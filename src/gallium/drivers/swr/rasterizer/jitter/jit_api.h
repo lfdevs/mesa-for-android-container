@@ -59,6 +59,7 @@ struct JIT_COMPILE_INPUT
     SWR_SHADER_TYPE type;
 
     const void* pIR;        ///< Pointer to LLVM IR text.
+    size_t irLength;
 
     bool enableJitSampler;
 };

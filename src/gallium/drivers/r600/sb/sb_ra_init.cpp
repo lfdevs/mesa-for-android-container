@@ -689,6 +689,7 @@ void ra_split::split_packed_ins(alu_packed_node *n) {
 void ra_split::split_alu_packed(alu_packed_node* n) {
 	switch (n->op()) {
 		case ALU_OP2_DOT4:
+		case ALU_OP2_DOT4_IEEE:
 		case ALU_OP2_CUBE:
 			split_packed_ins(n);
 			break;

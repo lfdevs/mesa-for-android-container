@@ -156,7 +156,7 @@ vmw_svga_winsys_surface_create(struct svga_winsys_screen *sws,
    pipe_reference_init(&surface->refcnt, 1);
    p_atomic_set(&surface->validated, 0);
    surface->screen = vws;
-   pipe_mutex_init(surface->mutex);
+   (void) mtx_init(&surface->mutex, mtx_plain);
    surface->shared = !!(usage & SVGA_SURFACE_USAGE_SHARED);
    provider = (surface->shared) ? vws->pools.gmr : vws->pools.mob_fenced;
 
@@ -279,18 +279,6 @@ vmw_svga_winsys_surface_can_create(struct svga_winsys_screen *sws,
    return TRUE;
 }
 
-
-static void
-vmw_svga_winsys_surface_invalidate(struct svga_winsys_screen *sws,
-                                   struct svga_winsys_surface *surf)
-{
-   /* this is a noop since surface invalidation is not needed for DMA path.
-    * DMA is enabled when guest-backed surface is not enabled or
-    * guest-backed dma is enabled.  Since guest-backed dma is enabled
-    * when guest-backed surface is enabled, that implies DMA is always enabled;
-    * hence, surface invalidation is not needed.
-    */
-}
 
 static boolean
 vmw_svga_winsys_surface_is_flushed(struct svga_winsys_screen *sws,
@@ -434,7 +422,6 @@ vmw_winsys_screen_init_svga(struct vmw_winsys_screen *vws)
    vws->base.surface_is_flushed = vmw_svga_winsys_surface_is_flushed;
    vws->base.surface_reference = vmw_svga_winsys_surface_ref;
    vws->base.surface_can_create = vmw_svga_winsys_surface_can_create;
-   vws->base.surface_invalidate = vmw_svga_winsys_surface_invalidate;
    vws->base.buffer_create = vmw_svga_winsys_buffer_create;
    vws->base.buffer_map = vmw_svga_winsys_buffer_map;
    vws->base.buffer_unmap = vmw_svga_winsys_buffer_unmap;

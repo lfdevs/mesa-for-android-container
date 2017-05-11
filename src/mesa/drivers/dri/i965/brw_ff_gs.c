@@ -37,7 +37,6 @@
 
 #include "brw_defines.h"
 #include "brw_context.h"
-#include "brw_eu.h"
 #include "brw_util.h"
 #include "brw_state.h"
 #include "brw_ff_gs.h"
@@ -195,10 +194,10 @@ brw_ff_gs_populate_key(struct brw_context *brw,
       /* On Gen6, GS is used for transform feedback. */
       /* BRW_NEW_TRANSFORM_FEEDBACK */
       if (_mesa_is_xfb_active_and_unpaused(ctx)) {
-         const struct gl_shader_program *shaderprog =
+         const struct gl_program *prog =
             ctx->_Shader->CurrentProgram[MESA_SHADER_VERTEX];
          const struct gl_transform_feedback_info *linked_xfb_info =
-            shaderprog->xfb_program->sh.LinkedTransformFeedback;
+            prog->sh.LinkedTransformFeedback;
          int i;
 
          /* Make sure that the VUE slots won't overflow the unsigned chars in

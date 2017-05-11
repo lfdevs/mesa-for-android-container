@@ -30,6 +30,7 @@
 #include "pipe/p_screen.h"
 #include "util/u_memory.h"
 #include "hud/hud_context.h"
+#include "os/os_time.h"
 #include "state_tracker/st_api.h"
 
 #include "stw_icd.h"
@@ -580,6 +581,38 @@ stw_framebuffer_present_locked(HDC hdc,
 }
 
 
+/**
+ * This is called just before issuing the buffer swap/present.
+ * We query the current time and determine if we should sleep before
+ * issuing the swap/present.
+ * This is a bit of a hack and is certainly not very accurate but it
+ * basically works.
+ * This is for the WGL_ARB_swap_interval extension.
+ */
+static void
+wait_swap_interval(struct stw_framebuffer *fb)
+{
+   /* Note: all time variables here are in units of microseconds */
+   int64_t cur_time = os_time_get_nano() / 1000;
+
+   if (fb->prev_swap_time != 0) {
+      /* Compute time since previous swap */
+      int64_t delta = cur_time - fb->prev_swap_time;
+      int64_t min_swap_period =
+         1.0e6 / stw_dev->refresh_rate * stw_dev->swap_interval;
+
+      /* if time since last swap is less than wait period, wait */
+      if (delta < min_swap_period) {
+         float fudge = 1.75f;  /* emperical fudge factor */
+         int64_t wait = (min_swap_period - delta) * fudge;
+         os_time_sleep(wait);
+      }
+   }
+
+   fb->prev_swap_time = cur_time;
+}
+
+
 BOOL APIENTRY
 DrvSwapBuffers(HDC hdc)
 {
@@ -613,6 +646,10 @@ DrvSwapBuffers(HDC hdc)
          /* flush current context */
          ctx->st->flush(ctx->st, ST_FLUSH_END_OF_FRAME, NULL);
       }
+   }
+
+   if (stw_dev->swap_interval != 0) {
+      wait_swap_interval(fb);
    }
 
    return stw_st_swap_framebuffer_locked(hdc, fb->stfb);

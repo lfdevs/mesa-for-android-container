@@ -44,6 +44,64 @@
 #include "st_program.h"
 #include "st_format.h"
 
+/**
+ * Convert a gl_image_unit object to a pipe_image_view object.
+ */
+void
+st_convert_image(const struct st_context *st, const struct gl_image_unit *u,
+                 struct pipe_image_view *img)
+{
+   struct st_texture_object *stObj = st_texture_object(u->TexObj);
+
+   img->resource = stObj->pt;
+   img->format = st_mesa_format_to_pipe_format(st, u->_ActualFormat);
+
+   switch (u->Access) {
+   case GL_READ_ONLY:
+      img->access = PIPE_IMAGE_ACCESS_READ;
+      break;
+   case GL_WRITE_ONLY:
+      img->access = PIPE_IMAGE_ACCESS_WRITE;
+      break;
+   case GL_READ_WRITE:
+      img->access = PIPE_IMAGE_ACCESS_READ_WRITE;
+      break;
+   default:
+      unreachable("bad gl_image_unit::Access");
+   }
+
+   if (stObj->pt->target == PIPE_BUFFER) {
+      unsigned base, size;
+
+      base = stObj->base.BufferOffset;
+      assert(base < stObj->pt->width0);
+      size = MIN2(stObj->pt->width0 - base, (unsigned)stObj->base.BufferSize);
+
+      img->u.buf.offset = base;
+      img->u.buf.size = size;
+   } else {
+      img->u.tex.level = u->Level + stObj->base.MinLevel;
+      if (stObj->pt->target == PIPE_TEXTURE_3D) {
+         if (u->Layered) {
+            img->u.tex.first_layer = 0;
+            img->u.tex.last_layer = u_minify(stObj->pt->depth0, img->u.tex.level) - 1;
+         } else {
+            img->u.tex.first_layer = u->_Layer;
+            img->u.tex.last_layer = u->_Layer;
+         }
+      } else {
+         img->u.tex.first_layer = u->_Layer + stObj->base.MinLayer;
+         img->u.tex.last_layer = u->_Layer + stObj->base.MinLayer;
+         if (u->Layered && img->resource->array_size > 1) {
+            if (stObj->base.Immutable)
+               img->u.tex.last_layer += stObj->base.NumLayers - 1;
+            else
+               img->u.tex.last_layer += img->resource->array_size - 1;
+         }
+      }
+   }
+}
+
 static void
 st_bind_images(struct st_context *st, struct gl_program *prog,
                enum pipe_shader_type shader_type)
@@ -70,53 +128,7 @@ st_bind_images(struct st_context *st, struct gl_program *prog,
          continue;
       }
 
-      img->resource = stObj->pt;
-      img->format = st_mesa_format_to_pipe_format(st, u->_ActualFormat);
-
-      switch (u->Access) {
-      case GL_READ_ONLY:
-         img->access = PIPE_IMAGE_ACCESS_READ;
-         break;
-      case GL_WRITE_ONLY:
-         img->access = PIPE_IMAGE_ACCESS_WRITE;
-         break;
-      case GL_READ_WRITE:
-         img->access = PIPE_IMAGE_ACCESS_READ_WRITE;
-         break;
-      default:
-         unreachable("bad gl_image_unit::Access");
-      }
-
-      if (stObj->pt->target == PIPE_BUFFER) {
-         unsigned base, size;
-
-         base = stObj->base.BufferOffset;
-         assert(base < stObj->pt->width0);
-         size = MIN2(stObj->pt->width0 - base, (unsigned)stObj->base.BufferSize);
-
-         img->u.buf.offset = base;
-         img->u.buf.size = size;
-      } else {
-         img->u.tex.level = u->Level + stObj->base.MinLevel;
-         if (stObj->pt->target == PIPE_TEXTURE_3D) {
-            if (u->Layered) {
-               img->u.tex.first_layer = 0;
-               img->u.tex.last_layer = u_minify(stObj->pt->depth0, img->u.tex.level) - 1;
-            } else {
-               img->u.tex.first_layer = u->_Layer;
-               img->u.tex.last_layer = u->_Layer;
-            }
-         } else {
-            img->u.tex.first_layer = u->_Layer + stObj->base.MinLayer;
-            img->u.tex.last_layer = u->_Layer + stObj->base.MinLayer;
-            if (u->Layered && img->resource->array_size > 1) {
-               if (stObj->base.Immutable)
-                  img->u.tex.last_layer += stObj->base.NumLayers - 1;
-               else
-                  img->u.tex.last_layer += img->resource->array_size - 1;
-            }
-         }
-      }
+      st_convert_image(st, u, img);
    }
    cso_set_shader_images(st->cso_context, shader_type, 0,
                          prog->info.num_images, images);
@@ -129,13 +141,10 @@ st_bind_images(struct st_context *st, struct gl_program *prog,
 
 static void bind_vs_images(struct st_context *st)
 {
-   struct gl_shader_program *prog =
+   struct gl_program *prog =
       st->ctx->_Shader->CurrentProgram[MESA_SHADER_VERTEX];
 
-   if (!prog || !prog->_LinkedShaders[MESA_SHADER_VERTEX])
-      return;
-
-   st_bind_images(st, prog->_LinkedShaders[MESA_SHADER_VERTEX]->Program, PIPE_SHADER_VERTEX);
+   st_bind_images(st, prog, PIPE_SHADER_VERTEX);
 }
 
 const struct st_tracked_state st_bind_vs_images = {
@@ -144,13 +153,10 @@ const struct st_tracked_state st_bind_vs_images = {
 
 static void bind_fs_images(struct st_context *st)
 {
-   struct gl_shader_program *prog =
+   struct gl_program *prog =
       st->ctx->_Shader->CurrentProgram[MESA_SHADER_FRAGMENT];
 
-   if (!prog || !prog->_LinkedShaders[MESA_SHADER_FRAGMENT])
-      return;
-
-   st_bind_images(st, prog->_LinkedShaders[MESA_SHADER_FRAGMENT]->Program, PIPE_SHADER_FRAGMENT);
+   st_bind_images(st, prog, PIPE_SHADER_FRAGMENT);
 }
 
 const struct st_tracked_state st_bind_fs_images = {
@@ -159,13 +165,10 @@ const struct st_tracked_state st_bind_fs_images = {
 
 static void bind_gs_images(struct st_context *st)
 {
-   struct gl_shader_program *prog =
+   struct gl_program *prog =
       st->ctx->_Shader->CurrentProgram[MESA_SHADER_GEOMETRY];
 
-   if (!prog || !prog->_LinkedShaders[MESA_SHADER_GEOMETRY])
-      return;
-
-   st_bind_images(st, prog->_LinkedShaders[MESA_SHADER_GEOMETRY]->Program, PIPE_SHADER_GEOMETRY);
+   st_bind_images(st, prog, PIPE_SHADER_GEOMETRY);
 }
 
 const struct st_tracked_state st_bind_gs_images = {
@@ -174,13 +177,10 @@ const struct st_tracked_state st_bind_gs_images = {
 
 static void bind_tcs_images(struct st_context *st)
 {
-   struct gl_shader_program *prog =
+   struct gl_program *prog =
       st->ctx->_Shader->CurrentProgram[MESA_SHADER_TESS_CTRL];
 
-   if (!prog || !prog->_LinkedShaders[MESA_SHADER_TESS_CTRL])
-      return;
-
-   st_bind_images(st, prog->_LinkedShaders[MESA_SHADER_TESS_CTRL]->Program, PIPE_SHADER_TESS_CTRL);
+   st_bind_images(st, prog, PIPE_SHADER_TESS_CTRL);
 }
 
 const struct st_tracked_state st_bind_tcs_images = {
@@ -189,13 +189,10 @@ const struct st_tracked_state st_bind_tcs_images = {
 
 static void bind_tes_images(struct st_context *st)
 {
-   struct gl_shader_program *prog =
+   struct gl_program *prog =
       st->ctx->_Shader->CurrentProgram[MESA_SHADER_TESS_EVAL];
 
-   if (!prog || !prog->_LinkedShaders[MESA_SHADER_TESS_EVAL])
-      return;
-
-   st_bind_images(st, prog->_LinkedShaders[MESA_SHADER_TESS_EVAL]->Program, PIPE_SHADER_TESS_EVAL);
+   st_bind_images(st, prog, PIPE_SHADER_TESS_EVAL);
 }
 
 const struct st_tracked_state st_bind_tes_images = {
@@ -204,13 +201,10 @@ const struct st_tracked_state st_bind_tes_images = {
 
 static void bind_cs_images(struct st_context *st)
 {
-   struct gl_shader_program *prog =
+   struct gl_program *prog =
       st->ctx->_Shader->CurrentProgram[MESA_SHADER_COMPUTE];
 
-   if (!prog || !prog->_LinkedShaders[MESA_SHADER_COMPUTE])
-      return;
-
-   st_bind_images(st, prog->_LinkedShaders[MESA_SHADER_COMPUTE]->Program, PIPE_SHADER_COMPUTE);
+   st_bind_images(st, prog, PIPE_SHADER_COMPUTE);
 }
 
 const struct st_tracked_state st_bind_cs_images = {

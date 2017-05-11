@@ -146,7 +146,7 @@ HOTTILE* HotTileMgr::GetHotTile(SWR_CONTEXT* pContext, DRAW_CONTEXT* pDC, uint32
             case SWR_ATTACHMENT_COLOR7: format = KNOB_COLOR_HOT_TILE_FORMAT; break;
             case SWR_ATTACHMENT_DEPTH: format = KNOB_DEPTH_HOT_TILE_FORMAT; break;
             case SWR_ATTACHMENT_STENCIL: format = KNOB_STENCIL_HOT_TILE_FORMAT; break;
-            default: SWR_ASSERT(false, "Unknown attachment: %d", attachment); format = KNOB_COLOR_HOT_TILE_FORMAT; break;
+            default: SWR_INVALID("Unknown attachment: %d", attachment); format = KNOB_COLOR_HOT_TILE_FORMAT; break;
             }
 
             if (hotTile.state == HOTTILE_CLEAR)

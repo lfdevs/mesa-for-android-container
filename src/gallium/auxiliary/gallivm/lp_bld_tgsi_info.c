@@ -305,8 +305,7 @@ analyse_instruction(struct analysis_context *ctx,
       } else if (dst->File == TGSI_FILE_OUTPUT) {
          regs = info->output;
          max_regs = ARRAY_SIZE(info->output);
-      } else if (dst->File == TGSI_FILE_ADDRESS ||
-                 dst->File == TGSI_FILE_PREDICATE) {
+      } else if (dst->File == TGSI_FILE_ADDRESS) {
          continue;
       } else {
          assert(0);
@@ -389,8 +388,7 @@ analyse_instruction(struct analysis_context *ctx,
 
          memset(res, 0, sizeof res);
 
-         if (!inst->Instruction.Predicate &&
-             !inst->Instruction.Saturate) {
+         if (!inst->Instruction.Saturate) {
             for (chan = 0; chan < 4; ++chan) {
                if (dst->WriteMask & (1 << chan)) {
                   if (inst->Instruction.Opcode == TGSI_OPCODE_MOV) {

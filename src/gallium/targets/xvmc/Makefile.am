@@ -82,7 +82,8 @@ install-data-hook:
 		ln -sf $${l}						\
 		       $${dest_dir}/$${k};				\
 	done;								\
-	$(RM) $${dest_dir}/libXvMCgallium.*
+	$(RM) $${dest_dir}/libXvMCgallium.*;				\
+	$(RM) -d $${dest_dir} &>/dev/null || true
 
 uninstall-hook:
 	for i in $(TARGET_DRIVERS); do					\

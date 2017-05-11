@@ -24,6 +24,8 @@
 #include "anv_private.h"
 #include "vk_format_info.h"
 
+#include "util/vk_util.h"
+
 /*
  * gcc-4 and earlier don't allow compound literals where a constant
  * is required in -std=c99/gnu99 mode, so we can't use ISL_SWIZZLE()
@@ -348,6 +350,11 @@ get_image_format_properties(const struct gen_device_info *devinfo,
    if (base == ISL_FORMAT_R32_SINT || base == ISL_FORMAT_R32_UINT)
       flags |= VK_FORMAT_FEATURE_STORAGE_IMAGE_ATOMIC_BIT;
 
+   if (flags) {
+      flags |= VK_FORMAT_FEATURE_TRANSFER_SRC_BIT_KHR |
+               VK_FORMAT_FEATURE_TRANSFER_DST_BIT_KHR;
+   }
+
    return flags;
 }
 
@@ -372,6 +379,11 @@ get_buffer_format_properties(const struct gen_device_info *devinfo,
    if (format == ISL_FORMAT_R32_SINT || format == ISL_FORMAT_R32_UINT)
       flags |= VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT;
 
+   if (flags) {
+      flags |= VK_FORMAT_FEATURE_TRANSFER_SRC_BIT_KHR |
+               VK_FORMAT_FEATURE_TRANSFER_DST_BIT_KHR;
+   }
+
    return flags;
 }
 
@@ -393,7 +405,9 @@ anv_physical_device_get_format_properties(struct anv_physical_device *physical_d
          tiled |= VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT;
 
       tiled |= VK_FORMAT_FEATURE_BLIT_SRC_BIT |
-               VK_FORMAT_FEATURE_BLIT_DST_BIT;
+               VK_FORMAT_FEATURE_BLIT_DST_BIT |
+               VK_FORMAT_FEATURE_TRANSFER_SRC_BIT_KHR |
+               VK_FORMAT_FEATURE_TRANSFER_DST_BIT_KHR;
    } else {
       struct anv_format linear_fmt, tiled_fmt;
       linear_fmt = anv_get_format(&physical_device->info, format,
@@ -450,16 +464,29 @@ void anv_GetPhysicalDeviceFormatProperties(
                pFormatProperties);
 }
 
-VkResult anv_GetPhysicalDeviceImageFormatProperties(
+void anv_GetPhysicalDeviceFormatProperties2KHR(
     VkPhysicalDevice                            physicalDevice,
     VkFormat                                    format,
-    VkImageType                                 type,
-    VkImageTiling                               tiling,
-    VkImageUsageFlags                           usage,
-    VkImageCreateFlags                          createFlags,
-    VkImageFormatProperties*                    pImageFormatProperties)
+    VkFormatProperties2KHR*                     pFormatProperties)
 {
-   ANV_FROM_HANDLE(anv_physical_device, physical_device, physicalDevice);
+   anv_GetPhysicalDeviceFormatProperties(physicalDevice, format,
+                                         &pFormatProperties->formatProperties);
+
+   vk_foreach_struct(ext, pFormatProperties->pNext) {
+      switch (ext->sType) {
+      default:
+         anv_debug_ignored_stype(ext->sType);
+         break;
+      }
+   }
+}
+
+static VkResult
+anv_get_image_format_properties(
+   struct anv_physical_device *physical_device,
+   const VkPhysicalDeviceImageFormatInfo2KHR *info,
+   VkImageFormatProperties *pImageFormatProperties)
+{
    VkFormatProperties format_props;
    VkFormatFeatureFlags format_feature_flags;
    VkExtent3D maxExtent;
@@ -467,24 +494,24 @@ VkResult anv_GetPhysicalDeviceImageFormatProperties(
    uint32_t maxArraySize;
    VkSampleCountFlags sampleCounts = VK_SAMPLE_COUNT_1_BIT;
 
-   if (anv_formats[format].isl_format == ISL_FORMAT_UNSUPPORTED)
+   if (anv_formats[info->format].isl_format == ISL_FORMAT_UNSUPPORTED)
       goto unsupported;
 
-   anv_physical_device_get_format_properties(physical_device, format,
+   anv_physical_device_get_format_properties(physical_device, info->format,
                                              &format_props);
 
    /* Extract the VkFormatFeatureFlags that are relevant for the queried
     * tiling.
     */
-   if (tiling == VK_IMAGE_TILING_LINEAR) {
+   if (info->tiling == VK_IMAGE_TILING_LINEAR) {
       format_feature_flags = format_props.linearTilingFeatures;
-   } else if (tiling == VK_IMAGE_TILING_OPTIMAL) {
+   } else if (info->tiling == VK_IMAGE_TILING_OPTIMAL) {
       format_feature_flags = format_props.optimalTilingFeatures;
    } else {
       unreachable("bad VkImageTiling");
    }
 
-   switch (type) {
+   switch (info->type) {
    default:
       unreachable("bad VkImageType");
    case VK_IMAGE_TYPE_1D:
@@ -520,22 +547,22 @@ VkResult anv_GetPhysicalDeviceImageFormatProperties(
     *       if the Surface Type is SURFTYPE_1D.
     *    * This field cannot be ASTC format if the Surface Type is SURFTYPE_1D.
     */
-   if (type == VK_IMAGE_TYPE_1D &&
-       isl_format_is_compressed(anv_formats[format].isl_format)) {
+   if (info->type == VK_IMAGE_TYPE_1D &&
+       isl_format_is_compressed(anv_formats[info->format].isl_format)) {
        goto unsupported;
    }
 
-   if (tiling == VK_IMAGE_TILING_OPTIMAL &&
-       type == VK_IMAGE_TYPE_2D &&
+   if (info->tiling == VK_IMAGE_TILING_OPTIMAL &&
+       info->type == VK_IMAGE_TYPE_2D &&
        (format_feature_flags & (VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
                                 VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT)) &&
-       !(createFlags & VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT) &&
-       !(usage & VK_IMAGE_USAGE_STORAGE_BIT)) {
+       !(info->flags & VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT) &&
+       !(info->usage & VK_IMAGE_USAGE_STORAGE_BIT)) {
       sampleCounts = isl_device_get_sample_counts(&physical_device->isl_dev);
    }
 
-   if (usage & (VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-                VK_IMAGE_USAGE_TRANSFER_DST_BIT)) {
+   if (info->usage & (VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                      VK_IMAGE_USAGE_TRANSFER_DST_BIT)) {
       /* Accept transfers on anything we can sample from or renderer to. */
       if (!(format_feature_flags & (VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
                                     VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT |
@@ -544,35 +571,35 @@ VkResult anv_GetPhysicalDeviceImageFormatProperties(
       }
    }
 
-   if (usage & VK_IMAGE_USAGE_SAMPLED_BIT) {
+   if (info->usage & VK_IMAGE_USAGE_SAMPLED_BIT) {
       if (!(format_feature_flags & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT)) {
          goto unsupported;
       }
    }
 
-   if (usage & VK_IMAGE_USAGE_STORAGE_BIT) {
+   if (info->usage & VK_IMAGE_USAGE_STORAGE_BIT) {
       if (!(format_feature_flags & VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT)) {
          goto unsupported;
       }
    }
 
-   if (usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) {
+   if (info->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) {
       if (!(format_feature_flags & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT)) {
          goto unsupported;
       }
    }
 
-   if (usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) {
+   if (info->usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) {
       if (!(format_feature_flags & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT)) {
          goto unsupported;
       }
    }
 
-   if (usage & VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT) {
+   if (info->usage & VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT) {
       /* Nothing to check. */
    }
 
-   if (usage & VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT) {
+   if (info->usage & VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT) {
       /* Ignore this flag because it was removed from the
        * provisional_I_20150910 header.
        */
@@ -604,6 +631,55 @@ unsupported:
    return VK_ERROR_FORMAT_NOT_SUPPORTED;
 }
 
+VkResult anv_GetPhysicalDeviceImageFormatProperties(
+    VkPhysicalDevice                            physicalDevice,
+    VkFormat                                    format,
+    VkImageType                                 type,
+    VkImageTiling                               tiling,
+    VkImageUsageFlags                           usage,
+    VkImageCreateFlags                          createFlags,
+    VkImageFormatProperties*                    pImageFormatProperties)
+{
+   ANV_FROM_HANDLE(anv_physical_device, physical_device, physicalDevice);
+
+   const VkPhysicalDeviceImageFormatInfo2KHR info = {
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2_KHR,
+      .pNext = NULL,
+      .format = format,
+      .type = type,
+      .tiling = tiling,
+      .usage = usage,
+      .flags = createFlags,
+   };
+
+   return anv_get_image_format_properties(physical_device, &info,
+                                          pImageFormatProperties);
+}
+
+VkResult anv_GetPhysicalDeviceImageFormatProperties2KHR(
+    VkPhysicalDevice                            physicalDevice,
+    const VkPhysicalDeviceImageFormatInfo2KHR*  pImageFormatInfo,
+    VkImageFormatProperties2KHR*                pImageFormatProperties)
+{
+   ANV_FROM_HANDLE(anv_physical_device, physical_device, physicalDevice);
+   VkResult result;
+
+   result = anv_get_image_format_properties(physical_device, pImageFormatInfo,
+               &pImageFormatProperties->imageFormatProperties);
+   if (result != VK_SUCCESS)
+      return result;
+
+   vk_foreach_struct(ext, pImageFormatProperties->pNext) {
+      switch (ext->sType) {
+      default:
+         anv_debug_ignored_stype(ext->sType);
+         break;
+      }
+   }
+
+   return VK_SUCCESS;
+}
+
 void anv_GetPhysicalDeviceSparseImageFormatProperties(
     VkPhysicalDevice                            physicalDevice,
     VkFormat                                    format,
@@ -616,4 +692,14 @@ void anv_GetPhysicalDeviceSparseImageFormatProperties(
 {
    /* Sparse images are not yet supported. */
    *pNumProperties = 0;
+}
+
+void anv_GetPhysicalDeviceSparseImageFormatProperties2KHR(
+    VkPhysicalDevice                            physicalDevice,
+    const VkPhysicalDeviceSparseImageFormatInfo2KHR* pFormatInfo,
+    uint32_t*                                   pPropertyCount,
+    VkSparseImageFormatProperties2KHR*          pProperties)
+{
+   /* Sparse images are not yet supported. */
+   *pPropertyCount = 0;
 }

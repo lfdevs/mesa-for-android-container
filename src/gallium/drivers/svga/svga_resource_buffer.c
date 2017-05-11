@@ -296,9 +296,9 @@ svga_buffer_transfer_flush_region( struct pipe_context *pipe,
    assert(transfer->usage & PIPE_TRANSFER_WRITE);
    assert(transfer->usage & PIPE_TRANSFER_FLUSH_EXPLICIT);
 
-   pipe_mutex_lock(ss->swc_mutex);
+   mtx_lock(&ss->swc_mutex);
    svga_buffer_add_range(sbuf, offset, offset + length);
-   pipe_mutex_unlock(ss->swc_mutex);
+   mtx_unlock(&ss->swc_mutex);
 }
 
 
@@ -312,7 +312,7 @@ svga_buffer_transfer_unmap( struct pipe_context *pipe,
 
    SVGA_STATS_TIME_PUSH(svga_sws(svga), SVGA_STATS_TIME_BUFFERTRANSFERUNMAP);
 
-   pipe_mutex_lock(ss->swc_mutex);
+   mtx_lock(&ss->swc_mutex);
 
    assert(sbuf->map.count);
    if (sbuf->map.count) {
@@ -339,7 +339,7 @@ svga_buffer_transfer_unmap( struct pipe_context *pipe,
       }
    }
 
-   pipe_mutex_unlock(ss->swc_mutex);
+   mtx_unlock(&ss->swc_mutex);
    FREE(transfer);
    SVGA_STATS_TIME_POP(svga_sws(svga));
 }

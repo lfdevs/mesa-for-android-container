@@ -36,24 +36,6 @@
 #include <stdbool.h>
 
 #include "brw_context.h"
-#include "brw_eu.h"
-
-/* A big lookup table is used to figure out which and how many
- * additional regs will inserted before the main payload in the WM
- * program execution.  These mainly relate to depth and stencil
- * processing and the early-depth-test optimization.
- */
-#define IZ_PS_KILL_ALPHATEST_BIT    0x1
-#define IZ_PS_COMPUTES_DEPTH_BIT    0x2
-#define IZ_DEPTH_WRITE_ENABLE_BIT   0x4
-#define IZ_DEPTH_TEST_ENABLE_BIT    0x8
-#define IZ_STENCIL_WRITE_ENABLE_BIT 0x10
-#define IZ_STENCIL_TEST_ENABLE_BIT  0x20
-#define IZ_BIT_MAX                  0x40
-
-#define AA_NEVER     0
-#define AA_SOMETIMES 1
-#define AA_ALWAYS    2
 
 #ifdef __cplusplus
 extern "C" {

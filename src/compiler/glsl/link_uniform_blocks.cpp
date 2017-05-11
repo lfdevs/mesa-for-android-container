@@ -146,7 +146,13 @@ private:
        */
       const glsl_type *type_for_size = type;
       if (type->is_unsized_array()) {
-         assert(last_field);
+         if (!last_field) {
+            linker_error(prog, "unsized array `%s' definition: "
+                         "only last member of a shader storage block "
+                         "can be defined as unsized array",
+                         name);
+         }
+
          type_for_size = type->without_array();
       }
 
@@ -496,6 +502,9 @@ link_uniform_blocks_are_compatible(const gl_uniform_block *a,
       return false;
 
    if (a->_RowMajor != b->_RowMajor)
+      return false;
+
+   if (a->Binding != b->Binding)
       return false;
 
    for (unsigned i = 0; i < a->NumUniforms; i++) {

@@ -49,8 +49,6 @@
 
 #define LP_MAX_TGSI_IMMEDIATES 4096
 
-#define LP_MAX_TGSI_PREDS 16
-
 #define LP_MAX_TGSI_CONSTS 4096
 
 #define LP_MAX_TGSI_CONST_BUFFERS 16
@@ -109,8 +107,6 @@ gallivm_get_shader_param(enum pipe_shader_cap param)
       return PIPE_MAX_CONSTANT_BUFFERS;
    case PIPE_SHADER_CAP_MAX_TEMPS:
       return LP_MAX_TGSI_TEMPS;
-   case PIPE_SHADER_CAP_MAX_PREDS:
-      return LP_MAX_TGSI_PREDS;
    case PIPE_SHADER_CAP_TGSI_CONT_SUPPORTED:
       return 1;
    case PIPE_SHADER_CAP_INDIRECT_INPUT_ADDR:
@@ -132,8 +128,6 @@ gallivm_get_shader_param(enum pipe_shader_cap param)
       return 1 << PIPE_SHADER_IR_TGSI;
    case PIPE_SHADER_CAP_TGSI_SQRT_SUPPORTED:
    case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
-      return 1;
-   case PIPE_SHADER_CAP_DOUBLES:
       return 1;
    case PIPE_SHADER_CAP_TGSI_DROUND_SUPPORTED:
    case PIPE_SHADER_CAP_TGSI_DFRACEXP_DLDEXP_SUPPORTED:

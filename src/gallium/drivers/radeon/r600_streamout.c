@@ -187,7 +187,7 @@ static void r600_emit_streamout_begin(struct r600_common_context *rctx, struct r
 {
 	struct radeon_winsys_cs *cs = rctx->gfx.cs;
 	struct r600_so_target **t = rctx->streamout.targets;
-	unsigned *stride_in_dw = rctx->streamout.stride_in_dw;
+	uint16_t *stride_in_dw = rctx->streamout.stride_in_dw;
 	unsigned i, update_flags = 0;
 
 	r600_flush_vgt_streamout(rctx);

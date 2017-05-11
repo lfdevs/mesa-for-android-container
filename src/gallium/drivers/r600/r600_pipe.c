@@ -188,8 +188,9 @@ static struct pipe_context *r600_create_context(struct pipe_screen *screen,
 				       r600_context_gfx_flush, rctx);
 	rctx->b.gfx.flush = r600_context_gfx_flush;
 
-	rctx->allocator_fetch_shader = u_suballocator_create(&rctx->b.b, 64 * 1024,
-							     0, PIPE_USAGE_DEFAULT, FALSE);
+	rctx->allocator_fetch_shader =
+		u_suballocator_create(&rctx->b.b, 64 * 1024,
+				      0, PIPE_USAGE_DEFAULT, 0, FALSE);
 	if (!rctx->allocator_fetch_shader)
 		goto fail;
 
@@ -207,7 +208,6 @@ static struct pipe_context *r600_create_context(struct pipe_screen *screen,
 	rctx->blitter->draw_rectangle = r600_draw_rectangle;
 
 	r600_begin_new_cs(rctx);
-	r600_query_init_backend_mask(&rctx->b); /* this emits commands and must be last */
 
 	rctx->dummy_pixel_shader =
 		util_make_fragment_cloneinput_shader(&rctx->b.b, 0,
@@ -261,7 +261,6 @@ static int r600_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 	case PIPE_CAP_VERTEX_BUFFER_OFFSET_4BYTE_ALIGNED_ONLY:
 	case PIPE_CAP_VERTEX_BUFFER_STRIDE_4BYTE_ALIGNED_ONLY:
 	case PIPE_CAP_VERTEX_ELEMENT_SRC_OFFSET_4BYTE_ALIGNED_ONLY:
-	case PIPE_CAP_USER_INDEX_BUFFERS:
 	case PIPE_CAP_USER_CONSTANT_BUFFERS:
 	case PIPE_CAP_START_INSTANCE:
 	case PIPE_CAP_MAX_DUAL_SOURCE_RENDER_TARGETS:
@@ -286,6 +285,7 @@ static int r600_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 	case PIPE_CAP_FRAMEBUFFER_NO_ATTACHMENT:
 	case PIPE_CAP_POLYGON_OFFSET_UNITS_UNSCALED:
 	case PIPE_CAP_CLEAR_TEXTURE:
+	case PIPE_CAP_TGSI_MUL_ZERO_WINS:
 		return 1;
 
 	case PIPE_CAP_DEVICE_RESET_STATUS_QUERY:
@@ -378,6 +378,22 @@ static int r600_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 	case PIPE_CAP_NATIVE_FENCE_FD:
 	case PIPE_CAP_GLSL_OPTIMIZE_CONSERVATIVELY:
 	case PIPE_CAP_TGSI_FS_FBFETCH:
+	case PIPE_CAP_INT64:
+	case PIPE_CAP_INT64_DIVMOD:
+	case PIPE_CAP_TGSI_TEX_TXF_LZ:
+	case PIPE_CAP_TGSI_CLOCK:
+	case PIPE_CAP_POLYGON_MODE_FILL_RECTANGLE:
+	case PIPE_CAP_SPARSE_BUFFER_PAGE_SIZE:
+	case PIPE_CAP_TGSI_BALLOT:
+	case PIPE_CAP_TGSI_TES_LAYER_VIEWPORT:
+		return 0;
+
+	case PIPE_CAP_DOUBLES:
+		if (rscreen->b.family == CHIP_ARUBA ||
+		    rscreen->b.family == CHIP_CAYMAN ||
+		    rscreen->b.family == CHIP_CYPRESS ||
+		    rscreen->b.family == CHIP_HEMLOCK)
+			return 1;
 		return 0;
 
 	case PIPE_CAP_MAX_SHADER_PATCH_VARYINGS:
@@ -474,7 +490,9 @@ static int r600_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 	return 0;
 }
 
-static int r600_get_shader_param(struct pipe_screen* pscreen, unsigned shader, enum pipe_shader_cap param)
+static int r600_get_shader_param(struct pipe_screen* pscreen,
+				 enum pipe_shader_type shader,
+				 enum pipe_shader_cap param)
 {
 	struct r600_screen *rscreen = (struct r600_screen *)pscreen;
 
@@ -526,8 +544,6 @@ static int r600_get_shader_param(struct pipe_screen* pscreen, unsigned shader, e
 		}
 	case PIPE_SHADER_CAP_MAX_CONST_BUFFERS:
 		return R600_MAX_USER_CONST_BUFFERS;
-	case PIPE_SHADER_CAP_MAX_PREDS:
-		return 0; /* nothing uses this */
 	case PIPE_SHADER_CAP_TGSI_CONT_SUPPORTED:
 		return 1;
 	case PIPE_SHADER_CAP_TGSI_SQRT_SUPPORTED:
@@ -554,7 +570,6 @@ static int r600_get_shader_param(struct pipe_screen* pscreen, unsigned shader, e
 	case PIPE_SHADER_CAP_SUPPORTED_IRS:
 		return 0;
 	case PIPE_SHADER_CAP_TGSI_FMA_SUPPORTED:
-	case PIPE_SHADER_CAP_DOUBLES:
 		if (rscreen->b.family == CHIP_ARUBA ||
 		    rscreen->b.family == CHIP_CAYMAN ||
 		    rscreen->b.family == CHIP_CYPRESS ||
@@ -734,5 +749,6 @@ struct pipe_screen *r600_screen_create(struct radeon_winsys *ws)
 	if (rscreen->b.debug_flags & DBG_TEST_DMA)
 		r600_test_dma(&rscreen->b);
 
+	r600_query_fix_enabled_rb_mask(&rscreen->b);
 	return &rscreen->b.b;
 }

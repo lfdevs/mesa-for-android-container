@@ -189,7 +189,7 @@ xmesa_close_display(Display *display)
 static XMesaDisplay
 xmesa_init_display( Display *display )
 {
-   pipe_static_mutex(init_mutex);
+   static mtx_t init_mutex = _MTX_INITIALIZER_NP;
    XMesaDisplay xmdpy;
    XMesaExtDisplayInfo *info;
 
@@ -197,14 +197,14 @@ xmesa_init_display( Display *display )
       return NULL;
    }
 
-   pipe_mutex_lock(init_mutex);
+   mtx_lock(&init_mutex);
 
    /* Look for XMesaDisplay which corresponds to this display */
    info = MesaExtInfo.head;
    while(info) {
       if (info->display == display) {
          /* Found it */
-         pipe_mutex_unlock(init_mutex);
+         mtx_unlock(&init_mutex);
          return  &info->mesaDisplay;
       }
       info = info->next;
@@ -216,7 +216,7 @@ xmesa_init_display( Display *display )
    /* allocate mesa display info */
    info = (XMesaExtDisplayInfo *) Xmalloc(sizeof(XMesaExtDisplayInfo));
    if (info == NULL) {
-      pipe_mutex_unlock(init_mutex);
+      mtx_unlock(&init_mutex);
       return NULL;
    }
    info->display = display;
@@ -242,7 +242,7 @@ xmesa_init_display( Display *display )
    }
 
    if (xmdpy->screen && xmdpy->smapi) {
-      pipe_mutex_init(xmdpy->mutex);
+      (void) mtx_init(&xmdpy->mutex, mtx_plain);
    }
    else {
       if (xmdpy->screen) {
@@ -255,7 +255,7 @@ xmesa_init_display( Display *display )
       xmdpy->display = NULL;
    }
 
-   pipe_mutex_unlock(init_mutex);
+   mtx_unlock(&init_mutex);
 
    return xmdpy;
 }
@@ -372,9 +372,9 @@ xmesa_get_window_size(Display *dpy, XMesaBuffer b,
    XMesaDisplay xmdpy = xmesa_init_display(dpy);
    Status stat;
 
-   pipe_mutex_lock(xmdpy->mutex);
+   mtx_lock(&xmdpy->mutex);
    stat = get_drawable_size(dpy, b->ws.drawable, width, height);
-   pipe_mutex_unlock(xmdpy->mutex);
+   mtx_unlock(&xmdpy->mutex);
 
    if (!stat) {
       /* probably querying a window that's recently been destroyed */
@@ -453,11 +453,11 @@ choose_pixel_format(XMesaVisual v)
  * stencil sizes.
  */
 static enum pipe_format
-choose_depth_stencil_format(XMesaDisplay xmdpy, int depth, int stencil)
+choose_depth_stencil_format(XMesaDisplay xmdpy, int depth, int stencil,
+                            int sample_count)
 {
    const enum pipe_texture_target target = PIPE_TEXTURE_2D;
    const unsigned tex_usage = PIPE_BIND_DEPTH_STENCIL;
-   const unsigned sample_count = 0;
    enum pipe_format formats[8], fmt;
    int count, i;
 
@@ -861,8 +861,8 @@ XMesaVisual XMesaCreateVisual( Display *display,
 
       vis->numAuxBuffers = 0;
       vis->level = 0;
-      vis->sampleBuffers = 0;
-      vis->samples = 0;
+      vis->sampleBuffers = num_samples > 1;
+      vis->samples = num_samples;
    }
 
    v->stvis.buffer_mask = ST_ATTACHMENT_FRONT_LEFT_MASK;
@@ -875,6 +875,14 @@ XMesaVisual XMesaCreateVisual( Display *display,
    }
 
    v->stvis.color_format = choose_pixel_format(v);
+
+   /* Check format support at requested num_samples (for multisample) */
+   if (!xmdpy->screen->is_format_supported(xmdpy->screen,
+                                           v->stvis.color_format,
+                                           PIPE_TEXTURE_2D, num_samples,
+                                           PIPE_BIND_RENDER_TARGET))
+      v->stvis.color_format = PIPE_FORMAT_NONE;
+
    if (v->stvis.color_format == PIPE_FORMAT_NONE) {
       free(v->visinfo);
       free(v);
@@ -882,7 +890,8 @@ XMesaVisual XMesaCreateVisual( Display *display,
    }
 
    v->stvis.depth_stencil_format =
-      choose_depth_stencil_format(xmdpy, depth_size, stencil_size);
+      choose_depth_stencil_format(xmdpy, depth_size, stencil_size,
+                                  num_samples);
 
    v->stvis.accum_format = (accum_red_size +
          accum_green_size + accum_blue_size + accum_alpha_size) ?

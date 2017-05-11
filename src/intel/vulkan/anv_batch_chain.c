@@ -140,7 +140,7 @@ anv_reloc_list_grow(struct anv_reloc_list *list,
    return VK_SUCCESS;
 }
 
-uint64_t
+VkResult
 anv_reloc_list_add(struct anv_reloc_list *list,
                    const VkAllocationCallbacks *alloc,
                    uint32_t offset, struct anv_bo *target_bo, uint32_t delta)
@@ -149,10 +149,11 @@ anv_reloc_list_add(struct anv_reloc_list *list,
    int index;
 
    const uint32_t domain =
-      target_bo->is_winsys_bo ? I915_GEM_DOMAIN_RENDER : 0;
+      (target_bo->flags & EXEC_OBJECT_WRITE) ? I915_GEM_DOMAIN_RENDER : 0;
 
-   anv_reloc_list_grow(list, alloc, 1);
-   /* TODO: Handle failure */
+   VkResult result = anv_reloc_list_grow(list, alloc, 1);
+   if (result != VK_SUCCESS)
+      return result;
 
    /* XXX: Can we use I915_EXEC_HANDLE_LUT? */
    index = list->num_relocs++;
@@ -166,16 +167,17 @@ anv_reloc_list_add(struct anv_reloc_list *list,
    entry->write_domain = domain;
    VG(VALGRIND_CHECK_MEM_IS_DEFINED(entry, sizeof(*entry)));
 
-   return target_bo->offset + delta;
+   return VK_SUCCESS;
 }
 
-static void
+static VkResult
 anv_reloc_list_append(struct anv_reloc_list *list,
                       const VkAllocationCallbacks *alloc,
                       struct anv_reloc_list *other, uint32_t offset)
 {
-   anv_reloc_list_grow(list, alloc, other->num_relocs);
-   /* TODO: Handle failure */
+   VkResult result = anv_reloc_list_grow(list, alloc, other->num_relocs);
+   if (result != VK_SUCCESS)
+      return result;
 
    memcpy(&list->relocs[list->num_relocs], &other->relocs[0],
           other->num_relocs * sizeof(other->relocs[0]));
@@ -186,6 +188,7 @@ anv_reloc_list_append(struct anv_reloc_list *list,
       list->relocs[i + list->num_relocs].offset += offset;
 
    list->num_relocs += other->num_relocs;
+   return VK_SUCCESS;
 }
 
 /*-----------------------------------------------------------------------*
@@ -195,8 +198,13 @@ anv_reloc_list_append(struct anv_reloc_list *list,
 void *
 anv_batch_emit_dwords(struct anv_batch *batch, int num_dwords)
 {
-   if (batch->next + num_dwords * 4 > batch->end)
-      batch->extend_cb(batch, batch->user_data);
+   if (batch->next + num_dwords * 4 > batch->end) {
+      VkResult result = batch->extend_cb(batch, batch->user_data);
+      if (result != VK_SUCCESS) {
+         anv_batch_set_error(batch, result);
+         return NULL;
+      }
+   }
 
    void *p = batch->next;
 
@@ -210,8 +218,14 @@ uint64_t
 anv_batch_emit_reloc(struct anv_batch *batch,
                      void *location, struct anv_bo *bo, uint32_t delta)
 {
-   return anv_reloc_list_add(batch->relocs, batch->alloc,
-                             location - batch->start, bo, delta);
+   VkResult result = anv_reloc_list_add(batch->relocs, batch->alloc,
+                                        location - batch->start, bo, delta);
+   if (result != VK_SUCCESS) {
+      anv_batch_set_error(batch, result);
+      return 0;
+   }
+
+   return bo->offset + delta;
 }
 
 void
@@ -222,8 +236,13 @@ anv_batch_emit_batch(struct anv_batch *batch, struct anv_batch *other)
    size = other->next - other->start;
    assert(size % 4 == 0);
 
-   if (batch->next + size > batch->end)
-      batch->extend_cb(batch, batch->user_data);
+   if (batch->next + size > batch->end) {
+      VkResult result = batch->extend_cb(batch, batch->user_data);
+      if (result != VK_SUCCESS) {
+         anv_batch_set_error(batch, result);
+         return;
+      }
+   }
 
    assert(batch->next + size <= batch->end);
 
@@ -231,8 +250,12 @@ anv_batch_emit_batch(struct anv_batch *batch, struct anv_batch *other)
    memcpy(batch->next, other->start, size);
 
    offset = batch->next - batch->start;
-   anv_reloc_list_append(batch->relocs, batch->alloc,
-                         other->relocs, offset);
+   VkResult result = anv_reloc_list_append(batch->relocs, batch->alloc,
+                                           other->relocs, offset);
+   if (result != VK_SUCCESS) {
+      anv_batch_set_error(batch, result);
+      return;
+   }
 
    batch->next += size;
 }
@@ -642,8 +665,10 @@ anv_cmd_buffer_new_binding_table_block(struct anv_cmd_buffer *cmd_buffer)
        &cmd_buffer->device->surface_state_block_pool;
 
    int32_t *offset = u_vector_add(&cmd_buffer->bt_blocks);
-   if (offset == NULL)
+   if (offset == NULL) {
+      anv_batch_set_error(&cmd_buffer->batch, VK_ERROR_OUT_OF_HOST_MEMORY);
       return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
+   }
 
    *offset = anv_block_pool_alloc_back(block_pool);
    cmd_buffer->bt_next = 0;
@@ -696,7 +721,9 @@ anv_cmd_buffer_init_batch_bo_chain(struct anv_cmd_buffer *cmd_buffer)
       goto fail_bt_blocks;
    cmd_buffer->last_ss_pool_center = 0;
 
-   anv_cmd_buffer_new_binding_table_block(cmd_buffer);
+   result = anv_cmd_buffer_new_binding_table_block(cmd_buffer);
+   if (result != VK_SUCCESS)
+      goto fail_bt_blocks;
 
    return VK_SUCCESS;
 
@@ -1009,7 +1036,7 @@ anv_execbuf_add_bo(struct anv_execbuf *exec,
       obj->relocs_ptr = 0;
       obj->alignment = 0;
       obj->offset = bo->offset;
-      obj->flags = bo->is_winsys_bo ? EXEC_OBJECT_WRITE : 0;
+      obj->flags = bo->flags;
       obj->rsvd1 = 0;
       obj->rsvd2 = 0;
    }
@@ -1063,7 +1090,7 @@ write_reloc(const struct anv_device *device, void *p, uint64_t v, bool flush)
    }
 
    if (flush && !device->info.has_llc)
-      anv_clflush_range(p, reloc_size);
+      anv_flush_range(p, reloc_size);
 }
 
 static void
@@ -1236,8 +1263,11 @@ anv_cmd_buffer_execbuf(struct anv_device *device,
 
    adjust_relocations_from_state_pool(ss_pool, &cmd_buffer->surface_relocs,
                                       cmd_buffer->last_ss_pool_center);
-   anv_execbuf_add_bo(&execbuf, &ss_pool->bo, &cmd_buffer->surface_relocs,
-                      &cmd_buffer->pool->alloc);
+   VkResult result =
+      anv_execbuf_add_bo(&execbuf, &ss_pool->bo, &cmd_buffer->surface_relocs,
+                         &device->alloc);
+   if (result != VK_SUCCESS)
+      return result;
 
    /* First, we walk over all of the bos we've seen and add them and their
     * relocations to the validate list.
@@ -1247,8 +1277,10 @@ anv_cmd_buffer_execbuf(struct anv_device *device,
       adjust_relocations_to_state_pool(ss_pool, &(*bbo)->bo, &(*bbo)->relocs,
                                        cmd_buffer->last_ss_pool_center);
 
-      anv_execbuf_add_bo(&execbuf, &(*bbo)->bo, &(*bbo)->relocs,
-                         &cmd_buffer->pool->alloc);
+      result = anv_execbuf_add_bo(&execbuf, &(*bbo)->bo, &(*bbo)->relocs,
+                                  &device->alloc);
+      if (result != VK_SUCCESS)
+         return result;
    }
 
    /* Now that we've adjusted all of the surface state relocations, we need to
@@ -1353,9 +1385,9 @@ anv_cmd_buffer_execbuf(struct anv_device *device,
          cmd_buffer->surface_relocs.relocs[i].presumed_offset = -1;
    }
 
-   VkResult result = anv_device_execbuf(device, &execbuf.execbuf, execbuf.bos);
+   result = anv_device_execbuf(device, &execbuf.execbuf, execbuf.bos);
 
-   anv_execbuf_finish(&execbuf, &cmd_buffer->pool->alloc);
+   anv_execbuf_finish(&execbuf, &device->alloc);
 
    return result;
 }

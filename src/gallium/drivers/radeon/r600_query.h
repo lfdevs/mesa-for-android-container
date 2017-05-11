@@ -55,22 +55,45 @@ enum {
 	R600_QUERY_NUM_FB_CACHE_FLUSHES,
 	R600_QUERY_NUM_L2_INVALIDATES,
 	R600_QUERY_NUM_L2_WRITEBACKS,
+	R600_QUERY_CS_THREAD_BUSY,
 	R600_QUERY_REQUESTED_VRAM,
 	R600_QUERY_REQUESTED_GTT,
 	R600_QUERY_MAPPED_VRAM,
 	R600_QUERY_MAPPED_GTT,
 	R600_QUERY_BUFFER_WAIT_TIME,
+	R600_QUERY_NUM_MAPPED_BUFFERS,
 	R600_QUERY_NUM_GFX_IBS,
 	R600_QUERY_NUM_SDMA_IBS,
 	R600_QUERY_NUM_BYTES_MOVED,
 	R600_QUERY_NUM_EVICTIONS,
 	R600_QUERY_VRAM_USAGE,
+	R600_QUERY_VRAM_VIS_USAGE,
 	R600_QUERY_GTT_USAGE,
 	R600_QUERY_GPU_TEMPERATURE,
 	R600_QUERY_CURRENT_GPU_SCLK,
 	R600_QUERY_CURRENT_GPU_MCLK,
 	R600_QUERY_GPU_LOAD,
 	R600_QUERY_GPU_SHADERS_BUSY,
+	R600_QUERY_GPU_TA_BUSY,
+	R600_QUERY_GPU_GDS_BUSY,
+	R600_QUERY_GPU_VGT_BUSY,
+	R600_QUERY_GPU_IA_BUSY,
+	R600_QUERY_GPU_SX_BUSY,
+	R600_QUERY_GPU_WD_BUSY,
+	R600_QUERY_GPU_BCI_BUSY,
+	R600_QUERY_GPU_SC_BUSY,
+	R600_QUERY_GPU_PA_BUSY,
+	R600_QUERY_GPU_DB_BUSY,
+	R600_QUERY_GPU_CP_BUSY,
+	R600_QUERY_GPU_CB_BUSY,
+	R600_QUERY_GPU_SDMA_BUSY,
+	R600_QUERY_GPU_PFP_BUSY,
+	R600_QUERY_GPU_MEQ_BUSY,
+	R600_QUERY_GPU_ME_BUSY,
+	R600_QUERY_GPU_SURF_SYNC_BUSY,
+	R600_QUERY_GPU_DMA_BUSY,
+	R600_QUERY_GPU_SCRATCH_RAM_BUSY,
+	R600_QUERY_GPU_CE_BUSY,
 	R600_QUERY_NUM_COMPILATIONS,
 	R600_QUERY_NUM_SHADERS_CREATED,
 	R600_QUERY_BACK_BUFFER_PS_DRAW_RATIO,
@@ -90,7 +113,7 @@ enum {
 };
 
 struct r600_query_ops {
-	void (*destroy)(struct r600_common_context *, struct r600_query *);
+	void (*destroy)(struct r600_common_screen *, struct r600_query *);
 	bool (*begin)(struct r600_common_context *, struct r600_query *);
 	bool (*end)(struct r600_common_context *, struct r600_query *);
 	bool (*get_result)(struct r600_common_context *,
@@ -119,7 +142,7 @@ enum {
 };
 
 struct r600_query_hw_ops {
-	bool (*prepare_buffer)(struct r600_common_context *,
+	bool (*prepare_buffer)(struct r600_common_screen *,
 			       struct r600_query_hw *,
 			       struct r600_resource *);
 	void (*emit_start)(struct r600_common_context *,
@@ -129,7 +152,7 @@ struct r600_query_hw_ops {
 			  struct r600_query_hw *,
 			  struct r600_resource *buffer, uint64_t va);
 	void (*clear_result)(struct r600_query_hw *, union pipe_query_result *);
-	void (*add_result)(struct r600_common_context *ctx,
+	void (*add_result)(struct r600_common_screen *screen,
 			   struct r600_query_hw *, void *buffer,
 			   union pipe_query_result *result);
 };
@@ -164,9 +187,9 @@ struct r600_query_hw {
 	unsigned stream;
 };
 
-bool r600_query_hw_init(struct r600_common_context *rctx,
+bool r600_query_hw_init(struct r600_common_screen *rscreen,
 			struct r600_query_hw *query);
-void r600_query_hw_destroy(struct r600_common_context *rctx,
+void r600_query_hw_destroy(struct r600_common_screen *rscreen,
 			   struct r600_query *rquery);
 bool r600_query_hw_begin(struct r600_common_context *rctx,
 			 struct r600_query *rquery);

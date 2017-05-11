@@ -43,8 +43,8 @@ struct lp_fence
    struct pipe_reference reference;
    unsigned id;
 
-   pipe_mutex mutex;
-   pipe_condvar signalled;
+   mtx_t mutex;
+   cnd_t signalled;
 
    boolean issued;
    unsigned rank;

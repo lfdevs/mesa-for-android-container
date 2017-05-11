@@ -226,7 +226,7 @@ enable_texture(struct gl_context *ctx, GLboolean state, GLbitfield texBit)
    if (texUnit->Enabled == newenabled)
        return GL_FALSE;
 
-   FLUSH_VERTICES(ctx, _NEW_TEXTURE);
+   FLUSH_VERTICES(ctx, _NEW_TEXTURE_STATE);
    texUnit->Enabled = newenabled;
    return GL_TRUE;
 }
@@ -385,6 +385,7 @@ _mesa_set_enable(struct gl_context *ctx, GLenum cap, GLboolean state)
             return;
          FLUSH_VERTICES(ctx, _NEW_FOG);
          ctx->Fog.Enabled = state;
+         ctx->Fog._PackedEnabledMode = state ? ctx->Fog._PackedMode : FOG_NONE;
          break;
       case GL_LIGHT0:
       case GL_LIGHT1:
@@ -718,7 +719,7 @@ _mesa_set_enable(struct gl_context *ctx, GLenum cap, GLboolean state)
                   newenabled |= coordBit;
                if (texUnit->TexGenEnabled == newenabled)
                   return;
-               FLUSH_VERTICES(ctx, _NEW_TEXTURE);
+               FLUSH_VERTICES(ctx, _NEW_TEXTURE_STATE);
                texUnit->TexGenEnabled = newenabled;
             }
          }
@@ -739,7 +740,7 @@ _mesa_set_enable(struct gl_context *ctx, GLenum cap, GLboolean state)
                   newenabled |= STR_BITS;
                if (texUnit->TexGenEnabled == newenabled)
                   return;
-               FLUSH_VERTICES(ctx, _NEW_TEXTURE);
+               FLUSH_VERTICES(ctx, _NEW_TEXTURE_STATE);
                texUnit->TexGenEnabled = newenabled;
             }
          }
@@ -958,7 +959,7 @@ _mesa_set_enable(struct gl_context *ctx, GLenum cap, GLboolean state)
             goto invalid_enum_error;
 	 CHECK_EXTENSION(ARB_seamless_cube_map, cap);
 	 if (ctx->Texture.CubeMapSeamless != state) {
-	    FLUSH_VERTICES(ctx, _NEW_TEXTURE);
+	    FLUSH_VERTICES(ctx, _NEW_TEXTURE_OBJECT);
 	    ctx->Texture.CubeMapSeamless = state;
 	 }
 	 break;

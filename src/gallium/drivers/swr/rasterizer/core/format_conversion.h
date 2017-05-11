@@ -202,7 +202,7 @@ INLINE void StoreSOA(const simdvector &src, uint8_t *pDst)
 /// @param pSrc - source data in SOA form
 /// @param dst - output data in SOA form
 template<SWR_FORMAT SrcFormat>
-INLINE void LoadSOA(const uint8_t *pSrc, simd16vector &dst)
+INLINE void SIMDAPI LoadSOA(const uint8_t *pSrc, simd16vector &dst)
 {
     // fast path for float32
     if ((FormatTraits<SrcFormat>::GetType(0) == SWR_TYPE_FLOAT) && (FormatTraits<SrcFormat>::GetBPC(0) == 32))
@@ -247,7 +247,7 @@ INLINE void LoadSOA(const uint8_t *pSrc, simd16vector &dst)
 /// @param vComp - SIMD vector of floats
 /// @param Component - component
 template<SWR_FORMAT Format>
-INLINE simd16scalar Clamp(simd16scalar vComp, uint32_t Component)
+INLINE simd16scalar SIMDAPI Clamp(simd16scalar vComp, uint32_t Component)
 {
     if (FormatTraits<Format>::isNormalized(Component))
     {
@@ -293,7 +293,7 @@ INLINE simd16scalar Clamp(simd16scalar vComp, uint32_t Component)
 /// @param vComp - SIMD vector of floats
 /// @param Component - component
 template<SWR_FORMAT Format>
-INLINE simd16scalar Normalize(simd16scalar vComp, uint32_t Component)
+INLINE simd16scalar SIMDAPI Normalize(simd16scalar vComp, uint32_t Component)
 {
     if (FormatTraits<Format>::isNormalized(Component))
     {
@@ -309,7 +309,7 @@ INLINE simd16scalar Normalize(simd16scalar vComp, uint32_t Component)
 /// @param src - source data in SOA form
 /// @param dst - output data in SOA form
 template<SWR_FORMAT DstFormat>
-INLINE void StoreSOA(const simd16vector &src, uint8_t *pDst)
+INLINE void SIMDAPI StoreSOA(const simd16vector &src, uint8_t *pDst)
 {
     // fast path for float32
     if ((FormatTraits<DstFormat>::GetType(0) == SWR_TYPE_FLOAT) && (FormatTraits<DstFormat>::GetBPC(0) == 32))

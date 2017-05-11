@@ -29,6 +29,7 @@
 
 #include "etnaviv_context.h"
 #include "etnaviv_internal.h"
+#include "etnaviv_shader.h"
 #include "pipe/p_compiler.h"
 #include "pipe/p_shader_tokens.h"
 
@@ -55,10 +56,13 @@ struct etna_shader_io_file {
 };
 
 /* shader object, for linking */
-struct etna_shader {
+struct etna_shader_variant {
+   uint32_t id; /* for debug */
+
    uint processor; /* TGSI_PROCESSOR_... */
    uint32_t code_size; /* code size in uint32 words */
    uint32_t *code;
+   unsigned num_loops;
    unsigned num_temps;
 
    struct etna_shader_uniform_info uniforms;
@@ -89,6 +93,13 @@ struct etna_shader {
 
    /* unknown input property (XX_INPUT_COUNT, field UNK8) */
    uint32_t input_count_unk8;
+
+   /* shader variants form a linked list */
+   struct etna_shader_variant *next;
+
+   /* replicated here to avoid passing extra ptrs everywhere */
+   struct etna_shader *shader;
+   struct etna_shader_key key;
 };
 
 struct etna_varying {
@@ -104,17 +115,17 @@ struct etna_shader_link_info {
    struct etna_varying varyings[ETNA_NUM_INPUTS];
 };
 
-struct etna_shader *
-etna_compile_shader(const struct etna_specs *specs, const struct tgsi_token *tokens);
+bool
+etna_compile_shader(struct etna_shader_variant *shader);
 
 void
-etna_dump_shader(const struct etna_shader *shader);
+etna_dump_shader(const struct etna_shader_variant *shader);
 
 bool
 etna_link_shader(struct etna_shader_link_info *info,
-                 const struct etna_shader *vs, const struct etna_shader *fs);
+                 const struct etna_shader_variant *vs, const struct etna_shader_variant *fs);
 
 void
-etna_destroy_shader(struct etna_shader *shader);
+etna_destroy_shader(struct etna_shader_variant *shader);
 
 #endif

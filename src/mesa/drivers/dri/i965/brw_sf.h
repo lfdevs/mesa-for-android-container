@@ -36,7 +36,7 @@
 
 #include "program/program.h"
 #include "brw_context.h"
-#include "brw_eu.h"
+#include "compiler/brw_eu.h"
 
 
 #define SF_POINTS    0

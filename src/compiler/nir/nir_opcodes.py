@@ -1,4 +1,3 @@
-#! /usr/bin/env python
 #
 # Copyright (C) 2014 Connor Abbott
 #
@@ -95,6 +94,7 @@ tuint = "uint"
 tfloat32 = "float32"
 tint32 = "int32"
 tuint32 = "uint32"
+tint64 = "int64"
 tuint64 = "uint64"
 tfloat64 = "float64"
 
@@ -165,25 +165,30 @@ unop("frsq", tfloat, "bit_size == 64 ? 1.0 / sqrt(src0) : 1.0f / sqrtf(src0)")
 unop("fsqrt", tfloat, "bit_size == 64 ? sqrt(src0) : sqrtf(src0)")
 unop("fexp2", tfloat, "exp2f(src0)")
 unop("flog2", tfloat, "log2f(src0)")
-unop_convert("f2i", tint32, tfloat32, "src0") # Float-to-integer conversion.
-unop_convert("f2u", tuint32, tfloat32, "src0") # Float-to-unsigned conversion
-unop_convert("d2i", tint32, tfloat64, "src0") # Double-to-integer conversion.
-unop_convert("d2u", tuint32, tfloat64, "src0") # Double-to-unsigned conversion.
-unop_convert("i2f", tfloat32, tint32, "src0") # Integer-to-float conversion.
-unop_convert("i2d", tfloat64, tint32, "src0") # Integer-to-double conversion.
-# Float-to-boolean conversion
-unop_convert("f2b", tbool, tfloat32, "src0 != 0.0f")
-unop_convert("d2b", tbool, tfloat64, "src0 != 0.0")
-# Boolean-to-float conversion
-unop_convert("b2f", tfloat32, tbool, "src0 ? 1.0f : 0.0f")
-# Int-to-boolean conversion
-unop_convert("i2b", tbool, tint32, "src0 != 0")
-unop_convert("b2i", tint32, tbool, "src0 ? 1 : 0") # Boolean-to-int conversion
-unop_convert("u2f", tfloat32, tuint32, "src0") # Unsigned-to-float conversion.
-unop_convert("u2d", tfloat64, tuint32, "src0") # Unsigned-to-double conversion.
-# double-to-float conversion
-unop_convert("d2f", tfloat32, tfloat64, "src0") # Double to single precision
-unop_convert("f2d", tfloat64, tfloat32, "src0") # Single to double precision
+
+# Generate all of the numeric conversion opcodes
+for src_t in [tint, tuint, tfloat]:
+   if src_t in (tint, tuint):
+      dst_types = [tfloat, src_t]
+   elif src_t == tfloat:
+      dst_types = [tint, tuint, tfloat]
+
+   for dst_t in dst_types:
+      if dst_t == tfloat:
+         bit_sizes = [16, 32, 64]
+      else:
+         bit_sizes = [8, 16, 32, 64]
+      for bit_size in bit_sizes:
+         unop_convert("{0}2{1}{2}".format(src_t[0], dst_t[0], bit_size),
+                      dst_t + str(bit_size), src_t, "src0")
+
+# We'll hand-code the to/from bool conversion opcodes.  Because bool doesn't
+# have multiple bit-sizes, we can always infer the size from the other type.
+unop_convert("f2b", tbool, tfloat, "src0 != 0.0")
+unop_convert("i2b", tbool, tint, "src0 != 0")
+unop_convert("b2f", tfloat, tbool, "src0 ? 1.0 : 0.0")
+unop_convert("b2i", tint, tbool, "src0 ? 1 : 0")
+
 
 # Unary floating-point rounding operations.
 
@@ -267,10 +272,10 @@ dst.x = (src0.x <<  0) |
         (src0.w << 24);
 """)
 
-unop_horiz("pack_double_2x32", 1, tuint64, 2, tuint32,
+unop_horiz("pack_64_2x32", 1, tuint64, 2, tuint32,
            "dst.x = src0.x | ((uint64_t)src0.y << 32);")
 
-unop_horiz("unpack_double_2x32", 2, tuint32, 1, tuint64,
+unop_horiz("unpack_64_2x32", 2, tuint32, 1, tuint64,
            "dst.x = src0.x; dst.y = src0.x >> 32;")
 
 # Lowered floating point unpacking operations.
@@ -281,8 +286,8 @@ unop_horiz("unpack_half_2x16_split_x", 1, tfloat32, 1, tuint32,
 unop_horiz("unpack_half_2x16_split_y", 1, tfloat32, 1, tuint32,
            "unpack_half_1x16((uint16_t)(src0.x >> 16))")
 
-unop_convert("unpack_double_2x32_split_x", tuint32, tuint64, "src0")
-unop_convert("unpack_double_2x32_split_y", tuint32, tuint64, "src0 >> 32")
+unop_convert("unpack_64_2x32_split_x", tuint32, tuint64, "src0")
+unop_convert("unpack_64_2x32_split_y", tuint32, tuint64, "src0 >> 32")
 
 # Bit operations, part of ARB_gpu_shader5.
 
@@ -467,9 +472,9 @@ binop("seq", tfloat32, commutative, "(src0 == src1) ? 1.0f : 0.0f") # Set on Equ
 binop("sne", tfloat32, commutative, "(src0 != src1) ? 1.0f : 0.0f") # Set on Not Equal
 
 
-binop("ishl", tint, "", "src0 << src1")
-binop("ishr", tint, "", "src0 >> src1")
-binop("ushr", tuint, "", "src0 >> src1")
+opcode("ishl", 0, tint, [0, 0], [tint, tuint32], "", "src0 << src1")
+opcode("ishr", 0, tint, [0, 0], [tint, tuint32], "", "src0 >> src1")
+opcode("ushr", 0, tuint, [0, 0], [tuint, tuint32], "", "src0 >> src1")
 
 # bitwise logic operators
 #
@@ -562,7 +567,7 @@ binop("fpow", tfloat, "", "bit_size == 64 ? powf(src0, src1) : pow(src0, src1)")
 binop_horiz("pack_half_2x16_split", 1, tuint32, 1, tfloat32, 1, tfloat32,
             "pack_half_1x16(src0.x) | (pack_half_1x16(src1.x) << 16)")
 
-binop_convert("pack_double_2x32_split", tuint64, tuint32, "",
+binop_convert("pack_64_2x32_split", tuint64, tuint32, "",
               "src0 | ((uint64_t)src1 << 32)")
 
 # bfm implements the behavior of the first operation of the SM5 "bfi" assembly

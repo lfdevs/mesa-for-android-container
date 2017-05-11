@@ -163,7 +163,7 @@ VA_DRIVER_INIT_FUNC(VADriverContextP ctx)
    vl_csc_get_matrix(VL_CSC_COLOR_STANDARD_BT_601, NULL, true, &drv->csc);
    if (!vl_compositor_set_csc_matrix(&drv->cstate, (const vl_csc_matrix *)&drv->csc, 1.0f, 0.0f))
       goto error_csc_matrix;
-   pipe_mutex_init(drv->mutex);
+   (void) mtx_init(&drv->mutex, mtx_plain);
 
    ctx->pDriverData = (void *)drv;
    ctx->version_major = 0;
@@ -214,9 +214,9 @@ vlVaCreateContext(VADriverContextP ctx, VAConfigID config_id, int picture_width,
       return VA_STATUS_ERROR_INVALID_CONTEXT;
 
    drv = VL_VA_DRIVER(ctx);
-   pipe_mutex_lock(drv->mutex);
+   mtx_lock(&drv->mutex);
    config = handle_table_get(drv->htab, config_id);
-   pipe_mutex_unlock(drv->mutex);
+   mtx_unlock(&drv->mutex);
 
    is_vpp = config->profile == PIPE_VIDEO_PROFILE_UNKNOWN && !picture_width &&
             !picture_height && !flag && !render_targets && !num_render_targets;
@@ -230,10 +230,6 @@ vlVaCreateContext(VADriverContextP ctx, VAConfigID config_id, int picture_width,
 
    if (is_vpp) {
       context->decoder = NULL;
-      if (!drv->compositor.upload) {
-         FREE(context);
-         return VA_STATUS_ERROR_INVALID_CONTEXT;
-      }
    } else {
       context->templat.profile = config->profile;
       context->templat.entrypoint = config->entrypoint;
@@ -291,9 +287,9 @@ vlVaCreateContext(VADriverContextP ctx, VAConfigID config_id, int picture_width,
    if (config->entrypoint == PIPE_VIDEO_ENTRYPOINT_ENCODE)
       context->desc.h264enc.rate_ctrl.rate_ctrl_method = config->rc;
 
-   pipe_mutex_lock(drv->mutex);
+   mtx_lock(&drv->mutex);
    *context_id = handle_table_add(drv->htab, context);
-   pipe_mutex_unlock(drv->mutex);
+   mtx_unlock(&drv->mutex);
 
    return VA_STATUS_SUCCESS;
 }
@@ -308,10 +304,10 @@ vlVaDestroyContext(VADriverContextP ctx, VAContextID context_id)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
 
    drv = VL_VA_DRIVER(ctx);
-   pipe_mutex_lock(drv->mutex);
+   mtx_lock(&drv->mutex);
    context = handle_table_get(drv->htab, context_id);
    if (!context) {
-      pipe_mutex_unlock(drv->mutex);
+      mtx_unlock(&drv->mutex);
       return VA_STATUS_ERROR_INVALID_CONTEXT;
    }
 
@@ -336,7 +332,7 @@ vlVaDestroyContext(VADriverContextP ctx, VAContextID context_id)
    }
    FREE(context);
    handle_table_remove(drv->htab, context_id);
-   pipe_mutex_unlock(drv->mutex);
+   mtx_unlock(&drv->mutex);
 
    return VA_STATUS_SUCCESS;
 }
@@ -355,7 +351,7 @@ vlVaTerminate(VADriverContextP ctx)
    drv->pipe->destroy(drv->pipe);
    drv->vscreen->destroy(drv->vscreen);
    handle_table_destroy(drv->htab);
-   pipe_mutex_destroy(drv->mutex);
+   mtx_destroy(&drv->mutex);
    FREE(drv);
 
    return VA_STATUS_SUCCESS;

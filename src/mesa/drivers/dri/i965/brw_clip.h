@@ -34,7 +34,7 @@
 
 
 #include "brw_context.h"
-#include "brw_eu.h"
+#include "compiler/brw_eu.h"
 
 /* Initial 3 verts, plus at most 6 additional verts from intersections
  * with fixed planes, plus at most 8 additional verts from intersections

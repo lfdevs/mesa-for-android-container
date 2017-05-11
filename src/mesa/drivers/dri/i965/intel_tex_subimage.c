@@ -84,7 +84,7 @@ intel_texsubimage_tiled_memcpy(struct gl_context * ctx,
    int src_pitch;
 
    /* The miptree's buffer. */
-   drm_intel_bo *bo;
+   struct brw_bo *bo;
 
    int error = 0;
 
@@ -143,12 +143,12 @@ intel_texsubimage_tiled_memcpy(struct gl_context * ctx,
 
    bo = image->mt->bo;
 
-   if (drm_intel_bo_references(brw->batch.bo, bo)) {
+   if (brw_batch_references(&brw->batch, bo)) {
       perf_debug("Flushing before mapping a referenced bo.\n");
       intel_batchbuffer_flush(brw);
    }
 
-   error = brw_bo_map(brw, bo, true /* write enable */, "miptree");
+   error = brw_bo_map(brw, bo, true /* write enable */);
    if (error || bo->virtual == NULL) {
       DBG("%s: failed to map bo\n", __func__);
       return false;
@@ -185,7 +185,7 @@ intel_texsubimage_tiled_memcpy(struct gl_context * ctx,
       mem_copy
    );
 
-   drm_intel_bo_unmap(bo);
+   brw_bo_unmap(bo);
    return true;
 }
 
@@ -202,7 +202,7 @@ intelTexSubImage(struct gl_context * ctx,
    struct intel_mipmap_tree *mt = intel_texture_image(texImage)->mt;
    bool ok;
 
-   bool tex_busy = mt && drm_intel_bo_busy(mt->bo);
+   bool tex_busy = mt && brw_bo_busy(mt->bo);
 
    if (mt && mt->format == MESA_FORMAT_S_UINT8)
       mt->r8stencil_needs_update = true;

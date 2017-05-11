@@ -22,7 +22,8 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-#pragma once
+#ifndef EGL_DRI2_FALLBACKS_INCLUDED
+#define EGL_DRI2_FALLBACKS_INCLUDED
 
 #include "egltypedefs.h"
 
@@ -116,3 +117,5 @@ dri2_fallback_get_sync_values(_EGLDisplay *dpy, _EGLSurface *surf,
 {
    return EGL_FALSE;
 }
+
+#endif /* EGL_DRI2_FALLBACKS_INCLUDED */

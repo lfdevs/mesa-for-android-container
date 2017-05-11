@@ -128,7 +128,7 @@ intelTexImage(struct gl_context * ctx,
    struct intel_texture_image *intelImage = intel_texture_image(texImage);
    bool ok;
 
-   bool tex_busy = intelImage->mt && drm_intel_bo_busy(intelImage->mt->bo);
+   bool tex_busy = intelImage->mt && brw_bo_busy(intelImage->mt->bo);
 
    DBG("%s mesa_format %s target %s format %s type %s level %d %dx%dx%d\n",
        __func__, _mesa_get_format_name(texImage->TexFormat),
@@ -467,7 +467,7 @@ intel_gettexsubimage_tiled_memcpy(struct gl_context *ctx,
    int dst_pitch;
 
    /* The miptree's buffer. */
-   drm_intel_bo *bo;
+   struct brw_bo *bo;
 
    int error = 0;
 
@@ -527,12 +527,12 @@ intel_gettexsubimage_tiled_memcpy(struct gl_context *ctx,
 
    bo = image->mt->bo;
 
-   if (drm_intel_bo_references(brw->batch.bo, bo)) {
+   if (brw_batch_references(&brw->batch, bo)) {
       perf_debug("Flushing before mapping a referenced bo.\n");
       intel_batchbuffer_flush(brw);
    }
 
-   error = brw_bo_map(brw, bo, false /* write enable */, "miptree");
+   error = brw_bo_map(brw, bo, false /* write enable */);
    if (error) {
       DBG("%s: failed to map bo\n", __func__);
       return false;
@@ -565,7 +565,7 @@ intel_gettexsubimage_tiled_memcpy(struct gl_context *ctx,
       mem_copy
    );
 
-   drm_intel_bo_unmap(bo);
+   brw_bo_unmap(bo);
    return true;
 }
 

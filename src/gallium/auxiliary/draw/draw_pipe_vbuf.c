@@ -98,14 +98,6 @@ static void vbuf_flush_vertices( struct vbuf_stage *vbuf );
 static void vbuf_alloc_vertices( struct vbuf_stage *vbuf );
 
 
-static inline boolean 
-overflow( void *map, void *ptr, unsigned bytes, unsigned bufsz )
-{
-   unsigned long used = (unsigned long) ((char *)ptr - (char *)map);
-   return (used + bytes) > bufsz;
-}
-
-
 static inline void 
 check_space( struct vbuf_stage *vbuf, unsigned nr )
 {

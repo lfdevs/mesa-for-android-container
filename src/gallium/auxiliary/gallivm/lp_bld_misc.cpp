@@ -32,14 +32,6 @@
  */
 
 
-#ifndef __STDC_LIMIT_MACROS
-#define __STDC_LIMIT_MACROS
-#endif
-
-#ifndef __STDC_CONSTANT_MACROS
-#define __STDC_CONSTANT_MACROS
-#endif
-
 // Undef these vars just to silence warnings
 #undef PACKAGE_BUGREPORT
 #undef PACKAGE_NAME
@@ -755,17 +747,6 @@ lp_free_memory_manager(LLVMMCJITMemoryManagerRef memorymgr)
    delete reinterpret_cast<BaseMemoryManager*>(memorymgr);
 }
 
-extern "C" void
-lp_add_attr_dereferenceable(LLVMValueRef val, uint64_t bytes)
-{
-#if HAVE_LLVM >= 0x0306
-   llvm::Argument *A = llvm::unwrap<llvm::Argument>(val);
-   llvm::AttrBuilder B;
-   B.addDereferenceableAttr(bytes);
-   A->addAttr(llvm::AttributeSet::get(A->getContext(), A->getArgNo() + 1,  B));
-#endif
-}
-
 extern "C" LLVMValueRef
 lp_get_called_value(LLVMValueRef call)
 {
@@ -789,15 +770,24 @@ lp_is_function(LLVMValueRef v)
 }
 
 extern "C" LLVMBuilderRef
-lp_create_builder(LLVMContextRef ctx, bool unsafe_fpmath)
+lp_create_builder(LLVMContextRef ctx, enum lp_float_mode float_mode)
 {
    LLVMBuilderRef builder = LLVMCreateBuilderInContext(ctx);
 
 #if HAVE_LLVM >= 0x0308
-   if (unsafe_fpmath) {
-      llvm::FastMathFlags flags;
+   llvm::FastMathFlags flags;
+
+   switch (float_mode) {
+   case LP_FLOAT_MODE_DEFAULT:
+      break;
+   case LP_FLOAT_MODE_NO_SIGNED_ZEROS_FP_MATH:
+      flags.setNoSignedZeros();
+      llvm::unwrap(builder)->setFastMathFlags(flags);
+      break;
+   case LP_FLOAT_MODE_UNSAFE_FP_MATH:
       flags.setUnsafeAlgebra();
       llvm::unwrap(builder)->setFastMathFlags(flags);
+      break;
    }
 #endif
 

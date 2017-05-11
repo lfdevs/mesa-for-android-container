@@ -389,6 +389,8 @@ enum pipe_format {
    PIPE_FORMAT_ASTC_12x10_SRGB         = 305,
    PIPE_FORMAT_ASTC_12x12_SRGB         = 306,
 
+   PIPE_FORMAT_P016                    = 307,
+
    PIPE_FORMAT_COUNT
 };
 

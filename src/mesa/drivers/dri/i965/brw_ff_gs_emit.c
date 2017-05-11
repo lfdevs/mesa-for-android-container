@@ -38,7 +38,6 @@
 
 #include "brw_defines.h"
 #include "brw_context.h"
-#include "brw_eu.h"
 #include "brw_ff_gs.h"
 
 /**
@@ -454,7 +453,7 @@ gen6_sol_program(struct brw_ff_gs_compile *c, struct brw_ff_gs_prog_key *key,
                           final_write ? c->reg.temp : brw_null_reg(), /* dest */
                           1, /* msg_reg_nr */
                           c->reg.header, /* src0 */
-                          SURF_INDEX_GEN6_SOL_BINDING(binding), /* binding_table_index */
+                          BRW_GEN6_SOL_BINDING_START + binding, /* binding_table_index */
                           final_write); /* send_commit_msg */
          }
       }

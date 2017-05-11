@@ -199,8 +199,6 @@ glXGetDriverConfig(const char *driverName)
    return dlsym(handle, "__driConfigOptions");
 }
 
-#ifdef XDAMAGE_1_1_INTERFACE
-
 static GLboolean
 has_damage_post(Display * dpy)
 {
@@ -273,8 +271,6 @@ static const __DRIdamageExtension damageExtension = {
 
    .reportDamage        = __glXReportDamage,
 };
-
-#endif
 
 static GLboolean
 __glXDRIGetDrawableInfo(__DRIdrawable * drawable,

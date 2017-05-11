@@ -167,7 +167,7 @@ prepare_shader_sampling(
    struct softpipe_context *sp,
    unsigned num,
    struct pipe_sampler_view **views,
-   unsigned shader_type,
+   enum pipe_shader_type shader_type,
    struct pipe_resource *mapped_tex[PIPE_MAX_SHADER_SAMPLER_VIEWS])
 {
 

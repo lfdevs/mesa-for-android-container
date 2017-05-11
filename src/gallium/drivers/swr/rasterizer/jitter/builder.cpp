@@ -56,16 +56,14 @@ namespace SwrJit
         mInt16PtrTy = PointerType::get(mInt16Ty, 0);
         mInt32PtrTy = PointerType::get(mInt32Ty, 0);
         mInt64Ty = Type::getInt64Ty(pJitMgr->mContext);
-        mV4FP32Ty = StructType::get(pJitMgr->mContext, std::vector<Type*>(4, mFP32Ty), false); // vector4 float type (represented as structure)
-        mV4Int32Ty = StructType::get(pJitMgr->mContext, std::vector<Type*>(4, mInt32Ty), false); // vector4 int type
         mSimdInt1Ty = VectorType::get(mInt1Ty, mVWidth);
         mSimdInt16Ty = VectorType::get(mInt16Ty, mVWidth);
         mSimdInt32Ty = VectorType::get(mInt32Ty, mVWidth);
         mSimdInt64Ty = VectorType::get(mInt64Ty, mVWidth);
         mSimdFP16Ty = VectorType::get(mFP16Ty, mVWidth);
         mSimdFP32Ty = VectorType::get(mFP32Ty, mVWidth);
-        mSimdVectorTy = StructType::get(pJitMgr->mContext, std::vector<Type*>(4, mSimdFP32Ty), false);
-        mSimdVectorTRTy = StructType::get(pJitMgr->mContext, std::vector<Type*>(5, mSimdFP32Ty), false);
+        mSimdVectorTy = ArrayType::get(mSimdFP32Ty, 4);
+        mSimdVectorTRTy = ArrayType::get(mSimdFP32Ty, 5);
 
         if (sizeof(uint32_t*) == 4)
         {

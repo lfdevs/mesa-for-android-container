@@ -34,10 +34,6 @@
 #include "intel_regions.h"
 #include "GL/internal/dri_interface.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 /* A layer on top of the intel_regions code which adds:
  *
  * - Code to size and layout a region to hold a set of mipmaps.
@@ -368,9 +364,5 @@ intel_miptree_unmap(struct intel_context *intel,
 		    unsigned int level,
 		    unsigned int slice);
 
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif

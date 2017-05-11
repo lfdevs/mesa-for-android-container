@@ -87,6 +87,8 @@ computes_derivative(unsigned opcode)
       return opcode != TGSI_OPCODE_TG4 &&
              opcode != TGSI_OPCODE_TXD &&
              opcode != TGSI_OPCODE_TXF &&
+             opcode != TGSI_OPCODE_TXF_LZ &&
+             opcode != TGSI_OPCODE_TEX_LZ &&
              opcode != TGSI_OPCODE_TXL &&
              opcode != TGSI_OPCODE_TXL2 &&
              opcode != TGSI_OPCODE_TXQ &&
@@ -199,6 +201,28 @@ scan_src_operand(struct tgsi_shader_info *info,
       }
    }
 
+   if (info->processor == PIPE_SHADER_TESS_CTRL &&
+       src->Register.File == TGSI_FILE_OUTPUT) {
+      unsigned input;
+
+      if (src->Register.Indirect && src->Indirect.ArrayID)
+         input = info->output_array_first[src->Indirect.ArrayID];
+      else
+         input = src->Register.Index;
+
+      switch (info->output_semantic_name[input]) {
+      case TGSI_SEMANTIC_PATCH:
+         info->reads_perpatch_outputs = true;
+         break;
+      case TGSI_SEMANTIC_TESSINNER:
+      case TGSI_SEMANTIC_TESSOUTER:
+         info->reads_tessfactor_outputs = true;
+         break;
+      default:
+         info->reads_pervertex_outputs = true;
+      }
+   }
+
    /* check for indirect register reads */
    if (src->Register.Indirect) {
       info->indirect_files |= (1 << src->Register.File);
@@ -261,9 +285,9 @@ scan_src_operand(struct tgsi_shader_info *info,
 
          if (src->Register.File == TGSI_FILE_IMAGE) {
             if (src->Register.Indirect)
-               info->images_writemask = info->images_declared;
+               info->images_atomic = info->images_declared;
             else
-               info->images_writemask |= 1 << src->Register.Index;
+               info->images_atomic |= 1 << src->Register.Index;
          } else if (src->Register.File == TGSI_FILE_BUFFER) {
             if (src->Register.Indirect)
                info->shader_buffers_atomic = info->shader_buffers_declared;
@@ -271,7 +295,12 @@ scan_src_operand(struct tgsi_shader_info *info,
                info->shader_buffers_atomic |= 1 << src->Register.Index;
          }
       } else {
-         if (src->Register.File == TGSI_FILE_BUFFER) {
+         if (src->Register.File == TGSI_FILE_IMAGE) {
+            if (src->Register.Indirect)
+               info->images_load = info->images_declared;
+            else
+               info->images_load |= 1 << src->Register.Index;
+         } else if (src->Register.File == TGSI_FILE_BUFFER) {
             if (src->Register.Indirect)
                info->shader_buffers_load = info->shader_buffers_declared;
             else
@@ -403,9 +432,9 @@ scan_instruction(struct tgsi_shader_info *info,
 
          if (dst->Register.File == TGSI_FILE_IMAGE) {
             if (dst->Register.Indirect)
-               info->images_writemask = info->images_declared;
+               info->images_store = info->images_declared;
             else
-               info->images_writemask |= 1 << dst->Register.Index;
+               info->images_store |= 1 << dst->Register.Index;
          } else if (dst->Register.File == TGSI_FILE_BUFFER) {
             if (dst->Register.Indirect)
                info->shader_buffers_store = info->shader_buffers_declared;
@@ -538,6 +567,10 @@ scan_declaration(struct tgsi_shader_info *info,
             break;
          case TGSI_SEMANTIC_SAMPLEMASK:
             info->reads_samplemask = TRUE;
+            break;
+         case TGSI_SEMANTIC_TESSINNER:
+         case TGSI_SEMANTIC_TESSOUTER:
+            info->reads_tess_factors = true;
             break;
          }
          break;

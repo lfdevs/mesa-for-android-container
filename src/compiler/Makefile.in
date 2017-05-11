@@ -165,13 +165,15 @@ check_PROGRAMS = glsl/glcpp/glcpp$(EXEEXT) glsl/glsl_test$(EXEEXT) \
 	glsl/tests/sampler-types-test$(EXEEXT) \
 	glsl/tests/uniform-initializer-test$(EXEEXT) \
 	nir/tests/control_flow_tests$(EXEEXT)
-TESTS = glsl/glcpp/tests/glcpp-test glsl/glcpp/tests/glcpp-test-cr-lf \
+TESTS = glsl/glcpp/tests/glcpp-test.sh \
+	glsl/glcpp/tests/glcpp-test-cr-lf.sh \
 	glsl/tests/blob-test$(EXEEXT) glsl/tests/cache-test$(EXEEXT) \
 	glsl/tests/general-ir-test$(EXEEXT) \
-	glsl/tests/optimization-test \
+	glsl/tests/optimization-test.sh \
 	glsl/tests/sampler-types-test$(EXEEXT) \
 	glsl/tests/uniform-initializer-test$(EXEEXT) \
-	glsl/tests/warnings-test nir/tests/control_flow_tests$(EXEEXT)
+	glsl/tests/warnings-test.sh \
+	nir/tests/control_flow_tests$(EXEEXT)
 noinst_PROGRAMS = glsl_compiler$(EXEEXT) spirv2nir$(EXEEXT)
 subdir = src/compiler
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
@@ -208,10 +210,11 @@ am__objects_2 = glsl/glsl_lexer.lo glsl/glsl_parser.lo
 am__objects_3 = glsl/ast_array_index.lo glsl/ast_expr.lo \
 	glsl/ast_function.lo glsl/ast_to_hir.lo glsl/ast_type.lo \
 	glsl/blob.lo glsl/builtin_functions.lo glsl/builtin_types.lo \
-	glsl/builtin_variables.lo glsl/glsl_parser_extras.lo \
-	glsl/glsl_symbol_table.lo glsl/glsl_to_nir.lo \
-	glsl/hir_field_selection.lo glsl/ir_array_refcount.lo \
-	glsl/ir_basic_block.lo glsl/ir_builder.lo glsl/ir_clone.lo \
+	glsl/builtin_variables.lo glsl/generate_ir.lo \
+	glsl/glsl_parser_extras.lo glsl/glsl_symbol_table.lo \
+	glsl/glsl_to_nir.lo glsl/hir_field_selection.lo \
+	glsl/ir_array_refcount.lo glsl/ir_basic_block.lo \
+	glsl/ir_builder.lo glsl/ir_clone.lo \
 	glsl/ir_constant_expression.lo glsl/ir.lo glsl/ir_equals.lo \
 	glsl/ir_expression_flattening.lo \
 	glsl/ir_function_can_inline.lo \
@@ -231,9 +234,9 @@ am__objects_3 = glsl/ast_array_index.lo glsl/ast_expr.lo \
 	glsl/lower_const_arrays_to_uniforms.lo glsl/lower_discard.lo \
 	glsl/lower_discard_flow.lo glsl/lower_distance.lo \
 	glsl/lower_if_to_cond_assign.lo glsl/lower_instructions.lo \
-	glsl/lower_jumps.lo glsl/lower_mat_op_to_vec.lo \
-	glsl/lower_noise.lo glsl/lower_offset_array.lo \
-	glsl/lower_packed_varyings.lo \
+	glsl/lower_int64.lo glsl/lower_jumps.lo \
+	glsl/lower_mat_op_to_vec.lo glsl/lower_noise.lo \
+	glsl/lower_offset_array.lo glsl/lower_packed_varyings.lo \
 	glsl/lower_named_interface_blocks.lo \
 	glsl/lower_packing_builtins.lo glsl/lower_subroutine.lo \
 	glsl/lower_tess_level.lo glsl/lower_texture_projection.lo \
@@ -258,39 +261,41 @@ am__objects_3 = glsl/ast_array_index.lo glsl/ast_expr.lo \
 	glsl/opt_structure_splitting.lo glsl/opt_swizzle_swizzle.lo \
 	glsl/opt_tree_grafting.lo glsl/opt_vectorize.lo \
 	glsl/propagate_invariance.lo glsl/s_expression.lo
-am_glsl_libglsl_la_OBJECTS = $(am__objects_2) $(am__objects_3)
+am__objects_4 = glsl/shader_cache.lo
+am_glsl_libglsl_la_OBJECTS = $(am__objects_2) $(am__objects_3) \
+	$(am__objects_4)
 glsl_libglsl_la_OBJECTS = $(am_glsl_libglsl_la_OBJECTS)
 am__DEPENDENCIES_1 =
 glsl_libstandalone_la_DEPENDENCIES = glsl/libglsl.la \
 	$(top_builddir)/src/libglsl_util.la \
 	$(top_builddir)/src/util/libmesautil.la $(am__DEPENDENCIES_1)
-am__objects_4 = glsl/ir_builder_print_visitor.lo \
+am__objects_5 = glsl/ir_builder_print_visitor.lo \
 	glsl/standalone_scaffolding.lo glsl/standalone.lo
-am_glsl_libstandalone_la_OBJECTS = $(am__objects_4)
+am_glsl_libstandalone_la_OBJECTS = $(am__objects_5)
 glsl_libstandalone_la_OBJECTS = $(am_glsl_libstandalone_la_OBJECTS)
 libcompiler_la_LIBADD =
-am__objects_5 = glsl_types.lo nir_types.lo shader_enums.lo
-am_libcompiler_la_OBJECTS = $(am__objects_5)
+am__objects_6 = glsl_types.lo nir_types.lo shader_enums.lo
+am_libcompiler_la_OBJECTS = $(am__objects_6)
 libcompiler_la_OBJECTS = $(am_libcompiler_la_OBJECTS)
 nir_libnir_la_DEPENDENCIES = libcompiler.la
-am__objects_6 = nir/nir.lo nir/nir_clone.lo nir/nir_control_flow.lo \
+am__objects_7 = nir/nir.lo nir/nir_clone.lo nir/nir_control_flow.lo \
 	nir/nir_dominance.lo nir/nir_from_ssa.lo \
 	nir/nir_gather_info.lo nir/nir_gs_count_vertices.lo \
 	nir/nir_inline_functions.lo nir/nir_instr_set.lo \
 	nir/nir_intrinsics.lo nir/nir_liveness.lo \
-	nir/nir_loop_analyze.lo nir/nir_lower_alu_to_scalar.lo \
-	nir/nir_lower_atomics.lo nir/nir_lower_bitmap.lo \
-	nir/nir_lower_clamp_color_outputs.lo nir/nir_lower_clip.lo \
+	nir/nir_loop_analyze.lo nir/nir_lower_64bit_packing.lo \
+	nir/nir_lower_alu_to_scalar.lo nir/nir_lower_atomics.lo \
+	nir/nir_lower_bitmap.lo nir/nir_lower_clamp_color_outputs.lo \
+	nir/nir_lower_clip.lo \
 	nir/nir_lower_clip_cull_distance_arrays.lo \
 	nir/nir_lower_constant_initializers.lo \
-	nir/nir_lower_double_ops.lo nir/nir_lower_double_packing.lo \
-	nir/nir_lower_drawpixels.lo \
+	nir/nir_lower_double_ops.lo nir/nir_lower_drawpixels.lo \
 	nir/nir_lower_global_vars_to_local.lo \
 	nir/nir_lower_gs_intrinsics.lo \
 	nir/nir_lower_load_const_to_scalar.lo \
 	nir/nir_lower_locals_to_regs.lo nir/nir_lower_idiv.lo \
-	nir/nir_lower_indirect_derefs.lo nir/nir_lower_io.lo \
-	nir/nir_lower_io_to_temporaries.lo \
+	nir/nir_lower_indirect_derefs.lo nir/nir_lower_int64.lo \
+	nir/nir_lower_io.lo nir/nir_lower_io_to_temporaries.lo \
 	nir/nir_lower_io_to_scalar.lo nir/nir_lower_io_types.lo \
 	nir/nir_lower_passthrough_edgeflags.lo \
 	nir/nir_lower_patch_vertices.lo \
@@ -316,13 +321,13 @@ am__objects_6 = nir/nir.lo nir/nir_clone.lo nir/nir_control_flow.lo \
 	nir/nir_remove_dead_variables.lo nir/nir_repair_ssa.lo \
 	nir/nir_search.lo nir/nir_split_var_copies.lo nir/nir_sweep.lo \
 	nir/nir_to_lcssa.lo nir/nir_validate.lo nir/nir_worklist.lo
-am__objects_7 = spirv/spirv_info.lo spirv/spirv_to_nir.lo \
+am__objects_8 = spirv/spirv_info.lo spirv/spirv_to_nir.lo \
 	spirv/vtn_alu.lo spirv/vtn_cfg.lo spirv/vtn_glsl450.lo \
 	spirv/vtn_variables.lo
-am__objects_8 = nir/nir_constant_expressions.lo nir/nir_opcodes.lo \
+am__objects_9 = nir/nir_constant_expressions.lo nir/nir_opcodes.lo \
 	nir/nir_opt_algebraic.lo
-am_nir_libnir_la_OBJECTS = $(am__objects_6) $(am__objects_7) \
-	$(am__objects_8)
+am_nir_libnir_la_OBJECTS = $(am__objects_7) $(am__objects_8) \
+	$(am__objects_9)
 nir_libnir_la_OBJECTS = $(am_nir_libnir_la_OBJECTS)
 PROGRAMS = $(noinst_PROGRAMS)
 am_glsl_glcpp_glcpp_OBJECTS = glsl/glcpp/glcpp.$(OBJEXT)
@@ -333,7 +338,8 @@ am_glsl_glsl_test_OBJECTS = glsl/test.$(OBJEXT) \
 	glsl/test_optpass.$(OBJEXT)
 glsl_glsl_test_OBJECTS = $(am_glsl_glsl_test_OBJECTS)
 glsl_glsl_test_DEPENDENCIES = glsl/libglsl.la glsl/libstandalone.la \
-	$(top_builddir)/src/libglsl_util.la $(am__DEPENDENCIES_1)
+	$(top_builddir)/src/libglsl_util.la $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1)
 am_glsl_tests_blob_test_OBJECTS = glsl/tests/blob_test.$(OBJEXT)
 glsl_tests_blob_test_OBJECTS = $(am_glsl_tests_blob_test_OBJECTS)
 glsl_tests_blob_test_DEPENDENCIES = glsl/libglsl.la
@@ -341,7 +347,7 @@ am_glsl_tests_cache_test_OBJECTS =  \
 	glsl/tests/glsl_tests_cache_test-cache_test.$(OBJEXT)
 glsl_tests_cache_test_OBJECTS = $(am_glsl_tests_cache_test_OBJECTS)
 glsl_tests_cache_test_DEPENDENCIES = glsl/libglsl.la \
-	$(am__DEPENDENCIES_1)
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
 glsl_tests_cache_test_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
 	$(glsl_tests_cache_test_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) \
@@ -351,6 +357,7 @@ am_glsl_tests_general_ir_test_OBJECTS =  \
 	glsl/tests/builtin_variable_test.$(OBJEXT) \
 	glsl/tests/invalidate_locations_test.$(OBJEXT) \
 	glsl/tests/general_ir_test.$(OBJEXT) \
+	glsl/tests/lower_int64_test.$(OBJEXT) \
 	glsl/tests/opt_add_neg_to_sub_test.$(OBJEXT) \
 	glsl/tests/varyings_test.$(OBJEXT)
 glsl_tests_general_ir_test_OBJECTS =  \
@@ -358,7 +365,7 @@ glsl_tests_general_ir_test_OBJECTS =  \
 glsl_tests_general_ir_test_DEPENDENCIES =  \
 	$(top_builddir)/src/gtest/libgtest.la glsl/libglsl.la \
 	glsl/libstandalone.la $(top_builddir)/src/libglsl_util.la \
-	$(am__DEPENDENCIES_1)
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
 am_glsl_tests_sampler_types_test_OBJECTS =  \
 	glsl/tests/sampler_types_test.$(OBJEXT)
 glsl_tests_sampler_types_test_OBJECTS =  \
@@ -377,7 +384,8 @@ glsl_tests_uniform_initializer_test_DEPENDENCIES =  \
 	$(top_builddir)/src/libglsl_util.la $(am__DEPENDENCIES_1)
 am_glsl_compiler_OBJECTS = glsl/main.$(OBJEXT)
 glsl_compiler_OBJECTS = $(am_glsl_compiler_OBJECTS)
-glsl_compiler_DEPENDENCIES = glsl/libstandalone.la
+glsl_compiler_DEPENDENCIES = glsl/libstandalone.la \
+	$(am__DEPENDENCIES_1)
 am_nir_tests_control_flow_tests_OBJECTS = nir/tests/nir_tests_control_flow_tests-control_flow_tests.$(OBJEXT)
 nir_tests_control_flow_tests_OBJECTS =  \
 	$(am_nir_tests_control_flow_tests_OBJECTS)
@@ -730,8 +738,6 @@ DLLTOOL = @DLLTOOL@
 DLOPEN_LIBS = @DLOPEN_LIBS@
 DRI2PROTO_CFLAGS = @DRI2PROTO_CFLAGS@
 DRI2PROTO_LIBS = @DRI2PROTO_LIBS@
-DRI3PROTO_CFLAGS = @DRI3PROTO_CFLAGS@
-DRI3PROTO_LIBS = @DRI3PROTO_LIBS@
 DRIGL_CFLAGS = @DRIGL_CFLAGS@
 DRIGL_LIBS = @DRIGL_LIBS@
 DRI_DRIVER_INSTALL_DIR = @DRI_DRIVER_INSTALL_DIR@
@@ -796,29 +802,27 @@ LIBDRM_CFLAGS = @LIBDRM_CFLAGS@
 LIBDRM_LIBS = @LIBDRM_LIBS@
 LIBELF_CFLAGS = @LIBELF_CFLAGS@
 LIBELF_LIBS = @LIBELF_LIBS@
+LIBGLVND_DATADIR = @LIBGLVND_DATADIR@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
 LIBSENSORS_LIBS = @LIBSENSORS_LIBS@
 LIBTOOL = @LIBTOOL@
+LIBUNWIND_CFLAGS = @LIBUNWIND_CFLAGS@
+LIBUNWIND_LIBS = @LIBUNWIND_LIBS@
 LIB_DIR = @LIB_DIR@
 LIB_EXT = @LIB_EXT@
 LIPO = @LIPO@
-LLVM_BINDIR = @LLVM_BINDIR@
 LLVM_CFLAGS = @LLVM_CFLAGS@
 LLVM_CONFIG = @LLVM_CONFIG@
-LLVM_CPPFLAGS = @LLVM_CPPFLAGS@
 LLVM_CXXFLAGS = @LLVM_CXXFLAGS@
 LLVM_INCLUDEDIR = @LLVM_INCLUDEDIR@
 LLVM_LDFLAGS = @LLVM_LDFLAGS@
-LLVM_LIBDIR = @LLVM_LIBDIR@
 LLVM_LIBS = @LLVM_LIBS@
-LLVM_VERSION = @LLVM_VERSION@
 LN_S = @LN_S@
 LTLIBOBJS = @LTLIBOBJS@
 LT_SYS_LIBRARY_PATH = @LT_SYS_LIBRARY_PATH@
 MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
-MESA_LLVM = @MESA_LLVM@
 MKDIR_P = @MKDIR_P@
 MSVC2013_COMPAT_CFLAGS = @MSVC2013_COMPAT_CFLAGS@
 MSVC2013_COMPAT_CXXFLAGS = @MSVC2013_COMPAT_CXXFLAGS@
@@ -858,8 +862,6 @@ PKG_CONFIG = @PKG_CONFIG@
 PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
 PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
 POSIX_SHELL = @POSIX_SHELL@
-PRESENTPROTO_CFLAGS = @PRESENTPROTO_CFLAGS@
-PRESENTPROTO_LIBS = @PRESENTPROTO_LIBS@
 PTHREADSTUBS_CFLAGS = @PTHREADSTUBS_CFLAGS@
 PTHREADSTUBS_LIBS = @PTHREADSTUBS_LIBS@
 PTHREAD_CC = @PTHREAD_CC@
@@ -882,7 +884,7 @@ SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
 SWR_AVX2_CXXFLAGS = @SWR_AVX2_CXXFLAGS@
 SWR_AVX_CXXFLAGS = @SWR_AVX_CXXFLAGS@
-SWR_CXX11_CXXFLAGS = @SWR_CXX11_CXXFLAGS@
+SWR_CXX14_CXXFLAGS = @SWR_CXX14_CXXFLAGS@
 VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
 VALGRIND_LIBS = @VALGRIND_LIBS@
 VA_CFLAGS = @VA_CFLAGS@
@@ -926,9 +928,10 @@ XVMC_LIBS = @XVMC_LIBS@
 XVMC_LIB_INSTALL_DIR = @XVMC_LIB_INSTALL_DIR@
 XVMC_MAJOR = @XVMC_MAJOR@
 XVMC_MINOR = @XVMC_MINOR@
-XXD = @XXD@
 YACC = @YACC@
 YFLAGS = @YFLAGS@
+ZLIB_CFLAGS = @ZLIB_CFLAGS@
+ZLIB_LIBS = @ZLIB_LIBS@
 abs_builddir = @abs_builddir@
 abs_srcdir = @abs_srcdir@
 abs_top_builddir = @abs_top_builddir@
@@ -1011,8 +1014,11 @@ LIBGLSL_FILES = \
 	glsl/blob.c \
 	glsl/blob.h \
 	glsl/builtin_functions.cpp \
+	glsl/builtin_functions.h \
+	glsl/builtin_int64.h \
 	glsl/builtin_types.cpp \
 	glsl/builtin_variables.cpp \
+	glsl/generate_ir.cpp \
 	glsl/glsl_parser_extras.cpp \
 	glsl/glsl_parser_extras.h \
 	glsl/glsl_symbol_table.cpp \
@@ -1079,6 +1085,7 @@ LIBGLSL_FILES = \
 	glsl/lower_distance.cpp \
 	glsl/lower_if_to_cond_assign.cpp \
 	glsl/lower_instructions.cpp \
+	glsl/lower_int64.cpp \
 	glsl/lower_jumps.cpp \
 	glsl/lower_mat_op_to_vec.cpp \
 	glsl/lower_noise.cpp \
@@ -1128,6 +1135,10 @@ LIBGLSL_FILES = \
 	glsl/propagate_invariance.cpp \
 	glsl/s_expression.cpp \
 	glsl/s_expression.h
+
+LIBGLSL_SHADER_CACHE_FILES = \
+	glsl/shader_cache.cpp \
+	glsl/shader_cache.h
 
 
 # glsl_compiler
@@ -1189,6 +1200,7 @@ NIR_FILES = \
 	nir/nir_liveness.c \
 	nir/nir_loop_analyze.c \
 	nir/nir_loop_analyze.h \
+	nir/nir_lower_64bit_packing.c \
 	nir/nir_lower_alu_to_scalar.c \
 	nir/nir_lower_atomics.c \
 	nir/nir_lower_bitmap.c \
@@ -1197,7 +1209,6 @@ NIR_FILES = \
 	nir/nir_lower_clip_cull_distance_arrays.c \
 	nir/nir_lower_constant_initializers.c \
 	nir/nir_lower_double_ops.c \
-	nir/nir_lower_double_packing.c \
 	nir/nir_lower_drawpixels.c \
 	nir/nir_lower_global_vars_to_local.c \
 	nir/nir_lower_gs_intrinsics.c \
@@ -1205,6 +1216,7 @@ NIR_FILES = \
 	nir/nir_lower_locals_to_regs.c \
 	nir/nir_lower_idiv.c \
 	nir/nir_lower_indirect_derefs.c \
+	nir/nir_lower_int64.c \
 	nir/nir_lower_io.c \
 	nir/nir_lower_io_to_temporaries.c \
 	nir/nir_lower_io_to_scalar.c \
@@ -1326,10 +1338,11 @@ EXTRA_DIST = SConscript glsl/tests glsl/glcpp/tests glsl/README \
 	SConscript.glsl nir/nir_algebraic.py \
 	nir/nir_builder_opcodes_h.py nir/nir_constant_expressions.py \
 	nir/nir_opcodes.py nir/nir_opcodes_c.py nir/nir_opcodes_h.py \
-	nir/nir_opt_algebraic.py nir/tests SConscript.nir
+	nir/nir_opt_algebraic.py nir/tests nir/README SConscript.nir
 MKDIR_GEN = $(AM_V_at)$(MKDIR_P) $(@D)
 PYTHON_GEN = $(AM_V_GEN)$(PYTHON2) $(PYTHON_FLAGS)
 TESTS_ENVIRONMENT = \
+	export abs_builddir=$(abs_builddir); \
 	export PYTHON2=$(PYTHON2); \
 	export PYTHON_FLAGS=$(PYTHON_FLAGS);
 
@@ -1347,13 +1360,15 @@ glsl_tests_cache_test_CFLAGS = \
 
 glsl_tests_cache_test_LDADD = \
 	glsl/libglsl.la					\
-	$(PTHREAD_LIBS)
+	$(PTHREAD_LIBS)					\
+	$(CLOCK_LIB)
 
 glsl_tests_general_ir_test_SOURCES = \
 	glsl/tests/array_refcount_test.cpp 		\
 	glsl/tests/builtin_variable_test.cpp		\
 	glsl/tests/invalidate_locations_test.cpp	\
 	glsl/tests/general_ir_test.cpp			\
+	glsl/tests/lower_int64_test.cpp			\
 	glsl/tests/opt_add_neg_to_sub_test.cpp		\
 	glsl/tests/varyings_test.cpp
 
@@ -1365,7 +1380,8 @@ glsl_tests_general_ir_test_LDADD = \
 	glsl/libglsl.la		\
 	glsl/libstandalone.la				\
 	$(top_builddir)/src/libglsl_util.la		\
-	$(PTHREAD_LIBS)
+	$(PTHREAD_LIBS)					\
+	$(CLOCK_LIB)
 
 glsl_tests_uniform_initializer_test_SOURCES = \
 	glsl/tests/copy_constant_to_storage_tests.cpp	\
@@ -1417,7 +1433,8 @@ glsl_libglsl_la_LIBADD = \
 
 glsl_libglsl_la_SOURCES = \
 	$(LIBGLSL_GENERATED_FILES)			\
-	$(LIBGLSL_FILES)
+	$(LIBGLSL_FILES)				\
+	$(LIBGLSL_SHADER_CACHE_FILES)
 
 glsl_libstandalone_la_SOURCES = \
 	$(GLSL_COMPILER_CXX_FILES)
@@ -1432,7 +1449,8 @@ glsl_compiler_SOURCES = \
 	glsl/main.cpp
 
 glsl_compiler_LDADD = \
-	glsl/libstandalone.la
+	glsl/libstandalone.la \
+	$(CLOCK_LIB)
 
 glsl_glsl_test_SOURCES = \
 	glsl/test.cpp \
@@ -1443,7 +1461,8 @@ glsl_glsl_test_LDADD = \
 	glsl/libglsl.la					\
 	glsl/libstandalone.la				\
 	$(top_builddir)/src/libglsl_util.la		\
-	$(PTHREAD_LIBS)
+	$(PTHREAD_LIBS)					\
+	$(CLOCK_LIB)
 
 
 # We write our own rules for yacc and lex below. We'd rather use automake,
@@ -1602,6 +1621,8 @@ glsl/builtin_types.lo: glsl/$(am__dirstamp) \
 	glsl/$(DEPDIR)/$(am__dirstamp)
 glsl/builtin_variables.lo: glsl/$(am__dirstamp) \
 	glsl/$(DEPDIR)/$(am__dirstamp)
+glsl/generate_ir.lo: glsl/$(am__dirstamp) \
+	glsl/$(DEPDIR)/$(am__dirstamp)
 glsl/glsl_parser_extras.lo: glsl/$(am__dirstamp) \
 	glsl/$(DEPDIR)/$(am__dirstamp)
 glsl/glsl_symbol_table.lo: glsl/$(am__dirstamp) \
@@ -1682,6 +1703,8 @@ glsl/lower_distance.lo: glsl/$(am__dirstamp) \
 glsl/lower_if_to_cond_assign.lo: glsl/$(am__dirstamp) \
 	glsl/$(DEPDIR)/$(am__dirstamp)
 glsl/lower_instructions.lo: glsl/$(am__dirstamp) \
+	glsl/$(DEPDIR)/$(am__dirstamp)
+glsl/lower_int64.lo: glsl/$(am__dirstamp) \
 	glsl/$(DEPDIR)/$(am__dirstamp)
 glsl/lower_jumps.lo: glsl/$(am__dirstamp) \
 	glsl/$(DEPDIR)/$(am__dirstamp)
@@ -1777,6 +1800,8 @@ glsl/propagate_invariance.lo: glsl/$(am__dirstamp) \
 	glsl/$(DEPDIR)/$(am__dirstamp)
 glsl/s_expression.lo: glsl/$(am__dirstamp) \
 	glsl/$(DEPDIR)/$(am__dirstamp)
+glsl/shader_cache.lo: glsl/$(am__dirstamp) \
+	glsl/$(DEPDIR)/$(am__dirstamp)
 
 glsl/libglsl.la: $(glsl_libglsl_la_OBJECTS) $(glsl_libglsl_la_DEPENDENCIES) $(EXTRA_glsl_libglsl_la_DEPENDENCIES) glsl/$(am__dirstamp)
 	$(AM_V_CXXLD)$(CXXLINK)  $(glsl_libglsl_la_OBJECTS) $(glsl_libglsl_la_LIBADD) $(LIBS)
@@ -1818,6 +1843,8 @@ nir/nir_intrinsics.lo: nir/$(am__dirstamp) \
 nir/nir_liveness.lo: nir/$(am__dirstamp) nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_loop_analyze.lo: nir/$(am__dirstamp) \
 	nir/$(DEPDIR)/$(am__dirstamp)
+nir/nir_lower_64bit_packing.lo: nir/$(am__dirstamp) \
+	nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_lower_alu_to_scalar.lo: nir/$(am__dirstamp) \
 	nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_lower_atomics.lo: nir/$(am__dirstamp) \
@@ -1834,8 +1861,6 @@ nir/nir_lower_constant_initializers.lo: nir/$(am__dirstamp) \
 	nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_lower_double_ops.lo: nir/$(am__dirstamp) \
 	nir/$(DEPDIR)/$(am__dirstamp)
-nir/nir_lower_double_packing.lo: nir/$(am__dirstamp) \
-	nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_lower_drawpixels.lo: nir/$(am__dirstamp) \
 	nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_lower_global_vars_to_local.lo: nir/$(am__dirstamp) \
@@ -1849,6 +1874,8 @@ nir/nir_lower_locals_to_regs.lo: nir/$(am__dirstamp) \
 nir/nir_lower_idiv.lo: nir/$(am__dirstamp) \
 	nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_lower_indirect_derefs.lo: nir/$(am__dirstamp) \
+	nir/$(DEPDIR)/$(am__dirstamp)
+nir/nir_lower_int64.lo: nir/$(am__dirstamp) \
 	nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_lower_io.lo: nir/$(am__dirstamp) nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_lower_io_to_temporaries.lo: nir/$(am__dirstamp) \
@@ -2023,6 +2050,8 @@ glsl/tests/invalidate_locations_test.$(OBJEXT):  \
 	glsl/tests/$(DEPDIR)/$(am__dirstamp)
 glsl/tests/general_ir_test.$(OBJEXT): glsl/tests/$(am__dirstamp) \
 	glsl/tests/$(DEPDIR)/$(am__dirstamp)
+glsl/tests/lower_int64_test.$(OBJEXT): glsl/tests/$(am__dirstamp) \
+	glsl/tests/$(DEPDIR)/$(am__dirstamp)
 glsl/tests/opt_add_neg_to_sub_test.$(OBJEXT):  \
 	glsl/tests/$(am__dirstamp) \
 	glsl/tests/$(DEPDIR)/$(am__dirstamp)
@@ -2105,6 +2134,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@glsl/$(DEPDIR)/builtin_functions.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@glsl/$(DEPDIR)/builtin_types.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@glsl/$(DEPDIR)/builtin_variables.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@glsl/$(DEPDIR)/generate_ir.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@glsl/$(DEPDIR)/glsl_lexer.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@glsl/$(DEPDIR)/glsl_parser.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@glsl/$(DEPDIR)/glsl_parser_extras.Plo@am__quote@
@@ -2151,6 +2181,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@glsl/$(DEPDIR)/lower_distance.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@glsl/$(DEPDIR)/lower_if_to_cond_assign.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@glsl/$(DEPDIR)/lower_instructions.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@glsl/$(DEPDIR)/lower_int64.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@glsl/$(DEPDIR)/lower_jumps.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@glsl/$(DEPDIR)/lower_mat_op_to_vec.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@glsl/$(DEPDIR)/lower_named_interface_blocks.Plo@am__quote@
@@ -2199,6 +2230,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@glsl/$(DEPDIR)/opt_vectorize.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@glsl/$(DEPDIR)/propagate_invariance.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@glsl/$(DEPDIR)/s_expression.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@glsl/$(DEPDIR)/shader_cache.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@glsl/$(DEPDIR)/standalone.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@glsl/$(DEPDIR)/standalone_scaffolding.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@glsl/$(DEPDIR)/test.Po@am__quote@
@@ -2214,6 +2246,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@glsl/tests/$(DEPDIR)/general_ir_test.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@glsl/tests/$(DEPDIR)/glsl_tests_cache_test-cache_test.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@glsl/tests/$(DEPDIR)/invalidate_locations_test.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@glsl/tests/$(DEPDIR)/lower_int64_test.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@glsl/tests/$(DEPDIR)/opt_add_neg_to_sub_test.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@glsl/tests/$(DEPDIR)/sampler_types_test.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@glsl/tests/$(DEPDIR)/set_uniform_initializer_tests.Po@am__quote@
@@ -2232,6 +2265,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_intrinsics.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_liveness.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_loop_analyze.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_64bit_packing.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_alu_to_scalar.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_atomics.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_bitmap.Plo@am__quote@
@@ -2240,12 +2274,12 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_clip_cull_distance_arrays.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_constant_initializers.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_double_ops.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_double_packing.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_drawpixels.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_global_vars_to_local.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_gs_intrinsics.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_idiv.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_indirect_derefs.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_int64.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_io.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_io_to_scalar.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_io_to_temporaries.Plo@am__quote@
@@ -2617,16 +2651,16 @@ recheck: all $(check_PROGRAMS)
 	        am__force_recheck=am--force-recheck \
 	        TEST_LOGS="$$log_list"; \
 	exit $$?
-glsl/glcpp/tests/glcpp-test.log: glsl/glcpp/tests/glcpp-test
-	@p='glsl/glcpp/tests/glcpp-test'; \
-	b='glsl/glcpp/tests/glcpp-test'; \
+glsl/glcpp/tests/glcpp-test.sh.log: glsl/glcpp/tests/glcpp-test.sh
+	@p='glsl/glcpp/tests/glcpp-test.sh'; \
+	b='glsl/glcpp/tests/glcpp-test.sh'; \
 	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
 	"$$tst" $(AM_TESTS_FD_REDIRECT)
-glsl/glcpp/tests/glcpp-test-cr-lf.log: glsl/glcpp/tests/glcpp-test-cr-lf
-	@p='glsl/glcpp/tests/glcpp-test-cr-lf'; \
-	b='glsl/glcpp/tests/glcpp-test-cr-lf'; \
+glsl/glcpp/tests/glcpp-test-cr-lf.sh.log: glsl/glcpp/tests/glcpp-test-cr-lf.sh
+	@p='glsl/glcpp/tests/glcpp-test-cr-lf.sh'; \
+	b='glsl/glcpp/tests/glcpp-test-cr-lf.sh'; \
 	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
@@ -2652,9 +2686,9 @@ glsl/tests/general-ir-test.log: glsl/tests/general-ir-test$(EXEEXT)
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
 	"$$tst" $(AM_TESTS_FD_REDIRECT)
-glsl/tests/optimization-test.log: glsl/tests/optimization-test
-	@p='glsl/tests/optimization-test'; \
-	b='glsl/tests/optimization-test'; \
+glsl/tests/optimization-test.sh.log: glsl/tests/optimization-test.sh
+	@p='glsl/tests/optimization-test.sh'; \
+	b='glsl/tests/optimization-test.sh'; \
 	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
@@ -2673,9 +2707,9 @@ glsl/tests/uniform-initializer-test.log: glsl/tests/uniform-initializer-test$(EX
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
 	"$$tst" $(AM_TESTS_FD_REDIRECT)
-glsl/tests/warnings-test.log: glsl/tests/warnings-test
-	@p='glsl/tests/warnings-test'; \
-	b='glsl/tests/warnings-test'; \
+glsl/tests/warnings-test.sh.log: glsl/tests/warnings-test.sh
+	@p='glsl/tests/warnings-test.sh'; \
+	b='glsl/tests/warnings-test.sh'; \
 	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
@@ -2910,6 +2944,12 @@ glsl/ir_expression_operation_strings.h: glsl/ir_expression_operation.py
 	$(PYTHON_GEN) $(srcdir)/glsl/ir_expression_operation.py strings > $@ || ($(RM) $@; false)
 
 clean-local:
+	$(RM) glsl/tests/lower_jumps/*.opt_test
+	$(RM) glsl/tests/lower_jumps/*.expected
+	$(RM) glsl/tests/lower_jumps/*.out
+	$(RM) glsl/tests/warnings/*.out
+	$(RM) glsl/glcpp/tests/*.out
+	$(RM) -r glsl/glcpp/tests/subtest*/
 	$(RM) -r subtest-cr subtest-cr-lf subtest-lf subtest-lf-cr
 
 dist-hook:

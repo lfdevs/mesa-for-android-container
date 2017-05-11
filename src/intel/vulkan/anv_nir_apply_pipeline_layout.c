@@ -351,9 +351,6 @@ anv_nir_apply_pipeline_layout(struct anv_pipeline *pipeline,
          continue;
 
       enum glsl_sampler_dim dim = glsl_get_sampler_dim(var->interface_type);
-      if (dim != GLSL_SAMPLER_DIM_SUBPASS &&
-          dim != GLSL_SAMPLER_DIM_SUBPASS_MS)
-         continue;
 
       const uint32_t set = var->data.descriptor_set;
       const uint32_t binding = var->data.binding;
@@ -369,7 +366,12 @@ anv_nir_apply_pipeline_layout(struct anv_pipeline *pipeline,
          assert(pipe_binding[i].set == set);
          assert(pipe_binding[i].binding == binding);
          assert(pipe_binding[i].index == i);
-         pipe_binding[i].input_attachment_index = var->data.index + i;
+
+         if (dim == GLSL_SAMPLER_DIM_SUBPASS ||
+             dim == GLSL_SAMPLER_DIM_SUBPASS_MS)
+            pipe_binding[i].input_attachment_index = var->data.index + i;
+
+         pipe_binding[i].write_only = var->data.image.write_only;
       }
    }
 

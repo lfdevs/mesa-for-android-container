@@ -23,6 +23,7 @@
 
 #include "main/context.h"
 
+#include <xf86drm.h>
 #include "brw_context.h"
 
 /**
@@ -34,16 +35,14 @@ GLenum
 brw_get_graphics_reset_status(struct gl_context *ctx)
 {
    struct brw_context *brw = brw_context(ctx);
-   int err;
-   uint32_t reset_count;
-   uint32_t active;
-   uint32_t pending;
+   __DRIscreen *dri_screen = brw->screen->driScrnPriv;
+   struct drm_i915_reset_stats stats = { .ctx_id = brw->hw_ctx };
 
    /* If hardware contexts are not being used (or
     * DRM_IOCTL_I915_GET_RESET_STATS is not supported), this function should
     * not be accessible.
     */
-   assert(brw->hw_ctx != NULL);
+   assert(brw->hw_ctx != 0);
 
    /* A reset status other than NO_ERROR was returned last time. I915 returns
     * nonzero active/pending only if reset has been encountered and completed.
@@ -52,16 +51,14 @@ brw_get_graphics_reset_status(struct gl_context *ctx)
    if (brw->reset_count != 0)
       return GL_NO_ERROR;
 
-   err = drm_intel_get_reset_stats(brw->hw_ctx, &reset_count, &active,
-                                   &pending);
-   if (err)
+   if (drmIoctl(dri_screen->fd, DRM_IOCTL_I915_GET_RESET_STATS, &stats) != 0)
       return GL_NO_ERROR;
 
    /* A reset was observed while a batch from this context was executing.
     * Assume that this context was at fault.
     */
-   if (active != 0) {
-      brw->reset_count = reset_count;
+   if (stats.batch_active != 0) {
+      brw->reset_count = stats.reset_count;
       return GL_GUILTY_CONTEXT_RESET_ARB;
    }
 
@@ -69,8 +66,8 @@ brw_get_graphics_reset_status(struct gl_context *ctx)
     * but the batch was not executing.  In this case, assume that the context
     * was not at fault.
     */
-   if (pending != 0) {
-      brw->reset_count = reset_count;
+   if (stats.batch_pending != 0) {
+      brw->reset_count = stats.reset_count;
       return GL_INNOCENT_CONTEXT_RESET_ARB;
    }
 
@@ -80,16 +77,12 @@ brw_get_graphics_reset_status(struct gl_context *ctx)
 void
 brw_check_for_reset(struct brw_context *brw)
 {
-   uint32_t reset_count;
-   uint32_t active;
-   uint32_t pending;
-   int err;
+   __DRIscreen *dri_screen = brw->screen->driScrnPriv;
+   struct drm_i915_reset_stats stats = { .ctx_id = brw->hw_ctx };
 
-   err = drm_intel_get_reset_stats(brw->hw_ctx, &reset_count, &active,
-                                   &pending);
-   if (err)
+   if (drmIoctl(dri_screen->fd, DRM_IOCTL_I915_GET_RESET_STATS, &stats) != 0)
       return;
 
-   if (active > 0 || pending > 0)
+   if (stats.batch_active > 0 || stats.batch_pending > 0)
       _mesa_set_context_lost_dispatch(&brw->ctx);
 }

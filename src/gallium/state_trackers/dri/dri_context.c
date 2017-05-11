@@ -156,6 +156,13 @@ dri_create_context(gl_api api, const struct gl_config * visual,
       ctx->hud = hud_create(ctx->st->pipe, ctx->st->cso_context);
    }
 
+   /* Do this last. */
+   if (ctx->st->start_thread &&
+       /* the driver loader must implement this */
+       screen->sPriv->dri2.backgroundCallable &&
+       driQueryOptionb(&screen->optionCache, "mesa_glthread"))
+      ctx->st->start_thread(ctx->st);
+
    *error = __DRI_CTX_ERROR_SUCCESS;
    return GL_TRUE;
 
@@ -199,6 +206,9 @@ dri_unbind_context(__DRIcontext * cPriv)
 
    if (--ctx->bind_count == 0) {
       if (ctx->st == ctx->stapi->get_current(ctx->stapi)) {
+         if (ctx->st->thread_finish)
+            ctx->st->thread_finish(ctx->st);
+
          /* For conformance, unbind is supposed to flush the context.
           * However, if we do it here we might end up flushing a partially
           * destroyed context. Instead, we flush in dri_make_current and
@@ -221,6 +231,9 @@ dri_make_current(__DRIcontext * cPriv,
    struct dri_drawable *draw = dri_drawable(driDrawPriv);
    struct dri_drawable *read = dri_drawable(driReadPriv);
    struct st_context_iface *old_st = ctx->stapi->get_current(ctx->stapi);
+
+   if (old_st && old_st->thread_finish)
+      old_st->thread_finish(old_st);
 
    /* Flush the old context here so we don't have to flush on unbind() */
    if (old_st && old_st != ctx->st)

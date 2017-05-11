@@ -12,13 +12,16 @@ Debugging
 
     There are new flags:
 
-    -   **sb** - Enable optimization of graphics shaders
+    -   **nosb** - Disable sb backend for graphics shaders
     -   **sbcl** - Enable optimization of compute shaders (experimental)
-    -   **sbdry** - Dry run, optimize but use source bytecode - 
-        useful if you only want to check shader dumps 
+    -   **sbdry** - Dry run, optimize but use source bytecode -
+        useful if you only want to check shader dumps
         without the risk of lockups and other problems
     -   **sbstat** - Print optimization statistics (only time so far)
     -   **sbdump** - Print IR after some passes.
+    -   **sbnofallback** - Abort on errors instead of fallback
+    -   **sbdisasm** - Use sb disassembler for shader dumps
+    -   **sbsafemath** - Disable unsafe math optimizations
 
 ### Regression debugging
 

@@ -29,6 +29,7 @@
 #include "main/accum.h"
 #include "main/api_exec.h"
 #include "main/context.h"
+#include "main/glthread.h"
 #include "main/samplerobj.h"
 #include "main/shaderobj.h"
 #include "main/version.h"
@@ -76,6 +77,7 @@
 #include "pipe/p_context.h"
 #include "util/u_inlines.h"
 #include "util/u_upload_mgr.h"
+#include "util/u_vbuf.h"
 #include "cso_cache/cso_context.h"
 
 
@@ -256,7 +258,7 @@ void st_invalidate_state(struct gl_context * ctx, GLbitfield new_state)
       st->active_states = st_get_active_states(ctx);
    }
 
-   if (new_state & _NEW_TEXTURE) {
+   if (new_state & _NEW_TEXTURE_OBJECT) {
       st->dirty |= st->active_states &
                    (ST_NEW_SAMPLER_VIEWS |
                     ST_NEW_SAMPLERS |
@@ -298,14 +300,6 @@ st_destroy_context_priv(struct st_context *st, bool destroy_pipe)
       }
    }
 
-   u_upload_destroy(st->uploader);
-   if (st->indexbuf_uploader) {
-      u_upload_destroy(st->indexbuf_uploader);
-   }
-   if (st->constbuf_uploader) {
-      u_upload_destroy(st->constbuf_uploader);
-   }
-
    /* free glDrawPixels cache data */
    free(st->drawpix_cache.image);
    pipe_resource_reference(&st->drawpix_cache.texture, NULL);
@@ -337,32 +331,21 @@ st_create_context_priv( struct gl_context *ctx, struct pipe_context *pipe,
    st->ctx = ctx;
    st->pipe = pipe;
 
-   /* XXX: this is one-off, per-screen init: */
-   st_debug_init();
-   
    /* state tracker needs the VBO module */
    _vbo_CreateContext(ctx);
 
    st->dirty = ST_ALL_STATES_MASK;
 
-   /* Create upload manager for vertex data for glBitmap, glDrawPixels,
-    * glClear, etc.
+   st->has_user_constbuf =
+      screen->get_param(screen, PIPE_CAP_USER_CONSTANT_BUFFERS);
+
+   /* Drivers still have to upload zero-stride vertex attribs manually
+    * with the GL core profile, but they don't have to deal with any complex
+    * user vertex buffer uploads.
     */
-   st->uploader = u_upload_create(pipe, 65536, PIPE_BIND_VERTEX_BUFFER,
-                                  PIPE_USAGE_STREAM);
-
-   if (!screen->get_param(screen, PIPE_CAP_USER_INDEX_BUFFERS)) {
-      st->indexbuf_uploader = u_upload_create(pipe, 128 * 1024,
-                                              PIPE_BIND_INDEX_BUFFER,
-                                              PIPE_USAGE_STREAM);
-   }
-
-   if (!screen->get_param(screen, PIPE_CAP_USER_CONSTANT_BUFFERS))
-      st->constbuf_uploader = u_upload_create(pipe, 128 * 1024,
-                                              PIPE_BIND_CONSTANT_BUFFER,
-                                              PIPE_USAGE_STREAM);
-
-   st->cso_context = cso_create_context(pipe);
+   unsigned vbuf_flags =
+      ctx->API == API_OPENGL_CORE ? U_VBUF_FLAG_NO_USER_VBOS : 0;
+   st->cso_context = cso_create_context(pipe, vbuf_flags);
 
    st_init_atoms( st );
    st_init_clear(st);
@@ -551,6 +534,12 @@ struct st_context *st_create_context(gl_api api, struct pipe_context *pipe,
       return NULL;
    }
 
+   st_debug_init();
+
+   if (pipe->screen->get_disk_shader_cache &&
+       !(ST_DEBUG & DEBUG_TGSI))
+      ctx->Cache = pipe->screen->get_disk_shader_cache(pipe->screen);
+
    st_init_driver_flags(&ctx->DriverFlags);
 
    /* XXX: need a capability bit in gallium to query if the pipe
@@ -585,6 +574,9 @@ void st_destroy_context( struct st_context *st )
 {
    struct gl_context *ctx = st->ctx;
    GLuint i;
+
+   /* This must be called first so that glthread has a chance to finish */
+   _mesa_glthread_destroy(ctx);
 
    _mesa_HashWalk(ctx->Shared->TexObjects, destroy_tex_sampler_cb, st);
 
@@ -622,6 +614,17 @@ st_emit_string_marker(struct gl_context *ctx, const GLchar *string, GLsizei len)
 {
    struct st_context *st = ctx->st;
    st->pipe->emit_string_marker(st->pipe, string, len);
+}
+
+static void
+st_set_background_context(struct gl_context *ctx)
+{
+   struct st_context *st = ctx->st;
+   struct st_manager *smapi =
+      (struct st_manager*)st->iface.st_context_private;
+
+   assert(smapi->set_background_context);
+   smapi->set_background_context(&st->iface);
 }
 
 void st_init_driver_functions(struct pipe_screen *screen,
@@ -668,4 +671,5 @@ void st_init_driver_functions(struct pipe_screen *screen,
    functions->Enable = st_Enable;
    functions->UpdateState = st_invalidate_state;
    functions->QueryMemoryInfo = st_query_memory_info;
+   functions->SetBackgroundContext = st_set_background_context;
 }

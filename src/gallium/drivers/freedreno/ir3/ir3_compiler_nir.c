@@ -722,16 +722,16 @@ emit_alu(struct ir3_compile *ctx, nir_alu_instr *alu)
 	}
 
 	switch (alu->op) {
-	case nir_op_f2i:
+	case nir_op_f2i32:
 		dst[0] = ir3_COV(b, src[0], TYPE_F32, TYPE_S32);
 		break;
-	case nir_op_f2u:
+	case nir_op_f2u32:
 		dst[0] = ir3_COV(b, src[0], TYPE_F32, TYPE_U32);
 		break;
-	case nir_op_i2f:
+	case nir_op_i2f32:
 		dst[0] = ir3_COV(b, src[0], TYPE_S32, TYPE_F32);
 		break;
-	case nir_op_u2f:
+	case nir_op_u2f32:
 		dst[0] = ir3_COV(b, src[0], TYPE_U32, TYPE_F32);
 		break;
 	case nir_op_imov:
@@ -1306,9 +1306,9 @@ emit_intrinsic(struct ir3_compile *ctx, nir_intrinsic_instr *intr)
 		cond->regs[0]->num = regid(REG_P0, 0);
 
 		kill = ir3_KILL(b, cond, 0);
-		array_insert(ctx->ir->predicates, kill);
+		array_insert(ctx->ir, ctx->ir->predicates, kill);
 
-		array_insert(ctx->ir->keeps, kill);
+		array_insert(b, b->keeps, kill);
 		ctx->so->has_kill = true;
 
 		break;
@@ -1583,7 +1583,7 @@ emit_tex(struct ir3_compile *ctx, nir_tex_instr *tex)
 		sam = ir3_SAM(b, opc, type, TGSI_WRITEMASK_W, flags,
 				tex_idx, tex_idx, col0, col1);
 
-		array_insert(ctx->ir->astc_srgb, sam);
+		array_insert(ctx->ir, ctx->ir->astc_srgb, sam);
 
 		/* fixup .w component: */
 		split_dest(b, &dst[3], sam, 3, 1);
@@ -1972,7 +1972,7 @@ emit_stream_out(struct ir3_compile *ctx)
 			stg->cat6.type = TYPE_U32;
 			stg->cat6.dst_offset = (strmout->output[i].dst_offset + j) * 4;
 
-			array_insert(ctx->ir->keeps, stg);
+			array_insert(ctx->block, ctx->block->keeps, stg);
 		}
 	}
 
@@ -2428,8 +2428,14 @@ ir3_compile_shader_nir(struct ir3_compiler *compiler,
 	if (so->key.half_precision) {
 		for (i = 0; i < ir->noutputs; i++) {
 			struct ir3_instruction *out = ir->outputs[i];
+
 			if (!out)
 				continue;
+
+			/* if frag shader writes z, that needs to be full precision: */
+			if (so->outputs[i/4].slot == FRAG_RESULT_DEPTH)
+				continue;
+
 			out->regs[0]->flags |= IR3_REG_HALF;
 			/* output could be a fanout (ie. texture fetch output)
 			 * in which case we need to propagate the half-reg flag

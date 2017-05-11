@@ -57,11 +57,6 @@ brw_is_color_fast_clear_compatible(struct brw_context *brw,
                                    const struct intel_mipmap_tree *mt,
                                    const union gl_color_union *color);
 
-struct gl_renderbuffer *brw_get_rb_for_slice(struct brw_context *brw,
-                                             struct intel_mipmap_tree *mt,
-                                             unsigned level, unsigned layer,
-                                             bool flat);
-
 #ifdef __cplusplus
 }
 #endif

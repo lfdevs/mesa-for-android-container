@@ -66,19 +66,24 @@ AC_SUBST([OSMESA_VERSION])
 OPENCL_VERSION=1
 AC_SUBST([OPENCL_VERSION])
 
-dnl Versions for external dependencies
-LIBDRM_REQUIRED=2.4.66
-LIBDRM_RADEON_REQUIRED=2.4.56
-LIBDRM_AMDGPU_REQUIRED=2.4.63
-LIBDRM_INTEL_REQUIRED=2.4.61
+# The idea is that libdrm is distributed as one cohesive package, even
+# though it is composed of multiple libraries. However some drivers
+# may have different version requirements than others. This list
+# codifies which drivers need which version of libdrm. Any libdrm
+# version dependencies in non-driver-specific code should be reflected
+# in the first entry.
+LIBDRM_REQUIRED=2.4.75
+LIBDRM_RADEON_REQUIRED=2.4.71
+LIBDRM_AMDGPU_REQUIRED=2.4.79
+LIBDRM_INTEL_REQUIRED=2.4.75
 LIBDRM_NVVIEUX_REQUIRED=2.4.66
 LIBDRM_NOUVEAU_REQUIRED=2.4.66
 LIBDRM_FREEDRENO_REQUIRED=2.4.74
 LIBDRM_VC4_REQUIRED=2.4.69
-LIBDRM_ETNAVIV_REQUIRED=2.4.74
-DRI2PROTO_REQUIRED=2.6
-DRI3PROTO_REQUIRED=1.0
-PRESENTPROTO_REQUIRED=1.0
+LIBDRM_ETNAVIV_REQUIRED=2.4.80
+
+dnl Versions for external dependencies
+DRI2PROTO_REQUIRED=2.8
 GLPROTO_REQUIRED=1.4.14
 LIBOMXIL_BELLAGIO_REQUIRED=0.0
 LIBVA_REQUIRED=0.38.0
@@ -87,18 +92,20 @@ WAYLAND_REQUIRED=1.11
 XCB_REQUIRED=1.9.3
 XCBDRI2_REQUIRED=1.8
 XCBGLX_REQUIRED=1.8.1
+XDAMAGE_REQUIRED=1.1
 XSHMFENCE_REQUIRED=1.1
 XVMC_REQUIRED=1.0.6
 PYTHON_MAKO_REQUIRED=0.8.0
 LIBSENSORS_REQUIRED=4.0.0
+ZLIB_REQUIRED=1.2.8
 
 dnl LLVM versions
 LLVM_REQUIRED_GALLIUM=3.3.0
 LLVM_REQUIRED_OPENCL=3.6.0
-LLVM_REQUIRED_R600=3.6.0
-LLVM_REQUIRED_RADEONSI=3.6.0
+LLVM_REQUIRED_R600=3.8.0
+LLVM_REQUIRED_RADEONSI=3.8.0
 LLVM_REQUIRED_RADV=3.9.0
-LLVM_REQUIRED_SWR=3.6.0
+LLVM_REQUIRED_SWR=3.9.0
 
 dnl Check for progs
 AC_PROG_CPP
@@ -117,7 +124,6 @@ LT_PREREQ([2.2])
 LT_INIT([disable-static])
 
 AC_CHECK_PROG(RM, rm, [rm -f])
-AC_CHECK_PROG(XXD, xxd, [xxd])
 
 AX_PROG_BISON([],
               AS_IF([test ! -f "$srcdir/src/compiler/glsl/glcpp/glcpp-parse.c"],
@@ -259,7 +265,7 @@ _SAVE_LDFLAGS="$LDFLAGS"
 _SAVE_CPPFLAGS="$CPPFLAGS"
 
 dnl Compiler macros
-DEFINES="-D__STDC_LIMIT_MACROS -D__STDC_CONSTANT_MACROS"
+DEFINES="-D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -D__STDC_LIMIT_MACROS"
 AC_SUBST([DEFINES])
 android=no
 case "$host_os" in
@@ -297,7 +303,7 @@ if test "x$GCC" = xyes; then
     AC_LINK_IFELSE([AC_LANG_PROGRAM()],
 		   AC_MSG_RESULT([yes]),
 		   [CFLAGS="$save_CFLAGS -Wmissing-prototypes";
-		    AC_MSG_RESULT([no])]);
+		    AC_MSG_RESULT([no])])
 
     # Enable -fvisibility=hidden if using a gcc that supports it
     save_CFLAGS="$CFLAGS"
@@ -305,7 +311,7 @@ if test "x$GCC" = xyes; then
     VISIBILITY_CFLAGS="-fvisibility=hidden"
     CFLAGS="$CFLAGS $VISIBILITY_CFLAGS"
     AC_LINK_IFELSE([AC_LANG_PROGRAM()], AC_MSG_RESULT([yes]),
-		   [VISIBILITY_CFLAGS=""; AC_MSG_RESULT([no])]);
+		   [VISIBILITY_CFLAGS=""; AC_MSG_RESULT([no])])
 
     # Restore CFLAGS; VISIBILITY_CFLAGS are added to it where needed.
     CFLAGS=$save_CFLAGS
@@ -330,7 +336,7 @@ if test "x$GCC" = xyes; then
 		   [MSVC2013_COMPAT_CFLAGS="$MSVC2013_COMPAT_CFLAGS -Werror=vla";
 		    MSVC2013_COMPAT_CXXFLAGS="$MSVC2013_COMPAT_CXXFLAGS -Werror=vla";
 		    AC_MSG_RESULT([yes])],
-		    AC_MSG_RESULT([no]));
+		    AC_MSG_RESULT([no]))
     CFLAGS="$save_CFLAGS"
 fi
 if test "x$GXX" = xyes; then
@@ -343,7 +349,7 @@ if test "x$GXX" = xyes; then
     CXXFLAGS="$CXXFLAGS $VISIBILITY_CXXFLAGS"
     AC_LANG_PUSH([C++])
     AC_LINK_IFELSE([AC_LANG_PROGRAM()], AC_MSG_RESULT([yes]),
-		   [VISIBILITY_CXXFLAGS="" ; AC_MSG_RESULT([no])]);
+		   [VISIBILITY_CXXFLAGS="" ; AC_MSG_RESULT([no])])
     AC_LANG_POP([C++])
 
     # Restore CXXFLAGS; VISIBILITY_CXXFLAGS are added to it where needed.
@@ -407,6 +413,20 @@ if test "x$GCC_ATOMIC_BUILTINS_SUPPORTED" = x1; then
 fi
 AM_CONDITIONAL([GCC_ATOMIC_BUILTINS_SUPPORTED], [test x$GCC_ATOMIC_BUILTINS_SUPPORTED = x1])
 
+dnl Check if host supports 64-bit atomics
+dnl note that lack of support usually results in link (not compile) error
+AC_MSG_CHECKING(whether __sync_add_and_fetch_8 is supported)
+AC_LINK_IFELSE([AC_LANG_SOURCE([[
+#include <stdint.h>
+uint64_t v;
+int main() {
+    return __sync_add_and_fetch(&v, (uint64_t)1);
+}]])], GCC_64BIT_ATOMICS_SUPPORTED=yes, GCC_64BIT_ATOMICS_SUPPORTED=no)
+if test "x$GCC_64BIT_ATOMICS_SUPPORTED" != xyes; then
+    DEFINES="$DEFINES -DMISSING_64BIT_ATOMICS"
+fi
+AC_MSG_RESULT($GCC_64BIT_ATOMICS_SUPPORTED)
+
 dnl Check for Endianness
 AC_C_BIGENDIAN(
    little_endian=no,
@@ -435,7 +455,7 @@ int main () {
 CFLAGS=$save_CFLAGS
 
 AC_ARG_ENABLE(pwr8,
-   [AC_HELP_STRING([--disable-pwr8-inst],
+   [AS_HELP_STRING([--disable-pwr8-inst],
                    [disable POWER8-specific instructions])],
    [enable_pwr8=$enableval], [enable_pwr8=auto])
 
@@ -493,6 +513,12 @@ AC_ARG_ENABLE([profile],
     [enable_profile=no]
 )
 
+AC_ARG_ENABLE([sanitize],
+    [AS_HELP_STRING([--enable-sanitize@<:@=address|undefined@:>@],
+        [enable code sanitizer @<:@default=disabled@:>@])],
+    [enable_sanitize="$enableval"],
+    [enable_sanitize=no])
+
 if test "x$enable_profile" = xyes; then
     DEFINES="$DEFINES -DPROFILE"
     if test "x$GCC" = xyes; then
@@ -528,7 +554,20 @@ else
    DEFINES="$DEFINES -DNDEBUG"
 fi
 
-DEFAULT_GL_LIB_NAME=GL
+if test "x$enable_sanitize" != xno; then
+    if test "x$enable_profile" = xyes; then
+        AC_MSG_WARN([Sanitize and Profile are enabled at the same time])
+    fi
+
+    CFLAGS="$CFLAGS -fsanitize=$enable_sanitize"
+    CXXFLAGS="$CXXFLAGS -fsanitize=$enable_sanitize"
+    LDFLAGS="$LDFLAGS -fsanitize=$enable_sanitize"
+
+    AC_LINK_IFELSE(
+        [AC_LANG_SOURCE([int main(){return 0;}])],
+        [],
+        [AC_MSG_FAILURE([sanitize flags '$enable_sanitize' not supported])])
+fi
 
 dnl
 dnl Check if linker supports -Bsymbolic
@@ -570,7 +609,12 @@ case "$host_os" in
 openbsd* | darwin* )
     LD_NO_UNDEFINED="" ;;
 *)
-    LD_NO_UNDEFINED="-Wl,--no-undefined" ;;
+    if test "x$enable_sanitize" = xno; then
+        LD_NO_UNDEFINED="-Wl,--no-undefined"
+    else
+        LD_NO_UNDEFINED=""
+    fi
+    ;;
 esac
 
 AC_SUBST([LD_NO_UNDEFINED])
@@ -627,23 +671,6 @@ esac
 
 AM_CONDITIONAL(HAVE_COMPAT_SYMLINKS, test "x$HAVE_COMPAT_SYMLINKS" = xyes)
 
-DEFAULT_GL_LIB_NAME=GL
-
-dnl
-dnl Libglvnd configuration
-dnl
-AC_ARG_ENABLE([libglvnd],
-    [AS_HELP_STRING([--enable-libglvnd],
-        [Build for libglvnd @<:@default=disabled@:>@])],
-    [enable_libglvnd="$enableval"],
-    [enable_libglvnd=no])
-AM_CONDITIONAL(USE_LIBGLVND_GLX, test "x$enable_libglvnd" = xyes)
-#AM_COND_IF([USE_LIBGLVND_GLX], [DEFINES="${DEFINES} -DUSE_LIBGLVND_GLX=1"])
-if test "x$enable_libglvnd" = xyes ; then
-    DEFINES="${DEFINES} -DUSE_LIBGLVND_GLX=1"
-    DEFAULT_GL_LIB_NAME=GLX_mesa
-fi
-
 dnl
 dnl library names
 dnl
@@ -677,36 +704,6 @@ esac
 
 AC_SUBST([LIB_EXT])
 
-AC_ARG_WITH([gl-lib-name],
-  [AS_HELP_STRING([--with-gl-lib-name@<:@=NAME@:>@],
-    [specify GL library name @<:@default=GL@:>@])],
-  [GL_LIB=$withval],
-  [GL_LIB="$DEFAULT_GL_LIB_NAME"])
-AC_ARG_WITH([osmesa-lib-name],
-  [AS_HELP_STRING([--with-osmesa-lib-name@<:@=NAME@:>@],
-    [specify OSMesa library name @<:@default=OSMesa@:>@])],
-  [OSMESA_LIB=$withval],
-  [OSMESA_LIB=OSMesa])
-AS_IF([test "x$GL_LIB" = xyes], [GL_LIB="$DEFAULT_GL_LIB_NAME"])
-AS_IF([test "x$OSMESA_LIB" = xyes], [OSMESA_LIB=OSMesa])
-
-dnl
-dnl Mangled Mesa support
-dnl
-AC_ARG_ENABLE([mangling],
-  [AS_HELP_STRING([--enable-mangling],
-    [enable mangled symbols and library name @<:@default=disabled@:>@])],
-  [enable_mangling="${enableval}"],
-  [enable_mangling=no]
-)
-if test "x${enable_mangling}" = "xyes" ; then
-  DEFINES="${DEFINES} -DUSE_MGL_NAMESPACE"
-  GL_LIB="Mangled${GL_LIB}"
-  OSMESA_LIB="Mangled${OSMESA_LIB}"
-fi
-AC_SUBST([GL_LIB])
-AC_SUBST([OSMESA_LIB])
-
 dnl
 dnl potentially-infringing-but-nobody-knows-for-sure stuff
 dnl
@@ -727,7 +724,7 @@ dnl Arch/platform-specific settings
 dnl
 AC_ARG_ENABLE([asm],
     [AS_HELP_STRING([--disable-asm],
-        [disable assembly usage @<:@default=enabled on supported plaforms@:>@])],
+        [disable assembly usage @<:@default=enabled on supported platforms@:>@])],
     [enable_asm="$enableval"],
     [enable_asm=yes]
 )
@@ -809,6 +806,8 @@ LIBS="$LIBS $DLOPEN_LIBS"
 AC_CHECK_FUNCS([dladdr])
 LIBS="$save_LIBS"
 
+AC_CHECK_FUNC([dl_iterate_phdr], [DEFINES="$DEFINES -DHAVE_DL_ITERATE_PHDR"])
+
 case "$host_os" in
 darwin*)
     ;;
@@ -823,6 +822,9 @@ esac
 dnl See if posix_memalign is available
 AC_CHECK_FUNC([posix_memalign], [DEFINES="$DEFINES -DHAVE_POSIX_MEMALIGN"])
 
+dnl Check for zlib
+PKG_CHECK_MODULES([ZLIB], [zlib >= $ZLIB_REQUIRED])
+
 dnl Check for pthreads
 AX_PTHREAD
 if test "x$ax_pthread_ok" = xno; then
@@ -836,9 +838,10 @@ if test "x$android" = xno; then
     test -z "$PTHREAD_LIBS" && PTHREAD_LIBS="-lpthread"
 fi
 
-dnl pthread-stubs is mandatory on targets where it exists
+dnl pthread-stubs is mandatory on BSD platforms, due to the nature of the
+dnl project. Even then there's a notable issue as described in the project README
 case "$host_os" in
-cygwin* )
+linux* | cygwin* | darwin* | solaris* | *-gnu* | gnu*)
     pthread_stubs_possible="no"
     ;;
 * )
@@ -847,7 +850,7 @@ cygwin* )
 esac
 
 if test "x$pthread_stubs_possible" = xyes; then
-    PKG_CHECK_MODULES(PTHREADSTUBS, pthread-stubs)
+    PKG_CHECK_MODULES(PTHREADSTUBS, pthread-stubs >= 0.4)
     AC_SUBST(PTHREADSTUBS_CFLAGS)
     AC_SUBST(PTHREADSTUBS_LIBS)
 fi
@@ -942,25 +945,24 @@ llvm_add_target() {
 # Call this inside ` ` to get the return value.
 # $1 is the llvm-config command with arguments.
 strip_unwanted_llvm_flags() {
-    # Use \> (marks the end of the word)
-    echo " `$1`" | sed \
-        -e 's/\s\+-m\S*//g' \
-        -e 's/\s\+-DNDEBUG\>//g' \
-        -e 's/\s\+-D_GNU_SOURCE\>//g' \
-        -e 's/\s\+-pedantic\>//g' \
-        -e 's/\s\+-W\S*//g' \
-        -e 's/\s\+-O\S*//g' \
-        -e 's/\s\+-g\S*//g' \
-        -e 's/-fno-rtti\>/-Fno-rtti/g' \
-        -e 's/\s\+-f\S*//g' \
-        -e 's/-Fno-rtti\>/-fno-rtti/g' \
-        -e 's/^ //'
+    echo " `$1` " | sed -E \
+        -e 's/[[[:space:]]]+-m[[^[:space:]]]*//g' \
+        -e 's/[[[:space:]]]+-DNDEBUG[[[:space:]]]/ /g' \
+        -e 's/[[[:space:]]]+-D_GNU_SOURCE[[[:space:]]]/ /g' \
+        -e 's/[[[:space:]]]+-pedantic[[[:space:]]]/ /g' \
+        -e 's/[[[:space:]]]+-W[[^[:space:]]]*//g' \
+        -e 's/[[[:space:]]]+-O[[^[:space:]]]*//g' \
+        -e 's/[[[:space:]]]+-g[[^[:space:]]]*//g' \
+        -e 's/-fno-rtti[[[:space:]]]/-Fno-rtti /g' \
+        -e 's/[[[:space:]]]+-f[[^[:space:]]]*//g' \
+        -e 's/-Fno-rtti[[[:space:]]]/-fno-rtti /g' \
+        -e 's/^[[[:space:]]]//' \
+        -e 's/[[[:space:]]]$//'
 }
 
 llvm_set_environment_variables() {
     if test "x$LLVM_CONFIG" != xno; then
         LLVM_VERSION=`$LLVM_CONFIG --version | egrep -o '^[[0-9.]]+'`
-        LLVM_BINDIR=`$LLVM_CONFIG --bindir`
         LLVM_CPPFLAGS=`strip_unwanted_llvm_flags "$LLVM_CONFIG --cppflags"`
         LLVM_INCLUDEDIR=`$LLVM_CONFIG --includedir`
         LLVM_LIBDIR=`$LLVM_CONFIG --libdir`
@@ -983,11 +985,7 @@ llvm_set_environment_variables() {
             LLVM_VERSION_PATCH=0
         fi
 
-        if test "$LLVM_VERSION_MINOR" -lt 10; then
-            LLVM_VERSION_INT="${LLVM_VERSION_MAJOR}0${LLVM_VERSION_MINOR}"
-        else
-            LLVM_VERSION_INT="${LLVM_VERSION_MAJOR}${LLVM_VERSION_MINOR}"
-        fi
+        LLVM_VERSION_INT="${LLVM_VERSION_MAJOR}0${LLVM_VERSION_MINOR}"
 
         FOUND_LLVM=yes
     else
@@ -997,8 +995,8 @@ llvm_set_environment_variables() {
 }
 
 require_llvm() {
-    if test "x$enable_gallium_llvm" != "xyes"; then
-        AC_MSG_ERROR([--enable-gallium-llvm is required when building $1])
+    if test "x$enable_llvm" != "xyes"; then
+        AC_MSG_ERROR([--enable-llvm is required when building $1])
     fi
 }
 
@@ -1052,24 +1050,43 @@ radeon_llvm_check() {
     llvm_add_component "bitreader" $2
     llvm_add_component "ipo" $2
 
-    NEED_RADEON_LLVM=yes
     if test "x$have_libelf" != xyes; then
-       AC_MSG_ERROR([$1 requires libelf when using llvm])
+       AC_MSG_ERROR([$2 requires libelf when using llvm])
     fi
 }
 
 llvm_set_environment_variables
 
-AC_SUBST([MESA_LLVM])
-AC_SUBST([LLVM_BINDIR])
 AC_SUBST([LLVM_CFLAGS])
-AC_SUBST([LLVM_CPPFLAGS])
 AC_SUBST([LLVM_CXXFLAGS])
-AC_SUBST([LLVM_LIBDIR])
 AC_SUBST([LLVM_LIBS])
 AC_SUBST([LLVM_LDFLAGS])
 AC_SUBST([LLVM_INCLUDEDIR])
-AC_SUBST([LLVM_VERSION])
+
+dnl
+dnl libunwind
+dnl
+AC_ARG_ENABLE([libunwind],
+    [AS_HELP_STRING([--enable-libunwind],
+            [Use libunwind for backtracing (default: auto)])],
+        [LIBUNWIND="$enableval"],
+        [LIBUNWIND="auto"])
+
+PKG_CHECK_EXISTS(libunwind, [HAVE_LIBUNWIND=yes], [HAVE_LIBUNWIND=no])
+if test "x$LIBUNWIND" = "xauto"; then
+    LIBUNWIND="$HAVE_LIBUNWIND"
+fi
+
+if test "x$LIBUNWIND" = "xyes"; then
+    PKG_CHECK_MODULES(LIBUNWIND, libunwind)
+    if test "x$HAVE_LIBUNWIND" != "xyes"; then
+        AC_MSG_ERROR([libunwind requested but not installed.])
+    fi
+    AC_DEFINE(HAVE_LIBUNWIND, 1, [Have libunwind support])
+fi
+
+AM_CONDITIONAL(HAVE_LIBUNWIND, [test "x$LIBUNWIND" = xyes])
+
 
 dnl Options for APIs
 AC_ARG_ENABLE([opengl],
@@ -1228,7 +1245,7 @@ GALLIUM_DRIVERS_DEFAULT="r300,r600,svga,swrast"
 AC_ARG_WITH([gallium-drivers],
     [AS_HELP_STRING([--with-gallium-drivers@<:@=DIRS...@:>@],
         [comma delimited Gallium drivers list, e.g.
-        "i915,ilo,nouveau,r300,r600,radeonsi,freedreno,svga,swrast,vc4,virgl,etnaviv,imx"
+        "i915,nouveau,r300,r600,radeonsi,freedreno,svga,swrast,swr,vc4,virgl,etnaviv,imx"
         @<:@default=r300,r600,svga,swrast@:>@])],
     [with_gallium_drivers="$withval"],
     [with_gallium_drivers="$GALLIUM_DRIVERS_DEFAULT"])
@@ -1322,15 +1339,18 @@ AM_CONDITIONAL(HAVE_DRI_GLX, test "x$enable_glx" = xdri)
 AM_CONDITIONAL(HAVE_XLIB_GLX, test "x$enable_glx" = xxlib)
 AM_CONDITIONAL(HAVE_GALLIUM_XLIB_GLX, test "x$enable_glx" = xgallium-xlib)
 
+DEFAULT_GL_LIB_NAME=GL
+
 dnl
 dnl Libglvnd configuration
 dnl
 AC_ARG_ENABLE([libglvnd],
     [AS_HELP_STRING([--enable-libglvnd],
-        [Build for libglvnd @<:@default=disabled@:>@])],
+        [Build GLX and EGL for libglvnd @<:@default=disabled@:>@])],
     [enable_libglvnd="$enableval"],
     [enable_libglvnd=no])
-AM_CONDITIONAL(USE_LIBGLVND_GLX, test "x$enable_libglvnd" = xyes)
+AM_CONDITIONAL(USE_LIBGLVND, test "x$enable_libglvnd" = xyes)
+
 if test "x$enable_libglvnd" = xyes ; then
     dnl XXX: update once we can handle more than libGL/glx.
     dnl Namely: we should error out if neither of the glvnd enabled libraries
@@ -1346,10 +1366,43 @@ if test "x$enable_libglvnd" = xyes ; then
         ;;
     esac
 
-    PKG_CHECK_MODULES([GLVND], libglvnd >= 0.1.0)
-    DEFINES="${DEFINES} -DUSE_LIBGLVND_GLX=1"
+    PKG_CHECK_MODULES([GLVND], libglvnd >= 0.2.0)
+    LIBGLVND_DATADIR=`$PKG_CONFIG --variable=datadir libglvnd`
+    AC_SUBST([LIBGLVND_DATADIR])
+
+    DEFINES="${DEFINES} -DUSE_LIBGLVND=1"
     DEFAULT_GL_LIB_NAME=GLX_mesa
 fi
+
+AC_ARG_WITH([gl-lib-name],
+  [AS_HELP_STRING([--with-gl-lib-name@<:@=NAME@:>@],
+    [specify GL library name @<:@default=GL@:>@])],
+  [GL_LIB=$withval],
+  [GL_LIB="$DEFAULT_GL_LIB_NAME"])
+AC_ARG_WITH([osmesa-lib-name],
+  [AS_HELP_STRING([--with-osmesa-lib-name@<:@=NAME@:>@],
+    [specify OSMesa library name @<:@default=OSMesa@:>@])],
+  [OSMESA_LIB=$withval],
+  [OSMESA_LIB=OSMesa])
+AS_IF([test "x$GL_LIB" = xyes], [GL_LIB="$DEFAULT_GL_LIB_NAME"])
+AS_IF([test "x$OSMESA_LIB" = xyes], [OSMESA_LIB=OSMesa])
+
+dnl
+dnl Mangled Mesa support
+dnl
+AC_ARG_ENABLE([mangling],
+  [AS_HELP_STRING([--enable-mangling],
+    [enable mangled symbols and library name @<:@default=disabled@:>@])],
+  [enable_mangling="${enableval}"],
+  [enable_mangling=no]
+)
+if test "x${enable_mangling}" = "xyes" ; then
+  DEFINES="${DEFINES} -DUSE_MGL_NAMESPACE"
+  GL_LIB="Mangled${GL_LIB}"
+  OSMESA_LIB="Mangled${OSMESA_LIB}"
+fi
+AC_SUBST([GL_LIB])
+AC_SUBST([OSMESA_LIB])
 
 # Check for libdrm
 PKG_CHECK_MODULES([LIBDRM], [libdrm >= $LIBDRM_REQUIRED],
@@ -1479,7 +1532,7 @@ xdri)
     # DRI-based GLX
 
     # find the DRI deps for libGL
-    dri_modules="x11 xext xdamage xfixes x11-xcb xcb xcb-glx >= $XCBGLX_REQUIRED"
+    dri_modules="x11 xext xdamage >= $XDAMAGE_REQUIRED xfixes x11-xcb xcb xcb-glx >= $XCBGLX_REQUIRED"
 
     if test x"$driglx_direct" = xyes; then
         if test x"$dri_platform" = xdrm ; then
@@ -1488,11 +1541,6 @@ xdri)
 
             PKG_CHECK_MODULES([DRI2PROTO], [dri2proto >= $DRI2PROTO_REQUIRED])
             GL_PC_REQ_PRIV="$GL_PC_REQ_PRIV libdrm >= $LIBDRM_REQUIRED"
-            if test x"$enable_dri3" = xyes; then
-               PKG_CHECK_MODULES([DRI3PROTO], [dri3proto >= $DRI3PROTO_REQUIRED])
-               PKG_CHECK_MODULES([PRESENTPROTO], [presentproto >= $PRESENTPROTO_REQUIRED])
-            fi
-
             if test x"$enable_dri" = xyes; then
                dri_modules="$dri_modules xcb-dri2 >= $XCBDRI2_REQUIRED"
             fi
@@ -1611,7 +1659,7 @@ dnl Which drivers to build - default is chosen by platform
 AC_ARG_WITH([dri-drivers],
     [AS_HELP_STRING([--with-dri-drivers@<:@=DIRS...@:>@],
         [comma delimited classic DRI drivers list, e.g.
-        "swrast,i965,radeon" @<:@default=auto@:>@])],
+        "i915,i965,nouveau,radeon,r200,swrast" @<:@default=auto@:>@])],
     [with_dri_drivers="$withval"],
     [with_dri_drivers=auto])
 
@@ -1690,27 +1738,32 @@ if test -n "$with_dri_drivers"; then
         DRI_DIRS="$DRI_DIRS $driver"
         case "x$driver" in
         xi915)
-            HAVE_I915_DRI=yes;
-            PKG_CHECK_MODULES([INTEL], [libdrm_intel >= $LIBDRM_INTEL_REQUIRED])
+            require_libdrm "i915"
+            HAVE_I915_DRI=yes
+            PKG_CHECK_MODULES([INTEL], [libdrm >= $LIBDRM_INTEL_REQUIRED libdrm_intel >= $LIBDRM_INTEL_REQUIRED])
             ;;
         xi965)
-            HAVE_I965_DRI=yes;
-            PKG_CHECK_MODULES([INTEL], [libdrm_intel >= $LIBDRM_INTEL_REQUIRED])
+            require_libdrm "i965"
+            HAVE_I965_DRI=yes
+            PKG_CHECK_MODULES([INTEL], [libdrm >= $LIBDRM_INTEL_REQUIRED libdrm_intel >= $LIBDRM_INTEL_REQUIRED])
             ;;
         xnouveau)
-            HAVE_NOUVEAU_DRI=yes;
-            PKG_CHECK_MODULES([NVVIEUX], [libdrm_nouveau >= $LIBDRM_NVVIEUX_REQUIRED])
+            require_libdrm "nouveau"
+            HAVE_NOUVEAU_DRI=yes
+            PKG_CHECK_MODULES([NVVIEUX], [libdrm >= $LIBDRM_NVVIEUX_REQUIRED libdrm_nouveau >= $LIBDRM_NVVIEUX_REQUIRED])
             ;;
         xradeon)
+            require_libdrm "radeon"
             HAVE_RADEON_DRI=yes;
-            PKG_CHECK_MODULES([RADEON], [libdrm_radeon >= $LIBDRM_RADEON_REQUIRED])
+            PKG_CHECK_MODULES([RADEON], [libdrm >= $LIBDRM_RADEON_REQUIRED libdrm_radeon >= $LIBDRM_RADEON_REQUIRED])
             ;;
         xr200)
-            HAVE_R200_DRI=yes;
-            PKG_CHECK_MODULES([RADEON], [libdrm_radeon >= $LIBDRM_RADEON_REQUIRED])
+            require_libdrm "r200"
+            HAVE_R200_DRI=yes
+            PKG_CHECK_MODULES([RADEON], [libdrm >= $LIBDRM_RADEON_REQUIRED libdrm_radeon >= $LIBDRM_RADEON_REQUIRED])
             ;;
         xswrast)
-            HAVE_SWRAST_DRI=yes;
+            HAVE_SWRAST_DRI=yes
             ;;
         *)
             AC_MSG_ERROR([classic DRI driver '$driver' does not exist])
@@ -1723,30 +1776,41 @@ fi
 
 dnl
 dnl Gallium LLVM
-dnl
-dnl With follow-up commits we'll rework --enable-gallium-llvm to --enable-llvm
-dnl Since that is too invasive to stable, do the more conservative thing for now
-dnl and consider it as a global LLVM toggle.
+dnl Deprecated: kept for backwards compatibility
 dnl
 AC_ARG_ENABLE([gallium-llvm],
     [AS_HELP_STRING([--enable-gallium-llvm],
-        [build gallium LLVM support @<:@default=enabled on x86/x86_64@:>@])],
+        [DEPRECATED: use --enable-llvm instead])],
     [enable_gallium_llvm="$enableval"],
     [enable_gallium_llvm=auto])
 
-if test "x$enable_gallium_llvm" = xauto; then
+if test "x$enable_gallium_llvm" != xauto; then
+   AC_MSG_WARN([The --enable-gallium-llvm option has been deprecated. Use --enable-llvm instead.])
+   enable_llvm=$enable_gallium_llvm
+fi
+
+dnl
+dnl LLVM
+dnl
+AC_ARG_ENABLE([llvm],
+    [AS_HELP_STRING([--enable-llvm],
+        [build with LLVM support @<:@default=enabled on x86/x86_64@:>@])],
+    [enable_llvm="$enableval"],
+    [enable_llvm=auto])
+
+if test "x$enable_llvm" = xauto -a "x$FOUND_LLVM" = xyes; then
     if test "x$FOUND_LLVM" = xyes; then
         case "$host_cpu" in
-        i*86|x86_64|amd64) enable_gallium_llvm=yes;;
-        *) enable_gallium_llvm=no;;
+        i*86|x86_64|amd64) enable_llvm=yes;;
+        *) enable_llvm=no;;
         esac
     else
-        enable_gallium_llvm=no
+        enable_llvm=no
     fi
 fi
 
-if test "x$enable_gallium_llvm" = xyes -a "x$FOUND_LLVM" = xno; then
-    AC_MSG_ERROR([--enable-gallium-llvm selected but llvm-config is not found])
+if test "x$enable_llvm" = xyes -a "x$FOUND_LLVM" = xno; then
+    AC_MSG_ERROR([--enable-llvm selected but llvm-config is not found])
 fi
 
 #
@@ -1776,20 +1840,23 @@ AC_ARG_WITH([vulkan-icddir],
 AC_SUBST([VULKAN_ICD_INSTALL_DIR])
 
 if test -n "$with_vulkan_drivers"; then
+    if test "x$ac_cv_func_dl_iterate_phdr" = xno; then
+        AC_MSG_ERROR([Vulkan drivers require the dl_iterate_phdr function])
+    fi
+
     VULKAN_DRIVERS=`IFS=', '; echo $with_vulkan_drivers`
     for driver in $VULKAN_DRIVERS; do
         case "x$driver" in
         xintel)
-            if test "x$HAVE_I965_DRI" != xyes; then
-                AC_MSG_ERROR([Intel Vulkan driver requires the i965 dri driver])
-            fi
-            HAVE_INTEL_VULKAN=yes;
-
+            require_libdrm "ANV"
+            PKG_CHECK_MODULES([INTEL], [libdrm >= $LIBDRM_INTEL_REQUIRED libdrm_intel >= $LIBDRM_INTEL_REQUIRED])
+            HAVE_INTEL_VULKAN=yes
             ;;
         xradeon)
-            PKG_CHECK_MODULES([AMDGPU], [libdrm_amdgpu >= $LIBDRM_AMDGPU_REQUIRED])
+            require_libdrm "radv"
+            PKG_CHECK_MODULES([AMDGPU], [libdrm >= $LIBDRM_AMDGPU_REQUIRED libdrm_amdgpu >= $LIBDRM_AMDGPU_REQUIRED])
             radeon_llvm_check $LLVM_REQUIRED_RADV "radv"
-            HAVE_RADEON_VULKAN=yes;
+            HAVE_RADEON_VULKAN=yes
             ;;
         *)
             AC_MSG_ERROR([Vulkan driver '$driver' does not exist])
@@ -2075,14 +2142,16 @@ dnl
 AM_CONDITIONAL(HAVE_GALLIUM, test -n "$with_gallium_drivers")
 
 dnl
-dnl EGL Platforms configuration
+dnl DEPRECATED: EGL Platforms configuration
 dnl
 AC_ARG_WITH([egl-platforms],
     [AS_HELP_STRING([--with-egl-platforms@<:@=DIRS...@:>@],
-        [comma delimited native platforms libEGL supports, e.g.
-        "x11,drm" @<:@default=auto@:>@])],
+        [DEPRECATED: use --with-platforms instead@<:@default=auto@:>@])],
     [with_egl_platforms="$withval"],
-    [if test "x$enable_egl" = xyes; then
+    [with_egl_platforms=auto])
+
+if test "x$with_egl_platforms" = xauto; then
+    if test "x$enable_egl" = xyes; then
         if test "x$enable_gbm" = xyes; then
            with_egl_platforms="x11,drm"
         else
@@ -2090,17 +2159,31 @@ AC_ARG_WITH([egl-platforms],
         fi
     else
         with_egl_platforms=""
-    fi])
+    fi
+else
+    AC_MSG_WARN([--with-egl-platforms is deprecated. Use --with-platforms instead.])
+fi
 
-if test "x$with_egl_platforms" != "x" -a "x$enable_egl" != xyes; then
-    AC_MSG_ERROR([cannot build egl state tracker without EGL library])
+dnl
+dnl Platforms configuration
+dnl
+AC_ARG_WITH([platforms],
+    [AS_HELP_STRING([--with-platforms@<:@=DIRS...@:>@],
+        [comma delimited native platforms libEGL/Vulkan/other supports, e.g.
+        "x11,drm,wayland,surfaceless..." @<:@default=auto@:>@])],
+    [with_platforms="$withval"],
+    [with_platforms=auto])
+
+# For the time being, we still reuse the EGL named variables/defines.
+if test "x$with_platforms" != xauto; then
+    with_egl_platforms=$with_platforms
 fi
 
 PKG_CHECK_MODULES([WAYLAND_SCANNER], [wayland-scanner],
         WAYLAND_SCANNER=`$PKG_CONFIG --variable=wayland_scanner wayland-scanner`,
         WAYLAND_SCANNER='')
 if test "x$WAYLAND_SCANNER" = x; then
-    AC_PATH_PROG([WAYLAND_SCANNER], [wayland-scanner])
+    AC_PATH_PROG([WAYLAND_SCANNER], [wayland-scanner], [:])
 fi
 
 # Do per-EGL platform setups and checks
@@ -2111,7 +2194,7 @@ for plat in $egl_platforms; do
 
 		PKG_CHECK_MODULES([WAYLAND], [wayland-client >= $WAYLAND_REQUIRED wayland-server >= $WAYLAND_REQUIRED])
 
-		if test "x$WAYLAND_SCANNER" = x; then
+		if test "x$WAYLAND_SCANNER" = "x:"; then
 			AC_MSG_ERROR([wayland-scanner is needed to compile the wayland egl platform])
 		fi
 		;;
@@ -2196,7 +2279,8 @@ AC_ARG_WITH([omx-libdir],
     [AS_HELP_STRING([--with-omx-libdir=DIR],
         [directory for the OMX libraries])],
     [OMX_LIB_INSTALL_DIR="$withval"],
-    [OMX_LIB_INSTALL_DIR=`$PKG_CONFIG --define-variable=libdir=\$libdir --variable=pluginsdir libomxil-bellagio`])
+    [OMX_LIB_INSTALL_DIR=`$PKG_CONFIG --exists libomxil-bellagio && \
+                          $PKG_CONFIG --define-variable=libdir=\$libdir --variable=pluginsdir libomxil-bellagio`])
 AC_SUBST([OMX_LIB_INSTALL_DIR])
 
 dnl Directory for VA libs
@@ -2238,18 +2322,11 @@ require_basic_egl() {
             ;;
         *)
             AC_MSG_ERROR([$1 requires one of these:
-                  1) --with-egl-platforms=drm (X, Wayland, offscreen rendering based on DRM)
-                  2) --with-egl-platforms=surfaceless (offscreen only)
+                  1) --with-platforms=drm (X, Wayland, offscreen rendering based on DRM)
+                  2) --with-platforms=surfaceless (offscreen only)
                   Recommended options: drm,x11])
             ;;
     esac
-}
-
-radeon_gallium_llvm_check() {
-    if test "x$enable_gallium_llvm" != "xyes"; then
-        AC_MSG_ERROR([--enable-gallium-llvm is required when building $2])
-    fi
-    radeon_llvm_check $*
 }
 
 swr_require_cxx_feature_flags() {
@@ -2302,26 +2379,21 @@ if test -n "$with_gallium_drivers"; then
             ;;
         xi915)
             HAVE_GALLIUM_I915=yes
-            PKG_CHECK_MODULES([INTEL], [libdrm_intel >= $LIBDRM_INTEL_REQUIRED])
+            PKG_CHECK_MODULES([INTEL], [libdrm >= $LIBDRM_INTEL_REQUIRED libdrm_intel >= $LIBDRM_INTEL_REQUIRED])
             require_libdrm "Gallium i915"
-            ;;
-        xilo)
-            HAVE_GALLIUM_ILO=yes
-            PKG_CHECK_MODULES([INTEL], [libdrm_intel >= $LIBDRM_INTEL_REQUIRED])
-            require_libdrm "Gallium i965/ilo"
             ;;
         xr300)
             HAVE_GALLIUM_R300=yes
-            PKG_CHECK_MODULES([RADEON], [libdrm_radeon >= $LIBDRM_RADEON_REQUIRED])
+            PKG_CHECK_MODULES([RADEON], [libdrm >= $LIBDRM_RADEON_REQUIRED libdrm_radeon >= $LIBDRM_RADEON_REQUIRED])
             require_libdrm "r300"
             r300_require_llvm "r300"
             ;;
         xr600)
             HAVE_GALLIUM_R600=yes
-            PKG_CHECK_MODULES([RADEON], [libdrm_radeon >= $LIBDRM_RADEON_REQUIRED])
+            PKG_CHECK_MODULES([RADEON], [libdrm >= $LIBDRM_RADEON_REQUIRED libdrm_radeon >= $LIBDRM_RADEON_REQUIRED])
             require_libdrm "r600"
-            if test "x$enable_opencl" = xyes; then
-                radeon_gallium_llvm_check $LLVM_REQUIRED_R600 "r600"
+            if test "x$enable_llvm" = xyes; then
+                radeon_llvm_check $LLVM_REQUIRED_R600 "r600"
 
                 llvm_add_component "asmparser" "r600"
                 llvm_add_component "bitreader" "r600"
@@ -2329,27 +2401,27 @@ if test -n "$with_gallium_drivers"; then
             ;;
         xradeonsi)
             HAVE_GALLIUM_RADEONSI=yes
-            PKG_CHECK_MODULES([RADEON], [libdrm_radeon >= $LIBDRM_RADEON_REQUIRED])
-            PKG_CHECK_MODULES([AMDGPU], [libdrm_amdgpu >= $LIBDRM_AMDGPU_REQUIRED])
+            PKG_CHECK_MODULES([RADEON], [libdrm >= $LIBDRM_RADEON_REQUIRED libdrm_radeon >= $LIBDRM_RADEON_REQUIRED])
+            PKG_CHECK_MODULES([AMDGPU], [libdrm >= $LIBDRM_AMDGPU_REQUIRED libdrm_amdgpu >= $LIBDRM_AMDGPU_REQUIRED])
             require_libdrm "radeonsi"
-            radeon_gallium_llvm_check $LLVM_REQUIRED_RADEONSI "radeonsi"
+            radeon_llvm_check $LLVM_REQUIRED_RADEONSI "radeonsi"
             if test "x$enable_egl" = xyes; then
                 require_basic_egl "radeonsi"
             fi
             ;;
         xnouveau)
             HAVE_GALLIUM_NOUVEAU=yes
-            PKG_CHECK_MODULES([NOUVEAU], [libdrm_nouveau >= $LIBDRM_NOUVEAU_REQUIRED])
+            PKG_CHECK_MODULES([NOUVEAU], [libdrm >= $LIBDRM_NOUVEAU_REQUIRED libdrm_nouveau >= $LIBDRM_NOUVEAU_REQUIRED])
             require_libdrm "nouveau"
             ;;
         xfreedreno)
             HAVE_GALLIUM_FREEDRENO=yes
-            PKG_CHECK_MODULES([FREEDRENO], [libdrm_freedreno >= $LIBDRM_FREEDRENO_REQUIRED])
+            PKG_CHECK_MODULES([FREEDRENO], [libdrm >= $LIBDRM_FREEDRENO_REQUIRED libdrm_freedreno >= $LIBDRM_FREEDRENO_REQUIRED])
             require_libdrm "freedreno"
             ;;
         xetnaviv)
             HAVE_GALLIUM_ETNAVIV=yes
-            PKG_CHECK_MODULES([ETNAVIV], [libdrm_etnaviv >= $LIBDRM_ETNAVIV_REQUIRED])
+            PKG_CHECK_MODULES([ETNAVIV], [libdrm >= $LIBDRM_ETNAVIV_REQUIRED libdrm_etnaviv >= $LIBDRM_ETNAVIV_REQUIRED])
             require_libdrm "etnaviv"
             ;;
        ximx)
@@ -2357,17 +2429,17 @@ if test -n "$with_gallium_drivers"; then
             ;;
         xswrast)
             HAVE_GALLIUM_SOFTPIPE=yes
-            if test "x$enable_gallium_llvm" = xyes; then
+            if test "x$enable_llvm" = xyes; then
                 HAVE_GALLIUM_LLVMPIPE=yes
             fi
             ;;
         xswr)
             llvm_require_version $LLVM_REQUIRED_SWR "swr"
 
-            swr_require_cxx_feature_flags "C++11" "__cplusplus >= 201103L" \
-                ",-std=c++11" \
-                SWR_CXX11_CXXFLAGS
-            AC_SUBST([SWR_CXX11_CXXFLAGS])
+            swr_require_cxx_feature_flags "C++14" "__cplusplus >= 201402L" \
+                "-std=c++14" \
+                SWR_CXX14_CXXFLAGS
+            AC_SUBST([SWR_CXX14_CXXFLAGS])
 
             swr_require_cxx_feature_flags "AVX" "defined(__AVX__)" \
                 ",-mavx,-march=core-avx" \
@@ -2383,7 +2455,7 @@ if test -n "$with_gallium_drivers"; then
             ;;
         xvc4)
             HAVE_GALLIUM_VC4=yes
-            PKG_CHECK_MODULES([VC4], [libdrm_vc4 >= $LIBDRM_VC4_REQUIRED])
+            PKG_CHECK_MODULES([VC4], [libdrm >= $LIBDRM_VC4_REQUIRED libdrm_vc4 >= $LIBDRM_VC4_REQUIRED])
             require_libdrm "vc4"
 
             PKG_CHECK_MODULES([SIMPENROSE], [simpenrose],
@@ -2394,7 +2466,9 @@ if test -n "$with_gallium_drivers"; then
         xvirgl)
             HAVE_GALLIUM_VIRGL=yes
             require_libdrm "virgl"
-            require_basic_egl "virgl"
+            if test "x$enable_egl" = xyes; then
+                require_basic_egl "virgl"
+            fi
             ;;
         *)
             AC_MSG_ERROR([Unknown Gallium driver: $driver])
@@ -2403,21 +2477,21 @@ if test -n "$with_gallium_drivers"; then
     done
 fi
 
-if test "x$enable_gallium_llvm" == "xyes" -a "$with_gallium_drivers"; then
+if test "x$enable_llvm" = "xyes" -a "$with_gallium_drivers"; then
     llvm_require_version $LLVM_REQUIRED_GALLIUM "gallium"
     llvm_add_default_components "gallium"
 fi
 
 dnl We need to validate some needed dependencies for renderonly drivers.
 
-if test "x$HAVE_GALLIUM_ETNAVIV" != xyes -a "x$HAVE_GALLIUM_IMX" == xyes  ; then
-    AC_ERROR([Building with imx requires etnaviv])
+if test "x$HAVE_GALLIUM_ETNAVIV" != xyes -a "x$HAVE_GALLIUM_IMX" = xyes  ; then
+    AC_MSG_ERROR([Building with imx requires etnaviv])
 fi
 
 dnl
 dnl Set defines and buildtime variables only when using LLVM.
 dnl
-if test "x$enable_gallium_llvm" = xyes; then
+if test "x$enable_llvm" = xyes; then
     DEFINES="${DEFINES} -DHAVE_LLVM=0x0$LLVM_VERSION_INT -DMESA_LLVM_VERSION_PATCH=$LLVM_VERSION_PATCH"
 
     LLVM_LDFLAGS=`$LLVM_CONFIG --ldflags`
@@ -2478,7 +2552,6 @@ fi
 
 AM_CONDITIONAL(HAVE_GALLIUM_SVGA, test "x$HAVE_GALLIUM_SVGA" = xyes)
 AM_CONDITIONAL(HAVE_GALLIUM_I915, test "x$HAVE_GALLIUM_I915" = xyes)
-AM_CONDITIONAL(HAVE_GALLIUM_ILO, test "x$HAVE_GALLIUM_ILO" = xyes)
 AM_CONDITIONAL(HAVE_GALLIUM_R300, test "x$HAVE_GALLIUM_R300" = xyes)
 AM_CONDITIONAL(HAVE_GALLIUM_R600, test "x$HAVE_GALLIUM_R600" = xyes)
 AM_CONDITIONAL(HAVE_GALLIUM_RADEONSI, test "x$HAVE_GALLIUM_RADEONSI" = xyes)
@@ -2529,13 +2602,9 @@ AM_CONDITIONAL(NEED_RADEON_DRM_WINSYS, test "x$HAVE_GALLIUM_R300" = xyes -o \
                                             "x$HAVE_GALLIUM_R600" = xyes -o \
                                             "x$HAVE_GALLIUM_RADEONSI" = xyes)
 AM_CONDITIONAL(NEED_WINSYS_XLIB, test "x$enable_glx" = xgallium-xlib)
-AM_CONDITIONAL(NEED_RADEON_LLVM, test x$NEED_RADEON_LLVM = xyes)
 AM_CONDITIONAL(HAVE_GALLIUM_COMPUTE, test x$enable_opencl = xyes)
-AM_CONDITIONAL(HAVE_GALLIUM_LLVM, test "x$enable_gallium_llvm" = xyes)
+AM_CONDITIONAL(HAVE_GALLIUM_LLVM, test "x$enable_llvm" = xyes)
 AM_CONDITIONAL(USE_VC4_SIMULATOR, test x$USE_VC4_SIMULATOR = xyes)
-if test "x$USE_VC4_SIMULATOR" = xyes -a "x$HAVE_GALLIUM_ILO" = xyes; then
-    AC_MSG_ERROR([VC4 simulator on x86 replaces i965 driver build, so ilo must be disabled.])
-fi
 
 AM_CONDITIONAL(HAVE_LIBDRM, test "x$have_libdrm" = xyes)
 AM_CONDITIONAL(HAVE_OSMESA, test "x$enable_osmesa" = xyes)
@@ -2555,8 +2624,10 @@ AC_SUBST([NINE_VERSION], "$NINE_MAJOR.$NINE_MINOR.$NINE_TINY")
 AC_SUBST([VDPAU_MAJOR], 1)
 AC_SUBST([VDPAU_MINOR], 0)
 
-VA_MAJOR=`$PKG_CONFIG --modversion libva | $SED -n 's/\([[^\.]]*\)\..*$/\1/p'`
-VA_MINOR=`$PKG_CONFIG --modversion libva | $SED -n 's/.*\.\(.*\)\..*$/\1/p'`
+if test "x$enable_va" = xyes; then
+    VA_MAJOR=`$PKG_CONFIG --modversion libva | $SED -n 's/\([[^\.]]*\)\..*$/\1/p'`
+    VA_MINOR=`$PKG_CONFIG --modversion libva | $SED -n 's/.*\.\(.*\)\..*$/\1/p'`
+fi
 AC_SUBST([VA_MAJOR], $VA_MAJOR)
 AC_SUBST([VA_MINOR], $VA_MINOR)
 
@@ -2627,7 +2698,6 @@ AC_CONFIG_FILES([Makefile
 		src/gallium/drivers/freedreno/Makefile
 		src/gallium/drivers/ddebug/Makefile
 		src/gallium/drivers/i915/Makefile
-		src/gallium/drivers/ilo/Makefile
 		src/gallium/drivers/llvmpipe/Makefile
 		src/gallium/drivers/noop/Makefile
 		src/gallium/drivers/nouveau/Makefile
@@ -2675,7 +2745,6 @@ AC_CONFIG_FILES([Makefile
 		src/gallium/winsys/imx/drm/Makefile
 		src/gallium/winsys/freedreno/drm/Makefile
 		src/gallium/winsys/i915/drm/Makefile
-		src/gallium/winsys/intel/drm/Makefile
 		src/gallium/winsys/nouveau/drm/Makefile
 		src/gallium/winsys/radeon/drm/Makefile
 		src/gallium/winsys/amdgpu/drm/Makefile
@@ -2697,8 +2766,6 @@ AC_CONFIG_FILES([Makefile
 		src/glx/windows/windowsdriproto.pc
 		src/gtest/Makefile
 		src/intel/Makefile
-		src/intel/tools/Makefile
-		src/intel/vulkan/Makefile
 		src/loader/Makefile
 		src/mapi/Makefile
 		src/mapi/es1api/glesv1_cm.pc
@@ -2722,7 +2789,7 @@ AC_CONFIG_FILES([Makefile
 		src/mesa/main/tests/Makefile
 		src/util/Makefile
 		src/util/tests/hash_table/Makefile
-		src/vulkan/wsi/Makefile])
+		src/vulkan/Makefile])
 
 AC_OUTPUT
 
@@ -2788,7 +2855,6 @@ dnl EGL
 echo ""
 echo "        EGL:             $enable_egl"
 if test "$enable_egl" = yes; then
-    echo "        EGL platforms:   $egl_platforms"
 
     egl_drivers=""
     if test "x$enable_dri" != "xno"; then
@@ -2806,6 +2872,8 @@ else
     echo "        GBM:             no"
 fi
 
+    echo "        EGL/Vulkan/VL platforms:   $egl_platforms"
+
 # Vulkan
 echo ""
 if test "x$VULKAN_DRIVERS" != x; then
@@ -2816,7 +2884,7 @@ else
 fi
 
 echo ""
-if test "x$enable_gallium_llvm" = xyes; then
+if test "x$enable_llvm" = xyes; then
     echo "        llvm:            yes"
     echo "        llvm-config:     $LLVM_CONFIG"
     echo "        llvm-version:    $LLVM_VERSION"
@@ -2863,7 +2931,7 @@ echo "        CFLAGS:          $cflags"
 echo "        CXXFLAGS:        $cxxflags"
 echo "        Macros:          $defines"
 echo ""
-if test "x$enable_gallium_llvm" = xyes; then
+if test "x$enable_llvm" = xyes; then
     echo "        LLVM_CFLAGS:     $LLVM_CFLAGS"
     echo "        LLVM_CXXFLAGS:   $LLVM_CXXFLAGS"
     echo "        LLVM_CPPFLAGS:   $LLVM_CPPFLAGS"

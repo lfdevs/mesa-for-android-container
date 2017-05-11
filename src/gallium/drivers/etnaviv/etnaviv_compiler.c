@@ -183,6 +183,8 @@ struct etna_compile {
    unsigned labels_count, labels_sz;
    struct etna_compile_label *labels;
 
+   unsigned num_loops;
+
    /* Code generation */
    int inst_ptr; /* current instruction pointer */
    uint32_t code[ETNA_MAX_INSTRUCTIONS * ETNA_INST_SIZE];
@@ -194,6 +196,8 @@ struct etna_compile {
 
    /* GPU hardware specs */
    const struct etna_specs *specs;
+
+   const struct etna_shader_key *key;
 };
 
 static struct etna_reg_desc *
@@ -1166,6 +1170,8 @@ trans_loop_bgn(const struct instr_translater *t, struct etna_compile *c,
    f->lbl_loop_end = alloc_new_label(c);
 
    label_place(c, f->lbl_loop_bgn);
+
+   c->num_loops++;
 }
 
 static void
@@ -1904,6 +1910,22 @@ etna_compile_add_z_div_if_needed(struct etna_compile *c)
    }
 }
 
+static void
+etna_compile_frag_rb_swap(struct etna_compile *c)
+{
+   if (c->info.processor == PIPE_SHADER_FRAGMENT && c->key->frag_rb_swap) {
+      /* find color out */
+      struct etna_reg_desc *color_reg =
+         find_decl_by_semantic(c, TGSI_FILE_OUTPUT, TGSI_SEMANTIC_COLOR, 0);
+
+      emit_inst(c, &(struct etna_inst) {
+         .opcode = INST_OPCODE_MOV,
+         .dst = etna_native_to_dst(color_reg->native, INST_COMPS_X | INST_COMPS_Y | INST_COMPS_Z | INST_COMPS_W),
+         .src[2] = etna_native_to_src(color_reg->native, SWIZZLE(Z, Y, X, W)),
+      });
+   }
+}
+
 /** add a NOP to the shader if
  * a) the shader is empty
  * or
@@ -2040,7 +2062,7 @@ permute_ps_inputs(struct etna_compile *c)
 
 /* fill in ps inputs into shader object */
 static void
-fill_in_ps_inputs(struct etna_shader *sobj, struct etna_compile *c)
+fill_in_ps_inputs(struct etna_shader_variant *sobj, struct etna_compile *c)
 {
    struct etna_shader_io_file *sf = &sobj->infile;
 
@@ -2070,7 +2092,7 @@ fill_in_ps_inputs(struct etna_shader *sobj, struct etna_compile *c)
 
 /* fill in output mapping for ps into shader object */
 static void
-fill_in_ps_outputs(struct etna_shader *sobj, struct etna_compile *c)
+fill_in_ps_outputs(struct etna_shader_variant *sobj, struct etna_compile *c)
 {
    sobj->outfile.num_reg = 0;
 
@@ -2092,7 +2114,7 @@ fill_in_ps_outputs(struct etna_shader *sobj, struct etna_compile *c)
 
 /* fill in inputs for vs into shader object */
 static void
-fill_in_vs_inputs(struct etna_shader *sobj, struct etna_compile *c)
+fill_in_vs_inputs(struct etna_shader_variant *sobj, struct etna_compile *c)
 {
    struct etna_shader_io_file *sf = &sobj->infile;
 
@@ -2112,7 +2134,7 @@ fill_in_vs_inputs(struct etna_shader *sobj, struct etna_compile *c)
 
 /* build two-level output index [Semantic][Index] for fast linking */
 static void
-build_output_index(struct etna_shader *sobj)
+build_output_index(struct etna_shader_variant *sobj)
 {
    int total = 0;
    int offset = 0;
@@ -2136,7 +2158,7 @@ build_output_index(struct etna_shader *sobj)
 
 /* fill in outputs for vs into shader object */
 static void
-fill_in_vs_outputs(struct etna_shader *sobj, struct etna_compile *c)
+fill_in_vs_outputs(struct etna_shader_variant *sobj, struct etna_compile *c)
 {
    struct etna_shader_io_file *sf = &sobj->outfile;
 
@@ -2236,7 +2258,7 @@ etna_compile_check_limits(struct etna_compile *c)
 }
 
 static void
-copy_uniform_state_to_shader(struct etna_compile *c, struct etna_shader *sobj)
+copy_uniform_state_to_shader(struct etna_compile *c, struct etna_shader_variant *sobj)
 {
    uint32_t count = c->imm_size;
    struct etna_shader_uniform_info *uinfo = &sobj->uniforms;
@@ -2249,15 +2271,18 @@ copy_uniform_state_to_shader(struct etna_compile *c, struct etna_shader *sobj)
    etna_set_shader_uniforms_dirty_flags(sobj);
 }
 
-struct etna_shader *
-etna_compile_shader(const struct etna_specs *specs,
-                    const struct tgsi_token *tokens)
+bool
+etna_compile_shader(struct etna_shader_variant *v)
 {
    /* Create scratch space that may be too large to fit on stack
     */
    bool ret;
    struct etna_compile *c;
-   struct etna_shader *shader;
+
+   if (unlikely(!v))
+      return false;
+
+   const struct etna_specs *specs = v->shader->specs;
 
    struct tgsi_lowering_config lconfig = {
       .lower_SCS = specs->has_sin_cos_sqrt,
@@ -2274,13 +2299,12 @@ etna_compile_shader(const struct etna_specs *specs,
 
    c = CALLOC_STRUCT(etna_compile);
    if (!c)
-      return NULL;
+      return false;
 
-   shader = CALLOC_STRUCT(etna_shader);
-   if (!shader)
-      goto out;
+   const struct tgsi_token *tokens = v->shader->tokens;
 
    c->specs = specs;
+   c->key = &v->key;
    c->tokens = tgsi_transform_lowering(&lconfig, tokens, &c->info);
    c->free_tokens = !!c->tokens;
    if (!c->tokens) {
@@ -2404,33 +2428,32 @@ etna_compile_shader(const struct etna_specs *specs,
    /* pass 3: generate instructions */
    etna_compile_pass_generate_code(c);
    etna_compile_add_z_div_if_needed(c);
+   etna_compile_frag_rb_swap(c);
    etna_compile_add_nop_if_needed(c);
    etna_compile_fill_in_labels(c);
 
    ret = etna_compile_check_limits(c);
-   if (!ret) {
-      FREE(shader);
-      shader = NULL;
+   if (!ret)
       goto out;
-   }
 
    /* fill in output structure */
-   shader->processor = c->info.processor;
-   shader->code_size = c->inst_ptr * 4;
-   shader->code = mem_dup(c->code, c->inst_ptr * 16);
-   shader->num_temps = c->next_free_native;
-   shader->vs_pos_out_reg = -1;
-   shader->vs_pointsize_out_reg = -1;
-   shader->ps_color_out_reg = -1;
-   shader->ps_depth_out_reg = -1;
-   copy_uniform_state_to_shader(c, shader);
+   v->processor = c->info.processor;
+   v->code_size = c->inst_ptr * 4;
+   v->code = mem_dup(c->code, c->inst_ptr * 16);
+   v->num_loops = c->num_loops;
+   v->num_temps = c->next_free_native;
+   v->vs_pos_out_reg = -1;
+   v->vs_pointsize_out_reg = -1;
+   v->ps_color_out_reg = -1;
+   v->ps_depth_out_reg = -1;
+   copy_uniform_state_to_shader(c, v);
 
    if (c->info.processor == PIPE_SHADER_VERTEX) {
-      fill_in_vs_inputs(shader, c);
-      fill_in_vs_outputs(shader, c);
+      fill_in_vs_inputs(v, c);
+      fill_in_vs_outputs(v, c);
    } else if (c->info.processor == PIPE_SHADER_FRAGMENT) {
-      fill_in_ps_inputs(shader, c);
-      fill_in_ps_outputs(shader, c);
+      fill_in_ps_inputs(v, c);
+      fill_in_ps_outputs(v, c);
    }
 
 out:
@@ -2440,12 +2463,12 @@ out:
    FREE(c->labels);
    FREE(c);
 
-   return shader;
+   return ret;
 }
 
 extern const char *tgsi_swizzle_names[];
 void
-etna_dump_shader(const struct etna_shader *shader)
+etna_dump_shader(const struct etna_shader_variant *shader)
 {
    if (shader->processor == PIPE_SHADER_VERTEX)
       printf("VERT\n");
@@ -2455,6 +2478,7 @@ etna_dump_shader(const struct etna_shader *shader)
 
    etna_disasm(shader->code, shader->code_size, PRINT_RAW);
 
+   printf("num loops: %i\n", shader->num_loops);
    printf("num temps: %i\n", shader->num_temps);
    printf("num const: %i\n", shader->uniforms.const_count);
    printf("immediates:\n");
@@ -2492,7 +2516,7 @@ etna_dump_shader(const struct etna_shader *shader)
 }
 
 void
-etna_destroy_shader(struct etna_shader *shader)
+etna_destroy_shader(struct etna_shader_variant *shader)
 {
    assert(shader);
 
@@ -2504,7 +2528,7 @@ etna_destroy_shader(struct etna_shader *shader)
 }
 
 static const struct etna_shader_inout *
-etna_shader_vs_lookup(const struct etna_shader *sobj,
+etna_shader_vs_lookup(const struct etna_shader_variant *sobj,
                       const struct etna_shader_inout *in)
 {
    if (in->semantic.Index < sobj->output_count_per_semantic[in->semantic.Name])
@@ -2515,7 +2539,7 @@ etna_shader_vs_lookup(const struct etna_shader *sobj,
 
 bool
 etna_link_shader(struct etna_shader_link_info *info,
-                 const struct etna_shader *vs, const struct etna_shader *fs)
+                 const struct etna_shader_variant *vs, const struct etna_shader_variant *fs)
 {
    /* For each fragment input we need to find the associated vertex shader
     * output, which can be found by matching on semantic name and index. A

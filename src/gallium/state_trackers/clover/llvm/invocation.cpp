@@ -281,8 +281,12 @@ clover::llvm::link_program(const std::vector<module> &modules,
 
    optimize(*mod, c->getCodeGenOpts().OptimizationLevel, !create_library);
 
+   static std::atomic_uint seq(0);
+   const std::string id = "." + mod->getModuleIdentifier() + "-" +
+      std::to_string(seq++);
+
    if (has_flag(debug::llvm))
-      debug::log(".ll", print_module_bitcode(*mod));
+      debug::log(id + ".ll", print_module_bitcode(*mod));
 
    if (create_library) {
       return build_module_library(*mod, module::section::text_library);
@@ -292,7 +296,7 @@ clover::llvm::link_program(const std::vector<module> &modules,
 
    } else if (ir == PIPE_SHADER_IR_NATIVE) {
       if (has_flag(debug::native))
-         debug::log(".asm", print_module_native(*mod, target));
+         debug::log(id +  ".asm", print_module_native(*mod, target));
 
       return build_module_native(*mod, target, *c, r_log);
 

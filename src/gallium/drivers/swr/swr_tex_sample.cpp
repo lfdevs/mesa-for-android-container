@@ -46,7 +46,7 @@
 
 #include "state.h"
 #include "JitManager.h"
-#include "state_llvm.h"
+#include "gen_state_llvm.h"
 
 #include "pipe/p_defines.h"
 #include "pipe/p_shader_tokens.h"
@@ -58,7 +58,7 @@
 #include "util/u_memory.h"
 
 #include "swr_tex_sample.h"
-#include "swr_context_llvm.h"
+#include "gen_swr_context_llvm.h"
 
 using namespace SwrJit;
 
@@ -74,7 +74,7 @@ struct swr_sampler_dynamic_state {
 
    const struct swr_sampler_static_state *static_state;
 
-   unsigned shader_type;
+   enum pipe_shader_type shader_type;
 };
 
 
@@ -122,6 +122,9 @@ swr_texture_member(const struct lp_sampler_dynamic_state *base,
       break;
    case PIPE_SHADER_VERTEX:
       indices[1] = lp_build_const_int32(gallivm, swr_draw_context_texturesVS);
+      break;
+   case PIPE_SHADER_GEOMETRY:
+      indices[1] = lp_build_const_int32(gallivm, swr_draw_context_texturesGS);
       break;
    default:
       assert(0 && "unsupported shader type");
@@ -216,6 +219,9 @@ swr_sampler_member(const struct lp_sampler_dynamic_state *base,
       break;
    case PIPE_SHADER_VERTEX:
       indices[1] = lp_build_const_int32(gallivm, swr_draw_context_samplersVS);
+      break;
+   case PIPE_SHADER_GEOMETRY:
+      indices[1] = lp_build_const_int32(gallivm, swr_draw_context_samplersGS);
       break;
    default:
       assert(0 && "unsupported shader type");
@@ -319,7 +325,7 @@ swr_sampler_soa_emit_size_query(const struct lp_build_sampler_soa *base,
 
 struct lp_build_sampler_soa *
 swr_sampler_soa_create(const struct swr_sampler_static_state *static_state,
-                       unsigned shader_type)
+                       enum pipe_shader_type shader_type)
 {
    struct swr_sampler_soa *sampler;
 

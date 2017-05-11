@@ -50,8 +50,8 @@ intel_upload_finish(struct brw_context *brw)
    if (!brw->upload.bo)
       return;
 
-   drm_intel_bo_unmap(brw->upload.bo);
-   drm_intel_bo_unreference(brw->upload.bo);
+   brw_bo_unmap(brw->upload.bo);
+   brw_bo_unreference(brw->upload.bo);
    brw->upload.bo = NULL;
    brw->upload.next_offset = 0;
 }
@@ -83,7 +83,7 @@ void *
 intel_upload_space(struct brw_context *brw,
                    uint32_t size,
                    uint32_t alignment,
-                   drm_intel_bo **out_bo,
+                   struct brw_bo **out_bo,
                    uint32_t *out_offset)
 {
    uint32_t offset;
@@ -95,21 +95,21 @@ intel_upload_space(struct brw_context *brw,
    }
 
    if (!brw->upload.bo) {
-      brw->upload.bo = drm_intel_bo_alloc(brw->bufmgr, "streamed data",
-                                          MAX2(INTEL_UPLOAD_SIZE, size), 4096);
+      brw->upload.bo = brw_bo_alloc(brw->bufmgr, "streamed data",
+                                    MAX2(INTEL_UPLOAD_SIZE, size), 4096);
       if (brw->has_llc)
-         drm_intel_bo_map(brw->upload.bo, true);
+         brw_bo_map(brw, brw->upload.bo, true);
       else
-         drm_intel_gem_bo_map_gtt(brw->upload.bo);
+         brw_bo_map_gtt(brw, brw->upload.bo);
    }
 
    brw->upload.next_offset = offset + size;
 
    *out_offset = offset;
    if (*out_bo != brw->upload.bo) {
-      drm_intel_bo_unreference(*out_bo);
+      brw_bo_unreference(*out_bo);
       *out_bo = brw->upload.bo;
-      drm_intel_bo_reference(brw->upload.bo);
+      brw_bo_reference(brw->upload.bo);
    }
 
    return brw->upload.bo->virtual + offset;
@@ -125,7 +125,7 @@ intel_upload_data(struct brw_context *brw,
                   const void *data,
                   uint32_t size,
                   uint32_t alignment,
-                  drm_intel_bo **out_bo,
+                  struct brw_bo **out_bo,
                   uint32_t *out_offset)
 {
    void *dst = intel_upload_space(brw, size, alignment, out_bo, out_offset);

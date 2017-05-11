@@ -29,7 +29,6 @@
 
 #include "isl/isl.h"
 
-struct brw_context;
 struct brw_stage_prog_data;
 
 #ifdef __cplusplus
@@ -55,7 +54,7 @@ struct blorp_context {
    bool (*lookup_shader)(struct blorp_context *blorp,
                          const void *key, uint32_t key_size,
                          uint32_t *kernel_out, void *prog_data_out);
-   void (*upload_shader)(struct blorp_context *blorp,
+   bool (*upload_shader)(struct blorp_context *blorp,
                          const void *key, uint32_t key_size,
                          const void *kernel, uint32_t kernel_size,
                          const struct brw_stage_prog_data *prog_data,

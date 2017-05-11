@@ -123,9 +123,9 @@ vc4_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
         case PIPE_CAP_TEXTURE_SHADOW_MAP:
         case PIPE_CAP_BLEND_EQUATION_SEPARATE:
         case PIPE_CAP_TWO_SIDED_STENCIL:
-        case PIPE_CAP_USER_INDEX_BUFFERS:
         case PIPE_CAP_TEXTURE_MULTISAMPLE:
         case PIPE_CAP_TEXTURE_SWIZZLE:
+        case PIPE_CAP_GLSL_OPTIMIZE_CONSERVATIVELY:
                 return 1;
 
                 /* lying for GL 2.0 */
@@ -225,8 +225,8 @@ vc4_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
         case PIPE_CAP_STRING_MARKER:
         case PIPE_CAP_SURFACE_REINTERPRET_BLOCKS:
         case PIPE_CAP_QUERY_BUFFER_OBJECT:
-	case PIPE_CAP_QUERY_MEMORY_INFO:
-	case PIPE_CAP_PCI_GROUP:
+        case PIPE_CAP_QUERY_MEMORY_INFO:
+        case PIPE_CAP_PCI_GROUP:
         case PIPE_CAP_PCI_BUS:
         case PIPE_CAP_PCI_DEVICE:
         case PIPE_CAP_PCI_FUNCTION:
@@ -241,8 +241,17 @@ vc4_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
         case PIPE_CAP_TGSI_ARRAY_COMPONENTS:
         case PIPE_CAP_TGSI_CAN_READ_OUTPUTS:
         case PIPE_CAP_NATIVE_FENCE_FD:
-        case PIPE_CAP_GLSL_OPTIMIZE_CONSERVATIVELY:
         case PIPE_CAP_TGSI_FS_FBFETCH:
+        case PIPE_CAP_TGSI_MUL_ZERO_WINS:
+        case PIPE_CAP_DOUBLES:
+        case PIPE_CAP_INT64:
+        case PIPE_CAP_INT64_DIVMOD:
+        case PIPE_CAP_TGSI_TEX_TXF_LZ:
+        case PIPE_CAP_TGSI_CLOCK:
+        case PIPE_CAP_POLYGON_MODE_FILL_RECTANGLE:
+        case PIPE_CAP_SPARSE_BUFFER_PAGE_SIZE:
+        case PIPE_CAP_TGSI_BALLOT:
+        case PIPE_CAP_TGSI_TES_LAYER_VIEWPORT:
                 return 0;
 
                 /* Stream output. */
@@ -341,8 +350,9 @@ vc4_screen_get_paramf(struct pipe_screen *pscreen, enum pipe_capf param)
 }
 
 static int
-vc4_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
-                           enum pipe_shader_cap param)
+vc4_screen_get_shader_param(struct pipe_screen *pscreen,
+                            enum pipe_shader_type shader,
+                            enum pipe_shader_cap param)
 {
         if (shader != PIPE_SHADER_VERTEX &&
             shader != PIPE_SHADER_FRAGMENT) {
@@ -361,10 +371,7 @@ vc4_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
                 return vc4_screen(pscreen)->has_control_flow;
 
         case PIPE_SHADER_CAP_MAX_INPUTS:
-                if (shader == PIPE_SHADER_FRAGMENT)
-                        return 8;
-                else
-                        return 16;
+                return 8;
         case PIPE_SHADER_CAP_MAX_OUTPUTS:
                 return shader == PIPE_SHADER_FRAGMENT ? 1 : 8;
         case PIPE_SHADER_CAP_MAX_TEMPS:
@@ -373,8 +380,6 @@ vc4_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
                 return 16 * 1024 * sizeof(float);
         case PIPE_SHADER_CAP_MAX_CONST_BUFFERS:
                 return 1;
-        case PIPE_SHADER_CAP_MAX_PREDS:
-                return 0; /* nothing uses this */
         case PIPE_SHADER_CAP_TGSI_CONT_SUPPORTED:
                 return 0;
         case PIPE_SHADER_CAP_INDIRECT_INPUT_ADDR:
@@ -389,7 +394,6 @@ vc4_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
                 return 0;
         case PIPE_SHADER_CAP_INTEGERS:
                 return 1;
-        case PIPE_SHADER_CAP_DOUBLES:
         case PIPE_SHADER_CAP_TGSI_DROUND_SUPPORTED:
         case PIPE_SHADER_CAP_TGSI_DFRACEXP_DLDEXP_SUPPORTED:
         case PIPE_SHADER_CAP_TGSI_FMA_SUPPORTED:
@@ -611,7 +615,7 @@ vc4_screen_create(int fd)
 
         screen->fd = fd;
         list_inithead(&screen->bo_cache.time_list);
-        pipe_mutex_init(screen->bo_handles_mutex);
+        (void) mtx_init(&screen->bo_handles_mutex, mtx_plain);
         screen->bo_handles = util_hash_table_create(handle_hash, handle_compare);
 
         screen->has_control_flow =

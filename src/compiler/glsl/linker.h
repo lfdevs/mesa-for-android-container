@@ -22,7 +22,6 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-#pragma once
 #ifndef GLSL_LINKER_H
 #define GLSL_LINKER_H
 
@@ -35,8 +34,7 @@ link_invalidate_variable_locations(exec_list *ir);
 
 extern void
 link_assign_uniform_locations(struct gl_shader_program *prog,
-                              struct gl_context *ctx,
-                              unsigned int num_explicit_uniform_locs);
+                              struct gl_context *ctx);
 
 extern void
 link_set_uniform_initializers(struct gl_shader_program *prog,
@@ -76,6 +74,9 @@ validate_interstage_inout_blocks(struct gl_shader_program *prog,
 void
 validate_interstage_uniform_blocks(struct gl_shader_program *prog,
                                    gl_linked_shader **stages);
+
+unsigned
+values_for_type(const glsl_type *type);
 
 extern void
 link_assign_atomic_counter_resources(struct gl_context *ctx,

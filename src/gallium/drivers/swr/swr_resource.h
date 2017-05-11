@@ -46,6 +46,10 @@ struct swr_resource {
 
    struct sw_displaytarget *display_target;
 
+   /* If resource is multisample, then this points to a alternate resource
+    * containing the resolved multisample surface, otherwise null */
+   struct pipe_resource *resolve_target;
+
    size_t mip_offsets[PIPE_MAX_TEXTURE_LEVELS];
    size_t secondary_mip_offsets[PIPE_MAX_TEXTURE_LEVELS];
 

@@ -410,6 +410,8 @@ ConstantFolding::findOriginForTestWithZero(Value *value)
    if (!value)
       return NULL;
    Instruction *insn = value->getInsn();
+   if (!insn)
+      return NULL;
 
    if (insn->asCmp() && insn->op != OP_SLCT)
       return insn->asCmp();
@@ -1024,6 +1026,7 @@ ConstantFolding::opnd(Instruction *i, ImmediateValue &imm0, int s)
          i->postFactor = 0;
       }
       break;
+   case OP_FMA:
    case OP_MAD:
       if (imm0.isInteger(0)) {
          i->setSrc(0, i->getSrc(2));
@@ -1054,8 +1057,12 @@ ConstantFolding::opnd(Instruction *i, ImmediateValue &imm0, int s)
          i->setSrc(1, new_ImmediateValue(prog, imm0.reg.data.u32));
       }
       break;
-   case OP_ADD:
    case OP_SUB:
+      if (imm0.isInteger(0) && s == 0 && typeSizeof(i->dType) == 8 &&
+          !isFloatType(i->dType))
+         break;
+      /* fallthrough */
+   case OP_ADD:
       if (i->usesFlags())
          break;
       if (imm0.isInteger(0)) {
@@ -1730,6 +1737,7 @@ AlgebraicOpt::tryADDToMADOrSAD(Instruction *add, operation toOp)
 
    add->op = toOp;
    add->subOp = src->getInsn()->subOp; // potentially mul-high
+   add->dnz = src->getInsn()->dnz;
    add->dType = src->getInsn()->dType; // sign matters for imad hi
    add->sType = src->getInsn()->sType;
 
@@ -2241,6 +2249,121 @@ LateAlgebraicOpt::visit(Instruction *i)
    }
 
    return true;
+}
+
+// =============================================================================
+
+// Split 64-bit MUL and MAD
+class Split64BitOpPreRA : public Pass
+{
+private:
+   virtual bool visit(BasicBlock *);
+   void split64MulMad(Function *, Instruction *, DataType);
+
+   BuildUtil bld;
+};
+
+bool
+Split64BitOpPreRA::visit(BasicBlock *bb)
+{
+   Instruction *i, *next;
+   Modifier mod;
+
+   for (i = bb->getEntry(); i; i = next) {
+      next = i->next;
+
+      DataType hTy;
+      switch (i->dType) {
+      case TYPE_U64: hTy = TYPE_U32; break;
+      case TYPE_S64: hTy = TYPE_S32; break;
+      default:
+         continue;
+      }
+
+      if (i->op == OP_MAD || i->op == OP_MUL)
+         split64MulMad(func, i, hTy);
+   }
+
+   return true;
+}
+
+void
+Split64BitOpPreRA::split64MulMad(Function *fn, Instruction *i, DataType hTy)
+{
+   assert(i->op == OP_MAD || i->op == OP_MUL);
+   assert(!isFloatType(i->dType) && !isFloatType(i->sType));
+   assert(typeSizeof(hTy) == 4);
+
+   bld.setPosition(i, true);
+
+   Value *zero = bld.mkImm(0u);
+   Value *carry = bld.getSSA(1, FILE_FLAGS);
+
+   // We want to compute `d = a * b (+ c)?`, where a, b, c and d are 64-bit
+   // values (a, b and c might be 32-bit values), using 32-bit operations. This
+   // gives the following operations:
+   // * `d.low = low(a.low * b.low) (+ c.low)?`
+   // * `d.high = low(a.high * b.low) + low(a.low * b.high)
+   //           + high(a.low * b.low) (+ c.high)?`
+   //
+   // To compute the high bits, we can split in the following operations:
+   // * `tmp1   = low(a.high * b.low) (+ c.high)?`
+   // * `tmp2   = low(a.low * b.high) + tmp1`
+   // * `d.high = high(a.low * b.low) + tmp2`
+   //
+   // mkSplit put lower bits at index 0 and higher bits at index 1
+
+   Value *op1[2];
+   if (i->getSrc(0)->reg.size == 8)
+      bld.mkSplit(op1, 4, i->getSrc(0));
+   else {
+      op1[0] = i->getSrc(0);
+      op1[1] = zero;
+   }
+   Value *op2[2];
+   if (i->getSrc(1)->reg.size == 8)
+      bld.mkSplit(op2, 4, i->getSrc(1));
+   else {
+      op2[0] = i->getSrc(1);
+      op2[1] = zero;
+   }
+
+   Value *op3[2] = { NULL, NULL };
+   if (i->op == OP_MAD) {
+      if (i->getSrc(2)->reg.size == 8)
+         bld.mkSplit(op3, 4, i->getSrc(2));
+      else {
+         op3[0] = i->getSrc(2);
+         op3[1] = zero;
+      }
+   }
+
+   Value *tmpRes1Hi = bld.getSSA();
+   if (i->op == OP_MAD)
+      bld.mkOp3(OP_MAD, hTy, tmpRes1Hi, op1[1], op2[0], op3[1]);
+   else
+      bld.mkOp2(OP_MUL, hTy, tmpRes1Hi, op1[1], op2[0]);
+
+   Value *tmpRes2Hi = bld.mkOp3v(OP_MAD, hTy, bld.getSSA(), op1[0], op2[1], tmpRes1Hi);
+
+   Value *def[2] = { bld.getSSA(), bld.getSSA() };
+
+   // If it was a MAD, add the carry from the low bits
+   // It is not needed if it was a MUL, since we added high(a.low * b.low) to
+   // d.high
+   if (i->op == OP_MAD)
+      bld.mkOp3(OP_MAD, hTy, def[0], op1[0], op2[0], op3[0])->setFlagsDef(1, carry);
+   else
+      bld.mkOp2(OP_MUL, hTy, def[0], op1[0], op2[0]);
+
+   Instruction *hiPart3 = bld.mkOp3(OP_MAD, hTy, def[1], op1[0], op2[0], tmpRes2Hi);
+   hiPart3->subOp = NV50_IR_SUBOP_MUL_HIGH;
+   if (i->op == OP_MAD)
+      hiPart3->setFlagsSrc(3, carry);
+
+   bld.mkOp2(OP_MERGE, i->dType, i->getDef(0), def[0], def[1]);
+
+   delete_Instruction(fn->getProgram(), i);
 }
 
 // =============================================================================
@@ -3067,10 +3190,13 @@ FlatteningPass::tryPredicateConditional(BasicBlock *bb)
 // constraint SDST == SSRC2
 // TODO:
 // Does NVC0+ have other situations where this pass makes sense?
-class NV50PostRaConstantFolding : public Pass
+class PostRaLoadPropagation : public Pass
 {
 private:
-   virtual bool visit(BasicBlock *);
+   virtual bool visit(Instruction *);
+
+   void handleMADforNV50(Instruction *);
+   void handleMADforNVC0(Instruction *);
 };
 
 static bool
@@ -3082,68 +3208,114 @@ post_ra_dead(Instruction *i)
    return true;
 }
 
-bool
-NV50PostRaConstantFolding::visit(BasicBlock *bb)
+// Fold Immediate into MAD; must be done after register allocation due to
+// constraint SDST == SSRC2
+void
+PostRaLoadPropagation::handleMADforNV50(Instruction *i)
 {
+   if (i->def(0).getFile() != FILE_GPR ||
+       i->src(0).getFile() != FILE_GPR ||
+       i->src(1).getFile() != FILE_GPR ||
+       i->src(2).getFile() != FILE_GPR ||
+       i->getDef(0)->reg.data.id != i->getSrc(2)->reg.data.id)
+      return;
+
+   if (i->getDef(0)->reg.data.id >= 64 ||
+       i->getSrc(0)->reg.data.id >= 64)
+      return;
+
+   if (i->flagsSrc >= 0 && i->getSrc(i->flagsSrc)->reg.data.id != 0)
+      return;
+
+   if (i->getPredicate())
+      return;
+
    Value *vtmp;
-   Instruction *def;
+   Instruction *def = i->getSrc(1)->getInsn();
 
-   for (Instruction *i = bb->getFirst(); i; i = i->next) {
-      switch (i->op) {
-      case OP_MAD:
-         if (i->def(0).getFile() != FILE_GPR ||
-             i->src(0).getFile() != FILE_GPR ||
-             i->src(1).getFile() != FILE_GPR ||
-             i->src(2).getFile() != FILE_GPR ||
-             i->getDef(0)->reg.data.id != i->getSrc(2)->reg.data.id)
-            break;
-
-         if (i->getDef(0)->reg.data.id >= 64 ||
-             i->getSrc(0)->reg.data.id >= 64)
-            break;
-
-         if (i->flagsSrc >= 0 && i->getSrc(i->flagsSrc)->reg.data.id != 0)
-            break;
-
-         if (i->getPredicate())
-            break;
-
-         def = i->getSrc(1)->getInsn();
-         if (def && def->op == OP_SPLIT && typeSizeof(def->sType) == 4)
-            def = def->getSrc(0)->getInsn();
-         if (def && def->op == OP_MOV && def->src(0).getFile() == FILE_IMMEDIATE) {
-            vtmp = i->getSrc(1);
-            if (isFloatType(i->sType)) {
-               i->setSrc(1, def->getSrc(0));
-            } else {
-               ImmediateValue val;
-               bool ret = def->src(0).getImmediate(val);
-               assert(ret);
-               if (i->getSrc(1)->reg.data.id & 1)
-                  val.reg.data.u32 >>= 16;
-               val.reg.data.u32 &= 0xffff;
-               i->setSrc(1, new_ImmediateValue(bb->getProgram(), val.reg.data.u32));
-            }
-
-            /* There's no post-RA dead code elimination, so do it here
-             * XXX: if we add more code-removing post-RA passes, we might
-             *      want to create a post-RA dead-code elim pass */
-            if (post_ra_dead(vtmp->getInsn())) {
-               Value *src = vtmp->getInsn()->getSrc(0);
-               // Careful -- splits will have already been removed from the
-               // functions. Don't double-delete.
-               if (vtmp->getInsn()->bb)
-                  delete_Instruction(prog, vtmp->getInsn());
-               if (src->getInsn() && post_ra_dead(src->getInsn()))
-                  delete_Instruction(prog, src->getInsn());
-            }
-
-            break;
-         }
-         break;
-      default:
-         break;
+   if (def && def->op == OP_SPLIT && typeSizeof(def->sType) == 4)
+      def = def->getSrc(0)->getInsn();
+   if (def && def->op == OP_MOV && def->src(0).getFile() == FILE_IMMEDIATE) {
+      vtmp = i->getSrc(1);
+      if (isFloatType(i->sType)) {
+         i->setSrc(1, def->getSrc(0));
+      } else {
+         ImmediateValue val;
+         bool ret = def->src(0).getImmediate(val);
+         assert(ret);
+         if (i->getSrc(1)->reg.data.id & 1)
+            val.reg.data.u32 >>= 16;
+         val.reg.data.u32 &= 0xffff;
+         i->setSrc(1, new_ImmediateValue(prog, val.reg.data.u32));
       }
+
+      /* There's no post-RA dead code elimination, so do it here
+       * XXX: if we add more code-removing post-RA passes, we might
+       *      want to create a post-RA dead-code elim pass */
+      if (post_ra_dead(vtmp->getInsn())) {
+         Value *src = vtmp->getInsn()->getSrc(0);
+         // Careful -- splits will have already been removed from the
+         // functions. Don't double-delete.
+         if (vtmp->getInsn()->bb)
+            delete_Instruction(prog, vtmp->getInsn());
+         if (src->getInsn() && post_ra_dead(src->getInsn()))
+            delete_Instruction(prog, src->getInsn());
+      }
+   }
+}
+
+void
+PostRaLoadPropagation::handleMADforNVC0(Instruction *i)
+{
+   if (i->def(0).getFile() != FILE_GPR ||
+       i->src(0).getFile() != FILE_GPR ||
+       i->src(1).getFile() != FILE_GPR ||
+       i->src(2).getFile() != FILE_GPR ||
+       i->getDef(0)->reg.data.id != i->getSrc(2)->reg.data.id)
+      return;
+
+   // TODO: gm107 can also do this for S32, maybe other chipsets as well
+   if (i->dType != TYPE_F32)
+      return;
+
+   if ((i->src(2).mod | Modifier(NV50_IR_MOD_NEG)) != Modifier(NV50_IR_MOD_NEG))
+      return;
+
+   ImmediateValue val;
+   int s;
+
+   if (i->src(0).getImmediate(val))
+      s = 1;
+   else if (i->src(1).getImmediate(val))
+      s = 0;
+   else
+      return;
+
+   if ((i->src(s).mod | Modifier(NV50_IR_MOD_NEG)) != Modifier(NV50_IR_MOD_NEG))
+      return;
+
+   if (s == 1)
+      i->swapSources(0, 1);
+
+   Instruction *imm = i->getSrc(1)->getInsn();
+   i->setSrc(1, imm->getSrc(0));
+   if (post_ra_dead(imm))
+      delete_Instruction(prog, imm);
+}
+
+bool
+PostRaLoadPropagation::visit(Instruction *i)
+{
+   switch (i->op) {
+   case OP_FMA:
+   case OP_MAD:
+      if (prog->getTarget()->getChipset() < 0xc0)
+         handleMADforNV50(i);
+      else
+         handleMADforNVC0(i);
+      break;
+   default:
+      break;
    }
 
    return true;
@@ -3429,6 +3601,11 @@ DeadCodeElim::visit(BasicBlock *bb)
              i->op == OP_SUREDP ||
              i->op == OP_SUREDB) {
             i->setDef(0, NULL);
+            if (i->op == OP_ATOM && i->subOp == NV50_IR_SUBOP_ATOM_EXCH) {
+               i->cache = CACHE_CV;
+               i->op = OP_STORE;
+               i->subOp = 0;
+            }
          } else if (i->op == OP_LOAD && i->subOp == NV50_IR_SUBOP_LOAD_LOCKED) {
             i->setDef(0, i->getDef(1));
             i->setDef(1, NULL);
@@ -3551,6 +3728,7 @@ Program::optimizeSSA(int level)
    RUN_PASS(2, ModifierFolding, run); // before load propagation -> less checks
    RUN_PASS(1, ConstantFolding, foldAll);
    RUN_PASS(2, LateAlgebraicOpt, run);
+   RUN_PASS(1, Split64BitOpPreRA, run);
    RUN_PASS(1, LoadPropagation, run);
    RUN_PASS(1, IndirectPropagation, run);
    RUN_PASS(2, MemoryOpt, run);
@@ -3564,8 +3742,7 @@ bool
 Program::optimizePostRA(int level)
 {
    RUN_PASS(2, FlatteningPass, run);
-   if (getTarget()->getChipset() < 0xc0)
-      RUN_PASS(2, NV50PostRaConstantFolding, run);
+   RUN_PASS(2, PostRaLoadPropagation, run);
 
    return true;
 }

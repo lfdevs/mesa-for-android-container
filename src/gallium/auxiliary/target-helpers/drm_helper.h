@@ -34,35 +34,6 @@ pipe_i915_create_screen(int fd)
 
 #endif
 
-#ifdef GALLIUM_ILO
-#include "intel/drm/intel_drm_public.h"
-#include "ilo/ilo_public.h"
-
-struct pipe_screen *
-pipe_ilo_create_screen(int fd)
-{
-   struct intel_winsys *iws;
-   struct pipe_screen *screen;
-
-   iws = intel_winsys_create_for_fd(fd);
-   if (!iws)
-      return NULL;
-
-   screen = ilo_screen_create(iws);
-   return screen ? debug_screen_wrap(screen) : NULL;
-}
-
-#else
-
-struct pipe_screen *
-pipe_ilo_create_screen(int fd)
-{
-   fprintf(stderr, "ilo: driver missing\n");
-   return NULL;
-}
-
-#endif
-
 #ifdef GALLIUM_NOUVEAU
 #include "nouveau/drm/nouveau_drm_public.h"
 

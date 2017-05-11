@@ -42,11 +42,47 @@
 #include "brw_state.h"
 #include "intel_batchbuffer.h"
 
+uint64_t
+brw_timebase_scale(struct brw_context *brw, uint64_t gpu_timestamp)
+{
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+
+   return (double)gpu_timestamp * devinfo->timebase_scale;
+}
+
+/* As best we know currently, the Gen HW timestamps are 36bits across
+ * all platforms, which we need to account for when calculating a
+ * delta to measure elapsed time.
+ *
+ * The timestamps read via glGetTimestamp() / brw_get_timestamp() sometimes
+ * only have 32bits due to a kernel bug and so in that case we make sure to
+ * treat all raw timestamps as 32bits so they overflow consistently and remain
+ * comparable. (Note: the timestamps being passed here are not from the kernel
+ * so we don't need to be taking the upper 32bits in this buggy kernel case we
+ * are just clipping to 32bits here for consistency.)
+ */
+uint64_t
+brw_raw_timestamp_delta(struct brw_context *brw, uint64_t time0, uint64_t time1)
+{
+   if (brw->screen->hw_has_timestamp == 2) {
+      /* Kernel clips timestamps to 32bits in this case, so we also clip
+       * PIPE_CONTROL timestamps for consistency.
+       */
+      return (uint32_t)time1 - (uint32_t)time0;
+   } else {
+      if (time0 > time1) {
+         return (1ULL << 36) + time1 - time0;
+      } else {
+         return time1 - time0;
+      }
+   }
+}
+
 /**
  * Emit PIPE_CONTROLs to write the current GPU timestamp into a buffer.
  */
 void
-brw_write_timestamp(struct brw_context *brw, drm_intel_bo *query_bo, int idx)
+brw_write_timestamp(struct brw_context *brw, struct brw_bo *query_bo, int idx)
 {
    if (brw->gen == 6) {
       /* Emit Sandybridge workaround flush: */
@@ -68,7 +104,7 @@ brw_write_timestamp(struct brw_context *brw, drm_intel_bo *query_bo, int idx)
  * Emit PIPE_CONTROLs to write the PS_DEPTH_COUNT register into a buffer.
  */
 void
-brw_write_depth_count(struct brw_context *brw, drm_intel_bo *query_bo, int idx)
+brw_write_depth_count(struct brw_context *brw, struct brw_bo *query_bo, int idx)
 {
    uint32_t flags = PIPE_CONTROL_WRITE_DEPTH_COUNT | PIPE_CONTROL_DEPTH_STALL;
 
@@ -101,28 +137,34 @@ brw_queryobj_get_results(struct gl_context *ctx,
     * still contributing to it, flush it now so the results will be present
     * when mapped.
     */
-   if (drm_intel_bo_references(brw->batch.bo, query->bo))
+   if (brw_batch_references(&brw->batch, query->bo))
       intel_batchbuffer_flush(brw);
 
    if (unlikely(brw->perf_debug)) {
-      if (drm_intel_bo_busy(query->bo)) {
+      if (brw_bo_busy(query->bo)) {
          perf_debug("Stalling on the GPU waiting for a query object.\n");
       }
    }
 
-   drm_intel_bo_map(query->bo, false);
+   brw_bo_map(brw, query->bo, false);
    results = query->bo->virtual;
    switch (query->Base.Target) {
    case GL_TIME_ELAPSED_EXT:
       /* The query BO contains the starting and ending timestamps.
        * Subtract the two and convert to nanoseconds.
        */
-      query->Base.Result += 1000 * ((results[1] >> 32) - (results[0] >> 32));
+      query->Base.Result = brw_raw_timestamp_delta(brw, results[0], results[1]);
+      query->Base.Result = brw_timebase_scale(brw, query->Base.Result);
       break;
 
    case GL_TIMESTAMP:
       /* The query BO contains a single timestamp value in results[0]. */
-      query->Base.Result = 1000 * (results[0] >> 32);
+      query->Base.Result = brw_timebase_scale(brw, results[0]);
+
+      /* Ensure the scaled timestamp overflows according to
+       * GL_QUERY_COUNTER_BITS
+       */
+      query->Base.Result &= (1ull << ctx->Const.QueryCounterBits.Timestamp) - 1;
       break;
 
    case GL_SAMPLES_PASSED_ARB:
@@ -157,12 +199,12 @@ brw_queryobj_get_results(struct gl_context *ctx,
    default:
       unreachable("Unrecognized query target in brw_queryobj_get_results()");
    }
-   drm_intel_bo_unmap(query->bo);
+   brw_bo_unmap(query->bo);
 
    /* Now that we've processed the data stored in the query's buffer object,
     * we can release it.
     */
-   drm_intel_bo_unreference(query->bo);
+   brw_bo_unreference(query->bo);
    query->bo = NULL;
 }
 
@@ -194,7 +236,7 @@ brw_delete_query(struct gl_context *ctx, struct gl_query_object *q)
 {
    struct brw_query_object *query = (struct brw_query_object *)q;
 
-   drm_intel_bo_unreference(query->bo);
+   brw_bo_unreference(query->bo);
    free(query);
 }
 
@@ -233,8 +275,8 @@ brw_begin_query(struct gl_context *ctx, struct gl_query_object *q)
        * obtain the time elapsed.  Notably, this includes time elapsed while
        * the system was doing other work, such as running other applications.
        */
-      drm_intel_bo_unreference(query->bo);
-      query->bo = drm_intel_bo_alloc(brw->bufmgr, "timer query", 4096, 4096);
+      brw_bo_unreference(query->bo);
+      query->bo = brw_bo_alloc(brw->bufmgr, "timer query", 4096, 4096);
       brw_write_timestamp(brw, query->bo, 0);
       break;
 
@@ -248,7 +290,7 @@ brw_begin_query(struct gl_context *ctx, struct gl_query_object *q)
        * Since we're starting a new query, we need to be sure to throw away
        * any previous occlusion query results.
        */
-      drm_intel_bo_unreference(query->bo);
+      brw_bo_unreference(query->bo);
       query->bo = NULL;
       query->last_index = -1;
 
@@ -360,10 +402,10 @@ static void brw_check_query(struct gl_context *ctx, struct gl_query_object *q)
     *      not ready yet on the first time it is queried.  This ensures that
     *      the async query will return true in finite time.
     */
-   if (query->bo && drm_intel_bo_references(brw->batch.bo, query->bo))
+   if (query->bo && brw_batch_references(&brw->batch, query->bo))
       intel_batchbuffer_flush(brw);
 
-   if (query->bo == NULL || !drm_intel_bo_busy(query->bo)) {
+   if (query->bo == NULL || !brw_bo_busy(query->bo)) {
       brw_queryobj_get_results(ctx, query);
       query->Base.Ready = true;
    }
@@ -392,7 +434,7 @@ ensure_bo_has_space(struct gl_context *ctx, struct brw_query_object *query)
          brw_queryobj_get_results(ctx, query);
       }
 
-      query->bo = drm_intel_bo_alloc(brw->bufmgr, "query", 4096, 1);
+      query->bo = brw_bo_alloc(brw->bufmgr, "query", 4096, 1);
       query->last_index = 0;
    }
 }
@@ -477,8 +519,8 @@ brw_query_counter(struct gl_context *ctx, struct gl_query_object *q)
 
    assert(q->Target == GL_TIMESTAMP);
 
-   drm_intel_bo_unreference(query->bo);
-   query->bo = drm_intel_bo_alloc(brw->bufmgr, "timestamp query", 4096, 4096);
+   brw_bo_unreference(query->bo);
+   query->bo = brw_bo_alloc(brw->bufmgr, "timestamp query", 4096, 4096);
    brw_write_timestamp(brw, query->bo, 0);
 
    query->flushed = false;
@@ -497,20 +539,26 @@ brw_get_timestamp(struct gl_context *ctx)
 
    switch (brw->screen->hw_has_timestamp) {
    case 3: /* New kernel, always full 36bit accuracy */
-      drm_intel_reg_read(brw->bufmgr, TIMESTAMP | 1, &result);
+      brw_reg_read(brw->bufmgr, TIMESTAMP | 1, &result);
       break;
    case 2: /* 64bit kernel, result is left-shifted by 32bits, losing 4bits */
-      drm_intel_reg_read(brw->bufmgr, TIMESTAMP, &result);
+      brw_reg_read(brw->bufmgr, TIMESTAMP, &result);
       result = result >> 32;
       break;
    case 1: /* 32bit kernel, result is 36bit wide but may be inaccurate! */
-      drm_intel_reg_read(brw->bufmgr, TIMESTAMP, &result);
+      brw_reg_read(brw->bufmgr, TIMESTAMP, &result);
       break;
    }
 
-   /* See logic in brw_queryobj_get_results() */
-   result *= 80;
-   result &= (1ull << 36) - 1;
+   /* Scale to nanosecond units */
+   result = brw_timebase_scale(brw, result);
+
+   /* Ensure the scaled timestamp overflows according to
+    * GL_QUERY_COUNTER_BITS.  Technically this isn't required if
+    * querying GL_TIMESTAMP via glGetInteger but it seems best to keep
+    * QueryObject and GetInteger timestamps consistent.
+    */
+   result &= (1ull << ctx->Const.QueryCounterBits.Timestamp) - 1;
    return result;
 }
 
@@ -530,6 +578,8 @@ brw_is_query_pipelined(struct brw_query_object *query)
 
    case GL_PRIMITIVES_GENERATED:
    case GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN:
+   case GL_TRANSFORM_FEEDBACK_STREAM_OVERFLOW_ARB:
+   case GL_TRANSFORM_FEEDBACK_OVERFLOW_ARB:
    case GL_VERTICES_SUBMITTED_ARB:
    case GL_PRIMITIVES_SUBMITTED_ARB:
    case GL_VERTEX_SHADER_INVOCATIONS_ARB:

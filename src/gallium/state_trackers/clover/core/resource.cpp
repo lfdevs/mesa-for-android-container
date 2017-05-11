@@ -33,9 +33,9 @@ namespace {
    class box {
    public:
       box(const resource::vector &origin, const resource::vector &size) :
-         pipe({ (int)origin[0], (int)origin[1],
-                (int)origin[2], (int)size[0],
-                (int)size[1], (int)size[2] }) {
+        pipe({ (int)origin[0], (int16_t)origin[1],
+               (int16_t)origin[2], (int)size[0],
+               (int16_t)size[1], (int16_t)size[2] }) {
       }
 
       operator const pipe_box *() {

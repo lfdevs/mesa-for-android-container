@@ -73,7 +73,7 @@ nv50_get_query_result(struct pipe_context *pipe, struct pipe_query *pq,
 static void
 nv50_render_condition(struct pipe_context *pipe,
                       struct pipe_query *pq,
-                      boolean condition, uint mode)
+                      boolean condition, enum pipe_render_cond_flag mode)
 {
    struct nv50_context *nv50 = nv50_context(pipe);
    struct nouveau_pushbuf *push = nv50->base.pushbuf;

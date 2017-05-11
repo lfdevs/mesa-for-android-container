@@ -475,6 +475,32 @@ anv_block_pool_grow(struct anv_block_pool *pool, struct anv_block_state *state)
     * values back into pool. */
    pool->map = map + center_bo_offset;
    pool->center_bo_offset = center_bo_offset;
+
+   /* For block pool BOs we have to be a bit careful about where we place them
+    * in the GTT.  There are two documented workarounds for state base address
+    * placement : Wa32bitGeneralStateOffset and Wa32bitInstructionBaseOffset
+    * which state that those two base addresses do not support 48-bit
+    * addresses and need to be placed in the bottom 32-bit range.
+    * Unfortunately, this is not quite accurate.
+    *
+    * The real problem is that we always set the size of our state pools in
+    * STATE_BASE_ADDRESS to 0xfffff (the maximum) even though the BO is most
+    * likely significantly smaller.  We do this because we do not no at the
+    * time we emit STATE_BASE_ADDRESS whether or not we will need to expand
+    * the pool during command buffer building so we don't actually have a
+    * valid final size.  If the address + size, as seen by STATE_BASE_ADDRESS
+    * overflows 48 bits, the GPU appears to treat all accesses to the buffer
+    * as being out of bounds and returns zero.  For dynamic state, this
+    * usually just leads to rendering corruptions, but shaders that are all
+    * zero hang the GPU immediately.
+    *
+    * The easiest solution to do is exactly what the bogus workarounds say to
+    * do: restrict these buffers to 32-bit addresses.  We could also pin the
+    * BO to some particular location of our choosing, but that's significantly
+    * more work than just not setting a flag.  So, we explicitly DO NOT set
+    * the EXEC_OBJECT_SUPPORTS_48B_ADDRESS flag and the kernel does all of the
+    * hard work for us.
+    */
    anv_bo_init(&pool->bo, gem_handle, size);
    pool->bo.map = map;
 
@@ -732,7 +758,6 @@ anv_state_stream_finish(struct anv_state_stream *stream)
 
    struct anv_state_stream_block *next = stream->block;
    while (next != NULL) {
-      VG(VALGRIND_MAKE_MEM_DEFINED(next, sizeof(*next)));
       struct anv_state_stream_block sb = VG_NOACCESS_READ(next);
       VG(VALGRIND_MEMPOOL_FREE(stream, sb._vg_ptr));
       VG(VALGRIND_MAKE_MEM_UNDEFINED(next, block_size));
@@ -859,7 +884,7 @@ anv_bo_pool_alloc(struct anv_bo_pool *pool, struct anv_bo *bo, uint32_t size)
    assert(new_bo.size == pow2_size);
 
    new_bo.map = anv_gem_mmap(pool->device, new_bo.gem_handle, 0, pow2_size, 0);
-   if (new_bo.map == NULL) {
+   if (new_bo.map == MAP_FAILED) {
       anv_gem_close(pool->device, new_bo.gem_handle);
       return vk_error(VK_ERROR_MEMORY_MAP_FAILED);
    }
@@ -967,6 +992,25 @@ anv_scratch_pool_alloc(struct anv_device *device, struct anv_scratch_pool *pool,
    uint32_t size = per_thread_scratch * max_threads[stage];
 
    anv_bo_init_new(&bo->bo, device, size);
+
+   /* Even though the Scratch base pointers in 3DSTATE_*S are 64 bits, they
+    * are still relative to the general state base address.  When we emit
+    * STATE_BASE_ADDRESS, we set general state base address to 0 and the size
+    * to the maximum (1 page under 4GB).  This allows us to just place the
+    * scratch buffers anywhere we wish in the bottom 32 bits of address space
+    * and just set the scratch base pointer in 3DSTATE_*S using a relocation.
+    * However, in order to do so, we need to ensure that the kernel does not
+    * place the scratch BO above the 32-bit boundary.
+    *
+    * NOTE: Technically, it can't go "anywhere" because the top page is off
+    * limits.  However, when EXEC_OBJECT_SUPPORTS_48B_ADDRESS is set, the
+    * kernel allocates space using
+    *
+    *    end = min_t(u64, end, (1ULL << 32) - I915_GTT_PAGE_SIZE);
+    *
+    * so nothing will ever touch the top page.
+    */
+   bo->bo.flags &= ~EXEC_OBJECT_SUPPORTS_48B_ADDRESS;
 
    /* Set the exists last because it may be read by other threads */
    __sync_synchronize();

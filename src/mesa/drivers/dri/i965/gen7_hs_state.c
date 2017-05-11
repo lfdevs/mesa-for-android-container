@@ -40,8 +40,7 @@ gen7_upload_tcs_push_constants(struct brw_context *brw)
       const struct brw_stage_prog_data *prog_data = brw->tcs.base.prog_data;
 
       _mesa_shader_write_subroutine_indices(&brw->ctx, MESA_SHADER_TESS_CTRL);
-      gen6_upload_push_constants(brw, &tcp->program, prog_data, stage_state,
-                                 AUB_TRACE_VS_CONSTANTS);
+      gen6_upload_push_constants(brw, &tcp->program, prog_data, stage_state);
    }
 
    gen7_upload_constant_state(brw, stage_state, active, _3DSTATE_CONSTANT_HS);

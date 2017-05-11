@@ -77,7 +77,7 @@ enum adreno_stencil_op fd_stencil_op(unsigned op);
 #define FD_DBG_FLUSH    0x1000
 #define FD_DBG_DEQP     0x2000
 #define FD_DBG_NIR      0x4000
-#define FD_DBG_REORDER  0x8000
+#define FD_DBG_INORDER  0x8000
 #define FD_DBG_BSTAT   0x10000
 #define FD_DBG_NOGROW  0x20000
 

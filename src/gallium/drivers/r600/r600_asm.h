@@ -25,6 +25,7 @@
 
 #include "r600_pipe.h"
 #include "r600_isa.h"
+#include "tgsi/tgsi_exec.h"
 
 struct r600_bytecode_alu_src {
 	unsigned			sel;
@@ -238,7 +239,7 @@ struct r600_bytecode {
 	unsigned			force_add_cf;
 	uint32_t			*bytecode;
 	uint32_t			fc_sp;
-	struct r600_cf_stack_entry	fc_stack[32];
+	struct r600_cf_stack_entry	fc_stack[TGSI_EXEC_MAX_NESTING];
 	struct r600_stack_info		stack;
 	unsigned	ar_loaded;
 	unsigned	ar_reg;

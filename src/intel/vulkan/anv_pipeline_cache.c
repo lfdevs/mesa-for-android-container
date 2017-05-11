@@ -205,23 +205,23 @@ anv_hash_shader(unsigned char *hash, const void *key, size_t key_size,
                 const struct anv_pipeline_layout *pipeline_layout,
                 const VkSpecializationInfo *spec_info)
 {
-   struct mesa_sha1 *ctx;
+   struct mesa_sha1 ctx;
 
-   ctx = _mesa_sha1_init();
-   _mesa_sha1_update(ctx, key, key_size);
-   _mesa_sha1_update(ctx, module->sha1, sizeof(module->sha1));
-   _mesa_sha1_update(ctx, entrypoint, strlen(entrypoint));
+   _mesa_sha1_init(&ctx);
+   _mesa_sha1_update(&ctx, key, key_size);
+   _mesa_sha1_update(&ctx, module->sha1, sizeof(module->sha1));
+   _mesa_sha1_update(&ctx, entrypoint, strlen(entrypoint));
    if (pipeline_layout) {
-      _mesa_sha1_update(ctx, pipeline_layout->sha1,
+      _mesa_sha1_update(&ctx, pipeline_layout->sha1,
                         sizeof(pipeline_layout->sha1));
    }
    /* hash in shader stage, pipeline layout? */
    if (spec_info) {
-      _mesa_sha1_update(ctx, spec_info->pMapEntries,
+      _mesa_sha1_update(&ctx, spec_info->pMapEntries,
                         spec_info->mapEntryCount * sizeof spec_info->pMapEntries[0]);
-      _mesa_sha1_update(ctx, spec_info->pData, spec_info->dataSize);
+      _mesa_sha1_update(&ctx, spec_info->pData, spec_info->dataSize);
    }
-   _mesa_sha1_final(ctx, hash);
+   _mesa_sha1_final(&ctx, hash);
 }
 
 static struct anv_shader_bin *
@@ -308,7 +308,8 @@ anv_pipeline_cache_upload_kernel(struct anv_pipeline_cache *cache,
       pthread_mutex_unlock(&cache->mutex);
 
       /* We increment refcount before handing it to the caller */
-      anv_shader_bin_ref(bin);
+      if (bin)
+         anv_shader_bin_ref(bin);
 
       return bin;
    } else {
@@ -546,6 +547,8 @@ VkResult anv_MergePipelineCaches(
       struct hash_entry *entry;
       hash_table_foreach(src->cache, entry) {
          struct anv_shader_bin *bin = entry->data;
+         assert(bin);
+
          if (_mesa_hash_table_search(dst->cache, bin->key))
             continue;
 

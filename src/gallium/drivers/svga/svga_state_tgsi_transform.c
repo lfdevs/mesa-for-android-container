@@ -249,9 +249,11 @@ update_tgsi_transform(struct svga_context *svga, unsigned dirty)
    if (svga->curr.reduced_prim == PIPE_PRIM_POINTS) {
       /* If the current prim type is POINTS and the current geometry shader
        * emits wide points, transform the shader to emulate wide points using
-       * quads.
+       * quads. NOTE: we don't do emulation of wide points in GS when
+       * transform feedback is enabled.
        */
-      if (gs != NULL && (gs->base.info.writes_psize || gs->wide_point)) {
+      if (gs != NULL && !gs->base.stream_output &&
+          (gs->base.info.writes_psize || gs->wide_point)) {
          orig_gs = gs->base.parent ? gs->base.parent : &gs->base;
          new_gs = emulate_point_sprite(svga, orig_gs, orig_gs->tokens);
       }
@@ -260,7 +262,7 @@ update_tgsi_transform(struct svga_context *svga, unsigned dirty)
        * shader emits wide point then create a new geometry shader to emulate
        * wide point.
        */
-      else if (gs == NULL &&
+      else if (gs == NULL && !vs->base.stream_output &&
                (svga->curr.rast->pointsize > 1.0 ||
                 vs->base.info.writes_psize)) {
          new_gs = add_point_sprite_shader(svga);

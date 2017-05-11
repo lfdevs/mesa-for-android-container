@@ -45,7 +45,7 @@
 #include "vid_dec.h"
 #include "vid_enc.h"
 
-pipe_static_mutex(omx_lock);
+static mtx_t omx_lock = _MTX_INITIALIZER_NP;
 static Display *omx_display = NULL;
 static struct vl_screen *omx_screen = NULL;
 static unsigned omx_usecount = 0;
@@ -75,7 +75,7 @@ int omx_component_library_Setup(stLoaderComponentType **stComponents)
 struct vl_screen *omx_get_screen(void)
 {
    static bool first_time = true;
-   pipe_mutex_lock(omx_lock);
+   mtx_lock(&omx_lock);
 
    if (!omx_screen) {
       if (first_time) {
@@ -107,17 +107,17 @@ struct vl_screen *omx_get_screen(void)
 
    ++omx_usecount;
 
-   pipe_mutex_unlock(omx_lock);
+   mtx_unlock(&omx_lock);
    return omx_screen;
 
 error:
-   pipe_mutex_unlock(omx_lock);
+   mtx_unlock(&omx_lock);
    return NULL;
 }
 
 void omx_put_screen(void)
 {
-   pipe_mutex_lock(omx_lock);
+   mtx_lock(&omx_lock);
    if ((--omx_usecount) == 0) {
       omx_screen->destroy(omx_screen);
       omx_screen = NULL;
@@ -127,7 +127,7 @@ void omx_put_screen(void)
       else
          XCloseDisplay(omx_display);
    }
-   pipe_mutex_unlock(omx_lock);
+   mtx_unlock(&omx_lock);
 }
 
 OMX_ERRORTYPE omx_workaround_Destructor(OMX_COMPONENTTYPE *comp)

@@ -94,7 +94,7 @@ enum ComponentControl
 //////////////////////////////////////////////////////////////////////////
 struct FETCH_COMPILE_STATE
 {
-    uint32_t numAttribs;
+    uint32_t numAttribs{ 0 };
     INPUT_ELEMENT_DESC layout[KNOB_NUM_ATTRIBUTES];
     SWR_FORMAT indexType;
     uint32_t cutIndex{ 0xffffffff };
@@ -104,6 +104,7 @@ struct FETCH_COMPILE_STATE
     bool bDisableIndexOOBCheck;             // If enabled, FetchJit will exclude index OOB check
     bool bEnableCutIndex{ false };          // Compares indices with the cut index and returns a cut mask
     bool bVertexIDOffsetEnable{ false };    // Offset vertexID by StartVertex for non-indexed draws or BaseVertex for indexed draws
+    bool bPartialVertexBuffer{ false };     // for indexed draws, map illegal indices to a known resident vertex
 
     FETCH_COMPILE_STATE(bool disableVGATHER = false, bool diableIndexOOBCheck = false):
         bDisableVGATHER(disableVGATHER), bDisableIndexOOBCheck(diableIndexOOBCheck){ };
@@ -117,6 +118,7 @@ struct FETCH_COMPILE_STATE
         if (bEnableCutIndex != other.bEnableCutIndex) return false;
         if (cutIndex != other.cutIndex) return false;
         if (bVertexIDOffsetEnable != other.bVertexIDOffsetEnable) return false;
+        if (bPartialVertexBuffer != other.bPartialVertexBuffer) return false;
 
         for(uint32_t i = 0; i < numAttribs; ++i)
         {

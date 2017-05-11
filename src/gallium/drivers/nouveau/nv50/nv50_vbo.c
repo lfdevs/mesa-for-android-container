@@ -824,6 +824,12 @@ nv50_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
       PUSH_DATA (push, nv50->seamless_cube_map ? NVA0_3D_TEX_MISC_SEAMLESS_CUBE_MAP : 0);
    }
 
+   if (nv50->vertprog->mul_zero_wins != nv50->state.mul_zero_wins) {
+      nv50->state.mul_zero_wins = nv50->vertprog->mul_zero_wins;
+      BEGIN_NV04(push, NV50_3D(UNK1690), 1);
+      PUSH_DATA (push, 0x00010000 * !!nv50->state.mul_zero_wins);
+   }
+
    if (nv50->vbo_fifo) {
       nv50_push_vbo(nv50, info);
       push->kick_notify = nv50_default_kick_notify;

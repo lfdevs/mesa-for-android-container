@@ -104,6 +104,7 @@ BOOL WINAPI
 wglBindTexImageARB(HPBUFFERARB hPbuffer, int iBuffer)
 {
    HDC prevDrawable = stw_get_current_dc();
+   HDC prevReadable = stw_get_current_read_dc();
    HDC dc;
    struct stw_context *curctx = stw_current_context();
    struct stw_framebuffer *fb;
@@ -128,6 +129,12 @@ wglBindTexImageARB(HPBUFFERARB hPbuffer, int iBuffer)
     * pbuffer image into the texture via glCopyTex[Sub]Image.  That's what
     * we do here.
     */
+
+   if (!curctx) {
+      debug_printf("No rendering context in wglBindTexImageARB()\n");
+      SetLastError(ERROR_INVALID_OPERATION);
+      return FALSE;
+   }
 
    fb = stw_framebuffer_from_HPBUFFERARB(hPbuffer);
    if (!fb) {
@@ -166,7 +173,7 @@ wglBindTexImageARB(HPBUFFERARB hPbuffer, int iBuffer)
    pixelFormatSave = fb->iPixelFormat;
    fb->iPixelFormat = curctx->iPixelFormat;
    dc = wglGetPbufferDCARB(hPbuffer);
-   retVal = stw_make_current(dc, curctx->dhglrc);
+   retVal = stw_make_current(dc, dc, curctx->dhglrc);
    fb->iPixelFormat = pixelFormatSave;
    if (!retVal) {
       debug_printf("stw_make_current(#1) failed in wglBindTexImageARB()\n");
@@ -179,7 +186,7 @@ wglBindTexImageARB(HPBUFFERARB hPbuffer, int iBuffer)
                                   fb->textureFace, texFormat);
 
    /* rebind previous drawing surface */
-   retVal = stw_make_current(prevDrawable, curctx->dhglrc);
+   retVal = stw_make_current(prevDrawable, prevReadable, curctx->dhglrc);
    if (!retVal) {
       debug_printf("stw_make_current(#2) failed in wglBindTexImageARB()\n");
    }

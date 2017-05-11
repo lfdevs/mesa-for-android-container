@@ -336,6 +336,21 @@ get_no_cull_rasterizer_state(struct svga_context *svga)
    return svga->rasterizer_no_cull[aa_point];
 }
 
+
+/** Returns a depth stencil state object with depth and stencil test disabled.
+ */
+static struct svga_depth_stencil_state *
+get_no_depth_stencil_test_state(struct svga_context *svga)
+{
+   if (!svga->depthstencil_disable) {
+      struct pipe_depth_stencil_alpha_state ds = {{0}};
+      svga->depthstencil_disable =
+         svga->pipe.create_depth_stencil_alpha_state(&svga->pipe, &ds);
+   }
+   return svga->depthstencil_disable;
+}
+
+
 static enum pipe_error
 emit_rss_vgpu10(struct svga_context *svga, unsigned dirty)
 {
@@ -394,45 +409,67 @@ emit_rss_vgpu10(struct svga_context *svga, unsigned dirty)
       }
    }
 
-   if (dirty & (SVGA_NEW_DEPTH_STENCIL_ALPHA | SVGA_NEW_STENCIL_REF)) {
-      const struct svga_depth_stencil_state *curr = svga->curr.depth;
-      unsigned curr_ref = svga->curr.stencil_ref.ref_value[0];
+   if (svga->disable_rasterizer) {
+      if (!svga->state.hw_draw.rasterizer_discard) {
+         struct svga_depth_stencil_state *ds;
 
-      if (curr->id != svga->state.hw_draw.depth_stencil_id ||
-          curr_ref != svga->state.hw_draw.stencil_ref) {
-         /* Set/bind the depth/stencil state object */
-         ret = SVGA3D_vgpu10_SetDepthStencilState(svga->swc, curr->id,
-                                                  curr_ref);
-         if (ret != PIPE_OK)
-            return ret;
-
-         svga->state.hw_draw.depth_stencil_id = curr->id;
-         svga->state.hw_draw.stencil_ref = curr_ref;
-      }
-   }
-
-   if (dirty & (SVGA_NEW_REDUCED_PRIMITIVE | SVGA_NEW_RAST)) {
-      const struct svga_rasterizer_state *rast;
-
-      if (svga->curr.reduced_prim == PIPE_PRIM_POINTS &&
-          svga->curr.gs && svga->curr.gs->wide_point) {
-
-         /* If we are drawing a point sprite, we will need to
-          * bind a non-culling rasterizer state object
+         /* If rasterization is to be disabled, disable depth and stencil
+          * testing as well.
           */
-         rast = get_no_cull_rasterizer_state(svga);
+         ds = get_no_depth_stencil_test_state(svga);
+         if (ds->id != svga->state.hw_draw.depth_stencil_id) {
+            ret = SVGA3D_vgpu10_SetDepthStencilState(svga->swc, ds->id, 0);
+            if (ret != PIPE_OK)
+               return ret;
+
+            svga->state.hw_draw.depth_stencil_id = ds->id;
+            svga->state.hw_draw.stencil_ref = 0;
+         }
+         svga->state.hw_draw.rasterizer_discard = TRUE;
       }
-      else {
-         rast = svga->curr.rast;
+   } else {
+      if ((dirty & (SVGA_NEW_DEPTH_STENCIL_ALPHA | SVGA_NEW_STENCIL_REF)) ||
+          svga->state.hw_draw.rasterizer_discard) {
+         const struct svga_depth_stencil_state *curr = svga->curr.depth;
+         unsigned curr_ref = svga->curr.stencil_ref.ref_value[0];
+
+         if (curr->id != svga->state.hw_draw.depth_stencil_id ||
+             curr_ref != svga->state.hw_draw.stencil_ref) {
+            /* Set/bind the depth/stencil state object */
+            ret = SVGA3D_vgpu10_SetDepthStencilState(svga->swc, curr->id,
+                                                     curr_ref);
+            if (ret != PIPE_OK)
+               return ret;
+
+            svga->state.hw_draw.depth_stencil_id = curr->id;
+            svga->state.hw_draw.stencil_ref = curr_ref;
+         }
       }
 
-      if (svga->state.hw_draw.rasterizer_id != rast->id) {
-         /* Set/bind the rasterizer state object */
-         ret = SVGA3D_vgpu10_SetRasterizerState(svga->swc, rast->id);
-         if (ret != PIPE_OK)
-            return ret;
-         svga->state.hw_draw.rasterizer_id = rast->id;
+      if (dirty & (SVGA_NEW_REDUCED_PRIMITIVE | SVGA_NEW_RAST)) {
+         const struct svga_rasterizer_state *rast;
+
+         if (svga->curr.reduced_prim == PIPE_PRIM_POINTS &&
+             svga->curr.gs && svga->curr.gs->wide_point) {
+
+            /* If we are drawing a point sprite, we will need to
+             * bind a non-culling rasterizer state object
+             */
+            rast = get_no_cull_rasterizer_state(svga);
+         }
+         else {
+            rast = svga->curr.rast;
+         }
+
+         if (svga->state.hw_draw.rasterizer_id != rast->id) {
+            /* Set/bind the rasterizer state object */
+            ret = SVGA3D_vgpu10_SetRasterizerState(svga->swc, rast->id);
+            if (ret != PIPE_OK)
+               return ret;
+            svga->state.hw_draw.rasterizer_id = rast->id;
+         }
       }
+      svga->state.hw_draw.rasterizer_discard = FALSE;
    }
    return PIPE_OK;
 }
@@ -461,6 +498,7 @@ struct svga_tracked_state svga_hw_rss =
     SVGA_NEW_RAST |
     SVGA_NEW_FRAME_BUFFER |
     SVGA_NEW_NEED_PIPELINE |
+    SVGA_NEW_FS |
     SVGA_NEW_REDUCED_PRIMITIVE),
 
    emit_rss

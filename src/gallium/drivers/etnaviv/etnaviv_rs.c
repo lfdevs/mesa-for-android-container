@@ -70,44 +70,45 @@ etna_compile_rs_state(struct etna_context *ctx, struct compiled_rs_state *cs,
                           COND(rs->source_tiling & 2, VIVS_RS_SOURCE_STRIDE_TILING) |
                           COND(source_multi, VIVS_RS_SOURCE_STRIDE_MULTI);
 
-   cs->source[0].bo = rs->source;
-   cs->source[0].offset = rs->source_offset;
-   cs->source[0].flags = ETNA_RELOC_READ;
+   /* Initially all pipes are set to the base address of the source and
+    * destination buffer respectively. This will be overridden below as
+    * necessary for the multi-pipe, multi-tiled case.
+    */
+   for (unsigned pipe = 0; pipe < ctx->specs.pixel_pipes; ++pipe) {
+      cs->source[pipe].bo = rs->source;
+      cs->source[pipe].offset = rs->source_offset;
+      cs->source[pipe].flags = ETNA_RELOC_READ;
 
-   cs->dest[0].bo = rs->dest;
-   cs->dest[0].offset = rs->dest_offset;
-   cs->dest[0].flags = ETNA_RELOC_WRITE;
+      cs->dest[pipe].bo = rs->dest;
+      cs->dest[pipe].offset = rs->dest_offset;
+      cs->dest[pipe].flags = ETNA_RELOC_WRITE;
+
+      cs->RS_PIPE_OFFSET[pipe] = VIVS_RS_PIPE_OFFSET_X(0) | VIVS_RS_PIPE_OFFSET_Y(0);
+   }
 
    cs->RS_DEST_STRIDE = (rs->dest_stride << dest_stride_shift) |
                         COND(rs->dest_tiling & 2, VIVS_RS_DEST_STRIDE_TILING) |
                         COND(dest_multi, VIVS_RS_DEST_STRIDE_MULTI);
 
-   if (ctx->specs.pixel_pipes == 1) {
+   if (ctx->specs.pixel_pipes == 1 || ctx->specs.single_buffer) {
       cs->RS_WINDOW_SIZE = VIVS_RS_WINDOW_SIZE_WIDTH(rs->width) |
                            VIVS_RS_WINDOW_SIZE_HEIGHT(rs->height);
    } else if (ctx->specs.pixel_pipes == 2) {
       assert((rs->height & 7) == 0); /* GPU hangs happen if height not 8-aligned */
 
-      if (source_multi) {
-         cs->source[1].bo = rs->source;
+      if (source_multi)
          cs->source[1].offset = rs->source_offset + rs->source_stride * rs->source_padded_height / 2;
-         cs->source[1].flags = ETNA_RELOC_READ;
-      }
 
-      if (dest_multi) {
-         cs->dest[1].bo = rs->dest;
+      if (dest_multi)
          cs->dest[1].offset = rs->dest_offset + rs->dest_stride * rs->dest_padded_height / 2;
-         cs->dest[1].flags = ETNA_RELOC_WRITE;
-      }
 
       cs->RS_WINDOW_SIZE = VIVS_RS_WINDOW_SIZE_WIDTH(rs->width) |
                            VIVS_RS_WINDOW_SIZE_HEIGHT(rs->height / 2);
+      cs->RS_PIPE_OFFSET[1] = VIVS_RS_PIPE_OFFSET_X(0) | VIVS_RS_PIPE_OFFSET_Y(rs->height / 2);
    } else {
       abort();
    }
 
-   cs->RS_PIPE_OFFSET[0] = VIVS_RS_PIPE_OFFSET_X(0) | VIVS_RS_PIPE_OFFSET_Y(0);
-   cs->RS_PIPE_OFFSET[1] = VIVS_RS_PIPE_OFFSET_X(0) | VIVS_RS_PIPE_OFFSET_Y(rs->height / 2);
    cs->RS_DITHER[0] = rs->dither[0];
    cs->RS_DITHER[1] = rs->dither[1];
    cs->RS_CLEAR_CONTROL = VIVS_RS_CLEAR_CONTROL_BITS(rs->clear_bits) | rs->clear_mode;
@@ -117,6 +118,10 @@ etna_compile_rs_state(struct etna_context *ctx, struct compiled_rs_state *cs,
    cs->RS_FILL_VALUE[3] = rs->clear_value[3];
    cs->RS_EXTRA_CONFIG = VIVS_RS_EXTRA_CONFIG_AA(rs->aa) |
                          VIVS_RS_EXTRA_CONFIG_ENDIAN(rs->endian_mode);
+   /* TODO: cs->RS_UNK016B0 = s->size / 64 ?
+    * The blob does this consistently but there seems to be no currently supported
+    * model that needs it.
+    */
 }
 
 void

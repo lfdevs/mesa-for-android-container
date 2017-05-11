@@ -32,19 +32,16 @@ AM_CFLAGS = \
 	$(EGL_CFLAGS) \
 	-D_EGL_NATIVE_PLATFORM=$(EGL_NATIVE_PLATFORM)
 
-lib_LTLIBRARIES = libEGL.la
-
-libEGL_la_SOURCES = \
+# Depending on whether libglvnd is enabled, we'll build the EGL library as
+# either libEGL.so.1 or libEGL_mesa.so.0. Using an automake substitution
+# in the variable names breaks "make dist" target, so use a conenience library
+# instead.
+noinst_LTLIBRARIES = libEGL_common.la
+libEGL_common_la_SOURCES = \
 	$(LIBEGL_C_FILES)
 
-libEGL_la_LIBADD = \
+libEGL_common_la_LIBADD = \
 	$(EGL_LIB_DEPS)
-libEGL_la_LDFLAGS = \
-	-no-undefined \
-	-version-number 1:0 \
-	$(BSYMBOLIC) \
-	$(GC_SECTIONS) \
-	$(LD_NO_UNDEFINED)
 
 dri2_backend_FILES =
 dri3_backend_FILES =
@@ -52,7 +49,7 @@ dri3_backend_FILES =
 if HAVE_PLATFORM_X11
 AM_CFLAGS += -DHAVE_X11_PLATFORM
 AM_CFLAGS += $(XCB_DRI2_CFLAGS)
-libEGL_la_LIBADD += $(XCB_DRI2_LIBS)
+libEGL_common_la_LIBADD += $(XCB_DRI2_LIBS)
 dri2_backend_FILES += drivers/dri2/platform_x11.c
 
 if HAVE_DRI3
@@ -60,22 +57,22 @@ dri3_backend_FILES += \
 	drivers/dri2/platform_x11_dri3.c \
 	drivers/dri2/platform_x11_dri3.h
 
-libEGL_la_LIBADD += $(top_builddir)/src/loader/libloader_dri3_helper.la
+libEGL_common_la_LIBADD += $(top_builddir)/src/loader/libloader_dri3_helper.la
 endif
 endif
 
 if HAVE_PLATFORM_WAYLAND
 AM_CFLAGS += -DHAVE_WAYLAND_PLATFORM
 AM_CFLAGS += $(WAYLAND_CFLAGS)
-libEGL_la_LIBADD += $(WAYLAND_LIBS)
-libEGL_la_LIBADD += $(LIBDRM_LIBS)
-libEGL_la_LIBADD += $(top_builddir)/src/egl/wayland/wayland-drm/libwayland-drm.la
+libEGL_common_la_LIBADD += $(WAYLAND_LIBS)
+libEGL_common_la_LIBADD += $(LIBDRM_LIBS)
+libEGL_common_la_LIBADD += $(top_builddir)/src/egl/wayland/wayland-drm/libwayland-drm.la
 dri2_backend_FILES += drivers/dri2/platform_wayland.c
 endif
 
 if HAVE_EGL_PLATFORM_DRM
 AM_CFLAGS += -DHAVE_DRM_PLATFORM
-libEGL_la_LIBADD += $(top_builddir)/src/gbm/libgbm.la
+libEGL_common_la_LIBADD += $(top_builddir)/src/gbm/libgbm.la
 dri2_backend_FILES += drivers/dri2/platform_drm.c
 endif
 
@@ -87,7 +84,7 @@ endif
 if HAVE_EGL_PLATFORM_ANDROID
 AM_CFLAGS += -DHAVE_ANDROID_PLATFORM
 AM_CFLAGS += $(ANDROID_CFLAGS)
-libEGL_la_LIBADD += $(ANDROID_LIBS)
+libEGL_common_la_LIBADD += $(ANDROID_LIBS)
 dri2_backend_FILES += drivers/dri2/platform_android.c
 endif
 
@@ -101,13 +98,68 @@ AM_CFLAGS += \
 	-DDEFAULT_DRIVER_DIR=\"$(DRI_DRIVER_SEARCH_DIR)\" \
 	-D_EGL_BUILT_IN_DRIVER_DRI2
 
-libEGL_la_SOURCES += \
+libEGL_common_la_SOURCES += \
 	$(dri2_backend_core_FILES) \
 	$(dri2_backend_FILES) \
 	$(dri3_backend_FILES)
 
-libEGL_la_LIBADD += $(top_builddir)/src/loader/libloader.la
-libEGL_la_LIBADD += $(DLOPEN_LIBS) $(LIBDRM_LIBS) $(CLOCK_LIB)
+libEGL_common_la_LIBADD += $(top_builddir)/src/loader/libloader.la
+libEGL_common_la_LIBADD += $(DLOPEN_LIBS) $(LIBDRM_LIBS) $(CLOCK_LIB)
+
+GLVND_GEN_DEPS = generate/gen_egl_dispatch.py \
+	generate/egl.xml generate/eglFunctionList.py generate/genCommon.py \
+	generate/egl_other.xml
+
+PYTHON_GEN = $(AM_V_GEN)$(PYTHON2) $(PYTHON_FLAGS)
+g_egldispatchstubs.c: $(GLVND_GEN_DEPS)
+	$(PYTHON_GEN) $(top_srcdir)/src/egl/generate/gen_egl_dispatch.py source \
+		$(top_srcdir)/src/egl/generate/eglFunctionList.py \
+		$(top_srcdir)/src/egl/generate/egl.xml \
+		$(top_srcdir)/src/egl/generate/egl_other.xml > $@
+
+g_egldispatchstubs.h: $(GLVND_GEN_DEPS)
+	$(PYTHON_GEN) $(top_srcdir)/src/egl/generate/gen_egl_dispatch.py header \
+		$(top_srcdir)/src/egl/generate/eglFunctionList.py \
+		$(top_srcdir)/src/egl/generate/egl.xml \
+		$(top_srcdir)/src/egl/generate/egl_other.xml > $@
+
+BUILT_SOURCES = g_egldispatchstubs.c g_egldispatchstubs.h
+CLEANFILES = $(BUILT_SOURCES)
+
+if USE_LIBGLVND
+AM_CFLAGS += \
+	$(GLVND_CFLAGS)
+
+vendorjsondir = @LIBGLVND_DATADIR@/glvnd/egl_vendor.d
+vendorjson_DATA = main/50_mesa.json
+
+lib_LTLIBRARIES = libEGL_mesa.la
+libEGL_mesa_la_SOURCES = \
+	main/eglglvnd.c \
+	main/egldispatchstubs.h \
+	main/egldispatchstubs.c \
+	g_egldispatchstubs.c
+libEGL_mesa_la_LIBADD = libEGL_common.la
+libEGL_mesa_la_LDFLAGS = \
+	-no-undefined \
+	-version-number 0 \
+	$(BSYMBOLIC) \
+	$(GC_SECTIONS) \
+	$(LD_NO_UNDEFINED)
+
+else # USE_LIBGLVND
+
+lib_LTLIBRARIES = libEGL.la
+libEGL_la_SOURCES =
+libEGL_la_LIBADD = libEGL_common.la
+libEGL_la_LDFLAGS = \
+	-no-undefined \
+	-version-number 1:0 \
+	$(BSYMBOLIC) \
+	$(GC_SECTIONS) \
+	$(LD_NO_UNDEFINED)
+
+endif # USE_LIBGLVND
 
 include $(top_srcdir)/install-lib-links.mk
 
@@ -126,11 +178,14 @@ egl_HEADERS = \
 	$(top_srcdir)/include/EGL/eglmesaext.h \
 	$(top_srcdir)/include/EGL/eglplatform.h
 
-TESTS = egl-symbols-check
+TESTS = egl-symbols-check \
+	egl-entrypoint-check
 
 EXTRA_DIST = \
-	egl-symbols-check \
+	$(TESTS) \
 	SConscript \
 	drivers/haiku \
 	main/egl.def \
-	main/README.txt
+	main/README.txt \
+	$(GLVND_GEN_DEPS) \
+	main/50_mesa.json

@@ -22,16 +22,13 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-#pragma once
 #ifndef IR_PRINT_VISITOR_H
 #define IR_PRINT_VISITOR_H
 
 #include "ir.h"
 #include "ir_visitor.h"
 
-extern "C" {
 #include "program/symbol_table.h"
-}
 
 /**
  * Abstract base class of visitors of IR instruction trees

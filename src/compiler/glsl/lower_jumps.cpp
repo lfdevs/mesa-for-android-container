@@ -940,11 +940,17 @@ lower_continue:
              */
             move_outer_block_inside(ir, &return_if->else_instructions);
 
-            /* In case the loop is embeded inside an if add a new return to
+            /* In case the loop is embedded inside an if add a new return to
              * the return flag then branch and let a future pass tidy it up.
              */
             if (this->function.signature->return_type->is_void())
                return_if->then_instructions.push_tail(new(ir) ir_return(NULL));
+            else {
+               assert(this->function.return_value);
+               ir_variable* return_value = this->function.return_value;
+               return_if->then_instructions.push_tail(
+                  new(ir) ir_return(new(ir) ir_dereference_variable(return_value)));
+            }
          }
 
          ir->insert_after(return_if);

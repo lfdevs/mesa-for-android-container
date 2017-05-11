@@ -24,13 +24,11 @@
 #include "util/ralloc.h"
 #include "brw_context.h"
 #include "brw_cs.h"
-#include "brw_eu.h"
 #include "brw_wm.h"
-#include "brw_shader.h"
 #include "intel_mipmap_tree.h"
 #include "brw_state.h"
 #include "intel_batchbuffer.h"
-#include "brw_nir.h"
+#include "compiler/brw_nir.h"
 #include "brw_program.h"
 #include "compiler/glsl/ir_uniform.h"
 
@@ -66,7 +64,7 @@ brw_codegen_cs_prog(struct brw_context *brw,
    memset(&prog_data, 0, sizeof(prog_data));
 
    if (cp->program.info.cs.shared_size > 64 * 1024) {
-      cp->program.sh.data->LinkStatus = false;
+      cp->program.sh.data->LinkStatus = linking_failure;
       const char *error_str =
          "Compute shader used more than 64KB of shared variables";
       ralloc_strcat(&cp->program.sh.data->InfoLog, error_str);
@@ -106,7 +104,7 @@ brw_codegen_cs_prog(struct brw_context *brw,
 
    if (unlikely(brw->perf_debug)) {
       start_busy = (brw->batch.last_bo &&
-                    drm_intel_bo_busy(brw->batch.last_bo));
+                    brw_bo_busy(brw->batch.last_bo));
       start_time = get_time();
    }
 
@@ -119,7 +117,7 @@ brw_codegen_cs_prog(struct brw_context *brw,
                             &prog_data, cp->program.nir, st_index,
                             &program_size, &error_str);
    if (program == NULL) {
-      cp->program.sh.data->LinkStatus = false;
+      cp->program.sh.data->LinkStatus = linking_failure;
       ralloc_strcat(&cp->program.sh.data->InfoLog, error_str);
       _mesa_problem(NULL, "Failed to compile compute shader: %s\n", error_str);
 
@@ -133,7 +131,7 @@ brw_codegen_cs_prog(struct brw_context *brw,
       }
       cp->compiled_once = true;
 
-      if (start_busy && !drm_intel_bo_busy(brw->batch.last_bo)) {
+      if (start_busy && !brw_bo_busy(brw->batch.last_bo)) {
          perf_debug("CS compile took %.03f ms and stalled the GPU\n",
                     (get_time() - start_time) * 1000);
       }

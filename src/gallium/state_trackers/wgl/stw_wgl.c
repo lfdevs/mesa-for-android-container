@@ -99,6 +99,13 @@ wglGetCurrentDC( VOID )
    return stw_get_current_dc();
 }
 
+WINGDIAPI HDC APIENTRY
+wglGetCurrentReadDCARB( VOID )
+{
+   return stw_get_current_read_dc();
+}
+
+
 WINGDIAPI BOOL APIENTRY
 wglMakeCurrent(
    HDC hdc,

@@ -3000,7 +3000,6 @@ svga_emit_instruction(struct svga_shader_emitter *emit,
       /* These aren't actually used by any of the frontends we care
        * about:
        */
-   case TGSI_OPCODE_CLAMP:
    case TGSI_OPCODE_AND:
    case TGSI_OPCODE_OR:
    case TGSI_OPCODE_I2F:

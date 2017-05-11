@@ -630,25 +630,14 @@ vc4_nir_lower_blend_instr(struct vc4_compile *c, nir_builder *b,
 {
         nir_ssa_def *frag_color = intr->src[0].ssa;
 
-        if (c->fs_key->sample_coverage) {
-                nir_intrinsic_instr *load =
-                        nir_intrinsic_instr_create(b->shader,
-                                                   nir_intrinsic_load_sample_mask_in);
-                load->num_components = 1;
-                nir_ssa_dest_init(&load->instr, &load->dest, 1, 32, NULL);
-                nir_builder_instr_insert(b, &load->instr);
-
-                nir_ssa_def *bitmask = &load->dest.ssa;
-
-                vc4_nir_store_sample_mask(c, b, bitmask);
-        } else if (c->fs_key->sample_alpha_to_coverage) {
+        if (c->fs_key->sample_alpha_to_coverage) {
                 nir_ssa_def *a = nir_channel(b, frag_color, 3);
 
                 /* XXX: We should do a nice dither based on the fragment
                  * coordinate, instead.
                  */
                 nir_ssa_def *num_samples = nir_imm_float(b, VC4_MAX_SAMPLES);
-                nir_ssa_def *num_bits = nir_f2i(b, nir_fmul(b, a, num_samples));
+                nir_ssa_def *num_bits = nir_f2i32(b, nir_fmul(b, a, num_samples));
                 nir_ssa_def *bitmask = nir_isub(b,
                                                 nir_ishl(b,
                                                          nir_imm_int(b, 1),
@@ -729,5 +718,17 @@ vc4_nir_lower_blend(nir_shader *s, struct vc4_compile *c)
                                               nir_metadata_block_index |
                                               nir_metadata_dominance);
                 }
+        }
+
+        /* If we didn't do alpha-to-coverage on the output color, we still
+         * need to pass glSampleMask() through.
+         */
+        if (c->fs_key->sample_coverage && !c->fs_key->sample_alpha_to_coverage) {
+                nir_function_impl *impl = nir_shader_get_entrypoint(s);
+                nir_builder b;
+                nir_builder_init(&b, impl);
+                b.cursor = nir_after_block(nir_impl_last_block(impl));
+
+                vc4_nir_store_sample_mask(c, &b, nir_load_sample_mask_in(&b));
         }
 }

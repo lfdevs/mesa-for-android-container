@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 
 # (C) Copyright IBM Corporation 2004, 2005
 # All Rights Reserved.
@@ -383,7 +382,7 @@ const GLuint __glXDefaultPixelStore[9] = { 0, 0, 0, 0, 0, 0, 0, 0, 1 };
                     procs[n] = func.static_glx_name(n)
 
         print """
-#ifdef GLX_SHARED_GLAPI
+#ifdef GLX_INDIRECT_RENDERING
 
 static const struct proc_pair
 {
@@ -419,7 +418,7 @@ __indirect_get_proc_address(const char *name)
    return (pair) ? pair->proc : NULL;
 }
 
-#endif /* GLX_SHARED_GLAPI */
+#endif /* GLX_INDIRECT_RENDERING */
 """
         return
 
@@ -1114,7 +1113,7 @@ extern _X_HIDDEN NOINLINE FASTCALL GLubyte * __glXSetupVendorRequest(
                     break
 
         print ''
-        print '#ifdef GLX_SHARED_GLAPI'
+        print '#ifdef GLX_INDIRECT_RENDERING'
         print 'extern _X_HIDDEN void (*__indirect_get_proc_address(const char *name))(void);'
         print '#endif'
 

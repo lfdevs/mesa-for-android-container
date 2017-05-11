@@ -59,11 +59,11 @@ struct virgl_drm_winsys
    struct list_head delayed;
    int num_delayed;
    unsigned usecs;
-   pipe_mutex mutex;
+   mtx_t mutex;
 
    struct util_hash_table *bo_handles;
    struct util_hash_table *bo_names;
-   pipe_mutex bo_handles_mutex;
+   mtx_t bo_handles_mutex;
 };
 
 struct virgl_drm_cmd_buf {

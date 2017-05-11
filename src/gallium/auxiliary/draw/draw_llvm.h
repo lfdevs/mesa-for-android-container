@@ -508,11 +508,12 @@ struct lp_build_sampler_soa *
 draw_llvm_sampler_soa_create(const struct draw_sampler_static_state *static_state);
 
 void
-draw_llvm_set_sampler_state(struct draw_context *draw, unsigned shader_stage);
+draw_llvm_set_sampler_state(struct draw_context *draw,
+                            enum pipe_shader_type shader_stage);
 
 void
 draw_llvm_set_mapped_texture(struct draw_context *draw,
-                             unsigned shader_stage,
+                             enum pipe_shader_type shader_stage,
                              unsigned sview_idx,
                              uint32_t width, uint32_t height, uint32_t depth,
                              uint32_t first_level, uint32_t last_level,

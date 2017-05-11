@@ -99,6 +99,7 @@ swr_destroy_scratch_buffers(struct swr_context *ctx)
    if (scratch) {
       AlignedFree(scratch->vs_constants.base);
       AlignedFree(scratch->fs_constants.base);
+      AlignedFree(scratch->gs_constants.base);
       AlignedFree(scratch->vertex_buffer.base);
       AlignedFree(scratch->index_buffer.base);
       FREE(scratch);

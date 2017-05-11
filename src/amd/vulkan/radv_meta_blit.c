@@ -246,8 +246,8 @@ meta_emit_blit(struct radv_cmd_buffer *cmd_buffer,
 	unsigned vb_size = 3 * sizeof(*vb_data);
 	vb_data[0] = (struct blit_vb_data) {
 		.pos = {
-			dest_offset_0.x,
-			dest_offset_0.y,
+			-1.0,
+			-1.0,
 		},
 		.tex_coord = {
 			(float)src_offset_0.x / (float)src_iview->extent.width,
@@ -258,8 +258,8 @@ meta_emit_blit(struct radv_cmd_buffer *cmd_buffer,
 
 	vb_data[1] = (struct blit_vb_data) {
 		.pos = {
-			dest_offset_0.x,
-			dest_offset_1.y,
+			-1.0,
+			1.0,
 		},
 		.tex_coord = {
 			(float)src_offset_0.x / (float)src_iview->extent.width,
@@ -270,8 +270,8 @@ meta_emit_blit(struct radv_cmd_buffer *cmd_buffer,
 
 	vb_data[2] = (struct blit_vb_data) {
 		.pos = {
-			dest_offset_1.x,
-			dest_offset_0.y,
+			1.0,
+			-1.0,
 		},
 		.tex_coord = {
 			(float)src_offset_1.x / (float)src_iview->extent.width,
@@ -306,31 +306,6 @@ meta_emit_blit(struct radv_cmd_buffer *cmd_buffer,
 						 .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
 						 .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
 						 }, &cmd_buffer->pool->alloc, &sampler);
-
-	VkDescriptorSet set;
-	radv_temp_descriptor_set_create(cmd_buffer->device, cmd_buffer,
-					        device->meta_state.blit.ds_layout,
-					        &set);
-
-	radv_UpdateDescriptorSets(radv_device_to_handle(device),
-				  1, /* writeCount */
-				  (VkWriteDescriptorSet[]) {
-					  {
-						  .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-							  .dstSet = set,
-							  .dstBinding = 0,
-							  .dstArrayElement = 0,
-							  .descriptorCount = 1,
-							  .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-							  .pImageInfo = (VkDescriptorImageInfo[]) {
-							  {
-								  .sampler = sampler,
-								  .imageView = radv_image_view_to_handle(src_iview),
-								  .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
-							  },
-						  }
-					  }
-				  }, 0, NULL);
 
 	VkFramebuffer fb;
 	radv_CreateFramebuffer(radv_device_to_handle(device),
@@ -439,10 +414,43 @@ meta_emit_blit(struct radv_cmd_buffer *cmd_buffer,
 				     VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 	}
 
-	radv_CmdBindDescriptorSets(radv_cmd_buffer_to_handle(cmd_buffer),
-				   VK_PIPELINE_BIND_POINT_GRAPHICS,
-				   device->meta_state.blit.pipeline_layout, 0, 1,
-				   &set, 0, NULL);
+	radv_meta_push_descriptor_set(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+			              device->meta_state.blit.pipeline_layout,
+				      0, /* set */
+				      1, /* descriptorWriteCount */
+				      (VkWriteDescriptorSet[]) {
+				              {
+				                      .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+				                      .dstBinding = 0,
+				                      .dstArrayElement = 0,
+				                      .descriptorCount = 1,
+				                      .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+				                      .pImageInfo = (VkDescriptorImageInfo[]) {
+				                              {
+				                                      .sampler = sampler,
+				                                      .imageView = radv_image_view_to_handle(src_iview),
+				                                      .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
+				                              },
+				                      }
+				              }
+				      });
+
+	radv_CmdSetViewport(radv_cmd_buffer_to_handle(cmd_buffer), 0, 1, &(VkViewport) {
+		.x = dest_offset_0.x,
+		.y = dest_offset_0.y,
+		.width = dest_offset_1.x - dest_offset_0.x,
+		.height = dest_offset_1.y - dest_offset_0.y,
+		.minDepth = 0.0f,
+		.maxDepth = 1.0f
+	});
+
+	radv_CmdSetScissor(radv_cmd_buffer_to_handle(cmd_buffer), 0, 1, &(VkRect2D) {
+		.offset = (VkOffset2D) { MIN2(dest_offset_0.x, dest_offset_1.x), MIN2(dest_offset_0.y, dest_offset_1.y) },
+		.extent = (VkExtent2D) {
+			abs(dest_offset_1.x - dest_offset_0.x),
+			abs(dest_offset_1.y - dest_offset_0.y)
+		},
+	});
 
 	radv_CmdDraw(radv_cmd_buffer_to_handle(cmd_buffer), 3, 1, 0, 0);
 
@@ -454,7 +462,6 @@ meta_emit_blit(struct radv_cmd_buffer *cmd_buffer,
 	/* TODO: above comment is not valid for at least descriptor sets/pools,
 	 * as we may not free them till after execution finishes. Check others. */
 
-	radv_temp_descriptor_set_destroy(cmd_buffer->device, set);
 	radv_DestroySampler(radv_device_to_handle(device), sampler,
 			    &cmd_buffer->pool->alloc);
 	radv_DestroyFramebuffer(radv_device_to_handle(device), fb,
@@ -813,8 +820,8 @@ radv_device_init_meta_blit_color(struct radv_device *device,
 			},
 			.pViewportState = &(VkPipelineViewportStateCreateInfo) {
 				.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-				.viewportCount = 0,
-				.scissorCount = 0,
+				.viewportCount = 1,
+				.scissorCount = 1,
 			},
 			.pRasterizationState = &(VkPipelineRasterizationStateCreateInfo) {
 				.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
@@ -842,8 +849,10 @@ radv_device_init_meta_blit_color(struct radv_device *device,
 			},
 			.pDynamicState = &(VkPipelineDynamicStateCreateInfo) {
 				.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-				.dynamicStateCount = 2,
+				.dynamicStateCount = 4,
 				.pDynamicStates = (VkDynamicState[]) {
+					VK_DYNAMIC_STATE_VIEWPORT,
+					VK_DYNAMIC_STATE_SCISSOR,
 					VK_DYNAMIC_STATE_LINE_WIDTH,
 					VK_DYNAMIC_STATE_BLEND_CONSTANTS,
 				},
@@ -990,8 +999,8 @@ radv_device_init_meta_blit_depth(struct radv_device *device,
 		},
 		.pViewportState = &(VkPipelineViewportStateCreateInfo) {
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-			.viewportCount = 0,
-			.scissorCount = 0,
+			.viewportCount = 1,
+			.scissorCount = 1,
 		},
 		.pRasterizationState = &(VkPipelineRasterizationStateCreateInfo) {
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
@@ -1019,8 +1028,10 @@ radv_device_init_meta_blit_depth(struct radv_device *device,
 		},
 		.pDynamicState = &(VkPipelineDynamicStateCreateInfo) {
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-			.dynamicStateCount = 7,
+			.dynamicStateCount = 9,
 			.pDynamicStates = (VkDynamicState[]) {
+				VK_DYNAMIC_STATE_VIEWPORT,
+				VK_DYNAMIC_STATE_SCISSOR,
 				VK_DYNAMIC_STATE_LINE_WIDTH,
 				VK_DYNAMIC_STATE_DEPTH_BIAS,
 				VK_DYNAMIC_STATE_BLEND_CONSTANTS,
@@ -1169,8 +1180,8 @@ radv_device_init_meta_blit_stencil(struct radv_device *device,
 		},
 		.pViewportState = &(VkPipelineViewportStateCreateInfo) {
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-			.viewportCount = 0,
-			.scissorCount = 0,
+			.viewportCount = 1,
+			.scissorCount = 1,
 		},
 		.pRasterizationState = &(VkPipelineRasterizationStateCreateInfo) {
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
@@ -1218,8 +1229,10 @@ radv_device_init_meta_blit_stencil(struct radv_device *device,
 
 		.pDynamicState = &(VkPipelineDynamicStateCreateInfo) {
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-			.dynamicStateCount = 4,
+			.dynamicStateCount = 6,
 			.pDynamicStates = (VkDynamicState[]) {
+				VK_DYNAMIC_STATE_VIEWPORT,
+				VK_DYNAMIC_STATE_SCISSOR,
 				VK_DYNAMIC_STATE_LINE_WIDTH,
 				VK_DYNAMIC_STATE_DEPTH_BIAS,
 				VK_DYNAMIC_STATE_BLEND_CONSTANTS,
@@ -1276,6 +1289,7 @@ radv_device_init_meta_blit_state(struct radv_device *device)
 
 	VkDescriptorSetLayoutCreateInfo ds_layout_info = {
 		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+		.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR,
 		.bindingCount = 1,
 		.pBindings = (VkDescriptorSetLayoutBinding[]) {
 			{

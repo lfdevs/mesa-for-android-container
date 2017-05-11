@@ -74,8 +74,7 @@
 #include "util/u_queue.h"
 #include "si_state.h"
 
-struct radeon_shader_binary;
-struct radeon_shader_reloc;
+struct ac_shader_binary;
 
 #define SI_MAX_VS_OUTPUTS	40
 
@@ -99,15 +98,8 @@ enum {
 	SI_SGPR_BASE_VERTEX,
 	SI_SGPR_START_INSTANCE,
 	SI_SGPR_DRAWID,
-	SI_ES_NUM_USER_SGPR,
-
-	/* hw VS only */
-	SI_SGPR_VS_STATE_BITS	= SI_ES_NUM_USER_SGPR,
+	SI_SGPR_VS_STATE_BITS,
 	SI_VS_NUM_USER_SGPR,
-
-	/* hw LS only */
-	SI_SGPR_LS_OUT_LAYOUT	= SI_ES_NUM_USER_SGPR,
-	SI_LS_NUM_USER_SGPR,
 
 	/* both TCS and TES */
 	SI_SGPR_TCS_OFFCHIP_LAYOUT = SI_NUM_RESOURCE_SGPRS,
@@ -147,11 +139,7 @@ enum {
 	SI_PARAM_BASE_VERTEX,
 	SI_PARAM_START_INSTANCE,
 	SI_PARAM_DRAWID,
-	/* [0] = clamp vertex color, VS as VS only */
 	SI_PARAM_VS_STATE_BITS,
-	/* same value as TCS_IN_LAYOUT, VS as LS only */
-	SI_PARAM_LS_OUT_LAYOUT = SI_PARAM_DRAWID + 1,
-	/* the other VS parameters are assigned dynamically */
 
 	/* Layout of TCS outputs in the offchip buffer
 	 *   [0:8] = the number of patches per threadgroup.
@@ -176,8 +164,9 @@ enum {
 	SI_PARAM_TCS_OUT_LAYOUT,
 
 	/* Layout of LS outputs / TCS inputs
-	 *   [0:12] = stride between patches in dwords = num_inputs * num_vertices * 4, max = 32*32*4
-	 *   [13:20] = stride between vertices in dwords = num_inputs * 4, max = 32*4
+	 *   [8:20] = stride between patches in dwords = num_inputs * num_vertices * 4, max = 32*32*4
+	 *   [24:31] = stride between vertices in dwords = num_inputs * 4, max = 32*4
+	 * (same layout as SI_PARAM_VS_STATE_BITS)
 	 */
 	SI_PARAM_TCS_IN_LAYOUT,
 
@@ -227,6 +216,17 @@ enum {
 	SI_NUM_PARAMS = SI_PARAM_POS_FIXED_PT + 9, /* +8 for COLOR[0..1] */
 };
 
+/* Fields of driver-defined VS state SGPR. */
+/* Clamp vertex color output (only used in VS as VS). */
+#define S_VS_STATE_CLAMP_VERTEX_COLOR(x)	(((unsigned)(x) & 0x1) << 0)
+#define C_VS_STATE_CLAMP_VERTEX_COLOR		0xFFFFFFFE
+#define S_VS_STATE_INDEXED(x)			(((unsigned)(x) & 0x1) << 1)
+#define C_VS_STATE_INDEXED			0xFFFFFFFD
+#define S_VS_STATE_LS_OUT_PATCH_SIZE(x)		(((unsigned)(x) & 0x1FFF) << 8)
+#define C_VS_STATE_LS_OUT_PATCH_SIZE		0xFFE000FF
+#define S_VS_STATE_LS_OUT_VERTEX_SIZE(x)	(((unsigned)(x) & 0xFF) << 24)
+#define C_VS_STATE_LS_OUT_VERTEX_SIZE		0x00FFFFFF
+
 /* SI-specific system values. */
 enum {
 	TGSI_SEMANTIC_DEFAULT_TESSOUTER_SI = TGSI_SEMANTIC_COUNT,
@@ -247,6 +247,13 @@ enum {
 	SI_FIX_FETCH_RGBA_32_SSCALED,
 	SI_FIX_FETCH_RGBA_32_FIXED,
 	SI_FIX_FETCH_RGBX_32_FIXED,
+	SI_FIX_FETCH_RG_64_FLOAT,
+	SI_FIX_FETCH_RGB_64_FLOAT,
+	SI_FIX_FETCH_RGBA_64_FLOAT,
+	SI_FIX_FETCH_RGB_8,	/* A = 1.0 */
+	SI_FIX_FETCH_RGB_8_INT,	/* A = 1 */
+	SI_FIX_FETCH_RGB_16,
+	SI_FIX_FETCH_RGB_16_INT,
 };
 
 struct si_shader;
@@ -272,7 +279,7 @@ struct si_shader_selector {
 	struct util_queue_fence ready;
 	struct si_compiler_ctx_state compiler_ctx_state;
 
-	pipe_mutex		mutex;
+	mtx_t		mutex;
 	struct si_shader	*first_variant; /* immutable after the first variant */
 	struct si_shader	*last_variant; /* mutable */
 
@@ -280,6 +287,8 @@ struct si_shader_selector {
 	 * uploaded to a buffer).
 	 */
 	struct si_shader	*main_shader_part;
+	struct si_shader	*main_shader_part_ls; /* as_ls is set in the key */
+	struct si_shader	*main_shader_part_es; /* as_es is set in the key */
 
 	struct si_shader	*gs_copy_shader;
 
@@ -289,6 +298,7 @@ struct si_shader_selector {
 
 	/* PIPE_SHADER_[VERTEX|FRAGMENT|...] */
 	unsigned	type;
+	bool		vs_needs_prolog;
 
 	/* GS parameters. */
 	unsigned	esgs_itemsize;
@@ -332,7 +342,7 @@ struct si_shader_selector {
 
 /* Common VS bits between the shader key and the prolog key. */
 struct si_vs_prolog_bits {
-	unsigned	instance_divisors[SI_NUM_VERTEX_BUFFERS];
+	unsigned	instance_divisors[SI_MAX_ATTRIBS];
 };
 
 /* Common VS bits between the shader key and the epilog key. */
@@ -343,6 +353,7 @@ struct si_vs_epilog_bits {
 /* Common TCS bits between the shader key and the epilog key. */
 struct si_tcs_epilog_bits {
 	unsigned	prim_mode:3;
+	unsigned	tes_reads_tess_factors:1;
 };
 
 struct si_gs_prolog_bits {
@@ -415,10 +426,6 @@ struct si_shader_key {
 	/* Prolog and epilog flags. */
 	union {
 		struct {
-			struct si_ps_prolog_bits prolog;
-			struct si_ps_epilog_bits epilog;
-		} ps;
-		struct {
 			struct si_vs_prolog_bits prolog;
 			struct si_vs_epilog_bits epilog;
 		} vs;
@@ -431,19 +438,23 @@ struct si_shader_key {
 		struct {
 			struct si_gs_prolog_bits prolog;
 		} gs;
+		struct {
+			struct si_ps_prolog_bits prolog;
+			struct si_ps_epilog_bits epilog;
+		} ps;
 	} part;
 
 	/* These two are initially set according to the NEXT_SHADER property,
 	 * or guessed if the property doesn't seem correct.
 	 */
-	unsigned as_es:1; /* export shader */
-	unsigned as_ls:1; /* local shader */
+	unsigned as_es:1; /* export shader, which precedes GS */
+	unsigned as_ls:1; /* local shader, which precedes TCS */
 
 	/* Flags for monolithic compilation only. */
 	union {
 		struct {
-			/* One nibble for every input: SI_FIX_FETCH_* enums. */
-			uint64_t	fix_fetch;
+			/* One byte for every input: SI_FIX_FETCH_* enums. */
+			uint8_t		fix_fetch[SI_MAX_ATTRIBS];
 		} vs;
 		struct {
 			uint64_t	inputs_to_copy; /* for fixed-func TCS */
@@ -519,7 +530,7 @@ struct si_shader {
 	bool				is_gs_copy_shader;
 
 	/* The following data is all that's needed for binary shaders. */
-	struct radeon_shader_binary	binary;
+	struct ac_shader_binary	binary;
 	struct si_shader_config		config;
 	struct si_shader_info		info;
 
@@ -533,7 +544,7 @@ struct si_shader {
 struct si_shader_part {
 	struct si_shader_part *next;
 	union si_shader_part_key key;
-	struct radeon_shader_binary binary;
+	struct ac_shader_binary binary;
 	struct si_shader_config config;
 };
 
@@ -552,7 +563,7 @@ int si_shader_create(struct si_screen *sscreen, LLVMTargetMachineRef tm,
 		     struct si_shader *shader,
 		     struct pipe_debug_callback *debug);
 int si_compile_llvm(struct si_screen *sscreen,
-		    struct radeon_shader_binary *binary,
+		    struct ac_shader_binary *binary,
 		    struct si_shader_config *conf,
 		    LLVMTargetMachineRef tm,
 		    LLVMModuleRef mod,
@@ -572,10 +583,25 @@ void si_shader_apply_scratch_relocs(struct si_context *sctx,
 			struct si_shader *shader,
 			struct si_shader_config *config,
 			uint64_t scratch_va);
-void si_shader_binary_read_config(struct radeon_shader_binary *binary,
+void si_shader_binary_read_config(struct ac_shader_binary *binary,
 				  struct si_shader_config *conf,
 				  unsigned symbol_offset);
 unsigned si_get_spi_shader_z_format(bool writes_z, bool writes_stencil,
 				    bool writes_samplemask);
+const char *si_get_shader_name(struct si_shader *shader, unsigned processor);
+
+/* Inline helpers. */
+
+/* Return the pointer to the main shader part's pointer. */
+static inline struct si_shader **
+si_get_main_shader_part(struct si_shader_selector *sel,
+			struct si_shader_key *key)
+{
+	if (key->as_ls)
+		return &sel->main_shader_part_ls;
+	if (key->as_es)
+		return &sel->main_shader_part_es;
+	return &sel->main_shader_part;
+}
 
 #endif

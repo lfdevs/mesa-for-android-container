@@ -24,9 +24,14 @@
 #ifndef SWR_SCREEN_H
 #define SWR_SCREEN_H
 
+#include "swr_resource.h"
+
 #include "pipe/p_screen.h"
 #include "pipe/p_defines.h"
+#include "util/u_format.h"
 #include "api.h"
+
+#include "memory/TilingFunctions.h"
 
 struct sw_winsys;
 
@@ -37,6 +42,9 @@ struct swr_screen {
    struct pipe_fence_handle *flush_fence;
 
    struct sw_winsys *winsys;
+
+   boolean msaa_force_enable;
+   uint8_t msaa_max_count;
 
    HANDLE hJitMgr;
 };

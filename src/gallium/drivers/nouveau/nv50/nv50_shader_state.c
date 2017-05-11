@@ -174,6 +174,9 @@ nv50_fragprog_validate(struct nv50_context *nv50)
    struct nv50_program *fp = nv50->fragprog;
    struct pipe_rasterizer_state *rast = &nv50->rast->pipe;
 
+   if (!fp || !rast)
+      return;
+
    if (nv50->zsa && nv50->zsa->pipe.alpha.enabled) {
       struct pipe_framebuffer_state *fb = &nv50->framebuffer;
       bool blendable = fb->nr_cbufs == 0 || !fb->cbufs[0] ||

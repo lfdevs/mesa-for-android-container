@@ -103,6 +103,26 @@ trace_screen_get_device_vendor(struct pipe_screen *_screen)
 }
 
 
+static struct disk_cache *
+trace_screen_get_disk_shader_cache(struct pipe_screen *_screen)
+{
+   struct trace_screen *tr_scr = trace_screen(_screen);
+   struct pipe_screen *screen = tr_scr->screen;
+
+   trace_dump_call_begin("pipe_screen", "get_disk_shader_cache");
+
+   trace_dump_arg(ptr, screen);
+
+   struct disk_cache *result = screen->get_disk_shader_cache(screen);
+
+   trace_dump_ret(ptr, result);
+
+   trace_dump_call_end();
+
+   return result;
+}
+
+
 static int
 trace_screen_get_param(struct pipe_screen *_screen,
                        enum pipe_cap param)
@@ -127,8 +147,9 @@ trace_screen_get_param(struct pipe_screen *_screen,
 
 
 static int
-trace_screen_get_shader_param(struct pipe_screen *_screen, unsigned shader,
-                       enum pipe_shader_cap param)
+trace_screen_get_shader_param(struct pipe_screen *_screen,
+                              enum pipe_shader_type shader,
+                              enum pipe_shader_cap param)
 {
    struct trace_screen *tr_scr = trace_screen(_screen);
    struct pipe_screen *screen = tr_scr->screen;
@@ -257,15 +278,13 @@ trace_screen_context_create(struct pipe_screen *_screen, void *priv,
 
 static void
 trace_screen_flush_frontbuffer(struct pipe_screen *_screen,
-                               struct pipe_resource *_resource,
+                               struct pipe_resource *resource,
                                unsigned level, unsigned layer,
                                void *context_private,
                                struct pipe_box *sub_box)
 {
    struct trace_screen *tr_scr = trace_screen(_screen);
-   struct trace_resource *tr_res = trace_resource(_resource);
    struct pipe_screen *screen = tr_scr->screen;
-   struct pipe_resource *resource = tr_res->resource;
 
    trace_dump_call_begin("pipe_screen", "flush_frontbuffer");
 
@@ -307,8 +326,8 @@ trace_screen_resource_create(struct pipe_screen *_screen,
 
    trace_dump_call_end();
 
-   result = trace_resource_create(tr_scr, result);
-
+   if (result)
+      result->screen = _screen;
    return result;
 }
 
@@ -326,23 +345,21 @@ trace_screen_resource_from_handle(struct pipe_screen *_screen,
 
    result = screen->resource_from_handle(screen, templ, handle, usage);
 
-   result = trace_resource_create(trace_screen(_screen), result);
-
+   if (result)
+      result->screen = _screen;
    return result;
 }
 
 static boolean
 trace_screen_resource_get_handle(struct pipe_screen *_screen,
                                  struct pipe_context *_pipe,
-                                struct pipe_resource *_resource,
+                                struct pipe_resource *resource,
                                 struct winsys_handle *handle,
                                  unsigned usage)
 {
    struct trace_screen *tr_screen = trace_screen(_screen);
    struct trace_context *tr_pipe = _pipe ? trace_context(_pipe) : NULL;
-   struct trace_resource *tr_resource = trace_resource(_resource);
    struct pipe_screen *screen = tr_screen->screen;
-   struct pipe_resource *resource = tr_resource->resource;
 
    /* TODO trace call */
 
@@ -350,18 +367,29 @@ trace_screen_resource_get_handle(struct pipe_screen *_screen,
                                       resource, handle, usage);
 }
 
+static void
+trace_screen_resource_changed(struct pipe_screen *_screen,
+                              struct pipe_resource *resource)
+{
+   struct trace_screen *tr_scr = trace_screen(_screen);
+   struct pipe_screen *screen = tr_scr->screen;
 
+   trace_dump_call_begin("pipe_screen", "resource_changed");
+
+   trace_dump_arg(ptr, screen);
+   trace_dump_arg(ptr, resource);
+
+   screen->resource_changed(screen, resource);
+
+   trace_dump_call_end();
+}
 
 static void
 trace_screen_resource_destroy(struct pipe_screen *_screen,
-			      struct pipe_resource *_resource)
+			      struct pipe_resource *resource)
 {
    struct trace_screen *tr_scr = trace_screen(_screen);
-   struct trace_resource *tr_res = trace_resource(_resource);
    struct pipe_screen *screen = tr_scr->screen;
-   struct pipe_resource *resource = tr_res->resource;
-
-   assert(resource->screen == screen);
 
    trace_dump_call_begin("pipe_screen", "resource_destroy");
 
@@ -370,7 +398,7 @@ trace_screen_resource_destroy(struct pipe_screen *_screen,
 
    trace_dump_call_end();
 
-   trace_resource_destroy(tr_scr, tr_res);
+   screen->resource_destroy(screen, resource);
 }
 
 
@@ -499,10 +527,14 @@ trace_screen_create(struct pipe_screen *screen)
    if (!tr_scr)
       goto error2;
 
+#define SCR_INIT(_member) \
+   tr_scr->base._member = screen->_member ? trace_screen_##_member : NULL
+
    tr_scr->base.destroy = trace_screen_destroy;
    tr_scr->base.get_name = trace_screen_get_name;
    tr_scr->base.get_vendor = trace_screen_get_vendor;
    tr_scr->base.get_device_vendor = trace_screen_get_device_vendor;
+   SCR_INIT(get_disk_shader_cache);
    tr_scr->base.get_param = trace_screen_get_param;
    tr_scr->base.get_shader_param = trace_screen_get_shader_param;
    tr_scr->base.get_paramf = trace_screen_get_paramf;
@@ -513,6 +545,7 @@ trace_screen_create(struct pipe_screen *screen)
    tr_scr->base.resource_create = trace_screen_resource_create;
    tr_scr->base.resource_from_handle = trace_screen_resource_from_handle;
    tr_scr->base.resource_get_handle = trace_screen_resource_get_handle;
+   SCR_INIT(resource_changed);
    tr_scr->base.resource_destroy = trace_screen_resource_destroy;
    tr_scr->base.fence_reference = trace_screen_fence_reference;
    tr_scr->base.fence_finish = trace_screen_fence_finish;

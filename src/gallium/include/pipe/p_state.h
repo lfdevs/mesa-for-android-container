@@ -158,7 +158,13 @@ struct pipe_rasterizer_state
    unsigned line_stipple_factor:8;  /**< [1..256] actually */
    unsigned line_stipple_pattern:16;
 
-   uint32_t sprite_coord_enable; /* referring to 32 TEXCOORD/GENERIC inputs */
+   /**
+    * Replace the given TEXCOORD inputs with point coordinates, max. 8 inputs.
+    * If TEXCOORD (including PCOORD) are unsupported, replace GENERIC inputs
+    * instead. Max. 9 inputs: 8x GENERIC to emulate TEXCOORD, and 1x GENERIC
+    * to emulate PCOORD.
+    */
+   uint16_t sprite_coord_enable; /* 0-7: TEXCOORD/GENERIC, 8: PCOORD */
 
    float line_width;
    float point_size;           /**< used when no per-vertex size */
@@ -200,7 +206,7 @@ struct pipe_clip_state
  */
 struct pipe_stream_output
 {
-   unsigned register_index:8;  /**< 0 to PIPE_MAX_SHADER_OUTPUTS */
+   unsigned register_index:6;  /**< 0 to 63 (OUT index) */
    unsigned start_component:2; /** 0 to 3 */
    unsigned num_components:3;  /** 1 to 4 */
    unsigned output_buffer:3;   /**< 0 to PIPE_MAX_SO_BUFFERS */
@@ -215,7 +221,7 @@ struct pipe_stream_output_info
 {
    unsigned num_outputs;
    /** stride for an entire vertex for each buffer in dwords */
-   unsigned stride[PIPE_MAX_SO_BUFFERS];
+   uint16_t stride[PIPE_MAX_SO_BUFFERS];
 
    /**
     * Array of stream outputs, in the order they are to be written in.
@@ -349,12 +355,12 @@ struct pipe_stencil_ref
  */
 struct pipe_framebuffer_state
 {
-   unsigned width, height;
-   unsigned samples; /**< Number of samples in a no-attachment framebuffer */
-   unsigned layers;  /**< Number of layers  in a no-attachment framebuffer */
+   uint16_t width, height;
+   uint16_t layers;  /**< Number of layers  in a no-attachment framebuffer */
+   ubyte samples; /**< Number of samples in a no-attachment framebuffer */
 
    /** multiple color buffers for multiple render targets */
-   unsigned nr_cbufs;
+   ubyte nr_cbufs;
    struct pipe_surface *cbufs[PIPE_MAX_COLOR_BUFS];
 
    struct pipe_surface *zsbuf;      /**< Z/stencil buffer */
@@ -401,15 +407,14 @@ union pipe_surface_desc {
 struct pipe_surface
 {
    struct pipe_reference reference;
+   enum pipe_format format:16;
+   unsigned writable:1;          /**< writable shader resource */
    struct pipe_resource *texture; /**< resource into which this is a view  */
    struct pipe_context *context; /**< context this surface belongs to */
-   enum pipe_format format;
 
    /* XXX width/height should be removed */
-   unsigned width;               /**< logical width in pixels */
-   unsigned height;              /**< logical height in pixels */
-
-   unsigned writable:1;          /**< writable shader resource */
+   uint16_t width;               /**< logical width in pixels */
+   uint16_t height;              /**< logical height in pixels */
 
    union pipe_surface_desc u;
 };
@@ -421,8 +426,12 @@ struct pipe_surface
 struct pipe_sampler_view
 {
    struct pipe_reference reference;
-   enum pipe_texture_target target; /**< PIPE_TEXTURE_x */
-   enum pipe_format format;      /**< typed PIPE_FORMAT_x */
+   enum pipe_format format:16;      /**< typed PIPE_FORMAT_x */
+   enum pipe_texture_target target:4; /**< PIPE_TEXTURE_x */
+   unsigned swizzle_r:3;         /**< PIPE_SWIZZLE_x for red component */
+   unsigned swizzle_g:3;         /**< PIPE_SWIZZLE_x for green component */
+   unsigned swizzle_b:3;         /**< PIPE_SWIZZLE_x for blue component */
+   unsigned swizzle_a:3;         /**< PIPE_SWIZZLE_x for alpha component */
    struct pipe_resource *texture; /**< texture into which this is a view  */
    struct pipe_context *context; /**< context this view belongs to */
    union {
@@ -437,10 +446,6 @@ struct pipe_sampler_view
          unsigned size;     /**< size of the readable sub-range in bytes */
       } buf;
    } u;
-   unsigned swizzle_r:3;         /**< PIPE_SWIZZLE_x for red component */
-   unsigned swizzle_g:3;         /**< PIPE_SWIZZLE_x for green component */
-   unsigned swizzle_b:3;         /**< PIPE_SWIZZLE_x for blue component */
-   unsigned swizzle_a:3;         /**< PIPE_SWIZZLE_x for alpha component */
 };
 
 
@@ -473,12 +478,15 @@ struct pipe_image_view
  */
 struct pipe_box
 {
+   /* Fields only used by textures use int16_t instead of int.
+    * x and width are used by buffers, so they need the full 32-bit range.
+    */
    int x;
-   int y;
-   int z;
+   int16_t y;
+   int16_t z;
    int width;
-   int height;
-   int depth;
+   int16_t height;
+   int16_t depth;
 };
 
 
@@ -489,14 +497,14 @@ struct pipe_resource
 {
    struct pipe_reference reference;
    struct pipe_screen *screen; /**< screen that this texture belongs to */
-   enum pipe_texture_target target; /**< PIPE_TEXTURE_x */
-   enum pipe_format format;         /**< PIPE_FORMAT_x */
 
-   unsigned width0;
-   unsigned height0;
-   unsigned depth0;
-   unsigned array_size;
+   unsigned width0; /**< Used by both buffers and textures. */
+   uint16_t height0; /* Textures: The maximum height/depth/array_size is 16k. */
+   uint16_t depth0;
+   uint16_t array_size;
 
+   enum pipe_format format:16;         /**< PIPE_FORMAT_x */
+   enum pipe_texture_target target:8; /**< PIPE_TEXTURE_x */
    unsigned last_level:8;    /**< Index of last mipmap level present/defined */
    unsigned nr_samples:8;    /**< for multisampled surfaces, nr of samples */
    unsigned usage:8;         /**< PIPE_USAGE_x (not a bitmask) */
@@ -601,19 +609,19 @@ struct pipe_stream_output_target
 struct pipe_vertex_element
 {
    /** Offset of this attribute, in bytes, from the start of the vertex */
-   unsigned src_offset;
+   unsigned src_offset:16;
+
+   /** Which vertex_buffer (as given to pipe->set_vertex_buffer()) does
+    * this attribute live in?
+    */
+   unsigned vertex_buffer_index:5;
+
+   enum pipe_format src_format:11;
 
    /** Instance data rate divisor. 0 means this is per-vertex data,
     *  n means per-instance data used for n consecutive instances (n > 0).
     */
    unsigned instance_divisor;
-
-   /** Which vertex_buffer (as given to pipe->set_vertex_buffer()) does
-    * this attribute live in?
-    */
-   unsigned vertex_buffer_index;
-
-   enum pipe_format src_format;
 };
 
 
@@ -636,8 +644,10 @@ struct pipe_index_buffer
 struct pipe_draw_info
 {
    boolean indexed;  /**< use index buffer */
+   enum pipe_prim_type mode:8;  /**< the mode of the primitive */
+   boolean primitive_restart;
+   ubyte vertices_per_patch; /**< the number of vertices per patch */
 
-   enum pipe_prim_type mode;  /**< the mode of the primitive */
    unsigned start;  /**< the index of the first vertex */
    unsigned count;  /**< number of vertices */
 
@@ -645,8 +655,6 @@ struct pipe_draw_info
    unsigned instance_count; /**< number of instances */
 
    unsigned drawid; /**< id of this draw in a multidraw */
-
-   unsigned vertices_per_patch; /**< the number of vertices per patch */
 
    /**
     * For indexed drawing, these fields apply after index lookup.
@@ -658,24 +666,15 @@ struct pipe_draw_info
    /**
     * Primitive restart enable/index (only applies to indexed drawing)
     */
-   boolean primitive_restart;
    unsigned restart_index;
 
-   /**
-    * Stream output target. If not NULL, it's used to provide the 'count'
-    * parameter based on the number vertices captured by the stream output
-    * stage. (or generally, based on the number of bytes captured)
-    *
-    * Only 'mode', 'start_instance', and 'instance_count' are taken into
-    * account, all the other variables from pipe_draw_info are ignored.
-    *
-    * 'start' is implicitly 0 and 'count' is set as discussed above.
-    * The draw command is non-indexed.
-    *
-    * Note that this only provides the count. The vertex buffers must
-    * be set via set_vertex_buffers manually.
-    */
-   struct pipe_stream_output_target *count_from_stream_output;
+   unsigned indirect_offset; /**< must be 4 byte aligned */
+   unsigned indirect_stride; /**< must be 4 byte aligned */
+   unsigned indirect_count; /**< number of indirect draws */
+
+   unsigned indirect_params_offset; /**< must be 4 byte aligned */
+
+   /* Pointers must be at the end for an optimal structure layout on 64-bit. */
 
    /* Indirect draw parameters resource: If not NULL, most values are taken
     * from this buffer instead, which is laid out as follows:
@@ -697,16 +696,28 @@ struct pipe_draw_info
     *  };
     */
    struct pipe_resource *indirect;
-   unsigned indirect_offset; /**< must be 4 byte aligned */
-   unsigned indirect_stride; /**< must be 4 byte aligned */
-   unsigned indirect_count; /**< number of indirect draws */
 
    /* Indirect draw count resource: If not NULL, contains a 32-bit value which
     * is to be used as the real indirect_count. In that case indirect_count
     * becomes the maximum possible value.
     */
    struct pipe_resource *indirect_params;
-   unsigned indirect_params_offset; /**< must be 4 byte aligned */
+
+   /**
+    * Stream output target. If not NULL, it's used to provide the 'count'
+    * parameter based on the number vertices captured by the stream output
+    * stage. (or generally, based on the number of bytes captured)
+    *
+    * Only 'mode', 'start_instance', and 'instance_count' are taken into
+    * account, all the other variables from pipe_draw_info are ignored.
+    *
+    * 'start' is implicitly 0 and 'count' is set as discussed above.
+    * The draw command is non-indexed.
+    *
+    * Note that this only provides the count. The vertex buffers must
+    * be set via set_vertex_buffers manually.
+    */
+   struct pipe_stream_output_target *count_from_stream_output;
 };
 
 

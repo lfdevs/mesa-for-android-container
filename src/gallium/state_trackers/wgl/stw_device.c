@@ -63,6 +63,24 @@ stw_get_param(struct st_manager *smapi,
    }
 }
 
+
+/** Get the refresh rate for the monitor, in Hz */
+static int
+get_refresh_rate(void)
+{
+   DEVMODE devModes;
+
+   if (EnumDisplaySettings(NULL, ENUM_CURRENT_SETTINGS, &devModes)) {
+      /* clamp the value, just in case we get garbage */
+      return CLAMP(devModes.dmDisplayFrequency, 30, 120);
+   }
+   else {
+      /* reasonable default */
+      return 60;
+   }
+}
+
+
 boolean
 stw_init(const struct stw_winsys *stw_winsys)
 {
@@ -115,6 +133,13 @@ stw_init(const struct stw_winsys *stw_winsys)
    }
 
    stw_pixelformat_init();
+
+   /* env var override for WGL_EXT_swap_control, useful for testing/debugging */
+   const char *s = os_get_option("SVGA_SWAP_INTERVAL");
+   if (s) {
+      stw_dev->swap_interval = atoi(s);
+   }
+   stw_dev->refresh_rate = get_refresh_rate();
 
    stw_dev->initialized = true;
 

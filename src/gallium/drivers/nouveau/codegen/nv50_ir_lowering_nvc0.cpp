@@ -147,6 +147,115 @@ NVC0LegalizeSSA::handleTEXLOD(TexInstruction *i)
    i->moveSources(arg + 1, -1);
 }
 
+void
+NVC0LegalizeSSA::handleShift(Instruction *lo)
+{
+   Value *shift = lo->getSrc(1);
+   Value *dst64 = lo->getDef(0);
+   Value *src[2], *dst[2];
+   operation op = lo->op;
+
+   bld.setPosition(lo, false);
+
+   bld.mkSplit(src, 4, lo->getSrc(0));
+
+   // SM30 and prior don't have the fancy new SHF.L/R ops. So the logic has to
+   // be completely emulated. For SM35+, we can use the more directed SHF
+   // operations.
+   if (prog->getTarget()->getChipset() < NVISA_GK20A_CHIPSET) {
+      // The strategy here is to handle shifts >= 32 and less than 32 as
+      // separate parts.
+      //
+      // For SHL:
+      // If the shift is <= 32, then
+      //   (HI,LO) << x = (HI << x | (LO >> (32 - x)), LO << x)
+      // If the shift is > 32, then
+      //   (HI,LO) << x = (LO << (x - 32), 0)
+      //
+      // For SHR:
+      // If the shift is <= 32, then
+      //   (HI,LO) >> x = (HI >> x, (HI << (32 - x)) | LO >> x)
+      // If the shift is > 32, then
+      //   (HI,LO) >> x = (0, HI >> (x - 32))
+      //
+      // Note that on NVIDIA hardware, a shift > 32 yields a 0 value, which we
+      // can use to our advantage. Also note the structural similarities
+      // between the right/left cases. The main difference is swapping hi/lo
+      // on input and output.
+
+      Value *x32_minus_shift, *pred, *hi1, *hi2;
+      DataType type = isSignedIntType(lo->dType) ? TYPE_S32 : TYPE_U32;
+      operation antiop = op == OP_SHR ? OP_SHL : OP_SHR;
+      if (op == OP_SHR)
+         std::swap(src[0], src[1]);
+      bld.mkOp2(OP_ADD, TYPE_U32, (x32_minus_shift = bld.getSSA()), shift, bld.mkImm(0x20))
+         ->src(0).mod = Modifier(NV50_IR_MOD_NEG);
+      bld.mkCmp(OP_SET, CC_LE, TYPE_U8, (pred = bld.getSSA(1, FILE_PREDICATE)),
+                TYPE_U32, shift, bld.mkImm(32));
+      // Compute HI (shift <= 32)
+      bld.mkOp2(OP_OR, TYPE_U32, (hi1 = bld.getSSA()),
+                bld.mkOp2v(op, TYPE_U32, bld.getSSA(), src[1], shift),
+                bld.mkOp2v(antiop, TYPE_U32, bld.getSSA(), src[0], x32_minus_shift))
+         ->setPredicate(CC_P, pred);
+      // Compute LO (all shift values)
+      bld.mkOp2(op, type, (dst[0] = bld.getSSA()), src[0], shift);
+      // Compute HI (shift > 32)
+      bld.mkOp2(op, type, (hi2 = bld.getSSA()), src[1],
+                bld.mkOp1v(OP_NEG, TYPE_S32, bld.getSSA(), x32_minus_shift))
+         ->setPredicate(CC_NOT_P, pred);
+      bld.mkOp2(OP_UNION, TYPE_U32, (dst[1] = bld.getSSA()), hi1, hi2);
+      if (op == OP_SHR)
+         std::swap(dst[0], dst[1]);
+      bld.mkOp2(OP_MERGE, TYPE_U64, dst64, dst[0], dst[1]);
+      delete_Instruction(prog, lo);
+      return;
+   }
+
+   Instruction *hi = new_Instruction(func, op, TYPE_U32);
+   lo->bb->insertAfter(lo, hi);
+
+   hi->sType = lo->sType;
+   lo->dType = TYPE_U32;
+
+   hi->setDef(0, (dst[1] = bld.getSSA()));
+   if (lo->op == OP_SHR)
+      hi->subOp |= NV50_IR_SUBOP_SHIFT_HIGH;
+   lo->setDef(0, (dst[0] = bld.getSSA()));
+
+   bld.setPosition(hi, true);
+
+   if (lo->op == OP_SHL)
+      std::swap(hi, lo);
+
+   hi->setSrc(0, new_ImmediateValue(prog, 0u));
+   hi->setSrc(1, shift);
+   hi->setSrc(2, lo->op == OP_SHL ? src[0] : src[1]);
+
+   lo->setSrc(0, src[0]);
+   lo->setSrc(1, shift);
+   lo->setSrc(2, src[1]);
+
+   bld.mkOp2(OP_MERGE, TYPE_U64, dst64, dst[0], dst[1]);
+}
+
+void
+NVC0LegalizeSSA::handleSET(CmpInstruction *cmp)
+{
+   DataType hTy = cmp->sType == TYPE_S64 ? TYPE_S32 : TYPE_U32;
+   Value *carry;
+   Value *src0[2], *src1[2];
+   bld.setPosition(cmp, false);
+
+   bld.mkSplit(src0, 4, cmp->getSrc(0));
+   bld.mkSplit(src1, 4, cmp->getSrc(1));
+   bld.mkOp2(OP_SUB, hTy, NULL, src0[0], src1[0])
+      ->setFlagsDef(0, (carry = bld.getSSA(1, FILE_FLAGS)));
+   cmp->setFlagsSrc(cmp->srcCount(), carry);
+   cmp->setSrc(0, src0[1]);
+   cmp->setSrc(1, src1[1]);
+   cmp->sType = hTy;
+}
+
 bool
 NVC0LegalizeSSA::visit(Function *fn)
 {
@@ -178,6 +287,18 @@ NVC0LegalizeSSA::visit(BasicBlock *bb)
       case OP_TXL:
       case OP_TXF:
          handleTEXLOD(i->asTex());
+         break;
+      case OP_SHR:
+      case OP_SHL:
+         if (typeSizeof(i->sType) == 8)
+            handleShift(i);
+         break;
+      case OP_SET:
+      case OP_SET_AND:
+      case OP_SET_OR:
+      case OP_SET_XOR:
+         if (typeSizeof(i->sType) == 8 && i->sType != TYPE_F64)
+            handleSET(i->asCmp());
          break;
       default:
          break;
@@ -612,7 +733,7 @@ NVC0LegalizePostRA::visit(BasicBlock *bb)
       } else {
          // TODO: Move this to before register allocation for operations that
          // need the $c register !
-         if (typeSizeof(i->dType) == 8) {
+         if (typeSizeof(i->sType) == 8 || typeSizeof(i->dType) == 8) {
             Instruction *hi;
             hi = BuildUtil::split64BitOpPostRA(func, i, rZero, carry);
             if (hi)

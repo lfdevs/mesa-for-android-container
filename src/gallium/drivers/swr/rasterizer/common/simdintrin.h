@@ -618,6 +618,7 @@ __m256i _simd_packs_epi32(__m256i a, __m256i b)
 #define _simd_loadu_si _mm256_loadu_si256
 #define _simd_sub_ps _mm256_sub_ps
 #define _simd_testz_ps _mm256_testz_ps
+#define _simd_testz_si _mm256_testz_si256
 #define _simd_xor_ps _mm256_xor_ps
 
 INLINE
@@ -648,6 +649,13 @@ simdscalari _simd_blendv_epi32(simdscalari a, simdscalari b, simdscalari mask)
     return _simd_castps_si(_simd_blendv_ps(_simd_castsi_ps(a), _simd_castsi_ps(b), _simd_castsi_ps(mask)));
 }
 
+template<int mask>
+INLINE
+__m128i _simd_blend4_epi32(__m128i a, __m128i b)
+{
+    return _mm_castps_si128(_mm_blend_ps(_mm_castsi128_ps(a), _mm_castsi128_ps(b), mask));
+}
+
 // convert bitmask to vector mask
 INLINE
 simdscalar vMask(int32_t mask)
@@ -657,6 +665,15 @@ simdscalar vMask(int32_t mask)
     vec = _simd_and_si(vec, bit);
     vec = _simd_cmplt_epi32(_mm256_setzero_si256(), vec);
     return _simd_castsi_ps(vec);
+}
+
+INLINE
+simdscalari vMaski(int32_t mask)
+{
+    __m256i vec = _mm256_set1_epi32(mask);
+    const __m256i bit = _mm256_set_epi32(0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01);
+    vec = _simd_and_si(vec, bit);
+    return _simd_cmplt_epi32(_mm256_setzero_si256(), vec);
 }
 
 INLINE
@@ -714,7 +731,7 @@ INLINE __m256i _simdemu_srli_epi32(__m256i a, uint32_t i)
 INLINE
 void _simdvec_transpose(simdvector &v)
 {
-    SWR_ASSERT(false, "Need to implement 8 wide version");
+    SWR_INVALID("Need to implement 8 wide version");
 }
 
 #else
@@ -1120,6 +1137,19 @@ static INLINE simdscalar InterpolateComponent(simdscalar vI, simdscalar vJ, cons
     vC = _simd_mul_ps(vk, vC);
     
     return vplaneps(vA, vB, vC, vI, vJ);
+}
+
+//////////////////////////////////////////////////////////////////////////
+/// @brief Interpolates a single component (flat shade).
+/// @param pInterpBuffer - pointer to attribute barycentric coeffs
+template<UINT Attrib, UINT Comp, UINT numComponents = 4>
+static INLINE simdscalar InterpolateComponentFlat(const float *pInterpBuffer)
+{
+    const float *pInterpA = &pInterpBuffer[Attrib * 3 * numComponents + 0 + Comp];
+
+    simdscalar vA = _simd_broadcast_ss(pInterpA);
+
+    return vA;
 }
 
 //////////////////////////////////////////////////////////////////////////

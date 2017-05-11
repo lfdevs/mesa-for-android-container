@@ -291,8 +291,9 @@ def generate(env):
     # C preprocessor options
     cppdefines = []
     cppdefines += [
-        '__STDC_LIMIT_MACROS',
         '__STDC_CONSTANT_MACROS',
+        '__STDC_FORMAT_MACROS',
+        '__STDC_LIMIT_MACROS',
         'HAVE_NO_AUTOCONF',
     ]
     if env['build'] in ('debug', 'checked'):
@@ -644,10 +645,10 @@ def generate(env):
     env.AddMethod(msvc2013_compat, 'MSVC2013Compat')
     env.AddMethod(unit_test, 'UnitTest')
 
-    env.PkgCheckModules('X11', ['x11', 'xext', 'xdamage', 'xfixes', 'glproto >= 1.4.13'])
+    env.PkgCheckModules('X11', ['x11', 'xext', 'xdamage >= 1.1', 'xfixes', 'glproto >= 1.4.13', 'dri2proto >= 2.8'])
     env.PkgCheckModules('XCB', ['x11-xcb', 'xcb-glx >= 1.8.1', 'xcb-dri2 >= 1.8'])
     env.PkgCheckModules('XF86VIDMODE', ['xxf86vm'])
-    env.PkgCheckModules('DRM', ['libdrm >= 2.4.66'])
+    env.PkgCheckModules('DRM', ['libdrm >= 2.4.75'])
 
     if env['x11']:
         env.Append(CPPPATH = env['X11_CPPPATH'])

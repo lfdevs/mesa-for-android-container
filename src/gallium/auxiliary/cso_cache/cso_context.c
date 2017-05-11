@@ -277,18 +277,19 @@ sanitize_hash(struct cso_hash *hash, enum cso_cache_type type,
    }
 }
 
-static void cso_init_vbuf(struct cso_context *cso)
+static void cso_init_vbuf(struct cso_context *cso, unsigned flags)
 {
    struct u_vbuf_caps caps;
 
    /* Install u_vbuf if there is anything unsupported. */
-   if (u_vbuf_get_caps(cso->pipe->screen, &caps)) {
+   if (u_vbuf_get_caps(cso->pipe->screen, &caps, flags)) {
       cso->vbuf = u_vbuf_create(cso->pipe, &caps,
                                 cso->aux_vertex_buffer_index);
    }
 }
 
-struct cso_context *cso_create_context( struct pipe_context *pipe )
+struct cso_context *
+cso_create_context(struct pipe_context *pipe, unsigned u_vbuf_flags)
 {
    struct cso_context *ctx = CALLOC_STRUCT(cso_context);
    if (!ctx)
@@ -306,7 +307,7 @@ struct cso_context *cso_create_context( struct pipe_context *pipe )
 
    ctx->aux_vertex_buffer_index = 0; /* 0 for now */
 
-   cso_init_vbuf(ctx);
+   cso_init_vbuf(ctx, u_vbuf_flags);
 
    /* Enable for testing: */
    if (0) cso_set_maximum_cache_size( ctx->cache, 4 );
@@ -851,7 +852,8 @@ cso_restore_stencil_ref(struct cso_context *ctx)
 
 void cso_set_render_condition(struct cso_context *ctx,
                               struct pipe_query *query,
-                              boolean condition, uint mode)
+                              boolean condition,
+                              enum pipe_render_cond_flag mode)
 {
    struct pipe_context *pipe = ctx->pipe;
 
@@ -1202,7 +1204,7 @@ unsigned cso_get_aux_vertex_buffer_slot(struct cso_context *ctx)
 
 
 enum pipe_error
-cso_single_sampler(struct cso_context *ctx, unsigned shader_stage,
+cso_single_sampler(struct cso_context *ctx, enum pipe_shader_type shader_stage,
                    unsigned idx, const struct pipe_sampler_state *templ)
 {
    if (templ) {
@@ -1536,7 +1538,8 @@ cso_restore_stream_outputs(struct cso_context *ctx)
 /* constant buffers */
 
 void
-cso_set_constant_buffer(struct cso_context *cso, unsigned shader_stage,
+cso_set_constant_buffer(struct cso_context *cso,
+                        enum pipe_shader_type shader_stage,
                         unsigned index, struct pipe_constant_buffer *cb)
 {
    struct pipe_context *pipe = cso->pipe;
@@ -1550,7 +1553,7 @@ cso_set_constant_buffer(struct cso_context *cso, unsigned shader_stage,
 
 void
 cso_set_constant_buffer_resource(struct cso_context *cso,
-                                 unsigned shader_stage,
+                                 enum pipe_shader_type shader_stage,
                                  unsigned index,
                                  struct pipe_resource *buffer)
 {
@@ -1568,7 +1571,7 @@ cso_set_constant_buffer_resource(struct cso_context *cso,
 
 void
 cso_save_constant_buffer_slot0(struct cso_context *cso,
-                                  unsigned shader_stage)
+                               enum pipe_shader_type shader_stage)
 {
    util_copy_constant_buffer(&cso->aux_constbuf_saved[shader_stage],
                              &cso->aux_constbuf_current[shader_stage]);
@@ -1576,7 +1579,7 @@ cso_save_constant_buffer_slot0(struct cso_context *cso,
 
 void
 cso_restore_constant_buffer_slot0(struct cso_context *cso,
-                                     unsigned shader_stage)
+                                  enum pipe_shader_type shader_stage)
 {
    cso_set_constant_buffer(cso, shader_stage, 0,
                            &cso->aux_constbuf_saved[shader_stage]);

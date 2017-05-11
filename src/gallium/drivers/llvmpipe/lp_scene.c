@@ -62,7 +62,7 @@ lp_scene_create( struct pipe_context *pipe )
    scene->data.head =
       CALLOC_STRUCT(data_block);
 
-   pipe_mutex_init(scene->mutex);
+   (void) mtx_init(&scene->mutex, mtx_plain);
 
 #ifdef DEBUG
    /* Do some scene limit sanity checks here */
@@ -90,7 +90,7 @@ void
 lp_scene_destroy(struct lp_scene *scene)
 {
    lp_fence_reference(&scene->fence, NULL);
-   pipe_mutex_destroy(scene->mutex);
+   mtx_destroy(&scene->mutex);
    assert(scene->data.head->next == NULL);
    FREE(scene->data.head);
    FREE(scene);
@@ -484,7 +484,7 @@ lp_scene_bin_iter_next( struct lp_scene *scene , int *x, int *y)
 {
    struct cmd_bin *bin = NULL;
 
-   pipe_mutex_lock(scene->mutex);
+   mtx_lock(&scene->mutex);
 
    if (scene->curr_x < 0) {
       /* first bin */
@@ -502,7 +502,7 @@ lp_scene_bin_iter_next( struct lp_scene *scene , int *x, int *y)
 
 end:
    /*printf("return bin %p at %d, %d\n", (void *) bin, *bin_x, *bin_y);*/
-   pipe_mutex_unlock(scene->mutex);
+   mtx_unlock(&scene->mutex);
    return bin;
 }
 

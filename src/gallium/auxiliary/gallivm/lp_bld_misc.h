@@ -73,17 +73,20 @@ lp_get_default_memory_manager();
 extern void
 lp_free_memory_manager(LLVMMCJITMemoryManagerRef memorymgr);
 
-extern void
-lp_add_attr_dereferenceable(LLVMValueRef val, uint64_t bytes);
-
 extern LLVMValueRef
 lp_get_called_value(LLVMValueRef call);
 
 extern bool
 lp_is_function(LLVMValueRef v);
 
+enum lp_float_mode {
+   LP_FLOAT_MODE_DEFAULT,
+   LP_FLOAT_MODE_NO_SIGNED_ZEROS_FP_MATH,
+   LP_FLOAT_MODE_UNSAFE_FP_MATH,
+};
+
 extern LLVMBuilderRef
-lp_create_builder(LLVMContextRef ctx, bool unsafe_fpmath);
+lp_create_builder(LLVMContextRef ctx, enum lp_float_mode float_mode);
 
 #ifdef __cplusplus
 }

@@ -88,7 +88,6 @@ struct tgsi_full_property
 struct tgsi_full_instruction
 {
    struct tgsi_instruction             Instruction;
-   struct tgsi_instruction_predicate   Predicate;
    struct tgsi_instruction_label       Label;
    struct tgsi_instruction_texture     Texture;
    struct tgsi_instruction_memory      Memory;

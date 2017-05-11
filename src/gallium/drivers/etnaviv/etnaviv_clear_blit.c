@@ -49,11 +49,11 @@ etna_blit_save_state(struct etna_context *ctx)
 {
    util_blitter_save_vertex_buffer_slot(ctx->blitter, ctx->vertex_buffer.vb);
    util_blitter_save_vertex_elements(ctx->blitter, ctx->vertex_elements);
-   util_blitter_save_vertex_shader(ctx->blitter, ctx->vs);
+   util_blitter_save_vertex_shader(ctx->blitter, ctx->shader.bind_vs);
    util_blitter_save_rasterizer(ctx->blitter, ctx->rasterizer);
    util_blitter_save_viewport(ctx->blitter, &ctx->viewport_s);
    util_blitter_save_scissor(ctx->blitter, &ctx->scissor_s);
-   util_blitter_save_fragment_shader(ctx->blitter, ctx->fs);
+   util_blitter_save_fragment_shader(ctx->blitter, ctx->shader.bind_fs);
    util_blitter_save_blend(ctx->blitter, ctx->blend);
    util_blitter_save_depth_stencil_alpha(ctx->blitter, ctx->zsa);
    util_blitter_save_stencil_ref(ctx->blitter, &ctx->stencil_ref_s);
@@ -119,6 +119,7 @@ etna_blit_clear_color(struct pipe_context *pctx, struct pipe_surface *dst,
          ctx->framebuffer.TS_MEM_CONFIG |= VIVS_TS_MEM_CONFIG_COLOR_AUTO_DISABLE;
       }
 
+      surf->level->ts_valid = true;
       ctx->dirty |= ETNA_DIRTY_TS;
    } else if (unlikely(new_clear_value != surf->level->clear_value)) { /* Queue normal RS clear for non-TS surfaces */
       /* If clear color changed, re-generate stored command */
@@ -178,6 +179,7 @@ etna_blit_clear_zs(struct pipe_context *pctx, struct pipe_surface *dst,
          ctx->framebuffer.TS_MEM_CONFIG |= VIVS_TS_MEM_CONFIG_DEPTH_AUTO_DISABLE;
       }
 
+      surf->level->ts_valid = true;
       ctx->dirty |= ETNA_DIRTY_TS;
    } else {
       if (unlikely(new_clear_value != surf->level->clear_value)) { /* Queue normal RS clear for non-TS surfaces */
@@ -468,7 +470,8 @@ etna_try_rs_blit(struct pipe_context *pctx,
    }
 
    /* Set up color TS to source surface before blit, if needed */
-   if (src->levels[blit_info->src.level].ts_size) {
+   if (src->levels[blit_info->src.level].ts_size &&
+       src->levels[blit_info->src.level].ts_valid) {
       struct etna_reloc reloc;
       unsigned ts_offset =
          src_lev->ts_offset + blit_info->src.box.z * src_lev->ts_layer_stride;
@@ -521,6 +524,7 @@ etna_try_rs_blit(struct pipe_context *pctx,
    etna_submit_rs_state(ctx, &copy_to_screen);
    resource_written(ctx, &dst->base);
    dst->seqno++;
+   dst->levels[blit_info->dst.level].ts_valid = false;
 
    return TRUE;
 
@@ -589,8 +593,14 @@ etna_flush_resource(struct pipe_context *pctx, struct pipe_resource *prsc)
 {
    struct etna_resource *rsc = etna_resource(prsc);
 
-   if (rsc->scanout)
+   if (rsc->scanout &&
+       etna_resource_older(etna_resource(rsc->scanout->prime), rsc)) {
       etna_copy_resource(pctx, rsc->scanout->prime, prsc, 0, 0);
+      etna_resource(rsc->scanout->prime)->seqno = rsc->seqno;
+   } else if (etna_resource_needs_flush(rsc)) {
+      etna_copy_resource(pctx, prsc, prsc, 0, 0);
+      rsc->flush_seqno = rsc->seqno;
+   }
 }
 
 void

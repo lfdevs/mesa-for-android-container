@@ -182,7 +182,7 @@ static boolean r300_get_query_result(struct pipe_context* pipe,
 static void r300_render_condition(struct pipe_context *pipe,
                                   struct pipe_query *query,
                                   boolean condition,
-                                  uint mode)
+                                  enum pipe_render_cond_flag mode)
 {
     struct r300_context *r300 = r300_context(pipe);
     union pipe_query_result result;

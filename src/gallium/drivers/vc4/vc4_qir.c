@@ -646,6 +646,7 @@ qir_compile_init(void)
 
         list_inithead(&c->blocks);
         qir_set_emit_block(c, qir_new_block(c));
+        c->last_top_block = c->cur_block;
 
         c->output_position_index = -1;
         c->output_color_index = -1;

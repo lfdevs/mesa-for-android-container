@@ -336,24 +336,6 @@ ralloc_parent(const void *ptr)
    return info->parent ? PTR_FROM_HEADER(info->parent) : NULL;
 }
 
-static void *autofree_context = NULL;
-
-static void
-autofree(void)
-{
-   ralloc_free(autofree_context);
-}
-
-void *
-ralloc_autofree_context(void)
-{
-   if (unlikely(autofree_context == NULL)) {
-      autofree_context = ralloc_context(NULL);
-      atexit(autofree);
-   }
-   return autofree_context;
-}
-
 void
 ralloc_set_destructor(const void *ptr, void(*destructor)(void *))
 {

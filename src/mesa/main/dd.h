@@ -469,9 +469,6 @@ struct dd_function_table {
     * \name Vertex/fragment program functions
     */
    /*@{*/
-   /** Bind a vertex/fragment program */
-   void (*BindProgram)(struct gl_context *ctx, GLenum target,
-                       struct gl_program *prog);
    /** Allocate a new program */
    struct gl_program * (*NewProgram)(struct gl_context *ctx, GLenum target,
                                      GLuint id, bool is_arb_asm);
@@ -780,6 +777,47 @@ struct dd_function_table {
    /*@}*/
 
    /**
+    * \name Performance Query objects
+    */
+   /*@{*/
+   unsigned (*InitPerfQueryInfo)(struct gl_context *ctx);
+   void (*GetPerfQueryInfo)(struct gl_context *ctx,
+                            unsigned queryIndex,
+                            const char **name,
+                            GLuint *dataSize,
+                            GLuint *numCounters,
+                            GLuint *numActive);
+   void (*GetPerfCounterInfo)(struct gl_context *ctx,
+                              unsigned queryIndex,
+                              unsigned counterIndex,
+                              const char **name,
+                              const char **desc,
+                              GLuint *offset,
+                              GLuint *data_size,
+                              GLuint *type_enum,
+                              GLuint *data_type_enum,
+                              GLuint64 *raw_max);
+   struct gl_perf_query_object * (*NewPerfQueryObject)(struct gl_context *ctx,
+                                                       unsigned queryIndex);
+   void (*DeletePerfQuery)(struct gl_context *ctx,
+                           struct gl_perf_query_object *obj);
+   bool (*BeginPerfQuery)(struct gl_context *ctx,
+                          struct gl_perf_query_object *obj);
+   void (*EndPerfQuery)(struct gl_context *ctx,
+                        struct gl_perf_query_object *obj);
+   void (*WaitPerfQuery)(struct gl_context *ctx,
+                         struct gl_perf_query_object *obj);
+   bool (*IsPerfQueryReady)(struct gl_context *ctx,
+                            struct gl_perf_query_object *obj);
+   void (*GetPerfQueryData)(struct gl_context *ctx,
+                            struct gl_perf_query_object *obj,
+                            GLsizei dataSize,
+                            GLuint *data,
+                            GLuint *bytesWritten);
+   /*@}*/
+
+
+   /**
     * \name GREMEDY debug/marker functions
     */
    /*@{*/
@@ -984,6 +1022,34 @@ struct dd_function_table {
     */
    void (*QueryMemoryInfo)(struct gl_context *ctx,
                            struct gl_memory_info *info);
+
+   /**
+    * Indicate that this thread is being used by Mesa as a background drawing
+    * thread for the given GL context.
+    *
+    * If this function is called more than once from any given thread, each
+    * subsequent call overrides the context that was passed in the previous
+    * call.  Mesa takes advantage of this to re-use a background thread to
+    * perform drawing on behalf of multiple contexts.
+    *
+    * Mesa may sometimes call this function from a non-background thread
+    * (i.e. a thread that has already been bound to a context using
+    * __DriverAPIRec::MakeCurrent()); when this happens, ctx will be equal to
+    * the context that is bound to this thread.
+    *
+    * Mesa will only call this function if GL multithreading is enabled.
+    */
+   void (*SetBackgroundContext)(struct gl_context *ctx);
+
+   /**
+    * \name GL_ARB_sparse_buffer interface
+    */
+   /*@{*/
+   void (*BufferPageCommitment)(struct gl_context *ctx,
+                                struct gl_buffer_object *bufferObj,
+                                GLintptr offset, GLsizeiptr size,
+                                GLboolean commit);
+   /*@}*/
 };
 
 

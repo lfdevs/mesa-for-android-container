@@ -572,16 +572,25 @@ transform_lit(struct tgsi_transform_context *tctx,
       reg_src(&new_inst.Src[1], &ctx->imm, SWIZ(X, X, _, _));
       tctx->emit_instruction(tctx, &new_inst);
 
-      /* CLAMP tmpA.z, src.w, -imm{128.0}, imm{128.0} */
+      /* MIN tmpA.z, src.w, imm{128.0} */
       new_inst = tgsi_default_full_instruction();
-      new_inst.Instruction.Opcode = TGSI_OPCODE_CLAMP;
+      new_inst.Instruction.Opcode = TGSI_OPCODE_MIN;
       new_inst.Instruction.NumDstRegs = 1;
       reg_dst(&new_inst.Dst[0], &ctx->tmp[A].dst, TGSI_WRITEMASK_Z);
-      new_inst.Instruction.NumSrcRegs = 3;
+      new_inst.Instruction.NumSrcRegs = 2;
       reg_src(&new_inst.Src[0], src, SWIZ(_, _, W, _));
       reg_src(&new_inst.Src[1], &ctx->imm, SWIZ(_, _, Z, _));
+      tctx->emit_instruction(tctx, &new_inst);
+
+      /* MAX tmpA.z, tmpA.z, -imm{128.0} */
+      new_inst = tgsi_default_full_instruction();
+      new_inst.Instruction.Opcode = TGSI_OPCODE_MAX;
+      new_inst.Instruction.NumDstRegs = 1;
+      reg_dst(&new_inst.Dst[0], &ctx->tmp[A].dst, TGSI_WRITEMASK_Z);
+      new_inst.Instruction.NumSrcRegs = 2;
+      reg_src(&new_inst.Src[0], &ctx->tmp[A].src, SWIZ(_, _, Z, _));
+      reg_src(&new_inst.Src[1], &ctx->imm, SWIZ(_, _, Z, _));
       new_inst.Src[1].Register.Negate = true;
-      reg_src(&new_inst.Src[2], &ctx->imm, SWIZ(_, _, Z, _));
       tctx->emit_instruction(tctx, &new_inst);
 
       /* LG2 tmpA.y, tmpA.y */

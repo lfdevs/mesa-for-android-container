@@ -60,9 +60,6 @@
  * Alternative stdint.h and stdbool.h headers are supplied in include/c99 for
  * systems that lack it.
  */
-#ifndef __STDC_LIMIT_MACROS
-#define __STDC_LIMIT_MACROS 1
-#endif
 #include <stdint.h>
 #include <stdbool.h>
 

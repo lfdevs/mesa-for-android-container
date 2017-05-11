@@ -63,12 +63,6 @@ struct ir3 * ir3_create(struct ir3_compiler *compiler,
 
 void ir3_destroy(struct ir3 *shader)
 {
-	/* TODO convert the dynamic array to ralloc too: */
-	free(shader->indirects);
-	free(shader->predicates);
-	free(shader->baryfs);
-	free(shader->keeps);
-	free(shader->astc_srgb);
 	ralloc_free(shader);
 }
 
@@ -626,7 +620,7 @@ static void insert_instr(struct ir3_block *block,
 	list_addtail(&instr->node, &block->instr_list);
 
 	if (is_input(instr))
-		array_insert(shader->baryfs, instr);
+		array_insert(shader, shader->baryfs, instr);
 }
 
 struct ir3_block * ir3_block_create(struct ir3 *shader)
@@ -729,7 +723,7 @@ ir3_instr_set_address(struct ir3_instruction *instr,
 	if (instr->address != addr) {
 		struct ir3 *ir = instr->block->shader;
 		instr->address = addr;
-		array_insert(ir->indirects, instr);
+		array_insert(ir, ir->indirects, instr);
 	}
 }
 

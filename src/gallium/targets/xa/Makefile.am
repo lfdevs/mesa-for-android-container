@@ -64,8 +64,6 @@ TARGET_LIB_DEPS =
 
 include $(top_srcdir)/src/gallium/drivers/i915/Automake.inc
 
-include $(top_srcdir)/src/gallium/drivers/ilo/Automake.inc
-
 include $(top_srcdir)/src/gallium/drivers/nouveau/Automake.inc
 
 include $(top_srcdir)/src/gallium/drivers/svga/Automake.inc

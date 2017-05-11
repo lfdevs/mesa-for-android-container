@@ -29,6 +29,7 @@
 #include "main/extensions.h"
 #include "main/context.h"
 #include "main/debug_output.h"
+#include "main/glthread.h"
 #include "main/texobj.h"
 #include "main/teximage.h"
 #include "main/texstate.h"
@@ -57,20 +58,6 @@
 #include "util/u_atomic.h"
 #include "util/u_surface.h"
 
-/**
- * Cast wrapper to convert a struct gl_framebuffer to an st_framebuffer.
- * Return NULL if the struct gl_framebuffer is a user-created framebuffer.
- * We'll only return non-null for window system framebuffers.
- * Note that this function may fail.
- */
-static inline struct st_framebuffer *
-st_ws_framebuffer(struct gl_framebuffer *fb)
-{
-   /* FBO cannot be casted.  See st_new_framebuffer */
-   if (fb && _mesa_is_winsys_fbo(fb))
-      return (struct st_framebuffer *) fb;
-   return NULL;
-}
 
 /**
  * Map an attachment to a buffer index.
@@ -283,7 +270,8 @@ st_framebuffer_update_attachments(struct st_framebuffer *stfb)
 }
 
 /**
- * Add a renderbuffer to the framebuffer.
+ * Add a renderbuffer to the framebuffer.  The framebuffer is one that
+ * corresponds to a window and is not a user-created FBO.
  */
 static boolean
 st_framebuffer_add_renderbuffer(struct st_framebuffer *stfb,
@@ -295,6 +283,8 @@ st_framebuffer_add_renderbuffer(struct st_framebuffer *stfb,
 
    if (!stfb->iface)
       return FALSE;
+
+   assert(_mesa_is_winsys_fbo(&stfb->Base));
 
    /* do not distinguish depth/stencil buffers */
    if (idx == BUFFER_STENCIL)
@@ -325,13 +315,21 @@ st_framebuffer_add_renderbuffer(struct st_framebuffer *stfb,
       return FALSE;
 
    if (idx != BUFFER_DEPTH) {
-      _mesa_add_renderbuffer(&stfb->Base, idx, rb);
+      _mesa_add_renderbuffer_without_ref(&stfb->Base, idx, rb);
+      return TRUE;
    }
-   else {
-      if (util_format_get_component_bits(format, UTIL_FORMAT_COLORSPACE_ZS, 0))
-         _mesa_add_renderbuffer(&stfb->Base, BUFFER_DEPTH, rb);
-      if (util_format_get_component_bits(format, UTIL_FORMAT_COLORSPACE_ZS, 1))
+
+   bool rb_ownership_taken = false;
+   if (util_format_get_component_bits(format, UTIL_FORMAT_COLORSPACE_ZS, 0)) {
+      _mesa_add_renderbuffer_without_ref(&stfb->Base, BUFFER_DEPTH, rb);
+      rb_ownership_taken = true;
+   }
+
+   if (util_format_get_component_bits(format, UTIL_FORMAT_COLORSPACE_ZS, 1)) {
+      if (rb_ownership_taken)
          _mesa_add_renderbuffer(&stfb->Base, BUFFER_STENCIL, rb);
+      else
+         _mesa_add_renderbuffer_without_ref(&stfb->Base, BUFFER_STENCIL, rb);
    }
 
    return TRUE;
@@ -504,6 +502,13 @@ st_context_flush(struct st_context_iface *stctxi, unsigned flags,
    }
 
    st_flush(st, fence, pipe_flags);
+
+   if ((flags & ST_FLUSH_WAIT) && fence) {
+      st->pipe->screen->fence_finish(st->pipe->screen, NULL, *fence,
+                                     PIPE_TIMEOUT_INFINITE);
+      st->pipe->screen->fence_reference(st->pipe->screen, fence, NULL);
+   }
+
    if (flags & ST_FLUSH_FRONT)
       st_manager_flush_frontbuffer(st);
 }
@@ -622,6 +627,22 @@ st_context_destroy(struct st_context_iface *stctxi)
    st_destroy_context(st);
 }
 
+static void
+st_start_thread(struct st_context_iface *stctxi)
+{
+   struct st_context *st = (struct st_context *) stctxi;
+
+   _mesa_glthread_init(st->ctx);
+}
+
+static void
+st_thread_finish(struct st_context_iface *stctxi)
+{
+   struct st_context *st = (struct st_context *) stctxi;
+
+   _mesa_glthread_finish(st->ctx);
+}
+
 static struct st_context_iface *
 st_api_create_context(struct st_api *stapi, struct st_manager *smapi,
                       const struct st_context_attribs *attribs,
@@ -716,6 +737,8 @@ st_api_create_context(struct st_api *stapi, struct st_manager *smapi,
    st->iface.teximage = st_context_teximage;
    st->iface.copy = st_context_copy;
    st->iface.share = st_context_share;
+   st->iface.start_thread = st_start_thread;
+   st->iface.thread_finish = st_thread_finish;
    st->iface.st_context_private = (void *) smapi;
    st->iface.cso_context = st->cso_context;
    st->iface.pipe = st->pipe;
@@ -821,44 +844,15 @@ st_manager_flush_frontbuffer(struct st_context *st)
    struct st_framebuffer *stfb = st_ws_framebuffer(st->ctx->DrawBuffer);
    struct st_renderbuffer *strb = NULL;
 
+   assert(st->ctx->DrawBuffer != _mesa_get_incomplete_framebuffer());
+
    if (stfb)
       strb = st_renderbuffer(stfb->Base.Attachment[BUFFER_FRONT_LEFT].Renderbuffer);
    if (!strb)
       return;
 
    /* never a dummy fb */
-   assert(&stfb->Base != _mesa_get_incomplete_framebuffer());
    stfb->iface->flush_front(&st->iface, stfb->iface, ST_ATTACHMENT_FRONT_LEFT);
-}
-
-/**
- * Return the surface of an EGLImage.
- * FIXME: I think this should operate on resources, not surfaces
- */
-struct pipe_surface *
-st_manager_get_egl_image_surface(struct st_context *st, void *eglimg)
-{
-   struct st_manager *smapi =
-      (struct st_manager *) st->iface.st_context_private;
-   struct st_egl_image stimg;
-   struct pipe_surface *ps, surf_tmpl;
-
-   if (!smapi || !smapi->get_egl_image)
-      return NULL;
-
-   memset(&stimg, 0, sizeof(stimg));
-   if (!smapi->get_egl_image(smapi, eglimg, &stimg))
-      return NULL;
-
-   u_surface_default_template(&surf_tmpl, stimg.texture);
-   surf_tmpl.format = stimg.format;
-   surf_tmpl.u.tex.level = stimg.level;
-   surf_tmpl.u.tex.first_layer = stimg.layer;
-   surf_tmpl.u.tex.last_layer = stimg.layer;
-   ps = st->pipe->create_surface(st->pipe, stimg.texture, &surf_tmpl);
-   pipe_resource_reference(&stimg.texture, NULL);
-
-   return ps;
 }
 
 /**
@@ -879,7 +873,8 @@ st_manager_validate_framebuffers(struct st_context *st)
 }
 
 /**
- * Add a color renderbuffer on demand.
+ * Add a color renderbuffer on demand.  The FBO must correspond to a window,
+ * not a user-created FBO.
  */
 boolean
 st_manager_add_color_renderbuffer(struct st_context *st,
@@ -891,6 +886,8 @@ st_manager_add_color_renderbuffer(struct st_context *st,
    /* FBO */
    if (!stfb)
       return FALSE;
+
+   assert(_mesa_is_winsys_fbo(fb));
 
    if (stfb->Base.Attachment[idx].Renderbuffer)
       return TRUE;

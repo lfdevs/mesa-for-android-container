@@ -126,38 +126,6 @@ out_no_vws:
    return NULL;
 }
 
-static inline boolean
-vmw_dri1_intersect_src_bbox(struct drm_clip_rect *dst,
-			    int dst_x,
-			    int dst_y,
-			    const struct drm_clip_rect *src,
-			    const struct drm_clip_rect *bbox)
-{
-   int xy1;
-   int xy2;
-
-   xy1 = ((int)src->x1 > (int)bbox->x1 + dst_x) ? src->x1 :
-      (int)bbox->x1 + dst_x;
-   xy2 = ((int)src->x2 < (int)bbox->x2 + dst_x) ? src->x2 :
-      (int)bbox->x2 + dst_x;
-   if (xy1 >= xy2 || xy1 < 0)
-      return FALSE;
-
-   dst->x1 = xy1;
-   dst->x2 = xy2;
-
-   xy1 = ((int)src->y1 > (int)bbox->y1 + dst_y) ? src->y1 :
-      (int)bbox->y1 + dst_y;
-   xy2 = ((int)src->y2 < (int)bbox->y2 + dst_y) ? src->y2 :
-      (int)bbox->y2 + dst_y;
-   if (xy1 >= xy2 || xy1 < 0)
-      return FALSE;
-
-   dst->y1 = xy1;
-   dst->y2 = xy2;
-   return TRUE;
-}
-
 /**
  * vmw_drm_gb_surface_from_handle - Create a shared surface
  *

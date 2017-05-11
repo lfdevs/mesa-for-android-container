@@ -506,6 +506,7 @@ struct vc4_compile {
         struct qblock *cur_block;
         struct qblock *loop_cont_block;
         struct qblock *loop_break_block;
+        struct qblock *last_top_block;
 
         struct list_head qpu_inst_list;
 

@@ -97,7 +97,7 @@ vc4_bo_from_cache(struct vc4_screen *screen, uint32_t size, const char *name)
                 return NULL;
 
         struct vc4_bo *bo = NULL;
-        pipe_mutex_lock(cache->lock);
+        mtx_lock(&cache->lock);
         if (!list_empty(&cache->size_list[page_index])) {
                 bo = LIST_ENTRY(struct vc4_bo, cache->size_list[page_index].next,
                                 size_list);
@@ -107,7 +107,7 @@ vc4_bo_from_cache(struct vc4_screen *screen, uint32_t size, const char *name)
                  * user will proceed to CPU map it and fill it with stuff.
                  */
                 if (!vc4_bo_wait(bo, 0, NULL)) {
-                        pipe_mutex_unlock(cache->lock);
+                        mtx_unlock(&cache->lock);
                         return NULL;
                 }
 
@@ -116,7 +116,7 @@ vc4_bo_from_cache(struct vc4_screen *screen, uint32_t size, const char *name)
 
                 bo->name = name;
         }
-        pipe_mutex_unlock(cache->lock);
+        mtx_unlock(&cache->lock);
         return bo;
 }
 
@@ -188,9 +188,9 @@ vc4_bo_last_unreference(struct vc4_bo *bo)
 
         struct timespec time;
         clock_gettime(CLOCK_MONOTONIC, &time);
-        pipe_mutex_lock(screen->bo_cache.lock);
+        mtx_lock(&screen->bo_cache.lock);
         vc4_bo_last_unreference_locked_timed(bo, time.tv_sec);
-        pipe_mutex_unlock(screen->bo_cache.lock);
+        mtx_unlock(&screen->bo_cache.lock);
 }
 
 static void
@@ -261,13 +261,13 @@ free_stale_bos(struct vc4_screen *screen, time_t time)
 static void
 vc4_bo_cache_free_all(struct vc4_bo_cache *cache)
 {
-        pipe_mutex_lock(cache->lock);
+        mtx_lock(&cache->lock);
         list_for_each_entry_safe(struct vc4_bo, bo, &cache->time_list,
                                  time_list) {
                 vc4_bo_remove_from_cache(cache, bo);
                 vc4_bo_free(bo);
         }
-        pipe_mutex_unlock(cache->lock);
+        mtx_unlock(&cache->lock);
 }
 
 void
@@ -322,7 +322,7 @@ vc4_bo_open_handle(struct vc4_screen *screen,
 
         assert(size);
 
-        pipe_mutex_lock(screen->bo_handles_mutex);
+        mtx_lock(&screen->bo_handles_mutex);
 
         bo = util_hash_table_get(screen->bo_handles, (void*)(uintptr_t)handle);
         if (bo) {
@@ -347,7 +347,7 @@ vc4_bo_open_handle(struct vc4_screen *screen,
         util_hash_table_set(screen->bo_handles, (void *)(uintptr_t)handle, bo);
 
 done:
-        pipe_mutex_unlock(screen->bo_handles_mutex);
+        mtx_unlock(&screen->bo_handles_mutex);
         return bo;
 }
 
@@ -401,10 +401,10 @@ vc4_bo_get_dmabuf(struct vc4_bo *bo)
                 return -1;
         }
 
-        pipe_mutex_lock(bo->screen->bo_handles_mutex);
+        mtx_lock(&bo->screen->bo_handles_mutex);
         bo->private = false;
         util_hash_table_set(bo->screen->bo_handles, (void *)(uintptr_t)bo->handle, bo);
-        pipe_mutex_unlock(bo->screen->bo_handles_mutex);
+        mtx_unlock(&bo->screen->bo_handles_mutex);
 
         return fd;
 }

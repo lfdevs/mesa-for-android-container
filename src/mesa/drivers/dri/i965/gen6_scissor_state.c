@@ -45,8 +45,7 @@ gen6_upload_scissor_state(struct brw_context *brw)
    /* BRW_NEW_VIEWPORT_COUNT */
    const unsigned viewport_count = brw->clip.viewport_count;
 
-   scissor = brw_state_batch(brw, AUB_TRACE_SCISSOR_STATE,
-			     sizeof(*scissor) * viewport_count, 32,
+   scissor = brw_state_batch(brw, sizeof(*scissor) * viewport_count, 32,
                              &scissor_state_offset);
 
    /* _NEW_SCISSOR | _NEW_BUFFERS | _NEW_VIEWPORT */

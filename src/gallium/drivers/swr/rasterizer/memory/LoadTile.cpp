@@ -92,7 +92,7 @@ void LoadHotTile(
             pfnLoadTiles = LoadMacroTile<TilingTraits<SWR_TILE_MODE_WMAJOR, 8>, R8_UINT, R8_UINT>::Load;
             break;
         default:
-            SWR_ASSERT(0, "Unsupported tiling mode");
+            SWR_INVALID("Unsupported tiling mode");
             break;
         }
     }
@@ -108,7 +108,7 @@ void LoadHotTile(
             pfnLoadTiles = sLoadTilesDepthTable_SWR_TILE_MODE_YMAJOR[pSrcSurface->format];
             break;
         default:
-            SWR_ASSERT(0, "Unsupported tiling mode");
+            SWR_INVALID("Unsupported tiling mode");
             break;
         }
     }
@@ -125,14 +125,14 @@ void LoadHotTile(
             pfnLoadTiles = LoadMacroTile<TilingTraits<SWR_TILE_MODE_WMAJOR, 8>, R8_UINT, R8_UINT>::Load;
             break;
         default:
-            SWR_ASSERT(0, "Unsupported tiling mode");
+            SWR_INVALID("Unsupported tiling mode");
             break;
         }
     }
 
     if (pfnLoadTiles == nullptr)
     {
-        SWR_ASSERT(false, "Unsupported format for load tile");
+        SWR_INVALID("Unsupported format for load tile");
         return;
     }
 

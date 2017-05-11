@@ -71,6 +71,10 @@ emit_fb_vgpu9(struct svga_context *svga)
          if (svga->curr.nr_fbs++ > MAX_RT_PER_BATCH)
             return PIPE_ERROR_OUT_OF_MEMORY;
 
+         /* Check to see if we need to propagate the render target surface */
+         if (hw->cbufs[i] && svga_surface_needs_propagation(hw->cbufs[i]))
+            svga_propagate_surface(svga, hw->cbufs[i], TRUE);
+
          ret = SVGA3D_SetRenderTarget(svga->swc, SVGA3D_RT_COLOR0 + i,
                                       curr->cbufs[i]);
          if (ret != PIPE_OK)
@@ -84,6 +88,10 @@ emit_fb_vgpu9(struct svga_context *svga)
       ret = SVGA3D_SetRenderTarget(svga->swc, SVGA3D_RT_DEPTH, curr->zsbuf);
       if (ret != PIPE_OK)
          return ret;
+
+      /* Check to see if we need to propagate the depth stencil surface */
+      if (hw->zsbuf && svga_surface_needs_propagation(hw->zsbuf))
+         svga_propagate_surface(svga, hw->zsbuf, TRUE);
 
       if (curr->zsbuf &&
           util_format_is_depth_and_stencil(curr->zsbuf->format)) {
@@ -174,6 +182,12 @@ emit_fb_vgpu10(struct svga_context *svga)
 
    assert(svga_have_vgpu10(svga));
 
+   /* Reset the has_backed_views flag.
+    * The flag is set in svga_validate_surface_view() if
+    * a backed surface view is used.
+    */
+   svga->state.hw_draw.has_backed_views = FALSE;
+
    /* Setup render targets array.  Note that we loop over the max of the
     * number of previously bound buffers and the new buffers to unbind
     * any previously bound buffers when the new number of buffers is less
@@ -227,7 +241,8 @@ emit_fb_vgpu10(struct svga_context *svga)
             /* propagate the backed view surface before unbinding it */
             if (hw->cbufs[i] && svga_surface(hw->cbufs[i])->backed) {
                svga_propagate_surface(svga,
-                                      &svga_surface(hw->cbufs[i])->backed->base);
+                                      &svga_surface(hw->cbufs[i])->backed->base,
+                                      TRUE);
             }
             pipe_surface_reference(&hw->cbufs[i], curr->cbufs[i]);
          }
@@ -237,7 +252,8 @@ emit_fb_vgpu10(struct svga_context *svga)
       if (hw->zsbuf != curr->zsbuf) {
          /* propagate the backed view surface before unbinding it */
          if (hw->zsbuf && svga_surface(hw->zsbuf)->backed) {
-            svga_propagate_surface(svga, &svga_surface(hw->zsbuf)->backed->base);
+            svga_propagate_surface(svga, &svga_surface(hw->zsbuf)->backed->base,
+                                   TRUE);
          }
          pipe_surface_reference(&hw->zsbuf, curr->zsbuf);
       }
@@ -393,7 +409,7 @@ emit_viewport( struct svga_context *svga,
    /* Enable prescale to adjust vertex positions to match
       VGPU10 convention only if rasterization is enabled.
     */
-   if (svga->curr.rast->templ.rasterizer_discard) {
+   if (svga->curr.rast && svga->curr.rast->templ.rasterizer_discard) {
       degenerate = TRUE;
       goto out;
    } else {
@@ -497,7 +513,7 @@ emit_viewport( struct svga_context *svga,
     * screen-space coordinates slightly relative to D3D which is
     * what hardware implements natively.
     */
-   if (svga->curr.rast->templ.half_pixel_center) {
+   if (svga->curr.rast && svga->curr.rast->templ.half_pixel_center) {
       float adjust_x = 0.0;
       float adjust_y = 0.0;
 
@@ -524,6 +540,9 @@ emit_viewport( struct svga_context *svga,
          case PIPE_PRIM_TRIANGLES:
             adjust_x = -0.5;
             adjust_y = -0.5;
+            break;
+         default:
+            /* nothing */
             break;
          }
       }

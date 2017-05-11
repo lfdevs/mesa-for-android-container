@@ -54,6 +54,7 @@ struct nv50_graph_state {
    uint8_t prim_size;
    uint16_t scissor;
    bool seamless_cube_map;
+   bool mul_zero_wins;
 };
 
 struct nv50_screen {

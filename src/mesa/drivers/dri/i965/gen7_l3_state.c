@@ -49,12 +49,12 @@ get_pipeline_state_l3_weights(const struct brw_context *brw)
    bool needs_dc = false, needs_slm = false;
 
    for (unsigned i = 0; i < ARRAY_SIZE(stage_states); i++) {
-      const struct gl_shader_program *prog =
+      const struct gl_program *prog =
          brw->ctx._Shader->CurrentProgram[stage_states[i]->stage];
       const struct brw_stage_prog_data *prog_data = stage_states[i]->prog_data;
 
-      needs_dc |= (prog && (prog->data->NumAtomicBuffers ||
-                            prog->data->NumShaderStorageBlocks)) ||
+      needs_dc |= (prog && (prog->sh.data->NumAtomicBuffers ||
+                            prog->sh.data->NumShaderStorageBlocks)) ||
          (prog_data && (prog_data->total_scratch || prog_data->nr_image_params));
       needs_slm |= prog_data && prog_data->total_shared;
    }

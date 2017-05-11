@@ -27,10 +27,10 @@
 * Notes:
 *
 ******************************************************************************/
+#include "builder.h"
 #include "jit_api.h"
 #include "streamout_jit.h"
-#include "builder.h"
-#include "state_llvm.h"
+#include "gen_state_llvm.h"
 #include "llvm/IR/DataLayout.h"
 
 #include <sstream>
@@ -159,7 +159,11 @@ struct StreamOutJit : public Builder
 
             // cast input to <4xfloat>
             Value* src = BITCAST(vpackedAttrib, simd4Ty);
-            CALL(maskStore, {pOut, ToMask(packedMask), src});
+
+            // cast mask to <4xint>
+            Value* mask = ToMask(packedMask);
+            mask = BITCAST(mask, VectorType::get(IRB()->getInt32Ty(), 4));
+            CALL(maskStore, {pOut, mask, src});
         }
 
         // increment SO buffer

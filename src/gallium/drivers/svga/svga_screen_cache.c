@@ -32,6 +32,7 @@
 #include "svga_winsys.h"
 #include "svga_screen.h"
 #include "svga_screen_cache.h"
+#include "svga_context.h"
 
 
 #define SVGA_SURFACE_CACHE_ENABLED 1
@@ -104,7 +105,7 @@ svga_screen_cache_lookup(struct svga_screen *svgascreen,
 
    bucket = svga_screen_cache_bucket(key);
 
-   pipe_mutex_lock(cache->mutex);
+   mtx_lock(&cache->mutex);
 
    curr = cache->bucket[bucket].next;
    next = curr->next;
@@ -154,7 +155,7 @@ svga_screen_cache_lookup(struct svga_screen *svgascreen,
       next = curr->next;
    }
 
-   pipe_mutex_unlock(cache->mutex);
+   mtx_unlock(&cache->mutex);
 
    if (SVGA_DEBUG & DEBUG_DMA)
       debug_printf("%s: cache %s after %u tries (bucket %d)\n", __FUNCTION__,
@@ -226,12 +227,12 @@ svga_screen_cache_add(struct svga_screen *svgascreen,
    surf_size = surface_size(key);
 
    *p_handle = NULL;
-   pipe_mutex_lock(cache->mutex);
+   mtx_lock(&cache->mutex);
 
    if (surf_size >= SVGA_HOST_SURFACE_CACHE_BYTES) {
       /* this surface is too large to cache, just free it */
       sws->surface_reference(sws, &handle, NULL);
-      pipe_mutex_unlock(cache->mutex);
+      mtx_unlock(&cache->mutex);
       return;
    }
 
@@ -249,7 +250,7 @@ svga_screen_cache_add(struct svga_screen *svgascreen,
           * just discard this surface.
           */
          sws->surface_reference(sws, &handle, NULL);
-         pipe_mutex_unlock(cache->mutex);
+         mtx_unlock(&cache->mutex);
          return;
       }
    }
@@ -300,7 +301,7 @@ svga_screen_cache_add(struct svga_screen *svgascreen,
       sws->surface_reference(sws, &handle, NULL);
    }
 
-   pipe_mutex_unlock(cache->mutex);
+   mtx_unlock(&cache->mutex);
 }
 
 
@@ -310,6 +311,7 @@ svga_screen_cache_add(struct svga_screen *svgascreen,
  */
 void
 svga_screen_cache_flush(struct svga_screen *svgascreen,
+                        struct svga_context *svga,
                         struct pipe_fence_handle *fence)
 {
    struct svga_host_surface_cache *cache = &svgascreen->cache;
@@ -318,7 +320,7 @@ svga_screen_cache_flush(struct svga_screen *svgascreen,
    struct list_head *curr, *next;
    unsigned bucket;
 
-   pipe_mutex_lock(cache->mutex);
+   mtx_lock(&cache->mutex);
 
    /* Loop over entries in the invalidated list */
    curr = cache->invalidated.next;
@@ -357,8 +359,10 @@ svga_screen_cache_flush(struct svga_screen *svgascreen,
          /* remove entry from the validated list */
          LIST_DEL(&entry->head);
 
-         /* it is now safe to invalidate the surface content. */
-         sws->surface_invalidate(sws, entry->handle);
+         /* It is now safe to invalidate the surface content.
+          * It will be done using the current context.
+          */
+         svga->swc->surface_invalidate(svga->swc, entry->handle);
 
          /* add the entry to the invalidated list */
          LIST_ADD(&entry->head, &cache->invalidated);
@@ -368,7 +372,7 @@ svga_screen_cache_flush(struct svga_screen *svgascreen,
       next = curr->next;
    }
 
-   pipe_mutex_unlock(cache->mutex);
+   mtx_unlock(&cache->mutex);
 }
 
 
@@ -396,7 +400,7 @@ svga_screen_cache_cleanup(struct svga_screen *svgascreen)
          sws->fence_reference(sws, &cache->entries[i].fence, NULL);
    }
 
-   pipe_mutex_destroy(cache->mutex);
+   mtx_destroy(&cache->mutex);
 }
 
 
@@ -408,7 +412,7 @@ svga_screen_cache_init(struct svga_screen *svgascreen)
 
    assert(cache->total_size == 0);
 
-   pipe_mutex_init(cache->mutex);
+   (void) mtx_init(&cache->mutex, mtx_plain);
 
    for (i = 0; i < SVGA_HOST_SURFACE_CACHE_BUCKETS; ++i)
       LIST_INITHEAD(&cache->bucket[i]);

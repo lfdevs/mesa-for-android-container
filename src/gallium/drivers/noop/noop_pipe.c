@@ -29,6 +29,7 @@
 #include "util/u_memory.h"
 #include "util/u_inlines.h"
 #include "util/u_format.h"
+#include "util/u_upload_mgr.h"
 #include "noop_public.h"
 
 DEBUG_GET_ONCE_BOOL_OPTION(noop, "GALLIUM_NOOP", FALSE)
@@ -289,6 +290,9 @@ static void noop_flush(struct pipe_context *ctx,
 
 static void noop_destroy_context(struct pipe_context *ctx)
 {
+   if (ctx->stream_uploader)
+      u_upload_destroy(ctx->stream_uploader);
+
    FREE(ctx);
 }
 
@@ -310,8 +314,17 @@ static struct pipe_context *noop_create_context(struct pipe_screen *screen,
 
    if (!ctx)
       return NULL;
+
    ctx->screen = screen;
    ctx->priv = priv;
+
+   ctx->stream_uploader = u_upload_create_default(ctx);
+   if (!ctx->stream_uploader) {
+      FREE(ctx);
+      return NULL;
+   }
+   ctx->const_uploader = ctx->stream_uploader;
+
    ctx->destroy = noop_destroy_context;
    ctx->flush = noop_flush;
    ctx->clear = noop_clear;
@@ -378,7 +391,9 @@ static float noop_get_paramf(struct pipe_screen* pscreen,
    return screen->get_paramf(screen, param);
 }
 
-static int noop_get_shader_param(struct pipe_screen* pscreen, unsigned shader, enum pipe_shader_cap param)
+static int noop_get_shader_param(struct pipe_screen* pscreen,
+                                 enum pipe_shader_type shader,
+                                 enum pipe_shader_cap param)
 {
    struct pipe_screen *screen = ((struct noop_pipe_screen*)pscreen)->oscreen;
 

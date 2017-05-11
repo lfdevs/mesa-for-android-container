@@ -1423,12 +1423,14 @@ static const __DRIdri2LoaderExtension dri2_loader_extension = {
 static const __DRIextension *dri2_loader_extensions_old[] = {
    &dri2_loader_extension_old.base,
    &image_lookup_extension.base,
+   &background_callable_extension.base,
    NULL,
 };
 
 static const __DRIextension *dri2_loader_extensions[] = {
    &dri2_loader_extension.base,
    &image_lookup_extension.base,
+   &background_callable_extension.base,
    NULL,
 };
 

@@ -169,6 +169,8 @@ meta_copy_buffer_to_image(struct radv_cmd_buffer *cmd_buffer,
 			.pitch = buf_extent_el.width,
 		};
 
+		if (image->type == VK_IMAGE_TYPE_3D)
+			img_bsurf.layer = img_offset_el.z;
 		/* Loop through each 3D or array slice */
 		unsigned num_slices_3d = img_extent_el.depth;
 		unsigned num_slices_array = pRegions[r].imageSubresource.layerCount;
@@ -276,6 +278,8 @@ meta_copy_image_to_buffer(struct radv_cmd_buffer *cmd_buffer,
 			.pitch = buf_extent_el.width,
 		};
 
+		if (image->type == VK_IMAGE_TYPE_3D)
+			img_info.layer = img_offset_el.z;
 		/* Loop through each 3D or array slice */
 		unsigned num_slices_3d = img_extent_el.depth;
 		unsigned num_slices_array = pRegions[r].imageSubresource.layerCount;
@@ -369,13 +373,16 @@ meta_copy_image(struct radv_cmd_buffer *cmd_buffer,
 		const VkOffset3D src_offset_el =
 			meta_region_offset_el(src_image, &pRegions[r].srcOffset);
 		const VkExtent3D img_extent_el =
-			meta_region_extent_el(src_image, &pRegions[r].extent);
+			meta_region_extent_el(dest_image, &pRegions[r].extent);
 
 		/* Start creating blit rect */
 		struct radv_meta_blit2d_rect rect = {
 			.width = img_extent_el.width,
 			.height = img_extent_el.height,
 		};
+
+		if (dest_image->type == VK_IMAGE_TYPE_3D)
+			b_dst.layer = dst_offset_el.z;
 
 		/* Loop through each 3D or array slice */
 		unsigned num_slices_3d = img_extent_el.depth;
@@ -426,4 +433,24 @@ void radv_CmdCopyImage(
 
 	meta_copy_image(cmd_buffer, src_image, dest_image,
 			regionCount, pRegions);
+}
+
+void radv_blit_to_prime_linear(struct radv_cmd_buffer *cmd_buffer,
+			       struct radv_image *image,
+			       struct radv_image *linear_image)
+{
+	struct VkImageCopy image_copy = { 0 };
+
+	image_copy.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	image_copy.srcSubresource.layerCount = 1;
+
+	image_copy.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	image_copy.dstSubresource.layerCount = 1;
+
+	image_copy.extent.width = image->extent.width;
+	image_copy.extent.height = image->extent.height;
+	image_copy.extent.depth = 1;
+
+	meta_copy_image(cmd_buffer, image, linear_image,
+			1, &image_copy);
 }

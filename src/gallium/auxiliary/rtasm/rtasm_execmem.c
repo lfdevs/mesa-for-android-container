@@ -63,7 +63,7 @@
 
 #define EXEC_HEAP_SIZE (10*1024*1024)
 
-pipe_static_mutex(exec_mutex);
+static mtx_t exec_mutex = _MTX_INITIALIZER_NP;
 
 static struct mem_block *exec_heap = NULL;
 static unsigned char *exec_mem = NULL;
@@ -90,7 +90,7 @@ rtasm_exec_malloc(size_t size)
    struct mem_block *block = NULL;
    void *addr = NULL;
 
-   pipe_mutex_lock(exec_mutex);
+   mtx_lock(&exec_mutex);
 
    if (!init_heap())
       goto bail;
@@ -106,7 +106,7 @@ rtasm_exec_malloc(size_t size)
       debug_printf("rtasm_exec_malloc failed\n");
 
 bail:
-   pipe_mutex_unlock(exec_mutex);
+   mtx_unlock(&exec_mutex);
    
    return addr;
 }
@@ -115,7 +115,7 @@ bail:
 void 
 rtasm_exec_free(void *addr)
 {
-   pipe_mutex_lock(exec_mutex);
+   mtx_lock(&exec_mutex);
 
    if (exec_heap) {
       struct mem_block *block = u_mmFindBlock(exec_heap, (unsigned char *)addr - exec_mem);
@@ -124,7 +124,7 @@ rtasm_exec_free(void *addr)
 	 u_mmFreeMem(block);
    }
 
-   pipe_mutex_unlock(exec_mutex);
+   mtx_unlock(&exec_mutex);
 }
 
 

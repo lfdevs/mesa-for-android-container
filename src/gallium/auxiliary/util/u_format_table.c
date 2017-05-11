@@ -43499,6 +43499,68 @@ util_format_nv21_description = {
 };
 
 const struct util_format_description
+util_format_p016_description = {
+   PIPE_FORMAT_P016,
+   "PIPE_FORMAT_P016",
+   "p016",
+   {1, 1, 32},	/* block */
+   UTIL_FORMAT_LAYOUT_OTHER,
+   2,	/* nr_channels */
+   FALSE,	/* is_array */
+   FALSE,	/* is_bitmask */
+   FALSE,	/* is_mixed */
+#ifdef PIPE_ARCH_BIG_ENDIAN
+   {
+      {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 16, 16},	/* x = x */
+      {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 16, 0},	/* y = y */
+      {0, 0, 0, 0, 0},
+      {0, 0, 0, 0, 0}
+   },
+#else
+   {
+      {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 16, 0},	/* x = x */
+      {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 16, 16},	/* y = y */
+      {0, 0, 0, 0, 0},
+      {0, 0, 0, 0, 0}
+   },
+#endif
+#ifdef PIPE_ARCH_BIG_ENDIAN
+   {
+      PIPE_SWIZZLE_X,	/* y */
+      PIPE_SWIZZLE_Y,	/* u */
+      PIPE_SWIZZLE_Z,	/* v */
+      PIPE_SWIZZLE_W	/* ignored */
+   },
+#else
+   {
+      PIPE_SWIZZLE_X,	/* y */
+      PIPE_SWIZZLE_Y,	/* u */
+      PIPE_SWIZZLE_Z,	/* v */
+      PIPE_SWIZZLE_W	/* ignored */
+   },
+#endif
+   UTIL_FORMAT_COLORSPACE_YUV,
+   &util_format_p016_unpack_rgba_8unorm,
+   &util_format_p016_pack_rgba_8unorm,
+   NULL, /* fetch_rgba_8unorm */
+   &util_format_p016_unpack_rgba_float,
+   &util_format_p016_pack_rgba_float,
+   &util_format_p016_fetch_rgba_float,
+   NULL, /* unpack_z_32unorm */
+   NULL, /* pack_z_32unorm */
+   NULL, /* unpack_z_float */
+   NULL, /* pack_z_float */
+   NULL, /* unpack_s_8uint */
+   NULL, /* pack_s_8uint */
+   NULL, /* unpack_rgba_uint */
+   NULL, /* pack_rgba_uint */
+   NULL, /* unpack_rgba_sint */
+   NULL, /* pack_rgba_sint */
+   NULL, /* fetch_rgba_uint */
+   NULL  /* fetch_rgba_sint */
+};
+
+const struct util_format_description
 util_format_a4r4_unorm_description = {
    PIPE_FORMAT_A4R4_UNORM,
    "PIPE_FORMAT_A4R4_UNORM",
@@ -49376,6 +49438,8 @@ util_format_description(enum pipe_format format)
       return &util_format_nv12_description;
    case PIPE_FORMAT_NV21:
       return &util_format_nv21_description;
+   case PIPE_FORMAT_P016:
+      return &util_format_p016_description;
    case PIPE_FORMAT_A4R4_UNORM:
       return &util_format_a4r4_unorm_description;
    case PIPE_FORMAT_R4A4_UNORM:

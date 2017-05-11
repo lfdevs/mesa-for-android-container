@@ -72,17 +72,13 @@ brw_upload_tcs_ubo_surfaces(struct brw_context *brw)
    struct gl_context *ctx = &brw->ctx;
 
    /* _NEW_PROGRAM */
-   struct gl_shader_program *prog =
+   struct gl_program *prog =
       ctx->_Shader->CurrentProgram[MESA_SHADER_TESS_CTRL];
-
-   if (!prog || !prog->_LinkedShaders[MESA_SHADER_TESS_CTRL])
-      return;
 
    /* BRW_NEW_TCS_PROG_DATA */
    struct brw_stage_prog_data *prog_data = brw->tcs.base.prog_data;
 
-   brw_upload_ubo_surfaces(brw, prog->_LinkedShaders[MESA_SHADER_TESS_CTRL]->Program,
-			   &brw->tcs.base, prog_data);
+   brw_upload_ubo_surfaces(brw, prog, &brw->tcs.base, prog_data);
 }
 
 const struct brw_tracked_state brw_tcs_ubo_surfaces = {

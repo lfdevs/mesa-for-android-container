@@ -66,7 +66,8 @@ update_need_pipeline(struct svga_context *svga, unsigned dirty)
 
    /* SVGA_NEW_RAST, SVGA_NEW_REDUCED_PRIMITIVE
     */
-   if (svga->curr.rast->need_pipeline & (1 << svga->curr.reduced_prim)) {
+   if (svga->curr.rast &&
+       (svga->curr.rast->need_pipeline & (1 << svga->curr.reduced_prim))) {
       SVGA_DBG(DEBUG_SWTNL, "%s: rast need_pipeline (0x%x) & prim (0x%x)\n",
                  __FUNCTION__,
                  svga->curr.rast->need_pipeline,
@@ -103,7 +104,7 @@ update_need_pipeline(struct svga_context *svga, unsigned dirty)
 
    /* SVGA_NEW_FS, SVGA_NEW_RAST, SVGA_NEW_REDUCED_PRIMITIVE
     */
-   if (svga->curr.reduced_prim == PIPE_PRIM_POINTS) {
+   if (svga->curr.rast && svga->curr.reduced_prim == PIPE_PRIM_POINTS) {
       unsigned sprite_coord_gen = svga->curr.rast->templ.sprite_coord_enable;
       unsigned generic_inputs =
          svga->curr.fs ? svga->curr.fs->generic_inputs : 0;

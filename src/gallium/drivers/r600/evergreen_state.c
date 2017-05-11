@@ -471,6 +471,7 @@ static void *evergreen_create_rs_state(struct pipe_context *ctx,
 	rs->clip_halfz = state->clip_halfz;
 	rs->flatshade = state->flatshade;
 	rs->sprite_coord_enable = state->sprite_coord_enable;
+	rs->rasterizer_discard = state->rasterizer_discard;
 	rs->two_side = state->light_twoside;
 	rs->clip_plane_enable = state->clip_plane_enable;
 	rs->pa_sc_line_stipple = state->line_stipple_enable ?
@@ -596,60 +597,282 @@ static void *evergreen_create_sampler_state(struct pipe_context *ctx,
 	return ss;
 }
 
-static struct pipe_sampler_view *
-texture_buffer_sampler_view(struct r600_context *rctx,
-			    struct r600_pipe_sampler_view *view,
-			    unsigned width0, unsigned height0)
-			    
+struct eg_buf_res_params {
+	enum pipe_format pipe_format;
+	unsigned offset;
+	unsigned size;
+	unsigned char swizzle[4];
+	bool uncached;
+};
+
+static void evergreen_fill_buffer_resource_words(struct r600_context *rctx,
+						 struct pipe_resource *buffer,
+						 struct eg_buf_res_params *params,
+						 bool *skip_mip_address_reloc,
+						 unsigned tex_resource_words[8])
 {
-	struct r600_texture *tmp = (struct r600_texture*)view->base.texture;
+	struct r600_texture *tmp = (struct r600_texture*)buffer;
 	uint64_t va;
-	int stride = util_format_get_blocksize(view->base.format);
+	int stride = util_format_get_blocksize(params->pipe_format);
 	unsigned format, num_format, format_comp, endian;
 	unsigned swizzle_res;
-	unsigned char swizzle[4];
 	const struct util_format_description *desc;
-	unsigned offset = view->base.u.buf.offset;
-	unsigned size = view->base.u.buf.size;
 
-	swizzle[0] = view->base.swizzle_r;
-	swizzle[1] = view->base.swizzle_g;
-	swizzle[2] = view->base.swizzle_b;
-	swizzle[3] = view->base.swizzle_a;
-
-	r600_vertex_data_type(view->base.format,
+	r600_vertex_data_type(params->pipe_format,
 			      &format, &num_format, &format_comp,
 			      &endian);
 
-	desc = util_format_description(view->base.format);
+	desc = util_format_description(params->pipe_format);
 
-	swizzle_res = r600_get_swizzle_combined(desc->swizzle, swizzle, TRUE);
+	swizzle_res = r600_get_swizzle_combined(desc->swizzle, params->swizzle, TRUE);
 
-	va = tmp->resource.gpu_address + offset;
-	view->tex_resource = &tmp->resource;
-
-	view->skip_mip_address_reloc = true;
-	view->tex_resource_words[0] = va;
-	view->tex_resource_words[1] = size - 1;
-	view->tex_resource_words[2] = S_030008_BASE_ADDRESS_HI(va >> 32UL) |
+	va = tmp->resource.gpu_address + params->offset;
+	*skip_mip_address_reloc = true;
+	tex_resource_words[0] = va;
+	tex_resource_words[1] = params->size - 1;
+	tex_resource_words[2] = S_030008_BASE_ADDRESS_HI(va >> 32UL) |
 		S_030008_STRIDE(stride) |
 		S_030008_DATA_FORMAT(format) |
 		S_030008_NUM_FORMAT_ALL(num_format) |
 		S_030008_FORMAT_COMP_ALL(format_comp) |
 		S_030008_ENDIAN_SWAP(endian);
-	view->tex_resource_words[3] = swizzle_res;
+	tex_resource_words[3] = swizzle_res | S_03000C_UNCACHED(params->uncached);
 	/*
 	 * in theory dword 4 is for number of elements, for use with resinfo,
 	 * but it seems to utterly fail to work, the amd gpu shader analyser
 	 * uses a const buffer to store the element sizes for buffer txq
 	 */
-	view->tex_resource_words[4] = 0;
-	view->tex_resource_words[5] = view->tex_resource_words[6] = 0;
-	view->tex_resource_words[7] = S_03001C_TYPE(V_03001C_SQ_TEX_VTX_VALID_BUFFER);
+	tex_resource_words[4] = 0;
+	tex_resource_words[5] = tex_resource_words[6] = 0;
+	tex_resource_words[7] = S_03001C_TYPE(V_03001C_SQ_TEX_VTX_VALID_BUFFER);
+}
+
+static struct pipe_sampler_view *
+texture_buffer_sampler_view(struct r600_context *rctx,
+			    struct r600_pipe_sampler_view *view,
+			    unsigned width0, unsigned height0)
+{
+	struct r600_texture *tmp = (struct r600_texture*)view->base.texture;
+	struct eg_buf_res_params params;
+
+	memset(&params, 0, sizeof(params));
+
+	params.pipe_format = view->base.format;
+	params.offset = view->base.u.buf.offset;
+	params.size = view->base.u.buf.size;
+	params.swizzle[0] = view->base.swizzle_r;
+	params.swizzle[1] = view->base.swizzle_g;
+	params.swizzle[2] = view->base.swizzle_b;
+	params.swizzle[3] = view->base.swizzle_a;
+
+	evergreen_fill_buffer_resource_words(rctx, view->base.texture,
+					     &params, &view->skip_mip_address_reloc,
+					     view->tex_resource_words);
+	view->tex_resource = &tmp->resource;
 
 	if (tmp->resource.gpu_address)
 		LIST_ADDTAIL(&view->list, &rctx->texture_buffers);
 	return &view->base;
+}
+
+struct eg_tex_res_params {
+	enum pipe_format pipe_format;
+	int force_level;
+	unsigned width0;
+	unsigned height0;
+	unsigned first_level;
+	unsigned last_level;
+	unsigned first_layer;
+	unsigned last_layer;
+	unsigned target;
+	unsigned char swizzle[4];
+};
+
+static int evergreen_fill_tex_resource_words(struct r600_context *rctx,
+					     struct pipe_resource *texture,
+					     struct eg_tex_res_params *params,
+					     bool *skip_mip_address_reloc,
+					     unsigned tex_resource_words[8])
+{
+	struct r600_screen *rscreen = (struct r600_screen*)rctx->b.b.screen;
+	struct r600_texture *tmp = (struct r600_texture*)texture;
+	unsigned format, endian;
+	uint32_t word4 = 0, yuv_format = 0, pitch = 0;
+	unsigned char array_mode = 0, non_disp_tiling = 0;
+	unsigned height, depth, width;
+	unsigned macro_aspect, tile_split, bankh, bankw, nbanks, fmask_bankh;
+	struct legacy_surf_level *surflevel;
+	unsigned base_level, first_level, last_level;
+	unsigned dim, last_layer;
+	uint64_t va;
+	bool do_endian_swap = FALSE;
+
+	tile_split = tmp->surface.u.legacy.tile_split;
+	surflevel = tmp->surface.u.legacy.level;
+
+	/* Texturing with separate depth and stencil. */
+	if (tmp->db_compatible) {
+		switch (params->pipe_format) {
+		case PIPE_FORMAT_Z32_FLOAT_S8X24_UINT:
+			params->pipe_format = PIPE_FORMAT_Z32_FLOAT;
+			break;
+		case PIPE_FORMAT_X8Z24_UNORM:
+		case PIPE_FORMAT_S8_UINT_Z24_UNORM:
+			/* Z24 is always stored like this for DB
+			 * compatibility.
+			 */
+			params->pipe_format = PIPE_FORMAT_Z24X8_UNORM;
+			break;
+		case PIPE_FORMAT_X24S8_UINT:
+		case PIPE_FORMAT_S8X24_UINT:
+		case PIPE_FORMAT_X32_S8X24_UINT:
+			params->pipe_format = PIPE_FORMAT_S8_UINT;
+			tile_split = tmp->surface.u.legacy.stencil_tile_split;
+			surflevel = tmp->surface.u.legacy.stencil_level;
+			break;
+		default:;
+		}
+	}
+
+	if (R600_BIG_ENDIAN)
+		do_endian_swap = !tmp->db_compatible;
+
+	format = r600_translate_texformat(rctx->b.b.screen, params->pipe_format,
+					  params->swizzle,
+					  &word4, &yuv_format, do_endian_swap);
+	assert(format != ~0);
+	if (format == ~0) {
+		return -1;
+	}
+
+	endian = r600_colorformat_endian_swap(format, do_endian_swap);
+
+	base_level = 0;
+	first_level = params->first_level;
+	last_level = params->last_level;
+	width = params->width0;
+	height = params->height0;
+	depth = texture->depth0;
+
+	if (params->force_level) {
+		base_level = params->force_level;
+		first_level = 0;
+		last_level = 0;
+		width = u_minify(width, params->force_level);
+		height = u_minify(height, params->force_level);
+		depth = u_minify(depth, params->force_level);
+	}
+
+	pitch = surflevel[base_level].nblk_x * util_format_get_blockwidth(params->pipe_format);
+	non_disp_tiling = tmp->non_disp_tiling;
+
+	switch (surflevel[base_level].mode) {
+	default:
+	case RADEON_SURF_MODE_LINEAR_ALIGNED:
+		array_mode = V_028C70_ARRAY_LINEAR_ALIGNED;
+		break;
+	case RADEON_SURF_MODE_2D:
+		array_mode = V_028C70_ARRAY_2D_TILED_THIN1;
+		break;
+	case RADEON_SURF_MODE_1D:
+		array_mode = V_028C70_ARRAY_1D_TILED_THIN1;
+		break;
+	}
+	macro_aspect = tmp->surface.u.legacy.mtilea;
+	bankw = tmp->surface.u.legacy.bankw;
+	bankh = tmp->surface.u.legacy.bankh;
+	tile_split = eg_tile_split(tile_split);
+	macro_aspect = eg_macro_tile_aspect(macro_aspect);
+	bankw = eg_bank_wh(bankw);
+	bankh = eg_bank_wh(bankh);
+	fmask_bankh = eg_bank_wh(tmp->fmask.bank_height);
+
+	/* 128 bit formats require tile type = 1 */
+	if (rscreen->b.chip_class == CAYMAN) {
+		if (util_format_get_blocksize(params->pipe_format) >= 16)
+			non_disp_tiling = 1;
+	}
+	nbanks = eg_num_banks(rscreen->b.info.r600_num_banks);
+
+	if (params->target == PIPE_TEXTURE_1D_ARRAY) {
+	        height = 1;
+		depth = texture->array_size;
+	} else if (params->target == PIPE_TEXTURE_2D_ARRAY) {
+		depth = texture->array_size;
+	} else if (params->target == PIPE_TEXTURE_CUBE_ARRAY)
+		depth = texture->array_size / 6;
+
+	va = tmp->resource.gpu_address;
+
+	/* array type views and views into array types need to use layer offset */
+	dim = params->target;
+	if (params->target != PIPE_TEXTURE_CUBE)
+		dim = MAX2(params->target, texture->target);
+
+	tex_resource_words[0] = (S_030000_DIM(r600_tex_dim(dim, texture->nr_samples)) |
+				       S_030000_PITCH((pitch / 8) - 1) |
+				       S_030000_TEX_WIDTH(width - 1));
+	if (rscreen->b.chip_class == CAYMAN)
+		tex_resource_words[0] |= CM_S_030000_NON_DISP_TILING_ORDER(non_disp_tiling);
+	else
+		tex_resource_words[0] |= S_030000_NON_DISP_TILING_ORDER(non_disp_tiling);
+	tex_resource_words[1] = (S_030004_TEX_HEIGHT(height - 1) |
+				       S_030004_TEX_DEPTH(depth - 1) |
+				       S_030004_ARRAY_MODE(array_mode));
+	tex_resource_words[2] = (surflevel[base_level].offset + va) >> 8;
+
+	*skip_mip_address_reloc = false;
+	/* TEX_RESOURCE_WORD3.MIP_ADDRESS */
+	if (texture->nr_samples > 1 && rscreen->has_compressed_msaa_texturing) {
+		if (tmp->is_depth) {
+			/* disable FMASK (0 = disabled) */
+			tex_resource_words[3] = 0;
+			*skip_mip_address_reloc = true;
+		} else {
+			/* FMASK should be in MIP_ADDRESS for multisample textures */
+			tex_resource_words[3] = (tmp->fmask.offset + va) >> 8;
+		}
+	} else if (last_level && texture->nr_samples <= 1) {
+		tex_resource_words[3] = (surflevel[1].offset + va) >> 8;
+	} else {
+		tex_resource_words[3] = (surflevel[base_level].offset + va) >> 8;
+	}
+
+	last_layer = params->last_layer;
+	if (params->target != texture->target && depth == 1) {
+		last_layer = params->first_layer;
+	}
+	tex_resource_words[4] = (word4 |
+				 S_030010_ENDIAN_SWAP(endian));
+	tex_resource_words[5] = S_030014_BASE_ARRAY(params->first_layer) |
+		                S_030014_LAST_ARRAY(last_layer);
+	tex_resource_words[6] = S_030018_TILE_SPLIT(tile_split);
+
+	if (texture->nr_samples > 1) {
+		unsigned log_samples = util_logbase2(texture->nr_samples);
+		if (rscreen->b.chip_class == CAYMAN) {
+			tex_resource_words[4] |= S_030010_LOG2_NUM_FRAGMENTS(log_samples);
+		}
+		/* LAST_LEVEL holds log2(nr_samples) for multisample textures */
+		tex_resource_words[5] |= S_030014_LAST_LEVEL(log_samples);
+		tex_resource_words[6] |= S_030018_FMASK_BANK_HEIGHT(fmask_bankh);
+	} else {
+		bool no_mip = first_level == last_level;
+
+		tex_resource_words[4] |= S_030010_BASE_LEVEL(first_level);
+		tex_resource_words[5] |= S_030014_LAST_LEVEL(last_level);
+		/* aniso max 16 samples */
+		tex_resource_words[6] |= S_030018_MAX_ANISO_RATIO(no_mip ? 0 : 4);
+	}
+
+	tex_resource_words[7] = S_03001C_DATA_FORMAT(format) |
+				      S_03001C_TYPE(V_03001C_SQ_TEX_VTX_VALID_TEXTURE) |
+				      S_03001C_BANK_WIDTH(bankw) |
+				      S_03001C_BANK_HEIGHT(bankh) |
+				      S_03001C_MACRO_TILE_ASPECT(macro_aspect) |
+				      S_03001C_NUM_BANKS(nbanks) |
+				      S_03001C_DEPTH_SAMPLE_ORDER(tmp->db_compatible);
+	return 0;
 }
 
 struct pipe_sampler_view *
@@ -660,20 +883,10 @@ evergreen_create_sampler_view_custom(struct pipe_context *ctx,
 				     unsigned force_level)
 {
 	struct r600_context *rctx = (struct r600_context*)ctx;
-	struct r600_screen *rscreen = (struct r600_screen*)ctx->screen;
 	struct r600_pipe_sampler_view *view = CALLOC_STRUCT(r600_pipe_sampler_view);
 	struct r600_texture *tmp = (struct r600_texture*)texture;
-	unsigned format, endian;
-	uint32_t word4 = 0, yuv_format = 0, pitch = 0;
-	unsigned char swizzle[4], array_mode = 0, non_disp_tiling = 0;
-	unsigned height, depth, width;
-	unsigned macro_aspect, tile_split, bankh, bankw, nbanks, fmask_bankh;
-	enum pipe_format pipe_format = state->format;
-	struct radeon_surf_level *surflevel;
-	unsigned base_level, first_level, last_level;
-	unsigned dim, last_layer;
-	uint64_t va;
-	bool do_endian_swap = FALSE;
+	struct eg_tex_res_params params;
+	int ret;
 
 	if (!view)
 		return NULL;
@@ -689,108 +902,28 @@ evergreen_create_sampler_view_custom(struct pipe_context *ctx,
 	if (state->target == PIPE_BUFFER)
 		return texture_buffer_sampler_view(rctx, view, width0, height0);
 
-	swizzle[0] = state->swizzle_r;
-	swizzle[1] = state->swizzle_g;
-	swizzle[2] = state->swizzle_b;
-	swizzle[3] = state->swizzle_a;
+	memset(&params, 0, sizeof(params));
+	params.pipe_format = state->format;
+	params.force_level = force_level;
+	params.width0 = width0;
+	params.height0 = height0;
+	params.first_level = state->u.tex.first_level;
+	params.last_level = state->u.tex.last_level;
+	params.first_layer = state->u.tex.first_layer;
+	params.last_layer = state->u.tex.last_layer;
+	params.target = state->target;
+	params.swizzle[0] = state->swizzle_r;
+	params.swizzle[1] = state->swizzle_g;
+	params.swizzle[2] = state->swizzle_b;
+	params.swizzle[3] = state->swizzle_a;
 
-	tile_split = tmp->surface.tile_split;
-	surflevel = tmp->surface.level;
-
-	/* Texturing with separate depth and stencil. */
-	if (tmp->db_compatible) {
-		switch (pipe_format) {
-		case PIPE_FORMAT_Z32_FLOAT_S8X24_UINT:
-			pipe_format = PIPE_FORMAT_Z32_FLOAT;
-			break;
-		case PIPE_FORMAT_X8Z24_UNORM:
-		case PIPE_FORMAT_S8_UINT_Z24_UNORM:
-			/* Z24 is always stored like this for DB
-			 * compatibility.
-			 */
-			pipe_format = PIPE_FORMAT_Z24X8_UNORM;
-			break;
-		case PIPE_FORMAT_X24S8_UINT:
-		case PIPE_FORMAT_S8X24_UINT:
-		case PIPE_FORMAT_X32_S8X24_UINT:
-			pipe_format = PIPE_FORMAT_S8_UINT;
-			tile_split = tmp->surface.stencil_tile_split;
-			surflevel = tmp->surface.stencil_level;
-			break;
-		default:;
-		}
-	}
-
-	if (R600_BIG_ENDIAN)
-		do_endian_swap = !tmp->db_compatible;
-
-	format = r600_translate_texformat(ctx->screen, pipe_format,
-					  swizzle,
-					  &word4, &yuv_format, do_endian_swap);
-	assert(format != ~0);
-	if (format == ~0) {
+	ret = evergreen_fill_tex_resource_words(rctx, texture, &params,
+						&view->skip_mip_address_reloc,
+						view->tex_resource_words);
+	if (ret != 0) {
 		FREE(view);
 		return NULL;
 	}
-
-	endian = r600_colorformat_endian_swap(format, do_endian_swap);
-
-	base_level = 0;
-	first_level = state->u.tex.first_level;
-	last_level = state->u.tex.last_level;
-	width = width0;
-	height = height0;
-	depth = texture->depth0;
-
-	if (force_level) {
-		base_level = force_level;
-		first_level = 0;
-		last_level = 0;
-		width = u_minify(width, force_level);
-		height = u_minify(height, force_level);
-		depth = u_minify(depth, force_level);
-	}
-
-	pitch = surflevel[base_level].nblk_x * util_format_get_blockwidth(pipe_format);
-	non_disp_tiling = tmp->non_disp_tiling;
-
-	switch (surflevel[base_level].mode) {
-	default:
-	case RADEON_SURF_MODE_LINEAR_ALIGNED:
-		array_mode = V_028C70_ARRAY_LINEAR_ALIGNED;
-		break;
-	case RADEON_SURF_MODE_2D:
-		array_mode = V_028C70_ARRAY_2D_TILED_THIN1;
-		break;
-	case RADEON_SURF_MODE_1D:
-		array_mode = V_028C70_ARRAY_1D_TILED_THIN1;
-		break;
-	}
-	macro_aspect = tmp->surface.mtilea;
-	bankw = tmp->surface.bankw;
-	bankh = tmp->surface.bankh;
-	tile_split = eg_tile_split(tile_split);
-	macro_aspect = eg_macro_tile_aspect(macro_aspect);
-	bankw = eg_bank_wh(bankw);
-	bankh = eg_bank_wh(bankh);
-	fmask_bankh = eg_bank_wh(tmp->fmask.bank_height);
-
-	/* 128 bit formats require tile type = 1 */
-	if (rscreen->b.chip_class == CAYMAN) {
-		if (util_format_get_blocksize(pipe_format) >= 16)
-			non_disp_tiling = 1;
-	}
-	nbanks = eg_num_banks(rscreen->b.info.r600_num_banks);
-
-	if (state->target == PIPE_TEXTURE_1D_ARRAY) {
-	        height = 1;
-		depth = texture->array_size;
-	} else if (state->target == PIPE_TEXTURE_2D_ARRAY) {
-		depth = texture->array_size;
-	} else if (state->target == PIPE_TEXTURE_CUBE_ARRAY)
-		depth = texture->array_size / 6;
-
-	va = tmp->resource.gpu_address;
 
 	if (state->format == PIPE_FORMAT_X24S8_UINT ||
 	    state->format == PIPE_FORMAT_S8X24_UINT ||
@@ -800,73 +933,6 @@ evergreen_create_sampler_view_custom(struct pipe_context *ctx,
 
 	view->tex_resource = &tmp->resource;
 
-	/* array type views and views into array types need to use layer offset */
-	dim = state->target;
-	if (state->target != PIPE_TEXTURE_CUBE)
-		dim = MAX2(state->target, texture->target);
-
-	view->tex_resource_words[0] = (S_030000_DIM(r600_tex_dim(dim, texture->nr_samples)) |
-				       S_030000_PITCH((pitch / 8) - 1) |
-				       S_030000_TEX_WIDTH(width - 1));
-	if (rscreen->b.chip_class == CAYMAN)
-		view->tex_resource_words[0] |= CM_S_030000_NON_DISP_TILING_ORDER(non_disp_tiling);
-	else
-		view->tex_resource_words[0] |= S_030000_NON_DISP_TILING_ORDER(non_disp_tiling);
-	view->tex_resource_words[1] = (S_030004_TEX_HEIGHT(height - 1) |
-				       S_030004_TEX_DEPTH(depth - 1) |
-				       S_030004_ARRAY_MODE(array_mode));
-	view->tex_resource_words[2] = (surflevel[base_level].offset + va) >> 8;
-
-	/* TEX_RESOURCE_WORD3.MIP_ADDRESS */
-	if (texture->nr_samples > 1 && rscreen->has_compressed_msaa_texturing) {
-		if (tmp->is_depth) {
-			/* disable FMASK (0 = disabled) */
-			view->tex_resource_words[3] = 0;
-			view->skip_mip_address_reloc = true;
-		} else {
-			/* FMASK should be in MIP_ADDRESS for multisample textures */
-			view->tex_resource_words[3] = (tmp->fmask.offset + va) >> 8;
-		}
-	} else if (last_level && texture->nr_samples <= 1) {
-		view->tex_resource_words[3] = (surflevel[1].offset + va) >> 8;
-	} else {
-		view->tex_resource_words[3] = (surflevel[base_level].offset + va) >> 8;
-	}
-
-	last_layer = state->u.tex.last_layer;
-	if (state->target != texture->target && depth == 1) {
-		last_layer = state->u.tex.first_layer;
-	}
-	view->tex_resource_words[4] = (word4 |
-				       S_030010_ENDIAN_SWAP(endian));
-	view->tex_resource_words[5] = S_030014_BASE_ARRAY(state->u.tex.first_layer) |
-				      S_030014_LAST_ARRAY(last_layer);
-	view->tex_resource_words[6] = S_030018_TILE_SPLIT(tile_split);
-
-	if (texture->nr_samples > 1) {
-		unsigned log_samples = util_logbase2(texture->nr_samples);
-		if (rscreen->b.chip_class == CAYMAN) {
-			view->tex_resource_words[4] |= S_030010_LOG2_NUM_FRAGMENTS(log_samples);
-		}
-		/* LAST_LEVEL holds log2(nr_samples) for multisample textures */
-		view->tex_resource_words[5] |= S_030014_LAST_LEVEL(log_samples);
-		view->tex_resource_words[6] |= S_030018_FMASK_BANK_HEIGHT(fmask_bankh);
-	} else {
-		bool no_mip = first_level == last_level;
-
-		view->tex_resource_words[4] |= S_030010_BASE_LEVEL(first_level);
-		view->tex_resource_words[5] |= S_030014_LAST_LEVEL(last_level);
-		/* aniso max 16 samples */
-		view->tex_resource_words[6] |= S_030018_MAX_ANISO_RATIO(no_mip ? 0 : 4);
-	}
-
-	view->tex_resource_words[7] = S_03001C_DATA_FORMAT(format) |
-				      S_03001C_TYPE(V_03001C_SQ_TEX_VTX_VALID_TEXTURE) |
-				      S_03001C_BANK_WIDTH(bankw) |
-				      S_03001C_BANK_HEIGHT(bankh) |
-				      S_03001C_MACRO_TILE_ASPECT(macro_aspect) |
-				      S_03001C_NUM_BANKS(nbanks) |
-				      S_03001C_DEPTH_SAMPLE_ORDER(tmp->db_compatible);
 	return &view->base;
 }
 
@@ -932,140 +998,171 @@ static void evergreen_get_scissor_rect(struct r600_context *rctx,
 	*br = S_028244_BR_X(scissor.maxx) | S_028244_BR_Y(scissor.maxy);
 }
 
-/**
- * This function intializes the CB* register values for RATs.  It is meant
- * to be used for 1D aligned buffers that do not have an associated
- * radeon_surf.
- */
-void evergreen_init_color_surface_rat(struct r600_context *rctx,
-					struct r600_surface *surf)
+struct r600_tex_color_info {
+	unsigned info;
+	unsigned view;
+	unsigned dim;
+	unsigned pitch;
+	unsigned slice;
+	unsigned attrib;
+	unsigned ntype;
+	unsigned fmask;
+	unsigned fmask_slice;
+	uint64_t offset;
+	boolean export_16bpc;
+};
+
+static void evergreen_set_color_surface_buffer(struct r600_context *rctx,
+					       struct r600_resource *res,
+					       enum pipe_format pformat,
+					       unsigned first_element,
+					       unsigned last_element,
+					       struct r600_tex_color_info *color)
 {
-	struct pipe_resource *pipe_buffer = surf->base.texture;
-	unsigned format = r600_translate_colorformat(rctx->b.chip_class,
-						     surf->base.format, FALSE);
-	unsigned endian = r600_colorformat_endian_swap(format, FALSE);
-	unsigned swap = r600_translate_colorswap(surf->base.format, FALSE);
-	unsigned block_size =
-		align(util_format_get_blocksize(pipe_buffer->format), 4);
+	unsigned format, swap, ntype, endian;
+	const struct util_format_description *desc;
+	unsigned block_size = align(util_format_get_blocksize(res->b.b.format), 4);
 	unsigned pitch_alignment =
 		MAX2(64, rctx->screen->b.info.pipe_interleave_bytes / block_size);
-	unsigned pitch = align(pipe_buffer->width0, pitch_alignment);
+	unsigned pitch = align(res->b.b.width0, pitch_alignment);
+	int i;
+	unsigned width_elements;
 
-	surf->cb_color_base = r600_resource(pipe_buffer)->gpu_address >> 8;
+	width_elements = last_element - first_element + 1;
 
-	surf->cb_color_pitch = (pitch / 8) - 1;
+	format = r600_translate_colorformat(rctx->b.chip_class, pformat, FALSE);
+	swap = r600_translate_colorswap(pformat, FALSE);
 
-	surf->cb_color_slice = 0;
+	endian = r600_colorformat_endian_swap(format, FALSE);
 
-	surf->cb_color_view = 0;
+	desc = util_format_description(pformat);
+	for (i = 0; i < 4; i++) {
+		if (desc->channel[i].type != UTIL_FORMAT_TYPE_VOID) {
+			break;
+		}
+	}
+	ntype = V_028C70_NUMBER_UNORM;
+		if (desc->colorspace == UTIL_FORMAT_COLORSPACE_SRGB)
+		ntype = V_028C70_NUMBER_SRGB;
+	else if (desc->channel[i].type == UTIL_FORMAT_TYPE_SIGNED) {
+		if (desc->channel[i].normalized)
+			ntype = V_028C70_NUMBER_SNORM;
+		else if (desc->channel[i].pure_integer)
+			ntype = V_028C70_NUMBER_SINT;
+	} else if (desc->channel[i].type == UTIL_FORMAT_TYPE_UNSIGNED) {
+		if (desc->channel[i].normalized)
+			ntype = V_028C70_NUMBER_UNORM;
+		else if (desc->channel[i].pure_integer)
+			ntype = V_028C70_NUMBER_UINT;
+	}
+	pitch = (pitch / 8) - 1;
+	color->pitch = S_028C64_PITCH_TILE_MAX(pitch);
 
-	surf->cb_color_info =
-		  S_028C70_ENDIAN(endian)
-		| S_028C70_FORMAT(format)
-		| S_028C70_ARRAY_MODE(V_028C70_ARRAY_LINEAR_ALIGNED)
-		| S_028C70_NUMBER_TYPE(V_028C70_NUMBER_UINT)
-		| S_028C70_COMP_SWAP(swap)
-		| S_028C70_BLEND_BYPASS(1) /* We must set this bit because we
-					    * are using NUMBER_UINT */
-		| S_028C70_RAT(1)
-		;
+	color->info = S_028C70_ARRAY_MODE(V_028C70_ARRAY_LINEAR_ALIGNED);
+	color->info |= S_028C70_FORMAT(format) |
+		       S_028C70_COMP_SWAP(swap) |
+		       S_028C70_BLEND_CLAMP(0) |
+		       S_028C70_BLEND_BYPASS(1) |
+		       S_028C70_NUMBER_TYPE(ntype) |
+		       S_028C70_ENDIAN(endian);
+	color->attrib = S_028C74_NON_DISP_TILING_ORDER(1);
+	color->ntype = ntype;
+	color->export_16bpc = false;
+	color->dim = width_elements - 1;
+	color->slice = 0; /* (width_elements / 64) - 1;*/
+	color->view = 0;
+	color->offset = res->gpu_address >> 8;
 
-	surf->cb_color_attrib = S_028C74_NON_DISP_TILING_ORDER(1);
-
-	/* For buffers, CB_COLOR0_DIM needs to be set to the number of
-	 * elements. */
-	surf->cb_color_dim = pipe_buffer->width0;
-
-	/* Set the buffer range the GPU will have access to: */
-	util_range_add(&r600_resource(pipe_buffer)->valid_buffer_range,
-		       0, pipe_buffer->width0);
-
-	surf->cb_color_fmask = surf->cb_color_base;
-	surf->cb_color_fmask_slice = 0;
+	color->fmask = color->offset;
+	color->fmask_slice = 0;
 }
 
-void evergreen_init_color_surface(struct r600_context *rctx,
-				  struct r600_surface *surf)
+static void evergreen_set_color_surface_common(struct r600_context *rctx,
+					       struct r600_texture *rtex,
+					       unsigned level,
+					       unsigned first_layer,
+					       unsigned last_layer,
+					       enum pipe_format pformat,
+					       struct r600_tex_color_info *color)
 {
 	struct r600_screen *rscreen = rctx->screen;
-	struct r600_texture *rtex = (struct r600_texture*)surf->base.texture;
-	unsigned level = surf->base.u.tex.level;
 	unsigned pitch, slice;
-	unsigned color_info, color_attrib, color_dim = 0, color_view;
-	unsigned format, swap, ntype, endian;
-	uint64_t offset, base_offset;
 	unsigned non_disp_tiling, macro_aspect, tile_split, bankh, bankw, fmask_bankh, nbanks;
+	unsigned format, swap, ntype, endian;
 	const struct util_format_description *desc;
-	int i;
 	bool blend_clamp = 0, blend_bypass = 0, do_endian_swap = FALSE;
+	int i;
 
-	offset = rtex->surface.level[level].offset;
-	color_view = S_028C6C_SLICE_START(surf->base.u.tex.first_layer) |
-		     S_028C6C_SLICE_MAX(surf->base.u.tex.last_layer);
+	color->offset = rtex->surface.u.legacy.level[level].offset;
+	color->view = S_028C6C_SLICE_START(first_layer) |
+			S_028C6C_SLICE_MAX(last_layer);
 
-	pitch = (rtex->surface.level[level].nblk_x) / 8 - 1;
-	slice = (rtex->surface.level[level].nblk_x * rtex->surface.level[level].nblk_y) / 64;
+	color->offset += rtex->resource.gpu_address;
+	color->offset >>= 8;
+
+	color->dim = 0;
+	pitch = (rtex->surface.u.legacy.level[level].nblk_x) / 8 - 1;
+	slice = (rtex->surface.u.legacy.level[level].nblk_x * rtex->surface.u.legacy.level[level].nblk_y) / 64;
 	if (slice) {
 		slice = slice - 1;
 	}
-	color_info = 0;
-	switch (rtex->surface.level[level].mode) {
+
+	color->info = 0;
+	switch (rtex->surface.u.legacy.level[level].mode) {
 	default:
 	case RADEON_SURF_MODE_LINEAR_ALIGNED:
-		color_info = S_028C70_ARRAY_MODE(V_028C70_ARRAY_LINEAR_ALIGNED);
+		color->info = S_028C70_ARRAY_MODE(V_028C70_ARRAY_LINEAR_ALIGNED);
 		non_disp_tiling = 1;
 		break;
 	case RADEON_SURF_MODE_1D:
-		color_info = S_028C70_ARRAY_MODE(V_028C70_ARRAY_1D_TILED_THIN1);
+		color->info = S_028C70_ARRAY_MODE(V_028C70_ARRAY_1D_TILED_THIN1);
 		non_disp_tiling = rtex->non_disp_tiling;
 		break;
 	case RADEON_SURF_MODE_2D:
-		color_info = S_028C70_ARRAY_MODE(V_028C70_ARRAY_2D_TILED_THIN1);
+		color->info = S_028C70_ARRAY_MODE(V_028C70_ARRAY_2D_TILED_THIN1);
 		non_disp_tiling = rtex->non_disp_tiling;
 		break;
 	}
-	tile_split = rtex->surface.tile_split;
-	macro_aspect = rtex->surface.mtilea;
-	bankw = rtex->surface.bankw;
-	bankh = rtex->surface.bankh;
+	tile_split = rtex->surface.u.legacy.tile_split;
+	macro_aspect = rtex->surface.u.legacy.mtilea;
+	bankw = rtex->surface.u.legacy.bankw;
+	bankh = rtex->surface.u.legacy.bankh;
 	if (rtex->fmask.size)
 		fmask_bankh = rtex->fmask.bank_height;
 	else
-		fmask_bankh = rtex->surface.bankh;
+		fmask_bankh = rtex->surface.u.legacy.bankh;
 	tile_split = eg_tile_split(tile_split);
 	macro_aspect = eg_macro_tile_aspect(macro_aspect);
 	bankw = eg_bank_wh(bankw);
 	bankh = eg_bank_wh(bankh);
 	fmask_bankh = eg_bank_wh(fmask_bankh);
 
-	/* 128 bit formats require tile type = 1 */
 	if (rscreen->b.chip_class == CAYMAN) {
-		if (util_format_get_blocksize(surf->base.format) >= 16)
+		if (util_format_get_blocksize(pformat) >= 16)
 			non_disp_tiling = 1;
 	}
 	nbanks = eg_num_banks(rscreen->b.info.r600_num_banks);
-	desc = util_format_description(surf->base.format);
+	desc = util_format_description(pformat);
 	for (i = 0; i < 4; i++) {
 		if (desc->channel[i].type != UTIL_FORMAT_TYPE_VOID) {
 			break;
 		}
 	}
-
-	color_attrib = S_028C74_TILE_SPLIT(tile_split)|
-			S_028C74_NUM_BANKS(nbanks) |
-			S_028C74_BANK_WIDTH(bankw) |
-			S_028C74_BANK_HEIGHT(bankh) |
-			S_028C74_MACRO_TILE_ASPECT(macro_aspect) |
-			S_028C74_NON_DISP_TILING_ORDER(non_disp_tiling) |
-		        S_028C74_FMASK_BANK_HEIGHT(fmask_bankh);
+	color->attrib = S_028C74_TILE_SPLIT(tile_split)|
+		S_028C74_NUM_BANKS(nbanks) |
+		S_028C74_BANK_WIDTH(bankw) |
+		S_028C74_BANK_HEIGHT(bankh) |
+		S_028C74_MACRO_TILE_ASPECT(macro_aspect) |
+		S_028C74_NON_DISP_TILING_ORDER(non_disp_tiling) |
+		S_028C74_FMASK_BANK_HEIGHT(fmask_bankh);
 
 	if (rctx->b.chip_class == CAYMAN) {
-		color_attrib |=	S_028C74_FORCE_DST_ALPHA_1(desc->swizzle[3] ==
+		color->attrib |= S_028C74_FORCE_DST_ALPHA_1(desc->swizzle[3] ==
 							   PIPE_SWIZZLE_1);
 
 		if (rtex->resource.b.b.nr_samples > 1) {
 			unsigned log_samples = util_logbase2(rtex->resource.b.b.nr_samples);
-			color_attrib |= S_028C74_NUM_SAMPLES(log_samples) |
+			color->attrib |= S_028C74_NUM_SAMPLES(log_samples) |
 					S_028C74_NUM_FRAGMENTS(log_samples);
 		}
 	}
@@ -1088,11 +1185,9 @@ void evergreen_init_color_surface(struct r600_context *rctx,
 	if (R600_BIG_ENDIAN)
 		do_endian_swap = !rtex->db_compatible;
 
-	format = r600_translate_colorformat(rctx->b.chip_class, surf->base.format,
-			                              do_endian_swap);
+	format = r600_translate_colorformat(rctx->b.chip_class, pformat, do_endian_swap);
 	assert(format != ~0);
-
-	swap = r600_translate_colorswap(surf->base.format, do_endian_swap);
+	swap = r600_translate_colorswap(pformat, do_endian_swap);
 	assert(swap != ~0);
 
 	endian = r600_colorformat_endian_swap(format, do_endian_swap);
@@ -1111,14 +1206,17 @@ void evergreen_init_color_surface(struct r600_context *rctx,
 		blend_bypass = 1;
 	}
 
-	surf->alphatest_bypass = ntype == V_028C70_NUMBER_UINT || ntype == V_028C70_NUMBER_SINT;
-
-	color_info |= S_028C70_FORMAT(format) |
+	color->ntype = ntype;
+	color->info |= S_028C70_FORMAT(format) |
 		S_028C70_COMP_SWAP(swap) |
 		S_028C70_BLEND_CLAMP(blend_clamp) |
 		S_028C70_BLEND_BYPASS(blend_bypass) |
 		S_028C70_NUMBER_TYPE(ntype) |
 		S_028C70_ENDIAN(endian);
+
+	if (rtex->fmask.size) {
+		color->info |= S_028C70_COMPRESSION(1);
+	}
 
 	/* EXPORT_NORM is an optimzation that can be enabled for better
 	 * performance in certain cases.
@@ -1126,37 +1224,89 @@ void evergreen_init_color_surface(struct r600_context *rctx,
 	 * - 11-bit or smaller UNORM/SNORM/SRGB
 	 * - 16-bit or smaller FLOAT
 	 */
+	color->export_16bpc = false;
 	if (desc->colorspace != UTIL_FORMAT_COLORSPACE_ZS &&
 	    ((desc->channel[i].size < 12 &&
 	      desc->channel[i].type != UTIL_FORMAT_TYPE_FLOAT &&
 	      ntype != V_028C70_NUMBER_UINT && ntype != V_028C70_NUMBER_SINT) ||
 	     (desc->channel[i].size < 17 &&
 	      desc->channel[i].type == UTIL_FORMAT_TYPE_FLOAT))) {
-		color_info |= S_028C70_SOURCE_FORMAT(V_028C70_EXPORT_4C_16BPC);
-		surf->export_16bpc = true;
+		color->info |= S_028C70_SOURCE_FORMAT(V_028C70_EXPORT_4C_16BPC);
+		color->export_16bpc = true;
 	}
+
+	color->pitch = S_028C64_PITCH_TILE_MAX(pitch);
+	color->slice = S_028C68_SLICE_TILE_MAX(slice);
 
 	if (rtex->fmask.size) {
-		color_info |= S_028C70_COMPRESSION(1);
+		color->fmask = (rtex->resource.gpu_address + rtex->fmask.offset) >> 8;
+		color->fmask_slice = S_028C88_TILE_MAX(rtex->fmask.slice_tile_max);
+	} else {
+		color->fmask = color->offset;
+		color->fmask_slice = S_028C88_TILE_MAX(slice);
 	}
+}
 
-	base_offset = rtex->resource.gpu_address;
+/**
+ * This function intializes the CB* register values for RATs.  It is meant
+ * to be used for 1D aligned buffers that do not have an associated
+ * radeon_surf.
+ */
+void evergreen_init_color_surface_rat(struct r600_context *rctx,
+					struct r600_surface *surf)
+{
+	struct pipe_resource *pipe_buffer = surf->base.texture;
+	struct r600_tex_color_info color;
+
+	evergreen_set_color_surface_buffer(rctx, (struct r600_resource *)surf->base.texture,
+					   surf->base.format, 0, pipe_buffer->width0,
+					   &color);
+
+	surf->cb_color_base = color.offset;
+	surf->cb_color_dim = color.dim;
+	surf->cb_color_info = color.info | S_028C70_RAT(1);
+	surf->cb_color_pitch = color.pitch;
+	surf->cb_color_slice = color.slice;
+	surf->cb_color_view = color.view;
+	surf->cb_color_attrib = color.attrib;
+	surf->cb_color_fmask = color.fmask;
+	surf->cb_color_fmask_slice = color.fmask_slice;
+
+	surf->cb_color_view = 0;
+
+	/* Set the buffer range the GPU will have access to: */
+	util_range_add(&r600_resource(pipe_buffer)->valid_buffer_range,
+		       0, pipe_buffer->width0);
+}
+
+
+void evergreen_init_color_surface(struct r600_context *rctx,
+				  struct r600_surface *surf)
+{
+	struct r600_texture *rtex = (struct r600_texture*)surf->base.texture;
+	unsigned level = surf->base.u.tex.level;
+	struct r600_tex_color_info color;
+
+	evergreen_set_color_surface_common(rctx, rtex, level,
+					   surf->base.u.tex.first_layer,
+					   surf->base.u.tex.last_layer,
+					   surf->base.format,
+					   &color);
+
+	surf->alphatest_bypass = color.ntype == V_028C70_NUMBER_UINT ||
+		color.ntype == V_028C70_NUMBER_SINT;
+	surf->export_16bpc = color.export_16bpc;
 
 	/* XXX handle enabling of CB beyond BASE8 which has different offset */
-	surf->cb_color_base = (base_offset + offset) >> 8;
-	surf->cb_color_dim = color_dim;
-	surf->cb_color_info = color_info;
-	surf->cb_color_pitch = S_028C64_PITCH_TILE_MAX(pitch);
-	surf->cb_color_slice = S_028C68_SLICE_TILE_MAX(slice);
-	surf->cb_color_view = color_view;
-	surf->cb_color_attrib = color_attrib;
-	if (rtex->fmask.size) {
-		surf->cb_color_fmask = (base_offset + rtex->fmask.offset) >> 8;
-		surf->cb_color_fmask_slice = S_028C88_TILE_MAX(rtex->fmask.slice_tile_max);
-	} else {
-		surf->cb_color_fmask = surf->cb_color_base;
-		surf->cb_color_fmask_slice = S_028C88_TILE_MAX(slice);
-	}
+	surf->cb_color_base = color.offset;
+	surf->cb_color_dim = color.dim;
+	surf->cb_color_info = color.info;
+	surf->cb_color_pitch = color.pitch;
+	surf->cb_color_slice = color.slice;
+	surf->cb_color_view = color.view;
+	surf->cb_color_attrib = color.attrib;
+	surf->cb_color_fmask = color.fmask;
+	surf->cb_color_fmask_slice = color.fmask_slice;
 
 	surf->color_initialized = true;
 }
@@ -1167,7 +1317,7 @@ static void evergreen_init_depth_surface(struct r600_context *rctx,
 	struct r600_screen *rscreen = rctx->screen;
 	struct r600_texture *rtex = (struct r600_texture*)surf->base.texture;
 	unsigned level = surf->base.u.tex.level;
-	struct radeon_surf_level *levelinfo = &rtex->surface.level[level];
+	struct legacy_surf_level *levelinfo = &rtex->surface.u.legacy.level[level];
 	uint64_t offset;
 	unsigned format, array_mode;
 	unsigned macro_aspect, tile_split, bankh, bankw, nbanks;
@@ -1177,9 +1327,9 @@ static void evergreen_init_depth_surface(struct r600_context *rctx,
 	assert(format != ~0);
 
 	offset = rtex->resource.gpu_address;
-	offset += rtex->surface.level[level].offset;
+	offset += rtex->surface.u.legacy.level[level].offset;
 
-	switch (rtex->surface.level[level].mode) {
+	switch (rtex->surface.u.legacy.level[level].mode) {
 	case RADEON_SURF_MODE_2D:
 		array_mode = V_028C70_ARRAY_2D_TILED_THIN1;
 		break;
@@ -1189,10 +1339,10 @@ static void evergreen_init_depth_surface(struct r600_context *rctx,
 		array_mode = V_028C70_ARRAY_1D_TILED_THIN1;
 		break;
 	}
-	tile_split = rtex->surface.tile_split;
-	macro_aspect = rtex->surface.mtilea;
-	bankw = rtex->surface.bankw;
-	bankh = rtex->surface.bankh;
+	tile_split = rtex->surface.u.legacy.tile_split;
+	macro_aspect = rtex->surface.u.legacy.mtilea;
+	bankw = rtex->surface.u.legacy.bankw;
+	bankh = rtex->surface.u.legacy.bankh;
 	tile_split = eg_tile_split(tile_split);
 	macro_aspect = eg_macro_tile_aspect(macro_aspect);
 	bankw = eg_bank_wh(bankw);
@@ -1223,11 +1373,11 @@ static void evergreen_init_depth_surface(struct r600_context *rctx,
 
 	if (rtex->surface.flags & RADEON_SURF_SBUFFER) {
 		uint64_t stencil_offset;
-		unsigned stile_split = rtex->surface.stencil_tile_split;
+		unsigned stile_split = rtex->surface.u.legacy.stencil_tile_split;
 
 		stile_split = eg_tile_split(stile_split);
 
-		stencil_offset = rtex->surface.stencil_level[level].offset;
+		stencil_offset = rtex->surface.u.legacy.stencil_level[level].offset;
 		stencil_offset += rtex->resource.gpu_address;
 
 		surf->db_stencil_base = stencil_offset >> 8;
@@ -1584,7 +1734,7 @@ static void evergreen_emit_framebuffer_state(struct r600_context *rctx, struct r
 		radeon_emit(cs, reloc);
 	}
 	/* set CB_COLOR1_INFO for possible dual-src blending */
-	if (i == 1 && state->cbufs[0]) {
+	if (rctx->framebuffer.dual_src_blend && i == 1 && state->cbufs[0]) {
 		radeon_set_context_reg(cs, R_028C70_CB_COLOR0_INFO + 1 * 0x3C,
 				       cb->cb_color_info | tex->cb_color_info);
 		i++;
@@ -3357,8 +3507,8 @@ static void evergreen_dma_copy_tile(struct r600_context *rctx,
 	unsigned sub_cmd, bank_h, bank_w, mt_aspect, nbanks, tile_split, non_disp_tiling = 0;
 	uint64_t base, addr;
 
-	dst_mode = rdst->surface.level[dst_level].mode;
-	src_mode = rsrc->surface.level[src_level].mode;
+	dst_mode = rdst->surface.u.legacy.level[dst_level].mode;
+	src_mode = rsrc->surface.u.legacy.level[src_level].mode;
 	assert(dst_mode != src_mode);
 
 	/* non_disp_tiling bit needs to be set for depth, stencil, and fmask surfaces */
@@ -3374,7 +3524,7 @@ static void evergreen_dma_copy_tile(struct r600_context *rctx,
 	if (dst_mode == RADEON_SURF_MODE_LINEAR_ALIGNED) {
 		/* T2L */
 		array_mode = evergreen_array_mode(src_mode);
-		slice_tile_max = (rsrc->surface.level[src_level].nblk_x * rsrc->surface.level[src_level].nblk_y) / (8*8);
+		slice_tile_max = (rsrc->surface.u.legacy.level[src_level].nblk_x * rsrc->surface.u.legacy.level[src_level].nblk_y) / (8*8);
 		slice_tile_max = slice_tile_max ? slice_tile_max - 1 : 0;
 		/* linear height must be the same as the slice tile max height, it's ok even
 		 * if the linear destination/source have smaller heigh as the size of the
@@ -3386,20 +3536,20 @@ static void evergreen_dma_copy_tile(struct r600_context *rctx,
 		x = src_x;
 		y = src_y;
 		z = src_z;
-		base = rsrc->surface.level[src_level].offset;
-		addr = rdst->surface.level[dst_level].offset;
-		addr += rdst->surface.level[dst_level].slice_size * dst_z;
+		base = rsrc->surface.u.legacy.level[src_level].offset;
+		addr = rdst->surface.u.legacy.level[dst_level].offset;
+		addr += rdst->surface.u.legacy.level[dst_level].slice_size * dst_z;
 		addr += dst_y * pitch + dst_x * bpp;
-		bank_h = eg_bank_wh(rsrc->surface.bankh);
-		bank_w = eg_bank_wh(rsrc->surface.bankw);
-		mt_aspect = eg_macro_tile_aspect(rsrc->surface.mtilea);
-		tile_split = eg_tile_split(rsrc->surface.tile_split);
+		bank_h = eg_bank_wh(rsrc->surface.u.legacy.bankh);
+		bank_w = eg_bank_wh(rsrc->surface.u.legacy.bankw);
+		mt_aspect = eg_macro_tile_aspect(rsrc->surface.u.legacy.mtilea);
+		tile_split = eg_tile_split(rsrc->surface.u.legacy.tile_split);
 		base += rsrc->resource.gpu_address;
 		addr += rdst->resource.gpu_address;
 	} else {
 		/* L2T */
 		array_mode = evergreen_array_mode(dst_mode);
-		slice_tile_max = (rdst->surface.level[dst_level].nblk_x * rdst->surface.level[dst_level].nblk_y) / (8*8);
+		slice_tile_max = (rdst->surface.u.legacy.level[dst_level].nblk_x * rdst->surface.u.legacy.level[dst_level].nblk_y) / (8*8);
 		slice_tile_max = slice_tile_max ? slice_tile_max - 1 : 0;
 		/* linear height must be the same as the slice tile max height, it's ok even
 		 * if the linear destination/source have smaller heigh as the size of the
@@ -3411,14 +3561,14 @@ static void evergreen_dma_copy_tile(struct r600_context *rctx,
 		x = dst_x;
 		y = dst_y;
 		z = dst_z;
-		base = rdst->surface.level[dst_level].offset;
-		addr = rsrc->surface.level[src_level].offset;
-		addr += rsrc->surface.level[src_level].slice_size * src_z;
+		base = rdst->surface.u.legacy.level[dst_level].offset;
+		addr = rsrc->surface.u.legacy.level[src_level].offset;
+		addr += rsrc->surface.u.legacy.level[src_level].slice_size * src_z;
 		addr += src_y * pitch + src_x * bpp;
-		bank_h = eg_bank_wh(rdst->surface.bankh);
-		bank_w = eg_bank_wh(rdst->surface.bankw);
-		mt_aspect = eg_macro_tile_aspect(rdst->surface.mtilea);
-		tile_split = eg_tile_split(rdst->surface.tile_split);
+		bank_h = eg_bank_wh(rdst->surface.u.legacy.bankh);
+		bank_w = eg_bank_wh(rdst->surface.u.legacy.bankw);
+		mt_aspect = eg_macro_tile_aspect(rdst->surface.u.legacy.mtilea);
+		tile_split = eg_tile_split(rdst->surface.u.legacy.tile_split);
 		base += rdst->resource.gpu_address;
 		addr += rsrc->resource.gpu_address;
 	}
@@ -3491,14 +3641,14 @@ static void evergreen_dma_copy(struct pipe_context *ctx,
 	dst_y = util_format_get_nblocksy(src->format, dst_y);
 
 	bpp = rdst->surface.bpe;
-	dst_pitch = rdst->surface.level[dst_level].nblk_x * rdst->surface.bpe;
-	src_pitch = rsrc->surface.level[src_level].nblk_x * rsrc->surface.bpe;
+	dst_pitch = rdst->surface.u.legacy.level[dst_level].nblk_x * rdst->surface.bpe;
+	src_pitch = rsrc->surface.u.legacy.level[src_level].nblk_x * rsrc->surface.bpe;
 	src_w = u_minify(rsrc->resource.b.b.width0, src_level);
 	dst_w = u_minify(rdst->resource.b.b.width0, dst_level);
 	copy_height = src_box->height / rsrc->surface.blk_h;
 
-	dst_mode = rdst->surface.level[dst_level].mode;
-	src_mode = rsrc->surface.level[src_level].mode;
+	dst_mode = rdst->surface.u.legacy.level[dst_level].mode;
+	src_mode = rsrc->surface.u.legacy.level[src_level].mode;
 
 	if (src_pitch != dst_pitch || src_box->x || dst_x || src_w != dst_w) {
 		/* FIXME evergreen can do partial blit */
@@ -3529,11 +3679,11 @@ static void evergreen_dma_copy(struct pipe_context *ctx,
 		 *   dst_x/y == 0
 		 *   dst_pitch == src_pitch
 		 */
-		src_offset= rsrc->surface.level[src_level].offset;
-		src_offset += rsrc->surface.level[src_level].slice_size * src_box->z;
+		src_offset= rsrc->surface.u.legacy.level[src_level].offset;
+		src_offset += rsrc->surface.u.legacy.level[src_level].slice_size * src_box->z;
 		src_offset += src_y * src_pitch + src_x * bpp;
-		dst_offset = rdst->surface.level[dst_level].offset;
-		dst_offset += rdst->surface.level[dst_level].slice_size * dst_z;
+		dst_offset = rdst->surface.u.legacy.level[dst_level].offset;
+		dst_offset += rdst->surface.u.legacy.level[dst_level].slice_size * dst_z;
 		dst_offset += dst_y * dst_pitch + dst_x * bpp;
 		evergreen_dma_copy_buffer(rctx, dst, src, dst_offset, src_offset,
 					src_box->height * src_pitch);

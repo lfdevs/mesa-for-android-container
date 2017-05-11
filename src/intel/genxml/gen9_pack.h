@@ -2465,7 +2465,7 @@ struct GEN9_3DSTATE_CLIP {
    bool                                 EarlyCullEnable;
    bool                                 ForceUserClipDistanceClipTestEnableBitmask;
    bool                                 ForceClipMode;
-   bool                                 ClipperStatisticsEnable;
+   bool                                 StatisticsEnable;
    uint32_t                             UserClipDistanceCullTestEnableBitmask;
    bool                                 ClipEnable;
    uint32_t                             APIMode;
@@ -2508,7 +2508,7 @@ GEN9_3DSTATE_CLIP_pack(__gen_user_data *data, void * restrict dst,
       __gen_uint(values->EarlyCullEnable, 18, 18) |
       __gen_uint(values->ForceUserClipDistanceClipTestEnableBitmask, 17, 17) |
       __gen_uint(values->ForceClipMode, 16, 16) |
-      __gen_uint(values->ClipperStatisticsEnable, 10, 10) |
+      __gen_uint(values->StatisticsEnable, 10, 10) |
       __gen_uint(values->UserClipDistanceCullTestEnableBitmask, 0, 7);
 
    dw[2] =
@@ -8374,8 +8374,7 @@ struct GEN9_MI_STORE_DATA_IMM {
    uint32_t                             DWordLength;
    __gen_address_type                   Address;
    uint32_t                             CoreModeEnable;
-   uint32_t                             DataDWord0;
-   uint32_t                             DataDWord1;
+   uint64_t                             ImmediateData;
 };
 
 static inline void
@@ -8398,8 +8397,10 @@ GEN9_MI_STORE_DATA_IMM_pack(__gen_user_data *data, void * restrict dst,
    dw[1] = v1_address;
    dw[2] = v1_address >> 32;
 
-   dw[3] =
-      __gen_uint(values->DataDWord0, 0, 31);
+   const uint64_t v3 =
+      __gen_uint(values->ImmediateData, 0, 63);
+   dw[3] = v3;
+   dw[4] = v3 >> 32;
 }
 
 #define GEN9_MI_STORE_DATA_INDEX_length        3
@@ -9026,6 +9027,378 @@ GEN9_STATE_SIP_pack(__gen_user_data *data, void * restrict dst,
    dw[2] = v1 >> 32;
 }
 
+#define GEN9_IA_VERTICES_COUNT_num        0x2310
+#define GEN9_IA_VERTICES_COUNT_length          2
+struct GEN9_IA_VERTICES_COUNT {
+   uint64_t                             IAVerticesCountReport;
+};
+
+static inline void
+GEN9_IA_VERTICES_COUNT_pack(__gen_user_data *data, void * restrict dst,
+                            const struct GEN9_IA_VERTICES_COUNT * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   const uint64_t v0 =
+      __gen_uint(values->IAVerticesCountReport, 0, 63);
+   dw[0] = v0;
+   dw[1] = v0 >> 32;
+}
+
+#define GEN9_IA_PRIMITIVES_COUNT_num      0x2318
+#define GEN9_IA_PRIMITIVES_COUNT_length        2
+struct GEN9_IA_PRIMITIVES_COUNT {
+   uint64_t                             IAPrimitivesCountReport;
+};
+
+static inline void
+GEN9_IA_PRIMITIVES_COUNT_pack(__gen_user_data *data, void * restrict dst,
+                              const struct GEN9_IA_PRIMITIVES_COUNT * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   const uint64_t v0 =
+      __gen_uint(values->IAPrimitivesCountReport, 0, 63);
+   dw[0] = v0;
+   dw[1] = v0 >> 32;
+}
+
+#define GEN9_VS_INVOCATION_COUNT_num      0x2320
+#define GEN9_VS_INVOCATION_COUNT_length        2
+struct GEN9_VS_INVOCATION_COUNT {
+   uint64_t                             VSInvocationCountReport;
+};
+
+static inline void
+GEN9_VS_INVOCATION_COUNT_pack(__gen_user_data *data, void * restrict dst,
+                              const struct GEN9_VS_INVOCATION_COUNT * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   const uint64_t v0 =
+      __gen_uint(values->VSInvocationCountReport, 0, 63);
+   dw[0] = v0;
+   dw[1] = v0 >> 32;
+}
+
+#define GEN9_HS_INVOCATION_COUNT_num      0x2300
+#define GEN9_HS_INVOCATION_COUNT_length        2
+struct GEN9_HS_INVOCATION_COUNT {
+   uint64_t                             HSInvocationCountReport;
+};
+
+static inline void
+GEN9_HS_INVOCATION_COUNT_pack(__gen_user_data *data, void * restrict dst,
+                              const struct GEN9_HS_INVOCATION_COUNT * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   const uint64_t v0 =
+      __gen_uint(values->HSInvocationCountReport, 0, 63);
+   dw[0] = v0;
+   dw[1] = v0 >> 32;
+}
+
+#define GEN9_DS_INVOCATION_COUNT_num      0x2308
+#define GEN9_DS_INVOCATION_COUNT_length        2
+struct GEN9_DS_INVOCATION_COUNT {
+   uint64_t                             DSInvocationCountReport;
+};
+
+static inline void
+GEN9_DS_INVOCATION_COUNT_pack(__gen_user_data *data, void * restrict dst,
+                              const struct GEN9_DS_INVOCATION_COUNT * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   const uint64_t v0 =
+      __gen_uint(values->DSInvocationCountReport, 0, 63);
+   dw[0] = v0;
+   dw[1] = v0 >> 32;
+}
+
+#define GEN9_GS_INVOCATION_COUNT_num      0x2328
+#define GEN9_GS_INVOCATION_COUNT_length        2
+struct GEN9_GS_INVOCATION_COUNT {
+   uint64_t                             GSInvocationCountReport;
+};
+
+static inline void
+GEN9_GS_INVOCATION_COUNT_pack(__gen_user_data *data, void * restrict dst,
+                              const struct GEN9_GS_INVOCATION_COUNT * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   const uint64_t v0 =
+      __gen_uint(values->GSInvocationCountReport, 0, 63);
+   dw[0] = v0;
+   dw[1] = v0 >> 32;
+}
+
+#define GEN9_GS_PRIMITIVES_COUNT_num      0x2330
+#define GEN9_GS_PRIMITIVES_COUNT_length        2
+struct GEN9_GS_PRIMITIVES_COUNT {
+   uint64_t                             GSPrimitivesCountReport;
+};
+
+static inline void
+GEN9_GS_PRIMITIVES_COUNT_pack(__gen_user_data *data, void * restrict dst,
+                              const struct GEN9_GS_PRIMITIVES_COUNT * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   const uint64_t v0 =
+      __gen_uint(values->GSPrimitivesCountReport, 0, 63);
+   dw[0] = v0;
+   dw[1] = v0 >> 32;
+}
+
+#define GEN9_CL_INVOCATION_COUNT_num      0x2338
+#define GEN9_CL_INVOCATION_COUNT_length        2
+struct GEN9_CL_INVOCATION_COUNT {
+   uint64_t                             CLInvocationCountReport;
+};
+
+static inline void
+GEN9_CL_INVOCATION_COUNT_pack(__gen_user_data *data, void * restrict dst,
+                              const struct GEN9_CL_INVOCATION_COUNT * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   const uint64_t v0 =
+      __gen_uint(values->CLInvocationCountReport, 0, 63);
+   dw[0] = v0;
+   dw[1] = v0 >> 32;
+}
+
+#define GEN9_CL_PRIMITIVES_COUNT_num      0x2340
+#define GEN9_CL_PRIMITIVES_COUNT_length        2
+struct GEN9_CL_PRIMITIVES_COUNT {
+   uint64_t                             CLPrimitivesCountReport;
+};
+
+static inline void
+GEN9_CL_PRIMITIVES_COUNT_pack(__gen_user_data *data, void * restrict dst,
+                              const struct GEN9_CL_PRIMITIVES_COUNT * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   const uint64_t v0 =
+      __gen_uint(values->CLPrimitivesCountReport, 0, 63);
+   dw[0] = v0;
+   dw[1] = v0 >> 32;
+}
+
+#define GEN9_PS_INVOCATION_COUNT_num      0x2348
+#define GEN9_PS_INVOCATION_COUNT_length        2
+struct GEN9_PS_INVOCATION_COUNT {
+   uint64_t                             PSInvocationCountReport;
+};
+
+static inline void
+GEN9_PS_INVOCATION_COUNT_pack(__gen_user_data *data, void * restrict dst,
+                              const struct GEN9_PS_INVOCATION_COUNT * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   const uint64_t v0 =
+      __gen_uint(values->PSInvocationCountReport, 0, 63);
+   dw[0] = v0;
+   dw[1] = v0 >> 32;
+}
+
+#define GEN9_CS_INVOCATION_COUNT_num      0x2290
+#define GEN9_CS_INVOCATION_COUNT_length        2
+struct GEN9_CS_INVOCATION_COUNT {
+   uint64_t                             CSInvocationCountReport;
+};
+
+static inline void
+GEN9_CS_INVOCATION_COUNT_pack(__gen_user_data *data, void * restrict dst,
+                              const struct GEN9_CS_INVOCATION_COUNT * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   const uint64_t v0 =
+      __gen_uint(values->CSInvocationCountReport, 0, 63);
+   dw[0] = v0;
+   dw[1] = v0 >> 32;
+}
+
+#define GEN9_BCS_INSTDONE_num             0x2206c
+#define GEN9_BCS_INSTDONE_length               1
+struct GEN9_BCS_INSTDONE {
+   bool                                 RingEnable;
+   bool                                 BlitterIDLE;
+   bool                                 GABIDLE;
+   bool                                 BCSDone;
+};
+
+static inline void
+GEN9_BCS_INSTDONE_pack(__gen_user_data *data, void * restrict dst,
+                       const struct GEN9_BCS_INSTDONE * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   dw[0] =
+      __gen_uint(values->RingEnable, 0, 0) |
+      __gen_uint(values->BlitterIDLE, 1, 1) |
+      __gen_uint(values->GABIDLE, 2, 2) |
+      __gen_uint(values->BCSDone, 3, 3);
+}
+
+#define GEN9_INSTDONE_1_num               0x206c
+#define GEN9_INSTDONE_1_length                 1
+struct GEN9_INSTDONE_1 {
+   bool                                 PRB0RingEnable;
+   bool                                 VFGDone;
+   bool                                 VSDone;
+   bool                                 HSDone;
+   bool                                 TEDone;
+   bool                                 DSDone;
+   bool                                 GSDone;
+   bool                                 SOLDone;
+   bool                                 CLDone;
+   bool                                 SFDone;
+   bool                                 TDGDone;
+   bool                                 URBMDone;
+   bool                                 SVGDone;
+   bool                                 GAFSDone;
+   bool                                 VFEDone;
+   bool                                 TSGDone;
+   bool                                 GAFMDone;
+   bool                                 GAMDone;
+   bool                                 SDEDone;
+   bool                                 RCCFBCCSDone;
+};
+
+static inline void
+GEN9_INSTDONE_1_pack(__gen_user_data *data, void * restrict dst,
+                     const struct GEN9_INSTDONE_1 * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   dw[0] =
+      __gen_uint(values->PRB0RingEnable, 0, 0) |
+      __gen_uint(values->VFGDone, 1, 1) |
+      __gen_uint(values->VSDone, 2, 2) |
+      __gen_uint(values->HSDone, 3, 3) |
+      __gen_uint(values->TEDone, 4, 4) |
+      __gen_uint(values->DSDone, 5, 5) |
+      __gen_uint(values->GSDone, 6, 6) |
+      __gen_uint(values->SOLDone, 7, 7) |
+      __gen_uint(values->CLDone, 8, 8) |
+      __gen_uint(values->SFDone, 9, 9) |
+      __gen_uint(values->TDGDone, 12, 12) |
+      __gen_uint(values->URBMDone, 13, 13) |
+      __gen_uint(values->SVGDone, 14, 14) |
+      __gen_uint(values->GAFSDone, 15, 15) |
+      __gen_uint(values->VFEDone, 16, 16) |
+      __gen_uint(values->TSGDone, 17, 17) |
+      __gen_uint(values->GAFMDone, 18, 18) |
+      __gen_uint(values->GAMDone, 19, 19) |
+      __gen_uint(values->SDEDone, 22, 22) |
+      __gen_uint(values->RCCFBCCSDone, 23, 23);
+}
+
+#define GEN9_VCS_INSTDONE_num             0x1206c
+#define GEN9_VCS_INSTDONE_length               1
+struct GEN9_VCS_INSTDONE {
+   bool                                 RingEnable;
+   bool                                 USBDone;
+   bool                                 QRCDone;
+   bool                                 SECDone;
+   bool                                 MPCDone;
+   bool                                 VFTDone;
+   bool                                 BSPDone;
+   bool                                 VLFDone;
+   bool                                 VOPDone;
+   bool                                 VMCDone;
+   bool                                 VIPDone;
+   bool                                 VITDone;
+   bool                                 VDSDone;
+   bool                                 VMXDone;
+   bool                                 VCPDone;
+   bool                                 VCDDone;
+   bool                                 VADDone;
+   bool                                 VMDDone;
+   bool                                 VISDone;
+   bool                                 VACDone;
+   bool                                 VAMDone;
+   bool                                 JPGDone;
+   bool                                 VBPDone;
+   bool                                 VHRDone;
+   bool                                 VCIDone;
+   bool                                 VCRDone;
+   bool                                 VINDone;
+   bool                                 VPRDone;
+   bool                                 VTQDone;
+   bool                                 Reserved;
+   bool                                 VCSDone;
+   bool                                 GACDone;
+};
+
+static inline void
+GEN9_VCS_INSTDONE_pack(__gen_user_data *data, void * restrict dst,
+                       const struct GEN9_VCS_INSTDONE * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   dw[0] =
+      __gen_uint(values->RingEnable, 0, 0) |
+      __gen_uint(values->USBDone, 1, 1) |
+      __gen_uint(values->QRCDone, 2, 2) |
+      __gen_uint(values->SECDone, 3, 3) |
+      __gen_uint(values->MPCDone, 4, 4) |
+      __gen_uint(values->VFTDone, 5, 5) |
+      __gen_uint(values->BSPDone, 6, 6) |
+      __gen_uint(values->VLFDone, 7, 7) |
+      __gen_uint(values->VOPDone, 8, 8) |
+      __gen_uint(values->VMCDone, 9, 9) |
+      __gen_uint(values->VIPDone, 10, 10) |
+      __gen_uint(values->VITDone, 11, 11) |
+      __gen_uint(values->VDSDone, 12, 12) |
+      __gen_uint(values->VMXDone, 13, 13) |
+      __gen_uint(values->VCPDone, 14, 14) |
+      __gen_uint(values->VCDDone, 15, 15) |
+      __gen_uint(values->VADDone, 16, 16) |
+      __gen_uint(values->VMDDone, 17, 17) |
+      __gen_uint(values->VISDone, 18, 18) |
+      __gen_uint(values->VACDone, 19, 19) |
+      __gen_uint(values->VAMDone, 20, 20) |
+      __gen_uint(values->JPGDone, 21, 21) |
+      __gen_uint(values->VBPDone, 22, 22) |
+      __gen_uint(values->VHRDone, 23, 23) |
+      __gen_uint(values->VCIDone, 24, 24) |
+      __gen_uint(values->VCRDone, 25, 25) |
+      __gen_uint(values->VINDone, 26, 26) |
+      __gen_uint(values->VPRDone, 27, 27) |
+      __gen_uint(values->VTQDone, 28, 28) |
+      __gen_uint(values->Reserved, 29, 29) |
+      __gen_uint(values->VCSDone, 30, 30) |
+      __gen_uint(values->GACDone, 31, 31);
+}
+
+#define GEN9_VECS_INSTDONE_num            0x1a06c
+#define GEN9_VECS_INSTDONE_length              1
+struct GEN9_VECS_INSTDONE {
+   bool                                 RingEnable;
+   bool                                 VECSDone;
+   bool                                 GAMDone;
+};
+
+static inline void
+GEN9_VECS_INSTDONE_pack(__gen_user_data *data, void * restrict dst,
+                        const struct GEN9_VECS_INSTDONE * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   dw[0] =
+      __gen_uint(values->RingEnable, 0, 0) |
+      __gen_uint(values->VECSDone, 30, 30) |
+      __gen_uint(values->GAMDone, 31, 31);
+}
+
 #define GEN9_L3CNTLREG_num                0x7034
 #define GEN9_L3CNTLREG_length                  1
 struct GEN9_L3CNTLREG {
@@ -9112,6 +9485,355 @@ GEN9_SO_WRITE_OFFSET3_pack(__gen_user_data *data, void * restrict dst,
 
    dw[0] =
       __gen_offset(values->WriteOffset, 2, 31);
+}
+
+#define GEN9_CACHE_MODE_0_num             0x7000
+#define GEN9_CACHE_MODE_0_length               1
+struct GEN9_CACHE_MODE_0 {
+   bool                                 Nulltilefixdisable;
+   bool                                 Disableclockgatinginthepixelbackend;
+   bool                                 HierarchicalZRAWStallOptimizationDisable;
+   bool                                 RCCEvictionPolicy;
+   bool                                 STCPMAOptimizationEnable;
+   uint32_t                             SamplerL2RequestArbitration;
+#define RoundRobin                               0
+#define FetchareHighestPriority                  1
+#define ConstantsareHighestPriority              2
+   bool                                 SamplerL2TLBPrefetchEnable;
+   bool                                 SamplerSetRemappingfor3DDisable;
+   uint32_t                             MSAACompressionPlaneNumberThresholdforeLLC;
+   bool                                 SamplerL2Disable;
+   bool                                 NulltilefixdisableMask;
+   bool                                 DisableclockgatinginthepixelbackendMask;
+   bool                                 HierarchicalZRAWStallOptimizationDisableMask;
+   bool                                 RCCEvictionPolicyMask;
+   bool                                 STCPMAOptimizationEnableMask;
+   uint32_t                             SamplerL2RequestArbitrationMask;
+   bool                                 SamplerL2TLBPrefetchEnableMask;
+   bool                                 SamplerSetRemappingfor3DDisableMask;
+   uint32_t                             MSAACompressionPlaneNumberThresholdforeLLCMask;
+   bool                                 SamplerL2DisableMask;
+};
+
+static inline void
+GEN9_CACHE_MODE_0_pack(__gen_user_data *data, void * restrict dst,
+                       const struct GEN9_CACHE_MODE_0 * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   dw[0] =
+      __gen_uint(values->Nulltilefixdisable, 0, 0) |
+      __gen_uint(values->Disableclockgatinginthepixelbackend, 1, 1) |
+      __gen_uint(values->HierarchicalZRAWStallOptimizationDisable, 2, 2) |
+      __gen_uint(values->RCCEvictionPolicy, 4, 4) |
+      __gen_uint(values->STCPMAOptimizationEnable, 5, 5) |
+      __gen_uint(values->SamplerL2RequestArbitration, 6, 7) |
+      __gen_uint(values->SamplerL2TLBPrefetchEnable, 9, 9) |
+      __gen_uint(values->SamplerSetRemappingfor3DDisable, 11, 11) |
+      __gen_uint(values->MSAACompressionPlaneNumberThresholdforeLLC, 12, 14) |
+      __gen_uint(values->SamplerL2Disable, 15, 15) |
+      __gen_uint(values->NulltilefixdisableMask, 16, 16) |
+      __gen_uint(values->DisableclockgatinginthepixelbackendMask, 17, 17) |
+      __gen_uint(values->HierarchicalZRAWStallOptimizationDisableMask, 18, 18) |
+      __gen_uint(values->RCCEvictionPolicyMask, 20, 20) |
+      __gen_uint(values->STCPMAOptimizationEnableMask, 21, 21) |
+      __gen_uint(values->SamplerL2RequestArbitrationMask, 22, 23) |
+      __gen_uint(values->SamplerL2TLBPrefetchEnableMask, 25, 25) |
+      __gen_uint(values->SamplerSetRemappingfor3DDisableMask, 27, 27) |
+      __gen_uint(values->MSAACompressionPlaneNumberThresholdforeLLCMask, 28, 30) |
+      __gen_uint(values->SamplerL2DisableMask, 31, 31);
+}
+
+#define GEN9_GFX_ARB_ERROR_RPT_num        0x40a0
+#define GEN9_GFX_ARB_ERROR_RPT_length          1
+struct GEN9_GFX_ARB_ERROR_RPT {
+   bool                                 TLBPageFaultError;
+   bool                                 RSTRMPAVPReadInvalid;
+   bool                                 InvalidPageDirectoryEntryError;
+   bool                                 ROSTRMPAVPInvalidPhysicalAddress;
+   bool                                 TLBPageVTDTranslationError;
+   bool                                 WRDPPAVPInvalid;
+   bool                                 PageDirectoryEntryVTDTranslationError;
+   bool                                 UnloadedPDError;
+   bool                                 GuCVTdtranslationPageFault2ndlevelUndefineddoorbell;
+   bool                                 NonWBmemorytypeforAdvancedContext;
+   bool                                 PASIDNotEnabled;
+   bool                                 PASIDBoundaryViolation;
+   bool                                 PASIDNotValid;
+   bool                                 PASIDWasZeroForUntranslatedRequest;
+   bool                                 ContextWasNotMarkedAsPresentWhenDoingDMA;
+};
+
+static inline void
+GEN9_GFX_ARB_ERROR_RPT_pack(__gen_user_data *data, void * restrict dst,
+                            const struct GEN9_GFX_ARB_ERROR_RPT * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   dw[0] =
+      __gen_uint(values->TLBPageFaultError, 0, 0) |
+      __gen_uint(values->RSTRMPAVPReadInvalid, 1, 1) |
+      __gen_uint(values->InvalidPageDirectoryEntryError, 2, 2) |
+      __gen_uint(values->ROSTRMPAVPInvalidPhysicalAddress, 3, 3) |
+      __gen_uint(values->TLBPageVTDTranslationError, 4, 4) |
+      __gen_uint(values->WRDPPAVPInvalid, 5, 5) |
+      __gen_uint(values->PageDirectoryEntryVTDTranslationError, 6, 6) |
+      __gen_uint(values->UnloadedPDError, 8, 8) |
+      __gen_uint(values->GuCVTdtranslationPageFault2ndlevelUndefineddoorbell, 9, 9) |
+      __gen_uint(values->NonWBmemorytypeforAdvancedContext, 10, 10) |
+      __gen_uint(values->PASIDNotEnabled, 11, 11) |
+      __gen_uint(values->PASIDBoundaryViolation, 12, 12) |
+      __gen_uint(values->PASIDNotValid, 13, 13) |
+      __gen_uint(values->PASIDWasZeroForUntranslatedRequest, 14, 14) |
+      __gen_uint(values->ContextWasNotMarkedAsPresentWhenDoingDMA, 15, 15);
+}
+
+#define GEN9_ACTHD_UDW_num                0x205c
+#define GEN9_ACTHD_UDW_length                  1
+struct GEN9_ACTHD_UDW {
+   uint32_t                             HeadPointerUpperDWORD;
+};
+
+static inline void
+GEN9_ACTHD_UDW_pack(__gen_user_data *data, void * restrict dst,
+                    const struct GEN9_ACTHD_UDW * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   dw[0] =
+      __gen_uint(values->HeadPointerUpperDWORD, 0, 15);
+}
+
+#define GEN9_BCS_ACTHD_UDW_num            0x2205c
+#define GEN9_BCS_ACTHD_UDW_length              1
+struct GEN9_BCS_ACTHD_UDW {
+   uint32_t                             HeadPointerUpperDWORD;
+};
+
+static inline void
+GEN9_BCS_ACTHD_UDW_pack(__gen_user_data *data, void * restrict dst,
+                        const struct GEN9_BCS_ACTHD_UDW * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   dw[0] =
+      __gen_uint(values->HeadPointerUpperDWORD, 0, 15);
+}
+
+#define GEN9_VCS_ACTHD_UDW_num            0x1205c
+#define GEN9_VCS_ACTHD_UDW_length              1
+struct GEN9_VCS_ACTHD_UDW {
+   uint32_t                             HeadPointerUpperDWORD;
+};
+
+static inline void
+GEN9_VCS_ACTHD_UDW_pack(__gen_user_data *data, void * restrict dst,
+                        const struct GEN9_VCS_ACTHD_UDW * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   dw[0] =
+      __gen_uint(values->HeadPointerUpperDWORD, 0, 15);
+}
+
+#define GEN9_VECS_ACTHD_UDW_num           0x1a05c
+#define GEN9_VECS_ACTHD_UDW_length             1
+struct GEN9_VECS_ACTHD_UDW {
+   uint32_t                             HeadPointerUpperDWORD;
+};
+
+static inline void
+GEN9_VECS_ACTHD_UDW_pack(__gen_user_data *data, void * restrict dst,
+                         const struct GEN9_VECS_ACTHD_UDW * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   dw[0] =
+      __gen_uint(values->HeadPointerUpperDWORD, 0, 15);
+}
+
+#define GEN9_FAULT_REG_num                0x4094
+#define GEN9_FAULT_REG_length                  1
+struct GEN9_FAULT_REG {
+   bool                                 ValidBit;
+   uint32_t                             FaultType;
+#define InvalidPTEFault                          0
+#define InvalidPDEFault                          1
+#define InvalidPDPEFault                         2
+#define InvalidPML4EFault                        3
+   uint32_t                             SRCIDofFault;
+   uint32_t                             GTTSEL;
+#define PPGTT                                    0
+#define GGTT                                     1
+   uint32_t                             EngineID;
+#define GFX                                      0
+#define MFX0                                     1
+#define MFX1                                     2
+#define VEBX                                     3
+#define BLT                                      4
+#define GUC                                      5
+};
+
+static inline void
+GEN9_FAULT_REG_pack(__gen_user_data *data, void * restrict dst,
+                    const struct GEN9_FAULT_REG * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   dw[0] =
+      __gen_uint(values->ValidBit, 0, 0) |
+      __gen_uint(values->FaultType, 1, 2) |
+      __gen_uint(values->SRCIDofFault, 3, 10) |
+      __gen_uint(values->GTTSEL, 11, 11) |
+      __gen_uint(values->EngineID, 12, 14);
+}
+
+#define GEN9_BCS_RING_BUFFER_CTL_num      0x2203c
+#define GEN9_BCS_RING_BUFFER_CTL_length        1
+struct GEN9_BCS_RING_BUFFER_CTL {
+   bool                                 RingBufferEnable;
+   uint32_t                             AutomaticReportHeadPointer;
+#define MI_AUTOREPORT_OFF                        0
+#define MI_AUTOREPORT_64KB                       1
+#define MI_AUTOREPORT_4KB                        2
+#define MI_AUTOREPORT_128KB                      3
+   bool                                 DisableRegisterAccesses;
+   bool                                 SemaphoreWait;
+   bool                                 RBWait;
+   uint32_t                             BufferLengthinpages1;
+};
+
+static inline void
+GEN9_BCS_RING_BUFFER_CTL_pack(__gen_user_data *data, void * restrict dst,
+                              const struct GEN9_BCS_RING_BUFFER_CTL * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   dw[0] =
+      __gen_uint(values->RingBufferEnable, 0, 0) |
+      __gen_uint(values->AutomaticReportHeadPointer, 1, 2) |
+      __gen_uint(values->DisableRegisterAccesses, 8, 8) |
+      __gen_uint(values->SemaphoreWait, 10, 10) |
+      __gen_uint(values->RBWait, 11, 11) |
+      __gen_uint(values->BufferLengthinpages1, 12, 20);
+}
+
+#define GEN9_RCS_RING_BUFFER_CTL_num      0x203c
+#define GEN9_RCS_RING_BUFFER_CTL_length        1
+struct GEN9_RCS_RING_BUFFER_CTL {
+   bool                                 RingBufferEnable;
+   uint32_t                             AutomaticReportHeadPointer;
+#define MI_AUTOREPORT_OFF                        0
+#define MI_AUTOREPORT_64KB                       1
+#define MI_AUTOREPORT_4KB                        2
+#define MI_AUTOREPORT_128KB                      3
+   bool                                 SemaphoreWait;
+   bool                                 RBWait;
+   uint32_t                             BufferLengthinpages1;
+};
+
+static inline void
+GEN9_RCS_RING_BUFFER_CTL_pack(__gen_user_data *data, void * restrict dst,
+                              const struct GEN9_RCS_RING_BUFFER_CTL * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   dw[0] =
+      __gen_uint(values->RingBufferEnable, 0, 0) |
+      __gen_uint(values->AutomaticReportHeadPointer, 1, 2) |
+      __gen_uint(values->SemaphoreWait, 10, 10) |
+      __gen_uint(values->RBWait, 11, 11) |
+      __gen_uint(values->BufferLengthinpages1, 12, 20);
+}
+
+#define GEN9_VECS_RING_BUFFER_CTL_num     0x1a03c
+#define GEN9_VECS_RING_BUFFER_CTL_length       1
+struct GEN9_VECS_RING_BUFFER_CTL {
+   bool                                 RingBufferEnable;
+   uint32_t                             AutomaticReportHeadPointer;
+#define MI_AUTOREPORT_OFF                        0
+#define MI_AUTOREPORT_64KB                       1
+#define MI_AUTOREPORT_4KB                        2
+#define MI_AUTOREPORT_128KB                      3
+   bool                                 DisableRegisterAccesses;
+   bool                                 SemaphoreWait;
+   bool                                 RBWait;
+   uint32_t                             BufferLengthinpages1;
+};
+
+static inline void
+GEN9_VECS_RING_BUFFER_CTL_pack(__gen_user_data *data, void * restrict dst,
+                               const struct GEN9_VECS_RING_BUFFER_CTL * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   dw[0] =
+      __gen_uint(values->RingBufferEnable, 0, 0) |
+      __gen_uint(values->AutomaticReportHeadPointer, 1, 2) |
+      __gen_uint(values->DisableRegisterAccesses, 8, 8) |
+      __gen_uint(values->SemaphoreWait, 10, 10) |
+      __gen_uint(values->RBWait, 11, 11) |
+      __gen_uint(values->BufferLengthinpages1, 12, 20);
+}
+
+#define GEN9_VCS_RING_BUFFER_CTL_num      0x1203c
+#define GEN9_VCS_RING_BUFFER_CTL_length        1
+struct GEN9_VCS_RING_BUFFER_CTL {
+   bool                                 RingBufferEnable;
+   uint32_t                             AutomaticReportHeadPointer;
+#define MI_AUTOREPORT_OFF                        0
+#define MI_AUTOREPORT_64KB                       1
+#define MI_AUTOREPORT_4KB                        2
+#define MI_AUTOREPORT_128KB                      3
+   bool                                 DisableRegisterAccesses;
+   bool                                 SemaphoreWait;
+   bool                                 RBWait;
+   uint32_t                             BufferLengthinpages1;
+};
+
+static inline void
+GEN9_VCS_RING_BUFFER_CTL_pack(__gen_user_data *data, void * restrict dst,
+                              const struct GEN9_VCS_RING_BUFFER_CTL * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   dw[0] =
+      __gen_uint(values->RingBufferEnable, 0, 0) |
+      __gen_uint(values->AutomaticReportHeadPointer, 1, 2) |
+      __gen_uint(values->DisableRegisterAccesses, 8, 8) |
+      __gen_uint(values->SemaphoreWait, 10, 10) |
+      __gen_uint(values->RBWait, 11, 11) |
+      __gen_uint(values->BufferLengthinpages1, 12, 20);
+}
+
+#define GEN9_VCS2_RING_BUFFER_CTL_num     0x1203c
+#define GEN9_VCS2_RING_BUFFER_CTL_length       1
+struct GEN9_VCS2_RING_BUFFER_CTL {
+   bool                                 RingBufferEnable;
+   uint32_t                             AutomaticReportHeadPointer;
+#define MI_AUTOREPORT_OFF                        0
+#define MI_AUTOREPORT_64KB                       1
+#define MI_AUTOREPORT_4KB                        2
+#define MI_AUTOREPORT_128KB                      3
+   bool                                 DisableRegisterAccesses;
+   bool                                 SemaphoreWait;
+   bool                                 RBWait;
+   uint32_t                             BufferLengthinpages1;
+};
+
+static inline void
+GEN9_VCS2_RING_BUFFER_CTL_pack(__gen_user_data *data, void * restrict dst,
+                               const struct GEN9_VCS2_RING_BUFFER_CTL * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   dw[0] =
+      __gen_uint(values->RingBufferEnable, 0, 0) |
+      __gen_uint(values->AutomaticReportHeadPointer, 1, 2) |
+      __gen_uint(values->DisableRegisterAccesses, 8, 8) |
+      __gen_uint(values->SemaphoreWait, 10, 10) |
+      __gen_uint(values->RBWait, 11, 11) |
+      __gen_uint(values->BufferLengthinpages1, 12, 20);
 }
 
 #endif /* GEN9_PACK_H */

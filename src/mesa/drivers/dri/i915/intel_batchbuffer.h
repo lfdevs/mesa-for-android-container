@@ -7,10 +7,6 @@
 #include "intel_bufmgr.h"
 #include "intel_reg.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 /**
  * Number of bytes to reserve for commands necessary to complete a batch.
  *
@@ -151,9 +147,5 @@ intel_batchbuffer_advance(struct intel_context *intel)
 
 #define ADVANCE_BATCH() intel_batchbuffer_advance(intel);
 #define CACHED_BATCH() intel_batchbuffer_cached_advance(intel);
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif

@@ -473,6 +473,8 @@ static OMX_ERRORTYPE vid_enc_GetParameter(OMX_HANDLETYPE handle, OMX_INDEXTYPE i
 
       if (format->nPortIndex > 1)
          return OMX_ErrorBadPortIndex;
+      if (format->nIndex >= 1)
+         return OMX_ErrorNoMore;
 
       port = (omx_base_video_PortType *)priv->ports[format->nPortIndex];
       memcpy(format, &port->sVideoParam, sizeof(OMX_VIDEO_PARAM_PORTFORMATTYPE));
@@ -1090,8 +1092,10 @@ static void enc_HandleTask(omx_base_PortType *port, struct encode_task *task,
    priv->s_pipe->flush(priv->s_pipe, NULL, 0);
 
    /* -------------- allocate output buffer --------- */
-   task->bitstream = pipe_buffer_create(priv->s_pipe->screen, PIPE_BIND_VERTEX_BUFFER,
-                                        PIPE_USAGE_STREAM, size);
+   task->bitstream = pipe_buffer_create(priv->s_pipe->screen,
+                                        PIPE_BIND_VERTEX_BUFFER,
+                                        PIPE_USAGE_STAGING, /* map for read */
+                                        size);
 
    picture.picture_type = picture_type;
    picture.pic_order_cnt = task->pic_order_cnt;
@@ -1269,4 +1273,7 @@ static void vid_enc_BufferEncoded(OMX_COMPONENTTYPE *comp, OMX_BUFFERHEADERTYPE*
 
    output->nOffset = 0;
    output->nFilledLen = size; /* mark buffer as full */
+
+   /* all output buffers contain exactly one frame */
+   output->nFlags = OMX_BUFFERFLAG_ENDOFFRAME;
 }

@@ -31,10 +31,6 @@
 #pragma warning(disable: 4800 4146 4244 4267 4355 4996)
 #endif
 
-#include "jit_api.h"
-#include "JitManager.h"
-#include "fetch_jit.h"
-
 #pragma push_macro("DEBUG")
 #undef DEBUG
 
@@ -57,9 +53,13 @@
 
 #pragma pop_macro("DEBUG")
 
+#include "JitManager.h"
+#include "jit_api.h"
+#include "fetch_jit.h"
+
 #include "core/state.h"
 
-#include "state_llvm.h"
+#include "gen_state_llvm.h"
 
 #include <sstream>
 #if defined(_WIN32)
@@ -69,7 +69,8 @@
 #define INTEL_OUTPUT_DIR "c:\\Intel"
 #define SWR_OUTPUT_DIR INTEL_OUTPUT_DIR "\\SWR"
 #define JITTER_OUTPUT_DIR SWR_OUTPUT_DIR "\\Jitter"
-#endif
+#endif // _WIN32
+
 
 using namespace llvm;
 using namespace SwrJit;
@@ -88,7 +89,7 @@ JitManager::JitManager(uint32_t simdWidth, const char *arch, const char* core)
     tOpts.AllowFPOpFusion = FPOpFusion::Fast;
     tOpts.NoInfsFPMath = false;
     tOpts.NoNaNsFPMath = false;
-    tOpts.UnsafeFPMath = true;
+    tOpts.UnsafeFPMath = false;
 #if defined(_DEBUG)
 #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR < 7
     tOpts.NoFramePointerElim = true;
@@ -105,15 +106,9 @@ JitManager::JitManager(uint32_t simdWidth, const char *arch, const char* core)
     std::unique_ptr<Module> newModule(new Module(fnName.str(), mContext));
     mpCurrentModule = newModule.get();
 
-    auto &&EB = EngineBuilder(std::move(newModule));
-    EB.setTargetOptions(tOpts);
-    EB.setOptLevel(CodeGenOpt::Aggressive);
-
     StringRef hostCPUName;
 
     hostCPUName = sys::getHostCPUName();
-
-    EB.setMCPU(hostCPUName);
 
 #if defined(_WIN32)
     // Needed for MCJIT on windows
@@ -122,7 +117,11 @@ JitManager::JitManager(uint32_t simdWidth, const char *arch, const char* core)
     mpCurrentModule->setTargetTriple(hostTriple.getTriple());
 #endif // _WIN32
 
-    mpExec = EB.create();
+    mpExec = EngineBuilder(std::move(newModule))
+        .setTargetOptions(tOpts)
+        .setOptLevel(CodeGenOpt::Aggressive)
+        .setMCPU(hostCPUName)
+        .create();
 
 #if LLVM_USE_INTEL_JITEVENTS
     JITEventListener *vTune = JITEventListener::createIntelJITEventListener();
@@ -133,8 +132,6 @@ JitManager::JitManager(uint32_t simdWidth, const char *arch, const char* core)
     mInt8Ty = Type::getInt8Ty(mContext);
     mInt32Ty = Type::getInt32Ty(mContext);   // int type
     mInt64Ty = Type::getInt64Ty(mContext);   // int type
-    mV4FP32Ty = StructType::get(mContext, std::vector<Type*>(4, mFP32Ty), false); // vector4 float type (represented as structure)
-    mV4Int32Ty = StructType::get(mContext, std::vector<Type*>(4, mInt32Ty), false); // vector4 int type
 
     // fetch function signature
     // typedef void(__cdecl *PFN_FETCH_FUNC)(SWR_FETCH_CONTEXT& fetchInfo, simdvertex& out);
@@ -147,8 +144,8 @@ JitManager::JitManager(uint32_t simdWidth, const char *arch, const char* core)
     mSimtFP32Ty = VectorType::get(mFP32Ty, mVWidth);
     mSimtInt32Ty = VectorType::get(mInt32Ty, mVWidth);
 
-    mSimdVectorTy = StructType::get(mContext, std::vector<Type*>(4, mSimtFP32Ty), false);
-    mSimdVectorInt32Ty = StructType::get(mContext, std::vector<Type*>(4, mSimtInt32Ty), false);
+    mSimdVectorTy = ArrayType::get(mSimtFP32Ty, 4);
+    mSimdVectorInt32Ty = ArrayType::get(mSimtInt32Ty, 4);
 
 #if defined(_WIN32)
     // explicitly instantiate used symbols from potentially staticly linked libs
@@ -190,44 +187,6 @@ void JitManager::SetupNewModule()
     mIsModuleFinalized = false;
 }
 
-//////////////////////////////////////////////////////////////////////////
-/// @brief Create new LLVM module from IR.
-bool JitManager::SetupModuleFromIR(const uint8_t *pIR)
-{
-    std::unique_ptr<MemoryBuffer> pMem = MemoryBuffer::getMemBuffer(StringRef((const char*)pIR), "");
-
-    SMDiagnostic Err;
-    std::unique_ptr<Module> newModule = parseIR(pMem.get()->getMemBufferRef(), Err, mContext);
-
-    SWR_REL_ASSERT(
-        !(newModule == nullptr),
-        "Parse failed!\n"
-        "%s", Err.getMessage().data());
-    if (newModule == nullptr)
-    {
-        return false;
-    }
-
-#if HAVE_LLVM == 0x307
-    // llvm-3.7 has mismatched setDataLyout/getDataLayout APIs
-    newModule->setDataLayout(*mpExec->getDataLayout());
-#else
-    newModule->setDataLayout(mpExec->getDataLayout());
-#endif
-
-    mpCurrentModule = newModule.get();
-#if defined(_WIN32)
-    // Needed for MCJIT on windows
-    Triple hostTriple(sys::getProcessTriple());
-    hostTriple.setObjectFormat(Triple::ELF);
-    newModule->setTargetTriple(hostTriple.getTriple());
-#endif // _WIN32
-
-    mpExec->addModule(std::move(newModule));
-    mIsModuleFinalized = false;
-
-    return true;
-}
 
 //////////////////////////////////////////////////////////////////////////
 /// @brief Dump function x86 assembly to file.
@@ -258,12 +217,7 @@ void JitManager::DumpAsm(Function* pFunction, const char* fileName)
         sprintf(fName, "%s.%s.asm", funcName, fileName);
 #endif
 
-#if HAVE_LLVM == 0x306
-        raw_fd_ostream fd(fName, EC, llvm::sys::fs::F_None);
-        formatted_raw_ostream filestream(fd);
-#else
         raw_fd_ostream filestream(fName, EC, llvm::sys::fs::F_None);
-#endif
 
         legacy::PassManager* pMPasses = new legacy::PassManager();
         auto* pTarget = mpExec->getTargetMachine();

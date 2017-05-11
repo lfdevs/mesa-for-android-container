@@ -40,16 +40,17 @@
 #define SWR_NEW_SAMPLER_VIEW (1 << 4)
 #define SWR_NEW_VS (1 << 5)
 #define SWR_NEW_FS (1 << 6)
-#define SWR_NEW_VSCONSTANTS (1 << 7)
-#define SWR_NEW_FSCONSTANTS (1 << 8)
-#define SWR_NEW_VERTEX (1 << 9)
-#define SWR_NEW_STIPPLE (1 << 10)
-#define SWR_NEW_SCISSOR (1 << 11)
-#define SWR_NEW_VIEWPORT (1 << 12)
-#define SWR_NEW_FRAMEBUFFER (1 << 13)
-#define SWR_NEW_CLIP (1 << 14)
-#define SWR_NEW_SO (1 << 15)
-#define SWR_NEW_ALL 0x0000ffff
+#define SWR_NEW_GS (1 << 7)
+#define SWR_NEW_VSCONSTANTS (1 << 8)
+#define SWR_NEW_FSCONSTANTS (1 << 9)
+#define SWR_NEW_GSCONSTANTS (1 << 10)
+#define SWR_NEW_VERTEX (1 << 11)
+#define SWR_NEW_STIPPLE (1 << 12)
+#define SWR_NEW_SCISSOR (1 << 13)
+#define SWR_NEW_VIEWPORT (1 << 14)
+#define SWR_NEW_FRAMEBUFFER (1 << 15)
+#define SWR_NEW_CLIP (1 << 16)
+#define SWR_NEW_SO (1 << 17)
 
 namespace std
 {
@@ -85,13 +86,19 @@ struct swr_draw_context {
    uint32_t num_constantsVS[PIPE_MAX_CONSTANT_BUFFERS];
    const float *constantFS[PIPE_MAX_CONSTANT_BUFFERS];
    uint32_t num_constantsFS[PIPE_MAX_CONSTANT_BUFFERS];
+   const float *constantGS[PIPE_MAX_CONSTANT_BUFFERS];
+   uint32_t num_constantsGS[PIPE_MAX_CONSTANT_BUFFERS];
 
    swr_jit_texture texturesVS[PIPE_MAX_SHADER_SAMPLER_VIEWS];
    swr_jit_sampler samplersVS[PIPE_MAX_SAMPLERS];
    swr_jit_texture texturesFS[PIPE_MAX_SHADER_SAMPLER_VIEWS];
    swr_jit_sampler samplersFS[PIPE_MAX_SAMPLERS];
+   swr_jit_texture texturesGS[PIPE_MAX_SHADER_SAMPLER_VIEWS];
+   swr_jit_sampler samplersGS[PIPE_MAX_SAMPLERS];
 
    float userClipPlanes[PIPE_MAX_CLIP_PLANES][4];
+
+   uint32_t polyStipple[32];
 
    SWR_SURFACE_STATE renderTargets[SWR_NUM_ATTACHMENTS];
    void *pStats;
@@ -112,6 +119,7 @@ struct swr_context {
 
    struct swr_vertex_shader *vs;
    struct swr_fragment_shader *fs;
+   struct swr_geometry_shader *gs;
    struct swr_vertex_element_state *velems;
 
    /** Other rendering state */
@@ -121,7 +129,7 @@ struct swr_context {
    struct pipe_constant_buffer
       constants[PIPE_SHADER_TYPES][PIPE_MAX_CONSTANT_BUFFERS];
    struct pipe_framebuffer_state framebuffer;
-   struct pipe_poly_stipple poly_stipple;
+   struct swr_poly_stipple poly_stipple;
    struct pipe_scissor_state scissor;
    SWR_RECT swr_scissor;
    struct pipe_sampler_view *
@@ -135,7 +143,7 @@ struct swr_context {
 
    /** Conditional query object and mode */
    struct pipe_query *render_cond_query;
-   uint render_cond_mode;
+   enum pipe_render_cond_flag render_cond_mode;
    boolean render_cond_cond;
    unsigned active_queries;
 
@@ -190,4 +198,7 @@ void swr_clear_init(struct pipe_context *pipe);
 void swr_draw_init(struct pipe_context *pipe);
 
 void swr_finish(struct pipe_context *pipe);
+
+void swr_do_msaa_resolve(struct pipe_resource *src_resource,
+                         struct pipe_resource *dst_resource);
 #endif

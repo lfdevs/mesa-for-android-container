@@ -247,11 +247,10 @@ am__libgallium_la_SOURCES_DIST = cso_cache/cso_cache.c \
 	util/u_network.h util/u_pack_color.h util/u_pointer.h \
 	util/u_prim.h util/u_prim_restart.c util/u_prim_restart.h \
 	util/u_pstipple.c util/u_pstipple.h util/u_pwr8.h \
-	util/u_queue.c util/u_queue.h util/u_range.h util/u_rect.h \
-	util/u_resource.c util/u_resource.h util/u_ringbuffer.c \
-	util/u_ringbuffer.h util/u_sampler.c util/u_sampler.h \
-	util/u_simple_shaders.c util/u_simple_shaders.h \
-	util/u_split_prim.h util/u_sse.h util/u_string.h \
+	util/u_range.h util/u_rect.h util/u_resource.c \
+	util/u_resource.h util/u_ringbuffer.c util/u_ringbuffer.h \
+	util/u_sampler.c util/u_sampler.h util/u_simple_shaders.c \
+	util/u_simple_shaders.h util/u_split_prim.h util/u_sse.h \
 	util/u_suballoc.c util/u_suballoc.h util/u_surface.c \
 	util/u_surface.h util/u_surfaces.c util/u_surfaces.h \
 	util/u_tests.c util/u_tests.h util/u_texture.c \
@@ -352,8 +351,8 @@ am__objects_1 = cso_cache/cso_cache.lo cso_cache/cso_context.lo \
 	util/u_handle_table.lo util/u_hash_table.lo util/u_helpers.lo \
 	util/u_index_modify.lo util/u_keymap.lo util/u_linear.lo \
 	util/u_math.lo util/u_mm.lo util/u_network.lo \
-	util/u_prim_restart.lo util/u_pstipple.lo util/u_queue.lo \
-	util/u_resource.lo util/u_ringbuffer.lo util/u_sampler.lo \
+	util/u_prim_restart.lo util/u_pstipple.lo util/u_resource.lo \
+	util/u_ringbuffer.lo util/u_sampler.lo \
 	util/u_simple_shaders.lo util/u_suballoc.lo util/u_surface.lo \
 	util/u_surfaces.lo util/u_tests.lo util/u_texture.lo \
 	util/u_tile.lo util/u_transfer.lo util/u_upload_mgr.lo \
@@ -567,8 +566,6 @@ DLLTOOL = @DLLTOOL@
 DLOPEN_LIBS = @DLOPEN_LIBS@
 DRI2PROTO_CFLAGS = @DRI2PROTO_CFLAGS@
 DRI2PROTO_LIBS = @DRI2PROTO_LIBS@
-DRI3PROTO_CFLAGS = @DRI3PROTO_CFLAGS@
-DRI3PROTO_LIBS = @DRI3PROTO_LIBS@
 DRIGL_CFLAGS = @DRIGL_CFLAGS@
 DRIGL_LIBS = @DRIGL_LIBS@
 DRI_DRIVER_INSTALL_DIR = @DRI_DRIVER_INSTALL_DIR@
@@ -633,29 +630,27 @@ LIBDRM_CFLAGS = @LIBDRM_CFLAGS@
 LIBDRM_LIBS = @LIBDRM_LIBS@
 LIBELF_CFLAGS = @LIBELF_CFLAGS@
 LIBELF_LIBS = @LIBELF_LIBS@
+LIBGLVND_DATADIR = @LIBGLVND_DATADIR@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
 LIBSENSORS_LIBS = @LIBSENSORS_LIBS@
 LIBTOOL = @LIBTOOL@
+LIBUNWIND_CFLAGS = @LIBUNWIND_CFLAGS@
+LIBUNWIND_LIBS = @LIBUNWIND_LIBS@
 LIB_DIR = @LIB_DIR@
 LIB_EXT = @LIB_EXT@
 LIPO = @LIPO@
-LLVM_BINDIR = @LLVM_BINDIR@
 LLVM_CFLAGS = @LLVM_CFLAGS@
 LLVM_CONFIG = @LLVM_CONFIG@
-LLVM_CPPFLAGS = @LLVM_CPPFLAGS@
 LLVM_CXXFLAGS = @LLVM_CXXFLAGS@
 LLVM_INCLUDEDIR = @LLVM_INCLUDEDIR@
 LLVM_LDFLAGS = @LLVM_LDFLAGS@
-LLVM_LIBDIR = @LLVM_LIBDIR@
 LLVM_LIBS = @LLVM_LIBS@
-LLVM_VERSION = @LLVM_VERSION@
 LN_S = @LN_S@
 LTLIBOBJS = @LTLIBOBJS@
 LT_SYS_LIBRARY_PATH = @LT_SYS_LIBRARY_PATH@
 MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
-MESA_LLVM = @MESA_LLVM@
 MKDIR_P = @MKDIR_P@
 MSVC2013_COMPAT_CFLAGS = @MSVC2013_COMPAT_CFLAGS@
 MSVC2013_COMPAT_CXXFLAGS = @MSVC2013_COMPAT_CXXFLAGS@
@@ -695,8 +690,6 @@ PKG_CONFIG = @PKG_CONFIG@
 PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
 PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
 POSIX_SHELL = @POSIX_SHELL@
-PRESENTPROTO_CFLAGS = @PRESENTPROTO_CFLAGS@
-PRESENTPROTO_LIBS = @PRESENTPROTO_LIBS@
 PTHREADSTUBS_CFLAGS = @PTHREADSTUBS_CFLAGS@
 PTHREADSTUBS_LIBS = @PTHREADSTUBS_LIBS@
 PTHREAD_CC = @PTHREAD_CC@
@@ -719,7 +712,7 @@ SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
 SWR_AVX2_CXXFLAGS = @SWR_AVX2_CXXFLAGS@
 SWR_AVX_CXXFLAGS = @SWR_AVX_CXXFLAGS@
-SWR_CXX11_CXXFLAGS = @SWR_CXX11_CXXFLAGS@
+SWR_CXX14_CXXFLAGS = @SWR_CXX14_CXXFLAGS@
 VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
 VALGRIND_LIBS = @VALGRIND_LIBS@
 VA_CFLAGS = @VA_CFLAGS@
@@ -763,9 +756,10 @@ XVMC_LIBS = @XVMC_LIBS@
 XVMC_LIB_INSTALL_DIR = @XVMC_LIB_INSTALL_DIR@
 XVMC_MAJOR = @XVMC_MAJOR@
 XVMC_MINOR = @XVMC_MINOR@
-XXD = @XXD@
 YACC = @YACC@
 YFLAGS = @YFLAGS@
+ZLIB_CFLAGS = @ZLIB_CFLAGS@
+ZLIB_LIBS = @ZLIB_LIBS@
 abs_builddir = @abs_builddir@
 abs_srcdir = @abs_srcdir@
 abs_top_builddir = @abs_top_builddir@
@@ -1104,8 +1098,6 @@ C_SOURCES := \
 	util/u_pstipple.c \
 	util/u_pstipple.h \
 	util/u_pwr8.h \
-	util/u_queue.c \
-	util/u_queue.h \
 	util/u_range.h \
 	util/u_rect.h \
 	util/u_resource.c \
@@ -1118,7 +1110,6 @@ C_SOURCES := \
 	util/u_simple_shaders.h \
 	util/u_split_prim.h \
 	util/u_sse.h \
-	util/u_string.h \
 	util/u_suballoc.c \
 	util/u_suballoc.h \
 	util/u_surface.c \
@@ -1316,8 +1307,8 @@ GALLIUM_TARGET_CFLAGS = \
 	$(LIBDRM_CFLAGS) \
 	$(VISIBILITY_CFLAGS)
 
-GALLIUM_COMMON_LIB_DEPS = -lm $(LIBSENSORS_LIBS) $(CLOCK_LIB) \
-	$(PTHREAD_LIBS) $(DLOPEN_LIBS) $(am__append_1)
+GALLIUM_COMMON_LIB_DEPS = -lm $(LIBUNWIND_LIBS) $(LIBSENSORS_LIBS) \
+	$(CLOCK_LIB) $(PTHREAD_LIBS) $(DLOPEN_LIBS) $(am__append_1)
 GALLIUM_WINSYS_CFLAGS = \
 	-I$(top_srcdir)/src \
 	-I$(top_srcdir)/include \
@@ -1335,8 +1326,8 @@ noinst_LTLIBRARIES = libgallium.la libgalliumvl_stub.la \
 AM_CFLAGS = -I$(top_srcdir)/src/loader \
 	-I$(top_builddir)/src/compiler/nir \
 	-I$(top_srcdir)/src/gallium/auxiliary/util $(GALLIUM_CFLAGS) \
-	$(VISIBILITY_CFLAGS) $(MSVC2013_COMPAT_CFLAGS) $(am__append_4) \
-	$(am__append_6)
+	$(LIBUNWIND_CFLAGS) $(VISIBILITY_CFLAGS) \
+	$(MSVC2013_COMPAT_CFLAGS) $(am__append_4) $(am__append_6)
 AM_CXXFLAGS = $(VISIBILITY_CXXFLAGS) $(MSVC2013_COMPAT_CXXFLAGS) \
 	$(am__append_7)
 libgallium_la_SOURCES = $(C_SOURCES) $(NIR_SOURCES) \
@@ -1736,7 +1727,6 @@ util/u_prim_restart.lo: util/$(am__dirstamp) \
 	util/$(DEPDIR)/$(am__dirstamp)
 util/u_pstipple.lo: util/$(am__dirstamp) \
 	util/$(DEPDIR)/$(am__dirstamp)
-util/u_queue.lo: util/$(am__dirstamp) util/$(DEPDIR)/$(am__dirstamp)
 util/u_resource.lo: util/$(am__dirstamp) \
 	util/$(DEPDIR)/$(am__dirstamp)
 util/u_ringbuffer.lo: util/$(am__dirstamp) \
@@ -2137,7 +2127,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_network.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_prim_restart.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_pstipple.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_queue.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_resource.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_ringbuffer.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_sampler.Plo@am__quote@

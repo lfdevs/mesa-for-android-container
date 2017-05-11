@@ -55,6 +55,7 @@ C_SOURCES := \
 	vc4_simulator_validate.h \
 	vc4_state.c \
 	vc4_tiling.c \
+	vc4_tiling_lt.c \
 	vc4_tiling.h \
 	vc4_uniforms.c \
 	$()

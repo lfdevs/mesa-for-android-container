@@ -28,6 +28,7 @@
 #include "brw_context.h"
 #include "brw_state.h"
 #include "brw_defines.h"
+#include "compiler/brw_eu_defines.h"
 #include "brw_util.h"
 #include "brw_wm.h"
 #include "program/program.h"
@@ -48,8 +49,7 @@ gen6_upload_wm_push_constants(struct brw_context *brw)
 
    _mesa_shader_write_subroutine_indices(&brw->ctx, MESA_SHADER_FRAGMENT);
 
-   gen6_upload_push_constants(brw, &fp->program, prog_data,
-                              stage_state, AUB_TRACE_WM_CONSTANTS);
+   gen6_upload_push_constants(brw, &fp->program, prog_data, stage_state);
 
    if (brw->gen >= 7) {
       gen7_upload_constant_state(brw, &brw->wm.base, true,

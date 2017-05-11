@@ -40,7 +40,7 @@ void
 glsl_type::init_ralloc_type_ctx(void)
 {
    if (glsl_type::mem_ctx == NULL) {
-      glsl_type::mem_ctx = ralloc_autofree_context();
+      glsl_type::mem_ctx = ralloc_context(NULL);
       assert(glsl_type::mem_ctx != NULL);
    }
 }
@@ -95,7 +95,7 @@ glsl_type::glsl_type(GLenum gl_type, glsl_base_type base_type,
 
    memset(& fields, 0, sizeof(fields));
 
-   if (base_type == GLSL_TYPE_SAMPLER) {
+   if (is_sampler()) {
       /* Samplers take no storage whatsoever. */
       matrix_columns = vector_elements = 0;
    } else {
@@ -300,7 +300,7 @@ glsl_type::sampler_index() const
 {
    const glsl_type *const t = (this->is_array()) ? this->fields.array : this;
 
-   assert(t->is_sampler());
+   assert(t->is_sampler() || t->is_image());
 
    switch (t->sampler_dimensionality) {
    case GLSL_SAMPLER_DIM_1D:
@@ -354,6 +354,10 @@ const glsl_type *glsl_type::get_base_type() const
       return double_type;
    case GLSL_TYPE_BOOL:
       return bool_type;
+   case GLSL_TYPE_UINT64:
+      return uint64_t_type;
+   case GLSL_TYPE_INT64:
+      return int64_t_type;
    default:
       return error_type;
    }
@@ -380,6 +384,10 @@ const glsl_type *glsl_type::get_scalar_type() const
       return double_type;
    case GLSL_TYPE_BOOL:
       return bool_type;
+   case GLSL_TYPE_UINT64:
+      return uint64_t_type;
+   case GLSL_TYPE_INT64:
+      return int64_t_type;
    default:
       /* Handle everything else */
       return type;
@@ -408,6 +416,9 @@ _mesa_glsl_release_types(void)
       _mesa_hash_table_destroy(glsl_type::interface_types, NULL);
       glsl_type::interface_types = NULL;
    }
+
+   ralloc_free(glsl_type::mem_ctx);
+   glsl_type::mem_ctx = NULL;
 }
 
 
@@ -520,6 +531,31 @@ glsl_type::bvec(unsigned components)
 
 
 const glsl_type *
+glsl_type::i64vec(unsigned components)
+{
+   if (components == 0 || components > 4)
+      return error_type;
+
+   static const glsl_type *const ts[] = {
+      int64_t_type, i64vec2_type, i64vec3_type, i64vec4_type
+   };
+   return ts[components - 1];
+}
+
+
+const glsl_type *
+glsl_type::u64vec(unsigned components)
+{
+   if (components == 0 || components > 4)
+      return error_type;
+
+   static const glsl_type *const ts[] = {
+      uint64_t_type, u64vec2_type, u64vec3_type, u64vec4_type
+   };
+   return ts[components - 1];
+}
+
+const glsl_type *
 glsl_type::get_instance(unsigned base_type, unsigned rows, unsigned columns)
 {
    if (base_type == GLSL_TYPE_VOID)
@@ -542,6 +578,10 @@ glsl_type::get_instance(unsigned base_type, unsigned rows, unsigned columns)
          return dvec(rows);
       case GLSL_TYPE_BOOL:
          return bvec(rows);
+      case GLSL_TYPE_UINT64:
+         return u64vec(rows);
+      case GLSL_TYPE_INT64:
+         return i64vec(rows);
       default:
          return error_type;
       }
@@ -1239,6 +1279,8 @@ glsl_type::component_slots() const
       return this->components();
 
    case GLSL_TYPE_DOUBLE:
+   case GLSL_TYPE_UINT64:
+   case GLSL_TYPE_INT64:
       return 2 * this->components();
 
    case GLSL_TYPE_STRUCT:
@@ -1321,6 +1363,8 @@ glsl_type::uniform_locations() const
    case GLSL_TYPE_INT:
    case GLSL_TYPE_FLOAT:
    case GLSL_TYPE_DOUBLE:
+   case GLSL_TYPE_UINT64:
+   case GLSL_TYPE_INT64:
    case GLSL_TYPE_BOOL:
    case GLSL_TYPE_SAMPLER:
    case GLSL_TYPE_IMAGE:
@@ -1350,6 +1394,8 @@ glsl_type::varying_count() const
    case GLSL_TYPE_FLOAT:
    case GLSL_TYPE_DOUBLE:
    case GLSL_TYPE_BOOL:
+   case GLSL_TYPE_UINT64:
+   case GLSL_TYPE_INT64:
       return 1;
 
    case GLSL_TYPE_STRUCT:
@@ -1923,6 +1969,8 @@ glsl_type::count_attribute_slots(bool is_vertex_input) const
    case GLSL_TYPE_BOOL:
       return this->matrix_columns;
    case GLSL_TYPE_DOUBLE:
+   case GLSL_TYPE_UINT64:
+   case GLSL_TYPE_INT64:
       if (this->vector_elements > 2 && !is_vertex_input)
          return this->matrix_columns * 2;
       else
@@ -1987,8 +2035,7 @@ glsl_type::coordinate_components() const
     * cubemap faces.
     */
    if (sampler_array &&
-       !(base_type == GLSL_TYPE_IMAGE &&
-         sampler_dimensionality == GLSL_SAMPLER_DIM_CUBE))
+       !(is_image() && sampler_dimensionality == GLSL_SAMPLER_DIM_CUBE))
       size += 1;
 
    return size;

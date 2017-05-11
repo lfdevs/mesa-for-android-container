@@ -40,7 +40,7 @@
 
 #include "svga_winsys.h"
 #include "pipebuffer/pb_buffer_fenced.h"
-
+#include <os/os_thread.h>
 
 #define VMW_GMR_POOL_SIZE (16*1024*1024)
 #define VMW_QUERY_POOL_SIZE (8192)
@@ -99,6 +99,9 @@ struct vmw_winsys_screen
     */
    dev_t device;
    int open_count;
+
+   cnd_t cs_cond;
+   mtx_t cs_mutex;
 };
 
 

@@ -29,6 +29,7 @@
 #include <stdlib.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <string.h>
 #include <errno.h>
 #include <limits.h>
@@ -38,6 +39,7 @@
 #include <unistd.h>
 #include <dlfcn.h>
 #include <xf86drm.h>
+#include <drm_fourcc.h>
 
 #include <GL/gl.h> /* dri_interface needs GL types */
 #include <GL/internal/dri_interface.h>
@@ -50,6 +52,14 @@
 /* For importing wl_buffer */
 #if HAVE_WAYLAND_PLATFORM
 #include "../../../egl/wayland/wayland-drm/wayland-drm.h"
+#endif
+
+#ifndef DRM_FORMAT_MOD_INVALID
+#define DRM_FORMAT_MOD_INVALID ((1ULL<<56) - 1)
+#endif
+
+#ifndef DRM_FORMAT_MOD_LINEAR
+#define DRM_FORMAT_MOD_LINEAR 0
 #endif
 
 static __DRIimage *
@@ -598,6 +608,175 @@ gbm_dri_bo_get_fd(struct gbm_bo *_bo)
    return fd;
 }
 
+static int
+get_number_planes(struct gbm_dri_device *dri, __DRIimage *image)
+{
+   int num_planes = 0;
+
+   /* Dumb buffers are single-plane only. */
+   if (!image)
+      return 1;
+
+   dri->image->queryImage(image, __DRI_IMAGE_ATTRIB_NUM_PLANES, &num_planes);
+
+   if (num_planes <= 0)
+      num_planes = 1;
+
+   return num_planes;
+}
+
+static int
+gbm_dri_bo_get_planes(struct gbm_bo *_bo)
+{
+   struct gbm_dri_device *dri = gbm_dri_device(_bo->gbm);
+   struct gbm_dri_bo *bo = gbm_dri_bo(_bo);
+
+   return get_number_planes(dri, bo->image);
+}
+
+static union gbm_bo_handle
+gbm_dri_bo_get_handle_for_plane(struct gbm_bo *_bo, int plane)
+{
+   struct gbm_dri_device *dri = gbm_dri_device(_bo->gbm);
+   struct gbm_dri_bo *bo = gbm_dri_bo(_bo);
+   union gbm_bo_handle ret;
+   ret.s32 = -1;
+
+   if (!dri->image || dri->image->base.version < 13 || !dri->image->fromPlanar) {
+      errno = ENOSYS;
+      return ret;
+   }
+
+   if (plane >= get_number_planes(dri, bo->image)) {
+      errno = EINVAL;
+      return ret;
+   }
+
+   /* dumb BOs can only utilize non-planar formats */
+   if (!bo->image) {
+      assert(plane == 0);
+      ret.s32 = bo->handle;
+      return ret;
+   }
+
+   __DRIimage *image = dri->image->fromPlanar(bo->image, plane, NULL);
+   if (image) {
+      dri->image->queryImage(image, __DRI_IMAGE_ATTRIB_HANDLE, &ret.s32);
+      dri->image->destroyImage(image);
+   } else {
+      assert(plane == 0);
+      dri->image->queryImage(bo->image, __DRI_IMAGE_ATTRIB_HANDLE, &ret.s32);
+   }
+
+   return ret;
+}
+
+static uint32_t
+gbm_dri_bo_get_stride(struct gbm_bo *_bo, int plane)
+{
+   struct gbm_dri_device *dri = gbm_dri_device(_bo->gbm);
+   struct gbm_dri_bo *bo = gbm_dri_bo(_bo);
+   __DRIimage *image;
+   int stride = 0;
+
+   if (!dri->image || dri->image->base.version < 11 || !dri->image->fromPlanar) {
+      /* Preserve legacy behavior if plane is 0 */
+      if (plane == 0)
+         return _bo->stride;
+
+      errno = ENOSYS;
+      return 0;
+   }
+
+   if (plane >= get_number_planes(dri, bo->image)) {
+      errno = EINVAL;
+      return 0;
+   }
+
+   if (bo->image == NULL) {
+      assert(plane == 0);
+      return _bo->stride;
+   }
+
+   image = dri->image->fromPlanar(bo->image, plane, NULL);
+   if (image) {
+      dri->image->queryImage(image, __DRI_IMAGE_ATTRIB_STRIDE, &stride);
+      dri->image->destroyImage(image);
+   } else {
+      assert(plane == 0);
+      dri->image->queryImage(bo->image, __DRI_IMAGE_ATTRIB_STRIDE, &stride);
+   }
+
+   return (uint32_t)stride;
+}
+
+static uint32_t
+gbm_dri_bo_get_offset(struct gbm_bo *_bo, int plane)
+{
+   struct gbm_dri_device *dri = gbm_dri_device(_bo->gbm);
+   struct gbm_dri_bo *bo = gbm_dri_bo(_bo);
+   int offset = 0;
+
+   /* These error cases do not actually return an error code, as the user
+    * will also fail to obtain the handle/FD from the BO. In that case, the
+    * offset is irrelevant, as they have no buffer to offset into, so
+    * returning 0 is harmless.
+    */
+   if (!dri->image || dri->image->base.version < 13 || !dri->image->fromPlanar)
+      return 0;
+
+   if (plane >= get_number_planes(dri, bo->image))
+      return 0;
+
+    /* Dumb images have no offset */
+   if (bo->image == NULL) {
+      assert(plane == 0);
+      return 0;
+   }
+
+   __DRIimage *image = dri->image->fromPlanar(bo->image, plane, NULL);
+   if (image) {
+      dri->image->queryImage(image, __DRI_IMAGE_ATTRIB_OFFSET, &offset);
+      dri->image->destroyImage(image);
+   } else {
+      dri->image->queryImage(bo->image, __DRI_IMAGE_ATTRIB_OFFSET, &offset);
+   }
+
+   return (uint32_t)offset;
+}
+
+static uint64_t
+gbm_dri_bo_get_modifier(struct gbm_bo *_bo)
+{
+   struct gbm_dri_device *dri = gbm_dri_device(_bo->gbm);
+   struct gbm_dri_bo *bo = gbm_dri_bo(_bo);
+
+   if (!dri->image || dri->image->base.version < 14) {
+      errno = ENOSYS;
+      return DRM_FORMAT_MOD_INVALID;
+   }
+
+   /* Dumb buffers have no modifiers */
+   if (!bo->image)
+      return DRM_FORMAT_MOD_LINEAR;
+
+   uint64_t ret = 0;
+   int mod;
+   if (!dri->image->queryImage(bo->image, __DRI_IMAGE_ATTRIB_MODIFIER_UPPER,
+                               &mod))
+      return DRM_FORMAT_MOD_INVALID;
+
+   ret = (uint64_t)mod << 32;
+
+   if (!dri->image->queryImage(bo->image, __DRI_IMAGE_ATTRIB_MODIFIER_LOWER,
+                               &mod))
+      return DRM_FORMAT_MOD_INVALID;
+
+   ret |= mod;
+
+   return ret;
+}
+
 static void
 gbm_dri_bo_destroy(struct gbm_bo *_bo)
 {
@@ -695,6 +874,7 @@ gbm_dri_bo_import(struct gbm_device *gbm,
          gbm_format = GBM_FORMAT_YUYV;
          break;
       default:
+         dri->image->destroyImage(image);
          return NULL;
       }
       break;
@@ -715,6 +895,7 @@ gbm_dri_bo_import(struct gbm_device *gbm,
       gbm_format = gbm_dri_to_gbm_format(dri_format);
       if (gbm_format == 0) {
          errno = EINVAL;
+         dri->image->destroyImage(image);
          return NULL;
       }
       break;
@@ -759,8 +940,10 @@ gbm_dri_bo_import(struct gbm_device *gbm,
 
 
    bo = calloc(1, sizeof *bo);
-   if (bo == NULL)
+   if (bo == NULL) {
+      dri->image->destroyImage(image);
       return NULL;
+   }
 
    bo->image = image;
 
@@ -771,6 +954,7 @@ gbm_dri_bo_import(struct gbm_device *gbm,
    if (dri->image->base.version >= 2 &&
        !dri->image->validateUsage(bo->image, dri_use)) {
       errno = EINVAL;
+      dri->image->destroyImage(bo->image);
       free(bo);
       return NULL;
    }
@@ -790,6 +974,31 @@ gbm_dri_bo_import(struct gbm_device *gbm,
    return &bo->base.base;
 }
 
+static bool
+is_planar_format(uint32_t format)
+{
+   switch (format) {
+   case GBM_FORMAT_NV12:
+   case GBM_FORMAT_NV21:
+   case GBM_FORMAT_NV16:
+   case GBM_FORMAT_NV61:
+   case GBM_FORMAT_YUV410:
+   case GBM_FORMAT_YVU410:
+   case GBM_FORMAT_YUV411:
+   case GBM_FORMAT_YVU411:
+   case GBM_FORMAT_YUV420:
+   case GBM_FORMAT_YVU420:
+   case GBM_FORMAT_YUV422:
+   case GBM_FORMAT_YVU422:
+   case GBM_FORMAT_YUV444:
+   case GBM_FORMAT_YVU444:
+      return true;
+   default:
+      return false;
+   }
+
+}
+
 static struct gbm_bo *
 create_dumb(struct gbm_device *gbm,
                   uint32_t width, uint32_t height,
@@ -807,6 +1016,11 @@ create_dumb(struct gbm_device *gbm,
    is_scanout = (usage & GBM_BO_USE_SCANOUT) != 0 &&
       format == GBM_FORMAT_XRGB8888;
    if (!is_cursor && !is_scanout) {
+      errno = EINVAL;
+      return NULL;
+   }
+
+   if (is_planar_format(format)) {
       errno = EINVAL;
       return NULL;
    }
@@ -851,12 +1065,19 @@ free_bo:
 static struct gbm_bo *
 gbm_dri_bo_create(struct gbm_device *gbm,
                   uint32_t width, uint32_t height,
-                  uint32_t format, uint32_t usage)
+                  uint32_t format, uint32_t usage,
+                  const uint64_t *modifiers,
+                  const unsigned int count)
 {
    struct gbm_dri_device *dri = gbm_dri_device(gbm);
    struct gbm_dri_bo *bo;
    int dri_format;
    unsigned dri_use = 0;
+
+   /* Callers of this may specify a modifier, or a dri usage, but not both. The
+    * newer modifier interface deprecates the older usage flags.
+    */
+   assert(!(usage && count));
 
    if (usage & GBM_BO_USE_WRITE || dri->image == NULL)
       return create_dumb(gbm, width, height, format, usage);
@@ -915,11 +1136,42 @@ gbm_dri_bo_create(struct gbm_device *gbm,
    /* Gallium drivers requires shared in order to get the handle/stride */
    dri_use |= __DRI_IMAGE_USE_SHARE;
 
-   bo->image =
-      dri->image->createImage(dri->screen,
-                              width, height,
-                              dri_format, dri_use,
-                              bo);
+   if (modifiers) {
+      if (!dri->image || dri->image->base.version < 14 ||
+          !dri->image->createImageWithModifiers) {
+         fprintf(stderr, "Modifiers specified, but DRI is too old\n");
+         errno = ENOSYS;
+         goto failed;
+      }
+
+      /* It's acceptable to create an image with INVALID modifier in the list,
+       * but it cannot be on the only modifier (since it will certainly fail
+       * later). While we could easily catch this after modifier creation, doing
+       * the check here is a convenient debug check likely pointing at whatever
+       * interface the client is using to build its modifier list.
+       */
+      if (count == 1 && modifiers[0] == DRM_FORMAT_MOD_INVALID) {
+         fprintf(stderr, "Only invalid modifier specified\n");
+         errno = EINVAL;
+         goto failed;
+      }
+
+      bo->image =
+         dri->image->createImageWithModifiers(dri->screen,
+                                              width, height,
+                                              dri_format,
+                                              modifiers, count,
+                                              bo);
+
+      if (bo->image) {
+         /* The client passed in a list of invalid modifiers */
+         assert(gbm_dri_bo_get_modifier(&bo->base.base) != DRM_FORMAT_MOD_INVALID);
+      }
+   } else {
+      bo->image = dri->image->createImage(dri->screen, width, height,
+                                          dri_format, dri_use, bo);
+   }
+
    if (bo->image == NULL)
       goto failed;
 
@@ -1001,19 +1253,62 @@ gbm_dri_bo_unmap(struct gbm_bo *_bo, void *map_data)
 static struct gbm_surface *
 gbm_dri_surface_create(struct gbm_device *gbm,
                        uint32_t width, uint32_t height,
-		       uint32_t format, uint32_t flags)
+		       uint32_t format, uint32_t flags,
+                       const uint64_t *modifiers, const unsigned count)
 {
+   struct gbm_dri_device *dri = gbm_dri_device(gbm);
    struct gbm_dri_surface *surf;
 
-   surf = calloc(1, sizeof *surf);
-   if (surf == NULL)
+   if (modifiers &&
+       (!dri->image || dri->image->base.version < 14 ||
+        !dri->image->createImageWithModifiers)) {
+      errno = ENOSYS;
       return NULL;
+   }
+
+   if (count)
+      assert(modifiers);
+
+   /* It's acceptable to create an image with INVALID modifier in the list,
+    * but it cannot be on the only modifier (since it will certainly fail
+    * later). While we could easily catch this after modifier creation, doing
+    * the check here is a convenient debug check likely pointing at whatever
+    * interface the client is using to build its modifier list.
+    */
+   if (count == 1 && modifiers[0] == DRM_FORMAT_MOD_INVALID) {
+      fprintf(stderr, "Only invalid modifier specified\n");
+      errno = EINVAL;
+   }
+
+   surf = calloc(1, sizeof *surf);
+   if (surf == NULL) {
+      errno = ENOMEM;
+      return NULL;
+   }
 
    surf->base.gbm = gbm;
    surf->base.width = width;
    surf->base.height = height;
    surf->base.format = format;
    surf->base.flags = flags;
+   if (!modifiers) {
+      assert(!count);
+      return &surf->base;
+   }
+
+   surf->base.modifiers = calloc(count, sizeof(*modifiers));
+   if (count && !surf->base.modifiers) {
+      errno = ENOMEM;
+      free(surf);
+      return NULL;
+   }
+
+   /* TODO: We are deferring validation of modifiers until the image is actually
+    * created. This deferred creation can fail due to a modifier-format
+    * mismatch. The result is the client has a surface but no object to back it.
+    */
+   surf->base.count = count;
+   memcpy(surf->base.modifiers, modifiers, count * sizeof(*modifiers));
 
    return &surf->base;
 }
@@ -1023,6 +1318,7 @@ gbm_dri_surface_destroy(struct gbm_surface *_surf)
 {
    struct gbm_dri_surface *surf = gbm_dri_surface(_surf);
 
+   free(surf->base.modifiers);
    free(surf);
 }
 
@@ -1063,6 +1359,11 @@ dri_device_create(int fd)
    dri->base.base.is_format_supported = gbm_dri_is_format_supported;
    dri->base.base.bo_write = gbm_dri_bo_write;
    dri->base.base.bo_get_fd = gbm_dri_bo_get_fd;
+   dri->base.base.bo_get_planes = gbm_dri_bo_get_planes;
+   dri->base.base.bo_get_handle = gbm_dri_bo_get_handle_for_plane;
+   dri->base.base.bo_get_stride = gbm_dri_bo_get_stride;
+   dri->base.base.bo_get_offset = gbm_dri_bo_get_offset;
+   dri->base.base.bo_get_modifier = gbm_dri_bo_get_modifier;
    dri->base.base.bo_destroy = gbm_dri_bo_destroy;
    dri->base.base.destroy = dri_destroy;
    dri->base.base.surface_create = gbm_dri_surface_create;

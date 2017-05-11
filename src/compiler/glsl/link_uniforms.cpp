@@ -45,7 +45,7 @@
 /**
  * Count the backing storage requirements for a type
  */
-static unsigned
+unsigned
 values_for_type(const glsl_type *type)
 {
    if (type->is_sampler()) {
@@ -1042,12 +1042,10 @@ find_empty_block(struct gl_shader_program *prog,
 
 static void
 link_setup_uniform_remap_tables(struct gl_context *ctx,
-                                struct gl_shader_program *prog,
-                                unsigned num_explicit_uniform_locs)
+                                struct gl_shader_program *prog)
 {
-   unsigned total_entries = num_explicit_uniform_locs;
-   unsigned empty_locs =
-      prog->NumUniformRemapTable - num_explicit_uniform_locs;
+   unsigned total_entries = prog->NumExplicitUniformLocations;
+   unsigned empty_locs = prog->NumUniformRemapTable - total_entries;
 
    /* Reserve all the explicit locations of the active uniforms. */
    for (unsigned i = 0; i < prog->data->NumUniformStorage; i++) {
@@ -1206,8 +1204,7 @@ link_setup_uniform_remap_tables(struct gl_context *ctx,
 static void
 link_assign_uniform_storage(struct gl_context *ctx,
                             struct gl_shader_program *prog,
-                            const unsigned num_data_slots,
-                            unsigned num_explicit_uniform_locs)
+                            const unsigned num_data_slots)
 {
    /* On the outside chance that there were no uniforms, bail out.
     */
@@ -1216,11 +1213,17 @@ link_assign_uniform_storage(struct gl_context *ctx,
 
    unsigned int boolean_true = ctx->Const.UniformBooleanTrue;
 
-   prog->data->UniformStorage = rzalloc_array(prog, struct gl_uniform_storage,
-                                              prog->data->NumUniformStorage);
-   union gl_constant_value *data = rzalloc_array(prog->data->UniformStorage,
-                                                 union gl_constant_value,
-                                                 num_data_slots);
+   union gl_constant_value *data;
+   if (prog->data->UniformStorage == NULL) {
+      prog->data->UniformStorage = rzalloc_array(prog,
+                                                 struct gl_uniform_storage,
+                                                 prog->data->NumUniformStorage);
+      data = rzalloc_array(prog->data->UniformStorage,
+                           union gl_constant_value, num_data_slots);
+   } else {
+      data = prog->data->UniformDataSlots;
+   }
+
 #ifndef NDEBUG
    union gl_constant_value *data_end = &data[num_data_slots];
 #endif
@@ -1255,6 +1258,13 @@ link_assign_uniform_storage(struct gl_context *ctx,
              sizeof(prog->_LinkedShaders[i]->Program->sh.SamplerTargets));
    }
 
+   /* If this is a fallback compile for a cache miss we already have the
+    * correct uniform mappings and we don't want to reinitialise uniforms so
+    * just return now.
+    */
+   if (prog->data->cache_fallback)
+      return;
+
 #ifndef NDEBUG
    for (unsigned i = 0; i < prog->data->NumUniformStorage; i++) {
       assert(prog->data->UniformStorage[i].storage != NULL ||
@@ -1266,19 +1276,24 @@ link_assign_uniform_storage(struct gl_context *ctx,
    assert(parcel.values == data_end);
 #endif
 
-   link_setup_uniform_remap_tables(ctx, prog, num_explicit_uniform_locs);
+   link_setup_uniform_remap_tables(ctx, prog);
+
+   /* Set shader cache fields */
+   prog->data->NumUniformDataSlots = num_data_slots;
+   prog->data->UniformDataSlots = data;
 
    link_set_uniform_initializers(prog, boolean_true);
 }
 
 void
 link_assign_uniform_locations(struct gl_shader_program *prog,
-                              struct gl_context *ctx,
-                              unsigned int num_explicit_uniform_locs)
+                              struct gl_context *ctx)
 {
-   ralloc_free(prog->data->UniformStorage);
-   prog->data->UniformStorage = NULL;
-   prog->data->NumUniformStorage = 0;
+   if (!prog->data->cache_fallback) {
+      ralloc_free(prog->data->UniformStorage);
+      prog->data->UniformStorage = NULL;
+      prog->data->NumUniformStorage = 0;
+   }
 
    if (prog->UniformHash != NULL) {
       prog->UniformHash->clear();
@@ -1335,6 +1350,5 @@ link_assign_uniform_locations(struct gl_shader_program *prog,
    hiddenUniforms->iterate(assign_hidden_uniform_slot_id, &uniform_size);
    delete hiddenUniforms;
 
-   link_assign_uniform_storage(ctx, prog, uniform_size.num_values,
-                               num_explicit_uniform_locs);
+   link_assign_uniform_storage(ctx, prog, uniform_size.num_values);
 }

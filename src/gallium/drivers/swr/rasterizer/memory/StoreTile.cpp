@@ -93,7 +93,7 @@ void StoreHotTileToSurface(
 
     if(nullptr == pfnStoreTiles)
     {
-        SWR_ASSERT(false, "Invalid pixel format / tile mode for store tiles");
+        SWR_INVALID("Invalid pixel format / tile mode for store tiles");
         return;
     }
 

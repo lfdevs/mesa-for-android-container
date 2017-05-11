@@ -40,20 +40,10 @@
  */
 void _tnl_UpdateFixedFunctionProgram( struct gl_context *ctx )
 {
-   const struct gl_program *prev = ctx->VertexProgram._Current;
-
    if (!ctx->VertexProgram._Current ||
        ctx->VertexProgram._Current == ctx->VertexProgram._TnlProgram) {
       ctx->VertexProgram._Current
          = ctx->VertexProgram._TnlProgram
          = _mesa_get_fixed_func_vertex_program(ctx);
-   }
-
-   /* Tell the driver about the change.  Could define a new target for
-    * this?
-    */
-   if (ctx->VertexProgram._Current != prev && ctx->Driver.BindProgram) {
-      ctx->Driver.BindProgram(ctx, GL_VERTEX_PROGRAM_ARB,
-                              ctx->VertexProgram._Current);
    }
 }

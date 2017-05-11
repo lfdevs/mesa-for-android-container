@@ -97,7 +97,7 @@ struct pipe_video_buffer *si_video_buffer_create(struct pipe_context *pipe,
 		pbs[i] = &resources[i]->resource.buf;
 	}
 
-	rvid_join_surfaces(ctx->b.ws, pbs, surfaces);
+	rvid_join_surfaces(&ctx->b, pbs, surfaces);
 
 	for (i = 0; i < VL_NUM_COMPONENTS; ++i) {
 		if (!resources[i])
@@ -121,12 +121,16 @@ error:
 /* set the decoding target buffer offsets */
 static struct pb_buffer* si_uvd_set_dtb(struct ruvd_msg *msg, struct vl_video_buffer *buf)
 {
+	struct si_screen *sscreen = (struct si_screen*)buf->base.context->screen;
 	struct r600_texture *luma = (struct r600_texture *)buf->resources[0];
 	struct r600_texture *chroma = (struct r600_texture *)buf->resources[1];
+	enum ruvd_surface_type type =  (sscreen->b.chip_class >= GFX9) ?
+					RUVD_SURFACE_TYPE_GFX9 :
+					RUVD_SURFACE_TYPE_LEGACY;
 
 	msg->body.decode.dt_field_mode = buf->base.interlaced;
 
-	ruvd_set_dt_surfaces(msg, &luma->surface, &chroma->surface);
+	ruvd_set_dt_surfaces(msg, &luma->surface, &chroma->surface, type);
 
 	return luma->resource.buf;
 }

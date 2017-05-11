@@ -37,24 +37,6 @@
 #include "util/list.h"
 #include <radeon_drm.h>
 
-#ifndef DRM_RADEON_GEM_USERPTR
-
-#define DRM_RADEON_GEM_USERPTR		0x2d
-
-#define RADEON_GEM_USERPTR_READONLY	(1 << 0)
-#define RADEON_GEM_USERPTR_ANONONLY	(1 << 1)
-#define RADEON_GEM_USERPTR_VALIDATE	(1 << 2)
-#define RADEON_GEM_USERPTR_REGISTER	(1 << 3)
-
-struct drm_radeon_gem_userptr {
-       uint64_t                addr;
-       uint64_t                size;
-       uint32_t                flags;
-       uint32_t                handle;
-};
-
-#endif
-
 struct radeon_drm_cs;
 
 enum radeon_generation {
@@ -81,6 +63,7 @@ struct radeon_drm_winsys {
     uint64_t buffer_wait_time; /* time spent in buffer_wait in ns */
     uint64_t num_gfx_IBs;
     uint64_t num_sdma_IBs;
+    uint64_t num_mapped_buffers;
     uint32_t next_bo_hash;
 
     enum radeon_generation gen;
@@ -95,9 +78,9 @@ struct radeon_drm_winsys {
     struct util_hash_table *bo_handles;
     /* List of buffer virtual memory ranges. Protectded by bo_handles_mutex. */
     struct util_hash_table *bo_vas;
-    pipe_mutex bo_handles_mutex;
-    pipe_mutex bo_va_mutex;
-    pipe_mutex bo_fence_lock;
+    mtx_t bo_handles_mutex;
+    mtx_t bo_va_mutex;
+    mtx_t bo_fence_lock;
 
     uint64_t va_offset;
     struct list_head va_holes;
@@ -108,9 +91,9 @@ struct radeon_drm_winsys {
     uint32_t num_cpus;      /* Number of CPUs. */
 
     struct radeon_drm_cs *hyperz_owner;
-    pipe_mutex hyperz_owner_mutex;
+    mtx_t hyperz_owner_mutex;
     struct radeon_drm_cs *cmask_owner;
-    pipe_mutex cmask_owner_mutex;
+    mtx_t cmask_owner_mutex;
 
     /* multithreaded command submission */
     struct util_queue cs_queue;

@@ -41,6 +41,7 @@
  * we do retain the vector types in that case.
  */
 
+#include "brw_program.h"
 #include "compiler/glsl/ir.h"
 #include "compiler/glsl/ir_expression_flattening.h"
 #include "compiler/glsl_types.h"
@@ -86,6 +87,8 @@ channel_expressions_predicate(ir_instruction *ir)
       case ir_binop_interpolate_at_offset:
       case ir_binop_interpolate_at_sample:
       case ir_unop_pack_double_2x32:
+      case ir_unop_pack_int_2x32:
+      case ir_unop_pack_uint_2x32:
          return false;
       default:
          break;
@@ -180,6 +183,8 @@ ir_channel_expressions_visitor::visit_leave(ir_assignment *ir)
       case ir_binop_interpolate_at_sample:
       /* We scalarize these in NIR, so no need to do it here */
       case ir_unop_pack_double_2x32:
+      case ir_unop_pack_int_2x32:
+      case ir_unop_pack_uint_2x32:
          return visit_continue;
 
       default:
@@ -228,6 +233,10 @@ ir_channel_expressions_visitor::visit_leave(ir_assignment *ir)
    case ir_unop_bitcast_f2i:
    case ir_unop_bitcast_f2u:
    case ir_unop_bitcast_u2f:
+   case ir_unop_bitcast_u642d:
+   case ir_unop_bitcast_i642d:
+   case ir_unop_bitcast_d2u64:
+   case ir_unop_bitcast_d2i64:
    case ir_unop_i2u:
    case ir_unop_u2i:
    case ir_unop_f2i:
@@ -245,6 +254,26 @@ ir_channel_expressions_visitor::visit_leave(ir_assignment *ir)
    case ir_unop_d2u:
    case ir_unop_u2d:
    case ir_unop_d2b:
+   case ir_unop_i642i:
+   case ir_unop_u642i:
+   case ir_unop_i642u:
+   case ir_unop_u642u:
+   case ir_unop_i642b:
+   case ir_unop_i642f:
+   case ir_unop_u642f:
+   case ir_unop_i642d:
+   case ir_unop_u642d:
+   case ir_unop_i2i64:
+   case ir_unop_u2i64:
+   case ir_unop_b2i64:
+   case ir_unop_f2i64:
+   case ir_unop_d2i64:
+   case ir_unop_i2u64:
+   case ir_unop_u2u64:
+   case ir_unop_f2u64:
+   case ir_unop_d2u64:
+   case ir_unop_u642i64:
+   case ir_unop_i642u64:
    case ir_unop_trunc:
    case ir_unop_ceil:
    case ir_unop_floor:
@@ -428,6 +457,8 @@ ir_channel_expressions_visitor::visit_leave(ir_assignment *ir)
       unreachable("not reached: expression operates on scalars only");
 
    case ir_unop_pack_double_2x32:
+   case ir_unop_pack_int_2x32:
+   case ir_unop_pack_uint_2x32:
       unreachable("not reached: to be lowered in NIR, should've been skipped");
 
    case ir_unop_frexp_sig:
@@ -437,6 +468,11 @@ ir_channel_expressions_visitor::visit_leave(ir_assignment *ir)
    case ir_unop_vote_any:
    case ir_unop_vote_all:
    case ir_unop_vote_eq:
+   case ir_unop_unpack_int_2x32:
+   case ir_unop_unpack_uint_2x32:
+   case ir_unop_ballot:
+   case ir_unop_read_first_invocation:
+   case ir_binop_read_invocation:
       unreachable("unsupported");
    }
 

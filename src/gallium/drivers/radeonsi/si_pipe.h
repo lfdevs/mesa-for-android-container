@@ -41,6 +41,8 @@
 #define SI_RESTART_INDEX_UNKNOWN INT_MIN
 #define SI_NUM_SMOOTH_AA_SAMPLES 8
 #define SI_GS_PER_ES 128
+/* Alignment for optimal CP DMA performance. */
+#define SI_CPDMA_ALIGNMENT	32
 
 /* Instruction cache. */
 #define SI_CONTEXT_INV_ICACHE		(R600_CONTEXT_PRIVATE_FLAG << 0)
@@ -53,9 +55,8 @@
 /* Write dirty L2 lines back to memory (shader and CP DMA stores), but don't
  * invalidate L2. SI-CIK can't do it, so they will do complete invalidation. */
 #define SI_CONTEXT_WRITEBACK_GLOBAL_L2	(R600_CONTEXT_PRIVATE_FLAG << 4)
+/* gaps */
 /* Framebuffer caches. */
-#define SI_CONTEXT_FLUSH_AND_INV_CB_META (R600_CONTEXT_PRIVATE_FLAG << 5)
-#define SI_CONTEXT_FLUSH_AND_INV_DB_META (R600_CONTEXT_PRIVATE_FLAG << 6)
 #define SI_CONTEXT_FLUSH_AND_INV_DB	(R600_CONTEXT_PRIVATE_FLAG << 7)
 #define SI_CONTEXT_FLUSH_AND_INV_CB	(R600_CONTEXT_PRIVATE_FLAG << 8)
 /* Engine synchronization. */
@@ -64,11 +65,6 @@
 #define SI_CONTEXT_CS_PARTIAL_FLUSH	(R600_CONTEXT_PRIVATE_FLAG << 11)
 #define SI_CONTEXT_VGT_FLUSH		(R600_CONTEXT_PRIVATE_FLAG << 12)
 #define SI_CONTEXT_VGT_STREAMOUT_SYNC	(R600_CONTEXT_PRIVATE_FLAG << 13)
-
-#define SI_CONTEXT_FLUSH_AND_INV_FRAMEBUFFER (SI_CONTEXT_FLUSH_AND_INV_CB | \
-					      SI_CONTEXT_FLUSH_AND_INV_CB_META | \
-					      SI_CONTEXT_FLUSH_AND_INV_DB | \
-					      SI_CONTEXT_FLUSH_AND_INV_DB_META)
 
 #define SI_MAX_BORDER_COLORS	4096
 
@@ -83,12 +79,13 @@ struct si_screen {
 	bool				has_distributed_tess;
 	bool				has_draw_indirect_multi;
 	bool				has_ds_bpermute;
+	bool				has_msaa_sample_loc_bug;
 
 	/* Whether shaders are monolithic (1-part) or separate (3-part). */
 	bool				use_monolithic_shaders;
 	bool				record_llvm_ir;
 
-	pipe_mutex			shader_parts_mutex;
+	mtx_t			shader_parts_mutex;
 	struct si_shader_part		*vs_prologs;
 	struct si_shader_part		*vs_epilogs;
 	struct si_shader_part		*tcs_epilogs;
@@ -108,7 +105,7 @@ struct si_screen {
 	 * - GS and CS aren't cached, but it's certainly possible to cache
 	 *   those as well.
 	 */
-	pipe_mutex			shader_cache_mutex;
+	mtx_t			shader_cache_mutex;
 	struct hash_table		*shader_cache;
 
 	/* Shader compiler queue for multithreaded compilation. */
@@ -127,10 +124,11 @@ struct si_sampler_view {
          * [4..7] = buffer descriptor */
 	uint32_t			state[8];
 	uint32_t			fmask_state[8];
-	const struct radeon_surf_level	*base_level_info;
+	const struct legacy_surf_level	*base_level_info;
 	unsigned			base_level;
 	unsigned			block_width;
 	bool is_stencil_sampler;
+	bool dcc_incompatible;
 };
 
 #define SI_SAMPLER_STATE_MAGIC 0x34f1c35a
@@ -178,6 +176,7 @@ struct si_framebuffer {
 	unsigned			dirty_cbufs;
 	bool				dirty_zsbuf;
 	bool				any_dst_linear;
+	bool				do_update_surf_dirtiness;
 };
 
 struct si_clip_state {
@@ -204,6 +203,28 @@ struct si_shader_ctx_state {
 	struct si_shader		*current;
 };
 
+#define SI_NUM_VGT_PARAM_KEY_BITS 12
+#define SI_NUM_VGT_PARAM_STATES (1 << SI_NUM_VGT_PARAM_KEY_BITS)
+
+/* The IA_MULTI_VGT_PARAM key used to index the table of precomputed values.
+ * Some fields are set by state-change calls, most are set by draw_vbo.
+ */
+union si_vgt_param_key {
+	struct {
+		unsigned prim:4;
+		unsigned uses_instancing:1;
+		unsigned multi_instances_smaller_than_primgroup:1;
+		unsigned primitive_restart:1;
+		unsigned count_from_stream_output:1;
+		unsigned line_stipple_enabled:1;
+		unsigned uses_tess:1;
+		unsigned tcs_tes_uses_prim_id:1;
+		unsigned uses_gs:1;
+		unsigned _pad:32 - SI_NUM_VGT_PARAM_KEY_BITS;
+	} u;
+	uint32_t index;
+};
+
 struct si_context {
 	struct r600_common_context	b;
 	struct blitter_context		*blitter;
@@ -228,16 +249,19 @@ struct si_context {
 	union si_state_atoms		atoms;
 	unsigned			dirty_atoms; /* mask */
 	/* PM4 states (precomputed immutable states) */
+	unsigned			dirty_states;
 	union si_state			queued;
 	union si_state			emitted;
 
 	/* Atom declarations. */
+	struct r600_atom		prefetch_L2;
 	struct si_framebuffer		framebuffer;
 	struct si_sample_locs		msaa_sample_locs;
 	struct r600_atom		db_render_state;
 	struct r600_atom		msaa_config;
 	struct si_sample_mask		sample_mask;
 	struct r600_atom		cb_render_state;
+	unsigned			last_cb_target_mask;
 	struct si_blend_color		blend_color;
 	struct r600_atom		clip_regs;
 	struct si_clip_state		clip_state;
@@ -324,13 +348,14 @@ struct si_context {
 	int			last_multi_vgt_param;
 	int			last_rast_prim;
 	unsigned		last_sc_line_stipple;
-	int			last_vtx_reuse_depth;
-	int			current_rast_prim; /* primitive type after TES, GS */
+	unsigned		current_vs_state;
+	unsigned		last_vs_state;
+	enum pipe_prim_type	current_rast_prim; /* primitive type after TES, GS */
 	bool			gs_tri_strip_adj_fix;
 
 	/* Scratch buffer */
+	struct r600_atom	scratch_state;
 	struct r600_resource	*scratch_buffer;
-	bool			emit_scratch_reloc;
 	unsigned		scratch_waves;
 	unsigned		spi_tmpring_size;
 
@@ -354,6 +379,10 @@ struct si_context {
 
 	/* Other state */
 	bool need_check_render_feedback;
+
+	/* Precomputed IA_MULTI_VGT_PARAM */
+	union si_vgt_param_key  ia_multi_vgt_param_key;
+	unsigned		ia_multi_vgt_param[SI_NUM_VGT_PARAM_STATES];
 };
 
 /* cik_sdma.c */
@@ -395,7 +424,7 @@ void si_init_cp_dma_functions(struct si_context *sctx);
 void si_init_debug_functions(struct si_context *sctx);
 void si_check_vm_faults(struct r600_common_context *ctx,
 			struct radeon_saved_cs *saved, enum ring_type ring);
-bool si_replace_shader(unsigned num, struct radeon_shader_binary *binary);
+bool si_replace_shader(unsigned num, struct ac_shader_binary *binary);
 
 /* si_dma.c */
 void si_init_dma_functions(struct si_context *sctx);
@@ -433,7 +462,7 @@ static inline void
 si_set_atom_dirty(struct si_context *sctx,
 		  struct r600_atom *atom, bool dirty)
 {
-	unsigned bit = 1 << (atom->id - 1);
+	unsigned bit = 1 << atom->id;
 
 	if (dirty)
 		sctx->dirty_atoms |= bit;
@@ -445,7 +474,7 @@ static inline bool
 si_is_atom_dirty(struct si_context *sctx,
 		  struct r600_atom *atom)
 {
-	unsigned bit = 1 << (atom->id - 1);
+	unsigned bit = 1 << atom->id;
 
 	return sctx->dirty_atoms & bit;
 }
@@ -487,6 +516,21 @@ static inline bool si_vs_exports_prim_id(struct si_shader *shader)
 		return shader->key.part.tes.epilog.export_prim_id;
 	else
 		return false;
+}
+
+static inline unsigned
+si_optimal_tcc_alignment(struct si_context *sctx, unsigned upload_size)
+{
+	unsigned alignment, tcc_cache_line_size;
+
+	/* If the upload size is less than the cache line size (e.g. 16, 32),
+	 * the whole thing will fit into a cache line if we align it to its size.
+	 * The idea is that multiple small uploads can share a cache line.
+	 * If the upload size is greater, align it to the cache line size.
+	 */
+	alignment = util_next_power_of_two(upload_size);
+	tcc_cache_line_size = sctx->screen->b.info.tcc_cache_line_size;
+	return MIN2(alignment, tcc_cache_line_size);
 }
 
 #endif

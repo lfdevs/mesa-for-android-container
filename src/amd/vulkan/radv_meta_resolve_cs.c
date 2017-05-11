@@ -82,7 +82,7 @@ build_resolve_compute_shader(struct radv_device *dev, bool is_integer, int sampl
 	nir_ssa_dest_init(&dst_offset->instr, &dst_offset->dest, 2, 32, "dst_offset");
 	nir_builder_instr_insert(&b, &dst_offset->instr);
 
-	nir_ssa_def *img_coord = nir_iadd(&b, global_id, &src_offset->dest.ssa);
+	nir_ssa_def *img_coord = nir_channels(&b, nir_iadd(&b, global_id, &src_offset->dest.ssa), 0x3);
 	/* do a txf_ms on each sample */
 	nir_ssa_def *tmp;
 
@@ -179,6 +179,7 @@ create_layout(struct radv_device *device)
 	 */
 	VkDescriptorSetLayoutCreateInfo ds_create_info = {
 		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+		.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR,
 		.bindingCount = 2,
 		.pBindings = (VkDescriptorSetLayoutBinding[]) {
 			{
@@ -326,6 +327,21 @@ void radv_meta_resolve_compute_image(struct radv_cmd_buffer *cmd_buffer,
 	struct radv_meta_saved_compute_state saved_state;
 	const uint32_t samples = src_image->samples;
 	const uint32_t samples_log2 = ffs(samples) - 1;
+
+	for (uint32_t r = 0; r < region_count; ++r) {
+		const VkImageResolve *region = &regions[r];
+		const uint32_t src_base_layer =
+			radv_meta_get_iview_layer(src_image, &region->srcSubresource,
+						  &region->srcOffset);
+		VkImageSubresourceRange range;
+		range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		range.baseMipLevel = region->srcSubresource.mipLevel;
+		range.levelCount = 1;
+		range.baseArrayLayer = src_base_layer;
+		range.layerCount = region->srcSubresource.layerCount;
+		radv_fast_clear_flush_image_inplace(cmd_buffer, src_image, &range);
+	}
+
 	radv_meta_save_compute(&saved_state, cmd_buffer, 16);
 
 	for (uint32_t r = 0; r < region_count; ++r) {
@@ -354,7 +370,6 @@ void radv_meta_resolve_compute_image(struct radv_cmd_buffer *cmd_buffer,
 		     ++layer) {
 
 			struct radv_image_view src_iview;
-			VkDescriptorSet set;
 			radv_image_view_init(&src_iview, cmd_buffer->device,
 					     &(VkImageViewCreateInfo) {
 						     .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
@@ -389,49 +404,41 @@ void radv_meta_resolve_compute_image(struct radv_cmd_buffer *cmd_buffer,
 					     cmd_buffer, VK_IMAGE_USAGE_STORAGE_BIT);
 
 
-			radv_temp_descriptor_set_create(device, cmd_buffer,
-							device->meta_state.resolve_compute.ds_layout,
-							&set);
-
-			radv_UpdateDescriptorSets(radv_device_to_handle(device),
-						  2, /* writeCount */
-						  (VkWriteDescriptorSet[]) {
-						  {
-						  .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-						  .dstSet = set,
-						  .dstBinding = 0,
-						  .dstArrayElement = 0,
-						  .descriptorCount = 1,
-						  .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-						  .pImageInfo = (VkDescriptorImageInfo[]) {
-							  {
-								  .sampler = VK_NULL_HANDLE,
-								  .imageView = radv_image_view_to_handle(&src_iview),
-								  .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
-							  },
-						  }
-					  },
-					  {
-						  .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-						  .dstSet = set,
-						  .dstBinding = 1,
-						  .dstArrayElement = 0,
-						  .descriptorCount = 1,
-						  .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-						  .pImageInfo = (VkDescriptorImageInfo[]) {
-							  {
-								  .sampler = VK_NULL_HANDLE,
-								  .imageView = radv_image_view_to_handle(&dest_iview),
-								  .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
-							  },
-						  }
-					  }
-				  }, 0, NULL);
-
-			radv_CmdBindDescriptorSets(radv_cmd_buffer_to_handle(cmd_buffer),
-						   VK_PIPELINE_BIND_POINT_COMPUTE,
-						   device->meta_state.resolve_compute.p_layout, 0, 1,
-						   &set, 0, NULL);
+			radv_meta_push_descriptor_set(cmd_buffer,
+						      VK_PIPELINE_BIND_POINT_COMPUTE,
+						      device->meta_state.resolve_compute.p_layout,
+						      0, /* set */
+						      2, /* descriptorWriteCount */
+						      (VkWriteDescriptorSet[]) {
+						              {
+						                      .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+						                      .dstBinding = 0,
+						                      .dstArrayElement = 0,
+						                      .descriptorCount = 1,
+						                      .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+						                      .pImageInfo = (VkDescriptorImageInfo[]) {
+						                              {
+						                                      .sampler = VK_NULL_HANDLE,
+						                                      .imageView = radv_image_view_to_handle(&src_iview),
+						                                      .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
+						                              },
+						                      }
+						              },
+						              {
+						                      .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+						                      .dstBinding = 1,
+						                      .dstArrayElement = 0,
+						                      .descriptorCount = 1,
+						                      .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+						                      .pImageInfo = (VkDescriptorImageInfo[]) {
+						                              {
+						                                      .sampler = VK_NULL_HANDLE,
+						                                      .imageView = radv_image_view_to_handle(&dest_iview),
+						                                      .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
+						                              },
+						                      }
+					                      }
+				                      });
 
 			VkPipeline pipeline;
 			if (vk_format_is_int(src_image->vk_format))
@@ -454,7 +461,6 @@ void radv_meta_resolve_compute_image(struct radv_cmd_buffer *cmd_buffer,
 					      VK_SHADER_STAGE_COMPUTE_BIT, 0, 16,
 					      push_constants);
 			radv_unaligned_dispatch(cmd_buffer, extent.width, extent.height, 1);
-			radv_temp_descriptor_set_destroy(cmd_buffer->device, set);
 		}
 	}
 	radv_meta_restore_compute(&saved_state, cmd_buffer, 16);

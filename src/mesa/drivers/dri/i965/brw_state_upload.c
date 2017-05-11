@@ -32,7 +32,9 @@
 
 
 #include "brw_context.h"
+#include "brw_defines.h"
 #include "brw_state.h"
+#include "brw_program.h"
 #include "drivers/common/meta.h"
 #include "intel_batchbuffer.h"
 #include "intel_buffers.h"
@@ -180,8 +182,6 @@ static const struct brw_tracked_state *gen7_render_atoms[] =
    &gen6_color_calc_state,	/* must do before cc unit */
    &gen6_depth_stencil_state,	/* must do before cc unit */
 
-   &gen7_hw_binding_tables, /* Enable hw-generated binding tables for Haswell */
-
    &brw_vs_image_surfaces, /* Before vs push/pull constants and binding table */
    &brw_tcs_image_surfaces, /* Before tcs push/pull constants and binding table */
    &brw_tes_image_surfaces, /* Before tes push/pull constants and binding table */
@@ -282,8 +282,6 @@ static const struct brw_tracked_state *gen8_render_atoms[] =
    &gen7_urb,
    &gen8_blend_state,
    &gen6_color_calc_state,
-
-   &gen7_hw_binding_tables, /* Enable hw-generated binding tables for Broadwell */
 
    &brw_vs_image_surfaces, /* Before vs push/pull constants and binding table */
    &brw_tcs_image_surfaces, /* Before tcs push/pull constants and binding table */
@@ -587,9 +585,10 @@ static struct dirty_bit_map mesa_bits[] = {
    DEFINE_BIT(_NEW_POLYGONSTIPPLE),
    DEFINE_BIT(_NEW_SCISSOR),
    DEFINE_BIT(_NEW_STENCIL),
-   DEFINE_BIT(_NEW_TEXTURE),
+   DEFINE_BIT(_NEW_TEXTURE_OBJECT),
    DEFINE_BIT(_NEW_TRANSFORM),
    DEFINE_BIT(_NEW_VIEWPORT),
+   DEFINE_BIT(_NEW_TEXTURE_STATE),
    DEFINE_BIT(_NEW_ARRAY),
    DEFINE_BIT(_NEW_RENDERMODE),
    DEFINE_BIT(_NEW_BUFFERS),

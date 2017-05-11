@@ -45,6 +45,9 @@
 
 #include "state_tracker/drm_driver.h"
 
+#define ETNA_DRM_VERSION(major, minor) ((major) << 16 | (minor))
+#define ETNA_DRM_VERSION_FENCE_FD      ETNA_DRM_VERSION(1, 1)
+
 static const struct debug_named_value debug_options[] = {
    {"dbg_msgs",       ETNA_DBG_MSGS, "Print debug messages"},
    {"frame_msgs",     ETNA_DBG_FRAME_MSGS, "Print frame messages"},
@@ -62,6 +65,7 @@ static const struct debug_named_value debug_options[] = {
    {"flush_all",      ETNA_DBG_FLUSH_ALL, "Flush after every rendered primitive"},
    {"zero",           ETNA_DBG_ZERO, "Zero all resources after allocation"},
    {"draw_stall",     ETNA_DBG_DRAW_STALL, "Stall FE/PE after each rendered primitive"},
+   {"shaderdb",       ETNA_DBG_SHADERDB, "Enable shaderdb output"},
    DEBUG_NAMED_VALUE_END
 };
 
@@ -136,6 +140,8 @@ etna_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_TGSI_TEXCOORD:
    case PIPE_CAP_VERTEX_COLOR_UNCLAMPED:
       return 1;
+   case PIPE_CAP_NATIVE_FENCE_FD:
+      return screen->drm_version >= ETNA_DRM_VERSION_FENCE_FD;
 
    /* Memory */
    case PIPE_CAP_CONSTANT_BUFFER_OFFSET_ALIGNMENT:
@@ -179,7 +185,6 @@ etna_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_FRAGMENT_COLOR_CLAMPED:
    case PIPE_CAP_VERTEX_COLOR_CLAMPED:
    case PIPE_CAP_USER_VERTEX_BUFFERS:
-   case PIPE_CAP_USER_INDEX_BUFFERS:
    case PIPE_CAP_TEXTURE_BUFFER_OBJECTS:
    case PIPE_CAP_TEXTURE_BUFFER_OFFSET_ALIGNMENT:
    case PIPE_CAP_BUFFER_SAMPLER_VIEW_RGBA_ONLY:
@@ -237,9 +242,18 @@ etna_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_TGSI_ARRAY_COMPONENTS:
    case PIPE_CAP_STREAM_OUTPUT_INTERLEAVE_BUFFERS:
    case PIPE_CAP_TGSI_CAN_READ_OUTPUTS:
-   case PIPE_CAP_NATIVE_FENCE_FD:
    case PIPE_CAP_GLSL_OPTIMIZE_CONSERVATIVELY:
    case PIPE_CAP_TGSI_FS_FBFETCH:
+   case PIPE_CAP_TGSI_MUL_ZERO_WINS:
+   case PIPE_CAP_DOUBLES:
+   case PIPE_CAP_INT64:
+   case PIPE_CAP_INT64_DIVMOD:
+   case PIPE_CAP_TGSI_TEX_TXF_LZ:
+   case PIPE_CAP_TGSI_CLOCK:
+   case PIPE_CAP_POLYGON_MODE_FILL_RECTANGLE:
+   case PIPE_CAP_SPARSE_BUFFER_PAGE_SIZE:
+   case PIPE_CAP_TGSI_BALLOT:
+   case PIPE_CAP_TGSI_TES_LAYER_VIEWPORT:
       return 0;
 
    /* Stream output. */
@@ -349,7 +363,8 @@ etna_screen_get_paramf(struct pipe_screen *pscreen, enum pipe_capf param)
 }
 
 static int
-etna_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
+etna_screen_get_shader_param(struct pipe_screen *pscreen,
+                             enum pipe_shader_type shader,
                              enum pipe_shader_cap param)
 {
    struct etna_screen *screen = etna_screen(pscreen);
@@ -389,8 +404,6 @@ etna_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
       return 64; /* Max native temporaries. */
    case PIPE_SHADER_CAP_MAX_CONST_BUFFERS:
       return 1;
-   case PIPE_SHADER_CAP_MAX_PREDS:
-      return 0; /* nothing uses this */
    case PIPE_SHADER_CAP_TGSI_CONT_SUPPORTED:
       return 1;
    case PIPE_SHADER_CAP_INDIRECT_INPUT_ADDR:
@@ -413,7 +426,6 @@ etna_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
       return PIPE_SHADER_IR_TGSI;
    case PIPE_SHADER_CAP_MAX_CONST_BUFFER_SIZE:
       return 4096;
-   case PIPE_SHADER_CAP_DOUBLES:
    case PIPE_SHADER_CAP_TGSI_DROUND_SUPPORTED:
    case PIPE_SHADER_CAP_TGSI_DFRACEXP_DLDEXP_SUPPORTED:
    case PIPE_SHADER_CAP_TGSI_FMA_SUPPORTED:
@@ -469,11 +481,8 @@ etna_screen_is_format_supported(struct pipe_screen *pscreen,
       return FALSE;
 
    if (usage & PIPE_BIND_RENDER_TARGET) {
-      /* If render target, must be RS-supported format that is not rb swapped.
-       * Exposing rb swapped (or other swizzled) formats for rendering would
-       * involve swizzing in the pixel shader.
-       */
-      if (translate_rs_format(format) != ETNA_NO_MATCH && !translate_rs_format_rb_swap(format)) {
+      /* if render target, must be RS-supported format */
+      if (translate_rs_format(format) != ETNA_NO_MATCH) {
          /* Validate MSAA; number of samples must be allowed, and render target
           * must have MSAA'able format. */
          if (sample_count > 1) {
@@ -613,14 +622,30 @@ etna_get_specs(struct etna_screen *screen)
    screen->specs.has_new_sin_cos =
       VIV_FEATURE(screen, chipMinorFeatures3, HAS_FAST_TRANSCENDENTALS);
 
-   if (instruction_count > 256) { /* unified instruction memory? */
+   if (VIV_FEATURE(screen, chipMinorFeatures3, INSTRUCTION_CACHE)) {
+      /* GC3000 - this core is capable of loading shaders from
+       * memory. It can also run shaders from registers, as a fallback, but
+       * "max_instructions" does not have the correct value. It has place for
+       * 2*256 instructions just like GC2000, but the offsets are slightly
+       * different.
+       */
       screen->specs.vs_offset = 0xC000;
-      screen->specs.ps_offset = 0xD000; /* like vivante driver */
+      /* State 08000-0C000 mirrors 0C000-0E000, and the Vivante driver uses
+       * this mirror for writing PS instructions, probably safest to do the
+       * same.
+       */
+      screen->specs.ps_offset = 0x8000 + 0x1000;
       screen->specs.max_instructions = 256;
    } else {
-      screen->specs.vs_offset = 0x4000;
-      screen->specs.ps_offset = 0x6000;
-      screen->specs.max_instructions = instruction_count / 2;
+      if (instruction_count > 256) { /* unified instruction memory? */
+         screen->specs.vs_offset = 0xC000;
+         screen->specs.ps_offset = 0xD000; /* like vivante driver */
+         screen->specs.max_instructions = 256;
+      } else {
+         screen->specs.vs_offset = 0x4000;
+         screen->specs.ps_offset = 0x6000;
+         screen->specs.max_instructions = instruction_count / 2;
+      }
    }
 
    if (VIV_FEATURE(screen, chipMinorFeatures1, HALTI0)) {
@@ -653,6 +678,10 @@ etna_get_specs(struct etna_screen *screen)
       VIV_FEATURE(screen, chipMinorFeatures0, TEXTURE_8K) ? 8192 : 2048;
    screen->specs.max_rendertarget_size =
       VIV_FEATURE(screen, chipMinorFeatures0, RENDERTARGET_8K) ? 8192 : 2048;
+
+   screen->specs.single_buffer = VIV_FEATURE(screen, chipMinorFeatures4, SINGLE_BUFFER);
+   if (screen->specs.single_buffer)
+      DBG("etnaviv: Single buffer mode enabled with %d pixel pipes\n", screen->specs.pixel_pipes);
 
    return true;
 
@@ -711,6 +740,7 @@ etna_screen_create(struct etna_device *dev, struct etna_gpu *gpu,
 {
    struct etna_screen *screen = CALLOC_STRUCT(etna_screen);
    struct pipe_screen *pscreen;
+   drmVersionPtr version;
    uint64_t val;
 
    if (!screen)
@@ -726,10 +756,15 @@ etna_screen_create(struct etna_device *dev, struct etna_gpu *gpu,
       goto fail;
    }
 
+   version = drmGetVersion(screen->ro->gpu_fd);
+   screen->drm_version = ETNA_DRM_VERSION(version->version_major,
+                                          version->version_minor);
+   drmFreeVersion(version);
+
    etna_mesa_debug = debug_get_option_etna_mesa_debug();
 
-   /* FIXME: Disable tile status for stability at the moment */
-   etna_mesa_debug |= ETNA_DBG_NO_TS;
+   /* Disable autodisable for correct rendering with TS */
+   etna_mesa_debug |= ETNA_DBG_NO_AUTODISABLE;
 
    screen->pipe = etna_pipe_new(gpu, ETNA_PIPE_3D);
    if (!screen->pipe) {
@@ -778,6 +813,18 @@ etna_screen_create(struct etna_device *dev, struct etna_gpu *gpu,
       goto fail;
    }
    screen->features[4] = val;
+
+   if (etna_gpu_get_param(screen->gpu, ETNA_GPU_FEATURES_5, &val)) {
+      DBG("could not get ETNA_GPU_FEATURES_5");
+      goto fail;
+   }
+   screen->features[5] = val;
+
+   if (etna_gpu_get_param(screen->gpu, ETNA_GPU_FEATURES_6, &val)) {
+      DBG("could not get ETNA_GPU_FEATURES_6");
+      goto fail;
+   }
+   screen->features[6] = val;
 
    if (!etna_get_specs(screen))
       goto fail;

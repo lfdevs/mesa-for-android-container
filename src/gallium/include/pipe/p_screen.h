@@ -58,6 +58,7 @@ struct pipe_surface;
 struct pipe_transfer;
 struct pipe_box;
 struct pipe_memory_info;
+struct disk_cache;
 
 
 /**
@@ -96,7 +97,8 @@ struct pipe_screen {
     * Query a per-shader-stage integer-valued capability/parameter/limit
     * \param param  one of PIPE_CAP_x
     */
-   int (*get_shader_param)( struct pipe_screen *, unsigned shader, enum pipe_shader_cap param );
+   int (*get_shader_param)( struct pipe_screen *, enum pipe_shader_type shader,
+                            enum pipe_shader_cap param );
 
    /**
     * Query an integer-valued capability/parameter/limit for a codec/profile
@@ -224,6 +226,14 @@ struct pipe_screen {
 				  struct winsys_handle *handle,
 				  unsigned usage);
 
+   /**
+    * Mark the resource as changed so derived internal resources will be
+    * recreated on next use.
+    *
+    * This is necessary when reimporting external images that can't be directly
+    * used as texture sampler source, to avoid sampling from old copies.
+    */
+   void (*resource_changed)(struct pipe_screen *, struct pipe_resource *pt);
 
    void (*resource_destroy)(struct pipe_screen *,
 			    struct pipe_resource *pt);
@@ -309,7 +319,15 @@ struct pipe_screen {
     */
    const void *(*get_compiler_options)(struct pipe_screen *screen,
                                       enum pipe_shader_ir ir,
-                                      unsigned shader);
+                                      enum pipe_shader_type shader);
+
+   /**
+    * Returns a pointer to a driver-specific on-disk shader cache. If the
+    * driver failed to create the cache or does not support an on-disk shader
+    * cache NULL is returned. The callback itself may also be NULL if the
+    * driver doesn't support an on-disk shader cache.
+    */
+   struct disk_cache *(*get_disk_shader_cache)(struct pipe_screen *screen);
 };
 
 

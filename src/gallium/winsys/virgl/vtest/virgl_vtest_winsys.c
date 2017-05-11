@@ -144,7 +144,7 @@ virgl_cache_flush(struct virgl_vtest_winsys *vtws)
    struct list_head *curr, *next;
    struct virgl_hw_res *res;
 
-   pipe_mutex_lock(vtws->mutex);
+   mtx_lock(&vtws->mutex);
    curr = vtws->delayed.next;
    next = curr->next;
 
@@ -155,7 +155,7 @@ virgl_cache_flush(struct virgl_vtest_winsys *vtws)
       curr = next;
       next = curr->next;
    }
-   pipe_mutex_unlock(vtws->mutex);
+   mtx_unlock(&vtws->mutex);
 }
 
 static void
@@ -189,14 +189,14 @@ static void virgl_vtest_resource_reference(struct virgl_vtest_winsys *vtws,
       if (!can_cache_resource(old)) {
          virgl_hw_res_destroy(vtws, old);
       } else {
-         pipe_mutex_lock(vtws->mutex);
+         mtx_lock(&vtws->mutex);
          virgl_cache_list_check_free(vtws);
 
          old->start = os_time_get();
          old->end = old->start + vtws->usecs;
          LIST_ADDTAIL(&old->head, &vtws->delayed);
          vtws->num_delayed++;
-         pipe_mutex_unlock(vtws->mutex);
+         mtx_unlock(&vtws->mutex);
       }
    }
    *dres = sres;
@@ -333,7 +333,7 @@ virgl_vtest_winsys_resource_cache_create(struct virgl_winsys *vws,
        bind != VIRGL_BIND_VERTEX_BUFFER && bind != VIRGL_BIND_CUSTOM)
       goto alloc;
 
-   pipe_mutex_lock(vtws->mutex);
+   mtx_lock(&vtws->mutex);
 
    res = NULL;
    curr = vtws->delayed.next;
@@ -376,12 +376,12 @@ virgl_vtest_winsys_resource_cache_create(struct virgl_winsys *vws,
    if (res) {
       LIST_DEL(&res->head);
       --vtws->num_delayed;
-      pipe_mutex_unlock(vtws->mutex);
+      mtx_unlock(&vtws->mutex);
       pipe_reference_init(&res->reference, 1);
       return res;
    }
 
-   pipe_mutex_unlock(vtws->mutex);
+   mtx_unlock(&vtws->mutex);
 
 alloc:
    res = virgl_vtest_winsys_resource_create(vws, target, format, bind,
@@ -619,7 +619,7 @@ virgl_vtest_winsys_destroy(struct virgl_winsys *vws)
 
    virgl_cache_flush(vtws);
 
-   pipe_mutex_destroy(vtws->mutex);
+   mtx_destroy(&vtws->mutex);
    FREE(vtws);
 }
 
@@ -637,7 +637,7 @@ virgl_vtest_winsys_wrap(struct sw_winsys *sws)
 
    vtws->usecs = 1000000;
    LIST_INITHEAD(&vtws->delayed);
-   pipe_mutex_init(vtws->mutex);
+   (void) mtx_init(&vtws->mutex, mtx_plain);
 
    vtws->base.destroy = virgl_vtest_winsys_destroy;
 

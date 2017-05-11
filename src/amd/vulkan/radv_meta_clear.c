@@ -159,8 +159,8 @@ create_pipeline(struct radv_device *device,
 						       },
 									.pViewportState = &(VkPipelineViewportStateCreateInfo) {
 							       .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-							       .viewportCount = 0,
-							       .scissorCount = 0,
+							       .viewportCount = 1,
+							       .scissorCount = 1,
 						       },
 										 .pRasterizationState = &(VkPipelineRasterizationStateCreateInfo) {
 							       .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
@@ -187,9 +187,11 @@ create_pipeline(struct radv_device *device,
 								* we need only restore dynamic state was vkCmdSet.
 								*/
 							       .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-							       .dynamicStateCount = 6,
+							       .dynamicStateCount = 8,
 							       .pDynamicStates = (VkDynamicState[]) {
 								       /* Everything except stencil write mask */
+								       VK_DYNAMIC_STATE_VIEWPORT,
+								       VK_DYNAMIC_STATE_SCISSOR,
 								       VK_DYNAMIC_STATE_LINE_WIDTH,
 								       VK_DYNAMIC_STATE_DEPTH_BIAS,
 								       VK_DYNAMIC_STATE_BLEND_CONSTANTS,
@@ -408,22 +410,22 @@ emit_color_clear(struct radv_cmd_buffer *cmd_buffer,
 	const struct color_clear_vattrs vertex_data[3] = {
 		{
 			.position = {
-				clear_rect->rect.offset.x,
-				clear_rect->rect.offset.y,
+				-1.0,
+				-1.0,
 			},
 			.color = clear_value,
 		},
 		{
 			.position = {
-				clear_rect->rect.offset.x,
-				clear_rect->rect.offset.y + clear_rect->rect.extent.height,
+				-1.0,
+				1.0,
 			},
 			.color = clear_value,
 		},
 		{
 			.position = {
-				clear_rect->rect.offset.x + clear_rect->rect.extent.width,
-				clear_rect->rect.offset.y,
+				1.0,
+				-1.0,
 			},
 			.color = clear_value,
 		},
@@ -456,6 +458,17 @@ emit_color_clear(struct radv_cmd_buffer *cmd_buffer,
 		radv_CmdBindPipeline(cmd_buffer_h, VK_PIPELINE_BIND_POINT_GRAPHICS,
 					   pipeline_h);
 	}
+
+	radv_CmdSetViewport(radv_cmd_buffer_to_handle(cmd_buffer), 0, 1, &(VkViewport) {
+			.x = clear_rect->rect.offset.x,
+			.y = clear_rect->rect.offset.y,
+			.width = clear_rect->rect.extent.width,
+			.height = clear_rect->rect.extent.height,
+			.minDepth = 0.0f,
+			.maxDepth = 1.0f
+		});
+
+	radv_CmdSetScissor(radv_cmd_buffer_to_handle(cmd_buffer), 0, 1, &clear_rect->rect);
 
 	radv_CmdDraw(cmd_buffer_h, 3, clear_rect->layerCount, 0, 0);
 
@@ -618,7 +631,7 @@ static bool depth_view_can_fast_clear(const struct radv_image_view *iview,
 	    clear_rect->rect.extent.width != iview->extent.width ||
 	    clear_rect->rect.extent.height != iview->extent.height)
 		return false;
-	if (iview->image->htile.size &&
+	if (iview->image->surface.htile_size &&
 	    iview->base_mip == 0 &&
 	    iview->base_layer == 0 &&
 	    radv_layout_can_expclear(iview->image, layout) &&
@@ -680,25 +693,28 @@ emit_depthstencil_clear(struct radv_cmd_buffer *cmd_buffer,
 			   VK_IMAGE_ASPECT_STENCIL_BIT));
 	assert(pass_att != VK_ATTACHMENT_UNUSED);
 
+	if (!(aspects & VK_IMAGE_ASPECT_DEPTH_BIT))
+		clear_value.depth = 1.0f;
+
 	const struct depthstencil_clear_vattrs vertex_data[3] = {
 		{
 			.position = {
-				clear_rect->rect.offset.x,
-				clear_rect->rect.offset.y,
+				-1.0,
+				-1.0
 			},
 			.depth_clear = clear_value.depth,
 		},
 		{
 			.position = {
-				clear_rect->rect.offset.x,
-				clear_rect->rect.offset.y + clear_rect->rect.extent.height,
+				-1.0,
+				1.0,
 			},
 			.depth_clear = clear_value.depth,
 		},
 		{
 			.position = {
-				clear_rect->rect.offset.x + clear_rect->rect.extent.width,
-				clear_rect->rect.offset.y,
+				1.0,
+				-1.0,
 			},
 			.depth_clear = clear_value.depth,
 		},
@@ -735,6 +751,17 @@ emit_depthstencil_clear(struct radv_cmd_buffer *cmd_buffer,
 
 	if (depth_view_can_fast_clear(iview, subpass->depth_stencil_attachment.layout, clear_rect))
 		radv_set_depth_clear_regs(cmd_buffer, iview->image, clear_value, aspects);
+
+	radv_CmdSetViewport(radv_cmd_buffer_to_handle(cmd_buffer), 0, 1, &(VkViewport) {
+			.x = clear_rect->rect.offset.x,
+			.y = clear_rect->rect.offset.y,
+			.width = clear_rect->rect.extent.width,
+			.height = clear_rect->rect.extent.height,
+			.minDepth = 0.0f,
+			.maxDepth = 1.0f
+		});
+
+	radv_CmdSetScissor(radv_cmd_buffer_to_handle(cmd_buffer), 0, 1, &clear_rect->rect);
 
 	radv_CmdDraw(cmd_buffer_h, 3, clear_rect->layerCount, 0, 0);
 }
@@ -826,7 +853,9 @@ fail:
 static bool
 emit_fast_color_clear(struct radv_cmd_buffer *cmd_buffer,
 		      const VkClearAttachment *clear_att,
-		      const VkClearRect *clear_rect)
+		      const VkClearRect *clear_rect,
+		      enum radv_cmd_flush_bits *pre_flush,
+		      enum radv_cmd_flush_bits *post_flush)
 {
 	const struct radv_subpass *subpass = cmd_buffer->state.subpass;
 	const uint32_t subpass_att = clear_att->colorAttachment;
@@ -841,10 +870,10 @@ emit_fast_color_clear(struct radv_cmd_buffer *cmd_buffer,
 	if (!iview->image->cmask.size && !iview->image->surface.dcc_size)
 		return false;
 
-	if (!(cmd_buffer->device->debug_flags & RADV_DEBUG_FAST_CLEARS))
+	if (cmd_buffer->device->debug_flags & RADV_DEBUG_NO_FAST_CLEARS)
 		return false;
 
-	if (!radv_layout_can_fast_clear(iview->image, image_layout, radv_image_queue_family_mask(iview->image, cmd_buffer->queue_family_index)))
+	if (!radv_layout_can_fast_clear(iview->image, image_layout, radv_image_queue_family_mask(iview->image, cmd_buffer->queue_family_index, cmd_buffer->queue_family_index)))
 		goto fail;
 	if (vk_format_get_blocksizebits(iview->image->vk_format) > 64)
 		goto fail;
@@ -884,9 +913,13 @@ emit_fast_color_clear(struct radv_cmd_buffer *cmd_buffer,
 	if (ret == false)
 		goto fail;
 
-	cmd_buffer->state.flush_bits |= RADV_CMD_FLAG_FLUSH_AND_INV_CB |
-	                                RADV_CMD_FLAG_FLUSH_AND_INV_CB_META;
-	si_emit_cache_flush(cmd_buffer);
+	if (pre_flush) {
+		cmd_buffer->state.flush_bits |= (RADV_CMD_FLAG_FLUSH_AND_INV_CB |
+						 RADV_CMD_FLAG_FLUSH_AND_INV_CB_META) & ~ *pre_flush;
+		*pre_flush |= cmd_buffer->state.flush_bits;
+	} else
+		cmd_buffer->state.flush_bits |= RADV_CMD_FLAG_FLUSH_AND_INV_CB |
+		                                RADV_CMD_FLAG_FLUSH_AND_INV_CB_META;
 	/* clear cmask buffer */
 	if (iview->image->surface.dcc_size) {
 		radv_fill_buffer(cmd_buffer, iview->image->bo,
@@ -897,9 +930,15 @@ emit_fast_color_clear(struct radv_cmd_buffer *cmd_buffer,
 				 iview->image->offset + iview->image->cmask.offset,
 				 iview->image->cmask.size, 0);
 	}
-	cmd_buffer->state.flush_bits |= RADV_CMD_FLAG_CS_PARTIAL_FLUSH |
-	                                RADV_CMD_FLAG_INV_VMEM_L1 |
-	                                RADV_CMD_FLAG_INV_GLOBAL_L2;
+
+	if (post_flush)
+		*post_flush |= RADV_CMD_FLAG_CS_PARTIAL_FLUSH |
+	                       RADV_CMD_FLAG_INV_VMEM_L1 |
+	                       RADV_CMD_FLAG_WRITEBACK_GLOBAL_L2;
+	else
+		cmd_buffer->state.flush_bits |= RADV_CMD_FLAG_CS_PARTIAL_FLUSH |
+	                                        RADV_CMD_FLAG_INV_VMEM_L1 |
+	                                        RADV_CMD_FLAG_WRITEBACK_GLOBAL_L2;
 
 	radv_set_color_clear_regs(cmd_buffer, iview->image, subpass_att, clear_color);
 
@@ -914,11 +953,14 @@ fail:
 static void
 emit_clear(struct radv_cmd_buffer *cmd_buffer,
            const VkClearAttachment *clear_att,
-           const VkClearRect *clear_rect)
+           const VkClearRect *clear_rect,
+           enum radv_cmd_flush_bits *pre_flush,
+           enum radv_cmd_flush_bits *post_flush)
 {
 	if (clear_att->aspectMask & VK_IMAGE_ASPECT_COLOR_BIT) {
 
-		if (!emit_fast_color_clear(cmd_buffer, clear_att, clear_rect))
+		if (!emit_fast_color_clear(cmd_buffer, clear_att, clear_rect,
+		                           pre_flush, post_flush))
 			emit_color_clear(cmd_buffer, clear_att, clear_rect);
 	} else {
 		assert(clear_att->aspectMask & (VK_IMAGE_ASPECT_DEPTH_BIT |
@@ -961,6 +1003,8 @@ radv_cmd_buffer_clear_subpass(struct radv_cmd_buffer *cmd_buffer)
 {
 	struct radv_cmd_state *cmd_state = &cmd_buffer->state;
 	struct radv_meta_saved_state saved_state;
+	enum radv_cmd_flush_bits pre_flush = 0;
+	enum radv_cmd_flush_bits post_flush = 0;
 
 	if (!subpass_needs_clear(cmd_buffer))
 		return;
@@ -988,7 +1032,7 @@ radv_cmd_buffer_clear_subpass(struct radv_cmd_buffer *cmd_buffer)
 			.clearValue = cmd_state->attachments[a].clear_value,
 		};
 
-		emit_clear(cmd_buffer, &clear_att, &clear_rect);
+		emit_clear(cmd_buffer, &clear_att, &clear_rect, &pre_flush, &post_flush);
 		cmd_state->attachments[a].pending_clear_aspects = 0;
 	}
 
@@ -1003,12 +1047,14 @@ radv_cmd_buffer_clear_subpass(struct radv_cmd_buffer *cmd_buffer)
 				.clearValue = cmd_state->attachments[ds].clear_value,
 			};
 
-			emit_clear(cmd_buffer, &clear_att, &clear_rect);
+			emit_clear(cmd_buffer, &clear_att, &clear_rect,
+			           &pre_flush, &post_flush);
 			cmd_state->attachments[ds].pending_clear_aspects = 0;
 		}
 	}
 
 	radv_meta_restore(&saved_state, cmd_buffer);
+	cmd_buffer->state.flush_bits |= post_flush;
 }
 
 static void
@@ -1129,7 +1175,7 @@ radv_clear_image_layer(struct radv_cmd_buffer *cmd_buffer,
 		.layerCount = 1, /* FINISHME: clear multi-layer framebuffer */
 	};
 
-	emit_clear(cmd_buffer, &clear_att, &clear_rect);
+	emit_clear(cmd_buffer, &clear_att, &clear_rect, NULL, NULL);
 
 	radv_CmdEndRenderPass(radv_cmd_buffer_to_handle(cmd_buffer));
 	radv_DestroyRenderPass(device_h, pass,
@@ -1154,6 +1200,14 @@ radv_cmd_clear_image(struct radv_cmd_buffer *cmd_buffer,
 		format = VK_FORMAT_R32_UINT;
 		value = float3_to_rgb9e5(clear_value->color.float32);
 		internal_clear_value.color.uint32[0] = value;
+	}
+
+	if (format == VK_FORMAT_R4G4_UNORM_PACK8) {
+		uint8_t r, g;
+		format = VK_FORMAT_R8_UINT;
+		r = float_to_ubyte(clear_value->color.float32[0]) >> 4;
+		g = float_to_ubyte(clear_value->color.float32[1]) >> 4;
+		internal_clear_value.color.uint32[0] = (r << 4) | (g & 0xf);
 	}
 
 	for (uint32_t r = 0; r < range_count; r++) {
@@ -1245,6 +1299,8 @@ void radv_CmdClearAttachments(
 {
 	RADV_FROM_HANDLE(radv_cmd_buffer, cmd_buffer, commandBuffer);
 	struct radv_meta_saved_state saved_state;
+	enum radv_cmd_flush_bits pre_flush = 0;
+	enum radv_cmd_flush_bits post_flush = 0;
 
 	if (!cmd_buffer->state.subpass)
 		return;
@@ -1256,9 +1312,10 @@ void radv_CmdClearAttachments(
 	 */
 	for (uint32_t a = 0; a < attachmentCount; ++a) {
 		for (uint32_t r = 0; r < rectCount; ++r) {
-			emit_clear(cmd_buffer, &pAttachments[a], &pRects[r]);
+			emit_clear(cmd_buffer, &pAttachments[a], &pRects[r], &pre_flush, &post_flush);
 		}
 	}
 
 	radv_meta_restore(&saved_state, cmd_buffer);
+	cmd_buffer->state.flush_bits |= post_flush;
 }

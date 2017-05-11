@@ -41,8 +41,7 @@ gen6_upload_depth_stencil_state(struct brw_context *brw)
    /* _NEW_BUFFERS */
    depth_irb = intel_get_renderbuffer(ctx->DrawBuffer, BUFFER_DEPTH);
 
-   ds = brw_state_batch(brw, AUB_TRACE_DEPTH_STENCIL_STATE,
-			sizeof(*ds), 64,
+   ds = brw_state_batch(brw, sizeof(*ds), 64,
 			&brw->cc.depth_stencil_state_offset);
    memset(ds, 0, sizeof(*ds));
 

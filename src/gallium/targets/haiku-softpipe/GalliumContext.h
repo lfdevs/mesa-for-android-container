@@ -50,7 +50,7 @@ private:
 		// Context Management
 		struct hgl_context*	fContext[CONTEXT_MAX];
 		context_id			fCurrentContext;
-		pipe_mutex			fMutex;
+		mtx_t			fMutex;
 };
 
 

@@ -28,6 +28,7 @@
 #include "brw_context.h"
 #include "brw_state.h"
 #include "brw_defines.h"
+#include "compiler/brw_eu_defines.h"
 #include "brw_util.h"
 #include "intel_batchbuffer.h"
 #include "main/fbobject.h"

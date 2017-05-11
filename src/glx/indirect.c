@@ -11135,7 +11135,7 @@ __indirect_glBindRenderbufferEXT(GLenum target, GLuint renderbuffer)
 }
 
 
-#ifdef GLX_SHARED_GLAPI
+#ifdef GLX_INDIRECT_RENDERING
 
 static const struct proc_pair {
     const char *name;
@@ -11188,7 +11188,7 @@ __indirect_get_proc_address(const char *name)
     return (pair) ? pair->proc : NULL;
 }
 
-#endif /* GLX_SHARED_GLAPI */
+#endif /* GLX_INDIRECT_RENDERING */
 
 
 #undef FASTCALL

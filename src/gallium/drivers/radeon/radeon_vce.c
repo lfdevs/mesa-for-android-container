@@ -52,6 +52,7 @@
 #define FW_52_0_3 ((52 << 24) | (0 << 16) | (3 << 8))
 #define FW_52_4_3 ((52 << 24) | (4 << 16) | (3 << 8))
 #define FW_52_8_3 ((52 << 24) | (8 << 16) | (3 << 8))
+#define FW_53_19_4 ((53 << 24) | (19 << 16) | (4 << 8))
 
 /**
  * flush commands to the hardware
@@ -224,9 +225,17 @@ struct rvce_cpb_slot *l1_slot(struct rvce_encoder *enc)
 void rvce_frame_offset(struct rvce_encoder *enc, struct rvce_cpb_slot *slot,
 		       signed *luma_offset, signed *chroma_offset)
 {
-	unsigned pitch = align(enc->luma->level[0].nblk_x * enc->luma->bpe, 128);
-	unsigned vpitch = align(enc->luma->level[0].nblk_y, 16);
-	unsigned fsize = pitch * (vpitch + vpitch / 2);
+	struct r600_common_screen *rscreen = (struct r600_common_screen *)enc->screen;
+	unsigned pitch, vpitch, fsize;
+
+	if (rscreen->chip_class < GFX9) {
+		pitch = align(enc->luma->u.legacy.level[0].nblk_x * enc->luma->bpe, 128);
+		vpitch = align(enc->luma->u.legacy.level[0].nblk_y, 16);
+	} else {
+		pitch = align(enc->luma->u.gfx9.surf_pitch * enc->luma->bpe, 256);
+		vpitch = align(enc->luma->u.gfx9.surf_height, 16);
+	}
+	fsize = pitch * (vpitch + vpitch / 2);
 
 	*luma_offset = slot->index * fsize;
 	*chroma_offset = *luma_offset + pitch * vpitch;
@@ -456,8 +465,14 @@ struct pipe_video_codec *rvce_create_encoder(struct pipe_context *context,
 		goto error;
 
 	get_buffer(((struct vl_video_buffer *)tmp_buf)->resources[0], NULL, &tmp_surf);
-	cpb_size = align(tmp_surf->level[0].nblk_x * tmp_surf->bpe, 128);
-	cpb_size = cpb_size * align(tmp_surf->level[0].nblk_y, 32);
+
+	cpb_size = (rscreen->chip_class < GFX9) ?
+		align(tmp_surf->u.legacy.level[0].nblk_x * tmp_surf->bpe, 128) *
+		align(tmp_surf->u.legacy.level[0].nblk_y, 32) :
+
+		align(tmp_surf->u.gfx9.surf_pitch * tmp_surf->bpe, 256) *
+		align(tmp_surf->u.gfx9.surf_height, 32);
+
 	cpb_size = cpb_size * 3 / 2;
 	cpb_size = cpb_size * enc->cpb_num;
 	if (enc->dual_pipe)
@@ -495,6 +510,10 @@ struct pipe_video_codec *rvce_create_encoder(struct pipe_context *context,
 		radeon_vce_52_init(enc);
 		get_pic_param = radeon_vce_52_get_param;
 		break;
+	case FW_53_19_4:
+		radeon_vce_52_init(enc);
+		get_pic_param = radeon_vce_52_get_param;
+		break;
 
 	default:
 		goto error;
@@ -527,6 +546,7 @@ bool rvce_is_fw_version_supported(struct r600_common_screen *rscreen)
 	case FW_52_0_3:
 	case FW_52_4_3:
 	case FW_52_8_3:
+	case FW_53_19_4:
 		return true;
 	default:
 		return false;

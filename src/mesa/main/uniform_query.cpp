@@ -25,6 +25,7 @@
  */
 
 #include <stdlib.h>
+#include <inttypes.h>  /* for PRIx64 macro */
 
 #include "main/core.h"
 #include "main/context.h"
@@ -156,11 +157,11 @@ _mesa_GetActiveUniformsiv(GLuint program,
 }
 
 static struct gl_uniform_storage *
-validate_uniform_parameters(struct gl_context *ctx,
-			    struct gl_shader_program *shProg,
-			    GLint location, GLsizei count,
-			    unsigned *array_index,
-			    const char *caller)
+validate_uniform_parameters(GLint location, GLsizei count,
+                            unsigned *array_index,
+                            struct gl_context *ctx,
+                            struct gl_shader_program *shProg,
+                            const char *caller)
 {
    if (shProg == NULL) {
       _mesa_error(ctx, GL_INVALID_OPERATION, "%s(program not linked)", caller);
@@ -284,8 +285,8 @@ _mesa_get_uniform(struct gl_context *ctx, GLuint program, GLint location,
    unsigned offset;
 
    struct gl_uniform_storage *const uni =
-      validate_uniform_parameters(ctx, shProg, location, 1,
-                                  &offset, "glGetUniform");
+      validate_uniform_parameters(location, 1, &offset,
+                                  ctx, shProg, "glGetUniform");
    if (uni == NULL) {
       /* For glGetUniform, page 264 (page 278 of the PDF) of the OpenGL 2.1
        * spec says:
@@ -332,7 +333,8 @@ _mesa_get_uniform(struct gl_context *ctx, GLuint program, GLint location,
 	 &uni->storage[offset * elements * dmul];
 
       assert(returnType == GLSL_TYPE_FLOAT || returnType == GLSL_TYPE_INT ||
-             returnType == GLSL_TYPE_UINT || returnType == GLSL_TYPE_DOUBLE);
+             returnType == GLSL_TYPE_UINT || returnType == GLSL_TYPE_DOUBLE ||
+             returnType == GLSL_TYPE_UINT64 || returnType == GLSL_TYPE_INT64);
 
       /* doubles have a different size than the other 3 types */
       unsigned bytes = sizeof(src[0]) * elements * rmul;
@@ -353,8 +355,12 @@ _mesa_get_uniform(struct gl_context *ctx, GLuint program, GLint location,
 	      &&
 	      (uni->type->base_type == GLSL_TYPE_INT
 	       || uni->type->base_type == GLSL_TYPE_UINT
-               || uni->type->base_type == GLSL_TYPE_SAMPLER
-               || uni->type->base_type == GLSL_TYPE_IMAGE))) {
+               || uni->type->is_sampler()
+               || uni->type->is_image()))
+          || ((returnType == GLSL_TYPE_UINT64 ||
+               returnType == GLSL_TYPE_INT64 ) &&
+              (uni->type->base_type == GLSL_TYPE_UINT64 ||
+               uni->type->base_type == GLSL_TYPE_INT64))) {
 	 memcpy(paramsOut, src, bytes);
       } else {
 	 union gl_constant_value *const dst =
@@ -387,6 +393,18 @@ _mesa_get_uniform(struct gl_context *ctx, GLuint program, GLint location,
                   dst[didx].f = tmp;
 		  break;
                }
+               case GLSL_TYPE_UINT64: {
+                  uint64_t tmp;
+                  memcpy(&tmp, &src[sidx].u, sizeof(tmp));
+                  dst[didx].f = tmp;
+                  break;
+               }
+               case GLSL_TYPE_INT64: {
+                  uint64_t tmp;
+                  memcpy(&tmp, &src[sidx].i, sizeof(tmp));
+                  dst[didx].f = tmp;
+                  break;
+               }
 	       default:
 		  assert(!"Should not get here.");
 		  break;
@@ -415,6 +433,22 @@ _mesa_get_uniform(struct gl_context *ctx, GLuint program, GLint location,
                   double tmp = src[sidx].f;
                   memcpy(&dst[didx].f, &tmp, sizeof(tmp));
 		  break;
+               }
+               case GLSL_TYPE_UINT64: {
+                  uint64_t tmpu;
+                  double tmp;
+                  memcpy(&tmpu, &src[sidx].u, sizeof(tmpu));
+                  tmp = tmpu;
+                  memcpy(&dst[didx].f, &tmp, sizeof(tmp));
+                  break;
+               }
+               case GLSL_TYPE_INT64: {
+                  int64_t tmpi;
+                  double tmp;
+                  memcpy(&tmpi, &src[sidx].i, sizeof(tmpi));
+                  tmp = tmpi;
+                  memcpy(&dst[didx].f, &tmp, sizeof(tmp));
+                  break;
                }
 	       default:
 		  assert(!"Should not get here.");
@@ -453,12 +487,53 @@ _mesa_get_uniform(struct gl_context *ctx, GLuint program, GLint location,
                   dst[didx].i = IROUNDD(tmp);
 		  break;
                }
+               case GLSL_TYPE_UINT64: {
+                  uint64_t tmp;
+                  memcpy(&tmp, &src[sidx].u, sizeof(tmp));
+                  dst[didx].i = tmp;
+                  break;
+               }
+               case GLSL_TYPE_INT64: {
+                  int64_t tmp;
+                  memcpy(&tmp, &src[sidx].i, sizeof(tmp));
+                  dst[didx].i = tmp;
+                  break;
+               }
 	       default:
 		  assert(!"Should not get here.");
 		  break;
 	       }
 	       break;
-
+            case GLSL_TYPE_INT64:
+            case GLSL_TYPE_UINT64:
+               switch (uni->type->base_type) {
+               case GLSL_TYPE_UINT: {
+                  uint64_t tmp = src[sidx].u;
+                  memcpy(&dst[didx].u, &tmp, sizeof(tmp));
+                  break;
+               }
+               case GLSL_TYPE_INT:
+               case GLSL_TYPE_SAMPLER:
+               case GLSL_TYPE_IMAGE: {
+                  int64_t tmp = src[sidx].i;
+                  memcpy(&dst[didx].u, &tmp, sizeof(tmp));
+                  break;
+               }
+               case GLSL_TYPE_BOOL: {
+                  int64_t tmp = src[sidx].i ? 1.0f : 0.0f;
+                  memcpy(&dst[didx].u, &tmp, sizeof(tmp));
+                  break;
+               }
+               case GLSL_TYPE_FLOAT: {
+                  int64_t tmp = src[sidx].f;
+                  memcpy(&dst[didx].u, &tmp, sizeof(tmp));
+                  break;
+               }
+               default:
+                  assert(!"Should not get here.");
+                  break;
+               }
+               break;
 	    default:
 	       assert(!"Should not get here.");
 	       break;
@@ -496,6 +571,18 @@ log_uniform(const void *values, enum glsl_base_type basicType,
       case GLSL_TYPE_INT:
 	 printf("%d ", v[i].i);
 	 break;
+      case GLSL_TYPE_UINT64: {
+         uint64_t tmp;
+         memcpy(&tmp, &v[i * 2].u, sizeof(tmp));
+         printf("%" PRIu64 " ", tmp);
+         break;
+      }
+      case GLSL_TYPE_INT64: {
+         int64_t tmp;
+         memcpy(&tmp, &v[i * 2].u, sizeof(tmp));
+         printf("%" PRId64 " ", tmp);
+         break;
+      }
       case GLSL_TYPE_FLOAT:
 	 printf("%g ", v[i].f);
 	 break;
@@ -667,6 +754,10 @@ glsl_type_name(enum glsl_base_type type)
       return "float";
    case GLSL_TYPE_DOUBLE:
       return "double";
+   case GLSL_TYPE_UINT64:
+      return "uint64";
+   case GLSL_TYPE_INT64:
+      return "int64";
    case GLSL_TYPE_BOOL:
       return "bool";
    case GLSL_TYPE_SAMPLER:
@@ -695,18 +786,16 @@ glsl_type_name(enum glsl_base_type type)
  * Called via glUniform*() functions.
  */
 extern "C" void
-_mesa_uniform(struct gl_context *ctx, struct gl_shader_program *shProg,
-	      GLint location, GLsizei count,
-              const GLvoid *values,
-              enum glsl_base_type basicType,
-              unsigned src_components)
+_mesa_uniform(GLint location, GLsizei count, const GLvoid *values,
+              struct gl_context *ctx, struct gl_shader_program *shProg,
+              enum glsl_base_type basicType, unsigned src_components)
 {
    unsigned offset;
    int size_mul = glsl_base_type_is_64bit(basicType) ? 2 : 1;
 
    struct gl_uniform_storage *const uni =
-      validate_uniform_parameters(ctx, shProg, location, count,
-                                  &offset, "glUniform");
+      validate_uniform_parameters(location, count, &offset,
+                                  ctx, shProg, "glUniform");
    if (uni == NULL)
       return;
 
@@ -856,6 +945,8 @@ _mesa_uniform(struct gl_context *ctx, struct gl_shader_program *shProg,
     */
    if (uni->type->is_sampler()) {
       bool flushed = false;
+      shProg->SamplersValidated = GL_TRUE;
+
       for (int i = 0; i < MESA_SHADER_STAGES; i++) {
 	 struct gl_linked_shader *const sh = shProg->_LinkedShaders[i];
 
@@ -874,7 +965,7 @@ _mesa_uniform(struct gl_context *ctx, struct gl_shader_program *shProg,
 
 	 if (changed) {
 	    if (!flushed) {
-	       FLUSH_VERTICES(ctx, _NEW_TEXTURE | _NEW_PROGRAM);
+	       FLUSH_VERTICES(ctx, _NEW_TEXTURE_OBJECT | _NEW_PROGRAM);
 	       flushed = true;
 	    }
 
@@ -909,20 +1000,15 @@ _mesa_uniform(struct gl_context *ctx, struct gl_shader_program *shProg,
  * Note: cols=2, rows=4  ==>  array[2] of vec4
  */
 extern "C" void
-_mesa_uniform_matrix(struct gl_context *ctx, struct gl_shader_program *shProg,
-		     GLuint cols, GLuint rows,
-                     GLint location, GLsizei count,
-                     GLboolean transpose,
-                     const GLvoid *values, enum glsl_base_type basicType)
+_mesa_uniform_matrix(GLint location, GLsizei count,
+                     GLboolean transpose, const void *values,
+                     struct gl_context *ctx, struct gl_shader_program *shProg,
+                     GLuint cols, GLuint rows, enum glsl_base_type basicType)
 {
    unsigned offset;
-   unsigned vectors;
-   unsigned components;
-   unsigned elements;
-   int size_mul;
    struct gl_uniform_storage *const uni =
-      validate_uniform_parameters(ctx, shProg, location, count,
-                                  &offset, "glUniformMatrix");
+      validate_uniform_parameters(location, count, &offset,
+                                  ctx, shProg, "glUniformMatrix");
    if (uni == NULL)
       return;
 
@@ -933,11 +1019,11 @@ _mesa_uniform_matrix(struct gl_context *ctx, struct gl_shader_program *shProg,
    }
 
    assert(basicType == GLSL_TYPE_FLOAT || basicType == GLSL_TYPE_DOUBLE);
-   size_mul = basicType == GLSL_TYPE_DOUBLE ? 2 : 1;
+   const unsigned size_mul = basicType == GLSL_TYPE_DOUBLE ? 2 : 1;
 
    assert(!uni->type->is_sampler());
-   vectors = uni->type->matrix_columns;
-   components = uni->type->vector_elements;
+   const unsigned vectors = uni->type->matrix_columns;
+   const unsigned components = uni->type->vector_elements;
 
    /* Verify that the types are compatible.  This is greatly simplified for
     * matrices because they can only have a float base type.
@@ -1008,7 +1094,7 @@ _mesa_uniform_matrix(struct gl_context *ctx, struct gl_shader_program *shProg,
 
    /* Store the data in the "actual type" backing storage for the uniform.
     */
-   elements = components * vectors;
+   const unsigned elements = components * vectors;
 
    if (!transpose) {
       memcpy(&uni->storage[size_mul * elements * offset], values,
@@ -1087,27 +1173,22 @@ _mesa_sampler_uniforms_pipeline_are_valid(struct gl_pipeline_object *pipeline)
 
    GLbitfield mask;
    GLbitfield TexturesUsed[MAX_COMBINED_TEXTURE_IMAGE_UNITS];
-   struct gl_linked_shader *shader;
    unsigned active_samplers = 0;
-   const struct gl_shader_program **shProg =
-      (const struct gl_shader_program **) pipeline->CurrentProgram;
+   const struct gl_program **prog =
+      (const struct gl_program **) pipeline->CurrentProgram;
 
 
    memset(TexturesUsed, 0, sizeof(TexturesUsed));
 
    for (unsigned idx = 0; idx < ARRAY_SIZE(pipeline->CurrentProgram); idx++) {
-      if (!shProg[idx])
+      if (!prog[idx])
          continue;
 
-      shader = shProg[idx]->_LinkedShaders[idx];
-      if (!shader || !shader->Program)
-         continue;
-
-      mask = shader->Program->SamplersUsed;
+      mask = prog[idx]->SamplersUsed;
       while (mask) {
          const int s = u_bit_scan(&mask);
-         GLuint unit = shader->Program->SamplerUnits[s];
-         GLuint tgt = shader->Program->sh.SamplerTargets[s];
+         GLuint unit = prog[idx]->SamplerUnits[s];
+         GLuint tgt = prog[idx]->sh.SamplerTargets[s];
 
          /* FIXME: Samplers are initialized to 0 and Mesa doesn't do a
           * great job of eliminating unused uniforms currently so for now
@@ -1121,14 +1202,14 @@ _mesa_sampler_uniforms_pipeline_are_valid(struct gl_pipeline_object *pipeline)
                ralloc_asprintf(pipeline,
                      "Program %d: "
                      "Texture unit %d is accessed with 2 different types",
-                     shProg[idx]->Name, unit);
+                     prog[idx]->Id, unit);
             return false;
          }
 
          TexturesUsed[unit] |= (1 << tgt);
       }
 
-      active_samplers += shader->Program->info.num_textures;
+      active_samplers += prog[idx]->info.num_textures;
    }
 
    if (active_samplers > MAX_COMBINED_TEXTURE_IMAGE_UNITS) {

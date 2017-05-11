@@ -25,6 +25,8 @@
  *    Rob Clark <robclark@freedesktop.org>
  */
 
+#include <libsync.h>
+
 #include "etnaviv_fence.h"
 #include "etnaviv_context.h"
 #include "etnaviv_screen.h"
@@ -36,8 +38,17 @@ struct pipe_fence_handle {
    struct pipe_reference reference;
    struct etna_context *ctx;
    struct etna_screen *screen;
+   int fence_fd;
    uint32_t timestamp;
 };
+
+static void
+etna_fence_destroy(struct pipe_fence_handle *fence)
+{
+   if (fence->fence_fd != -1)
+      close(fence->fence_fd);
+   FREE(fence);
+}
 
 static void
 etna_screen_fence_reference(struct pipe_screen *pscreen,
@@ -45,7 +56,7 @@ etna_screen_fence_reference(struct pipe_screen *pscreen,
                             struct pipe_fence_handle *fence)
 {
    if (pipe_reference(&(*ptr)->reference, &fence->reference))
-      FREE(*ptr);
+      etna_fence_destroy(*ptr);
 
    *ptr = fence;
 }
@@ -54,14 +65,42 @@ static boolean
 etna_screen_fence_finish(struct pipe_screen *pscreen, struct pipe_context *ctx,
                          struct pipe_fence_handle *fence, uint64_t timeout)
 {
+   if (fence->fence_fd != -1) {
+      int ret = sync_wait(fence->fence_fd, timeout / 1000000);
+      return ret == 0;
+   }
+
    if (etna_pipe_wait_ns(fence->screen->pipe, fence->timestamp, timeout))
       return false;
 
    return true;
 }
 
+void
+etna_create_fence_fd(struct pipe_context *pctx,
+                     struct pipe_fence_handle **pfence, int fd)
+{
+   *pfence = etna_fence_create(pctx, dup(fd));
+}
+
+void
+etna_fence_server_sync(struct pipe_context *pctx,
+                       struct pipe_fence_handle *pfence)
+{
+   struct etna_context *ctx = etna_context(pctx);
+
+   sync_accumulate("etnaviv", &ctx->in_fence_fd, pfence->fence_fd);
+}
+
+static int
+etna_screen_fence_get_fd(struct pipe_screen *pscreen,
+                         struct pipe_fence_handle *pfence)
+{
+   return dup(pfence->fence_fd);
+}
+
 struct pipe_fence_handle *
-etna_fence_create(struct pipe_context *pctx)
+etna_fence_create(struct pipe_context *pctx, int fence_fd)
 {
    struct pipe_fence_handle *fence;
    struct etna_context *ctx = etna_context(pctx);
@@ -75,6 +114,7 @@ etna_fence_create(struct pipe_context *pctx)
    fence->ctx = ctx;
    fence->screen = ctx->screen;
    fence->timestamp = etna_cmd_stream_timestamp(ctx->stream);
+   fence->fence_fd = fence_fd;
 
    return fence;
 }
@@ -84,4 +124,5 @@ etna_fence_screen_init(struct pipe_screen *pscreen)
 {
    pscreen->fence_reference = etna_screen_fence_reference;
    pscreen->fence_finish = etna_screen_fence_finish;
+   pscreen->fence_get_fd = etna_screen_fence_get_fd;
 }

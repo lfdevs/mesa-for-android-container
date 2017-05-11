@@ -144,7 +144,12 @@ vc4_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
         vc4->fd = screen->fd;
 
         slab_create_child(&vc4->transfer_pool, &screen->transfer_pool);
-        vc4->blitter = util_blitter_create(pctx);
+
+	vc4->uploader = u_upload_create_default(&vc4->base);
+	vc4->base.stream_uploader = vc4->uploader;
+	vc4->base.const_uploader = vc4->uploader;
+
+	vc4->blitter = util_blitter_create(pctx);
         if (!vc4->blitter)
                 goto fail;
 
@@ -152,10 +157,6 @@ vc4_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
                                                    (1 << PIPE_PRIM_QUADS) - 1);
         if (!vc4->primconvert)
                 goto fail;
-
-        vc4->uploader = u_upload_create(pctx, 16 * 1024,
-                                        PIPE_BIND_INDEX_BUFFER,
-                                        PIPE_USAGE_STREAM);
 
         vc4_debug |= saved_shaderdb_flag;
 

@@ -330,6 +330,17 @@ print_constant(nir_constant *c, const struct glsl_type *type, print_state *state
       }
       break;
 
+   case GLSL_TYPE_UINT64:
+   case GLSL_TYPE_INT64:
+      /* Only float base types can be matrices. */
+      assert(cols == 1);
+
+      for (i = 0; i < cols; i++) {
+         if (i > 0) fprintf(fp, ", ");
+         fprintf(fp, "0x%08" PRIx64, c->values[0].u64[i]);
+      }
+      break;
+
    case GLSL_TYPE_STRUCT:
       for (i = 0; i < c->num_elements; i++) {
          if (i > 0) fprintf(fp, ", ");
@@ -1157,6 +1168,19 @@ nir_print_shader_annotated(nir_shader *shader, FILE *fp,
 
    if (shader->info->label)
       fprintf(fp, "label: %s\n", shader->info->label);
+
+   switch (shader->stage) {
+   case MESA_SHADER_COMPUTE:
+      fprintf(fp, "local-size: %u, %u, %u%s\n",
+              shader->info->cs.local_size[0],
+              shader->info->cs.local_size[1],
+              shader->info->cs.local_size[2],
+              shader->info->cs.local_size_variable ? " (variable)" : "");
+      fprintf(fp, "shared-size: %u\n", shader->info->cs.shared_size);
+      break;
+   default:
+      break;
+   }
 
    fprintf(fp, "inputs: %u\n", shader->num_inputs);
    fprintf(fp, "outputs: %u\n", shader->num_outputs);

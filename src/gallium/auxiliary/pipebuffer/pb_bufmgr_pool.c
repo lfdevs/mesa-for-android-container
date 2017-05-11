@@ -56,7 +56,7 @@ struct pool_pb_manager
 {
    struct pb_manager base;
    
-   pipe_mutex mutex;
+   mtx_t mutex;
    
    pb_size bufSize;
    pb_size bufAlign;
@@ -110,10 +110,10 @@ pool_buffer_destroy(struct pb_buffer *buf)
    
    assert(!pipe_is_referenced(&pool_buf->base.reference));
 
-   pipe_mutex_lock(pool->mutex);
+   mtx_lock(&pool->mutex);
    LIST_ADD(&pool_buf->head, &pool->free);
    pool->numFree++;
-   pipe_mutex_unlock(pool->mutex);
+   mtx_unlock(&pool->mutex);
 }
 
 
@@ -126,9 +126,9 @@ pool_buffer_map(struct pb_buffer *buf, unsigned flags, void *flush_ctx)
 
    /* XXX: it will be necessary to remap here to propagate flush_ctx */
 
-   pipe_mutex_lock(pool->mutex);
+   mtx_lock(&pool->mutex);
    map = (unsigned char *) pool->map + pool_buf->start;
-   pipe_mutex_unlock(pool->mutex);
+   mtx_unlock(&pool->mutex);
    return map;
 }
 
@@ -196,10 +196,10 @@ pool_bufmgr_create_buffer(struct pb_manager *mgr,
    assert(size == pool->bufSize);
    assert(pool->bufAlign % desc->alignment == 0);
    
-   pipe_mutex_lock(pool->mutex);
+   mtx_lock(&pool->mutex);
 
    if (pool->numFree == 0) {
-      pipe_mutex_unlock(pool->mutex);
+      mtx_unlock(&pool->mutex);
       debug_printf("warning: out of fixed size buffer objects\n");
       return NULL;
    }
@@ -207,7 +207,7 @@ pool_bufmgr_create_buffer(struct pb_manager *mgr,
    item = pool->free.next;
 
    if (item == &pool->free) {
-      pipe_mutex_unlock(pool->mutex);
+      mtx_unlock(&pool->mutex);
       debug_printf("error: fixed size buffer pool corruption\n");
       return NULL;
    }
@@ -215,7 +215,7 @@ pool_bufmgr_create_buffer(struct pb_manager *mgr,
    LIST_DEL(item);
    --pool->numFree;
 
-   pipe_mutex_unlock(pool->mutex);
+   mtx_unlock(&pool->mutex);
    
    pool_buf = LIST_ENTRY(struct pool_buffer, item, head);
    assert(!pipe_is_referenced(&pool_buf->base.reference));
@@ -238,14 +238,14 @@ static void
 pool_bufmgr_destroy(struct pb_manager *mgr)
 {
    struct pool_pb_manager *pool = pool_pb_manager(mgr);
-   pipe_mutex_lock(pool->mutex);
+   mtx_lock(&pool->mutex);
 
    FREE(pool->bufs);
    
    pb_unmap(pool->buffer);
    pb_reference(&pool->buffer, NULL);
    
-   pipe_mutex_unlock(pool->mutex);
+   mtx_unlock(&pool->mutex);
    
    FREE(mgr);
 }
@@ -279,7 +279,7 @@ pool_bufmgr_create(struct pb_manager *provider,
    pool->bufSize = bufSize;
    pool->bufAlign = desc->alignment; 
    
-   pipe_mutex_init(pool->mutex);
+   (void) mtx_init(&pool->mutex, mtx_plain);
 
    pool->buffer = provider->create_buffer(provider, numBufs*bufSize, desc); 
    if (!pool->buffer)

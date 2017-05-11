@@ -256,6 +256,14 @@ vc4_register_allocate(struct vc4_context *vc4, struct vc4_compile *c)
                                 if (c->temp_start[i] < ip && c->temp_end[i] > ip)
                                         class_bits[i] &= ~CLASS_BIT_R4;
                         }
+
+                        /* If we're doing a conditional write of something
+                         * writing R4 (math, tex results), then make sure that
+                         * we store in a temp so that we actually
+                         * conditionally move the result.
+                         */
+                        if (inst->cond != QPU_COND_ALWAYS)
+                                class_bits[inst->dst.index] &= ~CLASS_BIT_R4;
                 } else {
                         /* R4 can't be written as a general purpose
                          * register. (it's TMU_NOSWAP as a write address).

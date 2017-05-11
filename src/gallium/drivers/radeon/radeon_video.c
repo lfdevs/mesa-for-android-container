@@ -138,14 +138,17 @@ void rvid_clear_buffer(struct pipe_context *context, struct rvid_buffer* buffer)
  * join surfaces into the same buffer with identical tiling params
  * sumup their sizes and replace the backend buffers with a single bo
  */
-void rvid_join_surfaces(struct radeon_winsys* ws,
+void rvid_join_surfaces(struct r600_common_context *rctx,
 			struct pb_buffer** buffers[VL_NUM_COMPONENTS],
 			struct radeon_surf *surfaces[VL_NUM_COMPONENTS])
 {
+	struct radeon_winsys* ws;
 	unsigned best_tiling, best_wh, off;
 	unsigned size, alignment;
 	struct pb_buffer *pb;
 	unsigned i, j;
+
+	ws = rctx->ws;
 
 	for (i = 0, best_tiling = 0, best_wh = ~0; i < VL_NUM_COMPONENTS; ++i) {
 		unsigned wh;
@@ -153,11 +156,13 @@ void rvid_join_surfaces(struct radeon_winsys* ws,
 		if (!surfaces[i])
 			continue;
 
-		/* choose the smallest bank w/h for now */
-		wh = surfaces[i]->bankw * surfaces[i]->bankh;
-		if (wh < best_wh) {
-			best_wh = wh;
-			best_tiling = i;
+		if (rctx->chip_class < GFX9) {
+			/* choose the smallest bank w/h for now */
+			wh = surfaces[i]->u.legacy.bankw * surfaces[i]->u.legacy.bankh;
+			if (wh < best_wh) {
+				best_wh = wh;
+				best_tiling = i;
+			}
 		}
 	}
 
@@ -165,16 +170,21 @@ void rvid_join_surfaces(struct radeon_winsys* ws,
 		if (!surfaces[i])
 			continue;
 
-		/* copy the tiling parameters */
-		surfaces[i]->bankw = surfaces[best_tiling]->bankw;
-		surfaces[i]->bankh = surfaces[best_tiling]->bankh;
-		surfaces[i]->mtilea = surfaces[best_tiling]->mtilea;
-		surfaces[i]->tile_split = surfaces[best_tiling]->tile_split;
-
 		/* adjust the texture layer offsets */
 		off = align(off, surfaces[i]->surf_alignment);
-		for (j = 0; j < ARRAY_SIZE(surfaces[i]->level); ++j)
-			surfaces[i]->level[j].offset += off;
+
+		if (rctx->chip_class < GFX9) {
+			/* copy the tiling parameters */
+			surfaces[i]->u.legacy.bankw = surfaces[best_tiling]->u.legacy.bankw;
+			surfaces[i]->u.legacy.bankh = surfaces[best_tiling]->u.legacy.bankh;
+			surfaces[i]->u.legacy.mtilea = surfaces[best_tiling]->u.legacy.mtilea;
+			surfaces[i]->u.legacy.tile_split = surfaces[best_tiling]->u.legacy.tile_split;
+
+			for (j = 0; j < ARRAY_SIZE(surfaces[i]->u.legacy.level); ++j)
+				surfaces[i]->u.legacy.level[j].offset += off;
+		} else
+			surfaces[i]->u.gfx9.surf_offset += off;
+
 		off += surfaces[i]->surf_size;
 	}
 
@@ -279,7 +289,11 @@ int rvid_get_video_param(struct pipe_screen *screen,
 	case PIPE_VIDEO_CAP_MAX_HEIGHT:
 		return (rscreen->family < CHIP_TONGA) ? 1152 : 4096;
 	case PIPE_VIDEO_CAP_PREFERED_FORMAT:
-		return PIPE_FORMAT_NV12;
+		if (profile == PIPE_VIDEO_PROFILE_HEVC_MAIN_10)
+			return PIPE_FORMAT_P016;
+		else
+			return PIPE_FORMAT_NV12;
+
 	case PIPE_VIDEO_CAP_PREFERS_INTERLACED:
 	case PIPE_VIDEO_CAP_SUPPORTS_INTERLACED:
 		if (rscreen->family < CHIP_PALM) {
@@ -331,6 +345,11 @@ boolean rvid_is_format_supported(struct pipe_screen *screen,
 				 enum pipe_video_profile profile,
 				 enum pipe_video_entrypoint entrypoint)
 {
+	/* HEVC 10 bit decoding should use P016 instead of NV12 if possible */
+	if (profile == PIPE_VIDEO_PROFILE_HEVC_MAIN_10)
+		return (format == PIPE_FORMAT_NV12) ||
+			(format == PIPE_FORMAT_P016);
+
 	/* we can only handle this one with UVD */
 	if (profile != PIPE_VIDEO_PROFILE_UNKNOWN)
 		return format == PIPE_FORMAT_NV12;

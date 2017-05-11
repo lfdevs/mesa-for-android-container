@@ -422,7 +422,7 @@ st_ReadPixels(struct gl_context *ctx, GLint x, GLint y,
 
    /* Validate state (to be sure we have up-to-date framebuffer surfaces)
     * and flush the bitmap cache prior to reading. */
-   st_validate_state(st, ST_PIPELINE_RENDER);
+   st_validate_state(st, ST_PIPELINE_UPDATE_FRAMEBUFFER);
    st_flush_bitmap_cache(st);
 
    if (!st->prefer_blit_based_texture_transfer) {

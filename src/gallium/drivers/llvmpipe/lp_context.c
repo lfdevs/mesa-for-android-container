@@ -37,6 +37,7 @@
 #include "util/u_math.h"
 #include "util/u_memory.h"
 #include "util/simple_list.h"
+#include "util/u_upload_mgr.h"
 #include "lp_clear.h"
 #include "lp_context.h"
 #include "lp_flush.h"
@@ -61,6 +62,9 @@ static void llvmpipe_destroy( struct pipe_context *pipe )
    if (llvmpipe->blitter) {
       util_blitter_destroy(llvmpipe->blitter);
    }
+
+   if (llvmpipe->pipe.stream_uploader)
+      u_upload_destroy(llvmpipe->pipe.stream_uploader);
 
    /* This will also destroy llvmpipe->setup:
     */
@@ -194,6 +198,11 @@ llvmpipe_create_context(struct pipe_screen *screen, void *priv,
                                       llvmpipe->draw );
    if (!llvmpipe->setup)
       goto fail;
+
+   llvmpipe->pipe.stream_uploader = u_upload_create_default(&llvmpipe->pipe);
+   if (!llvmpipe->pipe.stream_uploader)
+      goto fail;
+   llvmpipe->pipe.const_uploader = llvmpipe->pipe.stream_uploader;
 
    llvmpipe->blitter = util_blitter_create(&llvmpipe->pipe);
    if (!llvmpipe->blitter) {

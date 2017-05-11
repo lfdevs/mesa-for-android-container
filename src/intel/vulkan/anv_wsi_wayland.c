@@ -21,9 +21,6 @@
  * IN THE SOFTWARE.
  */
 
-#include <wayland-client.h>
-#include <wayland-drm-client-protocol.h>
-
 #include "vk_format_info.h"
 #include <util/hash_table.h>
 

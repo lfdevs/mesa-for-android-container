@@ -37,6 +37,7 @@
 #include "freedreno_query.h"
 #include "freedreno_query_hw.h"
 #include "freedreno_util.h"
+#include "util/u_upload_mgr.h"
 
 static void
 fd_context_flush(struct pipe_context *pctx, struct pipe_fence_handle **fence,
@@ -111,7 +112,7 @@ fd_context_destroy(struct pipe_context *pctx)
 
 	DBG("");
 
-	if (ctx->screen->reorder)
+	if (ctx->screen->reorder && util_queue_is_initialized(&ctx->flush_queue))
 		util_queue_destroy(&ctx->flush_queue);
 
 	fd_batch_reference(&ctx->batch, NULL);  /* unref current batch */
@@ -124,6 +125,9 @@ fd_context_destroy(struct pipe_context *pctx)
 
 	if (ctx->blitter)
 		util_blitter_destroy(ctx->blitter);
+
+	if (pctx->stream_uploader)
+		u_upload_destroy(pctx->stream_uploader);
 
 	if (ctx->clear_rs_state)
 		pctx->delete_rasterizer_state(pctx, ctx->clear_rs_state);
@@ -268,6 +272,11 @@ fd_context_init(struct fd_context *ctx, struct pipe_screen *pscreen,
 	pctx->set_debug_callback = fd_set_debug_callback;
 	pctx->create_fence_fd = fd_create_fence_fd;
 	pctx->fence_server_sync = fd_fence_server_sync;
+
+	pctx->stream_uploader = u_upload_create_default(pctx);
+	if (!pctx->stream_uploader)
+		goto fail;
+	pctx->const_uploader = pctx->stream_uploader;
 
 	/* TODO what about compute?  Ideally it creates it's own independent
 	 * batches per compute job (since it isn't using tiling, so no point

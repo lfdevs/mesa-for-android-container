@@ -1,3 +1,12 @@
+mesa (17.1.0-1) experimental; urgency=medium
+
+  * New upstream release.
+  * control: Add zlib1g-dev to build-depends.
+  * control: Bump libdrm-dev build-dep to 2.4.80.
+  * libgbm1.symbols: Updated.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 11 May 2017 09:59:50 +0300
+
 mesa (17.0.4-1) experimental; urgency=medium
 
   * New upstrem release.

@@ -424,8 +424,10 @@ struct pipe_context* r300_create_context(struct pipe_screen* screen,
     r300->context.create_video_codec = vl_create_decoder;
     r300->context.create_video_buffer = vl_video_buffer_create;
 
-    r300->uploader = u_upload_create(&r300->context, 256 * 1024,
+    r300->uploader = u_upload_create(&r300->context, 1024 * 1024,
                                      PIPE_BIND_CUSTOM, PIPE_USAGE_STREAM);
+    r300->context.stream_uploader = r300->uploader;
+    r300->context.const_uploader = r300->uploader;
 
     r300->blitter = util_blitter_create(&r300->context);
     if (r300->blitter == NULL)

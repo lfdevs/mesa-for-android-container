@@ -44,41 +44,6 @@
 #include "brw_state.h"
 #include "intel_batchbuffer.h"
 
-static const GLuint stage_to_bt_edit[] = {
-   [MESA_SHADER_VERTEX] = _3DSTATE_BINDING_TABLE_EDIT_VS,
-   [MESA_SHADER_GEOMETRY] = _3DSTATE_BINDING_TABLE_EDIT_GS,
-   [MESA_SHADER_FRAGMENT] = _3DSTATE_BINDING_TABLE_EDIT_PS,
-};
-
-static uint32_t
-reserve_hw_bt_space(struct brw_context *brw, unsigned bytes)
-{
-   /* From the Broadwell PRM, Volume 16, "Workarounds",
-    * WaStateBindingTableOverfetch:
-    * "HW over-fetches two cache lines of binding table indices.  When
-    *  using the resource streamer, SW needs to pad binding table pointer
-    *  updates with an additional two cache lines."
-    *
-    * Cache lines are 64 bytes, so we subtract 128 bytes from the size of
-    * the binding table pool buffer.
-    */
-   if (brw->hw_bt_pool.next_offset + bytes >= brw->hw_bt_pool.bo->size - 128) {
-      gen7_reset_hw_bt_pool_offsets(brw);
-   }
-
-   uint32_t offset = brw->hw_bt_pool.next_offset;
-
-   /* From the Haswell PRM, Volume 2b: Command Reference: Instructions,
-    * 3DSTATE_BINDING_TABLE_POINTERS_xS:
-    *
-    * "If HW Binding Table is enabled, the offset is relative to the
-    *  Binding Table Pool Base Address and the alignment is 64 bytes."
-    */
-   brw->hw_bt_pool.next_offset += ALIGN(bytes, 64);
-
-   return offset;
-}
-
 /**
  * Upload a shader stage's binding table as indirect state.
  *
@@ -103,44 +68,27 @@ brw_upload_binding_table(struct brw_context *brw,
          brw_emit_buffer_surface_state(
             brw, &stage_state->surf_offset[
                     prog_data->binding_table.shader_time_start],
-            brw->shader_time.bo, 0, BRW_SURFACEFORMAT_RAW,
+            brw->shader_time.bo, 0, ISL_FORMAT_RAW,
             brw->shader_time.bo->size, 1, true);
       }
-      /* When RS is enabled use hw-binding table uploads, otherwise fallback to
-       * software-uploads.
-       */
-      if (brw->use_resource_streamer) {
-         gen7_update_binding_table_from_array(brw, stage_state->stage,
-                                              stage_state->surf_offset,
-                                              prog_data->binding_table
-                                              .size_bytes / 4);
-      } else {
-         uint32_t *bind = brw_state_batch(brw, AUB_TRACE_BINDING_TABLE,
-                                          prog_data->binding_table.size_bytes,
-                                          32,
-                                          &stage_state->bind_bo_offset);
+      uint32_t *bind =
+         brw_state_batch(brw, prog_data->binding_table.size_bytes,
+                         32, &stage_state->bind_bo_offset);
 
-         /* BRW_NEW_SURFACES and BRW_NEW_*_CONSTBUF */
-         memcpy(bind, stage_state->surf_offset,
-                prog_data->binding_table.size_bytes);
-      }
+      /* BRW_NEW_SURFACES and BRW_NEW_*_CONSTBUF */
+      memcpy(bind, stage_state->surf_offset,
+             prog_data->binding_table.size_bytes);
    }
 
    brw->ctx.NewDriverState |= BRW_NEW_BINDING_TABLE_POINTERS;
 
    if (brw->gen >= 7) {
-      if (brw->use_resource_streamer) {
-         stage_state->bind_bo_offset =
-            reserve_hw_bt_space(brw, prog_data->binding_table.size_bytes);
-      }
       BEGIN_BATCH(2);
       OUT_BATCH(packet_name << 16 | (2 - 2));
       /* Align SurfaceStateOffset[16:6] format to [15:5] PS Binding Table field
        * when hw-generated binding table is enabled.
        */
-      OUT_BATCH(brw->use_resource_streamer ?
-                (stage_state->bind_bo_offset >> 1) :
-                stage_state->bind_bo_offset);
+      OUT_BATCH(stage_state->bind_bo_offset);
       ADVANCE_BATCH();
    }
 }
@@ -282,160 +230,6 @@ const struct brw_tracked_state brw_gs_binding_table = {
    },
    .emit = brw_gs_upload_binding_table,
 };
-
-/**
- * Edit a single entry in a hardware-generated binding table
- */
-void
-gen7_edit_hw_binding_table_entry(struct brw_context *brw,
-                                 gl_shader_stage stage,
-                                 uint32_t index,
-                                 uint32_t surf_offset)
-{
-   assert(stage < ARRAY_SIZE(stage_to_bt_edit));
-   assert(stage_to_bt_edit[stage]);
-
-   uint32_t dw2 = SET_FIELD(index, BRW_BINDING_TABLE_INDEX) |
-      (brw->gen >= 8 ? GEN8_SURFACE_STATE_EDIT(surf_offset) :
-       HSW_SURFACE_STATE_EDIT(surf_offset));
-
-   BEGIN_BATCH(3);
-   OUT_BATCH(stage_to_bt_edit[stage] << 16 | (3 - 2));
-   OUT_BATCH(BRW_BINDING_TABLE_EDIT_TARGET_ALL);
-   OUT_BATCH(dw2);
-   ADVANCE_BATCH();
-}
-
-/**
- * Upload a whole hardware binding table for the given stage.
- *
- * Takes an array of surface offsets and the number of binding table
- * entries.
- */
-void
-gen7_update_binding_table_from_array(struct brw_context *brw,
-                                     gl_shader_stage stage,
-                                     const uint32_t* binding_table,
-                                     int num_surfaces)
-{
-   uint32_t dw2 = 0;
-
-   assert(stage < ARRAY_SIZE(stage_to_bt_edit));
-   assert(stage_to_bt_edit[stage]);
-
-   BEGIN_BATCH(num_surfaces + 2);
-   OUT_BATCH(stage_to_bt_edit[stage] << 16 | num_surfaces);
-   OUT_BATCH(BRW_BINDING_TABLE_EDIT_TARGET_ALL);
-   for (int i = 0; i < num_surfaces; i++) {
-      dw2 = SET_FIELD(i, BRW_BINDING_TABLE_INDEX) |
-         (brw->gen >= 8 ? GEN8_SURFACE_STATE_EDIT(binding_table[i]) :
-          HSW_SURFACE_STATE_EDIT(binding_table[i]));
-      OUT_BATCH(dw2);
-   }
-   ADVANCE_BATCH();
-}
-
-/**
- * Disable hardware binding table support, falling back to the
- * older software-generated binding table mechanism.
- */
-void
-gen7_disable_hw_binding_tables(struct brw_context *brw)
-{
-   if (!brw->use_resource_streamer)
-      return;
-   /* From the Haswell PRM, Volume 7: 3D Media GPGPU,
-    * 3DSTATE_BINDING_TABLE_POOL_ALLOC > Programming Note:
-    *
-    * "When switching between HW and SW binding table generation, SW must
-    * issue a state cache invalidate."
-    */
-   brw_emit_pipe_control_flush(brw, PIPE_CONTROL_STATE_CACHE_INVALIDATE);
-
-   int pkt_len = brw->gen >= 8 ? 4 : 3;
-
-   BEGIN_BATCH(pkt_len);
-   OUT_BATCH(_3DSTATE_BINDING_TABLE_POOL_ALLOC << 16 | (pkt_len - 2));
-   if (brw->gen >= 8) {
-      OUT_BATCH(0);
-      OUT_BATCH(0);
-      OUT_BATCH(0);
-   } else {
-      OUT_BATCH(HSW_BT_POOL_ALLOC_MUST_BE_ONE);
-      OUT_BATCH(0);
-   }
-   ADVANCE_BATCH();
-}
-
-/**
- * Enable hardware binding tables and set up the binding table pool.
- */
-void
-gen7_enable_hw_binding_tables(struct brw_context *brw)
-{
-   if (!brw->use_resource_streamer)
-      return;
-
-   if (!brw->hw_bt_pool.bo) {
-      /* We use a single re-usable buffer object for the lifetime of the
-       * context and size it to maximum allowed binding tables that can be
-       * programmed per batch:
-       *
-       * From the Haswell PRM, Volume 7: 3D Media GPGPU,
-       * 3DSTATE_BINDING_TABLE_POOL_ALLOC > Programming Note:
-       * "A maximum of 16,383 Binding tables are allowed in any batch buffer"
-       */
-      static const int max_size = 16383 * 4;
-      brw->hw_bt_pool.bo = drm_intel_bo_alloc(brw->bufmgr, "hw_bt",
-                                              max_size, 64);
-      brw->hw_bt_pool.next_offset = 0;
-   }
-
-   /* From the Haswell PRM, Volume 7: 3D Media GPGPU,
-    * 3DSTATE_BINDING_TABLE_POOL_ALLOC > Programming Note:
-    *
-    * "When switching between HW and SW binding table generation, SW must
-    * issue a state cache invalidate."
-    */
-   brw_emit_pipe_control_flush(brw, PIPE_CONTROL_STATE_CACHE_INVALIDATE);
-
-   int pkt_len = brw->gen >= 8 ? 4 : 3;
-   uint32_t dw1 = BRW_HW_BINDING_TABLE_ENABLE;
-   if (brw->is_haswell) {
-      dw1 |= SET_FIELD(GEN7_MOCS_L3, GEN7_HW_BT_POOL_MOCS) |
-             HSW_BT_POOL_ALLOC_MUST_BE_ONE;
-   } else if (brw->gen >= 8) {
-      dw1 |= BDW_MOCS_WB;
-   }
-
-   BEGIN_BATCH(pkt_len);
-   OUT_BATCH(_3DSTATE_BINDING_TABLE_POOL_ALLOC << 16 | (pkt_len - 2));
-   if (brw->gen >= 8) {
-      OUT_RELOC64(brw->hw_bt_pool.bo, I915_GEM_DOMAIN_SAMPLER, 0, dw1);
-      OUT_BATCH(brw->hw_bt_pool.bo->size);
-   } else {
-      OUT_RELOC(brw->hw_bt_pool.bo, I915_GEM_DOMAIN_SAMPLER, 0, dw1);
-      OUT_RELOC(brw->hw_bt_pool.bo, I915_GEM_DOMAIN_SAMPLER, 0,
-             brw->hw_bt_pool.bo->size);
-   }
-   ADVANCE_BATCH();
-}
-
-void
-gen7_reset_hw_bt_pool_offsets(struct brw_context *brw)
-{
-   brw->hw_bt_pool.next_offset = 0;
-}
-
-const struct brw_tracked_state gen7_hw_binding_tables = {
-   .dirty = {
-      .mesa = 0,
-      .brw = BRW_NEW_BATCH |
-             BRW_NEW_BLORP,
-   },
-   .emit = gen7_enable_hw_binding_tables
-};
-
 /** @} */
 
 /**

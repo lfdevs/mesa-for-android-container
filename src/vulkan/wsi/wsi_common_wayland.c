@@ -22,7 +22,6 @@
  */
 
 #include <wayland-client.h>
-#include <wayland-drm-client-protocol.h>
 
 #include <assert.h>
 #include <stdlib.h>
@@ -33,6 +32,7 @@
 #include <pthread.h>
 
 #include "wsi_common_wayland.h"
+#include "wayland-drm-client-protocol.h"
 
 #include <util/hash_table.h>
 #include <util/u_vector.h>
@@ -351,6 +351,8 @@ wsi_wl_surface_get_support(VkIcdSurfaceBase *surface,
                            struct wsi_device *wsi_device,
                            const VkAllocationCallbacks *alloc,
                            uint32_t queueFamilyIndex,
+                           int local_fd,
+                           bool can_handle_different_gpu,
                            VkBool32* pSupported)
 {
    *pSupported = true;
@@ -486,6 +488,7 @@ struct wsi_wl_swapchain {
    struct wsi_wl_display *                      display;
    struct wl_event_queue *                      queue;
    struct wl_surface *                          surface;
+   uint32_t                                     surface_version;
 
    VkExtent2D                                   extent;
    VkFormat                                     vk_format;
@@ -494,7 +497,6 @@ struct wsi_wl_swapchain {
    VkPresentModeKHR                             present_mode;
    bool                                         fifo_ready;
 
-   uint32_t                                     image_count;
    struct wsi_wl_image                          images[0];
 };
 
@@ -507,13 +509,13 @@ wsi_wl_swapchain_get_images(struct wsi_swapchain *wsi_chain,
    VkResult result;
 
    if (pSwapchainImages == NULL) {
-      *pCount = chain->image_count;
+      *pCount = chain->base.image_count;
       return VK_SUCCESS;
    }
 
    result = VK_SUCCESS;
-   ret_count = chain->image_count;
-   if (chain->image_count > *pCount) {
+   ret_count = chain->base.image_count;
+   if (chain->base.image_count > *pCount) {
      ret_count = *pCount;
      result = VK_INCOMPLETE;
    }
@@ -542,7 +544,7 @@ wsi_wl_swapchain_acquire_next_image(struct wsi_swapchain *wsi_chain,
       return VK_ERROR_OUT_OF_DATE_KHR;
 
    while (1) {
-      for (uint32_t i = 0; i < chain->image_count; i++) {
+      for (uint32_t i = 0; i < chain->base.image_count; i++) {
          if (!chain->images[i].busy) {
             /* We found a non-busy image */
             *image_index = i;
@@ -577,7 +579,8 @@ static const struct wl_callback_listener frame_listener = {
 
 static VkResult
 wsi_wl_swapchain_queue_present(struct wsi_swapchain *wsi_chain,
-                               uint32_t image_index)
+                               uint32_t image_index,
+                               const VkPresentRegionKHR *damage)
 {
    struct wsi_wl_swapchain *chain = (struct wsi_wl_swapchain *)wsi_chain;
 
@@ -590,9 +593,21 @@ wsi_wl_swapchain_queue_present(struct wsi_swapchain *wsi_chain,
       }
    }
 
-   assert(image_index < chain->image_count);
+   assert(image_index < chain->base.image_count);
    wl_surface_attach(chain->surface, chain->images[image_index].buffer, 0, 0);
-   wl_surface_damage(chain->surface, 0, 0, INT32_MAX, INT32_MAX);
+
+   if (chain->surface_version >= 4 && damage &&
+       damage->pRectangles && damage->rectangleCount > 0) {
+      for (unsigned i = 0; i < damage->rectangleCount; i++) {
+         const VkRectLayerKHR *rect = &damage->pRectangles[i];
+         assert(rect->layer == 0);
+         wl_surface_damage_buffer(chain->surface,
+                                  rect->offset.x, rect->offset.y,
+                                  rect->extent.width, rect->extent.height);
+      }
+   } else {
+      wl_surface_damage(chain->surface, 0, 0, INT32_MAX, INT32_MAX);
+   }
 
    if (chain->base.present_mode == VK_PRESENT_MODE_FIFO_KHR) {
       struct wl_callback *frame = wl_surface_frame(chain->surface);
@@ -637,6 +652,8 @@ wsi_wl_image_init(struct wsi_wl_swapchain *chain,
    result = chain->base.image_fns->create_wsi_image(vk_device,
                                                     pCreateInfo,
                                                     pAllocator,
+                                                    false,
+                                                    false,
                                                     &image->image,
                                                     &image->memory,
                                                     &size,
@@ -678,7 +695,7 @@ wsi_wl_swapchain_destroy(struct wsi_swapchain *wsi_chain,
 {
    struct wsi_wl_swapchain *chain = (struct wsi_wl_swapchain *)wsi_chain;
 
-   for (uint32_t i = 0; i < chain->image_count; i++) {
+   for (uint32_t i = 0; i < chain->base.image_count; i++) {
       if (chain->images[i].buffer)
          chain->base.image_fns->free_wsi_image(chain->base.device, pAllocator,
                                                chain->images[i].image,
@@ -694,6 +711,7 @@ static VkResult
 wsi_wl_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
                                 VkDevice device,
                                 struct wsi_device *wsi_device,
+                                int local_fd,
                                 const VkSwapchainCreateInfoKHR* pCreateInfo,
                                 const VkAllocationCallbacks* pAllocator,
                                 const struct wsi_image_fns *image_fns,
@@ -723,19 +741,20 @@ wsi_wl_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
    chain->base.queue_present = wsi_wl_swapchain_queue_present;
    chain->base.image_fns = image_fns;
    chain->base.present_mode = pCreateInfo->presentMode;
+   chain->base.image_count = num_images;
+   chain->base.needs_linear_copy = false;
    chain->surface = surface->surface;
+   chain->surface_version = wl_proxy_get_version((void *)surface->surface);
    chain->extent = pCreateInfo->imageExtent;
    chain->vk_format = pCreateInfo->imageFormat;
    chain->drm_format = wl_drm_format_for_vk_format(chain->vk_format, alpha);
 
    chain->fifo_ready = true;
 
-   chain->image_count = num_images;
-
    /* Mark a bunch of stuff as NULL.  This way we can just call
     * destroy_swapchain for cleanup.
     */
-   for (uint32_t i = 0; i < chain->image_count; i++)
+   for (uint32_t i = 0; i < chain->base.image_count; i++)
       chain->images[i].buffer = NULL;
    chain->queue = NULL;
 
@@ -752,7 +771,7 @@ wsi_wl_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
       goto fail;
    }
 
-   for (uint32_t i = 0; i < chain->image_count; i++) {
+   for (uint32_t i = 0; i < chain->base.image_count; i++) {
       result = wsi_wl_image_init(chain, &chain->images[i],
                                  pCreateInfo, pAllocator);
       if (result != VK_SUCCESS)

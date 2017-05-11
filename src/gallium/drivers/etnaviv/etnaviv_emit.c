@@ -253,8 +253,8 @@ required_stream_size(struct etna_context *ctx)
    size += ctx->vertex_elements->num_elements + 1;
 
    /* uniforms - worst case (2 words per uniform load) */
-   size += ctx->vs->uniforms.const_count * 2;
-   size += ctx->fs->uniforms.const_count * 2;
+   size += ctx->shader.vs->uniforms.const_count * 2;
+   size += ctx->shader.fs->uniforms.const_count * 2;
 
    /* shader */
    size += ctx->shader_state.vs_inst_mem_size + 1;
@@ -603,10 +603,12 @@ etna_emit_state(struct etna_context *ctx)
    if (unlikely(dirty & (ETNA_DIRTY_STENCIL_REF))) {
       /*014A0*/ EMIT_STATE(PE_STENCIL_CONFIG_EXT, ctx->stencil_ref.PE_STENCIL_CONFIG_EXT);
    }
+   if (unlikely(dirty & (ETNA_DIRTY_BLEND | ETNA_DIRTY_FRAMEBUFFER))) {
+      struct etna_blend_state *blend = etna_blend_state(ctx->blend);
+      /*014A4*/ EMIT_STATE(PE_LOGIC_OP, blend->PE_LOGIC_OP | ctx->framebuffer.PE_LOGIC_OP);
+   }
    if (unlikely(dirty & (ETNA_DIRTY_BLEND))) {
       struct etna_blend_state *blend = etna_blend_state(ctx->blend);
-
-      /*014A4*/ EMIT_STATE(PE_LOGIC_OP, blend->PE_LOGIC_OP);
       for (int x = 0; x < 2; ++x) {
          /*014A8*/ EMIT_STATE(PE_DITHER(x), blend->PE_DITHER[x]);
       }
@@ -722,14 +724,14 @@ etna_emit_state(struct etna_context *ctx)
    static const uint32_t uniform_dirty_bits =
       ETNA_DIRTY_SHADER | ETNA_DIRTY_CONSTBUF;
 
-   if (dirty & (uniform_dirty_bits | ctx->fs->uniforms_dirty_bits))
+   if (dirty & (uniform_dirty_bits | ctx->shader.fs->uniforms_dirty_bits))
       etna_uniforms_write(
-         ctx, ctx->vs, &ctx->constant_buffer[PIPE_SHADER_VERTEX],
+         ctx, ctx->shader.vs, &ctx->constant_buffer[PIPE_SHADER_VERTEX],
          ctx->shader_state.VS_UNIFORMS, &ctx->shader_state.vs_uniforms_size);
 
-   if (dirty & (uniform_dirty_bits | ctx->vs->uniforms_dirty_bits))
+   if (dirty & (uniform_dirty_bits | ctx->shader.vs->uniforms_dirty_bits))
       etna_uniforms_write(
-         ctx, ctx->fs, &ctx->constant_buffer[PIPE_SHADER_FRAGMENT],
+         ctx, ctx->shader.fs, &ctx->constant_buffer[PIPE_SHADER_FRAGMENT],
          ctx->shader_state.PS_UNIFORMS, &ctx->shader_state.ps_uniforms_size);
 
    /**** Large dynamically-sized state ****/
@@ -762,7 +764,7 @@ etna_emit_state(struct etna_context *ctx)
              ctx->shader_state.ps_uniforms_size * 4);
    } else {
       etna_coalesce_start(stream, &coalesce);
-      for (int x = 0; x < ctx->vs->uniforms.const_count; ++x) {
+      for (int x = 0; x < ctx->shader.vs->uniforms.const_count; ++x) {
          if (ctx->gpu3d.VS_UNIFORMS[x] != ctx->shader_state.VS_UNIFORMS[x]) {
             /*05000*/ EMIT_STATE(VS_UNIFORMS(x), ctx->shader_state.VS_UNIFORMS[x]);
             ctx->gpu3d.VS_UNIFORMS[x] = ctx->shader_state.VS_UNIFORMS[x];
@@ -771,7 +773,7 @@ etna_emit_state(struct etna_context *ctx)
       etna_coalesce_end(stream, &coalesce);
 
       etna_coalesce_start(stream, &coalesce);
-      for (int x = 0; x < ctx->fs->uniforms.const_count; ++x) {
+      for (int x = 0; x < ctx->shader.fs->uniforms.const_count; ++x) {
          if (ctx->gpu3d.PS_UNIFORMS[x] != ctx->shader_state.PS_UNIFORMS[x]) {
             /*07000*/ EMIT_STATE(PS_UNIFORMS(x), ctx->shader_state.PS_UNIFORMS[x]);
             ctx->gpu3d.PS_UNIFORMS[x] = ctx->shader_state.PS_UNIFORMS[x];

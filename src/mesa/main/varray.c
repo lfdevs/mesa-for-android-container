@@ -137,13 +137,11 @@ vertex_attrib_binding(struct gl_context *ctx,
 {
    struct gl_array_attributes *array = &vao->VertexAttrib[attribIndex];
 
-   if (!_mesa_is_bufferobj(vao->BufferBinding[bindingIndex].BufferObj))
-      vao->VertexAttribBufferMask &= ~VERT_BIT(attribIndex);
-   else
-      vao->VertexAttribBufferMask |= VERT_BIT(attribIndex);
-
    if (array->BufferBindingIndex != bindingIndex) {
       const GLbitfield64 array_bit = VERT_BIT(attribIndex);
+
+      if (_mesa_is_bufferobj(vao->BufferBinding[bindingIndex].BufferObj))
+         vao->VertexAttribBufferMask |= array_bit;
 
       FLUSH_VERTICES(ctx, _NEW_ARRAY);
 
@@ -280,16 +278,12 @@ _mesa_update_array_format(struct gl_context *ctx,
                           GLuint attrib, GLint size, GLenum type,
                           GLenum format, GLboolean normalized,
                           GLboolean integer, GLboolean doubles,
-                          GLuint relativeOffset, bool flush_vertices)
+                          GLuint relativeOffset)
 {
    struct gl_array_attributes *const array = &vao->VertexAttrib[attrib];
    GLint elementSize;
 
    assert(size <= 4);
-
-   if (flush_vertices) {
-      FLUSH_VERTICES(ctx, 0);
-   }
 
    elementSize = _mesa_bytes_per_vertex_attrib(size, type);
    assert(elementSize != -1);
@@ -439,8 +433,7 @@ update_array_format(struct gl_context *ctx,
    }
 
    _mesa_update_array_format(ctx, vao, attrib, size, type, format,
-                             normalized, integer, doubles, relativeOffset,
-                             false);
+                             normalized, integer, doubles, relativeOffset);
 
    return true;
 }
@@ -1546,24 +1539,6 @@ _mesa_UnlockArraysEXT( void )
 }
 
 
-/* GL_EXT_multi_draw_arrays */
-void GLAPIENTRY
-_mesa_MultiDrawArrays( GLenum mode, const GLint *first,
-                          const GLsizei *count, GLsizei primcount )
-{
-   GET_CURRENT_CONTEXT(ctx);
-   GLint i;
-
-   FLUSH_VERTICES(ctx, 0);
-
-   for (i = 0; i < primcount; i++) {
-      if (count[i] > 0) {
-         CALL_DrawArrays(ctx->CurrentDispatch, (mode, first[i], count[i]));
-      }
-   }
-}
-
-
 /* GL_IBM_multimode_draw_arrays */
 void GLAPIENTRY
 _mesa_MultiModeDrawArraysIBM( const GLenum * mode, const GLint * first,
@@ -1578,7 +1553,7 @@ _mesa_MultiModeDrawArraysIBM( const GLenum * mode, const GLint * first,
    for ( i = 0 ; i < primcount ; i++ ) {
       if ( count[i] > 0 ) {
          GLenum m = *((GLenum *) ((GLubyte *) mode + i * modestride));
-	 CALL_DrawArrays(ctx->CurrentDispatch, ( m, first[i], count[i] ));
+	 CALL_DrawArrays(ctx->CurrentServerDispatch, ( m, first[i], count[i] ));
       }
    }
 }
@@ -1600,8 +1575,8 @@ _mesa_MultiModeDrawElementsIBM( const GLenum * mode, const GLsizei * count,
    for ( i = 0 ; i < primcount ; i++ ) {
       if ( count[i] > 0 ) {
          GLenum m = *((GLenum *) ((GLubyte *) mode + i * modestride));
-	 CALL_DrawElements(ctx->CurrentDispatch, ( m, count[i], type,
-                                                   indices[i] ));
+	 CALL_DrawElements(ctx->CurrentServerDispatch, ( m, count[i], type,
+							 indices[i] ));
       }
    }
 }
@@ -1889,7 +1864,7 @@ vertex_array_vertex_buffers(struct gl_context *ctx,
     *       their parameters are valid and no other error occurs."
     */
 
-   _mesa_begin_bufferobj_lookups(ctx);
+   _mesa_HashLockMutex(ctx->Shared->BufferObjects);
 
    for (i = 0; i < count; i++) {
       struct gl_buffer_object *vbo;
@@ -1940,7 +1915,7 @@ vertex_array_vertex_buffers(struct gl_context *ctx,
                                vbo, offsets[i], strides[i]);
    }
 
-   _mesa_end_bufferobj_lookups(ctx);
+   _mesa_HashUnlockMutex(ctx->Shared->BufferObjects);
 }
 
 

@@ -21,7 +21,8 @@
  * IN THE SOFTWARE.
  */
 
-#pragma once
+#ifndef INTEL_RESLVE_MAP_H
+#define INTEL_RESLVE_MAP_H
 
 #include <stdint.h>
 #include "blorp/blorp.h"
@@ -164,3 +165,4 @@ intel_resolve_map_clear(struct exec_list *resolve_map);
 } /* extern "C" */
 #endif
 
+#endif /* INTEL_RESLVE_MAP_H */

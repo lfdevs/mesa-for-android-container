@@ -86,7 +86,8 @@ etna_set_sample_mask(struct pipe_context *pctx, unsigned sample_mask)
 }
 
 static void
-etna_set_constant_buffer(struct pipe_context *pctx, uint shader, uint index,
+etna_set_constant_buffer(struct pipe_context *pctx,
+      enum pipe_shader_type shader, uint index,
       const struct pipe_constant_buffer *cb)
 {
    struct etna_context *ctx = etna_context(pctx);
@@ -167,8 +168,8 @@ etna_set_framebuffer_state(struct pipe_context *pctx,
          cs->PE_COLOR_ADDR = cbuf->reloc[0];
          cs->PE_COLOR_ADDR.flags = ETNA_RELOC_READ | ETNA_RELOC_WRITE;
       } else {
-         /* Rendered textures must always be multi-tiled */
-         assert(res->layout & ETNA_LAYOUT_BIT_MULTI);
+         /* Rendered textures must always be multi-tiled, or single-buffer mode must be supported */
+         assert((res->layout & ETNA_LAYOUT_BIT_MULTI) || ctx->specs.single_buffer);
          for (int i = 0; i < ctx->specs.pixel_pipes; i++) {
             cs->PE_PIPE_COLOR_ADDR[i] = cbuf->reloc[i];
             cs->PE_PIPE_COLOR_ADDR[i].flags = ETNA_RELOC_READ | ETNA_RELOC_WRITE;
@@ -329,6 +330,12 @@ etna_set_framebuffer_state(struct pipe_context *pctx,
    cs->SE_CLIP_BOTTOM = (sv->height << 16) + ETNA_SE_CLIP_MARGIN_BOTTOM;
 
    cs->TS_MEM_CONFIG = ts_mem_config;
+
+   /* Single buffer setup. There is only one switch for this, not a separate
+    * one per color buffer / depth buffer. To keep the logic simple always use
+    * single buffer when this feature is available.
+    */
+   cs->PE_LOGIC_OP = VIVS_PE_LOGIC_OP_SINGLE_BUFFER(ctx->specs.single_buffer ? 2 : 0);
 
    ctx->framebuffer_s = *sv; /* keep copy of original structure */
    ctx->dirty |= ETNA_DIRTY_FRAMEBUFFER;

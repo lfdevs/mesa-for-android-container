@@ -92,7 +92,7 @@ static const struct svga_tracked_state *swtnl_draw_state[] =
 /* Flattens the graph of state dependencies.  Could swap the positions
  * of hw_clear_state and need_swtnl_state without breaking anything.
  */
-static const struct svga_tracked_state **state_levels[] = 
+static const struct svga_tracked_state **state_levels[] =
 {
    need_swtnl_state,
    hw_clear_state,
@@ -102,26 +102,24 @@ static const struct svga_tracked_state **state_levels[] =
 
 
 
-static unsigned check_state( unsigned a,
-                             unsigned b )
+static unsigned
+check_state(unsigned a, unsigned b)
 {
    return (a & b);
 }
 
-static void accumulate_state( unsigned *a,
-			      unsigned b )
+static void
+accumulate_state(unsigned *a, unsigned b)
 {
    *a |= b;
 }
 
 
-static void xor_states( unsigned *result,
-                        unsigned a,
-                        unsigned b )
+static void
+xor_states(unsigned *result, unsigned a, unsigned b)
 {
    *result = a ^ b;
 }
-
 
 
 static enum pipe_error
@@ -146,44 +144,44 @@ update_state(struct svga_context *svga,
        * state flags which are generated and checked to help ensure
        * state atoms are ordered correctly in the list.
        */
-      unsigned examined, prev;      
+      unsigned examined, prev;
 
       examined = 0;
       prev = *state;
 
-      for (i = 0; atoms[i] != NULL; i++) {	 
-	 unsigned generated;
+      for (i = 0; atoms[i] != NULL; i++) {
+         unsigned generated;
 
-	 assert(atoms[i]->dirty); 
-	 assert(atoms[i]->update);
+         assert(atoms[i]->dirty);
+         assert(atoms[i]->update);
 
-	 if (check_state(*state, atoms[i]->dirty)) {
-	    if (0)
+         if (check_state(*state, atoms[i]->dirty)) {
+            if (0)
                debug_printf("update: %s\n", atoms[i]->name);
-	    ret = atoms[i]->update( svga, *state );
+            ret = atoms[i]->update( svga, *state );
             if (ret != PIPE_OK)
                return ret;
-	 }
+         }
 
-	 /* generated = (prev ^ state)
-	  * if (examined & generated)
-	  *     fail;
-	  */
-	 xor_states(&generated, prev, *state);
-	 if (check_state(examined, generated)) {
-	    debug_printf("state atom %s generated state already examined\n", 
+         /* generated = (prev ^ state)
+          * if (examined & generated)
+          *     fail;
+          */
+         xor_states(&generated, prev, *state);
+         if (check_state(examined, generated)) {
+            debug_printf("state atom %s generated state already examined\n",
                          atoms[i]->name);
-	    assert(0);
-	 }
-			 
-	 prev = *state;
-	 accumulate_state(&examined, atoms[i]->dirty);
+            assert(0);
+         }
+
+         prev = *state;
+         accumulate_state(&examined, atoms[i]->dirty);
       }
    }
    else {
-      for (i = 0; atoms[i] != NULL; i++) {	 
-	 if (check_state(*state, atoms[i]->dirty)) {
-	    ret = atoms[i]->update( svga, *state );
+      for (i = 0; atoms[i] != NULL; i++) {
+         if (check_state(*state, atoms[i]->dirty)) {
+            ret = atoms[i]->update( svga, *state );
             if (ret != PIPE_OK)
                return ret;
          }
@@ -192,7 +190,6 @@ update_state(struct svga_context *svga,
 
    return PIPE_OK;
 }
-
 
 
 enum pipe_error
@@ -217,8 +214,8 @@ svga_update_state(struct svga_context *svga, unsigned max_level)
       svga->dirty |= svga->state.dirty[i];
 
       if (svga->dirty) {
-         ret = update_state( svga, 
-                             state_levels[i], 
+         ret = update_state( svga,
+                             state_levels[i],
                              &svga->dirty );
          if (ret != PIPE_OK)
             goto done;
@@ -226,8 +223,8 @@ svga_update_state(struct svga_context *svga, unsigned max_level)
          svga->state.dirty[i] = 0;
       }
    }
-   
-   for (; i < SVGA_STATE_MAX; i++) 
+
+   for (; i < SVGA_STATE_MAX; i++)
       svga->state.dirty[i] |= svga->dirty;
 
    svga->dirty = 0;
@@ -240,10 +237,8 @@ done:
 }
 
 
-
-
-void svga_update_state_retry( struct svga_context *svga,
-                              unsigned max_level )
+void
+svga_update_state_retry(struct svga_context *svga, unsigned max_level)
 {
    enum pipe_error ret;
 
@@ -270,7 +265,8 @@ do {                                            \
 /* Setup any hardware state which will be constant through the life of
  * a context.
  */
-enum pipe_error svga_emit_initial_state( struct svga_context *svga )
+enum pipe_error
+svga_emit_initial_state(struct svga_context *svga)
 {
    if (svga_have_vgpu10(svga)) {
       SVGA3dRasterizerStateId id = util_bitmask_add(svga->rast_object_id_bm);

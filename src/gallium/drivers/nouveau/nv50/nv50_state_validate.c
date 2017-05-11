@@ -186,16 +186,17 @@ nv50_validate_scissor(struct nv50_context *nv50)
    struct nouveau_pushbuf *push = nv50->base.pushbuf;
 #ifdef NV50_SCISSORS_CLIPPING
    int minx, maxx, miny, maxy, i;
+   bool rast_scissor = nv50->rast ? nv50->rast->pipe.scissor : false;
 
    if (!(nv50->dirty_3d &
          (NV50_NEW_3D_SCISSOR | NV50_NEW_3D_VIEWPORT | NV50_NEW_3D_FRAMEBUFFER)) &&
-       nv50->state.scissor == nv50->rast->pipe.scissor)
+       nv50->state.scissor == rast_scissor)
       return;
 
-   if (nv50->state.scissor != nv50->rast->pipe.scissor)
+   if (nv50->state.scissor != rast_scissor)
       nv50->scissors_dirty = (1 << NV50_MAX_VIEWPORTS) - 1;
 
-   nv50->state.scissor = nv50->rast->pipe.scissor;
+   nv50->state.scissor = rast_scissor;
 
    if ((nv50->dirty_3d & NV50_NEW_3D_FRAMEBUFFER) && !nv50->state.scissor)
       nv50->scissors_dirty = (1 << NV50_MAX_VIEWPORTS) - 1;

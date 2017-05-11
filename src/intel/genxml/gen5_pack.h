@@ -249,4 +249,92 @@ GEN5_RENDER_SURFACE_STATE_pack(__gen_user_data *data, void * restrict dst,
       __gen_uint(values->YOffset, 20, 23);
 }
 
+#define GEN5_3DSTATE_DEPTH_BUFFER_length       5
+#define GEN5_3DSTATE_DEPTH_BUFFER_length_bias      2
+#define GEN5_3DSTATE_DEPTH_BUFFER_header        \
+   .CommandType                         =      3,  \
+   .CommandSubType                      =      3,  \
+   ._3DCommandOpcode                    =      1,  \
+   ._3DCommandSubOpcode                 =      5,  \
+   .DWordLength                         =      3
+
+struct GEN5_3DSTATE_DEPTH_BUFFER {
+   uint32_t                             CommandType;
+   uint32_t                             CommandSubType;
+   uint32_t                             _3DCommandOpcode;
+   uint32_t                             _3DCommandSubOpcode;
+   uint32_t                             DWordLength;
+   uint32_t                             SurfaceType;
+#define SURFTYPE_1D                              0
+#define SURFTYPE_2D                              1
+#define SURFTYPE_3D                              2
+#define SURFTYPE_CUBE                            3
+#define SURFTYPE_NULL                            7
+   bool                                 TiledSurface;
+   uint32_t                             TileWalk;
+#define TILEWALK_YMAJOR                          1
+   uint32_t                             SoftwareTiledRenderingMode;
+#define NORMAL                                   0
+#define STR1                                     1
+#define STR2                                     3
+   bool                                 HierarchicalDepthBufferEnable;
+   bool                                 SeparateStencilBufferEnable;
+   uint32_t                             SurfaceFormat;
+#define D32_FLOAT_S8X24_UINT                     0
+#define D32_FLOAT                                1
+#define D24_UNORM_S8_UINT                        2
+#define D24_UNORM_X8_UINT                        3
+#define D16_UNORM                                5
+   uint32_t                             SurfacePitch;
+   __gen_address_type                   SurfaceBaseAddress;
+   uint32_t                             Height;
+   uint32_t                             Width;
+   uint32_t                             LOD;
+   uint32_t                             MIPMapLayoutMode;
+#define MIPLAYOUT_BELOW                          0
+#define MIPLAYOUT_RIGHT                          1
+   uint32_t                             Depth;
+   uint32_t                             MinimumArrayElement;
+   uint32_t                             RenderTargetViewExtent;
+   int32_t                              DepthCoordinateOffsetY;
+   int32_t                              DepthCoordinateOffsetX;
+};
+
+static inline void
+GEN5_3DSTATE_DEPTH_BUFFER_pack(__gen_user_data *data, void * restrict dst,
+                               const struct GEN5_3DSTATE_DEPTH_BUFFER * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   dw[0] =
+      __gen_uint(values->CommandType, 29, 31) |
+      __gen_uint(values->CommandSubType, 27, 28) |
+      __gen_uint(values->_3DCommandOpcode, 24, 26) |
+      __gen_uint(values->_3DCommandSubOpcode, 16, 23) |
+      __gen_uint(values->DWordLength, 0, 7);
+
+   dw[1] =
+      __gen_uint(values->SurfaceType, 29, 31) |
+      __gen_uint(values->TiledSurface, 27, 27) |
+      __gen_uint(values->TileWalk, 26, 26) |
+      __gen_uint(values->SoftwareTiledRenderingMode, 23, 24) |
+      __gen_uint(values->HierarchicalDepthBufferEnable, 22, 22) |
+      __gen_uint(values->SeparateStencilBufferEnable, 21, 21) |
+      __gen_uint(values->SurfaceFormat, 18, 20) |
+      __gen_uint(values->SurfacePitch, 0, 16);
+
+   dw[2] = __gen_combine_address(data, &dw[2], values->SurfaceBaseAddress, 0);
+
+   dw[3] =
+      __gen_uint(values->Height, 19, 31) |
+      __gen_uint(values->Width, 6, 18) |
+      __gen_uint(values->LOD, 2, 5) |
+      __gen_uint(values->MIPMapLayoutMode, 1, 1);
+
+   dw[4] =
+      __gen_uint(values->Depth, 21, 31) |
+      __gen_uint(values->MinimumArrayElement, 10, 20) |
+      __gen_uint(values->RenderTargetViewExtent, 1, 9);
+}
+
 #endif /* GEN5_PACK_H */

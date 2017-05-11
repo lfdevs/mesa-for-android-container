@@ -106,11 +106,11 @@ vc4_nir_get_vattr_channel_vpm(struct vc4_compile *c,
         } else if (chan->size == 32 && chan->type == UTIL_FORMAT_TYPE_SIGNED) {
                 if (chan->normalized) {
                         return nir_fmul(b,
-                                        nir_i2f(b, vpm_reads[swiz]),
+                                        nir_i2f32(b, vpm_reads[swiz]),
                                         nir_imm_float(b,
                                                       1.0 / 0x7fffffff));
                 } else {
-                        return nir_i2f(b, vpm_reads[swiz]);
+                        return nir_i2f32(b, vpm_reads[swiz]);
                 }
         } else if (chan->size == 8 &&
                    (chan->type == UTIL_FORMAT_TYPE_UNSIGNED ||
@@ -125,16 +125,16 @@ vc4_nir_get_vattr_channel_vpm(struct vc4_compile *c,
                                                 nir_imm_float(b, 1.0));
                         } else {
                                 return nir_fadd(b,
-                                                nir_i2f(b,
-                                                        vc4_nir_unpack_8i(b, temp,
-                                                                          swiz)),
+                                                nir_i2f32(b,
+                                                          vc4_nir_unpack_8i(b, temp,
+                                                                            swiz)),
                                                 nir_imm_float(b, -128.0));
                         }
                 } else {
                         if (chan->normalized) {
                                 return vc4_nir_unpack_8f(b, vpm, swiz);
                         } else {
-                                return nir_i2f(b, vc4_nir_unpack_8i(b, vpm, swiz));
+                                return nir_i2f32(b, vc4_nir_unpack_8i(b, vpm, swiz));
                         }
                 }
         } else if (chan->size == 16 &&
@@ -146,7 +146,7 @@ vc4_nir_get_vattr_channel_vpm(struct vc4_compile *c,
                  * UNPACK_16_I for all of these.
                  */
                 if (chan->type == UTIL_FORMAT_TYPE_SIGNED) {
-                        temp = nir_i2f(b, vc4_nir_unpack_16i(b, vpm, swiz & 1));
+                        temp = nir_i2f32(b, vc4_nir_unpack_16i(b, vpm, swiz & 1));
                         if (chan->normalized) {
                                 return nir_fmul(b, temp,
                                                 nir_imm_float(b, 1/32768.0f));
@@ -154,7 +154,7 @@ vc4_nir_get_vattr_channel_vpm(struct vc4_compile *c,
                                 return temp;
                         }
                 } else {
-                        temp = nir_i2f(b, vc4_nir_unpack_16u(b, vpm, swiz & 1));
+                        temp = nir_i2f32(b, vc4_nir_unpack_16u(b, vpm, swiz & 1));
                         if (chan->normalized) {
                                 return nir_fmul(b, temp,
                                                 nir_imm_float(b, 1 / 65535.0));

@@ -22,6 +22,7 @@
 
 #include "pipe/p_defines.h"
 #include "util/u_framebuffer.h"
+#include "util/u_upload_mgr.h"
 
 #include "nvc0/nvc0_context.h"
 #include "nvc0/nvc0_screen.h"
@@ -198,6 +199,9 @@ nvc0_destroy(struct pipe_context *pipe)
       nvc0->screen->save_state = nvc0->state;
       nvc0->screen->save_state.tfb = NULL;
    }
+
+   if (nvc0->base.pipe.stream_uploader)
+      u_upload_destroy(nvc0->base.pipe.stream_uploader);
 
    /* Unset bufctx, we don't want to revalidate any resources after the flush.
     * Other contexts will always set their bufctx again on action calls.
@@ -386,6 +390,10 @@ nvc0_create(struct pipe_screen *pscreen, void *priv, unsigned ctxflags)
 
    pipe->screen = pscreen;
    pipe->priv = priv;
+   pipe->stream_uploader = u_upload_create_default(pipe);
+   if (!pipe->stream_uploader)
+      goto out_err;
+   pipe->const_uploader = pipe->stream_uploader;
 
    pipe->destroy = nvc0_destroy;
 
@@ -472,6 +480,8 @@ nvc0_create(struct pipe_screen *pscreen, void *priv, unsigned ctxflags)
 
 out_err:
    if (nvc0) {
+      if (pipe->stream_uploader)
+         u_upload_destroy(pipe->stream_uploader);
       if (nvc0->bufctx_3d)
          nouveau_bufctx_del(&nvc0->bufctx_3d);
       if (nvc0->bufctx_cp)

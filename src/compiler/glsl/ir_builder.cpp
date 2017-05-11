@@ -315,6 +315,12 @@ exp(operand a)
 }
 
 ir_expression *
+rcp(operand a)
+{
+   return expr(ir_unop_rcp, a);
+}
+
+ir_expression *
 rsq(operand a)
 {
    return expr(ir_unop_rsq, a);
@@ -516,6 +522,30 @@ ir_expression *
 b2f(operand a)
 {
    return expr(ir_unop_b2f, a);
+}
+
+ir_expression*
+bitcast_d2i64(operand a)
+{
+   return expr(ir_unop_bitcast_d2i64, a);
+}
+
+ir_expression*
+bitcast_d2u64(operand a)
+{
+   return expr(ir_unop_bitcast_d2u64, a);
+}
+
+ir_expression*
+bitcast_i642d(operand a)
+{
+   return expr(ir_unop_bitcast_i642d, a);
+}
+
+ir_expression*
+bitcast_u642d(operand a)
+{
+   return expr(ir_unop_bitcast_u642d, a);
 }
 
 ir_expression *

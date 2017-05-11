@@ -146,14 +146,11 @@ target_triplet = @target@
 # FIXME: Use pkg-config for X11-xcb ldflags.
 @HAVE_PLATFORM_X11_TRUE@am__append_3 = $(XCB_DRI3_LIBS) -lX11-xcb
 @HAVE_PLATFORM_WAYLAND_TRUE@am__append_4 = \
-@HAVE_PLATFORM_WAYLAND_TRUE@	-I$(top_builddir)/src/egl/wayland/wayland-drm \
-@HAVE_PLATFORM_WAYLAND_TRUE@	-I$(top_srcdir)/src/egl/wayland/wayland-drm \
 @HAVE_PLATFORM_WAYLAND_TRUE@	$(WAYLAND_CFLAGS) \
 @HAVE_PLATFORM_WAYLAND_TRUE@	-DVK_USE_PLATFORM_WAYLAND_KHR
 
 @HAVE_PLATFORM_WAYLAND_TRUE@am__append_5 = $(VULKAN_WSI_WAYLAND_FILES)
 @HAVE_PLATFORM_WAYLAND_TRUE@am__append_6 = \
-@HAVE_PLATFORM_WAYLAND_TRUE@	$(top_builddir)/src/egl/wayland/wayland-drm/libwayland-drm.la \
 @HAVE_PLATFORM_WAYLAND_TRUE@	$(WAYLAND_LIBS)
 
 subdir = src/amd/vulkan
@@ -206,16 +203,16 @@ am__installdirs = "$(DESTDIR)$(libdir)" "$(DESTDIR)$(icdconfdir)"
 LTLIBRARIES = $(lib_LTLIBRARIES) $(noinst_LTLIBRARIES)
 libvulkan_common_la_LIBADD =
 am__libvulkan_common_la_SOURCES_DIST = radv_entrypoints.c \
-	radv_entrypoints.h radv_cmd_buffer.c radv_cs.h radv_device.c \
-	radv_descriptor_set.c radv_descriptor_set.h radv_formats.c \
-	radv_image.c radv_meta.c radv_meta.h radv_meta_blit.c \
-	radv_meta_blit2d.c radv_meta_buffer.c radv_meta_bufimage.c \
-	radv_meta_clear.c radv_meta_copy.c radv_meta_decompress.c \
-	radv_meta_fast_clear.c radv_meta_resolve.c \
-	radv_meta_resolve_cs.c radv_pass.c radv_pipeline.c \
-	radv_pipeline_cache.c radv_private.h radv_radeon_winsys.h \
-	radv_query.c radv_util.c radv_util.h radv_wsi.c \
-	si_cmd_buffer.c vk_format_table.c vk_format.h \
+	radv_entrypoints.h radv_cmd_buffer.c radv_cs.h radv_debug.h \
+	radv_device.c radv_descriptor_set.c radv_descriptor_set.h \
+	radv_formats.c radv_image.c radv_meta.c radv_meta.h \
+	radv_meta_blit.c radv_meta_blit2d.c radv_meta_buffer.c \
+	radv_meta_bufimage.c radv_meta_clear.c radv_meta_copy.c \
+	radv_meta_decompress.c radv_meta_fast_clear.c \
+	radv_meta_resolve.c radv_meta_resolve_cs.c radv_pass.c \
+	radv_pipeline.c radv_pipeline_cache.c radv_private.h \
+	radv_radeon_winsys.h radv_query.c radv_util.c radv_util.h \
+	radv_wsi.c si_cmd_buffer.c vk_format_table.c vk_format.h \
 	winsys/amdgpu/radv_amdgpu_bo.c winsys/amdgpu/radv_amdgpu_bo.h \
 	winsys/amdgpu/radv_amdgpu_cs.c winsys/amdgpu/radv_amdgpu_cs.h \
 	winsys/amdgpu/radv_amdgpu_surface.c \
@@ -253,11 +250,12 @@ am__v_lt_0 = --silent
 am__v_lt_1 = 
 am__DEPENDENCIES_1 =
 @HAVE_PLATFORM_X11_TRUE@am__DEPENDENCIES_2 = $(am__DEPENDENCIES_1)
-@HAVE_PLATFORM_WAYLAND_TRUE@am__DEPENDENCIES_3 = $(top_builddir)/src/egl/wayland/wayland-drm/libwayland-drm.la \
+@HAVE_PLATFORM_WAYLAND_TRUE@am__DEPENDENCIES_3 =  \
 @HAVE_PLATFORM_WAYLAND_TRUE@	$(am__DEPENDENCIES_1)
 am__DEPENDENCIES_4 = $(am__DEPENDENCIES_2) $(am__DEPENDENCIES_3) \
 	libvulkan_common.la \
-	$(top_builddir)/src/vulkan/wsi/libvulkan_wsi.la \
+	$(top_builddir)/src/vulkan/libvulkan_util.la \
+	$(top_builddir)/src/vulkan/libvulkan_wsi.la \
 	$(top_builddir)/src/amd/common/libamd_common.la \
 	$(top_builddir)/src/amd/addrlib/libamdgpu_addrlib.la \
 	$(top_builddir)/src/compiler/nir/libnir.la \
@@ -395,8 +393,6 @@ DLLTOOL = @DLLTOOL@
 DLOPEN_LIBS = @DLOPEN_LIBS@
 DRI2PROTO_CFLAGS = @DRI2PROTO_CFLAGS@
 DRI2PROTO_LIBS = @DRI2PROTO_LIBS@
-DRI3PROTO_CFLAGS = @DRI3PROTO_CFLAGS@
-DRI3PROTO_LIBS = @DRI3PROTO_LIBS@
 DRIGL_CFLAGS = @DRIGL_CFLAGS@
 DRIGL_LIBS = @DRIGL_LIBS@
 DRI_DRIVER_INSTALL_DIR = @DRI_DRIVER_INSTALL_DIR@
@@ -461,29 +457,27 @@ LIBDRM_CFLAGS = @LIBDRM_CFLAGS@
 LIBDRM_LIBS = @LIBDRM_LIBS@
 LIBELF_CFLAGS = @LIBELF_CFLAGS@
 LIBELF_LIBS = @LIBELF_LIBS@
+LIBGLVND_DATADIR = @LIBGLVND_DATADIR@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
 LIBSENSORS_LIBS = @LIBSENSORS_LIBS@
 LIBTOOL = @LIBTOOL@
+LIBUNWIND_CFLAGS = @LIBUNWIND_CFLAGS@
+LIBUNWIND_LIBS = @LIBUNWIND_LIBS@
 LIB_DIR = @LIB_DIR@
 LIB_EXT = @LIB_EXT@
 LIPO = @LIPO@
-LLVM_BINDIR = @LLVM_BINDIR@
 LLVM_CFLAGS = @LLVM_CFLAGS@
 LLVM_CONFIG = @LLVM_CONFIG@
-LLVM_CPPFLAGS = @LLVM_CPPFLAGS@
 LLVM_CXXFLAGS = @LLVM_CXXFLAGS@
 LLVM_INCLUDEDIR = @LLVM_INCLUDEDIR@
 LLVM_LDFLAGS = @LLVM_LDFLAGS@
-LLVM_LIBDIR = @LLVM_LIBDIR@
 LLVM_LIBS = @LLVM_LIBS@
-LLVM_VERSION = @LLVM_VERSION@
 LN_S = @LN_S@
 LTLIBOBJS = @LTLIBOBJS@
 LT_SYS_LIBRARY_PATH = @LT_SYS_LIBRARY_PATH@
 MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
-MESA_LLVM = @MESA_LLVM@
 MKDIR_P = @MKDIR_P@
 MSVC2013_COMPAT_CFLAGS = @MSVC2013_COMPAT_CFLAGS@
 MSVC2013_COMPAT_CXXFLAGS = @MSVC2013_COMPAT_CXXFLAGS@
@@ -523,8 +517,6 @@ PKG_CONFIG = @PKG_CONFIG@
 PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
 PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
 POSIX_SHELL = @POSIX_SHELL@
-PRESENTPROTO_CFLAGS = @PRESENTPROTO_CFLAGS@
-PRESENTPROTO_LIBS = @PRESENTPROTO_LIBS@
 PTHREADSTUBS_CFLAGS = @PTHREADSTUBS_CFLAGS@
 PTHREADSTUBS_LIBS = @PTHREADSTUBS_LIBS@
 PTHREAD_CC = @PTHREAD_CC@
@@ -547,7 +539,7 @@ SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
 SWR_AVX2_CXXFLAGS = @SWR_AVX2_CXXFLAGS@
 SWR_AVX_CXXFLAGS = @SWR_AVX_CXXFLAGS@
-SWR_CXX11_CXXFLAGS = @SWR_CXX11_CXXFLAGS@
+SWR_CXX14_CXXFLAGS = @SWR_CXX14_CXXFLAGS@
 VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
 VALGRIND_LIBS = @VALGRIND_LIBS@
 VA_CFLAGS = @VA_CFLAGS@
@@ -591,9 +583,10 @@ XVMC_LIBS = @XVMC_LIBS@
 XVMC_LIB_INSTALL_DIR = @XVMC_LIB_INSTALL_DIR@
 XVMC_MAJOR = @XVMC_MAJOR@
 XVMC_MINOR = @XVMC_MINOR@
-XXD = @XXD@
 YACC = @YACC@
 YFLAGS = @YFLAGS@
+ZLIB_CFLAGS = @ZLIB_CFLAGS@
+ZLIB_LIBS = @ZLIB_LIBS@
 abs_builddir = @abs_builddir@
 abs_srcdir = @abs_srcdir@
 abs_top_builddir = @abs_top_builddir@
@@ -668,6 +661,7 @@ RADV_WS_AMDGPU_FILES := \
 VULKAN_FILES := \
 	radv_cmd_buffer.c \
 	radv_cs.h \
+	radv_debug.h \
 	radv_device.c \
 	radv_descriptor_set.c \
 	radv_descriptor_set.h \
@@ -718,8 +712,9 @@ lib_LTLIBRARIES = libvulkan_radeon.la
 # The gallium includes are for the util/u_math.h include from main/macros.h
 AM_CPPFLAGS = -I$(top_srcdir)/include -I$(top_builddir)/src \
 	-I$(top_srcdir)/src -I$(top_srcdir)/src/vulkan/wsi \
-	-I$(top_srcdir)/src/amd -I$(top_srcdir)/src/amd/common \
-	-I$(top_builddir)/src/compiler \
+	-I$(top_builddir)/src/vulkan/util \
+	-I$(top_srcdir)/src/vulkan/util -I$(top_srcdir)/src/amd \
+	-I$(top_srcdir)/src/amd/common -I$(top_builddir)/src/compiler \
 	-I$(top_builddir)/src/compiler/nir \
 	-I$(top_srcdir)/src/compiler -I$(top_srcdir)/src/mapi \
 	-I$(top_srcdir)/src/mesa \
@@ -735,7 +730,8 @@ AM_CFLAGS = \
 VULKAN_SOURCES = $(VULKAN_GENERATED_FILES) $(VULKAN_FILES) \
 	$(am__append_2) $(am__append_5)
 VULKAN_LIB_DEPS = $(am__append_3) $(am__append_6) libvulkan_common.la \
-	$(top_builddir)/src/vulkan/wsi/libvulkan_wsi.la \
+	$(top_builddir)/src/vulkan/libvulkan_util.la \
+	$(top_builddir)/src/vulkan/libvulkan_wsi.la \
 	$(top_builddir)/src/amd/common/libamd_common.la \
 	$(top_builddir)/src/amd/addrlib/libamdgpu_addrlib.la \
 	$(top_builddir)/src/compiler/nir/libnir.la \

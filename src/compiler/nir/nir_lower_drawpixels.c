@@ -135,7 +135,9 @@ lower_color(lower_drawpixels_state *state, nir_intrinsic_instr *intr)
    tex->texture_index = state->options->drawpix_sampler;
    tex->dest_type = nir_type_float;
    tex->src[0].src_type = nir_tex_src_coord;
-   tex->src[0].src = nir_src_for_ssa(texcoord);
+   tex->src[0].src =
+      nir_src_for_ssa(nir_channels(b, texcoord,
+                                   (1 << tex->coord_components) - 1));
 
    nir_ssa_dest_init(&tex->instr, &tex->dest, 4, 32, NULL);
    nir_builder_instr_insert(b, &tex->instr);
@@ -214,11 +216,11 @@ lower_drawpixels_block(lower_drawpixels_state *state, nir_block *block)
             nir_variable *var = dvar->var;
 
             if (var->data.location == VARYING_SLOT_COL0) {
-               /* gl_Color should not have array/struct deref's: */
+               /* gl_Color should not have array/struct derefs: */
                assert(dvar->deref.child == NULL);
                lower_color(state, intr);
             } else if (var->data.location == VARYING_SLOT_TEX0) {
-               /* gl_TexCoord should not have array/struct deref's: */
+               /* gl_TexCoord should not have array/struct derefs: */
                assert(dvar->deref.child == NULL);
                lower_texcoord(state, intr);
             }

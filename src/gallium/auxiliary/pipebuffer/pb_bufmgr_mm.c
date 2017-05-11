@@ -53,7 +53,7 @@ struct mm_pb_manager
 {
    struct pb_manager base;
    
-   pipe_mutex mutex;
+   mtx_t mutex;
    
    pb_size size;
    struct mem_block *heap;
@@ -99,10 +99,10 @@ mm_buffer_destroy(struct pb_buffer *buf)
    
    assert(!pipe_is_referenced(&mm_buf->base.reference));
    
-   pipe_mutex_lock(mm->mutex);
+   mtx_lock(&mm->mutex);
    u_mmFreeMem(mm_buf->block);
    FREE(mm_buf);
-   pipe_mutex_unlock(mm->mutex);
+   mtx_unlock(&mm->mutex);
 }
 
 
@@ -184,11 +184,11 @@ mm_bufmgr_create_buffer(struct pb_manager *mgr,
    if(!pb_check_alignment(desc->alignment, (pb_size)1 << mm->align2))
       return NULL;
    
-   pipe_mutex_lock(mm->mutex);
+   mtx_lock(&mm->mutex);
 
    mm_buf = CALLOC_STRUCT(mm_buffer);
    if (!mm_buf) {
-      pipe_mutex_unlock(mm->mutex);
+      mtx_unlock(&mm->mutex);
       return NULL;
    }
 
@@ -208,7 +208,7 @@ mm_bufmgr_create_buffer(struct pb_manager *mgr,
       mmDumpMemInfo(mm->heap);
 #endif
       FREE(mm_buf);
-      pipe_mutex_unlock(mm->mutex);
+      mtx_unlock(&mm->mutex);
       return NULL;
    }
    
@@ -216,7 +216,7 @@ mm_bufmgr_create_buffer(struct pb_manager *mgr,
    assert(0 <= (pb_size)mm_buf->block->ofs && (pb_size)mm_buf->block->ofs < mm->size);
    assert(size <= (pb_size)mm_buf->block->size && (pb_size)mm_buf->block->ofs + (pb_size)mm_buf->block->size <= mm->size);
    
-   pipe_mutex_unlock(mm->mutex);
+   mtx_unlock(&mm->mutex);
    return SUPER(mm_buf);
 }
 
@@ -233,14 +233,14 @@ mm_bufmgr_destroy(struct pb_manager *mgr)
 {
    struct mm_pb_manager *mm = mm_pb_manager(mgr);
    
-   pipe_mutex_lock(mm->mutex);
+   mtx_lock(&mm->mutex);
 
    u_mmDestroy(mm->heap);
    
    pb_unmap(mm->buffer);
    pb_reference(&mm->buffer, NULL);
    
-   pipe_mutex_unlock(mm->mutex);
+   mtx_unlock(&mm->mutex);
    
    FREE(mgr);
 }
@@ -266,7 +266,7 @@ mm_bufmgr_create_from_buffer(struct pb_buffer *buffer,
    mm->size = size;
    mm->align2 = align2; /* 64-byte alignment */
 
-   pipe_mutex_init(mm->mutex);
+   (void) mtx_init(&mm->mutex, mtx_plain);
 
    mm->buffer = buffer; 
 

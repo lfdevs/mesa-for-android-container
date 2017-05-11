@@ -77,6 +77,14 @@ rbug_screen_get_device_vendor(struct pipe_screen *_screen)
    return screen->get_device_vendor(screen);
 }
 
+static struct disk_cache *
+rbug_screen_get_disk_shader_cache(struct pipe_screen *_screen)
+{
+   struct pipe_screen *screen = rbug_screen(_screen)->screen;
+
+   return screen->get_disk_shader_cache(screen);
+}
+
 static int
 rbug_screen_get_param(struct pipe_screen *_screen,
                       enum pipe_cap param)
@@ -90,7 +98,8 @@ rbug_screen_get_param(struct pipe_screen *_screen,
 
 static int
 rbug_screen_get_shader_param(struct pipe_screen *_screen,
-                      unsigned shader, enum pipe_shader_cap param)
+                             enum pipe_shader_type shader,
+                             enum pipe_shader_cap param)
 {
    struct rbug_screen *rb_screen = rbug_screen(_screen);
    struct pipe_screen *screen = rb_screen->screen;
@@ -191,7 +200,17 @@ rbug_screen_resource_get_handle(struct pipe_screen *_screen,
                                       resource, handle, usage);
 }
 
+static void
+rbug_screen_resource_changed(struct pipe_screen *_screen,
+                             struct pipe_resource *_resource)
+{
+   struct rbug_screen *rb_screen = rbug_screen(_screen);
+   struct rbug_resource *rb_resource = rbug_resource(_resource);
+   struct pipe_screen *screen = rb_screen->screen;
+   struct pipe_resource *resource = rb_resource->resource;
 
+   screen->resource_changed(screen, resource);
+}
 
 static void
 rbug_screen_resource_destroy(struct pipe_screen *screen,
@@ -261,15 +280,19 @@ rbug_screen_create(struct pipe_screen *screen)
    if (!rb_screen)
       return screen;
 
-   pipe_mutex_init(rb_screen->list_mutex);
+   (void) mtx_init(&rb_screen->list_mutex, mtx_plain);
    make_empty_list(&rb_screen->contexts);
    make_empty_list(&rb_screen->resources);
    make_empty_list(&rb_screen->surfaces);
    make_empty_list(&rb_screen->transfers);
 
+#define SCR_INIT(_member) \
+   rb_screen->base._member = screen->_member ? rbug_screen_##_member : NULL
+
    rb_screen->base.destroy = rbug_screen_destroy;
    rb_screen->base.get_name = rbug_screen_get_name;
    rb_screen->base.get_vendor = rbug_screen_get_vendor;
+   SCR_INIT(get_disk_shader_cache);
    rb_screen->base.get_device_vendor = rbug_screen_get_device_vendor;
    rb_screen->base.get_param = rbug_screen_get_param;
    rb_screen->base.get_shader_param = rbug_screen_get_shader_param;
@@ -279,6 +302,7 @@ rbug_screen_create(struct pipe_screen *screen)
    rb_screen->base.resource_create = rbug_screen_resource_create;
    rb_screen->base.resource_from_handle = rbug_screen_resource_from_handle;
    rb_screen->base.resource_get_handle = rbug_screen_resource_get_handle;
+   SCR_INIT(resource_changed);
    rb_screen->base.resource_destroy = rbug_screen_resource_destroy;
    rb_screen->base.flush_frontbuffer = rbug_screen_flush_frontbuffer;
    rb_screen->base.fence_reference = rbug_screen_fence_reference;

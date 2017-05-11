@@ -20,6 +20,7 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  */
+#include <inttypes.h> /* for PRIx64 macro */
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
@@ -32,11 +33,14 @@
 #include "main/shaderobj.h"
 #include "util/u_atomic.h" /* for p_atomic_cmpxchg */
 #include "util/ralloc.h"
+#include "util/disk_cache.h"
+#include "util/mesa-sha1.h"
 #include "ast.h"
 #include "glsl_parser_extras.h"
 #include "glsl_parser.h"
 #include "ir_optimization.h"
 #include "loop_analysis.h"
+#include "builtin_functions.h"
 
 /**
  * Format a short human-readable description of the given GLSL version.
@@ -81,6 +85,7 @@ _mesa_glsl_parse_state::_mesa_glsl_parse_state(struct gl_context *_ctx,
    this->forced_language_version = ctx->Const.ForceGLSLVersion;
    this->zero_init = ctx->Const.GLSLZeroInit;
    this->gl_version = 20;
+   this->compat_shader = true;
    this->es_shader = false;
    this->ARB_texture_rectangle_enable = true;
 
@@ -368,6 +373,7 @@ _mesa_glsl_parse_state::process_version_directive(YYLTYPE *locp, int version,
                                                   const char *ident)
 {
    bool es_token_present = false;
+   bool compat_token_present = false;
    if (ident) {
       if (strcmp(ident, "es") == 0) {
          es_token_present = true;
@@ -377,8 +383,12 @@ _mesa_glsl_parse_state::process_version_directive(YYLTYPE *locp, int version,
              * a core profile shader since that's the only profile we support.
              */
          } else if (strcmp(ident, "compatibility") == 0) {
-            _mesa_glsl_error(locp, this,
-                             "the compatibility profile is not supported");
+            compat_token_present = true;
+
+            if (this->ctx->API != API_OPENGL_COMPAT) {
+               _mesa_glsl_error(locp, this,
+                                "the compatibility profile is not supported");
+            }
          } else {
             _mesa_glsl_error(locp, this,
                              "\"%s\" is not a valid shading language profile; "
@@ -409,6 +419,9 @@ _mesa_glsl_parse_state::process_version_directive(YYLTYPE *locp, int version,
       this->language_version = this->forced_language_version;
    else
       this->language_version = version;
+
+   this->compat_shader = compat_token_present ||
+                         (!this->es_shader && this->language_version < 140);
 
    bool supported = false;
    for (unsigned i = 0; i < this->num_supported_versions; i++) {
@@ -608,11 +621,13 @@ static const _mesa_glsl_extension _mesa_glsl_supported_extensions[] = {
    EXT(ARB_fragment_layer_viewport),
    EXT(ARB_gpu_shader5),
    EXT(ARB_gpu_shader_fp64),
+   EXT(ARB_gpu_shader_int64),
    EXT(ARB_post_depth_coverage),
    EXT(ARB_sample_shading),
    EXT(ARB_separate_shader_objects),
    EXT(ARB_shader_atomic_counter_ops),
    EXT(ARB_shader_atomic_counters),
+   EXT(ARB_shader_ballot),
    EXT(ARB_shader_bit_encoding),
    EXT(ARB_shader_clock),
    EXT(ARB_shader_draw_parameters),
@@ -672,6 +687,7 @@ static const _mesa_glsl_extension _mesa_glsl_supported_extensions[] = {
    EXT(AMD_vertex_shader_viewport_index),
    EXT(ANDROID_extension_pack_es31a),
    EXT(EXT_blend_func_extended),
+   EXT(EXT_frag_depth),
    EXT(EXT_draw_buffers),
    EXT(EXT_clip_cull_distance),
    EXT(EXT_geometry_point_size),
@@ -1057,10 +1073,10 @@ _mesa_ast_process_interface_block(YYLTYPE *locp,
 void
 _mesa_ast_type_qualifier_print(const struct ast_type_qualifier *q)
 {
-   if (q->flags.q.subroutine)
+   if (q->is_subroutine_decl())
       printf("subroutine ");
 
-   if (q->flags.q.subroutine_def) {
+   if (q->subroutine_list) {
       printf("subroutine (");
       q->subroutine_list->print();
       printf(")");
@@ -1245,6 +1261,14 @@ ast_expression::print(void) const
 
    case ast_double_constant:
       printf("%f ", primary_expression.double_constant);
+      break;
+
+   case ast_int64_constant:
+      printf("%" PRId64 " ", primary_expression.int64_constant);
+      break;
+
+   case ast_uint64_constant:
+      printf("%" PRIu64 " ", primary_expression.uint64_constant);
       break;
 
    case ast_bool_constant:
@@ -1704,7 +1728,7 @@ set_shader_inout_layout(struct gl_shader *shader,
          if (state->out_qualifier->out_xfb_stride[i]->
                 process_qualifier_constant(state, "xfb_stride", &xfb_stride,
                 true)) {
-            shader->info.TransformFeedback.BufferStride[i] = xfb_stride;
+            shader->TransformFeedbackBufferStride[i] = xfb_stride;
          }
       }
    }
@@ -1808,16 +1832,15 @@ set_shader_inout_layout(struct gl_shader *shader,
       break;
 
    case MESA_SHADER_FRAGMENT:
-      shader->info.redeclares_gl_fragcoord =
-         state->fs_redeclares_gl_fragcoord;
-      shader->info.uses_gl_fragcoord = state->fs_uses_gl_fragcoord;
-      shader->info.pixel_center_integer = state->fs_pixel_center_integer;
-      shader->info.origin_upper_left = state->fs_origin_upper_left;
-      shader->info.ARB_fragment_coord_conventions_enable =
+      shader->redeclares_gl_fragcoord = state->fs_redeclares_gl_fragcoord;
+      shader->uses_gl_fragcoord = state->fs_uses_gl_fragcoord;
+      shader->pixel_center_integer = state->fs_pixel_center_integer;
+      shader->origin_upper_left = state->fs_origin_upper_left;
+      shader->ARB_fragment_coord_conventions_enable =
          state->ARB_fragment_coord_conventions_enable;
-      shader->info.EarlyFragmentTests = state->fs_early_fragment_tests;
-      shader->info.InnerCoverage = state->fs_inner_coverage;
-      shader->info.PostDepthCoverage = state->fs_post_depth_coverage;
+      shader->EarlyFragmentTests = state->fs_early_fragment_tests;
+      shader->InnerCoverage = state->fs_inner_coverage;
+      shader->PostDepthCoverage = state->fs_post_depth_coverage;
       shader->BlendSupport = state->fs_blend_support;
       break;
 
@@ -1899,105 +1922,51 @@ do_late_parsing_checks(struct _mesa_glsl_parse_state *state)
    }
 }
 
-void
-_mesa_glsl_compile_shader(struct gl_context *ctx, struct gl_shader *shader,
-                          bool dump_ast, bool dump_hir)
+static void
+opt_shader_and_create_symbol_table(struct gl_context *ctx,
+                                   struct gl_shader *shader)
 {
-   struct _mesa_glsl_parse_state *state =
-      new(shader) _mesa_glsl_parse_state(ctx, shader->Stage, shader);
-   const char *source = shader->Source;
+   assert(shader->CompileStatus != compile_failure &&
+          !shader->ir->is_empty());
 
-   if (ctx->Const.GenerateTemporaryNames)
-      (void) p_atomic_cmpxchg(&ir_variable::temporaries_allocate_names,
-                              false, true);
+   struct gl_shader_compiler_options *options =
+      &ctx->Const.ShaderCompilerOptions[shader->Stage];
 
-   state->error = glcpp_preprocess(state, &source, &state->info_log,
-                             add_builtin_defines, state, ctx);
-
-   if (!state->error) {
-     _mesa_glsl_lexer_ctor(state, source);
-     _mesa_glsl_parse(state);
-     _mesa_glsl_lexer_dtor(state);
-     do_late_parsing_checks(state);
+   /* Do some optimization at compile time to reduce shader IR size
+    * and reduce later work if the same shader is linked multiple times
+    */
+   if (ctx->Const.GLSLOptimizeConservatively) {
+      /* Run it just once. */
+      do_common_optimization(shader->ir, false, false, options,
+                             ctx->Const.NativeIntegers);
+   } else {
+      /* Repeat it until it stops making changes. */
+      while (do_common_optimization(shader->ir, false, false, options,
+                                    ctx->Const.NativeIntegers))
+         ;
    }
 
-   if (dump_ast) {
-      foreach_list_typed(ast_node, ast, link, &state->translation_unit) {
-         ast->print();
-      }
-      printf("\n\n");
-   }
+   validate_ir_tree(shader->ir);
 
-   ralloc_free(shader->ir);
-   shader->ir = new(shader) exec_list;
-   if (!state->error && !state->translation_unit.is_empty())
-      _mesa_ast_to_hir(shader->ir, state);
-
-   if (!state->error) {
-      validate_ir_tree(shader->ir);
-
-      /* Print out the unoptimized IR. */
-      if (dump_hir) {
-         _mesa_print_ir(stdout, shader->ir, state);
-      }
-   }
-
-
-   if (!state->error && !shader->ir->is_empty()) {
-      struct gl_shader_compiler_options *options =
-         &ctx->Const.ShaderCompilerOptions[shader->Stage];
-
-      assign_subroutine_indexes(shader, state);
-      lower_subroutine(shader->ir, state);
-
-      /* Do some optimization at compile time to reduce shader IR size
-       * and reduce later work if the same shader is linked multiple times
+   enum ir_variable_mode other;
+   switch (shader->Stage) {
+   case MESA_SHADER_VERTEX:
+      other = ir_var_shader_in;
+      break;
+   case MESA_SHADER_FRAGMENT:
+      other = ir_var_shader_out;
+      break;
+   default:
+      /* Something invalid to ensure optimize_dead_builtin_uniforms
+       * doesn't remove anything other than uniforms or constants.
        */
-      if (ctx->Const.GLSLOptimizeConservatively) {
-         /* Run it just once. */
-         do_common_optimization(shader->ir, false, false, options,
-                                ctx->Const.NativeIntegers);
-      } else {
-         /* Repeat it until it stops making changes. */
-         while (do_common_optimization(shader->ir, false, false, options,
-                                       ctx->Const.NativeIntegers))
-            ;
-      }
-
-      validate_ir_tree(shader->ir);
-
-      enum ir_variable_mode other;
-      switch (shader->Stage) {
-      case MESA_SHADER_VERTEX:
-         other = ir_var_shader_in;
-         break;
-      case MESA_SHADER_FRAGMENT:
-         other = ir_var_shader_out;
-         break;
-      default:
-         /* Something invalid to ensure optimize_dead_builtin_uniforms
-          * doesn't remove anything other than uniforms or constants.
-          */
-         other = ir_var_mode_count;
-         break;
-      }
-
-      optimize_dead_builtin_variables(shader->ir, other);
-
-      validate_ir_tree(shader->ir);
+      other = ir_var_mode_count;
+      break;
    }
 
-   if (shader->InfoLog)
-      ralloc_free(shader->InfoLog);
+   optimize_dead_builtin_variables(shader->ir, other);
 
-   if (!state->error)
-      set_shader_inout_layout(shader, state);
-
-   shader->symbols = new(shader->ir) glsl_symbol_table;
-   shader->CompileStatus = !state->error;
-   shader->InfoLog = state->info_log;
-   shader->Version = state->language_version;
-   shader->IsES = state->es_shader;
+   validate_ir_tree(shader->ir);
 
    /* Retain any live IR, but trash the rest. */
    reparent_ir(shader->ir, shader->ir);
@@ -2030,6 +1999,114 @@ _mesa_glsl_compile_shader(struct gl_context *ctx, struct gl_shader *shader,
    }
 
    _mesa_glsl_initialize_derived_variables(ctx, shader);
+}
+
+void
+_mesa_glsl_compile_shader(struct gl_context *ctx, struct gl_shader *shader,
+                          bool dump_ast, bool dump_hir, bool force_recompile)
+{
+   const char *source = force_recompile && shader->FallbackSource ?
+      shader->FallbackSource : shader->Source;
+
+   if (!force_recompile) {
+      if (ctx->Cache) {
+         char buf[41];
+         disk_cache_compute_key(ctx->Cache, source, strlen(source),
+                                shader->sha1);
+         if (disk_cache_has_key(ctx->Cache, shader->sha1)) {
+            /* We've seen this shader before and know it compiles */
+            if (ctx->_Shader->Flags & GLSL_CACHE_INFO) {
+               _mesa_sha1_format(buf, shader->sha1);
+               fprintf(stderr, "deferring compile of shader: %s\n", buf);
+            }
+            shader->CompileStatus = compile_skipped;
+
+            free((void *)shader->FallbackSource);
+            shader->FallbackSource = NULL;
+            return;
+         }
+      }
+   } else {
+      /* We should only ever end up here if a re-compile has been forced by a
+       * shader cache miss. In which case we can skip the compile if its
+       * already be done by a previous fallback or the initial compile call.
+       */
+      if (shader->CompileStatus == compile_success)
+         return;
+
+      if (shader->CompileStatus == compiled_no_opts) {
+         opt_shader_and_create_symbol_table(ctx, shader);
+         shader->CompileStatus = compile_success;
+         return;
+      }
+   }
+
+   struct _mesa_glsl_parse_state *state =
+      new(shader) _mesa_glsl_parse_state(ctx, shader->Stage, shader);
+
+   if (ctx->Const.GenerateTemporaryNames)
+      (void) p_atomic_cmpxchg(&ir_variable::temporaries_allocate_names,
+                              false, true);
+
+   state->error = glcpp_preprocess(state, &source, &state->info_log,
+                                   add_builtin_defines, state, ctx);
+
+   if (!state->error) {
+     _mesa_glsl_lexer_ctor(state, source);
+     _mesa_glsl_parse(state);
+     _mesa_glsl_lexer_dtor(state);
+     do_late_parsing_checks(state);
+   }
+
+   if (dump_ast) {
+      foreach_list_typed(ast_node, ast, link, &state->translation_unit) {
+         ast->print();
+      }
+      printf("\n\n");
+   }
+
+   ralloc_free(shader->ir);
+   shader->ir = new(shader) exec_list;
+   if (!state->error && !state->translation_unit.is_empty())
+      _mesa_ast_to_hir(shader->ir, state);
+
+   if (!state->error) {
+      validate_ir_tree(shader->ir);
+
+      /* Print out the unoptimized IR. */
+      if (dump_hir) {
+         _mesa_print_ir(stdout, shader->ir, state);
+      }
+   }
+
+   if (shader->InfoLog)
+      ralloc_free(shader->InfoLog);
+
+   if (!state->error)
+      set_shader_inout_layout(shader, state);
+
+   shader->symbols = new(shader->ir) glsl_symbol_table;
+   shader->CompileStatus = state->error ? compile_failure : compile_success;
+   shader->InfoLog = state->info_log;
+   shader->Version = state->language_version;
+   shader->IsES = state->es_shader;
+
+   if (!state->error && !shader->ir->is_empty()) {
+      assign_subroutine_indexes(shader, state);
+      lower_subroutine(shader->ir, state);
+
+      if (!ctx->Cache || force_recompile)
+         opt_shader_and_create_symbol_table(ctx, shader);
+      else {
+         reparent_ir(shader->ir, shader->ir);
+         shader->CompileStatus = compiled_no_opts;
+      }
+   }
+
+   if (!force_recompile) {
+      free((void *)shader->FallbackSource);
+      shader->FallbackSource = NULL;
+   }
 
    delete state->symbols;
    ralloc_free(state);

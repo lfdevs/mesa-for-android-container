@@ -46,7 +46,7 @@ static inline struct virgl_query *virgl_query(struct pipe_query *q)
 static void virgl_render_condition(struct pipe_context *ctx,
                                   struct pipe_query *q,
                                   boolean condition,
-                                  uint mode)
+                                  enum pipe_render_cond_flag mode)
 {
    struct virgl_context *vctx = virgl_context(ctx);
    struct virgl_query *query = virgl_query(q);

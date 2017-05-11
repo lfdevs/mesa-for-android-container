@@ -31,6 +31,7 @@
 #include "common/os.h"
 #include "core/context.h"
 #include "core/multisample.h"
+#include "depthstencil.h"
 #include "rdtsc_core.h"
 
 void ProcessComputeBE(DRAW_CONTEXT* pDC, uint32_t workerId, uint32_t threadGroupId, void*& pSpillFillBuffer);
@@ -46,6 +47,14 @@ void InitBackendFuncTables();
 void InitCPSFuncTables();
 void CalcSampleBarycentrics(const BarycentricCoeffs& coeffs, SWR_PS_CONTEXT &psContext);
 
+extern PFN_BACKEND_FUNC gBackendPixelRateTable[SWR_MULTISAMPLE_TYPE_COUNT]
+                                              [2]   // isCenterPattern
+                                              [SWR_INPUT_COVERAGE_COUNT]
+                                              [2]  // centroid
+                                              [2]  // forcedSampleCount
+                                              [2]  // canEarlyZ
+                                              ;
+
 enum SWR_BACKEND_FUNCS
 {
     SWR_BACKEND_SINGLE_SAMPLE,
@@ -55,10 +64,10 @@ enum SWR_BACKEND_FUNCS
 };
 
 #if KNOB_SIMD_WIDTH == 8
-extern const __m256 vCenterOffsetsX;
-extern const __m256 vCenterOffsetsY;
-extern const __m256 vULOffsetsX;
-extern const __m256 vULOffsetsY;
+extern const simdscalar vCenterOffsetsX;
+extern const simdscalar vCenterOffsetsY;
+extern const simdscalar vULOffsetsX;
+extern const simdscalar vULOffsetsY;
 #define MASK 0xff
 #endif
 
@@ -142,9 +151,36 @@ struct generateInputCoverage
         // will need to update for avx512
         assert(KNOB_SIMD_WIDTH == 8);
 
-        __m256i mask[2];
-        __m256i sampleCoverage[2];
-        if(T::bIsStandardPattern)
+        simdscalari mask[2];
+        simdscalari sampleCoverage[2];
+        
+        if(T::bIsCenterPattern)
+        {
+            // center coverage is the same for all samples; just broadcast to the sample slots
+            uint32_t centerCoverage = ((uint32_t)(*coverageMask) & MASK);
+            if(T::MultisampleT::numSamples == 1)
+            {
+                sampleCoverage[0] = _mm256_set_epi32(0, 0, 0, 0, 0, 0, 0, centerCoverage);
+            }
+            else if(T::MultisampleT::numSamples == 2)
+            {
+                sampleCoverage[0] = _mm256_set_epi32(0, 0, 0, 0, 0, 0, centerCoverage, centerCoverage);
+            }
+            else if(T::MultisampleT::numSamples == 4)
+            {
+                sampleCoverage[0] = _mm256_set_epi32(0, 0, 0, 0, centerCoverage, centerCoverage, centerCoverage, centerCoverage);
+            }
+            else if(T::MultisampleT::numSamples == 8)
+            {
+                sampleCoverage[0] = _mm256_set1_epi32(centerCoverage);
+            }
+            else if(T::MultisampleT::numSamples == 16)
+            {
+                sampleCoverage[0] = _mm256_set1_epi32(centerCoverage);
+                sampleCoverage[1] = _mm256_set1_epi32(centerCoverage);
+            }
+        }
+        else
         {
             __m256i src = _mm256_set1_epi32(0);
             __m256i index0 = _mm256_set_epi32(7, 6, 5, 4, 3, 2, 1, 0), index1;
@@ -180,39 +216,13 @@ struct generateInputCoverage
                 sampleCoverage[1] = _mm256_castps_si256(_simd_mask_i32gather_ps(_mm256_castsi256_ps(src), (const float*)coverageMask, index1, _mm256_castsi256_ps(mask[1]), 8));
             }
         }
-        else
-        {
-            // center coverage is the same for all samples; just broadcast to the sample slots
-            uint32_t centerCoverage = ((uint32_t)(*coverageMask) & MASK);
-            if(T::MultisampleT::numSamples == 1)
-            {
-                sampleCoverage[0] = _mm256_set_epi32(0, 0, 0, 0, 0, 0, 0, centerCoverage);
-            }
-            else if(T::MultisampleT::numSamples == 2)
-            {
-                sampleCoverage[0] = _mm256_set_epi32(0, 0, 0, 0, 0, 0, centerCoverage, centerCoverage);
-            }
-            else if(T::MultisampleT::numSamples == 4)
-            {
-                sampleCoverage[0] = _mm256_set_epi32(0, 0, 0, 0, centerCoverage, centerCoverage, centerCoverage, centerCoverage);
-            }
-            else if(T::MultisampleT::numSamples == 8)
-            {
-                sampleCoverage[0] = _mm256_set1_epi32(centerCoverage);
-            }
-            else if(T::MultisampleT::numSamples == 16)
-            {
-                sampleCoverage[0] = _mm256_set1_epi32(centerCoverage);
-                sampleCoverage[1] = _mm256_set1_epi32(centerCoverage);
-            }
-        }
 
         mask[0] = _mm256_set_epi8(-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0xC, 0x8, 0x4, 0x0,
                                   -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0xC, 0x8, 0x4, 0x0);
         // pull out the 8bit 4x2 coverage for samples 0-7 into the lower 32 bits of each 128bit lane
-        __m256i packedCoverage0 = _simd_shuffle_epi8(sampleCoverage[0], mask[0]);
+        simdscalari packedCoverage0 = _simd_shuffle_epi8(sampleCoverage[0], mask[0]);
 
-        __m256i packedCoverage1;
+        simdscalari packedCoverage1;
         if(T::MultisampleT::numSamples > 8)
         {
             // pull out the 8bit 4x2 coverage for samples 8-15 into the lower 32 bits of each 128bit lane
@@ -221,11 +231,11 @@ struct generateInputCoverage
 
     #if (KNOB_ARCH == KNOB_ARCH_AVX)
         // pack lower 32 bits of each 128 bit lane into lower 64 bits of single 128 bit lane 
-        __m256i hiToLow = _mm256_permute2f128_si256(packedCoverage0, packedCoverage0, 0x83);
-        __m256 shufRes = _mm256_shuffle_ps(_mm256_castsi256_ps(hiToLow), _mm256_castsi256_ps(hiToLow), _MM_SHUFFLE(1, 1, 0, 1));
+        simdscalari hiToLow = _mm256_permute2f128_si256(packedCoverage0, packedCoverage0, 0x83);
+        simdscalar shufRes = _mm256_shuffle_ps(_mm256_castsi256_ps(hiToLow), _mm256_castsi256_ps(hiToLow), _MM_SHUFFLE(1, 1, 0, 1));
         packedCoverage0 = _mm256_castps_si256(_mm256_blend_ps(_mm256_castsi256_ps(packedCoverage0), shufRes, 0xFE));
 
-        __m256i packedSampleCoverage;
+        simdscalari packedSampleCoverage;
         if(T::MultisampleT::numSamples > 8)
         {
             // pack lower 32 bits of each 128 bit lane into upper 64 bits of single 128 bit lane
@@ -240,11 +250,11 @@ struct generateInputCoverage
             packedSampleCoverage = packedCoverage0;
         }
     #else
-        __m256i permMask = _mm256_set_epi32(0x7, 0x7, 0x7, 0x7, 0x7, 0x7, 0x4, 0x0);
+        simdscalari permMask = _mm256_set_epi32(0x7, 0x7, 0x7, 0x7, 0x7, 0x7, 0x4, 0x0);
         // pack lower 32 bits of each 128 bit lane into lower 64 bits of single 128 bit lane 
         packedCoverage0 = _mm256_permutevar8x32_epi32(packedCoverage0, permMask);
 
-        __m256i packedSampleCoverage;
+        simdscalari packedSampleCoverage;
         if(T::MultisampleT::numSamples > 8)
         {
             permMask = _mm256_set_epi32(0x7, 0x7, 0x7, 0x7, 0x4, 0x0, 0x7, 0x7);
@@ -276,7 +286,7 @@ struct generateInputCoverage
         }
     }
 
-    INLINE generateInputCoverage(const uint64_t *const coverageMask, __m256 &inputCoverage, const uint32_t sampleMask)
+    INLINE generateInputCoverage(const uint64_t *const coverageMask, simdscalar &inputCoverage, const uint32_t sampleMask)
     {
         uint32_t inputMask[KNOB_SIMD_WIDTH];
         generateInputCoverage<T, T::InputCoverage>(coverageMask, inputMask, sampleMask);
@@ -288,12 +298,12 @@ struct generateInputCoverage
 template<typename T>
 struct generateInputCoverage<T, SWR_INPUT_COVERAGE_INNER_CONSERVATIVE>
 {
-    INLINE generateInputCoverage(const uint64_t *const coverageMask, __m256 &inputCoverage, const uint32_t sampleMask)
+    INLINE generateInputCoverage(const uint64_t *const coverageMask, simdscalar &inputCoverage, const uint32_t sampleMask)
     {
         // will need to update for avx512
         assert(KNOB_SIMD_WIDTH == 8);
-        __m256i vec = _mm256_set1_epi32(coverageMask[0]);
-        const __m256i bit = _mm256_set_epi32(0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01);
+        simdscalari vec = _mm256_set1_epi32(coverageMask[0]);
+        const simdscalari bit = _mm256_set_epi32(0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01);
         vec = _simd_and_si(vec, bit);
         vec = _simd_cmplt_epi32(_mm256_setzero_si256(), vec);
         vec = _simd_blendv_epi32(_simd_setzero_si(), _simd_set1_epi32(1), vec);
@@ -323,7 +333,8 @@ struct generateInputCoverage<T, SWR_INPUT_COVERAGE_INNER_CONSERVATIVE>
 //     SampleMask Rasterizer State is the evaluation point.Otherwise (full SampleMask), the pixel center is the evaluation point.
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 template<typename T>
-INLINE void CalcCentroidPos(SWR_PS_CONTEXT &psContext, const uint64_t *const coverageMask, const uint32_t sampleMask,
+INLINE void CalcCentroidPos(SWR_PS_CONTEXT &psContext, const SWR_MULTISAMPLE_POS& samplePos,
+                            const uint64_t *const coverageMask, const uint32_t sampleMask,
                             const simdscalar vXSamplePosUL, const simdscalar vYSamplePosUL)
 {
     uint32_t inputMask[KNOB_SIMD_WIDTH];
@@ -343,54 +354,54 @@ INLINE void CalcCentroidPos(SWR_PS_CONTEXT &psContext, const uint64_t *const cov
     (inputMask[7] > 0) ? (_BitScanForward(&sampleNum[7], inputMask[7])) : (sampleNum[7] = 0);
 
     // look up and set the sample offsets from UL pixel corner for first covered sample 
-    __m256 vXSample = _mm256_set_ps(T::MultisampleT::X(sampleNum[7]),
-                                    T::MultisampleT::X(sampleNum[6]),
-                                    T::MultisampleT::X(sampleNum[5]),
-                                    T::MultisampleT::X(sampleNum[4]),
-                                    T::MultisampleT::X(sampleNum[3]),
-                                    T::MultisampleT::X(sampleNum[2]),
-                                    T::MultisampleT::X(sampleNum[1]),
-                                    T::MultisampleT::X(sampleNum[0]));
+    __m256 vXSample = _mm256_set_ps(samplePos.X(sampleNum[7]),
+                                    samplePos.X(sampleNum[6]),
+                                    samplePos.X(sampleNum[5]),
+                                    samplePos.X(sampleNum[4]),
+                                    samplePos.X(sampleNum[3]),
+                                    samplePos.X(sampleNum[2]),
+                                    samplePos.X(sampleNum[1]),
+                                    samplePos.X(sampleNum[0]));
 
-    __m256 vYSample = _mm256_set_ps(T::MultisampleT::Y(sampleNum[7]),
-                                    T::MultisampleT::Y(sampleNum[6]),
-                                    T::MultisampleT::Y(sampleNum[5]),
-                                    T::MultisampleT::Y(sampleNum[4]),
-                                    T::MultisampleT::Y(sampleNum[3]),
-                                    T::MultisampleT::Y(sampleNum[2]),
-                                    T::MultisampleT::Y(sampleNum[1]),
-                                    T::MultisampleT::Y(sampleNum[0]));
+    __m256 vYSample = _mm256_set_ps(samplePos.Y(sampleNum[7]),
+                                    samplePos.Y(sampleNum[6]),
+                                    samplePos.Y(sampleNum[5]),
+                                    samplePos.Y(sampleNum[4]),
+                                    samplePos.Y(sampleNum[3]),
+                                    samplePos.Y(sampleNum[2]),
+                                    samplePos.Y(sampleNum[1]),
+                                    samplePos.Y(sampleNum[0]));
     // add sample offset to UL pixel corner
     vXSample = _simd_add_ps(vXSamplePosUL, vXSample);
     vYSample = _simd_add_ps(vYSamplePosUL, vYSample);
 
     // Case (1) and case (3b) - All samples covered or not covered with full SampleMask
-    static const __m256i vFullyCoveredMask = T::MultisampleT::FullSampleMask();
-    __m256i vInputCoveragei =  _mm256_set_epi32(inputMask[7], inputMask[6], inputMask[5], inputMask[4], inputMask[3], inputMask[2], inputMask[1], inputMask[0]);
-    __m256i vAllSamplesCovered = _simd_cmpeq_epi32(vInputCoveragei, vFullyCoveredMask);
+    static const simdscalari vFullyCoveredMask = T::MultisampleT::FullSampleMask();
+    simdscalari vInputCoveragei =  _mm256_set_epi32(inputMask[7], inputMask[6], inputMask[5], inputMask[4], inputMask[3], inputMask[2], inputMask[1], inputMask[0]);
+    simdscalari vAllSamplesCovered = _simd_cmpeq_epi32(vInputCoveragei, vFullyCoveredMask);
 
-    static const __m256i vZero = _simd_setzero_si();
-    const __m256i vSampleMask = _simd_and_si(_simd_set1_epi32(sampleMask), vFullyCoveredMask);
-    __m256i vNoSamplesCovered = _simd_cmpeq_epi32(vInputCoveragei, vZero);
-    __m256i vIsFullSampleMask = _simd_cmpeq_epi32(vSampleMask, vFullyCoveredMask);
-    __m256i vCase3b = _simd_and_si(vNoSamplesCovered, vIsFullSampleMask);
+    static const simdscalari vZero = _simd_setzero_si();
+    const simdscalari vSampleMask = _simd_and_si(_simd_set1_epi32(sampleMask), vFullyCoveredMask);
+    simdscalari vNoSamplesCovered = _simd_cmpeq_epi32(vInputCoveragei, vZero);
+    simdscalari vIsFullSampleMask = _simd_cmpeq_epi32(vSampleMask, vFullyCoveredMask);
+    simdscalari vCase3b = _simd_and_si(vNoSamplesCovered, vIsFullSampleMask);
 
-    __m256i vEvalAtCenter = _simd_or_si(vAllSamplesCovered, vCase3b);
+    simdscalari vEvalAtCenter = _simd_or_si(vAllSamplesCovered, vCase3b);
 
     // set the centroid position based on results from above
     psContext.vX.centroid = _simd_blendv_ps(vXSample, psContext.vX.center, _simd_castsi_ps(vEvalAtCenter));
     psContext.vY.centroid = _simd_blendv_ps(vYSample, psContext.vY.center, _simd_castsi_ps(vEvalAtCenter));
 
     // Case (3a) No samples covered and partial sample mask
-    __m256i vSomeSampleMaskSamples = _simd_cmplt_epi32(vSampleMask, vFullyCoveredMask);
+    simdscalari vSomeSampleMaskSamples = _simd_cmplt_epi32(vSampleMask, vFullyCoveredMask);
     // sample mask should never be all 0's for this case, but handle it anyways
     unsigned long firstCoveredSampleMaskSample = 0;
     (sampleMask > 0) ? (_BitScanForward(&firstCoveredSampleMaskSample, sampleMask)) : (firstCoveredSampleMaskSample = 0);
 
-    __m256i vCase3a = _simd_and_si(vNoSamplesCovered, vSomeSampleMaskSamples);
+    simdscalari vCase3a = _simd_and_si(vNoSamplesCovered, vSomeSampleMaskSamples);
 
-    vXSample = _simd_set1_ps(T::MultisampleT::X(firstCoveredSampleMaskSample));
-    vYSample = _simd_set1_ps(T::MultisampleT::Y(firstCoveredSampleMaskSample));
+    vXSample = _simd_set1_ps(samplePos.X(firstCoveredSampleMaskSample));
+    vYSample = _simd_set1_ps(samplePos.Y(firstCoveredSampleMaskSample));
 
     // blend in case 3a pixel locations
     psContext.vX.centroid = _simd_blendv_ps(psContext.vX.centroid, vXSample, _simd_castsi_ps(vCase3a));
@@ -485,7 +496,7 @@ inline void SetupRenderBuffers(uint8_t *pColorBuffer[SWR_NUM_RENDERTARGETS], uin
 }
 
 template<typename T>
-void SetupPixelShaderContext(SWR_PS_CONTEXT *psContext, const SWR_TRIANGLE_DESC &work)
+void SetupPixelShaderContext(SWR_PS_CONTEXT *psContext, const SWR_MULTISAMPLE_POS& samplePos, SWR_TRIANGLE_DESC &work)
 {
     psContext->pAttribs = work.pAttribs;
     psContext->pPerspAttribs = work.pPerspAttribs;
@@ -498,14 +509,15 @@ void SetupPixelShaderContext(SWR_PS_CONTEXT *psContext, const SWR_TRIANGLE_DESC 
 
     psContext->recipDet = work.recipDet;
     psContext->pRecipW = work.pRecipW;
-    psContext->pSamplePosX = reinterpret_cast<const float *>(&T::MultisampleT::samplePosX);
-    psContext->pSamplePosY = reinterpret_cast<const float *>(&T::MultisampleT::samplePosY);
+    psContext->pSamplePosX = samplePos.X();//reinterpret_cast<const float *>(&T::MultisampleT::samplePosX);
+    psContext->pSamplePosY = samplePos.Y();//reinterpret_cast<const float *>(&T::MultisampleT::samplePosY);
     psContext->rasterizerSampleCount = T::MultisampleT::numSamples;
     psContext->sampleIndex = 0;
 }
 
 template<typename T, bool IsSingleSample>
-void CalcCentroid(SWR_PS_CONTEXT *psContext, const BarycentricCoeffs &coeffs, const uint64_t * const coverageMask, uint32_t sampleMask)
+void CalcCentroid(SWR_PS_CONTEXT *psContext, const SWR_MULTISAMPLE_POS& samplePos,
+                  const BarycentricCoeffs &coeffs, const uint64_t * const coverageMask, uint32_t sampleMask)
 {
     if (IsSingleSample) // if (T::MultisampleT::numSamples == 1) // doesn't cut it, the centroid positions are still different
     {
@@ -521,15 +533,15 @@ void CalcCentroid(SWR_PS_CONTEXT *psContext, const BarycentricCoeffs &coeffs, co
         if (T::bCentroidPos)
         {
             ///@ todo: don't need to genererate input coverage 2x if input coverage and centroid
-            if (T::bIsStandardPattern)
-            {
-                // add param: const uint32_t inputMask[KNOB_SIMD_WIDTH] to eliminate 'generate coverage 2X'..
-                CalcCentroidPos<T>(*psContext, coverageMask, sampleMask, psContext->vX.UL, psContext->vY.UL);
-            }
-            else
+            if (T::bIsCenterPattern)
             {
                 psContext->vX.centroid = _simd_add_ps(psContext->vX.UL, _simd_set1_ps(0.5f));
                 psContext->vY.centroid = _simd_add_ps(psContext->vY.UL, _simd_set1_ps(0.5f));
+            }
+            else
+            {
+                // add param: const uint32_t inputMask[KNOB_SIMD_WIDTH] to eliminate 'generate coverage 2X'..
+                CalcCentroidPos<T>(*psContext, samplePos, coverageMask, sampleMask, psContext->vX.UL, psContext->vY.UL);
             }
 
             CalcCentroidBarycentrics(coeffs, *psContext, psContext->vX.UL, psContext->vY.UL);
@@ -548,8 +560,9 @@ struct PixelRateZTestLoop
     PixelRateZTestLoop(DRAW_CONTEXT *DC, uint32_t _workerId, const SWR_TRIANGLE_DESC &Work, const BarycentricCoeffs& Coeffs, const API_STATE& apiState,
                        uint8_t*& depthBuffer, uint8_t*& stencilBuffer, const uint8_t ClipDistanceMask) :
                        pDC(DC), workerId(_workerId), work(Work), coeffs(Coeffs), state(apiState), psState(apiState.psState),
-                       clipDistanceMask(ClipDistanceMask), pDepthBuffer(depthBuffer), pStencilBuffer(stencilBuffer) {};
-           
+                       samplePos(state.rastState.samplePositions),
+                       clipDistanceMask(ClipDistanceMask), pDepthBuffer(depthBuffer), pStencilBuffer(stencilBuffer){};
+
     INLINE
     uint32_t operator()(simdscalar& activeLanes, SWR_PS_CONTEXT& psContext, 
                         const CORE_BUCKETS BEDepthBucket, uint32_t currentSimdIn8x8 = 0)
@@ -588,16 +601,18 @@ struct PixelRateZTestLoop
             AR_BEGIN(BEBarycentric, pDC->drawId);
 
             // calculate per sample positions
-            psContext.vX.sample = _simd_add_ps(psContext.vX.UL, T::MultisampleT::vX(sample));
-            psContext.vY.sample = _simd_add_ps(psContext.vY.UL, T::MultisampleT::vY(sample));
+            psContext.vX.sample = _simd_add_ps(psContext.vX.UL, samplePos.vX(sample));
+            psContext.vY.sample = _simd_add_ps(psContext.vY.UL, samplePos.vY(sample));
 
             // calc I & J per sample
             CalcSampleBarycentrics(coeffs, psContext);
 
             if(psState.writesODepth)
             {
-                // broadcast and test oDepth(psContext.vZ) written from the PS for each sample
-                vZ[sample] = psContext.vZ;
+                {
+                    // broadcast and test oDepth(psContext.vZ) written from the PS for each sample
+                    vZ[sample] = psContext.vZ;
+                }
             }
             else
             {
@@ -662,6 +677,7 @@ private:
     const BarycentricCoeffs& coeffs;
     const API_STATE& state;
     const SWR_PS_STATE& psState;
+    const SWR_MULTISAMPLE_POS& samplePos;
     const uint8_t clipDistanceMask;
     uint8_t*& pDepthBuffer;
     uint8_t*& pStencilBuffer;
@@ -704,23 +720,26 @@ INLINE void OutputMerger4x2(SWR_PS_CONTEXT &psContext, uint8_t* (&pColorBase)[SW
         uint8_t *pColorSample = pColorBase[rt] + rasterTileColorOffset;
 
         const SWR_RENDER_TARGET_BLEND_STATE *pRTBlend = &pBlendState->renderTarget[rt];
-        // pfnBlendFunc may not update all channels.  Initialize with PS output.
-        /// TODO: move this into the blend JIT.
-        blendOut = psContext.shaded[rt];
 
-        // Blend outputs and update coverage mask for alpha test
-        if(pfnBlendFunc[rt] != nullptr)
         {
-            pfnBlendFunc[rt](
-                pBlendState,
-                psContext.shaded[rt],
-                psContext.shaded[1],
-                psContext.shaded[0].w,
-                sample,
-                pColorSample,
-                blendOut,
-                &psContext.oMask,
-                (simdscalari*)&coverageMask);
+            // pfnBlendFunc may not update all channels.  Initialize with PS output.
+            /// TODO: move this into the blend JIT.
+            blendOut = psContext.shaded[rt];
+
+            // Blend outputs and update coverage mask for alpha test
+            if(pfnBlendFunc[rt] != nullptr)
+            {
+                pfnBlendFunc[rt](
+                    pBlendState,
+                    psContext.shaded[rt],
+                    psContext.shaded[1],
+                    psContext.shaded[0].w,
+                    sample,
+                    pColorSample,
+                    blendOut,
+                    &psContext.oMask,
+                    (simdscalari*)&coverageMask);
+            }
         }
 
         // final write mask 
@@ -773,9 +792,6 @@ INLINE void OutputMerger8x2(SWR_PS_CONTEXT &psContext, uint8_t* (&pColorBase)[SW
         simdscalar *pColorSample = reinterpret_cast<simdscalar *>(pColorBase[rt] + rasterTileColorOffset);
 
         const SWR_RENDER_TARGET_BLEND_STATE *pRTBlend = &pBlendState->renderTarget[rt];
-        // pfnBlendFunc may not update all channels.  Initialize with PS output.
-        /// TODO: move this into the blend JIT.
-        blendOut = psContext.shaded[rt];
 
         if (colorBufferBit & colorBufferEnableMask)
         {
@@ -785,19 +801,25 @@ INLINE void OutputMerger8x2(SWR_PS_CONTEXT &psContext, uint8_t* (&pColorBase)[SW
             blendSrc[3] = pColorSample[6];
         }
 
-        // Blend outputs and update coverage mask for alpha test
-        if (pfnBlendFunc[rt] != nullptr)
         {
-            pfnBlendFunc[rt](
-                pBlendState,
-                psContext.shaded[rt],
-                psContext.shaded[1],
-                psContext.shaded[0].w,
-                sample,
-                reinterpret_cast<uint8_t *>(&blendSrc),
-                blendOut,
-                &psContext.oMask,
-                reinterpret_cast<simdscalari *>(&coverageMask));
+            // pfnBlendFunc may not update all channels.  Initialize with PS output.
+            /// TODO: move this into the blend JIT.
+            blendOut = psContext.shaded[rt];
+
+            // Blend outputs and update coverage mask for alpha test
+            if(pfnBlendFunc[rt] != nullptr)
+            {
+                pfnBlendFunc[rt](
+                    pBlendState,
+                    psContext.shaded[rt],
+                    psContext.shaded[1],
+                    psContext.shaded[0].w,
+                    sample,
+                    reinterpret_cast<uint8_t *>(&blendSrc),
+                    blendOut,
+                    &psContext.oMask,
+                    reinterpret_cast<simdscalari *>(&coverageMask));
+            }
         }
 
         // final write mask 
@@ -827,14 +849,216 @@ INLINE void OutputMerger8x2(SWR_PS_CONTEXT &psContext, uint8_t* (&pColorBase)[SW
 }
 
 #endif
-template<uint32_t sampleCountT = SWR_MULTISAMPLE_1X, uint32_t samplePattern = SWR_MSAA_STANDARD_PATTERN,
-         uint32_t coverage = 0, uint32_t centroid = 0, uint32_t forced = 0, uint32_t canEarlyZ = 0>
+
+template<typename T>
+void BackendPixelRate(DRAW_CONTEXT *pDC, uint32_t workerId, uint32_t x, uint32_t y, SWR_TRIANGLE_DESC &work, RenderOutputBuffers &renderBuffers)
+{
+    ///@todo: Need to move locals off stack to prevent __chkstk's from being generated for the backend
+
+
+    SWR_CONTEXT *pContext = pDC->pContext;
+
+    AR_BEGIN(BEPixelRateBackend, pDC->drawId);
+    AR_BEGIN(BESetup, pDC->drawId);
+
+    const API_STATE &state = GetApiState(pDC);
+
+    BarycentricCoeffs coeffs;
+    SetupBarycentricCoeffs(&coeffs, work);
+
+    SWR_PS_CONTEXT psContext;
+    const SWR_MULTISAMPLE_POS& samplePos = state.rastState.samplePositions;
+    SetupPixelShaderContext<T>(&psContext, samplePos, work);
+
+    uint8_t *pDepthBuffer, *pStencilBuffer;
+    SetupRenderBuffers(psContext.pColorBuffer, &pDepthBuffer, &pStencilBuffer, state.psState.numRenderTargets, renderBuffers);
+
+    AR_END(BESetup, 0);
+
+    PixelRateZTestLoop<T> PixelRateZTest(pDC, workerId, work, coeffs, state, pDepthBuffer, pStencilBuffer, state.rastState.clipDistanceMask);
+
+    psContext.vY.UL     = _simd_add_ps(vULOffsetsY,     _simd_set1_ps(static_cast<float>(y)));
+    psContext.vY.center = _simd_add_ps(vCenterOffsetsY, _simd_set1_ps(static_cast<float>(y)));
+
+    const simdscalar dy = _simd_set1_ps(static_cast<float>(SIMD_TILE_Y_DIM));
+
+    for(uint32_t yy = y; yy < y + KNOB_TILE_Y_DIM; yy += SIMD_TILE_Y_DIM)
+    {
+        psContext.vX.UL     = _simd_add_ps(vULOffsetsX,     _simd_set1_ps(static_cast<float>(x)));
+        psContext.vX.center = _simd_add_ps(vCenterOffsetsX, _simd_set1_ps(static_cast<float>(x)));
+
+        const simdscalar dx = _simd_set1_ps(static_cast<float>(SIMD_TILE_X_DIM));
+
+        for(uint32_t xx = x; xx < x + KNOB_TILE_X_DIM; xx += SIMD_TILE_X_DIM)
+        {
+#if USE_8x2_TILE_BACKEND
+            const bool useAlternateOffset = ((xx & SIMD_TILE_X_DIM) != 0);
+#endif
+            simdscalar activeLanes;
+            if(!(work.anyCoveredSamples & MASK)) {goto Endtile;};
+            activeLanes = vMask(work.anyCoveredSamples & MASK);
+
+            if (T::InputCoverage != SWR_INPUT_COVERAGE_NONE)
+            {
+                const uint64_t* pCoverageMask = (T::InputCoverage == SWR_INPUT_COVERAGE_INNER_CONSERVATIVE) ? &work.innerCoverageMask : &work.coverageMask[0];
+
+                generateInputCoverage<T, T::InputCoverage>(pCoverageMask, psContext.inputMask, state.blendState.sampleMask);
+            }
+
+            AR_BEGIN(BEBarycentric, pDC->drawId);
+
+            CalcPixelBarycentrics(coeffs, psContext);
+
+            CalcCentroid<T, false>(&psContext, samplePos, coeffs, work.coverageMask, state.blendState.sampleMask);
+
+            AR_END(BEBarycentric, 0);
+
+            if(T::bForcedSampleCount)
+            {
+                // candidate pixels (that passed coverage) will cause shader invocation if any bits in the samplemask are set
+                const simdscalar vSampleMask = _simd_castsi_ps(_simd_cmpgt_epi32(_simd_set1_epi32(state.blendState.sampleMask), _simd_setzero_si()));
+                activeLanes = _simd_and_ps(activeLanes, vSampleMask);
+            }
+
+            // Early-Z?
+            if(T::bCanEarlyZ && !T::bForcedSampleCount)
+            {
+                uint32_t depthPassCount = PixelRateZTest(activeLanes, psContext, BEEarlyDepthTest);
+                UPDATE_STAT_BE(DepthPassCount, depthPassCount);
+                AR_EVENT(EarlyDepthInfoPixelRate(depthPassCount, _simd_movemask_ps(activeLanes)));
+            }
+
+            // if we have no covered samples that passed depth at this point, go to next tile
+            if(!_simd_movemask_ps(activeLanes)) { goto Endtile; };
+
+            if(state.psState.usesSourceDepth)
+            {
+                AR_BEGIN(BEBarycentric, pDC->drawId);
+                // interpolate and quantize z
+                psContext.vZ = vplaneps(coeffs.vZa, coeffs.vZb, coeffs.vZc, psContext.vI.center, psContext.vJ.center);
+                psContext.vZ = state.pfnQuantizeDepth(psContext.vZ);
+                AR_END(BEBarycentric, 0);
+            }
+
+            // pixels that are currently active
+            psContext.activeMask = _simd_castps_si(activeLanes);
+            psContext.oMask = T::MultisampleT::FullSampleMask();
+
+            // execute pixel shader
+            AR_BEGIN(BEPixelShader, pDC->drawId);
+            state.psState.pfnPixelShader(GetPrivateState(pDC), &psContext);
+            UPDATE_STAT_BE(PsInvocations, _mm_popcnt_u32(_simd_movemask_ps(activeLanes)));
+            AR_END(BEPixelShader, 0);
+
+            // update active lanes to remove any discarded or oMask'd pixels
+            activeLanes = _simd_castsi_ps(_simd_and_si(psContext.activeMask, _simd_cmpgt_epi32(psContext.oMask, _simd_setzero_si())));
+            if(!_simd_movemask_ps(activeLanes)) { goto Endtile; };
+
+            // late-Z
+            if(!T::bCanEarlyZ && !T::bForcedSampleCount)
+            {
+                uint32_t depthPassCount = PixelRateZTest(activeLanes, psContext, BELateDepthTest);
+                UPDATE_STAT_BE(DepthPassCount, depthPassCount);
+                AR_EVENT(LateDepthInfoPixelRate(depthPassCount, _simd_movemask_ps(activeLanes)));
+            }
+
+            // if we have no covered samples that passed depth at this point, skip OM and go to next tile
+            if(!_simd_movemask_ps(activeLanes)) { goto Endtile; };
+
+            // output merger
+            // loop over all samples, broadcasting the results of the PS to all passing pixels
+            for(uint32_t sample = 0; sample < GetNumOMSamples<T>(state.blendState.sampleCount); sample++)
+            {
+                AR_BEGIN(BEOutputMerger, pDC->drawId);
+                // center pattern does a single coverage/depth/stencil test, standard pattern tests all samples
+                uint32_t coverageSampleNum = (T::bIsCenterPattern) ? 0 : sample;
+                simdscalar coverageMask, depthMask;
+                if(T::bForcedSampleCount)
+                {
+                    coverageMask = depthMask = activeLanes;
+                }
+                else
+                {
+                    coverageMask = PixelRateZTest.vCoverageMask[coverageSampleNum];
+                    depthMask = PixelRateZTest.depthPassMask[coverageSampleNum];
+                    if(!_simd_movemask_ps(depthMask))
+                    {
+                        // stencil should already have been written in early/lateZ tests
+                        AR_END(BEOutputMerger, 0);
+                        continue;
+                    }
+                }
+                
+                // broadcast the results of the PS to all passing pixels
+#if USE_8x2_TILE_BACKEND
+                OutputMerger8x2(psContext, psContext.pColorBuffer, sample, &state.blendState,state.pfnBlendFunc, coverageMask, depthMask, state.psState.numRenderTargets, state.colorHottileEnable, useAlternateOffset);
+#else // USE_8x2_TILE_BACKEND
+                OutputMerger4x2(psContext, psContext.pColorBuffer, sample, &state.blendState, state.pfnBlendFunc, coverageMask, depthMask, state.psState.numRenderTargets);
+#endif // USE_8x2_TILE_BACKEND
+
+                if(!state.psState.forceEarlyZ && !T::bForcedSampleCount)
+                {
+                    uint8_t *pDepthSample = pDepthBuffer + RasterTileDepthOffset(sample);
+                    uint8_t * pStencilSample = pStencilBuffer + RasterTileStencilOffset(sample);
+
+                    DepthStencilWrite(&state.vp[work.triFlags.viewportIndex], &state.depthStencilState, work.triFlags.frontFacing, PixelRateZTest.vZ[coverageSampleNum],
+                                      pDepthSample, depthMask, coverageMask, pStencilSample, PixelRateZTest.stencilPassMask[coverageSampleNum]);
+                }
+                AR_END(BEOutputMerger, 0);
+            }
+Endtile:
+            AR_BEGIN(BEEndTile, pDC->drawId);
+
+            for(uint32_t sample = 0; sample < T::MultisampleT::numCoverageSamples; sample++)
+            {
+                work.coverageMask[sample] >>= (SIMD_TILE_Y_DIM * SIMD_TILE_X_DIM);
+            }
+
+            if(T::InputCoverage == SWR_INPUT_COVERAGE_INNER_CONSERVATIVE)
+            {
+                work.innerCoverageMask >>= (SIMD_TILE_Y_DIM * SIMD_TILE_X_DIM);
+            }
+            work.anyCoveredSamples >>= (SIMD_TILE_Y_DIM * SIMD_TILE_X_DIM);
+
+#if USE_8x2_TILE_BACKEND
+            if (useAlternateOffset)
+            {
+                for (uint32_t rt = 0; rt < state.psState.numRenderTargets; ++rt)
+                {
+                    psContext.pColorBuffer[rt] += (2 * KNOB_SIMD_WIDTH * FormatTraits<KNOB_COLOR_HOT_TILE_FORMAT>::bpp) / 8;
+                }
+            }
+#else
+            for(uint32_t rt = 0; rt < state.psState.numRenderTargets; ++rt)
+            {
+                psContext.pColorBuffer[rt] += (KNOB_SIMD_WIDTH * FormatTraits<KNOB_COLOR_HOT_TILE_FORMAT>::bpp) / 8;
+            }
+            pDepthBuffer += (KNOB_SIMD_WIDTH * FormatTraits<KNOB_DEPTH_HOT_TILE_FORMAT>::bpp) / 8;
+            pStencilBuffer += (KNOB_SIMD_WIDTH * FormatTraits<KNOB_STENCIL_HOT_TILE_FORMAT>::bpp) / 8;
+#endif
+
+            AR_END(BEEndTile, 0);
+
+            psContext.vX.UL     = _simd_add_ps(psContext.vX.UL,     dx);
+            psContext.vX.center = _simd_add_ps(psContext.vX.center, dx);
+        }
+
+        psContext.vY.UL     = _simd_add_ps(psContext.vY.UL,     dy);
+        psContext.vY.center = _simd_add_ps(psContext.vY.center, dy);
+    }
+
+    AR_END(BEPixelRateBackend, 0);
+}
+
+template<uint32_t sampleCountT = SWR_MULTISAMPLE_1X, uint32_t isCenter = 0,
+         uint32_t coverage = 0, uint32_t centroid = 0, uint32_t forced = 0, uint32_t canEarlyZ = 0
+    >
 struct SwrBackendTraits
 {
-    static const bool bIsStandardPattern = (samplePattern == SWR_MSAA_STANDARD_PATTERN);
+    static const bool bIsCenterPattern = (isCenter == 1);
     static const uint32_t InputCoverage = coverage;
     static const bool bCentroidPos = (centroid == 1);
     static const bool bForcedSampleCount = (forced == 1);
     static const bool bCanEarlyZ = (canEarlyZ == 1);
-    typedef MultisampleTraits<(SWR_MULTISAMPLE_COUNT)sampleCountT, (bIsStandardPattern) ? SWR_MSAA_STANDARD_PATTERN : SWR_MSAA_CENTER_PATTERN> MultisampleT;
+    typedef MultisampleTraits<(SWR_MULTISAMPLE_COUNT)sampleCountT, bIsCenterPattern> MultisampleT;
 };

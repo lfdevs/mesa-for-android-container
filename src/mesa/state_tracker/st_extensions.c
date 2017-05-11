@@ -461,6 +461,9 @@ void st_init_limits(struct pipe_screen *screen,
 
    c->MaxWindowRectangles =
       screen->get_param(screen, PIPE_CAP_MAX_WINDOW_RECTANGLES);
+
+   c->SparseBufferPageSize =
+      screen->get_param(screen, PIPE_CAP_SPARSE_BUFFER_PAGE_SIZE);
 }
 
 
@@ -588,6 +591,7 @@ void st_init_extensions(struct pipe_screen *screen,
       { o(ARB_draw_instanced),               PIPE_CAP_TGSI_INSTANCEID                  },
       { o(ARB_fragment_program_shadow),      PIPE_CAP_TEXTURE_SHADOW_MAP               },
       { o(ARB_framebuffer_object),           PIPE_CAP_MIXED_FRAMEBUFFER_SIZES          },
+      { o(ARB_gpu_shader_int64),             PIPE_CAP_INT64                            },
       { o(ARB_indirect_parameters),          PIPE_CAP_MULTI_DRAW_INDIRECT_PARAMS       },
       { o(ARB_instanced_arrays),             PIPE_CAP_VERTEX_ELEMENT_INSTANCE_DIVISOR  },
       { o(ARB_occlusion_query),              PIPE_CAP_OCCLUSION_QUERY                  },
@@ -598,12 +602,15 @@ void st_init_extensions(struct pipe_screen *screen,
       { o(ARB_robust_buffer_access_behavior), PIPE_CAP_ROBUST_BUFFER_ACCESS_BEHAVIOR   },
       { o(ARB_sample_shading),               PIPE_CAP_SAMPLE_SHADING                   },
       { o(ARB_seamless_cube_map),            PIPE_CAP_SEAMLESS_CUBE_MAP                },
+      { o(ARB_shader_ballot),                PIPE_CAP_TGSI_BALLOT                      },
+      { o(ARB_shader_clock),                 PIPE_CAP_TGSI_CLOCK                       },
       { o(ARB_shader_draw_parameters),       PIPE_CAP_DRAW_PARAMETERS                  },
       { o(ARB_shader_group_vote),            PIPE_CAP_TGSI_VOTE                        },
       { o(ARB_shader_stencil_export),        PIPE_CAP_SHADER_STENCIL_EXPORT            },
       { o(ARB_shader_texture_image_samples), PIPE_CAP_TGSI_TXQS                        },
       { o(ARB_shader_texture_lod),           PIPE_CAP_SM3                              },
       { o(ARB_shadow),                       PIPE_CAP_TEXTURE_SHADOW_MAP               },
+      { o(ARB_sparse_buffer),                PIPE_CAP_SPARSE_BUFFER_PAGE_SIZE          },
       { o(ARB_texture_buffer_object),        PIPE_CAP_TEXTURE_BUFFER_OBJECTS           },
       { o(ARB_texture_cube_map_array),       PIPE_CAP_CUBE_MAP_ARRAY                   },
       { o(ARB_texture_gather),               PIPE_CAP_MAX_TEXTURE_GATHER_COMPONENTS    },
@@ -636,6 +643,7 @@ void st_init_extensions(struct pipe_screen *screen,
       { o(ATI_separate_stencil),             PIPE_CAP_TWO_SIDED_STENCIL                },
       { o(ATI_texture_mirror_once),          PIPE_CAP_TEXTURE_MIRROR_CLAMP             },
       { o(NV_conditional_render),            PIPE_CAP_CONDITIONAL_RENDER               },
+      { o(NV_fill_rectangle),                PIPE_CAP_POLYGON_MODE_FILL_RECTANGLE      },
       { o(NV_primitive_restart),             PIPE_CAP_PRIMITIVE_RESTART                },
       { o(NV_texture_barrier),               PIPE_CAP_TEXTURE_BARRIER                  },
       { o(NVX_gpu_memory_info),              PIPE_CAP_QUERY_MEMORY_INFO                },
@@ -878,6 +886,12 @@ void st_init_extensions(struct pipe_screen *screen,
       consts->ForceGLSLVersion = options->force_glsl_version;
    }
 
+   consts->AllowHigherCompatVersion = options->allow_higher_compat_version;
+
+   consts->ForceGLSLAbsSqrt = options->force_glsl_abs_sqrt;
+
+   consts->dri_config_options_sha1 = options->config_options_sha1;
+
    if (consts->GLSLVersion >= 400)
       extensions->ARB_gpu_shader5 = GL_TRUE;
    if (consts->GLSLVersion >= 410)
@@ -1115,6 +1129,11 @@ void st_init_extensions(struct pipe_screen *screen,
          extensions->AMD_vertex_shader_viewport_index = GL_TRUE;
    }
 
+   if (extensions->AMD_vertex_shader_layer &&
+       extensions->AMD_vertex_shader_viewport_index &&
+       screen->get_param(screen, PIPE_CAP_TGSI_TES_LAYER_VIEWPORT))
+      extensions->ARB_shader_viewport_layer_array = GL_TRUE;
+
    /* ARB_framebuffer_no_attachments */
    if (screen->get_param(screen, PIPE_CAP_FRAMEBUFFER_NO_ATTACHMENT) &&
        ((consts->MaxSamples >= 4 && consts->MaxFramebufferLayers >= 2048) ||
@@ -1159,10 +1178,7 @@ void st_init_extensions(struct pipe_screen *screen,
    }
 #endif
 
-   if (screen->get_shader_param(screen, PIPE_SHADER_VERTEX,
-                                PIPE_SHADER_CAP_DOUBLES) &&
-       screen->get_shader_param(screen, PIPE_SHADER_FRAGMENT,
-                                PIPE_SHADER_CAP_DOUBLES)) {
+   if (screen->get_param(screen, PIPE_CAP_DOUBLES)) {
       extensions->ARB_gpu_shader_fp64 = GL_TRUE;
       extensions->ARB_vertex_attrib_64bit = GL_TRUE;
    }

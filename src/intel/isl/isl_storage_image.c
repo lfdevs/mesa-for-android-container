@@ -22,7 +22,7 @@
  */
 
 #include "isl_priv.h"
-#include "brw_compiler.h"
+#include "compiler/brw_compiler.h"
 
 bool
 isl_is_storage_image_format(enum isl_format format)

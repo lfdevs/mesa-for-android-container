@@ -34,6 +34,8 @@ AM_CPPFLAGS = \
 	-I$(top_builddir)/src \
 	-I$(top_srcdir)/src \
 	-I$(top_srcdir)/src/vulkan/wsi \
+	-I$(top_builddir)/src/vulkan/util \
+	-I$(top_srcdir)/src/vulkan/util \
 	-I$(top_srcdir)/src/amd \
 	-I$(top_srcdir)/src/amd/common \
 	-I$(top_builddir)/src/compiler \
@@ -75,15 +77,12 @@ endif
 
 if HAVE_PLATFORM_WAYLAND
 AM_CPPFLAGS += \
-	-I$(top_builddir)/src/egl/wayland/wayland-drm \
-	-I$(top_srcdir)/src/egl/wayland/wayland-drm \
 	$(WAYLAND_CFLAGS) \
 	-DVK_USE_PLATFORM_WAYLAND_KHR
 
 VULKAN_SOURCES += $(VULKAN_WSI_WAYLAND_FILES)
 
 VULKAN_LIB_DEPS += \
-	$(top_builddir)/src/egl/wayland/wayland-drm/libwayland-drm.la \
 	$(WAYLAND_LIBS)
 endif
 
@@ -92,7 +91,8 @@ libvulkan_common_la_SOURCES = $(VULKAN_SOURCES)
 
 VULKAN_LIB_DEPS += \
 	libvulkan_common.la \
-	$(top_builddir)/src/vulkan/wsi/libvulkan_wsi.la \
+	$(top_builddir)/src/vulkan/libvulkan_util.la \
+	$(top_builddir)/src/vulkan/libvulkan_wsi.la \
 	$(top_builddir)/src/amd/common/libamd_common.la \
 	$(top_builddir)/src/amd/addrlib/libamdgpu_addrlib.la \
 	$(top_builddir)/src/compiler/nir/libnir.la \

@@ -33,6 +33,9 @@
 
 // Temp storage used by the clipper
 THREAD simdvertex tlsTempVertices[7];
+#if USE_SIMD16_FRONTEND
+THREAD simd16vertex tlsTempVertices_simd16[7];
+#endif
 
 float ComputeInterpFactor(float boundaryCoord0, float boundaryCoord1)
 {
@@ -65,7 +68,7 @@ inline void intersect(
     case FRUSTUM_BOTTOM:    t = ComputeInterpFactor(v1[3] - v1[1], v2[3] - v2[1]); break;
     case FRUSTUM_NEAR:      t = ComputeInterpFactor(v1[2], v2[2]); break;
     case FRUSTUM_FAR:       t = ComputeInterpFactor(v1[3] - v1[2], v2[3] - v2[2]); break;
-    default: SWR_ASSERT(false, "invalid clipping plane: %d", ClippingPlane);
+    default: SWR_INVALID("invalid clipping plane: %d", ClippingPlane);
     };
 
 
@@ -104,7 +107,7 @@ inline int inside(const float v[4])
     case FRUSTUM_NEAR   : return (v[2]>=0.0f);
     case FRUSTUM_FAR    : return (v[2]<= v[3]);
     default:
-        SWR_ASSERT(false, "invalid clipping plane: %d", ClippingPlane);
+        SWR_INVALID("invalid clipping plane: %d", ClippingPlane);
         return 0;
     }
 }
@@ -157,28 +160,6 @@ int ClipTriToPlane( const float *pInPts, int numInPts,
     return i;
 }
 
-
-
-void Clip(const float *pTriangle, const float *pAttribs, int numAttribs, float *pOutTriangles, int *numVerts, float *pOutAttribs)
-{
-    // temp storage to hold at least 6 sets of vertices, the max number that can be created during clipping
-    OSALIGNSIMD(float) tempPts[6 * 4];
-    OSALIGNSIMD(float) tempAttribs[6 * KNOB_NUM_ATTRIBUTES * 4];
-
-    // we opt to clip to viewport frustum to produce smaller triangles for rasterization precision
-    int NumOutPts = ClipTriToPlane<FRUSTUM_NEAR>(pTriangle, 3, pAttribs, numAttribs, tempPts, tempAttribs);
-    NumOutPts = ClipTriToPlane<FRUSTUM_FAR>(tempPts, NumOutPts, tempAttribs, numAttribs, pOutTriangles, pOutAttribs);
-    NumOutPts = ClipTriToPlane<FRUSTUM_LEFT>(pOutTriangles, NumOutPts, pOutAttribs, numAttribs, tempPts, tempAttribs);
-    NumOutPts = ClipTriToPlane<FRUSTUM_RIGHT>(tempPts, NumOutPts, tempAttribs, numAttribs, pOutTriangles, pOutAttribs);
-    NumOutPts = ClipTriToPlane<FRUSTUM_BOTTOM>(pOutTriangles, NumOutPts, pOutAttribs, numAttribs, tempPts, tempAttribs);
-    NumOutPts = ClipTriToPlane<FRUSTUM_TOP>(tempPts, NumOutPts, tempAttribs, numAttribs, pOutTriangles, pOutAttribs);
-
-    SWR_ASSERT(NumOutPts <= 6);
-
-    *numVerts = NumOutPts;
-    return;
-}
-
 void ClipTriangles(DRAW_CONTEXT *pDC, PA_STATE& pa, uint32_t workerId, simdvector prims[], uint32_t primMask, simdscalari primId, simdscalari viewportIdx)
 {
     SWR_CONTEXT *pContext = pDC->pContext;
@@ -196,6 +177,7 @@ void ClipLines(DRAW_CONTEXT *pDC, PA_STATE& pa, uint32_t workerId, simdvector pr
     clipper.ExecuteStage(pa, prims, primMask, primId, viewportIdx);
     AR_END(FEClipLines, 1);
 }
+
 void ClipPoints(DRAW_CONTEXT *pDC, PA_STATE& pa, uint32_t workerId, simdvector prims[], uint32_t primMask, simdscalari primId, simdscalari viewportIdx)
 {
     SWR_CONTEXT *pContext = pDC->pContext;
@@ -204,4 +186,52 @@ void ClipPoints(DRAW_CONTEXT *pDC, PA_STATE& pa, uint32_t workerId, simdvector p
     clipper.ExecuteStage(pa, prims, primMask, primId, viewportIdx);
     AR_END(FEClipPoints, 1);
 }
+
+#if USE_SIMD16_FRONTEND
+void ClipTriangles_simd16(DRAW_CONTEXT *pDC, PA_STATE& pa, uint32_t workerId, simd16vector prims[], uint32_t primMask, simd16scalari primId, simd16scalari viewportIdx)
+{
+    SWR_CONTEXT *pContext = pDC->pContext;
+    AR_BEGIN(FEClipTriangles, pDC->drawId);
+
+    enum { VERTS_PER_PRIM = 3 };
+
+    Clipper<VERTS_PER_PRIM> clipper(workerId, pDC);
+
+    pa.useAlternateOffset = false;
+    clipper.ExecuteStage(pa, prims, primMask, primId, viewportIdx);
+
+    AR_END(FEClipTriangles, 1);
+}
+
+void ClipLines_simd16(DRAW_CONTEXT *pDC, PA_STATE& pa, uint32_t workerId, simd16vector prims[], uint32_t primMask, simd16scalari primId, simd16scalari viewportIdx)
+{
+    SWR_CONTEXT *pContext = pDC->pContext;
+    AR_BEGIN(FEClipLines, pDC->drawId);
+
+    enum { VERTS_PER_PRIM = 2 };
+
+    Clipper<VERTS_PER_PRIM> clipper(workerId, pDC);
+
+    pa.useAlternateOffset = false;
+    clipper.ExecuteStage(pa, prims, primMask, primId, viewportIdx);
+
+    AR_END(FEClipLines, 1);
+}
+
+void ClipPoints_simd16(DRAW_CONTEXT *pDC, PA_STATE& pa, uint32_t workerId, simd16vector prims[], uint32_t primMask, simd16scalari primId, simd16scalari viewportIdx)
+{
+    SWR_CONTEXT *pContext = pDC->pContext;
+    AR_BEGIN(FEClipPoints, pDC->drawId);
+
+    enum { VERTS_PER_PRIM = 1 };
+
+    Clipper<VERTS_PER_PRIM> clipper(workerId, pDC);
+
+    pa.useAlternateOffset = false;
+    clipper.ExecuteStage(pa, prims, primMask, primId, viewportIdx);
+
+    AR_END(FEClipPoints, 1);
+}
+
+#endif
 

@@ -30,8 +30,20 @@
 
 #include "pipe/p_context.h"
 
+void
+etna_create_fence_fd(struct pipe_context *pctx,
+                     struct pipe_fence_handle **pfence, int fd);
+
+void
+etna_fence_server_sync(struct pipe_context *pctx,
+                       struct pipe_fence_handle *fence);
+
+int
+etna_fence_get_fd(struct pipe_screen *pscreen,
+                  struct pipe_fence_handle *pfence);
+
 struct pipe_fence_handle *
-etna_fence_create(struct pipe_context *pctx);
+etna_fence_create(struct pipe_context *pctx, int fence_fd);
 
 void
 etna_fence_screen_init(struct pipe_screen *pscreen);

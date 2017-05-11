@@ -337,7 +337,7 @@ softpipe_delete_gs_state(struct pipe_context *pipe, void *gs)
 
 static void
 softpipe_set_constant_buffer(struct pipe_context *pipe,
-                             uint shader, uint index,
+                             enum pipe_shader_type shader, uint index,
                              const struct pipe_constant_buffer *cb)
 {
    struct softpipe_context *softpipe = softpipe_context(pipe);

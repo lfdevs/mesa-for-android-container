@@ -362,7 +362,7 @@ static void ConvertPixelFromFloat(
             break;
         }
         default:
-            SWR_ASSERT(0);
+            SWR_INVALID("Invalid type: %d", type);
             break;
         }
     }
@@ -381,7 +381,7 @@ static void ConvertPixelFromFloat(
         pPixel->r = outColor[0];
         break;
     default:
-        SWR_ASSERT(0);
+        SWR_INVALID("Invalid # of comps: %d", FormatTraits<DstFormat>::numComps);
     }
 }
 
@@ -419,7 +419,7 @@ INLINE static void ConvertPixelToFloat(
         srcColor[0] = pPixel->r;
         break;
     default:
-        SWR_ASSERT(0);
+        SWR_INVALID("Invalid # of comps: %d", FormatTraits<SrcFormat>::numComps);
     }
 
     // Convert components
@@ -547,7 +547,7 @@ INLINE static void ConvertPixelToFloat(
             break;
         }
         default:
-            SWR_ASSERT(0);
+            SWR_INVALID("Invalid type: %d", type);
             break;
         }
     }
@@ -724,7 +724,7 @@ INLINE static void ConvertPixelFromFloat(
     case R8G8B8_SINT: ConvertPixelFromFloat<R8G8B8_SINT>(pDst, srcPixel); break;
     case RAW: ConvertPixelFromFloat<RAW>(pDst, srcPixel); break;
     default:
-        SWR_ASSERT(0);
+        SWR_INVALID("Invalid format: %d", format);
         break;
     }
 }

@@ -70,7 +70,7 @@ static const char* get_chip_family_name(int chip_family)
 	}
 }
 
-const char const *radeonVendorString = "Mesa Project";
+const char *const radeonVendorString = "Mesa Project";
 
 /* Return complete renderer string.
  */

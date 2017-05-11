@@ -175,7 +175,7 @@ softpipe_launch_grid(struct pipe_context *context,
    int bwidth, bheight, bdepth;
    int w, h, d, i;
    int g_w, g_h, g_d;
-   uint32_t grid_size[3];
+   uint32_t grid_size[3] = {0};
    void *local_mem = NULL;
 
    softpipe_update_compute_samplers(softpipe);

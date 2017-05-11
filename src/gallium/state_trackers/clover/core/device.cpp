@@ -186,8 +186,7 @@ device::image_support() const {
 
 bool
 device::has_doubles() const {
-   return pipe->get_shader_param(pipe, PIPE_SHADER_COMPUTE,
-                                 PIPE_SHADER_CAP_DOUBLES);
+   return pipe->get_param(pipe, PIPE_CAP_DOUBLES);
 }
 
 std::vector<size_t>

@@ -59,10 +59,10 @@
  * [ 0, 0, 0, 1]
  *
  * brightness
- * [ 1, 0, 0, b]
- * [ 0, 1, 0, 0]
- * [ 0, 0, 1, 0]
- * [ 0, 0, 0, 1]
+ * [ 1, 0, 0, b/c]
+ * [ 0, 1, 0,   0]
+ * [ 0, 0, 1,   0]
+ * [ 0, 0, 0,   1]
  *
  * saturation
  * [ 1, 0, 0, 0]
@@ -108,18 +108,6 @@ static const vl_csc_matrix bt_601 =
 };
 
 /*
- * Converts ITU-R BT.601 YCbCr pixels to RGB pixels where:
- * Y is in [16,235], Cb and Cr are in [16,240]
- * R, G, and B are in [0,255]
- */
-static const vl_csc_matrix bt_601_full =
-{
-   { 1.164f,  0.0f,    1.596f, 0.0f, },
-   { 1.164f, -0.391f, -0.813f, 0.0f, },
-   { 1.164f,  2.018f,  0.0f,   0.0f, }
-};
-
-/*
  * Converts ITU-R BT.709 YCbCr pixels to RGB pixels where:
  * Y is in [16,235], Cb and Cr are in [16,240]
  * R, G, and B are in [16,235]
@@ -132,29 +120,15 @@ static const vl_csc_matrix bt_709 =
 };
 
 /*
- * Converts ITU-R BT.709 YCbCr pixels to RGB pixels where:
+ * Converts SMPTE 240M YCbCr pixels to RGB pixels where:
  * Y is in [16,235], Cb and Cr are in [16,240]
- * R, G, and B are in [0,255]
+ * R, G, and B are in [16,235]
  */
-static const vl_csc_matrix bt_709_full =
-{
-   { 1.164f,  0.0f,    1.793f, 0.0f, },
-   { 1.164f, -0.213f, -0.534f, 0.0f, },
-   { 1.164f,  2.115f,  0.0f,   0.0f, }
-};
-
 static const vl_csc_matrix smpte240m =
 {
-   { 1.0f,  0.0f,    1.582f, 0.0f, },
-   { 1.0f, -0.228f, -0.478f, 0.0f, },
-   { 1.0f,  1.833f,  0.0f,   0.0f, }
-};
-
-static const vl_csc_matrix smpte240m_full =
-{
-   { 1.164f,  0.0f,    1.794f, 0.0f, },
-   { 1.164f, -0.258f, -0.543f, 0.0f, },
-   { 1.164f,  2.079f,  0.0f,   0.0f, }
+   { 1.0f,  0.0f,    1.541f, 0.0f, },
+   { 1.0f, -0.221f, -0.466f, 0.0f, },
+   { 1.0f,  1.785f,  0.0f,   0.0f, }
 };
 
 static const vl_csc_matrix identity =
@@ -176,7 +150,6 @@ void vl_csc_get_matrix(enum VL_CSC_COLOR_STANDARD cs,
                        bool full_range,
                        vl_csc_matrix *matrix)
 {
-   float ybias = full_range ? -16.0f/255.0f : 0.0f;
    float cbbias = -128.0f/255.0f;
    float crbias = -128.0f/255.0f;
 
@@ -185,20 +158,31 @@ void vl_csc_get_matrix(enum VL_CSC_COLOR_STANDARD cs,
    float s = p->saturation;
    float b = p->brightness;
    float h = p->hue;
+   float x, y;
 
    const vl_csc_matrix *cstd;
+
+   if (full_range) {
+      c *= 1.164f;              /* Adjust for the y range */
+      b *= 1.164f;              /* Adjust for the y range */
+      b -= c * 16.0f  / 255.0f; /* Adjust for the y bias */
+   }
+
+   /* Parameter substitutions */
+   x = c * s * cosf(h);
+   y = c * s * sinf(h);
 
    assert(matrix);
 
    switch (cs) {
       case VL_CSC_COLOR_STANDARD_BT_601:
-         cstd = full_range ? &bt_601_full : &bt_601;
+         cstd = &bt_601;
          break;
       case VL_CSC_COLOR_STANDARD_BT_709:
-         cstd = full_range ? &bt_709_full : &bt_709;
+         cstd = &bt_709;
          break;
       case VL_CSC_COLOR_STANDARD_SMPTE_240M:
-         cstd = full_range ? &smpte240m_full : &smpte240m;
+         cstd = &smpte240m;
          break;
       case VL_CSC_COLOR_STANDARD_IDENTITY:
       default:
@@ -208,23 +192,23 @@ void vl_csc_get_matrix(enum VL_CSC_COLOR_STANDARD cs,
    }
 
    (*matrix)[0][0] = c * (*cstd)[0][0];
-   (*matrix)[0][1] = c * (*cstd)[0][1] * s * cosf(h) - c * (*cstd)[0][2] * s * sinf(h);
-   (*matrix)[0][2] = c * (*cstd)[0][2] * s * cosf(h) + c * (*cstd)[0][1] * s * sinf(h);
-   (*matrix)[0][3] = (*cstd)[0][3] + (*cstd)[0][0] * (b + c * ybias) +
-                     (*cstd)[0][1] * (c * cbbias * s * cosf(h) + c * crbias * s * sinf(h)) +
-                     (*cstd)[0][2] * (c * crbias * s * cosf(h) - c * cbbias * s * sinf(h));
+   (*matrix)[0][1] = (*cstd)[0][1] * x - (*cstd)[0][2] * y;
+   (*matrix)[0][2] = (*cstd)[0][2] * x + (*cstd)[0][1] * y;
+   (*matrix)[0][3] = (*cstd)[0][3] + (*cstd)[0][0] * b +
+                     (*cstd)[0][1] * (x * cbbias + y * crbias) +
+                     (*cstd)[0][2] * (x * crbias - y * cbbias);
 
    (*matrix)[1][0] = c * (*cstd)[1][0];
-   (*matrix)[1][1] = c * (*cstd)[1][1] * s * cosf(h) - c * (*cstd)[1][2] * s * sinf(h);
-   (*matrix)[1][2] = c * (*cstd)[1][2] * s * cosf(h) + c * (*cstd)[1][1] * s * sinf(h);
-   (*matrix)[1][3] = (*cstd)[1][3] + (*cstd)[1][0] * (b + c * ybias) +
-                     (*cstd)[1][1] * (c * cbbias * s * cosf(h) + c * crbias * s * sinf(h)) +
-                     (*cstd)[1][2] * (c * crbias * s * cosf(h) - c * cbbias * s * sinf(h));
+   (*matrix)[1][1] = (*cstd)[1][1] * x - (*cstd)[1][2] * y;
+   (*matrix)[1][2] = (*cstd)[1][2] * x + (*cstd)[1][1] * y;
+   (*matrix)[1][3] = (*cstd)[1][3] + (*cstd)[1][0] * b +
+                     (*cstd)[1][1] * (x * cbbias + y * crbias) +
+                     (*cstd)[1][2] * (x * crbias - y * cbbias);
 
    (*matrix)[2][0] = c * (*cstd)[2][0];
-   (*matrix)[2][1] = c * (*cstd)[2][1] * s * cosf(h) - c * (*cstd)[2][2] * s * sinf(h);
-   (*matrix)[2][2] = c * (*cstd)[2][2] * s * cosf(h) + c * (*cstd)[2][1] * s * sinf(h);
-   (*matrix)[2][3] = (*cstd)[2][3] + (*cstd)[2][0] * (b + c * ybias) +
-                     (*cstd)[2][1] * (c * cbbias * s * cosf(h) + c * crbias * s * sinf(h)) +
-                     (*cstd)[2][2] * (c * crbias * s * cosf(h) - c * cbbias * s * sinf(h));
+   (*matrix)[2][1] = (*cstd)[2][1] * x - (*cstd)[2][2] * y;
+   (*matrix)[2][2] = (*cstd)[2][2] * x + (*cstd)[2][1] * y;
+   (*matrix)[2][3] = (*cstd)[2][3] + (*cstd)[2][0] * b +
+                     (*cstd)[2][1] * (x * cbbias + y * crbias) +
+                     (*cstd)[2][2] * (x * crbias - y * cbbias);
 }

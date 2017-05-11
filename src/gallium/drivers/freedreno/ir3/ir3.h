@@ -369,12 +369,6 @@ struct ir3 {
 	unsigned predicates_count, predicates_sz;
 	struct ir3_instruction **predicates;
 
-	/* Track instructions which do not write a register but other-
-	 * wise must not be discarded (such as kill, stg, etc)
-	 */
-	unsigned keeps_count, keeps_sz;
-	struct ir3_instruction **keeps;
-
 	/* Track texture sample instructions which need texture state
 	 * patched in (for astc-srgb workaround):
 	 */
@@ -434,6 +428,12 @@ struct ir3_block {
 	struct ir3_block *successors[2];
 
 	uint16_t start_ip, end_ip;
+
+	/* Track instructions which do not write a register but other-
+	 * wise must not be discarded (such as kill, stg, etc)
+	 */
+	unsigned keeps_count, keeps_sz;
+	struct ir3_instruction **keeps;
 
 	/* used for per-pass extra block data.  Mainly used right
 	 * now in RA step to track livein/liveout.
@@ -854,10 +854,10 @@ static inline unsigned ir3_cat3_absneg(opc_t opc)
 	}
 }
 
-#define array_insert(arr, val) do { \
+#define array_insert(ctx, arr, val) do { \
 		if (arr ## _count == arr ## _sz) { \
 			arr ## _sz = MAX2(2 * arr ## _sz, 16); \
-			arr = realloc(arr, arr ## _sz * sizeof(arr[0])); \
+			arr = reralloc_size(ctx, arr, arr ## _sz * sizeof(arr[0])); \
 		} \
 		arr[arr ##_count++] = val; \
 	} while (0)

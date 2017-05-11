@@ -33,6 +33,7 @@
 #include "xmlpool.h"
 
 #include "dri_screen.h"
+#include "dri_context.h"
 
 #include "util/u_inlines.h"
 #include "pipe/p_screen.h"
@@ -53,6 +54,10 @@ const __DRIconfigOptionsExtension gallium_config_options = {
    .xml =
 
    DRI_CONF_BEGIN
+      DRI_CONF_SECTION_PERFORMANCE
+         DRI_CONF_MESA_GLTHREAD("false")
+      DRI_CONF_SECTION_END
+
       DRI_CONF_SECTION_QUALITY
          DRI_CONF_FORCE_S3TC_ENABLE("false")
          DRI_CONF_PP_CELSHADE(0)
@@ -70,6 +75,8 @@ const __DRIconfigOptionsExtension gallium_config_options = {
          DRI_CONF_DISABLE_SHADER_BIT_ENCODING("false")
          DRI_CONF_FORCE_GLSL_VERSION(0)
          DRI_CONF_ALLOW_GLSL_EXTENSION_DIRECTIVE_MIDSHADER("false")
+         DRI_CONF_ALLOW_HIGHER_COMPAT_VERSION("false")
+         DRI_CONF_FORCE_GLSL_ABS_SQRT("false")
       DRI_CONF_SECTION_END
 
       DRI_CONF_SECTION_MISCELLANEOUS
@@ -82,9 +89,11 @@ const __DRIconfigOptionsExtension gallium_config_options = {
 #define false 0
 
 static void
-dri_fill_st_options(struct st_config_options *options,
-                    const struct driOptionCache * optionCache)
+dri_fill_st_options(struct dri_screen *screen)
 {
+   struct st_config_options *options = &screen->options;
+   const struct driOptionCache *optionCache = &screen->optionCache;
+
    options->disable_blend_func_extended =
       driQueryOptionb(optionCache, "disable_blend_func_extended");
    options->disable_glsl_line_continuations =
@@ -99,7 +108,13 @@ dri_fill_st_options(struct st_config_options *options,
       driQueryOptionb(optionCache, "force_s3tc_enable");
    options->allow_glsl_extension_directive_midshader =
       driQueryOptionb(optionCache, "allow_glsl_extension_directive_midshader");
+   options->allow_higher_compat_version =
+      driQueryOptionb(optionCache, "allow_higher_compat_version");
    options->glsl_zero_init = driQueryOptionb(optionCache, "glsl_zero_init");
+   options->force_glsl_abs_sqrt =
+      driQueryOptionb(optionCache, "force_glsl_abs_sqrt");
+
+   driComputeOptionsSha1(optionCache, options->config_options_sha1);
 }
 
 static const __DRIconfig **
@@ -397,7 +412,7 @@ dri_destroy_screen_helper(struct dri_screen * screen)
       screen->base.screen->destroy(screen->base.screen);
 
    dri_destroy_option_cache(screen);
-   pipe_mutex_destroy(screen->opencl_func_mutex);
+   mtx_destroy(&screen->opencl_func_mutex);
 }
 
 void
@@ -425,6 +440,21 @@ dri_postprocessing_init(struct dri_screen *screen)
    }
 }
 
+static void
+dri_set_background_context(struct st_context_iface *st)
+{
+   struct dri_context *ctx = (struct dri_context *)st->st_manager_private;
+   const __DRIbackgroundCallableExtension *backgroundCallable =
+      ctx->sPriv->dri2.backgroundCallable;
+
+   /* Note: Mesa will only call this function if GL multithreading is enabled
+    * We only do that if the loader exposed the __DRI_BACKGROUND_CALLABLE
+    * extension. So we know that backgroundCallable is not NULL.
+    */
+   assert(backgroundCallable);
+   backgroundCallable->setBackgroundContext(ctx->cPriv->loaderPrivate);
+}
+
 const __DRIconfig **
 dri_init_screen_helper(struct dri_screen *screen,
                        struct pipe_screen *pscreen,
@@ -433,6 +463,7 @@ dri_init_screen_helper(struct dri_screen *screen,
    screen->base.screen = pscreen;
    screen->base.get_egl_image = dri_get_egl_image;
    screen->base.get_param = dri_get_param;
+   screen->base.set_background_context = dri_set_background_context;
 
    screen->st_api = st_gl_api_create();
    if (!screen->st_api)
@@ -450,7 +481,7 @@ dri_init_screen_helper(struct dri_screen *screen,
                        screen->sPriv->myNum,
                        driver_name);
 
-   dri_fill_st_options(&screen->options, &screen->optionCache);
+   dri_fill_st_options(screen);
 
    /* Handle force_s3tc_enable. */
    if (!util_format_s3tc_enabled && screen->options.force_s3tc_enable) {

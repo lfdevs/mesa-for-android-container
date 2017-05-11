@@ -34,7 +34,7 @@
 #include "brw_meta_util.h"
 #include "brw_state.h"
 #include "intel_fbo.h"
-#include "intel_debug.h"
+#include "common/gen_debug.h"
 
 #define FILE_DEBUG_FLAG DEBUG_BLORP
 
@@ -48,7 +48,7 @@ brw_blorp_lookup_shader(struct blorp_context *blorp,
                            key, key_size, kernel_out, prog_data_out);
 }
 
-static void
+static bool
 brw_blorp_upload_shader(struct blorp_context *blorp,
                         const void *key, uint32_t key_size,
                         const void *kernel, uint32_t kernel_size,
@@ -60,6 +60,7 @@ brw_blorp_upload_shader(struct blorp_context *blorp,
    brw_upload_cache(&brw->cache, BRW_CACHE_BLORP_PROG, key, key_size,
                     kernel, kernel_size, prog_data, prog_data_size,
                     kernel_out, prog_data_out);
+   return true;
 }
 
 void
@@ -244,24 +245,22 @@ blorp_surf_for_miptree(struct brw_context *brw,
          surf->aux_addr.offset = mt->mcs_buf->offset;
       } else {
          assert(surf->aux_usage == ISL_AUX_USAGE_HIZ);
+
+         surf->aux_addr.buffer = mt->hiz_buf->aux_base.bo;
+         surf->aux_addr.offset = mt->hiz_buf->aux_base.offset;
+
          struct intel_mipmap_tree *hiz_mt = mt->hiz_buf->mt;
          if (hiz_mt) {
-            surf->aux_addr.buffer = hiz_mt->bo;
-            if (brw->gen == 6 &&
-                hiz_mt->array_layout == ALL_SLICES_AT_EACH_LOD) {
-               /* gen6 requires the HiZ buffer to be manually offset to the
-                * right location.  We could fixup the surf but it doesn't
-                * matter since most of those fields don't matter.
-                */
-               apply_gen6_stencil_hiz_offset(aux_surf, hiz_mt, *level,
-                                             &surf->aux_addr.offset);
-            } else {
-               surf->aux_addr.offset = 0;
-            }
+            assert(brw->gen == 6 &&
+                   hiz_mt->array_layout == ALL_SLICES_AT_EACH_LOD);
+
+            /* gen6 requires the HiZ buffer to be manually offset to the
+             * right location.  We could fixup the surf but it doesn't
+             * matter since most of those fields don't matter.
+             */
+            apply_gen6_stencil_hiz_offset(aux_surf, hiz_mt, *level,
+                                          &surf->aux_addr.offset);
             assert(hiz_mt->pitch == aux_surf->row_pitch);
-         } else {
-            surf->aux_addr.buffer = mt->hiz_buf->aux_base.bo;
-            surf->aux_addr.offset = mt->hiz_buf->aux_base.offset;
          }
       }
    } else {
@@ -296,7 +295,7 @@ brw_blorp_to_isl_format(struct brw_context *brw, mesa_format format,
          assert(brw->format_supported_as_render_target[format]);
          return brw->render_target_format[format];
       } else {
-         return brw_format_for_mesa_format(format);
+         return brw_isl_format_for_mesa_format(format);
       }
       break;
    }

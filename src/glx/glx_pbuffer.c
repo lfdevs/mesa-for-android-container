@@ -901,7 +901,7 @@ glXGetSelectedEvent(Display * dpy, GLXDrawable drawable, unsigned long *mask)
    __glXSendError(dpy, GLXBadDrawable, drawable, X_GLXGetDrawableAttributes,
                   true);
 #else
-   unsigned int value;
+   unsigned int value = 0;
 
 
    /* The non-sense with value is required because on LP64 platforms

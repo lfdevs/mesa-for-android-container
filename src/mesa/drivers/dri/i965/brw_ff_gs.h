@@ -35,7 +35,7 @@
 
 
 #include "brw_context.h"
-#include "brw_eu.h"
+#include "compiler/brw_eu.h"
 
 #define MAX_GS_VERTS (4)
 

@@ -39,186 +39,186 @@
 
 static const GLuint double_types_float[5] = {
    0,
-   BRW_SURFACEFORMAT_R64_FLOAT,
-   BRW_SURFACEFORMAT_R64G64_FLOAT,
-   BRW_SURFACEFORMAT_R64G64B64_FLOAT,
-   BRW_SURFACEFORMAT_R64G64B64A64_FLOAT
+   ISL_FORMAT_R64_FLOAT,
+   ISL_FORMAT_R64G64_FLOAT,
+   ISL_FORMAT_R64G64B64_FLOAT,
+   ISL_FORMAT_R64G64B64A64_FLOAT
 };
 
 static const GLuint double_types_passthru[5] = {
    0,
-   BRW_SURFACEFORMAT_R64_PASSTHRU,
-   BRW_SURFACEFORMAT_R64G64_PASSTHRU,
-   BRW_SURFACEFORMAT_R64G64B64_PASSTHRU,
-   BRW_SURFACEFORMAT_R64G64B64A64_PASSTHRU
+   ISL_FORMAT_R64_PASSTHRU,
+   ISL_FORMAT_R64G64_PASSTHRU,
+   ISL_FORMAT_R64G64B64_PASSTHRU,
+   ISL_FORMAT_R64G64B64A64_PASSTHRU
 };
 
 static const GLuint float_types[5] = {
    0,
-   BRW_SURFACEFORMAT_R32_FLOAT,
-   BRW_SURFACEFORMAT_R32G32_FLOAT,
-   BRW_SURFACEFORMAT_R32G32B32_FLOAT,
-   BRW_SURFACEFORMAT_R32G32B32A32_FLOAT
+   ISL_FORMAT_R32_FLOAT,
+   ISL_FORMAT_R32G32_FLOAT,
+   ISL_FORMAT_R32G32B32_FLOAT,
+   ISL_FORMAT_R32G32B32A32_FLOAT
 };
 
 static const GLuint half_float_types[5] = {
    0,
-   BRW_SURFACEFORMAT_R16_FLOAT,
-   BRW_SURFACEFORMAT_R16G16_FLOAT,
-   BRW_SURFACEFORMAT_R16G16B16_FLOAT,
-   BRW_SURFACEFORMAT_R16G16B16A16_FLOAT
+   ISL_FORMAT_R16_FLOAT,
+   ISL_FORMAT_R16G16_FLOAT,
+   ISL_FORMAT_R16G16B16_FLOAT,
+   ISL_FORMAT_R16G16B16A16_FLOAT
 };
 
 static const GLuint fixed_point_types[5] = {
    0,
-   BRW_SURFACEFORMAT_R32_SFIXED,
-   BRW_SURFACEFORMAT_R32G32_SFIXED,
-   BRW_SURFACEFORMAT_R32G32B32_SFIXED,
-   BRW_SURFACEFORMAT_R32G32B32A32_SFIXED,
+   ISL_FORMAT_R32_SFIXED,
+   ISL_FORMAT_R32G32_SFIXED,
+   ISL_FORMAT_R32G32B32_SFIXED,
+   ISL_FORMAT_R32G32B32A32_SFIXED,
 };
 
 static const GLuint uint_types_direct[5] = {
    0,
-   BRW_SURFACEFORMAT_R32_UINT,
-   BRW_SURFACEFORMAT_R32G32_UINT,
-   BRW_SURFACEFORMAT_R32G32B32_UINT,
-   BRW_SURFACEFORMAT_R32G32B32A32_UINT
+   ISL_FORMAT_R32_UINT,
+   ISL_FORMAT_R32G32_UINT,
+   ISL_FORMAT_R32G32B32_UINT,
+   ISL_FORMAT_R32G32B32A32_UINT
 };
 
 static const GLuint uint_types_norm[5] = {
    0,
-   BRW_SURFACEFORMAT_R32_UNORM,
-   BRW_SURFACEFORMAT_R32G32_UNORM,
-   BRW_SURFACEFORMAT_R32G32B32_UNORM,
-   BRW_SURFACEFORMAT_R32G32B32A32_UNORM
+   ISL_FORMAT_R32_UNORM,
+   ISL_FORMAT_R32G32_UNORM,
+   ISL_FORMAT_R32G32B32_UNORM,
+   ISL_FORMAT_R32G32B32A32_UNORM
 };
 
 static const GLuint uint_types_scale[5] = {
    0,
-   BRW_SURFACEFORMAT_R32_USCALED,
-   BRW_SURFACEFORMAT_R32G32_USCALED,
-   BRW_SURFACEFORMAT_R32G32B32_USCALED,
-   BRW_SURFACEFORMAT_R32G32B32A32_USCALED
+   ISL_FORMAT_R32_USCALED,
+   ISL_FORMAT_R32G32_USCALED,
+   ISL_FORMAT_R32G32B32_USCALED,
+   ISL_FORMAT_R32G32B32A32_USCALED
 };
 
 static const GLuint int_types_direct[5] = {
    0,
-   BRW_SURFACEFORMAT_R32_SINT,
-   BRW_SURFACEFORMAT_R32G32_SINT,
-   BRW_SURFACEFORMAT_R32G32B32_SINT,
-   BRW_SURFACEFORMAT_R32G32B32A32_SINT
+   ISL_FORMAT_R32_SINT,
+   ISL_FORMAT_R32G32_SINT,
+   ISL_FORMAT_R32G32B32_SINT,
+   ISL_FORMAT_R32G32B32A32_SINT
 };
 
 static const GLuint int_types_norm[5] = {
    0,
-   BRW_SURFACEFORMAT_R32_SNORM,
-   BRW_SURFACEFORMAT_R32G32_SNORM,
-   BRW_SURFACEFORMAT_R32G32B32_SNORM,
-   BRW_SURFACEFORMAT_R32G32B32A32_SNORM
+   ISL_FORMAT_R32_SNORM,
+   ISL_FORMAT_R32G32_SNORM,
+   ISL_FORMAT_R32G32B32_SNORM,
+   ISL_FORMAT_R32G32B32A32_SNORM
 };
 
 static const GLuint int_types_scale[5] = {
    0,
-   BRW_SURFACEFORMAT_R32_SSCALED,
-   BRW_SURFACEFORMAT_R32G32_SSCALED,
-   BRW_SURFACEFORMAT_R32G32B32_SSCALED,
-   BRW_SURFACEFORMAT_R32G32B32A32_SSCALED
+   ISL_FORMAT_R32_SSCALED,
+   ISL_FORMAT_R32G32_SSCALED,
+   ISL_FORMAT_R32G32B32_SSCALED,
+   ISL_FORMAT_R32G32B32A32_SSCALED
 };
 
 static const GLuint ushort_types_direct[5] = {
    0,
-   BRW_SURFACEFORMAT_R16_UINT,
-   BRW_SURFACEFORMAT_R16G16_UINT,
-   BRW_SURFACEFORMAT_R16G16B16_UINT,
-   BRW_SURFACEFORMAT_R16G16B16A16_UINT
+   ISL_FORMAT_R16_UINT,
+   ISL_FORMAT_R16G16_UINT,
+   ISL_FORMAT_R16G16B16_UINT,
+   ISL_FORMAT_R16G16B16A16_UINT
 };
 
 static const GLuint ushort_types_norm[5] = {
    0,
-   BRW_SURFACEFORMAT_R16_UNORM,
-   BRW_SURFACEFORMAT_R16G16_UNORM,
-   BRW_SURFACEFORMAT_R16G16B16_UNORM,
-   BRW_SURFACEFORMAT_R16G16B16A16_UNORM
+   ISL_FORMAT_R16_UNORM,
+   ISL_FORMAT_R16G16_UNORM,
+   ISL_FORMAT_R16G16B16_UNORM,
+   ISL_FORMAT_R16G16B16A16_UNORM
 };
 
 static const GLuint ushort_types_scale[5] = {
    0,
-   BRW_SURFACEFORMAT_R16_USCALED,
-   BRW_SURFACEFORMAT_R16G16_USCALED,
-   BRW_SURFACEFORMAT_R16G16B16_USCALED,
-   BRW_SURFACEFORMAT_R16G16B16A16_USCALED
+   ISL_FORMAT_R16_USCALED,
+   ISL_FORMAT_R16G16_USCALED,
+   ISL_FORMAT_R16G16B16_USCALED,
+   ISL_FORMAT_R16G16B16A16_USCALED
 };
 
 static const GLuint short_types_direct[5] = {
    0,
-   BRW_SURFACEFORMAT_R16_SINT,
-   BRW_SURFACEFORMAT_R16G16_SINT,
-   BRW_SURFACEFORMAT_R16G16B16_SINT,
-   BRW_SURFACEFORMAT_R16G16B16A16_SINT
+   ISL_FORMAT_R16_SINT,
+   ISL_FORMAT_R16G16_SINT,
+   ISL_FORMAT_R16G16B16_SINT,
+   ISL_FORMAT_R16G16B16A16_SINT
 };
 
 static const GLuint short_types_norm[5] = {
    0,
-   BRW_SURFACEFORMAT_R16_SNORM,
-   BRW_SURFACEFORMAT_R16G16_SNORM,
-   BRW_SURFACEFORMAT_R16G16B16_SNORM,
-   BRW_SURFACEFORMAT_R16G16B16A16_SNORM
+   ISL_FORMAT_R16_SNORM,
+   ISL_FORMAT_R16G16_SNORM,
+   ISL_FORMAT_R16G16B16_SNORM,
+   ISL_FORMAT_R16G16B16A16_SNORM
 };
 
 static const GLuint short_types_scale[5] = {
    0,
-   BRW_SURFACEFORMAT_R16_SSCALED,
-   BRW_SURFACEFORMAT_R16G16_SSCALED,
-   BRW_SURFACEFORMAT_R16G16B16_SSCALED,
-   BRW_SURFACEFORMAT_R16G16B16A16_SSCALED
+   ISL_FORMAT_R16_SSCALED,
+   ISL_FORMAT_R16G16_SSCALED,
+   ISL_FORMAT_R16G16B16_SSCALED,
+   ISL_FORMAT_R16G16B16A16_SSCALED
 };
 
 static const GLuint ubyte_types_direct[5] = {
    0,
-   BRW_SURFACEFORMAT_R8_UINT,
-   BRW_SURFACEFORMAT_R8G8_UINT,
-   BRW_SURFACEFORMAT_R8G8B8_UINT,
-   BRW_SURFACEFORMAT_R8G8B8A8_UINT
+   ISL_FORMAT_R8_UINT,
+   ISL_FORMAT_R8G8_UINT,
+   ISL_FORMAT_R8G8B8_UINT,
+   ISL_FORMAT_R8G8B8A8_UINT
 };
 
 static const GLuint ubyte_types_norm[5] = {
    0,
-   BRW_SURFACEFORMAT_R8_UNORM,
-   BRW_SURFACEFORMAT_R8G8_UNORM,
-   BRW_SURFACEFORMAT_R8G8B8_UNORM,
-   BRW_SURFACEFORMAT_R8G8B8A8_UNORM
+   ISL_FORMAT_R8_UNORM,
+   ISL_FORMAT_R8G8_UNORM,
+   ISL_FORMAT_R8G8B8_UNORM,
+   ISL_FORMAT_R8G8B8A8_UNORM
 };
 
 static const GLuint ubyte_types_scale[5] = {
    0,
-   BRW_SURFACEFORMAT_R8_USCALED,
-   BRW_SURFACEFORMAT_R8G8_USCALED,
-   BRW_SURFACEFORMAT_R8G8B8_USCALED,
-   BRW_SURFACEFORMAT_R8G8B8A8_USCALED
+   ISL_FORMAT_R8_USCALED,
+   ISL_FORMAT_R8G8_USCALED,
+   ISL_FORMAT_R8G8B8_USCALED,
+   ISL_FORMAT_R8G8B8A8_USCALED
 };
 
 static const GLuint byte_types_direct[5] = {
    0,
-   BRW_SURFACEFORMAT_R8_SINT,
-   BRW_SURFACEFORMAT_R8G8_SINT,
-   BRW_SURFACEFORMAT_R8G8B8_SINT,
-   BRW_SURFACEFORMAT_R8G8B8A8_SINT
+   ISL_FORMAT_R8_SINT,
+   ISL_FORMAT_R8G8_SINT,
+   ISL_FORMAT_R8G8B8_SINT,
+   ISL_FORMAT_R8G8B8A8_SINT
 };
 
 static const GLuint byte_types_norm[5] = {
    0,
-   BRW_SURFACEFORMAT_R8_SNORM,
-   BRW_SURFACEFORMAT_R8G8_SNORM,
-   BRW_SURFACEFORMAT_R8G8B8_SNORM,
-   BRW_SURFACEFORMAT_R8G8B8A8_SNORM
+   ISL_FORMAT_R8_SNORM,
+   ISL_FORMAT_R8G8_SNORM,
+   ISL_FORMAT_R8G8B8_SNORM,
+   ISL_FORMAT_R8G8B8A8_SNORM
 };
 
 static const GLuint byte_types_scale[5] = {
    0,
-   BRW_SURFACEFORMAT_R8_SSCALED,
-   BRW_SURFACEFORMAT_R8G8_SSCALED,
-   BRW_SURFACEFORMAT_R8G8B8_SSCALED,
-   BRW_SURFACEFORMAT_R8G8B8A8_SSCALED
+   ISL_FORMAT_R8_SSCALED,
+   ISL_FORMAT_R8G8_SSCALED,
+   ISL_FORMAT_R8G8B8_SSCALED,
+   ISL_FORMAT_R8G8B8A8_SSCALED
 };
 
 static GLuint
@@ -246,10 +246,10 @@ static bool
 is_passthru_format(uint32_t format)
 {
    switch (format) {
-   case BRW_SURFACEFORMAT_R64_PASSTHRU:
-   case BRW_SURFACEFORMAT_R64G64_PASSTHRU:
-   case BRW_SURFACEFORMAT_R64G64B64_PASSTHRU:
-   case BRW_SURFACEFORMAT_R64G64B64A64_PASSTHRU:
+   case ISL_FORMAT_R64_PASSTHRU:
+   case ISL_FORMAT_R64G64_PASSTHRU:
+   case ISL_FORMAT_R64G64B64_PASSTHRU:
+   case ISL_FORMAT_R64G64B64A64_PASSTHRU:
       return true;
    default:
       return false;
@@ -263,11 +263,11 @@ uploads_needed(uint32_t format)
       return 1;
 
    switch (format) {
-   case BRW_SURFACEFORMAT_R64_PASSTHRU:
-   case BRW_SURFACEFORMAT_R64G64_PASSTHRU:
+   case ISL_FORMAT_R64_PASSTHRU:
+   case ISL_FORMAT_R64G64_PASSTHRU:
       return 1;
-   case BRW_SURFACEFORMAT_R64G64B64_PASSTHRU:
-   case BRW_SURFACEFORMAT_R64G64B64A64_PASSTHRU:
+   case ISL_FORMAT_R64G64B64_PASSTHRU:
+   case ISL_FORMAT_R64G64B64A64_PASSTHRU:
       return 2;
    default:
       unreachable("not reached");
@@ -282,9 +282,9 @@ static int
 upload_format_size(uint32_t upload_format)
 {
    switch (upload_format) {
-   case BRW_SURFACEFORMAT_R32G32_FLOAT:
+   case ISL_FORMAT_R32G32_FLOAT:
       return 2;
-   case BRW_SURFACEFORMAT_R32G32B32A32_FLOAT:
+   case ISL_FORMAT_R32G32B32A32_FLOAT:
       return 4;
    default:
       unreachable("not reached");
@@ -308,15 +308,15 @@ downsize_format_if_needed(uint32_t format,
       return format;
 
    switch (format) {
-   case BRW_SURFACEFORMAT_R64_PASSTHRU:
-      return BRW_SURFACEFORMAT_R32G32_FLOAT;
-   case BRW_SURFACEFORMAT_R64G64_PASSTHRU:
-      return BRW_SURFACEFORMAT_R32G32B32A32_FLOAT;
-   case BRW_SURFACEFORMAT_R64G64B64_PASSTHRU:
-      return !upload ? BRW_SURFACEFORMAT_R32G32B32A32_FLOAT
-                     : BRW_SURFACEFORMAT_R32G32_FLOAT;
-   case BRW_SURFACEFORMAT_R64G64B64A64_PASSTHRU:
-      return BRW_SURFACEFORMAT_R32G32B32A32_FLOAT;
+   case ISL_FORMAT_R64_PASSTHRU:
+      return ISL_FORMAT_R32G32_FLOAT;
+   case ISL_FORMAT_R64G64_PASSTHRU:
+      return ISL_FORMAT_R32G32B32A32_FLOAT;
+   case ISL_FORMAT_R64G64B64_PASSTHRU:
+      return !upload ? ISL_FORMAT_R32G32B32A32_FLOAT
+                     : ISL_FORMAT_R32G32_FLOAT;
+   case ISL_FORMAT_R64G64B64A64_PASSTHRU:
+      return ISL_FORMAT_R32G32B32A32_FLOAT;
    default:
       unreachable("not reached");
    }
@@ -368,7 +368,7 @@ brw_get_vertex_surface_type(struct brw_context *brw,
       default: unreachable("not reached");
       }
    } else if (glarray->Type == GL_UNSIGNED_INT_10F_11F_11F_REV) {
-      return BRW_SURFACEFORMAT_R11G11B10_FLOAT;
+      return ISL_FORMAT_R11G11B10_FLOAT;
    } else if (glarray->Normalized) {
       switch (glarray->Type) {
       case GL_DOUBLE: return double_types(brw, size, glarray->Doubles);
@@ -388,7 +388,7 @@ brw_get_vertex_surface_type(struct brw_context *brw,
          if (glarray->Format == GL_BGRA) {
             /* See GL_EXT_vertex_array_bgra */
             assert(size == 4);
-            return BRW_SURFACEFORMAT_B8G8R8A8_UNORM;
+            return ISL_FORMAT_B8G8R8A8_UNORM;
          }
          else {
             return ubyte_types_norm[size];
@@ -410,18 +410,18 @@ brw_get_vertex_surface_type(struct brw_context *brw,
          assert(size == 4);
          if (brw->gen >= 8 || brw->is_haswell) {
             return glarray->Format == GL_BGRA
-               ? BRW_SURFACEFORMAT_B10G10R10A2_SNORM
-               : BRW_SURFACEFORMAT_R10G10B10A2_SNORM;
+               ? ISL_FORMAT_B10G10R10A2_SNORM
+               : ISL_FORMAT_R10G10B10A2_SNORM;
          }
-         return BRW_SURFACEFORMAT_R10G10B10A2_UINT;
+         return ISL_FORMAT_R10G10B10A2_UINT;
       case GL_UNSIGNED_INT_2_10_10_10_REV:
          assert(size == 4);
          if (brw->gen >= 8 || brw->is_haswell) {
             return glarray->Format == GL_BGRA
-               ? BRW_SURFACEFORMAT_B10G10R10A2_UNORM
-               : BRW_SURFACEFORMAT_R10G10B10A2_UNORM;
+               ? ISL_FORMAT_B10G10R10A2_UNORM
+               : ISL_FORMAT_R10G10B10A2_UNORM;
          }
-         return BRW_SURFACEFORMAT_R10G10B10A2_UINT;
+         return ISL_FORMAT_R10G10B10A2_UINT;
       default: unreachable("not reached");
       }
    }
@@ -435,18 +435,18 @@ brw_get_vertex_surface_type(struct brw_context *brw,
          assert(size == 4);
          if (brw->gen >= 8 || brw->is_haswell) {
             return glarray->Format == GL_BGRA
-               ? BRW_SURFACEFORMAT_B10G10R10A2_SSCALED
-               : BRW_SURFACEFORMAT_R10G10B10A2_SSCALED;
+               ? ISL_FORMAT_B10G10R10A2_SSCALED
+               : ISL_FORMAT_R10G10B10A2_SSCALED;
          }
-         return BRW_SURFACEFORMAT_R10G10B10A2_UINT;
+         return ISL_FORMAT_R10G10B10A2_UINT;
       } else if (glarray->Type == GL_UNSIGNED_INT_2_10_10_10_REV) {
          assert(size == 4);
          if (brw->gen >= 8 || brw->is_haswell) {
             return glarray->Format == GL_BGRA
-               ? BRW_SURFACEFORMAT_B10G10R10A2_USCALED
-               : BRW_SURFACEFORMAT_R10G10B10A2_USCALED;
+               ? ISL_FORMAT_B10G10R10A2_USCALED
+               : ISL_FORMAT_R10G10B10A2_USCALED;
          }
-         return BRW_SURFACEFORMAT_R10G10B10A2_UINT;
+         return ISL_FORMAT_R10G10B10A2_UINT;
       }
       assert(glarray->Format == GL_RGBA); /* sanity check */
       switch (glarray->Type) {
@@ -702,7 +702,7 @@ brw_prepare_vertices(struct brw_context *brw)
       const uint32_t range = buffer_range_end[i] - buffer_range_start[i];
 
       buffer->bo = intel_bufferobj_buffer(brw, enabled_buffer[i], start, range);
-      drm_intel_bo_reference(buffer->bo);
+      brw_bo_reference(buffer->bo);
    }
 
    /* If we need to upload all the arrays, then we can trim those arrays to
@@ -792,7 +792,7 @@ brw_prepare_shader_draw_parameters(struct brw_context *brw)
 uint32_t *
 brw_emit_vertex_buffer_state(struct brw_context *brw,
                              unsigned buffer_nr,
-                             drm_intel_bo *bo,
+                             struct brw_bo *bo,
                              unsigned start_offset,
                              unsigned end_offset,
                              unsigned stride,
@@ -910,12 +910,12 @@ brw_emit_vertices(struct brw_context *brw)
       if (brw->gen >= 6) {
 	 OUT_BATCH((0 << GEN6_VE0_INDEX_SHIFT) |
 		   GEN6_VE0_VALID |
-		   (BRW_SURFACEFORMAT_R32G32B32A32_FLOAT << BRW_VE0_FORMAT_SHIFT) |
+		   (ISL_FORMAT_R32G32B32A32_FLOAT << BRW_VE0_FORMAT_SHIFT) |
 		   (0 << BRW_VE0_SRC_OFFSET_SHIFT));
       } else {
 	 OUT_BATCH((0 << BRW_VE0_INDEX_SHIFT) |
 		   BRW_VE0_VALID |
-		   (BRW_SURFACEFORMAT_R32G32B32A32_FLOAT << BRW_VE0_FORMAT_SHIFT) |
+		   (ISL_FORMAT_R32G32B32A32_FLOAT << BRW_VE0_FORMAT_SHIFT) |
 		   (0 << BRW_VE0_SRC_OFFSET_SHIFT));
       }
       OUT_BATCH((BRW_VE1_COMPONENT_STORE_0 << BRW_VE1_COMPONENT_0_SHIFT) |
@@ -1091,11 +1091,11 @@ brw_emit_vertices(struct brw_context *brw)
       if (brw->gen >= 6) {
          dw0 |= GEN6_VE0_VALID |
                 brw->vb.nr_buffers << GEN6_VE0_INDEX_SHIFT |
-                BRW_SURFACEFORMAT_R32G32_UINT << BRW_VE0_FORMAT_SHIFT;
+                ISL_FORMAT_R32G32_UINT << BRW_VE0_FORMAT_SHIFT;
       } else {
          dw0 |= BRW_VE0_VALID |
                 brw->vb.nr_buffers << BRW_VE0_INDEX_SHIFT |
-                BRW_SURFACEFORMAT_R32G32_UINT << BRW_VE0_FORMAT_SHIFT;
+                ISL_FORMAT_R32G32_UINT << BRW_VE0_FORMAT_SHIFT;
 	 dw1 |= (i * 4) << BRW_VE1_DST_OFFSET_SHIFT;
       }
 
@@ -1118,11 +1118,11 @@ brw_emit_vertices(struct brw_context *brw)
       if (brw->gen >= 6) {
          dw0 |= GEN6_VE0_VALID |
                 ((brw->vb.nr_buffers + 1) << GEN6_VE0_INDEX_SHIFT) |
-                (BRW_SURFACEFORMAT_R32_UINT << BRW_VE0_FORMAT_SHIFT);
+                (ISL_FORMAT_R32_UINT << BRW_VE0_FORMAT_SHIFT);
       } else {
          dw0 |= BRW_VE0_VALID |
                 ((brw->vb.nr_buffers + 1) << BRW_VE0_INDEX_SHIFT) |
-                (BRW_SURFACEFORMAT_R32_UINT << BRW_VE0_FORMAT_SHIFT);
+                (ISL_FORMAT_R32_UINT << BRW_VE0_FORMAT_SHIFT);
 
 	 dw1 |= (i * 4) << BRW_VE1_DST_OFFSET_SHIFT;
       }
@@ -1166,7 +1166,7 @@ brw_upload_indices(struct brw_context *brw)
    struct gl_context *ctx = &brw->ctx;
    const struct _mesa_index_buffer *index_buffer = brw->ib.ib;
    GLuint ib_size;
-   drm_intel_bo *old_bo = brw->ib.bo;
+   struct brw_bo *old_bo = brw->ib.bo;
    struct gl_buffer_object *bufferobj;
    GLuint offset;
    GLuint ib_type_size;
@@ -1210,14 +1210,14 @@ brw_upload_indices(struct brw_context *brw)
 
          ctx->Driver.UnmapBuffer(ctx, bufferobj, MAP_INTERNAL);
       } else {
-         drm_intel_bo *bo =
+         struct brw_bo *bo =
             intel_bufferobj_buffer(brw, intel_buffer_object(bufferobj),
                                    offset, ib_size);
          if (bo != brw->ib.bo) {
-            drm_intel_bo_unreference(brw->ib.bo);
+            brw_bo_unreference(brw->ib.bo);
             brw->ib.bo = bo;
             brw->ib.size = bufferobj->Size;
-            drm_intel_bo_reference(bo);
+            brw_bo_reference(bo);
          }
       }
    }

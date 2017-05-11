@@ -55,6 +55,9 @@ void genX(cmd_buffer_flush_dynamic_state)(struct anv_cmd_buffer *cmd_buffer);
 
 void genX(cmd_buffer_flush_compute_state)(struct anv_cmd_buffer *cmd_buffer);
 
+void genX(cmd_buffer_enable_pma_fix)(struct anv_cmd_buffer *cmd_buffer,
+                                     bool enable);
+
 void
 genX(emit_urb_setup)(struct anv_device *device, struct anv_batch *batch,
                      const struct gen_l3_config *l3_config,

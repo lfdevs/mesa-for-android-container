@@ -50,8 +50,8 @@ gen8_upload_blend_state(struct brw_context *brw)
       nr_draw_buffers = 1;
 
    int size = 4 + 8 * nr_draw_buffers;
-   uint32_t *blend = brw_state_batch(brw, AUB_TRACE_BLEND_STATE,
-                                     size, 64, &brw->cc.blend_state_offset);
+   uint32_t *blend =
+      brw_state_batch(brw, size, 64, &brw->cc.blend_state_offset);
    memset(blend, 0, size);
 
    /* OpenGL specification 3.3 (page 196), section 4.1.3 says:

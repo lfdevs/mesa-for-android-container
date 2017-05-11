@@ -22,7 +22,7 @@
 include Makefile.sources
 include $(top_srcdir)/src/gallium/Automake.inc
 
-AM_CXXFLAGS = $(GALLIUM_DRIVER_CFLAGS) $(SWR_CXX11_CXXFLAGS)
+AM_CXXFLAGS = $(GALLIUM_DRIVER_CFLAGS) $(SWR_CXX14_CXXFLAGS)
 
 noinst_LTLIBRARIES = libmesaswr.la
 
@@ -32,13 +32,13 @@ COMMON_CXXFLAGS = \
 	-fno-strict-aliasing \
 	$(GALLIUM_DRIVER_CFLAGS) \
 	$(LLVM_CXXFLAGS) \
-	$(SWR_CXX11_CXXFLAGS) \
-	-I$(builddir)/rasterizer/scripts \
+	$(SWR_CXX14_CXXFLAGS) \
+	-I$(builddir)/rasterizer/codegen \
 	-I$(builddir)/rasterizer/jitter \
 	-I$(builddir)/rasterizer/archrast \
 	-I$(srcdir)/rasterizer \
 	-I$(srcdir)/rasterizer/core \
-	-I$(srcdir)/rasterizer/scripts \
+	-I$(srcdir)/rasterizer/codegen \
 	-I$(srcdir)/rasterizer/jitter \
 	-I$(srcdir)/rasterizer/archrast
 
@@ -52,109 +52,107 @@ COMMON_SOURCES = \
 	$(BUILT_SOURCES)
 
 BUILT_SOURCES = \
-	swr_context_llvm.h \
-	rasterizer/scripts/gen_knobs.cpp \
-	rasterizer/scripts/gen_knobs.h \
-	rasterizer/jitter/state_llvm.h \
-	rasterizer/jitter/builder_x86.h \
-	rasterizer/jitter/builder_x86.cpp \
-	rasterizer/archrast/gen_ar_event.h \
+	gen_swr_context_llvm.h \
+	rasterizer/codegen/gen_knobs.cpp \
+	rasterizer/codegen/gen_knobs.h \
+	rasterizer/jitter/gen_state_llvm.h \
+	rasterizer/jitter/gen_builder_x86.hpp \
+	rasterizer/archrast/gen_ar_event.hpp \
 	rasterizer/archrast/gen_ar_event.cpp \
-	rasterizer/archrast/gen_ar_eventhandler.h \
-	rasterizer/archrast/gen_ar_eventhandlerfile.h
+	rasterizer/archrast/gen_ar_eventhandler.hpp \
+	rasterizer/archrast/gen_ar_eventhandlerfile.hpp \
+	rasterizer/core/gen_BackendPixelRate0.cpp
 
 MKDIR_GEN = $(AM_V_at)$(MKDIR_P) $(@D)
 PYTHON_GEN = $(AM_V_GEN)$(PYTHON2) $(PYTHON_FLAGS)
-swr_context_llvm.h: rasterizer/jitter/scripts/gen_llvm_types.py swr_context.h
+gen_swr_context_llvm.h: rasterizer/codegen/gen_llvm_types.py rasterizer/codegen/templates/gen_llvm.hpp swr_context.h
 	$(PYTHON_GEN) \
-		$(srcdir)/rasterizer/jitter/scripts/gen_llvm_types.py \
+		$(srcdir)/rasterizer/codegen/gen_llvm_types.py \
 		--input $(srcdir)/swr_context.h \
-		--output swr_context_llvm.h
+		--output ./gen_swr_context_llvm.h
 
-rasterizer/scripts/gen_knobs.cpp: rasterizer/scripts/gen_knobs.py rasterizer/scripts/knob_defs.py rasterizer/scripts/templates/knobs.template
+rasterizer/codegen/gen_knobs.cpp: rasterizer/codegen/gen_knobs.py rasterizer/codegen/knob_defs.py rasterizer/codegen/templates/gen_knobs.cpp rasterizer/codegen/gen_common.py
 	$(MKDIR_GEN)
 	$(PYTHON_GEN) \
-		$(srcdir)/rasterizer/scripts/gen_knobs.py \
-		--input $(srcdir)/rasterizer/scripts/templates/knobs.template \
-		--output rasterizer/scripts/gen_knobs.cpp \
+		$(srcdir)/rasterizer/codegen/gen_knobs.py \
+		--output rasterizer/codegen/gen_knobs.cpp \
 		--gen_cpp
 
-rasterizer/scripts/gen_knobs.h: rasterizer/scripts/gen_knobs.py rasterizer/scripts/knob_defs.py rasterizer/scripts/templates/knobs.template
+rasterizer/codegen/gen_knobs.h: rasterizer/codegen/gen_knobs.py rasterizer/codegen/knob_defs.py rasterizer/codegen/templates/gen_knobs.cpp rasterizer/codegen/gen_common.py
 	$(MKDIR_GEN)
 	$(PYTHON_GEN) \
-		$(srcdir)/rasterizer/scripts/gen_knobs.py \
-		--input $(srcdir)/rasterizer/scripts/templates/knobs.template \
-		--output rasterizer/scripts/gen_knobs.h \
+		$(srcdir)/rasterizer/codegen/gen_knobs.py \
+		--output rasterizer/codegen/gen_knobs.h \
 		--gen_h
 
-rasterizer/jitter/state_llvm.h: rasterizer/jitter/scripts/gen_llvm_types.py rasterizer/core/state.h
+rasterizer/jitter/gen_state_llvm.h: rasterizer/codegen/gen_llvm_types.py rasterizer/codegen/templates/gen_llvm.hpp rasterizer/core/state.h rasterizer/codegen/gen_common.py
 	$(MKDIR_GEN)
 	$(PYTHON_GEN) \
-		$(srcdir)/rasterizer/jitter/scripts/gen_llvm_types.py \
+		$(srcdir)/rasterizer/codegen/gen_llvm_types.py \
 		--input $(srcdir)/rasterizer/core/state.h \
-		--output rasterizer/jitter/state_llvm.h
+		--output rasterizer/jitter/gen_state_llvm.h
 
-rasterizer/jitter/builder_gen.h: rasterizer/jitter/scripts/gen_llvm_ir_macros.py
+rasterizer/jitter/gen_builder.hpp: rasterizer/codegen/gen_llvm_ir_macros.py rasterizer/codegen/templates/gen_builder.hpp rasterizer/codegen/gen_common.py
 	$(MKDIR_GEN)
 	$(PYTHON_GEN) \
-		$(srcdir)/rasterizer/jitter/scripts/gen_llvm_ir_macros.py \
+		$(srcdir)/rasterizer/codegen/gen_llvm_ir_macros.py \
 		--input $(LLVM_INCLUDEDIR)/llvm/IR/IRBuilder.h \
-		--output rasterizer/jitter/builder_gen.h \
+		--output rasterizer/jitter \
 		--gen_h
 
-rasterizer/jitter/builder_gen.cpp: rasterizer/jitter/scripts/gen_llvm_ir_macros.py
+rasterizer/jitter/gen_builder_x86.hpp: rasterizer/codegen/gen_llvm_ir_macros.py rasterizer/codegen/templates/gen_builder.hpp rasterizer/codegen/gen_common.py
 	$(MKDIR_GEN)
 	$(PYTHON_GEN) \
-		$(srcdir)/rasterizer/jitter/scripts/gen_llvm_ir_macros.py \
-		--input $(LLVM_INCLUDEDIR)/llvm/IR/IRBuilder.h \
-		--output rasterizer/jitter/builder_gen.cpp \
-		--gen_cpp
-
-rasterizer/jitter/builder_x86.h: rasterizer/jitter/scripts/gen_llvm_ir_macros.py
-	$(MKDIR_GEN)
-	$(PYTHON_GEN) \
-		$(srcdir)/rasterizer/jitter/scripts/gen_llvm_ir_macros.py \
-		--output rasterizer/jitter/builder_x86.h \
+		$(srcdir)/rasterizer/codegen/gen_llvm_ir_macros.py \
+		--output rasterizer/jitter \
 		--gen_x86_h
 
-rasterizer/jitter/builder_x86.cpp: rasterizer/jitter/scripts/gen_llvm_ir_macros.py
+rasterizer/archrast/gen_ar_event.hpp: rasterizer/codegen/gen_archrast.py rasterizer/codegen/templates/gen_ar_event.hpp rasterizer/archrast/events.proto rasterizer/codegen/gen_common.py
 	$(MKDIR_GEN)
 	$(PYTHON_GEN) \
-		$(srcdir)/rasterizer/jitter/scripts/gen_llvm_ir_macros.py \
-		--output rasterizer/jitter/builder_x86.cpp \
-		--gen_x86_cpp
-
-rasterizer/archrast/gen_ar_event.h: rasterizer/scripts/gen_archrast.py rasterizer/scripts/templates/ar_event_h.template rasterizer/archrast/events.proto
-	$(MKDIR_GEN)
-	$(PYTHON_GEN) \
-		$(srcdir)/rasterizer/scripts/gen_archrast.py \
+		$(srcdir)/rasterizer/codegen/gen_archrast.py \
 		--proto $(srcdir)/rasterizer/archrast/events.proto \
-		--output rasterizer/archrast/gen_ar_event.h \
+		--output rasterizer/archrast/gen_ar_event.hpp \
 		--gen_event_h
 
-rasterizer/archrast/gen_ar_event.cpp: rasterizer/scripts/gen_archrast.py rasterizer/scripts/templates/ar_event_cpp.template rasterizer/archrast/events.proto
+rasterizer/archrast/gen_ar_event.cpp: rasterizer/codegen/gen_archrast.py rasterizer/codegen/templates/gen_ar_event.cpp rasterizer/archrast/events.proto rasterizer/codegen/gen_common.py
 	$(MKDIR_GEN)
 	$(PYTHON_GEN) \
-		$(srcdir)/rasterizer/scripts/gen_archrast.py \
+		$(srcdir)/rasterizer/codegen/gen_archrast.py \
 		--proto $(srcdir)/rasterizer/archrast/events.proto \
 		--output rasterizer/archrast/gen_ar_event.cpp \
 		--gen_event_cpp
 
-rasterizer/archrast/gen_ar_eventhandler.h: rasterizer/scripts/gen_archrast.py rasterizer/scripts/templates/ar_eventhandler_h.template rasterizer/archrast/events.proto
+rasterizer/archrast/gen_ar_eventhandler.hpp: rasterizer/codegen/gen_archrast.py rasterizer/codegen/templates/gen_ar_eventhandler.hpp rasterizer/archrast/events.proto rasterizer/codegen/gen_common.py
 	$(MKDIR_GEN)
 	$(PYTHON_GEN) \
-		$(srcdir)/rasterizer/scripts/gen_archrast.py \
+		$(srcdir)/rasterizer/codegen/gen_archrast.py \
 		--proto $(srcdir)/rasterizer/archrast/events.proto \
-		--output rasterizer/archrast/gen_ar_eventhandler.h \
+		--output rasterizer/archrast/gen_ar_eventhandler.hpp \
 		--gen_eventhandler_h
 
-rasterizer/archrast/gen_ar_eventhandlerfile.h: rasterizer/scripts/gen_archrast.py rasterizer/scripts/templates/ar_eventhandlerfile_h.template rasterizer/archrast/events.proto
+rasterizer/archrast/gen_ar_eventhandlerfile.hpp: rasterizer/codegen/gen_archrast.py rasterizer/codegen/templates/gen_ar_eventhandlerfile.hpp rasterizer/archrast/events.proto rasterizer/codegen/gen_common.py
 	$(MKDIR_GEN)
 	$(PYTHON_GEN) \
-		$(srcdir)/rasterizer/scripts/gen_archrast.py \
+		$(srcdir)/rasterizer/codegen/gen_archrast.py \
 		--proto $(srcdir)/rasterizer/archrast/events.proto \
-		--output rasterizer/archrast/gen_ar_eventhandlerfile.h \
+		--output rasterizer/archrast/gen_ar_eventhandlerfile.hpp \
 		--gen_eventhandlerfile_h
+
+# 5 SWR_MULTISAMPLE_TYPE_COUNT
+# 2 SWR_MSAA_SAMPLE_PATTERN_COUNT
+# 3 SWR_INPUT_COVERAGE_COUNT
+# 2 centroid
+# 2 forcedSampleCount
+# 2 canEarlyZ
+rasterizer/core/gen_BackendPixelRate0.cpp: rasterizer/codegen/gen_backends.py rasterizer/codegen/templates/gen_backend.cpp
+	$(MKDIR_GEN)
+	$(PYTHON_GEN) \
+		$(srcdir)/rasterizer/codegen/gen_backends.py \
+		--outdir rasterizer/core \
+		--dim 5 2 3 2 2 2 \
+		--split 0 \
+		--cpp
 
 COMMON_LIBADD = \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
@@ -172,27 +170,17 @@ COMMON_LDFLAGS = \
 
 # XXX: As we cannot use BUILT_SOURCES (the files will end up in the dist
 # tarball) just annotate the dependency directly.
-# As the single direct user of builder_gen.h is a header (builder.h) trace all
+# As the single direct user of gen_builder.hpp is a header (builder.h) trace all
 # the translusive users (one that use the latter header).
-rasterizer/jitter/blend_jit.cpp: rasterizer/jitter/builder_gen.h
-rasterizer/jitter/builder.cpp: rasterizer/jitter/builder_gen.h
-rasterizer/jitter/builder_gen.cpp: rasterizer/jitter/builder_gen.h
-rasterizer/jitter/builder_x86.cpp: rasterizer/jitter/builder_gen.h
-rasterizer/jitter/builder_misc.cpp: rasterizer/jitter/builder_gen.h
-rasterizer/jitter/fetch_jit.cpp: rasterizer/jitter/builder_gen.h
-rasterizer/jitter/streamout_jit.cpp: rasterizer/jitter/builder_gen.h
-swr_shader.cpp: rasterizer/jitter/builder_gen.h
+rasterizer/jitter/blend_jit.cpp: rasterizer/jitter/gen_builder.hpp
+rasterizer/jitter/builder.cpp: rasterizer/jitter/gen_builder.hpp
+rasterizer/jitter/builder_misc.cpp: rasterizer/jitter/gen_builder.hpp
+rasterizer/jitter/fetch_jit.cpp: rasterizer/jitter/gen_builder.hpp
+rasterizer/jitter/streamout_jit.cpp: rasterizer/jitter/gen_builder.hpp
+swr_shader.cpp: rasterizer/jitter/gen_builder.hpp
 
 CLEANFILES = \
-	rasterizer/jitter/builder_gen.h \
-	rasterizer/jitter/builder_gen.cpp
-
-# XXX: Due to the funky dependencies above, the builder_x86.cpp file gets
-# generated (copied) into builddir when building from release tarball.
-# Add a temporary workaround to remove it, until the above issue is resolved.
-distclean-local:
-	( test $(top_srcdir) != $(top_builddir) && \
-		rm $(builddir)/rasterizer/jitter/builder_x86.cpp ) || true
+	rasterizer/jitter/gen_builder.hpp
 
 lib_LTLIBRARIES = libswrAVX.la libswrAVX2.la
 
@@ -210,8 +198,7 @@ libswrAVX_la_SOURCES = \
 # on systems with other versions of LLVM eg. 3.7 or 3.6.
 # Move these back to BUILT_SOURCES once that is resolved.
 nodist_libswrAVX_la_SOURCES = \
-	rasterizer/jitter/builder_gen.h \
-	rasterizer/jitter/builder_gen.cpp
+	rasterizer/jitter/gen_builder.hpp
 
 libswrAVX_la_LIBADD = \
 	$(COMMON_LIBADD)
@@ -233,8 +220,7 @@ libswrAVX2_la_SOURCES = \
 # on systems with other versions of LLVM eg. 3.7 or 3.6.
 # Move these back to BUILT_SOURCES once that is resolved.
 nodist_libswrAVX2_la_SOURCES = \
-	rasterizer/jitter/builder_gen.h \
-	rasterizer/jitter/builder_gen.cpp
+	rasterizer/jitter/gen_builder.hpp
 
 libswrAVX2_la_LIBADD = \
 	$(COMMON_LIBADD)
@@ -247,30 +233,18 @@ include $(top_srcdir)/install-gallium-links.mk
 EXTRA_DIST = \
 	SConscript \
 	rasterizer/archrast/events.proto \
-	rasterizer/jitter/scripts/gen_llvm_ir_macros.py \
-	rasterizer/jitter/scripts/gen_llvm_types.py \
-	rasterizer/scripts/gen_archrast.py \
-	rasterizer/scripts/gen_knobs.py \
-	rasterizer/scripts/knob_defs.py \
-	rasterizer/scripts/mako/ast.py \
-	rasterizer/scripts/mako/_ast_util.py \
-	rasterizer/scripts/mako/cache.py \
-	rasterizer/scripts/mako/cmd.py \
-	rasterizer/scripts/mako/codegen.py \
-	rasterizer/scripts/mako/compat.py \
-	rasterizer/scripts/mako/exceptions.py \
-	rasterizer/scripts/mako/filters.py \
-	rasterizer/scripts/mako/__init__.py \
-	rasterizer/scripts/mako/lexer.py \
-	rasterizer/scripts/mako/lookup.py \
-	rasterizer/scripts/mako/parsetree.py \
-	rasterizer/scripts/mako/pygen.py \
-	rasterizer/scripts/mako/pyparser.py \
-	rasterizer/scripts/mako/runtime.py \
-	rasterizer/scripts/mako/template.py \
-	rasterizer/scripts/mako/util.py \
-	rasterizer/scripts/templates/knobs.template \
-	rasterizer/scripts/templates/ar_event_h.template \
-	rasterizer/scripts/templates/ar_event_cpp.template \
-	rasterizer/scripts/templates/ar_eventhandler_h.template \
-	rasterizer/scripts/templates/ar_eventhandlerfile_h.template
+	rasterizer/codegen/gen_llvm_ir_macros.py \
+	rasterizer/codegen/gen_llvm_types.py \
+	rasterizer/codegen/gen_archrast.py \
+	rasterizer/codegen/gen_backends.py \
+	rasterizer/codegen/gen_common.py \
+	rasterizer/codegen/gen_knobs.py \
+	rasterizer/codegen/knob_defs.py \
+	rasterizer/codegen/templates/gen_ar_event.cpp \
+	rasterizer/codegen/templates/gen_ar_event.hpp \
+	rasterizer/codegen/templates/gen_ar_eventhandler.hpp \
+	rasterizer/codegen/templates/gen_ar_eventhandlerfile.hpp \
+	rasterizer/codegen/templates/gen_backend.cpp \
+	rasterizer/codegen/templates/gen_builder.hpp \
+	rasterizer/codegen/templates/gen_knobs.cpp \
+	rasterizer/codegen/templates/gen_llvm.hpp

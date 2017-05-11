@@ -218,6 +218,10 @@ genX(cmd_buffer_gpu_memcpy)(struct anv_cmd_buffer *cmd_buffer,
    }
 #endif
 
+   anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_VF_STATISTICS), vf) {
+      vf.StatisticsEnable = false;
+   }
+
    anv_batch_emit(&cmd_buffer->batch, GENX(3DPRIMITIVE), prim) {
       prim.VertexAccessType         = SEQUENTIAL;
       prim.PrimitiveTopologyType    = _3DPRIM_POINTLIST;

@@ -94,7 +94,7 @@ clover::llvm::build_module_library(const ::llvm::Module &mod,
    return m;
 }
 
-std::unique_ptr<::llvm::Module>
+std::unique_ptr< ::llvm::Module>
 clover::llvm::parse_module_library(const module &m, ::llvm::LLVMContext &ctx,
                                    std::string &r_log) {
    auto mod = ::llvm::parseBitcodeFile(::llvm::MemoryBufferRef(
@@ -104,5 +104,5 @@ clover::llvm::parse_module_library(const module &m, ::llvm::LLVMContext &ctx,
          fail(r_log, error(CL_INVALID_PROGRAM), s);
       });
 
-   return std::unique_ptr<::llvm::Module>(std::move(*mod));
+   return std::unique_ptr< ::llvm::Module>(std::move(*mod));
 }

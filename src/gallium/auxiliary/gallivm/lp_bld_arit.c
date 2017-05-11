@@ -1372,7 +1372,9 @@ lp_build_div(struct lp_build_context *bld,
          return LLVMConstUDiv(a, b);
    }
 
-   if(((util_cpu_caps.has_sse && type.width == 32 && type.length == 4) ||
+   /* fast rcp is disabled (just uses div), so makes no sense to try that */
+   if(FALSE &&
+      ((util_cpu_caps.has_sse && type.width == 32 && type.length == 4) ||
        (util_cpu_caps.has_avx && type.width == 32 && type.length == 8)) &&
       type.floating)
       return lp_build_mul(bld, a, lp_build_rcp(bld, b));

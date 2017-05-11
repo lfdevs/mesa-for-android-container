@@ -220,7 +220,7 @@ readpixels_memcpy(struct gl_context *ctx,
    struct gl_renderbuffer *rb =
          _mesa_get_read_renderbuffer_for_format(ctx, format);
    GLubyte *dst, *map;
-   int dstStride, stride, j, texelBytes;
+   int dstStride, stride, j, texelBytes, bytesPerRow;
 
    /* Fail if memcpy cannot be used. */
    if (!readpixels_can_use_memcpy(ctx, format, type, packing)) {
@@ -239,12 +239,17 @@ readpixels_memcpy(struct gl_context *ctx,
    }
 
    texelBytes = _mesa_get_format_bytes(rb->Format);
+   bytesPerRow = texelBytes * width;
 
    /* memcpy*/
-   for (j = 0; j < height; j++) {
-      memcpy(dst, map, width * texelBytes);
-      dst += dstStride;
-      map += stride;
+   if (dstStride == stride && dstStride == bytesPerRow) {
+      memcpy(dst, map, bytesPerRow * height);
+   } else {
+      for (j = 0; j < height; j++) {
+         memcpy(dst, map, bytesPerRow);
+         dst += dstStride;
+         map += stride;
+      }
    }
 
    ctx->Driver.UnmapRenderbuffer(ctx, rb);
@@ -1033,8 +1038,8 @@ _mesa_ReadnPixelsARB( GLint x, GLint y, GLsizei width, GLsizei height,
    if (_mesa_is_gles(ctx)) {
       if (ctx->API == API_OPENGLES2 &&
           _mesa_is_color_format(format) &&
-          _mesa_get_color_read_format(ctx) == format &&
-          _mesa_get_color_read_type(ctx) == type) {
+          _mesa_get_color_read_format(ctx, NULL, "glReadPixels") == format &&
+          _mesa_get_color_read_type(ctx, NULL, "glReadPixels") == type) {
          err = GL_NO_ERROR;
       } else if (ctx->Version < 30) {
          err = _mesa_es_error_check_format_and_type(ctx, format, type, 2);

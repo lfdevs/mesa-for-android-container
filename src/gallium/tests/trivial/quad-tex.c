@@ -101,7 +101,7 @@ static void init_prog(struct program *p)
 
 	/* create the pipe driver context and cso context */
 	p->pipe = p->screen->context_create(p->screen, NULL, 0);
-	p->cso = cso_create_context(p->pipe);
+	p->cso = cso_create_context(p->pipe, 0);
 
 	/* set clear color */
 	p->clear_color.f[0] = 0.3;

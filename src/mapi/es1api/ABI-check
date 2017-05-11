@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/sh
 
 # Print defined gl.* functions not in GL ES 1.1 or in
 # (FIXME, none of these should be part of the ABI)

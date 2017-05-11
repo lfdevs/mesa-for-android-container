@@ -57,7 +57,7 @@ try_lower_input_load(nir_function_impl *impl, nir_intrinsic_instr *load)
    nir_builder_init(&b, impl);
    b.cursor = nir_before_instr(&load->instr);
 
-   nir_ssa_def *frag_coord = nir_f2i(&b, load_frag_coord(&b));
+   nir_ssa_def *frag_coord = nir_f2i32(&b, load_frag_coord(&b));
    nir_ssa_def *offset = nir_ssa_for_src(&b, load->src[0], 2);
    nir_ssa_def *pos = nir_iadd(&b, frag_coord, offset);
 

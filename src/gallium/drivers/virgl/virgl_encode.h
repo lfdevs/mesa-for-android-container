@@ -236,7 +236,7 @@ int virgl_encoder_get_query_result(struct virgl_context *ctx,
 
 int virgl_encoder_render_condition(struct virgl_context *ctx,
                                   uint32_t handle, boolean condition,
-                                  uint mode);
+                                  enum pipe_render_cond_flag mode);
 
 int virgl_encoder_set_sub_ctx(struct virgl_context *ctx, uint32_t sub_ctx_id);
 int virgl_encoder_create_sub_ctx(struct virgl_context *ctx, uint32_t sub_ctx_id);

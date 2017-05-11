@@ -42,7 +42,7 @@
 
 static struct util_hash_table *fd_tab = NULL;
 
-pipe_static_mutex(fd_screen_mutex);
+static mtx_t fd_screen_mutex = _MTX_INITIALIZER_NP;
 
 static void
 fd_drm_screen_destroy(struct pipe_screen *pscreen)
@@ -50,13 +50,13 @@ fd_drm_screen_destroy(struct pipe_screen *pscreen)
 	struct fd_screen *screen = fd_screen(pscreen);
 	boolean destroy;
 
-	pipe_mutex_lock(fd_screen_mutex);
+	mtx_lock(&fd_screen_mutex);
 	destroy = --screen->refcnt == 0;
 	if (destroy) {
 		int fd = fd_device_fd(screen->dev);
 		util_hash_table_remove(fd_tab, intptr_to_pointer(fd));
 	}
-	pipe_mutex_unlock(fd_screen_mutex);
+	mtx_unlock(&fd_screen_mutex);
 
 	if (destroy) {
 		pscreen->destroy = screen->winsys_priv;
@@ -91,7 +91,7 @@ fd_drm_screen_create(int fd)
 {
 	struct pipe_screen *pscreen = NULL;
 
-	pipe_mutex_lock(fd_screen_mutex);
+	mtx_lock(&fd_screen_mutex);
 	if (!fd_tab) {
 		fd_tab = util_hash_table_create(hash_fd, compare_fd);
 		if (!fd_tab)
@@ -122,6 +122,6 @@ fd_drm_screen_create(int fd)
 	}
 
 unlock:
-	pipe_mutex_unlock(fd_screen_mutex);
+	mtx_unlock(&fd_screen_mutex);
 	return pscreen;
 }

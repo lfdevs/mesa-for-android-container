@@ -434,10 +434,20 @@ get_register_pressure_cost(struct schedule_state *state, struct qinst *inst)
                 cost--;
 
         for (int i = 0; i < qir_get_nsrc(inst); i++) {
-                if (inst->src[i].file == QFILE_TEMP &&
-                    !BITSET_TEST(state->temp_live, inst->src[i].index)) {
-                        cost++;
+                if (inst->src[i].file != QFILE_TEMP ||
+                    BITSET_TEST(state->temp_live, inst->src[i].index)) {
+                        continue;
                 }
+
+                bool already_counted = false;
+                for (int j = 0; j < i; j++) {
+                        if (inst->src[i].file == inst->src[j].file &&
+                            inst->src[i].index == inst->src[j].index) {
+                                already_counted = true;
+                        }
+                }
+                if (!already_counted)
+                        cost++;
         }
 
         return cost;

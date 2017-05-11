@@ -496,6 +496,13 @@ dri3_flush_front_buffer(__DRIdrawable *driDrawable, void *loaderPrivate)
    loader_dri3_wait_gl(draw);
 }
 
+static void
+dri_set_background_context(void *loaderPrivate)
+{
+   struct dri3_context *pcp = (struct dri3_context *)loaderPrivate;
+   __glXSetCurrentContext(&pcp->base);
+}
+
 /* The image loader extension record for DRI3
  */
 static const __DRIimageLoaderExtension imageLoaderExtension = {
@@ -509,10 +516,16 @@ const __DRIuseInvalidateExtension dri3UseInvalidate = {
    .base = { __DRI_USE_INVALIDATE, 1 }
 };
 
+static const __DRIbackgroundCallableExtension driBackgroundCallable = {
+   .base = { __DRI_BACKGROUND_CALLABLE, 1 },
+
+   .setBackgroundContext = dri_set_background_context,
+};
+
 static const __DRIextension *loader_extensions[] = {
    &imageLoaderExtension.base,
-   &systemTimeExtension.base,
    &dri3UseInvalidate.base,
+   &driBackgroundCallable.base,
    NULL
 };
 

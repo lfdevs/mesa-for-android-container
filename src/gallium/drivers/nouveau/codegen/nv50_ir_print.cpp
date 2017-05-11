@@ -23,7 +23,6 @@
 #include "codegen/nv50_ir.h"
 #include "codegen/nv50_ir_target.h"
 
-#define __STDC_FORMAT_MACROS
 #include <inttypes.h>
 
 namespace nv50_ir {
@@ -324,6 +323,11 @@ static const char *SemanticStr[SV_LAST + 1] =
    "BASEINSTANCE",
    "DRAWID",
    "WORK_DIM",
+   "LANEMASK_EQ",
+   "LANEMASK_LT",
+   "LANEMASK_LE",
+   "LANEMASK_GT",
+   "LANEMASK_GE",
    "?",
    "(INVALID)"
 };

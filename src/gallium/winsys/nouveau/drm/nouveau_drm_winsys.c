@@ -19,7 +19,7 @@
 
 static struct util_hash_table *fd_tab = NULL;
 
-pipe_static_mutex(nouveau_screen_mutex);
+static mtx_t nouveau_screen_mutex = _MTX_INITIALIZER_NP;
 
 bool nouveau_drm_screen_unref(struct nouveau_screen *screen)
 {
@@ -27,12 +27,12 @@ bool nouveau_drm_screen_unref(struct nouveau_screen *screen)
 	if (screen->refcount == -1)
 		return true;
 
-	pipe_mutex_lock(nouveau_screen_mutex);
+	mtx_lock(&nouveau_screen_mutex);
 	ret = --screen->refcount;
 	assert(ret >= 0);
 	if (ret == 0)
 		util_hash_table_remove(fd_tab, intptr_to_pointer(screen->drm->fd));
-	pipe_mutex_unlock(nouveau_screen_mutex);
+	mtx_unlock(&nouveau_screen_mutex);
 	return ret == 0;
 }
 
@@ -67,11 +67,11 @@ nouveau_drm_screen_create(int fd)
 	struct nouveau_screen *screen = NULL;
 	int ret, dupfd;
 
-	pipe_mutex_lock(nouveau_screen_mutex);
+	mtx_lock(&nouveau_screen_mutex);
 	if (!fd_tab) {
 		fd_tab = util_hash_table_create(hash_fd, compare_fd);
 		if (!fd_tab) {
-			pipe_mutex_unlock(nouveau_screen_mutex);
+			mtx_unlock(&nouveau_screen_mutex);
 			return NULL;
 		}
 	}
@@ -79,7 +79,7 @@ nouveau_drm_screen_create(int fd)
 	screen = util_hash_table_get(fd_tab, intptr_to_pointer(fd));
 	if (screen) {
 		screen->refcount++;
-		pipe_mutex_unlock(nouveau_screen_mutex);
+		mtx_unlock(&nouveau_screen_mutex);
 		return &screen->base;
 	}
 
@@ -143,7 +143,7 @@ nouveau_drm_screen_create(int fd)
 	 */
 	util_hash_table_set(fd_tab, intptr_to_pointer(dupfd), screen);
 	screen->refcount = 1;
-	pipe_mutex_unlock(nouveau_screen_mutex);
+	mtx_unlock(&nouveau_screen_mutex);
 	return &screen->base;
 
 err:
@@ -154,6 +154,6 @@ err:
 		nouveau_drm_del(&drm);
 		close(dupfd);
 	}
-	pipe_mutex_unlock(nouveau_screen_mutex);
+	mtx_unlock(&nouveau_screen_mutex);
 	return NULL;
 }

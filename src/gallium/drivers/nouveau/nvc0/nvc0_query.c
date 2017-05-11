@@ -95,7 +95,7 @@ nvc0_get_query_result_resource(struct pipe_context *pipe,
 static void
 nvc0_render_condition(struct pipe_context *pipe,
                       struct pipe_query *pq,
-                      boolean condition, uint mode)
+                      boolean condition, enum pipe_render_cond_flag mode)
 {
    struct nvc0_context *nvc0 = nvc0_context(pipe);
    struct nouveau_pushbuf *push = nvc0->base.pushbuf;

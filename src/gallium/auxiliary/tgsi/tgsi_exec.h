@@ -273,10 +273,6 @@ struct tgsi_sampler
 #define TGSI_EXEC_TEMP_ADDR         (TGSI_EXEC_NUM_TEMPS + 8)
 #define TGSI_EXEC_NUM_ADDRS         3
 
-/* predicate register */
-#define TGSI_EXEC_TEMP_P0           (TGSI_EXEC_NUM_TEMPS + 11)
-#define TGSI_EXEC_NUM_PREDS         1
-
 #define TGSI_EXEC_NUM_TEMP_EXTRAS   12
 
 
@@ -359,7 +355,6 @@ struct tgsi_exec_machine
    struct tgsi_exec_vector       SystemValue[TGSI_MAX_MISC_INPUTS];
 
    struct tgsi_exec_vector       *Addrs;
-   struct tgsi_exec_vector       *Predicates;
 
    struct tgsi_sampler           *Sampler;
 
@@ -505,8 +500,6 @@ tgsi_exec_get_shader_param(enum pipe_shader_cap param)
       return PIPE_MAX_CONSTANT_BUFFERS;
    case PIPE_SHADER_CAP_MAX_TEMPS:
       return TGSI_EXEC_NUM_TEMPS;
-   case PIPE_SHADER_CAP_MAX_PREDS:
-      return TGSI_EXEC_NUM_PREDS;
    case PIPE_SHADER_CAP_TGSI_CONT_SUPPORTED:
       return 1;
    case PIPE_SHADER_CAP_INDIRECT_INPUT_ADDR:
@@ -528,7 +521,6 @@ tgsi_exec_get_shader_param(enum pipe_shader_cap param)
       return 1 << PIPE_SHADER_IR_TGSI;
    case PIPE_SHADER_CAP_TGSI_SQRT_SUPPORTED:
       return 1;
-   case PIPE_SHADER_CAP_DOUBLES:
    case PIPE_SHADER_CAP_TGSI_DFRACEXP_DLDEXP_SUPPORTED:
    case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
       return 1;

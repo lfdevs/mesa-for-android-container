@@ -714,7 +714,7 @@ extern _X_HIDDEN void __indirect_glProgramNamedParameter4fvNV(GLuint id, GLsizei
 extern _X_HIDDEN void __indirect_glBindFramebufferEXT(GLenum target, GLuint framebuffer);
 extern _X_HIDDEN void __indirect_glBindRenderbufferEXT(GLenum target, GLuint renderbuffer);
 
-#ifdef GLX_SHARED_GLAPI
+#ifdef GLX_INDIRECT_RENDERING
 extern _X_HIDDEN void (*__indirect_get_proc_address(const char *name))(void);
 #endif
 

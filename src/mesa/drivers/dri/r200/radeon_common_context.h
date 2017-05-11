@@ -497,7 +497,7 @@ static inline __DRIdrawable* radeon_get_readable(radeonContextPtr radeon)
 	return radeon->driContext->driReadablePriv;
 }
 
-extern const char const *radeonVendorString;
+extern const char *const radeonVendorString;
 
 const char *radeonGetRendererString(radeonScreenPtr radeonScreen);
 

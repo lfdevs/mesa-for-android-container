@@ -26,6 +26,7 @@ LIBEGL_C_FILES := \
 	main/eglsurface.h \
 	main/eglsync.c \
 	main/eglsync.h \
+	main/eglentrypoint.h \
 	main/egltypedefs.h
 
 dri2_backend_core_FILES := \

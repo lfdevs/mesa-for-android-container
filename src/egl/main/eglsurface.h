@@ -56,6 +56,11 @@ struct _egl_surface
 
    EGLint Type; /* one of EGL_WINDOW_BIT, EGL_PIXMAP_BIT or EGL_PBUFFER_BIT */
 
+   /* The native surface is lost. The EGL spec requires certain functions
+    * to generate EGL_BAD_NATIVE_WINDOW when given this surface.
+    */
+   EGLBoolean Lost;
+
    /* attributes set by attribute list */
    EGLint Width, Height;
    EGLenum TextureFormat;

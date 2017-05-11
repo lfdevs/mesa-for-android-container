@@ -21,7 +21,8 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-#pragma once
+#ifndef GLSL_UNIFORM_INITIALIZER_UTILS_H
+#define GLSL_UNIFORM_INITIALIZER_UTILS_H
 
 #include "program/prog_parameter.h"
 #include "ir.h"
@@ -46,3 +47,5 @@ extern void
 verify_data(gl_constant_value *storage, unsigned storage_array_size,
             ir_constant *val, unsigned red_zone_size,
             unsigned int boolean_true);
+
+#endif /* GLSL_UNIFORM_INITIALIZER_UTILS_H */

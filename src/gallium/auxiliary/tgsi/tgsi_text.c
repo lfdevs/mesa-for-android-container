@@ -1036,43 +1036,6 @@ parse_instruction(
 
    inst = tgsi_default_full_instruction();
 
-   /* Parse predicate.
-    */
-   eat_opt_white( &ctx->cur );
-   if (*ctx->cur == '(') {
-      uint file;
-      int index;
-      uint swizzle[4];
-      boolean parsed_swizzle;
-
-      inst.Instruction.Predicate = 1;
-
-      ctx->cur++;
-      if (*ctx->cur == '!') {
-         ctx->cur++;
-         inst.Predicate.Negate = 1;
-      }
-
-      if (!parse_register_1d( ctx, &file, &index ))
-         return FALSE;
-
-      if (parse_optional_swizzle( ctx, swizzle, &parsed_swizzle, 4 )) {
-         if (parsed_swizzle) {
-            inst.Predicate.SwizzleX = swizzle[0];
-            inst.Predicate.SwizzleY = swizzle[1];
-            inst.Predicate.SwizzleZ = swizzle[2];
-            inst.Predicate.SwizzleW = swizzle[3];
-         }
-      }
-
-      if (*ctx->cur != ')') {
-         report_error( ctx, "Expected `)'" );
-         return FALSE;
-      }
-
-      ctx->cur++;
-   }
-
    /* Parse instruction name.
     */
    eat_opt_white( &ctx->cur );
@@ -1163,7 +1126,7 @@ parse_instruction(
 
    cur = ctx->cur;
    eat_opt_white( &cur );
-   for (i = 0; inst.Instruction.Texture && *cur == ','; i++) {
+   for (i = 0; inst.Instruction.Texture && *cur == ',' && i < TGSI_FULL_MAX_TEX_OFFSETS; i++) {
          cur++;
          eat_opt_white( &cur );
          ctx->cur = cur;

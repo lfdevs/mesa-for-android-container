@@ -380,7 +380,7 @@ nv50_program_translate(struct nv50_program *prog, uint16_t chipset,
    prog->interps = info->bin.fixupData;
    prog->max_gpr = MAX2(4, (info->bin.maxGPR >> 1) + 1);
    prog->tls_space = info->bin.tlsSpace;
-
+   prog->mul_zero_wins = info->io.mul_zero_wins;
    prog->vp.need_vertex_id = info->io.vertexId < PIPE_MAX_SHADER_INPUTS;
 
    prog->vp.clip_enable = (1 << info->io.clipDistances) - 1;

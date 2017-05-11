@@ -93,7 +93,7 @@ vc4_bo_unreference(struct vc4_bo **bo)
                         vc4_bo_last_unreference(*bo);
         } else {
                 screen = (*bo)->screen;
-                pipe_mutex_lock(screen->bo_handles_mutex);
+                mtx_lock(&screen->bo_handles_mutex);
 
                 if (pipe_reference(&(*bo)->reference, NULL)) {
                         util_hash_table_remove(screen->bo_handles,
@@ -101,7 +101,7 @@ vc4_bo_unreference(struct vc4_bo **bo)
                         vc4_bo_last_unreference(*bo);
                 }
 
-                pipe_mutex_unlock(screen->bo_handles_mutex);
+                mtx_unlock(&screen->bo_handles_mutex);
         }
 
         *bo = NULL;

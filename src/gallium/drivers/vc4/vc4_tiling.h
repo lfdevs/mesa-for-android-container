@@ -24,6 +24,9 @@
 #ifndef VC4_TILING_H
 #define VC4_TILING_H
 
+#include <stdbool.h>
+#include <stdint.h>
+#include "util/macros.h"
 
 /** Return the width in pixels of a 64-byte microtile. */
 static inline uint32_t
@@ -38,8 +41,7 @@ vc4_utile_width(int cpp)
         case 8:
                 return 2;
         default:
-                fprintf(stderr, "unknown cpp: %d\n", cpp);
-                abort();
+                unreachable("unknown cpp");
         }
 }
 
@@ -55,12 +57,23 @@ vc4_utile_height(int cpp)
         case 8:
                 return 4;
         default:
-                fprintf(stderr, "unknown cpp: %d\n", cpp);
-                abort();
+                unreachable("unknown cpp");
         }
 }
 
 bool vc4_size_is_lt(uint32_t width, uint32_t height, int cpp) ATTRIBUTE_CONST;
+void vc4_load_lt_image_base(void *dst, uint32_t dst_stride,
+                            void *src, uint32_t src_stride,
+                            int cpp, const struct pipe_box *box);
+void vc4_store_lt_image_base(void *dst, uint32_t dst_stride,
+                             void *src, uint32_t src_stride,
+                             int cpp, const struct pipe_box *box);
+void vc4_load_lt_image_neon(void *dst, uint32_t dst_stride,
+                            void *src, uint32_t src_stride,
+                            int cpp, const struct pipe_box *box);
+void vc4_store_lt_image_neon(void *dst, uint32_t dst_stride,
+                             void *src, uint32_t src_stride,
+                             int cpp, const struct pipe_box *box);
 void vc4_load_tiled_image(void *dst, uint32_t dst_stride,
                           void *src, uint32_t src_stride,
                           uint8_t tiling_format, int cpp,
@@ -69,5 +82,35 @@ void vc4_store_tiled_image(void *dst, uint32_t dst_stride,
                            void *src, uint32_t src_stride,
                            uint8_t tiling_format, int cpp,
                            const struct pipe_box *box);
+
+/* If we're building for ARMv7 (Pi 2+), assume it has NEON.  For Raspbian we
+ * should extend this to have some runtime detection of being built for ARMv6
+ * on a Pi 2+.
+ */
+#if defined(__ARM_ARCH) && __ARM_ARCH == 7
+#define NEON_SUFFIX(x) x ## _neon
+#else
+#define NEON_SUFFIX(x) x ## _base
+#endif
+
+static inline void
+vc4_load_lt_image(void *dst, uint32_t dst_stride,
+                  void *src, uint32_t src_stride,
+                  int cpp, const struct pipe_box *box)
+{
+        NEON_SUFFIX(vc4_load_lt_image)(dst, dst_stride, src, src_stride,
+                                       cpp, box);
+}
+
+static inline void
+vc4_store_lt_image(void *dst, uint32_t dst_stride,
+                   void *src, uint32_t src_stride,
+                   int cpp, const struct pipe_box *box)
+{
+        NEON_SUFFIX(vc4_store_lt_image)(dst, dst_stride, src, src_stride,
+                                        cpp, box);
+}
+
+#undef NEON_SUFFIX
 
 #endif /* VC4_TILING_H */

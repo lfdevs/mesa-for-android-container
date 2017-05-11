@@ -78,6 +78,10 @@ struct stw_device
    unsigned long memdbg_no;
 #endif
 
+   /** WGL_EXT_swap_control */
+   int refresh_rate;
+   int swap_interval;
+
    bool initialized;
 };
 

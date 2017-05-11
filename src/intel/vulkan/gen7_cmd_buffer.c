@@ -90,8 +90,7 @@ gen7_cmd_buffer_emit_scissor(struct anv_cmd_buffer *cmd_buffer)
       ssp.ScissorRectPointer = scissor_state.offset;
    }
 
-   if (!cmd_buffer->device->info.has_llc)
-      anv_state_clflush(scissor_state);
+   anv_state_flush(cmd_buffer->device, scissor_state);
 }
 #endif
 
@@ -128,11 +127,11 @@ get_depth_format(struct anv_cmd_buffer *cmd_buffer)
    const struct anv_render_pass *pass = cmd_buffer->state.pass;
    const struct anv_subpass *subpass = cmd_buffer->state.subpass;
 
-   if (subpass->depth_stencil_attachment >= pass->attachment_count)
+   if (subpass->depth_stencil_attachment.attachment >= pass->attachment_count)
       return D16_UNORM;
 
    struct anv_render_pass_attachment *att =
-      &pass->attachments[subpass->depth_stencil_attachment];
+      &pass->attachments[subpass->depth_stencil_attachment.attachment];
 
    switch (att->format) {
    case VK_FORMAT_D16_UNORM:
@@ -191,8 +190,7 @@ genX(cmd_buffer_flush_dynamic_state)(struct anv_cmd_buffer *cmd_buffer)
          .BackfaceStencilReferenceValue = d->stencil_reference.back & 0xff,
       };
       GENX(COLOR_CALC_STATE_pack)(NULL, cc_state.map, &cc);
-      if (!cmd_buffer->device->info.has_llc)
-         anv_state_clflush(cc_state);
+      anv_state_flush(cmd_buffer->device, cc_state);
 
       anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_CC_STATE_POINTERS), ccp) {
          ccp.ColorCalcStatePointer = cc_state.offset;
@@ -212,6 +210,10 @@ genX(cmd_buffer_flush_dynamic_state)(struct anv_cmd_buffer *cmd_buffer)
 
          .BackfaceStencilTestMask = d->stencil_compare_mask.back & 0xff,
          .BackfaceStencilWriteMask = d->stencil_write_mask.back & 0xff,
+
+         .StencilBufferWriteEnable =
+            (d->stencil_write_mask.front || d->stencil_write_mask.back) &&
+            pipeline->writes_stencil,
       };
       GENX(DEPTH_STENCIL_STATE_pack)(NULL, depth_stencil_dw, &depth_stencil);
 
@@ -256,12 +258,19 @@ genX(cmd_buffer_flush_dynamic_state)(struct anv_cmd_buffer *cmd_buffer)
    cmd_buffer->state.dirty = 0;
 }
 
+void
+genX(cmd_buffer_enable_pma_fix)(struct anv_cmd_buffer *cmd_buffer,
+                                bool enable)
+{
+   /* The NP PMA fix doesn't exist on gen7 */
+}
+
 void genX(CmdSetEvent)(
     VkCommandBuffer                             commandBuffer,
     VkEvent                                     event,
     VkPipelineStageFlags                        stageMask)
 {
-   stub();
+   anv_finishme("Implement events on gen7");
 }
 
 void genX(CmdResetEvent)(
@@ -269,7 +278,7 @@ void genX(CmdResetEvent)(
     VkEvent                                     event,
     VkPipelineStageFlags                        stageMask)
 {
-   stub();
+   anv_finishme("Implement events on gen7");
 }
 
 void genX(CmdWaitEvents)(
@@ -285,7 +294,7 @@ void genX(CmdWaitEvents)(
     uint32_t                                    imageMemoryBarrierCount,
     const VkImageMemoryBarrier*                 pImageMemoryBarriers)
 {
-   stub();
+   anv_finishme("Implement events on gen7");
 
    genX(CmdPipelineBarrier)(commandBuffer, srcStageMask, destStageMask,
                             false, /* byRegion */

@@ -641,12 +641,12 @@ svga_buffer_update_hw(struct svga_context *svga, struct svga_buffer *sbuf)
       if (ret != PIPE_OK)
          return ret;
 
-      pipe_mutex_lock(ss->swc_mutex);
+      mtx_lock(&ss->swc_mutex);
       map = svga_buffer_hw_storage_map(svga, sbuf, PIPE_TRANSFER_WRITE, &retry);
       assert(map);
       assert(!retry);
       if (!map) {
-	 pipe_mutex_unlock(ss->swc_mutex);
+	 mtx_unlock(&ss->swc_mutex);
          svga_buffer_destroy_hw_storage(ss, sbuf);
          return PIPE_ERROR;
       }
@@ -670,7 +670,7 @@ svga_buffer_update_hw(struct svga_context *svga, struct svga_buffer *sbuf)
          sbuf->swbuf = NULL;
       }
 
-      pipe_mutex_unlock(ss->swc_mutex);
+      mtx_unlock(&ss->swc_mutex);
    }
 
    return PIPE_OK;

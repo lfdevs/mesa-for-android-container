@@ -55,14 +55,6 @@ struct quad_shade_stage
 };
 
 
-/** cast wrapper */
-static inline struct quad_shade_stage *
-quad_shade_stage(struct quad_stage *qs)
-{
-   return (struct quad_shade_stage *) qs;
-}
-
-
 /**
  * Execute fragment shader for the four fragments in the quad.
  * \return TRUE if quad is alive, FALSE if all four pixels are killed

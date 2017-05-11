@@ -1,3 +1,4 @@
+<?xml version="1.0" ?>
 <genxml name="ILK" gen="5">
   <struct name="RENDER_SURFACE_STATE" length="6">
     <field name="Surface Type" start="29" end="31" type="uint">
@@ -53,4 +54,60 @@
     <field name="X Offset" start="185" end="191" type="uint"/>
     <field name="Y Offset" start="180" end="183" type="uint"/>
   </struct>
+
+  <instruction name="3DSTATE_DEPTH_BUFFER" bias="2" length="5">
+    <!-- The hardware docs incorrectly say length is 6. The actual length is 5. -->
+    <!-- DWord 0 -->
+    <field name="Command Type" start="29" end="31" type="uint" default="3"/>
+    <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
+    <field name="3D Command Opcode" start="24" end="26" type="uint" default="1"/>
+    <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="5"/>
+    <field name="DWord Length" start="0" end="7" type="uint" default="3"/>
+    <!-- DWord 1 -->
+    <field name="Surface Type" start="61" end="63" type="uint">
+      <value name="SURFTYPE_1D" value="0"/>
+      <value name="SURFTYPE_2D" value="1"/>
+      <value name="SURFTYPE_3D" value="2"/>
+      <value name="SURFTYPE_CUBE" value="3"/>
+      <value name="SURFTYPE_NULL" value="7"/>
+    </field>
+    <field name="Tiled Surface" start="59" end="59" type="bool"/>
+    <field name="Tile Walk" start="58" end="58" type="uint">
+      <value name="TILEWALK_YMAJOR" value="1"/>
+    </field>
+    <field name="Software Tiled Rendering Mode" start="55" end="56" type="uint">
+      <value name="NORMAL" value="0"/>
+      <value name="STR1" value="1"/>
+      <value name="STR2" value="3"/>
+    </field>
+    <field name="Hierarchical Depth Buffer Enable" start="54" end="54" type="bool"/>
+    <field name="Separate Stencil Buffer Enable" start="53" end="53" type="bool"/>
+    <field name="Surface Format" start="50" end="52" type="uint">
+      <value name="D32_FLOAT_S8X24_UINT" value="0"/>
+      <value name="D32_FLOAT" value="1"/>
+      <value name="D24_UNORM_S8_UINT" value="2"/>
+      <value name="D24_UNORM_X8_UINT" value="3"/>
+      <value name="D16_UNORM" value="5"/>
+    </field>
+    <field name="Surface Pitch" start="32" end="48" type="uint"/>
+    <!-- DWord 2 -->
+    <field name="Surface Base Address" start="64" end="95" type="address"/>
+    <!-- DWord 3 -->
+    <field name="Height" start="115" end="127" type="uint"/>
+    <field name="Width" start="102" end="114" type="uint"/>
+    <field name="LOD" start="98" end="101" type="uint"/>
+    <field name="MIP Map Layout Mode" start="97" end="97" type="uint">
+      <value name="MIPLAYOUT_BELOW" value="0"/>
+      <value name="MIPLAYOUT_RIGHT" value="1"/>
+    </field>
+    <!-- DWord 4 -->
+    <field name="Depth" start="149" end="159" type="uint"/>
+    <field name="Minimum Array Element" start="138" end="148" type="uint"/>
+    <field name="Render Target View Extent" start="129" end="137" type="uint"/>
+    <!-- DWord 5 -->
+    <field name="Depth Coordinate Offset Y" start="176" end="191" type="int"/>
+    <field name="Depth Coordinate Offset X" start="160" end="175" type="int"/>
+    <!-- DWord 6 -->
+    <!-- The hardware docs lie. There is no dword 6. -->
+  </instruction>
 </genxml>

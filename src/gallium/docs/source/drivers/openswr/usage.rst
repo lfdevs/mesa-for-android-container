@@ -4,8 +4,9 @@ Usage
 Requirements
 ^^^^^^^^^^^^
 
-* An x86 processor with AVX or AVX2
-* LLVM version 3.6 or later
+* An x86 processor with AVX or above
+* LLVM version 3.9 or later
+* C++14 capable compiler
 
 Building
 ^^^^^^^^
@@ -18,13 +19,18 @@ configure time, for example: ::
 Using
 ^^^^^
 
-On Linux, building will create a drop-in alternative for libGL.so into::
+On Linux, building with autotools will create a drop-in alternative
+for libGL.so into::
 
   lib/gallium/libGL.so
+  lib/gallium/libswrAVX.so
+  lib/gallium/libswrAVX2.so
 
-or::
+Alternatively, building with SCons will produce::
 
-  build/foo/gallium/targets/libgl-xlib/libGL.so
+  build/linux-x86_64/gallium/targets/libgl-xlib/libGL.so
+  build/linux-x86_64/gallium/drivers/swr/libswrAVX.so
+  build/linux-x86_64/gallium/drivers/swr/libswrAVX2.so
 
 To use it set the LD_LIBRARY_PATH environment variable accordingly.
 

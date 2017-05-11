@@ -84,7 +84,7 @@ fd_get_query_result(struct pipe_context *pctx, struct pipe_query *pq,
 
 static void
 fd_render_condition(struct pipe_context *pctx, struct pipe_query *pq,
-					boolean condition, uint mode)
+					boolean condition, enum pipe_render_cond_flag mode)
 {
 	struct fd_context *ctx = fd_context(pctx);
 	ctx->cond_query = pq;

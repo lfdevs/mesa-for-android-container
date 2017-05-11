@@ -97,6 +97,7 @@ static bool match_layout_qualifier(const char *s1, const char *s2,
 
 %union {
    int n;
+   int64_t n64;
    float real;
    double dreal;
    const char *identifier;
@@ -136,6 +137,7 @@ static bool match_layout_qualifier(const char *s1, const char *s2,
 %token ATTRIBUTE CONST_TOK BOOL_TOK FLOAT_TOK INT_TOK UINT_TOK DOUBLE_TOK
 %token BREAK BUFFER CONTINUE DO ELSE FOR IF DISCARD RETURN SWITCH CASE DEFAULT
 %token BVEC2 BVEC3 BVEC4 IVEC2 IVEC3 IVEC4 UVEC2 UVEC3 UVEC4 VEC2 VEC3 VEC4 DVEC2 DVEC3 DVEC4
+%token INT64_TOK UINT64_TOK I64VEC2 I64VEC3 I64VEC4 U64VEC2 U64VEC3 U64VEC4
 %token CENTROID IN_TOK OUT_TOK INOUT_TOK UNIFORM VARYING SAMPLE
 %token NOPERSPECTIVE FLAT SMOOTH
 %token MAT2X2 MAT2X3 MAT2X4
@@ -173,6 +175,7 @@ static bool match_layout_qualifier(const char *s1, const char *s2,
 %token <real> FLOATCONSTANT
 %token <dreal> DOUBLECONSTANT
 %token <n> INTCONSTANT UINTCONSTANT BOOLCONSTANT
+%token <n64> INT64CONSTANT UINT64CONSTANT
 %token <identifier> FIELD_SELECTION
 %token LEFT_OP RIGHT_OP
 %token INC_OP DEC_OP LE_OP GE_OP EQ_OP NE_OP
@@ -450,6 +453,20 @@ primary_expression:
       $$ = new(ctx) ast_expression(ast_uint_constant, NULL, NULL, NULL);
       $$->set_location(@1);
       $$->primary_expression.uint_constant = $1;
+   }
+   | INT64CONSTANT
+   {
+      void *ctx = state->linalloc;
+      $$ = new(ctx) ast_expression(ast_int64_constant, NULL, NULL, NULL);
+      $$->set_location(@1);
+      $$->primary_expression.int64_constant = $1;
+   }
+   | UINT64CONSTANT
+   {
+      void *ctx = state->linalloc;
+      $$ = new(ctx) ast_expression(ast_uint64_constant, NULL, NULL, NULL);
+      $$->set_location(@1);
+      $$->primary_expression.uint64_constant = $1;
    }
    | FLOATCONSTANT
    {
@@ -883,7 +900,7 @@ function_header:
       $$->return_type = $1;
       $$->identifier = $2;
 
-      if ($1->qualifier.flags.q.subroutine) {
+      if ($1->qualifier.is_subroutine_decl()) {
          /* add type for IDENTIFIER search */
          state->symbols->add_type($2, glsl_type::get_subroutine_instance($2));
       } else
@@ -1210,14 +1227,18 @@ layout_qualifier_id:
            state->ARB_conservative_depth_enable ||
            state->is_version(420, 0))) {
          if (match_layout_qualifier($1, "depth_any", state) == 0) {
-            $$.flags.q.depth_any = 1;
+            $$.flags.q.depth_type = 1;
+            $$.depth_type = ast_depth_any;
          } else if (match_layout_qualifier($1, "depth_greater", state) == 0) {
-            $$.flags.q.depth_greater = 1;
+            $$.flags.q.depth_type = 1;
+            $$.depth_type = ast_depth_greater;
          } else if (match_layout_qualifier($1, "depth_less", state) == 0) {
-            $$.flags.q.depth_less = 1;
+            $$.flags.q.depth_type = 1;
+            $$.depth_type = ast_depth_less;
          } else if (match_layout_qualifier($1, "depth_unchanged",
                                            state) == 0) {
-            $$.flags.q.depth_unchanged = 1;
+            $$.flags.q.depth_type = 1;
+            $$.depth_type = ast_depth_unchanged;
          }
 
          if ($$.flags.i && state->AMD_conservative_depth_warn) {
@@ -1301,8 +1322,7 @@ layout_qualifier_id:
       }
 
       /* Layout qualifiers for ARB_shader_image_load_store. */
-      if (state->ARB_shader_image_load_store_enable ||
-          state->is_version(420, 310)) {
+      if (state->has_shader_image_load_store()) {
          if (!$$.flags.i) {
             static const struct {
                const char *name;
@@ -1792,7 +1812,7 @@ subroutine_qualifier:
    | SUBROUTINE '(' subroutine_type_list ')'
    {
       memset(& $$, 0, sizeof($$));
-      $$.flags.q.subroutine_def = 1;
+      $$.flags.q.subroutine = 1;
       $$.subroutine_list = $3;
    }
    ;
@@ -2304,6 +2324,14 @@ basic_type_specifier_nonarray:
    | UIMAGE2DMS             { $$ = "uimage2DMS"; }
    | UIMAGE2DMSARRAY        { $$ = "uimage2DMSArray"; }
    | ATOMIC_UINT            { $$ = "atomic_uint"; }
+   | INT64_TOK              { $$ = "int64_t";	   }
+   | I64VEC2                { $$ = "i64vec2";	   }
+   | I64VEC3                { $$ = "i64vec3";	   }
+   | I64VEC4                { $$ = "i64vec4";	   }
+   | UINT64_TOK             { $$ = "uint64_t";	   }
+   | U64VEC2                { $$ = "u64vec2";	   }
+   | U64VEC3                { $$ = "u64vec3";	   }
+   | U64VEC4                { $$ = "u64vec4";	   }
    ;
 
 precision_qualifier:

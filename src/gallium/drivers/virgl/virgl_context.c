@@ -99,7 +99,7 @@ static void virgl_attach_res_framebuffer(struct virgl_context *vctx)
 }
 
 static void virgl_attach_res_sampler_views(struct virgl_context *vctx,
-                                           unsigned shader_type)
+                                           enum pipe_shader_type shader_type)
 {
    struct virgl_winsys *vws = virgl_screen(vctx->base.screen)->vws;
    struct virgl_textures_info *tinfo = &vctx->samplers[shader_type];
@@ -153,7 +153,7 @@ static void virgl_attach_res_so_targets(struct virgl_context *vctx)
 }
 
 static void virgl_attach_res_uniform_buffers(struct virgl_context *vctx,
-                                             unsigned shader_type)
+                                             enum pipe_shader_type shader_type)
 {
    struct virgl_winsys *vws = virgl_screen(vctx->base.screen)->vws;
    struct virgl_resource *res;
@@ -172,7 +172,7 @@ static void virgl_attach_res_uniform_buffers(struct virgl_context *vctx,
  */
 static void virgl_reemit_res(struct virgl_context *vctx)
 {
-   unsigned shader_type;
+   enum pipe_shader_type shader_type;
 
    /* reattach any flushed resources */
    /* framebuffer, sampler views, vertex/index/uniform/stream buffers */
@@ -425,7 +425,7 @@ static void virgl_hw_set_index_buffer(struct pipe_context *ctx,
 }
 
 static void virgl_set_constant_buffer(struct pipe_context *ctx,
-                                     uint shader, uint index,
+                                     enum pipe_shader_type shader, uint index,
                                      const struct pipe_constant_buffer *buf)
 {
    struct virgl_context *vctx = virgl_context(ctx);
@@ -950,6 +950,8 @@ struct pipe_context *virgl_context_create(struct pipe_screen *pscreen,
                                      PIPE_BIND_INDEX_BUFFER, PIPE_USAGE_STREAM);
    if (!vctx->uploader)
            goto fail;
+   vctx->base.stream_uploader = vctx->uploader;
+   vctx->base.const_uploader = vctx->uploader;
 
    vctx->hw_sub_ctx_id = rs->sub_ctx_id++;
    virgl_encoder_create_sub_ctx(vctx, vctx->hw_sub_ctx_id);

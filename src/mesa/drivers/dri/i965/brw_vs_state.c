@@ -31,6 +31,7 @@
 
 
 
+#include "intel_batchbuffer.h"
 #include "brw_context.h"
 #include "brw_state.h"
 #include "brw_defines.h"
@@ -47,8 +48,7 @@ brw_upload_vs_unit(struct brw_context *brw)
 
    struct brw_vs_unit_state *vs;
 
-   vs = brw_state_batch(brw, AUB_TRACE_VS_STATE,
-			sizeof(*vs), 32, &stage_state->state_offset);
+   vs = brw_state_batch(brw, sizeof(*vs), 32, &stage_state->state_offset);
    memset(vs, 0, sizeof(*vs));
 
    /* BRW_NEW_PROGRAM_CACHE | BRW_NEW_VS_PROG_DATA */
@@ -160,23 +160,22 @@ brw_upload_vs_unit(struct brw_context *brw)
       /* BRW_NEW_SAMPLER_STATE_TABLE - reloc */
       vs->vs5.sampler_state_pointer =
          (brw->batch.bo->offset64 + stage_state->sampler_offset) >> 5;
-      drm_intel_bo_emit_reloc(brw->batch.bo,
-                              stage_state->state_offset +
-                              offsetof(struct brw_vs_unit_state, vs5),
-                              brw->batch.bo,
-                              (stage_state->sampler_offset |
-                               vs->vs5.sampler_count),
-                              I915_GEM_DOMAIN_INSTRUCTION, 0);
+      brw_emit_reloc(&brw->batch,
+                     stage_state->state_offset +
+                     offsetof(struct brw_vs_unit_state, vs5),
+                     brw->batch.bo,
+                     (stage_state->sampler_offset | vs->vs5.sampler_count),
+                     I915_GEM_DOMAIN_INSTRUCTION, 0);
    }
 
    /* Emit scratch space relocation */
    if (prog_data->total_scratch != 0) {
-      drm_intel_bo_emit_reloc(brw->batch.bo,
-			      stage_state->state_offset +
-			      offsetof(struct brw_vs_unit_state, thread2),
-			      stage_state->scratch_bo,
-			      vs->thread2.per_thread_scratch_space,
-			      I915_GEM_DOMAIN_RENDER, I915_GEM_DOMAIN_RENDER);
+      brw_emit_reloc(&brw->batch,
+                     stage_state->state_offset +
+                     offsetof(struct brw_vs_unit_state, thread2),
+                     stage_state->scratch_bo,
+                     vs->thread2.per_thread_scratch_space,
+                     I915_GEM_DOMAIN_RENDER, I915_GEM_DOMAIN_RENDER);
    }
 
    brw->ctx.NewDriverState |= BRW_NEW_GEN4_UNIT_STATE;

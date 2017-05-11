@@ -110,21 +110,6 @@ arr_emit(
 							bld_base->uint_bld.vec_type, "");
 }
 
-/* TGSI_OPCODE_CLAMP */
-static void
-clamp_emit(
-   const struct lp_build_tgsi_action * action,
-   struct lp_build_tgsi_context * bld_base,
-   struct lp_build_emit_data * emit_data)
-{
-   LLVMValueRef tmp;
-   tmp = lp_build_emit_llvm_binary(bld_base, TGSI_OPCODE_MAX,
-                                   emit_data->args[0],
-                                   emit_data->args[1]);
-   emit_data->output[emit_data->chan] = lp_build_emit_llvm_binary(bld_base,
-                                       TGSI_OPCODE_MIN, tmp, emit_data->args[2]);
-}
-
 /* DP* Helper */
 
 static void
@@ -1330,7 +1315,6 @@ lp_set_default_actions(struct lp_build_tgsi_context * bld_base)
 
    bld_base->op_actions[TGSI_OPCODE_ADD].emit = add_emit;
    bld_base->op_actions[TGSI_OPCODE_ARR].emit = arr_emit;
-   bld_base->op_actions[TGSI_OPCODE_CLAMP].emit = clamp_emit;
    bld_base->op_actions[TGSI_OPCODE_END].emit = end_emit;
    bld_base->op_actions[TGSI_OPCODE_FRC].emit = frc_emit;
    bld_base->op_actions[TGSI_OPCODE_LRP].emit = lrp_emit;

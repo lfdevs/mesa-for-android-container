@@ -34,14 +34,14 @@ template<SWR_TILE_MODE mode, int>
 struct TilingTraits
 {
     static const SWR_TILE_MODE TileMode{ mode };
-    static UINT GetCu() { SWR_ASSERT(0); return 0; }
-    static UINT GetCv() { SWR_ASSERT(0); return 0; }
-    static UINT GetCr() { SWR_ASSERT(0); return 0; }
-    static UINT GetTileIDShift() { SWR_ASSERT(0); return 0; }
+    static UINT GetCu() { SWR_NOT_IMPL; return 0; }
+    static UINT GetCv() { SWR_NOT_IMPL; return 0; }
+    static UINT GetCr() { SWR_NOT_IMPL; return 0; }
+    static UINT GetTileIDShift() { SWR_NOT_IMPL; return 0; }
 
     /// @todo correct pdep shifts for all rastertile dims.  Unused for now
-    static UINT GetPdepX() { SWR_ASSERT(0); return 0x37; }
-    static UINT GetPdepY() { SWR_ASSERT(0); return 0xC8; }
+    static UINT GetPdepX() { SWR_NOT_IMPL; return 0x37; }
+    static UINT GetPdepY() { SWR_NOT_IMPL; return 0xC8; }
 };
 
 template<int X> struct TilingTraits <SWR_TILE_NONE, X>
@@ -64,8 +64,8 @@ template<> struct TilingTraits <SWR_TILE_SWRZ, 8>
     static UINT GetTileIDShift() { return KNOB_TILE_X_DIM_SHIFT + KNOB_TILE_Y_DIM_SHIFT; }
 
     /// @todo correct pdep shifts for all rastertile dims.  Unused for now
-    static UINT GetPdepX() { SWR_ASSERT(0); return 0x00; }
-    static UINT GetPdepY() { SWR_ASSERT(0); return 0x00; }
+    static UINT GetPdepX() { SWR_NOT_IMPL; return 0x00; }
+    static UINT GetPdepY() { SWR_NOT_IMPL; return 0x00; }
 };
 
 template<> struct TilingTraits <SWR_TILE_SWRZ, 32>
@@ -89,8 +89,8 @@ template<> struct TilingTraits <SWR_TILE_SWRZ, 128>
     static UINT GetTileIDShift() { return KNOB_TILE_X_DIM_SHIFT + KNOB_TILE_Y_DIM_SHIFT + 4; }
 
     /// @todo correct pdep shifts for all rastertile dims.  Unused for now
-    static UINT GetPdepX() { SWR_ASSERT(0); return 0x37; }
-    static UINT GetPdepY() { SWR_ASSERT(0); return 0xC8; }
+    static UINT GetPdepX() { SWR_NOT_IMPL; return 0x37; }
+    static UINT GetPdepY() { SWR_NOT_IMPL; return 0xC8; }
 };
 
 // y-major tiling layout unaffected by element size

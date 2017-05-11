@@ -20,44 +20,32 @@
 # IN THE SOFTWARE.
 
 BUILT_SOURCES += \
-	$(GENXML_GENERATED_FILES) \
-	$(AUBINATOR_GENERATED_FILES)
+	$(GENXML_GENERATED_FILES)
 
 EXTRA_DIST += \
-	$(GENXML_GENERATED_FILES) \
-	$(AUBINATOR_GENERATED_FILES)
+	$(GENXML_XML_FILES) \
+	$(GENXML_GENERATED_FILES)
 
 SUFFIXES = _pack.h _xml.h .xml
 
-$(GENXML_GENERATED_FILES): genxml/gen_pack_header.py
+$(GENXML_GENERATED_PACK_FILES): genxml/gen_pack_header.py
 
 .xml_pack.h:
 	$(MKDIR_GEN)
 	$(PYTHON_GEN) $(srcdir)/genxml/gen_pack_header.py $< > $@ || ($(RM) $@; false)
 
-# xxd generates variable names based on the path of the input file. We
-# prefer to generate our own name here, so it doesn't vary from
-# in/out-of-tree builds.
-
-$(GENXML_GENERATED_FILES): Makefile
-
-.xml_xml.h:
+genxml/genX_xml.h: genxml/gen_zipped_file.py $(GENXML_XML_FILES)
 	$(MKDIR_GEN)
-	$(AM_V_GEN) echo -n "static const uint8_t " > $@; \
-	echo "$(@F)_xml[] = {" | sed -e 's,_xml.h,,' >> $@; \
-	cat $< | $(XXD) -i >> $@; \
-	echo "};" >> $@
+	$(PYTHON_GEN) $(srcdir)/genxml/gen_zipped_file.py $(GENXML_XML_FILES:%=$(srcdir)/%) > $@ || ($(RM) $@; false)
+
+genxml/genX_bits.h: genxml/gen_bits_header.py $(GENXML_XML_FILES)
+	$(MKDIR_GEN)
+	$(PYTHON_GEN) $(srcdir)/genxml/gen_bits_header.py -o $@ $(GENXML_XML_FILES:%=$(srcdir)/%)
 
 EXTRA_DIST += \
-	genxml/gen4.xml \
-	genxml/gen45.xml \
-	genxml/gen5.xml \
-	genxml/gen6.xml \
-	genxml/gen7.xml \
-	genxml/gen75.xml \
-	genxml/gen8.xml \
-	genxml/gen9.xml \
 	genxml/genX_pack.h \
 	genxml/gen_macros.h \
 	genxml/gen_pack_header.py \
+	genxml/gen_zipped_file.py \
+	genxml/gen_bits_header.py \
 	genxml/README

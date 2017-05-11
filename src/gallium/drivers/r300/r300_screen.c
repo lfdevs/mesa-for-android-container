@@ -109,7 +109,6 @@ static int r300_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
         case PIPE_CAP_CONDITIONAL_RENDER:
         case PIPE_CAP_TEXTURE_BARRIER:
         case PIPE_CAP_TGSI_CAN_COMPACT_CONSTANTS:
-        case PIPE_CAP_USER_INDEX_BUFFERS:
         case PIPE_CAP_USER_CONSTANT_BUFFERS:
         case PIPE_CAP_PREFER_BLIT_BASED_TEXTURE_TRANSFER:
         case PIPE_CAP_BUFFER_MAP_PERSISTENT_COHERENT:
@@ -217,7 +216,7 @@ static int r300_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
         case PIPE_CAP_QUERY_BUFFER_OBJECT:
         case PIPE_CAP_QUERY_MEMORY_INFO:
         case PIPE_CAP_FRAMEBUFFER_NO_ATTACHMENT:
-	case PIPE_CAP_ROBUST_BUFFER_ACCESS_BEHAVIOR:
+        case PIPE_CAP_ROBUST_BUFFER_ACCESS_BEHAVIOR:
         case PIPE_CAP_CULL_DISTANCE:
         case PIPE_CAP_PRIMITIVE_RESTART_FOR_PATCHES:
         case PIPE_CAP_TGSI_VOTE:
@@ -229,6 +228,16 @@ static int r300_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
         case PIPE_CAP_NATIVE_FENCE_FD:
         case PIPE_CAP_GLSL_OPTIMIZE_CONSERVATIVELY:
         case PIPE_CAP_TGSI_FS_FBFETCH:
+        case PIPE_CAP_TGSI_MUL_ZERO_WINS:
+        case PIPE_CAP_DOUBLES:
+        case PIPE_CAP_INT64:
+        case PIPE_CAP_INT64_DIVMOD:
+        case PIPE_CAP_TGSI_TEX_TXF_LZ:
+        case PIPE_CAP_TGSI_CLOCK:
+        case PIPE_CAP_POLYGON_MODE_FILL_RECTANGLE:
+        case PIPE_CAP_SPARSE_BUFFER_PAGE_SIZE:
+        case PIPE_CAP_TGSI_BALLOT:
+        case PIPE_CAP_TGSI_TES_LAYER_VIEWPORT:
             return 0;
 
         /* SWTCL-only features. */
@@ -242,7 +251,7 @@ static int r300_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
         case PIPE_CAP_VERTEX_BUFFER_STRIDE_4BYTE_ALIGNED_ONLY:
         case PIPE_CAP_VERTEX_ELEMENT_SRC_OFFSET_4BYTE_ALIGNED_ONLY:
             return r300screen->caps.has_tcl;
-	case PIPE_CAP_TGSI_TEXCOORD:
+        case PIPE_CAP_TGSI_TEXCOORD:
             return 0;
 
         /* Texturing. */
@@ -255,7 +264,7 @@ static int r300_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
         /* Render targets. */
         case PIPE_CAP_MAX_RENDER_TARGETS:
             return 4;
-	case PIPE_CAP_ENDIANNESS:
+        case PIPE_CAP_ENDIANNESS:
             return PIPE_ENDIAN_LITTLE;
 
         case PIPE_CAP_MAX_VIEWPORTS:
@@ -286,7 +295,9 @@ static int r300_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
     return 0;
 }
 
-static int r300_get_shader_param(struct pipe_screen *pscreen, unsigned shader, enum pipe_shader_cap param)
+static int r300_get_shader_param(struct pipe_screen *pscreen,
+                                 enum pipe_shader_type shader,
+                                 enum pipe_shader_cap param)
 {
    struct r300_screen* r300screen = r300_screen(pscreen);
    boolean is_r400 = r300screen->caps.is_r400;
@@ -324,8 +335,6 @@ static int r300_get_shader_param(struct pipe_screen *pscreen, unsigned shader, e
             return 1;
         case PIPE_SHADER_CAP_MAX_TEMPS:
             return is_r500 ? 128 : is_r400 ? 64 : 32;
-        case PIPE_SHADER_CAP_MAX_PREDS:
-            return 0; /* unused */
         case PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS:
         case PIPE_SHADER_CAP_MAX_SAMPLER_VIEWS:
            return r300screen->caps.num_tex_units;
@@ -337,7 +346,6 @@ static int r300_get_shader_param(struct pipe_screen *pscreen, unsigned shader, e
         case PIPE_SHADER_CAP_INDIRECT_CONST_ADDR:
         case PIPE_SHADER_CAP_SUBROUTINES:
         case PIPE_SHADER_CAP_INTEGERS:
-        case PIPE_SHADER_CAP_DOUBLES:
         case PIPE_SHADER_CAP_TGSI_DROUND_SUPPORTED:
         case PIPE_SHADER_CAP_TGSI_DFRACEXP_DLDEXP_SUPPORTED:
         case PIPE_SHADER_CAP_TGSI_FMA_SUPPORTED:
@@ -384,8 +392,6 @@ static int r300_get_shader_param(struct pipe_screen *pscreen, unsigned shader, e
             return 1;
         case PIPE_SHADER_CAP_MAX_TEMPS:
             return 32;
-        case PIPE_SHADER_CAP_MAX_PREDS:
-            return 0; /* unused */
         case PIPE_SHADER_CAP_INDIRECT_CONST_ADDR:
         case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
             return 1;
@@ -400,7 +406,6 @@ static int r300_get_shader_param(struct pipe_screen *pscreen, unsigned shader, e
         case PIPE_SHADER_CAP_INTEGERS:
         case PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS:
         case PIPE_SHADER_CAP_MAX_SAMPLER_VIEWS:
-        case PIPE_SHADER_CAP_DOUBLES:
         case PIPE_SHADER_CAP_TGSI_DROUND_SUPPORTED:
         case PIPE_SHADER_CAP_TGSI_DFRACEXP_DLDEXP_SUPPORTED:
         case PIPE_SHADER_CAP_TGSI_FMA_SUPPORTED:
@@ -416,6 +421,8 @@ static int r300_get_shader_param(struct pipe_screen *pscreen, unsigned shader, e
             return 0;
         }
         break;
+    default:
+        ; /* nothing */
     }
     return 0;
 }
@@ -683,7 +690,7 @@ static void r300_destroy_screen(struct pipe_screen* pscreen)
     if (rws && !rws->unref(rws))
       return;
 
-    pipe_mutex_destroy(r300screen->cmask_mutex);
+    mtx_destroy(&r300screen->cmask_mutex);
     slab_destroy_parent(&r300screen->pool_transfers);
 
     if (rws)
@@ -750,7 +757,7 @@ struct pipe_screen* r300_screen_create(struct radeon_winsys *rws)
     slab_create_parent(&r300screen->pool_transfers, sizeof(struct pipe_transfer), 64);
 
     util_format_s3tc_init();
-    pipe_mutex_init(r300screen->cmask_mutex);
+    (void) mtx_init(&r300screen->cmask_mutex, mtx_plain);
 
     return &r300screen->screen;
 }

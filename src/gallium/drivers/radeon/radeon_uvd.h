@@ -56,6 +56,11 @@
 #define RUVD_GPCOM_VCPU_DATA1		0xEF14
 #define RUVD_ENGINE_CNTL		0xEF18
 
+#define RUVD_GPCOM_VCPU_CMD_SOC15		0x2070c
+#define RUVD_GPCOM_VCPU_DATA0_SOC15		0x20710
+#define RUVD_GPCOM_VCPU_DATA1_SOC15		0x20714
+#define RUVD_ENGINE_CNTL_SOC15			0x20718
+
 /* UVD commands to VCPU */
 #define RUVD_CMD_MSG_BUFFER		0x00000000
 #define RUVD_CMD_DPB_BUFFER		0x00000001
@@ -110,6 +115,11 @@
 #define RUVD_VC1_PROFILE_SIMPLE		0x00000000
 #define RUVD_VC1_PROFILE_MAIN		0x00000001
 #define RUVD_VC1_PROFILE_ADVANCED	0x00000002
+
+enum ruvd_surface_type {
+	RUVD_SURFACE_TYPE_LEGACY = 0,
+	RUVD_SURFACE_TYPE_GFX9
+};
 
 struct ruvd_mvc_element {
 	uint16_t	viewOrderIndex;
@@ -432,5 +442,5 @@ struct pipe_video_codec *ruvd_create_decoder(struct pipe_context *context,
 
 /* fill decoding target field from the luma and chroma surfaces */
 void ruvd_set_dt_surfaces(struct ruvd_msg *msg, struct radeon_surf *luma,
-			  struct radeon_surf *chroma);
+			struct radeon_surf *chroma, enum ruvd_surface_type type);
 #endif

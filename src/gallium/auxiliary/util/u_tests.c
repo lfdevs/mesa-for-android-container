@@ -304,7 +304,7 @@ tgsi_vs_window_space_position(struct pipe_context *ctx)
       return;
    }
 
-   cso = cso_create_context(ctx);
+   cso = cso_create_context(ctx, 0);
    cb = util_create_texture2d(ctx->screen, 256, 256,
                               PIPE_FORMAT_R8G8B8A8_UNORM);
    util_set_common_states_and_clear(cso, ctx, cb);
@@ -364,7 +364,7 @@ null_sampler_view(struct pipe_context *ctx, unsigned tgsi_tex_target)
       return;
    }
 
-   cso = cso_create_context(ctx);
+   cso = cso_create_context(ctx, 0);
    cb = util_create_texture2d(ctx->screen, 256, 256,
                               PIPE_FORMAT_R8G8B8A8_UNORM);
    util_set_common_states_and_clear(cso, ctx, cb);
@@ -397,8 +397,9 @@ null_sampler_view(struct pipe_context *ctx, unsigned tgsi_tex_target)
                              tgsi_texture_names[tgsi_tex_target]);
 }
 
-static void
-null_constant_buffer(struct pipe_context *ctx)
+void
+util_test_constant_buffer(struct pipe_context *ctx,
+                          struct pipe_resource *constbuf)
 {
    struct cso_context *cso;
    struct pipe_resource *cb;
@@ -406,12 +407,12 @@ null_constant_buffer(struct pipe_context *ctx)
    bool pass = true;
    static const float zero[] = {0, 0, 0, 0};
 
-   cso = cso_create_context(ctx);
+   cso = cso_create_context(ctx, 0);
    cb = util_create_texture2d(ctx->screen, 256, 256,
                               PIPE_FORMAT_R8G8B8A8_UNORM);
    util_set_common_states_and_clear(cso, ctx, cb);
 
-   ctx->set_constant_buffer(ctx, PIPE_SHADER_FRAGMENT, 0, NULL);
+   pipe_set_constant_buffer(ctx, PIPE_SHADER_FRAGMENT, 0, constbuf);
 
    /* Fragment shader. */
    {
@@ -462,7 +463,7 @@ null_fragment_shader(struct pipe_context *ctx)
    struct pipe_query *query;
    union pipe_query_result qresult;
 
-   cso = cso_create_context(ctx);
+   cso = cso_create_context(ctx, 0);
    cb = util_create_texture2d(ctx->screen, 256, 256,
                               PIPE_FORMAT_R8G8B8A8_UNORM);
    util_set_common_states_and_clear(cso, ctx, cb);
@@ -502,7 +503,7 @@ util_run_tests(struct pipe_screen *screen)
    tgsi_vs_window_space_position(ctx);
    null_sampler_view(ctx, TGSI_TEXTURE_2D);
    null_sampler_view(ctx, TGSI_TEXTURE_BUFFER);
-   null_constant_buffer(ctx);
+   util_test_constant_buffer(ctx, NULL);
 
    ctx->destroy(ctx);
 

@@ -94,27 +94,16 @@ emit_vertex_input(struct anv_pipeline *pipeline,
    assert((inputs_read & ((1 << VERT_ATTRIB_GENERIC0) - 1)) == 0);
    const uint32_t elements = inputs_read >> VERT_ATTRIB_GENERIC0;
    const uint32_t elements_double = double_inputs_read >> VERT_ATTRIB_GENERIC0;
-
-#if GEN_GEN >= 8
-   /* On BDW+, we only need to allocate space for base ids.  Setting up
-    * the actual vertex and instance id is a separate packet.
-    */
-   const bool needs_svgs_elem = vs_prog_data->uses_basevertex ||
-                                vs_prog_data->uses_baseinstance;
-#else
-   /* On Haswell and prior, vertex and instance id are created by using the
-    * ComponentControl fields, so we need an element for any of them.
-    */
    const bool needs_svgs_elem = vs_prog_data->uses_vertexid ||
                                 vs_prog_data->uses_instanceid ||
                                 vs_prog_data->uses_basevertex ||
                                 vs_prog_data->uses_baseinstance;
-#endif
 
    uint32_t elem_count = __builtin_popcount(elements) -
       __builtin_popcount(elements_double) / 2;
 
-   uint32_t total_elems = elem_count + needs_svgs_elem;
+   const uint32_t total_elems =
+      elem_count + needs_svgs_elem + vs_prog_data->uses_drawid;
    if (total_elems == 0)
       return;
 
@@ -123,6 +112,8 @@ emit_vertex_input(struct anv_pipeline *pipeline,
    const uint32_t num_dwords = 1 + total_elems * 2;
    p = anv_batch_emitn(&pipeline->batch, num_dwords,
                        GENX(3DSTATE_VERTEX_ELEMENTS));
+   if (!p)
+      return;
    memset(p + 1, 0, (num_dwords - 1) * 4);
 
    for (uint32_t i = 0; i < info->vertexAttributeDescriptionCount; i++) {
@@ -133,7 +124,7 @@ emit_vertex_input(struct anv_pipeline *pipeline,
                                                   VK_IMAGE_ASPECT_COLOR_BIT,
                                                   VK_IMAGE_TILING_LINEAR);
 
-      assert(desc->binding < 32);
+      assert(desc->binding < MAX_VBS);
 
       if ((elements & (1 << desc->location)) == 0)
          continue; /* Binding unused */
@@ -187,7 +178,7 @@ emit_vertex_input(struct anv_pipeline *pipeline,
                            VFCOMP_STORE_SRC : VFCOMP_STORE_0;
 
       struct GENX(VERTEX_ELEMENT_STATE) element = {
-         .VertexBufferIndex = 32, /* Reserved for this */
+         .VertexBufferIndex = ANV_SVGS_VB_INDEX,
          .Valid = true,
          .SourceElementFormat = ISL_FORMAT_R32G32_UINT,
          .Component0Control = base_ctrl,
@@ -213,6 +204,28 @@ emit_vertex_input(struct anv_pipeline *pipeline,
       sgvs.InstanceIDElementOffset     = id_slot;
    }
 #endif
+
+   const uint32_t drawid_slot = elem_count + needs_svgs_elem;
+   if (vs_prog_data->uses_drawid) {
+      struct GENX(VERTEX_ELEMENT_STATE) element = {
+         .VertexBufferIndex = ANV_DRAWID_VB_INDEX,
+         .Valid = true,
+         .SourceElementFormat = ISL_FORMAT_R32_UINT,
+         .Component0Control = VFCOMP_STORE_SRC,
+         .Component1Control = VFCOMP_STORE_0,
+         .Component2Control = VFCOMP_STORE_0,
+         .Component3Control = VFCOMP_STORE_0,
+      };
+      GENX(VERTEX_ELEMENT_STATE_pack)(NULL,
+                                      &p[1 + drawid_slot * 2],
+                                      &element);
+
+#if GEN_GEN >= 8
+      anv_batch_emit(&pipeline->batch, GENX(3DSTATE_VF_INSTANCING), vfi) {
+         vfi.VertexElementIndex = drawid_slot;
+      }
+#endif
+   }
 }
 
 void
@@ -378,10 +391,14 @@ emit_3dstate_sbe(struct anv_pipeline *pipeline)
 
    uint32_t *dw = anv_batch_emit_dwords(&pipeline->batch,
                                         GENX(3DSTATE_SBE_length));
+   if (!dw)
+      return;
    GENX(3DSTATE_SBE_pack)(&pipeline->batch, dw, &sbe);
 
 #if GEN_GEN >= 8
    dw = anv_batch_emit_dwords(&pipeline->batch, GENX(3DSTATE_SBE_SWIZ_length));
+   if (!dw)
+      return;
    GENX(3DSTATE_SBE_SWIZ_pack)(&pipeline->batch, dw, &swiz);
 #endif
 }
@@ -444,6 +461,10 @@ emit_rs_state(struct anv_pipeline *pipeline,
     */
 #if GEN_GEN >= 8
    raster.DXMultisampleRasterizationEnable = true;
+   /* NOTE: 3DSTATE_RASTER::ForcedSampleCount affects the BDW and SKL PMA fix
+    * computations.  If we ever set this bit to a different value, they will
+    * need to be updated accordingly.
+    */
    raster.ForcedSampleCount = FSC_NUMRASTSAMPLES_0;
    raster.ForceMultisampling = false;
 #else
@@ -474,9 +495,9 @@ emit_rs_state(struct anv_pipeline *pipeline,
    /* Gen7 requires that we provide the depth format in 3DSTATE_SF so that it
     * can get the depth offsets correct.
     */
-   if (subpass->depth_stencil_attachment < pass->attachment_count) {
+   if (subpass->depth_stencil_attachment.attachment < pass->attachment_count) {
       VkFormat vk_format =
-         pass->attachments[subpass->depth_stencil_attachment].format;
+         pass->attachments[subpass->depth_stencil_attachment.attachment].format;
       assert(vk_format_is_depth_or_stencil(vk_format));
       if (vk_format_aspects(vk_format) & VK_IMAGE_ASPECT_DEPTH_BIT) {
          enum isl_format isl_format =
@@ -634,9 +655,140 @@ static const uint32_t vk_to_gen_stencil_op[] = {
    [VK_STENCIL_OP_DECREMENT_AND_WRAP]           = STENCILOP_DECR,
 };
 
+/* This function sanitizes the VkStencilOpState by looking at the compare ops
+ * and trying to determine whether or not a given stencil op can ever actually
+ * occur.  Stencil ops which can never occur are set to VK_STENCIL_OP_KEEP.
+ * This function returns true if, after sanitation, any of the stencil ops are
+ * set to something other than VK_STENCIL_OP_KEEP.
+ */
+static bool
+sanitize_stencil_face(VkStencilOpState *face,
+                      VkCompareOp depthCompareOp)
+{
+   /* If compareOp is ALWAYS then the stencil test will never fail and failOp
+    * will never happen.  Set failOp to KEEP in this case.
+    */
+   if (face->compareOp == VK_COMPARE_OP_ALWAYS)
+      face->failOp = VK_STENCIL_OP_KEEP;
+
+   /* If compareOp is NEVER or depthCompareOp is NEVER then one of the depth
+    * or stencil tests will fail and passOp will never happen.
+    */
+   if (face->compareOp == VK_COMPARE_OP_NEVER ||
+       depthCompareOp == VK_COMPARE_OP_NEVER)
+      face->passOp = VK_STENCIL_OP_KEEP;
+
+   /* If compareOp is NEVER or depthCompareOp is ALWAYS then either the
+    * stencil test will fail or the depth test will pass.  In either case,
+    * depthFailOp will never happen.
+    */
+   if (face->compareOp == VK_COMPARE_OP_NEVER ||
+       depthCompareOp == VK_COMPARE_OP_ALWAYS)
+      face->depthFailOp = VK_STENCIL_OP_KEEP;
+
+   return face->failOp != VK_STENCIL_OP_KEEP ||
+          face->depthFailOp != VK_STENCIL_OP_KEEP ||
+          face->passOp != VK_STENCIL_OP_KEEP;
+}
+
+/* Intel hardware is fairly sensitive to whether or not depth/stencil writes
+ * are enabled.  In the presence of discards, it's fairly easy to get into the
+ * non-promoted case which means a fairly big performance hit.  From the Iron
+ * Lake PRM, Vol 2, pt. 1, section 8.4.3.2, "Early Depth Test Cases":
+ *
+ *    "Non-promoted depth (N) is active whenever the depth test can be done
+ *    early but it cannot determine whether or not to write source depth to
+ *    the depth buffer, therefore the depth write must be performed post pixel
+ *    shader. This includes cases where the pixel shader can kill pixels,
+ *    including via sampler chroma key, as well as cases where the alpha test
+ *    function is enabled, which kills pixels based on a programmable alpha
+ *    test. In this case, even if the depth test fails, the pixel cannot be
+ *    killed if a stencil write is indicated. Whether or not the stencil write
+ *    happens depends on whether or not the pixel is killed later. In these
+ *    cases if stencil test fails and stencil writes are off, the pixels can
+ *    also be killed early. If stencil writes are enabled, the pixels must be
+ *    treated as Computed depth (described above)."
+ *
+ * The same thing as mentioned in the stencil case can happen in the depth
+ * case as well if it thinks it writes depth but, thanks to the depth test
+ * being GL_EQUAL, the write doesn't actually matter.  A little extra work
+ * up-front to try and disable depth and stencil writes can make a big
+ * difference.
+ *
+ * Unfortunately, the way depth and stencil testing is specified, there are
+ * many case where, regardless of depth/stencil writes being enabled, nothing
+ * actually gets written due to some other bit of state being set.  This
+ * function attempts to "sanitize" the depth stencil state and disable writes
+ * and sometimes even testing whenever possible.
+ */
+static void
+sanitize_ds_state(VkPipelineDepthStencilStateCreateInfo *state,
+                  bool *stencilWriteEnable,
+                  VkImageAspectFlags ds_aspects)
+{
+   *stencilWriteEnable = state->stencilTestEnable;
+
+   /* If the depth test is disabled, we won't be writing anything. */
+   if (!state->depthTestEnable)
+      state->depthWriteEnable = false;
+
+   /* The Vulkan spec requires that if either depth or stencil is not present,
+    * the pipeline is to act as if the test silently passes.
+    */
+   if (!(ds_aspects & VK_IMAGE_ASPECT_DEPTH_BIT)) {
+      state->depthWriteEnable = false;
+      state->depthCompareOp = VK_COMPARE_OP_ALWAYS;
+   }
+
+   if (!(ds_aspects & VK_IMAGE_ASPECT_STENCIL_BIT)) {
+      *stencilWriteEnable = false;
+      state->front.compareOp = VK_COMPARE_OP_ALWAYS;
+      state->back.compareOp = VK_COMPARE_OP_ALWAYS;
+   }
+
+   /* If the stencil test is enabled and always fails, then we will never get
+    * to the depth test so we can just disable the depth test entirely.
+    */
+   if (state->stencilTestEnable &&
+       state->front.compareOp == VK_COMPARE_OP_NEVER &&
+       state->back.compareOp == VK_COMPARE_OP_NEVER) {
+      state->depthTestEnable = false;
+      state->depthWriteEnable = false;
+   }
+
+   /* If depthCompareOp is EQUAL then the value we would be writing to the
+    * depth buffer is the same as the value that's already there so there's no
+    * point in writing it.
+    */
+   if (state->depthCompareOp == VK_COMPARE_OP_EQUAL)
+      state->depthWriteEnable = false;
+
+   /* If the stencil ops are such that we don't actually ever modify the
+    * stencil buffer, we should disable writes.
+    */
+   if (!sanitize_stencil_face(&state->front, state->depthCompareOp) &&
+       !sanitize_stencil_face(&state->back, state->depthCompareOp))
+      *stencilWriteEnable = false;
+
+   /* If the depth test always passes and we never write out depth, that's the
+    * same as if the depth test is disabled entirely.
+    */
+   if (state->depthCompareOp == VK_COMPARE_OP_ALWAYS &&
+       !state->depthWriteEnable)
+      state->depthTestEnable = false;
+
+   /* If the stencil test always passes and we never write out stencil, that's
+    * the same as if the stencil test is disabled entirely.
+    */
+   if (state->front.compareOp == VK_COMPARE_OP_ALWAYS &&
+       state->back.compareOp == VK_COMPARE_OP_ALWAYS &&
+       !*stencilWriteEnable)
+      state->stencilTestEnable = false;
+}
+
 static void
 emit_ds_state(struct anv_pipeline *pipeline,
-              const VkPipelineDepthStencilStateCreateInfo *info,
+              const VkPipelineDepthStencilStateCreateInfo *pCreateInfo,
               const struct anv_render_pass *pass,
               const struct anv_subpass *subpass)
 {
@@ -648,13 +800,30 @@ emit_ds_state(struct anv_pipeline *pipeline,
 #  define depth_stencil_dw pipeline->gen9.wm_depth_stencil
 #endif
 
-   if (info == NULL) {
+   if (pCreateInfo == NULL) {
       /* We're going to OR this together with the dynamic state.  We need
        * to make sure it's initialized to something useful.
        */
+      pipeline->writes_stencil = false;
+      pipeline->stencil_test_enable = false;
+      pipeline->writes_depth = false;
+      pipeline->depth_test_enable = false;
       memset(depth_stencil_dw, 0, sizeof(depth_stencil_dw));
       return;
    }
+
+   VkImageAspectFlags ds_aspects = 0;
+   if (subpass->depth_stencil_attachment.attachment != VK_ATTACHMENT_UNUSED) {
+      VkFormat depth_stencil_format =
+         pass->attachments[subpass->depth_stencil_attachment.attachment].format;
+      ds_aspects = vk_format_aspects(depth_stencil_format);
+   }
+
+   VkPipelineDepthStencilStateCreateInfo info = *pCreateInfo;
+   sanitize_ds_state(&info, &pipeline->writes_stencil, ds_aspects);
+   pipeline->stencil_test_enable = info.stencilTestEnable;
+   pipeline->writes_depth = info.depthWriteEnable;
+   pipeline->depth_test_enable = info.depthTestEnable;
 
    /* VkBool32 depthBoundsTestEnable; // optional (depth_bounds_test) */
 
@@ -663,51 +832,21 @@ emit_ds_state(struct anv_pipeline *pipeline,
 #else
    struct GENX(3DSTATE_WM_DEPTH_STENCIL) depth_stencil = {
 #endif
-      .DepthTestEnable = info->depthTestEnable,
-      .DepthBufferWriteEnable = info->depthWriteEnable,
-      .DepthTestFunction = vk_to_gen_compare_op[info->depthCompareOp],
+      .DepthTestEnable = info.depthTestEnable,
+      .DepthBufferWriteEnable = info.depthWriteEnable,
+      .DepthTestFunction = vk_to_gen_compare_op[info.depthCompareOp],
       .DoubleSidedStencilEnable = true,
 
-      .StencilTestEnable = info->stencilTestEnable,
-      .StencilBufferWriteEnable = info->stencilTestEnable,
-      .StencilFailOp = vk_to_gen_stencil_op[info->front.failOp],
-      .StencilPassDepthPassOp = vk_to_gen_stencil_op[info->front.passOp],
-      .StencilPassDepthFailOp = vk_to_gen_stencil_op[info->front.depthFailOp],
-      .StencilTestFunction = vk_to_gen_compare_op[info->front.compareOp],
-      .BackfaceStencilFailOp = vk_to_gen_stencil_op[info->back.failOp],
-      .BackfaceStencilPassDepthPassOp = vk_to_gen_stencil_op[info->back.passOp],
-      .BackfaceStencilPassDepthFailOp =vk_to_gen_stencil_op[info->back.depthFailOp],
-      .BackfaceStencilTestFunction = vk_to_gen_compare_op[info->back.compareOp],
+      .StencilTestEnable = info.stencilTestEnable,
+      .StencilFailOp = vk_to_gen_stencil_op[info.front.failOp],
+      .StencilPassDepthPassOp = vk_to_gen_stencil_op[info.front.passOp],
+      .StencilPassDepthFailOp = vk_to_gen_stencil_op[info.front.depthFailOp],
+      .StencilTestFunction = vk_to_gen_compare_op[info.front.compareOp],
+      .BackfaceStencilFailOp = vk_to_gen_stencil_op[info.back.failOp],
+      .BackfaceStencilPassDepthPassOp = vk_to_gen_stencil_op[info.back.passOp],
+      .BackfaceStencilPassDepthFailOp =vk_to_gen_stencil_op[info.back.depthFailOp],
+      .BackfaceStencilTestFunction = vk_to_gen_compare_op[info.back.compareOp],
    };
-
-   VkImageAspectFlags aspects = 0;
-   if (subpass->depth_stencil_attachment != VK_ATTACHMENT_UNUSED) {
-      VkFormat depth_stencil_format =
-         pass->attachments[subpass->depth_stencil_attachment].format;
-      aspects = vk_format_aspects(depth_stencil_format);
-   }
-
-   /* The Vulkan spec requires that if either depth or stencil is not present,
-    * the pipeline is to act as if the test silently passes.
-    */
-   if (!(aspects & VK_IMAGE_ASPECT_DEPTH_BIT)) {
-      depth_stencil.DepthBufferWriteEnable = false;
-      depth_stencil.DepthTestFunction = PREFILTEROPALWAYS;
-   }
-
-   if (!(aspects & VK_IMAGE_ASPECT_STENCIL_BIT)) {
-      depth_stencil.StencilBufferWriteEnable = false;
-      depth_stencil.StencilTestFunction = PREFILTEROPALWAYS;
-      depth_stencil.BackfaceStencilTestFunction = PREFILTEROPALWAYS;
-   }
-
-   /* From the Broadwell PRM:
-    *
-    *    "If Depth_Test_Enable = 1 AND Depth_Test_func = EQUAL, the
-    *    Depth_Write_Enable must be set to 0."
-    */
-   if (info->depthTestEnable && info->depthCompareOp == VK_COMPARE_OP_EQUAL)
-      depth_stencil.DepthBufferWriteEnable = false;
 
 #if GEN_GEN <= 7
    GENX(DEPTH_STENCIL_STATE_pack)(NULL, depth_stencil_dw, &depth_stencil);
@@ -843,8 +982,7 @@ emit_cb_state(struct anv_pipeline *pipeline,
 #endif
 
    GENX(BLEND_STATE_pack)(NULL, pipeline->blend_state.map, &blend_state);
-   if (!device->info.has_llc)
-      anv_state_clflush(pipeline->blend_state);
+   anv_state_flush(device, pipeline->blend_state);
 
    anv_batch_emit(&pipeline->batch, GENX(3DSTATE_BLEND_STATE_POINTERS), bsp) {
       bsp.BlendStatePointer      = pipeline->blend_state.offset;
@@ -863,6 +1001,7 @@ emit_3dstate_clip(struct anv_pipeline *pipeline,
    (void) wm_prog_data;
    anv_batch_emit(&pipeline->batch, GENX(3DSTATE_CLIP), clip) {
       clip.ClipEnable               = true;
+      clip.StatisticsEnable         = true;
       clip.EarlyCullEnable          = true;
       clip.APIMode                  = APIMODE_D3D,
       clip.ViewportXYClipTestEnable = true;
@@ -1184,6 +1323,26 @@ emit_3dstate_gs(struct anv_pipeline *pipeline)
    }
 }
 
+static inline bool
+has_color_buffer_write_enabled(const struct anv_pipeline *pipeline)
+{
+   const struct anv_shader_bin *shader_bin =
+      pipeline->shaders[MESA_SHADER_FRAGMENT];
+   if (!shader_bin)
+      return false;
+
+   const struct anv_pipeline_bind_map *bind_map = &shader_bin->bind_map;
+   for (int i = 0; i < bind_map->surface_count; i++) {
+      if (bind_map->surface_to_descriptor[i].set !=
+          ANV_DESCRIPTOR_SET_COLOR_ATTACHMENTS)
+         continue;
+      if (bind_map->surface_to_descriptor[i].index != UINT8_MAX)
+         return true;
+   }
+
+   return false;
+}
+
 static void
 emit_3dstate_wm(struct anv_pipeline *pipeline, struct anv_subpass *subpass,
                 const VkPipelineMultisampleStateCreateInfo *multisample)
@@ -1212,9 +1371,6 @@ emit_3dstate_wm(struct anv_pipeline *pipeline, struct anv_subpass *subpass,
             wm_prog_data->barycentric_interp_modes;
 
 #if GEN_GEN < 8
-         /* FIXME: This needs a lot more work, cf gen7 upload_wm_state(). */
-         wm.ThreadDispatchEnable          = true;
-
          wm.PixelShaderComputedDepthMode  = wm_prog_data->computed_depth_mode;
          wm.PixelShaderUsesSourceDepth    = wm_prog_data->uses_src_depth;
          wm.PixelShaderUsesSourceW        = wm_prog_data->uses_src_w;
@@ -1229,6 +1385,12 @@ emit_3dstate_wm(struct anv_pipeline *pipeline, struct anv_subpass *subpass,
           */
          wm.PixelShaderKillsPixel         = subpass->has_ds_self_dep ||
                                             wm_prog_data->uses_kill;
+
+         if (wm.PixelShaderComputedDepthMode != PSCDEPTH_OFF ||
+             wm_prog_data->has_side_effects ||
+             wm.PixelShaderKillsPixel ||
+             has_color_buffer_write_enabled(pipeline))
+            wm.ThreadDispatchEnable = true;
 
          if (samples > 1) {
             wm.MultisampleRasterizationMode = MSRASTMODE_ON_PATTERN;
@@ -1348,26 +1510,6 @@ emit_3dstate_ps(struct anv_pipeline *pipeline,
    }
 }
 
-static inline bool
-has_color_buffer_write_enabled(const struct anv_pipeline *pipeline)
-{
-   const struct anv_shader_bin *shader_bin =
-      pipeline->shaders[MESA_SHADER_FRAGMENT];
-   if (!shader_bin)
-      return false;
-
-   const struct anv_pipeline_bind_map *bind_map = &shader_bin->bind_map;
-   for (int i = 0; i < bind_map->surface_count; i++) {
-      if (bind_map->surface_to_descriptor[i].set !=
-          ANV_DESCRIPTOR_SET_COLOR_ATTACHMENTS)
-         continue;
-      if (bind_map->surface_to_descriptor[i].index != UINT8_MAX)
-         return true;
-   }
-
-   return false;
-}
-
 #if GEN_GEN >= 8
 static void
 emit_3dstate_ps_extra(struct anv_pipeline *pipeline,
@@ -1448,6 +1590,46 @@ emit_3dstate_vf_topology(struct anv_pipeline *pipeline)
 }
 #endif
 
+static void
+emit_3dstate_vf_statistics(struct anv_pipeline *pipeline)
+{
+   anv_batch_emit(&pipeline->batch, GENX(3DSTATE_VF_STATISTICS), vfs) {
+      vfs.StatisticsEnable = true;
+   }
+}
+
+static void
+compute_kill_pixel(struct anv_pipeline *pipeline,
+                   const VkPipelineMultisampleStateCreateInfo *ms_info,
+                   const struct anv_subpass *subpass)
+{
+   if (!anv_pipeline_has_stage(pipeline, MESA_SHADER_FRAGMENT)) {
+      pipeline->kill_pixel = false;
+      return;
+   }
+
+   const struct brw_wm_prog_data *wm_prog_data = get_wm_prog_data(pipeline);
+
+   /* This computes the KillPixel portion of the computation for whether or
+    * not we want to enable the PMA fix on gen8 or gen9.  It's given by this
+    * chunk of the giant formula:
+    *
+    *    (3DSTATE_PS_EXTRA::PixelShaderKillsPixels ||
+    *     3DSTATE_PS_EXTRA::oMask Present to RenderTarget ||
+    *     3DSTATE_PS_BLEND::AlphaToCoverageEnable ||
+    *     3DSTATE_PS_BLEND::AlphaTestEnable ||
+    *     3DSTATE_WM_CHROMAKEY::ChromaKeyKillEnable)
+    *
+    * 3DSTATE_WM_CHROMAKEY::ChromaKeyKillEnable is always false and so is
+    * 3DSTATE_PS_BLEND::AlphaTestEnable since Vulkan doesn't have a concept
+    * of an alpha test.
+    */
+   pipeline->kill_pixel =
+      subpass->has_ds_self_dep || wm_prog_data->uses_kill ||
+      wm_prog_data->uses_omask ||
+      (ms_info && ms_info->alphaToCoverageEnable);
+}
+
 static VkResult
 genX(graphics_pipeline_create)(
     VkDevice                                    _device,
@@ -1485,6 +1667,7 @@ genX(graphics_pipeline_create)(
    emit_ds_state(pipeline, pCreateInfo->pDepthStencilState, pass, subpass);
    emit_cb_state(pipeline, pCreateInfo->pColorBlendState,
                            pCreateInfo->pMultisampleState);
+   compute_kill_pixel(pipeline, pCreateInfo->pMultisampleState, subpass);
 
    emit_urb_setup(pipeline);
 
@@ -1521,10 +1704,11 @@ genX(graphics_pipeline_create)(
    emit_3dstate_ps_extra(pipeline, subpass);
    emit_3dstate_vf_topology(pipeline);
 #endif
+   emit_3dstate_vf_statistics(pipeline);
 
    *pPipeline = anv_pipeline_to_handle(pipeline);
 
-   return VK_SUCCESS;
+   return pipeline->batch.status;
 }
 
 static VkResult
@@ -1563,6 +1747,7 @@ compute_pipeline_create(
    pipeline->batch.next = pipeline->batch.start = pipeline->batch_data;
    pipeline->batch.end = pipeline->batch.start + sizeof(pipeline->batch_data);
    pipeline->batch.relocs = &pipeline->batch_relocs;
+   pipeline->batch.status = VK_SUCCESS;
 
    /* When we free the pipeline, we detect stages based on the NULL status
     * of various prog_data pointers.  Make them NULL by default.
@@ -1652,7 +1837,7 @@ compute_pipeline_create(
 
    *pPipeline = anv_pipeline_to_handle(pipeline);
 
-   return VK_SUCCESS;
+   return pipeline->batch.status;
 }
 
 VkResult genX(CreateGraphicsPipelines)(

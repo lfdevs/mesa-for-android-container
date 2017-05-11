@@ -47,11 +47,11 @@
 #include "main/imports.h"
 #include "intel_batchbuffer.h"
 #include "brw_state.h"
-#include "brw_vs.h"
 #include "brw_wm.h"
 #include "brw_gs.h"
 #include "brw_cs.h"
 #include "brw_program.h"
+#include "compiler/brw_eu.h"
 
 #define FILE_DEBUG_FLAG DEBUG_STATE
 
@@ -213,27 +213,27 @@ static void
 brw_cache_new_bo(struct brw_cache *cache, uint32_t new_size)
 {
    struct brw_context *brw = cache->brw;
-   drm_intel_bo *new_bo;
+   struct brw_bo *new_bo;
 
-   new_bo = drm_intel_bo_alloc(brw->bufmgr, "program cache", new_size, 64);
+   new_bo = brw_bo_alloc(brw->bufmgr, "program cache", new_size, 64);
    if (brw->has_llc)
-      drm_intel_gem_bo_map_unsynchronized(new_bo);
+      brw_bo_map_unsynchronized(brw, new_bo);
 
    /* Copy any existing data that needs to be saved. */
    if (cache->next_offset != 0) {
       if (brw->has_llc) {
          memcpy(new_bo->virtual, cache->bo->virtual, cache->next_offset);
       } else {
-         drm_intel_bo_map(cache->bo, false);
-         drm_intel_bo_subdata(new_bo, 0, cache->next_offset,
+         brw_bo_map(brw, cache->bo, false);
+         brw_bo_subdata(new_bo, 0, cache->next_offset,
                               cache->bo->virtual);
-         drm_intel_bo_unmap(cache->bo);
+         brw_bo_unmap(cache->bo);
       }
    }
 
    if (brw->has_llc)
-      drm_intel_bo_unmap(cache->bo);
-   drm_intel_bo_unreference(cache->bo);
+      brw_bo_unmap(cache->bo);
+   brw_bo_unreference(cache->bo);
    cache->bo = new_bo;
    cache->bo_used_by_gpu = false;
 
@@ -252,7 +252,7 @@ brw_lookup_prog(const struct brw_cache *cache,
                 enum brw_cache_id cache_id,
                 const void *data, unsigned data_size)
 {
-   const struct brw_context *brw = cache->brw;
+   struct brw_context *brw = cache->brw;
    unsigned i;
    const struct brw_cache_item *item;
 
@@ -264,10 +264,10 @@ brw_lookup_prog(const struct brw_cache *cache,
             continue;
 
          if (!brw->has_llc)
-            drm_intel_bo_map(cache->bo, false);
+            brw_bo_map(brw, cache->bo, false);
          ret = memcmp(cache->bo->virtual + item->offset, data, item->size);
          if (!brw->has_llc)
-            drm_intel_bo_unmap(cache->bo);
+            brw_bo_unmap(cache->bo);
          if (ret)
             continue;
 
@@ -369,7 +369,7 @@ brw_upload_cache(struct brw_cache *cache,
       if (brw->has_llc) {
          memcpy((char *)cache->bo->virtual + item->offset, data, data_size);
       } else {
-         drm_intel_bo_subdata(cache->bo, item->offset, data_size, data);
+         brw_bo_subdata(cache->bo, item->offset, data_size, data);
       }
    }
 
@@ -406,9 +406,9 @@ brw_init_caches(struct brw_context *brw)
    cache->items =
       calloc(cache->size, sizeof(struct brw_cache_item *));
 
-   cache->bo = drm_intel_bo_alloc(brw->bufmgr, "program cache",  4096, 64);
+   cache->bo = brw_bo_alloc(brw->bufmgr, "program cache",  4096, 64);
    if (brw->has_llc)
-      drm_intel_gem_bo_map_unsynchronized(cache->bo);
+      brw_bo_map_unsynchronized(brw, cache->bo);
 }
 
 static void
@@ -485,10 +485,13 @@ brw_destroy_cache(struct brw_context *brw, struct brw_cache *cache)
 
    DBG("%s\n", __func__);
 
-   if (brw->has_llc)
-      drm_intel_bo_unmap(cache->bo);
-   drm_intel_bo_unreference(cache->bo);
-   cache->bo = NULL;
+   /* This can be NULL if context creation failed early on */
+   if (cache->bo) {
+      if (brw->has_llc)
+         brw_bo_unmap(cache->bo);
+      brw_bo_unreference(cache->bo);
+      cache->bo = NULL;
+   }
    brw_clear_cache(brw, cache);
    free(cache->items);
    cache->items = NULL;
@@ -536,7 +539,7 @@ brw_print_program_cache(struct brw_context *brw)
    struct brw_cache_item *item;
 
    if (!brw->has_llc)
-      drm_intel_bo_map(cache->bo, false);
+      brw_bo_map(brw, cache->bo, false);
 
    for (unsigned i = 0; i < cache->size; i++) {
       for (item = cache->items[i]; item; item = item->next) {
@@ -547,5 +550,5 @@ brw_print_program_cache(struct brw_context *brw)
    }
 
    if (!brw->has_llc)
-      drm_intel_bo_unmap(cache->bo);
+      brw_bo_unmap(cache->bo);
 }

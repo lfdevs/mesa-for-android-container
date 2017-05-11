@@ -181,7 +181,7 @@ save_glx_visual( Display *dpy, XVisualInfo *vinfo,
                  GLint depth_size, GLint stencil_size,
                  GLint accumRedSize, GLint accumGreenSize,
                  GLint accumBlueSize, GLint accumAlphaSize,
-                 GLint level, GLint numAuxBuffers )
+                 GLint level, GLint numAuxBuffers, GLint num_samples )
 {
    GLboolean ximageFlag = GL_TRUE;
    XMesaVisual xmvis;
@@ -229,6 +229,7 @@ save_glx_visual( Display *dpy, XVisualInfo *vinfo,
       if (v->display == dpy
           && v->mesa_visual.level == level
           && v->mesa_visual.numAuxBuffers == numAuxBuffers
+          && v->mesa_visual.samples == num_samples
           && v->ximage_flag == ximageFlag
           && v->mesa_visual.rgbMode == rgbFlag
           && v->mesa_visual.doubleBufferMode == dbFlag
@@ -254,7 +255,7 @@ save_glx_visual( Display *dpy, XVisualInfo *vinfo,
                               stereoFlag, ximageFlag,
                               depth_size, stencil_size,
                               accumRedSize, accumBlueSize,
-                              accumBlueSize, accumAlphaSize, 0, level,
+                              accumBlueSize, accumAlphaSize, num_samples, level,
                               GLX_NONE_EXT );
    if (xmvis) {
       /* Save a copy of the pointer now so we can find this visual again
@@ -344,7 +345,8 @@ create_glx_visual( Display *dpy, XVisualInfo *visinfo )
                               accBits, /* b */
                               accBits, /* a */
                               0,         /* level */
-                              0          /* numAux */
+                              0,         /* numAux */
+                              0          /* numSamples */
          );
    }
    else {
@@ -739,6 +741,7 @@ choose_visual( Display *dpy, int screen, const int *list, GLboolean fbConfig )
    XMesaVisual xmvis = NULL;
    int desiredVisualID = -1;
    int numAux = 0;
+   GLint num_samples = 0;
 
    xmesa_init( dpy );
 
@@ -905,12 +908,13 @@ choose_visual( Display *dpy, int screen, const int *list, GLboolean fbConfig )
           * GLX_ARB_multisample
           */
          case GLX_SAMPLE_BUFFERS_ARB:
+            /* ignore */
+            parselist++;
+            parselist++;
+            break;
          case GLX_SAMPLES_ARB:
             parselist++;
-            if (*parselist++ != 0) {
-               /* ms not supported */
-               return NULL;
-            }
+            num_samples = *parselist++;
             break;
 
          /*
@@ -956,7 +960,6 @@ choose_visual( Display *dpy, int screen, const int *list, GLboolean fbConfig )
             parselist += 2; /* ignore the parameter */
             break;
 
-#ifdef GLX_EXT_texture_from_pixmap
          case GLX_BIND_TO_TEXTURE_RGB_EXT:
             parselist++; /*skip*/
             break;
@@ -978,7 +981,6 @@ choose_visual( Display *dpy, int screen, const int *list, GLboolean fbConfig )
          case GLX_Y_INVERTED_EXT:
             parselist++; /*skip*/
             break;
-#endif
 
 	 case None:
             /* end of list */
@@ -1069,7 +1071,8 @@ choose_visual( Display *dpy, int screen, const int *list, GLboolean fbConfig )
       xmvis = save_glx_visual( dpy, vis, rgb_flag, alpha_flag, double_flag,
                                stereo_flag, depth_size, stencil_size,
                                accumRedSize, accumGreenSize,
-                               accumBlueSize, accumAlphaSize, level, numAux );
+                               accumBlueSize, accumAlphaSize, level, numAux,
+                               num_samples );
    }
 
    return xmvis;
@@ -1604,10 +1607,10 @@ get_config( XMesaVisual xmvis, int attrib, int *value, GLboolean fbconfig )
        * GLX_ARB_multisample
        */
       case GLX_SAMPLE_BUFFERS_ARB:
-         *value = 0;
+         *value = xmvis->mesa_visual.sampleBuffers;
          return 0;
       case GLX_SAMPLES_ARB:
-         *value = 0;
+         *value = xmvis->mesa_visual.samples;
          return 0;
 
       /*
@@ -1664,7 +1667,6 @@ get_config( XMesaVisual xmvis, int attrib, int *value, GLboolean fbconfig )
          *value = xmvis->visinfo->visualid;
          break;
 
-#ifdef GLX_EXT_texture_from_pixmap
       case GLX_BIND_TO_TEXTURE_RGB_EXT:
          *value = True; /*XXX*/
          break;
@@ -1683,7 +1685,6 @@ get_config( XMesaVisual xmvis, int attrib, int *value, GLboolean fbconfig )
       case GLX_Y_INVERTED_EXT:
          *value = True; /*XXX*/
          break;
-#endif
 
       default:
 	 return GLX_BAD_ATTRIBUTE;
@@ -2163,7 +2164,6 @@ glXQueryDrawable(Display *dpy, GLXDrawable draw, int attribute,
       case GLX_FBCONFIG_ID:
          *value = xmbuf->xm_visual->visinfo->visualid;
          return;
-#ifdef GLX_EXT_texture_from_pixmap
       case GLX_TEXTURE_FORMAT_EXT:
          *value = xmbuf->TextureFormat;
          break;
@@ -2173,7 +2173,6 @@ glXQueryDrawable(Display *dpy, GLXDrawable draw, int attribute,
       case GLX_MIPMAP_TEXTURE_EXT:
          *value = xmbuf->TextureMipmap;
          break;
-#endif
 
       default:
          generate_error(dpy, BadValue, 0, X_GLXCreateContextAttribsARB, true);

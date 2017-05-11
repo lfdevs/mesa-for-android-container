@@ -40,7 +40,7 @@ struct vmw_fence_ops
    struct pb_fence_ops base;
    struct vmw_winsys_screen *vws;
 
-   pipe_mutex mutex;
+   mtx_t mutex;
 
    /*
     * Protected by mutex;
@@ -101,10 +101,10 @@ vmw_fences_release(struct vmw_fence_ops *ops)
 {
    struct vmw_fence *fence, *n;
 
-   pipe_mutex_lock(ops->mutex);
+   mtx_lock(&ops->mutex);
    LIST_FOR_EACH_ENTRY_SAFE(fence, n, &ops->not_signaled, ops_list)
       LIST_DELINIT(&fence->ops_list);
-   pipe_mutex_unlock(ops->mutex);
+   mtx_unlock(&ops->mutex);
 }
 
 /**
@@ -130,7 +130,7 @@ vmw_fences_signal(struct pb_fence_ops *fence_ops,
       return;
 
    ops = vmw_fence_ops(fence_ops);
-   pipe_mutex_lock(ops->mutex);
+   mtx_lock(&ops->mutex);
 
    if (!has_emitted) {
       emitted = ops->last_emitted;
@@ -152,7 +152,7 @@ vmw_fences_signal(struct pb_fence_ops *fence_ops,
    ops->last_emitted = emitted;
 
 out_unlock:
-   pipe_mutex_unlock(ops->mutex);
+   mtx_unlock(&ops->mutex);
 }
 
 
@@ -193,7 +193,7 @@ vmw_fence_create(struct pb_fence_ops *fence_ops, uint32_t handle,
    fence->mask = mask;
    fence->seqno = seqno;
    p_atomic_set(&fence->signalled, 0);
-   pipe_mutex_lock(ops->mutex);
+   mtx_lock(&ops->mutex);
 
    if (vmw_fence_seq_is_signaled(seqno, ops->last_signaled, seqno)) {
       p_atomic_set(&fence->signalled, 1);
@@ -203,7 +203,7 @@ vmw_fence_create(struct pb_fence_ops *fence_ops, uint32_t handle,
       LIST_ADDTAIL(&fence->ops_list, &ops->not_signaled);
    }
 
-   pipe_mutex_unlock(ops->mutex);
+   mtx_unlock(&ops->mutex);
 
    return (struct pipe_fence_handle *) fence;
 }
@@ -229,9 +229,9 @@ vmw_fence_reference(struct vmw_winsys_screen *vws,
 
 	 vmw_ioctl_fence_unref(vws, vfence->handle);
 
-         pipe_mutex_lock(ops->mutex);
+         mtx_lock(&ops->mutex);
          LIST_DELINIT(&vfence->ops_list);
-         pipe_mutex_unlock(ops->mutex);
+         mtx_unlock(&ops->mutex);
 
 	 FREE(vfence);
       }
@@ -421,7 +421,7 @@ vmw_fence_ops_create(struct vmw_winsys_screen *vws)
    if(!ops)
       return NULL;
 
-   pipe_mutex_init(ops->mutex);
+   (void) mtx_init(&ops->mutex, mtx_plain);
    LIST_INITHEAD(&ops->not_signaled);
    ops->base.destroy = &vmw_fence_ops_destroy;
    ops->base.fence_reference = &vmw_fence_ops_fence_reference;

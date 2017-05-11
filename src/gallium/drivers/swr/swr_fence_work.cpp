@@ -99,6 +99,12 @@ swr_delete_fs_cb(struct swr_fence_work *work)
    delete work->free.swr_fs;
 }
 
+static void
+swr_delete_gs_cb(struct swr_fence_work *work)
+{
+   delete work->free.swr_gs;
+}
+
 bool
 swr_fence_work_free(struct pipe_fence_handle *fence, void *data,
                     bool aligned_free)
@@ -141,6 +147,21 @@ swr_fence_work_delete_fs(struct pipe_fence_handle *fence,
       return false;
    work->callback = swr_delete_fs_cb;
    work->free.swr_fs = swr_fs;
+
+   swr_add_fence_work(fence, work);
+
+   return true;
+}
+
+bool
+swr_fence_work_delete_gs(struct pipe_fence_handle *fence,
+                         struct swr_geometry_shader *swr_gs)
+{
+   struct swr_fence_work *work = CALLOC_STRUCT(swr_fence_work);
+   if (!work)
+      return false;
+   work->callback = swr_delete_gs_cb;
+   work->free.swr_gs = swr_gs;
 
    swr_add_fence_work(fence, work);
 

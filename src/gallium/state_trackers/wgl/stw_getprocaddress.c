@@ -67,7 +67,7 @@ static const struct stw_extension_entry stw_extension_entries[] = {
    /* WGL_EXT_extensions_string */
    STW_EXTENSION_ENTRY( wglGetExtensionsStringEXT ),
 
-   /* WGL_EXT_swap_interval */
+   /* WGL_EXT_swap_control */
    STW_EXTENSION_ENTRY( wglGetSwapIntervalEXT ),
    STW_EXTENSION_ENTRY( wglSwapIntervalEXT ),
 
@@ -79,6 +79,9 @@ static const struct stw_extension_entry stw_extension_entries[] = {
    STW_EXTENSION_ENTRY( wglReleaseTexImageARB ),
    STW_EXTENSION_ENTRY( wglSetPbufferAttribARB ),
 
+   /*  WGL_ARB_make_current_read */
+   STW_EXTENSION_ENTRY( wglMakeContextCurrentARB ),
+   STW_EXTENSION_ENTRY( wglGetCurrentReadDCARB ),
    { NULL, NULL }
 };
 

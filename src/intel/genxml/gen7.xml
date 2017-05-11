@@ -1,3 +1,4 @@
+<?xml version="1.0" ?>
 <genxml name="IVB" gen="7">
   <enum name="3D_Prim_Topo_Type" prefix="3DPRIM">
     <value name="POINTLIST" value="1"/>
@@ -671,8 +672,8 @@
     <field name="MIP Count / LOD" start="160" end="163" type="uint"/>
     <field name="Append Counter Address" start="198" end="223" type="address"/>
     <field name="Append Counter Enable" start="193" end="193" type="bool"/>
-    <field name="MCS Base Address" start="204" end="223" type="address"/>
-    <field name="MCS Surface Pitch" start="195" end="203" type="uint"/>
+    <field name="Auxiliary Surface Base Address" start="204" end="223" type="address"/>
+    <field name="Auxiliary Surface Pitch" start="195" end="203" type="uint"/>
     <field name="MCS Enable" start="192" end="192" type="bool"/>
     <field name="Reserved: MBZ" start="222" end="223" type="uint"/>
     <field name="X Offset for UV Plane" start="208" end="221" type="uint"/>
@@ -917,23 +918,23 @@
     <field name="DWord Length" start="0" end="7" type="uint" default="2"/>
     <field name="Front Winding" start="52" end="52" type="uint"/>
     <field name="Vertex Sub Pixel Precision Select" start="51" end="51" type="uint"/>
-    <field name="EarlyCull Enable" start="50" end="50" type="bool"/>
+    <field name="Early Cull Enable" start="50" end="50" type="bool"/>
     <field name="Cull Mode" start="48" end="49" type="uint" prefix="CULLMODE">
       <value name="BOTH" value="0"/>
       <value name="NONE" value="1"/>
       <value name="FRONT" value="2"/>
       <value name="BACK" value="3"/>
     </field>
-    <field name="Clipper Statistics Enable" start="42" end="42" type="bool"/>
+    <field name="Statistics Enable" start="42" end="42" type="bool"/>
     <field name="User Clip Distance Cull Test Enable Bitmask" start="32" end="39" type="uint"/>
     <field name="Clip Enable" start="95" end="95" type="bool"/>
     <field name="API Mode" start="94" end="94" type="uint">
       <value name="APIMODE_OGL" value="0"/>
       <value name="APIMODE_D3D" value="1"/>
     </field>
-    <field name="Viewport XY ClipTest Enable" start="92" end="92" type="bool"/>
-    <field name="Viewport Z ClipTest Enable" start="91" end="91" type="bool"/>
-    <field name="Guardband ClipTest Enable" start="90" end="90" type="bool"/>
+    <field name="Viewport XY Clip Test Enable" start="92" end="92" type="bool"/>
+    <field name="Viewport Z Clip Test Enable" start="91" end="91" type="bool"/>
+    <field name="Guardband Clip Test Enable" start="90" end="90" type="bool"/>
     <field name="User Clip Distance Clip Test Enable Bitmask" start="80" end="87" type="uint"/>
     <field name="Clip Mode" start="77" end="79" type="uint">
       <value name="CLIPMODE_NORMAL" value="0"/>
@@ -958,8 +959,8 @@
     </field>
     <field name="Minimum Point Width" start="113" end="123" type="u8.3"/>
     <field name="Maximum Point Width" start="102" end="112" type="u8.3"/>
-    <field name="Force Zero RTAIndex Enable" start="101" end="101" type="bool"/>
-    <field name="Maximum VPIndex" start="96" end="99" type="uint"/>
+    <field name="Force Zero RTA Index Enable" start="101" end="101" type="bool"/>
+    <field name="Maximum VP Index" start="96" end="99" type="uint"/>
   </instruction>
 
   <instruction name="3DSTATE_CONSTANT_DS" bias="2" length="7">
@@ -1130,7 +1131,7 @@
     </field>
     <field name="Illegal Opcode Exception Enable" start="77" end="77" type="bool"/>
     <field name="Mask Stack Exception Enable" start="75" end="75" type="bool"/>
-    <field name="Software  Exception Enable" start="71" end="71" type="bool"/>
+    <field name="Software Exception Enable" start="71" end="71" type="bool"/>
     <field name="Scratch Space Base Pointer" start="106" end="127" type="address"/>
     <field name="Per-Thread Scratch Space" start="96" end="99" type="uint"/>
     <field name="Output Vertex Size" start="151" end="156" type="uint"/>
@@ -1193,7 +1194,7 @@
       <value name="alternate" value="1"/>
     </field>
     <field name="Illegal Opcode Exception Enable" start="45" end="45" type="bool"/>
-    <field name="Software  Exception Enable" start="39" end="39" type="bool"/>
+    <field name="Software Exception Enable" start="39" end="39" type="bool"/>
     <field name="Maximum Number of Threads" start="32" end="38" type="uint"/>
     <field name="Function Enable" start="95" end="95" type="bool"/>
     <field name="Statistics Enable" start="93" end="93" type="bool"/>
@@ -1311,7 +1312,7 @@
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
     <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="32"/>
     <field name="DWord Length" start="0" end="7" type="uint" default="6"/>
-    <field name="Kernel Start Pointer[0]" start="38" end="63" type="offset"/>
+    <field name="Kernel Start Pointer 0" start="38" end="63" type="offset"/>
     <field name="Single Program Flow" start="95" end="95" type="bool"/>
     <field name="Vector Mask Enable" start="94" end="94" type="bool"/>
     <field name="Sampler Count" start="91" end="93" type="uint"/>
@@ -1332,7 +1333,7 @@
     </field>
     <field name="Illegal Opcode Exception Enable" start="77" end="77" type="bool"/>
     <field name="Mask Stack Exception Enable" start="75" end="75" type="bool"/>
-    <field name="Software  Exception Enable" start="71" end="71" type="bool"/>
+    <field name="Software Exception Enable" start="71" end="71" type="bool"/>
     <field name="Scratch Space Base Pointer" start="106" end="127" type="address"/>
     <field name="Per Thread Scratch Space" start="96" end="99" type="uint"/>
     <field name="Maximum Number of Threads" start="152" end="159" type="uint"/>
@@ -1350,11 +1351,11 @@
     <field name="32 Pixel Dispatch Enable" start="130" end="130" type="bool"/>
     <field name="16 Pixel Dispatch Enable" start="129" end="129" type="bool"/>
     <field name="8 Pixel Dispatch Enable" start="128" end="128" type="bool"/>
-    <field name="Dispatch GRF Start Register For Constant/Setup Data [0]" start="176" end="182" type="uint"/>
-    <field name="Dispatch GRF Start Register For Constant/Setup Data [1]" start="168" end="174" type="uint"/>
-    <field name="Dispatch GRF Start Register For Constant/Setup Data [2]" start="160" end="166" type="uint"/>
-    <field name="Kernel Start Pointer[1]" start="198" end="223" type="offset"/>
-    <field name="Kernel Start Pointer[2]" start="230" end="255" type="offset"/>
+    <field name="Dispatch GRF Start Register For Constant/Setup Data 0" start="176" end="182" type="uint"/>
+    <field name="Dispatch GRF Start Register For Constant/Setup Data 1" start="168" end="174" type="uint"/>
+    <field name="Dispatch GRF Start Register For Constant/Setup Data 2" start="160" end="166" type="uint"/>
+    <field name="Kernel Start Pointer 1" start="198" end="223" type="offset"/>
+    <field name="Kernel Start Pointer 2" start="230" end="255" type="offset"/>
   </instruction>
 
   <instruction name="3DSTATE_PUSH_CONSTANT_ALLOC_DS" bias="2" length="2">
@@ -1601,7 +1602,7 @@
       <value name="4.0 pixels" value="3"/>
     </field>
     <field name="Scissor Rectangle Enable" start="75" end="75" type="bool"/>
-    <field name="Multisample Rasterization  Mode" start="72" end="73" type="uint"/>
+    <field name="Multisample Rasterization Mode" start="72" end="73" type="uint"/>
     <field name="Last Pixel Enable" start="127" end="127" type="bool"/>
     <field name="Triangle Strip/List Provoking Vertex Select" start="125" end="126" type="uint">
       <value name="Vertex 0" value="0"/>
@@ -1845,7 +1846,7 @@
       <value name="Alternate" value="1"/>
     </field>
     <field name="Illegal Opcode Exception Enable" start="77" end="77" type="bool"/>
-    <field name="Software  Exception Enable" start="71" end="71" type="bool"/>
+    <field name="Software Exception Enable" start="71" end="71" type="bool"/>
     <field name="Scratch Space Base Pointer" start="106" end="127" type="address"/>
     <field name="Per-Thread Scratch Space" start="96" end="99" type="uint"/>
     <field name="Dispatch GRF Start Register For URB Data" start="148" end="152" type="uint"/>
@@ -2316,8 +2317,7 @@
     <field name="DWord Length" start="0" end="5" type="uint" default="2"/>
     <field name="Address" start="66" end="95" type="address"/>
     <field name="Core Mode Enable" start="64" end="64" type="uint"/>
-    <field name="Data DWord 0" start="96" end="127" type="uint"/>
-    <field name="Data DWord 1" start="128" end="159" type="uint"/>
+    <field name="Immediate Data" start="96" end="159" type="uint"/>
   </instruction>
 
   <instruction name="MI_STORE_DATA_INDEX" bias="2" length="3">
@@ -2430,7 +2430,7 @@
     <field name="Indirect State Pointers Disable" start="41" end="41" type="bool"/>
     <field name="Notify Enable" start="40" end="40" type="bool"/>
     <field name="Pipe Control Flush Enable" start="39" end="39" type="bool"/>
-    <field name="DC  Flush Enable" start="37" end="37" type="bool"/>
+    <field name="DC Flush Enable" start="37" end="37" type="bool"/>
     <field name="VF Cache Invalidation Enable" start="36" end="36" type="bool"/>
     <field name="Constant Cache Invalidation Enable" start="35" end="35" type="bool"/>
     <field name="State Cache Invalidation Enable" start="34" end="34" type="bool"/>
@@ -2502,6 +2502,114 @@
     <field name="SW Tessellation Memory Object Control State" start="40" end="43" type="MEMORY_OBJECT_CONTROL_STATE"/>
   </instruction>
 
+  <register name="IA_VERTICES_COUNT" length="2" num="0x2310">
+    <field name="IA Vertices Count Report" start="0" end="63" type="uint"/>
+  </register>
+
+  <register name="IA_PRIMITIVES_COUNT" length="2" num="0x2318">
+    <field name="IA Primitives Count Report" start="0" end="63" type="uint"/>
+  </register>
+
+  <register name="VS_INVOCATION_COUNT" length="2" num="0x2320">
+    <field name="VS Invocation Count Report" start="0" end="63" type="uint"/>
+  </register>
+
+  <register name="HS_INVOCATION_COUNT" length="2" num="0x2300">
+    <field name="HS Invocation Count Report" start="0" end="63" type="uint"/>
+  </register>
+
+  <register name="DS_INVOCATION_COUNT" length="2" num="0x2308">
+    <field name="DS Invocation Count Report" start="0" end="63" type="uint"/>
+  </register>
+
+  <register name="GS_INVOCATION_COUNT" length="2" num="0x2328">
+    <field name="GS Invocation Count Report" start="0" end="63" type="uint"/>
+  </register>
+
+  <register name="GS_PRIMITIVES_COUNT" length="2" num="0x2330">
+    <field name="GS Primitives Count Report" start="0" end="63" type="uint"/>
+  </register>
+
+  <register name="CL_INVOCATION_COUNT" length="2" num="0x2338">
+    <field name="CL Invocation Count Report" start="0" end="63" type="uint"/>
+  </register>
+
+  <register name="CL_PRIMITIVES_COUNT" length="2" num="0x2340">
+    <field name="CL Primitives Count Report" start="0" end="63" type="uint"/>
+  </register>
+
+  <register name="PS_INVOCATION_COUNT" length="2" num="0x2348">
+    <field name="PS Invocation Count Report" start="0" end="63" type="uint"/>
+  </register>
+
+  <register name="CS_INVOCATION_COUNT" length="2" num="0x2290">
+    <field name="CS Invocation Count Report" start="0" end="63" type="uint"/>
+  </register>
+
+  <register name="BCS_INSTDONE" length="1" num="0x2206c">
+    <field name="Ring Enable" start="0" end="0" type="bool"/>
+    <field name="Blitter IDLE" start="1" end="1" type="bool"/>
+    <field name="GAB IDLE" start="2" end="2" type="bool"/>
+    <field name="BCS Done" start="3" end="3" type="bool"/>
+  </register>
+
+  <register name="INSTDONE_1" length="1" num="0x206c">
+    <field name="PRB0 Ring Enable" start="0" end="0" type="bool"/>
+    <field name="VFG Done" start="1" end="1" type="bool"/>
+    <field name="VS Done" start="2" end="2" type="bool"/>
+    <field name="HS Done" start="3" end="3" type="bool"/>
+    <field name="TE Done" start="4" end="4" type="bool"/>
+    <field name="DS Done" start="5" end="5" type="bool"/>
+    <field name="GS Done" start="6" end="6" type="bool"/>
+    <field name="SOL Done" start="7" end="7" type="bool"/>
+    <field name="CL Done" start="8" end="8" type="bool"/>
+    <field name="SF Done" start="9" end="9" type="bool"/>
+    <field name="TDG Done" start="12" end="12" type="bool"/>
+    <field name="URBM Done" start="13" end="13" type="bool"/>
+    <field name="SVG Done" start="14" end="14" type="bool"/>
+    <field name="GAFS Done" start="15" end="15" type="bool"/>
+    <field name="VFE Done" start="16" end="16" type="bool"/>
+    <field name="TSG Done" start="17" end="17" type="bool"/>
+    <field name="GAFM Done" start="18" end="18" type="bool"/>
+    <field name="GAM Done" start="19" end="19" type="bool"/>
+    <field name="SDE Done" start="22" end="22" type="bool"/>
+    <field name="RCCFBC CS Done" start="23" end="23" type="bool"/>
+  </register>
+
+  <register name="VCS_INSTDONE" length="1" num="0x1206c">
+    <field name="Ring Enable" start="0" end="0" type="bool"/>
+    <field name="USB Done" start="1" end="1" type="bool"/>
+    <field name="QRC Done" start="2" end="2" type="bool"/>
+    <field name="SEC Done" start="3" end="3" type="bool"/>
+    <field name="MPC Done" start="4" end="4" type="bool"/>
+    <field name="VFT Done" start="5" end="5" type="bool"/>
+    <field name="BSP Done" start="6" end="6" type="bool"/>
+    <field name="VLF Done" start="7" end="7" type="bool"/>
+    <field name="VOP Done" start="8" end="8" type="bool"/>
+    <field name="VMC Done" start="9" end="9" type="bool"/>
+    <field name="VIP Done" start="10" end="10" type="bool"/>
+    <field name="VIT Done" start="11" end="11" type="bool"/>
+    <field name="VDS Done" start="12" end="12" type="bool"/>
+    <field name="VMX Done" start="13" end="13" type="bool"/>
+    <field name="VCP Done" start="14" end="14" type="bool"/>
+    <field name="VCD Done" start="15" end="15" type="bool"/>
+    <field name="VAD Done" start="16" end="16" type="bool"/>
+    <field name="VMD Done" start="17" end="17" type="bool"/>
+    <field name="VIS Done" start="18" end="18" type="bool"/>
+    <field name="VAC Done" start="19" end="19" type="bool"/>
+    <field name="VAM Done" start="20" end="20" type="bool"/>
+    <field name="JPG Done" start="21" end="21" type="bool"/>
+    <field name="VBP Done" start="22" end="22" type="bool"/>
+    <field name="VHR Done" start="23" end="23" type="bool"/>
+    <field name="VCI Done" start="24" end="24" type="bool"/>
+    <field name="VCR Done" start="25" end="25" type="bool"/>
+    <field name="VIN Done" start="26" end="26" type="bool"/>
+    <field name="VPR Done" start="27" end="27" type="bool"/>
+    <field name="VTQ Done" start="28" end="28" type="bool"/>
+    <field name="VCS Done" start="30" end="30" type="bool"/>
+    <field name="GAC Done" start="31" end="31" type="bool"/>
+  </register>
+
   <register name="L3SQCREG1" length="1" num="0xb010">
     <field name="Convert DC_UC" start="24" end="24" type="uint"/>
     <field name="Convert IS_UC" start="25" end="25" type="uint"/>
@@ -2543,6 +2651,117 @@
 
   <register name="SO_WRITE_OFFSET3" length="1" num="0x528c">
     <field name="Write Offset" start="2" end="31" type="offset"/>
+  </register>
+
+  <register name="GFX_ARB_ERROR_RPT" length="1" num="0x40a0">
+    <field name="TLB Page Fault Error" start="0" end="0" type="bool"/>
+    <field name="Context Page Fault Error" start="1" end="1" type="bool"/>
+    <field name="Invalid Page Directory entry error" start="2" end="2" type="bool"/>
+    <field name="Hardware Status Page Fault Error" start="3" end="3" type="bool"/>
+    <field name="TLB Page VTD Translation Error" start="4" end="4" type="bool"/>
+    <field name="Context Page VTD Translation Error" start="5" end="5" type="bool"/>
+    <field name="Page Directory Entry VTD Translation Error" start="6" end="6" type="bool"/>
+    <field name="Hardware Status Page VTD Translation Error" start="7" end="7" type="bool"/>
+    <field name="Unloaded PD Error" start="8" end="8" type="bool"/>
+  </register>
+
+  <register name="ERR_INT" length="1" num="0x44040">
+    <field name="Primary A GTT Fault Status" start="0" end="0" type="bool"/>
+    <field name="Primary B GTT Fault Status" start="1" end="1" type="bool"/>
+    <field name="Sprite A GTT Fault Status" start="2" end="2" type="bool"/>
+    <field name="Sprite B GTT Fault Status" start="3" end="3" type="bool"/>
+    <field name="Cursor A GTT Fault Status" start="4" end="4" type="bool"/>
+    <field name="Cursor B GTT Fault Status" start="5" end="5" type="bool"/>
+    <field name="Invalid page table entry data" start="6" end="6" type="bool"/>
+    <field name="Invalid GTT page table entry" start="7" end="7" type="bool"/>
+  </register>
+
+  <register name="BCS_FAULT_REG" length="1" num="0x4294">
+    <field name="Valid Bit" start="0" end="0" type="bool"/>
+    <field name="Fault Type" start="1" end="2" type="uint">
+      <value name="Page Fault" value="0"/>
+      <value name="Invalid PD Fault" value="1"/>
+      <value name="Unloaded PD Fault" value="2"/>
+      <value name="Invalid and Unloaded PD fault" value="3"/>
+    </field>
+    <field name= "SRCID of Fault" start="3" end="10" type="uint"/>
+    <field name="GTTSEL" start="11" end="1" type="uint">
+      <value name="PPGTT" value="0"/>
+      <value name="GGTT" value="1"/>
+    </field>
+    <field name="Virtual Address of Fault" start="12" end="31" type="address"/>
+  </register>
+
+  <register name="RCS_FAULT_REG" length="1" num="0x4094">
+    <field name="Valid Bit" start="0" end="0" type="bool"/>
+    <field name="Fault Type" start="1" end="2" type="uint">
+      <value name="Page Fault" value="0"/>
+      <value name="Invalid PD Fault" value="1"/>
+      <value name="Unloaded PD Fault" value="2"/>
+      <value name="Invalid and Unloaded PD fault" value="3"/>
+    </field>
+    <field name= "SRCID of Fault" start="3" end="10" type="uint"/>
+    <field name="GTTSEL" start="11" end="1" type="uint">
+      <value name="PPGTT" value="0"/>
+      <value name="GGTT" value="1"/>
+    </field>
+    <field name="Virtual Address of Fault" start="12" end="31" type="address"/>
+  </register>
+
+  <register name="VCS_FAULT_REG" length="1" num="0x4194">
+    <field name="Valid Bit" start="0" end="0" type="bool"/>
+    <field name="Fault Type" start="1" end="2" type="uint">
+      <value name="Page Fault" value="0"/>
+      <value name="Invalid PD Fault" value="1"/>
+      <value name="Unloaded PD Fault" value="2"/>
+      <value name="Invalid and Unloaded PD fault" value="3"/>
+    </field>
+    <field name= "SRCID of Fault" start="3" end="10" type="uint"/>
+    <field name="GTTSEL" start="11" end="1" type="uint">
+      <value name="PPGTT" value="0"/>
+      <value name="GGTT" value="1"/>
+    </field>
+    <field name="Virtual Address of Fault" start="12" end="31" type="address"/>
+  </register>
+
+  <register name="BCS_RING_BUFFER_CTL" length="1" num="0x2203c">
+    <field name="Ring Buffer Enable" start="0" end="0" type="bool"/>
+    <field name="Automatic Report Head Pointer" start="1" end="2" type="uint">
+      <value name="MI_AUTOREPORT_OFF" value="0"/>
+      <value name="MI_AUTOREPORT_64KB" value="1"/>
+      <value name="MI_AUTOREPORT_4KB" value="2"/>
+      <value name="MI_AUTOREPORT_128KB" value="3"/>
+    </field>
+    <field name="Disable Register Accesses" start="8" end="8" type="bool"/>
+    <field name="Semaphore Wait" start="10" end="10" type="bool"/>
+    <field name="RBWait" start="11" end="11" type="bool"/>
+    <field name="Buffer Length (in pages - 1)" start="12" end="20" type="uint"/>
+  </register>
+
+  <register name="RCS_RING_BUFFER_CTL" length="1" num="0x203c">
+    <field name="Ring Buffer Enable" start="0" end="0" type="bool"/>
+    <field name="Automatic Report Head Pointer" start="1" end="2" type="uint">
+      <value name="MI_AUTOREPORT_OFF" value="0"/>
+      <value name="MI_AUTOREPORT_64KBMI_AUTOREPORT_4KB" value="1"/>
+      <value name="MI_AUTOREPORT_128KB" value="3"/>
+    </field>
+    <field name="Semaphore Wait" start="10" end="10" type="bool"/>
+    <field name="RBWait" start="11" end="11" type="bool"/>
+    <field name="Buffer Length (in pages - 1)" start="12" end="20" type="uint"/>
+  </register>
+
+  <register name="VCS_RING_BUFFER_CTL" length="1" num="0x1203c">
+    <field name="Ring Buffer Enable" start="0" end="0" type="bool"/>
+    <field name="Automatic Report Head Pointer" start="1" end="2" type="uint">
+      <value name="MI_AUTOREPORT_OFF" value="0"/>
+      <value name="MI_AUTOREPORT_64KB" value="1"/>
+      <value name="MI_AUTOREPORT_4KB" value="2"/>
+      <value name="MI_AUTOREPORT_128KB" value="3"/>
+    </field>
+    <field name="Disable Register Accesses" start="8" end="8" type="bool"/>
+    <field name="Semaphore Wait" start="10" end="10" type="bool"/>
+    <field name="RBWait" start="11" end="11" type="bool"/>
+    <field name="Buffer Length (in pages - 1)" start="12" end="20" type="uint"/>
   </register>
 
 </genxml>

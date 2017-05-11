@@ -20,8 +20,11 @@ LIBGLSL_FILES = \
 	glsl/blob.c \
 	glsl/blob.h \
 	glsl/builtin_functions.cpp \
+	glsl/builtin_functions.h \
+	glsl/builtin_int64.h \
 	glsl/builtin_types.cpp \
 	glsl/builtin_variables.cpp \
+	glsl/generate_ir.cpp \
 	glsl/glsl_parser_extras.cpp \
 	glsl/glsl_parser_extras.h \
 	glsl/glsl_symbol_table.cpp \
@@ -88,6 +91,7 @@ LIBGLSL_FILES = \
 	glsl/lower_distance.cpp \
 	glsl/lower_if_to_cond_assign.cpp \
 	glsl/lower_instructions.cpp \
+	glsl/lower_int64.cpp \
 	glsl/lower_jumps.cpp \
 	glsl/lower_mat_op_to_vec.cpp \
 	glsl/lower_noise.cpp \
@@ -137,6 +141,10 @@ LIBGLSL_FILES = \
 	glsl/propagate_invariance.cpp \
 	glsl/s_expression.cpp \
 	glsl/s_expression.h
+
+LIBGLSL_SHADER_CACHE_FILES = \
+	glsl/shader_cache.cpp \
+	glsl/shader_cache.h
 
 # glsl_compiler
 
@@ -197,6 +205,7 @@ NIR_FILES = \
 	nir/nir_liveness.c \
 	nir/nir_loop_analyze.c \
 	nir/nir_loop_analyze.h \
+	nir/nir_lower_64bit_packing.c \
 	nir/nir_lower_alu_to_scalar.c \
 	nir/nir_lower_atomics.c \
 	nir/nir_lower_bitmap.c \
@@ -205,7 +214,6 @@ NIR_FILES = \
 	nir/nir_lower_clip_cull_distance_arrays.c \
 	nir/nir_lower_constant_initializers.c \
 	nir/nir_lower_double_ops.c \
-	nir/nir_lower_double_packing.c \
 	nir/nir_lower_drawpixels.c \
 	nir/nir_lower_global_vars_to_local.c \
 	nir/nir_lower_gs_intrinsics.c \
@@ -213,6 +221,7 @@ NIR_FILES = \
 	nir/nir_lower_locals_to_regs.c \
 	nir/nir_lower_idiv.c \
 	nir/nir_lower_indirect_derefs.c \
+	nir/nir_lower_int64.c \
 	nir/nir_lower_io.c \
 	nir/nir_lower_io_to_temporaries.c \
 	nir/nir_lower_io_to_scalar.c \

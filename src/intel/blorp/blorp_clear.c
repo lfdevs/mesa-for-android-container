@@ -27,7 +27,7 @@
 #include "util/format_rgb9e5.h"
 
 #include "blorp_priv.h"
-#include "brw_defines.h"
+#include "compiler/brw_eu_defines.h"
 
 #include "compiler/nir/nir_builder.h"
 
@@ -40,7 +40,7 @@ struct brw_blorp_const_color_prog_key
    bool pad[3];
 };
 
-static void
+static bool
 blorp_params_get_clear_kernel(struct blorp_context *blorp,
                               struct blorp_params *params,
                               bool use_replicated_data)
@@ -52,7 +52,7 @@ blorp_params_get_clear_kernel(struct blorp_context *blorp,
 
    if (blorp->lookup_shader(blorp, &blorp_key, sizeof(blorp_key),
                             &params->wm_prog_kernel, &params->wm_prog_data))
-      return;
+      return true;
 
    void *mem_ctx = ralloc_context(NULL);
 
@@ -79,12 +79,14 @@ blorp_params_get_clear_kernel(struct blorp_context *blorp,
       blorp_compile_fs(blorp, mem_ctx, b.shader, &wm_key, use_replicated_data,
                        &prog_data, &program_size);
 
-   blorp->upload_shader(blorp, &blorp_key, sizeof(blorp_key),
-                        program, program_size,
-                        &prog_data.base, sizeof(prog_data),
-                        &params->wm_prog_kernel, &params->wm_prog_data);
+   bool result =
+      blorp->upload_shader(blorp, &blorp_key, sizeof(blorp_key),
+                           program, program_size,
+                           &prog_data.base, sizeof(prog_data),
+                           &params->wm_prog_kernel, &params->wm_prog_data);
 
    ralloc_free(mem_ctx);
+   return result;
 }
 
 struct layer_offset_vs_key {
@@ -99,7 +101,7 @@ struct layer_offset_vs_key {
  * no real concept of "base instance", so we have to do it manually in a
  * vertex shader.
  */
-static void
+static bool
 blorp_params_get_layer_offset_vs(struct blorp_context *blorp,
                                  struct blorp_params *params)
 {
@@ -112,7 +114,7 @@ blorp_params_get_layer_offset_vs(struct blorp_context *blorp,
 
    if (blorp->lookup_shader(blorp, &blorp_key, sizeof(blorp_key),
                             &params->vs_prog_kernel, &params->vs_prog_data))
-      return;
+      return true;
 
    void *mem_ctx = ralloc_context(NULL);
 
@@ -168,12 +170,14 @@ blorp_params_get_layer_offset_vs(struct blorp_context *blorp,
    const unsigned *program =
       blorp_compile_vs(blorp, mem_ctx, b.shader, &vs_prog_data, &program_size);
 
-   blorp->upload_shader(blorp, &blorp_key, sizeof(blorp_key),
-                        program, program_size,
-                        &vs_prog_data.base.base, sizeof(vs_prog_data),
-                        &params->vs_prog_kernel, &params->vs_prog_data);
+   bool result =
+      blorp->upload_shader(blorp, &blorp_key, sizeof(blorp_key),
+                           program, program_size,
+                           &vs_prog_data.base.base, sizeof(vs_prog_data),
+                           &params->vs_prog_kernel, &params->vs_prog_data);
 
    ralloc_free(mem_ctx);
+   return result;
 }
 
 /* The x0, y0, x1, and y1 parameters must already be populated with the render
@@ -319,7 +323,8 @@ blorp_fast_clear(struct blorp_batch *batch,
    get_fast_clear_rect(batch->blorp->isl_dev, surf->aux_surf,
                        &params.x0, &params.y0, &params.x1, &params.y1);
 
-   blorp_params_get_clear_kernel(batch->blorp, &params, true);
+   if (!blorp_params_get_clear_kernel(batch->blorp, &params, true))
+      return;
 
    brw_blorp_surface_info_init(batch->blorp, &params.dst, surf, level,
                                start_layer, format, true);
@@ -410,8 +415,9 @@ blorp_clear(struct blorp_batch *batch,
       }
    }
 
-   blorp_params_get_clear_kernel(batch->blorp, &params,
-                                 use_simd16_replicated_data);
+   if (!blorp_params_get_clear_kernel(batch->blorp, &params,
+                                      use_simd16_replicated_data))
+      return;
 
    while (num_layers > 0) {
       brw_blorp_surface_info_init(batch->blorp, &params.dst, surf, level,
@@ -633,7 +639,8 @@ blorp_clear_attachments(struct blorp_batch *batch,
        * is tiled or not, we have to assume it may be linear.  This means no
        * SIMD16_REPDATA for us. :-(
        */
-      blorp_params_get_clear_kernel(batch->blorp, &params, false);
+      if (!blorp_params_get_clear_kernel(batch->blorp, &params, false))
+         return;
    }
 
    if (clear_depth) {
@@ -650,7 +657,9 @@ blorp_clear_attachments(struct blorp_batch *batch,
       params.stencil_ref = stencil_value;
    }
 
-   blorp_params_get_layer_offset_vs(batch->blorp, &params);
+   if (!blorp_params_get_layer_offset_vs(batch->blorp, &params))
+      return;
+
    params.vs_inputs.base_layer = start_layer;
 
    batch->blorp->exec(batch, &params);
@@ -717,7 +726,8 @@ blorp_ccs_resolve(struct blorp_batch *batch,
     * color" message.
     */
 
-   blorp_params_get_clear_kernel(batch->blorp, &params, true);
+   if (!blorp_params_get_clear_kernel(batch->blorp, &params, true))
+      return;
 
    batch->blorp->exec(batch, &params);
 }

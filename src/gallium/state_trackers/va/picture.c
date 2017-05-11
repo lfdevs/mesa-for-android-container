@@ -50,15 +50,15 @@ vlVaBeginPicture(VADriverContextP ctx, VAContextID context_id, VASurfaceID rende
    if (!drv)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
 
-   pipe_mutex_lock(drv->mutex);
+   mtx_lock(&drv->mutex);
    context = handle_table_get(drv->htab, context_id);
    if (!context) {
-      pipe_mutex_unlock(drv->mutex);
+      mtx_unlock(&drv->mutex);
       return VA_STATUS_ERROR_INVALID_CONTEXT;
    }
 
    surf = handle_table_get(drv->htab, render_target);
-   pipe_mutex_unlock(drv->mutex);
+   mtx_unlock(&drv->mutex);
    if (!surf || !surf->buffer)
       return VA_STATUS_ERROR_INVALID_SURFACE;
 
@@ -74,7 +74,8 @@ vlVaBeginPicture(VADriverContextP ctx, VAContextID context_id, VASurfaceID rende
           context->target->buffer_format != PIPE_FORMAT_R8G8B8A8_UNORM &&
           context->target->buffer_format != PIPE_FORMAT_B8G8R8X8_UNORM &&
           context->target->buffer_format != PIPE_FORMAT_R8G8B8X8_UNORM &&
-          context->target->buffer_format != PIPE_FORMAT_NV12)
+          context->target->buffer_format != PIPE_FORMAT_NV12 &&
+          context->target->buffer_format != PIPE_FORMAT_P016)
          return VA_STATUS_ERROR_UNIMPLEMENTED;
 
       return VA_STATUS_SUCCESS;
@@ -119,14 +120,21 @@ getEncParamPreset(vlVaContext *context)
    context->desc.h264enc.rate_ctrl.fill_data_enable = 1;
    context->desc.h264enc.rate_ctrl.enforce_hrd = 1;
    context->desc.h264enc.enable_vui = false;
-   if (context->desc.h264enc.rate_ctrl.frame_rate_num == 0)
-      context->desc.h264enc.rate_ctrl.frame_rate_num = 30;
+   if (context->desc.h264enc.rate_ctrl.frame_rate_num == 0 ||
+       context->desc.h264enc.rate_ctrl.frame_rate_den == 0) {
+         context->desc.h264enc.rate_ctrl.frame_rate_num = 30;
+         context->desc.h264enc.rate_ctrl.frame_rate_den = 1;
+   }
    context->desc.h264enc.rate_ctrl.target_bits_picture =
-      context->desc.h264enc.rate_ctrl.target_bitrate / context->desc.h264enc.rate_ctrl.frame_rate_num;
+      context->desc.h264enc.rate_ctrl.target_bitrate *
+      ((float)context->desc.h264enc.rate_ctrl.frame_rate_den /
+      context->desc.h264enc.rate_ctrl.frame_rate_num);
    context->desc.h264enc.rate_ctrl.peak_bits_picture_integer =
-      context->desc.h264enc.rate_ctrl.peak_bitrate / context->desc.h264enc.rate_ctrl.frame_rate_num;
-   context->desc.h264enc.rate_ctrl.peak_bits_picture_fraction = 0;
+      context->desc.h264enc.rate_ctrl.peak_bitrate *
+      ((float)context->desc.h264enc.rate_ctrl.frame_rate_den /
+      context->desc.h264enc.rate_ctrl.frame_rate_num);
 
+   context->desc.h264enc.rate_ctrl.peak_bits_picture_fraction = 0;
    context->desc.h264enc.ref_pic_mode = 0x00000201;
 }
 
@@ -341,7 +349,13 @@ static VAStatus
 handleVAEncMiscParameterTypeFrameRate(vlVaContext *context, VAEncMiscParameterBuffer *misc)
 {
    VAEncMiscParameterFrameRate *fr = (VAEncMiscParameterFrameRate *)misc->data;
-   context->desc.h264enc.rate_ctrl.frame_rate_num = fr->framerate;
+   if (fr->framerate & 0xffff0000) {
+      context->desc.h264enc.rate_ctrl.frame_rate_num = fr->framerate       & 0xffff;
+      context->desc.h264enc.rate_ctrl.frame_rate_den = fr->framerate >> 16 & 0xffff;
+   } else {
+      context->desc.h264enc.rate_ctrl.frame_rate_num = fr->framerate;
+      context->desc.h264enc.rate_ctrl.frame_rate_den = 1;
+   }
    return VA_STATUS_SUCCESS;
 }
 
@@ -362,7 +376,7 @@ handleVAEncSequenceParameterBufferType(vlVaDriver *drv, vlVaContext *context, vl
       context->gop_coeff = VL_VA_ENC_GOP_COEFF;
    context->desc.h264enc.gop_size = h264->intra_idr_period * context->gop_coeff;
    context->desc.h264enc.rate_ctrl.frame_rate_num = h264->time_scale / 2;
-   context->desc.h264enc.rate_ctrl.frame_rate_den = 1;
+   context->desc.h264enc.rate_ctrl.frame_rate_den = h264->num_units_in_tick;
    return VA_STATUS_SUCCESS;
 }
 
@@ -481,17 +495,17 @@ vlVaRenderPicture(VADriverContextP ctx, VAContextID context_id, VABufferID *buff
    if (!drv)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
 
-   pipe_mutex_lock(drv->mutex);
+   mtx_lock(&drv->mutex);
    context = handle_table_get(drv->htab, context_id);
    if (!context) {
-      pipe_mutex_unlock(drv->mutex);
+      mtx_unlock(&drv->mutex);
       return VA_STATUS_ERROR_INVALID_CONTEXT;
    }
 
    for (i = 0; i < num_buffers; ++i) {
       vlVaBuffer *buf = handle_table_get(drv->htab, buffers[i]);
       if (!buf) {
-         pipe_mutex_unlock(drv->mutex);
+         mtx_unlock(&drv->mutex);
          return VA_STATUS_ERROR_INVALID_BUFFER;
       }
 
@@ -535,7 +549,7 @@ vlVaRenderPicture(VADriverContextP ctx, VAContextID context_id, VABufferID *buff
          break;
       }
    }
-   pipe_mutex_unlock(drv->mutex);
+   mtx_unlock(&drv->mutex);
 
    return vaStatus;
 }
@@ -556,9 +570,9 @@ vlVaEndPicture(VADriverContextP ctx, VAContextID context_id)
    if (!drv)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
 
-   pipe_mutex_lock(drv->mutex);
+   mtx_lock(&drv->mutex);
    context = handle_table_get(drv->htab, context_id);
-   pipe_mutex_unlock(drv->mutex);
+   mtx_unlock(&drv->mutex);
    if (!context)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
 
@@ -570,7 +584,7 @@ vlVaEndPicture(VADriverContextP ctx, VAContextID context_id)
       return VA_STATUS_SUCCESS;
    }
 
-   pipe_mutex_lock(drv->mutex);
+   mtx_lock(&drv->mutex);
    surf = handle_table_get(drv->htab, context->target_id);
    context->mpeg4.frame_num++;
 
@@ -606,6 +620,6 @@ vlVaEndPicture(VADriverContextP ctx, VAContextID context_id)
          surf->force_flushed = true;
       }
    }
-   pipe_mutex_unlock(drv->mutex);
+   mtx_unlock(&drv->mutex);
    return VA_STATUS_SUCCESS;
 }

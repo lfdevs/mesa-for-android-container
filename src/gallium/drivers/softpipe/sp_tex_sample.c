@@ -796,23 +796,6 @@ get_texel_quad_2d_no_border(const struct sp_sampler_view *sp_sview,
    out[3] = get_texel_2d_no_border( sp_sview, addr, x1, y1 );
 }
 
-/* Can involve a lot of unnecessary checks for border color:
- */
-static inline void
-get_texel_quad_2d(const struct sp_sampler_view *sp_sview,
-                  const struct sp_sampler *sp_samp,
-                  union tex_tile_address addr,
-                  int x0, int y0,
-                  int x1, int y1,
-                  const float *out[4])
-{
-   out[0] = get_texel_2d( sp_sview, sp_samp, addr, x0, y0 );
-   out[1] = get_texel_2d( sp_sview, sp_samp, addr, x1, y0 );
-   out[3] = get_texel_2d( sp_sview, sp_samp, addr, x1, y1 );
-   out[2] = get_texel_2d( sp_sview, sp_samp, addr, x0, y1 );
-}
-
-
 
 /* 3d variants:
  */
@@ -3443,7 +3426,8 @@ softpipe_create_sampler_state(struct pipe_context *pipe,
 
 
 compute_lambda_func
-softpipe_get_lambda_func(const struct pipe_sampler_view *view, unsigned shader)
+softpipe_get_lambda_func(const struct pipe_sampler_view *view,
+                         enum pipe_shader_type shader)
 {
    if (shader != PIPE_SHADER_FRAGMENT)
       return compute_lambda_vert;

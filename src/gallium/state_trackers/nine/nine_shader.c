@@ -456,7 +456,6 @@ struct shader_translator
 
     boolean native_integers;
     boolean inline_subroutines;
-    boolean lower_preds;
     boolean want_texcoord;
     boolean shift_wpos;
     boolean wpos_is_sysval;
@@ -735,14 +734,6 @@ tx_addr_alloc(struct shader_translator *tx, INT idx)
         tx->regs.a0 = ureg_DECL_temporary(tx->ureg);
 }
 
-static inline void
-tx_pred_alloc(struct shader_translator *tx, INT idx)
-{
-    assert(idx == 0);
-    if (ureg_dst_is_undef(tx->regs.p))
-        tx->regs.p = ureg_DECL_predicate(tx->ureg);
-}
-
 /* NOTE: It's not very clear on which ps1.1-ps1.3 instructions
  * the projection should be applied on the texture. It doesn't
  * apply on texkill.
@@ -984,9 +975,7 @@ tx_src_param(struct shader_translator *tx, const struct sm1_src_param *param)
         }
         break;
     case D3DSPR_PREDICATE:
-        assert(!param->rel);
-        tx_pred_alloc(tx, param->idx);
-        src = ureg_src(tx->regs.p);
+        assert(!"D3DSPR_PREDICATE");
         break;
     case D3DSPR_SAMPLER:
         assert(param->mod == NINED3DSPSM_NONE);
@@ -1127,14 +1116,14 @@ tx_src_param(struct shader_translator *tx, const struct sm1_src_param *param)
     case NINED3DSPSM_DW:
         tmp = tx_scratch(tx);
         /* NOTE: app is not allowed to read w with this modifier */
-        ureg_RCP(ureg, ureg_writemask(tmp, NINED3DSP_WRITEMASK_3), src);
+        ureg_RCP(ureg, ureg_writemask(tmp, NINED3DSP_WRITEMASK_3), ureg_scalar(src, TGSI_SWIZZLE_W));
         ureg_MUL(ureg, tmp, src, ureg_swizzle(ureg_src(tmp), NINE_SWIZZLE4(W,W,W,W)));
         src = ureg_src(tmp);
         break;
     case NINED3DSPSM_DZ:
         tmp = tx_scratch(tx);
         /* NOTE: app is not allowed to read z with this modifier */
-        ureg_RCP(ureg, ureg_writemask(tmp, NINED3DSP_WRITEMASK_2), src);
+        ureg_RCP(ureg, ureg_writemask(tmp, NINED3DSP_WRITEMASK_2), ureg_scalar(src, TGSI_SWIZZLE_Z));
         ureg_MUL(ureg, tmp, src, ureg_swizzle(ureg_src(tmp), NINE_SWIZZLE4(Z,Z,Z,Z)));
         src = ureg_src(tmp);
         break;
@@ -1305,9 +1294,7 @@ _tx_dst_param(struct shader_translator *tx, const struct sm1_dst_param *param)
         dst = tx->regs.oDepth; /* XXX: must write .z component */
         break;
     case D3DSPR_PREDICATE:
-        assert(!param->rel);
-        tx_pred_alloc(tx, param->idx);
-        dst = tx->regs.p;
+        assert(!"D3DSPR_PREDICATE");
         break;
     case D3DSPR_TEMPFLOAT16:
         DBG("unhandled D3DSPR: %u\n", param->file);
@@ -3521,7 +3508,6 @@ nine_translate_shader(struct NineDevice9 *device, struct nine_shader_info *info,
 
     tx->native_integers = GET_SHADER_CAP(INTEGERS);
     tx->inline_subroutines = !GET_SHADER_CAP(SUBROUTINES);
-    tx->lower_preds = !GET_SHADER_CAP(MAX_PREDS);
     tx->want_texcoord = GET_CAP(TGSI_TEXCOORD);
     tx->shift_wpos = !GET_CAP(TGSI_FS_COORD_PIXEL_CENTER_INTEGER);
     tx->texcoord_sn = tx->want_texcoord ?
@@ -3563,6 +3549,9 @@ nine_translate_shader(struct NineDevice9 *device, struct nine_shader_info *info,
         if (!tx->shift_wpos)
             ureg_property(tx->ureg, TGSI_PROPERTY_FS_COORD_PIXEL_CENTER, TGSI_FS_COORD_PIXEL_CENTER_INTEGER);
     }
+
+    if (GET_CAP(TGSI_MUL_ZERO_WINS))
+       ureg_property(tx->ureg, TGSI_PROPERTY_MUL_ZERO_WINS, 1);
 
     while (!sm1_parse_eof(tx) && !tx->failure)
         sm1_parse_instruction(tx);
@@ -3702,8 +3691,7 @@ nine_translate_shader(struct NineDevice9 *device, struct nine_shader_info *info,
         ureg_DECL_constant2D(tx->ureg, 0, 2, 4); /* Viewport data */
 
     if (debug_get_bool_option("NINE_TGSI_DUMP", FALSE)) {
-        unsigned count;
-        const struct tgsi_token *toks = ureg_get_tokens(tx->ureg, &count);
+        const struct tgsi_token *toks = ureg_get_tokens(tx->ureg, NULL);
         tgsi_dump(toks, 0);
         ureg_free_tokens(toks);
     }

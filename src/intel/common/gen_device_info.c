@@ -36,6 +36,7 @@ static const struct gen_device_info gen_device_info_i965 = {
    .urb = {
       .size = 256,
    },
+   .timebase_scale = 80,
 };
 
 static const struct gen_device_info gen_device_info_g4x = {
@@ -51,6 +52,7 @@ static const struct gen_device_info gen_device_info_g4x = {
    .urb = {
       .size = 384,
    },
+   .timebase_scale = 80,
 };
 
 static const struct gen_device_info gen_device_info_ilk = {
@@ -65,6 +67,7 @@ static const struct gen_device_info gen_device_info_ilk = {
    .urb = {
       .size = 1024,
    },
+   .timebase_scale = 80,
 };
 
 static const struct gen_device_info gen_device_info_snb_gt1 = {
@@ -89,6 +92,7 @@ static const struct gen_device_info gen_device_info_snb_gt1 = {
          [MESA_SHADER_GEOMETRY] = 256,
       },
    },
+   .timebase_scale = 80,
 };
 
 static const struct gen_device_info gen_device_info_snb_gt2 = {
@@ -113,6 +117,7 @@ static const struct gen_device_info gen_device_info_snb_gt2 = {
          [MESA_SHADER_GEOMETRY] = 256,
       },
    },
+   .timebase_scale = 80,
 };
 
 #define GEN7_FEATURES                               \
@@ -121,7 +126,8 @@ static const struct gen_device_info gen_device_info_snb_gt2 = {
    .must_use_separate_stencil = true,               \
    .has_llc = true,                                 \
    .has_pln = true,                                 \
-   .has_surface_tile_offset = true
+   .has_surface_tile_offset = true,                 \
+   .timebase_scale = 80
 
 static const struct gen_device_info gen_device_info_ivb_gt1 = {
    GEN7_FEATURES, .is_ivybridge = true, .gt = 1,
@@ -287,7 +293,8 @@ static const struct gen_device_info gen_device_info_hsw_gt3 = {
    .max_tcs_threads = 504,                          \
    .max_tes_threads = 504,                          \
    .max_gs_threads = 504,                           \
-   .max_wm_threads = 384
+   .max_wm_threads = 384,                           \
+   .timebase_scale = 80
 
 static const struct gen_device_info gen_device_info_bdw_gt1 = {
    GEN8_FEATURES, .gt = 1,
@@ -385,6 +392,7 @@ static const struct gen_device_info gen_device_info_chv = {
    .max_tcs_threads = 336,                          \
    .max_tes_threads = 336,                          \
    .max_cs_threads = 56,                            \
+   .timebase_scale = 1000000000.0 / 12000000.0,     \
    .urb = {                                         \
       .size = 384,                                  \
       .min_entries = {                              \
@@ -410,6 +418,7 @@ static const struct gen_device_info gen_device_info_chv = {
    .max_tes_threads = 112,                         \
    .max_gs_threads = 112,                          \
    .max_cs_threads = 6 * 6,                        \
+   .timebase_scale = 1000000000.0 / 19200123.0,    \
    .urb = {                                        \
       .size = 192,                                 \
       .min_entries = {                             \

@@ -44,8 +44,7 @@ gen6_upload_gs_push_constants(struct brw_context *brw)
       struct brw_stage_prog_data *prog_data = brw->gs.base.prog_data;
 
       _mesa_shader_write_subroutine_indices(&brw->ctx, MESA_SHADER_GEOMETRY);
-      gen6_upload_push_constants(brw, &gp->program, prog_data, stage_state,
-                                 AUB_TRACE_VS_CONSTANTS);
+      gen6_upload_push_constants(brw, &gp->program, prog_data, stage_state);
    }
 
    if (brw->gen >= 7)

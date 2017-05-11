@@ -36,7 +36,7 @@ static unsigned cik_get_macro_tile_index(struct radeon_surf *surf)
 	unsigned index, tileb;
 
 	tileb = 8 * 8 * surf->bpe;
-	tileb = MIN2(surf->tile_split, tileb);
+	tileb = MIN2(surf->u.legacy.tile_split, tileb);
 
 	for (index = 0; tileb > 64; index++)
 		tileb >>= 1;
@@ -58,7 +58,7 @@ static void set_micro_tile_mode(struct radeon_surf *surf,
         return;
     }
 
-    tile_mode = info->si_tile_mode_array[surf->tiling_index[0]];
+    tile_mode = info->si_tile_mode_array[surf->u.legacy.tiling_index[0]];
 
     if (info->chip_class >= CIK)
         surf->micro_tile_mode = G_009910_MICRO_TILE_MODE_NEW(tile_mode);
@@ -67,7 +67,7 @@ static void set_micro_tile_mode(struct radeon_surf *surf,
 }
 
 static void surf_level_winsys_to_drm(struct radeon_surface_level *level_drm,
-                                     const struct radeon_surf_level *level_ws,
+                                     const struct legacy_surf_level *level_ws,
                                      unsigned bpe)
 {
     level_drm->offset = level_ws->offset;
@@ -78,7 +78,7 @@ static void surf_level_winsys_to_drm(struct radeon_surface_level *level_drm,
     level_drm->mode = level_ws->mode;
 }
 
-static void surf_level_drm_to_winsys(struct radeon_surf_level *level_ws,
+static void surf_level_drm_to_winsys(struct legacy_surf_level *level_ws,
                                      const struct radeon_surface_level *level_drm,
                                      unsigned bpe)
 {
@@ -151,26 +151,26 @@ static void surf_winsys_to_drm(struct radeon_surface *surf_drm,
     surf_drm->bo_size = surf_ws->surf_size;
     surf_drm->bo_alignment = surf_ws->surf_alignment;
 
-    surf_drm->bankw = surf_ws->bankw;
-    surf_drm->bankh = surf_ws->bankh;
-    surf_drm->mtilea = surf_ws->mtilea;
-    surf_drm->tile_split = surf_ws->tile_split;
+    surf_drm->bankw = surf_ws->u.legacy.bankw;
+    surf_drm->bankh = surf_ws->u.legacy.bankh;
+    surf_drm->mtilea = surf_ws->u.legacy.mtilea;
+    surf_drm->tile_split = surf_ws->u.legacy.tile_split;
 
     for (i = 0; i <= surf_drm->last_level; i++) {
-        surf_level_winsys_to_drm(&surf_drm->level[i], &surf_ws->level[i],
+        surf_level_winsys_to_drm(&surf_drm->level[i], &surf_ws->u.legacy.level[i],
                                  bpe * surf_drm->nsamples);
 
-        surf_drm->tiling_index[i] = surf_ws->tiling_index[i];
+        surf_drm->tiling_index[i] = surf_ws->u.legacy.tiling_index[i];
     }
 
     if (flags & RADEON_SURF_SBUFFER) {
-        surf_drm->stencil_tile_split = surf_ws->stencil_tile_split;
+        surf_drm->stencil_tile_split = surf_ws->u.legacy.stencil_tile_split;
 
         for (i = 0; i <= surf_drm->last_level; i++) {
             surf_level_winsys_to_drm(&surf_drm->stencil_level[i],
-                                     &surf_ws->stencil_level[i],
+                                     &surf_ws->u.legacy.stencil_level[i],
                                      surf_drm->nsamples);
-            surf_drm->stencil_tiling_index[i] = surf_ws->stencil_tiling_index[i];
+            surf_drm->stencil_tiling_index[i] = surf_ws->u.legacy.stencil_tiling_index[i];
         }
     }
 }
@@ -192,27 +192,27 @@ static void surf_drm_to_winsys(struct radeon_drm_winsys *ws,
     surf_ws->surf_size = surf_drm->bo_size;
     surf_ws->surf_alignment = surf_drm->bo_alignment;
 
-    surf_ws->bankw = surf_drm->bankw;
-    surf_ws->bankh = surf_drm->bankh;
-    surf_ws->mtilea = surf_drm->mtilea;
-    surf_ws->tile_split = surf_drm->tile_split;
+    surf_ws->u.legacy.bankw = surf_drm->bankw;
+    surf_ws->u.legacy.bankh = surf_drm->bankh;
+    surf_ws->u.legacy.mtilea = surf_drm->mtilea;
+    surf_ws->u.legacy.tile_split = surf_drm->tile_split;
 
-    surf_ws->macro_tile_index = cik_get_macro_tile_index(surf_ws);
+    surf_ws->u.legacy.macro_tile_index = cik_get_macro_tile_index(surf_ws);
 
     for (i = 0; i <= surf_drm->last_level; i++) {
-        surf_level_drm_to_winsys(&surf_ws->level[i], &surf_drm->level[i],
+        surf_level_drm_to_winsys(&surf_ws->u.legacy.level[i], &surf_drm->level[i],
                                  surf_drm->bpe * surf_drm->nsamples);
-        surf_ws->tiling_index[i] = surf_drm->tiling_index[i];
+        surf_ws->u.legacy.tiling_index[i] = surf_drm->tiling_index[i];
     }
 
     if (surf_ws->flags & RADEON_SURF_SBUFFER) {
-        surf_ws->stencil_tile_split = surf_drm->stencil_tile_split;
+        surf_ws->u.legacy.stencil_tile_split = surf_drm->stencil_tile_split;
 
         for (i = 0; i <= surf_drm->last_level; i++) {
-            surf_level_drm_to_winsys(&surf_ws->stencil_level[i],
+            surf_level_drm_to_winsys(&surf_ws->u.legacy.stencil_level[i],
                                      &surf_drm->stencil_level[i],
                                      surf_drm->nsamples);
-            surf_ws->stencil_tiling_index[i] = surf_drm->stencil_tiling_index[i];
+            surf_ws->u.legacy.stencil_tiling_index[i] = surf_drm->stencil_tiling_index[i];
         }
     }
 

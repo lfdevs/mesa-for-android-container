@@ -4,7 +4,7 @@
 #include "main/mtypes.h"
 
 #include "brw_context.h"
-#include "intel_bufmgr.h"
+#include "brw_bufmgr.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -38,22 +38,24 @@ extern "C" {
 
 struct intel_batchbuffer;
 
-void intel_batchbuffer_emit_render_ring_prelude(struct brw_context *brw);
-void intel_batchbuffer_init(struct intel_batchbuffer *batch, dri_bufmgr *bufmgr,
+void intel_batchbuffer_init(struct intel_batchbuffer *batch,
+                            struct brw_bufmgr *bufmgr,
                             bool has_llc);
 void intel_batchbuffer_free(struct intel_batchbuffer *batch);
 void intel_batchbuffer_save_state(struct brw_context *brw);
 void intel_batchbuffer_reset_to_saved(struct brw_context *brw);
 void intel_batchbuffer_require_space(struct brw_context *brw, GLuint sz,
                                      enum brw_gpu_ring ring);
+int _intel_batchbuffer_flush_fence(struct brw_context *brw,
+                                   int in_fence_fd, int *out_fence_fd,
+                                   const char *file, int line);
 
-int _intel_batchbuffer_flush(struct brw_context *brw,
-			     const char *file, int line);
+#define intel_batchbuffer_flush(brw) \
+   _intel_batchbuffer_flush_fence((brw), -1, NULL, __FILE__, __LINE__)
 
-#define intel_batchbuffer_flush(intel) \
-	_intel_batchbuffer_flush(intel, __FILE__, __LINE__)
-
-
+#define intel_batchbuffer_flush_fence(brw, in_fence_fd, out_fence_fd) \
+   _intel_batchbuffer_flush_fence((brw), (in_fence_fd), (out_fence_fd), \
+                                  __FILE__, __LINE__)
 
 /* Unlike bmBufferData, this currently requires the buffer be mapped.
  * Consider it a convenience function wrapping multple
@@ -63,18 +65,29 @@ void intel_batchbuffer_data(struct brw_context *brw,
                             const void *data, GLuint bytes,
                             enum brw_gpu_ring ring);
 
-uint32_t intel_batchbuffer_reloc(struct intel_batchbuffer *batch,
-                                 drm_intel_bo *buffer,
-                                 uint32_t offset,
-                                 uint32_t read_domains,
-                                 uint32_t write_domain,
-                                 uint32_t delta);
-uint64_t intel_batchbuffer_reloc64(struct intel_batchbuffer *batch,
-                                   drm_intel_bo *buffer,
-                                   uint32_t offset,
-                                   uint32_t read_domains,
-                                   uint32_t write_domain,
-                                   uint32_t delta);
+bool brw_batch_has_aperture_space(struct brw_context *brw,
+                                  unsigned extra_space_in_bytes);
+
+bool brw_batch_references(struct intel_batchbuffer *batch, struct brw_bo *bo);
+
+uint64_t brw_emit_reloc(struct intel_batchbuffer *batch, uint32_t batch_offset,
+                        struct brw_bo *target, uint32_t target_offset,
+                        uint32_t read_domains, uint32_t write_domain);
+
+static inline uint32_t
+brw_program_reloc(struct brw_context *brw, uint32_t state_offset,
+		  uint32_t prog_offset)
+{
+   if (brw->gen >= 5) {
+      /* Using state base address. */
+      return prog_offset;
+   }
+
+   brw_emit_reloc(&brw->batch, state_offset, brw->cache.bo, prog_offset,
+                  I915_GEM_DOMAIN_INSTRUCTION, 0);
+
+   return brw->cache.bo->offset64 + prog_offset;
+}
 
 #define USED_BATCH(batch) ((uintptr_t)((batch).map_next - (batch).map))
 
@@ -160,23 +173,22 @@ intel_batchbuffer_advance(struct brw_context *brw)
 #define OUT_BATCH(d) *__map++ = (d)
 #define OUT_BATCH_F(f) OUT_BATCH(float_as_int((f)))
 
-#define OUT_RELOC(buf, read_domains, write_domain, delta) do {    \
-   uint32_t __offset = (__map - brw->batch.map) * 4;              \
-   OUT_BATCH(intel_batchbuffer_reloc(&brw->batch, (buf), __offset, \
-                                     (read_domains),              \
-                                     (write_domain),              \
-                                     (delta)));                   \
+#define OUT_RELOC(buf, read_domains, write_domain, delta) do {          \
+   uint32_t __offset = (__map - brw->batch.map) * 4;                    \
+   uint32_t reloc =                                                     \
+      brw_emit_reloc(&brw->batch, __offset, (buf), (delta),             \
+                     (read_domains), (write_domain));                   \
+   OUT_BATCH(reloc);                                                    \
 } while (0)
 
 /* Handle 48-bit address relocations for Gen8+ */
-#define OUT_RELOC64(buf, read_domains, write_domain, delta) do {      \
-   uint32_t __offset = (__map - brw->batch.map) * 4;                  \
-   uint64_t reloc64 = intel_batchbuffer_reloc64(&brw->batch, (buf), __offset, \
-                                                (read_domains),       \
-                                                (write_domain),       \
-                                                (delta));             \
-   OUT_BATCH(reloc64);                                                \
-   OUT_BATCH(reloc64 >> 32);                                          \
+#define OUT_RELOC64(buf, read_domains, write_domain, delta) do {        \
+   uint32_t __offset = (__map - brw->batch.map) * 4;                    \
+   uint64_t reloc64 =                                                   \
+      brw_emit_reloc(&brw->batch, __offset, (buf), (delta),             \
+                     (read_domains), (write_domain));                   \
+   OUT_BATCH(reloc64);                                                  \
+   OUT_BATCH(reloc64 >> 32);                                            \
 } while (0)
 
 #define ADVANCE_BATCH()                  \

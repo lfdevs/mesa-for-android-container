@@ -42,7 +42,7 @@ struct rbug_context {
    struct rbug_list list;
 
    /* call locking */
-   pipe_mutex call_mutex;
+   mtx_t call_mutex;
 
    /* current state */
    struct {
@@ -58,8 +58,8 @@ struct rbug_context {
    } curr;
 
    /* draw locking */
-   pipe_mutex draw_mutex;
-   pipe_condvar draw_cond;
+   mtx_t draw_mutex;
+   cnd_t draw_cond;
    unsigned draw_num_rules;
    int draw_blocker;
    int draw_blocked;
@@ -74,7 +74,7 @@ struct rbug_context {
    } draw_rule;
 
    /* list of state objects */
-   pipe_mutex list_mutex;
+   mtx_t list_mutex;
    unsigned num_shaders;
    struct rbug_list shaders;
 };

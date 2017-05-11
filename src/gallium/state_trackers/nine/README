@@ -3,10 +3,9 @@ Quickstart Guide
 *** Configure and build mesa
 CFLAGS="-m32" CXXFLAGS="-m32" ./autogen.sh --prefix=/usr \
  --with-gallium-drivers=nouveau,r600,swrast --enable-nine \
- --with-gallium-driver-dir="`pwd`/src/gallium/targets/pipe-loader/.libs" \
  --enable-debug --enable-texture-float --with-dri-drivers= --disable-dri \
  --disable-opengl --disable-egl --disable-vdpau --disable-xvmc --disable-gbm \
- --disable-gallium-llvm
+ --disable-llvm
 make
 
 *** Then we create some symlinks to mesa:

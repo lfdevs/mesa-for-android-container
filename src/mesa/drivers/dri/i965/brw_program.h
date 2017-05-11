@@ -24,13 +24,16 @@
 #ifndef BRW_PROGRAM_H
 #define BRW_PROGRAM_H
 
-#include "brw_compiler.h"
+#include "compiler/brw_compiler.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 struct brw_context;
+
+bool brw_do_channel_expressions(struct exec_list *instructions);
+bool brw_do_vector_splitting(struct exec_list *instructions);
 
 struct nir_shader *brw_create_nir(struct brw_context *brw,
                                   const struct gl_shader_program *shader_prog,
@@ -48,17 +51,31 @@ void brw_populate_sampler_prog_key_data(struct gl_context *ctx,
 bool brw_debug_recompile_sampler_key(struct brw_context *brw,
                                      const struct brw_sampler_prog_key_data *old_key,
                                      const struct brw_sampler_prog_key_data *key);
-void brw_add_texrect_params(struct gl_program *prog);
 
-void
-brw_mark_surface_used(struct brw_stage_prog_data *prog_data,
-                      unsigned surf_index);
+uint32_t
+brw_assign_common_binding_table_offsets(const struct gen_device_info *devinfo,
+                                        const struct gl_program *prog,
+                                        struct brw_stage_prog_data *stage_prog_data,
+                                        uint32_t next_binding_table_offset);
 
 void
 brw_stage_prog_data_free(const void *prog_data);
 
 void
 brw_dump_arb_asm(const char *stage, struct gl_program *prog);
+
+bool brw_vs_precompile(struct gl_context *ctx, struct gl_program *prog);
+bool brw_tcs_precompile(struct gl_context *ctx,
+                        struct gl_shader_program *shader_prog,
+                        struct gl_program *prog);
+bool brw_tes_precompile(struct gl_context *ctx,
+                        struct gl_shader_program *shader_prog,
+                        struct gl_program *prog);
+bool brw_gs_precompile(struct gl_context *ctx, struct gl_program *prog);
+bool brw_fs_precompile(struct gl_context *ctx, struct gl_program *prog);
+bool brw_cs_precompile(struct gl_context *ctx, struct gl_program *prog);
+
+GLboolean brw_link_shader(struct gl_context *ctx, struct gl_shader_program *prog);
 
 void brw_upload_tcs_prog(struct brw_context *brw);
 void brw_tcs_populate_key(struct brw_context *brw,

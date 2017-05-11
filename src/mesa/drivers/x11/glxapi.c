@@ -1105,36 +1105,16 @@ const char **
 _glxapi_get_extensions(void)
 {
    static const char *extensions[] = {
-#ifdef GLX_EXT_import_context
       "GLX_EXT_import_context",
-#endif
-#ifdef GLX_SGI_video_sync
       "GLX_SGI_video_sync",
-#endif
-#ifdef GLX_MESA_copy_sub_buffer
       "GLX_MESA_copy_sub_buffer",
-#endif
-#ifdef GLX_MESA_release_buffers
       "GLX_MESA_release_buffers",
-#endif
-#ifdef GLX_MESA_pixmap_colormap
       "GLX_MESA_pixmap_colormap",
-#endif
-#ifdef GLX_MESA_set_3dfx_mode
       "GLX_MESA_set_3dfx_mode",
-#endif
-#ifdef GLX_SGIX_fbconfig
       "GLX_SGIX_fbconfig",
-#endif
-#ifdef GLX_SGIX_pbuffer
       "GLX_SGIX_pbuffer",
-#endif
-#ifdef GLX_EXT_texture_from_pixmap
       "GLX_EXT_texture_from_pixmap",
-#endif
-#ifdef GLX_INTEL_swap_event
       "GLX_INTEL_swap_event",
-#endif
       NULL
    };
    return extensions;

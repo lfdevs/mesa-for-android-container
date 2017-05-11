@@ -1,4 +1,3 @@
-#!/usr/bin/env python2
 #encoding=utf-8
 
 from __future__ import (
@@ -416,51 +415,49 @@ class Group(object):
                 v = "0"
 
             field_index = 0
+            non_address_fields = []
             for field in dw.fields:
                 if field.type != "mbo":
                     name = field.name + field.dim
 
                 if field.type == "mbo":
-                    s = "__gen_mbo(%d, %d)" % \
-                        (field.start - dword_start, field.end - dword_start)
+                    non_address_fields.append("__gen_mbo(%d, %d)" % \
+                        (field.start - dword_start, field.end - dword_start))
                 elif field.type == "address":
-                    s = None
+                    pass
                 elif field.type == "uint":
-                    s = "__gen_uint(values->%s, %d, %d)" % \
-                        (name, field.start - dword_start, field.end - dword_start)
+                    non_address_fields.append("__gen_uint(values->%s, %d, %d)" % \
+                        (name, field.start - dword_start, field.end - dword_start))
                 elif field.type in self.parser.enums:
-                    s = "__gen_uint(values->%s, %d, %d)" % \
-                        (name, field.start - dword_start, field.end - dword_start)
+                    non_address_fields.append("__gen_uint(values->%s, %d, %d)" % \
+                        (name, field.start - dword_start, field.end - dword_start))
                 elif field.type == "int":
-                    s = "__gen_sint(values->%s, %d, %d)" % \
-                        (name, field.start - dword_start, field.end - dword_start)
+                    non_address_fields.append("__gen_sint(values->%s, %d, %d)" % \
+                        (name, field.start - dword_start, field.end - dword_start))
                 elif field.type == "bool":
-                    s = "__gen_uint(values->%s, %d, %d)" % \
-                        (name, field.start - dword_start, field.end - dword_start)
+                    non_address_fields.append("__gen_uint(values->%s, %d, %d)" % \
+                        (name, field.start - dword_start, field.end - dword_start))
                 elif field.type == "float":
-                    s = "__gen_float(values->%s)" % name
+                    non_address_fields.append("__gen_float(values->%s)" % name)
                 elif field.type == "offset":
-                    s = "__gen_offset(values->%s, %d, %d)" % \
-                        (name, field.start - dword_start, field.end - dword_start)
+                    non_address_fields.append("__gen_offset(values->%s, %d, %d)" % \
+                        (name, field.start - dword_start, field.end - dword_start))
                 elif field.type == 'ufixed':
-                    s = "__gen_ufixed(values->%s, %d, %d, %d)" % \
-                        (name, field.start - dword_start, field.end - dword_start, field.fractional_size)
+                    non_address_fields.append("__gen_ufixed(values->%s, %d, %d, %d)" % \
+                        (name, field.start - dword_start, field.end - dword_start, field.fractional_size))
                 elif field.type == 'sfixed':
-                    s = "__gen_sfixed(values->%s, %d, %d, %d)" % \
-                        (name, field.start - dword_start, field.end - dword_start, field.fractional_size)
+                    non_address_fields.append("__gen_sfixed(values->%s, %d, %d, %d)" % \
+                        (name, field.start - dword_start, field.end - dword_start, field.fractional_size))
                 elif field.type in self.parser.structs:
-                    s = "__gen_uint(v%d_%d, %d, %d)" % \
-                        (index, field_index, field.start - dword_start, field.end - dword_start)
+                    non_address_fields.append("__gen_uint(v%d_%d, %d, %d)" % \
+                        (index, field_index, field.start - dword_start, field.end - dword_start))
                     field_index = field_index + 1
                 else:
-                    print("/* unhandled field %s, type %s */\n" % (name, field.type))
-                    s = None
+                    non_address_fields.append("/* unhandled field %s, type %s */\n" % \
+                                              (name, field.type))
 
-                if not s == None:
-                    if field == dw.fields[-1]:
-                        print("      %s;" % s)
-                    else:
-                        print("      %s |" % s)
+            if len(non_address_fields) > 0:
+                print(" |\n".join("      " + f for f in non_address_fields) + ";")
 
             if dw.size == 32:
                 if dw.address:

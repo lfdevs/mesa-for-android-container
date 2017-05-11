@@ -196,7 +196,6 @@ tgsi_util_get_inst_usage_mask(const struct tgsi_full_instruction *inst,
    case TGSI_OPCODE_FMA:
    case TGSI_OPCODE_FRC:
    case TGSI_OPCODE_CEIL:
-   case TGSI_OPCODE_CLAMP:
    case TGSI_OPCODE_FLR:
    case TGSI_OPCODE_ROUND:
    case TGSI_OPCODE_POW:

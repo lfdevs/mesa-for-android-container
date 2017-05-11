@@ -53,7 +53,6 @@
 #include "brw_context.h"
 #include "brw_defines.h"
 #include "brw_blorp.h"
-#include "brw_compiler.h"
 #include "brw_draw.h"
 #include "brw_state.h"
 
@@ -170,7 +169,7 @@ intel_update_framebuffer(struct gl_context *ctx,
 }
 
 static bool
-intel_disable_rb_aux_buffer(struct brw_context *brw, const drm_intel_bo *bo)
+intel_disable_rb_aux_buffer(struct brw_context *brw, const struct brw_bo *bo)
 {
    const struct gl_framebuffer *fb = brw->ctx.DrawBuffer;
    bool found = false;
@@ -206,10 +205,9 @@ intel_texture_view_requires_resolve(struct brw_context *brw,
        !intel_miptree_is_lossless_compressed(brw, intel_tex->mt))
      return false;
 
-   const uint32_t brw_format = brw_format_for_mesa_format(intel_tex->_Format);
+   const uint32_t brw_format = brw_isl_format_for_mesa_format(intel_tex->_Format);
 
-   if (isl_format_supports_lossless_compression(&brw->screen->devinfo,
-                                                brw_format))
+   if (isl_format_supports_ccs_e(&brw->screen->devinfo, brw_format))
       return false;
 
    perf_debug("Incompatible sampling format (%s) for rbc (%s)\n",
@@ -274,14 +272,12 @@ intel_update_state(struct gl_context * ctx, GLuint new_state)
 
    /* Resolve color for each active shader image. */
    for (unsigned i = 0; i < MESA_SHADER_STAGES; i++) {
-      const struct gl_linked_shader *shader =
-         ctx->_Shader->CurrentProgram[i] ?
-            ctx->_Shader->CurrentProgram[i]->_LinkedShaders[i] : NULL;
+      const struct gl_program *prog = ctx->_Shader->CurrentProgram[i];
 
-      if (unlikely(shader && shader->Program->info.num_images)) {
-         for (unsigned j = 0; j < shader->Program->info.num_images; j++) {
+      if (unlikely(prog && prog->info.num_images)) {
+         for (unsigned j = 0; j < prog->info.num_images; j++) {
             struct gl_image_unit *u =
-               &ctx->ImageUnits[shader->Program->sh.ImageUnits[j]];
+               &ctx->ImageUnits[prog->sh.ImageUnits[j]];
             tex_obj = intel_texture_object(u->TexObj);
 
             if (tex_obj && tex_obj->mt) {
@@ -417,7 +413,7 @@ intel_finish(struct gl_context * ctx)
    intel_glFlush(ctx);
 
    if (brw->batch.last_bo)
-      drm_intel_bo_wait_rendering(brw->batch.last_bo);
+      brw_bo_wait_rendering(brw, brw->batch.last_bo);
 }
 
 static void
@@ -484,6 +480,10 @@ brw_init_driver_functions(struct brw_context *brw,
    } else {
       functions->BeginTransformFeedback = brw_begin_transform_feedback;
       functions->EndTransformFeedback = brw_end_transform_feedback;
+      functions->PauseTransformFeedback = brw_pause_transform_feedback;
+      functions->ResumeTransformFeedback = brw_resume_transform_feedback;
+      functions->GetTransformFeedbackVertexCount =
+         brw_get_transform_feedback_vertex_count;
    }
 
    if (brw->gen >= 6)
@@ -524,6 +524,21 @@ brw_initialize_context_constants(struct brw_context *brw)
    ctx->Const.MaxCombinedShaderOutputResources =
       MAX_IMAGE_UNITS + BRW_MAX_DRAW_BUFFERS;
 
+   /* The timestamp register we can read for glGetTimestamp() is
+    * sometimes only 32 bits, before scaling to nanoseconds (depending
+    * on kernel).
+    *
+    * Once scaled to nanoseconds the timestamp would roll over at a
+    * non-power-of-two, so an application couldn't use
+    * GL_QUERY_COUNTER_BITS to handle rollover correctly.  Instead, we
+    * report 36 bits and truncate at that (rolling over 5 times as
+    * often as the HW counter), and when the 32-bit counter rolls
+    * over, it happens to also be at a rollover in the reported value
+    * from near (1<<36) to 0.
+    *
+    * The low 32 bits rolls over in ~343 seconds.  Our 36-bit result
+    * rolls over every ~69 seconds.
+    */
    ctx->Const.QueryCounterBits.Timestamp = 36;
 
    ctx->Const.MaxTextureCoordUnits = 8; /* Mesa limit */
@@ -876,11 +891,11 @@ brw_process_driconf_options(struct brw_context *brw)
    case DRI_CONF_BO_REUSE_DISABLED:
       break;
    case DRI_CONF_BO_REUSE_ALL:
-      intel_bufmgr_gem_enable_reuse(brw->bufmgr);
+      brw_bufmgr_enable_reuse(brw->bufmgr);
       break;
    }
 
-   if (!driQueryOptionb(options, "hiz")) {
+   if (INTEL_DEBUG & DEBUG_NO_HIZ) {
        brw->has_hiz = false;
        /* On gen6, you can only do separate stencil with HIZ. */
        if (brw->gen == 6)
@@ -918,6 +933,12 @@ brw_process_driconf_options(struct brw_context *brw)
 
    ctx->Const.AllowGLSLExtensionDirectiveMidShader =
       driQueryOptionb(options, "allow_glsl_extension_directive_midshader");
+
+   ctx->Const.AllowHigherCompatVersion =
+      driQueryOptionb(options, "allow_higher_compat_version");
+
+   ctx->Const.ForceGLSLAbsSqrt =
+      driQueryOptionb(options, "force_glsl_abs_sqrt");
 
    ctx->Const.GLSLZeroInit = driQueryOptionb(options, "glsl_zero_init");
 
@@ -1073,10 +1094,10 @@ brwCreateContext(gl_api api,
        * This is required for transform feedback buffer offsets, query objects,
        * and also allows us to reduce how much state we have to emit.
        */
-      brw->hw_ctx = drm_intel_gem_context_create(brw->bufmgr);
+      brw->hw_ctx = brw_create_hw_context(brw->bufmgr);
 
       if (!brw->hw_ctx) {
-         fprintf(stderr, "Gen6+ requires Kernel 3.6 or later.\n");
+         fprintf(stderr, "Failed to create hardware context.\n");
          intelDestroyContext(driContextPriv);
          return false;
       }
@@ -1112,10 +1133,6 @@ brwCreateContext(gl_api api,
 
    brw->max_gtt_map_object_size = screen->max_gtt_map_object_size;
 
-   brw->use_resource_streamer = screen->has_resource_streamer &&
-      (env_var_as_boolean("INTEL_USE_HW_BT", false) ||
-       env_var_as_boolean("INTEL_USE_GATHER", false));
-
    ctx->VertexProgram._MaintainTnlProgram = true;
    ctx->FragmentProgram._MaintainTexEnvProgram = true;
 
@@ -1139,6 +1156,9 @@ brwCreateContext(gl_api api,
    _mesa_initialize_dispatch_tables(ctx);
    _mesa_initialize_vbo_vtxfmt(ctx);
 
+   if (ctx->Extensions.INTEL_performance_query)
+      brw_init_performance_queries(brw);
+
    vbo_use_buffer_objects(ctx);
    vbo_always_unmap_buffers(ctx);
 
@@ -1151,12 +1171,6 @@ intelDestroyContext(__DRIcontext * driContextPriv)
    struct brw_context *brw =
       (struct brw_context *) driContextPriv->driverPrivate;
    struct gl_context *ctx = &brw->ctx;
-
-   /* Dump a final BMP in case the application doesn't call SwapBuffers */
-   if (INTEL_DEBUG & DEBUG_AUB) {
-      intel_batchbuffer_flush(brw);
-      aub_dump_bmp(&brw->ctx);
-   }
 
    _mesa_meta_free(&brw->ctx);
 
@@ -1174,23 +1188,19 @@ intelDestroyContext(__DRIcontext * driContextPriv)
    brw_destroy_state(brw);
    brw_draw_destroy(brw);
 
-   drm_intel_bo_unreference(brw->curbe.curbe_bo);
+   brw_bo_unreference(brw->curbe.curbe_bo);
    if (brw->vs.base.scratch_bo)
-      drm_intel_bo_unreference(brw->vs.base.scratch_bo);
+      brw_bo_unreference(brw->vs.base.scratch_bo);
    if (brw->tcs.base.scratch_bo)
-      drm_intel_bo_unreference(brw->tcs.base.scratch_bo);
+      brw_bo_unreference(brw->tcs.base.scratch_bo);
    if (brw->tes.base.scratch_bo)
-      drm_intel_bo_unreference(brw->tes.base.scratch_bo);
+      brw_bo_unreference(brw->tes.base.scratch_bo);
    if (brw->gs.base.scratch_bo)
-      drm_intel_bo_unreference(brw->gs.base.scratch_bo);
+      brw_bo_unreference(brw->gs.base.scratch_bo);
    if (brw->wm.base.scratch_bo)
-      drm_intel_bo_unreference(brw->wm.base.scratch_bo);
+      brw_bo_unreference(brw->wm.base.scratch_bo);
 
-   gen7_reset_hw_bt_pool_offsets(brw);
-   drm_intel_bo_unreference(brw->hw_bt_pool.bo);
-   brw->hw_bt_pool.bo = NULL;
-
-   drm_intel_gem_context_destroy(brw->hw_ctx);
+   brw_destroy_hw_context(brw->bufmgr, brw->hw_ctx);
 
    if (ctx->swrast_context) {
       _swsetup_DestroyContext(&brw->ctx);
@@ -1204,8 +1214,8 @@ intelDestroyContext(__DRIcontext * driContextPriv)
    brw_fini_pipe_control(brw);
    intel_batchbuffer_free(&brw->batch);
 
-   drm_intel_bo_unreference(brw->throttle_batch[1]);
-   drm_intel_bo_unreference(brw->throttle_batch[0]);
+   brw_bo_unreference(brw->throttle_batch[1]);
+   brw_bo_unreference(brw->throttle_batch[0]);
    brw->throttle_batch[1] = NULL;
    brw->throttle_batch[0] = NULL;
 
@@ -1590,7 +1600,7 @@ intel_query_dri2_buffers(struct brw_context *brw,
  *    DRI2BufferDepthStencil are handled as special cases.
  *
  * \param buffer_name is a human readable name, such as "dri2 front buffer",
- *        that is passed to drm_intel_bo_gem_create_from_name().
+ *        that is passed to brw_bo_gem_create_from_name().
  *
  * \see intel_update_renderbuffers()
  */
@@ -1602,7 +1612,7 @@ intel_process_dri2_buffer(struct brw_context *brw,
                           const char *buffer_name)
 {
    struct gl_framebuffer *fb = drawable->driverPrivate;
-   drm_intel_bo *bo;
+   struct brw_bo *bo;
 
    if (!rb)
       return;
@@ -1623,10 +1633,10 @@ intel_process_dri2_buffer(struct brw_context *brw,
    if (last_mt) {
        /* The bo already has a name because the miptree was created by a
 	* previous call to intel_process_dri2_buffer(). If a bo already has a
-	* name, then drm_intel_bo_flink() is a low-cost getter.  It does not
+	* name, then brw_bo_flink() is a low-cost getter.  It does not
 	* create a new name.
 	*/
-      drm_intel_bo_flink(last_mt->bo, &old_name);
+      brw_bo_flink(last_mt->bo, &old_name);
    }
 
    if (old_name == buffer->name)
@@ -1639,7 +1649,7 @@ intel_process_dri2_buffer(struct brw_context *brw,
               buffer->cpp, buffer->pitch);
    }
 
-   bo = drm_intel_bo_gem_create_from_name(brw->bufmgr, buffer_name,
+   bo = brw_bo_gem_create_from_name(brw->bufmgr, buffer_name,
                                           buffer->name);
    if (!bo) {
       fprintf(stderr,
@@ -1664,7 +1674,7 @@ intel_process_dri2_buffer(struct brw_context *brw,
 
    assert(rb->mt);
 
-   drm_intel_bo_unreference(bo);
+   brw_bo_unreference(bo);
 }
 
 /**

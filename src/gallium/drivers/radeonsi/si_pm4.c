@@ -29,8 +29,6 @@
 #include "si_pipe.h"
 #include "sid.h"
 
-#define NUMBER_OF_STATES (sizeof(union si_state) / sizeof(struct si_pm4_state *))
-
 void si_pm4_cmd_begin(struct si_pm4_state *state, unsigned opcode)
 {
 	state->last_opcode = opcode;
@@ -152,27 +150,15 @@ void si_pm4_emit(struct si_context *sctx, struct si_pm4_state *state)
 
 		radeon_emit(cs, PKT3(PKT3_INDIRECT_BUFFER_CIK, 2, 0));
 		radeon_emit(cs, ib->gpu_address);
-		radeon_emit(cs, (ib->gpu_address >> 32) & 0xffff);
+		radeon_emit(cs, ib->gpu_address >> 32);
 		radeon_emit(cs, (ib->b.b.width0 >> 2) & 0xfffff);
-	}
-}
-
-void si_pm4_emit_dirty(struct si_context *sctx)
-{
-	for (int i = 0; i < NUMBER_OF_STATES; ++i) {
-		struct si_pm4_state *state = sctx->queued.array[i];
-
-		if (!state || sctx->emitted.array[i] == state)
-			continue;
-
-		si_pm4_emit(sctx, state);
-		sctx->emitted.array[i] = state;
 	}
 }
 
 void si_pm4_reset_emitted(struct si_context *sctx)
 {
 	memset(&sctx->emitted, 0, sizeof(sctx->emitted));
+	sctx->dirty_states |= u_bit_consecutive(0, SI_NUM_STATES);
 }
 
 void si_pm4_upload_indirect_buffer(struct si_context *sctx,

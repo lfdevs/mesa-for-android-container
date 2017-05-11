@@ -25,22 +25,41 @@
 
 #include "intel_batchbuffer.h"
 #include "intel_buffer_objects.h"
-#include "intel_bufmgr.h"
+#include "brw_bufmgr.h"
 #include "intel_buffers.h"
 #include "intel_fbo.h"
 #include "brw_context.h"
 #include "brw_defines.h"
 #include "brw_state.h"
+#include "common/gen_decoder.h"
+
+#include "util/hash_table.h"
 
 #include <xf86drm.h>
 #include <i915_drm.h>
 
+#define FILE_DEBUG_FLAG DEBUG_BUFMGR
+
 static void
-intel_batchbuffer_reset(struct intel_batchbuffer *batch, dri_bufmgr *bufmgr,
+intel_batchbuffer_reset(struct intel_batchbuffer *batch,
+                        struct brw_bufmgr *bufmgr,
                         bool has_llc);
 
+static bool
+uint_key_compare(const void *a, const void *b)
+{
+   return a == b;
+}
+
+static uint32_t
+uint_key_hash(const void *key)
+{
+   return (uintptr_t) key;
+}
+
 void
-intel_batchbuffer_init(struct intel_batchbuffer *batch, dri_bufmgr *bufmgr,
+intel_batchbuffer_init(struct intel_batchbuffer *batch,
+                       struct brw_bufmgr *bufmgr,
                        bool has_llc)
 {
    intel_batchbuffer_reset(batch, bufmgr, has_llc);
@@ -50,21 +69,38 @@ intel_batchbuffer_init(struct intel_batchbuffer *batch, dri_bufmgr *bufmgr,
       batch->map = batch->cpu_map;
       batch->map_next = batch->cpu_map;
    }
+
+   batch->reloc_count = 0;
+   batch->reloc_array_size = 250;
+   batch->relocs = malloc(batch->reloc_array_size *
+                          sizeof(struct drm_i915_gem_relocation_entry));
+   batch->exec_count = 0;
+   batch->exec_array_size = 100;
+   batch->exec_bos =
+      malloc(batch->exec_array_size * sizeof(batch->exec_bos[0]));
+   batch->exec_objects =
+      malloc(batch->exec_array_size * sizeof(batch->exec_objects[0]));
+
+   if (INTEL_DEBUG & DEBUG_BATCH) {
+      batch->state_batch_sizes =
+         _mesa_hash_table_create(NULL, uint_key_hash, uint_key_compare);
+   }
 }
 
 static void
-intel_batchbuffer_reset(struct intel_batchbuffer *batch, dri_bufmgr *bufmgr,
+intel_batchbuffer_reset(struct intel_batchbuffer *batch,
+                        struct brw_bufmgr *bufmgr,
                         bool has_llc)
 {
    if (batch->last_bo != NULL) {
-      drm_intel_bo_unreference(batch->last_bo);
+      brw_bo_unreference(batch->last_bo);
       batch->last_bo = NULL;
    }
    batch->last_bo = batch->bo;
 
-   batch->bo = drm_intel_bo_alloc(bufmgr, "batchbuffer", BATCH_SZ, 4096);
+   batch->bo = brw_bo_alloc(bufmgr, "batchbuffer", BATCH_SZ, 4096);
    if (has_llc) {
-      drm_intel_bo_map(batch->bo, true);
+      brw_bo_map(NULL, batch->bo, true);
       batch->map = batch->bo->virtual;
    }
    batch->map_next = batch->map;
@@ -78,6 +114,9 @@ intel_batchbuffer_reset(struct intel_batchbuffer *batch, dri_bufmgr *bufmgr,
     * first BEGIN_BATCH or BEGIN_BATCH_BLT.  Mark it as unknown.
     */
    batch->ring = UNKNOWN_RING;
+
+   if (batch->state_batch_sizes)
+      _mesa_hash_table_clear(batch->state_batch_sizes, NULL);
 }
 
 static void
@@ -91,14 +130,21 @@ void
 intel_batchbuffer_save_state(struct brw_context *brw)
 {
    brw->batch.saved.map_next = brw->batch.map_next;
-   brw->batch.saved.reloc_count =
-      drm_intel_gem_bo_get_reloc_count(brw->batch.bo);
+   brw->batch.saved.reloc_count = brw->batch.reloc_count;
+   brw->batch.saved.exec_count = brw->batch.exec_count;
 }
 
 void
 intel_batchbuffer_reset_to_saved(struct brw_context *brw)
 {
-   drm_intel_gem_bo_clear_relocs(brw->batch.bo, brw->batch.saved.reloc_count);
+   for (int i = brw->batch.saved.exec_count;
+        i < brw->batch.exec_count; i++) {
+      if (brw->batch.exec_bos[i] != brw->batch.bo) {
+         brw_bo_unreference(brw->batch.exec_bos[i]);
+      }
+   }
+   brw->batch.reloc_count = brw->batch.saved.reloc_count;
+   brw->batch.exec_count = brw->batch.saved.exec_count;
 
    brw->batch.map_next = brw->batch.saved.map_next;
    if (USED_BATCH(brw->batch) == 0)
@@ -109,8 +155,20 @@ void
 intel_batchbuffer_free(struct intel_batchbuffer *batch)
 {
    free(batch->cpu_map);
-   drm_intel_bo_unreference(batch->last_bo);
-   drm_intel_bo_unreference(batch->bo);
+
+   for (int i = 0; i < batch->exec_count; i++) {
+      if (batch->exec_bos[i] != batch->bo) {
+         brw_bo_unreference(batch->exec_bos[i]);
+      }
+   }
+   free(batch->relocs);
+   free(batch->exec_bos);
+   free(batch->exec_objects);
+
+   brw_bo_unreference(batch->last_bo);
+   brw_bo_unreference(batch->bo);
+   if (batch->state_batch_sizes)
+      _mesa_hash_table_destroy(batch->state_batch_sizes, NULL);
 }
 
 void
@@ -129,61 +187,176 @@ intel_batchbuffer_require_space(struct brw_context *brw, GLuint sz,
    if (intel_batchbuffer_space(&brw->batch) < sz)
       intel_batchbuffer_flush(brw);
 
-   enum brw_gpu_ring prev_ring = brw->batch.ring;
    /* The intel_batchbuffer_flush() calls above might have changed
     * brw->batch.ring to UNKNOWN_RING, so we need to set it here at the end.
     */
    brw->batch.ring = ring;
+}
 
-   if (unlikely(prev_ring == UNKNOWN_RING && ring == RENDER_RING))
-      intel_batchbuffer_emit_render_ring_prelude(brw);
+#ifdef DEBUG
+#define CSI "\e["
+#define BLUE_HEADER  CSI "0;44m"
+#define NORMAL       CSI "0m"
+
+
+static void
+decode_struct(struct brw_context *brw, struct gen_spec *spec,
+              const char *struct_name, uint32_t *data,
+              uint32_t gtt_offset, uint32_t offset, bool color)
+{
+   struct gen_group *group = gen_spec_find_struct(spec, struct_name);
+   if (!group)
+      return;
+
+   fprintf(stderr, "%s\n", struct_name);
+   gen_print_group(stderr, group, gtt_offset + offset,
+                   &data[offset / 4], color);
+}
+
+static void
+decode_structs(struct brw_context *brw, struct gen_spec *spec,
+               const char *struct_name,
+               uint32_t *data, uint32_t gtt_offset, uint32_t offset,
+               int struct_size, bool color)
+{
+   struct gen_group *group = gen_spec_find_struct(spec, struct_name);
+   if (!group)
+      return;
+
+   int entries = brw_state_batch_size(brw, offset) / struct_size;
+   for (int i = 0; i < entries; i++) {
+      fprintf(stderr, "%s %d\n", struct_name, i);
+      gen_print_group(stderr, group, gtt_offset + offset,
+                      &data[(offset + i * struct_size) / 4], color);
+   }
 }
 
 static void
 do_batch_dump(struct brw_context *brw)
 {
-   struct drm_intel_decode *decode;
    struct intel_batchbuffer *batch = &brw->batch;
-   int ret;
+   struct gen_spec *spec = gen_spec_load(&brw->screen->devinfo);
 
-   decode = drm_intel_decode_context_alloc(brw->screen->deviceID);
-   if (!decode)
+   if (batch->ring != RENDER_RING)
       return;
 
-   ret = drm_intel_bo_map(batch->bo, false);
-   if (ret == 0) {
-      drm_intel_decode_set_batch_pointer(decode,
-					 batch->bo->virtual,
-					 batch->bo->offset64,
-                                         USED_BATCH(*batch));
-   } else {
+   int ret = brw_bo_map(brw, batch->bo, false);
+   if (ret != 0) {
       fprintf(stderr,
 	      "WARNING: failed to map batchbuffer (%s), "
 	      "dumping uploaded data instead.\n", strerror(ret));
-
-      drm_intel_decode_set_batch_pointer(decode,
-					 batch->map,
-					 batch->bo->offset64,
-                                         USED_BATCH(*batch));
    }
 
-   drm_intel_decode_set_output_file(decode, stderr);
-   drm_intel_decode(decode);
+   uint32_t *data = batch->bo->virtual ? batch->bo->virtual : batch->map;
+   uint32_t *end = data + USED_BATCH(*batch);
+   uint32_t gtt_offset = batch->bo->virtual ? batch->bo->offset64 : 0;
+   int length;
 
-   drm_intel_decode_context_free(decode);
+   bool color = INTEL_DEBUG & DEBUG_COLOR;
+   const char *header_color = color ? BLUE_HEADER : "";
+   const char *reset_color  = color ? NORMAL : "";
+
+   for (uint32_t *p = data; p < end; p += length) {
+      struct gen_group *inst = gen_spec_find_instruction(spec, p);
+      length = gen_group_get_length(inst, p);
+      assert(inst == NULL || length > 0);
+      length = MAX2(1, length);
+      if (inst == NULL) {
+         fprintf(stderr, "unknown instruction %08x\n", p[0]);
+         continue;
+      }
+
+      uint64_t offset = gtt_offset + 4 * (p - data);
+
+      fprintf(stderr, "%s0x%08"PRIx64":  0x%08x:  %-80s%s\n", header_color,
+              offset, p[0], gen_group_get_name(inst), reset_color);
+
+      gen_print_group(stderr, inst, offset, p, color);
+
+      switch (gen_group_get_opcode(inst) >> 16) {
+      case _3DSTATE_PIPELINED_POINTERS:
+         /* TODO: Decode Gen4-5 pipelined pointers */
+         break;
+      case _3DSTATE_BINDING_TABLE_POINTERS_VS:
+      case _3DSTATE_BINDING_TABLE_POINTERS_HS:
+      case _3DSTATE_BINDING_TABLE_POINTERS_DS:
+      case _3DSTATE_BINDING_TABLE_POINTERS_GS:
+      case _3DSTATE_BINDING_TABLE_POINTERS_PS: {
+         struct gen_group *group =
+            gen_spec_find_struct(spec, "RENDER_SURFACE_STATE");
+         if (!group)
+            break;
+
+         uint32_t bt_offset = p[1] & ~0x1fu;
+         int bt_entries = brw_state_batch_size(brw, bt_offset) / 4;
+         uint32_t *bt_pointers = &data[bt_offset / 4];
+         for (int i = 0; i < bt_entries; i++) {
+            fprintf(stderr, "SURFACE_STATE - BTI = %d\n", i);
+            gen_print_group(stderr, group, gtt_offset + bt_pointers[i],
+                            &data[bt_pointers[i] / 4], color);
+         }
+         break;
+      }
+      case _3DSTATE_SAMPLER_STATE_POINTERS_VS:
+      case _3DSTATE_SAMPLER_STATE_POINTERS_HS:
+      case _3DSTATE_SAMPLER_STATE_POINTERS_DS:
+      case _3DSTATE_SAMPLER_STATE_POINTERS_GS:
+      case _3DSTATE_SAMPLER_STATE_POINTERS_PS:
+         decode_structs(brw, spec, "SAMPLER_STATE", data,
+                        gtt_offset, p[1] & ~0x1fu, 4 * 4, color);
+         break;
+      case _3DSTATE_VIEWPORT_STATE_POINTERS:
+         decode_structs(brw, spec, "CLIP_VIEWPORT", data,
+                        gtt_offset, p[1] & ~0x3fu, 4 * 4, color);
+         decode_structs(brw, spec, "SF_VIEWPORT", data,
+                        gtt_offset, p[1] & ~0x3fu, 8 * 4, color);
+         decode_structs(brw, spec, "CC_VIEWPORT", data,
+                        gtt_offset, p[3] & ~0x3fu, 2 * 4, color);
+         break;
+      case _3DSTATE_VIEWPORT_STATE_POINTERS_CC:
+         decode_structs(brw, spec, "CC_VIEWPORT", data,
+                        gtt_offset, p[1] & ~0x3fu, 2 * 4, color);
+         break;
+      case _3DSTATE_VIEWPORT_STATE_POINTERS_SF_CL:
+         decode_structs(brw, spec, "SF_CLIP_VIEWPORT", data,
+                        gtt_offset, p[1] & ~0x3fu, 16 * 4, color);
+         break;
+      case _3DSTATE_SCISSOR_STATE_POINTERS:
+         decode_structs(brw, spec, "SCISSOR_RECT", data,
+                        gtt_offset, p[1] & ~0x1fu, 2 * 4, color);
+         break;
+      case _3DSTATE_BLEND_STATE_POINTERS:
+         /* TODO: handle Gen8+ extra dword at the beginning */
+         decode_structs(brw, spec, "BLEND_STATE", data,
+                        gtt_offset, p[1] & ~0x3fu, 8 * 4, color);
+         break;
+      case _3DSTATE_CC_STATE_POINTERS:
+         if (brw->gen >= 7) {
+            decode_struct(brw, spec, "COLOR_CALC_STATE", data,
+                          gtt_offset, p[1] & ~0x3fu, color);
+         } else if (brw->gen == 6) {
+            decode_structs(brw, spec, "BLEND_STATE", data,
+                           gtt_offset, p[1] & ~0x3fu, 2 * 4, color);
+            decode_struct(brw, spec, "DEPTH_STENCIL_STATE", data,
+                          gtt_offset, p[2] & ~0x3fu, color);
+            decode_struct(brw, spec, "COLOR_CALC_STATE", data,
+                          gtt_offset, p[3] & ~0x3fu, color);
+         }
+         break;
+      case _3DSTATE_DEPTH_STENCIL_STATE_POINTERS:
+         decode_struct(brw, spec, "DEPTH_STENCIL_STATE", data,
+                       gtt_offset, p[1] & ~0x3fu, color);
+         break;
+      }
+   }
 
    if (ret == 0) {
-      drm_intel_bo_unmap(batch->bo);
-
-      brw_debug_batch(brw);
+      brw_bo_unmap(batch->bo);
    }
 }
-
-void
-intel_batchbuffer_emit_render_ring_prelude(struct brw_context *brw)
-{
-   /* Un-used currently */
-}
+#else
+static void do_batch_dump(struct brw_context *brw) { }
+#endif
 
 /**
  * Called when starting a new batch buffer.
@@ -191,8 +364,18 @@ intel_batchbuffer_emit_render_ring_prelude(struct brw_context *brw)
 static void
 brw_new_batch(struct brw_context *brw)
 {
+   /* Unreference any BOs held by the previous batch, and reset counts. */
+   for (int i = 0; i < brw->batch.exec_count; i++) {
+      if (brw->batch.exec_bos[i] != brw->batch.bo) {
+         brw_bo_unreference(brw->batch.exec_bos[i]);
+      }
+      brw->batch.exec_bos[i] = NULL;
+   }
+   brw->batch.reloc_count = 0;
+   brw->batch.exec_count = 0;
+   brw->batch.aperture_space = BATCH_SZ;
+
    /* Create a new batchbuffer and reset the associated state: */
-   drm_intel_gem_bo_clear_relocs(brw->batch.bo, 0);
    intel_batchbuffer_reset_and_clear_render_cache(brw);
 
    /* If the kernel supports hardware contexts, then most hardware state is
@@ -201,12 +384,10 @@ brw_new_batch(struct brw_context *brw)
     * would otherwise be stored in the context (which for all intents and
     * purposes means everything).
     */
-   if (brw->hw_ctx == NULL)
+   if (brw->hw_ctx == 0)
       brw->ctx.NewDriverState |= BRW_NEW_CONTEXT;
 
    brw->ctx.NewDriverState |= BRW_NEW_BATCH;
-
-   brw->state_batch_count = 0;
 
    brw->ib.type = -1;
 
@@ -293,9 +474,13 @@ throttle(struct brw_context *brw)
     */
    if (brw->need_swap_throttle && brw->throttle_batch[0]) {
       if (brw->throttle_batch[1]) {
-         if (!brw->disable_throttling)
-            drm_intel_bo_wait_rendering(brw->throttle_batch[1]);
-         drm_intel_bo_unreference(brw->throttle_batch[1]);
+         if (!brw->disable_throttling) {
+            /* Pass NULL rather than brw so we avoid perf_debug warnings;
+             * stalling is common and expected here...
+             */
+            brw_bo_wait_rendering(NULL, brw->throttle_batch[1]);
+         }
+         brw_bo_unreference(brw->throttle_batch[1]);
       }
       brw->throttle_batch[1] = brw->throttle_batch[0];
       brw->throttle_batch[0] = NULL;
@@ -311,25 +496,116 @@ throttle(struct brw_context *brw)
    }
 }
 
-/* Drop when RS headers get pulled to libdrm */
-#ifndef I915_EXEC_RESOURCE_STREAMER
-#define I915_EXEC_RESOURCE_STREAMER (1<<15)
-#endif
-
-/* TODO: Push this whole function into bufmgr.
- */
-static int
-do_flush_locked(struct brw_context *brw)
+static void
+add_exec_bo(struct intel_batchbuffer *batch, struct brw_bo *bo)
 {
+   if (bo != batch->bo) {
+      for (int i = 0; i < batch->exec_count; i++) {
+         if (batch->exec_bos[i] == bo)
+            return;
+      }
+
+      brw_bo_reference(bo);
+   }
+
+   if (batch->exec_count == batch->exec_array_size) {
+      batch->exec_array_size *= 2;
+      batch->exec_bos =
+         realloc(batch->exec_bos,
+                 batch->exec_array_size * sizeof(batch->exec_bos[0]));
+      batch->exec_objects =
+         realloc(batch->exec_objects,
+                 batch->exec_array_size * sizeof(batch->exec_objects[0]));
+   }
+
+   struct drm_i915_gem_exec_object2 *validation_entry =
+      &batch->exec_objects[batch->exec_count];
+   validation_entry->handle = bo->gem_handle;
+   if (bo == batch->bo) {
+      validation_entry->relocation_count = batch->reloc_count;
+      validation_entry->relocs_ptr = (uintptr_t) batch->relocs;
+   } else {
+      validation_entry->relocation_count = 0;
+      validation_entry->relocs_ptr = 0;
+   }
+   validation_entry->alignment = bo->align;
+   validation_entry->offset = bo->offset64;
+   validation_entry->flags = 0;
+   validation_entry->rsvd1 = 0;
+   validation_entry->rsvd2 = 0;
+
+   batch->exec_bos[batch->exec_count] = bo;
+   batch->exec_count++;
+   batch->aperture_space += bo->size;
+}
+
+static int
+execbuffer(int fd,
+           struct intel_batchbuffer *batch,
+           uint32_t ctx_id,
+           int used,
+           int in_fence,
+           int *out_fence,
+           int flags)
+{
+   struct drm_i915_gem_execbuffer2 execbuf = {
+      .buffers_ptr = (uintptr_t) batch->exec_objects,
+      .buffer_count = batch->exec_count,
+      .batch_start_offset = 0,
+      .batch_len = used,
+      .flags = flags,
+      .rsvd1 = ctx_id, /* rsvd1 is actually the context ID */
+   };
+
+   unsigned long cmd = DRM_IOCTL_I915_GEM_EXECBUFFER2;
+
+   if (in_fence != -1) {
+      execbuf.rsvd2 = in_fence;
+      execbuf.flags |= I915_EXEC_FENCE_IN;
+   }
+
+   if (out_fence != NULL) {
+      cmd = DRM_IOCTL_I915_GEM_EXECBUFFER2_WR;
+      *out_fence = -1;
+      execbuf.flags |= I915_EXEC_FENCE_OUT;
+   }
+
+   int ret = drmIoctl(fd, cmd, &execbuf);
+   if (ret != 0)
+      ret = -errno;
+
+   for (int i = 0; i < batch->exec_count; i++) {
+      struct brw_bo *bo = batch->exec_bos[i];
+
+      bo->idle = false;
+
+      /* Update brw_bo::offset64 */
+      if (batch->exec_objects[i].offset != bo->offset64) {
+         DBG("BO %d migrated: 0x%" PRIx64 " -> 0x%llx\n",
+             bo->gem_handle, bo->offset64, batch->exec_objects[i].offset);
+         bo->offset64 = batch->exec_objects[i].offset;
+      }
+   }
+
+   if (ret == 0 && out_fence != NULL)
+      *out_fence = execbuf.rsvd2 >> 32;
+
+   return ret;
+}
+
+static int
+do_flush_locked(struct brw_context *brw, int in_fence_fd, int *out_fence_fd)
+{
+   __DRIscreen *dri_screen = brw->screen->driScrnPriv;
    struct intel_batchbuffer *batch = &brw->batch;
    int ret = 0;
 
    if (brw->has_llc) {
-      drm_intel_bo_unmap(batch->bo);
+      brw_bo_unmap(batch->bo);
    } else {
-      ret = drm_intel_bo_subdata(batch->bo, 0, 4 * USED_BATCH(*batch), batch->map);
+      ret = brw_bo_subdata(batch->bo, 0, 4 * USED_BATCH(*batch), batch->map);
       if (ret == 0 && batch->state_batch_offset != batch->bo->size) {
-	 ret = drm_intel_bo_subdata(batch->bo,
+	 ret = brw_bo_subdata(batch->bo,
 				    batch->state_batch_offset,
 				    batch->bo->size - batch->state_batch_offset,
 				    (char *)batch->map + batch->state_batch_offset);
@@ -342,23 +618,20 @@ do_flush_locked(struct brw_context *brw)
       if (brw->gen >= 6 && batch->ring == BLT_RING) {
          flags = I915_EXEC_BLT;
       } else {
-         flags = I915_EXEC_RENDER |
-            (brw->use_resource_streamer ? I915_EXEC_RESOURCE_STREAMER : 0);
+         flags = I915_EXEC_RENDER;
       }
       if (batch->needs_sol_reset)
 	 flags |= I915_EXEC_GEN7_SOL_RESET;
 
       if (ret == 0) {
-         if (unlikely(INTEL_DEBUG & DEBUG_AUB))
-            brw_annotate_aub(brw);
+         uint32_t hw_ctx = batch->ring == RENDER_RING ? brw->hw_ctx : 0;
 
-	 if (brw->hw_ctx == NULL || batch->ring != RENDER_RING) {
-            ret = drm_intel_bo_mrb_exec(batch->bo, 4 * USED_BATCH(*batch),
-                                        NULL, 0, 0, flags);
-	 } else {
-	    ret = drm_intel_gem_bo_context_exec(batch->bo, brw->hw_ctx,
-                                                4 * USED_BATCH(*batch), flags);
-	 }
+         /* Add the batch itself to the end of the validation list */
+         add_exec_bo(batch, batch->bo);
+
+         ret = execbuffer(dri_screen->fd, batch, hw_ctx,
+                          4 * USED_BATCH(*batch),
+                          in_fence_fd, out_fence_fd, flags);
       }
 
       throttle(brw);
@@ -378,9 +651,17 @@ do_flush_locked(struct brw_context *brw)
    return ret;
 }
 
+/**
+ * The in_fence_fd is ignored if -1.  Otherwise this function takes ownership
+ * of the fd.
+ *
+ * The out_fence_fd is ignored if NULL. Otherwise, the caller takes ownership
+ * of the returned fd.
+ */
 int
-_intel_batchbuffer_flush(struct brw_context *brw,
-			 const char *file, int line)
+_intel_batchbuffer_flush_fence(struct brw_context *brw,
+                               int in_fence_fd, int *out_fence_fd,
+                               const char *file, int line)
 {
    int ret;
 
@@ -389,7 +670,7 @@ _intel_batchbuffer_flush(struct brw_context *brw,
 
    if (brw->throttle_batch[0] == NULL) {
       brw->throttle_batch[0] = brw->batch.bo;
-      drm_intel_bo_reference(brw->throttle_batch[0]);
+      brw_bo_reference(brw->throttle_batch[0]);
    }
 
    if (unlikely(INTEL_DEBUG & DEBUG_BATCH)) {
@@ -419,15 +700,12 @@ _intel_batchbuffer_flush(struct brw_context *brw,
    /* Check that we didn't just wrap our batchbuffer at a bad time. */
    assert(!brw->no_batch_wrap);
 
-   ret = do_flush_locked(brw);
+   ret = do_flush_locked(brw, in_fence_fd, out_fence_fd);
 
    if (unlikely(INTEL_DEBUG & DEBUG_SYNC)) {
       fprintf(stderr, "waiting for idle\n");
-      drm_intel_bo_wait_rendering(brw->batch.bo);
+      brw_bo_wait_rendering(brw, brw->batch.bo);
    }
-
-   if (brw->use_resource_streamer)
-      gen7_reset_hw_bt_pool_offsets(brw);
 
    /* Start a new batch buffer. */
    brw_new_batch(brw);
@@ -435,49 +713,66 @@ _intel_batchbuffer_flush(struct brw_context *brw,
    return ret;
 }
 
+bool
+brw_batch_has_aperture_space(struct brw_context *brw, unsigned extra_space)
+{
+   return brw->batch.aperture_space + extra_space <=
+          brw->screen->aperture_threshold;
+}
+
+bool
+brw_batch_references(struct intel_batchbuffer *batch, struct brw_bo *bo)
+{
+   for (int i = 0; i < batch->exec_count; i++) {
+      if (batch->exec_bos[i] == bo)
+         return true;
+   }
+   return false;
+}
 
 /*  This is the only way buffers get added to the validate list.
  */
-uint32_t
-intel_batchbuffer_reloc(struct intel_batchbuffer *batch,
-                        drm_intel_bo *buffer, uint32_t offset,
-                        uint32_t read_domains, uint32_t write_domain,
-                        uint32_t delta)
-{
-   int ret;
-
-   ret = drm_intel_bo_emit_reloc(batch->bo, offset,
-				 buffer, delta,
-				 read_domains, write_domain);
-   assert(ret == 0);
-   (void)ret;
-
-   /* Using the old buffer offset, write in what the right data would be, in
-    * case the buffer doesn't move and we can short-circuit the relocation
-    * processing in the kernel
-    */
-   return buffer->offset64 + delta;
-}
-
 uint64_t
-intel_batchbuffer_reloc64(struct intel_batchbuffer *batch,
-                          drm_intel_bo *buffer, uint32_t offset,
-                          uint32_t read_domains, uint32_t write_domain,
-                          uint32_t delta)
+brw_emit_reloc(struct intel_batchbuffer *batch, uint32_t batch_offset,
+               struct brw_bo *target, uint32_t target_offset,
+               uint32_t read_domains, uint32_t write_domain)
 {
-   int ret = drm_intel_bo_emit_reloc(batch->bo, offset,
-                                     buffer, delta,
-                                     read_domains, write_domain);
-   assert(ret == 0);
-   (void) ret;
+   uint64_t offset64;
+
+   if (batch->reloc_count == batch->reloc_array_size) {
+      batch->reloc_array_size *= 2;
+      batch->relocs = realloc(batch->relocs,
+                              batch->reloc_array_size *
+                              sizeof(struct drm_i915_gem_relocation_entry));
+   }
+
+   /* Check args */
+   assert(batch_offset <= BATCH_SZ - sizeof(uint32_t));
+   assert(_mesa_bitcount(write_domain) <= 1);
+
+   if (target != batch->bo)
+      add_exec_bo(batch, target);
+
+   struct drm_i915_gem_relocation_entry *reloc =
+      &batch->relocs[batch->reloc_count];
+
+   batch->reloc_count++;
+
+   /* ensure gcc doesn't reload */
+   offset64 = *((volatile uint64_t *)&target->offset64);
+   reloc->offset = batch_offset;
+   reloc->delta = target_offset;
+   reloc->target_handle = target->gem_handle;
+   reloc->read_domains = read_domains;
+   reloc->write_domain = write_domain;
+   reloc->presumed_offset = offset64;
 
    /* Using the old buffer offset, write in what the right data would be, in
     * case the buffer doesn't move and we can short-circuit the relocation
     * processing in the kernel
     */
-   return buffer->offset64 + delta;
+   return offset64 + target_offset;
 }
-
 
 void
 intel_batchbuffer_data(struct brw_context *brw,
@@ -492,7 +787,7 @@ intel_batchbuffer_data(struct brw_context *brw,
 static void
 load_sized_register_mem(struct brw_context *brw,
                         uint32_t reg,
-                        drm_intel_bo *bo,
+                        struct brw_bo *bo,
                         uint32_t read_domains, uint32_t write_domain,
                         uint32_t offset,
                         int size)
@@ -524,7 +819,7 @@ load_sized_register_mem(struct brw_context *brw,
 void
 brw_load_register_mem(struct brw_context *brw,
                       uint32_t reg,
-                      drm_intel_bo *bo,
+                      struct brw_bo *bo,
                       uint32_t read_domains, uint32_t write_domain,
                       uint32_t offset)
 {
@@ -534,7 +829,7 @@ brw_load_register_mem(struct brw_context *brw,
 void
 brw_load_register_mem64(struct brw_context *brw,
                         uint32_t reg,
-                        drm_intel_bo *bo,
+                        struct brw_bo *bo,
                         uint32_t read_domains, uint32_t write_domain,
                         uint32_t offset)
 {
@@ -546,7 +841,7 @@ brw_load_register_mem64(struct brw_context *brw,
  */
 void
 brw_store_register_mem32(struct brw_context *brw,
-                         drm_intel_bo *bo, uint32_t reg, uint32_t offset)
+                         struct brw_bo *bo, uint32_t reg, uint32_t offset)
 {
    assert(brw->gen >= 6);
 
@@ -572,7 +867,7 @@ brw_store_register_mem32(struct brw_context *brw,
  */
 void
 brw_store_register_mem64(struct brw_context *brw,
-                         drm_intel_bo *bo, uint32_t reg, uint32_t offset)
+                         struct brw_bo *bo, uint32_t reg, uint32_t offset)
 {
    assert(brw->gen >= 6);
 
@@ -673,7 +968,7 @@ brw_load_register_reg64(struct brw_context *brw, uint32_t src, uint32_t dest)
  * Write 32-bits of immediate data to a GPU memory buffer.
  */
 void
-brw_store_data_imm32(struct brw_context *brw, drm_intel_bo *bo,
+brw_store_data_imm32(struct brw_context *brw, struct brw_bo *bo,
                      uint32_t offset, uint32_t imm)
 {
    assert(brw->gen >= 6);
@@ -696,7 +991,7 @@ brw_store_data_imm32(struct brw_context *brw, drm_intel_bo *bo,
  * Write 64-bits of immediate data to a GPU memory buffer.
  */
 void
-brw_store_data_imm64(struct brw_context *brw, drm_intel_bo *bo,
+brw_store_data_imm64(struct brw_context *brw, struct brw_bo *bo,
                      uint32_t offset, uint64_t imm)
 {
    assert(brw->gen >= 6);

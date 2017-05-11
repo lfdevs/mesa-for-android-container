@@ -107,6 +107,11 @@ create_frag_shader(struct vl_median_filter *filter,
 
    i_vtex = ureg_DECL_fs_input(shader, TGSI_SEMANTIC_GENERIC, VS_O_VTEX, TGSI_INTERPOLATE_LINEAR);
    sampler = ureg_DECL_sampler(shader, 0);
+   ureg_DECL_sampler_view(shader, 0, TGSI_TEXTURE_2D,
+                          TGSI_RETURN_TYPE_FLOAT,
+                          TGSI_RETURN_TYPE_FLOAT,
+                          TGSI_RETURN_TYPE_FLOAT,
+                          TGSI_RETURN_TYPE_FLOAT);
 
    for (i = 0; i < num_offsets; ++i)
       t_array[i] = ureg_DECL_temporary(shader);

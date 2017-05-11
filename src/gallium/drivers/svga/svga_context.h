@@ -115,7 +115,7 @@ struct svga_blend_state {
       uint8_t srcblend;
       uint8_t dstblend;
       uint8_t blendeq;
-      
+
       boolean separate_alpha_blend_enable;
       uint8_t srcblend_alpha;
       uint8_t dstblend_alpha;
@@ -132,7 +132,7 @@ struct svga_depth_stencil_state {
 
    unsigned alphatestenable:1;
    unsigned alphafunc:8;
-  
+
    struct {
       unsigned enabled:1;
       unsigned func:8;
@@ -140,7 +140,7 @@ struct svga_depth_stencil_state {
       unsigned zfail:8;
       unsigned pass:8;
    } stencil[2];
-   
+
    /* SVGA3D has one ref/mask/writemask triple shared between front &
     * back face stencil.  We really need two:
     */
@@ -177,7 +177,7 @@ struct svga_rasterizer_state {
    float depthbias;
    float pointsize;
    float linewidth;
-   
+
    unsigned hw_fillmode:2;         /* PIPE_POLYGON_MODE_x */
 
    /** Which prims do we need help for?  Bitmask of (1 << PIPE_PRIM_x) flags */
@@ -249,10 +249,11 @@ struct svga_velems_state {
    SVGA3dElementLayoutId id; /**< VGPU10 */
 };
 
+
 /* Use to calculate differences between state emitted to hardware and
- * current driver-calculated state.  
+ * current driver-calculated state.
  */
-struct svga_state 
+struct svga_state
 {
    const struct svga_blend_state *blend;
    const struct svga_depth_stencil_state *depth;
@@ -292,7 +293,7 @@ struct svga_state
    unsigned num_samplers[PIPE_SHADER_TYPES];
    unsigned num_sampler_views[PIPE_SHADER_TYPES];
    unsigned num_vertex_buffers;
-   unsigned reduced_prim;
+   enum pipe_prim_type reduced_prim;
 
    struct {
       unsigned flag_1d;
@@ -320,7 +321,7 @@ struct svga_hw_clear_state
    struct {
       float zmin, zmax;
    } depthrange;
-   
+
    struct pipe_framebuffer_state framebuffer;
    struct svga_prescale prescale;
 };
@@ -398,6 +399,9 @@ struct svga_hw_draw_state
 
    /* used for rebinding */
    unsigned default_constbuf_size[PIPE_SHADER_TYPES];
+
+   boolean rasterizer_discard; /* set if rasterization is disabled */
+   boolean has_backed_views;   /* set if any of the rtv/dsv is a backed surface view */
 };
 
 
@@ -494,8 +498,6 @@ struct svga_context
 
       unsigned texture_timestamp;
 
-      /* 
-       */
       struct svga_sw_state          sw;
       struct svga_hw_draw_state     hw_draw;
       struct svga_hw_clear_state    hw_clear;
@@ -584,6 +586,9 @@ struct svga_context
    /** Alternate rasterizer states created for point sprite */
    struct svga_rasterizer_state *rasterizer_no_cull[2];
 
+   /** Depth stencil state created to disable depth stencil test */
+   struct svga_depth_stencil_state *depthstencil_disable;
+
    /** Current conditional rendering predicate */
    struct {
       SVGA3dQueryId query_id;
@@ -591,6 +596,7 @@ struct svga_context
    } pred;
 
    boolean render_condition;
+   boolean disable_rasterizer; /* Set if to disable rasterization */
 };
 
 /* A flag for each state_tracker state object:
@@ -667,7 +673,7 @@ void svga_surfaces_flush(struct svga_context *svga);
 
 struct pipe_context *
 svga_context_create(struct pipe_screen *screen,
-		    void *priv, unsigned flags);
+                    void *priv, unsigned flags);
 
 
 /***********************************************************************

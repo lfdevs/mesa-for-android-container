@@ -118,14 +118,13 @@ expect_equal_bytes(uint8_t *expected, uint8_t *actual,
 static void
 test_write_and_read_functions (void)
 {
-   void *ctx = ralloc_context(NULL);
    struct blob *blob;
    struct blob_reader reader;
    uint8_t *reserved;
    size_t str_offset, uint_offset;
    uint8_t reserve_buf[sizeof(reserve_test_str)];
 
-   blob = blob_create(ctx);
+   blob = blob_create();
 
    /*** Test blob by writing one of every possible kind of value. */
 
@@ -185,20 +184,19 @@ test_write_and_read_functions (void)
                 "read_consumes_all_bytes");
    expect_equal(false, reader.overrun, "read_does_not_overrun");
 
-   ralloc_free(ctx);
+   blob_destroy(blob);
 }
 
 /* Test that data values are written and read with proper alignment. */
 static void
 test_alignment(void)
 {
-   void *ctx = ralloc_context(NULL);
    struct blob *blob;
    struct blob_reader reader;
    uint8_t bytes[] = "ABCDEFGHIJKLMNOP";
    size_t delta, last, num_bytes;
 
-   blob = blob_create(ctx);
+   blob = blob_create();
 
    /* First, write an intptr value to the blob and capture that size. This is
     * the expected offset between any pair of intptr values (if written with
@@ -244,19 +242,18 @@ test_alignment(void)
                    "aligned read of intptr_t");
    }
 
-   ralloc_free(ctx);
+   blob_destroy(blob);
 }
 
 /* Test that we detect overrun. */
 static void
 test_overrun(void)
 {
-   void *ctx =ralloc_context(NULL);
    struct blob *blob;
    struct blob_reader reader;
    uint32_t value = 0xdeadbeef;
 
-   blob = blob_create(ctx);
+   blob = blob_create();
 
    blob_write_uint32(blob, value);
 
@@ -267,7 +264,7 @@ test_overrun(void)
    expect_equal(0, blob_read_uint32(&reader), "read at overrun");
    expect_equal(true, reader.overrun, "overrun flag set");
 
-   ralloc_free(ctx);
+   blob_destroy(blob);
 }
 
 /* Test that we can read and write some large objects, (exercising the code in
@@ -284,7 +281,7 @@ test_big_objects(void)
    size_t i;
    char *buf;
 
-   blob = blob_create(ctx);
+   blob = blob_create();
 
    /* Initialize our buffer. */
    buf = ralloc_size(ctx, size);
@@ -311,6 +308,7 @@ test_big_objects(void)
    expect_equal(false, reader.overrun,
                 "overrun flag not set reading large objects");
 
+   blob_destroy(blob);
    ralloc_free(ctx);
 }
 

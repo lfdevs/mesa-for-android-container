@@ -81,69 +81,50 @@ create_frag_shader(struct vl_matrix_filter *filter, unsigned num_offsets,
    struct ureg_program *shader;
    struct ureg_src i_vtex;
    struct ureg_src sampler;
-   struct ureg_dst *t_array = MALLOC(sizeof(struct ureg_dst) * num_offsets);
+   struct ureg_dst tmp;
    struct ureg_dst t_sum;
    struct ureg_dst o_fragment;
-   bool first;
    unsigned i;
 
    shader = ureg_create(PIPE_SHADER_FRAGMENT);
    if (!shader) {
-      FREE(t_array);
       return NULL;
    }
 
    i_vtex = ureg_DECL_fs_input(shader, TGSI_SEMANTIC_GENERIC, VS_O_VTEX, TGSI_INTERPOLATE_LINEAR);
    sampler = ureg_DECL_sampler(shader, 0);
+   ureg_DECL_sampler_view(shader, 0, TGSI_TEXTURE_2D,
+                          TGSI_RETURN_TYPE_FLOAT,
+                          TGSI_RETURN_TYPE_FLOAT,
+                          TGSI_RETURN_TYPE_FLOAT,
+                          TGSI_RETURN_TYPE_FLOAT);
 
-   for (i = 0; i < num_offsets; ++i)
-      if (matrix_values[i] != 0.0f)
-         t_array[i] = ureg_DECL_temporary(shader);
-
+   tmp = ureg_DECL_temporary(shader);
+   t_sum = ureg_DECL_temporary(shader);
    o_fragment = ureg_DECL_output(shader, TGSI_SEMANTIC_COLOR, 0);
 
-   /*
-    * t_array[0..*] = vtex + offset[0..*]
-    * t_array[0..*] = tex(t_array[0..*], sampler)
-    * o_fragment = sum(t_array[0..*] * matrix_values[0..*])
-    */
-
+   ureg_MOV(shader, t_sum, ureg_imm1f(shader, 0.0f));
    for (i = 0; i < num_offsets; ++i) {
-      if (matrix_values[i] != 0.0f && !is_vec_zero(offsets[i])) {
-         ureg_ADD(shader, ureg_writemask(t_array[i], TGSI_WRITEMASK_XY),
+      if (matrix_values[i] == 0.0f)
+         continue;
+
+      if (!is_vec_zero(offsets[i])) {
+         ureg_ADD(shader, ureg_writemask(tmp, TGSI_WRITEMASK_XY),
                   i_vtex, ureg_imm2f(shader, offsets[i].x, offsets[i].y));
-         ureg_MOV(shader, ureg_writemask(t_array[i], TGSI_WRITEMASK_ZW),
+         ureg_MOV(shader, ureg_writemask(tmp, TGSI_WRITEMASK_ZW),
                   ureg_imm1f(shader, 0.0f));
+         ureg_TEX(shader, tmp, TGSI_TEXTURE_2D, ureg_src(tmp), sampler);
+      } else {
+         ureg_TEX(shader, tmp, TGSI_TEXTURE_2D, i_vtex, sampler);
       }
+      ureg_MAD(shader, t_sum, ureg_src(tmp), ureg_imm1f(shader, matrix_values[i]),
+               ureg_src(t_sum));
    }
 
-   for (i = 0; i < num_offsets; ++i) {
-      if (matrix_values[i] != 0.0f) {
-         struct ureg_src src = is_vec_zero(offsets[i]) ? i_vtex : ureg_src(t_array[i]);
-         ureg_TEX(shader, t_array[i], TGSI_TEXTURE_2D, src, sampler);
-      }
-   }
-
-   for (i = 0, first = true; i < num_offsets; ++i) {
-      if (matrix_values[i] != 0.0f) {
-         if (first) {
-            t_sum = t_array[i];
-            ureg_MUL(shader, t_sum, ureg_src(t_array[i]),
-                     ureg_imm1f(shader, matrix_values[i]));
-            first = false;
-         } else
-            ureg_MAD(shader, t_sum, ureg_src(t_array[i]),
-                     ureg_imm1f(shader, matrix_values[i]), ureg_src(t_sum));
-      }
-   }
-   if (first)
-      ureg_MOV(shader, o_fragment, ureg_imm1f(shader, 0.0f));
-   else
-      ureg_MOV(shader, o_fragment, ureg_src(t_sum));
+   ureg_MOV(shader, o_fragment, ureg_src(t_sum));
 
    ureg_END(shader);
 
-   FREE(t_array);
    return ureg_create_shader_and_destroy(shader, filter->pipe);
 }
 

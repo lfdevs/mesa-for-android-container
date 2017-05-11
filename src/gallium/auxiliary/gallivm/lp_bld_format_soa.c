@@ -505,7 +505,6 @@ lp_build_fetch_rgba_soa(struct gallivm_state *gallivm,
        * First, figure out fetch order.
        */
       fetch_width = util_next_power_of_two(format_desc->block.bits);
-      num_gather = fetch_width / type.width;
       /*
        * fp64 are treated like fp32 except we fetch twice wide values
        * (as we shuffle after trunc). The shuffles for that work out

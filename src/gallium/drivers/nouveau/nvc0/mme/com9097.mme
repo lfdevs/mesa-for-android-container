@@ -508,18 +508,21 @@ daic_runout_check:
  * parm[3] = MSB of start value
  * parm[4] = desired sequence
  * parm[5] = actual sequence
+ * parm[6] = query high address
+ * parm[7] = query low address
  */
 .section #mme9097_query_buffer_write
    parm $r2
    parm $r3
    parm $r4
-   parm $r5 maddr 0x16c2 /* QUERY_SEQUENCE */
+   parm $r5 maddr 0x16c0 /* QUERY_ADDRESS_HIGH */
    parm $r6
    parm $r7
    mov $r6 (sub $r7 $r6) /* actual - desired */
    mov $r6 (sbb 0x0 0x0) /* if there was underflow, not reached yet */
-   braz annul $r6 #qbw_ready
-   exit
+   parm $r7
+   exit braz $r6 #qbw_ready
+   parm $r6
 qbw_ready:
    mov $r2 (sub $r2 $r4)
    braz $r1 #qbw_postclamp
@@ -531,12 +534,19 @@ qbw_ready:
 qbw_clamp:
    mov $r2 $r1
 qbw_postclamp:
+   send $r7
+   send $r6
    send $r2
+   branz $r1 #qbw_done
    mov $r4 0x1000
-   branz annul $r1 #qbw_done
    send (extrinsrt 0x0 $r4 0x0 0x10 0x10)
-   maddr 0x16c2 /* QUERY_SEQUENCE */
+   maddr 0x16c0 /* QUERY_ADDRESS_HIGH */
+   mov $r5 0x4
+   mov $r6 (add $r6 $r5)
+   mov $r7 (adc $r7 0x0)
+   send $r7
+   send $r6
    send $r3
 qbw_done:
    exit send (extrinsrt 0x0 $r4 0x0 0x10 0x10)
-   nop
+   maddrsend 0x44

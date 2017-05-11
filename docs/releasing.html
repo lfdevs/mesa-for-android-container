@@ -57,11 +57,11 @@ to a minimum.
 
 <h2>Feature releases</h2>
 <ul>
-<li>Available approximatelly every three months.
+<li>Available approximately every three months.
 <li>Initial timeplan available 2-4 weeks before the planned branchpoint (rc1)
 on the mesa-announce@ mailing list.
 <li>A <a href="#prerelease">pre-release</a> announcement should be available
-approximatelly 24 hours before the final (non-rc) release.
+approximately 24 hours before the final (non-rc) release.
 </ul>
 
 <h2>Stable releases</h2>
@@ -69,7 +69,7 @@ approximatelly 24 hours before the final (non-rc) release.
 <li>Normally available once every two weeks.
 <li>Only the latest branch has releases. See note below.
 <li>A <a href="#prerelease">pre-release</a> announcement should be available
-approximatelly 48 hours before the actual release.
+approximately 48 hours before the actual release.
 </ul>
 
 <p>
@@ -115,6 +115,38 @@ performed where possible.
 Achieved by combination of local ad-hoc scripts and AppVeyor plus Travis-CI,
 the latter as part of their Github integration.
 </p>
+<p>
+<strong>Note:</strong> If a patch in the current queue needs any additional
+fix(es), then they should be squashed together.
+<br>
+The commit messages and the <code>cherry picked from</code> tags must be preserved.
+</p>
+<p>
+This should be noted in the <a href="#prerelease">pre-announce</a> email.
+<pre>
+    git show b10859ec41d09c57663a258f43fe57c12332698e
+
+    commit b10859ec41d09c57663a258f43fe57c12332698e
+    Author: Jonas Pfeil &ltpfeiljonas@gmx.de&gt
+    Date:   Wed Mar 1 18:11:10 2017 +0100
+
+        ralloc: Make sure ralloc() allocations match malloc()'s alignment.
+
+        The header of ralloc needs to be aligned, because the compiler assumes
+        ...
+
+        (cherry picked from commit cd2b55e536dc806f9358f71db438dd9c246cdb14)
+
+        Squashed with commit:
+
+        ralloc: don't leave out the alignment factor
+
+        Experimentation shows that without alignment factor gcc and clang choose
+        ...
+
+        (cherry picked from commit ff494fe999510ea40e3ed5827e7818550b6de126)
+</pre>
+</p>
 
 <h2>Regression/functionality testing</h2>
 
@@ -158,6 +190,11 @@ To setup the branchpoint:
 	git checkout master # make sure we're in master first
 	git tag -s X.Y-branchpoint -m "Mesa X.Y branchpoint"
 	git checkout -b X.Y
+	git checkout master
+	$EDITOR VERSION # bump the version number
+	git commit -as
+	cp docs/relnotes/{X.Y,X.Y+1}.html # copy/create relnotes template
+	git commit -as
 	git push origin X.Y-branchpoint X.Y
 </pre>
 
@@ -166,9 +203,9 @@ Now go to
 <a href="https://bugs.freedesktop.org/editversions.cgi?action=add&amp;product=Mesa" target="_parent">Bugzilla</a> and add the new Mesa version X.Y.
 </p>
 <p>
-Check for rare that there are no distribution breaking changes and revert them
-if needed. Extremely rare - we had only one case so far (see
-commit 2ced8eb136528914e1bf4e000dea06a9d53c7e04).
+Check that there are no distribution breaking changes and revert them if needed.
+For example: files being overwritten on install, etc. Happens extremely rarely -
+we had only one case so far (see commit 2ced8eb136528914e1bf4e000dea06a9d53c7e04).
 </p>
 <p>
 Proceed to <a href="#release">release</a> -rc1.
@@ -285,6 +322,12 @@ Queued (NUMBER)
 AUTHOR (NUMBER):
       COMMIT SUMMARY
 
+For example:
+
+Jonas Pfeil (1):
+      ralloc: Make sure ralloc() allocations match malloc()'s alignment.
+Squashed with
+      ralloc: don't leave out the alignment factor
 
 Rejected (NUMBER)
 =================
@@ -336,43 +379,53 @@ Here is one solution that I've been using.
 	chmod 755 -fR $__build_root; rm -rf $__build_root
 	mkdir -p $__build_root &amp;&amp; cd $__build_root
 
-	$__mesa_root/autogen.sh --enable-llvm-shared-libs &amp;&amp; make -j2 distcheck
+	$__mesa_root/autogen.sh &amp;&amp; make -j2 distcheck
 
-	# Build check the tarballs (scons)
-	tar -xaf mesa-$__version.tar.xz &amp;&amp; cd mesa-$__version &amp;&amp; scons &amp;&amp; cd ..
+	# Build check the tarballs (scons, linux)
+	tar -xaf mesa-$__version.tar.xz &amp;&amp; cd mesa-$__version
+	scons
+	cd .. &amp;&amp; rm -rf mesa-$__version
+
+	# Build check the tarballs (scons, windows/mingw)
+	tar -xaf mesa-$__version.tar.xz &amp;&amp; cd mesa-$__version
+	scons platform=windows toolchain=crossmingw
+	cd .. &amp;&amp; rm -rf mesa-$__version
 
 	# Test the automake binaries
-	rm -rf cd mesa-$__version
 	tar -xaf mesa-$__version.tar.xz &amp;&amp; cd mesa-$__version
 	./configure \
 		--with-dri-drivers=i965,swrast \
 		--with-gallium-drivers=swrast \
 		--with-vulkan-drivers=intel \
 		--enable-llvm-shared-libs \
-		--enable-gallium-llvm \
+		--enable-llvm \
 		--enable-glx-tls \
 		--enable-gbm \
 		--enable-egl \
 		--with-egl-platforms=x11,drm,wayland
 	make -j2 &amp;&amp; DESTDIR=`pwd`/test make -j6 install
+	__glxinfo_cmd='glxinfo 2>&amp;1 | egrep -o "Mesa.*|Gallium.*|.*dri\.so"'
+	__glxgears_cmd='glxgears 2>&amp;1 | grep -v "configuration file"'
+	__es2info_cmd='es2_info 2>&amp;1 | egrep "GL_VERSION|GL_RENDERER|.*dri\.so"'
+	__es2gears_cmd='es2gears_x11 2>&amp;1 | grep -v "configuration file"'
 	export LD_LIBRARY_PATH=`pwd`/test/usr/local/lib/
 	export LIBGL_DRIVERS_PATH=`pwd`/test/usr/local/lib/dri/
 	export LIBGL_DEBUG=verbose
-	glxinfo | egrep -o "Mesa.*"
-	glxgears
-	es2_info | egrep "GL_VERSION|GL_RENDERER"
-	es2gears_x11
+	eval $__glxinfo_cmd
+	eval $__glxgears_cmd
+	eval $__es2info_cmd
+	eval $__es2gears_cmd
 	export LIBGL_ALWAYS_SOFTWARE=1
-	glxinfo | egrep -o "Mesa.*|Gallium.*"
-	glxgears
-	es2_info | egrep "GL_VERSION|GL_RENDERER"
-	es2gears_x11
+	eval $__glxinfo_cmd
+	eval $__glxgears_cmd
+	eval $__es2info_cmd
+	eval $__es2gears_cmd
 	export LIBGL_ALWAYS_SOFTWARE=1
 	export GALLIUM_DRIVER=softpipe
-	glxinfo | egrep -o "Mesa.*|Gallium.*"
-	glxgears
-	es2_info | egrep "GL_VERSION|GL_RENDERER"
-	es2gears_x11
+	eval $__glxinfo_cmd
+	eval $__glxgears_cmd
+	eval $__es2info_cmd
+	eval $__es2gears_cmd
 	# Smoke test DOTA2
 	unset LD_LIBRARY_PATH
 	unset LIBGL_DRIVERS_PATH
@@ -420,11 +473,10 @@ Commit these changes and push the branch.
 </pre>
 
 
-<h3>Use the release.sh script from xorg util-macros</h3>
+<h3>Use the release.sh script from xorg <a href="https://cgit.freedesktop.org/xorg/util/modular/">util-modular</a></h3>
 
 <p>
-Ensure that the mesa git tree is clean via <code>git clean -fXd</code> and
-start the release process.
+Start the release process.
 </p>
 <pre>
 	../relative/path/to/release.sh . # append --dist if you've already done distcheck above
@@ -438,7 +490,7 @@ and SSH passphrase(s) to sign and upload the files, respectively.
 <h3>Add the sha256sums to the release notes</h3>
 
 <p>
-Edit docs/relnotes/X.Y.Z.html to add the sha256sums as availabe in the mesa-X.Y.Z.announce template. Commit this change.
+Edit docs/relnotes/X.Y.Z.html to add the sha256sums as available in the mesa-X.Y.Z.announce template. Commit this change.
 </p>
 
 <h3>Back on mesa master, add the new release notes into the tree</h3>
@@ -472,22 +524,9 @@ Use the generated template during the releasing process.
 <h1 id="website">Update the mesa3d.org website</h1>
 
 <p>
-NOTE: The recent release managers have not been performing this step
-themselves, but leaving this to Brian Paul, (who has access to the
-sourceforge.net hosting for mesa3d.org). Brian is more than willing to grant
-the permission necessary to future release managers to do this step on their
-own.
+As the hosting was moved to freedesktop, git hooks are deployed to update the
+website. Manually check that it is updated 5-10 minutes after the final <code>git push</code>
 </p>
-
-<p>
-Update the web site by copying the docs/ directory's files to
-/home/users/b/br/brianp/mesa-www/htdocs/ with:
-<br>
-<code>
-sftp USERNAME,mesa3d@web.sourceforge.net
-</code>
-</p>
-
 
 <h1 id="bugzilla">Update Bugzilla</h1>
 

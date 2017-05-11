@@ -21,7 +21,8 @@
  * IN THE SOFTWARE.
  */
 
-#pragma once
+#ifndef BRW_BLORP_H
+#define BRW_BLORP_H
 
 #include "blorp/blorp.h"
 #include "intel_mipmap_tree.h"
@@ -85,3 +86,5 @@ void gen9_blorp_exec(struct blorp_batch *batch,
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
+
+#endif /* BRW_BLORP_H */

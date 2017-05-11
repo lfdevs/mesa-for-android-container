@@ -46,6 +46,7 @@
 #include "compiler/glsl_types.h"
 #include "compiler/glsl/linker.h"
 #include "compiler/glsl/program.h"
+#include "compiler/glsl/shader_cache.h"
 #include "program/prog_instruction.h"
 #include "program/prog_optimize.h"
 #include "program/prog_print.h"
@@ -532,6 +533,12 @@ type_size(const struct glsl_type *type)
             return 1;
       }
       break;
+   case GLSL_TYPE_UINT64:
+   case GLSL_TYPE_INT64:
+      if (type->vector_elements > 2)
+         return 2;
+      else
+         return 1;
    case GLSL_TYPE_ARRAY:
       assert(type->length > 0);
       return type_size(type->fields.array) * type->length;
@@ -1062,8 +1069,10 @@ ir_to_mesa_visitor::visit(ir_expression *ir)
       emit_scalar(ir, OPCODE_EX2, result_dst, op[0]);
       break;
    case ir_unop_exp:
+      assert(!"not reached: should be handled by exp_to_exp2");
+      break;
    case ir_unop_log:
-      assert(!"not reached: should be handled by ir_explog_to_explog2");
+      assert(!"not reached: should be handled by log_to_log2");
       break;
    case ir_unop_log2:
       emit_scalar(ir, OPCODE_LG2, result_dst, op[0]);
@@ -1354,13 +1363,20 @@ ir_to_mesa_visitor::visit(ir_expression *ir)
       emit(ir, OPCODE_LRP, result_dst, op[2], op[1], op[0]);
       break;
 
+   case ir_triop_csel:
+      /* We assume that boolean true and false are 1.0 and 0.0.  OPCODE_CMP
+       * selects src1 if src0 is < 0, src2 otherwise.
+       */
+      op[0].negate = ~op[0].negate;
+      emit(ir, OPCODE_CMP, result_dst, op[0], op[1], op[2]);
+      break;
+
    case ir_binop_vector_extract:
    case ir_triop_fma:
    case ir_triop_bitfield_extract:
    case ir_triop_vector_insert:
    case ir_quadop_bitfield_insert:
    case ir_binop_ldexp:
-   case ir_triop_csel:
    case ir_binop_carry:
    case ir_binop_borrow:
    case ir_binop_imul_high:
@@ -1373,9 +1389,40 @@ ir_to_mesa_visitor::visit(ir_expression *ir)
    case ir_unop_dFdy_fine:
    case ir_unop_subroutine_to_int:
    case ir_unop_get_buffer_size:
+   case ir_unop_ballot:
+   case ir_binop_read_invocation:
+   case ir_unop_read_first_invocation:
    case ir_unop_vote_any:
    case ir_unop_vote_all:
    case ir_unop_vote_eq:
+   case ir_unop_bitcast_u642d:
+   case ir_unop_bitcast_i642d:
+   case ir_unop_bitcast_d2u64:
+   case ir_unop_bitcast_d2i64:
+   case ir_unop_i642i:
+   case ir_unop_u642i:
+   case ir_unop_i642u:
+   case ir_unop_u642u:
+   case ir_unop_i642b:
+   case ir_unop_i642f:
+   case ir_unop_u642f:
+   case ir_unop_i642d:
+   case ir_unop_u642d:
+   case ir_unop_i2i64:
+   case ir_unop_u2i64:
+   case ir_unop_b2i64:
+   case ir_unop_f2i64:
+   case ir_unop_d2i64:
+   case ir_unop_i2u64:
+   case ir_unop_u2u64:
+   case ir_unop_f2u64:
+   case ir_unop_d2u64:
+   case ir_unop_u642i64:
+   case ir_unop_i642u64:
+   case ir_unop_pack_int_2x32:
+   case ir_unop_unpack_int_2x32:
+   case ir_unop_pack_uint_2x32:
+   case ir_unop_unpack_uint_2x32:
       assert(!"not supported");
       break;
 
@@ -2490,7 +2537,8 @@ _mesa_generate_parameters_list_for_uniforms(struct gl_shader_program
 void
 _mesa_associate_uniform_storage(struct gl_context *ctx,
 				struct gl_shader_program *shader_program,
-				struct gl_program_parameter_list *params)
+                                struct gl_program_parameter_list *params,
+                                bool propagate_to_storage)
 {
    /* After adding each uniform to the parameter list, connect the storage for
     * the parameter with the tracking structure used by the API for the
@@ -2522,11 +2570,19 @@ _mesa_associate_uniform_storage(struct gl_context *ctx,
 	 unsigned columns = 0;
 	 int dmul = 4 * sizeof(float);
 	 switch (storage->type->base_type) {
+         case GLSL_TYPE_UINT64:
+	    if (storage->type->vector_elements > 2)
+               dmul *= 2;
+	    /* fallthrough */
 	 case GLSL_TYPE_UINT:
 	    assert(ctx->Const.NativeIntegers);
 	    format = uniform_native;
 	    columns = 1;
 	    break;
+         case GLSL_TYPE_INT64:
+	    if (storage->type->vector_elements > 2)
+               dmul *= 2;
+	    /* fallthrough */
 	 case GLSL_TYPE_INT:
 	    format =
 	       (ctx->Const.NativeIntegers) ? uniform_native : uniform_int_float;
@@ -2572,9 +2628,11 @@ _mesa_associate_uniform_storage(struct gl_context *ctx,
 	  * data from the linker's backing store.  This will cause values from
 	  * initializers in the source code to be copied over.
 	  */
-	 _mesa_propagate_uniforms_to_driver_storage(storage,
-						    0,
-						    MAX2(1, storage->array_elements));
+         if (propagate_to_storage) {
+            unsigned array_elements = MAX2(1, storage->array_elements);
+            _mesa_propagate_uniforms_to_driver_storage(storage, 0,
+                                                       array_elements);
+         }
 
 	 last_location = location;
       }
@@ -2926,15 +2984,14 @@ get_mesa_program(struct gl_context *ctx,
       prog->info.fs.depth_layout = shader_program->FragDepthLayout;
    }
 
-   if ((ctx->_Shader->Flags & GLSL_NO_OPT) == 0) {
-      _mesa_optimize_program(ctx, prog, prog);
-   }
+   _mesa_optimize_program(ctx, prog, prog);
 
    /* This has to be done last.  Any operation that can cause
     * prog->ParameterValues to get reallocated (e.g., anything that adds a
     * program constant) has to happen before creating this linkage.
     */
-   _mesa_associate_uniform_storage(ctx, shader_program, prog->Parameters);
+   _mesa_associate_uniform_storage(ctx, shader_program, prog->Parameters,
+                                   true);
    if (!shader_program->data->LinkStatus) {
       goto fail_exit;
    }
@@ -3047,7 +3104,7 @@ _mesa_glsl_link_shader(struct gl_context *ctx, struct gl_shader_program *prog)
 
    _mesa_clear_shader_program_data(ctx, prog);
 
-   prog->data->LinkStatus = GL_TRUE;
+   prog->data->LinkStatus = linking_success;
 
    for (i = 0; i < prog->NumShaders; i++) {
       if (!prog->Shaders[i]->CompileStatus) {
@@ -3060,10 +3117,19 @@ _mesa_glsl_link_shader(struct gl_context *ctx, struct gl_shader_program *prog)
    }
 
    if (prog->data->LinkStatus) {
+      /* Reset sampler validated to true, validation happens via the
+       * LinkShader call below.
+       */
+      prog->SamplersValidated = GL_TRUE;
+
       if (!ctx->Driver.LinkShader(ctx, prog)) {
-         prog->data->LinkStatus = GL_FALSE;
+         prog->data->LinkStatus = linking_failure;
       }
    }
+
+   /* Return early if we are loading the shader from on-disk cache */
+   if (prog->data->LinkStatus == linking_skipped)
+      return;
 
    if (ctx->_Shader->Flags & GLSL_DUMP) {
       if (!prog->data->LinkStatus) {
@@ -3075,6 +3141,11 @@ _mesa_glsl_link_shader(struct gl_context *ctx, struct gl_shader_program *prog)
          fprintf(stderr, "%s\n", prog->data->InfoLog);
       }
    }
+
+#ifdef ENABLE_SHADER_CACHE
+   if (prog->data->LinkStatus)
+      shader_cache_write_program_metadata(ctx, prog);
+#endif
 }
 
 } /* extern "C" */

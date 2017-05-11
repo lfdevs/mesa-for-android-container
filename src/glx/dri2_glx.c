@@ -74,7 +74,7 @@ struct dri2_display
 
    __glxHashTable *dri2Hash;
 
-   const __DRIextension *loader_extensions[4];
+   const __DRIextension *loader_extensions[5];
 };
 
 struct dri2_drawable
@@ -946,6 +946,13 @@ dri2GetSwapInterval(__GLXDRIdrawable *pdraw)
   return priv->swap_interval;
 }
 
+static void
+driSetBackgroundContext(void *loaderPrivate)
+{
+   struct dri2_context *pcp = (struct dri2_context *) loaderPrivate;
+   __glXSetCurrentContext(&pcp->base);
+}
+
 static const __DRIdri2LoaderExtension dri2LoaderExtension = {
    .base = { __DRI_DRI2_LOADER, 3 },
 
@@ -964,6 +971,12 @@ static const __DRIdri2LoaderExtension dri2LoaderExtension_old = {
 
 static const __DRIuseInvalidateExtension dri2UseInvalidate = {
    .base = { __DRI_USE_INVALIDATE, 1 }
+};
+
+static const __DRIbackgroundCallableExtension driBackgroundCallable = {
+   .base = { __DRI_BACKGROUND_CALLABLE, 1 },
+
+   .setBackgroundContext    = driSetBackgroundContext,
 };
 
 _X_HIDDEN void
@@ -1393,9 +1406,9 @@ dri2CreateDisplay(Display * dpy)
    else
       pdp->loader_extensions[i++] = &dri2LoaderExtension.base;
    
-   pdp->loader_extensions[i++] = &systemTimeExtension.base;
-
    pdp->loader_extensions[i++] = &dri2UseInvalidate.base;
+
+   pdp->loader_extensions[i++] = &driBackgroundCallable.base;
 
    pdp->loader_extensions[i++] = NULL;
 

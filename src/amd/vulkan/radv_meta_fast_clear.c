@@ -214,8 +214,8 @@ create_pipeline(struct radv_device *device,
 
 					       .pViewportState = &(VkPipelineViewportStateCreateInfo) {
 						       .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-						       .viewportCount = 0,
-						       .scissorCount = 0,
+						       .viewportCount = 1,
+						       .scissorCount = 1,
 					       },
 						       .pRasterizationState = &rs_state,
 					       .pMultisampleState = &(VkPipelineMultisampleStateCreateInfo) {
@@ -227,7 +227,14 @@ create_pipeline(struct radv_device *device,
 						       .alphaToOneEnable = false,
 					       },
 						.pColorBlendState = &blend_state,
-						.pDynamicState = NULL,
+						.pDynamicState = &(VkPipelineDynamicStateCreateInfo) {
+							.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+							.dynamicStateCount = 2,
+							.pDynamicStates = (VkDynamicState[]) {
+								VK_DYNAMIC_STATE_VIEWPORT,
+								VK_DYNAMIC_STATE_SCISSOR,
+							},
+						},
 						.renderPass = device->meta_state.fast_clear_flush.pass,
 						.subpass = 0,
 					       },
@@ -252,8 +259,8 @@ create_pipeline(struct radv_device *device,
 
 					       .pViewportState = &(VkPipelineViewportStateCreateInfo) {
 						       .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-						       .viewportCount = 0,
-						       .scissorCount = 0,
+						       .viewportCount = 1,
+						       .scissorCount = 1,
 					       },
 						       .pRasterizationState = &rs_state,
 					       .pMultisampleState = &(VkPipelineMultisampleStateCreateInfo) {
@@ -265,7 +272,14 @@ create_pipeline(struct radv_device *device,
 						       .alphaToOneEnable = false,
 					       },
 						.pColorBlendState = &blend_state,
-						.pDynamicState = NULL,
+						.pDynamicState = &(VkPipelineDynamicStateCreateInfo) {
+							.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+							.dynamicStateCount = 2,
+							.pDynamicStates = (VkDynamicState[]) {
+								VK_DYNAMIC_STATE_VIEWPORT,
+								VK_DYNAMIC_STATE_SCISSOR,
+							},
+						},
 						.renderPass = device->meta_state.fast_clear_flush.pass,
 						.subpass = 0,
 					       },
@@ -354,26 +368,24 @@ emit_fast_clear_flush(struct radv_cmd_buffer *cmd_buffer,
 	const struct vertex_attrs vertex_data[3] = {
 		{
 			.position = {
-				0,
-				0,
+				-1.0,
+				-1.0,
 			},
 		},
 		{
 			.position = {
-				0,
-				resolve_extent->height,
+				-1.0,
+				1.0,
 			},
 		},
 		{
 			.position = {
-				resolve_extent->width,
-				0,
+				1.0,
+				-1.0,
 			},
 		},
 	};
 
-	cmd_buffer->state.flush_bits |= (RADV_CMD_FLAG_FLUSH_AND_INV_CB |
-					 RADV_CMD_FLAG_FLUSH_AND_INV_CB_META);
 	radv_cmd_buffer_upload_data(cmd_buffer, sizeof(vertex_data), 16, vertex_data, &offset);
 	struct radv_buffer vertex_buffer = {
 		.device = device,
@@ -402,59 +414,77 @@ emit_fast_clear_flush(struct radv_cmd_buffer *cmd_buffer,
 				     pipeline_h);
 	}
 
+	radv_CmdSetViewport(radv_cmd_buffer_to_handle(cmd_buffer), 0, 1, &(VkViewport) {
+			.x = 0,
+			.y = 0,
+			.width = resolve_extent->width,
+			.height = resolve_extent->height,
+			.minDepth = 0.0f,
+			.maxDepth = 1.0f
+		});
+
+		radv_CmdSetScissor(radv_cmd_buffer_to_handle(cmd_buffer), 0, 1, &(VkRect2D) {
+			.offset = (VkOffset2D) { 0, 0 },
+			.extent = (VkExtent2D) { resolve_extent->width, resolve_extent->height },
+		});
+
 	radv_CmdDraw(cmd_buffer_h, 3, 1, 0, 0);
 	cmd_buffer->state.flush_bits |= (RADV_CMD_FLAG_FLUSH_AND_INV_CB |
 					 RADV_CMD_FLAG_FLUSH_AND_INV_CB_META);
-	si_emit_cache_flush(cmd_buffer);
 }
 
 /**
  */
 void
 radv_fast_clear_flush_image_inplace(struct radv_cmd_buffer *cmd_buffer,
-				    struct radv_image *image)
+				    struct radv_image *image,
+				    const VkImageSubresourceRange *subresourceRange)
 {
 	struct radv_meta_saved_state saved_state;
 	struct radv_meta_saved_pass_state saved_pass_state;
 	VkDevice device_h = radv_device_to_handle(cmd_buffer->device);
 	VkCommandBuffer cmd_buffer_h = radv_cmd_buffer_to_handle(cmd_buffer);
+	uint32_t layer_count = radv_get_layerCount(image, subresourceRange);
 
 	assert(cmd_buffer->queue_family_index == RADV_QUEUE_GENERAL);
 	radv_meta_save_pass(&saved_pass_state, cmd_buffer);
 	radv_meta_save_graphics_reset_vport_scissor(&saved_state, cmd_buffer);
 
-	struct radv_image_view iview;
-	radv_image_view_init(&iview, cmd_buffer->device,
-			     &(VkImageViewCreateInfo) {
-				     .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+	for (uint32_t layer = 0; layer < layer_count; ++layer) {
+		struct radv_image_view iview;
+
+		radv_image_view_init(&iview, cmd_buffer->device,
+				     &(VkImageViewCreateInfo) {
+					     .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
 					     .image = radv_image_to_handle(image),
+					     .viewType = radv_meta_get_view_type(image),
 					     .format = image->vk_format,
 					     .subresourceRange = {
 						     .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
 						     .baseMipLevel = 0,
 						     .levelCount = 1,
-						     .baseArrayLayer = 0,
+						     .baseArrayLayer = subresourceRange->baseArrayLayer + layer,
 						     .layerCount = 1,
-					     },
+					      },
 				     },
 				     cmd_buffer, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
 
-	VkFramebuffer fb_h;
-	radv_CreateFramebuffer(device_h,
-			       &(VkFramebufferCreateInfo) {
-				       .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-				       .attachmentCount = 1,
-				       .pAttachments = (VkImageView[]) {
-					       radv_image_view_to_handle(&iview)
-				       },
+		VkFramebuffer fb_h;
+		radv_CreateFramebuffer(device_h,
+				&(VkFramebufferCreateInfo) {
+					.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+					.attachmentCount = 1,
+					.pAttachments = (VkImageView[]) {
+						radv_image_view_to_handle(&iview)
+					},
 				       .width = image->extent.width,
 				       .height = image->extent.height,
 				       .layers = 1
-			      },
-			      &cmd_buffer->pool->alloc,
-			      &fb_h);
+				},
+				&cmd_buffer->pool->alloc,
+				&fb_h);
 
-	radv_CmdBeginRenderPass(cmd_buffer_h,
+		radv_CmdBeginRenderPass(cmd_buffer_h,
 				      &(VkRenderPassBeginInfo) {
 					      .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
 						      .renderPass = cmd_buffer->device->meta_state.fast_clear_flush.pass,
@@ -474,14 +504,15 @@ radv_fast_clear_flush_image_inplace(struct radv_cmd_buffer *cmd_buffer,
 				     },
 				     VK_SUBPASS_CONTENTS_INLINE);
 
-	emit_fast_clear_flush(cmd_buffer,
-			      &(VkExtent2D) { image->extent.width, image->extent.height },
-			      image->fmask.size > 0);
-	radv_CmdEndRenderPass(cmd_buffer_h);
+		emit_fast_clear_flush(cmd_buffer,
+				      &(VkExtent2D) { image->extent.width, image->extent.height },
+				      image->fmask.size > 0);
+		radv_CmdEndRenderPass(cmd_buffer_h);
 
-	radv_DestroyFramebuffer(device_h, fb_h,
-				&cmd_buffer->pool->alloc);
+		radv_DestroyFramebuffer(device_h, fb_h,
+					&cmd_buffer->pool->alloc);
 
+	}
 	radv_meta_restore(&saved_state, cmd_buffer);
 	radv_meta_restore_pass(&saved_pass_state, cmd_buffer);
 }

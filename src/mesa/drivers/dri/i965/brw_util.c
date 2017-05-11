@@ -32,6 +32,7 @@
 
 #include "brw_util.h"
 #include "brw_defines.h"
+#include "compiler/brw_eu_defines.h"
 
 GLuint brw_translate_blend_equation( GLenum mode )
 {
@@ -119,10 +120,6 @@ static const GLuint prim_to_hw_prim[GL_TRIANGLE_STRIP_ADJACENCY+1] = {
 uint32_t
 get_hw_prim_for_gl_prim(int mode)
 {
-   if (mode >= BRW_PRIM_OFFSET)
-      return mode - BRW_PRIM_OFFSET;
-   else {
-      assert(mode < ARRAY_SIZE(prim_to_hw_prim));
-      return prim_to_hw_prim[mode];
-   }
+   assert(mode < ARRAY_SIZE(prim_to_hw_prim));
+   return prim_to_hw_prim[mode];
 }

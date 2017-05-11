@@ -27,6 +27,7 @@
 #include "radv_amdgpu_winsys.h"
 #include "radv_amdgpu_winsys_public.h"
 #include "radv_amdgpu_surface.h"
+#include "radv_debug.h"
 #include "amdgpu_id.h"
 #include "xf86drm.h"
 #include <stdio.h>
@@ -106,6 +107,7 @@ get_chip_name(enum radeon_family family)
 	case CHIP_FIJI: return "AMD RADV FIJI";
 	case CHIP_POLARIS10: return "AMD RADV POLARIS10";
 	case CHIP_POLARIS11: return "AMD RADV POLARIS11";
+	case CHIP_POLARIS12: return "AMD RADV POLARIS12";
 	case CHIP_STONEY: return "AMD RADV STONEY";
 	default: return "AMD RADV unknown";
 	}
@@ -123,9 +125,9 @@ do_winsys_init(struct radv_amdgpu_winsys *ws, int fd)
 	int r;
 	int i, j;
 	/* Get PCI info. */
-	r = drmGetDevice(fd, &devinfo);
+	r = drmGetDevice2(fd, 0, &devinfo);
 	if (r) {
-		fprintf(stderr, "amdgpu: drmGetDevice failed.\n");
+		fprintf(stderr, "amdgpu: drmGetDevice2 failed.\n");
 		goto fail;
 	}
 	ws->info.pci_domain = devinfo->businfo.pci->domain;
@@ -270,6 +272,10 @@ do_winsys_init(struct radv_amdgpu_winsys *ws, int fd)
 		ws->family = FAMILY_VI;
 		ws->rev_id = VI_POLARIS11_M_A0;
 		break;
+	case CHIP_POLARIS12:
+		ws->family = FAMILY_VI;
+		ws->rev_id = VI_POLARIS12_V_A0;
+		break;
 	default:
 		fprintf(stderr, "amdgpu: Unknown family.\n");
 		goto fail;
@@ -347,7 +353,7 @@ static void radv_amdgpu_winsys_destroy(struct radeon_winsys *rws)
 }
 
 struct radeon_winsys *
-radv_amdgpu_winsys_create(int fd)
+radv_amdgpu_winsys_create(int fd, uint32_t debug_flags)
 {
 	uint32_t drm_major, drm_minor, r;
 	amdgpu_device_handle dev;
@@ -367,7 +373,10 @@ radv_amdgpu_winsys_create(int fd)
 	if (!do_winsys_init(ws, fd))
 		goto winsys_fail;
 
-	ws->debug_all_bos = getenv("RADV_DEBUG_ALL_BOS") ? true : false;
+	ws->debug_all_bos = !!(debug_flags & RADV_DEBUG_ALL_BOS);
+	if (debug_flags & RADV_DEBUG_NO_IBS)
+		ws->use_ib_bos = false;
+
 	LIST_INITHEAD(&ws->global_bo_list);
 	pthread_mutex_init(&ws->global_bo_list_lock, NULL);
 	ws->base.query_info = radv_amdgpu_winsys_query_info;

@@ -255,6 +255,7 @@ svga_buffer_has_hw_storage(struct svga_buffer *sbuf)
 
 /**
  * Map the hardware storage of a buffer.
+ * \param flags  bitmask of PIPE_TRANSFER_* flags
  */
 static inline void *
 svga_buffer_hw_storage_map(struct svga_context *svga,

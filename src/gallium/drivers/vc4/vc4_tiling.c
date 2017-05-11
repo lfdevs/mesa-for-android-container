@@ -52,22 +52,6 @@
 #include "vc4_context.h"
 #include "vc4_tiling.h"
 
-/** Returns the stride in bytes of a 64-byte microtile. */
-static uint32_t
-vc4_utile_stride(int cpp)
-{
-        switch (cpp) {
-        case 1:
-                return 8;
-        case 2:
-        case 4:
-        case 8:
-                return 16;
-        default:
-                unreachable("bad cpp");
-        }
-}
-
 /**
  * The texture unit decides what tiling format a particular miplevel is using
  * this function, so we lay out our miptrees accordingly.
@@ -80,76 +64,12 @@ vc4_size_is_lt(uint32_t width, uint32_t height, int cpp)
 }
 
 static void
-vc4_load_utile(void *dst, void *src, uint32_t dst_stride, uint32_t cpp)
-{
-        uint32_t src_stride = vc4_utile_stride(cpp);
-
-        for (uint32_t src_offset = 0; src_offset < 64; src_offset += src_stride) {
-                memcpy(dst, src + src_offset, src_stride);
-                dst += dst_stride;
-        }
-}
-
-static void
-vc4_store_utile(void *dst, void *src, uint32_t src_stride, uint32_t cpp)
-{
-        uint32_t dst_stride = vc4_utile_stride(cpp);
-
-        for (uint32_t dst_offset = 0; dst_offset < 64; dst_offset += dst_stride) {
-                memcpy(dst + dst_offset, src, dst_stride);
-                src += src_stride;
-        }
-}
-
-static void
 check_box_utile_alignment(const struct pipe_box *box, int cpp)
 {
         assert(!(box->x & (vc4_utile_width(cpp) - 1)));
         assert(!(box->y & (vc4_utile_height(cpp) - 1)));
         assert(!(box->width & (vc4_utile_width(cpp) - 1)));
         assert(!(box->height & (vc4_utile_height(cpp) - 1)));
-}
-
-static void
-vc4_load_lt_image(void *dst, uint32_t dst_stride,
-                  void *src, uint32_t src_stride,
-                  int cpp, const struct pipe_box *box)
-{
-        uint32_t utile_w = vc4_utile_width(cpp);
-        uint32_t utile_h = vc4_utile_height(cpp);
-        uint32_t xstart = box->x;
-        uint32_t ystart = box->y;
-
-        for (uint32_t y = 0; y < box->height; y += utile_h) {
-                for (int x = 0; x < box->width; x += utile_w) {
-                        vc4_load_utile(dst + (dst_stride * y +
-                                              x * cpp),
-                                       src + ((ystart + y) * src_stride +
-                                              (xstart + x) * 64 / utile_w),
-                                       dst_stride, cpp);
-                }
-        }
-}
-
-static void
-vc4_store_lt_image(void *dst, uint32_t dst_stride,
-                   void *src, uint32_t src_stride,
-                   int cpp, const struct pipe_box *box)
-{
-        uint32_t utile_w = vc4_utile_width(cpp);
-        uint32_t utile_h = vc4_utile_height(cpp);
-        uint32_t xstart = box->x;
-        uint32_t ystart = box->y;
-
-        for (uint32_t y = 0; y < box->height; y += utile_h) {
-                for (int x = 0; x < box->width; x += utile_w) {
-                        vc4_store_utile(dst + ((ystart + y) * dst_stride +
-                                               (xstart + x) * 64 / utile_w),
-                                        src + (src_stride * y +
-                                               x * cpp),
-                                        src_stride, cpp);
-                }
-        }
 }
 
 /**

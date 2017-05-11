@@ -31,6 +31,7 @@
 #include "util/u_memory.h"
 #include "util/u_prim.h"
 #include "util/u_format.h"
+#include "util/u_helpers.h"
 
 #include "freedreno_draw.h"
 #include "freedreno_context.h"
@@ -84,6 +85,14 @@ fd_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 		return;
 	}
 
+	/* Upload a user index buffer. */
+	struct pipe_index_buffer ibuffer_saved = {};
+	if (info->indexed && ctx->indexbuf.user_buffer &&
+	    !util_save_and_upload_index_buffer(pctx, info, &ctx->indexbuf,
+					       &ibuffer_saved)) {
+		return;
+	}
+
 	if (ctx->in_blit) {
 		fd_batch_reset(batch);
 		ctx->dirty = ~0;
@@ -101,7 +110,7 @@ fd_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 	 * Figure out the buffers/features we need:
 	 */
 
-	pipe_mutex_lock(ctx->screen->lock);
+	mtx_lock(&ctx->screen->lock);
 
 	if (fd_depth_enabled(ctx)) {
 		buffers |= FD_BUFFER_DEPTH;
@@ -163,7 +172,7 @@ fd_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 
 	resource_written(batch, batch->query_buf);
 
-	pipe_mutex_unlock(ctx->screen->lock);
+	mtx_unlock(&ctx->screen->lock);
 
 	batch->num_draws++;
 
@@ -201,6 +210,9 @@ fd_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 		ctx->dirty = 0xffffffff;
 
 	fd_batch_check_size(batch);
+
+	if (info->indexed && ibuffer_saved.user_buffer)
+           pctx->set_index_buffer(pctx, &ibuffer_saved);
 }
 
 /* Generic clear implementation (partially) using u_blitter: */
@@ -264,6 +276,8 @@ fd_blitter_clear(struct pipe_context *pctx, unsigned buffers,
 	util_blitter_restore_constant_buffer_state(blitter);
 	util_blitter_restore_vertex_states(blitter);
 	util_blitter_restore_fragment_states(blitter);
+	util_blitter_restore_textures(blitter);
+	util_blitter_restore_fb_state(blitter);
 	util_blitter_restore_render_cond(blitter);
 	util_blitter_unset_running_flag(blitter);
 
@@ -320,7 +334,7 @@ fd_clear(struct pipe_context *pctx, unsigned buffers,
 	batch->resolve |= buffers;
 	batch->needs_flush = true;
 
-	pipe_mutex_lock(ctx->screen->lock);
+	mtx_lock(&ctx->screen->lock);
 
 	if (buffers & PIPE_CLEAR_COLOR)
 		for (i = 0; i < pfb->nr_cbufs; i++)
@@ -334,7 +348,7 @@ fd_clear(struct pipe_context *pctx, unsigned buffers,
 
 	resource_written(batch, batch->query_buf);
 
-	pipe_mutex_unlock(ctx->screen->lock);
+	mtx_unlock(&ctx->screen->lock);
 
 	DBG("%p: %x %ux%u depth=%f, stencil=%u (%s/%s)", batch, buffers,
 		pfb->width, pfb->height, depth, stencil,

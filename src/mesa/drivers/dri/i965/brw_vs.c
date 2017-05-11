@@ -38,10 +38,36 @@
 #include "brw_state.h"
 #include "program/prog_print.h"
 #include "program/prog_parameter.h"
-#include "brw_nir.h"
+#include "compiler/brw_nir.h"
 #include "brw_program.h"
 
 #include "util/ralloc.h"
+
+/**
+ * Decide which set of clip planes should be used when clipping via
+ * gl_Position or gl_ClipVertex.
+ */
+gl_clip_plane *
+brw_select_clip_planes(struct gl_context *ctx)
+{
+   if (ctx->_Shader->CurrentProgram[MESA_SHADER_VERTEX]) {
+      /* There is currently a GLSL vertex shader, so clip according to GLSL
+       * rules, which means compare gl_ClipVertex (or gl_Position, if
+       * gl_ClipVertex wasn't assigned) against the eye-coordinate clip planes
+       * that were stored in EyeUserPlane at the time the clip planes were
+       * specified.
+       */
+      return ctx->Transform.EyeUserPlane;
+   } else {
+      /* Either we are using fixed function or an ARB vertex program.  In
+       * either case the clip planes are going to be compared against
+       * gl_Position (which is in clip coordinates) so we have to clip using
+       * _ClipUserPlane, which was transformed into clip coordinates by Mesa
+       * core.
+       */
+      return ctx->Transform._ClipUserPlane;
+   }
+}
 
 GLbitfield64
 brw_vs_outputs_written(struct brw_context *brw, struct brw_vs_prog_key *key,
@@ -201,7 +227,7 @@ brw_codegen_vs_prog(struct brw_context *brw,
 
    if (unlikely(brw->perf_debug)) {
       start_busy = (brw->batch.last_bo &&
-                    drm_intel_bo_busy(brw->batch.last_bo));
+                    brw_bo_busy(brw->batch.last_bo));
       start_time = get_time();
    }
 
@@ -226,7 +252,7 @@ brw_codegen_vs_prog(struct brw_context *brw,
                             st_index, &program_size, &error_str);
    if (program == NULL) {
       if (!vp->program.is_arb_asm) {
-         vp->program.sh.data->LinkStatus = false;
+         vp->program.sh.data->LinkStatus = linking_failure;
          ralloc_strcat(&vp->program.sh.data->InfoLog, error_str);
       }
 
@@ -240,7 +266,7 @@ brw_codegen_vs_prog(struct brw_context *brw,
       if (vp->compiled_once) {
          brw_vs_debug_recompile(brw, &vp->program, key);
       }
-      if (start_busy && !drm_intel_bo_busy(brw->batch.last_bo)) {
+      if (start_busy && !brw_bo_busy(brw->batch.last_bo)) {
          perf_debug("VS compile took %.03f ms and stalled the GPU\n",
                     (get_time() - start_time) * 1000);
       }
@@ -294,7 +320,7 @@ brw_vs_populate_key(struct brw_context *brw,
 
    if (ctx->Transform.ClipPlanesEnabled != 0 &&
        (ctx->API == API_OPENGL_COMPAT || ctx->API == API_OPENGLES) &&
-       vp->program.ClipDistanceArraySize == 0) {
+       vp->program.info.clip_distance_array_size == 0) {
       key->nr_userclip_plane_consts =
          _mesa_logbase2(ctx->Transform.ClipPlanesEnabled) + 1;
    }
@@ -310,7 +336,7 @@ brw_vs_populate_key(struct brw_context *brw,
       }
    }
 
-   if (prog->nir->info->outputs_written &
+   if (prog->info.outputs_written &
        (VARYING_BIT_COL0 | VARYING_BIT_COL1 | VARYING_BIT_BFC0 |
         VARYING_BIT_BFC1)) {
       /* _NEW_LIGHT | _NEW_BUFFERS */
@@ -364,7 +390,7 @@ brw_vs_precompile(struct gl_context *ctx, struct gl_program *prog)
    brw_setup_tex_for_precompile(brw, &key.tex, prog);
    key.program_string_id = bvp->id;
    key.clamp_vertex_color =
-      (prog->nir->info->outputs_written &
+      (prog->info.outputs_written &
        (VARYING_BIT_COL0 | VARYING_BIT_COL1 | VARYING_BIT_BFC0 |
         VARYING_BIT_BFC1));
 

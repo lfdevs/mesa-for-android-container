@@ -108,6 +108,9 @@ struct stw_framebuffer
    HANDLE hSharedSurface;
    struct stw_shared_surface *shared_surface;
 
+   /* For WGL_EXT_swap_control */
+   int64_t prev_swap_time;
+
    /** 
     * This is protected by stw_device::fb_mutex, not the mutex above.
     * 

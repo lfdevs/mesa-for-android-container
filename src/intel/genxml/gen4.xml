@@ -1,4 +1,719 @@
+<?xml version="1.0" ?>
 <genxml name="BRW" gen="4">
+  <enum name="3D_Prim_Topo_Type" prefix="3DPRIM">
+    <value name="POINTLIST" value="1"/>
+    <value name="LINELIST" value="2"/>
+    <value name="LINESTRIP" value="3"/>
+    <value name="TRILIST" value="4"/>
+    <value name="TRISTRIP" value="5"/>
+    <value name="TRIFAN" value="6"/>
+    <value name="QUADLIST" value="7"/>
+    <value name="QUADSTRIP" value="8"/>
+    <value name="TRISTRIP_REVERSE" value="13"/>
+    <value name="POLYGON" value="14"/>
+    <value name="RECTLIST" value="15"/>
+    <value name="LINELOOP" value="16"/>
+    <value name="POINTLIST _BF" value="17"/>
+    <value name="LINESTRIP_CONT" value="18"/>
+    <value name="LINESTRIP_BF" value="19"/>
+    <value name="LINESTRIP_CONT_BF" value="20"/>
+    <value name="TRIFAN_NOSTIPPLE" value="22"/>
+  </enum>
+
+  <enum name="3D_Vertex_Component_Control" prefix="VFCOMP">
+    <value name="NOSTORE" value="0"/>
+    <value name="STORE_SRC" value="1"/>
+    <value name="STORE_0" value="2"/>
+    <value name="STORE_1_FP" value="3"/>
+    <value name="STORE_1_INT" value="4"/>
+    <value name="STORE_VID" value="5"/>
+  </enum>
+
+  <enum name="3D_Compare_Function" prefix="COMPAREFUNCTION">
+    <value name="ALWAYS" value="0"/>
+    <value name="NEVER" value="1"/>
+    <value name="LESS" value="2"/>
+    <value name="EQUAL" value="3"/>
+    <value name="LEQUAL" value="4"/>
+    <value name="GREATER" value="5"/>
+    <value name="NOTEQUAL" value="6"/>
+    <value name="GEQUAL" value="7"/>
+  </enum>
+
+  <enum name="SURFACE_FORMAT" prefix="SF">
+    <value name="R32G32B32A32_FLOAT" value="0"/>
+    <value name="R32G32B32A32_SINT" value="1"/>
+    <value name="R32G32B32A32_UINT" value="2"/>
+    <value name="R32G32B32A32_UNORM" value="3"/>
+    <value name="R32G32B32A32_SNORM" value="4"/>
+    <value name="R64G64_FLOAT" value="5"/>
+    <value name="R32G32B32X32_FLOAT" value="6"/>
+    <value name="R32G32B32A32_SSCALED" value="7"/>
+    <value name="R32G32B32A32_USCALED" value="8"/>
+    <value name="R32G32B32A32_SFIXED" value="32"/>
+    <value name="R64G64_PASSTHRU" value="33"/>
+    <value name="R32G32B32_FLOAT" value="64"/>
+    <value name="R32G32B32_SINT" value="65"/>
+    <value name="R32G32B32_UINT" value="66"/>
+    <value name="R32G32B32_UNORM" value="67"/>
+    <value name="R32G32B32_SNORM" value="68"/>
+    <value name="R32G32B32_SSCALED" value="69"/>
+    <value name="R32G32B32_USCALED" value="70"/>
+    <value name="R32G32B32_SFIXED" value="80"/>
+    <value name="R16G16B16A16_UNORM" value="128"/>
+    <value name="R16G16B16A16_SNORM" value="129"/>
+    <value name="R16G16B16A16_SINT" value="130"/>
+    <value name="R16G16B16A16_UINT" value="131"/>
+    <value name="R16G16B16A16_FLOAT" value="132"/>
+    <value name="R32G32_FLOAT" value="133"/>
+    <value name="R32G32_SINT" value="134"/>
+    <value name="R32G32_UINT" value="135"/>
+    <value name="R32_FLOAT_X8X24_TYPELESS" value="136"/>
+    <value name="X32_TYPELESS_G8X24_UINT" value="137"/>
+    <value name="L32A32_FLOAT" value="138"/>
+    <value name="R32G32_UNORM" value="139"/>
+    <value name="R32G32_SNORM" value="140"/>
+    <value name="R64_FLOAT" value="141"/>
+    <value name="R16G16B16X16_UNORM" value="142"/>
+    <value name="R16G16B16X16_FLOAT" value="143"/>
+    <value name="A32X32_FLOAT" value="144"/>
+    <value name="L32X32_FLOAT" value="145"/>
+    <value name="I32X32_FLOAT" value="146"/>
+    <value name="R16G16B16A16_SSCALED" value="147"/>
+    <value name="R16G16B16A16_USCALED" value="148"/>
+    <value name="R32G32_SSCALED" value="149"/>
+    <value name="R32G32_USCALED" value="150"/>
+    <value name="R32G32_SFIXED" value="160"/>
+    <value name="R64_PASSTHRU" value="161"/>
+    <value name="B8G8R8A8_UNORM" value="192"/>
+    <value name="B8G8R8A8_UNORM_SRGB" value="193"/>
+    <value name="R10G10B10A2_UNORM" value="194"/>
+    <value name="R10G10B10A2_UNORM_SRGB" value="195"/>
+    <value name="R10G10B10A2_UINT" value="196"/>
+    <value name="R10G10B10_SNORM_A2_UNORM" value="197"/>
+    <value name="R8G8B8A8_UNORM" value="199"/>
+    <value name="R8G8B8A8_UNORM_SRGB" value="200"/>
+    <value name="R8G8B8A8_SNORM" value="201"/>
+    <value name="R8G8B8A8_SINT" value="202"/>
+    <value name="R8G8B8A8_UINT" value="203"/>
+    <value name="R16G16_UNORM" value="204"/>
+    <value name="R16G16_SNORM" value="205"/>
+    <value name="R16G16_SINT" value="206"/>
+    <value name="R16G16_UINT" value="207"/>
+    <value name="R16G16_FLOAT" value="208"/>
+    <value name="B10G10R10A2_UNORM" value="209"/>
+    <value name="B10G10R10A2_UNORM_SRGB" value="210"/>
+    <value name="R11G11B10_FLOAT" value="211"/>
+    <value name="R32_SINT" value="214"/>
+    <value name="R32_UINT" value="215"/>
+    <value name="R32_FLOAT" value="216"/>
+    <value name="R24_UNORM_X8_TYPELESS" value="217"/>
+    <value name="X24_TYPELESS_G8_UINT" value="218"/>
+    <value name="L32_UNORM" value="221"/>
+    <value name="A32_UNORM" value="222"/>
+    <value name="L16A16_UNORM" value="223"/>
+    <value name="I24X8_UNORM" value="224"/>
+    <value name="L24X8_UNORM" value="225"/>
+    <value name="A24X8_UNORM" value="226"/>
+    <value name="I32_FLOAT" value="227"/>
+    <value name="L32_FLOAT" value="228"/>
+    <value name="A32_FLOAT" value="229"/>
+    <value name="X8B8_UNORM_G8R8_SNORM" value="230"/>
+    <value name="A8X8_UNORM_G8R8_SNORM" value="231"/>
+    <value name="B8X8_UNORM_G8R8_SNORM" value="232"/>
+    <value name="B8G8R8X8_UNORM" value="233"/>
+    <value name="B8G8R8X8_UNORM_SRGB" value="234"/>
+    <value name="R8G8B8X8_UNORM" value="235"/>
+    <value name="R8G8B8X8_UNORM_SRGB" value="236"/>
+    <value name="R9G9B9E5_SHAREDEXP" value="237"/>
+    <value name="B10G10R10X2_UNORM" value="238"/>
+    <value name="L16A16_FLOAT" value="240"/>
+    <value name="R32_UNORM" value="241"/>
+    <value name="R32_SNORM" value="242"/>
+    <value name="R10G10B10X2_USCALED" value="243"/>
+    <value name="R8G8B8A8_SSCALED" value="244"/>
+    <value name="R8G8B8A8_USCALED" value="245"/>
+    <value name="R16G16_SSCALED" value="246"/>
+    <value name="R16G16_USCALED" value="247"/>
+    <value name="R32_SSCALED" value="248"/>
+    <value name="R32_USCALED" value="249"/>
+    <value name="B5G6R5_UNORM" value="256"/>
+    <value name="B5G6R5_UNORM_SRGB" value="257"/>
+    <value name="B5G5R5A1_UNORM" value="258"/>
+    <value name="B5G5R5A1_UNORM_SRGB" value="259"/>
+    <value name="B4G4R4A4_UNORM" value="260"/>
+    <value name="B4G4R4A4_UNORM_SRGB" value="261"/>
+    <value name="R8G8_UNORM" value="262"/>
+    <value name="R8G8_SNORM" value="263"/>
+    <value name="R8G8_SINT" value="264"/>
+    <value name="R8G8_UINT" value="265"/>
+    <value name="R16_UNORM" value="266"/>
+    <value name="R16_SNORM" value="267"/>
+    <value name="R16_SINT" value="268"/>
+    <value name="R16_UINT" value="269"/>
+    <value name="R16_FLOAT" value="270"/>
+    <value name="A8P8_UNORM_PALETTE0" value="271"/>
+    <value name="A8P8_UNORM_PALETTE1" value="272"/>
+    <value name="I16_UNORM" value="273"/>
+    <value name="L16_UNORM" value="274"/>
+    <value name="A16_UNORM" value="275"/>
+    <value name="L8A8_UNORM" value="276"/>
+    <value name="I16_FLOAT" value="277"/>
+    <value name="L16_FLOAT" value="278"/>
+    <value name="A16_FLOAT" value="279"/>
+    <value name="L8A8_UNORM_SRGB" value="280"/>
+    <value name="R5G5_SNORM_B6_UNORM" value="281"/>
+    <value name="B5G5R5X1_UNORM" value="282"/>
+    <value name="B5G5R5X1_UNORM_SRGB" value="283"/>
+    <value name="R8G8_SSCALED" value="284"/>
+    <value name="R8G8_USCALED" value="285"/>
+    <value name="R16_SSCALED" value="286"/>
+    <value name="R16_USCALED" value="287"/>
+    <value name="P8A8_UNORM_PALETTE0" value="290"/>
+    <value name="P8A8_UNORM_PALETTE1" value="291"/>
+    <value name="A1B5G5R5_UNORM" value="292"/>
+    <value name="A4B4G4R4_UNORM" value="293"/>
+    <value name="L8A8_UINT" value="294"/>
+    <value name="L8A8_SINT" value="295"/>
+    <value name="R8_UNORM" value="320"/>
+    <value name="R8_SNORM" value="321"/>
+    <value name="R8_SINT" value="322"/>
+    <value name="R8_UINT" value="323"/>
+    <value name="A8_UNORM" value="324"/>
+    <value name="I8_UNORM" value="325"/>
+    <value name="L8_UNORM" value="326"/>
+    <value name="P4A4_UNORM_PALETTE0" value="327"/>
+    <value name="A4P4_UNORM_PALETTE0" value="328"/>
+    <value name="R8_SSCALED" value="329"/>
+    <value name="R8_USCALED" value="330"/>
+    <value name="P8_UNORM_PALETTE0" value="331"/>
+    <value name="L8_UNORM_SRGB" value="332"/>
+    <value name="P8_UNORM_PALETTE1" value="333"/>
+    <value name="P4A4_UNORM_PALETTE1" value="334"/>
+    <value name="A4P4_UNORM_PALETTE1" value="335"/>
+    <value name="Y8_UNORM" value="336"/>
+    <value name="L8_UINT" value="338"/>
+    <value name="L8_SINT" value="339"/>
+    <value name="I8_UINT" value="340"/>
+    <value name="I8_SINT" value="341"/>
+    <value name="DXT1_RGB_SRGB" value="384"/>
+    <value name="R1_UNORM" value="385"/>
+    <value name="YCRCB_NORMAL" value="386"/>
+    <value name="YCRCB_SWAPUVY" value="387"/>
+    <value name="P2_UNORM_PALETTE0" value="388"/>
+    <value name="P2_UNORM_PALETTE1" value="389"/>
+    <value name="BC1_UNORM" value="390"/>
+    <value name="BC2_UNORM" value="391"/>
+    <value name="BC3_UNORM" value="392"/>
+    <value name="BC4_UNORM" value="393"/>
+    <value name="BC5_UNORM" value="394"/>
+    <value name="BC1_UNORM_SRGB" value="395"/>
+    <value name="BC2_UNORM_SRGB" value="396"/>
+    <value name="BC3_UNORM_SRGB" value="397"/>
+    <value name="MONO8" value="398"/>
+    <value name="YCRCB_SWAPUV" value="399"/>
+    <value name="YCRCB_SWAPY" value="400"/>
+    <value name="DXT1_RGB" value="401"/>
+    <value name="FXT1" value="402"/>
+    <value name="R8G8B8_UNORM" value="403"/>
+    <value name="R8G8B8_SNORM" value="404"/>
+    <value name="R8G8B8_SSCALED" value="405"/>
+    <value name="R8G8B8_USCALED" value="406"/>
+    <value name="R64G64B64A64_FLOAT" value="407"/>
+    <value name="R64G64B64_FLOAT" value="408"/>
+    <value name="BC4_SNORM" value="409"/>
+    <value name="BC5_SNORM" value="410"/>
+    <value name="R16G16B16_FLOAT" value="411"/>
+    <value name="R16G16B16_UNORM" value="412"/>
+    <value name="R16G16B16_SNORM" value="413"/>
+    <value name="R16G16B16_SSCALED" value="414"/>
+    <value name="R16G16B16_USCALED" value="415"/>
+    <value name="BC6H_SF16" value="417"/>
+    <value name="BC7_UNORM" value="418"/>
+    <value name="BC7_UNORM_SRGB" value="419"/>
+    <value name="BC6H_UF16" value="420"/>
+    <value name="PLANAR_420_8" value="421"/>
+    <value name="R8G8B8_UNORM_SRGB" value="424"/>
+    <value name="ETC1_RGB8" value="425"/>
+    <value name="ETC2_RGB8" value="426"/>
+    <value name="EAC_R11" value="427"/>
+    <value name="EAC_RG11" value="428"/>
+    <value name="EAC_SIGNED_R11" value="429"/>
+    <value name="EAC_SIGNED_RG11" value="430"/>
+    <value name="ETC2_SRGB8" value="431"/>
+    <value name="R16G16B16_UINT" value="432"/>
+    <value name="R16G16B16_SINT" value="433"/>
+    <value name="R32_SFIXED" value="434"/>
+    <value name="R10G10B10A2_SNORM" value="435"/>
+    <value name="R10G10B10A2_USCALED" value="436"/>
+    <value name="R10G10B10A2_SSCALED" value="437"/>
+    <value name="R10G10B10A2_SINT" value="438"/>
+    <value name="B10G10R10A2_SNORM" value="439"/>
+    <value name="B10G10R10A2_USCALED" value="440"/>
+    <value name="B10G10R10A2_SSCALED" value="441"/>
+    <value name="B10G10R10A2_UINT" value="442"/>
+    <value name="B10G10R10A2_SINT" value="443"/>
+    <value name="R64G64B64A64_PASSTHRU" value="444"/>
+    <value name="R64G64B64_PASSTHRU" value="445"/>
+    <value name="ETC2_RGB8_PTA" value="448"/>
+    <value name="ETC2_SRGB8_PTA" value="449"/>
+    <value name="ETC2_EAC_RGBA8" value="450"/>
+    <value name="ETC2_EAC_SRGB8_A8" value="451"/>
+    <value name="R8G8B8_UINT" value="456"/>
+    <value name="R8G8B8_SINT" value="457"/>
+    <value name="RAW" value="511"/>
+  </enum>
+
+  <enum name="Texture Coordinate Mode" prefix="TCM">
+    <value name="WRAP" value="0"/>
+    <value name="MIRROR" value="1"/>
+    <value name="CLAMP" value="2"/>
+    <value name="CUBE" value="3"/>
+    <value name="CLAMP_BORDER" value="4"/>
+    <value name="MIRROR_ONCE" value="5"/>
+  </enum>
+
+  <struct name="VS_STATE" length="7">
+    <!-- DWord 0 -->
+    <field name="Kernel Start Pointer" start="6" end="31" type="address"/>
+    <field name="GRF Register Count" start="1" end="3" type="uint"/>
+    <!-- DWord 1 -->
+    <field name="Single Program Flow" start="63" end="63" type="bool"/>
+    <field name="Binding Table Entry Count" start="50" end="57" type="uint"/>
+    <field name="Thread Priority" start="49" end="49" type="uint"/>
+    <field name="Floating Point Mode" start="48" end="48" type="uint">
+      <value name="IEEE-754" value="0"/>
+      <value name="Alternate" value="1"/>
+    </field>
+    <field name="Illegal Opcode Exception Enable" start="45" end="45" type="bool"/>
+    <field name="MaskStack Exception Enable" start="43" end="43" type="bool"/>
+    <field name="Software Exception Enable" start="39" end="39" type="bool"/>
+    <!-- DWord 2 -->
+    <field name="Scratch Space Base Pointer" start="74" end="95" type="offset"/>
+    <field name="Per-Thread Scratch Space" start="64" end="67" type="uint"/>
+    <!-- DWord 3 -->
+    <field name="Constant URB Entry Read Length" start="121" end="126" type="uint"/>
+    <field name="Constant URB Entry Read Offset" start="114" end="119" type="uint"/>
+    <field name="Vertex URB Entry Read Length" start="107" end="112" type="uint"/>
+    <field name="Vertex URB Entry Read Offset" start="100" end="105" type="uint"/>
+    <field name="Dispatch GRF Start Register for URB Data" start="96" end="99" type="uint"/>
+    <!-- DWord 4 -->
+    <field name="Maximum Number of Threads" start="153" end="158" type="uint"/>
+    <field name="URB Entry Allocation Size" start="147" end="151" type="uint"/>
+    <field name="Number of URB Entries" start="139" end="145" type="uint"/>
+    <field name="Statistics Enable" start="138" end="138" type="bool"/>
+    <!-- DWord 5 -->
+    <field name="Sampler State Pointer" start="165" end="191" type="address"/>
+    <field name="Sampler Count" start="160" end="162" type="uint"/>
+    <!-- DWord 6 -->
+    <field name="Vertex Cache Disable" start="193" end="193" type="bool"/>
+    <field name="VS Function Enable" start="192" end="192" type="bool"/>
+  </struct>
+
+  <struct name="GS_STATE" length="7">
+    <!-- DWord 0 -->
+    <field name="Kernel Start Pointer" start="6" end="31" type="address"/>
+    <field name="GRF Register Count" start="1" end="3" type="uint"/>
+    <!-- DWord 1 -->
+    <field name="Single Program Flow" start="63" end="63" type="bool"/>
+    <field name="Binding Table Entry Count" start="50" end="57" type="uint"/>
+    <field name="Floating Point Mode" start="48" end="48" type="uint">
+      <value name="IEEE-754" value="0"/>
+      <value name="Alternate" value="1"/>
+    </field>
+    <field name="Illegal Opcode Exception Enable" start="45" end="45" type="bool"/>
+    <field name="MaskStack Exception Enable" start="43" end="43" type="bool"/>
+    <field name="Software Exception Enable" start="39" end="39" type="bool"/>
+    <!-- DWord 2 -->
+    <field name="Scratch Space Base Pointer" start="74" end="95" type="offset"/>
+    <field name="Per-Thread Scratch Space" start="64" end="67" type="uint"/>
+    <!-- DWord 3 -->
+    <field name="Constant URB Entry Read Length" start="121" end="126" type="uint"/>
+    <field name="Constant URB Entry Read Offset" start="114" end="119" type="uint"/>
+    <field name="Vertex URB Entry Read Length" start="107" end="112" type="uint"/>
+    <field name="Vertex URB Entry Read Offset" start="100" end="105" type="uint"/>
+    <field name="Dispatch GRF Start Register for URB Data" start="96" end="99" type="uint"/>
+    <!-- DWord 4 -->
+    <field name="Maximum Number of Threads" start="153" end="157" type="uint"/>
+    <field name="URB Entry Allocation Size" start="147" end="151" type="uint"/>
+    <field name="Number of URB Entries" start="139" end="145" type="uint"/>
+    <!-- DWord 5 -->
+    <field name="Sampler State Pointer" start="165" end="191" type="address"/>
+    <field name="Sampler Count" start="160" end="162" type="uint"/>
+    <!-- DWord 6 -->
+    <field name="Reorder Enable" start="222" end="222" type="bool"/>
+    <field name="Maximum VPIndex" start="192" end="195" type="uint"/>
+  </struct>
+
+  <struct name="CLIP_STATE" length="11">
+    <!-- DWord 0 -->
+    <field name="Kernel Start Pointer" start="6" end="31" type="address"/>
+    <field name="GRF Register Count" start="1" end="3" type="uint"/>
+    <!-- DWord 1 -->
+    <field name="Single Program Flow" start="63" end="63" type="bool"/>
+    <field name="Binding Table Entry Count" start="50" end="57" type="uint"/>
+    <field name="Thread Priority" start="49" end="49" type="uint"/>
+    <field name="Floating Point Mode" start="48" end="48" type="uint">
+      <value name="IEEE-754" value="0"/>
+      <value name="Alternate" value="1"/>
+    </field>
+    <field name="Illegal Opcode Exception Enable" start="45" end="45" type="bool"/>
+    <field name="MaskStack Exception Enable" start="43" end="43" type="bool"/>
+    <field name="Software Exception Enable" start="39" end="39" type="bool"/>
+    <!-- DWord 2 -->
+    <field name="Scratch Space Base Pointer" start="74" end="95" type="offset"/>
+    <field name="Per-Thread Scratch Space" start="64" end="67" type="uint"/>
+    <!-- DWord 3 -->
+    <field name="Constant URB Entry Read Length" start="121" end="126" type="uint"/>
+    <field name="Constant URB Entry Read Offset" start="114" end="119" type="uint"/>
+    <field name="Vertex URB Entry Read Length" start="107" end="112" type="uint"/>
+    <field name="Vertex URB Entry Read Offset" start="100" end="105" type="uint"/>
+    <field name="Dispatch GRF Start Register for URB Data" start="96" end="99" type="uint"/>
+    <!-- DWord 4 -->
+    <field name="Maximum Number of Threads" start="153" end="157" type="uint"/>
+    <field name="URB Entry Allocation Size" start="147" end="151" type="uint"/>
+    <field name="Number of URB Entries" start="139" end="145" type="uint"/>
+    <!-- DWord 5 -->
+    <field name="Vertex Position Space" start="189" end="189" type="uint"/>
+    <field name="Viewport XY ClipTest Enable" start="188" end="188" type="bool"/>
+    <field name="Viewport Z ClipTest Enable" start="187" end="187" type="bool"/>
+    <field name="Guardband ClipTest Enable" start="186" end="186" type="bool"/>
+    <field name="UserClipFlags MustClip Enable" start="184" end="184" type="bool"/>
+    <field name="UserClipFlags ClipTest Enable Bitmask" start="176" end="183" type="uint"/>
+    <field name="Clip Mode" start="173" end="175" type="uint">
+      <value name="CLIPMODE_NORMAL" value="0"/>
+      <value name="CLIPMODE_ALL" value="1"/>
+      <value name="CLIPMODE_CLIP_NON_REJECTED" value="2"/>
+      <value name="CLIPMODE_REJECT_ALL" value="3"/>
+      <value name="CLIPMODE_ACCEPT_ALL" value="4"/>
+      <value name="CLIPMODE_NORMAL_FFCLIP" value="5"/>
+    </field>
+
+    <!-- DWord 6 -->
+    <field name="Clipper Viewport State Pointer" start="197" end="223" type="offset"/>
+    <!-- DWord 7 -->
+    <field name="Screen Space Viewport X Min" start="224" end="255" type="uint"/>
+    <!-- DWord 8 -->
+    <field name="Screen Space Viewport X Max" start="256" end="287" type="uint"/>
+    <!-- DWord 9 -->
+    <field name="Screen Space Viewport Y Min" start="288" end="319" type="uint"/>
+    <!-- DWord 10 -->
+    <field name="Screen Space Viewport Y Max" start="320" end="351" type="uint"/>
+  </struct>
+
+  <struct name="SF_STATE" length="8">
+    <!-- DWord 0 -->
+    <field name="Kernel Start Pointer" start="6" end="31" type="address"/>
+    <field name="GRF Register Count" start="1" end="3" type="uint"/>
+    <!-- DWord 1 -->
+    <field name="Single Program Flow" start="63" end="63" type="bool"/>
+    <field name="Binding Table Entry Count" start="50" end="57" type="uint"/>
+    <field name="Thread Priority" start="49" end="49" type="uint"/>
+    <field name="Floating Point Mode" start="48" end="48" type="uint">
+      <value name="IEEE-754" value="0"/>
+      <value name="Alternate" value="1"/>
+    </field>
+    <field name="Illegal Opcode Exception Enable" start="45" end="45" type="bool"/>
+    <field name="MaskStack Exception Enable" start="43" end="43" type="bool"/>
+    <field name="Software Exception Enable" start="39" end="39" type="bool"/>
+    <!-- DWord 2 -->
+    <field name="Scratch Space Base Pointer" start="74" end="95" type="offset"/>
+    <field name="Per-Thread Scratch Space" start="64" end="67" type="uint"/>
+    <!-- DWord 3 -->
+    <field name="Constant URB Entry Read Length" start="121" end="126" type="uint"/>
+    <field name="Constant URB Entry Read Offset" start="114" end="119" type="uint"/>
+    <field name="Vertex URB Entry Read Length" start="107" end="112" type="uint"/>
+    <field name="Vertex URB Entry Read Offset" start="100" end="105" type="uint"/>
+    <field name="Dispatch GRF Start Register for URB Data" start="96" end="99" type="uint"/>
+    <!-- DWord 4 -->
+    <field name="Maximum Number of Threads" start="153" end="158" type="uint"/>
+    <field name="URB Entry Allocation Size" start="147" end="151" type="uint"/>
+    <field name="Number of URB Entries" start="139" end="146" type="uint"/>
+    <!-- DWord 5 -->
+    <field name="Setup Viewport State Pointer" start="165" end="195" type="offset"/>
+    <field name="Viewport Transform Enable" start="161" end="161" type="uint"/>
+    <field name="Front Winding" start="160" end="160" type="uint">
+      <value name="FRONTWINDING_CW" value="0"/>
+      <value name="FRONTWINDING_CCW" value="1"/>
+    </field>
+    <!-- DWord 6 -->
+    <field name="Anti-aliasing Enable" start="223" end="223" type="bool"/>
+    <field name="Cull Mode" start="221" end="222" type="uint" prefix="CULLMODE">
+      <value name="BOTH" value="0"/>
+      <value name="NONE" value="1"/>
+      <value name="FRONT" value="2"/>
+      <value name="BACK" value="3"/>
+    </field>
+    <field name="Fast Scissor Clip Disable" start="220" end="220" type="bool"/>
+    <field name="Line Width" start="216" end="219" type="uint"/>
+    <field name="Line End Cap Antialiasing Region Width" start="214" end="215" type="uint"/>
+    <field name="Point Rasterization Rule" start="212" end="213" type="uint">
+      <value name="RASTRULE_UPPER_LEFT" value="0"/>
+      <value name="RASTRULE_UPPER_RIGHT" value="1"/>
+    </field>
+    <field name="Zero Pixel Triangle Filter Disable" start="211" end="211" type="bool"/>
+    <field name="2x2 Pixel Triangle Filter Disable" start="210" end="210" type="bool"/>
+    <field name="Scissor Rectangle Enable" start="209" end="209" type="bool"/>
+    <field name="Destination Origin Horizontal Bias" start="205" end="208" type="uint"/>
+    <field name="Destination Origin Vertical Bias" start="201" end="204" type="uint"/>
+
+    <!-- DWord 7 -->
+    <field name="Last Pixel Enable" start="255" end="255" type="bool"/>
+    <field name="Triangle Strip/List Provoking Vertex Select" start="253" end="254" type="uint"/>
+    <field name="Line Strip/List Provoking Vertex Select" start="251" end="252" type="uint"/>
+    <field name="Triangle Fan Provoking Vertex Select" start="249" end="250" type="uint"/>
+    <field name="AA Line Distance Mode" start="238" end="238" type="uint" prefix="AALINEDISTANCE">
+      <value name="MANHATTAN" value="0"/>
+      <value name="TRUE" value="1"/>
+    </field>
+    <field name="Sprite Point Enable" start="237" end="237" type="bool"/>
+    <field name="Vertex Sub Pixel Precision Select" start="236" end="236" type="uint"/>
+    <field name="Use Point Width State" start="235" end="235" type="uint"/>
+    <field name="Point Width" start="224" end="234" type="uint"/>
+  </struct>
+
+  <struct name="WM_STATE" length="7">
+    <!-- DWord 0 -->
+    <field name="Kernel Start Pointer[0]" start="6" end="31" type="address"/>
+    <field name="GRF Register Count" start="1" end="3" type="uint"/>
+    <!-- DWord 1 -->
+    <field name="Single Program Flow" start="63" end="63" type="bool"/>
+    <field name="Binding Table Entry Count" start="50" end="57" type="uint"/>
+    <field name="Thread Priority" start="49" end="49" type="uint"/>
+    <field name="Floating Point Mode" start="48" end="48" type="uint">
+      <value name="IEEE-754" value="0"/>
+      <value name="Alternate" value="1"/>
+    </field>
+    <field name="Depth Coefficient URB Read Offset" start="40" end="45" type="uint"/>
+    <field name="Illegal Opcode Exception Enable" start="36" end="36" type="bool"/>
+    <field name="MaskStack Exception Enable" start="34" end="34" type="bool"/>
+    <field name="Software Exception Enable" start="33" end="33" type="bool"/>
+    <!-- DWord 2 -->
+    <field name="Scratch Space Base Pointer" start="74" end="95" type="offset"/>
+    <field name="Per-Thread Scratch Space" start="64" end="67" type="uint"/>
+    <!-- DWord 3 -->
+    <field name="Constant URB Entry Read Length" start="121" end="126" type="uint"/>
+    <field name="Constant URB Entry Read Offset" start="114" end="119" type="uint"/>
+    <field name="Setup URB Entry Read Length" start="107" end="113" type="uint"/>
+    <field name="Setup URB Entry Read Offset" start="100" end="105" type="uint"/>
+    <field name="Dispatch GRF Start Register for URB Data" start="96" end="99" type="uint"/>
+    <!-- DWord 4 -->
+    <field name="Sampler State Pointer" start="133" end="159" type="address"/>
+    <field name="Sampler Count" start="130" end="132" type="uint"/>
+    <field name="Statistics Enable" start="128" end="128" type="bool"/>
+    <!-- DWord 5 -->
+    <field name="Maximum Number of Threads" start="185" end="191" type="uint"/>
+    <field name="Legacy Diamond Line Rasterization" start="183" end="183" type="bool"/>
+    <field name="Pixel Shader Kill Pixel" start="182" end="182" type="bool"/>
+    <field name="Pixel Shader Computed Depth" start="181" end="181" type="bool"/>
+    <field name="Pixel Shader Uses Source Depth" start="180" end="180" type="bool"/>
+    <field name="Thread Dispatch Enable" start="179" end="179" type="bool"/>
+    <field name="Early Depth Test Enable" start="178" end="178" type="bool"/>
+    <field name="Line End Cap Antialiasing Region Width" start="176" end="177" type="uint"/>
+    <field name="Line Antialiasing Region Width" start="174" end="175" type="uint"/>
+    <field name="Polygon Stipple Enable" start="173" end="173" type="bool"/>
+    <field name="Global Depth Offset Enable" start="172" end="172" type="bool"/>
+    <field name="Line Stipple Enable" start="171" end="171" type="bool"/>
+    <field name="Legacy Global Depth Bias Enable" start="170" end="170" type="bool"/>
+    <field name="32-Pixel Dispatch Enable" start="162" end="162" type="bool"/>
+    <field name="16-Pixel Dispatch Enable" start="161" end="161" type="bool"/>
+    <field name="8-Pixel Dispatch Enable" start="160" end="160" type="bool"/>
+    <!-- DWord 6 -->
+    <field name="Global Depth Offset Constant" start="192" end="223" type="float"/>
+    <!-- DWord 7 -->
+    <field name="Global Depth Offset Scale" start="224" end="255" type="float"/>
+  </struct>
+
+  <struct name="VERTEX_BUFFER_STATE" length="4">
+    <!-- DWord 0 -->
+    <field name="Vertex Buffer Index" start="27" end="31" type="uint"/>
+    <field name="Buffer Access Type" start="26" end="26" type="uint">
+      <value name="VERTEXDATA" value="0"/>
+      <value name="INSTANCEDATA" value="1"/>
+    </field>
+    <field name="Buffer Pitch" start="0" end="10" type="uint"/>
+    <!-- DWord 1 -->
+    <field name="Buffer Starting Address" start="32" end="63" type="address"/>
+    <!-- DWord 2 -->
+    <field name="Max Index" start="64" end="95" type="uint"/>
+    <!-- DWord 3 -->
+  </struct>
+
+  <struct name="VERTEX_ELEMENT_STATE" length="2">
+    <!-- DWord 0 -->
+    <field name="Vertex Buffer Index" start="27" end="31" type="uint"/>
+    <field name="Valid" start="26" end="26" type="uint"/>
+    <field name="Source Element Format" start="16" end="24" type="uint"/>
+    <field name="Source Element Offset" start="0" end="10" type="uint"/>
+    <!-- DWord 1 -->
+    <field name="Component 0 Control" start="60" end="62" type="uint"/>
+    <field name="Component 1 Control" start="56" end="58" type="uint"/>
+    <field name="Component 2 Control" start="52" end="54" type="uint"/>
+    <field name="Component 3 Control" start="48" end="50" type="uint"/>
+    <field name="Destination Element Offset" start="32" end="39" type="uint"/>
+  </struct>
+
+  <struct name="CLIP_VIEWPORT" length="4">
+    <field name="XMin Clip Guardband" start="0" end="31" type="uint"/>
+    <field name="XMax Clip Guardband" start="32" end="63" type="uint"/>
+    <field name="YMin Clip Guardband" start="64" end="95" type="uint"/>
+    <field name="YMax Clip Guardband" start="96" end="127" type="uint"/>
+  </struct>
+
+  <struct name="SF_VIEWPORT" length="8">
+    <!-- DWord 0 -->
+    <field name="Viewport Matrix Element m00" start="0" end="31" type="float"/>
+    <!-- DWord 1 -->
+    <field name="Viewport Matrix Element m11" start="32" end="63" type="float"/>
+    <!-- DWord 2 -->
+    <field name="Viewport Matrix Element m22" start="64" end="95" type="float"/>
+    <!-- DWord 3 -->
+    <field name="Viewport Matrix Element m30" start="96" end="127" type="float"/>
+    <!-- DWord 4 -->
+    <field name="Viewport Matrix Element m31" start="128" end="159" type="float"/>
+    <!-- DWord 5 -->
+    <field name="Viewport Matrix Element m32" start="160" end="191" type="float"/>
+    <!-- DWord 6 -->
+    <field name="Scissor Rectangle Y Min" start="208" end="223" type="uint"/>
+    <field name="Scissor Rectangle X Min" start="192" end="207" type="uint"/>
+    <!-- DWord 7 -->
+    <field name="Scissor Rectangle Y Max" start="224" end="239" type="uint"/>
+    <field name="Scissor Rectangle X Max" start="240" end="255" type="uint"/>
+  </struct>
+
+  <struct name="CC_VIEWPORT" length="2">
+    <field name="Minimum Depth" start="0" end="31" type="float"/>
+    <field name="Maximum Depth" start="32" end="63" type="float"/>
+  </struct>
+
+  <struct name="COLOR_CALC_STATE" length="6">
+    <!-- DWord 0 -->
+    <field name="Stencil Test Enable" start="31" end="31" type="bool"/>
+    <field name="Stencil Test Function" start="28" end="30" type="3D_Compare_Function"/>
+    <field name="Stencil Fail Op" start="25" end="27" type="uint">
+      <value name="STENCILOP_KEEP" value="0"/>
+      <value name="STENCILOP_ZERO" value="1"/>
+      <value name="STENCILOP_REPLACE" value="2"/>
+      <value name="STENCILOP_INCRSAT" value="3"/>
+      <value name="STENCILOP_DECRSAT" value="4"/>
+      <value name="STENCILOP_INCR" value="5"/>
+      <value name="STENCILOP_DECR" value="6"/>
+      <value name="STENCILOP_INVERT" value="7"/>
+    </field>
+    <field name="Stencil Pass Depth Fail Op" start="22" end="24" type="uint"/>
+    <field name="Stencil Pass Depth Pass Op" start="19" end="21" type="uint"/>
+    <field name="Stencil Buffer Write Enable" start="18" end="18" type="bool"/>
+    <field name="Double Sided Stencil Enable" start="15" end="15" type="bool"/>
+    <field name="BackFace Stencil Test Function" start="12" end="14" type="3D_Compare_Function"/>
+    <field name="Backface Stencil Fail Op" start="9" end="11" type="uint">
+      <value name="STENCILOP_KEEP" value="0"/>
+      <value name="STENCILOP_ZERO" value="1"/>
+      <value name="STENCILOP_REPLACE" value="2"/>
+      <value name="STENCILOP_INCRSAT" value="3"/>
+      <value name="STENCILOP_DECRSAT" value="4"/>
+      <value name="STENCILOP_INCR" value="5"/>
+      <value name="STENCILOP_DECR" value="6"/>
+      <value name="STENCILOP_INVERT" value="7"/>
+    </field>
+    <field name="Backface Stencil Pass Depth Fail Op" start="6" end="8" type="uint"/>
+    <field name="Backface Stencil Pass Depth Pass Op" start="3" end="5" type="uint"/>
+    <!-- DWord 1 -->
+    <field name="Stencil Reference Value" start="56" end="63" type="uint"/>
+    <field name="Stencil Test Mask" start="48" end="55" type="uint"/>
+    <field name="Stencil Write Mask" start="40" end="47" type="uint"/>
+    <field name="BackFace Stencil Reference Value" start="32" end="39" type="uint"/>
+    <!-- DWord 2 -->
+    <field name="Backface Stencil Test Mask" start="88" end="95" type="uint"/>
+    <field name="Backface Stencil Write Mask" start="80" end="87" type="uint"/>
+    <field name="Depth Test Enable" start="79" end="79" type="bool"/>
+    <field name="Depth Test Function" start="76" end="78" type="3D_Compare_Function"/>
+    <field name="Depth Buffer Write Enable" start="75" end="75" type="bool"/>
+    <field name="Logic Op Enable" start="64" end="64" type="bool"/>
+    <!-- DWord 3 -->
+    <field name="Alpha Test Format" start="111" end="111" type="uint">
+      <value name="ALPHATEST_UNORM8" value="0"/>
+      <value name="ALPHATEST_FLOAT32" value="1"/>
+    </field>
+    <field name="Independent Alpha Blend Enable" start="109" end="109" type="bool"/>
+    <field name="Color Buffer Blend Enable" start="108" end="108" type="bool"/>
+    <field name="Alpha Test Enable" start="107" end="107" type="bool"/>
+    <field name="Alpha Test Function" start="104" end="106" type="3D_Compare_Function"/>
+    <!-- DWord 4 -->
+    <field name="Color Calculator Viewport State Pointer" start="133" end="159" type="address"/>
+    <!-- DWord 5 -->
+    <field name="Color Dither Enable" start="191" end="191" type="bool"/>
+    <field name="Round Disable Function Disable" start="190" end="190" type="bool"/>
+    <field name="Logic Op Function" start="176" end="179" type="uint">
+      <value name="LOGICOP_CLEAR" value="0"/>
+      <value name="LOGICOP_NOR" value="1"/>
+      <value name="LOGICOP_AND_INVERTED" value="2"/>
+      <value name="LOGICOP_COPY_INVERTED" value="3"/>
+      <value name="LOGICOP_AND_REVERSE" value="4"/>
+      <value name="LOGICOP_INVERT" value="5"/>
+      <value name="LOGICOP_XOR" value="6"/>
+      <value name="LOGICOP_NAND" value="7"/>
+      <value name="LOGICOP_AND" value="8"/>
+      <value name="LOGICOP_EQUIV" value="9"/>
+      <value name="LOGICOP_NOOP" value="10"/>
+      <value name="LOGICOP_OR_INVERTED" value="11"/>
+      <value name="LOGICOP_COPY" value="12"/>
+      <value name="LOGICOP_OR_REVERSE" value="13"/>
+      <value name="LOGICOP_OR" value="14"/>
+      <value name="LOGICOP_SET" value="15"/>
+    </field>
+    <field name="Statistics Enable" start="175" end="175" type="bool"/>
+    <field name="Alpha Blend Function" start="172" end="174" type="uint">
+      <value name="BLENDFUNCTION_ADD" value="0"/>
+      <value name="BLENDFUNCTION_SUBTRACT" value="1"/>
+      <value name="BLENDFUNCTION_REVERSE_SUBTRACT" value="2"/>
+      <value name="BLENDFUNCTION_MIN" value="3"/>
+      <value name="BLENDFUNCTION_MAX" value="4"/>
+    </field>
+    <field name="Source Alpha Blend Factor" start="167" end="171" type="uint">
+      <value name="BLENDFACTOR_ONE" value="1"/>
+      <value name="BLENDFACTOR_SRC_COLOR" value="2"/>
+      <value name="BLENDFACTOR_SRC_ALPHA" value="3"/>
+      <value name="BLENDFACTOR_DST_ALPHA" value="4"/>
+      <value name="BLENDFACTOR_DST_COLOR" value="5"/>
+      <value name="BLENDFACTOR_SRC_ALPHA_SATURATE" value="6"/>
+      <value name="BLENDFACTOR_CONST_COLOR" value="7"/>
+      <value name="BLENDFACTOR_CONST_ALPHA" value="8"/>
+      <value name="BLENDFACTOR_SRC1_COLOR" value="9"/>
+      <value name="BLENDFACTOR_SRC1_ALPHA" value="10"/>
+      <value name="BLENDFACTOR_ZERO" value="17"/>
+      <value name="BLENDFACTOR_INV_SRC_COLOR" value="18"/>
+      <value name="BLENDFACTOR_INV_SRC_ALPHA" value="19"/>
+      <value name="BLENDFACTOR_INV_DST_ALPHA" value="20"/>
+      <value name="BLENDFACTOR_INV_DST_COLOR" value="21"/>
+      <value name="BLENDFACTOR_INV_CONST_COLOR" value="23"/>
+      <value name="BLENDFACTOR_INV_CONST_ALPHA" value="24"/>
+      <value name="BLENDFACTOR_INV_SRC1_COLOR" value="25"/>
+      <value name="BLENDFACTOR_INV_SRC1_ALPHA" value="26"/>
+    </field>
+    <field name="Destination Alpha Blend Factor" start="162" end="166" type="uint"/>
+    <!-- DWord 6 -->
+    <field name="Color Blend Function" start="221" end="223" type="uint">
+      <value name="BLENDFUNCTION_ADD" value="0"/>
+      <value name="BLENDFUNCTION_SUBTRACT" value="1"/>
+      <value name="BLENDFUNCTION_REVERSE_SUBTRACT" value="2"/>
+      <value name="BLENDFUNCTION_MIN" value="3"/>
+      <value name="BLENDFUNCTION_MAX" value="4"/>
+    </field>
+    <field name="Source Blend Factor" start="216" end="220" type="uint"/>
+    <field name="Destination Blend Factor" start="211" end="215" type="uint"/>
+    <field name="X Dither Offset" start="209" end="210" type="uint"/>
+    <field name="Y Dither Offset" start="207" end="208" type="uint"/>
+    <field name="Color Clamp Range" start="194" end="195" type="uint">
+      <value name="COLORCLAMP_UNORM" value="0"/>
+      <value name="COLORCLAMP_SNORM" value="1"/>
+      <value name="COLORCLAMP_RTFORMAT" value="2"/>
+    </field>
+    <field name="Pre-Blend Color Clamp Enable" start="193" end="193" type="bool"/>
+    <field name="Post-Blend Color Clamp Enable" start="192" end="192" type="bool"/>
+    <!-- DWord 7 -->
+    <field name="Alpha Reference Value" start="224" end="255" type="float"/>
+  </struct>
+
   <struct name="RENDER_SURFACE_STATE" length="6">
     <field name="Surface Type" start="29" end="31" type="uint">
       <value name="SURFTYPE_1D" value="0"/>
@@ -49,4 +764,400 @@
     <field name="Minimum Array Element" start="145" end="155" type="uint"/>
     <field name="Render Target View Extent" start="136" end="144" type="uint"/>
   </struct>
+
+  <struct name="SAMPLER_STATE" length="4">
+    <field name="Sampler Disable" start="31" end="31" type="bool"/>
+    <field name="LOD PreClamp Enable" start="28" end="28" type="uint" prefix="CLAMP_ENABLE">
+      <value name="D3D" value="0"/>
+      <value name="OGL" value="1"/>
+    </field>
+    <field name="Base Mip Level" start="22" end="26" type="u4.1"/>
+    <field name="Mip Mode Filter" start="20" end="21" type="uint" prefix="MIPFILTER">
+      <value name="NONE" value="0"/>
+      <value name="NEAREST" value="1"/>
+      <value name="LINEAR" value="3"/>
+    </field>
+    <field name="Mag Mode Filter" start="17" end="19" type="uint" prefix="MAPFILTER">
+      <value name="NEAREST" value="0"/>
+      <value name="LINEAR" value="1"/>
+      <value name="ANISOTROPIC" value="2"/>
+      <value name="MONO" value="6"/>
+    </field>
+    <field name="Min Mode Filter" start="14" end="16" type="uint" prefix="MAPFILTER"/>
+    <field name="Texture LOD Bias" start="3" end="13" type="s4.6"/>
+    <field name="Shadow Function" start="0" end="2" type="uint">
+      <value name="PREFILTEROP_ALWAYS" value="0"/>
+      <value name="PREFILTEROP_NEVER" value="1"/>
+      <value name="PREFILTEROP_LESS" value="2"/>
+      <value name="PREFILTEROP_EQUAL" value="3"/>
+      <value name="PREFILTEROP_LEQUAL" value="4"/>
+      <value name="PREFILTEROP_GREATER" value="5"/>
+      <value name="PREFILTEROP_NOTEQUAL" value="6"/>
+      <value name="PREFILTEROP_GEQUAL" value="7"/>
+    </field>
+    <field name="Min LOD" start="54" end="63" type="u4.6"/>
+    <field name="Max LOD" start="44" end="53" type="u4.6"/>
+    <field name="Cube Surface Control Mode" start="41" end="41" type="uint">
+      <value name="CUBECTRLMODE_PROGRAMMED" value="0"/>
+      <value name="CUBECTRLMODE_OVERRIDE" value="1"/>
+    </field>
+    <field name="TCX Address Control Mode" start="38" end="40" type="uint"/>
+    <field name="TCY Address Control Mode" start="35" end="37" type="uint"/>
+    <field name="TCZ Address Control Mode" start="32" end="34" type="uint"/>
+    <field name="Border Color Pointer" start="69" end="95" type="offset"/>
+    <field name="Monochrome Filter Height: Reserved" start="125" end="127" type="uint"/>
+    <field name="Monochrome Filter Width" start="122" end="124" type="uint"/>
+    <field name="ChromaKey Enable" start="121" end="121" type="bool"/>
+    <field name="ChromaKey Index" start="119" end="120" type="uint"/>
+    <field name="ChromaKey Mode" start="118" end="118" type="uint">
+      <value name="KEYFILTER_KILL_ON_ANY_MATCH" value="0"/>
+      <value name="KEYFILTER_REPLACE_BLACK" value="1"/>
+    </field>
+    <field name="Maximum Anisotropy" start="115" end="117" type="uint">
+      <value name="RATIO 2:1" value="0"/>
+      <value name="RATIO 4:1" value="1"/>
+      <value name="RATIO 6:1" value="2"/>
+      <value name="RATIO 8:1" value="3"/>
+      <value name="RATIO 10:1" value="4"/>
+      <value name="RATIO 12:1" value="5"/>
+      <value name="RATIO 14:1" value="6"/>
+      <value name="RATIO 16:1" value="7"/>
+    </field>
+    <field name="R Address Min Filter Rounding Enable" start="109" end="109" type="bool"/>
+    <field name="R Address Mag Filter Rounding Enable" start="110" end="110" type="bool"/>
+    <field name="V Address Min Filter Rounding Enable" start="111" end="111" type="bool"/>
+    <field name="V Address Mag Filter Rounding Enable" start="112" end="112" type="bool"/>
+    <field name="U Address Min Filter Rounding Enable" start="113" end="113" type="bool"/>
+    <field name="U Address Mag Filter Rounding Enable" start="114" end="114" type="bool"/>
+  </struct>
+
+  <instruction name="3DPRIMITIVE" bias="2" length="6">
+    <!-- DWord 0 -->
+    <field name="Command Type" start="29" end="31" type="uint" default="3"/>
+    <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
+    <field name="3D Command Opcode" start="24" end="26" type="uint" default="3"/>
+    <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="0"/>
+    <field name="Vertex Access Type" start="15" end="15" type="uint">
+      <value name="SEQUENTIAL" value="0"/>
+      <value name="RANDOM" value="1"/>
+    </field>
+    <field name="Primitive Topology Type" start="10" end="14" type="uint"/>
+    <field name="DWord Length" start="0" end="7" type="uint" default="4"/>
+    <!-- DWord 1 -->
+    <field name="Vertex Count" start="32" end="63" type="uint"/>
+    <!-- DWord 2 -->
+    <field name="Start Vertex Location" start="64" end="95" type="uint"/>
+    <!-- DWord 3 -->
+    <field name="Reserved" start="96" end="127" type="mbo"/>
+    <!-- DWord 4: MBZ -->
+    <!-- DWord 5 -->
+    <field name="Base Vertex Location" start="160" end="191" type="int"/>
+  </instruction>
+
+  <instruction name="3DSTATE_PIPELINED_POINTERS" bias="2" length="7">
+    <!-- DWord 0 -->
+    <field name="Command Type" start="29" end="31" type="uint" default="3"/>
+    <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
+    <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
+    <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="0"/>
+    <field name="DWord Length" start="0" end="7" type="uint" default="5"/>
+    <!-- DWord 1 -->
+    <field name="Pointer to VS_STATE" start="37" end="63" type="address"/>
+    <!-- DWord 2 -->
+    <field name="Pointer to GS_STATE" start="69" end="95" type="address"/>
+    <field name="GS Enable" start="64" end="64" type="bool"/>
+    <!-- DWord 3 -->
+    <field name="Pointer to CLIP_STATE" start="101" end="127" type="address"/>
+    <field name="CLIP Enable" start="96" end="96" type="bool"/>
+    <!-- DWord 4 -->
+    <field name="Pointer to SF_STATE" start="133" end="159" type="address"/>
+    <!-- DWord 5 -->
+    <field name="Pointer to WM_STATE" start="165" end="191" type="address"/>
+    <!-- DWord 6 -->
+    <field name="Pointer to COLOR_CALC_STATE" start="198" end="223" type="address"/>
+  </instruction>
+
+  <instruction name="3DSTATE_AA_LINE_PARAMETERS" bias="2" length="3">
+    <field name="Command Type" start="29" end="31" type="uint" default="3"/>
+    <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
+    <field name="3D Command Opcode" start="24" end="26" type="uint" default="1"/>
+    <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="10"/>
+    <field name="DWord Length" start="0" end="7" type="uint" default="1"/>
+    <field name="AA Coverage Bias" start="48" end="55" type="u0.8"/>
+    <field name="AA Coverage Slope" start="32" end="39" type="u0.8"/>
+    <field name="AA Coverage EndCap Bias" start="80" end="87" type="u0.8"/>
+    <field name="AA Coverage EndCap Slope" start="64" end="71" type="u0.8"/>
+  </instruction>
+
+  <instruction name="3DSTATE_BINDING_TABLE_POINTERS" bias="2" length="6">
+    <!-- DWord 0 -->
+    <field name="Command Type" start="29" end="31" type="uint" default="3"/>
+    <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
+    <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
+    <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="1"/>
+    <field name="DWord Length" start="0" end="7" type="uint" default="4"/>
+    <!-- DWord 1 -->
+    <field name="Pointer to VS Binding Table" start="37" end="63" type="offset"/>
+    <!-- DWord 2 -->
+    <field name="Pointer to GS Binding Table" start="69" end="95" type="offset"/>
+    <!-- DWord 3 -->
+    <field name="Pointer to CLIP Binding Table" start="101" end="127" type="offset"/>
+    <!-- DWord 4 -->
+    <field name="Pointer to SF Binding Table" start="133" end="159" type="offset"/>
+    <!-- DWord 5 -->
+    <field name="Pointer to PS Binding Table" start="165" end="191" type="offset"/>
+  </instruction>
+
+  <instruction name="3DSTATE_CONSTANT_COLOR" bias="2" length="5">
+    <!-- DWord 0 -->
+    <field name="Command Type" start="29" end="31" type="uint" default="3"/>
+    <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
+    <field name="3D Command Opcode" start="24" end="26" type="uint" default="1"/>
+    <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="1"/>
+    <field name="DWord Length" start="0" end="7" type="uint" default="3"/>
+    <!-- DWord 1 -->
+    <field name="Blend Constant Color Red" start="32" end="63" type="float"/>
+    <!-- DWord 2 -->
+    <field name="Blend Constant Color Green" start="64" end="95" type="float"/>
+    <!-- DWord 3 -->
+    <field name="Blend Constant Color Blue" start="96" end="127" type="float"/>
+    <!-- DWord 4 -->
+    <field name="Blend Constant Color Alpha" start="128" end="160" type="float"/>
+  </instruction>
+
+  <instruction name="3DSTATE_DEPTH_BUFFER" bias="2" length="5">
+    <!-- DWord 0 -->
+    <field name="Command Type" start="29" end="31" type="uint" default="3"/>
+    <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
+    <field name="3D Command Opcode" start="24" end="26" type="uint" default="1"/>
+    <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="5"/>
+    <field name="DWord Length" start="0" end="7" type="uint" default="5"/>
+    <!-- DWord 1 -->
+    <field name="Surface Type" start="61" end="63" type="uint">
+      <value name="SURFTYPE_1D" value="0"/>
+      <value name="SURFTYPE_2D" value="1"/>
+      <value name="SURFTYPE_3D" value="2"/>
+      <value name="SURFTYPE_CUBE" value="3"/>
+      <value name="SURFTYPE_NULL" value="7"/>
+    </field>
+    <field name="Tiled Surface" start="59" end="59" type="bool"/>
+    <field name="Tile Walk" start="58" end="58" type="uint">
+      <value name="TILEWALK_YMAJOR" value="1"/>
+    </field>
+    <field name="Depth Buffer Coordinate Offset Disable" start="57" end="57" type="bool"/>
+    <field name="Software Tiled Rendering Mode" start="55" end="56" type="uint">
+      <value name="NORMAL" value="0"/>
+      <value name="STR1" value="1"/>
+      <value name="STR2" value="3"/>
+    </field>
+    <field name="Surface Format" start="50" end="52" type="uint">
+      <value name="D32_FLOAT_S8X24_UINT" value="0"/>
+      <value name="D32_FLOAT" value="1"/>
+      <value name="D24_UNORM_S8_UINT" value="2"/>
+      <value name="D24_UNORM_X8_UINT" value="3"/>
+      <value name="D16_UNORM" value="5"/>
+    </field>
+    <field name="Surface Pitch" start="32" end="48" type="uint"/>
+    <!-- DWord 2 -->
+    <field name="Surface Base Address" start="64" end="95" type="address"/>
+    <!-- DWord 3 -->
+    <field name="Height" start="115" end="127" type="uint">
+      <value name="SURFTYPE_1D:  must be zero" value="0"/>
+    </field>
+    <field name="Width" start="102" end="114" type="uint"/>
+    <field name="LOD" start="98" end="101" type="uint"/>
+    <field name="MIP Map Layout Mode" start="97" end="97" type="uint">
+      <value name="MIPLAYOUT_BELOW" value="0"/>
+      <value name="MIPLAYOUT_RIGHT" value="1"/>
+    </field>
+    <!-- DWord 4 -->
+    <field name="Depth" start="149" end="159" type="uint">
+      <value name="SURFTYPE_CUBE:  must be zero" value="0"/>
+    </field>
+    <field name="Minimum Array Element" start="138" end="148" type="uint"/>
+    <field name="Render Target View Extent" start="129" end="137" type="uint"/>
+  </instruction>
+
+  <instruction name="3DSTATE_DRAWING_RECTANGLE" bias="2" length="4">
+    <field name="Command Type" start="29" end="31" type="uint" default="3"/>
+    <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
+    <field name="3D Command Opcode" start="24" end="26" type="uint" default="1"/>
+    <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="0"/>
+    <field name="DWord Length" start="0" end="7" type="uint" default="2"/>
+    <field name="Clipped Drawing Rectangle Y Min" start="48" end="63" type="uint"/>
+    <field name="Clipped Drawing Rectangle X Min" start="32" end="47" type="uint"/>
+    <field name="Clipped Drawing Rectangle Y Max" start="80" end="95" type="uint"/>
+    <field name="Clipped Drawing Rectangle X Max" start="64" end="79" type="uint"/>
+    <field name="Drawing Rectangle Origin Y" start="112" end="127" type="int"/>
+    <field name="Drawing Rectangle Origin X" start="96" end="111" type="int"/>
+  </instruction>
+
+  <instruction name="3DSTATE_INDEX_BUFFER" bias="2" length="3">
+    <!-- DWord 0 -->
+    <field name="Command Type" start="29" end="31" type="uint" default="3"/>
+    <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
+    <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
+    <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="10"/>
+    <field name="Cut Index Enable" start="10" end="10" type="bool"/>
+    <field name="Index Format" start="8" end="9" type="uint" prefix="INDEX">
+      <value name="BYTE" value="0"/>
+      <value name="WORD" value="1"/>
+      <value name="DWORD" value="2"/>
+    </field>
+    <field name="DWord Length" start="0" end="7" type="uint" default="1"/>
+    <!-- DWord 1 -->
+    <field name="Buffer Starting Address" start="32" end="63" type="address"/>
+    <!-- DWord 2 -->
+    <field name="Buffer Ending Address" start="64" end="95" type="address"/>
+  </instruction>
+
+  <instruction name="3DSTATE_LINE_STIPPLE" bias="2" length="3">
+    <field name="Command Type" start="29" end="31" type="uint" default="3"/>
+    <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
+    <field name="3D Command Opcode" start="24" end="26" type="uint" default="1"/>
+    <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="8"/>
+    <field name="DWord Length" start="0" end="7" type="uint" default="1"/>
+    <field name="Modify Enable (Current Repeat Counter, Current Stipple Index)" start="63" end="63" type="bool"/>
+    <field name="Current Repeat Counter" start="53" end="61" type="uint"/>
+    <field name="Current Stipple Index" start="48" end="51" type="uint"/>
+    <field name="Line Stipple Pattern" start="32" end="47" type="uint"/>
+    <field name="Line Stipple Inverse Repeat Count" start="79" end="95" type="u1.16"/>
+    <field name="Line Stipple Repeat Count" start="64" end="72" type="uint"/>
+  </instruction>
+
+  <instruction name="3DSTATE_POLY_STIPPLE_OFFSET" bias="2" length="2">
+    <field name="Command Type" start="29" end="31" type="uint" default="3"/>
+    <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
+    <field name="3D Command Opcode" start="24" end="26" type="uint" default="1"/>
+    <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="6"/>
+    <field name="DWord Length" start="0" end="7" type="uint" default="0"/>
+    <field name="Polygon Stipple X Offset" start="40" end="44" type="uint"/>
+    <field name="Polygon Stipple Y Offset" start="32" end="36" type="uint"/>
+  </instruction>
+
+  <instruction name="3DSTATE_POLY_STIPPLE_PATTERN" bias="2" length="33">
+    <field name="Command Type" start="29" end="31" type="uint" default="3"/>
+    <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
+    <field name="3D Command Opcode" start="24" end="26" type="uint" default="1"/>
+    <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="7"/>
+    <field name="DWord Length" start="0" end="7" type="uint" default="31"/>
+    <group count="32" start="32" size="32">
+      <field name="Pattern Row" start="0" end="31" type="uint"/>
+    </group>
+  </instruction>
+
+  <instruction name="3DSTATE_GLOBAL_DEPTH_OFFSET_CLAMP" bias="2" length="2">
+    <!-- DWord 0 -->
+    <field name="Command Type" start="29" end="31" type="uint" default="3"/>
+    <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
+    <field name="3D Command Opcode" start="24" end="26" type="uint" default="1"/>
+    <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="9"/>
+    <field name="DWord Length" start="0" end="7" type="uint"/>
+    <!-- DWord 1 -->
+    <field name="Global Depth Offset Clamp" start="32" end="63" type="float"/>
+  </instruction>
+
+  <instruction name="3DSTATE_VERTEX_BUFFERS" bias="2">
+    <field name="Command Type" start="29" end="31" type="uint" default="3"/>
+    <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
+    <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
+    <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="8"/>
+    <field name="DWord Length" start="0" end="7" type="uint" default="3"/>
+    <group count="0" start="32" size="128">
+      <field name="Vertex Buffer State" start="0" end="127" type="VERTEX_BUFFER_STATE"/>
+    </group>
+  </instruction>
+
+  <instruction name="3DSTATE_VERTEX_ELEMENTS" bias="2">
+    <field name="Command Type" start="29" end="31" type="uint" default="3"/>
+    <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
+    <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
+    <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="9"/>
+    <field name="DWord Length" start="0" end="7" type="uint" default="1"/>
+    <group count="0" start="32" size="64">
+      <field name="Element" start="0" end="63" type="VERTEX_ELEMENT_STATE"/>
+    </group>
+  </instruction>
+
+  <instruction name="3DSTATE_VF_STATISTICS" bias="1" length="1">
+    <field name="Command Type" start="29" end="31" type="uint" default="3"/>
+    <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
+    <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
+    <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="11"/>
+    <field name="Statistics Enable" start="0" end="0" type="bool"/>
+  </instruction>
+
+  <instruction name="PIPELINE_SELECT" bias="1" length="1">
+    <field name="Command Type" start="29" end="31" type="uint" default="3"/>
+    <field name="Command SubType" start="27" end="28" type="uint" default="0"/>
+    <field name="3D Command Opcode" start="24" end="26" type="uint" default="1"/>
+    <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="4"/>
+    <field name="Pipeline Selection" start="0" end="1" type="uint">
+      <value name="3D" value="0"/>
+      <value name="Media" value="1"/>
+    </field>
+  </instruction>
+
+  <instruction name="PIPE_CONTROL" bias="2" length="5">
+    <!-- DWord 0 -->
+    <field name="Command Type" start="29" end="31" type="uint" default="3"/>
+    <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
+    <field name="3D Command Opcode" start="24" end="26" type="uint" default="2"/>
+    <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="0"/>
+    <field name="Post Sync Operation" start="14" end="15" type="uint">
+      <value name="No Write" value="0"/>
+      <value name="Write Immediate Data" value="1"/>
+      <value name="Write PS Depth Count" value="2"/>
+      <value name="Write Timestamp" value="3"/>
+    </field>
+    <field name="Depth Stall Enable" start="13" end="13" type="bool"/>
+    <field name="Write Cache Flush Enable" start="12" end="12" type="bool"/>
+    <field name="Instruction/State Cache Flush Enable" start="11" end="11" type="bool"/>
+    <field name="Notify Enable" start="8" end="8" type="bool"/>
+    <field name="DWord Length" start="0" end="7" type="uint" default="3"/>
+    <!-- DWord 1 -->
+    <field name="Destination Address" start="63" end="35" type="address"/>
+    <field name="Destination Address Type" start="34" end="34" type="uint" prefix="DAT">
+      <value name="PPGTT" value="0"/>
+      <value name="GGTT" value="1"/>
+    </field>
+    <field name="Immediate Data" start="64" end="127" type="uint"/>
+  </instruction>
+
+  <instruction name="STATE_BASE_ADDRESS" bias="2" length="10">
+    <field name="Command Type" start="29" end="31" type="uint" default="3"/>
+    <field name="Command SubType" start="27" end="28" type="uint" default="0"/>
+    <field name="3D Command Opcode" start="24" end="26" type="uint" default="1"/>
+    <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="1"/>
+    <field name="DWord Length" start="0" end="7" type="uint" default="4"/>
+    <field name="General State Base Address" start="44" end="63" type="address"/>
+    <field name="General State Base Address Modify Enable" start="32" end="32" type="bool"/>
+    <field name="Surface State Base Address" start="76" end="95" type="address"/>
+    <field name="Surface State Base Address Modify Enable" start="64" end="64" type="bool"/>
+    <field name="Indirect Object Base Address" start="108" end="127" type="address"/>
+    <field name="Indirect Object Base Address Modify Enable" start="96" end="96" type="bool"/>
+    <field name="General State Access Upper Bound" start="140" end="159" type="address"/>
+    <field name="General State Access Upper Bound Modify Enable" start="128" end="128" type="bool"/>
+    <field name="Indirect Object Access Upper Bound" start="172" end="191" type="address"/>
+    <field name="Indirect Object Access Upper Bound Modify Enable" start="160" end="160" type="bool"/>
+  </instruction>
+
+  <instruction name="STATE_PREFETCH" bias="2" length="2">
+    <field name="Command Type" start="29" end="31" type="uint" default="3"/>
+    <field name="Command SubType" start="27" end="28" type="uint" default="0"/>
+    <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
+    <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="3"/>
+    <field name="DWord Length" start="0" end="7" type="uint" default="0"/>
+    <field name="Prefetch Pointer" start="38" end="63" type="address"/>
+    <field name="Prefetch Count" start="32" end="34" type="uint"/>
+  </instruction>
+
+  <instruction name="STATE_SIP" bias="2" length="2">
+    <field name="Command Type" start="29" end="31" type="uint" default="3"/>
+    <field name="Command SubType" start="27" end="28" type="uint" default="0"/>
+    <field name="3D Command Opcode" start="24" end="26" type="uint" default="1"/>
+    <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="2"/>
+    <field name="DWord Length" start="0" end="7" type="uint" default="0"/>
+    <field name="System Instruction Pointer" start="36" end="63" type="offset"/>
+  </instruction>
 </genxml>

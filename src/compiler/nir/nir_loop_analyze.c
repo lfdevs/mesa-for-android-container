@@ -218,7 +218,7 @@ compute_induction_information(loop_info_state *state)
        */
       assert(!var->in_control_flow && var->type != invariant);
 
-      /* We are only interested in checking phi's for the basic induction
+      /* We are only interested in checking phis for the basic induction
        * variable case as its simple to detect. All basic induction variables
        * have a phi node
        */
@@ -359,7 +359,7 @@ find_loop_terminators(loop_info_state *state)
 
 static int32_t
 get_iteration(nir_op cond_op, nir_const_value *initial, nir_const_value *step,
-              nir_const_value *limit, nir_alu_instr *alu)
+              nir_const_value *limit)
 {
    int32_t iter;
 
@@ -490,7 +490,7 @@ calculate_iterations(nir_const_value *initial, nir_const_value *step,
       trip_offset = 1;
    }
 
-   int iter_int = get_iteration(cond_alu->op, initial, step, limit, alu);
+   int iter_int = get_iteration(cond_alu->op, initial, step, limit);
 
    /* If iter_int is negative the loop is ill-formed or is the conditional is
     * unsigned with a huge iteration count so don't bother going any further.
@@ -707,7 +707,7 @@ static void
 get_loop_info(loop_info_state *state, nir_function_impl *impl)
 {
    /* Initialize all variables to "outside_loop". This also marks defs
-    * invariant and constant if they are nir_instr_type_load_const's
+    * invariant and constant if they are nir_instr_type_load_consts
     */
    nir_foreach_block(block, impl) {
       nir_foreach_instr(instr, block)

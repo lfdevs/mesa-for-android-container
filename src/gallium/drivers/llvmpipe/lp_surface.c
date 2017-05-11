@@ -231,7 +231,8 @@ llvmpipe_init_surface_functions(struct llvmpipe_context *lp)
    lp->pipe.clear_depth_stencil = llvmpipe_clear_depth_stencil;
    lp->pipe.create_surface = llvmpipe_create_surface;
    lp->pipe.surface_destroy = llvmpipe_surface_destroy;
-   /* These two are not actually functions dealing with surfaces */
+   /* These are not actually functions dealing with surfaces */
+   lp->pipe.clear_texture = util_clear_texture;
    lp->pipe.resource_copy_region = lp_resource_copy;
    lp->pipe.blit = lp_blit;
    lp->pipe.flush_resource = lp_flush_resource;

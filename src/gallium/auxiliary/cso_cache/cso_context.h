@@ -41,7 +41,8 @@ extern "C" {
 struct cso_context;
 struct u_vbuf;
 
-struct cso_context *cso_create_context( struct pipe_context *pipe );
+struct cso_context *cso_create_context(struct pipe_context *pipe,
+                                       unsigned u_vbuf_flags);
 void cso_destroy_context( struct cso_context *cso );
 
 
@@ -69,7 +70,7 @@ cso_set_samplers(struct cso_context *cso,
  * samplers one at a time:
  */
 enum pipe_error
-cso_single_sampler(struct cso_context *cso, unsigned shader_stage,
+cso_single_sampler(struct cso_context *cso, enum pipe_shader_type shader_stage,
                    unsigned idx, const struct pipe_sampler_state *states);
 
 void
@@ -149,7 +150,8 @@ void cso_set_stencil_ref(struct cso_context *cso,
 
 void cso_set_render_condition(struct cso_context *cso,
                               struct pipe_query *query,
-                              boolean condition, uint mode);
+                              boolean condition,
+                              enum pipe_render_cond_flag mode);
 
 
 #define CSO_BIT_AUX_VERTEX_BUFFER_SLOT    0x1
@@ -204,16 +206,17 @@ cso_set_shader_images(struct cso_context *cso,
 
 /* constant buffers */
 
-void cso_set_constant_buffer(struct cso_context *cso, unsigned shader_stage,
+void cso_set_constant_buffer(struct cso_context *cso,
+                             enum pipe_shader_type shader_stage,
                              unsigned index, struct pipe_constant_buffer *cb);
 void cso_set_constant_buffer_resource(struct cso_context *cso,
-                                      unsigned shader_stage,
+                                      enum pipe_shader_type shader_stage,
                                       unsigned index,
                                       struct pipe_resource *buffer);
 void cso_save_constant_buffer_slot0(struct cso_context *cso,
-                                    unsigned shader_stage);
+                                    enum pipe_shader_type shader_stage);
 void cso_restore_constant_buffer_slot0(struct cso_context *cso,
-                                       unsigned shader_stage);
+                                       enum pipe_shader_type shader_stage);
 
 
 /* drawing */

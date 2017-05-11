@@ -76,7 +76,7 @@ typedef struct xmesa_visual *XMesaVisual;
 
 
 struct xmesa_display {
-   pipe_mutex mutex;
+   mtx_t mutex;
 
    Display *display;
    struct pipe_screen *screen;

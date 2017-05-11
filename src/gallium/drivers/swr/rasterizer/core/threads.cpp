@@ -56,6 +56,7 @@ struct Core
 
 struct NumaNode
 {
+    uint32_t          numaId;
     std::vector<Core> cores;
 };
 
@@ -117,7 +118,7 @@ void CalculateProcessorTopology(CPUNumaNodes& out_nodes, uint32_t& out_numThread
                     // have seen more than 32 HW threads for this procGroup
                     // Don't use it
 #if defined(_WIN64)
-                    SWR_ASSERT(false, "Shouldn't get here in 64-bit mode");
+                    SWR_INVALID("Shouldn't get here in 64-bit mode");
 #endif
                     continue;
                 }
@@ -134,8 +135,12 @@ void CalculateProcessorTopology(CPUNumaNodes& out_nodes, uint32_t& out_numThread
                 SWR_ASSERT(ret);
 
                 // Store data
-                if (out_nodes.size() <= numaId) out_nodes.resize(numaId + 1);
+                if (out_nodes.size() <= numaId)
+                {
+                    out_nodes.resize(numaId + 1);
+                }
                 auto& numaNode = out_nodes[numaId];
+                numaNode.numaId = numaId;
 
                 uint32_t coreId = 0;
 
@@ -175,11 +180,18 @@ void CalculateProcessorTopology(CPUNumaNodes& out_nodes, uint32_t& out_numThread
             if (threadId != uint32_t(-1))
             {
                 // Save information.
-                if (out_nodes.size() <= numaId) out_nodes.resize(numaId + 1);
-                auto& numaNode = out_nodes[numaId];
-                if (numaNode.cores.size() <= coreId) numaNode.cores.resize(coreId + 1);
-                auto& core = numaNode.cores[coreId];
+                if (out_nodes.size() <= numaId)
+                {
+                    out_nodes.resize(numaId + 1);
+                }
 
+                auto& numaNode = out_nodes[numaId];
+                if (numaNode.cores.size() <= coreId)
+                {
+                    numaNode.cores.resize(coreId + 1);
+                }
+
+                auto& core = numaNode.cores[coreId];
                 core.procGroup = coreId;
                 core.threadIds.push_back(threadId);
 
@@ -207,9 +219,16 @@ void CalculateProcessorTopology(CPUNumaNodes& out_nodes, uint32_t& out_numThread
     if (threadId != uint32_t(-1))
     {
         // Save information.
-        if (out_nodes.size() <= numaId) out_nodes.resize(numaId + 1);
+        if (out_nodes.size() <= numaId)
+        {
+            out_nodes.resize(numaId + 1);
+        }
         auto& numaNode = out_nodes[numaId];
-        if (numaNode.cores.size() <= coreId) numaNode.cores.resize(coreId + 1);
+        numaNode.numaId = numaId;
+        if (numaNode.cores.size() <= coreId)
+        {
+            numaNode.cores.resize(coreId + 1);
+        }
         auto& core = numaNode.cores[coreId];
 
         core.procGroup = coreId;
@@ -217,38 +236,45 @@ void CalculateProcessorTopology(CPUNumaNodes& out_nodes, uint32_t& out_numThread
         out_numThreadsPerProcGroup++;
     }
 
-    /* Prune empty numa nodes */
-    for (auto it = out_nodes.begin(); it != out_nodes.end(); ) {
-       if ((*it).cores.size() == 0)
-          it = out_nodes.erase(it);
-       else
-          ++it;
-    }
-
-    /* Prune empty core nodes */
-    for (uint32_t node = 0; node < out_nodes.size(); node++) {
-        auto& numaNode = out_nodes[node];
-        auto it = numaNode.cores.begin();
-        for ( ; it != numaNode.cores.end(); ) {
-            if (it->threadIds.size() == 0)
-                numaNode.cores.erase(it);
-            else
-                ++it;
-        }
-    }
-
 #else
 
 #error Unsupported platform
 
 #endif
+
+    // Prune empty cores and numa nodes
+    for (auto node_it = out_nodes.begin(); node_it != out_nodes.end(); )
+    {
+        // Erase empty cores (first)
+        for (auto core_it = node_it->cores.begin(); core_it != node_it->cores.end(); )
+        {
+            if (core_it->threadIds.size() == 0)
+            {
+                core_it = node_it->cores.erase(core_it);
+            }
+            else
+            {
+                ++core_it;
+            }
+        }
+
+        // Erase empty numa nodes (second)
+        if (node_it->cores.size() == 0)
+        {
+            node_it = out_nodes.erase(node_it);
+        }
+        else
+        {
+            ++node_it;
+        }
+    }
 }
 
 
 void bindThread(SWR_CONTEXT* pContext, uint32_t threadId, uint32_t procGroupId = 0, bool bindProcGroup=false)
 {
     // Only bind threads when MAX_WORKER_THREADS isn't set.
-    if (pContext->threadInfo.MAX_WORKER_THREADS && bindProcGroup == false)
+    if (pContext->threadInfo.SINGLE_THREADED || (pContext->threadInfo.MAX_WORKER_THREADS && bindProcGroup == false))
     {
         return;
     }
@@ -262,7 +288,7 @@ void bindThread(SWR_CONTEXT* pContext, uint32_t threadId, uint32_t procGroupId =
     if (threadId >= 32)
     {
         // Hopefully we don't get here.  Logic in CreateThreadPool should prevent this.
-        SWR_REL_ASSERT(false, "Shouldn't get here");
+        SWR_INVALID("Shouldn't get here");
 
         // In a 32-bit process on Windows it is impossible to bind
         // to logical processors 32-63 within a processor group.
@@ -369,6 +395,8 @@ INLINE int32_t CompleteDrawContextInl(SWR_CONTEXT* pContext, uint32_t workerId, 
 {
     int32_t result = InterlockedDecrement((volatile LONG*)&pDC->threadsDone);
     SWR_ASSERT(result >= 0);
+
+    AR_FLUSH(pDC->drawId);
 
     if (result == 0)
     {
@@ -1022,7 +1050,7 @@ void CreateThreadPool(SWR_CONTEXT* pContext, THREAD_POOL* pPool)
                     pPool->pThreadData[workerId].workerId = workerId;
                     pPool->pThreadData[workerId].procGroupId = core.procGroup;
                     pPool->pThreadData[workerId].threadId = core.threadIds[t];
-                    pPool->pThreadData[workerId].numaId = n;
+                    pPool->pThreadData[workerId].numaId = node.numaId;
                     pPool->pThreadData[workerId].coreId = c;
                     pPool->pThreadData[workerId].htId = t;
                     pPool->pThreadData[workerId].pContext = pContext;

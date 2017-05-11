@@ -2,6 +2,7 @@
 #define __NOUVEAU_SCREEN_H__
 
 #include "pipe/p_screen.h"
+#include "util/disk_cache.h"
 #include "util/u_memory.h"
 
 #ifdef DEBUG
@@ -58,6 +59,8 @@ struct nouveau_screen {
       unsigned profiles_checked;
       unsigned profiles_present;
    } firmware_info;
+
+   struct disk_cache *disk_shader_cache;
 
 #ifdef NOUVEAU_ENABLE_DRIVER_STATISTICS
    union {

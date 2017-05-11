@@ -46,6 +46,7 @@ struct etna_resource_level {
    uint32_t ts_layer_stride;
    uint32_t ts_size;
    uint32_t clear_value; /* clear value of resource level (mainly for TS) */
+   bool ts_valid;
 };
 
 /* status of queued up but not flushed reads and write operations.
@@ -60,6 +61,7 @@ struct etna_resource {
    struct pipe_resource base;
    struct renderonly_scanout *scanout;
    uint32_t seqno;
+   uint32_t flush_seqno;
 
    /* only lod 0 used for non-texture buffers */
    /* Layout for surface (tiled, multitiled, split tiled, ...) */
@@ -94,6 +96,13 @@ static inline bool
 etna_resource_older(struct etna_resource *a, struct etna_resource *b)
 {
    return (int)(a->seqno - b->seqno) < 0;
+}
+
+/* returns TRUE if the resource needs a resolve to itself */
+static inline bool
+etna_resource_needs_flush(struct etna_resource *res)
+{
+   return (int)(res->seqno - res->flush_seqno) > 0;
 }
 
 /* is the resource only used on the sampler? */

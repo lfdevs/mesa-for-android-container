@@ -104,8 +104,8 @@ static const struct opProperties _initProps[] =
    { OP_MUL,    0x3, 0x0, 0x0, 0x8, 0x2, 0x2 | 0x8 },
    { OP_MAX,    0x3, 0x3, 0x0, 0x0, 0x2, 0x2 },
    { OP_MIN,    0x3, 0x3, 0x0, 0x0, 0x2, 0x2 },
-   { OP_MAD,    0x7, 0x0, 0x0, 0x8, 0x6, 0x2 | 0x8 }, // special c[] constraint
-   { OP_FMA,    0x7, 0x0, 0x0, 0x8, 0x6, 0x2 | 0x8 }, // keep the same as OP_MAD
+   { OP_MAD,    0x7, 0x0, 0x0, 0x8, 0x6, 0x2 }, // special c[] constraint
+   { OP_FMA,    0x7, 0x0, 0x0, 0x8, 0x6, 0x2 }, // keep the same as OP_MAD
    { OP_SHLADD, 0x5, 0x0, 0x0, 0x0, 0x4, 0x6 },
    { OP_MADSP,  0x0, 0x0, 0x0, 0x0, 0x6, 0x2 },
    { OP_ABS,    0x0, 0x0, 0x0, 0x0, 0x1, 0x0 },
@@ -330,6 +330,10 @@ TargetNVC0::insnCanLoad(const Instruction *i, int s,
    // indirect loads can only be done by OP_LOAD/VFETCH/INTERP on nvc0
    if (ld->src(0).isIndirect(0))
       return false;
+   // these are implemented using shf.r and shf.l which can't load consts
+   if ((i->op == OP_SHL || i->op == OP_SHR) && typeSizeof(i->sType) == 8 &&
+       sf == FILE_MEMORY_CONST)
+      return false;
 
    for (int k = 0; i->srcExists(k); ++k) {
       if (i->src(k).getFile() == FILE_IMMEDIATE) {
@@ -341,7 +345,8 @@ TargetNVC0::insnCanLoad(const Instruction *i, int s,
             return false;
       } else
       if (i->src(k).getFile() != FILE_GPR &&
-          i->src(k).getFile() != FILE_PREDICATE) {
+          i->src(k).getFile() != FILE_PREDICATE &&
+          i->src(k).getFile() != FILE_FLAGS) {
          return false;
       }
    }
@@ -375,12 +380,6 @@ TargetNVC0::insnCanLoad(const Instruction *i, int s,
          default:
             return false;
          }
-      } else
-      if (i->op == OP_MAD || i->op == OP_FMA) {
-         // requires src == dst, cannot decide before RA
-         // (except if we implement more constraints)
-         if (ld->getSrc(0)->asImm()->reg.data.u32 & 0xfff)
-            return false;
       } else
       if (i->op == OP_ADD && i->sType == TYPE_F32) {
          // add f32 LIMM cannot saturate

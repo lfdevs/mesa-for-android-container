@@ -56,14 +56,7 @@
 #ifdef HAVE_ANDROID_PLATFORM
 #define LOG_TAG "EGL-DRI2"
 
-#if ANDROID_VERSION >= 0x0400
-#  include <system/window.h>
-#else
-#  define android_native_buffer_t ANativeWindowBuffer
-#  include <ui/egl/android_natives.h>
-#  include <ui/android_native_buffer.h>
-#endif
-
+#include <system/window.h>
 #include <hardware/gralloc.h>
 #include <gralloc_drm_handle.h>
 #include <cutils/log.h>
@@ -300,6 +293,15 @@ struct dri2_egl_surface
 
    /* EGL-owned buffers */
    __DRIbuffer           *local_buffers[__DRI_BUFFER_COUNT];
+
+   /* Used to record all the buffers created by ANativeWindow and their ages.
+    * Usually Android uses at most triple buffers in ANativeWindow
+    * so hardcode the number of color_buffers to 3.
+    */
+   struct {
+      struct ANativeWindowBuffer *buffer;
+      int age;
+   } color_buffers[3], *back;
 #endif
 
 #if defined(HAVE_SURFACELESS_PLATFORM)
@@ -342,6 +344,7 @@ _EGL_DRIVER_TYPECAST(dri2_egl_sync, _EGLSync, obj)
 
 extern const __DRIimageLookupExtension image_lookup_extension;
 extern const __DRIuseInvalidateExtension use_invalidate;
+extern const __DRIbackgroundCallableExtension background_callable_extension;
 
 EGLBoolean
 dri2_load_driver(_EGLDisplay *disp);

@@ -717,8 +717,13 @@ st_DrawAtlasBitmaps(struct gl_context *ctx,
 
    vb.stride = sizeof(struct st_util_vertex);
 
-   u_upload_alloc(st->uploader, 0, num_vert_bytes, 4,
+   u_upload_alloc(pipe->stream_uploader, 0, num_vert_bytes, 4,
                   &vb.buffer_offset, &vb.buffer, (void **) &verts);
+
+   if (unlikely(!verts)) {
+      _mesa_error(ctx, GL_OUT_OF_MEMORY, "glCallLists(bitmap text)");
+      goto out;
+   }
 
    /* build quads vertex data */
    for (i = 0; i < count; i++) {
@@ -789,7 +794,7 @@ st_DrawAtlasBitmaps(struct gl_context *ctx,
       ctx->Current.RasterPos[1] += ymove;
    }
 
-   u_upload_unmap(st->uploader);
+   u_upload_unmap(pipe->stream_uploader);
 
    cso_set_vertex_buffers(st->cso_context,
                           cso_get_aux_vertex_buffer_slot(st->cso_context),
@@ -797,6 +802,7 @@ st_DrawAtlasBitmaps(struct gl_context *ctx,
 
    cso_draw_arrays(st->cso_context, PIPE_PRIM_QUADS, 0, num_verts);
 
+out:
    restore_render_state(ctx);
 
    pipe_resource_reference(&vb.buffer, NULL);

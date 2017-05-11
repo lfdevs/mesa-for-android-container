@@ -41,7 +41,7 @@
 #include "util/slab.h"
 
 struct pipe_screen;
-struct etna_shader;
+struct etna_shader_variant;
 
 struct etna_index_buffer {
    struct pipe_index_buffer ib;
@@ -77,6 +77,11 @@ struct etna_vertexbuf_state {
    struct compiled_set_vertex_buffer cvb[PIPE_MAX_ATTRIBS];
    unsigned count;
    uint32_t enabled_mask;
+};
+
+struct etna_shader_state {
+   void *bind_vs, *bind_fs;
+   struct etna_shader_variant *vs, *fs;
 };
 
 enum etna_immediate_contents {
@@ -155,10 +160,7 @@ struct etna_context {
    struct pipe_constant_buffer constant_buffer[PIPE_SHADER_TYPES];
    struct etna_vertexbuf_state vertex_buffer;
    struct etna_index_buffer index_buffer;
-
-   /* pointers to the bound state. these are mainly kept around for the blitter */
-   struct etna_shader *vs;
-   struct etna_shader *fs;
+   struct etna_shader_state shader;
 
    /* saved parameter-like state. these are mainly kept around for the blitter */
    struct pipe_framebuffer_state framebuffer_s;
@@ -174,6 +176,9 @@ struct etna_context {
       uint64_t prims_emitted;
       uint64_t draw_calls;
    } stats;
+
+   struct pipe_debug_callback debug;
+   int in_fence_fd;
 };
 
 static inline struct etna_context *

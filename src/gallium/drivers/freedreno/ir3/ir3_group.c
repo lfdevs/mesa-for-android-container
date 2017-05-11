@@ -254,9 +254,11 @@ find_neighbors(struct ir3 *ir)
 		}
 	}
 
-	for (i = 0; i < ir->keeps_count; i++) {
-		struct ir3_instruction *instr = ir->keeps[i];
-		instr_find_neighbors(instr);
+	list_for_each_entry (struct ir3_block, block, &ir->block_list, node) {
+		for (i = 0; i < block->keeps_count; i++) {
+			struct ir3_instruction *instr = block->keeps[i];
+			instr_find_neighbors(instr);
+		}
 	}
 }
 

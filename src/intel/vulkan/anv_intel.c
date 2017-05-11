@@ -59,6 +59,9 @@ VkResult anv_CreateDmaBufImageINTEL(
 
    anv_bo_init(&mem->bo, gem_handle, size);
 
+   if (device->instance->physicalDevice.supports_48bit_addresses)
+      mem->bo.flags |= EXEC_OBJECT_SUPPORTS_48B_ADDRESS;
+
    anv_image_create(_device,
       &(struct anv_image_create_info) {
          .isl_tiling_flags = ISL_TILING_X_BIT,

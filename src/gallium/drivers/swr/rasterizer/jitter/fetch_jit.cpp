@@ -27,10 +27,10 @@
 * Notes:
 *
 ******************************************************************************/
+#include "builder.h"
 #include "jit_api.h"
 #include "fetch_jit.h"
-#include "builder.h"
-#include "state_llvm.h"
+#include "gen_state_llvm.h"
 #include <sstream>
 #include <tuple>
 
@@ -158,7 +158,7 @@ Function* FetchJit::Create(const FETCH_COMPILE_STATE& fetchState)
             (fetchState.bDisableIndexOOBCheck) ? vIndices = LOAD(BITCAST(indices, PointerType::get(mSimdInt32Ty,0)),{(uint32_t)0})
                                                : vIndices = GetSimdValid32bitIndices(indices, pLastIndex);
             break; // incoming type is already 32bit int
-        default: SWR_ASSERT(0, "Unsupported index type"); vIndices = nullptr; break;
+        default: SWR_INVALID("Unsupported index type"); vIndices = nullptr; break;
     }
 
     Value* vVertexId = vIndices;
@@ -309,11 +309,29 @@ void FetchJit::JitLoadVertices(const FETCH_COMPILE_STATE &fetchState, Value* str
 
         Value* startVertexOffset = MUL(Z_EXT(startOffset, mInt64Ty), stride);
 
+        Value *minVertex = NULL;
+        Value *minVertexOffset = NULL;
+        if (fetchState.bPartialVertexBuffer) {
+            // fetch min index for low bounds checking
+            minVertex = GEP(streams, {C(ied.StreamIndex), C(SWR_VERTEX_BUFFER_STATE_minVertex)});
+            minVertex = LOAD(minVertex);
+            if (!fetchState.bDisableIndexOOBCheck) {
+                minVertexOffset = MUL(Z_EXT(minVertex, mInt64Ty), stride);
+            }
+        }
+
         // Load from the stream.
         for(uint32_t lane = 0; lane < mVWidth; ++lane)
         {
             // Get index
             Value* index = VEXTRACT(vCurIndices, C(lane));
+
+            if (fetchState.bPartialVertexBuffer) {
+                // clamp below minvertex
+                Value *isBelowMin = ICMP_SLT(index, minVertex);
+                index = SELECT(isBelowMin, minVertex, index);
+            }
+
             index = Z_EXT(index, mInt64Ty);
 
             Value*    offset = MUL(index, stride);
@@ -321,10 +339,14 @@ void FetchJit::JitLoadVertices(const FETCH_COMPILE_STATE &fetchState, Value* str
             offset = ADD(offset, startVertexOffset);
 
             if (!fetchState.bDisableIndexOOBCheck) {
-                // check for out of bound access, including partial OOB, and mask them to 0
+                // check for out of bound access, including partial OOB, and replace them with minVertex
                 Value *endOffset = ADD(offset, C((int64_t)info.Bpp));
                 Value *oob = ICMP_ULE(endOffset, size);
-                offset = SELECT(oob, offset, ConstantInt::get(mInt64Ty, 0));
+                if (fetchState.bPartialVertexBuffer) {
+                    offset = SELECT(oob, offset, minVertexOffset);
+                } else {
+                    offset = SELECT(oob, offset, ConstantInt::get(mInt64Ty, 0));
+                }
             }
 
             Value*    pointer = GEP(stream, offset);
@@ -337,7 +359,7 @@ void FetchJit::JitLoadVertices(const FETCH_COMPILE_STATE &fetchState, Value* str
                 case 8: vptr = BITCAST(pointer, PointerType::get(VectorType::get(mInt8Ty, 4), 0)); break;
                 case 16: vptr = BITCAST(pointer, PointerType::get(VectorType::get(mInt16Ty, 4), 0)); break;
                 case 32: vptr = BITCAST(pointer, PointerType::get(VectorType::get(mFP32Ty, 4), 0)); break;
-                default: SWR_ASSERT(false, "Unsupported underlying bpp!");
+                default: SWR_INVALID("Unsupported underlying bpp!");
             }
 
             // load 4 components of attribute
@@ -358,7 +380,7 @@ void FetchJit::JitLoadVertices(const FETCH_COMPILE_STATE &fetchState, Value* str
                             vec = FMUL(vec, ConstantVector::get(std::vector<Constant*>(4, ConstantFP::get(mFP32Ty, 1.0 / 65535.0))));
                             break;
                         default:
-                            SWR_ASSERT(false, "Unsupported underlying type!");
+                            SWR_INVALID("Unsupported underlying type!");
                             break;
                     }
                     break;
@@ -374,7 +396,7 @@ void FetchJit::JitLoadVertices(const FETCH_COMPILE_STATE &fetchState, Value* str
                             vec = FMUL(vec, ConstantVector::get(std::vector<Constant*>(4, ConstantFP::get(mFP32Ty, 1.0 / 32768.0))));
                             break;
                         default:
-                            SWR_ASSERT(false, "Unsupported underlying type!");
+                            SWR_INVALID("Unsupported underlying type!");
                             break;
                     }
                     break;
@@ -390,7 +412,7 @@ void FetchJit::JitLoadVertices(const FETCH_COMPILE_STATE &fetchState, Value* str
                         case 32:
                             break; // Pass through unchanged.
                         default:
-                            SWR_ASSERT(false, "Unsupported underlying type!");
+                            SWR_INVALID("Unsupported underlying type!");
                             break;
                     }
                     break;
@@ -406,7 +428,7 @@ void FetchJit::JitLoadVertices(const FETCH_COMPILE_STATE &fetchState, Value* str
                         case 32:
                             break; // Pass through unchanged.
                         default:
-                            SWR_ASSERT(false, "Unsupported underlying type!");
+                            SWR_INVALID("Unsupported underlying type!");
                             break;
                     }
                     break;
@@ -416,7 +438,7 @@ void FetchJit::JitLoadVertices(const FETCH_COMPILE_STATE &fetchState, Value* str
                         case 32:
                             break; // Pass through unchanged.
                         default:
-                            SWR_ASSERT(false, "Unsupported underlying type!");
+                            SWR_INVALID("Unsupported underlying type!");
                     }
                     break;
                 case SWR_TYPE_USCALED:
@@ -430,7 +452,7 @@ void FetchJit::JitLoadVertices(const FETCH_COMPILE_STATE &fetchState, Value* str
                     break;
                 case SWR_TYPE_UNKNOWN:
                 case SWR_TYPE_UNUSED:
-                    SWR_ASSERT(false, "Unsupported type %d!", info.type[0]);
+                    SWR_INVALID("Unsupported type %d!", info.type[0]);
             }
 
             // promote mask: sse(0,1,2,3) | avx(0,1,2,3,4,4,4,4)
@@ -591,7 +613,7 @@ void FetchJit::CreateGatherOddFormats(SWR_FORMAT format, Value* pMask, Value* pB
     case 16: pLoadTy = Type::getInt16PtrTy(JM()->mContext); break;
     case 24:
     case 32: pLoadTy = Type::getInt32PtrTy(JM()->mContext); break;
-    default: SWR_ASSERT(0);
+    default: SWR_INVALID("Invalid bpp: %d", info.bpp);
     }
 
     // allocate temporary memory for masked off lanes
@@ -732,6 +754,13 @@ void FetchJit::JitGatherVertices(const FETCH_COMPILE_STATE &fetchState,
         Value *maxVertex = GEP(streams, {C(ied.StreamIndex), C(SWR_VERTEX_BUFFER_STATE_maxVertex)});
         maxVertex = LOAD(maxVertex);
 
+        Value *minVertex = NULL;
+        if (fetchState.bPartialVertexBuffer) {
+            // min vertex index for low bounds OOB checking
+            minVertex = GEP(streams, {C(ied.StreamIndex), C(SWR_VERTEX_BUFFER_STATE_minVertex)});
+            minVertex = LOAD(minVertex);
+        }
+
         Value *vCurIndices;
         Value *startOffset;
         if(ied.InstanceEnable)
@@ -769,9 +798,16 @@ void FetchJit::JitGatherVertices(const FETCH_COMPILE_STATE &fetchState,
 
         // if we have a start offset, subtract from max vertex. Used for OOB check
         maxVertex = SUB(Z_EXT(maxVertex, mInt64Ty), Z_EXT(startOffset, mInt64Ty));
-        Value* neg = ICMP_SLT(maxVertex, C((int64_t)0));
+        Value* maxNeg = ICMP_SLT(maxVertex, C((int64_t)0));
         // if we have a negative value, we're already OOB. clamp at 0.
-        maxVertex = SELECT(neg, C(0), TRUNC(maxVertex, mInt32Ty));
+        maxVertex = SELECT(maxNeg, C(0), TRUNC(maxVertex, mInt32Ty));
+
+        if (fetchState.bPartialVertexBuffer) {
+            // similary for min vertex
+            minVertex = SUB(Z_EXT(minVertex, mInt64Ty), Z_EXT(startOffset, mInt64Ty));
+            Value *minNeg = ICMP_SLT(minVertex, C((int64_t)0));
+            minVertex = SELECT(minNeg, C(0), TRUNC(minVertex, mInt32Ty));
+        }
 
         // Load the in bounds size of a partially valid vertex
         Value *partialInboundsSize = GEP(streams, {C(ied.StreamIndex), C(SWR_VERTEX_BUFFER_STATE_partialInboundsSize)});
@@ -791,8 +827,20 @@ void FetchJit::JitGatherVertices(const FETCH_COMPILE_STATE &fetchState,
         Value* vMaxVertex = VBROADCAST(maxVertex);
         Value* vPartialOOBMask = ICMP_EQ(vCurIndices, vMaxVertex);
 
-        // are vertices are fully in bounds?
-        Value* vGatherMask = ICMP_ULT(vCurIndices, vMaxVertex);
+        // are vertices fully in bounds?
+        Value* vMaxGatherMask = ICMP_ULT(vCurIndices, vMaxVertex);
+
+        Value *vGatherMask;
+        if (fetchState.bPartialVertexBuffer) {
+            // are vertices below minVertex limit?
+            Value *vMinVertex = VBROADCAST(minVertex);
+            Value *vMinGatherMask = ICMP_UGE(vCurIndices, vMinVertex);
+
+            // only fetch lanes that pass both tests
+            vGatherMask = AND(vMaxGatherMask, vMinGatherMask);
+        } else {
+            vGatherMask = vMaxGatherMask;
+        }
 
         // blend in any partially OOB indices that have valid elements
         vGatherMask = SELECT(vPartialOOBMask, vElementInBoundsMask, vGatherMask);
@@ -967,7 +1015,7 @@ void FetchJit::JitGatherVertices(const FETCH_COMPILE_STATE &fetchState,
                 }
                     break;
                 default:
-                    SWR_ASSERT(0, "Tried to fetch invalid FP format");
+                    SWR_INVALID("Tried to fetch invalid FP format");
                     break;
             }
         }
@@ -1323,7 +1371,7 @@ void FetchJit::Shuffle8bpcGatherd(Shuffle8bpcArgs &args)
             conversionFactor = VIMMED1((float)(1.0));
             break;
         case CONVERT_USCALED:
-            SWR_ASSERT(0, "Type should not be sign extended!");
+            SWR_INVALID("Type should not be sign extended!");
             conversionFactor = nullptr;
             break;
         default:
@@ -1386,7 +1434,7 @@ void FetchJit::Shuffle8bpcGatherd(Shuffle8bpcArgs &args)
             conversionFactor = VIMMED1((float)(1.0));
             break;
         case CONVERT_SSCALED:
-            SWR_ASSERT(0, "Type should not be zero extended!");
+            SWR_INVALID("Type should not be zero extended!");
             conversionFactor = nullptr;
             break;
         default:
@@ -1459,7 +1507,7 @@ void FetchJit::Shuffle8bpcGatherd(Shuffle8bpcArgs &args)
     }
     else
     {
-        SWR_ASSERT(0, "Unsupported conversion type");
+        SWR_INVALID("Unsupported conversion type");
     }
 }
 
@@ -1542,7 +1590,7 @@ void FetchJit::Shuffle16bpcGather(Shuffle16bpcArgs &args)
             conversionFactor = VIMMED1((float)(1.0));
             break;
         case CONVERT_USCALED:
-            SWR_ASSERT(0, "Type should not be sign extended!");
+            SWR_INVALID("Type should not be sign extended!");
             conversionFactor = nullptr;
             break;
         default:
@@ -1624,7 +1672,7 @@ void FetchJit::Shuffle16bpcGather(Shuffle16bpcArgs &args)
             conversionFactor = VIMMED1((float)(1.0f));
             break;
         case CONVERT_SSCALED:
-            SWR_ASSERT(0, "Type should not be zero extended!");
+            SWR_INVALID("Type should not be zero extended!");
             conversionFactor = nullptr;
             break;
         default:
@@ -1673,7 +1721,7 @@ void FetchJit::Shuffle16bpcGather(Shuffle16bpcArgs &args)
     }
     else
     {
-        SWR_ASSERT(0, "Unsupported conversion type");
+        SWR_INVALID("Unsupported conversion type");
     }
 }
 
@@ -1732,7 +1780,7 @@ Value* FetchJit::GenerateCompCtrlVector(const ComponentControl ctrl)
             return VBROADCAST(pId);
         }
         case StoreSrc:
-        default:        SWR_ASSERT(0, "Invalid component control"); return VUNDEF_I();
+        default:        SWR_INVALID("Invalid component control"); return VUNDEF_I();
     }
 }
 

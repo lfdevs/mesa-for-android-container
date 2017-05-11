@@ -62,6 +62,10 @@ DRI_CONF_BEGIN
 	 DRI_CONF_DESC(en, "Enable early Z in classic mode (unstable, 945-only).")
       DRI_CONF_OPT_END
 
+      DRI_CONF_OPT_BEGIN_B(fragment_shader, "true")
+	 DRI_CONF_DESC(en, "Enable limited ARB_fragment_shader support on 915/945.")
+      DRI_CONF_OPT_END
+
    DRI_CONF_SECTION_END
    DRI_CONF_SECTION_QUALITY
       DRI_CONF_FORCE_S3TC_ENABLE("false")
@@ -74,6 +78,10 @@ DRI_CONF_BEGIN
       DRI_CONF_FORCE_GLSL_EXTENSIONS_WARN("false")
       DRI_CONF_DISABLE_GLSL_LINE_CONTINUATIONS("false")
       DRI_CONF_DISABLE_BLEND_FUNC_EXTENDED("false")
+
+      DRI_CONF_OPT_BEGIN_B(stub_occlusion_query, "false")
+	 DRI_CONF_DESC(en, "Enable stub ARB_occlusion_query support on 915/945.")
+      DRI_CONF_OPT_END
 
       DRI_CONF_OPT_BEGIN_B(shader_precompile, "true")
 	 DRI_CONF_DESC(en, "Perform code generation at shader link time.")
@@ -867,11 +875,12 @@ intelCreateBuffer(__DRIscreen * driScrnPriv,
 
    /* setup the hardware-based renderbuffers */
    rb = intel_create_renderbuffer(rgbFormat);
-   _mesa_add_renderbuffer(fb, BUFFER_FRONT_LEFT, &rb->Base.Base);
+   _mesa_add_renderbuffer_without_ref(fb, BUFFER_FRONT_LEFT, &rb->Base.Base);
 
    if (mesaVis->doubleBufferMode) {
       rb = intel_create_renderbuffer(rgbFormat);
-      _mesa_add_renderbuffer(fb, BUFFER_BACK_LEFT, &rb->Base.Base);
+      _mesa_add_renderbuffer_without_ref(fb, BUFFER_BACK_LEFT,
+                                            &rb->Base.Base);
    }
 
    /*
@@ -887,13 +896,13 @@ intelCreateBuffer(__DRIscreen * driScrnPriv,
        * attached to two attachment points.
        */
       rb = intel_create_private_renderbuffer(MESA_FORMAT_Z24_UNORM_S8_UINT);
-      _mesa_add_renderbuffer(fb, BUFFER_DEPTH, &rb->Base.Base);
+      _mesa_add_renderbuffer_without_ref(fb, BUFFER_DEPTH, &rb->Base.Base);
       _mesa_add_renderbuffer(fb, BUFFER_STENCIL, &rb->Base.Base);
    }
    else if (mesaVis->depthBits == 16) {
       assert(mesaVis->stencilBits == 0);
       rb = intel_create_private_renderbuffer(MESA_FORMAT_Z_UNORM16);
-      _mesa_add_renderbuffer(fb, BUFFER_DEPTH, &rb->Base.Base);
+      _mesa_add_renderbuffer_without_ref(fb, BUFFER_DEPTH, &rb->Base.Base);
    }
    else {
       assert(mesaVis->depthBits == 0);
@@ -1125,12 +1134,21 @@ set_max_gl_versions(struct intel_screen *screen)
    __DRIscreen *psp = screen->driScrnPriv;
 
    switch (screen->gen) {
-   case 3:
+   case 3: {
+      bool has_fragment_shader = driQueryOptionb(&screen->optionCache, "fragment_shader");
+      bool has_occlusion_query = driQueryOptionb(&screen->optionCache, "stub_occlusion_query");
+
       psp->max_gl_core_version = 0;
       psp->max_gl_es1_version = 11;
-      psp->max_gl_compat_version = 21;
       psp->max_gl_es2_version = 20;
+
+      if (has_fragment_shader && has_occlusion_query) {
+         psp->max_gl_compat_version = 21;
+      } else {
+         psp->max_gl_compat_version = 14;
+      }
       break;
+   }
    case 2:
       psp->max_gl_core_version = 0;
       psp->max_gl_compat_version = 13;

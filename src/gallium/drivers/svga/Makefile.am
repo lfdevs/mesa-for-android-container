@@ -23,6 +23,9 @@
 include Makefile.sources
 include $(top_srcdir)/src/gallium/Automake.inc
 
+AM_CPPFLAGS = \
+	-I$(top_builddir)/src
+
 AM_CFLAGS = \
 	$(GALLIUM_DRIVER_CFLAGS) \
 	$(MSVC2013_COMPAT_CFLAGS)

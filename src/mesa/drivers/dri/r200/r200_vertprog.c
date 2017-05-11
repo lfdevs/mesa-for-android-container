@@ -1183,21 +1183,6 @@ void r200SetupVertexProg( struct gl_context *ctx ) {
 }
 
 
-static void
-r200BindProgram(struct gl_context *ctx, GLenum target, struct gl_program *prog)
-{
-   r200ContextPtr rmesa = R200_CONTEXT(ctx);
-
-   switch(target){
-   case GL_VERTEX_PROGRAM_ARB:
-      rmesa->curr_vp_hw = NULL;
-      break;
-   default:
-      _mesa_problem(ctx, "Target not supported yet!");
-      break;
-   }
-}
-
 static struct gl_program *
 r200NewProgram(struct gl_context *ctx, GLenum target, GLuint id,
                bool is_arb_asm)
@@ -1271,7 +1256,6 @@ r200IsProgramNative(struct gl_context *ctx, GLenum target, struct gl_program *pr
 void r200InitShaderFuncs(struct dd_function_table *functions)
 {
    functions->NewProgram = r200NewProgram;
-   functions->BindProgram = r200BindProgram;
    functions->DeleteProgram = r200DeleteProgram;
    functions->ProgramStringNotify = r200ProgramStringNotify;
    functions->IsProgramNative = r200IsProgramNative;

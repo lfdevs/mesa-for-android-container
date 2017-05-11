@@ -23,9 +23,8 @@
 
 #include <stdlib.h>
 
-#include "brw_context.h"
-#include "brw_inst.h"
-#include "brw_eu.h"
+#include "compiler/brw_inst.h"
+#include "compiler/brw_eu.h"
 
 #include "gen_disasm.h"
 

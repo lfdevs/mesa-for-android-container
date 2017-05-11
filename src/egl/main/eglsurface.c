@@ -295,6 +295,7 @@ _eglInitSurface(_EGLSurface *surf, _EGLDisplay *dpy, EGLint type,
    _eglInitResource(&surf->Resource, sizeof(*surf), dpy);
    surf->Type = type;
    surf->Config = conf;
+   surf->Lost = EGL_FALSE;
 
    surf->Width = 0;
    surf->Height = 0;

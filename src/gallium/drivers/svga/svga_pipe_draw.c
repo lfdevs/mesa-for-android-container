@@ -25,6 +25,7 @@
 
 
 #include "util/u_format.h"
+#include "util/u_helpers.h"
 #include "util/u_inlines.h"
 #include "util/u_prim.h"
 #include "util/u_prim_restart.h"
@@ -43,6 +44,16 @@
 #include "svga_swtnl.h"
 #include "svga_debug.h"
 #include "svga_resource_buffer.h"
+
+/* Returns TRUE if we are currently using flat shading.
+ */
+static boolean
+is_using_flat_shading(const struct svga_context *svga)
+{
+   return
+      svga->state.hw_draw.fs ? svga->state.hw_draw.fs->uses_flat_interp : FALSE;
+}
+
 
 static enum pipe_error
 retry_draw_range_elements( struct svga_context *svga,
@@ -73,7 +84,7 @@ retry_draw_range_elements( struct svga_context *svga,
     */
    svga_hwtnl_set_flatshade(svga->hwtnl,
                             svga->curr.rast->templ.flatshade ||
-                            svga->state.hw_draw.fs->uses_flat_interp,
+                            is_using_flat_shading(svga),
                             svga->curr.rast->templ.flatshade_first);
 
    ret = svga_hwtnl_draw_range_elements( svga->hwtnl,
@@ -125,7 +136,7 @@ retry_draw_arrays( struct svga_context *svga,
     */
    svga_hwtnl_set_flatshade(svga->hwtnl,
                             svga->curr.rast->templ.flatshade ||
-                            svga->state.hw_draw.fs->uses_flat_interp,
+                            is_using_flat_shading(svga),
                             svga->curr.rast->templ.flatshade_first);
 
    ret = svga_hwtnl_draw_arrays(svga->hwtnl, prim, start, count,
@@ -181,7 +192,7 @@ static void
 svga_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
 {
    struct svga_context *svga = svga_context( pipe );
-   unsigned reduced_prim = u_reduced_prim( info->mode );
+   enum pipe_prim_type reduced_prim = u_reduced_prim( info->mode );
    unsigned count = info->count;
    enum pipe_error ret = 0;
    boolean needed_swtnl;
@@ -193,6 +204,14 @@ svga_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
    if (u_reduced_prim(info->mode) == PIPE_PRIM_TRIANGLES &&
        svga->curr.rast->templ.cull_face == PIPE_FACE_FRONT_AND_BACK)
       goto done;
+
+   /* Upload a user index buffer. */
+   struct pipe_index_buffer ibuffer_saved = {0};
+   if (info->indexed && svga->curr.ib.user_buffer &&
+       !util_save_and_upload_index_buffer(pipe, info, &svga->curr.ib,
+                                          &ibuffer_saved)) {
+      return;
+   }
 
    /*
     * Mark currently bound target surfaces as dirty
@@ -277,8 +296,10 @@ svga_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
    }
 
 done:
+   if (info->indexed && ibuffer_saved.user_buffer)
+      pipe->set_index_buffer(pipe, &ibuffer_saved);
+
    SVGA_STATS_TIME_POP(svga_sws(svga));
-;
 }
 
 

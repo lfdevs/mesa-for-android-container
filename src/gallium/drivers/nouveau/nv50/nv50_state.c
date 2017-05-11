@@ -859,7 +859,8 @@ nv50_cp_state_bind(struct pipe_context *pipe, void *hwcso)
 }
 
 static void
-nv50_set_constant_buffer(struct pipe_context *pipe, uint shader, uint index,
+nv50_set_constant_buffer(struct pipe_context *pipe,
+                         enum pipe_shader_type shader, uint index,
                          const struct pipe_constant_buffer *cb)
 {
    struct nv50_context *nv50 = nv50_context(pipe);

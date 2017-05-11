@@ -486,7 +486,7 @@ void radeon_drm_cs_sync_flush(struct radeon_winsys_cs *rcs)
 
     /* Wait for any pending ioctl of this CS to complete. */
     if (util_queue_is_initialized(&cs->ws->cs_queue))
-        util_queue_job_wait(&cs->flush_completed);
+        util_queue_fence_wait(&cs->flush_completed);
 }
 
 /* Add the given fence to a slab buffer fence list.
@@ -597,13 +597,13 @@ static int radeon_drm_cs_flush(struct radeon_winsys_cs *rcs,
             if (pfence)
                 radeon_fence_reference(pfence, fence);
 
-            pipe_mutex_lock(cs->ws->bo_fence_lock);
+            mtx_lock(&cs->ws->bo_fence_lock);
             for (unsigned i = 0; i < cs->csc->num_slab_buffers; ++i) {
                 struct radeon_bo *bo = cs->csc->slab_buffers[i].bo;
                 p_atomic_inc(&bo->num_active_ioctls);
                 radeon_bo_slab_fence(bo, (struct radeon_bo *)fence);
             }
-            pipe_mutex_unlock(cs->ws->bo_fence_lock);
+            mtx_unlock(&cs->ws->bo_fence_lock);
 
             radeon_fence_reference(&fence, NULL);
         }

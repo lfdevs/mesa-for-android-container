@@ -35,6 +35,7 @@
 #include "main/macros.h"
 #include "main/fbobject.h"
 #include "main/viewport.h"
+#include "intel_batchbuffer.h"
 #include "brw_context.h"
 #include "brw_state.h"
 #include "brw_defines.h"
@@ -48,8 +49,7 @@ static void upload_sf_vp(struct brw_context *brw)
    float scale[3], translate[3];
    const bool render_to_fbo = _mesa_is_user_fbo(ctx->DrawBuffer);
 
-   sfv = brw_state_batch(brw, AUB_TRACE_SF_VP_STATE,
-			 sizeof(*sfv), 32, &brw->sf.vp_offset);
+   sfv = brw_state_batch(brw, sizeof(*sfv), 32, &brw->sf.vp_offset);
    memset(sfv, 0, sizeof(*sfv));
 
    /* Accessing the fields Width and Height of gl_framebuffer to produce the
@@ -134,12 +134,10 @@ static void upload_sf_unit( struct brw_context *brw )
 {
    struct gl_context *ctx = &brw->ctx;
    struct brw_sf_unit_state *sf;
-   drm_intel_bo *bo = brw->batch.bo;
    int chipset_max_threads;
    bool render_to_fbo = _mesa_is_user_fbo(ctx->DrawBuffer);
 
-   sf = brw_state_batch(brw, AUB_TRACE_SF_STATE,
-			sizeof(*sf), 64, &brw->sf.state_offset);
+   sf = brw_state_batch(brw, sizeof(*sf), 64, &brw->sf.state_offset);
 
    memset(sf, 0, sizeof(*sf));
 
@@ -293,12 +291,13 @@ static void upload_sf_unit( struct brw_context *brw )
     */
 
    /* Emit SF viewport relocation */
-   drm_intel_bo_emit_reloc(bo, (brw->sf.state_offset +
-				offsetof(struct brw_sf_unit_state, sf5)),
-			   brw->batch.bo, (brw->sf.vp_offset |
-					     sf->sf5.front_winding |
-					     (sf->sf5.viewport_transform << 1)),
-			   I915_GEM_DOMAIN_INSTRUCTION, 0);
+   brw_emit_reloc(&brw->batch,
+                  brw->sf.state_offset +
+		  offsetof(struct brw_sf_unit_state, sf5),
+                  brw->batch.bo,
+                  brw->sf.vp_offset | sf->sf5.front_winding |
+                  (sf->sf5.viewport_transform << 1),
+                  I915_GEM_DOMAIN_INSTRUCTION, 0);
 
    brw->ctx.NewDriverState |= BRW_NEW_GEN4_UNIT_STATE;
 }

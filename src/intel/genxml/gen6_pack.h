@@ -1632,7 +1632,7 @@ struct GEN6_3DSTATE_CLIP {
    uint32_t                             _3DCommandOpcode;
    uint32_t                             _3DCommandSubOpcode;
    uint32_t                             DWordLength;
-   bool                                 ClipperStatisticsEnable;
+   bool                                 StatisticsEnable;
    uint32_t                             UserClipDistanceCullTestEnableBitmask;
    bool                                 CLIPEnable;
    uint32_t                             APIMode;
@@ -1680,7 +1680,7 @@ GEN6_3DSTATE_CLIP_pack(__gen_user_data *data, void * restrict dst,
       __gen_uint(values->DWordLength, 0, 7);
 
    dw[1] =
-      __gen_uint(values->ClipperStatisticsEnable, 10, 10) |
+      __gen_uint(values->StatisticsEnable, 10, 10) |
       __gen_uint(values->UserClipDistanceCullTestEnableBitmask, 0, 7);
 
    dw[2] =
@@ -1947,14 +1947,12 @@ struct GEN6_3DSTATE_DEPTH_BUFFER {
    uint32_t                             SurfacePitch;
    __gen_address_type                   SurfaceBaseAddress;
    uint32_t                             Height;
-#define SURFTYPE_1Dmustbezero                    0
    uint32_t                             Width;
    uint32_t                             LOD;
    uint32_t                             MIPMapLayoutMode;
 #define MIPLAYOUT_BELOW                          0
 #define MIPLAYOUT_RIGHT                          1
    uint32_t                             Depth;
-#define SURFTYPE_CUBEmustbezero                  0
    uint32_t                             MinimumArrayElement;
    uint32_t                             RenderTargetViewExtent;
    int32_t                              DepthCoordinateOffsetY;
@@ -4503,8 +4501,7 @@ struct GEN6_MI_STORE_DATA_IMM {
    uint32_t                             DWordLength;
    __gen_address_type                   Address;
    uint32_t                             CoreModeEnable;
-   uint32_t                             DataDWord0;
-   uint32_t                             DataDWord1;
+   uint64_t                             ImmediateData;
 };
 
 static inline void
@@ -4525,8 +4522,10 @@ GEN6_MI_STORE_DATA_IMM_pack(__gen_user_data *data, void * restrict dst,
       __gen_uint(values->CoreModeEnable, 0, 0);
    dw[2] = __gen_combine_address(data, &dw[2], values->Address, v2);
 
-   dw[3] =
-      __gen_uint(values->DataDWord0, 0, 31);
+   const uint64_t v3 =
+      __gen_uint(values->ImmediateData, 0, 63);
+   dw[3] = v3;
+   dw[4] = v3 >> 32;
 }
 
 #define GEN6_MI_STORE_DATA_INDEX_length        3
@@ -5036,6 +5035,467 @@ GEN6_STATE_SIP_pack(__gen_user_data *data, void * restrict dst,
 
    dw[1] =
       __gen_offset(values->SystemInstructionPointer, 4, 31);
+}
+
+#define GEN6_BCS_INSTDONE_num             0x2206c
+#define GEN6_BCS_INSTDONE_length               1
+struct GEN6_BCS_INSTDONE {
+   bool                                 RingEnable;
+   bool                                 BlitterIDLE;
+   bool                                 GABIDLE;
+   bool                                 BCSDone;
+};
+
+static inline void
+GEN6_BCS_INSTDONE_pack(__gen_user_data *data, void * restrict dst,
+                       const struct GEN6_BCS_INSTDONE * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   dw[0] =
+      __gen_uint(values->RingEnable, 0, 0) |
+      __gen_uint(values->BlitterIDLE, 1, 1) |
+      __gen_uint(values->GABIDLE, 2, 2) |
+      __gen_uint(values->BCSDone, 3, 3);
+}
+
+#define GEN6_INSTDONE_1_num               0x206c
+#define GEN6_INSTDONE_1_length                 1
+struct GEN6_INSTDONE_1 {
+   bool                                 PRB0RingEnable;
+   bool                                 AVSDone;
+   bool                                 HIZDone;
+   bool                                 GWDone;
+   bool                                 TSDone;
+   bool                                 TDDone;
+   bool                                 VFEDone;
+   bool                                 IEFDone;
+   bool                                 VSCDone;
+   bool                                 ISC23Done;
+   bool                                 ISC10Done;
+   bool                                 IC0Done;
+   bool                                 IC1Done;
+   bool                                 IC2Done;
+   bool                                 IC3Done;
+   bool                                 EU00Done;
+   bool                                 EU01Done;
+   bool                                 EU02Done;
+   bool                                 MA0Done;
+   bool                                 EU10Done;
+   bool                                 EU11Done;
+   bool                                 EU12Done;
+   bool                                 MA1Done;
+   bool                                 EU20Done;
+   bool                                 EU21Done;
+   bool                                 EU22Done;
+   bool                                 MA2Done;
+   bool                                 EU30Done;
+   bool                                 EU31Done;
+   bool                                 EU32Done;
+   bool                                 MA3Done;
+};
+
+static inline void
+GEN6_INSTDONE_1_pack(__gen_user_data *data, void * restrict dst,
+                     const struct GEN6_INSTDONE_1 * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   dw[0] =
+      __gen_uint(values->PRB0RingEnable, 0, 0) |
+      __gen_uint(values->AVSDone, 1, 1) |
+      __gen_uint(values->HIZDone, 2, 2) |
+      __gen_uint(values->GWDone, 3, 3) |
+      __gen_uint(values->TSDone, 4, 4) |
+      __gen_uint(values->TDDone, 6, 6) |
+      __gen_uint(values->VFEDone, 7, 7) |
+      __gen_uint(values->IEFDone, 8, 8) |
+      __gen_uint(values->VSCDone, 9, 9) |
+      __gen_uint(values->ISC23Done, 10, 10) |
+      __gen_uint(values->ISC10Done, 11, 11) |
+      __gen_uint(values->IC0Done, 12, 12) |
+      __gen_uint(values->IC1Done, 13, 13) |
+      __gen_uint(values->IC2Done, 14, 14) |
+      __gen_uint(values->IC3Done, 15, 15) |
+      __gen_uint(values->EU00Done, 16, 16) |
+      __gen_uint(values->EU01Done, 17, 17) |
+      __gen_uint(values->EU02Done, 18, 18) |
+      __gen_uint(values->MA0Done, 19, 19) |
+      __gen_uint(values->EU10Done, 20, 20) |
+      __gen_uint(values->EU11Done, 21, 21) |
+      __gen_uint(values->EU12Done, 22, 22) |
+      __gen_uint(values->MA1Done, 23, 23) |
+      __gen_uint(values->EU20Done, 24, 24) |
+      __gen_uint(values->EU21Done, 25, 25) |
+      __gen_uint(values->EU22Done, 26, 26) |
+      __gen_uint(values->MA2Done, 27, 27) |
+      __gen_uint(values->EU30Done, 28, 28) |
+      __gen_uint(values->EU31Done, 29, 29) |
+      __gen_uint(values->EU32Done, 30, 30) |
+      __gen_uint(values->MA3Done, 31, 31);
+}
+
+#define GEN6_INSTDONE_2_num               0x207c
+#define GEN6_INSTDONE_2_length                 1
+struct GEN6_INSTDONE_2 {
+   bool                                 VFDone;
+   bool                                 VS0Done;
+   bool                                 GSDone;
+   bool                                 CLDone;
+   bool                                 SFDone;
+   bool                                 VMEDone;
+   bool                                 PLDone;
+   bool                                 SODone;
+   bool                                 SIDone;
+   bool                                 DGDone;
+   bool                                 FTDone;
+   bool                                 DMDone;
+   bool                                 SCDone;
+   bool                                 FLDone;
+   bool                                 QCDone;
+   bool                                 SVSMDone;
+   bool                                 WMFEDone;
+   bool                                 IZDone;
+   bool                                 PSDDone;
+   bool                                 DAPDone;
+   bool                                 RCZDone;
+   bool                                 VDIDone;
+   bool                                 RCPBEDone;
+   bool                                 RCPFEDone;
+   bool                                 MTDone;
+   bool                                 ISCDone;
+   bool                                 SVGDone;
+   bool                                 RCCDone;
+   bool                                 SVRWDone;
+   bool                                 WMBEDone;
+   bool                                 CSDone;
+   bool                                 GAMDone;
+};
+
+static inline void
+GEN6_INSTDONE_2_pack(__gen_user_data *data, void * restrict dst,
+                     const struct GEN6_INSTDONE_2 * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   dw[0] =
+      __gen_uint(values->VFDone, 0, 0) |
+      __gen_uint(values->VS0Done, 1, 1) |
+      __gen_uint(values->GSDone, 2, 2) |
+      __gen_uint(values->CLDone, 3, 3) |
+      __gen_uint(values->SFDone, 4, 4) |
+      __gen_uint(values->VMEDone, 5, 5) |
+      __gen_uint(values->PLDone, 6, 6) |
+      __gen_uint(values->SODone, 7, 7) |
+      __gen_uint(values->SIDone, 8, 8) |
+      __gen_uint(values->DGDone, 9, 9) |
+      __gen_uint(values->FTDone, 10, 10) |
+      __gen_uint(values->DMDone, 11, 11) |
+      __gen_uint(values->SCDone, 12, 12) |
+      __gen_uint(values->FLDone, 13, 13) |
+      __gen_uint(values->QCDone, 14, 14) |
+      __gen_uint(values->SVSMDone, 15, 15) |
+      __gen_uint(values->WMFEDone, 16, 16) |
+      __gen_uint(values->IZDone, 17, 17) |
+      __gen_uint(values->PSDDone, 18, 18) |
+      __gen_uint(values->DAPDone, 19, 19) |
+      __gen_uint(values->RCZDone, 20, 20) |
+      __gen_uint(values->VDIDone, 21, 21) |
+      __gen_uint(values->RCPBEDone, 22, 22) |
+      __gen_uint(values->RCPFEDone, 23, 23) |
+      __gen_uint(values->MTDone, 24, 24) |
+      __gen_uint(values->ISCDone, 25, 25) |
+      __gen_uint(values->SVGDone, 26, 26) |
+      __gen_uint(values->RCCDone, 27, 27) |
+      __gen_uint(values->SVRWDone, 28, 28) |
+      __gen_uint(values->WMBEDone, 29, 29) |
+      __gen_uint(values->CSDone, 30, 30) |
+      __gen_uint(values->GAMDone, 31, 31);
+}
+
+#define GEN6_VCS_INSTDONE_num             0x1206c
+#define GEN6_VCS_INSTDONE_length               1
+struct GEN6_VCS_INSTDONE {
+   bool                                 RingEnable;
+   bool                                 USBDone;
+   bool                                 QRCDone;
+   bool                                 SECDone;
+   bool                                 MPCDone;
+   bool                                 VFTDone;
+   bool                                 BSPDone;
+   bool                                 VLFDone;
+   bool                                 VOPDone;
+   bool                                 VMCDone;
+   bool                                 VIPDone;
+   bool                                 VITDone;
+   bool                                 VDSDone;
+   bool                                 VMXDone;
+   bool                                 VCPDone;
+   bool                                 VCDDone;
+   bool                                 VADDone;
+   bool                                 VMDDone;
+   bool                                 VISDone;
+   bool                                 VACDone;
+   bool                                 VAMDone;
+   bool                                 JPGDone;
+   bool                                 VBPDone;
+   bool                                 VHRDone;
+   bool                                 VCIDone;
+   bool                                 VCRDone;
+   bool                                 VINDone;
+   bool                                 VPRDone;
+   bool                                 VTQDone;
+   bool                                 VCSDone;
+   bool                                 GACDone;
+};
+
+static inline void
+GEN6_VCS_INSTDONE_pack(__gen_user_data *data, void * restrict dst,
+                       const struct GEN6_VCS_INSTDONE * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   dw[0] =
+      __gen_uint(values->RingEnable, 0, 0) |
+      __gen_uint(values->USBDone, 1, 1) |
+      __gen_uint(values->QRCDone, 2, 2) |
+      __gen_uint(values->SECDone, 3, 3) |
+      __gen_uint(values->MPCDone, 4, 4) |
+      __gen_uint(values->VFTDone, 5, 5) |
+      __gen_uint(values->BSPDone, 6, 6) |
+      __gen_uint(values->VLFDone, 7, 7) |
+      __gen_uint(values->VOPDone, 8, 8) |
+      __gen_uint(values->VMCDone, 9, 9) |
+      __gen_uint(values->VIPDone, 10, 10) |
+      __gen_uint(values->VITDone, 11, 11) |
+      __gen_uint(values->VDSDone, 12, 12) |
+      __gen_uint(values->VMXDone, 13, 13) |
+      __gen_uint(values->VCPDone, 14, 14) |
+      __gen_uint(values->VCDDone, 15, 15) |
+      __gen_uint(values->VADDone, 16, 16) |
+      __gen_uint(values->VMDDone, 17, 17) |
+      __gen_uint(values->VISDone, 18, 18) |
+      __gen_uint(values->VACDone, 19, 19) |
+      __gen_uint(values->VAMDone, 20, 20) |
+      __gen_uint(values->JPGDone, 21, 21) |
+      __gen_uint(values->VBPDone, 22, 22) |
+      __gen_uint(values->VHRDone, 23, 23) |
+      __gen_uint(values->VCIDone, 24, 24) |
+      __gen_uint(values->VCRDone, 25, 25) |
+      __gen_uint(values->VINDone, 26, 26) |
+      __gen_uint(values->VPRDone, 27, 27) |
+      __gen_uint(values->VTQDone, 28, 28) |
+      __gen_uint(values->VCSDone, 30, 30) |
+      __gen_uint(values->GACDone, 31, 31);
+}
+
+#define GEN6_GFX_ARB_ERROR_RPT_num        0x40a0
+#define GEN6_GFX_ARB_ERROR_RPT_length          1
+struct GEN6_GFX_ARB_ERROR_RPT {
+   bool                                 TLBPageFaultError;
+   bool                                 ContextPageFaultError;
+   bool                                 InvalidPageDirectoryentryerror;
+   bool                                 HardwareStatusPageFaultError;
+   bool                                 TLBPageVTDTranslationError;
+   bool                                 ContextPageVTDTranslationError;
+   bool                                 PageDirectoryEntryVTDTranslationError;
+   bool                                 HardwareStatusPageVTDTranslationError;
+   bool                                 UnloadedPDError;
+};
+
+static inline void
+GEN6_GFX_ARB_ERROR_RPT_pack(__gen_user_data *data, void * restrict dst,
+                            const struct GEN6_GFX_ARB_ERROR_RPT * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   dw[0] =
+      __gen_uint(values->TLBPageFaultError, 0, 0) |
+      __gen_uint(values->ContextPageFaultError, 1, 1) |
+      __gen_uint(values->InvalidPageDirectoryentryerror, 2, 2) |
+      __gen_uint(values->HardwareStatusPageFaultError, 3, 3) |
+      __gen_uint(values->TLBPageVTDTranslationError, 4, 4) |
+      __gen_uint(values->ContextPageVTDTranslationError, 5, 5) |
+      __gen_uint(values->PageDirectoryEntryVTDTranslationError, 6, 6) |
+      __gen_uint(values->HardwareStatusPageVTDTranslationError, 7, 7) |
+      __gen_uint(values->UnloadedPDError, 8, 8);
+}
+
+#define GEN6_BCS_FAULT_REG_num            0x4294
+#define GEN6_BCS_FAULT_REG_length              1
+struct GEN6_BCS_FAULT_REG {
+   bool                                 ValidBit;
+   uint32_t                             FaultType;
+#define PageFault                                0
+#define InvalidPDFault                           1
+#define UnloadedPDFault                          2
+#define InvalidandUnloadedPDfault                3
+   uint32_t                             SRCIDofFault;
+   uint32_t                             GTTSEL;
+#define PPGTT                                    0
+#define GGTT                                     1
+   __gen_address_type                   VirtualAddressofFault;
+};
+
+static inline void
+GEN6_BCS_FAULT_REG_pack(__gen_user_data *data, void * restrict dst,
+                        const struct GEN6_BCS_FAULT_REG * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   const uint32_t v0 =
+      __gen_uint(values->ValidBit, 0, 0) |
+      __gen_uint(values->FaultType, 1, 2) |
+      __gen_uint(values->SRCIDofFault, 3, 10) |
+      __gen_uint(values->GTTSEL, 11, 1);
+   dw[0] = __gen_combine_address(data, &dw[0], values->VirtualAddressofFault, v0);
+}
+
+#define GEN6_RCS_FAULT_REG_num            0x4094
+#define GEN6_RCS_FAULT_REG_length              1
+struct GEN6_RCS_FAULT_REG {
+   bool                                 ValidBit;
+   uint32_t                             FaultType;
+#define PageFault                                0
+#define InvalidPDFault                           1
+#define UnloadedPDFault                          2
+#define InvalidandUnloadedPDfault                3
+   uint32_t                             SRCIDofFault;
+   uint32_t                             GTTSEL;
+#define PPGTT                                    0
+#define GGTT                                     1
+   __gen_address_type                   VirtualAddressofFault;
+};
+
+static inline void
+GEN6_RCS_FAULT_REG_pack(__gen_user_data *data, void * restrict dst,
+                        const struct GEN6_RCS_FAULT_REG * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   const uint32_t v0 =
+      __gen_uint(values->ValidBit, 0, 0) |
+      __gen_uint(values->FaultType, 1, 2) |
+      __gen_uint(values->SRCIDofFault, 3, 10) |
+      __gen_uint(values->GTTSEL, 11, 1);
+   dw[0] = __gen_combine_address(data, &dw[0], values->VirtualAddressofFault, v0);
+}
+
+#define GEN6_VCS_FAULT_REG_num            0x4194
+#define GEN6_VCS_FAULT_REG_length              1
+struct GEN6_VCS_FAULT_REG {
+   bool                                 ValidBit;
+   uint32_t                             FaultType;
+#define PageFault                                0
+#define InvalidPDFault                           1
+#define UnloadedPDFault                          2
+#define InvalidandUnloadedPDfault                3
+   uint32_t                             SRCIDofFault;
+   uint32_t                             GTTSEL;
+#define PPGTT                                    0
+#define GGTT                                     1
+   __gen_address_type                   VirtualAddressofFault;
+};
+
+static inline void
+GEN6_VCS_FAULT_REG_pack(__gen_user_data *data, void * restrict dst,
+                        const struct GEN6_VCS_FAULT_REG * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   const uint32_t v0 =
+      __gen_uint(values->ValidBit, 0, 0) |
+      __gen_uint(values->FaultType, 1, 2) |
+      __gen_uint(values->SRCIDofFault, 3, 10) |
+      __gen_uint(values->GTTSEL, 11, 1);
+   dw[0] = __gen_combine_address(data, &dw[0], values->VirtualAddressofFault, v0);
+}
+
+#define GEN6_BCS_RING_BUFFER_CTL_num      0x2203c
+#define GEN6_BCS_RING_BUFFER_CTL_length        1
+struct GEN6_BCS_RING_BUFFER_CTL {
+   bool                                 RingBufferEnable;
+   uint32_t                             AutomaticReportHeadPointer;
+#define MI_AUTOREPORT_OFF                        0
+#define MI_AUTOREPORT_64KB                       1
+#define MI_AUTOREPORT_4KB                        2
+#define MI_AUTOREPORT_128KB                      3
+   bool                                 DisableRegisterAccesses;
+   bool                                 SemaphoreWait;
+   bool                                 RBWait;
+   uint32_t                             BufferLengthinpages1;
+};
+
+static inline void
+GEN6_BCS_RING_BUFFER_CTL_pack(__gen_user_data *data, void * restrict dst,
+                              const struct GEN6_BCS_RING_BUFFER_CTL * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   dw[0] =
+      __gen_uint(values->RingBufferEnable, 0, 0) |
+      __gen_uint(values->AutomaticReportHeadPointer, 1, 2) |
+      __gen_uint(values->DisableRegisterAccesses, 8, 8) |
+      __gen_uint(values->SemaphoreWait, 10, 10) |
+      __gen_uint(values->RBWait, 11, 11) |
+      __gen_uint(values->BufferLengthinpages1, 12, 20);
+}
+
+#define GEN6_RCS_RING_BUFFER_CTL_num      0x203c
+#define GEN6_RCS_RING_BUFFER_CTL_length        1
+struct GEN6_RCS_RING_BUFFER_CTL {
+   bool                                 RingBufferEnable;
+   uint32_t                             AutomaticReportHeadPointer;
+#define MI_AUTOREPORT_OFF                        0
+#define MI_AUTOREPORT_64KBMI_AUTOREPORT_4KB      1
+#define MI_AUTOREPORT_128KB                      3
+   bool                                 SemaphoreWait;
+   bool                                 RBWait;
+   uint32_t                             BufferLengthinpages1;
+};
+
+static inline void
+GEN6_RCS_RING_BUFFER_CTL_pack(__gen_user_data *data, void * restrict dst,
+                              const struct GEN6_RCS_RING_BUFFER_CTL * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   dw[0] =
+      __gen_uint(values->RingBufferEnable, 0, 0) |
+      __gen_uint(values->AutomaticReportHeadPointer, 1, 2) |
+      __gen_uint(values->SemaphoreWait, 10, 10) |
+      __gen_uint(values->RBWait, 11, 11) |
+      __gen_uint(values->BufferLengthinpages1, 12, 20);
+}
+
+#define GEN6_VCS_RING_BUFFER_CTL_num      0x1203c
+#define GEN6_VCS_RING_BUFFER_CTL_length        1
+struct GEN6_VCS_RING_BUFFER_CTL {
+   bool                                 RingBufferEnable;
+   uint32_t                             AutomaticReportHeadPointer;
+#define MI_AUTOREPORT_OFF                        0
+#define MI_AUTOREPORT_64KB                       1
+#define MI_AUTOREPORT_4KB                        2
+#define MI_AUTOREPORT_128KB                      3
+   bool                                 DisableRegisterAccesses;
+   bool                                 SemaphoreWait;
+   bool                                 RBWait;
+   uint32_t                             BufferLengthinpages1;
+};
+
+static inline void
+GEN6_VCS_RING_BUFFER_CTL_pack(__gen_user_data *data, void * restrict dst,
+                              const struct GEN6_VCS_RING_BUFFER_CTL * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   dw[0] =
+      __gen_uint(values->RingBufferEnable, 0, 0) |
+      __gen_uint(values->AutomaticReportHeadPointer, 1, 2) |
+      __gen_uint(values->DisableRegisterAccesses, 8, 8) |
+      __gen_uint(values->SemaphoreWait, 10, 10) |
+      __gen_uint(values->RBWait, 11, 11) |
+      __gen_uint(values->BufferLengthinpages1, 12, 20);
 }
 
 #endif /* GEN6_PACK_H */

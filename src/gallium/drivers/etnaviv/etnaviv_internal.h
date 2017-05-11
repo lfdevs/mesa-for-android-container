@@ -72,6 +72,8 @@ struct etna_specs {
    unsigned has_shader_range_registers : 1;
    /* has the new sin/cos functions */
    unsigned has_new_sin_cos : 1;
+   /* supports single-buffer rendering with multiple pixel pipes */
+   unsigned single_buffer : 1;
    /* can use any kind of wrapping mode on npot textures */
    unsigned npot_tex_any_wrap;
    /* number of bits per TS tile */
@@ -191,6 +193,7 @@ struct compiled_framebuffer_state {
    uint32_t TS_COLOR_CLEAR_VALUE;
    struct etna_reloc TS_COLOR_STATUS_BASE;
    struct etna_reloc TS_COLOR_SURFACE_BASE;
+   uint32_t PE_LOGIC_OP;
    bool msaa_mode; /* adds input (and possible temp) to PS */
 };
 

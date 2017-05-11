@@ -49,7 +49,7 @@
 #define VL_VA_DRIVER(ctx) ((vlVaDriver *)ctx->pDriverData)
 #define VL_VA_PSCREEN(ctx) (VL_VA_DRIVER(ctx)->vscreen->pscreen)
 
-#define VL_VA_MAX_IMAGE_FORMATS 9
+#define VL_VA_MAX_IMAGE_FORMATS 11
 #define VL_VA_ENC_GOP_COEFF 16
 
 static inline enum pipe_video_chroma_format
@@ -57,6 +57,7 @@ ChromaToPipe(int format)
 {
    switch (format) {
    case VA_RT_FORMAT_YUV420:
+   case VA_RT_FORMAT_YUV420_10BPP:
       return PIPE_VIDEO_CHROMA_FORMAT_420;
    case VA_RT_FORMAT_YUV422:
       return PIPE_VIDEO_CHROMA_FORMAT_422;
@@ -73,6 +74,9 @@ VaFourccToPipeFormat(unsigned format)
    switch(format) {
    case VA_FOURCC('N','V','1','2'):
       return PIPE_FORMAT_NV12;
+   case VA_FOURCC('P','0','1','0'):
+   case VA_FOURCC('P','0','1','6'):
+      return PIPE_FORMAT_P016;
    case VA_FOURCC('I','4','2','0'):
       return PIPE_FORMAT_IYUV;
    case VA_FOURCC('Y','V','1','2'):
@@ -101,6 +105,8 @@ PipeFormatToVaFourcc(enum pipe_format p_format)
    switch (p_format) {
    case PIPE_FORMAT_NV12:
       return VA_FOURCC('N','V','1','2');
+   case PIPE_FORMAT_P016:
+      return VA_FOURCC('P','0','1','6');
    case PIPE_FORMAT_IYUV:
       return VA_FOURCC('I','4','2','0');
    case PIPE_FORMAT_YV12:
@@ -155,6 +161,7 @@ PipeToProfile(enum pipe_video_profile profile)
    case PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH10:
    case PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH422:
    case PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH444:
+   case PIPE_VIDEO_PROFILE_MPEG4_AVC_CONSTRAINED_BASELINE:
    case PIPE_VIDEO_PROFILE_HEVC_MAIN_12:
    case PIPE_VIDEO_PROFILE_HEVC_MAIN_STILL:
    case PIPE_VIDEO_PROFILE_HEVC_MAIN_444:
@@ -208,7 +215,7 @@ typedef struct {
    struct vl_compositor compositor;
    struct vl_compositor_state cstate;
    vl_csc_matrix csc;
-   pipe_mutex mutex;
+   mtx_t mutex;
 } vlVaDriver;
 
 typedef struct {

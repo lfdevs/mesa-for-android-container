@@ -246,7 +246,7 @@ gather_intrinsic_info(nir_intrinsic_instr *instr, nir_shader *shader)
    case nir_intrinsic_load_tess_level_outer:
    case nir_intrinsic_load_tess_level_inner:
       shader->info->system_values_read |=
-         (1 << nir_system_value_from_intrinsic(instr->intrinsic));
+         (1ull << nir_system_value_from_intrinsic(instr->intrinsic));
       break;
 
    case nir_intrinsic_end_primitive:

@@ -108,6 +108,9 @@ void si_context_gfx_flush(void *context, unsigned flags,
 	if (r600_check_device_reset(&ctx->b))
 		return;
 
+	if (ctx->screen->b.debug_flags & DBG_CHECK_VM)
+		flags &= ~RADEON_FLUSH_ASYNC;
+
 	/* If the state tracker is flushing the GFX IB, r600_flush_from_st is
 	 * responsible for flushing the DMA IB and merging the fences from both.
 	 * This code is only needed when the driver flushes the GFX IB
@@ -207,6 +210,9 @@ void si_begin_new_cs(struct si_context *ctx)
 	if (ctx->ce_preamble_ib)
 		si_ce_reinitialize_all_descriptors(ctx);
 
+	if (ctx->b.chip_class >= CIK)
+		si_mark_atom_dirty(ctx, &ctx->prefetch_L2);
+
 	ctx->framebuffer.dirty_cbufs = (1 << 8) - 1;
 	ctx->framebuffer.dirty_zsbuf = true;
 	si_mark_atom_dirty(ctx, &ctx->framebuffer.atom);
@@ -232,6 +238,12 @@ void si_begin_new_cs(struct si_context *ctx)
 	si_mark_atom_dirty(ctx, &ctx->b.scissors.atom);
 	si_mark_atom_dirty(ctx, &ctx->b.viewports.atom);
 
+	si_mark_atom_dirty(ctx, &ctx->scratch_state);
+	if (ctx->scratch_buffer) {
+		r600_context_add_resource_size(&ctx->b.b,
+					       &ctx->scratch_buffer->b.b);
+	}
+
 	r600_postflush_resume_features(&ctx->b);
 
 	assert(!ctx->b.gfx.cs->prev_dw);
@@ -248,8 +260,7 @@ void si_begin_new_cs(struct si_context *ctx)
 	ctx->last_multi_vgt_param = -1;
 	ctx->last_rast_prim = -1;
 	ctx->last_sc_line_stipple = ~0;
-	ctx->last_vtx_reuse_depth = -1;
-	ctx->emit_scratch_reloc = true;
+	ctx->last_vs_state = ~0;
 	ctx->last_ls = NULL;
 	ctx->last_tcs = NULL;
 	ctx->last_tes_sh_base = -1;

@@ -70,7 +70,7 @@ gen8_upload_3dstate_so_buffers(struct brw_context *brw)
       uint32_t start = xfb_obj->Offset[i];
       assert(start % 4 == 0);
       uint32_t end = ALIGN(start + xfb_obj->Size[i], 4);
-      drm_intel_bo *bo =
+      struct brw_bo *bo =
          intel_bufferobj_buffer(brw, bufferobj, start, end - start);
       assert(end <= bo->size);
 

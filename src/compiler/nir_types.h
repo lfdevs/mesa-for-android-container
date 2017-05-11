@@ -25,7 +25,8 @@
  *
  */
 
-#pragma once
+#ifndef NIR_TYPES_H
+#define NIR_TYPES_H
 
 #include <stdio.h>
 #include <stdbool.h>
@@ -92,6 +93,8 @@ glsl_get_bit_size(const struct glsl_type *type)
       return 32;
 
    case GLSL_TYPE_DOUBLE:
+   case GLSL_TYPE_INT64:
+   case GLSL_TYPE_UINT64:
       return 64;
 
    default:
@@ -126,6 +129,8 @@ const struct glsl_type *glsl_dvec_type(unsigned n);
 const struct glsl_type *glsl_vec4_type(void);
 const struct glsl_type *glsl_int_type(void);
 const struct glsl_type *glsl_uint_type(void);
+const struct glsl_type *glsl_int64_t_type(void);
+const struct glsl_type *glsl_uint64_t_type(void);
 const struct glsl_type *glsl_bool_type(void);
 
 const struct glsl_type *glsl_scalar_type(enum glsl_base_type base_type);
@@ -153,3 +158,5 @@ const struct glsl_type *glsl_transposed_type(const struct glsl_type *type);
 #ifdef __cplusplus
 }
 #endif
+
+#endif /* NIR_TYPES_H */

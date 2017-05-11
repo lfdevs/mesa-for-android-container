@@ -327,4 +327,27 @@ qir_calculate_live_intervals(struct vc4_compile *c)
                 ;
 
         qir_compute_start_end(c, c->num_temps);
+
+        if (vc4_debug & VC4_DEBUG_SHADERDB) {
+                int last_ip = 0;
+                for (int i = 0; i < c->num_temps; i++)
+                        last_ip = MAX2(last_ip, c->temp_end[i]);
+
+                int reg_pressure = 0;
+                int max_reg_pressure = 0;
+                for (int i = 0; i < last_ip; i++) {
+                        for (int j = 0; j < c->num_temps; j++) {
+                                if (c->temp_start[j] == i)
+                                        reg_pressure++;
+                                if (c->temp_end[j] == i)
+                                        reg_pressure--;
+                        }
+                        max_reg_pressure = MAX2(max_reg_pressure, reg_pressure);
+                }
+
+                fprintf(stderr, "SHADER-DB: %s prog %d/%d: %d max temps\n",
+                        qir_get_stage_name(c->stage),
+                        c->program_id, c->variant_id,
+                        max_reg_pressure);
+        }
 }

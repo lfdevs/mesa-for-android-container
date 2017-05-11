@@ -82,12 +82,12 @@ vlVdpVideoSurfaceQueryCapabilities(VdpDevice device, VdpChromaType surface_chrom
    if (!pscreen)
       return VDP_STATUS_RESOURCES;
 
-   pipe_mutex_lock(dev->mutex);
+   mtx_lock(&dev->mutex);
 
    /* XXX: Current limits */
    *is_supported = true;
    max_2d_texture_level = pscreen->get_param(pscreen, PIPE_CAP_MAX_TEXTURE_2D_LEVELS);
-   pipe_mutex_unlock(dev->mutex);
+   mtx_unlock(&dev->mutex);
    if (!max_2d_texture_level)
       return VDP_STATUS_RESOURCES;
 
@@ -119,12 +119,25 @@ vlVdpVideoSurfaceQueryGetPutBitsYCbCrCapabilities(VdpDevice device, VdpChromaTyp
    if (!pscreen)
       return VDP_STATUS_RESOURCES;
 
-   pipe_mutex_lock(dev->mutex);
+   mtx_lock(&dev->mutex);
 
    switch(bits_ycbcr_format) {
    case VDP_YCBCR_FORMAT_NV12:
+      *is_supported = surface_chroma_type == VDP_CHROMA_TYPE_420;
+      break;
+
    case VDP_YCBCR_FORMAT_YV12:
       *is_supported = surface_chroma_type == VDP_CHROMA_TYPE_420;
+
+      /* We can convert YV12 to NV12 on the fly! */
+      if (*is_supported &&
+          pscreen->is_video_format_supported(pscreen,
+                                             PIPE_FORMAT_NV12,
+                                             PIPE_VIDEO_PROFILE_UNKNOWN,
+                                             PIPE_VIDEO_ENTRYPOINT_BITSTREAM)) {
+         mtx_unlock(&dev->mutex);
+         return VDP_STATUS_OK;
+      }
       break;
 
    case VDP_YCBCR_FORMAT_UYVY:
@@ -149,7 +162,7 @@ vlVdpVideoSurfaceQueryGetPutBitsYCbCrCapabilities(VdpDevice device, VdpChromaTyp
       PIPE_VIDEO_PROFILE_UNKNOWN,
       PIPE_VIDEO_ENTRYPOINT_BITSTREAM
    );
-   pipe_mutex_unlock(dev->mutex);
+   mtx_unlock(&dev->mutex);
 
    return VDP_STATUS_OK;
 }
@@ -183,7 +196,7 @@ vlVdpDecoderQueryCapabilities(VdpDevice device, VdpDecoderProfile profile,
       return VDP_STATUS_OK;
    }
 
-   pipe_mutex_lock(dev->mutex);
+   mtx_lock(&dev->mutex);
    *is_supported = pscreen->get_video_param(pscreen, p_profile, PIPE_VIDEO_ENTRYPOINT_BITSTREAM,
                                             PIPE_VIDEO_CAP_SUPPORTED);
    if (*is_supported) {
@@ -200,7 +213,7 @@ vlVdpDecoderQueryCapabilities(VdpDevice device, VdpDecoderProfile profile,
       *max_level = 0;
       *max_macroblocks = 0;
    }
-   pipe_mutex_unlock(dev->mutex);
+   mtx_unlock(&dev->mutex);
 
    return VDP_STATUS_OK;
 }
@@ -231,7 +244,7 @@ vlVdpOutputSurfaceQueryCapabilities(VdpDevice device, VdpRGBAFormat surface_rgba
    if (!(is_supported && max_width && max_height))
       return VDP_STATUS_INVALID_POINTER;
 
-   pipe_mutex_lock(dev->mutex);
+   mtx_lock(&dev->mutex);
    *is_supported = pscreen->is_format_supported
    (
       pscreen, format, PIPE_TEXTURE_3D, 1,
@@ -242,7 +255,7 @@ vlVdpOutputSurfaceQueryCapabilities(VdpDevice device, VdpRGBAFormat surface_rgba
          pscreen, PIPE_CAP_MAX_TEXTURE_2D_LEVELS);
 
       if (!max_2d_texture_level) {
-         pipe_mutex_unlock(dev->mutex);
+         mtx_unlock(&dev->mutex);
          return VDP_STATUS_ERROR;
       }
 
@@ -251,7 +264,7 @@ vlVdpOutputSurfaceQueryCapabilities(VdpDevice device, VdpRGBAFormat surface_rgba
       *max_width = 0;
       *max_height = 0;
    }
-   pipe_mutex_unlock(dev->mutex);
+   mtx_unlock(&dev->mutex);
 
    return VDP_STATUS_OK;
 }
@@ -283,13 +296,13 @@ vlVdpOutputSurfaceQueryGetPutBitsNativeCapabilities(VdpDevice device, VdpRGBAFor
    if (!is_supported)
       return VDP_STATUS_INVALID_POINTER;
 
-   pipe_mutex_lock(dev->mutex);
+   mtx_lock(&dev->mutex);
    *is_supported = pscreen->is_format_supported
    (
       pscreen, format, PIPE_TEXTURE_2D, 1,
       PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_RENDER_TARGET
    );
-   pipe_mutex_unlock(dev->mutex);
+   mtx_unlock(&dev->mutex);
 
    return VDP_STATUS_OK;
 }
@@ -332,7 +345,7 @@ vlVdpOutputSurfaceQueryPutBitsIndexedCapabilities(VdpDevice device,
    if (!is_supported)
       return VDP_STATUS_INVALID_POINTER;
 
-   pipe_mutex_lock(dev->mutex);
+   mtx_lock(&dev->mutex);
    *is_supported = pscreen->is_format_supported
    (
       pscreen, rgba_format, PIPE_TEXTURE_2D, 1,
@@ -350,7 +363,7 @@ vlVdpOutputSurfaceQueryPutBitsIndexedCapabilities(VdpDevice device,
       pscreen, colortbl_format, PIPE_TEXTURE_1D, 1,
       PIPE_BIND_SAMPLER_VIEW
    );
-   pipe_mutex_unlock(dev->mutex);
+   mtx_unlock(&dev->mutex);
 
    return VDP_STATUS_OK;
 }
@@ -387,7 +400,7 @@ vlVdpOutputSurfaceQueryPutBitsYCbCrCapabilities(VdpDevice device, VdpRGBAFormat 
    if (!is_supported)
       return VDP_STATUS_INVALID_POINTER;
 
-   pipe_mutex_lock(dev->mutex);
+   mtx_lock(&dev->mutex);
    *is_supported = pscreen->is_format_supported
    (
       pscreen, rgba_format, PIPE_TEXTURE_2D, 1,
@@ -400,7 +413,7 @@ vlVdpOutputSurfaceQueryPutBitsYCbCrCapabilities(VdpDevice device, VdpRGBAFormat 
       PIPE_VIDEO_PROFILE_UNKNOWN,
       PIPE_VIDEO_ENTRYPOINT_BITSTREAM
    );
-   pipe_mutex_unlock(dev->mutex);
+   mtx_unlock(&dev->mutex);
 
    return VDP_STATUS_OK;
 }
@@ -431,7 +444,7 @@ vlVdpBitmapSurfaceQueryCapabilities(VdpDevice device, VdpRGBAFormat surface_rgba
    if (!(is_supported && max_width && max_height))
       return VDP_STATUS_INVALID_POINTER;
 
-   pipe_mutex_lock(dev->mutex);
+   mtx_lock(&dev->mutex);
    *is_supported = pscreen->is_format_supported
    (
       pscreen, format, PIPE_TEXTURE_3D, 1,
@@ -442,7 +455,7 @@ vlVdpBitmapSurfaceQueryCapabilities(VdpDevice device, VdpRGBAFormat surface_rgba
          pscreen, PIPE_CAP_MAX_TEXTURE_2D_LEVELS);
 
       if (!max_2d_texture_level) {
-         pipe_mutex_unlock(dev->mutex);
+         mtx_unlock(&dev->mutex);
          return VDP_STATUS_ERROR;
       }
 
@@ -451,7 +464,7 @@ vlVdpBitmapSurfaceQueryCapabilities(VdpDevice device, VdpRGBAFormat surface_rgba
       *max_width = 0;
       *max_height = 0;
    }
-   pipe_mutex_unlock(dev->mutex);
+   mtx_unlock(&dev->mutex);
 
    return VDP_STATUS_OK;
 }
@@ -520,7 +533,7 @@ vlVdpVideoMixerQueryParameterValueRange(VdpDevice device, VdpVideoMixerParameter
    if (!(min_value && max_value))
       return VDP_STATUS_INVALID_POINTER;
 
-   pipe_mutex_lock(dev->mutex);
+   mtx_lock(&dev->mutex);
    screen = dev->vscreen->pscreen;
    switch (parameter) {
    case VDP_VIDEO_MIXER_PARAMETER_VIDEO_SURFACE_WIDTH:
@@ -543,10 +556,10 @@ vlVdpVideoMixerQueryParameterValueRange(VdpDevice device, VdpVideoMixerParameter
 
    case VDP_VIDEO_MIXER_PARAMETER_CHROMA_TYPE:
    default:
-      pipe_mutex_unlock(dev->mutex);
+      mtx_unlock(&dev->mutex);
       return VDP_STATUS_INVALID_VIDEO_MIXER_PARAMETER;
    }
-   pipe_mutex_unlock(dev->mutex);
+   mtx_unlock(&dev->mutex);
    return VDP_STATUS_OK;
 }
 

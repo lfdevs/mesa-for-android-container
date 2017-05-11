@@ -37,6 +37,28 @@
 
 #include "pipebuffer/pb_slab.h"
 
+struct amdgpu_sparse_backing_chunk;
+
+/*
+ * Sub-allocation information for a real buffer used as backing memory of a
+ * sparse buffer.
+ */
+struct amdgpu_sparse_backing {
+   struct list_head list;
+
+   struct amdgpu_winsys_bo *bo;
+
+   /* Sorted list of free chunks. */
+   struct amdgpu_sparse_backing_chunk *chunks;
+   uint32_t max_chunks;
+   uint32_t num_chunks;
+};
+
+struct amdgpu_sparse_commitment {
+   struct amdgpu_sparse_backing *backing;
+   uint32_t page;
+};
+
 struct amdgpu_winsys_bo {
    struct pb_buffer base;
    union {
@@ -53,12 +75,26 @@ struct amdgpu_winsys_bo {
          struct pb_slab_entry entry;
          struct amdgpu_winsys_bo *real;
       } slab;
+      struct {
+         mtx_t commit_lock;
+         amdgpu_va_handle va_handle;
+         enum radeon_bo_flag flags;
+
+         uint32_t num_va_pages;
+         uint32_t num_backing_pages;
+
+         struct list_head backing;
+
+         /* Commitment information for each page of the virtual memory area. */
+         struct amdgpu_sparse_commitment *commitments;
+      } sparse;
    } u;
 
    struct amdgpu_winsys *ws;
    void *user_ptr; /* from buffer_from_ptr */
 
-   amdgpu_bo_handle bo; /* NULL for slab entries */
+   amdgpu_bo_handle bo; /* NULL for slab entries and sparse buffers */
+   bool sparse;
    uint32_t unique_id;
    uint64_t va;
    enum radeon_bo_domain initial_domain;

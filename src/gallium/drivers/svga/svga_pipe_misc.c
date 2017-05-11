@@ -121,18 +121,6 @@ svga_set_framebuffer_state(struct pipe_context *pipe,
    dst->height = fb->height;
    dst->nr_cbufs = fb->nr_cbufs;
 
-   /* Check if we need to propagate any of the render targets which we may
-    * be unbinding.
-    */
-   for (i = 0; i < dst->nr_cbufs; i++) {
-      struct pipe_surface *s = i < fb->nr_cbufs ? fb->cbufs[i] : NULL;
-      if (dst->cbufs[i] && dst->cbufs[i] != s) {
-         if (svga_surface_needs_propagation(dst->cbufs[i])) {
-            svga_propagate_surface(svga, dst->cbufs[i]);
-         }
-      }
-   }
-
    /* Check that all surfaces are the same size.
     * Actually, the virtual hardware may support rendertargets with
     * different size, depending on the host API and driver,

@@ -29,12 +29,13 @@
 #include "gallivm/lp_bld_tgsi.h"
 #include "tgsi/tgsi_parse.h"
 #include "ac_llvm_util.h"
+#include "ac_llvm_build.h"
 
 #include <llvm-c/Core.h>
 #include <llvm-c/TargetMachine.h>
 
 struct pipe_debug_callback;
-struct radeon_shader_binary;
+struct ac_shader_binary;
 
 #define RADEON_LLVM_MAX_INPUT_SLOTS 32
 #define RADEON_LLVM_MAX_INPUTS 32 * 4
@@ -42,7 +43,7 @@ struct radeon_shader_binary;
 
 #define RADEON_LLVM_INITIAL_CF_DEPTH 4
 
-#define RADEON_LLVM_MAX_SYSTEM_VALUES 4
+#define RADEON_LLVM_MAX_SYSTEM_VALUES 11
 #define RADEON_LLVM_MAX_ADDRS 16
 
 struct si_llvm_flow;
@@ -121,19 +122,11 @@ struct si_shader_context {
 	int param_es2gs_offset;
 	int param_oc_lds;
 
-	/* Sets a bit if the dynamic HS control word was 0x80000000. The bit is
-	 * 0x800000 for VS, 0x1 for ES.
-	 */
-	int param_tess_offchip;
-
 	LLVMTargetMachineRef tm;
 
-	unsigned invariant_load_md_kind;
 	unsigned range_md_kind;
-	unsigned uniform_md_kind;
 	unsigned fpmath_md_kind;
 	LLVMValueRef fpmath_md_2p5_ulp;
-	LLVMValueRef empty_md;
 
 	/* Preloaded descriptors. */
 	LLVMValueRef esgs_ring;
@@ -156,6 +149,9 @@ struct si_shader_context {
 	LLVMTypeRef v4f32;
 	LLVMTypeRef v8i32;
 
+	LLVMValueRef i32_0;
+	LLVMValueRef i32_1;
+
 	LLVMValueRef shared_memory;
 };
 
@@ -170,7 +166,7 @@ void si_llvm_shader_type(LLVMValueRef F, unsigned type);
 
 LLVMTargetRef si_llvm_get_amdgpu_target(const char *triple);
 
-unsigned si_llvm_compile(LLVMModuleRef M, struct radeon_shader_binary *binary,
+unsigned si_llvm_compile(LLVMModuleRef M, struct ac_shader_binary *binary,
 			 LLVMTargetMachineRef tm,
 			 struct pipe_debug_callback *debug);
 
@@ -205,9 +201,6 @@ LLVMValueRef si_llvm_emit_fetch_64bit(struct lp_build_tgsi_context *bld_base,
 				      enum tgsi_opcode_type type,
 				      LLVMValueRef ptr,
 				      LLVMValueRef ptr2);
-
-LLVMValueRef si_llvm_saturate(struct lp_build_tgsi_context *bld_base,
-			      LLVMValueRef value);
 
 LLVMValueRef si_llvm_emit_fetch(struct lp_build_tgsi_context *bld_base,
 				const struct tgsi_full_src_register *reg,

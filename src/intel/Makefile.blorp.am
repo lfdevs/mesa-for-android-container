@@ -22,3 +22,5 @@
 noinst_LTLIBRARIES += blorp/libblorp.la
 
 blorp_libblorp_la_SOURCES = $(BLORP_FILES)
+
+EXTRA_DIST += blorp/TODO

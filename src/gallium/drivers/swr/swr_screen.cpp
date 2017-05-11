@@ -61,6 +61,11 @@
 #define SWR_MAX_TEXTURE_CUBE_LEVELS 14  /* 8K x 8K for now */
 #define SWR_MAX_TEXTURE_ARRAY_LAYERS 512 /* 8K x 512 / 8K x 8K x 512 */
 
+/* Flag indicates creation of alternate surface, to prevent recursive loop
+ * in resource creation when msaa_force_enable is set. */
+#define SWR_RESOURCE_FLAG_ALT_SURFACE (PIPE_RESOURCE_FLAG_DRV_PRIV << 0)
+
+
 static const char *
 swr_get_name(struct pipe_screen *screen)
 {
@@ -78,13 +83,14 @@ swr_get_vendor(struct pipe_screen *screen)
 }
 
 static boolean
-swr_is_format_supported(struct pipe_screen *screen,
+swr_is_format_supported(struct pipe_screen *_screen,
                         enum pipe_format format,
                         enum pipe_texture_target target,
                         unsigned sample_count,
                         unsigned bind)
 {
-   struct sw_winsys *winsys = swr_screen(screen)->winsys;
+   struct swr_screen *screen = swr_screen(_screen);
+   struct sw_winsys *winsys = screen->winsys;
    const struct util_format_description *format_desc;
 
    assert(target == PIPE_BUFFER || target == PIPE_TEXTURE_1D
@@ -100,11 +106,11 @@ swr_is_format_supported(struct pipe_screen *screen,
    if (!format_desc)
       return FALSE;
 
-   if (sample_count > 1)
+   if ((sample_count > screen->msaa_max_count)
+      || !util_is_power_of_two(sample_count))
       return FALSE;
 
-   if (bind
-       & (PIPE_BIND_DISPLAY_TARGET | PIPE_BIND_SCANOUT | PIPE_BIND_SHARED)) {
+   if (bind & PIPE_BIND_DISPLAY_TARGET) {
       if (!winsys->is_displaytarget_format_supported(winsys, bind, format))
          return FALSE;
    }
@@ -231,24 +237,33 @@ swr_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_MIXED_COLORBUFFER_FORMATS:
    case PIPE_CAP_QUADS_FOLLOW_PROVOKING_VERTEX_CONVENTION:
    case PIPE_CAP_USER_VERTEX_BUFFERS:
-   case PIPE_CAP_USER_INDEX_BUFFERS:
    case PIPE_CAP_USER_CONSTANT_BUFFERS:
    case PIPE_CAP_STREAM_OUTPUT_INTERLEAVE_BUFFERS:
    case PIPE_CAP_QUERY_TIMESTAMP:
    case PIPE_CAP_TEXTURE_BUFFER_OBJECTS:
    case PIPE_CAP_BUFFER_MAP_PERSISTENT_COHERENT:
-   case PIPE_CAP_FAKE_SW_MSAA:
    case PIPE_CAP_DRAW_INDIRECT:
    case PIPE_CAP_UMA:
    case PIPE_CAP_CONDITIONAL_RENDER_INVERTED:
    case PIPE_CAP_CLIP_HALFZ:
    case PIPE_CAP_POLYGON_OFFSET_CLAMP:
    case PIPE_CAP_DEPTH_BOUNDS_TEST:
+   case PIPE_CAP_CLEAR_TEXTURE:
    case PIPE_CAP_TEXTURE_FLOAT_LINEAR:
    case PIPE_CAP_TEXTURE_HALF_FLOAT_LINEAR:
    case PIPE_CAP_CULL_DISTANCE:
    case PIPE_CAP_CUBE_MAP_ARRAY:
+   case PIPE_CAP_DOUBLES:
       return 1;
+
+   /* MSAA support
+    * If user has explicitly set max_sample_count = 0 (via SWR_MSAA_MAX_COUNT)
+    * then disable all MSAA support and go back to old caps. */
+   case PIPE_CAP_TEXTURE_MULTISAMPLE:
+   case PIPE_CAP_MULTISAMPLE_Z_RESOLVE:
+      return swr_screen(screen)->msaa_max_count ? 1 : 0;
+   case PIPE_CAP_FAKE_SW_MSAA:
+      return swr_screen(screen)->msaa_max_count ? 0 : 1;
 
       /* unsupported features */
    case PIPE_CAP_ANISOTROPIC_FILTER:
@@ -264,7 +279,6 @@ swr_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_VERTEX_BUFFER_OFFSET_4BYTE_ALIGNED_ONLY:
    case PIPE_CAP_VERTEX_BUFFER_STRIDE_4BYTE_ALIGNED_ONLY:
    case PIPE_CAP_VERTEX_ELEMENT_SRC_OFFSET_4BYTE_ALIGNED_ONLY:
-   case PIPE_CAP_TEXTURE_MULTISAMPLE:
    case PIPE_CAP_TGSI_TEXCOORD:
    case PIPE_CAP_PREFER_BLIT_BASED_TEXTURE_TRANSFER:
    case PIPE_CAP_MAX_TEXTURE_GATHER_COMPONENTS:
@@ -276,7 +290,6 @@ swr_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_TGSI_FS_FINE_DERIVATIVE:
    case PIPE_CAP_SAMPLER_VIEW_TARGET:
    case PIPE_CAP_VERTEXID_NOBASE:
-   case PIPE_CAP_MULTISAMPLE_Z_RESOLVE:
    case PIPE_CAP_RESOURCE_FROM_USER_MEMORY:
    case PIPE_CAP_DEVICE_RESET_STATUS_QUERY:
    case PIPE_CAP_MAX_SHADER_PATCH_VARYINGS:
@@ -284,7 +297,6 @@ swr_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_FORCE_PERSAMPLE_INTERP:
    case PIPE_CAP_SHAREABLE_SHADERS:
    case PIPE_CAP_COPY_BETWEEN_COMPRESSED_AND_PLAIN_FORMATS:
-   case PIPE_CAP_CLEAR_TEXTURE:
    case PIPE_CAP_DRAW_PARAMETERS:
    case PIPE_CAP_TGSI_PACK_HALF_FLOAT:
    case PIPE_CAP_MULTI_DRAW_INDIRECT:
@@ -316,6 +328,15 @@ swr_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_NATIVE_FENCE_FD:
    case PIPE_CAP_GLSL_OPTIMIZE_CONSERVATIVELY:
    case PIPE_CAP_TGSI_FS_FBFETCH:
+   case PIPE_CAP_TGSI_MUL_ZERO_WINS:
+   case PIPE_CAP_INT64:
+   case PIPE_CAP_INT64_DIVMOD:
+   case PIPE_CAP_TGSI_TEX_TXF_LZ:
+   case PIPE_CAP_TGSI_CLOCK:
+   case PIPE_CAP_POLYGON_MODE_FILL_RECTANGLE:
+   case PIPE_CAP_SPARSE_BUFFER_PAGE_SIZE:
+   case PIPE_CAP_TGSI_BALLOT:
+   case PIPE_CAP_TGSI_TES_LAYER_VIEWPORT:
       return 0;
 
    case PIPE_CAP_VENDOR_ID:
@@ -342,13 +363,15 @@ swr_get_param(struct pipe_screen *screen, enum pipe_cap param)
 
 static int
 swr_get_shader_param(struct pipe_screen *screen,
-                     unsigned shader,
+                     enum pipe_shader_type shader,
                      enum pipe_shader_cap param)
 {
-   if (shader == PIPE_SHADER_VERTEX || shader == PIPE_SHADER_FRAGMENT)
+   if (shader == PIPE_SHADER_VERTEX ||
+       shader == PIPE_SHADER_FRAGMENT ||
+       shader == PIPE_SHADER_GEOMETRY)
       return gallivm_get_shader_param(param);
 
-   // Todo: geometry, tesselation, compute
+   // Todo: tesselation, compute
    return 0;
 }
 
@@ -703,6 +726,14 @@ swr_texture_layout(struct swr_screen *screen,
    if (pt->bind & (PIPE_BIND_RENDER_TARGET | PIPE_BIND_DEPTH_STENCIL)) {
       res->swr.halign = KNOB_MACROTILE_X_DIM;
       res->swr.valign = KNOB_MACROTILE_Y_DIM;
+
+      /* If SWR_MSAA_FORCE_ENABLE is set, turn on MSAA and override requested
+       * surface sample count. */
+      if (screen->msaa_force_enable) {
+         res->swr.numSamples = screen->msaa_max_count;
+         fprintf(stderr,"swr_texture_layout: forcing sample count: %d\n",
+                 res->swr.numSamples);
+      }
    } else {
       res->swr.halign = 1;
       res->swr.valign = 1;
@@ -781,8 +812,8 @@ swr_texture_layout(struct swr_screen *screen,
          ComputeSurfaceOffset<false>(0, 0, 0, 0, 0, level, &res->swr);
    }
 
-   size_t total_size =
-      (size_t)res->swr.depth * res->swr.qpitch * res->swr.pitch;
+   size_t total_size = res->swr.depth * res->swr.qpitch * res->swr.pitch *
+                       res->swr.numSamples;
    if (total_size > SWR_MAX_TEXTURE_SIZE)
       return false;
 
@@ -799,9 +830,11 @@ swr_texture_layout(struct swr_screen *screen,
                ComputeSurfaceOffset<false>(0, 0, 0, 0, 0, level, &res->secondary);
          }
 
-         res->secondary.pBaseAddress = (uint8_t *)AlignedMalloc(
-            res->secondary.depth * res->secondary.qpitch *
-            res->secondary.pitch, 64);
+         total_size = res->secondary.depth * res->secondary.qpitch *
+                      res->secondary.pitch * res->secondary.numSamples;
+
+         res->secondary.pBaseAddress = (uint8_t *) AlignedMalloc(total_size,
+                                                                 64);
       }
    }
 
@@ -816,6 +849,51 @@ swr_can_create_resource(struct pipe_screen *screen,
    memset(&res, 0, sizeof(res));
    res.base = *templat;
    return swr_texture_layout(swr_screen(screen), &res, false);
+}
+
+/* Helper function that conditionally creates a single-sample resolve resource
+ * and attaches it to main multisample resource. */
+static boolean
+swr_create_resolve_resource(struct pipe_screen *_screen,
+                            struct swr_resource *msaa_res)
+{
+   struct swr_screen *screen = swr_screen(_screen);
+
+   /* If resource is multisample, create a single-sample resolve resource */
+   if (msaa_res->base.nr_samples > 1 || (screen->msaa_force_enable &&
+            !(msaa_res->base.flags & SWR_RESOURCE_FLAG_ALT_SURFACE))) {
+
+      /* Create a single-sample copy of the resource.  Copy the original
+       * resource parameters and set flag to prevent recursion when re-calling
+       * resource_create */
+      struct pipe_resource alt_template = msaa_res->base;
+      alt_template.nr_samples = 0;
+      alt_template.flags |= SWR_RESOURCE_FLAG_ALT_SURFACE;
+
+      /* Note: Display_target is a special single-sample resource, only the
+       * display_target has been created already. */
+      if (msaa_res->base.bind & (PIPE_BIND_DISPLAY_TARGET | PIPE_BIND_SCANOUT
+               | PIPE_BIND_SHARED)) {
+         /* Allocate the multisample buffers. */
+         if (!swr_texture_layout(screen, msaa_res, true))
+            return false;
+
+         /* Alt resource will only be bound as PIPE_BIND_RENDER_TARGET
+          * remove the DISPLAY_TARGET, SCANOUT, and SHARED bindings */
+         alt_template.bind = PIPE_BIND_RENDER_TARGET;
+      }
+
+      /* Allocate single-sample resolve surface */
+      struct pipe_resource *alt;
+      alt = _screen->resource_create(_screen, &alt_template);
+      if (!alt)
+         return false;
+
+      /* Attach it to the multisample resource */
+      msaa_res->resolve_target = alt;
+   }
+
+   return true; /* success */
 }
 
 static struct pipe_resource *
@@ -836,7 +914,7 @@ swr_resource_create(struct pipe_screen *_screen,
                             | PIPE_BIND_SHARED)) {
          /* displayable surface
           * first call swr_texture_layout without allocating to finish
-          * filling out the SWR_SURFAE_STATE in res */
+          * filling out the SWR_SURFACE_STATE in res */
          swr_texture_layout(screen, res, false);
          if (!swr_displaytarget_layout(screen, res))
             goto fail;
@@ -845,6 +923,12 @@ swr_resource_create(struct pipe_screen *_screen,
          if (!swr_texture_layout(screen, res, true))
             goto fail;
       }
+
+      /* If resource was multisample, create resolve resource and attach
+       * it to multisample resource. */
+      if (!swr_create_resolve_resource(_screen, res))
+            goto fail;
+
    } else {
       /* other data (vertex buffer, const buffer, etc) */
       assert(util_format_get_blocksize(templat->format) == 1);
@@ -853,7 +937,7 @@ swr_resource_create(struct pipe_screen *_screen,
       assert(templat->last_level == 0);
 
       /* Easiest to just call swr_texture_layout, as it sets up
-       * SWR_SURFAE_STATE in res */
+       * SWR_SURFACE_STATE in res */
       if (!swr_texture_layout(screen, res, true))
          goto fail;
    }
@@ -870,7 +954,6 @@ swr_resource_destroy(struct pipe_screen *p_screen, struct pipe_resource *pt)
 {
    struct swr_screen *screen = swr_screen(p_screen);
    struct swr_resource *spr = swr_resource(pt);
-   struct pipe_context *pipe = screen->pipe;
 
    if (spr->display_target) {
       /* If resource is display target, winsys manages the buffer and will
@@ -880,9 +963,24 @@ swr_resource_destroy(struct pipe_screen *p_screen, struct pipe_resource *pt)
       struct sw_winsys *winsys = screen->winsys;
       winsys->displaytarget_destroy(winsys, spr->display_target);
 
+      if (spr->swr.numSamples > 1) {
+         /* Free an attached resolve resource */
+         struct swr_resource *alt = swr_resource(spr->resolve_target);
+         swr_fence_work_free(screen->flush_fence, alt->swr.pBaseAddress, true);
+
+         /* Free multisample buffer */
+         swr_fence_work_free(screen->flush_fence, spr->swr.pBaseAddress, true);
+      }
    } else {
       /* For regular resources, defer deletion */
       swr_resource_unused(pt);
+
+      if (spr->swr.numSamples > 1) {
+         /* Free an attached resolve resource */
+         struct swr_resource *alt = swr_resource(spr->resolve_target);
+         swr_fence_work_free(screen->flush_fence, alt->swr.pBaseAddress, true);
+      }
+
       swr_fence_work_free(screen->flush_fence, spr->swr.pBaseAddress, true);
       swr_fence_work_free(screen->flush_fence,
                           spr->secondary.pBaseAddress, true);
@@ -909,6 +1007,23 @@ swr_flush_frontbuffer(struct pipe_screen *p_screen,
       swr_fence_finish(p_screen, NULL, screen->flush_fence, 0);
       swr_resource_unused(resource);
       SwrEndFrame(swr_context(pipe)->swrContext);
+   }
+
+   /* Multisample surfaces need to be resolved before present */
+   if (pipe && spr->swr.numSamples > 1) {
+      struct pipe_resource *resolve_target = spr->resolve_target;
+
+      /* Do an inline surface resolve into the resolve target resource
+       * XXX: This works, just not optimal. Work on using a pipelined blit. */
+      swr_do_msaa_resolve(resource, resolve_target);
+
+      /* Once resolved, copy into display target */
+      SWR_SURFACE_STATE *resolve = &swr_resource(resolve_target)->swr;
+
+      void *map = winsys->displaytarget_map(winsys, spr->display_target,
+                                            PIPE_TRANSFER_WRITE);
+      memcpy(map, resolve->pBaseAddress, resolve->pitch * resolve->height);
+      winsys->displaytarget_unmap(winsys, spr->display_target);
    }
 
    debug_assert(spr->display_target);
@@ -977,6 +1092,33 @@ swr_create_screen_internal(struct sw_winsys *winsys)
    swr_fence_init(&screen->base);
 
    util_format_s3tc_init();
+
+   /* XXX msaa under development, disable by default for now */
+   screen->msaa_max_count = 0; /* was SWR_MAX_NUM_MULTISAMPLES; */
+
+   /* validate env override values, within range and power of 2 */
+   int msaa_max_count = debug_get_num_option("SWR_MSAA_MAX_COUNT", 0);
+   if (msaa_max_count) {
+      if ((msaa_max_count < 0) || (msaa_max_count > SWR_MAX_NUM_MULTISAMPLES)
+            || !util_is_power_of_two(msaa_max_count)) {
+         fprintf(stderr, "SWR_MSAA_MAX_COUNT invalid: %d\n", msaa_max_count);
+         fprintf(stderr, "must be power of 2 between 1 and %d" \
+                         " (or 0 to disable msaa)\n",
+               SWR_MAX_NUM_MULTISAMPLES);
+         msaa_max_count = 0;
+      }
+
+      fprintf(stderr, "SWR_MSAA_MAX_COUNT: %d\n", msaa_max_count);
+      if (!msaa_max_count)
+         fprintf(stderr, "(msaa disabled)\n");
+
+      screen->msaa_max_count = msaa_max_count;
+   }
+
+   screen->msaa_force_enable = debug_get_bool_option(
+         "SWR_MSAA_FORCE_ENABLE", false);
+   if (screen->msaa_force_enable)
+      fprintf(stderr, "SWR_MSAA_FORCE_ENABLE: true\n");
 
    return &screen->base;
 }

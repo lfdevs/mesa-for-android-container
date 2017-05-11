@@ -33,7 +33,7 @@
 struct r600_pipe_compute {
 	struct r600_context *ctx;
 
-	struct radeon_shader_binary binary;
+	struct ac_shader_binary binary;
 	struct r600_resource *code_bo;
 	struct r600_bytecode bc;
 

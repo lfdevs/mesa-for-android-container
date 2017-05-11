@@ -25,6 +25,8 @@
  * 
  **************************************************************************/
 
+#include <inttypes.h>
+
 #include "util/u_debug.h"
 #include "util/u_string.h"
 #include "util/u_math.h"
@@ -87,6 +89,8 @@ dump_enum(
 #define CHR(C)          ctx->dump_printf( ctx, "%c", C )
 #define UIX(I)          ctx->dump_printf( ctx, "0x%x", I )
 #define UID(I)          ctx->dump_printf( ctx, "%u", I )
+#define SI64D(I)        ctx->dump_printf( ctx, "%"PRId64, I )
+#define UI64D(I)        ctx->dump_printf( ctx, "%"PRIu64, I )
 #define INSTID(I)       ctx->dump_printf( ctx, "% 3u", I )
 #define SID(I)          ctx->dump_printf( ctx, "%d", I )
 #define FLT(F)          ctx->dump_printf( ctx, "%10.4f", F )
@@ -257,14 +261,14 @@ dump_imm_data(struct tgsi_iterate_context *iter,
       case TGSI_IMM_INT64: {
          union di d;
          d.i = data[i].Uint | (uint64_t)data[i+1].Uint << 32;
-         UID( d.i );
+         SI64D( d.i );
          i++;
          break;
       }
       case TGSI_IMM_UINT64: {
          union di d;
          d.ui = data[i].Uint | (uint64_t)data[i+1].Uint << 32;
-         UID( d.ui );
+         UI64D( d.ui );
          i++;
          break;
       }
@@ -573,30 +577,6 @@ iter_instruction(
    for(i = 0; (int)i < ctx->indent; ++i)
       TXT( "  " );
    ctx->indent += info->post_indent;
-
-   if (inst->Instruction.Predicate) {
-      CHR( '(' );
-
-      if (inst->Predicate.Negate)
-         CHR( '!' );
-
-      TXT( "PRED[" );
-      SID( inst->Predicate.Index );
-      CHR( ']' );
-
-      if (inst->Predicate.SwizzleX != TGSI_SWIZZLE_X ||
-          inst->Predicate.SwizzleY != TGSI_SWIZZLE_Y ||
-          inst->Predicate.SwizzleZ != TGSI_SWIZZLE_Z ||
-          inst->Predicate.SwizzleW != TGSI_SWIZZLE_W) {
-         CHR( '.' );
-         ENM( inst->Predicate.SwizzleX, tgsi_swizzle_names );
-         ENM( inst->Predicate.SwizzleY, tgsi_swizzle_names );
-         ENM( inst->Predicate.SwizzleZ, tgsi_swizzle_names );
-         ENM( inst->Predicate.SwizzleW, tgsi_swizzle_names );
-      }
-
-      TXT( ") " );
-   }
 
    TXT( info->mnemonic );
 

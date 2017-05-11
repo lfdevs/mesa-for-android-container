@@ -684,7 +684,7 @@ struct ComputeScissorEdges<std::true_type, std::false_type, RT>
 template <typename ValidEdgeMaskT>
 INLINE bool TrivialRejectTest(const int, const int, const int)
 {
-    SWR_ASSERT(0, "Primary templated function should never be called");
+    SWR_INVALID("Primary templated function should never be called");
     return false;
 };
 
@@ -814,7 +814,7 @@ struct UpdateEdgeMasksInnerConservative<RT, AllEdgesValidT, InnerConservativeCov
         adjustEdgeConservative<RT, typename RT::InnerConservativeEdgeOffsetT>(vAi, vBi, vTempEdge[1]);
         adjustEdgeConservative<RT, typename RT::InnerConservativeEdgeOffsetT>(vAi, vBi, vTempEdge[2]);
 
-        UpdateEdgeMasks<typename RT::NumRasterSamplesT>(vEdgeTileBbox, vTempEdge, mask0, mask1, mask2);
+        UpdateEdgeMasks<typename RT::NumCoverageSamplesT>(vEdgeTileBbox, vTempEdge, mask0, mask1, mask2);
     }
 };
 
@@ -1037,11 +1037,11 @@ void RasterizeTriangle(DRAW_CONTEXT* pDC, uint32_t workerId, uint32_t macroTile,
     int32_t y = AlignDown(intersect.ymin, (FIXED_POINT_SCALE * KNOB_TILE_Y_DIM));
 
     // convenience typedef
-    typedef typename RT::NumRasterSamplesT NumRasterSamplesT;
+    typedef typename RT::NumCoverageSamplesT NumCoverageSamplesT;
 
     // single sample rasterization evaluates edges at pixel center,
     // multisample evaluates edges UL pixel corner and steps to each sample position
-    if(std::is_same<NumRasterSamplesT, SingleSampleT>::value)
+    if(std::is_same<NumCoverageSamplesT, SingleSampleT>::value)
     {
         // Add 0.5, in fixed point, to offset to pixel center
         x += (FIXED_POINT_SCALE / 2);
@@ -1116,10 +1116,11 @@ void RasterizeTriangle(DRAW_CONTEXT* pDC, uint32_t workerId, uint32_t macroTile,
     //                             |      |
     // min(xSamples),max(ySamples)  ------  max(xSamples),max(ySamples)
     __m256d vEdgeTileBbox[3];
-    if (NumRasterSamplesT::value > 1)
+    if (NumCoverageSamplesT::value > 1)
     {
-        __m128i vTileSampleBBoxXh = RT::MT::TileSampleOffsetsX();
-        __m128i vTileSampleBBoxYh = RT::MT::TileSampleOffsetsY();
+        const SWR_MULTISAMPLE_POS &samplePos = rastState.samplePositions;
+        const __m128i vTileSampleBBoxXh = samplePos.TileSampleOffsetsX();
+        const __m128i vTileSampleBBoxYh = samplePos.TileSampleOffsetsY();
 
         __m256d vTileSampleBBoxXFix8 = _mm256_cvtepi32_pd(vTileSampleBBoxXh);
         __m256d vTileSampleBBoxYFix8 = _mm256_cvtepi32_pd(vTileSampleBBoxYh);
@@ -1163,9 +1164,9 @@ void RasterizeTriangle(DRAW_CONTEXT* pDC, uint32_t workerId, uint32_t macroTile,
 
             // is the corner of the edge outside of the raster tile? (vEdge < 0)
             int mask0, mask1, mask2;
-            UpdateEdgeMasks<NumRasterSamplesT>(vEdgeTileBbox, vEdgeFix16, mask0, mask1, mask2);
+            UpdateEdgeMasks<NumCoverageSamplesT>(vEdgeTileBbox, vEdgeFix16, mask0, mask1, mask2);
 
-            for (uint32_t sampleNum = 0; sampleNum < NumRasterSamplesT::value; sampleNum++)
+            for (uint32_t sampleNum = 0; sampleNum < NumCoverageSamplesT::value; sampleNum++)
             {
                 // trivial reject, at least one edge has all 4 corners of raster tile outside
                 bool trivialReject = TrivialRejectTest<typename RT::ValidEdgeMaskT>(mask0, mask1, mask2);
@@ -1196,7 +1197,7 @@ void RasterizeTriangle(DRAW_CONTEXT* pDC, uint32_t workerId, uint32_t macroTile,
                     else
                     {
                         __m256d vEdgeAtSample[RT::NumEdgesT::value];
-                        if(std::is_same<NumRasterSamplesT, SingleSampleT>::value)
+                        if(std::is_same<NumCoverageSamplesT, SingleSampleT>::value)
                         {
                             // should get optimized out for single sample case (global value numbering or copy propagation)
                             for (uint32_t e = 0; e < RT::NumEdgesT::value; ++e)
@@ -1206,8 +1207,9 @@ void RasterizeTriangle(DRAW_CONTEXT* pDC, uint32_t workerId, uint32_t macroTile,
                         }
                         else
                         {
-                            __m128i vSampleOffsetXh = RT::MT::vXi(sampleNum);
-                            __m128i vSampleOffsetYh = RT::MT::vYi(sampleNum);
+                            const SWR_MULTISAMPLE_POS &samplePos = rastState.samplePositions;
+                            __m128i vSampleOffsetXh = samplePos.vXi(sampleNum);
+                            __m128i vSampleOffsetYh = samplePos.vYi(sampleNum);
                             __m256d vSampleOffsetX = _mm256_cvtepi32_pd(vSampleOffsetXh);
                             __m256d vSampleOffsetY = _mm256_cvtepi32_pd(vSampleOffsetYh);
 
@@ -1242,7 +1244,7 @@ void RasterizeTriangle(DRAW_CONTEXT* pDC, uint32_t workerId, uint32_t macroTile,
                 else
                 {
                     // if we're calculating coverage per sample, need to store it off. otherwise no covered samples, don't need to do anything
-                    if(NumRasterSamplesT::value > 1)
+                    if(NumCoverageSamplesT::value > 1)
                     {
                         triDesc.coverageMask[sampleNum] = 0;
                     }
@@ -1339,11 +1341,9 @@ void RasterizeTriPoint(DRAW_CONTEXT *pDC, uint32_t workerId, uint32_t macroTile,
 
     // setup triangle rasterizer function
     PFN_WORK_FUNC pfnTriRast;
-    // for center sample pattern, all samples are at pixel center; calculate coverage
-    // once at center and broadcast the results in the backend
-    uint32_t sampleCount = (rastState.samplePattern == SWR_MSAA_STANDARD_PATTERN) ? rastState.sampleCount : SWR_MULTISAMPLE_1X;
     // conservative rast not supported for points/lines
-    pfnTriRast = GetRasterizerFunc(sampleCount, false, SWR_INPUT_COVERAGE_NONE, ALL_EDGES_VALID, (pDC->pState->state.scissorsTileAligned == false));
+    pfnTriRast = GetRasterizerFunc(rastState.sampleCount, rastState.bIsCenterPattern, false, 
+                                   SWR_INPUT_COVERAGE_NONE, EdgeValToEdgeState(ALL_EDGES_VALID), (pDC->pState->state.scissorsTileAligned == false));
 
     // overwrite texcoords for point sprites
     if (isPointSpriteTexCoordEnabled)
@@ -1674,9 +1674,9 @@ void RasterizeLine(DRAW_CONTEXT *pDC, uint32_t workerId, uint32_t macroTile, voi
 
     // setup triangle rasterizer function
     PFN_WORK_FUNC pfnTriRast;
-    uint32_t sampleCount = (rastState.samplePattern == SWR_MSAA_STANDARD_PATTERN) ? rastState.sampleCount : SWR_MULTISAMPLE_1X;
     // conservative rast not supported for points/lines
-    pfnTriRast = GetRasterizerFunc(sampleCount, false, SWR_INPUT_COVERAGE_NONE, ALL_EDGES_VALID, (pDC->pState->state.scissorsTileAligned == false));
+    pfnTriRast = GetRasterizerFunc(rastState.sampleCount, rastState.bIsCenterPattern, false, 
+                                   SWR_INPUT_COVERAGE_NONE, EdgeValToEdgeState(ALL_EDGES_VALID), (pDC->pState->state.scissorsTileAligned == false));
 
     // make sure this macrotile intersects the triangle
     __m128i vXai = fpToFixedPoint(vXa);
@@ -1786,6 +1786,7 @@ struct RasterizerChooser
 // Selector for correct templated RasterizeTriangle function
 PFN_WORK_FUNC GetRasterizerFunc(
     uint32_t numSamples,
+    bool IsCenter,
     bool IsConservative,
     uint32_t InputCoverage,
     uint32_t EdgeEnable,
@@ -1794,8 +1795,9 @@ PFN_WORK_FUNC GetRasterizerFunc(
 {
     return TemplateArgUnroller<RasterizerChooser>::GetFunc(
         IntArg<SWR_MULTISAMPLE_1X,SWR_MULTISAMPLE_TYPE_COUNT-1>{numSamples},
+        IsCenter,
         IsConservative,
         IntArg<SWR_INPUT_COVERAGE_NONE, SWR_INPUT_COVERAGE_COUNT-1>{InputCoverage},
-        IntArg<0, VALID_TRI_EDGE_COUNT-1>{EdgeEnable},
+        IntArg<0, STATE_VALID_TRI_EDGE_COUNT-1>{EdgeEnable},
         RasterizeScissorEdges);
 }

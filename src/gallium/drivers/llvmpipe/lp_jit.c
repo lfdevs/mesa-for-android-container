@@ -222,7 +222,13 @@ lp_jit_create_types(struct lp_fragment_shader_variant *lp)
    }
 
    if (gallivm_debug & GALLIVM_DEBUG_IR) {
+#if HAVE_LLVM >= 0x304
+      char *str = LLVMPrintModuleToString(gallivm->module);
+      fprintf(stderr, "%s", str);
+      LLVMDisposeMessage(str);
+#else
       LLVMDumpModule(gallivm->module);
+#endif
    }
 }
 

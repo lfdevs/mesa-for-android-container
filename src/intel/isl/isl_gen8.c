@@ -94,29 +94,42 @@ static uint32_t
 gen8_choose_halign_el(const struct isl_device *dev,
                       const struct isl_surf_init_info *restrict info)
 {
-   if (isl_format_is_compressed(info->format))
-      return 1;
-
    /* From the Broadwell PRM, Volume 2d "Command Reference: Structures",
     * RENDER_SURFACE_STATE Surface Horizontal Alignment, p326:
     *
     *    - This field is intended to be set to HALIGN_8 only if the surface
     *      was rendered as a depth buffer with Z16 format or a stencil buffer.
     *      In this case it must be set to HALIGN_8 since these surfaces
-    *      support only alignment of 8. [...]
+    *      support only alignment of 8.  For Z32 formats it must be set to
+    *      HALIGN_4.
+    *
+    * From the Broadwell PRM, Volume 4, "Memory Views" p. 186, the alignment
+    * parameters are summarized in the following table:
+    *
+    *     Surface Defined By | Surface Format  | Align Width | Align Height
+    *    --------------------+-----------------+-------------+--------------
+    *       DEPTH_BUFFER     |   D16_UNORM     |      8      |      4
+    *                        |     other       |      4      |      4
+    *    --------------------+-----------------+-------------+--------------
+    *       STENCIL_BUFFER   |      N/A        |      8      |      8
+    *    --------------------+-----------------+-------------+--------------
+    *       SURFACE_STATE    | BC*, ETC*, EAC* |      4      |      4
+    *                        |      FXT1       |      8      |      4
+    *                        |   all others    |   HALIGN    |   VALIGN
+    *    -------------------------------------------------------------------
     */
-   if (isl_surf_info_is_z16(info))
-      return 8;
+   if (isl_surf_usage_is_depth(info->usage))
+      return info->format == ISL_FORMAT_R16_UNORM ? 8 : 4;
+
    if (isl_surf_usage_is_stencil(info->usage))
       return 8;
 
-   /* From the Broadwell PRM, Volume 2d "Command Reference: Structures",
-    * RENDER_SURFACE_STATE Surface Horizontal Alignment, p326:
-    *
-    *      [...] For Z32 formats it must be set to HALIGN_4.
+   /* All compressed formats in the above table have an alignment equal to
+    * their compression block size.  This translates to an alignment in
+    * elements of 1.
     */
-   if (isl_surf_usage_is_depth(info->usage))
-      return 4;
+   if (isl_format_is_compressed(info->format))
+      return 1;
 
    if (!(info->usage & ISL_SURF_USAGE_DISABLE_AUX_BIT)) {
       /* From the Broadwell PRM, Volume 2d "Command Reference: Structures",
@@ -168,13 +181,34 @@ gen8_choose_valign_el(const struct isl_device *dev,
     *       was rendered as a stencil buffer, since stencil buffer surfaces
     *       support only alignment of 8. If set to VALIGN_8, Surface Format
     *       must be R8_UINT.
+    *
+    * From the Broadwell PRM, Volume 4, "Memory Views" p. 186, the alignment
+    * parameters are summarized in the following table:
+    *
+    *     Surface Defined By | Surface Format  | Align Width | Align Height
+    *    --------------------+-----------------+-------------+--------------
+    *       DEPTH_BUFFER     |   D16_UNORM     |      8      |      4
+    *                        |     other       |      4      |      4
+    *    --------------------+-----------------+-------------+--------------
+    *       STENCIL_BUFFER   |      N/A        |      8      |      8
+    *    --------------------+-----------------+-------------+--------------
+    *       SURFACE_STATE    | BC*, ETC*, EAC* |      4      |      4
+    *                        |      FXT1       |      8      |      4
+    *                        |   all others    |   HALIGN    |   VALIGN
+    *    -------------------------------------------------------------------
     */
-
-   if (isl_format_is_compressed(info->format))
-      return 1;
+   if (isl_surf_usage_is_depth(info->usage))
+      return 4;
 
    if (isl_surf_usage_is_stencil(info->usage))
       return 8;
+
+   /* All compressed formats in the above table have an alignment equal to
+    * their compression block size.  This translates to an alignment in
+    * elements of 1.
+    */
+   if (isl_format_is_compressed(info->format))
+      return 1;
 
    return 4;
 }

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # This script processes symbols output by Gallium using glibc to human-readable function names
 
 lastbin=

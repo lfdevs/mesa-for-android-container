@@ -78,6 +78,7 @@ _mesa_parse_arb_fragment_program(struct gl_context* ctx, GLenum target,
    memset(&prog, 0, sizeof(prog));
    memset(&state, 0, sizeof(state));
    state.prog = &prog;
+   state.mem_ctx = program;
 
    if (!_mesa_parse_arb_program(ctx, target, (const GLubyte*) str, len,
 				&state)) {
@@ -180,8 +181,7 @@ _mesa_parse_arb_vertex_program(struct gl_context *ctx, GLenum target,
       return;
    }
 
-   if ((ctx->_Shader->Flags & GLSL_NO_OPT) == 0)
-      _mesa_optimize_program(ctx, &prog, program);
+   _mesa_optimize_program(ctx, &prog, program);
 
    ralloc_free(program->String);
 

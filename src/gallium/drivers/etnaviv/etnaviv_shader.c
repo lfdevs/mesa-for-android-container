@@ -31,6 +31,7 @@
 #include "etnaviv_debug.h"
 #include "etnaviv_util.h"
 
+#include "tgsi/tgsi_parse.h"
 #include "util/u_math.h"
 #include "util/u_memory.h"
 
@@ -44,7 +45,7 @@
  */
 static bool
 etna_link_shaders(struct etna_context *ctx, struct compiled_shader_state *cs,
-                  const struct etna_shader *vs, const struct etna_shader *fs)
+                  const struct etna_shader_variant *vs, const struct etna_shader_variant *fs)
 {
    struct etna_shader_link_info link = { };
 
@@ -172,17 +173,17 @@ etna_link_shaders(struct etna_context *ctx, struct compiled_shader_state *cs,
 bool
 etna_shader_link(struct etna_context *ctx)
 {
-   if (!ctx->vs || !ctx->fs)
+   if (!ctx->shader.vs || !ctx->shader.fs)
       return false;
 
    /* re-link vs and fs if needed */
-   return etna_link_shaders(ctx, &ctx->shader_state, ctx->vs, ctx->fs);
+   return etna_link_shaders(ctx, &ctx->shader_state, ctx->shader.vs, ctx->shader.fs);
 }
 
 static bool
 etna_shader_update_vs_inputs(struct etna_context *ctx,
                              struct compiled_shader_state *cs,
-                             const struct etna_shader *vs,
+                             const struct etna_shader_variant *vs,
                              const struct compiled_vertex_elements_state *ves)
 {
    unsigned num_temps, cur_temp, num_vs_inputs;
@@ -196,7 +197,7 @@ etna_shader_update_vs_inputs(struct etna_context *ctx,
    num_vs_inputs = MAX2(ves->num_elements, vs->infile.num_reg);
    if (num_vs_inputs != ves->num_elements) {
       BUG("Number of elements %u does not match the number of VS inputs %zu",
-          ctx->vertex_elements->num_elements, ctx->vs->infile.num_reg);
+          ctx->vertex_elements->num_elements, ctx->shader.vs->infile.num_reg);
       return false;
    }
 
@@ -223,11 +224,95 @@ etna_shader_update_vs_inputs(struct etna_context *ctx,
    return true;
 }
 
+static inline const char *
+etna_shader_stage(struct etna_shader_variant *shader)
+{
+   switch (shader->processor) {
+   case PIPE_SHADER_VERTEX:     return "VERT";
+   case PIPE_SHADER_FRAGMENT:   return "FRAG";
+   case PIPE_SHADER_COMPUTE:    return "CL";
+   default:
+      unreachable("invalid type");
+      return NULL;
+   }
+}
+
+static void
+dump_shader_info(struct etna_shader_variant *v, struct pipe_debug_callback *debug)
+{
+   if (!unlikely(etna_mesa_debug & ETNA_DBG_SHADERDB))
+      return;
+
+   pipe_debug_message(debug, SHADER_INFO, "\n"
+         "SHADER-DB: %s prog %d/%d: %u instructions %u temps\n"
+         "SHADER-DB: %s prog %d/%d: %u immediates %u consts\n"
+         "SHADER-DB: %s prog %d/%d: %u loops\n",
+         etna_shader_stage(v),
+         v->shader->id, v->id,
+         v->code_size,
+         v->num_temps,
+         etna_shader_stage(v),
+         v->shader->id, v->id,
+         v->uniforms.imm_count,
+         v->uniforms.const_count,
+         etna_shader_stage(v),
+         v->shader->id, v->id,
+         v->num_loops);
+}
+
 bool
 etna_shader_update_vertex(struct etna_context *ctx)
 {
-   return etna_shader_update_vs_inputs(ctx, &ctx->shader_state, ctx->vs,
+   return etna_shader_update_vs_inputs(ctx, &ctx->shader_state, ctx->shader.vs,
                                        ctx->vertex_elements);
+}
+
+static struct etna_shader_variant *
+create_variant(struct etna_shader *shader, struct etna_shader_key key)
+{
+   struct etna_shader_variant *v = CALLOC_STRUCT(etna_shader_variant);
+   int ret;
+
+   if (!v)
+      return NULL;
+
+   v->shader = shader;
+   v->key = key;
+
+   ret = etna_compile_shader(v);
+   if (!ret) {
+      debug_error("compile failed!");
+      goto fail;
+   }
+
+   v->id = ++shader->variant_count;
+
+   return v;
+
+fail:
+   FREE(v);
+   return NULL;
+}
+
+struct etna_shader_variant *
+etna_shader_variant(struct etna_shader *shader, struct etna_shader_key key,
+                   struct pipe_debug_callback *debug)
+{
+   struct etna_shader_variant *v;
+
+   for (v = shader->variants; v; v = v->next)
+      if (etna_shader_key_equal(&key, &v->key))
+         return v;
+
+   /* compile new variant if it doesn't exist already */
+   v = create_variant(shader, key);
+   if (v) {
+      v->next = shader->variants;
+      shader->variants = v;
+      dump_shader_info(v, debug);
+   }
+
+   return v;
 }
 
 static void *
@@ -235,41 +320,60 @@ etna_create_shader_state(struct pipe_context *pctx,
                          const struct pipe_shader_state *pss)
 {
    struct etna_context *ctx = etna_context(pctx);
+   struct etna_shader *shader = CALLOC_STRUCT(etna_shader);
 
-   return etna_compile_shader(&ctx->specs, pss->tokens);
+   if (!shader)
+      return NULL;
+
+   static uint32_t id;
+   shader->id = id++;
+   shader->specs = &ctx->specs;
+   shader->tokens = tgsi_dup_tokens(pss->tokens);
+
+   if (etna_mesa_debug & ETNA_DBG_SHADERDB) {
+      /* if shader-db run, create a standard variant immediately
+       * (as otherwise nothing will trigger the shader to be
+       * actually compiled).
+       */
+      struct etna_shader_key key = {};
+      etna_shader_variant(shader, key, &ctx->debug);
+   }
+
+   return shader;
 }
 
 static void
 etna_delete_shader_state(struct pipe_context *pctx, void *ss)
 {
-   etna_destroy_shader(ss);
+   struct etna_shader *shader = ss;
+   struct etna_shader_variant *v, *t;
+
+   v = shader->variants;
+   while (v) {
+      t = v;
+      v = v->next;
+      etna_destroy_shader(t);
+   }
+
+   FREE(shader->tokens);
+   FREE(shader);
 }
 
 static void
-etna_bind_fs_state(struct pipe_context *pctx, void *fss_)
+etna_bind_fs_state(struct pipe_context *pctx, void *hwcso)
 {
    struct etna_context *ctx = etna_context(pctx);
-   struct etna_shader *fss = fss_;
 
-   if (ctx->fs == fss) /* skip if already bound */
-      return;
-
-   assert(fss == NULL || fss->processor == PIPE_SHADER_FRAGMENT);
-   ctx->fs = fss;
+   ctx->shader.bind_fs = hwcso;
    ctx->dirty |= ETNA_DIRTY_SHADER;
 }
 
 static void
-etna_bind_vs_state(struct pipe_context *pctx, void *vss_)
+etna_bind_vs_state(struct pipe_context *pctx, void *hwcso)
 {
    struct etna_context *ctx = etna_context(pctx);
-   struct etna_shader *vss = vss_;
 
-   if (ctx->vs == vss) /* skip if already bound */
-      return;
-
-   assert(vss == NULL || vss->processor == PIPE_SHADER_VERTEX);
-   ctx->vs = vss;
+   ctx->shader.bind_vs = hwcso;
    ctx->dirty |= ETNA_DIRTY_SHADER;
 }
 

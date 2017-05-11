@@ -73,7 +73,8 @@ lib@GL_LIB@_la_LIBADD = \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
 	$(SHARED_GLAPI_LIB) \
 	$(GL_LIB_DEPS) \
-	$(CLOCK_LIB)
+	$(CLOCK_LIB) \
+	$(LIBUNWIND_LIBS)
 
 if HAVE_GALLIUM_LLVM
 lib@GL_LIB@_la_LIBADD += $(top_builddir)/src/gallium/drivers/llvmpipe/libllvmpipe.la $(LLVM_LIBS)

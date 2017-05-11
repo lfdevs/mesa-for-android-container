@@ -132,13 +132,11 @@ gen6_upload_sf_and_clip_viewports(struct brw_context *brw)
    const uint32_t fb_width = _mesa_geometric_width(ctx->DrawBuffer);
    const uint32_t fb_height = _mesa_geometric_height(ctx->DrawBuffer);
 
-   sfv = brw_state_batch(brw, AUB_TRACE_SF_VP_STATE,
-                         sizeof(*sfv) * viewport_count,
+   sfv = brw_state_batch(brw, sizeof(*sfv) * viewport_count,
                          32, &brw->sf.vp_offset);
    memset(sfv, 0, sizeof(*sfv) * viewport_count);
 
-   clv = brw_state_batch(brw, AUB_TRACE_CLIP_VP_STATE,
-                         sizeof(*clv) * viewport_count,
+   clv = brw_state_batch(brw, sizeof(*clv) * viewport_count,
                          32, &brw->clip.vp_offset);
 
    if (render_to_fbo) {

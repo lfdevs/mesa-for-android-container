@@ -184,13 +184,13 @@ vlVaApplyDeint(vlVaDriver *drv, vlVaContext *context,
 {
    vlVaSurface *prevprev, *prev, *next;
 
-   if (param->num_forward_references < 1 ||
-       param->num_backward_references < 2)
+   if (param->num_forward_references < 2 ||
+       param->num_backward_references < 1)
       return current;
 
-   prevprev = handle_table_get(drv->htab, param->backward_references[1]);
-   prev = handle_table_get(drv->htab, param->backward_references[0]);
-   next = handle_table_get(drv->htab, param->forward_references[0]);
+   prevprev = handle_table_get(drv->htab, param->forward_references[1]);
+   prev = handle_table_get(drv->htab, param->forward_references[0]);
+   next = handle_table_get(drv->htab, param->backward_references[0]);
 
    if (!prevprev || !prev || !next)
       return current;
@@ -292,7 +292,8 @@ vlVaHandleVAProcPipelineParameterBufferType(vlVaDriver *drv, vlVaContext *contex
    src_region = vlVaRegionDefault(param->surface_region, src_surface->buffer, &def_src_region);
    dst_region = vlVaRegionDefault(param->output_region, context->target, &def_dst_region);
 
-   if (context->target->buffer_format != PIPE_FORMAT_NV12)
+   if (context->target->buffer_format != PIPE_FORMAT_NV12 &&
+       context->target->buffer_format != PIPE_FORMAT_P016)
       return vlVaPostProcCompositor(drv, context, src_region, dst_region,
                                     src, context->target, deinterlace);
    else

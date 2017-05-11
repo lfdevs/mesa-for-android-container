@@ -31,7 +31,7 @@ if env['llvm']:
     env.Prepend(LIBS = [llvmpipe])
 
     if env['swr']:
-        env.Append(CPPDEFINES = 'HAVE_SWR')
+        env.Append(CPPDEFINES = 'GALLIUM_SWR')
         env.Prepend(LIBS = [swr])
 
 if env['platform'] == 'windows':

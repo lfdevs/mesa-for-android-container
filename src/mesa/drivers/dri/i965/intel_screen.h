@@ -32,10 +32,14 @@
 #include <GL/internal/dri_interface.h>
 
 #include "dri_util.h"
-#include "intel_bufmgr.h"
+#include "brw_bufmgr.h"
 #include "common/gen_device_info.h"
 #include "i915_drm.h"
 #include "xmlconfig.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct intel_screen
 {
@@ -46,16 +50,14 @@ struct intel_screen
 
    uint64_t max_gtt_map_object_size;
 
-   bool no_hw;
+   /** Bytes of aperture usage beyond which execbuf is likely to fail. */
+   uint64_t aperture_threshold;
 
+   bool no_hw;
    bool hw_has_swizzling;
+   bool has_exec_fence; /**< I915_PARAM_HAS_EXEC_FENCE */
 
    int hw_has_timestamp;
-
-   /**
-    * Does the kernel support resource streamer?
-    */
-   bool has_resource_streamer;
 
    /**
     * Does the kernel support context reset notifications?
@@ -73,7 +75,7 @@ struct intel_screen
 #define KERNEL_ALLOWS_HSW_SCRATCH1_AND_ROW_CHICKEN3 (1<<3)
 #define KERNEL_ALLOWS_COMPUTE_DISPATCH              (1<<4)
 
-   dri_bufmgr *bufmgr;
+   struct brw_bufmgr *bufmgr;
 
    /**
     * A unique ID for shader programs.
@@ -119,7 +121,6 @@ intelMakeCurrent(__DRIcontext * driContextPriv,
                  __DRIdrawable * driReadPriv);
 
 double get_time(void);
-void aub_dump_bmp(struct gl_context *ctx);
 
 const int*
 intel_supported_msaa_modes(const struct intel_screen  *screen);
@@ -153,5 +154,9 @@ can_do_predicate_writes(const struct intel_screen *screen)
 {
    return screen->kernel_features & KERNEL_ALLOWS_PREDICATE_WRITES;
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

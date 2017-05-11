@@ -51,7 +51,7 @@ namespace clover {
          is_kernel_node_for(const ::llvm::Function &f) {
             return [&](const ::llvm::MDNode *n) {
                using ::llvm::mdconst::dyn_extract;
-               return &f == dyn_extract<::llvm::Function>(n->getOperand(0));
+               return &f == dyn_extract< ::llvm::Function>(n->getOperand(0));
             };
          }
 
@@ -65,7 +65,7 @@ namespace clover {
 #endif
          }
 
-         inline iterator_range<::llvm::MDNode::op_iterator>
+         inline iterator_range< ::llvm::MDNode::op_iterator>
          get_kernel_metadata_operands(const ::llvm::Function &f,
                                       const std::string &name) {
 #if HAVE_LLVM >= 0x0309
@@ -79,11 +79,11 @@ namespace clover {
             const auto kernel_node = find(is_kernel_node_for(f),
                                           get_kernel_nodes(*f.getParent()));
 
-            const auto data_node = cast<::llvm::MDNode>(
+            const auto data_node = cast< ::llvm::MDNode>(
                find([&](const ::llvm::MDOperand &op) {
-                     if (auto m = dyn_cast<::llvm::MDNode>(op))
+                     if (auto m = dyn_cast< ::llvm::MDNode>(op))
                         if (m->getNumOperands())
-                           if (auto m_name = dyn_cast<::llvm::MDString>(
+                           if (auto m_name = dyn_cast< ::llvm::MDString>(
                                   m->getOperand(0).get()))
                               return m_name->getString() == name;
 
@@ -106,7 +106,7 @@ namespace clover {
       get_argument_metadata(const ::llvm::Function &f,
                             const ::llvm::Argument &arg,
                             const std::string &name) {
-         return ::llvm::cast<::llvm::MDString>(
+         return ::llvm::cast< ::llvm::MDString>(
                detail::get_kernel_metadata_operands(f, name)[arg.getArgNo()])
             ->getString();
       }

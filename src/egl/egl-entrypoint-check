@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -e
+
+if [ -z "$srcdir" ]
+then
+  srcdir=$(dirname "$0")
+fi
+
+entrypoints=$(grep EGL_ENTRYPOINT "$srcdir"/main/eglentrypoint.h)
+sorted=$(sort <<< "$entrypoints")
+test "$entrypoints" = "$sorted"

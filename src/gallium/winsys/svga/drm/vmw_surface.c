@@ -48,7 +48,7 @@ vmw_svga_winsys_surface_map(struct svga_winsys_context *swc,
    
    *retry = FALSE;
    assert((flags & (PIPE_TRANSFER_READ | PIPE_TRANSFER_WRITE)) != 0);
-   pipe_mutex_lock(vsrf->mutex);
+   mtx_lock(&vsrf->mutex);
 
    if (vsrf->mapcount) {
       /*
@@ -154,7 +154,7 @@ out_mapped:
    vsrf->data = data;
    vsrf->map_mode = flags & (PIPE_TRANSFER_READ | PIPE_TRANSFER_WRITE);
 out_unlock:
-   pipe_mutex_unlock(vsrf->mutex);
+   mtx_unlock(&vsrf->mutex);
    return data;
 }
 
@@ -165,7 +165,7 @@ vmw_svga_winsys_surface_unmap(struct svga_winsys_context *swc,
                               boolean *rebind)
 {
    struct vmw_svga_winsys_surface *vsrf = vmw_svga_winsys_surface(srf);
-   pipe_mutex_lock(vsrf->mutex);
+   mtx_lock(&vsrf->mutex);
    if (--vsrf->mapcount == 0) {
       *rebind = vsrf->rebind;
       vsrf->rebind = FALSE;
@@ -173,7 +173,19 @@ vmw_svga_winsys_surface_unmap(struct svga_winsys_context *swc,
    } else {
       *rebind = FALSE;
    }
-   pipe_mutex_unlock(vsrf->mutex);
+   mtx_unlock(&vsrf->mutex);
+}
+
+void
+vmw_svga_winsys_surface_invalidate(struct svga_winsys_context *swc,
+                                   struct svga_winsys_surface *surf)
+{
+   /* this is a noop since surface invalidation is not needed for DMA path.
+    * DMA is enabled when guest-backed surface is not enabled or
+    * guest-backed dma is enabled.  Since guest-backed dma is enabled
+    * when guest-backed surface is enabled, that implies DMA is always enabled;
+    * hence, surface invalidation is not needed.
+    */
 }
 
 void
@@ -201,7 +213,7 @@ vmw_svga_winsys_surface_reference(struct vmw_svga_winsys_surface **pdst,
       assert(p_atomic_read(&dst->validated) == 0);
       dst->sid = SVGA3D_INVALID_ID;
 #endif
-      pipe_mutex_destroy(dst->mutex);
+      mtx_destroy(&dst->mutex);
       FREE(dst);
    }
 

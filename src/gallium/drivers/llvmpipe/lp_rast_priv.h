@@ -127,7 +127,7 @@ struct lp_rasterizer
    struct lp_rasterizer_task tasks[LP_MAX_THREADS];
 
    unsigned num_threads;
-   pipe_thread threads[LP_MAX_THREADS];
+   thrd_t threads[LP_MAX_THREADS];
 
    /** For synchronizing the rasterization threads */
    pipe_barrier barrier;

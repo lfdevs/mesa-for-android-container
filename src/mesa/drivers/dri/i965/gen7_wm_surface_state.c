@@ -115,10 +115,10 @@ gen7_check_surface_setup(uint32_t *surf, bool is_render_target)
    }
    if (is_multisampled) {
       switch (GET_FIELD(surf[0], BRW_SURFACE_FORMAT)) {
-      case BRW_SURFACEFORMAT_I24X8_UNORM:
-      case BRW_SURFACEFORMAT_L24X8_UNORM:
-      case BRW_SURFACEFORMAT_A24X8_UNORM:
-      case BRW_SURFACEFORMAT_R24_UNORM_X8_TYPELESS:
+      case ISL_FORMAT_I24X8_UNORM:
+      case ISL_FORMAT_L24X8_UNORM:
+      case ISL_FORMAT_A24X8_UNORM:
+      case ISL_FORMAT_R24_UNORM_X8_TYPELESS:
          assert(multisampled_surface_storage_format ==
                 GEN7_SURFACE_MSFMT_DEPTH_STENCIL);
       }
@@ -155,8 +155,7 @@ gen7_emit_null_surface_state(struct brw_context *brw,
     *     depth buffer’s corresponding state for all render target surfaces,
     *     including null.
     */
-   uint32_t *surf = brw_state_batch(brw, AUB_TRACE_SURFACE_STATE, 8 * 4, 32,
-                                    out_offset);
+   uint32_t *surf = brw_state_batch(brw, 8 * 4, 32, out_offset);
    memset(surf, 0, 8 * 4);
 
    /* From the Ivybridge PRM, Volume 4, Part 1, page 65,
@@ -164,7 +163,7 @@ gen7_emit_null_surface_state(struct brw_context *brw,
     * "If Surface Type is SURFTYPE_NULL, this field must be TRUE."
     */
    surf[0] = BRW_SURFACE_NULL << BRW_SURFACE_TYPE_SHIFT |
-             BRW_SURFACEFORMAT_B8G8R8A8_UNORM << BRW_SURFACE_FORMAT_SHIFT |
+             ISL_FORMAT_B8G8R8A8_UNORM << BRW_SURFACE_FORMAT_SHIFT |
              GEN7_SURFACE_TILING_Y;
 
    surf[2] = SET_FIELD(width - 1, GEN7_SURFACE_WIDTH) |

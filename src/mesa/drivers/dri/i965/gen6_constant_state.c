@@ -119,8 +119,7 @@ void
 gen6_upload_push_constants(struct brw_context *brw,
                            const struct gl_program *prog,
                            const struct brw_stage_prog_data *prog_data,
-                           struct brw_stage_state *stage_state,
-                           enum aub_state_struct_type type)
+                           struct brw_stage_state *stage_state)
 {
    struct gl_context *ctx = &brw->ctx;
 
@@ -137,7 +136,7 @@ gen6_upload_push_constants(struct brw_context *brw,
       gl_constant_value *param;
       int i;
 
-      param = brw_state_batch(brw, type,
+      param = brw_state_batch(brw,
                               prog_data->nr_params * sizeof(gl_constant_value),
                               32, &stage_state->push_const_offset);
 

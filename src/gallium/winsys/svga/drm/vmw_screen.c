@@ -109,6 +109,9 @@ vmw_winsys_create( int fd )
    if (util_hash_table_set(dev_hash, &vws->device, vws) != PIPE_OK)
       goto out_no_hash_insert;
 
+   cnd_init(&vws->cs_cond);
+   mtx_init(&vws->cs_mutex, mtx_plain);
+
    return vws;
 out_no_hash_insert:
 out_no_svga:
@@ -133,6 +136,8 @@ vmw_winsys_destroy(struct vmw_winsys_screen *vws)
       vws->fence_ops->destroy(vws->fence_ops);
       vmw_ioctl_cleanup(vws);
       close(vws->ioctl.drm_fd);
+      mtx_destroy(&vws->cs_mutex);
+      cnd_destroy(&vws->cs_cond);
       FREE(vws);
    }
 }

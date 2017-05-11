@@ -84,6 +84,9 @@ static void set_draw_viewport( struct svga_context *svga )
          adjx += SVGA_TRIANGLE_ADJ_X;
          adjy += SVGA_TRIANGLE_ADJ_Y;
          break;
+      default:
+         /* nothing */
+         break;
       }
    }
 

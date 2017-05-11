@@ -57,7 +57,10 @@ qir_opt_coalesce_ff_writes(struct vc4_compile *c)
                 if (mov_inst->src[0].file != QFILE_TEMP)
                         continue;
 
-                if (!(mov_inst->dst.file == QFILE_VPM || qir_is_tex(mov_inst)))
+                if (!(mov_inst->dst.file == QFILE_VPM ||
+                      mov_inst->dst.file == QFILE_TLB_COLOR_WRITE ||
+                      mov_inst->dst.file == QFILE_TLB_COLOR_WRITE_MS ||
+                      qir_is_tex(mov_inst)))
                         continue;
 
                 uint32_t temp = mov_inst->src[0].index;
@@ -80,6 +83,7 @@ qir_opt_coalesce_ff_writes(struct vc4_compile *c)
 
                 if (qir_has_side_effects(c, inst) ||
                     qir_has_side_effect_reads(c, inst) ||
+                    inst->op == QOP_TLB_COLOR_READ ||
                     inst->op == QOP_VARY_ADD_C) {
                         continue;
                 }

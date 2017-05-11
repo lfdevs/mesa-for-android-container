@@ -176,6 +176,16 @@ void st_validate_state( struct st_context *st, enum st_pipeline pipeline )
       pipeline_mask = ST_PIPELINE_RENDER_STATE_MASK;
       break;
 
+   case ST_PIPELINE_CLEAR:
+      st_manager_validate_framebuffers(st);
+      pipeline_mask = ST_PIPELINE_CLEAR_STATE_MASK;
+      break;
+
+   case ST_PIPELINE_UPDATE_FRAMEBUFFER:
+      st_manager_validate_framebuffers(st);
+      pipeline_mask = ST_PIPELINE_UPDATE_FB_STATE_MASK;
+      break;
+
    case ST_PIPELINE_COMPUTE: {
       struct st_compute_program *old_cp = st->cp;
       struct gl_program *new_cp = ctx->ComputeProgram._Current;

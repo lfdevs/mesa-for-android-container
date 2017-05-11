@@ -177,7 +177,7 @@ brw_emit_pipe_control_flush(struct brw_context *brw, uint32_t flags)
  */
 void
 brw_emit_pipe_control_write(struct brw_context *brw, uint32_t flags,
-                            drm_intel_bo *bo, uint32_t offset,
+                            struct brw_bo *bo, uint32_t offset,
                             uint32_t imm_lower, uint32_t imm_upper)
 {
    if (brw->gen >= 8) {
@@ -372,9 +372,9 @@ brw_init_pipe_control(struct brw_context *brw,
     * the gen6 workaround because it involves actually writing to
     * the buffer, and the kernel doesn't let us write to the batch.
     */
-   brw->workaround_bo = drm_intel_bo_alloc(brw->bufmgr,
-                                           "pipe_control workaround",
-                                           4096, 4096);
+   brw->workaround_bo = brw_bo_alloc(brw->bufmgr,
+                                     "pipe_control workaround",
+                                     4096, 4096);
    if (brw->workaround_bo == NULL)
       return -ENOMEM;
 
@@ -386,5 +386,5 @@ brw_init_pipe_control(struct brw_context *brw,
 void
 brw_fini_pipe_control(struct brw_context *brw)
 {
-   drm_intel_bo_unreference(brw->workaround_bo);
+   brw_bo_unreference(brw->workaround_bo);
 }

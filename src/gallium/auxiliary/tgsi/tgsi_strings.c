@@ -52,7 +52,6 @@ static const char *tgsi_file_names[] =
    "SAMP",
    "ADDR",
    "IMM",
-   "PRED",
    "SV",
    "IMAGE",
    "SVIEW",
@@ -100,6 +99,13 @@ const char *tgsi_semantic_names[TGSI_SEMANTIC_COUNT] =
    "BASEINSTANCE",
    "DRAWID",
    "WORK_DIM",
+   "SUBGROUP_SIZE",
+   "SUBGROUP_INVOCATION",
+   "SUBGROUP_EQ_MASK",
+   "SUBGROUP_GE_MASK",
+   "SUBGROUP_GT_MASK",
+   "SUBGROUP_LE_MASK",
+   "SUBGROUP_LT_MASK",
 };
 
 const char *tgsi_texture_names[TGSI_TEXTURE_COUNT] =
@@ -148,7 +154,8 @@ const char *tgsi_property_names[TGSI_PROPERTY_COUNT] =
    "NEXT_SHADER",
    "CS_FIXED_BLOCK_WIDTH",
    "CS_FIXED_BLOCK_HEIGHT",
-   "CS_FIXED_BLOCK_DEPTH"
+   "CS_FIXED_BLOCK_DEPTH",
+   "MUL_ZERO_WINS",
 };
 
 const char *tgsi_return_type_names[TGSI_RETURN_TYPE_COUNT] =
@@ -206,12 +213,14 @@ const char *tgsi_fs_coord_pixel_center_names[2] =
    "INTEGER"
 };
 
-const char *tgsi_immediate_type_names[4] =
+const char *tgsi_immediate_type_names[6] =
 {
    "FLT32",
    "UINT32",
    "INT32",
-   "FLT64"
+   "FLT64",
+   "UINT64",
+   "INT64",
 };
 
 const char *tgsi_memory_names[3] =

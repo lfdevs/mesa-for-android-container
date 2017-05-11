@@ -171,8 +171,7 @@ static void nine_ff_prune_ps(struct NineDevice9 *);
 static void nine_ureg_tgsi_dump(struct ureg_program *ureg, boolean override)
 {
     if (debug_get_bool_option("NINE_FF_DUMP", FALSE) || override) {
-        unsigned count;
-        const struct tgsi_token *toks = ureg_get_tokens(ureg, &count);
+        const struct tgsi_token *toks = ureg_get_tokens(ureg, NULL);
         tgsi_dump(toks, 0);
         ureg_free_tokens(toks);
     }
@@ -2063,14 +2062,14 @@ nine_ff_update(struct NineDevice9 *device)
 
         if (!device->driver_caps.user_cbufs) {
             context->pipe_data.cb_vs_ff.buffer_size = cb.buffer_size;
-            u_upload_data(device->constbuf_uploader,
+            u_upload_data(device->context.pipe->const_uploader,
                           0,
                           cb.buffer_size,
                           device->constbuf_alignment,
                           cb.user_buffer,
                           &context->pipe_data.cb_vs_ff.buffer_offset,
                           &context->pipe_data.cb_vs_ff.buffer);
-            u_upload_unmap(device->constbuf_uploader);
+            u_upload_unmap(device->context.pipe->const_uploader);
             context->pipe_data.cb_vs_ff.user_buffer = NULL;
         } else
             context->pipe_data.cb_vs_ff = cb;
@@ -2087,14 +2086,14 @@ nine_ff_update(struct NineDevice9 *device)
 
         if (!device->driver_caps.user_cbufs) {
             context->pipe_data.cb_ps_ff.buffer_size = cb.buffer_size;
-            u_upload_data(device->constbuf_uploader,
+            u_upload_data(device->context.pipe->const_uploader,
                           0,
                           cb.buffer_size,
                           device->constbuf_alignment,
                           cb.user_buffer,
                           &context->pipe_data.cb_ps_ff.buffer_offset,
                           &context->pipe_data.cb_ps_ff.buffer);
-            u_upload_unmap(device->constbuf_uploader);
+            u_upload_unmap(device->context.pipe->const_uploader);
             context->pipe_data.cb_ps_ff.user_buffer = NULL;
         } else
             context->pipe_data.cb_ps_ff = cb;

@@ -245,7 +245,8 @@ emit_arith_inst(struct st_translate *t,
                 struct ureg_dst *dst, struct ureg_src *args, unsigned argcount)
 {
    if (desc->TGSI_opcode == TGSI_OPCODE_NOP) {
-      return emit_special_inst(t, desc, dst, args, argcount);
+      emit_special_inst(t, desc, dst, args, argcount);
+      return;
    }
 
    ureg_insn(t->ureg, desc->TGSI_opcode, dst, 1, args, argcount);
@@ -618,7 +619,6 @@ struct tgsi_atifs_transform {
    const struct st_fp_variant_key *key;
    bool first_instruction_emitted;
    unsigned fog_factor_temp;
-   unsigned fog_clamp_imm;
 };
 
 static inline struct tgsi_atifs_transform *
@@ -675,10 +675,6 @@ transform_instr(struct tgsi_transform_context *tctx,
       /* add a new temp for the fog factor */
       ctx->fog_factor_temp = ctx->info.file_max[TGSI_FILE_TEMPORARY] + 1;
       tgsi_transform_temp_decl(tctx, ctx->fog_factor_temp);
-
-      /* add immediates for clamp */
-      ctx->fog_clamp_imm = ctx->info.immediate_count;
-      tgsi_transform_immediate_decl(tctx, 1.0f, 0.0f, 0.0f, 0.0f);
    }
 
 transform_inst:
@@ -709,7 +705,7 @@ transform_inst:
       }
 
       /* compute the 1 component fog factor f */
-      if (ctx->key->fog == 1) {
+      if (ctx->key->fog == FOG_LINEAR) {
          /* LINEAR formula: f = (end - z) / (end - start)
           * with optimized parameters:
           *    f = MAD(fogcoord, oparams.x, oparams.y)
@@ -725,7 +721,7 @@ transform_inst:
          SET_SRC(&inst, 1, TGSI_FILE_CONSTANT, MAX_NUM_FRAGMENT_CONSTANTS_ATI, X, X, X, X);
          SET_SRC(&inst, 2, TGSI_FILE_CONSTANT, MAX_NUM_FRAGMENT_CONSTANTS_ATI, Y, Y, Y, Y);
          tctx->emit_instruction(tctx, &inst);
-      } else if (ctx->key->fog == 2) {
+      } else if (ctx->key->fog == FOG_EXP) {
          /* EXP formula: f = exp(-dens * z)
           * with optimized parameters:
           *    f = MUL(fogcoord, oparams.z); f= EX2(-f)
@@ -751,7 +747,7 @@ transform_inst:
          SET_SRC(&inst, 0, TGSI_FILE_TEMPORARY, ctx->fog_factor_temp, X, Y, Z, W);
          inst.Src[0].Register.Negate = 1;
          tctx->emit_instruction(tctx, &inst);
-      } else if (ctx->key->fog == 3) {
+      } else if (ctx->key->fog == FOG_EXP2) {
          /* EXP2 formula: f = exp(-(dens * z)^2)
           * with optimized parameters:
           *    f = MUL(fogcoord, oparams.w); f=MUL(f, f); f= EX2(-f)
@@ -789,17 +785,16 @@ transform_inst:
          inst.Src[0].Register.Negate ^= 1;
          tctx->emit_instruction(tctx, &inst);
       }
-      /* f = CLAMP(f, 0.0, 1.0) */
+      /* f = saturate(f) */
       inst = tgsi_default_full_instruction();
-      inst.Instruction.Opcode = TGSI_OPCODE_CLAMP;
+      inst.Instruction.Opcode = TGSI_OPCODE_MOV;
       inst.Instruction.NumDstRegs = 1;
+      inst.Instruction.Saturate = 1;
       inst.Dst[0].Register.File  = TGSI_FILE_TEMPORARY;
       inst.Dst[0].Register.Index = ctx->fog_factor_temp;
       inst.Dst[0].Register.WriteMask = TGSI_WRITEMASK_XYZW;
-      inst.Instruction.NumSrcRegs = 3;
+      inst.Instruction.NumSrcRegs = 1;
       SET_SRC(&inst, 0, TGSI_FILE_TEMPORARY, ctx->fog_factor_temp, X, Y, Z, W);
-      SET_SRC(&inst, 1, TGSI_FILE_IMMEDIATE, ctx->fog_clamp_imm, Y, Y, Y, Y); // 0.0
-      SET_SRC(&inst, 2, TGSI_FILE_IMMEDIATE, ctx->fog_clamp_imm, X, X, X, X); // 1.0
       tctx->emit_instruction(tctx, &inst);
 
       /* REG0 = LRP(f, REG0, fogcolor) */

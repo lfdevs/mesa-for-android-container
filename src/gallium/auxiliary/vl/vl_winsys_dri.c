@@ -363,7 +363,6 @@ vl_dri2_screen_create(Display *display, int screen)
       goto free_query;
 
    driverType = XCB_DRI2_DRIVER_TYPE_DRI;
-#ifdef DRI2DriverPrimeShift
    {
       char *prime = getenv("DRI_PRIME");
       if (prime) {
@@ -375,7 +374,6 @@ vl_dri2_screen_create(Display *display, int screen)
                ((primeid & DRI2DriverPrimeMask) << DRI2DriverPrimeShift);
       }
    }
-#endif
 
    connect_cookie = xcb_dri2_connect_unchecked(scrn->conn,
                                                xcb_screen->root,

@@ -29,7 +29,8 @@
 
 #include "common/os.h"
 #include "jit_api.h"
-#include "state_llvm.h"
+#include "gen_state_llvm.h"
+#include "core/multisample.h"
 
 #include "gallivm/lp_bld_tgsi.h"
 #include "util/u_format.h"
@@ -39,10 +40,11 @@
 #include "util/u_helpers.h"
 #include "util/u_framebuffer.h"
 #include "util/u_viewport.h"
+#include "util/u_prim.h"
 
 #include "swr_state.h"
 #include "swr_context.h"
-#include "swr_context_llvm.h"
+#include "gen_swr_context_llvm.h"
 #include "swr_screen.h"
 #include "swr_resource.h"
 #include "swr_tex_sample.h"
@@ -416,10 +418,48 @@ swr_delete_fs_state(struct pipe_context *pipe, void *fs)
    swr_fence_work_delete_fs(screen->flush_fence, swr_fs);
 }
 
+static void *
+swr_create_gs_state(struct pipe_context *pipe,
+                    const struct pipe_shader_state *gs)
+{
+   struct swr_geometry_shader *swr_gs = new swr_geometry_shader;
+   if (!swr_gs)
+      return NULL;
+
+   swr_gs->pipe.tokens = tgsi_dup_tokens(gs->tokens);
+
+   lp_build_tgsi_info(gs->tokens, &swr_gs->info);
+
+   return swr_gs;
+}
+
+
+static void
+swr_bind_gs_state(struct pipe_context *pipe, void *gs)
+{
+   struct swr_context *ctx = swr_context(pipe);
+
+   if (ctx->gs == gs)
+      return;
+
+   ctx->gs = (swr_geometry_shader *)gs;
+   ctx->dirty |= SWR_NEW_GS;
+}
+
+static void
+swr_delete_gs_state(struct pipe_context *pipe, void *gs)
+{
+   struct swr_geometry_shader *swr_gs = (swr_geometry_shader *)gs;
+   FREE((void *)swr_gs->pipe.tokens);
+   struct swr_screen *screen = swr_screen(pipe->screen);
+
+   /* Defer deleton of fs state */
+   swr_fence_work_delete_gs(screen->flush_fence, swr_gs);
+}
 
 static void
 swr_set_constant_buffer(struct pipe_context *pipe,
-                        uint shader,
+                        enum pipe_shader_type shader,
                         uint index,
                         const struct pipe_constant_buffer *cb)
 {
@@ -432,10 +472,12 @@ swr_set_constant_buffer(struct pipe_context *pipe,
    /* note: reference counting */
    util_copy_constant_buffer(&ctx->constants[shader][index], cb);
 
-   if (shader == PIPE_SHADER_VERTEX || shader == PIPE_SHADER_GEOMETRY) {
+   if (shader == PIPE_SHADER_VERTEX) {
       ctx->dirty |= SWR_NEW_VSCONSTANTS;
    } else if (shader == PIPE_SHADER_FRAGMENT) {
       ctx->dirty |= SWR_NEW_FSCONSTANTS;
+   } else if (shader == PIPE_SHADER_GEOMETRY) {
+      ctx->dirty |= SWR_NEW_GSCONSTANTS;
    }
 
    if (cb && cb->user_buffer) {
@@ -451,7 +493,7 @@ swr_create_vertex_elements_state(struct pipe_context *pipe,
 {
    struct swr_vertex_element_state *velems;
    assert(num_elements <= PIPE_MAX_ATTRIBS);
-   velems = CALLOC_STRUCT(swr_vertex_element_state);
+   velems = new swr_vertex_element_state;
    if (velems) {
       velems->fsState.bVertexIDOffsetEnable = true;
       velems->fsState.numAttribs = num_elements;
@@ -521,8 +563,10 @@ swr_bind_vertex_elements_state(struct pipe_context *pipe, void *velems)
 static void
 swr_delete_vertex_elements_state(struct pipe_context *pipe, void *velems)
 {
+   struct swr_vertex_element_state *swr_velems =
+      (struct swr_vertex_element_state *) velems;
    /* XXX Need to destroy fetch shader? */
-   FREE(velems);
+   delete swr_velems;
 }
 
 
@@ -566,7 +610,7 @@ swr_set_polygon_stipple(struct pipe_context *pipe,
 {
    struct swr_context *ctx = swr_context(pipe);
 
-   ctx->poly_stipple = *stipple; /* struct copy */
+   ctx->poly_stipple.pipe = *stipple; /* struct copy */
    ctx->dirty |= SWR_NEW_STIPPLE;
 }
 
@@ -626,6 +670,9 @@ swr_set_framebuffer_state(struct pipe_context *pipe,
    if (changed) {
       util_copy_framebuffer_state(&ctx->framebuffer, fb);
 
+      /* 0 and 1 both indicate no msaa.  Core doesn't understand 0 samples */
+      ctx->framebuffer.samples = std::max((ubyte)1, ctx->framebuffer.samples);
+
       ctx->dirty |= SWR_NEW_FRAMEBUFFER;
    }
 }
@@ -641,6 +688,36 @@ swr_set_sample_mask(struct pipe_context *pipe, unsigned sample_mask)
       ctx->dirty |= SWR_NEW_RASTERIZER;
    }
 }
+
+/*
+ * MSAA fixed sample position table
+ * used by update_derived and get_sample_position
+ * (integer locations on a 16x16 grid)
+ */
+static const uint8_t swr_sample_positions[][2] =
+{ /* 1x*/ { 8, 8},
+  /* 2x*/ {12,12},{ 4, 4},
+  /* 4x*/ { 6, 2},{14, 6},{ 2,10},{10,14},
+  /* 8x*/ { 9, 5},{ 7,11},{13, 9},{ 5, 3},
+          { 3,13},{ 1, 7},{11,15},{15, 1},
+  /*16x*/ { 9, 9},{ 7, 5},{ 5,10},{12, 7},
+          { 3, 6},{10,13},{13,11},{11, 3},
+          { 6,14},{ 8, 1},{ 4, 2},{ 2,12},
+          { 0, 8},{15, 4},{14,15},{ 1, 0} };
+
+static void
+swr_get_sample_position(struct pipe_context *pipe,
+                        unsigned sample_count, unsigned sample_index,
+                        float *out_value)
+{
+   /* validate sample_count */
+   sample_count = GetNumSamples(GetSampleCount(sample_count));
+
+   const uint8_t *sample = swr_sample_positions[sample_count-1 + sample_index];
+   out_value[0] = sample[0] / 16.0f;
+   out_value[1] = sample[1] / 16.0f;
+}
+
 
 /*
  * Update resource in-use status
@@ -706,7 +783,7 @@ swr_update_resource_status(struct pipe_context *pipe,
 
 static void
 swr_update_texture_state(struct swr_context *ctx,
-                         unsigned shader_type,
+                         enum pipe_shader_type shader_type,
                          unsigned num_sampler_views,
                          swr_jit_texture *textures)
 {
@@ -760,7 +837,7 @@ swr_update_texture_state(struct swr_context *ctx,
 
 static void
 swr_update_sampler_state(struct swr_context *ctx,
-                         unsigned shader_type,
+                         enum pipe_shader_type shader_type,
                          unsigned num_samplers,
                          swr_jit_sampler *samplers)
 {
@@ -796,6 +873,11 @@ swr_update_constants(struct swr_context *ctx, enum pipe_shader_type shaderType)
       constant = pDC->constantFS;
       num_constants = pDC->num_constantsFS;
       scratch = &ctx->scratch->fs_constants;
+      break;
+   case PIPE_SHADER_GEOMETRY:
+      constant = pDC->constantGS;
+      num_constants = pDC->num_constantsGS;
+      scratch = &ctx->scratch->gs_constants;
       break;
    default:
       debug_printf("Unsupported shader type constants\n");
@@ -905,12 +987,56 @@ swr_user_vbuf_range(const struct pipe_draw_info *info,
    }
 }
 
+static void
+swr_update_poly_stipple(struct swr_context *ctx)
+{
+   struct swr_draw_context *pDC = &ctx->swrDC;
+
+   assert(sizeof(ctx->poly_stipple.pipe.stipple) == sizeof(pDC->polyStipple));
+   memcpy(pDC->polyStipple,
+          ctx->poly_stipple.pipe.stipple,
+          sizeof(ctx->poly_stipple.pipe.stipple));
+}
+
 void
 swr_update_derived(struct pipe_context *pipe,
                    const struct pipe_draw_info *p_draw_info)
 {
    struct swr_context *ctx = swr_context(pipe);
    struct swr_screen *screen = swr_screen(pipe->screen);
+
+   /* When called from swr_clear (p_draw_info = null), set any null
+    * state-objects to the dummy state objects to prevent nullptr dereference
+    * in validation below.
+    *
+    * Important that this remains static for zero initialization.  These
+    * aren't meant to be proper state objects, just empty structs. They will
+    * not be written to.
+    *
+    * Shaders can't be part of the union since they contain std::unordered_map
+    */
+   static struct {
+      union {
+         struct pipe_rasterizer_state rasterizer;
+         struct pipe_depth_stencil_alpha_state depth_stencil;
+         struct swr_blend_state blend;
+      } state;
+      struct swr_vertex_shader vs;
+      struct swr_fragment_shader fs;
+   } swr_dummy;
+
+   if (!p_draw_info) {
+      if (!ctx->rasterizer)
+         ctx->rasterizer = &swr_dummy.state.rasterizer;
+      if (!ctx->depth_stencil)
+         ctx->depth_stencil = &swr_dummy.state.depth_stencil;
+      if (!ctx->blend)
+         ctx->blend = &swr_dummy.state.blend;
+      if (!ctx->vs)
+         ctx->vs = &swr_dummy.vs;
+      if (!ctx->fs)
+         ctx->fs = &swr_dummy.fs;
+   }
 
    /* Update screen->pipe to current pipe context. */
    if (screen->pipe != pipe)
@@ -980,11 +1106,30 @@ swr_update_derived(struct pipe_context *pipe,
       rastState->pointSpriteTopOrigin =
          rasterizer->sprite_coord_mode == PIPE_SPRITE_COORD_UPPER_LEFT;
 
-      /* XXX TODO: Add multisample */
-      rastState->msaaRastEnable = false;
-      rastState->rastMode = SWR_MSAA_RASTMODE_OFF_PIXEL;
-      rastState->sampleCount = SWR_MULTISAMPLE_1X;
+      /* If SWR_MSAA_FORCE_ENABLE is set, turn msaa on */
+      if (screen->msaa_force_enable && !rasterizer->multisample) {
+         /* Force enable and use the value the surface was created with */
+         rasterizer->multisample = true;
+         fb->samples = swr_resource(fb->cbufs[0]->texture)->swr.numSamples;
+         fprintf(stderr,"msaa force enable: %d samples\n", fb->samples);
+      }
+
+      rastState->sampleCount = GetSampleCount(fb->samples);
       rastState->forcedSampleCount = false;
+      rastState->bIsCenterPattern = !rasterizer->multisample;
+      rastState->pixelLocation = SWR_PIXEL_LOCATION_CENTER;
+
+      /* Only initialize sample positions if msaa is enabled */
+      if (rasterizer->multisample) {
+         for (uint32_t i = 0; i < fb->samples; i++) {
+            const uint8_t *sample = swr_sample_positions[fb->samples-1 + i];
+            rastState->samplePositions.SetXi(i, sample[0] << 4);
+            rastState->samplePositions.SetYi(i, sample[1] << 4);
+            rastState->samplePositions.SetX (i, sample[0] / 16.0f);
+            rastState->samplePositions.SetY (i, sample[1] / 16.0f);
+         }
+         rastState->samplePositions.PrecalcSampleData(fb->samples);
+      }
 
       bool do_offset = false;
       switch (rasterizer->fill_front) {
@@ -1104,6 +1249,7 @@ swr_update_derived(struct pipe_context *pipe,
       SWR_VERTEX_BUFFER_STATE swrVertexBuffers[PIPE_MAX_ATTRIBS];
       for (UINT i = 0; i < ctx->num_vertex_buffers; i++) {
          uint32_t size, pitch, elems, partial_inbounds;
+         uint32_t min_vertex_index;
          const uint8_t *p_data;
          struct pipe_vertex_buffer *vb = &ctx->vertex_buffer[i];
 
@@ -1115,6 +1261,7 @@ swr_update_derived(struct pipe_context *pipe,
             size = vb->buffer->width0;
             elems = size / pitch;
             partial_inbounds = size % pitch;
+            min_vertex_index = 0;
 
             p_data = swr_resource_data(vb->buffer) + vb->buffer_offset;
          } else {
@@ -1126,6 +1273,7 @@ swr_update_derived(struct pipe_context *pipe,
             uint32_t base;
             swr_user_vbuf_range(&info, ctx->velems, vb, i, &elems, &base, &size);
             partial_inbounds = 0;
+            min_vertex_index = info.min_index;
 
             /* Copy only needed vertices to scratch space */
             size = AlignUp(size, 4);
@@ -1141,6 +1289,7 @@ swr_update_derived(struct pipe_context *pipe,
          swrVertexBuffers[i].pitch = pitch;
          swrVertexBuffers[i].pData = p_data;
          swrVertexBuffers[i].size = size;
+         swrVertexBuffers[i].minVertex = min_vertex_index;
          swrVertexBuffers[i].maxVertex = elems;
          swrVertexBuffers[i].partialInboundsSize = partial_inbounds;
       }
@@ -1195,6 +1344,47 @@ swr_update_derived(struct pipe_context *pipe,
       }
    }
 
+   /* GeometryShader */
+   if (ctx->dirty & (SWR_NEW_GS |
+                     SWR_NEW_VS |
+                     SWR_NEW_SAMPLER |
+                     SWR_NEW_SAMPLER_VIEW)) {
+      if (ctx->gs) {
+         swr_jit_gs_key key;
+         swr_generate_gs_key(key, ctx, ctx->gs);
+         auto search = ctx->gs->map.find(key);
+         PFN_GS_FUNC func;
+         if (search != ctx->gs->map.end()) {
+            func = search->second->shader;
+         } else {
+            func = swr_compile_gs(ctx, key);
+         }
+         SwrSetGsFunc(ctx->swrContext, func);
+
+         /* JIT sampler state */
+         if (ctx->dirty & SWR_NEW_SAMPLER) {
+            swr_update_sampler_state(ctx,
+                                     PIPE_SHADER_GEOMETRY,
+                                     key.nr_samplers,
+                                     ctx->swrDC.samplersGS);
+         }
+
+         /* JIT sampler view state */
+         if (ctx->dirty & (SWR_NEW_SAMPLER_VIEW | SWR_NEW_FRAMEBUFFER)) {
+            swr_update_texture_state(ctx,
+                                     PIPE_SHADER_GEOMETRY,
+                                     key.nr_sampler_views,
+                                     ctx->swrDC.texturesGS);
+         }
+
+         SwrSetGsState(ctx->swrContext, &ctx->gs->gsState);
+      } else {
+         SWR_GS_STATE state = { 0 };
+         SwrSetGsState(ctx->swrContext, &state);
+         SwrSetGsFunc(ctx->swrContext, NULL);
+      }
+   }
+
    /* VertexShader */
    if (ctx->dirty & (SWR_NEW_VS |
                      SWR_NEW_RASTERIZER | // for clip planes
@@ -1229,9 +1419,25 @@ swr_update_derived(struct pipe_context *pipe,
       }
    }
 
+   /* work around the fact that poly stipple also affects lines */
+   /* and points, since we rasterize them as triangles, too */
+   /* Has to be before fragment shader, since it sets SWR_NEW_FS */
+   if (p_draw_info) {
+      bool new_prim_is_poly = (u_reduced_prim(p_draw_info->mode) == PIPE_PRIM_TRIANGLES);
+      if (new_prim_is_poly != ctx->poly_stipple.prim_is_poly) {
+         ctx->dirty |= SWR_NEW_FS;
+         ctx->poly_stipple.prim_is_poly = new_prim_is_poly;
+      }
+   }
+
    /* FragmentShader */
-   if (ctx->dirty & (SWR_NEW_FS | SWR_NEW_SAMPLER | SWR_NEW_SAMPLER_VIEW
-                     | SWR_NEW_RASTERIZER | SWR_NEW_FRAMEBUFFER)) {
+   if (ctx->dirty & (SWR_NEW_FS |
+                     SWR_NEW_VS |
+                     SWR_NEW_GS |
+                     SWR_NEW_RASTERIZER |
+                     SWR_NEW_SAMPLER |
+                     SWR_NEW_SAMPLER_VIEW |
+                     SWR_NEW_FRAMEBUFFER)) {
       swr_jit_fs_key key;
       swr_generate_fs_key(key, ctx, ctx->fs);
       auto search = ctx->fs->map.find(key);
@@ -1247,9 +1453,9 @@ swr_update_derived(struct pipe_context *pipe,
       psState.inputCoverage = SWR_INPUT_COVERAGE_NORMAL;
       psState.writesODepth = ctx->fs->info.base.writes_z;
       psState.usesSourceDepth = ctx->fs->info.base.reads_z;
-      psState.shadingRate = SWR_SHADING_RATE_PIXEL; // XXX
+      psState.shadingRate = SWR_SHADING_RATE_PIXEL;
       psState.numRenderTargets = ctx->framebuffer.nr_cbufs;
-      psState.posOffset = SWR_PS_POSITION_SAMPLE_NONE; // XXX msaa
+      psState.posOffset = SWR_PS_POSITION_SAMPLE_NONE;
       uint32_t barycentricsMask = 0;
 #if 0
       // when we switch to mesa-master
@@ -1283,7 +1489,8 @@ swr_update_derived(struct pipe_context *pipe,
       SwrSetPixelShaderState(ctx->swrContext, &psState);
 
       /* JIT sampler state */
-      if (ctx->dirty & SWR_NEW_SAMPLER) {
+      if (ctx->dirty & (SWR_NEW_SAMPLER |
+                        SWR_NEW_FS)) {
          swr_update_sampler_state(ctx,
                                   PIPE_SHADER_FRAGMENT,
                                   key.nr_samplers,
@@ -1291,7 +1498,9 @@ swr_update_derived(struct pipe_context *pipe,
       }
 
       /* JIT sampler view state */
-      if (ctx->dirty & (SWR_NEW_SAMPLER_VIEW | SWR_NEW_FRAMEBUFFER)) {
+      if (ctx->dirty & (SWR_NEW_SAMPLER_VIEW |
+                        SWR_NEW_FRAMEBUFFER |
+                        SWR_NEW_FS)) {
          swr_update_texture_state(ctx,
                                   PIPE_SHADER_FRAGMENT,
                                   key.nr_sampler_views,
@@ -1308,6 +1517,11 @@ swr_update_derived(struct pipe_context *pipe,
    /* FragmentShader Constants */
    if (ctx->dirty & SWR_NEW_FSCONSTANTS) {
       swr_update_constants(ctx, PIPE_SHADER_FRAGMENT);
+   }
+
+   /* GeometryShader Constants */
+   if (ctx->dirty & SWR_NEW_GSCONSTANTS) {
+      swr_update_constants(ctx, PIPE_SHADER_GEOMETRY);
    }
 
    /* Depth/stencil state */
@@ -1371,6 +1585,7 @@ swr_update_derived(struct pipe_context *pipe,
 
    /* Blend State */
    if (ctx->dirty & (SWR_NEW_BLEND |
+                     SWR_NEW_RASTERIZER |
                      SWR_NEW_FRAMEBUFFER |
                      SWR_NEW_DEPTH_STENCIL_ALPHA)) {
       struct pipe_framebuffer_state *fb = &ctx->framebuffer;
@@ -1384,9 +1599,8 @@ swr_update_derived(struct pipe_context *pipe,
       blendState.alphaTestReference =
          *((uint32_t*)&ctx->depth_stencil->alpha.ref_value);
 
-      // XXX MSAA
-      blendState.sampleMask = 0;
-      blendState.sampleCount = SWR_MULTISAMPLE_1X;
+      blendState.sampleMask = ctx->sample_mask;
+      blendState.sampleCount = GetSampleCount(fb->samples);
 
       /* If there are no color buffers bound, disable writes on RT0
        * and skip loop */
@@ -1442,8 +1656,8 @@ swr_update_derived(struct pipe_context *pipe,
                 compileState.blendState.alphaBlendFunc);
             compileState.desc.alphaToCoverageEnable =
                ctx->blend->pipe.alpha_to_coverage;
-            compileState.desc.sampleMaskEnable = 0; // XXX
-            compileState.desc.numSamples = 1; // XXX
+            compileState.desc.sampleMaskEnable = (blendState.sampleMask != 0);
+            compileState.desc.numSamples = fb->samples;
 
             compileState.alphaTestFunction =
                swr_convert_depth_func(ctx->depth_stencil->alpha.func);
@@ -1470,7 +1684,7 @@ swr_update_derived(struct pipe_context *pipe,
    }
 
    if (ctx->dirty & SWR_NEW_STIPPLE) {
-      /* XXX What to do with this one??? SWR doesn't stipple */
+      swr_update_poly_stipple(ctx);
    }
 
    if (ctx->dirty & (SWR_NEW_VS | SWR_NEW_SO | SWR_NEW_RASTERIZER)) {
@@ -1496,7 +1710,7 @@ swr_update_derived(struct pipe_context *pipe,
       }
    }
 
-   if (ctx->dirty & SWR_NEW_CLIP) {
+   if (ctx->dirty & (SWR_NEW_CLIP | SWR_NEW_RASTERIZER | SWR_NEW_VS)) {
       // shader exporting clip distances overrides all user clip planes
       if (ctx->rasterizer->clip_plane_enable &&
           !ctx->vs->info.base.num_written_clipdistance)
@@ -1511,8 +1725,10 @@ swr_update_derived(struct pipe_context *pipe,
    // set up backend state
    SWR_BACKEND_STATE backendState = {0};
    backendState.numAttributes =
-      ctx->vs->info.base.num_outputs - 1 +
+      ((ctx->gs ? ctx->gs->info.base.num_outputs : ctx->vs->info.base.num_outputs) - 1) +
       (ctx->rasterizer->sprite_coord_enable ? 1 : 0);
+   backendState.numAttributes = std::min((size_t)backendState.numAttributes,
+                                         sizeof(backendState.numComponents));
    for (unsigned i = 0; i < backendState.numAttributes; i++)
       backendState.numComponents[i] = 4;
    backendState.constantInterpolationMask = ctx->fs->constantMask |
@@ -1619,6 +1835,10 @@ swr_state_init(struct pipe_context *pipe)
    pipe->bind_fs_state = swr_bind_fs_state;
    pipe->delete_fs_state = swr_delete_fs_state;
 
+   pipe->create_gs_state = swr_create_gs_state;
+   pipe->bind_gs_state = swr_bind_gs_state;
+   pipe->delete_gs_state = swr_delete_gs_state;
+
    pipe->set_constant_buffer = swr_set_constant_buffer;
 
    pipe->create_vertex_elements_state = swr_create_vertex_elements_state;
@@ -1639,6 +1859,7 @@ swr_state_init(struct pipe_context *pipe)
    pipe->set_stencil_ref = swr_set_stencil_ref;
 
    pipe->set_sample_mask = swr_set_sample_mask;
+   pipe->get_sample_position = swr_get_sample_position;
 
    pipe->create_stream_output_target = swr_create_so_target;
    pipe->stream_output_target_destroy = swr_destroy_so_target;

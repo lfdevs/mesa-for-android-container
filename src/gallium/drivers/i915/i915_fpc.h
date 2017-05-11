@@ -296,7 +296,6 @@ struct i915_full_instruction
 {
    struct tgsi_instruction             Instruction;
 /*
-   struct tgsi_instruction_predicate   Predicate;
    struct tgsi_instruction_label       Label;
 */
    struct tgsi_instruction_texture     Texture;

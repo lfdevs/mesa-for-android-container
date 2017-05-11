@@ -25,14 +25,19 @@
 
 struct swr_vertex_shader;
 struct swr_fragment_shader;
+struct swr_geometry_shader;
 struct swr_jit_fs_key;
 struct swr_jit_vs_key;
+struct swr_jit_gs_key;
 
 PFN_VERTEX_FUNC
 swr_compile_vs(struct swr_context *ctx, swr_jit_vs_key &key);
 
 PFN_PIXEL_KERNEL
 swr_compile_fs(struct swr_context *ctx, swr_jit_fs_key &key);
+
+PFN_GS_FUNC
+swr_compile_gs(struct swr_context *ctx, swr_jit_gs_key &key);
 
 void swr_generate_fs_key(struct swr_jit_fs_key &key,
                          struct swr_context *ctx,
@@ -41,6 +46,13 @@ void swr_generate_fs_key(struct swr_jit_fs_key &key,
 void swr_generate_vs_key(struct swr_jit_vs_key &key,
                          struct swr_context *ctx,
                          swr_vertex_shader *swr_vs);
+
+void swr_generate_fetch_key(struct swr_jit_fetch_key &key,
+                            struct swr_vertex_element_state *velems);
+
+void swr_generate_gs_key(struct swr_jit_gs_key &key,
+                         struct swr_context *ctx,
+                         swr_geometry_shader *swr_gs);
 
 struct swr_jit_sampler_key {
    unsigned nr_samplers;
@@ -54,10 +66,20 @@ struct swr_jit_fs_key : swr_jit_sampler_key {
    unsigned sprite_coord_enable;
    ubyte vs_output_semantic_name[PIPE_MAX_SHADER_OUTPUTS];
    ubyte vs_output_semantic_idx[PIPE_MAX_SHADER_OUTPUTS];
+   bool poly_stipple_enable;
 };
 
 struct swr_jit_vs_key : swr_jit_sampler_key {
    unsigned clip_plane_mask; // from rasterizer state & vs_info
+};
+
+struct swr_jit_fetch_key {
+   FETCH_COMPILE_STATE fsState;
+};
+
+struct swr_jit_gs_key : swr_jit_sampler_key {
+   ubyte vs_output_semantic_name[PIPE_MAX_SHADER_OUTPUTS];
+   ubyte vs_output_semantic_idx[PIPE_MAX_SHADER_OUTPUTS];
 };
 
 namespace std
@@ -75,7 +97,23 @@ template <> struct hash<swr_jit_vs_key> {
       return util_hash_crc32(&k, sizeof(k));
    }
 };
+
+template <> struct hash<swr_jit_fetch_key> {
+   std::size_t operator()(const swr_jit_fetch_key &k) const
+   {
+      return util_hash_crc32(&k, sizeof(k));
+   }
+};
+
+template <> struct hash<swr_jit_gs_key> {
+   std::size_t operator()(const swr_jit_gs_key &k) const
+   {
+      return util_hash_crc32(&k, sizeof(k));
+   }
+};
 };
 
 bool operator==(const swr_jit_fs_key &lhs, const swr_jit_fs_key &rhs);
 bool operator==(const swr_jit_vs_key &lhs, const swr_jit_vs_key &rhs);
+bool operator==(const swr_jit_fetch_key &lhs, const swr_jit_fetch_key &rhs);
+bool operator==(const swr_jit_gs_key &lhs, const swr_jit_gs_key &rhs);

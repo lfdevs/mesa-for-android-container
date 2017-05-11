@@ -64,6 +64,8 @@ copy_constant_to_storage(union gl_constant_value *storage,
          storage[i].f = val->value.f[i];
          break;
       case GLSL_TYPE_DOUBLE:
+      case GLSL_TYPE_UINT64:
+      case GLSL_TYPE_INT64:
          /* XXX need to check on big-endian */
          memcpy(&storage[i * 2].u, &val->value.d[i], sizeof(double));
          break;
@@ -130,15 +132,14 @@ set_opaque_binding(void *mem_ctx, gl_shader_program *prog,
         gl_linked_shader *shader = prog->_LinkedShaders[sh];
 
          if (shader) {
-            if (storage->type->base_type == GLSL_TYPE_SAMPLER &&
-                storage->opaque[sh].active) {
+            if (storage->type->is_sampler() && storage->opaque[sh].active) {
                for (unsigned i = 0; i < elements; i++) {
                   const unsigned index = storage->opaque[sh].index + i;
                   shader->Program->SamplerUnits[index] =
                      storage->storage[i].i;
                }
 
-            } else if (storage->type->base_type == GLSL_TYPE_IMAGE &&
+            } else if (storage->type->is_image() &&
                     storage->opaque[sh].active) {
                for (unsigned i = 0; i < elements; i++) {
                   const unsigned index = storage->opaque[sh].index + i;

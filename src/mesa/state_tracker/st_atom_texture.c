@@ -66,11 +66,8 @@ update_single_texture(struct st_context *st,
    samp = _mesa_get_samplerobj(ctx, texUnit);
 
    texObj = ctx->Texture.Unit[texUnit]._Current;
+   assert(texObj);
 
-   if (!texObj) {
-      texObj = _mesa_get_fallback_texture(ctx, TEXTURE_2D_INDEX);
-      samp = &texObj->Sampler;
-   }
    stObj = st_texture_object(texObj);
 
    retval = st_finalize_texture(ctx, st->pipe, texObj, 0);
@@ -90,6 +87,10 @@ update_single_texture(struct st_context *st,
       stObj->prev_glsl_version = glsl_version;
       stObj->prev_sRGBDecode = samp->sRGBDecode;
    }
+
+   if (texObj->TargetIndex == TEXTURE_EXTERNAL_INDEX &&
+       stObj->pt->screen->resource_changed)
+         stObj->pt->screen->resource_changed(stObj->pt->screen, stObj->pt);
 
    *sampler_view =
       st_get_texture_sampler_view_from_stobj(st, stObj, samp, glsl_version);

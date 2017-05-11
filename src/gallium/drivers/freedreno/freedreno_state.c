@@ -89,7 +89,8 @@ fd_set_sample_mask(struct pipe_context *pctx, unsigned sample_mask)
  * index>0 will be UBO's.. well, I'll worry about that later
  */
 static void
-fd_set_constant_buffer(struct pipe_context *pctx, uint shader, uint index,
+fd_set_constant_buffer(struct pipe_context *pctx,
+		enum pipe_shader_type shader, uint index,
 		const struct pipe_constant_buffer *cb)
 {
 	struct fd_context *ctx = fd_context(pctx);

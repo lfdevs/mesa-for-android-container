@@ -127,12 +127,12 @@ static void encode(struct rvce_encoder *enc)
 	RVCE_CS(0x00000000); // endOfSequence
 	RVCE_CS(0x00000000); // endOfStream
 	RVCE_READ(enc->handle, RADEON_DOMAIN_VRAM,
-		enc->luma->level[0].offset); // inputPictureLumaAddressHi/Lo
+		enc->luma->u.legacy.level[0].offset); // inputPictureLumaAddressHi/Lo
 	RVCE_READ(enc->handle, RADEON_DOMAIN_VRAM,
-		enc->chroma->level[0].offset); // inputPictureChromaAddressHi/Lo
-	RVCE_CS(align(enc->luma->level[0].nblk_y, 16)); // encInputFrameYPitch
-	RVCE_CS(enc->luma->level[0].nblk_x * enc->luma->bpe); // encInputPicLumaPitch
-	RVCE_CS(enc->chroma->level[0].nblk_x * enc->chroma->bpe); // encInputPicChromaPitch
+		enc->chroma->u.legacy.level[0].offset); // inputPictureChromaAddressHi/Lo
+	RVCE_CS(align(enc->luma->u.legacy.level[0].nblk_y, 16)); // encInputFrameYPitch
+	RVCE_CS(enc->luma->u.legacy.level[0].nblk_x * enc->luma->bpe); // encInputPicLumaPitch
+	RVCE_CS(enc->chroma->u.legacy.level[0].nblk_x * enc->chroma->bpe); // encInputPicChromaPitch
 	if (enc->dual_pipe)
 		RVCE_CS(0x00000000); // encInputPic(Addr|Array)Mode,encDisable(TwoPipeMode|MBOffloading)
 	else

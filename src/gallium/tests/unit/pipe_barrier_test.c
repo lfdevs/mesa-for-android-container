@@ -46,7 +46,7 @@
 
 static int verbosity = 0;
 
-static pipe_thread threads[NUM_THREADS];
+static thrd_t threads[NUM_THREADS];
 static pipe_barrier barrier;
 static int thread_ids[NUM_THREADS];
 
@@ -66,7 +66,8 @@ static volatile int proceeded = 0;
    }
 
 
-static PIPE_THREAD_ROUTINE(thread_function, thread_data)
+static int
+thread_function(void *thread_data)
 {
    int thread_id = *((int *) thread_data);
 
@@ -112,11 +113,11 @@ int main(int argc, char *argv[])
 
    for (i = 0; i < NUM_THREADS; i++) {
       thread_ids[i] = i;
-      threads[i] = pipe_thread_create(thread_function, (void *) &thread_ids[i]);
+      threads[i] = u_thread_create(thread_function, (void *) &thread_ids[i]);
    }
 
    for (i = 0; i < NUM_THREADS; i++ ) {
-      pipe_thread_wait(threads[i]);
+      thrd_join(threads[i], NULL);
    }
 
    CHECK(p_atomic_read(&proceeded) == NUM_THREADS);

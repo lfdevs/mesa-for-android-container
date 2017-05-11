@@ -36,10 +36,6 @@
 #include "intel_mipmap_tree.h"
 #include "intel_screen.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 struct intel_context;
 struct intel_mipmap_tree;
 struct intel_texture_image;
@@ -157,9 +153,5 @@ intel_renderbuffer_get_tile_offsets(struct intel_renderbuffer *irb,
 
 struct intel_region*
 intel_get_rb_region(struct gl_framebuffer *fb, GLuint attIndex);
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif /* INTEL_FBO_H */

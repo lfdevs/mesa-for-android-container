@@ -37,6 +37,7 @@
  * behavior we want for the results of texture lookups, but probably not for
  */
 
+#include "brw_program.h"
 #include "main/imports.h"
 #include "compiler/glsl/ir.h"
 #include "compiler/glsl/ir_rvalue_visitor.h"

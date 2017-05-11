@@ -127,19 +127,6 @@ _mesa_lookup_texture_err(struct gl_context *ctx, GLuint id, const char* func)
    return texObj;
 }
 
-void
-_mesa_begin_texture_lookups(struct gl_context *ctx)
-{
-   _mesa_HashLockMutex(ctx->Shared->TexObjects);
-}
-
-
-void
-_mesa_end_texture_lookups(struct gl_context *ctx)
-{
-   _mesa_HashUnlockMutex(ctx->Shared->TexObjects);
-}
-
 
 struct gl_texture_object *
 _mesa_lookup_texture_locked(struct gl_context *ctx, GLuint id)
@@ -932,7 +919,7 @@ _mesa_dirty_texobj(struct gl_context *ctx, struct gl_texture_object *texObj)
 {
    texObj->_BaseComplete = GL_FALSE;
    texObj->_MipmapComplete = GL_FALSE;
-   ctx->NewState |= _NEW_TEXTURE;
+   ctx->NewState |= _NEW_TEXTURE_OBJECT;
 }
 
 
@@ -1412,7 +1399,7 @@ unbind_textures_from_unit(struct gl_context *ctx, GLuint unit)
          ctx->Driver.BindTexture(ctx, unit, 0, texObj);
 
       texUnit->_BoundTextures &= ~(1 << index);
-      ctx->NewState |= _NEW_TEXTURE;
+      ctx->NewState |= _NEW_TEXTURE_OBJECT;
    }
 }
 
@@ -1482,7 +1469,7 @@ _mesa_DeleteTextures( GLsizei n, const GLuint *textures)
 
             _mesa_unlock_texture(ctx, delObj);
 
-            ctx->NewState |= _NEW_TEXTURE;
+            ctx->NewState |= _NEW_TEXTURE_OBJECT;
 
             /* The texture _name_ is now free for re-use.
              * Remove it from the hash table now.
@@ -1531,7 +1518,7 @@ _mesa_delete_nameless_texture(struct gl_context *ctx,
    }
    _mesa_unlock_texture(ctx, texObj);
 
-   ctx->NewState |= _NEW_TEXTURE;
+   ctx->NewState |= _NEW_TEXTURE_OBJECT;
 
    /* Unreference the texobj.  If refcount hits zero, the texture
     * will be deleted.
@@ -1619,9 +1606,10 @@ bind_texture(struct gl_context *ctx,
    assert(targetIndex < NUM_TEXTURE_TARGETS);
 
    /* Check if this texture is only used by this context and is already bound.
-    * If so, just return.
+    * If so, just return. For GL_OES_image_external, rebinding the texture
+    * always must invalidate cached resources.
     */
-   {
+   if (targetIndex != TEXTURE_EXTERNAL_INDEX) {
       bool early_out;
       mtx_lock(&ctx->Shared->Mutex);
       early_out = ((ctx->Shared->RefCount == 1)
@@ -1633,7 +1621,7 @@ bind_texture(struct gl_context *ctx,
    }
 
    /* flush before changing binding */
-   FLUSH_VERTICES(ctx, _NEW_TEXTURE);
+   FLUSH_VERTICES(ctx, _NEW_TEXTURE_OBJECT);
 
    /* If the refcount on the previously bound texture is decremented to
     * zero, it'll be deleted here.
@@ -1832,7 +1820,7 @@ _mesa_BindTextures(GLuint first, GLsizei count, const GLuint *textures)
        *       their parameters are valid and no other error occurs."
        */
 
-      _mesa_begin_texture_lookups(ctx);
+      _mesa_HashLockMutex(ctx->Shared->TexObjects);
 
       for (i = 0; i < count; i++) {
          if (textures[i] != 0) {
@@ -1864,7 +1852,7 @@ _mesa_BindTextures(GLuint first, GLsizei count, const GLuint *textures)
          }
       }
 
-      _mesa_end_texture_lookups(ctx);
+      _mesa_HashUnlockMutex(ctx->Shared->TexObjects);
    } else {
       /* Unbind all textures in the range <first> through <first>+<count>-1 */
       for (i = 0; i < count; i++)
@@ -1914,7 +1902,7 @@ _mesa_PrioritizeTextures( GLsizei n, const GLuint *texName,
       }
    }
 
-   ctx->NewState |= _NEW_TEXTURE;
+   ctx->NewState |= _NEW_TEXTURE_OBJECT;
 }
 
 
@@ -2018,7 +2006,7 @@ _mesa_lock_context_textures( struct gl_context *ctx )
    mtx_lock(&ctx->Shared->TexMutex);
 
    if (ctx->Shared->TextureStateStamp != ctx->TextureStateTimestamp) {
-      ctx->NewState |= _NEW_TEXTURE;
+      ctx->NewState |= _NEW_TEXTURE_OBJECT;
       ctx->TextureStateTimestamp = ctx->Shared->TextureStateStamp;
    }
 }

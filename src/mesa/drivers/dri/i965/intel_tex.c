@@ -333,7 +333,7 @@ intel_set_texture_storage_for_buffer_object(struct gl_context *ctx,
 
    assert(intel_texobj->mt == NULL);
 
-   drm_intel_bo *bo = intel_bufferobj_buffer(brw, intel_buffer_obj,
+   struct brw_bo *bo = intel_bufferobj_buffer(brw, intel_buffer_obj,
                                              buffer_offset,
                                              row_stride * image->Height);
    intel_texobj->mt =

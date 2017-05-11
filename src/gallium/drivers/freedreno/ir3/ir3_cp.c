@@ -111,35 +111,11 @@ static bool valid_flags(struct ir3_instruction *instr, unsigned n,
 	if (flags & IR3_REG_RELATIV)
 		return false;
 
-	/* clear flags that are 'ok' */
 	switch (opc_cat(instr->opc)) {
 	case 1:
 		valid_flags = IR3_REG_IMMED | IR3_REG_CONST | IR3_REG_RELATIV;
 		if (flags & ~valid_flags)
 			return false;
-		break;
-	case 5:
-		/* no flags allowed */
-		if (flags)
-			return false;
-		break;
-	case 6:
-		valid_flags = IR3_REG_IMMED;
-		if (flags & ~valid_flags)
-			return false;
-
-		if (flags & IR3_REG_IMMED) {
-			/* doesn't seem like we can have immediate src for store
-			 * instructions:
-			 *
-			 * TODO this restriction could also apply to load instructions,
-			 * but for load instructions this arg is the address (and not
-			 * really sure any good way to test a hard-coded immed addr src)
-			 */
-			if (is_store(instr) && (n == 1))
-				return false;
-		}
-
 		break;
 	case 2:
 		valid_flags = ir3_cat2_absneg(instr->opc) |
@@ -196,6 +172,29 @@ static bool valid_flags(struct ir3_instruction *instr, unsigned n,
 			return false;
 		if (flags & (IR3_REG_SABS | IR3_REG_SNEG))
 			return false;
+		break;
+	case 5:
+		/* no flags allowed */
+		if (flags)
+			return false;
+		break;
+	case 6:
+		valid_flags = IR3_REG_IMMED;
+		if (flags & ~valid_flags)
+			return false;
+
+		if (flags & IR3_REG_IMMED) {
+			/* doesn't seem like we can have immediate src for store
+			 * instructions:
+			 *
+			 * TODO this restriction could also apply to load instructions,
+			 * but for load instructions this arg is the address (and not
+			 * really sure any good way to test a hard-coded immed addr src)
+			 */
+			if (is_store(instr) && (n == 1))
+				return false;
+		}
+
 		break;
 	}
 
@@ -576,15 +575,15 @@ ir3_cp(struct ir3 *ir, struct ir3_shader_variant *so)
 		}
 	}
 
-	for (unsigned i = 0; i < ir->keeps_count; i++) {
-		instr_cp(&ctx, ir->keeps[i]);
-		ir->keeps[i] = eliminate_output_mov(ir->keeps[i]);
-	}
-
 	list_for_each_entry (struct ir3_block, block, &ir->block_list, node) {
 		if (block->condition) {
 			instr_cp(&ctx, block->condition);
 			block->condition = eliminate_output_mov(block->condition);
+		}
+
+		for (unsigned i = 0; i < block->keeps_count; i++) {
+			instr_cp(&ctx, block->keeps[i]);
+			block->keeps[i] = eliminate_output_mov(block->keeps[i]);
 		}
 	}
 }

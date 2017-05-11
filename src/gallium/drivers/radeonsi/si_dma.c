@@ -89,7 +89,8 @@ static void si_dma_clear_buffer(struct pipe_context *ctx,
 	unsigned i, ncopy, csize;
 	struct r600_resource *rdst = r600_resource(dst);
 
-	if (!cs || offset % 4 != 0 || size % 4 != 0) {
+	if (!cs || offset % 4 != 0 || size % 4 != 0 ||
+	    dst->flags & PIPE_RESOURCE_FLAG_SPARSE) {
 		ctx->clear_buffer(ctx, dst, offset, size, &clear_value, 4);
 		return;
 	}
@@ -135,14 +136,14 @@ static void si_dma_copy_tile(struct si_context *ctx,
 	struct radeon_winsys_cs *cs = ctx->b.dma.cs;
 	struct r600_texture *rsrc = (struct r600_texture*)src;
 	struct r600_texture *rdst = (struct r600_texture*)dst;
-	unsigned dst_mode = rdst->surface.level[dst_level].mode;
+	unsigned dst_mode = rdst->surface.u.legacy.level[dst_level].mode;
 	bool detile = dst_mode == RADEON_SURF_MODE_LINEAR_ALIGNED;
 	struct r600_texture *rlinear = detile ? rdst : rsrc;
 	struct r600_texture *rtiled = detile ? rsrc : rdst;
 	unsigned linear_lvl = detile ? dst_level : src_level;
 	unsigned tiled_lvl = detile ? src_level : dst_level;
 	struct radeon_info *info = &ctx->screen->b.info;
-	unsigned index = rtiled->surface.tiling_index[tiled_lvl];
+	unsigned index = rtiled->surface.u.legacy.tiling_index[tiled_lvl];
 	unsigned tile_mode = info->si_tile_mode_array[index];
 	unsigned array_mode, lbpp, pitch_tile_max, slice_tile_max, size;
 	unsigned ncopy, height, cheight, i;
@@ -151,7 +152,7 @@ static void si_dma_copy_tile(struct si_context *ctx,
 	uint64_t base, addr;
 	unsigned pipe_config;
 
-	assert(dst_mode != rsrc->surface.level[src_level].mode);
+	assert(dst_mode != rsrc->surface.u.legacy.level[src_level].mode);
 
 	sub_cmd = SI_DMA_COPY_TILED;
 	lbpp = util_logbase2(bpp);
@@ -167,23 +168,23 @@ static void si_dma_copy_tile(struct si_context *ctx,
 	assert(!util_format_is_depth_and_stencil(rtiled->resource.b.b.format));
 
 	array_mode = G_009910_ARRAY_MODE(tile_mode);
-	slice_tile_max = (rtiled->surface.level[tiled_lvl].nblk_x *
-			  rtiled->surface.level[tiled_lvl].nblk_y) / (8*8) - 1;
+	slice_tile_max = (rtiled->surface.u.legacy.level[tiled_lvl].nblk_x *
+			  rtiled->surface.u.legacy.level[tiled_lvl].nblk_y) / (8*8) - 1;
 	/* linear height must be the same as the slice tile max height, it's ok even
 	 * if the linear destination/source have smaller heigh as the size of the
 	 * dma packet will be using the copy_height which is always smaller or equal
 	 * to the linear height
 	 */
-	height = rtiled->surface.level[tiled_lvl].nblk_y;
-	base = rtiled->surface.level[tiled_lvl].offset;
-	addr = rlinear->surface.level[linear_lvl].offset;
-	addr += rlinear->surface.level[linear_lvl].slice_size * linear_z;
+	height = rtiled->surface.u.legacy.level[tiled_lvl].nblk_y;
+	base = rtiled->surface.u.legacy.level[tiled_lvl].offset;
+	addr = rlinear->surface.u.legacy.level[linear_lvl].offset;
+	addr += rlinear->surface.u.legacy.level[linear_lvl].slice_size * linear_z;
 	addr += linear_y * pitch + linear_x * bpp;
 	bank_h = G_009910_BANK_HEIGHT(tile_mode);
 	bank_w = G_009910_BANK_WIDTH(tile_mode);
 	mt_aspect = G_009910_MACRO_TILE_ASPECT(tile_mode);
 	/* Non-depth modes don't have TILE_SPLIT set. */
-	tile_split = util_logbase2(rtiled->surface.tile_split >> 6);
+	tile_split = util_logbase2(rtiled->surface.u.legacy.tile_split >> 6);
 	nbanks = G_009910_NUM_BANKS(tile_mode);
 	base += rtiled->resource.gpu_address;
 	addr += rlinear->resource.gpu_address;
@@ -233,7 +234,9 @@ static void si_dma_copy(struct pipe_context *ctx,
 	unsigned src_x, src_y;
 	unsigned dst_x = dstx, dst_y = dsty, dst_z = dstz;
 
-	if (sctx->b.dma.cs == NULL) {
+	if (sctx->b.dma.cs == NULL ||
+	    src->flags & PIPE_RESOURCE_FLAG_SPARSE ||
+	    dst->flags & PIPE_RESOURCE_FLAG_SPARSE) {
 		goto fallback;
 	}
 
@@ -268,20 +271,20 @@ static void si_dma_copy(struct pipe_context *ctx,
 	dst_y = util_format_get_nblocksy(src->format, dst_y);
 
 	bpp = rdst->surface.bpe;
-	dst_pitch = rdst->surface.level[dst_level].nblk_x * rdst->surface.bpe;
-	src_pitch = rsrc->surface.level[src_level].nblk_x * rsrc->surface.bpe;
+	dst_pitch = rdst->surface.u.legacy.level[dst_level].nblk_x * rdst->surface.bpe;
+	src_pitch = rsrc->surface.u.legacy.level[src_level].nblk_x * rsrc->surface.bpe;
 	src_w = u_minify(rsrc->resource.b.b.width0, src_level);
 	dst_w = u_minify(rdst->resource.b.b.width0, dst_level);
 
-	dst_mode = rdst->surface.level[dst_level].mode;
-	src_mode = rsrc->surface.level[src_level].mode;
+	dst_mode = rdst->surface.u.legacy.level[dst_level].mode;
+	src_mode = rsrc->surface.u.legacy.level[src_level].mode;
 
 	if (src_pitch != dst_pitch || src_box->x || dst_x || src_w != dst_w ||
 	    src_box->width != src_w ||
 	    src_box->height != u_minify(rsrc->resource.b.b.height0, src_level) ||
 	    src_box->height != u_minify(rdst->resource.b.b.height0, dst_level) ||
-	    rsrc->surface.level[src_level].nblk_y !=
-	    rdst->surface.level[dst_level].nblk_y) {
+	    rsrc->surface.u.legacy.level[src_level].nblk_y !=
+	    rdst->surface.u.legacy.level[dst_level].nblk_y) {
 		/* FIXME si can do partial blit */
 		goto fallback;
 	}
@@ -300,14 +303,14 @@ static void si_dma_copy(struct pipe_context *ctx,
 		 *   dst_x/y == 0
 		 *   dst_pitch == src_pitch
 		 */
-		src_offset= rsrc->surface.level[src_level].offset;
-		src_offset += rsrc->surface.level[src_level].slice_size * src_box->z;
+		src_offset= rsrc->surface.u.legacy.level[src_level].offset;
+		src_offset += rsrc->surface.u.legacy.level[src_level].slice_size * src_box->z;
 		src_offset += src_y * src_pitch + src_x * bpp;
-		dst_offset = rdst->surface.level[dst_level].offset;
-		dst_offset += rdst->surface.level[dst_level].slice_size * dst_z;
+		dst_offset = rdst->surface.u.legacy.level[dst_level].offset;
+		dst_offset += rdst->surface.u.legacy.level[dst_level].slice_size * dst_z;
 		dst_offset += dst_y * dst_pitch + dst_x * bpp;
 		si_dma_copy_buffer(sctx, dst, src, dst_offset, src_offset,
-				   rsrc->surface.level[src_level].slice_size);
+				   rsrc->surface.u.legacy.level[src_level].slice_size);
 	} else {
 		si_dma_copy_tile(sctx, dst, dst_level, dst_x, dst_y, dst_z,
 				 src, src_level, src_x, src_y, src_box->z,

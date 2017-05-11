@@ -48,7 +48,7 @@ struct virgl_vtest_winsys {
    struct list_head delayed;
    int num_delayed;
    unsigned usecs;
-   pipe_mutex mutex;
+   mtx_t mutex;
 };
 
 struct virgl_hw_res {

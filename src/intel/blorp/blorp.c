@@ -26,8 +26,8 @@
 #include "program/prog_instruction.h"
 
 #include "blorp_priv.h"
-#include "brw_compiler.h"
-#include "brw_nir.h"
+#include "compiler/brw_compiler.h"
+#include "compiler/brw_nir.h"
 
 void
 blorp_init(struct blorp_context *blorp, void *driver_ctx,

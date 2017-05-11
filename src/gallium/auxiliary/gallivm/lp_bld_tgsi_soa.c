@@ -753,30 +753,21 @@ static void lp_exec_default(struct lp_exec_mask *mask,
  */
 static void lp_exec_mask_store(struct lp_exec_mask *mask,
                                struct lp_build_context *bld_store,
-                               LLVMValueRef pred,
                                LLVMValueRef val,
                                LLVMValueRef dst_ptr)
 {
    LLVMBuilderRef builder = mask->bld->gallivm->builder;
+   LLVMValueRef exec_mask = mask->has_mask ? mask->exec_mask : NULL;
 
    assert(lp_check_value(bld_store->type, val));
    assert(LLVMGetTypeKind(LLVMTypeOf(dst_ptr)) == LLVMPointerTypeKind);
    assert(LLVMGetElementType(LLVMTypeOf(dst_ptr)) == LLVMTypeOf(val));
 
-   /* Mix the predicate and execution mask */
-   if (mask->has_mask) {
-      if (pred) {
-         pred = LLVMBuildAnd(builder, pred, mask->exec_mask, "");
-      } else {
-         pred = mask->exec_mask;
-      }
-   }
-
-   if (pred) {
+   if (exec_mask) {
       LLVMValueRef res, dst;
 
       dst = LLVMBuildLoad(builder, dst_ptr, "");
-      res = lp_build_select(bld_store, pred, val, dst);
+      res = lp_build_select(bld_store, exec_mask, val, dst);
       LLVMBuildStore(builder, res, dst_ptr);
    } else
       LLVMBuildStore(builder, val, dst_ptr);
@@ -1036,22 +1027,12 @@ emit_mask_scatter(struct lp_build_tgsi_soa_context *bld,
                   LLVMValueRef base_ptr,
                   LLVMValueRef indexes,
                   LLVMValueRef values,
-                  struct lp_exec_mask *mask,
-                  LLVMValueRef pred)
+                  struct lp_exec_mask *mask)
 {
    struct gallivm_state *gallivm = bld->bld_base.base.gallivm;
    LLVMBuilderRef builder = gallivm->builder;
    unsigned i;
-
-   /* Mix the predicate and execution mask */
-   if (mask->has_mask) {
-      if (pred) {
-         pred = LLVMBuildAnd(builder, pred, mask->exec_mask, "");
-      }
-      else {
-         pred = mask->exec_mask;
-      }
-   }
+   LLVMValueRef pred = mask->has_mask ? mask->exec_mask : NULL;
 
    /*
     * Loop over elements of index_vec, store scalar value.
@@ -1733,74 +1714,6 @@ emit_fetch_deriv(
       *ddy = lp_build_ddy(&bld->bld_base.base, src);
 }
 
-
-/**
- * Predicate.
- */
-static void
-emit_fetch_predicate(
-   struct lp_build_tgsi_soa_context *bld,
-   const struct tgsi_full_instruction *inst,
-   LLVMValueRef *pred)
-{
-   LLVMBuilderRef builder = bld->bld_base.base.gallivm->builder;
-   unsigned index;
-   unsigned char swizzles[4];
-   LLVMValueRef unswizzled[4] = {NULL, NULL, NULL, NULL};
-   LLVMValueRef value;
-   unsigned chan;
-
-   if (!inst->Instruction.Predicate) {
-      TGSI_FOR_EACH_CHANNEL( chan ) {
-         pred[chan] = NULL;
-      }
-      return;
-   }
-
-   swizzles[0] = inst->Predicate.SwizzleX;
-   swizzles[1] = inst->Predicate.SwizzleY;
-   swizzles[2] = inst->Predicate.SwizzleZ;
-   swizzles[3] = inst->Predicate.SwizzleW;
-
-   index = inst->Predicate.Index;
-   assert(index < LP_MAX_TGSI_PREDS);
-
-   TGSI_FOR_EACH_CHANNEL( chan ) {
-      unsigned swizzle = swizzles[chan];
-
-      /*
-       * Only fetch the predicate register channels that are actually listed
-       * in the swizzles
-       */
-      if (!unswizzled[swizzle]) {
-         value = LLVMBuildLoad(builder,
-                               bld->preds[index][swizzle], "");
-
-         /*
-          * Convert the value to an integer mask.
-          *
-          * TODO: Short-circuit this comparison -- a D3D setp_xx instructions
-          * is needlessly causing two comparisons due to storing the intermediate
-          * result as float vector instead of an integer mask vector.
-          */
-         value = lp_build_compare(bld->bld_base.base.gallivm,
-                                  bld->bld_base.base.type,
-                                  PIPE_FUNC_NOTEQUAL,
-                                  value,
-                                  bld->bld_base.base.zero);
-         if (inst->Predicate.Negate) {
-            value = LLVMBuildNot(builder, value, "");
-         }
-
-         unswizzled[swizzle] = value;
-      } else {
-         value = unswizzled[swizzle];
-      }
-
-      pred[chan] = value;
-   }
-}
-
 /**
  * store an array of 8 64-bit into two arrays of 8 floats
  * i.e.
@@ -1813,7 +1726,6 @@ emit_fetch_predicate(
 static void
 emit_store_64bit_chan(struct lp_build_tgsi_context *bld_base,
                       LLVMValueRef chan_ptr, LLVMValueRef chan_ptr2,
-                      LLVMValueRef pred,
                       LLVMValueRef value)
 {
    struct lp_build_tgsi_soa_context * bld = lp_soa_context(bld_base);
@@ -1841,8 +1753,8 @@ emit_store_64bit_chan(struct lp_build_tgsi_context *bld_base,
                                                   bld_base->base.type.length),
                                   "");
 
-   lp_exec_mask_store(&bld->exec_mask, float_bld, pred, temp, chan_ptr);
-   lp_exec_mask_store(&bld->exec_mask, float_bld, pred, temp2, chan_ptr2);
+   lp_exec_mask_store(&bld->exec_mask, float_bld, temp, chan_ptr);
+   lp_exec_mask_store(&bld->exec_mask, float_bld, temp2, chan_ptr2);
 }
 
 /**
@@ -1854,7 +1766,6 @@ emit_store_chan(
    const struct tgsi_full_instruction *inst,
    unsigned index,
    unsigned chan_index,
-   LLVMValueRef pred,
    LLVMValueRef value)
 {
    struct lp_build_tgsi_soa_context * bld = lp_soa_context(bld_base);
@@ -1917,7 +1828,7 @@ emit_store_chan(
 
          /* Scatter store values into output registers */
          emit_mask_scatter(bld, outputs_array, index_vec, value,
-                           &bld->exec_mask, pred);
+                           &bld->exec_mask);
       }
       else {
          LLVMValueRef out_ptr = lp_get_output_ptr(bld, reg->Register.Index,
@@ -1927,9 +1838,9 @@ emit_store_chan(
             LLVMValueRef out_ptr2 = lp_get_output_ptr(bld, reg->Register.Index,
                                                       chan_index + 1);
             emit_store_64bit_chan(bld_base, out_ptr, out_ptr2,
-                                  pred, value);
+                                  value);
          } else
-            lp_exec_mask_store(&bld->exec_mask, float_bld, pred, value, out_ptr);
+            lp_exec_mask_store(&bld->exec_mask, float_bld, value, out_ptr);
       }
       break;
 
@@ -1955,7 +1866,7 @@ emit_store_chan(
 
          /* Scatter store values into temp registers */
          emit_mask_scatter(bld, temps_array, index_vec, value,
-                           &bld->exec_mask, pred);
+                           &bld->exec_mask);
       }
       else {
          LLVMValueRef temp_ptr;
@@ -1966,10 +1877,10 @@ emit_store_chan(
                                                          reg->Register.Index,
                                                          chan_index + 1);
             emit_store_64bit_chan(bld_base, temp_ptr, temp_ptr2,
-                                  pred, value);
+                                  value);
          }
          else
-            lp_exec_mask_store(&bld->exec_mask, float_bld, pred, value, temp_ptr);
+            lp_exec_mask_store(&bld->exec_mask, float_bld, value, temp_ptr);
       }
       break;
 
@@ -1977,15 +1888,8 @@ emit_store_chan(
       assert(dtype == TGSI_TYPE_SIGNED);
       assert(LLVMTypeOf(value) == int_bld->vec_type);
       value = LLVMBuildBitCast(builder, value, int_bld->vec_type, "");
-      lp_exec_mask_store(&bld->exec_mask, int_bld, pred, value,
+      lp_exec_mask_store(&bld->exec_mask, int_bld, value,
                          bld->addr[reg->Register.Index][chan_index]);
-      break;
-
-   case TGSI_FILE_PREDICATE:
-      assert(LLVMTypeOf(value) == float_bld->vec_type);
-      value = LLVMBuildBitCast(builder, value, float_bld->vec_type, "");
-      lp_exec_mask_store(&bld->exec_mask, float_bld, pred, value,
-                         bld->preds[reg->Register.Index][chan_index]);
       break;
 
    default:
@@ -2037,18 +1941,14 @@ emit_store(
 
 {
    unsigned chan_index;
-   struct lp_build_tgsi_soa_context * bld = lp_soa_context(bld_base);
    enum tgsi_opcode_type dtype = tgsi_opcode_infer_dst_type(inst->Instruction.Opcode);
+
    if(info->num_dst) {
-      LLVMValueRef pred[TGSI_NUM_CHANNELS];
-
-      emit_fetch_predicate( bld, inst, pred );
-
       TGSI_FOR_EACH_DST0_ENABLED_CHANNEL( inst, chan_index ) {
 
          if (tgsi_type_is_64bit(dtype) && (chan_index == 1 || chan_index == 3))
              continue;
-         emit_store_chan(bld_base, inst, 0, chan_index, pred[chan_index], dst[chan_index]);
+         emit_store_chan(bld_base, inst, 0, chan_index, dst[chan_index]);
       }
    }
 }
@@ -2995,15 +2895,6 @@ lp_emit_declaration_soa(
          assert(idx < LP_MAX_TGSI_ADDRS);
          for (i = 0; i < TGSI_NUM_CHANNELS; i++)
             bld->addr[idx][i] = lp_build_alloca(gallivm, bld_base->base.int_vec_type, "addr");
-      }
-      break;
-
-   case TGSI_FILE_PREDICATE:
-      assert(last < LP_MAX_TGSI_PREDS);
-      for (idx = first; idx <= last; ++idx) {
-         for (i = 0; i < TGSI_NUM_CHANNELS; i++)
-            bld->preds[idx][i] = lp_build_alloca(gallivm, vec_type,
-                                                 "predicate");
       }
       break;
 

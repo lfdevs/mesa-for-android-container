@@ -85,8 +85,7 @@ brw_upload_wm_unit(struct brw_context *brw)
       brw_wm_prog_data(brw->wm.base.prog_data);
    struct brw_wm_unit_state *wm;
 
-   wm = brw_state_batch(brw, AUB_TRACE_WM_STATE,
-			sizeof(*wm), 32, &brw->wm.base.state_offset);
+   wm = brw_state_batch(brw, sizeof(*wm), 32, &brw->wm.base.state_offset);
    memset(wm, 0, sizeof(*wm));
 
    if (prog_data->dispatch_8 && prog_data->dispatch_16) {
@@ -223,23 +222,23 @@ brw_upload_wm_unit(struct brw_context *brw)
 
    /* Emit scratch space relocation */
    if (prog_data->base.total_scratch != 0) {
-      drm_intel_bo_emit_reloc(brw->batch.bo,
-			      brw->wm.base.state_offset +
-			      offsetof(struct brw_wm_unit_state, thread2),
-			      brw->wm.base.scratch_bo,
-			      wm->thread2.per_thread_scratch_space,
-			      I915_GEM_DOMAIN_RENDER, I915_GEM_DOMAIN_RENDER);
+      brw_emit_reloc(&brw->batch,
+                     brw->wm.base.state_offset +
+                     offsetof(struct brw_wm_unit_state, thread2),
+                     brw->wm.base.scratch_bo,
+                     wm->thread2.per_thread_scratch_space,
+                     I915_GEM_DOMAIN_RENDER, I915_GEM_DOMAIN_RENDER);
    }
 
    /* Emit sampler state relocation */
    if (brw->wm.base.sampler_count != 0) {
-      drm_intel_bo_emit_reloc(brw->batch.bo,
-			      brw->wm.base.state_offset +
-			      offsetof(struct brw_wm_unit_state, wm4),
-			      brw->batch.bo, (brw->wm.base.sampler_offset |
-                                              wm->wm4.stats_enable |
-                                              (wm->wm4.sampler_count << 2)),
-			      I915_GEM_DOMAIN_INSTRUCTION, 0);
+      brw_emit_reloc(&brw->batch,
+                     brw->wm.base.state_offset +
+                     offsetof(struct brw_wm_unit_state, wm4),
+                     brw->batch.bo,
+                     brw->wm.base.sampler_offset | wm->wm4.stats_enable |
+                     (wm->wm4.sampler_count << 2),
+                     I915_GEM_DOMAIN_INSTRUCTION, 0);
    }
 
    brw->ctx.NewDriverState |= BRW_NEW_GEN4_UNIT_STATE;

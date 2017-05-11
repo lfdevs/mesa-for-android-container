@@ -57,7 +57,7 @@ xa_context_create(struct xa_tracker *xa)
 
     ctx->xa = xa;
     ctx->pipe = xa->screen->context_create(xa->screen, NULL, 0);
-    ctx->cso = cso_create_context(ctx->pipe);
+    ctx->cso = cso_create_context(ctx->pipe, 0);
     ctx->shaders = xa_shaders_create(ctx);
     renderer_init_state(ctx);
 

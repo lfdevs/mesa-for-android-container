@@ -3462,7 +3462,7 @@ lp_build_size_query_soa(struct gallivm_state *gallivm,
                         struct lp_sampler_dynamic_state *dynamic_state,
                         const struct lp_sampler_size_query_params *params)
 {
-   LLVMValueRef lod, level, size;
+   LLVMValueRef lod, level = 0, size;
    LLVMValueRef first_level = NULL;
    int dims, i;
    boolean has_array;

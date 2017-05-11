@@ -63,7 +63,7 @@ vlVdpVideoMixerCreate(VdpDevice device,
 
    DeviceReference(&vmixer->device, dev);
 
-   pipe_mutex_lock(dev->mutex);
+   mtx_lock(&dev->mutex);
 
    if (!vl_compositor_init_state(&vmixer->cstate, dev->context)) {
       ret = VDP_STATUS_ERROR;
@@ -162,7 +162,7 @@ vlVdpVideoMixerCreate(VdpDevice device,
    }
    vmixer->luma_key.luma_min = 1.0f;
    vmixer->luma_key.luma_max = 0.0f;
-   pipe_mutex_unlock(dev->mutex);
+   mtx_unlock(&dev->mutex);
 
    return VDP_STATUS_OK;
 
@@ -173,7 +173,7 @@ no_handle:
 err_csc_matrix:
    vl_compositor_cleanup_state(&vmixer->cstate);
 no_compositor_state:
-   pipe_mutex_unlock(dev->mutex);
+   mtx_unlock(&dev->mutex);
    DeviceReference(&vmixer->device, NULL);
    FREE(vmixer);
    return ret;
@@ -191,7 +191,7 @@ vlVdpVideoMixerDestroy(VdpVideoMixer mixer)
    if (!vmixer)
       return VDP_STATUS_INVALID_HANDLE;
 
-   pipe_mutex_lock(vmixer->device->mutex);
+   mtx_lock(&vmixer->device->mutex);
 
    vlRemoveDataHTAB(mixer);
 
@@ -216,7 +216,7 @@ vlVdpVideoMixerDestroy(VdpVideoMixer mixer)
       vl_bicubic_filter_cleanup(vmixer->bicubic.filter);
       FREE(vmixer->bicubic.filter);
    }
-   pipe_mutex_unlock(vmixer->device->mutex);
+   mtx_unlock(&vmixer->device->mutex);
    DeviceReference(&vmixer->device, NULL);
 
    FREE(vmixer);
@@ -290,7 +290,7 @@ VdpStatus vlVdpVideoMixerRender(VdpVideoMixer mixer,
          return VDP_STATUS_INVALID_HANDLE;
    }
 
-   pipe_mutex_lock(vmixer->device->mutex);
+   mtx_lock(&vmixer->device->mutex);
 
    vl_compositor_clear_layers(&vmixer->cstate);
 
@@ -312,7 +312,7 @@ VdpStatus vlVdpVideoMixerRender(VdpVideoMixer mixer,
       break;
 
    default:
-      pipe_mutex_unlock(vmixer->device->mutex);
+      mtx_unlock(&vmixer->device->mutex);
       return VDP_STATUS_INVALID_VIDEO_MIXER_PICTURE_STRUCTURE;
    }
 
@@ -387,7 +387,7 @@ VdpStatus vlVdpVideoMixerRender(VdpVideoMixer mixer,
    for (i = 0; i < layer_count; ++i) {
       vlVdpOutputSurface *src = vlGetDataHTAB(layers->source_surface);
       if (!src) {
-         pipe_mutex_unlock(vmixer->device->mutex);
+         mtx_unlock(&vmixer->device->mutex);
          return VDP_STATUS_INVALID_HANDLE;
       }
 
@@ -454,7 +454,7 @@ VdpStatus vlVdpVideoMixerRender(VdpVideoMixer mixer,
       pipe_sampler_view_reference(&sampler_view, NULL);
       pipe_surface_reference(&surface, NULL);
    }
-   pipe_mutex_unlock(vmixer->device->mutex);
+   mtx_unlock(&vmixer->device->mutex);
 
    return VDP_STATUS_OK;
 }
@@ -658,7 +658,7 @@ vlVdpVideoMixerSetFeatureEnables(VdpVideoMixer mixer,
    if (!vmixer)
       return VDP_STATUS_INVALID_HANDLE;
 
-   pipe_mutex_lock(vmixer->device->mutex);
+   mtx_lock(&vmixer->device->mutex);
    for (i = 0; i < feature_count; ++i) {
       switch (features[i]) {
       /* they are valid, but we doesn't support them */
@@ -694,7 +694,7 @@ vlVdpVideoMixerSetFeatureEnables(VdpVideoMixer mixer,
          if (!debug_get_bool_option("G3DVL_NO_CSC", FALSE))
             if (!vl_compositor_set_csc_matrix(&vmixer->cstate, (const vl_csc_matrix *)&vmixer->csc,
                         vmixer->luma_key.luma_min, vmixer->luma_key.luma_max)) {
-               pipe_mutex_unlock(vmixer->device->mutex);
+               mtx_unlock(&vmixer->device->mutex);
                return VDP_STATUS_ERROR;
             }
          break;
@@ -705,11 +705,11 @@ vlVdpVideoMixerSetFeatureEnables(VdpVideoMixer mixer,
          break;
 
       default:
-         pipe_mutex_unlock(vmixer->device->mutex);
+         mtx_unlock(&vmixer->device->mutex);
          return VDP_STATUS_INVALID_VIDEO_MIXER_FEATURE;
       }
    }
-   pipe_mutex_unlock(vmixer->device->mutex);
+   mtx_unlock(&vmixer->device->mutex);
 
    return VDP_STATUS_OK;
 }
@@ -796,7 +796,7 @@ vlVdpVideoMixerSetAttributeValues(VdpVideoMixer mixer,
    if (!vmixer)
       return VDP_STATUS_INVALID_HANDLE;
 
-   pipe_mutex_lock(vmixer->device->mutex);
+   mtx_lock(&vmixer->device->mutex);
    for (i = 0; i < attribute_count; ++i) {
       switch (attributes[i]) {
       case VDP_VIDEO_MIXER_ATTRIBUTE_BACKGROUND_COLOR:
@@ -889,11 +889,11 @@ vlVdpVideoMixerSetAttributeValues(VdpVideoMixer mixer,
          goto fail;
       }
    }
-   pipe_mutex_unlock(vmixer->device->mutex);
+   mtx_unlock(&vmixer->device->mutex);
 
    return VDP_STATUS_OK;
 fail:
-   pipe_mutex_unlock(vmixer->device->mutex);
+   mtx_unlock(&vmixer->device->mutex);
    return ret;
 }
 
@@ -955,7 +955,7 @@ vlVdpVideoMixerGetAttributeValues(VdpVideoMixer mixer,
    if (!vmixer)
       return VDP_STATUS_INVALID_HANDLE;
 
-   pipe_mutex_lock(vmixer->device->mutex);
+   mtx_lock(&vmixer->device->mutex);
    for (i = 0; i < attribute_count; ++i) {
       switch (attributes[i]) {
       case VDP_VIDEO_MIXER_ATTRIBUTE_BACKGROUND_COLOR:
@@ -987,11 +987,11 @@ vlVdpVideoMixerGetAttributeValues(VdpVideoMixer mixer,
          *(uint8_t*)attribute_values[i] = vmixer->skip_chroma_deint;
          break;
       default:
-         pipe_mutex_unlock(vmixer->device->mutex);
+         mtx_unlock(&vmixer->device->mutex);
          return VDP_STATUS_INVALID_VIDEO_MIXER_ATTRIBUTE;
       }
    }
-   pipe_mutex_unlock(vmixer->device->mutex);
+   mtx_unlock(&vmixer->device->mutex);
    return VDP_STATUS_OK;
 }
 

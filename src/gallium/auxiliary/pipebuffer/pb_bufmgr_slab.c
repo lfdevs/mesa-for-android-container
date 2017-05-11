@@ -71,7 +71,7 @@ struct pb_slab_buffer
    
    /** Use when validating, to signal that all mappings are finished */
    /* TODO: Actually validation does not reach this stage yet */
-   pipe_condvar event;
+   cnd_t event;
 };
 
 
@@ -128,7 +128,7 @@ struct pb_slab_manager
     */
    struct list_head slabs;
    
-   pipe_mutex mutex;
+   mtx_t mutex;
 };
 
 
@@ -199,7 +199,7 @@ pb_slab_buffer_destroy(struct pb_buffer *_buf)
    struct pb_slab_manager *mgr = slab->mgr;
    struct list_head *list = &buf->head;
 
-   pipe_mutex_lock(mgr->mutex);
+   mtx_lock(&mgr->mutex);
    
    assert(!pipe_is_referenced(&buf->base.reference));
    
@@ -221,7 +221,7 @@ pb_slab_buffer_destroy(struct pb_buffer *_buf)
       FREE(slab);
    }
 
-   pipe_mutex_unlock(mgr->mutex);
+   mtx_unlock(&mgr->mutex);
 }
 
 
@@ -246,7 +246,7 @@ pb_slab_buffer_unmap(struct pb_buffer *_buf)
 
    --buf->mapCount;
    if (buf->mapCount == 0) 
-       pipe_condvar_broadcast(buf->event);
+       cnd_broadcast(&buf->event);
 }
 
 
@@ -350,7 +350,7 @@ pb_slab_create(struct pb_slab_manager *mgr)
       buf->slab = slab;
       buf->start = i* mgr->bufSize;
       buf->mapCount = 0;
-      pipe_condvar_init(buf->event);
+      cnd_init(&buf->event);
       LIST_ADDTAIL(&buf->head, &slab->freeBuffers);
       slab->numFree++;
       buf++;
@@ -396,13 +396,13 @@ pb_slab_manager_create_buffer(struct pb_manager *_mgr,
    if(!pb_check_usage(desc->usage, mgr->desc.usage))
       return NULL;
 
-   pipe_mutex_lock(mgr->mutex);
+   mtx_lock(&mgr->mutex);
    
    /* Create a new slab, if we run out of partial slabs */
    if (mgr->slabs.next == &mgr->slabs) {
       (void) pb_slab_create(mgr);
       if (mgr->slabs.next == &mgr->slabs) {
-	 pipe_mutex_unlock(mgr->mutex);
+	 mtx_unlock(&mgr->mutex);
 	 return NULL;
       }
    }
@@ -418,7 +418,7 @@ pb_slab_manager_create_buffer(struct pb_manager *_mgr,
    list = slab->freeBuffers.next;
    LIST_DELINIT(list);
 
-   pipe_mutex_unlock(mgr->mutex);
+   mtx_unlock(&mgr->mutex);
    buf = LIST_ENTRY(struct pb_slab_buffer, list, head);
    
    pipe_reference_init(&buf->base.reference, 1);
@@ -473,7 +473,7 @@ pb_slab_manager_create(struct pb_manager *provider,
 
    LIST_INITHEAD(&mgr->slabs);
    
-   pipe_mutex_init(mgr->mutex);
+   (void) mtx_init(&mgr->mutex, mtx_plain);
 
    return &mgr->base;
 }

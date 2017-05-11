@@ -59,6 +59,16 @@ wglSetPixelFormat(HDC hdc,
                   int iPixelFormat,
                   CONST PIXELFORMATDESCRIPTOR *ppfd);
 
+WINGDIAPI HDC APIENTRY
+wglGetCurrentReadDCARB( VOID );
+
+WINGDIAPI BOOL APIENTRY
+wglMakeContextCurrentARB(
+   HDC hDrawDC,
+   HDC hReadDC,
+   HGLRC hglrc );
+
+
 #ifndef WGL_SWAPMULTIPLE_MAX
 
 typedef struct _WGLSWAP

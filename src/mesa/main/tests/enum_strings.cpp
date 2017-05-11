@@ -24,9 +24,7 @@
 #include <gtest/gtest.h>
 #include <GL/gl.h>
 
-extern "C" {
 #include "main/enums.h"
-}
 
 struct enum_info {
    int value;

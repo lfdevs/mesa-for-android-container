@@ -148,6 +148,7 @@ ir_expression *neg(operand a);
 ir_expression *sin(operand a);
 ir_expression *cos(operand a);
 ir_expression *exp(operand a);
+ir_expression *rcp(operand a);
 ir_expression *rsq(operand a);
 ir_expression *sqrt(operand a);
 ir_expression *log(operand a);
@@ -190,6 +191,12 @@ ir_expression *b2f(operand a);
 ir_expression *f2d(operand a);
 ir_expression *i2d(operand a);
 ir_expression *u2d(operand a);
+
+ir_expression *bitcast_d2i64(operand a);
+ir_expression *bitcast_d2u64(operand a);
+
+ir_expression *bitcast_i642d(operand a);
+ir_expression *bitcast_u642d(operand a);
 
 ir_expression *min2(operand a, operand b);
 ir_expression *max2(operand a, operand b);

@@ -83,6 +83,16 @@ struct simdBBox
     simdscalari xmax;
 };
 
+#if ENABLE_AVX512_SIMD16
+struct simd16BBox
+{
+    simd16scalari ymin;
+    simd16scalari ymax;
+    simd16scalari xmin;
+    simd16scalari xmax;
+};
+
+#endif
 INLINE
 void vTranspose(__m128 &row0, __m128 &row1, __m128 &row2, __m128 &row3)
 {
@@ -133,65 +143,53 @@ void vTranspose(__m128i &row0, __m128i &row1, __m128i &row2, __m128i &row3)
     row3 = _mm_unpackhi_epi64(row3, vTemp);
 }
 
-#define GCC_VERSION (__GNUC__ * 10000 \
-                     + __GNUC_MINOR__ * 100 \
-                     + __GNUC_PATCHLEVEL__)
-
-#if defined(__clang__) || (defined(__GNUC__) && (GCC_VERSION < 40900))
-#define _mm_undefined_ps _mm_setzero_ps
-#define _mm_undefined_si128 _mm_setzero_si128
-#if KNOB_SIMD_WIDTH == 8
-#define _mm256_undefined_ps _mm256_setzero_ps
-#endif
-#endif
-
 #if KNOB_SIMD_WIDTH == 8
 INLINE
-void vTranspose3x8(__m128 (&vDst)[8], const __m256 &vSrc0, const __m256 &vSrc1, const __m256 &vSrc2)
+void vTranspose3x8(__m128 (&vDst)[8], const simdscalar &vSrc0, const simdscalar &vSrc1, const simdscalar &vSrc2)
 {
-    __m256 r0r2 = _mm256_unpacklo_ps(vSrc0, vSrc2);                    //x0z0x1z1 x4z4x5z5
-    __m256 r1rx = _mm256_unpacklo_ps(vSrc1, _mm256_undefined_ps());    //y0w0y1w1 y4w4y5w5
-    __m256 r02r1xlolo = _mm256_unpacklo_ps(r0r2, r1rx);                //x0y0z0w0 x4y4z4w4
-    __m256 r02r1xlohi = _mm256_unpackhi_ps(r0r2, r1rx);                //x1y1z1w1 x5y5z5w5
+    simdscalar r0r2 = _simd_unpacklo_ps(vSrc0, vSrc2);                  //x0z0x1z1 x4z4x5z5
+    simdscalar r1rx = _simd_unpacklo_ps(vSrc1, _simd_setzero_ps());     //y0w0y1w1 y4w4y5w5
+    simdscalar r02r1xlolo = _simd_unpacklo_ps(r0r2, r1rx);              //x0y0z0w0 x4y4z4w4
+    simdscalar r02r1xlohi = _simd_unpackhi_ps(r0r2, r1rx);              //x1y1z1w1 x5y5z5w5
 
-    r0r2 = _mm256_unpackhi_ps(vSrc0, vSrc2);                        //x2z2x3z3 x6z6x7z7
-    r1rx = _mm256_unpackhi_ps(vSrc1, _mm256_undefined_ps());        //y2w2y3w3 y6w6yw77
-    __m256 r02r1xhilo = _mm256_unpacklo_ps(r0r2, r1rx);                //x2y2z2w2 x6y6z6w6
-    __m256 r02r1xhihi = _mm256_unpackhi_ps(r0r2, r1rx);                //x3y3z3w3 x7y7z7w7
+    r0r2 = _simd_unpackhi_ps(vSrc0, vSrc2);                             //x2z2x3z3 x6z6x7z7
+    r1rx = _simd_unpackhi_ps(vSrc1, _simd_setzero_ps());                //y2w2y3w3 y6w6yw77
+    simdscalar r02r1xhilo = _simd_unpacklo_ps(r0r2, r1rx);              //x2y2z2w2 x6y6z6w6
+    simdscalar r02r1xhihi = _simd_unpackhi_ps(r0r2, r1rx);              //x3y3z3w3 x7y7z7w7
 
     vDst[0] = _mm256_castps256_ps128(r02r1xlolo);
     vDst[1] = _mm256_castps256_ps128(r02r1xlohi);
     vDst[2] = _mm256_castps256_ps128(r02r1xhilo);
     vDst[3] = _mm256_castps256_ps128(r02r1xhihi);
 
-    vDst[4] = _mm256_extractf128_ps(r02r1xlolo, 1);
-    vDst[5] = _mm256_extractf128_ps(r02r1xlohi, 1);
-    vDst[6] = _mm256_extractf128_ps(r02r1xhilo, 1);
-    vDst[7] = _mm256_extractf128_ps(r02r1xhihi, 1);
+    vDst[4] = _simd_extractf128_ps(r02r1xlolo, 1);
+    vDst[5] = _simd_extractf128_ps(r02r1xlohi, 1);
+    vDst[6] = _simd_extractf128_ps(r02r1xhilo, 1);
+    vDst[7] = _simd_extractf128_ps(r02r1xhihi, 1);
 }
 
 INLINE
-void vTranspose4x8(__m128 (&vDst)[8], const __m256 &vSrc0, const __m256 &vSrc1, const __m256 &vSrc2, const __m256 &vSrc3)
+void vTranspose4x8(__m128 (&vDst)[8], const simdscalar &vSrc0, const simdscalar &vSrc1, const simdscalar &vSrc2, const simdscalar &vSrc3)
 {
-    __m256 r0r2 = _mm256_unpacklo_ps(vSrc0, vSrc2);                    //x0z0x1z1 x4z4x5z5
-    __m256 r1rx = _mm256_unpacklo_ps(vSrc1, vSrc3);                    //y0w0y1w1 y4w4y5w5
-    __m256 r02r1xlolo = _mm256_unpacklo_ps(r0r2, r1rx);                //x0y0z0w0 x4y4z4w4
-    __m256 r02r1xlohi = _mm256_unpackhi_ps(r0r2, r1rx);                //x1y1z1w1 x5y5z5w5
+    simdscalar r0r2 = _simd_unpacklo_ps(vSrc0, vSrc2);      //x0z0x1z1 x4z4x5z5
+    simdscalar r1rx = _simd_unpacklo_ps(vSrc1, vSrc3);      //y0w0y1w1 y4w4y5w5
+    simdscalar r02r1xlolo = _simd_unpacklo_ps(r0r2, r1rx);  //x0y0z0w0 x4y4z4w4
+    simdscalar r02r1xlohi = _simd_unpackhi_ps(r0r2, r1rx);  //x1y1z1w1 x5y5z5w5
 
-    r0r2 = _mm256_unpackhi_ps(vSrc0, vSrc2);                        //x2z2x3z3 x6z6x7z7
-    r1rx = _mm256_unpackhi_ps(vSrc1, vSrc3)                    ;        //y2w2y3w3 y6w6yw77
-    __m256 r02r1xhilo = _mm256_unpacklo_ps(r0r2, r1rx);                //x2y2z2w2 x6y6z6w6
-    __m256 r02r1xhihi = _mm256_unpackhi_ps(r0r2, r1rx);                //x3y3z3w3 x7y7z7w7
+    r0r2 = _simd_unpackhi_ps(vSrc0, vSrc2);                 //x2z2x3z3 x6z6x7z7
+    r1rx = _simd_unpackhi_ps(vSrc1, vSrc3);                 //y2w2y3w3 y6w6yw77
+    simdscalar r02r1xhilo = _simd_unpacklo_ps(r0r2, r1rx);  //x2y2z2w2 x6y6z6w6
+    simdscalar r02r1xhihi = _simd_unpackhi_ps(r0r2, r1rx);  //x3y3z3w3 x7y7z7w7
 
     vDst[0] = _mm256_castps256_ps128(r02r1xlolo);
     vDst[1] = _mm256_castps256_ps128(r02r1xlohi);
     vDst[2] = _mm256_castps256_ps128(r02r1xhilo);
     vDst[3] = _mm256_castps256_ps128(r02r1xhihi);
 
-    vDst[4] = _mm256_extractf128_ps(r02r1xlolo, 1);
-    vDst[5] = _mm256_extractf128_ps(r02r1xlohi, 1);
-    vDst[6] = _mm256_extractf128_ps(r02r1xhilo, 1);
-    vDst[7] = _mm256_extractf128_ps(r02r1xhihi, 1);
+    vDst[4] = _simd_extractf128_ps(r02r1xlolo, 1);
+    vDst[5] = _simd_extractf128_ps(r02r1xlohi, 1);
+    vDst[6] = _simd_extractf128_ps(r02r1xhilo, 1);
+    vDst[7] = _simd_extractf128_ps(r02r1xhihi, 1);
 }
 
 #if ENABLE_AVX512_SIMD16
@@ -218,39 +216,39 @@ void vTranspose4x16(simd16scalar(&dst)[4], const simd16scalar &src0, const simd1
 
 #endif
 INLINE
-void vTranspose8x8(__m256 (&vDst)[8], const __m256 &vMask0, const __m256 &vMask1, const __m256 &vMask2, const __m256 &vMask3, const __m256 &vMask4, const __m256 &vMask5, const __m256 &vMask6, const __m256 &vMask7)
+void vTranspose8x8(simdscalar (&vDst)[8], const simdscalar &vMask0, const simdscalar &vMask1, const simdscalar &vMask2, const simdscalar &vMask3, const simdscalar &vMask4, const simdscalar &vMask5, const simdscalar &vMask6, const simdscalar &vMask7)
 {
-    __m256 __t0 = _mm256_unpacklo_ps(vMask0, vMask1);
-    __m256 __t1 = _mm256_unpackhi_ps(vMask0, vMask1);
-    __m256 __t2 = _mm256_unpacklo_ps(vMask2, vMask3);
-    __m256 __t3 = _mm256_unpackhi_ps(vMask2, vMask3);
-    __m256 __t4 = _mm256_unpacklo_ps(vMask4, vMask5);
-    __m256 __t5 = _mm256_unpackhi_ps(vMask4, vMask5);
-    __m256 __t6 = _mm256_unpacklo_ps(vMask6, vMask7);
-    __m256 __t7 = _mm256_unpackhi_ps(vMask6, vMask7);
-    __m256 __tt0 = _mm256_shuffle_ps(__t0,__t2,_MM_SHUFFLE(1,0,1,0));
-    __m256 __tt1 = _mm256_shuffle_ps(__t0,__t2,_MM_SHUFFLE(3,2,3,2));
-    __m256 __tt2 = _mm256_shuffle_ps(__t1,__t3,_MM_SHUFFLE(1,0,1,0));
-    __m256 __tt3 = _mm256_shuffle_ps(__t1,__t3,_MM_SHUFFLE(3,2,3,2));
-    __m256 __tt4 = _mm256_shuffle_ps(__t4,__t6,_MM_SHUFFLE(1,0,1,0));
-    __m256 __tt5 = _mm256_shuffle_ps(__t4,__t6,_MM_SHUFFLE(3,2,3,2));
-    __m256 __tt6 = _mm256_shuffle_ps(__t5,__t7,_MM_SHUFFLE(1,0,1,0));
-    __m256 __tt7 = _mm256_shuffle_ps(__t5,__t7,_MM_SHUFFLE(3,2,3,2));
-    vDst[0] = _mm256_permute2f128_ps(__tt0, __tt4, 0x20);
-    vDst[1] = _mm256_permute2f128_ps(__tt1, __tt5, 0x20);
-    vDst[2] = _mm256_permute2f128_ps(__tt2, __tt6, 0x20);
-    vDst[3] = _mm256_permute2f128_ps(__tt3, __tt7, 0x20);
-    vDst[4] = _mm256_permute2f128_ps(__tt0, __tt4, 0x31);
-    vDst[5] = _mm256_permute2f128_ps(__tt1, __tt5, 0x31);
-    vDst[6] = _mm256_permute2f128_ps(__tt2, __tt6, 0x31);
-    vDst[7] = _mm256_permute2f128_ps(__tt3, __tt7, 0x31);
+    simdscalar __t0 = _simd_unpacklo_ps(vMask0, vMask1);
+    simdscalar __t1 = _simd_unpackhi_ps(vMask0, vMask1);
+    simdscalar __t2 = _simd_unpacklo_ps(vMask2, vMask3);
+    simdscalar __t3 = _simd_unpackhi_ps(vMask2, vMask3);
+    simdscalar __t4 = _simd_unpacklo_ps(vMask4, vMask5);
+    simdscalar __t5 = _simd_unpackhi_ps(vMask4, vMask5);
+    simdscalar __t6 = _simd_unpacklo_ps(vMask6, vMask7);
+    simdscalar __t7 = _simd_unpackhi_ps(vMask6, vMask7);
+    simdscalar __tt0 = _simd_shuffle_ps(__t0,__t2,_MM_SHUFFLE(1,0,1,0));
+    simdscalar __tt1 = _simd_shuffle_ps(__t0,__t2,_MM_SHUFFLE(3,2,3,2));
+    simdscalar __tt2 = _simd_shuffle_ps(__t1,__t3,_MM_SHUFFLE(1,0,1,0));
+    simdscalar __tt3 = _simd_shuffle_ps(__t1,__t3,_MM_SHUFFLE(3,2,3,2));
+    simdscalar __tt4 = _simd_shuffle_ps(__t4,__t6,_MM_SHUFFLE(1,0,1,0));
+    simdscalar __tt5 = _simd_shuffle_ps(__t4,__t6,_MM_SHUFFLE(3,2,3,2));
+    simdscalar __tt6 = _simd_shuffle_ps(__t5,__t7,_MM_SHUFFLE(1,0,1,0));
+    simdscalar __tt7 = _simd_shuffle_ps(__t5,__t7,_MM_SHUFFLE(3,2,3,2));
+    vDst[0] = _simd_permute2f128_ps(__tt0, __tt4, 0x20);
+    vDst[1] = _simd_permute2f128_ps(__tt1, __tt5, 0x20);
+    vDst[2] = _simd_permute2f128_ps(__tt2, __tt6, 0x20);
+    vDst[3] = _simd_permute2f128_ps(__tt3, __tt7, 0x20);
+    vDst[4] = _simd_permute2f128_ps(__tt0, __tt4, 0x31);
+    vDst[5] = _simd_permute2f128_ps(__tt1, __tt5, 0x31);
+    vDst[6] = _simd_permute2f128_ps(__tt2, __tt6, 0x31);
+    vDst[7] = _simd_permute2f128_ps(__tt3, __tt7, 0x31);
 }
 
 INLINE
-void vTranspose8x8(__m256 (&vDst)[8], const __m256i &vMask0, const __m256i &vMask1, const __m256i &vMask2, const __m256i &vMask3, const __m256i &vMask4, const __m256i &vMask5, const __m256i &vMask6, const __m256i &vMask7)
+void vTranspose8x8(simdscalar (&vDst)[8], const simdscalari &vMask0, const simdscalari &vMask1, const simdscalari &vMask2, const simdscalari &vMask3, const simdscalari &vMask4, const simdscalari &vMask5, const simdscalari &vMask6, const simdscalari &vMask7)
 {
-    vTranspose8x8(vDst, _mm256_castsi256_ps(vMask0), _mm256_castsi256_ps(vMask1), _mm256_castsi256_ps(vMask2), _mm256_castsi256_ps(vMask3), 
-        _mm256_castsi256_ps(vMask4), _mm256_castsi256_ps(vMask5), _mm256_castsi256_ps(vMask6), _mm256_castsi256_ps(vMask7));
+    vTranspose8x8(vDst, _simd_castsi_ps(vMask0), _simd_castsi_ps(vMask1), _simd_castsi_ps(vMask2), _simd_castsi_ps(vMask3), 
+        _simd_castsi_ps(vMask4), _simd_castsi_ps(vMask5), _simd_castsi_ps(vMask6), _simd_castsi_ps(vMask7));
 }
 #endif
 
@@ -291,7 +289,7 @@ struct Transpose8_8_8_8
         simdscalari src = _simd_load_si((const simdscalari*)pSrc);
 
 #if KNOB_SIMD_WIDTH == 8
-#if KNOB_ARCH == KNOB_ARCH_AVX
+#if KNOB_ARCH <= KNOB_ARCH_AVX
         __m128i c0c1 = _mm256_castsi256_si128(src);                                           // rrrrrrrrgggggggg
         __m128i c2c3 = _mm_castps_si128(_mm256_extractf128_ps(_mm256_castsi256_ps(src), 1));  // bbbbbbbbaaaaaaaa
         __m128i c0c2 = _mm_unpacklo_epi64(c0c1, c2c3);                                        // rrrrrrrrbbbbbbbb
@@ -302,13 +300,13 @@ struct Transpose8_8_8_8
         __m128i c0123hi = _mm_unpackhi_epi16(c01, c23);                                       // rgbargbargbargba
         _mm_store_si128((__m128i*)pDst, c0123lo);
         _mm_store_si128((__m128i*)(pDst + 16), c0123hi);
-#elif KNOB_ARCH == KNOB_ARCH_AVX2
-        simdscalari dst01 = _mm256_shuffle_epi8(src,
-            _mm256_set_epi32(0x0f078080, 0x0e068080, 0x0d058080, 0x0c048080, 0x80800b03, 0x80800a02, 0x80800901, 0x80800800));
+#else
+        simdscalari dst01 = _simd_shuffle_epi8(src,
+            _simd_set_epi32(0x0f078080, 0x0e068080, 0x0d058080, 0x0c048080, 0x80800b03, 0x80800a02, 0x80800901, 0x80800800));
         simdscalari dst23 = _mm256_permute2x128_si256(src, src, 0x01);
-        dst23 = _mm256_shuffle_epi8(dst23,
-            _mm256_set_epi32(0x80800f07, 0x80800e06, 0x80800d05, 0x80800c04, 0x0b038080, 0x0a028080, 0x09018080, 0x08008080));
-        simdscalari dst = _mm256_or_si256(dst01, dst23);
+        dst23 = _simd_shuffle_epi8(dst23,
+            _simd_set_epi32(0x80800f07, 0x80800e06, 0x80800d05, 0x80800c04, 0x0b038080, 0x0a028080, 0x09018080, 0x08008080));
+        simdscalari dst = _simd_or_si(dst01, dst23);
         _simd_store_si((simdscalari*)pDst, dst);
 #endif
 #else

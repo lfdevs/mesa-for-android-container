@@ -161,6 +161,7 @@ private:
    void emitISETP();
    void emitSHL();
    void emitSHR();
+   void emitSHF();
    void emitPOPC();
    void emitBFI();
    void emitBFE();
@@ -251,7 +252,8 @@ CodeEmitterGM107::emitInsn(uint32_t hi, bool pred)
 void
 CodeEmitterGM107::emitGPR(int pos, const Value *val)
 {
-   emitField(pos, 8, val ? val->reg.data.id : 255);
+   emitField(pos, 8, val && !val->inFile(FILE_FLAGS) ?
+             val->reg.data.id : 255);
 }
 
 void
@@ -267,6 +269,12 @@ CodeEmitterGM107::emitSYS(int pos, const Value *val)
    case SV_INVOCATION_INFO: id = 0x1d; break;
    case SV_TID            : id = 0x21 + val->reg.data.sv.index; break;
    case SV_CTAID          : id = 0x25 + val->reg.data.sv.index; break;
+   case SV_LANEMASK_EQ    : id = 0x38; break;
+   case SV_LANEMASK_LT    : id = 0x39; break;
+   case SV_LANEMASK_LE    : id = 0x3a; break;
+   case SV_LANEMASK_GT    : id = 0x3b; break;
+   case SV_LANEMASK_GE    : id = 0x3c; break;
+   case SV_CLOCK          : id = 0x50 + val->reg.data.sv.index; break;
    default:
       assert(!"invalid system value");
       id = 0;
@@ -964,11 +972,26 @@ CodeEmitterGM107::emitSHFL()
       break;
    }
 
-   /*XXX: what is this arg? hardcode immediate for now */
-   emitField(0x22, 13, 0x1c03);
-   type |= 2;
+   switch (insn->src(2).getFile()) {
+   case FILE_GPR:
+      emitGPR(0x27, insn->src(2));
+      break;
+   case FILE_IMMEDIATE:
+      emitIMMD(0x22, 13, insn->src(2));
+      type |= 2;
+      break;
+   default:
+      assert(!"invalid src2 file");
+      break;
+   }
 
-   emitPRED (0x30);
+   if (!insn->defExists(1))
+      emitPRED(0x30);
+   else {
+      assert(insn->def(1).getFile() == FILE_PREDICATE);
+      emitPRED(0x30, insn->def(1));
+   }
+
    emitField(0x1e, 2, insn->subOp);
    emitField(0x1c, 2, type);
    emitGPR  (0x08, insn->src(0));
@@ -1309,7 +1332,7 @@ CodeEmitterGM107::emitFMUL()
 void
 CodeEmitterGM107::emitFFMA()
 {
-   /*XXX: ffma32i exists, but not using it as third src overlaps dst */
+   bool isLongIMMD = false;
    switch(insn->src(2).getFile()) {
    case FILE_GPR:
       switch (insn->src(1).getFile()) {
@@ -1322,14 +1345,22 @@ CodeEmitterGM107::emitFFMA()
          emitCBUF(0x22, -1, 0x14, 16, 2, insn->src(1));
          break;
       case FILE_IMMEDIATE:
-         emitInsn(0x32800000);
-         emitIMMD(0x14, 19, insn->src(1));
+         if (longIMMD(insn->getSrc(1))) {
+            assert(insn->getDef(0)->reg.data.id == insn->getSrc(2)->reg.data.id);
+            isLongIMMD = true;
+            emitInsn(0x0c000000);
+            emitIMMD(0x14, 32, insn->src(1));
+         } else {
+            emitInsn(0x32800000);
+            emitIMMD(0x14, 19, insn->src(1));
+         }
          break;
       default:
          assert(!"bad src1 file");
          break;
       }
-      emitGPR (0x27, insn->src(2));
+      if (!isLongIMMD)
+         emitGPR (0x27, insn->src(2));
       break;
    case FILE_MEMORY_CONST:
       emitInsn(0x51800000);
@@ -1340,11 +1371,19 @@ CodeEmitterGM107::emitFFMA()
       assert(!"bad src2 file");
       break;
    }
-   emitRND (0x33);
-   emitSAT (0x32);
-   emitNEG (0x31, insn->src(2));
-   emitNEG2(0x30, insn->src(0), insn->src(1));
-   emitCC  (0x2f);
+
+   if (isLongIMMD) {
+      emitNEG (0x39, insn->src(2));
+      emitNEG2(0x38, insn->src(0), insn->src(1));
+      emitSAT (0x37);
+      emitCC  (0x34);
+   } else {
+      emitRND (0x33);
+      emitSAT (0x32);
+      emitNEG (0x31, insn->src(2));
+      emitNEG2(0x30, insn->src(0), insn->src(1));
+      emitCC  (0x2f);
+   }
 
    emitFMZ(0x35, 2);
    emitGPR(0x08, insn->src(0));
@@ -1867,6 +1906,7 @@ CodeEmitterGM107::emitIMNMX()
 
    emitField(0x30, 1, isSignedType(insn->dType));
    emitCC   (0x2f);
+   emitField(0x2b, 2, insn->subOp);
    emitField(0x2a, 1, insn->op == OP_MAX);
    emitPRED (0x27);
    emitGPR  (0x08, insn->src(0));
@@ -2066,6 +2106,47 @@ CodeEmitterGM107::emitSHR()
    emitCC   (0x2f);
    emitX    (0x2c);
    emitField(0x27, 1, insn->subOp == NV50_IR_SUBOP_SHIFT_WRAP);
+   emitGPR  (0x08, insn->src(0));
+   emitGPR  (0x00, insn->def(0));
+}
+
+void
+CodeEmitterGM107::emitSHF()
+{
+   unsigned type;
+
+   switch (insn->src(1).getFile()) {
+   case FILE_GPR:
+      emitInsn(insn->op == OP_SHL ? 0x5bf80000 : 0x5cf80000);
+      emitGPR(0x14, insn->src(1));
+      break;
+   case FILE_IMMEDIATE:
+      emitInsn(insn->op == OP_SHL ? 0x36f80000 : 0x38f80000);
+      emitIMMD(0x14, 19, insn->src(1));
+      break;
+   default:
+      assert(!"bad src1 file");
+      break;
+   }
+
+   switch (insn->sType) {
+   case TYPE_U64:
+      type = 2;
+      break;
+   case TYPE_S64:
+      type = 3;
+      break;
+   default:
+      type = 0;
+      break;
+   }
+
+   emitField(0x32, 1, !!(insn->subOp & NV50_IR_SUBOP_SHIFT_WRAP));
+   emitX    (0x31);
+   emitField(0x30, 1, !!(insn->subOp & NV50_IR_SUBOP_SHIFT_HIGH));
+   emitCC   (0x2f);
+   emitGPR  (0x27, insn->src(2));
+   emitField(0x25, 2, type);
    emitGPR  (0x08, insn->src(0));
    emitGPR  (0x00, insn->def(0));
 }
@@ -2855,7 +2936,8 @@ CodeEmitterGM107::emitMEMBAR()
 void
 CodeEmitterGM107::emitVOTE()
 {
-   assert(insn->src(0).getFile() == FILE_PREDICATE);
+   const ImmediateValue *imm;
+   uint32_t u32;
 
    int r = -1, p = -1;
    for (int i = 0; insn->defExists(i); i++) {
@@ -2875,8 +2957,24 @@ CodeEmitterGM107::emitVOTE()
       emitPRED (0x2d, insn->def(p));
    else
       emitPRED (0x2d);
-   emitField(0x2a, 1, insn->src(0).mod == Modifier(NV50_IR_MOD_NOT));
-   emitPRED (0x27, insn->src(0));
+
+   switch (insn->src(0).getFile()) {
+   case FILE_PREDICATE:
+      emitField(0x2a, 1, insn->src(0).mod == Modifier(NV50_IR_MOD_NOT));
+      emitPRED (0x27, insn->src(0));
+      break;
+   case FILE_IMMEDIATE:
+      imm = insn->getSrc(0)->asImm();
+      assert(imm);
+      u32 = imm->reg.data.u32;
+      assert(u32 == 0 || u32 == 1);
+      emitPRED(0x27);
+      emitField(0x2a, 1, u32 == 0);
+      break;
+   default:
+      assert(!"Unhandled src");
+      break;
+   }
 }
 
 void
@@ -3168,10 +3266,16 @@ CodeEmitterGM107::emitInstruction(Instruction *i)
       }
       break;
    case OP_SHL:
-      emitSHL();
+      if (typeSizeof(insn->sType) == 8)
+         emitSHF();
+      else
+         emitSHL();
       break;
    case OP_SHR:
-      emitSHR();
+      if (typeSizeof(insn->sType) == 8)
+         emitSHF();
+      else
+         emitSHR();
       break;
    case OP_POPCNT:
       emitPOPC();

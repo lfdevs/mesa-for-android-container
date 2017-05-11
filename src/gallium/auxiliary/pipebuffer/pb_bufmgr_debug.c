@@ -78,7 +78,7 @@ struct pb_debug_buffer
 
    struct debug_stack_frame create_backtrace[PB_DEBUG_CREATE_BACKTRACE];
 
-   pipe_mutex mutex;
+   mtx_t mutex;
    unsigned map_count;
    struct debug_stack_frame map_backtrace[PB_DEBUG_MAP_BACKTRACE];
    
@@ -95,7 +95,7 @@ struct pb_debug_manager
    pb_size underflow_size;
    pb_size overflow_size;
    
-   pipe_mutex mutex;
+   mtx_t mutex;
    struct list_head list;
 };
 
@@ -236,11 +236,11 @@ pb_debug_buffer_destroy(struct pb_buffer *_buf)
    
    pb_debug_buffer_check(buf);
 
-   pipe_mutex_lock(mgr->mutex);
+   mtx_lock(&mgr->mutex);
    LIST_DEL(&buf->head);
-   pipe_mutex_unlock(mgr->mutex);
+   mtx_unlock(&mgr->mutex);
 
-   pipe_mutex_destroy(buf->mutex);
+   mtx_destroy(&buf->mutex);
    
    pb_reference(&buf->buffer, NULL);
    FREE(buf);
@@ -260,10 +260,10 @@ pb_debug_buffer_map(struct pb_buffer *_buf,
    if (!map)
       return NULL;
    
-   pipe_mutex_lock(buf->mutex);
+   mtx_lock(&buf->mutex);
    ++buf->map_count;
    debug_backtrace_capture(buf->map_backtrace, 1, PB_DEBUG_MAP_BACKTRACE);
-   pipe_mutex_unlock(buf->mutex);
+   mtx_unlock(&buf->mutex);
    
    return (uint8_t *)map + buf->underflow_size;
 }
@@ -274,11 +274,11 @@ pb_debug_buffer_unmap(struct pb_buffer *_buf)
 {
    struct pb_debug_buffer *buf = pb_debug_buffer(_buf);   
    
-   pipe_mutex_lock(buf->mutex);
+   mtx_lock(&buf->mutex);
    assert(buf->map_count);
    if(buf->map_count)
       --buf->map_count;
-   pipe_mutex_unlock(buf->mutex);
+   mtx_unlock(&buf->mutex);
    
    pb_unmap(buf->buffer);
    
@@ -304,13 +304,13 @@ pb_debug_buffer_validate(struct pb_buffer *_buf,
 {
    struct pb_debug_buffer *buf = pb_debug_buffer(_buf);
    
-   pipe_mutex_lock(buf->mutex);
+   mtx_lock(&buf->mutex);
    if(buf->map_count) {
       debug_printf("%s: attempting to validate a mapped buffer\n", __FUNCTION__);
       debug_printf("last map backtrace is\n");
       debug_backtrace_dump(buf->map_backtrace, PB_DEBUG_MAP_BACKTRACE);
    }
-   pipe_mutex_unlock(buf->mutex);
+   mtx_unlock(&buf->mutex);
 
    pb_debug_buffer_check(buf);
 
@@ -388,11 +388,11 @@ pb_debug_manager_create_buffer(struct pb_manager *_mgr,
    if(!buf->buffer) {
       FREE(buf);
 #if 0
-      pipe_mutex_lock(mgr->mutex);
+      mtx_lock(&mgr->mutex);
       debug_printf("%s: failed to create buffer\n", __FUNCTION__);
       if(!LIST_IS_EMPTY(&mgr->list))
          pb_debug_manager_dump_locked(mgr);
-      pipe_mutex_unlock(mgr->mutex);
+      mtx_unlock(&mgr->mutex);
 #endif
       return NULL;
    }
@@ -417,11 +417,11 @@ pb_debug_manager_create_buffer(struct pb_manager *_mgr,
 
    pb_debug_buffer_fill(buf);
    
-   pipe_mutex_init(buf->mutex);
+   (void) mtx_init(&buf->mutex, mtx_plain);
    
-   pipe_mutex_lock(mgr->mutex);
+   mtx_lock(&mgr->mutex);
    LIST_ADDTAIL(&buf->head, &mgr->list);
-   pipe_mutex_unlock(mgr->mutex);
+   mtx_unlock(&mgr->mutex);
 
    return &buf->base;
 }
@@ -442,14 +442,14 @@ pb_debug_manager_destroy(struct pb_manager *_mgr)
 {
    struct pb_debug_manager *mgr = pb_debug_manager(_mgr);
    
-   pipe_mutex_lock(mgr->mutex);
+   mtx_lock(&mgr->mutex);
    if(!LIST_IS_EMPTY(&mgr->list)) {
       debug_printf("%s: unfreed buffers\n", __FUNCTION__);
       pb_debug_manager_dump_locked(mgr);
    }
-   pipe_mutex_unlock(mgr->mutex);
+   mtx_unlock(&mgr->mutex);
    
-   pipe_mutex_destroy(mgr->mutex);
+   mtx_destroy(&mgr->mutex);
    mgr->provider->destroy(mgr->provider);
    FREE(mgr);
 }
@@ -475,7 +475,7 @@ pb_debug_manager_create(struct pb_manager *provider,
    mgr->underflow_size = underflow_size;
    mgr->overflow_size = overflow_size;
     
-   pipe_mutex_init(mgr->mutex);
+   (void) mtx_init(&mgr->mutex, mtx_plain);
    LIST_INITHEAD(&mgr->list);
 
    return &mgr->base;

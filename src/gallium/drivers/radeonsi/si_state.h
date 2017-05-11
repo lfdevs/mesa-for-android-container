@@ -74,6 +74,7 @@ struct si_state_rasterizer {
 	bool			poly_smooth;
 	bool			uses_poly_offset;
 	bool			clamp_fragment_color;
+	bool			clamp_vertex_color;
 	bool			rasterizer_discard;
 	bool			scissor_enable;
 	bool			clip_halfz;
@@ -100,13 +101,10 @@ struct si_vertex_element
 {
 	unsigned			count;
 	unsigned			first_vb_use_mask;
+	/* Vertex buffer descriptor list size aligned for optimal prefetch. */
+	unsigned			desc_list_byte_size;
 
-	/* Two bits per attribute indicating the size of each vector component
-	 * in bytes if the size 3-workaround must be applied.
-	 */
-	uint32_t			fix_size3;
-	uint64_t			fix_fetch;
-
+	uint8_t				fix_fetch[SI_MAX_ATTRIBS];
 	uint32_t			rsrc_word3[SI_MAX_ATTRIBS];
 	uint32_t			format_size[SI_MAX_ATTRIBS];
 	struct pipe_vertex_element	elements[SI_MAX_ATTRIBS];
@@ -129,9 +127,12 @@ union si_state {
 	struct si_pm4_state	*array[0];
 };
 
+#define SI_NUM_STATES (sizeof(union si_state) / sizeof(struct si_pm4_state *))
+
 union si_state_atoms {
 	struct {
 		/* The order matters. */
+		struct r600_atom *prefetch_L2;
 		struct r600_atom *render_cond;
 		struct r600_atom *streamout_begin;
 		struct r600_atom *streamout_enable; /* must be after streamout_begin */
@@ -149,6 +150,7 @@ union si_state_atoms {
 		struct r600_atom *viewports;
 		struct r600_atom *stencil_ref;
 		struct r600_atom *spi_map;
+		struct r600_atom *scratch_state;
 	} s;
 	struct r600_atom *array[0];
 };
@@ -231,6 +233,8 @@ struct si_descriptors {
 	/* elements of the list that are changed and need to be uploaded */
 	unsigned dirty_mask;
 
+	/* Whether CE is used to upload this descriptor array. */
+	bool uses_ce;
 	/* Whether the CE ram is dirty and needs to be reinitialized entirely
 	 * before we can do partial updates. */
 	bool ce_ram_dirty;
@@ -266,6 +270,7 @@ struct si_buffer_resources {
 #define si_pm4_bind_state(sctx, member, value) \
 	do { \
 		(sctx)->queued.named.member = (value); \
+		(sctx)->dirty_states |= 1 << si_pm4_block_idx(member); \
 	} while(0)
 
 #define si_pm4_delete_state(sctx, member, value) \
@@ -280,14 +285,16 @@ struct si_buffer_resources {
 /* si_descriptors.c */
 void si_ce_reinitialize_all_descriptors(struct si_context *sctx);
 void si_ce_enable_loads(struct radeon_winsys_cs *ib);
-void si_set_mutable_tex_desc_fields(struct r600_texture *tex,
-				    const struct radeon_surf_level *base_level_info,
+void si_set_mutable_tex_desc_fields(struct si_screen *sscreen,
+				    struct r600_texture *tex,
+				    const struct legacy_surf_level *base_level_info,
 				    unsigned base_level, unsigned first_level,
 				    unsigned block_width, bool is_stencil,
 				    uint32_t *state);
 void si_get_pipe_constant_buffer(struct si_context *sctx, uint shader,
 				 uint slot, struct pipe_constant_buffer *cbuf);
-void si_get_shader_buffers(struct si_context *sctx, uint shader,
+void si_get_shader_buffers(struct si_context *sctx,
+			   enum pipe_shader_type shader,
 			   uint start_slot, uint count,
 			   struct pipe_shader_buffer *sbuf);
 void si_set_ring_buffer(struct pipe_context *ctx, uint slot,
@@ -351,6 +358,7 @@ void si_destroy_shader_cache(struct si_screen *sscreen);
 void si_init_shader_selector_async(void *job, int thread_index);
 
 /* si_state_draw.c */
+void si_init_ia_multi_vgt_param_table(struct si_context *sctx);
 void si_emit_cache_flush(struct si_context *sctx);
 void si_ce_pre_draw_synchronization(struct si_context *sctx);
 void si_ce_post_draw_synchronization(struct si_context *sctx);
@@ -362,9 +370,9 @@ static inline unsigned
 si_tile_mode_index(struct r600_texture *rtex, unsigned level, bool stencil)
 {
 	if (stencil)
-		return rtex->surface.stencil_tiling_index[level];
+		return rtex->surface.u.legacy.stencil_tiling_index[level];
 	else
-		return rtex->surface.tiling_index[level];
+		return rtex->surface.u.legacy.tiling_index[level];
 }
 
 #endif

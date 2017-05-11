@@ -64,12 +64,9 @@ etna_create_surface(struct pipe_context *pctx, struct pipe_resource *prsc,
     * indicate the tile status module bypasses the memory
     * offset and MMU. */
 
-   /* XXX for now, don't do TS for render textures as this path
-    * is not stable. */
    if (VIV_FEATURE(ctx->screen, chipFeatures, FAST_CLEAR) &&
        VIV_FEATURE(ctx->screen, chipMinorFeatures0, MC20) &&
        !DBG_ENABLED(ETNA_DBG_NO_TS) && !rsc->ts_bo &&
-       !(rsc->base.bind & (PIPE_BIND_SAMPLER_VIEW)) &&
        (rsc->levels[level].padded_width & ETNA_RS_WIDTH_MASK) == 0 &&
        (rsc->levels[level].padded_height & ETNA_RS_HEIGHT_MASK) == 0) {
       etna_screen_resource_alloc_ts(pctx->screen, rsc);
@@ -94,12 +91,18 @@ etna_create_surface(struct pipe_context *pctx, struct pipe_resource *prsc,
    struct etna_resource_level *lev = &rsc->levels[level];
 
    /* Setup template relocations for this surface */
-   surf->reloc[0].bo = rsc->bo;
-   surf->reloc[0].offset = surf->surf.offset;
-   surf->reloc[0].flags = 0;
-   surf->reloc[1].bo = rsc->bo;
-   surf->reloc[1].offset = surf->surf.offset + lev->stride * lev->padded_height / 2;
-   surf->reloc[1].flags = 0;
+   for (unsigned pipe = 0; pipe < ctx->specs.pixel_pipes; ++pipe) {
+      surf->reloc[pipe].bo = rsc->bo;
+      surf->reloc[pipe].offset = surf->surf.offset;
+      surf->reloc[pipe].flags = 0;
+   }
+
+   /* In single buffer mode, both pixel pipes must point to the same address,
+    * for multi-tiled surfaces on the other hand the second pipe is expected to
+    * point halfway the image vertically.
+    */
+   if (rsc->layout & ETNA_LAYOUT_BIT_MULTI)
+      surf->reloc[1].offset = surf->surf.offset + lev->stride * lev->padded_height / 2;
 
    if (surf->surf.ts_size) {
       unsigned int layer_offset = layer * surf->surf.ts_layer_stride;
@@ -107,6 +110,7 @@ etna_create_surface(struct pipe_context *pctx, struct pipe_resource *prsc,
 
       surf->surf.ts_offset += layer_offset;
       surf->surf.ts_size -= layer_offset;
+      surf->surf.ts_valid = false;
 
       surf->ts_reloc.bo = rsc->ts_bo;
       surf->ts_reloc.offset = surf->surf.ts_offset;

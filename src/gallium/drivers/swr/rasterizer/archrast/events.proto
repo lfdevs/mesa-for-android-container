@@ -140,6 +140,42 @@ event FrameEndEvent
     uint32_t nextDrawId;
 };
 
+///@brief API Stat: Split draw event for DrawInstanced. In certain cases, Rasty can split draws up into smaller draws.
+event DrawInstancedSplitEvent
+{
+    uint32_t drawId;
+};
+
+///@brief API Stat: Split draw event for DrawIndexedInstanced.
+event DrawIndexedInstancedSplitEvent
+{
+    uint32_t drawId;
+};
+
+///@brief API Stat: Synchonization event.
+event SwrSyncEvent
+{
+    uint32_t drawId;
+};
+
+///@brief API Stat: Invalidate hot tiles (i.e. tile cache)
+event SwrInvalidateTilesEvent
+{
+    uint32_t drawId;
+};
+
+///@brief API Stat: Invalidate and discard hot tiles within pixel region
+event SwrDiscardRectEvent
+{
+    uint32_t drawId;
+};
+
+///@brief API Stat: Flush tiles out to memory that is typically owned by driver (e.g. Flush RT cache)
+event SwrStoreTilesEvent
+{
+    uint32_t drawId;
+};
+
 event FrontendStatsEvent
 {
     uint32_t drawId;
@@ -173,255 +209,239 @@ event BackendStatsEvent
 
 event EarlyDepthStencilInfoSingleSample
 {
-	uint64_t depthPassMask;
-	uint64_t stencilPassMask;
-	uint64_t coverageMask;
+    uint64_t depthPassMask;
+    uint64_t stencilPassMask;
+    uint64_t coverageMask;
 };
 
 event EarlyDepthStencilInfoSampleRate
 {
-	uint64_t depthPassMask;
-	uint64_t stencilPassMask;
-	uint64_t coverageMask;
+    uint64_t depthPassMask;
+    uint64_t stencilPassMask;
+    uint64_t coverageMask;
 };
 
 event EarlyDepthStencilInfoNullPS
 {
-	uint64_t depthPassMask;
-	uint64_t stencilPassMask;
-	uint64_t coverageMask;
+    uint64_t depthPassMask;
+    uint64_t stencilPassMask;
+    uint64_t coverageMask;
 };
 
 event LateDepthStencilInfoSingleSample
 {
-	uint64_t depthPassMask;
-	uint64_t stencilPassMask;
-	uint64_t coverageMask;
+    uint64_t depthPassMask;
+    uint64_t stencilPassMask;
+    uint64_t coverageMask;
 };
 
 event LateDepthStencilInfoSampleRate
 {
-	uint64_t depthPassMask;
-	uint64_t stencilPassMask;
-	uint64_t coverageMask;
+    uint64_t depthPassMask;
+    uint64_t stencilPassMask;
+    uint64_t coverageMask;
 };
 
 event LateDepthStencilInfoNullPS
 {
-	uint64_t depthPassMask;
-	uint64_t stencilPassMask;
-	uint64_t coverageMask;
+    uint64_t depthPassMask;
+    uint64_t stencilPassMask;
+    uint64_t coverageMask;
 };
 
 event EarlyDepthInfoPixelRate
 {
-	uint64_t depthPassCount;
-	uint64_t activeLanes;
+    uint64_t depthPassCount;
+    uint64_t activeLanes;
 };
 
 
 event LateDepthInfoPixelRate
 {
-	uint64_t depthPassCount;
-	uint64_t activeLanes;
+    uint64_t depthPassCount;
+    uint64_t activeLanes;
 };
 
 
 event BackendDrawEndEvent
 {
-	uint32_t drawId;
+    uint32_t drawId;
 };
 
 event FrontendDrawEndEvent
 {
-	uint32_t drawId;
+    uint32_t drawId;
 };
 
 event EarlyZSingleSample
 {
-	uint32_t drawId;
-	uint64_t passCount;
-	uint64_t failCount;
-	uint64_t testCount;
+    uint32_t drawId;
+    uint64_t passCount;
+    uint64_t failCount;
 };	
 
 event LateZSingleSample
 {
-	uint32_t drawId;
-	uint64_t passCount;
-	uint64_t failCount;
-	uint64_t testCount;
+    uint32_t drawId;
+    uint64_t passCount;
+    uint64_t failCount;
 };
 
 event EarlyStencilSingleSample
 {
-	uint32_t drawId; 
-	uint64_t passCount;
-	uint64_t failCount;
-	uint64_t testCount; 
+    uint32_t drawId; 
+    uint64_t passCount;
+    uint64_t failCount;
 };
 
 event LateStencilSingleSample
 {
-	uint32_t drawId; 
-	uint64_t passCount;
-	uint64_t failCount;
-	uint64_t testCount;
+    uint32_t drawId; 
+    uint64_t passCount;
+    uint64_t failCount;
 };
 
 event EarlyZSampleRate
 {
-	uint32_t drawId;
-	uint64_t passCount;
-	uint64_t failCount;
-	uint64_t testCount;
+    uint32_t drawId;
+    uint64_t passCount;
+    uint64_t failCount;
 };	
 
 event LateZSampleRate
 {
-	uint32_t drawId;
-	uint64_t passCount;
-	uint64_t failCount;
-	uint64_t testCount;
+    uint32_t drawId;
+    uint64_t passCount;
+    uint64_t failCount;
 };
 
 event EarlyStencilSampleRate
 {
-	uint32_t drawId; 
-	uint64_t passCount;
-	uint64_t failCount;
-	uint64_t testCount; 
+    uint32_t drawId; 
+    uint64_t passCount;
+    uint64_t failCount;
 };
 
 event LateStencilSampleRate
 {
-	uint32_t drawId; 
-	uint64_t passCount;
-	uint64_t failCount;
-	uint64_t testCount;
+    uint32_t drawId; 
+    uint64_t passCount;
+    uint64_t failCount;
 };
 
 event EarlyZNullPS
 {
-	uint32_t drawId;
-	uint64_t passCount;
-	uint64_t failCount;
-	uint64_t testCount;
+    uint32_t drawId;
+    uint64_t passCount;
+    uint64_t failCount;
 };
 
 event EarlyStencilNullPS
 {
-	uint32_t drawId; 
-	uint64_t passCount;
-	uint64_t failCount;
-	uint64_t testCount; 
+    uint32_t drawId; 
+    uint64_t passCount;
+    uint64_t failCount;
 };
 
 event EarlyZPixelRate
 {
-	uint32_t drawId;
-	uint64_t passCount;
-	uint64_t failCount;
-	uint64_t testCount;
+    uint32_t drawId;
+    uint64_t passCount;
+    uint64_t failCount;
 };
 
 event LateZPixelRate
 {
-	uint32_t drawId;
-	uint64_t passCount;
-	uint64_t failCount;
-	uint64_t testCount;
+    uint32_t drawId;
+    uint64_t passCount;
+    uint64_t failCount;
 };
 
 
 event EarlyOmZ
 {
-	uint32_t drawId;
-	uint64_t passCount;
-	uint64_t failCount;
-	uint64_t testCount;
+    uint32_t drawId;
+    uint64_t passCount;
+    uint64_t failCount;
 };
 
 event EarlyOmStencil
 {
-	uint32_t drawId;
-	uint64_t passCount;
-	uint64_t failCount;
-	uint64_t testCount;
+    uint32_t drawId;
+    uint64_t passCount;
+    uint64_t failCount;
 };
 
 event LateOmZ
 {
-	uint32_t drawId;
-	uint64_t passCount;
-	uint64_t failCount;
-	uint64_t testCount;
+    uint32_t drawId;
+    uint64_t passCount;
+    uint64_t failCount;
 };
 
 event LateOmStencil
 {
-	uint32_t drawId;
-	uint64_t passCount;
-	uint64_t failCount;
-	uint64_t testCount;
+    uint32_t drawId;
+    uint64_t passCount;
+    uint64_t failCount;
 };
 
 event GSPrimInfo
 {
-	uint64_t inputPrimCount;
-	uint64_t primGeneratedCount;
-	uint64_t vertsInput;
+    uint64_t inputPrimCount;
+    uint64_t primGeneratedCount;
+    uint64_t vertsInput;
 };
 
 event GSInputPrims
 {
-	uint32_t drawId;
-	uint64_t inputPrimCount;
+    uint32_t drawId;
+    uint64_t inputPrimCount;
 };
 
 event GSPrimsGen
 {
-	uint32_t drawId;
-	uint64_t primGeneratedCount;
+    uint32_t drawId;
+    uint64_t primGeneratedCount;
 };
 
 event GSVertsInput
 {
-	uint32_t drawId;
-	uint64_t vertsInput;
+    uint32_t drawId;
+    uint64_t vertsInput;
 };
 
 event ClipVertexCount
 {
-	uint64_t vertsPerPrim;
-	uint64_t primMask;
+    uint64_t vertsPerPrim;
+    uint64_t primMask;
 };
 
 //REMOVE AND REPLACE
 event FlushVertClip
 {
-	uint32_t drawId;
+    uint32_t drawId;
 };
 
 event VertsClipped
 {
-	uint32_t drawId;
-	uint64_t clipCount;
+    uint32_t drawId;
+    uint64_t clipCount;
 };
 
 event TessPrimCount
 {
-	uint64_t primCount;
+    uint64_t primCount;
 };
 
 //REMOVE AND REPLACE
 event TessPrimFlush
 {
-	uint32_t drawId;
+    uint32_t drawId;
 };
 
 event TessPrims
 {
-	uint32_t drawId;
-	uint64_t primCount;
+    uint32_t drawId;
+    uint64_t primCount;
 };

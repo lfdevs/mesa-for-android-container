@@ -24,7 +24,7 @@ include Makefile.sources
 include $(top_srcdir)/src/gallium/Automake.inc
 
 AM_CFLAGS = \
-	-Wall -pedantic \
+	-pedantic \
 	$(GALLIUM_CFLAGS) \
 	$(VISIBILITY_CFLAGS)
 
@@ -38,4 +38,4 @@ noinst_LTLIBRARIES = libxatracker.la
 
 libxatracker_la_SOURCES = $(C_SOURCES)
 
-EXTRA_DIST = README xa-indent
+EXTRA_DIST = README xa-indent.sh

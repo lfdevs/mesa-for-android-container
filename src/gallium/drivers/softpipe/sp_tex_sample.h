@@ -155,7 +155,8 @@ struct sp_tgsi_sampler
 };
 
 compute_lambda_func
-softpipe_get_lambda_func(const struct pipe_sampler_view *view, unsigned shader);
+softpipe_get_lambda_func(const struct pipe_sampler_view *view,
+                         enum pipe_shader_type shader);
 
 
 void *

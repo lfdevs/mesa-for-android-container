@@ -147,6 +147,23 @@ anv_gem_set_domain(struct anv_device *device, uint32_t gem_handle,
 }
 
 /**
+ * Returns 0, 1, or negative to indicate error
+ */
+int
+anv_gem_busy(struct anv_device *device, uint32_t gem_handle)
+{
+   struct drm_i915_gem_busy busy = {
+      .handle = gem_handle,
+   };
+
+   int ret = anv_ioctl(device->fd, DRM_IOCTL_I915_GEM_BUSY, &busy);
+   if (ret < 0)
+      return ret;
+
+   return busy.busy != 0;
+}
+
+/**
  * On error, \a timeout_ns holds the remaining time.
  */
 int
@@ -288,6 +305,22 @@ anv_gem_destroy_context(struct anv_device *device, int context)
 }
 
 int
+anv_gem_get_context_param(int fd, int context, uint32_t param, uint64_t *value)
+{
+   struct drm_i915_gem_context_param gp = {
+      .ctx_id = context,
+      .param = param,
+   };
+
+   int ret = anv_ioctl(fd, DRM_IOCTL_I915_GEM_CONTEXT_GETPARAM, &gp);
+   if (ret == -1)
+      return -1;
+
+   *value = gp.value;
+   return 0;
+}
+
+int
 anv_gem_get_aperture(int fd, uint64_t *size)
 {
    struct drm_i915_gem_get_aperture aperture = { 0 };
@@ -299,6 +332,41 @@ anv_gem_get_aperture(int fd, uint64_t *size)
    *size = aperture.aper_available_size;
 
    return 0;
+}
+
+bool
+anv_gem_supports_48b_addresses(int fd)
+{
+   struct drm_i915_gem_exec_object2 obj = {
+      .flags = EXEC_OBJECT_SUPPORTS_48B_ADDRESS,
+   };
+
+   struct drm_i915_gem_execbuffer2 execbuf = {
+      .buffers_ptr = (uintptr_t)&obj,
+      .buffer_count = 1,
+      .rsvd1 = 0xffffffu,
+   };
+
+   int ret = anv_ioctl(fd, DRM_IOCTL_I915_GEM_EXECBUFFER2, &execbuf);
+
+   return ret == -1 && errno == ENOENT;
+}
+
+int
+anv_gem_gpu_get_reset_stats(struct anv_device *device,
+                            uint32_t *active, uint32_t *pending)
+{
+   struct drm_i915_reset_stats stats = {
+      .ctx_id = device->context_id,
+   };
+
+   int ret = anv_ioctl(device->fd, DRM_IOCTL_I915_GET_RESET_STATS, &stats);
+   if (ret == 0) {
+      *active = stats.batch_active;
+      *pending = stats.batch_pending;
+   }
+
+   return ret;
 }
 
 int

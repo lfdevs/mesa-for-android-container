@@ -672,6 +672,7 @@ void si_init_perfcounters(struct si_screen *screen)
 		num_blocks = ARRAY_SIZE(groups_VI);
 		break;
 	case SI:
+	case GFX9:
 	default:
 		return; /* not implemented */
 	}

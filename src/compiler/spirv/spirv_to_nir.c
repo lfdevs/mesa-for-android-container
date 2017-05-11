@@ -104,6 +104,8 @@ vtn_const_ssa_value(struct vtn_builder *b, nir_constant *constant,
    switch (glsl_get_base_type(type)) {
    case GLSL_TYPE_INT:
    case GLSL_TYPE_UINT:
+   case GLSL_TYPE_INT64:
+   case GLSL_TYPE_UINT64:
    case GLSL_TYPE_BOOL:
    case GLSL_TYPE_FLOAT:
    case GLSL_TYPE_DOUBLE: {
@@ -420,6 +422,8 @@ vtn_type_copy(struct vtn_builder *b, struct vtn_type *src)
       switch (glsl_get_base_type(src->type)) {
       case GLSL_TYPE_INT:
       case GLSL_TYPE_UINT:
+      case GLSL_TYPE_INT64:
+      case GLSL_TYPE_UINT64:
       case GLSL_TYPE_BOOL:
       case GLSL_TYPE_FLOAT:
       case GLSL_TYPE_DOUBLE:
@@ -561,6 +565,9 @@ struct_member_decoration_cb(struct vtn_builder *b,
       vtn_warn("Decoration only allowed for CL-style kernels: %s",
                spirv_decoration_to_string(dec->decoration));
       break;
+
+   default:
+      unreachable("Unhandled decoration");
    }
 }
 
@@ -609,7 +616,7 @@ type_decoration_cb(struct vtn_builder *b,
    case SpvDecorationOffset:
    case SpvDecorationXfbBuffer:
    case SpvDecorationXfbStride:
-      vtn_warn("Decoraiton only allowed for struct members: %s",
+      vtn_warn("Decoration only allowed for struct members: %s",
                spirv_decoration_to_string(dec->decoration));
       break;
 
@@ -625,7 +632,7 @@ type_decoration_cb(struct vtn_builder *b,
    case SpvDecorationLinkageAttributes:
    case SpvDecorationNoContraction:
    case SpvDecorationInputAttachmentIndex:
-      vtn_warn("Decoraiton not allowed on types: %s",
+      vtn_warn("Decoration not allowed on types: %s",
                spirv_decoration_to_string(dec->decoration));
       break;
 
@@ -635,9 +642,12 @@ type_decoration_cb(struct vtn_builder *b,
    case SpvDecorationFPRoundingMode:
    case SpvDecorationFPFastMathMode:
    case SpvDecorationAlignment:
-      vtn_warn("Decoraiton only allowed for CL-style kernels: %s",
+      vtn_warn("Decoration only allowed for CL-style kernels: %s",
                spirv_decoration_to_string(dec->decoration));
       break;
+
+   default:
+      unreachable("Unhandled decoration");
    }
 }
 
@@ -709,8 +719,12 @@ vtn_handle_type(struct vtn_builder *b, SpvOp opcode,
       val->type->type = glsl_bool_type();
       break;
    case SpvOpTypeInt: {
+      int bit_size = w[2];
       const bool signedness = w[3];
-      val->type->type = (signedness ? glsl_int_type() : glsl_uint_type());
+      if (bit_size == 64)
+         val->type->type = (signedness ? glsl_int64_t_type() : glsl_uint64_t_type());
+      else
+         val->type->type = (signedness ? glsl_int_type() : glsl_uint_type());
       break;
    }
    case SpvOpTypeFloat: {
@@ -854,8 +868,12 @@ vtn_handle_type(struct vtn_builder *b, SpvOp opcode,
          val->type->access_qualifier = SpvAccessQualifierReadWrite;
 
       if (multisampled) {
-         assert(dim == GLSL_SAMPLER_DIM_2D);
-         dim = GLSL_SAMPLER_DIM_MS;
+         if (dim == GLSL_SAMPLER_DIM_2D)
+            dim = GLSL_SAMPLER_DIM_MS;
+         else if (dim == GLSL_SAMPLER_DIM_SUBPASS)
+            dim = GLSL_SAMPLER_DIM_SUBPASS_MS;
+         else
+            assert(!"Unsupported multisampled image type");
       }
 
       val->type->image_format = translate_image_format(format);
@@ -864,7 +882,6 @@ vtn_handle_type(struct vtn_builder *b, SpvOp opcode,
          val->type->type = glsl_sampler_type(dim, is_shadow, is_array,
                                              glsl_get_base_type(sampled_type));
       } else if (sampled == 2) {
-         assert((dim == GLSL_SAMPLER_DIM_SUBPASS) || format);
          assert(!is_shadow);
          val->type->type = glsl_image_type(dim, is_array,
                                            glsl_get_base_type(sampled_type));
@@ -908,6 +925,8 @@ vtn_null_constant(struct vtn_builder *b, const struct glsl_type *type)
    switch (glsl_get_base_type(type)) {
    case GLSL_TYPE_INT:
    case GLSL_TYPE_UINT:
+   case GLSL_TYPE_INT64:
+   case GLSL_TYPE_UINT64:
    case GLSL_TYPE_BOOL:
    case GLSL_TYPE_FLOAT:
    case GLSL_TYPE_DOUBLE:
@@ -1062,6 +1081,8 @@ vtn_handle_constant(struct vtn_builder *b, SpvOp opcode,
       switch (glsl_get_base_type(val->const_type)) {
       case GLSL_TYPE_UINT:
       case GLSL_TYPE_INT:
+      case GLSL_TYPE_UINT64:
+      case GLSL_TYPE_INT64:
       case GLSL_TYPE_FLOAT:
       case GLSL_TYPE_BOOL:
       case GLSL_TYPE_DOUBLE: {
@@ -1128,6 +1149,7 @@ vtn_handle_constant(struct vtn_builder *b, SpvOp opcode,
                               glsl_get_bit_size(v1->type->type);
 
          assert(bit_size == bit_size0 && bit_size == bit_size1);
+         (void)bit_size0; (void)bit_size1;
 
          if (bit_size == 64) {
             uint64_t u64[8];
@@ -1199,6 +1221,8 @@ vtn_handle_constant(struct vtn_builder *b, SpvOp opcode,
             switch (glsl_get_base_type(type)) {
             case GLSL_TYPE_UINT:
             case GLSL_TYPE_INT:
+            case GLSL_TYPE_UINT64:
+            case GLSL_TYPE_INT64:
             case GLSL_TYPE_FLOAT:
             case GLSL_TYPE_DOUBLE:
             case GLSL_TYPE_BOOL:
@@ -1368,6 +1392,8 @@ vtn_create_ssa_value(struct vtn_builder *b, const struct glsl_type *type)
          switch (glsl_get_base_type(type)) {
          case GLSL_TYPE_INT:
          case GLSL_TYPE_UINT:
+         case GLSL_TYPE_INT64:
+         case GLSL_TYPE_UINT64:
          case GLSL_TYPE_BOOL:
          case GLSL_TYPE_FLOAT:
          case GLSL_TYPE_DOUBLE:
@@ -1542,7 +1568,8 @@ vtn_handle_texture(struct vtn_builder *b, SpvOp opcode,
          coord_components++;
 
       coord = vtn_ssa_value(b, w[idx++])->def;
-      p->src = nir_src_for_ssa(coord);
+      p->src = nir_src_for_ssa(nir_channels(&b->nb, coord,
+                                            (1 << coord_components) - 1));
       p->src_type = nir_tex_src_coord;
       p++;
       break;
@@ -1971,17 +1998,21 @@ vtn_handle_image(struct vtn_builder *b, SpvOp opcode,
    if (opcode != SpvOpImageWrite) {
       struct vtn_value *val = vtn_push_value(b, w[2], vtn_value_type_ssa);
       struct vtn_type *type = vtn_value(b, w[1], vtn_value_type_type)->type;
-      nir_ssa_dest_init(&intrin->instr, &intrin->dest, 4, 32, NULL);
+
+      unsigned dest_components =
+         nir_intrinsic_infos[intrin->intrinsic].dest_components;
+      if (intrin->intrinsic == nir_intrinsic_image_size) {
+         dest_components = intrin->num_components =
+            glsl_get_vector_elements(type->type);
+      }
+
+      nir_ssa_dest_init(&intrin->instr, &intrin->dest,
+                        dest_components, 32, NULL);
 
       nir_builder_instr_insert(&b->nb, &intrin->instr);
 
-      /* The image intrinsics always return 4 channels but we may not want
-       * that many.  Emit a mov to trim it down.
-       */
-      unsigned swiz[4] = {0, 1, 2, 3};
       val->ssa = vtn_create_ssa_value(b, type->type);
-      val->ssa->def = nir_swizzle(&b->nb, &intrin->dest.ssa, swiz,
-                                  glsl_get_vector_elements(type->type), false);
+      val->ssa->def = &intrin->dest.ssa;
    } else {
       nir_builder_instr_insert(&b->nb, &intrin->instr);
    }
@@ -2323,15 +2354,30 @@ vtn_vector_construct(struct vtn_builder *b, unsigned num_components,
    nir_alu_instr *vec = create_vec(b->shader, num_components,
                                    srcs[0]->bit_size);
 
+   /* From the SPIR-V 1.1 spec for OpCompositeConstruct:
+    *
+    *    "When constructing a vector, there must be at least two Constituent
+    *    operands."
+    */
+   assert(num_srcs >= 2);
+
    unsigned dest_idx = 0;
    for (unsigned i = 0; i < num_srcs; i++) {
       nir_ssa_def *src = srcs[i];
+      assert(dest_idx + src->num_components <= num_components);
       for (unsigned j = 0; j < src->num_components; j++) {
          vec->src[dest_idx].src = nir_src_for_ssa(src);
          vec->src[dest_idx].swizzle[0] = j;
          dest_idx++;
       }
    }
+
+   /* From the SPIR-V 1.1 spec for OpCompositeConstruct:
+    *
+    *    "When constructing a vector, the total number of components in all
+    *    the operands must equal the number of components in Result Type."
+    */
+   assert(dest_idx == num_components);
 
    nir_builder_instr_insert(&b->nb, &vec->instr);
 
@@ -2629,7 +2675,6 @@ vtn_handle_preamble_instruction(struct vtn_builder *b, SpvOp opcode,
       case SpvCapabilityVector16:
       case SpvCapabilityFloat16Buffer:
       case SpvCapabilityFloat16:
-      case SpvCapabilityInt64:
       case SpvCapabilityInt64Atomics:
       case SpvCapabilityAtomicStorage:
       case SpvCapabilityInt16:
@@ -2639,14 +2684,15 @@ vtn_handle_preamble_instruction(struct vtn_builder *b, SpvOp opcode,
       case SpvCapabilitySparseResidency:
       case SpvCapabilityMinLod:
       case SpvCapabilityTransformFeedback:
-      case SpvCapabilityStorageImageReadWithoutFormat:
-      case SpvCapabilityStorageImageWriteWithoutFormat:
          vtn_warn("Unsupported SPIR-V capability: %s",
                   spirv_capability_to_string(cap));
          break;
 
       case SpvCapabilityFloat64:
          spv_check_supported(float64, cap);
+         break;
+      case SpvCapabilityInt64:
+         spv_check_supported(int64, cap);
          break;
 
       case SpvCapabilityAddresses:
@@ -2671,6 +2717,21 @@ vtn_handle_preamble_instruction(struct vtn_builder *b, SpvOp opcode,
       case SpvCapabilityTessellationPointSize:
          spv_check_supported(tessellation, cap);
          break;
+
+      case SpvCapabilityDrawParameters:
+         spv_check_supported(draw_parameters, cap);
+         break;
+
+      case SpvCapabilityStorageImageReadWithoutFormat:
+         spv_check_supported(image_read_without_format, cap);
+         break;
+
+      case SpvCapabilityStorageImageWriteWithoutFormat:
+         spv_check_supported(image_write_without_format, cap);
+         break;
+
+      default:
+         unreachable("Unhandled capability");
       }
       break;
    }
@@ -2860,6 +2921,9 @@ vtn_handle_execution_mode(struct vtn_builder *b, struct vtn_value *entry_point,
    case SpvExecutionModeVecTypeHint:
    case SpvExecutionModeContractionOff:
       break; /* OpenCL */
+
+   default:
+      unreachable("Unhandled execution mode");
    }
 }
 

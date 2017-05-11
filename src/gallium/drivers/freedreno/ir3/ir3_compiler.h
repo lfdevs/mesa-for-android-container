@@ -41,7 +41,6 @@ struct ir3_compiler {
 };
 
 struct ir3_compiler * ir3_compiler_create(struct fd_device *dev, uint32_t gpu_id);
-void ir3_compiler_destroy(struct ir3_compiler *compiler);
 
 int ir3_compile_shader_nir(struct ir3_compiler *compiler,
 		struct ir3_shader_variant *so);

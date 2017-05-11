@@ -174,7 +174,9 @@ public:
    virtual void getBuiltinCode(const uint32_t **code, uint32_t *size) const = 0;
 
    virtual void parseDriverInfo(const struct nv50_ir_prog_info *info) {
-      threads = info->prop.cp.numThreads;
+      threads = info->prop.cp.numThreads[0] *
+         info->prop.cp.numThreads[1] *
+         info->prop.cp.numThreads[2];
       if (threads == 0)
          threads = info->target >= NVISA_GK104_CHIPSET ? 1024 : 512;
    }

@@ -821,7 +821,7 @@ int virgl_encoder_get_query_result(struct virgl_context *ctx,
 
 int virgl_encoder_render_condition(struct virgl_context *ctx,
                                   uint32_t handle, boolean condition,
-                                  uint mode)
+                                  enum pipe_render_cond_flag mode)
 {
    virgl_encoder_write_cmd_dword(ctx, VIRGL_CMD0(VIRGL_CCMD_SET_RENDER_CONDITION, 0, VIRGL_RENDER_CONDITION_SIZE));
    virgl_encoder_write_dword(ctx->cbuf, handle);

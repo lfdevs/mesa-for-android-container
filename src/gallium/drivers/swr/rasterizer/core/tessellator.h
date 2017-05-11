@@ -67,14 +67,14 @@ INLINE HANDLE SWR_API TSInitCtx(
     void* pContextMem,
     size_t& memSize)
 {
-    SWR_ASSERT(0, "%s: Not Implemented", __FUNCTION__);
+    SWR_NOT_IMPL;
     return NULL;
 }
 
 
 INLINE void SWR_API TSDestroyCtx(HANDLE tsCtx)
 {
-    SWR_ASSERT(0, "%s: Not Implemented", __FUNCTION__);
+    SWR_NOT_IMPL;
 }
 
 
@@ -83,6 +83,6 @@ INLINE void SWR_API TSTessellate(
     const SWR_TESSELLATION_FACTORS& tsTessFactors,
     SWR_TS_TESSELLATED_DATA& tsTessellatedData)
 {
-    SWR_ASSERT(0, "%s: Not Implemented", __FUNCTION__);
+    SWR_NOT_IMPL;
 }
 

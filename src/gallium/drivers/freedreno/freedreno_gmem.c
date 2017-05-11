@@ -219,6 +219,9 @@ calculate_tiles(struct fd_batch *batch)
 			div_round_up(nbins_x, tpp_x)) > 8)
 		tpp_x += 1;
 
+	gmem->maxpw = tpp_x;
+	gmem->maxph = tpp_y;
+
 	/* configure pipes: */
 	xoff = yoff = 0;
 	for (i = 0; i < ARRAY_SIZE(ctx->pipe); i++) {

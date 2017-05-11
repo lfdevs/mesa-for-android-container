@@ -22,7 +22,3 @@ C_SOURCES := \
 	radeon_video.c \
 	radeon_video.h \
 	radeon_winsys.h
-
-LLVM_C_FILES := \
-	radeon_elf_util.c \
-	radeon_elf_util.h

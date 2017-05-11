@@ -39,7 +39,7 @@
 
 #include "util/macros.h"
 
-#include "decoder.h"
+#include "common/gen_decoder.h"
 #include "intel_aub.h"
 #include "gen_disasm.h"
 
@@ -75,6 +75,8 @@ uint64_t dynamic_state_base;
 uint64_t instruction_base;
 uint64_t instruction_bound;
 
+FILE *outfile;
+
 static inline uint32_t
 field(uint32_t value, int start, int end)
 {
@@ -94,80 +96,10 @@ valid_offset(uint32_t offset)
 }
 
 static void
-print_dword_val(struct gen_field_iterator *iter, uint64_t offset,
-                int *dword_num)
+decode_group(struct gen_group *strct, const uint32_t *p, int starting_dword)
 {
-   struct gen_field *f;
-
-   f = iter->group->fields[iter->i - 1];
-   const int dword = f->start / 32;
-
-   if (*dword_num != dword) {
-      printf("0x%08"PRIx64":  0x%08x : Dword %d\n",
-             offset + 4 * dword,  iter->p[dword], dword);
-      *dword_num = dword;
-   }
-}
-
-static char *
-print_iterator_values(struct gen_field_iterator *iter, int *idx)
-{
-    char *token = NULL;
-    if (strstr(iter->value, "struct") == NULL) {
-       if (strlen(iter->description) > 0) {
-          printf("    %s: %s (%s)\n",
-                 iter->name, iter->value, iter->description);
-       } else {
-          printf("    %s: %s\n", iter->name, iter->value);
-       }
-    } else {
-        token = strtok(iter->value, " ");
-        if (token != NULL) {
-            token = strtok(NULL, " ");
-            *idx = atoi(strtok(NULL, ">"));
-        } else {
-            token = NULL;
-        }
-        printf("    %s:<struct %s>\n", iter->name, token);
-    }
-    return token;
-}
-
-static void
-decode_structure(struct gen_spec *spec, struct gen_group *strct,
-                 const uint32_t *p)
-{
-   struct gen_field_iterator iter;
-   char *token = NULL;
-   int idx = 0, dword_num = 0;
-   uint64_t offset = 0;
-
-   if (option_print_offsets)
-      offset = (void *) p - gtt;
-   else
-      offset = 0;
-
-   gen_field_iterator_init(&iter, strct, p,
-                           option_color == COLOR_ALWAYS);
-   while (gen_field_iterator_next(&iter)) {
-      idx = 0;
-      print_dword_val(&iter, offset, &dword_num);
-      token = print_iterator_values(&iter, &idx);
-      if (token != NULL) {
-         struct gen_group *struct_val = gen_spec_find_struct(spec, token);
-         decode_structure(spec, struct_val, &p[idx]);
-         token = NULL;
-      }
-   }
-}
-
-static void
-handle_struct_decode(struct gen_spec *spec, char *struct_name, uint32_t *p)
-{
-   if (struct_name == NULL)
-      return;
-   struct gen_group *struct_val = gen_spec_find_struct(spec, struct_name);
-   decode_structure(spec, struct_val, p);
+   uint64_t offset = option_print_offsets ? (void *) p - gtt : 0;
+   gen_print_group(outfile, strct, offset, p, option_color == COLOR_ALWAYS);
 }
 
 static void
@@ -179,7 +111,7 @@ dump_binding_table(struct gen_spec *spec, uint32_t offset)
 
    surface_state = gen_spec_find_struct(spec, "RENDER_SURFACE_STATE");
    if (surface_state == NULL) {
-      printf("did not find RENDER_SURFACE_STATE info\n");
+      fprintf(outfile, "did not find RENDER_SURFACE_STATE info\n");
       return;
    }
 
@@ -190,14 +122,14 @@ dump_binding_table(struct gen_spec *spec, uint32_t offset)
          continue;
       start = pointers[i] + surface_state_base;
       if (!valid_offset(start)) {
-         printf("pointer %u: %08x <not valid>\n",
-                i, pointers[i]);
+         fprintf(outfile, "pointer %u: %08x <not valid>\n",
+                 i, pointers[i]);
          continue;
       } else {
-         printf("pointer %u: %08x\n", i, pointers[i]);
+         fprintf(outfile, "pointer %u: %08x\n", i, pointers[i]);
       }
 
-      decode_structure(spec, surface_state, gtt + start);
+      decode_group(surface_state, gtt + start, 0);
    }
 }
 
@@ -214,25 +146,25 @@ handle_3dstate_index_buffer(struct gen_spec *spec, uint32_t *p)
    if (length > 10)
       length = 10;
 
-   printf("\t");
+   fprintf(outfile, "\t");
 
    for (i = 0; i < length; i++) {
       switch (type) {
       case 0:
-         printf("%3d ", ((uint8_t *)start)[i]);
+         fprintf(outfile, "%3d ", ((uint8_t *)start)[i]);
          break;
       case 1:
-         printf("%3d ", ((uint16_t *)start)[i]);
+         fprintf(outfile, "%3d ", ((uint16_t *)start)[i]);
          break;
       case 2:
-         printf("%3d ", ((uint32_t *)start)[i]);
+         fprintf(outfile, "%3d ", ((uint32_t *)start)[i]);
          break;
       }
    }
    if (length < p[4] / size)
-      printf("...\n");
+      fprintf(outfile, "...\n");
    else
-      printf("\n");
+      fprintf(outfile, "\n");
 }
 
 static inline uint64_t
@@ -308,8 +240,8 @@ dump_samplers(struct gen_spec *spec, uint32_t offset)
 
    start = dynamic_state_base + offset;
    for (i = 0; i < 4; i++) {
-      printf("sampler state %d\n", i);
-      decode_structure(spec, sampler_state, gtt + start + i * 16);
+      fprintf(outfile, "sampler state %d\n", i);
+      decode_group(sampler_state, gtt + start + i * 16, 0);
    }
 }
 
@@ -325,22 +257,22 @@ handle_media_interface_descriptor_load(struct gen_spec *spec, uint32_t *p)
    descriptor_structure =
       gen_spec_find_struct(spec, "INTERFACE_DESCRIPTOR_DATA");
    if (descriptor_structure == NULL) {
-      printf("did not find INTERFACE_DESCRIPTOR_DATA info\n");
+      fprintf(outfile, "did not find INTERFACE_DESCRIPTOR_DATA info\n");
       return;
    }
 
    start = dynamic_state_base + p[3];
    descriptors = gtt + start;
    for (i = 0; i < length; i++, descriptors += 8) {
-      printf("descriptor %u: %08x\n", i, *descriptors);
-      decode_structure(spec, descriptor_structure, descriptors);
+      fprintf(outfile, "descriptor %u: %08x\n", i, *descriptors);
+      decode_group(descriptor_structure, descriptors, 0);
 
       start = instruction_base + descriptors[0];
       if (!valid_offset(start)) {
-         printf("kernel: %08"PRIx64" <not valid>\n", start);
+         fprintf(outfile, "kernel: %08"PRIx64" <not valid>\n", start);
          continue;
       } else {
-         printf("kernel: %08"PRIx64"\n", start);
+         fprintf(outfile, "kernel: %08"PRIx64"\n", start);
       }
 
       insns = (struct brw_instruction *) (gtt + start);
@@ -395,30 +327,30 @@ handle_3dstate_vertex_buffers(struct gen_spec *spec, uint32_t *p)
 
       stride = field(s[0], 0, 11);
       count = 0;
-      printf("vertex buffer %d, size %d\n", n, s[3]);
+      fprintf(outfile, "vertex buffer %d, size %d\n", n, s[3]);
       for (dw = gtt + offset, i = 0; dw < dwend && i < 256; dw++) {
          if (count == 0 && count % (8 * 4) == 0)
-            printf("  ");
+            fprintf(outfile, "  ");
 
          if (probably_float(*dw))
-            printf("  %8.2f", *(float *) dw);
+            fprintf(outfile, "  %8.2f", *(float *) dw);
          else
-            printf("  0x%08x", *dw);
+            fprintf(outfile, "  0x%08x", *dw);
 
          i++;
          count += 4;
 
          if (count == stride) {
-            printf("\n");
+            fprintf(outfile, "\n");
             count = 0;
          } else if (count % (8 * 4) == 0) {
-            printf("\n");
+            fprintf(outfile, "\n");
          } else {
-            printf(" ");
+            fprintf(outfile, " ");
          }
       }
       if (count > 0 && count % (8 * 4) != 0)
-         printf("\n");
+         fprintf(outfile, "\n");
    }
 }
 
@@ -438,8 +370,8 @@ handle_3dstate_vs(struct gen_spec *spec, uint32_t *p)
    }
 
    if (vs_enable) {
-      printf("instruction_base %08"PRIx64", start %08"PRIx64"\n",
-             instruction_base, start);
+      fprintf(outfile, "instruction_base %08"PRIx64", start %08"PRIx64"\n",
+              instruction_base, start);
 
       insns = (struct brw_instruction *) (gtt + instruction_base + start);
       gen_disasm_disassemble(disasm, insns, 0, stdout);
@@ -462,8 +394,8 @@ handle_3dstate_hs(struct gen_spec *spec, uint32_t *p)
    hs_enable = p[2] & 0x80000000;
 
    if (hs_enable) {
-      printf("instruction_base %08"PRIx64", start %08"PRIx64"\n",
-             instruction_base, start);
+      fprintf(outfile, "instruction_base %08"PRIx64", start %08"PRIx64"\n",
+              instruction_base, start);
 
       insns = (struct brw_instruction *) (gtt + instruction_base + start);
       gen_disasm_disassemble(disasm, insns, 0, stdout);
@@ -483,12 +415,12 @@ handle_3dstate_constant(struct gen_spec *spec, uint32_t *p)
       dw = (uint32_t *) f;
       for (j = 0; j < length * 8; j++) {
          if (probably_float(dw[j]))
-            printf("  %04.3f", f[j]);
+            fprintf(outfile, "  %04.3f", f[j]);
          else
-            printf("  0x%08x", dw[j]);
+            fprintf(outfile, "  0x%08x", dw[j]);
 
          if ((j & 7) == 7)
-            printf("\n");
+            fprintf(outfile, "\n");
       }
    }
 }
@@ -557,21 +489,21 @@ handle_3dstate_ps(struct gen_spec *spec, uint32_t *p)
    }
 
    start = instruction_base + (p[1] & mask);
-   printf("  Kernel[0] %s\n", k0);
+   fprintf(outfile, "  Kernel[0] %s\n", k0);
    if (k0 != unused) {
       insns = (struct brw_instruction *) (gtt + start);
       gen_disasm_disassemble(disasm, insns, 0, stdout);
    }
 
    start = instruction_base + (p[k1_offset] & mask);
-   printf("  Kernel[1] %s\n", k1);
+   fprintf(outfile, "  Kernel[1] %s\n", k1);
    if (k1 != unused) {
       insns = (struct brw_instruction *) (gtt + start);
       gen_disasm_disassemble(disasm, insns, 0, stdout);
    }
 
    start = instruction_base + (p[k2_offset] & mask);
-   printf("  Kernel[2] %s\n", k2);
+   fprintf(outfile, "  Kernel[2] %s\n", k2);
    if (k2 != unused) {
       insns = (struct brw_instruction *) (gtt + start);
       gen_disasm_disassemble(disasm, insns, 0, stdout);
@@ -600,8 +532,8 @@ handle_3dstate_viewport_state_pointers_cc(struct gen_spec *spec, uint32_t *p)
 
    start = dynamic_state_base + (p[1] & ~0x1fu);
    for (uint32_t i = 0; i < 4; i++) {
-      printf("viewport %d\n", i);
-      decode_structure(spec, cc_viewport, gtt + start + i * 8);
+      fprintf(outfile, "viewport %d\n", i);
+      decode_group(cc_viewport, gtt + start + i * 8, 0);
    }
 }
 
@@ -616,8 +548,8 @@ handle_3dstate_viewport_state_pointers_sf_clip(struct gen_spec *spec,
 
    start = dynamic_state_base + (p[1] & ~0x3fu);
    for (uint32_t i = 0; i < 4; i++) {
-      printf("viewport %d\n", i);
-      decode_structure(spec, sf_clip_viewport, gtt + start + i * 64);
+      fprintf(outfile, "viewport %d\n", i);
+      decode_group(sf_clip_viewport, gtt + start + i * 64, 0);
    }
 }
 
@@ -630,7 +562,7 @@ handle_3dstate_blend_state_pointers(struct gen_spec *spec, uint32_t *p)
    blend_state = gen_spec_find_struct(spec, "BLEND_STATE");
 
    start = dynamic_state_base + (p[1] & ~0x3fu);
-   decode_structure(spec, blend_state, gtt + start);
+   decode_group(blend_state, gtt + start, 0);
 }
 
 static void
@@ -642,7 +574,7 @@ handle_3dstate_cc_state_pointers(struct gen_spec *spec, uint32_t *p)
    cc_state = gen_spec_find_struct(spec, "COLOR_CALC_STATE");
 
    start = dynamic_state_base + (p[1] & ~0x3fu);
-   decode_structure(spec, cc_state, gtt + start);
+   decode_group(cc_state, gtt + start, 0);
 }
 
 static void
@@ -654,7 +586,7 @@ handle_3dstate_scissor_state_pointers(struct gen_spec *spec, uint32_t *p)
    scissor_rect = gen_spec_find_struct(spec, "SCISSOR_RECT");
 
    start = dynamic_state_base + (p[1] & ~0x1fu);
-   decode_structure(spec, scissor_rect, gtt + start);
+   decode_group(scissor_rect, gtt + start, 0);
 }
 
 static void
@@ -663,9 +595,9 @@ handle_load_register_imm(struct gen_spec *spec, uint32_t *p)
    struct gen_group *reg = gen_spec_find_register(spec, p[1]);
 
    if (reg != NULL) {
-      printf("register %s (0x%x): 0x%x\n",
-             reg->name, reg->register_offset, p[2]);
-      decode_structure(spec, reg, &p[2]);
+      fprintf(outfile, "register %s (0x%x): 0x%x\n",
+              reg->name, reg->register_offset, p[2]);
+      decode_group(reg, &p[2], 0);
    }
 }
 
@@ -750,17 +682,18 @@ static void
 parse_commands(struct gen_spec *spec, uint32_t *cmds, int size, int engine)
 {
    uint32_t *p, *end = cmds + size / 4;
-   unsigned int length, i;
+   int length, i;
    struct gen_group *inst;
 
    for (p = cmds; p < end; p += length) {
       inst = gen_spec_find_instruction(spec, p);
+      length = gen_group_get_length(inst, p);
+      assert(inst == NULL || length > 0);
+      length = MAX2(1, length);
       if (inst == NULL) {
-         printf("unknown instruction %08x\n", p[0]);
-         length = (p[0] & 0xff) + 2;
+         fprintf(outfile, "unknown instruction %08x\n", p[0]);
          continue;
       }
-      length = gen_group_get_length(inst, p);
 
       const char *color, *reset_color = NORMAL;
       uint64_t offset;
@@ -784,33 +717,18 @@ parse_commands(struct gen_spec *spec, uint32_t *cmds, int size, int engine)
       else
          offset = 0;
 
-      printf("%s0x%08"PRIx64":  0x%08x:  %-80s%s\n",
-             color, offset, p[0],
-             gen_group_get_name(inst), reset_color);
+      fprintf(outfile, "%s0x%08"PRIx64":  0x%08x:  %-80s%s\n",
+              color, offset, p[0],
+              gen_group_get_name(inst), reset_color);
 
       if (option_full_decode) {
-         struct gen_field_iterator iter;
-         char *token = NULL;
-         int idx = 0, dword_num = 0;
-         gen_field_iterator_init(&iter, inst, p,
-                                 option_color == COLOR_ALWAYS);
-         while (gen_field_iterator_next(&iter)) {
-            idx = 0;
-            print_dword_val(&iter, offset, &dword_num);
-            if (dword_num > 0)
-                token = print_iterator_values(&iter, &idx);
-            if (token != NULL) {
-                printf("0x%08"PRIx64":  0x%08x : Dword %d\n",
-                       offset + 4 * idx, p[idx], idx);
-                handle_struct_decode(spec,token, &p[idx]);
-                token = NULL;
-            }
-         }
+         decode_group(inst, p, 0);
 
          for (i = 0; i < ARRAY_LENGTH(custom_handlers); i++) {
-            if (gen_group_get_opcode(inst) ==
-                custom_handlers[i].opcode)
+            if (gen_group_get_opcode(inst) == custom_handlers[i].opcode) {
                custom_handlers[i].handle(spec, p);
+               break;
+            }
          }
       }
 
@@ -881,7 +799,7 @@ handle_trace_block(uint32_t *p)
          engine = GEN_ENGINE_BLITTER;
          break;
       default:
-         printf("command write to unknown ring %d\n", type);
+         fprintf(outfile, "command write to unknown ring %d\n", type);
          break;
       }
 
@@ -921,24 +839,24 @@ handle_trace_header(uint32_t *p)
    if (spec == NULL || disasm == NULL)
       exit(EXIT_FAILURE);
 
-   printf("%sAubinator: Intel AUB file decoder.%-80s%s\n",
-          GREEN_HEADER, "", NORMAL);
+   fprintf(outfile, "%sAubinator: Intel AUB file decoder.%-80s%s\n",
+           GREEN_HEADER, "", NORMAL);
 
    if (input_file)
-      printf("File name:        %s\n", input_file);
+      fprintf(outfile, "File name:        %s\n", input_file);
 
    if (aub_pci_id)
-      printf("PCI ID:           0x%x\n", aub_pci_id);
+      fprintf(outfile, "PCI ID:           0x%x\n", aub_pci_id);
 
    char app_name[33];
    strncpy(app_name, (char *)&p[2], 32);
    app_name[32] = 0;
-   printf("Application name: %s\n", app_name);
+   fprintf(outfile, "Application name: %s\n", app_name);
 
-   printf("Decoding as:      %s\n", gen_get_device_name(pci_id));
+   fprintf(outfile, "Decoding as:      %s\n", gen_get_device_name(pci_id));
 
    /* Throw in a new line before the first batch */
-   printf("\n");
+   fprintf(outfile, "\n");
 }
 
 struct aub_file {
@@ -1063,9 +981,9 @@ aub_file_decode_batch(struct aub_file *file)
       bias = 1;
       break;
    default:
-      printf("unknown opcode %d at %td/%td\n",
-             OPCODE(h), file->cursor - file->map,
-             file->end - file->map);
+      fprintf(outfile, "unknown opcode %d at %td/%td\n",
+              OPCODE(h), file->cursor - file->map,
+              file->end - file->map);
       return AUB_ITEM_DECODE_FAILED;
    }
 
@@ -1089,27 +1007,27 @@ aub_file_decode_batch(struct aub_file *file)
    case MAKE_HEADER(TYPE_AUB, OPCODE_AUB, SUBOPCODE_BMP):
       break;
    case MAKE_HEADER(TYPE_AUB, OPCODE_NEW_AUB, SUBOPCODE_VERSION):
-      printf("version block: dw1 %08x\n", p[1]);
+      fprintf(outfile, "version block: dw1 %08x\n", p[1]);
       device = (p[1] >> 8) & 0xff;
-      printf("  device %s\n", device_map[device].name);
+      fprintf(outfile, "  device %s\n", device_map[device].name);
       break;
    case MAKE_HEADER(TYPE_AUB, OPCODE_NEW_AUB, SUBOPCODE_REG_WRITE):
-      printf("register write block: (dwords %d)\n", h & 0xffff);
-      printf("  reg 0x%x, data 0x%x\n", p[1], p[5]);
+      fprintf(outfile, "register write block: (dwords %d)\n", h & 0xffff);
+      fprintf(outfile, "  reg 0x%x, data 0x%x\n", p[1], p[5]);
       break;
    case MAKE_HEADER(TYPE_AUB, OPCODE_NEW_AUB, SUBOPCODE_MEM_WRITE):
-      printf("memory write block (dwords %d):\n", h & 0xffff);
-      printf("  address 0x%"PRIx64"\n", *(uint64_t *) &p[1]);
+      fprintf(outfile, "memory write block (dwords %d):\n", h & 0xffff);
+      fprintf(outfile, "  address 0x%"PRIx64"\n", *(uint64_t *) &p[1]);
       data_type = (p[3] >> 20) & 0xff;
       if (data_type != 0)
-         printf("  data type 0x%x\n", data_type);
-      printf("  address space 0x%x\n", (p[3] >> 28) & 0xf);
+         fprintf(outfile, "  data type 0x%x\n", data_type);
+      fprintf(outfile, "  address space 0x%x\n", (p[3] >> 28) & 0xf);
       break;
    case MAKE_HEADER(TYPE_AUB, OPCODE_NEW_AUB, SUBOPCODE_MEM_POLL):
-      printf("memory poll block (dwords %d):\n", h & 0xffff);
+      fprintf(outfile, "memory poll block (dwords %d):\n", h & 0xffff);
       break;
    default:
-      printf("unknown block type=0x%x, opcode=0x%x, "
+      fprintf(outfile, "unknown block type=0x%x, opcode=0x%x, "
              "subopcode=0x%x (%08x)\n", TYPE(h), OPCODE(h), SUBOPCODE(h), h);
       break;
    }
@@ -1220,6 +1138,8 @@ int main(int argc, char *argv[])
       const char *name;
       int pci_id;
    } gens[] = {
+      { "ilk", 0x0046 }, /* Intel(R) Ironlake Mobile */
+      { "snb", 0x0126 }, /* Intel(R) Sandybridge Mobile GT2 */
       { "ivb", 0x0166 }, /* Intel(R) Ivybridge Mobile GT2 */
       { "hsw", 0x0416 }, /* Intel(R) Haswell Mobile GT2 */
       { "byt", 0x0155 }, /* Intel(R) Bay Trail */
@@ -1239,6 +1159,8 @@ int main(int argc, char *argv[])
       { "xml",        required_argument, NULL,                          'x' },
       { NULL,         0,                 NULL,                          0 }
    };
+
+   outfile = stdout;
 
    i = 0;
    while ((c = getopt_long(argc, argv, "", aubinator_opts, &i)) != -1) {

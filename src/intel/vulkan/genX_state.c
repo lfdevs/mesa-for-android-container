@@ -52,9 +52,6 @@ genX(init_device_state)(struct anv_device *device)
       ps.PipelineSelection = _3D;
    }
 
-   anv_batch_emit(&batch, GENX(3DSTATE_VF_STATISTICS), vfs)
-      vfs.StatisticsEnable = true;
-
    anv_batch_emit(&batch, GENX(3DSTATE_AA_LINE_PARAMETERS), aa);
 
    anv_batch_emit(&batch, GENX(3DSTATE_DRAWING_RECTANGLE), rect) {

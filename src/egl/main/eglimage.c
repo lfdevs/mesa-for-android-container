@@ -46,9 +46,6 @@ _eglParseImageAttribList(_EGLImageAttribs *attrs, _EGLDisplay *dpy,
    (void) dpy;
 
    memset(attrs, 0, sizeof(*attrs));
-   attrs->ImagePreserved = EGL_FALSE;
-   attrs->GLTextureLevel = 0;
-   attrs->GLTextureZOffset = 0;
 
    if (!attrib_list)
       return err;

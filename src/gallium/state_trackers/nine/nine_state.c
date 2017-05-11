@@ -60,17 +60,17 @@ struct csmt_instruction {
 };
 
 struct csmt_context {
-    pipe_thread worker;
+    thrd_t worker;
     struct nine_queue_pool* pool;
     BOOL terminate;
-    pipe_condvar event_processed;
-    pipe_mutex mutex_processed;
+    cnd_t event_processed;
+    mtx_t mutex_processed;
     struct NineDevice9 *device;
     BOOL processed;
     BOOL toPause;
     BOOL hasPaused;
-    pipe_mutex thread_running;
-    pipe_mutex thread_resume;
+    mtx_t thread_running;
+    mtx_t thread_resume;
 };
 
 /* Wait for instruction to be processed.
@@ -79,26 +79,27 @@ struct csmt_context {
 static void
 nine_csmt_wait_processed(struct csmt_context *ctx)
 {
-    pipe_mutex_lock(ctx->mutex_processed);
+    mtx_lock(&ctx->mutex_processed);
     while (!p_atomic_read(&ctx->processed)) {
-        pipe_condvar_wait(ctx->event_processed, ctx->mutex_processed);
+        cnd_wait(&ctx->event_processed, &ctx->mutex_processed);
     }
-    pipe_mutex_unlock(ctx->mutex_processed);
+    mtx_unlock(&ctx->mutex_processed);
 }
 
 /* CSMT worker thread */
 static
-PIPE_THREAD_ROUTINE(nine_csmt_worker, arg)
+int
+nine_csmt_worker(void *arg)
 {
     struct csmt_context *ctx = arg;
     struct csmt_instruction *instr;
     DBG("CSMT worker spawned\n");
 
-    pipe_thread_setname("CSMT-Worker");
+    u_thread_setname("CSMT-Worker");
 
     while (1) {
         nine_queue_wait_flush(ctx->pool);
-        pipe_mutex_lock(ctx->thread_running);
+        mtx_lock(&ctx->thread_running);
 
         /* Get instruction. NULL on empty cmdbuf. */
         while (!p_atomic_read(&ctx->terminate) &&
@@ -106,26 +107,26 @@ PIPE_THREAD_ROUTINE(nine_csmt_worker, arg)
 
             /* decode */
             if (instr->func(ctx->device, instr)) {
-                pipe_mutex_lock(ctx->mutex_processed);
+                mtx_lock(&ctx->mutex_processed);
                 p_atomic_set(&ctx->processed, TRUE);
-                pipe_condvar_signal(ctx->event_processed);
-                pipe_mutex_unlock(ctx->mutex_processed);
+                cnd_signal(&ctx->event_processed);
+                mtx_unlock(&ctx->mutex_processed);
             }
             if (p_atomic_read(&ctx->toPause)) {
-                pipe_mutex_unlock(ctx->thread_running);
+                mtx_unlock(&ctx->thread_running);
                 /* will wait here the thread can be resumed */
-                pipe_mutex_lock(ctx->thread_resume);
-                pipe_mutex_lock(ctx->thread_running);
-                pipe_mutex_unlock(ctx->thread_resume);
+                mtx_lock(&ctx->thread_resume);
+                mtx_lock(&ctx->thread_running);
+                mtx_unlock(&ctx->thread_resume);
             }
         }
 
-        pipe_mutex_unlock(ctx->thread_running);
+        mtx_unlock(&ctx->thread_running);
         if (p_atomic_read(&ctx->terminate)) {
-            pipe_mutex_lock(ctx->mutex_processed);
+            mtx_lock(&ctx->mutex_processed);
             p_atomic_set(&ctx->processed, TRUE);
-            pipe_condvar_signal(ctx->event_processed);
-            pipe_mutex_unlock(ctx->mutex_processed);
+            cnd_signal(&ctx->event_processed);
+            mtx_unlock(&ctx->mutex_processed);
             break;
         }
     }
@@ -151,18 +152,18 @@ nine_csmt_create( struct NineDevice9 *This )
         FREE(ctx);
         return NULL;
     }
-    pipe_condvar_init(ctx->event_processed);
-    pipe_mutex_init(ctx->mutex_processed);
-    pipe_mutex_init(ctx->thread_running);
-    pipe_mutex_init(ctx->thread_resume);
+    cnd_init(&ctx->event_processed);
+    (void) mtx_init(&ctx->mutex_processed, mtx_plain);
+    (void) mtx_init(&ctx->thread_running, mtx_plain);
+    (void) mtx_init(&ctx->thread_resume, mtx_plain);
 
 #if DEBUG
-    pipe_thread_setname("Main thread");
+    u_thread_setname("Main thread");
 #endif
 
     ctx->device = This;
 
-    ctx->worker = pipe_thread_create(nine_csmt_worker, ctx);
+    ctx->worker = u_thread_create(nine_csmt_worker, ctx);
     if (!ctx->worker) {
         nine_queue_delete(ctx->pool);
         FREE(ctx);
@@ -217,7 +218,7 @@ void
 nine_csmt_destroy( struct NineDevice9 *device, struct csmt_context *ctx )
 {
     struct csmt_instruction* instr;
-    pipe_thread render_thread = ctx->worker;
+    thrd_t render_thread = ctx->worker;
 
     DBG("device=%p ctx=%p\n", device, ctx);
 
@@ -233,11 +234,11 @@ nine_csmt_destroy( struct NineDevice9 *device, struct csmt_context *ctx )
 
     nine_csmt_wait_processed(ctx);
     nine_queue_delete(ctx->pool);
-    pipe_mutex_destroy(ctx->mutex_processed);
+    mtx_destroy(&ctx->mutex_processed);
 
     FREE(ctx);
 
-    pipe_thread_wait(render_thread);
+    thrd_join(render_thread, NULL);
 }
 
 static void
@@ -252,11 +253,11 @@ nine_csmt_pause( struct NineDevice9 *device )
     if (nine_queue_no_flushed_work(ctx->pool))
         return;
 
-    pipe_mutex_lock(ctx->thread_resume);
+    mtx_lock(&ctx->thread_resume);
     p_atomic_set(&ctx->toPause, TRUE);
 
     /* Wait the thread is paused */
-    pipe_mutex_lock(ctx->thread_running);
+    mtx_lock(&ctx->thread_running);
     ctx->hasPaused = TRUE;
     p_atomic_set(&ctx->toPause, FALSE);
 }
@@ -273,8 +274,8 @@ nine_csmt_resume( struct NineDevice9 *device )
         return;
 
     ctx->hasPaused = FALSE;
-    pipe_mutex_unlock(ctx->thread_running);
-    pipe_mutex_unlock(ctx->thread_resume);
+    mtx_unlock(&ctx->thread_running);
+    mtx_unlock(&ctx->thread_resume);
 }
 
 struct pipe_context *
@@ -424,47 +425,47 @@ prepare_vs_constants_userbuf_swvp(struct NineDevice9 *device)
 
     if (!device->driver_caps.user_cbufs) {
         struct pipe_constant_buffer *cb = &(context->pipe_data.cb0_swvp);
-        u_upload_data(device->constbuf_uploader,
+        u_upload_data(device->context.pipe->const_uploader,
                       0,
                       cb->buffer_size,
                       device->constbuf_alignment,
                       cb->user_buffer,
                       &(cb->buffer_offset),
                       &(cb->buffer));
-        u_upload_unmap(device->constbuf_uploader);
+        u_upload_unmap(device->context.pipe->const_uploader);
         cb->user_buffer = NULL;
 
         cb = &(context->pipe_data.cb1_swvp);
-        u_upload_data(device->constbuf_uploader,
+        u_upload_data(device->context.pipe->const_uploader,
                       0,
                       cb->buffer_size,
                       device->constbuf_alignment,
                       cb->user_buffer,
                       &(cb->buffer_offset),
                       &(cb->buffer));
-        u_upload_unmap(device->constbuf_uploader);
+        u_upload_unmap(device->context.pipe->const_uploader);
         cb->user_buffer = NULL;
 
         cb = &(context->pipe_data.cb2_swvp);
-        u_upload_data(device->constbuf_uploader,
+        u_upload_data(device->context.pipe->const_uploader,
                       0,
                       cb->buffer_size,
                       device->constbuf_alignment,
                       cb->user_buffer,
                       &(cb->buffer_offset),
                       &(cb->buffer));
-        u_upload_unmap(device->constbuf_uploader);
+        u_upload_unmap(device->context.pipe->const_uploader);
         cb->user_buffer = NULL;
 
         cb = &(context->pipe_data.cb3_swvp);
-        u_upload_data(device->constbuf_uploader,
+        u_upload_data(device->context.pipe->const_uploader,
                       0,
                       cb->buffer_size,
                       device->constbuf_alignment,
                       cb->user_buffer,
                       &(cb->buffer_offset),
                       &(cb->buffer));
-        u_upload_unmap(device->constbuf_uploader);
+        u_upload_unmap(device->context.pipe->const_uploader);
         cb->user_buffer = NULL;
     }
 
@@ -523,14 +524,14 @@ prepare_vs_constants_userbuf(struct NineDevice9 *device)
 
     if (!device->driver_caps.user_cbufs) {
         context->pipe_data.cb_vs.buffer_size = cb.buffer_size;
-        u_upload_data(device->constbuf_uploader,
+        u_upload_data(device->context.pipe->const_uploader,
                       0,
                       cb.buffer_size,
                       device->constbuf_alignment,
                       cb.user_buffer,
                       &context->pipe_data.cb_vs.buffer_offset,
                       &context->pipe_data.cb_vs.buffer);
-        u_upload_unmap(device->constbuf_uploader);
+        u_upload_unmap(device->context.pipe->const_uploader);
         context->pipe_data.cb_vs.user_buffer = NULL;
     } else
         context->pipe_data.cb_vs = cb;
@@ -594,14 +595,14 @@ prepare_ps_constants_userbuf(struct NineDevice9 *device)
 
     if (!device->driver_caps.user_cbufs) {
         context->pipe_data.cb_ps.buffer_size = cb.buffer_size;
-        u_upload_data(device->constbuf_uploader,
+        u_upload_data(device->context.pipe->const_uploader,
                       0,
                       cb.buffer_size,
                       device->constbuf_alignment,
                       cb.user_buffer,
                       &context->pipe_data.cb_ps.buffer_offset,
                       &context->pipe_data.cb_ps.buffer);
-        u_upload_unmap(device->constbuf_uploader);
+        u_upload_unmap(device->context.pipe->const_uploader);
         context->pipe_data.cb_ps.user_buffer = NULL;
     } else
         context->pipe_data.cb_ps = cb;
@@ -3296,14 +3297,14 @@ update_vertex_buffers_sw(struct NineDevice9 *device, int start_vertice, int num_
                                                         &(sw_internal->transfers_so[i]));
                 vtxbuf.buffer = NULL;
                 if (!device->driver_caps.user_sw_vbufs) {
-                    u_upload_data(device->vertex_sw_uploader,
+                    u_upload_data(device->pipe_sw->stream_uploader,
                                   0,
                                   box.width,
                                   16,
                                   vtxbuf.user_buffer,
                                   &(vtxbuf.buffer_offset),
                                   &(vtxbuf.buffer));
-                    u_upload_unmap(device->vertex_sw_uploader);
+                    u_upload_unmap(device->pipe_sw->stream_uploader);
                     vtxbuf.user_buffer = NULL;
                 }
                 pipe_sw->set_vertex_buffers(pipe_sw, i, 1, &vtxbuf);
@@ -3352,14 +3353,14 @@ update_vs_constants_sw(struct NineDevice9 *device)
 
         buf = cb.user_buffer;
         if (!device->driver_caps.user_sw_cbufs) {
-            u_upload_data(device->constbuf_sw_uploader,
+            u_upload_data(device->pipe_sw->const_uploader,
                           0,
                           cb.buffer_size,
                           16,
                           cb.user_buffer,
                           &(cb.buffer_offset),
                           &(cb.buffer));
-            u_upload_unmap(device->constbuf_sw_uploader);
+            u_upload_unmap(device->pipe_sw->const_uploader);
             cb.user_buffer = NULL;
         }
 
@@ -3369,14 +3370,14 @@ update_vs_constants_sw(struct NineDevice9 *device)
 
         cb.user_buffer = (char *)buf + 4096 * sizeof(float[4]);
         if (!device->driver_caps.user_sw_cbufs) {
-            u_upload_data(device->constbuf_sw_uploader,
+            u_upload_data(device->pipe_sw->const_uploader,
                           0,
                           cb.buffer_size,
                           16,
                           cb.user_buffer,
                           &(cb.buffer_offset),
                           &(cb.buffer));
-            u_upload_unmap(device->constbuf_sw_uploader);
+            u_upload_unmap(device->pipe_sw->const_uploader);
             cb.user_buffer = NULL;
         }
 
@@ -3394,14 +3395,14 @@ update_vs_constants_sw(struct NineDevice9 *device)
         cb.user_buffer = state->vs_const_i;
 
         if (!device->driver_caps.user_sw_cbufs) {
-            u_upload_data(device->constbuf_sw_uploader,
+            u_upload_data(device->pipe_sw->const_uploader,
                           0,
                           cb.buffer_size,
                           16,
                           cb.user_buffer,
                           &(cb.buffer_offset),
                           &(cb.buffer));
-            u_upload_unmap(device->constbuf_sw_uploader);
+            u_upload_unmap(device->pipe_sw->const_uploader);
             cb.user_buffer = NULL;
         }
 
@@ -3419,14 +3420,14 @@ update_vs_constants_sw(struct NineDevice9 *device)
         cb.user_buffer = state->vs_const_b;
 
         if (!device->driver_caps.user_sw_cbufs) {
-            u_upload_data(device->constbuf_sw_uploader,
+            u_upload_data(device->pipe_sw->const_uploader,
                           0,
                           cb.buffer_size,
                           16,
                           cb.user_buffer,
                           &(cb.buffer_offset),
                           &(cb.buffer));
-            u_upload_unmap(device->constbuf_sw_uploader);
+            u_upload_unmap(device->pipe_sw->const_uploader);
             cb.user_buffer = NULL;
         }
 
@@ -3450,14 +3451,14 @@ update_vs_constants_sw(struct NineDevice9 *device)
         cb.user_buffer = viewport_data;
 
         {
-            u_upload_data(device->constbuf_sw_uploader,
+            u_upload_data(device->pipe_sw->const_uploader,
                           0,
                           cb.buffer_size,
                           16,
                           cb.user_buffer,
                           &(cb.buffer_offset),
                           &(cb.buffer));
-            u_upload_unmap(device->constbuf_sw_uploader);
+            u_upload_unmap(device->pipe_sw->const_uploader);
             cb.user_buffer = NULL;
         }
 

@@ -89,7 +89,7 @@ struct dri_screen
    __DRIimage * (*lookup_egl_image)(struct dri_screen *ctx, void *handle);
 
    /* OpenCL interop */
-   pipe_mutex opencl_func_mutex;
+   mtx_t opencl_func_mutex;
    opencl_dri_event_add_ref_t opencl_dri_event_add_ref;
    opencl_dri_event_release_t opencl_dri_event_release;
    opencl_dri_event_wait_t opencl_dri_event_wait;

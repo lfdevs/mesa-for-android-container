@@ -31,6 +31,7 @@ struct swr_fence_work {
       void *data;
       struct swr_vertex_shader *swr_vs;
       struct swr_fragment_shader *swr_fs;
+      struct swr_geometry_shader *swr_gs;
    } free;
 
    struct swr_fence_work *next;
@@ -44,4 +45,6 @@ bool swr_fence_work_delete_vs(struct pipe_fence_handle *fence,
                               struct swr_vertex_shader *swr_vs);
 bool swr_fence_work_delete_fs(struct pipe_fence_handle *fence,
                               struct swr_fragment_shader *swr_vs);
+bool swr_fence_work_delete_gs(struct pipe_fence_handle *fence,
+                              struct swr_geometry_shader *swr_gs);
 #endif

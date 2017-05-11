@@ -27,7 +27,7 @@
 #include <stdint.h>
 
 #include "compiler/nir/nir.h"
-#include "brw_compiler.h"
+#include "compiler/brw_compiler.h"
 
 #include "blorp.h"
 

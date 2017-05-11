@@ -1058,7 +1058,7 @@ brw_render_cache_set_clear(struct brw_context *brw)
 }
 
 void
-brw_render_cache_set_add_bo(struct brw_context *brw, drm_intel_bo *bo)
+brw_render_cache_set_add_bo(struct brw_context *brw, struct brw_bo *bo)
 {
    _mesa_set_add(brw->render_cache, bo);
 }
@@ -1076,7 +1076,7 @@ brw_render_cache_set_add_bo(struct brw_context *brw, drm_intel_bo *bo)
  * different caches within a batchbuffer, it's all our responsibility.
  */
 void
-brw_render_cache_set_check_flush(struct brw_context *brw, drm_intel_bo *bo)
+brw_render_cache_set_check_flush(struct brw_context *brw, struct brw_bo *bo)
 {
    if (!_mesa_set_search(brw->render_cache, bo))
       return;

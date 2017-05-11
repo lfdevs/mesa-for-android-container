@@ -43,17 +43,6 @@ struct tr_list
    struct tr_list *prev;
 };
 
-
-struct trace_resource
-{
-   struct pipe_resource base;
-
-   struct pipe_resource *resource;
-
-   struct tr_list list;
-};
-
-
 struct trace_surface
 {
    struct pipe_surface base;
@@ -85,22 +74,11 @@ struct trace_transfer
 };
 
 
-static inline struct trace_resource *
-trace_resource(struct pipe_resource *texture)
-{
-   if (!texture)
-      return NULL;
-   (void)trace_screen(texture->screen);
-   return (struct trace_resource *)texture;
-}
-
-
 static inline struct trace_surface *
 trace_surface(struct pipe_surface *surface)
 {
    if (!surface)
       return NULL;
-   (void)trace_resource(surface->texture);
    return (struct trace_surface *)surface;
 }
 
@@ -119,22 +97,13 @@ trace_transfer(struct pipe_transfer *transfer)
 {
    if (!transfer)
       return NULL;
-   (void)trace_resource(transfer->resource);
    return (struct trace_transfer *)transfer;
 }
 
 
-struct pipe_resource *
-trace_resource_create(struct trace_screen *tr_scr,
-                     struct pipe_resource *texture);
-
-void
-trace_resource_destroy(struct trace_screen *tr_scr,
-		       struct trace_resource *tr_res);
-
 struct pipe_surface *
 trace_surf_create(struct trace_context *tr_ctx,
-                  struct trace_resource *tr_res,
+                  struct pipe_resource *tr_res,
                   struct pipe_surface *surface);
 
 void
@@ -142,7 +111,7 @@ trace_surf_destroy(struct trace_surface *tr_surf);
 
 struct pipe_transfer *
 trace_transfer_create(struct trace_context *tr_ctx,
-		      struct trace_resource *tr_res,
+		      struct pipe_resource *tr_res,
 		      struct pipe_transfer *transfer);
 
 void

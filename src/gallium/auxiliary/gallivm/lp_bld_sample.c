@@ -1412,8 +1412,8 @@ lp_build_unnormalized_coords(struct lp_build_sample_context *bld,
 {
    const unsigned dims = bld->dims;
    LLVMValueRef width;
-   LLVMValueRef height;
-   LLVMValueRef depth;
+   LLVMValueRef height = NULL;
+   LLVMValueRef depth = NULL;
 
    lp_build_extract_image_sizes(bld,
                                 &bld->float_size_bld,

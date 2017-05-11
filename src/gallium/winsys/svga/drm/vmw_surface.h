@@ -57,7 +57,7 @@ struct vmw_svga_winsys_surface
    unsigned next_present_no;
    uint32_t present_fences[VMW_MAX_PRESENTS];
 
-   pipe_mutex mutex;
+   mtx_t mutex;
    struct svga_winsys_buffer *buf; /* Current backing guest buffer */
    uint32_t mapcount; /* Number of mappers */
    uint32_t map_mode; /* PIPE_TRANSFER_[READ|WRITE] */
@@ -94,5 +94,8 @@ void
 vmw_svga_winsys_surface_unmap(struct svga_winsys_context *swc,
                               struct svga_winsys_surface *srf,
                               boolean *rebind);
+void
+vmw_svga_winsys_surface_invalidate(struct svga_winsys_context *swc,
+                                   struct svga_winsys_surface *srf);
 
 #endif /* VMW_SURFACE_H_ */

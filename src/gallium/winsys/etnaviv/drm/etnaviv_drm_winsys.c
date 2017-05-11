@@ -69,7 +69,7 @@ screen_create(struct renderonly *ro)
 
 static struct util_hash_table *etna_tab = NULL;
 
-pipe_static_mutex(etna_screen_mutex);
+static mtx_t etna_screen_mutex = _MTX_INITIALIZER_NP;
 
 static void
 etna_drm_screen_destroy(struct pipe_screen *pscreen)
@@ -77,13 +77,13 @@ etna_drm_screen_destroy(struct pipe_screen *pscreen)
    struct etna_screen *screen = etna_screen(pscreen);
    boolean destroy;
 
-   pipe_mutex_lock(etna_screen_mutex);
+   mtx_lock(&etna_screen_mutex);
    destroy = --screen->refcnt == 0;
    if (destroy) {
       int fd = etna_device_fd(screen->dev);
       util_hash_table_remove(etna_tab, intptr_to_pointer(fd));
    }
-   pipe_mutex_unlock(etna_screen_mutex);
+   mtx_unlock(&etna_screen_mutex);
 
    if (destroy) {
       pscreen->destroy = screen->winsys_priv;
@@ -120,7 +120,7 @@ etna_drm_screen_create_renderonly(struct renderonly *ro)
 {
    struct pipe_screen *pscreen = NULL;
 
-   pipe_mutex_lock(etna_screen_mutex);
+   mtx_lock(&etna_screen_mutex);
    if (!etna_tab) {
       etna_tab = util_hash_table_create(hash_fd, compare_fd);
       if (!etna_tab)
@@ -145,7 +145,7 @@ etna_drm_screen_create_renderonly(struct renderonly *ro)
    }
 
 unlock:
-   pipe_mutex_unlock(etna_screen_mutex);
+   mtx_unlock(&etna_screen_mutex);
    return pscreen;
 }
 

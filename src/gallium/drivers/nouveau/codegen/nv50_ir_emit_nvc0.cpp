@@ -58,6 +58,7 @@ private:
    void setImmediateS8(const ValueRef&);
    void setSUConst16(const Instruction *, const int s);
    void setSUPred(const Instruction *, const int s);
+   void setPDSTL(const Instruction *, const int d);
 
    void emitCondCode(CondCode cc, int pos);
    void emitInterpMode(const Instruction *);
@@ -149,6 +150,8 @@ private:
 
    void emitPIXLD(const Instruction *);
 
+   void emitSHFL(const Instruction *);
+
    void emitVOTE(const Instruction *);
 
    inline void defId(const ValueDef&, const int pos);
@@ -195,13 +198,15 @@ CodeEmitterNVC0::srcAddr32(const ValueRef& src, int pos, int shr)
 
 void CodeEmitterNVC0::defId(const ValueDef& def, const int pos)
 {
-   code[pos / 32] |= (def.get() ? DDATA(def).id : 63) << (pos % 32);
+   code[pos / 32] |= (def.get() && def.getFile() != FILE_FLAGS ? DDATA(def).id : 63) << (pos % 32);
 }
 
-void CodeEmitterNVC0::defId(const Instruction *insn, int d, int pos)
+void CodeEmitterNVC0::defId(const Instruction *insn, int d, const int pos)
 {
-   int r = insn->defExists(d) ? DDATA(insn->def(d)).id : 63;
-   code[pos / 32] |= r << (pos % 32);
+   if (insn->defExists(d))
+      defId(insn->def(d), pos);
+   else
+      code[pos / 32] |= 63 << (pos % 32);
 }
 
 bool CodeEmitterNVC0::isLIMM(const ValueRef& ref, DataType ty)
@@ -371,6 +376,16 @@ void CodeEmitterNVC0::setImmediateS8(const ValueRef &ref)
 
    code[0] |= (s8 & 0x3f) << 26;
    code[0] |= (s8 >> 6) << 8;
+}
+
+void CodeEmitterNVC0::setPDSTL(const Instruction *i, const int d)
+{
+   assert(d < 0 || (i->defExists(d) && i->def(d).getFile() == FILE_PREDICATE));
+
+   uint32_t pred = d >= 0 ? DDATA(i->def(d)).id : 7;
+
+   code[0] |= (pred & 3) << 8;
+   code[1] |= (pred & 4) << (26 - 2);
 }
 
 void
@@ -716,11 +731,11 @@ CodeEmitterNVC0::emitUADD(const Instruction *i)
    if (i->encSize == 8) {
       if (isLIMM(i->src(1), TYPE_U32)) {
          emitForm_A(i, HEX64(08000000, 00000002));
-         if (i->defExists(1))
+         if (i->flagsDef >= 0)
             code[1] |= 1 << 26; // write carry
       } else {
          emitForm_A(i, HEX64(48000000, 00000003));
-         if (i->defExists(1))
+         if (i->flagsDef >= 0)
             code[1] |= 1 << 16; // write carry
       }
       code[0] |= addOp;
@@ -1011,13 +1026,18 @@ CodeEmitterNVC0::emitMINMAX(const Instruction *i)
    if (i->ftz)
       op |= 1 << 5;
    else
-   if (!isFloatType(i->dType))
+   if (!isFloatType(i->dType)) {
       op |= isSignedType(i->dType) ? 0x23 : 0x03;
+      op |= i->subOp << 6;
+   }
    if (i->dType == TYPE_F64)
       op |= 0x01;
 
    emitForm_A(i, op);
    emitNegAbs12(i);
+
+   if (i->flagsDef >= 0)
+      code[1] |= 1 << 16;
 }
 
 void
@@ -1189,6 +1209,8 @@ CodeEmitterNVC0::emitSET(const CmpInstruction *i)
 
    if (i->ftz)
       code[1] |= 1 << 27;
+   if (i->flagsSrc >= 0)
+      code[0] |= 1 << 6;
 
    emitCondCode(i->setCond, 32 + 23);
    emitNegAbs12(i);
@@ -1864,7 +1886,7 @@ CodeEmitterNVC0::emitSTORE(const Instruction *i)
       if (i->src(0).getFile() == FILE_MEMORY_SHARED &&
           i->subOp == NV50_IR_SUBOP_STORE_UNLOCKED) {
          assert(i->defExists(0));
-         defId(i->def(0), 8);
+         setPDSTL(i, 0);
       }
    }
 
@@ -1936,7 +1958,7 @@ CodeEmitterNVC0::emitLOAD(const Instruction *i)
 
    if (p >= 0) {
       if (targ->getChipset() >= NVISA_GK104_CHIPSET)
-         defId(i->def(p), 8);
+         setPDSTL(i, p);
       else
          defId(i->def(p), 32 + 18);
    }
@@ -1969,6 +1991,11 @@ CodeEmitterNVC0::getSRegEncoding(const ValueRef& ref)
    case SV_NCTAID:        return 0x2d + SDATA(ref).sv.index;
    case SV_LBASE:         return 0x34;
    case SV_SBASE:         return 0x30;
+   case SV_LANEMASK_EQ:   return 0x38;
+   case SV_LANEMASK_LT:   return 0x39;
+   case SV_LANEMASK_LE:   return 0x3a;
+   case SV_LANEMASK_GT:   return 0x3b;
+   case SV_LANEMASK_GE:   return 0x3c;
    case SV_CLOCK:         return 0x50 + SDATA(ref).sv.index;
    default:
       assert(!"no sreg for system value");
@@ -2511,9 +2538,58 @@ CodeEmitterNVC0::emitPIXLD(const Instruction *i)
 }
 
 void
+CodeEmitterNVC0::emitSHFL(const Instruction *i)
+{
+   const ImmediateValue *imm;
+
+   assert(targ->getChipset() >= NVISA_GK104_CHIPSET);
+
+   code[0] = 0x00000005;
+   code[1] = 0x88000000 | (i->subOp << 23);
+
+   emitPredicate(i);
+
+   defId(i->def(0), 14);
+   srcId(i->src(0), 20);
+
+   switch (i->src(1).getFile()) {
+   case FILE_GPR:
+      srcId(i->src(1), 26);
+      break;
+   case FILE_IMMEDIATE:
+      imm = i->getSrc(1)->asImm();
+      assert(imm && imm->reg.data.u32 < 0x20);
+      code[0] |= imm->reg.data.u32 << 26;
+      code[0] |= 1 << 5;
+      break;
+   default:
+      assert(!"invalid src1 file");
+      break;
+   }
+
+   switch (i->src(2).getFile()) {
+   case FILE_GPR:
+      srcId(i->src(2), 49);
+      break;
+   case FILE_IMMEDIATE:
+      imm = i->getSrc(2)->asImm();
+      assert(imm && imm->reg.data.u32 < 0x2000);
+      code[1] |= imm->reg.data.u32 << 10;
+      code[0] |= 1 << 6;
+      break;
+   default:
+      assert(!"invalid src2 file");
+      break;
+   }
+
+   setPDSTL(i, i->defExists(1) ? 1 : -1);
+}
+
+void
 CodeEmitterNVC0::emitVOTE(const Instruction *i)
 {
-   assert(i->src(0).getFile() == FILE_PREDICATE);
+   const ImmediateValue *imm;
+   uint32_t u32;
 
    code[0] = 0x00000004 | (i->subOp << 5);
    code[1] = 0x48000000;
@@ -2538,9 +2614,24 @@ CodeEmitterNVC0::emitVOTE(const Instruction *i)
       code[0] |= 63 << 14;
    if (!(rp & 2))
       code[1] |= 7 << 22;
-   if (i->src(0).mod == Modifier(NV50_IR_MOD_NOT))
-      code[0] |= 1 << 23;
-   srcId(i->src(0), 20);
+
+   switch (i->src(0).getFile()) {
+   case FILE_PREDICATE:
+      if (i->src(0).mod == Modifier(NV50_IR_MOD_NOT))
+         code[0] |= 1 << 23;
+      srcId(i->src(0), 20);
+      break;
+   case FILE_IMMEDIATE:
+      imm = i->getSrc(0)->asImm();
+      assert(imm);
+      u32 = imm->reg.data.u32;
+      assert(u32 == 0 || u32 == 1);
+      code[0] |= (u32 == 1 ? 0x7 : 0xf) << 20;
+      break;
+   default:
+      assert(!"Unhandled src");
+      break;
+   }
 }
 
 bool
@@ -2818,6 +2909,9 @@ CodeEmitterNVC0::emitInstruction(Instruction *insn)
       break;
    case OP_PIXLD:
       emitPIXLD(insn);
+      break;
+   case OP_SHFL:
+      emitSHFL(insn);
       break;
    case OP_VOTE:
       emitVOTE(insn);

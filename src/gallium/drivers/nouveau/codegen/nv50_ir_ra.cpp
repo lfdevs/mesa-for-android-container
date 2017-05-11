@@ -1471,7 +1471,7 @@ GCRA::allocateRegisters(ArrayList& insns)
          if (lval->inFile(FILE_GPR) && lval->getInsn() != NULL &&
              prog->getTarget()->getChipset() < 0xc0) {
             Instruction *insn = lval->getInsn();
-            if (insn->op == OP_MAD || insn->op == OP_SAD)
+            if (insn->op == OP_MAD || insn->op == OP_FMA || insn->op == OP_SAD)
                // Short encoding only possible if they're all GPRs, no need to
                // affect them otherwise.
                if (insn->flagsDef < 0 &&

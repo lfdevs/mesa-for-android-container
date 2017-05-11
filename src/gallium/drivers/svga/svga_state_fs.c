@@ -61,7 +61,6 @@ get_dummy_fragment_shader(void)
    const struct tgsi_token *tokens;
    struct ureg_src src;
    struct ureg_dst dst;
-   unsigned num_tokens;
 
    ureg = ureg_create(PIPE_SHADER_FRAGMENT);
    if (!ureg)
@@ -72,7 +71,7 @@ get_dummy_fragment_shader(void)
    ureg_MOV(ureg, dst, src);
    ureg_END(ureg);
 
-   tokens = ureg_get_tokens(ureg, &num_tokens);
+   tokens = ureg_get_tokens(ureg, NULL);
 
    ureg_destroy(ureg);
 
@@ -408,6 +407,27 @@ emit_hw_fs(struct svga_context *svga, unsigned dirty)
    struct svga_compile_key key;
 
    SVGA_STATS_TIME_PUSH(svga_sws(svga), SVGA_STATS_TIME_EMITFS);
+
+   /* Disable rasterization if rasterizer_discard flag is set or
+    * vs/gs does not output position.
+    */
+   svga->disable_rasterizer =
+      svga->curr.rast->templ.rasterizer_discard ||
+      (svga->curr.gs && !svga->curr.gs->base.info.writes_position) ||
+      (!svga->curr.gs && !svga->curr.vs->base.info.writes_position);
+
+   /* Set FS to NULL when rasterization is to be disabled */
+   if (svga->disable_rasterizer) {
+      /* Set FS to NULL if it has not been done */
+      if (svga->state.hw_draw.fs) {
+         ret = svga_set_shader(svga, SVGA3D_SHADERTYPE_PS, NULL);
+         if (ret != PIPE_OK)
+            goto done;
+      }
+      svga->rebind.flags.fs = FALSE;
+      svga->state.hw_draw.fs = NULL;
+      goto done;
+   }
 
    /* SVGA_NEW_BLEND
     * SVGA_NEW_TEXTURE_BINDING

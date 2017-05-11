@@ -22,6 +22,7 @@
 
 #include "pipe/p_defines.h"
 #include "util/u_framebuffer.h"
+#include "util/u_upload_mgr.h"
 
 #include "nv50/nv50_context.h"
 #include "nv50/nv50_screen.h"
@@ -176,6 +177,10 @@ nv50_destroy(struct pipe_context *pipe)
       /* Save off the state in case another context gets created */
       nv50->screen->save_state = nv50->state;
    }
+
+   if (nv50->base.pipe.stream_uploader)
+      u_upload_destroy(nv50->base.pipe.stream_uploader);
+
    nouveau_pushbuf_bufctx(nv50->base.pushbuf, NULL);
    nouveau_pushbuf_kick(nv50->base.pushbuf, nv50->base.pushbuf->channel);
 
@@ -315,6 +320,10 @@ nv50_create(struct pipe_screen *pscreen, void *priv, unsigned ctxflags)
    nv50->screen = screen;
    pipe->screen = pscreen;
    pipe->priv = priv;
+   pipe->stream_uploader = u_upload_create_default(pipe);
+   if (!pipe->stream_uploader)
+      goto out_err;
+   pipe->const_uploader = pipe->stream_uploader;
 
    pipe->destroy = nv50_destroy;
 
@@ -387,6 +396,8 @@ nv50_create(struct pipe_screen *pscreen, void *priv, unsigned ctxflags)
    return pipe;
 
 out_err:
+   if (pipe->stream_uploader)
+      u_upload_destroy(pipe->stream_uploader);
    if (nv50->bufctx_3d)
       nouveau_bufctx_del(&nv50->bufctx_3d);
    if (nv50->bufctx_cp)

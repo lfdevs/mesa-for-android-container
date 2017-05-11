@@ -48,18 +48,18 @@
 #include "os/os_thread.h"
 
 /* Global mutex as described by MSDN */
-pipe_static_mutex(d3dlock_global);
+static mtx_t d3dlock_global = _MTX_INITIALIZER_NP;
 
 void
 NineLockGlobalMutex()
 {
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
 }
 
 void
 NineUnlockGlobalMutex()
 {
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
 }
 
 static HRESULT NINE_WINAPI
@@ -67,9 +67,9 @@ LockAuthenticatedChannel9_GetCertificateSize( struct NineAuthenticatedChannel9 *
                                               UINT *pCertificateSize )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineAuthenticatedChannel9_GetCertificateSize(This, pCertificateSize);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -79,9 +79,9 @@ LockAuthenticatedChannel9_GetCertificate( struct NineAuthenticatedChannel9 *This
                                           BYTE *ppCertificate )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineAuthenticatedChannel9_GetCertificate(This, CertifacteSize, ppCertificate);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -91,9 +91,9 @@ LockAuthenticatedChannel9_NegotiateKeyExchange( struct NineAuthenticatedChannel9
                                                 void *pData )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineAuthenticatedChannel9_NegotiateKeyExchange(This, DataSize, pData);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -105,9 +105,9 @@ LockAuthenticatedChannel9_Query( struct NineAuthenticatedChannel9 *This,
                                  void *pOutput )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineAuthenticatedChannel9_Query(This, InputSize, pInput, OutputSize, pOutput);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -118,9 +118,9 @@ LockAuthenticatedChannel9_Configure( struct NineAuthenticatedChannel9 *This,
                                      D3DAUTHENTICATEDCHANNEL_CONFIGURE_OUTPUT *pOutput )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineAuthenticatedChannel9_Configure(This, InputSize, pInput, pOutput);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -143,9 +143,9 @@ LockUnknown_SetPrivateData( struct NineUnknown *This,
                             DWORD Flags )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineUnknown_SetPrivateData(This, refguid, pData, SizeOfData, Flags);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -156,9 +156,9 @@ LockUnknown_GetPrivateData( struct NineUnknown *This,
                             DWORD *pSizeOfData )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineUnknown_GetPrivateData(This, refguid, pData, pSizeOfData);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -167,9 +167,9 @@ LockUnknown_FreePrivateData( struct NineUnknown *This,
                              REFGUID refguid )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineUnknown_FreePrivateData(This, refguid);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -179,9 +179,9 @@ LockResource9_GetDevice( struct NineResource9 *This,
                          IDirect3DDevice9 **ppDevice )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineUnknown_GetDevice(NineUnknown(This), ppDevice);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 #endif
@@ -191,9 +191,9 @@ LockResource9_SetPriority( struct NineResource9 *This,
                            DWORD PriorityNew )
 {
     DWORD r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineResource9_SetPriority(This, PriorityNew);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -201,9 +201,9 @@ static DWORD NINE_WINAPI
 LockResource9_GetPriority( struct NineResource9 *This )
 {
     DWORD r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineResource9_GetPriority(This);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -211,9 +211,9 @@ LockResource9_GetPriority( struct NineResource9 *This )
 static void NINE_WINAPI
 LockResource9_PreLoad( struct NineResource9 *This )
 {
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     NineResource9_PreLoad(This);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
 }
 #endif
 
@@ -222,9 +222,9 @@ static D3DRESOURCETYPE NINE_WINAPI
 LockResource9_GetType( struct NineResource9 *This )
 {
     D3DRESOURCETYPE r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineResource9_GetType(This);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 #endif
@@ -234,9 +234,9 @@ LockBaseTexture9_SetLOD( struct NineBaseTexture9 *This,
                          DWORD LODNew )
 {
     DWORD r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineBaseTexture9_SetLOD(This, LODNew);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -244,9 +244,9 @@ static DWORD NINE_WINAPI
 LockBaseTexture9_GetLOD( struct NineBaseTexture9 *This )
 {
     DWORD r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineBaseTexture9_GetLOD(This);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -254,9 +254,9 @@ static DWORD NINE_WINAPI
 LockBaseTexture9_GetLevelCount( struct NineBaseTexture9 *This )
 {
     DWORD r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineBaseTexture9_GetLevelCount(This);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -265,9 +265,9 @@ LockBaseTexture9_SetAutoGenFilterType( struct NineBaseTexture9 *This,
                                        D3DTEXTUREFILTERTYPE FilterType )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineBaseTexture9_SetAutoGenFilterType(This, FilterType);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -275,26 +275,26 @@ static D3DTEXTUREFILTERTYPE NINE_WINAPI
 LockBaseTexture9_GetAutoGenFilterType( struct NineBaseTexture9 *This )
 {
     D3DTEXTUREFILTERTYPE r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineBaseTexture9_GetAutoGenFilterType(This);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
 static void NINE_WINAPI
 LockBaseTexture9_PreLoad( struct NineBaseTexture9 *This )
 {
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     NineBaseTexture9_PreLoad(This);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
 }
 
 static void NINE_WINAPI
 LockBaseTexture9_GenerateMipSubLevels( struct NineBaseTexture9 *This )
 {
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     NineBaseTexture9_GenerateMipSubLevels(This);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
 }
 
 static HRESULT NINE_WINAPI
@@ -302,9 +302,9 @@ LockCryptoSession9_GetCertificateSize( struct NineCryptoSession9 *This,
                                        UINT *pCertificateSize )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineCryptoSession9_GetCertificateSize(This, pCertificateSize);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -314,9 +314,9 @@ LockCryptoSession9_GetCertificate( struct NineCryptoSession9 *This,
                                    BYTE *ppCertificate )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineCryptoSession9_GetCertificate(This, CertifacteSize, ppCertificate);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -326,9 +326,9 @@ LockCryptoSession9_NegotiateKeyExchange( struct NineCryptoSession9 *This,
                                          void *pData )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineCryptoSession9_NegotiateKeyExchange(This, DataSize, pData);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -340,9 +340,9 @@ LockCryptoSession9_EncryptionBlt( struct NineCryptoSession9 *This,
                                   void *pIV )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineCryptoSession9_EncryptionBlt(This, pSrcSurface, pDstSurface, DstSurfaceSize, pIV);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -356,9 +356,9 @@ LockCryptoSession9_DecryptionBlt( struct NineCryptoSession9 *This,
                                   void *pIV )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineCryptoSession9_DecryptionBlt(This, pSrcSurface, pDstSurface, SrcSurfaceSize, pEncryptedBlockInfo, pContentKey, pIV);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -368,9 +368,9 @@ LockCryptoSession9_GetSurfacePitch( struct NineCryptoSession9 *This,
                                     UINT *pSurfacePitch )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineCryptoSession9_GetSurfacePitch(This, pSrcSurface, pSurfacePitch);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -380,9 +380,9 @@ LockCryptoSession9_StartSessionKeyRefresh( struct NineCryptoSession9 *This,
                                            UINT RandomNumberSize )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineCryptoSession9_StartSessionKeyRefresh(This, pRandomNumber, RandomNumberSize);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -390,9 +390,9 @@ static HRESULT NINE_WINAPI
 LockCryptoSession9_FinishSessionKeyRefresh( struct NineCryptoSession9 *This )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineCryptoSession9_FinishSessionKeyRefresh(This);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -402,9 +402,9 @@ LockCryptoSession9_GetEncryptionBltKey( struct NineCryptoSession9 *This,
                                         UINT KeySize )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineCryptoSession9_GetEncryptionBltKey(This, pReadbackKey, KeySize);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -430,9 +430,9 @@ LockCubeTexture9_GetLevelDesc( struct NineCubeTexture9 *This,
                                D3DSURFACE_DESC *pDesc )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineCubeTexture9_GetLevelDesc(This, Level, pDesc);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 #endif
@@ -445,9 +445,9 @@ LockCubeTexture9_GetCubeMapSurface( struct NineCubeTexture9 *This,
                                     IDirect3DSurface9 **ppCubeMapSurface )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineCubeTexture9_GetCubeMapSurface(This, FaceType, Level, ppCubeMapSurface);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 #endif
@@ -461,9 +461,9 @@ LockCubeTexture9_LockRect( struct NineCubeTexture9 *This,
                            DWORD Flags )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineCubeTexture9_LockRect(This, FaceType, Level, pLockedRect, pRect, Flags);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -473,9 +473,9 @@ LockCubeTexture9_UnlockRect( struct NineCubeTexture9 *This,
                              UINT Level )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineCubeTexture9_UnlockRect(This, FaceType, Level);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -485,9 +485,9 @@ LockCubeTexture9_AddDirtyRect( struct NineCubeTexture9 *This,
                                const RECT *pDirtyRect )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineCubeTexture9_AddDirtyRect(This, FaceType, pDirtyRect);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -520,9 +520,9 @@ static HRESULT NINE_WINAPI
 LockDevice9_TestCooperativeLevel( struct NineDevice9 *This )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_TestCooperativeLevel(This);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -530,9 +530,9 @@ static UINT NINE_WINAPI
 LockDevice9_GetAvailableTextureMem( struct NineDevice9 *This )
 {
     UINT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_GetAvailableTextureMem(This);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -540,9 +540,9 @@ static HRESULT NINE_WINAPI
 LockDevice9_EvictManagedResources( struct NineDevice9 *This )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_EvictManagedResources(This);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -551,9 +551,9 @@ LockDevice9_GetDirect3D( struct NineDevice9 *This,
                          IDirect3D9 **ppD3D9 )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_GetDirect3D(This, ppD3D9);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -563,9 +563,9 @@ LockDevice9_GetDeviceCaps( struct NineDevice9 *This,
                            D3DCAPS9 *pCaps )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_GetDeviceCaps(This, pCaps);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 #endif
@@ -576,9 +576,9 @@ LockDevice9_GetDisplayMode( struct NineDevice9 *This,
                             D3DDISPLAYMODE *pMode )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_GetDisplayMode(This, iSwapChain, pMode);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -588,9 +588,9 @@ LockDevice9_GetCreationParameters( struct NineDevice9 *This,
                                    D3DDEVICE_CREATION_PARAMETERS *pParameters )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_GetCreationParameters(This, pParameters);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 #endif
@@ -602,9 +602,9 @@ LockDevice9_SetCursorProperties( struct NineDevice9 *This,
                                  IDirect3DSurface9 *pCursorBitmap )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_SetCursorProperties(This, XHotSpot, YHotSpot, pCursorBitmap);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -614,9 +614,9 @@ LockDevice9_SetCursorPosition( struct NineDevice9 *This,
                                int Y,
                                DWORD Flags )
 {
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     NineDevice9_SetCursorPosition(This, X, Y, Flags);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
 }
 
 static BOOL NINE_WINAPI
@@ -624,9 +624,9 @@ LockDevice9_ShowCursor( struct NineDevice9 *This,
                         BOOL bShow )
 {
     BOOL r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_ShowCursor(This, bShow);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -636,9 +636,9 @@ LockDevice9_CreateAdditionalSwapChain( struct NineDevice9 *This,
                                        IDirect3DSwapChain9 **pSwapChain )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_CreateAdditionalSwapChain(This, pPresentationParameters, pSwapChain);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -648,9 +648,9 @@ LockDevice9_GetSwapChain( struct NineDevice9 *This,
                           IDirect3DSwapChain9 **pSwapChain )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_GetSwapChain(This, iSwapChain, pSwapChain);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -658,9 +658,9 @@ static UINT NINE_WINAPI
 LockDevice9_GetNumberOfSwapChains( struct NineDevice9 *This )
 {
     UINT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_GetNumberOfSwapChains(This);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -669,9 +669,9 @@ LockDevice9_Reset( struct NineDevice9 *This,
                    D3DPRESENT_PARAMETERS *pPresentationParameters )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_Reset(This, pPresentationParameters);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -683,9 +683,9 @@ LockDevice9_Present( struct NineDevice9 *This,
                      const RGNDATA *pDirtyRegion )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_Present(This, pSourceRect, pDestRect, hDestWindowOverride, pDirtyRegion);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -697,9 +697,9 @@ LockDevice9_GetBackBuffer( struct NineDevice9 *This,
                            IDirect3DSurface9 **ppBackBuffer )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_GetBackBuffer(This, iSwapChain, iBackBuffer, Type, ppBackBuffer);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -709,9 +709,9 @@ LockDevice9_GetRasterStatus( struct NineDevice9 *This,
                              D3DRASTER_STATUS *pRasterStatus )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_GetRasterStatus(This, iSwapChain, pRasterStatus);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -720,9 +720,9 @@ LockDevice9_SetDialogBoxMode( struct NineDevice9 *This,
                               BOOL bEnableDialogs )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_SetDialogBoxMode(This, bEnableDialogs);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -732,9 +732,9 @@ LockDevice9_SetGammaRamp( struct NineDevice9 *This,
                           DWORD Flags,
                           const D3DGAMMARAMP *pRamp )
 {
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     NineDevice9_SetGammaRamp(This, iSwapChain, Flags, pRamp);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
 }
 
 static void NINE_WINAPI
@@ -742,9 +742,9 @@ LockDevice9_GetGammaRamp( struct NineDevice9 *This,
                           UINT iSwapChain,
                           D3DGAMMARAMP *pRamp )
 {
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     NineDevice9_GetGammaRamp(This, iSwapChain, pRamp);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
 }
 
 static HRESULT NINE_WINAPI
@@ -759,9 +759,9 @@ LockDevice9_CreateTexture( struct NineDevice9 *This,
                            HANDLE *pSharedHandle )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_CreateTexture(This, Width, Height, Levels, Usage, Format, Pool, ppTexture, pSharedHandle);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -778,9 +778,9 @@ LockDevice9_CreateVolumeTexture( struct NineDevice9 *This,
                                  HANDLE *pSharedHandle )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_CreateVolumeTexture(This, Width, Height, Depth, Levels, Usage, Format, Pool, ppVolumeTexture, pSharedHandle);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -795,9 +795,9 @@ LockDevice9_CreateCubeTexture( struct NineDevice9 *This,
                                HANDLE *pSharedHandle )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_CreateCubeTexture(This, EdgeLength, Levels, Usage, Format, Pool, ppCubeTexture, pSharedHandle);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -811,9 +811,9 @@ LockDevice9_CreateVertexBuffer( struct NineDevice9 *This,
                                 HANDLE *pSharedHandle )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_CreateVertexBuffer(This, Length, Usage, FVF, Pool, ppVertexBuffer, pSharedHandle);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -827,9 +827,9 @@ LockDevice9_CreateIndexBuffer( struct NineDevice9 *This,
                                HANDLE *pSharedHandle )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_CreateIndexBuffer(This, Length, Usage, Format, Pool, ppIndexBuffer, pSharedHandle);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -845,9 +845,9 @@ LockDevice9_CreateRenderTarget( struct NineDevice9 *This,
                                 HANDLE *pSharedHandle )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_CreateRenderTarget(This, Width, Height, Format, MultiSample, MultisampleQuality, Lockable, ppSurface, pSharedHandle);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -863,9 +863,9 @@ LockDevice9_CreateDepthStencilSurface( struct NineDevice9 *This,
                                        HANDLE *pSharedHandle )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_CreateDepthStencilSurface(This, Width, Height, Format, MultiSample, MultisampleQuality, Discard, ppSurface, pSharedHandle);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -877,9 +877,9 @@ LockDevice9_UpdateSurface( struct NineDevice9 *This,
                            const POINT *pDestPoint )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_UpdateSurface(This, pSourceSurface, pSourceRect, pDestinationSurface, pDestPoint);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -889,9 +889,9 @@ LockDevice9_UpdateTexture( struct NineDevice9 *This,
                            IDirect3DBaseTexture9 *pDestinationTexture )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_UpdateTexture(This, pSourceTexture, pDestinationTexture);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -901,9 +901,9 @@ LockDevice9_GetRenderTargetData( struct NineDevice9 *This,
                                  IDirect3DSurface9 *pDestSurface )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_GetRenderTargetData(This, pRenderTarget, pDestSurface);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -913,9 +913,9 @@ LockDevice9_GetFrontBufferData( struct NineDevice9 *This,
                                 IDirect3DSurface9 *pDestSurface )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_GetFrontBufferData(This, iSwapChain, pDestSurface);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -928,9 +928,9 @@ LockDevice9_StretchRect( struct NineDevice9 *This,
                          D3DTEXTUREFILTERTYPE Filter )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_StretchRect(This, pSourceSurface, pSourceRect, pDestSurface, pDestRect, Filter);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -941,9 +941,9 @@ LockDevice9_ColorFill( struct NineDevice9 *This,
                        D3DCOLOR color )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_ColorFill(This, pSurface, pRect, color);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -957,9 +957,9 @@ LockDevice9_CreateOffscreenPlainSurface( struct NineDevice9 *This,
                                          HANDLE *pSharedHandle )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_CreateOffscreenPlainSurface(This, Width, Height, Format, Pool, ppSurface, pSharedHandle);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -969,9 +969,9 @@ LockDevice9_SetRenderTarget( struct NineDevice9 *This,
                              IDirect3DSurface9 *pRenderTarget )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_SetRenderTarget(This, RenderTargetIndex, pRenderTarget);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -981,9 +981,9 @@ LockDevice9_GetRenderTarget( struct NineDevice9 *This,
                              IDirect3DSurface9 **ppRenderTarget )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_GetRenderTarget(This, RenderTargetIndex, ppRenderTarget);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -992,9 +992,9 @@ LockDevice9_SetDepthStencilSurface( struct NineDevice9 *This,
                                     IDirect3DSurface9 *pNewZStencil )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_SetDepthStencilSurface(This, pNewZStencil);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1003,9 +1003,9 @@ LockDevice9_GetDepthStencilSurface( struct NineDevice9 *This,
                                     IDirect3DSurface9 **ppZStencilSurface )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_GetDepthStencilSurface(This, ppZStencilSurface);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1013,9 +1013,9 @@ static HRESULT NINE_WINAPI
 LockDevice9_BeginScene( struct NineDevice9 *This )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_BeginScene(This);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1023,9 +1023,9 @@ static HRESULT NINE_WINAPI
 LockDevice9_EndScene( struct NineDevice9 *This )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_EndScene(This);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1039,9 +1039,9 @@ LockDevice9_Clear( struct NineDevice9 *This,
                    DWORD Stencil )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_Clear(This, Count, pRects, Flags, Color, Z, Stencil);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1051,9 +1051,9 @@ LockDevice9_SetTransform( struct NineDevice9 *This,
                           const D3DMATRIX *pMatrix )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_SetTransform(This, State, pMatrix);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1063,9 +1063,9 @@ LockDevice9_GetTransform( struct NineDevice9 *This,
                           D3DMATRIX *pMatrix )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_GetTransform(This, State, pMatrix);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1075,9 +1075,9 @@ LockDevice9_MultiplyTransform( struct NineDevice9 *This,
                                const D3DMATRIX *pMatrix )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_MultiplyTransform(This, State, pMatrix);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1086,9 +1086,9 @@ LockDevice9_SetViewport( struct NineDevice9 *This,
                          const D3DVIEWPORT9 *pViewport )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_SetViewport(This, pViewport);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1097,9 +1097,9 @@ LockDevice9_GetViewport( struct NineDevice9 *This,
                          D3DVIEWPORT9 *pViewport )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_GetViewport(This, pViewport);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1108,9 +1108,9 @@ LockDevice9_SetMaterial( struct NineDevice9 *This,
                          const D3DMATERIAL9 *pMaterial )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_SetMaterial(This, pMaterial);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1119,9 +1119,9 @@ LockDevice9_GetMaterial( struct NineDevice9 *This,
                          D3DMATERIAL9 *pMaterial )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_GetMaterial(This, pMaterial);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1131,9 +1131,9 @@ LockDevice9_SetLight( struct NineDevice9 *This,
                       const D3DLIGHT9 *pLight )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_SetLight(This, Index, pLight);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1143,9 +1143,9 @@ LockDevice9_GetLight( struct NineDevice9 *This,
                       D3DLIGHT9 *pLight )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_GetLight(This, Index, pLight);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1155,9 +1155,9 @@ LockDevice9_LightEnable( struct NineDevice9 *This,
                          BOOL Enable )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_LightEnable(This, Index, Enable);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1167,9 +1167,9 @@ LockDevice9_GetLightEnable( struct NineDevice9 *This,
                             BOOL *pEnable )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_GetLightEnable(This, Index, pEnable);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1179,9 +1179,9 @@ LockDevice9_SetClipPlane( struct NineDevice9 *This,
                           const float *pPlane )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_SetClipPlane(This, Index, pPlane);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1191,9 +1191,9 @@ LockDevice9_GetClipPlane( struct NineDevice9 *This,
                           float *pPlane )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_GetClipPlane(This, Index, pPlane);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1203,9 +1203,9 @@ LockDevice9_SetRenderState( struct NineDevice9 *This,
                             DWORD Value )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_SetRenderState(This, State, Value);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1215,9 +1215,9 @@ LockDevice9_GetRenderState( struct NineDevice9 *This,
                             DWORD *pValue )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_GetRenderState(This, State, pValue);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1227,9 +1227,9 @@ LockDevice9_CreateStateBlock( struct NineDevice9 *This,
                               IDirect3DStateBlock9 **ppSB )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_CreateStateBlock(This, Type, ppSB);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1237,9 +1237,9 @@ static HRESULT NINE_WINAPI
 LockDevice9_BeginStateBlock( struct NineDevice9 *This )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_BeginStateBlock(This);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1248,9 +1248,9 @@ LockDevice9_EndStateBlock( struct NineDevice9 *This,
                            IDirect3DStateBlock9 **ppSB )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_EndStateBlock(This, ppSB);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1259,9 +1259,9 @@ LockDevice9_SetClipStatus( struct NineDevice9 *This,
                            const D3DCLIPSTATUS9 *pClipStatus )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_SetClipStatus(This, pClipStatus);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1270,9 +1270,9 @@ LockDevice9_GetClipStatus( struct NineDevice9 *This,
                            D3DCLIPSTATUS9 *pClipStatus )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_GetClipStatus(This, pClipStatus);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1282,9 +1282,9 @@ LockDevice9_GetTexture( struct NineDevice9 *This,
                         IDirect3DBaseTexture9 **ppTexture )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_GetTexture(This, Stage, ppTexture);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1294,9 +1294,9 @@ LockDevice9_SetTexture( struct NineDevice9 *This,
                         IDirect3DBaseTexture9 *pTexture )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_SetTexture(This, Stage, pTexture);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1307,9 +1307,9 @@ LockDevice9_GetTextureStageState( struct NineDevice9 *This,
                                   DWORD *pValue )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_GetTextureStageState(This, Stage, Type, pValue);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1320,9 +1320,9 @@ LockDevice9_SetTextureStageState( struct NineDevice9 *This,
                                   DWORD Value )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_SetTextureStageState(This, Stage, Type, Value);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1333,9 +1333,9 @@ LockDevice9_GetSamplerState( struct NineDevice9 *This,
                              DWORD *pValue )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_GetSamplerState(This, Sampler, Type, pValue);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1346,9 +1346,9 @@ LockDevice9_SetSamplerState( struct NineDevice9 *This,
                              DWORD Value )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_SetSamplerState(This, Sampler, Type, Value);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1357,9 +1357,9 @@ LockDevice9_ValidateDevice( struct NineDevice9 *This,
                             DWORD *pNumPasses )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_ValidateDevice(This, pNumPasses);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1369,9 +1369,9 @@ LockDevice9_SetPaletteEntries( struct NineDevice9 *This,
                                const PALETTEENTRY *pEntries )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_SetPaletteEntries(This, PaletteNumber, pEntries);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1381,9 +1381,9 @@ LockDevice9_GetPaletteEntries( struct NineDevice9 *This,
                                PALETTEENTRY *pEntries )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_GetPaletteEntries(This, PaletteNumber, pEntries);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1392,9 +1392,9 @@ LockDevice9_SetCurrentTexturePalette( struct NineDevice9 *This,
                                       UINT PaletteNumber )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_SetCurrentTexturePalette(This, PaletteNumber);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1403,9 +1403,9 @@ LockDevice9_GetCurrentTexturePalette( struct NineDevice9 *This,
                                       UINT *PaletteNumber )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_GetCurrentTexturePalette(This, PaletteNumber);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1414,9 +1414,9 @@ LockDevice9_SetScissorRect( struct NineDevice9 *This,
                             const RECT *pRect )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_SetScissorRect(This, pRect);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1425,9 +1425,9 @@ LockDevice9_GetScissorRect( struct NineDevice9 *This,
                             RECT *pRect )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_GetScissorRect(This, pRect);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1436,9 +1436,9 @@ LockDevice9_SetSoftwareVertexProcessing( struct NineDevice9 *This,
                                          BOOL bSoftware )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_SetSoftwareVertexProcessing(This, bSoftware);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1446,9 +1446,9 @@ static BOOL NINE_WINAPI
 LockDevice9_GetSoftwareVertexProcessing( struct NineDevice9 *This )
 {
     BOOL r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_GetSoftwareVertexProcessing(This);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1457,9 +1457,9 @@ LockDevice9_SetNPatchMode( struct NineDevice9 *This,
                            float nSegments )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_SetNPatchMode(This, nSegments);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1467,9 +1467,9 @@ static float NINE_WINAPI
 LockDevice9_GetNPatchMode( struct NineDevice9 *This )
 {
     float r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_GetNPatchMode(This);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1480,9 +1480,9 @@ LockDevice9_DrawPrimitive( struct NineDevice9 *This,
                            UINT PrimitiveCount )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_DrawPrimitive(This, PrimitiveType, StartVertex, PrimitiveCount);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1496,9 +1496,9 @@ LockDevice9_DrawIndexedPrimitive( struct NineDevice9 *This,
                                   UINT primCount )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_DrawIndexedPrimitive(This, PrimitiveType, BaseVertexIndex, MinVertexIndex, NumVertices, startIndex, primCount);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1510,9 +1510,9 @@ LockDevice9_DrawPrimitiveUP( struct NineDevice9 *This,
                              UINT VertexStreamZeroStride )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_DrawPrimitiveUP(This, PrimitiveType, PrimitiveCount, pVertexStreamZeroData, VertexStreamZeroStride);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1528,9 +1528,9 @@ LockDevice9_DrawIndexedPrimitiveUP( struct NineDevice9 *This,
                                     UINT VertexStreamZeroStride )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_DrawIndexedPrimitiveUP(This, PrimitiveType, MinVertexIndex, NumVertices, PrimitiveCount, pIndexData, IndexDataFormat, pVertexStreamZeroData, VertexStreamZeroStride);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1544,9 +1544,9 @@ LockDevice9_ProcessVertices( struct NineDevice9 *This,
                              DWORD Flags )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_ProcessVertices(This, SrcStartIndex, DestIndex, VertexCount, pDestBuffer, pVertexDecl, Flags);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1556,9 +1556,9 @@ LockDevice9_CreateVertexDeclaration( struct NineDevice9 *This,
                                      IDirect3DVertexDeclaration9 **ppDecl )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_CreateVertexDeclaration(This, pVertexElements, ppDecl);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1567,9 +1567,9 @@ LockDevice9_SetVertexDeclaration( struct NineDevice9 *This,
                                   IDirect3DVertexDeclaration9 *pDecl )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_SetVertexDeclaration(This, pDecl);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1578,9 +1578,9 @@ LockDevice9_GetVertexDeclaration( struct NineDevice9 *This,
                                   IDirect3DVertexDeclaration9 **ppDecl )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_GetVertexDeclaration(This, ppDecl);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1589,9 +1589,9 @@ LockDevice9_SetFVF( struct NineDevice9 *This,
                     DWORD FVF )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_SetFVF(This, FVF);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1600,9 +1600,9 @@ LockDevice9_GetFVF( struct NineDevice9 *This,
                     DWORD *pFVF )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_GetFVF(This, pFVF);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1612,9 +1612,9 @@ LockDevice9_CreateVertexShader( struct NineDevice9 *This,
                                 IDirect3DVertexShader9 **ppShader )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_CreateVertexShader(This, pFunction, ppShader);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1623,9 +1623,9 @@ LockDevice9_SetVertexShader( struct NineDevice9 *This,
                              IDirect3DVertexShader9 *pShader )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_SetVertexShader(This, pShader);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1634,9 +1634,9 @@ LockDevice9_GetVertexShader( struct NineDevice9 *This,
                              IDirect3DVertexShader9 **ppShader )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_GetVertexShader(This, ppShader);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1647,9 +1647,9 @@ LockDevice9_SetVertexShaderConstantF( struct NineDevice9 *This,
                                       UINT Vector4fCount )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_SetVertexShaderConstantF(This, StartRegister, pConstantData, Vector4fCount);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1660,9 +1660,9 @@ LockDevice9_GetVertexShaderConstantF( struct NineDevice9 *This,
                                       UINT Vector4fCount )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_GetVertexShaderConstantF(This, StartRegister, pConstantData, Vector4fCount);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1673,9 +1673,9 @@ LockDevice9_SetVertexShaderConstantI( struct NineDevice9 *This,
                                       UINT Vector4iCount )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_SetVertexShaderConstantI(This, StartRegister, pConstantData, Vector4iCount);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1686,9 +1686,9 @@ LockDevice9_GetVertexShaderConstantI( struct NineDevice9 *This,
                                       UINT Vector4iCount )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_GetVertexShaderConstantI(This, StartRegister, pConstantData, Vector4iCount);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1699,9 +1699,9 @@ LockDevice9_SetVertexShaderConstantB( struct NineDevice9 *This,
                                       UINT BoolCount )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_SetVertexShaderConstantB(This, StartRegister, pConstantData, BoolCount);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1712,9 +1712,9 @@ LockDevice9_GetVertexShaderConstantB( struct NineDevice9 *This,
                                       UINT BoolCount )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_GetVertexShaderConstantB(This, StartRegister, pConstantData, BoolCount);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1726,9 +1726,9 @@ LockDevice9_SetStreamSource( struct NineDevice9 *This,
                              UINT Stride )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_SetStreamSource(This, StreamNumber, pStreamData, OffsetInBytes, Stride);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1740,9 +1740,9 @@ LockDevice9_GetStreamSource( struct NineDevice9 *This,
                              UINT *pStride )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_GetStreamSource(This, StreamNumber, ppStreamData, pOffsetInBytes, pStride);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1752,9 +1752,9 @@ LockDevice9_SetStreamSourceFreq( struct NineDevice9 *This,
                                  UINT Setting )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_SetStreamSourceFreq(This, StreamNumber, Setting);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1764,9 +1764,9 @@ LockDevice9_GetStreamSourceFreq( struct NineDevice9 *This,
                                  UINT *pSetting )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_GetStreamSourceFreq(This, StreamNumber, pSetting);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1775,9 +1775,9 @@ LockDevice9_SetIndices( struct NineDevice9 *This,
                         IDirect3DIndexBuffer9 *pIndexData )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_SetIndices(This, pIndexData);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1786,9 +1786,9 @@ LockDevice9_GetIndices( struct NineDevice9 *This,
                         IDirect3DIndexBuffer9 **ppIndexData )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_GetIndices(This, ppIndexData);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1798,9 +1798,9 @@ LockDevice9_CreatePixelShader( struct NineDevice9 *This,
                                IDirect3DPixelShader9 **ppShader )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_CreatePixelShader(This, pFunction, ppShader);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1809,9 +1809,9 @@ LockDevice9_SetPixelShader( struct NineDevice9 *This,
                             IDirect3DPixelShader9 *pShader )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_SetPixelShader(This, pShader);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1820,9 +1820,9 @@ LockDevice9_GetPixelShader( struct NineDevice9 *This,
                             IDirect3DPixelShader9 **ppShader )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_GetPixelShader(This, ppShader);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1833,9 +1833,9 @@ LockDevice9_SetPixelShaderConstantF( struct NineDevice9 *This,
                                      UINT Vector4fCount )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_SetPixelShaderConstantF(This, StartRegister, pConstantData, Vector4fCount);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1846,9 +1846,9 @@ LockDevice9_GetPixelShaderConstantF( struct NineDevice9 *This,
                                      UINT Vector4fCount )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_GetPixelShaderConstantF(This, StartRegister, pConstantData, Vector4fCount);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1859,9 +1859,9 @@ LockDevice9_SetPixelShaderConstantI( struct NineDevice9 *This,
                                      UINT Vector4iCount )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_SetPixelShaderConstantI(This, StartRegister, pConstantData, Vector4iCount);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1872,9 +1872,9 @@ LockDevice9_GetPixelShaderConstantI( struct NineDevice9 *This,
                                      UINT Vector4iCount )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_GetPixelShaderConstantI(This, StartRegister, pConstantData, Vector4iCount);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1885,9 +1885,9 @@ LockDevice9_SetPixelShaderConstantB( struct NineDevice9 *This,
                                      UINT BoolCount )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_SetPixelShaderConstantB(This, StartRegister, pConstantData, BoolCount);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1898,9 +1898,9 @@ LockDevice9_GetPixelShaderConstantB( struct NineDevice9 *This,
                                      UINT BoolCount )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_GetPixelShaderConstantB(This, StartRegister, pConstantData, BoolCount);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1911,9 +1911,9 @@ LockDevice9_DrawRectPatch( struct NineDevice9 *This,
                            const D3DRECTPATCH_INFO *pRectPatchInfo )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_DrawRectPatch(This, Handle, pNumSegs, pRectPatchInfo);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1924,9 +1924,9 @@ LockDevice9_DrawTriPatch( struct NineDevice9 *This,
                           const D3DTRIPATCH_INFO *pTriPatchInfo )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_DrawTriPatch(This, Handle, pNumSegs, pTriPatchInfo);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1935,9 +1935,9 @@ LockDevice9_DeletePatch( struct NineDevice9 *This,
                          UINT Handle )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_DeletePatch(This, Handle);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -1947,9 +1947,9 @@ LockDevice9_CreateQuery( struct NineDevice9 *This,
                          IDirect3DQuery9 **ppQuery )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9_CreateQuery(This, Type, ppQuery);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -2083,9 +2083,9 @@ LockDevice9Ex_SetConvolutionMonoKernel( struct NineDevice9Ex *This,
                                         float *columns )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9Ex_SetConvolutionMonoKernel(This, width, height, rows, columns);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -2101,9 +2101,9 @@ LockDevice9Ex_ComposeRects( struct NineDevice9Ex *This,
                             int Yoffset )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9Ex_ComposeRects(This, pSrc, pDst, pSrcRectDescs, NumRects, pDstRectDescs, Operation, Xoffset, Yoffset);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -2116,9 +2116,9 @@ LockDevice9Ex_PresentEx( struct NineDevice9Ex *This,
                          DWORD dwFlags )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9Ex_PresentEx(This, pSourceRect, pDestRect, hDestWindowOverride, pDirtyRegion, dwFlags);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -2127,9 +2127,9 @@ LockDevice9Ex_GetGPUThreadPriority( struct NineDevice9Ex *This,
                                     INT *pPriority )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9Ex_GetGPUThreadPriority(This, pPriority);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -2138,9 +2138,9 @@ LockDevice9Ex_SetGPUThreadPriority( struct NineDevice9Ex *This,
                                     INT Priority )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9Ex_SetGPUThreadPriority(This, Priority);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -2149,9 +2149,9 @@ LockDevice9Ex_WaitForVBlank( struct NineDevice9Ex *This,
                              UINT iSwapChain )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9Ex_WaitForVBlank(This, iSwapChain);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -2161,9 +2161,9 @@ LockDevice9Ex_CheckResourceResidency( struct NineDevice9Ex *This,
                                       UINT32 NumResources )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9Ex_CheckResourceResidency(This, pResourceArray, NumResources);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -2172,9 +2172,9 @@ LockDevice9Ex_SetMaximumFrameLatency( struct NineDevice9Ex *This,
                                       UINT MaxLatency )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9Ex_SetMaximumFrameLatency(This, MaxLatency);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -2183,9 +2183,9 @@ LockDevice9Ex_GetMaximumFrameLatency( struct NineDevice9Ex *This,
                                       UINT *pMaxLatency )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9Ex_GetMaximumFrameLatency(This, pMaxLatency);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -2194,9 +2194,9 @@ LockDevice9Ex_CheckDeviceState( struct NineDevice9Ex *This,
                                 HWND hDestinationWindow )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9Ex_CheckDeviceState(This, hDestinationWindow);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -2213,9 +2213,9 @@ LockDevice9Ex_CreateRenderTargetEx( struct NineDevice9Ex *This,
                                     DWORD Usage )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9Ex_CreateRenderTargetEx(This, Width, Height, Format, MultiSample, MultisampleQuality, Lockable, ppSurface, pSharedHandle, Usage);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -2230,9 +2230,9 @@ LockDevice9Ex_CreateOffscreenPlainSurfaceEx( struct NineDevice9Ex *This,
                                              DWORD Usage )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9Ex_CreateOffscreenPlainSurfaceEx(This, Width, Height, Format, Pool, ppSurface, pSharedHandle, Usage);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -2249,9 +2249,9 @@ LockDevice9Ex_CreateDepthStencilSurfaceEx( struct NineDevice9Ex *This,
                                            DWORD Usage )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9Ex_CreateDepthStencilSurfaceEx(This, Width, Height, Format, MultiSample, MultisampleQuality, Discard, ppSurface, pSharedHandle, Usage);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -2261,9 +2261,9 @@ LockDevice9Ex_ResetEx( struct NineDevice9Ex *This,
                        D3DDISPLAYMODEEX *pFullscreenDisplayMode )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9Ex_ResetEx(This, pPresentationParameters, pFullscreenDisplayMode);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -2274,9 +2274,9 @@ LockDevice9Ex_GetDisplayModeEx( struct NineDevice9Ex *This,
                                 D3DDISPLAYROTATION *pRotation )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9Ex_GetDisplayModeEx(This, iSwapChain, pMode, pRotation);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -2424,9 +2424,9 @@ LockDevice9Video_GetContentProtectionCaps( struct NineDevice9Video *This,
                                            D3DCONTENTPROTECTIONCAPS *pCaps )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9Video_GetContentProtectionCaps(This, pCryptoType, pDecodeProfile, pCaps);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -2437,9 +2437,9 @@ LockDevice9Video_CreateAuthenticatedChannel( struct NineDevice9Video *This,
                                              HANDLE *pChannelHandle )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9Video_CreateAuthenticatedChannel(This, ChannelType, ppAuthenticatedChannel, pChannelHandle);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -2451,9 +2451,9 @@ LockDevice9Video_CreateCryptoSession( struct NineDevice9Video *This,
                                       HANDLE *pCryptoHandle )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineDevice9Video_CreateCryptoSession(This, pCryptoType, pDecodeProfile, ppCryptoSession, pCryptoHandle);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -2474,9 +2474,9 @@ LockIndexBuffer9_Lock( struct NineIndexBuffer9 *This,
                        DWORD Flags )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineIndexBuffer9_Lock(This, OffsetToLock, SizeToLock, ppbData, Flags);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -2484,9 +2484,9 @@ static HRESULT NINE_WINAPI
 LockIndexBuffer9_Unlock( struct NineIndexBuffer9 *This )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineIndexBuffer9_Unlock(This);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -2496,9 +2496,9 @@ LockIndexBuffer9_GetDesc( struct NineIndexBuffer9 *This,
                           D3DINDEXBUFFER_DESC *pDesc )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineIndexBuffer9_GetDesc(This, pDesc);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 #endif
@@ -2526,9 +2526,9 @@ LockPixelShader9_GetDevice( struct NinePixelShader9 *This,
                             IDirect3DDevice9 **ppDevice )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineUnknown_GetDevice(NineUnknown(This), ppDevice);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 #endif
@@ -2539,9 +2539,9 @@ LockPixelShader9_GetFunction( struct NinePixelShader9 *This,
                               UINT *pSizeOfData )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NinePixelShader9_GetFunction(This, pData, pSizeOfData);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -2559,9 +2559,9 @@ LockQuery9_GetDevice( struct NineQuery9 *This,
                       IDirect3DDevice9 **ppDevice )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineUnknown_GetDevice(NineUnknown(This), ppDevice);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 #endif
@@ -2571,9 +2571,9 @@ static D3DQUERYTYPE NINE_WINAPI
 LockQuery9_GetType( struct NineQuery9 *This )
 {
     D3DQUERYTYPE r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineQuery9_GetType(This);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 #endif
@@ -2583,9 +2583,9 @@ static DWORD NINE_WINAPI
 LockQuery9_GetDataSize( struct NineQuery9 *This )
 {
     DWORD r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineQuery9_GetDataSize(This);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 #endif
@@ -2595,9 +2595,9 @@ LockQuery9_Issue( struct NineQuery9 *This,
                   DWORD dwIssueFlags )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineQuery9_Issue(This, dwIssueFlags);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -2608,9 +2608,9 @@ LockQuery9_GetData( struct NineQuery9 *This,
                     DWORD dwGetDataFlags )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineQuery9_GetData(This, pData, dwSize, dwGetDataFlags);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -2631,9 +2631,9 @@ LockStateBlock9_GetDevice( struct NineStateBlock9 *This,
                            IDirect3DDevice9 **ppDevice )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineUnknown_GetDevice(NineUnknown(This), ppDevice);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 #endif
@@ -2642,9 +2642,9 @@ static HRESULT NINE_WINAPI
 LockStateBlock9_Capture( struct NineStateBlock9 *This )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineStateBlock9_Capture(This);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -2652,9 +2652,9 @@ static HRESULT NINE_WINAPI
 LockStateBlock9_Apply( struct NineStateBlock9 *This )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineStateBlock9_Apply(This);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -2673,9 +2673,9 @@ LockSurface9_GetContainer( struct NineSurface9 *This,
                            void **ppContainer )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineSurface9_GetContainer(This, riid, ppContainer);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -2685,9 +2685,9 @@ LockSurface9_GetDesc( struct NineSurface9 *This,
                       D3DSURFACE_DESC *pDesc )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineSurface9_GetDesc(This, pDesc);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 #endif
@@ -2699,9 +2699,9 @@ LockSurface9_LockRect( struct NineSurface9 *This,
                        DWORD Flags )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineSurface9_LockRect(This, pLockedRect, pRect, Flags);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -2709,9 +2709,9 @@ static HRESULT NINE_WINAPI
 LockSurface9_UnlockRect( struct NineSurface9 *This )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineSurface9_UnlockRect(This);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -2720,9 +2720,9 @@ LockSurface9_GetDC( struct NineSurface9 *This,
                     HDC *phdc )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineSurface9_GetDC(This, phdc);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -2731,9 +2731,9 @@ LockSurface9_ReleaseDC( struct NineSurface9 *This,
                         HDC hdc )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineSurface9_ReleaseDC(This, hdc);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -2766,9 +2766,9 @@ LockSwapChain9_Present( struct NineSwapChain9 *This,
                         DWORD dwFlags )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineSwapChain9_Present(This, pSourceRect, pDestRect, hDestWindowOverride, pDirtyRegion, dwFlags);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -2777,9 +2777,9 @@ LockSwapChain9_GetFrontBufferData( struct NineSwapChain9 *This,
                                    IDirect3DSurface9 *pDestSurface )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineSwapChain9_GetFrontBufferData(This, pDestSurface);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -2790,9 +2790,9 @@ LockSwapChain9_GetBackBuffer( struct NineSwapChain9 *This,
                               IDirect3DSurface9 **ppBackBuffer )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineSwapChain9_GetBackBuffer(This, iBackBuffer, Type, ppBackBuffer);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -2801,9 +2801,9 @@ LockSwapChain9_GetRasterStatus( struct NineSwapChain9 *This,
                                 D3DRASTER_STATUS *pRasterStatus )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineSwapChain9_GetRasterStatus(This, pRasterStatus);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -2812,9 +2812,9 @@ LockSwapChain9_GetDisplayMode( struct NineSwapChain9 *This,
                                D3DDISPLAYMODE *pMode )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineSwapChain9_GetDisplayMode(This, pMode);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -2824,9 +2824,9 @@ LockSwapChain9_GetDevice( struct NineSwapChain9 *This,
                           IDirect3DDevice9 **ppDevice )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineUnknown_GetDevice(NineUnknown(This), ppDevice);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 #endif
@@ -2836,9 +2836,9 @@ LockSwapChain9_GetPresentParameters( struct NineSwapChain9 *This,
                                      D3DPRESENT_PARAMETERS *pPresentationParameters )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineSwapChain9_GetPresentParameters(This, pPresentationParameters);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -2860,9 +2860,9 @@ LockSwapChain9Ex_GetLastPresentCount( struct NineSwapChain9Ex *This,
                                       UINT *pLastPresentCount )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineSwapChain9Ex_GetLastPresentCount(This, pLastPresentCount);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -2871,9 +2871,9 @@ LockSwapChain9Ex_GetPresentStats( struct NineSwapChain9Ex *This,
                                   D3DPRESENTSTATS *pPresentationStatistics )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineSwapChain9Ex_GetPresentStats(This, pPresentationStatistics);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -2883,9 +2883,9 @@ LockSwapChain9Ex_GetDisplayModeEx( struct NineSwapChain9Ex *This,
                                    D3DDISPLAYROTATION *pRotation )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineSwapChain9Ex_GetDisplayModeEx(This, pMode, pRotation);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -2912,9 +2912,9 @@ LockTexture9_GetLevelDesc( struct NineTexture9 *This,
                            D3DSURFACE_DESC *pDesc )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineTexture9_GetLevelDesc(This, Level, pDesc);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 #endif
@@ -2926,9 +2926,9 @@ LockTexture9_GetSurfaceLevel( struct NineTexture9 *This,
                               IDirect3DSurface9 **ppSurfaceLevel )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineTexture9_GetSurfaceLevel(This, Level, ppSurfaceLevel);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 #endif
@@ -2941,9 +2941,9 @@ LockTexture9_LockRect( struct NineTexture9 *This,
                        DWORD Flags )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineTexture9_LockRect(This, Level, pLockedRect, pRect, Flags);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -2952,9 +2952,9 @@ LockTexture9_UnlockRect( struct NineTexture9 *This,
                          UINT Level )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineTexture9_UnlockRect(This, Level);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -2963,9 +2963,9 @@ LockTexture9_AddDirtyRect( struct NineTexture9 *This,
                            const RECT *pDirtyRect )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineTexture9_AddDirtyRect(This, pDirtyRect);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -3002,9 +3002,9 @@ LockVertexBuffer9_Lock( struct NineVertexBuffer9 *This,
                         DWORD Flags )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineVertexBuffer9_Lock(This, OffsetToLock, SizeToLock, ppbData, Flags);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -3012,9 +3012,9 @@ static HRESULT NINE_WINAPI
 LockVertexBuffer9_Unlock( struct NineVertexBuffer9 *This )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineVertexBuffer9_Unlock(This);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -3024,9 +3024,9 @@ LockVertexBuffer9_GetDesc( struct NineVertexBuffer9 *This,
                            D3DVERTEXBUFFER_DESC *pDesc )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineVertexBuffer9_GetDesc(This, pDesc);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 #endif
@@ -3054,9 +3054,9 @@ LockVertexDeclaration9_GetDevice( struct NineVertexDeclaration9 *This,
                                   IDirect3DDevice9 **ppDevice )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineUnknown_GetDevice(NineUnknown(This), ppDevice);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 #endif
@@ -3067,9 +3067,9 @@ LockVertexDeclaration9_GetDeclaration( struct NineVertexDeclaration9 *This,
                                        UINT *pNumElements )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineVertexDeclaration9_GetDeclaration(This, pElement, pNumElements);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -3087,9 +3087,9 @@ LockVertexShader9_GetDevice( struct NineVertexShader9 *This,
                              IDirect3DDevice9 **ppDevice )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineUnknown_GetDevice(NineUnknown(This), ppDevice);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 #endif
@@ -3100,9 +3100,9 @@ LockVertexShader9_GetFunction( struct NineVertexShader9 *This,
                                UINT *pSizeOfData )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineVertexShader9_GetFunction(This, pData, pSizeOfData);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -3120,9 +3120,9 @@ LockVolume9_GetDevice( struct NineVolume9 *This,
                        IDirect3DDevice9 **ppDevice )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineUnknown_GetDevice(NineUnknown(This), ppDevice);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 #endif
@@ -3133,9 +3133,9 @@ LockVolume9_GetContainer( struct NineVolume9 *This,
                           void **ppContainer )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineVolume9_GetContainer(This, riid, ppContainer);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -3145,9 +3145,9 @@ LockVolume9_GetDesc( struct NineVolume9 *This,
                      D3DVOLUME_DESC *pDesc )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineVolume9_GetDesc(This, pDesc);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 #endif
@@ -3159,9 +3159,9 @@ LockVolume9_LockBox( struct NineVolume9 *This,
                      DWORD Flags )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineVolume9_LockBox(This, pLockedVolume, pBox, Flags);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -3169,9 +3169,9 @@ static HRESULT NINE_WINAPI
 LockVolume9_UnlockBox( struct NineVolume9 *This )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineVolume9_UnlockBox(This);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -3196,9 +3196,9 @@ LockVolumeTexture9_GetLevelDesc( struct NineVolumeTexture9 *This,
                                  D3DVOLUME_DESC *pDesc )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineVolumeTexture9_GetLevelDesc(This, Level, pDesc);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 #endif
@@ -3210,9 +3210,9 @@ LockVolumeTexture9_GetVolumeLevel( struct NineVolumeTexture9 *This,
                                    IDirect3DVolume9 **ppVolumeLevel )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineVolumeTexture9_GetVolumeLevel(This, Level, ppVolumeLevel);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 #endif
@@ -3225,9 +3225,9 @@ LockVolumeTexture9_LockBox( struct NineVolumeTexture9 *This,
                             DWORD Flags )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineVolumeTexture9_LockBox(This, Level, pLockedVolume, pBox, Flags);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -3236,9 +3236,9 @@ LockVolumeTexture9_UnlockBox( struct NineVolumeTexture9 *This,
                               UINT Level )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineVolumeTexture9_UnlockBox(This, Level);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 
@@ -3247,9 +3247,9 @@ LockVolumeTexture9_AddDirtyBox( struct NineVolumeTexture9 *This,
                                 const D3DBOX *pDirtyBox )
 {
     HRESULT r;
-    pipe_mutex_lock(d3dlock_global);
+    mtx_lock(&d3dlock_global);
     r = NineVolumeTexture9_AddDirtyBox(This, pDirtyBox);
-    pipe_mutex_unlock(d3dlock_global);
+    mtx_unlock(&d3dlock_global);
     return r;
 }
 

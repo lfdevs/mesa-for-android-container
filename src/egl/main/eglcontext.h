@@ -82,6 +82,9 @@ _eglBindContext(_EGLContext *ctx, _EGLSurface *draw, _EGLSurface *read,
                 _EGLContext **old_ctx,
                 _EGLSurface **old_draw, _EGLSurface **old_read);
 
+extern _EGLContext *
+_eglBindContextToThread(_EGLContext *ctx, _EGLThreadInfo *t);
+
 
 /**
  * Increment reference count for the context.

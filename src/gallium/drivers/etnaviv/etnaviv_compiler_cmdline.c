@@ -38,6 +38,9 @@
 #include "etnaviv_compiler.h"
 #include "etnaviv_debug.h"
 #include "etnaviv_internal.h"
+#include "etnaviv_shader.h"
+
+#include "util/u_memory.h"
 
 static const struct etna_specs specs_gc2000 = {
    .vs_need_z_div = 0,
@@ -88,6 +91,7 @@ print_usage(void)
 {
    printf("Usage: etnaviv_compiler [OPTIONS]... FILE\n");
    printf("    --verbose         - verbose compiler/debug messages\n");
+   printf("    --frag-rb-swap    - swap rb in color output (FRAG)\n");
    printf("    --help            - show this message\n");
 }
 
@@ -98,15 +102,29 @@ main(int argc, char **argv)
    const char *filename;
    struct tgsi_token toks[65536];
    struct tgsi_parse_context parse;
-   struct etna_shader *shader_obj;
+   struct etna_shader s = {};
+   struct etna_shader_key key = {};
    void *ptr;
    size_t size;
+
+   struct etna_shader_variant *v = CALLOC_STRUCT(etna_shader_variant);
+   if (!v) {
+      fprintf(stderr, "malloc failed!\n");
+      return 1;
+   }
 
    etna_mesa_debug = ETNA_DBG_MSGS;
 
    while (n < argc) {
       if (!strcmp(argv[n], "--verbose")) {
          etna_mesa_debug |= ETNA_DBG_COMPILER_MSGS;
+         n++;
+         continue;
+      }
+
+      if (!strcmp(argv[n], "--frag-rb-swap")) {
+         debug_printf(" %s", argv[n]);
+         key.frag_rb_swap = true;
          n++;
          continue;
       }
@@ -134,13 +152,17 @@ main(int argc, char **argv)
 
    tgsi_parse_init(&parse, toks);
 
-   shader_obj = etna_compile_shader(&specs_gc2000, toks);
+   s.specs = &specs_gc2000;
+   s.tokens = toks;
 
-   if (shader_obj == NULL) {
+   v->shader = &s;
+   v->key = key;
+
+   if (!etna_compile_shader(v)) {
       fprintf(stderr, "compiler failed!\n");
       return 1;
    }
 
-   etna_dump_shader(shader_obj);
-   etna_destroy_shader(shader_obj);
+   etna_dump_shader(v);
+   etna_destroy_shader(v);
 }

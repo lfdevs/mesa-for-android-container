@@ -86,6 +86,12 @@ const enum pipe_format const_resource_formats_UYVY[3] = {
    PIPE_FORMAT_NONE
 };
 
+const enum pipe_format const_resource_formats_P016[3] = {
+   PIPE_FORMAT_R16_UNORM,
+   PIPE_FORMAT_R16G16_UNORM,
+   PIPE_FORMAT_NONE
+};
+
 const unsigned const_resource_plane_order_YUV[3] = {
    0,
    1,
@@ -126,6 +132,9 @@ vl_video_buffer_formats(struct pipe_screen *screen, enum pipe_format format)
    case PIPE_FORMAT_UYVY:
       return const_resource_formats_UYVY;
 
+   case PIPE_FORMAT_P016:
+      return const_resource_formats_P016;
+
    default:
       return NULL;
    }
@@ -143,6 +152,7 @@ vl_video_buffer_plane_order(enum pipe_format format)
    case PIPE_FORMAT_B8G8R8A8_UNORM:
    case PIPE_FORMAT_YUYV:
    case PIPE_FORMAT_UYVY:
+   case PIPE_FORMAT_P016:
       return const_resource_plane_order_YUV;
 
    default:
@@ -238,6 +248,8 @@ vl_video_buffer_template(struct pipe_resource *templ,
                          unsigned depth, unsigned array_size,
                          unsigned usage, unsigned plane)
 {
+   unsigned height = tmpl->height;
+
    memset(templ, 0, sizeof(*templ));
    if (depth > 1)
       templ->target = PIPE_TEXTURE_3D;
@@ -247,14 +259,14 @@ vl_video_buffer_template(struct pipe_resource *templ,
       templ->target = PIPE_TEXTURE_2D;
    templ->format = resource_format;
    templ->width0 = tmpl->width;
-   templ->height0 = tmpl->height;
    templ->depth0 = depth;
    templ->array_size = array_size;
    templ->bind = PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_RENDER_TARGET | tmpl->bind;
    templ->usage = usage;
 
-   vl_video_buffer_adjust_size(&templ->width0, &templ->height0, plane,
+   vl_video_buffer_adjust_size(&templ->width0, &height, plane,
                                tmpl->chroma_format, false);
+   templ->height0 = height;
 }
 
 static void

@@ -51,14 +51,6 @@ struct sp_exec_fragment_shader
 };
 
 
-/** cast wrapper */
-static inline struct sp_exec_fragment_shader *
-sp_exec_fragment_shader(const struct sp_fragment_shader_variant *var)
-{
-   return (struct sp_exec_fragment_shader *) var;
-}
-
-
 static void
 exec_prepare( const struct sp_fragment_shader_variant *var,
               struct tgsi_exec_machine *machine,

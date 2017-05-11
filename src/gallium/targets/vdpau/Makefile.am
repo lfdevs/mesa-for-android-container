@@ -120,7 +120,8 @@ install-data-hook:
 		ln -sf $${l}						\
 		       $${dest_dir}/$${k};				\
 	done;								\
-	$(RM) $${dest_dir}/libvdpau_gallium.*
+	$(RM) $${dest_dir}/libvdpau_gallium.*;				\
+	$(RM) -d $${dest_dir} &>/dev/null || true
 
 uninstall-hook:
 	for i in $(TARGET_DRIVERS); do					\

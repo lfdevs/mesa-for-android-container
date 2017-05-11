@@ -93,6 +93,7 @@ int hud_get_num_cpus(void);
 
 void hud_fps_graph_install(struct hud_pane *pane);
 void hud_cpu_graph_install(struct hud_pane *pane, unsigned cpu_index);
+void hud_api_thread_busy_install(struct hud_pane *pane);
 void hud_pipe_query_install(struct hud_batch_query_context **pbq,
                             struct hud_pane *pane, struct pipe_context *pipe,
                             const char *name, unsigned query_type,
@@ -107,8 +108,6 @@ boolean hud_driver_query_install(struct hud_batch_query_context **pbq,
 void hud_batch_query_begin(struct hud_batch_query_context *bq);
 void hud_batch_query_update(struct hud_batch_query_context *bq);
 void hud_batch_query_cleanup(struct hud_batch_query_context **pbq);
-
-void hud_graph_set_dump_file(struct hud_graph *gr);
 
 #if HAVE_GALLIUM_EXTRA_HUD
 int hud_get_num_nics(bool displayhelp);

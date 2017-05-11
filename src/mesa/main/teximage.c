@@ -154,23 +154,6 @@ set_tex_image(struct gl_texture_object *tObj,
 
 
 /**
- * Allocate a texture image structure.
- *
- * Called via ctx->Driver.NewTextureImage() unless overriden by a device
- * driver.
- *
- * \return a pointer to gl_texture_image struct with all fields initialized to
- * zero.
- */
-struct gl_texture_image *
-_mesa_new_texture_image( struct gl_context *ctx )
-{
-   (void) ctx;
-   return CALLOC_STRUCT(gl_texture_image);
-}
-
-
-/**
  * Free a gl_texture_image and associated data.
  * This function is a fallback called via ctx->Driver.DeleteTextureImage().
  *
@@ -1322,7 +1305,6 @@ static bool
 compressedteximage_only_format(const struct gl_context *ctx, GLenum format)
 {
    switch (format) {
-   case GL_ETC1_RGB8_OES:
    case GL_PALETTE4_RGB8_OES:
    case GL_PALETTE4_RGBA8_OES:
    case GL_PALETTE4_R5_G6_B5_OES:
@@ -3243,7 +3225,7 @@ _mesa_texture_sub_image(struct gl_context *ctx, GLuint dims,
 
          check_gen_mipmap(ctx, target, texObj, level);
 
-         /* NOTE: Don't signal _NEW_TEXTURE since we've only changed
+         /* NOTE: Don't signal _NEW_TEXTURE_OBJECT since we've only changed
           * the texel data, not the texture format, size, etc.
           */
       }
@@ -3648,9 +3630,10 @@ copyteximage(struct gl_context *ctx, GLuint dims,
       if (texImage && can_avoid_reallocation(texImage, internalFormat, texFormat,
                                              x, y, width, height, border)) {
          _mesa_unlock_texture(ctx, texObj);
-         return _mesa_copy_texture_sub_image(ctx, dims, texObj, target, level,
-                                             0, 0, 0, x, y, width, height,
-                                             "CopyTexImage");
+         _mesa_copy_texture_sub_image(ctx, dims, texObj, target, level,
+                                      0, 0, 0, x, y, width, height,
+                                      "CopyTexImage");
+         return;
       }
    }
    _mesa_unlock_texture(ctx, texObj);
@@ -3834,7 +3817,7 @@ _mesa_copy_texture_sub_image(struct gl_context *ctx, GLuint dims,
 
          check_gen_mipmap(ctx, target, texObj, level);
 
-         /* NOTE: Don't signal _NEW_TEXTURE since we've only changed
+         /* NOTE: Don't signal _NEW_TEXTURE_OBJECT since we've only changed
           * the texel data, not the texture format, size, etc.
           */
       }
@@ -3939,7 +3922,7 @@ _mesa_CopyTextureSubImage1D(GLuint texture, GLint level,
 
    /* Check target (proxies not allowed). */
    if (!legal_texsubimage_target(ctx, 1, texObj->Target, true)) {
-      _mesa_error(ctx, GL_INVALID_ENUM, "%s(invalid target %s)", self,
+      _mesa_error(ctx, GL_INVALID_OPERATION, "%s(invalid target %s)", self,
                   _mesa_enum_to_string(texObj->Target));
       return;
    }
@@ -3963,7 +3946,7 @@ _mesa_CopyTextureSubImage2D(GLuint texture, GLint level,
 
    /* Check target (proxies not allowed). */
    if (!legal_texsubimage_target(ctx, 2, texObj->Target, true)) {
-      _mesa_error(ctx, GL_INVALID_ENUM, "%s(invalid target %s)", self,
+      _mesa_error(ctx, GL_INVALID_OPERATION, "%s(invalid target %s)", self,
                   _mesa_enum_to_string(texObj->Target));
       return;
    }
@@ -3990,7 +3973,7 @@ _mesa_CopyTextureSubImage3D(GLuint texture, GLint level,
 
    /* Check target (proxies not allowed). */
    if (!legal_texsubimage_target(ctx, 3, texObj->Target, true)) {
-      _mesa_error(ctx, GL_INVALID_ENUM, "%s(invalid target %s)", self,
+      _mesa_error(ctx, GL_INVALID_OPERATION, "%s(invalid target %s)", self,
                   _mesa_enum_to_string(texObj->Target));
       return;
    }
@@ -4540,7 +4523,7 @@ _mesa_compressed_texture_sub_image(struct gl_context *ctx, GLuint dims,
 
          check_gen_mipmap(ctx, target, texObj, level);
 
-         /* NOTE: Don't signal _NEW_TEXTURE since we've only changed
+         /* NOTE: Don't signal _NEW_TEXTURE_OBJECT since we've only changed
           * the texel data, not the texture format, size, etc.
           */
       }

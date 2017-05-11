@@ -91,7 +91,7 @@ BARRIER(memory_barrier)
  * The latter can be used as code motion barrier, which is currently not
  * feasible with NIR.
  */
-INTRINSIC(shader_clock, 0, ARR(0), true, 1, 0, 0, xx, xx, xx, NIR_INTRINSIC_CAN_ELIMINATE)
+INTRINSIC(shader_clock, 0, ARR(0), true, 2, 0, 0, xx, xx, xx, NIR_INTRINSIC_CAN_ELIMINATE)
 
 /*
  * Memory barrier with semantics analogous to the compute shader
@@ -186,7 +186,7 @@ INTRINSIC(image_atomic_or, 3, ARR(4, 1, 1), true, 1, 1, 0, xx, xx, xx, 0)
 INTRINSIC(image_atomic_xor, 3, ARR(4, 1, 1), true, 1, 1, 0, xx, xx, xx, 0)
 INTRINSIC(image_atomic_exchange, 3, ARR(4, 1, 1), true, 1, 1, 0, xx, xx, xx, 0)
 INTRINSIC(image_atomic_comp_swap, 4, ARR(4, 1, 1, 1), true, 1, 1, 0, xx, xx, xx, 0)
-INTRINSIC(image_size, 0, ARR(0), true, 4, 1, 0, xx, xx, xx,
+INTRINSIC(image_size, 0, ARR(0), true, 0, 1, 0, xx, xx, xx,
           NIR_INTRINSIC_CAN_ELIMINATE | NIR_INTRINSIC_CAN_REORDER)
 INTRINSIC(image_samples, 0, ARR(0), true, 1, 1, 0, xx, xx, xx,
           NIR_INTRINSIC_CAN_ELIMINATE | NIR_INTRINSIC_CAN_REORDER)

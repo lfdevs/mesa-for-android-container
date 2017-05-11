@@ -39,10 +39,10 @@ static bool
 is_passthru_format(uint32_t format)
 {
    switch (format) {
-   case BRW_SURFACEFORMAT_R64_PASSTHRU:
-   case BRW_SURFACEFORMAT_R64G64_PASSTHRU:
-   case BRW_SURFACEFORMAT_R64G64B64_PASSTHRU:
-   case BRW_SURFACEFORMAT_R64G64B64A64_PASSTHRU:
+   case ISL_FORMAT_R64_PASSTHRU:
+   case ISL_FORMAT_R64G64_PASSTHRU:
+   case ISL_FORMAT_R64G64B64_PASSTHRU:
+   case ISL_FORMAT_R64G64B64A64_PASSTHRU:
       return true;
    default:
       return false;
@@ -138,7 +138,7 @@ gen8_emit_vertices(struct brw_context *brw)
       OUT_BATCH((_3DSTATE_VERTEX_ELEMENTS << 16) | (3 - 2));
       OUT_BATCH((0 << GEN6_VE0_INDEX_SHIFT) |
                 GEN6_VE0_VALID |
-                (BRW_SURFACEFORMAT_R32G32B32A32_FLOAT << BRW_VE0_FORMAT_SHIFT) |
+                (ISL_FORMAT_R32G32B32A32_FLOAT << BRW_VE0_FORMAT_SHIFT) |
                 (0 << BRW_VE0_SRC_OFFSET_SHIFT));
       OUT_BATCH((BRW_VE1_COMPONENT_STORE_0 << BRW_VE1_COMPONENT_0_SHIFT) |
                 (BRW_VE1_COMPONENT_STORE_0 << BRW_VE1_COMPONENT_1_SHIFT) |
@@ -281,7 +281,7 @@ gen8_emit_vertices(struct brw_context *brw)
           vs_prog_data->uses_baseinstance) {
          OUT_BATCH(GEN6_VE0_VALID |
                    brw->vb.nr_buffers << GEN6_VE0_INDEX_SHIFT |
-                   BRW_SURFACEFORMAT_R32G32_UINT << BRW_VE0_FORMAT_SHIFT);
+                   ISL_FORMAT_R32G32_UINT << BRW_VE0_FORMAT_SHIFT);
          OUT_BATCH((BRW_VE1_COMPONENT_STORE_SRC << BRW_VE1_COMPONENT_0_SHIFT) |
                    (BRW_VE1_COMPONENT_STORE_SRC << BRW_VE1_COMPONENT_1_SHIFT) |
                    (BRW_VE1_COMPONENT_STORE_0 << BRW_VE1_COMPONENT_2_SHIFT) |
@@ -298,7 +298,7 @@ gen8_emit_vertices(struct brw_context *brw)
    if (vs_prog_data->uses_drawid) {
       OUT_BATCH(GEN6_VE0_VALID |
                 ((brw->vb.nr_buffers + 1) << GEN6_VE0_INDEX_SHIFT) |
-                (BRW_SURFACEFORMAT_R32_UINT << BRW_VE0_FORMAT_SHIFT));
+                (ISL_FORMAT_R32_UINT << BRW_VE0_FORMAT_SHIFT));
       OUT_BATCH((BRW_VE1_COMPONENT_STORE_SRC << BRW_VE1_COMPONENT_0_SHIFT) |
                    (BRW_VE1_COMPONENT_STORE_0 << BRW_VE1_COMPONENT_1_SHIFT) |
                    (BRW_VE1_COMPONENT_STORE_0 << BRW_VE1_COMPONENT_2_SHIFT) |

@@ -654,7 +654,7 @@ void trace_dump_vertex_buffer(const struct pipe_vertex_buffer *state)
 
    trace_dump_member(uint, state, stride);
    trace_dump_member(uint, state, buffer_offset);
-   trace_dump_member(resource_ptr, state, buffer);
+   trace_dump_member(ptr, state, buffer);
    trace_dump_member(ptr, state, user_buffer);
 
    trace_dump_struct_end();
@@ -675,7 +675,7 @@ void trace_dump_index_buffer(const struct pipe_index_buffer *state)
 
    trace_dump_member(uint, state, index_size);
    trace_dump_member(uint, state, offset);
-   trace_dump_member(resource_ptr, state, buffer);
+   trace_dump_member(ptr, state, buffer);
    trace_dump_member(ptr, state, user_buffer);
 
    trace_dump_struct_end();
@@ -733,7 +733,7 @@ void trace_dump_shader_buffer(const struct pipe_shader_buffer *state)
    }
 
    trace_dump_struct_begin("pipe_shader_buffer");
-   trace_dump_member(resource_ptr, state, buffer);
+   trace_dump_member(ptr, state, buffer);
    trace_dump_member(uint, state, buffer_offset);
    trace_dump_member(uint, state, buffer_size);
    trace_dump_struct_end();
@@ -751,7 +751,7 @@ void trace_dump_image_view(const struct pipe_image_view *state)
    }
 
    trace_dump_struct_begin("pipe_image_view");
-   trace_dump_member(resource_ptr, state, resource);
+   trace_dump_member(ptr, state, resource);
    trace_dump_member(uint, state, format);
    trace_dump_member(uint, state, access);
 
@@ -834,7 +834,7 @@ void trace_dump_blit_info(const struct pipe_blit_info *info)
 
    trace_dump_member_begin("dst");
    trace_dump_struct_begin("dst");
-   trace_dump_member(resource_ptr, &info->dst, resource);
+   trace_dump_member(ptr, &info->dst, resource);
    trace_dump_member(uint, &info->dst, level);
    trace_dump_member(format, &info->dst, format);
    trace_dump_member_begin("box");
@@ -845,7 +845,7 @@ void trace_dump_blit_info(const struct pipe_blit_info *info)
 
    trace_dump_member_begin("src");
    trace_dump_struct_begin("src");
-   trace_dump_member(resource_ptr, &info->src, resource);
+   trace_dump_member(ptr, &info->src, resource);
    trace_dump_member(uint, &info->src, level);
    trace_dump_member(format, &info->src, format);
    trace_dump_member_begin("box");

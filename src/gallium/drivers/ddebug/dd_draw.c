@@ -220,6 +220,8 @@ dd_dump_draw_vbo(struct dd_draw_state *dstate, struct pipe_draw_info *info, FILE
              count_from_stream_output);
    if (info->indirect)
       DUMP_M(resource, info, indirect);
+   if (info->indirect_params)
+      DUMP_M(resource, info, indirect_params);
    fprintf(f, "\n");
 
    /* TODO: dump active queries */
@@ -451,6 +453,13 @@ dd_dump_clear_buffer(struct dd_draw_state *dstate, struct call_clear_buffer *inf
 }
 
 static void
+dd_dump_clear_texture(struct dd_draw_state *dstate, FILE *f)
+{
+   fprintf(f, "%s:\n", __func__+8);
+   /* TODO */
+}
+
+static void
 dd_dump_clear_render_target(struct dd_draw_state *dstate, FILE *f)
 {
    fprintf(f, "%s:\n", __func__+8);
@@ -500,6 +509,9 @@ dd_dump_call(FILE *f, struct dd_draw_state *state, struct dd_call *call)
       break;
    case CALL_CLEAR_BUFFER:
       dd_dump_clear_buffer(state, &call->info.clear_buffer, f);
+      break;
+   case CALL_CLEAR_TEXTURE:
+      dd_dump_clear_texture(state, f);
       break;
    case CALL_CLEAR_RENDER_TARGET:
       dd_dump_clear_render_target(state, f);
@@ -619,6 +631,8 @@ dd_unreference_copy_of_call(struct dd_call *dst)
    case CALL_CLEAR_BUFFER:
       pipe_resource_reference(&dst->info.clear_buffer.res, NULL);
       break;
+   case CALL_CLEAR_TEXTURE:
+      break;
    case CALL_CLEAR_RENDER_TARGET:
       break;
    case CALL_CLEAR_DEPTH_STENCIL:
@@ -674,6 +688,8 @@ dd_copy_call(struct dd_call *dst, struct dd_call *src)
       pipe_resource_reference(&dst->info.clear_buffer.res,
                               src->info.clear_buffer.res);
       dst->info.clear_buffer = src->info.clear_buffer;
+      break;
+   case CALL_CLEAR_TEXTURE:
       break;
    case CALL_CLEAR_RENDER_TARGET:
       break;
@@ -899,12 +915,13 @@ dd_dump_record(struct dd_context *dctx, struct dd_draw_record *record,
    fclose(f);
 }
 
-PIPE_THREAD_ROUTINE(dd_thread_pipelined_hang_detect, input)
+int
+dd_thread_pipelined_hang_detect(void *input)
 {
    struct dd_context *dctx = (struct dd_context *)input;
    struct dd_screen *dscreen = dd_screen(dctx->base.screen);
 
-   pipe_mutex_lock(dctx->mutex);
+   mtx_lock(&dctx->mutex);
 
    while (!dctx->kill_thread) {
       struct dd_draw_record **record = &dctx->records;
@@ -942,16 +959,16 @@ PIPE_THREAD_ROUTINE(dd_thread_pipelined_hang_detect, input)
       }
 
       /* Unlock and sleep before starting all over again. */
-      pipe_mutex_unlock(dctx->mutex);
+      mtx_unlock(&dctx->mutex);
       os_time_sleep(10000); /* 10 ms */
-      pipe_mutex_lock(dctx->mutex);
+      mtx_lock(&dctx->mutex);
    }
 
    /* Thread termination. */
    while (dctx->records)
       dd_free_record(&dctx->records);
 
-   pipe_mutex_unlock(dctx->mutex);
+   mtx_unlock(&dctx->mutex);
    return 0;
 }
 
@@ -1041,10 +1058,10 @@ dd_pipelined_process_draw(struct dd_context *dctx, struct dd_call *call)
    dd_copy_draw_state(&record->draw_state.base, &dctx->draw_state);
 
    /* Add the record to the list. */
-   pipe_mutex_lock(dctx->mutex);
+   mtx_lock(&dctx->mutex);
    record->next = dctx->records;
    dctx->records = record;
-   pipe_mutex_unlock(dctx->mutex);
+   mtx_unlock(&dctx->mutex);
 }
 
 static void
@@ -1339,6 +1356,24 @@ dd_context_clear_buffer(struct pipe_context *_pipe, struct pipe_resource *res,
    dd_after_draw(dctx, &call);
 }
 
+static void
+dd_context_clear_texture(struct pipe_context *_pipe,
+                         struct pipe_resource *res,
+                         unsigned level,
+                         const struct pipe_box *box,
+                         const void *data)
+{
+   struct dd_context *dctx = dd_context(_pipe);
+   struct pipe_context *pipe = dctx->pipe;
+   struct dd_call call;
+
+   call.type = CALL_CLEAR_TEXTURE;
+
+   dd_before_draw(dctx);
+   pipe->clear_texture(pipe, res, level, box, data);
+   dd_after_draw(dctx, &call);
+}
+
 void
 dd_init_draw_functions(struct dd_context *dctx)
 {
@@ -1351,6 +1386,7 @@ dd_init_draw_functions(struct dd_context *dctx)
    CTX_INIT(clear_render_target);
    CTX_INIT(clear_depth_stencil);
    CTX_INIT(clear_buffer);
+   CTX_INIT(clear_texture);
    CTX_INIT(flush_resource);
    CTX_INIT(generate_mipmap);
 }

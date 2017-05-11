@@ -45,7 +45,7 @@ gen8_upload_sf_clip_viewport(struct brw_context *brw)
    const uint32_t fb_width = _mesa_geometric_width(ctx->DrawBuffer);
    const uint32_t fb_height = _mesa_geometric_height(ctx->DrawBuffer);
 
-   float *vp = brw_state_batch(brw, AUB_TRACE_SF_VP_STATE,
+   float *vp = brw_state_batch(brw,
                                16 * 4 * viewport_count,
                                64, &brw->sf.vp_offset);
    /* Also assign to clip.vp_offset in case something uses it. */

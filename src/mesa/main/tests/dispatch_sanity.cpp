@@ -961,6 +961,10 @@ const struct function common_desktop_functions_possible[] = {
    /* GL_KHR_blend_equation_advanced */
    { "glBlendBarrierKHR", 20, -1 },
 
+   /* GL_ARB_sparse_buffer */
+   { "glBufferPageCommitmentARB", 43, -1 },
+   { "glNamedBufferPageCommitmentARB", 43, -1 },
+
    { NULL, 0, -1 }
 };
 
@@ -1871,6 +1875,44 @@ const struct function gl_core_functions_possible[] = {
 
    /* GL_ARB_ES3_2_compatibility */
    { "glPrimitiveBoundingBoxARB", 45, -1 },
+
+   /* GL_ARB_gpu_shader_int64 */
+   { "glUniform1i64ARB", 45, -1 },
+   { "glUniform2i64ARB", 45, -1 },
+   { "glUniform3i64ARB", 45, -1 },
+   { "glUniform4i64ARB", 45, -1 },
+   { "glUniform1ui64ARB", 45, -1 },
+   { "glUniform2ui64ARB", 45, -1 },
+   { "glUniform3ui64ARB", 45, -1 },
+   { "glUniform4ui64ARB", 45, -1 },
+   { "glUniform1i64vARB", 45, -1 },
+   { "glUniform2i64vARB", 45, -1 },
+   { "glUniform3i64vARB", 45, -1 },
+   { "glUniform4i64vARB", 45, -1 },
+   { "glUniform1ui64vARB", 45, -1 },
+   { "glUniform2ui64vARB", 45, -1 },
+   { "glUniform3ui64vARB", 45, -1 },
+   { "glUniform4ui64vARB", 45, -1 },
+   { "glGetUniformi64vARB", 45, -1 },
+   { "glGetUniformui64vARB", 45, -1 },
+   { "glGetnUniformi64vARB", 45, -1 },
+   { "glGetnUniformui64vARB", 45, -1 },
+   { "glProgramUniform1i64ARB", 45, -1 },
+   { "glProgramUniform2i64ARB", 45, -1 },
+   { "glProgramUniform3i64ARB", 45, -1 },
+   { "glProgramUniform4i64ARB", 45, -1 },
+   { "glProgramUniform1ui64ARB", 45, -1 },
+   { "glProgramUniform2ui64ARB", 45, -1 },
+   { "glProgramUniform3ui64ARB", 45, -1 },
+   { "glProgramUniform4ui64ARB", 45, -1 },
+   { "glProgramUniform1i64vARB", 45, -1 },
+   { "glProgramUniform2i64vARB", 45, -1 },
+   { "glProgramUniform3i64vARB", 45, -1 },
+   { "glProgramUniform4i64vARB", 45, -1 },
+   { "glProgramUniform1ui64vARB", 45, -1 },
+   { "glProgramUniform2ui64vARB", 45, -1 },
+   { "glProgramUniform3ui64vARB", 45, -1 },
+   { "glProgramUniform4ui64vARB", 45, -1 },
 
    { NULL, 0, -1 }
 };

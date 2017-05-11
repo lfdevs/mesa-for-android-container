@@ -203,9 +203,16 @@ unpack_half_1x16(uint16_t u)
 }
 
 /* Some typed vector structures to make things like src0.y work */
+typedef float float16_t;
 typedef float float32_t;
 typedef double float64_t;
 typedef bool bool32_t;
+struct float16_vec {
+   float16_t x;
+   float16_t y;
+   float16_t z;
+   float16_t w;
+};
 struct float32_vec {
    float32_t x;
    float32_t y;
@@ -218,6 +225,18 @@ struct float64_vec {
    float64_t z;
    float64_t w;
 };
+struct int8_vec {
+   int8_t x;
+   int8_t y;
+   int8_t z;
+   int8_t w;
+};
+struct int16_vec {
+   int16_t x;
+   int16_t y;
+   int16_t z;
+   int16_t w;
+};
 struct int32_vec {
    int32_t x;
    int32_t y;
@@ -229,6 +248,18 @@ struct int64_vec {
    int64_t y;
    int64_t z;
    int64_t w;
+};
+struct uint8_vec {
+   uint8_t x;
+   uint8_t y;
+   uint8_t z;
+   uint8_t w;
+};
+struct uint16_vec {
+   uint16_t x;
+   uint16_t y;
+   uint16_t z;
+   uint16_t w;
 };
 struct uint32_vec {
    uint32_t x;
@@ -250,45 +281,64 @@ struct bool32_vec {
     bool w;
 };
 
+
+
 static nir_const_value
 evaluate_b2f(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
                  MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const bool src0 = _src[0].u32[_i] != 0;
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const bool src0 = _src[0].u32[_i] != 0;
 
-               float32_t dst = src0 ? 1.0f : 0.0f;
+            float16_t dst = src0 ? 1.0 : 0.0;
 
-               _dst_val.f32[_i] = dst;
-         }
+            _dst_val.u16[_i] = _mesa_float_to_half(dst);
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const bool src0 = _src[0].u32[_i] != 0;
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const bool src0 = _src[0].u32[_i] != 0;
 
-               float32_t dst = src0 ? 1.0f : 0.0f;
+            float32_t dst = src0 ? 1.0 : 0.0;
 
-               _dst_val.f32[_i] = dst;
-         }
+            _dst_val.f32[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const bool src0 = _src[0].u32[_i] != 0;
+
+            float64_t dst = src0 ? 1.0 : 0.0;
+
+            _dst_val.f64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -298,39 +348,71 @@ evaluate_b2i(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 8: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const bool src0 = _src[0].u32[_i] != 0;
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const bool src0 = _src[0].u32[_i] != 0;
 
-               int32_t dst = src0 ? 1 : 0;
+            int8_t dst = src0 ? 1 : 0;
 
-               _dst_val.i32[_i] = dst;
-         }
+            _dst_val.i8[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 16: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const bool src0 = _src[0].u32[_i] != 0;
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const bool src0 = _src[0].u32[_i] != 0;
 
-               int32_t dst = src0 ? 1 : 0;
+            int16_t dst = src0 ? 1 : 0;
 
-               _dst_val.i32[_i] = dst;
-         }
+            _dst_val.i16[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 32: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const bool src0 = _src[0].u32[_i] != 0;
+
+            int32_t dst = src0 ? 1 : 0;
+
+            _dst_val.i32[_i] = dst;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const bool src0 = _src[0].u32[_i] != 0;
+
+            int64_t dst = src0 ? 1 : 0;
+
+            _dst_val.i64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -340,63 +422,92 @@ evaluate_ball_fequal2(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
 
-         const struct float32_vec src0 = {
-               _src[0].f32[0],
-               _src[0].f32[1],
-            0,
-            0,
-         };
+      const struct float16_vec src0 = {
+            _mesa_half_to_float(_src[0].u16[0]),
+            _mesa_half_to_float(_src[0].u16[1]),
+         0,
+         0,
+      };
 
-         const struct float32_vec src1 = {
-               _src[1].f32[0],
-               _src[1].f32[1],
-            0,
-            0,
-         };
+      const struct float16_vec src1 = {
+            _mesa_half_to_float(_src[1].u16[0]),
+            _mesa_half_to_float(_src[1].u16[1]),
+         0,
+         0,
+      };
 
-         struct bool32_vec dst;
+      struct bool32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = ((src0.x == src1.x) && (src0.y == src1.y));
+         dst.x = dst.y = dst.z = dst.w = ((src0.x == src1.x) && (src0.y == src1.y));
 
-               _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
+            _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
 
-         const struct float64_vec src0 = {
-               _src[0].f64[0],
-               _src[0].f64[1],
-            0,
-            0,
-         };
+      const struct float32_vec src0 = {
+            _src[0].f32[0],
+            _src[0].f32[1],
+         0,
+         0,
+      };
 
-         const struct float64_vec src1 = {
-               _src[1].f64[0],
-               _src[1].f64[1],
-            0,
-            0,
-         };
+      const struct float32_vec src1 = {
+            _src[1].f32[0],
+            _src[1].f32[1],
+         0,
+         0,
+      };
 
-         struct bool32_vec dst;
+      struct bool32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = ((src0.x == src1.x) && (src0.y == src1.y));
+         dst.x = dst.y = dst.z = dst.w = ((src0.x == src1.x) && (src0.y == src1.y));
 
-               _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
+            _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+
+      const struct float64_vec src0 = {
+            _src[0].f64[0],
+            _src[0].f64[1],
+         0,
+         0,
+      };
+
+      const struct float64_vec src1 = {
+            _src[1].f64[0],
+            _src[1].f64[1],
+         0,
+         0,
+      };
+
+      struct bool32_vec dst;
+
+         dst.x = dst.y = dst.z = dst.w = ((src0.x == src1.x) && (src0.y == src1.y));
+
+            _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -406,63 +517,92 @@ evaluate_ball_fequal3(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
 
-         const struct float32_vec src0 = {
-               _src[0].f32[0],
-               _src[0].f32[1],
-               _src[0].f32[2],
-            0,
-         };
+      const struct float16_vec src0 = {
+            _mesa_half_to_float(_src[0].u16[0]),
+            _mesa_half_to_float(_src[0].u16[1]),
+            _mesa_half_to_float(_src[0].u16[2]),
+         0,
+      };
 
-         const struct float32_vec src1 = {
-               _src[1].f32[0],
-               _src[1].f32[1],
-               _src[1].f32[2],
-            0,
-         };
+      const struct float16_vec src1 = {
+            _mesa_half_to_float(_src[1].u16[0]),
+            _mesa_half_to_float(_src[1].u16[1]),
+            _mesa_half_to_float(_src[1].u16[2]),
+         0,
+      };
 
-         struct bool32_vec dst;
+      struct bool32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = ((src0.x == src1.x) && (src0.y == src1.y) && (src0.z == src1.z));
+         dst.x = dst.y = dst.z = dst.w = ((src0.x == src1.x) && (src0.y == src1.y) && (src0.z == src1.z));
 
-               _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
+            _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
 
-         const struct float64_vec src0 = {
-               _src[0].f64[0],
-               _src[0].f64[1],
-               _src[0].f64[2],
-            0,
-         };
+      const struct float32_vec src0 = {
+            _src[0].f32[0],
+            _src[0].f32[1],
+            _src[0].f32[2],
+         0,
+      };
 
-         const struct float64_vec src1 = {
-               _src[1].f64[0],
-               _src[1].f64[1],
-               _src[1].f64[2],
-            0,
-         };
+      const struct float32_vec src1 = {
+            _src[1].f32[0],
+            _src[1].f32[1],
+            _src[1].f32[2],
+         0,
+      };
 
-         struct bool32_vec dst;
+      struct bool32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = ((src0.x == src1.x) && (src0.y == src1.y) && (src0.z == src1.z));
+         dst.x = dst.y = dst.z = dst.w = ((src0.x == src1.x) && (src0.y == src1.y) && (src0.z == src1.z));
 
-               _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
+            _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+
+      const struct float64_vec src0 = {
+            _src[0].f64[0],
+            _src[0].f64[1],
+            _src[0].f64[2],
+         0,
+      };
+
+      const struct float64_vec src1 = {
+            _src[1].f64[0],
+            _src[1].f64[1],
+            _src[1].f64[2],
+         0,
+      };
+
+      struct bool32_vec dst;
+
+         dst.x = dst.y = dst.z = dst.w = ((src0.x == src1.x) && (src0.y == src1.y) && (src0.z == src1.z));
+
+            _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -472,63 +612,92 @@ evaluate_ball_fequal4(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
 
-         const struct float32_vec src0 = {
-               _src[0].f32[0],
-               _src[0].f32[1],
-               _src[0].f32[2],
-               _src[0].f32[3],
-         };
+      const struct float16_vec src0 = {
+            _mesa_half_to_float(_src[0].u16[0]),
+            _mesa_half_to_float(_src[0].u16[1]),
+            _mesa_half_to_float(_src[0].u16[2]),
+            _mesa_half_to_float(_src[0].u16[3]),
+      };
 
-         const struct float32_vec src1 = {
-               _src[1].f32[0],
-               _src[1].f32[1],
-               _src[1].f32[2],
-               _src[1].f32[3],
-         };
+      const struct float16_vec src1 = {
+            _mesa_half_to_float(_src[1].u16[0]),
+            _mesa_half_to_float(_src[1].u16[1]),
+            _mesa_half_to_float(_src[1].u16[2]),
+            _mesa_half_to_float(_src[1].u16[3]),
+      };
 
-         struct bool32_vec dst;
+      struct bool32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = ((src0.x == src1.x) && (src0.y == src1.y) && (src0.z == src1.z) && (src0.w == src1.w));
+         dst.x = dst.y = dst.z = dst.w = ((src0.x == src1.x) && (src0.y == src1.y) && (src0.z == src1.z) && (src0.w == src1.w));
 
-               _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
+            _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
 
-         const struct float64_vec src0 = {
-               _src[0].f64[0],
-               _src[0].f64[1],
-               _src[0].f64[2],
-               _src[0].f64[3],
-         };
+      const struct float32_vec src0 = {
+            _src[0].f32[0],
+            _src[0].f32[1],
+            _src[0].f32[2],
+            _src[0].f32[3],
+      };
 
-         const struct float64_vec src1 = {
-               _src[1].f64[0],
-               _src[1].f64[1],
-               _src[1].f64[2],
-               _src[1].f64[3],
-         };
+      const struct float32_vec src1 = {
+            _src[1].f32[0],
+            _src[1].f32[1],
+            _src[1].f32[2],
+            _src[1].f32[3],
+      };
 
-         struct bool32_vec dst;
+      struct bool32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = ((src0.x == src1.x) && (src0.y == src1.y) && (src0.z == src1.z) && (src0.w == src1.w));
+         dst.x = dst.y = dst.z = dst.w = ((src0.x == src1.x) && (src0.y == src1.y) && (src0.z == src1.z) && (src0.w == src1.w));
 
-               _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
+            _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+
+      const struct float64_vec src0 = {
+            _src[0].f64[0],
+            _src[0].f64[1],
+            _src[0].f64[2],
+            _src[0].f64[3],
+      };
+
+      const struct float64_vec src1 = {
+            _src[1].f64[0],
+            _src[1].f64[1],
+            _src[1].f64[2],
+            _src[1].f64[3],
+      };
+
+      struct bool32_vec dst;
+
+         dst.x = dst.y = dst.z = dst.w = ((src0.x == src1.x) && (src0.y == src1.y) && (src0.z == src1.z) && (src0.w == src1.w));
+
+            _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -538,63 +707,119 @@ evaluate_ball_iequal2(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 8: {
+         
+   
 
 
-         const struct int32_vec src0 = {
-               _src[0].i32[0],
-               _src[0].i32[1],
-            0,
-            0,
-         };
+      const struct int8_vec src0 = {
+            _src[0].i8[0],
+            _src[0].i8[1],
+         0,
+         0,
+      };
 
-         const struct int32_vec src1 = {
-               _src[1].i32[0],
-               _src[1].i32[1],
-            0,
-            0,
-         };
+      const struct int8_vec src1 = {
+            _src[1].i8[0],
+            _src[1].i8[1],
+         0,
+         0,
+      };
 
-         struct bool32_vec dst;
+      struct bool32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = ((src0.x == src1.x) && (src0.y == src1.y));
+         dst.x = dst.y = dst.z = dst.w = ((src0.x == src1.x) && (src0.y == src1.y));
 
-               _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
+            _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 16: {
+         
+   
 
 
-         const struct int64_vec src0 = {
-               _src[0].i64[0],
-               _src[0].i64[1],
-            0,
-            0,
-         };
+      const struct int16_vec src0 = {
+            _src[0].i16[0],
+            _src[0].i16[1],
+         0,
+         0,
+      };
 
-         const struct int64_vec src1 = {
-               _src[1].i64[0],
-               _src[1].i64[1],
-            0,
-            0,
-         };
+      const struct int16_vec src1 = {
+            _src[1].i16[0],
+            _src[1].i16[1],
+         0,
+         0,
+      };
 
-         struct bool32_vec dst;
+      struct bool32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = ((src0.x == src1.x) && (src0.y == src1.y));
+         dst.x = dst.y = dst.z = dst.w = ((src0.x == src1.x) && (src0.y == src1.y));
 
-               _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
+            _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
 
-      break;
-   }
+         break;
+      }
+      case 32: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+
+      const struct int32_vec src0 = {
+            _src[0].i32[0],
+            _src[0].i32[1],
+         0,
+         0,
+      };
+
+      const struct int32_vec src1 = {
+            _src[1].i32[0],
+            _src[1].i32[1],
+         0,
+         0,
+      };
+
+      struct bool32_vec dst;
+
+         dst.x = dst.y = dst.z = dst.w = ((src0.x == src1.x) && (src0.y == src1.y));
+
+            _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
+
+         break;
+      }
+      case 64: {
+         
+   
+
+
+      const struct int64_vec src0 = {
+            _src[0].i64[0],
+            _src[0].i64[1],
+         0,
+         0,
+      };
+
+      const struct int64_vec src1 = {
+            _src[1].i64[0],
+            _src[1].i64[1],
+         0,
+         0,
+      };
+
+      struct bool32_vec dst;
+
+         dst.x = dst.y = dst.z = dst.w = ((src0.x == src1.x) && (src0.y == src1.y));
+
+            _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -604,63 +829,119 @@ evaluate_ball_iequal3(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 8: {
+         
+   
 
 
-         const struct int32_vec src0 = {
-               _src[0].i32[0],
-               _src[0].i32[1],
-               _src[0].i32[2],
-            0,
-         };
+      const struct int8_vec src0 = {
+            _src[0].i8[0],
+            _src[0].i8[1],
+            _src[0].i8[2],
+         0,
+      };
 
-         const struct int32_vec src1 = {
-               _src[1].i32[0],
-               _src[1].i32[1],
-               _src[1].i32[2],
-            0,
-         };
+      const struct int8_vec src1 = {
+            _src[1].i8[0],
+            _src[1].i8[1],
+            _src[1].i8[2],
+         0,
+      };
 
-         struct bool32_vec dst;
+      struct bool32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = ((src0.x == src1.x) && (src0.y == src1.y) && (src0.z == src1.z));
+         dst.x = dst.y = dst.z = dst.w = ((src0.x == src1.x) && (src0.y == src1.y) && (src0.z == src1.z));
 
-               _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
+            _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 16: {
+         
+   
 
 
-         const struct int64_vec src0 = {
-               _src[0].i64[0],
-               _src[0].i64[1],
-               _src[0].i64[2],
-            0,
-         };
+      const struct int16_vec src0 = {
+            _src[0].i16[0],
+            _src[0].i16[1],
+            _src[0].i16[2],
+         0,
+      };
 
-         const struct int64_vec src1 = {
-               _src[1].i64[0],
-               _src[1].i64[1],
-               _src[1].i64[2],
-            0,
-         };
+      const struct int16_vec src1 = {
+            _src[1].i16[0],
+            _src[1].i16[1],
+            _src[1].i16[2],
+         0,
+      };
 
-         struct bool32_vec dst;
+      struct bool32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = ((src0.x == src1.x) && (src0.y == src1.y) && (src0.z == src1.z));
+         dst.x = dst.y = dst.z = dst.w = ((src0.x == src1.x) && (src0.y == src1.y) && (src0.z == src1.z));
 
-               _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
+            _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
 
-      break;
-   }
+         break;
+      }
+      case 32: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+
+      const struct int32_vec src0 = {
+            _src[0].i32[0],
+            _src[0].i32[1],
+            _src[0].i32[2],
+         0,
+      };
+
+      const struct int32_vec src1 = {
+            _src[1].i32[0],
+            _src[1].i32[1],
+            _src[1].i32[2],
+         0,
+      };
+
+      struct bool32_vec dst;
+
+         dst.x = dst.y = dst.z = dst.w = ((src0.x == src1.x) && (src0.y == src1.y) && (src0.z == src1.z));
+
+            _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
+
+         break;
+      }
+      case 64: {
+         
+   
+
+
+      const struct int64_vec src0 = {
+            _src[0].i64[0],
+            _src[0].i64[1],
+            _src[0].i64[2],
+         0,
+      };
+
+      const struct int64_vec src1 = {
+            _src[1].i64[0],
+            _src[1].i64[1],
+            _src[1].i64[2],
+         0,
+      };
+
+      struct bool32_vec dst;
+
+         dst.x = dst.y = dst.z = dst.w = ((src0.x == src1.x) && (src0.y == src1.y) && (src0.z == src1.z));
+
+            _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -670,63 +951,119 @@ evaluate_ball_iequal4(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 8: {
+         
+   
 
 
-         const struct int32_vec src0 = {
-               _src[0].i32[0],
-               _src[0].i32[1],
-               _src[0].i32[2],
-               _src[0].i32[3],
-         };
+      const struct int8_vec src0 = {
+            _src[0].i8[0],
+            _src[0].i8[1],
+            _src[0].i8[2],
+            _src[0].i8[3],
+      };
 
-         const struct int32_vec src1 = {
-               _src[1].i32[0],
-               _src[1].i32[1],
-               _src[1].i32[2],
-               _src[1].i32[3],
-         };
+      const struct int8_vec src1 = {
+            _src[1].i8[0],
+            _src[1].i8[1],
+            _src[1].i8[2],
+            _src[1].i8[3],
+      };
 
-         struct bool32_vec dst;
+      struct bool32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = ((src0.x == src1.x) && (src0.y == src1.y) && (src0.z == src1.z) && (src0.w == src1.w));
+         dst.x = dst.y = dst.z = dst.w = ((src0.x == src1.x) && (src0.y == src1.y) && (src0.z == src1.z) && (src0.w == src1.w));
 
-               _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
+            _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 16: {
+         
+   
 
 
-         const struct int64_vec src0 = {
-               _src[0].i64[0],
-               _src[0].i64[1],
-               _src[0].i64[2],
-               _src[0].i64[3],
-         };
+      const struct int16_vec src0 = {
+            _src[0].i16[0],
+            _src[0].i16[1],
+            _src[0].i16[2],
+            _src[0].i16[3],
+      };
 
-         const struct int64_vec src1 = {
-               _src[1].i64[0],
-               _src[1].i64[1],
-               _src[1].i64[2],
-               _src[1].i64[3],
-         };
+      const struct int16_vec src1 = {
+            _src[1].i16[0],
+            _src[1].i16[1],
+            _src[1].i16[2],
+            _src[1].i16[3],
+      };
 
-         struct bool32_vec dst;
+      struct bool32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = ((src0.x == src1.x) && (src0.y == src1.y) && (src0.z == src1.z) && (src0.w == src1.w));
+         dst.x = dst.y = dst.z = dst.w = ((src0.x == src1.x) && (src0.y == src1.y) && (src0.z == src1.z) && (src0.w == src1.w));
 
-               _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
+            _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
 
-      break;
-   }
+         break;
+      }
+      case 32: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+
+      const struct int32_vec src0 = {
+            _src[0].i32[0],
+            _src[0].i32[1],
+            _src[0].i32[2],
+            _src[0].i32[3],
+      };
+
+      const struct int32_vec src1 = {
+            _src[1].i32[0],
+            _src[1].i32[1],
+            _src[1].i32[2],
+            _src[1].i32[3],
+      };
+
+      struct bool32_vec dst;
+
+         dst.x = dst.y = dst.z = dst.w = ((src0.x == src1.x) && (src0.y == src1.y) && (src0.z == src1.z) && (src0.w == src1.w));
+
+            _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
+
+         break;
+      }
+      case 64: {
+         
+   
+
+
+      const struct int64_vec src0 = {
+            _src[0].i64[0],
+            _src[0].i64[1],
+            _src[0].i64[2],
+            _src[0].i64[3],
+      };
+
+      const struct int64_vec src1 = {
+            _src[1].i64[0],
+            _src[1].i64[1],
+            _src[1].i64[2],
+            _src[1].i64[3],
+      };
+
+      struct bool32_vec dst;
+
+         dst.x = dst.y = dst.z = dst.w = ((src0.x == src1.x) && (src0.y == src1.y) && (src0.z == src1.z) && (src0.w == src1.w));
+
+            _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -736,63 +1073,92 @@ evaluate_bany_fnequal2(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
 
-         const struct float32_vec src0 = {
-               _src[0].f32[0],
-               _src[0].f32[1],
-            0,
-            0,
-         };
+      const struct float16_vec src0 = {
+            _mesa_half_to_float(_src[0].u16[0]),
+            _mesa_half_to_float(_src[0].u16[1]),
+         0,
+         0,
+      };
 
-         const struct float32_vec src1 = {
-               _src[1].f32[0],
-               _src[1].f32[1],
-            0,
-            0,
-         };
+      const struct float16_vec src1 = {
+            _mesa_half_to_float(_src[1].u16[0]),
+            _mesa_half_to_float(_src[1].u16[1]),
+         0,
+         0,
+      };
 
-         struct bool32_vec dst;
+      struct bool32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = ((src0.x != src1.x) || (src0.y != src1.y));
+         dst.x = dst.y = dst.z = dst.w = ((src0.x != src1.x) || (src0.y != src1.y));
 
-               _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
+            _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
 
-         const struct float64_vec src0 = {
-               _src[0].f64[0],
-               _src[0].f64[1],
-            0,
-            0,
-         };
+      const struct float32_vec src0 = {
+            _src[0].f32[0],
+            _src[0].f32[1],
+         0,
+         0,
+      };
 
-         const struct float64_vec src1 = {
-               _src[1].f64[0],
-               _src[1].f64[1],
-            0,
-            0,
-         };
+      const struct float32_vec src1 = {
+            _src[1].f32[0],
+            _src[1].f32[1],
+         0,
+         0,
+      };
 
-         struct bool32_vec dst;
+      struct bool32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = ((src0.x != src1.x) || (src0.y != src1.y));
+         dst.x = dst.y = dst.z = dst.w = ((src0.x != src1.x) || (src0.y != src1.y));
 
-               _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
+            _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+
+      const struct float64_vec src0 = {
+            _src[0].f64[0],
+            _src[0].f64[1],
+         0,
+         0,
+      };
+
+      const struct float64_vec src1 = {
+            _src[1].f64[0],
+            _src[1].f64[1],
+         0,
+         0,
+      };
+
+      struct bool32_vec dst;
+
+         dst.x = dst.y = dst.z = dst.w = ((src0.x != src1.x) || (src0.y != src1.y));
+
+            _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -802,63 +1168,92 @@ evaluate_bany_fnequal3(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
 
-         const struct float32_vec src0 = {
-               _src[0].f32[0],
-               _src[0].f32[1],
-               _src[0].f32[2],
-            0,
-         };
+      const struct float16_vec src0 = {
+            _mesa_half_to_float(_src[0].u16[0]),
+            _mesa_half_to_float(_src[0].u16[1]),
+            _mesa_half_to_float(_src[0].u16[2]),
+         0,
+      };
 
-         const struct float32_vec src1 = {
-               _src[1].f32[0],
-               _src[1].f32[1],
-               _src[1].f32[2],
-            0,
-         };
+      const struct float16_vec src1 = {
+            _mesa_half_to_float(_src[1].u16[0]),
+            _mesa_half_to_float(_src[1].u16[1]),
+            _mesa_half_to_float(_src[1].u16[2]),
+         0,
+      };
 
-         struct bool32_vec dst;
+      struct bool32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = ((src0.x != src1.x) || (src0.y != src1.y) || (src0.z != src1.z));
+         dst.x = dst.y = dst.z = dst.w = ((src0.x != src1.x) || (src0.y != src1.y) || (src0.z != src1.z));
 
-               _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
+            _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
 
-         const struct float64_vec src0 = {
-               _src[0].f64[0],
-               _src[0].f64[1],
-               _src[0].f64[2],
-            0,
-         };
+      const struct float32_vec src0 = {
+            _src[0].f32[0],
+            _src[0].f32[1],
+            _src[0].f32[2],
+         0,
+      };
 
-         const struct float64_vec src1 = {
-               _src[1].f64[0],
-               _src[1].f64[1],
-               _src[1].f64[2],
-            0,
-         };
+      const struct float32_vec src1 = {
+            _src[1].f32[0],
+            _src[1].f32[1],
+            _src[1].f32[2],
+         0,
+      };
 
-         struct bool32_vec dst;
+      struct bool32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = ((src0.x != src1.x) || (src0.y != src1.y) || (src0.z != src1.z));
+         dst.x = dst.y = dst.z = dst.w = ((src0.x != src1.x) || (src0.y != src1.y) || (src0.z != src1.z));
 
-               _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
+            _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+
+      const struct float64_vec src0 = {
+            _src[0].f64[0],
+            _src[0].f64[1],
+            _src[0].f64[2],
+         0,
+      };
+
+      const struct float64_vec src1 = {
+            _src[1].f64[0],
+            _src[1].f64[1],
+            _src[1].f64[2],
+         0,
+      };
+
+      struct bool32_vec dst;
+
+         dst.x = dst.y = dst.z = dst.w = ((src0.x != src1.x) || (src0.y != src1.y) || (src0.z != src1.z));
+
+            _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -868,63 +1263,92 @@ evaluate_bany_fnequal4(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
 
-         const struct float32_vec src0 = {
-               _src[0].f32[0],
-               _src[0].f32[1],
-               _src[0].f32[2],
-               _src[0].f32[3],
-         };
+      const struct float16_vec src0 = {
+            _mesa_half_to_float(_src[0].u16[0]),
+            _mesa_half_to_float(_src[0].u16[1]),
+            _mesa_half_to_float(_src[0].u16[2]),
+            _mesa_half_to_float(_src[0].u16[3]),
+      };
 
-         const struct float32_vec src1 = {
-               _src[1].f32[0],
-               _src[1].f32[1],
-               _src[1].f32[2],
-               _src[1].f32[3],
-         };
+      const struct float16_vec src1 = {
+            _mesa_half_to_float(_src[1].u16[0]),
+            _mesa_half_to_float(_src[1].u16[1]),
+            _mesa_half_to_float(_src[1].u16[2]),
+            _mesa_half_to_float(_src[1].u16[3]),
+      };
 
-         struct bool32_vec dst;
+      struct bool32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = ((src0.x != src1.x) || (src0.y != src1.y) || (src0.z != src1.z) || (src0.w != src1.w));
+         dst.x = dst.y = dst.z = dst.w = ((src0.x != src1.x) || (src0.y != src1.y) || (src0.z != src1.z) || (src0.w != src1.w));
 
-               _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
+            _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
 
-         const struct float64_vec src0 = {
-               _src[0].f64[0],
-               _src[0].f64[1],
-               _src[0].f64[2],
-               _src[0].f64[3],
-         };
+      const struct float32_vec src0 = {
+            _src[0].f32[0],
+            _src[0].f32[1],
+            _src[0].f32[2],
+            _src[0].f32[3],
+      };
 
-         const struct float64_vec src1 = {
-               _src[1].f64[0],
-               _src[1].f64[1],
-               _src[1].f64[2],
-               _src[1].f64[3],
-         };
+      const struct float32_vec src1 = {
+            _src[1].f32[0],
+            _src[1].f32[1],
+            _src[1].f32[2],
+            _src[1].f32[3],
+      };
 
-         struct bool32_vec dst;
+      struct bool32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = ((src0.x != src1.x) || (src0.y != src1.y) || (src0.z != src1.z) || (src0.w != src1.w));
+         dst.x = dst.y = dst.z = dst.w = ((src0.x != src1.x) || (src0.y != src1.y) || (src0.z != src1.z) || (src0.w != src1.w));
 
-               _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
+            _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+
+      const struct float64_vec src0 = {
+            _src[0].f64[0],
+            _src[0].f64[1],
+            _src[0].f64[2],
+            _src[0].f64[3],
+      };
+
+      const struct float64_vec src1 = {
+            _src[1].f64[0],
+            _src[1].f64[1],
+            _src[1].f64[2],
+            _src[1].f64[3],
+      };
+
+      struct bool32_vec dst;
+
+         dst.x = dst.y = dst.z = dst.w = ((src0.x != src1.x) || (src0.y != src1.y) || (src0.z != src1.z) || (src0.w != src1.w));
+
+            _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -934,63 +1358,119 @@ evaluate_bany_inequal2(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 8: {
+         
+   
 
 
-         const struct int32_vec src0 = {
-               _src[0].i32[0],
-               _src[0].i32[1],
-            0,
-            0,
-         };
+      const struct int8_vec src0 = {
+            _src[0].i8[0],
+            _src[0].i8[1],
+         0,
+         0,
+      };
 
-         const struct int32_vec src1 = {
-               _src[1].i32[0],
-               _src[1].i32[1],
-            0,
-            0,
-         };
+      const struct int8_vec src1 = {
+            _src[1].i8[0],
+            _src[1].i8[1],
+         0,
+         0,
+      };
 
-         struct bool32_vec dst;
+      struct bool32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = ((src0.x != src1.x) || (src0.y != src1.y));
+         dst.x = dst.y = dst.z = dst.w = ((src0.x != src1.x) || (src0.y != src1.y));
 
-               _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
+            _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 16: {
+         
+   
 
 
-         const struct int64_vec src0 = {
-               _src[0].i64[0],
-               _src[0].i64[1],
-            0,
-            0,
-         };
+      const struct int16_vec src0 = {
+            _src[0].i16[0],
+            _src[0].i16[1],
+         0,
+         0,
+      };
 
-         const struct int64_vec src1 = {
-               _src[1].i64[0],
-               _src[1].i64[1],
-            0,
-            0,
-         };
+      const struct int16_vec src1 = {
+            _src[1].i16[0],
+            _src[1].i16[1],
+         0,
+         0,
+      };
 
-         struct bool32_vec dst;
+      struct bool32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = ((src0.x != src1.x) || (src0.y != src1.y));
+         dst.x = dst.y = dst.z = dst.w = ((src0.x != src1.x) || (src0.y != src1.y));
 
-               _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
+            _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
 
-      break;
-   }
+         break;
+      }
+      case 32: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+
+      const struct int32_vec src0 = {
+            _src[0].i32[0],
+            _src[0].i32[1],
+         0,
+         0,
+      };
+
+      const struct int32_vec src1 = {
+            _src[1].i32[0],
+            _src[1].i32[1],
+         0,
+         0,
+      };
+
+      struct bool32_vec dst;
+
+         dst.x = dst.y = dst.z = dst.w = ((src0.x != src1.x) || (src0.y != src1.y));
+
+            _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
+
+         break;
+      }
+      case 64: {
+         
+   
+
+
+      const struct int64_vec src0 = {
+            _src[0].i64[0],
+            _src[0].i64[1],
+         0,
+         0,
+      };
+
+      const struct int64_vec src1 = {
+            _src[1].i64[0],
+            _src[1].i64[1],
+         0,
+         0,
+      };
+
+      struct bool32_vec dst;
+
+         dst.x = dst.y = dst.z = dst.w = ((src0.x != src1.x) || (src0.y != src1.y));
+
+            _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -1000,63 +1480,119 @@ evaluate_bany_inequal3(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 8: {
+         
+   
 
 
-         const struct int32_vec src0 = {
-               _src[0].i32[0],
-               _src[0].i32[1],
-               _src[0].i32[2],
-            0,
-         };
+      const struct int8_vec src0 = {
+            _src[0].i8[0],
+            _src[0].i8[1],
+            _src[0].i8[2],
+         0,
+      };
 
-         const struct int32_vec src1 = {
-               _src[1].i32[0],
-               _src[1].i32[1],
-               _src[1].i32[2],
-            0,
-         };
+      const struct int8_vec src1 = {
+            _src[1].i8[0],
+            _src[1].i8[1],
+            _src[1].i8[2],
+         0,
+      };
 
-         struct bool32_vec dst;
+      struct bool32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = ((src0.x != src1.x) || (src0.y != src1.y) || (src0.z != src1.z));
+         dst.x = dst.y = dst.z = dst.w = ((src0.x != src1.x) || (src0.y != src1.y) || (src0.z != src1.z));
 
-               _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
+            _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 16: {
+         
+   
 
 
-         const struct int64_vec src0 = {
-               _src[0].i64[0],
-               _src[0].i64[1],
-               _src[0].i64[2],
-            0,
-         };
+      const struct int16_vec src0 = {
+            _src[0].i16[0],
+            _src[0].i16[1],
+            _src[0].i16[2],
+         0,
+      };
 
-         const struct int64_vec src1 = {
-               _src[1].i64[0],
-               _src[1].i64[1],
-               _src[1].i64[2],
-            0,
-         };
+      const struct int16_vec src1 = {
+            _src[1].i16[0],
+            _src[1].i16[1],
+            _src[1].i16[2],
+         0,
+      };
 
-         struct bool32_vec dst;
+      struct bool32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = ((src0.x != src1.x) || (src0.y != src1.y) || (src0.z != src1.z));
+         dst.x = dst.y = dst.z = dst.w = ((src0.x != src1.x) || (src0.y != src1.y) || (src0.z != src1.z));
 
-               _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
+            _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
 
-      break;
-   }
+         break;
+      }
+      case 32: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+
+      const struct int32_vec src0 = {
+            _src[0].i32[0],
+            _src[0].i32[1],
+            _src[0].i32[2],
+         0,
+      };
+
+      const struct int32_vec src1 = {
+            _src[1].i32[0],
+            _src[1].i32[1],
+            _src[1].i32[2],
+         0,
+      };
+
+      struct bool32_vec dst;
+
+         dst.x = dst.y = dst.z = dst.w = ((src0.x != src1.x) || (src0.y != src1.y) || (src0.z != src1.z));
+
+            _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
+
+         break;
+      }
+      case 64: {
+         
+   
+
+
+      const struct int64_vec src0 = {
+            _src[0].i64[0],
+            _src[0].i64[1],
+            _src[0].i64[2],
+         0,
+      };
+
+      const struct int64_vec src1 = {
+            _src[1].i64[0],
+            _src[1].i64[1],
+            _src[1].i64[2],
+         0,
+      };
+
+      struct bool32_vec dst;
+
+         dst.x = dst.y = dst.z = dst.w = ((src0.x != src1.x) || (src0.y != src1.y) || (src0.z != src1.z));
+
+            _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -1066,63 +1602,119 @@ evaluate_bany_inequal4(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 8: {
+         
+   
 
 
-         const struct int32_vec src0 = {
-               _src[0].i32[0],
-               _src[0].i32[1],
-               _src[0].i32[2],
-               _src[0].i32[3],
-         };
+      const struct int8_vec src0 = {
+            _src[0].i8[0],
+            _src[0].i8[1],
+            _src[0].i8[2],
+            _src[0].i8[3],
+      };
 
-         const struct int32_vec src1 = {
-               _src[1].i32[0],
-               _src[1].i32[1],
-               _src[1].i32[2],
-               _src[1].i32[3],
-         };
+      const struct int8_vec src1 = {
+            _src[1].i8[0],
+            _src[1].i8[1],
+            _src[1].i8[2],
+            _src[1].i8[3],
+      };
 
-         struct bool32_vec dst;
+      struct bool32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = ((src0.x != src1.x) || (src0.y != src1.y) || (src0.z != src1.z) || (src0.w != src1.w));
+         dst.x = dst.y = dst.z = dst.w = ((src0.x != src1.x) || (src0.y != src1.y) || (src0.z != src1.z) || (src0.w != src1.w));
 
-               _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
+            _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 16: {
+         
+   
 
 
-         const struct int64_vec src0 = {
-               _src[0].i64[0],
-               _src[0].i64[1],
-               _src[0].i64[2],
-               _src[0].i64[3],
-         };
+      const struct int16_vec src0 = {
+            _src[0].i16[0],
+            _src[0].i16[1],
+            _src[0].i16[2],
+            _src[0].i16[3],
+      };
 
-         const struct int64_vec src1 = {
-               _src[1].i64[0],
-               _src[1].i64[1],
-               _src[1].i64[2],
-               _src[1].i64[3],
-         };
+      const struct int16_vec src1 = {
+            _src[1].i16[0],
+            _src[1].i16[1],
+            _src[1].i16[2],
+            _src[1].i16[3],
+      };
 
-         struct bool32_vec dst;
+      struct bool32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = ((src0.x != src1.x) || (src0.y != src1.y) || (src0.z != src1.z) || (src0.w != src1.w));
+         dst.x = dst.y = dst.z = dst.w = ((src0.x != src1.x) || (src0.y != src1.y) || (src0.z != src1.z) || (src0.w != src1.w));
 
-               _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
+            _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
 
-      break;
-   }
+         break;
+      }
+      case 32: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+
+      const struct int32_vec src0 = {
+            _src[0].i32[0],
+            _src[0].i32[1],
+            _src[0].i32[2],
+            _src[0].i32[3],
+      };
+
+      const struct int32_vec src1 = {
+            _src[1].i32[0],
+            _src[1].i32[1],
+            _src[1].i32[2],
+            _src[1].i32[3],
+      };
+
+      struct bool32_vec dst;
+
+         dst.x = dst.y = dst.z = dst.w = ((src0.x != src1.x) || (src0.y != src1.y) || (src0.z != src1.z) || (src0.w != src1.w));
+
+            _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
+
+         break;
+      }
+      case 64: {
+         
+   
+
+
+      const struct int64_vec src0 = {
+            _src[0].i64[0],
+            _src[0].i64[1],
+            _src[0].i64[2],
+            _src[0].i64[3],
+      };
+
+      const struct int64_vec src1 = {
+            _src[1].i64[0],
+            _src[1].i64[1],
+            _src[1].i64[2],
+            _src[1].i64[3],
+      };
+
+      struct bool32_vec dst;
+
+         dst.x = dst.y = dst.z = dst.w = ((src0.x != src1.x) || (src0.y != src1.y) || (src0.z != src1.z) || (src0.w != src1.w));
+
+            _dst_val.u32[0] = dst.x ? NIR_TRUE : NIR_FALSE;
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -1132,47 +1724,87 @@ evaluate_bcsel(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 8: {
+         
+   
 
-                                    
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const bool src0 = _src[0].u32[_i] != 0;
-                  const uint32_t src1 =
-                     _src[1].u32[_i];
-                  const uint32_t src2 =
-                     _src[2].u32[_i];
+                           
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const bool src0 = _src[0].u32[_i] != 0;
+               const uint8_t src1 =
+                  _src[1].u8[_i];
+               const uint8_t src2 =
+                  _src[2].u8[_i];
 
-               uint32_t dst = src0 ? src1 : src2;
+            uint8_t dst = src0 ? src1 : src2;
 
-               _dst_val.u32[_i] = dst;
-         }
+            _dst_val.u8[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 16: {
+         
+   
 
-                                    
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const bool src0 = _src[0].u32[_i] != 0;
-                  const uint64_t src1 =
-                     _src[1].u64[_i];
-                  const uint64_t src2 =
-                     _src[2].u64[_i];
+                           
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const bool src0 = _src[0].u32[_i] != 0;
+               const uint16_t src1 =
+                  _src[1].u16[_i];
+               const uint16_t src2 =
+                  _src[2].u16[_i];
 
-               uint64_t dst = src0 ? src1 : src2;
+            uint16_t dst = src0 ? src1 : src2;
 
-               _dst_val.u64[_i] = dst;
-         }
+            _dst_val.u16[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 32: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+                           
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const bool src0 = _src[0].u32[_i] != 0;
+               const uint32_t src1 =
+                  _src[1].u32[_i];
+               const uint32_t src2 =
+                  _src[2].u32[_i];
+
+            uint32_t dst = src0 ? src1 : src2;
+
+            _dst_val.u32[_i] = dst;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+                           
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const bool src0 = _src[0].u32[_i] != 0;
+               const uint64_t src1 =
+                  _src[1].u64[_i];
+               const uint64_t src2 =
+                  _src[2].u64[_i];
+
+            uint64_t dst = src0 ? src1 : src2;
+
+            _dst_val.u64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -1182,22 +1814,21 @@ evaluate_bfi(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
       
+   
 
-                                    
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const uint32_t src0 =
-                     _src[0].u32[_i];
-                  const uint32_t src1 =
-                     _src[1].u32[_i];
-                  const uint32_t src2 =
-                     _src[2].u32[_i];
+                           
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint32_t src0 =
+                  _src[0].u32[_i];
+               const uint32_t src1 =
+                  _src[1].u32[_i];
+               const uint32_t src2 =
+                  _src[2].u32[_i];
 
-               uint32_t dst;
+            uint32_t dst;
 
-               
+            
 unsigned mask = src0, insert = src1, base = src2;
 if (mask == 0) {
    dst = base;
@@ -1211,48 +1842,9 @@ if (mask == 0) {
 }
 
 
-               _dst_val.u32[_i] = dst;
-         }
+            _dst_val.u32[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
-
-                                    
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const uint32_t src0 =
-                     _src[0].u32[_i];
-                  const uint32_t src1 =
-                     _src[1].u32[_i];
-                  const uint32_t src2 =
-                     _src[2].u32[_i];
-
-               uint32_t dst;
-
-               
-unsigned mask = src0, insert = src1, base = src2;
-if (mask == 0) {
-   dst = base;
-} else {
-   unsigned tmp = mask;
-   while (!(tmp & 1)) {
-      tmp >>= 1;
-      insert <<= 1;
-   }
-   dst = (base & ~mask) | (insert & mask);
-}
-
-
-               _dst_val.u32[_i] = dst;
-         }
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
 
    return _dst_val;
 }
@@ -1262,20 +1854,19 @@ evaluate_bfm(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
       
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int32_t src0 =
-                     _src[0].i32[_i];
-                  const int32_t src1 =
-                     _src[1].i32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int32_t src0 =
+                  _src[0].i32[_i];
+               const int32_t src1 =
+                  _src[1].i32[_i];
 
-               uint32_t dst;
+            uint32_t dst;
 
-               
+            
 int bits = src0, offset = src1;
 if (offset < 0 || bits < 0 || offset > 31 || bits > 31 || offset + bits > 32)
    dst = 0; /* undefined */
@@ -1283,40 +1874,9 @@ else
    dst = ((1u << bits) - 1) << offset;
 
 
-               _dst_val.u32[_i] = dst;
-         }
+            _dst_val.u32[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
-
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int32_t src0 =
-                     _src[0].i32[_i];
-                  const int32_t src1 =
-                     _src[1].i32[_i];
-
-               uint32_t dst;
-
-               
-int bits = src0, offset = src1;
-if (offset < 0 || bits < 0 || offset > 31 || bits > 31 || offset + bits > 32)
-   dst = 0; /* undefined */
-else
-   dst = ((1u << bits) - 1) << offset;
-
-
-               _dst_val.u32[_i] = dst;
-         }
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
 
    return _dst_val;
 }
@@ -1326,18 +1886,17 @@ evaluate_bit_count(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
       
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint32_t src0 =
+                  _src[0].u32[_i];
+
+            uint32_t dst;
 
             
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const uint32_t src0 =
-                     _src[0].u32[_i];
-
-               uint32_t dst;
-
-               
 dst = 0;
 for (unsigned bit = 0; bit < 32; bit++) {
    if ((src0 >> bit) & 1)
@@ -1345,38 +1904,9 @@ for (unsigned bit = 0; bit < 32; bit++) {
 }
 
 
-               _dst_val.u32[_i] = dst;
-         }
+            _dst_val.u32[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
-
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const uint32_t src0 =
-                     _src[0].u32[_i];
-
-               uint32_t dst;
-
-               
-dst = 0;
-for (unsigned bit = 0; bit < 32; bit++) {
-   if ((src0 >> bit) & 1)
-      dst++;
-}
-
-
-               _dst_val.u32[_i] = dst;
-         }
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
 
    return _dst_val;
 }
@@ -1386,24 +1916,23 @@ evaluate_bitfield_insert(MAYBE_UNUSED unsigned num_components, unsigned bit_size
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
       
+   
 
-                                                
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const uint32_t src0 =
-                     _src[0].u32[_i];
-                  const uint32_t src1 =
-                     _src[1].u32[_i];
-                  const int32_t src2 =
-                     _src[2].i32[_i];
-                  const int32_t src3 =
-                     _src[3].i32[_i];
+                                    
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint32_t src0 =
+                  _src[0].u32[_i];
+               const uint32_t src1 =
+                  _src[1].u32[_i];
+               const int32_t src2 =
+                  _src[2].i32[_i];
+               const int32_t src3 =
+                  _src[3].i32[_i];
 
-               uint32_t dst;
+            uint32_t dst;
 
-               
+            
 unsigned base = src0, insert = src1;
 int offset = src2, bits = src3;
 if (bits == 0) {
@@ -1416,49 +1945,9 @@ if (bits == 0) {
 }
 
 
-               _dst_val.u32[_i] = dst;
-         }
+            _dst_val.u32[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
-
-                                                
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const uint32_t src0 =
-                     _src[0].u32[_i];
-                  const uint32_t src1 =
-                     _src[1].u32[_i];
-                  const int32_t src2 =
-                     _src[2].i32[_i];
-                  const int32_t src3 =
-                     _src[3].i32[_i];
-
-               uint32_t dst;
-
-               
-unsigned base = src0, insert = src1;
-int offset = src2, bits = src3;
-if (bits == 0) {
-   dst = 0;
-} else if (offset < 0 || bits < 0 || bits + offset > 32) {
-   dst = 0;
-} else {
-   unsigned mask = ((1ull << bits) - 1) << offset;
-   dst = (base & ~mask) | ((insert << bits) & mask);
-}
-
-
-               _dst_val.u32[_i] = dst;
-         }
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
 
    return _dst_val;
 }
@@ -1468,231 +1957,26 @@ evaluate_bitfield_reverse(MAYBE_UNUSED unsigned num_components, unsigned bit_siz
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
       
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint32_t src0 =
+                  _src[0].u32[_i];
+
+            uint32_t dst;
 
             
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const uint32_t src0 =
-                     _src[0].u32[_i];
-
-               uint32_t dst;
-
-               
 /* we're not winning any awards for speed here, but that's ok */
 dst = 0;
 for (unsigned bit = 0; bit < 32; bit++)
    dst |= ((src0 >> bit) & 1) << (31 - bit);
 
 
-               _dst_val.u32[_i] = dst;
-         }
+            _dst_val.u32[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
-
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const uint32_t src0 =
-                     _src[0].u32[_i];
-
-               uint32_t dst;
-
-               
-/* we're not winning any awards for speed here, but that's ok */
-dst = 0;
-for (unsigned bit = 0; bit < 32; bit++)
-   dst |= ((src0 >> bit) & 1) << (31 - bit);
-
-
-               _dst_val.u32[_i] = dst;
-         }
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
-
-   return _dst_val;
-}
-static nir_const_value
-evaluate_d2b(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
-                 MAYBE_UNUSED nir_const_value *_src)
-{
-   nir_const_value _dst_val = { {0, } };
-
-   switch (bit_size) {
-   case 32: {
-      
-
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float64_t src0 =
-                     _src[0].f64[_i];
-
-               bool32_t dst = src0 != 0.0;
-
-               _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
-         }
-
-      break;
-   }
-   case 64: {
-      
-
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float64_t src0 =
-                     _src[0].f64[_i];
-
-               bool32_t dst = src0 != 0.0;
-
-               _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
-         }
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
-
-   return _dst_val;
-}
-static nir_const_value
-evaluate_d2f(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
-                 MAYBE_UNUSED nir_const_value *_src)
-{
-   nir_const_value _dst_val = { {0, } };
-
-   switch (bit_size) {
-   case 32: {
-      
-
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float64_t src0 =
-                     _src[0].f64[_i];
-
-               float32_t dst = src0;
-
-               _dst_val.f32[_i] = dst;
-         }
-
-      break;
-   }
-   case 64: {
-      
-
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float64_t src0 =
-                     _src[0].f64[_i];
-
-               float32_t dst = src0;
-
-               _dst_val.f32[_i] = dst;
-         }
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
-
-   return _dst_val;
-}
-static nir_const_value
-evaluate_d2i(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
-                 MAYBE_UNUSED nir_const_value *_src)
-{
-   nir_const_value _dst_val = { {0, } };
-
-   switch (bit_size) {
-   case 32: {
-      
-
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float64_t src0 =
-                     _src[0].f64[_i];
-
-               int32_t dst = src0;
-
-               _dst_val.i32[_i] = dst;
-         }
-
-      break;
-   }
-   case 64: {
-      
-
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float64_t src0 =
-                     _src[0].f64[_i];
-
-               int32_t dst = src0;
-
-               _dst_val.i32[_i] = dst;
-         }
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
-
-   return _dst_val;
-}
-static nir_const_value
-evaluate_d2u(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
-                 MAYBE_UNUSED nir_const_value *_src)
-{
-   nir_const_value _dst_val = { {0, } };
-
-   switch (bit_size) {
-   case 32: {
-      
-
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float64_t src0 =
-                     _src[0].f64[_i];
-
-               uint32_t dst = src0;
-
-               _dst_val.u32[_i] = dst;
-         }
-
-      break;
-   }
-   case 64: {
-      
-
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float64_t src0 =
-                     _src[0].f64[_i];
-
-               uint32_t dst = src0;
-
-               _dst_val.u32[_i] = dst;
-         }
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
 
    return _dst_val;
 }
@@ -1702,45 +1986,83 @@ evaluate_extract_i16(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 8: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int32_t src0 =
-                     _src[0].i32[_i];
-                  const int32_t src1 =
-                     _src[1].i32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int8_t src0 =
+                  _src[0].i8[_i];
+               const int8_t src1 =
+                  _src[1].i8[_i];
 
-               int32_t dst = (int16_t)(src0 >> (src1 * 16));
+            int8_t dst = (int16_t)(src0 >> (src1 * 16));
 
-               _dst_val.i32[_i] = dst;
-         }
+            _dst_val.i8[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 16: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int64_t src0 =
-                     _src[0].i64[_i];
-                  const int64_t src1 =
-                     _src[1].i64[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int16_t src0 =
+                  _src[0].i16[_i];
+               const int16_t src1 =
+                  _src[1].i16[_i];
 
-               int64_t dst = (int16_t)(src0 >> (src1 * 16));
+            int16_t dst = (int16_t)(src0 >> (src1 * 16));
 
-               _dst_val.i64[_i] = dst;
-         }
+            _dst_val.i16[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 32: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int32_t src0 =
+                  _src[0].i32[_i];
+               const int32_t src1 =
+                  _src[1].i32[_i];
+
+            int32_t dst = (int16_t)(src0 >> (src1 * 16));
+
+            _dst_val.i32[_i] = dst;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int64_t src0 =
+                  _src[0].i64[_i];
+               const int64_t src1 =
+                  _src[1].i64[_i];
+
+            int64_t dst = (int16_t)(src0 >> (src1 * 16));
+
+            _dst_val.i64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -1750,45 +2072,83 @@ evaluate_extract_i8(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 8: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int32_t src0 =
-                     _src[0].i32[_i];
-                  const int32_t src1 =
-                     _src[1].i32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int8_t src0 =
+                  _src[0].i8[_i];
+               const int8_t src1 =
+                  _src[1].i8[_i];
 
-               int32_t dst = (int8_t)(src0 >> (src1 * 8));
+            int8_t dst = (int8_t)(src0 >> (src1 * 8));
 
-               _dst_val.i32[_i] = dst;
-         }
+            _dst_val.i8[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 16: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int64_t src0 =
-                     _src[0].i64[_i];
-                  const int64_t src1 =
-                     _src[1].i64[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int16_t src0 =
+                  _src[0].i16[_i];
+               const int16_t src1 =
+                  _src[1].i16[_i];
 
-               int64_t dst = (int8_t)(src0 >> (src1 * 8));
+            int16_t dst = (int8_t)(src0 >> (src1 * 8));
 
-               _dst_val.i64[_i] = dst;
-         }
+            _dst_val.i16[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 32: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int32_t src0 =
+                  _src[0].i32[_i];
+               const int32_t src1 =
+                  _src[1].i32[_i];
+
+            int32_t dst = (int8_t)(src0 >> (src1 * 8));
+
+            _dst_val.i32[_i] = dst;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int64_t src0 =
+                  _src[0].i64[_i];
+               const int64_t src1 =
+                  _src[1].i64[_i];
+
+            int64_t dst = (int8_t)(src0 >> (src1 * 8));
+
+            _dst_val.i64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -1798,45 +2158,83 @@ evaluate_extract_u16(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 8: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const uint32_t src0 =
-                     _src[0].u32[_i];
-                  const uint32_t src1 =
-                     _src[1].u32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint8_t src0 =
+                  _src[0].u8[_i];
+               const uint8_t src1 =
+                  _src[1].u8[_i];
 
-               uint32_t dst = (uint16_t)(src0 >> (src1 * 16));
+            uint8_t dst = (uint16_t)(src0 >> (src1 * 16));
 
-               _dst_val.u32[_i] = dst;
-         }
+            _dst_val.u8[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 16: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const uint64_t src0 =
-                     _src[0].u64[_i];
-                  const uint64_t src1 =
-                     _src[1].u64[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint16_t src0 =
+                  _src[0].u16[_i];
+               const uint16_t src1 =
+                  _src[1].u16[_i];
 
-               uint64_t dst = (uint16_t)(src0 >> (src1 * 16));
+            uint16_t dst = (uint16_t)(src0 >> (src1 * 16));
 
-               _dst_val.u64[_i] = dst;
-         }
+            _dst_val.u16[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 32: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint32_t src0 =
+                  _src[0].u32[_i];
+               const uint32_t src1 =
+                  _src[1].u32[_i];
+
+            uint32_t dst = (uint16_t)(src0 >> (src1 * 16));
+
+            _dst_val.u32[_i] = dst;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint64_t src0 =
+                  _src[0].u64[_i];
+               const uint64_t src1 =
+                  _src[1].u64[_i];
+
+            uint64_t dst = (uint16_t)(src0 >> (src1 * 16));
+
+            _dst_val.u64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -1846,45 +2244,83 @@ evaluate_extract_u8(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 8: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const uint32_t src0 =
-                     _src[0].u32[_i];
-                  const uint32_t src1 =
-                     _src[1].u32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint8_t src0 =
+                  _src[0].u8[_i];
+               const uint8_t src1 =
+                  _src[1].u8[_i];
 
-               uint32_t dst = (uint8_t)(src0 >> (src1 * 8));
+            uint8_t dst = (uint8_t)(src0 >> (src1 * 8));
 
-               _dst_val.u32[_i] = dst;
-         }
+            _dst_val.u8[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 16: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const uint64_t src0 =
-                     _src[0].u64[_i];
-                  const uint64_t src1 =
-                     _src[1].u64[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint16_t src0 =
+                  _src[0].u16[_i];
+               const uint16_t src1 =
+                  _src[1].u16[_i];
 
-               uint64_t dst = (uint8_t)(src0 >> (src1 * 8));
+            uint16_t dst = (uint8_t)(src0 >> (src1 * 8));
 
-               _dst_val.u64[_i] = dst;
-         }
+            _dst_val.u16[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 32: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint32_t src0 =
+                  _src[0].u32[_i];
+               const uint32_t src1 =
+                  _src[1].u32[_i];
+
+            uint32_t dst = (uint8_t)(src0 >> (src1 * 8));
+
+            _dst_val.u32[_i] = dst;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint64_t src0 =
+                  _src[0].u64[_i];
+               const uint64_t src1 =
+                  _src[1].u64[_i];
+
+            uint64_t dst = (uint8_t)(src0 >> (src1 * 8));
+
+            _dst_val.u64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -1894,173 +2330,741 @@ evaluate_f2b(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float src0 =
+                  _mesa_half_to_float(_src[0].u16[_i]);
 
-               bool32_t dst = src0 != 0.0f;
+            bool32_t dst = src0 != 0.0;
 
-               _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
-         }
+            _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float32_t src0 =
+                  _src[0].f32[_i];
 
-               bool32_t dst = src0 != 0.0f;
+            bool32_t dst = src0 != 0.0;
 
-               _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
-         }
+            _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float64_t src0 =
+                  _src[0].f64[_i];
 
-   return _dst_val;
-}
-static nir_const_value
-evaluate_f2d(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
-                 MAYBE_UNUSED nir_const_value *_src)
-{
-   nir_const_value _dst_val = { {0, } };
+            bool32_t dst = src0 != 0.0;
 
-   switch (bit_size) {
-   case 32: {
-      
+            _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
+      }
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
+         break;
+      }
 
-               float64_t dst = src0;
-
-               _dst_val.f64[_i] = dst;
-         }
-
-      break;
-   }
-   case 64: {
-      
-
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
-
-               float64_t dst = src0;
-
-               _dst_val.f64[_i] = dst;
-         }
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
 static nir_const_value
-evaluate_f2i(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+evaluate_f2f16(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
                  MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float src0 =
+                  _mesa_half_to_float(_src[0].u16[_i]);
 
-               int32_t dst = src0;
+            float16_t dst = src0;
 
-               _dst_val.i32[_i] = dst;
-         }
+            _dst_val.u16[_i] = _mesa_float_to_half(dst);
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float32_t src0 =
+                  _src[0].f32[_i];
 
-               int32_t dst = src0;
+            float16_t dst = src0;
 
-               _dst_val.i32[_i] = dst;
-         }
+            _dst_val.u16[_i] = _mesa_float_to_half(dst);
+      }
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float64_t src0 =
+                  _src[0].f64[_i];
+
+            float16_t dst = src0;
+
+            _dst_val.u16[_i] = _mesa_float_to_half(dst);
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
 static nir_const_value
-evaluate_f2u(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+evaluate_f2f32(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
                  MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float src0 =
+                  _mesa_half_to_float(_src[0].u16[_i]);
 
-               uint32_t dst = src0;
+            float32_t dst = src0;
 
-               _dst_val.u32[_i] = dst;
-         }
+            _dst_val.f32[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float32_t src0 =
+                  _src[0].f32[_i];
 
-               uint32_t dst = src0;
+            float32_t dst = src0;
 
-               _dst_val.u32[_i] = dst;
-         }
+            _dst_val.f32[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float64_t src0 =
+                  _src[0].f64[_i];
+
+            float32_t dst = src0;
+
+            _dst_val.f32[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
+
+   return _dst_val;
+}
+static nir_const_value
+evaluate_f2f64(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
+{
+   nir_const_value _dst_val = { {0, } };
+
+      switch (bit_size) {
+      case 16: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float src0 =
+                  _mesa_half_to_float(_src[0].u16[_i]);
+
+            float64_t dst = src0;
+
+            _dst_val.f64[_i] = dst;
+      }
+
+         break;
+      }
+      case 32: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float32_t src0 =
+                  _src[0].f32[_i];
+
+            float64_t dst = src0;
+
+            _dst_val.f64[_i] = dst;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float64_t src0 =
+                  _src[0].f64[_i];
+
+            float64_t dst = src0;
+
+            _dst_val.f64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
+
+   return _dst_val;
+}
+static nir_const_value
+evaluate_f2i16(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
+{
+   nir_const_value _dst_val = { {0, } };
+
+      switch (bit_size) {
+      case 16: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float src0 =
+                  _mesa_half_to_float(_src[0].u16[_i]);
+
+            int16_t dst = src0;
+
+            _dst_val.i16[_i] = dst;
+      }
+
+         break;
+      }
+      case 32: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float32_t src0 =
+                  _src[0].f32[_i];
+
+            int16_t dst = src0;
+
+            _dst_val.i16[_i] = dst;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float64_t src0 =
+                  _src[0].f64[_i];
+
+            int16_t dst = src0;
+
+            _dst_val.i16[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
+
+   return _dst_val;
+}
+static nir_const_value
+evaluate_f2i32(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
+{
+   nir_const_value _dst_val = { {0, } };
+
+      switch (bit_size) {
+      case 16: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float src0 =
+                  _mesa_half_to_float(_src[0].u16[_i]);
+
+            int32_t dst = src0;
+
+            _dst_val.i32[_i] = dst;
+      }
+
+         break;
+      }
+      case 32: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float32_t src0 =
+                  _src[0].f32[_i];
+
+            int32_t dst = src0;
+
+            _dst_val.i32[_i] = dst;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float64_t src0 =
+                  _src[0].f64[_i];
+
+            int32_t dst = src0;
+
+            _dst_val.i32[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
+
+   return _dst_val;
+}
+static nir_const_value
+evaluate_f2i64(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
+{
+   nir_const_value _dst_val = { {0, } };
+
+      switch (bit_size) {
+      case 16: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float src0 =
+                  _mesa_half_to_float(_src[0].u16[_i]);
+
+            int64_t dst = src0;
+
+            _dst_val.i64[_i] = dst;
+      }
+
+         break;
+      }
+      case 32: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float32_t src0 =
+                  _src[0].f32[_i];
+
+            int64_t dst = src0;
+
+            _dst_val.i64[_i] = dst;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float64_t src0 =
+                  _src[0].f64[_i];
+
+            int64_t dst = src0;
+
+            _dst_val.i64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
+
+   return _dst_val;
+}
+static nir_const_value
+evaluate_f2i8(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
+{
+   nir_const_value _dst_val = { {0, } };
+
+      switch (bit_size) {
+      case 16: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float src0 =
+                  _mesa_half_to_float(_src[0].u16[_i]);
+
+            int8_t dst = src0;
+
+            _dst_val.i8[_i] = dst;
+      }
+
+         break;
+      }
+      case 32: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float32_t src0 =
+                  _src[0].f32[_i];
+
+            int8_t dst = src0;
+
+            _dst_val.i8[_i] = dst;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float64_t src0 =
+                  _src[0].f64[_i];
+
+            int8_t dst = src0;
+
+            _dst_val.i8[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
+
+   return _dst_val;
+}
+static nir_const_value
+evaluate_f2u16(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
+{
+   nir_const_value _dst_val = { {0, } };
+
+      switch (bit_size) {
+      case 16: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float src0 =
+                  _mesa_half_to_float(_src[0].u16[_i]);
+
+            uint16_t dst = src0;
+
+            _dst_val.u16[_i] = dst;
+      }
+
+         break;
+      }
+      case 32: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float32_t src0 =
+                  _src[0].f32[_i];
+
+            uint16_t dst = src0;
+
+            _dst_val.u16[_i] = dst;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float64_t src0 =
+                  _src[0].f64[_i];
+
+            uint16_t dst = src0;
+
+            _dst_val.u16[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
+
+   return _dst_val;
+}
+static nir_const_value
+evaluate_f2u32(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
+{
+   nir_const_value _dst_val = { {0, } };
+
+      switch (bit_size) {
+      case 16: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float src0 =
+                  _mesa_half_to_float(_src[0].u16[_i]);
+
+            uint32_t dst = src0;
+
+            _dst_val.u32[_i] = dst;
+      }
+
+         break;
+      }
+      case 32: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float32_t src0 =
+                  _src[0].f32[_i];
+
+            uint32_t dst = src0;
+
+            _dst_val.u32[_i] = dst;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float64_t src0 =
+                  _src[0].f64[_i];
+
+            uint32_t dst = src0;
+
+            _dst_val.u32[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
+
+   return _dst_val;
+}
+static nir_const_value
+evaluate_f2u64(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
+{
+   nir_const_value _dst_val = { {0, } };
+
+      switch (bit_size) {
+      case 16: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float src0 =
+                  _mesa_half_to_float(_src[0].u16[_i]);
+
+            uint64_t dst = src0;
+
+            _dst_val.u64[_i] = dst;
+      }
+
+         break;
+      }
+      case 32: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float32_t src0 =
+                  _src[0].f32[_i];
+
+            uint64_t dst = src0;
+
+            _dst_val.u64[_i] = dst;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float64_t src0 =
+                  _src[0].f64[_i];
+
+            uint64_t dst = src0;
+
+            _dst_val.u64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
+
+   return _dst_val;
+}
+static nir_const_value
+evaluate_f2u8(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
+{
+   nir_const_value _dst_val = { {0, } };
+
+      switch (bit_size) {
+      case 16: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float src0 =
+                  _mesa_half_to_float(_src[0].u16[_i]);
+
+            uint8_t dst = src0;
+
+            _dst_val.u8[_i] = dst;
+      }
+
+         break;
+      }
+      case 32: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float32_t src0 =
+                  _src[0].f32[_i];
+
+            uint8_t dst = src0;
+
+            _dst_val.u8[_i] = dst;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float64_t src0 =
+                  _src[0].f64[_i];
+
+            uint8_t dst = src0;
+
+            _dst_val.u8[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -2070,41 +3074,59 @@ evaluate_fabs(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float src0 =
+                  _mesa_half_to_float(_src[0].u16[_i]);
 
-               float32_t dst = bit_size == 64 ? fabs(src0) : fabsf(src0);
+            float16_t dst = bit_size == 64 ? fabs(src0) : fabsf(src0);
 
-               _dst_val.f32[_i] = dst;
-         }
+            _dst_val.u16[_i] = _mesa_float_to_half(dst);
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float64_t src0 =
-                     _src[0].f64[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float32_t src0 =
+                  _src[0].f32[_i];
 
-               float64_t dst = bit_size == 64 ? fabs(src0) : fabsf(src0);
+            float32_t dst = bit_size == 64 ? fabs(src0) : fabsf(src0);
 
-               _dst_val.f64[_i] = dst;
-         }
+            _dst_val.f32[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float64_t src0 =
+                  _src[0].f64[_i];
+
+            float64_t dst = bit_size == 64 ? fabs(src0) : fabsf(src0);
+
+            _dst_val.f64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -2114,45 +3136,65 @@ evaluate_fadd(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
-                  const float32_t src1 =
-                     _src[1].f32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float src0 =
+                  _mesa_half_to_float(_src[0].u16[_i]);
+               const float src1 =
+                  _mesa_half_to_float(_src[1].u16[_i]);
 
-               float32_t dst = src0 + src1;
+            float16_t dst = src0 + src1;
 
-               _dst_val.f32[_i] = dst;
-         }
+            _dst_val.u16[_i] = _mesa_float_to_half(dst);
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float64_t src0 =
-                     _src[0].f64[_i];
-                  const float64_t src1 =
-                     _src[1].f64[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float32_t src0 =
+                  _src[0].f32[_i];
+               const float32_t src1 =
+                  _src[1].f32[_i];
 
-               float64_t dst = src0 + src1;
+            float32_t dst = src0 + src1;
 
-               _dst_val.f64[_i] = dst;
-         }
+            _dst_val.f32[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float64_t src0 =
+                  _src[0].f64[_i];
+               const float64_t src1 =
+                  _src[1].f64[_i];
+
+            float64_t dst = src0 + src1;
+
+            _dst_val.f64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -2162,63 +3204,30 @@ evaluate_fall_equal2(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
       
+   
 
 
-         const struct float32_vec src0 = {
-               _src[0].f32[0],
-               _src[0].f32[1],
-            0,
-            0,
-         };
+      const struct float32_vec src0 = {
+            _src[0].f32[0],
+            _src[0].f32[1],
+         0,
+         0,
+      };
 
-         const struct float32_vec src1 = {
-               _src[1].f32[0],
-               _src[1].f32[1],
-            0,
-            0,
-         };
+      const struct float32_vec src1 = {
+            _src[1].f32[0],
+            _src[1].f32[1],
+         0,
+         0,
+      };
 
-         struct float32_vec dst;
+      struct float32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = ((src0.x == src1.x) && (src0.y == src1.y)) ? 1.0f : 0.0f;
+         dst.x = dst.y = dst.z = dst.w = ((src0.x == src1.x) && (src0.y == src1.y)) ? 1.0f : 0.0f;
 
-               _dst_val.f32[0] = dst.x;
+            _dst_val.f32[0] = dst.x;
 
-      break;
-   }
-   case 64: {
-      
-
-
-         const struct float32_vec src0 = {
-               _src[0].f32[0],
-               _src[0].f32[1],
-            0,
-            0,
-         };
-
-         const struct float32_vec src1 = {
-               _src[1].f32[0],
-               _src[1].f32[1],
-            0,
-            0,
-         };
-
-         struct float32_vec dst;
-
-            dst.x = dst.y = dst.z = dst.w = ((src0.x == src1.x) && (src0.y == src1.y)) ? 1.0f : 0.0f;
-
-               _dst_val.f32[0] = dst.x;
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
 
    return _dst_val;
 }
@@ -2228,63 +3237,30 @@ evaluate_fall_equal3(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
       
+   
 
 
-         const struct float32_vec src0 = {
-               _src[0].f32[0],
-               _src[0].f32[1],
-               _src[0].f32[2],
-            0,
-         };
+      const struct float32_vec src0 = {
+            _src[0].f32[0],
+            _src[0].f32[1],
+            _src[0].f32[2],
+         0,
+      };
 
-         const struct float32_vec src1 = {
-               _src[1].f32[0],
-               _src[1].f32[1],
-               _src[1].f32[2],
-            0,
-         };
+      const struct float32_vec src1 = {
+            _src[1].f32[0],
+            _src[1].f32[1],
+            _src[1].f32[2],
+         0,
+      };
 
-         struct float32_vec dst;
+      struct float32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = ((src0.x == src1.x) && (src0.y == src1.y) && (src0.z == src1.z)) ? 1.0f : 0.0f;
+         dst.x = dst.y = dst.z = dst.w = ((src0.x == src1.x) && (src0.y == src1.y) && (src0.z == src1.z)) ? 1.0f : 0.0f;
 
-               _dst_val.f32[0] = dst.x;
+            _dst_val.f32[0] = dst.x;
 
-      break;
-   }
-   case 64: {
-      
-
-
-         const struct float32_vec src0 = {
-               _src[0].f32[0],
-               _src[0].f32[1],
-               _src[0].f32[2],
-            0,
-         };
-
-         const struct float32_vec src1 = {
-               _src[1].f32[0],
-               _src[1].f32[1],
-               _src[1].f32[2],
-            0,
-         };
-
-         struct float32_vec dst;
-
-            dst.x = dst.y = dst.z = dst.w = ((src0.x == src1.x) && (src0.y == src1.y) && (src0.z == src1.z)) ? 1.0f : 0.0f;
-
-               _dst_val.f32[0] = dst.x;
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
 
    return _dst_val;
 }
@@ -2294,63 +3270,30 @@ evaluate_fall_equal4(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
       
+   
 
 
-         const struct float32_vec src0 = {
-               _src[0].f32[0],
-               _src[0].f32[1],
-               _src[0].f32[2],
-               _src[0].f32[3],
-         };
+      const struct float32_vec src0 = {
+            _src[0].f32[0],
+            _src[0].f32[1],
+            _src[0].f32[2],
+            _src[0].f32[3],
+      };
 
-         const struct float32_vec src1 = {
-               _src[1].f32[0],
-               _src[1].f32[1],
-               _src[1].f32[2],
-               _src[1].f32[3],
-         };
+      const struct float32_vec src1 = {
+            _src[1].f32[0],
+            _src[1].f32[1],
+            _src[1].f32[2],
+            _src[1].f32[3],
+      };
 
-         struct float32_vec dst;
+      struct float32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = ((src0.x == src1.x) && (src0.y == src1.y) && (src0.z == src1.z) && (src0.w == src1.w)) ? 1.0f : 0.0f;
+         dst.x = dst.y = dst.z = dst.w = ((src0.x == src1.x) && (src0.y == src1.y) && (src0.z == src1.z) && (src0.w == src1.w)) ? 1.0f : 0.0f;
 
-               _dst_val.f32[0] = dst.x;
+            _dst_val.f32[0] = dst.x;
 
-      break;
-   }
-   case 64: {
-      
-
-
-         const struct float32_vec src0 = {
-               _src[0].f32[0],
-               _src[0].f32[1],
-               _src[0].f32[2],
-               _src[0].f32[3],
-         };
-
-         const struct float32_vec src1 = {
-               _src[1].f32[0],
-               _src[1].f32[1],
-               _src[1].f32[2],
-               _src[1].f32[3],
-         };
-
-         struct float32_vec dst;
-
-            dst.x = dst.y = dst.z = dst.w = ((src0.x == src1.x) && (src0.y == src1.y) && (src0.z == src1.z) && (src0.w == src1.w)) ? 1.0f : 0.0f;
-
-               _dst_val.f32[0] = dst.x;
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
 
    return _dst_val;
 }
@@ -2360,45 +3303,21 @@ evaluate_fand(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
       
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
-                  const float32_t src1 =
-                     _src[1].f32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float32_t src0 =
+                  _src[0].f32[_i];
+               const float32_t src1 =
+                  _src[1].f32[_i];
 
-               float32_t dst = ((src0 != 0.0f) && (src1 != 0.0f)) ? 1.0f : 0.0f;
+            float32_t dst = ((src0 != 0.0f) && (src1 != 0.0f)) ? 1.0f : 0.0f;
 
-               _dst_val.f32[_i] = dst;
-         }
+            _dst_val.f32[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
-
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
-                  const float32_t src1 =
-                     _src[1].f32[_i];
-
-               float32_t dst = ((src0 != 0.0f) && (src1 != 0.0f)) ? 1.0f : 0.0f;
-
-               _dst_val.f32[_i] = dst;
-         }
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
 
    return _dst_val;
 }
@@ -2408,63 +3327,30 @@ evaluate_fany_nequal2(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
       
+   
 
 
-         const struct float32_vec src0 = {
-               _src[0].f32[0],
-               _src[0].f32[1],
-            0,
-            0,
-         };
+      const struct float32_vec src0 = {
+            _src[0].f32[0],
+            _src[0].f32[1],
+         0,
+         0,
+      };
 
-         const struct float32_vec src1 = {
-               _src[1].f32[0],
-               _src[1].f32[1],
-            0,
-            0,
-         };
+      const struct float32_vec src1 = {
+            _src[1].f32[0],
+            _src[1].f32[1],
+         0,
+         0,
+      };
 
-         struct float32_vec dst;
+      struct float32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = ((src0.x != src1.x) || (src0.y != src1.y)) ? 1.0f : 0.0f;
+         dst.x = dst.y = dst.z = dst.w = ((src0.x != src1.x) || (src0.y != src1.y)) ? 1.0f : 0.0f;
 
-               _dst_val.f32[0] = dst.x;
+            _dst_val.f32[0] = dst.x;
 
-      break;
-   }
-   case 64: {
-      
-
-
-         const struct float32_vec src0 = {
-               _src[0].f32[0],
-               _src[0].f32[1],
-            0,
-            0,
-         };
-
-         const struct float32_vec src1 = {
-               _src[1].f32[0],
-               _src[1].f32[1],
-            0,
-            0,
-         };
-
-         struct float32_vec dst;
-
-            dst.x = dst.y = dst.z = dst.w = ((src0.x != src1.x) || (src0.y != src1.y)) ? 1.0f : 0.0f;
-
-               _dst_val.f32[0] = dst.x;
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
 
    return _dst_val;
 }
@@ -2474,63 +3360,30 @@ evaluate_fany_nequal3(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
       
+   
 
 
-         const struct float32_vec src0 = {
-               _src[0].f32[0],
-               _src[0].f32[1],
-               _src[0].f32[2],
-            0,
-         };
+      const struct float32_vec src0 = {
+            _src[0].f32[0],
+            _src[0].f32[1],
+            _src[0].f32[2],
+         0,
+      };
 
-         const struct float32_vec src1 = {
-               _src[1].f32[0],
-               _src[1].f32[1],
-               _src[1].f32[2],
-            0,
-         };
+      const struct float32_vec src1 = {
+            _src[1].f32[0],
+            _src[1].f32[1],
+            _src[1].f32[2],
+         0,
+      };
 
-         struct float32_vec dst;
+      struct float32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = ((src0.x != src1.x) || (src0.y != src1.y) || (src0.z != src1.z)) ? 1.0f : 0.0f;
+         dst.x = dst.y = dst.z = dst.w = ((src0.x != src1.x) || (src0.y != src1.y) || (src0.z != src1.z)) ? 1.0f : 0.0f;
 
-               _dst_val.f32[0] = dst.x;
+            _dst_val.f32[0] = dst.x;
 
-      break;
-   }
-   case 64: {
-      
-
-
-         const struct float32_vec src0 = {
-               _src[0].f32[0],
-               _src[0].f32[1],
-               _src[0].f32[2],
-            0,
-         };
-
-         const struct float32_vec src1 = {
-               _src[1].f32[0],
-               _src[1].f32[1],
-               _src[1].f32[2],
-            0,
-         };
-
-         struct float32_vec dst;
-
-            dst.x = dst.y = dst.z = dst.w = ((src0.x != src1.x) || (src0.y != src1.y) || (src0.z != src1.z)) ? 1.0f : 0.0f;
-
-               _dst_val.f32[0] = dst.x;
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
 
    return _dst_val;
 }
@@ -2540,63 +3393,30 @@ evaluate_fany_nequal4(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
       
+   
 
 
-         const struct float32_vec src0 = {
-               _src[0].f32[0],
-               _src[0].f32[1],
-               _src[0].f32[2],
-               _src[0].f32[3],
-         };
+      const struct float32_vec src0 = {
+            _src[0].f32[0],
+            _src[0].f32[1],
+            _src[0].f32[2],
+            _src[0].f32[3],
+      };
 
-         const struct float32_vec src1 = {
-               _src[1].f32[0],
-               _src[1].f32[1],
-               _src[1].f32[2],
-               _src[1].f32[3],
-         };
+      const struct float32_vec src1 = {
+            _src[1].f32[0],
+            _src[1].f32[1],
+            _src[1].f32[2],
+            _src[1].f32[3],
+      };
 
-         struct float32_vec dst;
+      struct float32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = ((src0.x != src1.x) || (src0.y != src1.y) || (src0.z != src1.z) || (src0.w != src1.w)) ? 1.0f : 0.0f;
+         dst.x = dst.y = dst.z = dst.w = ((src0.x != src1.x) || (src0.y != src1.y) || (src0.z != src1.z) || (src0.w != src1.w)) ? 1.0f : 0.0f;
 
-               _dst_val.f32[0] = dst.x;
+            _dst_val.f32[0] = dst.x;
 
-      break;
-   }
-   case 64: {
-      
-
-
-         const struct float32_vec src0 = {
-               _src[0].f32[0],
-               _src[0].f32[1],
-               _src[0].f32[2],
-               _src[0].f32[3],
-         };
-
-         const struct float32_vec src1 = {
-               _src[1].f32[0],
-               _src[1].f32[1],
-               _src[1].f32[2],
-               _src[1].f32[3],
-         };
-
-         struct float32_vec dst;
-
-            dst.x = dst.y = dst.z = dst.w = ((src0.x != src1.x) || (src0.y != src1.y) || (src0.z != src1.z) || (src0.w != src1.w)) ? 1.0f : 0.0f;
-
-               _dst_val.f32[0] = dst.x;
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
 
    return _dst_val;
 }
@@ -2606,41 +3426,59 @@ evaluate_fceil(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float src0 =
+                  _mesa_half_to_float(_src[0].u16[_i]);
 
-               float32_t dst = bit_size == 64 ? ceil(src0) : ceilf(src0);
+            float16_t dst = bit_size == 64 ? ceil(src0) : ceilf(src0);
 
-               _dst_val.f32[_i] = dst;
-         }
+            _dst_val.u16[_i] = _mesa_float_to_half(dst);
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float64_t src0 =
-                     _src[0].f64[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float32_t src0 =
+                  _src[0].f32[_i];
 
-               float64_t dst = bit_size == 64 ? ceil(src0) : ceilf(src0);
+            float32_t dst = bit_size == 64 ? ceil(src0) : ceilf(src0);
 
-               _dst_val.f64[_i] = dst;
-         }
+            _dst_val.f32[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float64_t src0 =
+                  _src[0].f64[_i];
+
+            float64_t dst = bit_size == 64 ? ceil(src0) : ceilf(src0);
+
+            _dst_val.f64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -2650,41 +3488,59 @@ evaluate_fcos(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float src0 =
+                  _mesa_half_to_float(_src[0].u16[_i]);
 
-               float32_t dst = bit_size == 64 ? cos(src0) : cosf(src0);
+            float16_t dst = bit_size == 64 ? cos(src0) : cosf(src0);
 
-               _dst_val.f32[_i] = dst;
-         }
+            _dst_val.u16[_i] = _mesa_float_to_half(dst);
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float64_t src0 =
-                     _src[0].f64[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float32_t src0 =
+                  _src[0].f32[_i];
 
-               float64_t dst = bit_size == 64 ? cos(src0) : cosf(src0);
+            float32_t dst = bit_size == 64 ? cos(src0) : cosf(src0);
 
-               _dst_val.f64[_i] = dst;
-         }
+            _dst_val.f32[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float64_t src0 =
+                  _src[0].f64[_i];
+
+            float64_t dst = bit_size == 64 ? cos(src0) : cosf(src0);
+
+            _dst_val.f64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -2694,49 +3550,23 @@ evaluate_fcsel(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
       
+   
 
-                                    
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
-                  const float32_t src1 =
-                     _src[1].f32[_i];
-                  const float32_t src2 =
-                     _src[2].f32[_i];
+                           
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float32_t src0 =
+                  _src[0].f32[_i];
+               const float32_t src1 =
+                  _src[1].f32[_i];
+               const float32_t src2 =
+                  _src[2].f32[_i];
 
-               float32_t dst = (src0 != 0.0f) ? src1 : src2;
+            float32_t dst = (src0 != 0.0f) ? src1 : src2;
 
-               _dst_val.f32[_i] = dst;
-         }
+            _dst_val.f32[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
-
-                                    
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
-                  const float32_t src1 =
-                     _src[1].f32[_i];
-                  const float32_t src2 =
-                     _src[2].f32[_i];
-
-               float32_t dst = (src0 != 0.0f) ? src1 : src2;
-
-               _dst_val.f32[_i] = dst;
-         }
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
 
    return _dst_val;
 }
@@ -2746,37 +3576,53 @@ evaluate_fddx(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  
-               float32_t dst = 0.0;
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               
+            float16_t dst = 0.0;
 
-               _dst_val.f32[_i] = dst;
-         }
+            _dst_val.u16[_i] = _mesa_float_to_half(dst);
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  
-               float64_t dst = 0.0;
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               
+            float32_t dst = 0.0;
 
-               _dst_val.f64[_i] = dst;
-         }
+            _dst_val.f32[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               
+            float64_t dst = 0.0;
+
+            _dst_val.f64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -2786,37 +3632,53 @@ evaluate_fddx_coarse(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  
-               float32_t dst = 0.0;
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               
+            float16_t dst = 0.0;
 
-               _dst_val.f32[_i] = dst;
-         }
+            _dst_val.u16[_i] = _mesa_float_to_half(dst);
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  
-               float64_t dst = 0.0;
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               
+            float32_t dst = 0.0;
 
-               _dst_val.f64[_i] = dst;
-         }
+            _dst_val.f32[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               
+            float64_t dst = 0.0;
+
+            _dst_val.f64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -2826,37 +3688,53 @@ evaluate_fddx_fine(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  
-               float32_t dst = 0.0;
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               
+            float16_t dst = 0.0;
 
-               _dst_val.f32[_i] = dst;
-         }
+            _dst_val.u16[_i] = _mesa_float_to_half(dst);
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  
-               float64_t dst = 0.0;
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               
+            float32_t dst = 0.0;
 
-               _dst_val.f64[_i] = dst;
-         }
+            _dst_val.f32[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               
+            float64_t dst = 0.0;
+
+            _dst_val.f64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -2866,37 +3744,53 @@ evaluate_fddy(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  
-               float32_t dst = 0.0;
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               
+            float16_t dst = 0.0;
 
-               _dst_val.f32[_i] = dst;
-         }
+            _dst_val.u16[_i] = _mesa_float_to_half(dst);
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  
-               float64_t dst = 0.0;
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               
+            float32_t dst = 0.0;
 
-               _dst_val.f64[_i] = dst;
-         }
+            _dst_val.f32[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               
+            float64_t dst = 0.0;
+
+            _dst_val.f64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -2906,37 +3800,53 @@ evaluate_fddy_coarse(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  
-               float32_t dst = 0.0;
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               
+            float16_t dst = 0.0;
 
-               _dst_val.f32[_i] = dst;
-         }
+            _dst_val.u16[_i] = _mesa_float_to_half(dst);
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  
-               float64_t dst = 0.0;
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               
+            float32_t dst = 0.0;
 
-               _dst_val.f64[_i] = dst;
-         }
+            _dst_val.f32[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               
+            float64_t dst = 0.0;
+
+            _dst_val.f64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -2946,37 +3856,53 @@ evaluate_fddy_fine(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  
-               float32_t dst = 0.0;
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               
+            float16_t dst = 0.0;
 
-               _dst_val.f32[_i] = dst;
-         }
+            _dst_val.u16[_i] = _mesa_float_to_half(dst);
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  
-               float64_t dst = 0.0;
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               
+            float32_t dst = 0.0;
 
-               _dst_val.f64[_i] = dst;
-         }
+            _dst_val.f32[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               
+            float64_t dst = 0.0;
+
+            _dst_val.f64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -2986,45 +3912,65 @@ evaluate_fdiv(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
-                  const float32_t src1 =
-                     _src[1].f32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float src0 =
+                  _mesa_half_to_float(_src[0].u16[_i]);
+               const float src1 =
+                  _mesa_half_to_float(_src[1].u16[_i]);
 
-               float32_t dst = src0 / src1;
+            float16_t dst = src0 / src1;
 
-               _dst_val.f32[_i] = dst;
-         }
+            _dst_val.u16[_i] = _mesa_float_to_half(dst);
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float64_t src0 =
-                     _src[0].f64[_i];
-                  const float64_t src1 =
-                     _src[1].f64[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float32_t src0 =
+                  _src[0].f32[_i];
+               const float32_t src1 =
+                  _src[1].f32[_i];
 
-               float64_t dst = src0 / src1;
+            float32_t dst = src0 / src1;
 
-               _dst_val.f64[_i] = dst;
-         }
+            _dst_val.f32[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float64_t src0 =
+                  _src[0].f64[_i];
+               const float64_t src1 =
+                  _src[1].f64[_i];
+
+            float64_t dst = src0 / src1;
+
+            _dst_val.f64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -3034,63 +3980,92 @@ evaluate_fdot2(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
 
-         const struct float32_vec src0 = {
-               _src[0].f32[0],
-               _src[0].f32[1],
-            0,
-            0,
-         };
+      const struct float16_vec src0 = {
+            _mesa_half_to_float(_src[0].u16[0]),
+            _mesa_half_to_float(_src[0].u16[1]),
+         0,
+         0,
+      };
 
-         const struct float32_vec src1 = {
-               _src[1].f32[0],
-               _src[1].f32[1],
-            0,
-            0,
-         };
+      const struct float16_vec src1 = {
+            _mesa_half_to_float(_src[1].u16[0]),
+            _mesa_half_to_float(_src[1].u16[1]),
+         0,
+         0,
+      };
 
-         struct float32_vec dst;
+      struct float16_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = ((src0.x * src1.x) + (src0.y * src1.y));
+         dst.x = dst.y = dst.z = dst.w = ((src0.x * src1.x) + (src0.y * src1.y));
 
-               _dst_val.f32[0] = dst.x;
+            _dst_val.u16[0] = _mesa_float_to_half(dst.x);
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
 
-         const struct float64_vec src0 = {
-               _src[0].f64[0],
-               _src[0].f64[1],
-            0,
-            0,
-         };
+      const struct float32_vec src0 = {
+            _src[0].f32[0],
+            _src[0].f32[1],
+         0,
+         0,
+      };
 
-         const struct float64_vec src1 = {
-               _src[1].f64[0],
-               _src[1].f64[1],
-            0,
-            0,
-         };
+      const struct float32_vec src1 = {
+            _src[1].f32[0],
+            _src[1].f32[1],
+         0,
+         0,
+      };
 
-         struct float64_vec dst;
+      struct float32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = ((src0.x * src1.x) + (src0.y * src1.y));
+         dst.x = dst.y = dst.z = dst.w = ((src0.x * src1.x) + (src0.y * src1.y));
 
-               _dst_val.f64[0] = dst.x;
+            _dst_val.f32[0] = dst.x;
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+
+      const struct float64_vec src0 = {
+            _src[0].f64[0],
+            _src[0].f64[1],
+         0,
+         0,
+      };
+
+      const struct float64_vec src1 = {
+            _src[1].f64[0],
+            _src[1].f64[1],
+         0,
+         0,
+      };
+
+      struct float64_vec dst;
+
+         dst.x = dst.y = dst.z = dst.w = ((src0.x * src1.x) + (src0.y * src1.y));
+
+            _dst_val.f64[0] = dst.x;
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -3100,63 +4075,92 @@ evaluate_fdot3(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
 
-         const struct float32_vec src0 = {
-               _src[0].f32[0],
-               _src[0].f32[1],
-               _src[0].f32[2],
-            0,
-         };
+      const struct float16_vec src0 = {
+            _mesa_half_to_float(_src[0].u16[0]),
+            _mesa_half_to_float(_src[0].u16[1]),
+            _mesa_half_to_float(_src[0].u16[2]),
+         0,
+      };
 
-         const struct float32_vec src1 = {
-               _src[1].f32[0],
-               _src[1].f32[1],
-               _src[1].f32[2],
-            0,
-         };
+      const struct float16_vec src1 = {
+            _mesa_half_to_float(_src[1].u16[0]),
+            _mesa_half_to_float(_src[1].u16[1]),
+            _mesa_half_to_float(_src[1].u16[2]),
+         0,
+      };
 
-         struct float32_vec dst;
+      struct float16_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = ((src0.x * src1.x) + (src0.y * src1.y) + (src0.z * src1.z));
+         dst.x = dst.y = dst.z = dst.w = ((src0.x * src1.x) + (src0.y * src1.y) + (src0.z * src1.z));
 
-               _dst_val.f32[0] = dst.x;
+            _dst_val.u16[0] = _mesa_float_to_half(dst.x);
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
 
-         const struct float64_vec src0 = {
-               _src[0].f64[0],
-               _src[0].f64[1],
-               _src[0].f64[2],
-            0,
-         };
+      const struct float32_vec src0 = {
+            _src[0].f32[0],
+            _src[0].f32[1],
+            _src[0].f32[2],
+         0,
+      };
 
-         const struct float64_vec src1 = {
-               _src[1].f64[0],
-               _src[1].f64[1],
-               _src[1].f64[2],
-            0,
-         };
+      const struct float32_vec src1 = {
+            _src[1].f32[0],
+            _src[1].f32[1],
+            _src[1].f32[2],
+         0,
+      };
 
-         struct float64_vec dst;
+      struct float32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = ((src0.x * src1.x) + (src0.y * src1.y) + (src0.z * src1.z));
+         dst.x = dst.y = dst.z = dst.w = ((src0.x * src1.x) + (src0.y * src1.y) + (src0.z * src1.z));
 
-               _dst_val.f64[0] = dst.x;
+            _dst_val.f32[0] = dst.x;
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+
+      const struct float64_vec src0 = {
+            _src[0].f64[0],
+            _src[0].f64[1],
+            _src[0].f64[2],
+         0,
+      };
+
+      const struct float64_vec src1 = {
+            _src[1].f64[0],
+            _src[1].f64[1],
+            _src[1].f64[2],
+         0,
+      };
+
+      struct float64_vec dst;
+
+         dst.x = dst.y = dst.z = dst.w = ((src0.x * src1.x) + (src0.y * src1.y) + (src0.z * src1.z));
+
+            _dst_val.f64[0] = dst.x;
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -3166,63 +4170,92 @@ evaluate_fdot4(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
 
-         const struct float32_vec src0 = {
-               _src[0].f32[0],
-               _src[0].f32[1],
-               _src[0].f32[2],
-               _src[0].f32[3],
-         };
+      const struct float16_vec src0 = {
+            _mesa_half_to_float(_src[0].u16[0]),
+            _mesa_half_to_float(_src[0].u16[1]),
+            _mesa_half_to_float(_src[0].u16[2]),
+            _mesa_half_to_float(_src[0].u16[3]),
+      };
 
-         const struct float32_vec src1 = {
-               _src[1].f32[0],
-               _src[1].f32[1],
-               _src[1].f32[2],
-               _src[1].f32[3],
-         };
+      const struct float16_vec src1 = {
+            _mesa_half_to_float(_src[1].u16[0]),
+            _mesa_half_to_float(_src[1].u16[1]),
+            _mesa_half_to_float(_src[1].u16[2]),
+            _mesa_half_to_float(_src[1].u16[3]),
+      };
 
-         struct float32_vec dst;
+      struct float16_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = ((src0.x * src1.x) + (src0.y * src1.y) + (src0.z * src1.z) + (src0.w * src1.w));
+         dst.x = dst.y = dst.z = dst.w = ((src0.x * src1.x) + (src0.y * src1.y) + (src0.z * src1.z) + (src0.w * src1.w));
 
-               _dst_val.f32[0] = dst.x;
+            _dst_val.u16[0] = _mesa_float_to_half(dst.x);
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
 
-         const struct float64_vec src0 = {
-               _src[0].f64[0],
-               _src[0].f64[1],
-               _src[0].f64[2],
-               _src[0].f64[3],
-         };
+      const struct float32_vec src0 = {
+            _src[0].f32[0],
+            _src[0].f32[1],
+            _src[0].f32[2],
+            _src[0].f32[3],
+      };
 
-         const struct float64_vec src1 = {
-               _src[1].f64[0],
-               _src[1].f64[1],
-               _src[1].f64[2],
-               _src[1].f64[3],
-         };
+      const struct float32_vec src1 = {
+            _src[1].f32[0],
+            _src[1].f32[1],
+            _src[1].f32[2],
+            _src[1].f32[3],
+      };
 
-         struct float64_vec dst;
+      struct float32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = ((src0.x * src1.x) + (src0.y * src1.y) + (src0.z * src1.z) + (src0.w * src1.w));
+         dst.x = dst.y = dst.z = dst.w = ((src0.x * src1.x) + (src0.y * src1.y) + (src0.z * src1.z) + (src0.w * src1.w));
 
-               _dst_val.f64[0] = dst.x;
+            _dst_val.f32[0] = dst.x;
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+
+      const struct float64_vec src0 = {
+            _src[0].f64[0],
+            _src[0].f64[1],
+            _src[0].f64[2],
+            _src[0].f64[3],
+      };
+
+      const struct float64_vec src1 = {
+            _src[1].f64[0],
+            _src[1].f64[1],
+            _src[1].f64[2],
+            _src[1].f64[3],
+      };
+
+      struct float64_vec dst;
+
+         dst.x = dst.y = dst.z = dst.w = ((src0.x * src1.x) + (src0.y * src1.y) + (src0.z * src1.z) + (src0.w * src1.w));
+
+            _dst_val.f64[0] = dst.x;
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -3232,69 +4265,101 @@ evaluate_fdot_replicated2(MAYBE_UNUSED unsigned num_components, unsigned bit_siz
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
 
-         const struct float32_vec src0 = {
-               _src[0].f32[0],
-               _src[0].f32[1],
-            0,
-            0,
-         };
+      const struct float16_vec src0 = {
+            _mesa_half_to_float(_src[0].u16[0]),
+            _mesa_half_to_float(_src[0].u16[1]),
+         0,
+         0,
+      };
 
-         const struct float32_vec src1 = {
-               _src[1].f32[0],
-               _src[1].f32[1],
-            0,
-            0,
-         };
+      const struct float16_vec src1 = {
+            _mesa_half_to_float(_src[1].u16[0]),
+            _mesa_half_to_float(_src[1].u16[1]),
+         0,
+         0,
+      };
 
-         struct float32_vec dst;
+      struct float16_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = ((src0.x * src1.x) + (src0.y * src1.y));
+         dst.x = dst.y = dst.z = dst.w = ((src0.x * src1.x) + (src0.y * src1.y));
 
-               _dst_val.f32[0] = dst.x;
-               _dst_val.f32[1] = dst.y;
-               _dst_val.f32[2] = dst.z;
-               _dst_val.f32[3] = dst.w;
+            _dst_val.u16[0] = _mesa_float_to_half(dst.x);
+            _dst_val.u16[1] = _mesa_float_to_half(dst.y);
+            _dst_val.u16[2] = _mesa_float_to_half(dst.z);
+            _dst_val.u16[3] = _mesa_float_to_half(dst.w);
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
 
-         const struct float64_vec src0 = {
-               _src[0].f64[0],
-               _src[0].f64[1],
-            0,
-            0,
-         };
+      const struct float32_vec src0 = {
+            _src[0].f32[0],
+            _src[0].f32[1],
+         0,
+         0,
+      };
 
-         const struct float64_vec src1 = {
-               _src[1].f64[0],
-               _src[1].f64[1],
-            0,
-            0,
-         };
+      const struct float32_vec src1 = {
+            _src[1].f32[0],
+            _src[1].f32[1],
+         0,
+         0,
+      };
 
-         struct float64_vec dst;
+      struct float32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = ((src0.x * src1.x) + (src0.y * src1.y));
+         dst.x = dst.y = dst.z = dst.w = ((src0.x * src1.x) + (src0.y * src1.y));
 
-               _dst_val.f64[0] = dst.x;
-               _dst_val.f64[1] = dst.y;
-               _dst_val.f64[2] = dst.z;
-               _dst_val.f64[3] = dst.w;
+            _dst_val.f32[0] = dst.x;
+            _dst_val.f32[1] = dst.y;
+            _dst_val.f32[2] = dst.z;
+            _dst_val.f32[3] = dst.w;
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+
+      const struct float64_vec src0 = {
+            _src[0].f64[0],
+            _src[0].f64[1],
+         0,
+         0,
+      };
+
+      const struct float64_vec src1 = {
+            _src[1].f64[0],
+            _src[1].f64[1],
+         0,
+         0,
+      };
+
+      struct float64_vec dst;
+
+         dst.x = dst.y = dst.z = dst.w = ((src0.x * src1.x) + (src0.y * src1.y));
+
+            _dst_val.f64[0] = dst.x;
+            _dst_val.f64[1] = dst.y;
+            _dst_val.f64[2] = dst.z;
+            _dst_val.f64[3] = dst.w;
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -3304,69 +4369,101 @@ evaluate_fdot_replicated3(MAYBE_UNUSED unsigned num_components, unsigned bit_siz
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
 
-         const struct float32_vec src0 = {
-               _src[0].f32[0],
-               _src[0].f32[1],
-               _src[0].f32[2],
-            0,
-         };
+      const struct float16_vec src0 = {
+            _mesa_half_to_float(_src[0].u16[0]),
+            _mesa_half_to_float(_src[0].u16[1]),
+            _mesa_half_to_float(_src[0].u16[2]),
+         0,
+      };
 
-         const struct float32_vec src1 = {
-               _src[1].f32[0],
-               _src[1].f32[1],
-               _src[1].f32[2],
-            0,
-         };
+      const struct float16_vec src1 = {
+            _mesa_half_to_float(_src[1].u16[0]),
+            _mesa_half_to_float(_src[1].u16[1]),
+            _mesa_half_to_float(_src[1].u16[2]),
+         0,
+      };
 
-         struct float32_vec dst;
+      struct float16_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = ((src0.x * src1.x) + (src0.y * src1.y) + (src0.z * src1.z));
+         dst.x = dst.y = dst.z = dst.w = ((src0.x * src1.x) + (src0.y * src1.y) + (src0.z * src1.z));
 
-               _dst_val.f32[0] = dst.x;
-               _dst_val.f32[1] = dst.y;
-               _dst_val.f32[2] = dst.z;
-               _dst_val.f32[3] = dst.w;
+            _dst_val.u16[0] = _mesa_float_to_half(dst.x);
+            _dst_val.u16[1] = _mesa_float_to_half(dst.y);
+            _dst_val.u16[2] = _mesa_float_to_half(dst.z);
+            _dst_val.u16[3] = _mesa_float_to_half(dst.w);
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
 
-         const struct float64_vec src0 = {
-               _src[0].f64[0],
-               _src[0].f64[1],
-               _src[0].f64[2],
-            0,
-         };
+      const struct float32_vec src0 = {
+            _src[0].f32[0],
+            _src[0].f32[1],
+            _src[0].f32[2],
+         0,
+      };
 
-         const struct float64_vec src1 = {
-               _src[1].f64[0],
-               _src[1].f64[1],
-               _src[1].f64[2],
-            0,
-         };
+      const struct float32_vec src1 = {
+            _src[1].f32[0],
+            _src[1].f32[1],
+            _src[1].f32[2],
+         0,
+      };
 
-         struct float64_vec dst;
+      struct float32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = ((src0.x * src1.x) + (src0.y * src1.y) + (src0.z * src1.z));
+         dst.x = dst.y = dst.z = dst.w = ((src0.x * src1.x) + (src0.y * src1.y) + (src0.z * src1.z));
 
-               _dst_val.f64[0] = dst.x;
-               _dst_val.f64[1] = dst.y;
-               _dst_val.f64[2] = dst.z;
-               _dst_val.f64[3] = dst.w;
+            _dst_val.f32[0] = dst.x;
+            _dst_val.f32[1] = dst.y;
+            _dst_val.f32[2] = dst.z;
+            _dst_val.f32[3] = dst.w;
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+
+      const struct float64_vec src0 = {
+            _src[0].f64[0],
+            _src[0].f64[1],
+            _src[0].f64[2],
+         0,
+      };
+
+      const struct float64_vec src1 = {
+            _src[1].f64[0],
+            _src[1].f64[1],
+            _src[1].f64[2],
+         0,
+      };
+
+      struct float64_vec dst;
+
+         dst.x = dst.y = dst.z = dst.w = ((src0.x * src1.x) + (src0.y * src1.y) + (src0.z * src1.z));
+
+            _dst_val.f64[0] = dst.x;
+            _dst_val.f64[1] = dst.y;
+            _dst_val.f64[2] = dst.z;
+            _dst_val.f64[3] = dst.w;
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -3376,69 +4473,101 @@ evaluate_fdot_replicated4(MAYBE_UNUSED unsigned num_components, unsigned bit_siz
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
 
-         const struct float32_vec src0 = {
-               _src[0].f32[0],
-               _src[0].f32[1],
-               _src[0].f32[2],
-               _src[0].f32[3],
-         };
+      const struct float16_vec src0 = {
+            _mesa_half_to_float(_src[0].u16[0]),
+            _mesa_half_to_float(_src[0].u16[1]),
+            _mesa_half_to_float(_src[0].u16[2]),
+            _mesa_half_to_float(_src[0].u16[3]),
+      };
 
-         const struct float32_vec src1 = {
-               _src[1].f32[0],
-               _src[1].f32[1],
-               _src[1].f32[2],
-               _src[1].f32[3],
-         };
+      const struct float16_vec src1 = {
+            _mesa_half_to_float(_src[1].u16[0]),
+            _mesa_half_to_float(_src[1].u16[1]),
+            _mesa_half_to_float(_src[1].u16[2]),
+            _mesa_half_to_float(_src[1].u16[3]),
+      };
 
-         struct float32_vec dst;
+      struct float16_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = ((src0.x * src1.x) + (src0.y * src1.y) + (src0.z * src1.z) + (src0.w * src1.w));
+         dst.x = dst.y = dst.z = dst.w = ((src0.x * src1.x) + (src0.y * src1.y) + (src0.z * src1.z) + (src0.w * src1.w));
 
-               _dst_val.f32[0] = dst.x;
-               _dst_val.f32[1] = dst.y;
-               _dst_val.f32[2] = dst.z;
-               _dst_val.f32[3] = dst.w;
+            _dst_val.u16[0] = _mesa_float_to_half(dst.x);
+            _dst_val.u16[1] = _mesa_float_to_half(dst.y);
+            _dst_val.u16[2] = _mesa_float_to_half(dst.z);
+            _dst_val.u16[3] = _mesa_float_to_half(dst.w);
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
 
-         const struct float64_vec src0 = {
-               _src[0].f64[0],
-               _src[0].f64[1],
-               _src[0].f64[2],
-               _src[0].f64[3],
-         };
+      const struct float32_vec src0 = {
+            _src[0].f32[0],
+            _src[0].f32[1],
+            _src[0].f32[2],
+            _src[0].f32[3],
+      };
 
-         const struct float64_vec src1 = {
-               _src[1].f64[0],
-               _src[1].f64[1],
-               _src[1].f64[2],
-               _src[1].f64[3],
-         };
+      const struct float32_vec src1 = {
+            _src[1].f32[0],
+            _src[1].f32[1],
+            _src[1].f32[2],
+            _src[1].f32[3],
+      };
 
-         struct float64_vec dst;
+      struct float32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = ((src0.x * src1.x) + (src0.y * src1.y) + (src0.z * src1.z) + (src0.w * src1.w));
+         dst.x = dst.y = dst.z = dst.w = ((src0.x * src1.x) + (src0.y * src1.y) + (src0.z * src1.z) + (src0.w * src1.w));
 
-               _dst_val.f64[0] = dst.x;
-               _dst_val.f64[1] = dst.y;
-               _dst_val.f64[2] = dst.z;
-               _dst_val.f64[3] = dst.w;
+            _dst_val.f32[0] = dst.x;
+            _dst_val.f32[1] = dst.y;
+            _dst_val.f32[2] = dst.z;
+            _dst_val.f32[3] = dst.w;
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+
+      const struct float64_vec src0 = {
+            _src[0].f64[0],
+            _src[0].f64[1],
+            _src[0].f64[2],
+            _src[0].f64[3],
+      };
+
+      const struct float64_vec src1 = {
+            _src[1].f64[0],
+            _src[1].f64[1],
+            _src[1].f64[2],
+            _src[1].f64[3],
+      };
+
+      struct float64_vec dst;
+
+         dst.x = dst.y = dst.z = dst.w = ((src0.x * src1.x) + (src0.y * src1.y) + (src0.z * src1.z) + (src0.w * src1.w));
+
+            _dst_val.f64[0] = dst.x;
+            _dst_val.f64[1] = dst.y;
+            _dst_val.f64[2] = dst.z;
+            _dst_val.f64[3] = dst.w;
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -3448,63 +4577,92 @@ evaluate_fdph(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
 
-         const struct float32_vec src0 = {
-               _src[0].f32[0],
-               _src[0].f32[1],
-               _src[0].f32[2],
-            0,
-         };
+      const struct float16_vec src0 = {
+            _mesa_half_to_float(_src[0].u16[0]),
+            _mesa_half_to_float(_src[0].u16[1]),
+            _mesa_half_to_float(_src[0].u16[2]),
+         0,
+      };
 
-         const struct float32_vec src1 = {
-               _src[1].f32[0],
-               _src[1].f32[1],
-               _src[1].f32[2],
-               _src[1].f32[3],
-         };
+      const struct float16_vec src1 = {
+            _mesa_half_to_float(_src[1].u16[0]),
+            _mesa_half_to_float(_src[1].u16[1]),
+            _mesa_half_to_float(_src[1].u16[2]),
+            _mesa_half_to_float(_src[1].u16[3]),
+      };
 
-         struct float32_vec dst;
+      struct float16_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = src0.x * src1.x + src0.y * src1.y + src0.z * src1.z + src1.w;
+         dst.x = dst.y = dst.z = dst.w = src0.x * src1.x + src0.y * src1.y + src0.z * src1.z + src1.w;
 
-               _dst_val.f32[0] = dst.x;
+            _dst_val.u16[0] = _mesa_float_to_half(dst.x);
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
 
-         const struct float64_vec src0 = {
-               _src[0].f64[0],
-               _src[0].f64[1],
-               _src[0].f64[2],
-            0,
-         };
+      const struct float32_vec src0 = {
+            _src[0].f32[0],
+            _src[0].f32[1],
+            _src[0].f32[2],
+         0,
+      };
 
-         const struct float64_vec src1 = {
-               _src[1].f64[0],
-               _src[1].f64[1],
-               _src[1].f64[2],
-               _src[1].f64[3],
-         };
+      const struct float32_vec src1 = {
+            _src[1].f32[0],
+            _src[1].f32[1],
+            _src[1].f32[2],
+            _src[1].f32[3],
+      };
 
-         struct float64_vec dst;
+      struct float32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = src0.x * src1.x + src0.y * src1.y + src0.z * src1.z + src1.w;
+         dst.x = dst.y = dst.z = dst.w = src0.x * src1.x + src0.y * src1.y + src0.z * src1.z + src1.w;
 
-               _dst_val.f64[0] = dst.x;
+            _dst_val.f32[0] = dst.x;
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+
+      const struct float64_vec src0 = {
+            _src[0].f64[0],
+            _src[0].f64[1],
+            _src[0].f64[2],
+         0,
+      };
+
+      const struct float64_vec src1 = {
+            _src[1].f64[0],
+            _src[1].f64[1],
+            _src[1].f64[2],
+            _src[1].f64[3],
+      };
+
+      struct float64_vec dst;
+
+         dst.x = dst.y = dst.z = dst.w = src0.x * src1.x + src0.y * src1.y + src0.z * src1.z + src1.w;
+
+            _dst_val.f64[0] = dst.x;
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -3514,69 +4672,101 @@ evaluate_fdph_replicated(MAYBE_UNUSED unsigned num_components, unsigned bit_size
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
 
-         const struct float32_vec src0 = {
-               _src[0].f32[0],
-               _src[0].f32[1],
-               _src[0].f32[2],
-            0,
-         };
+      const struct float16_vec src0 = {
+            _mesa_half_to_float(_src[0].u16[0]),
+            _mesa_half_to_float(_src[0].u16[1]),
+            _mesa_half_to_float(_src[0].u16[2]),
+         0,
+      };
 
-         const struct float32_vec src1 = {
-               _src[1].f32[0],
-               _src[1].f32[1],
-               _src[1].f32[2],
-               _src[1].f32[3],
-         };
+      const struct float16_vec src1 = {
+            _mesa_half_to_float(_src[1].u16[0]),
+            _mesa_half_to_float(_src[1].u16[1]),
+            _mesa_half_to_float(_src[1].u16[2]),
+            _mesa_half_to_float(_src[1].u16[3]),
+      };
 
-         struct float32_vec dst;
+      struct float16_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = src0.x * src1.x + src0.y * src1.y + src0.z * src1.z + src1.w;
+         dst.x = dst.y = dst.z = dst.w = src0.x * src1.x + src0.y * src1.y + src0.z * src1.z + src1.w;
 
-               _dst_val.f32[0] = dst.x;
-               _dst_val.f32[1] = dst.y;
-               _dst_val.f32[2] = dst.z;
-               _dst_val.f32[3] = dst.w;
+            _dst_val.u16[0] = _mesa_float_to_half(dst.x);
+            _dst_val.u16[1] = _mesa_float_to_half(dst.y);
+            _dst_val.u16[2] = _mesa_float_to_half(dst.z);
+            _dst_val.u16[3] = _mesa_float_to_half(dst.w);
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
 
-         const struct float64_vec src0 = {
-               _src[0].f64[0],
-               _src[0].f64[1],
-               _src[0].f64[2],
-            0,
-         };
+      const struct float32_vec src0 = {
+            _src[0].f32[0],
+            _src[0].f32[1],
+            _src[0].f32[2],
+         0,
+      };
 
-         const struct float64_vec src1 = {
-               _src[1].f64[0],
-               _src[1].f64[1],
-               _src[1].f64[2],
-               _src[1].f64[3],
-         };
+      const struct float32_vec src1 = {
+            _src[1].f32[0],
+            _src[1].f32[1],
+            _src[1].f32[2],
+            _src[1].f32[3],
+      };
 
-         struct float64_vec dst;
+      struct float32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = src0.x * src1.x + src0.y * src1.y + src0.z * src1.z + src1.w;
+         dst.x = dst.y = dst.z = dst.w = src0.x * src1.x + src0.y * src1.y + src0.z * src1.z + src1.w;
 
-               _dst_val.f64[0] = dst.x;
-               _dst_val.f64[1] = dst.y;
-               _dst_val.f64[2] = dst.z;
-               _dst_val.f64[3] = dst.w;
+            _dst_val.f32[0] = dst.x;
+            _dst_val.f32[1] = dst.y;
+            _dst_val.f32[2] = dst.z;
+            _dst_val.f32[3] = dst.w;
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+
+      const struct float64_vec src0 = {
+            _src[0].f64[0],
+            _src[0].f64[1],
+            _src[0].f64[2],
+         0,
+      };
+
+      const struct float64_vec src1 = {
+            _src[1].f64[0],
+            _src[1].f64[1],
+            _src[1].f64[2],
+            _src[1].f64[3],
+      };
+
+      struct float64_vec dst;
+
+         dst.x = dst.y = dst.z = dst.w = src0.x * src1.x + src0.y * src1.y + src0.z * src1.z + src1.w;
+
+            _dst_val.f64[0] = dst.x;
+            _dst_val.f64[1] = dst.y;
+            _dst_val.f64[2] = dst.z;
+            _dst_val.f64[3] = dst.w;
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -3586,45 +4776,65 @@ evaluate_feq(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
-                  const float32_t src1 =
-                     _src[1].f32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float src0 =
+                  _mesa_half_to_float(_src[0].u16[_i]);
+               const float src1 =
+                  _mesa_half_to_float(_src[1].u16[_i]);
 
-               bool32_t dst = src0 == src1;
+            bool32_t dst = src0 == src1;
 
-               _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
-         }
+            _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float64_t src0 =
-                     _src[0].f64[_i];
-                  const float64_t src1 =
-                     _src[1].f64[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float32_t src0 =
+                  _src[0].f32[_i];
+               const float32_t src1 =
+                  _src[1].f32[_i];
 
-               bool32_t dst = src0 == src1;
+            bool32_t dst = src0 == src1;
 
-               _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
-         }
+            _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float64_t src0 =
+                  _src[0].f64[_i];
+               const float64_t src1 =
+                  _src[1].f64[_i];
+
+            bool32_t dst = src0 == src1;
+
+            _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -3634,41 +4844,59 @@ evaluate_fexp2(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float src0 =
+                  _mesa_half_to_float(_src[0].u16[_i]);
 
-               float32_t dst = exp2f(src0);
+            float16_t dst = exp2f(src0);
 
-               _dst_val.f32[_i] = dst;
-         }
+            _dst_val.u16[_i] = _mesa_float_to_half(dst);
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float64_t src0 =
-                     _src[0].f64[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float32_t src0 =
+                  _src[0].f32[_i];
 
-               float64_t dst = exp2f(src0);
+            float32_t dst = exp2f(src0);
 
-               _dst_val.f64[_i] = dst;
-         }
+            _dst_val.f32[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float64_t src0 =
+                  _src[0].f64[_i];
+
+            float64_t dst = exp2f(src0);
+
+            _dst_val.f64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -3678,41 +4906,59 @@ evaluate_ffloor(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float src0 =
+                  _mesa_half_to_float(_src[0].u16[_i]);
 
-               float32_t dst = bit_size == 64 ? floor(src0) : floorf(src0);
+            float16_t dst = bit_size == 64 ? floor(src0) : floorf(src0);
 
-               _dst_val.f32[_i] = dst;
-         }
+            _dst_val.u16[_i] = _mesa_float_to_half(dst);
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float64_t src0 =
-                     _src[0].f64[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float32_t src0 =
+                  _src[0].f32[_i];
 
-               float64_t dst = bit_size == 64 ? floor(src0) : floorf(src0);
+            float32_t dst = bit_size == 64 ? floor(src0) : floorf(src0);
 
-               _dst_val.f64[_i] = dst;
-         }
+            _dst_val.f32[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float64_t src0 =
+                  _src[0].f64[_i];
+
+            float64_t dst = bit_size == 64 ? floor(src0) : floorf(src0);
+
+            _dst_val.f64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -3722,49 +4968,71 @@ evaluate_ffma(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-                                    
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
-                  const float32_t src1 =
-                     _src[1].f32[_i];
-                  const float32_t src2 =
-                     _src[2].f32[_i];
+                           
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float src0 =
+                  _mesa_half_to_float(_src[0].u16[_i]);
+               const float src1 =
+                  _mesa_half_to_float(_src[1].u16[_i]);
+               const float src2 =
+                  _mesa_half_to_float(_src[2].u16[_i]);
 
-               float32_t dst = src0 * src1 + src2;
+            float16_t dst = src0 * src1 + src2;
 
-               _dst_val.f32[_i] = dst;
-         }
+            _dst_val.u16[_i] = _mesa_float_to_half(dst);
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-                                    
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float64_t src0 =
-                     _src[0].f64[_i];
-                  const float64_t src1 =
-                     _src[1].f64[_i];
-                  const float64_t src2 =
-                     _src[2].f64[_i];
+                           
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float32_t src0 =
+                  _src[0].f32[_i];
+               const float32_t src1 =
+                  _src[1].f32[_i];
+               const float32_t src2 =
+                  _src[2].f32[_i];
 
-               float64_t dst = src0 * src1 + src2;
+            float32_t dst = src0 * src1 + src2;
 
-               _dst_val.f64[_i] = dst;
-         }
+            _dst_val.f32[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+                           
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float64_t src0 =
+                  _src[0].f64[_i];
+               const float64_t src1 =
+                  _src[1].f64[_i];
+               const float64_t src2 =
+                  _src[2].f64[_i];
+
+            float64_t dst = src0 * src1 + src2;
+
+            _dst_val.f64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -3774,41 +5042,59 @@ evaluate_ffract(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float src0 =
+                  _mesa_half_to_float(_src[0].u16[_i]);
 
-               float32_t dst = src0 - (bit_size == 64 ? floor(src0) : floorf(src0));
+            float16_t dst = src0 - (bit_size == 64 ? floor(src0) : floorf(src0));
 
-               _dst_val.f32[_i] = dst;
-         }
+            _dst_val.u16[_i] = _mesa_float_to_half(dst);
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float64_t src0 =
-                     _src[0].f64[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float32_t src0 =
+                  _src[0].f32[_i];
 
-               float64_t dst = src0 - (bit_size == 64 ? floor(src0) : floorf(src0));
+            float32_t dst = src0 - (bit_size == 64 ? floor(src0) : floorf(src0));
 
-               _dst_val.f64[_i] = dst;
-         }
+            _dst_val.f32[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float64_t src0 =
+                  _src[0].f64[_i];
+
+            float64_t dst = src0 - (bit_size == 64 ? floor(src0) : floorf(src0));
+
+            _dst_val.f64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -3818,45 +5104,65 @@ evaluate_fge(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
-                  const float32_t src1 =
-                     _src[1].f32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float src0 =
+                  _mesa_half_to_float(_src[0].u16[_i]);
+               const float src1 =
+                  _mesa_half_to_float(_src[1].u16[_i]);
 
-               bool32_t dst = src0 >= src1;
+            bool32_t dst = src0 >= src1;
 
-               _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
-         }
+            _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float64_t src0 =
-                     _src[0].f64[_i];
-                  const float64_t src1 =
-                     _src[1].f64[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float32_t src0 =
+                  _src[0].f32[_i];
+               const float32_t src1 =
+                  _src[1].f32[_i];
 
-               bool32_t dst = src0 >= src1;
+            bool32_t dst = src0 >= src1;
 
-               _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
-         }
+            _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float64_t src0 =
+                  _src[0].f64[_i];
+               const float64_t src1 =
+                  _src[1].f64[_i];
+
+            bool32_t dst = src0 >= src1;
+
+            _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -3866,18 +5172,17 @@ evaluate_find_lsb(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
       
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int32_t src0 =
+                  _src[0].i32[_i];
+
+            int32_t dst;
 
             
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int32_t src0 =
-                     _src[0].i32[_i];
-
-               int32_t dst;
-
-               
 dst = -1;
 for (unsigned bit = 0; bit < 32; bit++) {
    if ((src0 >> bit) & 1) {
@@ -3887,40 +5192,9 @@ for (unsigned bit = 0; bit < 32; bit++) {
 }
 
 
-               _dst_val.i32[_i] = dst;
-         }
+            _dst_val.i32[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
-
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int32_t src0 =
-                     _src[0].i32[_i];
-
-               int32_t dst;
-
-               
-dst = -1;
-for (unsigned bit = 0; bit < 32; bit++) {
-   if ((src0 >> bit) & 1) {
-      dst = bit;
-      break;
-   }
-}
-
-
-               _dst_val.i32[_i] = dst;
-         }
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
 
    return _dst_val;
 }
@@ -3930,41 +5204,59 @@ evaluate_flog2(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float src0 =
+                  _mesa_half_to_float(_src[0].u16[_i]);
 
-               float32_t dst = log2f(src0);
+            float16_t dst = log2f(src0);
 
-               _dst_val.f32[_i] = dst;
-         }
+            _dst_val.u16[_i] = _mesa_float_to_half(dst);
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float64_t src0 =
-                     _src[0].f64[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float32_t src0 =
+                  _src[0].f32[_i];
 
-               float64_t dst = log2f(src0);
+            float32_t dst = log2f(src0);
 
-               _dst_val.f64[_i] = dst;
-         }
+            _dst_val.f32[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float64_t src0 =
+                  _src[0].f64[_i];
+
+            float64_t dst = log2f(src0);
+
+            _dst_val.f64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -3974,49 +5266,71 @@ evaluate_flrp(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-                                    
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
-                  const float32_t src1 =
-                     _src[1].f32[_i];
-                  const float32_t src2 =
-                     _src[2].f32[_i];
+                           
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float src0 =
+                  _mesa_half_to_float(_src[0].u16[_i]);
+               const float src1 =
+                  _mesa_half_to_float(_src[1].u16[_i]);
+               const float src2 =
+                  _mesa_half_to_float(_src[2].u16[_i]);
 
-               float32_t dst = src0 * (1 - src2) + src1 * src2;
+            float16_t dst = src0 * (1 - src2) + src1 * src2;
 
-               _dst_val.f32[_i] = dst;
-         }
+            _dst_val.u16[_i] = _mesa_float_to_half(dst);
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-                                    
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float64_t src0 =
-                     _src[0].f64[_i];
-                  const float64_t src1 =
-                     _src[1].f64[_i];
-                  const float64_t src2 =
-                     _src[2].f64[_i];
+                           
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float32_t src0 =
+                  _src[0].f32[_i];
+               const float32_t src1 =
+                  _src[1].f32[_i];
+               const float32_t src2 =
+                  _src[2].f32[_i];
 
-               float64_t dst = src0 * (1 - src2) + src1 * src2;
+            float32_t dst = src0 * (1 - src2) + src1 * src2;
 
-               _dst_val.f64[_i] = dst;
-         }
+            _dst_val.f32[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+                           
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float64_t src0 =
+                  _src[0].f64[_i];
+               const float64_t src1 =
+                  _src[1].f64[_i];
+               const float64_t src2 =
+                  _src[2].f64[_i];
+
+            float64_t dst = src0 * (1 - src2) + src1 * src2;
+
+            _dst_val.f64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -4026,45 +5340,65 @@ evaluate_flt(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
-                  const float32_t src1 =
-                     _src[1].f32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float src0 =
+                  _mesa_half_to_float(_src[0].u16[_i]);
+               const float src1 =
+                  _mesa_half_to_float(_src[1].u16[_i]);
 
-               bool32_t dst = src0 < src1;
+            bool32_t dst = src0 < src1;
 
-               _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
-         }
+            _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float64_t src0 =
-                     _src[0].f64[_i];
-                  const float64_t src1 =
-                     _src[1].f64[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float32_t src0 =
+                  _src[0].f32[_i];
+               const float32_t src1 =
+                  _src[1].f32[_i];
 
-               bool32_t dst = src0 < src1;
+            bool32_t dst = src0 < src1;
 
-               _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
-         }
+            _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float64_t src0 =
+                  _src[0].f64[_i];
+               const float64_t src1 =
+                  _src[1].f64[_i];
+
+            bool32_t dst = src0 < src1;
+
+            _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -4074,45 +5408,65 @@ evaluate_fmax(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
-                  const float32_t src1 =
-                     _src[1].f32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float src0 =
+                  _mesa_half_to_float(_src[0].u16[_i]);
+               const float src1 =
+                  _mesa_half_to_float(_src[1].u16[_i]);
 
-               float32_t dst = fmaxf(src0, src1);
+            float16_t dst = fmaxf(src0, src1);
 
-               _dst_val.f32[_i] = dst;
-         }
+            _dst_val.u16[_i] = _mesa_float_to_half(dst);
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float64_t src0 =
-                     _src[0].f64[_i];
-                  const float64_t src1 =
-                     _src[1].f64[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float32_t src0 =
+                  _src[0].f32[_i];
+               const float32_t src1 =
+                  _src[1].f32[_i];
 
-               float64_t dst = fmaxf(src0, src1);
+            float32_t dst = fmaxf(src0, src1);
 
-               _dst_val.f64[_i] = dst;
-         }
+            _dst_val.f32[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float64_t src0 =
+                  _src[0].f64[_i];
+               const float64_t src1 =
+                  _src[1].f64[_i];
+
+            float64_t dst = fmaxf(src0, src1);
+
+            _dst_val.f64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -4122,45 +5476,65 @@ evaluate_fmin(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
-                  const float32_t src1 =
-                     _src[1].f32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float src0 =
+                  _mesa_half_to_float(_src[0].u16[_i]);
+               const float src1 =
+                  _mesa_half_to_float(_src[1].u16[_i]);
 
-               float32_t dst = fminf(src0, src1);
+            float16_t dst = fminf(src0, src1);
 
-               _dst_val.f32[_i] = dst;
-         }
+            _dst_val.u16[_i] = _mesa_float_to_half(dst);
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float64_t src0 =
-                     _src[0].f64[_i];
-                  const float64_t src1 =
-                     _src[1].f64[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float32_t src0 =
+                  _src[0].f32[_i];
+               const float32_t src1 =
+                  _src[1].f32[_i];
 
-               float64_t dst = fminf(src0, src1);
+            float32_t dst = fminf(src0, src1);
 
-               _dst_val.f64[_i] = dst;
-         }
+            _dst_val.f32[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float64_t src0 =
+                  _src[0].f64[_i];
+               const float64_t src1 =
+                  _src[1].f64[_i];
+
+            float64_t dst = fminf(src0, src1);
+
+            _dst_val.f64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -4170,45 +5544,65 @@ evaluate_fmod(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
-                  const float32_t src1 =
-                     _src[1].f32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float src0 =
+                  _mesa_half_to_float(_src[0].u16[_i]);
+               const float src1 =
+                  _mesa_half_to_float(_src[1].u16[_i]);
 
-               float32_t dst = src0 - src1 * floorf(src0 / src1);
+            float16_t dst = src0 - src1 * floorf(src0 / src1);
 
-               _dst_val.f32[_i] = dst;
-         }
+            _dst_val.u16[_i] = _mesa_float_to_half(dst);
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float64_t src0 =
-                     _src[0].f64[_i];
-                  const float64_t src1 =
-                     _src[1].f64[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float32_t src0 =
+                  _src[0].f32[_i];
+               const float32_t src1 =
+                  _src[1].f32[_i];
 
-               float64_t dst = src0 - src1 * floorf(src0 / src1);
+            float32_t dst = src0 - src1 * floorf(src0 / src1);
 
-               _dst_val.f64[_i] = dst;
-         }
+            _dst_val.f32[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float64_t src0 =
+                  _src[0].f64[_i];
+               const float64_t src1 =
+                  _src[1].f64[_i];
+
+            float64_t dst = src0 - src1 * floorf(src0 / src1);
+
+            _dst_val.f64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -4218,41 +5612,59 @@ evaluate_fmov(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float src0 =
+                  _mesa_half_to_float(_src[0].u16[_i]);
 
-               float32_t dst = src0;
+            float16_t dst = src0;
 
-               _dst_val.f32[_i] = dst;
-         }
+            _dst_val.u16[_i] = _mesa_float_to_half(dst);
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float64_t src0 =
-                     _src[0].f64[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float32_t src0 =
+                  _src[0].f32[_i];
 
-               float64_t dst = src0;
+            float32_t dst = src0;
 
-               _dst_val.f64[_i] = dst;
-         }
+            _dst_val.f32[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float64_t src0 =
+                  _src[0].f64[_i];
+
+            float64_t dst = src0;
+
+            _dst_val.f64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -4262,45 +5674,65 @@ evaluate_fmul(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
-                  const float32_t src1 =
-                     _src[1].f32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float src0 =
+                  _mesa_half_to_float(_src[0].u16[_i]);
+               const float src1 =
+                  _mesa_half_to_float(_src[1].u16[_i]);
 
-               float32_t dst = src0 * src1;
+            float16_t dst = src0 * src1;
 
-               _dst_val.f32[_i] = dst;
-         }
+            _dst_val.u16[_i] = _mesa_float_to_half(dst);
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float64_t src0 =
-                     _src[0].f64[_i];
-                  const float64_t src1 =
-                     _src[1].f64[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float32_t src0 =
+                  _src[0].f32[_i];
+               const float32_t src1 =
+                  _src[1].f32[_i];
 
-               float64_t dst = src0 * src1;
+            float32_t dst = src0 * src1;
 
-               _dst_val.f64[_i] = dst;
-         }
+            _dst_val.f32[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float64_t src0 =
+                  _src[0].f64[_i];
+               const float64_t src1 =
+                  _src[1].f64[_i];
+
+            float64_t dst = src0 * src1;
+
+            _dst_val.f64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -4310,45 +5742,65 @@ evaluate_fne(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
-                  const float32_t src1 =
-                     _src[1].f32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float src0 =
+                  _mesa_half_to_float(_src[0].u16[_i]);
+               const float src1 =
+                  _mesa_half_to_float(_src[1].u16[_i]);
 
-               bool32_t dst = src0 != src1;
+            bool32_t dst = src0 != src1;
 
-               _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
-         }
+            _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float64_t src0 =
-                     _src[0].f64[_i];
-                  const float64_t src1 =
-                     _src[1].f64[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float32_t src0 =
+                  _src[0].f32[_i];
+               const float32_t src1 =
+                  _src[1].f32[_i];
 
-               bool32_t dst = src0 != src1;
+            bool32_t dst = src0 != src1;
 
-               _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
-         }
+            _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float64_t src0 =
+                  _src[0].f64[_i];
+               const float64_t src1 =
+                  _src[1].f64[_i];
+
+            bool32_t dst = src0 != src1;
+
+            _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -4358,41 +5810,59 @@ evaluate_fneg(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float src0 =
+                  _mesa_half_to_float(_src[0].u16[_i]);
 
-               float32_t dst = -src0;
+            float16_t dst = -src0;
 
-               _dst_val.f32[_i] = dst;
-         }
+            _dst_val.u16[_i] = _mesa_float_to_half(dst);
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float64_t src0 =
-                     _src[0].f64[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float32_t src0 =
+                  _src[0].f32[_i];
 
-               float64_t dst = -src0;
+            float32_t dst = -src0;
 
-               _dst_val.f64[_i] = dst;
-         }
+            _dst_val.f32[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float64_t src0 =
+                  _src[0].f64[_i];
+
+            float64_t dst = -src0;
+
+            _dst_val.f64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -4402,35 +5872,50 @@ evaluate_fnoise1_1(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-            
-         struct float32_vec dst;
+         
+      struct float16_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = 0.0f;
+         dst.x = dst.y = dst.z = dst.w = 0.0f;
 
-               _dst_val.f32[0] = dst.x;
+            _dst_val.u16[0] = _mesa_float_to_half(dst.x);
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-            
-         struct float64_vec dst;
+         
+      struct float32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = 0.0f;
+         dst.x = dst.y = dst.z = dst.w = 0.0f;
 
-               _dst_val.f64[0] = dst.x;
+            _dst_val.f32[0] = dst.x;
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+         
+      struct float64_vec dst;
+
+         dst.x = dst.y = dst.z = dst.w = 0.0f;
+
+            _dst_val.f64[0] = dst.x;
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -4440,35 +5925,50 @@ evaluate_fnoise1_2(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-            
-         struct float32_vec dst;
+         
+      struct float16_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = 0.0f;
+         dst.x = dst.y = dst.z = dst.w = 0.0f;
 
-               _dst_val.f32[0] = dst.x;
+            _dst_val.u16[0] = _mesa_float_to_half(dst.x);
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-            
-         struct float64_vec dst;
+         
+      struct float32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = 0.0f;
+         dst.x = dst.y = dst.z = dst.w = 0.0f;
 
-               _dst_val.f64[0] = dst.x;
+            _dst_val.f32[0] = dst.x;
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+         
+      struct float64_vec dst;
+
+         dst.x = dst.y = dst.z = dst.w = 0.0f;
+
+            _dst_val.f64[0] = dst.x;
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -4478,35 +5978,50 @@ evaluate_fnoise1_3(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-            
-         struct float32_vec dst;
+         
+      struct float16_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = 0.0f;
+         dst.x = dst.y = dst.z = dst.w = 0.0f;
 
-               _dst_val.f32[0] = dst.x;
+            _dst_val.u16[0] = _mesa_float_to_half(dst.x);
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-            
-         struct float64_vec dst;
+         
+      struct float32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = 0.0f;
+         dst.x = dst.y = dst.z = dst.w = 0.0f;
 
-               _dst_val.f64[0] = dst.x;
+            _dst_val.f32[0] = dst.x;
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+         
+      struct float64_vec dst;
+
+         dst.x = dst.y = dst.z = dst.w = 0.0f;
+
+            _dst_val.f64[0] = dst.x;
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -4516,35 +6031,50 @@ evaluate_fnoise1_4(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-            
-         struct float32_vec dst;
+         
+      struct float16_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = 0.0f;
+         dst.x = dst.y = dst.z = dst.w = 0.0f;
 
-               _dst_val.f32[0] = dst.x;
+            _dst_val.u16[0] = _mesa_float_to_half(dst.x);
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-            
-         struct float64_vec dst;
+         
+      struct float32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = 0.0f;
+         dst.x = dst.y = dst.z = dst.w = 0.0f;
 
-               _dst_val.f64[0] = dst.x;
+            _dst_val.f32[0] = dst.x;
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+         
+      struct float64_vec dst;
+
+         dst.x = dst.y = dst.z = dst.w = 0.0f;
+
+            _dst_val.f64[0] = dst.x;
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -4554,37 +6084,53 @@ evaluate_fnoise2_1(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-            
-         struct float32_vec dst;
+         
+      struct float16_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = 0.0f;
+         dst.x = dst.y = dst.z = dst.w = 0.0f;
 
-               _dst_val.f32[0] = dst.x;
-               _dst_val.f32[1] = dst.y;
+            _dst_val.u16[0] = _mesa_float_to_half(dst.x);
+            _dst_val.u16[1] = _mesa_float_to_half(dst.y);
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-            
-         struct float64_vec dst;
+         
+      struct float32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = 0.0f;
+         dst.x = dst.y = dst.z = dst.w = 0.0f;
 
-               _dst_val.f64[0] = dst.x;
-               _dst_val.f64[1] = dst.y;
+            _dst_val.f32[0] = dst.x;
+            _dst_val.f32[1] = dst.y;
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+         
+      struct float64_vec dst;
+
+         dst.x = dst.y = dst.z = dst.w = 0.0f;
+
+            _dst_val.f64[0] = dst.x;
+            _dst_val.f64[1] = dst.y;
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -4594,37 +6140,53 @@ evaluate_fnoise2_2(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-            
-         struct float32_vec dst;
+         
+      struct float16_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = 0.0f;
+         dst.x = dst.y = dst.z = dst.w = 0.0f;
 
-               _dst_val.f32[0] = dst.x;
-               _dst_val.f32[1] = dst.y;
+            _dst_val.u16[0] = _mesa_float_to_half(dst.x);
+            _dst_val.u16[1] = _mesa_float_to_half(dst.y);
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-            
-         struct float64_vec dst;
+         
+      struct float32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = 0.0f;
+         dst.x = dst.y = dst.z = dst.w = 0.0f;
 
-               _dst_val.f64[0] = dst.x;
-               _dst_val.f64[1] = dst.y;
+            _dst_val.f32[0] = dst.x;
+            _dst_val.f32[1] = dst.y;
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+         
+      struct float64_vec dst;
+
+         dst.x = dst.y = dst.z = dst.w = 0.0f;
+
+            _dst_val.f64[0] = dst.x;
+            _dst_val.f64[1] = dst.y;
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -4634,37 +6196,53 @@ evaluate_fnoise2_3(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-            
-         struct float32_vec dst;
+         
+      struct float16_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = 0.0f;
+         dst.x = dst.y = dst.z = dst.w = 0.0f;
 
-               _dst_val.f32[0] = dst.x;
-               _dst_val.f32[1] = dst.y;
+            _dst_val.u16[0] = _mesa_float_to_half(dst.x);
+            _dst_val.u16[1] = _mesa_float_to_half(dst.y);
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-            
-         struct float64_vec dst;
+         
+      struct float32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = 0.0f;
+         dst.x = dst.y = dst.z = dst.w = 0.0f;
 
-               _dst_val.f64[0] = dst.x;
-               _dst_val.f64[1] = dst.y;
+            _dst_val.f32[0] = dst.x;
+            _dst_val.f32[1] = dst.y;
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+         
+      struct float64_vec dst;
+
+         dst.x = dst.y = dst.z = dst.w = 0.0f;
+
+            _dst_val.f64[0] = dst.x;
+            _dst_val.f64[1] = dst.y;
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -4674,37 +6252,53 @@ evaluate_fnoise2_4(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-            
-         struct float32_vec dst;
+         
+      struct float16_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = 0.0f;
+         dst.x = dst.y = dst.z = dst.w = 0.0f;
 
-               _dst_val.f32[0] = dst.x;
-               _dst_val.f32[1] = dst.y;
+            _dst_val.u16[0] = _mesa_float_to_half(dst.x);
+            _dst_val.u16[1] = _mesa_float_to_half(dst.y);
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-            
-         struct float64_vec dst;
+         
+      struct float32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = 0.0f;
+         dst.x = dst.y = dst.z = dst.w = 0.0f;
 
-               _dst_val.f64[0] = dst.x;
-               _dst_val.f64[1] = dst.y;
+            _dst_val.f32[0] = dst.x;
+            _dst_val.f32[1] = dst.y;
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+         
+      struct float64_vec dst;
+
+         dst.x = dst.y = dst.z = dst.w = 0.0f;
+
+            _dst_val.f64[0] = dst.x;
+            _dst_val.f64[1] = dst.y;
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -4714,39 +6308,56 @@ evaluate_fnoise3_1(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-            
-         struct float32_vec dst;
+         
+      struct float16_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = 0.0f;
+         dst.x = dst.y = dst.z = dst.w = 0.0f;
 
-               _dst_val.f32[0] = dst.x;
-               _dst_val.f32[1] = dst.y;
-               _dst_val.f32[2] = dst.z;
+            _dst_val.u16[0] = _mesa_float_to_half(dst.x);
+            _dst_val.u16[1] = _mesa_float_to_half(dst.y);
+            _dst_val.u16[2] = _mesa_float_to_half(dst.z);
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-            
-         struct float64_vec dst;
+         
+      struct float32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = 0.0f;
+         dst.x = dst.y = dst.z = dst.w = 0.0f;
 
-               _dst_val.f64[0] = dst.x;
-               _dst_val.f64[1] = dst.y;
-               _dst_val.f64[2] = dst.z;
+            _dst_val.f32[0] = dst.x;
+            _dst_val.f32[1] = dst.y;
+            _dst_val.f32[2] = dst.z;
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+         
+      struct float64_vec dst;
+
+         dst.x = dst.y = dst.z = dst.w = 0.0f;
+
+            _dst_val.f64[0] = dst.x;
+            _dst_val.f64[1] = dst.y;
+            _dst_val.f64[2] = dst.z;
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -4756,39 +6367,56 @@ evaluate_fnoise3_2(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-            
-         struct float32_vec dst;
+         
+      struct float16_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = 0.0f;
+         dst.x = dst.y = dst.z = dst.w = 0.0f;
 
-               _dst_val.f32[0] = dst.x;
-               _dst_val.f32[1] = dst.y;
-               _dst_val.f32[2] = dst.z;
+            _dst_val.u16[0] = _mesa_float_to_half(dst.x);
+            _dst_val.u16[1] = _mesa_float_to_half(dst.y);
+            _dst_val.u16[2] = _mesa_float_to_half(dst.z);
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-            
-         struct float64_vec dst;
+         
+      struct float32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = 0.0f;
+         dst.x = dst.y = dst.z = dst.w = 0.0f;
 
-               _dst_val.f64[0] = dst.x;
-               _dst_val.f64[1] = dst.y;
-               _dst_val.f64[2] = dst.z;
+            _dst_val.f32[0] = dst.x;
+            _dst_val.f32[1] = dst.y;
+            _dst_val.f32[2] = dst.z;
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+         
+      struct float64_vec dst;
+
+         dst.x = dst.y = dst.z = dst.w = 0.0f;
+
+            _dst_val.f64[0] = dst.x;
+            _dst_val.f64[1] = dst.y;
+            _dst_val.f64[2] = dst.z;
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -4798,39 +6426,56 @@ evaluate_fnoise3_3(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-            
-         struct float32_vec dst;
+         
+      struct float16_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = 0.0f;
+         dst.x = dst.y = dst.z = dst.w = 0.0f;
 
-               _dst_val.f32[0] = dst.x;
-               _dst_val.f32[1] = dst.y;
-               _dst_val.f32[2] = dst.z;
+            _dst_val.u16[0] = _mesa_float_to_half(dst.x);
+            _dst_val.u16[1] = _mesa_float_to_half(dst.y);
+            _dst_val.u16[2] = _mesa_float_to_half(dst.z);
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-            
-         struct float64_vec dst;
+         
+      struct float32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = 0.0f;
+         dst.x = dst.y = dst.z = dst.w = 0.0f;
 
-               _dst_val.f64[0] = dst.x;
-               _dst_val.f64[1] = dst.y;
-               _dst_val.f64[2] = dst.z;
+            _dst_val.f32[0] = dst.x;
+            _dst_val.f32[1] = dst.y;
+            _dst_val.f32[2] = dst.z;
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+         
+      struct float64_vec dst;
+
+         dst.x = dst.y = dst.z = dst.w = 0.0f;
+
+            _dst_val.f64[0] = dst.x;
+            _dst_val.f64[1] = dst.y;
+            _dst_val.f64[2] = dst.z;
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -4840,39 +6485,56 @@ evaluate_fnoise3_4(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-            
-         struct float32_vec dst;
+         
+      struct float16_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = 0.0f;
+         dst.x = dst.y = dst.z = dst.w = 0.0f;
 
-               _dst_val.f32[0] = dst.x;
-               _dst_val.f32[1] = dst.y;
-               _dst_val.f32[2] = dst.z;
+            _dst_val.u16[0] = _mesa_float_to_half(dst.x);
+            _dst_val.u16[1] = _mesa_float_to_half(dst.y);
+            _dst_val.u16[2] = _mesa_float_to_half(dst.z);
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-            
-         struct float64_vec dst;
+         
+      struct float32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = 0.0f;
+         dst.x = dst.y = dst.z = dst.w = 0.0f;
 
-               _dst_val.f64[0] = dst.x;
-               _dst_val.f64[1] = dst.y;
-               _dst_val.f64[2] = dst.z;
+            _dst_val.f32[0] = dst.x;
+            _dst_val.f32[1] = dst.y;
+            _dst_val.f32[2] = dst.z;
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+         
+      struct float64_vec dst;
+
+         dst.x = dst.y = dst.z = dst.w = 0.0f;
+
+            _dst_val.f64[0] = dst.x;
+            _dst_val.f64[1] = dst.y;
+            _dst_val.f64[2] = dst.z;
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -4882,41 +6544,59 @@ evaluate_fnoise4_1(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-            
-         struct float32_vec dst;
+         
+      struct float16_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = 0.0f;
+         dst.x = dst.y = dst.z = dst.w = 0.0f;
 
-               _dst_val.f32[0] = dst.x;
-               _dst_val.f32[1] = dst.y;
-               _dst_val.f32[2] = dst.z;
-               _dst_val.f32[3] = dst.w;
+            _dst_val.u16[0] = _mesa_float_to_half(dst.x);
+            _dst_val.u16[1] = _mesa_float_to_half(dst.y);
+            _dst_val.u16[2] = _mesa_float_to_half(dst.z);
+            _dst_val.u16[3] = _mesa_float_to_half(dst.w);
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-            
-         struct float64_vec dst;
+         
+      struct float32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = 0.0f;
+         dst.x = dst.y = dst.z = dst.w = 0.0f;
 
-               _dst_val.f64[0] = dst.x;
-               _dst_val.f64[1] = dst.y;
-               _dst_val.f64[2] = dst.z;
-               _dst_val.f64[3] = dst.w;
+            _dst_val.f32[0] = dst.x;
+            _dst_val.f32[1] = dst.y;
+            _dst_val.f32[2] = dst.z;
+            _dst_val.f32[3] = dst.w;
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+         
+      struct float64_vec dst;
+
+         dst.x = dst.y = dst.z = dst.w = 0.0f;
+
+            _dst_val.f64[0] = dst.x;
+            _dst_val.f64[1] = dst.y;
+            _dst_val.f64[2] = dst.z;
+            _dst_val.f64[3] = dst.w;
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -4926,41 +6606,59 @@ evaluate_fnoise4_2(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-            
-         struct float32_vec dst;
+         
+      struct float16_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = 0.0f;
+         dst.x = dst.y = dst.z = dst.w = 0.0f;
 
-               _dst_val.f32[0] = dst.x;
-               _dst_val.f32[1] = dst.y;
-               _dst_val.f32[2] = dst.z;
-               _dst_val.f32[3] = dst.w;
+            _dst_val.u16[0] = _mesa_float_to_half(dst.x);
+            _dst_val.u16[1] = _mesa_float_to_half(dst.y);
+            _dst_val.u16[2] = _mesa_float_to_half(dst.z);
+            _dst_val.u16[3] = _mesa_float_to_half(dst.w);
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-            
-         struct float64_vec dst;
+         
+      struct float32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = 0.0f;
+         dst.x = dst.y = dst.z = dst.w = 0.0f;
 
-               _dst_val.f64[0] = dst.x;
-               _dst_val.f64[1] = dst.y;
-               _dst_val.f64[2] = dst.z;
-               _dst_val.f64[3] = dst.w;
+            _dst_val.f32[0] = dst.x;
+            _dst_val.f32[1] = dst.y;
+            _dst_val.f32[2] = dst.z;
+            _dst_val.f32[3] = dst.w;
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+         
+      struct float64_vec dst;
+
+         dst.x = dst.y = dst.z = dst.w = 0.0f;
+
+            _dst_val.f64[0] = dst.x;
+            _dst_val.f64[1] = dst.y;
+            _dst_val.f64[2] = dst.z;
+            _dst_val.f64[3] = dst.w;
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -4970,41 +6668,59 @@ evaluate_fnoise4_3(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-            
-         struct float32_vec dst;
+         
+      struct float16_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = 0.0f;
+         dst.x = dst.y = dst.z = dst.w = 0.0f;
 
-               _dst_val.f32[0] = dst.x;
-               _dst_val.f32[1] = dst.y;
-               _dst_val.f32[2] = dst.z;
-               _dst_val.f32[3] = dst.w;
+            _dst_val.u16[0] = _mesa_float_to_half(dst.x);
+            _dst_val.u16[1] = _mesa_float_to_half(dst.y);
+            _dst_val.u16[2] = _mesa_float_to_half(dst.z);
+            _dst_val.u16[3] = _mesa_float_to_half(dst.w);
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-            
-         struct float64_vec dst;
+         
+      struct float32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = 0.0f;
+         dst.x = dst.y = dst.z = dst.w = 0.0f;
 
-               _dst_val.f64[0] = dst.x;
-               _dst_val.f64[1] = dst.y;
-               _dst_val.f64[2] = dst.z;
-               _dst_val.f64[3] = dst.w;
+            _dst_val.f32[0] = dst.x;
+            _dst_val.f32[1] = dst.y;
+            _dst_val.f32[2] = dst.z;
+            _dst_val.f32[3] = dst.w;
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+         
+      struct float64_vec dst;
+
+         dst.x = dst.y = dst.z = dst.w = 0.0f;
+
+            _dst_val.f64[0] = dst.x;
+            _dst_val.f64[1] = dst.y;
+            _dst_val.f64[2] = dst.z;
+            _dst_val.f64[3] = dst.w;
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -5014,41 +6730,59 @@ evaluate_fnoise4_4(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-            
-         struct float32_vec dst;
+         
+      struct float16_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = 0.0f;
+         dst.x = dst.y = dst.z = dst.w = 0.0f;
 
-               _dst_val.f32[0] = dst.x;
-               _dst_val.f32[1] = dst.y;
-               _dst_val.f32[2] = dst.z;
-               _dst_val.f32[3] = dst.w;
+            _dst_val.u16[0] = _mesa_float_to_half(dst.x);
+            _dst_val.u16[1] = _mesa_float_to_half(dst.y);
+            _dst_val.u16[2] = _mesa_float_to_half(dst.z);
+            _dst_val.u16[3] = _mesa_float_to_half(dst.w);
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-            
-         struct float64_vec dst;
+         
+      struct float32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = 0.0f;
+         dst.x = dst.y = dst.z = dst.w = 0.0f;
 
-               _dst_val.f64[0] = dst.x;
-               _dst_val.f64[1] = dst.y;
-               _dst_val.f64[2] = dst.z;
-               _dst_val.f64[3] = dst.w;
+            _dst_val.f32[0] = dst.x;
+            _dst_val.f32[1] = dst.y;
+            _dst_val.f32[2] = dst.z;
+            _dst_val.f32[3] = dst.w;
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+         
+      struct float64_vec dst;
+
+         dst.x = dst.y = dst.z = dst.w = 0.0f;
+
+            _dst_val.f64[0] = dst.x;
+            _dst_val.f64[1] = dst.y;
+            _dst_val.f64[2] = dst.z;
+            _dst_val.f64[3] = dst.w;
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -5058,41 +6792,59 @@ evaluate_fnot(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float src0 =
+                  _mesa_half_to_float(_src[0].u16[_i]);
 
-               float32_t dst = bit_size == 64 ? ((src0 == 0.0) ? 1.0 : 0.0f) : ((src0 == 0.0f) ? 1.0f : 0.0f);
+            float16_t dst = bit_size == 64 ? ((src0 == 0.0) ? 1.0 : 0.0f) : ((src0 == 0.0f) ? 1.0f : 0.0f);
 
-               _dst_val.f32[_i] = dst;
-         }
+            _dst_val.u16[_i] = _mesa_float_to_half(dst);
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float64_t src0 =
-                     _src[0].f64[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float32_t src0 =
+                  _src[0].f32[_i];
 
-               float64_t dst = bit_size == 64 ? ((src0 == 0.0) ? 1.0 : 0.0f) : ((src0 == 0.0f) ? 1.0f : 0.0f);
+            float32_t dst = bit_size == 64 ? ((src0 == 0.0) ? 1.0 : 0.0f) : ((src0 == 0.0f) ? 1.0f : 0.0f);
 
-               _dst_val.f64[_i] = dst;
-         }
+            _dst_val.f32[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float64_t src0 =
+                  _src[0].f64[_i];
+
+            float64_t dst = bit_size == 64 ? ((src0 == 0.0) ? 1.0 : 0.0f) : ((src0 == 0.0f) ? 1.0f : 0.0f);
+
+            _dst_val.f64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -5102,45 +6854,21 @@ evaluate_for(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
       
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
-                  const float32_t src1 =
-                     _src[1].f32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float32_t src0 =
+                  _src[0].f32[_i];
+               const float32_t src1 =
+                  _src[1].f32[_i];
 
-               float32_t dst = ((src0 != 0.0f) || (src1 != 0.0f)) ? 1.0f : 0.0f;
+            float32_t dst = ((src0 != 0.0f) || (src1 != 0.0f)) ? 1.0f : 0.0f;
 
-               _dst_val.f32[_i] = dst;
-         }
+            _dst_val.f32[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
-
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
-                  const float32_t src1 =
-                     _src[1].f32[_i];
-
-               float32_t dst = ((src0 != 0.0f) || (src1 != 0.0f)) ? 1.0f : 0.0f;
-
-               _dst_val.f32[_i] = dst;
-         }
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
 
    return _dst_val;
 }
@@ -5150,45 +6878,65 @@ evaluate_fpow(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
-                  const float32_t src1 =
-                     _src[1].f32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float src0 =
+                  _mesa_half_to_float(_src[0].u16[_i]);
+               const float src1 =
+                  _mesa_half_to_float(_src[1].u16[_i]);
 
-               float32_t dst = bit_size == 64 ? powf(src0, src1) : pow(src0, src1);
+            float16_t dst = bit_size == 64 ? powf(src0, src1) : pow(src0, src1);
 
-               _dst_val.f32[_i] = dst;
-         }
+            _dst_val.u16[_i] = _mesa_float_to_half(dst);
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float64_t src0 =
-                     _src[0].f64[_i];
-                  const float64_t src1 =
-                     _src[1].f64[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float32_t src0 =
+                  _src[0].f32[_i];
+               const float32_t src1 =
+                  _src[1].f32[_i];
 
-               float64_t dst = bit_size == 64 ? powf(src0, src1) : pow(src0, src1);
+            float32_t dst = bit_size == 64 ? powf(src0, src1) : pow(src0, src1);
 
-               _dst_val.f64[_i] = dst;
-         }
+            _dst_val.f32[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float64_t src0 =
+                  _src[0].f64[_i];
+               const float64_t src1 =
+                  _src[1].f64[_i];
+
+            float64_t dst = bit_size == 64 ? powf(src0, src1) : pow(src0, src1);
+
+            _dst_val.f64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -5198,41 +6946,59 @@ evaluate_fquantize2f16(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float src0 =
+                  _mesa_half_to_float(_src[0].u16[_i]);
 
-               float32_t dst = (fabs(src0) < ldexpf(1.0, -14)) ? copysignf(0.0f, src0) : _mesa_half_to_float(_mesa_float_to_half(src0));
+            float16_t dst = (fabs(src0) < ldexpf(1.0, -14)) ? copysignf(0.0f, src0) : _mesa_half_to_float(_mesa_float_to_half(src0));
 
-               _dst_val.f32[_i] = dst;
-         }
+            _dst_val.u16[_i] = _mesa_float_to_half(dst);
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float64_t src0 =
-                     _src[0].f64[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float32_t src0 =
+                  _src[0].f32[_i];
 
-               float64_t dst = (fabs(src0) < ldexpf(1.0, -14)) ? copysignf(0.0f, src0) : _mesa_half_to_float(_mesa_float_to_half(src0));
+            float32_t dst = (fabs(src0) < ldexpf(1.0, -14)) ? copysignf(0.0f, src0) : _mesa_half_to_float(_mesa_float_to_half(src0));
 
-               _dst_val.f64[_i] = dst;
-         }
+            _dst_val.f32[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float64_t src0 =
+                  _src[0].f64[_i];
+
+            float64_t dst = (fabs(src0) < ldexpf(1.0, -14)) ? copysignf(0.0f, src0) : _mesa_half_to_float(_mesa_float_to_half(src0));
+
+            _dst_val.f64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -5242,41 +7008,59 @@ evaluate_frcp(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float src0 =
+                  _mesa_half_to_float(_src[0].u16[_i]);
 
-               float32_t dst = bit_size == 64 ? 1.0 / src0 : 1.0f / src0;
+            float16_t dst = bit_size == 64 ? 1.0 / src0 : 1.0f / src0;
 
-               _dst_val.f32[_i] = dst;
-         }
+            _dst_val.u16[_i] = _mesa_float_to_half(dst);
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float64_t src0 =
-                     _src[0].f64[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float32_t src0 =
+                  _src[0].f32[_i];
 
-               float64_t dst = bit_size == 64 ? 1.0 / src0 : 1.0f / src0;
+            float32_t dst = bit_size == 64 ? 1.0 / src0 : 1.0f / src0;
 
-               _dst_val.f64[_i] = dst;
-         }
+            _dst_val.f32[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float64_t src0 =
+                  _src[0].f64[_i];
+
+            float64_t dst = bit_size == 64 ? 1.0 / src0 : 1.0f / src0;
+
+            _dst_val.f64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -5286,45 +7070,65 @@ evaluate_frem(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
-                  const float32_t src1 =
-                     _src[1].f32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float src0 =
+                  _mesa_half_to_float(_src[0].u16[_i]);
+               const float src1 =
+                  _mesa_half_to_float(_src[1].u16[_i]);
 
-               float32_t dst = src0 - src1 * truncf(src0 / src1);
+            float16_t dst = src0 - src1 * truncf(src0 / src1);
 
-               _dst_val.f32[_i] = dst;
-         }
+            _dst_val.u16[_i] = _mesa_float_to_half(dst);
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float64_t src0 =
-                     _src[0].f64[_i];
-                  const float64_t src1 =
-                     _src[1].f64[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float32_t src0 =
+                  _src[0].f32[_i];
+               const float32_t src1 =
+                  _src[1].f32[_i];
 
-               float64_t dst = src0 - src1 * truncf(src0 / src1);
+            float32_t dst = src0 - src1 * truncf(src0 / src1);
 
-               _dst_val.f64[_i] = dst;
-         }
+            _dst_val.f32[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float64_t src0 =
+                  _src[0].f64[_i];
+               const float64_t src1 =
+                  _src[1].f64[_i];
+
+            float64_t dst = src0 - src1 * truncf(src0 / src1);
+
+            _dst_val.f64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -5334,41 +7138,59 @@ evaluate_fround_even(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float src0 =
+                  _mesa_half_to_float(_src[0].u16[_i]);
 
-               float32_t dst = bit_size == 64 ? _mesa_roundeven(src0) : _mesa_roundevenf(src0);
+            float16_t dst = bit_size == 64 ? _mesa_roundeven(src0) : _mesa_roundevenf(src0);
 
-               _dst_val.f32[_i] = dst;
-         }
+            _dst_val.u16[_i] = _mesa_float_to_half(dst);
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float64_t src0 =
-                     _src[0].f64[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float32_t src0 =
+                  _src[0].f32[_i];
 
-               float64_t dst = bit_size == 64 ? _mesa_roundeven(src0) : _mesa_roundevenf(src0);
+            float32_t dst = bit_size == 64 ? _mesa_roundeven(src0) : _mesa_roundevenf(src0);
 
-               _dst_val.f64[_i] = dst;
-         }
+            _dst_val.f32[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float64_t src0 =
+                  _src[0].f64[_i];
+
+            float64_t dst = bit_size == 64 ? _mesa_roundeven(src0) : _mesa_roundevenf(src0);
+
+            _dst_val.f64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -5378,41 +7200,59 @@ evaluate_frsq(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float src0 =
+                  _mesa_half_to_float(_src[0].u16[_i]);
 
-               float32_t dst = bit_size == 64 ? 1.0 / sqrt(src0) : 1.0f / sqrtf(src0);
+            float16_t dst = bit_size == 64 ? 1.0 / sqrt(src0) : 1.0f / sqrtf(src0);
 
-               _dst_val.f32[_i] = dst;
-         }
+            _dst_val.u16[_i] = _mesa_float_to_half(dst);
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float64_t src0 =
-                     _src[0].f64[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float32_t src0 =
+                  _src[0].f32[_i];
 
-               float64_t dst = bit_size == 64 ? 1.0 / sqrt(src0) : 1.0f / sqrtf(src0);
+            float32_t dst = bit_size == 64 ? 1.0 / sqrt(src0) : 1.0f / sqrtf(src0);
 
-               _dst_val.f64[_i] = dst;
-         }
+            _dst_val.f32[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float64_t src0 =
+                  _src[0].f64[_i];
+
+            float64_t dst = bit_size == 64 ? 1.0 / sqrt(src0) : 1.0f / sqrtf(src0);
+
+            _dst_val.f64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -5422,41 +7262,59 @@ evaluate_fsat(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float src0 =
+                  _mesa_half_to_float(_src[0].u16[_i]);
 
-               float32_t dst = bit_size == 64 ? ((src0 > 1.0) ? 1.0 : ((src0 <= 0.0) ? 0.0 : src0)) : ((src0 > 1.0f) ? 1.0f : ((src0 <= 0.0f) ? 0.0f : src0));
+            float16_t dst = bit_size == 64 ? ((src0 > 1.0) ? 1.0 : ((src0 <= 0.0) ? 0.0 : src0)) : ((src0 > 1.0f) ? 1.0f : ((src0 <= 0.0f) ? 0.0f : src0));
 
-               _dst_val.f32[_i] = dst;
-         }
+            _dst_val.u16[_i] = _mesa_float_to_half(dst);
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float64_t src0 =
-                     _src[0].f64[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float32_t src0 =
+                  _src[0].f32[_i];
 
-               float64_t dst = bit_size == 64 ? ((src0 > 1.0) ? 1.0 : ((src0 <= 0.0) ? 0.0 : src0)) : ((src0 > 1.0f) ? 1.0f : ((src0 <= 0.0f) ? 0.0f : src0));
+            float32_t dst = bit_size == 64 ? ((src0 > 1.0) ? 1.0 : ((src0 <= 0.0) ? 0.0 : src0)) : ((src0 > 1.0f) ? 1.0f : ((src0 <= 0.0f) ? 0.0f : src0));
 
-               _dst_val.f64[_i] = dst;
-         }
+            _dst_val.f32[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float64_t src0 =
+                  _src[0].f64[_i];
+
+            float64_t dst = bit_size == 64 ? ((src0 > 1.0) ? 1.0 : ((src0 <= 0.0) ? 0.0 : src0)) : ((src0 > 1.0f) ? 1.0f : ((src0 <= 0.0f) ? 0.0f : src0));
+
+            _dst_val.f64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -5466,41 +7324,59 @@ evaluate_fsign(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float src0 =
+                  _mesa_half_to_float(_src[0].u16[_i]);
 
-               float32_t dst = bit_size == 64 ? ((src0 == 0.0) ? 0.0 : ((src0 > 0.0) ? 1.0 : -1.0)) : ((src0 == 0.0f) ? 0.0f : ((src0 > 0.0f) ? 1.0f : -1.0f));
+            float16_t dst = bit_size == 64 ? ((src0 == 0.0) ? 0.0 : ((src0 > 0.0) ? 1.0 : -1.0)) : ((src0 == 0.0f) ? 0.0f : ((src0 > 0.0f) ? 1.0f : -1.0f));
 
-               _dst_val.f32[_i] = dst;
-         }
+            _dst_val.u16[_i] = _mesa_float_to_half(dst);
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float64_t src0 =
-                     _src[0].f64[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float32_t src0 =
+                  _src[0].f32[_i];
 
-               float64_t dst = bit_size == 64 ? ((src0 == 0.0) ? 0.0 : ((src0 > 0.0) ? 1.0 : -1.0)) : ((src0 == 0.0f) ? 0.0f : ((src0 > 0.0f) ? 1.0f : -1.0f));
+            float32_t dst = bit_size == 64 ? ((src0 == 0.0) ? 0.0 : ((src0 > 0.0) ? 1.0 : -1.0)) : ((src0 == 0.0f) ? 0.0f : ((src0 > 0.0f) ? 1.0f : -1.0f));
 
-               _dst_val.f64[_i] = dst;
-         }
+            _dst_val.f32[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float64_t src0 =
+                  _src[0].f64[_i];
+
+            float64_t dst = bit_size == 64 ? ((src0 == 0.0) ? 0.0 : ((src0 > 0.0) ? 1.0 : -1.0)) : ((src0 == 0.0f) ? 0.0f : ((src0 > 0.0f) ? 1.0f : -1.0f));
+
+            _dst_val.f64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -5510,41 +7386,59 @@ evaluate_fsin(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float src0 =
+                  _mesa_half_to_float(_src[0].u16[_i]);
 
-               float32_t dst = bit_size == 64 ? sin(src0) : sinf(src0);
+            float16_t dst = bit_size == 64 ? sin(src0) : sinf(src0);
 
-               _dst_val.f32[_i] = dst;
-         }
+            _dst_val.u16[_i] = _mesa_float_to_half(dst);
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float64_t src0 =
-                     _src[0].f64[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float32_t src0 =
+                  _src[0].f32[_i];
 
-               float64_t dst = bit_size == 64 ? sin(src0) : sinf(src0);
+            float32_t dst = bit_size == 64 ? sin(src0) : sinf(src0);
 
-               _dst_val.f64[_i] = dst;
-         }
+            _dst_val.f32[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float64_t src0 =
+                  _src[0].f64[_i];
+
+            float64_t dst = bit_size == 64 ? sin(src0) : sinf(src0);
+
+            _dst_val.f64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -5554,41 +7448,59 @@ evaluate_fsqrt(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float src0 =
+                  _mesa_half_to_float(_src[0].u16[_i]);
 
-               float32_t dst = bit_size == 64 ? sqrt(src0) : sqrtf(src0);
+            float16_t dst = bit_size == 64 ? sqrt(src0) : sqrtf(src0);
 
-               _dst_val.f32[_i] = dst;
-         }
+            _dst_val.u16[_i] = _mesa_float_to_half(dst);
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float64_t src0 =
-                     _src[0].f64[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float32_t src0 =
+                  _src[0].f32[_i];
 
-               float64_t dst = bit_size == 64 ? sqrt(src0) : sqrtf(src0);
+            float32_t dst = bit_size == 64 ? sqrt(src0) : sqrtf(src0);
 
-               _dst_val.f64[_i] = dst;
-         }
+            _dst_val.f32[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float64_t src0 =
+                  _src[0].f64[_i];
+
+            float64_t dst = bit_size == 64 ? sqrt(src0) : sqrtf(src0);
+
+            _dst_val.f64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -5598,45 +7510,65 @@ evaluate_fsub(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
-                  const float32_t src1 =
-                     _src[1].f32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float src0 =
+                  _mesa_half_to_float(_src[0].u16[_i]);
+               const float src1 =
+                  _mesa_half_to_float(_src[1].u16[_i]);
 
-               float32_t dst = src0 - src1;
+            float16_t dst = src0 - src1;
 
-               _dst_val.f32[_i] = dst;
-         }
+            _dst_val.u16[_i] = _mesa_float_to_half(dst);
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float64_t src0 =
-                     _src[0].f64[_i];
-                  const float64_t src1 =
-                     _src[1].f64[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float32_t src0 =
+                  _src[0].f32[_i];
+               const float32_t src1 =
+                  _src[1].f32[_i];
 
-               float64_t dst = src0 - src1;
+            float32_t dst = src0 - src1;
 
-               _dst_val.f64[_i] = dst;
-         }
+            _dst_val.f32[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float64_t src0 =
+                  _src[0].f64[_i];
+               const float64_t src1 =
+                  _src[1].f64[_i];
+
+            float64_t dst = src0 - src1;
+
+            _dst_val.f64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -5646,41 +7578,59 @@ evaluate_ftrunc(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float src0 =
+                  _mesa_half_to_float(_src[0].u16[_i]);
 
-               float32_t dst = bit_size == 64 ? trunc(src0) : truncf(src0);
+            float16_t dst = bit_size == 64 ? trunc(src0) : truncf(src0);
 
-               _dst_val.f32[_i] = dst;
-         }
+            _dst_val.u16[_i] = _mesa_float_to_half(dst);
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float64_t src0 =
-                     _src[0].f64[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float32_t src0 =
+                  _src[0].f32[_i];
 
-               float64_t dst = bit_size == 64 ? trunc(src0) : truncf(src0);
+            float32_t dst = bit_size == 64 ? trunc(src0) : truncf(src0);
 
-               _dst_val.f64[_i] = dst;
-         }
+            _dst_val.f32[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float64_t src0 =
+                  _src[0].f64[_i];
+
+            float64_t dst = bit_size == 64 ? trunc(src0) : truncf(src0);
+
+            _dst_val.f64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -5690,45 +7640,21 @@ evaluate_fxor(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
       
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
-                  const float32_t src1 =
-                     _src[1].f32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float32_t src0 =
+                  _src[0].f32[_i];
+               const float32_t src1 =
+                  _src[1].f32[_i];
 
-               float32_t dst = (src0 != 0.0f && src1 == 0.0f) || (src0 == 0.0f && src1 != 0.0f) ? 1.0f : 0.0f;
+            float32_t dst = (src0 != 0.0f && src1 == 0.0f) || (src0 == 0.0f && src1 != 0.0f) ? 1.0f : 0.0f;
 
-               _dst_val.f32[_i] = dst;
-         }
+            _dst_val.f32[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
-
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
-                  const float32_t src1 =
-                     _src[1].f32[_i];
-
-               float32_t dst = (src0 != 0.0f && src1 == 0.0f) || (src0 == 0.0f && src1 != 0.0f) ? 1.0f : 0.0f;
-
-               _dst_val.f32[_i] = dst;
-         }
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
 
    return _dst_val;
 }
@@ -5738,129 +7664,621 @@ evaluate_i2b(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 8: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int32_t src0 =
-                     _src[0].i32[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int8_t src0 =
+                  _src[0].i8[_i];
 
-               bool32_t dst = src0 != 0;
+            bool32_t dst = src0 != 0;
 
-               _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
-         }
+            _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 16: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int32_t src0 =
-                     _src[0].i32[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int16_t src0 =
+                  _src[0].i16[_i];
 
-               bool32_t dst = src0 != 0;
+            bool32_t dst = src0 != 0;
 
-               _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
-         }
+            _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 32: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int32_t src0 =
+                  _src[0].i32[_i];
 
-   return _dst_val;
-}
-static nir_const_value
-evaluate_i2d(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
-                 MAYBE_UNUSED nir_const_value *_src)
-{
-   nir_const_value _dst_val = { {0, } };
+            bool32_t dst = src0 != 0;
 
-   switch (bit_size) {
-   case 32: {
-      
+            _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
+      }
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int32_t src0 =
-                     _src[0].i32[_i];
+         break;
+      }
+      case 64: {
+         
+   
 
-               float64_t dst = src0;
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int64_t src0 =
+                  _src[0].i64[_i];
 
-               _dst_val.f64[_i] = dst;
-         }
+            bool32_t dst = src0 != 0;
 
-      break;
-   }
-   case 64: {
-      
+            _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
+      }
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int32_t src0 =
-                     _src[0].i32[_i];
+         break;
+      }
 
-               float64_t dst = src0;
-
-               _dst_val.f64[_i] = dst;
-         }
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
 static nir_const_value
-evaluate_i2f(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+evaluate_i2f16(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
                  MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 8: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int32_t src0 =
-                     _src[0].i32[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int8_t src0 =
+                  _src[0].i8[_i];
 
-               float32_t dst = src0;
+            float16_t dst = src0;
 
-               _dst_val.f32[_i] = dst;
-         }
+            _dst_val.u16[_i] = _mesa_float_to_half(dst);
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 16: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int32_t src0 =
-                     _src[0].i32[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int16_t src0 =
+                  _src[0].i16[_i];
 
-               float32_t dst = src0;
+            float16_t dst = src0;
 
-               _dst_val.f32[_i] = dst;
-         }
+            _dst_val.u16[_i] = _mesa_float_to_half(dst);
+      }
 
-      break;
-   }
+         break;
+      }
+      case 32: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int32_t src0 =
+                  _src[0].i32[_i];
+
+            float16_t dst = src0;
+
+            _dst_val.u16[_i] = _mesa_float_to_half(dst);
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int64_t src0 =
+                  _src[0].i64[_i];
+
+            float16_t dst = src0;
+
+            _dst_val.u16[_i] = _mesa_float_to_half(dst);
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
+
+   return _dst_val;
+}
+static nir_const_value
+evaluate_i2f32(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
+{
+   nir_const_value _dst_val = { {0, } };
+
+      switch (bit_size) {
+      case 8: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int8_t src0 =
+                  _src[0].i8[_i];
+
+            float32_t dst = src0;
+
+            _dst_val.f32[_i] = dst;
+      }
+
+         break;
+      }
+      case 16: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int16_t src0 =
+                  _src[0].i16[_i];
+
+            float32_t dst = src0;
+
+            _dst_val.f32[_i] = dst;
+      }
+
+         break;
+      }
+      case 32: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int32_t src0 =
+                  _src[0].i32[_i];
+
+            float32_t dst = src0;
+
+            _dst_val.f32[_i] = dst;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int64_t src0 =
+                  _src[0].i64[_i];
+
+            float32_t dst = src0;
+
+            _dst_val.f32[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
+
+   return _dst_val;
+}
+static nir_const_value
+evaluate_i2f64(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
+{
+   nir_const_value _dst_val = { {0, } };
+
+      switch (bit_size) {
+      case 8: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int8_t src0 =
+                  _src[0].i8[_i];
+
+            float64_t dst = src0;
+
+            _dst_val.f64[_i] = dst;
+      }
+
+         break;
+      }
+      case 16: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int16_t src0 =
+                  _src[0].i16[_i];
+
+            float64_t dst = src0;
+
+            _dst_val.f64[_i] = dst;
+      }
+
+         break;
+      }
+      case 32: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int32_t src0 =
+                  _src[0].i32[_i];
+
+            float64_t dst = src0;
+
+            _dst_val.f64[_i] = dst;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int64_t src0 =
+                  _src[0].i64[_i];
+
+            float64_t dst = src0;
+
+            _dst_val.f64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
+
+   return _dst_val;
+}
+static nir_const_value
+evaluate_i2i16(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
+{
+   nir_const_value _dst_val = { {0, } };
+
+      switch (bit_size) {
+      case 8: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int8_t src0 =
+                  _src[0].i8[_i];
+
+            int16_t dst = src0;
+
+            _dst_val.i16[_i] = dst;
+      }
+
+         break;
+      }
+      case 16: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int16_t src0 =
+                  _src[0].i16[_i];
+
+            int16_t dst = src0;
+
+            _dst_val.i16[_i] = dst;
+      }
+
+         break;
+      }
+      case 32: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int32_t src0 =
+                  _src[0].i32[_i];
+
+            int16_t dst = src0;
+
+            _dst_val.i16[_i] = dst;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int64_t src0 =
+                  _src[0].i64[_i];
+
+            int16_t dst = src0;
+
+            _dst_val.i16[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
+
+   return _dst_val;
+}
+static nir_const_value
+evaluate_i2i32(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
+{
+   nir_const_value _dst_val = { {0, } };
+
+      switch (bit_size) {
+      case 8: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int8_t src0 =
+                  _src[0].i8[_i];
+
+            int32_t dst = src0;
+
+            _dst_val.i32[_i] = dst;
+      }
+
+         break;
+      }
+      case 16: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int16_t src0 =
+                  _src[0].i16[_i];
+
+            int32_t dst = src0;
+
+            _dst_val.i32[_i] = dst;
+      }
+
+         break;
+      }
+      case 32: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int32_t src0 =
+                  _src[0].i32[_i];
+
+            int32_t dst = src0;
+
+            _dst_val.i32[_i] = dst;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int64_t src0 =
+                  _src[0].i64[_i];
+
+            int32_t dst = src0;
+
+            _dst_val.i32[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
+
+   return _dst_val;
+}
+static nir_const_value
+evaluate_i2i64(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
+{
+   nir_const_value _dst_val = { {0, } };
+
+      switch (bit_size) {
+      case 8: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int8_t src0 =
+                  _src[0].i8[_i];
+
+            int64_t dst = src0;
+
+            _dst_val.i64[_i] = dst;
+      }
+
+         break;
+      }
+      case 16: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int16_t src0 =
+                  _src[0].i16[_i];
+
+            int64_t dst = src0;
+
+            _dst_val.i64[_i] = dst;
+      }
+
+         break;
+      }
+      case 32: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int32_t src0 =
+                  _src[0].i32[_i];
+
+            int64_t dst = src0;
+
+            _dst_val.i64[_i] = dst;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int64_t src0 =
+                  _src[0].i64[_i];
+
+            int64_t dst = src0;
+
+            _dst_val.i64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
+
+   return _dst_val;
+}
+static nir_const_value
+evaluate_i2i8(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
+{
+   nir_const_value _dst_val = { {0, } };
+
+      switch (bit_size) {
+      case 8: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int8_t src0 =
+                  _src[0].i8[_i];
+
+            int8_t dst = src0;
+
+            _dst_val.i8[_i] = dst;
+      }
+
+         break;
+      }
+      case 16: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int16_t src0 =
+                  _src[0].i16[_i];
+
+            int8_t dst = src0;
+
+            _dst_val.i8[_i] = dst;
+      }
+
+         break;
+      }
+      case 32: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int32_t src0 =
+                  _src[0].i32[_i];
+
+            int8_t dst = src0;
+
+            _dst_val.i8[_i] = dst;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int64_t src0 =
+                  _src[0].i64[_i];
+
+            int8_t dst = src0;
+
+            _dst_val.i8[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -5870,41 +8288,75 @@ evaluate_iabs(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 8: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int32_t src0 =
-                     _src[0].i32[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int8_t src0 =
+                  _src[0].i8[_i];
 
-               int32_t dst = (src0 < 0) ? -src0 : src0;
+            int8_t dst = (src0 < 0) ? -src0 : src0;
 
-               _dst_val.i32[_i] = dst;
-         }
+            _dst_val.i8[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 16: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int64_t src0 =
-                     _src[0].i64[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int16_t src0 =
+                  _src[0].i16[_i];
 
-               int64_t dst = (src0 < 0) ? -src0 : src0;
+            int16_t dst = (src0 < 0) ? -src0 : src0;
 
-               _dst_val.i64[_i] = dst;
-         }
+            _dst_val.i16[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 32: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int32_t src0 =
+                  _src[0].i32[_i];
+
+            int32_t dst = (src0 < 0) ? -src0 : src0;
+
+            _dst_val.i32[_i] = dst;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int64_t src0 =
+                  _src[0].i64[_i];
+
+            int64_t dst = (src0 < 0) ? -src0 : src0;
+
+            _dst_val.i64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -5914,45 +8366,83 @@ evaluate_iadd(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 8: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int32_t src0 =
-                     _src[0].i32[_i];
-                  const int32_t src1 =
-                     _src[1].i32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int8_t src0 =
+                  _src[0].i8[_i];
+               const int8_t src1 =
+                  _src[1].i8[_i];
 
-               int32_t dst = src0 + src1;
+            int8_t dst = src0 + src1;
 
-               _dst_val.i32[_i] = dst;
-         }
+            _dst_val.i8[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 16: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int64_t src0 =
-                     _src[0].i64[_i];
-                  const int64_t src1 =
-                     _src[1].i64[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int16_t src0 =
+                  _src[0].i16[_i];
+               const int16_t src1 =
+                  _src[1].i16[_i];
 
-               int64_t dst = src0 + src1;
+            int16_t dst = src0 + src1;
 
-               _dst_val.i64[_i] = dst;
-         }
+            _dst_val.i16[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 32: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int32_t src0 =
+                  _src[0].i32[_i];
+               const int32_t src1 =
+                  _src[1].i32[_i];
+
+            int32_t dst = src0 + src1;
+
+            _dst_val.i32[_i] = dst;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int64_t src0 =
+                  _src[0].i64[_i];
+               const int64_t src1 =
+                  _src[1].i64[_i];
+
+            int64_t dst = src0 + src1;
+
+            _dst_val.i64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -5962,45 +8452,83 @@ evaluate_iand(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 8: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const uint32_t src0 =
-                     _src[0].u32[_i];
-                  const uint32_t src1 =
-                     _src[1].u32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint8_t src0 =
+                  _src[0].u8[_i];
+               const uint8_t src1 =
+                  _src[1].u8[_i];
 
-               uint32_t dst = src0 & src1;
+            uint8_t dst = src0 & src1;
 
-               _dst_val.u32[_i] = dst;
-         }
+            _dst_val.u8[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 16: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const uint64_t src0 =
-                     _src[0].u64[_i];
-                  const uint64_t src1 =
-                     _src[1].u64[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint16_t src0 =
+                  _src[0].u16[_i];
+               const uint16_t src1 =
+                  _src[1].u16[_i];
 
-               uint64_t dst = src0 & src1;
+            uint16_t dst = src0 & src1;
 
-               _dst_val.u64[_i] = dst;
-         }
+            _dst_val.u16[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 32: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint32_t src0 =
+                  _src[0].u32[_i];
+               const uint32_t src1 =
+                  _src[1].u32[_i];
+
+            uint32_t dst = src0 & src1;
+
+            _dst_val.u32[_i] = dst;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint64_t src0 =
+                  _src[0].u64[_i];
+               const uint64_t src1 =
+                  _src[1].u64[_i];
+
+            uint64_t dst = src0 & src1;
+
+            _dst_val.u64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -6010,22 +8538,21 @@ evaluate_ibfe(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
       
+   
 
-                                    
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int32_t src0 =
-                     _src[0].i32[_i];
-                  const int32_t src1 =
-                     _src[1].i32[_i];
-                  const int32_t src2 =
-                     _src[2].i32[_i];
+                           
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int32_t src0 =
+                  _src[0].i32[_i];
+               const int32_t src1 =
+                  _src[1].i32[_i];
+               const int32_t src2 =
+                  _src[2].i32[_i];
 
-               int32_t dst;
+            int32_t dst;
 
-               
+            
 int base = src0;
 int offset = src1, bits = src2;
 if (bits == 0) {
@@ -6039,48 +8566,9 @@ if (bits == 0) {
 }
 
 
-               _dst_val.i32[_i] = dst;
-         }
+            _dst_val.i32[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
-
-                                    
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int32_t src0 =
-                     _src[0].i32[_i];
-                  const int32_t src1 =
-                     _src[1].i32[_i];
-                  const int32_t src2 =
-                     _src[2].i32[_i];
-
-               int32_t dst;
-
-               
-int base = src0;
-int offset = src1, bits = src2;
-if (bits == 0) {
-   dst = 0;
-} else if (bits < 0 || offset < 0) {
-   dst = 0; /* undefined */
-} else if (offset + bits < 32) {
-   dst = (base << (32 - bits - offset)) >> (32 - bits);
-} else {
-   dst = base >> offset;
-}
-
-
-               _dst_val.i32[_i] = dst;
-         }
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
 
    return _dst_val;
 }
@@ -6090,22 +8578,21 @@ evaluate_ibitfield_extract(MAYBE_UNUSED unsigned num_components, unsigned bit_si
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
       
+   
 
-                                    
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int32_t src0 =
-                     _src[0].i32[_i];
-                  const int32_t src1 =
-                     _src[1].i32[_i];
-                  const int32_t src2 =
-                     _src[2].i32[_i];
+                           
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int32_t src0 =
+                  _src[0].i32[_i];
+               const int32_t src1 =
+                  _src[1].i32[_i];
+               const int32_t src2 =
+                  _src[2].i32[_i];
 
-               int32_t dst;
+            int32_t dst;
 
-               
+            
 int base = src0;
 int offset = src1, bits = src2;
 if (bits == 0) {
@@ -6117,46 +8604,9 @@ if (bits == 0) {
 }
 
 
-               _dst_val.i32[_i] = dst;
-         }
+            _dst_val.i32[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
-
-                                    
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int32_t src0 =
-                     _src[0].i32[_i];
-                  const int32_t src1 =
-                     _src[1].i32[_i];
-                  const int32_t src2 =
-                     _src[2].i32[_i];
-
-               int32_t dst;
-
-               
-int base = src0;
-int offset = src1, bits = src2;
-if (bits == 0) {
-   dst = 0;
-} else if (offset < 0 || bits < 0 || offset + bits > 32) {
-   dst = 0;
-} else {
-   dst = (base << (32 - offset - bits)) >> offset; /* use sign-extending shift */
-}
-
-
-               _dst_val.i32[_i] = dst;
-         }
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
 
    return _dst_val;
 }
@@ -6166,45 +8616,83 @@ evaluate_idiv(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 8: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int32_t src0 =
-                     _src[0].i32[_i];
-                  const int32_t src1 =
-                     _src[1].i32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int8_t src0 =
+                  _src[0].i8[_i];
+               const int8_t src1 =
+                  _src[1].i8[_i];
 
-               int32_t dst = src0 / src1;
+            int8_t dst = src0 / src1;
 
-               _dst_val.i32[_i] = dst;
-         }
+            _dst_val.i8[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 16: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int64_t src0 =
-                     _src[0].i64[_i];
-                  const int64_t src1 =
-                     _src[1].i64[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int16_t src0 =
+                  _src[0].i16[_i];
+               const int16_t src1 =
+                  _src[1].i16[_i];
 
-               int64_t dst = src0 / src1;
+            int16_t dst = src0 / src1;
 
-               _dst_val.i64[_i] = dst;
-         }
+            _dst_val.i16[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 32: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int32_t src0 =
+                  _src[0].i32[_i];
+               const int32_t src1 =
+                  _src[1].i32[_i];
+
+            int32_t dst = src0 / src1;
+
+            _dst_val.i32[_i] = dst;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int64_t src0 =
+                  _src[0].i64[_i];
+               const int64_t src1 =
+                  _src[1].i64[_i];
+
+            int64_t dst = src0 / src1;
+
+            _dst_val.i64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -6214,45 +8702,83 @@ evaluate_ieq(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 8: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int32_t src0 =
-                     _src[0].i32[_i];
-                  const int32_t src1 =
-                     _src[1].i32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int8_t src0 =
+                  _src[0].i8[_i];
+               const int8_t src1 =
+                  _src[1].i8[_i];
 
-               bool32_t dst = src0 == src1;
+            bool32_t dst = src0 == src1;
 
-               _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
-         }
+            _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 16: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int64_t src0 =
-                     _src[0].i64[_i];
-                  const int64_t src1 =
-                     _src[1].i64[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int16_t src0 =
+                  _src[0].i16[_i];
+               const int16_t src1 =
+                  _src[1].i16[_i];
 
-               bool32_t dst = src0 == src1;
+            bool32_t dst = src0 == src1;
 
-               _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
-         }
+            _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 32: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int32_t src0 =
+                  _src[0].i32[_i];
+               const int32_t src1 =
+                  _src[1].i32[_i];
+
+            bool32_t dst = src0 == src1;
+
+            _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int64_t src0 =
+                  _src[0].i64[_i];
+               const int64_t src1 =
+                  _src[1].i64[_i];
+
+            bool32_t dst = src0 == src1;
+
+            _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -6262,18 +8788,17 @@ evaluate_ifind_msb(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
       
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int32_t src0 =
+                  _src[0].i32[_i];
+
+            int32_t dst;
 
             
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int32_t src0 =
-                     _src[0].i32[_i];
-
-               int32_t dst;
-
-               
 dst = -1;
 for (int bit = 31; bit >= 0; bit--) {
    /* If src0 < 0, we're looking for the first 0 bit.
@@ -6287,44 +8812,9 @@ for (int bit = 31; bit >= 0; bit--) {
 }
 
 
-               _dst_val.i32[_i] = dst;
-         }
+            _dst_val.i32[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
-
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int32_t src0 =
-                     _src[0].i32[_i];
-
-               int32_t dst;
-
-               
-dst = -1;
-for (int bit = 31; bit >= 0; bit--) {
-   /* If src0 < 0, we're looking for the first 0 bit.
-    * if src0 >= 0, we're looking for the first 1 bit.
-    */
-   if ((((src0 >> bit) & 1) && (src0 >= 0)) ||
-      (!((src0 >> bit) & 1) && (src0 < 0))) {
-      dst = bit;
-      break;
-   }
-}
-
-
-               _dst_val.i32[_i] = dst;
-         }
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
 
    return _dst_val;
 }
@@ -6334,45 +8824,83 @@ evaluate_ige(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 8: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int32_t src0 =
-                     _src[0].i32[_i];
-                  const int32_t src1 =
-                     _src[1].i32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int8_t src0 =
+                  _src[0].i8[_i];
+               const int8_t src1 =
+                  _src[1].i8[_i];
 
-               bool32_t dst = src0 >= src1;
+            bool32_t dst = src0 >= src1;
 
-               _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
-         }
+            _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 16: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int64_t src0 =
-                     _src[0].i64[_i];
-                  const int64_t src1 =
-                     _src[1].i64[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int16_t src0 =
+                  _src[0].i16[_i];
+               const int16_t src1 =
+                  _src[1].i16[_i];
 
-               bool32_t dst = src0 >= src1;
+            bool32_t dst = src0 >= src1;
 
-               _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
-         }
+            _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 32: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int32_t src0 =
+                  _src[0].i32[_i];
+               const int32_t src1 =
+                  _src[1].i32[_i];
+
+            bool32_t dst = src0 >= src1;
+
+            _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int64_t src0 =
+                  _src[0].i64[_i];
+               const int64_t src1 =
+                  _src[1].i64[_i];
+
+            bool32_t dst = src0 >= src1;
+
+            _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -6382,45 +8910,83 @@ evaluate_ilt(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 8: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int32_t src0 =
-                     _src[0].i32[_i];
-                  const int32_t src1 =
-                     _src[1].i32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int8_t src0 =
+                  _src[0].i8[_i];
+               const int8_t src1 =
+                  _src[1].i8[_i];
 
-               bool32_t dst = src0 < src1;
+            bool32_t dst = src0 < src1;
 
-               _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
-         }
+            _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 16: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int64_t src0 =
-                     _src[0].i64[_i];
-                  const int64_t src1 =
-                     _src[1].i64[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int16_t src0 =
+                  _src[0].i16[_i];
+               const int16_t src1 =
+                  _src[1].i16[_i];
 
-               bool32_t dst = src0 < src1;
+            bool32_t dst = src0 < src1;
 
-               _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
-         }
+            _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 32: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int32_t src0 =
+                  _src[0].i32[_i];
+               const int32_t src1 =
+                  _src[1].i32[_i];
+
+            bool32_t dst = src0 < src1;
+
+            _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int64_t src0 =
+                  _src[0].i64[_i];
+               const int64_t src1 =
+                  _src[1].i64[_i];
+
+            bool32_t dst = src0 < src1;
+
+            _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -6430,45 +8996,83 @@ evaluate_imax(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 8: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int32_t src0 =
-                     _src[0].i32[_i];
-                  const int32_t src1 =
-                     _src[1].i32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int8_t src0 =
+                  _src[0].i8[_i];
+               const int8_t src1 =
+                  _src[1].i8[_i];
 
-               int32_t dst = src1 > src0 ? src1 : src0;
+            int8_t dst = src1 > src0 ? src1 : src0;
 
-               _dst_val.i32[_i] = dst;
-         }
+            _dst_val.i8[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 16: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int64_t src0 =
-                     _src[0].i64[_i];
-                  const int64_t src1 =
-                     _src[1].i64[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int16_t src0 =
+                  _src[0].i16[_i];
+               const int16_t src1 =
+                  _src[1].i16[_i];
 
-               int64_t dst = src1 > src0 ? src1 : src0;
+            int16_t dst = src1 > src0 ? src1 : src0;
 
-               _dst_val.i64[_i] = dst;
-         }
+            _dst_val.i16[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 32: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int32_t src0 =
+                  _src[0].i32[_i];
+               const int32_t src1 =
+                  _src[1].i32[_i];
+
+            int32_t dst = src1 > src0 ? src1 : src0;
+
+            _dst_val.i32[_i] = dst;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int64_t src0 =
+                  _src[0].i64[_i];
+               const int64_t src1 =
+                  _src[1].i64[_i];
+
+            int64_t dst = src1 > src0 ? src1 : src0;
+
+            _dst_val.i64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -6478,45 +9082,83 @@ evaluate_imin(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 8: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int32_t src0 =
-                     _src[0].i32[_i];
-                  const int32_t src1 =
-                     _src[1].i32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int8_t src0 =
+                  _src[0].i8[_i];
+               const int8_t src1 =
+                  _src[1].i8[_i];
 
-               int32_t dst = src1 > src0 ? src0 : src1;
+            int8_t dst = src1 > src0 ? src0 : src1;
 
-               _dst_val.i32[_i] = dst;
-         }
+            _dst_val.i8[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 16: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int64_t src0 =
-                     _src[0].i64[_i];
-                  const int64_t src1 =
-                     _src[1].i64[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int16_t src0 =
+                  _src[0].i16[_i];
+               const int16_t src1 =
+                  _src[1].i16[_i];
 
-               int64_t dst = src1 > src0 ? src0 : src1;
+            int16_t dst = src1 > src0 ? src0 : src1;
 
-               _dst_val.i64[_i] = dst;
-         }
+            _dst_val.i16[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 32: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int32_t src0 =
+                  _src[0].i32[_i];
+               const int32_t src1 =
+                  _src[1].i32[_i];
+
+            int32_t dst = src1 > src0 ? src0 : src1;
+
+            _dst_val.i32[_i] = dst;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int64_t src0 =
+                  _src[0].i64[_i];
+               const int64_t src1 =
+                  _src[1].i64[_i];
+
+            int64_t dst = src1 > src0 ? src0 : src1;
+
+            _dst_val.i64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -6526,45 +9168,83 @@ evaluate_imod(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 8: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int32_t src0 =
-                     _src[0].i32[_i];
-                  const int32_t src1 =
-                     _src[1].i32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int8_t src0 =
+                  _src[0].i8[_i];
+               const int8_t src1 =
+                  _src[1].i8[_i];
 
-               int32_t dst = src1 == 0 ? 0 : ((src0 % src1 == 0 || (src0 >= 0) == (src1 >= 0)) ?                 src0 % src1 : src0 % src1 + src1);
+            int8_t dst = src1 == 0 ? 0 : ((src0 % src1 == 0 || (src0 >= 0) == (src1 >= 0)) ?                 src0 % src1 : src0 % src1 + src1);
 
-               _dst_val.i32[_i] = dst;
-         }
+            _dst_val.i8[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 16: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int64_t src0 =
-                     _src[0].i64[_i];
-                  const int64_t src1 =
-                     _src[1].i64[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int16_t src0 =
+                  _src[0].i16[_i];
+               const int16_t src1 =
+                  _src[1].i16[_i];
 
-               int64_t dst = src1 == 0 ? 0 : ((src0 % src1 == 0 || (src0 >= 0) == (src1 >= 0)) ?                 src0 % src1 : src0 % src1 + src1);
+            int16_t dst = src1 == 0 ? 0 : ((src0 % src1 == 0 || (src0 >= 0) == (src1 >= 0)) ?                 src0 % src1 : src0 % src1 + src1);
 
-               _dst_val.i64[_i] = dst;
-         }
+            _dst_val.i16[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 32: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int32_t src0 =
+                  _src[0].i32[_i];
+               const int32_t src1 =
+                  _src[1].i32[_i];
+
+            int32_t dst = src1 == 0 ? 0 : ((src0 % src1 == 0 || (src0 >= 0) == (src1 >= 0)) ?                 src0 % src1 : src0 % src1 + src1);
+
+            _dst_val.i32[_i] = dst;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int64_t src0 =
+                  _src[0].i64[_i];
+               const int64_t src1 =
+                  _src[1].i64[_i];
+
+            int64_t dst = src1 == 0 ? 0 : ((src0 % src1 == 0 || (src0 >= 0) == (src1 >= 0)) ?                 src0 % src1 : src0 % src1 + src1);
+
+            _dst_val.i64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -6574,41 +9254,75 @@ evaluate_imov(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 8: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int32_t src0 =
-                     _src[0].i32[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int8_t src0 =
+                  _src[0].i8[_i];
 
-               int32_t dst = src0;
+            int8_t dst = src0;
 
-               _dst_val.i32[_i] = dst;
-         }
+            _dst_val.i8[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 16: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int64_t src0 =
-                     _src[0].i64[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int16_t src0 =
+                  _src[0].i16[_i];
 
-               int64_t dst = src0;
+            int16_t dst = src0;
 
-               _dst_val.i64[_i] = dst;
-         }
+            _dst_val.i16[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 32: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int32_t src0 =
+                  _src[0].i32[_i];
+
+            int32_t dst = src0;
+
+            _dst_val.i32[_i] = dst;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int64_t src0 =
+                  _src[0].i64[_i];
+
+            int64_t dst = src0;
+
+            _dst_val.i64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -6618,45 +9332,83 @@ evaluate_imul(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 8: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int32_t src0 =
-                     _src[0].i32[_i];
-                  const int32_t src1 =
-                     _src[1].i32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int8_t src0 =
+                  _src[0].i8[_i];
+               const int8_t src1 =
+                  _src[1].i8[_i];
 
-               int32_t dst = src0 * src1;
+            int8_t dst = src0 * src1;
 
-               _dst_val.i32[_i] = dst;
-         }
+            _dst_val.i8[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 16: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int64_t src0 =
-                     _src[0].i64[_i];
-                  const int64_t src1 =
-                     _src[1].i64[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int16_t src0 =
+                  _src[0].i16[_i];
+               const int16_t src1 =
+                  _src[1].i16[_i];
 
-               int64_t dst = src0 * src1;
+            int16_t dst = src0 * src1;
 
-               _dst_val.i64[_i] = dst;
-         }
+            _dst_val.i16[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 32: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int32_t src0 =
+                  _src[0].i32[_i];
+               const int32_t src1 =
+                  _src[1].i32[_i];
+
+            int32_t dst = src0 * src1;
+
+            _dst_val.i32[_i] = dst;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int64_t src0 =
+                  _src[0].i64[_i];
+               const int64_t src1 =
+                  _src[1].i64[_i];
+
+            int64_t dst = src0 * src1;
+
+            _dst_val.i64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -6666,45 +9418,21 @@ evaluate_imul_high(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
       
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int32_t src0 =
-                     _src[0].i32[_i];
-                  const int32_t src1 =
-                     _src[1].i32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int32_t src0 =
+                  _src[0].i32[_i];
+               const int32_t src1 =
+                  _src[1].i32[_i];
 
-               int32_t dst = (int32_t)(((int64_t) src0 * (int64_t) src1) >> 32);
+            int32_t dst = (int32_t)(((int64_t) src0 * (int64_t) src1) >> 32);
 
-               _dst_val.i32[_i] = dst;
-         }
+            _dst_val.i32[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
-
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int32_t src0 =
-                     _src[0].i32[_i];
-                  const int32_t src1 =
-                     _src[1].i32[_i];
-
-               int32_t dst = (int32_t)(((int64_t) src0 * (int64_t) src1) >> 32);
-
-               _dst_val.i32[_i] = dst;
-         }
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
 
    return _dst_val;
 }
@@ -6714,45 +9442,83 @@ evaluate_ine(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 8: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int32_t src0 =
-                     _src[0].i32[_i];
-                  const int32_t src1 =
-                     _src[1].i32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int8_t src0 =
+                  _src[0].i8[_i];
+               const int8_t src1 =
+                  _src[1].i8[_i];
 
-               bool32_t dst = src0 != src1;
+            bool32_t dst = src0 != src1;
 
-               _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
-         }
+            _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 16: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int64_t src0 =
-                     _src[0].i64[_i];
-                  const int64_t src1 =
-                     _src[1].i64[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int16_t src0 =
+                  _src[0].i16[_i];
+               const int16_t src1 =
+                  _src[1].i16[_i];
 
-               bool32_t dst = src0 != src1;
+            bool32_t dst = src0 != src1;
 
-               _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
-         }
+            _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 32: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int32_t src0 =
+                  _src[0].i32[_i];
+               const int32_t src1 =
+                  _src[1].i32[_i];
+
+            bool32_t dst = src0 != src1;
+
+            _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int64_t src0 =
+                  _src[0].i64[_i];
+               const int64_t src1 =
+                  _src[1].i64[_i];
+
+            bool32_t dst = src0 != src1;
+
+            _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -6762,41 +9528,75 @@ evaluate_ineg(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 8: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int32_t src0 =
-                     _src[0].i32[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int8_t src0 =
+                  _src[0].i8[_i];
 
-               int32_t dst = -src0;
+            int8_t dst = -src0;
 
-               _dst_val.i32[_i] = dst;
-         }
+            _dst_val.i8[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 16: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int64_t src0 =
-                     _src[0].i64[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int16_t src0 =
+                  _src[0].i16[_i];
 
-               int64_t dst = -src0;
+            int16_t dst = -src0;
 
-               _dst_val.i64[_i] = dst;
-         }
+            _dst_val.i16[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 32: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int32_t src0 =
+                  _src[0].i32[_i];
+
+            int32_t dst = -src0;
+
+            _dst_val.i32[_i] = dst;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int64_t src0 =
+                  _src[0].i64[_i];
+
+            int64_t dst = -src0;
+
+            _dst_val.i64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -6806,41 +9606,75 @@ evaluate_inot(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 8: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int32_t src0 =
-                     _src[0].i32[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int8_t src0 =
+                  _src[0].i8[_i];
 
-               int32_t dst = ~src0;
+            int8_t dst = ~src0;
 
-               _dst_val.i32[_i] = dst;
-         }
+            _dst_val.i8[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 16: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int64_t src0 =
-                     _src[0].i64[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int16_t src0 =
+                  _src[0].i16[_i];
 
-               int64_t dst = ~src0;
+            int16_t dst = ~src0;
 
-               _dst_val.i64[_i] = dst;
-         }
+            _dst_val.i16[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 32: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int32_t src0 =
+                  _src[0].i32[_i];
+
+            int32_t dst = ~src0;
+
+            _dst_val.i32[_i] = dst;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int64_t src0 =
+                  _src[0].i64[_i];
+
+            int64_t dst = ~src0;
+
+            _dst_val.i64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -6850,45 +9684,83 @@ evaluate_ior(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 8: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const uint32_t src0 =
-                     _src[0].u32[_i];
-                  const uint32_t src1 =
-                     _src[1].u32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint8_t src0 =
+                  _src[0].u8[_i];
+               const uint8_t src1 =
+                  _src[1].u8[_i];
 
-               uint32_t dst = src0 | src1;
+            uint8_t dst = src0 | src1;
 
-               _dst_val.u32[_i] = dst;
-         }
+            _dst_val.u8[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 16: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const uint64_t src0 =
-                     _src[0].u64[_i];
-                  const uint64_t src1 =
-                     _src[1].u64[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint16_t src0 =
+                  _src[0].u16[_i];
+               const uint16_t src1 =
+                  _src[1].u16[_i];
 
-               uint64_t dst = src0 | src1;
+            uint16_t dst = src0 | src1;
 
-               _dst_val.u64[_i] = dst;
-         }
+            _dst_val.u16[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 32: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint32_t src0 =
+                  _src[0].u32[_i];
+               const uint32_t src1 =
+                  _src[1].u32[_i];
+
+            uint32_t dst = src0 | src1;
+
+            _dst_val.u32[_i] = dst;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint64_t src0 =
+                  _src[0].u64[_i];
+               const uint64_t src1 =
+                  _src[1].u64[_i];
+
+            uint64_t dst = src0 | src1;
+
+            _dst_val.u64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -6898,45 +9770,83 @@ evaluate_irem(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 8: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int32_t src0 =
-                     _src[0].i32[_i];
-                  const int32_t src1 =
-                     _src[1].i32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int8_t src0 =
+                  _src[0].i8[_i];
+               const int8_t src1 =
+                  _src[1].i8[_i];
 
-               int32_t dst = src1 == 0 ? 0 : src0 % src1;
+            int8_t dst = src1 == 0 ? 0 : src0 % src1;
 
-               _dst_val.i32[_i] = dst;
-         }
+            _dst_val.i8[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 16: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int64_t src0 =
-                     _src[0].i64[_i];
-                  const int64_t src1 =
-                     _src[1].i64[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int16_t src0 =
+                  _src[0].i16[_i];
+               const int16_t src1 =
+                  _src[1].i16[_i];
 
-               int64_t dst = src1 == 0 ? 0 : src0 % src1;
+            int16_t dst = src1 == 0 ? 0 : src0 % src1;
 
-               _dst_val.i64[_i] = dst;
-         }
+            _dst_val.i16[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 32: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int32_t src0 =
+                  _src[0].i32[_i];
+               const int32_t src1 =
+                  _src[1].i32[_i];
+
+            int32_t dst = src1 == 0 ? 0 : src0 % src1;
+
+            _dst_val.i32[_i] = dst;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int64_t src0 =
+                  _src[0].i64[_i];
+               const int64_t src1 =
+                  _src[1].i64[_i];
+
+            int64_t dst = src1 == 0 ? 0 : src0 % src1;
+
+            _dst_val.i64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -6946,45 +9856,83 @@ evaluate_ishl(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 8: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int32_t src0 =
-                     _src[0].i32[_i];
-                  const int32_t src1 =
-                     _src[1].i32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int8_t src0 =
+                  _src[0].i8[_i];
+               const uint32_t src1 =
+                  _src[1].u32[_i];
 
-               int32_t dst = src0 << src1;
+            int8_t dst = src0 << src1;
 
-               _dst_val.i32[_i] = dst;
-         }
+            _dst_val.i8[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 16: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int64_t src0 =
-                     _src[0].i64[_i];
-                  const int64_t src1 =
-                     _src[1].i64[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int16_t src0 =
+                  _src[0].i16[_i];
+               const uint32_t src1 =
+                  _src[1].u32[_i];
 
-               int64_t dst = src0 << src1;
+            int16_t dst = src0 << src1;
 
-               _dst_val.i64[_i] = dst;
-         }
+            _dst_val.i16[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 32: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int32_t src0 =
+                  _src[0].i32[_i];
+               const uint32_t src1 =
+                  _src[1].u32[_i];
+
+            int32_t dst = src0 << src1;
+
+            _dst_val.i32[_i] = dst;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int64_t src0 =
+                  _src[0].i64[_i];
+               const uint32_t src1 =
+                  _src[1].u32[_i];
+
+            int64_t dst = src0 << src1;
+
+            _dst_val.i64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -6994,45 +9942,83 @@ evaluate_ishr(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 8: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int32_t src0 =
-                     _src[0].i32[_i];
-                  const int32_t src1 =
-                     _src[1].i32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int8_t src0 =
+                  _src[0].i8[_i];
+               const uint32_t src1 =
+                  _src[1].u32[_i];
 
-               int32_t dst = src0 >> src1;
+            int8_t dst = src0 >> src1;
 
-               _dst_val.i32[_i] = dst;
-         }
+            _dst_val.i8[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 16: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int64_t src0 =
-                     _src[0].i64[_i];
-                  const int64_t src1 =
-                     _src[1].i64[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int16_t src0 =
+                  _src[0].i16[_i];
+               const uint32_t src1 =
+                  _src[1].u32[_i];
 
-               int64_t dst = src0 >> src1;
+            int16_t dst = src0 >> src1;
 
-               _dst_val.i64[_i] = dst;
-         }
+            _dst_val.i16[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 32: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int32_t src0 =
+                  _src[0].i32[_i];
+               const uint32_t src1 =
+                  _src[1].u32[_i];
+
+            int32_t dst = src0 >> src1;
+
+            _dst_val.i32[_i] = dst;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int64_t src0 =
+                  _src[0].i64[_i];
+               const uint32_t src1 =
+                  _src[1].u32[_i];
+
+            int64_t dst = src0 >> src1;
+
+            _dst_val.i64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -7042,41 +10028,75 @@ evaluate_isign(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 8: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int32_t src0 =
-                     _src[0].i32[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int8_t src0 =
+                  _src[0].i8[_i];
 
-               int32_t dst = (src0 == 0) ? 0 : ((src0 > 0) ? 1 : -1);
+            int8_t dst = (src0 == 0) ? 0 : ((src0 > 0) ? 1 : -1);
 
-               _dst_val.i32[_i] = dst;
-         }
+            _dst_val.i8[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 16: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int64_t src0 =
-                     _src[0].i64[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int16_t src0 =
+                  _src[0].i16[_i];
 
-               int64_t dst = (src0 == 0) ? 0 : ((src0 > 0) ? 1 : -1);
+            int16_t dst = (src0 == 0) ? 0 : ((src0 > 0) ? 1 : -1);
 
-               _dst_val.i64[_i] = dst;
-         }
+            _dst_val.i16[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 32: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int32_t src0 =
+                  _src[0].i32[_i];
+
+            int32_t dst = (src0 == 0) ? 0 : ((src0 > 0) ? 1 : -1);
+
+            _dst_val.i32[_i] = dst;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int64_t src0 =
+                  _src[0].i64[_i];
+
+            int64_t dst = (src0 == 0) ? 0 : ((src0 > 0) ? 1 : -1);
+
+            _dst_val.i64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -7086,45 +10106,83 @@ evaluate_isub(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 8: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int32_t src0 =
-                     _src[0].i32[_i];
-                  const int32_t src1 =
-                     _src[1].i32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int8_t src0 =
+                  _src[0].i8[_i];
+               const int8_t src1 =
+                  _src[1].i8[_i];
 
-               int32_t dst = src0 - src1;
+            int8_t dst = src0 - src1;
 
-               _dst_val.i32[_i] = dst;
-         }
+            _dst_val.i8[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 16: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int64_t src0 =
-                     _src[0].i64[_i];
-                  const int64_t src1 =
-                     _src[1].i64[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int16_t src0 =
+                  _src[0].i16[_i];
+               const int16_t src1 =
+                  _src[1].i16[_i];
 
-               int64_t dst = src0 - src1;
+            int16_t dst = src0 - src1;
 
-               _dst_val.i64[_i] = dst;
-         }
+            _dst_val.i16[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 32: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int32_t src0 =
+                  _src[0].i32[_i];
+               const int32_t src1 =
+                  _src[1].i32[_i];
+
+            int32_t dst = src0 - src1;
+
+            _dst_val.i32[_i] = dst;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int64_t src0 =
+                  _src[0].i64[_i];
+               const int64_t src1 =
+                  _src[1].i64[_i];
+
+            int64_t dst = src0 - src1;
+
+            _dst_val.i64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -7134,45 +10192,83 @@ evaluate_ixor(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 8: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const uint32_t src0 =
-                     _src[0].u32[_i];
-                  const uint32_t src1 =
-                     _src[1].u32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint8_t src0 =
+                  _src[0].u8[_i];
+               const uint8_t src1 =
+                  _src[1].u8[_i];
 
-               uint32_t dst = src0 ^ src1;
+            uint8_t dst = src0 ^ src1;
 
-               _dst_val.u32[_i] = dst;
-         }
+            _dst_val.u8[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 16: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const uint64_t src0 =
-                     _src[0].u64[_i];
-                  const uint64_t src1 =
-                     _src[1].u64[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint16_t src0 =
+                  _src[0].u16[_i];
+               const uint16_t src1 =
+                  _src[1].u16[_i];
 
-               uint64_t dst = src0 ^ src1;
+            uint16_t dst = src0 ^ src1;
 
-               _dst_val.u64[_i] = dst;
-         }
+            _dst_val.u16[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 32: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint32_t src0 =
+                  _src[0].u32[_i];
+               const uint32_t src1 =
+                  _src[1].u32[_i];
+
+            uint32_t dst = src0 ^ src1;
+
+            _dst_val.u32[_i] = dst;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint64_t src0 =
+                  _src[0].u64[_i];
+               const uint64_t src1 =
+                  _src[1].u64[_i];
+
+            uint64_t dst = src0 ^ src1;
+
+            _dst_val.u64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -7182,159 +10278,136 @@ evaluate_ldexp(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
-                  const int32_t src1 =
-                     _src[1].i32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float src0 =
+                  _mesa_half_to_float(_src[0].u16[_i]);
+               const int32_t src1 =
+                  _src[1].i32[_i];
 
-               float32_t dst;
+            float16_t dst;
 
-               
+            
 dst = (bit_size == 64) ? ldexp(src0, src1) : ldexpf(src0, src1);
 /* flush denormals to zero. */
 if (!isnormal(dst))
    dst = copysignf(0.0f, src0);
 
 
-               _dst_val.f32[_i] = dst;
-         }
+            _dst_val.u16[_i] = _mesa_float_to_half(dst);
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 32: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float64_t src0 =
-                     _src[0].f64[_i];
-                  const int32_t src1 =
-                     _src[1].i32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float32_t src0 =
+                  _src[0].f32[_i];
+               const int32_t src1 =
+                  _src[1].i32[_i];
 
-               float64_t dst;
+            float32_t dst;
 
-               
+            
 dst = (bit_size == 64) ? ldexp(src0, src1) : ldexpf(src0, src1);
 /* flush denormals to zero. */
 if (!isnormal(dst))
    dst = copysignf(0.0f, src0);
 
 
-               _dst_val.f64[_i] = dst;
-         }
+            _dst_val.f32[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 64: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float64_t src0 =
+                  _src[0].f64[_i];
+               const int32_t src1 =
+                  _src[1].i32[_i];
 
-   return _dst_val;
-}
-static nir_const_value
-evaluate_pack_double_2x32(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
-                 MAYBE_UNUSED nir_const_value *_src)
-{
-   nir_const_value _dst_val = { {0, } };
+            float64_t dst;
 
-   switch (bit_size) {
-   case 32: {
-      
-
-
-         const struct uint32_vec src0 = {
-               _src[0].u32[0],
-               _src[0].u32[1],
-            0,
-            0,
-         };
-
-         struct uint64_vec dst;
-
-            dst.x = src0.x | ((uint64_t)src0.y << 32);
-
-               _dst_val.u64[0] = dst.x;
-
-      break;
-   }
-   case 64: {
-      
+            
+dst = (bit_size == 64) ? ldexp(src0, src1) : ldexpf(src0, src1);
+/* flush denormals to zero. */
+if (!isnormal(dst))
+   dst = copysignf(0.0f, src0);
 
 
-         const struct uint32_vec src0 = {
-               _src[0].u32[0],
-               _src[0].u32[1],
-            0,
-            0,
-         };
+            _dst_val.f64[_i] = dst;
+      }
 
-         struct uint64_vec dst;
+         break;
+      }
 
-            dst.x = src0.x | ((uint64_t)src0.y << 32);
-
-               _dst_val.u64[0] = dst.x;
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
 static nir_const_value
-evaluate_pack_double_2x32_split(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+evaluate_pack_64_2x32(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
                  MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
       
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const uint32_t src0 =
-                     _src[0].u32[_i];
-                  const uint32_t src1 =
-                     _src[1].u32[_i];
 
-               uint64_t dst = src0 | ((uint64_t)src1 << 32);
+      const struct uint32_vec src0 = {
+            _src[0].u32[0],
+            _src[0].u32[1],
+         0,
+         0,
+      };
 
-               _dst_val.u64[_i] = dst;
-         }
+      struct uint64_vec dst;
 
-      break;
-   }
-   case 64: {
+         dst.x = src0.x | ((uint64_t)src0.y << 32);
+
+            _dst_val.u64[0] = dst.x;
+
+
+   return _dst_val;
+}
+static nir_const_value
+evaluate_pack_64_2x32_split(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
+{
+   nir_const_value _dst_val = { {0, } };
+
       
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const uint32_t src0 =
-                     _src[0].u32[_i];
-                  const uint32_t src1 =
-                     _src[1].u32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint32_t src0 =
+                  _src[0].u32[_i];
+               const uint32_t src1 =
+                  _src[1].u32[_i];
 
-               uint64_t dst = src0 | ((uint64_t)src1 << 32);
+            uint64_t dst = src0 | ((uint64_t)src1 << 32);
 
-               _dst_val.u64[_i] = dst;
-         }
+            _dst_val.u64[_i] = dst;
+      }
 
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
 
    return _dst_val;
 }
@@ -7344,55 +10417,26 @@ evaluate_pack_half_2x16(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
       
+   
 
 
-         const struct float32_vec src0 = {
-               _src[0].f32[0],
-               _src[0].f32[1],
-            0,
-            0,
-         };
+      const struct float32_vec src0 = {
+            _src[0].f32[0],
+            _src[0].f32[1],
+         0,
+         0,
+      };
 
-         struct uint32_vec dst;
+      struct uint32_vec dst;
 
-            
+         
 dst.x = (uint32_t) pack_half_1x16(src0.x);
 dst.x |= ((uint32_t) pack_half_1x16(src0.y)) << 16;
 
 
-               _dst_val.u32[0] = dst.x;
+            _dst_val.u32[0] = dst.x;
 
-      break;
-   }
-   case 64: {
-      
-
-
-         const struct float32_vec src0 = {
-               _src[0].f32[0],
-               _src[0].f32[1],
-            0,
-            0,
-         };
-
-         struct uint32_vec dst;
-
-            
-dst.x = (uint32_t) pack_half_1x16(src0.x);
-dst.x |= ((uint32_t) pack_half_1x16(src0.y)) << 16;
-
-
-               _dst_val.u32[0] = dst.x;
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
 
    return _dst_val;
 }
@@ -7402,63 +10446,30 @@ evaluate_pack_half_2x16_split(MAYBE_UNUSED unsigned num_components, unsigned bit
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
       
+   
 
 
-         const struct float32_vec src0 = {
-               _src[0].f32[0],
-            0,
-            0,
-            0,
-         };
+      const struct float32_vec src0 = {
+            _src[0].f32[0],
+         0,
+         0,
+         0,
+      };
 
-         const struct float32_vec src1 = {
-               _src[1].f32[0],
-            0,
-            0,
-            0,
-         };
+      const struct float32_vec src1 = {
+            _src[1].f32[0],
+         0,
+         0,
+         0,
+      };
 
-         struct uint32_vec dst;
+      struct uint32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = pack_half_1x16(src0.x) | (pack_half_1x16(src1.x) << 16);
+         dst.x = dst.y = dst.z = dst.w = pack_half_1x16(src0.x) | (pack_half_1x16(src1.x) << 16);
 
-               _dst_val.u32[0] = dst.x;
+            _dst_val.u32[0] = dst.x;
 
-      break;
-   }
-   case 64: {
-      
-
-
-         const struct float32_vec src0 = {
-               _src[0].f32[0],
-            0,
-            0,
-            0,
-         };
-
-         const struct float32_vec src1 = {
-               _src[1].f32[0],
-            0,
-            0,
-            0,
-         };
-
-         struct uint32_vec dst;
-
-            dst.x = dst.y = dst.z = dst.w = pack_half_1x16(src0.x) | (pack_half_1x16(src1.x) << 16);
-
-               _dst_val.u32[0] = dst.x;
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
 
    return _dst_val;
 }
@@ -7468,55 +10479,26 @@ evaluate_pack_snorm_2x16(MAYBE_UNUSED unsigned num_components, unsigned bit_size
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
       
+   
 
 
-         const struct float32_vec src0 = {
-               _src[0].f32[0],
-               _src[0].f32[1],
-            0,
-            0,
-         };
+      const struct float32_vec src0 = {
+            _src[0].f32[0],
+            _src[0].f32[1],
+         0,
+         0,
+      };
 
-         struct uint32_vec dst;
+      struct uint32_vec dst;
 
-            
+         
 dst.x = (uint32_t) pack_snorm_1x16(src0.x);
 dst.x |= ((uint32_t) pack_snorm_1x16(src0.y)) << 16;
 
 
-               _dst_val.u32[0] = dst.x;
+            _dst_val.u32[0] = dst.x;
 
-      break;
-   }
-   case 64: {
-      
-
-
-         const struct float32_vec src0 = {
-               _src[0].f32[0],
-               _src[0].f32[1],
-            0,
-            0,
-         };
-
-         struct uint32_vec dst;
-
-            
-dst.x = (uint32_t) pack_snorm_1x16(src0.x);
-dst.x |= ((uint32_t) pack_snorm_1x16(src0.y)) << 16;
-
-
-               _dst_val.u32[0] = dst.x;
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
 
    return _dst_val;
 }
@@ -7526,59 +10508,28 @@ evaluate_pack_snorm_4x8(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
       
+   
 
 
-         const struct float32_vec src0 = {
-               _src[0].f32[0],
-               _src[0].f32[1],
-               _src[0].f32[2],
-               _src[0].f32[3],
-         };
+      const struct float32_vec src0 = {
+            _src[0].f32[0],
+            _src[0].f32[1],
+            _src[0].f32[2],
+            _src[0].f32[3],
+      };
 
-         struct uint32_vec dst;
+      struct uint32_vec dst;
 
-            
+         
 dst.x = (uint32_t) pack_snorm_1x8(src0.x);
 dst.x |= ((uint32_t) pack_snorm_1x8(src0.y)) << 8;
 dst.x |= ((uint32_t) pack_snorm_1x8(src0.z)) << 16;
 dst.x |= ((uint32_t) pack_snorm_1x8(src0.w)) << 24;
 
 
-               _dst_val.u32[0] = dst.x;
+            _dst_val.u32[0] = dst.x;
 
-      break;
-   }
-   case 64: {
-      
-
-
-         const struct float32_vec src0 = {
-               _src[0].f32[0],
-               _src[0].f32[1],
-               _src[0].f32[2],
-               _src[0].f32[3],
-         };
-
-         struct uint32_vec dst;
-
-            
-dst.x = (uint32_t) pack_snorm_1x8(src0.x);
-dst.x |= ((uint32_t) pack_snorm_1x8(src0.y)) << 8;
-dst.x |= ((uint32_t) pack_snorm_1x8(src0.z)) << 16;
-dst.x |= ((uint32_t) pack_snorm_1x8(src0.w)) << 24;
-
-
-               _dst_val.u32[0] = dst.x;
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
 
    return _dst_val;
 }
@@ -7588,55 +10539,26 @@ evaluate_pack_unorm_2x16(MAYBE_UNUSED unsigned num_components, unsigned bit_size
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
       
+   
 
 
-         const struct float32_vec src0 = {
-               _src[0].f32[0],
-               _src[0].f32[1],
-            0,
-            0,
-         };
+      const struct float32_vec src0 = {
+            _src[0].f32[0],
+            _src[0].f32[1],
+         0,
+         0,
+      };
 
-         struct uint32_vec dst;
+      struct uint32_vec dst;
 
-            
+         
 dst.x = (uint32_t) pack_unorm_1x16(src0.x);
 dst.x |= ((uint32_t) pack_unorm_1x16(src0.y)) << 16;
 
 
-               _dst_val.u32[0] = dst.x;
+            _dst_val.u32[0] = dst.x;
 
-      break;
-   }
-   case 64: {
-      
-
-
-         const struct float32_vec src0 = {
-               _src[0].f32[0],
-               _src[0].f32[1],
-            0,
-            0,
-         };
-
-         struct uint32_vec dst;
-
-            
-dst.x = (uint32_t) pack_unorm_1x16(src0.x);
-dst.x |= ((uint32_t) pack_unorm_1x16(src0.y)) << 16;
-
-
-               _dst_val.u32[0] = dst.x;
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
 
    return _dst_val;
 }
@@ -7646,59 +10568,28 @@ evaluate_pack_unorm_4x8(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
       
+   
 
 
-         const struct float32_vec src0 = {
-               _src[0].f32[0],
-               _src[0].f32[1],
-               _src[0].f32[2],
-               _src[0].f32[3],
-         };
+      const struct float32_vec src0 = {
+            _src[0].f32[0],
+            _src[0].f32[1],
+            _src[0].f32[2],
+            _src[0].f32[3],
+      };
 
-         struct uint32_vec dst;
+      struct uint32_vec dst;
 
-            
+         
 dst.x = (uint32_t) pack_unorm_1x8(src0.x);
 dst.x |= ((uint32_t) pack_unorm_1x8(src0.y)) << 8;
 dst.x |= ((uint32_t) pack_unorm_1x8(src0.z)) << 16;
 dst.x |= ((uint32_t) pack_unorm_1x8(src0.w)) << 24;
 
 
-               _dst_val.u32[0] = dst.x;
+            _dst_val.u32[0] = dst.x;
 
-      break;
-   }
-   case 64: {
-      
-
-
-         const struct float32_vec src0 = {
-               _src[0].f32[0],
-               _src[0].f32[1],
-               _src[0].f32[2],
-               _src[0].f32[3],
-         };
-
-         struct uint32_vec dst;
-
-            
-dst.x = (uint32_t) pack_unorm_1x8(src0.x);
-dst.x |= ((uint32_t) pack_unorm_1x8(src0.y)) << 8;
-dst.x |= ((uint32_t) pack_unorm_1x8(src0.z)) << 16;
-dst.x |= ((uint32_t) pack_unorm_1x8(src0.w)) << 24;
-
-
-               _dst_val.u32[0] = dst.x;
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
 
    return _dst_val;
 }
@@ -7708,53 +10599,25 @@ evaluate_pack_uvec2_to_uint(MAYBE_UNUSED unsigned num_components, unsigned bit_s
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
       
+   
 
 
-         const struct uint32_vec src0 = {
-               _src[0].u32[0],
-               _src[0].u32[1],
-            0,
-            0,
-         };
+      const struct uint32_vec src0 = {
+            _src[0].u32[0],
+            _src[0].u32[1],
+         0,
+         0,
+      };
 
-         struct uint32_vec dst;
+      struct uint32_vec dst;
 
-            
+         
 dst.x = (src0.x & 0xffff) | (src0.y << 16);
 
 
-               _dst_val.u32[0] = dst.x;
+            _dst_val.u32[0] = dst.x;
 
-      break;
-   }
-   case 64: {
-      
-
-
-         const struct uint32_vec src0 = {
-               _src[0].u32[0],
-               _src[0].u32[1],
-            0,
-            0,
-         };
-
-         struct uint32_vec dst;
-
-            
-dst.x = (src0.x & 0xffff) | (src0.y << 16);
-
-
-               _dst_val.u32[0] = dst.x;
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
 
    return _dst_val;
 }
@@ -7764,59 +10627,28 @@ evaluate_pack_uvec4_to_uint(MAYBE_UNUSED unsigned num_components, unsigned bit_s
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
       
+   
 
 
-         const struct uint32_vec src0 = {
-               _src[0].u32[0],
-               _src[0].u32[1],
-               _src[0].u32[2],
-               _src[0].u32[3],
-         };
+      const struct uint32_vec src0 = {
+            _src[0].u32[0],
+            _src[0].u32[1],
+            _src[0].u32[2],
+            _src[0].u32[3],
+      };
 
-         struct uint32_vec dst;
+      struct uint32_vec dst;
 
-            
+         
 dst.x = (src0.x <<  0) |
         (src0.y <<  8) |
         (src0.z << 16) |
         (src0.w << 24);
 
 
-               _dst_val.u32[0] = dst.x;
+            _dst_val.u32[0] = dst.x;
 
-      break;
-   }
-   case 64: {
-      
-
-
-         const struct uint32_vec src0 = {
-               _src[0].u32[0],
-               _src[0].u32[1],
-               _src[0].u32[2],
-               _src[0].u32[3],
-         };
-
-         struct uint32_vec dst;
-
-            
-dst.x = (src0.x <<  0) |
-        (src0.y <<  8) |
-        (src0.z << 16) |
-        (src0.w << 24);
-
-
-               _dst_val.u32[0] = dst.x;
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
 
    return _dst_val;
 }
@@ -7826,45 +10658,21 @@ evaluate_seq(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
       
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
-                  const float32_t src1 =
-                     _src[1].f32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float32_t src0 =
+                  _src[0].f32[_i];
+               const float32_t src1 =
+                  _src[1].f32[_i];
 
-               float32_t dst = (src0 == src1) ? 1.0f : 0.0f;
+            float32_t dst = (src0 == src1) ? 1.0f : 0.0f;
 
-               _dst_val.f32[_i] = dst;
-         }
+            _dst_val.f32[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
-
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
-                  const float32_t src1 =
-                     _src[1].f32[_i];
-
-               float32_t dst = (src0 == src1) ? 1.0f : 0.0f;
-
-               _dst_val.f32[_i] = dst;
-         }
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
 
    return _dst_val;
 }
@@ -7874,45 +10682,21 @@ evaluate_sge(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
       
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
-                  const float32_t src1 =
-                     _src[1].f32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float32_t src0 =
+                  _src[0].f32[_i];
+               const float32_t src1 =
+                  _src[1].f32[_i];
 
-               float32_t dst = (src0 >= src1) ? 1.0f : 0.0f;
+            float32_t dst = (src0 >= src1) ? 1.0f : 0.0f;
 
-               _dst_val.f32[_i] = dst;
-         }
+            _dst_val.f32[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
-
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
-                  const float32_t src1 =
-                     _src[1].f32[_i];
-
-               float32_t dst = (src0 >= src1) ? 1.0f : 0.0f;
-
-               _dst_val.f32[_i] = dst;
-         }
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
 
    return _dst_val;
 }
@@ -7922,45 +10706,21 @@ evaluate_slt(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
       
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
-                  const float32_t src1 =
-                     _src[1].f32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float32_t src0 =
+                  _src[0].f32[_i];
+               const float32_t src1 =
+                  _src[1].f32[_i];
 
-               float32_t dst = (src0 < src1) ? 1.0f : 0.0f;
+            float32_t dst = (src0 < src1) ? 1.0f : 0.0f;
 
-               _dst_val.f32[_i] = dst;
-         }
+            _dst_val.f32[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
-
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
-                  const float32_t src1 =
-                     _src[1].f32[_i];
-
-               float32_t dst = (src0 < src1) ? 1.0f : 0.0f;
-
-               _dst_val.f32[_i] = dst;
-         }
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
 
    return _dst_val;
 }
@@ -7970,133 +10730,567 @@ evaluate_sne(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
       
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
-                  const float32_t src1 =
-                     _src[1].f32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float32_t src0 =
+                  _src[0].f32[_i];
+               const float32_t src1 =
+                  _src[1].f32[_i];
 
-               float32_t dst = (src0 != src1) ? 1.0f : 0.0f;
+            float32_t dst = (src0 != src1) ? 1.0f : 0.0f;
 
-               _dst_val.f32[_i] = dst;
-         }
+            _dst_val.f32[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
-
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const float32_t src0 =
-                     _src[0].f32[_i];
-                  const float32_t src1 =
-                     _src[1].f32[_i];
-
-               float32_t dst = (src0 != src1) ? 1.0f : 0.0f;
-
-               _dst_val.f32[_i] = dst;
-         }
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
 
    return _dst_val;
 }
 static nir_const_value
-evaluate_u2d(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+evaluate_u2f16(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
                  MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 8: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const uint32_t src0 =
-                     _src[0].u32[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint8_t src0 =
+                  _src[0].u8[_i];
 
-               float64_t dst = src0;
+            float16_t dst = src0;
 
-               _dst_val.f64[_i] = dst;
-         }
+            _dst_val.u16[_i] = _mesa_float_to_half(dst);
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 16: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const uint32_t src0 =
-                     _src[0].u32[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint16_t src0 =
+                  _src[0].u16[_i];
 
-               float64_t dst = src0;
+            float16_t dst = src0;
 
-               _dst_val.f64[_i] = dst;
-         }
+            _dst_val.u16[_i] = _mesa_float_to_half(dst);
+      }
 
-      break;
-   }
+         break;
+      }
+      case 32: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint32_t src0 =
+                  _src[0].u32[_i];
+
+            float16_t dst = src0;
+
+            _dst_val.u16[_i] = _mesa_float_to_half(dst);
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint64_t src0 =
+                  _src[0].u64[_i];
+
+            float16_t dst = src0;
+
+            _dst_val.u16[_i] = _mesa_float_to_half(dst);
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
 static nir_const_value
-evaluate_u2f(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+evaluate_u2f32(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
                  MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 8: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const uint32_t src0 =
-                     _src[0].u32[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint8_t src0 =
+                  _src[0].u8[_i];
 
-               float32_t dst = src0;
+            float32_t dst = src0;
 
-               _dst_val.f32[_i] = dst;
-         }
+            _dst_val.f32[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 16: {
+         
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const uint32_t src0 =
-                     _src[0].u32[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint16_t src0 =
+                  _src[0].u16[_i];
 
-               float32_t dst = src0;
+            float32_t dst = src0;
 
-               _dst_val.f32[_i] = dst;
-         }
+            _dst_val.f32[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 32: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint32_t src0 =
+                  _src[0].u32[_i];
+
+            float32_t dst = src0;
+
+            _dst_val.f32[_i] = dst;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint64_t src0 =
+                  _src[0].u64[_i];
+
+            float32_t dst = src0;
+
+            _dst_val.f32[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
+
+   return _dst_val;
+}
+static nir_const_value
+evaluate_u2f64(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
+{
+   nir_const_value _dst_val = { {0, } };
+
+      switch (bit_size) {
+      case 8: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint8_t src0 =
+                  _src[0].u8[_i];
+
+            float64_t dst = src0;
+
+            _dst_val.f64[_i] = dst;
+      }
+
+         break;
+      }
+      case 16: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint16_t src0 =
+                  _src[0].u16[_i];
+
+            float64_t dst = src0;
+
+            _dst_val.f64[_i] = dst;
+      }
+
+         break;
+      }
+      case 32: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint32_t src0 =
+                  _src[0].u32[_i];
+
+            float64_t dst = src0;
+
+            _dst_val.f64[_i] = dst;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint64_t src0 =
+                  _src[0].u64[_i];
+
+            float64_t dst = src0;
+
+            _dst_val.f64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
+
+   return _dst_val;
+}
+static nir_const_value
+evaluate_u2u16(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
+{
+   nir_const_value _dst_val = { {0, } };
+
+      switch (bit_size) {
+      case 8: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint8_t src0 =
+                  _src[0].u8[_i];
+
+            uint16_t dst = src0;
+
+            _dst_val.u16[_i] = dst;
+      }
+
+         break;
+      }
+      case 16: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint16_t src0 =
+                  _src[0].u16[_i];
+
+            uint16_t dst = src0;
+
+            _dst_val.u16[_i] = dst;
+      }
+
+         break;
+      }
+      case 32: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint32_t src0 =
+                  _src[0].u32[_i];
+
+            uint16_t dst = src0;
+
+            _dst_val.u16[_i] = dst;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint64_t src0 =
+                  _src[0].u64[_i];
+
+            uint16_t dst = src0;
+
+            _dst_val.u16[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
+
+   return _dst_val;
+}
+static nir_const_value
+evaluate_u2u32(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
+{
+   nir_const_value _dst_val = { {0, } };
+
+      switch (bit_size) {
+      case 8: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint8_t src0 =
+                  _src[0].u8[_i];
+
+            uint32_t dst = src0;
+
+            _dst_val.u32[_i] = dst;
+      }
+
+         break;
+      }
+      case 16: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint16_t src0 =
+                  _src[0].u16[_i];
+
+            uint32_t dst = src0;
+
+            _dst_val.u32[_i] = dst;
+      }
+
+         break;
+      }
+      case 32: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint32_t src0 =
+                  _src[0].u32[_i];
+
+            uint32_t dst = src0;
+
+            _dst_val.u32[_i] = dst;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint64_t src0 =
+                  _src[0].u64[_i];
+
+            uint32_t dst = src0;
+
+            _dst_val.u32[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
+
+   return _dst_val;
+}
+static nir_const_value
+evaluate_u2u64(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
+{
+   nir_const_value _dst_val = { {0, } };
+
+      switch (bit_size) {
+      case 8: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint8_t src0 =
+                  _src[0].u8[_i];
+
+            uint64_t dst = src0;
+
+            _dst_val.u64[_i] = dst;
+      }
+
+         break;
+      }
+      case 16: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint16_t src0 =
+                  _src[0].u16[_i];
+
+            uint64_t dst = src0;
+
+            _dst_val.u64[_i] = dst;
+      }
+
+         break;
+      }
+      case 32: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint32_t src0 =
+                  _src[0].u32[_i];
+
+            uint64_t dst = src0;
+
+            _dst_val.u64[_i] = dst;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint64_t src0 =
+                  _src[0].u64[_i];
+
+            uint64_t dst = src0;
+
+            _dst_val.u64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
+
+   return _dst_val;
+}
+static nir_const_value
+evaluate_u2u8(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+                 MAYBE_UNUSED nir_const_value *_src)
+{
+   nir_const_value _dst_val = { {0, } };
+
+      switch (bit_size) {
+      case 8: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint8_t src0 =
+                  _src[0].u8[_i];
+
+            uint8_t dst = src0;
+
+            _dst_val.u8[_i] = dst;
+      }
+
+         break;
+      }
+      case 16: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint16_t src0 =
+                  _src[0].u16[_i];
+
+            uint8_t dst = src0;
+
+            _dst_val.u8[_i] = dst;
+      }
+
+         break;
+      }
+      case 32: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint32_t src0 =
+                  _src[0].u32[_i];
+
+            uint8_t dst = src0;
+
+            _dst_val.u8[_i] = dst;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint64_t src0 =
+                  _src[0].u64[_i];
+
+            uint8_t dst = src0;
+
+            _dst_val.u8[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -8106,45 +11300,83 @@ evaluate_uadd_carry(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 8: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const uint32_t src0 =
-                     _src[0].u32[_i];
-                  const uint32_t src1 =
-                     _src[1].u32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint8_t src0 =
+                  _src[0].u8[_i];
+               const uint8_t src1 =
+                  _src[1].u8[_i];
 
-               uint32_t dst = src0 + src1 < src0;
+            uint8_t dst = src0 + src1 < src0;
 
-               _dst_val.u32[_i] = dst;
-         }
+            _dst_val.u8[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 16: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const uint64_t src0 =
-                     _src[0].u64[_i];
-                  const uint64_t src1 =
-                     _src[1].u64[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint16_t src0 =
+                  _src[0].u16[_i];
+               const uint16_t src1 =
+                  _src[1].u16[_i];
 
-               uint64_t dst = src0 + src1 < src0;
+            uint16_t dst = src0 + src1 < src0;
 
-               _dst_val.u64[_i] = dst;
-         }
+            _dst_val.u16[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 32: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint32_t src0 =
+                  _src[0].u32[_i];
+               const uint32_t src1 =
+                  _src[1].u32[_i];
+
+            uint32_t dst = src0 + src1 < src0;
+
+            _dst_val.u32[_i] = dst;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint64_t src0 =
+                  _src[0].u64[_i];
+               const uint64_t src1 =
+                  _src[1].u64[_i];
+
+            uint64_t dst = src0 + src1 < src0;
+
+            _dst_val.u64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -8154,22 +11386,21 @@ evaluate_ubfe(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
       
+   
 
-                                    
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const uint32_t src0 =
-                     _src[0].u32[_i];
-                  const int32_t src1 =
-                     _src[1].i32[_i];
-                  const int32_t src2 =
-                     _src[2].i32[_i];
+                           
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint32_t src0 =
+                  _src[0].u32[_i];
+               const int32_t src1 =
+                  _src[1].i32[_i];
+               const int32_t src2 =
+                  _src[2].i32[_i];
 
-               uint32_t dst;
+            uint32_t dst;
 
-               
+            
 unsigned base = src0;
 int offset = src1, bits = src2;
 if (bits == 0) {
@@ -8183,48 +11414,9 @@ if (bits == 0) {
 }
 
 
-               _dst_val.u32[_i] = dst;
-         }
+            _dst_val.u32[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
-
-                                    
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const uint32_t src0 =
-                     _src[0].u32[_i];
-                  const int32_t src1 =
-                     _src[1].i32[_i];
-                  const int32_t src2 =
-                     _src[2].i32[_i];
-
-               uint32_t dst;
-
-               
-unsigned base = src0;
-int offset = src1, bits = src2;
-if (bits == 0) {
-   dst = 0;
-} else if (bits < 0 || offset < 0) {
-   dst = 0; /* undefined */
-} else if (offset + bits < 32) {
-   dst = (base << (32 - bits - offset)) >> (32 - bits);
-} else {
-   dst = base >> offset;
-}
-
-
-               _dst_val.u32[_i] = dst;
-         }
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
 
    return _dst_val;
 }
@@ -8234,22 +11426,21 @@ evaluate_ubitfield_extract(MAYBE_UNUSED unsigned num_components, unsigned bit_si
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
       
+   
 
-                                    
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const uint32_t src0 =
-                     _src[0].u32[_i];
-                  const int32_t src1 =
-                     _src[1].i32[_i];
-                  const int32_t src2 =
-                     _src[2].i32[_i];
+                           
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint32_t src0 =
+                  _src[0].u32[_i];
+               const int32_t src1 =
+                  _src[1].i32[_i];
+               const int32_t src2 =
+                  _src[2].i32[_i];
 
-               uint32_t dst;
+            uint32_t dst;
 
-               
+            
 unsigned base = src0;
 int offset = src1, bits = src2;
 if (bits == 0) {
@@ -8261,46 +11452,9 @@ if (bits == 0) {
 }
 
 
-               _dst_val.u32[_i] = dst;
-         }
+            _dst_val.u32[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
-
-                                    
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const uint32_t src0 =
-                     _src[0].u32[_i];
-                  const int32_t src1 =
-                     _src[1].i32[_i];
-                  const int32_t src2 =
-                     _src[2].i32[_i];
-
-               uint32_t dst;
-
-               
-unsigned base = src0;
-int offset = src1, bits = src2;
-if (bits == 0) {
-   dst = 0;
-} else if (bits < 0 || offset < 0 || offset + bits > 32) {
-   dst = 0; /* undefined per the spec */
-} else {
-   dst = (base >> offset) & ((1ull << bits) - 1);
-}
-
-
-               _dst_val.u32[_i] = dst;
-         }
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
 
    return _dst_val;
 }
@@ -8310,45 +11464,83 @@ evaluate_udiv(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 8: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const uint32_t src0 =
-                     _src[0].u32[_i];
-                  const uint32_t src1 =
-                     _src[1].u32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint8_t src0 =
+                  _src[0].u8[_i];
+               const uint8_t src1 =
+                  _src[1].u8[_i];
 
-               uint32_t dst = src0 / src1;
+            uint8_t dst = src0 / src1;
 
-               _dst_val.u32[_i] = dst;
-         }
+            _dst_val.u8[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 16: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const uint64_t src0 =
-                     _src[0].u64[_i];
-                  const uint64_t src1 =
-                     _src[1].u64[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint16_t src0 =
+                  _src[0].u16[_i];
+               const uint16_t src1 =
+                  _src[1].u16[_i];
 
-               uint64_t dst = src0 / src1;
+            uint16_t dst = src0 / src1;
 
-               _dst_val.u64[_i] = dst;
-         }
+            _dst_val.u16[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 32: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint32_t src0 =
+                  _src[0].u32[_i];
+               const uint32_t src1 =
+                  _src[1].u32[_i];
+
+            uint32_t dst = src0 / src1;
+
+            _dst_val.u32[_i] = dst;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint64_t src0 =
+                  _src[0].u64[_i];
+               const uint64_t src1 =
+                  _src[1].u64[_i];
+
+            uint64_t dst = src0 / src1;
+
+            _dst_val.u64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -8358,18 +11550,17 @@ evaluate_ufind_msb(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
       
+   
+
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint32_t src0 =
+                  _src[0].u32[_i];
+
+            int32_t dst;
 
             
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const uint32_t src0 =
-                     _src[0].u32[_i];
-
-               int32_t dst;
-
-               
 dst = -1;
 for (int bit = 31; bit > 0; bit--) {
    if ((src0 >> bit) & 1) {
@@ -8379,40 +11570,9 @@ for (int bit = 31; bit > 0; bit--) {
 }
 
 
-               _dst_val.i32[_i] = dst;
-         }
+            _dst_val.i32[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
-
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const uint32_t src0 =
-                     _src[0].u32[_i];
-
-               int32_t dst;
-
-               
-dst = -1;
-for (int bit = 31; bit > 0; bit--) {
-   if ((src0 >> bit) & 1) {
-      dst = bit;
-      break;
-   }
-}
-
-
-               _dst_val.i32[_i] = dst;
-         }
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
 
    return _dst_val;
 }
@@ -8422,45 +11582,83 @@ evaluate_uge(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 8: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const uint32_t src0 =
-                     _src[0].u32[_i];
-                  const uint32_t src1 =
-                     _src[1].u32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint8_t src0 =
+                  _src[0].u8[_i];
+               const uint8_t src1 =
+                  _src[1].u8[_i];
 
-               bool32_t dst = src0 >= src1;
+            bool32_t dst = src0 >= src1;
 
-               _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
-         }
+            _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 16: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const uint64_t src0 =
-                     _src[0].u64[_i];
-                  const uint64_t src1 =
-                     _src[1].u64[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint16_t src0 =
+                  _src[0].u16[_i];
+               const uint16_t src1 =
+                  _src[1].u16[_i];
 
-               bool32_t dst = src0 >= src1;
+            bool32_t dst = src0 >= src1;
 
-               _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
-         }
+            _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 32: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint32_t src0 =
+                  _src[0].u32[_i];
+               const uint32_t src1 =
+                  _src[1].u32[_i];
+
+            bool32_t dst = src0 >= src1;
+
+            _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint64_t src0 =
+                  _src[0].u64[_i];
+               const uint64_t src1 =
+                  _src[1].u64[_i];
+
+            bool32_t dst = src0 >= src1;
+
+            _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -8470,45 +11668,83 @@ evaluate_ult(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 8: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const uint32_t src0 =
-                     _src[0].u32[_i];
-                  const uint32_t src1 =
-                     _src[1].u32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint8_t src0 =
+                  _src[0].u8[_i];
+               const uint8_t src1 =
+                  _src[1].u8[_i];
 
-               bool32_t dst = src0 < src1;
+            bool32_t dst = src0 < src1;
 
-               _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
-         }
+            _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 16: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const uint64_t src0 =
-                     _src[0].u64[_i];
-                  const uint64_t src1 =
-                     _src[1].u64[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint16_t src0 =
+                  _src[0].u16[_i];
+               const uint16_t src1 =
+                  _src[1].u16[_i];
 
-               bool32_t dst = src0 < src1;
+            bool32_t dst = src0 < src1;
 
-               _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
-         }
+            _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 32: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint32_t src0 =
+                  _src[0].u32[_i];
+               const uint32_t src1 =
+                  _src[1].u32[_i];
+
+            bool32_t dst = src0 < src1;
+
+            _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint64_t src0 =
+                  _src[0].u64[_i];
+               const uint64_t src1 =
+                  _src[1].u64[_i];
+
+            bool32_t dst = src0 < src1;
+
+            _dst_val.u32[_i] = dst ? NIR_TRUE : NIR_FALSE;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -8518,45 +11754,83 @@ evaluate_umax(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 8: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const uint32_t src0 =
-                     _src[0].u32[_i];
-                  const uint32_t src1 =
-                     _src[1].u32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint8_t src0 =
+                  _src[0].u8[_i];
+               const uint8_t src1 =
+                  _src[1].u8[_i];
 
-               uint32_t dst = src1 > src0 ? src1 : src0;
+            uint8_t dst = src1 > src0 ? src1 : src0;
 
-               _dst_val.u32[_i] = dst;
-         }
+            _dst_val.u8[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 16: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const uint64_t src0 =
-                     _src[0].u64[_i];
-                  const uint64_t src1 =
-                     _src[1].u64[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint16_t src0 =
+                  _src[0].u16[_i];
+               const uint16_t src1 =
+                  _src[1].u16[_i];
 
-               uint64_t dst = src1 > src0 ? src1 : src0;
+            uint16_t dst = src1 > src0 ? src1 : src0;
 
-               _dst_val.u64[_i] = dst;
-         }
+            _dst_val.u16[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 32: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint32_t src0 =
+                  _src[0].u32[_i];
+               const uint32_t src1 =
+                  _src[1].u32[_i];
+
+            uint32_t dst = src1 > src0 ? src1 : src0;
+
+            _dst_val.u32[_i] = dst;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint64_t src0 =
+                  _src[0].u64[_i];
+               const uint64_t src1 =
+                  _src[1].u64[_i];
+
+            uint64_t dst = src1 > src0 ? src1 : src0;
+
+            _dst_val.u64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -8566,59 +11840,28 @@ evaluate_umax_4x8(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
       
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int32_t src0 =
-                     _src[0].i32[_i];
-                  const int32_t src1 =
-                     _src[1].i32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int32_t src0 =
+                  _src[0].i32[_i];
+               const int32_t src1 =
+                  _src[1].i32[_i];
 
-               int32_t dst;
+            int32_t dst;
 
-               
+            
 dst = 0;
 for (int i = 0; i < 32; i += 8) {
    dst |= MAX2((src0 >> i) & 0xff, (src1 >> i) & 0xff) << i;
 }
 
 
-               _dst_val.i32[_i] = dst;
-         }
+            _dst_val.i32[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
-
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int32_t src0 =
-                     _src[0].i32[_i];
-                  const int32_t src1 =
-                     _src[1].i32[_i];
-
-               int32_t dst;
-
-               
-dst = 0;
-for (int i = 0; i < 32; i += 8) {
-   dst |= MAX2((src0 >> i) & 0xff, (src1 >> i) & 0xff) << i;
-}
-
-
-               _dst_val.i32[_i] = dst;
-         }
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
 
    return _dst_val;
 }
@@ -8628,45 +11871,83 @@ evaluate_umin(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 8: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const uint32_t src0 =
-                     _src[0].u32[_i];
-                  const uint32_t src1 =
-                     _src[1].u32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint8_t src0 =
+                  _src[0].u8[_i];
+               const uint8_t src1 =
+                  _src[1].u8[_i];
 
-               uint32_t dst = src1 > src0 ? src0 : src1;
+            uint8_t dst = src1 > src0 ? src0 : src1;
 
-               _dst_val.u32[_i] = dst;
-         }
+            _dst_val.u8[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 16: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const uint64_t src0 =
-                     _src[0].u64[_i];
-                  const uint64_t src1 =
-                     _src[1].u64[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint16_t src0 =
+                  _src[0].u16[_i];
+               const uint16_t src1 =
+                  _src[1].u16[_i];
 
-               uint64_t dst = src1 > src0 ? src0 : src1;
+            uint16_t dst = src1 > src0 ? src0 : src1;
 
-               _dst_val.u64[_i] = dst;
-         }
+            _dst_val.u16[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 32: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint32_t src0 =
+                  _src[0].u32[_i];
+               const uint32_t src1 =
+                  _src[1].u32[_i];
+
+            uint32_t dst = src1 > src0 ? src0 : src1;
+
+            _dst_val.u32[_i] = dst;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint64_t src0 =
+                  _src[0].u64[_i];
+               const uint64_t src1 =
+                  _src[1].u64[_i];
+
+            uint64_t dst = src1 > src0 ? src0 : src1;
+
+            _dst_val.u64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -8676,59 +11957,28 @@ evaluate_umin_4x8(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
       
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int32_t src0 =
-                     _src[0].i32[_i];
-                  const int32_t src1 =
-                     _src[1].i32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int32_t src0 =
+                  _src[0].i32[_i];
+               const int32_t src1 =
+                  _src[1].i32[_i];
 
-               int32_t dst;
+            int32_t dst;
 
-               
+            
 dst = 0;
 for (int i = 0; i < 32; i += 8) {
    dst |= MIN2((src0 >> i) & 0xff, (src1 >> i) & 0xff) << i;
 }
 
 
-               _dst_val.i32[_i] = dst;
-         }
+            _dst_val.i32[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
-
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int32_t src0 =
-                     _src[0].i32[_i];
-                  const int32_t src1 =
-                     _src[1].i32[_i];
-
-               int32_t dst;
-
-               
-dst = 0;
-for (int i = 0; i < 32; i += 8) {
-   dst |= MIN2((src0 >> i) & 0xff, (src1 >> i) & 0xff) << i;
-}
-
-
-               _dst_val.i32[_i] = dst;
-         }
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
 
    return _dst_val;
 }
@@ -8738,45 +11988,83 @@ evaluate_umod(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 8: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const uint32_t src0 =
-                     _src[0].u32[_i];
-                  const uint32_t src1 =
-                     _src[1].u32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint8_t src0 =
+                  _src[0].u8[_i];
+               const uint8_t src1 =
+                  _src[1].u8[_i];
 
-               uint32_t dst = src1 == 0 ? 0 : src0 % src1;
+            uint8_t dst = src1 == 0 ? 0 : src0 % src1;
 
-               _dst_val.u32[_i] = dst;
-         }
+            _dst_val.u8[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 16: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const uint64_t src0 =
-                     _src[0].u64[_i];
-                  const uint64_t src1 =
-                     _src[1].u64[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint16_t src0 =
+                  _src[0].u16[_i];
+               const uint16_t src1 =
+                  _src[1].u16[_i];
 
-               uint64_t dst = src1 == 0 ? 0 : src0 % src1;
+            uint16_t dst = src1 == 0 ? 0 : src0 % src1;
 
-               _dst_val.u64[_i] = dst;
-         }
+            _dst_val.u16[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 32: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint32_t src0 =
+                  _src[0].u32[_i];
+               const uint32_t src1 =
+                  _src[1].u32[_i];
+
+            uint32_t dst = src1 == 0 ? 0 : src0 % src1;
+
+            _dst_val.u32[_i] = dst;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint64_t src0 =
+                  _src[0].u64[_i];
+               const uint64_t src1 =
+                  _src[1].u64[_i];
+
+            uint64_t dst = src1 == 0 ? 0 : src0 % src1;
+
+            _dst_val.u64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -8786,45 +12074,21 @@ evaluate_umul_high(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
       
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const uint32_t src0 =
-                     _src[0].u32[_i];
-                  const uint32_t src1 =
-                     _src[1].u32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint32_t src0 =
+                  _src[0].u32[_i];
+               const uint32_t src1 =
+                  _src[1].u32[_i];
 
-               uint32_t dst = (uint32_t)(((uint64_t) src0 * (uint64_t) src1) >> 32);
+            uint32_t dst = (uint32_t)(((uint64_t) src0 * (uint64_t) src1) >> 32);
 
-               _dst_val.u32[_i] = dst;
-         }
+            _dst_val.u32[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
-
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const uint32_t src0 =
-                     _src[0].u32[_i];
-                  const uint32_t src1 =
-                     _src[1].u32[_i];
-
-               uint32_t dst = (uint32_t)(((uint64_t) src0 * (uint64_t) src1) >> 32);
-
-               _dst_val.u32[_i] = dst;
-         }
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
 
    return _dst_val;
 }
@@ -8834,20 +12098,19 @@ evaluate_umul_unorm_4x8(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
       
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int32_t src0 =
-                     _src[0].i32[_i];
-                  const int32_t src1 =
-                     _src[1].i32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int32_t src0 =
+                  _src[0].i32[_i];
+               const int32_t src1 =
+                  _src[1].i32[_i];
 
-               int32_t dst;
+            int32_t dst;
 
-               
+            
 dst = 0;
 for (int i = 0; i < 32; i += 8) {
    int src0_chan = (src0 >> i) & 0xff;
@@ -8856,183 +12119,80 @@ for (int i = 0; i < 32; i += 8) {
 }
 
 
-               _dst_val.i32[_i] = dst;
-         }
+            _dst_val.i32[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
-
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int32_t src0 =
-                     _src[0].i32[_i];
-                  const int32_t src1 =
-                     _src[1].i32[_i];
-
-               int32_t dst;
-
-               
-dst = 0;
-for (int i = 0; i < 32; i += 8) {
-   int src0_chan = (src0 >> i) & 0xff;
-   int src1_chan = (src1 >> i) & 0xff;
-   dst |= ((src0_chan * src1_chan) / 255) << i;
-}
-
-
-               _dst_val.i32[_i] = dst;
-         }
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
 
    return _dst_val;
 }
 static nir_const_value
-evaluate_unpack_double_2x32(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+evaluate_unpack_64_2x32(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
                  MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
       
+   
 
 
-         const struct uint64_vec src0 = {
-               _src[0].u64[0],
-            0,
-            0,
-            0,
-         };
+      const struct uint64_vec src0 = {
+            _src[0].u64[0],
+         0,
+         0,
+         0,
+      };
 
-         struct uint32_vec dst;
+      struct uint32_vec dst;
 
-            dst.x = src0.x; dst.y = src0.x >> 32;
+         dst.x = src0.x; dst.y = src0.x >> 32;
 
-               _dst_val.u32[0] = dst.x;
-               _dst_val.u32[1] = dst.y;
+            _dst_val.u32[0] = dst.x;
+            _dst_val.u32[1] = dst.y;
 
-      break;
-   }
-   case 64: {
-      
-
-
-         const struct uint64_vec src0 = {
-               _src[0].u64[0],
-            0,
-            0,
-            0,
-         };
-
-         struct uint32_vec dst;
-
-            dst.x = src0.x; dst.y = src0.x >> 32;
-
-               _dst_val.u32[0] = dst.x;
-               _dst_val.u32[1] = dst.y;
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
 
    return _dst_val;
 }
 static nir_const_value
-evaluate_unpack_double_2x32_split_x(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+evaluate_unpack_64_2x32_split_x(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
                  MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
       
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const uint64_t src0 =
-                     _src[0].u64[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint64_t src0 =
+                  _src[0].u64[_i];
 
-               uint32_t dst = src0;
+            uint32_t dst = src0;
 
-               _dst_val.u32[_i] = dst;
-         }
+            _dst_val.u32[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
-
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const uint64_t src0 =
-                     _src[0].u64[_i];
-
-               uint32_t dst = src0;
-
-               _dst_val.u32[_i] = dst;
-         }
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
 
    return _dst_val;
 }
 static nir_const_value
-evaluate_unpack_double_2x32_split_y(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
+evaluate_unpack_64_2x32_split_y(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
                  MAYBE_UNUSED nir_const_value *_src)
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
       
+   
 
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const uint64_t src0 =
-                     _src[0].u64[_i];
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint64_t src0 =
+                  _src[0].u64[_i];
 
-               uint32_t dst = src0 >> 32;
+            uint32_t dst = src0 >> 32;
 
-               _dst_val.u32[_i] = dst;
-         }
+            _dst_val.u32[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
-
-            
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const uint64_t src0 =
-                     _src[0].u64[_i];
-
-               uint32_t dst = src0 >> 32;
-
-               _dst_val.u32[_i] = dst;
-         }
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
 
    return _dst_val;
 }
@@ -9042,57 +12202,27 @@ evaluate_unpack_half_2x16(MAYBE_UNUSED unsigned num_components, unsigned bit_siz
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
       
+   
 
 
-         const struct uint32_vec src0 = {
-               _src[0].u32[0],
-            0,
-            0,
-            0,
-         };
+      const struct uint32_vec src0 = {
+            _src[0].u32[0],
+         0,
+         0,
+         0,
+      };
 
-         struct float32_vec dst;
+      struct float32_vec dst;
 
-            
+         
 dst.x = unpack_half_1x16((uint16_t)(src0.x & 0xffff));
 dst.y = unpack_half_1x16((uint16_t)(src0.x << 16));
 
 
-               _dst_val.f32[0] = dst.x;
-               _dst_val.f32[1] = dst.y;
+            _dst_val.f32[0] = dst.x;
+            _dst_val.f32[1] = dst.y;
 
-      break;
-   }
-   case 64: {
-      
-
-
-         const struct uint32_vec src0 = {
-               _src[0].u32[0],
-            0,
-            0,
-            0,
-         };
-
-         struct float32_vec dst;
-
-            
-dst.x = unpack_half_1x16((uint16_t)(src0.x & 0xffff));
-dst.y = unpack_half_1x16((uint16_t)(src0.x << 16));
-
-
-               _dst_val.f32[0] = dst.x;
-               _dst_val.f32[1] = dst.y;
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
 
    return _dst_val;
 }
@@ -9102,49 +12232,23 @@ evaluate_unpack_half_2x16_split_x(MAYBE_UNUSED unsigned num_components, unsigned
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
       
+   
 
 
-         const struct uint32_vec src0 = {
-               _src[0].u32[0],
-            0,
-            0,
-            0,
-         };
+      const struct uint32_vec src0 = {
+            _src[0].u32[0],
+         0,
+         0,
+         0,
+      };
 
-         struct float32_vec dst;
+      struct float32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = unpack_half_1x16((uint16_t)(src0.x & 0xffff));
+         dst.x = dst.y = dst.z = dst.w = unpack_half_1x16((uint16_t)(src0.x & 0xffff));
 
-               _dst_val.f32[0] = dst.x;
+            _dst_val.f32[0] = dst.x;
 
-      break;
-   }
-   case 64: {
-      
-
-
-         const struct uint32_vec src0 = {
-               _src[0].u32[0],
-            0,
-            0,
-            0,
-         };
-
-         struct float32_vec dst;
-
-            dst.x = dst.y = dst.z = dst.w = unpack_half_1x16((uint16_t)(src0.x & 0xffff));
-
-               _dst_val.f32[0] = dst.x;
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
 
    return _dst_val;
 }
@@ -9154,49 +12258,23 @@ evaluate_unpack_half_2x16_split_y(MAYBE_UNUSED unsigned num_components, unsigned
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
       
+   
 
 
-         const struct uint32_vec src0 = {
-               _src[0].u32[0],
-            0,
-            0,
-            0,
-         };
+      const struct uint32_vec src0 = {
+            _src[0].u32[0],
+         0,
+         0,
+         0,
+      };
 
-         struct float32_vec dst;
+      struct float32_vec dst;
 
-            dst.x = dst.y = dst.z = dst.w = unpack_half_1x16((uint16_t)(src0.x >> 16));
+         dst.x = dst.y = dst.z = dst.w = unpack_half_1x16((uint16_t)(src0.x >> 16));
 
-               _dst_val.f32[0] = dst.x;
+            _dst_val.f32[0] = dst.x;
 
-      break;
-   }
-   case 64: {
-      
-
-
-         const struct uint32_vec src0 = {
-               _src[0].u32[0],
-            0,
-            0,
-            0,
-         };
-
-         struct float32_vec dst;
-
-            dst.x = dst.y = dst.z = dst.w = unpack_half_1x16((uint16_t)(src0.x >> 16));
-
-               _dst_val.f32[0] = dst.x;
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
 
    return _dst_val;
 }
@@ -9206,57 +12284,27 @@ evaluate_unpack_snorm_2x16(MAYBE_UNUSED unsigned num_components, unsigned bit_si
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
       
+   
 
 
-         const struct uint32_vec src0 = {
-               _src[0].u32[0],
-            0,
-            0,
-            0,
-         };
+      const struct uint32_vec src0 = {
+            _src[0].u32[0],
+         0,
+         0,
+         0,
+      };
 
-         struct float32_vec dst;
+      struct float32_vec dst;
 
-            
+         
 dst.x = unpack_snorm_1x16((uint16_t)(src0.x & 0xffff));
 dst.y = unpack_snorm_1x16((uint16_t)(src0.x << 16));
 
 
-               _dst_val.f32[0] = dst.x;
-               _dst_val.f32[1] = dst.y;
+            _dst_val.f32[0] = dst.x;
+            _dst_val.f32[1] = dst.y;
 
-      break;
-   }
-   case 64: {
-      
-
-
-         const struct uint32_vec src0 = {
-               _src[0].u32[0],
-            0,
-            0,
-            0,
-         };
-
-         struct float32_vec dst;
-
-            
-dst.x = unpack_snorm_1x16((uint16_t)(src0.x & 0xffff));
-dst.y = unpack_snorm_1x16((uint16_t)(src0.x << 16));
-
-
-               _dst_val.f32[0] = dst.x;
-               _dst_val.f32[1] = dst.y;
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
 
    return _dst_val;
 }
@@ -9266,65 +12314,31 @@ evaluate_unpack_snorm_4x8(MAYBE_UNUSED unsigned num_components, unsigned bit_siz
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
       
+   
 
 
-         const struct uint32_vec src0 = {
-               _src[0].u32[0],
-            0,
-            0,
-            0,
-         };
+      const struct uint32_vec src0 = {
+            _src[0].u32[0],
+         0,
+         0,
+         0,
+      };
 
-         struct float32_vec dst;
+      struct float32_vec dst;
 
-            
+         
 dst.x = unpack_snorm_1x8((uint8_t)(src0.x & 0xff));
 dst.y = unpack_snorm_1x8((uint8_t)((src0.x >> 8) & 0xff));
 dst.z = unpack_snorm_1x8((uint8_t)((src0.x >> 16) & 0xff));
 dst.w = unpack_snorm_1x8((uint8_t)(src0.x >> 24));
 
 
-               _dst_val.f32[0] = dst.x;
-               _dst_val.f32[1] = dst.y;
-               _dst_val.f32[2] = dst.z;
-               _dst_val.f32[3] = dst.w;
+            _dst_val.f32[0] = dst.x;
+            _dst_val.f32[1] = dst.y;
+            _dst_val.f32[2] = dst.z;
+            _dst_val.f32[3] = dst.w;
 
-      break;
-   }
-   case 64: {
-      
-
-
-         const struct uint32_vec src0 = {
-               _src[0].u32[0],
-            0,
-            0,
-            0,
-         };
-
-         struct float32_vec dst;
-
-            
-dst.x = unpack_snorm_1x8((uint8_t)(src0.x & 0xff));
-dst.y = unpack_snorm_1x8((uint8_t)((src0.x >> 8) & 0xff));
-dst.z = unpack_snorm_1x8((uint8_t)((src0.x >> 16) & 0xff));
-dst.w = unpack_snorm_1x8((uint8_t)(src0.x >> 24));
-
-
-               _dst_val.f32[0] = dst.x;
-               _dst_val.f32[1] = dst.y;
-               _dst_val.f32[2] = dst.z;
-               _dst_val.f32[3] = dst.w;
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
 
    return _dst_val;
 }
@@ -9334,57 +12348,27 @@ evaluate_unpack_unorm_2x16(MAYBE_UNUSED unsigned num_components, unsigned bit_si
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
       
+   
 
 
-         const struct uint32_vec src0 = {
-               _src[0].u32[0],
-            0,
-            0,
-            0,
-         };
+      const struct uint32_vec src0 = {
+            _src[0].u32[0],
+         0,
+         0,
+         0,
+      };
 
-         struct float32_vec dst;
+      struct float32_vec dst;
 
-            
+         
 dst.x = unpack_unorm_1x16((uint16_t)(src0.x & 0xffff));
 dst.y = unpack_unorm_1x16((uint16_t)(src0.x << 16));
 
 
-               _dst_val.f32[0] = dst.x;
-               _dst_val.f32[1] = dst.y;
+            _dst_val.f32[0] = dst.x;
+            _dst_val.f32[1] = dst.y;
 
-      break;
-   }
-   case 64: {
-      
-
-
-         const struct uint32_vec src0 = {
-               _src[0].u32[0],
-            0,
-            0,
-            0,
-         };
-
-         struct float32_vec dst;
-
-            
-dst.x = unpack_unorm_1x16((uint16_t)(src0.x & 0xffff));
-dst.y = unpack_unorm_1x16((uint16_t)(src0.x << 16));
-
-
-               _dst_val.f32[0] = dst.x;
-               _dst_val.f32[1] = dst.y;
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
 
    return _dst_val;
 }
@@ -9394,65 +12378,31 @@ evaluate_unpack_unorm_4x8(MAYBE_UNUSED unsigned num_components, unsigned bit_siz
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
       
+   
 
 
-         const struct uint32_vec src0 = {
-               _src[0].u32[0],
-            0,
-            0,
-            0,
-         };
+      const struct uint32_vec src0 = {
+            _src[0].u32[0],
+         0,
+         0,
+         0,
+      };
 
-         struct float32_vec dst;
+      struct float32_vec dst;
 
-            
+         
 dst.x = unpack_unorm_1x8((uint8_t)(src0.x & 0xff));
 dst.y = unpack_unorm_1x8((uint8_t)((src0.x >> 8) & 0xff));
 dst.z = unpack_unorm_1x8((uint8_t)((src0.x >> 16) & 0xff));
 dst.w = unpack_unorm_1x8((uint8_t)(src0.x >> 24));
 
 
-               _dst_val.f32[0] = dst.x;
-               _dst_val.f32[1] = dst.y;
-               _dst_val.f32[2] = dst.z;
-               _dst_val.f32[3] = dst.w;
+            _dst_val.f32[0] = dst.x;
+            _dst_val.f32[1] = dst.y;
+            _dst_val.f32[2] = dst.z;
+            _dst_val.f32[3] = dst.w;
 
-      break;
-   }
-   case 64: {
-      
-
-
-         const struct uint32_vec src0 = {
-               _src[0].u32[0],
-            0,
-            0,
-            0,
-         };
-
-         struct float32_vec dst;
-
-            
-dst.x = unpack_unorm_1x8((uint8_t)(src0.x & 0xff));
-dst.y = unpack_unorm_1x8((uint8_t)((src0.x >> 8) & 0xff));
-dst.z = unpack_unorm_1x8((uint8_t)((src0.x >> 16) & 0xff));
-dst.w = unpack_unorm_1x8((uint8_t)(src0.x >> 24));
-
-
-               _dst_val.f32[0] = dst.x;
-               _dst_val.f32[1] = dst.y;
-               _dst_val.f32[2] = dst.z;
-               _dst_val.f32[3] = dst.w;
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
 
    return _dst_val;
 }
@@ -9462,59 +12412,28 @@ evaluate_usadd_4x8(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
       
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int32_t src0 =
-                     _src[0].i32[_i];
-                  const int32_t src1 =
-                     _src[1].i32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int32_t src0 =
+                  _src[0].i32[_i];
+               const int32_t src1 =
+                  _src[1].i32[_i];
 
-               int32_t dst;
+            int32_t dst;
 
-               
+            
 dst = 0;
 for (int i = 0; i < 32; i += 8) {
    dst |= MIN2(((src0 >> i) & 0xff) + ((src1 >> i) & 0xff), 0xff) << i;
 }
 
 
-               _dst_val.i32[_i] = dst;
-         }
+            _dst_val.i32[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
-
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int32_t src0 =
-                     _src[0].i32[_i];
-                  const int32_t src1 =
-                     _src[1].i32[_i];
-
-               int32_t dst;
-
-               
-dst = 0;
-for (int i = 0; i < 32; i += 8) {
-   dst |= MIN2(((src0 >> i) & 0xff) + ((src1 >> i) & 0xff), 0xff) << i;
-}
-
-
-               _dst_val.i32[_i] = dst;
-         }
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
 
    return _dst_val;
 }
@@ -9524,45 +12443,83 @@ evaluate_ushr(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 8: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const uint32_t src0 =
-                     _src[0].u32[_i];
-                  const uint32_t src1 =
-                     _src[1].u32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint8_t src0 =
+                  _src[0].u8[_i];
+               const uint32_t src1 =
+                  _src[1].u32[_i];
 
-               uint32_t dst = src0 >> src1;
+            uint8_t dst = src0 >> src1;
 
-               _dst_val.u32[_i] = dst;
-         }
+            _dst_val.u8[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 16: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const uint64_t src0 =
-                     _src[0].u64[_i];
-                  const uint64_t src1 =
-                     _src[1].u64[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint16_t src0 =
+                  _src[0].u16[_i];
+               const uint32_t src1 =
+                  _src[1].u32[_i];
 
-               uint64_t dst = src0 >> src1;
+            uint16_t dst = src0 >> src1;
 
-               _dst_val.u64[_i] = dst;
-         }
+            _dst_val.u16[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 32: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint32_t src0 =
+                  _src[0].u32[_i];
+               const uint32_t src1 =
+                  _src[1].u32[_i];
+
+            uint32_t dst = src0 >> src1;
+
+            _dst_val.u32[_i] = dst;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint64_t src0 =
+                  _src[0].u64[_i];
+               const uint32_t src1 =
+                  _src[1].u32[_i];
+
+            uint64_t dst = src0 >> src1;
+
+            _dst_val.u64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -9572,20 +12529,19 @@ evaluate_ussub_4x8(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
       
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int32_t src0 =
-                     _src[0].i32[_i];
-                  const int32_t src1 =
-                     _src[1].i32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const int32_t src0 =
+                  _src[0].i32[_i];
+               const int32_t src1 =
+                  _src[1].i32[_i];
 
-               int32_t dst;
+            int32_t dst;
 
-               
+            
 dst = 0;
 for (int i = 0; i < 32; i += 8) {
    int src0_chan = (src0 >> i) & 0xff;
@@ -9595,42 +12551,9 @@ for (int i = 0; i < 32; i += 8) {
 }
 
 
-               _dst_val.i32[_i] = dst;
-         }
+            _dst_val.i32[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
-
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const int32_t src0 =
-                     _src[0].i32[_i];
-                  const int32_t src1 =
-                     _src[1].i32[_i];
-
-               int32_t dst;
-
-               
-dst = 0;
-for (int i = 0; i < 32; i += 8) {
-   int src0_chan = (src0 >> i) & 0xff;
-   int src1_chan = (src1 >> i) & 0xff;
-   if (src0_chan > src1_chan)
-      dst |= (src0_chan - src1_chan) << i;
-}
-
-
-               _dst_val.i32[_i] = dst;
-         }
-
-      break;
-   }
-
-   default:
-      unreachable("unknown bit width");
-   }
 
    return _dst_val;
 }
@@ -9640,45 +12563,83 @@ evaluate_usub_borrow(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 8: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const uint32_t src0 =
-                     _src[0].u32[_i];
-                  const uint32_t src1 =
-                     _src[1].u32[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint8_t src0 =
+                  _src[0].u8[_i];
+               const uint8_t src1 =
+                  _src[1].u8[_i];
 
-               uint32_t dst = src0 < src1;
+            uint8_t dst = src0 < src1;
 
-               _dst_val.u32[_i] = dst;
-         }
+            _dst_val.u8[_i] = dst;
+      }
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 16: {
+         
+   
 
-                        
-         for (unsigned _i = 0; _i < num_components; _i++) {
-                  const uint64_t src0 =
-                     _src[0].u64[_i];
-                  const uint64_t src1 =
-                     _src[1].u64[_i];
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint16_t src0 =
+                  _src[0].u16[_i];
+               const uint16_t src1 =
+                  _src[1].u16[_i];
 
-               uint64_t dst = src0 < src1;
+            uint16_t dst = src0 < src1;
 
-               _dst_val.u64[_i] = dst;
-         }
+            _dst_val.u16[_i] = dst;
+      }
 
-      break;
-   }
+         break;
+      }
+      case 32: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint32_t src0 =
+                  _src[0].u32[_i];
+               const uint32_t src1 =
+                  _src[1].u32[_i];
+
+            uint32_t dst = src0 < src1;
+
+            _dst_val.u32[_i] = dst;
+      }
+
+         break;
+      }
+      case 64: {
+         
+   
+
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint64_t src0 =
+                  _src[0].u64[_i];
+               const uint64_t src1 =
+                  _src[1].u64[_i];
+
+            uint64_t dst = src0 < src1;
+
+            _dst_val.u64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -9688,71 +12649,135 @@ evaluate_vec2(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 8: {
+         
+   
 
 
-         const struct uint32_vec src0 = {
-               _src[0].u32[0],
-            0,
-            0,
-            0,
-         };
+      const struct uint8_vec src0 = {
+            _src[0].u8[0],
+         0,
+         0,
+         0,
+      };
 
-         const struct uint32_vec src1 = {
-               _src[1].u32[0],
-            0,
-            0,
-            0,
-         };
+      const struct uint8_vec src1 = {
+            _src[1].u8[0],
+         0,
+         0,
+         0,
+      };
 
-         struct uint32_vec dst;
+      struct uint8_vec dst;
 
-            
+         
 dst.x = src0.x;
 dst.y = src1.x;
 
 
-               _dst_val.u32[0] = dst.x;
-               _dst_val.u32[1] = dst.y;
+            _dst_val.u8[0] = dst.x;
+            _dst_val.u8[1] = dst.y;
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 16: {
+         
+   
 
 
-         const struct uint64_vec src0 = {
-               _src[0].u64[0],
-            0,
-            0,
-            0,
-         };
+      const struct uint16_vec src0 = {
+            _src[0].u16[0],
+         0,
+         0,
+         0,
+      };
 
-         const struct uint64_vec src1 = {
-               _src[1].u64[0],
-            0,
-            0,
-            0,
-         };
+      const struct uint16_vec src1 = {
+            _src[1].u16[0],
+         0,
+         0,
+         0,
+      };
 
-         struct uint64_vec dst;
+      struct uint16_vec dst;
 
-            
+         
 dst.x = src0.x;
 dst.y = src1.x;
 
 
-               _dst_val.u64[0] = dst.x;
-               _dst_val.u64[1] = dst.y;
+            _dst_val.u16[0] = dst.x;
+            _dst_val.u16[1] = dst.y;
 
-      break;
-   }
+         break;
+      }
+      case 32: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+
+      const struct uint32_vec src0 = {
+            _src[0].u32[0],
+         0,
+         0,
+         0,
+      };
+
+      const struct uint32_vec src1 = {
+            _src[1].u32[0],
+         0,
+         0,
+         0,
+      };
+
+      struct uint32_vec dst;
+
+         
+dst.x = src0.x;
+dst.y = src1.x;
+
+
+            _dst_val.u32[0] = dst.x;
+            _dst_val.u32[1] = dst.y;
+
+         break;
+      }
+      case 64: {
+         
+   
+
+
+      const struct uint64_vec src0 = {
+            _src[0].u64[0],
+         0,
+         0,
+         0,
+      };
+
+      const struct uint64_vec src1 = {
+            _src[1].u64[0],
+         0,
+         0,
+         0,
+      };
+
+      struct uint64_vec dst;
+
+         
+dst.x = src0.x;
+dst.y = src1.x;
+
+
+            _dst_val.u64[0] = dst.x;
+            _dst_val.u64[1] = dst.y;
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -9762,89 +12787,171 @@ evaluate_vec3(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 8: {
+         
+   
 
 
-         const struct uint32_vec src0 = {
-               _src[0].u32[0],
-            0,
-            0,
-            0,
-         };
+      const struct uint8_vec src0 = {
+            _src[0].u8[0],
+         0,
+         0,
+         0,
+      };
 
-         const struct uint32_vec src1 = {
-               _src[1].u32[0],
-            0,
-            0,
-            0,
-         };
+      const struct uint8_vec src1 = {
+            _src[1].u8[0],
+         0,
+         0,
+         0,
+      };
 
-         const struct uint32_vec src2 = {
-               _src[2].u32[0],
-            0,
-            0,
-            0,
-         };
+      const struct uint8_vec src2 = {
+            _src[2].u8[0],
+         0,
+         0,
+         0,
+      };
 
-         struct uint32_vec dst;
+      struct uint8_vec dst;
 
-            
+         
 dst.x = src0.x;
 dst.y = src1.x;
 dst.z = src2.x;
 
 
-               _dst_val.u32[0] = dst.x;
-               _dst_val.u32[1] = dst.y;
-               _dst_val.u32[2] = dst.z;
+            _dst_val.u8[0] = dst.x;
+            _dst_val.u8[1] = dst.y;
+            _dst_val.u8[2] = dst.z;
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 16: {
+         
+   
 
 
-         const struct uint64_vec src0 = {
-               _src[0].u64[0],
-            0,
-            0,
-            0,
-         };
+      const struct uint16_vec src0 = {
+            _src[0].u16[0],
+         0,
+         0,
+         0,
+      };
 
-         const struct uint64_vec src1 = {
-               _src[1].u64[0],
-            0,
-            0,
-            0,
-         };
+      const struct uint16_vec src1 = {
+            _src[1].u16[0],
+         0,
+         0,
+         0,
+      };
 
-         const struct uint64_vec src2 = {
-               _src[2].u64[0],
-            0,
-            0,
-            0,
-         };
+      const struct uint16_vec src2 = {
+            _src[2].u16[0],
+         0,
+         0,
+         0,
+      };
 
-         struct uint64_vec dst;
+      struct uint16_vec dst;
 
-            
+         
 dst.x = src0.x;
 dst.y = src1.x;
 dst.z = src2.x;
 
 
-               _dst_val.u64[0] = dst.x;
-               _dst_val.u64[1] = dst.y;
-               _dst_val.u64[2] = dst.z;
+            _dst_val.u16[0] = dst.x;
+            _dst_val.u16[1] = dst.y;
+            _dst_val.u16[2] = dst.z;
 
-      break;
-   }
+         break;
+      }
+      case 32: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+
+      const struct uint32_vec src0 = {
+            _src[0].u32[0],
+         0,
+         0,
+         0,
+      };
+
+      const struct uint32_vec src1 = {
+            _src[1].u32[0],
+         0,
+         0,
+         0,
+      };
+
+      const struct uint32_vec src2 = {
+            _src[2].u32[0],
+         0,
+         0,
+         0,
+      };
+
+      struct uint32_vec dst;
+
+         
+dst.x = src0.x;
+dst.y = src1.x;
+dst.z = src2.x;
+
+
+            _dst_val.u32[0] = dst.x;
+            _dst_val.u32[1] = dst.y;
+            _dst_val.u32[2] = dst.z;
+
+         break;
+      }
+      case 64: {
+         
+   
+
+
+      const struct uint64_vec src0 = {
+            _src[0].u64[0],
+         0,
+         0,
+         0,
+      };
+
+      const struct uint64_vec src1 = {
+            _src[1].u64[0],
+         0,
+         0,
+         0,
+      };
+
+      const struct uint64_vec src2 = {
+            _src[2].u64[0],
+         0,
+         0,
+         0,
+      };
+
+      struct uint64_vec dst;
+
+         
+dst.x = src0.x;
+dst.y = src1.x;
+dst.z = src2.x;
+
+
+            _dst_val.u64[0] = dst.x;
+            _dst_val.u64[1] = dst.y;
+            _dst_val.u64[2] = dst.z;
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -9854,107 +12961,207 @@ evaluate_vec4(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-   switch (bit_size) {
-   case 32: {
-      
+      switch (bit_size) {
+      case 8: {
+         
+   
 
 
-         const struct uint32_vec src0 = {
-               _src[0].u32[0],
-            0,
-            0,
-            0,
-         };
+      const struct uint8_vec src0 = {
+            _src[0].u8[0],
+         0,
+         0,
+         0,
+      };
 
-         const struct uint32_vec src1 = {
-               _src[1].u32[0],
-            0,
-            0,
-            0,
-         };
+      const struct uint8_vec src1 = {
+            _src[1].u8[0],
+         0,
+         0,
+         0,
+      };
 
-         const struct uint32_vec src2 = {
-               _src[2].u32[0],
-            0,
-            0,
-            0,
-         };
+      const struct uint8_vec src2 = {
+            _src[2].u8[0],
+         0,
+         0,
+         0,
+      };
 
-         const struct uint32_vec src3 = {
-               _src[3].u32[0],
-            0,
-            0,
-            0,
-         };
+      const struct uint8_vec src3 = {
+            _src[3].u8[0],
+         0,
+         0,
+         0,
+      };
 
-         struct uint32_vec dst;
+      struct uint8_vec dst;
 
-            
+         
 dst.x = src0.x;
 dst.y = src1.x;
 dst.z = src2.x;
 dst.w = src3.x;
 
 
-               _dst_val.u32[0] = dst.x;
-               _dst_val.u32[1] = dst.y;
-               _dst_val.u32[2] = dst.z;
-               _dst_val.u32[3] = dst.w;
+            _dst_val.u8[0] = dst.x;
+            _dst_val.u8[1] = dst.y;
+            _dst_val.u8[2] = dst.z;
+            _dst_val.u8[3] = dst.w;
 
-      break;
-   }
-   case 64: {
-      
+         break;
+      }
+      case 16: {
+         
+   
 
 
-         const struct uint64_vec src0 = {
-               _src[0].u64[0],
-            0,
-            0,
-            0,
-         };
+      const struct uint16_vec src0 = {
+            _src[0].u16[0],
+         0,
+         0,
+         0,
+      };
 
-         const struct uint64_vec src1 = {
-               _src[1].u64[0],
-            0,
-            0,
-            0,
-         };
+      const struct uint16_vec src1 = {
+            _src[1].u16[0],
+         0,
+         0,
+         0,
+      };
 
-         const struct uint64_vec src2 = {
-               _src[2].u64[0],
-            0,
-            0,
-            0,
-         };
+      const struct uint16_vec src2 = {
+            _src[2].u16[0],
+         0,
+         0,
+         0,
+      };
 
-         const struct uint64_vec src3 = {
-               _src[3].u64[0],
-            0,
-            0,
-            0,
-         };
+      const struct uint16_vec src3 = {
+            _src[3].u16[0],
+         0,
+         0,
+         0,
+      };
 
-         struct uint64_vec dst;
+      struct uint16_vec dst;
 
-            
+         
 dst.x = src0.x;
 dst.y = src1.x;
 dst.z = src2.x;
 dst.w = src3.x;
 
 
-               _dst_val.u64[0] = dst.x;
-               _dst_val.u64[1] = dst.y;
-               _dst_val.u64[2] = dst.z;
-               _dst_val.u64[3] = dst.w;
+            _dst_val.u16[0] = dst.x;
+            _dst_val.u16[1] = dst.y;
+            _dst_val.u16[2] = dst.z;
+            _dst_val.u16[3] = dst.w;
 
-      break;
-   }
+         break;
+      }
+      case 32: {
+         
+   
 
-   default:
-      unreachable("unknown bit width");
-   }
+
+      const struct uint32_vec src0 = {
+            _src[0].u32[0],
+         0,
+         0,
+         0,
+      };
+
+      const struct uint32_vec src1 = {
+            _src[1].u32[0],
+         0,
+         0,
+         0,
+      };
+
+      const struct uint32_vec src2 = {
+            _src[2].u32[0],
+         0,
+         0,
+         0,
+      };
+
+      const struct uint32_vec src3 = {
+            _src[3].u32[0],
+         0,
+         0,
+         0,
+      };
+
+      struct uint32_vec dst;
+
+         
+dst.x = src0.x;
+dst.y = src1.x;
+dst.z = src2.x;
+dst.w = src3.x;
+
+
+            _dst_val.u32[0] = dst.x;
+            _dst_val.u32[1] = dst.y;
+            _dst_val.u32[2] = dst.z;
+            _dst_val.u32[3] = dst.w;
+
+         break;
+      }
+      case 64: {
+         
+   
+
+
+      const struct uint64_vec src0 = {
+            _src[0].u64[0],
+         0,
+         0,
+         0,
+      };
+
+      const struct uint64_vec src1 = {
+            _src[1].u64[0],
+         0,
+         0,
+         0,
+      };
+
+      const struct uint64_vec src2 = {
+            _src[2].u64[0],
+         0,
+         0,
+         0,
+      };
+
+      const struct uint64_vec src3 = {
+            _src[3].u64[0],
+         0,
+         0,
+         0,
+      };
+
+      struct uint64_vec dst;
+
+         
+dst.x = src0.x;
+dst.y = src1.x;
+dst.z = src2.x;
+dst.w = src3.x;
+
+
+            _dst_val.u64[0] = dst.x;
+            _dst_val.u64[1] = dst.y;
+            _dst_val.u64[2] = dst.z;
+            _dst_val.u64[3] = dst.w;
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }
@@ -10004,14 +13211,6 @@ nir_eval_const_opcode(nir_op op, unsigned num_components,
       return evaluate_bitfield_insert(num_components, bit_width, src);
    case nir_op_bitfield_reverse:
       return evaluate_bitfield_reverse(num_components, bit_width, src);
-   case nir_op_d2b:
-      return evaluate_d2b(num_components, bit_width, src);
-   case nir_op_d2f:
-      return evaluate_d2f(num_components, bit_width, src);
-   case nir_op_d2i:
-      return evaluate_d2i(num_components, bit_width, src);
-   case nir_op_d2u:
-      return evaluate_d2u(num_components, bit_width, src);
    case nir_op_extract_i16:
       return evaluate_extract_i16(num_components, bit_width, src);
    case nir_op_extract_i8:
@@ -10022,12 +13221,28 @@ nir_eval_const_opcode(nir_op op, unsigned num_components,
       return evaluate_extract_u8(num_components, bit_width, src);
    case nir_op_f2b:
       return evaluate_f2b(num_components, bit_width, src);
-   case nir_op_f2d:
-      return evaluate_f2d(num_components, bit_width, src);
-   case nir_op_f2i:
-      return evaluate_f2i(num_components, bit_width, src);
-   case nir_op_f2u:
-      return evaluate_f2u(num_components, bit_width, src);
+   case nir_op_f2f16:
+      return evaluate_f2f16(num_components, bit_width, src);
+   case nir_op_f2f32:
+      return evaluate_f2f32(num_components, bit_width, src);
+   case nir_op_f2f64:
+      return evaluate_f2f64(num_components, bit_width, src);
+   case nir_op_f2i16:
+      return evaluate_f2i16(num_components, bit_width, src);
+   case nir_op_f2i32:
+      return evaluate_f2i32(num_components, bit_width, src);
+   case nir_op_f2i64:
+      return evaluate_f2i64(num_components, bit_width, src);
+   case nir_op_f2i8:
+      return evaluate_f2i8(num_components, bit_width, src);
+   case nir_op_f2u16:
+      return evaluate_f2u16(num_components, bit_width, src);
+   case nir_op_f2u32:
+      return evaluate_f2u32(num_components, bit_width, src);
+   case nir_op_f2u64:
+      return evaluate_f2u64(num_components, bit_width, src);
+   case nir_op_f2u8:
+      return evaluate_f2u8(num_components, bit_width, src);
    case nir_op_fabs:
       return evaluate_fabs(num_components, bit_width, src);
    case nir_op_fadd:
@@ -10180,10 +13395,20 @@ nir_eval_const_opcode(nir_op op, unsigned num_components,
       return evaluate_fxor(num_components, bit_width, src);
    case nir_op_i2b:
       return evaluate_i2b(num_components, bit_width, src);
-   case nir_op_i2d:
-      return evaluate_i2d(num_components, bit_width, src);
-   case nir_op_i2f:
-      return evaluate_i2f(num_components, bit_width, src);
+   case nir_op_i2f16:
+      return evaluate_i2f16(num_components, bit_width, src);
+   case nir_op_i2f32:
+      return evaluate_i2f32(num_components, bit_width, src);
+   case nir_op_i2f64:
+      return evaluate_i2f64(num_components, bit_width, src);
+   case nir_op_i2i16:
+      return evaluate_i2i16(num_components, bit_width, src);
+   case nir_op_i2i32:
+      return evaluate_i2i32(num_components, bit_width, src);
+   case nir_op_i2i64:
+      return evaluate_i2i64(num_components, bit_width, src);
+   case nir_op_i2i8:
+      return evaluate_i2i8(num_components, bit_width, src);
    case nir_op_iabs:
       return evaluate_iabs(num_components, bit_width, src);
    case nir_op_iadd:
@@ -10238,10 +13463,10 @@ nir_eval_const_opcode(nir_op op, unsigned num_components,
       return evaluate_ixor(num_components, bit_width, src);
    case nir_op_ldexp:
       return evaluate_ldexp(num_components, bit_width, src);
-   case nir_op_pack_double_2x32:
-      return evaluate_pack_double_2x32(num_components, bit_width, src);
-   case nir_op_pack_double_2x32_split:
-      return evaluate_pack_double_2x32_split(num_components, bit_width, src);
+   case nir_op_pack_64_2x32:
+      return evaluate_pack_64_2x32(num_components, bit_width, src);
+   case nir_op_pack_64_2x32_split:
+      return evaluate_pack_64_2x32_split(num_components, bit_width, src);
    case nir_op_pack_half_2x16:
       return evaluate_pack_half_2x16(num_components, bit_width, src);
    case nir_op_pack_half_2x16_split:
@@ -10266,10 +13491,20 @@ nir_eval_const_opcode(nir_op op, unsigned num_components,
       return evaluate_slt(num_components, bit_width, src);
    case nir_op_sne:
       return evaluate_sne(num_components, bit_width, src);
-   case nir_op_u2d:
-      return evaluate_u2d(num_components, bit_width, src);
-   case nir_op_u2f:
-      return evaluate_u2f(num_components, bit_width, src);
+   case nir_op_u2f16:
+      return evaluate_u2f16(num_components, bit_width, src);
+   case nir_op_u2f32:
+      return evaluate_u2f32(num_components, bit_width, src);
+   case nir_op_u2f64:
+      return evaluate_u2f64(num_components, bit_width, src);
+   case nir_op_u2u16:
+      return evaluate_u2u16(num_components, bit_width, src);
+   case nir_op_u2u32:
+      return evaluate_u2u32(num_components, bit_width, src);
+   case nir_op_u2u64:
+      return evaluate_u2u64(num_components, bit_width, src);
+   case nir_op_u2u8:
+      return evaluate_u2u8(num_components, bit_width, src);
    case nir_op_uadd_carry:
       return evaluate_uadd_carry(num_components, bit_width, src);
    case nir_op_ubfe:
@@ -10298,12 +13533,12 @@ nir_eval_const_opcode(nir_op op, unsigned num_components,
       return evaluate_umul_high(num_components, bit_width, src);
    case nir_op_umul_unorm_4x8:
       return evaluate_umul_unorm_4x8(num_components, bit_width, src);
-   case nir_op_unpack_double_2x32:
-      return evaluate_unpack_double_2x32(num_components, bit_width, src);
-   case nir_op_unpack_double_2x32_split_x:
-      return evaluate_unpack_double_2x32_split_x(num_components, bit_width, src);
-   case nir_op_unpack_double_2x32_split_y:
-      return evaluate_unpack_double_2x32_split_y(num_components, bit_width, src);
+   case nir_op_unpack_64_2x32:
+      return evaluate_unpack_64_2x32(num_components, bit_width, src);
+   case nir_op_unpack_64_2x32_split_x:
+      return evaluate_unpack_64_2x32_split_x(num_components, bit_width, src);
+   case nir_op_unpack_64_2x32_split_y:
+      return evaluate_unpack_64_2x32_split_y(num_components, bit_width, src);
    case nir_op_unpack_half_2x16:
       return evaluate_unpack_half_2x16(num_components, bit_width, src);
    case nir_op_unpack_half_2x16_split_x:
