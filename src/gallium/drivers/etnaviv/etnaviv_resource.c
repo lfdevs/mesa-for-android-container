@@ -180,7 +180,7 @@ etna_resource_alloc(struct pipe_screen *pscreen, unsigned layout,
                         &paddingY, &halign);
    assert(paddingX && paddingY);
 
-   if (templat->bind != PIPE_BUFFER) {
+   if (templat->target != PIPE_BUFFER) {
       unsigned min_paddingY = 4 * screen->specs.pixel_pipes;
       if (paddingY < min_paddingY)
          paddingY = min_paddingY;

@@ -27,6 +27,7 @@ AM_CFLAGS = \
 	$(GALLIUM_CFLAGS) \
 	$(VISIBILITY_CFLAGS) \
 	$(VL_CFLAGS) \
+	$(XCB_DRI3_CFLAGS) \
 	$(XVMC_CFLAGS)
 
 noinst_LTLIBRARIES = libxvmctracker.la
@@ -45,7 +46,7 @@ noinst_PROGRAMS = \
 
 noinst_HEADERS = tests/testlib.h
 
-TEST_LIBS = $(XVMC_LIBS) -lXvMCW $(VL_LIBS)
+TEST_LIBS = $(XVMC_LIBS) -lXvMCW $(VL_LIBS) $(XCB_DRI3_LIBS)
 tests_test_context_SOURCES = tests/test_context.c tests/testlib.c
 tests_test_context_LDADD = $(TEST_LIBS)
 tests_test_surface_SOURCES = tests/test_surface.c tests/testlib.c

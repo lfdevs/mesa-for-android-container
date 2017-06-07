@@ -868,10 +868,36 @@ brw_compile_gs(const struct brw_compiler *compiler, void *log_data,
 
          vec4_gs_visitor v(compiler, log_data, &c, prog_data, shader,
                            mem_ctx, true /* no_spills */, shader_time_index);
+
+         /* Backup 'nr_params' and 'param' as they can be modified by the
+          * the DUAL_OBJECT visitor. If it fails, we will run the fallback
+          * (DUAL_INSTANCED or SINGLE mode) and we need to restore original
+          * values.
+          */
+         const unsigned param_count = prog_data->base.base.nr_params;
+         gl_constant_value **param = ralloc_array(NULL, gl_constant_value*,
+                                                  param_count);
+         memcpy(param, prog_data->base.base.param,
+                sizeof(gl_constant_value*) * param_count);
+
          if (v.run()) {
+            /* Success! Backup is not needed */
+            ralloc_free(param);
             return brw_vec4_generate_assembly(compiler, log_data, mem_ctx,
                                               shader, &prog_data->base, v.cfg,
                                               final_assembly_size);
+         } else {
+            /* These variables could be modified by the execution of the GS
+             * visitor if it packed the uniforms in the push constant buffer.
+             * As it failed, we need restore them so we can start again with
+             * DUAL_INSTANCED or SINGLE mode.
+             *
+             * FIXME: Could more variables be modified by this execution?
+             */
+            memcpy(prog_data->base.base.param, param,
+                   sizeof(gl_constant_value*) * param_count);
+            prog_data->base.base.nr_params = param_count;
+            ralloc_free(param);
          }
       }
    }

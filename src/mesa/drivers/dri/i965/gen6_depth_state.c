@@ -164,7 +164,7 @@ gen6_emit_depth_stencil_hiz(struct brw_context *brw,
          struct intel_mipmap_tree *hiz_mt = depth_mt->hiz_buf->mt;
          uint32_t offset = 0;
 
-         if (hiz_mt->array_layout == ALL_SLICES_AT_EACH_LOD) {
+         if (hiz_mt->array_layout == GEN6_HIZ_STENCIL) {
             offset = intel_miptree_get_aligned_offset(
                         hiz_mt,
                         hiz_mt->level[lod].level_x,
@@ -190,7 +190,7 @@ gen6_emit_depth_stencil_hiz(struct brw_context *brw,
       if (separate_stencil) {
          uint32_t offset = 0;
 
-         if (stencil_mt->array_layout == ALL_SLICES_AT_EACH_LOD) {
+         if (stencil_mt->array_layout == GEN6_HIZ_STENCIL) {
             assert(stencil_mt->format == MESA_FORMAT_S_UINT8);
 
             /* Note: we can't compute the stencil offset using

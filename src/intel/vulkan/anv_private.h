@@ -604,6 +604,24 @@ struct anv_bo *anv_scratch_pool_alloc(struct anv_device *device,
                                       gl_shader_stage stage,
                                       unsigned per_thread_scratch);
 
+struct anv_memory_type {
+   /* Standard bits passed on to the client */
+   VkMemoryPropertyFlags   propertyFlags;
+   uint32_t                heapIndex;
+
+   /* Driver-internal book-keeping */
+   VkBufferUsageFlags      valid_buffer_usage;
+};
+
+struct anv_memory_heap {
+   /* Standard bits passed on to the client */
+   VkDeviceSize      size;
+   VkMemoryHeapFlags flags;
+
+   /* Driver-internal book-keeping */
+   bool              supports_48bit_addresses;
+};
+
 struct anv_physical_device {
     VK_LOADER_DATA                              _loader_data;
 
@@ -620,16 +638,27 @@ struct anv_physical_device {
      * practically unlimited.  However, we will never report more than 3/4 of
      * the total system ram to try and avoid running out of RAM.
      */
-    uint64_t                                    heap_size;
     bool                                        supports_48bit_addresses;
     struct brw_compiler *                       compiler;
     struct isl_device                           isl_dev;
     int                                         cmd_parser_version;
+    bool                                        has_exec_async;
 
     uint32_t                                    eu_total;
     uint32_t                                    subslice_total;
 
     uint8_t                                     uuid[VK_UUID_SIZE];
+
+    struct {
+      uint32_t                                  type_count;
+      struct anv_memory_type                    types[VK_MAX_MEMORY_TYPES];
+      uint32_t                                  heap_count;
+      struct anv_memory_heap                    heaps[VK_MAX_MEMORY_HEAPS];
+    } memory;
+
+    uint8_t                                     pipeline_cache_uuid[VK_UUID_SIZE];
+    uint8_t                                     driver_uuid[VK_UUID_SIZE];
+    uint8_t                                     device_uuid[VK_UUID_SIZE];
 
     struct wsi_device                       wsi_device;
     int                                         local_fd;
@@ -960,7 +989,7 @@ _anv_combine_address(struct anv_batch *batch, void *location,
 
 struct anv_device_memory {
    struct anv_bo                                bo;
-   uint32_t                                     type_index;
+   struct anv_memory_type *                     type;
    VkDeviceSize                                 map_size;
    void *                                       map;
 };
@@ -1993,6 +2022,12 @@ void
 anv_gen8_hiz_op_resolve(struct anv_cmd_buffer *cmd_buffer,
                         const struct anv_image *image,
                         enum blorp_hiz_op op);
+
+void
+anv_image_ccs_clear(struct anv_cmd_buffer *cmd_buffer,
+                    const struct anv_image *image,
+                    const struct isl_view *view,
+                    const VkImageSubresourceRange *subresourceRange);
 
 enum isl_aux_usage
 anv_layout_to_aux_usage(const struct gen_device_info * const devinfo,

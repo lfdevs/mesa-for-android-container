@@ -142,9 +142,7 @@ target_triplet = @target@
 @HAVE_PLATFORM_X11_TRUE@	-DVK_USE_PLATFORM_XLIB_KHR
 
 @HAVE_PLATFORM_X11_TRUE@am__append_2 = $(VULKAN_WSI_X11_FILES)
-
-# FIXME: Use pkg-config for X11-xcb ldflags.
-@HAVE_PLATFORM_X11_TRUE@am__append_3 = $(XCB_DRI3_LIBS) -lX11-xcb
+@HAVE_PLATFORM_X11_TRUE@am__append_3 = $(XCB_DRI3_LIBS)
 @HAVE_PLATFORM_WAYLAND_TRUE@am__append_4 = \
 @HAVE_PLATFORM_WAYLAND_TRUE@	$(WAYLAND_CFLAGS) \
 @HAVE_PLATFORM_WAYLAND_TRUE@	-DVK_USE_PLATFORM_WAYLAND_KHR
@@ -252,8 +250,7 @@ am__DEPENDENCIES_1 =
 @HAVE_PLATFORM_X11_TRUE@am__DEPENDENCIES_2 = $(am__DEPENDENCIES_1)
 @HAVE_PLATFORM_WAYLAND_TRUE@am__DEPENDENCIES_3 =  \
 @HAVE_PLATFORM_WAYLAND_TRUE@	$(am__DEPENDENCIES_1)
-am__DEPENDENCIES_4 = $(am__DEPENDENCIES_2) $(am__DEPENDENCIES_3) \
-	libvulkan_common.la \
+am__DEPENDENCIES_4 = libvulkan_common.la \
 	$(top_builddir)/src/vulkan/libvulkan_util.la \
 	$(top_builddir)/src/vulkan/libvulkan_wsi.la \
 	$(top_builddir)/src/amd/common/libamd_common.la \
@@ -262,7 +259,8 @@ am__DEPENDENCIES_4 = $(am__DEPENDENCIES_2) $(am__DEPENDENCIES_3) \
 	$(top_builddir)/src/util/libmesautil.la $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
-	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_2) $(am__DEPENDENCIES_3)
 libvulkan_radeon_la_DEPENDENCIES = $(am__DEPENDENCIES_4)
 am_libvulkan_radeon_la_OBJECTS =
 libvulkan_radeon_la_OBJECTS = $(am_libvulkan_radeon_la_OBJECTS)
@@ -635,6 +633,7 @@ pdfdir = @pdfdir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
+runstatedir = @runstatedir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
@@ -729,7 +728,7 @@ AM_CFLAGS = \
 
 VULKAN_SOURCES = $(VULKAN_GENERATED_FILES) $(VULKAN_FILES) \
 	$(am__append_2) $(am__append_5)
-VULKAN_LIB_DEPS = $(am__append_3) $(am__append_6) libvulkan_common.la \
+VULKAN_LIB_DEPS = libvulkan_common.la \
 	$(top_builddir)/src/vulkan/libvulkan_util.la \
 	$(top_builddir)/src/vulkan/libvulkan_wsi.la \
 	$(top_builddir)/src/amd/common/libamd_common.la \
@@ -737,7 +736,8 @@ VULKAN_LIB_DEPS = $(am__append_3) $(am__append_6) libvulkan_common.la \
 	$(top_builddir)/src/compiler/nir/libnir.la \
 	$(top_builddir)/src/util/libmesautil.la $(LLVM_LIBS) \
 	$(LIBELF_LIBS) $(PTHREAD_LIBS) $(AMDGPU_LIBS) $(LIBDRM_LIBS) \
-	$(PTHREAD_LIBS) $(DLOPEN_LIBS) -lm
+	$(PTHREAD_LIBS) $(DLOPEN_LIBS) -lm $(am__append_3) \
+	$(am__append_6)
 noinst_LTLIBRARIES = libvulkan_common.la
 libvulkan_common_la_SOURCES = $(VULKAN_SOURCES)
 nodist_EXTRA_libvulkan_radeon_la_SOURCES = dummy.cpp

@@ -282,9 +282,7 @@ TESTS = $(am__EXEEXT_1) $(check_PROGRAMS) $(am__EXEEXT_3)
 @HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_X11_TRUE@	-DVK_USE_PLATFORM_XLIB_KHR
 
 @HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_X11_TRUE@am__append_6 = $(VULKAN_WSI_X11_FILES)
-
-# FIXME: Use pkg-config for X11-xcb ldflags.
-@HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_X11_TRUE@am__append_7 = $(XCB_DRI3_LIBS) -lX11-xcb
+@HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_X11_TRUE@am__append_7 = $(XCB_DRI3_LIBS)
 @HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_WAYLAND_TRUE@am__append_8 = \
 @HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_WAYLAND_TRUE@	$(WAYLAND_CFLAGS) \
 @HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_WAYLAND_TRUE@	-DVK_USE_PLATFORM_WAYLAND_KHR
@@ -595,9 +593,7 @@ vulkan_libanv_gen9_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 am__DEPENDENCIES_2 =
 @HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_X11_TRUE@am__DEPENDENCIES_3 = $(am__DEPENDENCIES_2)
 @HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_WAYLAND_TRUE@am__DEPENDENCIES_4 = $(am__DEPENDENCIES_2)
-@HAVE_INTEL_VULKAN_TRUE@am__DEPENDENCIES_5 = $(am__DEPENDENCIES_2) \
-@HAVE_INTEL_VULKAN_TRUE@	$(am__DEPENDENCIES_3) \
-@HAVE_INTEL_VULKAN_TRUE@	$(am__DEPENDENCIES_4) \
+@HAVE_INTEL_VULKAN_TRUE@am__DEPENDENCIES_5 =  \
 @HAVE_INTEL_VULKAN_TRUE@	vulkan/libvulkan_common.la \
 @HAVE_INTEL_VULKAN_TRUE@	$(VULKAN_PER_GEN_LIBS) \
 @HAVE_INTEL_VULKAN_TRUE@	compiler/libintel_compiler.la \
@@ -608,7 +604,10 @@ am__DEPENDENCIES_2 =
 @HAVE_INTEL_VULKAN_TRUE@	$(top_builddir)/src/compiler/nir/libnir.la \
 @HAVE_INTEL_VULKAN_TRUE@	$(top_builddir)/src/util/libmesautil.la \
 @HAVE_INTEL_VULKAN_TRUE@	$(am__DEPENDENCIES_2) \
-@HAVE_INTEL_VULKAN_TRUE@	$(am__DEPENDENCIES_2)
+@HAVE_INTEL_VULKAN_TRUE@	$(am__DEPENDENCIES_2) \
+@HAVE_INTEL_VULKAN_TRUE@	$(am__DEPENDENCIES_2) \
+@HAVE_INTEL_VULKAN_TRUE@	$(am__DEPENDENCIES_3) \
+@HAVE_INTEL_VULKAN_TRUE@	$(am__DEPENDENCIES_4)
 @HAVE_INTEL_VULKAN_TRUE@vulkan_libvulkan_test_la_DEPENDENCIES =  \
 @HAVE_INTEL_VULKAN_TRUE@	$(am__DEPENDENCIES_5)
 am__vulkan_libvulkan_test_la_SOURCES_DIST = vulkan/anv_gem_stubs.c
@@ -1416,6 +1415,7 @@ pdfdir = @pdfdir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
+runstatedir = @runstatedir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
@@ -1912,9 +1912,7 @@ vulkan_api_xml = $(top_srcdir)/src/vulkan/registry/vk.xml
 @HAVE_INTEL_VULKAN_TRUE@VULKAN_SOURCES = $(VULKAN_GENERATED_FILES) \
 @HAVE_INTEL_VULKAN_TRUE@	$(VULKAN_FILES) $(am__append_6) \
 @HAVE_INTEL_VULKAN_TRUE@	$(am__append_9)
-@HAVE_INTEL_VULKAN_TRUE@VULKAN_LIB_DEPS = $(LIBDRM_LIBS) \
-@HAVE_INTEL_VULKAN_TRUE@	$(am__append_7) $(am__append_10) \
-@HAVE_INTEL_VULKAN_TRUE@	vulkan/libvulkan_common.la \
+@HAVE_INTEL_VULKAN_TRUE@VULKAN_LIB_DEPS = vulkan/libvulkan_common.la \
 @HAVE_INTEL_VULKAN_TRUE@	$(VULKAN_PER_GEN_LIBS) \
 @HAVE_INTEL_VULKAN_TRUE@	compiler/libintel_compiler.la \
 @HAVE_INTEL_VULKAN_TRUE@	common/libintel_common.la \
@@ -1923,7 +1921,9 @@ vulkan_api_xml = $(top_srcdir)/src/vulkan/registry/vk.xml
 @HAVE_INTEL_VULKAN_TRUE@	$(top_builddir)/src/vulkan/libvulkan_wsi.la \
 @HAVE_INTEL_VULKAN_TRUE@	$(top_builddir)/src/compiler/nir/libnir.la \
 @HAVE_INTEL_VULKAN_TRUE@	$(top_builddir)/src/util/libmesautil.la \
-@HAVE_INTEL_VULKAN_TRUE@	$(PTHREAD_LIBS) $(DLOPEN_LIBS) -lm
+@HAVE_INTEL_VULKAN_TRUE@	$(LIBDRM_LIBS) $(PTHREAD_LIBS) \
+@HAVE_INTEL_VULKAN_TRUE@	$(DLOPEN_LIBS) -lm $(am__append_7) \
+@HAVE_INTEL_VULKAN_TRUE@	$(am__append_10)
 @HAVE_INTEL_VULKAN_TRUE@vulkan_libvulkan_common_la_SOURCES = $(VULKAN_SOURCES)
 @HAVE_INTEL_VULKAN_TRUE@vulkan_libvulkan_common_la_CFLAGS = $(VULKAN_CFLAGS)
 @HAVE_INTEL_VULKAN_TRUE@vulkan_libvulkan_common_la_CPPFLAGS = $(VULKAN_CPPFLAGS)

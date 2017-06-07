@@ -174,6 +174,20 @@ static void si_emit_derived_tess_state(struct si_context *sctx,
 	if (sctx->b.chip_class == SI) {
 		unsigned one_wave = 64 / MAX2(num_tcs_input_cp, num_tcs_output_cp);
 		*num_patches = MIN2(*num_patches, one_wave);
+
+		if (sctx->screen->b.info.max_se == 1) {
+			/* The VGT HS block increments the patch ID unconditionally
+			 * within a single threadgroup. This results in incorrect
+			 * patch IDs when instanced draws are used.
+			 *
+			 * The intended solution is to restrict threadgroups to
+			 * a single instance by setting SWITCH_ON_EOI, which
+			 * should cause IA to split instances up. However, this
+			 * doesn't work correctly on SI when there is no other
+			 * SE to switch to.
+			 */
+			*num_patches = 1;
+		}
 	}
 
 	sctx->last_num_patches = *num_patches;

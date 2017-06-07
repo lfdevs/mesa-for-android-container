@@ -251,6 +251,41 @@ enum miptree_array_layout {
     *   +---+
     */
    ALL_SLICES_AT_EACH_LOD,
+
+   /* On Sandy Bridge, HiZ and stencil buffers work the same as on Ivy Bridge
+    * except that they don't technically support mipmapping.  That does not,
+    * however, stop us from doing it.  As far as Sandy Bridge hardware is
+    * concerned, HiZ and stencil always operates on a single miplevel 2D
+    * (possibly array) image.  The dimensions of that image are NOT minified.
+    *
+    * In order to implement HiZ and stencil on Sandy Bridge, we create one
+    * full-sized 2D (possibly array) image for every LOD with every image
+    * aligned to a page boundary.  In order to save memory, we pretend that
+    * the width of each miplevel is minified and we place LOD1 and above below
+    * LOD0 but horizontally adjacent to each other.  When considered as
+    * full-sized images, LOD1 and above technically overlap.  However, since
+    * we only write to part of that image, the hardware will never notice the
+    * overlap.
+    *
+    * This layout looks something like this:
+    *
+    *   +---------+
+    *   |         |
+    *   |         |
+    *   +---------+
+    *   |         |
+    *   |         |
+    *   +---------+
+    *
+    *   +----+ +-+ .
+    *   |    | +-+
+    *   +----+
+    *
+    *   +----+ +-+ .
+    *   |    | +-+
+    *   +----+
+    */
+   GEN6_HIZ_STENCIL,
 };
 
 enum intel_aux_disable {
@@ -672,7 +707,7 @@ intel_miptree_alloc_non_msrt_mcs(struct brw_context *brw,
 
 enum {
    MIPTREE_LAYOUT_ACCELERATED_UPLOAD       = 1 << 0,
-   MIPTREE_LAYOUT_FORCE_ALL_SLICE_AT_LOD   = 1 << 1,
+   MIPTREE_LAYOUT_GEN6_HIZ_STENCIL         = 1 << 1,
    MIPTREE_LAYOUT_FOR_BO                   = 1 << 2,
    MIPTREE_LAYOUT_DISABLE_AUX              = 1 << 3,
    MIPTREE_LAYOUT_FORCE_HALIGN16           = 1 << 4,

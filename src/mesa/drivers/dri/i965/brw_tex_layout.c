@@ -216,6 +216,8 @@ brw_miptree_layout_2d(struct intel_mipmap_tree *mt)
       mt->total_height = MAX2(mt->total_height, y + img_height);
 
       /* Layout_below: step right after second mipmap.
+       *
+       * For Sandy Bridge HiZ and stencil, we always step down.
        */
       if (level == mt->first_level + 1) {
 	 x += ALIGN_NPOT(width, mt->halign) / bw;
@@ -228,6 +230,67 @@ brw_miptree_layout_2d(struct intel_mipmap_tree *mt)
 
       if (mt->target == GL_TEXTURE_3D)
          depth = minify(depth, 1);
+   }
+}
+
+static void
+brw_miptree_layout_gen6_hiz_stencil(struct intel_mipmap_tree *mt)
+{
+   unsigned x = 0;
+   unsigned y = 0;
+   unsigned width = mt->physical_width0;
+   unsigned height = mt->physical_height0;
+   /* Number of layers of array texture. */
+   unsigned depth = mt->physical_depth0;
+   unsigned tile_width, tile_height, bw, bh;
+
+   if (mt->format == MESA_FORMAT_S_UINT8) {
+      bw = bh = 1;
+      /* W-tiled */
+      tile_width = 64;
+      tile_height = 64;
+   } else {
+      assert(_mesa_get_format_base_format(mt->format) == GL_DEPTH_COMPONENT ||
+             _mesa_get_format_base_format(mt->format) == GL_DEPTH_STENCIL);
+      /* Each 128-bit HiZ block corresponds to a region of of 8x4 depth
+       * samples.  Each cache line in the Y-Tiled HiZ image contains 2x2 HiZ
+       * blocks.  Therefore, each Y-tiled cache line corresponds to an 16x8
+       * region in the depth surface.  Since we're representing it as
+       * RGBA_FLOAT32, the miptree calculations will think that each cache
+       * line is 1x4 pixels.  Therefore, we need a scale-down factor of 16x2
+       * and a vertical alignment of 2.
+       */
+      mt->cpp = 16;
+      bw = 16;
+      bh = 2;
+      /* Y-tiled */
+      tile_width = 128 / mt->cpp;
+      tile_height = 32;
+   }
+
+   mt->total_width = 0;
+   mt->total_height = 0;
+
+   for (unsigned level = mt->first_level; level <= mt->last_level; level++) {
+      intel_miptree_set_level_info(mt, level, x, y, depth);
+
+      const unsigned img_width = ALIGN(DIV_ROUND_UP(width, bw), mt->halign);
+      const unsigned img_height =
+         ALIGN(DIV_ROUND_UP(height, bh), mt->valign) * depth;
+
+      mt->total_width = MAX2(mt->total_width, x + img_width);
+      mt->total_height = MAX2(mt->total_height, y + img_height);
+
+      if (level == mt->first_level) {
+         y += ALIGN(img_height, tile_height);
+      } else {
+         x += ALIGN(img_width, tile_width);
+      }
+
+      /* We only minify the width.  We want qpitch to match for all miplevels
+       * because the hardware doesn't know we aren't on LOD0.
+       */
+      width = minify(width, 1);
    }
 }
 
@@ -249,6 +312,8 @@ brw_miptree_get_vertical_slice_pitch(const struct brw_context *brw,
                                      const struct intel_mipmap_tree *mt,
                                      unsigned level)
 {
+   assert(mt->array_layout != GEN6_HIZ_STENCIL || brw->gen == 6);
+
    if (brw->gen >= 9) {
       /* ALL_SLICES_AT_EACH_LOD isn't supported on Gen8+ but this code will
        * effectively end up with a packed qpitch anyway whenever
@@ -280,6 +345,15 @@ brw_miptree_get_vertical_slice_pitch(const struct brw_context *brw,
               (brw->gen == 4 && mt->target == GL_TEXTURE_CUBE_MAP) ||
               mt->array_layout == ALL_SLICES_AT_EACH_LOD) {
       return ALIGN_NPOT(minify(mt->physical_height0, level), mt->valign);
+
+   } else if (mt->array_layout == GEN6_HIZ_STENCIL) {
+      /* For HiZ and stencil on Sandy Bridge, we don't minify the height. */
+      if (mt->format == MESA_FORMAT_S_UINT8) {
+         return ALIGN(mt->physical_height0, mt->valign);
+      } else {
+         /* HiZ has a vertical scale factor of 2. */
+         return ALIGN(DIV_ROUND_UP(mt->physical_height0, 2), mt->valign);
+      }
 
    } else {
       const unsigned h0 = ALIGN_NPOT(mt->physical_height0, mt->valign);
@@ -333,6 +407,8 @@ brw_miptree_layout_texture_array(struct brw_context *brw,
 
    if (layout_1d)
       gen9_miptree_layout_1d(mt);
+   else if (mt->array_layout == GEN6_HIZ_STENCIL)
+      brw_miptree_layout_gen6_hiz_stencil(mt);
    else
       brw_miptree_layout_2d(mt);
 
@@ -556,6 +632,8 @@ intel_miptree_set_total_width_height(struct brw_context *brw,
       case INTEL_MSAA_LAYOUT_IMS:
          if (gen9_use_linear_1d_layout(brw, mt))
             gen9_miptree_layout_1d(mt);
+         else if (mt->array_layout == GEN6_HIZ_STENCIL)
+            brw_miptree_layout_gen6_hiz_stencil(mt);
          else
             brw_miptree_layout_2d(mt);
          break;
@@ -579,15 +657,9 @@ intel_miptree_set_alignment(struct brw_context *brw,
     * - Ironlake and Sandybridge PRMs: Volume 1, Part 1, Section 7.18.3.4
     * - BSpec (for Ivybridge and slight variations in separate stencil)
     */
-   bool gen6_hiz_or_stencil = false;
 
-   if (brw->gen == 6 && mt->array_layout == ALL_SLICES_AT_EACH_LOD) {
-      const GLenum base_format = _mesa_get_format_base_format(mt->format);
-      gen6_hiz_or_stencil = _mesa_is_depth_or_stencil_format(base_format);
-   }
-
-   if (gen6_hiz_or_stencil) {
-      /* On gen6, we use ALL_SLICES_AT_EACH_LOD for stencil/hiz because the
+   if (mt->array_layout == GEN6_HIZ_STENCIL) {
+      /* On gen6, we use GEN6_HIZ_STENCIL for stencil/hiz because the
        * hardware doesn't support multiple mip levels on stencil/hiz.
        *
        * PRM Vol 2, Part 1, 7.5.3 Hierarchical Depth Buffer:
@@ -600,15 +672,13 @@ intel_miptree_set_alignment(struct brw_context *brw,
          /* Stencil uses W tiling, so we force W tiling alignment for the
           * ALL_SLICES_AT_EACH_LOD miptree layout.
           */
-         mt->halign = 64;
-         mt->valign = 64;
+         mt->halign = 4;
+         mt->valign = 2;
          assert((layout_flags & MIPTREE_LAYOUT_FORCE_HALIGN16) == 0);
       } else {
-         /* Depth uses Y tiling, so we force need Y tiling alignment for the
-          * ALL_SLICES_AT_EACH_LOD miptree layout.
-          */
-         mt->halign = 128 / mt->cpp;
-         mt->valign = 32;
+         /* See brw_miptree_layout_gen6_hiz_stencil() */
+         mt->halign = 1;
+         mt->valign = 2;
       }
    } else if (mt->compressed) {
        /* The hardware alignment requirements for compressed textures

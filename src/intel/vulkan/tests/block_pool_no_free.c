@@ -107,7 +107,10 @@ static void validate_monotonic(uint32_t **blocks)
 
 static void run_test()
 {
-   struct anv_device device;
+   struct anv_instance instance;
+   struct anv_device device = {
+      .instance = &instance,
+   };
    struct anv_block_pool pool;
 
    pthread_mutex_init(&device.mutex, NULL);

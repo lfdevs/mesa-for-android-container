@@ -33,9 +33,6 @@
 #include "vl/vl_decoder.h"
 #include "../ddebug/dd_util.h"
 
-#define SI_LLVM_DEFAULT_FEATURES \
-	"+DumpCode,+vgpr-spilling,-fp32-denormals,-xnack"
-
 /*
  * pipe_context
  */
@@ -126,12 +123,16 @@ static LLVMTargetMachineRef
 si_create_llvm_target_machine(struct si_screen *sscreen)
 {
 	const char *triple = "amdgcn--";
+	char features[256];
+
+	snprintf(features, sizeof(features),
+		 "+DumpCode,+vgpr-spilling,-fp32-denormals,+fp64-denormals%s%s",
+		 sscreen->b.chip_class >= GFX9 ? ",+xnack" : ",-xnack",
+		 sscreen->b.debug_flags & DBG_SI_SCHED ? ",+si-scheduler" : "");
 
 	return LLVMCreateTargetMachine(si_llvm_get_amdgpu_target(triple), triple,
 				       r600_get_llvm_processor_name(sscreen->b.family),
-				       sscreen->b.debug_flags & DBG_SI_SCHED ?
-					       SI_LLVM_DEFAULT_FEATURES ",+si-scheduler" :
-					       SI_LLVM_DEFAULT_FEATURES,
+				       features,
 				       LLVMCodeGenLevelDefault,
 				       LLVMRelocDefault,
 				       LLVMCodeModelDefault);
@@ -759,6 +760,7 @@ static bool si_init_gs_info(struct si_screen *sscreen)
 	case CHIP_POLARIS11:
 	case CHIP_POLARIS12:
 	case CHIP_VEGA10:
+	case CHIP_RAVEN:
 		sscreen->gs_table_depth = 32;
 		return true;
 	default:
@@ -897,7 +899,8 @@ struct pipe_screen *radeonsi_screen_create(struct radeon_winsys *ws)
 
 	sscreen->has_msaa_sample_loc_bug = (sscreen->b.family >= CHIP_POLARIS10 &&
 					    sscreen->b.family <= CHIP_POLARIS12) ||
-					   sscreen->b.family == CHIP_VEGA10;
+					   sscreen->b.family == CHIP_VEGA10 ||
+					   sscreen->b.family == CHIP_RAVEN;
 
 	sscreen->b.has_cp_dma = true;
 	sscreen->b.has_streamout = true;
@@ -911,7 +914,8 @@ struct pipe_screen *radeonsi_screen_create(struct radeon_winsys *ws)
 
 		sscreen->b.rbplus_allowed =
 			!(sscreen->b.debug_flags & DBG_NO_RB_PLUS) &&
-			sscreen->b.family == CHIP_STONEY;
+			(sscreen->b.family == CHIP_STONEY ||
+			 sscreen->b.family == CHIP_RAVEN);
 	}
 
 	(void) mtx_init(&sscreen->shader_parts_mutex, mtx_plain);

@@ -35,6 +35,7 @@ libvdpau_gallium_la_LIBADD = \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
 	$(top_builddir)/src/util/libmesautil.la \
 	$(VL_LIBS) \
+	$(XCB_DRI3_LIBS) \
 	$(LIBDRM_LIBS) \
 	$(GALLIUM_COMMON_LIB_DEPS)
 

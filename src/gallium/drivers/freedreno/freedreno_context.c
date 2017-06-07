@@ -278,13 +278,7 @@ fd_context_init(struct fd_context *ctx, struct pipe_screen *pscreen,
 		goto fail;
 	pctx->const_uploader = pctx->stream_uploader;
 
-	/* TODO what about compute?  Ideally it creates it's own independent
-	 * batches per compute job (since it isn't using tiling, so no point
-	 * in getting involved with the re-ordering madness)..
-	 */
-	if (!screen->reorder) {
-		ctx->batch = fd_bc_alloc_batch(&screen->batch_cache, ctx);
-	}
+	ctx->batch = fd_bc_alloc_batch(&screen->batch_cache, ctx);
 
 	slab_create_child(&ctx->transfer_pool, &screen->transfer_pool);
 

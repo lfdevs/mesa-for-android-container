@@ -416,6 +416,8 @@ translate_clear_color(enum pipe_format format,
    switch (format) {
    case PIPE_FORMAT_B8G8R8A8_UNORM:
    case PIPE_FORMAT_B8G8R8X8_UNORM:
+   case PIPE_FORMAT_R8G8B8A8_UNORM:
+   case PIPE_FORMAT_R8G8B8X8_UNORM:
       clear_value = etna_cfloat_to_uintN(color->f[2], 8) |
                     (etna_cfloat_to_uintN(color->f[1], 8) << 8) |
                     (etna_cfloat_to_uintN(color->f[0], 8) << 16) |

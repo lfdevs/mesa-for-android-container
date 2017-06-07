@@ -1133,6 +1133,64 @@ struct StoreRasterTile
             }
         }
     }
+
+    //////////////////////////////////////////////////////////////////////////
+    /// @brief Resolves an 8x8 raster tile to the resolve destination surface.
+    /// @param pSrc - Pointer to raster tile.
+    /// @param pDstSurface - Destination surface state
+    /// @param x, y - Coordinates to raster tile.
+    /// @param sampleOffset - Offset between adjacent multisamples
+    INLINE static void Resolve(
+        uint8_t *pSrc,
+        SWR_SURFACE_STATE* pDstSurface,
+        uint32_t x, uint32_t y, uint32_t sampleOffset, uint32_t renderTargetArrayIndex) // (x, y) pixel coordinate to start of raster tile.
+    {
+        uint32_t lodWidth = std::max(pDstSurface->width >> pDstSurface->lod, 1U);
+        uint32_t lodHeight = std::max(pDstSurface->height >> pDstSurface->lod, 1U);
+
+        float oneOverNumSamples = 1.0f / pDstSurface->numSamples;
+
+        // For each raster tile pixel (rx, ry)
+        for (uint32_t ry = 0; ry < KNOB_TILE_Y_DIM; ++ry)
+        {
+            for (uint32_t rx = 0; rx < KNOB_TILE_X_DIM; ++rx)
+            {
+                // Perform bounds checking.
+                if (((x + rx) < lodWidth) &&
+                        ((y + ry) < lodHeight))
+                {
+                    // Sum across samples
+                    float resolveColor[4] = {0};
+                    for (uint32_t sampleNum = 0; sampleNum < pDstSurface->numSamples; sampleNum++)
+                    {
+                        float sampleColor[4] = {0};
+                        uint8_t *pSampleSrc = pSrc + sampleOffset * sampleNum;
+                        GetSwizzledSrcColor(pSampleSrc, rx, ry, sampleColor);
+                        resolveColor[0] += sampleColor[0];
+                        resolveColor[1] += sampleColor[1];
+                        resolveColor[2] += sampleColor[2];
+                        resolveColor[3] += sampleColor[3];
+                    }
+
+                    // Divide by numSamples to average
+                    resolveColor[0] *= oneOverNumSamples;
+                    resolveColor[1] *= oneOverNumSamples;
+                    resolveColor[2] *= oneOverNumSamples;
+                    resolveColor[3] *= oneOverNumSamples;
+
+                    // Use the resolve surface state
+                    SWR_SURFACE_STATE* pResolveSurface = (SWR_SURFACE_STATE*)pDstSurface->pAuxBaseAddress;
+                    uint8_t *pDst = (uint8_t*)ComputeSurfaceAddress<false, false>((x + rx), (y + ry),
+                        pResolveSurface->arrayIndex + renderTargetArrayIndex, pResolveSurface->arrayIndex + renderTargetArrayIndex,
+                        0, pResolveSurface->lod, pResolveSurface);
+                    {
+                        ConvertPixelFromFloat<DstFormat>(pDst, resolveColor);
+                    }
+                }
+            }
+        }
+    }
+
 };
 
 template<typename TTraits, SWR_FORMAT SrcFormat, SWR_FORMAT DstFormat>
@@ -2316,6 +2374,9 @@ struct StoreMacroTile
             pfnStore[sampleNum] = (bForceGeneric || KNOB_USE_GENERIC_STORETILE) ? StoreRasterTile<TTraits, SrcFormat, DstFormat>::Store : OptStoreRasterTile<TTraits, SrcFormat, DstFormat>::Store;
         }
 
+        // Save original for pSrcHotTile resolve.
+        uint8_t *pResolveSrcHotTile = pSrcHotTile;
+
         // Store each raster tile from the hot tile to the destination surface.
         for(uint32_t row = 0; row < KNOB_MACROTILE_Y_DIM; row += KNOB_TILE_Y_DIM)
         {
@@ -2325,6 +2386,20 @@ struct StoreMacroTile
                 {
                     pfnStore[sampleNum](pSrcHotTile, pDstSurface, (x + col), (y + row), sampleNum, renderTargetArrayIndex);
                     pSrcHotTile += KNOB_TILE_X_DIM * KNOB_TILE_Y_DIM * (FormatTraits<SrcFormat>::bpp / 8);
+                }
+            }
+        }
+
+        if (pDstSurface->pAuxBaseAddress)
+        {
+            uint32_t sampleOffset = KNOB_TILE_X_DIM * KNOB_TILE_Y_DIM * (FormatTraits<SrcFormat>::bpp / 8);
+            // Store each raster tile from the hot tile to the destination surface.
+            for(uint32_t row = 0; row < KNOB_MACROTILE_Y_DIM; row += KNOB_TILE_Y_DIM)
+            {
+                for(uint32_t col = 0; col < KNOB_MACROTILE_X_DIM; col += KNOB_TILE_X_DIM)
+                {
+                    StoreRasterTile<TTraits, SrcFormat, DstFormat>::Resolve(pResolveSrcHotTile, pDstSurface, (x + col), (y + row), sampleOffset, renderTargetArrayIndex);
+                    pResolveSrcHotTile += sampleOffset * pDstSurface->numSamples;
                 }
             }
         }

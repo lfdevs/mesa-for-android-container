@@ -208,6 +208,7 @@ x11_anv_wsi_image_create(VkDevice device_h,
     * know we're writing to them and synchronize uses on other rings (eg if
     * the display server uses the blitter ring).
     */
+   memory->bo.flags &= ~EXEC_OBJECT_ASYNC;
    memory->bo.flags |= EXEC_OBJECT_WRITE;
 
    anv_BindImageMemory(device_h, image_h, memory_h, 0);

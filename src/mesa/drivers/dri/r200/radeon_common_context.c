@@ -182,7 +182,7 @@ GLboolean radeonInitContext(radeonContextPtr radeon,
         radeon->texture_depth = driQueryOptioni (&radeon->optionCache,
 					        "texture_depth");
         if (radeon->texture_depth == DRI_CONF_TEXTURE_DEPTH_FB)
-                radeon->texture_depth = ( glVisual->rgbBits > 16 ) ?
+                radeon->texture_depth = (glVisual == NULL || glVisual->rgbBits > 16) ?
 	        DRI_CONF_TEXTURE_DEPTH_32 : DRI_CONF_TEXTURE_DEPTH_16;
 
 	radeon->texture_row_align = 32;

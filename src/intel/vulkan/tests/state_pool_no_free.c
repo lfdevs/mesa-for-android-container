@@ -54,7 +54,10 @@ static void *alloc_states(void *_job)
 
 static void run_test()
 {
-   struct anv_device device;
+   struct anv_instance instance;
+   struct anv_device device = {
+      .instance = &instance,
+   };
    struct anv_block_pool block_pool;
    struct anv_state_pool state_pool;
 

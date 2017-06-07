@@ -117,9 +117,9 @@ target_triplet = @target@
 
 @NEED_GALLIUM_VL_TRUE@am__append_9 = libgalliumvl.la
 @NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@am__append_10 = libgalliumvlwinsys.la
-@HAVE_DRI3_TRUE@@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@am__append_11 = \
-@HAVE_DRI3_TRUE@@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@	$(VL_WINSYS_DRI3_SOURCES)
-
+@HAVE_PLATFORM_X11_TRUE@@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@am__append_11 = $(VL_WINSYS_DRI2_SOURCES)
+@HAVE_DRI3_TRUE@@HAVE_PLATFORM_X11_TRUE@@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@am__append_12 = $(VL_WINSYS_DRI3_SOURCES)
+@HAVE_PLATFORM_DRM_TRUE@@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@am__append_13 = $(VL_WINSYS_DRM_SOURCES)
 subdir = src/gallium/auxiliary
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_gnu_make.m4 \
@@ -402,7 +402,7 @@ am__libgalliumvl_la_SOURCES_DIST = vl/vl_bicubic_filter.c \
 	vl/vl_mpeg12_decoder.c vl/vl_mpeg12_decoder.h vl/vl_rbsp.h \
 	vl/vl_types.h vl/vl_vertex_buffers.c vl/vl_vertex_buffers.h \
 	vl/vl_video_buffer.c vl/vl_video_buffer.h vl/vl_vlc.h \
-	vl/vl_winsys.h vl/vl_zscan.c vl/vl_zscan.h
+	vl/vl_zscan.c vl/vl_zscan.h
 am__objects_8 = vl/libgalliumvl_la-vl_bicubic_filter.lo \
 	vl/libgalliumvl_la-vl_compositor.lo \
 	vl/libgalliumvl_la-vl_csc.lo vl/libgalliumvl_la-vl_decoder.lo \
@@ -428,14 +428,19 @@ am__objects_9 = vl/vl_stubs.lo
 am_libgalliumvl_stub_la_OBJECTS = $(am__objects_9)
 libgalliumvl_stub_la_OBJECTS = $(am_libgalliumvl_stub_la_OBJECTS)
 libgalliumvlwinsys_la_LIBADD =
-am__libgalliumvlwinsys_la_SOURCES_DIST = vl/vl_winsys_dri.c \
-	vl/vl_winsys_drm.c vl/vl_winsys_dri3.c
-am__objects_10 = vl/libgalliumvlwinsys_la-vl_winsys_dri.lo \
-	vl/libgalliumvlwinsys_la-vl_winsys_drm.lo
-am__objects_11 = vl/libgalliumvlwinsys_la-vl_winsys_dri3.lo
-@HAVE_DRI3_TRUE@@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@am__objects_12 = $(am__objects_11)
+am__libgalliumvlwinsys_la_SOURCES_DIST = vl/vl_winsys.h \
+	vl/vl_winsys_dri.c vl/vl_winsys_dri3.c vl/vl_winsys_drm.c
+am__objects_10 =
+am__objects_11 = vl/libgalliumvlwinsys_la-vl_winsys_dri.lo
+@HAVE_PLATFORM_X11_TRUE@@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@am__objects_12 = $(am__objects_11)
+am__objects_13 = vl/libgalliumvlwinsys_la-vl_winsys_dri3.lo
+@HAVE_DRI3_TRUE@@HAVE_PLATFORM_X11_TRUE@@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@am__objects_14 = $(am__objects_13)
+am__objects_15 = vl/libgalliumvlwinsys_la-vl_winsys_drm.lo
+@HAVE_PLATFORM_DRM_TRUE@@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@am__objects_16 = $(am__objects_15)
 @NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@am_libgalliumvlwinsys_la_OBJECTS = $(am__objects_10) \
-@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@	$(am__objects_12)
+@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@	$(am__objects_12) \
+@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@	$(am__objects_14) \
+@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@	$(am__objects_16)
 libgalliumvlwinsys_la_OBJECTS = $(am_libgalliumvlwinsys_la_OBJECTS)
 libgalliumvlwinsys_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
@@ -808,6 +813,7 @@ pdfdir = @pdfdir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
+runstatedir = @runstatedir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
@@ -1167,18 +1173,22 @@ VL_SOURCES := \
 	vl/vl_video_buffer.c \
 	vl/vl_video_buffer.h \
 	vl/vl_vlc.h \
-	vl/vl_winsys.h \
 	vl/vl_zscan.c \
 	vl/vl_zscan.h
 
 
 # XXX: Nuke this as our dri targets no longer depend on VL.
 VL_WINSYS_SOURCES := \
-	vl/vl_winsys_dri.c \
-	vl/vl_winsys_drm.c
+	vl/vl_winsys.h
+
+VL_WINSYS_DRI2_SOURCES := \
+	vl/vl_winsys_dri.c
 
 VL_WINSYS_DRI3_SOURCES := \
 	vl/vl_winsys_dri3.c
+
+VL_WINSYS_DRM_SOURCES := \
+	vl/vl_winsys_drm.c
 
 VL_STUB_SOURCES := \
 	vl/vl_stubs.c
@@ -1340,6 +1350,7 @@ libgalliumvl_stub_la_SOURCES = \
 @NEED_GALLIUM_VL_TRUE@COMMON_VL_CFLAGS = \
 @NEED_GALLIUM_VL_TRUE@	$(AM_CFLAGS) \
 @NEED_GALLIUM_VL_TRUE@	$(VL_CFLAGS) \
+@NEED_GALLIUM_VL_TRUE@	$(XCB_DRI3_CFLAGS) \
 @NEED_GALLIUM_VL_TRUE@	$(DRI2PROTO_CFLAGS) \
 @NEED_GALLIUM_VL_TRUE@	$(LIBDRM_CFLAGS)
 
@@ -1349,11 +1360,11 @@ libgalliumvl_stub_la_SOURCES = \
 @NEED_GALLIUM_VL_TRUE@libgalliumvl_la_SOURCES = \
 @NEED_GALLIUM_VL_TRUE@	$(VL_SOURCES)
 
-@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@libgalliumvlwinsys_la_CFLAGS = \
-@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@	$(COMMON_VL_CFLAGS)
-
+@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@libgalliumvlwinsys_la_CFLAGS = $(COMMON_VL_CFLAGS)
 @NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@libgalliumvlwinsys_la_SOURCES = $(VL_WINSYS_SOURCES) \
-@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@	$(am__append_11)
+@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@	$(am__append_11) \
+@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@	$(am__append_12) \
+@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@	$(am__append_13)
 EXTRA_DIST = \
 	SConscript \
 	indices/u_indices.c \
@@ -1897,9 +1908,9 @@ libgalliumvl_stub.la: $(libgalliumvl_stub_la_OBJECTS) $(libgalliumvl_stub_la_DEP
 	$(AM_V_CCLD)$(LINK)  $(libgalliumvl_stub_la_OBJECTS) $(libgalliumvl_stub_la_LIBADD) $(LIBS)
 vl/libgalliumvlwinsys_la-vl_winsys_dri.lo: vl/$(am__dirstamp) \
 	vl/$(DEPDIR)/$(am__dirstamp)
-vl/libgalliumvlwinsys_la-vl_winsys_drm.lo: vl/$(am__dirstamp) \
-	vl/$(DEPDIR)/$(am__dirstamp)
 vl/libgalliumvlwinsys_la-vl_winsys_dri3.lo: vl/$(am__dirstamp) \
+	vl/$(DEPDIR)/$(am__dirstamp)
+vl/libgalliumvlwinsys_la-vl_winsys_drm.lo: vl/$(am__dirstamp) \
 	vl/$(DEPDIR)/$(am__dirstamp)
 
 libgalliumvlwinsys.la: $(libgalliumvlwinsys_la_OBJECTS) $(libgalliumvlwinsys_la_DEPENDENCIES) $(EXTRA_libgalliumvlwinsys_la_DEPENDENCIES) 
@@ -2288,19 +2299,19 @@ vl/libgalliumvlwinsys_la-vl_winsys_dri.lo: vl/vl_winsys_dri.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgalliumvlwinsys_la_CFLAGS) $(CFLAGS) -c -o vl/libgalliumvlwinsys_la-vl_winsys_dri.lo `test -f 'vl/vl_winsys_dri.c' || echo '$(srcdir)/'`vl/vl_winsys_dri.c
 
-vl/libgalliumvlwinsys_la-vl_winsys_drm.lo: vl/vl_winsys_drm.c
-@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgalliumvlwinsys_la_CFLAGS) $(CFLAGS) -MT vl/libgalliumvlwinsys_la-vl_winsys_drm.lo -MD -MP -MF vl/$(DEPDIR)/libgalliumvlwinsys_la-vl_winsys_drm.Tpo -c -o vl/libgalliumvlwinsys_la-vl_winsys_drm.lo `test -f 'vl/vl_winsys_drm.c' || echo '$(srcdir)/'`vl/vl_winsys_drm.c
-@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) vl/$(DEPDIR)/libgalliumvlwinsys_la-vl_winsys_drm.Tpo vl/$(DEPDIR)/libgalliumvlwinsys_la-vl_winsys_drm.Plo
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='vl/vl_winsys_drm.c' object='vl/libgalliumvlwinsys_la-vl_winsys_drm.lo' libtool=yes @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgalliumvlwinsys_la_CFLAGS) $(CFLAGS) -c -o vl/libgalliumvlwinsys_la-vl_winsys_drm.lo `test -f 'vl/vl_winsys_drm.c' || echo '$(srcdir)/'`vl/vl_winsys_drm.c
-
 vl/libgalliumvlwinsys_la-vl_winsys_dri3.lo: vl/vl_winsys_dri3.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgalliumvlwinsys_la_CFLAGS) $(CFLAGS) -MT vl/libgalliumvlwinsys_la-vl_winsys_dri3.lo -MD -MP -MF vl/$(DEPDIR)/libgalliumvlwinsys_la-vl_winsys_dri3.Tpo -c -o vl/libgalliumvlwinsys_la-vl_winsys_dri3.lo `test -f 'vl/vl_winsys_dri3.c' || echo '$(srcdir)/'`vl/vl_winsys_dri3.c
 @am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) vl/$(DEPDIR)/libgalliumvlwinsys_la-vl_winsys_dri3.Tpo vl/$(DEPDIR)/libgalliumvlwinsys_la-vl_winsys_dri3.Plo
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='vl/vl_winsys_dri3.c' object='vl/libgalliumvlwinsys_la-vl_winsys_dri3.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgalliumvlwinsys_la_CFLAGS) $(CFLAGS) -c -o vl/libgalliumvlwinsys_la-vl_winsys_dri3.lo `test -f 'vl/vl_winsys_dri3.c' || echo '$(srcdir)/'`vl/vl_winsys_dri3.c
+
+vl/libgalliumvlwinsys_la-vl_winsys_drm.lo: vl/vl_winsys_drm.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgalliumvlwinsys_la_CFLAGS) $(CFLAGS) -MT vl/libgalliumvlwinsys_la-vl_winsys_drm.lo -MD -MP -MF vl/$(DEPDIR)/libgalliumvlwinsys_la-vl_winsys_drm.Tpo -c -o vl/libgalliumvlwinsys_la-vl_winsys_drm.lo `test -f 'vl/vl_winsys_drm.c' || echo '$(srcdir)/'`vl/vl_winsys_drm.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) vl/$(DEPDIR)/libgalliumvlwinsys_la-vl_winsys_drm.Tpo vl/$(DEPDIR)/libgalliumvlwinsys_la-vl_winsys_drm.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='vl/vl_winsys_drm.c' object='vl/libgalliumvlwinsys_la-vl_winsys_drm.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgalliumvlwinsys_la_CFLAGS) $(CFLAGS) -c -o vl/libgalliumvlwinsys_la-vl_winsys_drm.lo `test -f 'vl/vl_winsys_drm.c' || echo '$(srcdir)/'`vl/vl_winsys_drm.c
 
 .cpp.o:
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.o$$||'`;\

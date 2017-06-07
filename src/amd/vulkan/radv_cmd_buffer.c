@@ -1334,6 +1334,10 @@ radv_flush_descriptors(struct radv_cmd_buffer *cmd_buffer,
 	if (cmd_buffer->state.push_descriptors_dirty)
 		radv_flush_push_descriptors(cmd_buffer);
 
+	MAYBE_UNUSED unsigned cdw_max = radeon_check_space(cmd_buffer->device->ws,
+	                                                   cmd_buffer->cs,
+	                                                   MAX_SETS * MESA_SHADER_STAGES * 4);
+
 	for (i = 0; i < MAX_SETS; i++) {
 		if (!(cmd_buffer->state.descriptors_dirty & (1 << i)))
 			continue;
@@ -1345,6 +1349,7 @@ radv_flush_descriptors(struct radv_cmd_buffer *cmd_buffer,
 	}
 	cmd_buffer->state.descriptors_dirty = 0;
 	cmd_buffer->state.push_descriptors_dirty = false;
+	assert(cmd_buffer->cs->cdw <= cdw_max);
 }
 
 static void
@@ -1373,6 +1378,8 @@ radv_flush_constants(struct radv_cmd_buffer *cmd_buffer,
 	va = cmd_buffer->device->ws->buffer_get_va(cmd_buffer->upload.upload_bo);
 	va += offset;
 
+	MAYBE_UNUSED unsigned cdw_max = radeon_check_space(cmd_buffer->device->ws,
+	                                                   cmd_buffer->cs, MESA_SHADER_STAGES * 4);
 	if (stages & VK_SHADER_STAGE_VERTEX_BIT)
 		radv_emit_userdata_address(cmd_buffer, pipeline, MESA_SHADER_VERTEX,
 					   AC_UD_PUSH_CONSTANTS, va);
@@ -1398,6 +1405,7 @@ radv_flush_constants(struct radv_cmd_buffer *cmd_buffer,
 					   AC_UD_PUSH_CONSTANTS, va);
 
 	cmd_buffer->push_constant_stages &= ~stages;
+	assert(cmd_buffer->cs->cdw <= cdw_max);
 }
 
 static void radv_emit_primitive_reset_state(struct radv_cmd_buffer *cmd_buffer,

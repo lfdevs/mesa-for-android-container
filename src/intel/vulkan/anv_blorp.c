@@ -1373,6 +1373,73 @@ void anv_CmdResolveImage(
    blorp_batch_finish(&batch);
 }
 
+void
+anv_image_ccs_clear(struct anv_cmd_buffer *cmd_buffer,
+                    const struct anv_image *image,
+                    const struct isl_view *view,
+                    const VkImageSubresourceRange *subresourceRange)
+{
+   assert(image->type == VK_IMAGE_TYPE_3D || image->extent.depth == 1);
+
+   struct blorp_batch batch;
+   blorp_batch_init(&cmd_buffer->device->blorp, &batch, cmd_buffer, 0);
+
+   struct blorp_surf surf;
+   get_blorp_surf_for_anv_image(image, VK_IMAGE_ASPECT_COLOR_BIT,
+                                image->aux_usage, &surf);
+
+   /* From the Sky Lake PRM Vol. 7, "Render Target Fast Clear":
+    *
+    *    "After Render target fast clear, pipe-control with color cache
+    *    write-flush must be issued before sending any DRAW commands on
+    *    that render target."
+    *
+    * This comment is a bit cryptic and doesn't really tell you what's going
+    * or what's really needed.  It appears that fast clear ops are not
+    * properly synchronized with other drawing.  This means that we cannot
+    * have a fast clear operation in the pipe at the same time as other
+    * regular drawing operations.  We need to use a PIPE_CONTROL to ensure
+    * that the contents of the previous draw hit the render target before we
+    * resolve and then use a second PIPE_CONTROL after the resolve to ensure
+    * that it is completed before any additional drawing occurs.
+    */
+   cmd_buffer->state.pending_pipe_bits |=
+      ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT | ANV_PIPE_CS_STALL_BIT;
+
+   const uint32_t level_count =
+      view ? view->levels : anv_get_levelCount(image, subresourceRange);
+   for (uint32_t l = 0; l < level_count; l++) {
+      const uint32_t level =
+         (view ? view->base_level : subresourceRange->baseMipLevel) + l;
+
+      const VkExtent3D extent = {
+         .width = anv_minify(image->extent.width, level),
+         .height = anv_minify(image->extent.height, level),
+         .depth = anv_minify(image->extent.depth, level),
+      };
+
+      /* Blorp likes to treat 2D_ARRAY and 3D the same. */
+      uint32_t blorp_base_layer, blorp_layer_count;
+      if (view) {
+         blorp_base_layer = view->base_array_layer;
+         blorp_layer_count = view->array_len;
+      } else if (image->type == VK_IMAGE_TYPE_3D) {
+         blorp_base_layer = 0;
+         blorp_layer_count = extent.depth;
+      } else {
+         blorp_base_layer = subresourceRange->baseArrayLayer;
+         blorp_layer_count = anv_get_layerCount(image, subresourceRange);
+      }
+
+      blorp_fast_clear(&batch, &surf, surf.surf->format,
+                       level, blorp_base_layer, blorp_layer_count,
+                       0, 0, extent.width, extent.height);
+   }
+
+   cmd_buffer->state.pending_pipe_bits |=
+      ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT | ANV_PIPE_CS_STALL_BIT;
+}
+
 static void
 ccs_resolve_attachment(struct anv_cmd_buffer *cmd_buffer,
                        struct blorp_batch *batch,

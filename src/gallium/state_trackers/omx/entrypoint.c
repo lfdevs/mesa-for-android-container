@@ -35,7 +35,13 @@
 #include <string.h>
 #include <stdbool.h>
 
+#if defined(HAVE_X11_PLATFORM)
 #include <X11/Xlib.h>
+#else
+#define XOpenDisplay(x) NULL
+#define XCloseDisplay(x)
+#define Display void
+#endif
 
 #include "os/os_thread.h"
 #include "util/u_memory.h"

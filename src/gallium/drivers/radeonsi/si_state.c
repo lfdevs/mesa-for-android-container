@@ -4568,6 +4568,9 @@ static void si_init_config(struct si_context *sctx)
 		case CHIP_VEGA10:
 			pc_lines = 4096;
 			break;
+		case CHIP_RAVEN:
+			pc_lines = 1024;
+			break;
 		default:
 			assert(0);
 		}

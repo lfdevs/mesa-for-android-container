@@ -199,7 +199,6 @@ GLboolean r200CreateContext( gl_api api,
       return false;
    }
 
-   assert(glVisual);
    assert(driContextPriv);
    assert(screen);
 

@@ -123,7 +123,7 @@ target_triplet = @target@
 @HAVE_LIBDRM_TRUE@am__append_3 = \
 @HAVE_LIBDRM_TRUE@	$(LIBDRM_LIBS)
 
-@HAVE_DRI3_TRUE@am__append_4 = libloader_dri3_helper.la
+@HAVE_DRI3_TRUE@@HAVE_PLATFORM_X11_TRUE@am__append_4 = libloader_dri3_helper.la
 subdir = src/loader
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_gnu_make.m4 \
@@ -154,15 +154,15 @@ AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
 am__v_lt_1 = 
-@HAVE_DRI3_TRUE@libloader_dri3_helper_la_DEPENDENCIES =  \
-@HAVE_DRI3_TRUE@	$(am__DEPENDENCIES_1)
+@HAVE_DRI3_TRUE@@HAVE_PLATFORM_X11_TRUE@libloader_dri3_helper_la_DEPENDENCIES =  \
+@HAVE_DRI3_TRUE@@HAVE_PLATFORM_X11_TRUE@	$(am__DEPENDENCIES_1)
 am__libloader_dri3_helper_la_SOURCES_DIST = loader_dri3_helper.c \
 	loader_dri3_helper.h
-@HAVE_DRI3_TRUE@am_libloader_dri3_helper_la_OBJECTS =  \
-@HAVE_DRI3_TRUE@	loader_dri3_helper.lo
+@HAVE_DRI3_TRUE@@HAVE_PLATFORM_X11_TRUE@am_libloader_dri3_helper_la_OBJECTS =  \
+@HAVE_DRI3_TRUE@@HAVE_PLATFORM_X11_TRUE@	loader_dri3_helper.lo
 libloader_dri3_helper_la_OBJECTS =  \
 	$(am_libloader_dri3_helper_la_OBJECTS)
-@HAVE_DRI3_TRUE@am_libloader_dri3_helper_la_rpath =
+@HAVE_DRI3_TRUE@@HAVE_PLATFORM_X11_TRUE@am_libloader_dri3_helper_la_rpath =
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -506,6 +506,7 @@ pdfdir = @pdfdir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
+runstatedir = @runstatedir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
@@ -537,11 +538,11 @@ AM_CPPFLAGS = \
 libloader_la_CPPFLAGS = $(AM_CPPFLAGS) $(am__append_1)
 libloader_la_SOURCES = $(LOADER_C_FILES)
 libloader_la_LIBADD = $(am__append_2) $(am__append_3)
-@HAVE_DRI3_TRUE@libloader_dri3_helper_la_SOURCES = \
-@HAVE_DRI3_TRUE@	loader_dri3_helper.c \
-@HAVE_DRI3_TRUE@	loader_dri3_helper.h
+@HAVE_DRI3_TRUE@@HAVE_PLATFORM_X11_TRUE@libloader_dri3_helper_la_SOURCES = \
+@HAVE_DRI3_TRUE@@HAVE_PLATFORM_X11_TRUE@	loader_dri3_helper.c \
+@HAVE_DRI3_TRUE@@HAVE_PLATFORM_X11_TRUE@	loader_dri3_helper.h
 
-@HAVE_DRI3_TRUE@libloader_dri3_helper_la_LIBADD = $(XCB_DRI3_LIBS)
+@HAVE_DRI3_TRUE@@HAVE_PLATFORM_X11_TRUE@libloader_dri3_helper_la_LIBADD = $(XCB_DRI3_LIBS)
 all: all-am
 
 .SUFFIXES:

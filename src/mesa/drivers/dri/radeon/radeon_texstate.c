@@ -199,6 +199,12 @@ do {							\
  * Texture unit state management
  */
 
+static GLenum
+texture_base_format(const struct gl_texture_object *t)
+{
+	return t->Image[0][t->BaseLevel]->_BaseFormat;
+}
+
 static GLboolean radeonUpdateTextureEnv( struct gl_context *ctx, int unit )
 {
    r100ContextPtr rmesa = R100_CONTEXT(ctx);
@@ -251,7 +257,7 @@ static GLboolean radeonUpdateTextureEnv( struct gl_context *ctx, int unit )
 	 assert(op <= 3);
 	 switch ( srcRGBi ) {
 	 case GL_TEXTURE:
-	    if (texUnit->_Current->Image[0][0]->_BaseFormat == GL_ALPHA)
+	    if (texture_base_format(texUnit->_Current) == GL_ALPHA)
 	       color_arg[i] = radeon_zero_color[op];
 	    else
 	       color_arg[i] = radeon_texture_color[op][unit];
@@ -275,7 +281,7 @@ static GLboolean radeonUpdateTextureEnv( struct gl_context *ctx, int unit )
 	 case GL_TEXTURE1:
 	 case GL_TEXTURE2: {
 	    GLuint txunit = srcRGBi - GL_TEXTURE0;
-	    if (ctx->Texture.Unit[txunit]._Current->Image[0][0]->_BaseFormat == GL_ALPHA)
+	    if (texture_base_format(ctx->Texture.Unit[txunit]._Current) == GL_ALPHA)
 	       color_arg[i] = radeon_zero_color[op];
 	    else
 	 /* implement ogl 1.4/1.5 core spec here, not specification of
@@ -296,7 +302,7 @@ static GLboolean radeonUpdateTextureEnv( struct gl_context *ctx, int unit )
 	 assert(op <= 1);
 	 switch ( srcAi ) {
 	 case GL_TEXTURE:
-	    if (texUnit->_Current->Image[0][0]->_BaseFormat == GL_LUMINANCE)
+	    if (texture_base_format(texUnit->_Current) == GL_LUMINANCE)
 	       alpha_arg[i] = radeon_zero_alpha[op+1];
 	    else
 	       alpha_arg[i] = radeon_texture_alpha[op][unit];
@@ -320,7 +326,7 @@ static GLboolean radeonUpdateTextureEnv( struct gl_context *ctx, int unit )
 	 case GL_TEXTURE1:
 	 case GL_TEXTURE2: {    
 	    GLuint txunit = srcAi - GL_TEXTURE0;
-	    if (ctx->Texture.Unit[txunit]._Current->Image[0][0]->_BaseFormat == GL_LUMINANCE)
+	    if (texture_base_format(ctx->Texture.Unit[txunit]._Current) == GL_LUMINANCE)
 	       alpha_arg[i] = radeon_zero_alpha[op+1];
 	    else
 	       alpha_arg[i] = radeon_texture_alpha[op][txunit];

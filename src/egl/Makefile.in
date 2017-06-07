@@ -115,8 +115,7 @@ POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
 target_triplet = @target@
-@HAVE_PLATFORM_X11_TRUE@am__append_1 = -DHAVE_X11_PLATFORM \
-@HAVE_PLATFORM_X11_TRUE@	$(XCB_DRI2_CFLAGS)
+@HAVE_PLATFORM_X11_TRUE@am__append_1 = $(XCB_DRI2_CFLAGS)
 @HAVE_PLATFORM_X11_TRUE@am__append_2 = $(XCB_DRI2_LIBS)
 @HAVE_PLATFORM_X11_TRUE@am__append_3 = drivers/dri2/platform_x11.c
 @HAVE_DRI3_TRUE@@HAVE_PLATFORM_X11_TRUE@am__append_4 = \
@@ -124,23 +123,18 @@ target_triplet = @target@
 @HAVE_DRI3_TRUE@@HAVE_PLATFORM_X11_TRUE@	drivers/dri2/platform_x11_dri3.h
 
 @HAVE_DRI3_TRUE@@HAVE_PLATFORM_X11_TRUE@am__append_5 = $(top_builddir)/src/loader/libloader_dri3_helper.la
-@HAVE_PLATFORM_WAYLAND_TRUE@am__append_6 = -DHAVE_WAYLAND_PLATFORM \
-@HAVE_PLATFORM_WAYLAND_TRUE@	$(WAYLAND_CFLAGS)
+@HAVE_PLATFORM_WAYLAND_TRUE@am__append_6 = $(WAYLAND_CFLAGS)
 @HAVE_PLATFORM_WAYLAND_TRUE@am__append_7 = $(WAYLAND_LIBS) \
 @HAVE_PLATFORM_WAYLAND_TRUE@	$(LIBDRM_LIBS) \
 @HAVE_PLATFORM_WAYLAND_TRUE@	$(top_builddir)/src/egl/wayland/wayland-drm/libwayland-drm.la
 @HAVE_PLATFORM_WAYLAND_TRUE@am__append_8 = drivers/dri2/platform_wayland.c
-@HAVE_EGL_PLATFORM_DRM_TRUE@am__append_9 = -DHAVE_DRM_PLATFORM
-@HAVE_EGL_PLATFORM_DRM_TRUE@am__append_10 = $(top_builddir)/src/gbm/libgbm.la
-@HAVE_EGL_PLATFORM_DRM_TRUE@am__append_11 = drivers/dri2/platform_drm.c
-@HAVE_EGL_PLATFORM_SURFACELESS_TRUE@am__append_12 = -DHAVE_SURFACELESS_PLATFORM
-@HAVE_EGL_PLATFORM_SURFACELESS_TRUE@am__append_13 = drivers/dri2/platform_surfaceless.c
-@HAVE_EGL_PLATFORM_ANDROID_TRUE@am__append_14 =  \
-@HAVE_EGL_PLATFORM_ANDROID_TRUE@	-DHAVE_ANDROID_PLATFORM \
-@HAVE_EGL_PLATFORM_ANDROID_TRUE@	$(ANDROID_CFLAGS)
-@HAVE_EGL_PLATFORM_ANDROID_TRUE@am__append_15 = $(ANDROID_LIBS)
-@HAVE_EGL_PLATFORM_ANDROID_TRUE@am__append_16 = drivers/dri2/platform_android.c
-@USE_LIBGLVND_TRUE@am__append_17 = \
+@HAVE_PLATFORM_DRM_TRUE@am__append_9 = $(top_builddir)/src/gbm/libgbm.la
+@HAVE_PLATFORM_DRM_TRUE@am__append_10 = drivers/dri2/platform_drm.c
+@HAVE_PLATFORM_SURFACELESS_TRUE@am__append_11 = drivers/dri2/platform_surfaceless.c
+@HAVE_PLATFORM_ANDROID_TRUE@am__append_12 = $(ANDROID_CFLAGS)
+@HAVE_PLATFORM_ANDROID_TRUE@am__append_13 = $(ANDROID_LIBS)
+@HAVE_PLATFORM_ANDROID_TRUE@am__append_14 = drivers/dri2/platform_android.c
+@USE_LIBGLVND_TRUE@am__append_15 = \
 @USE_LIBGLVND_TRUE@	$(GLVND_CFLAGS)
 
 subdir = src/egl
@@ -210,11 +204,11 @@ am__DEPENDENCIES_1 =
 @HAVE_PLATFORM_WAYLAND_TRUE@	$(am__DEPENDENCIES_1) \
 @HAVE_PLATFORM_WAYLAND_TRUE@	$(am__DEPENDENCIES_1) \
 @HAVE_PLATFORM_WAYLAND_TRUE@	$(top_builddir)/src/egl/wayland/wayland-drm/libwayland-drm.la
-@HAVE_EGL_PLATFORM_ANDROID_TRUE@am__DEPENDENCIES_4 =  \
-@HAVE_EGL_PLATFORM_ANDROID_TRUE@	$(am__DEPENDENCIES_1)
+@HAVE_PLATFORM_ANDROID_TRUE@am__DEPENDENCIES_4 =  \
+@HAVE_PLATFORM_ANDROID_TRUE@	$(am__DEPENDENCIES_1)
 libEGL_common_la_DEPENDENCIES = $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_2) $(am__append_5) $(am__DEPENDENCIES_3) \
-	$(am__append_10) $(am__DEPENDENCIES_4) \
+	$(am__append_9) $(am__DEPENDENCIES_4) \
 	$(top_builddir)/src/loader/libloader.la $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
 am__libEGL_common_la_SOURCES_DIST = main/eglapi.c main/eglapi.h \
@@ -244,10 +238,10 @@ am__objects_2 = drivers/dri2/egl_dri2.lo
 @HAVE_PLATFORM_X11_TRUE@am__objects_3 = drivers/dri2/platform_x11.lo
 @HAVE_PLATFORM_WAYLAND_TRUE@am__objects_4 =  \
 @HAVE_PLATFORM_WAYLAND_TRUE@	drivers/dri2/platform_wayland.lo
-@HAVE_EGL_PLATFORM_DRM_TRUE@am__objects_5 =  \
-@HAVE_EGL_PLATFORM_DRM_TRUE@	drivers/dri2/platform_drm.lo
-@HAVE_EGL_PLATFORM_SURFACELESS_TRUE@am__objects_6 = drivers/dri2/platform_surfaceless.lo
-@HAVE_EGL_PLATFORM_ANDROID_TRUE@am__objects_7 = drivers/dri2/platform_android.lo
+@HAVE_PLATFORM_DRM_TRUE@am__objects_5 = drivers/dri2/platform_drm.lo
+@HAVE_PLATFORM_SURFACELESS_TRUE@am__objects_6 = drivers/dri2/platform_surfaceless.lo
+@HAVE_PLATFORM_ANDROID_TRUE@am__objects_7 =  \
+@HAVE_PLATFORM_ANDROID_TRUE@	drivers/dri2/platform_android.lo
 am__objects_8 = $(am__objects_3) $(am__objects_4) $(am__objects_5) \
 	$(am__objects_6) $(am__objects_7)
 @HAVE_DRI3_TRUE@@HAVE_PLATFORM_X11_TRUE@am__objects_9 = drivers/dri2/platform_x11_dri3.lo
@@ -258,7 +252,7 @@ libEGL_common_la_OBJECTS = $(am_libEGL_common_la_OBJECTS)
 @USE_LIBGLVND_TRUE@libEGL_mesa_la_DEPENDENCIES = libEGL_common.la
 am__libEGL_mesa_la_SOURCES_DIST = main/eglglvnd.c \
 	main/egldispatchstubs.h main/egldispatchstubs.c \
-	g_egldispatchstubs.c
+	g_egldispatchstubs.c g_egldispatchstubs.h
 @USE_LIBGLVND_TRUE@am_libEGL_mesa_la_OBJECTS = main/eglglvnd.lo \
 @USE_LIBGLVND_TRUE@	main/egldispatchstubs.lo \
 @USE_LIBGLVND_TRUE@	g_egldispatchstubs.lo
@@ -793,6 +787,7 @@ pdfdir = @pdfdir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
+runstatedir = @runstatedir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
@@ -845,15 +840,14 @@ AM_CFLAGS = -I$(top_srcdir)/include -I$(top_srcdir)/src/egl/main \
 	-I$(top_srcdir)/src/gbm/main -I$(top_srcdir)/src $(DEFINES) \
 	$(VISIBILITY_CFLAGS) $(LIBDRM_CFLAGS) $(EGL_CFLAGS) \
 	-D_EGL_NATIVE_PLATFORM=$(EGL_NATIVE_PLATFORM) $(am__append_1) \
-	$(am__append_6) $(am__append_9) $(am__append_12) \
-	$(am__append_14) -I$(top_srcdir)/src/loader \
+	$(am__append_6) $(am__append_12) -I$(top_srcdir)/src/loader \
 	-I$(top_srcdir)/src/egl/drivers/dri2 \
 	-I$(top_srcdir)/src/gbm/backends/dri \
 	-I$(top_srcdir)/src/egl/wayland/wayland-egl \
 	-I$(top_builddir)/src/egl/wayland/wayland-drm \
 	-I$(top_srcdir)/src/egl/wayland/wayland-drm \
 	-DDEFAULT_DRIVER_DIR=\"$(DRI_DRIVER_SEARCH_DIR)\" \
-	-D_EGL_BUILT_IN_DRIVER_DRI2 $(am__append_17)
+	-D_EGL_BUILT_IN_DRIVER_DRI2 $(am__append_15)
 
 # Depending on whether libglvnd is enabled, we'll build the EGL library as
 # either libEGL.so.1 or libEGL_mesa.so.0. Using an automake substitution
@@ -864,11 +858,11 @@ libEGL_common_la_SOURCES = $(LIBEGL_C_FILES) \
 	$(dri2_backend_core_FILES) $(dri2_backend_FILES) \
 	$(dri3_backend_FILES)
 libEGL_common_la_LIBADD = $(EGL_LIB_DEPS) $(am__append_2) \
-	$(am__append_5) $(am__append_7) $(am__append_10) \
-	$(am__append_15) $(top_builddir)/src/loader/libloader.la \
+	$(am__append_5) $(am__append_7) $(am__append_9) \
+	$(am__append_13) $(top_builddir)/src/loader/libloader.la \
 	$(DLOPEN_LIBS) $(LIBDRM_LIBS) $(CLOCK_LIB)
-dri2_backend_FILES = $(am__append_3) $(am__append_8) $(am__append_11) \
-	$(am__append_13) $(am__append_16)
+dri2_backend_FILES = $(am__append_3) $(am__append_8) $(am__append_10) \
+	$(am__append_11) $(am__append_14)
 dri3_backend_FILES = $(am__append_4)
 GLVND_GEN_DEPS = generate/gen_egl_dispatch.py \
 	generate/egl.xml generate/eglFunctionList.py generate/genCommon.py \
@@ -885,7 +879,8 @@ CLEANFILES = $(BUILT_SOURCES)
 @USE_LIBGLVND_TRUE@	main/eglglvnd.c \
 @USE_LIBGLVND_TRUE@	main/egldispatchstubs.h \
 @USE_LIBGLVND_TRUE@	main/egldispatchstubs.c \
-@USE_LIBGLVND_TRUE@	g_egldispatchstubs.c
+@USE_LIBGLVND_TRUE@	g_egldispatchstubs.c \
+@USE_LIBGLVND_TRUE@	g_egldispatchstubs.h
 
 @USE_LIBGLVND_TRUE@libEGL_mesa_la_LIBADD = libEGL_common.la
 @USE_LIBGLVND_TRUE@libEGL_mesa_la_LDFLAGS = \

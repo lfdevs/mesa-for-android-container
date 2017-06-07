@@ -343,15 +343,8 @@ transition_depth_buffer(struct anv_cmd_buffer *cmd_buffer,
     * The undefined layout indicates that the user doesn't care about the data
     * that's currently in the buffer. Therefore, a data-preserving resolve
     * operation is not needed.
-    *
-    * The pre-initialized layout is equivalent to the undefined layout for
-    * optimally-tiled images. Anv only exposes support for optimally-tiled
-    * depth buffers.
     */
-   if (image->aux_usage != ISL_AUX_USAGE_HIZ ||
-       initial_layout == final_layout ||
-       initial_layout == VK_IMAGE_LAYOUT_UNDEFINED ||
-       initial_layout == VK_IMAGE_LAYOUT_PREINITIALIZED)
+   if (image->aux_usage != ISL_AUX_USAGE_HIZ || initial_layout == final_layout)
       return;
 
    const bool hiz_enabled = ISL_AUX_USAGE_HIZ ==
@@ -376,6 +369,30 @@ transition_depth_buffer(struct anv_cmd_buffer *cmd_buffer,
       anv_gen8_hiz_op_resolve(cmd_buffer, image, hiz_op);
 }
 
+static void
+transition_color_buffer(struct anv_cmd_buffer *cmd_buffer,
+                        const struct anv_image *image,
+                        VkImageLayout initial_layout,
+                        VkImageLayout final_layout,
+                        const struct isl_view *view,
+                        const VkImageSubresourceRange *subresourceRange)
+{
+   if (image->aux_usage != ISL_AUX_USAGE_CCS_E)
+      return;
+
+   if (initial_layout != VK_IMAGE_LAYOUT_UNDEFINED &&
+       initial_layout != VK_IMAGE_LAYOUT_PREINITIALIZED)
+      return;
+
+#if GEN_GEN >= 9
+   /* We're transitioning from an undefined layout so it doesn't really matter
+    * what data ends up in the color buffer.  We do, however, need to ensure
+    * that the CCS has valid data in it.  One easy way to do that is to
+    * fast-clear the specified range.
+    */
+   anv_image_ccs_clear(cmd_buffer, image, view, subresourceRange);
+#endif
+}
 
 /**
  * Setup anv_cmd_state::attachments for vkCmdBeginRenderPass.
@@ -962,6 +979,14 @@ void genX(CmdPipelineBarrier)(
          transition_depth_buffer(cmd_buffer, image,
                                  pImageMemoryBarriers[i].oldLayout,
                                  pImageMemoryBarriers[i].newLayout);
+      }
+      if (pImageMemoryBarriers[i].subresourceRange.aspectMask &
+          VK_IMAGE_ASPECT_COLOR_BIT) {
+         transition_color_buffer(cmd_buffer, image,
+                                 pImageMemoryBarriers[i].oldLayout,
+                                 pImageMemoryBarriers[i].newLayout,
+                                 NULL,
+                                 &pImageMemoryBarriers[i].subresourceRange);
       }
    }
 
@@ -2312,8 +2337,9 @@ cmd_buffer_subpass_transition_layouts(struct anv_cmd_buffer * const cmd_buffer,
        */
       assert(att_ref->attachment < cmd_state->framebuffer->attachment_count);
 
-      const struct anv_image * const image =
-         cmd_state->framebuffer->attachments[att_ref->attachment]->image;
+      const struct anv_image_view * const iview =
+         cmd_state->framebuffer->attachments[att_ref->attachment];
+      const struct anv_image * const image = iview->image;
 
       /* Perform the layout transition. */
       if (image->aspects & VK_IMAGE_ASPECT_DEPTH_BIT) {
@@ -2322,6 +2348,11 @@ cmd_buffer_subpass_transition_layouts(struct anv_cmd_buffer * const cmd_buffer,
          att_state->aux_usage =
             anv_layout_to_aux_usage(&cmd_buffer->device->info, image,
                                     image->aspects, target_layout);
+      }
+      if (image->aspects & VK_IMAGE_ASPECT_COLOR_BIT) {
+         transition_color_buffer(cmd_buffer, image,
+                                 att_state->current_layout, target_layout,
+                                 &iview->isl, NULL);
       }
 
       att_state->current_layout = target_layout;

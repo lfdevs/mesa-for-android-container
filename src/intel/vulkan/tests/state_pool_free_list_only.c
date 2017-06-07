@@ -33,7 +33,10 @@
 
 int main(int argc, char **argv)
 {
-   struct anv_device device;
+   struct anv_instance instance;
+   struct anv_device device = {
+      .instance = &instance,
+   };
    struct anv_block_pool block_pool;
    struct anv_state_pool state_pool;
 

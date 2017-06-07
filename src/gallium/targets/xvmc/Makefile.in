@@ -210,8 +210,8 @@ libXvMCgallium_la_DEPENDENCIES = $(top_builddir)/src/gallium/state_trackers/xvmc
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
 	$(top_builddir)/src/util/libmesautil.la $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
-	$(am__DEPENDENCIES_3) $(am__DEPENDENCIES_9) $(am__append_14) \
-	$(am__DEPENDENCIES_10)
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_3) \
+	$(am__DEPENDENCIES_9) $(am__append_14) $(am__DEPENDENCIES_10)
 am__libXvMCgallium_la_SOURCES_DIST = target.c
 @HAVE_GALLIUM_STATIC_TARGETS_TRUE@am__objects_1 =  \
 @HAVE_GALLIUM_STATIC_TARGETS_TRUE@	libXvMCgallium_la-target.lo
@@ -588,6 +588,7 @@ pdfdir = @pdfdir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
+runstatedir = @runstatedir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
@@ -676,8 +677,9 @@ libXvMCgallium_la_LIBADD = $(top_builddir)/src/gallium/state_trackers/xvmc/libxv
 	$(top_builddir)/src/gallium/auxiliary/libgalliumvl.la \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
 	$(top_builddir)/src/util/libmesautil.la $(XVMC_LIBS) \
-	$(VL_LIBS) $(LIBDRM_LIBS) $(GALLIUM_COMMON_LIB_DEPS) \
-	$(am__append_13) $(am__append_14) $(am__append_15)
+	$(VL_LIBS) $(XCB_DRI3_LIBS) $(LIBDRM_LIBS) \
+	$(GALLIUM_COMMON_LIB_DEPS) $(am__append_13) $(am__append_14) \
+	$(am__append_15)
 EXTRA_libXvMCgallium_la_DEPENDENCIES = xvmc.sym
 EXTRA_DIST = xvmc.sym
 TARGET_DRIVERS = $(am__append_5) $(am__append_8)

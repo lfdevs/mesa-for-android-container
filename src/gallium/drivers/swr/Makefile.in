@@ -253,9 +253,7 @@ am__objects_9 = $(am__objects_2) $(am__objects_3) $(am__objects_4) \
 	$(am__objects_5) $(am__objects_6) $(am__objects_7) \
 	$(am__objects_8)
 am_libswrAVX_la_OBJECTS = $(am__objects_9)
-nodist_libswrAVX_la_OBJECTS =
-libswrAVX_la_OBJECTS = $(am_libswrAVX_la_OBJECTS) \
-	$(nodist_libswrAVX_la_OBJECTS)
+libswrAVX_la_OBJECTS = $(am_libswrAVX_la_OBJECTS)
 libswrAVX_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) \
 	$(LIBTOOLFLAGS) --mode=link $(CXXLD) $(libswrAVX_la_CXXFLAGS) \
 	$(CXXFLAGS) $(libswrAVX_la_LDFLAGS) $(LDFLAGS) -o $@
@@ -307,9 +305,7 @@ am__objects_17 = $(am__objects_10) $(am__objects_11) $(am__objects_12) \
 	$(am__objects_13) $(am__objects_14) $(am__objects_15) \
 	$(am__objects_16)
 am_libswrAVX2_la_OBJECTS = $(am__objects_17)
-nodist_libswrAVX2_la_OBJECTS =
-libswrAVX2_la_OBJECTS = $(am_libswrAVX2_la_OBJECTS) \
-	$(nodist_libswrAVX2_la_OBJECTS)
+libswrAVX2_la_OBJECTS = $(am_libswrAVX2_la_OBJECTS)
 libswrAVX2_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CXX \
 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CXXLD) \
 	$(libswrAVX2_la_CXXFLAGS) $(CXXFLAGS) $(libswrAVX2_la_LDFLAGS) \
@@ -367,8 +363,7 @@ am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
 SOURCES = $(libmesaswr_la_SOURCES) $(libswrAVX_la_SOURCES) \
-	$(nodist_libswrAVX_la_SOURCES) $(libswrAVX2_la_SOURCES) \
-	$(nodist_libswrAVX2_la_SOURCES)
+	$(libswrAVX2_la_SOURCES)
 DIST_SOURCES = $(libmesaswr_la_SOURCES) $(libswrAVX_la_SOURCES) \
 	$(libswrAVX2_la_SOURCES)
 am__can_run_installinfo = \
@@ -679,6 +674,7 @@ pdfdir = @pdfdir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
+runstatedir = @runstatedir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
@@ -904,6 +900,7 @@ BUILT_SOURCES = \
 	rasterizer/codegen/gen_knobs.cpp \
 	rasterizer/codegen/gen_knobs.h \
 	rasterizer/jitter/gen_state_llvm.h \
+	rasterizer/jitter/gen_builder.hpp \
 	rasterizer/jitter/gen_builder_x86.hpp \
 	rasterizer/archrast/gen_ar_event.hpp \
 	rasterizer/archrast/gen_ar_event.cpp \
@@ -926,9 +923,6 @@ COMMON_LDFLAGS = \
 	$(NO_UNDEFINED) \
 	$(LLVM_LDFLAGS)
 
-CLEANFILES = \
-	rasterizer/jitter/gen_builder.hpp
-
 lib_LTLIBRARIES = libswrAVX.la libswrAVX2.la
 libswrAVX_la_CXXFLAGS = \
 	$(SWR_AVX_CXXFLAGS) \
@@ -937,15 +931,6 @@ libswrAVX_la_CXXFLAGS = \
 
 libswrAVX_la_SOURCES = \
 	$(COMMON_SOURCES)
-
-
-# XXX: Don't ship these generated sources for now, since they are specific
-# to the LLVM version they are generated from. Thus a release tarball
-# containing the said files, generated against eg. LLVM 3.8 will fail to build
-# on systems with other versions of LLVM eg. 3.7 or 3.6.
-# Move these back to BUILT_SOURCES once that is resolved.
-nodist_libswrAVX_la_SOURCES = \
-	rasterizer/jitter/gen_builder.hpp
 
 libswrAVX_la_LIBADD = \
 	$(COMMON_LIBADD)
@@ -960,15 +945,6 @@ libswrAVX2_la_CXXFLAGS = \
 
 libswrAVX2_la_SOURCES = \
 	$(COMMON_SOURCES)
-
-
-# XXX: Don't ship these generated sources for now, since they are specific
-# to the LLVM version they are generated from. Thus a release tarball
-# containing the said files, generated against eg. LLVM 3.8 will fail to build
-# on systems with other versions of LLVM eg. 3.7 or 3.6.
-# Move these back to BUILT_SOURCES once that is resolved.
-nodist_libswrAVX2_la_SOURCES = \
-	rasterizer/jitter/gen_builder.hpp
 
 libswrAVX2_la_LIBADD = \
 	$(COMMON_LIBADD)
@@ -2247,6 +2223,9 @@ distdir: $(DISTFILES)
 	    || exit 1; \
 	  fi; \
 	done
+	$(MAKE) $(AM_MAKEFLAGS) \
+	  top_distdir="$(top_distdir)" distdir="$(distdir)" \
+	  dist-hook
 check-am: all-am
 check: $(BUILT_SOURCES)
 	$(MAKE) $(AM_MAKEFLAGS) check-am
@@ -2280,7 +2259,6 @@ install-strip:
 mostlyclean-generic:
 
 clean-generic:
-	-test -z "$(CLEANFILES)" || rm -f $(CLEANFILES)
 
 distclean-generic:
 	-test -z "$(CONFIG_CLEAN_FILES)" || rm -f $(CONFIG_CLEAN_FILES)
@@ -2378,15 +2356,15 @@ uninstall-am: uninstall-libLTLIBRARIES
 
 .PHONY: CTAGS GTAGS TAGS all all-am all-local check check-am clean \
 	clean-generic clean-libLTLIBRARIES clean-libtool clean-local \
-	clean-noinstLTLIBRARIES cscopelist-am ctags ctags-am distclean \
-	distclean-compile distclean-generic distclean-libtool \
-	distclean-tags distdir dvi dvi-am html html-am info info-am \
-	install install-am install-data install-data-am install-dvi \
-	install-dvi-am install-exec install-exec-am install-html \
-	install-html-am install-info install-info-am \
-	install-libLTLIBRARIES install-man install-pdf install-pdf-am \
-	install-ps install-ps-am install-strip installcheck \
-	installcheck-am installdirs maintainer-clean \
+	clean-noinstLTLIBRARIES cscopelist-am ctags ctags-am dist-hook \
+	distclean distclean-compile distclean-generic \
+	distclean-libtool distclean-tags distdir dvi dvi-am html \
+	html-am info info-am install install-am install-data \
+	install-data-am install-dvi install-dvi-am install-exec \
+	install-exec-am install-html install-html-am install-info \
+	install-info-am install-libLTLIBRARIES install-man install-pdf \
+	install-pdf-am install-ps install-ps-am install-strip \
+	installcheck installcheck-am installdirs maintainer-clean \
 	maintainer-clean-generic mostlyclean mostlyclean-compile \
 	mostlyclean-generic mostlyclean-libtool pdf pdf-am ps ps-am \
 	tags tags-am uninstall uninstall-am uninstall-libLTLIBRARIES
@@ -2482,17 +2460,6 @@ rasterizer/core/gen_BackendPixelRate0.cpp: rasterizer/codegen/gen_backends.py ra
 		--split 0 \
 		--cpp
 
-# XXX: As we cannot use BUILT_SOURCES (the files will end up in the dist
-# tarball) just annotate the dependency directly.
-# As the single direct user of gen_builder.hpp is a header (builder.h) trace all
-# the translusive users (one that use the latter header).
-rasterizer/jitter/blend_jit.cpp: rasterizer/jitter/gen_builder.hpp
-rasterizer/jitter/builder.cpp: rasterizer/jitter/gen_builder.hpp
-rasterizer/jitter/builder_misc.cpp: rasterizer/jitter/gen_builder.hpp
-rasterizer/jitter/fetch_jit.cpp: rasterizer/jitter/gen_builder.hpp
-rasterizer/jitter/streamout_jit.cpp: rasterizer/jitter/gen_builder.hpp
-swr_shader.cpp: rasterizer/jitter/gen_builder.hpp
-
 @BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@all-local : .install-gallium-links
 
 @BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@.install-gallium-links : $(dri_LTLIBRARIES) $(egl_LTLIBRARIES) $(lib_LTLIBRARIES)
@@ -2522,6 +2489,14 @@ swr_shader.cpp: rasterizer/jitter/gen_builder.hpp
 @BUILD_SHARED_TRUE@	done;
 @BUILD_SHARED_TRUE@	rmdir $(top_builddir)/$(LIB_DIR)/gallium || true
 @BUILD_SHARED_TRUE@	$(RM) .install-gallium-links
+
+# Generated gen_builder.hpp is not backwards compatible. So ship only one
+# created with the oldest supported version of LLVM.
+dist-hook:
+@SWR_INVALID_LLVM_VERSION_TRUE@	@echo "*******************************************************"
+@SWR_INVALID_LLVM_VERSION_TRUE@	@echo "LLVM 3.9.0 or LLVM 3.9.1 required to create the tarball"
+@SWR_INVALID_LLVM_VERSION_TRUE@	@echo "*******************************************************"
+@SWR_INVALID_LLVM_VERSION_TRUE@	@test
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

@@ -258,7 +258,12 @@ virgl_bo_transfer_put(struct virgl_winsys *vws,
 
    memset(&tohostcmd, 0, sizeof(tohostcmd));
    tohostcmd.bo_handle = res->bo_handle;
-   tohostcmd.box = *(struct drm_virtgpu_3d_box *)box;
+   tohostcmd.box.x = box->x;
+   tohostcmd.box.y = box->y;
+   tohostcmd.box.z = box->z;
+   tohostcmd.box.w = box->width;
+   tohostcmd.box.h = box->height;
+   tohostcmd.box.d = box->depth;
    tohostcmd.offset = buf_offset;
    tohostcmd.level = level;
   // tohostcmd.stride = stride;
@@ -282,7 +287,12 @@ virgl_bo_transfer_get(struct virgl_winsys *vws,
    fromhostcmd.offset = buf_offset;
   // fromhostcmd.stride = stride;
   // fromhostcmd.layer_stride = layer_stride;
-   fromhostcmd.box = *(struct drm_virtgpu_3d_box *)box;
+   fromhostcmd.box.x = box->x;
+   fromhostcmd.box.y = box->y;
+   fromhostcmd.box.z = box->z;
+   fromhostcmd.box.w = box->width;
+   fromhostcmd.box.h = box->height;
+   fromhostcmd.box.d = box->depth;
    return drmIoctl(vdws->fd, DRM_IOCTL_VIRTGPU_TRANSFER_FROM_HOST, &fromhostcmd);
 }
 

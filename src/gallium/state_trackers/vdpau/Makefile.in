@@ -492,6 +492,7 @@ pdfdir = @pdfdir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
+runstatedir = @runstatedir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
@@ -583,6 +584,7 @@ AM_CFLAGS = \
 	$(GALLIUM_CFLAGS) \
 	$(VISIBILITY_CFLAGS) \
 	$(VL_CFLAGS) \
+	$(XCB_DRI3_CFLAGS) \
 	$(VDPAU_CFLAGS)
 
 AM_CPPFLAGS = \

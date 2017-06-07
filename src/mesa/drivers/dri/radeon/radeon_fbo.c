@@ -739,7 +739,7 @@ radeon_update_wrapper(struct gl_context *ctx, struct radeon_renderbuffer *rrb,
 	rrb->pitch = texImage->Width * rrb->cpp;
 	rb->Format = texImage->TexFormat;
 	rb->InternalFormat = texImage->InternalFormat;
-	rb->_BaseFormat = _mesa_base_fbo_format(ctx, rb->InternalFormat);
+	rb->_BaseFormat = _mesa_get_format_base_format(rb->Format);
 	rb->Width = texImage->Width;
 	rb->Height = texImage->Height;
 	rb->Delete = radeon_delete_renderbuffer;

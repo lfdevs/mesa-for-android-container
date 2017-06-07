@@ -95,9 +95,7 @@ target_triplet = @target@
 @HAVE_PLATFORM_X11_TRUE@	-DVK_USE_PLATFORM_XLIB_KHR
 
 @HAVE_PLATFORM_X11_TRUE@am__append_2 = $(VULKAN_WSI_X11_FILES)
-
-# FIXME: Use pkg-config for X11-xcb ldflags.
-@HAVE_PLATFORM_X11_TRUE@am__append_3 = $(XCB_DRI3_LIBS) -lX11-xcb
+@HAVE_PLATFORM_X11_TRUE@am__append_3 = $(XCB_DRI3_LIBS)
 @HAVE_PLATFORM_WAYLAND_TRUE@am__append_4 = \
 @HAVE_PLATFORM_WAYLAND_TRUE@	-I$(top_builddir)/src/vulkan/wsi \
 @HAVE_PLATFORM_WAYLAND_TRUE@	$(WAYLAND_CFLAGS) \
@@ -497,6 +495,7 @@ pdfdir = @pdfdir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
+runstatedir = @runstatedir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@

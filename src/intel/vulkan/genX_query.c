@@ -39,6 +39,7 @@ VkResult genX(CreateQueryPool)(
     VkQueryPool*                                pQueryPool)
 {
    ANV_FROM_HANDLE(anv_device, device, _device);
+   const struct anv_physical_device *pdevice = &device->instance->physicalDevice;
    struct anv_query_pool *pool;
    VkResult result;
 
@@ -89,6 +90,12 @@ VkResult genX(CreateQueryPool)(
    result = anv_bo_init_new(&pool->bo, device, size);
    if (result != VK_SUCCESS)
       goto fail;
+
+   if (pdevice->supports_48bit_addresses)
+      pool->bo.flags |= EXEC_OBJECT_SUPPORTS_48B_ADDRESS;
+
+   if (pdevice->has_exec_async)
+      pool->bo.flags |= EXEC_OBJECT_ASYNC;
 
    /* For query pools, we set the caching mode to I915_CACHING_CACHED.  On LLC
     * platforms, this does nothing.  On non-LLC platforms, this means snooping

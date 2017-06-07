@@ -828,25 +828,6 @@ eglMakeCurrent(EGLDisplay dpy, EGLSurface draw, EGLSurface read,
          RETURN_EGL_ERROR(disp, EGL_BAD_MATCH, EGL_FALSE);
    }
 
-   _EGLThreadInfo *t =_eglGetCurrentThread();
-   _EGLContext *old_ctx = t->CurrentContext;
-   _EGLSurface *old_draw_surf = old_ctx ? old_ctx->DrawSurface : NULL;
-   _EGLSurface *old_read_surf = old_ctx ? old_ctx->ReadSurface : NULL;
-
-   /* From the EGL 1.5 spec, Section 3.7.3 Binding Context and Drawables:
-    *
-    *    If the previous context of the calling thread has unflushed commands,
-    *    and the previous surface is no longer valid, an
-    *    EGL_BAD_CURRENT_SURFACE error is generated.
-    *
-    * It's difficult to check if the context has unflushed commands, but it's
-    * easy to check if the surface is no longer valid.
-    */
-   if (old_draw_surf && old_draw_surf->Lost)
-      RETURN_EGL_ERROR(disp, EGL_BAD_CURRENT_SURFACE, EGL_FALSE);
-   if (old_read_surf && old_read_surf->Lost)
-      RETURN_EGL_ERROR(disp, EGL_BAD_CURRENT_SURFACE, EGL_FALSE);
-
    /*    If a native window underlying either draw or read is no longer valid,
     *    an EGL_BAD_NATIVE_WINDOW error is generated.
     */

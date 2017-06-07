@@ -703,6 +703,7 @@ pdfdir = @pdfdir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
+runstatedir = @runstatedir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
@@ -743,7 +744,6 @@ libgbm_la_LDFLAGS = \
 
 libgbm_la_LIBADD = $(top_builddir)/src/loader/libloader.la \
 	$(DLOPEN_LIBS) $(am__append_2) $(am__append_5)
-@HAVE_PLATFORM_WAYLAND_TRUE@AM_CPPFLAGS = -DHAVE_WAYLAND_PLATFORM
 TESTS = gbm-symbols-check
 EXTRA_DIST = gbm-symbols-check
 all: all-am

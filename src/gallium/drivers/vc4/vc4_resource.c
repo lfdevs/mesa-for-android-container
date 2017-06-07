@@ -165,7 +165,8 @@ vc4_resource_transfer_map(struct pipe_context *pctx,
             prsc->width0 == box->width &&
             prsc->height0 == box->height &&
             prsc->depth0 == box->depth &&
-            prsc->array_size == 1) {
+            prsc->array_size == 1 &&
+            rsc->bo->private) {
                 usage |= PIPE_TRANSFER_DISCARD_WHOLE_RESOURCE;
         }
 

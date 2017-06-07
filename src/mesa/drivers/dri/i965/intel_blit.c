@@ -411,8 +411,8 @@ intel_miptree_copy(struct brw_context *brw,
 
       src_x /= (int)bw;
       src_y /= (int)bh;
-      src_width /= (int)bw;
-      src_height /= (int)bh;
+      src_width = DIV_ROUND_UP(src_width, (int)bw);
+      src_height = DIV_ROUND_UP(src_height, (int)bh);
    }
    src_x += src_image_x;
    src_y += src_image_y;

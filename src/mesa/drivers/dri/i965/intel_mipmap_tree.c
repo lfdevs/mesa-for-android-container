@@ -463,7 +463,7 @@ intel_miptree_create_layout(struct brw_context *brw,
          intel_miptree_wants_hiz_buffer(brw, mt)))) {
       uint32_t stencil_flags = MIPTREE_LAYOUT_ACCELERATED_UPLOAD;
       if (brw->gen == 6) {
-         stencil_flags |= MIPTREE_LAYOUT_FORCE_ALL_SLICE_AT_LOD |
+         stencil_flags |= MIPTREE_LAYOUT_GEN6_HIZ_STENCIL |
                           MIPTREE_LAYOUT_TILING_ANY;
       }
 
@@ -496,8 +496,8 @@ intel_miptree_create_layout(struct brw_context *brw,
       }
    }
 
-   if (layout_flags & MIPTREE_LAYOUT_FORCE_ALL_SLICE_AT_LOD)
-      mt->array_layout = ALL_SLICES_AT_EACH_LOD;
+   if (layout_flags & MIPTREE_LAYOUT_GEN6_HIZ_STENCIL)
+      mt->array_layout = GEN6_HIZ_STENCIL;
 
    /*
     * Obey HALIGN_16 constraints for Gen8 and Gen9 buffers which are
@@ -1789,7 +1789,7 @@ intel_hiz_miptree_buf_create(struct brw_context *brw,
    uint32_t layout_flags = MIPTREE_LAYOUT_ACCELERATED_UPLOAD;
 
    if (brw->gen == 6)
-      layout_flags |= MIPTREE_LAYOUT_FORCE_ALL_SLICE_AT_LOD;
+      layout_flags |= MIPTREE_LAYOUT_GEN6_HIZ_STENCIL;
 
    if (!buf)
       return NULL;
@@ -2379,7 +2379,7 @@ intel_update_r8stencil(struct brw_context *brw,
       const uint32_t r8stencil_flags =
          MIPTREE_LAYOUT_ACCELERATED_UPLOAD | MIPTREE_LAYOUT_TILING_Y |
          MIPTREE_LAYOUT_DISABLE_AUX;
-      assert(brw->gen > 6); /* Handle MIPTREE_LAYOUT_FORCE_ALL_SLICE_AT_LOD */
+      assert(brw->gen > 6); /* Handle MIPTREE_LAYOUT_GEN6_HIZ_STENCIL */
       mt->r8stencil_mt = intel_miptree_create(brw,
                                               src->target,
                                               MESA_FORMAT_R_UINT8,
@@ -3297,6 +3297,7 @@ intel_miptree_get_isl_surf(struct brw_context *brw,
       surf->array_pitch_span = ISL_ARRAY_PITCH_SPAN_FULL;
       break;
    case ALL_SLICES_AT_EACH_LOD:
+   case GEN6_HIZ_STENCIL:
       surf->array_pitch_span = ISL_ARRAY_PITCH_SPAN_COMPACT;
       break;
    default:

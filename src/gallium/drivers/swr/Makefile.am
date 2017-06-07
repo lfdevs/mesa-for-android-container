@@ -56,6 +56,7 @@ BUILT_SOURCES = \
 	rasterizer/codegen/gen_knobs.cpp \
 	rasterizer/codegen/gen_knobs.h \
 	rasterizer/jitter/gen_state_llvm.h \
+	rasterizer/jitter/gen_builder.hpp \
 	rasterizer/jitter/gen_builder_x86.hpp \
 	rasterizer/archrast/gen_ar_event.hpp \
 	rasterizer/archrast/gen_ar_event.cpp \
@@ -168,20 +169,6 @@ COMMON_LDFLAGS = \
 	$(LLVM_LDFLAGS)
 
 
-# XXX: As we cannot use BUILT_SOURCES (the files will end up in the dist
-# tarball) just annotate the dependency directly.
-# As the single direct user of gen_builder.hpp is a header (builder.h) trace all
-# the translusive users (one that use the latter header).
-rasterizer/jitter/blend_jit.cpp: rasterizer/jitter/gen_builder.hpp
-rasterizer/jitter/builder.cpp: rasterizer/jitter/gen_builder.hpp
-rasterizer/jitter/builder_misc.cpp: rasterizer/jitter/gen_builder.hpp
-rasterizer/jitter/fetch_jit.cpp: rasterizer/jitter/gen_builder.hpp
-rasterizer/jitter/streamout_jit.cpp: rasterizer/jitter/gen_builder.hpp
-swr_shader.cpp: rasterizer/jitter/gen_builder.hpp
-
-CLEANFILES = \
-	rasterizer/jitter/gen_builder.hpp
-
 lib_LTLIBRARIES = libswrAVX.la libswrAVX2.la
 
 libswrAVX_la_CXXFLAGS = \
@@ -191,14 +178,6 @@ libswrAVX_la_CXXFLAGS = \
 
 libswrAVX_la_SOURCES = \
 	$(COMMON_SOURCES)
-
-# XXX: Don't ship these generated sources for now, since they are specific
-# to the LLVM version they are generated from. Thus a release tarball
-# containing the said files, generated against eg. LLVM 3.8 will fail to build
-# on systems with other versions of LLVM eg. 3.7 or 3.6.
-# Move these back to BUILT_SOURCES once that is resolved.
-nodist_libswrAVX_la_SOURCES = \
-	rasterizer/jitter/gen_builder.hpp
 
 libswrAVX_la_LIBADD = \
 	$(COMMON_LIBADD)
@@ -214,14 +193,6 @@ libswrAVX2_la_CXXFLAGS = \
 libswrAVX2_la_SOURCES = \
 	$(COMMON_SOURCES)
 
-# XXX: Don't ship these generated sources for now, since they are specific
-# to the LLVM version they are generated from. Thus a release tarball
-# containing the said files, generated against eg. LLVM 3.8 will fail to build
-# on systems with other versions of LLVM eg. 3.7 or 3.6.
-# Move these back to BUILT_SOURCES once that is resolved.
-nodist_libswrAVX2_la_SOURCES = \
-	rasterizer/jitter/gen_builder.hpp
-
 libswrAVX2_la_LIBADD = \
 	$(COMMON_LIBADD)
 
@@ -229,6 +200,16 @@ libswrAVX2_la_LDFLAGS = \
 	$(COMMON_LDFLAGS)
 
 include $(top_srcdir)/install-gallium-links.mk
+
+# Generated gen_builder.hpp is not backwards compatible. So ship only one
+# created with the oldest supported version of LLVM.
+dist-hook:
+if SWR_INVALID_LLVM_VERSION
+	@echo "*******************************************************"
+	@echo "LLVM 3.9.0 or LLVM 3.9.1 required to create the tarball"
+	@echo "*******************************************************"
+	@test
+endif
 
 EXTRA_DIST = \
 	SConscript \

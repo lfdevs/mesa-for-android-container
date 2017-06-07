@@ -94,14 +94,14 @@ brw_isl_format_for_mesa_format(mesa_format mesa_format)
       [MESA_FORMAT_L_SRGB8] = ISL_FORMAT_L8_UNORM_SRGB,
       [MESA_FORMAT_L8A8_SRGB] = ISL_FORMAT_L8A8_UNORM_SRGB,
       [MESA_FORMAT_A8L8_SRGB] = 0,
-      [MESA_FORMAT_SRGB_DXT1] = ISL_FORMAT_DXT1_RGB_SRGB,
+      [MESA_FORMAT_SRGB_DXT1] = ISL_FORMAT_BC1_UNORM_SRGB,
       [MESA_FORMAT_SRGBA_DXT1] = ISL_FORMAT_BC1_UNORM_SRGB,
       [MESA_FORMAT_SRGBA_DXT3] = ISL_FORMAT_BC2_UNORM_SRGB,
       [MESA_FORMAT_SRGBA_DXT5] = ISL_FORMAT_BC3_UNORM_SRGB,
 
       [MESA_FORMAT_RGB_FXT1] = ISL_FORMAT_FXT1,
       [MESA_FORMAT_RGBA_FXT1] = ISL_FORMAT_FXT1,
-      [MESA_FORMAT_RGB_DXT1] = ISL_FORMAT_DXT1_RGB,
+      [MESA_FORMAT_RGB_DXT1] = ISL_FORMAT_BC1_UNORM,
       [MESA_FORMAT_RGBA_DXT1] = ISL_FORMAT_BC1_UNORM,
       [MESA_FORMAT_RGBA_DXT3] = ISL_FORMAT_BC2_UNORM,
       [MESA_FORMAT_RGBA_DXT5] = ISL_FORMAT_BC3_UNORM,
@@ -540,17 +540,6 @@ translate_tex_format(struct brw_context *brw,
        * assertion below.
        */
       return ISL_FORMAT_R32G32B32A32_FLOAT;
-
-   case MESA_FORMAT_SRGB_DXT1:
-      if (brw->gen == 4 && !brw->is_g4x) {
-         /* Work around missing SRGB DXT1 support on original gen4 by just
-          * skipping SRGB decode.  It's not worth not supporting sRGB in
-          * general to prevent this.
-          */
-         WARN_ONCE(true, "Demoting sRGB DXT1 texture to non-sRGB\n");
-         mesa_format = MESA_FORMAT_RGB_DXT1;
-      }
-      return brw_isl_format_for_mesa_format(mesa_format);
 
    case MESA_FORMAT_RGBA_ASTC_4x4:
    case MESA_FORMAT_RGBA_ASTC_5x4:

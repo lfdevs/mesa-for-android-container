@@ -201,7 +201,8 @@ addrlib_libamdgpu_addrlib_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CXX \
 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CXXLD) \
 	$(addrlib_libamdgpu_addrlib_la_CXXFLAGS) $(CXXFLAGS) \
 	$(AM_LDFLAGS) $(LDFLAGS) -o $@
-common_libamd_common_la_LIBADD =
+am__DEPENDENCIES_1 =
+common_libamd_common_la_DEPENDENCIES = $(am__DEPENDENCIES_1)
 am__common_libamd_common_la_SOURCES_DIST = common/ac_binary.c \
 	common/ac_binary.h common/ac_llvm_build.c \
 	common/ac_llvm_build.h common/ac_llvm_helper.cpp \
@@ -589,6 +590,7 @@ pdfdir = @pdfdir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
+runstatedir = @runstatedir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
@@ -714,6 +716,7 @@ addrlib_libamdgpu_addrlib_la_SOURCES = $(ADDRLIB_FILES)
 @HAVE_GALLIUM_LLVM_TRUE@	$(AMD_COMPILER_FILES) \
 @HAVE_GALLIUM_LLVM_TRUE@	$(AMD_DEBUG_FILES) \
 @HAVE_GALLIUM_LLVM_TRUE@	$(AMD_GENERATED_FILES) $(am__append_2)
+common_libamd_common_la_LIBADD = $(LIBELF_LIBS)
 BUILT_SOURCES = $(AMD_GENERATED_FILES)
 all: $(BUILT_SOURCES)
 	$(MAKE) $(AM_MAKEFLAGS) all-am

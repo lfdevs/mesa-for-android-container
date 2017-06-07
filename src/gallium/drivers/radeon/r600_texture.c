@@ -2720,8 +2720,15 @@ void evergreen_do_fast_color_clear(struct r600_common_context *rctx,
 
 			vi_dcc_clear_level(rctx, tex, 0, reset_value);
 
-			if (clear_words_needed)
-				tex->dirty_level_mask |= 1 << fb->cbufs[i]->u.tex.level;
+			unsigned level_bit = 1 << fb->cbufs[i]->u.tex.level;
+			if (clear_words_needed) {
+				bool need_compressed_update = !tex->dirty_level_mask;
+
+				tex->dirty_level_mask |= level_bit;
+
+				if (need_compressed_update)
+					p_atomic_inc(&rctx->screen->compressed_colortex_counter);
+			}
 			tex->separate_dcc_dirty = true;
 		} else {
 			/* 128-bit formats are unusupported */
@@ -2744,7 +2751,12 @@ void evergreen_do_fast_color_clear(struct r600_common_context *rctx,
 					   tex->cmask.offset, tex->cmask.size, 0,
 					   R600_COHERENCY_CB_META);
 
+			bool need_compressed_update = !tex->dirty_level_mask;
+
 			tex->dirty_level_mask |= 1 << fb->cbufs[i]->u.tex.level;
+
+			if (need_compressed_update)
+				p_atomic_inc(&rctx->screen->compressed_colortex_counter);
 		}
 
 		/* We can change the micro tile mode before a full clear. */

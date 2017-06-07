@@ -315,6 +315,10 @@ static bool do_winsys_init(struct amdgpu_winsys *ws, int fd)
       ws->family = FAMILY_AI;
       ws->rev_id = AI_VEGA10_P_A0;
       break;
+   case CHIP_RAVEN:
+      ws->family = FAMILY_RV;
+      ws->rev_id = RAVEN_A0;
+      break;
    default:
       fprintf(stderr, "amdgpu: Unknown family.\n");
       goto fail;

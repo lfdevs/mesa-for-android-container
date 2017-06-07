@@ -2823,6 +2823,13 @@ struct gl_shader_program_data
 
    bool cache_fallback;
 
+   /* TODO: This used by Gallium drivers to skip the cache on tgsi fallback.
+    * All structures (gl_program, uniform storage, etc) will get recreated
+    * even though we have already loaded them from cache. Once the i965 cache
+    * lands we should switch to using the cache_fallback support.
+    */
+   bool skip_cache;
+
    /** List of all active resources after linking. */
    struct gl_program_resource *ProgramResourceList;
    unsigned NumProgramResourceList;

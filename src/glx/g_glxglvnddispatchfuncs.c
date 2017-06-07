@@ -4,6 +4,7 @@
  */
 #include <stdlib.h>
 
+#include "glxclient.h"
 #include "glxglvnd.h"
 #include "glxglvnddispatchfuncs.h"
 #include "g_glxglvnddispatchindices.h"
@@ -50,6 +51,7 @@ const char * const __glXDispatchTableStrings[DI_LAST_INDEX] = {
     __ATTRIB(GetCurrentDisplayEXT),
     // glXGetCurrentDrawable implemented by libglvnd
     // glXGetCurrentReadDrawable implemented by libglvnd
+    __ATTRIB(GetDriverConfig),
     // glXGetFBConfigAttrib implemented by libglvnd
     __ATTRIB(GetFBConfigAttribSGIX),
     __ATTRIB(GetFBConfigFromVisualSGIX),
@@ -330,6 +332,17 @@ static Display *dispatch_GetCurrentDisplayEXT(void)
         return NULL;
 
     return (*pGetCurrentDisplayEXT)();
+}
+
+
+
+static const char *dispatch_GetDriverConfig(const char *driverName)
+{
+    /*
+     * The options are constant for a given driverName, so we do not need
+     * a context (and apps expect to be able to call this without one).
+     */
+    return glXGetDriverConfig(driverName);
 }
 
 
@@ -939,6 +952,7 @@ const void * const __glXDispatchFunctions[DI_LAST_INDEX + 1] = {
     __ATTRIB(DestroyGLXPbufferSGIX),
     __ATTRIB(GetContextIDEXT),
     __ATTRIB(GetCurrentDisplayEXT),
+    __ATTRIB(GetDriverConfig),
     __ATTRIB(GetFBConfigAttribSGIX),
     __ATTRIB(GetFBConfigFromVisualSGIX),
     __ATTRIB(GetMscRateOML),

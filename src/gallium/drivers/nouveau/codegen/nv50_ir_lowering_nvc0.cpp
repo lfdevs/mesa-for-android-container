@@ -642,6 +642,8 @@ NVC0LegalizePostRA::replaceZero(Instruction *i)
    for (int s = 0; i->srcExists(s); ++s) {
       if (s == 2 && i->op == OP_SUCLAMP)
          continue;
+      if (s == 1 && i->op == OP_SHLADD)
+         continue;
       ImmediateValue *imm = i->getSrc(s)->asImm();
       if (imm) {
          if (i->op == OP_SELP && s == 2) {

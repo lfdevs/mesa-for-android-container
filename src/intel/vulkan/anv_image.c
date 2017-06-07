@@ -332,7 +332,6 @@ VkResult anv_BindImageMemory(
     VkDeviceMemory                              _memory,
     VkDeviceSize                                memoryOffset)
 {
-   ANV_FROM_HANDLE(anv_device, device, _device);
    ANV_FROM_HANDLE(anv_device_memory, mem, _memory);
    ANV_FROM_HANDLE(anv_image, image, _image);
 
@@ -344,33 +343,6 @@ VkResult anv_BindImageMemory(
 
    image->bo = &mem->bo;
    image->offset = memoryOffset;
-
-   if (image->aux_surface.isl.size > 0) {
-
-      /* The offset and size must be a multiple of 4K or else the
-       * anv_gem_mmap call below will fail.
-       */
-      assert((image->offset + image->aux_surface.offset) % 4096 == 0);
-      assert(image->aux_surface.isl.size % 4096 == 0);
-
-      /* Auxiliary surfaces need to have their memory cleared to 0 before they
-       * can be used.  For CCS surfaces, this puts them in the "resolved"
-       * state so they can be used with CCS enabled before we ever touch it
-       * from the GPU.  For HiZ, we need something valid or else we may get
-       * GPU hangs on some hardware and 0 works fine.
-       */
-      void *map = anv_gem_mmap(device, image->bo->gem_handle,
-                               image->offset + image->aux_surface.offset,
-                               image->aux_surface.isl.size,
-                               device->info.has_llc ? 0 : I915_MMAP_WC);
-
-      if (map == MAP_FAILED)
-         return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
-
-      memset(map, 0, image->aux_surface.isl.size);
-
-      anv_gem_munmap(map, image->aux_surface.isl.size);
-   }
 
    return VK_SUCCESS;
 }
@@ -423,12 +395,10 @@ void anv_GetImageSubresourceLayout(
 }
 
 /**
- * This function determines the optimal buffer to use for device
- * accesses given a VkImageLayout and other pieces of information needed to
- * make that determination. This does not determine the optimal buffer to
- * use during a resolve operation.
- *
- * NOTE: Some layouts do not support device access.
+ * This function determines the optimal buffer to use for a given
+ * VkImageLayout and other pieces of information needed to make that
+ * determination. This does not determine the optimal buffer to use
+ * during a resolve operation.
  *
  * @param devinfo The device information of the Intel GPU.
  * @param image The image that may contain a collection of buffers.
@@ -484,15 +454,19 @@ anv_layout_to_aux_usage(const struct gen_device_info * const devinfo,
    switch (layout) {
 
    /* Invalid Layouts */
+   case VK_IMAGE_LAYOUT_RANGE_SIZE:
+   case VK_IMAGE_LAYOUT_MAX_ENUM:
+      unreachable("Invalid image layout.");
 
-   /* According to the Vulkan Spec, the following layouts are valid only as
-    * initial layouts in a layout transition and don't support device access.
+   /* Undefined layouts
+    *
+    * The pre-initialized layout is equivalent to the undefined layout for
+    * optimally-tiled images.  We can only do color compression (CCS or HiZ)
+    * on tiled images.
     */
    case VK_IMAGE_LAYOUT_UNDEFINED:
    case VK_IMAGE_LAYOUT_PREINITIALIZED:
-   case VK_IMAGE_LAYOUT_RANGE_SIZE:
-   case VK_IMAGE_LAYOUT_MAX_ENUM:
-      unreachable("Invalid image layout for device access.");
+      return ISL_AUX_USAGE_NONE;
 
 
    /* Transfer Layouts

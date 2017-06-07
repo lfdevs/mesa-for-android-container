@@ -852,7 +852,8 @@ vec4_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
        * The swizzle also works in the indirect case as the generator adds
        * the swizzle to the offset for us.
        */
-      unsigned shift = (nir_intrinsic_base(instr) % 16) / 4;
+      const int type_size = type_sz(src.type);
+      unsigned shift = (nir_intrinsic_base(instr) % 16) / type_size;
       assert(shift + instr->num_components <= 4);
 
       nir_const_value *const_offset = nir_src_as_const_value(instr->src[0]);
@@ -860,14 +861,20 @@ vec4_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
          /* Offsets are in bytes but they should always be multiples of 4 */
          assert(const_offset->u32[0] % 4 == 0);
 
-         unsigned offset = const_offset->u32[0] + shift * 4;
+         src.swizzle = brw_swizzle_for_size(instr->num_components);
+         dest.writemask = brw_writemask_for_size(instr->num_components);
+         unsigned offset = const_offset->u32[0] + shift * type_size;
          src.offset = ROUND_DOWN_TO(offset, 16);
-         shift = (offset % 16) / 4;
+         shift = (offset % 16) / type_size;
+         assert(shift + instr->num_components <= 4);
          src.swizzle += BRW_SWIZZLE4(shift, shift, shift, shift);
 
          emit(MOV(dest, src));
       } else {
-         src.swizzle += BRW_SWIZZLE4(shift, shift, shift, shift);
+         /* Uniform arrays are vec4 aligned, because of std140 alignment
+          * rules.
+          */
+         assert(shift == 0);
 
          src_reg indirect = get_nir_src(instr->src[0], BRW_REGISTER_TYPE_UD, 1);
 

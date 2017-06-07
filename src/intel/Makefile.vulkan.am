@@ -111,7 +111,21 @@ VULKAN_SOURCES = \
 	$(VULKAN_GENERATED_FILES) \
 	$(VULKAN_FILES)
 
-VULKAN_LIB_DEPS = $(LIBDRM_LIBS)
+VULKAN_LIB_DEPS = \
+	vulkan/libvulkan_common.la \
+	$(VULKAN_PER_GEN_LIBS) \
+	compiler/libintel_compiler.la \
+	common/libintel_common.la \
+	isl/libisl.la \
+	blorp/libblorp.la \
+	$(top_builddir)/src/vulkan/libvulkan_util.la \
+	$(top_builddir)/src/vulkan/libvulkan_wsi.la \
+	$(top_builddir)/src/compiler/nir/libnir.la \
+	$(top_builddir)/src/util/libmesautil.la \
+	$(LIBDRM_LIBS) \
+	$(PTHREAD_LIBS) \
+	$(DLOPEN_LIBS) \
+	-lm
 
 if HAVE_PLATFORM_X11
 VULKAN_CPPFLAGS += \
@@ -121,8 +135,7 @@ VULKAN_CPPFLAGS += \
 
 VULKAN_SOURCES += $(VULKAN_WSI_X11_FILES)
 
-# FIXME: Use pkg-config for X11-xcb ldflags.
-VULKAN_LIB_DEPS += $(XCB_DRI3_LIBS) -lX11-xcb
+VULKAN_LIB_DEPS += $(XCB_DRI3_LIBS)
 endif
 
 
@@ -140,21 +153,6 @@ noinst_LTLIBRARIES += vulkan/libvulkan_common.la
 vulkan_libvulkan_common_la_SOURCES = $(VULKAN_SOURCES)
 vulkan_libvulkan_common_la_CFLAGS = $(VULKAN_CFLAGS)
 vulkan_libvulkan_common_la_CPPFLAGS = $(VULKAN_CPPFLAGS)
-
-VULKAN_LIB_DEPS += \
-	vulkan/libvulkan_common.la \
-	$(VULKAN_PER_GEN_LIBS) \
-	compiler/libintel_compiler.la \
-	common/libintel_common.la \
-	isl/libisl.la \
-	blorp/libblorp.la \
-	$(top_builddir)/src/vulkan/libvulkan_util.la \
-	$(top_builddir)/src/vulkan/libvulkan_wsi.la \
-	$(top_builddir)/src/compiler/nir/libnir.la \
-	$(top_builddir)/src/util/libmesautil.la \
-	$(PTHREAD_LIBS) \
-	$(DLOPEN_LIBS) \
-	-lm
 
 nodist_EXTRA_vulkan_libvulkan_intel_la_SOURCES = dummy.cpp
 vulkan_libvulkan_intel_la_SOURCES = $(VULKAN_GEM_FILES)

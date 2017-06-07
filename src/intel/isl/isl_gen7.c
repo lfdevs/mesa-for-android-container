@@ -352,30 +352,12 @@ gen7_choose_valign_el(const struct isl_device *dev,
    if (isl_surf_usage_is_stencil(info->usage)) {
       /* The Ivybridge PRM states that the stencil buffer's vertical alignment
        * is 8 [Ivybridge PRM, Volume 1, Part 1, Section 6.18.4.4 Alignment
-       * Unit Size]. However, valign=8 is outside the set of valid values of
-       * RENDER_SURFACE_STATE.SurfaceVerticalAlignment, which is VALIGN_2
-       * (0x0) and VALIGN_4 (0x1).
-       *
-       * The PRM is generally confused about the width, height, and alignment
-       * of the stencil buffer; and this confusion appears elsewhere. For
-       * example, the following PRM text effectively converts the stencil
-       * buffer's 8-pixel alignment to a 4-pixel alignment [Ivybridge PRM,
-       * Volume 1, Part 1, Section
-       * 6.18.4.2 Base Address and LOD Calculation]:
-       *
-       *    For separate stencil buffer, the width must be mutiplied by 2 and
-       *    height divided by 2 as follows:
-       *
-       *       w_L = 2*i*ceil(W_L/i)
-       *       h_L = 1/2*j*ceil(H_L/j)
-       *
-       * The root of the confusion is that, in W tiling, each pair of rows is
-       * interleaved into one.
-       *
-       * FINISHME(chadv): Decide to set valign=4 or valign=8 after isl's API
-       * is more polished.
+       * Unit Size]. valign=8 is outside the set of valid values of
+       * RENDER_SURFACE_STATE.SurfaceVerticalAlignment, but that's ok because
+       * a stencil buffer will never be used directly for texturing or
+       * rendering on gen7.
        */
-      require_valign4 = true;
+      return 8;
    }
 
    assert(!require_valign2 || !require_valign4);

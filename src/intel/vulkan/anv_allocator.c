@@ -504,6 +504,9 @@ anv_block_pool_grow(struct anv_block_pool *pool, struct anv_block_state *state)
    anv_bo_init(&pool->bo, gem_handle, size);
    pool->bo.map = map;
 
+   if (pool->device->instance->physicalDevice.has_exec_async)
+      pool->bo.flags |= EXEC_OBJECT_ASYNC;
+
 done:
    pthread_mutex_unlock(&pool->device->mutex);
 
@@ -881,6 +884,12 @@ anv_bo_pool_alloc(struct anv_bo_pool *pool, struct anv_bo *bo, uint32_t size)
    if (result != VK_SUCCESS)
       return result;
 
+   if (pool->device->instance->physicalDevice.supports_48bit_addresses)
+      new_bo.flags |= EXEC_OBJECT_SUPPORTS_48B_ADDRESS;
+
+   if (pool->device->instance->physicalDevice.has_exec_async)
+      new_bo.flags |= EXEC_OBJECT_ASYNC;
+
    assert(new_bo.size == pow2_size);
 
    new_bo.map = anv_gem_mmap(pool->device, new_bo.gem_handle, 0, pow2_size, 0);
@@ -1010,7 +1019,10 @@ anv_scratch_pool_alloc(struct anv_device *device, struct anv_scratch_pool *pool,
     *
     * so nothing will ever touch the top page.
     */
-   bo->bo.flags &= ~EXEC_OBJECT_SUPPORTS_48B_ADDRESS;
+   assert(!(bo->bo.flags & EXEC_OBJECT_SUPPORTS_48B_ADDRESS));
+
+   if (device->instance->physicalDevice.has_exec_async)
+      bo->bo.flags |= EXEC_OBJECT_ASYNC;
 
    /* Set the exists last because it may be read by other threads */
    __sync_synchronize();

@@ -772,7 +772,7 @@ gbm_dri_bo_get_modifier(struct gbm_bo *_bo)
                                &mod))
       return DRM_FORMAT_MOD_INVALID;
 
-   ret |= mod;
+   ret |= (uint64_t)(mod & 0xffffffff);
 
    return ret;
 }

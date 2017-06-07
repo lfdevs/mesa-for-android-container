@@ -176,10 +176,6 @@ st_framebuffer_validate(struct st_framebuffer *stfb,
    boolean changed = FALSE;
    int32_t new_stamp;
 
-   /* Check for incomplete framebuffers (e.g. EGL_KHR_surfaceless_context) */
-   if (!stfb->iface)
-      return;
-
    new_stamp = p_atomic_read(&stfb->iface->stamp);
    if (stfb->iface_stamp == new_stamp)
       return;
@@ -280,9 +276,6 @@ st_framebuffer_add_renderbuffer(struct st_framebuffer *stfb,
    struct gl_renderbuffer *rb;
    enum pipe_format format;
    boolean sw;
-
-   if (!stfb->iface)
-      return FALSE;
 
    assert(_mesa_is_winsys_fbo(&stfb->Base));
 
@@ -843,8 +836,6 @@ st_manager_flush_frontbuffer(struct st_context *st)
 {
    struct st_framebuffer *stfb = st_ws_framebuffer(st->ctx->DrawBuffer);
    struct st_renderbuffer *strb = NULL;
-
-   assert(st->ctx->DrawBuffer != _mesa_get_incomplete_framebuffer());
 
    if (stfb)
       strb = st_renderbuffer(stfb->Base.Attachment[BUFFER_FRONT_LEFT].Renderbuffer);

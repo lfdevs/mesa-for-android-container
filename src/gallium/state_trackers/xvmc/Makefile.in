@@ -162,7 +162,8 @@ am_tests_test_blocks_OBJECTS = tests/test_blocks.$(OBJEXT) \
 	tests/testlib.$(OBJEXT)
 tests_test_blocks_OBJECTS = $(am_tests_test_blocks_OBJECTS)
 am__DEPENDENCIES_1 =
-am__DEPENDENCIES_2 = $(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
+am__DEPENDENCIES_2 = $(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1)
 tests_test_blocks_DEPENDENCIES = $(am__DEPENDENCIES_2)
 am_tests_test_context_OBJECTS = tests/test_context.$(OBJEXT) \
 	tests/testlib.$(OBJEXT)
@@ -535,6 +536,7 @@ pdfdir = @pdfdir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
+runstatedir = @runstatedir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
@@ -620,12 +622,13 @@ AM_CFLAGS = \
 	$(GALLIUM_CFLAGS) \
 	$(VISIBILITY_CFLAGS) \
 	$(VL_CFLAGS) \
+	$(XCB_DRI3_CFLAGS) \
 	$(XVMC_CFLAGS)
 
 noinst_LTLIBRARIES = libxvmctracker.la
 libxvmctracker_la_SOURCES = $(C_SOURCES)
 noinst_HEADERS = tests/testlib.h
-TEST_LIBS = $(XVMC_LIBS) -lXvMCW $(VL_LIBS)
+TEST_LIBS = $(XVMC_LIBS) -lXvMCW $(VL_LIBS) $(XCB_DRI3_LIBS)
 tests_test_context_SOURCES = tests/test_context.c tests/testlib.c
 tests_test_context_LDADD = $(TEST_LIBS)
 tests_test_surface_SOURCES = tests/test_surface.c tests/testlib.c

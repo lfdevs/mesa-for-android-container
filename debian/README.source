@@ -39,3 +39,9 @@ are involved:
 * Otherwise, the patch is added to debian/patches/ which is managed
   with quilt as documented in /usr/share/doc/quilt/README.source.
   Thus, the patching system requires a build dependency on quilt.
+
+Updating debian/upstream/signing-key.asc with new keys requires the following steps:
+* fetch the key:
+  gpg [--keyserver $server] --recv-keys $keyid
+* export it to the file:
+  gpg --export-options export-minimal --export -a $keyid >> debian/upstream/signing-key.asc

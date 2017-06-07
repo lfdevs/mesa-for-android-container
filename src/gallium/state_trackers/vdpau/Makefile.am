@@ -30,6 +30,7 @@ AM_CFLAGS = \
 	$(GALLIUM_CFLAGS) \
 	$(VISIBILITY_CFLAGS) \
 	$(VL_CFLAGS) \
+	$(XCB_DRI3_CFLAGS) \
 	$(VDPAU_CFLAGS)
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/include \

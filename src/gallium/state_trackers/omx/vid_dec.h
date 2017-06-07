@@ -34,8 +34,6 @@
 #ifndef OMX_VID_DEC_H
 #define OMX_VID_DEC_H
 
-#include <X11/Xlib.h>
-
 #include <string.h>
 
 #include <OMX_Types.h>
