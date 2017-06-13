@@ -1,3 +1,11 @@
+mesa (17.1.2-2) experimental; urgency=medium
+
+  * rules: --with-egl-platforms is deprecated, use --with-platforms
+    instead.
+  * rules: Enable surfaceless EGL platform.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Tue, 13 Jun 2017 10:50:33 +0300
+
 mesa (17.1.2-1) experimental; urgency=medium
 
   * New upstream release.
