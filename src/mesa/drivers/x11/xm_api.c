@@ -1304,6 +1304,14 @@ XMesaBuffer XMesaGetCurrentReadBuffer( void )
 }
 
 
+Display *XMesaGetCurrentDisplay(void)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   XMesaContext xmctx = XMESA_CONTEXT(ctx);
+   return xmctx ? xmctx->display : NULL;
+}
+
+
 
 GLboolean XMesaSetFXmode( GLint mode )
 {

@@ -953,26 +953,27 @@ public:
 
 
 private:
+    template <typename MaskT>
+    INLINE __m128i expandThenBlend4(uint32_t* min, uint32_t* max) // @llvm_func_start
+    {
+        __m128i vMin = _mm_set1_epi32(*min);
+        __m128i vMax = _mm_set1_epi32(*max);
+        return _simd_blend4_epi32<MaskT::value>(vMin, vMax);
+    }  // @llvm_func_end
+
     INLINE void CalcTileSampleOffsets(int numSamples)   // @llvm_func_start
-    {                                                                      
-        auto expandThenBlend4 = [](uint32_t* min, uint32_t* max, auto mask)
-        {
-            __m128i vMin = _mm_set1_epi32(*min);
-            __m128i vMax = _mm_set1_epi32(*max);
-            return _simd_blend4_epi32<decltype(mask)::value>(vMin, vMax);
-        };
-                                                                           
+    {
         auto minXi = std::min_element(std::begin(_xi), &_xi[numSamples]);
         auto maxXi = std::max_element(std::begin(_xi), &_xi[numSamples]);
-        std::integral_constant<int, 0xA> xMask;
+        using xMask = std::integral_constant<int, 0xA>;
         // BR(max),    BL(min),    UR(max),    UL(min)
-        tileSampleOffsetsX = expandThenBlend4(minXi, maxXi, xMask);
-        
+        tileSampleOffsetsX = expandThenBlend4<xMask>(minXi, maxXi);
+
         auto minYi = std::min_element(std::begin(_yi), &_yi[numSamples]);
         auto maxYi = std::max_element(std::begin(_yi), &_yi[numSamples]);
-        std::integral_constant<int, 0xC> yMask;
+        using yMask = std::integral_constant<int, 0xC>;
         // BR(max),    BL(min),    UR(max),    UL(min)
-        tileSampleOffsetsY = expandThenBlend4(minYi, maxYi, yMask);
+        tileSampleOffsetsY = expandThenBlend4<yMask>(minYi, maxYi);
     };  // @llvm_func_end
     // scalar sample values
     uint32_t _xi[SWR_MAX_NUM_MULTISAMPLES];

@@ -51,10 +51,10 @@ void
 radv_meta_restore(const struct radv_meta_saved_state *state,
 		  struct radv_cmd_buffer *cmd_buffer)
 {
-	cmd_buffer->state.pipeline = state->old_pipeline;
+	radv_CmdBindPipeline(radv_cmd_buffer_to_handle(cmd_buffer), VK_PIPELINE_BIND_POINT_GRAPHICS,
+			     radv_pipeline_to_handle(state->old_pipeline));
 
 	cmd_buffer->state.descriptors[0] = state->old_descriptor_set0;
-	cmd_buffer->state.descriptors_dirty |= (1u << 0);
 	memcpy(cmd_buffer->state.vertex_bindings, state->old_vertex_bindings,
 	       sizeof(state->old_vertex_bindings));
 
@@ -114,7 +114,6 @@ radv_meta_restore_compute(const struct radv_meta_saved_compute_state *state,
 			     radv_pipeline_to_handle(state->old_pipeline));
 
 	cmd_buffer->state.descriptors[0] = state->old_descriptor_set0;
-	cmd_buffer->state.descriptors_dirty |= (1u << 0);
 
 	if (push_constant_size) {
 		memcpy(cmd_buffer->push_constants, state->push_constants, push_constant_size);

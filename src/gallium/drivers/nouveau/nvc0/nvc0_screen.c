@@ -90,11 +90,20 @@ nvc0_screen_is_format_supported(struct pipe_screen *pscreen,
    bindings &= ~(PIPE_BIND_LINEAR |
                  PIPE_BIND_SHARED);
 
-   if (bindings & PIPE_BIND_SHADER_IMAGE && sample_count > 1 &&
-       nouveau_screen(pscreen)->class_3d >= GM107_3D_CLASS) {
-      /* MS images are currently unsupported on Maxwell because they have to
-       * be handled explicitly. */
-      return false;
+   if (bindings & PIPE_BIND_SHADER_IMAGE) {
+      if (sample_count > 1 &&
+          nouveau_screen(pscreen)->class_3d >= GM107_3D_CLASS) {
+         /* MS images are currently unsupported on Maxwell because they have to
+          * be handled explicitly. */
+         return false;
+      }
+
+      if (format == PIPE_FORMAT_B8G8R8A8_UNORM &&
+          nouveau_screen(pscreen)->class_3d < NVE4_3D_CLASS) {
+         /* This should work on Fermi, but for currently unknown reasons it
+          * does not and results in breaking reads from pbos. */
+         return false;
+      }
    }
 
    return (( nvc0_format_table[format].usage |

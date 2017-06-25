@@ -1992,7 +1992,7 @@ intel_miptree_slice_resolve(struct brw_context *brw,
    if (!item || item->need != need)
       return false;
 
-   intel_hiz_exec(brw, mt, level, layer, need);
+   intel_hiz_exec(brw, mt, level, layer, 1, need);
    intel_resolve_map_remove(item);
    return true;
 }
@@ -2028,7 +2028,7 @@ intel_miptree_all_slices_resolve(struct brw_context *brw,
       if (map->need != need)
 	 continue;
 
-      intel_hiz_exec(brw, mt, map->level, map->layer, need);
+      intel_hiz_exec(brw, mt, map->level, map->layer, 1, need);
       intel_resolve_map_remove(map);
       did_resolve = true;
    }

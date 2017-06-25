@@ -175,71 +175,13 @@ brw_fast_clear_depth(struct gl_context *ctx)
       mt->depth_clear_value = depth_clear_value;
    }
 
-   if (brw->gen == 6) {
-      /* From the Sandy Bridge PRM, volume 2 part 1, page 313:
-       *
-       *   "If other rendering operations have preceded this clear, a
-       *    PIPE_CONTROL with write cache flush enabled and Z-inhibit disabled
-       *    must be issued before the rectangle primitive used for the depth
-       *    buffer clear operation.
-       */
-       brw_emit_pipe_control_flush(brw,
-                                   PIPE_CONTROL_RENDER_TARGET_FLUSH |
-                                   PIPE_CONTROL_DEPTH_CACHE_FLUSH |
-                                   PIPE_CONTROL_CS_STALL);
-   } else if (brw->gen >= 7) {
-      /*
-       * From the Ivybridge PRM, volume 2, "Depth Buffer Clear":
-       *
-       *   If other rendering operations have preceded this clear, a
-       *   PIPE_CONTROL with depth cache flush enabled, Depth Stall bit
-       *   enabled must be issued before the rectangle primitive used for the
-       *   depth buffer clear operation.
-       *
-       * Same applies for Gen8 and Gen9.
-       *
-       * In addition, from the Ivybridge PRM, volume 2, 1.10.4.1 PIPE_CONTROL,
-       * Depth Cache Flush Enable:
-       *
-       *   This bit must not be set when Depth Stall Enable bit is set in
-       *   this packet.
-       *
-       * This is confirmed to hold for real, HSW gets immediate gpu hangs.
-       *
-       * Therefore issue two pipe control flushes, one for cache flush and
-       * another for depth stall.
-       */
-       brw_emit_pipe_control_flush(brw,
-                                   PIPE_CONTROL_DEPTH_CACHE_FLUSH |
-                                   PIPE_CONTROL_CS_STALL);
-
-       brw_emit_pipe_control_flush(brw, PIPE_CONTROL_DEPTH_STALL);
-   }
-
    if (fb->MaxNumLayers > 0) {
-      for (unsigned layer = 0; layer < depth_irb->layer_count; layer++) {
-         intel_hiz_exec(brw, mt, depth_irb->mt_level,
-                        depth_irb->mt_layer + layer,
-                        BLORP_HIZ_OP_DEPTH_CLEAR);
-      }
-   } else {
-      intel_hiz_exec(brw, mt, depth_irb->mt_level, depth_irb->mt_layer,
+      intel_hiz_exec(brw, mt, depth_irb->mt_level,
+                     depth_irb->mt_layer, depth_irb->layer_count,
                      BLORP_HIZ_OP_DEPTH_CLEAR);
-   }
-
-   if (brw->gen == 6) {
-      /* From the Sandy Bridge PRM, volume 2 part 1, page 314:
-       *
-       *     "DevSNB, DevSNB-B{W/A}]: Depth buffer clear pass must be followed
-       *      by a PIPE_CONTROL command with DEPTH_STALL bit set and Then
-       *      followed by Depth FLUSH'
-      */
-      brw_emit_pipe_control_flush(brw,
-                                  PIPE_CONTROL_DEPTH_STALL);
-
-      brw_emit_pipe_control_flush(brw,
-                                  PIPE_CONTROL_DEPTH_CACHE_FLUSH |
-                                  PIPE_CONTROL_CS_STALL);
+   } else {
+      intel_hiz_exec(brw, mt, depth_irb->mt_level, depth_irb->mt_layer, 1,
+                     BLORP_HIZ_OP_DEPTH_CLEAR);
    }
 
    /* Now, the HiZ buffer contains data that needs to be resolved to the depth

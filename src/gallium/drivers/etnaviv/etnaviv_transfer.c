@@ -70,6 +70,9 @@ etna_transfer_unmap(struct pipe_context *pctx, struct pipe_transfer *ptrans)
    if (rsc->texture && !etna_resource_newer(rsc, etna_resource(rsc->texture)))
       rsc = etna_resource(rsc->texture); /* switch to using the texture resource */
 
+   if (trans->rsc)
+      etna_bo_cpu_fini(etna_resource(trans->rsc)->bo);
+
    if (ptrans->usage & PIPE_TRANSFER_WRITE) {
       if (trans->rsc) {
          /* We have a temporary resource due to either tile status or
@@ -105,14 +108,14 @@ etna_transfer_unmap(struct pipe_context *pctx, struct pipe_transfer *ptrans)
       }
 
       rsc->seqno++;
-      etna_bo_cpu_fini(rsc->bo);
 
       if (rsc->base.bind & PIPE_BIND_SAMPLER_VIEW) {
-         /* XXX do we need to flush the CPU cache too or start a write barrier
-          * to make sure the GPU sees it? */
          ctx->dirty |= ETNA_DIRTY_TEXTURE_CACHES;
       }
    }
+
+   if (!trans->rsc)
+      etna_bo_cpu_fini(rsc->bo);
 
    pipe_resource_reference(&trans->rsc, NULL);
    pipe_resource_reference(&ptrans->resource, NULL);

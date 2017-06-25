@@ -379,13 +379,13 @@ glXQueryServerString(Display *dpy, int screen, int name)
 
 /*** GLX_VERSION_1_2 ***/
 
+/* declare here to avoid including xmesa.h */
+extern Display *XMesaGetCurrentDisplay(void);
+
 Display PUBLIC *
 glXGetCurrentDisplay(void)
 {
-   /* Same code as in libGL's glxext.c */
-   __GLXcontext *gc = (__GLXcontext *) glXGetCurrentContext();
-   if (NULL == gc) return NULL;
-   return gc->currentDpy;
+   return XMesaGetCurrentDisplay();
 }
 
 

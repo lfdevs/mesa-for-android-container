@@ -382,7 +382,8 @@ si_make_texture_descriptor(struct radv_device *device,
 			S_008F24_LAST_ARRAY(last_layer);
 		fmask_state[6] = 0;
 		fmask_state[7] = 0;
-	}
+	} else if (fmask_state)
+		memset(fmask_state, 0, 8 * 4);
 }
 
 static void

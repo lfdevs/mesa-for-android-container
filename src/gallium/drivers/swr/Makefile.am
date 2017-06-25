@@ -22,7 +22,7 @@
 include Makefile.sources
 include $(top_srcdir)/src/gallium/Automake.inc
 
-AM_CXXFLAGS = $(GALLIUM_DRIVER_CFLAGS) $(SWR_CXX14_CXXFLAGS)
+AM_CXXFLAGS = $(GALLIUM_DRIVER_CFLAGS) $(SWR_CXX11_CXXFLAGS)
 
 noinst_LTLIBRARIES = libmesaswr.la
 
@@ -32,7 +32,7 @@ COMMON_CXXFLAGS = \
 	-fno-strict-aliasing \
 	$(GALLIUM_DRIVER_CFLAGS) \
 	$(LLVM_CXXFLAGS) \
-	$(SWR_CXX14_CXXFLAGS) \
+	$(SWR_CXX11_CXXFLAGS) \
 	-I$(builddir)/rasterizer/codegen \
 	-I$(builddir)/rasterizer/jitter \
 	-I$(builddir)/rasterizer/archrast \

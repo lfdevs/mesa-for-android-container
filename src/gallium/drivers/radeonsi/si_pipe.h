@@ -366,6 +366,7 @@ struct si_context {
 	struct si_shader_selector *last_tcs;
 	int			last_num_tcs_input_cp;
 	int			last_tes_sh_base;
+	bool			last_tess_uses_primid;
 	unsigned		last_num_patches;
 
 	/* Debug state. */

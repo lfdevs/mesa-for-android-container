@@ -235,6 +235,11 @@ dri3_bind_context(struct glx_context *context, struct glx_context *old,
    if (!(*psc->core->bindContext) (pcp->driContext, dri_draw, dri_read))
       return GLXBadContext;
 
+   if (dri_draw)
+      (*psc->f->invalidate)(dri_draw);
+   if (dri_read && dri_read != dri_draw)
+      (*psc->f->invalidate)(dri_read);
+
    return Success;
 }
 
@@ -493,6 +498,7 @@ dri3_flush_front_buffer(__DRIdrawable *driDrawable, void *loaderPrivate)
 
    loader_dri3_flush(draw, __DRI2_FLUSH_DRAWABLE, __DRI2_THROTTLE_FLUSHFRONT);
 
+   (*psc->f->invalidate)(driDrawable);
    loader_dri3_wait_gl(draw);
 }
 

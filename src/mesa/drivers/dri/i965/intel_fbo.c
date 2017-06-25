@@ -442,13 +442,9 @@ intel_create_renderbuffer(mesa_format format, unsigned num_samples)
    struct intel_renderbuffer *irb;
    struct gl_renderbuffer *rb;
 
-   GET_CURRENT_CONTEXT(ctx);
-
    irb = CALLOC_STRUCT(intel_renderbuffer);
-   if (!irb) {
-      _mesa_error(ctx, GL_OUT_OF_MEMORY, "creating renderbuffer");
+   if (!irb)
       return NULL;
-   }
 
    rb = &irb->Base.Base;
    irb->layer_count = 1;

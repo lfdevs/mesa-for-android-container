@@ -609,10 +609,10 @@ droid_query_buffer_age(_EGLDriver *drv,
 
    if (update_buffers(dri2_surf) < 0) {
       _eglError(EGL_BAD_ALLOC, "droid_query_buffer_age");
-      return 0;
+      return -1;
    }
 
-   return dri2_surf->back->age;
+   return dri2_surf->back ? dri2_surf->back->age : 0;
 }
 
 static EGLBoolean

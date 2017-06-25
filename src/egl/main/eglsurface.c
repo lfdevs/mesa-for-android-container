@@ -409,7 +409,11 @@ _eglQuerySurface(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surface,
          _eglError(EGL_BAD_ATTRIBUTE, "eglQuerySurface");
          return EGL_FALSE;
       }
-      *value = drv->API.QueryBufferAge(drv, dpy, surface);
+      EGLint result = drv->API.QueryBufferAge(drv, dpy, surface);
+      /* error happened */
+      if (result < 0)
+         return EGL_FALSE;
+      *value = result;
       break;
    default:
       _eglError(EGL_BAD_ATTRIBUTE, "eglQuerySurface");

@@ -1,3 +1,9 @@
+mesa (17.1.3-1) experimental; urgency=medium
+
+  * New upstream release.
+
+ -- Emilio Pozuelo Monfort <pochu@debian.org>  Mon, 26 Jun 2017 00:03:57 +0200
+
 mesa (17.1.2-2) experimental; urgency=medium
 
   * rules: --with-egl-platforms is deprecated, use --with-platforms

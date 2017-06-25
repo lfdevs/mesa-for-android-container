@@ -676,7 +676,7 @@ void radv_GetPhysicalDeviceProperties(
 		.driverVersion = radv_get_driver_version(),
 		.vendorID = 0x1002,
 		.deviceID = pdevice->rad_info.pci_id,
-		.deviceType = VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU,
+		.deviceType = pdevice->rad_info.has_dedicated_vram ? VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU : VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU,
 		.limits = limits,
 		.sparseProperties = {0},
 	};

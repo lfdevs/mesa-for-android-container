@@ -22,7 +22,7 @@
  */
 
 #include <stdio.h>
-
+#include "st_debug.h"
 #include "st_program.h"
 #include "st_shader_cache.h"
 #include "compiler/glsl/program.h"
@@ -382,6 +382,11 @@ st_load_tgsi_from_disk_cache(struct gl_context *ctx,
          st_set_prog_affected_state_flags(glprog);
          _mesa_associate_uniform_storage(ctx, prog, glprog->Parameters,
                                          false);
+
+         /* Create Gallium shaders now instead of on demand. */
+         if (ST_DEBUG & DEBUG_PRECOMPILE ||
+             st->shader_has_one_variant[glprog->info.stage])
+            st_precompile_shader_variant(st, glprog);
 
          free(buffer);
       } else {

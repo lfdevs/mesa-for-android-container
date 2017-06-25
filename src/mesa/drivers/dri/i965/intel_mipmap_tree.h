@@ -1029,10 +1029,6 @@ intel_miptree_unmap(struct brw_context *brw,
 		    unsigned int level,
 		    unsigned int slice);
 
-void
-intel_hiz_exec(struct brw_context *brw, struct intel_mipmap_tree *mt,
-	       unsigned int level, unsigned int layer, enum blorp_hiz_op op);
-
 bool
 intel_miptree_sample_with_hiz(struct brw_context *brw,
                               struct intel_mipmap_tree *mt);

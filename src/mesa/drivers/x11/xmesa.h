@@ -241,6 +241,12 @@ extern XMesaBuffer XMesaGetCurrentReadBuffer( void );
 
 
 /*
+ * Return display of current context.
+ */
+extern Display *XMesaGetCurrentDisplay( void );
+
+
+/*
  * Swap the front and back buffers for the given buffer.  No action is
  * taken if the buffer is not double buffered.
  */
