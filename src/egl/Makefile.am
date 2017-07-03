@@ -163,9 +163,6 @@ pkgconfigdir = $(libdir)/pkgconfig
 
 pkgconfig_DATA = main/egl.pc
 
-khrdir = $(includedir)/KHR
-khr_HEADERS = $(top_srcdir)/include/KHR/khrplatform.h
-
 egldir = $(includedir)/EGL
 egl_HEADERS = \
 	$(top_srcdir)/include/EGL/eglext.h \

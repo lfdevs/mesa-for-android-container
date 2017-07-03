@@ -405,53 +405,6 @@ etna_layout_multiple(unsigned layout, unsigned pixel_pipes, bool rs_align,
    }
 }
 
-/* return 32-bit clear pattern for color */
-static inline uint32_t
-translate_clear_color(enum pipe_format format,
-                      const union pipe_color_union *color)
-{
-   uint32_t clear_value = 0;
-
-   // XXX util_pack_color
-   switch (format) {
-   case PIPE_FORMAT_B8G8R8A8_UNORM:
-   case PIPE_FORMAT_B8G8R8X8_UNORM:
-   case PIPE_FORMAT_R8G8B8A8_UNORM:
-   case PIPE_FORMAT_R8G8B8X8_UNORM:
-      clear_value = etna_cfloat_to_uintN(color->f[2], 8) |
-                    (etna_cfloat_to_uintN(color->f[1], 8) << 8) |
-                    (etna_cfloat_to_uintN(color->f[0], 8) << 16) |
-                    (etna_cfloat_to_uintN(color->f[3], 8) << 24);
-      break;
-   case PIPE_FORMAT_B4G4R4X4_UNORM:
-   case PIPE_FORMAT_B4G4R4A4_UNORM:
-      clear_value = etna_cfloat_to_uintN(color->f[2], 4) |
-                    (etna_cfloat_to_uintN(color->f[1], 4) << 4) |
-                    (etna_cfloat_to_uintN(color->f[0], 4) << 8) |
-                    (etna_cfloat_to_uintN(color->f[3], 4) << 12);
-      clear_value |= clear_value << 16;
-      break;
-   case PIPE_FORMAT_B5G5R5X1_UNORM:
-   case PIPE_FORMAT_B5G5R5A1_UNORM:
-      clear_value = etna_cfloat_to_uintN(color->f[2], 5) |
-                    (etna_cfloat_to_uintN(color->f[1], 5) << 5) |
-                    (etna_cfloat_to_uintN(color->f[0], 5) << 10) |
-                    (etna_cfloat_to_uintN(color->f[3], 1) << 15);
-      clear_value |= clear_value << 16;
-      break;
-   case PIPE_FORMAT_B5G6R5_UNORM:
-      clear_value = etna_cfloat_to_uintN(color->f[2], 5) |
-                    (etna_cfloat_to_uintN(color->f[1], 6) << 5) |
-                    (etna_cfloat_to_uintN(color->f[0], 5) << 11);
-      clear_value |= clear_value << 16;
-      break;
-   default:
-      DBG("Unhandled pipe format for color clear: %i", format);
-   }
-
-   return clear_value;
-}
-
 static inline uint32_t
 translate_clear_depth_stencil(enum pipe_format format, float depth,
                               unsigned stencil)

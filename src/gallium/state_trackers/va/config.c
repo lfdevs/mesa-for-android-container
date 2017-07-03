@@ -101,6 +101,8 @@ vlVaQueryConfigEntrypoints(VADriverContextP ctx, VAProfile profile,
    if (num_entrypoints == 0)
       return VA_STATUS_ERROR_UNSUPPORTED_PROFILE;
 
+   assert(*num_entrypoints <= ctx->max_entrypoints);
+
    return VA_STATUS_SUCCESS;
 }
 

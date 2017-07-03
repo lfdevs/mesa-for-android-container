@@ -362,7 +362,21 @@ svga_screen_cache_flush(struct svga_screen *svgascreen,
          /* It is now safe to invalidate the surface content.
           * It will be done using the current context.
           */
-         svga->swc->surface_invalidate(svga->swc, entry->handle);
+         if (svga->swc->surface_invalidate(svga->swc, entry->handle) != PIPE_OK) {
+            enum pipe_error ret;
+
+            /* Even though surface invalidation here is done after the command
+             * buffer is flushed, it is still possible that it will
+             * fail because there might be just enough of this command that is
+             * filling up the command buffer, so in this case we will call
+             * the winsys flush directly to flush the buffer.
+             * Note, we don't want to call svga_context_flush() here because
+             * this function itself is called inside svga_context_flush().
+             */
+            svga->swc->flush(svga->swc, NULL);
+            ret = svga->swc->surface_invalidate(svga->swc, entry->handle);
+            assert(ret == PIPE_OK);
+         }
 
          /* add the entry to the invalidated list */
          LIST_ADD(&entry->head, &cache->invalidated);

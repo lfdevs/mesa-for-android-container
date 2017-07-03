@@ -261,7 +261,7 @@ static void update_raster_state( struct st_context *st )
          _mesa_geometric_samples(ctx->DrawBuffer) > 1;
 
    /* _NEW_SCISSOR */
-   raster->scissor = ctx->Scissor.EnableFlags;
+   raster->scissor = !!ctx->Scissor.EnableFlags;
 
    /* _NEW_FRAG_CLAMP */
    raster->clamp_fragment_color = !st->clamp_frag_color_in_shader &&

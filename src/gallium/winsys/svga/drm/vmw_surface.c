@@ -176,7 +176,7 @@ vmw_svga_winsys_surface_unmap(struct svga_winsys_context *swc,
    mtx_unlock(&vsrf->mutex);
 }
 
-void
+enum pipe_error
 vmw_svga_winsys_surface_invalidate(struct svga_winsys_context *swc,
                                    struct svga_winsys_surface *surf)
 {
@@ -186,6 +186,7 @@ vmw_svga_winsys_surface_invalidate(struct svga_winsys_context *swc,
     * when guest-backed surface is enabled, that implies DMA is always enabled;
     * hence, surface invalidation is not needed.
     */
+   return PIPE_OK;
 }
 
 void

@@ -29,6 +29,7 @@
 
 #include "hw/common.xml.h"
 
+#include "etnaviv_blend.h"
 #include "etnaviv_clear_blit.h"
 #include "etnaviv_context.h"
 #include "etnaviv_format.h"
@@ -624,6 +625,9 @@ static const struct etna_state_updater etna_state_updates[] = {
    },
    {
       etna_shader_link, ETNA_DIRTY_SHADER,
+   },
+   {
+      etna_update_blend, ETNA_DIRTY_BLEND | ETNA_DIRTY_FRAMEBUFFER
    }
 };
 

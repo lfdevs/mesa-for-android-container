@@ -1700,7 +1700,8 @@ void brw_fini_pipe_control(struct brw_context *brw);
 void brw_emit_pipe_control_flush(struct brw_context *brw, uint32_t flags);
 void brw_emit_pipe_control_write(struct brw_context *brw, uint32_t flags,
                                  struct brw_bo *bo, uint32_t offset,
-                                 uint32_t imm_lower, uint32_t imm_upper);
+                                 uint64_t imm);
+void brw_emit_end_of_pipe_sync(struct brw_context *brw, uint32_t flags);
 void brw_emit_mi_flush(struct brw_context *brw);
 void brw_emit_post_sync_nonzero_flush(struct brw_context *brw);
 void brw_emit_depth_stall_flushes(struct brw_context *brw);

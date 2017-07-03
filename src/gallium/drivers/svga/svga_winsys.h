@@ -394,7 +394,7 @@ struct svga_winsys_context
    /**
     * Invalidate the content of this surface
     */
-   void
+   enum pipe_error
    (*surface_invalidate)(struct svga_winsys_context *swc,
                          struct svga_winsys_surface *surface);
 

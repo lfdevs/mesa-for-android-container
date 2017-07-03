@@ -555,7 +555,7 @@ brw_initialize_context_constants(struct brw_context *brw)
    ctx->Const.Max3DTextureLevels = 12; /* 2048 */
    ctx->Const.MaxArrayTextureLayers = brw->gen >= 7 ? 2048 : 512;
    ctx->Const.MaxTextureMbytes = 1536;
-   ctx->Const.MaxTextureRectSize = 1 << 12;
+   ctx->Const.MaxTextureRectSize = brw->gen >= 7 ? 16384 : 8192;
    ctx->Const.MaxTextureMaxAnisotropy = 16.0;
    ctx->Const.MaxTextureLodBias = 15.0;
    ctx->Const.StripTextureBorder = true;

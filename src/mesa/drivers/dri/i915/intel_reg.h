@@ -93,7 +93,11 @@
 #define S2_TEX_COUNT_SHIFT_830		12
 #define S2_VERTEX_1_WIDTH_SHIFT_830	0
 #define S2_VERTEX_0_WIDTH_SHIFT_830	6
-/* S3 not interesting */
+
+#define S3_TEXCOORD_WRAP_SHORTEST_TCX(unit)	(1<<((unit)*4+3))
+#define S3_TEXCOORD_WRAP_SHORTEST_TCY(unit)	(1<<((unit)*4+2))
+#define S3_TEXCOORD_WRAP_SHORTEST_TCZ(unit)	(1<<((unit)*4+1))
+#define S3_TEXCOORD_PERSPECTIVE_DISABLE(unit)	(1<<((unit)*4+0))
 
 #define S4_POINT_WIDTH_SHIFT           23
 #define S4_POINT_WIDTH_MASK            (0x1ff<<23)

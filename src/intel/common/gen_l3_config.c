@@ -102,6 +102,20 @@ static const struct gen_l3_config chv_l3_configs[] = {
 };
 
 /**
+ * BXT 2x6 validated L3 configurations.  \sa ivb_l3_configs.
+ */
+static const struct gen_l3_config bxt_2x6_l3_configs[] = {
+   /* SLM URB ALL DC  RO  IS   C   T */
+   {{  0, 32, 48,  0,  0,  0,  0,  0 }},
+   {{  0, 32,  0,  8, 40,  0,  0,  0 }},
+   {{  0, 32,  0, 32, 16,  0,  0,  0 }},
+   {{ 16, 16, 48,  0,  0,  0,  0,  0 }},
+   {{ 16, 16,  0, 40,  8,  0,  0,  0 }},
+   {{ 16, 16,  0, 16, 32,  0,  0,  0 }},
+   {{ 0 }}
+};
+
+/**
  * Return a zero-terminated array of validated L3 configurations for the
  * specified device.
  */
@@ -116,6 +130,8 @@ get_l3_configs(const struct gen_device_info *devinfo)
       return (devinfo->is_cherryview ? chv_l3_configs : bdw_l3_configs);
 
    case 9:
+      if (devinfo->l3_banks == 1)
+	 return bxt_2x6_l3_configs;
       return chv_l3_configs;
 
    default:

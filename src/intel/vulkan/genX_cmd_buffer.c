@@ -822,7 +822,7 @@ genX(cmd_buffer_config_l3)(struct anv_cmd_buffer *cmd_buffer,
    anv_pack_struct(&l3cr2, GENX(L3CNTLREG2),
                    .SLMEnable = has_slm,
                    .URBLowBandwidth = urb_low_bw,
-                   .URBAllocation = cfg->n[GEN_L3P_URB],
+                   .URBAllocation = cfg->n[GEN_L3P_URB] - n0_urb,
 #if !GEN_IS_HASWELL
                    .ALLAllocation = cfg->n[GEN_L3P_ALL],
 #endif

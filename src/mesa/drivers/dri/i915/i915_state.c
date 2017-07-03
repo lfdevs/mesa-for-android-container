@@ -925,11 +925,12 @@ i915_init_packets(struct i915_context *i915)
        * piece changes.
        */
       i915->state.Ctx[I915_CTXREG_LI] = (_3DSTATE_LOAD_STATE_IMMEDIATE_1 |
-                                         I1_LOAD_S(2) |
-                                         I1_LOAD_S(4) |
-                                         I1_LOAD_S(5) | I1_LOAD_S(6) | (3));
+                                         I1_LOAD_S(2) | I1_LOAD_S(3) |
+                                         I1_LOAD_S(4) | I1_LOAD_S(5) |
+                                         I1_LOAD_S(6) | (4));
       i915->state.Ctx[I915_CTXREG_LIS2] = 0;
       i915->state.Ctx[I915_CTXREG_LIS4] = 0;
+      i915->state.Ctx[I915_CTXREG_LIS3] = 0;
       i915->state.Ctx[I915_CTXREG_LIS5] = 0;
 
       if (i915->intel.ctx.Visual.rgbBits == 16)

@@ -887,9 +887,7 @@ do_single_blorp_clear(struct brw_context *brw, struct gl_framebuffer *fb,
        * and again afterwards to ensure that the resolve is complete before we
        * do any more regular drawing.
        */
-      brw_emit_pipe_control_flush(brw,
-                                  PIPE_CONTROL_RENDER_TARGET_FLUSH |
-                                  PIPE_CONTROL_CS_STALL);
+      brw_emit_end_of_pipe_sync(brw, PIPE_CONTROL_RENDER_TARGET_FLUSH);
 
       struct blorp_batch batch;
       blorp_batch_init(&brw->blorp, &batch, brw, 0);
@@ -899,9 +897,7 @@ do_single_blorp_clear(struct brw_context *brw, struct gl_framebuffer *fb,
                        x0, y0, x1, y1);
       blorp_batch_finish(&batch);
 
-      brw_emit_pipe_control_flush(brw,
-                                  PIPE_CONTROL_RENDER_TARGET_FLUSH |
-                                  PIPE_CONTROL_CS_STALL);
+      brw_emit_end_of_pipe_sync(brw, PIPE_CONTROL_RENDER_TARGET_FLUSH);
 
       /* Now that the fast clear has occurred, put the buffer in
        * INTEL_FAST_CLEAR_STATE_CLEAR so that we won't waste time doing
@@ -1001,9 +997,7 @@ brw_blorp_resolve_color(struct brw_context *brw, struct intel_mipmap_tree *mt,
     * and again afterwards to ensure that the resolve is complete before we
     * do any more regular drawing.
     */
-   brw_emit_pipe_control_flush(brw,
-                               PIPE_CONTROL_RENDER_TARGET_FLUSH |
-                               PIPE_CONTROL_CS_STALL);
+   brw_emit_end_of_pipe_sync(brw, PIPE_CONTROL_RENDER_TARGET_FLUSH);
 
 
    struct blorp_batch batch;
@@ -1014,9 +1008,7 @@ brw_blorp_resolve_color(struct brw_context *brw, struct intel_mipmap_tree *mt,
    blorp_batch_finish(&batch);
 
    /* See comment above */
-   brw_emit_pipe_control_flush(brw,
-                               PIPE_CONTROL_RENDER_TARGET_FLUSH |
-                               PIPE_CONTROL_CS_STALL);
+   brw_emit_end_of_pipe_sync(brw, PIPE_CONTROL_RENDER_TARGET_FLUSH);
 }
 
 static void

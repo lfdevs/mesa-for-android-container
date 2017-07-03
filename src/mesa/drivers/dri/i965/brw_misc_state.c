@@ -457,6 +457,12 @@ brw_workaround_depthstencil_alignment(struct brw_context *brw,
          brw->depthstencil.stencil_offset =
             (stencil_draw_y & ~tile_mask_y) * stencil_mt->pitch +
             (stencil_draw_x & ~tile_mask_x) * 64;
+      } else if (!depth_irb) {
+         brw->depthstencil.depth_offset =
+            intel_miptree_get_aligned_offset(
+               stencil_mt,
+               stencil_irb->draw_x & ~tile_mask_x,
+               stencil_irb->draw_y & ~tile_mask_y);
       }
    }
 }
@@ -993,6 +999,37 @@ brw_upload_state_base_address(struct brw_context *brw)
     * maybe this isn't required for us in particular.
     */
 
+   if (brw->gen >= 6) {
+      const unsigned dc_flush =
+         brw->gen >= 7 ? PIPE_CONTROL_DATA_CACHE_FLUSH : 0;
+
+      /* Emit a render target cache flush.
+       *
+       * This isn't documented anywhere in the PRM.  However, it seems to be
+       * necessary prior to changing the surface state base adress.  We've
+       * seen issues in Vulkan where we get GPU hangs when using multi-level
+       * command buffers which clear depth, reset state base address, and then
+       * go render stuff.
+       *
+       * Normally, in GL, we would trust the kernel to do sufficient stalls
+       * and flushes prior to executing our batch.  However, it doesn't seem
+       * as if the kernel's flushing is always sufficient and we don't want to
+       * rely on it.
+       *
+       * We make this an end-of-pipe sync instead of a normal flush because we
+       * do not know the current status of the GPU.  On Haswell at least,
+       * having a fast-clear operation in flight at the same time as a normal
+       * rendering operation can cause hangs.  Since the kernel's flushing is
+       * insufficient, we need to ensure that any rendering operations from
+       * other processes are definitely complete before we try to do our own
+       * rendering.  It's a bit of a big hammer but it appears to work.
+       */
+      brw_emit_end_of_pipe_sync(brw,
+                                PIPE_CONTROL_RENDER_TARGET_FLUSH |
+                                PIPE_CONTROL_DEPTH_CACHE_FLUSH |
+                                dc_flush);
+   }
+
    if (brw->gen >= 8) {
       uint32_t mocs_wb = brw->gen >= 9 ? SKL_MOCS_WB : BDW_MOCS_WB;
       int pkt_len = brw->gen >= 9 ? 19 : 16;
@@ -1094,6 +1131,13 @@ brw_upload_state_base_address(struct brw_context *brw)
        OUT_BATCH(1); /* General state upper bound */
        OUT_BATCH(1); /* Indirect object upper bound */
        ADVANCE_BATCH();
+   }
+
+   if (brw->gen >= 6) {
+      brw_emit_pipe_control_flush(brw,
+                                  PIPE_CONTROL_INSTRUCTION_INVALIDATE |
+                                  PIPE_CONTROL_STATE_CACHE_INVALIDATE |
+                                  PIPE_CONTROL_TEXTURE_CACHE_INVALIDATE);
    }
 
    /* According to section 3.6.1 of VOL1 of the 965 PRM,

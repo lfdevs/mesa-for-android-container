@@ -40,6 +40,8 @@ set_viewport_no_notify(struct gl_context *ctx, unsigned idx,
                        GLfloat x, GLfloat y,
                        GLfloat width, GLfloat height)
 {
+   FLUSH_VERTICES(ctx, _NEW_VIEWPORT);
+
    /* clamp width and height to the implementation dependent range */
    width  = MIN2(width, (GLfloat) ctx->Const.MaxViewportWidth);
    height = MIN2(height, (GLfloat) ctx->Const.MaxViewportHeight);
@@ -71,7 +73,6 @@ set_viewport_no_notify(struct gl_context *ctx, unsigned idx,
    ctx->ViewportArray[idx].Width = width;
    ctx->ViewportArray[idx].Y = y;
    ctx->ViewportArray[idx].Height = height;
-   ctx->NewState |= _NEW_VIEWPORT;
 }
 
 struct gl_viewport_inputs {
@@ -240,9 +241,10 @@ set_depth_range_no_notify(struct gl_context *ctx, unsigned idx,
        ctx->ViewportArray[idx].Far == farval)
       return;
 
+   FLUSH_VERTICES(ctx, _NEW_VIEWPORT);
+
    ctx->ViewportArray[idx].Near = CLAMP(nearval, 0.0, 1.0);
    ctx->ViewportArray[idx].Far = CLAMP(farval, 0.0, 1.0);
-   ctx->NewState |= _NEW_VIEWPORT;
 }
 
 void

@@ -341,6 +341,8 @@ etna_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 static float
 etna_screen_get_paramf(struct pipe_screen *pscreen, enum pipe_capf param)
 {
+   struct etna_screen *screen = etna_screen(pscreen);
+
    switch (param) {
    case PIPE_CAPF_MAX_LINE_WIDTH:
    case PIPE_CAPF_MAX_LINE_WIDTH_AA:
@@ -350,7 +352,7 @@ etna_screen_get_paramf(struct pipe_screen *pscreen, enum pipe_capf param)
    case PIPE_CAPF_MAX_TEXTURE_ANISOTROPY:
       return 16.0f;
    case PIPE_CAPF_MAX_TEXTURE_LOD_BIAS:
-      return 16.0f;
+      return util_last_bit(screen->specs.max_texture_size);
    case PIPE_CAPF_GUARD_BAND_LEFT:
    case PIPE_CAPF_GUARD_BAND_TOP:
    case PIPE_CAPF_GUARD_BAND_RIGHT:

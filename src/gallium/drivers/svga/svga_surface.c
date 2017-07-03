@@ -502,10 +502,10 @@ svga_validate_surface_view(struct svga_context *svga, struct svga_surface *s)
           * need to update the host-side copy with the invalid
           * content when the associated mob is first bound to the surface.
           */
-         ret = SVGA3D_InvalidateGBSurface(svga->swc, stex->handle);
-         if (ret != PIPE_OK) {
-            s = NULL;
-            goto done;
+         if (svga->swc->surface_invalidate(svga->swc, stex->handle) != PIPE_OK) {
+            svga_context_flush(svga, NULL);
+            ret = svga->swc->surface_invalidate(svga->swc, stex->handle);
+            assert(ret == PIPE_OK);
          }
          stex->validated = TRUE;
       }

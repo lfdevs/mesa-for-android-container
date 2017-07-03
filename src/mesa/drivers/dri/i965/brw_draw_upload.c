@@ -664,15 +664,16 @@ brw_prepare_vertices(struct brw_context *brw)
 	    ptr = glarray->Ptr;
 	 }
 	 else if (interleaved != glarray->StrideB ||
+                  glarray->InstanceDivisor != 0 ||
                   glarray->Ptr < ptr ||
                   (uintptr_t)(glarray->Ptr - ptr) + glarray->_ElementSize > interleaved)
 	 {
             /* If our stride is different from the first attribute's stride,
-             * or if the first attribute's stride didn't cover our element,
-             * disable the interleaved upload optimization.  The second case
-             * can most commonly occur in cases where there is a single vertex
-             * and, for example, the data is stored on the application's
-             * stack.
+             * or if we are using an instance divisor or if the first
+             * attribute's stride didn't cover our element, disable the
+             * interleaved upload optimization.  The second case can most
+             * commonly occur in cases where there is a single vertex and, for
+             * example, the data is stored on the application's stack.
              *
              * NOTE: This will also disable the optimization in cases where
              * the data is in a different order than the array indices.
@@ -727,6 +728,7 @@ brw_prepare_vertices(struct brw_context *brw)
 				 buffer, interleaved);
 	 buffer->offset -= delta * interleaved;
          buffer->size += delta * interleaved;
+         buffer->step_rate = 0;
 
 	 for (i = 0; i < nr_uploads; i++) {
 	    /* Then, just point upload[i] at upload[0]'s buffer. */

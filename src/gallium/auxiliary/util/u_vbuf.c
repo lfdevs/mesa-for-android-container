@@ -423,8 +423,22 @@ u_vbuf_translate_buffers(struct u_vbuf *mgr, struct translate_key *key,
          unsigned size = vb->stride ? num_vertices * vb->stride
                                     : sizeof(double)*4;
 
-         if (offset+size > vb->buffer->width0) {
+         if (offset + size > vb->buffer->width0) {
+            /* Don't try to map past end of buffer.  This often happens when
+             * we're translating an attribute that's at offset > 0 from the
+             * start of the vertex.  If we'd subtract attrib's offset from
+             * the size, this probably wouldn't happen.
+             */
             size = vb->buffer->width0 - offset;
+
+            /* Also adjust num_vertices.  A common user error is to call
+             * glDrawRangeElements() with incorrect 'end' argument.  The 'end
+             * value should be the max index value, but people often
+             * accidentally add one to this value.  This adjustment avoids
+             * crashing (by reading past the end of a hardware buffer mapping)
+             * when people do that.
+             */
+            num_vertices = (size + vb->stride - 1) / vb->stride;
          }
 
          map = pipe_buffer_map_range(mgr->pipe, vb->buffer, offset, size,

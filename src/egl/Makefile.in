@@ -151,8 +151,7 @@ am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_gnu_make.m4 \
 	$(top_srcdir)/VERSION $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
-DIST_COMMON = $(srcdir)/Makefile.am $(egl_HEADERS) $(khr_HEADERS) \
-	$(am__DIST_COMMON)
+DIST_COMMON = $(srcdir)/Makefile.am $(egl_HEADERS) $(am__DIST_COMMON)
 mkinstalldirs = $(install_sh) -d
 CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
@@ -184,8 +183,7 @@ am__uninstall_files_from_dir = { \
          $(am__cd) "$$dir" && rm -f $$files; }; \
   }
 am__installdirs = "$(DESTDIR)$(libdir)" "$(DESTDIR)$(pkgconfigdir)" \
-	"$(DESTDIR)$(vendorjsondir)" "$(DESTDIR)$(egldir)" \
-	"$(DESTDIR)$(khrdir)"
+	"$(DESTDIR)$(vendorjsondir)" "$(DESTDIR)$(egldir)"
 LTLIBRARIES = $(lib_LTLIBRARIES) $(noinst_LTLIBRARIES)
 @USE_LIBGLVND_FALSE@libEGL_la_DEPENDENCIES = libEGL_common.la
 am_libEGL_la_OBJECTS =
@@ -307,7 +305,7 @@ am__can_run_installinfo = \
     *) (install-info --version) >/dev/null 2>&1;; \
   esac
 DATA = $(pkgconfig_DATA) $(vendorjson_DATA)
-HEADERS = $(egl_HEADERS) $(khr_HEADERS)
+HEADERS = $(egl_HEADERS)
 am__tagged_files = $(HEADERS) $(SOURCES) $(TAGS_FILES) $(LISP)
 # Read a list of newline-separated strings from the standard input,
 # and print each of them once, without duplicates.  Input order is
@@ -787,6 +785,7 @@ pdfdir = @pdfdir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
+runstatedir = @runstatedir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
@@ -900,8 +899,6 @@ CLEANFILES = $(BUILT_SOURCES)
 
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = main/egl.pc
-khrdir = $(includedir)/KHR
-khr_HEADERS = $(top_srcdir)/include/KHR/khrplatform.h
 egldir = $(includedir)/EGL
 egl_HEADERS = \
 	$(top_srcdir)/include/EGL/eglext.h \
@@ -1189,27 +1186,6 @@ uninstall-eglHEADERS:
 	@list='$(egl_HEADERS)'; test -n "$(egldir)" || list=; \
 	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
 	dir='$(DESTDIR)$(egldir)'; $(am__uninstall_files_from_dir)
-install-khrHEADERS: $(khr_HEADERS)
-	@$(NORMAL_INSTALL)
-	@list='$(khr_HEADERS)'; test -n "$(khrdir)" || list=; \
-	if test -n "$$list"; then \
-	  echo " $(MKDIR_P) '$(DESTDIR)$(khrdir)'"; \
-	  $(MKDIR_P) "$(DESTDIR)$(khrdir)" || exit 1; \
-	fi; \
-	for p in $$list; do \
-	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
-	  echo "$$d$$p"; \
-	done | $(am__base_list) | \
-	while read files; do \
-	  echo " $(INSTALL_HEADER) $$files '$(DESTDIR)$(khrdir)'"; \
-	  $(INSTALL_HEADER) $$files "$(DESTDIR)$(khrdir)" || exit $$?; \
-	done
-
-uninstall-khrHEADERS:
-	@$(NORMAL_UNINSTALL)
-	@list='$(khr_HEADERS)'; test -n "$(khrdir)" || list=; \
-	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
-	dir='$(DESTDIR)$(khrdir)'; $(am__uninstall_files_from_dir)
 
 ID: $(am__tagged_files)
 	$(am__define_uniq_tagged_files); mkid -fID $$unique
@@ -1471,7 +1447,7 @@ check: $(BUILT_SOURCES)
 @HAVE_COMPAT_SYMLINKS_FALSE@all-local:
 all-am: Makefile $(LTLIBRARIES) $(DATA) $(HEADERS) all-local
 installdirs:
-	for dir in "$(DESTDIR)$(libdir)" "$(DESTDIR)$(pkgconfigdir)" "$(DESTDIR)$(vendorjsondir)" "$(DESTDIR)$(egldir)" "$(DESTDIR)$(khrdir)"; do \
+	for dir in "$(DESTDIR)$(libdir)" "$(DESTDIR)$(pkgconfigdir)" "$(DESTDIR)$(vendorjsondir)" "$(DESTDIR)$(egldir)"; do \
 	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
 	done
 install: $(BUILT_SOURCES)
@@ -1539,8 +1515,8 @@ info: info-am
 
 info-am:
 
-install-data-am: install-eglHEADERS install-khrHEADERS \
-	install-pkgconfigDATA install-vendorjsonDATA
+install-data-am: install-eglHEADERS install-pkgconfigDATA \
+	install-vendorjsonDATA
 
 install-dvi: install-dvi-am
 
@@ -1586,9 +1562,8 @@ ps: ps-am
 
 ps-am:
 
-uninstall-am: uninstall-eglHEADERS uninstall-khrHEADERS \
-	uninstall-libLTLIBRARIES uninstall-pkgconfigDATA \
-	uninstall-vendorjsonDATA
+uninstall-am: uninstall-eglHEADERS uninstall-libLTLIBRARIES \
+	uninstall-pkgconfigDATA uninstall-vendorjsonDATA
 
 .MAKE: all check check-am install install-am install-strip
 
@@ -1601,14 +1576,13 @@ uninstall-am: uninstall-eglHEADERS uninstall-khrHEADERS \
 	install-data install-data-am install-dvi install-dvi-am \
 	install-eglHEADERS install-exec install-exec-am install-html \
 	install-html-am install-info install-info-am \
-	install-khrHEADERS install-libLTLIBRARIES install-man \
-	install-pdf install-pdf-am install-pkgconfigDATA install-ps \
-	install-ps-am install-strip install-vendorjsonDATA \
-	installcheck installcheck-am installdirs maintainer-clean \
-	maintainer-clean-generic mostlyclean mostlyclean-compile \
-	mostlyclean-generic mostlyclean-libtool pdf pdf-am ps ps-am \
-	recheck tags tags-am uninstall uninstall-am \
-	uninstall-eglHEADERS uninstall-khrHEADERS \
+	install-libLTLIBRARIES install-man install-pdf install-pdf-am \
+	install-pkgconfigDATA install-ps install-ps-am install-strip \
+	install-vendorjsonDATA installcheck installcheck-am \
+	installdirs maintainer-clean maintainer-clean-generic \
+	mostlyclean mostlyclean-compile mostlyclean-generic \
+	mostlyclean-libtool pdf pdf-am ps ps-am recheck tags tags-am \
+	uninstall uninstall-am uninstall-eglHEADERS \
 	uninstall-libLTLIBRARIES uninstall-pkgconfigDATA \
 	uninstall-vendorjsonDATA
 

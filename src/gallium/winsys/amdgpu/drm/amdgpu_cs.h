@@ -105,7 +105,9 @@ struct amdgpu_cs_context {
    unsigned                    last_added_bo_usage;
    uint64_t                    last_added_bo_priority_usage;
 
-   unsigned                    max_dependencies;
+   struct pipe_fence_handle    **fence_dependencies;
+   unsigned                    num_fence_dependencies;
+   unsigned                    max_fence_dependencies;
 
    struct pipe_fence_handle    *fence;
 

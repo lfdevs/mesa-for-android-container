@@ -747,10 +747,13 @@ static void amdgpu_cs_context_cleanup(struct amdgpu_cs_context *cs)
       p_atomic_dec(&cs->sparse_buffers[i].bo->num_cs_references);
       amdgpu_winsys_bo_reference(&cs->sparse_buffers[i].bo, NULL);
    }
+   for (i = 0; i < cs->num_fence_dependencies; i++)
+      amdgpu_fence_reference(&cs->fence_dependencies[i], NULL);
 
    cs->num_real_buffers = 0;
    cs->num_slab_buffers = 0;
    cs->num_sparse_buffers = 0;
+   cs->num_fence_dependencies = 0;
    amdgpu_fence_reference(&cs->fence, NULL);
 
    memset(cs->buffer_indices_hashlist, -1, sizeof(cs->buffer_indices_hashlist));
@@ -765,7 +768,7 @@ static void amdgpu_destroy_cs_context(struct amdgpu_cs_context *cs)
    FREE(cs->handles);
    FREE(cs->slab_buffers);
    FREE(cs->sparse_buffers);
-   FREE(cs->request.dependencies);
+   FREE(cs->fence_dependencies);
 }
 
 
@@ -976,7 +979,6 @@ static void amdgpu_add_fence_dependency(struct amdgpu_cs *acs,
 {
    struct amdgpu_cs_context *cs = acs->csc;
    struct amdgpu_winsys_bo *bo = buffer->bo;
-   struct amdgpu_cs_fence *dep;
    unsigned new_num_fences = 0;
 
    for (unsigned j = 0; j < bo->num_fences; ++j) {
@@ -998,21 +1000,21 @@ static void amdgpu_add_fence_dependency(struct amdgpu_cs *acs,
       if (!(buffer->usage & RADEON_USAGE_SYNCHRONIZED))
          continue;
 
-      if (bo_fence->submission_in_progress)
-         os_wait_until_zero(&bo_fence->submission_in_progress,
-                            PIPE_TIMEOUT_INFINITE);
-
-      idx = cs->request.number_of_dependencies++;
-      if (idx >= cs->max_dependencies) {
+      idx = cs->num_fence_dependencies++;
+      if (idx >= cs->max_fence_dependencies) {
          unsigned size;
+         const unsigned increment = 8;
 
-         cs->max_dependencies = idx + 8;
-         size = cs->max_dependencies * sizeof(struct amdgpu_cs_fence);
-         cs->request.dependencies = realloc(cs->request.dependencies, size);
+         cs->max_fence_dependencies = idx + increment;
+         size = cs->max_fence_dependencies * sizeof(cs->fence_dependencies[0]);
+         cs->fence_dependencies = realloc(cs->fence_dependencies, size);
+         /* Clear the newly-allocated elements. */
+         memset(cs->fence_dependencies + idx, 0,
+                increment * sizeof(cs->fence_dependencies[0]));
       }
 
-      dep = &cs->request.dependencies[idx];
-      memcpy(dep, &bo_fence->fence, sizeof(*dep));
+      amdgpu_fence_reference(&cs->fence_dependencies[idx],
+                             (struct pipe_fence_handle*)bo_fence);
    }
 
    for (unsigned j = new_num_fences; j < bo->num_fences; ++j)
@@ -1083,7 +1085,7 @@ static void amdgpu_add_fence_dependencies(struct amdgpu_cs *acs)
 {
    struct amdgpu_cs_context *cs = acs->csc;
 
-   cs->request.number_of_dependencies = 0;
+   cs->num_fence_dependencies = 0;
 
    amdgpu_add_fence_dependencies_list(acs, cs->fence, cs->num_real_buffers, cs->real_buffers);
    amdgpu_add_fence_dependencies_list(acs, cs->fence, cs->num_slab_buffers, cs->slab_buffers);
@@ -1131,7 +1133,30 @@ void amdgpu_cs_submit_ib(void *job, int thread_index)
    struct amdgpu_winsys *ws = acs->ctx->ws;
    struct amdgpu_cs_context *cs = acs->cst;
    int i, r;
+   struct amdgpu_cs_fence *dependencies = NULL;
 
+   /* Set dependencies (input fences). */
+   if (cs->num_fence_dependencies) {
+      dependencies = alloca(sizeof(dependencies[0]) *
+                            cs->num_fence_dependencies);
+      unsigned num = 0;
+
+      for (i = 0; i < cs->num_fence_dependencies; i++) {
+         struct amdgpu_fence *fence =
+            (struct amdgpu_fence*)cs->fence_dependencies[i];
+
+         /* Past fences can't be unsubmitted because we have only 1 CS thread. */
+         assert(!fence->submission_in_progress);
+         memcpy(&dependencies[num++], &fence->fence, sizeof(dependencies[0]));
+      }
+      cs->request.dependencies = dependencies;
+      cs->request.number_of_dependencies = num;
+   } else {
+      cs->request.dependencies = NULL;
+      cs->request.number_of_dependencies = 0;
+   }
+
+   /* Set the output fence. */
    cs->request.fence_info.handle = NULL;
    if (amdgpu_cs_has_user_fence(cs)) {
 	cs->request.fence_info.handle = acs->ctx->user_fence_bo;

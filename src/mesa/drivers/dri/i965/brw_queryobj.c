@@ -97,7 +97,7 @@ brw_write_timestamp(struct brw_context *brw, struct brw_bo *query_bo, int idx)
       flags |= PIPE_CONTROL_CS_STALL;
 
    brw_emit_pipe_control_write(brw, flags,
-                               query_bo, idx * sizeof(uint64_t), 0, 0);
+                               query_bo, idx * sizeof(uint64_t), 0);
 }
 
 /**
@@ -112,8 +112,7 @@ brw_write_depth_count(struct brw_context *brw, struct brw_bo *query_bo, int idx)
       flags |= PIPE_CONTROL_CS_STALL;
 
    brw_emit_pipe_control_write(brw, flags,
-                               query_bo, idx * sizeof(uint64_t),
-                               0, 0);
+                               query_bo, idx * sizeof(uint64_t), 0);
 }
 
 /**

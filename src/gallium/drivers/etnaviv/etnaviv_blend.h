@@ -30,8 +30,12 @@
 #include "pipe/p_context.h"
 #include "pipe/p_state.h"
 
+struct etna_context;
+
 struct etna_blend_state {
    struct pipe_blend_state base;
+
+   bool enable;
 
    uint32_t PE_ALPHA_CONFIG;
    uint32_t PE_COLOR_FORMAT;
@@ -48,5 +52,8 @@ etna_blend_state(struct pipe_blend_state *blend)
 void *
 etna_blend_state_create(struct pipe_context *pctx,
                         const struct pipe_blend_state *so);
+
+bool
+etna_update_blend(struct etna_context *ctx);
 
 #endif

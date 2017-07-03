@@ -357,6 +357,46 @@ brw_meta_convert_fast_clear_color(const struct brw_context *brw,
       break;
    }
 
+   switch (_mesa_get_format_datatype(mt->format)) {
+   case GL_UNSIGNED_NORMALIZED:
+      for (int i = 0; i < 4; i++)
+         override_color.f[i] = CLAMP(override_color.f[i], 0.0f, 1.0f);
+      break;
+
+   case GL_SIGNED_NORMALIZED:
+      for (int i = 0; i < 4; i++)
+         override_color.f[i] = CLAMP(override_color.f[i], -1.0f, 1.0f);
+      break;
+
+   case GL_UNSIGNED_INT:
+      for (int i = 0; i < 4; i++) {
+         unsigned bits = _mesa_get_format_bits(mt->format, GL_RED_BITS + i);
+         if (bits < 32) {
+            uint32_t max = (1u << bits) - 1;
+            override_color.ui[i] = MIN2(override_color.ui[i], max);
+         }
+      }
+      break;
+
+   case GL_INT:
+      for (int i = 0; i < 4; i++) {
+         unsigned bits = _mesa_get_format_bits(mt->format, GL_RED_BITS + i);
+         if (bits < 32) {
+            int32_t max = (1 << (bits - 1)) - 1;
+            int32_t min = -(1 << (bits - 1));
+            override_color.i[i] = CLAMP(override_color.i[i], min, max);
+         }
+      }
+      break;
+
+   case GL_FLOAT:
+      if (!_mesa_is_format_signed(mt->format)) {
+         for (int i = 0; i < 4; i++)
+            override_color.f[i] = MAX2(override_color.f[i], 0.0f);
+      }
+      break;
+   }
+
    if (!_mesa_format_has_color_component(mt->format, 3)) {
       if (_mesa_is_format_integer_color(mt->format))
          override_color.ui[3] = 1;

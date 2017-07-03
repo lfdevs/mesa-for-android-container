@@ -1965,6 +1965,8 @@ static struct pipe_surface *r600_create_surface(struct pipe_context *pipe,
 	unsigned level = templ->u.tex.level;
 	unsigned width = u_minify(tex->width0, level);
 	unsigned height = u_minify(tex->height0, level);
+	unsigned width0 = tex->width0;
+	unsigned height0 = tex->height0;
 
 	if (tex->target != PIPE_BUFFER && templ->format != tex->format) {
 		const struct util_format_description *tex_desc
@@ -1983,11 +1985,14 @@ static struct pipe_surface *r600_create_surface(struct pipe_context *pipe,
 
 			width = nblks_x * templ_desc->block.width;
 			height = nblks_y * templ_desc->block.height;
+
+			width0 = util_format_get_nblocksx(tex->format, width0);
+			height0 = util_format_get_nblocksy(tex->format, height0);
 		}
 	}
 
 	return r600_create_surface_custom(pipe, tex, templ,
-					  tex->width0, tex->height0,
+					  width0, height0,
 					  width, height);
 }
 

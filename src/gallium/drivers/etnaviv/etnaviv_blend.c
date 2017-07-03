@@ -48,7 +48,7 @@ etna_blend_state_create(struct pipe_context *pctx,
     * - NOT source factor is ONE and destination factor ZERO for both rgb and
     *   alpha (which would mean that blending is effectively disabled)
     */
-   bool enable = rt0->blend_enable &&
+   co->enable = rt0->blend_enable &&
                  !(rt0->rgb_src_factor == PIPE_BLENDFACTOR_ONE &&
                    rt0->rgb_dst_factor == PIPE_BLENDFACTOR_ZERO &&
                    rt0->alpha_src_factor == PIPE_BLENDFACTOR_ONE &&
@@ -59,17 +59,11 @@ etna_blend_state_create(struct pipe_context *pctx,
     * - NOT source factor is equal to destination factor for both rgb abd
     *   alpha (which would effectively that mean alpha is not separate)
     */
-   bool separate_alpha = enable &&
+   bool separate_alpha = co->enable &&
                          !(rt0->rgb_src_factor == rt0->alpha_src_factor &&
                            rt0->rgb_dst_factor == rt0->alpha_dst_factor);
 
-   /* If the complete render target is written, set full_overwrite:
-    * - The color mask is 1111
-    * - No blending is used
-    */
-   bool full_overwrite = (rt0->colormask == 15) && !enable;
-
-   if (enable) {
+   if (co->enable) {
       co->PE_ALPHA_CONFIG =
          VIVS_PE_ALPHA_CONFIG_BLEND_ENABLE_COLOR |
          COND(separate_alpha, VIVS_PE_ALPHA_CONFIG_BLEND_SEPARATE_ALPHA) |
@@ -82,10 +76,6 @@ etna_blend_state_create(struct pipe_context *pctx,
    } else {
       co->PE_ALPHA_CONFIG = 0;
    }
-
-   co->PE_COLOR_FORMAT =
-         VIVS_PE_COLOR_FORMAT_COMPONENTS(rt0->colormask) |
-         COND(full_overwrite, VIVS_PE_COLOR_FORMAT_OVERWRITE);
 
    co->PE_LOGIC_OP =
          VIVS_PE_LOGIC_OP_OP(so->logicop_enable ? so->logicop_func : LOGIC_OP_COPY) |
@@ -106,4 +96,36 @@ etna_blend_state_create(struct pipe_context *pctx,
    }
 
    return co;
+}
+
+bool
+etna_update_blend(struct etna_context *ctx)
+{
+   struct pipe_framebuffer_state *pfb = &ctx->framebuffer_s;
+   struct pipe_blend_state *pblend = ctx->blend;
+   struct etna_blend_state *blend = etna_blend_state(pblend);
+   const struct pipe_rt_blend_state *rt0 = &pblend->rt[0];
+   uint32_t colormask;
+
+   if (pfb->cbufs[0] &&
+       translate_rs_format_rb_swap(pfb->cbufs[0]->texture->format)) {
+      colormask = rt0->colormask & (PIPE_MASK_A | PIPE_MASK_G);
+      if (rt0->colormask & PIPE_MASK_R)
+         colormask |= PIPE_MASK_B;
+      if (rt0->colormask & PIPE_MASK_B)
+         colormask |= PIPE_MASK_R;
+   } else {
+      colormask = rt0->colormask;
+   }
+
+   /* If the complete render target is written, set full_overwrite:
+    * - The color mask is 1111
+    * - No blending is used
+    */
+   bool full_overwrite = (rt0->colormask == 0xf) && !blend->enable;
+   blend->PE_COLOR_FORMAT =
+            VIVS_PE_COLOR_FORMAT_COMPONENTS(colormask) |
+            COND(full_overwrite, VIVS_PE_COLOR_FORMAT_OVERWRITE);
+
+   return true;
 }

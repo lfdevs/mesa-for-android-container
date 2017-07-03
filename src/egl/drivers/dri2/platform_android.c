@@ -1005,20 +1005,39 @@ droid_add_configs_for_visuals(_EGLDriver *drv, _EGLDisplay *dpy)
    unsigned int format_count[ARRAY_SIZE(visuals)] = { 0 };
    int count, i, j;
 
+   /* The nesting of loops is significant here. Also significant is the order
+    * of the HAL pixel formats. Many Android apps (such as Google's official
+    * NDK GLES2 example app), and even portions the core framework code (such
+    * as SystemServiceManager in Nougat), incorrectly choose their EGLConfig.
+    * They neglect to match the EGLConfig's EGL_NATIVE_VISUAL_ID against the
+    * window's native format, and instead choose the first EGLConfig whose
+    * channel sizes match those of the native window format while ignoring the
+    * channel *ordering*.
+    *
+    * We can detect such buggy clients in logcat when they call
+    * eglCreateSurface, by detecting the mismatch between the EGLConfig's
+    * format and the window's format.
+    *
+    * As a workaround, we generate EGLConfigs such that all EGLConfigs for HAL
+    * pixel format i precede those for HAL pixel format i+1. In my
+    * (chadversary) testing on Android Nougat, this was good enough to pacify
+    * the buggy clients.
+    */
    count = 0;
-   for (i = 0; dri2_dpy->driver_configs[i]; i++) {
+   for (i = 0; i < ARRAY_SIZE(visuals); i++) {
       const EGLint surface_type = EGL_WINDOW_BIT | EGL_PBUFFER_BIT;
       struct dri2_egl_config *dri2_conf;
 
-      for (j = 0; j < ARRAY_SIZE(visuals); j++) {
-         config_attrs[1] = visuals[j].format;
-         config_attrs[3] = visuals[j].format;
+      for (j = 0; dri2_dpy->driver_configs[j]; j++) {
+         config_attrs[1] = visuals[i].format;
+         config_attrs[3] = visuals[i].format;
 
-         dri2_conf = dri2_add_config(dpy, dri2_dpy->driver_configs[i],
-               count + 1, surface_type, config_attrs, visuals[j].rgba_masks);
+         dri2_conf = dri2_add_config(dpy, dri2_dpy->driver_configs[j],
+               count + 1, surface_type, config_attrs, visuals[i].rgba_masks);
          if (dri2_conf) {
-            count++;
-            format_count[j]++;
+            if (dri2_conf->base.ConfigID == count + 1)
+               count++;
+            format_count[i]++;
          }
       }
    }

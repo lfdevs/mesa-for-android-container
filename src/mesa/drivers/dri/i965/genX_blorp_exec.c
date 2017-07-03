@@ -180,7 +180,7 @@ genX(blorp_exec)(struct blorp_batch *batch,
    assert(batch->blorp->driver_ctx == batch->driver_batch);
    struct brw_context *brw = batch->driver_batch;
    struct gl_context *ctx = &brw->ctx;
-   const uint32_t estimated_max_batch_usage = GEN_GEN >= 8 ? 1920 : 1500;
+   const uint32_t estimated_max_batch_usage = GEN_GEN >= 8 ? 1920 : 1700;
    bool check_aperture_failed_once = false;
 
    /* Flush the sampler and render caches.  We definitely need to flush the

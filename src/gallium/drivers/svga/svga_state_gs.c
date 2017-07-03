@@ -190,6 +190,8 @@ emit_hw_gs(struct svga_context *svga, unsigned dirty)
           *  Needs to unbind the geometry shader.
           */
          ret = svga_set_shader(svga, SVGA3D_SHADERTYPE_GS, NULL);
+         if (ret != PIPE_OK)
+            goto done;
          svga->state.hw_draw.gs = NULL;
       }
       goto done;

@@ -450,8 +450,10 @@ brw_update_sampler_state(struct brw_context *brw,
    /* Enable anisotropic filtering if desired. */
    unsigned max_anisotropy = BRW_ANISORATIO_2;
    if (sampler->MaxAnisotropy > 1.0f) {
-      min_filter = BRW_MAPFILTER_ANISOTROPIC;
-      mag_filter = BRW_MAPFILTER_ANISOTROPIC;
+      if (min_filter == BRW_MAPFILTER_LINEAR)
+         min_filter = BRW_MAPFILTER_ANISOTROPIC;
+      if (mag_filter == BRW_MAPFILTER_LINEAR)
+         mag_filter = BRW_MAPFILTER_ANISOTROPIC;
 
       if (sampler->MaxAnisotropy > 2.0f) {
 	 max_anisotropy =

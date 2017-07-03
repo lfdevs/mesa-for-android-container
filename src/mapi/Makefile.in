@@ -187,7 +187,8 @@ am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 DIST_COMMON = $(srcdir)/Makefile.am $(am__GLES2_include_HEADERS_DIST) \
 	$(am__GLES3_include_HEADERS_DIST) \
-	$(am__GLES_include_HEADERS_DIST) $(am__DIST_COMMON)
+	$(am__GLES_include_HEADERS_DIST) $(khr_HEADERS) \
+	$(am__DIST_COMMON)
 mkinstalldirs = $(install_sh) -d
 CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
@@ -220,7 +221,8 @@ am__uninstall_files_from_dir = { \
   }
 am__installdirs = "$(DESTDIR)$(libdir)" "$(DESTDIR)$(pkgconfigdir)" \
 	"$(DESTDIR)$(GLES2_includedir)" \
-	"$(DESTDIR)$(GLES3_includedir)" "$(DESTDIR)$(GLES_includedir)"
+	"$(DESTDIR)$(GLES3_includedir)" "$(DESTDIR)$(GLES_includedir)" \
+	"$(DESTDIR)$(khrdir)"
 LTLIBRARIES = $(lib_LTLIBRARIES) $(noinst_LTLIBRARIES)
 am__DEPENDENCIES_1 =
 @HAVE_OPENGL_ES1_TRUE@es1api_libGLESv1_CM_la_DEPENDENCIES =  \
@@ -417,7 +419,7 @@ am__GLES_include_HEADERS_DIST = $(top_srcdir)/include/GLES/egl.h \
 	$(top_srcdir)/include/GLES/glext.h \
 	$(top_srcdir)/include/GLES/glplatform.h
 HEADERS = $(GLES2_include_HEADERS) $(GLES3_include_HEADERS) \
-	$(GLES_include_HEADERS)
+	$(GLES_include_HEADERS) $(khr_HEADERS)
 RECURSIVE_CLEAN_TARGETS = mostlyclean-recursive clean-recursive	\
   distclean-recursive maintainer-clean-recursive
 am__recursive_targets = \
@@ -930,6 +932,7 @@ pdfdir = @pdfdir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
+runstatedir = @runstatedir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
@@ -1111,6 +1114,8 @@ glapi_gen_mapi_deps := \
 @HAVE_OPENGL_ES2_TRUE@	$(GC_SECTIONS) \
 @HAVE_OPENGL_ES2_TRUE@	$(LD_NO_UNDEFINED)
 
+khrdir = $(includedir)/KHR
+khr_HEADERS = $(top_srcdir)/include/KHR/khrplatform.h
 all: $(BUILT_SOURCES)
 	$(MAKE) $(AM_MAKEFLAGS) all-recursive
 
@@ -1639,6 +1644,27 @@ uninstall-GLES_includeHEADERS:
 	@list='$(GLES_include_HEADERS)'; test -n "$(GLES_includedir)" || list=; \
 	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
 	dir='$(DESTDIR)$(GLES_includedir)'; $(am__uninstall_files_from_dir)
+install-khrHEADERS: $(khr_HEADERS)
+	@$(NORMAL_INSTALL)
+	@list='$(khr_HEADERS)'; test -n "$(khrdir)" || list=; \
+	if test -n "$$list"; then \
+	  echo " $(MKDIR_P) '$(DESTDIR)$(khrdir)'"; \
+	  $(MKDIR_P) "$(DESTDIR)$(khrdir)" || exit 1; \
+	fi; \
+	for p in $$list; do \
+	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
+	  echo "$$d$$p"; \
+	done | $(am__base_list) | \
+	while read files; do \
+	  echo " $(INSTALL_HEADER) $$files '$(DESTDIR)$(khrdir)'"; \
+	  $(INSTALL_HEADER) $$files "$(DESTDIR)$(khrdir)" || exit $$?; \
+	done
+
+uninstall-khrHEADERS:
+	@$(NORMAL_UNINSTALL)
+	@list='$(khr_HEADERS)'; test -n "$(khrdir)" || list=; \
+	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
+	dir='$(DESTDIR)$(khrdir)'; $(am__uninstall_files_from_dir)
 
 # This directory's subdirectories are mostly independent; you can cd
 # into them and run 'make' without going through this Makefile.
@@ -1988,7 +2014,7 @@ check: $(BUILT_SOURCES)
 all-am: Makefile $(LTLIBRARIES) $(DATA) $(HEADERS) all-local
 installdirs: installdirs-recursive
 installdirs-am:
-	for dir in "$(DESTDIR)$(libdir)" "$(DESTDIR)$(pkgconfigdir)" "$(DESTDIR)$(GLES2_includedir)" "$(DESTDIR)$(GLES3_includedir)" "$(DESTDIR)$(GLES_includedir)"; do \
+	for dir in "$(DESTDIR)$(libdir)" "$(DESTDIR)$(pkgconfigdir)" "$(DESTDIR)$(GLES2_includedir)" "$(DESTDIR)$(GLES3_includedir)" "$(DESTDIR)$(GLES_includedir)" "$(DESTDIR)$(khrdir)"; do \
 	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
 	done
 install: $(BUILT_SOURCES)
@@ -2064,7 +2090,7 @@ info-am:
 
 install-data-am: install-GLES2_includeHEADERS \
 	install-GLES3_includeHEADERS install-GLES_includeHEADERS \
-	install-pkgconfigDATA
+	install-khrHEADERS install-pkgconfigDATA
 
 install-dvi: install-dvi-recursive
 
@@ -2112,7 +2138,8 @@ ps-am:
 
 uninstall-am: uninstall-GLES2_includeHEADERS \
 	uninstall-GLES3_includeHEADERS uninstall-GLES_includeHEADERS \
-	uninstall-libLTLIBRARIES uninstall-pkgconfigDATA
+	uninstall-khrHEADERS uninstall-libLTLIBRARIES \
+	uninstall-pkgconfigDATA
 
 .MAKE: $(am__recursive_targets) all check check-am install install-am \
 	install-strip
@@ -2128,15 +2155,16 @@ uninstall-am: uninstall-GLES2_includeHEADERS \
 	install-am install-data install-data-am install-dvi \
 	install-dvi-am install-exec install-exec-am install-html \
 	install-html-am install-info install-info-am \
-	install-libLTLIBRARIES install-man install-pdf install-pdf-am \
-	install-pkgconfigDATA install-ps install-ps-am install-strip \
-	installcheck installcheck-am installdirs installdirs-am \
-	maintainer-clean maintainer-clean-generic mostlyclean \
-	mostlyclean-compile mostlyclean-generic mostlyclean-libtool \
-	pdf pdf-am ps ps-am recheck tags tags-am uninstall \
-	uninstall-GLES2_includeHEADERS uninstall-GLES3_includeHEADERS \
-	uninstall-GLES_includeHEADERS uninstall-am \
-	uninstall-libLTLIBRARIES uninstall-pkgconfigDATA
+	install-khrHEADERS install-libLTLIBRARIES install-man \
+	install-pdf install-pdf-am install-pkgconfigDATA install-ps \
+	install-ps-am install-strip installcheck installcheck-am \
+	installdirs installdirs-am maintainer-clean \
+	maintainer-clean-generic mostlyclean mostlyclean-compile \
+	mostlyclean-generic mostlyclean-libtool pdf pdf-am ps ps-am \
+	recheck tags tags-am uninstall uninstall-GLES2_includeHEADERS \
+	uninstall-GLES3_includeHEADERS uninstall-GLES_includeHEADERS \
+	uninstall-am uninstall-khrHEADERS uninstall-libLTLIBRARIES \
+	uninstall-pkgconfigDATA
 
 .PRECIOUS: Makefile
 

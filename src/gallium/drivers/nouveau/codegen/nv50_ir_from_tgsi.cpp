@@ -2628,6 +2628,10 @@ Converter::handleLOAD(Value *dst0[4])
    const int r = tgsi.getSrc(0).getIndex(0);
    int c;
    std::vector<Value *> off, src, ldv, def;
+   Value *ind = NULL;
+
+   if (tgsi.getSrc(0).isIndirect(0))
+      ind = fetchSrc(tgsi.getSrc(0).getIndirect(0), 0, 0);
 
    switch (tgsi.getSrc(0).getFile()) {
    case TGSI_FILE_BUFFER:
@@ -2654,8 +2658,8 @@ Converter::handleLOAD(Value *dst0[4])
 
          Instruction *ld = mkLoad(TYPE_U32, dst0[c], sym, off);
          ld->cache = tgsi.getCacheMode();
-         if (tgsi.getSrc(0).isIndirect(0))
-            ld->setIndirect(0, 1, fetchSrc(tgsi.getSrc(0).getIndirect(0), 0, 0));
+         if (ind)
+            ld->setIndirect(0, 1, ind);
       }
       break;
    case TGSI_FILE_IMAGE: {
@@ -2677,8 +2681,8 @@ Converter::handleLOAD(Value *dst0[4])
       ld->tex.mask = tgsi.getDst(0).getMask();
       ld->tex.format = getImageFormat(code, r);
       ld->cache = tgsi.getCacheMode();
-      if (tgsi.getSrc(0).isIndirect(0))
-         ld->setIndirectR(fetchSrc(tgsi.getSrc(0).getIndirect(0), 0, NULL));
+      if (ind)
+         ld->setIndirectR(ind);
 
       FOR_EACH_DST_ENABLED_CHANNEL(0, c, tgsi)
          if (dst0[c] != def[c])
@@ -2766,6 +2770,10 @@ Converter::handleSTORE()
    const int r = tgsi.getDst(0).getIndex(0);
    int c;
    std::vector<Value *> off, src, dummy;
+   Value *ind = NULL;
+
+   if (tgsi.getDst(0).isIndirect(0))
+      ind = fetchSrc(tgsi.getDst(0).getIndirect(0), 0, 0);
 
    switch (tgsi.getDst(0).getFile()) {
    case TGSI_FILE_BUFFER:
@@ -2788,8 +2796,8 @@ Converter::handleSTORE()
 
          Instruction *st = mkStore(OP_STORE, TYPE_U32, sym, off, fetchSrc(1, c));
          st->cache = tgsi.getCacheMode();
-         if (tgsi.getDst(0).isIndirect(0))
-            st->setIndirect(0, 1, fetchSrc(tgsi.getDst(0).getIndirect(0), 0, 0));
+         if (ind)
+            st->setIndirect(0, 1, ind);
       }
       break;
    case TGSI_FILE_IMAGE: {
@@ -2807,8 +2815,8 @@ Converter::handleSTORE()
       st->tex.mask = tgsi.getDst(0).getMask();
       st->tex.format = getImageFormat(code, r);
       st->cache = tgsi.getCacheMode();
-      if (tgsi.getDst(0).isIndirect(0))
-         st->setIndirectR(fetchSrc(tgsi.getDst(0).getIndirect(0), 0, NULL));
+      if (ind)
+         st->setIndirectR(ind);
       }
       break;
    default:
@@ -2877,6 +2885,10 @@ Converter::handleATOM(Value *dst0[4], DataType ty, uint16_t subOp)
    std::vector<Value *> srcv;
    std::vector<Value *> defv;
    LValue *dst = getScratch();
+   Value *ind = NULL;
+
+   if (tgsi.getSrc(0).isIndirect(0))
+      ind = fetchSrc(tgsi.getSrc(0).getIndirect(0), 0, 0);
 
    switch (tgsi.getSrc(0).getFile()) {
    case TGSI_FILE_BUFFER:
@@ -2886,23 +2898,21 @@ Converter::handleATOM(Value *dst0[4], DataType ty, uint16_t subOp)
             continue;
 
          Instruction *insn;
-         Value *off = fetchSrc(1, c), *off2 = NULL;
+         Value *off = fetchSrc(1, c);
          Value *sym;
          if (tgsi.getSrc(1).getFile() == TGSI_FILE_IMMEDIATE)
             sym = makeSym(tgsi.getSrc(0).getFile(), r, -1, c,
                           tgsi.getSrc(1).getValueU32(c, info));
          else
             sym = makeSym(tgsi.getSrc(0).getFile(), r, -1, c, 0);
-         if (tgsi.getSrc(0).isIndirect(0))
-            off2 = fetchSrc(tgsi.getSrc(0).getIndirect(0), 0, 0);
          if (subOp == NV50_IR_SUBOP_ATOM_CAS)
             insn = mkOp3(OP_ATOM, ty, dst, sym, fetchSrc(2, c), fetchSrc(3, c));
          else
             insn = mkOp2(OP_ATOM, ty, dst, sym, fetchSrc(2, c));
          if (tgsi.getSrc(1).getFile() != TGSI_FILE_IMMEDIATE)
             insn->setIndirect(0, 0, off);
-         if (off2)
-            insn->setIndirect(0, 1, off2);
+         if (ind)
+            insn->setIndirect(0, 1, ind);
          insn->subOp = subOp;
       }
       for (int c = 0; c < 4; ++c)
@@ -2925,8 +2935,8 @@ Converter::handleATOM(Value *dst0[4], DataType ty, uint16_t subOp)
       tex->tex.mask = 1;
       tex->tex.format = getImageFormat(code, r);
       tex->setType(ty);
-      if (tgsi.getSrc(0).isIndirect(0))
-         tex->setIndirectR(fetchSrc(tgsi.getSrc(0).getIndirect(0), 0, NULL));
+      if (ind)
+         tex->setIndirectR(ind);
 
       for (int c = 0; c < 4; ++c)
          if (dst0[c])
@@ -3798,12 +3808,14 @@ Converter::handleInstruction(const struct tgsi_full_instruction *insn)
       break;
    case TGSI_OPCODE_RESQ:
       if (tgsi.getSrc(0).getFile() == TGSI_FILE_BUFFER) {
+         Value *ind = NULL;
+         if (tgsi.getSrc(0).isIndirect(0))
+            ind = fetchSrc(tgsi.getSrc(0).getIndirect(0), 0, 0);
          geni = mkOp1(OP_BUFQ, TYPE_U32, dst0[0],
                       makeSym(tgsi.getSrc(0).getFile(),
                               tgsi.getSrc(0).getIndex(0), -1, 0, 0));
-         if (tgsi.getSrc(0).isIndirect(0))
-            geni->setIndirect(0, 1,
-                              fetchSrc(tgsi.getSrc(0).getIndirect(0), 0, 0));
+         if (ind)
+            geni->setIndirect(0, 1, ind);
       } else {
          assert(tgsi.getSrc(0).getFile() == TGSI_FILE_IMAGE);
 
@@ -3816,10 +3828,11 @@ Converter::handleInstruction(const struct tgsi_full_instruction *insn)
          }
          texi->tex.r = tgsi.getSrc(0).getIndex(0);
          texi->tex.target = getImageTarget(code, texi->tex.r);
-         bb->insertTail(texi);
 
          if (tgsi.getSrc(0).isIndirect(0))
             texi->setIndirectR(fetchSrc(tgsi.getSrc(0).getIndirect(0), 0, NULL));
+
+         bb->insertTail(texi);
       }
       break;
    case TGSI_OPCODE_IBFE:

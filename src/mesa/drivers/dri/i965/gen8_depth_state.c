@@ -513,7 +513,7 @@ gen8_hiz_exec(struct brw_context *brw, struct intel_mipmap_tree *mt,
     */
    brw_emit_pipe_control_write(brw,
                                PIPE_CONTROL_WRITE_IMMEDIATE,
-                               brw->workaround_bo, 0, 0, 0);
+                               brw->workaround_bo, 0, 0);
 
    /* Emit 3DSTATE_WM_HZ_OP again to disable the state overrides. */
    BEGIN_BATCH(5);
