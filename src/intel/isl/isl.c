@@ -1362,7 +1362,8 @@ isl_surf_init_s(const struct isl_device *dev,
                            &phys_slice0_sa, &row_pitch))
       return false;
 
-   uint32_t size, base_alignment;
+   uint32_t base_alignment;
+   uint64_t size;
    if (tiling == ISL_TILING_LINEAR) {
       size = row_pitch * total_h_el + pad_bytes;
 
@@ -1395,6 +1396,28 @@ isl_surf_init_s(const struct isl_device *dev,
                                  tile_info.phys_extent_B.height;
       assert(isl_is_pow2(info->min_alignment) && isl_is_pow2(tile_size));
       base_alignment = MAX(info->min_alignment, tile_size);
+   }
+
+   if (ISL_DEV_GEN(dev) < 9) {
+      /* From the Broadwell PRM Vol 5, Surface Layout:
+       *
+       *    "In addition to restrictions on maximum height, width, and depth,
+       *     surfaces are also restricted to a maximum size in bytes. This
+       *     maximum is 2 GB for all products and all surface types."
+       *
+       * This comment is applicable to all Pre-gen9 platforms.
+       */
+      if (size > (uint64_t) 1 << 31)
+         return false;
+   } else {
+      /* From the Skylake PRM Vol 5, Maximum Surface Size in Bytes:
+       *    "In addition to restrictions on maximum height, width, and depth,
+       *     surfaces are also restricted to a maximum size of 2^38 bytes.
+       *     All pixels within the surface must be contained within 2^38 bytes
+       *     of the base address."
+       */
+      if (size > (uint64_t) 1 << 38)
+         return false;
    }
 
    *surf = (struct isl_surf) {

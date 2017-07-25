@@ -156,9 +156,10 @@ static struct draw_stage *validate_pipeline( struct draw_stage *stage )
     */
    stage->next = next;
 
-   /* drawing wide lines? */
-   wide_lines = (roundf(rast->line_width) > draw->pipeline.wide_line_threshold
-                 && !rast->line_smooth);
+   /* drawing wide, non-AA lines? */
+   wide_lines = rast->line_width != 1.0f &&
+                roundf(rast->line_width) > draw->pipeline.wide_line_threshold &&
+                !rast->line_smooth;
 
    /* drawing large/sprite points (but not AA points)? */
    if (rast->sprite_coord_enable && draw->pipeline.point_sprite)

@@ -171,6 +171,12 @@ void _mm256_storeu2_m128i(__m128i *hi, __m128i *lo, __m256i a)
     _mm_storeu_si128((__m128i*)lo, _mm256_castsi256_si128(a));
     _mm_storeu_si128((__m128i*)hi, _mm256_extractf128_si256(a, 0x1));
 }
+
+// gcc prior to 4.9 doesn't have _mm*_undefined_*
+#if (__GNUC__) && (GCC_VERSION < 409000)
+#define _mm_undefined_si128 _mm_setzero_si128
+#define _mm256_undefined_ps _mm256_setzero_ps
+#endif
 #endif
 
 inline

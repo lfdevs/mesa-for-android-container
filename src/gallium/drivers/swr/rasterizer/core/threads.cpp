@@ -363,7 +363,7 @@ INLINE void UpdateClientStats(SWR_CONTEXT* pContext, uint32_t workerId, DRAW_CON
     }
 
     DRAW_DYNAMIC_STATE& dynState = pDC->dynState;
-    SWR_STATS stats{ 0 };
+    OSALIGNLINE(SWR_STATS) stats{ 0 };
 
     // Sum up stats across all workers before sending to client.
     for (uint32_t i = 0; i < pContext->NumWorkerThreads; ++i)
@@ -972,7 +972,7 @@ void CreateThreadPool(SWR_CONTEXT* pContext, THREAD_POOL* pPool)
     // Initialize DRAW_CONTEXT's per-thread stats
     for (uint32_t dc = 0; dc < KNOB_MAX_DRAWS_IN_FLIGHT; ++dc)
     {
-        pContext->dcRing[dc].dynState.pStats = new SWR_STATS[numThreads];
+        pContext->dcRing[dc].dynState.pStats = (SWR_STATS*)AlignedMalloc(sizeof(SWR_STATS) * numThreads, 64);
         memset(pContext->dcRing[dc].dynState.pStats, 0, sizeof(SWR_STATS) * numThreads);
     }
 

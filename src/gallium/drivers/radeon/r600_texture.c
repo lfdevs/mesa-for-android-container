@@ -590,16 +590,22 @@ static boolean r600_texture_get_handle(struct pipe_screen* screen,
 		res->external_usage = usage;
 	}
 
-	if (rscreen->chip_class >= GFX9) {
-		offset = rtex->surface.u.gfx9.surf_offset;
-		stride = rtex->surface.u.gfx9.surf_pitch *
-			 rtex->surface.bpe;
-		slice_size = rtex->surface.u.gfx9.surf_slice_size;
+	if (res->b.b.target == PIPE_BUFFER) {
+		offset = 0;
+		stride = 0;
+		slice_size = 0;
 	} else {
-		offset = rtex->surface.u.legacy.level[0].offset;
-		stride = rtex->surface.u.legacy.level[0].nblk_x *
-			 rtex->surface.bpe;
-		slice_size = rtex->surface.u.legacy.level[0].slice_size;
+		if (rscreen->chip_class >= GFX9) {
+			offset = rtex->surface.u.gfx9.surf_offset;
+			stride = rtex->surface.u.gfx9.surf_pitch *
+				 rtex->surface.bpe;
+			slice_size = rtex->surface.u.gfx9.surf_slice_size;
+		} else {
+			offset = rtex->surface.u.legacy.level[0].offset;
+			stride = rtex->surface.u.legacy.level[0].nblk_x *
+				 rtex->surface.bpe;
+			slice_size = rtex->surface.u.legacy.level[0].slice_size;
+		}
 	}
 	return rscreen->ws->buffer_get_handle(res->buf, stride, offset,
 					      slice_size, whandle);

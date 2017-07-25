@@ -988,6 +988,12 @@ swr_resource_destroy(struct pipe_screen *p_screen, struct pipe_resource *pt)
       swr_fence_work_free(screen->flush_fence, spr->swr.pBaseAddress, true);
       swr_fence_work_free(screen->flush_fence,
                           spr->secondary.pBaseAddress, true);
+
+      /* If work queue grows too large, submit a fence to force queue to
+       * drain.  This is mainly to decrease the amount of memory used by the
+       * piglit streaming-texture-leak test */
+      if (screen->pipe && swr_fence(screen->flush_fence)->work.count > 64)
+         swr_fence_submit(swr_context(screen->pipe), screen->flush_fence);
    }
 
    FREE(spr);

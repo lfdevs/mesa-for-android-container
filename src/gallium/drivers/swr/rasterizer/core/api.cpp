@@ -108,7 +108,7 @@ HANDLE SwrCreateContext(
     CreateThreadPool(pContext, &pContext->threadPool);
 
     pContext->ppScratch = new uint8_t*[pContext->NumWorkerThreads];
-    pContext->pStats = new SWR_STATS[pContext->NumWorkerThreads];
+    pContext->pStats = (SWR_STATS*)AlignedMalloc(sizeof(SWR_STATS) * pContext->NumWorkerThreads, 64);
 
 #if defined(KNOB_ENABLE_AR)
     // Setup ArchRast thread contexts which includes +1 for API thread.
@@ -367,7 +367,7 @@ void SwrDestroyContext(HANDLE hContext)
     // free the fifos
     for (uint32_t i = 0; i < KNOB_MAX_DRAWS_IN_FLIGHT; ++i)
     {
-        delete[] pContext->dcRing[i].dynState.pStats;
+        AlignedFree(pContext->dcRing[i].dynState.pStats);
         delete pContext->dcRing[i].pArena;
         delete pContext->dsRing[i].pArena;
         pContext->pMacroTileManagerArray[i].~MacroTileMgr();
@@ -392,7 +392,7 @@ void SwrDestroyContext(HANDLE hContext)
     }
 
     delete[] pContext->ppScratch;
-    delete[] pContext->pStats;
+    AlignedFree(pContext->pStats);
 
     delete(pContext->pHotTileMgr);
 

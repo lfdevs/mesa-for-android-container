@@ -868,7 +868,7 @@ struct isl_surf {
    uint32_t samples;
 
    /** Total size of the surface, in bytes. */
-   uint32_t size;
+   uint64_t size;
 
    /** Required alignment for the surface's base address. */
    uint32_t alignment;

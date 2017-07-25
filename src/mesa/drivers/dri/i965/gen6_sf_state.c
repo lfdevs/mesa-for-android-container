@@ -286,7 +286,7 @@ upload_sf_state(struct brw_context *brw)
 
    dw1 = GEN6_SF_SWIZZLE_ENABLE | num_outputs << GEN6_SF_NUM_OUTPUTS_SHIFT;
    dw2 = GEN6_SF_STATISTICS_ENABLE;
-   dw3 = GEN6_SF_SCISSOR_ENABLE;
+   dw3 = GEN6_SF_SCISSOR_ENABLE | GEN6_SF_LINE_AA_MODE_TRUE;
    dw4 = 0;
 
    if (brw->sf.viewport_transform_enable)
@@ -365,7 +365,6 @@ upload_sf_state(struct brw_context *brw)
    }
    if (ctx->Line.SmoothFlag) {
       dw3 |= GEN6_SF_LINE_AA_ENABLE;
-      dw3 |= GEN6_SF_LINE_AA_MODE_TRUE;
       dw3 |= GEN6_SF_LINE_END_CAP_WIDTH_1_0;
    }
    /* _NEW_MULTISAMPLE */

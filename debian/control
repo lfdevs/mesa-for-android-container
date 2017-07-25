@@ -3,7 +3,7 @@ Section: graphics
 Priority: optional
 Maintainer: Debian X Strike Force <debian-x@lists.debian.org>
 Uploaders: Andreas Boll <andreas.boll.dev@gmail.com>
-Standards-Version: 3.9.8
+Standards-Version: 4.0.0
 Build-Depends:
  debhelper (>= 9),
  dh-autoreconf,

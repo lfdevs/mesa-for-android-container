@@ -48,6 +48,7 @@ surface_size(const struct svga_host_surface_cache_key *key)
 
    assert(key->numMipLevels > 0);
    assert(key->numFaces > 0);
+   assert(key->arraySize > 0);
 
    if (key->format == SVGA3D_BUFFER) {
       /* Special case: we don't want to count vertex/index buffers
@@ -68,7 +69,7 @@ surface_size(const struct svga_host_surface_cache_key *key)
       total_size += img_size;
    }
 
-   total_size *= key->numFaces;
+   total_size *= key->numFaces * key->arraySize;
 
    return total_size;
 }

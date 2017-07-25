@@ -752,6 +752,7 @@ etna_screen_create(struct etna_device *dev, struct etna_gpu *gpu,
    screen->dev = dev;
    screen->gpu = gpu;
    screen->ro = renderonly_dup(ro);
+   screen->refcnt = 1;
 
    if (!screen->ro) {
       DBG("could not create renderonly object");

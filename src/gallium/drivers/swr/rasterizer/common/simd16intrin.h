@@ -405,8 +405,8 @@ INLINE simd16mask SIMDAPI _simd16_movemask_pd(simd16scalard a)
 
 INLINE uint64_t SIMDAPI _simd16_movemask_epi8(simd16scalari a)
 {
-    uint32_t mask_lo = _mm256_movemask_epi8(a.lo);
-    uint32_t mask_hi = _mm256_movemask_epi8(a.hi);
+    uint32_t mask_lo = _simd_movemask_epi8(a.lo);
+    uint32_t mask_hi = _simd_movemask_epi8(a.hi);
 
     return static_cast<uint64_t>(mask_lo) | (static_cast<uint64_t>(mask_hi) << 32);
 }

@@ -323,9 +323,9 @@ etna_resource_from_handle(struct pipe_screen *pscreen,
                           struct winsys_handle *handle, unsigned usage)
 {
    struct etna_screen *screen = etna_screen(pscreen);
-   struct etna_resource *rsc = CALLOC_STRUCT(etna_resource);
-   struct etna_resource_level *level = &rsc->levels[0];
-   struct pipe_resource *prsc = &rsc->base;
+   struct etna_resource *rsc;
+   struct etna_resource_level *level;
+   struct pipe_resource *prsc;
    struct pipe_resource *ptiled = NULL;
 
    DBG("target=%d, format=%s, %ux%ux%u, array_size=%u, last_level=%u, "
@@ -334,8 +334,12 @@ etna_resource_from_handle(struct pipe_screen *pscreen,
        tmpl->height0, tmpl->depth0, tmpl->array_size, tmpl->last_level,
        tmpl->nr_samples, tmpl->usage, tmpl->bind, tmpl->flags);
 
+   rsc = CALLOC_STRUCT(etna_resource);
    if (!rsc)
       return NULL;
+
+   level = &rsc->levels[0];
+   prsc = &rsc->base;
 
    *prsc = *tmpl;
 

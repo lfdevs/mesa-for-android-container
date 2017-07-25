@@ -23,3 +23,8 @@ noinst_LTLIBRARIES += common/libintel_common.la
 
 common_libintel_common_la_CFLAGS = $(AM_CFLAGS) $(LIBDRM_CFLAGS)
 common_libintel_common_la_SOURCES = $(COMMON_FILES) $(DECODER_FILES)
+
+if HAVE_PLATFORM_ANDROID
+common_libintel_common_la_CFLAGS += $(ANDROID_CFLAGS)
+common_libintel_common_la_LIBADD = $(ANDROID_LIBS)
+endif

@@ -535,7 +535,7 @@ emit_viewport( struct svga_context *svga,
             break;
          case PIPE_PRIM_LINES:
             adjust_x = -0.5;
-            adjust_y = 0;
+            adjust_y = -0.125;
             break;
          case PIPE_PRIM_TRIANGLES:
             adjust_x = -0.5;

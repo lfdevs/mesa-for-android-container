@@ -410,7 +410,7 @@ svga_texture_transfer_map_direct(struct svga_context *svga,
    struct svga_texture *tex = svga_texture(texture);
    struct svga_winsys_surface *surf = tex->handle;
    unsigned level = st->base.level;
-   unsigned w, h, nblocksx, nblocksy;
+   unsigned w, h, nblocksx, nblocksy, i;
    unsigned usage = st->base.usage;
 
    if (need_tex_readback(transfer)) {
@@ -418,13 +418,14 @@ svga_texture_transfer_map_direct(struct svga_context *svga,
 
       svga_surfaces_flush(svga);
 
-      if (svga_have_vgpu10(svga)) {
-         ret = readback_image_vgpu10(svga, surf, st->slice, level,
-                                     tex->b.b.last_level + 1);
-      } else {
-         ret = readback_image_vgpu9(svga, surf, st->slice, level);
+      for (i = 0; i < st->base.box.depth; i++) {
+         if (svga_have_vgpu10(svga)) {
+            ret = readback_image_vgpu10(svga, surf, st->slice + i, level,
+                                        tex->b.b.last_level + 1);
+         } else {
+            ret = readback_image_vgpu9(svga, surf, st->slice + i, level);
+         }
       }
-
       svga->hud.num_readbacks++;
       SVGA_STATS_COUNT_INC(sws, SVGA_STATS_COUNT_TEXREADBACK);
 

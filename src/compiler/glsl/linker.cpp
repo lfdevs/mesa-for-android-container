@@ -2221,8 +2221,10 @@ link_intrastage_shaders(void *mem_ctx,
    link_tes_in_layout_qualifiers(prog, gl_prog, shader_list, num_shaders);
    link_gs_inout_layout_qualifiers(prog, gl_prog, shader_list, num_shaders);
    link_cs_input_layout_qualifiers(prog, gl_prog, shader_list, num_shaders);
-   link_xfb_stride_layout_qualifiers(ctx, prog, linked, shader_list,
-                                     num_shaders);
+
+   if (linked->Stage != MESA_SHADER_FRAGMENT)
+      link_xfb_stride_layout_qualifiers(ctx, prog, linked, shader_list,
+                                        num_shaders);
 
    populate_symbol_table(linked);
 

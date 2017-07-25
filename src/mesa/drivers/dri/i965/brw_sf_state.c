@@ -265,7 +265,7 @@ static void upload_sf_unit( struct brw_context *brw )
    /* _NEW_PROGRAM | _NEW_POINT */
    sf->sf7.use_point_size_state = !(ctx->VertexProgram.PointSizeEnabled ||
 				    ctx->Point._Attenuated);
-   sf->sf7.aa_line_distance_mode = 0;
+   sf->sf7.aa_line_distance_mode = brw->is_g4x || brw->gen == 5;
 
    /* might be BRW_NEW_PRIMITIVE if we have to adjust pv for polygons:
     * _NEW_LIGHT

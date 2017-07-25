@@ -1774,6 +1774,37 @@ static void visit_alu(struct nir_to_llvm_context *ctx, nir_alu_instr *instr)
 	case nir_op_fddy_coarse:
 		result = emit_ddxy(ctx, instr->op, src[0]);
 		break;
+
+	case nir_op_unpack_64_2x32_split_x: {
+		assert(instr->src[0].src.ssa->num_components == 1);
+		LLVMValueRef tmp = LLVMBuildBitCast(ctx->builder, src[0],
+						    LLVMVectorType(ctx->i32, 2),
+						    "");
+		result = LLVMBuildExtractElement(ctx->builder, tmp,
+						 ctx->i32zero, "");
+		break;
+	}
+
+	case nir_op_unpack_64_2x32_split_y: {
+		assert(instr->src[0].src.ssa->num_components == 1);
+		LLVMValueRef tmp = LLVMBuildBitCast(ctx->builder, src[0],
+						    LLVMVectorType(ctx->i32, 2),
+						    "");
+		result = LLVMBuildExtractElement(ctx->builder, tmp,
+						 ctx->i32one, "");
+		break;
+	}
+
+	case nir_op_pack_64_2x32_split: {
+		LLVMValueRef tmp = LLVMGetUndef(LLVMVectorType(ctx->i32, 2));
+		tmp = LLVMBuildInsertElement(ctx->builder, tmp,
+					     src[0], ctx->i32zero, "");
+		tmp = LLVMBuildInsertElement(ctx->builder, tmp,
+					     src[1], ctx->i32one, "");
+		result = LLVMBuildBitCast(ctx->builder, tmp, ctx->i64, "");
+		break;
+	}
+
 	default:
 		fprintf(stderr, "Unknown NIR alu instr: ");
 		nir_print_instr(&instr->instr, stderr);
@@ -3302,36 +3333,13 @@ static LLVMValueRef visit_image_atomic(struct nir_to_llvm_context *ctx,
 	int param_count = 0;
 	const nir_variable *var = instr->variables[0]->var;
 
-	const char *base_name = "llvm.amdgcn.image.atomic";
 	const char *atomic_name;
-	LLVMValueRef coords;
-	char intrinsic_name[32], coords_type[8];
+	char intrinsic_name[41];
 	const struct glsl_type *type = glsl_without_array(var->type);
+	MAYBE_UNUSED int length;
 
 	if (ctx->stage == MESA_SHADER_FRAGMENT)
 		ctx->shader_info->fs.writes_memory = true;
-
-	params[param_count++] = get_src(ctx, instr->src[2]);
-	if (instr->intrinsic == nir_intrinsic_image_atomic_comp_swap)
-		params[param_count++] = get_src(ctx, instr->src[3]);
-
-	if (glsl_get_sampler_dim(type) == GLSL_SAMPLER_DIM_BUF) {
-		params[param_count++] = get_sampler_desc(ctx, instr->variables[0], DESC_BUFFER);
-		coords = params[param_count++] = LLVMBuildExtractElement(ctx->builder, get_src(ctx, instr->src[0]),
-									LLVMConstInt(ctx->i32, 0, false), ""); /* vindex */
-		params[param_count++] = ctx->i32zero; /* voffset */
-		params[param_count++] = ctx->i1false;  /* glc */
-		params[param_count++] = ctx->i1false;  /* slc */
-	} else {
-		bool da = glsl_sampler_type_is_array(type) ||
-		          glsl_get_sampler_dim(type) == GLSL_SAMPLER_DIM_CUBE;
-
-		coords = params[param_count++] = get_image_coords(ctx, instr);
-		params[param_count++] = get_sampler_desc(ctx, instr->variables[0], DESC_IMAGE);
-		params[param_count++] = ctx->i1false; /* r128 */
-		params[param_count++] = da ? ctx->i1true : ctx->i1false;      /* da */
-		params[param_count++] = ctx->i1false;  /* slc */
-	}
 
 	switch (instr->intrinsic) {
 	case nir_intrinsic_image_atomic_add:
@@ -3361,11 +3369,39 @@ static LLVMValueRef visit_image_atomic(struct nir_to_llvm_context *ctx,
 	default:
 		abort();
 	}
-	build_int_type_name(LLVMTypeOf(coords),
-			    coords_type, sizeof(coords_type));
 
-	snprintf(intrinsic_name, sizeof(intrinsic_name),
-			 "%s.%s.%s", base_name, atomic_name, coords_type);
+	if (instr->intrinsic == nir_intrinsic_image_atomic_comp_swap)
+		params[param_count++] = get_src(ctx, instr->src[3]);
+	params[param_count++] = get_src(ctx, instr->src[2]);
+
+	if (glsl_get_sampler_dim(type) == GLSL_SAMPLER_DIM_BUF) {
+		params[param_count++] = get_sampler_desc(ctx, instr->variables[0], DESC_BUFFER);
+		params[param_count++] = LLVMBuildExtractElement(ctx->builder, get_src(ctx, instr->src[0]),
+								LLVMConstInt(ctx->i32, 0, false), ""); /* vindex */
+		params[param_count++] = ctx->i32zero; /* voffset */
+		params[param_count++] = ctx->i1false;  /* slc */
+
+		length = snprintf(intrinsic_name, sizeof(intrinsic_name),
+				  "llvm.amdgcn.buffer.atomic.%s", atomic_name);
+	} else {
+		char coords_type[8];
+
+		bool da = glsl_sampler_type_is_array(type) ||
+		          glsl_get_sampler_dim(type) == GLSL_SAMPLER_DIM_CUBE;
+
+		LLVMValueRef coords = params[param_count++] = get_image_coords(ctx, instr);
+		params[param_count++] = get_sampler_desc(ctx, instr->variables[0], DESC_IMAGE);
+		params[param_count++] = ctx->i1false; /* r128 */
+		params[param_count++] = da ? ctx->i1true : ctx->i1false;      /* da */
+		params[param_count++] = ctx->i1false;  /* slc */
+
+		build_int_type_name(LLVMTypeOf(coords),
+				    coords_type, sizeof(coords_type));
+
+		length = snprintf(intrinsic_name, sizeof(intrinsic_name),
+				  "llvm.amdgcn.image.atomic.%s.%s", atomic_name, coords_type);
+	}
+
 	return ac_build_intrinsic(&ctx->ac, intrinsic_name, ctx->i32, params, param_count, 0);
 }
 

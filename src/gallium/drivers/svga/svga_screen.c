@@ -303,7 +303,10 @@ svga_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return svgascreen->ms_samples ? 1 : 0;
 
    case PIPE_CAP_MAX_TEXTURE_BUFFER_SIZE:
-      return SVGA3D_DX_MAX_RESOURCE_SIZE;
+      /* convert bytes to texels for the case of the largest texel
+       * size: float[4].
+       */
+      return SVGA3D_DX_MAX_RESOURCE_SIZE / (4 * sizeof(float));
 
    case PIPE_CAP_MIN_TEXEL_OFFSET:
       return sws->have_vgpu10 ? VGPU10_MIN_TEXEL_FETCH_OFFSET : 0;
@@ -1090,18 +1093,18 @@ svga_screen_create(struct svga_winsys_screen *sws)
       get_bool_cap(sws, SVGA3D_DEVCAP_LINE_STIPPLE, FALSE);
 
    svgascreen->maxLineWidth =
-      get_float_cap(sws, SVGA3D_DEVCAP_MAX_LINE_WIDTH, 1.0f);
+      MAX2(1.0, get_float_cap(sws, SVGA3D_DEVCAP_MAX_LINE_WIDTH, 1.0f));
 
    svgascreen->maxLineWidthAA =
-      get_float_cap(sws, SVGA3D_DEVCAP_MAX_AA_LINE_WIDTH, 1.0f);
+      MAX2(1.0, get_float_cap(sws, SVGA3D_DEVCAP_MAX_AA_LINE_WIDTH, 1.0f));
 
    if (0) {
       debug_printf("svga: haveProvokingVertex %u\n",
                    svgascreen->haveProvokingVertex);
       debug_printf("svga: haveLineStip %u  "
-                   "haveLineSmooth %u  maxLineWidth %f\n",
+                   "haveLineSmooth %u  maxLineWidth %.2f  maxLineWidthAA %.2f\n",
                    svgascreen->haveLineStipple, svgascreen->haveLineSmooth,
-                   svgascreen->maxLineWidth);
+                   svgascreen->maxLineWidth, svgascreen->maxLineWidthAA);
       debug_printf("svga: maxPointSize %g\n", svgascreen->maxPointSize);
       debug_printf("svga: msaa samples mask: 0x%x\n", svgascreen->ms_samples);
    }

@@ -365,6 +365,8 @@ static bool do_winsys_init(struct radeon_drm_winsys *ws)
     /* Radeon allocates all buffers as contigous, which makes large allocations
      * unlikely to succeed. */
     ws->info.max_alloc_size = MAX2(ws->info.vram_size, ws->info.gart_size) * 0.7;
+    if (ws->info.has_dedicated_vram)
+        ws->info.max_alloc_size = MIN2(ws->info.vram_size * 0.7, ws->info.max_alloc_size);
     if (ws->info.drm_minor < 40)
         ws->info.max_alloc_size = MIN2(ws->info.max_alloc_size, 256*1024*1024);
 

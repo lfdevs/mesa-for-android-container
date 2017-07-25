@@ -442,17 +442,39 @@ int stw_pixelformat_choose( HDC hdc,
           !!(pfi->pfd.dwFlags & PFD_DOUBLEBUFFER))
          continue;
 
+      /* Selection logic:
+      * - Enabling a feature (depth, stencil...) is given highest priority.
+      * - Giving as many bits as requested is given medium priority.
+      * - Giving no more bits than requested is given lowest priority.
+      */
+
       /* FIXME: Take in account individual channel bits */
-      if (ppfd->cColorBits != pfi->pfd.cColorBits)
-         delta += 8;
+      if (ppfd->cColorBits && !pfi->pfd.cColorBits)
+         delta += 10000;
+      else if (ppfd->cColorBits > pfi->pfd.cColorBits)
+         delta += 100;
+      else if (ppfd->cColorBits < pfi->pfd.cColorBits)
+         delta++;
 
-      if (ppfd->cDepthBits != pfi->pfd.cDepthBits)
-         delta += 4;
-
-      if (ppfd->cStencilBits != pfi->pfd.cStencilBits)
+      if (ppfd->cDepthBits && !pfi->pfd.cDepthBits)
+         delta += 10000;
+      else if (ppfd->cDepthBits > pfi->pfd.cDepthBits)
+         delta += 200;
+      else if (ppfd->cDepthBits < pfi->pfd.cDepthBits)
          delta += 2;
 
-      if (ppfd->cAlphaBits != pfi->pfd.cAlphaBits)
+      if (ppfd->cStencilBits && !pfi->pfd.cStencilBits)
+         delta += 10000;
+      else if (ppfd->cStencilBits > pfi->pfd.cStencilBits)
+         delta += 400;
+      else if (ppfd->cStencilBits < pfi->pfd.cStencilBits)
+         delta++;
+
+      if (ppfd->cAlphaBits && !pfi->pfd.cAlphaBits)
+         delta += 10000;
+      else if (ppfd->cAlphaBits > pfi->pfd.cAlphaBits)
+         delta += 100;
+      else if (ppfd->cAlphaBits < pfi->pfd.cAlphaBits)
          delta++;
 
       if (delta < bestdelta) {

@@ -1027,7 +1027,8 @@ no_slab:
                           pb_cache_bucket);
     if (!bo) {
         /* Clear the cache and try again. */
-        pb_slabs_reclaim(&ws->bo_slabs);
+        if (ws->info.has_virtual_memory)
+            pb_slabs_reclaim(&ws->bo_slabs);
         pb_cache_release_all_buffers(&ws->bo_cache);
         bo = radeon_create_bo(ws, size, alignment, usage, domain, flags,
                               pb_cache_bucket);
