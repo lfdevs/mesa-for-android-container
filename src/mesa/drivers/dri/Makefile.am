@@ -6,10 +6,6 @@ MEGADRIVERS_DEPS =
 
 SUBDIRS+=common
 
-if HAVE_SHARED_GLAPI
-SHARED_GLAPI_LIB = $(top_builddir)/src/mapi/shared-glapi/libglapi.la
-endif
-
 if HAVE_I915_DRI
 SUBDIRS += i915
 MEGADRIVERS_DEPS += i915/libi915_dri.la
@@ -70,7 +66,7 @@ mesa_dri_drivers_la_LIBADD = \
         common/libmegadriver_stub.la \
         common/libdricommon.la \
         common/libxmlconfig.la \
-        $(SHARED_GLAPI_LIB) \
+        $(top_builddir)/src/mapi/shared-glapi/libglapi.la \
         $(MEGADRIVERS_DEPS) \
         $(DRI_LIB_DEPS) \
         $()

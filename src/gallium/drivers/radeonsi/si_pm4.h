@@ -30,11 +30,10 @@
 #include "radeon/radeon_winsys.h"
 
 #define SI_PM4_MAX_DW		176
-#define SI_PM4_MAX_BO		1
+#define SI_PM4_MAX_BO		3
 
 // forward defines
 struct si_context;
-enum chip_class;
 
 struct si_pm4_state
 {
@@ -55,8 +54,6 @@ struct si_pm4_state
 	struct r600_resource	*bo[SI_PM4_MAX_BO];
 	enum radeon_bo_usage	bo_usage[SI_PM4_MAX_BO];
 	enum radeon_bo_priority	bo_priority[SI_PM4_MAX_BO];
-
-	bool compute_pkt;
 };
 
 void si_pm4_cmd_begin(struct si_pm4_state *state, unsigned opcode);
@@ -72,7 +69,6 @@ void si_pm4_upload_indirect_buffer(struct si_context *sctx,
 				   struct si_pm4_state *state);
 
 void si_pm4_clear_state(struct si_pm4_state *state);
-void si_pm4_free_state_simple(struct si_pm4_state *state);
 void si_pm4_free_state(struct si_context *sctx,
 		       struct si_pm4_state *state,
 		       unsigned idx);

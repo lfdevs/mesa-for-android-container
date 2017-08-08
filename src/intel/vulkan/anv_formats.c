@@ -23,8 +23,7 @@
 
 #include "anv_private.h"
 #include "vk_format_info.h"
-
-#include "util/vk_util.h"
+#include "vk_util.h"
 
 /*
  * gcc-4 and earlier don't allow compound literals where a constant
@@ -379,11 +378,6 @@ get_buffer_format_properties(const struct gen_device_info *devinfo,
    if (format == ISL_FORMAT_R32_SINT || format == ISL_FORMAT_R32_UINT)
       flags |= VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_ATOMIC_BIT;
 
-   if (flags) {
-      flags |= VK_FORMAT_FEATURE_TRANSFER_SRC_BIT_KHR |
-               VK_FORMAT_FEATURE_TRANSFER_DST_BIT_KHR;
-   }
-
    return flags;
 }
 
@@ -656,28 +650,98 @@ VkResult anv_GetPhysicalDeviceImageFormatProperties(
                                           pImageFormatProperties);
 }
 
+static const VkExternalMemoryPropertiesKHR prime_fd_props = {
+   /* If we can handle external, then we can both import and export it. */
+   .externalMemoryFeatures = VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT_KHR |
+                             VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT_KHR,
+   /* For the moment, let's not support mixing and matching */
+   .exportFromImportedHandleTypes =
+      VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT_KHR,
+   .compatibleHandleTypes =
+      VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT_KHR,
+};
+
 VkResult anv_GetPhysicalDeviceImageFormatProperties2KHR(
     VkPhysicalDevice                            physicalDevice,
-    const VkPhysicalDeviceImageFormatInfo2KHR*  pImageFormatInfo,
-    VkImageFormatProperties2KHR*                pImageFormatProperties)
+    const VkPhysicalDeviceImageFormatInfo2KHR*  base_info,
+    VkImageFormatProperties2KHR*                base_props)
 {
    ANV_FROM_HANDLE(anv_physical_device, physical_device, physicalDevice);
+   const VkPhysicalDeviceExternalImageFormatInfoKHR *external_info = NULL;
+   VkExternalImageFormatPropertiesKHR *external_props = NULL;
    VkResult result;
 
-   result = anv_get_image_format_properties(physical_device, pImageFormatInfo,
-               &pImageFormatProperties->imageFormatProperties);
+   result = anv_get_image_format_properties(physical_device, base_info,
+               &base_props->imageFormatProperties);
    if (result != VK_SUCCESS)
-      return result;
+      goto fail;
 
-   vk_foreach_struct(ext, pImageFormatProperties->pNext) {
-      switch (ext->sType) {
+   /* Extract input structs */
+   vk_foreach_struct_const(s, base_info->pNext) {
+      switch (s->sType) {
+      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO_KHR:
+         external_info = (const void *) s;
+         break;
       default:
-         anv_debug_ignored_stype(ext->sType);
+         anv_debug_ignored_stype(s->sType);
          break;
       }
    }
 
+   /* Extract output structs */
+   vk_foreach_struct(s, base_props->pNext) {
+      switch (s->sType) {
+      case VK_STRUCTURE_TYPE_EXTERNAL_IMAGE_FORMAT_PROPERTIES_KHR:
+         external_props = (void *) s;
+         break;
+      default:
+         anv_debug_ignored_stype(s->sType);
+         break;
+      }
+   }
+
+   /* From the Vulkan 1.0.42 spec:
+    *
+    *    If handleType is 0, vkGetPhysicalDeviceImageFormatProperties2KHR will
+    *    behave as if VkPhysicalDeviceExternalImageFormatInfoKHR was not
+    *    present and VkExternalImageFormatPropertiesKHR will be ignored.
+    */
+   if (external_info && external_info->handleType != 0) {
+      switch (external_info->handleType) {
+      case VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT_KHR:
+         if (external_props)
+            external_props->externalMemoryProperties = prime_fd_props;
+         break;
+      default:
+         /* From the Vulkan 1.0.42 spec:
+          *
+          *    If handleType is not compatible with the [parameters] specified
+          *    in VkPhysicalDeviceImageFormatInfo2KHR, then
+          *    vkGetPhysicalDeviceImageFormatProperties2KHR returns
+          *    VK_ERROR_FORMAT_NOT_SUPPORTED.
+          */
+         result = vk_errorf(VK_ERROR_FORMAT_NOT_SUPPORTED,
+                            "unsupported VkExternalMemoryTypeFlagBitsKHR 0x%x",
+                            external_info->handleType);
+         goto fail;
+      }
+   }
+
    return VK_SUCCESS;
+
+ fail:
+   if (result == VK_ERROR_FORMAT_NOT_SUPPORTED) {
+      /* From the Vulkan 1.0.42 spec:
+       *
+       *    If the combination of parameters to
+       *    vkGetPhysicalDeviceImageFormatProperties2KHR is not supported by
+       *    the implementation for use in vkCreateImage, then all members of
+       *    imageFormatProperties will be filled with zero.
+       */
+      base_props->imageFormatProperties = (VkImageFormatProperties) {0};
+   }
+
+   return result;
 }
 
 void anv_GetPhysicalDeviceSparseImageFormatProperties(
@@ -702,4 +766,37 @@ void anv_GetPhysicalDeviceSparseImageFormatProperties2KHR(
 {
    /* Sparse images are not yet supported. */
    *pPropertyCount = 0;
+}
+
+void anv_GetPhysicalDeviceExternalBufferPropertiesKHR(
+    VkPhysicalDevice                             physicalDevice,
+    const VkPhysicalDeviceExternalBufferInfoKHR* pExternalBufferInfo,
+    VkExternalBufferPropertiesKHR*               pExternalBufferProperties)
+{
+   /* The Vulkan 1.0.42 spec says "handleType must be a valid
+    * VkExternalMemoryHandleTypeFlagBitsKHR value" in
+    * VkPhysicalDeviceExternalBufferInfoKHR. This differs from
+    * VkPhysicalDeviceExternalImageFormatInfoKHR, which surprisingly permits
+    * handleType == 0.
+    */
+   assert(pExternalBufferInfo->handleType != 0);
+
+   /* All of the current flags are for sparse which we don't support yet.
+    * Even when we do support it, doing sparse on external memory sounds
+    * sketchy.  Also, just disallowing flags is the safe option.
+    */
+   if (pExternalBufferInfo->flags)
+      goto unsupported;
+
+   switch (pExternalBufferInfo->handleType) {
+   case VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT_KHR:
+      pExternalBufferProperties->externalMemoryProperties = prime_fd_props;
+      return;
+   default:
+      goto unsupported;
+   }
+
+ unsupported:
+   pExternalBufferProperties->externalMemoryProperties =
+      (VkExternalMemoryPropertiesKHR) {0};
 }

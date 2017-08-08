@@ -29,7 +29,6 @@ vc4_emit_state(struct pipe_context *pctx)
         struct vc4_context *vc4 = vc4_context(pctx);
         struct vc4_job *job = vc4->job;
 
-        struct vc4_cl_out *bcl = cl_start(&job->bcl);
         if (vc4->dirty & (VC4_DIRTY_SCISSOR | VC4_DIRTY_VIEWPORT |
                           VC4_DIRTY_RASTERIZER)) {
                 float *vpscale = vc4->viewport.scale;
@@ -60,11 +59,12 @@ vc4_emit_state(struct pipe_context *pctx)
                         maxy = MIN2(vp_maxy, vc4->scissor.maxy);
                 }
 
-                cl_u8(&bcl, VC4_PACKET_CLIP_WINDOW);
-                cl_u16(&bcl, minx);
-                cl_u16(&bcl, miny);
-                cl_u16(&bcl, maxx - minx);
-                cl_u16(&bcl, maxy - miny);
+                cl_emit(&job->bcl, CLIP_WINDOW, clip) {
+                        clip.clip_window_left_pixel_coordinate = minx;
+                        clip.clip_window_bottom_pixel_coordinate = miny;
+                        clip.clip_window_height_in_pixels = maxy - miny;
+                        clip.clip_window_width_in_pixels = maxx - minx;
+                }
 
                 job->draw_min_x = MIN2(job->draw_min_x, minx);
                 job->draw_min_y = MIN2(job->draw_min_y, miny);
@@ -78,6 +78,7 @@ vc4_emit_state(struct pipe_context *pctx)
                 uint8_t ez_enable_mask_out = ~0;
                 uint8_t rasosm_mask_out = ~0;
 
+                struct vc4_cl_out *bcl = cl_start(&job->bcl);
                 /* HW-2905: If the RCL ends up doing a full-res load when
                  * multisampling, then early Z tracking may end up with values
                  * from the previous tile due to a HW bug.  Disable it to
@@ -110,39 +111,41 @@ vc4_emit_state(struct pipe_context *pctx)
                 cl_u8(&bcl,
                       (vc4->rasterizer->config_bits[2] |
                        vc4->zsa->config_bits[2]) & ez_enable_mask_out);
+                cl_end(&job->bcl, bcl);
         }
 
         if (vc4->dirty & VC4_DIRTY_RASTERIZER) {
-                cl_u8(&bcl, VC4_PACKET_DEPTH_OFFSET);
-                cl_u16(&bcl, vc4->rasterizer->offset_factor);
-                cl_u16(&bcl, vc4->rasterizer->offset_units);
-
-                cl_u8(&bcl, VC4_PACKET_POINT_SIZE);
-                cl_f(&bcl, vc4->rasterizer->point_size);
-
-                cl_u8(&bcl, VC4_PACKET_LINE_WIDTH);
-                cl_f(&bcl, vc4->rasterizer->base.line_width);
+                cl_emit_prepacked(&job->bcl, &vc4->rasterizer->packed);
         }
 
         if (vc4->dirty & VC4_DIRTY_VIEWPORT) {
-                cl_u8(&bcl, VC4_PACKET_CLIPPER_XY_SCALING);
-                cl_f(&bcl, vc4->viewport.scale[0] * 16.0f);
-                cl_f(&bcl, vc4->viewport.scale[1] * 16.0f);
+                cl_emit(&job->bcl, CLIPPER_XY_SCALING, clip) {
+                        clip.viewport_half_width_in_1_16th_of_pixel =
+                                vc4->viewport.scale[0] * 16.0f;
+                        clip.viewport_half_height_in_1_16th_of_pixel =
+                                vc4->viewport.scale[1] * 16.0f;
+                }
 
-                cl_u8(&bcl, VC4_PACKET_CLIPPER_Z_SCALING);
-                cl_f(&bcl, vc4->viewport.translate[2]);
-                cl_f(&bcl, vc4->viewport.scale[2]);
+                cl_emit(&job->bcl, CLIPPER_Z_SCALE_AND_OFFSET, clip) {
+                        clip.viewport_z_offset_zc_to_zs =
+                                vc4->viewport.translate[2];
+                        clip.viewport_z_scale_zc_to_zs =
+                                vc4->viewport.scale[2];
+                }
 
-                cl_u8(&bcl, VC4_PACKET_VIEWPORT_OFFSET);
-                cl_u16(&bcl, 16 * vc4->viewport.translate[0]);
-                cl_u16(&bcl, 16 * vc4->viewport.translate[1]);
+                cl_emit(&job->bcl, VIEWPORT_OFFSET, vp) {
+                        vp.viewport_centre_x_coordinate =
+                                16 * vc4->viewport.translate[0];
+                        vp.viewport_centre_y_coordinate =
+                                16 * vc4->viewport.translate[1];
+                }
         }
 
         if (vc4->dirty & VC4_DIRTY_FLAT_SHADE_FLAGS) {
-                cl_u8(&bcl, VC4_PACKET_FLAT_SHADE_FLAGS);
-                cl_u32(&bcl, vc4->rasterizer->base.flatshade ?
-                       vc4->prog.fs->color_inputs : 0);
+                cl_emit(&job->bcl, FLAT_SHADE_FLAGS, flags) {
+                        if (vc4->rasterizer->base.flatshade)
+                                flags.flat_shading_flags =
+                                        vc4->prog.fs->color_inputs;
+                }
         }
-
-        cl_end(&job->bcl, bcl);
 }

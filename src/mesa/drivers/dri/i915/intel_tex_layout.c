@@ -97,14 +97,11 @@ intel_vertical_texture_alignment_unit(struct intel_context *intel,
     * | FXT1  compressed format                |  4  |  4  |  4  |  4  |  4  |
     * | Depth Buffer                           |  2  |  2  |  2  |  4  |  4  |
     * | Separate Stencil Buffer                | N/A | N/A | N/A |  4  |  8  |
-    * | Multisampled (4x or 8x) render target  | N/A | N/A | N/A |  4  |  4  |
     * | All Others                             |  2  |  2  |  2  |  2  |  2  |
     * +----------------------------------------------------------------------+
     *
     * On SNB+, non-special cases can be overridden by setting the SURFACE_STATE
     * "Surface Vertical Alignment" field to VALIGN_2 or VALIGN_4.
-    *
-    * We currently don't support multisampling.
     */
    if (_mesa_is_format_compressed(format))
       return 4;

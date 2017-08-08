@@ -143,7 +143,6 @@ struct nv50_context {
    struct pipe_vertex_buffer vtxbuf[PIPE_MAX_ATTRIBS];
    unsigned num_vtxbufs;
    uint32_t vtxbufs_coherent;
-   struct pipe_index_buffer idxbuf;
    uint32_t vbo_fifo; /* bitmask of vertex elements to be pushed to FIFO */
    uint32_t vbo_user; /* bitmask of vertex buffers pointing to user memory */
    uint32_t vbo_constant; /* bitmask of user buffers with stride 0 */

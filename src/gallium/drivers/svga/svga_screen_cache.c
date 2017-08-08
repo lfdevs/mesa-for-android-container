@@ -476,6 +476,7 @@ svga_screen_surface_create(struct svga_screen *svgascreen,
             key->cachable);
 
    if (cachable) {
+      /* Try to re-cycle a previously freed, cached surface */
       if (key->format == SVGA3D_BUFFER) {
          SVGA3dSurfaceFlags hint_flag;
 
@@ -536,6 +537,7 @@ svga_screen_surface_create(struct svga_screen *svgascreen,
    }
 
    if (!handle) {
+      /* Unable to recycle surface, allocate a new one */
       unsigned usage = 0;
 
       if (!key->cachable)

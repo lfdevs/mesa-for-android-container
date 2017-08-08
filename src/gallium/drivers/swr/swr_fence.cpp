@@ -59,7 +59,7 @@ swr_fence_submit(struct swr_context *ctx, struct pipe_fence_handle *fh)
 
    fence->write++;
    fence->pending = TRUE;
-   SwrSync(ctx->swrContext, swr_fence_cb, (uint64_t)fence, fence->write, 0);
+   ctx->api.pfnSwrSync(ctx->swrContext, swr_fence_cb, (uint64_t)fence, fence->write, 0);
 }
 
 /*

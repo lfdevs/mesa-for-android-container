@@ -127,7 +127,7 @@ i915_update_stencil(struct gl_context * ctx)
                  S5_STENCIL_PASS_Z_PASS_SHIFT));
 
    /* Set back state if different from front. */
-   if (ctx->Stencil._TestTwoSide) {
+   if (_mesa_stencil_is_two_sided(ctx)) {
       set_ctx_bits(I915_CTXREG_BF_STENCIL_OPS,
                    BFO_STENCIL_REF_MASK |
                    BFO_STENCIL_TEST_MASK |

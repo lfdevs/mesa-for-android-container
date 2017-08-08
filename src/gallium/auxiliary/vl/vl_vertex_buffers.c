@@ -49,23 +49,23 @@ vl_vb_upload_quads(struct pipe_context *pipe)
    /* create buffer */
    quad.stride = sizeof(struct vertex2f);
    quad.buffer_offset = 0;
-   quad.buffer = pipe_buffer_create
+   quad.buffer.resource = pipe_buffer_create
    (
       pipe->screen,
       PIPE_BIND_VERTEX_BUFFER,
       PIPE_USAGE_DEFAULT,
       sizeof(struct vertex2f) * 4
    );
-   quad.user_buffer = NULL;
+   quad.is_user_buffer = false;
 
-   if(!quad.buffer)
+   if(!quad.buffer.resource)
       return quad;
 
    /* and fill it */
    v = pipe_buffer_map
    (
       pipe,
-      quad.buffer,
+      quad.buffer.resource,
       PIPE_TRANSFER_WRITE | PIPE_TRANSFER_DISCARD_RANGE,
       &buf_transfer
    );
@@ -94,23 +94,23 @@ vl_vb_upload_pos(struct pipe_context *pipe, unsigned width, unsigned height)
    /* create buffer */
    pos.stride = sizeof(struct vertex2s);
    pos.buffer_offset = 0;
-   pos.buffer = pipe_buffer_create
+   pos.buffer.resource = pipe_buffer_create
    (
       pipe->screen,
       PIPE_BIND_VERTEX_BUFFER,
       PIPE_USAGE_DEFAULT,
       sizeof(struct vertex2s) * width * height
    );
-   pos.user_buffer = NULL;
+   pos.is_user_buffer = false;
 
-   if(!pos.buffer)
+   if(!pos.buffer.resource)
       return pos;
 
    /* and fill it */
    v = pipe_buffer_map
    (
       pipe,
-      pos.buffer,
+      pos.buffer.resource,
       PIPE_TRANSFER_WRITE | PIPE_TRANSFER_DISCARD_RANGE,
       &buf_transfer
    );
@@ -268,8 +268,8 @@ vl_vb_get_ycbcr(struct vl_vertex_buffer *buffer, int component)
 
    buf.stride = sizeof(struct vl_ycbcr_block);
    buf.buffer_offset = 0;
-   buf.buffer = buffer->ycbcr[component].resource;
-   buf.user_buffer = NULL;
+   buf.buffer.resource = buffer->ycbcr[component].resource;
+   buf.is_user_buffer = false;
 
    return buf;
 }
@@ -283,8 +283,8 @@ vl_vb_get_mv(struct vl_vertex_buffer *buffer, int motionvector)
 
    buf.stride = sizeof(struct vl_motionvector);
    buf.buffer_offset = 0;
-   buf.buffer = buffer->mv[motionvector].resource;
-   buf.user_buffer = NULL;
+   buf.buffer.resource = buffer->mv[motionvector].resource;
+   buf.is_user_buffer = false;
 
    return buf;
 }

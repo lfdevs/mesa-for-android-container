@@ -176,6 +176,18 @@
 #define   G_SQ_CF_ALLOC_EXPORT_WORD0_ELEM_SIZE(x)                    (((x) >> 30) & 0x3)
 #define   C_SQ_CF_ALLOC_EXPORT_WORD0_ELEM_SIZE                       0x3FFFFFFF
 /* done */
+
+#define P_SQ_CF_ALLOC_EXPORT_WORD0_RAT
+#define   S_SQ_CF_ALLOC_EXPORT_WORD0_RAT_RAT_ID(x)                   (((x) & 0xF) << 0)
+#define   G_SQ_CF_ALLOC_EXPORT_WORD0_RAT_RAT_ID(x)                   (((x) >> 0) & 0xF)
+#define   C_SQ_CF_ALLOC_EXPORT_WORD0_RAT_RAT_ID                      0xFFFFFFF0
+#define   S_SQ_CF_ALLOC_EXPORT_WORD0_RAT_RAT_INST(x)                 (((x) & 0x3F) << 4)
+#define   G_SQ_CF_ALLOC_EXPORT_WORD0_RAT_RAT_INST(x)                 (((x) >> 4) & 0x3F)
+#define   C_SQ_CF_ALLOC_EXPORT_WORD0_RAT_RAT_INST                    0xFFFFFC0F
+#define   S_SQ_CF_ALLOC_EXPORT_WORD0_RAT_RAT_INDEX_MODE(x)           (((x) & 0x3) << 11)
+#define   G_SQ_CF_ALLOC_EXPORT_WORD0_RAT_RAT_INDEX_MODE(x)           (((x) >> 11) & 0x3)
+#define   C_SQ_CF_ALLOC_EXPORT_WORD0_RAT_RAT_INDEX_MODE              0xFFFFE7FF
+
 #define P_SQ_CF_ALLOC_EXPORT_WORD1
 #define   S_SQ_CF_ALLOC_EXPORT_WORD1_BURST_COUNT(x)                  (((unsigned)(x) & 0xF) << 16)
 #define   G_SQ_CF_ALLOC_EXPORT_WORD1_BURST_COUNT(x)                  (((x) >> 16) & 0xF)
@@ -528,6 +540,10 @@
 #define   S_SQ_MEM_GDS_WORD1_DST_REL(x)                              (((unsigned)(x) & 0x3) << 7)
 #define   S_SQ_MEM_GDS_WORD1_GDS_OP(x)                               (((unsigned)(x) & 0x3f) << 9)
 #define   S_SQ_MEM_GDS_WORD1_SRC_GPR(x)                              (((unsigned)(x) & 0x7f) << 16)
+#define   S_SQ_MEM_GDS_WORD1_UAV_INDEX_MODE(x)                       (((unsigned)(x) & 0x3) << 24)
+#define   S_SQ_MEM_GDS_WORD1_UAV_ID(x)                               (((unsigned)(x) & 0xf) << 26)
+#define   S_SQ_MEM_GDS_WORD1_ALLOC_CONSUME(x)                        (((unsigned)(x) & 0x1) << 30)
+#define   S_SQ_MEM_GDS_WORD1_BCAST_FIRST_REQ(x)                      (((unsigned)(x) & 0x1) << 31)
 
 #define P_SQ_MEM_GDS_WORD2
 #define   S_SQ_MEM_GDS_WORD2_DST_SEL_X(x)                            (((unsigned)(x) & 0x7) << 0)

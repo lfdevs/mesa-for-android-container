@@ -35,6 +35,7 @@
 #include "radeon/radeon_video.h"
 #include "radeon/radeon_uvd.h"
 #include "radeon/radeon_vce.h"
+#include "radeon/radeon_vcn_dec.h"
 
 /**
  * creates an video buffer with an UVD compatible memory layout
@@ -156,9 +157,11 @@ struct pipe_video_codec *si_uvd_create_decoder(struct pipe_context *context,
 					       const struct pipe_video_codec *templ)
 {
 	struct si_context *ctx = (struct si_context *)context;
+	bool vcn = (ctx->b.family == CHIP_RAVEN) ? true : false;
 
         if (templ->entrypoint == PIPE_VIDEO_ENTRYPOINT_ENCODE)
                 return rvce_create_encoder(context, templ, ctx->b.ws, si_vce_get_buffer);
 
-	return ruvd_create_decoder(context, templ, si_uvd_set_dtb);
+	return (vcn) ? 	radeon_create_decoder(context, templ) :
+		ruvd_create_decoder(context, templ, si_uvd_set_dtb);
 }

@@ -1315,7 +1315,7 @@ vec4_visitor::emit_urb_slot(dst_reg reg, int varying)
       if (output_reg[VARYING_SLOT_POS][0].file != BAD_FILE)
          emit(MOV(reg, src_reg(output_reg[VARYING_SLOT_POS][0])));
       break;
-   case VARYING_SLOT_EDGE:
+   case VARYING_SLOT_EDGE: {
       /* This is present when doing unfilled polygons.  We're supposed to copy
        * the edge flag from the user-provided vertex array
        * (glEdgeFlagPointer), or otherwise we'll copy from the current value
@@ -1323,9 +1323,12 @@ vec4_visitor::emit_urb_slot(dst_reg reg, int varying)
        * determine which edges should be drawn as wireframe.
        */
       current_annotation = "edge flag";
-      emit(MOV(reg, src_reg(dst_reg(ATTR, VERT_ATTRIB_EDGEFLAG,
+      int edge_attr = _mesa_bitcount_64(nir->info.inputs_read &
+                                        BITFIELD64_MASK(VERT_ATTRIB_EDGEFLAG));
+      emit(MOV(reg, src_reg(dst_reg(ATTR, edge_attr,
                                     glsl_type::float_type, WRITEMASK_XYZW))));
       break;
+   }
    case BRW_VARYING_SLOT_PAD:
       /* No need to write to this slot */
       break;

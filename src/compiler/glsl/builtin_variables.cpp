@@ -336,11 +336,12 @@ per_vertex_accumulator::add_field(int slot, const glsl_type *type,
    this->fields[this->num_fields].sample = 0;
    this->fields[this->num_fields].patch = 0;
    this->fields[this->num_fields].precision = GLSL_PRECISION_NONE;
-   this->fields[this->num_fields].image_read_only = 0;
-   this->fields[this->num_fields].image_write_only = 0;
-   this->fields[this->num_fields].image_coherent = 0;
-   this->fields[this->num_fields].image_volatile = 0;
-   this->fields[this->num_fields].image_restrict = 0;
+   this->fields[this->num_fields].memory_read_only = 0;
+   this->fields[this->num_fields].memory_write_only = 0;
+   this->fields[this->num_fields].memory_coherent = 0;
+   this->fields[this->num_fields].memory_volatile = 0;
+   this->fields[this->num_fields].memory_restrict = 0;
+   this->fields[this->num_fields].image_format = 0;
    this->fields[this->num_fields].explicit_xfb_buffer = 0;
    this->fields[this->num_fields].xfb_buffer = -1;
    this->fields[this->num_fields].xfb_stride = -1;
@@ -1325,6 +1326,8 @@ builtin_variable_generator::add_varying(int slot, const glsl_type *type,
    case MESA_SHADER_COMPUTE:
       /* Compute shaders don't have varyings. */
       break;
+   default:
+      break;
    }
 }
 
@@ -1461,6 +1464,8 @@ _mesa_glsl_initialize_variables(exec_list *instructions,
       break;
    case MESA_SHADER_COMPUTE:
       gen.generate_cs_special_vars();
+      break;
+   default:
       break;
    }
 }

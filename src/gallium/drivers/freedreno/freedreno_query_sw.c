@@ -89,7 +89,6 @@ static boolean
 fd_sw_begin_query(struct fd_context *ctx, struct fd_query *q)
 {
 	struct fd_sw_query *sq = fd_sw_query(q);
-	q->active = true;
 	sq->begin_value = read_counter(ctx, q->type);
 	if (is_rate_query(q))
 		sq->begin_time = os_time_get();
@@ -100,7 +99,6 @@ static void
 fd_sw_end_query(struct fd_context *ctx, struct fd_query *q)
 {
 	struct fd_sw_query *sq = fd_sw_query(q);
-	q->active = false;
 	sq->end_value = read_counter(ctx, q->type);
 	if (is_rate_query(q))
 		sq->end_time = os_time_get();
@@ -111,11 +109,6 @@ fd_sw_get_query_result(struct fd_context *ctx, struct fd_query *q,
 		boolean wait, union pipe_query_result *result)
 {
 	struct fd_sw_query *sq = fd_sw_query(q);
-
-	if (q->active)
-		return false;
-
-	util_query_clear_result(result, q->type);
 
 	result->u64 = sq->end_value - sq->begin_value;
 

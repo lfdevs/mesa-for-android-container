@@ -31,6 +31,7 @@
 #include <string.h>
 #include <pthread.h>
 
+#include "vk_util.h"
 #include "wsi_common_wayland.h"
 #include "wayland-drm-client-protocol.h"
 
@@ -422,6 +423,16 @@ wsi_wl_surface_get_capabilities(VkIcdSurfaceBase *surface,
 }
 
 static VkResult
+wsi_wl_surface_get_capabilities2(VkIcdSurfaceBase *surface,
+                                 const void *info_next,
+                                 VkSurfaceCapabilities2KHR* caps)
+{
+   assert(caps->sType == VK_STRUCTURE_TYPE_SURFACE_CAPABILITIES_2_KHR);
+
+   return wsi_wl_surface_get_capabilities(surface, &caps->surfaceCapabilities);
+}
+
+static VkResult
 wsi_wl_surface_get_formats(VkIcdSurfaceBase *icd_surface,
 			   struct wsi_device *wsi_device,
                            uint32_t* pSurfaceFormatCount,
@@ -433,28 +444,43 @@ wsi_wl_surface_get_formats(VkIcdSurfaceBase *icd_surface,
    if (!display)
       return VK_ERROR_OUT_OF_HOST_MEMORY;
 
-   if (pSurfaceFormats == NULL) {
-      *pSurfaceFormatCount = u_vector_length(&display->formats);
-      return VK_SUCCESS;
+   VK_OUTARRAY_MAKE(out, pSurfaceFormats, pSurfaceFormatCount);
+
+   VkFormat *disp_fmt;
+   u_vector_foreach(disp_fmt, &display->formats) {
+      vk_outarray_append(&out, out_fmt) {
+         out_fmt->format = *disp_fmt;
+         out_fmt->colorSpace = VK_COLORSPACE_SRGB_NONLINEAR_KHR;
+      }
    }
 
-   uint32_t count = 0;
-   VkFormat *f;
-   u_vector_foreach(f, &display->formats) {
-      if (count == *pSurfaceFormatCount)
-         return VK_INCOMPLETE;
+   return vk_outarray_status(&out);
+}
 
-      pSurfaceFormats[count++] = (VkSurfaceFormatKHR) {
-         .format = *f,
-         /* TODO: We should get this from the compositor somehow */
-         .colorSpace = VK_COLORSPACE_SRGB_NONLINEAR_KHR,
-      };
+static VkResult
+wsi_wl_surface_get_formats2(VkIcdSurfaceBase *icd_surface,
+			    struct wsi_device *wsi_device,
+                            const void *info_next,
+                            uint32_t* pSurfaceFormatCount,
+                            VkSurfaceFormat2KHR* pSurfaceFormats)
+{
+   VkIcdSurfaceWayland *surface = (VkIcdSurfaceWayland *)icd_surface;
+   struct wsi_wl_display *display =
+      wsi_wl_get_display(wsi_device, surface->display);
+   if (!display)
+      return VK_ERROR_OUT_OF_HOST_MEMORY;
+
+   VK_OUTARRAY_MAKE(out, pSurfaceFormats, pSurfaceFormatCount);
+
+   VkFormat *disp_fmt;
+   u_vector_foreach(disp_fmt, &display->formats) {
+      vk_outarray_append(&out, out_fmt) {
+         out_fmt->surfaceFormat.format = *disp_fmt;
+         out_fmt->surfaceFormat.colorSpace = VK_COLORSPACE_SRGB_NONLINEAR_KHR;
+      }
    }
 
-   assert(*pSurfaceFormatCount <= count);
-   *pSurfaceFormatCount = count;
-
-   return VK_SUCCESS;
+   return vk_outarray_status(&out);
 }
 
 static VkResult
@@ -876,7 +902,9 @@ wsi_wl_init_wsi(struct wsi_device *wsi_device,
 
    wsi->base.get_support = wsi_wl_surface_get_support;
    wsi->base.get_capabilities = wsi_wl_surface_get_capabilities;
+   wsi->base.get_capabilities2 = wsi_wl_surface_get_capabilities2;
    wsi->base.get_formats = wsi_wl_surface_get_formats;
+   wsi->base.get_formats2 = wsi_wl_surface_get_formats2;
    wsi->base.get_present_modes = wsi_wl_surface_get_present_modes;
    wsi->base.create_swapchain = wsi_wl_surface_create_swapchain;
 

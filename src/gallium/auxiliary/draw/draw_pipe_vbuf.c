@@ -28,7 +28,7 @@
 /**
  * \file
  * Vertex buffer drawing stage.
- * 
+ *
  * \author Jose Fonseca <jfonseca@vmware.com>
  * \author Keith Whitwell <keithw@vmware.com>
  */
@@ -37,7 +37,6 @@
 #include "util/u_debug.h"
 #include "util/u_math.h"
 #include "util/u_memory.h"
-
 #include "draw_vbuf.h"
 #include "draw_private.h"
 #include "draw_vertex.h"
@@ -53,14 +52,14 @@ struct vbuf_stage {
    struct draw_stage stage; /**< This must be first (base class) */
 
    struct vbuf_render *render;
-   
+
    const struct vertex_info *vinfo;
-   
+
    /** Vertex size in bytes */
    unsigned vertex_size;
 
    struct translate *translate;
-   
+
    /* FIXME: we have no guarantee that 'unsigned' is 32bit */
 
    /** Vertices in hardware format */
@@ -68,7 +67,7 @@ struct vbuf_stage {
    unsigned *vertex_ptr;
    unsigned max_vertices;
    unsigned nr_vertices;
-   
+
    /** Indices */
    ushort *indices;
    unsigned max_indices;
@@ -87,29 +86,26 @@ struct vbuf_stage {
  * Basically a cast wrapper.
  */
 static inline struct vbuf_stage *
-vbuf_stage( struct draw_stage *stage )
+vbuf_stage(struct draw_stage *stage)
 {
    assert(stage);
    return (struct vbuf_stage *)stage;
 }
 
 
-static void vbuf_flush_vertices( struct vbuf_stage *vbuf );
-static void vbuf_alloc_vertices( struct vbuf_stage *vbuf );
+static void vbuf_flush_vertices(struct vbuf_stage *vbuf);
+static void vbuf_alloc_vertices(struct vbuf_stage *vbuf);
 
 
-static inline void 
-check_space( struct vbuf_stage *vbuf, unsigned nr )
+static inline void
+check_space(struct vbuf_stage *vbuf, unsigned nr)
 {
    if (vbuf->nr_vertices + nr > vbuf->max_vertices ||
-       vbuf->nr_indices + nr > vbuf->max_indices)
-   {
-      vbuf_flush_vertices( vbuf );
-      vbuf_alloc_vertices( vbuf );
+       vbuf->nr_indices + nr > vbuf->max_indices) {
+      vbuf_flush_vertices(vbuf);
+      vbuf_alloc_vertices(vbuf);
    }
 }
-
-
 
 
 /**
@@ -119,22 +115,21 @@ check_space( struct vbuf_stage *vbuf, unsigned nr )
  * have a couple of slots at the beginning (1-dword header, 4-dword
  * clip pos) that we ignore here.  We only use the vertex->data[] fields.
  */
-static inline ushort 
-emit_vertex( struct vbuf_stage *vbuf,
-             struct vertex_header *vertex )
+static inline ushort
+emit_vertex(struct vbuf_stage *vbuf, struct vertex_header *vertex)
 {
    if (vertex->vertex_id == UNDEFINED_VERTEX_ID && vbuf->vertex_ptr) {
       /* Hmm - vertices are emitted one at a time - better make sure
        * set_buffer is efficient.  Consider a special one-shot mode for
        * translate.
        */
-      /* Note: we really do want data[0] here, not data[pos]: 
+      /* Note: we really do want data[0] here, not data[pos]:
        */
       vbuf->translate->set_buffer(vbuf->translate, 0, vertex->data[0], 0, ~0);
       vbuf->translate->run(vbuf->translate, 0, 1, 0, 0, vbuf->vertex_ptr);
 
       if (0) draw_dump_emitted_vertex(vbuf->vinfo, (uint8_t *)vbuf->vertex_ptr);
-      
+
       vbuf->vertex_ptr += vbuf->vertex_size/4;
       vertex->vertex_id = vbuf->nr_vertices++;
    }
@@ -143,48 +138,43 @@ emit_vertex( struct vbuf_stage *vbuf,
 }
 
 
-static void 
-vbuf_tri( struct draw_stage *stage,
-          struct prim_header *prim )
+static void
+vbuf_tri(struct draw_stage *stage, struct prim_header *prim)
 {
-   struct vbuf_stage *vbuf = vbuf_stage( stage );
+   struct vbuf_stage *vbuf = vbuf_stage(stage);
    unsigned i;
 
-   check_space( vbuf, 3 );
+   check_space(vbuf, 3);
 
    for (i = 0; i < 3; i++) {
-      vbuf->indices[vbuf->nr_indices++] = emit_vertex( vbuf, prim->v[i] );
+      vbuf->indices[vbuf->nr_indices++] = emit_vertex(vbuf, prim->v[i]);
    }
 }
 
 
-static void 
-vbuf_line( struct draw_stage *stage, 
-           struct prim_header *prim )
+static void
+vbuf_line(struct draw_stage *stage, struct prim_header *prim)
 {
-   struct vbuf_stage *vbuf = vbuf_stage( stage );
+   struct vbuf_stage *vbuf = vbuf_stage(stage);
    unsigned i;
 
-   check_space( vbuf, 2 );
+   check_space(vbuf, 2);
 
    for (i = 0; i < 2; i++) {
-      vbuf->indices[vbuf->nr_indices++] = emit_vertex( vbuf, prim->v[i] );
-   }   
+      vbuf->indices[vbuf->nr_indices++] = emit_vertex(vbuf, prim->v[i]);
+   }
 }
 
 
-static void 
-vbuf_point( struct draw_stage *stage, 
-            struct prim_header *prim )
+static void
+vbuf_point(struct draw_stage *stage, struct prim_header *prim)
 {
-   struct vbuf_stage *vbuf = vbuf_stage( stage );
+   struct vbuf_stage *vbuf = vbuf_stage(stage);
 
-   check_space( vbuf, 1 );
+   check_space(vbuf, 1);
 
-   vbuf->indices[vbuf->nr_indices++] = emit_vertex( vbuf, prim->v[0] );
+   vbuf->indices[vbuf->nr_indices++] = emit_vertex(vbuf, prim->v[0]);
 }
-
-
 
 
 /**
@@ -193,7 +183,7 @@ vbuf_point( struct draw_stage *stage,
  * will be flushed if needed and a new one allocated.
  */
 static void
-vbuf_start_prim( struct vbuf_stage *vbuf, uint prim )
+vbuf_start_prim(struct vbuf_stage *vbuf, uint prim)
 {
    struct translate_key hw_key;
    unsigned dst_offset;
@@ -203,7 +193,7 @@ vbuf_start_prim( struct vbuf_stage *vbuf, uint prim )
    vbuf->render->set_primitive(vbuf->render, prim);
 
    /* Must do this after set_primitive() above:
-    * 
+    *
     * XXX: need some state managment to track when this needs to be
     * recalculated.  The driver should tell us whether there was a
     * state change.
@@ -220,7 +210,7 @@ vbuf_start_prim( struct vbuf_stage *vbuf, uint prim )
       unsigned emit_sz = 0;
       unsigned src_buffer = 0;
       enum pipe_format output_format;
-      unsigned src_offset = (vinfo->attrib[i].src_index * 4 * sizeof(float) );
+      unsigned src_offset = (vinfo->attrib[i].src_index * 4 * sizeof(float));
 
       output_format = draw_translate_vinfo_format(vinfo->attrib[i].emit);
       emit_sz = draw_translate_vinfo_size(vinfo->attrib[i].emit);
@@ -255,8 +245,7 @@ vbuf_start_prim( struct vbuf_stage *vbuf, uint prim )
    /* Don't bother with caching at this stage:
     */
    if (!vbuf->translate ||
-       translate_key_compare(&vbuf->translate->key, &hw_key) != 0) 
-   {
+       translate_key_compare(&vbuf->translate->key, &hw_key) != 0) {
       translate_key_sanitize(&hw_key);
       vbuf->translate = translate_cache_find(vbuf->cache, &hw_key);
 
@@ -273,42 +262,39 @@ vbuf_start_prim( struct vbuf_stage *vbuf, uint prim )
 }
 
 
-static void 
-vbuf_first_tri( struct draw_stage *stage,
-                struct prim_header *prim )
+static void
+vbuf_first_tri(struct draw_stage *stage, struct prim_header *prim)
 {
-   struct vbuf_stage *vbuf = vbuf_stage( stage );
+   struct vbuf_stage *vbuf = vbuf_stage(stage);
 
-   vbuf_flush_vertices( vbuf );
+   vbuf_flush_vertices(vbuf);
    vbuf_start_prim(vbuf, PIPE_PRIM_TRIANGLES);
    stage->tri = vbuf_tri;
-   stage->tri( stage, prim );
+   stage->tri(stage, prim);
 }
 
 
-static void 
-vbuf_first_line( struct draw_stage *stage,
-                 struct prim_header *prim )
+static void
+vbuf_first_line(struct draw_stage *stage, struct prim_header *prim)
 {
-   struct vbuf_stage *vbuf = vbuf_stage( stage );
+   struct vbuf_stage *vbuf = vbuf_stage(stage);
 
-   vbuf_flush_vertices( vbuf );
+   vbuf_flush_vertices(vbuf);
    vbuf_start_prim(vbuf, PIPE_PRIM_LINES);
    stage->line = vbuf_line;
-   stage->line( stage, prim );
+   stage->line(stage, prim);
 }
 
 
-static void 
-vbuf_first_point( struct draw_stage *stage,
-                  struct prim_header *prim )
+static void
+vbuf_first_point(struct draw_stage *stage, struct prim_header *prim)
 {
-   struct vbuf_stage *vbuf = vbuf_stage( stage );
+   struct vbuf_stage *vbuf = vbuf_stage(stage);
 
    vbuf_flush_vertices(vbuf);
    vbuf_start_prim(vbuf, PIPE_PRIM_POINTS);
    stage->point = vbuf_point;
-   stage->point( stage, prim );
+   stage->point(stage, prim);
 }
 
 
@@ -316,28 +302,26 @@ vbuf_first_point( struct draw_stage *stage,
 /**
  * Flush existing vertex buffer and allocate a new one.
  */
-static void 
-vbuf_flush_vertices( struct vbuf_stage *vbuf )
+static void
+vbuf_flush_vertices(struct vbuf_stage *vbuf)
 {
-   if(vbuf->vertices) {
+   if (vbuf->vertices) {
+      vbuf->render->unmap_vertices(vbuf->render, 0, vbuf->nr_vertices - 1);
 
-      vbuf->render->unmap_vertices( vbuf->render, 0, vbuf->nr_vertices - 1 );
+      if (vbuf->nr_indices) {
+         vbuf->render->draw_elements(vbuf->render,
+                                     vbuf->indices,
+                                     vbuf->nr_indices);
 
-      if (vbuf->nr_indices) 
-      {
-         vbuf->render->draw_elements(vbuf->render, 
-                                     vbuf->indices, 
-                                     vbuf->nr_indices );
-   
          vbuf->nr_indices = 0;
       }
-     
+
       /* Reset temporary vertices ids */
-      if(vbuf->nr_vertices)
-	 draw_reset_vertex_ids( vbuf->stage.draw );
-      
+      if (vbuf->nr_vertices)
+         draw_reset_vertex_ids(vbuf->stage.draw);
+
       /* Free the vertex buffer */
-      vbuf->render->release_vertices( vbuf->render );
+      vbuf->render->release_vertices(vbuf->render);
 
       vbuf->max_vertices = vbuf->nr_vertices = 0;
       vbuf->vertex_ptr = vbuf->vertices = NULL;
@@ -353,20 +337,21 @@ vbuf_flush_vertices( struct vbuf_stage *vbuf )
    vbuf->stage.line = vbuf_first_line;
    vbuf->stage.tri = vbuf_first_tri;
 }
-   
 
-static void 
-vbuf_alloc_vertices( struct vbuf_stage *vbuf )
+
+static void
+vbuf_alloc_vertices(struct vbuf_stage *vbuf)
 {
    if (vbuf->vertex_ptr) {
       assert(!vbuf->nr_indices);
       assert(!vbuf->vertices);
    }
-   
-   /* Allocate a new vertex buffer */
-   vbuf->max_vertices = vbuf->render->max_vertex_buffer_bytes / vbuf->vertex_size;
 
-   if(vbuf->max_vertices >= UNDEFINED_VERTEX_ID)
+   /* Allocate a new vertex buffer */
+   vbuf->max_vertices =
+      vbuf->render->max_vertex_buffer_bytes / vbuf->vertex_size;
+
+   if (vbuf->max_vertices >= UNDEFINED_VERTEX_ID)
       vbuf->max_vertices = UNDEFINED_VERTEX_ID - 1;
 
    /* Must always succeed -- driver gives us a
@@ -378,24 +363,23 @@ vbuf_alloc_vertices( struct vbuf_stage *vbuf )
                                    (ushort) vbuf->vertex_size,
                                    (ushort) vbuf->max_vertices);
 
-   vbuf->vertices = (uint *) vbuf->render->map_vertices( vbuf->render );
-   
+   vbuf->vertices = (uint *) vbuf->render->map_vertices(vbuf->render);
+
    vbuf->vertex_ptr = vbuf->vertices;
 }
 
 
-
-static void 
-vbuf_flush( struct draw_stage *stage, unsigned flags )
+static void
+vbuf_flush(struct draw_stage *stage, unsigned flags)
 {
-   struct vbuf_stage *vbuf = vbuf_stage( stage );
+   struct vbuf_stage *vbuf = vbuf_stage(stage);
 
-   vbuf_flush_vertices( vbuf );
+   vbuf_flush_vertices(vbuf);
 }
 
 
-static void 
-vbuf_reset_stipple_counter( struct draw_stage *stage )
+static void
+vbuf_reset_stipple_counter(struct draw_stage *stage)
 {
    /* XXX: Need to do something here for hardware with linestipple.
     */
@@ -403,28 +387,29 @@ vbuf_reset_stipple_counter( struct draw_stage *stage )
 }
 
 
-static void vbuf_destroy( struct draw_stage *stage )
+static void
+vbuf_destroy(struct draw_stage *stage)
 {
-   struct vbuf_stage *vbuf = vbuf_stage( stage );
+   struct vbuf_stage *vbuf = vbuf_stage(stage);
 
-   if(vbuf->indices)
-      align_free( vbuf->indices );
-   
+   if (vbuf->indices)
+      align_free(vbuf->indices);
+
    if (vbuf->render)
-      vbuf->render->destroy( vbuf->render );
+      vbuf->render->destroy(vbuf->render);
 
    if (vbuf->cache)
       translate_cache_destroy(vbuf->cache);
 
-   FREE( stage );
+   FREE(stage);
 }
 
 
 /**
  * Create a new primitive vbuf/render stage.
  */
-struct draw_stage *draw_vbuf_stage( struct draw_context *draw,
-                                    struct vbuf_render *render )
+struct draw_stage *
+draw_vbuf_stage(struct draw_context *draw, struct vbuf_render *render)
 {
    struct vbuf_stage *vbuf = CALLOC_STRUCT(vbuf_stage);
    if (!vbuf)

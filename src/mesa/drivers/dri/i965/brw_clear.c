@@ -121,11 +121,11 @@ brw_fast_clear_depth(struct gl_context *ctx)
    if ((ctx->Scissor.EnableFlags & 1) && !noop_scissor(fb)) {
       perf_debug("Failed to fast clear %dx%d depth because of scissors.  "
                  "Possible 5%% performance win if avoided.\n",
-                 mt->logical_width0, mt->logical_height0);
+                 mt->surf.logical_level0_px.width,
+                 mt->surf.logical_level0_px.height);
       return false;
    }
 
-   uint32_t depth_clear_value;
    switch (mt->format) {
    case MESA_FORMAT_Z32_FLOAT_S8X24_UINT:
    case MESA_FORMAT_Z24_UNORM_S8_UINT:
@@ -139,10 +139,6 @@ brw_fast_clear_depth(struct gl_context *ctx)
        */
       return false;
 
-   case MESA_FORMAT_Z_FLOAT32:
-      depth_clear_value = float_as_int(ctx->Depth.Clear);
-      break;
-
    case MESA_FORMAT_Z_UNORM16:
       /* From the Sandy Bridge PRM, volume 2 part 1, page 314:
        *
@@ -154,28 +150,26 @@ brw_fast_clear_depth(struct gl_context *ctx)
        *        optimization must be disabled.
        */
       if (brw->gen == 6 &&
-          (minify(mt->physical_width0,
+          (minify(mt->surf.phys_level0_sa.width,
                   depth_irb->mt_level - mt->first_level) % 16) != 0)
 	 return false;
-      /* FALLTHROUGH */
+      break;
 
    default:
-      if (brw->gen >= 8)
-         depth_clear_value = float_as_int(ctx->Depth.Clear);
-      else
-         depth_clear_value = fb->_DepthMax * ctx->Depth.Clear;
       break;
    }
 
    /* If we're clearing to a new clear value, then we need to resolve any clear
     * flags out of the HiZ buffer into the real depth buffer.
     */
-   if (mt->depth_clear_value != depth_clear_value) {
-      intel_miptree_all_slices_resolve_depth(brw, mt);
-      mt->depth_clear_value = depth_clear_value;
+   if (mt->fast_clear_color.f32[0] != ctx->Depth.Clear) {
+      intel_miptree_prepare_access(brw, mt, 0, INTEL_REMAINING_LEVELS,
+                                   0, INTEL_REMAINING_LAYERS,
+                                   ISL_AUX_USAGE_HIZ, false);
+      mt->fast_clear_color.f32[0] = ctx->Depth.Clear;
    }
 
-   if (fb->MaxNumLayers > 0) {
+   if (depth_att->Layered) {
       intel_hiz_exec(brw, mt, depth_irb->mt_level,
                      depth_irb->mt_layer, depth_irb->layer_count,
                      BLORP_HIZ_OP_DEPTH_CLEAR);
@@ -187,7 +181,15 @@ brw_fast_clear_depth(struct gl_context *ctx)
    /* Now, the HiZ buffer contains data that needs to be resolved to the depth
     * buffer.
     */
-   intel_renderbuffer_att_set_needs_depth_resolve(depth_att);
+   if (depth_att->Layered) {
+      intel_miptree_set_aux_state(brw, mt, depth_irb->mt_level,
+                                  depth_irb->mt_layer, depth_irb->layer_count,
+                                  ISL_AUX_STATE_CLEAR);
+   } else {
+      intel_miptree_set_aux_state(brw, mt, depth_irb->mt_level,
+                                  depth_irb->mt_layer, 1,
+                                  ISL_AUX_STATE_CLEAR);
+   }
 
    return true;
 }
@@ -227,31 +229,32 @@ brw_clear(struct gl_context *ctx, GLbitfield mask)
          mt->stencil_mt->r8stencil_needs_update = true;
    }
 
-   /* BLORP is currently only supported on Gen6+. */
-   if (brw->gen >= 6 && (mask & BUFFER_BITS_COLOR)) {
-      const bool encode_srgb = ctx->Color.sRGBEnabled;
-      if (brw_blorp_clear_color(brw, fb, mask, partial_clear, encode_srgb)) {
-         debug_mask("blorp color", mask & BUFFER_BITS_COLOR);
-         mask &= ~BUFFER_BITS_COLOR;
-      }
+   if (mask & BUFFER_BITS_COLOR) {
+      brw_blorp_clear_color(brw, fb, mask, partial_clear,
+                            ctx->Color.sRGBEnabled);
+      debug_mask("blorp color", mask & BUFFER_BITS_COLOR);
+      mask &= ~BUFFER_BITS_COLOR;
    }
 
-   GLbitfield tri_mask = mask & (BUFFER_BITS_COLOR |
-				 BUFFER_BIT_STENCIL |
-				 BUFFER_BIT_DEPTH);
+   if (brw->gen >= 6 && (mask & BUFFER_BITS_DEPTH_STENCIL)) {
+      brw_blorp_clear_depth_stencil(brw, fb, mask, partial_clear);
+      debug_mask("blorp depth/stencil", mask & BUFFER_BITS_DEPTH_STENCIL);
+      mask &= ~BUFFER_BITS_DEPTH_STENCIL;
+   }
+
+   GLbitfield tri_mask = mask & (BUFFER_BIT_STENCIL |
+                                 BUFFER_BIT_DEPTH);
 
    if (tri_mask) {
       debug_mask("tri", tri_mask);
       mask &= ~tri_mask;
-
-      if (ctx->API == API_OPENGLES) {
-         _mesa_meta_Clear(&brw->ctx, tri_mask);
-      } else {
-         _mesa_meta_glsl_Clear(&brw->ctx, tri_mask);
-      }
+      _mesa_meta_glsl_Clear(&brw->ctx, tri_mask);
    }
 
-   /* Any strange buffers get passed off to swrast */
+   /* Any strange buffers get passed off to swrast.  The only thing that
+    * should be left at this point is the accumulation buffer.
+    */
+   assert((mask & ~BUFFER_BIT_ACCUM) == 0);
    if (mask) {
       debug_mask("swrast", mask);
       _swrast_Clear(ctx, mask);

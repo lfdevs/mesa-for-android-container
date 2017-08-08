@@ -26,53 +26,7 @@
 
 #include "radv_meta.h"
 #include "radv_private.h"
-#include "nir/nir_builder.h"
 #include "sid.h"
-/**
- * Vertex attributes used by all pipelines.
- */
-struct vertex_attrs {
-	float position[2]; /**< 3DPRIM_RECTLIST */
-};
-
-/* passthrough vertex shader */
-static nir_shader *
-build_nir_vs(void)
-{
-	const struct glsl_type *vec4 = glsl_vec4_type();
-
-	nir_builder b;
-	nir_variable *a_position;
-	nir_variable *v_position;
-
-	nir_builder_init_simple_shader(&b, NULL, MESA_SHADER_VERTEX, NULL);
-	b.shader->info->name = ralloc_strdup(b.shader, "meta_fast_clear_vs");
-
-	a_position = nir_variable_create(b.shader, nir_var_shader_in, vec4,
-					 "a_position");
-	a_position->data.location = VERT_ATTRIB_GENERIC0;
-
-	v_position = nir_variable_create(b.shader, nir_var_shader_out, vec4,
-					 "gl_Position");
-	v_position->data.location = VARYING_SLOT_POS;
-
-	nir_copy_var(&b, v_position, a_position);
-
-	return b.shader;
-}
-
-/* simple passthrough shader */
-static nir_shader *
-build_nir_fs(void)
-{
-	nir_builder b;
-
-	nir_builder_init_simple_shader(&b, NULL, MESA_SHADER_FRAGMENT, NULL);
-	b.shader->info->name = ralloc_asprintf(b.shader,
-					      "meta_fast_clear_noop_fs");
-
-	return b.shader;
-}
 
 static VkResult
 create_pass(struct radv_device *device)
@@ -128,7 +82,7 @@ create_pipeline(struct radv_device *device,
 	VkDevice device_h = radv_device_to_handle(device);
 
 	struct radv_shader_module fs_module = {
-		.nir = build_nir_fs(),
+		.nir = radv_meta_build_nir_fs_noop(),
 	};
 
 	if (!fs_module.nir) {
@@ -154,24 +108,8 @@ create_pipeline(struct radv_device *device,
 
 	const VkPipelineVertexInputStateCreateInfo vi_state = {
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-		.vertexBindingDescriptionCount = 1,
-		.pVertexBindingDescriptions = (VkVertexInputBindingDescription[]) {
-			{
-				.binding = 0,
-				.stride = sizeof(struct vertex_attrs),
-				.inputRate = VK_VERTEX_INPUT_RATE_VERTEX
-			},
-		},
-		.vertexAttributeDescriptionCount = 1,
-		.pVertexAttributeDescriptions = (VkVertexInputAttributeDescription[]) {
-			{
-				/* Position */
-				.location = 0,
-				.binding = 0,
-				.format = VK_FORMAT_R32G32_SFLOAT,
-				.offset = offsetof(struct vertex_attrs, position),
-			},
-		}
+		.vertexBindingDescriptionCount = 0,
+		.vertexAttributeDescriptionCount = 0,
 	};
 
 	const VkPipelineInputAssemblyStateCreateInfo ia_state = {
@@ -330,7 +268,7 @@ radv_device_init_meta_fast_clear_flush_state(struct radv_device *device)
 
 	zero(device->meta_state.fast_clear_flush);
 
-	struct radv_shader_module vs_module = { .nir = build_nir_vs() };
+	struct radv_shader_module vs_module = { .nir = radv_meta_build_nir_vs_generate_vertices() };
 	if (!vs_module.nir) {
 		/* XXX: Need more accurate error */
 		res = VK_ERROR_OUT_OF_HOST_MEMORY;
@@ -364,43 +302,6 @@ emit_fast_clear_flush(struct radv_cmd_buffer *cmd_buffer,
 {
 	struct radv_device *device = cmd_buffer->device;
 	VkCommandBuffer cmd_buffer_h = radv_cmd_buffer_to_handle(cmd_buffer);
-	uint32_t offset;
-	const struct vertex_attrs vertex_data[3] = {
-		{
-			.position = {
-				-1.0,
-				-1.0,
-			},
-		},
-		{
-			.position = {
-				-1.0,
-				1.0,
-			},
-		},
-		{
-			.position = {
-				1.0,
-				-1.0,
-			},
-		},
-	};
-
-	radv_cmd_buffer_upload_data(cmd_buffer, sizeof(vertex_data), 16, vertex_data, &offset);
-	struct radv_buffer vertex_buffer = {
-		.device = device,
-		.size = sizeof(vertex_data),
-		.bo = cmd_buffer->upload.upload_bo,
-		.offset = offset,
-	};
-
-	VkBuffer vertex_buffer_h = radv_buffer_to_handle(&vertex_buffer);
-
-	radv_CmdBindVertexBuffers(cmd_buffer_h,
-				  /*firstBinding*/ 0,
-				  /*bindingCount*/ 1,
-				  (VkBuffer[]) { vertex_buffer_h },
-				  (VkDeviceSize[]) { 0 });
 
 	VkPipeline pipeline_h;
 	if (fmask_decompress)
@@ -433,6 +334,20 @@ emit_fast_clear_flush(struct radv_cmd_buffer *cmd_buffer,
 					 RADV_CMD_FLAG_FLUSH_AND_INV_CB_META);
 }
 
+static void
+radv_emit_set_predication_state_from_image(struct radv_cmd_buffer *cmd_buffer,
+				      struct radv_image *image, bool value)
+{
+	uint64_t va = 0;
+
+	if (value) {
+		va = cmd_buffer->device->ws->buffer_get_va(image->bo) + image->offset;
+		va += image->dcc_pred_offset;
+	}
+
+	si_emit_set_predication_state(cmd_buffer, va);
+}
+
 /**
  */
 void
@@ -448,8 +363,12 @@ radv_fast_clear_flush_image_inplace(struct radv_cmd_buffer *cmd_buffer,
 
 	assert(cmd_buffer->queue_family_index == RADV_QUEUE_GENERAL);
 	radv_meta_save_pass(&saved_pass_state, cmd_buffer);
-	radv_meta_save_graphics_reset_vport_scissor(&saved_state, cmd_buffer);
+	radv_meta_save_graphics_reset_vport_scissor_novertex(&saved_state, cmd_buffer);
 
+	if (image->surface.dcc_size) {
+		radv_emit_set_predication_state_from_image(cmd_buffer, image, true);
+		cmd_buffer->state.predicating = true;
+	}
 	for (uint32_t layer = 0; layer < layer_count; ++layer) {
 		struct radv_image_view iview;
 
@@ -466,8 +385,7 @@ radv_fast_clear_flush_image_inplace(struct radv_cmd_buffer *cmd_buffer,
 						     .baseArrayLayer = subresourceRange->baseArrayLayer + layer,
 						     .layerCount = 1,
 					      },
-				     },
-				     cmd_buffer, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+				     });
 
 		VkFramebuffer fb_h;
 		radv_CreateFramebuffer(device_h,
@@ -477,8 +395,8 @@ radv_fast_clear_flush_image_inplace(struct radv_cmd_buffer *cmd_buffer,
 					.pAttachments = (VkImageView[]) {
 						radv_image_view_to_handle(&iview)
 					},
-				       .width = image->extent.width,
-				       .height = image->extent.height,
+				       .width = image->info.width,
+				       .height = image->info.height,
 				       .layers = 1
 				},
 				&cmd_buffer->pool->alloc,
@@ -495,8 +413,8 @@ radv_fast_clear_flush_image_inplace(struct radv_cmd_buffer *cmd_buffer,
 							      0,
 						      },
 						      .extent = {
-							      image->extent.width,
-							      image->extent.height,
+							      image->info.width,
+							      image->info.height,
 						      }
 					      },
 					      .clearValueCount = 0,
@@ -505,13 +423,17 @@ radv_fast_clear_flush_image_inplace(struct radv_cmd_buffer *cmd_buffer,
 				     VK_SUBPASS_CONTENTS_INLINE);
 
 		emit_fast_clear_flush(cmd_buffer,
-				      &(VkExtent2D) { image->extent.width, image->extent.height },
+				      &(VkExtent2D) { image->info.width, image->info.height },
 				      image->fmask.size > 0);
 		radv_CmdEndRenderPass(cmd_buffer_h);
 
 		radv_DestroyFramebuffer(device_h, fb_h,
 					&cmd_buffer->pool->alloc);
 
+	}
+	if (image->surface.dcc_size) {
+		cmd_buffer->state.predicating = false;
+		radv_emit_set_predication_state_from_image(cmd_buffer, image, false);
 	}
 	radv_meta_restore(&saved_state, cmd_buffer);
 	radv_meta_restore_pass(&saved_pass_state, cmd_buffer);

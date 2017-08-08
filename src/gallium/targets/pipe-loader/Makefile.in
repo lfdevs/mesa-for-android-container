@@ -139,23 +139,20 @@ target_triplet = @target@
 @HAVE_GALLIUM_NOUVEAU_TRUE@am__append_11 = pipe_nouveau.la
 @HAVE_GALLIUM_R300_TRUE@am__append_12 = pipe_r300.la
 @HAVE_GALLIUM_R600_TRUE@am__append_13 = pipe_r600.la
-@HAVE_GALLIUM_LLVM_TRUE@@HAVE_GALLIUM_R600_TRUE@am__append_14 = \
-@HAVE_GALLIUM_LLVM_TRUE@@HAVE_GALLIUM_R600_TRUE@	$(top_builddir)/src/amd/common/libamd_common.la
-
-@HAVE_GALLIUM_RADEONSI_TRUE@am__append_15 = pipe_radeonsi.la
-@HAVE_GALLIUM_FREEDRENO_TRUE@am__append_16 = pipe_msm.la
-@HAVE_GALLIUM_SVGA_TRUE@am__append_17 = pipe_vmwgfx.la
-@HAVE_GALLIUM_SWRAST_TRUE@am__append_18 = pipe_swrast.la
-@HAVE_GALLIUM_SOFTPIPE_TRUE@@HAVE_GALLIUM_SWRAST_TRUE@am__append_19 = -DGALLIUM_SOFTPIPE
-@HAVE_GALLIUM_SOFTPIPE_TRUE@@HAVE_GALLIUM_SWRAST_TRUE@am__append_20 = \
+@HAVE_GALLIUM_RADEONSI_TRUE@am__append_14 = pipe_radeonsi.la
+@HAVE_GALLIUM_FREEDRENO_TRUE@am__append_15 = pipe_msm.la
+@HAVE_GALLIUM_SVGA_TRUE@am__append_16 = pipe_vmwgfx.la
+@HAVE_GALLIUM_SWRAST_TRUE@am__append_17 = pipe_swrast.la
+@HAVE_GALLIUM_SOFTPIPE_TRUE@@HAVE_GALLIUM_SWRAST_TRUE@am__append_18 = -DGALLIUM_SOFTPIPE
+@HAVE_GALLIUM_SOFTPIPE_TRUE@@HAVE_GALLIUM_SWRAST_TRUE@am__append_19 = \
 @HAVE_GALLIUM_SOFTPIPE_TRUE@@HAVE_GALLIUM_SWRAST_TRUE@	$(top_builddir)/src/gallium/drivers/softpipe/libsoftpipe.la
 
-@HAVE_GALLIUM_LLVMPIPE_TRUE@@HAVE_GALLIUM_SWRAST_TRUE@am__append_21 = -DGALLIUM_LLVMPIPE
-@HAVE_GALLIUM_LLVMPIPE_TRUE@@HAVE_GALLIUM_SWRAST_TRUE@am__append_22 = \
+@HAVE_GALLIUM_LLVMPIPE_TRUE@@HAVE_GALLIUM_SWRAST_TRUE@am__append_20 = -DGALLIUM_LLVMPIPE
+@HAVE_GALLIUM_LLVMPIPE_TRUE@@HAVE_GALLIUM_SWRAST_TRUE@am__append_21 = \
 @HAVE_GALLIUM_LLVMPIPE_TRUE@@HAVE_GALLIUM_SWRAST_TRUE@	$(top_builddir)/src/gallium/drivers/llvmpipe/libllvmpipe.la
 
-@HAVE_GALLIUM_SWRAST_TRUE@@HAVE_GALLIUM_SWR_TRUE@am__append_23 = -DGALLIUM_SWR
-@HAVE_GALLIUM_SWRAST_TRUE@@HAVE_GALLIUM_SWR_TRUE@am__append_24 = \
+@HAVE_GALLIUM_SWRAST_TRUE@@HAVE_GALLIUM_SWR_TRUE@am__append_22 = -DGALLIUM_SWR
+@HAVE_GALLIUM_SWRAST_TRUE@@HAVE_GALLIUM_SWR_TRUE@am__append_23 = \
 @HAVE_GALLIUM_SWRAST_TRUE@@HAVE_GALLIUM_SWR_TRUE@	$(top_builddir)/src/gallium/drivers/swr/libmesaswr.la
 
 subdir = src/gallium/targets/pipe-loader
@@ -270,7 +267,8 @@ pipe_r300_la_OBJECTS = $(am_pipe_r300_la_OBJECTS)
 @HAVE_GALLIUM_R600_TRUE@	$(top_builddir)/src/gallium/drivers/radeon/libradeon.la \
 @HAVE_GALLIUM_R600_TRUE@	$(top_builddir)/src/gallium/drivers/r600/libr600.la \
 @HAVE_GALLIUM_R600_TRUE@	$(am__DEPENDENCIES_1) \
-@HAVE_GALLIUM_R600_TRUE@	$(am__DEPENDENCIES_1) $(am__append_14)
+@HAVE_GALLIUM_R600_TRUE@	$(am__DEPENDENCIES_1) \
+@HAVE_GALLIUM_R600_TRUE@	$(am__DEPENDENCIES_1)
 am__pipe_r600_la_SOURCES_DIST = pipe_r600.c
 @HAVE_GALLIUM_R600_TRUE@am_pipe_r600_la_OBJECTS = pipe_r600.lo
 pipe_r600_la_OBJECTS = $(am_pipe_r600_la_OBJECTS)
@@ -299,8 +297,8 @@ am__DEPENDENCIES_7 =  \
 	$(am__append_2) $(am__DEPENDENCIES_6)
 @HAVE_GALLIUM_SWRAST_TRUE@pipe_swrast_la_DEPENDENCIES =  \
 @HAVE_GALLIUM_SWRAST_TRUE@	$(am__DEPENDENCIES_5) \
-@HAVE_GALLIUM_SWRAST_TRUE@	$(am__append_20) $(am__append_22) \
-@HAVE_GALLIUM_SWRAST_TRUE@	$(am__append_24) \
+@HAVE_GALLIUM_SWRAST_TRUE@	$(am__append_19) $(am__append_21) \
+@HAVE_GALLIUM_SWRAST_TRUE@	$(am__append_23) \
 @HAVE_GALLIUM_SWRAST_TRUE@	$(am__DEPENDENCIES_7)
 am__pipe_swrast_la_SOURCES_DIST = pipe_swrast.c
 @HAVE_GALLIUM_SWRAST_TRUE@am_pipe_swrast_la_OBJECTS = pipe_swrast.lo
@@ -494,6 +492,8 @@ GL_PC_LIB_PRIV = @GL_PC_LIB_PRIV@
 GL_PC_REQ_PRIV = @GL_PC_REQ_PRIV@
 GREP = @GREP@
 HAVE_XF86VIDMODE = @HAVE_XF86VIDMODE@
+I915_CFLAGS = @I915_CFLAGS@
+I915_LIBS = @I915_LIBS@
 INDENT = @INDENT@
 INDENT_FLAGS = @INDENT_FLAGS@
 INSTALL = @INSTALL@
@@ -501,8 +501,6 @@ INSTALL_DATA = @INSTALL_DATA@
 INSTALL_PROGRAM = @INSTALL_PROGRAM@
 INSTALL_SCRIPT = @INSTALL_SCRIPT@
 INSTALL_STRIP_PROGRAM = @INSTALL_STRIP_PROGRAM@
-INTEL_CFLAGS = @INTEL_CFLAGS@
-INTEL_LIBS = @INTEL_LIBS@
 LD = @LD@
 LDFLAGS = @LDFLAGS@
 LD_NO_UNDEFINED = @LD_NO_UNDEFINED@
@@ -598,6 +596,8 @@ STRIP = @STRIP@
 SWR_AVX2_CXXFLAGS = @SWR_AVX2_CXXFLAGS@
 SWR_AVX_CXXFLAGS = @SWR_AVX_CXXFLAGS@
 SWR_CXX11_CXXFLAGS = @SWR_CXX11_CXXFLAGS@
+SWR_KNL_CXXFLAGS = @SWR_KNL_CXXFLAGS@
+SWR_SKX_CXXFLAGS = @SWR_SKX_CXXFLAGS@
 VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
 VALGRIND_LIBS = @VALGRIND_LIBS@
 VA_CFLAGS = @VA_CFLAGS@
@@ -605,8 +605,6 @@ VA_LIBS = @VA_LIBS@
 VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
 VA_MAJOR = @VA_MAJOR@
 VA_MINOR = @VA_MINOR@
-VC4_CFLAGS = @VC4_CFLAGS@
-VC4_LIBS = @VC4_LIBS@
 VDPAU_CFLAGS = @VDPAU_CFLAGS@
 VDPAU_LIBS = @VDPAU_LIBS@
 VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
@@ -620,6 +618,7 @@ VL_LIBS = @VL_LIBS@
 VULKAN_ICD_INSTALL_DIR = @VULKAN_ICD_INSTALL_DIR@
 WAYLAND_CFLAGS = @WAYLAND_CFLAGS@
 WAYLAND_LIBS = @WAYLAND_LIBS@
+WAYLAND_PROTOCOLS_DATADIR = @WAYLAND_PROTOCOLS_DATADIR@
 WAYLAND_SCANNER = @WAYLAND_SCANNER@
 WAYLAND_SCANNER_CFLAGS = @WAYLAND_SCANNER_CFLAGS@
 WAYLAND_SCANNER_LIBS = @WAYLAND_SCANNER_LIBS@
@@ -693,7 +692,6 @@ pdfdir = @pdfdir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
-runstatedir = @runstatedir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
@@ -772,11 +770,11 @@ AM_CPPFLAGS = $(GALLIUM_CFLAGS) -I$(top_srcdir)/include \
 	-I$(top_srcdir)/src/gallium/winsys \
 	$(GALLIUM_PIPE_LOADER_DEFINES) $(LIBDRM_CFLAGS) \
 	$(VISIBILITY_CFLAGS) -DGALLIUM_RBUG -DGALLIUM_TRACE \
-	$(am__append_19) $(am__append_21) $(am__append_23)
+	$(am__append_18) $(am__append_20) $(am__append_22)
 pipedir = $(libdir)/gallium-pipe
 pipe_LTLIBRARIES = $(am__append_10) $(am__append_11) $(am__append_12) \
-	$(am__append_13) $(am__append_15) $(am__append_16) \
-	$(am__append_17) $(am__append_18)
+	$(am__append_13) $(am__append_14) $(am__append_15) \
+	$(am__append_16) $(am__append_17)
 PIPE_LIBS = $(am__append_4) $(am__append_5) $(am__append_6) \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
 	$(top_builddir)/src/compiler/nir/libnir.la \
@@ -793,7 +791,7 @@ AM_LDFLAGS = -module -no-undefined -avoid-version $(GC_SECTIONS) \
 @HAVE_GALLIUM_I915_TRUE@	$(top_builddir)/src/gallium/winsys/i915/drm/libi915drm.la \
 @HAVE_GALLIUM_I915_TRUE@	$(top_builddir)/src/gallium/drivers/i915/libi915.la \
 @HAVE_GALLIUM_I915_TRUE@	$(LIBDRM_LIBS) \
-@HAVE_GALLIUM_I915_TRUE@	$(INTEL_LIBS)
+@HAVE_GALLIUM_I915_TRUE@	$(I915_LIBS)
 
 @HAVE_GALLIUM_NOUVEAU_TRUE@pipe_nouveau_la_SOURCES = pipe_nouveau.c
 @HAVE_GALLIUM_NOUVEAU_TRUE@nodist_EXTRA_pipe_nouveau_la_SOURCES = dummy.cpp
@@ -815,12 +813,15 @@ AM_LDFLAGS = -module -no-undefined -avoid-version $(GC_SECTIONS) \
 
 @HAVE_GALLIUM_R600_TRUE@pipe_r600_la_SOURCES = pipe_r600.c
 @HAVE_GALLIUM_R600_TRUE@nodist_EXTRA_pipe_r600_la_SOURCES = dummy.cpp
-@HAVE_GALLIUM_R600_TRUE@pipe_r600_la_LIBADD = $(PIPE_LIBS) \
+@HAVE_GALLIUM_R600_TRUE@pipe_r600_la_LIBADD = \
+@HAVE_GALLIUM_R600_TRUE@	$(PIPE_LIBS) \
 @HAVE_GALLIUM_R600_TRUE@	$(top_builddir)/src/gallium/winsys/radeon/drm/libradeonwinsys.la \
 @HAVE_GALLIUM_R600_TRUE@	$(top_builddir)/src/gallium/drivers/radeon/libradeon.la \
 @HAVE_GALLIUM_R600_TRUE@	$(top_builddir)/src/gallium/drivers/r600/libr600.la \
-@HAVE_GALLIUM_R600_TRUE@	$(LIBDRM_LIBS) $(RADEON_LIBS) \
-@HAVE_GALLIUM_R600_TRUE@	$(am__append_14)
+@HAVE_GALLIUM_R600_TRUE@	$(LIBDRM_LIBS) \
+@HAVE_GALLIUM_R600_TRUE@	$(RADEON_LIBS) \
+@HAVE_GALLIUM_R600_TRUE@	$(LIBELF_LIBS)
+
 @HAVE_GALLIUM_RADEONSI_TRUE@pipe_radeonsi_la_SOURCES = pipe_radeonsi.c
 @HAVE_GALLIUM_RADEONSI_TRUE@nodist_EXTRA_pipe_radeonsi_la_SOURCES = dummy.cpp
 @HAVE_GALLIUM_RADEONSI_TRUE@pipe_radeonsi_la_LIBADD = \
@@ -854,8 +855,8 @@ AM_LDFLAGS = -module -no-undefined -avoid-version $(GC_SECTIONS) \
 @HAVE_GALLIUM_SWRAST_TRUE@pipe_swrast_la_SOURCES = pipe_swrast.c
 @HAVE_GALLIUM_SWRAST_TRUE@nodist_EXTRA_pipe_swrast_la_SOURCES = dummy.cpp
 @HAVE_GALLIUM_SWRAST_TRUE@pipe_swrast_la_LIBADD = $(PIPE_LIBS) \
-@HAVE_GALLIUM_SWRAST_TRUE@	$(am__append_20) $(am__append_22) \
-@HAVE_GALLIUM_SWRAST_TRUE@	$(am__append_24) \
+@HAVE_GALLIUM_SWRAST_TRUE@	$(am__append_19) $(am__append_21) \
+@HAVE_GALLIUM_SWRAST_TRUE@	$(am__append_23) \
 @HAVE_GALLIUM_SWRAST_TRUE@	$(GALLIUM_PIPE_LOADER_WINSYS_LIBS)
 EXTRA_DIST = pipe.sym
 all: all-am

@@ -486,12 +486,12 @@ static const struct svga3d_surface_desc svga3d_surface_descs[] = {
       64, {{0}, {8}, {32}, {0}},
       {{0}, {32}, {0}, {0}}},
 
-   {SVGA3D_R32_FLOAT_X8X24_TYPELESS, SVGA3DBLOCKDESC_R_FP,
+   {SVGA3D_R32_FLOAT_X8X24, SVGA3DBLOCKDESC_R_FP,
       {1, 1, 1},  8, 8,
       64, {{0}, {0}, {32}, {0}},
       {{0}, {0}, {0}, {0}}},
 
-   {SVGA3D_X32_TYPELESS_G8X24_UINT, SVGA3DBLOCKDESC_GREEN,
+   {SVGA3D_X32_G8X24_UINT, SVGA3DBLOCKDESC_GREEN,
       {1, 1, 1},  8, 8,
       64, {{0}, {8}, {0}, {0}},
       {{0}, {32}, {0}, {0}}},
@@ -581,12 +581,12 @@ static const struct svga3d_surface_desc svga3d_surface_descs[] = {
       32, {{0}, {8}, {24}, {0}},
       {{0}, {24}, {0}, {0}}},
 
-   {SVGA3D_R24_UNORM_X8_TYPELESS, SVGA3DBLOCKDESC_RED,
+   {SVGA3D_R24_UNORM_X8, SVGA3DBLOCKDESC_RED,
       {1, 1, 1},  4, 4,
       32, {{0}, {0}, {24}, {0}},
       {{0}, {0}, {0}, {0}}},
 
-   {SVGA3D_X24_TYPELESS_G8_UINT, SVGA3DBLOCKDESC_GREEN,
+   {SVGA3D_X24_G8_UINT, SVGA3DBLOCKDESC_GREEN,
       {1, 1, 1},  4, 4,
       32, {{0}, {8}, {0}, {0}},
       {{0}, {24}, {0}, {0}}},

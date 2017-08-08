@@ -36,6 +36,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "main/imports.h"
 #include "main/context.h"
 #include "main/macros.h"
+#include "main/state.h"
 #include "main/teximage.h"
 #include "main/texobj.h"
 #include "main/enums.h"
@@ -1480,7 +1481,7 @@ void r200UpdateTextureState( struct gl_context *ctx )
       atoms. */
    R200_NEWPRIM( rmesa );
 
-   if (ctx->ATIFragmentShader._Enabled) {
+   if (_mesa_ati_fragment_shader_enabled(ctx)) {
       GLuint i;
       for (i = 0; i < R200_MAX_TEXTURE_UNITS; i++) {
          if (ctx->Texture.Unit[i]._Current)
@@ -1502,7 +1503,7 @@ void r200UpdateTextureState( struct gl_context *ctx )
 	 r200UpdateTextureUnit( ctx, 5 ));
    }
 
-   if (ok && ctx->ATIFragmentShader._Enabled) {
+   if (ok && _mesa_ati_fragment_shader_enabled(ctx)) {
       r200UpdateFragmentShader(ctx);
    }
 
@@ -1528,7 +1529,7 @@ void r200UpdateTextureState( struct gl_context *ctx )
 	   rmesa->hw.tex[1].cmd[TEX_PP_TXFORMAT] &= ~TEXOBJ_TXFORMAT_MASK;
 	 rmesa->hw.tex[1].cmd[TEX_PP_TXFORMAT] |= R200_TXFORMAT_LOOKUP_DISABLE;
       }
-      else if (!ctx->ATIFragmentShader._Enabled) {
+      else if (!_mesa_ati_fragment_shader_enabled(ctx)) {
 	 if ((rmesa->hw.ctx.cmd[CTX_PP_CNTL] & R200_TEX_1_ENABLE) &&
 	    (rmesa->hw.tex[1].cmd[TEX_PP_TXFORMAT] & R200_TXFORMAT_LOOKUP_DISABLE)) {
 	    R200_STATECHANGE(rmesa, tex[1]);

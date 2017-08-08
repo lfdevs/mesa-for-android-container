@@ -126,11 +126,11 @@ CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 libr600_la_LIBADD =
-am__objects_1 = compute_memory_pool.lo eg_asm.lo evergreen_compute.lo \
-	evergreen_hw_context.lo evergreen_state.lo r600_asm.lo \
-	r600_blit.lo r600_hw_context.lo r600_isa.lo r600_pipe.lo \
-	r600_shader.lo r600_state.lo r600_state_common.lo r600_uvd.lo \
-	r700_asm.lo
+am__objects_1 = compute_memory_pool.lo eg_asm.lo eg_debug.lo \
+	evergreen_compute.lo evergreen_hw_context.lo \
+	evergreen_state.lo r600_asm.lo r600_blit.lo r600_hw_context.lo \
+	r600_isa.lo r600_pipe.lo r600_shader.lo r600_state.lo \
+	r600_state_common.lo r600_uvd.lo r700_asm.lo
 am__dirstamp = $(am__leading_dot)dirstamp
 am__objects_2 = sb/sb_bc_builder.lo sb/sb_bc_decoder.lo \
 	sb/sb_bc_dump.lo sb/sb_bc_finalize.lo sb/sb_bc_parser.lo \
@@ -309,6 +309,8 @@ GL_PC_LIB_PRIV = @GL_PC_LIB_PRIV@
 GL_PC_REQ_PRIV = @GL_PC_REQ_PRIV@
 GREP = @GREP@
 HAVE_XF86VIDMODE = @HAVE_XF86VIDMODE@
+I915_CFLAGS = @I915_CFLAGS@
+I915_LIBS = @I915_LIBS@
 INDENT = @INDENT@
 INDENT_FLAGS = @INDENT_FLAGS@
 INSTALL = @INSTALL@
@@ -316,8 +318,6 @@ INSTALL_DATA = @INSTALL_DATA@
 INSTALL_PROGRAM = @INSTALL_PROGRAM@
 INSTALL_SCRIPT = @INSTALL_SCRIPT@
 INSTALL_STRIP_PROGRAM = @INSTALL_STRIP_PROGRAM@
-INTEL_CFLAGS = @INTEL_CFLAGS@
-INTEL_LIBS = @INTEL_LIBS@
 LD = @LD@
 LDFLAGS = @LDFLAGS@
 LD_NO_UNDEFINED = @LD_NO_UNDEFINED@
@@ -413,6 +413,8 @@ STRIP = @STRIP@
 SWR_AVX2_CXXFLAGS = @SWR_AVX2_CXXFLAGS@
 SWR_AVX_CXXFLAGS = @SWR_AVX_CXXFLAGS@
 SWR_CXX11_CXXFLAGS = @SWR_CXX11_CXXFLAGS@
+SWR_KNL_CXXFLAGS = @SWR_KNL_CXXFLAGS@
+SWR_SKX_CXXFLAGS = @SWR_SKX_CXXFLAGS@
 VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
 VALGRIND_LIBS = @VALGRIND_LIBS@
 VA_CFLAGS = @VA_CFLAGS@
@@ -420,8 +422,6 @@ VA_LIBS = @VA_LIBS@
 VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
 VA_MAJOR = @VA_MAJOR@
 VA_MINOR = @VA_MINOR@
-VC4_CFLAGS = @VC4_CFLAGS@
-VC4_LIBS = @VC4_LIBS@
 VDPAU_CFLAGS = @VDPAU_CFLAGS@
 VDPAU_LIBS = @VDPAU_LIBS@
 VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
@@ -435,6 +435,7 @@ VL_LIBS = @VL_LIBS@
 VULKAN_ICD_INSTALL_DIR = @VULKAN_ICD_INSTALL_DIR@
 WAYLAND_CFLAGS = @WAYLAND_CFLAGS@
 WAYLAND_LIBS = @WAYLAND_LIBS@
+WAYLAND_PROTOCOLS_DATADIR = @WAYLAND_PROTOCOLS_DATADIR@
 WAYLAND_SCANNER = @WAYLAND_SCANNER@
 WAYLAND_SCANNER_CFLAGS = @WAYLAND_SCANNER_CFLAGS@
 WAYLAND_SCANNER_LIBS = @WAYLAND_SCANNER_LIBS@
@@ -508,7 +509,6 @@ pdfdir = @pdfdir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
-runstatedir = @runstatedir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
@@ -525,6 +525,7 @@ C_SOURCES = \
 	compute_memory_pool.c \
 	compute_memory_pool.h \
 	eg_asm.c \
+	eg_debug.c \
 	eg_sq.h \
 	evergreen_compute.c \
 	evergreen_compute.h \
@@ -588,6 +589,9 @@ CXX_SOURCES = \
 	sb/sb_ssa_builder.cpp \
 	sb/sb_valtable.cpp
 
+R600_GENERATED_FILES = \
+	egd_tables.h
+
 GALLIUM_CFLAGS = \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/src \
@@ -649,11 +653,13 @@ GALLIUM_PIPE_LOADER_WINSYS_LIBS =  \
 	$(top_builddir)/src/gallium/winsys/sw/null/libws_null.la \
 	$(top_builddir)/src/gallium/winsys/sw/wrapper/libwsw.la \
 	$(am__append_2) $(am__append_3)
-AM_CFLAGS = $(GALLIUM_DRIVER_CFLAGS) $(RADEON_CFLAGS) \
+BUILT_SOURCES = $(R600_GENERATED_FILES)
+AM_CFLAGS = $(GALLIUM_DRIVER_CFLAGS) $(RADEON_CFLAGS) $(LIBELF_CFLAGS) \
 	-I$(top_srcdir)/src/amd/common $(am__append_4) $(am__append_5)
 AM_CXXFLAGS = \
 	$(GALLIUM_DRIVER_CXXFLAGS) \
 	$(RADEON_CFLAGS) \
+	$(LIBELF_CFLAGS) \
 	-I$(top_srcdir)/src/amd/common
 
 noinst_LTLIBRARIES = libr600.la
@@ -661,11 +667,16 @@ libr600_la_SOURCES = \
 	$(C_SOURCES) \
 	$(CXX_SOURCES)
 
+CLEANFILES = \
+	egd_tables.h
+
 EXTRA_DIST = \
+	egd_tables.py \
 	sb/notes.markdown \
 	sb/sb_bc_fmt_def.inc
 
-all: all-am
+all: $(BUILT_SOURCES)
+	$(MAKE) $(AM_MAKEFLAGS) all-am
 
 .SUFFIXES:
 .SUFFIXES: .c .cpp .lo .o .obj
@@ -757,6 +768,7 @@ distclean-compile:
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/compute_memory_pool.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eg_asm.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eg_debug.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/evergreen_compute.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/evergreen_hw_context.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/evergreen_state.Plo@am__quote@
@@ -935,10 +947,12 @@ distdir: $(DISTFILES)
 	  fi; \
 	done
 check-am: all-am
-check: check-am
+check: $(BUILT_SOURCES)
+	$(MAKE) $(AM_MAKEFLAGS) check-am
 all-am: Makefile $(LTLIBRARIES)
 installdirs:
-install: install-am
+install: $(BUILT_SOURCES)
+	$(MAKE) $(AM_MAKEFLAGS) install-am
 install-exec: install-exec-am
 install-data: install-data-am
 uninstall: uninstall-am
@@ -960,6 +974,7 @@ install-strip:
 mostlyclean-generic:
 
 clean-generic:
+	-test -z "$(CLEANFILES)" || rm -f $(CLEANFILES)
 
 distclean-generic:
 	-test -z "$(CONFIG_CLEAN_FILES)" || rm -f $(CONFIG_CLEAN_FILES)
@@ -970,6 +985,7 @@ distclean-generic:
 maintainer-clean-generic:
 	@echo "This command is intended for maintainers to use"
 	@echo "it deletes files that may require special tools to rebuild."
+	-test -z "$(BUILT_SOURCES)" || rm -f $(BUILT_SOURCES)
 clean: clean-am
 
 clean-am: clean-generic clean-libtool clean-noinstLTLIBRARIES \
@@ -1041,7 +1057,7 @@ ps-am:
 
 uninstall-am:
 
-.MAKE: install-am install-strip
+.MAKE: all check install install-am install-strip
 
 .PHONY: CTAGS GTAGS TAGS all all-am check check-am clean clean-generic \
 	clean-libtool clean-noinstLTLIBRARIES cscopelist-am ctags \
@@ -1059,6 +1075,10 @@ uninstall-am:
 
 .PRECIOUS: Makefile
 
+
+egd_tables.h: $(srcdir)/egd_tables.py $(srcdir)/evergreend.h
+	$(AM_V_at)$(MKDIR_P) $(@D)
+	$(AM_V_GEN) $(PYTHON2) $(srcdir)/egd_tables.py $(srcdir)/evergreend.h > $@
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

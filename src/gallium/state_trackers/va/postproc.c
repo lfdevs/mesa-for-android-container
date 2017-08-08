@@ -26,6 +26,7 @@
  **************************************************************************/
 
 #include "util/u_handle_table.h"
+#include "util/u_memory.h"
 
 #include "vl/vl_defines.h"
 #include "vl/vl_video_buffer.h"

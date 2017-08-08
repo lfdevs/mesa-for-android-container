@@ -62,15 +62,11 @@ nvc0_memory_barrier(struct pipe_context *pipe, unsigned flags)
 
    if (flags & PIPE_BARRIER_MAPPED_BUFFER) {
       for (i = 0; i < nvc0->num_vtxbufs; ++i) {
-         if (!nvc0->vtxbuf[i].buffer)
+         if (!nvc0->vtxbuf[i].buffer.resource && !nvc0->vtxbuf[i].is_user_buffer)
             continue;
-         if (nvc0->vtxbuf[i].buffer->flags & PIPE_RESOURCE_FLAG_MAP_PERSISTENT)
+         if (nvc0->vtxbuf[i].buffer.resource->flags & PIPE_RESOURCE_FLAG_MAP_PERSISTENT)
             nvc0->base.vbo_dirty = true;
       }
-
-      if (nvc0->idxbuf.buffer &&
-          nvc0->idxbuf.buffer->flags & PIPE_RESOURCE_FLAG_MAP_PERSISTENT)
-         nvc0->base.vbo_dirty = true;
 
       for (s = 0; s < 5 && !nvc0->cb_dirty; ++s) {
          uint32_t valid = nvc0->constbuf_valid[s];
@@ -147,9 +143,7 @@ nvc0_context_unreference_resources(struct nvc0_context *nvc0)
    util_unreference_framebuffer_state(&nvc0->framebuffer);
 
    for (i = 0; i < nvc0->num_vtxbufs; ++i)
-      pipe_resource_reference(&nvc0->vtxbuf[i].buffer, NULL);
-
-   pipe_resource_reference(&nvc0->idxbuf.buffer, NULL);
+      pipe_vertex_buffer_unreference(&nvc0->vtxbuf[i]);
 
    for (s = 0; s < 6; ++s) {
       for (i = 0; i < nvc0->num_textures[s]; ++i)
@@ -260,19 +254,12 @@ nvc0_invalidate_resource_storage(struct nouveau_context *ctx,
 
    if (res->target == PIPE_BUFFER) {
       for (i = 0; i < nvc0->num_vtxbufs; ++i) {
-         if (nvc0->vtxbuf[i].buffer == res) {
+         if (nvc0->vtxbuf[i].buffer.resource == res) {
             nvc0->dirty_3d |= NVC0_NEW_3D_ARRAYS;
             nouveau_bufctx_reset(nvc0->bufctx_3d, NVC0_BIND_3D_VTX);
             if (!--ref)
                return ref;
          }
-      }
-
-      if (nvc0->idxbuf.buffer == res) {
-         nvc0->dirty_3d |= NVC0_NEW_3D_IDXBUF;
-         nouveau_bufctx_reset(nvc0->bufctx_3d, NVC0_BIND_3D_IDX);
-         if (!--ref)
-            return ref;
       }
 
       for (s = 0; s < 6; ++s) {
@@ -474,7 +461,7 @@ nvc0_create(struct pipe_screen *pscreen, void *priv, unsigned ctxflags)
 
    memset(nvc0->tex_handles, ~0, sizeof(nvc0->tex_handles));
 
-   util_dynarray_init(&nvc0->global_residents);
+   util_dynarray_init(&nvc0->global_residents, NULL);
 
    return pipe;
 

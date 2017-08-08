@@ -146,6 +146,11 @@ nvc0_fragprog_validate(struct nvc0_context *nvc0)
       nvc0->state.early_z_forced = fp->fp.early_z;
       IMMED_NVC0(push, NVC0_3D(FORCE_EARLY_FRAGMENT_TESTS), fp->fp.early_z);
    }
+   if (fp->fp.post_depth_coverage != nvc0->state.post_depth_coverage) {
+      nvc0->state.post_depth_coverage = fp->fp.post_depth_coverage;
+      IMMED_NVC0(push, NVC0_3D(POST_DEPTH_COVERAGE),
+                 fp->fp.post_depth_coverage);
+   }
 
    BEGIN_NVC0(push, NVC0_3D(SP_SELECT(5)), 2);
    PUSH_DATA (push, 0x51);
@@ -220,18 +225,13 @@ nvc0_gmtyprog_validate(struct nvc0_context *nvc0)
 
    /* we allow GPs with no code for specifying stream output state only */
    if (gp && nvc0_program_validate(nvc0, gp) && gp->code_size) {
-      const bool gp_selects_layer = !!(gp->hdr[13] & (1 << 9));
-
       BEGIN_NVC0(push, NVC0_3D(MACRO_GP_SELECT), 1);
       PUSH_DATA (push, 0x41);
       BEGIN_NVC0(push, NVC0_3D(SP_START_ID(4)), 1);
       PUSH_DATA (push, gp->code_base);
       BEGIN_NVC0(push, NVC0_3D(SP_GPR_ALLOC(4)), 1);
       PUSH_DATA (push, gp->num_gprs);
-      BEGIN_NVC0(push, NVC0_3D(LAYER), 1);
-      PUSH_DATA (push, gp_selects_layer ? NVC0_3D_LAYER_USE_GP : 0);
    } else {
-      IMMED_NVC0(push, NVC0_3D(LAYER), 0);
       BEGIN_NVC0(push, NVC0_3D(MACRO_GP_SELECT), 1);
       PUSH_DATA (push, 0x40);
    }
@@ -249,6 +249,27 @@ nvc0_compprog_validate(struct nvc0_context *nvc0)
 
    BEGIN_NVC0(push, NVC0_CP(FLUSH), 1);
    PUSH_DATA (push, NVC0_COMPUTE_FLUSH_CODE);
+}
+
+void
+nvc0_layer_validate(struct nvc0_context *nvc0)
+{
+   struct nouveau_pushbuf *push = nvc0->base.pushbuf;
+   struct nvc0_program *last;
+   bool prog_selects_layer = false;
+
+   if (nvc0->gmtyprog)
+      last = nvc0->gmtyprog;
+   else if (nvc0->tevlprog)
+      last = nvc0->tevlprog;
+   else
+      last = nvc0->vertprog;
+
+   if (last)
+      prog_selects_layer = !!(last->hdr[13] & (1 << 9));
+
+   BEGIN_NVC0(push, NVC0_3D(LAYER), 1);
+   PUSH_DATA (push, prog_selects_layer ? NVC0_3D_LAYER_USE_GP : 0);
 }
 
 void

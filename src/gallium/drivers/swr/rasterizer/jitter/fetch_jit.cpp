@@ -89,13 +89,13 @@ struct FetchJit : public Builder
 
 Function* FetchJit::Create(const FETCH_COMPILE_STATE& fetchState)
 {
-    static std::size_t fetchNum = 0;
-
-    std::stringstream fnName("FetchShader", std::ios_base::in | std::ios_base::out | std::ios_base::ate);
-    fnName << fetchNum++;
+    std::stringstream fnName("FetchShader_", std::ios_base::in | std::ios_base::out | std::ios_base::ate);
+    fnName << ComputeCRC(0, &fetchState, sizeof(fetchState));
 
     Function*    fetch = Function::Create(JM()->mFetchShaderTy, GlobalValue::ExternalLinkage, fnName.str(), JM()->mpCurrentModule);
     BasicBlock*    entry = BasicBlock::Create(JM()->mContext, "entry", fetch);
+
+    fetch->getParent()->setModuleIdentifier(fetch->getName());
 
     IRB()->SetInsertPoint(entry);
 
@@ -590,64 +590,27 @@ void FetchJit::UnpackComponents(SWR_FORMAT format, Value* vInput, Value* result[
 // gather for odd component size formats
 // gather SIMD full pixels per lane then shift/mask to move each component to their
 // own vector
-void FetchJit::CreateGatherOddFormats(SWR_FORMAT format, Value* pMask, Value* pBase, Value* offsets, Value* result[4])
+void FetchJit::CreateGatherOddFormats(SWR_FORMAT format, Value* pMask, Value* pBase, Value* pOffsets, Value* pResult[4])
 {
     const SWR_FORMAT_INFO &info = GetFormatInfo(format);
 
     // only works if pixel size is <= 32bits
     SWR_ASSERT(info.bpp <= 32);
 
-    Value* gather = VUNDEF_I();
+	Value* pGather = GATHERDD(VIMMED1(0), pBase, pOffsets, pMask, C((char)1));
 
-    // assign defaults
     for (uint32_t comp = 0; comp < 4; ++comp)
     {
-        result[comp] = VIMMED1((int)info.defaults[comp]);
+        pResult[comp] = VIMMED1((int)info.defaults[comp]);
     }
 
-    // load the proper amount of data based on component size
-    PointerType* pLoadTy = nullptr;
-    switch (info.bpp)
-    {
-    case 8: pLoadTy = Type::getInt8PtrTy(JM()->mContext); break;
-    case 16: pLoadTy = Type::getInt16PtrTy(JM()->mContext); break;
-    case 24:
-    case 32: pLoadTy = Type::getInt32PtrTy(JM()->mContext); break;
-    default: SWR_INVALID("Invalid bpp: %d", info.bpp);
-    }
-
-    // allocate temporary memory for masked off lanes
-    Value* pTmp = ALLOCA(pLoadTy->getElementType());
-
-    // gather SIMD pixels
-    for (uint32_t e = 0; e < JM()->mVWidth; ++e)
-    {
-        Value* pElemOffset = VEXTRACT(offsets, C(e));
-        Value* pLoad = GEP(pBase, pElemOffset);
-        Value* pLaneMask = VEXTRACT(pMask, C(e));
-
-        pLoad = POINTER_CAST(pLoad, pLoadTy);
-
-        // mask in tmp pointer for disabled lanes
-        pLoad = SELECT(pLaneMask, pLoad, pTmp);
-
-        // load pixel
-        Value *val = LOAD(pLoad);
-
-        // zero extend to 32bit integer
-        val = INT_CAST(val, mInt32Ty, false);
-
-        // store in simd lane
-        gather = VINSERT(gather, val, C(e));
-    }
-
-    UnpackComponents(format, gather, result);
+    UnpackComponents(format, pGather, pResult);
 
     // cast to fp32
-    result[0] = BITCAST(result[0], mSimdFP32Ty);
-    result[1] = BITCAST(result[1], mSimdFP32Ty);
-    result[2] = BITCAST(result[2], mSimdFP32Ty);
-    result[3] = BITCAST(result[3], mSimdFP32Ty);
+    pResult[0] = BITCAST(pResult[0], mSimdFP32Ty);
+    pResult[1] = BITCAST(pResult[1], mSimdFP32Ty);
+    pResult[2] = BITCAST(pResult[2], mSimdFP32Ty);
+    pResult[3] = BITCAST(pResult[3], mSimdFP32Ty);
 }
 
 void FetchJit::ConvertFormat(SWR_FORMAT format, Value *texels[4])
@@ -860,7 +823,7 @@ void FetchJit::JitGatherVertices(const FETCH_COMPILE_STATE &fetchState,
         if (IsOddFormat((SWR_FORMAT)ied.Format))
         {
             Value* pResults[4];
-            CreateGatherOddFormats((SWR_FORMAT)ied.Format, pMask, pStreamBase, vOffsets, pResults);
+            CreateGatherOddFormats((SWR_FORMAT)ied.Format, vGatherMask, pStreamBase, vOffsets, pResults);
             ConvertFormat((SWR_FORMAT)ied.Format, pResults);
 
             for (uint32_t c = 0; c < 4; ++c)

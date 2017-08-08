@@ -60,6 +60,27 @@ static void kil_emit(const struct lp_build_tgsi_action *action,
 		     struct lp_build_emit_data *emit_data)
 {
 	struct si_shader_context *ctx = si_shader_context(bld_base);
+	LLVMBuilderRef builder = ctx->gallivm.builder;
+
+	if (ctx->postponed_kill) {
+		if (emit_data->inst->Instruction.Opcode == TGSI_OPCODE_KILL_IF) {
+			LLVMValueRef val;
+
+			/* Take the minimum kill value. This is the same as OR
+			 * between 2 kill values. If the value is negative,
+			 * the pixel will be killed.
+			 */
+			val = LLVMBuildLoad(builder, ctx->postponed_kill, "");
+			val = lp_build_emit_llvm_binary(bld_base, TGSI_OPCODE_MIN,
+							val, emit_data->args[0]);
+			LLVMBuildStore(builder, val, ctx->postponed_kill);
+		} else {
+			LLVMBuildStore(builder,
+				       LLVMConstReal(ctx->f32, -1),
+				       ctx->postponed_kill);
+		}
+		return;
+	}
 
 	if (emit_data->inst->Instruction.Opcode == TGSI_OPCODE_KILL_IF)
 		ac_build_kill(&ctx->ac, emit_data->args[0]);
@@ -701,8 +722,7 @@ static void emit_fdiv(const struct lp_build_tgsi_action *action,
 			      emit_data->args[0], emit_data->args[1], "");
 
 	/* Use v_rcp_f32 instead of precise division. */
-	if (HAVE_LLVM >= 0x0309 &&
-	    !LLVMIsConstant(emit_data->output[emit_data->chan]))
+	if (!LLVMIsConstant(emit_data->output[emit_data->chan]))
 		LLVMSetMetadata(emit_data->output[emit_data->chan],
 				ctx->fpmath_md_kind, ctx->fpmath_md_2p5_ulp);
 }
@@ -748,8 +768,7 @@ void si_shader_context_init_alu(struct lp_build_tgsi_context *bld_base)
 	bld_base->op_actions[TGSI_OPCODE_DSLT].emit = emit_dcmp;
 	bld_base->op_actions[TGSI_OPCODE_DSNE].emit = emit_dcmp;
 	bld_base->op_actions[TGSI_OPCODE_DRSQ].emit = build_tgsi_intrinsic_nomem;
-	bld_base->op_actions[TGSI_OPCODE_DRSQ].intr_name =
-		HAVE_LLVM >= 0x0309 ? "llvm.amdgcn.rsq.f64" : "llvm.AMDGPU.rsq.f64";
+	bld_base->op_actions[TGSI_OPCODE_DRSQ].intr_name = "llvm.amdgcn.rsq.f64";
 	bld_base->op_actions[TGSI_OPCODE_DSQRT].emit = build_tgsi_intrinsic_nomem;
 	bld_base->op_actions[TGSI_OPCODE_DSQRT].intr_name = "llvm.sqrt.f64";
 	bld_base->op_actions[TGSI_OPCODE_EX2].emit = build_tgsi_intrinsic_nomem;

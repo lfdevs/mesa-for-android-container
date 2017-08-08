@@ -26,6 +26,7 @@
 #include "main/accum.h"
 #include "main/enums.h"
 #include "main/state.h"
+#include "main/stencil.h"
 #include "main/bufferobj.h"
 #include "main/context.h"
 #include "swrast/swrast.h"
@@ -58,7 +59,7 @@ intel_check_blit_fragment_ops(struct gl_context * ctx, bool src_alpha_is_one)
    if (ctx->NewState)
       _mesa_update_state(ctx);
 
-   if (ctx->FragmentProgram._Enabled) {
+   if (_mesa_arb_fragment_program_enabled(ctx)) {
       DBG("fallback due to fragment program\n");
       return false;
    }
@@ -107,7 +108,7 @@ intel_check_blit_fragment_ops(struct gl_context * ctx, bool src_alpha_is_one)
       return false;
    }
 
-   if (ctx->Stencil._Enabled) {
+   if (_mesa_stencil_is_enabled(ctx)) {
       DBG("fallback due to image stencil\n");
       return false;
    }

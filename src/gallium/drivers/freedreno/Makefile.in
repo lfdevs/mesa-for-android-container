@@ -124,9 +124,10 @@ libfreedreno_la_LIBADD =
 am__objects_1 = freedreno_batch.lo freedreno_batch_cache.lo \
 	freedreno_context.lo freedreno_draw.lo freedreno_fence.lo \
 	freedreno_gmem.lo freedreno_program.lo freedreno_query.lo \
-	freedreno_query_hw.lo freedreno_query_sw.lo \
-	freedreno_resource.lo freedreno_screen.lo freedreno_state.lo \
-	freedreno_surface.lo freedreno_texture.lo freedreno_util.lo
+	freedreno_query_acc.lo freedreno_query_hw.lo \
+	freedreno_query_sw.lo freedreno_resource.lo \
+	freedreno_screen.lo freedreno_state.lo freedreno_surface.lo \
+	freedreno_texture.lo freedreno_util.lo
 am__dirstamp = $(am__leading_dot)dirstamp
 am__objects_2 = a2xx/disasm-a2xx.lo a2xx/fd2_blend.lo \
 	a2xx/fd2_compiler.lo a2xx/fd2_context.lo a2xx/fd2_draw.lo \
@@ -141,10 +142,11 @@ am__objects_4 = a4xx/fd4_blend.lo a4xx/fd4_context.lo a4xx/fd4_draw.lo \
 	a4xx/fd4_emit.lo a4xx/fd4_format.lo a4xx/fd4_gmem.lo \
 	a4xx/fd4_program.lo a4xx/fd4_query.lo a4xx/fd4_rasterizer.lo \
 	a4xx/fd4_screen.lo a4xx/fd4_texture.lo a4xx/fd4_zsa.lo
-am__objects_5 = a5xx/fd5_blend.lo a5xx/fd5_context.lo a5xx/fd5_draw.lo \
-	a5xx/fd5_emit.lo a5xx/fd5_format.lo a5xx/fd5_gmem.lo \
-	a5xx/fd5_program.lo a5xx/fd5_query.lo a5xx/fd5_rasterizer.lo \
-	a5xx/fd5_screen.lo a5xx/fd5_texture.lo a5xx/fd5_zsa.lo
+am__objects_5 = a5xx/fd5_blend.lo a5xx/fd5_compute.lo \
+	a5xx/fd5_context.lo a5xx/fd5_draw.lo a5xx/fd5_emit.lo \
+	a5xx/fd5_format.lo a5xx/fd5_gmem.lo a5xx/fd5_program.lo \
+	a5xx/fd5_query.lo a5xx/fd5_rasterizer.lo a5xx/fd5_screen.lo \
+	a5xx/fd5_texture.lo a5xx/fd5_zsa.lo
 am__objects_6 = ir3/disasm-a3xx.lo ir3/ir3.lo ir3/ir3_compiler_nir.lo \
 	ir3/ir3_compiler.lo ir3/ir3_cp.lo ir3/ir3_depth.lo \
 	ir3/ir3_group.lo ir3/ir3_legalize.lo ir3/ir3_nir.lo \
@@ -337,6 +339,8 @@ GL_PC_LIB_PRIV = @GL_PC_LIB_PRIV@
 GL_PC_REQ_PRIV = @GL_PC_REQ_PRIV@
 GREP = @GREP@
 HAVE_XF86VIDMODE = @HAVE_XF86VIDMODE@
+I915_CFLAGS = @I915_CFLAGS@
+I915_LIBS = @I915_LIBS@
 INDENT = @INDENT@
 INDENT_FLAGS = @INDENT_FLAGS@
 INSTALL = @INSTALL@
@@ -344,8 +348,6 @@ INSTALL_DATA = @INSTALL_DATA@
 INSTALL_PROGRAM = @INSTALL_PROGRAM@
 INSTALL_SCRIPT = @INSTALL_SCRIPT@
 INSTALL_STRIP_PROGRAM = @INSTALL_STRIP_PROGRAM@
-INTEL_CFLAGS = @INTEL_CFLAGS@
-INTEL_LIBS = @INTEL_LIBS@
 LD = @LD@
 LDFLAGS = @LDFLAGS@
 LD_NO_UNDEFINED = @LD_NO_UNDEFINED@
@@ -441,6 +443,8 @@ STRIP = @STRIP@
 SWR_AVX2_CXXFLAGS = @SWR_AVX2_CXXFLAGS@
 SWR_AVX_CXXFLAGS = @SWR_AVX_CXXFLAGS@
 SWR_CXX11_CXXFLAGS = @SWR_CXX11_CXXFLAGS@
+SWR_KNL_CXXFLAGS = @SWR_KNL_CXXFLAGS@
+SWR_SKX_CXXFLAGS = @SWR_SKX_CXXFLAGS@
 VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
 VALGRIND_LIBS = @VALGRIND_LIBS@
 VA_CFLAGS = @VA_CFLAGS@
@@ -448,8 +452,6 @@ VA_LIBS = @VA_LIBS@
 VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
 VA_MAJOR = @VA_MAJOR@
 VA_MINOR = @VA_MINOR@
-VC4_CFLAGS = @VC4_CFLAGS@
-VC4_LIBS = @VC4_LIBS@
 VDPAU_CFLAGS = @VDPAU_CFLAGS@
 VDPAU_LIBS = @VDPAU_LIBS@
 VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
@@ -463,6 +465,7 @@ VL_LIBS = @VL_LIBS@
 VULKAN_ICD_INSTALL_DIR = @VULKAN_ICD_INSTALL_DIR@
 WAYLAND_CFLAGS = @WAYLAND_CFLAGS@
 WAYLAND_LIBS = @WAYLAND_LIBS@
+WAYLAND_PROTOCOLS_DATADIR = @WAYLAND_PROTOCOLS_DATADIR@
 WAYLAND_SCANNER = @WAYLAND_SCANNER@
 WAYLAND_SCANNER_CFLAGS = @WAYLAND_SCANNER_CFLAGS@
 WAYLAND_SCANNER_LIBS = @WAYLAND_SCANNER_LIBS@
@@ -536,7 +539,6 @@ pdfdir = @pdfdir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
-runstatedir = @runstatedir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
@@ -569,6 +571,8 @@ C_SOURCES := \
 	freedreno_program.h \
 	freedreno_query.c \
 	freedreno_query.h \
+	freedreno_query_acc.c \
+	freedreno_query_acc.h \
 	freedreno_query_hw.c \
 	freedreno_query_hw.h \
 	freedreno_query_sw.c \
@@ -675,6 +679,8 @@ a5xx_SOURCES := \
 	a5xx/a5xx.xml.h \
 	a5xx/fd5_blend.c \
 	a5xx/fd5_blend.h \
+	a5xx/fd5_compute.c \
+	a5xx/fd5_compute.h \
 	a5xx/fd5_context.c \
 	a5xx/fd5_context.h \
 	a5xx/fd5_draw.c \
@@ -949,6 +955,8 @@ a5xx/$(DEPDIR)/$(am__dirstamp):
 	@$(MKDIR_P) a5xx/$(DEPDIR)
 	@: > a5xx/$(DEPDIR)/$(am__dirstamp)
 a5xx/fd5_blend.lo: a5xx/$(am__dirstamp) a5xx/$(DEPDIR)/$(am__dirstamp)
+a5xx/fd5_compute.lo: a5xx/$(am__dirstamp) \
+	a5xx/$(DEPDIR)/$(am__dirstamp)
 a5xx/fd5_context.lo: a5xx/$(am__dirstamp) \
 	a5xx/$(DEPDIR)/$(am__dirstamp)
 a5xx/fd5_draw.lo: a5xx/$(am__dirstamp) a5xx/$(DEPDIR)/$(am__dirstamp)
@@ -1033,6 +1041,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/freedreno_gmem.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/freedreno_program.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/freedreno_query.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/freedreno_query_acc.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/freedreno_query_hw.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/freedreno_query_sw.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/freedreno_resource.Plo@am__quote@
@@ -1080,6 +1089,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@a4xx/$(DEPDIR)/fd4_texture.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@a4xx/$(DEPDIR)/fd4_zsa.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@a5xx/$(DEPDIR)/fd5_blend.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@a5xx/$(DEPDIR)/fd5_compute.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@a5xx/$(DEPDIR)/fd5_context.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@a5xx/$(DEPDIR)/fd5_draw.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@a5xx/$(DEPDIR)/fd5_emit.Plo@am__quote@

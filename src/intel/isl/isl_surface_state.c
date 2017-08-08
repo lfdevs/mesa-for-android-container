@@ -254,7 +254,31 @@ isl_genX(surf_fill_state_s)(const struct isl_device *dev, void *state,
    if (info->surf->dim == ISL_SURF_DIM_1D)
       assert(!isl_format_is_compressed(info->view->format));
 
+   if (isl_format_is_compressed(info->surf->format)) {
+      /* You're not allowed to make a view of a compressed format with any
+       * format other than the surface format.  None of the userspace APIs
+       * allow for this directly and doing so would mess up a number of
+       * surface parameters such as Width, Height, and alignments.  Ideally,
+       * we'd like to assert that the two formats match.  However, we have an
+       * S3TC workaround that requires us to do reinterpretation.  So assert
+       * that they're at least the same bpb and block size.
+       */
+      MAYBE_UNUSED const struct isl_format_layout *surf_fmtl =
+         isl_format_get_layout(info->surf->format);
+      MAYBE_UNUSED const struct isl_format_layout *view_fmtl =
+         isl_format_get_layout(info->surf->format);
+      assert(surf_fmtl->bpb == view_fmtl->bpb);
+      assert(surf_fmtl->bw == view_fmtl->bw);
+      assert(surf_fmtl->bh == view_fmtl->bh);
+   }
+
    s.SurfaceFormat = info->view->format;
+
+#if GEN_GEN <= 5
+   s.ColorBufferComponentWriteDisables = info->write_disables;
+#else
+   assert(info->write_disables == 0);
+#endif
 
 #if GEN_IS_HASWELL
    s.IntegerSurfaceFormat = isl_format_has_int_channel(s.SurfaceFormat);
@@ -544,7 +568,7 @@ isl_genX(surf_fill_state_s)(const struct isl_device *dev, void *state,
       assert(!(info->view->usage & ISL_SURF_USAGE_STORAGE_BIT));
 
       struct isl_tile_info tile_info;
-      isl_surf_get_tile_info(dev, info->aux_surf, &tile_info);
+      isl_surf_get_tile_info(info->aux_surf, &tile_info);
       uint32_t pitch_in_tiles =
          info->aux_surf->row_pitch / tile_info.phys_extent_B.width;
 

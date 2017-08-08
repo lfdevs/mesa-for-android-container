@@ -67,74 +67,23 @@
 
 
 /**
- * This is very similar to vbo_all_varyings_in_vbos() but we are
- * only interested in per-vertex data.  See bug 38626.
- */
-static GLboolean
-all_varyings_in_vbos(const struct gl_vertex_array *arrays[])
-{
-   GLuint i;
-
-   for (i = 0; i < VERT_ATTRIB_MAX; i++)
-      if (arrays[i]->StrideB &&
-          !arrays[i]->InstanceDivisor &&
-          !_mesa_is_bufferobj(arrays[i]->BufferObj))
-	 return GL_FALSE;
-
-   return GL_TRUE;
-}
-
-
-/**
- * Basically, translate Mesa's index buffer information into
- * a pipe_index_buffer object.
- */
-static void
-setup_index_buffer(struct st_context *st,
-                   const struct _mesa_index_buffer *ib)
-{
-   struct pipe_index_buffer ibuffer;
-   struct gl_buffer_object *bufobj = ib->obj;
-
-   ibuffer.index_size = vbo_sizeof_ib_type(ib->type);
-
-   /* get/create the index buffer object */
-   if (_mesa_is_bufferobj(bufobj)) {
-      /* indices are in a real VBO */
-      ibuffer.buffer = st_buffer_object(bufobj)->buffer;
-      ibuffer.offset = pointer_to_offset(ib->ptr);
-      ibuffer.user_buffer = NULL;
-   }
-   else {
-      /* indices are in user space memory */
-      ibuffer.buffer = NULL;
-      ibuffer.offset = 0;
-      ibuffer.user_buffer = ib->ptr;
-   }
-
-   cso_set_index_buffer(st->cso_context, &ibuffer);
-}
-
-
-/**
  * Set the restart index.
  */
 static void
-setup_primitive_restart(struct gl_context *ctx,
-                        const struct _mesa_index_buffer *ib,
-                        struct pipe_draw_info *info)
+setup_primitive_restart(struct gl_context *ctx, struct pipe_draw_info *info)
 {
    if (ctx->Array._PrimitiveRestart) {
-      info->restart_index = _mesa_primitive_restart_index(ctx, ib->type);
+      unsigned index_size = info->index_size;
+
+      info->restart_index =
+         _mesa_primitive_restart_index(ctx, index_size);
 
       /* Enable primitive restart only when the restart index can have an
        * effect. This is required for correctness in radeonsi VI support.
        * Other hardware may also benefit from taking a faster, non-restart path
        * when possible.
        */
-      if ((ib->type == GL_UNSIGNED_INT) ||
-          (ib->type == GL_UNSIGNED_SHORT && info->restart_index <= 0xffff) ||
-          (ib->type == GL_UNSIGNED_BYTE && info->restart_index <= 0xff))
+      if (index_size == 4 || info->restart_index < (1 << (index_size * 8)))
          info->primitive_restart = true;
    }
 }
@@ -156,13 +105,30 @@ translate_prim(const struct gl_context *ctx, unsigned prim)
    return prim;
 }
 
+static inline void
+prepare_draw(struct st_context *st, struct gl_context *ctx)
+{
+   /* Mesa core state should have been validated already */
+   assert(ctx->NewState == 0x0);
+
+   if (unlikely(!st->bitmap.cache.empty))
+      st_flush_bitmap_cache(st);
+
+   st_invalidate_readpix_cache(st);
+
+   /* Validate state. */
+   if ((st->dirty | ctx->NewDriverState) & ST_PIPELINE_RENDER_STATE_MASK ||
+       st->gfx_shaders_may_be_dirty) {
+      st_validate_state(st, ST_PIPELINE_RENDER);
+   }
+}
 
 /**
  * This function gets plugged into the VBO module and is called when
  * we have something to render.
  * Basically, translate the information into the format expected by gallium.
  */
-void
+static void
 st_draw_vbo(struct gl_context *ctx,
             const struct _mesa_prim *prims,
             GLuint nr_prims,
@@ -176,48 +142,50 @@ st_draw_vbo(struct gl_context *ctx,
 {
    struct st_context *st = st_context(ctx);
    struct pipe_draw_info info;
-   const struct gl_vertex_array **arrays = ctx->Array._DrawArrays;
    unsigned i;
+   unsigned start = 0;
 
-   /* Mesa core state should have been validated already */
-   assert(ctx->NewState == 0x0);
+   prepare_draw(st, ctx);
 
-   st_flush_bitmap_cache(st);
-   st_invalidate_readpix_cache(st);
-
-   /* Validate state. */
-   if ((st->dirty | ctx->NewDriverState) & ST_PIPELINE_RENDER_STATE_MASK ||
-       st->gfx_shaders_may_be_dirty) {
-      st_validate_state(st, ST_PIPELINE_RENDER);
-   }
-
-   if (st->vertex_array_out_of_memory) {
+   if (st->vertex_array_out_of_memory)
       return;
-   }
 
-   util_draw_init_info(&info);
+   /* Initialize pipe_draw_info. */
+   info.primitive_restart = false;
+   info.vertices_per_patch = ctx->TessCtrlProgram.patch_vertices;
+   info.indirect = NULL;
+   info.count_from_stream_output = NULL;
 
    if (ib) {
+      struct gl_buffer_object *bufobj = ib->obj;
+
       /* Get index bounds for user buffers. */
-      if (!index_bounds_valid)
-         if (!all_varyings_in_vbos(arrays))
-            vbo_get_minmax_indices(ctx, prims, ib, &min_index, &max_index,
-                                   nr_prims);
-
-      setup_index_buffer(st, ib);
-
-      info.indexed = TRUE;
-      if (min_index != ~0U && max_index != ~0U) {
-         info.min_index = min_index;
-         info.max_index = max_index;
+      if (!index_bounds_valid && st->draw_needs_minmax_index) {
+         vbo_get_minmax_indices(ctx, prims, ib, &min_index, &max_index,
+                                nr_prims);
       }
 
-      /* The VBO module handles restart for the non-indexed GLDrawArrays
-       * so we only set these fields for indexed drawing:
-       */
-      setup_primitive_restart(ctx, ib, &info);
+      info.index_size = ib->index_size;
+      info.min_index = min_index;
+      info.max_index = max_index;
+
+      if (_mesa_is_bufferobj(bufobj)) {
+         /* indices are in a real VBO */
+         info.has_user_indices = false;
+         info.index.resource = st_buffer_object(bufobj)->buffer;
+         start = pointer_to_offset(ib->ptr) / info.index_size;
+      } else {
+         /* indices are in user space memory */
+         info.has_user_indices = true;
+         info.index.user = ib->ptr;
+      }
+
+      setup_primitive_restart(ctx, &info);
    }
    else {
+      info.index_size = 0;
+      info.has_user_indices = false;
+
       /* Transform feedback drawing is always non-indexed. */
       /* Set info.count_from_stream_output. */
       if (tfb_vertcount) {
@@ -231,11 +199,10 @@ st_draw_vbo(struct gl_context *ctx,
    /* do actual drawing */
    for (i = 0; i < nr_prims; i++) {
       info.mode = translate_prim(ctx, prims[i].mode);
-      info.start = prims[i].start;
+      info.start = start + prims[i].start;
       info.count = prims[i].count;
       info.start_instance = prims[i].base_instance;
       info.instance_count = prims[i].num_instances;
-      info.vertices_per_patch = ctx->TessCtrlProgram.patch_vertices;
       info.index_bias = prims[i].basevertex;
       info.drawid = prims[i].draw_id;
       if (!ib) {
@@ -244,23 +211,15 @@ st_draw_vbo(struct gl_context *ctx,
       }
 
       if (ST_DEBUG & DEBUG_DRAW) {
-         debug_printf("st/draw: mode %s  start %u  count %u  indexed %d\n",
+         debug_printf("st/draw: mode %s  start %u  count %u  index_size %d\n",
                       u_prim_name(info.mode),
                       info.start,
                       info.count,
-                      info.indexed);
+                      info.index_size);
       }
 
-      if (info.count_from_stream_output) {
-         cso_draw_vbo(st->cso_context, &info);
-      }
-      else if (info.primitive_restart) {
-         /* don't trim, restarts might be inside index list */
-         cso_draw_vbo(st->cso_context, &info);
-      }
-      else if (u_trim_pipe_prim(prims[i].mode, &info.count)) {
-         cso_draw_vbo(st->cso_context, &info);
-      }
+      /* Don't call u_trim_pipe_prim. Drivers should do it if they need it. */
+      cso_draw_vbo(st->cso_context, &info);
    }
 }
 
@@ -277,62 +236,61 @@ st_indirect_draw_vbo(struct gl_context *ctx,
 {
    struct st_context *st = st_context(ctx);
    struct pipe_draw_info info;
+   struct pipe_draw_indirect_info indirect;
 
-   /* Mesa core state should have been validated already */
-   assert(ctx->NewState == 0x0);
    assert(stride);
+   prepare_draw(st, ctx);
 
-   st_invalidate_readpix_cache(st);
-
-   /* Validate state. */
-   if ((st->dirty | ctx->NewDriverState) & ST_PIPELINE_RENDER_STATE_MASK ||
-       st->gfx_shaders_may_be_dirty) {
-      st_validate_state(st, ST_PIPELINE_RENDER);
-   }
-
-   if (st->vertex_array_out_of_memory) {
+   if (st->vertex_array_out_of_memory)
       return;
-   }
 
+   memset(&indirect, 0, sizeof(indirect));
    util_draw_init_info(&info);
+   info.start = 0; /* index offset / index size */
 
    if (ib) {
-      setup_index_buffer(st, ib);
+      struct gl_buffer_object *bufobj = ib->obj;
 
-      info.indexed = TRUE;
+      /* indices are always in a real VBO */
+      assert(_mesa_is_bufferobj(bufobj));
+
+      info.index_size = ib->index_size;
+      info.index.resource = st_buffer_object(bufobj)->buffer;
+      info.start = pointer_to_offset(ib->ptr) / info.index_size;
 
       /* Primitive restart is not handled by the VBO module in this case. */
-      setup_primitive_restart(ctx, ib, &info);
+      setup_primitive_restart(ctx, &info);
    }
 
    info.mode = translate_prim(ctx, mode);
    info.vertices_per_patch = ctx->TessCtrlProgram.patch_vertices;
-   info.indirect = st_buffer_object(indirect_data)->buffer;
-   info.indirect_offset = indirect_offset;
+   info.indirect = &indirect;
+   indirect.buffer = st_buffer_object(indirect_data)->buffer;
+   indirect.offset = indirect_offset;
 
    if (ST_DEBUG & DEBUG_DRAW) {
-      debug_printf("st/draw indirect: mode %s drawcount %d indexed %d\n",
+      debug_printf("st/draw indirect: mode %s drawcount %d index_size %d\n",
                    u_prim_name(info.mode),
                    draw_count,
-                   info.indexed);
+                   info.index_size);
    }
 
    if (!st->has_multi_draw_indirect) {
       int i;
 
       assert(!indirect_params);
-      info.indirect_count = 1;
+      indirect.draw_count = 1;
       for (i = 0; i < draw_count; i++) {
          info.drawid = i;
          cso_draw_vbo(st->cso_context, &info);
-         info.indirect_offset += stride;
+         indirect.offset += stride;
       }
    } else {
-      info.indirect_count = draw_count;
-      info.indirect_stride = stride;
+      indirect.draw_count = draw_count;
+      indirect.stride = stride;
       if (indirect_params) {
-         info.indirect_params = st_buffer_object(indirect_params)->buffer;
-         info.indirect_params_offset = indirect_params_offset;
+         indirect.indirect_draw_count = st_buffer_object(indirect_params)->buffer;
+         indirect.indirect_draw_count_offset = indirect_params_offset;
       }
       cso_draw_vbo(st->cso_context, &info);
    }
@@ -398,8 +356,8 @@ st_draw_quad(struct st_context *st,
 
    u_upload_alloc(st->pipe->stream_uploader, 0,
                   4 * sizeof(struct st_util_vertex), 4,
-                  &vb.buffer_offset, &vb.buffer, (void **) &verts);
-   if (!vb.buffer) {
+                  &vb.buffer_offset, &vb.buffer.resource, (void **) &verts);
+   if (!vb.buffer.resource) {
       return false;
    }
 
@@ -466,7 +424,7 @@ st_draw_quad(struct st_context *st,
       cso_draw_arrays(st->cso_context, PIPE_PRIM_TRIANGLE_FAN, 0, 4);
    }
 
-   pipe_resource_reference(&vb.buffer, NULL);
+   pipe_resource_reference(&vb.buffer.resource, NULL);
 
    return true;
 }

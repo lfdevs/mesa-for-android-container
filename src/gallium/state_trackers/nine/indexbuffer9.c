@@ -49,17 +49,13 @@ NineIndexBuffer9_ctor( struct NineIndexBuffer9 *This,
     if (FAILED(hr))
         return hr;
 
-    This->buffer.buffer = NULL;
-    This->buffer.offset = 0;
-
     switch (pDesc->Format) {
-    case D3DFMT_INDEX16: This->buffer.index_size = 2; break;
-    case D3DFMT_INDEX32: This->buffer.index_size = 4; break;
+    case D3DFMT_INDEX16: This->index_size = 2; break;
+    case D3DFMT_INDEX32: This->index_size = 4; break;
     default:
         user_assert(!"Invalid index format.", D3DERR_INVALIDCALL);
         break;
     }
-    This->buffer.user_buffer = NULL;
 
     pDesc->Type = D3DRTYPE_INDEXBUFFER;
     This->desc = *pDesc;
@@ -73,12 +69,11 @@ NineIndexBuffer9_dtor( struct NineIndexBuffer9 *This )
     NineBuffer9_dtor(&This->base);
 }
 
-const struct pipe_index_buffer *
-NineIndexBuffer9_GetBuffer( struct NineIndexBuffer9 *This )
+struct pipe_resource *
+NineIndexBuffer9_GetBuffer( struct NineIndexBuffer9 *This, unsigned *offset )
 {
     /* The resource may change */
-    This->buffer.buffer = NineBuffer9_GetResource(&This->base, &This->buffer.offset);
-    return &This->buffer;
+    return NineBuffer9_GetResource(&This->base, offset);
 }
 
 HRESULT NINE_WINAPI

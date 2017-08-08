@@ -41,7 +41,7 @@ read_thread_local_id(struct lower_intrinsics_state *state)
 {
    nir_builder *b = &state->builder;
    nir_shader *nir = state->nir;
-   const unsigned *sizes = nir->info->cs.local_size;
+   const unsigned *sizes = nir->info.cs.local_size;
    const unsigned group_size = sizes[0] * sizes[1] * sizes[2];
 
    /* Some programs have local_size dimensions so small that the thread local
@@ -88,10 +88,10 @@ lower_cs_intrinsics_convert_block(struct lower_intrinsics_state *state,
          /* We construct the local invocation index from:
           *
           *    gl_LocalInvocationIndex =
-          *       cs_thread_local_id + channel_num;
+          *       cs_thread_local_id + subgroup_invocation;
           */
          nir_ssa_def *thread_local_id = read_thread_local_id(state);
-         nir_ssa_def *channel = nir_load_channel_num(b);
+         nir_ssa_def *channel = nir_load_subgroup_invocation(b);
          sysval = nir_iadd(b, channel, thread_local_id);
          break;
       }
@@ -111,7 +111,7 @@ lower_cs_intrinsics_convert_block(struct lower_intrinsics_state *state,
           *        (gl_WorkGroupSize.x * gl_WorkGroupSize.y)) %
           *       gl_WorkGroupSize.z;
           */
-         unsigned *size = nir->info->cs.local_size;
+         unsigned *size = nir->info.cs.local_size;
 
          nir_ssa_def *local_index = nir_load_local_invocation_index(b);
 

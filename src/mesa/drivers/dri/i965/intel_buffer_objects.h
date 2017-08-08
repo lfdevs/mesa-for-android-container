@@ -70,6 +70,17 @@ struct intel_buffer_object
    uint32_t gpu_active_start;
    uint32_t gpu_active_end;
 
+   /** @{
+    * Tracking for what range of the BO may contain valid data.
+    *
+    * Users may create a large buffer object and only fill part of it
+    * with valid data.  This is a conservative estimate of what part
+    * of the buffer contains valid data that we have to preserve.
+    */
+   uint32_t valid_data_start;
+   uint32_t valid_data_end;
+   /** @} */
+
    /**
     * If we've avoided stalls/blits using the active tracking, flag the buffer
     * for (occasional) stalling in the future to avoid getting stuck in a
@@ -83,9 +94,10 @@ struct intel_buffer_object
 /* Get the bm buffer associated with a GL bufferobject:
  */
 struct brw_bo *intel_bufferobj_buffer(struct brw_context *brw,
-                                     struct intel_buffer_object *obj,
-                                     uint32_t offset,
-                                     uint32_t size);
+                                      struct intel_buffer_object *obj,
+                                      uint32_t offset,
+                                      uint32_t size,
+                                      bool write);
 
 void intel_upload_data(struct brw_context *brw,
                        const void *data,

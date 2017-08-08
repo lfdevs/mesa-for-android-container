@@ -336,7 +336,7 @@ clGetDeviceInfo(cl_device_id d_dev, cl_device_info param,
       break;
 
    case CL_DEVICE_HOST_UNIFIED_MEMORY:
-      buf.as_scalar<cl_bool>() = CL_TRUE;
+      buf.as_scalar<cl_bool>() = dev.has_unified_memory();
       break;
 
    case CL_DEVICE_NATIVE_VECTOR_WIDTH_CHAR:

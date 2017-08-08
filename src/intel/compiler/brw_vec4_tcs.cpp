@@ -50,18 +50,6 @@ vec4_tcs_visitor::vec4_tcs_visitor(const struct brw_compiler *compiler,
 
 
 void
-vec4_tcs_visitor::nir_setup_system_value_intrinsic(nir_intrinsic_instr *instr)
-{
-}
-
-dst_reg *
-vec4_tcs_visitor::make_reg_for_system_value(int location)
-{
-   return NULL;
-}
-
-
-void
 vec4_tcs_visitor::setup_payload()
 {
    int reg = 0;
@@ -95,9 +83,9 @@ vec4_tcs_visitor::emit_prolog()
     * HS instance dispatched will only have its bottom half doing real
     * work, and so we need to disable the upper half:
     */
-   if (nir->info->tess.tcs_vertices_out % 2) {
+   if (nir->info.tess.tcs_vertices_out % 2) {
       emit(CMP(dst_null_d(), invocation_id,
-               brw_imm_ud(nir->info->tess.tcs_vertices_out),
+               brw_imm_ud(nir->info.tess.tcs_vertices_out),
                BRW_CONDITIONAL_L));
 
       /* Matching ENDIF is in emit_thread_end() */
@@ -112,7 +100,7 @@ vec4_tcs_visitor::emit_thread_end()
    vec4_instruction *inst;
    current_annotation = "thread end";
 
-   if (nir->info->tess.tcs_vertices_out % 2) {
+   if (nir->info.tess.tcs_vertices_out % 2) {
       emit(BRW_OPCODE_ENDIF);
    }
 
@@ -402,18 +390,18 @@ brw_compile_tcs(const struct brw_compiler *compiler,
    const bool is_scalar = compiler->scalar_stage[MESA_SHADER_TESS_CTRL];
 
    nir_shader *nir = nir_shader_clone(mem_ctx, src_shader);
-   nir->info->outputs_written = key->outputs_written;
-   nir->info->patch_outputs_written = key->patch_outputs_written;
+   nir->info.outputs_written = key->outputs_written;
+   nir->info.patch_outputs_written = key->patch_outputs_written;
 
    struct brw_vue_map input_vue_map;
-   brw_compute_vue_map(devinfo, &input_vue_map, nir->info->inputs_read,
-                       nir->info->separate_shader);
+   brw_compute_vue_map(devinfo, &input_vue_map, nir->info.inputs_read,
+                       nir->info.separate_shader);
    brw_compute_tess_vue_map(&vue_prog_data->vue_map,
-                            nir->info->outputs_written,
-                            nir->info->patch_outputs_written);
+                            nir->info.outputs_written,
+                            nir->info.patch_outputs_written);
 
    nir = brw_nir_apply_sampler_key(nir, compiler, &key->tex, is_scalar);
-   brw_nir_lower_vue_inputs(nir, is_scalar, &input_vue_map);
+   brw_nir_lower_vue_inputs(nir, &input_vue_map);
    brw_nir_lower_tcs_outputs(nir, &vue_prog_data->vue_map,
                              key->tes_primitive_mode);
    if (key->quads_workaround)
@@ -422,9 +410,9 @@ brw_compile_tcs(const struct brw_compiler *compiler,
    nir = brw_postprocess_nir(nir, compiler, is_scalar);
 
    if (is_scalar)
-      prog_data->instances = DIV_ROUND_UP(nir->info->tess.tcs_vertices_out, 8);
+      prog_data->instances = DIV_ROUND_UP(nir->info.tess.tcs_vertices_out, 8);
    else
-      prog_data->instances = DIV_ROUND_UP(nir->info->tess.tcs_vertices_out, 2);
+      prog_data->instances = DIV_ROUND_UP(nir->info.tess.tcs_vertices_out, 2);
 
    /* Compute URB entry size.  The maximum allowed URB entry size is 32k.
     * That divides up as follows:
@@ -443,7 +431,7 @@ brw_compile_tcs(const struct brw_compiler *compiler,
    unsigned output_size_bytes = 0;
    /* Note that the patch header is counted in num_per_patch_slots. */
    output_size_bytes += num_per_patch_slots * 16;
-   output_size_bytes += nir->info->tess.tcs_vertices_out *
+   output_size_bytes += nir->info.tess.tcs_vertices_out *
                         num_per_vertex_slots * 16;
 
    assert(output_size_bytes >= 1);
@@ -452,6 +440,13 @@ brw_compile_tcs(const struct brw_compiler *compiler,
 
    /* URB entry sizes are stored as a multiple of 64 bytes. */
    vue_prog_data->urb_entry_size = ALIGN(output_size_bytes, 64) / 64;
+
+   /* On Cannonlake software shall not program an allocation size that
+    * specifies a size that is a multiple of 3 64B (512-bit) cachelines.
+    */
+   if (devinfo->gen == 10 &&
+       vue_prog_data->urb_entry_size % 3 == 0)
+      vue_prog_data->urb_entry_size++;
 
    /* HS does not use the usual payload pushing from URB to GRFs,
     * because we don't have enough registers for a full-size payload, and
@@ -485,9 +480,9 @@ brw_compile_tcs(const struct brw_compiler *compiler,
       if (unlikely(INTEL_DEBUG & DEBUG_TCS)) {
          g.enable_debug(ralloc_asprintf(mem_ctx,
                                         "%s tessellation control shader %s",
-                                        nir->info->label ? nir->info->label
+                                        nir->info.label ? nir->info.label
                                                         : "unnamed",
-                                        nir->info->name));
+                                        nir->info.name));
       }
 
       g.generate_code(v.cfg, 8);

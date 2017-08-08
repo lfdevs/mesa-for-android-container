@@ -189,6 +189,7 @@ struct r600_framebuffer {
 	bool cb0_is_integer;
 	bool is_msaa_resolve;
 	bool dual_src_blend;
+	bool do_update_surf_dirtiness;
 };
 
 struct r600_sample_mask {
@@ -508,9 +509,6 @@ struct r600_context {
 	 * the GPU addresses are updated. */
 	struct list_head		texture_buffers;
 
-	/* Index buffer. */
-	struct pipe_index_buffer	index_buffer;
-
 	/* Last draw state (-1 = unset). */
 	enum pipe_prim_type		last_primitive_type; /* Last primitive type used in draw_vbo. */
 	enum pipe_prim_type		current_rast_prim; /* primitive type after TES, GS */
@@ -526,6 +524,13 @@ struct r600_context {
 	struct r600_pipe_shader_selector *last_tcs;
 	unsigned last_num_tcs_input_cp;
 	unsigned lds_alloc;
+
+	/* Debug state. */
+	bool			is_debug;
+	struct radeon_saved_cs	last_gfx;
+	struct r600_resource	*last_trace_buf;
+	struct r600_resource	*trace_buf;
+	unsigned		trace_id;
 };
 
 static inline void r600_emit_command_buffer(struct radeon_winsys_cs *cs,
@@ -920,10 +925,6 @@ static inline void radeon_set_ctl_const(struct radeon_winsys_cs *cs, unsigned re
 /*
  * common helpers
  */
-static inline uint32_t S_FIXED(float value, uint32_t frac_bits)
-{
-	return value * (1 << frac_bits);
-}
 
 /* 12.4 fixed-point */
 static inline unsigned r600_pack_float_12p4(float x)
@@ -954,4 +955,8 @@ static inline unsigned r600_get_flush_flags(enum r600_coherency coher)
 #define     V_028A6C_OUTPRIM_TYPE_TRISTRIP             2
 
 unsigned r600_conv_prim_to_gs_out(unsigned mode);
+
+void eg_trace_emit(struct r600_context *rctx);
+void eg_dump_debug_state(struct pipe_context *ctx, FILE *f,
+			 unsigned flags);
 #endif

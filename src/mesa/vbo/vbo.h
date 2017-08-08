@@ -69,7 +69,7 @@ struct _mesa_prim {
  */
 struct _mesa_index_buffer {
    GLuint count;
-   GLenum type;
+   unsigned index_size;
    struct gl_buffer_object *obj;
    const void *ptr;
 };
@@ -78,7 +78,6 @@ struct _mesa_index_buffer {
 
 GLboolean _vbo_CreateContext( struct gl_context *ctx );
 void _vbo_DestroyContext( struct gl_context *ctx );
-void _vbo_InvalidateState( struct gl_context *ctx, GLbitfield new_state );
 
 
 void
@@ -91,7 +90,7 @@ vbo_initialize_save_dispatch(const struct gl_context *ctx,
 
 void vbo_exec_FlushVertices(struct gl_context *ctx, GLuint flags);
 void vbo_save_SaveFlushVertices(struct gl_context *ctx);
-GLboolean vbo_save_NotifyBegin(struct gl_context *ctx, GLenum mode);
+void vbo_save_NotifyBegin(struct gl_context *ctx, GLenum mode);
 void vbo_save_NewList(struct gl_context *ctx, GLuint list, GLenum mode);
 void vbo_save_EndList(struct gl_context *ctx);
 void vbo_save_BeginCallList(struct gl_context *ctx, struct gl_display_list *list);

@@ -144,8 +144,7 @@ static GLuint get_depth_z16(const struct radeon_renderbuffer *rrb,
 #endif
 
 static void
-radeon_map_renderbuffer_s8z24(struct gl_context *ctx,
-		       struct gl_renderbuffer *rb,
+radeon_map_renderbuffer_s8z24(struct gl_renderbuffer *rb,
 		       GLuint x, GLuint y, GLuint w, GLuint h,
 		       GLbitfield mode,
 		       GLubyte **out_map,
@@ -183,8 +182,7 @@ radeon_map_renderbuffer_s8z24(struct gl_context *ctx,
 }
 
 static void
-radeon_map_renderbuffer_z16(struct gl_context *ctx,
-			    struct gl_renderbuffer *rb,
+radeon_map_renderbuffer_z16(struct gl_renderbuffer *rb,
 			    GLuint x, GLuint y, GLuint w, GLuint h,
 			    GLbitfield mode,
 			    GLubyte **out_map,
@@ -307,12 +305,12 @@ radeon_map_renderbuffer(struct gl_context *ctx,
 
    if ((rmesa->radeonScreen->chip_flags & RADEON_CHIPSET_DEPTH_ALWAYS_TILED) && !rrb->has_surface) {
        if (rb->Format == MESA_FORMAT_Z24_UNORM_S8_UINT || rb->Format == MESA_FORMAT_Z24_UNORM_X8_UINT) {
-	   radeon_map_renderbuffer_s8z24(ctx, rb, x, y, w, h,
+	   radeon_map_renderbuffer_s8z24(rb, x, y, w, h,
 					 mode, out_map, out_stride);
 	   return;
        }
        if (rb->Format == MESA_FORMAT_Z_UNORM16) {
-	   radeon_map_renderbuffer_z16(ctx, rb, x, y, w, h,
+	   radeon_map_renderbuffer_z16(rb, x, y, w, h,
 				       mode, out_map, out_stride);
 	   return;
        }
@@ -621,8 +619,11 @@ radeon_alloc_window_storage(struct gl_context * ctx, struct gl_renderbuffer *rb,
 
 /** Dummy function for gl_renderbuffer::AllocStorage() */
 static GLboolean
-radeon_nop_alloc_storage(struct gl_context * ctx, struct gl_renderbuffer *rb,
-			 GLenum internalFormat, GLuint width, GLuint height)
+radeon_nop_alloc_storage(struct gl_context * ctx,
+			 UNUSED struct gl_renderbuffer *rb,
+			 UNUSED GLenum internalFormat,
+			 UNUSED GLuint width,
+			 UNUSED GLuint height)
 {
    _mesa_problem(ctx, "radeon_op_alloc_storage should never be called.");
    return GL_FALSE;

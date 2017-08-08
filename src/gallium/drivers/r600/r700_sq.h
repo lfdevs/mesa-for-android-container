@@ -543,4 +543,34 @@
 #define   G_SQ_TEX_WORD2_SRC_SEL_W(x)                                (((x) >> 29) & 0x7)
 #define   C_SQ_TEX_WORD2_SRC_SEL_W                                   0x1FFFFFFF
 
+#define P_SQ_MEM_RD_WORD0
+#define   S_SQ_MEM_RD_WORD0_MEM_INST(x)                              (((x) & 0x1F) << 0)
+#define   S_SQ_MEM_RD_WORD0_ELEM_SIZE(x)                             (((x) & 0x3) << 5)
+#define   S_SQ_MEM_RD_WORD0_FETCH_WHOLE_QUAD(x)                      (((x) & 0x1) << 7)
+#define   S_SQ_MEM_RD_WORD0_MEM_OP(x)                                (((x) & 0x7) << 8)
+#define   S_SQ_MEM_RD_WORD0_UNCACHED(x)                              (((x) & 0x1) << 11)
+#define   S_SQ_MEM_RD_WORD0_INDEXED(x)                               (((x) & 0x1) << 12)
+#define   S_SQ_MEM_RD_WORD0_SRC_SEL_Y(x)                             (((x) & 0x3) << 13)
+#define   S_SQ_MEM_RD_WORD0_SRC_GPR(x)                               (((x) & 0x7F) << 16)
+#define   S_SQ_MEM_RD_WORD0_SRC_REL(x)                               (((x) & 0x1) << 23)
+#define   S_SQ_MEM_RD_WORD0_SRC_SEL_X(x)                             (((x) & 0x3) << 24)
+#define   S_SQ_MEM_RD_WORD0_BURST_COUNT(x)                           (((x) & 0xF) << 26)
+#define   S_SQ_MEM_RD_WORD0_LDS_REQ(x)                               (((x) & 0x1) << 30)
+#define   S_SQ_MEM_RD_WORD0_COALESCED_READ(x)                        (((x) & 0x1) << 31)
+#define P_SQ_MEM_RD_WORD1
+#define   S_SQ_MEM_RD_WORD1_DST_GPR(x)                               (((x) & 0x7f) << 0)
+#define   S_SQ_MEM_RD_WORD1_DST_REL(x)                               (((x) & 0x1) << 7)
+#define   S_SQ_MEM_RD_WORD1_DST_SEL_X(x)                             (((x) & 0x7) << 9)
+#define   S_SQ_MEM_RD_WORD1_DST_SEL_Y(x)                             (((x) & 0x7) << 12)
+#define   S_SQ_MEM_RD_WORD1_DST_SEL_Z(x)                             (((x) & 0x7) << 15)
+#define   S_SQ_MEM_RD_WORD1_DST_SEL_W(x)                             (((x) & 0x7) << 18)
+#define   S_SQ_MEM_RD_WORD1_DATA_FORMAT(x)                           (((x) & 0x3F) << 22)
+#define   S_SQ_MEM_RD_WORD1_NUM_FORMAT_ALL(x)                        (((x) & 0x3) << 28)
+#define   S_SQ_MEM_RD_WORD1_FORMAT_COMP_ALL(x)                       (((x) & 0x1) << 30)
+#define   S_SQ_MEM_RD_WORD1_SRF_MODE_ALL(x)                          (((x) & 0x1) << 31)
+#define P_SQ_MEM_RD_WORD2
+#define   S_SQ_MEM_RD_WORD2_ARRAY_BASE(x)                            (((x) & 0x1FFF) << 0)
+#define   S_SQ_MEM_RD_WORD2_ENDIAN_SWAP(x)                           (((x) & 0x3) << 16)
+#define   S_SQ_MEM_RD_WORD2_ARRAY_SIZE(x)                            (((x) & 0xFFF) << 20)
+
 #endif

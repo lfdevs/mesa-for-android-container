@@ -1,3 +1,12 @@
+mesa (17.2.0~rc3-1) experimental; urgency=medium
+
+  * New upstream release candidate.
+  * control: Add wayland-protocols (>= 1.9) to Build-Depends.
+  * control: Bump libdrm-dev build dependency to 2.4.82.
+  * libegl1-mesa.symbols: Updated.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Tue, 08 Aug 2017 09:37:22 +0300
+
 mesa (17.1.5-1) unstable; urgency=medium
 
   * Team upload.

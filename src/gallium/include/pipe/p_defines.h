@@ -384,6 +384,20 @@ enum pipe_flush_flags
 #define PIPE_CONTEXT_ROBUST_BUFFER_ACCESS (1 << 2)
 
 /**
+ * Prefer threaded pipe_context. It also implies that video codec functions
+ * will not be used. (they will be either no-ops or NULL when threading is
+ * enabled)
+ */
+#define PIPE_CONTEXT_PREFER_THREADED   (1 << 3)
+
+/**
+ * Implicit and explicit derivatives after KILL behave as if KILL didn't
+ * happen.
+ */
+#define PIPE_SCREEN_ENABLE_CORRECT_TGSI_DERIVATIVES_AFTER_KILL (1 << 0)
+
+
+/**
  * Flags for pipe_context::memory_barrier.
  */
 #define PIPE_BARRIER_MAPPED_BUFFER     (1 << 0)
@@ -762,6 +776,10 @@ enum pipe_cap
    PIPE_CAP_SPARSE_BUFFER_PAGE_SIZE,
    PIPE_CAP_TGSI_BALLOT,
    PIPE_CAP_TGSI_TES_LAYER_VIEWPORT,
+   PIPE_CAP_CAN_BIND_CONST_BUFFER_AS_VERTEX,
+   PIPE_CAP_ALLOW_MAPPED_BUFFERS_DURING_EXECUTION,
+   PIPE_CAP_POST_DEPTH_COVERAGE,
+   PIPE_CAP_BINDLESS_TEXTURE,
 };
 
 #define PIPE_QUIRK_TEXTURE_BORDER_COLOR_SWIZZLE_NV50 (1 << 0)
@@ -830,6 +848,7 @@ enum pipe_shader_cap
    PIPE_SHADER_CAP_SUPPORTED_IRS,
    PIPE_SHADER_CAP_MAX_SHADER_IMAGES,
    PIPE_SHADER_CAP_LOWER_IF_THRESHOLD,
+   PIPE_SHADER_CAP_TGSI_SKIP_MERGE_REGISTERS,
 };
 
 /**

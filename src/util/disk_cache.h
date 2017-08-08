@@ -93,7 +93,8 @@ disk_cache_get_function_timestamp(void *ptr, uint32_t* timestamp)
  * assistance in computing SHA-1 signatures.
  */
 struct disk_cache *
-disk_cache_create(const char *gpu_name, const char *timestamp);
+disk_cache_create(const char *gpu_name, const char *timestamp,
+                  uint64_t driver_flags);
 
 /**
  * Destroy a cache object, (freeing all associated resources).
@@ -142,7 +143,7 @@ disk_cache_get(struct disk_cache *cache, const cache_key key, size_t *size);
  * Later this key can be checked with disk_cache_has_key(), (unless the key
  * has been evicted in the interim).
  *
- * Any call to cache_record() may cause an existing, random key to be
+ * Any call to disk_cache_put_key() may cause an existing, random key to be
  * evicted from the cache.
  */
 void
@@ -171,7 +172,8 @@ disk_cache_compute_key(struct disk_cache *cache, const void *data, size_t size,
 #else
 
 static inline struct disk_cache *
-disk_cache_create(const char *gpu_name, const char *timestamp)
+disk_cache_create(const char *gpu_name, const char *timestamp,
+                  uint64_t driver_flags)
 {
    return NULL;
 }

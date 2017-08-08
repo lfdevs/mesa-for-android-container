@@ -62,16 +62,6 @@ struct brw_bo {
     */
    uint64_t align;
 
-   /**
-    * Virtual address for accessing the buffer data.  Only valid while
-    * mapped.
-    */
-#ifdef __cplusplus
-   void *virt;
-#else
-   void *virtual;
-#endif
-
    /** Buffer manager context associated with this buffer object */
    struct brw_bufmgr *bufmgr;
 
@@ -97,6 +87,11 @@ struct brw_bo {
    int refcount;
    const char *name;
 
+#ifndef EXEC_OBJECT_CAPTURE
+#define EXEC_OBJECT_CAPTURE            (1<<7)
+#endif
+   uint64_t kflags;
+
    /**
     * Kenel-assigned global name for this object
     *
@@ -114,12 +109,11 @@ struct brw_bo {
    time_t free_time;
 
    /** Mapped address for the buffer, saved across map/unmap cycles */
-   void *mem_virtual;
+   void *map_cpu;
    /** GTT virtual address for the buffer, saved across map/unmap cycles */
-   void *gtt_virtual;
+   void *map_gtt;
    /** WC CPU address for the buffer, saved across map/unmap cycles */
-   void *wc_virtual;
-   int map_count;
+   void *map_wc;
 
    /** BO cache list */
    struct list_head head;
@@ -128,19 +122,48 @@ struct brw_bo {
     * Boolean of whether this buffer can be re-used
     */
    bool reusable;
+
+   /**
+    * Boolean of whether this buffer has been shared with an external client.
+    */
+   bool external;
+
+   /**
+    * Boolean of whether this buffer is cache coherent
+    */
+   bool cache_coherent;
 };
 
 #define BO_ALLOC_FOR_RENDER (1<<0)
+#define BO_ALLOC_ZEROED     (1<<1)
 
 /**
  * Allocate a buffer object.
  *
  * Buffer objects are not necessarily initially mapped into CPU virtual
  * address space or graphics device aperture.  They must be mapped
- * using bo_map() or brw_bo_map_gtt() to be used by the CPU.
+ * using brw_bo_map() to be used by the CPU.
  */
 struct brw_bo *brw_bo_alloc(struct brw_bufmgr *bufmgr, const char *name,
                             uint64_t size, uint64_t alignment);
+
+/**
+ * Allocate a tiled buffer object.
+ *
+ * Alignment for tiled objects is set automatically; the 'flags'
+ * argument provides a hint about how the object will be used initially.
+ *
+ * Valid tiling formats are:
+ *  I915_TILING_NONE
+ *  I915_TILING_X
+ *  I915_TILING_Y
+ */
+struct brw_bo *brw_bo_alloc_tiled(struct brw_bufmgr *bufmgr,
+                                  const char *name,
+                                  uint64_t size,
+                                  uint32_t tiling_mode,
+                                  uint32_t pitch,
+                                  unsigned flags);
 
 /**
  * Allocate a tiled buffer object.
@@ -157,12 +180,12 @@ struct brw_bo *brw_bo_alloc(struct brw_bufmgr *bufmgr, const char *name,
  * 'tiling_mode' field on return, as well as the pitch value, which
  * may have been rounded up to accommodate for tiling restrictions.
  */
-struct brw_bo *brw_bo_alloc_tiled(struct brw_bufmgr *bufmgr,
-                                  const char *name,
-                                  int x, int y, int cpp,
-                                  uint32_t tiling_mode,
-                                  uint32_t *pitch,
-                                  unsigned flags);
+struct brw_bo *brw_bo_alloc_tiled_2d(struct brw_bufmgr *bufmgr,
+                                     const char *name,
+                                     int x, int y, int cpp,
+                                     uint32_t tiling_mode,
+                                     uint32_t *pitch,
+                                     unsigned flags);
 
 /** Takes a reference on a buffer object */
 void brw_bo_reference(struct brw_bo *bo);
@@ -173,27 +196,33 @@ void brw_bo_reference(struct brw_bo *bo);
  */
 void brw_bo_unreference(struct brw_bo *bo);
 
+/* Must match MapBufferRange interface (for convenience) */
+#define MAP_READ        GL_MAP_READ_BIT
+#define MAP_WRITE       GL_MAP_WRITE_BIT
+#define MAP_ASYNC       GL_MAP_UNSYNCHRONIZED_BIT
+#define MAP_PERSISTENT  GL_MAP_PERSISTENT_BIT
+#define MAP_COHERENT    GL_MAP_COHERENT_BIT
+/* internal */
+#define MAP_INTERNAL_MASK       (0xff << 24)
+#define MAP_RAW                 (0x01 << 24)
+
 /**
  * Maps the buffer into userspace.
  *
  * This function will block waiting for any existing execution on the
- * buffer to complete, first.  The resulting mapping is available at
- * buf->virtual.
+ * buffer to complete, first.  The resulting mapping is returned.
  */
-int brw_bo_map(struct brw_context *brw, struct brw_bo *bo, int write_enable);
+MUST_CHECK void *brw_bo_map(struct brw_context *brw, struct brw_bo *bo, unsigned flags);
 
 /**
  * Reduces the refcount on the userspace mapping of the buffer
  * object.
  */
-int brw_bo_unmap(struct brw_bo *bo);
+static inline int brw_bo_unmap(struct brw_bo *bo) { return 0; }
 
 /** Write data into an object. */
 int brw_bo_subdata(struct brw_bo *bo, uint64_t offset,
                    uint64_t size, const void *data);
-/** Read data from an object. */
-int brw_bo_get_subdata(struct brw_bo *bo, uint64_t offset,
-                       uint64_t size, void *data);
 /**
  * Waits for rendering to an object by the GPU to have completed.
  *
@@ -201,7 +230,7 @@ int brw_bo_get_subdata(struct brw_bo *bo, uint64_t offset,
  * bo_subdata, etc.  It is merely a way for the driver to implement
  * glFinish.
  */
-void brw_bo_wait_rendering(struct brw_context *brw, struct brw_bo *bo);
+void brw_bo_wait_rendering(struct brw_bo *bo);
 
 /**
  * Tears down the buffer manager instance.
@@ -253,12 +282,6 @@ struct brw_bo *brw_bo_gem_create_from_name(struct brw_bufmgr *bufmgr,
                                            const char *name,
                                            unsigned int handle);
 void brw_bufmgr_enable_reuse(struct brw_bufmgr *bufmgr);
-int brw_bo_map_unsynchronized(struct brw_context *brw, struct brw_bo *bo);
-int brw_bo_map_gtt(struct brw_context *brw, struct brw_bo *bo);
-
-void *brw_bo_map__cpu(struct brw_bo *bo);
-void *brw_bo_map__gtt(struct brw_bo *bo);
-void *brw_bo_map__wc(struct brw_bo *bo);
 
 int brw_bo_wait(struct brw_bo *bo, int64_t timeout_ns);
 
@@ -267,7 +290,7 @@ void brw_destroy_hw_context(struct brw_bufmgr *bufmgr, uint32_t ctx_id);
 
 int brw_bo_gem_export_to_prime(struct brw_bo *bo, int *prime_fd);
 struct brw_bo *brw_bo_gem_create_from_prime(struct brw_bufmgr *bufmgr,
-                                            int prime_fd, int size);
+                                            int prime_fd);
 
 int brw_reg_read(struct brw_bufmgr *bufmgr, uint32_t offset,
                  uint64_t *result);

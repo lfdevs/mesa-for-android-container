@@ -88,7 +88,7 @@ brw_inst_##name(const struct gen_device_info *devinfo,        \
    } else {                                                                  \
       high = hi4;  low = lo4;                                                \
    }                                                                         \
-   assert(((int) high) != -1 && ((int) low) != -1);                          \
+   assert(((int) high) != -1 && ((int) low) != -1);
 
 /* A general macro for cases where the field has moved to several different
  * bit locations across generations.  GCC appears to combine cases where the

@@ -534,7 +534,6 @@ struct pipe_transfer
 };
 
 
-
 /**
  * A vertex buffer.  Typically, all the vertex data/attributes for
  * drawing something will be in one buffer.  But it's also possible, for
@@ -542,10 +541,14 @@ struct pipe_transfer
  */
 struct pipe_vertex_buffer
 {
-   unsigned stride;    /**< stride to same attrib in next vertex, in bytes */
+   uint16_t stride;    /**< stride to same attrib in next vertex, in bytes */
+   bool is_user_buffer;
    unsigned buffer_offset;  /**< offset to start of data in buffer, in bytes */
-   struct pipe_resource *buffer;  /**< the actual buffer */
-   const void *user_buffer;  /**< pointer to a user buffer if buffer == NULL */
+
+   union {
+      struct pipe_resource *resource;  /**< the actual buffer */
+      const void *user;  /**< pointer to a user buffer */
+   } buffer;
 };
 
 
@@ -625,16 +628,37 @@ struct pipe_vertex_element
 };
 
 
-/**
- * An index buffer.  When an index buffer is bound, all indices to vertices
- * will be looked up in the buffer.
- */
-struct pipe_index_buffer
+struct pipe_draw_indirect_info
 {
-   unsigned index_size;  /**< size of an index, in bytes */
-   unsigned offset;  /**< offset to start of data in buffer, in bytes */
-   struct pipe_resource *buffer; /**< the actual buffer */
-   const void *user_buffer;  /**< pointer to a user buffer if buffer == NULL */
+   unsigned offset; /**< must be 4 byte aligned */
+   unsigned stride; /**< must be 4 byte aligned */
+   unsigned draw_count; /**< number of indirect draws */
+   unsigned indirect_draw_count_offset; /**< must be 4 byte aligned */
+
+   /* Indirect draw parameters resource is laid out as follows:
+    *
+    * if using indexed drawing:
+    *  struct {
+    *     uint32_t count;
+    *     uint32_t instance_count;
+    *     uint32_t start;
+    *     int32_t index_bias;
+    *     uint32_t start_instance;
+    *  };
+    * otherwise:
+    *  struct {
+    *     uint32_t count;
+    *     uint32_t instance_count;
+    *     uint32_t start;
+    *     uint32_t start_instance;
+    *  };
+    */
+   struct pipe_resource *buffer;
+
+   /* Indirect draw count resource: If not NULL, contains a 32-bit value which
+    * is to be used as the real draw_count.
+    */
+   struct pipe_resource *indirect_draw_count;
 };
 
 
@@ -643,12 +667,18 @@ struct pipe_index_buffer
  */
 struct pipe_draw_info
 {
-   boolean indexed;  /**< use index buffer */
+   ubyte index_size;  /**< if 0, the draw is not indexed. */
    enum pipe_prim_type mode:8;  /**< the mode of the primitive */
-   boolean primitive_restart;
+   unsigned primitive_restart:1;
+   unsigned has_user_indices:1; /**< if true, use index.user_buffer */
    ubyte vertices_per_patch; /**< the number of vertices per patch */
 
-   unsigned start;  /**< the index of the first vertex */
+   /**
+    * Direct draws: start is the index of the first vertex
+    * Non-indexed indirect draws: not used
+    * Indexed indirect draws: start is added to the indirect start.
+    */
+   unsigned start;
    unsigned count;  /**< number of vertices */
 
    unsigned start_instance; /**< first instance id */
@@ -668,40 +698,20 @@ struct pipe_draw_info
     */
    unsigned restart_index;
 
-   unsigned indirect_offset; /**< must be 4 byte aligned */
-   unsigned indirect_stride; /**< must be 4 byte aligned */
-   unsigned indirect_count; /**< number of indirect draws */
-
-   unsigned indirect_params_offset; /**< must be 4 byte aligned */
-
    /* Pointers must be at the end for an optimal structure layout on 64-bit. */
 
-   /* Indirect draw parameters resource: If not NULL, most values are taken
-    * from this buffer instead, which is laid out as follows:
+   /**
+    * An index buffer.  When an index buffer is bound, all indices to vertices
+    * will be looked up from the buffer.
     *
-    * if indexed is TRUE:
-    *  struct {
-    *     uint32_t count;
-    *     uint32_t instance_count;
-    *     uint32_t start;
-    *     int32_t index_bias;
-    *     uint32_t start_instance;
-    *  };
-    * otherwise:
-    *  struct {
-    *     uint32_t count;
-    *     uint32_t instance_count;
-    *     uint32_t start;
-    *     uint32_t start_instance;
-    *  };
+    * If has_user_indices, use index.user, else use index.resource.
     */
-   struct pipe_resource *indirect;
+   union {
+      struct pipe_resource *resource;  /**< real buffer */
+      const void *user;  /**< pointer to a user buffer */
+   } index;
 
-   /* Indirect draw count resource: If not NULL, contains a 32-bit value which
-    * is to be used as the real indirect_count. In that case indirect_count
-    * becomes the maximum possible value.
-    */
-   struct pipe_resource *indirect_params;
+   struct pipe_draw_indirect_info *indirect; /**< Indirect draw. */
 
    /**
     * Stream output target. If not NULL, it's used to provide the 'count'

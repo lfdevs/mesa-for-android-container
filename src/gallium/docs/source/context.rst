@@ -53,8 +53,6 @@ buffers, surfaces) are bound to the driver.
 
 * ``set_vertex_buffers``
 
-* ``set_index_buffer``
-
 
 Non-CSO State
 ^^^^^^^^^^^^^
@@ -101,6 +99,14 @@ objects. They all follow simple, one-method binding calls, e.g.
   various debug messages, eventually reported via KHR_debug and
   similar mechanisms.
 
+Samplers
+^^^^^^^^
+
+pipe_sampler_state objects control how textures are sampled (coordinate
+wrap modes, interpolation modes, etc).  Note that samplers are not used
+for texture buffer objects.  That is, pipe_context::bind_sampler_views()
+will not bind a sampler if the corresponding sampler view refers to a
+PIPE_BUFFER resource.
 
 Sampler Views
 ^^^^^^^^^^^^^
@@ -290,8 +296,8 @@ the mode of the primitive and the vertices to be fetched, in the range between
 Every instance with instanceID in the range between ``start_instance`` and
 ``start_instance``+``instance_count``-1, inclusive, will be drawn.
 
-If there is an index buffer bound, and ``indexed`` field is true, all vertex
-indices will be looked up in the index buffer.
+If  ``index_size`` != 0, all vertex indices will be looked up from the index
+buffer.
 
 In indexed draw, ``min_index`` and ``max_index`` respectively provide a lower
 and upper bound of the indices contained in the index buffer inside the range
@@ -758,6 +764,26 @@ notifications are single-shot, i.e. subsequent calls to
   since the last call or since the last notification by callback.
 * ``set_device_reset_callback`` sets a callback which will be called when
   a device reset is detected. The callback is only called synchronously.
+
+Bindless
+^^^^^^^^
+
+If PIPE_CAP_BINDLESS_TEXTURE is TRUE, the following ``pipe_context`` functions
+are used to create/delete bindless handles, and to make them resident in the
+current context when they are going to be used by shaders.
+
+* ``create_texture_handle`` creates a 64-bit unsigned integer texture handle
+  that is going to be directly used in shaders.
+* ``delete_texture_handle`` deletes a 64-bit unsigned integer texture handle.
+* ``make_texture_handle_resident`` makes a 64-bit unsigned texture handle
+  resident in the current context to be accessible by shaders for texture
+  mapping.
+* ``create_image_handle`` creates a 64-bit unsigned integer image handle that
+  is going to be directly used in shaders.
+* ``delete_image_handle`` deletes a 64-bit unsigned integer image handle.
+* ``make_image_handle_resident`` makes a 64-bit unsigned integer image handle
+  resident in the current context to be accessible by shaders for image loads,
+  stores and atomic operations.
 
 Using several contexts
 ----------------------

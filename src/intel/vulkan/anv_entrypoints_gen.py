@@ -33,18 +33,27 @@ from mako.template import Template
 MAX_API_VERSION = 1.0
 
 SUPPORTED_EXTENSIONS = [
+    'VK_KHR_dedicated_allocation',
     'VK_KHR_descriptor_update_template',
+    'VK_KHR_external_memory',
+    'VK_KHR_external_memory_capabilities',
+    'VK_KHR_external_memory_fd',
+    'VK_KHR_get_memory_requirements2',
     'VK_KHR_get_physical_device_properties2',
+    'VK_KHR_get_surface_capabilities2',
     'VK_KHR_incremental_present',
     'VK_KHR_maintenance1',
     'VK_KHR_push_descriptor',
     'VK_KHR_sampler_mirror_clamp_to_edge',
     'VK_KHR_shader_draw_parameters',
+    'VK_KHR_storage_buffer_storage_class',
     'VK_KHR_surface',
     'VK_KHR_swapchain',
+    'VK_KHR_variable_pointers',
     'VK_KHR_wayland_surface',
     'VK_KHR_xcb_surface',
     'VK_KHR_xlib_surface',
+    'VK_KHX_multiview',
 ]
 
 # We generate a static hash table for entry point lookup
@@ -83,6 +92,7 @@ TEMPLATE_H = Template(textwrap.dedent("""\
       ${type_} gen75_${name}(${args});
       ${type_} gen8_${name}(${args});
       ${type_} gen9_${name}(${args});
+      ${type_} gen10_${name}(${args});
       % if guard is not None:
     #endif // ${guard}
       % endif
@@ -144,7 +154,7 @@ TEMPLATE_C = Template(textwrap.dedent(u"""\
      * either pick the correct entry point.
      */
 
-    % for layer in ['anv', 'gen7', 'gen75', 'gen8', 'gen9']:
+    % for layer in ['anv', 'gen7', 'gen75', 'gen8', 'gen9', 'gen10']:
       % for type_, name, args, _, _, guard in entrypoints:
         % if guard is not None:
     #ifdef ${guard}
@@ -176,6 +186,10 @@ TEMPLATE_C = Template(textwrap.dedent(u"""\
        }
 
        switch (devinfo->gen) {
+       case 10:
+          if (gen10_layer.entrypoints[index])
+             return gen10_layer.entrypoints[index];
+          /* fall through */
        case 9:
           if (gen9_layer.entrypoints[index])
              return gen9_layer.entrypoints[index];

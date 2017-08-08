@@ -66,6 +66,10 @@ brw_blorp_surface_info_init(struct blorp_context *blorp,
                             unsigned int level, unsigned int layer,
                             enum isl_format format, bool is_render_target)
 {
+   assert(level < surf->surf->levels);
+   assert(layer < MAX2(surf->surf->logical_level0_px.depth >> level,
+                       surf->surf->logical_level0_px.array_len));
+
    info->enabled = true;
 
    if (format == ISL_FORMAT_UNSUPPORTED)
@@ -81,11 +85,6 @@ brw_blorp_surface_info_init(struct blorp_context *blorp,
        * map it as 8-bit BGRA.
        */
       format = ISL_FORMAT_B8G8R8A8_UNORM;
-   } else if (surf->surf->usage & ISL_SURF_USAGE_STENCIL_BIT) {
-      assert(surf->surf->format == ISL_FORMAT_R8_UINT);
-      /* Prior to Broadwell, we can't render to R8_UINT */
-      if (blorp->isl_dev->info->gen < 8)
-         format = ISL_FORMAT_R8_UNORM;
    }
 
    info->surf = *surf->surf;
@@ -95,6 +94,9 @@ brw_blorp_surface_info_init(struct blorp_context *blorp,
    if (info->aux_usage != ISL_AUX_USAGE_NONE) {
       info->aux_surf = *surf->aux_surf;
       info->aux_addr = surf->aux_addr;
+      assert(level < info->aux_surf.levels);
+      assert(layer < MAX2(info->aux_surf.logical_level0_px.depth >> level,
+                          info->aux_surf.logical_level0_px.array_len));
    }
 
    info->clear_color = surf->clear_color;
@@ -129,10 +131,10 @@ brw_blorp_surface_info_init(struct blorp_context *blorp,
       info->z_offset = 0;
    }
 
-   /* Sandy Bridge has a limit of a maximum of 512 layers for layered
-    * rendering.
+   /* Sandy Bridge and earlier have a limit of a maximum of 512 layers for
+    * layered rendering.
     */
-   if (is_render_target && blorp->isl_dev->info->gen == 6)
+   if (is_render_target && blorp->isl_dev->info->gen <= 6)
       info->view.array_len = MIN2(info->view.array_len, 512);
 }
 
@@ -158,7 +160,7 @@ brw_blorp_init_wm_prog_key(struct brw_wm_prog_key *wm_key)
 const unsigned *
 blorp_compile_fs(struct blorp_context *blorp, void *mem_ctx,
                  struct nir_shader *nir,
-                 const struct brw_wm_prog_key *wm_key,
+                 struct brw_wm_prog_key *wm_key,
                  bool use_repclear,
                  struct brw_wm_prog_data *wm_prog_data,
                  unsigned *program_size)
@@ -182,6 +184,13 @@ blorp_compile_fs(struct blorp_context *blorp, void *mem_ctx,
    nir_remove_dead_variables(nir, nir_var_shader_in);
    nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
 
+   if (blorp->compiler->devinfo->gen < 6) {
+      if (nir->info.fs.uses_discard)
+         wm_key->iz_lookup |= BRW_WM_IZ_PS_KILL_ALPHATEST_BIT;
+
+      wm_key->input_slots_valid = nir->info.inputs_read | VARYING_BIT_POS;
+   }
+
    const unsigned *program =
       brw_compile_fs(compiler, blorp->driver_ctx, mem_ctx, wm_key,
                      wm_prog_data, nir, NULL, -1, -1, false, use_repclear,
@@ -204,12 +213,12 @@ blorp_compile_vs(struct blorp_context *blorp, void *mem_ctx,
    nir = brw_preprocess_nir(compiler, nir);
    nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
 
-   vs_prog_data->inputs_read = nir->info->inputs_read;
+   vs_prog_data->inputs_read = nir->info.inputs_read;
 
    brw_compute_vue_map(compiler->devinfo,
                        &vs_prog_data->base.vue_map,
-                       nir->info->outputs_written,
-                       nir->info->separate_shader);
+                       nir->info.outputs_written,
+                       nir->info.separate_shader);
 
    struct brw_vs_prog_key vs_key = { 0, };
 
@@ -221,61 +230,130 @@ blorp_compile_vs(struct blorp_context *blorp, void *mem_ctx,
    return program;
 }
 
+struct blorp_sf_key {
+   enum blorp_shader_type shader_type; /* Must be BLORP_SHADER_TYPE_GEN4_SF */
+
+   struct brw_sf_prog_key key;
+};
+
+bool
+blorp_ensure_sf_program(struct blorp_context *blorp,
+                        struct blorp_params *params)
+{
+   const struct brw_wm_prog_data *wm_prog_data = params->wm_prog_data;
+   assert(params->wm_prog_data);
+
+   /* Gen6+ doesn't need a strips and fans program */
+   if (blorp->compiler->devinfo->gen >= 6)
+      return true;
+
+   struct blorp_sf_key key = {
+      .shader_type = BLORP_SHADER_TYPE_GEN4_SF,
+   };
+
+   /* Everything gets compacted in vertex setup, so we just need a
+    * pass-through for the correct number of input varyings.
+    */
+   const uint64_t slots_valid = VARYING_BIT_POS |
+      ((1ull << wm_prog_data->num_varying_inputs) - 1) << VARYING_SLOT_VAR0;
+
+   key.key.attrs = slots_valid;
+   key.key.primitive = BRW_SF_PRIM_TRIANGLES;
+   key.key.contains_flat_varying = wm_prog_data->contains_flat_varying;
+
+   STATIC_ASSERT(sizeof(key.key.interp_mode) ==
+                 sizeof(wm_prog_data->interp_mode));
+   memcpy(key.key.interp_mode, wm_prog_data->interp_mode,
+          sizeof(key.key.interp_mode));
+
+   if (blorp->lookup_shader(blorp, &key, sizeof(key),
+                            &params->sf_prog_kernel, &params->sf_prog_data))
+      return true;
+
+   void *mem_ctx = ralloc_context(NULL);
+
+   const unsigned *program;
+   unsigned program_size;
+
+   struct brw_vue_map vue_map;
+   brw_compute_vue_map(blorp->compiler->devinfo, &vue_map, slots_valid, false);
+
+   struct brw_sf_prog_data prog_data_tmp;
+   program = brw_compile_sf(blorp->compiler, mem_ctx, &key.key,
+                            &prog_data_tmp, &vue_map, &program_size);
+
+   bool result =
+      blorp->upload_shader(blorp, &key, sizeof(key), program, program_size,
+                           (void *)&prog_data_tmp, sizeof(prog_data_tmp),
+                           &params->sf_prog_kernel, &params->sf_prog_data);
+
+   ralloc_free(mem_ctx);
+
+   return result;
+}
+
 void
-blorp_gen6_hiz_op(struct blorp_batch *batch,
-                  struct blorp_surf *surf, unsigned level, unsigned layer,
-                  enum blorp_hiz_op op)
+blorp_hiz_op(struct blorp_batch *batch, struct blorp_surf *surf,
+             uint32_t level, uint32_t start_layer, uint32_t num_layers,
+             enum blorp_hiz_op op)
 {
    struct blorp_params params;
    blorp_params_init(&params);
 
    params.hiz_op = op;
+   params.full_surface_hiz_op = true;
 
-   brw_blorp_surface_info_init(batch->blorp, &params.depth, surf, level, layer,
-                               surf->surf->format, true);
+   for (uint32_t a = 0; a < num_layers; a++) {
+      const uint32_t layer = start_layer + a;
 
-   /* Align the rectangle primitive to 8x4 pixels.
-    *
-    * During fast depth clears, the emitted rectangle primitive  must be
-    * aligned to 8x4 pixels.  From the Ivybridge PRM, Vol 2 Part 1 Section
-    * 11.5.3.1 Depth Buffer Clear (and the matching section in the Sandybridge
-    * PRM):
-    *     If Number of Multisamples is NUMSAMPLES_1, the rectangle must be
-    *     aligned to an 8x4 pixel block relative to the upper left corner
-    *     of the depth buffer [...]
-    *
-    * For hiz resolves, the rectangle must also be 8x4 aligned. Item
-    * WaHizAmbiguate8x4Aligned from the Haswell workarounds page and the
-    * Ivybridge simulator require the alignment.
-    *
-    * To be safe, let's just align the rect for all hiz operations and all
-    * hardware generations.
-    *
-    * However, for some miptree slices of a Z24 texture, emitting an 8x4
-    * aligned rectangle that covers the slice may clobber adjacent slices if
-    * we strictly adhered to the texture alignments specified in the PRM.  The
-    * Ivybridge PRM, Section "Alignment Unit Size", states that
-    * SURFACE_STATE.Surface_Horizontal_Alignment should be 4 for Z24 surfaces,
-    * not 8. But commit 1f112cc increased the alignment from 4 to 8, which
-    * prevents the clobbering.
-    */
-   params.x1 = minify(params.depth.surf.logical_level0_px.width,
-                      params.depth.view.base_level);
-   params.y1 = minify(params.depth.surf.logical_level0_px.height,
-                      params.depth.view.base_level);
-   params.x1 = ALIGN(params.x1, 8);
-   params.y1 = ALIGN(params.y1, 4);
+      brw_blorp_surface_info_init(batch->blorp, &params.depth, surf, level,
+                                  layer, surf->surf->format, true);
 
-   if (params.depth.view.base_level == 0) {
-      /* TODO: What about MSAA? */
-      params.depth.surf.logical_level0_px.width = params.x1;
-      params.depth.surf.logical_level0_px.height = params.y1;
+      /* Align the rectangle primitive to 8x4 pixels.
+       *
+       * During fast depth clears, the emitted rectangle primitive  must be
+       * aligned to 8x4 pixels.  From the Ivybridge PRM, Vol 2 Part 1 Section
+       * 11.5.3.1 Depth Buffer Clear (and the matching section in the
+       * Sandybridge PRM):
+       *
+       *     If Number of Multisamples is NUMSAMPLES_1, the rectangle must be
+       *     aligned to an 8x4 pixel block relative to the upper left corner
+       *     of the depth buffer [...]
+       *
+       * For hiz resolves, the rectangle must also be 8x4 aligned. Item
+       * WaHizAmbiguate8x4Aligned from the Haswell workarounds page and the
+       * Ivybridge simulator require the alignment.
+       *
+       * To be safe, let's just align the rect for all hiz operations and all
+       * hardware generations.
+       *
+       * However, for some miptree slices of a Z24 texture, emitting an 8x4
+       * aligned rectangle that covers the slice may clobber adjacent slices
+       * if we strictly adhered to the texture alignments specified in the
+       * PRM.  The Ivybridge PRM, Section "Alignment Unit Size", states that
+       * SURFACE_STATE.Surface_Horizontal_Alignment should be 4 for Z24
+       * surfaces, not 8. But commit 1f112cc increased the alignment from 4 to
+       * 8, which prevents the clobbering.
+       */
+      params.x1 = minify(params.depth.surf.logical_level0_px.width,
+                         params.depth.view.base_level);
+      params.y1 = minify(params.depth.surf.logical_level0_px.height,
+                         params.depth.view.base_level);
+      params.x1 = ALIGN(params.x1, 8);
+      params.y1 = ALIGN(params.y1, 4);
+
+      if (params.depth.view.base_level == 0) {
+         /* TODO: What about MSAA? */
+         params.depth.surf.logical_level0_px.width = params.x1;
+         params.depth.surf.logical_level0_px.height = params.y1;
+      }
+
+      params.dst.surf.samples = params.depth.surf.samples;
+      params.dst.surf.logical_level0_px = params.depth.surf.logical_level0_px;
+      params.depth_format =
+         isl_format_get_depth_format(surf->surf->format, false);
+      params.num_samples = params.depth.surf.samples;
+
+      batch->blorp->exec(batch, &params);
    }
-
-   params.dst.surf.samples = params.depth.surf.samples;
-   params.dst.surf.logical_level0_px = params.depth.surf.logical_level0_px;
-   params.depth_format = isl_format_get_depth_format(surf->surf->format, false);
-   params.num_samples = params.depth.surf.samples;
-
-   batch->blorp->exec(batch, &params);
 }

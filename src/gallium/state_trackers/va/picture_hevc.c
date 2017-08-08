@@ -25,6 +25,7 @@
  *
  **************************************************************************/
 
+#include "vl/vl_zscan.h"
 #include "va_private.h"
 
 void vlVaHandlePictureParameterBufferHEVC(vlVaDriver *drv, vlVaContext *context, vlVaBuffer *buf)
@@ -179,14 +180,32 @@ void vlVaHandlePictureParameterBufferHEVC(vlVaDriver *drv, vlVaContext *context,
 void vlVaHandleIQMatrixBufferHEVC(vlVaContext *context, vlVaBuffer *buf)
 {
    VAIQMatrixBufferHEVC *h265 = buf->data;
+   int i, j;
 
-   assert(buf->size >= sizeof(VAIQMatrixBufferH264) && buf->num_elements == 1);
-   memcpy(&context->desc.h265.pps->sps->ScalingList4x4, h265->ScalingList4x4, 6 * 16);
-   memcpy(&context->desc.h265.pps->sps->ScalingList8x8, h265->ScalingList8x8, 6 * 64);
-   memcpy(&context->desc.h265.pps->sps->ScalingList16x16, h265->ScalingList16x16, 6 * 64);
-   memcpy(&context->desc.h265.pps->sps->ScalingList32x32, h265->ScalingList32x32, 2 * 64);
-   memcpy(&context->desc.h265.pps->sps->ScalingListDCCoeff16x16, h265->ScalingListDC16x16, 6);
-   memcpy(&context->desc.h265.pps->sps->ScalingListDCCoeff32x32, h265->ScalingListDC32x32, 2);
+   assert(buf->size >= sizeof(VAIQMatrixBufferHEVC) && buf->num_elements == 1);
+
+   for (i = 0; i < 6; i++) {
+      for (j = 0; j < 16; j++)
+         context->desc.h265.pps->sps->ScalingList4x4[i][j] =
+                                h265->ScalingList4x4[i][vl_zscan_h265_up_right_diagonal_16[j]];
+
+      for (j = 0; j < 64; j++) {
+         context->desc.h265.pps->sps->ScalingList8x8[i][j] =
+                                h265->ScalingList8x8[i][vl_zscan_h265_up_right_diagonal[j]];
+         context->desc.h265.pps->sps->ScalingList16x16[i][j] =
+                                h265->ScalingList16x16[i][vl_zscan_h265_up_right_diagonal[j]];
+
+         if (i < 2)
+            context->desc.h265.pps->sps->ScalingList32x32[i][j] =
+                                   h265->ScalingList32x32[i][vl_zscan_h265_up_right_diagonal[j]];
+      }
+
+      context->desc.h265.pps->sps->ScalingListDCCoeff16x16[i] =
+                             h265->ScalingListDC16x16[i];
+      if (i < 2)
+         context->desc.h265.pps->sps->ScalingListDCCoeff32x32[i] =
+                                h265->ScalingListDC32x32[i];
+   }
 }
 
 void vlVaHandleSliceParameterBufferHEVC(vlVaContext *context, vlVaBuffer *buf)

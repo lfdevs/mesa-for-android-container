@@ -249,7 +249,7 @@ struct xmesa_buffer {
 #define PACK_TRUECOLOR( PIXEL, R, G, B )	\
    PIXEL = xmesa->xm_visual->RtoPixel[R]	\
          | xmesa->xm_visual->GtoPixel[G]	\
-         | xmesa->xm_visual->BtoPixel[B];	\
+         | xmesa->xm_visual->BtoPixel[B];
 
 
 /**
@@ -352,10 +352,6 @@ xmesa_check_and_update_buffer_size(XMesaContext xmctx, XMesaBuffer drawBuffer);
 extern void
 xmesa_init_driver_functions( XMesaVisual xmvisual,
                              struct dd_function_table *driver );
-
-extern void
-xmesa_update_state( struct gl_context *ctx, GLbitfield new_state );
-
 
 extern void
 xmesa_MapRenderbuffer(struct gl_context *ctx,

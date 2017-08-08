@@ -315,8 +315,8 @@ ttn_emit_declaration(struct ttn_compile *c)
 
       /* nothing to do for UBOs: */
       if ((file == TGSI_FILE_CONSTANT) && decl->Declaration.Dimension) {
-         b->shader->info->num_ubos =
-            MAX2(b->shader->info->num_ubos, decl->Dim.Index2D);
+         b->shader->info.num_ubos =
+            MAX2(b->shader->info.num_ubos, decl->Dim.Index2D);
          return;
       }
 
@@ -374,7 +374,7 @@ ttn_emit_declaration(struct ttn_compile *c)
             exec_list_push_tail(&b->shader->inputs, &var->node);
 
             for (int i = 0; i < array_size; i++)
-               b->shader->info->inputs_read |= 1 << (var->data.location + i);
+               b->shader->info.inputs_read |= 1 << (var->data.location + i);
 
             break;
          case TGSI_FILE_OUTPUT: {
@@ -440,7 +440,7 @@ ttn_emit_declaration(struct ttn_compile *c)
             exec_list_push_tail(&b->shader->outputs, &var->node);
 
             for (int i = 0; i < array_size; i++)
-               b->shader->info->outputs_written |= 1 << (var->data.location + i);
+               b->shader->info.outputs_written |= 1 << (var->data.location + i);
          }
             break;
          case TGSI_FILE_CONSTANT:
@@ -587,7 +587,7 @@ ttn_src_for_file_and_index(struct ttn_compile *c, unsigned file, unsigned index,
 
       src = nir_src_for_ssa(&load->dest.ssa);
 
-      b->shader->info->system_values_read |=
+      b->shader->info.system_values_read |=
          (1 << nir_system_value_from_intrinsic(op));
 
       break;
@@ -1068,7 +1068,7 @@ ttn_kill(nir_builder *b, nir_op op, nir_alu_dest dest, nir_ssa_def **src)
    nir_intrinsic_instr *discard =
       nir_intrinsic_instr_create(b->shader, nir_intrinsic_discard);
    nir_builder_instr_insert(b, &discard->instr);
-   b->shader->info->fs.uses_discard = true;
+   b->shader->info.fs.uses_discard = true;
 }
 
 static void
@@ -1081,7 +1081,7 @@ ttn_kill_if(nir_builder *b, nir_op op, nir_alu_dest dest, nir_ssa_def **src)
       nir_intrinsic_instr_create(b->shader, nir_intrinsic_discard_if);
    discard->src[0] = nir_src_for_ssa(cmp);
    nir_builder_instr_insert(b, &discard->instr);
-   b->shader->info->fs.uses_discard = true;
+   b->shader->info.fs.uses_discard = true;
 }
 
 static void
@@ -1411,15 +1411,17 @@ ttn_tex(struct ttn_compile *c, nir_alu_dest dest, nir_ssa_def **src)
    }
 
    if (tgsi_inst->Instruction.Opcode == TGSI_OPCODE_TXD) {
+      instr->src[src_number].src_type = nir_tex_src_ddx;
       instr->src[src_number].src =
          nir_src_for_ssa(nir_swizzle(b, src[1], SWIZ(X, Y, Z, W),
-              instr->coord_components, false));
-      instr->src[src_number].src_type = nir_tex_src_ddx;
+				     nir_tex_instr_src_size(instr, src_number),
+				     false));
       src_number++;
+      instr->src[src_number].src_type = nir_tex_src_ddy;
       instr->src[src_number].src =
          nir_src_for_ssa(nir_swizzle(b, src[2], SWIZ(X, Y, Z, W),
-              instr->coord_components, false));
-      instr->src[src_number].src_type = nir_tex_src_ddy;
+				     nir_tex_instr_src_size(instr, src_number),
+				     false));
       src_number++;
    }
 
@@ -1462,7 +1464,9 @@ ttn_tex(struct ttn_compile *c, nir_alu_dest dest, nir_ssa_def **src)
 
    assert(src_number == num_srcs);
 
-   nir_ssa_dest_init(&instr->instr, &instr->dest, 4, 32, NULL);
+   nir_ssa_dest_init(&instr->instr, &instr->dest,
+		     nir_tex_instr_dest_size(instr),
+		     32, NULL);
    nir_builder_instr_insert(b, &instr->instr);
 
    /* Resolve the writemask on the texture op. */
@@ -1501,7 +1505,8 @@ ttn_txq(struct ttn_compile *c, nir_alu_dest dest, nir_ssa_def **src)
    txs->src[0].src = nir_src_for_ssa(ttn_channel(b, src[0], X));
    txs->src[0].src_type = nir_tex_src_lod;
 
-   nir_ssa_dest_init(&txs->instr, &txs->dest, 3, 32, NULL);
+   nir_ssa_dest_init(&txs->instr, &txs->dest,
+		     nir_tex_instr_dest_size(txs), 32, NULL);
    nir_builder_instr_insert(b, &txs->instr);
 
    nir_ssa_dest_init(&qlv->instr, &qlv->dest, 1, 32, NULL);

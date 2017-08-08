@@ -1,5 +1,5 @@
 /**************************************************************************
- * 
+ *
  * Copyright 2007 VMware, Inc.
  * All Rights Reserved.
  *
@@ -10,11 +10,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -22,7 +22,7 @@
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- * 
+ *
  **************************************************************************/
 
 /* Authors:  Keith Whitwell <keithw@vmware.com>
@@ -61,16 +61,16 @@ stipple_stage(struct draw_stage *stage)
 
 
 /**
- * Compute interpolated vertex attributes for 'dst' at position 't' 
+ * Compute interpolated vertex attributes for 'dst' at position 't'
  * between 'v0' and 'v1'.
  * XXX using linear interpolation for all attribs at this time.
  */
 static void
-screen_interp( struct draw_context *draw,
-               struct vertex_header *dst,
-               float t,
-               const struct vertex_header *v0, 
-               const struct vertex_header *v1 )
+screen_interp(struct draw_context *draw,
+              struct vertex_header *dst,
+              float t,
+              const struct vertex_header *v0,
+              const struct vertex_header *v1)
 {
    uint attr;
    uint num_outputs = draw_current_shader_outputs(draw);
@@ -95,16 +95,16 @@ emit_segment(struct draw_stage *stage, struct prim_header *header,
    struct prim_header newprim = *header;
 
    if (t0 > 0.0) {
-      screen_interp( stage->draw, v0new, t0, header->v[0], header->v[1] );
+      screen_interp(stage->draw, v0new, t0, header->v[0], header->v[1]);
       newprim.v[0] = v0new;
    }
 
    if (t1 < 1.0) {
-      screen_interp( stage->draw, v1new, t1, header->v[0], header->v[1] );
+      screen_interp(stage->draw, v1new, t1, header->v[0], header->v[1]);
       newprim.v[1] = v1new;
    }
 
-   stage->next->line( stage->next, &newprim );
+   stage->next->line(stage->next, &newprim);
 }
 
 
@@ -176,7 +176,7 @@ reset_stipple_counter(struct draw_stage *stage)
 {
    struct stipple_stage *stipple = stipple_stage(stage);
    stipple->counter = 0;
-   stage->next->reset_stipple_counter( stage->next );
+   stage->next->reset_stipple_counter(stage->next);
 }
 
 static void
@@ -197,8 +197,8 @@ stipple_reset_tri(struct draw_stage *stage, struct prim_header *header)
 
 
 static void
-stipple_first_line(struct draw_stage *stage, 
-		   struct prim_header *header)
+stipple_first_line(struct draw_stage *stage,
+                   struct prim_header *header)
 {
    struct stipple_stage *stipple = stipple_stage(stage);
    struct draw_context *draw = stage->draw;
@@ -207,7 +207,7 @@ stipple_first_line(struct draw_stage *stage,
    stipple->factor = draw->rasterizer->line_stipple_factor + 1;
 
    stage->line = stipple_line;
-   stage->line( stage, header );
+   stage->line(stage, header);
 }
 
 
@@ -215,24 +215,23 @@ static void
 stipple_flush(struct draw_stage *stage, unsigned flags)
 {
    stage->line = stipple_first_line;
-   stage->next->flush( stage->next, flags );
+   stage->next->flush(stage->next, flags);
 }
 
 
-
-
-static void 
-stipple_destroy( struct draw_stage *stage )
+static void
+stipple_destroy(struct draw_stage *stage)
 {
-   draw_free_temp_verts( stage );
-   FREE( stage );
+   draw_free_temp_verts(stage);
+   FREE(stage);
 }
 
 
 /**
  * Create line stippler stage
  */
-struct draw_stage *draw_stipple_stage( struct draw_context *draw )
+struct draw_stage *
+draw_stipple_stage(struct draw_context *draw)
 {
    struct stipple_stage *stipple = CALLOC_STRUCT(stipple_stage);
    if (!stipple)
@@ -248,14 +247,14 @@ struct draw_stage *draw_stipple_stage( struct draw_context *draw )
    stipple->stage.flush = stipple_flush;
    stipple->stage.destroy = stipple_destroy;
 
-   if (!draw_alloc_temp_verts( &stipple->stage, 2 ))
+   if (!draw_alloc_temp_verts(&stipple->stage, 2))
       goto fail;
 
    return &stipple->stage;
 
 fail:
    if (stipple)
-      stipple->stage.destroy( &stipple->stage );
+      stipple->stage.destroy(&stipple->stage);
 
    return NULL;
 }

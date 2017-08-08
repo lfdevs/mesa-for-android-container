@@ -32,6 +32,7 @@
  
 #include "main/macros.h"
 #include "main/framebuffer.h"
+#include "main/state.h"
 #include "st_context.h"
 #include "st_atom.h"
 #include "st_debug.h"
@@ -60,7 +61,7 @@ static GLuint translate_fill( GLenum mode )
 
 
 
-static void update_raster_state( struct st_context *st )
+void st_update_rasterizer( struct st_context *st )
 {
    struct gl_context *ctx = st->ctx;
    struct pipe_rasterizer_state *raster = &st->state.rasterizer;
@@ -85,7 +86,7 @@ static void update_raster_state( struct st_context *st )
        * must match OpenGL conventions so FBOs use Y=0=BOTTOM.  In that
        * case, we must invert Y and flip the notion of front vs. back.
        */
-      if (st_fb_orientation(ctx->DrawBuffer) == Y_0_BOTTOM) {
+      if (st->state.fb_orientation == Y_0_BOTTOM) {
          /* Drawing to an FBO.  The viewport will be inverted. */
          raster->front_ccw ^= 1;
       }
@@ -99,7 +100,7 @@ static void update_raster_state( struct st_context *st )
                              GL_FIRST_VERTEX_CONVENTION_EXT;
 
    /* _NEW_LIGHT | _NEW_PROGRAM */
-   raster->light_twoside = ctx->VertexProgram._TwoSideEnabled;
+   raster->light_twoside = _mesa_vertex_program_two_side_enabled(ctx);
 
    /*_NEW_LIGHT | _NEW_BUFFERS */
    raster->clamp_vertex_color = !st->clamp_vert_color_in_shader &&
@@ -173,7 +174,7 @@ static void update_raster_state( struct st_context *st )
    if (ctx->Point.PointSprite) {
       /* origin */
       if ((ctx->Point.SpriteOrigin == GL_UPPER_LEFT) ^
-          (st_fb_orientation(ctx->DrawBuffer) == Y_0_BOTTOM))
+          (st->state.fb_orientation == Y_0_BOTTOM))
          raster->sprite_coord_mode = PIPE_SPRITE_COORD_UPPER_LEFT;
       else 
          raster->sprite_coord_mode = PIPE_SPRITE_COORD_LOWER_LEFT;
@@ -268,7 +269,7 @@ static void update_raster_state( struct st_context *st )
                                   ctx->Color._ClampFragmentColor;
 
    raster->half_pixel_center = 1;
-   if (st_fb_orientation(ctx->DrawBuffer) == Y_0_TOP)
+   if (st->state.fb_orientation == Y_0_TOP)
       raster->bottom_edge_rule = 1;
    /* _NEW_TRANSFORM */
    if (ctx->Transform.ClipOrigin == GL_UPPER_LEFT)
@@ -292,7 +293,3 @@ static void update_raster_state( struct st_context *st )
 
    cso_set_rasterizer(st->cso_context, raster);
 }
-
-const struct st_tracked_state st_update_rasterizer = {
-   update_raster_state     /* update function */
-};

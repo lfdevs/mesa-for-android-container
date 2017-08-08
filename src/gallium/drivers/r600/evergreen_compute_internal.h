@@ -21,10 +21,10 @@
  * Authors:
  *      Adam Rak <adam.rak@streamnovation.com>
  */
- 
 #ifndef EVERGREEN_COMPUTE_INTERNAL_H
 #define EVERGREEN_COMPUTE_INTERNAL_H
 
+#include "ac_binary.h"
 #include "r600_asm.h"
 #ifdef HAVE_OPENCL
 #include <llvm-c/Core.h>

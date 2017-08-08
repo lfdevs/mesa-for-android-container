@@ -72,7 +72,8 @@ VULKAN_PER_GEN_LIBS = \
 	vulkan/libanv-gen7.la \
 	vulkan/libanv-gen75.la \
 	vulkan/libanv-gen8.la \
-	vulkan/libanv-gen9.la
+	vulkan/libanv-gen9.la \
+	vulkan/libanv-gen10.la
 
 noinst_LTLIBRARIES += $(VULKAN_PER_GEN_LIBS)
 
@@ -83,6 +84,7 @@ VULKAN_CFLAGS = \
 VULKAN_CPPFLAGS = \
 	-I$(top_srcdir)/src/compiler \
 	-I$(top_srcdir)/src/intel/compiler \
+	-I$(top_srcdir)/include/drm-uapi \
 	-I$(top_builddir)/src/intel/vulkan \
 	-I$(top_srcdir)/src/intel/vulkan \
 	-I$(top_srcdir)/src/vulkan/wsi \
@@ -106,6 +108,10 @@ vulkan_libanv_gen8_la_SOURCES = $(VULKAN_GEN8_FILES)
 vulkan_libanv_gen9_la_CFLAGS = $(VULKAN_CFLAGS)
 vulkan_libanv_gen9_la_CPPFLAGS = $(VULKAN_CPPFLAGS) -DGEN_VERSIONx10=90
 vulkan_libanv_gen9_la_SOURCES = $(VULKAN_GEN9_FILES)
+
+vulkan_libanv_gen10_la_CFLAGS = $(VULKAN_CFLAGS)
+vulkan_libanv_gen10_la_CPPFLAGS = $(VULKAN_CPPFLAGS) -DGEN_VERSIONx10=100
+vulkan_libanv_gen10_la_SOURCES = $(VULKAN_GEN10_FILES)
 
 VULKAN_SOURCES = \
 	$(VULKAN_GENERATED_FILES) \

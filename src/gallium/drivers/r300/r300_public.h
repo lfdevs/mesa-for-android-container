@@ -8,7 +8,7 @@ extern "C" {
 
 struct radeon_winsys;
 
-struct pipe_screen* r300_screen_create(struct radeon_winsys *rws);
+struct pipe_screen* r300_screen_create(struct radeon_winsys *rws, unsigned flags);
 
 #ifdef __cplusplus
 } // extern "C"

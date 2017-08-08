@@ -24,9 +24,12 @@
  *      Adam Rak <adam.rak@streamnovation.com>
  */
 
+#ifdef HAVE_OPENCL
+#include <gelf.h>
+#include <libelf.h>
+#endif
 #include <stdio.h>
 #include <errno.h>
-#include "ac_binary.h"
 #include "pipe/p_defines.h"
 #include "pipe/p_state.h"
 #include "pipe/p_context.h"
@@ -146,8 +149,8 @@ static void evergreen_cs_set_vertex_buffer(struct r600_context *rctx,
 	struct pipe_vertex_buffer *vb = &state->vb[vb_index];
 	vb->stride = 1;
 	vb->buffer_offset = offset;
-	vb->buffer = buffer;
-	vb->user_buffer = NULL;
+	vb->buffer.resource = buffer;
+	vb->is_user_buffer = false;
 
 	/* The vertex instructions in the compute shaders use the texture cache,
 	 * so we need to invalidate it. */
@@ -179,6 +182,169 @@ static void evergreen_cs_set_constant_buffer(struct r600_context *rctx,
 #define R_028850_SQ_PGM_RESOURCES_PS                 0x028850
 
 #ifdef HAVE_OPENCL
+static void parse_symbol_table(Elf_Data *symbol_table_data,
+				const GElf_Shdr *symbol_table_header,
+				struct ac_shader_binary *binary)
+{
+	GElf_Sym symbol;
+	unsigned i = 0;
+	unsigned symbol_count =
+		symbol_table_header->sh_size / symbol_table_header->sh_entsize;
+
+	/* We are over allocating this list, because symbol_count gives the
+	 * total number of symbols, and we will only be filling the list
+	 * with offsets of global symbols.  The memory savings from
+	 * allocating the correct size of this list will be small, and
+	 * I don't think it is worth the cost of pre-computing the number
+	 * of global symbols.
+	 */
+	binary->global_symbol_offsets = CALLOC(symbol_count, sizeof(uint64_t));
+
+	while (gelf_getsym(symbol_table_data, i++, &symbol)) {
+		unsigned i;
+		if (GELF_ST_BIND(symbol.st_info) != STB_GLOBAL ||
+		    symbol.st_shndx == 0 /* Undefined symbol */) {
+			continue;
+		}
+
+		binary->global_symbol_offsets[binary->global_symbol_count] =
+					symbol.st_value;
+
+		/* Sort the list using bubble sort.  This list will usually
+		 * be small. */
+		for (i = binary->global_symbol_count; i > 0; --i) {
+			uint64_t lhs = binary->global_symbol_offsets[i - 1];
+			uint64_t rhs = binary->global_symbol_offsets[i];
+			if (lhs < rhs) {
+				break;
+			}
+			binary->global_symbol_offsets[i] = lhs;
+			binary->global_symbol_offsets[i - 1] = rhs;
+		}
+		++binary->global_symbol_count;
+	}
+}
+
+
+static void parse_relocs(Elf *elf, Elf_Data *relocs, Elf_Data *symbols,
+			unsigned symbol_sh_link,
+			struct ac_shader_binary *binary)
+{
+	unsigned i;
+
+	if (!relocs || !symbols || !binary->reloc_count) {
+		return;
+	}
+	binary->relocs = CALLOC(binary->reloc_count,
+			sizeof(struct ac_shader_reloc));
+	for (i = 0; i < binary->reloc_count; i++) {
+		GElf_Sym symbol;
+		GElf_Rel rel;
+		char *symbol_name;
+		struct ac_shader_reloc *reloc = &binary->relocs[i];
+
+		gelf_getrel(relocs, i, &rel);
+		gelf_getsym(symbols, GELF_R_SYM(rel.r_info), &symbol);
+		symbol_name = elf_strptr(elf, symbol_sh_link, symbol.st_name);
+
+		reloc->offset = rel.r_offset;
+		strncpy(reloc->name, symbol_name, sizeof(reloc->name)-1);
+		reloc->name[sizeof(reloc->name)-1] = 0;
+	}
+}
+
+static void r600_elf_read(const char *elf_data, unsigned elf_size,
+		 struct ac_shader_binary *binary)
+{
+	char *elf_buffer;
+	Elf *elf;
+	Elf_Scn *section = NULL;
+	Elf_Data *symbols = NULL, *relocs = NULL;
+	size_t section_str_index;
+	unsigned symbol_sh_link = 0;
+
+	/* One of the libelf implementations
+	 * (http://www.mr511.de/software/english.htm) requires calling
+	 * elf_version() before elf_memory().
+	 */
+	elf_version(EV_CURRENT);
+	elf_buffer = MALLOC(elf_size);
+	memcpy(elf_buffer, elf_data, elf_size);
+
+	elf = elf_memory(elf_buffer, elf_size);
+
+	elf_getshdrstrndx(elf, &section_str_index);
+
+	while ((section = elf_nextscn(elf, section))) {
+		const char *name;
+		Elf_Data *section_data = NULL;
+		GElf_Shdr section_header;
+		if (gelf_getshdr(section, &section_header) != &section_header) {
+			fprintf(stderr, "Failed to read ELF section header\n");
+			return;
+		}
+		name = elf_strptr(elf, section_str_index, section_header.sh_name);
+		if (!strcmp(name, ".text")) {
+			section_data = elf_getdata(section, section_data);
+			binary->code_size = section_data->d_size;
+			binary->code = MALLOC(binary->code_size * sizeof(unsigned char));
+			memcpy(binary->code, section_data->d_buf, binary->code_size);
+		} else if (!strcmp(name, ".AMDGPU.config")) {
+			section_data = elf_getdata(section, section_data);
+			binary->config_size = section_data->d_size;
+			binary->config = MALLOC(binary->config_size * sizeof(unsigned char));
+			memcpy(binary->config, section_data->d_buf, binary->config_size);
+		} else if (!strcmp(name, ".AMDGPU.disasm")) {
+			/* Always read disassembly if it's available. */
+			section_data = elf_getdata(section, section_data);
+			binary->disasm_string = strndup(section_data->d_buf,
+							section_data->d_size);
+		} else if (!strncmp(name, ".rodata", 7)) {
+			section_data = elf_getdata(section, section_data);
+			binary->rodata_size = section_data->d_size;
+			binary->rodata = MALLOC(binary->rodata_size * sizeof(unsigned char));
+			memcpy(binary->rodata, section_data->d_buf, binary->rodata_size);
+		} else if (!strncmp(name, ".symtab", 7)) {
+			symbols = elf_getdata(section, section_data);
+			symbol_sh_link = section_header.sh_link;
+			parse_symbol_table(symbols, &section_header, binary);
+		} else if (!strcmp(name, ".rel.text")) {
+			relocs = elf_getdata(section, section_data);
+			binary->reloc_count = section_header.sh_size /
+					section_header.sh_entsize;
+		}
+	}
+
+	parse_relocs(elf, relocs, symbols, symbol_sh_link, binary);
+
+	if (elf){
+		elf_end(elf);
+	}
+	FREE(elf_buffer);
+
+	/* Cache the config size per symbol */
+	if (binary->global_symbol_count) {
+		binary->config_size_per_symbol =
+			binary->config_size / binary->global_symbol_count;
+	} else {
+		binary->global_symbol_count = 1;
+		binary->config_size_per_symbol = binary->config_size;
+	}
+}
+
+static const unsigned char *r600_shader_binary_config_start(
+	const struct ac_shader_binary *binary,
+	uint64_t symbol_offset)
+{
+	unsigned i;
+	for (i = 0; i < binary->global_symbol_count; ++i) {
+		if (binary->global_symbol_offsets[i] == symbol_offset) {
+			unsigned offset = i * binary->config_size_per_symbol;
+			return binary->config + offset;
+		}
+	}
+	return binary->config;
+}
 
 static void r600_shader_binary_read_config(const struct ac_shader_binary *binary,
 					   struct r600_bytecode *bc,
@@ -187,7 +353,7 @@ static void r600_shader_binary_read_config(const struct ac_shader_binary *binary
 {
        unsigned i;
        const unsigned char *config =
-               ac_shader_binary_config_start(binary, symbol_offset);
+               r600_shader_binary_config_start(binary, symbol_offset);
 
        for (i = 0; i < binary->config_size_per_symbol; i+= 8) {
                unsigned reg =
@@ -251,7 +417,7 @@ static void *evergreen_create_compute_state(struct pipe_context *ctx,
 	header = cso->prog;
 	code = cso->prog + sizeof(struct pipe_llvm_program_header);
 	radeon_shader_binary_init(&shader->binary);
-	ac_elf_read(code, header->num_bytes, &shader->binary);
+	r600_elf_read(code, header->num_bytes, &shader->binary);
 	r600_create_shader(&shader->bc, &shader->binary, &use_kill);
 
 	/* Upload code + ROdata */
@@ -281,7 +447,9 @@ static void evergreen_delete_compute_state(struct pipe_context *ctx, void *state
 	if (!shader)
 		return;
 
+#ifdef HAVE_OPENCL
 	radeon_shader_binary_clean(&shader->binary);
+#endif
 	r600_destroy_shader(&shader->bc);
 
 	/* TODO destroy shader->code_bo, shader->const_bo
@@ -442,6 +610,9 @@ static void evergreen_emit_dispatch(struct r600_context *rctx,
 	radeon_emit(cs, info->grid[2]);
 	/* VGT_DISPATCH_INITIATOR = COMPUTE_SHADER_EN */
 	radeon_emit(cs, 1);
+
+	if (rctx->is_debug)
+		eg_trace_emit(rctx);
 }
 
 static void compute_emit_cs(struct r600_context *rctx,
@@ -867,10 +1038,9 @@ void evergreen_init_atom_start_compute_cs(struct r600_context *rctx)
 	r600_store_context_reg(cb, R_028B54_VGT_SHADER_STAGES_EN, 2/*CS_ON*/);
 
 	r600_store_context_reg(cb, R_0286E8_SPI_COMPUTE_INPUT_CNTL,
-						S_0286E8_TID_IN_GROUP_ENA
-						| S_0286E8_TGID_ENA
-						| S_0286E8_DISABLE_INDEX_PACK)
-						;
+			       S_0286E8_TID_IN_GROUP_ENA(1) |
+			       S_0286E8_TGID_ENA(1) |
+			       S_0286E8_DISABLE_INDEX_PACK(1));
 
 	/* The LOOP_CONST registers are an optimizations for loops that allows
 	 * you to store the initial counter, increment value, and maximum

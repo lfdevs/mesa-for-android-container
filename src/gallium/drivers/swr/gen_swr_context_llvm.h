@@ -91,42 +91,44 @@ namespace SwrJit
         LLVMContext& ctx = pJitMgr->mContext;
         std::vector<Type*> members;
         
-        /* constantVS      */ members.push_back( ArrayType::get(PointerType::get(Type::getFloatTy(ctx), 0), PIPE_MAX_CONSTANT_BUFFERS) );
-        /* num_constantsVS */ members.push_back( ArrayType::get(Type::getInt32Ty(ctx), PIPE_MAX_CONSTANT_BUFFERS) );
-        /* constantFS      */ members.push_back( ArrayType::get(PointerType::get(Type::getFloatTy(ctx), 0), PIPE_MAX_CONSTANT_BUFFERS) );
-        /* num_constantsFS */ members.push_back( ArrayType::get(Type::getInt32Ty(ctx), PIPE_MAX_CONSTANT_BUFFERS) );
-        /* constantGS      */ members.push_back( ArrayType::get(PointerType::get(Type::getFloatTy(ctx), 0), PIPE_MAX_CONSTANT_BUFFERS) );
-        /* num_constantsGS */ members.push_back( ArrayType::get(Type::getInt32Ty(ctx), PIPE_MAX_CONSTANT_BUFFERS) );
-        /* texturesVS      */ members.push_back( ArrayType::get(Gen_swr_jit_texture(pJitMgr), PIPE_MAX_SHADER_SAMPLER_VIEWS) );
-        /* samplersVS      */ members.push_back( ArrayType::get(Gen_swr_jit_sampler(pJitMgr), PIPE_MAX_SAMPLERS) );
-        /* texturesFS      */ members.push_back( ArrayType::get(Gen_swr_jit_texture(pJitMgr), PIPE_MAX_SHADER_SAMPLER_VIEWS) );
-        /* samplersFS      */ members.push_back( ArrayType::get(Gen_swr_jit_sampler(pJitMgr), PIPE_MAX_SAMPLERS) );
-        /* texturesGS      */ members.push_back( ArrayType::get(Gen_swr_jit_texture(pJitMgr), PIPE_MAX_SHADER_SAMPLER_VIEWS) );
-        /* samplersGS      */ members.push_back( ArrayType::get(Gen_swr_jit_sampler(pJitMgr), PIPE_MAX_SAMPLERS) );
-        /* userClipPlanes  */ members.push_back( ArrayType::get(ArrayType::get(Type::getFloatTy(ctx), 4), PIPE_MAX_CLIP_PLANES) );
-        /* polyStipple     */ members.push_back( ArrayType::get(Type::getInt32Ty(ctx), 32) );
-        /* renderTargets   */ members.push_back( ArrayType::get(Gen_SWR_SURFACE_STATE(pJitMgr), SWR_NUM_ATTACHMENTS) );
-        /* pStats          */ members.push_back( PointerType::get(Type::getInt32Ty(ctx), 0) );
+        /* constantVS       */ members.push_back( ArrayType::get(PointerType::get(Type::getFloatTy(ctx), 0), PIPE_MAX_CONSTANT_BUFFERS) );
+        /* num_constantsVS  */ members.push_back( ArrayType::get(Type::getInt32Ty(ctx), PIPE_MAX_CONSTANT_BUFFERS) );
+        /* constantFS       */ members.push_back( ArrayType::get(PointerType::get(Type::getFloatTy(ctx), 0), PIPE_MAX_CONSTANT_BUFFERS) );
+        /* num_constantsFS  */ members.push_back( ArrayType::get(Type::getInt32Ty(ctx), PIPE_MAX_CONSTANT_BUFFERS) );
+        /* constantGS       */ members.push_back( ArrayType::get(PointerType::get(Type::getFloatTy(ctx), 0), PIPE_MAX_CONSTANT_BUFFERS) );
+        /* num_constantsGS  */ members.push_back( ArrayType::get(Type::getInt32Ty(ctx), PIPE_MAX_CONSTANT_BUFFERS) );
+        /* texturesVS       */ members.push_back( ArrayType::get(Gen_swr_jit_texture(pJitMgr), PIPE_MAX_SHADER_SAMPLER_VIEWS) );
+        /* samplersVS       */ members.push_back( ArrayType::get(Gen_swr_jit_sampler(pJitMgr), PIPE_MAX_SAMPLERS) );
+        /* texturesFS       */ members.push_back( ArrayType::get(Gen_swr_jit_texture(pJitMgr), PIPE_MAX_SHADER_SAMPLER_VIEWS) );
+        /* samplersFS       */ members.push_back( ArrayType::get(Gen_swr_jit_sampler(pJitMgr), PIPE_MAX_SAMPLERS) );
+        /* texturesGS       */ members.push_back( ArrayType::get(Gen_swr_jit_texture(pJitMgr), PIPE_MAX_SHADER_SAMPLER_VIEWS) );
+        /* samplersGS       */ members.push_back( ArrayType::get(Gen_swr_jit_sampler(pJitMgr), PIPE_MAX_SAMPLERS) );
+        /* userClipPlanes   */ members.push_back( ArrayType::get(ArrayType::get(Type::getFloatTy(ctx), 4), PIPE_MAX_CLIP_PLANES) );
+        /* polyStipple      */ members.push_back( ArrayType::get(Type::getInt32Ty(ctx), 32) );
+        /* renderTargets    */ members.push_back( ArrayType::get(Gen_SWR_SURFACE_STATE(pJitMgr), SWR_NUM_ATTACHMENTS) );
+        /* swr_query_result */ members.push_back( PointerType::get(Type::getInt32Ty(ctx), 0) );
+        /* pAPI             */ members.push_back( PointerType::get(Type::getInt32Ty(ctx), 0) );
 
         return StructType::get(ctx, members, false);
     }
 
-    static const uint32_t swr_draw_context_constantVS      = 0;
-    static const uint32_t swr_draw_context_num_constantsVS = 1;
-    static const uint32_t swr_draw_context_constantFS      = 2;
-    static const uint32_t swr_draw_context_num_constantsFS = 3;
-    static const uint32_t swr_draw_context_constantGS      = 4;
-    static const uint32_t swr_draw_context_num_constantsGS = 5;
-    static const uint32_t swr_draw_context_texturesVS      = 6;
-    static const uint32_t swr_draw_context_samplersVS      = 7;
-    static const uint32_t swr_draw_context_texturesFS      = 8;
-    static const uint32_t swr_draw_context_samplersFS      = 9;
-    static const uint32_t swr_draw_context_texturesGS      = 10;
-    static const uint32_t swr_draw_context_samplersGS      = 11;
-    static const uint32_t swr_draw_context_userClipPlanes  = 12;
-    static const uint32_t swr_draw_context_polyStipple     = 13;
-    static const uint32_t swr_draw_context_renderTargets   = 14;
-    static const uint32_t swr_draw_context_pStats          = 15;
+    static const uint32_t swr_draw_context_constantVS       = 0;
+    static const uint32_t swr_draw_context_num_constantsVS  = 1;
+    static const uint32_t swr_draw_context_constantFS       = 2;
+    static const uint32_t swr_draw_context_num_constantsFS  = 3;
+    static const uint32_t swr_draw_context_constantGS       = 4;
+    static const uint32_t swr_draw_context_num_constantsGS  = 5;
+    static const uint32_t swr_draw_context_texturesVS       = 6;
+    static const uint32_t swr_draw_context_samplersVS       = 7;
+    static const uint32_t swr_draw_context_texturesFS       = 8;
+    static const uint32_t swr_draw_context_samplersFS       = 9;
+    static const uint32_t swr_draw_context_texturesGS       = 10;
+    static const uint32_t swr_draw_context_samplersGS       = 11;
+    static const uint32_t swr_draw_context_userClipPlanes   = 12;
+    static const uint32_t swr_draw_context_polyStipple      = 13;
+    static const uint32_t swr_draw_context_renderTargets    = 14;
+    static const uint32_t swr_draw_context_swr_query_result = 15;
+    static const uint32_t swr_draw_context_pAPI             = 16;
 
 } // ns SwrJit
 

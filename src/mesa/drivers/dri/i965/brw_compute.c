@@ -188,6 +188,8 @@ brw_dispatch_compute_common(struct gl_context *ctx)
 
    brw_validate_textures(brw);
 
+   brw_predraw_resolve_inputs(brw);
+
    const int sampler_state_size = 16; /* 16 bytes */
    estimated_buffer_space_needed = 512; /* batchbuffer commands */
    estimated_buffer_space_needed += (BRW_MAX_TEX_UNIT *
@@ -261,7 +263,7 @@ brw_dispatch_compute_indirect(struct gl_context *ctx, GLintptr indirect)
    struct brw_bo *bo =
       intel_bufferobj_buffer(brw,
                              intel_buffer_object(indirect_buffer),
-                             indirect, 3 * sizeof(GLuint));
+                             indirect, 3 * sizeof(GLuint), false);
 
    brw->compute.num_work_groups_bo = bo;
    brw->compute.num_work_groups_offset = indirect;

@@ -34,97 +34,35 @@
 #include "main/mtypes.h"
 #include "main/enums.h"
 #include "main/fbobject.h"
+#include "main/state.h"
 
 #include "intel_batchbuffer.h"
 
 #include "brw_defines.h"
 #include "brw_context.h"
 #include "brw_util.h"
-#include "brw_sf.h"
 #include "brw_state.h"
+#include "compiler/brw_eu.h"
 
 #include "util/ralloc.h"
 
 static void compile_sf_prog( struct brw_context *brw,
 			     struct brw_sf_prog_key *key )
 {
-   struct brw_sf_compile c;
-   const GLuint *program;
+   const unsigned *program;
    void *mem_ctx;
-   GLuint program_size;
-
-   memset(&c, 0, sizeof(c));
+   unsigned program_size;
 
    mem_ctx = ralloc_context(NULL);
-   /* Begin the compilation:
-    */
-   brw_init_codegen(&brw->screen->devinfo, &c.func, mem_ctx);
 
-   c.key = *key;
-   c.vue_map = brw->vue_map_geom_out;
-   if (c.key.do_point_coord) {
-      /*
-       * gl_PointCoord is a FS instead of VS builtin variable, thus it's
-       * not included in c.vue_map generated in VS stage. Here we add
-       * it manually to let SF shader generate the needed interpolation
-       * coefficient for FS shader.
-       */
-      c.vue_map.varying_to_slot[BRW_VARYING_SLOT_PNTC] = c.vue_map.num_slots;
-      c.vue_map.slot_to_varying[c.vue_map.num_slots++] = BRW_VARYING_SLOT_PNTC;
-   }
-   c.urb_entry_read_offset = BRW_SF_URB_ENTRY_READ_OFFSET;
-   c.nr_attr_regs = (c.vue_map.num_slots + 1)/2 - c.urb_entry_read_offset;
-   c.nr_setup_regs = c.nr_attr_regs;
-
-   c.prog_data.urb_read_length = c.nr_attr_regs;
-   c.prog_data.urb_entry_size = c.nr_setup_regs * 2;
-
-   /* Which primitive?  Or all three?
-    */
-   switch (key->primitive) {
-   case SF_TRIANGLES:
-      c.nr_verts = 3;
-      brw_emit_tri_setup( &c, true );
-      break;
-   case SF_LINES:
-      c.nr_verts = 2;
-      brw_emit_line_setup( &c, true );
-      break;
-   case SF_POINTS:
-      c.nr_verts = 1;
-      if (key->do_point_sprite)
-	  brw_emit_point_sprite_setup( &c, true );
-      else
-	  brw_emit_point_setup( &c, true );
-      break;
-   case SF_UNFILLED_TRIS:
-      c.nr_verts = 3;
-      brw_emit_anyprim_setup( &c );
-      break;
-   default:
-      unreachable("not reached");
-   }
-
-   /* FINISHME: SF programs use calculated jumps (i.e., JMPI with a register
-    * source). Compacting would be difficult.
-    */
-   /* brw_compact_instructions(&c.func, 0, 0, NULL); */
-
-   /* get the program
-    */
-   program = brw_get_program(&c.func, &program_size);
-
-   if (unlikely(INTEL_DEBUG & DEBUG_SF)) {
-      fprintf(stderr, "sf:\n");
-      brw_disassemble(&brw->screen->devinfo,
-                      c.func.store, 0, program_size, stderr);
-      fprintf(stderr, "\n");
-   }
+   struct brw_sf_prog_data prog_data;
+   program = brw_compile_sf(brw->screen->compiler, mem_ctx, key, &prog_data,
+                            &brw->vue_map_geom_out, &program_size);
 
    brw_upload_cache(&brw->cache, BRW_CACHE_SF_PROG,
-		    &c.key, sizeof(c.key),
+		    key, sizeof(*key),
 		    program, program_size,
-		    &c.prog_data, sizeof(c.prog_data),
+		    &prog_data, sizeof(prog_data),
 		    &brw->sf.prog_offset, &brw->sf.prog_data);
    ralloc_free(mem_ctx);
 }
@@ -170,15 +108,15 @@ brw_upload_sf_prog(struct brw_context *brw)
        * program.
        */
       if (key.attrs & BITFIELD64_BIT(VARYING_SLOT_EDGE))
-	 key.primitive = SF_UNFILLED_TRIS;
+	 key.primitive = BRW_SF_PRIM_UNFILLED_TRIS;
       else
-	 key.primitive = SF_TRIANGLES;
+	 key.primitive = BRW_SF_PRIM_TRIANGLES;
       break;
    case GL_LINES:
-      key.primitive = SF_LINES;
+      key.primitive = BRW_SF_PRIM_LINES;
       break;
    case GL_POINTS:
-      key.primitive = SF_POINTS;
+      key.primitive = BRW_SF_PRIM_POINTS;
       break;
    }
 
@@ -207,12 +145,15 @@ brw_upload_sf_prog(struct brw_context *brw)
       brw_wm_prog_data(brw->wm.base.prog_data);
    if (wm_prog_data) {
       key.contains_flat_varying = wm_prog_data->contains_flat_varying;
-      key.interp_mode = wm_prog_data->interp_mode;
+
+      STATIC_ASSERT(sizeof(key.interp_mode) ==
+                    sizeof(wm_prog_data->interp_mode));
+      memcpy(key.interp_mode, wm_prog_data->interp_mode,
+             sizeof(key.interp_mode));
    }
 
    /* _NEW_LIGHT | _NEW_PROGRAM */
-   key.do_twoside_color = ((ctx->Light.Enabled && ctx->Light.Model.TwoSide) ||
-                           ctx->VertexProgram._TwoSideEnabled);
+   key.do_twoside_color = _mesa_vertex_program_two_side_enabled(ctx);
 
    /* _NEW_POLYGON */
    if (key.do_twoside_color) {
@@ -220,7 +161,7 @@ brw_upload_sf_prog(struct brw_context *brw)
        * face orientation, just as we invert the viewport in
        * sf_unit_create_from_key().
        */
-      key.frontface_ccw = ctx->Polygon._FrontBit == render_to_fbo;
+      key.frontface_ccw = brw->polygon_front_bit == render_to_fbo;
    }
 
    if (!brw_search_cache(&brw->cache, BRW_CACHE_SF_PROG,

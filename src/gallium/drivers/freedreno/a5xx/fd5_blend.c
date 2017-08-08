@@ -59,12 +59,12 @@ fd5_blend_state_create(struct pipe_context *pctx,
 		const struct pipe_blend_state *cso)
 {
 	struct fd5_blend_stateobj *so;
-//	enum a3xx_rop_code rop = ROP_COPY;
+	enum a3xx_rop_code rop = ROP_COPY;
 	bool reads_dest = false;
 	unsigned i, mrt_blend = 0;
 
 	if (cso->logicop_enable) {
-//		rop = cso->logicop_func;  /* maps 1:1 */
+		rop = cso->logicop_func;  /* maps 1:1 */
 
 		switch (cso->logicop_func) {
 		case PIPE_LOGICOP_NOR:
@@ -89,6 +89,8 @@ fd5_blend_state_create(struct pipe_context *pctx,
 		return NULL;
 
 	so->base = *cso;
+
+	so->lrz_write = true;  /* unless blend enabled for any MRT */
 
 	for (i = 0; i < ARRAY_SIZE(so->rb_mrt); i++) {
 		const struct pipe_rt_blend_state *rt;
@@ -115,9 +117,8 @@ fd5_blend_state_create(struct pipe_context *pctx,
 
 
 		so->rb_mrt[i].control =
-//				A5XX_RB_MRT_CONTROL_ROP_CODE(rop) |
-//				COND(cso->logicop_enable, A5XX_RB_MRT_CONTROL_ROP_ENABLE) |
-				0x60 | /* XXX set other than RECTLIST clear blits?? */
+				A5XX_RB_MRT_CONTROL_ROP_CODE(rop) |
+				COND(cso->logicop_enable, A5XX_RB_MRT_CONTROL_ROP_ENABLE) |
 				A5XX_RB_MRT_CONTROL_COMPONENT_ENABLE(rt->colormask);
 
 		if (rt->blend_enable) {
@@ -126,6 +127,7 @@ fd5_blend_state_create(struct pipe_context *pctx,
 					A5XX_RB_MRT_CONTROL_BLEND |
 					A5XX_RB_MRT_CONTROL_BLEND2;
 			mrt_blend |= (1 << i);
+			so->lrz_write = false;
 		}
 
 		if (reads_dest) {
@@ -139,6 +141,8 @@ fd5_blend_state_create(struct pipe_context *pctx,
 
 	so->rb_blend_cntl = A5XX_RB_BLEND_CNTL_ENABLE_BLEND(mrt_blend) |
 		COND(cso->independent_blend_enable, A5XX_RB_BLEND_CNTL_INDEPENDENT_BLEND);
+	so->sp_blend_cntl = A5XX_SP_BLEND_CNTL_UNK8 |
+		COND(mrt_blend, A5XX_SP_BLEND_CNTL_ENABLED);
 
 	return so;
 }

@@ -29,6 +29,7 @@
 #include "pipe/p_screen.h"
 
 #include "util/u_video.h"
+#include "util/u_memory.h"
 
 #include "vl/vl_winsys.h"
 

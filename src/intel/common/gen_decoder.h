@@ -53,12 +53,15 @@ struct gen_enum *gen_spec_find_enum(struct gen_spec *spec, const char *name);
 
 struct gen_field_iterator {
    struct gen_group *group;
-   const char *name;
+   char name[128];
    char value[128];
    struct gen_group *struct_desc;
    const uint32_t *p;
    int dword; /**< current field starts at &p[dword] */
-   int i;
+
+   int field_iter;
+   int group_iter;
+
    struct gen_field *field;
    bool print_colors;
 };
@@ -66,9 +69,17 @@ struct gen_field_iterator {
 struct gen_group {
    struct gen_spec *spec;
    char *name;
-   int nfields;
+
    struct gen_field **fields;
+   uint32_t nfields;
+   uint32_t fields_size;
+
    uint32_t group_offset, group_count;
+   uint32_t group_size;
+   bool variable;
+
+   struct gen_group *parent;
+   struct gen_group *next;
 
    uint32_t opcode_mask;
    uint32_t opcode;

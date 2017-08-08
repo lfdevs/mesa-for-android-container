@@ -110,6 +110,8 @@ struct _egl_api
                              _EGLSurface *draw);
    EGLBoolean (*CopyBuffers)(_EGLDriver *drv, _EGLDisplay *dpy,
                              _EGLSurface *surface, void *native_pixmap_target);
+   EGLBoolean (*SetDamageRegion)(_EGLDriver *drv, _EGLDisplay *dpy,
+                                 _EGLSurface *surface, EGLint *rects, EGLint n_rects);
 
    /* misc functions */
    EGLBoolean (*WaitClient)(_EGLDriver *drv, _EGLDisplay *dpy,
@@ -198,6 +200,15 @@ struct _egl_api
    int (*GLInteropExportObject)(_EGLDisplay *dpy, _EGLContext *ctx,
                                 struct mesa_glinterop_export_in *in,
                                 struct mesa_glinterop_export_out *out);
+
+   EGLBoolean (*QueryDmaBufFormatsEXT)(_EGLDriver *drv, _EGLDisplay *dpy,
+                                       EGLint max_formats, EGLint *formats,
+                                       EGLint *num_formats);
+   EGLBoolean (*QueryDmaBufModifiersEXT) (_EGLDriver *drv, _EGLDisplay *dpy,
+                                          EGLint format, EGLint max_modifiers,
+                                          EGLuint64KHR *modifiers,
+                                          EGLBoolean *external_only,
+                                          EGLint *num_modifiers);
 };
 
 #ifdef __cplusplus

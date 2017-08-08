@@ -58,15 +58,12 @@ _mesa_delete_pipeline_object(struct gl_context *ctx,
 {
    unsigned i;
 
-   _mesa_reference_program(ctx, &obj->_CurrentFragmentProgram, NULL);
-
    for (i = 0; i < MESA_SHADER_STAGES; i++) {
       _mesa_reference_program(ctx, &obj->CurrentProgram[i], NULL);
       _mesa_reference_shader_program(ctx, &obj->ReferencedPrograms[i], NULL);
    }
 
    _mesa_reference_shader_program(ctx, &obj->ActiveProgram, NULL);
-   mtx_destroy(&obj->Mutex);
    free(obj->Label);
    ralloc_free(obj);
 }
@@ -80,7 +77,6 @@ _mesa_new_pipeline_object(struct gl_context *ctx, GLuint name)
    struct gl_pipeline_object *obj = rzalloc(NULL, struct gl_pipeline_object);
    if (obj) {
       obj->Name = name;
-      mtx_init(&obj->Mutex, mtx_plain);
       obj->RefCount = 1;
       obj->Flags = _mesa_get_shader_flags();
       obj->InfoLog = NULL;
@@ -146,7 +142,7 @@ _mesa_lookup_pipeline_object(struct gl_context *ctx, GLuint id)
       return NULL;
    else
       return (struct gl_pipeline_object *)
-         _mesa_HashLookup(ctx->Pipeline.Objects, id);
+         _mesa_HashLookupLocked(ctx->Pipeline.Objects, id);
 }
 
 /**
@@ -156,7 +152,7 @@ static void
 save_pipeline_object(struct gl_context *ctx, struct gl_pipeline_object *obj)
 {
    if (obj->Name > 0) {
-      _mesa_HashInsert(ctx->Pipeline.Objects, obj->Name, obj);
+      _mesa_HashInsertLocked(ctx->Pipeline.Objects, obj->Name, obj);
    }
 }
 
@@ -168,7 +164,7 @@ static void
 remove_pipeline_object(struct gl_context *ctx, struct gl_pipeline_object *obj)
 {
    if (obj->Name > 0) {
-      _mesa_HashRemove(ctx->Pipeline.Objects, obj->Name);
+      _mesa_HashRemoveLocked(ctx->Pipeline.Objects, obj->Name);
    }
 }
 
@@ -186,16 +182,12 @@ _mesa_reference_pipeline_object_(struct gl_context *ctx,
 
    if (*ptr) {
       /* Unreference the old pipeline object */
-      GLboolean deleteFlag = GL_FALSE;
       struct gl_pipeline_object *oldObj = *ptr;
 
-      mtx_lock(&oldObj->Mutex);
       assert(oldObj->RefCount > 0);
       oldObj->RefCount--;
-      deleteFlag = (oldObj->RefCount == 0);
-      mtx_unlock(&oldObj->Mutex);
 
-      if (deleteFlag) {
+      if (oldObj->RefCount == 0) {
          _mesa_delete_pipeline_object(ctx, oldObj);
       }
 
@@ -205,18 +197,10 @@ _mesa_reference_pipeline_object_(struct gl_context *ctx,
 
    if (obj) {
       /* reference new pipeline object */
-      mtx_lock(&obj->Mutex);
-      if (obj->RefCount == 0) {
-         /* this pipeline's being deleted (look just above) */
-         /* Not sure this can ever really happen.  Warn if it does. */
-         _mesa_problem(NULL, "referencing deleted pipeline object");
-         *ptr = NULL;
-      }
-      else {
-         obj->RefCount++;
-         *ptr = obj;
-      }
-      mtx_unlock(&obj->Mutex);
+      assert(obj->RefCount > 0);
+
+      obj->RefCount++;
+      *ptr = obj;
    }
 }
 
@@ -230,6 +214,65 @@ use_program_stage(struct gl_context *ctx, GLenum type,
       prog = shProg->_LinkedShaders[stage]->Program;
 
    _mesa_use_program(ctx, stage, shProg, prog, pipe);
+}
+
+static void
+use_program_stages(struct gl_context *ctx, struct gl_shader_program *shProg,
+                   GLbitfield stages, struct gl_pipeline_object *pipe) {
+
+   /* Enable individual stages from the program as requested by the
+    * application.  If there is no shader for a requested stage in the
+    * program, _mesa_use_shader_program will enable fixed-function processing
+    * as dictated by the spec.
+    *
+    * Section 2.11.4 (Program Pipeline Objects) of the OpenGL 4.1 spec
+    * says:
+    *
+    *     "If UseProgramStages is called with program set to zero or with a
+    *     program object that contains no executable code for the given
+    *     stages, it is as if the pipeline object has no programmable stage
+    *     configured for the indicated shader stages."
+    */
+   if ((stages & GL_VERTEX_SHADER_BIT) != 0)
+      use_program_stage(ctx, GL_VERTEX_SHADER, shProg, pipe);
+
+   if ((stages & GL_FRAGMENT_SHADER_BIT) != 0)
+      use_program_stage(ctx, GL_FRAGMENT_SHADER, shProg, pipe);
+
+   if ((stages & GL_GEOMETRY_SHADER_BIT) != 0)
+      use_program_stage(ctx, GL_GEOMETRY_SHADER, shProg, pipe);
+
+   if ((stages & GL_TESS_CONTROL_SHADER_BIT) != 0)
+      use_program_stage(ctx, GL_TESS_CONTROL_SHADER, shProg, pipe);
+
+   if ((stages & GL_TESS_EVALUATION_SHADER_BIT) != 0)
+      use_program_stage(ctx, GL_TESS_EVALUATION_SHADER, shProg, pipe);
+
+   if ((stages & GL_COMPUTE_SHADER_BIT) != 0)
+      use_program_stage(ctx, GL_COMPUTE_SHADER, shProg, pipe);
+
+   pipe->Validated = false;
+}
+
+void GLAPIENTRY
+_mesa_UseProgramStages_no_error(GLuint pipeline, GLbitfield stages,
+                                GLuint prog)
+{
+   GET_CURRENT_CONTEXT(ctx);
+
+   struct gl_pipeline_object *pipe =
+      _mesa_lookup_pipeline_object(ctx, pipeline);
+   struct gl_shader_program *shProg = NULL;
+
+   if (prog)
+      shProg = _mesa_lookup_shader_program(ctx, prog);
+
+   /* Object is created by any Pipeline call but glGenProgramPipelines,
+    * glIsProgramPipeline and GetProgramPipelineInfoLog
+    */
+   pipe->EverBound = GL_TRUE;
+
+   use_program_stages(ctx, shProg, stages, pipe);
 }
 
 /**
@@ -325,38 +368,25 @@ _mesa_UseProgramStages(GLuint pipeline, GLbitfield stages, GLuint program)
       }
    }
 
-   /* Enable individual stages from the program as requested by the
-    * application.  If there is no shader for a requested stage in the
-    * program, _mesa_use_shader_program will enable fixed-function processing
-    * as dictated by the spec.
-    *
-    * Section 2.11.4 (Program Pipeline Objects) of the OpenGL 4.1 spec
-    * says:
-    *
-    *     "If UseProgramStages is called with program set to zero or with a
-    *     program object that contains no executable code for the given
-    *     stages, it is as if the pipeline object has no programmable stage
-    *     configured for the indicated shader stages."
+   use_program_stages(ctx, shProg, stages, pipe);
+}
+
+void GLAPIENTRY
+_mesa_ActiveShaderProgram_no_error(GLuint pipeline, GLuint program)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   struct gl_shader_program *shProg = NULL;
+   struct gl_pipeline_object *pipe = _mesa_lookup_pipeline_object(ctx, pipeline);
+
+   if (program)
+      shProg = _mesa_lookup_shader_program(ctx, program);
+
+   /* Object is created by any Pipeline call but glGenProgramPipelines,
+    * glIsProgramPipeline and GetProgramPipelineInfoLog
     */
-   if ((stages & GL_VERTEX_SHADER_BIT) != 0)
-      use_program_stage(ctx, GL_VERTEX_SHADER, shProg, pipe);
+   pipe->EverBound = GL_TRUE;
 
-   if ((stages & GL_FRAGMENT_SHADER_BIT) != 0)
-      use_program_stage(ctx, GL_FRAGMENT_SHADER, shProg, pipe);
-
-   if ((stages & GL_GEOMETRY_SHADER_BIT) != 0)
-      use_program_stage(ctx, GL_GEOMETRY_SHADER, shProg, pipe);
-
-   if ((stages & GL_TESS_CONTROL_SHADER_BIT) != 0)
-      use_program_stage(ctx, GL_TESS_CONTROL_SHADER, shProg, pipe);
-
-   if ((stages & GL_TESS_EVALUATION_SHADER_BIT) != 0)
-      use_program_stage(ctx, GL_TESS_EVALUATION_SHADER, shProg, pipe);
-
-   if ((stages & GL_COMPUTE_SHADER_BIT) != 0)
-      use_program_stage(ctx, GL_COMPUTE_SHADER, shProg, pipe);
-
-   pipe->Validated = false;
+   _mesa_reference_shader_program(ctx, &pipe->ActiveProgram, shProg);
 }
 
 /**
@@ -397,6 +427,32 @@ _mesa_ActiveShaderProgram(GLuint pipeline, GLuint program)
    }
 
    _mesa_reference_shader_program(ctx, &pipe->ActiveProgram, shProg);
+}
+
+void GLAPIENTRY
+_mesa_BindProgramPipeline_no_error(GLuint pipeline)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   struct gl_pipeline_object *newObj = NULL;
+
+   /* Rebinding the same pipeline object: no change.
+    */
+   if (ctx->_Shader->Name == pipeline)
+      return;
+
+   /* Get pointer to new pipeline object (newObj)
+    */
+   if (pipeline) {
+      /* non-default pipeline object */
+      newObj = _mesa_lookup_pipeline_object(ctx, pipeline);
+
+      /* Object is created by any Pipeline call but glGenProgramPipelines,
+       * glIsProgramPipeline and GetProgramPipelineInfoLog
+       */
+      newObj->EverBound = GL_TRUE;
+   }
+
+   _mesa_bind_pipeline(ctx, newObj);
 }
 
 /**
@@ -547,20 +603,12 @@ static void
 create_program_pipelines(struct gl_context *ctx, GLsizei n, GLuint *pipelines,
                          bool dsa)
 {
-   const char *func;
+   const char *func = dsa ? "glCreateProgramPipelines" : "glGenProgramPipelines";
    GLuint first;
    GLint i;
 
-   func = dsa ? "glCreateProgramPipelines" : "glGenProgramPipelines";
-
-   if (n < 0) {
-      _mesa_error(ctx, GL_INVALID_VALUE, "%s (n < 0)", func);
+   if (!pipelines)
       return;
-   }
-
-   if (!pipelines) {
-      return;
-   }
 
    first = _mesa_HashFindFreeKeyBlock(ctx->Pipeline.Objects, n);
 
@@ -582,7 +630,27 @@ create_program_pipelines(struct gl_context *ctx, GLsizei n, GLuint *pipelines,
       save_pipeline_object(ctx, obj);
       pipelines[i] = first + i;
    }
+}
 
+static void
+create_program_pipelines_err(struct gl_context *ctx, GLsizei n,
+                             GLuint *pipelines, bool dsa)
+{
+   const char *func = dsa ? "glCreateProgramPipelines" : "glGenProgramPipelines";
+
+   if (n < 0) {
+      _mesa_error(ctx, GL_INVALID_VALUE, "%s (n < 0)", func);
+      return;
+   }
+
+   create_program_pipelines(ctx, n, pipelines, dsa);
+}
+
+void GLAPIENTRY
+_mesa_GenProgramPipelines_no_error(GLsizei n, GLuint *pipelines)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   create_program_pipelines(ctx, n, pipelines, false);
 }
 
 void GLAPIENTRY
@@ -593,7 +661,14 @@ _mesa_GenProgramPipelines(GLsizei n, GLuint *pipelines)
    if (MESA_VERBOSE & VERBOSE_API)
       _mesa_debug(ctx, "glGenProgramPipelines(%d, %p)\n", n, pipelines);
 
-   create_program_pipelines(ctx, n, pipelines, false);
+   create_program_pipelines_err(ctx, n, pipelines, false);
+}
+
+void GLAPIENTRY
+_mesa_CreateProgramPipelines_no_error(GLsizei n, GLuint *pipelines)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   create_program_pipelines(ctx, n, pipelines, true);
 }
 
 void GLAPIENTRY
@@ -604,7 +679,7 @@ _mesa_CreateProgramPipelines(GLsizei n, GLuint *pipelines)
    if (MESA_VERBOSE & VERBOSE_API)
       _mesa_debug(ctx, "glCreateProgramPipelines(%d, %p)\n", n, pipelines);
 
-   create_program_pipelines(ctx, n, pipelines, true);
+   create_program_pipelines_err(ctx, n, pipelines, true);
 }
 
 /**

@@ -236,11 +236,13 @@ vmw_swc_flush(struct svga_winsys_context *swc,
 
       if (vswc->command.used || pfence != NULL)
          vmw_ioctl_command(vws,
-			   vswc->base.cid,
-			   0,
+                           vswc->base.cid,
+                           0,
                            vswc->command.buffer,
                            vswc->command.used,
-                           &fence);
+                           &fence,
+                           vswc->base.imported_fence_fd,
+                           vswc->base.hints);
 
       pb_validate_fence(vswc->validate, fence);
       mtx_lock(&vws->cs_mutex);
@@ -280,10 +282,16 @@ vmw_swc_flush(struct svga_winsys_context *swc,
    debug_flush_flush(vswc->fctx);
 #endif
    swc->hints &= ~SVGA_HINT_FLAG_CAN_PRE_FLUSH;
+   swc->hints &= ~SVGA_HINT_FLAG_EXPORT_FENCE_FD;
    vswc->preemptive_flush = FALSE;
    vswc->seen_surfaces = 0;
    vswc->seen_regions = 0;
    vswc->seen_mobs = 0;
+
+   if (vswc->base.imported_fence_fd != -1) {
+      close(vswc->base.imported_fence_fd);
+      vswc->base.imported_fence_fd = -1;
+   }
 
    if(pfence)
       vmw_fence_reference(vswc->vws, pfence, fence);
@@ -822,6 +830,8 @@ vmw_svga_winsys_context_create(struct svga_winsys_screen *sws)
 
    if (vswc->base.cid == -1)
       goto out_no_context;
+
+   vswc->base.imported_fence_fd = -1;
 
    vswc->base.have_gb_objects = sws->have_gb_objects;
 

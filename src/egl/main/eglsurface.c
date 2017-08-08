@@ -286,11 +286,9 @@ _eglInitSurface(_EGLSurface *surf, _EGLDisplay *dpy, EGLint type,
       return EGL_FALSE;
    }
 
-   if ((conf->SurfaceType & type) == 0) {
+   if ((conf->SurfaceType & type) == 0)
       /* The config can't be used to create a surface of this type */
-      _eglError(EGL_BAD_MATCH, func);
-      return EGL_FALSE;
-   }
+      return _eglError(EGL_BAD_MATCH, func);
 
    _eglInitResource(&surf->Resource, sizeof(*surf), dpy);
    surf->Type = type;
@@ -317,6 +315,8 @@ _eglInitSurface(_EGLSurface *surf, _EGLDisplay *dpy, EGLint type,
    surf->AspectRatio = EGL_UNKNOWN;
 
    surf->PostSubBufferSupportedNV = EGL_FALSE;
+   surf->SetDamageRegionCalled = EGL_FALSE;
+   surf->BufferAgeRead = EGL_FALSE;
 
    /* the default swap interval is 1 */
    _eglClampSwapInterval(surf, 1);
@@ -395,29 +395,32 @@ _eglQuerySurface(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surface,
       *value = surface->VGColorspace;
       break;
    case EGL_GL_COLORSPACE_KHR:
-      if (!dpy->Extensions.KHR_gl_colorspace) {
-         _eglError(EGL_BAD_ATTRIBUTE, "eglQuerySurface");
-         return EGL_FALSE;
-      }
+      if (!dpy->Extensions.KHR_gl_colorspace)
+         return _eglError(EGL_BAD_ATTRIBUTE, "eglQuerySurface");
+
       *value = surface->GLColorspace;
       break;
    case EGL_POST_SUB_BUFFER_SUPPORTED_NV:
       *value = surface->PostSubBufferSupportedNV;
       break;
    case EGL_BUFFER_AGE_EXT:
-      if (!dpy->Extensions.EXT_buffer_age) {
-         _eglError(EGL_BAD_ATTRIBUTE, "eglQuerySurface");
-         return EGL_FALSE;
-      }
+      if (!dpy->Extensions.EXT_buffer_age)
+         return _eglError(EGL_BAD_ATTRIBUTE, "eglQuerySurface");
+
+      _EGLContext *ctx = _eglGetCurrentContext();
       EGLint result = drv->API.QueryBufferAge(drv, dpy, surface);
       /* error happened */
       if (result < 0)
          return EGL_FALSE;
+      if (_eglGetContextHandle(ctx) == EGL_NO_CONTEXT ||
+          ctx->DrawSurface != surface)
+         return _eglError(EGL_BAD_SURFACE, "eglQuerySurface");
+
       *value = result;
+      surface->BufferAgeRead = EGL_TRUE;
       break;
    default:
-      _eglError(EGL_BAD_ATTRIBUTE, "eglQuerySurface");
-      return EGL_FALSE;
+      return _eglError(EGL_BAD_ATTRIBUTE, "eglQuerySurface");
    }
 
    return EGL_TRUE;
@@ -504,25 +507,17 @@ _eglBindTexImage(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surface,
    if (dpy->Extensions.NOK_texture_from_pixmap)
       texture_type |= EGL_PIXMAP_BIT;
 
-   if (!(surface->Type & texture_type)) {
-      _eglError(EGL_BAD_SURFACE, "eglBindTexImage");
-      return EGL_FALSE;
-   }
+   if (!(surface->Type & texture_type))
+      return _eglError(EGL_BAD_SURFACE, "eglBindTexImage");
 
-   if (surface->TextureFormat == EGL_NO_TEXTURE) {
-      _eglError(EGL_BAD_MATCH, "eglBindTexImage");
-      return EGL_FALSE;
-   }
+   if (surface->TextureFormat == EGL_NO_TEXTURE)
+      return _eglError(EGL_BAD_MATCH, "eglBindTexImage");
 
-   if (surface->TextureTarget == EGL_NO_TEXTURE) {
-      _eglError(EGL_BAD_MATCH, "eglBindTexImage");
-      return EGL_FALSE;
-   }
+   if (surface->TextureTarget == EGL_NO_TEXTURE)
+      return _eglError(EGL_BAD_MATCH, "eglBindTexImage");
 
-   if (buffer != EGL_BACK_BUFFER) {
-      _eglError(EGL_BAD_PARAMETER, "eglBindTexImage");
-      return EGL_FALSE;
-   }
+   if (buffer != EGL_BACK_BUFFER)
+      return _eglError(EGL_BAD_PARAMETER, "eglBindTexImage");
 
    surface->BoundToTexture = EGL_TRUE;
 
@@ -540,10 +535,7 @@ _eglReleaseTexImage(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surf,
    EGLint texture_type = EGL_PBUFFER_BIT;
 
    if (surf == EGL_NO_SURFACE)
-   {
-      _eglError(EGL_BAD_SURFACE, "eglReleaseTexImage");
-      return EGL_FALSE;
-   }
+      return _eglError(EGL_BAD_SURFACE, "eglReleaseTexImage");
 
    if (!surf->BoundToTexture)
    {
@@ -552,25 +544,16 @@ _eglReleaseTexImage(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surf,
    }
 
    if (surf->TextureFormat == EGL_NO_TEXTURE)
-   {
-      _eglError(EGL_BAD_MATCH, "eglReleaseTexImage");
-      return EGL_FALSE;
-   }
+      return _eglError(EGL_BAD_MATCH, "eglReleaseTexImage");
 
    if (buffer != EGL_BACK_BUFFER)
-   {
-      _eglError(EGL_BAD_PARAMETER, "eglReleaseTexImage");
-      return EGL_FALSE;
-   }
+      return _eglError(EGL_BAD_PARAMETER, "eglReleaseTexImage");
 
    if (dpy->Extensions.NOK_texture_from_pixmap)
       texture_type |= EGL_PIXMAP_BIT;
 
    if (!(surf->Type & texture_type))
-   {
-      _eglError(EGL_BAD_SURFACE, "eglReleaseTexImage");
-      return EGL_FALSE;
-   }
+      return _eglError(EGL_BAD_SURFACE, "eglReleaseTexImage");
 
    surf->BoundToTexture = EGL_FALSE;
 

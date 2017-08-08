@@ -68,7 +68,8 @@ count_movs_from_if(fs_inst *then_mov[MAX_MOVS], fs_inst *else_mov[MAX_MOVS],
 {
    int then_movs = 0;
    foreach_inst_in_block(fs_inst, inst, then_block) {
-      if (then_movs == MAX_MOVS || inst->opcode != BRW_OPCODE_MOV)
+      if (then_movs == MAX_MOVS || inst->opcode != BRW_OPCODE_MOV ||
+          inst->flags_written())
          break;
 
       then_mov[then_movs] = inst;
@@ -77,7 +78,8 @@ count_movs_from_if(fs_inst *then_mov[MAX_MOVS], fs_inst *else_mov[MAX_MOVS],
 
    int else_movs = 0;
    foreach_inst_in_block(fs_inst, inst, else_block) {
-      if (else_movs == MAX_MOVS || inst->opcode != BRW_OPCODE_MOV)
+      if (else_movs == MAX_MOVS || inst->opcode != BRW_OPCODE_MOV ||
+          inst->flags_written())
          break;
 
       else_mov[else_movs] = inst;

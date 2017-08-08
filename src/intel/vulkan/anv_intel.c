@@ -49,18 +49,15 @@ VkResult anv_CreateDmaBufImageINTEL(
    if (mem == NULL)
       return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
 
-   uint32_t gem_handle = anv_gem_fd_to_handle(device, pCreateInfo->fd);
-   if (!gem_handle) {
-      result = vk_error(VK_ERROR_OUT_OF_DEVICE_MEMORY);
-      goto fail;
-   }
-
    uint64_t size = (uint64_t)pCreateInfo->strideInBytes * pCreateInfo->extent.height;
 
-   anv_bo_init(&mem->bo, gem_handle, size);
+   result = anv_bo_cache_import(device, &device->bo_cache,
+                                pCreateInfo->fd, size, &mem->bo);
+   if (result != VK_SUCCESS)
+      goto fail;
 
    if (device->instance->physicalDevice.supports_48bit_addresses)
-      mem->bo.flags |= EXEC_OBJECT_SUPPORTS_48B_ADDRESS;
+      mem->bo->flags |= EXEC_OBJECT_SUPPORTS_48B_ADDRESS;
 
    anv_image_create(_device,
       &(struct anv_image_create_info) {
@@ -83,7 +80,7 @@ VkResult anv_CreateDmaBufImageINTEL(
       pAllocator, &image_h);
 
    image = anv_image_from_handle(image_h);
-   image->bo = &mem->bo;
+   image->bo = mem->bo;
    image->offset = 0;
 
    assert(image->extent.width > 0);

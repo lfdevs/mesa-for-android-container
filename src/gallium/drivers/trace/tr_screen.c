@@ -391,13 +391,10 @@ trace_screen_resource_destroy(struct pipe_screen *_screen,
    struct trace_screen *tr_scr = trace_screen(_screen);
    struct pipe_screen *screen = tr_scr->screen;
 
-   trace_dump_call_begin("pipe_screen", "resource_destroy");
-
-   trace_dump_arg(ptr, screen);
-   trace_dump_arg(ptr, resource);
-
-   trace_dump_call_end();
-
+   /* Don't trace this, because due to the lack of pipe_resource wrapping,
+    * we can get this call from inside of driver calls, which would try
+    * to lock an already-locked mutex.
+    */
    screen->resource_destroy(screen, resource);
 }
 

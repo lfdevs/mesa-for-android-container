@@ -26,6 +26,7 @@
  *    Rob Clark <robclark@freedesktop.org>
  */
 
+#include "freedreno_query_hw.h"
 
 #include "fd3_context.h"
 #include "fd3_blend.h"
@@ -50,6 +51,8 @@ fd3_context_destroy(struct pipe_context *pctx)
 	fd_context_cleanup_common_vbos(&fd3_ctx->base);
 
 	u_upload_destroy(fd3_ctx->border_color_uploader);
+
+	fd_hw_query_fini(pctx);
 
 	fd_context_destroy(pctx);
 }
@@ -94,6 +97,8 @@ fd3_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
 	pctx = fd_context_init(&fd3_ctx->base, pscreen, primtypes, priv);
 	if (!pctx)
 		return NULL;
+
+	fd_hw_query_init(pctx);
 
 	fd3_ctx->vs_pvt_mem = fd_bo_new(screen->dev, 0x2000,
 			DRM_FREEDRENO_GEM_TYPE_KMEM);

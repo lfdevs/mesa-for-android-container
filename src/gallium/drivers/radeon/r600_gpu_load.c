@@ -105,7 +105,7 @@ static void r600_update_mmio_counters(struct r600_common_screen *rscreen,
 	UPDATE_COUNTER(gui, GUI_ACTIVE);
 	gui_busy = GUI_ACTIVE(value);
 
-	if (rscreen->chip_class >= CIK) {
+	if (rscreen->chip_class == CIK || rscreen->chip_class == VI) {
 		/* SRBM_STATUS2 */
 		rscreen->ws->read_registers(rscreen->ws, SRBM_STATUS2, 1, &value);
 

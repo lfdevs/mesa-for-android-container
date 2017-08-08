@@ -10682,7 +10682,27 @@ evaluate_sge(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 {
    nir_const_value _dst_val = { {0, } };
 
-      
+      switch (bit_size) {
+      case 16: {
+         
+   
+
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float src0 =
+                  _mesa_half_to_float(_src[0].u16[_i]);
+               const float src1 =
+                  _mesa_half_to_float(_src[1].u16[_i]);
+
+            float16_t dst = (src0 >= src1) ? 1.0f : 0.0f;
+
+            _dst_val.u16[_i] = _mesa_float_to_half(dst);
+      }
+
+         break;
+      }
+      case 32: {
+         
    
 
                   
@@ -10697,6 +10717,30 @@ evaluate_sge(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
             _dst_val.f32[_i] = dst;
       }
 
+         break;
+      }
+      case 64: {
+         
+   
+
+                  
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const float64_t src0 =
+                  _src[0].f64[_i];
+               const float64_t src1 =
+                  _src[1].f64[_i];
+
+            float64_t dst = (src0 >= src1) ? 1.0f : 0.0f;
+
+            _dst_val.f64[_i] = dst;
+      }
+
+         break;
+      }
+
+      default:
+         unreachable("unknown bit width");
+      }
 
    return _dst_val;
 }

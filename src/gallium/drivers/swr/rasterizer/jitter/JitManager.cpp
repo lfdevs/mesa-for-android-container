@@ -46,6 +46,15 @@
 #include "llvm/IRReader/IRReader.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Support/FormattedStream.h"
+#include "llvm/Support/Path.h"
+#include "llvm/Support/MemoryBuffer.h"
+
+#if HAVE_LLVM < 0x400
+#include "llvm/Bitcode/ReaderWriter.h"
+#else
+#include "llvm/Bitcode/BitcodeWriter.h"
+#include "llvm/Bitcode/BitcodeReader.h"
+#endif
 
 #if LLVM_USE_INTEL_JITEVENTS
 #include "llvm/ExecutionEngine/JITEventListener.h"
@@ -70,6 +79,11 @@
 #define SWR_OUTPUT_DIR INTEL_OUTPUT_DIR "\\SWR"
 #define JITTER_OUTPUT_DIR SWR_OUTPUT_DIR "\\Jitter"
 #endif // _WIN32
+
+#if defined(__APPLE) || defined(FORCE_LINUX) || defined(__linux__) || defined(__gnu_linux__)
+#include <pwd.h>
+#include <sys/stat.h>
+#endif
 
 
 using namespace llvm;
@@ -101,9 +115,7 @@ JitManager::JitManager(uint32_t simdWidth, const char *arch, const char* core)
     mCore = std::string(core);
     std::transform(mCore.begin(), mCore.end(), mCore.begin(), ::tolower);
 
-    std::stringstream fnName("JitModule", std::ios_base::in | std::ios_base::out | std::ios_base::ate);
-    fnName << mJitNumber++;
-    std::unique_ptr<Module> newModule(new Module(fnName.str(), mContext));
+    std::unique_ptr<Module> newModule(new Module("", mContext));
     mpCurrentModule = newModule.get();
 
     StringRef hostCPUName;
@@ -122,6 +134,12 @@ JitManager::JitManager(uint32_t simdWidth, const char *arch, const char* core)
         .setOptLevel(CodeGenOpt::Aggressive)
         .setMCPU(hostCPUName)
         .create();
+
+    if (KNOB_JIT_ENABLE_CACHE)
+    {
+        mCache.SetCpu(hostCPUName);
+        mpExec->setObjectCache(&mCache);
+    }
 
 #if LLVM_USE_INTEL_JITEVENTS
     JITEventListener *vTune = JITEventListener::createIntelJITEventListener();
@@ -159,9 +177,9 @@ JitManager::JitManager(uint32_t simdWidth, const char *arch, const char* core)
 #if defined(_WIN32)
     if (KNOB_DUMP_SHADER_IR)
     {
-        CreateDirectory(INTEL_OUTPUT_DIR, NULL);
-        CreateDirectory(SWR_OUTPUT_DIR, NULL);
-        CreateDirectory(JITTER_OUTPUT_DIR, NULL);
+        CreateDirectoryPath(INTEL_OUTPUT_DIR);
+        CreateDirectoryPath(SWR_OUTPUT_DIR);
+        CreateDirectoryPath(JITTER_OUTPUT_DIR);
     }
 #endif
 }
@@ -172,9 +190,7 @@ void JitManager::SetupNewModule()
 {
     SWR_ASSERT(mIsModuleFinalized == true && "Current module is not finalized!");
     
-    std::stringstream fnName("JitModule", std::ios_base::in | std::ios_base::out | std::ios_base::ate);
-    fnName << mJitNumber++;
-    std::unique_ptr<Module> newModule(new Module(fnName.str(), mContext));
+    std::unique_ptr<Module> newModule(new Module("", mContext));
     mpCurrentModule = newModule.get();
 #if defined(_WIN32)
     // Needed for MCJIT on windows
@@ -204,7 +220,7 @@ void JitManager::DumpAsm(Function* pFunction, const char* fileName)
         const char* pBaseName = strrchr(procname, '\\');
         std::stringstream outDir;
         outDir << JITTER_OUTPUT_DIR << pBaseName << "_" << pid << std::ends;
-        CreateDirectory(outDir.str().c_str(), NULL);
+        CreateDirectoryPath(outDir.str().c_str());
 #endif
 
         std::error_code EC;
@@ -242,7 +258,7 @@ void JitManager::DumpToFile(Function *f, const char *fileName)
         const char* pBaseName = strrchr(procname, '\\');
         std::stringstream outDir;
         outDir << JITTER_OUTPUT_DIR << pBaseName << "_" << pid << std::ends;
-        CreateDirectory(outDir.str().c_str(), NULL);
+        CreateDirectoryPath(outDir.str().c_str());
 #endif
 
         std::error_code EC;
@@ -264,10 +280,10 @@ void JitManager::DumpToFile(Function *f, const char *fileName)
 #endif
         fd.flush();
 
-        raw_fd_ostream fd_cfg(fName, EC, llvm::sys::fs::F_Text);
-        WriteGraph(fd_cfg, (const Function*)f);
+        //raw_fd_ostream fd_cfg(fName, EC, llvm::sys::fs::F_Text);
+        //WriteGraph(fd_cfg, (const Function*)f);
 
-        fd_cfg.flush();
+        //fd_cfg.flush();
     }
 }
 
@@ -292,4 +308,195 @@ extern "C"
             delete reinterpret_cast<JitManager*>(hJitContext);
         }
     }
+}
+
+//////////////////////////////////////////////////////////////////////////
+/// JitCache
+//////////////////////////////////////////////////////////////////////////
+
+//////////////////////////////////////////////////////////////////////////
+/// JitCacheFileHeader
+//////////////////////////////////////////////////////////////////////////
+struct JitCacheFileHeader
+{
+    void Init(uint32_t llCRC, uint32_t objCRC, const std::string& moduleID, const std::string& cpu, uint64_t bufferSize)
+    {
+        m_MagicNumber = JC_MAGIC_NUMBER;
+        m_BufferSize = bufferSize;
+        m_llCRC = llCRC;
+        m_platformKey = JC_PLATFORM_KEY;
+        m_objCRC = objCRC;
+        strncpy(m_ModuleID, moduleID.c_str(), JC_STR_MAX_LEN - 1);
+        m_ModuleID[JC_STR_MAX_LEN - 1] = 0;
+        strncpy(m_Cpu, cpu.c_str(), JC_STR_MAX_LEN - 1);
+        m_Cpu[JC_STR_MAX_LEN - 1] = 0;
+    }
+
+    bool IsValid(uint32_t llCRC, const std::string& moduleID, const std::string& cpu)
+    {
+        if ((m_MagicNumber != JC_MAGIC_NUMBER) ||
+            (m_llCRC != llCRC) ||
+            (m_platformKey != JC_PLATFORM_KEY))
+        {
+            return false;
+        }
+
+        m_ModuleID[JC_STR_MAX_LEN - 1] = 0;
+        if (strncmp(moduleID.c_str(), m_ModuleID, JC_STR_MAX_LEN - 1))
+        {
+            return false;
+        }
+
+        m_Cpu[JC_STR_MAX_LEN - 1] = 0;
+        if (strncmp(cpu.c_str(), m_Cpu, JC_STR_MAX_LEN - 1))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    uint64_t GetBufferSize() const { return m_BufferSize; }
+    uint64_t GetBufferCRC() const { return m_objCRC; }
+
+private:
+    static const uint64_t   JC_MAGIC_NUMBER = 0xfedcba9876543211ULL;
+    static const size_t     JC_STR_MAX_LEN = 32;
+    static const uint32_t   JC_PLATFORM_KEY =
+        (LLVM_VERSION_MAJOR << 24)  |
+        (LLVM_VERSION_MINOR << 16)  |
+        (LLVM_VERSION_PATCH << 8)   |
+        ((sizeof(void*) > sizeof(uint32_t)) ? 1 : 0);
+
+    uint64_t m_MagicNumber;
+    uint64_t m_BufferSize;
+    uint32_t m_llCRC;
+    uint32_t m_platformKey;
+    uint32_t m_objCRC;
+    char m_ModuleID[JC_STR_MAX_LEN];
+    char m_Cpu[JC_STR_MAX_LEN];
+};
+
+static inline uint32_t ComputeModuleCRC(const llvm::Module* M)
+{
+    std::string bitcodeBuffer;
+    raw_string_ostream bitcodeStream(bitcodeBuffer);
+
+    llvm::WriteBitcodeToFile(M, bitcodeStream);
+    //M->print(bitcodeStream, nullptr, false);
+
+    bitcodeStream.flush();
+
+    return ComputeCRC(0, bitcodeBuffer.data(), bitcodeBuffer.size());
+}
+
+/// constructor
+JitCache::JitCache()
+{
+#if defined(__APPLE) || defined(FORCE_LINUX) || defined(__linux__) || defined(__gnu_linux__)
+    if (strncmp(KNOB_JIT_CACHE_DIR.c_str(), "~/", 2) == 0) {
+        char *homedir;
+        if (!(homedir = getenv("HOME"))) {
+            homedir = getpwuid(getuid())->pw_dir;
+        }
+        mCacheDir = homedir;
+        mCacheDir += (KNOB_JIT_CACHE_DIR.c_str() + 1);
+    } else
+#endif
+    {
+        mCacheDir = KNOB_JIT_CACHE_DIR;
+    }
+}
+
+/// notifyObjectCompiled - Provides a pointer to compiled code for Module M.
+void JitCache::notifyObjectCompiled(const llvm::Module *M, llvm::MemoryBufferRef Obj)
+{
+    const std::string& moduleID = M->getModuleIdentifier();
+    if (!moduleID.length())
+    {
+        return;
+    }
+
+    if (!llvm::sys::fs::exists(mCacheDir.str()) &&
+        llvm::sys::fs::create_directories(mCacheDir.str()))
+    {
+        SWR_INVALID("Unable to create directory: %s", mCacheDir.c_str());
+        return;
+    }
+
+    llvm::SmallString<MAX_PATH> filePath = mCacheDir;
+    llvm::sys::path::append(filePath, moduleID);
+
+    std::error_code err;
+    llvm::raw_fd_ostream fileObj(filePath.c_str(), err, llvm::sys::fs::F_None);
+
+    uint32_t objcrc = ComputeCRC(0, Obj.getBufferStart(), Obj.getBufferSize());
+
+    JitCacheFileHeader header;
+    header.Init(mCurrentModuleCRC, objcrc, moduleID, mCpu, Obj.getBufferSize());
+
+    fileObj.write((const char*)&header, sizeof(header));
+    fileObj << Obj.getBuffer();
+    fileObj.flush();
+}
+
+/// Returns a pointer to a newly allocated MemoryBuffer that contains the
+/// object which corresponds with Module M, or 0 if an object is not
+/// available.
+std::unique_ptr<llvm::MemoryBuffer> JitCache::getObject(const llvm::Module* M)
+{
+    const std::string& moduleID = M->getModuleIdentifier();
+    mCurrentModuleCRC = ComputeModuleCRC(M);
+
+    if (!moduleID.length())
+    {
+        return nullptr;
+    }
+
+    if (!llvm::sys::fs::exists(mCacheDir))
+    {
+        return nullptr;
+    }
+
+    llvm::SmallString<MAX_PATH> filePath = mCacheDir;
+    llvm::sys::path::append(filePath, moduleID);
+
+    FILE* fpIn = fopen(filePath.c_str(), "rb");
+    if (!fpIn)
+    {
+        return nullptr;
+    }
+
+    std::unique_ptr<llvm::MemoryBuffer> pBuf = nullptr;
+    do
+    {
+        JitCacheFileHeader header;
+        if (!fread(&header, sizeof(header), 1, fpIn))
+        {
+            break;
+        }
+
+        if (!header.IsValid(mCurrentModuleCRC, moduleID, mCpu))
+        {
+            break;
+        }
+
+        pBuf = llvm::MemoryBuffer::getNewUninitMemBuffer(size_t(header.GetBufferSize()));
+        if (!fread(const_cast<char*>(pBuf->getBufferStart()), header.GetBufferSize(), 1, fpIn))
+        {
+            pBuf = nullptr;
+            break;
+        }
+
+        if (header.GetBufferCRC() != ComputeCRC(0, pBuf->getBufferStart(), pBuf->getBufferSize()))
+        {
+            SWR_TRACE("Invalid object cache file, ignoring: %s", filePath.c_str());
+            pBuf = nullptr;
+            break;
+        }
+    } while (0);
+
+    fclose(fpIn);
+
+    return pBuf;
 }

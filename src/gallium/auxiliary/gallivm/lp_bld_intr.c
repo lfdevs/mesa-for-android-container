@@ -168,10 +168,14 @@ lp_add_function_attr(LLVMValueRef function_or_call,
 
 #if HAVE_LLVM < 0x0400
    LLVMAttribute llvm_attr = lp_attr_to_llvm_attr(attr);
-   if (attr_idx == -1) {
-      LLVMAddFunctionAttr(function_or_call, llvm_attr);
+   if (LLVMIsAFunction(function_or_call)) {
+      if (attr_idx == -1) {
+         LLVMAddFunctionAttr(function_or_call, llvm_attr);
+      } else {
+         LLVMAddAttribute(LLVMGetParam(function_or_call, attr_idx - 1), llvm_attr);
+      }
    } else {
-      LLVMAddAttribute(LLVMGetParam(function_or_call, attr_idx - 1), llvm_attr);
+      LLVMAddInstrAttribute(function_or_call, attr_idx, llvm_attr);
    }
 #else
 

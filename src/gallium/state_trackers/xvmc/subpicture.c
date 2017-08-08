@@ -48,22 +48,43 @@
 #define FOURCC_AI44 0x34344941
 #define FOURCC_IA44 0x34344149
 
-static enum pipe_format XvIDToPipe(int xvimage_id)
+static enum pipe_format XvIDToPipe(struct pipe_screen *screen,
+                                   int xvimage_id)
 {
+   enum pipe_format ret;
+   assert(screen);
+
    switch (xvimage_id) {
-      case FOURCC_RGB:
-         return PIPE_FORMAT_B8G8R8X8_UNORM;
+   case FOURCC_RGB:
+      ret = PIPE_FORMAT_B8G8R8X8_UNORM;
+      break;
 
-      case FOURCC_AI44:
-         return PIPE_FORMAT_R4A4_UNORM;
+   case FOURCC_AI44:
+      ret = PIPE_FORMAT_R4A4_UNORM;
+      if (!screen->is_format_supported(
+                screen, ret, PIPE_TEXTURE_2D, 0, PIPE_BIND_SAMPLER_VIEW))
+         ret = PIPE_FORMAT_B4G4R4A4_UNORM;
+      break;
 
-      case FOURCC_IA44:
-         return PIPE_FORMAT_A4R4_UNORM;
+   case FOURCC_IA44:
+      ret = PIPE_FORMAT_A4R4_UNORM;
+      if (!screen->is_format_supported(
+                screen, ret, PIPE_TEXTURE_2D, 0, PIPE_BIND_SAMPLER_VIEW))
+         ret = PIPE_FORMAT_B4G4R4A4_UNORM;
+      break;
 
-      default:
-         XVMC_MSG(XVMC_ERR, "[XvMC] Unrecognized Xv image ID 0x%08X.\n", xvimage_id);
-         return PIPE_FORMAT_NONE;
+   default:
+      XVMC_MSG(XVMC_ERR, "[XvMC] Unrecognized Xv image ID 0x%08X.\n", xvimage_id);
+      return PIPE_FORMAT_NONE;
    }
+
+   if (!screen->is_format_supported(
+             screen, ret, PIPE_TEXTURE_2D, 0, PIPE_BIND_SAMPLER_VIEW)) {
+      XVMC_MSG(XVMC_ERR, "[XvMC] Unsupported 2D format %s for Xv image ID 0x%08X.\n", util_format_name(ret), xvimage_id);
+      ret = PIPE_FORMAT_NONE;
+   }
+   return ret;
+
 }
 
 static unsigned NumPaletteEntries4XvID(int xvimage_id)
@@ -82,29 +103,44 @@ static unsigned NumPaletteEntries4XvID(int xvimage_id)
    }
 }
 
-static int PipeToComponentOrder(enum pipe_format format, char *component_order)
+static int PipeToComponentOrder(struct pipe_screen *screen,
+                                enum pipe_format format,
+                                enum pipe_format *palette_format,
+                                char *component_order)
 {
+   assert(screen);
    assert(component_order);
+   assert(palette_format);
 
    switch (format) {
-      case PIPE_FORMAT_B8G8R8X8_UNORM:
-         return 0;
+   case PIPE_FORMAT_B8G8R8X8_UNORM:
+      return 0;
 
-      case PIPE_FORMAT_A4R4_UNORM:
-      case PIPE_FORMAT_R4A4_UNORM:
-         component_order[0] = 'Y';
-         component_order[1] = 'U';
-         component_order[2] = 'V';
-         component_order[3] = 'A';
-         return 4;
+   case PIPE_FORMAT_A4R4_UNORM:
+   case PIPE_FORMAT_R4A4_UNORM:
+   case PIPE_FORMAT_B4G4R4A4_UNORM:
+      *palette_format = PIPE_FORMAT_R8G8B8X8_UNORM;
+      component_order[0] = 'Y';
+      component_order[1] = 'U';
+      component_order[2] = 'V';
+      component_order[3] = 'A';
+      if (!screen->is_format_supported(
+                screen, *palette_format, PIPE_TEXTURE_1D, 0,
+                PIPE_BIND_SAMPLER_VIEW)) {
+         /* One of these formats better be supported... */
+         *palette_format = PIPE_FORMAT_B8G8R8X8_UNORM;
+         component_order[0] = 'V';
+         component_order[2] = 'Y';
+      }
+      return 4;
 
-      default:
-         XVMC_MSG(XVMC_ERR, "[XvMC] Unrecognized PIPE_FORMAT 0x%08X.\n", format);
-         component_order[0] = 0;
-         component_order[1] = 0;
-         component_order[2] = 0;
-         component_order[3] = 0;
-         return 0;
+   default:
+      XVMC_MSG(XVMC_ERR, "[XvMC] Unrecognized PIPE_FORMAT 0x%08X.\n", format);
+      component_order[0] = 0;
+      component_order[1] = 0;
+      component_order[2] = 0;
+      component_order[3] = 0;
+      return 0;
    }
 }
 
@@ -186,6 +222,41 @@ upload_sampler(struct pipe_context *pipe, struct pipe_sampler_view *dst,
    pipe->transfer_unmap(pipe, transfer);
 }
 
+static void
+upload_sampler_convert(struct pipe_context *pipe, struct pipe_sampler_view *dst,
+                       const struct pipe_box *dst_box, const XvImage *image,
+                       unsigned src_x, unsigned src_y)
+{
+   struct pipe_transfer *transfer;
+   int i, j;
+   char *map, *src;
+
+   map = pipe->transfer_map(pipe, dst->texture, 0, PIPE_TRANSFER_WRITE,
+                            dst_box, &transfer);
+   if (!map)
+      return;
+
+   src = image->data;
+   src += src_y * image->width + src_x;
+   if (image->id == FOURCC_AI44) {
+      /* The format matches what we want, we just have to insert dummy
+       * bytes. So just copy the same value in twice.
+       */
+      for (i = 0; i < dst_box->height; i++, map += transfer->stride, src += image->width)
+         for (j = 0; j < dst_box->width; j++)
+            map[j * 2 + 0] = map[j * 2 + 1] = src[j];
+   } else {
+      assert(image->id == FOURCC_IA44);
+      /* Same idea as above, but we have to swap the low and high nibbles.
+       */
+      for (i = 0; i < dst_box->height; i++, map += transfer->stride, src += image->width)
+         for (j = 0; j < dst_box->width; j++)
+            map[j * 2 + 0] = map[j * 2 + 1] = (src[j] >> 4) | (src[j] << 4);
+   }
+
+   pipe->transfer_unmap(pipe, transfer);
+}
+
 PUBLIC
 Status XvMCCreateSubpicture(Display *dpy, XvMCContext *context, XvMCSubpicture *subpicture,
                             unsigned short width, unsigned short height, int xvimage_id)
@@ -195,6 +266,7 @@ Status XvMCCreateSubpicture(Display *dpy, XvMCContext *context, XvMCSubpicture *
    struct pipe_context *pipe;
    struct pipe_resource tex_templ, *tex;
    struct pipe_sampler_view sampler_templ;
+   enum pipe_format palette_format;
    Status ret;
 
    XVMC_MSG(XVMC_TRACE, "[XvMC] Creating subpicture %p.\n", subpicture);
@@ -224,7 +296,7 @@ Status XvMCCreateSubpicture(Display *dpy, XvMCContext *context, XvMCSubpicture *
 
    memset(&tex_templ, 0, sizeof(tex_templ));
    tex_templ.target = PIPE_TEXTURE_2D;
-   tex_templ.format = XvIDToPipe(xvimage_id);
+   tex_templ.format = XvIDToPipe(pipe->screen, xvimage_id);
    tex_templ.last_level = 0;
    if (pipe->screen->get_video_param(pipe->screen,
                                      PIPE_VIDEO_PROFILE_UNKNOWN,
@@ -262,12 +334,14 @@ Status XvMCCreateSubpicture(Display *dpy, XvMCContext *context, XvMCSubpicture *
    subpicture->width = width;
    subpicture->height = height;
    subpicture->num_palette_entries = NumPaletteEntries4XvID(xvimage_id);
-   subpicture->entry_bytes = PipeToComponentOrder(tex_templ.format, subpicture->component_order);
+   subpicture->entry_bytes = PipeToComponentOrder(
+         pipe->screen, tex_templ.format, &palette_format,
+         subpicture->component_order);
    subpicture->privData = subpicture_priv;
 
    if (subpicture->num_palette_entries > 0) {
       tex_templ.target = PIPE_TEXTURE_1D;
-      tex_templ.format = PIPE_FORMAT_R8G8B8X8_UNORM;
+      tex_templ.format = palette_format;
       tex_templ.width0 = subpicture->num_palette_entries;
       tex_templ.height0 = 1;
       tex_templ.usage = PIPE_USAGE_DEFAULT;
@@ -366,8 +440,13 @@ Status XvMCCompositeSubpicture(Display *dpy, XvMCSubpicture *subpicture, XvImage
 
    /* clipping should be done by upload_sampler and regardles what the documentation
    says image->pitches[0] doesn't seems to be in bytes, so don't use it */
-   src_stride = image->width * util_format_get_blocksize(subpicture_priv->sampler->texture->format);
-   upload_sampler(pipe, subpicture_priv->sampler, &dst_box, image->data, src_stride, srcx, srcy);
+   if ((image->id == FOURCC_IA44 || image->id == FOURCC_AI44) &&
+       subpicture_priv->sampler->texture->format == PIPE_FORMAT_B4G4R4A4_UNORM) {
+      upload_sampler_convert(pipe, subpicture_priv->sampler, &dst_box, image, srcx, srcy);
+   } else {
+      src_stride = image->width * util_format_get_blocksize(subpicture_priv->sampler->texture->format);
+      upload_sampler(pipe, subpicture_priv->sampler, &dst_box, image->data, src_stride, srcx, srcy);
+   }
 
    XVMC_MSG(XVMC_TRACE, "[XvMC] Subpicture %p composited.\n", subpicture);
 

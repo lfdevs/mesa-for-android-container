@@ -256,7 +256,6 @@ test_bdw_3d_r8g8b8a8_unorm_256x256x256_levels09_tiley0(void)
 
    t_assert_image_alignment_el(&surf, 4, 4, 1);
    t_assert_image_alignment_sa(&surf, 4, 4, 1);
-   t_assert(isl_surf_get_array_pitch_el_rows(&surf) == 74916);
    t_assert(isl_surf_get_array_pitch_sa_rows(&surf) ==
             isl_surf_get_array_pitch_el_rows(&surf));
 

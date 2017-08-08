@@ -102,6 +102,7 @@ struct _egl_extensions
    EGLBoolean EXT_buffer_age;
    EGLBoolean EXT_create_context_robustness;
    EGLBoolean EXT_image_dma_buf_import;
+   EGLBoolean EXT_image_dma_buf_import_modifiers;
    EGLBoolean EXT_swap_buffers_with_damage;
 
    EGLBoolean KHR_cl_event2;
@@ -117,9 +118,11 @@ struct _egl_extensions
    EGLBoolean KHR_image_base;
    EGLBoolean KHR_image_pixmap;
    EGLBoolean KHR_no_config_context;
+   EGLBoolean KHR_partial_update;
    EGLBoolean KHR_reusable_sync;
    EGLBoolean KHR_surfaceless_context;
    EGLBoolean KHR_wait_sync;
+   EGLBoolean KHR_create_context_no_error;
 
    EGLBoolean MESA_drm_image;
    EGLBoolean MESA_image_dma_buf_export;
@@ -151,6 +154,7 @@ struct _egl_display
    struct {
       EGLBoolean TestOnly;    /**< Driver should not set fields when true */
       EGLBoolean UseFallback; /**< Use fallback driver (sw or less features) */
+      void *Platform;         /**< Platform-specific options */
    } Options;
 
    /* these fields are set by the driver during init */

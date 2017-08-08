@@ -52,10 +52,50 @@ gcd_pow2_u64(uint64_t a, uint64_t b)
 }
 
 void
-genX(cmd_buffer_gpu_memcpy)(struct anv_cmd_buffer *cmd_buffer,
-                            struct anv_bo *dst, uint32_t dst_offset,
-                            struct anv_bo *src, uint32_t src_offset,
-                            uint32_t size)
+genX(cmd_buffer_mi_memcpy)(struct anv_cmd_buffer *cmd_buffer,
+                           struct anv_bo *dst, uint32_t dst_offset,
+                           struct anv_bo *src, uint32_t src_offset,
+                           uint32_t size)
+{
+   /* This memcpy operates in units of dwords. */
+   assert(size % 4 == 0);
+   assert(dst_offset % 4 == 0);
+   assert(src_offset % 4 == 0);
+
+   for (uint32_t i = 0; i < size; i += 4) {
+      const struct anv_address src_addr =
+         (struct anv_address) { src, src_offset + i};
+      const struct anv_address dst_addr =
+         (struct anv_address) { dst, dst_offset + i};
+#if GEN_GEN >= 8
+      anv_batch_emit(&cmd_buffer->batch, GENX(MI_COPY_MEM_MEM), cp) {
+         cp.DestinationMemoryAddress = dst_addr;
+         cp.SourceMemoryAddress = src_addr;
+      }
+#else
+      /* IVB does not have a general purpose register for command streamer
+       * commands. Therefore, we use an alternate temporary register.
+       */
+#define TEMP_REG 0x2440 /* GEN7_3DPRIM_BASE_VERTEX */
+      anv_batch_emit(&cmd_buffer->batch, GENX(MI_LOAD_REGISTER_MEM), load) {
+         load.RegisterAddress = TEMP_REG;
+         load.MemoryAddress = src_addr;
+      }
+      anv_batch_emit(&cmd_buffer->batch, GENX(MI_STORE_REGISTER_MEM), store) {
+         store.RegisterAddress = TEMP_REG;
+         store.MemoryAddress = dst_addr;
+      }
+#undef TEMP_REG
+#endif
+   }
+   return;
+}
+
+void
+genX(cmd_buffer_so_memcpy)(struct anv_cmd_buffer *cmd_buffer,
+                           struct anv_bo *dst, uint32_t dst_offset,
+                           struct anv_bo *src, uint32_t src_offset,
+                           uint32_t size)
 {
    if (size == 0)
       return;

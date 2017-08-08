@@ -406,7 +406,7 @@ vl_dri2_screen_create(Display *display, int screen)
       goto free_authenticate;
 
    if (pipe_loader_drm_probe_fd(&scrn->base.dev, fd))
-      scrn->base.pscreen = pipe_loader_create_screen(scrn->base.dev);
+      scrn->base.pscreen = pipe_loader_create_screen(scrn->base.dev, 0);
 
    if (!scrn->base.pscreen)
       goto release_pipe;

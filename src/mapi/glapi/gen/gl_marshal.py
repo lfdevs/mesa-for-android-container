@@ -66,8 +66,6 @@ class PrintCode(gl_XML.gl_print_base):
 
     def printRealHeader(self):
         print header
-        print '#ifdef HAVE_PTHREAD'
-        print
         print 'static inline int safe_mul(int a, int b)'
         print '{'
         print '    if (a < 0 || b < 0) return -1;'
@@ -78,8 +76,7 @@ class PrintCode(gl_XML.gl_print_base):
         print
 
     def printRealFooter(self):
-        print
-        print '#endif'
+        pass
 
     def print_sync_call(self, func):
         call = 'CALL_{0}(ctx->CurrentServerDispatch, ({1}))'.format(
@@ -90,7 +87,6 @@ class PrintCode(gl_XML.gl_print_base):
             out('return {0};'.format(call))
 
     def print_sync_dispatch(self, func):
-        out('_mesa_glthread_finish(ctx);')
         out('debug_print_sync_fallback("{0}");'.format(func.name))
         self.print_sync_call(func)
 
@@ -177,11 +173,19 @@ class PrintCode(gl_XML.gl_print_base):
         with indent():
             for p in func.fixed_params:
                 if p.count:
-                    out('const {0} * {1} = cmd->{1};'.format(
-                            p.get_base_type_string(), p.name))
+                    p_decl = '{0} * {1} = cmd->{1};'.format(
+                            p.get_base_type_string(), p.name)
                 else:
-                    out('const {0} {1} = cmd->{1};'.format(
-                            p.type_string(), p.name))
+                    p_decl = '{0} {1} = cmd->{1};'.format(
+                            p.type_string(), p.name)
+
+                if not p_decl.startswith('const '):
+                    # Declare all local function variables as const, even if
+                    # the original parameter is not const.
+                    p_decl = 'const ' + p_decl
+
+                out(p_decl)
+
             if func.variable_params:
                 for p in func.variable_params:
                     out('const {0} * {1};'.format(
@@ -259,6 +263,7 @@ class PrintCode(gl_XML.gl_print_base):
         if need_fallback_sync:
             out('fallback_to_sync:')
         with indent():
+            out('_mesa_glthread_finish(ctx);')
             self.print_sync_dispatch(func)
 
         out('}')

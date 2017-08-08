@@ -42,7 +42,7 @@ namespace {
 
 device::device(clover::platform &platform, pipe_loader_device *ldev) :
    platform(platform), ldev(ldev) {
-   pipe = pipe_loader_create_screen(ldev);
+   pipe = pipe_loader_create_screen(ldev, 0);
    if (!pipe || !pipe->get_param(pipe, PIPE_CAP_COMPUTE)) {
       if (pipe)
          pipe->destroy(pipe);
@@ -187,6 +187,11 @@ device::image_support() const {
 bool
 device::has_doubles() const {
    return pipe->get_param(pipe, PIPE_CAP_DOUBLES);
+}
+
+bool
+device::has_unified_memory() const {
+   return pipe->get_param(pipe, PIPE_CAP_UMA);
 }
 
 std::vector<size_t>

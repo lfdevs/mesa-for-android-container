@@ -332,8 +332,6 @@ public:
 
    virtual void emit_nir_code();
    virtual void nir_setup_uniforms();
-   virtual void nir_setup_system_value_intrinsic(nir_intrinsic_instr *instr);
-   virtual void nir_setup_system_values();
    virtual void nir_emit_impl(nir_function_impl *impl);
    virtual void nir_emit_cf_list(exec_list *list);
    virtual void nir_emit_if(nir_if *if_stmt);
@@ -359,16 +357,11 @@ public:
                        unsigned num_components = 4);
    src_reg get_indirect_offset(nir_intrinsic_instr *instr);
 
-   virtual dst_reg *make_reg_for_system_value(int location) = 0;
-
    dst_reg *nir_locals;
    dst_reg *nir_ssa_values;
-   dst_reg *nir_system_values;
 
 protected:
    void emit_vertex();
-   void lower_attributes_to_hw_regs(const int *attribute_map,
-                                    bool interleaved);
    void setup_payload_interference(struct ra_graph *g, int first_payload_node,
                                    int reg_node_count);
    virtual void setup_payload() = 0;

@@ -1277,6 +1277,9 @@ void Source::scanProperty(const struct tgsi_full_property *prop)
    case TGSI_PROPERTY_FS_EARLY_DEPTH_STENCIL:
       info->prop.fp.earlyFragTests = prop->u[0].Data;
       break;
+   case TGSI_PROPERTY_FS_POST_DEPTH_COVERAGE:
+      info->prop.fp.postDepthCoverage = prop->u[0].Data;
+      break;
    case TGSI_PROPERTY_MUL_ZERO_WINS:
       info->io.mul_zero_wins = prop->u[0].Data;
       break;
@@ -2156,6 +2159,7 @@ Converter::storeDst(const tgsi::Instruction::DstRegister dst, int c,
          /* Save the viewport index into a scratch register so that it can be
             exported at EMIT time */
          if (info->out[idx].sn == TGSI_SEMANTIC_VIEWPORT_INDEX &&
+             prog->getType() == Program::TYPE_GEOMETRY &&
              viewport != NULL)
             mkOp1(OP_MOV, TYPE_U32, viewport, val);
          else
@@ -3185,6 +3189,7 @@ Converter::handleInstruction(const struct tgsi_full_instruction *insn)
          geni->subOp = tgsi::opcodeToSubOp(tgsi.getOpcode());
          if (op == OP_MUL && dstTy == TYPE_F32)
             geni->dnz = info->io.mul_zero_wins;
+         geni->precise = insn->Instruction.Precise;
       }
       break;
    case TGSI_OPCODE_MAD:
@@ -3198,6 +3203,7 @@ Converter::handleInstruction(const struct tgsi_full_instruction *insn)
          geni = mkOp3(op, dstTy, dst0[c], src0, src1, src2);
          if (dstTy == TYPE_F32)
             geni->dnz = info->io.mul_zero_wins;
+         geni->precise = insn->Instruction.Precise;
       }
       break;
    case TGSI_OPCODE_MOV:

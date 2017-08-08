@@ -233,6 +233,7 @@ enum tgsi_return_type {
    TGSI_RETURN_TYPE_SINT,
    TGSI_RETURN_TYPE_UINT,
    TGSI_RETURN_TYPE_FLOAT,
+   TGSI_RETURN_TYPE_UNKNOWN,
    TGSI_RETURN_TYPE_COUNT
 };
 
@@ -292,6 +293,7 @@ enum tgsi_property_name {
    TGSI_PROPERTY_NUM_CLIPDIST_ENABLED,
    TGSI_PROPERTY_NUM_CULLDIST_ENABLED,
    TGSI_PROPERTY_FS_EARLY_DEPTH_STENCIL,
+   TGSI_PROPERTY_FS_POST_DEPTH_COVERAGE,
    TGSI_PROPERTY_NEXT_SHADER,
    TGSI_PROPERTY_CS_FIXED_BLOCK_WIDTH,
    TGSI_PROPERTY_CS_FIXED_BLOCK_HEIGHT,
@@ -636,7 +638,8 @@ struct tgsi_instruction
    unsigned Label      : 1;
    unsigned Texture    : 1;
    unsigned Memory     : 1;
-   unsigned Padding    : 2;
+   unsigned Precise    : 1;
+   unsigned Padding    : 1;
 };
 
 /*
@@ -694,7 +697,8 @@ struct tgsi_instruction_texture
 {
    unsigned Texture  : 8;    /* TGSI_TEXTURE_ */
    unsigned NumOffsets : 4;
-   unsigned Padding : 20;
+   unsigned ReturnType : 3; /* TGSI_RETURN_TYPE_x */
+   unsigned Padding : 17;
 };
 
 /* for texture offsets in GLSL and DirectX.

@@ -247,8 +247,7 @@ tally_prims_generated(struct brw_context *brw,
    if (unlikely(brw->perf_debug && brw_bo_busy(obj->prim_count_bo)))
       perf_debug("Stalling for # of transform feedback primitives written.\n");
 
-   brw_bo_map(brw, obj->prim_count_bo, false);
-   uint64_t *prim_counts = obj->prim_count_bo->virtual;
+   uint64_t *prim_counts = brw_bo_map(brw, obj->prim_count_bo, MAP_READ);
 
    assert(obj->prim_count_buffer_index % (2 * streams) == 0);
    int pairs = obj->prim_count_buffer_index / (2 * streams);

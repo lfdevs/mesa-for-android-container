@@ -40,9 +40,10 @@
 #include "svga_screen.h"
 
 
-static void svga_set_vertex_buffers(struct pipe_context *pipe,
-                                    unsigned start_slot, unsigned count,
-                                    const struct pipe_vertex_buffer *buffers)
+static void
+svga_set_vertex_buffers(struct pipe_context *pipe,
+                        unsigned start_slot, unsigned count,
+                        const struct pipe_vertex_buffer *buffers)
 {
    struct svga_context *svga = svga_context(pipe);
 
@@ -51,15 +52,6 @@ static void svga_set_vertex_buffers(struct pipe_context *pipe,
                                  buffers, start_slot, count);
 
    svga->dirty |= SVGA_NEW_VBUFFER;
-}
-
-
-static void svga_set_index_buffer(struct pipe_context *pipe,
-                                  const struct pipe_index_buffer *ib)
-{
-   struct svga_context *svga = svga_context(pipe);
-
-   util_set_index_buffer(&svga->curr.ib, ib);
 }
 
 
@@ -323,12 +315,14 @@ svga_delete_vertex_elements_state(struct pipe_context *pipe, void *state)
    svga->hud.num_vertexelement_objects--;
 }
 
-void svga_cleanup_vertex_state( struct svga_context *svga )
+
+void
+svga_cleanup_vertex_state(struct svga_context *svga)
 {
    unsigned i;
-   
+
    for (i = 0 ; i < svga->curr.num_vertex_buffers; i++)
-      pipe_resource_reference(&svga->curr.vb[i].buffer, NULL);
+      pipe_vertex_buffer_unreference(&svga->curr.vb[i]);
 
    pipe_resource_reference(&svga->state.hw_draw.ib, NULL);
 
@@ -337,10 +331,10 @@ void svga_cleanup_vertex_state( struct svga_context *svga )
 }
 
 
-void svga_init_vertex_functions( struct svga_context *svga )
+void
+svga_init_vertex_functions(struct svga_context *svga)
 {
    svga->pipe.set_vertex_buffers = svga_set_vertex_buffers;
-   svga->pipe.set_index_buffer = svga_set_index_buffer;
    svga->pipe.create_vertex_elements_state = svga_create_vertex_elements_state;
    svga->pipe.bind_vertex_elements_state = svga_bind_vertex_elements_state;
    svga->pipe.delete_vertex_elements_state = svga_delete_vertex_elements_state;

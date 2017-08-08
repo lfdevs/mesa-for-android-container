@@ -846,40 +846,40 @@ static void
 micro_u64div(union tgsi_double_channel *dst,
              const union tgsi_double_channel *src)
 {
-   dst->u64[0] = src[0].u64[0] / src[1].u64[0];
-   dst->u64[1] = src[0].u64[1] / src[1].u64[1];
-   dst->u64[2] = src[0].u64[2] / src[1].u64[2];
-   dst->u64[3] = src[0].u64[3] / src[1].u64[3];
+   dst->u64[0] = src[1].u64[0] ? src[0].u64[0] / src[1].u64[0] : ~0ull;
+   dst->u64[1] = src[1].u64[1] ? src[0].u64[1] / src[1].u64[1] : ~0ull;
+   dst->u64[2] = src[1].u64[2] ? src[0].u64[2] / src[1].u64[2] : ~0ull;
+   dst->u64[3] = src[1].u64[3] ? src[0].u64[3] / src[1].u64[3] : ~0ull;
 }
 
 static void
 micro_i64div(union tgsi_double_channel *dst,
              const union tgsi_double_channel *src)
 {
-   dst->i64[0] = src[0].i64[0] / src[1].i64[0];
-   dst->i64[1] = src[0].i64[1] / src[1].i64[1];
-   dst->i64[2] = src[0].i64[2] / src[1].i64[2];
-   dst->i64[3] = src[0].i64[3] / src[1].i64[3];
+   dst->i64[0] = src[1].i64[0] ? src[0].i64[0] / src[1].i64[0] : 0;
+   dst->i64[1] = src[1].i64[1] ? src[0].i64[1] / src[1].i64[1] : 0;
+   dst->i64[2] = src[1].i64[2] ? src[0].i64[2] / src[1].i64[2] : 0;
+   dst->i64[3] = src[1].i64[3] ? src[0].i64[3] / src[1].i64[3] : 0;
 }
 
 static void
 micro_u64mod(union tgsi_double_channel *dst,
              const union tgsi_double_channel *src)
 {
-   dst->u64[0] = src[0].u64[0] % src[1].u64[0];
-   dst->u64[1] = src[0].u64[1] % src[1].u64[1];
-   dst->u64[2] = src[0].u64[2] % src[1].u64[2];
-   dst->u64[3] = src[0].u64[3] % src[1].u64[3];
+   dst->u64[0] = src[1].u64[0] ? src[0].u64[0] % src[1].u64[0] : ~0ull;
+   dst->u64[1] = src[1].u64[1] ? src[0].u64[1] % src[1].u64[1] : ~0ull;
+   dst->u64[2] = src[1].u64[2] ? src[0].u64[2] % src[1].u64[2] : ~0ull;
+   dst->u64[3] = src[1].u64[3] ? src[0].u64[3] % src[1].u64[3] : ~0ull;
 }
 
 static void
 micro_i64mod(union tgsi_double_channel *dst,
              const union tgsi_double_channel *src)
 {
-   dst->i64[0] = src[0].i64[0] % src[1].i64[0];
-   dst->i64[1] = src[0].i64[1] % src[1].i64[1];
-   dst->i64[2] = src[0].i64[2] % src[1].i64[2];
-   dst->i64[3] = src[0].i64[3] % src[1].i64[3];
+   dst->i64[0] = src[1].i64[0] ? src[0].i64[0] % src[1].i64[0] : ~0ll;
+   dst->i64[1] = src[1].i64[1] ? src[0].i64[1] % src[1].i64[1] : ~0ll;
+   dst->i64[2] = src[1].i64[2] ? src[0].i64[2] % src[1].i64[2] : ~0ll;
+   dst->i64[3] = src[1].i64[3] ? src[0].i64[3] % src[1].i64[3] : ~0ll;
 }
 
 static void
@@ -4653,10 +4653,10 @@ micro_mod(union tgsi_exec_channel *dst,
           const union tgsi_exec_channel *src0,
           const union tgsi_exec_channel *src1)
 {
-   dst->i[0] = src0->i[0] % src1->i[0];
-   dst->i[1] = src0->i[1] % src1->i[1];
-   dst->i[2] = src0->i[2] % src1->i[2];
-   dst->i[3] = src0->i[3] % src1->i[3];
+   dst->i[0] = src1->i[0] ? src0->i[0] % src1->i[0] : ~0;
+   dst->i[1] = src1->i[1] ? src0->i[1] % src1->i[1] : ~0;
+   dst->i[2] = src1->i[2] ? src0->i[2] % src1->i[2] : ~0;
+   dst->i[3] = src1->i[3] ? src0->i[3] % src1->i[3] : ~0;
 }
 
 static void

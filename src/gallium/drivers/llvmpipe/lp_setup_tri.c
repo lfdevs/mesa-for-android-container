@@ -273,7 +273,9 @@ do_triangle_ccw(struct lp_setup_context *setup,
    const struct lp_setup_variant_key *key = &setup->setup.variant->key;
    struct lp_rast_triangle *tri;
    struct lp_rast_plane *plane;
-   struct u_rect bbox;
+   const struct u_rect *scissor;
+   struct u_rect bbox, bboxpos;
+   boolean s_planes[4];
    unsigned tri_bytes;
    int nr_planes = 3;
    unsigned viewport_index = 0;
@@ -332,12 +334,14 @@ do_triangle_ccw(struct lp_setup_context *setup,
       return TRUE;
    }
 
+   bboxpos = bbox;
+
    /* Can safely discard negative regions, but need to keep hold of
     * information about when the triangle extends past screen
     * boundaries.  See trimmed_box in lp_setup_bin_triangle().
     */
-   bbox.x0 = MAX2(bbox.x0, 0);
-   bbox.y0 = MAX2(bbox.y0, 0);
+   bboxpos.x0 = MAX2(bboxpos.x0, 0);
+   bboxpos.y0 = MAX2(bboxpos.y0, 0);
 
    nr_planes = 3;
    /*
@@ -346,8 +350,8 @@ do_triangle_ccw(struct lp_setup_context *setup,
     */
    if (setup->scissor_test) {
       /* why not just use draw_regions */
-      boolean s_planes[4];
-      scissor_planes_needed(s_planes, &bbox, &setup->scissors[viewport_index]);
+      scissor = &setup->scissors[viewport_index];
+      scissor_planes_needed(s_planes, &bboxpos, scissor);
       nr_planes += s_planes[0] + s_planes[1] + s_planes[2] + s_planes[3];
    }
 
@@ -358,7 +362,7 @@ do_triangle_ccw(struct lp_setup_context *setup,
    if (!tri)
       return FALSE;
 
-#if 0
+#ifdef DEBUG
    tri->v[0][0] = v0[0][0];
    tri->v[1][0] = v1[0][0];
    tri->v[2][0] = v2[0][0];
@@ -680,10 +684,7 @@ do_triangle_ccw(struct lp_setup_context *setup,
     */
    if (nr_planes > 3) {
       /* why not just use draw_regions */
-      const struct u_rect *scissor = &setup->scissors[viewport_index];
       struct lp_rast_plane *plane_s = &plane[3];
-      boolean s_planes[4];
-      scissor_planes_needed(s_planes, &bbox, scissor);
 
       if (s_planes[0]) {
          plane_s->dcdx = -1 << 8;
@@ -716,7 +717,7 @@ do_triangle_ccw(struct lp_setup_context *setup,
       assert(plane_s == &plane[nr_planes]);
    }
 
-   return lp_setup_bin_triangle(setup, tri, &bbox, nr_planes, viewport_index);
+   return lp_setup_bin_triangle(setup, tri, &bbox, &bboxpos, nr_planes, viewport_index);
 }
 
 /*
@@ -747,11 +748,12 @@ floor_pot(uint32_t n)
 
 
 boolean
-lp_setup_bin_triangle( struct lp_setup_context *setup,
-                       struct lp_rast_triangle *tri,
-                       const struct u_rect *bbox,
-                       int nr_planes,
-                       unsigned viewport_index )
+lp_setup_bin_triangle(struct lp_setup_context *setup,
+                      struct lp_rast_triangle *tri,
+                      const struct u_rect *bboxorig,
+                      const struct u_rect *bbox,
+                      int nr_planes,
+                      unsigned viewport_index)
 {
    struct lp_scene *scene = setup->scene;
    struct u_rect trimmed_box = *bbox;   
@@ -767,7 +769,16 @@ lp_setup_bin_triangle( struct lp_setup_context *setup,
    int max_sz = ((bbox->x1 - (bbox->x0 & ~3)) |
                  (bbox->y1 - (bbox->y0 & ~3)));
    int sz = floor_pot(max_sz);
-   boolean use_32bits = max_sz <= MAX_FIXED_LENGTH32;
+
+   /*
+    * NOTE: It is important to use the original bounding box
+    * which might contain negative values here, because if the
+    * plane math may overflow or not with the 32bit rasterization
+    * functions depends on the original extent of the triangle.
+    */
+   int max_szorig = ((bboxorig->x1 - (bboxorig->x0 & ~3)) |
+                     (bboxorig->y1 - (bboxorig->y0 & ~3)));
+   boolean use_32bits = max_szorig <= MAX_FIXED_LENGTH32;
 
    /* Now apply scissor, etc to the bounding box.  Could do this
     * earlier, but it confuses the logic for tri-16 and would force

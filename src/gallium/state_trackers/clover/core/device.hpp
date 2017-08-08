@@ -67,6 +67,7 @@ namespace clover {
       cl_uint max_compute_units() const;
       bool image_support() const;
       bool has_doubles() const;
+      bool has_unified_memory() const;
 
       std::vector<size_t> max_block_size() const;
       cl_uint subgroup_size() const;

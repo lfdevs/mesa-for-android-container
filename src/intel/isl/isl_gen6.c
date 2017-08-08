@@ -88,6 +88,8 @@ isl_gen6_choose_image_alignment_el(const struct isl_device *dev,
     *    | format                 | halign | valign |
     *    +------------------------+--------+--------+
     *    | YUV 4:2:2 formats      |      4 |      * |
+    *    | BC1-5                  |      4 |      4 |
+    *    | FXT1                   |      8 |      4 |
     *    | uncompressed formats   |      4 |      * |
     *    +------------------------+--------+--------+
     *
@@ -110,12 +112,21 @@ isl_gen6_choose_image_alignment_el(const struct isl_device *dev,
     */
 
    if (isl_format_is_compressed(info->format)) {
+      /* Compressed formats have an alignment equal to their block size */
       *image_align_el = isl_extent3d(1, 1, 1);
       return;
    }
 
-   if (isl_format_is_yuv(info->format)) {
+   /* Separate stencil requires 4x2 alignment */
+   if (isl_surf_usage_is_stencil(info->usage) &&
+       info->format == ISL_FORMAT_R8_UINT) {
       *image_align_el = isl_extent3d(4, 2, 1);
+      return;
+   }
+
+   /* Depth or combined depth stencil surfaces require 4x4 alignment */
+   if (isl_surf_usage_is_depth_or_stencil(info->usage)) {
+      *image_align_el = isl_extent3d(4, 4, 1);
       return;
    }
 
@@ -124,24 +135,9 @@ isl_gen6_choose_image_alignment_el(const struct isl_device *dev,
       return;
    }
 
-   if (isl_surf_usage_is_depth_or_stencil(info->usage) &&
-       !ISL_DEV_USE_SEPARATE_STENCIL(dev)) {
-      /* interleaved depthstencil buffer */
-      *image_align_el = isl_extent3d(4, 4, 1);
-      return;
-   }
-
-   if (isl_surf_usage_is_depth(info->usage)) {
-      /* separate depth buffer */
-      *image_align_el = isl_extent3d(4, 4, 1);
-      return;
-   }
-
-   if (isl_surf_usage_is_stencil(info->usage)) {
-      /* separate stencil buffer */
-      *image_align_el = isl_extent3d(4, 2, 1);
-      return;
-   }
-
+   /* For everything else, 4x2 is always a valid alignment.  Since this is
+    * also the smallest alignment we can specify, we use 4x2 for everything
+    * else because it uses the least memory.
+    */
    *image_align_el = isl_extent3d(4, 2, 1);
 }

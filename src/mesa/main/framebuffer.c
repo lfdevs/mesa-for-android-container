@@ -251,7 +251,7 @@ _mesa_reference_framebuffer_(struct gl_framebuffer **ptr,
       oldFb->RefCount--;
       deleteFlag = (oldFb->RefCount == 0);
       mtx_unlock(&oldFb->Mutex);
-      
+
       if (deleteFlag)
          oldFb->Delete(oldFb);
 
@@ -321,43 +321,6 @@ _mesa_resize_framebuffer(struct gl_context *ctx, struct gl_framebuffer *fb,
 }
 
 /**
- * Examine all the framebuffer's renderbuffers to update the Width/Height
- * fields of the framebuffer.  If we have renderbuffers with different
- * sizes, set the framebuffer's width and height to the min size.
- * Note: this is only intended for user-created framebuffers, not
- * window-system framebuffes.
- */
-static void
-update_framebuffer_size(struct gl_context *ctx, struct gl_framebuffer *fb)
-{
-   GLuint minWidth = ~0, minHeight = ~0;
-   GLuint i;
-
-   /* user-created framebuffers only */
-   assert(_mesa_is_user_fbo(fb));
-
-   for (i = 0; i < BUFFER_COUNT; i++) {
-      struct gl_renderbuffer_attachment *att = &fb->Attachment[i];
-      const struct gl_renderbuffer *rb = att->Renderbuffer;
-      if (rb) {
-         minWidth = MIN2(minWidth, rb->Width);
-         minHeight = MIN2(minHeight, rb->Height);
-      }
-   }
-
-   if (minWidth != ~0U) {
-      fb->Width = minWidth;
-      fb->Height = minHeight;
-   }
-   else {
-      fb->Width = 0;
-      fb->Height = 0;
-   }
-}
-
-
-
-/**
  * Given a bounding box, intersect the bounding box with the scissor of
  * a specified vieport.
  *
@@ -403,14 +366,14 @@ _mesa_intersect_scissor_bounding_box(const struct gl_context *ctx,
  *                xmax, ymin, ymax.
  *
  * \warning This function assumes that the framebuffer dimensions are up to
- * date (e.g., update_framebuffer_size has been recently called on \c buffer).
+ * date.
  *
  * \sa _mesa_clip_to_region
  */
-void
-_mesa_scissor_bounding_box(const struct gl_context *ctx,
-                           const struct gl_framebuffer *buffer,
-                           unsigned idx, int *bbox)
+static void
+scissor_bounding_box(const struct gl_context *ctx,
+                     const struct gl_framebuffer *buffer,
+                     unsigned idx, int *bbox)
 {
    bbox[0] = 0;
    bbox[2] = 0;
@@ -438,13 +401,8 @@ _mesa_update_draw_buffer_bounds(struct gl_context *ctx,
    if (!buffer)
       return;
 
-   if (_mesa_is_user_fbo(buffer)) {
-      /* user-created framebuffer size depends on the renderbuffers */
-      update_framebuffer_size(ctx, buffer);
-   }
-
    /* Default to the first scissor as that's always valid */
-   _mesa_scissor_bounding_box(ctx, buffer, 0, bbox);
+   scissor_bounding_box(ctx, buffer, 0, bbox);
    buffer->_Xmin = bbox[0];
    buffer->_Ymin = bbox[2];
    buffer->_Xmax = bbox[1];
@@ -473,13 +431,6 @@ _mesa_update_framebuffer_visual(struct gl_context *ctx,
 
    memset(&fb->Visual, 0, sizeof(fb->Visual));
    fb->Visual.rgbMode = GL_TRUE; /* assume this */
-
-#if 0 /* this _might_ be needed */
-   if (fb->_Status != GL_FRAMEBUFFER_COMPLETE_EXT) {
-      /* leave visual fields zero'd */
-      return;
-   }
-#endif
 
    /* find first RGB renderbuffer */
    for (i = 0; i < BUFFER_COUNT; i++) {
@@ -631,7 +582,7 @@ static void
 update_color_read_buffer(struct gl_context *ctx, struct gl_framebuffer *fb)
 {
    (void) ctx;
-   if (fb->_ColorReadBufferIndex == -1 ||
+   if (fb->_ColorReadBufferIndex == BUFFER_NONE ||
        fb->DeletePending ||
        fb->Width == 0 ||
        fb->Height == 0) {

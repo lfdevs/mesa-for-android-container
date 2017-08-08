@@ -1858,6 +1858,8 @@ CodeEmitterGM107::emitIMAD()
 void
 CodeEmitterGM107::emitISCADD()
 {
+   assert(insn->src(1).get()->asImm());
+
    switch (insn->src(2).getFile()) {
    case FILE_GPR:
       emitInsn(0x5c180000);

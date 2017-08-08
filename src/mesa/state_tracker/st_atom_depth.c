@@ -95,8 +95,8 @@ gl_stencil_op_to_pipe(GLenum func)
    }
 }
 
-static void
-update_depth_stencil_alpha(struct st_context *st)
+void
+st_update_depth_stencil_alpha(struct st_context *st)
 {
    struct pipe_depth_stencil_alpha_state *dsa = &st->state.depth_stencil;
    struct pipe_stencil_ref sr;
@@ -128,7 +128,7 @@ update_depth_stencil_alpha(struct st_context *st)
       dsa->stencil[0].writemask = ctx->Stencil.WriteMask[0] & 0xff;
       sr.ref_value[0] = _mesa_get_stencil_ref(ctx, 0);
 
-      if (ctx->Stencil._TestTwoSide) {
+      if (_mesa_stencil_is_two_sided(ctx)) {
          const GLuint back = ctx->Stencil._BackFace;
          dsa->stencil[1].enabled = 1;
          dsa->stencil[1].func = st_compare_func_to_pipe(ctx->Stencil.Function[back]);
@@ -159,8 +159,3 @@ update_depth_stencil_alpha(struct st_context *st)
    cso_set_depth_stencil_alpha(st->cso_context, dsa);
    cso_set_stencil_ref(st->cso_context, &sr);
 }
-
-
-const struct st_tracked_state st_update_depth_stencil_alpha = {
-   update_depth_stencil_alpha				/* update */
-};

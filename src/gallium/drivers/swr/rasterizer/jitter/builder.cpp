@@ -47,6 +47,7 @@ namespace SwrJit
         mVoidTy = Type::getVoidTy(pJitMgr->mContext);
         mFP16Ty = Type::getHalfTy(pJitMgr->mContext);
         mFP32Ty = Type::getFloatTy(pJitMgr->mContext);
+        mFP32PtrTy = PointerType::get(mFP32Ty, 0);
         mDoubleTy = Type::getDoubleTy(pJitMgr->mContext);
         mInt1Ty = Type::getInt1Ty(pJitMgr->mContext);
         mInt8Ty = Type::getInt8Ty(pJitMgr->mContext);

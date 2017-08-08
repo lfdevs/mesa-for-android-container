@@ -58,7 +58,6 @@ struct virgl_context {
 
    struct slab_child_pool texture_transfer_pool;
 
-   struct pipe_index_buffer index_buffer;
    struct u_upload_mgr *uploader;
 
    struct pipe_vertex_buffer vertex_buffer[PIPE_MAX_ATTRIBS];

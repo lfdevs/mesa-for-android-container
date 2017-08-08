@@ -30,6 +30,7 @@
 #include "util/u_inlines.h"
 #include "util/u_memory.h"
 #include "util/u_format.h"
+#include "util/u_prim.h"
 #include "util/u_transfer.h"
 #include "util/u_helpers.h"
 #include "util/slab.h"
@@ -123,18 +124,19 @@ static void virgl_attach_res_vertex_buffers(struct virgl_context *vctx)
    unsigned i;
 
    for (i = 0; i < vctx->num_vertex_buffers; i++) {
-      res = virgl_resource(vctx->vertex_buffer[i].buffer);
+      res = virgl_resource(vctx->vertex_buffer[i].buffer.resource);
       if (res)
          vws->emit_res(vws, vctx->cbuf, res->hw_res, FALSE);
    }
 }
 
-static void virgl_attach_res_index_buffer(struct virgl_context *vctx)
+static void virgl_attach_res_index_buffer(struct virgl_context *vctx,
+					  struct virgl_indexbuf *ib)
 {
    struct virgl_winsys *vws = virgl_screen(vctx->base.screen)->vws;
    struct virgl_resource *res;
 
-   res = virgl_resource(vctx->index_buffer.buffer);
+   res = virgl_resource(ib->buffer);
    if (res)
       vws->emit_res(vws, vctx->cbuf, res->hw_res, FALSE);
 }
@@ -182,7 +184,6 @@ static void virgl_reemit_res(struct virgl_context *vctx)
       virgl_attach_res_sampler_views(vctx, shader_type);
       virgl_attach_res_uniform_buffers(vctx, shader_type);
    }
-   virgl_attach_res_index_buffer(vctx);
    virgl_attach_res_vertex_buffers(vctx);
    virgl_attach_res_so_targets(vctx);
 }
@@ -403,25 +404,12 @@ static void virgl_set_blend_color(struct pipe_context *ctx,
    virgl_encoder_set_blend_color(vctx, color);
 }
 
-static void virgl_set_index_buffer(struct pipe_context *ctx,
-                                  const struct pipe_index_buffer *ib)
-{
-   struct virgl_context *vctx = virgl_context(ctx);
-
-   if (ib) {
-      pipe_resource_reference(&vctx->index_buffer.buffer, ib->buffer);
-      memcpy(&vctx->index_buffer, ib, sizeof(*ib));
-   } else {
-      pipe_resource_reference(&vctx->index_buffer.buffer, NULL);
-   }
-}
-
 static void virgl_hw_set_index_buffer(struct pipe_context *ctx,
-                                     struct pipe_index_buffer *ib)
+                                     struct virgl_indexbuf *ib)
 {
    struct virgl_context *vctx = virgl_context(ctx);
    virgl_encoder_set_index_buffer(vctx, ib);
-   virgl_attach_res_index_buffer(vctx);
+   virgl_attach_res_index_buffer(vctx, ib);
 }
 
 static void virgl_set_constant_buffer(struct pipe_context *ctx,
@@ -589,19 +577,23 @@ static void virgl_draw_vbo(struct pipe_context *ctx,
 {
    struct virgl_context *vctx = virgl_context(ctx);
    struct virgl_screen *rs = virgl_screen(ctx->screen);
-   struct pipe_index_buffer ib = {};
+   struct virgl_indexbuf ib = {};
    struct pipe_draw_info info = *dinfo;
 
+   if (!dinfo->count_from_stream_output && !dinfo->indirect &&
+       !dinfo->primitive_restart &&
+       !u_trim_pipe_prim(dinfo->mode, (unsigned*)&dinfo->count))
+      return;
+
    if (!(rs->caps.caps.v1.prim_mask & (1 << dinfo->mode))) {
-      util_primconvert_save_index_buffer(vctx->primconvert, &vctx->index_buffer);
       util_primconvert_draw_vbo(vctx->primconvert, dinfo);
       return;
    }
-   if (info.indexed) {
-           pipe_resource_reference(&ib.buffer, vctx->index_buffer.buffer);
-           ib.user_buffer = vctx->index_buffer.user_buffer;
-           ib.index_size = vctx->index_buffer.index_size;
-           ib.offset = vctx->index_buffer.offset + info.start * ib.index_size;
+   if (info.index_size) {
+           pipe_resource_reference(&ib.buffer, info.has_user_indices ? NULL : info.index.resource);
+           ib.user_buffer = info.has_user_indices ? info.index.user : NULL;
+           ib.index_size = dinfo->index_size;
+           ib.offset = info.start * ib.index_size;
 
            if (ib.user_buffer) {
                    u_upload_data(vctx->uploader, 0, info.count * ib.index_size, 256,
@@ -614,7 +606,7 @@ static void virgl_draw_vbo(struct pipe_context *ctx,
 
    vctx->num_draws++;
    virgl_hw_set_vertex_buffers(ctx);
-   if (info.indexed)
+   if (info.index_size)
       virgl_hw_set_index_buffer(ctx, &ib);
 
    virgl_encoder_draw_vbo(vctx, &info);
@@ -899,7 +891,6 @@ struct pipe_context *virgl_context_create(struct pipe_screen *pscreen,
    vctx->base.bind_vertex_elements_state = virgl_bind_vertex_elements_state;
    vctx->base.delete_vertex_elements_state = virgl_delete_vertex_elements_state;
    vctx->base.set_vertex_buffers = virgl_set_vertex_buffers;
-   vctx->base.set_index_buffer = virgl_set_index_buffer;
    vctx->base.set_constant_buffer = virgl_set_constant_buffer;
 
    vctx->base.create_vs_state = virgl_create_vs_state;

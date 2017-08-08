@@ -41,8 +41,15 @@
 #include <string.h>
 #include <strings.h>
 #include "c11/threads.h"
+#include "util/macros.h"
 
 #include "egllog.h"
+
+#ifdef HAVE_ANDROID_PLATFORM
+#define LOG_TAG "EGL-MAIN"
+#include <cutils/log.h>
+
+#endif /* HAVE_ANDROID_PLATFORM */
 
 #define MAXSTRING 1000
 #define FALLBACK_LOG_LEVEL _EGL_WARNING
@@ -53,73 +60,18 @@ static struct {
 
    EGLBoolean initialized;
    EGLint level;
-   _EGLLogProc logger;
-   EGLint num_messages;
 } logging = {
-   _MTX_INITIALIZER_NP,
-   EGL_FALSE,
-   FALLBACK_LOG_LEVEL,
-   NULL,
-   0
+   .mutex = _MTX_INITIALIZER_NP,
+   .initialized = EGL_FALSE,
+   .level = FALLBACK_LOG_LEVEL,
 };
 
 static const char *level_strings[] = {
-   /* the order is important */
-   "fatal",
-   "warning",
-   "info",
-   "debug",
-   NULL
+   [_EGL_FATAL] = "fatal",
+   [_EGL_WARNING]  = "warning",
+   [_EGL_INFO] = "info",
+   [_EGL_DEBUG] = "debug",
 };
-
-
-/**
- * Set the function to be called when there is a message to log.
- * Note that the function will be called with an internal lock held.
- * Recursive logging is not allowed.
- */
-void
-_eglSetLogProc(_EGLLogProc logger)
-{
-   EGLint num_messages = 0;
-
-   mtx_lock(&logging.mutex);
-
-   if (logging.logger != logger) {
-      logging.logger = logger;
-
-      num_messages = logging.num_messages;
-      logging.num_messages = 0;
-   }
-
-   mtx_unlock(&logging.mutex);
-
-   if (num_messages)
-      _eglLog(_EGL_DEBUG,
-              "New logger installed. "
-              "Messages before the new logger might not be available.");
-}
-
-
-/**
- * Set the log reporting level.
- */
-void
-_eglSetLogLevel(EGLint level)
-{
-   switch (level) {
-   case _EGL_FATAL:
-   case _EGL_WARNING:
-   case _EGL_INFO:
-   case _EGL_DEBUG:
-      mtx_lock(&logging.mutex);
-      logging.level = level;
-      mtx_unlock(&logging.mutex);
-      break;
-   default:
-      break;
-   }
-}
 
 
 /**
@@ -128,7 +80,17 @@ _eglSetLogLevel(EGLint level)
 static void
 _eglDefaultLogger(EGLint level, const char *msg)
 {
+#ifdef HAVE_ANDROID_PLATFORM
+   static const int egl2alog[] = {
+      [_EGL_FATAL] = ANDROID_LOG_ERROR,
+      [_EGL_WARNING]  = ANDROID_LOG_WARN,
+      [_EGL_INFO] = ANDROID_LOG_INFO,
+      [_EGL_DEBUG] = ANDROID_LOG_DEBUG,
+   };
+   LOG_PRI(egl2alog[level], LOG_TAG, "%s", msg);
+#else
    fprintf(stderr, "libEGL %s: %s\n", level_strings[level], msg);
+#endif /* HAVE_ANDROID_PLATFORM */
 }
 
 
@@ -146,18 +108,14 @@ _eglInitLogger(void)
 
    log_env = getenv("EGL_LOG_LEVEL");
    if (log_env) {
-      for (i = 0; level_strings[i]; i++) {
+      for (i = 0; i < ARRAY_SIZE(level_strings); i++) {
          if (strcasecmp(log_env, level_strings[i]) == 0) {
             level = i;
             break;
          }
       }
    }
-   else {
-      level = FALLBACK_LOG_LEVEL;
-   }
 
-   logging.logger = _eglDefaultLogger;
    logging.level = (level >= 0) ? level : FALLBACK_LOG_LEVEL;
    logging.initialized = EGL_TRUE;
 
@@ -191,16 +149,13 @@ _eglLog(EGLint level, const char *fmtStr, ...)
 
    mtx_lock(&logging.mutex);
 
-   if (logging.logger) {
-      va_start(args, fmtStr);
-      ret = vsnprintf(msg, MAXSTRING, fmtStr, args);
-      if (ret < 0 || ret >= MAXSTRING)
-         strcpy(msg, "<message truncated>");
-      va_end(args);
+   va_start(args, fmtStr);
+   ret = vsnprintf(msg, MAXSTRING, fmtStr, args);
+   if (ret < 0 || ret >= MAXSTRING)
+      strcpy(msg, "<message truncated>");
+   va_end(args);
 
-      logging.logger(level, msg);
-      logging.num_messages++;
-   }
+   _eglDefaultLogger(level, msg);
 
    mtx_unlock(&logging.mutex);
 

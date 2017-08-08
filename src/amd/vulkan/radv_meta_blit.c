@@ -38,25 +38,64 @@ build_nir_vertex_shader(void)
 	nir_builder b;
 
 	nir_builder_init_simple_shader(&b, NULL, MESA_SHADER_VERTEX, NULL);
-	b.shader->info->name = ralloc_strdup(b.shader, "meta_blit_vs");
+	b.shader->info.name = ralloc_strdup(b.shader, "meta_blit_vs");
 
-	nir_variable *pos_in = nir_variable_create(b.shader, nir_var_shader_in,
-						   vec4, "a_pos");
-	pos_in->data.location = VERT_ATTRIB_GENERIC0;
 	nir_variable *pos_out = nir_variable_create(b.shader, nir_var_shader_out,
 						    vec4, "gl_Position");
 	pos_out->data.location = VARYING_SLOT_POS;
-	nir_copy_var(&b, pos_out, pos_in);
 
-	nir_variable *tex_pos_in = nir_variable_create(b.shader, nir_var_shader_in,
-						       vec4, "a_tex_pos");
-	tex_pos_in->data.location = VERT_ATTRIB_GENERIC1;
 	nir_variable *tex_pos_out = nir_variable_create(b.shader, nir_var_shader_out,
 							vec4, "v_tex_pos");
 	tex_pos_out->data.location = VARYING_SLOT_VAR0;
 	tex_pos_out->data.interpolation = INTERP_MODE_SMOOTH;
-	nir_copy_var(&b, tex_pos_out, tex_pos_in);
 
+	nir_ssa_def *outvec = radv_meta_gen_rect_vertices(&b);
+
+	nir_store_var(&b, pos_out, outvec, 0xf);
+
+	nir_intrinsic_instr *src_box = nir_intrinsic_instr_create(b.shader, nir_intrinsic_load_push_constant);
+	src_box->src[0] = nir_src_for_ssa(nir_imm_int(&b, 0));
+	nir_intrinsic_set_base(src_box, 0);
+	nir_intrinsic_set_range(src_box, 16);
+	src_box->num_components = 4;
+	nir_ssa_dest_init(&src_box->instr, &src_box->dest, 4, 32, "src_box");
+	nir_builder_instr_insert(&b, &src_box->instr);
+
+	nir_intrinsic_instr *src0_z = nir_intrinsic_instr_create(b.shader, nir_intrinsic_load_push_constant);
+	src0_z->src[0] = nir_src_for_ssa(nir_imm_int(&b, 0));
+	nir_intrinsic_set_base(src0_z, 16);
+	nir_intrinsic_set_range(src0_z, 4);
+	src0_z->num_components = 1;
+	nir_ssa_dest_init(&src0_z->instr, &src0_z->dest, 1, 32, "src0_z");
+	nir_builder_instr_insert(&b, &src0_z->instr);
+
+	nir_intrinsic_instr *vertex_id = nir_intrinsic_instr_create(b.shader, nir_intrinsic_load_vertex_id_zero_base);
+	nir_ssa_dest_init(&vertex_id->instr, &vertex_id->dest, 1, 32, "vertexid");
+	nir_builder_instr_insert(&b, &vertex_id->instr);
+
+	/* vertex 0 - src0_x, src0_y, src0_z */
+	/* vertex 1 - src0_x, src1_y, src0_z*/
+	/* vertex 2 - src1_x, src0_y, src0_z */
+	/* so channel 0 is vertex_id != 2 ? src_x : src_x + w
+	   channel 1 is vertex id != 1 ? src_y : src_y + w */
+
+	nir_ssa_def *c0cmp = nir_ine(&b, &vertex_id->dest.ssa,
+				     nir_imm_int(&b, 2));
+	nir_ssa_def *c1cmp = nir_ine(&b, &vertex_id->dest.ssa,
+				     nir_imm_int(&b, 1));
+
+	nir_ssa_def *comp[4];
+	comp[0] = nir_bcsel(&b, c0cmp,
+			    nir_channel(&b, &src_box->dest.ssa, 0),
+			    nir_channel(&b, &src_box->dest.ssa, 2));
+
+	comp[1] = nir_bcsel(&b, c1cmp,
+			    nir_channel(&b, &src_box->dest.ssa, 1),
+			    nir_channel(&b, &src_box->dest.ssa, 3));
+	comp[2] = &src0_z->dest.ssa;
+	comp[3] = nir_imm_float(&b, 1.0);
+	nir_ssa_def *out_tex_vec = nir_vec(&b, comp, 4);
+	nir_store_var(&b, tex_pos_out, out_tex_vec, 0xf);
 	return b.shader;
 }
 
@@ -70,7 +109,7 @@ build_nir_copy_fragment_shader(enum glsl_sampler_dim tex_dim)
 	nir_builder_init_simple_shader(&b, NULL, MESA_SHADER_FRAGMENT, NULL);
 
 	sprintf(shader_name, "meta_blit_fs.%d", tex_dim);
-	b.shader->info->name = ralloc_strdup(b.shader, shader_name);
+	b.shader->info.name = ralloc_strdup(b.shader, shader_name);
 
 	nir_variable *tex_pos_in = nir_variable_create(b.shader, nir_var_shader_in,
 						       vec4, "v_tex_pos");
@@ -124,7 +163,7 @@ build_nir_copy_fragment_shader_depth(enum glsl_sampler_dim tex_dim)
 	nir_builder_init_simple_shader(&b, NULL, MESA_SHADER_FRAGMENT, NULL);
 
 	sprintf(shader_name, "meta_blit_depth_fs.%d", tex_dim);
-	b.shader->info->name = ralloc_strdup(b.shader, shader_name);
+	b.shader->info.name = ralloc_strdup(b.shader, shader_name);
 
 	nir_variable *tex_pos_in = nir_variable_create(b.shader, nir_var_shader_in,
 						       vec4, "v_tex_pos");
@@ -178,7 +217,7 @@ build_nir_copy_fragment_shader_stencil(enum glsl_sampler_dim tex_dim)
 	nir_builder_init_simple_shader(&b, NULL, MESA_SHADER_FRAGMENT, NULL);
 
 	sprintf(shader_name, "meta_blit_stencil_fs.%d", tex_dim);
-	b.shader->info->name = ralloc_strdup(b.shader, shader_name);
+	b.shader->info.name = ralloc_strdup(b.shader, shader_name);
 
 	nir_variable *tex_pos_in = nir_variable_create(b.shader, nir_var_shader_in,
 						       vec4, "v_tex_pos");
@@ -236,65 +275,21 @@ meta_emit_blit(struct radv_cmd_buffer *cmd_buffer,
                VkFilter blit_filter)
 {
 	struct radv_device *device = cmd_buffer->device;
-	unsigned offset = 0;
-	struct blit_vb_data {
-		float pos[2];
-		float tex_coord[3];
-	} vb_data[3];
 
-	assert(src_image->samples == dest_image->samples);
-	unsigned vb_size = 3 * sizeof(*vb_data);
-	vb_data[0] = (struct blit_vb_data) {
-		.pos = {
-			-1.0,
-			-1.0,
-		},
-		.tex_coord = {
-			(float)src_offset_0.x / (float)src_iview->extent.width,
-			(float)src_offset_0.y / (float)src_iview->extent.height,
-			(float)src_offset_0.z / (float)src_iview->extent.depth,
-		},
+	assert(src_image->info.samples == dest_image->info.samples);
+
+	float vertex_push_constants[5] = {
+		(float)src_offset_0.x / (float)src_iview->extent.width,
+		(float)src_offset_0.y / (float)src_iview->extent.height,
+		(float)src_offset_1.x / (float)src_iview->extent.width,
+		(float)src_offset_1.y / (float)src_iview->extent.height,
+		(float)src_offset_0.z / (float)src_iview->extent.depth,
 	};
 
-	vb_data[1] = (struct blit_vb_data) {
-		.pos = {
-			-1.0,
-			1.0,
-		},
-		.tex_coord = {
-			(float)src_offset_0.x / (float)src_iview->extent.width,
-			(float)src_offset_1.y / (float)src_iview->extent.height,
-			(float)src_offset_0.z / (float)src_iview->extent.depth,
-		},
-	};
-
-	vb_data[2] = (struct blit_vb_data) {
-		.pos = {
-			1.0,
-			-1.0,
-		},
-		.tex_coord = {
-			(float)src_offset_1.x / (float)src_iview->extent.width,
-			(float)src_offset_0.y / (float)src_iview->extent.height,
-			(float)src_offset_0.z / (float)src_iview->extent.depth,
-		},
-	};
-	radv_cmd_buffer_upload_data(cmd_buffer, vb_size, 16, vb_data, &offset);
-
-	struct radv_buffer vertex_buffer = {
-		.device = device,
-		.size = vb_size,
-		.bo = cmd_buffer->upload.upload_bo,
-		.offset = offset,
-	};
-
-	radv_CmdBindVertexBuffers(radv_cmd_buffer_to_handle(cmd_buffer), 0, 1,
-				  (VkBuffer[]) {
-						  radv_buffer_to_handle(&vertex_buffer)
-						  },
-				  (VkDeviceSize[]) {
-					  0,
-						  });
+	radv_CmdPushConstants(radv_cmd_buffer_to_handle(cmd_buffer),
+			      device->meta_state.blit.pipeline_layout,
+			      VK_SHADER_STAGE_VERTEX_BIT, 0, 20,
+			      vertex_push_constants);
 
 	VkSampler sampler;
 	radv_CreateSampler(radv_device_to_handle(device),
@@ -509,10 +504,10 @@ void radv_CmdBlitImage(
 	 *    vkCmdBlitImage must not be used for multisampled source or
 	 *    destination images. Use vkCmdResolveImage for this purpose.
 	 */
-	assert(src_image->samples == 1);
-	assert(dest_image->samples == 1);
+	assert(src_image->info.samples == 1);
+	assert(dest_image->info.samples == 1);
 
-	radv_meta_save_graphics_reset_vport_scissor(&saved_state, cmd_buffer);
+	radv_meta_save_graphics_reset_vport_scissor_novertex(&saved_state, cmd_buffer);
 
 	for (unsigned r = 0; r < regionCount; r++) {
 		const VkImageSubresourceLayers *src_res = &pRegions[r].srcSubresource;
@@ -531,8 +526,7 @@ void radv_CmdBlitImage(
 						     .baseArrayLayer = src_res->baseArrayLayer,
 						     .layerCount = 1
 					     },
-						     },
-				     cmd_buffer, VK_IMAGE_USAGE_SAMPLED_BIT);
+				     });
 
 		unsigned dst_start, dst_end;
 		if (dest_image->type == VK_IMAGE_TYPE_3D) {
@@ -580,12 +574,6 @@ void radv_CmdBlitImage(
 		dest_box.extent.height = abs(dst_y1 - dst_y0);
 
 		struct radv_image_view dest_iview;
-		unsigned usage;
-		if (dst_res->aspectMask == VK_IMAGE_ASPECT_COLOR_BIT)
-			usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-		else
-			usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-
 		const unsigned num_layers = dst_end - dst_start;
 		for (unsigned i = 0; i < num_layers; i++) {
 			const VkOffset3D dest_offset_0 = {
@@ -625,8 +613,7 @@ void radv_CmdBlitImage(
 							     .baseArrayLayer = dest_array_slice,
 							     .layerCount = 1
 						     },
-					     },
-					     cmd_buffer, usage);
+					     });
 			meta_emit_blit(cmd_buffer,
 				       src_image, &src_iview,
 				       src_offset_0, src_offset_1,
@@ -708,6 +695,8 @@ static VkFormat pipeline_formats[] = {
    VK_FORMAT_R8G8B8A8_UNORM,
    VK_FORMAT_R8G8B8A8_UINT,
    VK_FORMAT_R8G8B8A8_SINT,
+   VK_FORMAT_A2R10G10B10_UINT_PACK32,
+   VK_FORMAT_A2R10G10B10_SINT_PACK32,
    VK_FORMAT_R16G16B16A16_UNORM,
    VK_FORMAT_R16G16B16A16_SNORM,
    VK_FORMAT_R16G16B16A16_UINT,
@@ -765,31 +754,8 @@ radv_device_init_meta_blit_color(struct radv_device *device,
 
 		VkPipelineVertexInputStateCreateInfo vi_create_info = {
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-			.vertexBindingDescriptionCount = 1,
-			.pVertexBindingDescriptions = (VkVertexInputBindingDescription[]) {
-				{
-					.binding = 0,
-					.stride = 5 * sizeof(float),
-					.inputRate = VK_VERTEX_INPUT_RATE_VERTEX
-				},
-			},
-			.vertexAttributeDescriptionCount = 2,
-			.pVertexAttributeDescriptions = (VkVertexInputAttributeDescription[]) {
-				{
-					/* Position */
-					.location = 0,
-					.binding = 0,
-					.format = VK_FORMAT_R32G32_SFLOAT,
-					.offset = 0
-				},
-				{
-					/* Texture Coordinate */
-					.location = 1,
-					.binding = 0,
-					.format = VK_FORMAT_R32G32B32_SFLOAT,
-					.offset = 8
-				}
-			}
+			.vertexBindingDescriptionCount = 0,
+			.vertexAttributeDescriptionCount = 0,
 		};
 
 		VkPipelineShaderStageCreateInfo pipeline_shader_stages[] = {
@@ -917,7 +883,7 @@ radv_device_init_meta_blit_depth(struct radv_device *device,
 					       .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
 						       .attachmentCount = 1,
 						       .pAttachments = &(VkAttachmentDescription) {
-						       .format = 0,
+						       .format = VK_FORMAT_D32_SFLOAT,
 						       .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
 						       .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
 						       .initialLayout = VK_IMAGE_LAYOUT_GENERAL,
@@ -944,31 +910,8 @@ radv_device_init_meta_blit_depth(struct radv_device *device,
 
 	VkPipelineVertexInputStateCreateInfo vi_create_info = {
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-		.vertexBindingDescriptionCount = 1,
-		.pVertexBindingDescriptions = (VkVertexInputBindingDescription[]) {
-			{
-				.binding = 0,
-				.stride = 5 * sizeof(float),
-				.inputRate = VK_VERTEX_INPUT_RATE_VERTEX
-			},
-		},
-		.vertexAttributeDescriptionCount = 2,
-		.pVertexAttributeDescriptions = (VkVertexInputAttributeDescription[]) {
-			{
-				/* Position */
-				.location = 0,
-				.binding = 0,
-				.format = VK_FORMAT_R32G32_SFLOAT,
-				.offset = 0
-			},
-			{
-				/* Texture Coordinate */
-				.location = 1,
-				.binding = 0,
-				.format = VK_FORMAT_R32G32B32_SFLOAT,
-				.offset = 8
-			}
-		}
+		.vertexBindingDescriptionCount = 0,
+		.vertexAttributeDescriptionCount = 0,
 	};
 
 	VkPipelineShaderStageCreateInfo pipeline_shader_stages[] = {
@@ -1098,7 +1041,7 @@ radv_device_init_meta_blit_stencil(struct radv_device *device,
 					       .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
 						       .attachmentCount = 1,
 						       .pAttachments = &(VkAttachmentDescription) {
-						       .format = 0,
+						       .format = VK_FORMAT_S8_UINT,
 						       .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
 						       .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
 						       .initialLayout = VK_IMAGE_LAYOUT_GENERAL,
@@ -1125,31 +1068,8 @@ radv_device_init_meta_blit_stencil(struct radv_device *device,
 
 	VkPipelineVertexInputStateCreateInfo vi_create_info = {
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-		.vertexBindingDescriptionCount = 1,
-		.pVertexBindingDescriptions = (VkVertexInputBindingDescription[]) {
-			{
-				.binding = 0,
-				.stride = 5 * sizeof(float),
-				.inputRate = VK_VERTEX_INPUT_RATE_VERTEX
-			},
-		},
-		.vertexAttributeDescriptionCount = 2,
-		.pVertexAttributeDescriptions = (VkVertexInputAttributeDescription[]) {
-			{
-				/* Position */
-				.location = 0,
-				.binding = 0,
-				.format = VK_FORMAT_R32G32_SFLOAT,
-				.offset = 0
-			},
-			{
-				/* Texture Coordinate */
-				.location = 1,
-				.binding = 0,
-				.format = VK_FORMAT_R32G32B32_SFLOAT,
-				.offset = 8
-			}
-		}
+		.vertexBindingDescriptionCount = 0,
+		.vertexAttributeDescriptionCount = 0,
 	};
 
 	VkPipelineShaderStageCreateInfo pipeline_shader_stages[] = {
@@ -1308,11 +1228,15 @@ radv_device_init_meta_blit_state(struct radv_device *device)
 	if (result != VK_SUCCESS)
 		goto fail;
 
+	const VkPushConstantRange push_constant_range = {VK_SHADER_STAGE_VERTEX_BIT, 0, 20};
+
 	result = radv_CreatePipelineLayout(radv_device_to_handle(device),
 					   &(VkPipelineLayoutCreateInfo) {
 						   .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
 							   .setLayoutCount = 1,
 							   .pSetLayouts = &device->meta_state.blit.ds_layout,
+							   .pushConstantRangeCount = 1,
+							   .pPushConstantRanges = &push_constant_range,
 							   },
 					   &device->meta_state.alloc, &device->meta_state.blit.pipeline_layout);
 	if (result != VK_SUCCESS)
@@ -1329,12 +1253,10 @@ radv_device_init_meta_blit_state(struct radv_device *device)
 		goto fail;
 
 	result = radv_device_init_meta_blit_stencil(device, &vs);
-	if (result != VK_SUCCESS)
-		goto fail;
-	return VK_SUCCESS;
 
 fail:
 	ralloc_free(vs.nir);
-	radv_device_finish_meta_blit_state(device);
+	if (result != VK_SUCCESS)
+		radv_device_finish_meta_blit_state(device);
 	return result;
 }

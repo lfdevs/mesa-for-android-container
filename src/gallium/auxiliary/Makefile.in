@@ -202,8 +202,9 @@ am__libgallium_la_SOURCES_DIST = cso_cache/cso_cache.c \
 	tgsi/tgsi_aa_point.h tgsi/tgsi_build.c tgsi/tgsi_build.h \
 	tgsi/tgsi_dump.c tgsi/tgsi_dump.h tgsi/tgsi_exec.c \
 	tgsi/tgsi_exec.h tgsi/tgsi_emulate.c tgsi/tgsi_emulate.h \
-	tgsi/tgsi_info.c tgsi/tgsi_info.h tgsi/tgsi_iterate.c \
-	tgsi/tgsi_iterate.h tgsi/tgsi_lowering.c tgsi/tgsi_lowering.h \
+	tgsi/tgsi_from_mesa.c tgsi/tgsi_from_mesa.h tgsi/tgsi_info.c \
+	tgsi/tgsi_info.h tgsi/tgsi_iterate.c tgsi/tgsi_iterate.h \
+	tgsi/tgsi_lowering.c tgsi/tgsi_lowering.h \
 	tgsi/tgsi_opcode_tmp.h tgsi/tgsi_parse.c tgsi/tgsi_parse.h \
 	tgsi/tgsi_point_sprite.c tgsi/tgsi_point_sprite.h \
 	tgsi/tgsi_sanity.c tgsi/tgsi_sanity.h tgsi/tgsi_scan.c \
@@ -217,9 +218,9 @@ am__libgallium_la_SOURCES_DIST = cso_cache/cso_cache.c \
 	translate/translate_sse.c util/dbghelp.h util/u_bitcast.h \
 	util/u_bitmask.c util/u_bitmask.h util/u_blend.h util/u_blit.c \
 	util/u_blit.h util/u_blitter.c util/u_blitter.h util/u_box.h \
-	util/u_cache.c util/u_cache.h util/u_caps.c util/u_caps.h \
-	util/u_cpu_detect.c util/u_cpu_detect.h util/u_debug.c \
-	util/u_debug.h util/u_debug_describe.c util/u_debug_describe.h \
+	util/u_cache.c util/u_cache.h util/u_cpu_detect.c \
+	util/u_cpu_detect.h util/u_debug.c util/u_debug.h \
+	util/u_debug_describe.c util/u_debug_describe.h \
 	util/u_debug_flush.c util/u_debug_flush.h util/u_debug_image.c \
 	util/u_debug_image.h util/u_debug_memory.c \
 	util/u_debug_refcnt.c util/u_debug_refcnt.h \
@@ -228,17 +229,16 @@ am__libgallium_la_SOURCES_DIST = cso_cache/cso_cache.c \
 	util/u_dirty_flags.h util/u_dirty_surfaces.h util/u_dl.c \
 	util/u_dl.h util/u_draw.c util/u_draw.h util/u_draw_quad.c \
 	util/u_draw_quad.h util/u_dual_blend.h util/u_dump_defines.c \
-	util/u_dump.h util/u_dump_state.c util/u_dynarray.h \
-	util/u_fifo.h util/u_format.c util/u_format.h \
-	util/u_format_etc.c util/u_format_etc.h util/u_format_latc.c \
-	util/u_format_latc.h util/u_format_other.c \
-	util/u_format_other.h util/u_format_rgtc.c \
-	util/u_format_rgtc.h util/u_format_s3tc.c util/u_format_s3tc.h \
-	util/u_format_tests.c util/u_format_tests.h \
-	util/u_format_yuv.c util/u_format_yuv.h util/u_format_zs.c \
-	util/u_format_zs.h util/u_framebuffer.c util/u_framebuffer.h \
-	util/u_gen_mipmap.c util/u_gen_mipmap.h util/u_half.h \
-	util/u_handle_table.c util/u_handle_table.h \
+	util/u_dump.h util/u_dump_state.c util/u_fifo.h \
+	util/u_format.c util/u_format.h util/u_format_etc.c \
+	util/u_format_etc.h util/u_format_latc.c util/u_format_latc.h \
+	util/u_format_other.c util/u_format_other.h \
+	util/u_format_rgtc.c util/u_format_rgtc.h util/u_format_s3tc.c \
+	util/u_format_s3tc.h util/u_format_tests.c \
+	util/u_format_tests.h util/u_format_yuv.c util/u_format_yuv.h \
+	util/u_format_zs.c util/u_format_zs.h util/u_framebuffer.c \
+	util/u_framebuffer.h util/u_gen_mipmap.c util/u_gen_mipmap.h \
+	util/u_half.h util/u_handle_table.c util/u_handle_table.h \
 	util/u_hash_table.c util/u_hash_table.h util/u_helpers.c \
 	util/u_helpers.h util/u_index_modify.c util/u_index_modify.h \
 	util/u_inlines.h util/u_keymap.c util/u_keymap.h \
@@ -255,43 +255,44 @@ am__libgallium_la_SOURCES_DIST = cso_cache/cso_cache.c \
 	util/u_surface.h util/u_surfaces.c util/u_surfaces.h \
 	util/u_tests.c util/u_tests.h util/u_texture.c \
 	util/u_texture.h util/u_tile.c util/u_tile.h util/u_time.h \
-	util/u_transfer.c util/u_transfer.h util/u_upload_mgr.c \
-	util/u_upload_mgr.h util/u_vbuf.c util/u_vbuf.h util/u_video.h \
-	util/u_viewport.h nir/tgsi_to_nir.c nir/tgsi_to_nir.h \
-	indices/u_indices_gen.c indices/u_unfilled_gen.c \
-	util/u_format_table.c renderonly/renderonly.c \
-	renderonly/renderonly.h gallivm/lp_bld_arit.c \
-	gallivm/lp_bld_arit.h gallivm/lp_bld_arit_overflow.c \
-	gallivm/lp_bld_arit_overflow.h gallivm/lp_bld_assert.c \
-	gallivm/lp_bld_assert.h gallivm/lp_bld_bitarit.c \
-	gallivm/lp_bld_bitarit.h gallivm/lp_bld_const.c \
-	gallivm/lp_bld_const.h gallivm/lp_bld_conv.c \
-	gallivm/lp_bld_conv.h gallivm/lp_bld_debug.cpp \
-	gallivm/lp_bld_debug.h gallivm/lp_bld_flow.c \
-	gallivm/lp_bld_flow.h gallivm/lp_bld_format_aos_array.c \
-	gallivm/lp_bld_format_aos.c gallivm/lp_bld_format_cached.c \
-	gallivm/lp_bld_format_float.c gallivm/lp_bld_format.c \
-	gallivm/lp_bld_format.h gallivm/lp_bld_format_soa.c \
-	gallivm/lp_bld_format_srgb.c gallivm/lp_bld_format_yuv.c \
-	gallivm/lp_bld_gather.c gallivm/lp_bld_gather.h \
-	gallivm/lp_bld.h gallivm/lp_bld_init.c gallivm/lp_bld_init.h \
-	gallivm/lp_bld_intr.c gallivm/lp_bld_intr.h \
-	gallivm/lp_bld_limits.h gallivm/lp_bld_logic.c \
-	gallivm/lp_bld_logic.h gallivm/lp_bld_misc.cpp \
-	gallivm/lp_bld_misc.h gallivm/lp_bld_pack.c \
-	gallivm/lp_bld_pack.h gallivm/lp_bld_printf.c \
-	gallivm/lp_bld_printf.h gallivm/lp_bld_quad.c \
-	gallivm/lp_bld_quad.h gallivm/lp_bld_sample_aos.c \
-	gallivm/lp_bld_sample_aos.h gallivm/lp_bld_sample.c \
-	gallivm/lp_bld_sample.h gallivm/lp_bld_sample_soa.c \
-	gallivm/lp_bld_struct.c gallivm/lp_bld_struct.h \
-	gallivm/lp_bld_swizzle.c gallivm/lp_bld_swizzle.h \
-	gallivm/lp_bld_tgsi_action.c gallivm/lp_bld_tgsi_action.h \
-	gallivm/lp_bld_tgsi_aos.c gallivm/lp_bld_tgsi.c \
-	gallivm/lp_bld_tgsi.h gallivm/lp_bld_tgsi_info.c \
-	gallivm/lp_bld_tgsi_soa.c gallivm/lp_bld_type.c \
-	gallivm/lp_bld_type.h draw/draw_llvm.c draw/draw_llvm.h \
-	draw/draw_llvm_sample.c \
+	util/u_transfer.c util/u_transfer.h util/u_threaded_context.c \
+	util/u_threaded_context.h util/u_threaded_context_calls.h \
+	util/u_upload_mgr.c util/u_upload_mgr.h util/u_vbuf.c \
+	util/u_vbuf.h util/u_video.h util/u_viewport.h \
+	nir/tgsi_to_nir.c nir/tgsi_to_nir.h indices/u_indices_gen.c \
+	indices/u_unfilled_gen.c util/u_format_table.c \
+	renderonly/renderonly.c renderonly/renderonly.h \
+	gallivm/lp_bld_arit.c gallivm/lp_bld_arit.h \
+	gallivm/lp_bld_arit_overflow.c gallivm/lp_bld_arit_overflow.h \
+	gallivm/lp_bld_assert.c gallivm/lp_bld_assert.h \
+	gallivm/lp_bld_bitarit.c gallivm/lp_bld_bitarit.h \
+	gallivm/lp_bld_const.c gallivm/lp_bld_const.h \
+	gallivm/lp_bld_conv.c gallivm/lp_bld_conv.h \
+	gallivm/lp_bld_debug.cpp gallivm/lp_bld_debug.h \
+	gallivm/lp_bld_flow.c gallivm/lp_bld_flow.h \
+	gallivm/lp_bld_format_aos_array.c gallivm/lp_bld_format_aos.c \
+	gallivm/lp_bld_format_cached.c gallivm/lp_bld_format_float.c \
+	gallivm/lp_bld_format.c gallivm/lp_bld_format.h \
+	gallivm/lp_bld_format_soa.c gallivm/lp_bld_format_srgb.c \
+	gallivm/lp_bld_format_yuv.c gallivm/lp_bld_gather.c \
+	gallivm/lp_bld_gather.h gallivm/lp_bld.h gallivm/lp_bld_init.c \
+	gallivm/lp_bld_init.h gallivm/lp_bld_intr.c \
+	gallivm/lp_bld_intr.h gallivm/lp_bld_limits.h \
+	gallivm/lp_bld_logic.c gallivm/lp_bld_logic.h \
+	gallivm/lp_bld_misc.cpp gallivm/lp_bld_misc.h \
+	gallivm/lp_bld_pack.c gallivm/lp_bld_pack.h \
+	gallivm/lp_bld_printf.c gallivm/lp_bld_printf.h \
+	gallivm/lp_bld_quad.c gallivm/lp_bld_quad.h \
+	gallivm/lp_bld_sample_aos.c gallivm/lp_bld_sample_aos.h \
+	gallivm/lp_bld_sample.c gallivm/lp_bld_sample.h \
+	gallivm/lp_bld_sample_soa.c gallivm/lp_bld_struct.c \
+	gallivm/lp_bld_struct.h gallivm/lp_bld_swizzle.c \
+	gallivm/lp_bld_swizzle.h gallivm/lp_bld_tgsi_action.c \
+	gallivm/lp_bld_tgsi_action.h gallivm/lp_bld_tgsi_aos.c \
+	gallivm/lp_bld_tgsi.c gallivm/lp_bld_tgsi.h \
+	gallivm/lp_bld_tgsi_info.c gallivm/lp_bld_tgsi_soa.c \
+	gallivm/lp_bld_type.c gallivm/lp_bld_type.h draw/draw_llvm.c \
+	draw/draw_llvm.h draw/draw_llvm_sample.c \
 	draw/draw_pt_fetch_shade_pipeline_llvm.c draw/draw_vs_llvm.c
 am__dirstamp = $(am__leading_dot)dirstamp
 am__objects_1 = cso_cache/cso_cache.lo cso_cache/cso_context.lo \
@@ -329,20 +330,20 @@ am__objects_1 = cso_cache/cso_cache.lo cso_cache/cso_context.lo \
 	rbug/rbug_shader.lo rbug/rbug_texture.lo rtasm/rtasm_cpu.lo \
 	rtasm/rtasm_execmem.lo rtasm/rtasm_x86sse.lo \
 	tgsi/tgsi_aa_point.lo tgsi/tgsi_build.lo tgsi/tgsi_dump.lo \
-	tgsi/tgsi_exec.lo tgsi/tgsi_emulate.lo tgsi/tgsi_info.lo \
-	tgsi/tgsi_iterate.lo tgsi/tgsi_lowering.lo tgsi/tgsi_parse.lo \
-	tgsi/tgsi_point_sprite.lo tgsi/tgsi_sanity.lo \
-	tgsi/tgsi_scan.lo tgsi/tgsi_strings.lo tgsi/tgsi_text.lo \
-	tgsi/tgsi_transform.lo tgsi/tgsi_two_side.lo tgsi/tgsi_ureg.lo \
-	tgsi/tgsi_util.lo translate/translate.lo \
+	tgsi/tgsi_exec.lo tgsi/tgsi_emulate.lo tgsi/tgsi_from_mesa.lo \
+	tgsi/tgsi_info.lo tgsi/tgsi_iterate.lo tgsi/tgsi_lowering.lo \
+	tgsi/tgsi_parse.lo tgsi/tgsi_point_sprite.lo \
+	tgsi/tgsi_sanity.lo tgsi/tgsi_scan.lo tgsi/tgsi_strings.lo \
+	tgsi/tgsi_text.lo tgsi/tgsi_transform.lo tgsi/tgsi_two_side.lo \
+	tgsi/tgsi_ureg.lo tgsi/tgsi_util.lo translate/translate.lo \
 	translate/translate_cache.lo translate/translate_generic.lo \
 	translate/translate_sse.lo util/u_bitmask.lo util/u_blit.lo \
-	util/u_blitter.lo util/u_cache.lo util/u_caps.lo \
-	util/u_cpu_detect.lo util/u_debug.lo util/u_debug_describe.lo \
-	util/u_debug_flush.lo util/u_debug_image.lo \
-	util/u_debug_memory.lo util/u_debug_refcnt.lo \
-	util/u_debug_stack.lo util/u_debug_symbol.lo util/u_dl.lo \
-	util/u_draw.lo util/u_draw_quad.lo util/u_dump_defines.lo \
+	util/u_blitter.lo util/u_cache.lo util/u_cpu_detect.lo \
+	util/u_debug.lo util/u_debug_describe.lo util/u_debug_flush.lo \
+	util/u_debug_image.lo util/u_debug_memory.lo \
+	util/u_debug_refcnt.lo util/u_debug_stack.lo \
+	util/u_debug_symbol.lo util/u_dl.lo util/u_draw.lo \
+	util/u_draw_quad.lo util/u_dump_defines.lo \
 	util/u_dump_state.lo util/u_format.lo util/u_format_etc.lo \
 	util/u_format_latc.lo util/u_format_other.lo \
 	util/u_format_rgtc.lo util/u_format_s3tc.lo \
@@ -355,8 +356,8 @@ am__objects_1 = cso_cache/cso_cache.lo cso_cache/cso_context.lo \
 	util/u_ringbuffer.lo util/u_sampler.lo \
 	util/u_simple_shaders.lo util/u_suballoc.lo util/u_surface.lo \
 	util/u_surfaces.lo util/u_tests.lo util/u_texture.lo \
-	util/u_tile.lo util/u_transfer.lo util/u_upload_mgr.lo \
-	util/u_vbuf.lo
+	util/u_tile.lo util/u_transfer.lo util/u_threaded_context.lo \
+	util/u_upload_mgr.lo util/u_vbuf.lo
 am__objects_2 = nir/tgsi_to_nir.lo
 am__objects_3 = indices/u_indices_gen.lo indices/u_unfilled_gen.lo \
 	util/u_format_table.lo
@@ -614,6 +615,8 @@ GL_PC_LIB_PRIV = @GL_PC_LIB_PRIV@
 GL_PC_REQ_PRIV = @GL_PC_REQ_PRIV@
 GREP = @GREP@
 HAVE_XF86VIDMODE = @HAVE_XF86VIDMODE@
+I915_CFLAGS = @I915_CFLAGS@
+I915_LIBS = @I915_LIBS@
 INDENT = @INDENT@
 INDENT_FLAGS = @INDENT_FLAGS@
 INSTALL = @INSTALL@
@@ -621,8 +624,6 @@ INSTALL_DATA = @INSTALL_DATA@
 INSTALL_PROGRAM = @INSTALL_PROGRAM@
 INSTALL_SCRIPT = @INSTALL_SCRIPT@
 INSTALL_STRIP_PROGRAM = @INSTALL_STRIP_PROGRAM@
-INTEL_CFLAGS = @INTEL_CFLAGS@
-INTEL_LIBS = @INTEL_LIBS@
 LD = @LD@
 LDFLAGS = @LDFLAGS@
 LD_NO_UNDEFINED = @LD_NO_UNDEFINED@
@@ -718,6 +719,8 @@ STRIP = @STRIP@
 SWR_AVX2_CXXFLAGS = @SWR_AVX2_CXXFLAGS@
 SWR_AVX_CXXFLAGS = @SWR_AVX_CXXFLAGS@
 SWR_CXX11_CXXFLAGS = @SWR_CXX11_CXXFLAGS@
+SWR_KNL_CXXFLAGS = @SWR_KNL_CXXFLAGS@
+SWR_SKX_CXXFLAGS = @SWR_SKX_CXXFLAGS@
 VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
 VALGRIND_LIBS = @VALGRIND_LIBS@
 VA_CFLAGS = @VA_CFLAGS@
@@ -725,8 +728,6 @@ VA_LIBS = @VA_LIBS@
 VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
 VA_MAJOR = @VA_MAJOR@
 VA_MINOR = @VA_MINOR@
-VC4_CFLAGS = @VC4_CFLAGS@
-VC4_LIBS = @VC4_LIBS@
 VDPAU_CFLAGS = @VDPAU_CFLAGS@
 VDPAU_LIBS = @VDPAU_LIBS@
 VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
@@ -740,6 +741,7 @@ VL_LIBS = @VL_LIBS@
 VULKAN_ICD_INSTALL_DIR = @VULKAN_ICD_INSTALL_DIR@
 WAYLAND_CFLAGS = @WAYLAND_CFLAGS@
 WAYLAND_LIBS = @WAYLAND_LIBS@
+WAYLAND_PROTOCOLS_DATADIR = @WAYLAND_PROTOCOLS_DATADIR@
 WAYLAND_SCANNER = @WAYLAND_SCANNER@
 WAYLAND_SCANNER_CFLAGS = @WAYLAND_SCANNER_CFLAGS@
 WAYLAND_SCANNER_LIBS = @WAYLAND_SCANNER_LIBS@
@@ -813,7 +815,6 @@ pdfdir = @pdfdir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
-runstatedir = @runstatedir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
@@ -975,6 +976,8 @@ C_SOURCES := \
 	tgsi/tgsi_exec.h \
 	tgsi/tgsi_emulate.c \
 	tgsi/tgsi_emulate.h \
+	tgsi/tgsi_from_mesa.c \
+	tgsi/tgsi_from_mesa.h \
 	tgsi/tgsi_info.c \
 	tgsi/tgsi_info.h \
 	tgsi/tgsi_iterate.c \
@@ -1020,8 +1023,6 @@ C_SOURCES := \
 	util/u_box.h \
 	util/u_cache.c \
 	util/u_cache.h \
-	util/u_caps.c \
-	util/u_caps.h \
 	util/u_cpu_detect.c \
 	util/u_cpu_detect.h \
 	util/u_debug.c \
@@ -1051,7 +1052,6 @@ C_SOURCES := \
 	util/u_dump_defines.c \
 	util/u_dump.h \
 	util/u_dump_state.c \
-	util/u_dynarray.h \
 	util/u_fifo.h \
 	util/u_format.c \
 	util/u_format.h \
@@ -1131,6 +1131,9 @@ C_SOURCES := \
 	util/u_time.h \
 	util/u_transfer.c \
 	util/u_transfer.h \
+	util/u_threaded_context.c \
+	util/u_threaded_context.h \
+	util/u_threaded_context_calls.h \
 	util/u_upload_mgr.c \
 	util/u_upload_mgr.h \
 	util/u_vbuf.c \
@@ -1630,6 +1633,8 @@ tgsi/tgsi_dump.lo: tgsi/$(am__dirstamp) tgsi/$(DEPDIR)/$(am__dirstamp)
 tgsi/tgsi_exec.lo: tgsi/$(am__dirstamp) tgsi/$(DEPDIR)/$(am__dirstamp)
 tgsi/tgsi_emulate.lo: tgsi/$(am__dirstamp) \
 	tgsi/$(DEPDIR)/$(am__dirstamp)
+tgsi/tgsi_from_mesa.lo: tgsi/$(am__dirstamp) \
+	tgsi/$(DEPDIR)/$(am__dirstamp)
 tgsi/tgsi_info.lo: tgsi/$(am__dirstamp) tgsi/$(DEPDIR)/$(am__dirstamp)
 tgsi/tgsi_iterate.lo: tgsi/$(am__dirstamp) \
 	tgsi/$(DEPDIR)/$(am__dirstamp)
@@ -1675,7 +1680,6 @@ util/u_bitmask.lo: util/$(am__dirstamp) util/$(DEPDIR)/$(am__dirstamp)
 util/u_blit.lo: util/$(am__dirstamp) util/$(DEPDIR)/$(am__dirstamp)
 util/u_blitter.lo: util/$(am__dirstamp) util/$(DEPDIR)/$(am__dirstamp)
 util/u_cache.lo: util/$(am__dirstamp) util/$(DEPDIR)/$(am__dirstamp)
-util/u_caps.lo: util/$(am__dirstamp) util/$(DEPDIR)/$(am__dirstamp)
 util/u_cpu_detect.lo: util/$(am__dirstamp) \
 	util/$(DEPDIR)/$(am__dirstamp)
 util/u_debug.lo: util/$(am__dirstamp) util/$(DEPDIR)/$(am__dirstamp)
@@ -1754,6 +1758,8 @@ util/u_tests.lo: util/$(am__dirstamp) util/$(DEPDIR)/$(am__dirstamp)
 util/u_texture.lo: util/$(am__dirstamp) util/$(DEPDIR)/$(am__dirstamp)
 util/u_tile.lo: util/$(am__dirstamp) util/$(DEPDIR)/$(am__dirstamp)
 util/u_transfer.lo: util/$(am__dirstamp) \
+	util/$(DEPDIR)/$(am__dirstamp)
+util/u_threaded_context.lo: util/$(am__dirstamp) \
 	util/$(DEPDIR)/$(am__dirstamp)
 util/u_upload_mgr.lo: util/$(am__dirstamp) \
 	util/$(DEPDIR)/$(am__dirstamp)
@@ -2079,6 +2085,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@tgsi/$(DEPDIR)/tgsi_dump.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@tgsi/$(DEPDIR)/tgsi_emulate.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@tgsi/$(DEPDIR)/tgsi_exec.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@tgsi/$(DEPDIR)/tgsi_from_mesa.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@tgsi/$(DEPDIR)/tgsi_info.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@tgsi/$(DEPDIR)/tgsi_iterate.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@tgsi/$(DEPDIR)/tgsi_lowering.Plo@am__quote@
@@ -2100,7 +2107,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_blit.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_blitter.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_cache.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_caps.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_cpu_detect.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_debug.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_debug_describe.Plo@am__quote@
@@ -2147,6 +2153,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_surfaces.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_tests.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_texture.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_threaded_context.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_tile.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_transfer.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_upload_mgr.Plo@am__quote@

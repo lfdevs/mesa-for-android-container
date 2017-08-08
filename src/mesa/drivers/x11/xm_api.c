@@ -311,8 +311,8 @@ create_xmesa_buffer(XMesaDrawable d, BufferType type,
    b->frontxrb->Parent = b;
    b->frontxrb->drawable = d;
    b->frontxrb->pixmap = (XMesaPixmap) d;
-   _mesa_add_renderbuffer_without_ref(&b->mesa_buffer, BUFFER_FRONT_LEFT,
-                                      &b->frontxrb->Base.Base);
+   _mesa_attach_and_own_rb(&b->mesa_buffer, BUFFER_FRONT_LEFT,
+                           &b->frontxrb->Base.Base);
 
    /*
     * Back renderbuffer
@@ -328,8 +328,8 @@ create_xmesa_buffer(XMesaDrawable d, BufferType type,
       /* determine back buffer implementation */
       b->db_mode = vis->ximage_flag ? BACK_XIMAGE : BACK_PIXMAP;
       
-      _mesa_add_renderbuffer_without_ref(&b->mesa_buffer, BUFFER_BACK_LEFT,
-                                         &b->backxrb->Base.Base);
+      _mesa_attach_and_own_rb(&b->mesa_buffer, BUFFER_BACK_LEFT,
+                              &b->backxrb->Base.Base);
    }
 
    /*

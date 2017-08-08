@@ -59,10 +59,16 @@
 
 #if defined(PIPE_OS_LINUX)
 #include <signal.h>
+#include <fcntl.h>
+#include <elf.h>
 #endif
 
 #ifdef PIPE_OS_UNIX
 #include <unistd.h>
+#endif
+
+#if defined(HAS_ANDROID_CPUFEATURES)
+#include <cpu-features.h>
 #endif
 
 #if defined(PIPE_OS_WINDOWS)
@@ -294,6 +300,45 @@ PIPE_ALIGN_STACK static inline boolean sse2_has_daz(void)
 
 #endif /* X86 or X86_64 */
 
+#if defined(PIPE_ARCH_ARM)
+static void
+check_os_arm_support(void)
+{
+   /*
+    * On Android, the cpufeatures library is preferred way of checking
+    * CPU capabilities. However, it is not available for standalone Mesa
+    * builds, i.e. when Android build system (Android.mk-based) is not
+    * used. Because of this we cannot use PIPE_OS_ANDROID here, but rather
+    * have a separate macro that only gets enabled from respective Android.mk.
+    */
+#if defined(HAS_ANDROID_CPUFEATURES)
+   AndroidCpuFamily cpu_family = android_getCpuFamily();
+   uint64_t cpu_features = android_getCpuFeatures();
+
+   if (cpu_family == ANDROID_CPU_FAMILY_ARM) {
+      if (cpu_features & ANDROID_CPU_ARM_FEATURE_NEON)
+         util_cpu_caps.has_neon = 1;
+   }
+#elif defined(PIPE_OS_LINUX)
+    Elf32_auxv_t aux;
+    int fd;
+
+    fd = open("/proc/self/auxv", O_RDONLY | O_CLOEXEC);
+    if (fd >= 0) {
+       while (read(fd, &aux, sizeof(Elf32_auxv_t)) == sizeof(Elf32_auxv_t)) {
+          if (aux.a_type == AT_HWCAP) {
+             uint32_t hwcap = aux.a_un.a_val;
+
+             util_cpu_caps.has_neon = (hwcap >> 12) & 1;
+             break;
+          }
+       }
+       close (fd);
+    }
+#endif /* PIPE_OS_LINUX */
+}
+#endif /* PIPE_ARCH_ARM */
+
 void
 util_cpu_detect(void)
 {
@@ -393,7 +438,7 @@ util_cpu_detect(void)
           (xgetbv() & (0x7 << 5)) && // OPMASK: upper-256 enabled by OS
           ((xgetbv() & 6) == 6)) { // XMM/YMM enabled by OS
          uint32_t regs3[4];
-         cpuid(0x00000007, regs3);
+         cpuid_count(0x00000007, 0x00000000, regs3);
          util_cpu_caps.has_avx512f    = (regs3[1] >> 16) & 1;
          util_cpu_caps.has_avx512dq   = (regs3[1] >> 17) & 1;
          util_cpu_caps.has_avx512ifma = (regs3[1] >> 21) & 1;
@@ -443,6 +488,10 @@ util_cpu_detect(void)
    }
 #endif /* PIPE_ARCH_X86 || PIPE_ARCH_X86_64 */
 
+#if defined(PIPE_ARCH_ARM)
+   check_os_arm_support();
+#endif
+
 #if defined(PIPE_ARCH_PPC)
    check_os_altivec_support();
 #endif /* PIPE_ARCH_PPC */
@@ -471,6 +520,7 @@ util_cpu_detect(void)
       debug_printf("util_cpu_caps.has_3dnow_ext = %u\n", util_cpu_caps.has_3dnow_ext);
       debug_printf("util_cpu_caps.has_xop = %u\n", util_cpu_caps.has_xop);
       debug_printf("util_cpu_caps.has_altivec = %u\n", util_cpu_caps.has_altivec);
+      debug_printf("util_cpu_caps.has_neon = %u\n", util_cpu_caps.has_neon);
       debug_printf("util_cpu_caps.has_daz = %u\n", util_cpu_caps.has_daz);
       debug_printf("util_cpu_caps.has_avx512f = %u\n", util_cpu_caps.has_avx512f);
       debug_printf("util_cpu_caps.has_avx512dq = %u\n", util_cpu_caps.has_avx512dq);

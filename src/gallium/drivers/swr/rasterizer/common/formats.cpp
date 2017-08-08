@@ -20,7 +20,7 @@
 * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 * IN THE SOFTWARE.
 *
-* @file gen_formats.cpp
+* @file formats.cpp
 *
 * @brief auto-generated file
 *
@@ -2729,26 +2729,16 @@ const SWR_FORMAT_INFO gFormatInfo[] = {
         { 0.0f, 0.0f, 0.0f, 0.0f },
         1, 1
     },
-    // R10G10B10_FLOAT_A2_UNORM (0xD5)
+    // padding (0xD5)
     {
-        "R10G10B10_FLOAT_A2_UNORM",
-        { SWR_TYPE_FLOAT, SWR_TYPE_FLOAT, SWR_TYPE_FLOAT, SWR_TYPE_FLOAT },
-        { 0, 0, 0, 0x3f800000 }, // Defaults for missing components
-        { 0, 1, 2, 3 }, // Swizzle
-        { 10, 10, 10, 2 }, // Bits per component
-        32, // Bits per element
-        4, // Bytes per element
-        4, // Num components
-        false, // isSRGB
-        false, // isBC
-        false, // isSubsampled
-        false, // isLuminance
-        { false, false, false, false }, // Is normalized?
-        { 1.0f, 1.0f, 1.0f, 1.0f }, // To float scale factor
-        1, // bcWidth
-        1, // bcHeight
+        nullptr,
+        { SWR_TYPE_UNKNOWN, SWR_TYPE_UNKNOWN, SWR_TYPE_UNKNOWN, SWR_TYPE_UNKNOWN },
+        { 0, 0, 0, 0 },{ 0, 0, 0, 0 },{ 0, 0, 0, 0 },
+        0, 0, 0, false, false, false, false,
+        { false, false, false, false },
+        { 0.0f, 0.0f, 0.0f, 0.0f },
+        1, 1
     },
-
     // R32_SINT (0xD6)
     {
         "R32_SINT",
@@ -5179,16 +5169,26 @@ const SWR_FORMAT_INFO gFormatInfo[] = {
         { 0.0f, 0.0f, 0.0f, 0.0f },
         1, 1
     },
-    // padding (0x180)
+    // DXT1_RGB_SRGB (0x180)
     {
-        nullptr,
-        { SWR_TYPE_UNKNOWN, SWR_TYPE_UNKNOWN, SWR_TYPE_UNKNOWN, SWR_TYPE_UNKNOWN },
-        { 0, 0, 0, 0 },{ 0, 0, 0, 0 },{ 0, 0, 0, 0 },
-        0, 0, 0, false, false, false, false,
-        { false, false, false, false },
-        { 0.0f, 0.0f, 0.0f, 0.0f },
-        1, 1
+        "DXT1_RGB_SRGB",
+        { SWR_TYPE_UNORM, SWR_TYPE_UNKNOWN, SWR_TYPE_UNKNOWN, SWR_TYPE_UNKNOWN },
+        { 0, 0, 0, 0x3f800000 }, // Defaults for missing components
+        { 0, 1, 2, 3 }, // Swizzle
+        { 8, 8, 8, 8 }, // Bits per component
+        64, // Bits per element
+        8, // Bytes per element
+        1, // Num components
+        false, // isSRGB
+        true, // isBC
+        false, // isSubsampled
+        false, // isLuminance
+        { true, false, false, false }, // Is normalized?
+        { 1.0f / 255.0f, 0, 0, 0 }, // To float scale factor
+        4, // bcWidth
+        4, // bcHeight
     },
+
     // padding (0x181)
     {
         nullptr,
@@ -5449,16 +5449,26 @@ const SWR_FORMAT_INFO gFormatInfo[] = {
         { 0.0f, 0.0f, 0.0f, 0.0f },
         1, 1
     },
-    // padding (0x191)
+    // DXT1_RGB (0x191)
     {
-        nullptr,
-        { SWR_TYPE_UNKNOWN, SWR_TYPE_UNKNOWN, SWR_TYPE_UNKNOWN, SWR_TYPE_UNKNOWN },
-        { 0, 0, 0, 0 },{ 0, 0, 0, 0 },{ 0, 0, 0, 0 },
-        0, 0, 0, false, false, false, false,
-        { false, false, false, false },
-        { 0.0f, 0.0f, 0.0f, 0.0f },
-        1, 1
+        "DXT1_RGB",
+        { SWR_TYPE_UNORM, SWR_TYPE_UNKNOWN, SWR_TYPE_UNKNOWN, SWR_TYPE_UNKNOWN },
+        { 0, 0, 0, 0x3f800000 }, // Defaults for missing components
+        { 0, 1, 2, 3 }, // Swizzle
+        { 8, 8, 8, 8 }, // Bits per component
+        64, // Bits per element
+        8, // Bytes per element
+        1, // Num components
+        false, // isSRGB
+        true, // isBC
+        false, // isSubsampled
+        false, // isLuminance
+        { true, false, false, false }, // Is normalized?
+        { 1.0f / 255.0f, 0, 0, 0 }, // To float scale factor
+        4, // bcWidth
+        4, // bcHeight
     },
+
     // padding (0x192)
     {
         nullptr,

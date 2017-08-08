@@ -277,6 +277,22 @@ namespace SwrJit
         return GEPA(ptr, indices);
     }
 
+    Value *Builder::IN_BOUNDS_GEP(Value* ptr, const std::initializer_list<Value*> &indexList)
+    {
+        std::vector<Value*> indices;
+        for (auto i : indexList)
+            indices.push_back(i);
+        return IN_BOUNDS_GEP(ptr, indices);
+    }
+
+    Value *Builder::IN_BOUNDS_GEP(Value* ptr, const std::initializer_list<uint32_t> &indexList)
+    {
+        std::vector<Value*> indices;
+        for (auto i : indexList)
+            indices.push_back(C(i));
+        return IN_BOUNDS_GEP(ptr, indices);
+    }
+
     LoadInst *Builder::LOAD(Value *basePtr, const std::initializer_list<uint32_t> &indices, const llvm::Twine& name)
     {
         std::vector<Value*> valIndices;
@@ -1377,7 +1393,17 @@ namespace SwrJit
         IRB()->SetInsertPoint(&pFunc->getEntryBlock(),
                               pFunc->getEntryBlock().begin());
         Value* pAlloca = ALLOCA(pType);
-        IRB()->restoreIP(saveIP);
+        if (saveIP.isSet()) IRB()->restoreIP(saveIP);
+        return pAlloca;
+    }
+
+    Value* Builder::CreateEntryAlloca(Function* pFunc, Type* pType, Value* pArraySize)
+    {
+        auto saveIP = IRB()->saveIP();
+        IRB()->SetInsertPoint(&pFunc->getEntryBlock(),
+            pFunc->getEntryBlock().begin());
+        Value* pAlloca = ALLOCA(pType, pArraySize);
+        if (saveIP.isSet()) IRB()->restoreIP(saveIP);
         return pAlloca;
     }
 
@@ -1649,4 +1675,45 @@ namespace SwrJit
         }
     }
 
+
+    uint32_t Builder::GetTypeSize(Type* pType)
+    {
+        if (pType->isStructTy())
+        {
+            uint32_t numElems = pType->getStructNumElements();
+            Type* pElemTy = pType->getStructElementType(0);
+            return numElems * GetTypeSize(pElemTy);
+        }
+
+        if (pType->isArrayTy())
+        {
+            uint32_t numElems = pType->getArrayNumElements();
+            Type* pElemTy = pType->getArrayElementType();
+            return numElems * GetTypeSize(pElemTy);
+        }
+
+        if (pType->isIntegerTy())
+        {
+            uint32_t bitSize = pType->getIntegerBitWidth();
+            return bitSize / 8;
+        }
+
+        if (pType->isFloatTy())
+        {
+            return 4;
+        }
+
+        if (pType->isHalfTy())
+        {
+            return 2;
+        }
+
+        if (pType->isDoubleTy())
+        {
+            return 8;
+        }
+
+        SWR_ASSERT(false, "Unimplemented type.");
+        return 0;
+    }
 }

@@ -289,18 +289,7 @@ brw_is_color_fast_clear_compatible(struct brw_context *brw,
     */
    if (brw->gen >= 9 &&
        brw_isl_format_for_mesa_format(mt->format) !=
-       brw->render_target_format[mt->format])
-      return false;
-
-   /* Gen9 doesn't support fast clear on single-sampled SRGB buffers. When
-    * GL_FRAMEBUFFER_SRGB is enabled any color renderbuffers will be
-    * resolved in intel_update_state. In that case it's pointless to do a
-    * fast clear because it's very likely to be immediately resolved.
-    */
-   if (brw->gen >= 9 &&
-       mt->num_samples <= 1 &&
-       ctx->Color.sRGBEnabled &&
-       _mesa_get_srgb_format_linear(mt->format) != mt->format)
+       brw->mesa_to_isl_render_format[mt->format])
       return false;
 
    const mesa_format format = _mesa_get_render_format(ctx, mt->format);
@@ -329,12 +318,19 @@ brw_is_color_fast_clear_compatible(struct brw_context *brw,
  * Convert the given color to a bitfield suitable for ORing into DWORD 7 of
  * SURFACE_STATE (DWORD 12-15 on SKL+).
  */
-union gl_color_union
+union isl_color_value
 brw_meta_convert_fast_clear_color(const struct brw_context *brw,
                                   const struct intel_mipmap_tree *mt,
                                   const union gl_color_union *color)
 {
-   union gl_color_union override_color = *color;
+   union isl_color_value override_color = {
+      .u32 = {
+         color->ui[0],
+         color->ui[1],
+         color->ui[2],
+         color->ui[3],
+      },
+   };
 
    /* The sampler doesn't look at the format of the surface when the fast
     * clear color is used so we need to implement luminance, intensity and
@@ -342,17 +338,17 @@ brw_meta_convert_fast_clear_color(const struct brw_context *brw,
     */
    switch (_mesa_get_format_base_format(mt->format)) {
    case GL_INTENSITY:
-      override_color.ui[3] = override_color.ui[0];
+      override_color.u32[3] = override_color.u32[0];
       /* flow through */
    case GL_LUMINANCE:
    case GL_LUMINANCE_ALPHA:
-      override_color.ui[1] = override_color.ui[0];
-      override_color.ui[2] = override_color.ui[0];
+      override_color.u32[1] = override_color.u32[0];
+      override_color.u32[2] = override_color.u32[0];
       break;
    default:
       for (int i = 0; i < 3; i++) {
          if (!_mesa_format_has_color_component(mt->format, i))
-            override_color.ui[i] = 0;
+            override_color.u32[i] = 0;
       }
       break;
    }
@@ -360,12 +356,12 @@ brw_meta_convert_fast_clear_color(const struct brw_context *brw,
    switch (_mesa_get_format_datatype(mt->format)) {
    case GL_UNSIGNED_NORMALIZED:
       for (int i = 0; i < 4; i++)
-         override_color.f[i] = CLAMP(override_color.f[i], 0.0f, 1.0f);
+         override_color.f32[i] = CLAMP(override_color.f32[i], 0.0f, 1.0f);
       break;
 
    case GL_SIGNED_NORMALIZED:
       for (int i = 0; i < 4; i++)
-         override_color.f[i] = CLAMP(override_color.f[i], -1.0f, 1.0f);
+         override_color.f32[i] = CLAMP(override_color.f32[i], -1.0f, 1.0f);
       break;
 
    case GL_UNSIGNED_INT:
@@ -373,7 +369,7 @@ brw_meta_convert_fast_clear_color(const struct brw_context *brw,
          unsigned bits = _mesa_get_format_bits(mt->format, GL_RED_BITS + i);
          if (bits < 32) {
             uint32_t max = (1u << bits) - 1;
-            override_color.ui[i] = MIN2(override_color.ui[i], max);
+            override_color.u32[i] = MIN2(override_color.u32[i], max);
          }
       }
       break;
@@ -384,7 +380,7 @@ brw_meta_convert_fast_clear_color(const struct brw_context *brw,
          if (bits < 32) {
             int32_t max = (1 << (bits - 1)) - 1;
             int32_t min = -(1 << (bits - 1));
-            override_color.i[i] = CLAMP(override_color.i[i], min, max);
+            override_color.i32[i] = CLAMP(override_color.i32[i], min, max);
          }
       }
       break;
@@ -392,55 +388,26 @@ brw_meta_convert_fast_clear_color(const struct brw_context *brw,
    case GL_FLOAT:
       if (!_mesa_is_format_signed(mt->format)) {
          for (int i = 0; i < 4; i++)
-            override_color.f[i] = MAX2(override_color.f[i], 0.0f);
+            override_color.f32[i] = MAX2(override_color.f32[i], 0.0f);
       }
       break;
    }
 
    if (!_mesa_format_has_color_component(mt->format, 3)) {
       if (_mesa_is_format_integer_color(mt->format))
-         override_color.ui[3] = 1;
+         override_color.u32[3] = 1;
       else
-         override_color.f[3] = 1.0f;
+         override_color.f32[3] = 1.0f;
    }
 
    /* Handle linear to SRGB conversion */
    if (brw->ctx.Color.sRGBEnabled &&
        _mesa_get_srgb_format_linear(mt->format) != mt->format) {
       for (int i = 0; i < 3; i++) {
-         override_color.f[i] =
-            util_format_linear_to_srgb_float(override_color.f[i]);
+         override_color.f32[i] =
+            util_format_linear_to_srgb_float(override_color.f32[i]);
       }
    }
 
    return override_color;
-}
-
-/* Returned boolean tells if the given color differs from the current. */
-bool
-brw_meta_set_fast_clear_color(struct brw_context *brw,
-                              union gl_color_union *curr_color,
-                              const union gl_color_union *new_color)
-{
-   bool updated;
-
-   if (brw->gen >= 9) {
-      updated = memcmp(curr_color, new_color, sizeof(*curr_color));
-      *curr_color = *new_color;
-   } else {
-      const uint32_t old_color_value = *(uint32_t *)curr_color;
-      uint32_t adjusted = 0;
-
-      for (int i = 0; i < 4; i++) {
-         /* Testing for non-0 works for integer and float colors */
-         if (new_color->f[i] != 0.0f) {
-            adjusted |= 1 << (GEN7_SURFACE_CLEAR_COLOR_SHIFT + (3 - i));
-         }
-      }
-
-      updated = (old_color_value != adjusted);
-      *(uint32_t *)curr_color = adjusted;
-   }
-
-   return updated;
 }

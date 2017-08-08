@@ -68,6 +68,9 @@ int32_t S_IMMED(Value* i);
 
 Value *GEP(Value* ptr, const std::initializer_list<Value*> &indexList);
 Value *GEP(Value* ptr, const std::initializer_list<uint32_t> &indexList);
+Value *IN_BOUNDS_GEP(Value* ptr, const std::initializer_list<Value*> &indexList);
+Value *IN_BOUNDS_GEP(Value* ptr, const std::initializer_list<uint32_t> &indexList);
+
 CallInst *CALL(Value *Callee, const std::initializer_list<Value*> &args);
 CallInst *CALL(Value *Callee) { return CALLA(Callee); }
 CallInst *CALL(Value *Callee, Value* arg);
@@ -159,8 +162,11 @@ void RDTSC_START(Value* pBucketMgr, Value* pId);
 void RDTSC_STOP(Value* pBucketMgr, Value* pId);
 
 Value* CreateEntryAlloca(Function* pFunc, Type* pType);
+Value* CreateEntryAlloca(Function* pFunc, Type* pType, Value* pArraySize);
 
 // Static stack allocations for scatter operations
 Value* pScatterStackSrc{ nullptr };
 Value* pScatterStackOffsets{ nullptr };
 
+
+uint32_t GetTypeSize(Type* pType);

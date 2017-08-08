@@ -48,7 +48,6 @@
 
 #include "pipe/p_screen.h"
 #include "pipe/p_video_codec.h"
-#include "state_tracker/drm_driver.h"
 #include "util/u_memory.h"
 #include "vl/vl_video_buffer.h"
 
@@ -180,7 +179,7 @@ static OMX_ERRORTYPE vid_enc_Constructor(OMX_COMPONENTTYPE *comp, OMX_STRING nam
                                 PIPE_VIDEO_ENTRYPOINT_ENCODE, PIPE_VIDEO_CAP_SUPPORTED))
       return OMX_ErrorBadParameter;
 
-   priv->s_pipe = screen->context_create(screen, priv->screen, 0);
+   priv->s_pipe = screen->context_create(screen, NULL, 0);
    if (!priv->s_pipe)
       return OMX_ErrorInsufficientResources;
 
@@ -197,7 +196,7 @@ static OMX_ERRORTYPE vid_enc_Constructor(OMX_COMPONENTTYPE *comp, OMX_STRING nam
       return OMX_ErrorInsufficientResources;
    }
 
-   priv->t_pipe = screen->context_create(screen, priv->screen, 0);
+   priv->t_pipe = screen->context_create(screen, NULL, 0);
    if (!priv->t_pipe)
       return OMX_ErrorInsufficientResources;
 

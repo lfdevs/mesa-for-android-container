@@ -2,6 +2,7 @@ C_SOURCES := \
 	cik_sdma.c \
 	si_blit.c \
 	si_compute.c \
+	si_compute.h \
 	si_cp_dma.c \
 	si_debug.c \
 	si_descriptors.c \
@@ -17,6 +18,7 @@ C_SOURCES := \
 	si_shader.h \
 	si_shader_internal.h \
 	si_shader_tgsi_alu.c \
+	si_shader_tgsi_mem.c \
 	si_shader_tgsi_setup.c \
 	si_state.c \
 	si_state_draw.c \

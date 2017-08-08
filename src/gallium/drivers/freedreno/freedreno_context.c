@@ -121,7 +121,6 @@ fd_context_destroy(struct pipe_context *pctx)
 	fd_fence_ref(pctx->screen, &ctx->last_fence, NULL);
 
 	fd_prog_fini(pctx);
-	fd_hw_query_fini(pctx);
 
 	if (ctx->blitter)
 		util_blitter_destroy(ctx->blitter);
@@ -211,7 +210,7 @@ fd_context_setup_common_vbos(struct fd_context *ctx)
 			}});
 	ctx->solid_vbuf_state.vertexbuf.count = 1;
 	ctx->solid_vbuf_state.vertexbuf.vb[0].stride = 12;
-	ctx->solid_vbuf_state.vertexbuf.vb[0].buffer = ctx->solid_vbuf;
+	ctx->solid_vbuf_state.vertexbuf.vb[0].buffer.resource = ctx->solid_vbuf;
 
 	/* setup blit_vbuf_state: */
 	ctx->blit_vbuf_state.vtx = pctx->create_vertex_elements_state(
@@ -226,9 +225,9 @@ fd_context_setup_common_vbos(struct fd_context *ctx)
 			}});
 	ctx->blit_vbuf_state.vertexbuf.count = 2;
 	ctx->blit_vbuf_state.vertexbuf.vb[0].stride = 8;
-	ctx->blit_vbuf_state.vertexbuf.vb[0].buffer = ctx->blit_texcoord_vbuf;
+	ctx->blit_vbuf_state.vertexbuf.vb[0].buffer.resource = ctx->blit_texcoord_vbuf;
 	ctx->blit_vbuf_state.vertexbuf.vb[1].stride = 12;
-	ctx->blit_vbuf_state.vertexbuf.vb[1].buffer = ctx->solid_vbuf;
+	ctx->blit_vbuf_state.vertexbuf.vb[1].buffer.resource = ctx->solid_vbuf;
 }
 
 void
@@ -287,7 +286,6 @@ fd_context_init(struct fd_context *ctx, struct pipe_screen *pscreen,
 	fd_query_context_init(pctx);
 	fd_texture_init(pctx);
 	fd_state_init(pctx);
-	fd_hw_query_init(pctx);
 
 	ctx->blitter = util_blitter_create(pctx);
 	if (!ctx->blitter)
@@ -296,6 +294,9 @@ fd_context_init(struct fd_context *ctx, struct pipe_screen *pscreen,
 	ctx->primconvert = util_primconvert_create(pctx, ctx->primtype_mask);
 	if (!ctx->primconvert)
 		goto fail;
+
+	list_inithead(&ctx->hw_active_queries);
+	list_inithead(&ctx->acc_active_queries);
 
 	return pctx;
 

@@ -186,7 +186,7 @@ gbm_bo_get_stride_for_plane(struct gbm_bo *bo, int plane)
  * The format of the pixels in the buffer.
  *
  * \param bo The buffer object
- * \return The format of buffer object, on of the GBM_FORMAT_* codes
+ * \return The format of buffer object, one of the GBM_FORMAT_* codes
  */
 GBM_EXPORT uint32_t
 gbm_bo_get_format(struct gbm_bo *bo)
@@ -426,8 +426,8 @@ gbm_bo_create_with_modifiers(struct gbm_device *gbm,
  * independent of the foreign object.
  *
  * \param gbm The gbm device returned from gbm_create_device()
- * \param gbm The type of object we're importing
- * \param gbm Pointer to the external object
+ * \param type The type of object we're importing
+ * \param buffer Pointer to the external object
  * \param usage The union of the usage flags for this buffer
  *
  * \return A newly allocated buffer object that should be freed with

@@ -21,6 +21,10 @@
 
 include Makefile.sources
 
+MKDIR_GEN = $(AM_V_at)$(MKDIR_P) $(@D)
+
+BUILT_SOURCES =
+
 AM_CFLAGS = \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/src/egl/main \
@@ -60,12 +64,29 @@ libEGL_common_la_LIBADD += $(top_builddir)/src/loader/libloader_dri3_helper.la
 endif
 endif
 
+WL_DMABUF_XML = $(WAYLAND_PROTOCOLS_DATADIR)/unstable/linux-dmabuf/linux-dmabuf-unstable-v1.xml
+
+drivers/dri2/linux-dmabuf-unstable-v1-protocol.c: $(WL_DMABUF_XML)
+	$(MKDIR_GEN)
+	$(AM_V_GEN)$(WAYLAND_SCANNER) code < $< > $@
+
+drivers/dri2/linux-dmabuf-unstable-v1-client-protocol.h: $(WL_DMABUF_XML)
+	$(MKDIR_GEN)
+	$(AM_V_GEN)$(WAYLAND_SCANNER) client-header < $< > $@
+
 if HAVE_PLATFORM_WAYLAND
+drivers/dri2/linux-dmabuf-unstable-v1-protocol.lo: drivers/dri2/linux-dmabuf-unstable-v1-client-protocol.h
+drivers/dri2/egl_dri2.lo: drivers/dri2/linux-dmabuf-unstable-v1-client-protocol.h
+
 AM_CFLAGS += $(WAYLAND_CFLAGS)
 libEGL_common_la_LIBADD += $(WAYLAND_LIBS)
 libEGL_common_la_LIBADD += $(LIBDRM_LIBS)
 libEGL_common_la_LIBADD += $(top_builddir)/src/egl/wayland/wayland-drm/libwayland-drm.la
-dri2_backend_FILES += drivers/dri2/platform_wayland.c
+libEGL_common_la_LIBADD += $(top_builddir)/src/util/libmesautil.la
+dri2_backend_FILES += \
+	drivers/dri2/platform_wayland.c	\
+	drivers/dri2/linux-dmabuf-unstable-v1-protocol.c \
+	drivers/dri2/linux-dmabuf-unstable-v1-client-protocol.h
 endif
 
 if HAVE_PLATFORM_DRM
@@ -85,6 +106,7 @@ endif
 
 AM_CFLAGS += \
 	-I$(top_srcdir)/src/loader \
+	-I$(top_builddir)/src/egl/drivers/dri2 \
 	-I$(top_srcdir)/src/egl/drivers/dri2 \
 	-I$(top_srcdir)/src/gbm/backends/dri \
 	-I$(top_srcdir)/src/egl/wayland/wayland-egl \
@@ -118,7 +140,7 @@ g_egldispatchstubs.h: $(GLVND_GEN_DEPS)
 		$(top_srcdir)/src/egl/generate/egl.xml \
 		$(top_srcdir)/src/egl/generate/egl_other.xml > $@
 
-BUILT_SOURCES = g_egldispatchstubs.c g_egldispatchstubs.h
+BUILT_SOURCES += g_egldispatchstubs.c g_egldispatchstubs.h
 CLEANFILES = $(BUILT_SOURCES)
 
 if USE_LIBGLVND

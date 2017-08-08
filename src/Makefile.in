@@ -116,15 +116,16 @@ target_triplet = @target@
 @HAVE_VULKAN_COMMON_TRUE@am__append_2 = vulkan
 @HAVE_AMD_DRIVERS_TRUE@am__append_3 = amd
 @HAVE_INTEL_DRIVERS_TRUE@am__append_4 = intel
-@NEED_OPENGL_COMMON_TRUE@am__append_5 = mesa
-@HAVE_DRI_GLX_TRUE@am__append_6 = glx
-@HAVE_GBM_TRUE@am__append_7 = gbm
-@HAVE_PLATFORM_WAYLAND_TRUE@am__append_8 = egl/wayland/wayland-egl
-@HAVE_EGL_TRUE@am__append_9 = egl
+@HAVE_GALLIUM_VC4_TRUE@am__append_5 = broadcom
+@NEED_OPENGL_COMMON_TRUE@am__append_6 = mesa
+@HAVE_DRI_GLX_TRUE@am__append_7 = glx
+@HAVE_GBM_TRUE@am__append_8 = gbm
+@HAVE_PLATFORM_WAYLAND_TRUE@am__append_9 = egl/wayland/wayland-egl
+@HAVE_EGL_TRUE@am__append_10 = egl
 
 # Requires wayland-drm
-@HAVE_RADEON_VULKAN_TRUE@am__append_10 = amd/vulkan
-@HAVE_GALLIUM_TRUE@am__append_11 = gallium
+@HAVE_RADEON_VULKAN_TRUE@am__append_11 = amd/vulkan
+@HAVE_GALLIUM_TRUE@am__append_12 = gallium
 subdir = src
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_gnu_make.m4 \
@@ -272,8 +273,8 @@ am__define_uniq_tagged_files = \
 ETAGS = etags
 CTAGS = ctags
 DIST_SUBDIRS = . gtest util mapi/glapi/gen mapi compiler \
-	egl/wayland/wayland-drm vulkan amd intel mesa loader glx gbm \
-	egl/wayland/wayland-egl egl amd/vulkan gallium
+	egl/wayland/wayland-drm vulkan amd intel broadcom mesa loader \
+	glx gbm egl/wayland/wayland-egl egl amd/vulkan gallium
 am__DIST_COMMON = $(srcdir)/Makefile.in $(top_srcdir)/bin/depcomp
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 am__relativize = \
@@ -381,6 +382,8 @@ GL_PC_LIB_PRIV = @GL_PC_LIB_PRIV@
 GL_PC_REQ_PRIV = @GL_PC_REQ_PRIV@
 GREP = @GREP@
 HAVE_XF86VIDMODE = @HAVE_XF86VIDMODE@
+I915_CFLAGS = @I915_CFLAGS@
+I915_LIBS = @I915_LIBS@
 INDENT = @INDENT@
 INDENT_FLAGS = @INDENT_FLAGS@
 INSTALL = @INSTALL@
@@ -388,8 +391,6 @@ INSTALL_DATA = @INSTALL_DATA@
 INSTALL_PROGRAM = @INSTALL_PROGRAM@
 INSTALL_SCRIPT = @INSTALL_SCRIPT@
 INSTALL_STRIP_PROGRAM = @INSTALL_STRIP_PROGRAM@
-INTEL_CFLAGS = @INTEL_CFLAGS@
-INTEL_LIBS = @INTEL_LIBS@
 LD = @LD@
 LDFLAGS = @LDFLAGS@
 LD_NO_UNDEFINED = @LD_NO_UNDEFINED@
@@ -485,6 +486,8 @@ STRIP = @STRIP@
 SWR_AVX2_CXXFLAGS = @SWR_AVX2_CXXFLAGS@
 SWR_AVX_CXXFLAGS = @SWR_AVX_CXXFLAGS@
 SWR_CXX11_CXXFLAGS = @SWR_CXX11_CXXFLAGS@
+SWR_KNL_CXXFLAGS = @SWR_KNL_CXXFLAGS@
+SWR_SKX_CXXFLAGS = @SWR_SKX_CXXFLAGS@
 VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
 VALGRIND_LIBS = @VALGRIND_LIBS@
 VA_CFLAGS = @VA_CFLAGS@
@@ -492,8 +495,6 @@ VA_LIBS = @VA_LIBS@
 VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
 VA_MAJOR = @VA_MAJOR@
 VA_MINOR = @VA_MINOR@
-VC4_CFLAGS = @VC4_CFLAGS@
-VC4_LIBS = @VC4_LIBS@
 VDPAU_CFLAGS = @VDPAU_CFLAGS@
 VDPAU_LIBS = @VDPAU_LIBS@
 VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
@@ -507,6 +508,7 @@ VL_LIBS = @VL_LIBS@
 VULKAN_ICD_INSTALL_DIR = @VULKAN_ICD_INSTALL_DIR@
 WAYLAND_CFLAGS = @WAYLAND_CFLAGS@
 WAYLAND_LIBS = @WAYLAND_LIBS@
+WAYLAND_PROTOCOLS_DATADIR = @WAYLAND_PROTOCOLS_DATADIR@
 WAYLAND_SCANNER = @WAYLAND_SCANNER@
 WAYLAND_SCANNER_CFLAGS = @WAYLAND_SCANNER_CFLAGS@
 WAYLAND_SCANNER_LIBS = @WAYLAND_SCANNER_LIBS@
@@ -580,7 +582,6 @@ pdfdir = @pdfdir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
-runstatedir = @runstatedir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
@@ -601,9 +602,9 @@ EXTRA_DIST = vulkan/registry/vk.xml getopt hgl SConscript \
 # include only conditionally ?
 SUBDIRS = . gtest util mapi/glapi/gen mapi compiler $(am__append_1) \
 	$(am__append_2) $(am__append_3) $(am__append_4) \
-	$(am__append_5) loader $(am__append_6) $(am__append_7) \
+	$(am__append_5) $(am__append_6) loader $(am__append_7) \
 	$(am__append_8) $(am__append_9) $(am__append_10) \
-	$(am__append_11)
+	$(am__append_11) $(am__append_12)
 @HAVE_OPENGL_TRUE@gldir = $(includedir)/GL
 @HAVE_OPENGL_TRUE@gl_HEADERS = \
 @HAVE_OPENGL_TRUE@  $(top_srcdir)/include/GL/gl.h \
@@ -1140,18 +1141,7 @@ uninstall-am: uninstall-glHEADERS uninstall-glxHEADERS \
 
 .PHONY: git_sha1.h.tmp
 git_sha1.h.tmp:
-	@# Don't assume that $(top_srcdir)/.git is a directory. It may be
-	@# a gitlink file if $(top_srcdir) is a submodule checkout or a linked
-	@# worktree.
-	@# If we are building from a release tarball copy the bundled header.
-	@touch git_sha1.h.tmp
-	@if test -e $(top_srcdir)/.git; then \
-		if which git > /dev/null; then \
-		    git --git-dir=$(top_srcdir)/.git log -n 1 --oneline | \
-			sed 's/^\([^ ]*\) .*/#define MESA_GIT_SHA1 "git-\1"/' \
-			> git_sha1.h.tmp ; \
-		fi \
-	fi
+	@sh $(top_srcdir)/bin/git_sha1_gen.sh > $@
 
 git_sha1.h: git_sha1.h.tmp
 	@echo "updating git_sha1.h"

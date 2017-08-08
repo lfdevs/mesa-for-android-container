@@ -342,7 +342,7 @@ struct __DRI2throttleExtensionRec {
 #define __DRI2_FENCE "DRI2_Fence"
 #define __DRI2_FENCE_VERSION 2
 
-#define __DRI2_FENCE_TIMEOUT_INFINITE     0xffffffffffffffffllu
+#define __DRI2_FENCE_TIMEOUT_INFINITE     0xffffffffffffffffull
 
 #define __DRI2_FENCE_FLAG_FLUSH_COMMANDS  (1 << 0)
 
@@ -702,6 +702,7 @@ struct __DRIuseInvalidateExtensionRec {
 #define __DRI_ATTRIB_BIND_TO_TEXTURE_TARGETS	46
 #define __DRI_ATTRIB_YINVERTED			47
 #define __DRI_ATTRIB_FRAMEBUFFER_SRGB_CAPABLE	48
+#define __DRI_ATTRIB_MAX			(__DRI_ATTRIB_FRAMEBUFFER_SRGB_CAPABLE + 1)
 
 /* __DRI_ATTRIB_RENDER_TYPE */
 #define __DRI_ATTRIB_RGBA_BIT			0x01	
@@ -1049,6 +1050,12 @@ struct __DRIdri2LoaderExtensionRec {
 #define __DRI_CTX_FLAG_ROBUST_BUFFER_ACCESS	0x00000004
 
 /**
+ * \requires __DRI2_NO_ERROR.
+ *
+ */
+#define __DRI_CTX_FLAG_NO_ERROR			0x00000008
+
+/**
  * \name Context reset strategies.
  */
 /*@{*/
@@ -1136,7 +1143,7 @@ struct __DRIdri2ExtensionRec {
  * extensions.
  */
 #define __DRI_IMAGE "DRI_IMAGE"
-#define __DRI_IMAGE_VERSION 14
+#define __DRI_IMAGE_VERSION 15
 
 /**
  * These formats correspond to the similarly named MESA_FORMAT_*
@@ -1210,6 +1217,7 @@ struct __DRIdri2ExtensionRec {
 #define __DRI_IMAGE_FOURCC_NV12		0x3231564e
 #define __DRI_IMAGE_FOURCC_NV16		0x3631564e
 #define __DRI_IMAGE_FOURCC_YUYV		0x56595559
+#define __DRI_IMAGE_FOURCC_UYVY		0x59565955
 
 #define __DRI_IMAGE_FOURCC_YVU410	0x39555659
 #define __DRI_IMAGE_FOURCC_YVU411	0x31315659
@@ -1223,7 +1231,7 @@ struct __DRIdri2ExtensionRec {
  * RGB and RGBA are may be usable directly as images but its still
  * recommended to call fromPlanar with plane == 0.
  *
- * Y_U_V, Y_UV and Y_XUXV all requires call to fromPlanar to create
+ * Y_U_V, Y_UV,Y_XUXV and Y_UXVX all requires call to fromPlanar to create
  * usable sub-images, sampling from images return raw YUV data and
  * color conversion needs to be done in the shader.
  *
@@ -1235,6 +1243,7 @@ struct __DRIdri2ExtensionRec {
 #define __DRI_IMAGE_COMPONENTS_Y_U_V	0x3003
 #define __DRI_IMAGE_COMPONENTS_Y_UV	0x3004
 #define __DRI_IMAGE_COMPONENTS_Y_XUXV	0x3005
+#define __DRI_IMAGE_COMPONENTS_Y_UXVX	0x3008
 #define __DRI_IMAGE_COMPONENTS_R	0x3006
 #define __DRI_IMAGE_COMPONENTS_RG	0x3007
 
@@ -1493,6 +1502,67 @@ struct __DRIimageExtensionRec {
                                            const uint64_t *modifiers,
                                            const unsigned int modifier_count,
                                            void *loaderPrivate);
+
+   /*
+    * Like createImageFromDmaBufs, but takes also format modifiers.
+    *
+    * For EGL_EXT_image_dma_buf_import_modifiers.
+    *
+    * \since 15
+    */
+   __DRIimage *(*createImageFromDmaBufs2)(__DRIscreen *screen,
+                                          int width, int height, int fourcc,
+                                          uint64_t modifier,
+                                          int *fds, int num_fds,
+                                          int *strides, int *offsets,
+                                          enum __DRIYUVColorSpace color_space,
+                                          enum __DRISampleRange sample_range,
+                                          enum __DRIChromaSiting horiz_siting,
+                                          enum __DRIChromaSiting vert_siting,
+                                          unsigned *error,
+                                          void *loaderPrivate);
+
+   /*
+    * dmabuf format query to support EGL_EXT_image_dma_buf_import_modifiers.
+    *
+    * \param max      Maximum number of formats that can be accomodated into
+    *                 \param formats. If zero, no formats are returned -
+    *                 instead, the driver returns the total number of
+    *                 supported dmabuf formats in \param count.
+    * \param formats  Buffer to fill formats into.
+    * \param count    Count of formats returned, or, total number of
+    *                 supported formats in case \param max is zero.
+    *
+    * Returns true on success.
+    *
+    * \since 15
+    */
+   GLboolean (*queryDmaBufFormats)(__DRIscreen *screen, int max,
+                                   int *formats, int *count);
+
+   /*
+    * dmabuf format modifier query for a given format to support
+    * EGL_EXT_image_dma_buf_import_modifiers.
+    *
+    * \param fourcc    The format to query modifiers for. If this format
+    *                  is not supported by the driver, return false.
+    * \param max       Maximum number of modifiers that can be accomodated in
+    *                  \param modifiers. If zero, no modifiers are returned -
+    *                  instead, the driver returns the total number of
+    *                  modifiers for \param format in \param count.
+    * \param modifiers Buffer to fill modifiers into.
+    * \param count     Count of the modifiers returned, or, total number of
+    *                  supported modifiers for \param fourcc in case
+    *                  \param max is zero.
+    *
+    * Returns true upon success.
+    *
+    * \since 15
+    */
+   GLboolean (*queryDmaBufModifiers)(__DRIscreen *screen, int fourcc,
+                                     int max, uint64_t *modifiers,
+                                     unsigned int *external_only,
+                                     int *count);
 };
 
 
@@ -1546,6 +1616,19 @@ typedef struct __DRIrobustnessExtensionRec __DRIrobustnessExtension;
 struct __DRIrobustnessExtensionRec {
    __DRIextension base;
 };
+
+/**
+ * No-error context driver extension.
+ *
+ * Existence of this extension means the driver can accept the
+ * __DRI_CTX_FLAG_NO_ERROR flag.
+ */
+#define __DRI2_NO_ERROR "DRI_NoError"
+#define __DRI2_NO_ERROR_VERSION 1
+
+typedef struct __DRInoErrorExtensionRec {
+   __DRIextension base;
+} __DRInoErrorExtension;
 
 /**
  * DRI config options extension.
@@ -1720,6 +1803,19 @@ struct __DRIbackgroundCallableExtensionRec {
     * operations (e.g. it should just set a thread-local variable).
     */
    void (*setBackgroundContext)(void *loaderPrivate);
+
+   /**
+    * Indicate that it is multithread safe to use glthread.  For GLX/EGL
+    * platforms using Xlib, that involves calling XInitThreads, before
+    * opening an X display.
+    *
+    * Note: only supported if extension version is at least 2.
+    *
+    * \param loaderPrivate is the value that was passed to to the driver when
+    * the context was created.  This can be used by the loader to identify
+    * which context any callbacks are associated with.
+    */
+   GLboolean (*isThreadSafe)(void *loaderPrivate);
 };
 
 #endif

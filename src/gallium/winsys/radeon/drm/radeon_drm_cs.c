@@ -367,7 +367,7 @@ static unsigned radeon_drm_cs_add_buffer(struct radeon_winsys_cs *rcs,
     reloc->read_domains |= rd;
     reloc->write_domain |= wd;
     reloc->flags = MAX2(reloc->flags, priority);
-    cs->csc->relocs_bo[index].u.real.priority_usage |= 1llu << priority;
+    cs->csc->relocs_bo[index].u.real.priority_usage |= 1ull << priority;
 
     if (added_domains & RADEON_DOMAIN_VRAM)
         cs->base.used_vram += bo->base.size;
@@ -751,7 +751,7 @@ radeon_cs_create_fence(struct radeon_winsys_cs *rcs)
 
     /* Create a fence, which is a dummy BO. */
     fence = cs->ws->base.buffer_create(&cs->ws->base, 1, 1,
-                                       RADEON_DOMAIN_GTT, RADEON_FLAG_HANDLE);
+                                       RADEON_DOMAIN_GTT, RADEON_FLAG_NO_SUBALLOC);
     if (!fence)
        return NULL;
 

@@ -38,6 +38,7 @@
 #include "svga_resource.h"
 #include "svga_resource_buffer.h"
 #include "svga_resource_texture.h"
+#include "svga_sampler_view.h"
 #include "svga_shader.h"
 #include "svga_surface.h"
 #include "svga_winsys.h"
@@ -74,7 +75,7 @@ svga_hwtnl_destroy(struct svga_hwtnl *hwtnl)
    }
 
    for (i = 0; i < hwtnl->cmd.vbuf_count; i++)
-      pipe_resource_reference(&hwtnl->cmd.vbufs[i].buffer, NULL);
+      pipe_vertex_buffer_unreference(&hwtnl->cmd.vbufs[i]);
 
    for (i = 0; i < hwtnl->cmd.prim_count; i++)
       pipe_resource_reference(&hwtnl->cmd.prim_ib[i], NULL);
@@ -134,8 +135,21 @@ void
 svga_hwtnl_vertex_buffers(struct svga_hwtnl *hwtnl,
                           unsigned count, struct pipe_vertex_buffer *buffers)
 {
-   util_set_vertex_buffers_count(hwtnl->cmd.vbufs,
-                                 &hwtnl->cmd.vbuf_count, buffers, 0, count);
+   struct pipe_vertex_buffer *dst = hwtnl->cmd.vbufs;
+   const struct pipe_vertex_buffer *src = buffers;
+   unsigned i;
+
+   for (i = 0; i < count; i++) {
+      pipe_vertex_buffer_reference(&dst[i], &src[i]);
+   }
+
+   /* release old buffer references */
+   for ( ; i < hwtnl->cmd.vbuf_count; i++) {
+      pipe_vertex_buffer_unreference(&dst[i]);
+      /* don't bother zeroing stride/offset fields */
+   }
+
+   hwtnl->cmd.vbuf_count = count;
 }
 
 
@@ -158,7 +172,7 @@ svga_hwtnl_is_buffer_referred(struct svga_hwtnl *hwtnl,
    }
 
    for (i = 0; i < hwtnl->cmd.vbuf_count; ++i) {
-      if (hwtnl->cmd.vbufs[i].buffer == buffer) {
+      if (hwtnl->cmd.vbufs[i].buffer.resource == buffer) {
          return TRUE;
       }
    }
@@ -186,9 +200,28 @@ draw_vgpu9(struct svga_hwtnl *hwtnl)
    SVGA3dPrimitiveRange *prim;
    unsigned i;
 
+   /* Re-validate those sampler views with backing copy
+    * of texture whose original copy has been updated.
+    * This is done here at draw time because the texture binding might not
+    * have modified, hence validation is not triggered at state update time,
+    * and yet the texture might have been updated in another context, so
+    * we need to re-validate the sampler view in order to update the backing
+    * copy of the updated texture.
+    */
+   if (svga->state.hw_draw.num_backed_views) {
+      for (i = 0; i < svga->state.hw_draw.num_views; i++) {
+         struct svga_hw_view_state *view = &svga->state.hw_draw.views[i];
+         struct svga_texture *tex = svga_texture(view->texture);
+         struct svga_sampler_view *sv = view->v;
+         if (sv && tex && sv->handle != tex->handle && sv->age < tex->age)
+            svga_validate_sampler_view(svga, view->v);
+      }
+   }
+
    for (i = 0; i < hwtnl->cmd.vdecl_count; i++) {
       unsigned j = hwtnl->cmd.vdecl_buffer_index[i];
-      handle = svga_buffer_handle(svga, hwtnl->cmd.vbufs[j].buffer);
+      handle = svga_buffer_handle(svga, hwtnl->cmd.vbufs[j].buffer.resource,
+                                  PIPE_BIND_VERTEX_BUFFER);
       if (!handle)
          return PIPE_ERROR_OUT_OF_MEMORY;
 
@@ -197,7 +230,8 @@ draw_vgpu9(struct svga_hwtnl *hwtnl)
 
    for (i = 0; i < hwtnl->cmd.prim_count; i++) {
       if (hwtnl->cmd.prim_ib[i]) {
-         handle = svga_buffer_handle(svga, hwtnl->cmd.prim_ib[i]);
+         handle = svga_buffer_handle(svga, hwtnl->cmd.prim_ib[i],
+                                     PIPE_BIND_INDEX_BUFFER);
          if (!handle)
             return PIPE_ERROR_OUT_OF_MEMORY;
       }
@@ -331,7 +365,8 @@ validate_sampler_resources(struct svga_context *svga)
 
          if (sv) {
             if (sv->base.texture->target == PIPE_BUFFER) {
-               surfaces[i] = svga_buffer_handle(svga, sv->base.texture);
+               surfaces[i] = svga_buffer_handle(svga, sv->base.texture,
+                                                PIPE_BIND_SAMPLER_VIEW);
             }
             else {
                surfaces[i] = svga_texture(sv->base.texture)->handle;
@@ -408,7 +443,8 @@ validate_constant_buffers(struct svga_context *svga)
          unsigned i = u_bit_scan(&enabled_constbufs);
          buffer = svga_buffer(svga->curr.constbufs[shader][i].buffer);
          if (buffer) {
-            handle = svga_buffer_handle(svga, &buffer->b.b);
+            handle = svga_buffer_handle(svga, &buffer->b.b,
+                                        PIPE_BIND_CONSTANT_BUFFER);
 
             if (svga->rebind.flags.constbufs) {
                ret = svga->swc->resource_rebind(svga->swc,
@@ -509,11 +545,12 @@ draw_vgpu10(struct svga_hwtnl *hwtnl,
 
    /* Get handle for each referenced vertex buffer */
    for (i = 0; i < vbuf_count; i++) {
-      struct svga_buffer *sbuf = svga_buffer(hwtnl->cmd.vbufs[i].buffer);
+      struct svga_buffer *sbuf = svga_buffer(hwtnl->cmd.vbufs[i].buffer.resource);
 
       if (sbuf) {
+         vbuffer_handles[i] = svga_buffer_handle(svga, &sbuf->b.b,
+                                                 PIPE_BIND_VERTEX_BUFFER);
          assert(sbuf->key.flags & SVGA3D_SURFACE_BIND_VERTEX_BUFFER);
-         vbuffer_handles[i] = svga_buffer_handle(svga, &sbuf->b.b);
          if (vbuffer_handles[i] == NULL)
             return PIPE_ERROR_OUT_OF_MEMORY;
          vbuffers[i] = &sbuf->b.b;
@@ -537,7 +574,7 @@ draw_vgpu10(struct svga_hwtnl *hwtnl,
       assert(sbuf->key.flags & SVGA3D_SURFACE_BIND_INDEX_BUFFER);
       (void) sbuf; /* silence unused var warning */
 
-      ib_handle = svga_buffer_handle(svga, ib);
+      ib_handle = svga_buffer_handle(svga, ib, PIPE_BIND_INDEX_BUFFER);
       if (!ib_handle)
          return PIPE_ERROR_OUT_OF_MEMORY;
    }
@@ -582,6 +619,16 @@ draw_vgpu10(struct svga_hwtnl *hwtnl,
           * the unused vertex buffers.
           */
          num_vbuffers = MAX2(vbuf_count, svga->state.hw_draw.num_vbuffers);
+
+         /* Zero-out the old buffers we want to unbind (the number of loop
+          * iterations here is typically very small, and often zero.)
+          */
+         for (i = vbuf_count; i < num_vbuffers; i++) {
+            vbuffer_attrs[i].sid = 0;
+            vbuffer_attrs[i].stride = 0;
+            vbuffer_attrs[i].offset = 0;
+            vbuffer_handles[i] = NULL;
+         }
 
          if (num_vbuffers > 0) {
 
@@ -773,7 +820,7 @@ check_draw_params(struct svga_hwtnl *hwtnl,
    for (i = 0; i < hwtnl->cmd.vdecl_count; i++) {
       unsigned j = hwtnl->cmd.vdecl_buffer_index[i];
       const struct pipe_vertex_buffer *vb = &hwtnl->cmd.vbufs[j];
-      unsigned size = vb->buffer ? vb->buffer->width0 : 0;
+      unsigned size = vb->buffer.resource ? vb->buffer.resource->width0 : 0;
       unsigned offset = hwtnl->cmd.vdecl[i].array.offset;
       unsigned stride = hwtnl->cmd.vdecl[i].array.stride;
       int index_bias = (int) range->indexBias + hwtnl->index_bias;

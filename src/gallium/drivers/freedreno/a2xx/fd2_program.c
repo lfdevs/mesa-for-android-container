@@ -241,16 +241,18 @@ void
 fd2_program_validate(struct fd_context *ctx)
 {
 	struct fd_program_stateobj *prog = &ctx->prog;
+	bool dirty_fp = !!(ctx->dirty_shader[PIPE_SHADER_FRAGMENT] & FD_DIRTY_SHADER_PROG);
+	bool dirty_vp = !!(ctx->dirty_shader[PIPE_SHADER_VERTEX] & FD_DIRTY_SHADER_PROG);
 
 	/* if vertex or frag shader is dirty, we may need to recompile. Compile
 	 * frag shader first, as that assigns the register slots for exports
 	 * from the vertex shader.  And therefore if frag shader has changed we
 	 * need to recompile both vert and frag shader.
 	 */
-	if (ctx->dirty & FD_SHADER_DIRTY_FP)
+	if (dirty_fp)
 		compile(prog, prog->fp);
 
-	if (ctx->dirty & (FD_SHADER_DIRTY_FP | FD_SHADER_DIRTY_VP))
+	if (dirty_fp || dirty_vp)
 		compile(prog, prog->vp);
 
 	/* if necessary, fix up vertex fetch instructions: */
@@ -259,8 +261,8 @@ fd2_program_validate(struct fd_context *ctx)
 
 	/* if necessary, fix up texture fetch instructions: */
 	if (ctx->dirty & (FD_DIRTY_TEXSTATE | FD_DIRTY_PROG)) {
-		patch_tex_fetches(ctx, prog->vp, &ctx->verttex);
-		patch_tex_fetches(ctx, prog->fp, &ctx->fragtex);
+		patch_tex_fetches(ctx, prog->vp, &ctx->tex[PIPE_SHADER_VERTEX]);
+		patch_tex_fetches(ctx, prog->fp, &ctx->tex[PIPE_SHADER_FRAGMENT]);
 	}
 }
 

@@ -104,7 +104,6 @@ static void set_vertices( void )
 {
    struct pipe_vertex_element ve[3];
    struct pipe_vertex_buffer vbuf[2];
-   struct pipe_index_buffer ibuf;
    void *handle;
 
    memset(ve, 0, sizeof ve);
@@ -133,7 +132,7 @@ static void set_vertices( void )
    /* vertex data */
    vbuf[0].stride = sizeof( struct vertex );
    vbuf[0].buffer_offset = 0;
-   vbuf[0].buffer = pipe_buffer_create_with_data(ctx,
+   vbuf[0].buffer.resource = pipe_buffer_create_with_data(ctx,
                                                  PIPE_BIND_VERTEX_BUFFER,
                                                  PIPE_USAGE_DEFAULT,
                                                  sizeof(vertices),
@@ -142,25 +141,13 @@ static void set_vertices( void )
    /* instance data */
    vbuf[1].stride = sizeof( inst_data[0] );
    vbuf[1].buffer_offset = 0;
-   vbuf[1].buffer = pipe_buffer_create_with_data(ctx,
+   vbuf[1].buffer.resource = pipe_buffer_create_with_data(ctx,
                                                  PIPE_BIND_VERTEX_BUFFER,
                                                  PIPE_USAGE_DEFAULT,
                                                  sizeof(inst_data),
                                                  inst_data);
 
    ctx->set_vertex_buffers(ctx, 0, 2, vbuf);
-
-   /* index data */
-   ibuf.buffer = pipe_buffer_create_with_data(ctx,
-                                              PIPE_BIND_INDEX_BUFFER,
-                                              PIPE_USAGE_DEFAULT,
-                                              sizeof(indices),
-                                              indices);
-   ibuf.offset = 0;
-   ibuf.index_size = 2;
-
-   ctx->set_index_buffer(ctx, &ibuf);
-
 }
 
 static void set_vertex_shader( void )
@@ -203,15 +190,28 @@ static void draw( void )
 
    ctx->clear(ctx, PIPE_CLEAR_COLOR, &clear_color, 0, 0);
 
+
    util_draw_init_info(&info);
-   info.indexed = (draw_elements != 0);
+   info.index_size = draw_elements ? 2 : 0;
    info.mode = PIPE_PRIM_TRIANGLES;
    info.start = 0;
    info.count = 3;
    /* draw NUM_INST triangles */
    info.instance_count = NUM_INST;
 
+   /* index data */
+   if (info.index_size) {
+      info.index.resource =
+         pipe_buffer_create_with_data(ctx,
+                                      PIPE_BIND_INDEX_BUFFER,
+                                      PIPE_USAGE_DEFAULT,
+                                      sizeof(indices),
+                                      indices);
+   }
+
    ctx->draw_vbo(ctx, &info);
+
+   pipe_resource_reference(&info.index.resource, NULL);
 
    ctx->flush(ctx, NULL, 0);
 

@@ -44,6 +44,7 @@
 #include "llvm/IR/Type.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/IntrinsicInst.h"
+#include "llvm/ExecutionEngine/ObjectCache.h"
 
 #include "llvm/Config/llvm-config.h"
 #ifndef LLVM_VERSION_MAJOR
@@ -77,6 +78,8 @@ using PassManager = llvm::legacy::PassManager;
 
 #include "common/os.h"
 #include "common/isa.hpp"
+
+#include <mutex>
 
 #pragma pop_macro("DEBUG")
 
@@ -133,6 +136,31 @@ struct JitLLVMContext : llvm::LLVMContext
 {
 };
 
+//////////////////////////////////////////////////////////////////////////
+/// JitCache
+//////////////////////////////////////////////////////////////////////////
+class JitCache : public llvm::ObjectCache
+{
+public:
+    /// constructor
+    JitCache();
+    virtual ~JitCache() {}
+
+    void SetCpu(const llvm::StringRef& cpu) { mCpu = cpu.str(); }
+
+    /// notifyObjectCompiled - Provides a pointer to compiled code for Module M.
+    virtual void notifyObjectCompiled(const llvm::Module *M, llvm::MemoryBufferRef Obj);
+
+    /// Returns a pointer to a newly allocated MemoryBuffer that contains the
+    /// object which corresponds with Module M, or 0 if an object is not
+    /// available.
+    virtual std::unique_ptr<llvm::MemoryBuffer> getObject(const llvm::Module* M);
+
+private:
+    std::string mCpu;
+    llvm::SmallString<MAX_PATH> mCacheDir;
+    uint32_t mCurrentModuleCRC;
+};
 
 //////////////////////////////////////////////////////////////////////////
 /// JitManager
@@ -145,6 +173,7 @@ struct JitManager
     JitLLVMContext          mContext;   ///< LLVM compiler
     llvm::IRBuilder<>       mBuilder;   ///< LLVM IR Builder
     llvm::ExecutionEngine*  mpExec;
+    JitCache                mCache;
 
     // Need to be rebuilt after a JIT and before building new IR
     llvm::Module* mpCurrentModule;

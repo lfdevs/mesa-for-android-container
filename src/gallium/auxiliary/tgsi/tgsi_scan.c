@@ -115,6 +115,39 @@ scan_src_operand(struct tgsi_shader_info *info,
 {
    int ind = src->Register.Index;
 
+   if (info->processor == PIPE_SHADER_COMPUTE &&
+       src->Register.File == TGSI_FILE_SYSTEM_VALUE) {
+      unsigned swizzle[4], i, name;
+
+      name = info->system_value_semantic_name[src->Register.Index];
+      swizzle[0] = src->Register.SwizzleX;
+      swizzle[1] = src->Register.SwizzleY;
+      swizzle[2] = src->Register.SwizzleZ;
+      swizzle[3] = src->Register.SwizzleW;
+
+      switch (name) {
+      case TGSI_SEMANTIC_THREAD_ID:
+      case TGSI_SEMANTIC_BLOCK_ID:
+         for (i = 0; i < 4; i++) {
+            if (swizzle[i] <= TGSI_SWIZZLE_Z) {
+               if (name == TGSI_SEMANTIC_THREAD_ID)
+                  info->uses_thread_id[swizzle[i]] = true;
+               else
+                  info->uses_block_id[swizzle[i]] = true;
+            }
+         }
+         break;
+      case TGSI_SEMANTIC_BLOCK_SIZE:
+         /* The block size is translated to IMM with a fixed block size. */
+         if (info->properties[TGSI_PROPERTY_CS_FIXED_BLOCK_WIDTH] == 0)
+            info->uses_block_size = true;
+         break;
+      case TGSI_SEMANTIC_GRID_SIZE:
+         info->uses_grid_size = true;
+         break;
+      }
+   }
+
    /* Mark which inputs are effectively used */
    if (src->Register.File == TGSI_FILE_INPUT) {
       if (src->Register.Indirect) {
@@ -319,6 +352,7 @@ scan_instruction(struct tgsi_shader_info *info,
    unsigned i;
    bool is_mem_inst = false;
    bool is_interp_instruction = false;
+   unsigned sampler_src;
 
    assert(fullinst->Instruction.Opcode < TGSI_OPCODE_LAST);
    info->opcode_count[fullinst->Instruction.Opcode]++;
@@ -333,6 +367,44 @@ scan_instruction(struct tgsi_shader_info *info,
    case TGSI_OPCODE_ENDIF:
    case TGSI_OPCODE_ENDLOOP:
       (*current_depth)--;
+      break;
+   case TGSI_OPCODE_TEX:
+   case TGSI_OPCODE_TEX_LZ:
+   case TGSI_OPCODE_TXB:
+   case TGSI_OPCODE_TXD:
+   case TGSI_OPCODE_TXL:
+   case TGSI_OPCODE_TXP:
+   case TGSI_OPCODE_TXQ:
+   case TGSI_OPCODE_TXQS:
+   case TGSI_OPCODE_TXF:
+   case TGSI_OPCODE_TXF_LZ:
+   case TGSI_OPCODE_TEX2:
+   case TGSI_OPCODE_TXB2:
+   case TGSI_OPCODE_TXL2:
+   case TGSI_OPCODE_TG4:
+   case TGSI_OPCODE_LODQ:
+      sampler_src = fullinst->Instruction.NumSrcRegs - 1;
+      if (fullinst->Src[sampler_src].Register.File != TGSI_FILE_SAMPLER)
+         info->uses_bindless_samplers = true;
+      break;
+   case TGSI_OPCODE_RESQ:
+   case TGSI_OPCODE_LOAD:
+   case TGSI_OPCODE_ATOMUADD:
+   case TGSI_OPCODE_ATOMXCHG:
+   case TGSI_OPCODE_ATOMCAS:
+   case TGSI_OPCODE_ATOMAND:
+   case TGSI_OPCODE_ATOMOR:
+   case TGSI_OPCODE_ATOMXOR:
+   case TGSI_OPCODE_ATOMUMIN:
+   case TGSI_OPCODE_ATOMUMAX:
+   case TGSI_OPCODE_ATOMIMIN:
+   case TGSI_OPCODE_ATOMIMAX:
+      if (tgsi_is_bindless_image_file(fullinst->Src[0].Register.File))
+         info->uses_bindless_images = true;
+      break;
+   case TGSI_OPCODE_STORE:
+      if (tgsi_is_bindless_image_file(fullinst->Dst[0].Register.File))
+         info->uses_bindless_images = true;
       break;
    default:
       break;
@@ -524,13 +596,16 @@ scan_declaration(struct tgsi_shader_info *info,
          /* Vertex shaders can have inputs with holes between them. */
          info->num_inputs = MAX2(info->num_inputs, reg + 1);
 
-         if (semName == TGSI_SEMANTIC_PRIMID)
-            info->uses_primid = TRUE;
-         else if (procType == PIPE_SHADER_FRAGMENT) {
-            if (semName == TGSI_SEMANTIC_POSITION)
-               info->reads_position = TRUE;
-            else if (semName == TGSI_SEMANTIC_FACE)
-               info->uses_frontface = TRUE;
+         switch (semName) {
+         case TGSI_SEMANTIC_PRIMID:
+            info->uses_primid = true;
+            break;
+         case TGSI_SEMANTIC_POSITION:
+            info->reads_position = true;
+            break;
+         case TGSI_SEMANTIC_FACE:
+            info->uses_frontface = true;
+            break;
          }
          break;
 
@@ -857,80 +932,4 @@ tgsi_scan_arrays(const struct tgsi_token *tokens,
    tgsi_parse_free(&parse);
 
    return;
-}
-
-
-/**
- * Check if the given shader is a "passthrough" shader consisting of only
- * MOV instructions of the form:  MOV OUT[n], IN[n]
- *  
- */
-boolean
-tgsi_is_passthrough_shader(const struct tgsi_token *tokens)
-{
-   struct tgsi_parse_context parse;
-
-   /**
-    ** Setup to begin parsing input shader
-    **/
-   if (tgsi_parse_init(&parse, tokens) != TGSI_PARSE_OK) {
-      debug_printf("tgsi_parse_init() failed in tgsi_is_passthrough_shader()!\n");
-      return FALSE;
-   }
-
-   /**
-    ** Loop over incoming program tokens/instructions
-    */
-   while (!tgsi_parse_end_of_tokens(&parse)) {
-
-      tgsi_parse_token(&parse);
-
-      switch (parse.FullToken.Token.Type) {
-      case TGSI_TOKEN_TYPE_INSTRUCTION:
-         {
-            struct tgsi_full_instruction *fullinst =
-               &parse.FullToken.FullInstruction;
-            const struct tgsi_full_src_register *src =
-               &fullinst->Src[0];
-            const struct tgsi_full_dst_register *dst =
-               &fullinst->Dst[0];
-
-            /* Do a whole bunch of checks for a simple move */
-            if (fullinst->Instruction.Opcode != TGSI_OPCODE_MOV ||
-                (src->Register.File != TGSI_FILE_INPUT &&
-                 src->Register.File != TGSI_FILE_SYSTEM_VALUE) ||
-                dst->Register.File != TGSI_FILE_OUTPUT ||
-                src->Register.Index != dst->Register.Index ||
-
-                src->Register.Negate ||
-                src->Register.Absolute ||
-
-                src->Register.SwizzleX != TGSI_SWIZZLE_X ||
-                src->Register.SwizzleY != TGSI_SWIZZLE_Y ||
-                src->Register.SwizzleZ != TGSI_SWIZZLE_Z ||
-                src->Register.SwizzleW != TGSI_SWIZZLE_W ||
-
-                dst->Register.WriteMask != TGSI_WRITEMASK_XYZW)
-            {
-               tgsi_parse_free(&parse);
-               return FALSE;
-            }
-         }
-         break;
-
-      case TGSI_TOKEN_TYPE_DECLARATION:
-         /* fall-through */
-      case TGSI_TOKEN_TYPE_IMMEDIATE:
-         /* fall-through */
-      case TGSI_TOKEN_TYPE_PROPERTY:
-         /* fall-through */
-      default:
-         ; /* no-op */
-      }
-   }
-
-   tgsi_parse_free(&parse);
-
-   /* if we get here, it's a pass-through shader */
-   return TRUE;
 }

@@ -181,6 +181,9 @@ xmesa_close_display(Display *display)
     *    xmdpy->screen->destroy(xmdpy->screen);
     * }
     */
+
+   if (xmdpy->smapi->destroy)
+      xmdpy->smapi->destroy(xmdpy->smapi);
    free(xmdpy->smapi);
 
    XFree((char *) info);
@@ -594,6 +597,11 @@ xmesa_free_buffer(XMesaBuffer buffer)
           * want to dereference this pointer in the future.
           */
          b->ws.drawable = 0;
+
+         /* Notify the st manager that the associated framebuffer interface
+          * object is no longer valid.
+          */
+         stapi->destroy_drawable(stapi, buffer->stfb);
 
          /* XXX we should move the buffer to a delete-pending list and destroy
           * the buffer until it is no longer current.

@@ -39,23 +39,23 @@
 #include <stdio.h>
 #include <errno.h>
 
-/* CAYMAN notes 
+/* CAYMAN notes
 Why CAYMAN got loops for lots of instructions is explained here.
 
 -These 8xx t-slot only ops are implemented in all vector slots.
 MUL_LIT, FLT_TO_UINT, INT_TO_FLT, UINT_TO_FLT
-These 8xx t-slot only opcodes become vector ops, with all four 
-slots expecting the arguments on sources a and b. Result is 
+These 8xx t-slot only opcodes become vector ops, with all four
+slots expecting the arguments on sources a and b. Result is
 broadcast to all channels.
 MULLO_INT, MULHI_INT, MULLO_UINT, MULHI_UINT, MUL_64
-These 8xx t-slot only opcodes become vector ops in the z, y, and 
+These 8xx t-slot only opcodes become vector ops in the z, y, and
 x slots.
 EXP_IEEE, LOG_IEEE/CLAMPED, RECIP_IEEE/CLAMPED/FF/INT/UINT/_64/CLAMPED_64
 RECIPSQRT_IEEE/CLAMPED/FF/_64/CLAMPED_64
 SQRT_IEEE/_64
 SIN/COS
-The w slot may have an independent co-issued operation, or if the 
-result is required to be in the w slot, the opcode above may be 
+The w slot may have an independent co-issued operation, or if the
+result is required to be in the w slot, the opcode above may be
 issued in the w slot as well.
 The compiler must issue the source argument to slots z, y, and x
 */
@@ -1134,9 +1134,10 @@ static int allocate_system_value_inputs(struct r600_shader_ctx *ctx, int gpr_off
 
 		if (enabled) {
 			int gpr = gpr_offset + num_regs++;
+			ctx->shader->nsys_inputs++;
 
 			// add to inputs, allocate a gpr
-			k = ctx->shader->ninput ++;
+			k = ctx->shader->ninput++;
 			ctx->shader->input[k].name = name;
 			ctx->shader->input[k].sid = 0;
 			ctx->shader->input[k].interpolate = TGSI_INTERPOLATE_CONSTANT;
@@ -2945,6 +2946,7 @@ static int r600_shader_from_tgsi(struct r600_context *rctx,
 	shader->indirect_files = ctx.info.indirect_files;
 
 	shader->uses_doubles = ctx.info.uses_doubles;
+	shader->nsys_inputs = 0;
 
 	indirect_gprs = ctx.info.indirect_files & ~((1 << TGSI_FILE_CONSTANT) | (1 << TGSI_FILE_SAMPLER));
 	tgsi_parse_init(&ctx.parse, tokens);
@@ -3158,7 +3160,7 @@ static int r600_shader_from_tgsi(struct r600_context *rctx,
 			goto out_err;
 		}
 	}
-	
+
 	shader->ring_item_sizes[0] = ctx.next_ring_offset;
 	shader->ring_item_sizes[1] = 0;
 	shader->ring_item_sizes[2] = 0;
@@ -4270,7 +4272,7 @@ static int cayman_emit_float_instr(struct r600_shader_ctx *ctx)
 	int i, j, r;
 	struct r600_bytecode_alu alu;
 	int last_slot = (inst->Dst[0].Register.WriteMask & 0x8) ? 4 : 3;
-	
+
 	for (i = 0 ; i < last_slot; i++) {
 		memset(&alu, 0, sizeof(struct r600_bytecode_alu));
 		alu.op = ctx->inst_info->op;
@@ -4797,7 +4799,7 @@ static int tgsi_lit(struct r600_shader_ctx *ctx)
 					alu.last = 1;
 				} else
 					alu.dst.write = 0;
-				
+
 				r = r600_bytecode_add_alu(ctx->bc, &alu);
 				if (r)
 					return r;
@@ -5273,7 +5275,7 @@ static int tgsi_divmod(struct r600_shader_ctx *ctx, int mod, int signed_op)
 
 			memset(&alu, 0, sizeof(struct r600_bytecode_alu));
 			alu.op = ALU_OP1_FLT_TO_UINT;
-		  
+
 			alu.dst.sel = tmp0;
 			alu.dst.chan = 0;
 			alu.dst.write = 1;
@@ -5344,7 +5346,7 @@ static int tgsi_divmod(struct r600_shader_ctx *ctx, int mod, int signed_op)
 			} else {
 				r600_bytecode_src(&alu.src[1], &ctx->src[1], i);
 			}
-			
+
 			alu.last = 1;
 			if ((r = r600_bytecode_add_alu(ctx->bc, &alu)))
 				return r;
@@ -5610,7 +5612,7 @@ static int tgsi_divmod(struct r600_shader_ctx *ctx, int mod, int signed_op)
 			} else {
 				r600_bytecode_src(&alu.src[0], &ctx->src[1], i);
 			}
-			
+
 			alu.src[1].sel = tmp0;
 			alu.src[1].chan = 2;
 
@@ -6322,11 +6324,9 @@ static int tgsi_interp_egcm(struct r600_shader_ctx *ctx)
 	struct r600_bytecode_alu alu;
 	int r, i = 0, k, interp_gpr, interp_base_chan, tmp, lasti;
 	unsigned location;
-	int input;
+	const int input = inst->Src[0].Register.Index + ctx->shader->nsys_inputs;
 
 	assert(inst->Src[0].Register.File == TGSI_FILE_INPUT);
-
-	input = inst->Src[0].Register.Index;
 
 	/* Interpolators have been marked for use already by allocate_system_value_inputs */
 	if (inst->Instruction.Opcode == TGSI_OPCODE_INTERP_OFFSET ||
@@ -7012,7 +7012,7 @@ static int tgsi_tex(struct r600_shader_ctx *ctx)
 		r = r600_bytecode_add_alu(ctx->bc, &alu);
 		if (r)
 			return r;
-		/* write initial compare value into Z component 
+		/* write initial compare value into Z component
 		  - W src 0 for shadow cube
 		  - X src 1 for shadow cube array */
 		if (inst->Texture.Texture == TGSI_TEXTURE_SHADOWCUBE ||
@@ -7090,7 +7090,7 @@ static int tgsi_tex(struct r600_shader_ctx *ctx)
 				r = r600_bytecode_add_alu(ctx->bc, &alu);
 				if (r)
 					return r;
-					
+
 				r = r600_bytecode_add_tex(ctx->bc, &tex);
 				if (r)
 					return r;
@@ -7417,7 +7417,7 @@ static int tgsi_tex(struct r600_shader_ctx *ctx)
 	/* does this shader want a num layers from TXQ for a cube array? */
 	if (has_txq_cube_array_z) {
 		int id = tgsi_tex_get_src_gpr(ctx, sampler_src_reg);
-		
+
 		memset(&alu, 0, sizeof(struct r600_bytecode_alu));
 		alu.op = ALU_OP1_MOV;
 
@@ -8071,10 +8071,10 @@ static int tgsi_log(struct r600_shader_ctx *ctx)
 				alu.op = ALU_OP1_LOG_IEEE;
 				r600_bytecode_src(&alu.src[0], &ctx->src[0], 0);
 				r600_bytecode_src_set_abs(&alu.src[0]);
-			
+
 				alu.dst.sel = ctx->temp_reg;
 				alu.dst.chan = i;
-				if (i == 0) 
+				if (i == 0)
 					alu.dst.write = 1;
 				if (i == 2)
 					alu.last = 1;
@@ -8089,7 +8089,7 @@ static int tgsi_log(struct r600_shader_ctx *ctx)
 			alu.op = ALU_OP1_LOG_IEEE;
 			r600_bytecode_src(&alu.src[0], &ctx->src[0], 0);
 			r600_bytecode_src_set_abs(&alu.src[0]);
-			
+
 			alu.dst.sel = ctx->temp_reg;
 			alu.dst.chan = 0;
 			alu.dst.write = 1;
@@ -8130,10 +8130,10 @@ static int tgsi_log(struct r600_shader_ctx *ctx)
 					alu.dst.write = 1;
 				if (i == 2)
 					alu.last = 1;
-				
+
 				r = r600_bytecode_add_alu(ctx->bc, &alu);
 				if (r)
-					return r;	
+					return r;
 			}
 		} else {
 			memset(&alu, 0, sizeof(struct r600_bytecode_alu));
@@ -8214,7 +8214,7 @@ static int tgsi_log(struct r600_shader_ctx *ctx)
 					alu.dst.write = 1;
 				if (i == 2)
 					alu.last = 1;
-				
+
 				r = r600_bytecode_add_alu(ctx->bc, &alu);
 				if (r)
 					return r;
@@ -8954,7 +8954,7 @@ static int tgsi_umad(struct r600_shader_ctx *ctx)
 
 		alu.src[0].sel = ctx->temp_reg;
 		alu.src[0].chan = i;
-		
+
 		r600_bytecode_src(&alu.src[1], &ctx->src[2], i);
 		if (i == lasti) {
 			alu.last = 1;

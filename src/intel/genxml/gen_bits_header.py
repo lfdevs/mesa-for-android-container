@@ -80,6 +80,7 @@ static inline uint32_t ATTRIBUTE_PURE
 ${item.token_name}_${prop}(const struct gen_device_info *devinfo)
 {
    switch (devinfo->gen) {
+   case 10: return ${item.get_prop(prop, 10)};
    case 9: return ${item.get_prop(prop, 9)};
    case 8: return ${item.get_prop(prop, 8)};
    case 7:
@@ -167,10 +168,7 @@ class Gen(object):
 
     def __init__(self, z):
         # Convert potential "major.minor" string
-        z = float(z)
-        if z < 10:
-            z *= 10
-        self.tenx = int(z)
+        self.tenx = int(float(z) * 10)
 
     def __lt__(self, other):
         return self.tenx < other.tenx

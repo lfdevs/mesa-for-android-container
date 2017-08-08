@@ -28,16 +28,9 @@
 ******************************************************************************/
 #pragma once
 #include "context.h"
+#include "common/simdintrin.h"
 #include <type_traits>
 
-#if ENABLE_AVX512_SIMD16
-// TODO: this belongs in state.h alongside the simdvector definition, but there is a llvm codegen issue
-struct simd16vertex
-{
-    simd16vector    attrib[KNOB_NUM_ATTRIBUTES];
-};
-
-#endif
 // Calculates the A and B coefficients for the 3 edges of the triangle
 // 
 // maths for edge equations:
@@ -68,21 +61,6 @@ void triangleSetupAB(const __m128 vX, const __m128 vY, __m128 & vA, __m128 & vB)
     // B[0] = x1 - x0
     // B[1] = x2 - x1
     // B[2] = x0 - x2
-}
-
-INLINE
-void triangleSetupABVertical(const simdscalar vX[3], const simdscalar vY[3], simdscalar (&vA)[3], simdscalar (&vB)[3])
-{
-    // generate edge equations
-    // A = y0 - y1
-    // B = x1 - x0
-    vA[0] = _simd_sub_ps(vY[0], vY[1]);
-    vA[1] = _simd_sub_ps(vY[1], vY[2]);
-    vA[2] = _simd_sub_ps(vY[2], vY[0]);
-
-    vB[0] = _simd_sub_ps(vX[1], vX[0]);
-    vB[1] = _simd_sub_ps(vX[2], vX[1]);
-    vB[2] = _simd_sub_ps(vX[0], vX[2]);
 }
 
 INLINE
@@ -170,6 +148,7 @@ INLINE
 void calcDeterminantIntVertical(const simdscalari vA[3], const simdscalari vB[3], simdscalari *pvDet)
 {
     // refer to calcDeterminantInt comment for calculation explanation
+
     // A1*B2
     simdscalari vA1Lo = _simd_unpacklo_epi32(vA[1], vA[1]);     // 0 0 1 1 4 4 5 5
     simdscalari vA1Hi = _simd_unpackhi_epi32(vA[1], vA[1]);     // 2 2 3 3 6 6 7 7
@@ -194,8 +173,10 @@ void calcDeterminantIntVertical(const simdscalari vA[3], const simdscalari vB[3]
     simdscalari detLo = _simd_sub_epi64(vA1B2Lo, vA2B1Lo);
     simdscalari detHi = _simd_sub_epi64(vA1B2Hi, vA2B1Hi);
 
-    // shuffle 0 1 4 5 -> 0 1 2 3
+    // shuffle 0 1 4 5 2 3 6 7 -> 0 1 2 3
     simdscalari vResultLo = _simd_permute2f128_si(detLo, detHi, 0x20);
+
+    // shuffle 0 1 4 5 2 3 6 7 -> 4 5 6 7
     simdscalari vResultHi = _simd_permute2f128_si(detLo, detHi, 0x31);
 
     pvDet[0] = vResultLo;
@@ -207,57 +188,38 @@ INLINE
 void calcDeterminantIntVertical(const simd16scalari vA[3], const simd16scalari vB[3], simd16scalari *pvDet)
 {
     // refer to calcDeterminantInt comment for calculation explanation
+
     // A1*B2
+    simd16scalari vA1_lo = _simd16_unpacklo_epi32(vA[1], vA[1]);                // X 0 X 1 X 4 X 5 X 8 X 9 X C X D (32b)
+    simd16scalari vA1_hi = _simd16_unpackhi_epi32(vA[1], vA[1]);                // X 2 X 3 X 6 X 7 X A X B X E X F
 
-#if 1
-    // TODO: get the native SIMD16 version working..
+    simd16scalari vB2_lo = _simd16_unpacklo_epi32(vB[2], vB[2]);
+    simd16scalari vB2_hi = _simd16_unpackhi_epi32(vB[2], vB[2]);
 
-    simdscalari vA_lo[3];
-    simdscalari vA_hi[3];
-    simdscalari vB_lo[3];
-    simdscalari vB_hi[3];
-
-    for (uint32_t i = 0; i < 3; i += 1)
-    {
-        vA_lo[i] = _simd16_extract_si(vA[i], 0);
-        vA_hi[i] = _simd16_extract_si(vA[i], 1);
-        vB_lo[i] = _simd16_extract_si(vB[i], 0);
-        vB_hi[i] = _simd16_extract_si(vB[i], 1);
-    }
-
-    calcDeterminantIntVertical(vA_lo, vB_lo, reinterpret_cast<simdscalari *>(&pvDet[0]));
-    calcDeterminantIntVertical(vA_hi, vB_hi, reinterpret_cast<simdscalari *>(&pvDet[1]));
-#else
-    simd16scalari vA1Lo = _simd16_unpacklo_epi32(vA[1], vA[1]); // 0 0 1 1 4 4 5 5 8 8 9 9 C C D D
-    simd16scalari vA1Hi = _simd16_unpackhi_epi32(vA[1], vA[1]); // 2 2 3 3 6 6 7 7 A A B B E E F F
-
-    simd16scalari vB2Lo = _simd16_unpacklo_epi32(vB[2], vB[2]);
-    simd16scalari vB2Hi = _simd16_unpackhi_epi32(vB[2], vB[2]);
-
-    simd16scalari vA1B2Lo = _simd16_mul_epi32(vA1Lo, vB2Lo);    // 0 1 4 5 8 9 C D
-    simd16scalari vA1B2Hi = _simd16_mul_epi32(vA1Hi, vB2Hi);    // 2 3 6 7 A B E F
+    simd16scalari vA1B2_lo = _simd16_mul_epi32(vA1_lo, vB2_lo);                 // 0 1 4 5 8 9 C D (64b)
+    simd16scalari vA1B2_hi = _simd16_mul_epi32(vA1_hi, vB2_hi);                 // 2 3 6 7 A B E F
 
     // B1*A2
-    simd16scalari vA2Lo = _simd16_unpacklo_epi32(vA[2], vA[2]);
-    simd16scalari vA2Hi = _simd16_unpackhi_epi32(vA[2], vA[2]);
+    simd16scalari vA2_lo = _simd16_unpacklo_epi32(vA[2], vA[2]);
+    simd16scalari vA2_hi = _simd16_unpackhi_epi32(vA[2], vA[2]);
 
-    simd16scalari vB1Lo = _simd16_unpacklo_epi32(vB[1], vB[1]);
-    simd16scalari vB1Hi = _simd16_unpackhi_epi32(vB[1], vB[1]);
+    simd16scalari vB1_lo = _simd16_unpacklo_epi32(vB[1], vB[1]);
+    simd16scalari vB1_hi = _simd16_unpackhi_epi32(vB[1], vB[1]);
 
-    simd16scalari vA2B1Lo = _simd16_mul_epi32(vA2Lo, vB1Lo);
-    simd16scalari vA2B1Hi = _simd16_mul_epi32(vA2Hi, vB1Hi);
+    simd16scalari vA2B1_lo = _simd16_mul_epi32(vA2_lo, vB1_lo);
+    simd16scalari vA2B1_hi = _simd16_mul_epi32(vA2_hi, vB1_hi);
 
     // A1*B2 - A2*B1
-    simd16scalari detLo = _simd16_sub_epi64(vA1B2Lo, vA2B1Lo);
-    simd16scalari detHi = _simd16_sub_epi64(vA1B2Hi, vA2B1Hi);
+    simd16scalari difflo = _simd16_sub_epi64(vA1B2_lo, vA2B1_lo);               // 0 1 4 5 8 9 C D (64b)
+    simd16scalari diffhi = _simd16_sub_epi64(vA1B2_hi, vA2B1_hi);               // 2 3 6 7 A B E F
 
-    // shuffle 0 1 4 5 -> 0 1 2 3
-    simd16scalari vResultLo = _simd16_permute2f128_si(detLo, detHi, 0x20);
-    simd16scalari vResultHi = _simd16_permute2f128_si(detLo, detHi, 0x31);
+    // (1, 0, 1, 0) = 01 00 01 00 = 0x44, (3, 2, 3, 2) = 11 10 11 10 = 0xEE
+    simd16scalari templo = _simd16_permute2f128_si(difflo, diffhi, 0x44);       // 0 1 4 5 2 3 6 7 (64b)
+    simd16scalari temphi = _simd16_permute2f128_si(difflo, diffhi, 0xEE);       // 8 9 C D A B E F
 
-    pvDet[0] = vResultLo;
-    pvDet[1] = vResultHi;
-#endif
+    // (3, 1, 2, 0) = 11 01 10 00 = 0xD8
+    pvDet[0] = _simd16_permute2f128_si(templo, templo, 0xD8);                   // 0 1 2 3 4 5 6 7 (64b)
+    pvDet[1] = _simd16_permute2f128_si(temphi, temphi, 0xD8);                   // 8 9 A B C D E F
 }
 
 #endif
@@ -269,19 +231,6 @@ void triangleSetupC(const __m128 vX, const __m128 vY, const __m128 vA, const __m
     __m128 vCy = _mm_mul_ps(vB, vY);    
     vC  = _mm_mul_ps(vC, _mm_set1_ps(-1.0f));
     vC  = _mm_sub_ps(vC, vCy);
-}
-
-INLINE
-void viewportTransform(__m128 &vX, __m128 &vY, __m128 &vZ, const SWR_VIEWPORT_MATRIX &vpMatrix)
-{
-    vX = _mm_mul_ps(vX, _mm_set1_ps(vpMatrix.m00));
-    vX = _mm_add_ps(vX, _mm_set1_ps(vpMatrix.m30));
-
-    vY = _mm_mul_ps(vY, _mm_set1_ps(vpMatrix.m11));
-    vY = _mm_add_ps(vY, _mm_set1_ps(vpMatrix.m31));
-
-    vZ = _mm_mul_ps(vZ, _mm_set1_ps(vpMatrix.m22));
-    vZ = _mm_add_ps(vZ, _mm_set1_ps(vpMatrix.m32));
 }
 
 template<uint32_t NumVerts>
@@ -439,10 +388,10 @@ PFN_PROCESS_PRIMS_SIMD16 GetBinTrianglesFunc_simd16(bool IsConservative);
 #endif
 
 struct PA_STATE_BASE;  // forward decl
-void BinPoints(DRAW_CONTEXT *pDC, PA_STATE& pa, uint32_t workerId, simdvector prims[3], uint32_t primMask, simdscalari primID, simdscalari viewportIdx);
-void BinLines(DRAW_CONTEXT *pDC, PA_STATE& pa, uint32_t workerId, simdvector prims[3], uint32_t primMask, simdscalari primID, simdscalari viewportIdx);
+void BinPoints(DRAW_CONTEXT *pDC, PA_STATE& pa, uint32_t workerId, simdvector prims[3], uint32_t primMask, simdscalari primID);
+void BinLines(DRAW_CONTEXT *pDC, PA_STATE& pa, uint32_t workerId, simdvector prims[3], uint32_t primMask, simdscalari primID);
 #if USE_SIMD16_FRONTEND
-void SIMDAPI BinPoints_simd16(DRAW_CONTEXT *pDC, PA_STATE& pa, uint32_t workerId, simd16vector prims[3], uint32_t primMask, simd16scalari primID, simd16scalari viewportIdx);
-void SIMDAPI BinLines_simd16(DRAW_CONTEXT *pDC, PA_STATE& pa, uint32_t workerId, simd16vector prims[3], uint32_t primMask, simd16scalari primID, simd16scalari viewportIdx);
+void SIMDCALL BinPoints_simd16(DRAW_CONTEXT *pDC, PA_STATE& pa, uint32_t workerId, simd16vector prims[3], uint32_t primMask, simd16scalari primID);
+void SIMDCALL BinLines_simd16(DRAW_CONTEXT *pDC, PA_STATE& pa, uint32_t workerId, simd16vector prims[3], uint32_t primMask, simd16scalari primID);
 #endif
 

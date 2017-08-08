@@ -35,82 +35,6 @@
 #include "drivers/common/meta.h"
 
 static void
-copy_image_with_memcpy(struct brw_context *brw,
-                       struct intel_mipmap_tree *src_mt, int src_level,
-                       int src_x, int src_y, int src_z,
-                       struct intel_mipmap_tree *dst_mt, int dst_level,
-                       int dst_x, int dst_y, int dst_z,
-                       int src_width, int src_height)
-{
-   bool same_slice;
-   void *mapped, *src_mapped, *dst_mapped;
-   ptrdiff_t src_stride, dst_stride, cpp;
-   int map_x1, map_y1, map_x2, map_y2;
-   GLuint src_bw, src_bh;
-
-   cpp = _mesa_get_format_bytes(src_mt->format);
-   _mesa_get_format_block_size(src_mt->format, &src_bw, &src_bh);
-
-   assert(src_width % src_bw == 0);
-   assert(src_height % src_bh == 0);
-   assert(src_x % src_bw == 0);
-   assert(src_y % src_bh == 0);
-
-   /* If we are on the same miptree, same level, and same slice, then
-    * intel_miptree_map won't let us map it twice.  We have to do things a
-    * bit differently.  In particular, we do a single map large enough for
-    * both portions and in read-write mode.
-    */
-   same_slice = src_mt == dst_mt && src_level == dst_level && src_z == dst_z;
-
-   if (same_slice) {
-      assert(dst_x % src_bw == 0);
-      assert(dst_y % src_bh == 0);
-
-      map_x1 = MIN2(src_x, dst_x);
-      map_y1 = MIN2(src_y, dst_y);
-      map_x2 = MAX2(src_x, dst_x) + src_width;
-      map_y2 = MAX2(src_y, dst_y) + src_height;
-
-      intel_miptree_map(brw, src_mt, src_level, src_z,
-                        map_x1, map_y1, map_x2 - map_x1, map_y2 - map_y1,
-                        GL_MAP_READ_BIT | GL_MAP_WRITE_BIT,
-                        &mapped, &src_stride);
-
-      dst_stride = src_stride;
-
-      /* Set the offsets here so we don't have to think about while looping */
-      src_mapped = mapped + ((src_y - map_y1) / src_bh) * src_stride +
-                            ((src_x - map_x1) / src_bw) * cpp;
-      dst_mapped = mapped + ((dst_y - map_y1) / src_bh) * dst_stride +
-                            ((dst_x - map_x1) / src_bw) * cpp;
-   } else {
-      intel_miptree_map(brw, src_mt, src_level, src_z,
-                        src_x, src_y, src_width, src_height,
-                        GL_MAP_READ_BIT, &src_mapped, &src_stride);
-      intel_miptree_map(brw, dst_mt, dst_level, dst_z,
-                        dst_x, dst_y, src_width, src_height,
-                        GL_MAP_WRITE_BIT, &dst_mapped, &dst_stride);
-   }
-
-   src_width /= (int)src_bw;
-   src_height /= (int)src_bh;
-
-   for (int i = 0; i < src_height; ++i) {
-      memcpy(dst_mapped, src_mapped, src_width * cpp);
-      src_mapped += src_stride;
-      dst_mapped += dst_stride;
-   }
-
-   if (same_slice) {
-      intel_miptree_unmap(brw, src_mt, src_level, src_z);
-   } else {
-      intel_miptree_unmap(brw, dst_mt, dst_level, dst_z);
-      intel_miptree_unmap(brw, src_mt, src_level, src_z);
-   }
-}
-
-static void
 copy_miptrees(struct brw_context *brw,
               struct intel_mipmap_tree *src_mt,
               int src_x, int src_y, int src_z, unsigned src_level,
@@ -118,55 +42,25 @@ copy_miptrees(struct brw_context *brw,
               int dst_x, int dst_y, int dst_z, unsigned dst_level,
               int src_width, int src_height)
 {
-   unsigned bw, bh;
-
-   if (brw->gen >= 6) {
-      brw_blorp_copy_miptrees(brw,
-                              src_mt, src_level, src_z,
-                              dst_mt, dst_level, dst_z,
-                              src_x, src_y, dst_x, dst_y,
-                              src_width, src_height);
-      return;
+   if (brw->gen <= 5) {
+      /* On gen4-5, try BLT first.
+       *
+       * Gen4-5 have a single ring for both 3D and BLT operations, so there's
+       * no inter-ring synchronization issues like on Gen6+.  It is apparently
+       * faster than using the 3D pipeline.  Original Gen4 also has to rebase
+       * and copy miptree slices in order to render to unaligned locations.
+       */
+      if (intel_miptree_copy(brw, src_mt, src_level, src_z, src_x, src_y,
+                             dst_mt, dst_level, dst_z, dst_x, dst_y,
+                             src_width, src_height))
+         return;
    }
 
-   /* We are now going to try and copy the texture using the blitter.  If
-    * that fails, we will fall back mapping the texture and using memcpy.
-    * In either case, we need to do a full resolve.
-    */
-   intel_miptree_all_slices_resolve_hiz(brw, src_mt);
-   intel_miptree_all_slices_resolve_depth(brw, src_mt);
-   intel_miptree_all_slices_resolve_color(brw, src_mt, 0);
-
-   intel_miptree_all_slices_resolve_hiz(brw, dst_mt);
-   intel_miptree_all_slices_resolve_depth(brw, dst_mt);
-   intel_miptree_all_slices_resolve_color(brw, dst_mt, 0);
-
-   _mesa_get_format_block_size(src_mt->format, &bw, &bh);
-
-   /* It's legal to have a WxH that's smaller than a compressed block. This
-    * happens for example when you are using a higher level LOD. For this case,
-    * we still want to copy the entire block, or else the decompression will be
-    * incorrect.
-    */
-   if (src_width < bw)
-      src_width = ALIGN_NPOT(src_width, bw);
-
-   if (src_height < bh)
-      src_height = ALIGN_NPOT(src_height, bh);
-
-   if (intel_miptree_copy(brw, src_mt, src_level, src_z, src_x, src_y,
-                          dst_mt, dst_level, dst_z, dst_x, dst_y,
-                          src_width, src_height))
-      return;
-
-   /* This is a worst-case scenario software fallback that maps the two
-    * textures and does a memcpy between them.
-    */
-   copy_image_with_memcpy(brw, src_mt, src_level,
-                          src_x, src_y, src_z,
-                          dst_mt, dst_level,
-                          dst_x, dst_y, dst_z,
-                          src_width, src_height);
+   brw_blorp_copy_miptrees(brw,
+                           src_mt, src_level, src_z,
+                           dst_mt, dst_level, dst_z,
+                           src_x, src_y, dst_x, dst_y,
+                           src_width, src_height);
 }
 
 static void

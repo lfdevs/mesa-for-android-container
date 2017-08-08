@@ -28,7 +28,8 @@
 
 #include "pipebuffer/pb_buffer.h"
 
-#include "amd/common/amd_family.h"
+#include "amd/common/ac_gpu_info.h"
+#include "amd/common/ac_surface.h"
 
 #define RADEON_FLUSH_ASYNC		(1 << 0)
 #define RADEON_FLUSH_END_OF_FRAME       (1 << 1)
@@ -50,10 +51,9 @@ enum radeon_bo_domain { /* bitfield */
 
 enum radeon_bo_flag { /* bitfield */
     RADEON_FLAG_GTT_WC =        (1 << 0),
-    RADEON_FLAG_CPU_ACCESS =    (1 << 1),
-    RADEON_FLAG_NO_CPU_ACCESS = (1 << 2),
-    RADEON_FLAG_HANDLE =        (1 << 3), /* the buffer must not be suballocated */
-    RADEON_FLAG_SPARSE =        (1 << 4),
+    RADEON_FLAG_NO_CPU_ACCESS = (1 << 1),
+    RADEON_FLAG_NO_SUBALLOC =   (1 << 2),
+    RADEON_FLAG_SPARSE =        (1 << 3),
 };
 
 enum radeon_bo_usage { /* bitfield */
@@ -75,6 +75,8 @@ enum ring_type {
     RING_DMA,
     RING_UVD,
     RING_VCE,
+    RING_UVD_ENC,
+    RING_VCN_DEC,
     RING_LAST,
 };
 
@@ -88,8 +90,10 @@ enum radeon_value_id {
     RADEON_TIMESTAMP,
     RADEON_NUM_GFX_IBS,
     RADEON_NUM_SDMA_IBS,
+    RADEON_GFX_BO_LIST_COUNTER, /* number of BOs submitted in gfx IBs */
     RADEON_NUM_BYTES_MOVED,
     RADEON_NUM_EVICTIONS,
+    RADEON_NUM_VRAM_CPU_PAGE_FAULTS,
     RADEON_VRAM_USAGE,
     RADEON_VRAM_VIS_USAGE,
     RADEON_GTT_USAGE,
@@ -175,66 +179,6 @@ struct radeon_winsys_cs {
     uint64_t                      used_gart;
 };
 
-struct radeon_info {
-    /* PCI info: domain:bus:dev:func */
-    uint32_t                    pci_domain;
-    uint32_t                    pci_bus;
-    uint32_t                    pci_dev;
-    uint32_t                    pci_func;
-
-    /* Device info. */
-    uint32_t                    pci_id;
-    enum radeon_family          family;
-    enum chip_class             chip_class;
-    uint32_t                    gart_page_size;
-    uint64_t                    gart_size;
-    uint64_t                    vram_size;
-    uint64_t                    vram_vis_size;
-    uint64_t                    max_alloc_size;
-    uint32_t                    min_alloc_size;
-    bool                        has_dedicated_vram;
-    bool                        has_virtual_memory;
-    bool                        gfx_ib_pad_with_type2;
-    bool                        has_sdma;
-    bool                        has_uvd;
-    uint32_t                    uvd_fw_version;
-    uint32_t                    vce_fw_version;
-    uint32_t                    me_fw_version;
-    uint32_t                    pfp_fw_version;
-    uint32_t                    ce_fw_version;
-    uint32_t                    vce_harvest_config;
-    uint32_t                    clock_crystal_freq;
-    uint32_t                    tcc_cache_line_size;
-
-    /* Kernel info. */
-    uint32_t                    drm_major; /* version */
-    uint32_t                    drm_minor;
-    uint32_t                    drm_patchlevel;
-    bool                        has_userptr;
-
-    /* Shader cores. */
-    uint32_t                    r600_max_quad_pipes; /* wave size / 16 */
-    uint32_t                    max_shader_clock;
-    uint32_t                    num_good_compute_units;
-    uint32_t                    max_se; /* shader engines */
-    uint32_t                    max_sh_per_se; /* shader arrays per shader engine */
-
-    /* Render backends (color + depth blocks). */
-    uint32_t                    r300_num_gb_pipes;
-    uint32_t                    r300_num_z_pipes;
-    uint32_t                    r600_gb_backend_map; /* R600 harvest config */
-    bool                        r600_gb_backend_map_valid;
-    uint32_t                    r600_num_banks;
-    uint32_t                    num_render_backends;
-    uint32_t                    num_tile_pipes; /* pipe count from PIPE_CONFIG */
-    uint32_t                    pipe_interleave_bytes;
-    uint32_t                    enabled_rb_mask; /* GCN harvest config */
-
-    /* Tile modes. */
-    uint32_t                    si_tile_mode_array[32];
-    uint32_t                    cik_macrotile_mode_array[16];
-};
-
 /* Tiling info for display code, DRI sharing, and other data. */
 struct radeon_bo_metadata {
     /* Tiling flags describing the texture layout for display code
@@ -271,153 +215,6 @@ struct radeon_bo_metadata {
 enum radeon_feature_id {
     RADEON_FID_R300_HYPERZ_ACCESS,     /* ZMask + HiZ */
     RADEON_FID_R300_CMASK_ACCESS,
-};
-
-#define RADEON_SURF_MAX_LEVELS                  15
-
-enum radeon_surf_mode {
-    RADEON_SURF_MODE_LINEAR_ALIGNED = 1,
-    RADEON_SURF_MODE_1D = 2,
-    RADEON_SURF_MODE_2D = 3,
-};
-
-/* These are defined exactly like GB_TILE_MODEn.MICRO_TILE_MODE_NEW. */
-enum radeon_micro_mode {
-    RADEON_MICRO_MODE_DISPLAY = 0,
-    RADEON_MICRO_MODE_THIN = 1,
-    RADEON_MICRO_MODE_DEPTH = 2,
-    RADEON_MICRO_MODE_ROTATED = 3,
-};
-
-/* the first 16 bits are reserved for libdrm_radeon, don't use them */
-#define RADEON_SURF_SCANOUT                     (1 << 16)
-#define RADEON_SURF_ZBUFFER                     (1 << 17)
-#define RADEON_SURF_SBUFFER                     (1 << 18)
-#define RADEON_SURF_Z_OR_SBUFFER                (RADEON_SURF_ZBUFFER | RADEON_SURF_SBUFFER)
-/* bits 19 and 20 are reserved for libdrm_radeon, don't use them */
-#define RADEON_SURF_FMASK                       (1 << 21)
-#define RADEON_SURF_DISABLE_DCC                 (1 << 22)
-#define RADEON_SURF_TC_COMPATIBLE_HTILE         (1 << 23)
-#define RADEON_SURF_IMPORTED                    (1 << 24)
-#define RADEON_SURF_OPTIMIZE_FOR_SPACE          (1 << 25)
-
-struct legacy_surf_level {
-    uint64_t                    offset;
-    uint64_t                    slice_size;
-    uint64_t                    dcc_offset;
-    uint64_t                    dcc_fast_clear_size;
-    uint16_t                    nblk_x;
-    uint16_t                    nblk_y;
-    enum radeon_surf_mode       mode;
-};
-
-struct legacy_surf_layout {
-    unsigned                    bankw:4;  /* max 8 */
-    unsigned                    bankh:4;  /* max 8 */
-    unsigned                    mtilea:4; /* max 8 */
-    unsigned                    tile_split:13;         /* max 4K */
-    unsigned                    stencil_tile_split:13; /* max 4K */
-    unsigned                    pipe_config:5;      /* max 17 */
-    unsigned                    num_banks:5;        /* max 16 */
-    unsigned                    macro_tile_index:4; /* max 15 */
-
-    /* Whether the depth miptree or stencil miptree as used by the DB are
-     * adjusted from their TC compatible form to ensure depth/stencil
-     * compatibility. If either is true, the corresponding plane cannot be
-     * sampled from.
-     */
-    unsigned                    depth_adjusted:1;
-    unsigned                    stencil_adjusted:1;
-
-    struct legacy_surf_level    level[RADEON_SURF_MAX_LEVELS];
-    struct legacy_surf_level    stencil_level[RADEON_SURF_MAX_LEVELS];
-    uint8_t                     tiling_index[RADEON_SURF_MAX_LEVELS];
-    uint8_t                     stencil_tiling_index[RADEON_SURF_MAX_LEVELS];
-};
-
-/* Same as addrlib - AddrResourceType. */
-enum gfx9_resource_type {
-    RADEON_RESOURCE_1D = 0,
-    RADEON_RESOURCE_2D,
-    RADEON_RESOURCE_3D,
-};
-
-struct gfx9_surf_flags {
-    uint16_t                    swizzle_mode; /* tile mode */
-    uint16_t                    epitch; /* (pitch - 1) or (height - 1) */
-};
-
-struct gfx9_surf_meta_flags {
-    unsigned                    rb_aligned:1;   /* optimal for RBs */
-    unsigned                    pipe_aligned:1; /* optimal for TC */
-};
-
-struct gfx9_surf_layout {
-    struct gfx9_surf_flags      surf;    /* color or depth surface */
-    struct gfx9_surf_flags      fmask;   /* not added to surf_size */
-    struct gfx9_surf_flags      stencil; /* added to surf_size, use stencil_offset */
-
-    struct gfx9_surf_meta_flags dcc;   /* metadata of color */
-    struct gfx9_surf_meta_flags htile; /* metadata of depth and stencil */
-    struct gfx9_surf_meta_flags cmask; /* metadata of fmask */
-
-    enum gfx9_resource_type     resource_type; /* 1D, 2D or 3D */
-    uint64_t                    surf_offset; /* 0 unless imported with an offset */
-    /* The size of the 2D plane containing all mipmap levels. */
-    uint64_t                    surf_slice_size;
-    uint16_t                    surf_pitch; /* in blocks */
-    uint16_t                    surf_height;
-    /* Mipmap level offset within the slice in bytes. Only valid for LINEAR. */
-    uint32_t                    offset[RADEON_SURF_MAX_LEVELS];
-
-    uint16_t                    dcc_pitch_max;  /* (mip chain pitch - 1) */
-
-    uint64_t                    stencil_offset; /* separate stencil */
-    uint64_t                    fmask_size;
-    uint64_t                    cmask_size;
-
-    uint32_t                    fmask_alignment;
-    uint32_t                    cmask_alignment;
-};
-
-struct radeon_surf {
-    /* Format properties. */
-    unsigned                    blk_w:4;
-    unsigned                    blk_h:4;
-    unsigned                    bpe:5;
-    /* Number of mipmap levels where DCC is enabled starting from level 0.
-     * Non-zero levels may be disabled due to alignment constraints, but not
-     * the first level.
-     */
-    unsigned                    num_dcc_levels:4;
-    unsigned                    is_linear:1;
-    /* Displayable, thin, depth, rotated. AKA D,S,Z,R swizzle modes. */
-    unsigned                    micro_tile_mode:3;
-    uint32_t                    flags;
-
-    /* These are return values. Some of them can be set by the caller, but
-     * they will be treated as hints (e.g. bankw, bankh) and might be
-     * changed by the calculator.
-     */
-    uint64_t                    surf_size;
-    uint64_t                    dcc_size;
-    uint64_t                    htile_size;
-
-    uint32_t                    surf_alignment;
-    uint32_t                    dcc_alignment;
-    uint32_t                    htile_alignment;
-
-    union {
-        /* R600-VI return values.
-         *
-         * Some of them can be set by the caller if certain parameters are
-         * desirable. The allocator will try to obey them.
-         */
-        struct legacy_surf_layout legacy;
-
-        /* GFX9+ return values. */
-        struct gfx9_surf_layout gfx9;
-    } u;
 };
 
 struct radeon_bo_list_item {
@@ -562,6 +359,9 @@ struct radeon_winsys {
      * \return          whether \p buf was created via buffer_from_ptr
      */
     bool (*buffer_is_user_ptr)(struct pb_buffer *buf);
+
+    /** Whether the buffer was suballocated. */
+    bool (*buffer_is_suballocated)(struct pb_buffer *buf);
 
     /**
      * Get a winsys handle from a winsys buffer. The internal structure
@@ -840,6 +640,8 @@ struct radeon_winsys {
 
     bool (*read_registers)(struct radeon_winsys *ws, unsigned reg_offset,
                            unsigned num_registers, uint32_t *out);
+
+    const char* (*get_chip_name)(struct radeon_winsys *ws);
 };
 
 static inline bool radeon_emitted(struct radeon_winsys_cs *cs, unsigned num_dw)
@@ -857,6 +659,97 @@ static inline void radeon_emit_array(struct radeon_winsys_cs *cs,
 {
     memcpy(cs->current.buf + cs->current.cdw, values, count * 4);
     cs->current.cdw += count;
+}
+
+enum radeon_heap {
+    RADEON_HEAP_VRAM_NO_CPU_ACCESS,
+    RADEON_HEAP_VRAM,
+    RADEON_HEAP_VRAM_GTT, /* combined heaps */
+    RADEON_HEAP_GTT_WC,
+    RADEON_HEAP_GTT,
+    RADEON_MAX_SLAB_HEAPS,
+    RADEON_MAX_CACHED_HEAPS = RADEON_MAX_SLAB_HEAPS,
+};
+
+static inline enum radeon_bo_domain radeon_domain_from_heap(enum radeon_heap heap)
+{
+    switch (heap) {
+    case RADEON_HEAP_VRAM_NO_CPU_ACCESS:
+    case RADEON_HEAP_VRAM:
+        return RADEON_DOMAIN_VRAM;
+    case RADEON_HEAP_VRAM_GTT:
+        return RADEON_DOMAIN_VRAM_GTT;
+    case RADEON_HEAP_GTT_WC:
+    case RADEON_HEAP_GTT:
+        return RADEON_DOMAIN_GTT;
+    default:
+        assert(0);
+        return (enum radeon_bo_domain)0;
+    }
+}
+
+static inline unsigned radeon_flags_from_heap(enum radeon_heap heap)
+{
+    switch (heap) {
+    case RADEON_HEAP_VRAM_NO_CPU_ACCESS:
+        return RADEON_FLAG_GTT_WC | RADEON_FLAG_NO_CPU_ACCESS;
+    case RADEON_HEAP_VRAM:
+    case RADEON_HEAP_VRAM_GTT:
+    case RADEON_HEAP_GTT_WC:
+        return RADEON_FLAG_GTT_WC;
+    case RADEON_HEAP_GTT:
+    default:
+        return 0;
+    }
+}
+
+/* The pb cache bucket is chosen to minimize pb_cache misses.
+ * It must be between 0 and 3 inclusive.
+ */
+static inline unsigned radeon_get_pb_cache_bucket_index(enum radeon_heap heap)
+{
+    switch (heap) {
+    case RADEON_HEAP_VRAM_NO_CPU_ACCESS:
+        return 0;
+    case RADEON_HEAP_VRAM:
+    case RADEON_HEAP_VRAM_GTT:
+        return 1;
+    case RADEON_HEAP_GTT_WC:
+        return 2;
+    case RADEON_HEAP_GTT:
+    default:
+        return 3;
+    }
+}
+
+/* Return the heap index for winsys allocators, or -1 on failure. */
+static inline int radeon_get_heap_index(enum radeon_bo_domain domain,
+                                        enum radeon_bo_flag flags)
+{
+    /* VRAM implies WC (write combining) */
+    assert(!(domain & RADEON_DOMAIN_VRAM) || flags & RADEON_FLAG_GTT_WC);
+    /* NO_CPU_ACCESS implies VRAM only. */
+    assert(!(flags & RADEON_FLAG_NO_CPU_ACCESS) || domain == RADEON_DOMAIN_VRAM);
+
+    /* Unsupported flags: NO_SUBALLOC, SPARSE. */
+    if (flags & ~(RADEON_FLAG_GTT_WC | RADEON_FLAG_NO_CPU_ACCESS))
+        return -1;
+
+    switch (domain) {
+    case RADEON_DOMAIN_VRAM:
+        if (flags & RADEON_FLAG_NO_CPU_ACCESS)
+            return RADEON_HEAP_VRAM_NO_CPU_ACCESS;
+        else
+            return RADEON_HEAP_VRAM;
+    case RADEON_DOMAIN_VRAM_GTT:
+        return RADEON_HEAP_VRAM_GTT;
+    case RADEON_DOMAIN_GTT:
+        if (flags & RADEON_FLAG_GTT_WC)
+            return RADEON_HEAP_GTT_WC;
+        else
+            return RADEON_HEAP_GTT;
+    }
+    return -1;
 }
 
 #endif

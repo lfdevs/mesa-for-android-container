@@ -59,9 +59,19 @@ vbo_init_arrays(struct gl_context *ctx, const struct _mesa_index_buffer *ib,
 	GLboolean imm = (render->mode == IMM);
 	int i, attr;
 
-	if (ib)
-		nouveau_init_array(&render->ib, 0, 0, ib->count, ib->type,
+	if (ib) {
+		GLenum ib_type;
+
+		if (ib->index_size == 4)
+			ib_type = GL_UNSIGNED_INT;
+		else if (ib->index_size == 2)
+			ib_type = GL_UNSIGNED_SHORT;
+		else
+			ib_type = GL_UNSIGNED_BYTE;
+
+		nouveau_init_array(&render->ib, 0, 0, ib->count, ib_type,
 				   ib->obj, ib->ptr, GL_TRUE, ctx);
+	}
 
 	FOR_EACH_BOUND_ATTR(render, i, attr) {
 		const struct gl_vertex_array *array = arrays[attr];

@@ -215,10 +215,11 @@ lp_setup_alloc_triangle(struct lp_scene *scene,
                         unsigned *tri_size);
 
 boolean
-lp_setup_bin_triangle( struct lp_setup_context *setup,
-                       struct lp_rast_triangle *tri,
-                       const struct u_rect *bbox,
-                       int nr_planes,
-                       unsigned scissor_index );
+lp_setup_bin_triangle(struct lp_setup_context *setup,
+                      struct lp_rast_triangle *tri,
+                      const struct u_rect *bboxorig,
+                      const struct u_rect *bbox,
+                      int nr_planes,
+                      unsigned scissor_index);
 
 #endif

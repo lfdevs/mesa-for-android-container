@@ -487,6 +487,7 @@ nvc0_fp_gen_header(struct nvc0_program *fp, struct nv50_ir_prog_info *info)
    fp->fp.early_z = info->prop.fp.earlyFragTests;
    fp->fp.sample_mask_in = info->prop.fp.usesSampleMaskIn;
    fp->fp.reads_framebuffer = info->prop.fp.readsFramebuffer;
+   fp->fp.post_depth_coverage = info->prop.fp.postDepthCoverage;
 
    /* Mark position xy and layer as read */
    if (fp->fp.reads_framebuffer)
@@ -567,7 +568,7 @@ nvc0_program_translate(struct nvc0_program *prog, uint16_t chipset,
 
    info->type = prog->type;
    info->target = chipset;
-   info->bin.sourceRep = NV50_PROGRAM_IR_TGSI;
+   info->bin.sourceRep = PIPE_SHADER_IR_TGSI;
    info->bin.source = (void *)prog->pipe.tokens;
 
 #ifdef DEBUG

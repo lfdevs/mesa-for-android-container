@@ -76,7 +76,7 @@ struct widepoint_stage {
    uint texcoord_gen_slot[PIPE_MAX_SHADER_OUTPUTS];
 
    /* TGSI_SEMANTIC to which sprite_coord_enable applies */
-   unsigned sprite_coord_semantic;
+   enum tgsi_semantic sprite_coord_semantic;
 
    int psize_slot;
 };
@@ -242,7 +242,7 @@ widepoint_first_point(struct draw_stage *stage,
        */
       for (i = 0; i < fs->info.num_inputs; i++) {
          int slot;
-         const unsigned sn = fs->info.input_semantic_name[i];
+         const enum tgsi_semantic sn = fs->info.input_semantic_name[i];
          const unsigned si = fs->info.input_semantic_index[i];
 
          if (sn == wide->sprite_coord_semantic) {

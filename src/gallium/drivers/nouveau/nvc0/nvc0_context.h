@@ -53,7 +53,7 @@
 #define NVC0_NEW_3D_TEXTURES     (1 << 19)
 #define NVC0_NEW_3D_SAMPLERS     (1 << 20)
 #define NVC0_NEW_3D_TFB_TARGETS  (1 << 21)
-#define NVC0_NEW_3D_IDXBUF       (1 << 22)
+
 #define NVC0_NEW_3D_SURFACES     (1 << 23)
 #define NVC0_NEW_3D_MIN_SAMPLES  (1 << 24)
 #define NVC0_NEW_3D_TESSFACTOR   (1 << 25)
@@ -193,7 +193,6 @@ struct nvc0_context {
    struct pipe_vertex_buffer vtxbuf[PIPE_MAX_ATTRIBS];
    unsigned num_vtxbufs;
    uint32_t vtxbufs_coherent;
-   struct pipe_index_buffer idxbuf;
    uint32_t constant_vbos;
    uint32_t vbo_user; /* bitmask of vertex buffers pointing to user memory */
    uint32_t vb_elt_first; /* from pipe_draw_info, for vertex upload */
@@ -312,6 +311,7 @@ void nvc0_fragprog_validate(struct nvc0_context *);
 void nvc0_compprog_validate(struct nvc0_context *);
 
 void nvc0_tfb_validate(struct nvc0_context *);
+void nvc0_layer_validate(struct nvc0_context *);
 
 /* nvc0_state.c */
 extern void nvc0_init_state_functions(struct nvc0_context *);

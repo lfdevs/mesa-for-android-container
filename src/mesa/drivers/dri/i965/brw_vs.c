@@ -203,6 +203,8 @@ brw_codegen_vs_prog(struct brw_context *brw,
       brw_nir_setup_glsl_uniforms(vp->program.nir, &vp->program,
                                   &prog_data.base.base,
                                   compiler->scalar_stage[MESA_SHADER_VERTEX]);
+      brw_nir_analyze_ubo_ranges(compiler, vp->program.nir,
+                                 prog_data.base.base.ubo_ranges);
    } else {
       brw_nir_setup_arb_uniforms(vp->program.nir, &vp->program,
                                  &prog_data.base.base);
@@ -210,16 +212,10 @@ brw_codegen_vs_prog(struct brw_context *brw,
 
    uint64_t outputs_written =
       brw_vs_outputs_written(brw, key, vp->program.info.outputs_written);
-   prog_data.inputs_read = vp->program.info.inputs_read;
-   prog_data.double_inputs_read = vp->program.info.double_inputs_read;
-
-   if (key->copy_edgeflag) {
-      prog_data.inputs_read |= VERT_BIT_EDGEFLAG;
-   }
 
    brw_compute_vue_map(devinfo,
                        &prog_data.base.vue_map, outputs_written,
-                       vp->program.nir->info->separate_shader);
+                       vp->program.nir->info.separate_shader);
 
    if (0) {
       _mesa_fprint_program_opt(stderr, &vp->program, PROG_PRINT_DEBUG, true);

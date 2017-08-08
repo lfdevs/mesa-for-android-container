@@ -1060,17 +1060,6 @@ i915_delete_vertex_elements_state(struct pipe_context *pipe, void *velems)
    FREE( velems );
 }
 
-static void i915_set_index_buffer(struct pipe_context *pipe,
-                                  const struct pipe_index_buffer *ib)
-{
-   struct i915_context *i915 = i915_context(pipe);
-
-   if (ib)
-      memcpy(&i915->index_buffer, ib, sizeof(i915->index_buffer));
-   else
-      memset(&i915->index_buffer, 0, sizeof(i915->index_buffer));
-}
-
 static void
 i915_set_sample_mask(struct pipe_context *pipe,
                      unsigned sample_mask)
@@ -1119,5 +1108,4 @@ i915_init_state_functions( struct i915_context *i915 )
    i915->base.sampler_view_destroy = i915_sampler_view_destroy;
    i915->base.set_viewport_states = i915_set_viewport_states;
    i915->base.set_vertex_buffers = i915_set_vertex_buffers;
-   i915->base.set_index_buffer = i915_set_index_buffer;
 }

@@ -44,12 +44,18 @@ struct fd5_emit {
 	const struct fd_program_stateobj *prog;
 	const struct pipe_draw_info *info;
 	struct ir3_shader_key key;
-	uint32_t dirty;
+	enum fd_dirty_3d_state dirty;
 
 	uint32_t sprite_coord_enable;  /* bitmask */
 	bool sprite_coord_mode;
 	bool rasterflat;
 	bool no_decode_srgb;
+
+	/* in binning pass, we don't have real frag shader, so we
+	 * don't know if real draw disqualifies lrz write.  So just
+	 * figure that out up-front and stash it in the emit.
+	 */
+	bool no_lrz_write;
 
 	/* cached to avoid repeated lookups of same variants: */
 	const struct ir3_shader_variant *vp, *fp;
@@ -114,7 +120,8 @@ fd5_set_render_mode(struct fd_context *ctx, struct fd_ringbuffer *ring,
 	OUT_RING(ring, CP_SET_RENDER_MODE_0_MODE(mode));
 	OUT_RING(ring, 0x00000000);   /* ADDR_LO */
 	OUT_RING(ring, 0x00000000);   /* ADDR_HI */
-	OUT_RING(ring, COND(mode == GMEM, CP_SET_RENDER_MODE_3_GMEM_ENABLE));
+	OUT_RING(ring, COND(mode == GMEM, CP_SET_RENDER_MODE_3_GMEM_ENABLE) |
+			COND(mode == BINNING, CP_SET_RENDER_MODE_3_VSC_ENABLE));
 	OUT_RING(ring, 0x00000000);
 	emit_marker5(ring, 7);
 }
@@ -135,9 +142,9 @@ fd5_emit_blit(struct fd_context *ctx, struct fd_ringbuffer *ring)
 }
 
 static inline void
-fd5_emit_render_cntl(struct fd_context *ctx, bool blit)
+fd5_emit_render_cntl(struct fd_context *ctx, bool blit, bool binning)
 {
-	struct fd_ringbuffer *ring = ctx->batch->draw;
+	struct fd_ringbuffer *ring = binning ? ctx->batch->binning : ctx->batch->draw;
 
 	/* TODO eventually this partially depends on the pfb state, ie.
 	 * which of the cbuf(s)/zsbuf has an UBWC flag buffer.. that part
@@ -147,15 +154,43 @@ fd5_emit_render_cntl(struct fd_context *ctx, bool blit)
 	 * Other bits seem to depend on query state, like if samples-passed
 	 * query is active.
 	 */
+	bool samples_passed = (fd5_context(ctx)->samples_passed_queries > 0);
 	OUT_PKT4(ring, REG_A5XX_RB_RENDER_CNTL, 1);
 	OUT_RING(ring, 0x00000000 |   /* RB_RENDER_CNTL */
+			COND(binning, A5XX_RB_RENDER_CNTL_BINNING_PASS) |
+			COND(binning, A5XX_RB_RENDER_CNTL_DISABLE_COLOR_PIPE) |
+			COND(samples_passed, A5XX_RB_RENDER_CNTL_SAMPLES_PASSED) |
 			COND(!blit, 0x8));
+
+	OUT_PKT4(ring, REG_A5XX_GRAS_SC_CNTL, 1);
+	OUT_RING(ring, 0x00000008 |   /* GRAS_SC_CNTL */
+			COND(binning, A5XX_GRAS_SC_CNTL_BINNING_PASS) |
+			COND(samples_passed, A5XX_GRAS_SC_CNTL_SAMPLES_PASSED));
+}
+
+static inline void
+fd5_emit_lrz_flush(struct fd_ringbuffer *ring)
+{
+	/* TODO I think the extra writes to GRAS_LRZ_CNTL are probably
+	 * a workaround and not needed on all a5xx.
+	 */
+	OUT_PKT4(ring, REG_A5XX_GRAS_LRZ_CNTL, 1);
+	OUT_RING(ring, A5XX_GRAS_LRZ_CNTL_ENABLE);
+
+	OUT_PKT7(ring, CP_EVENT_WRITE, 1);
+	OUT_RING(ring, LRZ_FLUSH);
+
+	OUT_PKT4(ring, REG_A5XX_GRAS_LRZ_CNTL, 1);
+	OUT_RING(ring, 0x0);
 }
 
 void fd5_emit_vertex_bufs(struct fd_ringbuffer *ring, struct fd5_emit *emit);
 
 void fd5_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 		struct fd5_emit *emit);
+
+void fd5_emit_cs_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
+		struct ir3_shader_variant *cp);
 
 void fd5_emit_restore(struct fd_batch *batch, struct fd_ringbuffer *ring);
 

@@ -18,6 +18,7 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 # IN THE SOFTWARE.
+import sys
 
 # Python source
 KNOBS = [
@@ -129,7 +130,7 @@ KNOBS = [
 
     ['MAX_DRAWS_IN_FLIGHT', {
         'type'      : 'uint32_t',
-        'default'   : '128',
+        'default'   : '256',
         'desc'      : ['Maximum number of draws outstanding before API thread blocks.',
                        'This value MUST be evenly divisible into 2^32'],
         'category'  : 'perf',
@@ -137,7 +138,7 @@ KNOBS = [
 
     ['MAX_PRIMS_PER_DRAW', {
         'type'      : 'uint32_t',
-        'default'   : '2040',
+        'default'   : '49152',
         'desc'      : ['Maximum primitives in a single Draw().',
                        'Larger primitives are split into smaller Draw calls.',
                        'Should be a multiple of (3 * vectorWidth).'],
@@ -156,8 +157,22 @@ KNOBS = [
 
     ['DEBUG_OUTPUT_DIR', {
         'type'      : 'std::string',
-        'default'   : '/tmp/Rast/DebugOutput',
+        'default'   : r'%TEMP%\Rast\DebugOutput' if sys.platform == 'win32' else '/tmp/Rast/DebugOutput',
         'desc'      : ['Output directory for debug data.'],
+        'category'  : 'debug',
+    }],
+
+    ['JIT_ENABLE_CACHE', {
+        'type'      : 'bool',
+        'default'   : 'false',
+        'desc'      : ['Enables caching of compiled shaders'],
+        'category'  : 'debug',
+    }],
+
+    ['JIT_CACHE_DIR', {
+        'type'      : 'std::string',
+        'default'   : r'%TEMP%\SWR\JitCache' if sys.platform == 'win32' else '${HOME}/.swr/jitcache',
+        'desc'      : ['Cache directory for compiled shaders.'],
         'category'  : 'debug',
     }],
 

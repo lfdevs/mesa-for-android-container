@@ -65,10 +65,8 @@ static boolean
 etna_screen_fence_finish(struct pipe_screen *pscreen, struct pipe_context *ctx,
                          struct pipe_fence_handle *fence, uint64_t timeout)
 {
-   if (fence->fence_fd != -1) {
-      int ret = sync_wait(fence->fence_fd, timeout / 1000000);
-      return ret == 0;
-   }
+   if (fence->fence_fd != -1)
+	return !sync_wait(fence->fence_fd, timeout / 1000000);
 
    if (etna_pipe_wait_ns(fence->screen->pipe, fence->timestamp, timeout))
       return false;

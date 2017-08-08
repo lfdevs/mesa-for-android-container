@@ -158,7 +158,7 @@ nouveau_disk_cache_create(struct nouveau_screen *screen)
       if (res != -1) {
          screen->disk_shader_cache =
             disk_cache_create(nouveau_screen_get_name(&screen->base),
-                              timestamp_str);
+                              timestamp_str, 0);
          free(timestamp_str);
       }
    }

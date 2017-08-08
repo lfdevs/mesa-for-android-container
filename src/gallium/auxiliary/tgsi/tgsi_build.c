@@ -642,6 +642,7 @@ tgsi_default_instruction( void )
    instruction.Label = 0;
    instruction.Texture = 0;
    instruction.Memory = 0;
+   instruction.Precise = 0;
    instruction.Padding = 0;
 
    return instruction;
@@ -650,6 +651,7 @@ tgsi_default_instruction( void )
 static struct tgsi_instruction
 tgsi_build_instruction(unsigned opcode,
                        unsigned saturate,
+                       unsigned precise,
                        unsigned num_dst_regs,
                        unsigned num_src_regs,
                        struct tgsi_header *header)
@@ -664,6 +666,7 @@ tgsi_build_instruction(unsigned opcode,
    instruction = tgsi_default_instruction();
    instruction.Opcode = opcode;
    instruction.Saturate = saturate;
+   instruction.Precise = precise;
    instruction.NumDstRegs = num_dst_regs;
    instruction.NumSrcRegs = num_src_regs;
 
@@ -720,6 +723,7 @@ tgsi_default_instruction_texture( void )
 
    instruction_texture.Texture = TGSI_TEXTURE_UNKNOWN;
    instruction_texture.NumOffsets = 0;
+   instruction_texture.ReturnType = TGSI_RETURN_TYPE_UNKNOWN;
    instruction_texture.Padding = 0;
 
    return instruction_texture;
@@ -729,6 +733,7 @@ static struct tgsi_instruction_texture
 tgsi_build_instruction_texture(
    unsigned texture,
    unsigned num_offsets,
+   unsigned return_type,
    struct tgsi_token *prev_token,
    struct tgsi_instruction *instruction,
    struct tgsi_header *header )
@@ -737,6 +742,7 @@ tgsi_build_instruction_texture(
 
    instruction_texture.Texture = texture;
    instruction_texture.NumOffsets = num_offsets;
+   instruction_texture.ReturnType = return_type;
    instruction_texture.Padding = 0;
    instruction->Texture = 1;
 
@@ -1057,6 +1063,7 @@ tgsi_build_full_instruction(
 
    *instruction = tgsi_build_instruction(full_inst->Instruction.Opcode,
                                          full_inst->Instruction.Saturate,
+                                         full_inst->Instruction.Precise,
                                          full_inst->Instruction.NumDstRegs,
                                          full_inst->Instruction.NumSrcRegs,
                                          header);
@@ -1090,7 +1097,8 @@ tgsi_build_full_instruction(
 
       *instruction_texture = tgsi_build_instruction_texture(
          full_inst->Texture.Texture,
-	 full_inst->Texture.NumOffsets,
+         full_inst->Texture.NumOffsets,
+         full_inst->Texture.ReturnType,
          prev_token,
          instruction,
          header   );

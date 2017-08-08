@@ -102,6 +102,8 @@ brw_codegen_tes_prog(struct brw_context *brw,
 
    brw_nir_setup_glsl_uniforms(nir, &tep->program, &prog_data.base.base,
                                compiler->scalar_stage[MESA_SHADER_TESS_EVAL]);
+   brw_nir_analyze_ubo_ranges(compiler, tep->program.nir,
+                              prog_data.base.base.ubo_ranges);
 
    int st_index = -1;
    if (unlikely(INTEL_DEBUG & DEBUG_SHADER_TIME))
@@ -234,15 +236,15 @@ brw_tes_precompile(struct gl_context *ctx,
    memset(&key, 0, sizeof(key));
 
    key.program_string_id = btep->id;
-   key.inputs_read = prog->nir->info->inputs_read;
-   key.patch_inputs_read = prog->nir->info->patch_inputs_read;
+   key.inputs_read = prog->nir->info.inputs_read;
+   key.patch_inputs_read = prog->nir->info.patch_inputs_read;
 
    if (shader_prog->_LinkedShaders[MESA_SHADER_TESS_CTRL]) {
       struct gl_program *tcp =
          shader_prog->_LinkedShaders[MESA_SHADER_TESS_CTRL]->Program;
-      key.inputs_read |= tcp->nir->info->outputs_written &
+      key.inputs_read |= tcp->nir->info.outputs_written &
          ~(VARYING_BIT_TESS_LEVEL_INNER | VARYING_BIT_TESS_LEVEL_OUTER);
-      key.patch_inputs_read |= tcp->nir->info->patch_outputs_written;
+      key.patch_inputs_read |= tcp->nir->info.patch_outputs_written;
    }
 
    brw_setup_tex_for_precompile(brw, &key.tex, prog);

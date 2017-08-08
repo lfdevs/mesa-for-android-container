@@ -305,20 +305,20 @@ static bool do_winsys_init(struct radeon_drm_winsys *ws)
     }
 
     /* Check for dma */
-    ws->info.has_sdma = false;
+    ws->info.num_sdma_rings = 0;
     /* DMA is disabled on R700. There is IB corruption and hangs. */
     if (ws->info.chip_class >= EVERGREEN && ws->info.drm_minor >= 27) {
-        ws->info.has_sdma = true;
+        ws->info.num_sdma_rings = 1;
     }
 
     /* Check for UVD and VCE */
-    ws->info.has_uvd = false;
+    ws->info.has_hw_decode = false;
     ws->info.vce_fw_version = 0x00000000;
     if (ws->info.drm_minor >= 32) {
 	uint32_t value = RADEON_CS_RING_UVD;
         if (radeon_get_drm_value(ws->fd, RADEON_INFO_RING_WORKING,
                                  "UVD Ring working", &value))
-            ws->info.has_uvd = value;
+            ws->info.has_hw_decode = value;
 
         value = RADEON_CS_RING_VCE;
         if (radeon_get_drm_value(ws->fd, RADEON_INFO_RING_WORKING,
@@ -629,7 +629,9 @@ static uint64_t radeon_query_value(struct radeon_winsys *rws,
                              "num-bytes-moved", (uint32_t*)&retval);
         return retval;
     case RADEON_NUM_EVICTIONS:
+    case RADEON_NUM_VRAM_CPU_PAGE_FAULTS:
     case RADEON_VRAM_VIS_USAGE:
+    case RADEON_GFX_BO_LIST_COUNTER:
         return 0; /* unimplemented */
     case RADEON_VRAM_USAGE:
         radeon_get_drm_value(ws->fd, RADEON_INFO_VRAM_USAGE,
@@ -734,7 +736,8 @@ static int handle_compare(void *key1, void *key2)
 }
 
 PUBLIC struct radeon_winsys *
-radeon_drm_winsys_create(int fd, radeon_screen_create_t screen_create)
+radeon_drm_winsys_create(int fd, unsigned flags,
+			 radeon_screen_create_t screen_create)
 {
     struct radeon_drm_winsys *ws;
 
@@ -773,7 +776,7 @@ radeon_drm_winsys_create(int fd, radeon_screen_create_t screen_create)
          */
         if (!pb_slabs_init(&ws->bo_slabs,
                            RADEON_SLAB_MIN_SIZE_LOG2, RADEON_SLAB_MAX_SIZE_LOG2,
-                           12,
+                           RADEON_MAX_SLAB_HEAPS,
                            ws,
                            radeon_bo_can_reclaim_slab,
                            radeon_bo_slab_alloc,
@@ -822,14 +825,14 @@ radeon_drm_winsys_create(int fd, radeon_screen_create_t screen_create)
     ws->info.gart_page_size = sysconf(_SC_PAGESIZE);
 
     if (ws->num_cpus > 1 && debug_get_option_thread())
-        util_queue_init(&ws->cs_queue, "radeon_cs", 8, 1);
+        util_queue_init(&ws->cs_queue, "radeon_cs", 8, 1, 0);
 
     /* Create the screen at the end. The winsys must be initialized
      * completely.
      *
      * Alternatively, we could create the screen based on "ws->gen"
      * and link all drivers into one binary blob. */
-    ws->base.screen = screen_create(&ws->base);
+    ws->base.screen = screen_create(&ws->base, flags);
     if (!ws->base.screen) {
         radeon_winsys_destroy(&ws->base);
         mtx_unlock(&fd_tab_mutex);

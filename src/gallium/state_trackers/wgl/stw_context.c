@@ -170,7 +170,13 @@ stw_create_context_attribs(HDC hdc, INT iLayerPlane, DHGLRC hShareContext,
       iPixelFormat = fb->iPixelFormat;
       stw_framebuffer_unlock(fb);
    } else {
-      return 0;
+      /* Applications should call SetPixelFormat before creating a context,
+       * but not all do, and the opengl32 runtime seems to use a default
+       * pixel format in some cases, so use that.
+       */
+      iPixelFormat = GetPixelFormat(hdc);
+      if (!iPixelFormat)
+         return 0;
    }
 
    pfi = stw_pixelformat_get_info( iPixelFormat );

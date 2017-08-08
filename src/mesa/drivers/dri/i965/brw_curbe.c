@@ -41,7 +41,7 @@
  * quickly at thread setup time.  Each individual fixed function unit's state
  * (brw_vs_state.c for example) tells the hardware which subset of the CURBE
  * it wants in its register space, and we calculate those areas here under the
- * BRW_NEW_CURBE_OFFSETS state flag.  The brw_urb.c allocation will control
+ * BRW_NEW_PUSH_CONSTANT_ALLOCATION state flag.  The brw_urb.c allocation will control
  * how many CURBEs can be loaded into the hardware at once before a pipeline
  * stall occurs at CMD_CONST_BUFFER time.
  *
@@ -135,7 +135,7 @@ static void calculate_curbe_offsets( struct brw_context *brw )
                  brw->curbe.vs_start,
                  brw->curbe.vs_size );
 
-      brw->ctx.NewDriverState |= BRW_NEW_CURBE_OFFSETS;
+      brw->ctx.NewDriverState |= BRW_NEW_PUSH_CONSTANT_ALLOCATION;
    }
 }
 
@@ -196,7 +196,7 @@ static void
 brw_upload_constant_buffer(struct brw_context *brw)
 {
    struct gl_context *ctx = &brw->ctx;
-   /* BRW_NEW_CURBE_OFFSETS */
+   /* BRW_NEW_PUSH_CONSTANT_ALLOCATION */
    const GLuint sz = brw->curbe.total_size;
    const GLuint bufsz = sz * 16 * sizeof(GLfloat);
    gl_constant_value *buf;
@@ -216,7 +216,7 @@ brw_upload_constant_buffer(struct brw_context *brw)
    if (brw->curbe.wm_size) {
       _mesa_load_state_parameters(ctx, brw->fragment_program->Parameters);
 
-      /* BRW_NEW_CURBE_OFFSETS */
+      /* BRW_NEW_PUSH_CONSTANT_ALLOCATION */
       GLuint offset = brw->curbe.wm_start * 16;
 
       /* BRW_NEW_FS_PROG_DATA | _NEW_PROGRAM_CONSTANTS: copy uniform values */
@@ -338,7 +338,7 @@ const struct brw_tracked_state brw_constant_buffer = {
       .mesa = _NEW_PROGRAM_CONSTANTS,
       .brw  = BRW_NEW_BATCH |
               BRW_NEW_BLORP |
-              BRW_NEW_CURBE_OFFSETS |
+              BRW_NEW_PUSH_CONSTANT_ALLOCATION |
               BRW_NEW_FRAGMENT_PROGRAM |
               BRW_NEW_FS_PROG_DATA |
               BRW_NEW_PSP | /* Implicit - hardware requires this, not used above */

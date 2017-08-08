@@ -507,35 +507,20 @@ void genX(CmdWriteTimestamp)(
 
 #if GEN_GEN > 7 || GEN_IS_HASWELL
 
-#define alu_opcode(v)   __gen_uint((v),  20, 31)
-#define alu_operand1(v) __gen_uint((v),  10, 19)
-#define alu_operand2(v) __gen_uint((v),   0,  9)
-#define alu(opcode, operand1, operand2) \
-   alu_opcode(opcode) | alu_operand1(operand1) | alu_operand2(operand2)
+static inline uint32_t
+mi_alu(uint32_t opcode, uint32_t operand1, uint32_t operand2)
+{
+   struct GENX(MI_MATH_ALU_INSTRUCTION) instr = {
+      .ALUOpcode = opcode,
+      .Operand1 = operand1,
+      .Operand2 = operand2,
+   };
 
-#define OPCODE_NOOP      0x000
-#define OPCODE_LOAD      0x080
-#define OPCODE_LOADINV   0x480
-#define OPCODE_LOAD0     0x081
-#define OPCODE_LOAD1     0x481
-#define OPCODE_ADD       0x100
-#define OPCODE_SUB       0x101
-#define OPCODE_AND       0x102
-#define OPCODE_OR        0x103
-#define OPCODE_XOR       0x104
-#define OPCODE_STORE     0x180
-#define OPCODE_STOREINV  0x580
+   uint32_t dw;
+   GENX(MI_MATH_ALU_INSTRUCTION_pack)(NULL, &dw, &instr);
 
-#define OPERAND_R0   0x00
-#define OPERAND_R1   0x01
-#define OPERAND_R2   0x02
-#define OPERAND_R3   0x03
-#define OPERAND_R4   0x04
-#define OPERAND_SRCA 0x20
-#define OPERAND_SRCB 0x21
-#define OPERAND_ACCU 0x31
-#define OPERAND_ZF   0x32
-#define OPERAND_CF   0x33
+   return dw;
+}
 
 #define CS_GPR(n) (0x2600 + (n) * 8)
 
@@ -588,10 +573,15 @@ keep_gpr0_lower_n_bits(struct anv_batch *batch, uint32_t n)
    emit_load_alu_reg_imm64(batch, CS_GPR(1), (1ull << n) - 1);
 
    uint32_t *dw = anv_batch_emitn(batch, 5, GENX(MI_MATH));
-   dw[1] = alu(OPCODE_LOAD, OPERAND_SRCA, OPERAND_R0);
-   dw[2] = alu(OPCODE_LOAD, OPERAND_SRCB, OPERAND_R1);
-   dw[3] = alu(OPCODE_AND, 0, 0);
-   dw[4] = alu(OPCODE_STORE, OPERAND_R0, OPERAND_ACCU);
+   if (!dw) {
+      anv_batch_set_error(batch, VK_ERROR_OUT_OF_HOST_MEMORY);
+      return;
+   }
+
+   dw[1] = mi_alu(MI_ALU_LOAD, MI_ALU_SRCA, MI_ALU_REG0);
+   dw[2] = mi_alu(MI_ALU_LOAD, MI_ALU_SRCB, MI_ALU_REG1);
+   dw[3] = mi_alu(MI_ALU_AND, 0, 0);
+   dw[4] = mi_alu(MI_ALU_STORE, MI_ALU_REG0, MI_ALU_ACCU);
 }
 
 /*
@@ -614,12 +604,17 @@ shl_gpr0_by_30_bits(struct anv_batch *batch)
    for (int o = 0; o < outer_count; o++) {
       /* Submit one MI_MATH to shift left by 6 bits */
       uint32_t *dw = anv_batch_emitn(batch, cmd_len, GENX(MI_MATH));
+      if (!dw) {
+         anv_batch_set_error(batch, VK_ERROR_OUT_OF_HOST_MEMORY);
+         return;
+      }
+
       dw++;
       for (int i = 0; i < inner_count; i++, dw += 4) {
-         dw[0] = alu(OPCODE_LOAD, OPERAND_SRCA, OPERAND_R0);
-         dw[1] = alu(OPCODE_LOAD, OPERAND_SRCB, OPERAND_R0);
-         dw[2] = alu(OPCODE_ADD, 0, 0);
-         dw[3] = alu(OPCODE_STORE, OPERAND_R0, OPERAND_ACCU);
+         dw[0] = mi_alu(MI_ALU_LOAD, MI_ALU_SRCA, MI_ALU_REG0);
+         dw[1] = mi_alu(MI_ALU_LOAD, MI_ALU_SRCB, MI_ALU_REG0);
+         dw[2] = mi_alu(MI_ALU_ADD, 0, 0);
+         dw[3] = mi_alu(MI_ALU_STORE, MI_ALU_REG0, MI_ALU_ACCU);
       }
    }
 }
@@ -682,10 +677,10 @@ compute_query_result(struct anv_batch *batch, uint32_t dst_reg,
       return;
    }
 
-   dw[1] = alu(OPCODE_LOAD, OPERAND_SRCA, OPERAND_R1);
-   dw[2] = alu(OPCODE_LOAD, OPERAND_SRCB, OPERAND_R0);
-   dw[3] = alu(OPCODE_SUB, 0, 0);
-   dw[4] = alu(OPCODE_STORE, dst_reg, OPERAND_ACCU);
+   dw[1] = mi_alu(MI_ALU_LOAD, MI_ALU_SRCA, MI_ALU_REG1);
+   dw[2] = mi_alu(MI_ALU_LOAD, MI_ALU_SRCB, MI_ALU_REG0);
+   dw[3] = mi_alu(MI_ALU_SUB, 0, 0);
+   dw[4] = mi_alu(MI_ALU_STORE, dst_reg, MI_ALU_ACCU);
 }
 
 void genX(CmdCopyQueryPoolResults)(
@@ -714,7 +709,7 @@ void genX(CmdCopyQueryPoolResults)(
       slot_offset = (firstQuery + i) * pool->stride;
       switch (pool->type) {
       case VK_QUERY_TYPE_OCCLUSION:
-         compute_query_result(&cmd_buffer->batch, OPERAND_R2,
+         compute_query_result(&cmd_buffer->batch, MI_ALU_REG2,
                               &pool->bo, slot_offset + 8);
          gpu_write_query_result(&cmd_buffer->batch, buffer, destOffset,
                                 flags, 0, CS_GPR(2));
@@ -726,7 +721,7 @@ void genX(CmdCopyQueryPoolResults)(
          while (statistics) {
             uint32_t stat = u_bit_scan(&statistics);
 
-            compute_query_result(&cmd_buffer->batch, OPERAND_R0,
+            compute_query_result(&cmd_buffer->batch, MI_ALU_REG0,
                                  &pool->bo, slot_offset + idx * 16 + 8);
 
             /* WaDividePSInvocationCountBy4:HSW,BDW */

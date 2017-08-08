@@ -749,6 +749,9 @@ extern mesa_format
 _mesa_get_srgb_format_linear(mesa_format format);
 
 extern mesa_format
+_mesa_get_linear_format_srgb(mesa_format format);
+
+extern mesa_format
 _mesa_get_uncompressed_format(mesa_format format);
 
 extern GLuint
@@ -761,6 +764,9 @@ GLboolean
 _mesa_format_matches_format_and_type(mesa_format mesa_format,
 				     GLenum format, GLenum type,
 				     GLboolean swapBytes, GLenum *error);
+
+mesa_format
+_mesa_format_fallback_rgbx_to_rgba(mesa_format format);
 
 #ifdef __cplusplus
 }

@@ -42,33 +42,8 @@
 
 #include "main/framebuffer.h"
 #include "main/fbobject.h"
+#include "main/format_utils.h"
 #include "main/glformats.h"
-
-/* Constant single cliprect for framebuffer object or DRI2 drawing */
-static void
-upload_drawing_rect(struct brw_context *brw)
-{
-   struct gl_context *ctx = &brw->ctx;
-   const struct gl_framebuffer *fb = ctx->DrawBuffer;
-   const unsigned int fb_width = _mesa_geometric_width(fb);
-   const unsigned int fb_height = _mesa_geometric_height(fb);
-
-   BEGIN_BATCH(4);
-   OUT_BATCH(_3DSTATE_DRAWING_RECTANGLE << 16 | (4 - 2));
-   OUT_BATCH(0); /* xmin, ymin */
-   OUT_BATCH(((fb_width - 1) & 0xffff) | ((fb_height - 1) << 16));
-   OUT_BATCH(0);
-   ADVANCE_BATCH();
-}
-
-const struct brw_tracked_state brw_drawing_rect = {
-   .dirty = {
-      .mesa = _NEW_BUFFERS,
-      .brw = BRW_NEW_BLORP |
-             BRW_NEW_CONTEXT,
-   },
-   .emit = upload_drawing_rect
-};
 
 /**
  * Upload pointers to the per-stage state.
@@ -151,62 +126,6 @@ brw_depthbuffer_format(struct brw_context *brw)
    return brw_depth_format(brw, drb->mt->format);
 }
 
-/**
- * Returns the mask of how many bits of x and y must be handled through the
- * depthbuffer's draw offset x and y fields.
- *
- * The draw offset x/y field of the depthbuffer packet is unfortunately shared
- * between the depth, hiz, and stencil buffers.  Because it can be hard to get
- * all 3 to agree on this value, we want to do as much drawing offset
- * adjustment as possible by moving the base offset of the 3 buffers, which is
- * restricted to tile boundaries.
- *
- * For each buffer, the remainder must be applied through the x/y draw offset.
- * This returns the worst-case mask of the low bits that have to go into the
- * packet.  If the 3 buffers don't agree on the drawing offset ANDed with this
- * mask, then we're in trouble.
- */
-static void
-brw_get_depthstencil_tile_masks(struct intel_mipmap_tree *depth_mt,
-                                uint32_t depth_level,
-                                uint32_t depth_layer,
-                                struct intel_mipmap_tree *stencil_mt,
-                                uint32_t *out_tile_mask_x,
-                                uint32_t *out_tile_mask_y)
-{
-   uint32_t tile_mask_x = 0, tile_mask_y = 0;
-
-   if (depth_mt) {
-      intel_get_tile_masks(depth_mt->tiling,
-                           depth_mt->cpp,
-                           &tile_mask_x, &tile_mask_y);
-      assert(!intel_miptree_level_has_hiz(depth_mt, depth_level));
-   }
-
-   if (stencil_mt) {
-      if (stencil_mt->stencil_mt)
-	 stencil_mt = stencil_mt->stencil_mt;
-
-      if (stencil_mt->format == MESA_FORMAT_S_UINT8) {
-         /* Separate stencil buffer uses 64x64 tiles. */
-         tile_mask_x |= 63;
-         tile_mask_y |= 63;
-      } else {
-         uint32_t stencil_tile_mask_x, stencil_tile_mask_y;
-         intel_get_tile_masks(stencil_mt->tiling,
-                              stencil_mt->cpp,
-                              &stencil_tile_mask_x,
-                              &stencil_tile_mask_y);
-
-         tile_mask_x |= stencil_tile_mask_x;
-         tile_mask_y |= stencil_tile_mask_y;
-      }
-   }
-
-   *out_tile_mask_x = tile_mask_x;
-   *out_tile_mask_y = tile_mask_y;
-}
-
 static struct intel_mipmap_tree *
 get_stencil_miptree(struct intel_renderbuffer *irb)
 {
@@ -214,7 +133,68 @@ get_stencil_miptree(struct intel_renderbuffer *irb)
       return NULL;
    if (irb->mt->stencil_mt)
       return irb->mt->stencil_mt;
-   return irb->mt;
+   return intel_renderbuffer_get_mt(irb);
+}
+
+static bool
+rebase_depth_stencil(struct brw_context *brw, struct intel_renderbuffer *irb,
+                     bool invalidate)
+{
+   struct gl_context *ctx = &brw->ctx;
+   uint32_t tile_mask_x = 0, tile_mask_y = 0;
+
+   intel_get_tile_masks(irb->mt->surf.tiling, irb->mt->cpp,
+                        &tile_mask_x, &tile_mask_y);
+   assert(!intel_miptree_level_has_hiz(irb->mt, irb->mt_level));
+
+   uint32_t tile_x = irb->draw_x & tile_mask_x;
+   uint32_t tile_y = irb->draw_y & tile_mask_y;
+
+   /* According to the Sandy Bridge PRM, volume 2 part 1, pp326-327
+    * (3DSTATE_DEPTH_BUFFER dw5), in the documentation for "Depth
+    * Coordinate Offset X/Y":
+    *
+    *   "The 3 LSBs of both offsets must be zero to ensure correct
+    *   alignment"
+    */
+   bool rebase = tile_x & 7 || tile_y & 7;
+
+   /* We didn't even have intra-tile offsets before g45. */
+   rebase |= (!brw->has_surface_tile_offset && (tile_x || tile_y));
+
+   if (rebase) {
+      perf_debug("HW workaround: blitting depth level %d to a temporary "
+                 "to fix alignment (depth tile offset %d,%d)\n",
+                 irb->mt_level, tile_x, tile_y);
+      intel_renderbuffer_move_to_temp(brw, irb, invalidate);
+
+      /* There is now only single slice miptree. */
+      brw->depthstencil.tile_x = 0;
+      brw->depthstencil.tile_y = 0;
+      brw->depthstencil.depth_offset = 0;
+      return true;
+   }
+
+   /* While we just tried to get everything aligned, we may have failed to do
+    * so in the case of rendering to array or 3D textures, where nonzero faces
+    * will still have an offset post-rebase.  At least give an informative
+    * warning.
+    */
+   WARN_ONCE((tile_x & 7) || (tile_y & 7),
+             "Depth/stencil buffer needs alignment to 8-pixel boundaries.\n"
+             "Truncating offset (%u:%u), bad rendering may occur.\n",
+             tile_x, tile_y);
+   tile_x &= ~7;
+   tile_y &= ~7;
+
+   brw->depthstencil.tile_x = tile_x;
+   brw->depthstencil.tile_y = tile_y;
+   brw->depthstencil.depth_offset = intel_miptree_get_aligned_offset(
+                                       irb->mt,
+                                       irb->draw_x & ~tile_mask_x,
+                                       irb->draw_y & ~tile_mask_y);
+
+   return false;
 }
 
 void
@@ -223,14 +203,9 @@ brw_workaround_depthstencil_alignment(struct brw_context *brw,
 {
    struct gl_context *ctx = &brw->ctx;
    struct gl_framebuffer *fb = ctx->DrawBuffer;
-   bool rebase_depth = false;
-   bool rebase_stencil = false;
    struct intel_renderbuffer *depth_irb = intel_get_renderbuffer(fb, BUFFER_DEPTH);
    struct intel_renderbuffer *stencil_irb = intel_get_renderbuffer(fb, BUFFER_STENCIL);
    struct intel_mipmap_tree *depth_mt = NULL;
-   struct intel_mipmap_tree *stencil_mt = get_stencil_miptree(stencil_irb);
-   uint32_t tile_x = 0, tile_y = 0, stencil_tile_x = 0, stencil_tile_y = 0;
-   uint32_t stencil_draw_x = 0, stencil_draw_y = 0;
    bool invalidate_depth = clear_mask & BUFFER_BIT_DEPTH;
    bool invalidate_stencil = clear_mask & BUFFER_BIT_STENCIL;
 
@@ -242,14 +217,6 @@ brw_workaround_depthstencil_alignment(struct brw_context *brw,
    brw->depthstencil.tile_x = 0;
    brw->depthstencil.tile_y = 0;
    brw->depthstencil.depth_offset = 0;
-   brw->depthstencil.stencil_offset = 0;
-   brw->depthstencil.hiz_offset = 0;
-   brw->depthstencil.depth_mt = NULL;
-   brw->depthstencil.stencil_mt = NULL;
-   if (depth_irb)
-      brw->depthstencil.depth_mt = depth_mt;
-   if (stencil_irb)
-      brw->depthstencil.stencil_mt = get_stencil_miptree(stencil_irb);
 
    /* Gen6+ doesn't require the workarounds, since we always program the
     * surface state at the start of the whole surface.
@@ -258,54 +225,14 @@ brw_workaround_depthstencil_alignment(struct brw_context *brw,
       return;
 
    /* Check if depth buffer is in depth/stencil format.  If so, then it's only
-    * safe to invalidate it if we're also clearing stencil, and both depth_irb
-    * and stencil_irb point to the same miptree.
-    *
-    * Note: it's not sufficient to check for the case where
-    * _mesa_get_format_base_format(depth_mt->format) == GL_DEPTH_STENCIL,
-    * because this fails to catch depth/stencil buffers on hardware that uses
-    * separate stencil.  To catch that case, we check whether
-    * depth_mt->stencil_mt is non-NULL.
+    * safe to invalidate it if we're also clearing stencil.
     */
    if (depth_irb && invalidate_depth &&
-       (_mesa_get_format_base_format(depth_mt->format) == GL_DEPTH_STENCIL ||
-        depth_mt->stencil_mt)) {
-      invalidate_depth = invalidate_stencil && depth_irb && stencil_irb
-         && depth_irb->mt == stencil_irb->mt;
-   }
-
-   uint32_t tile_mask_x, tile_mask_y;
-   brw_get_depthstencil_tile_masks(depth_mt,
-                                   depth_mt ? depth_irb->mt_level : 0,
-                                   depth_mt ? depth_irb->mt_layer : 0,
-                                   stencil_mt,
-                                   &tile_mask_x, &tile_mask_y);
+      _mesa_get_format_base_format(depth_mt->format) == GL_DEPTH_STENCIL)
+      invalidate_depth = invalidate_stencil && stencil_irb;
 
    if (depth_irb) {
-      tile_x = depth_irb->draw_x & tile_mask_x;
-      tile_y = depth_irb->draw_y & tile_mask_y;
-
-      /* According to the Sandy Bridge PRM, volume 2 part 1, pp326-327
-       * (3DSTATE_DEPTH_BUFFER dw5), in the documentation for "Depth
-       * Coordinate Offset X/Y":
-       *
-       *   "The 3 LSBs of both offsets must be zero to ensure correct
-       *   alignment"
-       */
-      if (tile_x & 7 || tile_y & 7)
-         rebase_depth = true;
-
-      /* We didn't even have intra-tile offsets before g45. */
-      if (!brw->has_surface_tile_offset) {
-         if (tile_x || tile_y)
-            rebase_depth = true;
-      }
-
-      if (rebase_depth) {
-         perf_debug("HW workaround: blitting depth level %d to a temporary "
-                    "to fix alignment (depth tile offset %d,%d)\n",
-                    depth_irb->mt_level, tile_x, tile_y);
-         intel_renderbuffer_move_to_temp(brw, depth_irb, invalidate_depth);
+      if (rebase_depth_stencil(brw, depth_irb, invalidate_depth)) {
          /* In the case of stencil_irb being the same packed depth/stencil
           * texture but not the same rb, make it point at our rebased mt, too.
           */
@@ -315,156 +242,18 @@ brw_workaround_depthstencil_alignment(struct brw_context *brw,
             intel_miptree_reference(&stencil_irb->mt, depth_irb->mt);
             intel_renderbuffer_set_draw_offset(stencil_irb);
          }
-
-         stencil_mt = get_stencil_miptree(stencil_irb);
-
-         tile_x = depth_irb->draw_x & tile_mask_x;
-         tile_y = depth_irb->draw_y & tile_mask_y;
       }
 
       if (stencil_irb) {
-         stencil_mt = get_stencil_miptree(stencil_irb);
-         intel_miptree_get_image_offset(stencil_mt,
-                                        stencil_irb->mt_level,
-                                        stencil_irb->mt_layer,
-                                        &stencil_draw_x, &stencil_draw_y);
-         int stencil_tile_x = stencil_draw_x & tile_mask_x;
-         int stencil_tile_y = stencil_draw_y & tile_mask_y;
-
-         /* If stencil doesn't match depth, then we'll need to rebase stencil
-          * as well.  (if we hadn't decided to rebase stencil before, the
-          * post-stencil depth test will also rebase depth to try to match it
-          * up).
-          */
-         if (tile_x != stencil_tile_x ||
-             tile_y != stencil_tile_y) {
-            rebase_stencil = true;
-         }
+         assert(stencil_irb->mt == depth_irb->mt);
+         assert(stencil_irb->mt_level == depth_irb->mt_level);
+         assert(stencil_irb->mt_layer == depth_irb->mt_layer);
       }
    }
 
-   /* If we have (just) stencil, check it for ignored low bits as well */
-   if (stencil_irb) {
-      intel_miptree_get_image_offset(stencil_mt,
-                                     stencil_irb->mt_level,
-                                     stencil_irb->mt_layer,
-                                     &stencil_draw_x, &stencil_draw_y);
-      stencil_tile_x = stencil_draw_x & tile_mask_x;
-      stencil_tile_y = stencil_draw_y & tile_mask_y;
-
-      if (stencil_tile_x & 7 || stencil_tile_y & 7)
-         rebase_stencil = true;
-
-      if (!brw->has_surface_tile_offset) {
-         if (stencil_tile_x || stencil_tile_y)
-            rebase_stencil = true;
-      }
-   }
-
-   if (rebase_stencil) {
-      perf_debug("HW workaround: blitting stencil level %d to a temporary "
-                 "to fix alignment (stencil tile offset %d,%d)\n",
-                 stencil_irb->mt_level, stencil_tile_x, stencil_tile_y);
-
-      intel_renderbuffer_move_to_temp(brw, stencil_irb, invalidate_stencil);
-      stencil_mt = get_stencil_miptree(stencil_irb);
-
-      intel_miptree_get_image_offset(stencil_mt,
-                                     stencil_irb->mt_level,
-                                     stencil_irb->mt_layer,
-                                     &stencil_draw_x, &stencil_draw_y);
-      stencil_tile_x = stencil_draw_x & tile_mask_x;
-      stencil_tile_y = stencil_draw_y & tile_mask_y;
-
-      if (depth_irb && depth_irb->mt == stencil_irb->mt) {
-         intel_miptree_reference(&depth_irb->mt, stencil_irb->mt);
-         intel_renderbuffer_set_draw_offset(depth_irb);
-      } else if (depth_irb && !rebase_depth) {
-         if (tile_x != stencil_tile_x ||
-             tile_y != stencil_tile_y) {
-            perf_debug("HW workaround: blitting depth level %d to a temporary "
-                       "to match stencil level %d alignment (depth tile offset "
-                       "%d,%d, stencil offset %d,%d)\n",
-                       depth_irb->mt_level,
-                       stencil_irb->mt_level,
-                       tile_x, tile_y,
-                       stencil_tile_x, stencil_tile_y);
-
-            intel_renderbuffer_move_to_temp(brw, depth_irb, invalidate_depth);
-
-            tile_x = depth_irb->draw_x & tile_mask_x;
-            tile_y = depth_irb->draw_y & tile_mask_y;
-
-            if (stencil_irb && stencil_irb->mt == depth_mt) {
-               intel_miptree_reference(&stencil_irb->mt, depth_irb->mt);
-               intel_renderbuffer_set_draw_offset(stencil_irb);
-            }
-
-            WARN_ONCE(stencil_tile_x != tile_x ||
-                      stencil_tile_y != tile_y,
-                      "Rebased stencil tile offset (%d,%d) doesn't match depth "
-                      "tile offset (%d,%d).\n",
-                      stencil_tile_x, stencil_tile_y,
-                      tile_x, tile_y);
-         }
-      }
-   }
-
-   if (!depth_irb) {
-      tile_x = stencil_tile_x;
-      tile_y = stencil_tile_y;
-   }
-
-   /* While we just tried to get everything aligned, we may have failed to do
-    * so in the case of rendering to array or 3D textures, where nonzero faces
-    * will still have an offset post-rebase.  At least give an informative
-    * warning.
-    */
-   WARN_ONCE((tile_x & 7) || (tile_y & 7),
-             "Depth/stencil buffer needs alignment to 8-pixel boundaries.\n"
-             "Truncating offset, bad rendering may occur.\n");
-   tile_x &= ~7;
-   tile_y &= ~7;
-
-   /* Now, after rebasing, save off the new dephtstencil state so the hardware
-    * packets can just dereference that without re-calculating tile offsets.
-    */
-   brw->depthstencil.tile_x = tile_x;
-   brw->depthstencil.tile_y = tile_y;
-   if (depth_irb) {
-      depth_mt = depth_irb->mt;
-      brw->depthstencil.depth_mt = depth_mt;
-      brw->depthstencil.depth_offset =
-         intel_miptree_get_aligned_offset(depth_mt,
-                                          depth_irb->draw_x & ~tile_mask_x,
-                                          depth_irb->draw_y & ~tile_mask_y);
-      if (intel_renderbuffer_has_hiz(depth_irb)) {
-         brw->depthstencil.hiz_offset =
-            intel_miptree_get_aligned_offset(depth_mt,
-                                             depth_irb->draw_x & ~tile_mask_x,
-                                             (depth_irb->draw_y & ~tile_mask_y) / 2);
-      }
-   }
-   if (stencil_irb) {
-      stencil_mt = get_stencil_miptree(stencil_irb);
-
-      brw->depthstencil.stencil_mt = stencil_mt;
-      if (stencil_mt->format == MESA_FORMAT_S_UINT8) {
-         /* Note: we can't compute the stencil offset using
-          * intel_region_get_aligned_offset(), because stencil_region claims
-          * that the region is untiled even though it's W tiled.
-          */
-         brw->depthstencil.stencil_offset =
-            (stencil_draw_y & ~tile_mask_y) * stencil_mt->pitch +
-            (stencil_draw_x & ~tile_mask_x) * 64;
-      } else if (!depth_irb) {
-         brw->depthstencil.depth_offset =
-            intel_miptree_get_aligned_offset(
-               stencil_mt,
-               stencil_irb->draw_x & ~tile_mask_x,
-               stencil_irb->draw_y & ~tile_mask_y);
-      }
-   }
+   /* If there is no depth attachment, consider if stencil needs rebase. */
+   if (!depth_irb && stencil_irb)
+       rebase_depth_stencil(brw, stencil_irb, invalidate_stencil);
 }
 
 void
@@ -475,8 +264,8 @@ brw_emit_depthbuffer(struct brw_context *brw)
    /* _NEW_BUFFERS */
    struct intel_renderbuffer *depth_irb = intel_get_renderbuffer(fb, BUFFER_DEPTH);
    struct intel_renderbuffer *stencil_irb = intel_get_renderbuffer(fb, BUFFER_STENCIL);
-   struct intel_mipmap_tree *depth_mt = brw->depthstencil.depth_mt;
-   struct intel_mipmap_tree *stencil_mt = brw->depthstencil.stencil_mt;
+   struct intel_mipmap_tree *depth_mt = intel_renderbuffer_get_mt(depth_irb);
+   struct intel_mipmap_tree *stencil_mt = get_stencil_miptree(stencil_irb);
    uint32_t tile_x = brw->depthstencil.tile_x;
    uint32_t tile_y = brw->depthstencil.tile_y;
    bool hiz = depth_irb && intel_renderbuffer_has_hiz(depth_irb);
@@ -517,8 +306,8 @@ brw_emit_depthbuffer(struct brw_context *brw)
       /* Prior to Gen7, if using separate stencil, hiz must be enabled. */
       assert(brw->gen >= 7 || !separate_stencil || hiz);
 
-      assert(brw->gen < 6 || depth_mt->tiling == I915_TILING_Y);
-      assert(!hiz || depth_mt->tiling == I915_TILING_Y);
+      assert(brw->gen < 6 || depth_mt->surf.tiling == ISL_TILING_Y0);
+      assert(!hiz || depth_mt->surf.tiling == ISL_TILING_Y0);
 
       depthbuffer_format = brw_depthbuffer_format(brw);
       depth_surface_type = BRW_SURFACE_2D;
@@ -555,6 +344,21 @@ brw_emit_depthbuffer(struct brw_context *brw)
                                     width, height, tile_x, tile_y);
 }
 
+uint32_t
+brw_convert_depth_value(mesa_format format, float value)
+{
+   switch (format) {
+   case MESA_FORMAT_Z_FLOAT32:
+      return float_as_int(value);
+   case MESA_FORMAT_Z_UNORM16:
+      return value * ((1u << 16) - 1);
+   case MESA_FORMAT_Z24_UNORM_X8_UINT:
+      return value * ((1u << 24) - 1);
+   default:
+      unreachable("Invalid depth format");
+   }
+}
+
 void
 brw_emit_depth_stencil_hiz(struct brw_context *brw,
                            struct intel_mipmap_tree *depth_mt,
@@ -565,42 +369,21 @@ brw_emit_depth_stencil_hiz(struct brw_context *brw,
                            uint32_t width, uint32_t height,
                            uint32_t tile_x, uint32_t tile_y)
 {
-   /* Enable the hiz bit if we're doing separate stencil, because it and the
-    * separate stencil bit must have the same value. From Section 2.11.5.6.1.1
-    * 3DSTATE_DEPTH_BUFFER, Bit 1.21 "Separate Stencil Enable":
-    *     [DevIL]: If this field is enabled, Hierarchical Depth Buffer
-    *     Enable must also be enabled.
-    *
-    *     [DevGT]: This field must be set to the same value (enabled or
-    *     disabled) as Hierarchical Depth Buffer Enable
-    */
-   bool enable_hiz_ss = hiz || separate_stencil;
+   (void)hiz;
+   (void)separate_stencil;
+   (void)stencil_mt;
 
+   assert(!hiz);
+   assert(!separate_stencil);
 
-   /* 3DSTATE_DEPTH_BUFFER, 3DSTATE_STENCIL_BUFFER are both
-    * non-pipelined state that will need the PIPE_CONTROL workaround.
-    */
-   if (brw->gen == 6) {
-      brw_emit_depth_stall_flushes(brw);
-   }
-
-   unsigned int len;
-   if (brw->gen >= 6)
-      len = 7;
-   else if (brw->is_g4x || brw->gen == 5)
-      len = 6;
-   else
-      len = 5;
+   const unsigned len = (brw->is_g4x || brw->gen == 5) ? 6 : 5;
 
    BEGIN_BATCH(len);
    OUT_BATCH(_3DSTATE_DEPTH_BUFFER << 16 | (len - 2));
-   OUT_BATCH((depth_mt ? depth_mt->pitch - 1 : 0) |
+   OUT_BATCH((depth_mt ? depth_mt->surf.row_pitch - 1 : 0) |
              (depthbuffer_format << 18) |
-             ((enable_hiz_ss ? 1 : 0) << 21) | /* separate stencil enable */
-             ((enable_hiz_ss ? 1 : 0) << 22) | /* hiz enable */
              (BRW_TILEWALK_YMAJOR << 26) |
-             ((depth_mt ? depth_mt->tiling != I915_TILING_NONE : 1)
-              << 27) |
+             (1 << 27) |
              (depth_surface_type << 29));
 
    if (depth_mt) {
@@ -624,73 +407,6 @@ brw_emit_depth_stencil_hiz(struct brw_context *brw,
       OUT_BATCH(0);
 
    ADVANCE_BATCH();
-
-   if (hiz || separate_stencil) {
-      /*
-       * In the 3DSTATE_DEPTH_BUFFER batch emitted above, the 'separate
-       * stencil enable' and 'hiz enable' bits were set. Therefore we must
-       * emit 3DSTATE_HIER_DEPTH_BUFFER and 3DSTATE_STENCIL_BUFFER. Even if
-       * there is no stencil buffer, 3DSTATE_STENCIL_BUFFER must be emitted;
-       * failure to do so causes hangs on gen5 and a stall on gen6.
-       */
-
-      /* Emit hiz buffer. */
-      if (hiz) {
-         assert(depth_mt);
-	 BEGIN_BATCH(3);
-	 OUT_BATCH((_3DSTATE_HIER_DEPTH_BUFFER << 16) | (3 - 2));
-	 OUT_BATCH(depth_mt->hiz_buf->aux_base.pitch - 1);
-	 OUT_RELOC(depth_mt->hiz_buf->aux_base.bo,
-		   I915_GEM_DOMAIN_RENDER, I915_GEM_DOMAIN_RENDER,
-		   brw->depthstencil.hiz_offset);
-	 ADVANCE_BATCH();
-      } else {
-	 BEGIN_BATCH(3);
-	 OUT_BATCH((_3DSTATE_HIER_DEPTH_BUFFER << 16) | (3 - 2));
-	 OUT_BATCH(0);
-	 OUT_BATCH(0);
-	 ADVANCE_BATCH();
-      }
-
-      /* Emit stencil buffer. */
-      if (separate_stencil) {
-	 BEGIN_BATCH(3);
-	 OUT_BATCH((_3DSTATE_STENCIL_BUFFER << 16) | (3 - 2));
-         /* The stencil buffer has quirky pitch requirements.  From Vol 2a,
-          * 11.5.6.2.1 3DSTATE_STENCIL_BUFFER, field "Surface Pitch":
-          *    The pitch must be set to 2x the value computed based on width, as
-          *    the stencil buffer is stored with two rows interleaved.
-          */
-	 OUT_BATCH(2 * stencil_mt->pitch - 1);
-	 OUT_RELOC(stencil_mt->bo,
-		   I915_GEM_DOMAIN_RENDER, I915_GEM_DOMAIN_RENDER,
-		   brw->depthstencil.stencil_offset);
-	 ADVANCE_BATCH();
-      } else {
-	 BEGIN_BATCH(3);
-	 OUT_BATCH((_3DSTATE_STENCIL_BUFFER << 16) | (3 - 2));
-	 OUT_BATCH(0);
-	 OUT_BATCH(0);
-	 ADVANCE_BATCH();
-      }
-   }
-
-   /*
-    * On Gen >= 6, emit clear params for safety. If using hiz, then clear
-    * params must be emitted.
-    *
-    * From Section 2.11.5.6.4.1 3DSTATE_CLEAR_PARAMS:
-    *     3DSTATE_CLEAR_PARAMS packet must follow the DEPTH_BUFFER_STATE packet
-    *     when HiZ is enabled and the DEPTH_BUFFER_STATE changes.
-    */
-   if (brw->gen >= 6 || hiz) {
-      BEGIN_BATCH(2);
-      OUT_BATCH(_3DSTATE_CLEAR_PARAMS << 16 |
-		GEN5_DEPTH_CLEAR_VALID |
-		(2 - 2));
-      OUT_BATCH(depth_mt ? depth_mt->depth_clear_value : 0);
-      ADVANCE_BATCH();
-   }
 }
 
 const struct brw_tracked_state brw_depthbuffer = {
@@ -700,127 +416,6 @@ const struct brw_tracked_state brw_depthbuffer = {
              BRW_NEW_BLORP,
    },
    .emit = brw_emit_depthbuffer,
-};
-
-/**
- * Polygon stipple packet
- */
-static void
-upload_polygon_stipple(struct brw_context *brw)
-{
-   struct gl_context *ctx = &brw->ctx;
-   GLuint i;
-
-   /* _NEW_POLYGON */
-   if (!ctx->Polygon.StippleFlag)
-      return;
-
-   BEGIN_BATCH(33);
-   OUT_BATCH(_3DSTATE_POLY_STIPPLE_PATTERN << 16 | (33 - 2));
-
-   /* Polygon stipple is provided in OpenGL order, i.e. bottom
-    * row first.  If we're rendering to a window (i.e. the
-    * default frame buffer object, 0), then we need to invert
-    * it to match our pixel layout.  But if we're rendering
-    * to a FBO (i.e. any named frame buffer object), we *don't*
-    * need to invert - we already match the layout.
-    */
-   if (_mesa_is_winsys_fbo(ctx->DrawBuffer)) {
-      for (i = 0; i < 32; i++)
-	  OUT_BATCH(ctx->PolygonStipple[31 - i]); /* invert */
-   } else {
-      for (i = 0; i < 32; i++)
-	 OUT_BATCH(ctx->PolygonStipple[i]);
-   }
-   ADVANCE_BATCH();
-}
-
-const struct brw_tracked_state brw_polygon_stipple = {
-   .dirty = {
-      .mesa = _NEW_POLYGON |
-              _NEW_POLYGONSTIPPLE,
-      .brw = BRW_NEW_CONTEXT,
-   },
-   .emit = upload_polygon_stipple
-};
-
-/**
- * Polygon stipple offset packet
- */
-static void
-upload_polygon_stipple_offset(struct brw_context *brw)
-{
-   struct gl_context *ctx = &brw->ctx;
-
-   /* _NEW_POLYGON */
-   if (!ctx->Polygon.StippleFlag)
-      return;
-
-   BEGIN_BATCH(2);
-   OUT_BATCH(_3DSTATE_POLY_STIPPLE_OFFSET << 16 | (2-2));
-
-   /* _NEW_BUFFERS
-    *
-    * If we're drawing to a system window we have to invert the Y axis
-    * in order to match the OpenGL pixel coordinate system, and our
-    * offset must be matched to the window position.  If we're drawing
-    * to a user-created FBO then our native pixel coordinate system
-    * works just fine, and there's no window system to worry about.
-    */
-   if (_mesa_is_winsys_fbo(ctx->DrawBuffer))
-      OUT_BATCH((32 - (_mesa_geometric_height(ctx->DrawBuffer) & 31)) & 31);
-   else
-      OUT_BATCH(0);
-   ADVANCE_BATCH();
-}
-
-const struct brw_tracked_state brw_polygon_stipple_offset = {
-   .dirty = {
-      .mesa = _NEW_BUFFERS |
-              _NEW_POLYGON,
-      .brw = BRW_NEW_CONTEXT,
-   },
-   .emit = upload_polygon_stipple_offset
-};
-
-/**
- * Line stipple packet
- */
-static void
-upload_line_stipple(struct brw_context *brw)
-{
-   struct gl_context *ctx = &brw->ctx;
-   GLfloat tmp;
-   GLint tmpi;
-
-   if (!ctx->Line.StippleFlag)
-      return;
-
-   BEGIN_BATCH(3);
-   OUT_BATCH(_3DSTATE_LINE_STIPPLE_PATTERN << 16 | (3 - 2));
-   OUT_BATCH(ctx->Line.StipplePattern);
-
-   if (brw->gen >= 7) {
-      /* in U1.16 */
-      tmp = 1.0f / ctx->Line.StippleFactor;
-      tmpi = tmp * (1<<16);
-      OUT_BATCH(tmpi << 15 | ctx->Line.StippleFactor);
-   } else {
-      /* in U1.13 */
-      tmp = 1.0f / ctx->Line.StippleFactor;
-      tmpi = tmp * (1<<13);
-      OUT_BATCH(tmpi << 16 | ctx->Line.StippleFactor);
-   }
-
-   ADVANCE_BATCH();
-}
-
-const struct brw_tracked_state brw_line_stipple = {
-   .dirty = {
-      .mesa = _NEW_LINE,
-      .brw = BRW_NEW_CONTEXT,
-   },
-   .emit = upload_line_stipple
 };
 
 void

@@ -353,11 +353,14 @@ emit_hw_vs(struct svga_context *svga, unsigned dirty)
       /* No GS stream out */
       if (svga_have_vs_streamout(svga)) {
          /* Set VS stream out */
-         svga_set_stream_output(svga, vs->base.stream_output);
+         ret = svga_set_stream_output(svga, vs->base.stream_output);
       }
       else {
          /* turn off stream out */
-         svga_set_stream_output(svga, NULL);
+         ret = svga_set_stream_output(svga, NULL);
+      }
+      if (ret != PIPE_OK) {
+         goto done;
       }
    }
 

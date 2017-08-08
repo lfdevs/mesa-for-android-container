@@ -38,13 +38,20 @@
 
 /* driver param indices: */
 enum ir3_driver_param {
+	/* compute shader driver params: */
+	IR3_DP_NUM_WORK_GROUPS_X = 0,
+	IR3_DP_NUM_WORK_GROUPS_Y = 1,
+	IR3_DP_NUM_WORK_GROUPS_Z = 2,
+	IR3_DP_CS_COUNT   = 4,   /* must be aligned to vec4 */
+
+	/* vertex shader driver params: */
 	IR3_DP_VTXID_BASE = 0,
 	IR3_DP_VTXCNT_MAX = 1,
 	/* user-clip-plane components, up to 8x vec4's: */
 	IR3_DP_UCP0_X     = 4,
 	/* .... */
 	IR3_DP_UCP7_W     = 35,
-	IR3_DP_COUNT      = 36   /* must be aligned to vec4 */
+	IR3_DP_VS_COUNT   = 36   /* must be aligned to vec4 */
 };
 
 /* Configuration key used to identify a shader variant.. different
@@ -103,6 +110,57 @@ ir3_shader_key_equal(struct ir3_shader_key *a, struct ir3_shader_key *b)
 	if (a->has_per_samp || b->has_per_samp)
 		return memcmp(a, b, sizeof(struct ir3_shader_key)) == 0;
 	return a->global == b->global;
+}
+
+/* will the two keys produce different lowering for a fragment shader? */
+static inline bool
+ir3_shader_key_changes_fs(struct ir3_shader_key *key, struct ir3_shader_key *last_key)
+{
+	if (last_key->has_per_samp || key->has_per_samp) {
+		if ((last_key->fsaturate_s != key->fsaturate_s) ||
+				(last_key->fsaturate_t != key->fsaturate_t) ||
+				(last_key->fsaturate_r != key->fsaturate_r) ||
+				(last_key->fastc_srgb != key->fastc_srgb))
+			return true;
+	}
+
+	if (last_key->fclamp_color != key->fclamp_color)
+		return true;
+
+	if (last_key->color_two_side != key->color_two_side)
+		return true;
+
+	if (last_key->half_precision != key->half_precision)
+		return true;
+
+	if (last_key->rasterflat != key->rasterflat)
+		return true;
+
+	if (last_key->ucp_enables != key->ucp_enables)
+		return true;
+
+	return false;
+}
+
+/* will the two keys produce different lowering for a vertex shader? */
+static inline bool
+ir3_shader_key_changes_vs(struct ir3_shader_key *key, struct ir3_shader_key *last_key)
+{
+	if (last_key->has_per_samp || key->has_per_samp) {
+		if ((last_key->vsaturate_s != key->vsaturate_s) ||
+				(last_key->vsaturate_t != key->vsaturate_t) ||
+				(last_key->vsaturate_r != key->vsaturate_r) ||
+				(last_key->vastc_srgb != key->vastc_srgb))
+			return true;
+	}
+
+	if (last_key->vclamp_color != key->vclamp_color)
+		return true;
+
+	if (last_key->ucp_enables != key->ucp_enables)
+		return true;
+
+	return false;
 }
 
 struct ir3_shader_variant {
@@ -198,6 +256,9 @@ struct ir3_shader_variant {
 	/* do we have one or more texture sample instructions: */
 	bool has_samp;
 
+	/* do we have one or more SSBO instructions: */
+	bool has_ssbo;
+
 	/* do we have kill instructions: */
 	bool has_kill;
 
@@ -259,6 +320,10 @@ void * ir3_shader_assemble(struct ir3_shader_variant *v, uint32_t gpu_id);
 struct ir3_shader * ir3_shader_create(struct ir3_compiler *compiler,
 		const struct pipe_shader_state *cso, enum shader_t type,
 		struct pipe_debug_callback *debug);
+struct ir3_shader *
+ir3_shader_create_compute(struct ir3_compiler *compiler,
+		const struct pipe_compute_state *cso,
+		struct pipe_debug_callback *debug);
 void ir3_shader_destroy(struct ir3_shader *shader);
 struct ir3_shader_variant * ir3_shader_variant(struct ir3_shader *shader,
 		struct ir3_shader_key key, struct pipe_debug_callback *debug);
@@ -267,8 +332,12 @@ uint64_t ir3_shader_outputs(const struct ir3_shader *so);
 
 struct fd_ringbuffer;
 struct fd_context;
-void ir3_emit_consts(const struct ir3_shader_variant *v, struct fd_ringbuffer *ring,
-		struct fd_context *ctx, const struct pipe_draw_info *info, uint32_t dirty);
+void ir3_emit_vs_consts(const struct ir3_shader_variant *v, struct fd_ringbuffer *ring,
+		struct fd_context *ctx, const struct pipe_draw_info *info);
+void ir3_emit_fs_consts(const struct ir3_shader_variant *v, struct fd_ringbuffer *ring,
+		struct fd_context *ctx);
+void ir3_emit_cs_consts(const struct ir3_shader_variant *v, struct fd_ringbuffer *ring,
+		struct fd_context *ctx, const struct pipe_grid_info *info);
 
 static inline const char *
 ir3_shader_stage(struct ir3_shader *shader)

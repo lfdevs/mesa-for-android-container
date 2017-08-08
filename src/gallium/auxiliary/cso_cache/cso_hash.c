@@ -73,12 +73,6 @@ static int countBits(int hint)
    return numBits;
 }
 
-struct cso_node {
-   struct cso_node *next;
-   unsigned key;
-   void *value;
-};
-
 struct cso_hash_data {
    struct cso_node *fakeNext;
    struct cso_node **buckets;
@@ -87,13 +81,6 @@ struct cso_hash_data {
    short userNumBits;
    short numBits;
    int numBuckets;
-};
-
-struct cso_hash {
-   union {
-      struct cso_hash_data *d;
-      struct cso_node      *e;
-   } data;
 };
 
 static void *cso_data_allocate_node(struct cso_hash_data *hash)
@@ -293,13 +280,6 @@ unsigned cso_hash_iter_key(struct cso_hash_iter iter)
    return iter.node->key;
 }
 
-void * cso_hash_iter_data(struct cso_hash_iter iter)
-{
-   if (!iter.node || iter.hash->data.e == iter.node)
-      return 0;
-   return iter.node->value;
-}
-
 static struct cso_node *cso_hash_data_next(struct cso_node *node)
 {
    union {
@@ -372,13 +352,6 @@ struct cso_hash_iter cso_hash_iter_next(struct cso_hash_iter iter)
 {
    struct cso_hash_iter next = {iter.hash, cso_hash_data_next(iter.node)};
    return next;
-}
-
-int cso_hash_iter_is_null(struct cso_hash_iter iter)
-{
-   if (!iter.node || iter.node == iter.hash->data.e)
-      return 1;
-   return 0;
 }
 
 void * cso_hash_take(struct cso_hash *hash,

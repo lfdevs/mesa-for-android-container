@@ -84,7 +84,7 @@ pipe_loader_probe(struct pipe_loader_device **devs, int ndev);
  * \param dev Device the screen will be created for.
  */
 struct pipe_screen *
-pipe_loader_create_screen(struct pipe_loader_device *dev);
+pipe_loader_create_screen(struct pipe_loader_device *dev, unsigned flags);
 
 /**
  * Query the configuration parameters for the specified device.

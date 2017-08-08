@@ -39,7 +39,8 @@
     <enum name="format">
       <!-- The drm format codes match the #defines in drm_fourcc.h.
            The formats actually supported by the compositor will be
-           reported by the format event. -->
+           reported by the format event. New codes must not be added,
+           unless directly taken from drm_fourcc.h. -->
       <entry name="c8" value="0x20203843"/>
       <entry name="rgb332" value="0x38424752"/>
       <entry name="bgr233" value="0x38524742"/>

@@ -39,6 +39,7 @@
 #include "main/state.h"
 #include "main/dd.h"
 #include "main/fbobject.h"
+#include "main/state.h"
 
 #include "swrast/swrast.h"
 #include "swrast_setup/swrast_setup.h"

@@ -504,6 +504,7 @@ loader_dri3_copy_sub_buffer(struct loader_dri3_drawable *draw,
                                      x, y, width, height, __BLIT_FLAG_FLUSH);
    }
 
+   loader_dri3_swapbuffer_barrier(draw);
    dri3_fence_reset(draw->conn, back);
    dri3_copy_area(draw->conn,
                   dri3_back_buffer(draw)->pixmap,
@@ -595,6 +596,7 @@ loader_dri3_wait_gl(struct loader_dri3_drawable *draw)
                                   front->height,
                                   0, 0, front->width,
                                   front->height, __BLIT_FLAG_FLUSH);
+   loader_dri3_swapbuffer_barrier(draw);
    loader_dri3_copy_drawable(draw, draw->drawable, front->pixmap);
 }
 
@@ -640,7 +642,7 @@ loader_dri3_swap_buffers_msc(struct loader_dri3_drawable *draw,
 
    draw->vtable->flush_drawable(draw, flush_flags);
 
-   back = draw->buffers[LOADER_DRI3_BACK_ID(draw->cur_back)];
+   back = draw->buffers[dri3_find_back(draw)];
    if (draw->is_different_gpu && back) {
       /* Update the linear buffer before presenting the pixmap */
       draw->ext->image->blitImage(dri_context,
@@ -1258,6 +1260,7 @@ dri3_get_buffer(__DRIdrawable *driDrawable,
          }
          break;
       case loader_dri3_buffer_front:
+         loader_dri3_swapbuffer_barrier(draw);
          dri3_fence_reset(draw->conn, new_buffer);
          dri3_copy_area(draw->conn,
                         draw->drawable,
@@ -1430,4 +1433,19 @@ loader_dri3_update_drawable_geometry(struct loader_dri3_drawable *draw)
 
       free(geom_reply);
    }
+}
+
+
+/**
+ * Make sure the server has flushed all pending swap buffers to hardware
+ * for this drawable. Ideally we'd want to send an X protocol request to
+ * have the server block our connection until the swaps are complete. That
+ * would avoid the potential round-trip here.
+ */
+void
+loader_dri3_swapbuffer_barrier(struct loader_dri3_drawable *draw)
+{
+   int64_t ust, msc, sbc;
+
+   (void) loader_dri3_wait_for_sbc(draw, 0, &ust, &msc, &sbc);
 }

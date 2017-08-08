@@ -25,6 +25,7 @@
  */
 
 #include "si_pipe.h"
+#include "si_compute.h"
 #include "sid.h"
 #include "gfx9d.h"
 #include "sid_tables.h"
@@ -35,18 +36,33 @@
 DEBUG_GET_ONCE_OPTION(replace_shaders, "RADEON_REPLACE_SHADERS", NULL)
 
 static void si_dump_shader(struct si_screen *sscreen,
-			   struct si_shader_ctx_state *state, FILE *f)
+			   enum pipe_shader_type processor,
+			   const struct si_shader *shader, FILE *f)
 {
-	struct si_shader *current = state->current;
+	if (shader->shader_log)
+		fwrite(shader->shader_log, shader->shader_log_size, 1, f);
+	else
+		si_shader_dump(sscreen, shader, NULL, processor, f, false);
+}
+
+static void si_dump_gfx_shader(struct si_screen *sscreen,
+			       const struct si_shader_ctx_state *state, FILE *f)
+{
+	const struct si_shader *current = state->current;
 
 	if (!state->cso || !current)
 		return;
 
-	if (current->shader_log)
-		fwrite(current->shader_log, current->shader_log_size, 1, f);
-	else
-		si_shader_dump(sscreen, state->current, NULL,
-			       state->cso->info.processor, f, false);
+	si_dump_shader(sscreen, state->cso->info.processor, current, f);
+}
+
+static void si_dump_compute_shader(struct si_screen *sscreen,
+				   const struct si_cs_shader_state *state, FILE *f)
+{
+	if (!state->program || state->program != state->emitted_program)
+		return;
+
+	si_dump_shader(sscreen, PIPE_SHADER_COMPUTE, &state->program->shader, f);
 }
 
 /**
@@ -328,7 +344,7 @@ static void si_dump_bo_list(struct si_context *sctx,
 
 		/* Print the usage. */
 		for (j = 0; j < 64; j++) {
-			if (!(saved->bo_list[i].priority_usage & (1llu << j)))
+			if (!(saved->bo_list[i].priority_usage & (1ull << j)))
 				continue;
 
 			fprintf(f, "%s%s", !hit ? "" : ", ", priority_to_string(j));
@@ -364,27 +380,29 @@ static void si_dump_framebuffer(struct si_context *sctx, FILE *f)
 	}
 }
 
+typedef unsigned (*slot_remap_func)(unsigned);
+
 static void si_dump_descriptor_list(struct si_descriptors *desc,
 				    const char *shader_name,
 				    const char *elem_name,
+				    unsigned element_dw_size,
 				    unsigned num_elements,
+				    slot_remap_func slot_remap,
 				    FILE *f)
 {
 	unsigned i, j;
-	uint32_t *cpu_list = desc->list;
-	uint32_t *gpu_list = desc->gpu_list;
-	const char *list_note = "GPU list";
-
-	if (!gpu_list) {
-		gpu_list = cpu_list;
-		list_note = "CPU list";
-	}
 
 	for (i = 0; i < num_elements; i++) {
+		unsigned dw_offset = slot_remap(i) * element_dw_size;
+		uint32_t *gpu_ptr = desc->gpu_list ? desc->gpu_list : desc->list;
+		const char *list_note = desc->gpu_list ? "GPU list" : "CPU list";
+		uint32_t *cpu_list = desc->list + dw_offset;
+		uint32_t *gpu_list = gpu_ptr + dw_offset;
+
 		fprintf(f, COLOR_GREEN "%s%s slot %u (%s):" COLOR_RESET "\n",
 			shader_name, elem_name, i, list_note);
 
-		switch (desc->element_dw_size) {
+		switch (element_dw_size) {
 		case 4:
 			for (j = 0; j < 4; j++)
 				ac_dump_reg(f, R_008F00_SQ_BUF_RSRC_WORD0 + j*4,
@@ -428,46 +446,85 @@ static void si_dump_descriptor_list(struct si_descriptors *desc,
 		}
 
 		fprintf(f, "\n");
-		gpu_list += desc->element_dw_size;
-		cpu_list += desc->element_dw_size;
 	}
 }
 
+static unsigned si_identity(unsigned slot)
+{
+	return slot;
+}
+
 static void si_dump_descriptors(struct si_context *sctx,
-				struct si_shader_ctx_state *state,
-				FILE *f)
+				enum pipe_shader_type processor,
+				const struct tgsi_shader_info *info, FILE *f)
+{
+	struct si_descriptors *descs =
+		&sctx->descriptors[SI_DESCS_FIRST_SHADER +
+				   processor * SI_NUM_SHADER_DESCS];
+	static const char *shader_name[] = {"VS", "PS", "GS", "TCS", "TES", "CS"};
+	const char *name = shader_name[processor];
+	unsigned enabled_constbuf, enabled_shaderbuf, enabled_samplers;
+	unsigned enabled_images;
+
+	if (info) {
+		enabled_constbuf = info->const_buffers_declared;
+		enabled_shaderbuf = info->shader_buffers_declared;
+		enabled_samplers = info->samplers_declared;
+		enabled_images = info->images_declared;
+	} else {
+		enabled_constbuf = sctx->const_and_shader_buffers[processor].enabled_mask >>
+				   SI_NUM_SHADER_BUFFERS;
+		enabled_shaderbuf = sctx->const_and_shader_buffers[processor].enabled_mask &
+				    u_bit_consecutive(0, SI_NUM_SHADER_BUFFERS);
+		enabled_shaderbuf = util_bitreverse(enabled_shaderbuf) >>
+				    (32 - SI_NUM_SHADER_BUFFERS);
+		enabled_samplers = sctx->samplers[processor].views.enabled_mask;
+		enabled_images = sctx->images[processor].enabled_mask;
+	}
+
+	if (processor == PIPE_SHADER_VERTEX) {
+		assert(info); /* only CS may not have an info struct */
+
+		si_dump_descriptor_list(&sctx->vertex_buffers, name,
+					" - Vertex buffer", 4, info->num_inputs,
+					si_identity, f);
+	}
+
+	si_dump_descriptor_list(&descs[SI_SHADER_DESCS_CONST_AND_SHADER_BUFFERS],
+				name, " - Constant buffer", 4,
+				util_last_bit(enabled_constbuf),
+				si_get_constbuf_slot, f);
+	si_dump_descriptor_list(&descs[SI_SHADER_DESCS_CONST_AND_SHADER_BUFFERS],
+				name, " - Shader buffer", 4,
+				util_last_bit(enabled_shaderbuf),
+				si_get_shaderbuf_slot, f);
+	si_dump_descriptor_list(&descs[SI_SHADER_DESCS_SAMPLERS_AND_IMAGES],
+				name, " - Sampler", 16,
+				util_last_bit(enabled_samplers),
+				si_get_sampler_slot, f);
+	si_dump_descriptor_list(&descs[SI_SHADER_DESCS_SAMPLERS_AND_IMAGES],
+				name, " - Image", 8,
+				util_last_bit(enabled_images),
+				si_get_image_slot, f);
+}
+
+static void si_dump_gfx_descriptors(struct si_context *sctx,
+				    const struct si_shader_ctx_state *state,
+				    FILE *f)
 {
 	if (!state->cso || !state->current)
 		return;
 
-	unsigned type = state->cso->type;
-	const struct tgsi_shader_info *info = &state->cso->info;
-	struct si_descriptors *descs =
-		&sctx->descriptors[SI_DESCS_FIRST_SHADER +
-				   type * SI_NUM_SHADER_DESCS];
-	static const char *shader_name[] = {"VS", "PS", "GS", "TCS", "TES", "CS"};
+	si_dump_descriptors(sctx, state->cso->type, &state->cso->info, f);
+}
 
-	static const char *elem_name[] = {
-		" - Constant buffer",
-		" - Shader buffer",
-		" - Sampler",
-		" - Image",
-	};
-	unsigned num_elements[] = {
-		util_last_bit(info->const_buffers_declared),
-		util_last_bit(info->shader_buffers_declared),
-		util_last_bit(info->samplers_declared),
-		util_last_bit(info->images_declared),
-	};
+static void si_dump_compute_descriptors(struct si_context *sctx, FILE *f)
+{
+	if (!sctx->cs_shader_state.program ||
+	    sctx->cs_shader_state.program != sctx->cs_shader_state.emitted_program)
+		return;
 
-	if (type == PIPE_SHADER_VERTEX) {
-		si_dump_descriptor_list(&sctx->vertex_buffers, shader_name[type],
-					" - Vertex buffer", info->num_inputs, f);
-	}
-
-	for (unsigned i = 0; i < SI_NUM_SHADER_DESCS; ++i, ++descs)
-		si_dump_descriptor_list(descs, shader_name[type], elem_name[i],
-					num_elements[i], f);
+	si_dump_descriptors(sctx, PIPE_SHADER_COMPUTE, NULL, f);
 }
 
 struct si_shader_inst {
@@ -639,6 +696,14 @@ static void si_print_annotated_shader(struct si_shader *shader,
 		si_add_split_disasm(shader->prolog->binary.disasm_string,
 				    start_addr, &num_inst, instructions);
 	}
+	if (shader->previous_stage) {
+		si_add_split_disasm(shader->previous_stage->binary.disasm_string,
+				    start_addr, &num_inst, instructions);
+	}
+	if (shader->prolog2) {
+		si_add_split_disasm(shader->prolog2->binary.disasm_string,
+				    start_addr, &num_inst, instructions);
+	}
 	si_add_split_disasm(shader->binary.disasm_string,
 			    start_addr, &num_inst, instructions);
 	if (shader->epilog) {
@@ -745,11 +810,12 @@ static void si_dump_debug_state(struct pipe_context *ctx, FILE *f,
 		si_dump_framebuffer(sctx, f);
 
 	if (flags & PIPE_DUMP_CURRENT_SHADERS) {
-		si_dump_shader(sctx->screen, &sctx->vs_shader, f);
-		si_dump_shader(sctx->screen, &sctx->tcs_shader, f);
-		si_dump_shader(sctx->screen, &sctx->tes_shader, f);
-		si_dump_shader(sctx->screen, &sctx->gs_shader, f);
-		si_dump_shader(sctx->screen, &sctx->ps_shader, f);
+		si_dump_gfx_shader(sctx->screen, &sctx->vs_shader, f);
+		si_dump_gfx_shader(sctx->screen, &sctx->tcs_shader, f);
+		si_dump_gfx_shader(sctx->screen, &sctx->tes_shader, f);
+		si_dump_gfx_shader(sctx->screen, &sctx->gs_shader, f);
+		si_dump_gfx_shader(sctx->screen, &sctx->ps_shader, f);
+		si_dump_compute_shader(sctx->screen, &sctx->cs_shader_state, f);
 
 		if (flags & PIPE_DUMP_DEVICE_STATUS_REGISTERS) {
 			si_dump_annotated_shaders(sctx, f);
@@ -758,12 +824,14 @@ static void si_dump_debug_state(struct pipe_context *ctx, FILE *f,
 		}
 
 		si_dump_descriptor_list(&sctx->descriptors[SI_DESCS_RW_BUFFERS],
-					"", "RW buffers", SI_NUM_RW_BUFFERS, f);
-		si_dump_descriptors(sctx, &sctx->vs_shader, f);
-		si_dump_descriptors(sctx, &sctx->tcs_shader, f);
-		si_dump_descriptors(sctx, &sctx->tes_shader, f);
-		si_dump_descriptors(sctx, &sctx->gs_shader, f);
-		si_dump_descriptors(sctx, &sctx->ps_shader, f);
+					"", "RW buffers", 4, SI_NUM_RW_BUFFERS,
+					si_identity, f);
+		si_dump_gfx_descriptors(sctx, &sctx->vs_shader, f);
+		si_dump_gfx_descriptors(sctx, &sctx->tcs_shader, f);
+		si_dump_gfx_descriptors(sctx, &sctx->tes_shader, f);
+		si_dump_gfx_descriptors(sctx, &sctx->gs_shader, f);
+		si_dump_gfx_descriptors(sctx, &sctx->ps_shader, f);
+		si_dump_compute_descriptors(sctx, f);
 	}
 
 	if (flags & PIPE_DUMP_LAST_COMMAND_BUFFER) {
@@ -798,7 +866,7 @@ static void si_dump_dma(struct si_context *sctx,
 	fprintf(f, "SDMA Dump Done.\n");
 }
 
-static bool si_vm_fault_occured(struct si_context *sctx, uint32_t *out_addr)
+static bool si_vm_fault_occured(struct si_context *sctx, uint64_t *out_addr)
 {
 	char line[2000];
 	unsigned sec, usec;
@@ -826,7 +894,7 @@ static bool si_vm_fault_occured(struct si_context *sctx, uint32_t *out_addr)
 			}
 			continue;
 		}
-		timestamp = sec * 1000000llu + usec;
+		timestamp = sec * 1000000ull + usec;
 
 		/* If just updating the timestamp. */
 		if (!out_addr)
@@ -853,18 +921,35 @@ static bool si_vm_fault_occured(struct si_context *sctx, uint32_t *out_addr)
 		}
 		msg++;
 
+		const char *header_line, *addr_line_prefix, *addr_line_format;
+
+		if (sctx->b.chip_class >= GFX9) {
+			/* Match this:
+			 * ..: [gfxhub] VMC page fault (src_id:0 ring:158 vm_id:2 pas_id:0)
+			 * ..:   at page 0x0000000219f8f000 from 27
+			 * ..: VM_L2_PROTECTION_FAULT_STATUS:0x0020113C
+			 */
+			header_line = "VMC page fault";
+			addr_line_prefix = "   at page";
+			addr_line_format = "%"PRIx64;
+		} else {
+			header_line = "GPU fault detected:";
+			addr_line_prefix = "VM_CONTEXT1_PROTECTION_FAULT_ADDR";
+			addr_line_format = "%"PRIX64;
+		}
+
 		switch (progress) {
 		case 0:
-			if (strstr(msg, "GPU fault detected:"))
+			if (strstr(msg, header_line))
 				progress = 1;
 			break;
 		case 1:
-			msg = strstr(msg, "VM_CONTEXT1_PROTECTION_FAULT_ADDR");
+			msg = strstr(msg, addr_line_prefix);
 			if (msg) {
 				msg = strstr(msg, "0x");
 				if (msg) {
 					msg += 2;
-					if (sscanf(msg, "%X", out_addr) == 1)
+					if (sscanf(msg, addr_line_format, out_addr) == 1)
 						fault = true;
 				}
 			}
@@ -887,7 +972,7 @@ void si_check_vm_faults(struct r600_common_context *ctx,
 	struct si_context *sctx = (struct si_context *)ctx;
 	struct pipe_screen *screen = sctx->b.b.screen;
 	FILE *f;
-	uint32_t addr;
+	uint64_t addr;
 	char cmd_line[4096];
 
 	if (!si_vm_fault_occured(sctx, &addr))
@@ -903,7 +988,7 @@ void si_check_vm_faults(struct r600_common_context *ctx,
 	fprintf(f, "Driver vendor: %s\n", screen->get_vendor(screen));
 	fprintf(f, "Device vendor: %s\n", screen->get_device_vendor(screen));
 	fprintf(f, "Device name: %s\n\n", screen->get_name(screen));
-	fprintf(f, "Failing VM page: 0x%08x\n\n", addr);
+	fprintf(f, "Failing VM page: 0x%08"PRIx64"\n\n", addr);
 
 	if (sctx->apitrace_call_number)
 		fprintf(f, "Last apitrace call: %u\n\n",

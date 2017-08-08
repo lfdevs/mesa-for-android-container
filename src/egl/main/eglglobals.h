@@ -87,4 +87,10 @@ static inline unsigned int DebugBitFromType(EGLenum type)
 extern const char *
 _eglGetClientExtensionString(void);
 
+/**
+ * Perform validity checks on a generic pointer.
+ */
+extern EGLBoolean
+_eglPointerIsDereferencable(void *p);
+
 #endif /* EGLGLOBALS_INCLUDED */

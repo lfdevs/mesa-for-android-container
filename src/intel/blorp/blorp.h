@@ -75,6 +75,9 @@ enum blorp_batch_flags {
     * hardware.
     */
    BLORP_BATCH_NO_EMIT_DEPTH_STENCIL = (1 << 0),
+
+   /* This flag indicates that the blorp call should be predicated. */
+   BLORP_BATCH_PREDICATE_ENABLE      = (1 << 1),
 };
 
 struct blorp_batch {
@@ -191,6 +194,23 @@ blorp_ccs_resolve(struct blorp_batch *batch,
                   enum isl_format format,
                   enum blorp_fast_clear_op resolve_op);
 
+/* Resolves subresources of the image subresource range specified in the
+ * binding table.
+ */
+void
+blorp_ccs_resolve_attachment(struct blorp_batch *batch,
+                             const uint32_t binding_table_offset,
+                             struct blorp_surf * const surf,
+                             const uint32_t level, const uint32_t num_layers,
+                             const enum isl_format format,
+                             const enum blorp_fast_clear_op resolve_op);
+
+void
+blorp_mcs_partial_resolve(struct blorp_batch *batch,
+                          struct blorp_surf *surf,
+                          enum isl_format format,
+                          uint32_t start_layer, uint32_t num_layers);
+
 /**
  * For an overview of the HiZ operations, see the following sections of the
  * Sandy Bridge PRM, Volume 1, Part2:
@@ -209,9 +229,9 @@ enum blorp_hiz_op {
 };
 
 void
-blorp_gen6_hiz_op(struct blorp_batch *batch,
-                  struct blorp_surf *surf, unsigned level, unsigned layer,
-                  enum blorp_hiz_op op);
+blorp_hiz_op(struct blorp_batch *batch, struct blorp_surf *surf,
+             uint32_t level, uint32_t start_layer, uint32_t num_layers,
+             enum blorp_hiz_op op);
 
 #ifdef __cplusplus
 } /* end extern "C" */

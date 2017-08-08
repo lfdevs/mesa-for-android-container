@@ -26,6 +26,3 @@ libradeon_la_LDFLAGS = \
 	$(LLVM_LDFLAGS)
 
 endif
-
-EXTRA_DIST = \
-	LLVM_REVISION.txt

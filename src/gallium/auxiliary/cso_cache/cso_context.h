@@ -59,7 +59,7 @@ enum pipe_error cso_set_rasterizer( struct cso_context *cso,
                                     const struct pipe_rasterizer_state *rasterizer );
 
 
-enum pipe_error
+void
 cso_set_samplers(struct cso_context *cso,
                  enum pipe_shader_type shader_stage,
                  unsigned count,
@@ -69,7 +69,7 @@ cso_set_samplers(struct cso_context *cso,
 /* Alternate interface to support state trackers that like to modify
  * samplers one at a time:
  */
-enum pipe_error
+void
 cso_single_sampler(struct cso_context *cso, enum pipe_shader_type shader_stage,
                    unsigned idx, const struct pipe_sampler_state *states);
 
@@ -220,10 +220,6 @@ void cso_restore_constant_buffer_slot0(struct cso_context *cso,
 
 
 /* drawing */
-
-void
-cso_set_index_buffer(struct cso_context *cso,
-                     const struct pipe_index_buffer *ib);
 
 void
 cso_draw_vbo(struct cso_context *cso,

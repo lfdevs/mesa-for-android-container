@@ -168,7 +168,7 @@ vbo_draw_indirect_prims(struct gl_context *ctx,
    }
 
    vbo->draw_prims(ctx, prim, draw_count,
-                   ib, false, ~0, ~0,
+                   ib, false, 0, ~0,
                    NULL, 0,
                    ctx->DrawIndirectBuffer);
 
@@ -224,12 +224,6 @@ GLboolean _vbo_CreateContext( struct gl_context *ctx )
    _math_init_eval();
 
    return GL_TRUE;
-}
-
-
-void _vbo_InvalidateState( struct gl_context *ctx, GLbitfield new_state )
-{
-   vbo_exec_invalidate_state(ctx, new_state);
 }
 
 

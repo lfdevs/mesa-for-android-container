@@ -51,6 +51,7 @@
 #define SWR_NEW_FRAMEBUFFER (1 << 15)
 #define SWR_NEW_CLIP (1 << 16)
 #define SWR_NEW_SO (1 << 17)
+#define SWR_LARGE_CLIENT_DRAW (1<<18) // Indicates client draw will block
 
 namespace std
 {
@@ -101,7 +102,8 @@ struct swr_draw_context {
    uint32_t polyStipple[32];
 
    SWR_SURFACE_STATE renderTargets[SWR_NUM_ATTACHMENTS];
-   void *pStats;
+   struct swr_query_result *pStats; // @llvm_struct
+   SWR_INTERFACE *pAPI; // @llvm_struct - Needed for the swr_memory callbacks
 };
 
 /* gen_llvm_types FINI */
@@ -137,7 +139,6 @@ struct swr_context {
 
    struct pipe_viewport_state viewport;
    struct pipe_vertex_buffer vertex_buffer[PIPE_MAX_ATTRIBS];
-   struct pipe_index_buffer index_buffer;
 
    struct blitter_context *blitter;
 
@@ -170,6 +171,8 @@ struct swr_context {
    struct swr_draw_context swrDC;
 
    unsigned dirty; /**< Mask of SWR_NEW_x flags */
+
+   SWR_INTERFACE api;
 };
 
 static INLINE struct swr_context *
@@ -183,7 +186,7 @@ swr_update_draw_context(struct swr_context *ctx,
       struct swr_query_result *pqr = nullptr)
 {
    swr_draw_context *pDC =
-      (swr_draw_context *)SwrGetPrivateContextState(ctx->swrContext);
+      (swr_draw_context *)ctx->api.pfnSwrGetPrivateContextState(ctx->swrContext);
    if (pqr)
       ctx->swrDC.pStats = pqr;
    memcpy(pDC, &ctx->swrDC, sizeof(swr_draw_context));

@@ -28,6 +28,7 @@
 #include "main/glheader.h"
 #include "main/image.h"
 #include "main/state.h"
+#include "main/stencil.h"
 #include "main/mtypes.h"
 #include "main/condrender.h"
 #include "main/fbobject.h"
@@ -111,14 +112,14 @@ do_blit_copypixels(struct gl_context * ctx,
       return false;
    }
 
-   if (ctx->Stencil._Enabled) {
+   if (_mesa_stencil_is_enabled(ctx)) {
       perf_debug("glCopyPixels(): Unsupported stencil test state\n");
       return false;
    }
 
    if (ctx->Fog.Enabled ||
        ctx->Texture._MaxEnabledTexImageUnit != -1 ||
-       ctx->FragmentProgram._Enabled) {
+       _mesa_arb_fragment_program_enabled(ctx)) {
       perf_debug("glCopyPixels(): Unsupported fragment shader state\n");
       return false;
    }

@@ -345,7 +345,7 @@ VkResult anv_CreateDescriptorPool(
    pool->free_list = EMPTY;
 
    anv_state_stream_init(&pool->surface_state_stream,
-                         &device->surface_state_block_pool);
+                         &device->surface_state_pool, 4096);
    pool->surface_state_free_list = NULL;
 
    *pDescriptorPool = anv_descriptor_pool_to_handle(pool);
@@ -380,7 +380,7 @@ VkResult anv_ResetDescriptorPool(
    pool->free_list = EMPTY;
    anv_state_stream_finish(&pool->surface_state_stream);
    anv_state_stream_init(&pool->surface_state_stream,
-                         &device->surface_state_block_pool);
+                         &device->surface_state_pool, 4096);
    pool->surface_state_free_list = NULL;
 
    return VK_SUCCESS;
@@ -615,12 +615,9 @@ anv_descriptor_set_write_image_view(struct anv_descriptor_set *set,
 
    *desc = (struct anv_descriptor) {
       .type = type,
+      .layout = info->imageLayout,
       .image_view = image_view,
       .sampler = sampler,
-      .aux_usage = image_view == NULL ? ISL_AUX_USAGE_NONE :
-                   anv_layout_to_aux_usage(devinfo, image_view->image,
-                                           image_view->aspect_mask,
-                                           info->imageLayout),
    };
 }
 

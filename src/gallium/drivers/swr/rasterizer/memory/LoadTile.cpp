@@ -53,7 +53,7 @@ static std::mutex sBucketMutex;
 /// @param renderTargetIndex - Index to src render target
 /// @param x, y - Coordinates to raster tile.
 /// @param pDstHotTile - Pointer to Hot Tile
-void LoadHotTile(
+void SwrLoadHotTile(
     const SWR_SURFACE_STATE *pSrcSurface,
     SWR_FORMAT dstFormat,
     SWR_RENDERTARGET_ATTACHMENT renderTargetIndex,

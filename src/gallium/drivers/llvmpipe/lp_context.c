@@ -96,7 +96,7 @@ static void llvmpipe_destroy( struct pipe_context *pipe )
    }
 
    for (i = 0; i < llvmpipe->num_vertex_buffers; i++) {
-      pipe_resource_reference(&llvmpipe->vertex_buffer[i].buffer, NULL);
+      pipe_vertex_buffer_unreference(&llvmpipe->vertex_buffer[i]);
    }
 
    lp_delete_setup_variants(llvmpipe);
@@ -119,10 +119,10 @@ do_flush( struct pipe_context *pipe,
 
 
 static void
-llvmpipe_render_condition ( struct pipe_context *pipe,
-                            struct pipe_query *query,
-                            boolean condition,
-                            uint mode )
+llvmpipe_render_condition(struct pipe_context *pipe,
+                          struct pipe_query *query,
+                          boolean condition,
+                          enum pipe_render_cond_flag mode)
 {
    struct llvmpipe_context *llvmpipe = llvmpipe_context( pipe );
 

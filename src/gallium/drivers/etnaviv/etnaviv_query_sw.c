@@ -50,6 +50,8 @@ read_counter(struct etna_context *ctx, int type)
       return ctx->stats.prims_emitted;
    case ETNA_QUERY_DRAW_CALLS:
       return ctx->stats.draw_calls;
+   case ETNA_QUERY_RS_OPERATIONS:
+      return ctx->stats.rs_operations;
    }
 
    return 0;
@@ -106,6 +108,7 @@ etna_sw_create_query(struct etna_context *ctx, unsigned query_type)
    switch (query_type) {
    case PIPE_QUERY_PRIMITIVES_EMITTED:
    case ETNA_QUERY_DRAW_CALLS:
+   case ETNA_QUERY_RS_OPERATIONS:
       break;
    default:
       return NULL;

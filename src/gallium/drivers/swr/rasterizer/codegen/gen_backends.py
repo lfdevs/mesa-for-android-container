@@ -1,7 +1,7 @@
 # Copyright (C) 2017 Intel Corporation.   All Rights Reserved.
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
-# copy of this software and associated documentation files (the "Software"),
+# copy of this software and associated documentation files (the 'Software'),
 # to deal in the Software without restriction, including without limitation
 # the rights to use, copy, modify, merge, publish, distribute, sublicense,
 # and/or sell copies of the Software, and to permit persons to whom the
@@ -11,7 +11,7 @@
 # paragraph) shall be included in all copies or substantial portions of the
 # Software.
 #
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# THE SOFTWARE IS PROVIDED 'AS IS', WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 # IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 # FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
 # THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
@@ -31,23 +31,41 @@ from gen_common import ArgumentParser, MakoTemplateWriter
 
 def main(args=sys.argv[1:]):
     thisDir = os.path.dirname(os.path.realpath(__file__))
-    parser = ArgumentParser("Generate files and initialization functions for all permutuations of BackendPixelRate.")
-    parser.add_argument('--dim', help="gBackendPixelRateTable array dimensions", nargs='+', type=int, required=True)
-    parser.add_argument('--outdir', help="output directory", nargs='?', type=str, default=thisDir)
-    parser.add_argument('--split', help="how many lines of initialization per file [0=no split]", nargs='?', type=int, default='512')
-    parser.add_argument('--cpp', help="Generate cpp file(s)", action='store_true', default=False)
-    parser.add_argument('--cmake', help="Generate cmake file", action='store_true', default=False)
+    parser = ArgumentParser('Generate files and initialization functions for all permutuations of BackendPixelRate.')
+    parser.add_argument('--dim', help='gBackendPixelRateTable array dimensions', nargs='+', type=int, required=True)
+    parser.add_argument('--outdir', help='output directory', nargs='?', type=str, default=thisDir)
+    parser.add_argument('--split', help='how many lines of initialization per file [0=no split]', nargs='?', type=int, default='512')
+    parser.add_argument('--numfiles', help='how many output files to generate', nargs='?', type=int, default='0')
+    parser.add_argument('--cpp', help='Generate cpp file(s)', action='store_true', default=False)
+    parser.add_argument('--hpp', help='Generate hpp file', action='store_true', default=False)
+    parser.add_argument('--cmake', help='Generate cmake file', action='store_true', default=False)
+    parser.add_argument('--rast', help='Generate rasterizer functions instead of normal backend', action='store_true', default=False)
 
-    args = parser.parse_args(args);
+    args = parser.parse_args(args)
+
 
     class backendStrs :
         def __init__(self) :
             self.outFileName = 'gen_BackendPixelRate%s.cpp'
+            self.outHeaderName = 'gen_BackendPixelRate.hpp'
             self.functionTableName = 'gBackendPixelRateTable'
             self.funcInstanceHeader = ' = BackendPixelRate<SwrBackendTraits<'
             self.template = 'gen_backend.cpp'
+            self.hpp_template = 'gen_header_init.hpp'
             self.cmakeFileName = 'gen_backends.cmake'
             self.cmakeSrcVar = 'GEN_BACKEND_SOURCES'
+            self.tableName = 'BackendPixelRate'
+
+            if args.rast:
+                self.outFileName = 'gen_rasterizer%s.cpp'
+                self.outHeaderName = 'gen_rasterizer.hpp'
+                self.functionTableName = 'gRasterizerFuncs'
+                self.funcInstanceHeader = ' = RasterizeTriangle<RasterizerTraits<'
+                self.template = 'gen_rasterizer.cpp'
+                self.cmakeFileName = 'gen_rasterizer.cmake'
+                self.cmakeSrcVar = 'GEN_RASTERIZER_SOURCES'
+                self.tableName = 'RasterizerFuncs'
+
 
     backend = backendStrs()
 
@@ -77,6 +95,8 @@ def main(args=sys.argv[1:]):
         numFiles = 1
     else:
         numFiles = (len(output_list) + args.split - 1) // args.split
+    if (args.numfiles != 0):
+        numFiles = args.numfiles
     linesPerFile = (len(output_list) + numFiles - 1) // numFiles
     chunkedList = [output_list[x:x+linesPerFile] for x in range(0, len(output_list), linesPerFile)]
 
@@ -87,7 +107,6 @@ def main(args=sys.argv[1:]):
 
         for fileNum in range(numFiles):
             filename = baseCppName % str(fileNum)
-            #print('Generating', filename)
             MakoTemplateWriter.to_file(
                 templateCpp,
                 baseCppName % str(fileNum),
@@ -95,11 +114,23 @@ def main(args=sys.argv[1:]):
                 fileNum=fileNum,
                 funcList=chunkedList[fileNum])
 
+    if args.hpp:
+        baseHppName = os.path.join(args.outdir, backend.outHeaderName)
+        templateHpp = os.path.join(thisDir, 'templates', backend.hpp_template)
+
+        MakoTemplateWriter.to_file(
+            templateHpp,
+            baseHppName,
+            cmdline=sys.argv,
+            numFiles=numFiles,
+            filename=backend.outHeaderName,
+            tableName=backend.tableName)
+
     # generate gen_backend.cmake file
     if args.cmake:
         templateCmake = os.path.join(thisDir, 'templates', 'gen_backend.cmake')
         cmakeFile = os.path.join(args.outdir, backend.cmakeFileName)
-        #print('Generating', cmakeFile)
+
         MakoTemplateWriter.to_file(
             templateCmake,
             cmakeFile,
@@ -107,8 +138,6 @@ def main(args=sys.argv[1:]):
             srcVar=backend.cmakeSrcVar,
             numFiles=numFiles,
             baseCppName='${RASTY_GEN_SRC_DIR}/backends/' + os.path.basename(baseCppName))
-
-    #print("Generated %d template instantiations in %d files" % (len(output_list), numFiles))
 
     return 0
 

@@ -70,8 +70,10 @@ namespace clover {
 
 #if HAVE_LLVM >= 0x0500
          const auto lang_as_offset = 0;
+         const clang::InputKind ik_opencl = clang::InputKind::OpenCL;
 #else
          const auto lang_as_offset = clang::LangAS::Offset;
+         const clang::InputKind ik_opencl = clang::IK_OpenCL;
 #endif
 
          inline void

@@ -126,7 +126,7 @@ namespace {
       c->getDiagnosticOpts().ShowCarets = false;
 
       compat::set_lang_defaults(c->getInvocation(), c->getLangOpts(),
-                                clang::IK_OpenCL, ::llvm::Triple(target.triple),
+                                compat::ik_opencl, ::llvm::Triple(target.triple),
                                 c->getPreprocessorOpts(),
                                 clang::LangStandard::lang_opencl11);
 

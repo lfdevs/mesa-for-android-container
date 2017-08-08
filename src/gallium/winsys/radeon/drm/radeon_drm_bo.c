@@ -611,8 +611,6 @@ static struct radeon_bo *radeon_create_bo(struct radeon_drm_winsys *rws,
 
     if (flags & RADEON_FLAG_GTT_WC)
         args.flags |= RADEON_GEM_GTT_WC;
-    if (flags & RADEON_FLAG_CPU_ACCESS)
-        args.flags |= RADEON_GEM_CPU_ACCESS;
     if (flags & RADEON_FLAG_NO_CPU_ACCESS)
         args.flags |= RADEON_GEM_NO_CPU_ACCESS;
 
@@ -731,30 +729,12 @@ struct pb_slab *radeon_bo_slab_alloc(void *priv, unsigned heap,
 {
     struct radeon_drm_winsys *ws = priv;
     struct radeon_slab *slab = CALLOC_STRUCT(radeon_slab);
-    enum radeon_bo_domain domains;
-    enum radeon_bo_flag flags = 0;
+    enum radeon_bo_domain domains = radeon_domain_from_heap(heap);
+    enum radeon_bo_flag flags = radeon_flags_from_heap(heap);
     unsigned base_hash;
 
     if (!slab)
         return NULL;
-
-    if (heap & 1)
-        flags |= RADEON_FLAG_GTT_WC;
-    if (heap & 2)
-        flags |= RADEON_FLAG_CPU_ACCESS;
-
-    switch (heap >> 2) {
-    case 0:
-        domains = RADEON_DOMAIN_VRAM;
-        break;
-    default:
-    case 1:
-        domains = RADEON_DOMAIN_VRAM_GTT;
-        break;
-    case 2:
-        domains = RADEON_DOMAIN_GTT;
-        break;
-    }
 
     slab->buffer = radeon_bo(radeon_winsys_bo_create(&ws->base,
                                                      64 * 1024, 64 * 1024,
@@ -942,34 +922,23 @@ radeon_winsys_bo_create(struct radeon_winsys *rws,
     if (size > UINT_MAX)
         return NULL;
 
+    /* VRAM implies WC. This is not optional. */
+    if (domain & RADEON_DOMAIN_VRAM)
+        flags |= RADEON_FLAG_GTT_WC;
+    /* NO_CPU_ACCESS is valid with VRAM only. */
+    if (domain != RADEON_DOMAIN_VRAM)
+        flags &= ~RADEON_FLAG_NO_CPU_ACCESS;
+
     /* Sub-allocate small buffers from slabs. */
-    if (!(flags & RADEON_FLAG_HANDLE) &&
+    if (!(flags & RADEON_FLAG_NO_SUBALLOC) &&
         size <= (1 << RADEON_SLAB_MAX_SIZE_LOG2) &&
         ws->info.has_virtual_memory &&
         alignment <= MAX2(1 << RADEON_SLAB_MIN_SIZE_LOG2, util_next_power_of_two(size))) {
         struct pb_slab_entry *entry;
-        unsigned heap = 0;
+        int heap = radeon_get_heap_index(domain, flags);
 
-        if (flags & RADEON_FLAG_GTT_WC)
-            heap |= 1;
-        if (flags & RADEON_FLAG_CPU_ACCESS)
-            heap |= 2;
-        if (flags & ~(RADEON_FLAG_GTT_WC | RADEON_FLAG_CPU_ACCESS))
+        if (heap < 0 || heap >= RADEON_MAX_SLAB_HEAPS)
             goto no_slab;
-
-        switch (domain) {
-        case RADEON_DOMAIN_VRAM:
-            heap |= 0 * 4;
-            break;
-        case RADEON_DOMAIN_VRAM_GTT:
-            heap |= 1 * 4;
-            break;
-        case RADEON_DOMAIN_GTT:
-            heap |= 2 * 4;
-            break;
-        default:
-            goto no_slab;
-        }
 
         entry = pb_slab_alloc(&ws->bo_slabs, size, heap);
         if (!entry) {
@@ -991,7 +960,7 @@ radeon_winsys_bo_create(struct radeon_winsys *rws,
 no_slab:
 
     /* This flag is irrelevant for the cache. */
-    flags &= ~RADEON_FLAG_HANDLE;
+    flags &= ~RADEON_FLAG_NO_SUBALLOC;
 
     /* Align size to page size. This is the minimum alignment for normal
      * BOs. Aligning this here helps the cached bufmgr. Especially small BOs,
@@ -1000,22 +969,11 @@ no_slab:
     size = align(size, ws->info.gart_page_size);
     alignment = align(alignment, ws->info.gart_page_size);
 
-    /* Only set one usage bit each for domains and flags, or the cache manager
-     * might consider different sets of domains / flags compatible
-     */
-    if (domain == RADEON_DOMAIN_VRAM_GTT)
-        usage = 1 << 2;
-    else
-        usage = (unsigned)domain >> 1;
-    assert(flags < sizeof(usage) * 8 - 3);
-    usage |= 1 << (flags + 3);
+    int heap = radeon_get_heap_index(domain, flags);
+    assert(heap >= 0 && heap < RADEON_MAX_CACHED_HEAPS);
+    usage = 1 << heap; /* Only set one usage bit for each heap. */
 
-    /* Determine the pb_cache bucket for minimizing pb_cache misses. */
-    pb_cache_bucket = 0;
-    if (domain & RADEON_DOMAIN_VRAM) /* VRAM or VRAM+GTT */
-       pb_cache_bucket += 1;
-    if (flags == RADEON_FLAG_GTT_WC) /* WC */
-       pb_cache_bucket += 2;
+    pb_cache_bucket = radeon_get_pb_cache_bucket_index(heap);
     assert(pb_cache_bucket < ARRAY_SIZE(ws->bo_cache.buckets));
 
     bo = radeon_bo(pb_cache_reclaim_buffer(&ws->bo_cache, size, alignment,
@@ -1290,10 +1248,9 @@ static bool radeon_winsys_bo_get_handle(struct pb_buffer *buffer,
     struct radeon_bo *bo = radeon_bo(buffer);
     struct radeon_drm_winsys *ws = bo->rws;
 
-    if (!bo->handle) {
-        offset += bo->va - bo->u.slab.real->va;
-        bo = bo->u.slab.real;
-    }
+    /* Don't allow exports of slab entries. */
+    if (!bo->handle)
+        return false;
 
     memset(&flink, 0, sizeof(flink));
 
@@ -1333,6 +1290,11 @@ static bool radeon_winsys_bo_is_user_ptr(struct pb_buffer *buf)
    return ((struct radeon_bo*)buf)->user_ptr != NULL;
 }
 
+static bool radeon_winsys_bo_is_suballocated(struct pb_buffer *buf)
+{
+   return !((struct radeon_bo*)buf)->handle;
+}
+
 static uint64_t radeon_winsys_bo_va(struct pb_buffer *buf)
 {
     return ((struct radeon_bo*)buf)->va;
@@ -1359,6 +1321,7 @@ void radeon_drm_bo_init_functions(struct radeon_drm_winsys *ws)
     ws->base.buffer_from_handle = radeon_winsys_bo_from_handle;
     ws->base.buffer_from_ptr = radeon_winsys_bo_from_ptr;
     ws->base.buffer_is_user_ptr = radeon_winsys_bo_is_user_ptr;
+    ws->base.buffer_is_suballocated = radeon_winsys_bo_is_suballocated;
     ws->base.buffer_get_handle = radeon_winsys_bo_get_handle;
     ws->base.buffer_get_virtual_address = radeon_winsys_bo_va;
     ws->base.buffer_get_reloc_offset = radeon_winsys_bo_get_reloc_offset;

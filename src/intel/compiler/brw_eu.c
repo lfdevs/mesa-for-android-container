@@ -366,12 +366,12 @@ const unsigned *brw_get_program( struct brw_codegen *p,
 
 void
 brw_disassemble(const struct gen_device_info *devinfo,
-                void *assembly, int start, int end, FILE *out)
+                const void *assembly, int start, int end, FILE *out)
 {
    bool dump_hex = (INTEL_DEBUG & DEBUG_HEX) != 0;
 
    for (int offset = start; offset < end;) {
-      brw_inst *insn = assembly + offset;
+      const brw_inst *insn = assembly + offset;
       brw_inst uncompacted;
       bool compacted = brw_inst_cmpt_control(devinfo, insn);
       if (0)
@@ -412,6 +412,7 @@ enum gen {
    GEN75 = (1 << 5),
    GEN8  = (1 << 6),
    GEN9  = (1 << 7),
+   GEN10  = (1 << 8),
    GEN_ALL = ~0
 };
 
@@ -688,6 +689,7 @@ gen_from_devinfo(const struct gen_device_info *devinfo)
    case 7: return devinfo->is_haswell ? GEN75 : GEN7;
    case 8: return GEN8;
    case 9: return GEN9;
+   case 10: return GEN10;
    default:
       unreachable("not reached");
    }

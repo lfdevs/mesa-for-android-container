@@ -122,8 +122,7 @@ etna_blit_clear_color(struct pipe_context *pctx, struct pipe_surface *dst,
    if (surf->surf.ts_size) { /* TS: use precompiled clear command */
       ctx->framebuffer.TS_COLOR_CLEAR_VALUE = new_clear_value;
 
-      if (!DBG_ENABLED(ETNA_DBG_NO_AUTODISABLE) &&
-          VIV_FEATURE(ctx->screen, chipMinorFeatures1, AUTO_DISABLE)) {
+      if (VIV_FEATURE(ctx->screen, chipMinorFeatures1, AUTO_DISABLE)) {
          /* Set number of color tiles to be filled */
          etna_set_state(ctx->stream, VIVS_TS_COLOR_AUTO_DISABLE_COUNT,
                         surf->surf.padded_width * surf->surf.padded_height / 16);
@@ -182,8 +181,7 @@ etna_blit_clear_zs(struct pipe_context *pctx, struct pipe_surface *dst,
    if (surf->surf.ts_size) { /* TS: use precompiled clear command */
       /* Set new clear depth value */
       ctx->framebuffer.TS_DEPTH_CLEAR_VALUE = new_clear_value;
-      if (!DBG_ENABLED(ETNA_DBG_NO_AUTODISABLE) &&
-          VIV_FEATURE(ctx->screen, chipMinorFeatures1, AUTO_DISABLE)) {
+      if (VIV_FEATURE(ctx->screen, chipMinorFeatures1, AUTO_DISABLE)) {
          /* Set number of depth tiles to be filled */
          etna_set_state(ctx->stream, VIVS_TS_DEPTH_AUTO_DISABLE_COUNT,
                         surf->surf.padded_width * surf->surf.padded_height / 16);
@@ -467,16 +465,24 @@ etna_try_rs_blit(struct pipe_context *pctx,
       ts_mem_config |= VIVS_TS_MEM_CONFIG_MSAA | msaa_format;
    }
 
-   uint32_t to_flush = 0;
-
-   if (src->base.bind & PIPE_BIND_RENDER_TARGET)
-      to_flush |= VIVS_GL_FLUSH_CACHE_COLOR;
-   if (src->base.bind & PIPE_BIND_DEPTH_STENCIL)
-      to_flush |= VIVS_GL_FLUSH_CACHE_DEPTH;
-
-   if (to_flush) {
-      etna_set_state(ctx->stream, VIVS_GL_FLUSH_CACHE, to_flush);
+   /* Always flush color and depth cache together before resolving. This works
+    * around artifacts that appear in some cases when scanning out a texture
+    * directly after it has been rendered to, such as rendering an animated web
+    * page in a QtWebEngine based WebView on GC2000. The artifacts look like
+    * the texture sampler samples zeroes instead of texture data in a small,
+    * irregular triangle in the lower right of each browser tile quad. Other
+    * attempts to avoid these artifacts, including a pipeline stall before the
+    * color flush or a TS cache flush afterwards, or flushing multiple times,
+    * with stalls before and after each flush, have shown no effect. */
+   if (src->base.bind & PIPE_BIND_RENDER_TARGET ||
+       src->base.bind & PIPE_BIND_DEPTH_STENCIL) {
+      etna_set_state(ctx->stream, VIVS_GL_FLUSH_CACHE,
+		     VIVS_GL_FLUSH_CACHE_COLOR | VIVS_GL_FLUSH_CACHE_DEPTH);
       etna_stall(ctx->stream, SYNC_RECIPIENT_RA, SYNC_RECIPIENT_PE);
+
+      if (src->levels[blit_info->src.level].ts_size &&
+          src->levels[blit_info->src.level].ts_valid)
+         etna_set_state(ctx->stream, VIVS_TS_FLUSH_CACHE, VIVS_TS_FLUSH_CACHE_FLUSH);
    }
 
    /* Set up color TS to source surface before blit, if needed */
@@ -540,8 +546,9 @@ etna_try_rs_blit(struct pipe_context *pctx,
 
 manual:
    if (src->layout == ETNA_LAYOUT_TILED && dst->layout == ETNA_LAYOUT_TILED) {
-      etna_resource_wait(pctx, dst);
-      etna_resource_wait(pctx, src);
+      if ((src->status & ETNA_PENDING_WRITE) ||
+          (dst->status & ETNA_PENDING_WRITE))
+         pctx->flush(pctx, NULL, 0);
       return etna_manual_blit(dst, dst_lev, dst_offset, src, src_lev, src_offset, blit_info);
    }
 
@@ -603,10 +610,10 @@ etna_flush_resource(struct pipe_context *pctx, struct pipe_resource *prsc)
 {
    struct etna_resource *rsc = etna_resource(prsc);
 
-   if (rsc->scanout) {
-      if (etna_resource_older(etna_resource(rsc->scanout->prime), rsc)) {
-         etna_copy_resource(pctx, rsc->scanout->prime, prsc, 0, 0);
-         etna_resource(rsc->scanout->prime)->seqno = rsc->seqno;
+   if (rsc->external) {
+      if (etna_resource_older(etna_resource(rsc->external), rsc)) {
+         etna_copy_resource(pctx, rsc->external, prsc, 0, 0);
+         etna_resource(rsc->external)->seqno = rsc->seqno;
       }
    } else if (etna_resource_needs_flush(rsc)) {
       etna_copy_resource(pctx, prsc, prsc, 0, 0);

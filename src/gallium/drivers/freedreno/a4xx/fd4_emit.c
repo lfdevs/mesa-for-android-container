@@ -45,11 +45,6 @@
 #include "fd4_format.h"
 #include "fd4_zsa.h"
 
-static const enum adreno_state_block sb[] = {
-	[SHADER_VERTEX]   = SB_VERT_SHADER,
-	[SHADER_FRAGMENT] = SB_FRAG_SHADER,
-};
-
 /* regid:          base const register
  * prsc or dwords: buffer containing constant values
  * sizedwords:     size of const value buffer
@@ -60,31 +55,31 @@ fd4_emit_const(struct fd_ringbuffer *ring, enum shader_t type,
 		const uint32_t *dwords, struct pipe_resource *prsc)
 {
 	uint32_t i, sz;
-	enum adreno_state_src src;
+	enum a4xx_state_src src;
 
 	debug_assert((regid % 4) == 0);
 	debug_assert((sizedwords % 4) == 0);
 
 	if (prsc) {
 		sz = 0;
-		src = 0x2;  // TODO ??
+		src = SS4_INDIRECT;
 	} else {
 		sz = sizedwords;
-		src = SS_DIRECT;
+		src = SS4_DIRECT;
 	}
 
-	OUT_PKT3(ring, CP_LOAD_STATE, 2 + sz);
-	OUT_RING(ring, CP_LOAD_STATE_0_DST_OFF(regid/4) |
-			CP_LOAD_STATE_0_STATE_SRC(src) |
-			CP_LOAD_STATE_0_STATE_BLOCK(sb[type]) |
-			CP_LOAD_STATE_0_NUM_UNIT(sizedwords/4));
+	OUT_PKT3(ring, CP_LOAD_STATE4, 2 + sz);
+	OUT_RING(ring, CP_LOAD_STATE4_0_DST_OFF(regid/4) |
+			CP_LOAD_STATE4_0_STATE_SRC(src) |
+			CP_LOAD_STATE4_0_STATE_BLOCK(fd4_stage2shadersb(type)) |
+			CP_LOAD_STATE4_0_NUM_UNIT(sizedwords/4));
 	if (prsc) {
 		struct fd_bo *bo = fd_resource(prsc)->bo;
 		OUT_RELOC(ring, bo, offset,
-				CP_LOAD_STATE_1_STATE_TYPE(ST_CONSTANTS), 0);
+				CP_LOAD_STATE4_1_STATE_TYPE(ST4_CONSTANTS), 0);
 	} else {
-		OUT_RING(ring, CP_LOAD_STATE_1_EXT_SRC_ADDR(0) |
-				CP_LOAD_STATE_1_STATE_TYPE(ST_CONSTANTS));
+		OUT_RING(ring, CP_LOAD_STATE4_1_EXT_SRC_ADDR(0) |
+				CP_LOAD_STATE4_1_STATE_TYPE(ST4_CONSTANTS));
 		dwords = (uint32_t *)&((uint8_t *)dwords)[offset];
 	}
 	for (i = 0; i < sz; i++) {
@@ -101,13 +96,13 @@ fd4_emit_const_bo(struct fd_ringbuffer *ring, enum shader_t type, boolean write,
 
 	debug_assert((regid % 4) == 0);
 
-	OUT_PKT3(ring, CP_LOAD_STATE, 2 + anum);
-	OUT_RING(ring, CP_LOAD_STATE_0_DST_OFF(regid/4) |
-			CP_LOAD_STATE_0_STATE_SRC(SS_DIRECT) |
-			CP_LOAD_STATE_0_STATE_BLOCK(sb[type]) |
-			CP_LOAD_STATE_0_NUM_UNIT(anum/4));
-	OUT_RING(ring, CP_LOAD_STATE_1_EXT_SRC_ADDR(0) |
-			CP_LOAD_STATE_1_STATE_TYPE(ST_CONSTANTS));
+	OUT_PKT3(ring, CP_LOAD_STATE4, 2 + anum);
+	OUT_RING(ring, CP_LOAD_STATE4_0_DST_OFF(regid/4) |
+			CP_LOAD_STATE4_0_STATE_SRC(SS4_DIRECT) |
+			CP_LOAD_STATE4_0_STATE_BLOCK(fd4_stage2shadersb(type)) |
+			CP_LOAD_STATE4_0_NUM_UNIT(anum/4));
+	OUT_RING(ring, CP_LOAD_STATE4_1_EXT_SRC_ADDR(0) |
+			CP_LOAD_STATE4_1_STATE_TYPE(ST4_CONSTANTS));
 
 	for (i = 0; i < num; i++) {
 		if (prscs[i]) {
@@ -127,12 +122,12 @@ fd4_emit_const_bo(struct fd_ringbuffer *ring, enum shader_t type, boolean write,
 
 static void
 emit_textures(struct fd_context *ctx, struct fd_ringbuffer *ring,
-		enum adreno_state_block sb, struct fd_texture_stateobj *tex,
+		enum a4xx_state_block sb, struct fd_texture_stateobj *tex,
 		const struct ir3_shader_variant *v)
 {
 	static const uint32_t bcolor_reg[] = {
-			[SB_VERT_TEX] = REG_A4XX_TPL1_TP_VS_BORDER_COLOR_BASE_ADDR,
-			[SB_FRAG_TEX] = REG_A4XX_TPL1_TP_FS_BORDER_COLOR_BASE_ADDR,
+			[SB4_VS_TEX] = REG_A4XX_TPL1_TP_VS_BORDER_COLOR_BASE_ADDR,
+			[SB4_FS_TEX] = REG_A4XX_TPL1_TP_FS_BORDER_COLOR_BASE_ADDR,
 	};
 	struct fd4_context *fd4_ctx = fd4_context(ctx);
 	bool needs_border = false;
@@ -148,13 +143,13 @@ emit_textures(struct fd_context *ctx, struct fd_ringbuffer *ring,
 		num_samplers = align(tex->num_samplers, 2);
 
 		/* output sampler state: */
-		OUT_PKT3(ring, CP_LOAD_STATE, 2 + (2 * num_samplers));
-		OUT_RING(ring, CP_LOAD_STATE_0_DST_OFF(0) |
-				CP_LOAD_STATE_0_STATE_SRC(SS_DIRECT) |
-				CP_LOAD_STATE_0_STATE_BLOCK(sb) |
-				CP_LOAD_STATE_0_NUM_UNIT(num_samplers));
-		OUT_RING(ring, CP_LOAD_STATE_1_STATE_TYPE(ST_SHADER) |
-				CP_LOAD_STATE_1_EXT_SRC_ADDR(0));
+		OUT_PKT3(ring, CP_LOAD_STATE4, 2 + (2 * num_samplers));
+		OUT_RING(ring, CP_LOAD_STATE4_0_DST_OFF(0) |
+				CP_LOAD_STATE4_0_STATE_SRC(SS4_DIRECT) |
+				CP_LOAD_STATE4_0_STATE_BLOCK(sb) |
+				CP_LOAD_STATE4_0_NUM_UNIT(num_samplers));
+		OUT_RING(ring, CP_LOAD_STATE4_1_STATE_TYPE(ST4_SHADER) |
+				CP_LOAD_STATE4_1_EXT_SRC_ADDR(0));
 		for (i = 0; i < tex->num_samplers; i++) {
 			static const struct fd4_sampler_stateobj dummy_sampler = {};
 			const struct fd4_sampler_stateobj *sampler = tex->samplers[i] ?
@@ -176,13 +171,13 @@ emit_textures(struct fd_context *ctx, struct fd_ringbuffer *ring,
 		unsigned num_textures = tex->num_textures + v->astc_srgb.count;
 
 		/* emit texture state: */
-		OUT_PKT3(ring, CP_LOAD_STATE, 2 + (8 * num_textures));
-		OUT_RING(ring, CP_LOAD_STATE_0_DST_OFF(0) |
-				CP_LOAD_STATE_0_STATE_SRC(SS_DIRECT) |
-				CP_LOAD_STATE_0_STATE_BLOCK(sb) |
-				CP_LOAD_STATE_0_NUM_UNIT(num_textures));
-		OUT_RING(ring, CP_LOAD_STATE_1_STATE_TYPE(ST_CONSTANTS) |
-				CP_LOAD_STATE_1_EXT_SRC_ADDR(0));
+		OUT_PKT3(ring, CP_LOAD_STATE4, 2 + (8 * num_textures));
+		OUT_RING(ring, CP_LOAD_STATE4_0_DST_OFF(0) |
+				CP_LOAD_STATE4_0_STATE_SRC(SS4_DIRECT) |
+				CP_LOAD_STATE4_0_STATE_BLOCK(sb) |
+				CP_LOAD_STATE4_0_NUM_UNIT(num_textures));
+		OUT_RING(ring, CP_LOAD_STATE4_1_STATE_TYPE(ST4_CONSTANTS) |
+				CP_LOAD_STATE4_1_EXT_SRC_ADDR(0));
 		for (i = 0; i < tex->num_textures; i++) {
 			static const struct fd4_pipe_sampler_view dummy_view = {};
 			const struct fd4_pipe_sampler_view *view = tex->textures[i] ?
@@ -267,13 +262,13 @@ fd4_emit_gmem_restore_tex(struct fd_ringbuffer *ring, unsigned nr_bufs,
 	}
 
 	/* output sampler state: */
-	OUT_PKT3(ring, CP_LOAD_STATE, 2 + (2 * nr_bufs));
-	OUT_RING(ring, CP_LOAD_STATE_0_DST_OFF(0) |
-			CP_LOAD_STATE_0_STATE_SRC(SS_DIRECT) |
-			CP_LOAD_STATE_0_STATE_BLOCK(SB_FRAG_TEX) |
-			CP_LOAD_STATE_0_NUM_UNIT(nr_bufs));
-	OUT_RING(ring, CP_LOAD_STATE_1_STATE_TYPE(ST_SHADER) |
-			CP_LOAD_STATE_1_EXT_SRC_ADDR(0));
+	OUT_PKT3(ring, CP_LOAD_STATE4, 2 + (2 * nr_bufs));
+	OUT_RING(ring, CP_LOAD_STATE4_0_DST_OFF(0) |
+			CP_LOAD_STATE4_0_STATE_SRC(SS4_DIRECT) |
+			CP_LOAD_STATE4_0_STATE_BLOCK(SB4_FS_TEX) |
+			CP_LOAD_STATE4_0_NUM_UNIT(nr_bufs));
+	OUT_RING(ring, CP_LOAD_STATE4_1_STATE_TYPE(ST4_SHADER) |
+			CP_LOAD_STATE4_1_EXT_SRC_ADDR(0));
 	for (i = 0; i < nr_bufs; i++) {
 		OUT_RING(ring, A4XX_TEX_SAMP_0_XY_MAG(A4XX_TEX_NEAREST) |
 				A4XX_TEX_SAMP_0_XY_MIN(A4XX_TEX_NEAREST) |
@@ -284,13 +279,13 @@ fd4_emit_gmem_restore_tex(struct fd_ringbuffer *ring, unsigned nr_bufs,
 	}
 
 	/* emit texture state: */
-	OUT_PKT3(ring, CP_LOAD_STATE, 2 + (8 * nr_bufs));
-	OUT_RING(ring, CP_LOAD_STATE_0_DST_OFF(0) |
-			CP_LOAD_STATE_0_STATE_SRC(SS_DIRECT) |
-			CP_LOAD_STATE_0_STATE_BLOCK(SB_FRAG_TEX) |
-			CP_LOAD_STATE_0_NUM_UNIT(nr_bufs));
-	OUT_RING(ring, CP_LOAD_STATE_1_STATE_TYPE(ST_CONSTANTS) |
-			CP_LOAD_STATE_1_EXT_SRC_ADDR(0));
+	OUT_PKT3(ring, CP_LOAD_STATE4, 2 + (8 * nr_bufs));
+	OUT_RING(ring, CP_LOAD_STATE4_0_DST_OFF(0) |
+			CP_LOAD_STATE4_0_STATE_SRC(SS4_DIRECT) |
+			CP_LOAD_STATE4_0_STATE_BLOCK(SB4_FS_TEX) |
+			CP_LOAD_STATE4_0_NUM_UNIT(nr_bufs));
+	OUT_RING(ring, CP_LOAD_STATE4_1_STATE_TYPE(ST4_CONSTANTS) |
+			CP_LOAD_STATE4_1_EXT_SRC_ADDR(0));
 	for (i = 0; i < nr_bufs; i++) {
 		if (bufs[i]) {
 			struct fd_resource *rsc = fd_resource(bufs[i]->texture);
@@ -408,7 +403,7 @@ fd4_emit_vertex_bufs(struct fd_ringbuffer *ring, struct fd4_emit *emit)
 			struct pipe_vertex_element *elem = &vtx->vtx->pipe[i];
 			const struct pipe_vertex_buffer *vb =
 					&vtx->vertexbuf.vb[elem->vertex_buffer_index];
-			struct fd_resource *rsc = fd_resource(vb->buffer);
+			struct fd_resource *rsc = fd_resource(vb->buffer.resource);
 			enum pipe_format pfmt = elem->src_format;
 			enum a4xx_vtx_fmt fmt = fd4_pipe2vtx(pfmt);
 			bool switchnext = (i != last) ||
@@ -504,7 +499,7 @@ fd4_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 {
 	const struct ir3_shader_variant *vp = fd4_emit_get_vp(emit);
 	const struct ir3_shader_variant *fp = fd4_emit_get_fp(emit);
-	uint32_t dirty = emit->dirty;
+	const enum fd_dirty_3d_state dirty = emit->dirty;
 
 	emit_marker(ring, 5);
 
@@ -605,7 +600,7 @@ fd4_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 			fd4_rasterizer_stateobj(ctx->rasterizer);
 		uint32_t val = rast->pc_prim_vtx_cntl;
 
-		if (info->indexed && info->primitive_restart)
+		if (info->index_size && info->primitive_restart)
 			val |= A4XX_PC_PRIM_VTX_CNTL_PRIMITIVE_RESTART;
 
 		val |= COND(vp->writes_psize, A4XX_PC_PRIM_VTX_CNTL_PSIZE);
@@ -682,9 +677,9 @@ fd4_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 	}
 
 	if (emit->prog == &ctx->prog) { /* evil hack to deal sanely with clear path */
-		ir3_emit_consts(vp, ring, ctx, emit->info, dirty);
+		ir3_emit_vs_consts(vp, ring, ctx, emit->info);
 		if (!emit->key.binning_pass)
-			ir3_emit_consts(fp, ring, ctx, emit->info, dirty);
+			ir3_emit_fs_consts(fp, ring, ctx);
 	}
 
 	if ((dirty & FD_DIRTY_BLEND)) {
@@ -745,21 +740,11 @@ fd4_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 		OUT_RING(ring, A4XX_RB_BLEND_ALPHA_F32(bcolor->color[3]));
 	}
 
-	if (dirty & FD_DIRTY_VERTTEX) {
-		if (vp->has_samp)
-			emit_textures(ctx, ring, SB_VERT_TEX, &ctx->verttex, vp);
-		else
-			dirty &= ~FD_DIRTY_VERTTEX;
-	}
+	if (ctx->dirty_shader[PIPE_SHADER_VERTEX] & FD_DIRTY_SHADER_TEX)
+		emit_textures(ctx, ring, SB4_VS_TEX, &ctx->tex[PIPE_SHADER_VERTEX], vp);
 
-	if (dirty & FD_DIRTY_FRAGTEX) {
-		if (fp->has_samp)
-			emit_textures(ctx, ring, SB_FRAG_TEX, &ctx->fragtex, fp);
-		else
-			dirty &= ~FD_DIRTY_FRAGTEX;
-	}
-
-	ctx->dirty &= ~dirty;
+	if (ctx->dirty_shader[PIPE_SHADER_FRAGMENT] & FD_DIRTY_SHADER_TEX)
+		emit_textures(ctx, ring, SB4_FS_TEX, &ctx->tex[PIPE_SHADER_FRAGMENT], fp);
 }
 
 /* emit setup at begin of new cmdstream buffer (don't rely on previous

@@ -52,7 +52,7 @@ vl_drm_screen_create(int fd)
       goto free_screen;
 
    if (pipe_loader_drm_probe_fd(&vscreen->dev, new_fd))
-      vscreen->pscreen = pipe_loader_create_screen(vscreen->dev);
+      vscreen->pscreen = pipe_loader_create_screen(vscreen->dev, 0);
 
    if (!vscreen->pscreen)
       goto release_pipe;

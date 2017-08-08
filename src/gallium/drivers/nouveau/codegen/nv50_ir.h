@@ -884,6 +884,8 @@ public:
    unsigned perPatch   : 1;
    unsigned exit       : 1; // terminate program after insn
    unsigned mask       : 4; // for vector ops
+   // prevent algebraic optimisations that aren't bit-for-bit identical
+   unsigned precise    : 1;
 
    int8_t postFactor; // MUL/DIV(if < 0) by 1 << postFactor
 
@@ -1253,7 +1255,6 @@ public:
    inline void add(Value *rval, int& id) { allRValues.insert(rval, id); }
 
    bool makeFromTGSI(struct nv50_ir_prog_info *);
-   bool makeFromSM4(struct nv50_ir_prog_info *);
    bool convertToSSA();
    bool optimizeSSA(int level);
    bool optimizePostRA(int level);

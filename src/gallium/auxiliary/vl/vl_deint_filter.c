@@ -308,7 +308,7 @@ vl_deint_filter_init(struct vl_deint_filter *filter, struct pipe_context *pipe,
       goto error_sampler;
 
    filter->quad = vl_vb_upload_quads(pipe);
-   if(!filter->quad.buffer)
+   if(!filter->quad.buffer.resource)
       goto error_quad;
 
    memset(&ve, 0, sizeof(ve));
@@ -361,7 +361,7 @@ error_vs:
    pipe->delete_vertex_elements_state(pipe, filter->ves);
 
 error_ves:
-   pipe_resource_reference(&filter->quad.buffer, NULL);
+   pipe_resource_reference(&filter->quad.buffer.resource, NULL);
 
 error_quad:
    pipe->delete_sampler_state(pipe, filter->sampler);
@@ -396,7 +396,7 @@ vl_deint_filter_cleanup(struct vl_deint_filter *filter)
    filter->pipe->delete_blend_state(filter->pipe, filter->blend[2]);
    filter->pipe->delete_rasterizer_state(filter->pipe, filter->rs_state);
    filter->pipe->delete_vertex_elements_state(filter->pipe, filter->ves);
-   pipe_resource_reference(&filter->quad.buffer, NULL);
+   pipe_resource_reference(&filter->quad.buffer.resource, NULL);
 
    filter->pipe->delete_vs_state(filter->pipe, filter->vs);
    filter->pipe->delete_fs_state(filter->pipe, filter->fs_copy_top);

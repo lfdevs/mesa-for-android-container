@@ -58,7 +58,7 @@ assign_fs_binding_table_offsets(const struct gen_device_info *devinfo,
       brw_assign_common_binding_table_offsets(devinfo, prog, &prog_data->base,
                                               next_binding_table_offset);
 
-   if (prog->nir->info->outputs_read && !key->coherent_fb_fetch) {
+   if (prog->nir->info.outputs_read && !key->coherent_fb_fetch) {
       prog_data->binding_table.render_target_read_start =
          next_binding_table_offset;
       next_binding_table_offset += key->nr_color_regions;
@@ -106,6 +106,9 @@ brw_wm_debug_recompile(struct brw_context *brw, struct gl_program *prog,
                       old_key->alpha_test_func, key->alpha_test_func);
    found |= key_debug(brw, "mrt alpha test reference value",
                       old_key->alpha_test_ref, key->alpha_test_ref);
+   found |= key_debug(brw, "force dual color blending",
+                      old_key->force_dual_color_blend,
+                      key->force_dual_color_blend);
 
    found |= brw_debug_recompile_sampler_key(brw, &old_key->tex, &key->tex);
 
@@ -162,6 +165,8 @@ brw_codegen_wm_prog(struct brw_context *brw,
    if (!fp->program.is_arb_asm) {
       brw_nir_setup_glsl_uniforms(fp->program.nir, &fp->program,
                                   &prog_data.base, true);
+      brw_nir_analyze_ubo_ranges(brw->screen->compiler, fp->program.nir,
+                                 prog_data.base.ubo_ranges);
    } else {
       brw_nir_setup_arb_uniforms(fp->program.nir, &fp->program,
                                  &prog_data.base);
@@ -188,7 +193,7 @@ brw_codegen_wm_prog(struct brw_context *brw,
    program = brw_compile_fs(brw->screen->compiler, brw, mem_ctx,
                             key, &prog_data, fp->program.nir,
                             &fp->program, st_index8, st_index16,
-                            true, brw->use_rep_send, vue_map,
+                            true, false, vue_map,
                             &program_size, &error_str);
 
    if (program == NULL) {
@@ -267,6 +272,10 @@ brw_debug_recompile_sampler_key(struct brw_context *brw,
    found |= key_debug(brw, "yx_xuxv image bound",
                       old_key->yx_xuxv_image_mask,
                       key->yx_xuxv_image_mask);
+   found |= key_debug(brw, "xy_uxvx image bound",
+                      old_key->xy_uxvx_image_mask,
+                      key->xy_uxvx_image_mask);
+
 
    for (unsigned int i = 0; i < MAX_SAMPLERS; i++) {
       found |= key_debug(brw, "textureGather workarounds",
@@ -335,7 +344,7 @@ brw_populate_sampler_prog_key_data(struct gl_context *ctx,
          }
 
          /* gather4 for RG32* is broken in multiple ways on Gen7. */
-         if (brw->gen == 7 && prog->nir->info->uses_texture_gather) {
+         if (brw->gen == 7 && prog->nir->info.uses_texture_gather) {
             switch (img->InternalFormat) {
             case GL_RG32I:
             case GL_RG32UI: {
@@ -373,7 +382,7 @@ brw_populate_sampler_prog_key_data(struct gl_context *ctx,
          /* Gen6's gather4 is broken for UINT/SINT; we treat them as
           * UNORM/FLOAT instead and fix it in the shader.
           */
-         if (brw->gen == 6 && prog->nir->info->uses_texture_gather) {
+         if (brw->gen == 6 && prog->nir->info.uses_texture_gather) {
             key->gen6_gather_wa[s] = gen6_gather_workaround(img->InternalFormat);
          }
 
@@ -387,12 +396,14 @@ brw_populate_sampler_prog_key_data(struct gl_context *ctx,
          /* From gen9 onwards some single sampled buffers can also be
           * compressed. These don't need ld2dms sampling along with mcs fetch.
           */
-         if (brw->gen >= 7 &&
-             intel_tex->mt->msaa_layout == INTEL_MSAA_LAYOUT_CMS &&
-             intel_tex->mt->num_samples > 1) {
+         if (intel_tex->mt->aux_usage == ISL_AUX_USAGE_MCS) {
+            assert(brw->gen >= 7);
+            assert(intel_tex->mt->surf.samples > 1);
+            assert(intel_tex->mt->mcs_buf);
+            assert(intel_tex->mt->surf.msaa_layout == ISL_MSAA_LAYOUT_ARRAY);
             key->compressed_multisample_layout_mask |= 1 << s;
 
-            if (intel_tex->mt->num_samples >= 16) {
+            if (intel_tex->mt->surf.samples >= 16) {
                assert(brw->gen >= 9);
                key->msaa_16 |= 1 << s;
             }
@@ -408,6 +419,9 @@ brw_populate_sampler_prog_key_data(struct gl_context *ctx,
                break;
             case __DRI_IMAGE_COMPONENTS_Y_XUXV:
                key->yx_xuxv_image_mask |= 1 << s;
+               break;
+            case __DRI_IMAGE_COMPONENTS_Y_UXVX:
+               key->xy_uxvx_image_mask |= 1 << s;
                break;
             default:
                break;
@@ -471,7 +485,7 @@ brw_wm_populate_key(struct brw_context *brw, struct brw_wm_prog_key *key)
          lookup |= BRW_WM_IZ_DEPTH_WRITE_ENABLE_BIT;
 
       /* _NEW_STENCIL | _NEW_BUFFERS */
-      if (ctx->Stencil._Enabled) {
+      if (brw->stencil_enabled) {
          lookup |= BRW_WM_IZ_STENCIL_TEST_ENABLE_BIT;
 
          if (ctx->Stencil.WriteMask[0] ||

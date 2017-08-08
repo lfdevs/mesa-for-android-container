@@ -5,7 +5,7 @@
 #include "i915/i915_public.h"
 
 static struct pipe_screen *
-create_screen(int fd)
+create_screen(int fd, unsigned flags)
 {
    struct i915_winsys *iws;
    struct pipe_screen *screen;

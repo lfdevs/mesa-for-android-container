@@ -27,6 +27,8 @@
 #include "intel_asm_annotation.h"
 #include "compiler/nir/nir.h"
 
+__attribute__((weak)) void nir_print_instr(const nir_instr *instr, FILE *fp) {}
+
 void
 dump_assembly(void *assembly, int num_annotations, struct annotation *annotation,
               const struct gen_device_info *devinfo)

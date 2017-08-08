@@ -1347,6 +1347,10 @@ lp_setup_create( struct pipe_context *pipe,
    
    setup->dirty = ~0;
 
+   /* Initialize empty default fb correctly, so the rect is empty */
+   setup->framebuffer.x1 = -1;
+   setup->framebuffer.y1 = -1;
+
    return setup;
 
 no_scenes:

@@ -819,8 +819,6 @@ nvc0_switch_pipe_context(struct nvc0_context *ctx_to)
 
    if (!ctx_to->vertex)
       ctx_to->dirty_3d &= ~(NVC0_NEW_3D_VERTEX | NVC0_NEW_3D_ARRAYS);
-   if (!ctx_to->idxbuf.buffer)
-      ctx_to->dirty_3d &= ~NVC0_NEW_3D_IDXBUF;
 
    if (!ctx_to->vertprog)
       ctx_to->dirty_3d &= ~NVC0_NEW_3D_VERTPROG;
@@ -876,8 +874,10 @@ validate_list_3d[] = {
     { nvc0_vertex_arrays_validate, NVC0_NEW_3D_VERTEX | NVC0_NEW_3D_ARRAYS },
     { nvc0_validate_surfaces,      NVC0_NEW_3D_SURFACES },
     { nvc0_validate_buffers,       NVC0_NEW_3D_BUFFERS },
-    { nvc0_idxbuf_validate,        NVC0_NEW_3D_IDXBUF },
     { nvc0_tfb_validate,           NVC0_NEW_3D_TFB_TARGETS | NVC0_NEW_3D_GMTYPROG },
+    { nvc0_layer_validate,         NVC0_NEW_3D_VERTPROG |
+                                   NVC0_NEW_3D_TEVLPROG |
+                                   NVC0_NEW_3D_GMTYPROG },
     { nvc0_validate_driverconst,   NVC0_NEW_3D_DRIVERCONST },
 };
 

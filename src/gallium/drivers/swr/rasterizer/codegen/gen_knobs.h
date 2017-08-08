@@ -32,14 +32,44 @@
 #pragma once
 #include <string>
 
-template <typename T>
-struct Knob
+struct KnobBase
 {
-    const   T&  Value() const               { return m_Value; }
-    const   T&  Value(const T& newValue)    { m_Value = newValue; return Value(); }
+private:
+    // Update the input string.
+    static void autoExpandEnvironmentVariables(std::string &text);
 
 protected:
-    Knob(const T& defaultValue) : m_Value(defaultValue) {}
+    // Leave input alone and return new string.
+    static std::string expandEnvironmentVariables(std::string const &input)
+    {
+        std::string text = input;
+        autoExpandEnvironmentVariables(text);
+        return text;
+    }
+
+    template <typename T>
+    static T expandEnvironmentVariables(T const &input)
+    {
+        return input;
+    }
+};
+
+template <typename T>
+struct Knob : KnobBase
+{
+public:
+    const   T&  Value() const               { return m_Value; }
+    const   T&  Value(T const &newValue)
+    {
+        m_Value = expandEnvironmentVariables(newValue);
+        return Value();
+    }
+
+protected:
+    Knob(T const &defaultValue) :
+        m_Value(expandEnvironmentVariables(defaultValue))
+    {
+    }
 
 private:
     T m_Value;
@@ -168,7 +198,7 @@ struct GlobalKnobs
     // Maximum number of draws outstanding before API thread blocks.
     // This value MUST be evenly divisible into 2^32
     //
-    DEFINE_KNOB(MAX_DRAWS_IN_FLIGHT, uint32_t, 128);
+    DEFINE_KNOB(MAX_DRAWS_IN_FLIGHT, uint32_t, 256);
 
     //-----------------------------------------------------------
     // KNOB_MAX_PRIMS_PER_DRAW
@@ -177,7 +207,7 @@ struct GlobalKnobs
     // Larger primitives are split into smaller Draw calls.
     // Should be a multiple of (3 * vectorWidth).
     //
-    DEFINE_KNOB(MAX_PRIMS_PER_DRAW, uint32_t, 2040);
+    DEFINE_KNOB(MAX_PRIMS_PER_DRAW, uint32_t, 49152);
 
     //-----------------------------------------------------------
     // KNOB_MAX_TESS_PRIMS_PER_DRAW
@@ -194,6 +224,20 @@ struct GlobalKnobs
     // Output directory for debug data.
     //
     DEFINE_KNOB(DEBUG_OUTPUT_DIR, std::string, "/tmp/Rast/DebugOutput");
+
+    //-----------------------------------------------------------
+    // KNOB_JIT_ENABLE_CACHE
+    //
+    // Enables caching of compiled shaders
+    //
+    DEFINE_KNOB(JIT_ENABLE_CACHE, bool, false);
+
+    //-----------------------------------------------------------
+    // KNOB_JIT_CACHE_DIR
+    //
+    // Cache directory for compiled shaders.
+    //
+    DEFINE_KNOB(JIT_CACHE_DIR, std::string, "${HOME}/.swr/jitcache");
 
     //-----------------------------------------------------------
     // KNOB_TOSS_DRAW
@@ -288,6 +332,8 @@ extern GlobalKnobs g_GlobalKnobs;
 #define KNOB_MAX_PRIMS_PER_DRAW          GET_KNOB(MAX_PRIMS_PER_DRAW)
 #define KNOB_MAX_TESS_PRIMS_PER_DRAW     GET_KNOB(MAX_TESS_PRIMS_PER_DRAW)
 #define KNOB_DEBUG_OUTPUT_DIR            GET_KNOB(DEBUG_OUTPUT_DIR)
+#define KNOB_JIT_ENABLE_CACHE            GET_KNOB(JIT_ENABLE_CACHE)
+#define KNOB_JIT_CACHE_DIR               GET_KNOB(JIT_CACHE_DIR)
 #define KNOB_TOSS_DRAW                   GET_KNOB(TOSS_DRAW)
 #define KNOB_TOSS_QUEUE_FE               GET_KNOB(TOSS_QUEUE_FE)
 #define KNOB_TOSS_FETCH                  GET_KNOB(TOSS_FETCH)
@@ -296,5 +342,6 @@ extern GlobalKnobs g_GlobalKnobs;
 #define KNOB_TOSS_SETUP_TRIS             GET_KNOB(TOSS_SETUP_TRIS)
 #define KNOB_TOSS_BIN_TRIS               GET_KNOB(TOSS_BIN_TRIS)
 #define KNOB_TOSS_RS                     GET_KNOB(TOSS_RS)
+
 
 

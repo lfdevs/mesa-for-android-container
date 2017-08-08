@@ -46,6 +46,8 @@ struct fd5_blend_stateobj {
 		uint32_t blend_control_alpha;
 	} rb_mrt[A5XX_MAX_RENDER_TARGETS];
 	uint32_t rb_blend_cntl;
+	uint32_t sp_blend_cntl;
+	bool lrz_write;
 };
 
 static inline struct fd5_blend_stateobj *

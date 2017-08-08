@@ -32,21 +32,21 @@ static unsigned si_descriptor_list_cs_space(unsigned count, unsigned element_siz
 	/* Ensure we have enough space to start a new range in a hole */
 	assert(element_size >= 3);
 
-	/* 5 dwords for possible load to reinitialize when we have no preamble
-	 * IB + 5 dwords for write to L2 + 3 bytes for every range written to
-	 * CE RAM.
+	/* 5 dwords for write to L2 + 3 bytes for the packet header of
+	 * every disjoint range written to CE RAM.
 	 */
-	return 5 + 5 + 3 + count * element_size;
+	return 5 + (3 * count / 2) + count * element_size;
 }
 
 static unsigned si_ce_needed_cs_space(void)
 {
 	unsigned space = 0;
 
-	space += si_descriptor_list_cs_space(SI_NUM_CONST_BUFFERS, 4);
-	space += si_descriptor_list_cs_space(SI_NUM_SHADER_BUFFERS, 4);
-	space += si_descriptor_list_cs_space(SI_NUM_SAMPLERS, 16);
-	space += si_descriptor_list_cs_space(SI_NUM_IMAGES, 8);
+	space += si_descriptor_list_cs_space(SI_NUM_SHADER_BUFFERS +
+					     SI_NUM_CONST_BUFFERS, 4);
+	/* two 8-byte images share one 16-byte slot */
+	space += si_descriptor_list_cs_space(SI_NUM_IMAGES / 2 +
+					     SI_NUM_SAMPLERS, 16);
 	space *= SI_NUM_SHADERS;
 
 	space += si_descriptor_list_cs_space(SI_NUM_RW_BUFFERS, 4);
@@ -122,6 +122,10 @@ void si_context_gfx_flush(void *context, unsigned flags,
 	}
 
 	ctx->gfx_flush_in_progress = true;
+
+	/* This CE dump should be done in parallel with the last draw. */
+	if (ctx->ce_ib)
+		si_ce_save_all_descriptors_at_ib_end(ctx);
 
 	r600_preflush_suspend_features(&ctx->b);
 
@@ -207,8 +211,8 @@ void si_begin_new_cs(struct si_context *ctx)
 	else if (ctx->ce_ib)
 		si_ce_enable_loads(ctx->ce_ib);
 
-	if (ctx->ce_preamble_ib)
-		si_ce_reinitialize_all_descriptors(ctx);
+	if (ctx->ce_ib)
+		si_ce_restore_all_descriptors_at_ib_start(ctx);
 
 	if (ctx->b.chip_class >= CIK)
 		si_mark_atom_dirty(ctx, &ctx->prefetch_L2);
@@ -231,6 +235,7 @@ void si_begin_new_cs(struct si_context *ctx)
 	si_mark_atom_dirty(ctx, &ctx->b.streamout.enable_atom);
 	si_mark_atom_dirty(ctx, &ctx->b.render_cond_atom);
 	si_all_descriptors_begin_new_cs(ctx);
+	si_all_resident_buffers_begin_new_cs(ctx);
 
 	ctx->b.scissors.dirty_mask = (1 << R600_MAX_VIEWPORTS) - 1;
 	ctx->b.viewports.dirty_mask = (1 << R600_MAX_VIEWPORTS) - 1;

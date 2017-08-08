@@ -90,6 +90,7 @@ enum st_api_feature
 #define ST_CONTEXT_FLAG_FORWARD_COMPATIBLE  (1 << 1)
 #define ST_CONTEXT_FLAG_ROBUST_ACCESS       (1 << 2)
 #define ST_CONTEXT_FLAG_RESET_NOTIFICATION_ENABLED (1 << 3)
+#define ST_CONTEXT_FLAG_NO_ERROR            (1 << 4)
 
 /**
  * Reasons that context creation might fail.
@@ -179,6 +180,7 @@ enum st_manager_param {
 struct pipe_context;
 struct pipe_resource;
 struct pipe_fence_handle;
+struct util_queue_monitoring;
 
 /**
  * Used in st_context_iface->get_resource_for_egl_image.
@@ -246,6 +248,7 @@ struct st_config_options
    unsigned force_glsl_version;
    boolean force_s3tc_enable;
    boolean allow_glsl_extension_directive_midshader;
+   boolean allow_glsl_builtin_variable_redeclaration;
    boolean allow_higher_compat_version;
    boolean glsl_zero_init;
    boolean force_glsl_abs_sqrt;
@@ -281,6 +284,7 @@ struct st_context_attribs
 };
 
 struct st_context_iface;
+struct st_manager;
 
 /**
  * Represent a windowing system drawable.
@@ -307,6 +311,16 @@ struct st_framebuffer_iface
     * Atomic stamp which changes when framebuffers need to be updated.
     */
    int32_t stamp;
+
+   /**
+    * Identifier that uniquely identifies the framebuffer interface object.
+    */
+   uint32_t ID;
+
+   /**
+    * The state tracker manager that manages this object.
+    */
+   struct st_manager *state_manager;
 
    /**
     * Available for the state tracker manager to use.
@@ -366,6 +380,11 @@ struct st_context_iface
     */
    void *st_context_private;
    void *st_manager_private;
+
+   /**
+    * The state tracker manager that manages this object.
+    */
+   struct st_manager *state_manager;
 
    /**
     * The CSO context associated with this context in case we need to draw
@@ -473,7 +492,18 @@ struct st_manager
     * Call the loader function setBackgroundContext. Called from the worker
     * thread.
     */
-   void (*set_background_context)(struct st_context_iface *stctxi);
+   void (*set_background_context)(struct st_context_iface *stctxi,
+                                  struct util_queue_monitoring *queue_info);
+
+   /**
+    * Destroy any private data used by the state tracker manager.
+    */
+   void (*destroy)(struct st_manager *smapi);
+
+   /**
+    * Available for the state tracker manager to use.
+    */
+   void *st_manager_private;
 };
 
 /**
@@ -543,6 +573,13 @@ struct st_api
     * Get the currently bound context in the calling thread.
     */
    struct st_context_iface *(*get_current)(struct st_api *stapi);
+
+   /**
+    * Notify the st manager the framebuffer interface object
+    * is no longer valid.
+    */
+   void (*destroy_drawable)(struct st_api *stapi,
+                            struct st_framebuffer_iface *stfbi);
 };
 
 /**

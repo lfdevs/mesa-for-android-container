@@ -132,8 +132,14 @@ void ac_dump_reg(FILE *file, unsigned offset, uint32_t value,
 static void ac_parse_set_reg_packet(FILE *f, uint32_t *ib, unsigned count,
 				    unsigned reg_offset)
 {
-	unsigned reg = (ib[1] << 2) + reg_offset;
+	unsigned reg = ((ib[1] & 0xFFFF) << 2) + reg_offset;
+	unsigned index = ib[1] >> 28;
 	int i;
+
+	if (index != 0) {
+		print_spaces(f, INDENT_PKT);
+		fprintf(f, "INDEX = %u\n", index);
+	}
 
 	for (i = 0; i < count; i++)
 		ac_dump_reg(f, reg + i*4, ib[2+i], ~0);
@@ -213,6 +219,52 @@ static uint32_t *ac_parse_packet3(FILE *f, uint32_t *ib, int *num_dw,
 			print_named_value(f, "ADDRESS_LO", ib[2], 32);
 			print_named_value(f, "ADDRESS_HI", ib[3], 16);
 		}
+		break;
+	case PKT3_EVENT_WRITE_EOP:
+		ac_dump_reg(f, R_028A90_VGT_EVENT_INITIATOR, ib[1],
+			    S_028A90_EVENT_TYPE(~0));
+		print_named_value(f, "EVENT_INDEX", (ib[1] >> 8) & 0xf, 4);
+		print_named_value(f, "TCL1_VOL_ACTION_ENA", (ib[1] >> 12) & 0x1, 1);
+		print_named_value(f, "TC_VOL_ACTION_ENA", (ib[1] >> 13) & 0x1, 1);
+		print_named_value(f, "TC_WB_ACTION_ENA", (ib[1] >> 15) & 0x1, 1);
+		print_named_value(f, "TCL1_ACTION_ENA", (ib[1] >> 16) & 0x1, 1);
+		print_named_value(f, "TC_ACTION_ENA", (ib[1] >> 17) & 0x1, 1);
+		print_named_value(f, "ADDRESS_LO", ib[2], 32);
+		print_named_value(f, "ADDRESS_HI", ib[3], 16);
+		print_named_value(f, "DST_SEL", (ib[3] >> 16) & 0x3, 2);
+		print_named_value(f, "INT_SEL", (ib[3] >> 24) & 0x7, 3);
+		print_named_value(f, "DATA_SEL", ib[3] >> 29, 3);
+		print_named_value(f, "DATA_LO", ib[4], 32);
+		print_named_value(f, "DATA_HI", ib[5], 32);
+		break;
+	case PKT3_RELEASE_MEM:
+		ac_dump_reg(f, R_028A90_VGT_EVENT_INITIATOR, ib[1],
+			    S_028A90_EVENT_TYPE(~0));
+		print_named_value(f, "EVENT_INDEX", (ib[1] >> 8) & 0xf, 4);
+		print_named_value(f, "TCL1_VOL_ACTION_ENA", (ib[1] >> 12) & 0x1, 1);
+		print_named_value(f, "TC_VOL_ACTION_ENA", (ib[1] >> 13) & 0x1, 1);
+		print_named_value(f, "TC_WB_ACTION_ENA", (ib[1] >> 15) & 0x1, 1);
+		print_named_value(f, "TCL1_ACTION_ENA", (ib[1] >> 16) & 0x1, 1);
+		print_named_value(f, "TC_ACTION_ENA", (ib[1] >> 17) & 0x1, 1);
+		print_named_value(f, "TC_NC_ACTION_ENA", (ib[1] >> 19) & 0x1, 1);
+		print_named_value(f, "TC_WC_ACTION_ENA", (ib[1] >> 20) & 0x1, 1);
+		print_named_value(f, "TC_MD_ACTION_ENA", (ib[1] >> 21) & 0x1, 1);
+		print_named_value(f, "DST_SEL", (ib[2] >> 16) & 0x3, 2);
+		print_named_value(f, "INT_SEL", (ib[2] >> 24) & 0x7, 3);
+		print_named_value(f, "DATA_SEL", ib[2] >> 29, 3);
+		print_named_value(f, "ADDRESS_LO", ib[3], 32);
+		print_named_value(f, "ADDRESS_HI", ib[4], 32);
+		print_named_value(f, "DATA_LO", ib[5], 32);
+		print_named_value(f, "DATA_HI", ib[6], 32);
+		print_named_value(f, "CTXID", ib[7], 32);
+		break;
+	case PKT3_WAIT_REG_MEM:
+		print_named_value(f, "OP", ib[1], 32);
+		print_named_value(f, "ADDRESS_LO", ib[2], 32);
+		print_named_value(f, "ADDRESS_HI", ib[3], 32);
+		print_named_value(f, "REF", ib[4], 32);
+		print_named_value(f, "MASK", ib[5], 32);
+		print_named_value(f, "POLL_INTERVAL", ib[6], 16);
 		break;
 	case PKT3_DRAW_INDEX_AUTO:
 		ac_dump_reg(f, R_030930_VGT_NUM_INDICES, ib[1], ~0);

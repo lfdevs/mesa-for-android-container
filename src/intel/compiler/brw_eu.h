@@ -115,9 +115,9 @@ void brw_set_default_acc_write_control(struct brw_codegen *p, unsigned value);
 void brw_init_codegen(const struct gen_device_info *, struct brw_codegen *p,
 		      void *mem_ctx);
 int brw_disassemble_inst(FILE *file, const struct gen_device_info *devinfo,
-                         struct brw_inst *inst, bool is_compacted);
-void brw_disassemble(const struct gen_device_info *devinfo, void *assembly,
-                     int start, int end, FILE *out);
+                         const struct brw_inst *inst, bool is_compacted);
+void brw_disassemble(const struct gen_device_info *devinfo,
+                     const void *assembly, int start, int end, FILE *out);
 const unsigned *brw_get_program( struct brw_codegen *p, unsigned *sz );
 
 brw_inst *brw_next_insn(struct brw_codegen *p, unsigned opcode);
@@ -548,7 +548,8 @@ void brw_debug_compact_uncompact(const struct gen_device_info *devinfo,
                                  brw_inst *orig, brw_inst *uncompacted);
 
 /* brw_eu_validate.c */
-bool brw_validate_instructions(const struct brw_codegen *p, int start_offset,
+bool brw_validate_instructions(const struct gen_device_info *devinfo,
+                               void *assembly, int start_offset, int end_offset,
                                struct annotation_info *annotation);
 
 static inline int

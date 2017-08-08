@@ -40,6 +40,7 @@
 
 #include "common/gen_decoder.h"
 #include "util/macros.h"
+#include "gen_disasm.h"
 
 #define CSI "\e["
 #define BLUE_HEADER  CSI "0;44m"
@@ -209,6 +210,18 @@ print_fault_data(struct gen_device_info *devinfo, uint32_t data1, uint32_t data0
 #define CSI "\e["
 #define NORMAL       CSI "0m"
 
+struct program {
+   const char *type;
+   const char *command;
+   uint64_t command_offset;
+   uint64_t instruction_base_address;
+   uint64_t ksp;
+};
+
+#define MAX_NUM_PROGRAMS 4096
+static struct program programs[MAX_NUM_PROGRAMS];
+static int num_programs = 0;
+
 static void decode(struct gen_spec *spec,
                    const char *buffer_name,
                    const char *ring_name,
@@ -219,6 +232,7 @@ static void decode(struct gen_spec *spec,
    uint32_t *p, *end = (data + *count);
    int length;
    struct gen_group *inst;
+   uint64_t current_instruction_base_address = 0;
 
    for (p = data; p < end; p += length) {
       const char *color = option_full_decode ? BLUE_HEADER : NORMAL,
@@ -243,6 +257,135 @@ static void decode(struct gen_spec *spec,
 
       gen_print_group(stdout, inst, offset, p,
                       option_color == COLOR_ALWAYS);
+
+      if (strcmp(inst->name, "MI_BATCH_BUFFER_END") == 0)
+         break;
+
+      if (strcmp(inst->name, "STATE_BASE_ADDRESS") == 0) {
+         struct gen_field_iterator iter;
+         gen_field_iterator_init(&iter, inst, p, false);
+
+         while (gen_field_iterator_next(&iter)) {
+            if (strcmp(iter.name, "Instruction Base Address") == 0) {
+               current_instruction_base_address = strtol(iter.value, NULL, 16);
+            }
+         }
+      } else if (strcmp(inst->name,   "WM_STATE") == 0 ||
+                 strcmp(inst->name, "3DSTATE_PS") == 0 ||
+                 strcmp(inst->name, "3DSTATE_WM") == 0) {
+         struct gen_field_iterator iter;
+         gen_field_iterator_init(&iter, inst, p, false);
+         uint64_t ksp[3] = {0, 0, 0};
+         bool enabled[3] = {false, false, false};
+
+         while (gen_field_iterator_next(&iter)) {
+            if (strncmp(iter.name, "Kernel Start Pointer ",
+                        strlen("Kernel Start Pointer ")) == 0) {
+               int idx = iter.name[strlen("Kernel Start Pointer ")] - '0';
+               ksp[idx] = strtol(iter.value, NULL, 16);
+            } else if (strcmp(iter.name, "8 Pixel Dispatch Enable") == 0) {
+               enabled[0] = strcmp(iter.value, "true") == 0;
+            } else if (strcmp(iter.name, "16 Pixel Dispatch Enable") == 0) {
+               enabled[1] = strcmp(iter.value, "true") == 0;
+            } else if (strcmp(iter.name, "32 Pixel Dispatch Enable") == 0) {
+               enabled[2] = strcmp(iter.value, "true") == 0;
+            }
+         }
+
+         /* FINISHME: Broken for multi-program WM_STATE,
+          * which Mesa does not use
+          */
+         if (enabled[0] + enabled[1] + enabled[2] == 1) {
+            const char *type = enabled[0] ? "SIMD8 fragment shader" :
+                               enabled[1] ? "SIMD16 fragment shader" :
+                               enabled[2] ? "SIMD32 fragment shader" : NULL;
+
+            programs[num_programs++] = (struct program) {
+               .type = type,
+               .command = inst->name,
+               .command_offset = offset,
+               .instruction_base_address = current_instruction_base_address,
+               .ksp = ksp[0],
+            };
+         } else {
+            if (enabled[0]) /* SIMD8 */ {
+               programs[num_programs++] = (struct program) {
+                  .type = "SIMD8 fragment shader",
+                  .command = inst->name,
+                  .command_offset = offset,
+                  .instruction_base_address = current_instruction_base_address,
+                  .ksp = ksp[0],
+                  .ksp = ksp[0], /* SIMD8 shader is specified by ksp[0] */
+               };
+            }
+            if (enabled[1]) /* SIMD16 */ {
+               programs[num_programs++] = (struct program) {
+                  .type = "SIMD16 fragment shader",
+                  .command = inst->name,
+                  .command_offset = offset,
+                  .instruction_base_address = current_instruction_base_address,
+                  .ksp = ksp[2], /* SIMD16 shader is specified by ksp[2] */
+               };
+            }
+            if (enabled[2]) /* SIMD32 */ {
+               programs[num_programs++] = (struct program) {
+                  .type = "SIMD32 fragment shader",
+                  .command = inst->name,
+                  .command_offset = offset,
+                  .instruction_base_address = current_instruction_base_address,
+                  .ksp = ksp[1], /* SIMD32 shader is specified by ksp[1] */
+               };
+            }
+         }
+      } else if (strcmp(inst->name,   "VS_STATE") == 0 ||
+                 strcmp(inst->name,   "GS_STATE") == 0 ||
+                 strcmp(inst->name,   "SF_STATE") == 0 ||
+                 strcmp(inst->name, "CLIP_STATE") == 0 ||
+                 strcmp(inst->name, "3DSTATE_DS") == 0 ||
+                 strcmp(inst->name, "3DSTATE_HS") == 0 ||
+                 strcmp(inst->name, "3DSTATE_GS") == 0 ||
+                 strcmp(inst->name, "3DSTATE_VS") == 0) {
+         struct gen_field_iterator iter;
+         gen_field_iterator_init(&iter, inst, p, false);
+         uint64_t ksp = 0;
+         bool is_simd8 = false; /* vertex shaders on Gen8+ only */
+         bool is_enabled = true;
+
+         while (gen_field_iterator_next(&iter)) {
+            if (strcmp(iter.name, "Kernel Start Pointer") == 0) {
+               ksp = strtol(iter.value, NULL, 16);
+            } else if (strcmp(iter.name, "SIMD8 Dispatch Enable") == 0) {
+               is_simd8 = strcmp(iter.value, "true") == 0;
+            } else if (strcmp(iter.name, "Dispatch Enable") == 0) {
+               is_simd8 = strcmp(iter.value, "SIMD8") == 0;
+            } else if (strcmp(iter.name, "Function Enable") == 0) {
+               is_enabled = strcmp(iter.value, "true") == 0;
+            }
+         }
+
+         const char *type =
+            strcmp(inst->name,   "VS_STATE") == 0 ? "vertex shader" :
+            strcmp(inst->name,   "GS_STATE") == 0 ? "geometry shader" :
+            strcmp(inst->name,   "SF_STATE") == 0 ? "strips and fans shader" :
+            strcmp(inst->name, "CLIP_STATE") == 0 ? "clip shader" :
+            strcmp(inst->name, "3DSTATE_DS") == 0 ? "tessellation control shader" :
+            strcmp(inst->name, "3DSTATE_HS") == 0 ? "tessellation evaluation shader" :
+            strcmp(inst->name, "3DSTATE_VS") == 0 ? (is_simd8 ? "SIMD8 vertex shader" : "vec4 vertex shader") :
+            strcmp(inst->name, "3DSTATE_GS") == 0 ? (is_simd8 ? "SIMD8 geometry shader" : "vec4 geometry shader") :
+            NULL;
+
+         if (is_enabled) {
+            programs[num_programs++] = (struct program) {
+               .type = type,
+               .command = inst->name,
+               .command_offset = offset,
+               .instruction_base_address = current_instruction_base_address,
+               .ksp = ksp,
+            };
+         }
+      }
+
+      assert(num_programs < MAX_NUM_PROGRAMS);
    }
 }
 
@@ -345,6 +488,7 @@ read_data_file(FILE *file)
    const char *buffer_name = "batch buffer";
    char *ring_name = NULL;
    struct gen_device_info devinfo;
+   struct gen_disasm *disasm = NULL;
 
    while (getline(&line, &line_size, file) > 0) {
       char *new_ring_name = NULL;
@@ -421,17 +565,51 @@ read_data_file(FILE *file)
             buffer_name = "HW Context";
             continue;
          }
+
+         matched = sscanf(dashes, "--- user = 0x%08x %08x\n",
+                          &hi, &lo);
+         if (matched > 0) {
+            new_gtt_offset = hi;
+            if (matched == 2) {
+               new_gtt_offset <<= 32;
+               new_gtt_offset |= lo;
+            }
+
+            gtt_offset = new_gtt_offset;
+            free(ring_name);
+            ring_name = new_ring_name;
+            buffer_name = "user";
+            continue;
+         }
       }
 
       if (line[0] == ':' || line[0] == '~') {
          count = ascii85_decode(line+1, &data, line[0] == ':');
          if (count == 0) {
             fprintf(stderr, "ASCII85 decode failed.\n");
-            exit(1);
+            exit(EXIT_FAILURE);
          }
-         decode(spec,
-                buffer_name, ring_name,
-                gtt_offset, data, &count);
+
+         if (strcmp(buffer_name, "user") == 0) {
+            printf("Disassembly of programs in instruction buffer at "
+                   "0x%08"PRIx64":\n", gtt_offset);
+            for (int i = 0; i < num_programs; i++) {
+               if (programs[i].instruction_base_address == gtt_offset) {
+                    printf("\n%s (specified by %s at batch offset "
+                           "0x%08"PRIx64") at offset 0x%08"PRIx64"\n",
+                           programs[i].type,
+                           programs[i].command,
+                           programs[i].command_offset,
+                           programs[i].ksp);
+                    gen_disasm_disassemble(disasm, data, programs[i].ksp,
+                                           stdout);
+               }
+            }
+         } else {
+            decode(spec,
+                   buffer_name, ring_name,
+                   gtt_offset, data, &count);
+         }
          continue;
       }
 
@@ -457,8 +635,10 @@ read_data_file(FILE *file)
          if (matched == 1) {
             if (!gen_get_device_info(reg, &devinfo)) {
                printf("Unable to identify devid=%x\n", reg);
-               return;
+               exit(EXIT_FAILURE);
             }
+
+            disasm = gen_disasm_create(reg);
 
             printf("Detected GEN%i chipset\n", devinfo.gen);
 
@@ -538,7 +718,7 @@ read_data_file(FILE *file)
          data = realloc(data, data_size * sizeof (uint32_t));
          if (data == NULL) {
             fprintf(stderr, "Out of memory.\n");
-            exit(1);
+            exit(EXIT_FAILURE);
          }
       }
 
@@ -549,6 +729,7 @@ read_data_file(FILE *file)
           buffer_name, ring_name,
           gtt_offset, data, &count);
 
+   gen_disasm_destroy(disasm);
    free(data);
    free(line);
    free(ring_name);
@@ -643,7 +824,7 @@ main(int argc, char *argv[])
 
    if (help || argc == 1) {
       print_help(argv[0], stderr);
-      exit(0);
+      exit(EXIT_SUCCESS);
    }
 
    if (optind >= argc) {
@@ -666,7 +847,7 @@ main(int argc, char *argv[])
          }
       } else {
          read_data_file(stdin);
-         exit(0);
+         exit(EXIT_SUCCESS);
       }
    } else {
       path = argv[optind];
@@ -674,7 +855,7 @@ main(int argc, char *argv[])
       if (error != 0) {
          fprintf(stderr, "Error opening %s: %s\n",
                  path, strerror(errno));
-         exit(1);
+         exit(EXIT_FAILURE);
       }
    }
 
@@ -693,8 +874,8 @@ main(int argc, char *argv[])
       file = fopen(filename, "r");
       if (!file) {
          int minor;
+         free(filename);
          for (minor = 0; minor < 64; minor++) {
-            free(filename);
             ret = asprintf(&filename, "%s/%d/i915_error_state", path, minor);
             assert(ret > 0);
 

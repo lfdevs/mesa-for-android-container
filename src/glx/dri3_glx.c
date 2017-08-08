@@ -509,6 +509,15 @@ dri_set_background_context(void *loaderPrivate)
    __glXSetCurrentContext(&pcp->base);
 }
 
+static GLboolean
+dri_is_thread_safe(void *loaderPrivate)
+{
+   /* Unlike DRI2, DRI3 doesn't call GetBuffers/GetBuffersWithFormat
+    * during draw so we're safe here.
+    */
+   return true;
+}
+
 /* The image loader extension record for DRI3
  */
 static const __DRIimageLoaderExtension imageLoaderExtension = {
@@ -523,9 +532,10 @@ const __DRIuseInvalidateExtension dri3UseInvalidate = {
 };
 
 static const __DRIbackgroundCallableExtension driBackgroundCallable = {
-   .base = { __DRI_BACKGROUND_CALLABLE, 1 },
+   .base = { __DRI_BACKGROUND_CALLABLE, 2 },
 
    .setBackgroundContext = dri_set_background_context,
+   .isThreadSafe         = dri_is_thread_safe,
 };
 
 static const __DRIextension *loader_extensions[] = {
@@ -786,6 +796,7 @@ dri3_create_screen(int screen, struct glx_display * priv)
    struct glx_config *configs = NULL, *visuals = NULL;
    char *driverName, *deviceName, *tmp;
    int i;
+   unsigned char disable;
 
    psc = calloc(1, sizeof *psc);
    if (psc == NULL)
@@ -924,13 +935,19 @@ dri3_create_screen(int screen, struct glx_display * priv)
    psp->waitForSBC = dri3_wait_for_sbc;
    psp->setSwapInterval = dri3_set_swap_interval;
    psp->getSwapInterval = dri3_get_swap_interval;
-   __glXEnableDirectExtension(&psc->base, "GLX_OML_sync_control");
+   if (psc->config->configQueryb(psc->driScreen,
+                                 "glx_disable_oml_sync_control",
+                                 &disable) || !disable)
+      __glXEnableDirectExtension(&psc->base, "GLX_OML_sync_control");
 
    psp->copySubBuffer = dri3_copy_sub_buffer;
    __glXEnableDirectExtension(&psc->base, "GLX_MESA_copy_sub_buffer");
 
    psp->getBufferAge = dri3_get_buffer_age;
-   __glXEnableDirectExtension(&psc->base, "GLX_EXT_buffer_age");
+   if (psc->config->configQueryb(psc->driScreen,
+                                 "glx_disable_ext_buffer_age",
+                                 &disable) || !disable)
+      __glXEnableDirectExtension(&psc->base, "GLX_EXT_buffer_age");
 
    free(driverName);
    free(deviceName);

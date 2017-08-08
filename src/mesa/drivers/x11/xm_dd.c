@@ -33,6 +33,7 @@
 #include "main/context.h"
 #include "main/colormac.h"
 #include "main/fbobject.h"
+#include "main/framebuffer.h"
 #include "main/macros.h"
 #include "main/mipmap.h"
 #include "main/image.h"
@@ -678,17 +679,20 @@ enable( struct gl_context *ctx, GLenum pname, GLboolean state )
  * Called when the driver should update its state, based on the new_state
  * flags.
  */
-void
-xmesa_update_state( struct gl_context *ctx, GLbitfield new_state )
+static void
+xmesa_update_state(struct gl_context *ctx)
 {
+   GLbitfield new_state = ctx->NewState;
    const XMesaContext xmesa = XMESA_CONTEXT(ctx);
+
+   if (new_state & (_NEW_SCISSOR | _NEW_BUFFERS | _NEW_VIEWPORT))
+      _mesa_update_draw_buffer_bounds(ctx, ctx->DrawBuffer);
 
    /* Propagate statechange information to swrast and swrast_setup
     * modules.  The X11 driver has no internal GL-dependent state.
     */
    _swrast_InvalidateState( ctx, new_state );
    _tnl_InvalidateState( ctx, new_state );
-   _vbo_InvalidateState( ctx, new_state );
    _swsetup_InvalidateState( ctx, new_state );
 
    if (_mesa_is_user_fbo(ctx->DrawBuffer))

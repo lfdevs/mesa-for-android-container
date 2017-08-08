@@ -633,7 +633,7 @@ linear_to_tiled(uint32_t xt1, uint32_t xt2,
                 char *dst, const char *src,
                 uint32_t dst_pitch, int32_t src_pitch,
                 bool has_swizzling,
-                uint32_t tiling,
+                enum isl_tiling tiling,
                 mem_copy_fn mem_copy)
 {
    tile_copy_fn tile_copy;
@@ -643,12 +643,12 @@ linear_to_tiled(uint32_t xt1, uint32_t xt2,
    uint32_t tw, th, span;
    uint32_t swizzle_bit = has_swizzling ? 1<<6 : 0;
 
-   if (tiling == I915_TILING_X) {
+   if (tiling == ISL_TILING_X) {
       tw = xtile_width;
       th = xtile_height;
       span = xtile_span;
       tile_copy = linear_to_xtiled_faster;
-   } else if (tiling == I915_TILING_Y) {
+   } else if (tiling == ISL_TILING_Y0) {
       tw = ytile_width;
       th = ytile_height;
       span = ytile_span;
@@ -724,7 +724,7 @@ tiled_to_linear(uint32_t xt1, uint32_t xt2,
                 char *dst, const char *src,
                 int32_t dst_pitch, uint32_t src_pitch,
                 bool has_swizzling,
-                uint32_t tiling,
+                enum isl_tiling tiling,
                 mem_copy_fn mem_copy)
 {
    tile_copy_fn tile_copy;
@@ -734,12 +734,12 @@ tiled_to_linear(uint32_t xt1, uint32_t xt2,
    uint32_t tw, th, span;
    uint32_t swizzle_bit = has_swizzling ? 1<<6 : 0;
 
-   if (tiling == I915_TILING_X) {
+   if (tiling == ISL_TILING_X) {
       tw = xtile_width;
       th = xtile_height;
       span = xtile_span;
       tile_copy = xtiled_to_linear_faster;
-   } else if (tiling == I915_TILING_Y) {
+   } else if (tiling == ISL_TILING_Y0) {
       tw = ytile_width;
       th = ytile_height;
       span = ytile_span;

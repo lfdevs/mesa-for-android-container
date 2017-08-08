@@ -174,27 +174,28 @@ am__libmesa_la_SOURCES_DIST = main/accum.c main/accum.h \
 	main/fbobject.c main/fbobject.h main/feedback.c \
 	main/feedback.h main/ff_fragment_shader.cpp \
 	main/ffvertex_prog.c main/ffvertex_prog.h main/fog.c \
-	main/fog.h main/format_info.h main/format_pack.h \
-	main/format_pack.c main/format_unpack.h main/format_unpack.c \
-	main/formatquery.c main/formatquery.h main/formats.c \
-	main/formats.h main/format_utils.c main/format_utils.h \
-	main/framebuffer.c main/framebuffer.h main/get.c main/get.h \
-	main/get_hash.h main/genmipmap.c main/genmipmap.h \
-	main/getstring.c main/glformats.c main/glformats.h \
-	main/glthread.c main/glthread.h main/glheader.h main/hash.c \
-	main/hash.h main/hint.c main/hint.h main/histogram.c \
-	main/histogram.h main/image.c main/image.h main/imports.c \
-	main/imports.h main/light.c main/light.h main/lines.c \
-	main/lines.h main/macros.h main/marshal.c main/marshal.h \
-	main/marshal_generated.c main/marshal_generated.h \
-	main/matrix.c main/matrix.h main/mipmap.c main/mipmap.h \
-	main/mm.c main/mm.h main/mtypes.h main/multisample.c \
-	main/multisample.h main/objectlabel.c main/objectlabel.h \
-	main/objectpurge.c main/objectpurge.h main/pack.c main/pack.h \
-	main/pbo.c main/pbo.h main/performance_monitor.c \
-	main/performance_monitor.h main/performance_query.c \
-	main/performance_query.h main/pipelineobj.c main/pipelineobj.h \
-	main/pixel.c main/pixel.h main/pixelstore.c main/pixelstore.h \
+	main/fog.h main/format_fallback.c main/format_info.h \
+	main/format_pack.h main/format_pack.c main/format_unpack.h \
+	main/format_unpack.c main/formatquery.c main/formatquery.h \
+	main/formats.c main/formats.h main/format_utils.c \
+	main/format_utils.h main/framebuffer.c main/framebuffer.h \
+	main/get.c main/get.h main/get_hash.h main/genmipmap.c \
+	main/genmipmap.h main/getstring.c main/glformats.c \
+	main/glformats.h main/glthread.c main/glthread.h \
+	main/glheader.h main/hash.c main/hash.h main/hint.c \
+	main/hint.h main/histogram.c main/histogram.h main/image.c \
+	main/image.h main/imports.c main/imports.h main/light.c \
+	main/light.h main/lines.c main/lines.h main/macros.h \
+	main/marshal.c main/marshal.h main/marshal_generated.c \
+	main/marshal_generated.h main/matrix.c main/matrix.h \
+	main/mipmap.c main/mipmap.h main/mm.c main/mm.h main/mtypes.h \
+	main/multisample.c main/multisample.h main/objectlabel.c \
+	main/objectlabel.h main/objectpurge.c main/objectpurge.h \
+	main/pack.c main/pack.h main/pbo.c main/pbo.h \
+	main/performance_monitor.c main/performance_monitor.h \
+	main/performance_query.c main/performance_query.h \
+	main/pipelineobj.c main/pipelineobj.h main/pixel.c \
+	main/pixel.h main/pixelstore.c main/pixelstore.h \
 	main/pixeltransfer.c main/pixeltransfer.h main/points.c \
 	main/points.h main/polygon.c main/polygon.h \
 	main/program_resource.c main/program_resource.h \
@@ -221,6 +222,7 @@ am__libmesa_la_SOURCES_DIST = main/accum.c main/accum.h \
 	main/texobj.c main/texobj.h main/texparam.c main/texparam.h \
 	main/texstate.c main/texstate.h main/texstorage.c \
 	main/texstorage.h main/texstore.c main/texstore.h \
+	main/texturebindless.c main/texturebindless.h \
 	main/textureview.c main/textureview.h main/transformfeedback.c \
 	main/transformfeedback.h main/uniform_query.cpp \
 	main/uniforms.c main/uniforms.h main/varray.c main/varray.h \
@@ -322,14 +324,14 @@ am__objects_2 = main/accum.lo main/api_arrayelt.lo main/api_exec.lo \
 	main/enable.lo main/enums.lo main/errors.lo main/eval.lo \
 	main/execmem.lo main/extensions.lo main/extensions_table.lo \
 	main/fbobject.lo main/feedback.lo main/ff_fragment_shader.lo \
-	main/ffvertex_prog.lo main/fog.lo main/format_pack.lo \
-	main/format_unpack.lo main/formatquery.lo main/formats.lo \
-	main/format_utils.lo main/framebuffer.lo main/get.lo \
-	main/genmipmap.lo main/getstring.lo main/glformats.lo \
-	main/glthread.lo main/hash.lo main/hint.lo main/histogram.lo \
-	main/image.lo main/imports.lo main/light.lo main/lines.lo \
-	main/marshal.lo main/marshal_generated.lo main/matrix.lo \
-	main/mipmap.lo main/mm.lo main/multisample.lo \
+	main/ffvertex_prog.lo main/fog.lo main/format_fallback.lo \
+	main/format_pack.lo main/format_unpack.lo main/formatquery.lo \
+	main/formats.lo main/format_utils.lo main/framebuffer.lo \
+	main/get.lo main/genmipmap.lo main/getstring.lo \
+	main/glformats.lo main/glthread.lo main/hash.lo main/hint.lo \
+	main/histogram.lo main/image.lo main/imports.lo main/light.lo \
+	main/lines.lo main/marshal.lo main/marshal_generated.lo \
+	main/matrix.lo main/mipmap.lo main/mm.lo main/multisample.lo \
 	main/objectlabel.lo main/objectpurge.lo main/pack.lo \
 	main/pbo.lo main/performance_monitor.lo \
 	main/performance_query.lo main/pipelineobj.lo main/pixel.lo \
@@ -346,10 +348,11 @@ am__objects_2 = main/accum.lo main/api_arrayelt.lo main/api_exec.lo \
 	main/texcompress_s3tc.lo main/texenv.lo main/texformat.lo \
 	main/texgen.lo main/texgetimage.lo main/teximage.lo \
 	main/texobj.lo main/texparam.lo main/texstate.lo \
-	main/texstorage.lo main/texstore.lo main/textureview.lo \
-	main/transformfeedback.lo main/uniform_query.lo \
-	main/uniforms.lo main/varray.lo main/vdpau.lo main/version.lo \
-	main/viewport.lo main/vtxfmt.lo $(am__objects_1)
+	main/texstorage.lo main/texstore.lo main/texturebindless.lo \
+	main/textureview.lo main/transformfeedback.lo \
+	main/uniform_query.lo main/uniforms.lo main/varray.lo \
+	main/vdpau.lo main/version.lo main/viewport.lo main/vtxfmt.lo \
+	$(am__objects_1)
 am__objects_3 = math/m_debug_clip.lo math/m_debug_norm.lo \
 	math/m_debug_xform.lo math/m_eval.lo math/m_matrix.lo \
 	math/m_translate.lo math/m_vector.lo
@@ -459,27 +462,28 @@ am__libmesagallium_la_SOURCES_DIST = main/accum.c main/accum.h \
 	main/fbobject.c main/fbobject.h main/feedback.c \
 	main/feedback.h main/ff_fragment_shader.cpp \
 	main/ffvertex_prog.c main/ffvertex_prog.h main/fog.c \
-	main/fog.h main/format_info.h main/format_pack.h \
-	main/format_pack.c main/format_unpack.h main/format_unpack.c \
-	main/formatquery.c main/formatquery.h main/formats.c \
-	main/formats.h main/format_utils.c main/format_utils.h \
-	main/framebuffer.c main/framebuffer.h main/get.c main/get.h \
-	main/get_hash.h main/genmipmap.c main/genmipmap.h \
-	main/getstring.c main/glformats.c main/glformats.h \
-	main/glthread.c main/glthread.h main/glheader.h main/hash.c \
-	main/hash.h main/hint.c main/hint.h main/histogram.c \
-	main/histogram.h main/image.c main/image.h main/imports.c \
-	main/imports.h main/light.c main/light.h main/lines.c \
-	main/lines.h main/macros.h main/marshal.c main/marshal.h \
-	main/marshal_generated.c main/marshal_generated.h \
-	main/matrix.c main/matrix.h main/mipmap.c main/mipmap.h \
-	main/mm.c main/mm.h main/mtypes.h main/multisample.c \
-	main/multisample.h main/objectlabel.c main/objectlabel.h \
-	main/objectpurge.c main/objectpurge.h main/pack.c main/pack.h \
-	main/pbo.c main/pbo.h main/performance_monitor.c \
-	main/performance_monitor.h main/performance_query.c \
-	main/performance_query.h main/pipelineobj.c main/pipelineobj.h \
-	main/pixel.c main/pixel.h main/pixelstore.c main/pixelstore.h \
+	main/fog.h main/format_fallback.c main/format_info.h \
+	main/format_pack.h main/format_pack.c main/format_unpack.h \
+	main/format_unpack.c main/formatquery.c main/formatquery.h \
+	main/formats.c main/formats.h main/format_utils.c \
+	main/format_utils.h main/framebuffer.c main/framebuffer.h \
+	main/get.c main/get.h main/get_hash.h main/genmipmap.c \
+	main/genmipmap.h main/getstring.c main/glformats.c \
+	main/glformats.h main/glthread.c main/glthread.h \
+	main/glheader.h main/hash.c main/hash.h main/hint.c \
+	main/hint.h main/histogram.c main/histogram.h main/image.c \
+	main/image.h main/imports.c main/imports.h main/light.c \
+	main/light.h main/lines.c main/lines.h main/macros.h \
+	main/marshal.c main/marshal.h main/marshal_generated.c \
+	main/marshal_generated.h main/matrix.c main/matrix.h \
+	main/mipmap.c main/mipmap.h main/mm.c main/mm.h main/mtypes.h \
+	main/multisample.c main/multisample.h main/objectlabel.c \
+	main/objectlabel.h main/objectpurge.c main/objectpurge.h \
+	main/pack.c main/pack.h main/pbo.c main/pbo.h \
+	main/performance_monitor.c main/performance_monitor.h \
+	main/performance_query.c main/performance_query.h \
+	main/pipelineobj.c main/pipelineobj.h main/pixel.c \
+	main/pixel.h main/pixelstore.c main/pixelstore.h \
 	main/pixeltransfer.c main/pixeltransfer.h main/points.c \
 	main/points.h main/polygon.c main/polygon.h \
 	main/program_resource.c main/program_resource.h \
@@ -506,6 +510,7 @@ am__libmesagallium_la_SOURCES_DIST = main/accum.c main/accum.h \
 	main/texobj.c main/texobj.h main/texparam.c main/texparam.h \
 	main/texstate.c main/texstate.h main/texstorage.c \
 	main/texstorage.h main/texstore.c main/texstore.h \
+	main/texturebindless.c main/texturebindless.h \
 	main/textureview.c main/textureview.h main/transformfeedback.c \
 	main/transformfeedback.h main/uniform_query.cpp \
 	main/uniforms.c main/uniforms.h main/varray.c main/varray.h \
@@ -907,6 +912,8 @@ GL_PC_LIB_PRIV = @GL_PC_LIB_PRIV@
 GL_PC_REQ_PRIV = @GL_PC_REQ_PRIV@
 GREP = @GREP@
 HAVE_XF86VIDMODE = @HAVE_XF86VIDMODE@
+I915_CFLAGS = @I915_CFLAGS@
+I915_LIBS = @I915_LIBS@
 INDENT = @INDENT@
 INDENT_FLAGS = @INDENT_FLAGS@
 INSTALL = @INSTALL@
@@ -914,8 +921,6 @@ INSTALL_DATA = @INSTALL_DATA@
 INSTALL_PROGRAM = @INSTALL_PROGRAM@
 INSTALL_SCRIPT = @INSTALL_SCRIPT@
 INSTALL_STRIP_PROGRAM = @INSTALL_STRIP_PROGRAM@
-INTEL_CFLAGS = @INTEL_CFLAGS@
-INTEL_LIBS = @INTEL_LIBS@
 LD = @LD@
 LDFLAGS = @LDFLAGS@
 LD_NO_UNDEFINED = @LD_NO_UNDEFINED@
@@ -1011,6 +1016,8 @@ STRIP = @STRIP@
 SWR_AVX2_CXXFLAGS = @SWR_AVX2_CXXFLAGS@
 SWR_AVX_CXXFLAGS = @SWR_AVX_CXXFLAGS@
 SWR_CXX11_CXXFLAGS = @SWR_CXX11_CXXFLAGS@
+SWR_KNL_CXXFLAGS = @SWR_KNL_CXXFLAGS@
+SWR_SKX_CXXFLAGS = @SWR_SKX_CXXFLAGS@
 VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
 VALGRIND_LIBS = @VALGRIND_LIBS@
 VA_CFLAGS = @VA_CFLAGS@
@@ -1018,8 +1025,6 @@ VA_LIBS = @VA_LIBS@
 VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
 VA_MAJOR = @VA_MAJOR@
 VA_MINOR = @VA_MINOR@
-VC4_CFLAGS = @VC4_CFLAGS@
-VC4_LIBS = @VC4_LIBS@
 VDPAU_CFLAGS = @VDPAU_CFLAGS@
 VDPAU_LIBS = @VDPAU_LIBS@
 VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
@@ -1033,6 +1038,7 @@ VL_LIBS = @VL_LIBS@
 VULKAN_ICD_INSTALL_DIR = @VULKAN_ICD_INSTALL_DIR@
 WAYLAND_CFLAGS = @WAYLAND_CFLAGS@
 WAYLAND_LIBS = @WAYLAND_LIBS@
+WAYLAND_PROTOCOLS_DATADIR = @WAYLAND_PROTOCOLS_DATADIR@
 WAYLAND_SCANNER = @WAYLAND_SCANNER@
 WAYLAND_SCANNER_CFLAGS = @WAYLAND_SCANNER_CFLAGS@
 WAYLAND_SCANNER_LIBS = @WAYLAND_SCANNER_LIBS@
@@ -1106,7 +1112,6 @@ pdfdir = @pdfdir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
-runstatedir = @runstatedir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
@@ -1215,6 +1220,7 @@ MAIN_FILES = \
 	main/ffvertex_prog.h \
 	main/fog.c \
 	main/fog.h \
+	main/format_fallback.c \
 	main/format_info.h \
 	main/format_pack.h \
 	main/format_pack.c \
@@ -1361,6 +1367,8 @@ MAIN_FILES = \
 	main/texstorage.h \
 	main/texstore.c \
 	main/texstore.h \
+	main/texturebindless.c \
+	main/texturebindless.h \
 	main/textureview.c \
 	main/textureview.h \
 	main/transformfeedback.c \
@@ -1798,6 +1806,7 @@ INCLUDE_DIRS = \
 
 EXTRA_DIST = \
 	drivers/SConscript \
+	main/format_fallback.py \
 	main/format_info.py \
 	main/format_pack.py \
 	main/format_parser.py \
@@ -1813,9 +1822,9 @@ EXTRA_DIST = \
 	tnl/NOTES \
 	tnl_dd
 
-BUILT_SOURCES = main/get_hash.h main/format_info.h main/format_pack.c \
-	main/format_unpack.c program/program_parse.tab.c \
-	program/lex.yy.c $(am__append_7)
+BUILT_SOURCES = main/get_hash.h main/format_fallback.c \
+	main/format_info.h main/format_pack.c main/format_unpack.c \
+	program/program_parse.tab.c program/lex.yy.c $(am__append_7)
 CLEANFILES = \
 	$(BUILT_SOURCES) \
 	program/program_parse.tab.h
@@ -1985,6 +1994,8 @@ main/ff_fragment_shader.lo: main/$(am__dirstamp) \
 main/ffvertex_prog.lo: main/$(am__dirstamp) \
 	main/$(DEPDIR)/$(am__dirstamp)
 main/fog.lo: main/$(am__dirstamp) main/$(DEPDIR)/$(am__dirstamp)
+main/format_fallback.lo: main/$(am__dirstamp) \
+	main/$(DEPDIR)/$(am__dirstamp)
 main/format_pack.lo: main/$(am__dirstamp) \
 	main/$(DEPDIR)/$(am__dirstamp)
 main/format_unpack.lo: main/$(am__dirstamp) \
@@ -2086,6 +2097,8 @@ main/texstate.lo: main/$(am__dirstamp) main/$(DEPDIR)/$(am__dirstamp)
 main/texstorage.lo: main/$(am__dirstamp) \
 	main/$(DEPDIR)/$(am__dirstamp)
 main/texstore.lo: main/$(am__dirstamp) main/$(DEPDIR)/$(am__dirstamp)
+main/texturebindless.lo: main/$(am__dirstamp) \
+	main/$(DEPDIR)/$(am__dirstamp)
 main/textureview.lo: main/$(am__dirstamp) \
 	main/$(DEPDIR)/$(am__dirstamp)
 main/transformfeedback.lo: main/$(am__dirstamp) \
@@ -2624,6 +2637,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/ff_fragment_shader.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/ffvertex_prog.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/fog.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/format_fallback.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/format_pack.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/format_unpack.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/format_utils.Plo@am__quote@
@@ -2697,6 +2711,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/texstate.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/texstorage.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/texstore.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/texturebindless.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/textureview.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/transformfeedback.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/uniform_query.Plo@am__quote@
@@ -3317,6 +3332,11 @@ main/get_hash.h: ../mapi/glapi/gen/gl_and_es_API.xml main/get_hash_params.py \
                  main/get_hash_generator.py
 	$(PYTHON_GEN) $(srcdir)/main/get_hash_generator.py \
 		-f $(srcdir)/../mapi/glapi/gen/gl_and_es_API.xml > $@
+
+main/format_fallback.c: main/format_fallback.py \
+                        main/format_parser.py \
+	                main/formats.csv
+	$(PYTHON_GEN) $(srcdir)/main/format_fallback.py $(srcdir)/main/formats.csv $@
 
 main/format_info.h: main/formats.csv \
                     main/format_parser.py main/format_info.py

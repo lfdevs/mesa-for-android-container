@@ -33,14 +33,27 @@
 #include "svga_format.h"
 
 
+/**
+ * This is the primary driver entrypoint for allocating graphics memory
+ * (vertex/index/constant buffers, textures, etc)
+ */
 static struct pipe_resource *
 svga_resource_create(struct pipe_screen *screen,
                      const struct pipe_resource *template)
 {
+   struct pipe_resource *r;
+
    if (template->target == PIPE_BUFFER)
-      return svga_buffer_create(screen, template);
+      r = svga_buffer_create(screen, template);
    else
-      return svga_texture_create(screen, template);
+      r = svga_texture_create(screen, template);
+
+   if (!r) {
+      struct svga_screen *svgascreen = svga_screen(screen);
+      svgascreen->hud.num_failed_allocations++;
+   }
+
+   return r;
 }
 
 

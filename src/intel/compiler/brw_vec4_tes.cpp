@@ -45,26 +45,6 @@ vec4_tes_visitor::vec4_tes_visitor(const struct brw_compiler *compiler,
 {
 }
 
-
-dst_reg *
-vec4_tes_visitor::make_reg_for_system_value(int location)
-{
-   return NULL;
-}
-
-void
-vec4_tes_visitor::nir_setup_system_value_intrinsic(nir_intrinsic_instr *instr)
-{
-   switch (instr->intrinsic) {
-   case nir_intrinsic_load_tess_level_outer:
-   case nir_intrinsic_load_tess_level_inner:
-      break;
-   default:
-      vec4_visitor::nir_setup_system_value_intrinsic(instr);
-   }
-}
-
-
 void
 vec4_tes_visitor::setup_payload()
 {

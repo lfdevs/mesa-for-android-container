@@ -30,6 +30,9 @@ struct swr_jit_fs_key;
 struct swr_jit_vs_key;
 struct swr_jit_gs_key;
 
+unsigned swr_so_adjust_attrib(unsigned in_attrib,
+                              swr_vertex_shader *swr_vs);
+
 PFN_VERTEX_FUNC
 swr_compile_vs(struct swr_context *ctx, swr_jit_vs_key &key);
 

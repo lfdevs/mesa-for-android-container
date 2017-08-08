@@ -89,26 +89,35 @@ static int ring_to_hw_ip(enum ring_type ring)
 	}
 }
 
+static int radv_amdgpu_signal_sems(struct radv_amdgpu_ctx *ctx,
+				   uint32_t ip_type,
+				   uint32_t ring,
+				   struct radv_winsys_sem_info *sem_info);
+static int radv_amdgpu_cs_submit(struct radv_amdgpu_ctx *ctx,
+				 struct amdgpu_cs_request *request,
+				 struct radv_winsys_sem_info *sem_info);
+
 static void radv_amdgpu_request_to_fence(struct radv_amdgpu_ctx *ctx,
-					 struct amdgpu_cs_fence *fence,
+					 struct radv_amdgpu_fence *fence,
 					 struct amdgpu_cs_request *req)
 {
-	fence->context = ctx->ctx;
-	fence->ip_type = req->ip_type;
-	fence->ip_instance = req->ip_instance;
-	fence->ring = req->ring;
-	fence->fence = req->seq_no;
+	fence->fence.context = ctx->ctx;
+	fence->fence.ip_type = req->ip_type;
+	fence->fence.ip_instance = req->ip_instance;
+	fence->fence.ring = req->ring;
+	fence->fence.fence = req->seq_no;
+	fence->user_ptr = (volatile uint64_t*)(ctx->fence_map + (req->ip_type * MAX_RINGS_PER_TYPE + req->ring) * sizeof(uint64_t));
 }
 
 static struct radeon_winsys_fence *radv_amdgpu_create_fence()
 {
-	struct radv_amdgpu_cs_fence *fence = calloc(1, sizeof(struct amdgpu_cs_fence));
+	struct radv_amdgpu_fence *fence = calloc(1, sizeof(struct radv_amdgpu_fence));
 	return (struct radeon_winsys_fence*)fence;
 }
 
 static void radv_amdgpu_destroy_fence(struct radeon_winsys_fence *_fence)
 {
-	struct amdgpu_cs_fence *fence = (struct amdgpu_cs_fence *)_fence;
+	struct radv_amdgpu_fence *fence = (struct radv_amdgpu_fence *)_fence;
 	free(fence);
 }
 
@@ -117,16 +126,23 @@ static bool radv_amdgpu_fence_wait(struct radeon_winsys *_ws,
 			      bool absolute,
 			      uint64_t timeout)
 {
-	struct amdgpu_cs_fence *fence = (struct amdgpu_cs_fence *)_fence;
+	struct radv_amdgpu_fence *fence = (struct radv_amdgpu_fence *)_fence;
 	unsigned flags = absolute ? AMDGPU_QUERY_FENCE_TIMEOUT_IS_ABSOLUTE : 0;
 	int r;
 	uint32_t expired = 0;
 
+	if (fence->user_ptr) {
+		if (*fence->user_ptr >= fence->fence.fence)
+			return true;
+		if (!absolute && !timeout)
+			return false;
+	}
+
 	/* Now use the libdrm query. */
-	r = amdgpu_cs_query_fence_status(fence,
-					 timeout,
-					 flags,
-					 &expired);
+	r = amdgpu_cs_query_fence_status(&fence->fence,
+	                                 timeout,
+	                                 flags,
+	                                 &expired);
 
 	if (r) {
 		fprintf(stderr, "amdgpu: radv_amdgpu_cs_query_fence_status failed.\n");
@@ -619,6 +635,16 @@ static int radv_amdgpu_create_bo_list(struct radv_amdgpu_winsys *ws,
 	return r;
 }
 
+static struct amdgpu_cs_fence_info radv_set_cs_fence(struct radv_amdgpu_ctx *ctx, int ip_type, int ring)
+{
+	struct amdgpu_cs_fence_info ret = {0};
+	if (ctx->fence_map) {
+		ret.handle = radv_amdgpu_winsys_bo(ctx->fence_bo)->bo;
+		ret.offset = (ip_type * MAX_RINGS_PER_TYPE + ring) * sizeof(uint64_t);
+	}
+	return ret;
+}
+
 static void radv_assign_last_submit(struct radv_amdgpu_ctx *ctx,
 				    struct amdgpu_cs_request *request)
 {
@@ -629,6 +655,7 @@ static void radv_assign_last_submit(struct radv_amdgpu_ctx *ctx,
 
 static int radv_amdgpu_winsys_cs_submit_chained(struct radeon_winsys_ctx *_ctx,
 						int queue_idx,
+						struct radv_winsys_sem_info *sem_info,
 						struct radeon_winsys_cs **cs_array,
 						unsigned cs_count,
 						struct radeon_winsys_cs *initial_preamble_cs,
@@ -637,7 +664,7 @@ static int radv_amdgpu_winsys_cs_submit_chained(struct radeon_winsys_ctx *_ctx,
 {
 	int r;
 	struct radv_amdgpu_ctx *ctx = radv_amdgpu_ctx(_ctx);
-	struct amdgpu_cs_fence *fence = (struct amdgpu_cs_fence *)_fence;
+	struct radv_amdgpu_fence *fence = (struct radv_amdgpu_fence *)_fence;
 	struct radv_amdgpu_cs *cs0 = radv_amdgpu_cs(cs_array[0]);
 	amdgpu_bo_list_handle bo_list;
 	struct amdgpu_cs_request request = {0};
@@ -676,6 +703,7 @@ static int radv_amdgpu_winsys_cs_submit_chained(struct radeon_winsys_ctx *_ctx,
 	request.number_of_ibs = 1;
 	request.ibs = &cs0->ib;
 	request.resources = bo_list;
+	request.fence_info = radv_set_cs_fence(ctx, cs0->hw_ip, queue_idx);
 
 	if (initial_preamble_cs) {
 		request.ibs = ibs;
@@ -684,7 +712,7 @@ static int radv_amdgpu_winsys_cs_submit_chained(struct radeon_winsys_ctx *_ctx,
 		ibs[0] = ((struct radv_amdgpu_cs*)initial_preamble_cs)->ib;
 	}
 
-	r = amdgpu_cs_submit(ctx->ctx, 0, &request, 1);
+	r = radv_amdgpu_cs_submit(ctx, &request, sem_info);
 	if (r) {
 		if (r == -ENOMEM)
 			fprintf(stderr, "amdgpu: Not enough memory for command submission.\n");
@@ -705,6 +733,7 @@ static int radv_amdgpu_winsys_cs_submit_chained(struct radeon_winsys_ctx *_ctx,
 
 static int radv_amdgpu_winsys_cs_submit_fallback(struct radeon_winsys_ctx *_ctx,
 						 int queue_idx,
+						 struct radv_winsys_sem_info *sem_info,
 						 struct radeon_winsys_cs **cs_array,
 						 unsigned cs_count,
 						 struct radeon_winsys_cs *initial_preamble_cs,
@@ -713,10 +742,10 @@ static int radv_amdgpu_winsys_cs_submit_fallback(struct radeon_winsys_ctx *_ctx,
 {
 	int r;
 	struct radv_amdgpu_ctx *ctx = radv_amdgpu_ctx(_ctx);
-	struct amdgpu_cs_fence *fence = (struct amdgpu_cs_fence *)_fence;
+	struct radv_amdgpu_fence *fence = (struct radv_amdgpu_fence *)_fence;
 	amdgpu_bo_list_handle bo_list;
 	struct amdgpu_cs_request request;
-
+	bool emit_signal_sem = sem_info->cs_emit_signal;
 	assert(cs_count);
 
 	for (unsigned i = 0; i < cs_count;) {
@@ -740,6 +769,7 @@ static int radv_amdgpu_winsys_cs_submit_fallback(struct radeon_winsys_ctx *_ctx,
 		request.resources = bo_list;
 		request.number_of_ibs = cnt + !!preamble_cs;
 		request.ibs = ibs;
+		request.fence_info = radv_set_cs_fence(ctx, cs0->hw_ip, queue_idx);
 
 		if (preamble_cs) {
 			ibs[0] = radv_amdgpu_cs(preamble_cs)->ib;
@@ -755,7 +785,8 @@ static int radv_amdgpu_winsys_cs_submit_fallback(struct radeon_winsys_ctx *_ctx,
 			}
 		}
 
-		r = amdgpu_cs_submit(ctx->ctx, 0, &request, 1);
+		sem_info->cs_emit_signal = (i == cs_count - cnt) ? emit_signal_sem : false;
+		r = radv_amdgpu_cs_submit(ctx, &request, sem_info);
 		if (r) {
 			if (r == -ENOMEM)
 				fprintf(stderr, "amdgpu: Not enough memory for command submission.\n");
@@ -781,6 +812,7 @@ static int radv_amdgpu_winsys_cs_submit_fallback(struct radeon_winsys_ctx *_ctx,
 
 static int radv_amdgpu_winsys_cs_submit_sysmem(struct radeon_winsys_ctx *_ctx,
 					       int queue_idx,
+					       struct radv_winsys_sem_info *sem_info,
 					       struct radeon_winsys_cs **cs_array,
 					       unsigned cs_count,
 					       struct radeon_winsys_cs *initial_preamble_cs,
@@ -789,14 +821,15 @@ static int radv_amdgpu_winsys_cs_submit_sysmem(struct radeon_winsys_ctx *_ctx,
 {
 	int r;
 	struct radv_amdgpu_ctx *ctx = radv_amdgpu_ctx(_ctx);
-	struct amdgpu_cs_fence *fence = (struct amdgpu_cs_fence *)_fence;
+	struct radv_amdgpu_fence *fence = (struct radv_amdgpu_fence *)_fence;
 	struct radv_amdgpu_cs *cs0 = radv_amdgpu_cs(cs_array[0]);
 	struct radeon_winsys *ws = (struct radeon_winsys*)cs0->ws;
 	amdgpu_bo_list_handle bo_list;
 	struct amdgpu_cs_request request;
 	uint32_t pad_word = 0xffff1000U;
+	bool emit_signal_sem = sem_info->cs_emit_signal;
 
-	if (radv_amdgpu_winsys(ws)->family == FAMILY_SI)
+	if (radv_amdgpu_winsys(ws)->info.chip_class == SI)
 		pad_word = 0x80000000;
 
 	assert(cs_count);
@@ -858,8 +891,10 @@ static int radv_amdgpu_winsys_cs_submit_sysmem(struct radeon_winsys_ctx *_ctx,
 		request.resources = bo_list;
 		request.number_of_ibs = 1;
 		request.ibs = &ib;
+		request.fence_info = radv_set_cs_fence(ctx, cs0->hw_ip, queue_idx);
 
-		r = amdgpu_cs_submit(ctx->ctx, 0, &request, 1);
+		sem_info->cs_emit_signal = (i == cs_count - cnt) ? emit_signal_sem : false;
+		r = radv_amdgpu_cs_submit(ctx, &request, sem_info);
 		if (r) {
 			if (r == -ENOMEM)
 				fprintf(stderr, "amdgpu: Not enough memory for command submission.\n");
@@ -890,39 +925,27 @@ static int radv_amdgpu_winsys_cs_submit(struct radeon_winsys_ctx *_ctx,
 					unsigned cs_count,
 					struct radeon_winsys_cs *initial_preamble_cs,
 					struct radeon_winsys_cs *continue_preamble_cs,
-					struct radeon_winsys_sem **wait_sem,
-					unsigned wait_sem_count,
-					struct radeon_winsys_sem **signal_sem,
-					unsigned signal_sem_count,
+					struct radv_winsys_sem_info *sem_info,
 					bool can_patch,
 					struct radeon_winsys_fence *_fence)
 {
 	struct radv_amdgpu_cs *cs = radv_amdgpu_cs(cs_array[0]);
 	struct radv_amdgpu_ctx *ctx = radv_amdgpu_ctx(_ctx);
 	int ret;
-	int i;
-	
-	for (i = 0; i < wait_sem_count; i++) {
-		amdgpu_semaphore_handle sem = (amdgpu_semaphore_handle)wait_sem[i];
-		amdgpu_cs_wait_semaphore(ctx->ctx, cs->hw_ip, 0, queue_idx,
-					 sem);
-	}
+
+	assert(sem_info);
 	if (!cs->ws->use_ib_bos) {
-		ret = radv_amdgpu_winsys_cs_submit_sysmem(_ctx, queue_idx, cs_array,
+		ret = radv_amdgpu_winsys_cs_submit_sysmem(_ctx, queue_idx, sem_info, cs_array,
 							   cs_count, initial_preamble_cs, continue_preamble_cs, _fence);
-	} else if (can_patch && cs_count > AMDGPU_CS_MAX_IBS_PER_SUBMIT && false) {
-		ret = radv_amdgpu_winsys_cs_submit_chained(_ctx, queue_idx, cs_array,
+	} else if (can_patch && cs_count > AMDGPU_CS_MAX_IBS_PER_SUBMIT && cs->ws->batchchain) {
+		ret = radv_amdgpu_winsys_cs_submit_chained(_ctx, queue_idx, sem_info, cs_array,
 							    cs_count, initial_preamble_cs, continue_preamble_cs, _fence);
 	} else {
-		ret = radv_amdgpu_winsys_cs_submit_fallback(_ctx, queue_idx, cs_array,
+		ret = radv_amdgpu_winsys_cs_submit_fallback(_ctx, queue_idx, sem_info, cs_array,
 							     cs_count, initial_preamble_cs, continue_preamble_cs, _fence);
 	}
 
-	for (i = 0; i < signal_sem_count; i++) {
-		amdgpu_semaphore_handle sem = (amdgpu_semaphore_handle)signal_sem[i];
-		amdgpu_cs_signal_semaphore(ctx->ctx, cs->hw_ip, 0, queue_idx,
-					   sem);
-	}
+	radv_amdgpu_signal_sems(ctx, cs->hw_ip, queue_idx, sem_info);
 	return ret;
 }
 
@@ -978,6 +1001,15 @@ static struct radeon_winsys_ctx *radv_amdgpu_ctx_create(struct radeon_winsys *_w
 		goto error_create;
 	}
 	ctx->ws = ws;
+
+	assert(AMDGPU_HW_IP_NUM * MAX_RINGS_PER_TYPE * sizeof(uint64_t) <= 4096);
+	ctx->fence_bo = ws->base.buffer_create(&ws->base, 4096, 8,
+	                                      RADEON_DOMAIN_GTT,
+	                                      RADEON_FLAG_CPU_ACCESS);
+	if (ctx->fence_bo)
+		ctx->fence_map = (uint64_t*)ws->base.buffer_map(ctx->fence_bo);
+	if (ctx->fence_map)
+		memset(ctx->fence_map, 0, 4096);
 	return (struct radeon_winsys_ctx *)ctx;
 error_create:
 	FREE(ctx);
@@ -987,6 +1019,7 @@ error_create:
 static void radv_amdgpu_ctx_destroy(struct radeon_winsys_ctx *rwctx)
 {
 	struct radv_amdgpu_ctx *ctx = (struct radv_amdgpu_ctx *)rwctx;
+	ctx->ws->base.buffer_destroy(ctx->fence_bo);
 	amdgpu_cs_ctx_free(ctx->ctx);
 	FREE(ctx);
 }
@@ -997,9 +1030,9 @@ static bool radv_amdgpu_ctx_wait_idle(struct radeon_winsys_ctx *rwctx,
 	struct radv_amdgpu_ctx *ctx = (struct radv_amdgpu_ctx *)rwctx;
 	int ip_type = ring_to_hw_ip(ring_type);
 
-	if (ctx->last_submission[ip_type][ring_index].fence) {
+	if (ctx->last_submission[ip_type][ring_index].fence.fence) {
 		uint32_t expired;
-		int ret = amdgpu_cs_query_fence_status(&ctx->last_submission[ip_type][ring_index],
+		int ret = amdgpu_cs_query_fence_status(&ctx->last_submission[ip_type][ring_index].fence,
 		                                       1000000000ull, 0, &expired);
 
 		if (ret || !expired)
@@ -1011,19 +1044,202 @@ static bool radv_amdgpu_ctx_wait_idle(struct radeon_winsys_ctx *rwctx,
 
 static struct radeon_winsys_sem *radv_amdgpu_create_sem(struct radeon_winsys *_ws)
 {
-	int ret;
-	amdgpu_semaphore_handle sem;
-
-	ret = amdgpu_cs_create_semaphore(&sem);
-	if (ret)
+	struct amdgpu_cs_fence *sem = CALLOC_STRUCT(amdgpu_cs_fence);
+	if (!sem)
 		return NULL;
+
 	return (struct radeon_winsys_sem *)sem;
 }
 
 static void radv_amdgpu_destroy_sem(struct radeon_winsys_sem *_sem)
 {
-	amdgpu_semaphore_handle sem = (amdgpu_semaphore_handle)_sem;
-	amdgpu_cs_destroy_semaphore(sem);
+	struct amdgpu_cs_fence *sem = (struct amdgpu_cs_fence *)_sem;
+	FREE(sem);
+}
+
+static int radv_amdgpu_signal_sems(struct radv_amdgpu_ctx *ctx,
+				   uint32_t ip_type,
+				   uint32_t ring,
+				   struct radv_winsys_sem_info *sem_info)
+{
+	for (unsigned i = 0; i < sem_info->signal.sem_count; i++) {
+		struct amdgpu_cs_fence *sem = (struct amdgpu_cs_fence *)(sem_info->signal.sem)[i];
+
+		if (sem->context)
+			return -EINVAL;
+
+		*sem = ctx->last_submission[ip_type][ring].fence;
+	}
+	return 0;
+}
+
+static struct drm_amdgpu_cs_chunk_sem *radv_amdgpu_cs_alloc_syncobj_chunk(struct radv_winsys_sem_counts *counts,
+									  struct drm_amdgpu_cs_chunk *chunk, int chunk_id)
+{
+	struct drm_amdgpu_cs_chunk_sem *syncobj = malloc(sizeof(struct drm_amdgpu_cs_chunk_sem) * counts->syncobj_count);
+	if (!syncobj)
+		return NULL;
+
+	for (unsigned i = 0; i < counts->syncobj_count; i++) {
+		struct drm_amdgpu_cs_chunk_sem *sem = &syncobj[i];
+		sem->handle = counts->syncobj[i];
+	}
+
+	chunk->chunk_id = chunk_id;
+	chunk->length_dw = sizeof(struct drm_amdgpu_cs_chunk_sem) / 4 * counts->syncobj_count;
+	chunk->chunk_data = (uint64_t)(uintptr_t)syncobj;
+	return syncobj;
+}
+
+static int radv_amdgpu_cs_submit(struct radv_amdgpu_ctx *ctx,
+				 struct amdgpu_cs_request *request,
+				 struct radv_winsys_sem_info *sem_info)
+{
+	int r;
+	int num_chunks;
+	int size;
+	bool user_fence;
+	struct drm_amdgpu_cs_chunk *chunks;
+	struct drm_amdgpu_cs_chunk_data *chunk_data;
+	struct drm_amdgpu_cs_chunk_dep *sem_dependencies = NULL;
+	struct drm_amdgpu_cs_chunk_sem *wait_syncobj = NULL, *signal_syncobj = NULL;
+	int i;
+	struct amdgpu_cs_fence *sem;
+
+	user_fence = (request->fence_info.handle != NULL);
+	size = request->number_of_ibs + (user_fence ? 2 : 1) + 3;
+
+	chunks = alloca(sizeof(struct drm_amdgpu_cs_chunk) * size);
+
+	size = request->number_of_ibs + (user_fence ? 1 : 0);
+
+	chunk_data = alloca(sizeof(struct drm_amdgpu_cs_chunk_data) * size);
+
+	num_chunks = request->number_of_ibs;
+	for (i = 0; i < request->number_of_ibs; i++) {
+		struct amdgpu_cs_ib_info *ib;
+		chunks[i].chunk_id = AMDGPU_CHUNK_ID_IB;
+		chunks[i].length_dw = sizeof(struct drm_amdgpu_cs_chunk_ib) / 4;
+		chunks[i].chunk_data = (uint64_t)(uintptr_t)&chunk_data[i];
+
+		ib = &request->ibs[i];
+
+		chunk_data[i].ib_data._pad = 0;
+		chunk_data[i].ib_data.va_start = ib->ib_mc_address;
+		chunk_data[i].ib_data.ib_bytes = ib->size * 4;
+		chunk_data[i].ib_data.ip_type = request->ip_type;
+		chunk_data[i].ib_data.ip_instance = request->ip_instance;
+		chunk_data[i].ib_data.ring = request->ring;
+		chunk_data[i].ib_data.flags = ib->flags;
+	}
+
+	if (user_fence) {
+		i = num_chunks++;
+
+		chunks[i].chunk_id = AMDGPU_CHUNK_ID_FENCE;
+		chunks[i].length_dw = sizeof(struct drm_amdgpu_cs_chunk_fence) / 4;
+		chunks[i].chunk_data = (uint64_t)(uintptr_t)&chunk_data[i];
+
+		amdgpu_cs_chunk_fence_info_to_data(&request->fence_info,
+						   &chunk_data[i]);
+	}
+
+	if (sem_info->wait.syncobj_count && sem_info->cs_emit_wait) {
+		wait_syncobj = radv_amdgpu_cs_alloc_syncobj_chunk(&sem_info->wait,
+								  &chunks[num_chunks],
+								  AMDGPU_CHUNK_ID_SYNCOBJ_IN);
+		if (!wait_syncobj) {
+			r = -ENOMEM;
+			goto error_out;
+		}
+		num_chunks++;
+
+		if (sem_info->wait.sem_count == 0)
+			sem_info->cs_emit_wait = false;
+
+	}
+
+	if (sem_info->wait.sem_count && sem_info->cs_emit_wait) {
+		sem_dependencies = malloc(sizeof(struct drm_amdgpu_cs_chunk_dep) * sem_info->wait.sem_count);
+		if (!sem_dependencies) {
+			r = -ENOMEM;
+			goto error_out;
+		}
+		int sem_count = 0;
+		for (unsigned j = 0; j < sem_info->wait.sem_count; j++) {
+			sem = (struct amdgpu_cs_fence *)sem_info->wait.sem[j];
+			if (!sem->context)
+				continue;
+			struct drm_amdgpu_cs_chunk_dep *dep = &sem_dependencies[sem_count++];
+
+			amdgpu_cs_chunk_fence_to_dep(sem, dep);
+
+			sem->context = NULL;
+		}
+		i = num_chunks++;
+
+		/* dependencies chunk */
+		chunks[i].chunk_id = AMDGPU_CHUNK_ID_DEPENDENCIES;
+		chunks[i].length_dw = sizeof(struct drm_amdgpu_cs_chunk_dep) / 4 * sem_count;
+		chunks[i].chunk_data = (uint64_t)(uintptr_t)sem_dependencies;
+
+		sem_info->cs_emit_wait = false;
+	}
+
+	if (sem_info->signal.syncobj_count && sem_info->cs_emit_signal) {
+		signal_syncobj = radv_amdgpu_cs_alloc_syncobj_chunk(&sem_info->signal,
+								    &chunks[num_chunks],
+								    AMDGPU_CHUNK_ID_SYNCOBJ_OUT);
+		if (!signal_syncobj) {
+			r = -ENOMEM;
+			goto error_out;
+		}
+		num_chunks++;
+	}
+
+	r = amdgpu_cs_submit_raw(ctx->ws->dev,
+				 ctx->ctx,
+				 request->resources,
+				 num_chunks,
+				 chunks,
+				 &request->seq_no);
+error_out:
+	free(sem_dependencies);
+	free(wait_syncobj);
+	free(signal_syncobj);
+	return r;
+}
+
+static int radv_amdgpu_create_syncobj(struct radeon_winsys *_ws,
+				      uint32_t *handle)
+{
+	struct radv_amdgpu_winsys *ws = radv_amdgpu_winsys(_ws);
+	return amdgpu_cs_create_syncobj(ws->dev, handle);
+}
+
+static void radv_amdgpu_destroy_syncobj(struct radeon_winsys *_ws,
+				    uint32_t handle)
+{
+	struct radv_amdgpu_winsys *ws = radv_amdgpu_winsys(_ws);
+	amdgpu_cs_destroy_syncobj(ws->dev, handle);
+}
+
+static int radv_amdgpu_export_syncobj(struct radeon_winsys *_ws,
+				      uint32_t syncobj,
+				      int *fd)
+{
+	struct radv_amdgpu_winsys *ws = radv_amdgpu_winsys(_ws);
+
+	return amdgpu_cs_export_syncobj(ws->dev, syncobj, fd);
+}
+
+static int radv_amdgpu_import_syncobj(struct radeon_winsys *_ws,
+				      int fd,
+				      uint32_t *syncobj)
+{
+	struct radv_amdgpu_winsys *ws = radv_amdgpu_winsys(_ws);
+
+	return amdgpu_cs_import_syncobj(ws->dev, fd, syncobj);
 }
 
 void radv_amdgpu_cs_init_functions(struct radv_amdgpu_winsys *ws)
@@ -1044,5 +1260,9 @@ void radv_amdgpu_cs_init_functions(struct radv_amdgpu_winsys *ws)
 	ws->base.destroy_fence = radv_amdgpu_destroy_fence;
 	ws->base.create_sem = radv_amdgpu_create_sem;
 	ws->base.destroy_sem = radv_amdgpu_destroy_sem;
+	ws->base.create_syncobj = radv_amdgpu_create_syncobj;
+	ws->base.destroy_syncobj = radv_amdgpu_destroy_syncobj;
+	ws->base.export_syncobj = radv_amdgpu_export_syncobj;
+	ws->base.import_syncobj = radv_amdgpu_import_syncobj;
 	ws->base.fence_wait = radv_amdgpu_fence_wait;
 }

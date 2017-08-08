@@ -24,7 +24,16 @@
 #include "util/u_math.h"
 #include "util/u_prim.h"
 #include "util/macros.h"
-#include "vc4_context.h"
+#include "vc4_cl_dump.h"
+#include "kernel/vc4_packet.h"
+
+#define __gen_user_data void
+#define __gen_address_type uint32_t
+#define __gen_address_offset(reloc) (*reloc)
+#define __gen_emit_reloc(cl, reloc)
+#define __gen_unpack_address __gen_unpack_uint
+
+#include "broadcom/cle/v3d_packet_v21_pack.h"
 
 #define dump_VC4_PACKET_LINE_WIDTH dump_float
 #define dump_VC4_PACKET_POINT_SIZE dump_float
@@ -187,15 +196,16 @@ static void
 dump_VC4_PACKET_GL_ARRAY_PRIMITIVE(void *cl, uint32_t offset, uint32_t hw_offset)
 {
         uint8_t *b = cl + offset;
-        uint32_t *count = cl + offset + 1;
-        uint32_t *start = cl + offset + 5;
+
+        struct V3D21_VERTEX_ARRAY_PRIMITIVES values;
+        V3D21_VERTEX_ARRAY_PRIMITIVES_unpack(cl + offset - 1, &values);
 
         fprintf(stderr, "0x%08x 0x%08x:      0x%02x %s\n",
-                offset, hw_offset, b[0], u_prim_name(b[0] & 0x7));
+                offset, hw_offset, b[0], u_prim_name(values.primitive_mode));
         fprintf(stderr, "0x%08x 0x%08x:      %d verts\n",
-                offset + 1, hw_offset + 1, *count);
+                offset + 1, hw_offset + 1, values.length);
         fprintf(stderr, "0x%08x 0x%08x:      0x%08x start\n",
-                offset + 5, hw_offset + 5, *start);
+                offset + 5, hw_offset + 5, values.index_of_first_vertex);
 }
 
 static void
@@ -223,10 +233,15 @@ dump_VC4_PACKET_CLIPPER_XY_SCALING(void *cl, uint32_t offset, uint32_t hw_offset
 {
         uint32_t *scale = cl + offset;
 
+        struct V3D21_CLIPPER_XY_SCALING values;
+        V3D21_CLIPPER_XY_SCALING_unpack(cl + offset - 1, &values);
+
         fprintf(stderr, "0x%08x 0x%08x:      %f, %f (%f, %f, 0x%08x, 0x%08x)\n",
                 offset, hw_offset,
-                uif(scale[0]) / 16.0, uif(scale[1]) / 16.0,
-                uif(scale[0]), uif(scale[1]),
+                values.viewport_half_width_in_1_16th_of_pixel / 16.0,
+                values.viewport_half_height_in_1_16th_of_pixel / 16.0,
+                values.viewport_half_width_in_1_16th_of_pixel,
+                values.viewport_half_height_in_1_16th_of_pixel,
                 scale[0], scale[1]);
 }
 
@@ -236,9 +251,13 @@ dump_VC4_PACKET_CLIPPER_Z_SCALING(void *cl, uint32_t offset, uint32_t hw_offset)
         uint32_t *translate = cl + offset;
         uint32_t *scale = cl + offset + 8;
 
+        struct V3D21_CLIPPER_Z_SCALE_AND_OFFSET values;
+        V3D21_CLIPPER_Z_SCALE_AND_OFFSET_unpack(cl + offset - 1, &values);
+
         fprintf(stderr, "0x%08x 0x%08x:      %f, %f (0x%08x, 0x%08x)\n",
                 offset, hw_offset,
-                uif(translate[0]), uif(translate[1]),
+                values.viewport_z_scale_zc_to_zs,
+                values.viewport_z_offset_zc_to_zs,
                 translate[0], translate[1]);
 
         fprintf(stderr, "0x%08x 0x%08x:      %f, %f (0x%08x, 0x%08x)\n",
@@ -250,28 +269,26 @@ dump_VC4_PACKET_CLIPPER_Z_SCALING(void *cl, uint32_t offset, uint32_t hw_offset)
 static void
 dump_VC4_PACKET_TILE_BINNING_MODE_CONFIG(void *cl, uint32_t offset, uint32_t hw_offset)
 {
-        uint32_t *tile_alloc_addr = cl + offset;
-        uint32_t *tile_alloc_size = cl + offset + 4;
-        uint32_t *tile_state_addr = cl + offset + 8;
-        uint8_t *bin_x = cl + offset + 12;
-        uint8_t *bin_y = cl + offset + 13;
         uint8_t *flags = cl + offset + 14;
+
+        struct V3D21_TILE_BINNING_MODE_CONFIGURATION values;
+        V3D21_TILE_BINNING_MODE_CONFIGURATION_unpack(cl + offset - 1, &values);
 
         fprintf(stderr, "0x%08x 0x%08x:       tile alloc addr 0x%08x\n",
                 offset, hw_offset,
-                *tile_alloc_addr);
+                values.tile_allocation_memory_address);
 
         fprintf(stderr, "0x%08x 0x%08x:       tile alloc size %db\n",
                 offset + 4, hw_offset + 4,
-                *tile_alloc_size);
+                values.tile_allocation_memory_size);
 
         fprintf(stderr, "0x%08x 0x%08x:       tile state addr 0x%08x\n",
                 offset + 8, hw_offset + 8,
-                *tile_state_addr);
+                values.tile_state_data_array_address);
 
         fprintf(stderr, "0x%08x 0x%08x:       tiles (%d, %d)\n",
                 offset + 12, hw_offset + 12,
-                *bin_x, *bin_y);
+                values.width_in_tiles, values.height_in_tiles);
 
         fprintf(stderr, "0x%08x 0x%08x:       flags 0x%02x\n",
                 offset + 14, hw_offset + 14,

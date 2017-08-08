@@ -32,7 +32,7 @@ def mapi_objects(env, printer, mode):
         script = '../mapi_abi.py',
         source = [GLAPI + 'gen/gl_and_es_API.xml'] + env.Glob(GLAPI + 'gen/*.xml'),
         command = python_cmd + ' $SCRIPT ' + \
-                '--printer %s --mode lib $SOURCE > $TARGET' % (printer),
+                '--printer %s $SOURCE > $TARGET' % (printer),
     )
 
     cpppath = [

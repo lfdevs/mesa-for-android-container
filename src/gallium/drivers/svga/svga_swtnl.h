@@ -39,7 +39,9 @@ void svga_destroy_swtnl( struct svga_context *svga );
 
 enum pipe_error
 svga_swtnl_draw_vbo(struct svga_context *svga,
-                    const struct pipe_draw_info *info);
+                    const struct pipe_draw_info *info,
+                    struct pipe_resource *indexbuf,
+                    unsigned index_offset);
 
 
 #endif

@@ -34,8 +34,6 @@ struct primconvert_context;
 struct primconvert_context *util_primconvert_create(struct pipe_context *pipe,
                                                     uint32_t primtypes_mask);
 void util_primconvert_destroy(struct primconvert_context *pc);
-void util_primconvert_save_index_buffer(struct primconvert_context *pc,
-                                        const struct pipe_index_buffer *ib);
 void util_primconvert_save_rasterizer_state(struct primconvert_context *pc,
                                             const struct pipe_rasterizer_state
                                             *rast);

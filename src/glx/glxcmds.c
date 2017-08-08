@@ -1014,6 +1014,7 @@ fbconfigs_compatible(const struct glx_config * const a,
 
    MATCH_MASK(drawableType);
    MATCH_MASK(renderType);
+   MATCH_DONT_CARE(sRGBCapable);
 
    /* There is a bug in a few of the XFree86 DDX drivers.  They contain
     * visuals with a "transparent type" of 0 when they really mean GLX_NONE.

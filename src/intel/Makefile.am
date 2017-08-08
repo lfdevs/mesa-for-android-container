@@ -38,6 +38,7 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/gallium/auxiliary \
 	-I$(top_srcdir)/src/gallium/include \
 	$(VALGRIND_CFLAGS) \
+	$(LIBDRM_CFLAGS) \
 	$(DEFINES)
 
 AM_CFLAGS = \

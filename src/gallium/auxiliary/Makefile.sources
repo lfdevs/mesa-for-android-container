@@ -147,6 +147,8 @@ C_SOURCES := \
 	tgsi/tgsi_exec.h \
 	tgsi/tgsi_emulate.c \
 	tgsi/tgsi_emulate.h \
+	tgsi/tgsi_from_mesa.c \
+	tgsi/tgsi_from_mesa.h \
 	tgsi/tgsi_info.c \
 	tgsi/tgsi_info.h \
 	tgsi/tgsi_iterate.c \
@@ -192,8 +194,6 @@ C_SOURCES := \
 	util/u_box.h \
 	util/u_cache.c \
 	util/u_cache.h \
-	util/u_caps.c \
-	util/u_caps.h \
 	util/u_cpu_detect.c \
 	util/u_cpu_detect.h \
 	util/u_debug.c \
@@ -223,7 +223,6 @@ C_SOURCES := \
 	util/u_dump_defines.c \
 	util/u_dump.h \
 	util/u_dump_state.c \
-	util/u_dynarray.h \
 	util/u_fifo.h \
 	util/u_format.c \
 	util/u_format.h \
@@ -303,6 +302,9 @@ C_SOURCES := \
 	util/u_time.h \
 	util/u_transfer.c \
 	util/u_transfer.h \
+	util/u_threaded_context.c \
+	util/u_threaded_context.h \
+	util/u_threaded_context_calls.h \
 	util/u_upload_mgr.c \
 	util/u_upload_mgr.h \
 	util/u_vbuf.c \

@@ -31,12 +31,15 @@
 #include <zlib.h>
 
 #include <util/macros.h>
+#include <util/ralloc.h>
 
 #include "gen_decoder.h"
 
 #include "genxml/genX_xml.h"
 
 #define XML_BUFFER_SIZE 4096
+
+#define MAX(a, b) ((a) < (b) ? (b) : (a))
 
 #define MAKE_GEN(major, minor) ( ((major) << 8) | (minor) )
 
@@ -66,9 +69,6 @@ struct parser_context {
 
    struct gen_group *group;
    struct gen_enum *enoom;
-
-   int nfields;
-   struct gen_field *fields[128];
 
    int nvalues;
    struct gen_value *values[256];
@@ -178,8 +178,32 @@ xzalloc(size_t s)
    return fail_on_null(zalloc(s));
 }
 
+static void
+get_group_offset_count(const char **atts, uint32_t *offset, uint32_t *count,
+                       uint32_t *size, bool *variable)
+{
+   char *p;
+   int i;
+
+   for (i = 0; atts[i]; i += 2) {
+      if (strcmp(atts[i], "count") == 0) {
+         *count = strtoul(atts[i + 1], &p, 0);
+         if (*count == 0)
+            *variable = true;
+      } else if (strcmp(atts[i], "start") == 0) {
+         *offset = strtoul(atts[i + 1], &p, 0);
+      } else if (strcmp(atts[i], "size") == 0) {
+         *size = strtoul(atts[i + 1], &p, 0);
+      }
+   }
+   return;
+}
+
 static struct gen_group *
-create_group(struct parser_context *ctx, const char *name, const char **atts)
+create_group(struct parser_context *ctx,
+             const char *name,
+             const char **atts,
+             struct gen_group *parent)
 {
    struct gen_group *group;
 
@@ -190,6 +214,16 @@ create_group(struct parser_context *ctx, const char *name, const char **atts)
    group->spec = ctx->spec;
    group->group_offset = 0;
    group->group_count = 0;
+   group->variable = false;
+
+   if (parent) {
+      group->parent = parent;
+      get_group_offset_count(atts,
+                             &group->group_offset,
+                             &group->group_count,
+                             &group->group_size,
+                             &group->variable);
+   }
 
    return group;
 }
@@ -206,22 +240,6 @@ create_enum(struct parser_context *ctx, const char *name, const char **atts)
    e->nvalues = 0;
 
    return e;
-}
-
-static void
-get_group_offset_count(struct parser_context *ctx, const char *name,
-                       const char **atts, uint32_t *offset, uint32_t *count)
-{
-   char *p;
-   int i;
-
-   for (i = 0; atts[i]; i += 2) {
-      if (strcmp(atts[i], "count") == 0)
-         *count = strtoul(atts[i + 1], &p, 0);
-      else if (strcmp(atts[i], "start") == 0)
-         *offset = strtoul(atts[i + 1], &p, 0);
-   }
-   return;
 }
 
 static void
@@ -328,11 +346,9 @@ create_field(struct parser_context *ctx, const char **atts)
       if (strcmp(atts[i], "name") == 0)
          field->name = xstrdup(atts[i + 1]);
       else if (strcmp(atts[i], "start") == 0)
-         field->start = ctx->group->group_offset+strtoul(atts[i + 1], &p, 0);
+         field->start = strtoul(atts[i + 1], &p, 0);
       else if (strcmp(atts[i], "end") == 0) {
-         field->end = ctx->group->group_offset+strtoul(atts[i + 1], &p, 0);
-         if (ctx->group->group_offset)
-            ctx->group->group_offset = field->end+1;
+         field->end = strtoul(atts[i + 1], &p, 0);
       } else if (strcmp(atts[i], "type") == 0)
          field->type = string_to_type(ctx, atts[i + 1]);
       else if (strcmp(atts[i], "default") == 0 &&
@@ -358,6 +374,21 @@ create_value(struct parser_context *ctx, const char **atts)
    }
 
    return value;
+}
+
+static void
+create_and_append_field(struct parser_context *ctx,
+                        const char **atts)
+{
+   if (ctx->group->nfields == ctx->group->fields_size) {
+      ctx->group->fields_size = MAX(ctx->group->fields_size * 2, 2);
+      ctx->group->fields =
+         (struct gen_field **) realloc(ctx->group->fields,
+                                       sizeof(ctx->group->fields[0]) *
+                                       ctx->group->fields_size);
+   }
+
+   ctx->group->fields[ctx->group->nfields++] = create_field(ctx, atts);
 }
 
 static void
@@ -394,24 +425,27 @@ start_element(void *data, const char *element_name, const char **atts)
       ctx->spec->gen = MAKE_GEN(major, minor);
    } else if (strcmp(element_name, "instruction") == 0 ||
               strcmp(element_name, "struct") == 0) {
-      ctx->group = create_group(ctx, name, atts);
+      ctx->group = create_group(ctx, name, atts, NULL);
    } else if (strcmp(element_name, "register") == 0) {
-      ctx->group = create_group(ctx, name, atts);
+      ctx->group = create_group(ctx, name, atts, NULL);
       get_register_offset(atts, &ctx->group->register_offset);
    } else if (strcmp(element_name, "group") == 0) {
-      get_group_offset_count(ctx, name, atts, &ctx->group->group_offset,
-                             &ctx->group->group_count);
+      struct gen_group *previous_group = ctx->group;
+      while (previous_group->next)
+         previous_group = previous_group->next;
+
+      struct gen_group *group = create_group(ctx, "", atts, ctx->group);
+      previous_group->next = group;
+      ctx->group = group;
    } else if (strcmp(element_name, "field") == 0) {
-      do {
-         ctx->fields[ctx->nfields++] = create_field(ctx, atts);
-         if (ctx->group->group_count)
-            ctx->group->group_count--;
-      } while (ctx->group->group_count > 0);
+      create_and_append_field(ctx, atts);
    } else if (strcmp(element_name, "enum") == 0) {
       ctx->enoom = create_enum(ctx, name, atts);
    } else if (strcmp(element_name, "value") == 0) {
       ctx->values[ctx->nvalues++] = create_value(ctx, atts);
+      assert(ctx->nvalues < ARRAY_SIZE(ctx->values));
    }
+
 }
 
 static void
@@ -421,21 +455,16 @@ end_element(void *data, const char *name)
    struct gen_spec *spec = ctx->spec;
 
    if (strcmp(name, "instruction") == 0 ||
-      strcmp(name, "struct") == 0 ||
-      strcmp(name, "register") == 0) {
-      size_t size = ctx->nfields * sizeof(ctx->fields[0]);
+       strcmp(name, "struct") == 0 ||
+       strcmp(name, "register") == 0) {
       struct gen_group *group = ctx->group;
 
-      group->fields = xzalloc(size);
-      group->nfields = ctx->nfields;
-      memcpy(group->fields, ctx->fields, size);
-      ctx->nfields = 0;
-      ctx->group = NULL;
+      ctx->group = ctx->group->parent;
 
       for (int i = 0; i < group->nfields; i++) {
          if (group->fields[i]->start >= 16 &&
-            group->fields[i]->end <= 31 &&
-            group->fields[i]->has_default) {
+             group->fields[i]->end <= 31 &&
+             group->fields[i]->has_default) {
             group->opcode_mask |=
                mask(group->fields[i]->start % 32, group->fields[i]->end % 32);
             group->opcode |=
@@ -449,12 +478,15 @@ end_element(void *data, const char *name)
          spec->structs[spec->nstructs++] = group;
       else if (strcmp(name, "register") == 0)
          spec->registers[spec->nregisters++] = group;
+
+      assert(spec->ncommands < ARRAY_SIZE(spec->commands));
+      assert(spec->nstructs < ARRAY_SIZE(spec->structs));
+      assert(spec->nregisters < ARRAY_SIZE(spec->registers));
    } else if (strcmp(name, "group") == 0) {
-      ctx->group->group_offset = 0;
-      ctx->group->group_count = 0;
+      ctx->group = ctx->group->parent;
    } else if (strcmp(name, "field") == 0) {
-      assert(ctx->nfields > 0);
-      struct gen_field *field = ctx->fields[ctx->nfields - 1];
+      assert(ctx->group->nfields > 0);
+      struct gen_field *field = ctx->group->fields[ctx->group->nfields - 1];
       size_t size = ctx->nvalues * sizeof(ctx->values[0]);
       field->inline_enum.values = xzalloc(size);
       field->inline_enum.nvalues = ctx->nvalues;
@@ -636,11 +668,11 @@ gen_spec_load_from_path(const struct gen_device_info *devinfo,
    do {
       buf = XML_GetBuffer(ctx.parser, XML_BUFFER_SIZE);
       len = fread(buf, 1, XML_BUFFER_SIZE, input);
-      if (len < 0) {
+      if (len == 0) {
          fprintf(stderr, "fread: %m\n");
-         fclose(input);
-         free(filename);
-         return NULL;
+         free(ctx.spec);
+         ctx.spec = NULL;
+         goto end;
       }
       if (XML_ParseBuffer(ctx.parser, len, len == 0) == 0) {
          fprintf(stderr,
@@ -648,12 +680,13 @@ gen_spec_load_from_path(const struct gen_device_info *devinfo,
                  XML_GetCurrentLineNumber(ctx.parser),
                  XML_GetCurrentColumnNumber(ctx.parser),
                  XML_ErrorString(XML_GetErrorCode(ctx.parser)));
-         fclose(input);
-         free(filename);
-         return NULL;
+         free(ctx.spec);
+         ctx.spec = NULL;
+         goto end;
       }
    } while (len > 0);
 
+ end:
    XML_ParserFree(ctx.parser);
 
    fclose(input);
@@ -690,12 +723,19 @@ gen_group_get_length(struct gen_group *group, const uint32_t *p)
       break;
    }
 
+   case 2: /* BLT */ {
+      return field(h, 0, 7) + 2;
+   }
+
    case 3: /* Render */ {
       uint32_t subtype = field(h, 27, 28);
       uint32_t opcode = field(h, 24, 26);
+      uint16_t whole_opcode = field(h, 16, 31);
       switch (subtype) {
       case 0:
-         if (opcode < 2)
+         if (whole_opcode == 0x6104 /* PIPELINE_SELECT_965 */)
+            return 1;
+         else if (opcode < 2)
             return field(h, 0, 7) + 2;
          else
             return -1;
@@ -713,7 +753,9 @@ gen_group_get_length(struct gen_group *group, const uint32_t *p)
             return -1;
       }
       case 3:
-         if (opcode < 4)
+         if (whole_opcode == 0x780b)
+            return 1;
+         else if (opcode < 4)
             return field(h, 0, 7) + 2;
          else
             return -1;
@@ -730,9 +772,10 @@ gen_field_iterator_init(struct gen_field_iterator *iter,
                         const uint32_t *p,
                         bool print_colors)
 {
+   memset(iter, 0, sizeof(*iter));
+
    iter->group = group;
    iter->p = p;
-   iter->i = 0;
    iter->print_colors = print_colors;
 }
 
@@ -747,6 +790,70 @@ gen_get_enum_name(struct gen_enum *e, uint64_t value)
    return NULL;
 }
 
+static bool
+iter_more_fields(const struct gen_field_iterator *iter)
+{
+   return iter->field_iter < iter->group->nfields;
+}
+
+static uint32_t
+iter_group_offset_bits(const struct gen_field_iterator *iter,
+                       uint32_t group_iter)
+{
+   return iter->group->group_offset + (group_iter * iter->group->group_size);
+}
+
+static bool
+iter_more_groups(const struct gen_field_iterator *iter)
+{
+   if (iter->group->variable) {
+      return iter_group_offset_bits(iter, iter->group_iter + 1) <
+              (gen_group_get_length(iter->group, iter->p) * 32);
+   } else {
+      return (iter->group_iter + 1) < iter->group->group_count ||
+         iter->group->next != NULL;
+   }
+}
+
+static void
+iter_advance_group(struct gen_field_iterator *iter)
+{
+   if (iter->group->variable)
+      iter->group_iter++;
+   else {
+      if ((iter->group_iter + 1) < iter->group->group_count) {
+         iter->group_iter++;
+      } else {
+         iter->group = iter->group->next;
+         iter->group_iter = 0;
+      }
+   }
+
+   iter->field_iter = 0;
+}
+
+static bool
+iter_advance_field(struct gen_field_iterator *iter)
+{
+   while (!iter_more_fields(iter)) {
+      if (!iter_more_groups(iter))
+         return false;
+
+      iter_advance_group(iter);
+   }
+
+   iter->field = iter->group->fields[iter->field_iter++];
+   if (iter->field->name)
+       strncpy(iter->name, iter->field->name, sizeof(iter->name));
+   else
+      memset(iter->name, 0, sizeof(iter->name));
+   iter->dword = iter_group_offset_bits(iter, iter->group_iter) / 32 +
+      iter->field->start / 32;
+   iter->struct_desc = NULL;
+
+   return true;
+}
+
 bool
 gen_field_iterator_next(struct gen_field_iterator *iter)
 {
@@ -755,13 +862,8 @@ gen_field_iterator_next(struct gen_field_iterator *iter)
       float f;
    } v;
 
-   if (iter->i == iter->group->nfields)
+   if (!iter_advance_field(iter))
       return false;
-
-   iter->field = iter->group->fields[iter->i++];
-   iter->name = iter->field->name;
-   iter->dword = iter->field->start / 32;
-   iter->struct_desc = NULL;
 
    if ((iter->field->end - iter->field->start) > 32)
       v.qw = ((uint64_t) iter->p[iter->dword+1] << 32) | iter->p[iter->dword];
@@ -827,6 +929,12 @@ gen_field_iterator_next(struct gen_field_iterator *iter)
    }
    }
 
+   if (strlen(iter->group->name) == 0) {
+      int length = strlen(iter->name);
+      snprintf(iter->name + length, sizeof(iter->name) - length,
+               "[%i]", iter->group_iter);
+   }
+
    if (enum_name) {
       int length = strlen(iter->value);
       snprintf(iter->value + length, sizeof(iter->value) - length,
@@ -875,7 +983,6 @@ gen_print_group(FILE *outfile, struct gen_group *group,
          fprintf(outfile, "    %s: %s\n", iter.name, iter.value);
          if (iter.struct_desc) {
             uint64_t struct_offset = offset + 4 * iter.dword;
-            print_dword_header(outfile, &iter, struct_offset);
             gen_print_group(outfile, iter.struct_desc, struct_offset,
                             &p[iter.dword], color);
          }

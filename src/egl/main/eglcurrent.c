@@ -37,12 +37,8 @@
 #include "eglcurrent.h"
 #include "eglglobals.h"
 
-/* This should be kept in sync with _eglInitThreadInfo() */
-#define _EGL_THREAD_INFO_INITIALIZER \
-   { EGL_SUCCESS, NULL, EGL_OPENGL_ES_API, NULL, NULL, NULL }
-
 /* a fallback thread info to guarantee that every thread always has one */
-static _EGLThreadInfo dummy_thread = _EGL_THREAD_INFO_INITIALIZER;
+static _EGLThreadInfo dummy_thread;
 static mtx_t _egl_TSDMutex = _MTX_INITIALIZER_NP;
 static EGLBoolean _egl_TSDInitialized;
 static tss_t _egl_TSD;
@@ -109,7 +105,6 @@ static inline EGLBoolean _eglInitTSD(void (*dtor)(_EGLThreadInfo *))
 static void
 _eglInitThreadInfo(_EGLThreadInfo *t)
 {
-   memset(t, 0, sizeof(*t));
    t->LastError = EGL_SUCCESS;
    /* default, per EGL spec */
    t->CurrentAPI = EGL_OPENGL_ES_API;
@@ -123,10 +118,10 @@ static _EGLThreadInfo *
 _eglCreateThreadInfo(void)
 {
    _EGLThreadInfo *t = calloc(1, sizeof(_EGLThreadInfo));
-   if (t)
-      _eglInitThreadInfo(t);
-   else
+   if (!t)
       t = &dummy_thread;
+
+   _eglInitThreadInfo(t);
    return t;
 }
 

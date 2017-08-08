@@ -434,18 +434,6 @@ general_restrictions_based_on_operand_types(const struct gen_device_info *devinf
     * In fact, checking it would weaken testing of the other rules.
     */
 
-   if (num_sources == 3)
-      return (struct string){};
-
-   if (exec_size == 1)
-      return (struct string){};
-
-   if (inst_is_send(devinfo, inst))
-      return (struct string){};
-
-   if (desc->ndst == 0)
-      return (struct string){};
-
    unsigned dst_stride = 1 << (brw_inst_dst_hstride(devinfo, inst) - 1);
    bool dst_type_is_byte =
       brw_inst_dst_reg_type(devinfo, inst) == BRW_HW_REG_NON_IMM_TYPE_B ||
@@ -633,7 +621,7 @@ general_restrictions_on_region_parameters(const struct gen_device_info *devinfo,
       /* VertStride must be used to cross GRF register boundaries. This rule
        * implies that elements within a 'Width' cannot cross GRF boundaries.
        */
-      const uint64_t mask = (1 << element_size) - 1;
+      const uint64_t mask = (1ULL << element_size) - 1;
       unsigned rowbase = subreg;
 
       for (int y = 0; y < exec_size / width; y++) {
@@ -686,7 +674,7 @@ align1_access_mask(uint64_t access_mask[static 32],
                    unsigned exec_size, unsigned element_size, unsigned subreg,
                    unsigned vstride, unsigned width, unsigned hstride)
 {
-   const uint64_t mask = (1 << element_size) - 1;
+   const uint64_t mask = (1ULL << element_size) - 1;
    unsigned rowbase = subreg;
    unsigned element = 0;
 
@@ -1042,17 +1030,23 @@ region_alignment_rules(const struct gen_device_info *devinfo,
 }
 
 bool
-brw_validate_instructions(const struct brw_codegen *p, int start_offset,
+brw_validate_instructions(const struct gen_device_info *devinfo,
+                          void *assembly, int start_offset, int end_offset,
                           struct annotation_info *annotation)
 {
-   const struct gen_device_info *devinfo = p->devinfo;
-   const void *store = p->store;
    bool valid = true;
 
-   for (int src_offset = start_offset; src_offset < p->next_insn_offset;
-        src_offset += sizeof(brw_inst)) {
+   for (int src_offset = start_offset; src_offset < end_offset;) {
       struct string error_msg = { .str = NULL, .len = 0 };
-      const brw_inst *inst = store + src_offset;
+      const brw_inst *inst = assembly + src_offset;
+      bool is_compact = brw_inst_cmpt_control(devinfo, inst);
+      brw_inst uncompacted;
+
+      if (is_compact) {
+         brw_compact_inst *compacted = (void *)inst;
+         brw_uncompact_instruction(devinfo, &uncompacted, compacted);
+         inst = &uncompacted;
+      }
 
       if (is_unsupported_inst(devinfo, inst)) {
          ERROR("Instruction not supported on this Gen");
@@ -1069,6 +1063,12 @@ brw_validate_instructions(const struct brw_codegen *p, int start_offset,
       }
       valid = valid && error_msg.len == 0;
       free(error_msg.str);
+
+      if (is_compact) {
+         src_offset += sizeof(brw_compact_inst);
+      } else {
+         src_offset += sizeof(brw_inst);
+      }
    }
 
    return valid;

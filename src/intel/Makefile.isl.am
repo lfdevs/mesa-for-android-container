@@ -27,6 +27,7 @@ ISL_GEN_LIBS =                                           \
 	isl/libisl-gen75.la                              \
 	isl/libisl-gen8.la                               \
 	isl/libisl-gen9.la                               \
+	isl/libisl-gen10.la                              \
 	$(NULL)
 
 noinst_LTLIBRARIES += $(ISL_GEN_LIBS) isl/libisl.la
@@ -54,6 +55,9 @@ isl_libisl_gen8_la_CFLAGS = $(AM_CFLAGS) -DGEN_VERSIONx10=80
 
 isl_libisl_gen9_la_SOURCES = $(ISL_GEN9_FILES)
 isl_libisl_gen9_la_CFLAGS = $(AM_CFLAGS) -DGEN_VERSIONx10=90
+
+isl_libisl_gen10_la_SOURCES = $(ISL_GEN10_FILES)
+isl_libisl_gen10_la_CFLAGS = $(AM_CFLAGS) -DGEN_VERSIONx10=100
 
 BUILT_SOURCES += $(ISL_GENERATED_FILES)
 

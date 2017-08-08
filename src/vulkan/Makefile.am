@@ -11,6 +11,10 @@ PYTHON_GEN = $(AM_V_GEN)$(PYTHON2) $(PYTHON_FLAGS)
 EXTRA_DIST = \
 	util/gen_enum_to_str.py
 
+VULKAN_UTIL_SOURCES = \
+	$(VULKAN_UTIL_FILES) \
+	$(VULKAN_UTIL_GENERATED_FILES)
+
 BUILT_SOURCES = \
 	$(VULKAN_UTIL_GENERATED_FILES)
 
@@ -18,20 +22,19 @@ util/vk_enum_to_str.c util/vk_enum_to_str.h: util/gen_enum_to_str.py $(vulkan_ap
 	$(MKDIR_GEN)
 	$(PYTHON_GEN) $(srcdir)/util/gen_enum_to_str.py --xml $(vulkan_api_xml) --outdir $(top_builddir)/src/vulkan/util
 
-libvulkan_util_la_SOURCES = $(VULKAN_UTIL_GENERATED_FILES)
+libvulkan_util_la_SOURCES = $(VULKAN_UTIL_SOURCES)
 
 AM_CPPFLAGS = \
 	$(DEFINES) \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/src \
+	-I$(top_srcdir)/src/vulkan/util \
 	-I$(top_srcdir)/src/gallium/auxiliary \
 	-I$(top_srcdir)/src/gallium/include
 
 AM_CFLAGS = \
 	$(LIBDRM_CFLAGS) \
 	$(VISIBILITY_CFLAGS)
-
-VULKAN_LIB_DEPS =
 
 VULKAN_WSI_SOURCES = \
 	$(VULKAN_WSI_FILES)
@@ -43,8 +46,6 @@ AM_CPPFLAGS += \
 	-DVK_USE_PLATFORM_XLIB_KHR
 
 VULKAN_WSI_SOURCES += $(VULKAN_WSI_X11_FILES)
-
-VULKAN_LIB_DEPS += $(XCB_DRI3_LIBS)
 endif
 
 BUILT_SOURCES += $(VULKAN_WSI_WAYLAND_GENERATED_FILES)
@@ -70,8 +71,6 @@ VULKAN_WSI_SOURCES += \
 	$(VULKAN_WSI_WAYLAND_FILES) \
 	$(VULKAN_WSI_WAYLAND_GENERATED_FILES)
 
-VULKAN_LIB_DEPS += \
-	$(WAYLAND_LIBS)
 endif
 
 libvulkan_wsi_la_SOURCES = $(VULKAN_WSI_SOURCES)

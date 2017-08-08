@@ -27,13 +27,17 @@
 #include "etnaviv_zsa.h"
 
 #include "etnaviv_context.h"
+#include "etnaviv_screen.h"
 #include "etnaviv_translate.h"
 #include "util/u_memory.h"
+
+#include "hw/common.xml.h"
 
 void *
 etna_zsa_state_create(struct pipe_context *pctx,
                       const struct pipe_depth_stencil_alpha_state *so)
 {
+   struct etna_context *ctx = etna_context(pctx);
    struct etna_zsa_state *cs = CALLOC_STRUCT(etna_zsa_state);
 
    if (!cs)
@@ -42,7 +46,7 @@ etna_zsa_state_create(struct pipe_context *pctx,
    cs->base = *so;
 
    /* XXX does stencil[0] / stencil[1] order depend on rs->front_ccw? */
-   bool early_z = true;
+   bool early_z = !VIV_FEATURE(ctx->screen, chipFeatures, NO_EARLY_Z);
    bool disable_zs =
       (!so->depth.enabled || so->depth.func == PIPE_FUNC_ALWAYS) &&
       !so->depth.writemask;
@@ -86,9 +90,6 @@ etna_zsa_state_create(struct pipe_context *pctx,
     * This avoids having to sample depth even though we know it's going to
     * succeed. */
    if (so->depth.enabled == false || so->depth.func == PIPE_FUNC_ALWAYS)
-      early_z = false;
-
-   if (DBG_ENABLED(ETNA_DBG_NO_EARLY_Z))
       early_z = false;
 
    /* compare funcs have 1 to 1 mapping */

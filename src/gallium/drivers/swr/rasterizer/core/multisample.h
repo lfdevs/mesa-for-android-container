@@ -34,14 +34,6 @@
 typedef std::integral_constant<int, 1> SingleSampleT;
 
 INLINE
-uint32_t GetNumSamples(SWR_MULTISAMPLE_COUNT sampleCount)
-{
-    static const uint32_t sampleCountLUT[SWR_MULTISAMPLE_TYPE_COUNT] {1, 2, 4, 8, 16};
-    assert(sampleCount < SWR_MULTISAMPLE_TYPE_COUNT);
-    return sampleCountLUT[sampleCount];
-}
-
-INLINE
 SWR_MULTISAMPLE_COUNT GetSampleCount(uint32_t numSamples)
 {
     switch(numSamples)

@@ -56,4 +56,10 @@ etna_blend_state_create(struct pipe_context *pctx,
 bool
 etna_update_blend(struct etna_context *ctx);
 
+void
+etna_set_blend_color(struct pipe_context *pctx, const struct pipe_blend_color *bc);
+
+bool
+etna_update_blend_color(struct etna_context *ctx);
+
 #endif

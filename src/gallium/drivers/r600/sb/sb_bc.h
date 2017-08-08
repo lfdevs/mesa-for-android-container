@@ -787,7 +787,7 @@ public: \
 	} \
 	unsigned get_##name() const { \
 		return (value>>(first_bit))&((1ull<<((last_bit)-(first_bit)+1))-1); \
-	} \
+	}
 
 #define BC_RSRVD(fmt, last_bit, first_bit)
 

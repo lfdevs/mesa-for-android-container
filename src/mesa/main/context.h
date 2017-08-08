@@ -162,9 +162,6 @@ _mesa_record_error( struct gl_context *ctx, GLenum error );
 
 
 extern void
-_mesa_finish(struct gl_context *ctx);
-
-extern void
 _mesa_flush(struct gl_context *ctx);
 
 extern void GLAPIENTRY
@@ -321,6 +318,13 @@ static inline bool
 _mesa_is_gles32(const struct gl_context *ctx)
 {
    return ctx->API == API_OPENGLES2 && ctx->Version >= 32;
+}
+
+
+static inline bool
+_mesa_is_no_error_enabled(const struct gl_context *ctx)
+{
+   return ctx->Const.ContextFlags & GL_CONTEXT_FLAG_NO_ERROR_BIT_KHR;
 }
 
 

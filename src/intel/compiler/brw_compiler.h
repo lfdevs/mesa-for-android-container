@@ -100,6 +100,12 @@ struct brw_compiler {
     * This can negatively impact performance.
     */
    bool precise_trig;
+
+   /**
+    * Is 3DSTATE_CONSTANT_*'s Constant Buffer 0 relative to Dynamic State
+    * Base Address?  (If not, it's a normal GPU address.)
+    */
+   bool constant_buffer_0_is_relative;
 };
 
 
@@ -168,6 +174,7 @@ struct brw_sampler_prog_key_data {
    uint32_t y_u_v_image_mask;
    uint32_t y_uv_image_mask;
    uint32_t yx_xuxv_image_mask;
+   uint32_t xy_uxvx_image_mask;
 };
 
 /**
@@ -258,6 +265,68 @@ struct brw_gs_prog_key
    unsigned program_string_id;
 
    struct brw_sampler_prog_key_data tex;
+};
+
+enum brw_sf_primitive {
+   BRW_SF_PRIM_POINTS = 0,
+   BRW_SF_PRIM_LINES = 1,
+   BRW_SF_PRIM_TRIANGLES = 2,
+   BRW_SF_PRIM_UNFILLED_TRIS = 3,
+};
+
+struct brw_sf_prog_key {
+   uint64_t attrs;
+   bool contains_flat_varying;
+   unsigned char interp_mode[65]; /* BRW_VARYING_SLOT_COUNT */
+   uint8_t point_sprite_coord_replace;
+   enum brw_sf_primitive primitive:2;
+   bool do_twoside_color:1;
+   bool frontface_ccw:1;
+   bool do_point_sprite:1;
+   bool do_point_coord:1;
+   bool sprite_origin_lower_left:1;
+   bool userclip_active:1;
+};
+
+enum brw_clip_mode {
+   BRW_CLIP_MODE_NORMAL             = 0,
+   BRW_CLIP_MODE_CLIP_ALL           = 1,
+   BRW_CLIP_MODE_CLIP_NON_REJECTED  = 2,
+   BRW_CLIP_MODE_REJECT_ALL         = 3,
+   BRW_CLIP_MODE_ACCEPT_ALL         = 4,
+   BRW_CLIP_MODE_KERNEL_CLIP        = 5,
+};
+
+enum brw_clip_fill_mode {
+   BRW_CLIP_FILL_MODE_LINE = 0,
+   BRW_CLIP_FILL_MODE_POINT = 1,
+   BRW_CLIP_FILL_MODE_FILL = 2,
+   BRW_CLIP_FILL_MODE_CULL = 3,
+};
+
+/* Note that if unfilled primitives are being emitted, we have to fix
+ * up polygon offset and flatshading at this point:
+ */
+struct brw_clip_prog_key {
+   uint64_t attrs;
+   bool contains_flat_varying;
+   bool contains_noperspective_varying;
+   unsigned char interp_mode[65]; /* BRW_VARYING_SLOT_COUNT */
+   unsigned primitive:4;
+   unsigned nr_userclip:4;
+   bool pv_first:1;
+   bool do_unfilled:1;
+   enum brw_clip_fill_mode fill_cw:2;  /* includes cull information */
+   enum brw_clip_fill_mode fill_ccw:2; /* includes cull information */
+   bool offset_cw:1;
+   bool offset_ccw:1;
+   bool copy_bfc_cw:1;
+   bool copy_bfc_ccw:1;
+   enum brw_clip_mode clip_mode:3;
+
+   float offset_factor;
+   float offset_units;
+   float offset_clamp;
 };
 
 /* A big lookup table is used to figure out which and how many
@@ -399,6 +468,13 @@ struct brw_image_param {
  */
 #define BRW_SHADER_TIME_STRIDE 64
 
+struct brw_ubo_range
+{
+   uint16_t block;
+   uint8_t start;
+   uint8_t length;
+};
+
 struct brw_stage_prog_data {
    struct {
       /** size of our binding table. */
@@ -418,6 +494,8 @@ struct brw_stage_prog_data {
       uint32_t plane_start[3];
       /** @} */
    } binding_table;
+
+   struct brw_ubo_range ubo_ranges[4];
 
    GLuint nr_params;       /**< number of float params/constants */
    GLuint nr_pull_params;
@@ -457,6 +535,27 @@ brw_mark_surface_used(struct brw_stage_prog_data *prog_data,
    prog_data->binding_table.size_bytes =
       MAX2(prog_data->binding_table.size_bytes, (surf_index + 1) * 4);
 }
+
+enum brw_barycentric_mode {
+   BRW_BARYCENTRIC_PERSPECTIVE_PIXEL       = 0,
+   BRW_BARYCENTRIC_PERSPECTIVE_CENTROID    = 1,
+   BRW_BARYCENTRIC_PERSPECTIVE_SAMPLE      = 2,
+   BRW_BARYCENTRIC_NONPERSPECTIVE_PIXEL    = 3,
+   BRW_BARYCENTRIC_NONPERSPECTIVE_CENTROID = 4,
+   BRW_BARYCENTRIC_NONPERSPECTIVE_SAMPLE   = 5,
+   BRW_BARYCENTRIC_MODE_COUNT              = 6
+};
+#define BRW_BARYCENTRIC_NONPERSPECTIVE_BITS \
+   ((1 << BRW_BARYCENTRIC_NONPERSPECTIVE_PIXEL) | \
+    (1 << BRW_BARYCENTRIC_NONPERSPECTIVE_CENTROID) | \
+    (1 << BRW_BARYCENTRIC_NONPERSPECTIVE_SAMPLE))
+
+enum brw_pixel_shader_computed_depth_mode {
+   BRW_PSCDEPTH_OFF   = 0, /* PS does not compute depth */
+   BRW_PSCDEPTH_ON    = 1, /* PS computes depth; no guarantee about value */
+   BRW_PSCDEPTH_ON_GE = 2, /* PS guarantees output depth >= source depth */
+   BRW_PSCDEPTH_ON_LE = 3, /* PS guarantees output depth <= source depth */
+};
 
 /* Data about a particular attempt to compile a program.  Note that
  * there can be many of these, each in a different GL state
@@ -850,6 +949,26 @@ struct brw_gs_prog_data
    unsigned char transform_feedback_swizzles[64 /* BRW_MAX_SOL_BINDINGS */];
 };
 
+struct brw_sf_prog_data {
+   uint32_t urb_read_length;
+   uint32_t total_grf;
+
+   /* Each vertex may have upto 12 attributes, 4 components each,
+    * except WPOS which requires only 2.  (11*4 + 2) == 44 ==> 11
+    * rows.
+    *
+    * Actually we use 4 for each, so call it 12 rows.
+    */
+   unsigned urb_entry_size;
+};
+
+struct brw_clip_prog_data {
+   uint32_t curb_read_length;	/* user planes? */
+   uint32_t clip_mode;
+   uint32_t urb_read_length;
+   uint32_t total_grf;
+};
+
 #define DEFINE_PROG_DATA_DOWNCAST(stage)                       \
 static inline struct brw_##stage##_prog_data *                 \
 brw_##stage##_prog_data(struct brw_stage_prog_data *prog_data) \
@@ -940,6 +1059,38 @@ brw_compile_gs(const struct brw_compiler *compiler, void *log_data,
                char **error_str);
 
 /**
+ * Compile a strips and fans shader.
+ *
+ * This is a fixed-function shader determined entirely by the shader key and
+ * a VUE map.
+ *
+ * Returns the final assembly and the program's size.
+ */
+const unsigned *
+brw_compile_sf(const struct brw_compiler *compiler,
+               void *mem_ctx,
+               const struct brw_sf_prog_key *key,
+               struct brw_sf_prog_data *prog_data,
+               struct brw_vue_map *vue_map,
+               unsigned *final_assembly_size);
+
+/**
+ * Compile a clipper shader.
+ *
+ * This is a fixed-function shader determined entirely by the shader key and
+ * a VUE map.
+ *
+ * Returns the final assembly and the program's size.
+ */
+const unsigned *
+brw_compile_clip(const struct brw_compiler *compiler,
+                 void *mem_ctx,
+                 const struct brw_clip_prog_key *key,
+                 struct brw_clip_prog_data *prog_data,
+                 struct brw_vue_map *vue_map,
+                 unsigned *final_assembly_size);
+
+/**
  * Compile a fragment shader.
  *
  * Returns the final assembly and the program's size.
@@ -1021,7 +1172,7 @@ brw_stage_has_packed_dispatch(const struct gen_device_info *devinfo,
     * to do a full test run with brw_fs_test_dispatch_packing() hooked up to
     * the NIR front-end before changing this assertion.
     */
-   assert(devinfo->gen <= 9);
+   assert(devinfo->gen <= 10);
 
    switch (stage) {
    case MESA_SHADER_FRAGMENT: {

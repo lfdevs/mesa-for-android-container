@@ -72,8 +72,9 @@ namespace ArchRast
             char buf[255];
             // There could be multiple threads creating thread pools. We
             // want to make sure they are uniquly identified by adding in
-            // the creator's thread id into the filename.
-            sprintf(buf, "%s/ar_event%d_%d.bin", "/tmp", GetCurrentThreadId(), id);
+            // the creator's thread (process) id into the filename.
+            // Assumes a 1:1 thread:LWP mapping as in linux.
+            sprintf(buf, "%s/ar_event%d_%d.bin", "/tmp", GetCurrentProcessId(), id);
             mFilename = std::string(buf);
 #endif
         }

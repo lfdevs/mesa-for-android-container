@@ -3,24 +3,24 @@
 /*
  * Copyright 2015 Intel Corporation
  *
- *  Permission is hereby granted, free of charge, to any person obtaining a
- *  copy of this software and associated documentation files (the "Software"),
- *  to deal in the Software without restriction, including without limitation
- *  the rights to use, copy, modify, merge, publish, distribute, sublicense,
- *  and/or sell copies of the Software, and to permit persons to whom the
- *  Software is furnished to do so, subject to the following conditions:
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
  *
- *  The above copyright notice and this permission notice (including the next
- *  paragraph) shall be included in all copies or substantial portions of the
- *  Software.
+ * The above copyright notice and this permission notice (including the next
+ * paragraph) shall be included in all copies or substantial portions of the
+ * Software.
  *
- *  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- *  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- *  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- *  THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- *  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- *  FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
- *  IN THE SOFTWARE.
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+ * IN THE SOFTWARE.
  */
 
 #include "isl/isl.h"
@@ -5027,6 +5027,286 @@ isl_format_layouts[] = {
     .txc = ISL_TXC_ASTC,
   },
 
+  [ISL_FORMAT_ASTC_HDR_2D_4X4_FLT16] = {
+    .format = ISL_FORMAT_ASTC_HDR_2D_4X4_FLT16,
+    .name = "ISL_FORMAT_ASTC_HDR_2D_4X4_FLT16",
+    .bpb = 128,
+    .bw = 4,
+    .bh = 4,
+    .bd = 1,
+    .channels = {
+              .r = { ISL_SFLOAT, 16 },
+              .g = { ISL_SFLOAT, 16 },
+              .b = { ISL_SFLOAT, 16 },
+              .a = { ISL_SFLOAT, 16 },
+              .l = {},
+              .i = {},
+              .p = {},
+    },
+    .colorspace = ISL_COLORSPACE_LINEAR,
+    .txc = ISL_TXC_ASTC,
+  },
+
+  [ISL_FORMAT_ASTC_HDR_2D_5X4_FLT16] = {
+    .format = ISL_FORMAT_ASTC_HDR_2D_5X4_FLT16,
+    .name = "ISL_FORMAT_ASTC_HDR_2D_5X4_FLT16",
+    .bpb = 128,
+    .bw = 5,
+    .bh = 4,
+    .bd = 1,
+    .channels = {
+              .r = { ISL_SFLOAT, 16 },
+              .g = { ISL_SFLOAT, 16 },
+              .b = { ISL_SFLOAT, 16 },
+              .a = { ISL_SFLOAT, 16 },
+              .l = {},
+              .i = {},
+              .p = {},
+    },
+    .colorspace = ISL_COLORSPACE_LINEAR,
+    .txc = ISL_TXC_ASTC,
+  },
+
+  [ISL_FORMAT_ASTC_HDR_2D_5X5_FLT16] = {
+    .format = ISL_FORMAT_ASTC_HDR_2D_5X5_FLT16,
+    .name = "ISL_FORMAT_ASTC_HDR_2D_5X5_FLT16",
+    .bpb = 128,
+    .bw = 5,
+    .bh = 5,
+    .bd = 1,
+    .channels = {
+              .r = { ISL_SFLOAT, 16 },
+              .g = { ISL_SFLOAT, 16 },
+              .b = { ISL_SFLOAT, 16 },
+              .a = { ISL_SFLOAT, 16 },
+              .l = {},
+              .i = {},
+              .p = {},
+    },
+    .colorspace = ISL_COLORSPACE_LINEAR,
+    .txc = ISL_TXC_ASTC,
+  },
+
+  [ISL_FORMAT_ASTC_HDR_2D_6X5_FLT16] = {
+    .format = ISL_FORMAT_ASTC_HDR_2D_6X5_FLT16,
+    .name = "ISL_FORMAT_ASTC_HDR_2D_6X5_FLT16",
+    .bpb = 128,
+    .bw = 6,
+    .bh = 5,
+    .bd = 1,
+    .channels = {
+              .r = { ISL_SFLOAT, 16 },
+              .g = { ISL_SFLOAT, 16 },
+              .b = { ISL_SFLOAT, 16 },
+              .a = { ISL_SFLOAT, 16 },
+              .l = {},
+              .i = {},
+              .p = {},
+    },
+    .colorspace = ISL_COLORSPACE_LINEAR,
+    .txc = ISL_TXC_ASTC,
+  },
+
+  [ISL_FORMAT_ASTC_HDR_2D_6X6_FLT16] = {
+    .format = ISL_FORMAT_ASTC_HDR_2D_6X6_FLT16,
+    .name = "ISL_FORMAT_ASTC_HDR_2D_6X6_FLT16",
+    .bpb = 128,
+    .bw = 6,
+    .bh = 6,
+    .bd = 1,
+    .channels = {
+              .r = { ISL_SFLOAT, 16 },
+              .g = { ISL_SFLOAT, 16 },
+              .b = { ISL_SFLOAT, 16 },
+              .a = { ISL_SFLOAT, 16 },
+              .l = {},
+              .i = {},
+              .p = {},
+    },
+    .colorspace = ISL_COLORSPACE_LINEAR,
+    .txc = ISL_TXC_ASTC,
+  },
+
+  [ISL_FORMAT_ASTC_HDR_2D_8X5_FLT16] = {
+    .format = ISL_FORMAT_ASTC_HDR_2D_8X5_FLT16,
+    .name = "ISL_FORMAT_ASTC_HDR_2D_8X5_FLT16",
+    .bpb = 128,
+    .bw = 8,
+    .bh = 5,
+    .bd = 1,
+    .channels = {
+              .r = { ISL_SFLOAT, 16 },
+              .g = { ISL_SFLOAT, 16 },
+              .b = { ISL_SFLOAT, 16 },
+              .a = { ISL_SFLOAT, 16 },
+              .l = {},
+              .i = {},
+              .p = {},
+    },
+    .colorspace = ISL_COLORSPACE_LINEAR,
+    .txc = ISL_TXC_ASTC,
+  },
+
+  [ISL_FORMAT_ASTC_HDR_2D_8X6_FLT16] = {
+    .format = ISL_FORMAT_ASTC_HDR_2D_8X6_FLT16,
+    .name = "ISL_FORMAT_ASTC_HDR_2D_8X6_FLT16",
+    .bpb = 128,
+    .bw = 8,
+    .bh = 6,
+    .bd = 1,
+    .channels = {
+              .r = { ISL_SFLOAT, 16 },
+              .g = { ISL_SFLOAT, 16 },
+              .b = { ISL_SFLOAT, 16 },
+              .a = { ISL_SFLOAT, 16 },
+              .l = {},
+              .i = {},
+              .p = {},
+    },
+    .colorspace = ISL_COLORSPACE_LINEAR,
+    .txc = ISL_TXC_ASTC,
+  },
+
+  [ISL_FORMAT_ASTC_HDR_2D_8X8_FLT16] = {
+    .format = ISL_FORMAT_ASTC_HDR_2D_8X8_FLT16,
+    .name = "ISL_FORMAT_ASTC_HDR_2D_8X8_FLT16",
+    .bpb = 128,
+    .bw = 8,
+    .bh = 8,
+    .bd = 1,
+    .channels = {
+              .r = { ISL_SFLOAT, 16 },
+              .g = { ISL_SFLOAT, 16 },
+              .b = { ISL_SFLOAT, 16 },
+              .a = { ISL_SFLOAT, 16 },
+              .l = {},
+              .i = {},
+              .p = {},
+    },
+    .colorspace = ISL_COLORSPACE_LINEAR,
+    .txc = ISL_TXC_ASTC,
+  },
+
+  [ISL_FORMAT_ASTC_HDR_2D_10X5_FLT16] = {
+    .format = ISL_FORMAT_ASTC_HDR_2D_10X5_FLT16,
+    .name = "ISL_FORMAT_ASTC_HDR_2D_10X5_FLT16",
+    .bpb = 128,
+    .bw = 10,
+    .bh = 5,
+    .bd = 1,
+    .channels = {
+              .r = { ISL_SFLOAT, 16 },
+              .g = { ISL_SFLOAT, 16 },
+              .b = { ISL_SFLOAT, 16 },
+              .a = { ISL_SFLOAT, 16 },
+              .l = {},
+              .i = {},
+              .p = {},
+    },
+    .colorspace = ISL_COLORSPACE_LINEAR,
+    .txc = ISL_TXC_ASTC,
+  },
+
+  [ISL_FORMAT_ASTC_HDR_2D_10X6_FLT16] = {
+    .format = ISL_FORMAT_ASTC_HDR_2D_10X6_FLT16,
+    .name = "ISL_FORMAT_ASTC_HDR_2D_10X6_FLT16",
+    .bpb = 128,
+    .bw = 10,
+    .bh = 6,
+    .bd = 1,
+    .channels = {
+              .r = { ISL_SFLOAT, 16 },
+              .g = { ISL_SFLOAT, 16 },
+              .b = { ISL_SFLOAT, 16 },
+              .a = { ISL_SFLOAT, 16 },
+              .l = {},
+              .i = {},
+              .p = {},
+    },
+    .colorspace = ISL_COLORSPACE_LINEAR,
+    .txc = ISL_TXC_ASTC,
+  },
+
+  [ISL_FORMAT_ASTC_HDR_2D_10X8_FLT16] = {
+    .format = ISL_FORMAT_ASTC_HDR_2D_10X8_FLT16,
+    .name = "ISL_FORMAT_ASTC_HDR_2D_10X8_FLT16",
+    .bpb = 128,
+    .bw = 10,
+    .bh = 8,
+    .bd = 1,
+    .channels = {
+              .r = { ISL_SFLOAT, 16 },
+              .g = { ISL_SFLOAT, 16 },
+              .b = { ISL_SFLOAT, 16 },
+              .a = { ISL_SFLOAT, 16 },
+              .l = {},
+              .i = {},
+              .p = {},
+    },
+    .colorspace = ISL_COLORSPACE_LINEAR,
+    .txc = ISL_TXC_ASTC,
+  },
+
+  [ISL_FORMAT_ASTC_HDR_2D_10X10_FLT16] = {
+    .format = ISL_FORMAT_ASTC_HDR_2D_10X10_FLT16,
+    .name = "ISL_FORMAT_ASTC_HDR_2D_10X10_FLT16",
+    .bpb = 128,
+    .bw = 10,
+    .bh = 10,
+    .bd = 1,
+    .channels = {
+              .r = { ISL_SFLOAT, 16 },
+              .g = { ISL_SFLOAT, 16 },
+              .b = { ISL_SFLOAT, 16 },
+              .a = { ISL_SFLOAT, 16 },
+              .l = {},
+              .i = {},
+              .p = {},
+    },
+    .colorspace = ISL_COLORSPACE_LINEAR,
+    .txc = ISL_TXC_ASTC,
+  },
+
+  [ISL_FORMAT_ASTC_HDR_2D_12X10_FLT16] = {
+    .format = ISL_FORMAT_ASTC_HDR_2D_12X10_FLT16,
+    .name = "ISL_FORMAT_ASTC_HDR_2D_12X10_FLT16",
+    .bpb = 128,
+    .bw = 12,
+    .bh = 10,
+    .bd = 1,
+    .channels = {
+              .r = { ISL_SFLOAT, 16 },
+              .g = { ISL_SFLOAT, 16 },
+              .b = { ISL_SFLOAT, 16 },
+              .a = { ISL_SFLOAT, 16 },
+              .l = {},
+              .i = {},
+              .p = {},
+    },
+    .colorspace = ISL_COLORSPACE_LINEAR,
+    .txc = ISL_TXC_ASTC,
+  },
+
+  [ISL_FORMAT_ASTC_HDR_2D_12X12_FLT16] = {
+    .format = ISL_FORMAT_ASTC_HDR_2D_12X12_FLT16,
+    .name = "ISL_FORMAT_ASTC_HDR_2D_12X12_FLT16",
+    .bpb = 128,
+    .bw = 12,
+    .bh = 12,
+    .bd = 1,
+    .channels = {
+              .r = { ISL_SFLOAT, 16 },
+              .g = { ISL_SFLOAT, 16 },
+              .b = { ISL_SFLOAT, 16 },
+              .a = { ISL_SFLOAT, 16 },
+              .l = {},
+              .i = {},
+              .p = {},
+    },
+    .colorspace = ISL_COLORSPACE_LINEAR,
+    .txc = ISL_TXC_ASTC,
+  },
+
   [ISL_FORMAT_HIZ] = {
     .format = ISL_FORMAT_HIZ,
     .name = "ISL_FORMAT_HIZ",
@@ -5308,3 +5588,80 @@ isl_format_layouts[] = {
   },
 
 };
+
+enum isl_format
+isl_format_srgb_to_linear(enum isl_format format)
+{
+    switch (format) {
+    case ISL_FORMAT_B8G8R8A8_UNORM_SRGB:
+        return ISL_FORMAT_B8G8R8A8_UNORM;
+    case ISL_FORMAT_R10G10B10A2_UNORM_SRGB:
+        return ISL_FORMAT_R10G10B10A2_UNORM;
+    case ISL_FORMAT_R8G8B8A8_UNORM_SRGB:
+        return ISL_FORMAT_R8G8B8A8_UNORM;
+    case ISL_FORMAT_B10G10R10A2_UNORM_SRGB:
+        return ISL_FORMAT_B10G10R10A2_UNORM;
+    case ISL_FORMAT_B8G8R8X8_UNORM_SRGB:
+        return ISL_FORMAT_B8G8R8X8_UNORM;
+    case ISL_FORMAT_R8G8B8X8_UNORM_SRGB:
+        return ISL_FORMAT_R8G8B8X8_UNORM;
+    case ISL_FORMAT_B5G6R5_UNORM_SRGB:
+        return ISL_FORMAT_B5G6R5_UNORM;
+    case ISL_FORMAT_B5G5R5A1_UNORM_SRGB:
+        return ISL_FORMAT_B5G5R5A1_UNORM;
+    case ISL_FORMAT_B4G4R4A4_UNORM_SRGB:
+        return ISL_FORMAT_B4G4R4A4_UNORM;
+    case ISL_FORMAT_L8A8_UNORM_SRGB:
+        return ISL_FORMAT_L8A8_UNORM;
+    case ISL_FORMAT_B5G5R5X1_UNORM_SRGB:
+        return ISL_FORMAT_B5G5R5X1_UNORM;
+    case ISL_FORMAT_DXT1_RGB_SRGB:
+        return ISL_FORMAT_DXT1_RGB;
+    case ISL_FORMAT_BC1_UNORM_SRGB:
+        return ISL_FORMAT_BC1_UNORM;
+    case ISL_FORMAT_BC2_UNORM_SRGB:
+        return ISL_FORMAT_BC2_UNORM;
+    case ISL_FORMAT_BC3_UNORM_SRGB:
+        return ISL_FORMAT_BC3_UNORM;
+    case ISL_FORMAT_BC7_UNORM_SRGB:
+        return ISL_FORMAT_BC7_UNORM;
+    case ISL_FORMAT_R8G8B8_UNORM_SRGB:
+        return ISL_FORMAT_R8G8B8_UNORM;
+    case ISL_FORMAT_ETC2_SRGB8:
+        return ISL_FORMAT_ETC2_RGB8;
+    case ISL_FORMAT_ETC2_SRGB8_PTA:
+        return ISL_FORMAT_ETC2_RGB8_PTA;
+    case ISL_FORMAT_ETC2_EAC_SRGB8_A8:
+        return ISL_FORMAT_ETC2_EAC_SRGB8_A8;
+    case ISL_FORMAT_ASTC_LDR_2D_4X4_U8SRGB:
+        return ISL_FORMAT_ASTC_LDR_2D_4X4_U8SRGB;
+    case ISL_FORMAT_ASTC_LDR_2D_5X4_U8SRGB:
+        return ISL_FORMAT_ASTC_LDR_2D_5X4_U8SRGB;
+    case ISL_FORMAT_ASTC_LDR_2D_5X5_U8SRGB:
+        return ISL_FORMAT_ASTC_LDR_2D_5X5_U8SRGB;
+    case ISL_FORMAT_ASTC_LDR_2D_6X5_U8SRGB:
+        return ISL_FORMAT_ASTC_LDR_2D_6X5_U8SRGB;
+    case ISL_FORMAT_ASTC_LDR_2D_6X6_U8SRGB:
+        return ISL_FORMAT_ASTC_LDR_2D_6X6_U8SRGB;
+    case ISL_FORMAT_ASTC_LDR_2D_8X5_U8SRGB:
+        return ISL_FORMAT_ASTC_LDR_2D_8X5_U8SRGB;
+    case ISL_FORMAT_ASTC_LDR_2D_8X6_U8SRGB:
+        return ISL_FORMAT_ASTC_LDR_2D_8X6_U8SRGB;
+    case ISL_FORMAT_ASTC_LDR_2D_8X8_U8SRGB:
+        return ISL_FORMAT_ASTC_LDR_2D_8X8_U8SRGB;
+    case ISL_FORMAT_ASTC_LDR_2D_10X5_U8SRGB:
+        return ISL_FORMAT_ASTC_LDR_2D_10X5_U8SRGB;
+    case ISL_FORMAT_ASTC_LDR_2D_10X6_U8SRGB:
+        return ISL_FORMAT_ASTC_LDR_2D_10X6_U8SRGB;
+    case ISL_FORMAT_ASTC_LDR_2D_10X8_U8SRGB:
+        return ISL_FORMAT_ASTC_LDR_2D_10X8_U8SRGB;
+    case ISL_FORMAT_ASTC_LDR_2D_10X10_U8SRGB:
+        return ISL_FORMAT_ASTC_LDR_2D_10X10_U8SRGB;
+    case ISL_FORMAT_ASTC_LDR_2D_12X10_U8SRGB:
+        return ISL_FORMAT_ASTC_LDR_2D_12X10_U8SRGB;
+    case ISL_FORMAT_ASTC_LDR_2D_12X12_U8SRGB:
+        return ISL_FORMAT_ASTC_LDR_2D_12X12_U8SRGB;
+    default:
+        return format;
+    }
+}

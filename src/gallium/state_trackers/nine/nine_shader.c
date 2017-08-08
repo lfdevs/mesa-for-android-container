@@ -1879,7 +1879,7 @@ DECL_SPECIAL(IFC)
     struct ureg_dst tmp = ureg_writemask(tx_scratch(tx), TGSI_WRITEMASK_X);
     src[0] = tx_src_param(tx, &tx->insn.src[0]);
     src[1] = tx_src_param(tx, &tx->insn.src[1]);
-    ureg_insn(tx->ureg, cmp_op, &tmp, 1, src, 2);
+    ureg_insn(tx->ureg, cmp_op, &tmp, 1, src, 2, 0);
     ureg_IF(tx->ureg, ureg_scalar(ureg_src(tmp), TGSI_SWIZZLE_X), tx_cond(tx));
     return D3D_OK;
 }
@@ -1897,7 +1897,7 @@ DECL_SPECIAL(BREAKC)
     struct ureg_dst tmp = ureg_writemask(tx_scratch(tx), TGSI_WRITEMASK_X);
     src[0] = tx_src_param(tx, &tx->insn.src[0]);
     src[1] = tx_src_param(tx, &tx->insn.src[1]);
-    ureg_insn(tx->ureg, cmp_op, &tmp, 1, src, 2);
+    ureg_insn(tx->ureg, cmp_op, &tmp, 1, src, 2, 0);
     ureg_IF(tx->ureg, ureg_scalar(ureg_src(tmp), TGSI_SWIZZLE_X), tx_cond(tx));
     ureg_BRK(tx->ureg);
     tx_endcond(tx);
@@ -3029,7 +3029,7 @@ NineTranslateInstruction_Generic(struct shader_translator *tx)
 
     ureg_insn(tx->ureg, tx->insn.info->opcode,
               dst, tx->insn.ndst,
-              src, tx->insn.nsrc);
+              src, tx->insn.nsrc, 0);
     return D3D_OK;
 }
 

@@ -3,10 +3,12 @@ BLORP_FILES = \
 	blorp/blorp.h \
 	blorp/blorp_blit.c \
 	blorp/blorp_clear.c \
+	blorp/blorp_nir_builder.h \
 	blorp/blorp_genX_exec.h \
 	blorp/blorp_priv.h
 
 COMMON_FILES = \
+	common/gen_clflush.h \
 	common/gen_debug.c \
 	common/gen_debug.h \
 	common/gen_device_info.c \
@@ -23,6 +25,14 @@ DECODER_FILES = \
 COMPILER_FILES = \
 	compiler/brw_cfg.cpp \
 	compiler/brw_cfg.h \
+	compiler/brw_clip.h \
+	compiler/brw_clip_line.c \
+	compiler/brw_clip_point.c \
+	compiler/brw_clip_tri.c \
+	compiler/brw_clip_unfilled.c \
+	compiler/brw_clip_util.c \
+	compiler/brw_compile_clip.c \
+	compiler/brw_compile_sf.c \
 	compiler/brw_compiler.c \
 	compiler/brw_compiler.h \
 	compiler/brw_dead_control_flow.cpp \
@@ -65,6 +75,7 @@ COMPILER_FILES = \
 	compiler/brw_nir.h \
 	compiler/brw_nir.c \
 	compiler/brw_nir_analyze_boolean_resolves.c \
+	compiler/brw_nir_analyze_ubo_ranges.c \
 	compiler/brw_nir_attribute_workarounds.c \
 	compiler/brw_nir_intrinsics.c \
 	compiler/brw_nir_opt_peephole_ffma.c \
@@ -117,7 +128,8 @@ GENXML_XML_FILES = \
 	genxml/gen7.xml \
 	genxml/gen75.xml \
 	genxml/gen8.xml \
-	genxml/gen9.xml
+	genxml/gen9.xml \
+	genxml/gen10.xml
 
 GENXML_GENERATED_PACK_FILES = \
 	genxml/gen4_pack.h \
@@ -127,7 +139,8 @@ GENXML_GENERATED_PACK_FILES = \
 	genxml/gen7_pack.h \
 	genxml/gen75_pack.h \
 	genxml/gen8_pack.h \
-	genxml/gen9_pack.h
+	genxml/gen9_pack.h \
+	genxml/gen10_pack.h
 
 GENXML_GENERATED_FILES = \
 	$(GENXML_GENERATED_PACK_FILES) \
@@ -137,6 +150,7 @@ GENXML_GENERATED_FILES = \
 ISL_FILES = \
 	isl/isl.c \
 	isl/isl.h \
+	isl/isl_drm.c \
 	isl/isl_format.c \
 	isl/isl_priv.h \
 	isl/isl_storage_image.c
@@ -179,6 +193,10 @@ ISL_GEN9_FILES = \
 	isl/isl_emit_depth_stencil.c \
 	isl/isl_surface_state.c
 
+ISL_GEN10_FILES = \
+	isl/isl_emit_depth_stencil.c \
+	isl/isl_surface_state.c
+
 ISL_GENERATED_FILES = \
 	isl/isl_format_layout.c
 
@@ -197,11 +215,13 @@ VULKAN_FILES := \
 	vulkan/anv_nir.h \
 	vulkan/anv_nir_apply_pipeline_layout.c \
 	vulkan/anv_nir_lower_input_attachments.c \
+	vulkan/anv_nir_lower_multiview.c \
 	vulkan/anv_nir_lower_push_constants.c \
 	vulkan/anv_pass.c \
 	vulkan/anv_pipeline.c \
 	vulkan/anv_pipeline_cache.c \
 	vulkan/anv_private.h \
+	vulkan/anv_queue.c \
 	vulkan/anv_util.c \
 	vulkan/anv_wsi.c \
 	vulkan/vk_format_info.h
@@ -243,5 +263,9 @@ VULKAN_GEN8_FILES := \
 	$(VULKAN_GENX_FILES)
 
 VULKAN_GEN9_FILES := \
+	vulkan/gen8_cmd_buffer.c \
+	$(VULKAN_GENX_FILES)
+
+VULKAN_GEN10_FILES := \
 	vulkan/gen8_cmd_buffer.c \
 	$(VULKAN_GENX_FILES)

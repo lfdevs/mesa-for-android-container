@@ -74,21 +74,6 @@ uint64_t brw_emit_reloc(struct intel_batchbuffer *batch, uint32_t batch_offset,
                         struct brw_bo *target, uint32_t target_offset,
                         uint32_t read_domains, uint32_t write_domain);
 
-static inline uint32_t
-brw_program_reloc(struct brw_context *brw, uint32_t state_offset,
-		  uint32_t prog_offset)
-{
-   if (brw->gen >= 5) {
-      /* Using state base address. */
-      return prog_offset;
-   }
-
-   brw_emit_reloc(&brw->batch, state_offset, brw->cache.bo, prog_offset,
-                  I915_GEM_DOMAIN_INSTRUCTION, 0);
-
-   return brw->cache.bo->offset64 + prog_offset;
-}
-
 #define USED_BATCH(batch) ((uintptr_t)((batch).map_next - (batch).map))
 
 static inline uint32_t float_as_int(float f)

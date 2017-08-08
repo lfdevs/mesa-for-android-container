@@ -1,5 +1,5 @@
 /**************************************************************************
- * 
+ *
  * Copyright 2007 VMware, Inc.
  * All Rights Reserved.
  *
@@ -10,11 +10,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -22,7 +22,7 @@
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- * 
+ *
  **************************************************************************/
 
 /**
@@ -423,9 +423,9 @@ aaline_create_texture(struct aaline_stage *aaline)
 
       assert(aaline->texture->width0 == aaline->texture->height0);
 
-      u_box_origin_2d( size, size, &box );
+      u_box_origin_2d(size, size, &box);
 
-      /* This texture is new, no need to flush. 
+      /* This texture is new, no need to flush.
        */
       data = pipe->transfer_map(pipe,
                                 aaline->texture,
@@ -502,8 +502,7 @@ bind_aaline_fragment_shader(struct aaline_stage *aaline)
    struct draw_context *draw = aaline->stage.draw;
    struct pipe_context *pipe = draw->pipe;
 
-   if (!aaline->fs->aaline_fs && 
-       !generate_aaline_fs(aaline))
+   if (!aaline->fs->aaline_fs && !generate_aaline_fs(aaline))
       return FALSE;
 
    draw->suspend_flushing = TRUE;
@@ -516,7 +515,7 @@ bind_aaline_fragment_shader(struct aaline_stage *aaline)
 
 
 static inline struct aaline_stage *
-aaline_stage( struct draw_stage *stage )
+aaline_stage(struct draw_stage *stage)
 {
    return (struct aaline_stage *) stage;
 }
@@ -573,12 +572,12 @@ aaline_line(struct draw_stage *stage, struct prim_header *header)
    pos[1] += (-dx * s_a + -dy * c_a);
 
    pos = v[2]->data[posPos];
-   pos[0] += ( dx * c_a -  dy * s_a);
-   pos[1] += ( dx * s_a +  dy * c_a);
+   pos[0] += (dx * c_a -  dy * s_a);
+   pos[1] += (dx * s_a +  dy * c_a);
 
    pos = v[3]->data[posPos];
-   pos[0] += ( dx * c_a - -dy * s_a);
-   pos[1] += ( dx * s_a + -dy * c_a);
+   pos[0] += (dx * c_a - -dy * s_a);
+   pos[1] += (dx * s_a + -dy * c_a);
 
    pos = v[4]->data[posPos];
    pos[0] += (-dx * c_a -  dy * s_a);
@@ -589,12 +588,12 @@ aaline_line(struct draw_stage *stage, struct prim_header *header)
    pos[1] += (-dx * s_a + -dy * c_a);
 
    pos = v[6]->data[posPos];
-   pos[0] += ( dx * c_a -  dy * s_a);
-   pos[1] += ( dx * s_a +  dy * c_a);
+   pos[0] += (dx * c_a -  dy * s_a);
+   pos[1] += (dx * s_a +  dy * c_a);
 
    pos = v[7]->data[posPos];
-   pos[0] += ( dx * c_a - -dy * s_a);
-   pos[1] += ( dx * s_a + -dy * c_a);
+   pos[0] += (dx * c_a - -dy * s_a);
+   pos[1] += (dx * s_a + -dy * c_a);
 
    /* new texcoords */
    tex = v[0]->data[texPos];
@@ -623,22 +622,22 @@ aaline_line(struct draw_stage *stage, struct prim_header *header)
 
    /* emit 6 tris for the quad strip */
    tri.v[0] = v[2];  tri.v[1] = v[1];  tri.v[2] = v[0];
-   stage->next->tri( stage->next, &tri );
+   stage->next->tri(stage->next, &tri);
 
    tri.v[0] = v[3];  tri.v[1] = v[1];  tri.v[2] = v[2];
-   stage->next->tri( stage->next, &tri );
+   stage->next->tri(stage->next, &tri);
 
    tri.v[0] = v[4];  tri.v[1] = v[3];  tri.v[2] = v[2];
-   stage->next->tri( stage->next, &tri );
+   stage->next->tri(stage->next, &tri);
 
    tri.v[0] = v[5];  tri.v[1] = v[3];  tri.v[2] = v[4];
-   stage->next->tri( stage->next, &tri );
+   stage->next->tri(stage->next, &tri);
 
    tri.v[0] = v[6];  tri.v[1] = v[5];  tri.v[2] = v[4];
-   stage->next->tri( stage->next, &tri );
+   stage->next->tri(stage->next, &tri);
 
    tri.v[0] = v[7];  tri.v[1] = v[5];  tri.v[2] = v[6];
-   stage->next->tri( stage->next, &tri );
+   stage->next->tri(stage->next, &tri);
 }
 
 
@@ -708,7 +707,7 @@ aaline_flush(struct draw_stage *stage, unsigned flags)
    struct pipe_context *pipe = draw->pipe;
 
    stage->line = aaline_first_line;
-   stage->next->flush( stage->next, flags );
+   stage->next->flush(stage->next, flags);
 
    /* restore original frag shader, texture, sampler state */
    draw->suspend_flushing = TRUE;
@@ -736,7 +735,7 @@ aaline_flush(struct draw_stage *stage, unsigned flags)
 static void
 aaline_reset_stipple_counter(struct draw_stage *stage)
 {
-   stage->next->reset_stipple_counter( stage->next );
+   stage->next->reset_stipple_counter(stage->next);
 }
 
 
@@ -761,7 +760,7 @@ aaline_destroy(struct draw_stage *stage)
       pipe_sampler_view_reference(&aaline->sampler_view, NULL);
    }
 
-   draw_free_temp_verts( stage );
+   draw_free_temp_verts(stage);
 
    /* restore the old entry points */
    pipe->create_fs_state = aaline->driver_create_fs_state;
@@ -771,7 +770,7 @@ aaline_destroy(struct draw_stage *stage)
    pipe->bind_sampler_states = aaline->driver_bind_sampler_states;
    pipe->set_sampler_views = aaline->driver_set_sampler_views;
 
-   FREE( stage );
+   FREE(stage);
 }
 
 
@@ -792,7 +791,7 @@ draw_aaline_stage(struct draw_context *draw)
    aaline->stage.reset_stipple_counter = aaline_reset_stipple_counter;
    aaline->stage.destroy = aaline_destroy;
 
-   if (!draw_alloc_temp_verts( &aaline->stage, 8 ))
+   if (!draw_alloc_temp_verts(&aaline->stage, 8))
       goto fail;
 
    return aaline;
@@ -970,7 +969,7 @@ draw_install_aaline_stage(struct draw_context *draw, struct pipe_context *pipe)
    /*
     * Create / install AA line drawing / prim stage
     */
-   aaline = draw_aaline_stage( draw );
+   aaline = draw_aaline_stage(draw);
    if (!aaline)
       goto fail;
 
@@ -996,16 +995,16 @@ draw_install_aaline_stage(struct draw_context *draw, struct pipe_context *pipe)
 
    pipe->bind_sampler_states = aaline_bind_sampler_states;
    pipe->set_sampler_views = aaline_set_sampler_views;
-   
+
    /* Install once everything is known to be OK:
     */
    draw->pipeline.aaline = &aaline->stage;
 
    return TRUE;
 
- fail:
+fail:
    if (aaline)
-      aaline->stage.destroy( &aaline->stage );
-   
+      aaline->stage.destroy(&aaline->stage);
+
    return FALSE;
 }

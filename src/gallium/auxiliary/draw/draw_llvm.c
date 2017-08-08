@@ -352,9 +352,9 @@ create_jit_vertex_buffer_type(struct gallivm_state *gallivm,
    LLVMTypeRef elem_types[4];
    LLVMTypeRef vb_type;
 
-   elem_types[0] =
-   elem_types[1] = LLVMInt32TypeInContext(gallivm->context);
-   elem_types[2] =
+   elem_types[0] = LLVMInt16TypeInContext(gallivm->context);
+   elem_types[1] = LLVMInt8TypeInContext(gallivm->context);
+   elem_types[2] = LLVMInt32TypeInContext(gallivm->context);
    elem_types[3] = LLVMPointerType(LLVMInt8TypeInContext(gallivm->context), 0);
 
    vb_type = LLVMStructTypeInContext(gallivm->context, elem_types,
@@ -363,8 +363,12 @@ create_jit_vertex_buffer_type(struct gallivm_state *gallivm,
    (void) target; /* silence unused var warning for non-debug build */
    LP_CHECK_MEMBER_OFFSET(struct pipe_vertex_buffer, stride,
                           target, vb_type, 0);
-   LP_CHECK_MEMBER_OFFSET(struct pipe_vertex_buffer, buffer_offset,
+   LP_CHECK_MEMBER_OFFSET(struct pipe_vertex_buffer, is_user_buffer,
                           target, vb_type, 1);
+   LP_CHECK_MEMBER_OFFSET(struct pipe_vertex_buffer, buffer_offset,
+                          target, vb_type, 2);
+   LP_CHECK_MEMBER_OFFSET(struct pipe_vertex_buffer, buffer.resource,
+                          target, vb_type, 3);
 
    LP_CHECK_STRUCT_SIZE(struct pipe_vertex_buffer, target, vb_type);
 
@@ -1699,6 +1703,8 @@ draw_llvm_generate(struct draw_llvm *llvm, struct draw_llvm_variant *variant)
          vbuffer_ptr = LLVMBuildGEP(builder, vbuffers_ptr, &vb_index, 1, "");
          vb_info = LLVMBuildGEP(builder, vb_ptr, &vb_index, 1, "");
          vb_stride[j] = draw_jit_vbuffer_stride(gallivm, vb_info);
+         vb_stride[j] = LLVMBuildZExt(gallivm->builder, vb_stride[j],
+                                      LLVMInt32TypeInContext(context), "");
          vb_buffer_offset = draw_jit_vbuffer_offset(gallivm, vb_info);
          map_ptr[j] = draw_jit_dvbuffer_map(gallivm, vbuffer_ptr);
          buffer_size = draw_jit_dvbuffer_size(gallivm, vbuffer_ptr);

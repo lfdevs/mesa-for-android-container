@@ -35,6 +35,7 @@
 void RasterizeLine(DRAW_CONTEXT *pDC, uint32_t workerId, uint32_t macroTile, void *pData);
 void RasterizeSimplePoint(DRAW_CONTEXT *pDC, uint32_t workerId, uint32_t macroTile, void *pData);
 void RasterizeTriPoint(DRAW_CONTEXT *pDC, uint32_t workerId, uint32_t macroTile, void *pData);
+void InitRasterizerFunctions();
 
 INLINE
 __m128i fpToFixedPoint(const __m128 vIn)
@@ -42,15 +43,6 @@ __m128i fpToFixedPoint(const __m128 vIn)
     __m128 vFixed = _mm_mul_ps(vIn, _mm_set1_ps(FIXED_POINT_SCALE));
     return _mm_cvtps_epi32(vFixed);
 }
-
-// Selector for correct templated RasterizeTriangle function
-PFN_WORK_FUNC GetRasterizerFunc(
-    uint32_t numSamples,
-    bool IsCenter,
-    bool IsConservative,
-    uint32_t InputCoverage,
-    uint32_t EdgeEnable,
-    bool RasterizeScissorEdges);
 
 enum TriEdgesStates
 {
@@ -71,6 +63,15 @@ enum TriEdgesValues
     ALL_EDGES_VALID = 0x7,
     VALID_TRI_EDGE_COUNT,
 };
+
+// Selector for correct templated RasterizeTriangle function
+PFN_WORK_FUNC GetRasterizerFunc(
+    SWR_MULTISAMPLE_COUNT numSamples,
+    bool IsCenter,
+    bool IsConservative,
+    SWR_INPUT_COVERAGE InputCoverage,
+    uint32_t EdgeEnable,
+    bool RasterizeScissorEdges);
 
 //////////////////////////////////////////////////////////////////////////
 /// @brief ValidTriEdges convenience typedefs used for templated function 
@@ -173,7 +174,7 @@ struct RasterEdgeTraits<std::false_type, std::false_type, EdgeMaskT>
 /// (only used with conservative rasterization)
 /// @tparam RasterScissorEdgesT: do we need to rasterize with a scissor?
 template <typename NumSamplesT, typename CenterPatternT, typename ConservativeT, typename InputCoverageT, typename EdgeEnableT, typename RasterScissorEdgesT>
-struct RasterizerTraits final : public ConservativeRastBETraits<ConservativeT, InputCoverageT>,
+struct _RasterizerTraits : public ConservativeRastBETraits<ConservativeT, InputCoverageT>,
                                 public RasterEdgeTraits<RasterScissorEdgesT, ConservativeT, EdgeEnableT>
 {
     typedef MultisampleTraits<static_cast<SWR_MULTISAMPLE_COUNT>(NumSamplesT::value), CenterPatternT::value> MT;
@@ -197,3 +198,13 @@ struct RasterizerTraits final : public ConservativeRastBETraits<ConservativeT, I
     static const int depthRasterTileRowStep{(KNOB_MACROTILE_X_DIM / KNOB_TILE_X_DIM)* depthRasterTileStep};
     static const int stencilRasterTileRowStep{(KNOB_MACROTILE_X_DIM / KNOB_TILE_X_DIM) * stencilRasterTileStep};
 };
+
+template <uint32_t NumSamplesT, uint32_t CenterPatternT, uint32_t ConservativeT, uint32_t InputCoverageT, uint32_t EdgeEnableT, uint32_t RasterScissorEdgesT>
+struct RasterizerTraits final : public _RasterizerTraits <
+    std::integral_constant<uint32_t, NumSamplesT>,
+    std::integral_constant<bool, CenterPatternT != 0>,
+    std::integral_constant<bool, ConservativeT != 0>,
+    std::integral_constant<uint32_t, InputCoverageT>,
+    std::integral_constant<uint32_t, EdgeEnableT>,
+    std::integral_constant<bool, RasterScissorEdgesT != 0> >
+{};

@@ -999,6 +999,7 @@ parse_texoffset_operand(
 static boolean
 match_inst(const char **pcur,
            unsigned *saturate,
+           unsigned *precise,
            const struct tgsi_opcode_info *info)
 {
    const char *cur = *pcur;
@@ -1007,16 +1008,24 @@ match_inst(const char **pcur,
    if (str_match_nocase_whole(&cur, info->mnemonic)) {
       *pcur = cur;
       *saturate = 0;
+      *precise = 0;
       return TRUE;
    }
 
    if (str_match_no_case(&cur, info->mnemonic)) {
       /* the instruction has a suffix, figure it out */
-      if (str_match_nocase_whole(&cur, "_SAT")) {
+      if (str_match_no_case(&cur, "_SAT")) {
          *pcur = cur;
          *saturate = 1;
-         return TRUE;
       }
+
+      if (str_match_no_case(&cur, "_PRECISE")) {
+         *pcur = cur;
+         *precise = 1;
+      }
+
+      if (!is_digit_alpha_underscore(cur))
+         return TRUE;
    }
 
    return FALSE;
@@ -1029,6 +1038,7 @@ parse_instruction(
 {
    uint i;
    uint saturate = 0;
+   uint precise = 0;
    const struct tgsi_opcode_info *info;
    struct tgsi_full_instruction inst;
    const char *cur;
@@ -1043,7 +1053,7 @@ parse_instruction(
       cur = ctx->cur;
 
       info = tgsi_get_opcode_info( i );
-      if (match_inst(&cur, &saturate, info)) {
+      if (match_inst(&cur, &saturate, &precise, info)) {
          if (info->num_dst + info->num_src + info->is_tex == 0) {
             ctx->cur = cur;
             break;
@@ -1064,6 +1074,7 @@ parse_instruction(
 
    inst.Instruction.Opcode = i;
    inst.Instruction.Saturate = saturate;
+   inst.Instruction.Precise = precise;
    inst.Instruction.NumDstRegs = info->num_dst;
    inst.Instruction.NumSrcRegs = info->num_src;
 

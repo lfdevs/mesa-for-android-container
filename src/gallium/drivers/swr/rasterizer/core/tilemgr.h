@@ -151,7 +151,7 @@ private:
     OSALIGNLINE(volatile LONG) mWorkItemsConsumed { 0 };
 };
 
-typedef void(*PFN_DISPATCH)(DRAW_CONTEXT* pDC, uint32_t workerId, uint32_t threadGroupId, void*& pSpillFillBuffer);
+typedef void(*PFN_DISPATCH)(DRAW_CONTEXT* pDC, uint32_t workerId, uint32_t threadGroupId, void*& pSpillFillBuffer, void*& pScratchSpace);
 
 //////////////////////////////////////////////////////////////////////////
 /// DispatchQueue - work queue for dispatch
@@ -231,10 +231,10 @@ public:
 
     //////////////////////////////////////////////////////////////////////////
     /// @brief Dispatches a unit of work
-    void dispatch(DRAW_CONTEXT* pDC, uint32_t workerId, uint32_t threadGroupId, void*& pSpillFillBuffer)
+    void dispatch(DRAW_CONTEXT* pDC, uint32_t workerId, uint32_t threadGroupId, void*& pSpillFillBuffer, void*& pScratchSpace)
     {
         SWR_ASSERT(mPfnDispatch != nullptr);
-        mPfnDispatch(pDC, workerId, threadGroupId, pSpillFillBuffer);
+        mPfnDispatch(pDC, workerId, threadGroupId, pSpillFillBuffer, pScratchSpace);
     }
 
     void* mpTaskData{ nullptr };        // The API thread will set this up and the callback task function will interpet this.

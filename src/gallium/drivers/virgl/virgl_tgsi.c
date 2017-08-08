@@ -48,6 +48,15 @@ virgl_tgsi_transform_property(struct tgsi_transform_context *ctx,
    }
 }
 
+static void
+virgl_tgsi_transform_instruction(struct tgsi_transform_context *ctx,
+				 struct tgsi_full_instruction *inst)
+{
+   if (inst->Instruction.Precise)
+      inst->Instruction.Precise = 0;
+   ctx->emit_instruction(ctx, inst);
+}
+
 struct tgsi_token *virgl_tgsi_transform(const struct tgsi_token *tokens_in)
 {
 
@@ -61,6 +70,7 @@ struct tgsi_token *virgl_tgsi_transform(const struct tgsi_token *tokens_in)
 
    memset(&transform, 0, sizeof(transform));
    transform.base.transform_property = virgl_tgsi_transform_property;
+   transform.base.transform_instruction = virgl_tgsi_transform_instruction;
    tgsi_transform_shader(tokens_in, new_tokens, newLen, &transform.base);
 
    return new_tokens;

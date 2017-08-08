@@ -41,8 +41,6 @@
 extern "C" {
 #endif
 
-bool brw_color_buffer_write_enabled(struct brw_context *brw);
-
 void
 brw_upload_wm_prog(struct brw_context *brw);
 

@@ -72,6 +72,7 @@ enum svga_hud {
    SVGA_QUERY_NUM_STATE_OBJECTS,
    SVGA_QUERY_NUM_SURFACE_VIEWS,
    SVGA_QUERY_NUM_GENERATE_MIPMAP,
+   SVGA_QUERY_NUM_FAILED_ALLOCATIONS,
 
 /*SVGA_QUERY_MAX has to be last because it is size of an array*/
    SVGA_QUERY_MAX
@@ -268,7 +269,6 @@ struct svga_state
    struct svga_geometry_shader *gs;      /* derived GS */
 
    struct pipe_vertex_buffer vb[PIPE_MAX_ATTRIBS];
-   struct pipe_index_buffer ib;
    /** Constant buffers for each shader.
     * The size should probably always match with that of
     * svga_shader_emitter_v10.num_shader_consts.
@@ -324,6 +324,11 @@ struct svga_hw_clear_state
 
    struct pipe_framebuffer_state framebuffer;
    struct svga_prescale prescale;
+
+   /* VGPU10 state */
+   unsigned num_rendertargets;
+   struct pipe_surface *rtv[SVGA3D_MAX_RENDER_TARGETS];
+   struct pipe_surface *dsv;
 };
 
 struct svga_hw_view_state
@@ -343,9 +348,12 @@ struct svga_hw_draw_state
    unsigned rs[SVGA3D_RS_MAX];
    /** VGPU9 texture sampler and bindings state */
    unsigned ts[SVGA3D_PIXEL_SAMPLERREG_MAX][SVGA3D_TS_MAX];
+
    /** VGPU9 texture views */
    unsigned num_views;
+   unsigned num_backed_views; /* views with backing copy of texture */
    struct svga_hw_view_state views[PIPE_MAX_SAMPLERS];
+
    /** VGPU9 constant buffer values */
    float cb[PIPE_SHADER_TYPES][SVGA3D_CONSTREG_MAX][4];
 
@@ -392,10 +400,6 @@ struct svga_hw_draw_state
    unsigned num_sampler_views[PIPE_SHADER_TYPES];
    struct pipe_sampler_view
       *sampler_views[PIPE_SHADER_TYPES][PIPE_MAX_SAMPLERS];
-
-   unsigned num_rendertargets;
-   struct pipe_surface *rtv[SVGA3D_MAX_RENDER_TARGETS];
-   struct pipe_surface *dsv;
 
    /* used for rebinding */
    unsigned default_constbuf_size[PIPE_SHADER_TYPES];
@@ -675,6 +679,9 @@ struct pipe_context *
 svga_context_create(struct pipe_screen *screen,
                     void *priv, unsigned flags);
 
+void svga_toggle_render_condition(struct svga_context *svga,
+                                  boolean render_condition_enabled,
+                                  boolean on);
 
 /***********************************************************************
  * Inline conversion functions.  These are better-typed than the

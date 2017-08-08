@@ -328,6 +328,35 @@ struct pipe_screen {
     * driver doesn't support an on-disk shader cache.
     */
    struct disk_cache *(*get_disk_shader_cache)(struct pipe_screen *screen);
+
+   /**
+    * Create a new texture object from the given template info, taking
+    * format modifiers into account. \p modifiers specifies a list of format
+    * modifier tokens, as defined in drm_fourcc.h. The driver then picks the
+    * best modifier among these and creates the resource. \p count must
+    * contain the size of \p modifiers array.
+    *
+    * Returns NULL if an entry in \p modifiers is unsupported by the driver,
+    * or if only DRM_FORMAT_MOD_INVALID is provided.
+    */
+   struct pipe_resource * (*resource_create_with_modifiers)(
+                           struct pipe_screen *,
+                           const struct pipe_resource *templat,
+                           const uint64_t *modifiers, int count);
+
+   /**
+    * Get supported modifiers for a format.
+    * If \p max is 0, the total number of supported modifiers for the supplied
+    * format is returned in \p count, with no modification to \p modifiers.
+    * Otherwise, \p modifiers is filled with upto \p max supported modifier
+    * codes, and \p count with the number of modifiers copied.
+    * The \p external_only array is used to return whether the format and
+    * modifier combination can only be used with an external texture target.
+    */
+   void (*query_dmabuf_modifiers)(struct pipe_screen *screen,
+                                  enum pipe_format format, int max,
+                                  uint64_t *modifiers,
+                                  unsigned int *external_only, int *count);
 };
 
 

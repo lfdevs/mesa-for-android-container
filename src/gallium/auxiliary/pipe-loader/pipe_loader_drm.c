@@ -129,6 +129,11 @@ static const struct drm_driver_descriptor driver_descriptors[] = {
         .configuration = configuration_query,
     },
     {
+       .driver_name = "pl111",
+        .create_screen = pipe_pl111_create_screen,
+        .configuration = configuration_query,
+    },
+    {
         .driver_name = "virtio_gpu",
         .create_screen = pipe_virgl_create_screen,
         .configuration = configuration_query,
@@ -276,11 +281,11 @@ pipe_loader_drm_configuration(struct pipe_loader_device *dev,
 }
 
 static struct pipe_screen *
-pipe_loader_drm_create_screen(struct pipe_loader_device *dev)
+pipe_loader_drm_create_screen(struct pipe_loader_device *dev, unsigned flags)
 {
    struct pipe_loader_drm_device *ddev = pipe_loader_drm_device(dev);
 
-   return ddev->dd->create_screen(ddev->fd);
+   return ddev->dd->create_screen(ddev->fd, flags);
 }
 
 static const struct pipe_loader_ops pipe_loader_drm_ops = {

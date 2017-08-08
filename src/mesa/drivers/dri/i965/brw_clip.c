@@ -38,88 +38,28 @@
 #include "brw_context.h"
 #include "brw_util.h"
 #include "brw_state.h"
-#include "brw_clip.h"
+#include "compiler/brw_eu.h"
 
 #include "util/ralloc.h"
-
-#define FRONT_UNFILLED_BIT  0x1
-#define BACK_UNFILLED_BIT   0x2
-
 
 static void compile_clip_prog( struct brw_context *brw,
 			     struct brw_clip_prog_key *key )
 {
-   struct brw_clip_compile c;
-   const GLuint *program;
+   const unsigned *program;
    void *mem_ctx;
-   GLuint program_size;
-
-   memset(&c, 0, sizeof(c));
+   unsigned program_size;
 
    mem_ctx = ralloc_context(NULL);
 
-   /* Begin the compilation:
-    */
-   brw_init_codegen(&brw->screen->devinfo, &c.func, mem_ctx);
-
-   c.func.single_program_flow = 1;
-
-   c.key = *key;
-   c.vue_map = brw->vue_map_geom_out;
-
-   /* nr_regs is the number of registers filled by reading data from the VUE.
-    * This program accesses the entire VUE, so nr_regs needs to be the size of
-    * the VUE (measured in pairs, since two slots are stored in each
-    * register).
-    */
-   c.nr_regs = (c.vue_map.num_slots + 1)/2;
-
-   c.prog_data.clip_mode = c.key.clip_mode; /* XXX */
-
-   /* For some reason the thread is spawned with only 4 channels
-    * unmasked.
-    */
-   brw_set_default_mask_control(&c.func, BRW_MASK_DISABLE);
-
-
-   /* Would ideally have the option of producing a program which could
-    * do all three:
-    */
-   switch (key->primitive) {
-   case GL_TRIANGLES:
-      if (key->do_unfilled)
-	 brw_emit_unfilled_clip( &c );
-      else
-	 brw_emit_tri_clip( &c );
-      break;
-   case GL_LINES:
-      brw_emit_line_clip( &c );
-      break;
-   case GL_POINTS:
-      brw_emit_point_clip( &c );
-      break;
-   default:
-      unreachable("not reached");
-   }
-
-   brw_compact_instructions(&c.func, 0, 0, NULL);
-
-   /* get the program
-    */
-   program = brw_get_program(&c.func, &program_size);
-
-   if (unlikely(INTEL_DEBUG & DEBUG_CLIP)) {
-      fprintf(stderr, "clip:\n");
-      brw_disassemble(&brw->screen->devinfo, c.func.store,
-                      0, program_size, stderr);
-      fprintf(stderr, "\n");
-   }
+   struct brw_clip_prog_data prog_data;
+   program = brw_compile_clip(brw->screen->compiler, mem_ctx, key, &prog_data,
+                              &brw->vue_map_geom_out, &program_size);
 
    brw_upload_cache(&brw->cache,
 		    BRW_CACHE_CLIP_PROG,
-		    &c.key, sizeof(c.key),
+		    key, sizeof(*key),
 		    program, program_size,
-		    &c.prog_data, sizeof(c.prog_data),
+		    &prog_data, sizeof(prog_data),
 		    &brw->clip.prog_offset, &brw->clip.prog_data);
    ralloc_free(mem_ctx);
 }
@@ -155,7 +95,11 @@ brw_upload_clip_prog(struct brw_context *brw)
       key.contains_flat_varying = wm_prog_data->contains_flat_varying;
       key.contains_noperspective_varying =
          wm_prog_data->contains_noperspective_varying;
-      key.interp_mode = wm_prog_data->interp_mode;
+
+      STATIC_ASSERT(sizeof(key.interp_mode) ==
+                    sizeof(wm_prog_data->interp_mode));
+      memcpy(key.interp_mode, wm_prog_data->interp_mode,
+             sizeof(key.interp_mode));
    }
 
    /* BRW_NEW_REDUCED_PRIMITIVE */
@@ -170,18 +114,18 @@ brw_upload_clip_prog(struct brw_context *brw)
       key.nr_userclip = _mesa_logbase2(ctx->Transform.ClipPlanesEnabled) + 1;
 
    if (brw->gen == 5)
-       key.clip_mode = BRW_CLIPMODE_KERNEL_CLIP;
+       key.clip_mode = BRW_CLIP_MODE_KERNEL_CLIP;
    else
-       key.clip_mode = BRW_CLIPMODE_NORMAL;
+       key.clip_mode = BRW_CLIP_MODE_NORMAL;
 
    /* _NEW_POLYGON */
    if (key.primitive == GL_TRIANGLES) {
       if (ctx->Polygon.CullFlag &&
 	  ctx->Polygon.CullFaceMode == GL_FRONT_AND_BACK)
-	 key.clip_mode = BRW_CLIPMODE_REJECT_ALL;
+	 key.clip_mode = BRW_CLIP_MODE_REJECT_ALL;
       else {
-	 GLuint fill_front = CLIP_CULL;
-	 GLuint fill_back = CLIP_CULL;
+	 GLuint fill_front = BRW_CLIP_FILL_MODE_CULL;
+	 GLuint fill_back = BRW_CLIP_FILL_MODE_CULL;
 	 GLuint offset_front = 0;
 	 GLuint offset_back = 0;
 
@@ -189,15 +133,15 @@ brw_upload_clip_prog(struct brw_context *brw)
 	     ctx->Polygon.CullFaceMode != GL_FRONT) {
 	    switch (ctx->Polygon.FrontMode) {
 	    case GL_FILL:
-	       fill_front = CLIP_FILL;
+	       fill_front = BRW_CLIP_FILL_MODE_FILL;
 	       offset_front = 0;
 	       break;
 	    case GL_LINE:
-	       fill_front = CLIP_LINE;
+	       fill_front = BRW_CLIP_FILL_MODE_LINE;
 	       offset_front = ctx->Polygon.OffsetLine;
 	       break;
 	    case GL_POINT:
-	       fill_front = CLIP_POINT;
+	       fill_front = BRW_CLIP_FILL_MODE_POINT;
 	       offset_front = ctx->Polygon.OffsetPoint;
 	       break;
 	    }
@@ -207,15 +151,15 @@ brw_upload_clip_prog(struct brw_context *brw)
 	     ctx->Polygon.CullFaceMode != GL_BACK) {
 	    switch (ctx->Polygon.BackMode) {
 	    case GL_FILL:
-	       fill_back = CLIP_FILL;
+	       fill_back = BRW_CLIP_FILL_MODE_FILL;
 	       offset_back = 0;
 	       break;
 	    case GL_LINE:
-	       fill_back = CLIP_LINE;
+	       fill_back = BRW_CLIP_FILL_MODE_LINE;
 	       offset_back = ctx->Polygon.OffsetLine;
 	       break;
 	    case GL_POINT:
-	       fill_back = CLIP_POINT;
+	       fill_back = BRW_CLIP_FILL_MODE_POINT;
 	       offset_back = ctx->Polygon.OffsetPoint;
 	       break;
 	    }
@@ -228,7 +172,7 @@ brw_upload_clip_prog(struct brw_context *brw)
 	    /* Most cases the fixed function units will handle.  Cases where
 	     * one or more polygon faces are unfilled will require help:
 	     */
-	    key.clip_mode = BRW_CLIPMODE_CLIP_NON_REJECTED;
+	    key.clip_mode = BRW_CLIP_MODE_CLIP_NON_REJECTED;
 
 	    if (offset_back || offset_front) {
 	       /* _NEW_POLYGON, _NEW_BUFFERS */
@@ -237,13 +181,13 @@ brw_upload_clip_prog(struct brw_context *brw)
 	       key.offset_clamp = ctx->Polygon.OffsetClamp * ctx->DrawBuffer->_MRD;
 	    }
 
-	    if (!ctx->Polygon._FrontBit) {
+	    if (!brw->polygon_front_bit) {
 	       key.fill_ccw = fill_front;
 	       key.fill_cw = fill_back;
 	       key.offset_ccw = offset_front;
 	       key.offset_cw = offset_back;
 	       if (ctx->Light.Model.TwoSide &&
-		   key.fill_cw != CLIP_CULL)
+		   key.fill_cw != BRW_CLIP_FILL_MODE_CULL)
 		  key.copy_bfc_cw = 1;
 	    } else {
 	       key.fill_cw = fill_front;
@@ -251,7 +195,7 @@ brw_upload_clip_prog(struct brw_context *brw)
 	       key.offset_cw = offset_front;
 	       key.offset_ccw = offset_back;
 	       if (ctx->Light.Model.TwoSide &&
-		   key.fill_ccw != CLIP_CULL)
+		   key.fill_ccw != BRW_CLIP_FILL_MODE_CULL)
 		  key.copy_bfc_ccw = 1;
 	    }
 	 }

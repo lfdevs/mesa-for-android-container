@@ -84,42 +84,36 @@ fd5_vp_state_delete(struct pipe_context *pctx, void *hwcso)
 	delete_shader_stateobj(so);
 }
 
-static void
-emit_shader(struct fd_ringbuffer *ring, const struct ir3_shader_variant *so)
+void
+fd5_emit_shader(struct fd_ringbuffer *ring, const struct ir3_shader_variant *so)
 {
 	const struct ir3_info *si = &so->info;
-	enum adreno_state_block sb;
-	enum adreno_state_src src;
+	enum a4xx_state_block sb = fd4_stage2shadersb(so->type);
+	enum a4xx_state_src src;
 	uint32_t i, sz, *bin;
-
-	if (so->type == SHADER_VERTEX) {
-		sb = SB_VERT_SHADER;
-	} else {
-		sb = SB_FRAG_SHADER;
-	}
 
 	if (fd_mesa_debug & FD_DBG_DIRECT) {
 		sz = si->sizedwords;
-		src = SS_DIRECT;
+		src = SS4_DIRECT;
 		bin = fd_bo_map(so->bo);
 	} else {
 		sz = 0;
-		src = 2;  // enums different on a5xx..
+		src = SS4_INDIRECT;
 		bin = NULL;
 	}
 
-	OUT_PKT7(ring, CP_LOAD_STATE, 3 + sz);
-	OUT_RING(ring, CP_LOAD_STATE_0_DST_OFF(0) |
-			CP_LOAD_STATE_0_STATE_SRC(src) |
-			CP_LOAD_STATE_0_STATE_BLOCK(sb) |
-			CP_LOAD_STATE_0_NUM_UNIT(so->instrlen));
+	OUT_PKT7(ring, CP_LOAD_STATE4, 3 + sz);
+	OUT_RING(ring, CP_LOAD_STATE4_0_DST_OFF(0) |
+			CP_LOAD_STATE4_0_STATE_SRC(src) |
+			CP_LOAD_STATE4_0_STATE_BLOCK(sb) |
+			CP_LOAD_STATE4_0_NUM_UNIT(so->instrlen));
 	if (bin) {
-		OUT_RING(ring, CP_LOAD_STATE_1_EXT_SRC_ADDR(0) |
-				CP_LOAD_STATE_1_STATE_TYPE(ST_SHADER));
-		OUT_RING(ring, CP_LOAD_STATE_2_EXT_SRC_ADDR_HI(0));
+		OUT_RING(ring, CP_LOAD_STATE4_1_EXT_SRC_ADDR(0) |
+				CP_LOAD_STATE4_1_STATE_TYPE(ST4_SHADER));
+		OUT_RING(ring, CP_LOAD_STATE4_2_EXT_SRC_ADDR_HI(0));
 	} else {
 		OUT_RELOC(ring, so->bo, 0,
-				CP_LOAD_STATE_1_STATE_TYPE(ST_SHADER), 0);
+				CP_LOAD_STATE4_1_STATE_TYPE(ST4_SHADER), 0);
 	}
 
 	/* for how clever coverity is, it is sometimes rather dull, and
@@ -330,7 +324,8 @@ setup_stages(struct fd5_emit *emit, struct stage *s)
 }
 
 void
-fd5_program_emit(struct fd_ringbuffer *ring, struct fd5_emit *emit)
+fd5_program_emit(struct fd_context *ctx, struct fd_ringbuffer *ring,
+				 struct fd5_emit *emit)
 {
 	struct stage s[MAX_STAGES];
 	uint32_t pos_regid, psize_regid, color_regid[8];
@@ -374,49 +369,54 @@ fd5_program_emit(struct fd_ringbuffer *ring, struct fd5_emit *emit)
 	 * emitted if frag-prog is dirty vs if vert-prog is dirty..
 	 */
 
-	OUT_PKT4(ring, REG_A5XX_HLSQ_VS_CONTROL_REG, 5);
-	OUT_RING(ring, A5XX_HLSQ_VS_CONTROL_REG_CONSTOBJECTOFFSET(s[VS].constoff) |
-			A5XX_HLSQ_VS_CONTROL_REG_SHADEROBJOFFSET(s[VS].instroff) |
-			COND(s[VS].v, A5XX_HLSQ_VS_CONTROL_REG_ENABLED));
-	OUT_RING(ring, A5XX_HLSQ_FS_CONTROL_REG_CONSTOBJECTOFFSET(s[FS].constoff) |
-			A5XX_HLSQ_FS_CONTROL_REG_SHADEROBJOFFSET(s[FS].instroff) |
-			COND(s[FS].v, A5XX_HLSQ_FS_CONTROL_REG_ENABLED));
-	OUT_RING(ring, A5XX_HLSQ_HS_CONTROL_REG_CONSTOBJECTOFFSET(s[HS].constoff) |
-			A5XX_HLSQ_HS_CONTROL_REG_SHADEROBJOFFSET(s[HS].instroff) |
-			COND(s[HS].v, A5XX_HLSQ_HS_CONTROL_REG_ENABLED));
-	OUT_RING(ring, A5XX_HLSQ_DS_CONTROL_REG_CONSTOBJECTOFFSET(s[DS].constoff) |
-			A5XX_HLSQ_DS_CONTROL_REG_SHADEROBJOFFSET(s[DS].instroff) |
-			COND(s[DS].v, A5XX_HLSQ_DS_CONTROL_REG_ENABLED));
-	OUT_RING(ring, A5XX_HLSQ_GS_CONTROL_REG_CONSTOBJECTOFFSET(s[GS].constoff) |
-			A5XX_HLSQ_GS_CONTROL_REG_SHADEROBJOFFSET(s[GS].instroff) |
-			COND(s[GS].v, A5XX_HLSQ_GS_CONTROL_REG_ENABLED));
+	OUT_PKT4(ring, REG_A5XX_HLSQ_VS_CONFIG, 5);
+	OUT_RING(ring, A5XX_HLSQ_VS_CONFIG_CONSTOBJECTOFFSET(s[VS].constoff) |
+			A5XX_HLSQ_VS_CONFIG_SHADEROBJOFFSET(s[VS].instroff) |
+			COND(s[VS].v, A5XX_HLSQ_VS_CONFIG_ENABLED));
+	OUT_RING(ring, A5XX_HLSQ_FS_CONFIG_CONSTOBJECTOFFSET(s[FS].constoff) |
+			A5XX_HLSQ_FS_CONFIG_SHADEROBJOFFSET(s[FS].instroff) |
+			COND(s[FS].v, A5XX_HLSQ_FS_CONFIG_ENABLED));
+	OUT_RING(ring, A5XX_HLSQ_HS_CONFIG_CONSTOBJECTOFFSET(s[HS].constoff) |
+			A5XX_HLSQ_HS_CONFIG_SHADEROBJOFFSET(s[HS].instroff) |
+			COND(s[HS].v, A5XX_HLSQ_HS_CONFIG_ENABLED));
+	OUT_RING(ring, A5XX_HLSQ_DS_CONFIG_CONSTOBJECTOFFSET(s[DS].constoff) |
+			A5XX_HLSQ_DS_CONFIG_SHADEROBJOFFSET(s[DS].instroff) |
+			COND(s[DS].v, A5XX_HLSQ_DS_CONFIG_ENABLED));
+	OUT_RING(ring, A5XX_HLSQ_GS_CONFIG_CONSTOBJECTOFFSET(s[GS].constoff) |
+			A5XX_HLSQ_GS_CONFIG_SHADEROBJOFFSET(s[GS].instroff) |
+			COND(s[GS].v, A5XX_HLSQ_GS_CONFIG_ENABLED));
 
 	OUT_PKT4(ring, REG_A5XX_HLSQ_CS_CONFIG, 1);
 	OUT_RING(ring, 0x00000000);
 
 	OUT_PKT4(ring, REG_A5XX_HLSQ_VS_CNTL, 5);
-	OUT_RING(ring, A5XX_HLSQ_VS_CNTL_INSTRLEN(s[VS].instrlen));
-	OUT_RING(ring, A5XX_HLSQ_FS_CNTL_INSTRLEN(s[FS].instrlen));
-	OUT_RING(ring, A5XX_HLSQ_HS_CNTL_INSTRLEN(s[HS].instrlen));
-	OUT_RING(ring, A5XX_HLSQ_DS_CNTL_INSTRLEN(s[DS].instrlen));
-	OUT_RING(ring, A5XX_HLSQ_GS_CNTL_INSTRLEN(s[GS].instrlen));
+	OUT_RING(ring, A5XX_HLSQ_VS_CNTL_INSTRLEN(s[VS].instrlen) |
+			COND(s[VS].v && s[VS].v->has_ssbo, A5XX_HLSQ_VS_CNTL_SSBO_ENABLE));
+	OUT_RING(ring, A5XX_HLSQ_FS_CNTL_INSTRLEN(s[FS].instrlen) |
+			COND(s[FS].v && s[FS].v->has_ssbo, A5XX_HLSQ_FS_CNTL_SSBO_ENABLE));
+	OUT_RING(ring, A5XX_HLSQ_HS_CNTL_INSTRLEN(s[HS].instrlen) |
+			COND(s[HS].v && s[HS].v->has_ssbo, A5XX_HLSQ_HS_CNTL_SSBO_ENABLE));
+	OUT_RING(ring, A5XX_HLSQ_DS_CNTL_INSTRLEN(s[DS].instrlen) |
+			COND(s[DS].v && s[DS].v->has_ssbo, A5XX_HLSQ_DS_CNTL_SSBO_ENABLE));
+	OUT_RING(ring, A5XX_HLSQ_GS_CNTL_INSTRLEN(s[GS].instrlen) |
+			COND(s[GS].v && s[GS].v->has_ssbo, A5XX_HLSQ_GS_CNTL_SSBO_ENABLE));
 
-	OUT_PKT4(ring, REG_A5XX_SP_VS_CONTROL_REG, 5);
-	OUT_RING(ring, A5XX_SP_VS_CONTROL_REG_CONSTOBJECTOFFSET(s[VS].constoff) |
-			A5XX_SP_VS_CONTROL_REG_SHADEROBJOFFSET(s[VS].instroff) |
-			COND(s[VS].v, A5XX_SP_VS_CONTROL_REG_ENABLED));
-	OUT_RING(ring, A5XX_SP_FS_CONTROL_REG_CONSTOBJECTOFFSET(s[FS].constoff) |
-			A5XX_SP_FS_CONTROL_REG_SHADEROBJOFFSET(s[FS].instroff) |
-			COND(s[FS].v, A5XX_SP_FS_CONTROL_REG_ENABLED));
-	OUT_RING(ring, A5XX_SP_HS_CONTROL_REG_CONSTOBJECTOFFSET(s[HS].constoff) |
-			A5XX_SP_HS_CONTROL_REG_SHADEROBJOFFSET(s[HS].instroff) |
-			COND(s[HS].v, A5XX_SP_HS_CONTROL_REG_ENABLED));
-	OUT_RING(ring, A5XX_SP_DS_CONTROL_REG_CONSTOBJECTOFFSET(s[DS].constoff) |
-			A5XX_SP_DS_CONTROL_REG_SHADEROBJOFFSET(s[DS].instroff) |
-			COND(s[DS].v, A5XX_SP_DS_CONTROL_REG_ENABLED));
-	OUT_RING(ring, A5XX_SP_GS_CONTROL_REG_CONSTOBJECTOFFSET(s[GS].constoff) |
-			A5XX_SP_GS_CONTROL_REG_SHADEROBJOFFSET(s[GS].instroff) |
-			COND(s[GS].v, A5XX_SP_GS_CONTROL_REG_ENABLED));
+	OUT_PKT4(ring, REG_A5XX_SP_VS_CONFIG, 5);
+	OUT_RING(ring, A5XX_SP_VS_CONFIG_CONSTOBJECTOFFSET(s[VS].constoff) |
+			A5XX_SP_VS_CONFIG_SHADEROBJOFFSET(s[VS].instroff) |
+			COND(s[VS].v, A5XX_SP_VS_CONFIG_ENABLED));
+	OUT_RING(ring, A5XX_SP_FS_CONFIG_CONSTOBJECTOFFSET(s[FS].constoff) |
+			A5XX_SP_FS_CONFIG_SHADEROBJOFFSET(s[FS].instroff) |
+			COND(s[FS].v, A5XX_SP_FS_CONFIG_ENABLED));
+	OUT_RING(ring, A5XX_SP_HS_CONFIG_CONSTOBJECTOFFSET(s[HS].constoff) |
+			A5XX_SP_HS_CONFIG_SHADEROBJOFFSET(s[HS].instroff) |
+			COND(s[HS].v, A5XX_SP_HS_CONFIG_ENABLED));
+	OUT_RING(ring, A5XX_SP_DS_CONFIG_CONSTOBJECTOFFSET(s[DS].constoff) |
+			A5XX_SP_DS_CONFIG_SHADEROBJOFFSET(s[DS].instroff) |
+			COND(s[DS].v, A5XX_SP_DS_CONFIG_ENABLED));
+	OUT_RING(ring, A5XX_SP_GS_CONFIG_CONSTOBJECTOFFSET(s[GS].constoff) |
+			A5XX_SP_GS_CONFIG_SHADEROBJOFFSET(s[GS].instroff) |
+			COND(s[GS].v, A5XX_SP_GS_CONFIG_ENABLED));
 
 	OUT_PKT4(ring, REG_A5XX_SP_CS_CONFIG, 1);
 	OUT_RING(ring, 0x00000000);
@@ -441,9 +441,9 @@ fd5_program_emit(struct fd_ringbuffer *ring, struct fd5_emit *emit)
 	OUT_RING(ring, s[GS].constlen);    /* HLSQ_GS_CONSTLEN */
 	OUT_RING(ring, s[GS].instrlen);    /* HLSQ_GS_INSTRLEN */
 
-	OUT_PKT4(ring, REG_A5XX_HLSQ_CONTEXT_SWITCH_CS_SW_3, 2);
-	OUT_RING(ring, 0x00000000);   /* HLSQ_CONTEXT_SWITCH_CS_SW_3 */
-	OUT_RING(ring, 0x00000000);   /* HLSQ_CONTEXT_SWITCH_CS_SW_4 */
+	OUT_PKT4(ring, REG_A5XX_HLSQ_CS_CONSTLEN, 2);
+	OUT_RING(ring, 0x00000000);        /* HLSQ_CS_CONSTLEN */
+	OUT_RING(ring, 0x00000000);        /* HLSQ_CS_INSTRLEN */
 
 	OUT_PKT4(ring, REG_A5XX_SP_VS_CTRL_REG0, 1);
 	OUT_RING(ring, A5XX_SP_VS_CTRL_REG0_HALFREGFOOTPRINT(s[VS].i->max_half_reg + 1) |
@@ -525,39 +525,35 @@ fd5_program_emit(struct fd_ringbuffer *ring, struct fd5_emit *emit)
 	OUT_RELOC(ring, s[VS].v->bo, 0, 0, 0);  /* SP_VS_OBJ_START_LO/HI */
 
 	if (s[VS].instrlen)
-		emit_shader(ring, s[VS].v);
+		fd5_emit_shader(ring, s[VS].v);
 
 	// TODO depending on other bits in this reg (if any) set somewhere else?
 	OUT_PKT4(ring, REG_A5XX_PC_PRIM_VTX_CNTL, 1);
 	OUT_RING(ring, COND(s[VS].v->writes_psize, A5XX_PC_PRIM_VTX_CNTL_PSIZE));
+
+	OUT_PKT4(ring, REG_A5XX_SP_PRIMITIVE_CNTL, 1);
+	OUT_RING(ring, A5XX_SP_PRIMITIVE_CNTL_VSOUT(l.cnt));
+
+	OUT_PKT4(ring, REG_A5XX_VPC_CNTL_0, 1);
+	OUT_RING(ring, A5XX_VPC_CNTL_0_STRIDE_IN_VPC(l.max_loc) |
+			COND(s[FS].v->total_in > 0, A5XX_VPC_CNTL_0_VARYING) |
+			COND(s[FS].v->frag_coord, A5XX_VPC_CNTL_0_VARYING) |
+			0x10000);    // XXX
+
+	fd5_context(ctx)->max_loc = l.max_loc;
 
 	if (emit->key.binning_pass) {
 		OUT_PKT4(ring, REG_A5XX_SP_FS_OBJ_START_LO, 2);
 		OUT_RING(ring, 0x00000000);    /* SP_FS_OBJ_START_LO */
 		OUT_RING(ring, 0x00000000);    /* SP_FS_OBJ_START_HI */
 	} else {
-		// TODO if some of these other bits depend on something other than
-		// program state we should probably move these next three regs:
-
-		OUT_PKT4(ring, REG_A5XX_SP_PRIMITIVE_CNTL, 1);
-		OUT_RING(ring, A5XX_SP_PRIMITIVE_CNTL_VSOUT(l.cnt));
-
-		OUT_PKT4(ring, REG_A5XX_VPC_CNTL_0, 1);
-		OUT_RING(ring, A5XX_VPC_CNTL_0_STRIDE_IN_VPC(l.max_loc) |
-				COND(s[FS].v->total_in > 0, A5XX_VPC_CNTL_0_VARYING) |
-				COND(s[FS].v->frag_coord, A5XX_VPC_CNTL_0_VARYING) |
-				0x10000);    // XXX
-
-		OUT_PKT4(ring, REG_A5XX_PC_PRIMITIVE_CNTL, 1);
-		OUT_RING(ring, A5XX_PC_PRIMITIVE_CNTL_STRIDE_IN_VPC(l.max_loc) |
-				0x400);      // XXX
-
 		OUT_PKT4(ring, REG_A5XX_SP_FS_OBJ_START_LO, 2);
 		OUT_RELOC(ring, s[FS].v->bo, 0, 0, 0);  /* SP_FS_OBJ_START_LO/HI */
 	}
 
 	OUT_PKT4(ring, REG_A5XX_HLSQ_CONTROL_0_REG, 5);
 	OUT_RING(ring, A5XX_HLSQ_CONTROL_0_REG_FSTHREADSIZE(fssz) |
+			A5XX_HLSQ_CONTROL_0_REG_CSTHREADSIZE(TWO_QUADS) |
 			0x00000880);               /* XXX HLSQ_CONTROL_0 */
 	OUT_RING(ring, A5XX_HLSQ_CONTROL_1_REG_PRIMALLOCTHRESHOLD(63));
 	OUT_RING(ring, A5XX_HLSQ_CONTROL_2_REG_FACEREGID(face_regid) |
@@ -613,10 +609,12 @@ fd5_program_emit(struct fd_ringbuffer *ring, struct fd5_emit *emit)
 					A5XX_SP_FS_OUTPUT_REG_HALF_PRECISION));
 	}
 
-	if (emit->key.binning_pass) {
-		OUT_PKT4(ring, REG_A5XX_VPC_PACK, 1);
-		OUT_RING(ring, A5XX_VPC_PACK_NUMNONPOSVAR(0));
-	} else {
+
+	OUT_PKT4(ring, REG_A5XX_VPC_PACK, 1);
+	OUT_RING(ring, A5XX_VPC_PACK_NUMNONPOSVAR(s[FS].v->total_in) |
+			A5XX_VPC_PACK_PSIZELOC(psize_loc));
+
+	if (!emit->key.binning_pass) {
 		uint32_t vinterp[8], vpsrepl[8];
 
 		memset(vinterp, 0, sizeof(vinterp));
@@ -698,10 +696,6 @@ fd5_program_emit(struct fd_ringbuffer *ring, struct fd5_emit *emit)
 			}
 		}
 
-		OUT_PKT4(ring, REG_A5XX_VPC_PACK, 1);
-		OUT_RING(ring, A5XX_VPC_PACK_NUMNONPOSVAR(s[FS].v->total_in) |
-				A5XX_VPC_PACK_PSIZELOC(psize_loc));
-
 		OUT_PKT4(ring, REG_A5XX_VPC_VARYING_INTERP_MODE(0), 8);
 		for (i = 0; i < 8; i++)
 			OUT_RING(ring, vinterp[i]);     /* VPC_VARYING_INTERP[i].MODE */
@@ -713,7 +707,7 @@ fd5_program_emit(struct fd_ringbuffer *ring, struct fd5_emit *emit)
 
 	if (!emit->key.binning_pass)
 		if (s[FS].instrlen)
-			emit_shader(ring, s[FS].v);
+			fd5_emit_shader(ring, s[FS].v);
 
 	OUT_PKT4(ring, REG_A5XX_VFD_CONTROL_1, 5);
 	OUT_RING(ring, A5XX_VFD_CONTROL_1_REGID4VTX(vertex_regid) |

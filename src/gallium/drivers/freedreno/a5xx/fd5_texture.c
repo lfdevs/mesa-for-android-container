@@ -123,7 +123,6 @@ fd5_sampler_state_create(struct pipe_context *pctx,
 		A5XX_TEX_SAMP_0_WRAP_R(tex_clamp(cso->wrap_r, clamp_to_edge, &so->needs_border));
 
 	so->texsamp1 =
-		COND(miplinear, A5XX_TEX_SAMP_1_MIPFILTER_LINEAR_FAR) |
 		COND(!cso->seamless_cube_map, A5XX_TEX_SAMP_1_CUBEMAPSEAMLESSFILTOFF) |
 		COND(!cso->normalized_coords, A5XX_TEX_SAMP_1_UNNORM_COORDS);
 
@@ -212,8 +211,7 @@ tex_type(unsigned target)
 static bool
 use_astc_srgb_workaround(struct pipe_context *pctx, enum pipe_format format)
 {
-	return (fd_screen(pctx->screen)->gpu_id == 420) &&
-		(util_format_description(format)->layout == UTIL_FORMAT_LAYOUT_ASTC);
+	return false;  // TODO check if this is still needed on a5xx
 }
 
 static struct pipe_sampler_view *
@@ -223,7 +221,6 @@ fd5_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 	struct fd5_pipe_sampler_view *so = CALLOC_STRUCT(fd5_pipe_sampler_view);
 	struct fd_resource *rsc = fd_resource(prsc);
 	unsigned lvl, layers;
-	uint32_t sz2 = 0;
 
 	if (!so)
 		return NULL;
@@ -300,8 +297,6 @@ fd5_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 			A5XX_TEX_CONST_5_DEPTH(layers / 6);
 		break;
 	case PIPE_TEXTURE_3D:
-		while (lvl < cso->u.tex.last_level && sz2 != rsc->slices[lvl+1].size0)
-			sz2 = rsc->slices[++lvl].size0;
 		so->texconst3 =
 			A5XX_TEX_CONST_3_ARRAY_PITCH(rsc->slices[lvl].size0);
 		so->texconst5 =

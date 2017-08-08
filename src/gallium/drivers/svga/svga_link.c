@@ -62,7 +62,7 @@ svga_link_shaders(const struct tgsi_shader_info *outshader_info,
    free_slot = outshader_info->num_outputs + 1;
 
    for (i = 0; i < inshader_info->num_inputs; i++) {
-      unsigned sem_name = inshader_info->input_semantic_name[i];
+      enum tgsi_semantic sem_name = inshader_info->input_semantic_name[i];
       unsigned sem_index = inshader_info->input_semantic_index[i];
       unsigned j;
       /**

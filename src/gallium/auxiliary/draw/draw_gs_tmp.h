@@ -22,7 +22,7 @@
       default:                                                    \
          break;                                                   \
       }                                                           \
-   } while (0)                                                    \
+   } while (0)
 
 #define POINT(i0)                             gs_point(gs,i0)
 #define LINE(flags,i0,i1)                     gs_line(gs,i0,i1)

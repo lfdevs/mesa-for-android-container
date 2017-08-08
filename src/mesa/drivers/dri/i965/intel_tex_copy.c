@@ -51,7 +51,13 @@ intel_copy_texsubimage(struct brw_context *brw,
                        GLint x, GLint y, GLsizei width, GLsizei height)
 {
    const GLenum internalFormat = intelImage->base.Base.InternalFormat;
-   bool ret;
+
+   if (!intelImage->mt || !irb || !irb->mt) {
+      if (unlikely(INTEL_DEBUG & DEBUG_PERF))
+	 fprintf(stderr, "%s fail %p %p (0x%08x)\n",
+		 __func__, intelImage->mt, irb, internalFormat);
+      return false;
+   }
 
    /* No pixel transfer operations (zoom, bias, mapping), just a blit */
    if (brw->ctx._ImageTransferState)
@@ -70,32 +76,19 @@ intel_copy_texsubimage(struct brw_context *brw,
    /* glCopyTexSubImage() can't be called on a multisampled texture. */
    assert(intelImage->base.Base.NumSamples == 0);
 
-   if (!intelImage->mt || !irb || !irb->mt) {
-      if (unlikely(INTEL_DEBUG & DEBUG_PERF))
-	 fprintf(stderr, "%s fail %p %p (0x%08x)\n",
-		 __func__, intelImage->mt, irb, internalFormat);
-      return false;
-   }
-
    /* account for view parameters and face index */
    int dst_level = intelImage->base.Base.Level +
                    intelImage->base.Base.TexObject->MinLevel;
    int dst_slice = slice + intelImage->base.Base.Face +
                    intelImage->base.Base.TexObject->MinLayer;
 
-   _mesa_unlock_texture(&brw->ctx, intelImage->base.Base.TexObject);
-
    /* blit from src buffer to texture */
-   ret = intel_miptree_blit(brw,
-                            irb->mt, irb->mt_level, irb->mt_layer,
-                            x, y, irb->Base.Base.Name == 0,
-                            intelImage->mt, dst_level, dst_slice,
-                            dstx, dsty, false,
-                            width, height, GL_COPY);
-
-   _mesa_lock_texture(&brw->ctx, intelImage->base.Base.TexObject);
-
-   return ret;
+   return intel_miptree_blit(brw,
+                             irb->mt, irb->mt_level, irb->mt_layer,
+                             x, y, irb->Base.Base.Name == 0,
+                             intelImage->mt, dst_level, dst_slice,
+                             dstx, dsty, false,
+                             width, height, GL_COPY);
 }
 
 

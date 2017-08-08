@@ -350,7 +350,7 @@ static unsigned long op_operands(enum prog_opcode opcode)
 		       ((t_src_class(a.File) == VSF_IN_CLASS_PARAM && \
 			 t_src_class(b.File) == VSF_IN_CLASS_PARAM) || \
 			(t_src_class(a.File) == VSF_IN_CLASS_ATTR && \
-			 t_src_class(b.File) == VSF_IN_CLASS_ATTR))) \
+			 t_src_class(b.File) == VSF_IN_CLASS_ATTR)))
 
 /* fglrx on rv250 codes up unused sources as follows:
    unused but necessary sources are same as previous source, zero-ed out.

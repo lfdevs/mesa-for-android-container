@@ -71,7 +71,6 @@ struct fd_resource {
 	bool layer_first;        /* see above description */
 	uint32_t layer_size;
 	struct fd_resource_slice slices[MAX_MIP_LEVELS];
-	uint32_t timestamp;
 	/* buffer range that has been initialized */
 	struct util_range valid_buffer_range;
 
@@ -96,6 +95,15 @@ struct fd_resource {
 	 * shadowed.
 	 */
 	uint32_t bc_batch_mask;
+
+	/*
+	 * LRZ
+	 */
+	bool lrz_valid : 1;
+	uint16_t lrz_width;  // for lrz clear, does this differ from lrz_pitch?
+	uint16_t lrz_height;
+	uint16_t lrz_pitch;
+	struct fd_bo *lrz;
 };
 
 static inline struct fd_resource *

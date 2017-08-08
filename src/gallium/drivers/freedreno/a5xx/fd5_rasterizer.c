@@ -55,7 +55,6 @@ fd5_rasterizer_state_create(struct pipe_context *pctx,
 		psize_max = cso->point_size;
 	}
 
-	so->gras_cl_clip_cntl = 0x80000; /* ??? */
 	so->gras_su_point_minmax =
 			A5XX_GRAS_SU_POINT_MINMAX_MIN(psize_min) |
 			A5XX_GRAS_SU_POINT_MINMAX_MAX(psize_max);
@@ -69,13 +68,13 @@ fd5_rasterizer_state_create(struct pipe_context *pctx,
 
 	so->gras_su_cntl =
 			A5XX_GRAS_SU_CNTL_LINEHALFWIDTH(cso->line_width/2.0);
-//	so->pc_prim_vtx_cntl2 =
-//		A5XX_PC_PRIM_VTX_CNTL2_POLYMODE_FRONT_PTYPE(fd_polygon_mode(cso->fill_front)) |
-//		A5XX_PC_PRIM_VTX_CNTL2_POLYMODE_BACK_PTYPE(fd_polygon_mode(cso->fill_back));
+	so->pc_raster_cntl =
+		A5XX_PC_RASTER_CNTL_POLYMODE_FRONT_PTYPE(fd_polygon_mode(cso->fill_front)) |
+		A5XX_PC_RASTER_CNTL_POLYMODE_BACK_PTYPE(fd_polygon_mode(cso->fill_back));
 
-//	if (cso->fill_front != PIPE_POLYGON_MODE_FILL ||
-//		cso->fill_back != PIPE_POLYGON_MODE_FILL)
-//		so->pc_prim_vtx_cntl2 |= A5XX_PC_PRIM_VTX_CNTL2_POLYMODE_ENABLE;
+	if (cso->fill_front != PIPE_POLYGON_MODE_FILL ||
+		cso->fill_back != PIPE_POLYGON_MODE_FILL)
+		so->pc_raster_cntl |= A5XX_PC_RASTER_CNTL_POLYMODE_ENABLE;
 
 	if (cso->cull_face & PIPE_FACE_FRONT)
 		so->gras_su_cntl |= A5XX_GRAS_SU_CNTL_CULL_FRONT;
@@ -83,17 +82,17 @@ fd5_rasterizer_state_create(struct pipe_context *pctx,
 		so->gras_su_cntl |= A5XX_GRAS_SU_CNTL_CULL_BACK;
 	if (!cso->front_ccw)
 		so->gras_su_cntl |= A5XX_GRAS_SU_CNTL_FRONT_CW;
-//	if (!cso->flatshade_first)
-//		so->pc_prim_vtx_cntl |= A5XX_PC_PRIM_VTX_CNTL_PROVOKING_VTX_LAST;
-
 	if (cso->offset_tri)
 		so->gras_su_cntl |= A5XX_GRAS_SU_CNTL_POLY_OFFSET;
+
+	if (!cso->flatshade_first)
+		so->pc_primitive_cntl |= A5XX_PC_PRIMITIVE_CNTL_PROVOKING_VTX_LAST;
 
 //	if (!cso->depth_clip)
 //		so->gras_cl_clip_cntl |= A5XX_GRAS_CL_CLIP_CNTL_ZNEAR_CLIP_DISABLE |
 //			A5XX_GRAS_CL_CLIP_CNTL_ZFAR_CLIP_DISABLE;
-//	if (cso->clip_halfz)
-//		so->gras_cl_clip_cntl |= A5XX_GRAS_CL_CLIP_CNTL_ZERO_GB_SCALE_Z;
+	if (cso->clip_halfz)
+		so->gras_cl_clip_cntl |= A5XX_GRAS_CL_CNTL_ZERO_GB_SCALE_Z;
 
 	return so;
 }

@@ -72,15 +72,35 @@
 #include "brw_defines.h"
 #include "brw_performance_query.h"
 #include "brw_oa_hsw.h"
+#include "brw_oa_bdw.h"
+#include "brw_oa_chv.h"
+#include "brw_oa_sklgt2.h"
+#include "brw_oa_sklgt3.h"
+#include "brw_oa_sklgt4.h"
+#include "brw_oa_bxt.h"
+#include "brw_oa_kblgt2.h"
+#include "brw_oa_kblgt3.h"
+#include "brw_oa_glk.h"
 #include "intel_batchbuffer.h"
 
 #define FILE_DEBUG_FLAG DEBUG_PERFMON
 
 /*
- * The largest OA format we can use on Haswell includes:
- * 1 timestamp, 45 A counters, 8 B counters and 8 C counters.
+ * The largest OA formats we can use include:
+ * For Haswell:
+ *   1 timestamp, 45 A counters, 8 B counters and 8 C counters.
+ * For Gen8+
+ *   1 timestamp, 1 clock, 36 A counters, 8 B counters and 8 C counters
  */
 #define MAX_OA_REPORT_COUNTERS 62
+
+#define OAREPORT_REASON_MASK           0x3f
+#define OAREPORT_REASON_SHIFT          19
+#define OAREPORT_REASON_TIMER          (1<<0)
+#define OAREPORT_REASON_TRIGGER1       (1<<1)
+#define OAREPORT_REASON_TRIGGER2       (1<<2)
+#define OAREPORT_REASON_CTX_SWITCH     (1<<3)
+#define OAREPORT_REASON_GO_TRANSITION  (1<<4)
 
 #define I915_PERF_OA_SAMPLE_SIZE (8 +   /* drm_i915_perf_record_header */ \
                                   256)  /* OA counter report */
@@ -202,6 +222,7 @@ struct brw_oa_sample_buf {
    int refcount;
    int len;
    uint8_t buf[I915_PERF_OA_SAMPLE_SIZE * 10];
+   uint32_t last_timestamp;
 };
 
 /**
@@ -225,6 +246,11 @@ struct brw_perf_query_object
           * BO containing OA counter snapshots at query Begin/End time.
           */
          struct brw_bo *bo;
+
+         /**
+          * Address of mapped of @bo
+          */
+         void *map;
 
          /**
           * The MI_REPORT_PERF_COUNT command lets us specify a unique
@@ -468,29 +494,6 @@ snapshot_statistics_registers(struct brw_context *brw,
 }
 
 /**
- * Emit an MI_REPORT_PERF_COUNT command packet.
- *
- * This asks the GPU to write a report of the current OA counter
- * values into @bo at the given offset and containing the given
- * @report_id which we can cross-reference when parsing the report.
- */
-static void
-emit_mi_report_perf_count(struct brw_context *brw,
-                          struct brw_bo *bo,
-                          uint32_t offset_in_bytes,
-                          uint32_t report_id)
-{
-   assert(offset_in_bytes % 64 == 0);
-
-   BEGIN_BATCH(3);
-   OUT_BATCH(GEN6_MI_REPORT_PERF_COUNT);
-   OUT_RELOC(bo, I915_GEM_DOMAIN_INSTRUCTION, I915_GEM_DOMAIN_INSTRUCTION,
-             offset_in_bytes);
-   OUT_BATCH(report_id);
-   ADVANCE_BATCH();
-}
-
-/**
  * Add a query to the global list of "unaccumulated queries."
  *
  * Queries are tracked here until all the associated OA reports have
@@ -558,9 +561,10 @@ drop_from_unaccumulated_query_list(struct brw_context *brw,
 static uint64_t
 timebase_scale(struct brw_context *brw, uint32_t u32_time_delta)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    uint64_t tmp = ((uint64_t)u32_time_delta) * 1000000000ull;
 
-   return tmp ? tmp / brw->perfquery.sys_vars.timestamp_frequency : 0;
+   return tmp ? tmp / devinfo->timestamp_frequency : 0;
 }
 
 static void
@@ -569,6 +573,28 @@ accumulate_uint32(const uint32_t *report0,
                   uint64_t *accumulator)
 {
    *accumulator += (uint32_t)(*report1 - *report0);
+}
+
+static void
+accumulate_uint40(int a_index,
+                  const uint32_t *report0,
+                  const uint32_t *report1,
+                  uint64_t *accumulator)
+{
+   const uint8_t *high_bytes0 = (uint8_t *)(report0 + 40);
+   const uint8_t *high_bytes1 = (uint8_t *)(report1 + 40);
+   uint64_t high0 = (uint64_t)(high_bytes0[a_index]) << 32;
+   uint64_t high1 = (uint64_t)(high_bytes1[a_index]) << 32;
+   uint64_t value0 = report0[a_index + 4] | high0;
+   uint64_t value1 = report1[a_index + 4] | high1;
+   uint64_t delta;
+
+   if (value0 > value1)
+      delta = (1ULL << 40) + value1 - value0;
+   else
+      delta = value1 - value0;
+
+   *accumulator += delta;
 }
 
 /**
@@ -583,9 +609,27 @@ add_deltas(struct brw_context *brw,
 {
    const struct brw_perf_query_info *query = obj->query;
    uint64_t *accumulator = obj->oa.accumulator;
+   int idx = 0;
    int i;
 
    switch (query->oa_format) {
+   case I915_OA_FORMAT_A32u40_A4u32_B8_C8:
+      accumulate_uint32(start + 1, end + 1, accumulator + idx++); /* timestamp */
+      accumulate_uint32(start + 3, end + 3, accumulator + idx++); /* clock */
+
+      /* 32x 40bit A counters... */
+      for (i = 0; i < 32; i++)
+         accumulate_uint40(i, start, end, accumulator + idx++);
+
+      /* 4x 32bit A counters... */
+      for (i = 0; i < 4; i++)
+         accumulate_uint32(start + 36 + i, end + 36 + i, accumulator + idx++);
+
+      /* 8x 32bit B counters + 8x 32bit C counters... */
+      for (i = 0; i < 16; i++)
+         accumulate_uint32(start + 48 + i, end + 48 + i, accumulator + idx++);
+
+      break;
    case I915_OA_FORMAT_A45_B8_C8:
       accumulate_uint32(start + 1, end + 1, accumulator); /* timestamp */
 
@@ -646,11 +690,26 @@ discard_all_queries(struct brw_context *brw)
    }
 }
 
-static bool
-read_oa_samples(struct brw_context *brw)
+enum OaReadStatus {
+   OA_READ_STATUS_ERROR,
+   OA_READ_STATUS_UNFINISHED,
+   OA_READ_STATUS_FINISHED,
+};
+
+static enum OaReadStatus
+read_oa_samples_until(struct brw_context *brw,
+                      uint32_t start_timestamp,
+                      uint32_t end_timestamp)
 {
+   struct exec_node *tail_node =
+      exec_list_get_tail(&brw->perfquery.sample_buffers);
+   struct brw_oa_sample_buf *tail_buf =
+      exec_node_data(struct brw_oa_sample_buf, tail_node, link);
+   uint32_t last_timestamp = tail_buf->last_timestamp;
+
    while (1) {
       struct brw_oa_sample_buf *buf = get_free_sample_buf(brw);
+      uint32_t offset;
       int len;
 
       while ((len = read(brw->perfquery.oa_stream_fd, buf->buf,
@@ -662,28 +721,94 @@ read_oa_samples(struct brw_context *brw)
 
          if (len < 0) {
             if (errno == EAGAIN)
-               return true;
+               return ((last_timestamp - start_timestamp) >=
+                       (end_timestamp - start_timestamp)) ?
+                      OA_READ_STATUS_FINISHED :
+                      OA_READ_STATUS_UNFINISHED;
             else {
                DBG("Error reading i915 perf samples: %m\n");
-               return false;
             }
-         } else {
+         } else
             DBG("Spurious EOF reading i915 perf samples\n");
-            return false;
-         }
+
+         return OA_READ_STATUS_ERROR;
       }
 
       buf->len = len;
       exec_list_push_tail(&brw->perfquery.sample_buffers, &buf->link);
+
+      /* Go through the reports and update the last timestamp. */
+      offset = 0;
+      while (offset < buf->len) {
+         const struct drm_i915_perf_record_header *header =
+            (const struct drm_i915_perf_record_header *) &buf->buf[offset];
+         uint32_t *report = (uint32_t *) (header + 1);
+
+         if (header->type == DRM_I915_PERF_RECORD_SAMPLE)
+            last_timestamp = report[1];
+
+         offset += header->size;
+      }
+
+      buf->last_timestamp = last_timestamp;
    }
 
    unreachable("not reached");
+   return OA_READ_STATUS_ERROR;
+}
+
+/**
+ * Try to read all the reports until either the delimiting timestamp
+ * or an error arises.
+ */
+static bool
+read_oa_samples_for_query(struct brw_context *brw,
+                          struct brw_perf_query_object *obj)
+{
+   uint32_t *start;
+   uint32_t *last;
+   uint32_t *end;
+
+   /* We need the MI_REPORT_PERF_COUNT to land before we can start
+    * accumulate. */
+   assert(!brw_batch_references(&brw->batch, obj->oa.bo) &&
+          !brw_bo_busy(obj->oa.bo));
+
+   /* Map the BO once here and let accumulate_oa_reports() unmap
+    * it. */
+   if (obj->oa.map == NULL)
+      obj->oa.map = brw_bo_map(brw, obj->oa.bo, MAP_READ);
+
+   start = last = obj->oa.map;
+   end = obj->oa.map + MI_RPC_BO_END_OFFSET_BYTES;
+
+   if (start[0] != obj->oa.begin_report_id) {
+      DBG("Spurious start report id=%"PRIu32"\n", start[0]);
+      return true;
+   }
+   if (end[0] != (obj->oa.begin_report_id + 1)) {
+      DBG("Spurious end report id=%"PRIu32"\n", end[0]);
+      return true;
+   }
+
+   /* Read the reports until the end timestamp. */
+   switch (read_oa_samples_until(brw, start[1], end[1])) {
+   case OA_READ_STATUS_ERROR:
+      /* Fallthrough and let accumulate_oa_reports() deal with the
+       * error. */
+   case OA_READ_STATUS_FINISHED:
+      return true;
+   case OA_READ_STATUS_UNFINISHED:
+      return false;
+   }
+
+   unreachable("invalid read status");
    return false;
 }
 
 /**
- * Accumulate raw OA counter values based on deltas between pairs
- * of OA reports.
+ * Accumulate raw OA counter values based on deltas between pairs of
+ * OA reports.
  *
  * Accumulation starts from the first report captured via
  * MI_REPORT_PERF_COUNT (MI_RPC) by brw_begin_perf_query() until the
@@ -694,30 +819,30 @@ read_oa_samples(struct brw_context *brw)
  *
  * These periodic snapshots help to ensure we handle counter overflow
  * correctly by being frequent enough to ensure we don't miss multiple
- * overflows of a counter between snapshots.
+ * overflows of a counter between snapshots. For Gen8+ the i915 perf
+ * snapshots provide the extra context-switch reports that let us
+ * subtract out the progress of counters associated with other
+ * contexts running on the system.
  */
 static void
 accumulate_oa_reports(struct brw_context *brw,
                       struct brw_perf_query_object *obj)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    struct gl_perf_query_object *o = &obj->base;
-   uint32_t *query_buffer;
    uint32_t *start;
    uint32_t *last;
    uint32_t *end;
    struct exec_node *first_samples_node;
+   bool in_ctx = true;
+   uint32_t ctx_id;
+   int out_duration = 0;
 
    assert(o->Ready);
+   assert(obj->oa.map != NULL);
 
-   /* Collect the latest periodic OA reports from i915 perf */
-   if (!read_oa_samples(brw))
-      goto error;
-
-   brw_bo_map(brw, obj->oa.bo, false);
-   query_buffer = obj->oa.bo->virtual;
-
-   start = last = query_buffer;
-   end = query_buffer + (MI_RPC_BO_END_OFFSET_BYTES / sizeof(uint32_t));
+   start = last = obj->oa.map;
+   end = obj->oa.map + MI_RPC_BO_END_OFFSET_BYTES;
 
    if (start[0] != obj->oa.begin_report_id) {
       DBG("Spurious start report id=%"PRIu32"\n", start[0]);
@@ -727,6 +852,8 @@ accumulate_oa_reports(struct brw_context *brw,
       DBG("Spurious end report id=%"PRIu32"\n", end[0]);
       goto error;
    }
+
+   ctx_id = start[2];
 
    /* See if we have any periodic reports to accumulate too... */
 
@@ -757,6 +884,7 @@ accumulate_oa_reports(struct brw_context *brw,
          switch (header->type) {
          case DRM_I915_PERF_RECORD_SAMPLE: {
             uint32_t *report = (uint32_t *)(header + 1);
+            bool add = true;
 
             /* Ignore reports that come before the start marker.
              * (Note: takes care to allow overflow of 32bit timestamps)
@@ -770,7 +898,49 @@ accumulate_oa_reports(struct brw_context *brw,
             if (timebase_scale(brw, report[1] - end[1]) <= 5000000000)
                goto end;
 
-            add_deltas(brw, obj, last, report);
+            /* For Gen8+ since the counters continue while other
+             * contexts are running we need to discount any unrelated
+             * deltas. The hardware automatically generates a report
+             * on context switch which gives us a new reference point
+             * to continuing adding deltas from.
+             *
+             * For Haswell we can rely on the HW to stop the progress
+             * of OA counters while any other context is acctive.
+             */
+            if (devinfo->gen >= 8) {
+               if (in_ctx && report[2] != ctx_id) {
+                  DBG("i915 perf: Switch AWAY (observed by ID change)\n");
+                  in_ctx = false;
+                  out_duration = 0;
+               } else if (in_ctx == false && report[2] == ctx_id) {
+                  DBG("i915 perf: Switch TO\n");
+                  in_ctx = true;
+
+                  /* From experimentation in IGT, we found that the OA unit
+                   * might label some report as "idle" (using an invalid
+                   * context ID), right after a report for a given context.
+                   * Deltas generated by those reports actually belong to the
+                   * previous context, even though they're not labelled as
+                   * such.
+                   *
+                   * We didn't *really* Switch AWAY in the case that we e.g.
+                   * saw a single periodic report while idle...
+                   */
+                  if (out_duration >= 1)
+                     add = false;
+               } else if (in_ctx) {
+                  assert(report[2] == ctx_id);
+                  DBG("i915 perf: Continuation IN\n");
+               } else {
+                  assert(report[2] != ctx_id);
+                  DBG("i915 perf: Continuation OUT\n");
+                  add = false;
+                  out_duration++;
+               }
+            }
+
+            if (add)
+               add_deltas(brw, obj, last, report);
 
             last = report;
 
@@ -794,6 +964,7 @@ end:
    DBG("Marking %d accumulated - results gathered\n", o->Id);
 
    brw_bo_unmap(obj->oa.bo);
+   obj->oa.map = NULL;
    obj->oa.results_accumulated = true;
    drop_from_unaccumulated_query_list(brw, obj);
    dec_n_oa_users(brw);
@@ -803,6 +974,7 @@ end:
 error:
 
    brw_bo_unmap(obj->oa.bo);
+   obj->oa.map = NULL;
    discard_all_queries(brw);
 }
 
@@ -833,7 +1005,7 @@ open_i915_perf_oa_stream(struct brw_context *brw,
                I915_PERF_FLAG_FD_NONBLOCK |
                I915_PERF_FLAG_DISABLED,
       .num_properties = ARRAY_SIZE(properties) / 2,
-      .properties_ptr = (uint64_t)properties
+      .properties_ptr = (uintptr_t) properties,
    };
    int fd = drmIoctl(drm_fd, DRM_IOCTL_I915_PERF_OPEN, &param);
    if (fd == -1) {
@@ -948,21 +1120,60 @@ brw_begin_perf_query(struct gl_context *ctx,
       /* If the OA counters aren't already on, enable them. */
       if (brw->perfquery.oa_stream_fd == -1) {
          __DRIscreen *screen = brw->screen->driScrnPriv;
-         int period_exponent;
+         const struct gen_device_info *devinfo = &brw->screen->devinfo;
 
-         /* The timestamp for HSW+ increments every 80ns
+         /* The period_exponent gives a sampling period as follows:
+          *   sample_period = timestamp_period * 2^(period_exponent + 1)
           *
-          * The period_exponent gives a sampling period as follows:
-          *   sample_period = 80ns * 2^(period_exponent + 1)
+          * The timestamps increments every 80ns (HSW), ~52ns (GEN9LP) or
+          * ~83ns (GEN8/9).
           *
-          * The overflow period for Haswell can be calculated as:
+          * The counter overflow period is derived from the EuActive counter
+          * which reads a counter that increments by the number of clock
+          * cycles multiplied by the number of EUs. It can be calculated as:
           *
-          * 2^32 / (n_eus * max_gen_freq * 2)
+          * 2^(number of bits in A counter) / (n_eus * max_gen_freq * 2)
+          *
           * (E.g. 40 EUs @ 1GHz = ~53ms)
           *
-          * We currently sample every 42 milliseconds...
+          * We select a sampling period inferior to that overflow period to
+          * ensure we cannot see more than 1 counter overflow, otherwise we
+          * could loose information.
           */
-         period_exponent = 18;
+
+         int a_counter_in_bits = 32;
+         if (devinfo->gen >= 8)
+            a_counter_in_bits = 40;
+
+         uint64_t overflow_period = pow(2, a_counter_in_bits) /
+            (brw->perfquery.sys_vars.n_eus *
+             /* drop 1GHz freq to have units in nanoseconds */
+             2);
+
+         DBG("A counter overflow period: %"PRIu64"ns, %"PRIu64"ms (n_eus=%"PRIu64")\n",
+             overflow_period, overflow_period / 1000000ul, brw->perfquery.sys_vars.n_eus);
+
+         int period_exponent = 0;
+         uint64_t prev_sample_period, next_sample_period;
+         for (int e = 0; e < 30; e++) {
+            prev_sample_period = 1000000000ull * pow(2, e + 1) / devinfo->timestamp_frequency;
+            next_sample_period = 1000000000ull * pow(2, e + 2) / devinfo->timestamp_frequency;
+
+            /* Take the previous sampling period, lower than the overflow
+             * period.
+             */
+            if (prev_sample_period < overflow_period &&
+                next_sample_period > overflow_period)
+               period_exponent = e + 1;
+         }
+
+         if (period_exponent == 0) {
+            DBG("WARNING: enable to find a sampling exponent\n");
+            return false;
+         }
+
+         DBG("OA sampling exponent: %i ~= %"PRIu64"ms\n", period_exponent,
+             prev_sample_period / 1000000ul);
 
          if (!open_i915_perf_oa_stream(brw,
                                        query->oa_metrics_set_id,
@@ -993,17 +1204,25 @@ brw_begin_perf_query(struct gl_context *ctx,
                       MI_RPC_BO_SIZE, 64);
 #ifdef DEBUG
       /* Pre-filling the BO helps debug whether writes landed. */
-      brw_bo_map(brw, obj->oa.bo, true);
-      memset((char *) obj->oa.bo->virtual, 0x80, MI_RPC_BO_SIZE);
+      void *map = brw_bo_map(brw, obj->oa.bo, MAP_WRITE);
+      memset(map, 0x80, MI_RPC_BO_SIZE);
       brw_bo_unmap(obj->oa.bo);
 #endif
 
       obj->oa.begin_report_id = brw->perfquery.next_query_start_report_id;
       brw->perfquery.next_query_start_report_id += 2;
 
+      /* We flush the batchbuffer here to minimize the chances that MI_RPC
+       * delimiting commands end up in different batchbuffers. If that's the
+       * case, the measurement will include the time it takes for the kernel
+       * scheduler to load a new request into the hardware. This is manifested in
+       * tools like frameretrace by spikes in the "GPU Core Clocks" counter.
+       */
+      intel_batchbuffer_flush(brw);
+
       /* Take a starting OA counter snapshot. */
-      emit_mi_report_perf_count(brw, obj->oa.bo, 0,
-                                obj->oa.begin_report_id);
+      brw->vtbl.emit_mi_report_perf_count(brw, obj->oa.bo, 0,
+                                          obj->oa.begin_report_id);
       ++brw->perfquery.n_active_oa_queries;
 
       /* No already-buffered samples can possibly be associated with this query
@@ -1082,9 +1301,9 @@ brw_end_perf_query(struct gl_context *ctx,
        */
       if (!obj->oa.results_accumulated) {
          /* Take an ending OA counter snapshot. */
-         emit_mi_report_perf_count(brw, obj->oa.bo,
-                                   MI_RPC_BO_END_OFFSET_BYTES,
-                                   obj->oa.begin_report_id + 1);
+         brw->vtbl.emit_mi_report_perf_count(brw, obj->oa.bo,
+                                             MI_RPC_BO_END_OFFSET_BYTES,
+                                             obj->oa.begin_report_id + 1);
       }
 
       --brw->perfquery.n_active_oa_queries;
@@ -1131,7 +1350,17 @@ brw_wait_perf_query(struct gl_context *ctx, struct gl_perf_query_object *o)
    if (brw_batch_references(&brw->batch, bo))
       intel_batchbuffer_flush(brw);
 
-   brw_bo_wait_rendering(brw, bo);
+   brw_bo_wait_rendering(bo);
+
+   /* Due to a race condition between the OA unit signaling report
+    * availability and the report actually being written into memory,
+    * we need to wait for all the reports to come in before we can
+    * read them.
+    */
+   if (obj->query->kind == OA_COUNTERS) {
+      while (!read_oa_samples_for_query(brw, obj))
+         ;
+   }
 }
 
 static bool
@@ -1149,8 +1378,8 @@ brw_is_perf_query_ready(struct gl_context *ctx,
       return (obj->oa.results_accumulated ||
               (obj->oa.bo &&
                !brw_batch_references(&brw->batch, obj->oa.bo) &&
-               !brw_bo_busy(obj->oa.bo)));
-
+               !brw_bo_busy(obj->oa.bo) &&
+               read_oa_samples_for_query(brw, obj)));
    case PIPELINE_STATS:
       return (obj->pipeline_stats.bo &&
               !brw_batch_references(&brw->batch, obj->pipeline_stats.bo) &&
@@ -1215,8 +1444,7 @@ get_pipeline_stats_data(struct brw_context *brw,
    int n_counters = obj->query->n_counters;
    uint8_t *p = data;
 
-   brw_bo_map(brw, obj->pipeline_stats.bo, false);
-   uint64_t *start = obj->pipeline_stats.bo->virtual;
+   uint64_t *start = brw_bo_map(brw, obj->pipeline_stats.bo, MAP_READ);
    uint64_t *end = start + (STATS_BO_END_OFFSET_BYTES / sizeof(uint64_t));
 
    for (int i = 0; i < n_counters; i++) {
@@ -1399,6 +1627,7 @@ add_basic_stat_reg(struct brw_perf_query_info *query,
 static void
 init_pipeline_statistic_query_registers(struct brw_context *brw)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    struct brw_perf_query_info *query = append_query_info(brw);
 
    query->kind = PIPELINE_STATS;
@@ -1414,7 +1643,7 @@ init_pipeline_statistic_query_registers(struct brw_context *brw)
    add_basic_stat_reg(query, VS_INVOCATION_COUNT,
                       "N vertex shader invocations");
 
-   if (brw->gen == 6) {
+   if (devinfo->gen == 6) {
       add_stat_reg(query, GEN6_SO_PRIM_STORAGE_NEEDED, 1, 1,
                    "SO_PRIM_STORAGE_NEEDED",
                    "N geometry shader stream-out primitives (total)");
@@ -1463,7 +1692,7 @@ init_pipeline_statistic_query_registers(struct brw_context *brw)
    add_basic_stat_reg(query, CL_PRIMITIVES_COUNT,
                       "N primitives leaving clipping");
 
-   if (brw->is_haswell || brw->gen == 8)
+   if (devinfo->is_haswell || devinfo->gen == 8)
       add_stat_reg(query, PS_INVOCATION_COUNT, 1, 4,
                    "N fragment shader invocations",
                    "N fragment shader invocations");
@@ -1473,7 +1702,7 @@ init_pipeline_statistic_query_registers(struct brw_context *brw)
 
    add_basic_stat_reg(query, PS_DEPTH_COUNT, "N z-pass fragments");
 
-   if (brw->gen >= 7)
+   if (devinfo->gen >= 7)
       add_basic_stat_reg(query, CS_INVOCATION_COUNT,
                          "N compute shader invocations");
 
@@ -1581,6 +1810,7 @@ read_sysfs_drm_device_file_uint64(struct brw_context *brw,
 static bool
 init_oa_sys_vars(struct brw_context *brw, const char *sysfs_dev_dir)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    uint64_t min_freq_mhz = 0, max_freq_mhz = 0;
 
    if (!read_sysfs_drm_device_file_uint64(brw, sysfs_dev_dir,
@@ -1595,30 +1825,82 @@ init_oa_sys_vars(struct brw_context *brw, const char *sysfs_dev_dir)
 
    brw->perfquery.sys_vars.gt_min_freq = min_freq_mhz * 1000000;
    brw->perfquery.sys_vars.gt_max_freq = max_freq_mhz * 1000000;
+   brw->perfquery.sys_vars.timestamp_frequency = devinfo->timestamp_frequency;
+   brw->perfquery.sys_vars.n_eu_slices = devinfo->num_slices;
+   /* Assuming uniform distribution of subslices per slices. */
+   brw->perfquery.sys_vars.n_eu_sub_slices = devinfo->num_subslices[0];
 
-   if (brw->is_haswell) {
-      const struct gen_device_info *info = &brw->screen->devinfo;
+   if (devinfo->is_haswell) {
+      brw->perfquery.sys_vars.slice_mask = 0;
+      brw->perfquery.sys_vars.subslice_mask = 0;
 
-      brw->perfquery.sys_vars.timestamp_frequency = 12500000;
+      for (int s = 0; s < devinfo->num_slices; s++)
+         brw->perfquery.sys_vars.slice_mask |= 1U << s;
+      for (int ss = 0; ss < devinfo->num_subslices[0]; ss++)
+         brw->perfquery.sys_vars.subslice_mask |= 1U << ss;
 
-      if (info->gt == 1) {
+      if (devinfo->gt == 1) {
          brw->perfquery.sys_vars.n_eus = 10;
-         brw->perfquery.sys_vars.n_eu_slices = 1;
-         brw->perfquery.sys_vars.subslice_mask = 0x1;
-      } else if (info->gt == 2) {
+      } else if (devinfo->gt == 2) {
          brw->perfquery.sys_vars.n_eus = 20;
-         brw->perfquery.sys_vars.n_eu_slices = 1;
-         brw->perfquery.sys_vars.subslice_mask = 0x3;
-      } else if (info->gt == 3) {
+      } else if (devinfo->gt == 3) {
          brw->perfquery.sys_vars.n_eus = 40;
-         brw->perfquery.sys_vars.n_eu_slices = 2;
-         brw->perfquery.sys_vars.subslice_mask = 0xf;
       } else
          unreachable("not reached");
+   } else {
+      __DRIscreen *screen = brw->screen->driScrnPriv;
+      drm_i915_getparam_t gp;
+      int ret;
+      int slice_mask = 0;
+      int ss_mask = 0;
+      /* maximum number of slices */
+      int s_max = devinfo->num_slices;
+      /* maximum number of subslices per slice (assuming uniform subslices per
+       * slices)
+       */
+      int ss_max = devinfo->num_subslices[0];
+      uint64_t subslice_mask = 0;
+      int s;
 
-      return true;
-   } else
-      return false;
+      gp.param = I915_PARAM_SLICE_MASK;
+      gp.value = &slice_mask;
+      ret = drmIoctl(screen->fd, DRM_IOCTL_I915_GETPARAM, &gp);
+      if (ret)
+         return false;
+
+      gp.param = I915_PARAM_SUBSLICE_MASK;
+      gp.value = &ss_mask;
+      ret = drmIoctl(screen->fd, DRM_IOCTL_I915_GETPARAM, &gp);
+      if (ret)
+         return false;
+
+      brw->perfquery.sys_vars.n_eus = brw->screen->eu_total;
+      brw->perfquery.sys_vars.n_eu_slices = __builtin_popcount(slice_mask);
+      brw->perfquery.sys_vars.slice_mask = slice_mask;
+
+      /* Note: the _SUBSLICE_MASK param only reports a global subslice mask
+       * which applies to all slices.
+       *
+       * Note: some of the metrics we have (as described in XML) are
+       * conditional on a $SubsliceMask variable which is expected to also
+       * reflect the slice mask by packing together subslice masks for each
+       * slice in one value..
+       */
+      for (s = 0; s < s_max; s++) {
+         if (slice_mask & (1<<s)) {
+            subslice_mask |= ss_mask << (ss_max * s);
+         }
+      }
+
+      brw->perfquery.sys_vars.subslice_mask = subslice_mask;
+      brw->perfquery.sys_vars.n_eu_sub_slices =
+         __builtin_popcount(subslice_mask);
+   }
+
+   brw->perfquery.sys_vars.eu_threads_count =
+      brw->perfquery.sys_vars.n_eus * devinfo->num_thread_per_eu;
+
+   return true;
 }
 
 static bool
@@ -1687,23 +1969,77 @@ get_sysfs_dev_dir(struct brw_context *brw,
    return false;
 }
 
+typedef void (*perf_register_oa_queries_t)(struct brw_context *);
+
+static perf_register_oa_queries_t
+get_register_queries_function(const struct gen_device_info *devinfo)
+{
+   if (devinfo->is_haswell)
+      return brw_oa_register_queries_hsw;
+   if (devinfo->is_cherryview)
+      return brw_oa_register_queries_chv;
+   if (devinfo->is_broadwell)
+      return brw_oa_register_queries_bdw;
+   if (devinfo->is_broxton)
+      return brw_oa_register_queries_bxt;
+   if (devinfo->is_skylake) {
+      if (devinfo->gt == 2)
+         return brw_oa_register_queries_sklgt2;
+      if (devinfo->gt == 3)
+         return brw_oa_register_queries_sklgt3;
+      if (devinfo->gt == 4)
+         return brw_oa_register_queries_sklgt4;
+   }
+   if (devinfo->is_kabylake) {
+      if (devinfo->gt == 2)
+         return brw_oa_register_queries_kblgt2;
+      if (devinfo->gt == 3)
+         return brw_oa_register_queries_kblgt3;
+   }
+   if (devinfo->is_geminilake)
+      return brw_oa_register_queries_glk;
+   return NULL;
+}
+
 static unsigned
 brw_init_perf_query_info(struct gl_context *ctx)
 {
    struct brw_context *brw = brw_context(ctx);
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   bool i915_perf_oa_available = false;
    struct stat sb;
    char sysfs_dev_dir[128];
+   perf_register_oa_queries_t oa_register;
 
    if (brw->perfquery.n_queries)
       return brw->perfquery.n_queries;
 
    init_pipeline_statistic_query_registers(brw);
 
+   oa_register = get_register_queries_function(devinfo);
+
    /* The existence of this sysctl parameter implies the kernel supports
     * the i915 perf interface.
     */
-   if (brw->is_haswell &&
-       stat("/proc/sys/dev/i915/perf_stream_paranoid", &sb) == 0 &&
+   if (stat("/proc/sys/dev/i915/perf_stream_paranoid", &sb) == 0) {
+
+      /* If _paranoid == 1 then on Gen8+ we won't be able to access OA
+       * metrics unless running as root.
+       */
+      if (devinfo->is_haswell)
+         i915_perf_oa_available = true;
+      else {
+         uint64_t paranoid = 1;
+
+         read_file_uint64("/proc/sys/dev/i915/perf_stream_paranoid", &paranoid);
+
+         if (paranoid == 0 || geteuid() == 0)
+            i915_perf_oa_available = true;
+      }
+   }
+
+   if (i915_perf_oa_available &&
+       oa_register &&
        get_sysfs_dev_dir(brw, sysfs_dev_dir, sizeof(sysfs_dev_dir)) &&
        init_oa_sys_vars(brw, sysfs_dev_dir))
    {
@@ -1711,10 +2047,10 @@ brw_init_perf_query_info(struct gl_context *ctx)
          _mesa_hash_table_create(NULL, _mesa_key_hash_string,
                                  _mesa_key_string_equal);
 
-      /* Index all the metric sets mesa knows about before looking to
-       * see what the kernel is advertising.
+      /* Index all the metric sets mesa knows about before looking to see what
+       * the kernel is advertising.
        */
-      brw_oa_register_queries_hsw(brw);
+      oa_register(brw);
 
       enumerate_sysfs_metrics(brw, sysfs_dev_dir);
    }

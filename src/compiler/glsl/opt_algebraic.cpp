@@ -144,7 +144,7 @@ is_valid_vec_const(ir_constant *ir)
 static inline bool
 is_less_than_one(ir_constant *ir)
 {
-   assert(ir->type->base_type == GLSL_TYPE_FLOAT);
+   assert(ir->type->is_float());
 
    if (!is_valid_vec_const(ir))
       return false;
@@ -161,7 +161,7 @@ is_less_than_one(ir_constant *ir)
 static inline bool
 is_greater_than_zero(ir_constant *ir)
 {
-   assert(ir->type->base_type == GLSL_TYPE_FLOAT);
+   assert(ir->type->is_float());
 
    if (!is_valid_vec_const(ir))
       return false;
@@ -246,7 +246,7 @@ ir_algebraic_visitor::reassociate_operands(ir_expression *ir1,
 /**
  * Reassociates a constant down a tree of adds or multiplies.
  *
- * Consider (2 * (a * (b * 0.5))).  We want to send up with a * b.
+ * Consider (2 * (a * (b * 0.5))).  We want to end up with a * b.
  */
 bool
 ir_algebraic_visitor::reassociate_constant(ir_expression *ir1, int const_index,
@@ -313,7 +313,6 @@ ir_algebraic_visitor::handle_expression(ir_expression *ir)
 {
    ir_constant *op_const[4] = {NULL, NULL, NULL, NULL};
    ir_expression *op_expr[4] = {NULL, NULL, NULL, NULL};
-   unsigned int i;
 
    if (ir->operation == ir_binop_mul &&
        ir->operands[0]->type->is_matrix() &&
@@ -330,7 +329,7 @@ ir_algebraic_visitor::handle_expression(ir_expression *ir)
    }
 
    assert(ir->get_num_operands() <= 4);
-   for (i = 0; i < ir->get_num_operands(); i++) {
+   for (unsigned i = 0; i < ir->get_num_operands(); i++) {
       if (ir->operands[i]->type->is_matrix())
 	 return ir;
 
@@ -649,8 +648,7 @@ ir_algebraic_visitor::handle_expression(ir_expression *ir)
 
    case ir_binop_div:
       if (is_vec_one(op_const[0]) && (
-                ir->type->base_type == GLSL_TYPE_FLOAT ||
-                ir->type->base_type == GLSL_TYPE_DOUBLE)) {
+                ir->type->is_float() || ir->type->is_double())) {
 	 return new(mem_ctx) ir_expression(ir_unop_rcp,
 					   ir->operands[1]->type,
 					   ir->operands[1],
@@ -845,7 +843,7 @@ ir_algebraic_visitor::handle_expression(ir_expression *ir)
 
    case ir_binop_min:
    case ir_binop_max:
-      if (ir->type->base_type != GLSL_TYPE_FLOAT || options->EmitNoSat)
+      if (!ir->type->is_float() || options->EmitNoSat)
          break;
 
       /* Replace min(max) operations and its commutative combinations with

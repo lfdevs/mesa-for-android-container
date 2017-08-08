@@ -26,7 +26,7 @@
 
 
 void r300_translate_index_buffer(struct r300_context *r300,
-                                 struct pipe_index_buffer *ib,
+                                 const struct pipe_draw_info *info,
                                  struct pipe_resource **out_buffer,
                                  unsigned *index_size, unsigned index_offset,
                                  unsigned *start, unsigned count)
@@ -41,7 +41,7 @@ void r300_translate_index_buffer(struct r300_context *r300,
                        &out_offset, out_buffer, &ptr);
 
         util_shorten_ubyte_elts_to_userptr(
-                &r300->context, ib, PIPE_TRANSFER_UNSYNCHRONIZED, index_offset,
+                &r300->context, info, PIPE_TRANSFER_UNSYNCHRONIZED, index_offset,
                 *start, count, ptr);
 
         *index_size = 2;
@@ -54,7 +54,7 @@ void r300_translate_index_buffer(struct r300_context *r300,
             u_upload_alloc(r300->uploader, 0, count * 2, 4,
                            &out_offset, out_buffer, &ptr);
 
-            util_rebuild_ushort_elts_to_userptr(&r300->context, ib,
+            util_rebuild_ushort_elts_to_userptr(&r300->context, info,
                                                 PIPE_TRANSFER_UNSYNCHRONIZED,
                                                 index_offset, *start,
                                                 count, ptr);
@@ -69,7 +69,7 @@ void r300_translate_index_buffer(struct r300_context *r300,
             u_upload_alloc(r300->uploader, 0, count * 4, 4,
                            &out_offset, out_buffer, &ptr);
 
-            util_rebuild_uint_elts_to_userptr(&r300->context, ib,
+            util_rebuild_uint_elts_to_userptr(&r300->context, info,
                                               PIPE_TRANSFER_UNSYNCHRONIZED,
                                               index_offset, *start,
                                               count, ptr);

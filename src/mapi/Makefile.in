@@ -132,7 +132,7 @@ build_triplet = @build@
 host_triplet = @host@
 target_triplet = @target@
 TESTS = $(am__EXEEXT_1) $(am__EXEEXT_2) $(am__append_13) \
-	$(am__append_18)
+	$(am__append_17)
 check_PROGRAMS = $(am__EXEEXT_1) $(am__EXEEXT_2)
 @HAVE_SHARED_GLAPI_TRUE@am__append_1 = shared-glapi/glapi_mapi_tmp.h
 @HAVE_SHARED_GLAPI_TRUE@am__append_2 = shared-glapi/libglapi.la
@@ -165,12 +165,10 @@ check_PROGRAMS = $(am__EXEEXT_1) $(am__EXEEXT_2)
 @HAVE_OPENGL_ES1_TRUE@am__append_14 = es1api/glapi_mapi_tmp.h
 @HAVE_OPENGL_ES1_TRUE@am__append_15 = es1api/glesv1_cm.pc
 @HAVE_OPENGL_ES1_TRUE@am__append_16 = es1api/libGLESv1_CM.la
-@HAVE_OPENGL_ES1_TRUE@@HAVE_SHARED_GLAPI_TRUE@am__append_17 = shared-glapi/libglapi.la
-@HAVE_OPENGL_ES2_TRUE@am__append_18 = es2api/ABI-check
-@HAVE_OPENGL_ES2_TRUE@am__append_19 = es2api/glapi_mapi_tmp.h
-@HAVE_OPENGL_ES2_TRUE@am__append_20 = es2api/glesv2.pc
-@HAVE_OPENGL_ES2_TRUE@am__append_21 = es2api/libGLESv2.la
-@HAVE_OPENGL_ES2_TRUE@@HAVE_SHARED_GLAPI_TRUE@am__append_22 = shared-glapi/libglapi.la
+@HAVE_OPENGL_ES2_TRUE@am__append_17 = es2api/ABI-check
+@HAVE_OPENGL_ES2_TRUE@am__append_18 = es2api/glapi_mapi_tmp.h
+@HAVE_OPENGL_ES2_TRUE@am__append_19 = es2api/glesv2.pc
+@HAVE_OPENGL_ES2_TRUE@am__append_20 = es2api/libGLESv2.la
 subdir = src/mapi
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_gnu_make.m4 \
@@ -187,7 +185,7 @@ am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 DIST_COMMON = $(srcdir)/Makefile.am $(am__GLES2_include_HEADERS_DIST) \
 	$(am__GLES3_include_HEADERS_DIST) \
-	$(am__GLES_include_HEADERS_DIST) $(khr_HEADERS) \
+	$(am__GLES_include_HEADERS_DIST) $(am__khr_HEADERS_DIST) \
 	$(am__DIST_COMMON)
 mkinstalldirs = $(install_sh) -d
 CONFIG_CLEAN_FILES =
@@ -226,7 +224,8 @@ am__installdirs = "$(DESTDIR)$(libdir)" "$(DESTDIR)$(pkgconfigdir)" \
 LTLIBRARIES = $(lib_LTLIBRARIES) $(noinst_LTLIBRARIES)
 am__DEPENDENCIES_1 =
 @HAVE_OPENGL_ES1_TRUE@es1api_libGLESv1_CM_la_DEPENDENCIES =  \
-@HAVE_OPENGL_ES1_TRUE@	$(am__DEPENDENCIES_1) $(am__append_17)
+@HAVE_OPENGL_ES1_TRUE@	$(am__DEPENDENCIES_1) \
+@HAVE_OPENGL_ES1_TRUE@	shared-glapi/libglapi.la
 am__es1api_libGLESv1_CM_la_SOURCES_DIST = entry.c \
 	es1api/glapi_mapi_tmp.h
 @HAVE_OPENGL_ES1_TRUE@am_es1api_libGLESv1_CM_la_OBJECTS =  \
@@ -244,7 +243,8 @@ es1api_libGLESv1_CM_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 @HAVE_OPENGL_ES1_TRUE@	$(libdir)
 am__dirstamp = $(am__leading_dot)dirstamp
 @HAVE_OPENGL_ES2_TRUE@es2api_libGLESv2_la_DEPENDENCIES =  \
-@HAVE_OPENGL_ES2_TRUE@	$(am__DEPENDENCIES_1) $(am__append_22)
+@HAVE_OPENGL_ES2_TRUE@	$(am__DEPENDENCIES_1) \
+@HAVE_OPENGL_ES2_TRUE@	shared-glapi/libglapi.la
 am__es2api_libGLESv2_la_SOURCES_DIST = entry.c es2api/glapi_mapi_tmp.h
 @HAVE_OPENGL_ES2_TRUE@am_es2api_libGLESv2_la_OBJECTS =  \
 @HAVE_OPENGL_ES2_TRUE@	es2api_libGLESv2_la-entry.lo
@@ -257,7 +257,8 @@ es2api_libGLESv2_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 glapi_libglapi_la_LIBADD =
 am__glapi_libglapi_la_SOURCES_DIST = glapi/glapi_gentable.c entry.c \
 	entry.h entry_x86-64_tls.h entry_x86_tls.h entry_x86_tsd.h \
-	mapi_tmp.h glapi/glapi_mapi_tmp.h glapi/glapi_dispatch.c \
+	entry_ppc64le_tls.h entry_ppc64le_tsd.h mapi_tmp.h \
+	glapi/glapi_mapi_tmp.h glapi/glapi_dispatch.c \
 	glapi/glapi_entrypoint.c glapi/glapi_getproc.c \
 	glapi/glapi_nop.c glapi/glapi.c glapi/glapi.h \
 	glapi/glapi_priv.h glapi/glapi_sparc.S glapi/glapi_x86.S \
@@ -418,6 +419,7 @@ am__GLES_include_HEADERS_DIST = $(top_srcdir)/include/GLES/egl.h \
 	$(top_srcdir)/include/GLES/gl.h \
 	$(top_srcdir)/include/GLES/glext.h \
 	$(top_srcdir)/include/GLES/glplatform.h
+am__khr_HEADERS_DIST = $(top_srcdir)/include/KHR/khrplatform.h
 HEADERS = $(GLES2_include_HEADERS) $(GLES3_include_HEADERS) \
 	$(GLES_include_HEADERS) $(khr_HEADERS)
 RECURSIVE_CLEAN_TARGETS = mostlyclean-recursive clean-recursive	\
@@ -733,6 +735,8 @@ GL_PC_LIB_PRIV = @GL_PC_LIB_PRIV@
 GL_PC_REQ_PRIV = @GL_PC_REQ_PRIV@
 GREP = @GREP@
 HAVE_XF86VIDMODE = @HAVE_XF86VIDMODE@
+I915_CFLAGS = @I915_CFLAGS@
+I915_LIBS = @I915_LIBS@
 INDENT = @INDENT@
 INDENT_FLAGS = @INDENT_FLAGS@
 INSTALL = @INSTALL@
@@ -740,8 +744,6 @@ INSTALL_DATA = @INSTALL_DATA@
 INSTALL_PROGRAM = @INSTALL_PROGRAM@
 INSTALL_SCRIPT = @INSTALL_SCRIPT@
 INSTALL_STRIP_PROGRAM = @INSTALL_STRIP_PROGRAM@
-INTEL_CFLAGS = @INTEL_CFLAGS@
-INTEL_LIBS = @INTEL_LIBS@
 LD = @LD@
 LDFLAGS = @LDFLAGS@
 LD_NO_UNDEFINED = @LD_NO_UNDEFINED@
@@ -837,6 +839,8 @@ STRIP = @STRIP@
 SWR_AVX2_CXXFLAGS = @SWR_AVX2_CXXFLAGS@
 SWR_AVX_CXXFLAGS = @SWR_AVX_CXXFLAGS@
 SWR_CXX11_CXXFLAGS = @SWR_CXX11_CXXFLAGS@
+SWR_KNL_CXXFLAGS = @SWR_KNL_CXXFLAGS@
+SWR_SKX_CXXFLAGS = @SWR_SKX_CXXFLAGS@
 VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
 VALGRIND_LIBS = @VALGRIND_LIBS@
 VA_CFLAGS = @VA_CFLAGS@
@@ -844,8 +848,6 @@ VA_LIBS = @VA_LIBS@
 VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
 VA_MAJOR = @VA_MAJOR@
 VA_MINOR = @VA_MINOR@
-VC4_CFLAGS = @VC4_CFLAGS@
-VC4_LIBS = @VC4_LIBS@
 VDPAU_CFLAGS = @VDPAU_CFLAGS@
 VDPAU_LIBS = @VDPAU_LIBS@
 VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
@@ -859,6 +861,7 @@ VL_LIBS = @VL_LIBS@
 VULKAN_ICD_INSTALL_DIR = @VULKAN_ICD_INSTALL_DIR@
 WAYLAND_CFLAGS = @WAYLAND_CFLAGS@
 WAYLAND_LIBS = @WAYLAND_LIBS@
+WAYLAND_PROTOCOLS_DATADIR = @WAYLAND_PROTOCOLS_DATADIR@
 WAYLAND_SCANNER = @WAYLAND_SCANNER@
 WAYLAND_SCANNER_CFLAGS = @WAYLAND_SCANNER_CFLAGS@
 WAYLAND_SCANNER_LIBS = @WAYLAND_SCANNER_LIBS@
@@ -932,7 +935,6 @@ pdfdir = @pdfdir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
-runstatedir = @runstatedir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
@@ -946,11 +948,11 @@ top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 SUBDIRS = 
-BUILT_SOURCES = $(am__append_1) $(am__append_14) $(am__append_19)
+BUILT_SOURCES = $(am__append_1) $(am__append_14) $(am__append_18)
 CLEANFILES = $(BUILT_SOURCES)
-lib_LTLIBRARIES = $(am__append_2) $(am__append_16) $(am__append_21)
+lib_LTLIBRARIES = $(am__append_2) $(am__append_16) $(am__append_20)
 pkgconfigdir = $(libdir)/pkgconfig
-pkgconfig_DATA = $(am__append_15) $(am__append_20)
+pkgconfig_DATA = $(am__append_15) $(am__append_19)
 EXTRA_DIST = \
 	es1api/ABI-check \
 	es2api/ABI-check \
@@ -983,6 +985,8 @@ MAPI_BRIDGE_FILES = \
 	entry_x86-64_tls.h \
 	entry_x86_tls.h \
 	entry_x86_tsd.h \
+	entry_ppc64le_tls.h \
+	entry_ppc64le_tsd.h \
 	mapi_tmp.h
 
 MAPI_FILES = \
@@ -1075,7 +1079,8 @@ glapi_gen_mapi_deps := \
 @HAVE_OPENGL_ES1_TRUE@	-DMAPI_ABI_HEADER=\"es1api/glapi_mapi_tmp.h\"
 
 @HAVE_OPENGL_ES1_TRUE@es1api_libGLESv1_CM_la_LIBADD =  \
-@HAVE_OPENGL_ES1_TRUE@	$(GLESv1_CM_LIB_DEPS) $(am__append_17)
+@HAVE_OPENGL_ES1_TRUE@	$(GLESv1_CM_LIB_DEPS) \
+@HAVE_OPENGL_ES1_TRUE@	shared-glapi/libglapi.la
 @HAVE_OPENGL_ES1_TRUE@es1api_libGLESv1_CM_la_LDFLAGS = \
 @HAVE_OPENGL_ES1_TRUE@	-no-undefined \
 @HAVE_OPENGL_ES1_TRUE@	-version-number 1:1 \
@@ -1107,15 +1112,15 @@ glapi_gen_mapi_deps := \
 @HAVE_OPENGL_ES2_TRUE@	-DMAPI_ABI_HEADER=\"es2api/glapi_mapi_tmp.h\"
 
 @HAVE_OPENGL_ES2_TRUE@es2api_libGLESv2_la_LIBADD = $(GLESv2_LIB_DEPS) \
-@HAVE_OPENGL_ES2_TRUE@	$(am__append_22)
+@HAVE_OPENGL_ES2_TRUE@	shared-glapi/libglapi.la
 @HAVE_OPENGL_ES2_TRUE@es2api_libGLESv2_la_LDFLAGS = \
 @HAVE_OPENGL_ES2_TRUE@	-no-undefined \
 @HAVE_OPENGL_ES2_TRUE@	-version-number 2 \
 @HAVE_OPENGL_ES2_TRUE@	$(GC_SECTIONS) \
 @HAVE_OPENGL_ES2_TRUE@	$(LD_NO_UNDEFINED)
 
-khrdir = $(includedir)/KHR
-khr_HEADERS = $(top_srcdir)/include/KHR/khrplatform.h
+@NEED_KHRPLATFORM_TRUE@khrdir = $(includedir)/KHR
+@NEED_KHRPLATFORM_TRUE@khr_HEADERS = $(top_srcdir)/include/KHR/khrplatform.h
 all: $(BUILT_SOURCES)
 	$(MAKE) $(AM_MAKEFLAGS) all-recursive
 
@@ -2171,17 +2176,17 @@ uninstall-am: uninstall-GLES2_includeHEADERS \
 
 shared-glapi/glapi_mapi_tmp.h : glapi/gen/gl_and_es_API.xml $(glapi_gen_mapi_deps)
 	$(MKDIR_GEN)
-	$(PYTHON_GEN) $(srcdir)/mapi_abi.py --mode lib --printer shared-glapi \
+	$(PYTHON_GEN) $(srcdir)/mapi_abi.py --printer shared-glapi \
 		$(srcdir)/glapi/gen/gl_and_es_API.xml > $@
 
 es1api/glapi_mapi_tmp.h: glapi/gen/gl_and_es_API.xml $(glapi_gen_mapi_deps)
 	$(MKDIR_GEN)
-	$(PYTHON_GEN) $(srcdir)/mapi_abi.py --mode lib --printer es1api \
+	$(PYTHON_GEN) $(srcdir)/mapi_abi.py --printer es1api \
 		$(srcdir)/glapi/gen/gl_and_es_API.xml > $@
 
 es2api/glapi_mapi_tmp.h: glapi/gen/gl_and_es_API.xml $(glapi_gen_mapi_deps)
 	$(MKDIR_GEN)
-	$(PYTHON_GEN) $(srcdir)/mapi_abi.py --mode lib --printer es2api \
+	$(PYTHON_GEN) $(srcdir)/mapi_abi.py --printer es2api \
 		$(srcdir)/glapi/gen/gl_and_es_API.xml > $@
 
 @BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@all-local : .install-mesa-links

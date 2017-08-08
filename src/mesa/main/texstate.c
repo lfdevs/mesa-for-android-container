@@ -38,6 +38,7 @@
 #include "teximage.h"
 #include "texstate.h"
 #include "mtypes.h"
+#include "state.h"
 #include "util/bitscan.h"
 #include "util/bitset.h"
 
@@ -279,14 +280,12 @@ calculate_derived_texenv( struct gl_tex_env_combine_state *state,
 }
 
 
-
-
 /* GL_ARB_multitexture */
-void GLAPIENTRY
-_mesa_ActiveTexture(GLenum texture)
+static ALWAYS_INLINE void
+active_texture(GLenum texture, bool no_error)
 {
    const GLuint texUnit = texture - GL_TEXTURE0;
-   GLuint k;
+
    GET_CURRENT_CONTEXT(ctx);
 
    if (MESA_VERBOSE & (VERBOSE_API|VERBOSE_TEXTURE))
@@ -296,23 +295,37 @@ _mesa_ActiveTexture(GLenum texture)
    if (ctx->Texture.CurrentUnit == texUnit)
       return;
 
-   k = _mesa_max_tex_unit(ctx);
+   if (!no_error) {
+      GLuint k = _mesa_max_tex_unit(ctx);
 
-   assert(k <= ARRAY_SIZE(ctx->Texture.Unit));
+      assert(k <= ARRAY_SIZE(ctx->Texture.Unit));
 
-   if (texUnit >= k) {
-      _mesa_error(ctx, GL_INVALID_ENUM, "glActiveTexture(texture=%s)",
-                  _mesa_enum_to_string(texture));
-      return;
+      if (texUnit >= k) {
+         _mesa_error(ctx, GL_INVALID_ENUM, "glActiveTexture(texture=%s)",
+                     _mesa_enum_to_string(texture));
+         return;
+      }
    }
-
-   FLUSH_VERTICES(ctx, _NEW_TEXTURE_STATE);
 
    ctx->Texture.CurrentUnit = texUnit;
    if (ctx->Transform.MatrixMode == GL_TEXTURE) {
       /* update current stack pointer */
       ctx->CurrentStack = &ctx->TextureMatrixStack[texUnit];
    }
+}
+
+
+void GLAPIENTRY
+_mesa_ActiveTexture_no_error(GLenum texture)
+{
+   active_texture(texture, true);
+}
+
+
+void GLAPIENTRY
+_mesa_ActiveTexture(GLenum texture)
+{
+   active_texture(texture, false);
 }
 
 
@@ -336,7 +349,7 @@ _mesa_ClientActiveTexture(GLenum texture)
       return;
    }
 
-   FLUSH_VERTICES(ctx, _NEW_ARRAY);
+   /* Don't flush vertices. This is a "latched" state. */
    ctx->Array.ActiveTexture = texUnit;
 }
 
@@ -612,18 +625,13 @@ update_texgen(struct gl_context *ctx)
 
 static struct gl_texture_object *
 update_single_program_texture(struct gl_context *ctx, struct gl_program *prog,
-                              int s)
+                              int unit)
 {
    gl_texture_index target_index;
    struct gl_texture_unit *texUnit;
    struct gl_texture_object *texObj;
    struct gl_sampler_object *sampler;
-   int unit;
 
-   if (!(prog->SamplersUsed & (1 << s)))
-      return NULL;
-
-   unit = prog->SamplerUnits[s];
    texUnit = &ctx->Texture.Unit[unit];
 
    /* Note: If more than one bit was set in TexturesUsed[unit], then we should
@@ -669,6 +677,24 @@ update_single_program_texture(struct gl_context *ctx, struct gl_program *prog,
    return texObj;
 }
 
+static inline void
+update_single_program_texture_state(struct gl_context *ctx,
+                                    struct gl_program *prog,
+                                    int unit,
+                                    BITSET_WORD *enabled_texture_units)
+{
+   struct gl_texture_object *texObj;
+
+   texObj = update_single_program_texture(ctx, prog, unit);
+   if (!texObj)
+      return;
+
+   _mesa_reference_texobj(&ctx->Texture.Unit[unit]._Current, texObj);
+   BITSET_SET(enabled_texture_units, unit);
+   ctx->Texture._MaxEnabledTexImageUnit =
+      MAX2(ctx->Texture._MaxEnabledTexImageUnit, (int)unit);
+}
+
 static void
 update_program_texture_state(struct gl_context *ctx, struct gl_program **prog,
                              BITSET_WORD *enabled_texture_units)
@@ -676,25 +702,34 @@ update_program_texture_state(struct gl_context *ctx, struct gl_program **prog,
    int i;
 
    for (i = 0; i < MESA_SHADER_STAGES; i++) {
-      int s;
+      GLbitfield mask;
+      GLuint s;
 
       if (!prog[i])
          continue;
 
-      /* We can't only do the shifting trick as the loop condition because if
-       * sampler 31 is active, the next iteration tries to shift by 32, which is
-       * undefined.
-       */
-      for (s = 0; s < MAX_SAMPLERS && (1 << s) <= prog[i]->SamplersUsed; s++) {
-         struct gl_texture_object *texObj;
+      mask = prog[i]->SamplersUsed;
 
-         texObj = update_single_program_texture(ctx, prog[i], s);
-         if (texObj) {
-            int unit = prog[i]->SamplerUnits[s];
-            _mesa_reference_texobj(&ctx->Texture.Unit[unit]._Current, texObj);
-            BITSET_SET(enabled_texture_units, unit);
-            ctx->Texture._MaxEnabledTexImageUnit =
-               MAX2(ctx->Texture._MaxEnabledTexImageUnit, (int)unit);
+      while (mask) {
+         s = u_bit_scan(&mask);
+
+         update_single_program_texture_state(ctx, prog[i],
+                                             prog[i]->SamplerUnits[s],
+                                             enabled_texture_units);
+      }
+
+      if (unlikely(prog[i]->sh.HasBoundBindlessSampler)) {
+         /* Loop over bindless samplers bound to texture units.
+          */
+         for (s = 0; s < prog[i]->sh.NumBindlessSamplers; s++) {
+            struct gl_bindless_sampler *sampler =
+               &prog[i]->sh.BindlessSamplers[s];
+
+            if (!sampler->bound)
+               continue;
+
+            update_single_program_texture_state(ctx, prog[i], sampler->unit,
+                                                enabled_texture_units);
          }
       }
    }
@@ -803,15 +838,10 @@ _mesa_update_texture_state(struct gl_context *ctx)
    int old_max_unit = ctx->Texture._MaxEnabledTexImageUnit;
    BITSET_DECLARE(enabled_texture_units, MAX_COMBINED_TEXTURE_IMAGE_UNITS);
 
-   for (i = 0; i < MESA_SHADER_STAGES; i++) {
-      if (ctx->_Shader->CurrentProgram[i]) {
-         prog[i] = ctx->_Shader->CurrentProgram[i];
-      } else {
-         prog[i] = NULL;
-      }
-   }
+   memcpy(prog, ctx->_Shader->CurrentProgram, sizeof(prog));
 
-   if (prog[MESA_SHADER_FRAGMENT] == NULL && ctx->FragmentProgram._Enabled) {
+   if (prog[MESA_SHADER_FRAGMENT] == NULL &&
+       _mesa_arb_fragment_program_enabled(ctx)) {
       prog[MESA_SHADER_FRAGMENT] = ctx->FragmentProgram.Current;
    }
 

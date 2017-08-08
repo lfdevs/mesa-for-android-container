@@ -44,7 +44,7 @@
 
 static void
 draw_impl(struct fd_context *ctx, struct fd_ringbuffer *ring,
-		struct fd4_emit *emit)
+		struct fd4_emit *emit, unsigned index_offset)
 {
 	const struct pipe_draw_info *info = emit->info;
 	enum pc_di_primtype primtype = ctx->primtypes[info->mode];
@@ -55,7 +55,7 @@ draw_impl(struct fd_context *ctx, struct fd_ringbuffer *ring,
 		fd4_emit_vertex_bufs(ring, emit);
 
 	OUT_PKT0(ring, REG_A4XX_VFD_INDEX_OFFSET, 2);
-	OUT_RING(ring, info->indexed ? info->index_bias : info->start); /* VFD_INDEX_OFFSET */
+	OUT_RING(ring, info->index_size ? info->index_bias : info->start); /* VFD_INDEX_OFFSET */
 	OUT_RING(ring, info->start_instance);   /* ??? UNKNOWN_2209 */
 
 	OUT_PKT0(ring, REG_A4XX_PC_RESTART_INDEX, 1);
@@ -70,7 +70,7 @@ draw_impl(struct fd_context *ctx, struct fd_ringbuffer *ring,
 
 	fd4_draw_emit(ctx->batch, ring, primtype,
 			emit->key.binning_pass ? IGNORE_VISIBILITY : USE_VISIBILITY,
-			info);
+			info, index_offset);
 }
 
 /* fixup dirty shader state in case some "unrelated" (from the state-
@@ -84,44 +84,23 @@ fixup_shader_state(struct fd_context *ctx, struct ir3_shader_key *key)
 	struct ir3_shader_key *last_key = &fd4_ctx->last_key;
 
 	if (!ir3_shader_key_equal(last_key, key)) {
-		if (last_key->has_per_samp || key->has_per_samp) {
-			if ((last_key->vsaturate_s != key->vsaturate_s) ||
-					(last_key->vsaturate_t != key->vsaturate_t) ||
-					(last_key->vsaturate_r != key->vsaturate_r) ||
-					(last_key->vastc_srgb != key->vastc_srgb))
-				ctx->dirty |= FD_SHADER_DIRTY_VP;
-
-			if ((last_key->fsaturate_s != key->fsaturate_s) ||
-					(last_key->fsaturate_t != key->fsaturate_t) ||
-					(last_key->fsaturate_r != key->fsaturate_r) ||
-					(last_key->fastc_srgb != key->fastc_srgb))
-				ctx->dirty |= FD_SHADER_DIRTY_FP;
+		if (ir3_shader_key_changes_fs(last_key, key)) {
+			ctx->dirty_shader[PIPE_SHADER_FRAGMENT] |= FD_DIRTY_SHADER_PROG;
+			ctx->dirty |= FD_DIRTY_PROG;
 		}
 
-		if (last_key->vclamp_color != key->vclamp_color)
-			ctx->dirty |= FD_SHADER_DIRTY_VP;
-
-		if (last_key->fclamp_color != key->fclamp_color)
-			ctx->dirty |= FD_SHADER_DIRTY_FP;
-
-		if (last_key->color_two_side != key->color_two_side)
-			ctx->dirty |= FD_SHADER_DIRTY_FP;
-
-		if (last_key->half_precision != key->half_precision)
-			ctx->dirty |= FD_SHADER_DIRTY_FP;
-
-		if (last_key->rasterflat != key->rasterflat)
-			ctx->dirty |= FD_SHADER_DIRTY_FP;
-
-		if (last_key->ucp_enables != key->ucp_enables)
-			ctx->dirty |= FD_SHADER_DIRTY_FP | FD_SHADER_DIRTY_VP;
+		if (ir3_shader_key_changes_vs(last_key, key)) {
+			ctx->dirty_shader[PIPE_SHADER_VERTEX] |= FD_DIRTY_SHADER_PROG;
+			ctx->dirty |= FD_DIRTY_PROG;
+		}
 
 		fd4_ctx->last_key = *key;
 	}
 }
 
 static bool
-fd4_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info)
+fd4_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info,
+             unsigned index_offset)
 {
 	struct fd4_context *fd4_ctx = fd4_context(ctx);
 	struct fd4_emit emit = {
@@ -155,7 +134,7 @@ fd4_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info)
 
 	fixup_shader_state(ctx, &emit.key);
 
-	unsigned dirty = ctx->dirty;
+	enum fd_dirty_3d_state dirty = ctx->dirty;
 
 	/* do regular pass first, since that is more likely to fail compiling: */
 
@@ -175,7 +154,7 @@ fd4_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info)
 		OUT_RING(ring, A4XX_RB_RENDER_CONTROL_DISABLE_COLOR_PIPE);
 	}
 
-	draw_impl(ctx, ctx->batch->draw, &emit);
+	draw_impl(ctx, ctx->batch->draw, &emit, index_offset);
 
 	if (ctx->rasterizer->rasterizer_discard) {
 		fd_wfi(ctx->batch, ring);
@@ -190,7 +169,9 @@ fd4_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info)
 	emit.dirty = dirty & ~(FD_DIRTY_BLEND);
 	emit.vp = NULL;   /* we changed key so need to refetch vp */
 	emit.fp = NULL;
-	draw_impl(ctx, ctx->batch->binning, &emit);
+	draw_impl(ctx, ctx->batch->binning, &emit, index_offset);
+
+	fd_context_all_clean(ctx);
 
 	return true;
 }

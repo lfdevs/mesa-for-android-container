@@ -74,9 +74,9 @@ pipe_loader_configuration(struct pipe_loader_device *dev,
 }
 
 struct pipe_screen *
-pipe_loader_create_screen(struct pipe_loader_device *dev)
+pipe_loader_create_screen(struct pipe_loader_device *dev, unsigned flags)
 {
-   return dev->ops->create_screen(dev);
+   return dev->ops->create_screen(dev, flags);
 }
 
 struct util_dl_library *

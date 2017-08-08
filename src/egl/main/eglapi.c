@@ -89,7 +89,7 @@
 #include "c99_compat.h"
 #include "c11/threads.h"
 #include "GL/mesa_glinterop.h"
-#include "eglcompiler.h"
+#include "util/macros.h"
 
 #include "eglglobals.h"
 #include "eglcontext.h"
@@ -488,11 +488,13 @@ _eglCreateExtensionsString(_EGLDisplay *dpy)
    _EGL_CHECK_EXTENSION(EXT_buffer_age);
    _EGL_CHECK_EXTENSION(EXT_create_context_robustness);
    _EGL_CHECK_EXTENSION(EXT_image_dma_buf_import);
+   _EGL_CHECK_EXTENSION(EXT_image_dma_buf_import_modifiers);
    _EGL_CHECK_EXTENSION(EXT_swap_buffers_with_damage);
 
    _EGL_CHECK_EXTENSION(KHR_cl_event2);
    _EGL_CHECK_EXTENSION(KHR_config_attribs);
    _EGL_CHECK_EXTENSION(KHR_create_context);
+   _EGL_CHECK_EXTENSION(KHR_create_context_no_error);
    _EGL_CHECK_EXTENSION(KHR_fence_sync);
    _EGL_CHECK_EXTENSION(KHR_get_all_proc_addresses);
    _EGL_CHECK_EXTENSION(KHR_gl_colorspace);
@@ -505,6 +507,7 @@ _eglCreateExtensionsString(_EGLDisplay *dpy)
    _EGL_CHECK_EXTENSION(KHR_image_base);
    _EGL_CHECK_EXTENSION(KHR_image_pixmap);
    _EGL_CHECK_EXTENSION(KHR_no_config_context);
+   _EGL_CHECK_EXTENSION(KHR_partial_update);
    _EGL_CHECK_EXTENSION(KHR_reusable_sync);
    _EGL_CHECK_EXTENSION(KHR_surfaceless_context);
    if (dpy->Extensions.EXT_swap_buffers_with_damage)
@@ -1234,6 +1237,15 @@ eglSwapBuffers(EGLDisplay dpy, EGLSurface surface)
 
    ret = drv->API.SwapBuffers(drv, disp, surf);
 
+   /* EGL_KHR_partial_update
+    * Frame boundary successfully reached,
+    * reset damage region and reset BufferAgeRead
+    */
+   if (ret) {
+      surf->SetDamageRegionCalled = EGL_FALSE;
+      surf->BufferAgeRead = EGL_FALSE;
+   }
+
    RETURN_EGL_EVAL(disp, ret);
 }
 
@@ -1258,6 +1270,15 @@ _eglSwapBuffersWithDamageCommon(_EGLDisplay *disp, _EGLSurface *surf,
 
    ret = drv->API.SwapBuffersWithDamageEXT(drv, disp, surf, rects, n_rects);
 
+   /* EGL_KHR_partial_update
+    * Frame boundary successfully reached,
+    * reset damage region and reset BufferAgeRead
+    */
+   if (ret) {
+      surf->SetDamageRegionCalled = EGL_FALSE;
+      surf->BufferAgeRead = EGL_FALSE;
+   }
+
    RETURN_EGL_EVAL(disp, ret);
 }
 
@@ -1279,6 +1300,70 @@ eglSwapBuffersWithDamageKHR(EGLDisplay dpy, EGLSurface surface,
    _EGLSurface *surf = _eglLookupSurface(surface, disp);
    _EGL_FUNC_START(disp, EGL_OBJECT_SURFACE_KHR, surf, EGL_FALSE);
    return _eglSwapBuffersWithDamageCommon(disp, surf, rects, n_rects);
+}
+
+/**
+ * If the width of the passed rect is greater than the surface's
+ * width then it is clamped to the width of the surface. Same with
+ * height.
+ */
+
+static void
+_eglSetDamageRegionKHRClampRects(_EGLDisplay* disp, _EGLSurface* surf,
+                                 EGLint *rects, EGLint n_rects)
+{
+   EGLint i;
+   EGLint surf_height = surf->Height;
+   EGLint surf_width = surf->Width;
+
+   for (i = 0; i < (4 * n_rects); i += 4) {
+      EGLint x, y, rect_width, rect_height;
+      x = rects[i];
+      y = rects[i + 1];
+      rect_width = rects[i + 2];
+      rect_height = rects[i + 3];
+
+      if (rect_width > surf_width - x)
+         rects[i + 2] = surf_width - x;
+
+      if (rect_height > surf_height - y)
+         rects[i + 3] = surf_height - y;
+   }
+}
+
+static EGLBoolean EGLAPIENTRY
+eglSetDamageRegionKHR(EGLDisplay dpy, EGLSurface surface,
+                      EGLint *rects, EGLint n_rects)
+{
+   _EGLDisplay *disp = _eglLockDisplay(dpy);
+   _EGLSurface *surf = _eglLookupSurface(surface, disp);
+   _EGL_FUNC_START(disp, EGL_OBJECT_SURFACE_KHR, surf, EGL_FALSE);
+   _EGLContext *ctx = _eglGetCurrentContext();
+   _EGLDriver *drv;
+   EGLBoolean ret;
+   _EGL_CHECK_SURFACE(disp, surf, EGL_FALSE, drv);
+
+   if (_eglGetContextHandle(ctx) == EGL_NO_CONTEXT ||
+       surf->Type != EGL_WINDOW_BIT ||
+       ctx->DrawSurface != surf ||
+       surf->SwapBehavior != EGL_BUFFER_DESTROYED)
+      RETURN_EGL_ERROR(disp, EGL_BAD_MATCH, EGL_FALSE);
+
+   /* If the damage region is already set or
+    * buffer age is not queried between
+    * frame boundaries, throw bad access error
+    */
+
+   if (surf->SetDamageRegionCalled || !surf->BufferAgeRead)
+      RETURN_EGL_ERROR(disp, EGL_BAD_ACCESS, EGL_FALSE);
+
+   _eglSetDamageRegionKHRClampRects(disp, surf, rects, n_rects);
+   ret = drv->API.SetDamageRegion(drv, disp, surf, rects, n_rects);
+
+   if (ret)
+      surf->SetDamageRegionCalled = EGL_TRUE;
+
+   RETURN_EGL_EVAL(disp, ret);
 }
 
 EGLBoolean EGLAPIENTRY
@@ -2132,7 +2217,8 @@ eglCreateWaylandBufferFromImageWL(EGLDisplay dpy, EGLImage image)
    _EGL_FUNC_START(disp, EGL_OBJECT_DISPLAY_KHR, NULL, EGL_FALSE);
 
    _EGL_CHECK_DISPLAY(disp, NULL, drv);
-   assert(disp->Extensions.WL_create_wayland_buffer_from_image);
+   if (!disp->Extensions.WL_create_wayland_buffer_from_image)
+      RETURN_EGL_EVAL(disp, NULL);
 
    img = _eglLookupImage(image, disp);
 
@@ -2383,6 +2469,44 @@ _eglFunctionCompare(const void *key, const void *elem)
    const char *procname = key;
    const struct _egl_entrypoint *entrypoint = elem;
    return strcmp(procname, entrypoint->name);
+}
+
+static EGLBoolean EGLAPIENTRY
+eglQueryDmaBufFormatsEXT(EGLDisplay dpy, EGLint max_formats,
+                         EGLint *formats, EGLint *num_formats)
+{
+   _EGLDisplay *disp = _eglLockDisplay(dpy);
+   _EGLDriver *drv;
+   EGLBoolean ret;
+
+   _EGL_FUNC_START(NULL, EGL_NONE, NULL, EGL_FALSE);
+
+   _EGL_CHECK_DISPLAY(disp, EGL_FALSE, drv);
+
+   ret = drv->API.QueryDmaBufFormatsEXT(drv, disp, max_formats, formats,
+                                        num_formats);
+
+   RETURN_EGL_EVAL(disp, ret);
+}
+
+static EGLBoolean EGLAPIENTRY
+eglQueryDmaBufModifiersEXT(EGLDisplay dpy, EGLint format, EGLint max_modifiers,
+                           EGLuint64KHR *modifiers, EGLBoolean *external_only,
+                           EGLint *num_modifiers)
+{
+   _EGLDisplay *disp = _eglLockDisplay(dpy);
+   _EGLDriver *drv;
+   EGLBoolean ret;
+
+   _EGL_FUNC_START(NULL, EGL_NONE, NULL, EGL_FALSE);
+
+   _EGL_CHECK_DISPLAY(disp, EGL_FALSE, drv);
+
+   ret = drv->API.QueryDmaBufModifiersEXT(drv, disp, format, max_modifiers,
+                                          modifiers, external_only,
+                                          num_modifiers);
+
+   RETURN_EGL_EVAL(disp, ret);
 }
 
 __eglMustCastToProperFunctionPointerType EGLAPIENTRY

@@ -109,8 +109,8 @@ struct QUEUE
 
         auto lambda = [&](int32_t i)
         {
-            __m256 vSrc = _simd_load_ps(pSrc + i*KNOB_SIMD_WIDTH);
-            _simd_stream_ps(pDst + i*KNOB_SIMD_WIDTH, vSrc);
+            __m256 vSrc = _mm256_load_ps(pSrc + i*KNOB_SIMD_WIDTH);
+            _mm256_stream_ps(pDst + i*KNOB_SIMD_WIDTH, vSrc);
         };
             
         const uint32_t numSimdLines = sizeof(T) / (KNOB_SIMD_WIDTH*4);

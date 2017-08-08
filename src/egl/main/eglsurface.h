@@ -82,6 +82,18 @@ struct _egl_surface
 
    EGLint SwapInterval;
 
+   /* EGL_KHR_partial_update
+    * True if the damage region is already set
+    * between frame boundaries.
+    */
+   EGLBoolean SetDamageRegionCalled;
+
+   /* EGL_KHR_partial_update
+    * True if the buffer age is read by the client
+    * between frame boundaries.
+    */
+   EGLBoolean BufferAgeRead;
+
    /* True if the surface is bound to an OpenGL ES texture */
    EGLBoolean BoundToTexture;
 

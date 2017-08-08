@@ -219,8 +219,12 @@
 #define R_008C4C_SQ_GSVS_RING_SIZE                   0x008C4C
 #define R_008C50_SQ_ESTMP_RING_BASE                  0x008C50
 #define R_008C54_SQ_ESTMP_RING_SIZE                  0x008C54
-#define R_008C50_SQ_GSTMP_RING_BASE                  0x008C58
-#define R_008C54_SQ_GSTMP_RING_SIZE                  0x008C5C
+#define R_008C58_SQ_GSTMP_RING_BASE                  0x008C58
+#define R_008C5C_SQ_GSTMP_RING_SIZE                  0x008C5C
+#define R_008C68_SQ_PSTMP_RING_BASE                  0x008C68
+#define R_008C6C_SQ_PSTMP_RING_SIZE                  0x008C6C
+#define R_008C60_SQ_VSTMP_RING_BASE                  0x008C60
+#define R_008C64_SQ_VSTMP_RING_SIZE                  0x008C64
 
 #define R_0088C8_VGT_GS_PER_ES                       0x0088C8
 #define R_0088CC_VGT_ES_PER_GS                       0x0088CC
@@ -3772,6 +3776,12 @@
 #define SQ_TEX_INST_SAMPLE_C_G_L	0x1D
 #define SQ_TEX_INST_SAMPLE_C_G_LB	0x1E
 #define SQ_TEX_INST_SAMPLE_C_G_LZ	0x1F
+
+#define EG_0802C_GRBM_GFX_INDEX          			0x802C
+#define   S_0802C_INSTANCE_INDEX(x)					  (((x) & 0xffff) << 0)
+#define   S_0802C_SE_INDEX(x)						  (((x) & 0x3fff) << 16)
+#define   S_0802C_INSTANCE_BROADCAST_WRITES(x)		  (((x) & 0x1) << 30)
+#define   S_0802C_SE_BROADCAST_WRITES(x)			  (((x) & 0x1) << 31)
 
 #define CM_R_028AA8_IA_MULTI_VGT_PARAM                0x028AA8
 #define   S_028AA8_PRIMGROUP_SIZE(x)                   (((unsigned)(x) & 0xFFFF) << 0)

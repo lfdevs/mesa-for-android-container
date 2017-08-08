@@ -47,12 +47,14 @@
 void
 intel_upload_finish(struct brw_context *brw)
 {
+   assert((brw->upload.bo == NULL) == (brw->upload.map == NULL));
    if (!brw->upload.bo)
       return;
 
    brw_bo_unmap(brw->upload.bo);
    brw_bo_unreference(brw->upload.bo);
    brw->upload.bo = NULL;
+   brw->upload.map = NULL;
    brw->upload.next_offset = 0;
 }
 
@@ -94,13 +96,11 @@ intel_upload_space(struct brw_context *brw,
       offset = 0;
    }
 
+   assert((brw->upload.bo == NULL) == (brw->upload.map == NULL));
    if (!brw->upload.bo) {
       brw->upload.bo = brw_bo_alloc(brw->bufmgr, "streamed data",
                                     MAX2(INTEL_UPLOAD_SIZE, size), 4096);
-      if (brw->has_llc)
-         brw_bo_map(brw, brw->upload.bo, true);
-      else
-         brw_bo_map_gtt(brw, brw->upload.bo);
+      brw->upload.map = brw_bo_map(brw, brw->upload.bo, MAP_READ | MAP_WRITE);
    }
 
    brw->upload.next_offset = offset + size;
@@ -112,7 +112,7 @@ intel_upload_space(struct brw_context *brw,
       brw_bo_reference(brw->upload.bo);
    }
 
-   return brw->upload.bo->virtual + offset;
+   return brw->upload.map + offset;
 }
 
 /**

@@ -52,6 +52,23 @@ static const nir_shader_compiler_options options = {
 		.lower_extract_word = true,
 };
 
+static const nir_shader_compiler_options options_5xx = {
+		.lower_fpow = true,
+		.lower_fsat = true,
+		.lower_scmp = true,
+		.lower_flrp32 = true,
+		.lower_flrp64 = true,
+		.lower_ffract = true,
+		.lower_fmod32 = true,
+		.lower_fmod64 = true,
+		.lower_fdiv = true,
+		.fuse_ffma = true,
+		.native_integers = true,
+		.vertex_id_zero_based = false,
+		.lower_extract_byte = true,
+		.lower_extract_word = true,
+};
+
 struct nir_shader *
 ir3_tgsi_to_nir(const struct tgsi_token *tokens)
 {
@@ -59,8 +76,10 @@ ir3_tgsi_to_nir(const struct tgsi_token *tokens)
 }
 
 const nir_shader_compiler_options *
-ir3_get_compiler_options(void)
+ir3_get_compiler_options(struct ir3_compiler *compiler)
 {
+	if (compiler->gpu_id >= 500)
+		return &options_5xx;
 	return &options;
 }
 
@@ -90,6 +109,7 @@ ir3_optimize_loop(nir_shader *s)
 		progress = false;
 
 		OPT_V(s, nir_lower_vars_to_ssa);
+		progress |= OPT(s, nir_opt_copy_prop_vars);
 		progress |= OPT(s, nir_lower_alu_to_scalar);
 		progress |= OPT(s, nir_lower_phis_to_scalar);
 
@@ -114,7 +134,6 @@ ir3_optimize_nir(struct ir3_shader *shader, nir_shader *s,
 	if (key) {
 		switch (shader->type) {
 		case SHADER_FRAGMENT:
-		case SHADER_COMPUTE:
 			tex_options.saturate_s = key->fsaturate_s;
 			tex_options.saturate_t = key->fsaturate_t;
 			tex_options.saturate_r = key->fsaturate_r;
@@ -123,6 +142,9 @@ ir3_optimize_nir(struct ir3_shader *shader, nir_shader *s,
 			tex_options.saturate_s = key->vsaturate_s;
 			tex_options.saturate_t = key->vsaturate_t;
 			tex_options.saturate_r = key->vsaturate_r;
+			break;
+		default:
+			/* TODO */
 			break;
 		}
 	}

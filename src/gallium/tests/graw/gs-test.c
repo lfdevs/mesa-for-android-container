@@ -235,13 +235,13 @@ static void set_vertices( void )
    vbuf.stride = sizeof( struct vertex );
    vbuf.buffer_offset = 0;
    if (draw_strip) {
-      vbuf.buffer = pipe_buffer_create_with_data(ctx,
+      vbuf.buffer.resource = pipe_buffer_create_with_data(ctx,
                                                  PIPE_BIND_VERTEX_BUFFER,
                                                  PIPE_USAGE_DEFAULT,
                                                  sizeof(vertices_strip),
                                                  vertices_strip);
    } else {
-      vbuf.buffer = pipe_buffer_create_with_data(ctx,
+      vbuf.buffer.resource = pipe_buffer_create_with_data(ctx,
                                                  PIPE_BIND_VERTEX_BUFFER,
                                                  PIPE_USAGE_DEFAULT,
                                                  sizeof(vertices),

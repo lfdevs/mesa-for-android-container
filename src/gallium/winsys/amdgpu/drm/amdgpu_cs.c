@@ -259,7 +259,8 @@ amdgpu_ctx_query_reset_status(struct radeon_winsys_ctx *rwctx)
 static bool amdgpu_cs_has_user_fence(struct amdgpu_cs_context *cs)
 {
    return cs->request.ip_type != AMDGPU_HW_IP_UVD &&
-          cs->request.ip_type != AMDGPU_HW_IP_VCE;
+          cs->request.ip_type != AMDGPU_HW_IP_VCE &&
+          cs->request.ip_type != AMDGPU_HW_IP_VCN_DEC;
 }
 
 static bool amdgpu_cs_has_chaining(struct amdgpu_cs *cs)
@@ -535,7 +536,7 @@ static unsigned amdgpu_cs_add_buffer(struct radeon_winsys_cs *rcs,
       buffer = &cs->sparse_buffers[index];
    }
 
-   buffer->u.real.priority_usage |= 1llu << priority;
+   buffer->u.real.priority_usage |= 1ull << priority;
    buffer->usage |= usage;
 
    cs->last_added_bo = bo;
@@ -580,8 +581,7 @@ static bool amdgpu_ib_new_buffer(struct amdgpu_winsys *ws, struct amdgpu_ib *ib)
 
    pb = ws->base.buffer_create(&ws->base, buffer_size,
                                ws->info.gart_page_size,
-                               RADEON_DOMAIN_GTT,
-                               RADEON_FLAG_CPU_ACCESS);
+                               RADEON_DOMAIN_GTT, 0);
    if (!pb)
       return false;
 
@@ -710,6 +710,10 @@ static bool amdgpu_init_cs_context(struct amdgpu_cs_context *cs,
 
    case RING_COMPUTE:
       cs->request.ip_type = AMDGPU_HW_IP_COMPUTE;
+      break;
+
+   case RING_VCN_DEC:
+      cs->request.ip_type = AMDGPU_HW_IP_VCN_DEC;
       break;
 
    default:
@@ -1220,6 +1224,9 @@ void amdgpu_cs_submit_ib(void *job, int thread_index)
          cs->flags[i] = (util_last_bit64(buffer->u.real.priority_usage) - 1) / 4;
       }
 
+      if (acs->ring_type == RING_GFX)
+         ws->gfx_bo_list_counter += cs->num_real_buffers;
+
       r = amdgpu_bo_list_create(ws->dev, cs->num_real_buffers,
                                 cs->handles, cs->flags,
                                 &cs->request.resources);
@@ -1329,6 +1336,10 @@ static int amdgpu_cs_flush(struct radeon_winsys_cs *rcs,
    case RING_UVD:
       while (rcs->current.cdw & 15)
          radeon_emit(rcs, 0x80000000); /* type2 nop packet */
+      break;
+   case RING_VCN_DEC:
+      while (rcs->current.cdw & 15)
+         radeon_emit(rcs, 0x81ff); /* nop packet */
       break;
    default:
       break;

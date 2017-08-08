@@ -99,6 +99,7 @@ static void
 decode_group(struct gen_group *strct, const uint32_t *p, int starting_dword)
 {
    uint64_t offset = option_print_offsets ? (void *) p - gtt : 0;
+
    gen_print_group(outfile, strct, offset, p, option_color == COLOR_ALWAYS);
 }
 
@@ -523,6 +524,14 @@ handle_3dstate_sampler_state_pointers(struct gen_spec *spec, uint32_t *p)
 }
 
 static void
+handle_3dstate_sampler_state_pointers_gen6(struct gen_spec *spec, uint32_t *p)
+{
+   dump_samplers(spec, p[1]);
+   dump_samplers(spec, p[2]);
+   dump_samplers(spec, p[3]);
+}
+
+static void
 handle_3dstate_viewport_state_pointers_cc(struct gen_spec *spec, uint32_t *p)
 {
    uint64_t start;
@@ -633,6 +642,8 @@ handle_load_register_imm(struct gen_spec *spec, uint32_t *p)
 #define _3DSTATE_SAMPLER_STATE_POINTERS_GS  0x782e0000
 #define _3DSTATE_SAMPLER_STATE_POINTERS_PS  0x782f0000
 
+#define _3DSTATE_SAMPLER_STATE_POINTERS     0x78020000
+
 #define _3DSTATE_VIEWPORT_STATE_POINTERS_CC 0x78230000
 #define _3DSTATE_VIEWPORT_STATE_POINTERS_SF_CLIP 0x78210000
 #define _3DSTATE_BLEND_STATE_POINTERS       0x78240000
@@ -669,6 +680,7 @@ struct custom_handler {
    { _3DSTATE_SAMPLER_STATE_POINTERS_VS, handle_3dstate_sampler_state_pointers },
    { _3DSTATE_SAMPLER_STATE_POINTERS_GS, handle_3dstate_sampler_state_pointers },
    { _3DSTATE_SAMPLER_STATE_POINTERS_PS, handle_3dstate_sampler_state_pointers },
+   { _3DSTATE_SAMPLER_STATE_POINTERS, handle_3dstate_sampler_state_pointers_gen6 },
 
    { _3DSTATE_VIEWPORT_STATE_POINTERS_CC, handle_3dstate_viewport_state_pointers_cc },
    { _3DSTATE_VIEWPORT_STATE_POINTERS_SF_CLIP, handle_3dstate_viewport_state_pointers_sf_clip },
@@ -892,6 +904,8 @@ aub_file_open(const char *filename)
       exit(EXIT_FAILURE);
    }
 
+   close(fd);
+
    file->cursor = file->map;
    file->end = file->map + sb.st_size / 4;
 
@@ -951,7 +965,8 @@ struct {
    { "bdw", MAKE_GEN(8, 0) },
    { "skl", MAKE_GEN(9, 0) },
    { "chv", MAKE_GEN(8, 0) },
-   { "bxt", MAKE_GEN(9, 0) }
+   { "bxt", MAKE_GEN(9, 0) },
+   { "cnl", MAKE_GEN(10, 0) },
 };
 
 enum {
@@ -1119,7 +1134,7 @@ print_help(const char *progname, FILE *file)
            "Decode aub file contents from either FILE or the standard input.\n\n"
            "A valid --gen option must be provided.\n\n"
            "      --help          display this help and exit\n"
-           "      --gen=platform  decode for given platform (ivb, byt, hsw, bdw, chv, skl, kbl or bxt)\n"
+           "      --gen=platform  decode for given platform (ivb, byt, hsw, bdw, chv, skl, kbl, bxt or cnl)\n"
            "      --headers       decode only command headers\n"
            "      --color[=WHEN]  colorize the output; WHEN can be 'auto' (default\n"
            "                        if omitted), 'always', or 'never'\n"
@@ -1147,7 +1162,8 @@ int main(int argc, char *argv[])
       { "chv", 0x22B3 }, /* Intel(R) HD Graphics (Cherryview) */
       { "skl", 0x1912 }, /* Intel(R) HD Graphics 530 (Skylake GT2) */
       { "kbl", 0x591D }, /* Intel(R) Kabylake GT2 */
-      { "bxt", 0x0A84 }  /* Intel(R) HD Graphics (Broxton) */
+      { "bxt", 0x0A84 },  /* Intel(R) HD Graphics (Broxton) */
+      { "cnl", 0x5A52 },  /* Intel(R) HD Graphics (Cannonlake) */
    };
    const struct option aubinator_opts[] = {
       { "help",       no_argument,       (int *) &help,                 true },

@@ -29,6 +29,7 @@
 
 #ifdef DEBUG
 static void nve4_compute_dump_launch_desc(const struct nve4_cp_launch_desc *);
+static void gp100_compute_dump_launch_desc(const struct gp100_cp_launch_desc *);
 #endif
 
 
@@ -56,6 +57,9 @@ nve4_screen_compute_setup(struct nvc0_screen *screen,
       break;
    case 0x120:
       obj_class = GM200_COMPUTE_CLASS;
+      break;
+   case 0x130:
+      obj_class = dev->chipset == 0x130 ? GP100_COMPUTE_CLASS : GP104_COMPUTE_CLASS;
       break;
    default:
       NOUVEAU_ERR("unsupported chipset: NV%02x\n", dev->chipset);
@@ -585,7 +589,45 @@ nve4_compute_setup_launch_desc(struct nvc0_context *nvc0,
                               NVC0_CB_AUX_INFO(5), 1 << 11);
 }
 
-static inline struct nve4_cp_launch_desc *
+static void
+gp100_compute_setup_launch_desc(struct nvc0_context *nvc0,
+                                struct gp100_cp_launch_desc *desc,
+                                const struct pipe_grid_info *info)
+{
+   const struct nvc0_screen *screen = nvc0->screen;
+   const struct nvc0_program *cp = nvc0->compprog;
+
+   gp100_cp_launch_desc_init_default(desc);
+
+   desc->entry = nvc0_program_symbol_offset(cp, info->pc);
+
+   desc->griddim_x = info->grid[0];
+   desc->griddim_y = info->grid[1];
+   desc->griddim_z = info->grid[2];
+   desc->blockdim_x = info->block[0];
+   desc->blockdim_y = info->block[1];
+   desc->blockdim_z = info->block[2];
+
+   desc->shared_size = align(cp->cp.smem_size, 0x100);
+   desc->local_size_p = (cp->hdr[1] & 0xfffff0) + align(cp->cp.lmem_size, 0x10);
+   desc->local_size_n = 0;
+   desc->cstack_size = 0x800;
+
+   desc->gpr_alloc = cp->num_gprs;
+   desc->bar_alloc = cp->num_barriers;
+
+   // Only bind user uniforms and the driver constant buffer through the
+   // launch descriptor because UBOs are sticked to the driver cb to avoid the
+   // limitation of 8 CBs.
+   if (nvc0->constbuf[5][0].user || cp->parm_size) {
+      gp100_cp_launch_desc_set_cb(desc, 0, screen->uniform_bo,
+                                  NVC0_CB_USR_INFO(5), 1 << 16);
+   }
+   gp100_cp_launch_desc_set_cb(desc, 7, screen->uniform_bo,
+                               NVC0_CB_AUX_INFO(5), 1 << 11);
+}
+
+static inline void *
 nve4_compute_alloc_launch_desc(struct nouveau_context *nv,
                                struct nouveau_bo **pbo, uint64_t *pgpuaddr)
 {
@@ -597,7 +639,28 @@ nve4_compute_alloc_launch_desc(struct nouveau_context *nv,
       ptr += adj;
       *pgpuaddr += adj;
    }
-   return (struct nve4_cp_launch_desc *)ptr;
+   return ptr;
+}
+
+static void
+nve4_upload_indirect_desc(struct nouveau_pushbuf *push,
+                          struct nv04_resource *res,  uint64_t gpuaddr,
+                          uint32_t length, uint32_t bo_offset)
+{
+   BEGIN_NVC0(push, NVE4_CP(UPLOAD_DST_ADDRESS_HIGH), 2);
+   PUSH_DATAh(push, gpuaddr);
+   PUSH_DATA (push, gpuaddr);
+   BEGIN_NVC0(push, NVE4_CP(UPLOAD_LINE_LENGTH_IN), 2);
+   PUSH_DATA (push, length);
+   PUSH_DATA (push, 1);
+
+   nouveau_pushbuf_space(push, 32, 0, 1);
+   PUSH_REFN(push, res->bo, NOUVEAU_BO_RD | res->domain);
+
+   BEGIN_1IC0(push, NVE4_CP(UPLOAD_EXEC), 1 + (length / 4));
+   PUSH_DATA (push, NVE4_COMPUTE_UPLOAD_EXEC_LINEAR | (0x08 << 1));
+   nouveau_pushbuf_data(push, res->bo, bo_offset,
+                        NVC0_IB_ENTRY_1_NO_PREFETCH | length);
 }
 
 void
@@ -605,7 +668,7 @@ nve4_launch_grid(struct pipe_context *pipe, const struct pipe_grid_info *info)
 {
    struct nvc0_context *nvc0 = nvc0_context(pipe);
    struct nouveau_pushbuf *push = nvc0->base.pushbuf;
-   struct nve4_cp_launch_desc *desc;
+   void *desc;
    uint64_t desc_gpuaddr;
    struct nouveau_bo *desc_bo;
    int ret;
@@ -622,13 +685,20 @@ nve4_launch_grid(struct pipe_context *pipe, const struct pipe_grid_info *info)
    if (ret)
       goto out;
 
-   nve4_compute_setup_launch_desc(nvc0, desc, info);
+   if (nvc0->screen->compute->oclass >= GP100_COMPUTE_CLASS)
+      gp100_compute_setup_launch_desc(nvc0, desc, info);
+   else
+      nve4_compute_setup_launch_desc(nvc0, desc, info);
 
    nve4_compute_upload_input(nvc0, info);
 
 #ifdef DEBUG
-   if (debug_get_num_option("NV50_PROG_DEBUG", 0))
-      nve4_compute_dump_launch_desc(desc);
+   if (debug_get_num_option("NV50_PROG_DEBUG", 0)) {
+      if (nvc0->screen->compute->oclass >= GP100_COMPUTE_CLASS)
+         gp100_compute_dump_launch_desc(desc);
+      else
+         nve4_compute_dump_launch_desc(desc);
+   }
 #endif
 
    if (unlikely(info->indirect)) {
@@ -646,35 +716,17 @@ nve4_launch_grid(struct pipe_context *pipe, const struct pipe_grid_info *info)
       PUSH_DATA (push, NVE4_COMPUTE_UPLOAD_EXEC_LINEAR | (0x08 << 1));
       PUSH_DATAp(push, (const uint32_t *)desc, 256 / 4);
 
-      /* overwrite griddim_x and griddim_y as two 32-bits integers even
-       * if griddim_y must be a 16-bits integer */
-      BEGIN_NVC0(push, NVE4_CP(UPLOAD_DST_ADDRESS_HIGH), 2);
-      PUSH_DATAh(push, desc_gpuaddr + 48);
-      PUSH_DATA (push, desc_gpuaddr + 48);
-      BEGIN_NVC0(push, NVE4_CP(UPLOAD_LINE_LENGTH_IN), 2);
-      PUSH_DATA (push, 8);
-      PUSH_DATA (push, 1);
+      if (nvc0->screen->compute->oclass >= GP100_COMPUTE_CLASS) {
+         nve4_upload_indirect_desc(push, res, desc_gpuaddr + 48, 12, offset);
+      } else {
+         /* overwrite griddim_x and griddim_y as two 32-bits integers even
+          * if griddim_y must be a 16-bits integer */
+         nve4_upload_indirect_desc(push, res, desc_gpuaddr + 48, 8, offset);
 
-      nouveau_pushbuf_space(push, 32, 0, 1);
-      PUSH_REFN(push, res->bo, NOUVEAU_BO_RD | res->domain);
-
-      BEGIN_1IC0(push, NVE4_CP(UPLOAD_EXEC), 1 + (8 / 4));
-      PUSH_DATA (push, NVE4_COMPUTE_UPLOAD_EXEC_LINEAR | (0x08 << 1));
-      nouveau_pushbuf_data(push, res->bo, offset,
-                           NVC0_IB_ENTRY_1_NO_PREFETCH | 2 * 4);
-
-      /* overwrite the 16 high bits of griddim_y with griddim_z because
-       * we need (z << 16) | x */
-      BEGIN_NVC0(push, NVE4_CP(UPLOAD_DST_ADDRESS_HIGH), 2);
-      PUSH_DATAh(push, desc_gpuaddr + 54);
-      PUSH_DATA (push, desc_gpuaddr + 54);
-      BEGIN_NVC0(push, NVE4_CP(UPLOAD_LINE_LENGTH_IN), 2);
-      PUSH_DATA (push, 4);
-      PUSH_DATA (push, 1);
-      BEGIN_1IC0(push, NVE4_CP(UPLOAD_EXEC), 1 + (4 / 4));
-      PUSH_DATA (push, NVE4_COMPUTE_UPLOAD_EXEC_LINEAR | (0x08 << 1));
-      nouveau_pushbuf_data(push, res->bo, offset + 8,
-                           NVC0_IB_ENTRY_1_NO_PREFETCH | 1 * 4);
+         /* overwrite the 16 high bits of griddim_y with griddim_z because
+          * we need (z << 16) | x */
+         nve4_upload_indirect_desc(push, res, desc_gpuaddr + 54, 4, offset + 8);
+      }
    }
 
    /* upload descriptor and flush */
@@ -821,6 +873,53 @@ nve4_compute_dump_launch_desc(const struct nve4_cp_launch_desc *desc)
    for (i = 0; i < 8; ++i) {
       uint64_t address;
       uint32_t size = desc->cb[i].size;
+      bool valid = !!(desc->cb_mask & (1 << i));
+
+      address = ((uint64_t)desc->cb[i].address_h << 32) | desc->cb[i].address_l;
+
+      if (!valid && !address && !size)
+         continue;
+      debug_printf("CB[%u]: address = 0x%"PRIx64", size 0x%x%s\n",
+                   i, address, size, valid ? "" : "  (invalid)");
+   }
+}
+
+static void
+gp100_compute_dump_launch_desc(const struct gp100_cp_launch_desc *desc)
+{
+   const uint32_t *data = (const uint32_t *)desc;
+   unsigned i;
+   bool zero = false;
+
+   debug_printf("COMPUTE LAUNCH DESCRIPTOR:\n");
+
+   for (i = 0; i < sizeof(*desc); i += 4) {
+      if (data[i / 4]) {
+         debug_printf("[%x]: 0x%08x\n", i, data[i / 4]);
+         zero = false;
+      } else
+      if (!zero) {
+         debug_printf("...\n");
+         zero = true;
+      }
+   }
+
+   debug_printf("entry = 0x%x\n", desc->entry);
+   debug_printf("grid dimensions = %ux%ux%u\n",
+                desc->griddim_x, desc->griddim_y, desc->griddim_z);
+   debug_printf("block dimensions = %ux%ux%u\n",
+                desc->blockdim_x, desc->blockdim_y, desc->blockdim_z);
+   debug_printf("s[] size: 0x%x\n", desc->shared_size);
+   debug_printf("l[] size: -0x%x / +0x%x\n",
+                desc->local_size_n, desc->local_size_p);
+   debug_printf("stack size: 0x%x\n", desc->cstack_size);
+   debug_printf("barrier count: %u\n", desc->bar_alloc);
+   debug_printf("$r count: %u\n", desc->gpr_alloc);
+   debug_printf("linked tsc: %d\n", desc->linked_tsc);
+
+   for (i = 0; i < 8; ++i) {
+      uint64_t address;
+      uint32_t size = desc->cb[i].size_sh4 << 4;
       bool valid = !!(desc->cb_mask & (1 << i));
 
       address = ((uint64_t)desc->cb[i].address_h << 32) | desc->cb[i].address_l;

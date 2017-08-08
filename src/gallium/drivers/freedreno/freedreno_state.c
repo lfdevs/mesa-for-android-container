@@ -109,7 +109,56 @@ fd_set_constant_buffer(struct pipe_context *pctx,
 
 	so->enabled_mask |= 1 << index;
 	so->dirty_mask |= 1 << index;
-	ctx->dirty |= FD_DIRTY_CONSTBUF;
+	ctx->dirty_shader[shader] |= FD_DIRTY_SHADER_CONST;
+	ctx->dirty |= FD_DIRTY_CONST;
+}
+
+static void
+fd_set_shader_buffers(struct pipe_context *pctx,
+		enum pipe_shader_type shader,
+		unsigned start, unsigned count,
+		const struct pipe_shader_buffer *buffers)
+{
+	struct fd_context *ctx = fd_context(pctx);
+	struct fd_shaderbuf_stateobj *so = &ctx->shaderbuf[shader];
+	unsigned mask = 0;
+
+	if (buffers) {
+		for (unsigned i = 0; i < count; i++) {
+			unsigned n = i + start;
+			struct pipe_shader_buffer *buf = &so->sb[n];
+
+			if ((buf->buffer == buffers[i].buffer) &&
+					(buf->buffer_offset == buffers[i].buffer_offset) &&
+					(buf->buffer_size == buffers[i].buffer_size))
+				continue;
+
+			mask |= BIT(n);
+
+			buf->buffer_offset = buffers[i].buffer_offset;
+			buf->buffer_size = buffers[i].buffer_size;
+			pipe_resource_reference(&buf->buffer, buffers[i].buffer);
+
+			if (buf->buffer)
+				so->enabled_mask |= BIT(n);
+			else
+				so->enabled_mask &= ~BIT(n);
+		}
+	} else {
+		mask = (BIT(count) - 1) << start;
+
+		for (unsigned i = 0; i < count; i++) {
+			unsigned n = i + start;
+			struct pipe_shader_buffer *buf = &so->sb[n];
+
+			pipe_resource_reference(&buf->buffer, NULL);
+		}
+
+		so->enabled_mask &= ~mask;
+	}
+
+	so->dirty_mask |= mask;
+	ctx->dirty_shader[shader] |= FD_DIRTY_SHADER_SSBO;
 }
 
 static void
@@ -125,13 +174,13 @@ fd_set_framebuffer_state(struct pipe_context *pctx,
 		fd_batch_reference(&old_batch, ctx->batch);
 
 		if (likely(old_batch))
-			fd_hw_query_set_stage(old_batch, old_batch->draw, FD_STAGE_NULL);
+			fd_batch_set_stage(old_batch, FD_STAGE_NULL);
 
 		batch = fd_batch_from_fb(&ctx->screen->batch_cache, ctx, framebuffer);
 		fd_batch_reference(&ctx->batch, NULL);
 		fd_reset_wfi(batch);
 		ctx->batch = batch;
-		ctx->dirty = ~0;
+		fd_context_all_dirty(ctx);
 
 		if (old_batch && old_batch->blit && !old_batch->back_blit) {
 			/* for blits, there is not really much point in hanging on
@@ -210,8 +259,8 @@ fd_set_vertex_buffers(struct pipe_context *pctx,
 	 */
 	if (ctx->screen->gpu_id < 300) {
 		for (i = 0; i < count; i++) {
-			bool new_enabled = vb && (vb[i].buffer || vb[i].user_buffer);
-			bool old_enabled = so->vb[i].buffer || so->vb[i].user_buffer;
+			bool new_enabled = vb && vb[i].buffer.resource;
+			bool old_enabled = so->vb[i].buffer.resource != NULL;
 			uint32_t new_stride = vb ? vb[i].stride : 0;
 			uint32_t old_stride = so->vb[i].stride;
 			if ((new_enabled != old_enabled) || (new_stride != old_stride)) {
@@ -225,24 +274,6 @@ fd_set_vertex_buffers(struct pipe_context *pctx,
 	so->count = util_last_bit(so->enabled_mask);
 
 	ctx->dirty |= FD_DIRTY_VTXBUF;
-}
-
-static void
-fd_set_index_buffer(struct pipe_context *pctx,
-		const struct pipe_index_buffer *ib)
-{
-	struct fd_context *ctx = fd_context(pctx);
-
-	if (ib) {
-		pipe_resource_reference(&ctx->indexbuf.buffer, ib->buffer);
-		ctx->indexbuf.index_size = ib->index_size;
-		ctx->indexbuf.offset = ib->offset;
-		ctx->indexbuf.user_buffer = ib->user_buffer;
-	} else {
-		pipe_resource_reference(&ctx->indexbuf.buffer, NULL);
-	}
-
-	ctx->dirty |= FD_DIRTY_INDEXBUF;
 }
 
 static void
@@ -402,6 +433,32 @@ fd_set_stream_output_targets(struct pipe_context *pctx,
 	ctx->dirty |= FD_DIRTY_STREAMOUT;
 }
 
+static void
+fd_bind_compute_state(struct pipe_context *pctx, void *state)
+{
+	struct fd_context *ctx = fd_context(pctx);
+	ctx->compute = state;
+	ctx->dirty_shader[PIPE_SHADER_COMPUTE] |= FD_DIRTY_SHADER_PROG;
+}
+
+static void
+fd_set_compute_resources(struct pipe_context *pctx,
+		unsigned start, unsigned count, struct pipe_surface **prscs)
+{
+	// TODO
+}
+
+static void
+fd_set_global_binding(struct pipe_context *pctx,
+		unsigned first, unsigned count, struct pipe_resource **prscs,
+		uint32_t **handles)
+{
+	/* TODO only used by clover.. seems to need us to return the actual
+	 * gpuaddr of the buffer.. which isn't really exposed to mesa atm.
+	 * How is this used?
+	 */
+}
+
 void
 fd_state_init(struct pipe_context *pctx)
 {
@@ -410,13 +467,13 @@ fd_state_init(struct pipe_context *pctx)
 	pctx->set_clip_state = fd_set_clip_state;
 	pctx->set_sample_mask = fd_set_sample_mask;
 	pctx->set_constant_buffer = fd_set_constant_buffer;
+	pctx->set_shader_buffers = fd_set_shader_buffers;
 	pctx->set_framebuffer_state = fd_set_framebuffer_state;
 	pctx->set_polygon_stipple = fd_set_polygon_stipple;
 	pctx->set_scissor_states = fd_set_scissor_states;
 	pctx->set_viewport_states = fd_set_viewport_states;
 
 	pctx->set_vertex_buffers = fd_set_vertex_buffers;
-	pctx->set_index_buffer = fd_set_index_buffer;
 
 	pctx->bind_blend_state = fd_blend_state_bind;
 	pctx->delete_blend_state = fd_blend_state_delete;
@@ -434,4 +491,10 @@ fd_state_init(struct pipe_context *pctx)
 	pctx->create_stream_output_target = fd_create_stream_output_target;
 	pctx->stream_output_target_destroy = fd_stream_output_target_destroy;
 	pctx->set_stream_output_targets = fd_set_stream_output_targets;
+
+	if (has_compute(fd_screen(pctx->screen))) {
+		pctx->bind_compute_state = fd_bind_compute_state;
+		pctx->set_compute_resources = fd_set_compute_resources;
+		pctx->set_global_binding = fd_set_global_binding;
+	}
 }

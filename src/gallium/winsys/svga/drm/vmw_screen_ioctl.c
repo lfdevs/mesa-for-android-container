@@ -408,8 +408,9 @@ vmw_ioctl_surface_destroy(struct vmw_winsys_screen *vws, uint32 sid)
 
 void
 vmw_ioctl_command(struct vmw_winsys_screen *vws, int32_t cid,
-		  uint32_t throttle_us, void *commands, uint32_t size,
-		  struct pipe_fence_handle **pfence)
+                  uint32_t throttle_us, void *commands, uint32_t size,
+                  struct pipe_fence_handle **pfence, int32_t imported_fence_fd,
+                  uint32_t flags)
 {
    struct drm_vmw_execbuf_arg arg;
    struct drm_vmw_fence_rep rep;
@@ -439,6 +440,14 @@ vmw_ioctl_command(struct vmw_winsys_screen *vws, int32_t cid,
    memset(&arg, 0, sizeof(arg));
    memset(&rep, 0, sizeof(rep));
 
+   if (flags & SVGA_HINT_FLAG_EXPORT_FENCE_FD) {
+      arg.flags |= DRM_VMW_EXECBUF_FLAG_EXPORT_FENCE_FD;
+   }
+
+   if (imported_fence_fd != -1) {
+      arg.flags |= DRM_VMW_EXECBUF_FLAG_IMPORT_FENCE_FD;
+   }
+
    rep.error = -EFAULT;
    if (pfence)
       arg.fence_rep = (unsigned long)&rep;
@@ -447,6 +456,10 @@ vmw_ioctl_command(struct vmw_winsys_screen *vws, int32_t cid,
    arg.throttle_us = throttle_us;
    arg.version = vws->ioctl.drm_execbuf_version;
    arg.context_handle = (vws->base.have_vgpu10 ? cid : SVGA3D_INVALID_ID);
+
+   /* Older DRM module requires this to be zero */
+   if (vws->base.have_fence_fd)
+      arg.imported_fence_fd = imported_fence_fd;
 
    /* In DRM_VMW_EXECBUF_VERSION 1, the drm_vmw_execbuf_arg structure ends with
     * the flags field. The structure size sent to drmCommandWrite must match
@@ -474,15 +487,20 @@ vmw_ioctl_command(struct vmw_winsys_screen *vws, int32_t cid,
          vmw_fences_signal(vws->fence_ops, rep.passed_seqno, rep.seqno,
                            TRUE);
 
-	 *pfence = vmw_fence_create(vws->fence_ops, rep.handle,
-				    rep.seqno, rep.mask);
-	 if (*pfence == NULL) {
-	    /*
-	     * Fence creation failed. Need to sync.
-	     */
-	    (void) vmw_ioctl_fence_finish(vws, rep.handle, rep.mask);
-	    vmw_ioctl_fence_unref(vws, rep.handle);
-	 }
+         /* Older DRM module will set this to zero, but -1 is the proper FD
+          * to use for no Fence FD support */
+         if (!vws->base.have_fence_fd)
+            rep.fd = -1;
+
+         *pfence = vmw_fence_create(vws->fence_ops, rep.handle,
+                                    rep.seqno, rep.mask, rep.fd);
+         if (*pfence == NULL) {
+            /*
+             * Fence creation failed. Need to sync.
+             */
+            (void) vmw_ioctl_fence_finish(vws, rep.handle, rep.mask);
+            vmw_ioctl_fence_unref(vws, rep.handle);
+         }
       }
    }
 }
@@ -1031,6 +1049,10 @@ vmw_ioctl_init(struct vmw_winsys_screen *vws)
       */
       vws->base.have_generate_mipmap_cmd = TRUE;
       vws->base.have_set_predication_cmd = TRUE;
+   }
+
+   if (version->version_major == 2 && version->version_minor >= 14) {
+      vws->base.have_fence_fd = TRUE;
    }
 
    free(cap_buffer);

@@ -97,49 +97,6 @@ add_const_offset_to_base(nir_shader *nir, nir_variable_mode mode)
 }
 
 static bool
-remap_vs_attrs(nir_block *block, shader_info *nir_info)
-{
-   nir_foreach_instr(instr, block) {
-      if (instr->type != nir_instr_type_intrinsic)
-         continue;
-
-      nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
-
-      if (intrin->intrinsic == nir_intrinsic_load_input) {
-         /* Attributes come in a contiguous block, ordered by their
-          * gl_vert_attrib value.  That means we can compute the slot
-          * number for an attribute by masking out the enabled attributes
-          * before it and counting the bits.
-          */
-         int attr = intrin->const_index[0];
-         int slot = _mesa_bitcount_64(nir_info->inputs_read &
-                                      BITFIELD64_MASK(attr));
-         intrin->const_index[0] = 4 * slot;
-      }
-   }
-   return true;
-}
-
-static bool
-remap_inputs_with_vue_map(nir_block *block, const struct brw_vue_map *vue_map)
-{
-   nir_foreach_instr(instr, block) {
-      if (instr->type != nir_instr_type_intrinsic)
-         continue;
-
-      nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
-
-      if (intrin->intrinsic == nir_intrinsic_load_input ||
-          intrin->intrinsic == nir_intrinsic_load_per_vertex_input) {
-         int vue_slot = vue_map->varying_to_slot[intrin->const_index[0]];
-         assert(vue_slot != -1);
-         intrin->const_index[0] = vue_slot;
-      }
-   }
-   return true;
-}
-
-static bool
 remap_tess_levels(nir_builder *b, nir_intrinsic_instr *intr,
                   GLenum primitive_mode)
 {
@@ -199,8 +156,8 @@ remap_patch_urb_offsets(nir_block *block, nir_builder *b,
                         const struct brw_vue_map *vue_map,
                         GLenum tes_primitive_mode)
 {
-   const bool is_passthrough_tcs = b->shader->info->name &&
-      strcmp(b->shader->info->name, "passthrough") == 0;
+   const bool is_passthrough_tcs = b->shader->info.name &&
+      strcmp(b->shader->info.name, "passthrough") == 0;
 
    nir_foreach_instr_safe(instr, block) {
       if (instr->type != nir_instr_type_intrinsic)
@@ -254,7 +211,6 @@ remap_patch_urb_offsets(nir_block *block, nir_builder *b,
 
 void
 brw_nir_lower_vs_inputs(nir_shader *nir,
-                        bool is_scalar,
                         bool use_legacy_snorm_formula,
                         const uint8_t *vs_attrib_wa_flags)
 {
@@ -277,13 +233,100 @@ brw_nir_lower_vs_inputs(nir_shader *nir,
    brw_nir_apply_attribute_workarounds(nir, use_legacy_snorm_formula,
                                        vs_attrib_wa_flags);
 
-   if (is_scalar) {
-      /* Finally, translate VERT_ATTRIB_* values into the actual registers. */
+   /* The last step is to remap VERT_ATTRIB_* to actual registers */
 
-      nir_foreach_function(function, nir) {
-         if (function->impl) {
-            nir_foreach_block(block, function->impl) {
-               remap_vs_attrs(block, nir->info);
+   /* Whether or not we have any system generated values.  gl_DrawID is not
+    * included here as it lives in its own vec4.
+    */
+   const bool has_sgvs =
+      nir->info.system_values_read &
+      (BITFIELD64_BIT(SYSTEM_VALUE_BASE_VERTEX) |
+       BITFIELD64_BIT(SYSTEM_VALUE_BASE_INSTANCE) |
+       BITFIELD64_BIT(SYSTEM_VALUE_VERTEX_ID_ZERO_BASE) |
+       BITFIELD64_BIT(SYSTEM_VALUE_INSTANCE_ID));
+
+   const unsigned num_inputs = _mesa_bitcount_64(nir->info.inputs_read);
+
+   nir_foreach_function(function, nir) {
+      if (!function->impl)
+         continue;
+
+      nir_builder b;
+      nir_builder_init(&b, function->impl);
+
+      nir_foreach_block(block, function->impl) {
+         nir_foreach_instr_safe(instr, block) {
+            if (instr->type != nir_instr_type_intrinsic)
+               continue;
+
+            nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
+
+            switch (intrin->intrinsic) {
+            case nir_intrinsic_load_base_vertex:
+            case nir_intrinsic_load_base_instance:
+            case nir_intrinsic_load_vertex_id_zero_base:
+            case nir_intrinsic_load_instance_id:
+            case nir_intrinsic_load_draw_id: {
+               b.cursor = nir_after_instr(&intrin->instr);
+
+               /* gl_VertexID and friends are stored by the VF as the last
+                * vertex element.  We convert them to load_input intrinsics at
+                * the right location.
+                */
+               nir_intrinsic_instr *load =
+                  nir_intrinsic_instr_create(nir, nir_intrinsic_load_input);
+               load->src[0] = nir_src_for_ssa(nir_imm_int(&b, 0));
+
+               nir_intrinsic_set_base(load, num_inputs);
+               switch (intrin->intrinsic) {
+               case nir_intrinsic_load_base_vertex:
+                  nir_intrinsic_set_component(load, 0);
+                  break;
+               case nir_intrinsic_load_base_instance:
+                  nir_intrinsic_set_component(load, 1);
+                  break;
+               case nir_intrinsic_load_vertex_id_zero_base:
+                  nir_intrinsic_set_component(load, 2);
+                  break;
+               case nir_intrinsic_load_instance_id:
+                  nir_intrinsic_set_component(load, 3);
+                  break;
+               case nir_intrinsic_load_draw_id:
+                  /* gl_DrawID is stored right after gl_VertexID and friends
+                   * if any of them exist.
+                   */
+                  nir_intrinsic_set_base(load, num_inputs + has_sgvs);
+                  nir_intrinsic_set_component(load, 0);
+                  break;
+               default:
+                  unreachable("Invalid system value intrinsic");
+               }
+
+               load->num_components = 1;
+               nir_ssa_dest_init(&load->instr, &load->dest, 1, 32, NULL);
+               nir_builder_instr_insert(&b, &load->instr);
+
+               nir_ssa_def_rewrite_uses(&intrin->dest.ssa,
+                                        nir_src_for_ssa(&load->dest.ssa));
+               nir_instr_remove(&intrin->instr);
+               break;
+            }
+
+            case nir_intrinsic_load_input: {
+               /* Attributes come in a contiguous block, ordered by their
+                * gl_vert_attrib value.  That means we can compute the slot
+                * number for an attribute by masking out the enabled attributes
+                * before it and counting the bits.
+                */
+               int attr = nir_intrinsic_base(intrin);
+               int slot = _mesa_bitcount_64(nir->info.inputs_read &
+                                            BITFIELD64_MASK(attr));
+               nir_intrinsic_set_base(intrin, slot);
+               break;
+            }
+
+            default:
+               break; /* Nothing to do */
             }
          }
       }
@@ -291,7 +334,7 @@ brw_nir_lower_vs_inputs(nir_shader *nir,
 }
 
 void
-brw_nir_lower_vue_inputs(nir_shader *nir, bool is_scalar,
+brw_nir_lower_vue_inputs(nir_shader *nir,
                          const struct brw_vue_map *vue_map)
 {
    foreach_list_typed(nir_variable, var, node, &nir->inputs) {
@@ -301,16 +344,42 @@ brw_nir_lower_vue_inputs(nir_shader *nir, bool is_scalar,
    /* Inputs are stored in vec4 slots, so use type_size_vec4(). */
    nir_lower_io(nir, nir_var_shader_in, type_size_vec4, 0);
 
-   if (is_scalar || nir->stage != MESA_SHADER_GEOMETRY) {
-      /* This pass needs actual constants */
-      nir_opt_constant_folding(nir);
+   /* This pass needs actual constants */
+   nir_opt_constant_folding(nir);
 
-      add_const_offset_to_base(nir, nir_var_shader_in);
+   add_const_offset_to_base(nir, nir_var_shader_in);
 
-      nir_foreach_function(function, nir) {
-         if (function->impl) {
-            nir_foreach_block(block, function->impl) {
-               remap_inputs_with_vue_map(block, vue_map);
+   nir_foreach_function(function, nir) {
+      if (!function->impl)
+         continue;
+
+      nir_foreach_block(block, function->impl) {
+         nir_foreach_instr(instr, block) {
+            if (instr->type != nir_instr_type_intrinsic)
+               continue;
+
+            nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
+
+            if (intrin->intrinsic == nir_intrinsic_load_input ||
+                intrin->intrinsic == nir_intrinsic_load_per_vertex_input) {
+               /* Offset 0 is the VUE header, which contains
+                * VARYING_SLOT_LAYER [.y], VARYING_SLOT_VIEWPORT [.z], and
+                * VARYING_SLOT_PSIZ [.w].
+                */
+               int varying = nir_intrinsic_base(intrin);
+               int vue_slot;
+               switch (varying) {
+               case VARYING_SLOT_PSIZ:
+                  nir_intrinsic_set_base(intrin, 0);
+                  nir_intrinsic_set_component(intrin, 3);
+                  break;
+
+               default:
+                  vue_slot = vue_map->varying_to_slot[varying];
+                  assert(vue_slot != -1);
+                  nir_intrinsic_set_base(intrin, vue_slot);
+                  break;
+               }
             }
          }
       }
@@ -337,7 +406,7 @@ brw_nir_lower_tes_inputs(nir_shader *nir, const struct brw_vue_map *vue_map)
          nir_builder_init(&b, function->impl);
          nir_foreach_block(block, function->impl) {
             remap_patch_urb_offsets(block, &b, vue_map,
-                                    nir->info->tess.primitive_mode);
+                                    nir->info.tess.primitive_mode);
          }
       }
    }
@@ -484,6 +553,7 @@ nir_optimize(nir_shader *nir, const struct brw_compiler *compiler,
       OPT(nir_opt_dce);
       OPT(nir_opt_cse);
       OPT(nir_opt_peephole_select, 0);
+      OPT(nir_opt_intrinsics);
       OPT(nir_opt_algebraic);
       OPT(nir_opt_constant_folding);
       OPT(nir_opt_dead_cf);
@@ -550,6 +620,7 @@ brw_preprocess_nir(const struct brw_compiler *compiler, nir_shader *nir)
 
    OPT(nir_lower_tex, &tex_options);
    OPT(nir_normalize_cubemap_coords);
+   OPT(nir_lower_read_invocation_to_scalar);
 
    OPT(nir_lower_global_vars_to_local);
 
@@ -604,6 +675,12 @@ brw_postprocess_nir(nir_shader *nir, const struct brw_compiler *compiler,
       (INTEL_DEBUG & intel_debug_flag_for_shader_stage(nir->stage));
 
    UNUSED bool progress; /* Written by OPT */
+
+
+   do {
+      progress = false;
+      OPT(nir_opt_algebraic_before_ffma);
+   } while (progress);
 
    nir = nir_optimize(nir, compiler, is_scalar);
 
@@ -695,6 +772,7 @@ brw_nir_apply_sampler_key(nir_shader *nir,
    tex_options.lower_y_uv_external = key_tex->y_uv_image_mask;
    tex_options.lower_y_u_v_external = key_tex->y_u_v_image_mask;
    tex_options.lower_yx_xuxv_external = key_tex->yx_xuxv_image_mask;
+   tex_options.lower_xy_uxvx_external = key_tex->xy_uxvx_image_mask;
 
    if (nir_lower_tex(nir, &tex_options)) {
       nir_validate_shader(nir);

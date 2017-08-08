@@ -509,8 +509,8 @@ vl_mpeg12_destroy(struct pipe_video_codec *decoder)
    dec->context->delete_vertex_elements_state(dec->context, dec->ves_ycbcr);
    dec->context->delete_vertex_elements_state(dec->context, dec->ves_mv);
 
-   pipe_resource_reference(&dec->quads.buffer, NULL);
-   pipe_resource_reference(&dec->pos.buffer, NULL);
+   pipe_resource_reference(&dec->quads.buffer.resource, NULL);
+   pipe_resource_reference(&dec->pos.buffer.resource, NULL);
 
    pipe_sampler_view_reference(&dec->zscan_linear, NULL);
    pipe_sampler_view_reference(&dec->zscan_normal, NULL);

@@ -214,7 +214,9 @@ def output_rpn_equation_code(set, counter, equation, counter_vars):
     value = stack[-1]
 
     if value in hw_vars:
-        value = hw_vars[value];
+        value = hw_vars[value]
+    if value in counter_vars:
+        value = read_funcs[value[1:]] + "(brw, query, accumulator)"
 
     c("\nreturn " + value + ";")
 

@@ -29,10 +29,9 @@
 #include "util/u_math.h"
 #include "util/macros.h"
 
-#include "kernel/vc4_packet.h"
-
 struct vc4_bo;
 struct vc4_job;
+struct vc4_cl;
 
 /**
  * Undefined structure, used for typechecking that you're passing the pointers
@@ -40,8 +39,25 @@ struct vc4_job;
  */
 struct vc4_cl_out;
 
+/** A reference to a BO used in the CL packing functions */
+struct vc4_cl_reloc {
+        struct vc4_bo *bo;
+        uint32_t offset;
+};
+
+static inline void cl_pack_emit_reloc(struct vc4_cl *cl, const struct vc4_cl_reloc *);
+
+#define __gen_user_data struct vc4_cl
+#define __gen_address_type struct vc4_cl_reloc
+#define __gen_address_offset(reloc) ((reloc)->offset)
+#define __gen_emit_reloc cl_pack_emit_reloc
+
+#include "kernel/vc4_packet.h"
+#include "broadcom/cle/v3d_packet_v21_pack.h"
+
 struct vc4_cl {
         void *base;
+        struct vc4_job *job;
         struct vc4_cl_out *next;
         struct vc4_cl_out *reloc_next;
         uint32_t size;
@@ -50,9 +66,8 @@ struct vc4_cl {
 #endif
 };
 
-void vc4_init_cl(void *mem_ctx, struct vc4_cl *cl);
+void vc4_init_cl(struct vc4_job *job, struct vc4_cl *cl);
 void vc4_reset_cl(struct vc4_cl *cl);
-void vc4_dump_cl(void *cl, uint32_t size, bool is_render);
 uint32_t vc4_gem_hindex(struct vc4_job *job, struct vc4_bo *bo);
 
 struct PACKED unaligned_16 { uint16_t x; };
@@ -203,6 +218,88 @@ cl_aligned_reloc(struct vc4_job *job, struct vc4_cl *cl,
         cl_aligned_u32(cl_out, offset);
 }
 
+/**
+ * Reference to a BO with its associated offset, used in the pack process.
+ */
+static inline struct vc4_cl_reloc
+cl_address(struct vc4_bo *bo, uint32_t offset)
+{
+        struct vc4_cl_reloc reloc = {
+                .bo = bo,
+                .offset = offset,
+        };
+        return reloc;
+}
+
 void cl_ensure_space(struct vc4_cl *cl, uint32_t size);
+
+#define cl_packet_header(packet) V3D21_ ## packet ## _header
+#define cl_packet_length(packet) V3D21_ ## packet ## _length
+#define cl_packet_pack(packet)   V3D21_ ## packet ## _pack
+#define cl_packet_struct(packet)   V3D21_ ## packet
+
+static inline void *
+cl_get_emit_space(struct vc4_cl_out **cl, size_t size)
+{
+        void *addr = *cl;
+        cl_advance(cl, size);
+        return addr;
+}
+
+/* Macro for setting up an emit of a CL struct.  A temporary unpacked struct
+ * is created, which you get to set fields in of the form:
+ *
+ * cl_emit(bcl, FLAT_SHADE_FLAGS, flags) {
+ *     .flags.flat_shade_flags = 1 << 2,
+ * }
+ *
+ * or default values only can be emitted with just:
+ *
+ * cl_emit(bcl, FLAT_SHADE_FLAGS, flags);
+ *
+ * The trick here is that we make a for loop that will execute the body
+ * (either the block or the ';' after the macro invocation) exactly once.
+ * Also, *dst is actually of the wrong type, it's the
+ * uint8_t[cl_packet_length()] in the CL, not a cl_packet_struct(packet).
+ */
+#define cl_emit(cl, packet, name)                                \
+        for (struct cl_packet_struct(packet) name = {            \
+                cl_packet_header(packet)                         \
+        },                                                       \
+        *_loop_terminate = &name;                                \
+        __builtin_expect(_loop_terminate != NULL, 1);            \
+        ({                                                       \
+                struct vc4_cl_out *cl_out = cl_start(cl);        \
+                cl_packet_pack(packet)(cl, (uint8_t *)cl_out, &name); \
+                VG(VALGRIND_CHECK_MEM_IS_DEFINED(cl_out,         \
+                                                 cl_packet_length(packet))); \
+                cl_advance(&cl_out, cl_packet_length(packet));   \
+                cl_end(cl, cl_out);                              \
+                _loop_terminate = NULL;                          \
+        }))                                                      \
+
+#define cl_emit_prepacked(cl, packet) do {                       \
+        memcpy((cl)->next, packet, sizeof(*packet));             \
+        cl_advance(&(cl)->next, sizeof(*packet));                \
+} while (0)
+
+/**
+ * Helper function called by the XML-generated pack functions for filling in
+ * an address field in shader records.
+ *
+ * Relocations for shader recs and texturing involve the packet (or uniforms
+ * stream) being preceded by the handles to the BOs, and the offset within the
+ * BO being in the stream (the output of this function).
+ */
+static inline void
+cl_pack_emit_reloc(struct vc4_cl *cl, const struct vc4_cl_reloc *reloc)
+{
+        *(uint32_t *)cl->reloc_next = vc4_gem_hindex(cl->job, reloc->bo);
+        cl_advance(&cl->reloc_next, 4);
+
+#ifdef DEBUG
+        cl->reloc_count--;
+#endif
+}
 
 #endif /* VC4_CL_H */

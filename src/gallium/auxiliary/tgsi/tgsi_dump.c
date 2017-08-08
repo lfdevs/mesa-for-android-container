@@ -584,6 +584,10 @@ iter_instruction(
       TXT( "_SAT" );
    }
 
+   if (inst->Instruction.Precise) {
+      TXT( "_PRECISE" );
+   }
+
    for (i = 0; i < inst->Instruction.NumDstRegs; i++) {
       const struct tgsi_full_dst_register *dst = &inst->Dst[i];
 

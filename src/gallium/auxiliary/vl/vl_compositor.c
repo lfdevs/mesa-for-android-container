@@ -605,7 +605,8 @@ init_buffers(struct vl_compositor *c)
     */
    c->vertex_buf.stride = sizeof(struct vertex2f) + sizeof(struct vertex4f) * 2;
    c->vertex_buf.buffer_offset = 0;
-   c->vertex_buf.buffer = NULL;
+   c->vertex_buf.buffer.resource = NULL;
+   c->vertex_buf.is_user_buffer = false;
 
    vertex_elems[0].src_offset = 0;
    vertex_elems[0].instance_divisor = 0;
@@ -630,7 +631,7 @@ cleanup_buffers(struct vl_compositor *c)
    assert(c);
 
    c->pipe->delete_vertex_elements_state(c->pipe, c->vertex_elems_state);
-   pipe_resource_reference(&c->vertex_buf.buffer, NULL);
+   pipe_resource_reference(&c->vertex_buf.buffer.resource, NULL);
 }
 
 static inline struct u_rect
@@ -812,7 +813,7 @@ gen_vertex_data(struct vl_compositor *c, struct vl_compositor_state *s, struct u
    u_upload_alloc(c->pipe->stream_uploader, 0,
                   c->vertex_buf.stride * VL_COMPOSITOR_MAX_LAYERS * 4, /* size */
                   4, /* alignment */
-                  &c->vertex_buf.buffer_offset, &c->vertex_buf.buffer,
+                  &c->vertex_buf.buffer_offset, &c->vertex_buf.buffer.resource,
                   (void**)&vb);
 
    for (i = 0; i < VL_COMPOSITOR_MAX_LAYERS; i++) {

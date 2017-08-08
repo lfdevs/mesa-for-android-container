@@ -197,6 +197,17 @@ DRI_CONF_OPT_BEGIN_B(allow_glsl_extension_directive_midshader, def) \
         DRI_CONF_DESC(sv,"Allow GLSL #extension directives in the middle of shaders") \
 DRI_CONF_OPT_END
 
+#define DRI_CONF_ALLOW_GLSL_BUILTIN_VARIABLE_REDECLARATION(def) \
+DRI_CONF_OPT_BEGIN_B(allow_glsl_builtin_variable_redeclaration, def) \
+        DRI_CONF_DESC(en,"Allow GLSL built-in variables to be redeclared verbatim") \
+        DRI_CONF_DESC(ca,"Allow GLSL built-in variables to be redeclared verbatim") \
+        DRI_CONF_DESC(de,"Allow GLSL built-in variables to be redeclared verbatim") \
+        DRI_CONF_DESC(es,"Allow GLSL built-in variables to be redeclared verbatim") \
+        DRI_CONF_DESC(nl,"Allow GLSL built-in variables to be redeclared verbatim") \
+        DRI_CONF_DESC(fr,"Allow GLSL built-in variables to be redeclared verbatim") \
+        DRI_CONF_DESC(sv,"Allow GLSL built-in variables to be redeclared verbatim") \
+DRI_CONF_OPT_END
+
 #define DRI_CONF_ALLOW_HIGHER_COMPAT_VERSION(def) \
 DRI_CONF_OPT_BEGIN_B(allow_higher_compat_version, def) \
         DRI_CONF_DESC(en,"Allow a higher compat profile (version 3.1+) for apps that request it") \
@@ -219,6 +230,16 @@ DRI_CONF_OPT_BEGIN_B(force_glsl_abs_sqrt, def) \
         DRI_CONF_DESC(sv,"Force computing the absolute value for sqrt() and inversesqrt()") \
 DRI_CONF_OPT_END
 
+#define DRI_CONF_GLSL_CORRECT_DERIVATIVES_AFTER_DISCARD(def) \
+DRI_CONF_OPT_BEGIN_B(glsl_correct_derivatives_after_discard, def) \
+        DRI_CONF_DESC(en,"Implicit and explicit derivatives after a discard behave as if the discard didn't happen") \
+        DRI_CONF_DESC(ca,"Implicit and explicit derivatives after a discard behave as if the discard didn't happen") \
+        DRI_CONF_DESC(de,"Implicit and explicit derivatives after a discard behave as if the discard didn't happen") \
+        DRI_CONF_DESC(es,"Implicit and explicit derivatives after a discard behave as if the discard didn't happen") \
+        DRI_CONF_DESC(nl,"Implicit and explicit derivatives after a discard behave as if the discard didn't happen") \
+        DRI_CONF_DESC(fr,"Implicit and explicit derivatives after a discard behave as if the discard didn't happen") \
+        DRI_CONF_DESC(sv,"Implicit and explicit derivatives after a discard behave as if the discard didn't happen") \
+DRI_CONF_OPT_END
 
 
 /**
@@ -763,6 +784,39 @@ DRI_CONF_OPT_BEGIN_B(mesa_glthread, def) \
         DRI_CONF_DESC(nl,"Enable offloading GL driver work to a separate thread") \
         DRI_CONF_DESC(fr,"Enable offloading GL driver work to a separate thread") \
         DRI_CONF_DESC(sv,"Enable offloading GL driver work to a separate thread") \
+DRI_CONF_OPT_END
+
+#define DRI_CONF_MESA_NO_ERROR(def) \
+DRI_CONF_OPT_BEGIN_B(mesa_no_error, def) \
+        DRI_CONF_DESC(en,"Disable GL driver error checking") \
+        DRI_CONF_DESC(ca,"Disable GL driver error checking") \
+        DRI_CONF_DESC(de,"Disable GL driver error checking") \
+        DRI_CONF_DESC(es,"Disable GL driver error checking") \
+        DRI_CONF_DESC(nl,"Disable GL driver error checking") \
+        DRI_CONF_DESC(fr,"Disable GL driver error checking") \
+        DRI_CONF_DESC(sv,"Disable GL driver error checking") \
+DRI_CONF_OPT_END
+
+#define DRI_CONF_DISABLE_EXT_BUFFER_AGE(def) \
+DRI_CONF_OPT_BEGIN_B(glx_disable_ext_buffer_age, def) \
+   DRI_CONF_DESC(en, "Disable the GLX_EXT_buffer_age extension") \
+   DRI_CONF_DESC(ca, "Disable the GLX_EXT_buffer_age extension") \
+   DRI_CONF_DESC(de, "Disable the GLX_EXT_buffer_age extension") \
+   DRI_CONF_DESC(es, "Disable the GLX_EXT_buffer_age extension") \
+   DRI_CONF_DESC(nl, "Disable the GLX_EXT_buffer_age extension") \
+   DRI_CONF_DESC(fr, "Disable the GLX_EXT_buffer_age extension") \
+   DRI_CONF_DESC(sv, "Disable the GLX_EXT_buffer_age extension") \
+DRI_CONF_OPT_END
+
+#define DRI_CONF_DISABLE_OML_SYNC_CONTROL(def) \
+DRI_CONF_OPT_BEGIN_B(glx_disable_oml_sync_control, def) \
+   DRI_CONF_DESC(en, "Disable the GLX_OML_sync_control extension") \
+   DRI_CONF_DESC(ca, "Disable the GLX_OML_sync_control extension") \
+   DRI_CONF_DESC(de, "Disable the GLX_OML_sync_control extension") \
+   DRI_CONF_DESC(es, "Disable the GLX_OML_sync_control extension") \
+   DRI_CONF_DESC(nl, "Disable the GLX_OML_sync_control extension") \
+   DRI_CONF_DESC(fr, "Disable the GLX_OML_sync_control extension") \
+   DRI_CONF_DESC(sv, "Disable the GLX_OML_sync_control extension") \
 DRI_CONF_OPT_END
 
 

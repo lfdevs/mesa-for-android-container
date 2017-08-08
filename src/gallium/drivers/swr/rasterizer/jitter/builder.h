@@ -56,6 +56,7 @@ namespace SwrJit
         Type*                mIntPtrTy;
         Type*                mFP16Ty;
         Type*                mFP32Ty;
+        Type*                mFP32PtrTy;
         Type*                mDoubleTy;
         Type*                mInt8PtrTy;
         Type*                mInt16PtrTy;

@@ -32,50 +32,6 @@
 
 using namespace brw;
 
-fs_reg *
-fs_visitor::emit_vs_system_value(int location)
-{
-   fs_reg *reg = new(this->mem_ctx)
-      fs_reg(ATTR, 4 * _mesa_bitcount_64(nir->info->inputs_read),
-             BRW_REGISTER_TYPE_D);
-   struct brw_vs_prog_data *vs_prog_data = brw_vs_prog_data(prog_data);
-
-   switch (location) {
-   case SYSTEM_VALUE_BASE_VERTEX:
-      reg->offset = 0;
-      vs_prog_data->uses_basevertex = true;
-      break;
-   case SYSTEM_VALUE_BASE_INSTANCE:
-      reg->offset = REG_SIZE;
-      vs_prog_data->uses_baseinstance = true;
-      break;
-   case SYSTEM_VALUE_VERTEX_ID:
-      unreachable("should have been lowered");
-   case SYSTEM_VALUE_VERTEX_ID_ZERO_BASE:
-      reg->offset = 2 * REG_SIZE;
-      vs_prog_data->uses_vertexid = true;
-      break;
-   case SYSTEM_VALUE_INSTANCE_ID:
-      reg->offset = 3 * REG_SIZE;
-      vs_prog_data->uses_instanceid = true;
-      break;
-   case SYSTEM_VALUE_DRAW_ID:
-      if (nir->info->system_values_read &
-          (BITFIELD64_BIT(SYSTEM_VALUE_BASE_VERTEX) |
-           BITFIELD64_BIT(SYSTEM_VALUE_BASE_INSTANCE) |
-           BITFIELD64_BIT(SYSTEM_VALUE_VERTEX_ID_ZERO_BASE) |
-           BITFIELD64_BIT(SYSTEM_VALUE_INSTANCE_ID)))
-         reg->nr += 4;
-      reg->offset = 0;
-      vs_prog_data->uses_drawid = true;
-      break;
-   default:
-      unreachable("not reached");
-   }
-
-   return reg;
-}
-
 /* Sample from the MCS surface attached to this multisample texture. */
 fs_reg
 fs_visitor::emit_mcs_fetch(const fs_reg &coordinate, unsigned components,
@@ -414,13 +370,13 @@ fs_visitor::emit_single_fb_write(const fs_builder &bld,
    fs_reg src_depth, src_stencil;
 
    if (source_depth_to_render_target) {
-      if (nir->info->outputs_written & BITFIELD64_BIT(FRAG_RESULT_DEPTH))
+      if (nir->info.outputs_written & BITFIELD64_BIT(FRAG_RESULT_DEPTH))
          src_depth = frag_depth;
       else
          src_depth = fs_reg(brw_vec8_grf(payload.source_depth_reg, 0));
    }
 
-   if (nir->info->outputs_written & BITFIELD64_BIT(FRAG_RESULT_STENCIL))
+   if (nir->info.outputs_written & BITFIELD64_BIT(FRAG_RESULT_STENCIL))
       src_stencil = frag_stencil;
 
    const fs_reg sources[] = {
@@ -459,7 +415,7 @@ fs_visitor::emit_fb_writes()
       limit_dispatch_width(8, "Depth writes unsupported in SIMD16+ mode.\n");
    }
 
-   if (nir->info->outputs_written & BITFIELD64_BIT(FRAG_RESULT_STENCIL)) {
+   if (nir->info.outputs_written & BITFIELD64_BIT(FRAG_RESULT_STENCIL)) {
       /* From the 'Render Target Write message' section of the docs:
        * "Output Stencil is not supported with SIMD16 Render Target Write
        * Messages."

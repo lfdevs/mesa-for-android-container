@@ -39,6 +39,13 @@ struct virgl_surface {
    uint32_t handle;
 };
 
+struct virgl_indexbuf {
+   unsigned offset;
+   unsigned index_size;  /**< size of an index, in bytes */
+   struct pipe_resource *buffer; /**< the actual buffer */
+   const void *user_buffer;  /**< pointer to a user buffer if buffer == NULL */
+};
+
 static inline struct virgl_surface *virgl_surface(struct pipe_surface *surf)
 {
    return (struct virgl_surface *)surf;
@@ -167,7 +174,7 @@ int virgl_encode_bind_sampler_states(struct virgl_context *ctx,
                                     uint32_t *handles);
 
 int virgl_encoder_set_index_buffer(struct virgl_context *ctx,
-                                  const struct pipe_index_buffer *ib);
+                                  const struct virgl_indexbuf *ib);
 
 uint32_t virgl_object_assign_handle(void);
 

@@ -217,7 +217,7 @@ The integer capabilities:
   pipe_draw_info::indirect_stride and ::indirect_count
 * ``PIPE_CAP_MULTI_DRAW_INDIRECT_PARAMS``: Whether the driver supports
   taking the number of indirect draws from a separate parameter
-  buffer, see pipe_draw_info::indirect_params.
+  buffer, see pipe_draw_indirect_info::indirect_draw_count.
 * ``PIPE_CAP_TGSI_FS_FINE_DERIVATIVE``: Whether the fragment shader supports
   the FINE versions of DDX/DDY.
 * ``PIPE_CAP_VENDOR_ID``: The vendor ID of the underlying hardware. If it's
@@ -389,6 +389,13 @@ The integer capabilities:
 * ``PIPE_CAP_TGSI_TES_LAYER_VIEWPORT``: Whether ``TGSI_SEMANTIC_LAYER`` and
   ``TGSI_SEMANTIC_VIEWPORT_INDEX`` are supported as tessellation evaluation
   shader outputs.
+* ``PIPE_CAP_CAN_BIND_CONST_BUFFER_AS_VERTEX``: Whether a buffer with just
+  PIPE_BIND_CONSTANT_BUFFER can be legally passed to set_vertex_buffers.
+* ``PIPE_CAP_ALLOW_MAPPED_BUFFERS_DURING_EXECUTION``: As the name says.
+* ``PIPE_CAP_POST_DEPTH_COVERAGE``: whether
+  ``TGSI_PROPERTY_FS_POST_DEPTH_COVERAGE`` is supported.
+* ``PIPE_CAP_BINDLESS_TEXTURE``: Whether bindless texture operations are
+  supported.
 
 
 .. _pipe_capf:
@@ -489,6 +496,9 @@ to be 0.
   cost than this value should be lowered by the state tracker for better
   performance. This is a tunable for the GLSL compiler and the behavior is
   specific to the compiler.
+* ``PIPE_SHADER_CAP_TGSI_SKIP_MERGE_REGISTERS``: Whether the merge registers
+  TGSI pass is skipped. This might reduce code size and register pressure if
+  the underlying driver has a real backend compiler.
 
 
 .. _pipe_compute_cap:
@@ -616,16 +626,25 @@ get_name
 
 Returns an identifying name for the screen.
 
+The returned string should remain valid and immutable for the lifetime of
+pipe_screen.
+
 get_vendor
 ^^^^^^^^^^
 
 Returns the screen vendor.
+
+The returned string should remain valid and immutable for the lifetime of
+pipe_screen.
 
 get_device_vendor
 ^^^^^^^^^^^^^^^^^
 
 Returns the actual vendor of the device driving the screen
 (as opposed to the driver vendor).
+
+The returned string should remain valid and immutable for the lifetime of
+pipe_screen.
 
 .. _get_param:
 

@@ -203,7 +203,8 @@ void rvid_join_surfaces(struct r600_common_context *rctx,
 	/* TODO: 2D tiling workaround */
 	alignment *= 2;
 
-	pb = ws->buffer_create(ws, size, alignment, RADEON_DOMAIN_VRAM, 0);
+	pb = ws->buffer_create(ws, size, alignment, RADEON_DOMAIN_VRAM,
+			       RADEON_FLAG_GTT_WC);
 	if (!pb)
 		return;
 

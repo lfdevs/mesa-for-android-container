@@ -68,11 +68,19 @@ swr_clear(struct pipe_context *pipe,
    ((union pipe_color_union *)color)->f[3] = 1.0; /* cast off your const'd-ness */
 #endif
 
+   SWR_RECT clear_rect;
+   /* If enabled, clear to scissor; otherwise clear full surface */
+   if (ctx->rasterizer && ctx->rasterizer->scissor) {
+      clear_rect = ctx->swr_scissor;
+   } else {
+      clear_rect = {0, 0, (int32_t)fb->width, (int32_t)fb->height};
+   }
+
    for (unsigned i = 0; i < layers; ++i) {
       swr_update_draw_context(ctx);
-      SwrClearRenderTarget(ctx->swrContext, clearMask, i,
-                           color->f, depth, stencil,
-                           ctx->swr_scissor);
+      ctx->api.pfnSwrClearRenderTarget(ctx->swrContext, clearMask, i,
+                                       color->f, depth, stencil,
+                                       clear_rect);
 
       // Mask out the attachments that are out of layers.
       if (fb->zsbuf &&

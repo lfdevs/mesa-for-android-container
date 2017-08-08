@@ -4,6 +4,7 @@
 #include "pipe/p_state.h"
 #include "util/u_dynarray.h"
 #include "util/u_debug.h"
+#include "util/u_memory.h"
 
 #include "pipe/p_shader_tokens.h"
 #include "tgsi/tgsi_parse.h"
@@ -997,7 +998,7 @@ _nvfx_vertprog_translate(uint16_t oclass, struct nv30_vertprog *vp)
       vpc->cvtx_idx = vpc->hpos_idx;
    }
 
-   util_dynarray_init(&insns);
+   util_dynarray_init(&insns, NULL);
 
    tgsi_parse_init(&parse, vp->pipe.tokens);
    while (!tgsi_parse_end_of_tokens(&parse)) {

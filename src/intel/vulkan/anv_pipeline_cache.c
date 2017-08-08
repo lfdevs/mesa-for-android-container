@@ -21,7 +21,6 @@
  * IN THE SOFTWARE.
  */
 
-#include "util/mesa-sha1.h"
 #include "util/hash_table.h"
 #include "util/debug.h"
 #include "anv_private.h"
@@ -198,32 +197,6 @@ anv_pipeline_cache_finish(struct anv_pipeline_cache *cache)
    }
 }
 
-void
-anv_hash_shader(unsigned char *hash, const void *key, size_t key_size,
-                struct anv_shader_module *module,
-                const char *entrypoint,
-                const struct anv_pipeline_layout *pipeline_layout,
-                const VkSpecializationInfo *spec_info)
-{
-   struct mesa_sha1 ctx;
-
-   _mesa_sha1_init(&ctx);
-   _mesa_sha1_update(&ctx, key, key_size);
-   _mesa_sha1_update(&ctx, module->sha1, sizeof(module->sha1));
-   _mesa_sha1_update(&ctx, entrypoint, strlen(entrypoint));
-   if (pipeline_layout) {
-      _mesa_sha1_update(&ctx, pipeline_layout->sha1,
-                        sizeof(pipeline_layout->sha1));
-   }
-   /* hash in shader stage, pipeline layout? */
-   if (spec_info) {
-      _mesa_sha1_update(&ctx, spec_info->pMapEntries,
-                        spec_info->mapEntryCount * sizeof spec_info->pMapEntries[0]);
-      _mesa_sha1_update(&ctx, spec_info->pData, spec_info->dataSize);
-   }
-   _mesa_sha1_final(&ctx, hash);
-}
-
 static struct anv_shader_bin *
 anv_pipeline_cache_search_locked(struct anv_pipeline_cache *cache,
                                  const void *key_data, uint32_t key_size)
@@ -351,7 +324,7 @@ anv_pipeline_cache_load(struct anv_pipeline_cache *cache,
       return;
    if (header.device_id != device->chipset_id)
       return;
-   if (memcmp(header.uuid, pdevice->uuid, VK_UUID_SIZE) != 0)
+   if (memcmp(header.uuid, pdevice->pipeline_cache_uuid, VK_UUID_SIZE) != 0)
       return;
 
    const void *end = data + size;
@@ -498,7 +471,7 @@ VkResult anv_GetPipelineCacheData(
    header->header_version = VK_PIPELINE_CACHE_HEADER_VERSION_ONE;
    header->vendor_id = 0x8086;
    header->device_id = device->chipset_id;
-   memcpy(header->uuid, pdevice->uuid, VK_UUID_SIZE);
+   memcpy(header->uuid, pdevice->pipeline_cache_uuid, VK_UUID_SIZE);
    p += align_u32(header->header_size, 8);
 
    uint32_t *count = p;

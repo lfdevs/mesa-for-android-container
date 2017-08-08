@@ -43,6 +43,7 @@
 
 struct ir3_legalize_ctx {
 	bool has_samp;
+	bool has_ssbo;
 	int max_bary;
 };
 
@@ -191,6 +192,9 @@ legalize_block(struct ir3_legalize_ctx *ctx, struct ir3_block *block)
 			else
 				regmask_set(&needs_sy, n->regs[0]);
 		}
+
+		if ((n->opc == OPC_LDGB) || (n->opc == OPC_STGB) || is_atomic(n->opc))
+			ctx->has_ssbo = true;
 
 		/* both tex/sfu appear to not always immediately consume
 		 * their src register(s):
@@ -388,7 +392,7 @@ mark_convergence_points(struct ir3 *ir)
 }
 
 void
-ir3_legalize(struct ir3 *ir, bool *has_samp, int *max_bary)
+ir3_legalize(struct ir3 *ir, bool *has_samp, bool *has_ssbo, int *max_bary)
 {
 	struct ir3_legalize_ctx ctx = {
 			.max_bary = -1,
@@ -399,6 +403,7 @@ ir3_legalize(struct ir3 *ir, bool *has_samp, int *max_bary)
 	}
 
 	*has_samp = ctx.has_samp;
+	*has_ssbo = ctx.has_ssbo;
 	*max_bary = ctx.max_bary;
 
 	do {

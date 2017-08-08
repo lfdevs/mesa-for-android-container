@@ -37,4 +37,8 @@ enum {
 	RADV_DEBUG_NO_IBS            = 0x200,
 };
 
+enum {
+	RADV_PERFTEST_BATCHCHAIN     =   0x1,
+	RADV_PERFTEST_SISCHED        =   0x2,
+};
 #endif

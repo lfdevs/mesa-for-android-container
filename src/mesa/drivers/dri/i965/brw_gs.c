@@ -112,6 +112,8 @@ brw_codegen_gs_prog(struct brw_context *brw,
    brw_nir_setup_glsl_uniforms(gp->program.nir, &gp->program,
                                &prog_data.base.base,
                                compiler->scalar_stage[MESA_SHADER_GEOMETRY]);
+   brw_nir_analyze_ubo_ranges(compiler, gp->program.nir,
+                              prog_data.base.base.ubo_ranges);
 
    uint64_t outputs_written = gp->program.info.outputs_written;
 

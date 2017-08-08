@@ -1773,44 +1773,13 @@ static void r300_set_vertex_buffers_swtcl(struct pipe_context* pipe,
         return;
 
     for (i = 0; i < count; i++) {
-        if (buffers[i].user_buffer) {
+        if (buffers[i].is_user_buffer) {
             draw_set_mapped_vertex_buffer(r300->draw, start_slot + i,
-                                          buffers[i].user_buffer, ~0);
-        } else if (buffers[i].buffer) {
+                                          buffers[i].buffer.user, ~0);
+        } else if (buffers[i].buffer.resource) {
             draw_set_mapped_vertex_buffer(r300->draw, start_slot + i,
-                                          r300_resource(buffers[i].buffer)->malloced_buffer, ~0);
+                                          r300_resource(buffers[i].buffer.resource)->malloced_buffer, ~0);
         }
-    }
-}
-
-static void r300_set_index_buffer_hwtcl(struct pipe_context* pipe,
-                                        const struct pipe_index_buffer *ib)
-{
-    struct r300_context* r300 = r300_context(pipe);
-
-    if (ib) {
-        pipe_resource_reference(&r300->index_buffer.buffer, ib->buffer);
-        memcpy(&r300->index_buffer, ib, sizeof(*ib));
-    } else {
-        pipe_resource_reference(&r300->index_buffer.buffer, NULL);
-    }
-}
-
-static void r300_set_index_buffer_swtcl(struct pipe_context* pipe,
-                                        const struct pipe_index_buffer *ib)
-{
-    struct r300_context* r300 = r300_context(pipe);
-
-    if (ib) {
-        const void *buf = NULL;
-        if (ib->user_buffer) {
-            buf = ib->user_buffer;
-        } else if (ib->buffer) {
-            buf = r300_resource(ib->buffer)->malloced_buffer;
-        }
-        draw_set_indexes(r300->draw,
-                         (const ubyte *) buf + ib->offset,
-                         ib->index_size, ~0);
     }
 }
 
@@ -2125,10 +2094,8 @@ void r300_init_state_functions(struct r300_context* r300)
 
     if (r300->screen->caps.has_tcl) {
         r300->context.set_vertex_buffers = r300_set_vertex_buffers_hwtcl;
-        r300->context.set_index_buffer = r300_set_index_buffer_hwtcl;
     } else {
         r300->context.set_vertex_buffers = r300_set_vertex_buffers_swtcl;
-        r300->context.set_index_buffer = r300_set_index_buffer_swtcl;
     }
 
     r300->context.create_vertex_elements_state = r300_create_vertex_elements_state;

@@ -34,14 +34,44 @@
 #pragma once
 #include <string>
 
-template <typename T>
-struct Knob
+struct KnobBase
 {
-    const   T&  Value() const               { return m_Value; }
-    const   T&  Value(const T& newValue)    { m_Value = newValue; return Value(); }
+private:
+    // Update the input string.
+    static void autoExpandEnvironmentVariables(std::string &text);
 
 protected:
-    Knob(const T& defaultValue) : m_Value(defaultValue) {}
+    // Leave input alone and return new string.
+    static std::string expandEnvironmentVariables(std::string const &input)
+    {
+        std::string text = input;
+        autoExpandEnvironmentVariables(text);
+        return text;
+    }
+
+    template <typename T>
+    static T expandEnvironmentVariables(T const &input)
+    {
+        return input;
+    }
+};
+
+template <typename T>
+struct Knob : KnobBase
+{
+public:
+    const   T&  Value() const               { return m_Value; }
+    const   T&  Value(T const &newValue)
+    {
+        m_Value = expandEnvironmentVariables(newValue);
+        return Value();
+    }
+
+protected:
+    Knob(T const &defaultValue) :
+        m_Value(expandEnvironmentVariables(defaultValue))
+    {
+    }
 
 private:
     T m_Value;
@@ -102,6 +132,61 @@ extern GlobalKnobs g_GlobalKnobs;
 % for inc in includes:
 #include <${inc}>
 % endfor
+#include <regex>
+#include <core/utils.h>
+
+//========================================================
+// Implementation
+//========================================================
+void KnobBase::autoExpandEnvironmentVariables(std::string &text)
+{
+#if (__GNUC__) && (GCC_VERSION < 409000)
+    // <regex> isn't implemented prior to gcc-4.9.0
+    // unix style variable replacement
+    size_t start;
+    while ((start = text.find("${'${'}")) != std::string::npos) {
+        size_t end = text.find("}");
+        if (end == std::string::npos)
+            break;
+        const std::string var = GetEnv(text.substr(start + 2, end - start - 2));
+        text.replace(start, end - start + 1, var);
+    }
+    // win32 style variable replacement
+    while ((start = text.find("%")) != std::string::npos) {
+        size_t end = text.find("%", start + 1);
+        if (end == std::string::npos)
+            break;
+        const std::string var = GetEnv(text.substr(start + 1, end - start - 1));
+        text.replace(start, end - start + 1, var);
+    }
+#else
+    {
+        // unix style variable replacement
+        static std::regex env("\\$\\{([^}]+)\\}");
+        std::smatch match;
+        while (std::regex_search(text, match, env))
+        {
+            const std::string var = GetEnv(match[1].str());
+            // certain combinations of gcc/libstd++ have problems with this
+            // text.replace(match[0].first, match[0].second, var);
+            text.replace(match.prefix().length(), match[0].length(), var);
+        }
+    }
+    {
+        // win32 style variable replacement
+        static std::regex env("\\%([^}]+)\\%");
+        std::smatch match;
+        while (std::regex_search(text, match, env))
+        {
+            const std::string var = GetEnv(match[1].str());
+            // certain combinations of gcc/libstd++ have problems with this
+            // text.replace(match[0].first, match[0].second, var);
+            text.replace(match.prefix().length(), match[0].length(), var);
+        }
+    }
+#endif
+}
+
 
 //========================================================
 // Static Data Members

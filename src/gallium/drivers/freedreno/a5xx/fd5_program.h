@@ -37,7 +37,10 @@ struct fd5_shader_stateobj {
 
 struct fd5_emit;
 
-void fd5_program_emit(struct fd_ringbuffer *ring, struct fd5_emit *emit);
+void fd5_emit_shader(struct fd_ringbuffer *ring, const struct ir3_shader_variant *so);
+
+void fd5_program_emit(struct fd_context *ctx, struct fd_ringbuffer *ring,
+					  struct fd5_emit *emit);
 
 void fd5_prog_init(struct pipe_context *pctx);
 

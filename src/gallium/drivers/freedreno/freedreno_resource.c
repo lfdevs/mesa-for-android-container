@@ -51,39 +51,46 @@
 static void
 fd_invalidate_resource(struct fd_context *ctx, struct pipe_resource *prsc)
 {
-	int i;
-
 	/* Go through the entire state and see if the resource is bound
 	 * anywhere. If it is, mark the relevant state as dirty. This is called on
 	 * realloc_bo.
 	 */
 
-	/* Constbufs */
-	for (i = 1; i < PIPE_MAX_CONSTANT_BUFFERS && !(ctx->dirty & FD_DIRTY_CONSTBUF); i++) {
-		if (ctx->constbuf[PIPE_SHADER_VERTEX].cb[i].buffer == prsc)
-			ctx->dirty |= FD_DIRTY_CONSTBUF;
-		if (ctx->constbuf[PIPE_SHADER_FRAGMENT].cb[i].buffer == prsc)
-			ctx->dirty |= FD_DIRTY_CONSTBUF;
-	}
-
 	/* VBOs */
-	for (i = 0; i < ctx->vtx.vertexbuf.count && !(ctx->dirty & FD_DIRTY_VTXBUF); i++) {
-		if (ctx->vtx.vertexbuf.vb[i].buffer == prsc)
+	for (unsigned i = 0; i < ctx->vtx.vertexbuf.count && !(ctx->dirty & FD_DIRTY_VTXBUF); i++) {
+		if (ctx->vtx.vertexbuf.vb[i].buffer.resource == prsc)
 			ctx->dirty |= FD_DIRTY_VTXBUF;
 	}
 
-	/* Index buffer */
-	if (ctx->indexbuf.buffer == prsc)
-		ctx->dirty |= FD_DIRTY_INDEXBUF;
+	/* per-shader-stage resources: */
+	for (unsigned stage = 0; stage < PIPE_SHADER_TYPES; stage++) {
+		/* Constbufs.. note that constbuf[0] is normal uniforms emitted in
+		 * cmdstream rather than by pointer..
+		 */
+		const unsigned num_ubos = util_last_bit(ctx->constbuf[stage].enabled_mask);
+		for (unsigned i = 1; i < num_ubos; i++) {
+			if (ctx->dirty_shader[stage] & FD_DIRTY_SHADER_CONST)
+				break;
+			if (ctx->constbuf[stage].cb[i].buffer == prsc)
+				ctx->dirty_shader[stage] |= FD_DIRTY_SHADER_CONST;
+		}
 
-	/* Textures */
-	for (i = 0; i < ctx->verttex.num_textures && !(ctx->dirty & FD_DIRTY_VERTTEX); i++) {
-		if (ctx->verttex.textures[i] && (ctx->verttex.textures[i]->texture == prsc))
-			ctx->dirty |= FD_DIRTY_VERTTEX;
-	}
-	for (i = 0; i < ctx->fragtex.num_textures && !(ctx->dirty & FD_DIRTY_FRAGTEX); i++) {
-		if (ctx->fragtex.textures[i] && (ctx->fragtex.textures[i]->texture == prsc))
-			ctx->dirty |= FD_DIRTY_FRAGTEX;
+		/* Textures */
+		for (unsigned i = 0; i < ctx->tex[stage].num_textures; i++) {
+			if (ctx->dirty_shader[stage] & FD_DIRTY_SHADER_TEX)
+				break;
+			if (ctx->tex[stage].textures[i] && (ctx->tex[stage].textures[i]->texture == prsc))
+				ctx->dirty_shader[stage] |= FD_DIRTY_SHADER_TEX;
+		}
+
+		/* SSBOs */
+		const unsigned num_ssbos = util_last_bit(ctx->shaderbuf[stage].enabled_mask);
+		for (unsigned i = 0; i < num_ssbos; i++) {
+			if (ctx->dirty_shader[stage] & FD_DIRTY_SHADER_SSBO)
+				break;
+			if (ctx->shaderbuf[stage].sb[i].buffer == prsc)
+				ctx->dirty_shader[stage] |= FD_DIRTY_SHADER_SSBO;
+		}
 	}
 }
 
@@ -102,7 +109,6 @@ realloc_bo(struct fd_resource *rsc, uint32_t size)
 		fd_bo_del(rsc->bo);
 
 	rsc->bo = fd_bo_new(screen->dev, size, flags);
-	rsc->timestamp = 0;
 	util_range_set_empty(&rsc->valid_buffer_range);
 	fd_bc_invalidate_resource(rsc, true);
 }
@@ -196,7 +202,6 @@ fd_try_shadow_resource(struct fd_context *ctx, struct fd_resource *rsc,
 
 	/* TODO valid_buffer_range?? */
 	swap(rsc->bo,        shadow->bo);
-	swap(rsc->timestamp, shadow->timestamp);
 	swap(rsc->write_batch,   shadow->write_batch);
 
 	/* at this point, the newly created shadow buffer is not referenced
@@ -776,6 +781,25 @@ fd_resource_resize(struct pipe_resource *prsc, uint32_t sz)
 	realloc_bo(rsc, setup_slices(rsc, 1, prsc->format));
 }
 
+// TODO common helper?
+static bool
+has_depth(enum pipe_format format)
+{
+	switch (format) {
+	case PIPE_FORMAT_Z16_UNORM:
+	case PIPE_FORMAT_Z32_UNORM:
+	case PIPE_FORMAT_Z32_FLOAT:
+	case PIPE_FORMAT_Z32_FLOAT_S8X24_UINT:
+	case PIPE_FORMAT_Z24_UNORM_S8_UINT:
+	case PIPE_FORMAT_S8_UINT_Z24_UNORM:
+	case PIPE_FORMAT_Z24X8_UNORM:
+	case PIPE_FORMAT_X8Z24_UNORM:
+		return true;
+	default:
+		return false;
+	}
+}
+
 /**
  * Create a new texture object, using the given template info.
  */
@@ -783,6 +807,7 @@ static struct pipe_resource *
 fd_resource_create(struct pipe_screen *pscreen,
 		const struct pipe_resource *tmpl)
 {
+	struct fd_screen *screen = fd_screen(pscreen);
 	struct fd_resource *rsc = CALLOC_STRUCT(fd_resource);
 	struct pipe_resource *prsc = &rsc->base.b;
 	enum pipe_format format = tmpl->format;
@@ -810,7 +835,7 @@ fd_resource_create(struct pipe_screen *pscreen,
 
 	if (format == PIPE_FORMAT_Z32_FLOAT_S8X24_UINT)
 		format = PIPE_FORMAT_Z32_FLOAT;
-	else if (fd_screen(pscreen)->gpu_id < 400 &&
+	else if (screen->gpu_id < 400 &&
 			 util_format_description(format)->layout == UTIL_FORMAT_LAYOUT_RGTC)
 		format = PIPE_FORMAT_R8G8B8A8_UNORM;
 	rsc->internal_format = format;
@@ -818,8 +843,24 @@ fd_resource_create(struct pipe_screen *pscreen,
 
 	assert(rsc->cpp);
 
+	// XXX probably need some extra work if we hit rsc shadowing path w/ lrz..
+	if (is_a5xx(screen) && (fd_mesa_debug & FD_DBG_LRZ) && has_depth(format)) {
+		const uint32_t flags = DRM_FREEDRENO_GEM_CACHE_WCOMBINE |
+				DRM_FREEDRENO_GEM_TYPE_KMEM; /* TODO */
+		unsigned lrz_pitch  = align(DIV_ROUND_UP(tmpl->width0, 8), 32);
+		unsigned lrz_height = DIV_ROUND_UP(tmpl->height0, 8);
+		unsigned size = lrz_pitch * lrz_height * 2;
+
+		size += 0x1000; /* for GRAS_LRZ_FAST_CLEAR_BUFFER */
+
+		rsc->lrz_height = lrz_height;
+		rsc->lrz_width = lrz_pitch;
+		rsc->lrz_pitch = lrz_pitch;
+		rsc->lrz = fd_bo_new(screen->dev, size, flags);
+	}
+
 	alignment = slice_alignment(pscreen, tmpl);
-	if (is_a4xx(fd_screen(pscreen)) || is_a5xx(fd_screen(pscreen))) {
+	if (is_a4xx(screen) || is_a5xx(screen)) {
 		switch (tmpl->target) {
 		case PIPE_TEXTURE_3D:
 			rsc->layer_first = false;
@@ -1079,16 +1120,17 @@ fd_blitter_pipe_begin(struct fd_context *ctx, bool render_cond, bool discard,
 	util_blitter_save_framebuffer(ctx->blitter,
 			ctx->batch ? &ctx->batch->framebuffer : NULL);
 	util_blitter_save_fragment_sampler_states(ctx->blitter,
-			ctx->fragtex.num_samplers,
-			(void **)ctx->fragtex.samplers);
+			ctx->tex[PIPE_SHADER_FRAGMENT].num_samplers,
+			(void **)ctx->tex[PIPE_SHADER_FRAGMENT].samplers);
 	util_blitter_save_fragment_sampler_views(ctx->blitter,
-			ctx->fragtex.num_textures, ctx->fragtex.textures);
+			ctx->tex[PIPE_SHADER_FRAGMENT].num_textures,
+			ctx->tex[PIPE_SHADER_FRAGMENT].textures);
 	if (!render_cond)
 		util_blitter_save_render_condition(ctx->blitter,
 			ctx->cond_query, ctx->cond_cond, ctx->cond_mode);
 
 	if (ctx->batch)
-		fd_hw_query_set_stage(ctx->batch, ctx->batch->draw, stage);
+		fd_batch_set_stage(ctx->batch, stage);
 
 	ctx->in_blit = discard;
 }
@@ -1097,7 +1139,7 @@ void
 fd_blitter_pipe_end(struct fd_context *ctx)
 {
 	if (ctx->batch)
-		fd_hw_query_set_stage(ctx->batch, ctx->batch->draw, FD_STAGE_NULL);
+		fd_batch_set_stage(ctx->batch, FD_STAGE_NULL);
 	ctx->in_blit = false;
 }
 

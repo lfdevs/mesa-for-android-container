@@ -129,3 +129,38 @@ etna_update_blend(struct etna_context *ctx)
 
    return true;
 }
+
+void
+etna_set_blend_color(struct pipe_context *pctx, const struct pipe_blend_color *bc)
+{
+   struct etna_context *ctx = etna_context(pctx);
+   struct compiled_blend_color *cs = &ctx->blend_color;
+
+   memcpy(cs->color, bc->color, sizeof(float) * 4);
+
+   ctx->dirty |= ETNA_DIRTY_BLEND_COLOR;
+}
+
+bool
+etna_update_blend_color(struct etna_context *ctx)
+{
+   struct pipe_framebuffer_state *pfb = &ctx->framebuffer_s;
+   struct compiled_blend_color *cs = &ctx->blend_color;
+
+   if (pfb->cbufs[0] &&
+       translate_rs_format_rb_swap(pfb->cbufs[0]->texture->format)) {
+      cs->PE_ALPHA_BLEND_COLOR =
+         VIVS_PE_ALPHA_BLEND_COLOR_R(etna_cfloat_to_uint8(cs->color[2])) |
+         VIVS_PE_ALPHA_BLEND_COLOR_G(etna_cfloat_to_uint8(cs->color[1])) |
+         VIVS_PE_ALPHA_BLEND_COLOR_B(etna_cfloat_to_uint8(cs->color[0])) |
+         VIVS_PE_ALPHA_BLEND_COLOR_A(etna_cfloat_to_uint8(cs->color[3]));
+   } else {
+      cs->PE_ALPHA_BLEND_COLOR =
+         VIVS_PE_ALPHA_BLEND_COLOR_R(etna_cfloat_to_uint8(cs->color[0])) |
+         VIVS_PE_ALPHA_BLEND_COLOR_G(etna_cfloat_to_uint8(cs->color[1])) |
+         VIVS_PE_ALPHA_BLEND_COLOR_B(etna_cfloat_to_uint8(cs->color[2])) |
+         VIVS_PE_ALPHA_BLEND_COLOR_A(etna_cfloat_to_uint8(cs->color[3]));
+	}
+
+	return true;
+}

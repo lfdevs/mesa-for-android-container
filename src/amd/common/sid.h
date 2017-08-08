@@ -154,6 +154,7 @@
 #define			COPY_DATA_MEM		1
 #define                 COPY_DATA_PERF          4
 #define                 COPY_DATA_IMM           5
+#define                 COPY_DATA_TIMESTAMP     9
 #define		COPY_DATA_DST_SEL(x)		(((unsigned)(x) & 0xf) << 8)
 #define		COPY_DATA_COUNT_SEL		(1 << 16)
 #define		COPY_DATA_WR_CONFIRM		(1 << 20)
@@ -169,7 +170,7 @@
  */
 /* fix CP DMA before uncommenting: */
 /*#define PKT3_EVENT_WRITE_EOS                   0x48*/ /* not on GFX9 */
-#define PKT3_RELEASE_MEM                       0x49 /* GFX9+ (any ring) or GFX8 (compute ring only) */
+#define PKT3_RELEASE_MEM                       0x49 /* GFX9+ [any ring] or GFX8 [compute ring only] */
 #define PKT3_ONE_REG_WRITE                     0x57 /* not on CIK */
 #define PKT3_ACQUIRE_MEM                       0x58 /* new for CIK */
 #define PKT3_SET_CONFIG_REG                    0x68
@@ -279,6 +280,7 @@
 #define     S_500_DSL_SEL(x)		(((unsigned)(x) & 0x3) << 20)
 #define       V_500_DST_ADDR		0
 #define       V_500_GDS			1 /* program DAS to 1 as well */
+#define       V_500_NOWHERE		2 /* new for GFX9 */
 #define       V_500_DST_ADDR_TC_L2	3 /* new for CIK */
 #define     S_500_ENGINE(x)		((x) & 0x1)
 #define       V_500_ME			0

@@ -33,7 +33,6 @@
  *
  *    // emulate unsupported primitives:
  *    if (info->mode needs emulating) {
- *       util_primconvert_save_index_buffer(ctx->primconvert, &ctx->indexbuf);
  *       util_primconvert_save_rasterizer_state(ctx->primconvert, ctx->rasterizer);
  *       util_primconvert_draw_vbo(ctx->primconvert, info);
  *       return;
@@ -53,7 +52,6 @@
 struct primconvert_context
 {
    struct pipe_context *pipe;
-   struct pipe_index_buffer saved_ib;
    uint32_t primtypes_mask;
    unsigned api_pv;
 };
@@ -73,23 +71,7 @@ util_primconvert_create(struct pipe_context *pipe, uint32_t primtypes_mask)
 void
 util_primconvert_destroy(struct primconvert_context *pc)
 {
-   util_primconvert_save_index_buffer(pc, NULL);
    FREE(pc);
-}
-
-void
-util_primconvert_save_index_buffer(struct primconvert_context *pc,
-                                   const struct pipe_index_buffer *ib)
-{
-   if (ib) {
-      pipe_resource_reference(&pc->saved_ib.buffer, ib->buffer);
-      pc->saved_ib.index_size = ib->index_size;
-      pc->saved_ib.offset = ib->offset;
-      pc->saved_ib.user_buffer = ib->user_buffer;
-   }
-   else {
-      pipe_resource_reference(&pc->saved_ib.buffer, NULL);
-   }
 }
 
 void
@@ -108,18 +90,15 @@ void
 util_primconvert_draw_vbo(struct primconvert_context *pc,
                           const struct pipe_draw_info *info)
 {
-   struct pipe_index_buffer *ib = &pc->saved_ib;
-   struct pipe_index_buffer new_ib;
    struct pipe_draw_info new_info;
    struct pipe_transfer *src_transfer = NULL;
    u_translate_func trans_func;
    u_generate_func gen_func;
    const void *src = NULL;
    void *dst;
+   unsigned ib_offset;
 
-   memset(&new_ib, 0, sizeof(new_ib));
    util_draw_init_info(&new_info);
-   new_info.indexed = true;
    new_info.min_index = info->min_index;
    new_info.max_index = info->max_index;
    new_info.index_bias = info->index_bias;
@@ -127,38 +106,43 @@ util_primconvert_draw_vbo(struct primconvert_context *pc,
    new_info.instance_count = info->instance_count;
    new_info.primitive_restart = info->primitive_restart;
    new_info.restart_index = info->restart_index;
-   if (info->indexed) {
+   if (info->index_size) {
       enum pipe_prim_type mode = 0;
+      unsigned index_size;
 
       u_index_translator(pc->primtypes_mask,
-                         info->mode, pc->saved_ib.index_size, info->count,
+                         info->mode, info->index_size, info->count,
                          pc->api_pv, pc->api_pv,
                          info->primitive_restart ? PR_ENABLE : PR_DISABLE,
-                         &mode, &new_ib.index_size, &new_info.count,
+                         &mode, &index_size, &new_info.count,
                          &trans_func);
       new_info.mode = mode;
-      src = ib->user_buffer;
+      new_info.index_size = index_size;
+      src = info->has_user_indices ? info->index.user : NULL;
       if (!src) {
-         src = pipe_buffer_map(pc->pipe, ib->buffer,
+         src = pipe_buffer_map(pc->pipe, info->index.resource,
                                PIPE_TRANSFER_READ, &src_transfer);
       }
-      src = (const uint8_t *)src + ib->offset;
+      src = (const uint8_t *)src;
    }
    else {
       enum pipe_prim_type mode = 0;
+      unsigned index_size;
 
       u_index_generator(pc->primtypes_mask,
                         info->mode, info->start, info->count,
                         pc->api_pv, pc->api_pv,
-                        &mode, &new_ib.index_size, &new_info.count,
+                        &mode, &index_size, &new_info.count,
                         &gen_func);
       new_info.mode = mode;
+      new_info.index_size = index_size;
    }
 
-   u_upload_alloc(pc->pipe->stream_uploader, 0, new_ib.index_size * new_info.count, 4,
-                  &new_ib.offset, &new_ib.buffer, &dst);
+   u_upload_alloc(pc->pipe->stream_uploader, 0, new_info.index_size * new_info.count, 4,
+                  &ib_offset, &new_info.index.resource, &dst);
+   new_info.start = ib_offset / new_info.index_size;
 
-   if (info->indexed) {
+   if (info->index_size) {
       trans_func(src, info->start, info->count, new_info.count, info->restart_index, dst);
    }
    else {
@@ -170,14 +154,8 @@ util_primconvert_draw_vbo(struct primconvert_context *pc,
 
    u_upload_unmap(pc->pipe->stream_uploader);
 
-   /* bind new index buffer: */
-   pc->pipe->set_index_buffer(pc->pipe, &new_ib);
-
    /* to the translated draw: */
    pc->pipe->draw_vbo(pc->pipe, &new_info);
 
-   /* and then restore saved ib: */
-   pc->pipe->set_index_buffer(pc->pipe, ib);
-
-   pipe_resource_reference(&new_ib.buffer, NULL);
+   pipe_resource_reference(&new_info.index.resource, NULL);
 }

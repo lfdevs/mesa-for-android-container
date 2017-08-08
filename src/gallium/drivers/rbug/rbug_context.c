@@ -778,8 +778,11 @@ rbug_set_vertex_buffers(struct pipe_context *_pipe,
 
    if (num_buffers && _buffers) {
       memcpy(unwrapped_buffers, _buffers, num_buffers * sizeof(*_buffers));
-      for (i = 0; i < num_buffers; i++)
-         unwrapped_buffers[i].buffer = rbug_resource_unwrap(_buffers[i].buffer);
+      for (i = 0; i < num_buffers; i++) {
+         if (!_buffers[i].is_user_buffer)
+            unwrapped_buffers[i].buffer.resource =
+               rbug_resource_unwrap(_buffers[i].buffer.resource);
+      }
       buffers = unwrapped_buffers;
    }
 
@@ -787,25 +790,6 @@ rbug_set_vertex_buffers(struct pipe_context *_pipe,
                             num_buffers,
                             buffers);
 
-   mtx_unlock(&rb_pipe->call_mutex);
-}
-
-static void
-rbug_set_index_buffer(struct pipe_context *_pipe,
-                      const struct pipe_index_buffer *_ib)
-{
-   struct rbug_context *rb_pipe = rbug_context(_pipe);
-   struct pipe_context *pipe = rb_pipe->pipe;
-   struct pipe_index_buffer unwrapped_ib, *ib = NULL;
-
-   if (_ib) {
-      unwrapped_ib = *_ib;
-      unwrapped_ib.buffer = rbug_resource_unwrap(_ib->buffer);
-      ib = &unwrapped_ib;
-   }
-
-   mtx_lock(&rb_pipe->call_mutex);
-   pipe->set_index_buffer(pipe, ib);
    mtx_unlock(&rb_pipe->call_mutex);
 }
 
@@ -1257,7 +1241,6 @@ rbug_context_create(struct pipe_screen *_screen, struct pipe_context *pipe)
    rb_pipe->base.set_viewport_states = rbug_set_viewport_states;
    rb_pipe->base.set_sampler_views = rbug_set_sampler_views;
    rb_pipe->base.set_vertex_buffers = rbug_set_vertex_buffers;
-   rb_pipe->base.set_index_buffer = rbug_set_index_buffer;
    rb_pipe->base.set_sample_mask = rbug_set_sample_mask;
    rb_pipe->base.create_stream_output_target = rbug_create_stream_output_target;
    rb_pipe->base.stream_output_target_destroy = rbug_stream_output_target_destroy;

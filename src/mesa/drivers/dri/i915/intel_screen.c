@@ -47,7 +47,6 @@ static const __DRIconfigOptionsExtension i915_config_options = {
 
 DRI_CONF_BEGIN
    DRI_CONF_SECTION_PERFORMANCE
-      DRI_CONF_VBLANK_MODE(DRI_CONF_VBLANK_ALWAYS_SYNC)
       /* Options correspond to DRI_CONF_BO_REUSE_DISABLED,
        * DRI_CONF_BO_REUSE_ALL
        */
@@ -227,17 +226,20 @@ static struct intel_image_format intel_image_formats[] = {
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_R8, 1 },
        { 1, 1, 0, __DRI_IMAGE_FORMAT_GR88, 2 } } },
 
-   /* For YUYV buffers, we set up two overlapping DRI images and treat
-    * them as planar buffers in the compositors.  Plane 0 is GR88 and
-    * samples YU or YV pairs and places Y into the R component, while
-    * plane 1 is ARGB and samples YUYV clusters and places pairs and
-    * places U into the G component and V into A.  This lets the
-    * texture sampler interpolate the Y components correctly when
-    * sampling from plane 0, and interpolate U and V correctly when
-    * sampling from plane 1. */
+   /* For YUYV and UYVY buffers, we set up two overlapping DRI images
+    * and treat them as planar buffers in the compositors.
+    * Plane 0 is GR88 and samples YU or YV pairs and places Y into
+    * the R component, while plane 1 is ARGB/ABGR and samples YUYV/UYVY
+    * clusters and places pairs and places U into the G component and
+    * V into A.  This lets the texture sampler interpolate the Y
+    * components correctly when sampling from plane 0, and interpolate
+    * U and V correctly when sampling from plane 1. */
    { __DRI_IMAGE_FOURCC_YUYV, __DRI_IMAGE_COMPONENTS_Y_XUXV, 2,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_GR88, 2 },
-       { 0, 1, 0, __DRI_IMAGE_FORMAT_ARGB8888, 4 } } }
+       { 0, 1, 0, __DRI_IMAGE_FORMAT_ARGB8888, 4 } } },
+   { __DRI_IMAGE_FOURCC_UYVY, __DRI_IMAGE_COMPONENTS_Y_UXVX, 2,
+     { { 0, 0, 0, __DRI_IMAGE_FORMAT_GR88, 2 },
+       { 0, 1, 0, __DRI_IMAGE_FORMAT_ABGR8888, 4 } } }
 };
 
 static __DRIimage *
@@ -278,7 +280,7 @@ intel_setup_image_from_mipmap_tree(struct intel_context *intel, __DRIimage *imag
 
    intel_miptree_check_level_layer(mt, level, zoffset);
 
-   intel_region_get_tile_masks(mt->region, &mask_x, &mask_y, false);
+   intel_region_get_tile_masks(mt->region, &mask_x, &mask_y);
    intel_miptree_get_image_offset(mt, level, zoffset, &draw_x, &draw_y);
 
    image->width = mt->level[level].width;
@@ -288,8 +290,7 @@ intel_setup_image_from_mipmap_tree(struct intel_context *intel, __DRIimage *imag
 
    image->offset = intel_region_get_aligned_offset(mt->region,
                                                    draw_x & ~mask_x,
-                                                   draw_y & ~mask_y,
-                                                   false);
+                                                   draw_y & ~mask_y);
 
    intel_region_reference(&image->region, mt->region);
 }
@@ -685,7 +686,7 @@ intel_from_planar(__DRIimage *parent, int plane, void *loaderPrivate)
     image->offset = offset;
     intel_setup_image_from_dimensions(image);
 
-    intel_region_get_tile_masks(image->region, &mask_x, &mask_y, false);
+    intel_region_get_tile_masks(image->region, &mask_x, &mask_y);
     if (offset & mask_x)
        _mesa_warning(NULL,
                      "intel_create_sub_image: offset not on tile boundary");
@@ -800,6 +801,7 @@ static const __DRIextension *intelScreenExtensions[] = {
     &intelImageExtension.base,
     &intelRendererQueryExtension.base,
     &dri2ConfigQueryExtension.base,
+    &dri2NoErrorExtension.base,
     NULL
 };
 
@@ -875,12 +877,11 @@ intelCreateBuffer(__DRIscreen * driScrnPriv,
 
    /* setup the hardware-based renderbuffers */
    rb = intel_create_renderbuffer(rgbFormat);
-   _mesa_add_renderbuffer_without_ref(fb, BUFFER_FRONT_LEFT, &rb->Base.Base);
+   _mesa_attach_and_own_rb(fb, BUFFER_FRONT_LEFT, &rb->Base.Base);
 
    if (mesaVis->doubleBufferMode) {
       rb = intel_create_renderbuffer(rgbFormat);
-      _mesa_add_renderbuffer_without_ref(fb, BUFFER_BACK_LEFT,
-                                            &rb->Base.Base);
+      _mesa_attach_and_own_rb(fb, BUFFER_BACK_LEFT, &rb->Base.Base);
    }
 
    /*
@@ -896,13 +897,13 @@ intelCreateBuffer(__DRIscreen * driScrnPriv,
        * attached to two attachment points.
        */
       rb = intel_create_private_renderbuffer(MESA_FORMAT_Z24_UNORM_S8_UINT);
-      _mesa_add_renderbuffer_without_ref(fb, BUFFER_DEPTH, &rb->Base.Base);
-      _mesa_add_renderbuffer(fb, BUFFER_STENCIL, &rb->Base.Base);
+      _mesa_attach_and_own_rb(fb, BUFFER_DEPTH, &rb->Base.Base);
+      _mesa_attach_and_reference_rb(fb, BUFFER_STENCIL, &rb->Base.Base);
    }
    else if (mesaVis->depthBits == 16) {
       assert(mesaVis->stencilBits == 0);
       rb = intel_create_private_renderbuffer(MESA_FORMAT_Z_UNORM16);
-      _mesa_add_renderbuffer_without_ref(fb, BUFFER_DEPTH, &rb->Base.Base);
+      _mesa_attach_and_own_rb(fb, BUFFER_DEPTH, &rb->Base.Base);
    }
    else {
       assert(mesaVis->depthBits == 0);
@@ -970,7 +971,7 @@ intelCreateContext(gl_api api,
    __DRIscreen *sPriv = driContextPriv->driScreenPriv;
    struct intel_screen *intelScreen = sPriv->driverPrivate;
 
-   if (flags & ~__DRI_CTX_FLAG_DEBUG) {
+   if (flags & ~(__DRI_CTX_FLAG_DEBUG | __DRI_CTX_FLAG_NO_ERROR)) {
       *error = __DRI_CTX_ERROR_UNKNOWN_FLAG;
       return false;
    }

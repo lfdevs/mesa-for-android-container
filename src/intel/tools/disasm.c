@@ -43,45 +43,21 @@ is_send(uint32_t opcode)
            opcode == BRW_OPCODE_SENDSC );
 }
 
-void
-gen_disasm_disassemble(struct gen_disasm *disasm, void *assembly,
-                       int start, FILE *out)
+static int
+gen_disasm_find_end(struct gen_disasm *disasm, void *assembly, int start)
 {
    struct gen_device_info *devinfo = &disasm->devinfo;
-   bool dump_hex = false;
    int offset = start;
 
    /* This loop exits when send-with-EOT or when opcode is 0 */
    while (true) {
       brw_inst *insn = assembly + offset;
-      brw_inst uncompacted;
-      bool compacted = brw_inst_cmpt_control(devinfo, insn);
-      if (0)
-         fprintf(out, "0x%08x: ", offset);
 
-      if (compacted) {
-         brw_compact_inst *compacted = (void *)insn;
-         if (dump_hex) {
-            fprintf(out, "0x%08x 0x%08x                       ",
-                   ((uint32_t *)insn)[1],
-                   ((uint32_t *)insn)[0]);
-         }
-
-         brw_uncompact_instruction(devinfo, &uncompacted, compacted);
-         insn = &uncompacted;
+      if (brw_inst_cmpt_control(devinfo, insn)) {
          offset += 8;
       } else {
-         if (dump_hex) {
-            fprintf(out, "0x%08x 0x%08x 0x%08x 0x%08x ",
-                   ((uint32_t *)insn)[3],
-                   ((uint32_t *)insn)[2],
-                   ((uint32_t *)insn)[1],
-                   ((uint32_t *)insn)[0]);
-         }
          offset += 16;
       }
-
-      brw_disassemble_inst(out, devinfo, insn, compacted);
 
       /* Simplistic, but efficient way to terminate disasm */
       uint32_t opcode = brw_inst_opcode(devinfo, insn);
@@ -89,6 +65,45 @@ gen_disasm_disassemble(struct gen_disasm *disasm, void *assembly,
          break;
       }
    }
+
+   return offset;
+}
+
+void
+gen_disasm_disassemble(struct gen_disasm *disasm, void *assembly,
+                       int start, FILE *out)
+{
+   struct gen_device_info *devinfo = &disasm->devinfo;
+   int end = gen_disasm_find_end(disasm, assembly, start);
+
+   /* Make a dummy annotation structure that brw_validate_instructions
+    * can work from.
+    */
+   struct annotation_info annotation_info = {
+      .ann_count = 1,
+      .ann_size = 2,
+   };
+   annotation_info.mem_ctx = ralloc_context(NULL);
+   annotation_info.ann = rzalloc_array(annotation_info.mem_ctx,
+                                       struct annotation,
+                                       annotation_info.ann_size);
+   annotation_info.ann[0].offset = start;
+   annotation_info.ann[1].offset = end;
+   brw_validate_instructions(devinfo, assembly, start, end, &annotation_info);
+   struct annotation *annotation = annotation_info.ann;
+
+   for (int i = 0; i < annotation_info.ann_count; i++) {
+      int start_offset = annotation[i].offset;
+      int end_offset = annotation[i + 1].offset;
+
+      brw_disassemble(devinfo, assembly, start_offset, end_offset, stdout);
+
+      if (annotation[i].error) {
+         fputs(annotation[i].error, stdout);
+      }
+   }
+
+   ralloc_free(annotation_info.mem_ctx);
 }
 
 struct gen_disasm *

@@ -55,7 +55,9 @@ ARCHRAST_CXX_SOURCES := \
 COMMON_CXX_SOURCES := \
 	rasterizer/common/formats.cpp \
 	rasterizer/common/formats.h \
+	rasterizer/common/intrin.h \
 	rasterizer/common/isa.hpp \
+	rasterizer/common/os.cpp \
 	rasterizer/common/os.h \
 	rasterizer/common/rdtsc_buckets.cpp \
 	rasterizer/common/rdtsc_buckets.h \
@@ -63,6 +65,19 @@ COMMON_CXX_SOURCES := \
 	rasterizer/common/rdtsc_buckets_shared.h \
 	rasterizer/common/simd16intrin.h \
 	rasterizer/common/simdintrin.h \
+	rasterizer/common/simdlib.hpp \
+	rasterizer/common/simdlib_128_avx.inl \
+	rasterizer/common/simdlib_128_avx2.inl \
+	rasterizer/common/simdlib_128_avx512.inl \
+	rasterizer/common/simdlib_256_avx.inl \
+	rasterizer/common/simdlib_256_avx2.inl \
+	rasterizer/common/simdlib_256_avx512.inl \
+	rasterizer/common/simdlib_512_avx512.inl \
+	rasterizer/common/simdlib_512_avx512_masks.inl \
+	rasterizer/common/simdlib_512_emu.inl \
+	rasterizer/common/simdlib_512_emu_masks.inl \
+	rasterizer/common/simdlib_interface.hpp \
+	rasterizer/common/simdlib_types.hpp \
 	rasterizer/common/swr_assert.cpp \
 	rasterizer/common/swr_assert.h
 
@@ -71,8 +86,13 @@ CORE_CXX_SOURCES := \
 	rasterizer/core/api.h \
 	rasterizer/core/arena.h \
 	rasterizer/core/backend.cpp \
+	rasterizer/core/backend_clear.cpp \
+	rasterizer/core/backend_sample.cpp \
+	rasterizer/core/backend_singlesample.cpp \
 	rasterizer/core/backend.h \
+	rasterizer/core/backend_impl.h \
 	rasterizer/core/binner.cpp \
+	rasterizer/core/binner.h \
 	rasterizer/core/blend.h \
 	rasterizer/core/clip.cpp \
 	rasterizer/core/clip.h \
@@ -83,20 +103,22 @@ CORE_CXX_SOURCES := \
 	rasterizer/core/format_conversion.h \
 	rasterizer/core/format_traits.h \
 	rasterizer/core/format_types.h \
+	rasterizer/core/format_utils.h \
 	rasterizer/core/frontend.cpp \
 	rasterizer/core/frontend.h \
 	rasterizer/core/knobs.h \
 	rasterizer/core/knobs_init.h \
-	rasterizer/core/multisample.cpp \
 	rasterizer/core/multisample.h \
 	rasterizer/core/pa_avx.cpp \
 	rasterizer/core/pa.h \
 	rasterizer/core/rasterizer.cpp \
 	rasterizer/core/rasterizer.h \
+	rasterizer/core/rasterizer_impl.h \
 	rasterizer/core/rdtsc_core.cpp \
 	rasterizer/core/rdtsc_core.h \
 	rasterizer/core/ringbuffer.h \
 	rasterizer/core/state.h \
+	rasterizer/core/state_funcs.h \
 	rasterizer/core/tessellator.h \
 	rasterizer/core/threads.cpp \
 	rasterizer/core/threads.h \

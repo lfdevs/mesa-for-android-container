@@ -3,7 +3,6 @@ LIBEGL_C_FILES := \
 	main/eglapi.h \
 	main/eglarray.c \
 	main/eglarray.h \
-	main/eglcompiler.h \
 	main/eglconfig.c \
 	main/eglconfig.h \
 	main/eglcontext.c \

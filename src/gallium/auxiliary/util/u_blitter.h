@@ -268,7 +268,8 @@ void util_blitter_default_dst_texture(struct pipe_surface *dst_templ,
  * Helper function to initialize a view for copy_texture_view.
  * The parameters must match copy_texture_view.
  */
-void util_blitter_default_src_texture(struct pipe_sampler_view *src_templ,
+void util_blitter_default_src_texture(struct blitter_context *blitter,
+                                      struct pipe_sampler_view *src_templ,
                                       struct pipe_resource *src,
                                       unsigned srclevel);
 
@@ -503,10 +504,8 @@ static inline void
 util_blitter_save_vertex_buffer_slot(struct blitter_context *blitter,
                                      struct pipe_vertex_buffer *vertex_buffers)
 {
-   pipe_resource_reference(&blitter->saved_vertex_buffer.buffer,
-                           vertex_buffers[blitter->vb_slot].buffer);
-   memcpy(&blitter->saved_vertex_buffer, &vertex_buffers[blitter->vb_slot],
-          sizeof(struct pipe_vertex_buffer));
+   pipe_vertex_buffer_reference(&blitter->saved_vertex_buffer,
+                                &vertex_buffers[blitter->vb_slot]);
 }
 
 static inline void

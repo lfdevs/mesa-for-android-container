@@ -424,14 +424,12 @@
   </enum>
 
   <struct name="3DSTATE_CONSTANT_BODY" length="10">
-    <field name="Constant Buffer 1 Read Length" start="16" end="31" type="uint"/>
-    <field name="Constant Buffer 0 Read Length" start="0" end="15" type="uint"/>
-    <field name="Constant Buffer 3 Read Length" start="48" end="63" type="uint"/>
-    <field name="Constant Buffer 2 Read Length" start="32" end="47" type="uint"/>
-    <field name="Pointer To Constant Buffer 0" start="69" end="127" type="address"/>
-    <field name="Pointer To Constant Buffer 1" start="133" end="191" type="address"/>
-    <field name="Pointer To Constant Buffer 2" start="197" end="255" type="address"/>
-    <field name="Pointer To Constant Buffer 3" start="261" end="319" type="address"/>
+    <group count="4" start="0" size="16">
+      <field name="Read Length" start="0" end="15" type="uint"/>
+    </group>
+    <group count="4" start="64" size="64">
+      <field name="Buffer" start="5" end="63" type="address"/>
+    </group>
   </struct>
 
   <struct name="BINDING_TABLE_EDIT_ENTRY" length="1">
@@ -555,7 +553,7 @@
     <field name="Write Disable Blue" start="0" end="0" type="bool"/>
   </struct>
 
-  <struct name="BLEND_STATE" length="17">
+  <struct name="BLEND_STATE" length="1">
     <field name="Alpha To Coverage Enable" start="31" end="31" type="bool"/>
     <field name="Independent Alpha Blend Enable" start="30" end="30" type="bool"/>
     <field name="Alpha To One Enable" start="29" end="29" type="bool"/>
@@ -565,7 +563,7 @@
     <field name="Color Dither Enable" start="23" end="23" type="bool"/>
     <field name="X Dither Offset" start="21" end="22" type="uint"/>
     <field name="Y Dither Offset" start="19" end="20" type="uint"/>
-    <group count="8" start="32" size="64">
+    <group count="0" start="32" size="64">
       <field name="Entry" start="0" end="63" type="BLEND_STATE_ENTRY"/>
     </group>
   </struct>
@@ -782,10 +780,10 @@
       <value name="Vertical" value="1"/>
     </field>
     <field name="Memory Compression Enable" start="254" end="254" type="bool"/>
-    <field name="Shader Channel Select Red" start="249" end="251" type="uint"/>
-    <field name="Shader Channel Select Green" start="246" end="248" type="uint"/>
-    <field name="Shader Channel Select Blue" start="243" end="245" type="uint"/>
-    <field name="Shader Channel Select Alpha" start="240" end="242" type="uint"/>
+    <field name="Shader Channel Select Red" start="249" end="251" type="Shader Channel Select"/>
+    <field name="Shader Channel Select Green" start="246" end="248" type="Shader Channel Select"/>
+    <field name="Shader Channel Select Blue" start="243" end="245" type="Shader Channel Select"/>
+    <field name="Shader Channel Select Alpha" start="240" end="242" type="Shader Channel Select"/>
     <field name="Resource Min LOD" start="224" end="235" type="u4.8"/>
     <field name="Surface Base Address" start="256" end="319" type="address"/>
     <field name="X Offset for V Plane" start="368" end="381" type="uint"/>
@@ -907,9 +905,9 @@
     </field>
     <field name="Non-normalized Coordinate Enable" start="106" end="106" type="bool"/>
     <field name="Reduction Type Enable" start="105" end="105" type="bool"/>
-    <field name="TCX Address Control Mode" start="102" end="104" type="uint"/>
-    <field name="TCY Address Control Mode" start="99" end="101" type="uint"/>
-    <field name="TCZ Address Control Mode" start="96" end="98" type="uint"/>
+    <field name="TCX Address Control Mode" start="102" end="104" type="Texture Coordinate Mode"/>
+    <field name="TCY Address Control Mode" start="99" end="101" type="Texture Coordinate Mode"/>
+    <field name="TCZ Address Control Mode" start="96" end="98" type="Texture Coordinate Mode"/>
   </struct>
 
   <struct name="SAMPLER_STATE_8X8_AVS_COEFFICIENTS" length="8">
@@ -937,6 +935,69 @@
     <field name="Table 1Y Filter Coefficient[n,2]" start="208" end="215" type="s1.6"/>
     <field name="Table 1Y Filter Coefficient[n,5]" start="232" end="239" type="s1.6"/>
     <field name="Table 1Y Filter Coefficient[n,4]" start="224" end="231" type="s1.6"/>
+  </struct>
+
+  <struct name="MI_MATH_ALU_INSTRUCTION" length="1">
+    <field name="ALU Opcode" start="20" end="31" type="uint" prefix="MI_ALU">
+      <value name="NOOP" value="0x000"/>
+      <value name="LOAD" value="0x080"/>
+      <value name="LOADINV" value="0x480"/>
+      <value name="LOAD0" value="0x081"/>
+      <value name="LOAD1" value="0x481"/>
+      <value name="ADD" value="0x100"/>
+      <value name="SUB" value="0x101"/>
+      <value name="AND" value="0x102"/>
+      <value name="OR" value="0x103"/>
+      <value name="XOR" value="0x104"/>
+      <value name="STORE" value="0x180"/>
+      <value name="STOREINV" value="0x580"/>
+    </field>
+    <field name="Operand 1" start="10" end="19" type="uint" prefix="MI_ALU">
+      <value name="REG0" value="0x00"/>
+      <value name="REG1" value="0x01"/>
+      <value name="REG2" value="0x02"/>
+      <value name="REG3" value="0x03"/>
+      <value name="REG4" value="0x04"/>
+      <value name="REG5" value="0x05"/>
+      <value name="REG6" value="0x06"/>
+      <value name="REG7" value="0x07"/>
+      <value name="REG8" value="0x08"/>
+      <value name="REG9" value="0x09"/>
+      <value name="REG10" value="0x0a"/>
+      <value name="REG11" value="0x0b"/>
+      <value name="REG12" value="0x0c"/>
+      <value name="REG13" value="0x0d"/>
+      <value name="REG14" value="0x0e"/>
+      <value name="REG15" value="0x0f"/>
+      <value name="SRCA" value="0x20"/>
+      <value name="SRCB" value="0x21"/>
+      <value name="ACCU" value="0x31"/>
+      <value name="ZF" value="0x32"/>
+      <value name="CF" value="0x33"/>
+    </field>
+    <field name="Operand 2" start="0" end="9" type="uint" prefix="MI_ALU">
+      <value name="REG0" value="0x00"/>
+      <value name="REG1" value="0x01"/>
+      <value name="REG2" value="0x02"/>
+      <value name="REG3" value="0x03"/>
+      <value name="REG4" value="0x04"/>
+      <value name="REG5" value="0x05"/>
+      <value name="REG6" value="0x06"/>
+      <value name="REG7" value="0x07"/>
+      <value name="REG8" value="0x08"/>
+      <value name="REG9" value="0x09"/>
+      <value name="REG10" value="0x0a"/>
+      <value name="REG11" value="0x0b"/>
+      <value name="REG12" value="0x0c"/>
+      <value name="REG13" value="0x0d"/>
+      <value name="REG14" value="0x0e"/>
+      <value name="REG15" value="0x0f"/>
+      <value name="SRCA" value="0x20"/>
+      <value name="SRCB" value="0x21"/>
+      <value name="ACCU" value="0x31"/>
+      <value name="ZF" value="0x32"/>
+      <value name="CF" value="0x33"/>
+    </field>
   </struct>
 
   <instruction name="3DPRIMITIVE" bias="2" length="7">
@@ -1349,7 +1410,7 @@
     </field>
     <field name="Compute W Coordinate Enable" start="226" end="226" type="bool"/>
     <field name="Cache Disable" start="225" end="225" type="bool"/>
-    <field name="Function Enable" start="224" end="224" type="bool"/>
+    <field name="Enable" start="224" end="224" type="bool"/>
     <field name="Vertex URB Entry Output Read Offset" start="277" end="282" type="uint"/>
     <field name="Vertex URB Entry Output Length" start="272" end="276" type="uint"/>
     <field name="User Clip Distance Clip Test Enable Bitmask" start="264" end="271" type="uint"/>
@@ -1548,7 +1609,7 @@
       <value name="TRAILING" value="1"/>
     </field>
     <field name="Discard Adjacency" start="225" end="225" type="bool"/>
-    <field name="Function Enable" start="224" end="224" type="bool"/>
+    <field name="Enable" start="224" end="224" type="bool"/>
     <field name="Control Data Format" start="287" end="287" type="uint">
       <value name="CUT" value="0"/>
       <value name="SID" value="1"/>
@@ -1598,7 +1659,7 @@
     </field>
     <field name="Illegal Opcode Exception Enable" start="45" end="45" type="bool"/>
     <field name="Software Exception Enable" start="44" end="44" type="bool"/>
-    <field name="Function Enable" start="95" end="95" type="bool"/>
+    <field name="Enable" start="95" end="95" type="bool"/>
     <field name="Statistics Enable" start="93" end="93" type="bool"/>
     <field name="Maximum Number of Threads" start="72" end="80" type="uint"/>
     <field name="Instance Count" start="64" end="67" type="uint"/>
@@ -1633,6 +1694,7 @@
       <value name="DWORD" value="2"/>
     </field>
     <field name="Memory Object Control State" start="32" end="38" type="MEMORY_OBJECT_CONTROL_STATE"/>
+    <field name="IndexBufferMOCS" start="32" end="38" type="uint"/>
     <field name="Buffer Starting Address" start="64" end="127" type="address"/>
     <field name="Buffer Size" start="128" end="159" type="uint"/>
   </instruction>
@@ -2110,7 +2172,12 @@
     <field name="Point Sprite Texture Coordinate Enable" start="64" end="95" type="uint"/>
     <field name="Constant Interpolation Enable" start="96" end="127" type="uint"/>
     <group count="32" start="128" size="2">
-      <field name="Attribute Active Component Format" start="0" end="1" type="uint"/>
+      <field name="Attribute Active Component Format" start="0" end="1" type="uint" prefix="ACTIVE_COMPONENT">
+         <value name="DISABLED" value="0"/>
+         <value name="XY" value="1"/>
+         <value name="XYZ" value="2"/>
+         <value name="XYZW" value="3"/>
+      </field>
     </group>
   </instruction>
 
@@ -2178,6 +2245,7 @@
     <field name="SO Buffer Enable" start="63" end="63" type="bool"/>
     <field name="SO Buffer Index" start="61" end="62" type="uint"/>
     <field name="SO Buffer Object Control State" start="54" end="60" type="MEMORY_OBJECT_CONTROL_STATE"/>
+    <field name="SO Buffer MOCS" start="54" end="60" type="uint"/>
     <field name="Stream Offset Write Enable" start="53" end="53" type="bool"/>
     <field name="Stream Output Buffer Offset Address Enable" start="52" end="52" type="bool"/>
     <field name="Surface Base Address" start="66" end="111" type="address"/>
@@ -2516,7 +2584,7 @@
     <field name="Statistics Enable" start="234" end="234" type="bool"/>
     <field name="SIMD8 Dispatch Enable" start="226" end="226" type="bool"/>
     <field name="Vertex Cache Disable" start="225" end="225" type="bool"/>
-    <field name="Function Enable" start="224" end="224" type="bool"/>
+    <field name="Enable" start="224" end="224" type="bool"/>
     <field name="Vertex URB Entry Output Read Offset" start="277" end="282" type="uint"/>
     <field name="Vertex URB Entry Output Length" start="272" end="276" type="uint"/>
     <field name="User Clip Distance Clip Test Enable Bitmask" start="264" end="271" type="uint"/>
@@ -3103,10 +3171,8 @@
     <field name="Command Type" start="29" end="31" type="uint" default="0"/>
     <field name="MI Command Opcode" start="23" end="28" type="uint" default="26"/>
     <field name="DWord Length" start="0" end="7" type="uint" default="0"/>
-    <field name="ALU INSTRUCTION 1" start="32" end="63" type="uint"/>
-    <field name="ALU INSTRUCTION 2" start="64" end="95" type="uint"/>
-    <group count="0" start="96" size="32">
-      <field name="ALU INSTRUCTION n" start="0" end="31" type="uint"/>
+    <group count="0" start="32" size="32">
+      <field name="Instruction" start="0" end="31" type="MI_MATH_ALU_INSTRUCTION"/>
     </group>
   </instruction>
 
@@ -3612,6 +3678,36 @@
     <field name="Sampler Set Remapping for 3D Disable Mask" start="27" end="27" type="bool"/>
     <field name="MSAA Compression Plane Number Threshold for eLLC Mask" start="28" end="30" type="uint"/>
     <field name="Sampler L2 Disable Mask" start="31" end="31" type="bool"/>
+  </register>
+
+  <register name="CACHE_MODE_1" length="1" num="0x7004">
+    <field name="Partial Resolve Disable In VC" start="1" end="1" type="bool"/>
+    <field name="RCZ Read after expansion control fix 2" start="2" end="2" type="bool"/>
+    <field name="Depth Read Hit Write-Only Optimization Disable" start="3" end="3" type="bool"/>
+    <field name="Float Blend Optimization Enable" start="4" end="4" type="bool"/>
+    <field name="MCS Cache Disable" start="5" end="5" type="bool"/>
+    <field name="4X4 RCPFE-STC Optimization Disable" start="6" end="6" type="bool"/>
+    <field name="Sampler Cache Set XOR selection" start="7" end="8" type="uint"/>
+    <field name="MSC RAW Hazard Avoidance Bit" start="9" end="9" type="bool"/>
+    <field name="NP PMA Fix Enable" start="11" end="11" type="uint"/>
+    <field name="HIZ Eviction Policy" start="12" end="12" type="uint"/>
+    <field name="NP Early Z Fails Disable" start="13" end="13" type="uint"/>
+    <field name="Blend Optimization Fix Disable" start="14" end="14" type="bool"/>
+    <field name="Color Compression Disable" start="15" end="15" type="bool"/>
+
+    <field name="Partial Resolve Disable In VC Mask" start="17" end="17" type="bool"/>
+    <field name="RCZ Read after expansion control fix 2 Mask" start="18" end="18" type="bool"/>
+    <field name="Depth Read Hit Write-Only Optimization Disable Mask" start="19" end="19" type="bool"/>
+    <field name="Float Blend Optimization Enable Mask" start="20" end="20" type="bool"/>
+    <field name="MCS Cache Disable Mask" start="21" end="21" type="bool"/>
+    <field name="4X4 RCPFE-STC Optimization Disable Mask" start="22" end="22" type="bool"/>
+    <field name="Sampler Cache Set XOR selection Mask" start="23" end="24" type="uint"/>
+    <field name="MSC RAW Hazard Avoidance Bit Mask" start="25" end="25" type="bool"/>
+    <field name="NP PMA Fix Enable Mask" start="27" end="27" type="bool"/>
+    <field name="HIZ Eviction Policy Mask" start="28" end="28" type="bool"/>
+    <field name="NP Early Z Fails Disable Mask" start="29" end="29" type="bool"/>
+    <field name="Blend Optimization Fix Disable Mask" start="30" end="30" type="bool"/>
+    <field name="Color Compression Disable Mask" start="31" end="31" type="bool"/>
   </register>
 
   <register name="GFX_ARB_ERROR_RPT" length="1" num="0x40a0">

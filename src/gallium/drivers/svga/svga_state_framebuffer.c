@@ -34,6 +34,7 @@
 #include "svga_debug.h"
 #include "svga_screen.h"
 #include "svga_surface.h"
+#include "svga_resource_texture.h"
 
 
 /*
@@ -82,6 +83,13 @@ emit_fb_vgpu9(struct svga_context *svga)
 
          pipe_surface_reference(&hw->cbufs[i], curr->cbufs[i]);
       }
+
+      /* Set the rendered-to flag */
+      struct pipe_surface *s = curr->cbufs[i];
+      if (s) {
+         svga_set_texture_rendered_to(svga_texture(s->texture),
+                                      s->u.tex.first_layer, s->u.tex.level);
+      }
    }
 
    if ((curr->zsbuf != hw->zsbuf) || (reemit && hw->zsbuf)) {
@@ -107,6 +115,13 @@ emit_fb_vgpu9(struct svga_context *svga)
       }
 
       pipe_surface_reference(&hw->zsbuf, curr->zsbuf);
+
+      /* Set the rendered-to flag */
+      struct pipe_surface *s = curr->zsbuf;
+      if (s) {
+         svga_set_texture_rendered_to(svga_texture(s->texture),
+                                      s->u.tex.first_layer, s->u.tex.level);
+      }
    }
 
    return PIPE_OK;
@@ -195,14 +210,19 @@ emit_fb_vgpu10(struct svga_context *svga)
     */
    for (i = 0; i < num_color; i++) {
       if (curr->cbufs[i]) {
-         rtv[i] = svga_validate_surface_view(svga,
-                                             svga_surface(curr->cbufs[i]));
+         struct pipe_surface *s = curr->cbufs[i];
+
+         rtv[i] = svga_validate_surface_view(svga, svga_surface(s));
          if (rtv[i] == NULL) {
             return PIPE_ERROR_OUT_OF_MEMORY;
          }
 
          assert(svga_surface(rtv[i])->view_id != SVGA3D_INVALID_ID);
          last_rtv = i;
+
+         /* Set the rendered-to flag */
+         svga_set_texture_rendered_to(svga_texture(s->texture),
+                                      s->u.tex.first_layer, s->u.tex.level);
       }
       else {
          rtv[i] = NULL;
@@ -211,19 +231,25 @@ emit_fb_vgpu10(struct svga_context *svga)
 
    /* Setup depth stencil view */
    if (curr->zsbuf) {
+      struct pipe_surface *s = curr->zsbuf;
+
       dsv = svga_validate_surface_view(svga, svga_surface(curr->zsbuf));
       if (!dsv) {
          return PIPE_ERROR_OUT_OF_MEMORY;
       }
+
+      /* Set the rendered-to flag */
+      svga_set_texture_rendered_to(svga_texture(s->texture),
+                                      s->u.tex.first_layer, s->u.tex.level);
    }
    else {
       dsv = NULL;
    }
 
    /* avoid emitting redundant SetRenderTargets command */
-   if ((num_color != svga->state.hw_draw.num_rendertargets) ||
-       (dsv != svga->state.hw_draw.dsv) ||
-       memcmp(rtv, svga->state.hw_draw.rtv, num_color * sizeof(rtv[0]))) {
+   if ((num_color != svga->state.hw_clear.num_rendertargets) ||
+       (dsv != svga->state.hw_clear.dsv) ||
+       memcmp(rtv, svga->state.hw_clear.rtv, num_color * sizeof(rtv[0]))) {
 
       ret = SVGA3D_vgpu10_SetRenderTargets(svga->swc, num_color, rtv, dsv);
       if (ret != PIPE_OK)
@@ -232,9 +258,9 @@ emit_fb_vgpu10(struct svga_context *svga)
       /* number of render targets sent to the device, not including trailing
        * unbound render targets.
        */
-      svga->state.hw_draw.num_rendertargets = last_rtv + 1;
-      svga->state.hw_draw.dsv = dsv;
-      memcpy(svga->state.hw_draw.rtv, rtv, num_color * sizeof(rtv[0]));
+      svga->state.hw_clear.num_rendertargets = last_rtv + 1;
+      svga->state.hw_clear.dsv = dsv;
+      memcpy(svga->state.hw_clear.rtv, rtv, num_color * sizeof(rtv[0]));
     
       for (i = 0; i < ss->max_color_buffers; i++) {
          if (hw->cbufs[i] != curr->cbufs[i]) {
@@ -309,7 +335,7 @@ svga_reemit_framebuffer_bindings(struct svga_context *svga)
 enum pipe_error
 svga_rebind_framebuffer_bindings(struct svga_context *svga)
 {
-   struct svga_hw_draw_state *hw = &svga->state.hw_draw;
+   struct svga_hw_clear_state *hw = &svga->state.hw_clear;
    unsigned i;
    enum pipe_error ret;
 

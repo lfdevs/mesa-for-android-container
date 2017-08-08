@@ -27,6 +27,7 @@
 #include "blorp_priv.h"
 #include "common/gen_device_info.h"
 #include "common/gen_sample_positions.h"
+#include "genxml/gen_macros.h"
 
 /**
  * This file provides the blorp pipeline setup and execution functionality.
@@ -59,6 +60,11 @@ static void *
 blorp_alloc_vertex_buffer(struct blorp_batch *batch, uint32_t size,
                           struct blorp_address *addr);
 
+#if GEN_GEN >= 8
+static struct blorp_address
+blorp_get_workaround_page(struct blorp_batch *batch);
+#endif
+
 static void
 blorp_alloc_binding_table(struct blorp_batch *batch, unsigned num_entries,
                           unsigned state_size, unsigned state_alignment,
@@ -73,11 +79,14 @@ blorp_surface_reloc(struct blorp_batch *batch, uint32_t ss_offset,
                     struct blorp_address address, uint32_t delta);
 
 static void
-blorp_emit_urb_config(struct blorp_batch *batch, unsigned vs_entry_size);
+blorp_emit_urb_config(struct blorp_batch *batch,
+                      unsigned vs_entry_size, unsigned sf_entry_size);
+
+static void
+blorp_emit_pipeline(struct blorp_batch *batch,
+                    const struct blorp_params *params);
 
 /***** BEGIN blorp_exec implementation ******/
-
-#include "genxml/gen_macros.h"
 
 static uint64_t
 _blorp_combine_address(struct blorp_batch *batch, void *location,
@@ -180,7 +189,10 @@ emit_urb_config(struct blorp_batch *batch,
    /* The URB size is expressed in units of 64 bytes (512 bits) */
    const unsigned vs_entry_size = DIV_ROUND_UP(total_needed, 64);
 
-   blorp_emit_urb_config(batch, vs_entry_size);
+   const unsigned sf_entry_size =
+      params->sf_prog_data ? params->sf_prog_data->urb_entry_size : 0;
+
+   blorp_emit_urb_config(batch, vs_entry_size, sf_entry_size);
 }
 
 static void
@@ -256,32 +268,42 @@ blorp_emit_vertex_buffers(struct blorp_batch *batch,
    blorp_emit_vertex_data(batch, params, &vb[0].BufferStartingAddress, &size);
    vb[0].VertexBufferIndex = 0;
    vb[0].BufferPitch = 3 * sizeof(float);
+#if GEN_GEN >= 6
    vb[0].VertexBufferMOCS = batch->blorp->mocs.vb;
+#endif
 #if GEN_GEN >= 7
    vb[0].AddressModifyEnable = true;
 #endif
 #if GEN_GEN >= 8
    vb[0].BufferSize = size;
-#else
+#elif GEN_GEN >= 5
    vb[0].BufferAccessType = VERTEXDATA;
    vb[0].EndAddress = vb[0].BufferStartingAddress;
    vb[0].EndAddress.offset += size - 1;
+#elif GEN_GEN == 4
+   vb[0].BufferAccessType = VERTEXDATA;
+   vb[0].MaxIndex = 2;
 #endif
 
    blorp_emit_input_varying_data(batch, params,
                                  &vb[1].BufferStartingAddress, &size);
    vb[1].VertexBufferIndex = 1;
    vb[1].BufferPitch = 0;
+#if GEN_GEN >= 6
    vb[1].VertexBufferMOCS = batch->blorp->mocs.vb;
+#endif
 #if GEN_GEN >= 7
    vb[1].AddressModifyEnable = true;
 #endif
 #if GEN_GEN >= 8
    vb[1].BufferSize = size;
-#else
+#elif GEN_GEN >= 5
    vb[1].BufferAccessType = INSTANCEDATA;
    vb[1].EndAddress = vb[1].BufferStartingAddress;
    vb[1].EndAddress.offset += size - 1;
+#elif GEN_GEN == 4
+   vb[1].BufferAccessType = INSTANCEDATA;
+   vb[1].MaxIndex = 0;
 #endif
 
    const unsigned num_dwords = 1 + GENX(VERTEX_BUFFER_STATE_length) * 2;
@@ -301,7 +323,8 @@ blorp_emit_vertex_elements(struct blorp_batch *batch,
 {
    const unsigned num_varyings =
       params->wm_prog_data ? params->wm_prog_data->num_varying_inputs : 0;
-   const unsigned num_elements = 2 + num_varyings;
+   bool need_ndc = batch->blorp->compiler->devinfo->gen <= 5;
+   const unsigned num_elements = 2 + need_ndc + num_varyings;
 
    struct GENX(VERTEX_ELEMENT_STATE) ve[num_elements];
    memset(ve, 0, num_elements * sizeof(*ve));
@@ -352,42 +375,84 @@ blorp_emit_vertex_elements(struct blorp_batch *batch,
     *
     * See the vertex element setup below.
     */
-   ve[0].VertexBufferIndex = 1;
-   ve[0].Valid = true;
-   ve[0].SourceElementFormat = ISL_FORMAT_R32G32B32A32_FLOAT;
-   ve[0].SourceElementOffset = 0;
-   ve[0].Component0Control = VFCOMP_STORE_SRC;
+   unsigned slot = 0;
 
-   /* From Gen8 onwards hardware is no more instructed to overwrite components
-    * using an element specifier. Instead one has separate 3DSTATE_VF_SGVS
-    * (System Generated Value Setup) state packet for it.
-    */
+   ve[slot] = (struct GENX(VERTEX_ELEMENT_STATE)) {
+      .VertexBufferIndex = 1,
+      .Valid = true,
+      .SourceElementFormat = ISL_FORMAT_R32G32B32A32_FLOAT,
+      .SourceElementOffset = 0,
+      .Component0Control = VFCOMP_STORE_SRC,
+
+      /* From Gen8 onwards hardware is no more instructed to overwrite
+       * components using an element specifier. Instead one has separate
+       * 3DSTATE_VF_SGVS (System Generated Value Setup) state packet for it.
+       */
 #if GEN_GEN >= 8
-   ve[0].Component1Control = VFCOMP_STORE_0;
+      .Component1Control = VFCOMP_STORE_0,
+#elif GEN_GEN >= 5
+      .Component1Control = VFCOMP_STORE_IID,
 #else
-   ve[0].Component1Control = VFCOMP_STORE_IID;
+      .Component1Control = VFCOMP_STORE_0,
 #endif
-   ve[0].Component2Control = VFCOMP_STORE_SRC;
-   ve[0].Component3Control = VFCOMP_STORE_SRC;
+      .Component2Control = VFCOMP_STORE_SRC,
+      .Component3Control = VFCOMP_STORE_SRC,
+#if GEN_GEN <= 5
+      .DestinationElementOffset = slot * 4,
+#endif
+   };
+   slot++;
 
-   ve[1].VertexBufferIndex = 0;
-   ve[1].Valid = true;
-   ve[1].SourceElementFormat = ISL_FORMAT_R32G32B32_FLOAT;
-   ve[1].SourceElementOffset = 0;
-   ve[1].Component0Control = VFCOMP_STORE_SRC;
-   ve[1].Component1Control = VFCOMP_STORE_SRC;
-   ve[1].Component2Control = VFCOMP_STORE_SRC;
-   ve[1].Component3Control = VFCOMP_STORE_1_FP;
+#if GEN_GEN <= 5
+   /* On Iron Lake and earlier, a native device coordinates version of the
+    * position goes right after the normal VUE header and before position.
+    * Since w == 1 for all of our coordinates, this is just a copy of the
+    * position.
+    */
+   ve[slot] = (struct GENX(VERTEX_ELEMENT_STATE)) {
+      .VertexBufferIndex = 0,
+      .Valid = true,
+      .SourceElementFormat = ISL_FORMAT_R32G32B32_FLOAT,
+      .SourceElementOffset = 0,
+      .Component0Control = VFCOMP_STORE_SRC,
+      .Component1Control = VFCOMP_STORE_SRC,
+      .Component2Control = VFCOMP_STORE_SRC,
+      .Component3Control = VFCOMP_STORE_1_FP,
+      .DestinationElementOffset = slot * 4,
+   };
+   slot++;
+#endif
+
+   ve[slot] = (struct GENX(VERTEX_ELEMENT_STATE)) {
+      .VertexBufferIndex = 0,
+      .Valid = true,
+      .SourceElementFormat = ISL_FORMAT_R32G32B32_FLOAT,
+      .SourceElementOffset = 0,
+      .Component0Control = VFCOMP_STORE_SRC,
+      .Component1Control = VFCOMP_STORE_SRC,
+      .Component2Control = VFCOMP_STORE_SRC,
+      .Component3Control = VFCOMP_STORE_1_FP,
+#if GEN_GEN <= 5
+      .DestinationElementOffset = slot * 4,
+#endif
+   };
+   slot++;
 
    for (unsigned i = 0; i < num_varyings; ++i) {
-      ve[i + 2].VertexBufferIndex = 1;
-      ve[i + 2].Valid = true;
-      ve[i + 2].SourceElementFormat = ISL_FORMAT_R32G32B32A32_FLOAT;
-      ve[i + 2].SourceElementOffset = 16 + i * 4 * sizeof(float);
-      ve[i + 2].Component0Control = VFCOMP_STORE_SRC;
-      ve[i + 2].Component1Control = VFCOMP_STORE_SRC;
-      ve[i + 2].Component2Control = VFCOMP_STORE_SRC;
-      ve[i + 2].Component3Control = VFCOMP_STORE_SRC;
+      ve[slot] = (struct GENX(VERTEX_ELEMENT_STATE)) {
+         .VertexBufferIndex = 1,
+         .Valid = true,
+         .SourceElementFormat = ISL_FORMAT_R32G32B32A32_FLOAT,
+         .SourceElementOffset = 16 + i * 4 * sizeof(float),
+         .Component0Control = VFCOMP_STORE_SRC,
+         .Component1Control = VFCOMP_STORE_SRC,
+         .Component2Control = VFCOMP_STORE_SRC,
+         .Component3Control = VFCOMP_STORE_SRC,
+#if GEN_GEN <= 5
+         .DestinationElementOffset = slot * 4,
+#endif
+      };
+      slot++;
    }
 
    const unsigned num_dwords =
@@ -424,6 +489,79 @@ blorp_emit_vertex_elements(struct blorp_batch *batch,
 #endif
 }
 
+/* 3DSTATE_VIEWPORT_STATE_POINTERS */
+static uint32_t
+blorp_emit_cc_viewport(struct blorp_batch *batch,
+                       const struct blorp_params *params)
+{
+   uint32_t cc_vp_offset;
+   blorp_emit_dynamic(batch, GENX(CC_VIEWPORT), vp, 32, &cc_vp_offset) {
+      vp.MinimumDepth = 0.0;
+      vp.MaximumDepth = 1.0;
+   }
+
+#if GEN_GEN >= 7
+   blorp_emit(batch, GENX(3DSTATE_VIEWPORT_STATE_POINTERS_CC), vsp) {
+      vsp.CCViewportPointer = cc_vp_offset;
+   }
+#elif GEN_GEN == 6
+   blorp_emit(batch, GENX(3DSTATE_VIEWPORT_STATE_POINTERS), vsp) {
+      vsp.CCViewportStateChange = true;
+      vsp.PointertoCC_VIEWPORT = cc_vp_offset;
+   }
+#endif
+
+   return cc_vp_offset;
+}
+
+static uint32_t
+blorp_emit_sampler_state(struct blorp_batch *batch,
+                         const struct blorp_params *params)
+{
+   uint32_t offset;
+   blorp_emit_dynamic(batch, GENX(SAMPLER_STATE), sampler, 32, &offset) {
+      sampler.MipModeFilter = MIPFILTER_NONE;
+      sampler.MagModeFilter = MAPFILTER_LINEAR;
+      sampler.MinModeFilter = MAPFILTER_LINEAR;
+      sampler.MinLOD = 0;
+      sampler.MaxLOD = 0;
+      sampler.TCXAddressControlMode = TCM_CLAMP;
+      sampler.TCYAddressControlMode = TCM_CLAMP;
+      sampler.TCZAddressControlMode = TCM_CLAMP;
+      sampler.MaximumAnisotropy = RATIO21;
+      sampler.RAddressMinFilterRoundingEnable = true;
+      sampler.RAddressMagFilterRoundingEnable = true;
+      sampler.VAddressMinFilterRoundingEnable = true;
+      sampler.VAddressMagFilterRoundingEnable = true;
+      sampler.UAddressMinFilterRoundingEnable = true;
+      sampler.UAddressMagFilterRoundingEnable = true;
+#if GEN_GEN > 6
+      sampler.NonnormalizedCoordinateEnable = true;
+#endif
+   }
+
+#if GEN_GEN >= 7
+   blorp_emit(batch, GENX(3DSTATE_SAMPLER_STATE_POINTERS_PS), ssp) {
+      ssp.PointertoPSSamplerState = offset;
+   }
+#elif GEN_GEN == 6
+   blorp_emit(batch, GENX(3DSTATE_SAMPLER_STATE_POINTERS), ssp) {
+      ssp.VSSamplerStateChange = true;
+      ssp.GSSamplerStateChange = true;
+      ssp.PSSamplerStateChange = true;
+      ssp.PointertoPSSamplerState = offset;
+   }
+#endif
+
+   return offset;
+}
+
+/* What follows is the code for setting up a "pipeline" on Sandy Bridge and
+ * later hardware.  This file will be included by i965 for gen4-5 as well, so
+ * this code is guarded by GEN_GEN >= 6.
+ */
+#if GEN_GEN >= 6
+
 static void
 blorp_emit_vs_config(struct blorp_batch *batch,
                      const struct blorp_params *params)
@@ -432,7 +570,7 @@ blorp_emit_vs_config(struct blorp_batch *batch,
 
    blorp_emit(batch, GENX(3DSTATE_VS), vs) {
       if (vs_prog_data) {
-         vs.FunctionEnable = true;
+         vs.Enable = true;
 
          vs.KernelStartPointer = params->vs_prog_kernel;
 
@@ -781,96 +919,38 @@ blorp_emit_ps_config(struct blorp_batch *batch,
 #endif /* GEN_GEN */
 }
 
-static const uint32_t isl_to_gen_ds_surftype [] = {
-#if GEN_GEN >= 9
-   /* From the SKL PRM, "3DSTATE_DEPTH_STENCIL::SurfaceType":
-    *
-    *    "If depth/stencil is enabled with 1D render target, depth/stencil
-    *    surface type needs to be set to 2D surface type and height set to 1.
-    *    Depth will use (legacy) TileY and stencil will use TileW. For this
-    *    case only, the Surface Type of the depth buffer can be 2D while the
-    *    Surface Type of the render target(s) are 1D, representing an
-    *    exception to a programming note above.
-    */
-   [ISL_SURF_DIM_1D] = SURFTYPE_2D,
-#else
-   [ISL_SURF_DIM_1D] = SURFTYPE_1D,
-#endif
-   [ISL_SURF_DIM_2D] = SURFTYPE_2D,
-   [ISL_SURF_DIM_3D] = SURFTYPE_3D,
-};
-
-static void
-blorp_emit_depth_stencil_config(struct blorp_batch *batch,
-                                const struct blorp_params *params)
-{
-   const struct isl_device *isl_dev = batch->blorp->isl_dev;
-
-   uint32_t *dw = blorp_emit_dwords(batch, isl_dev->ds.size / 4);
-   if (dw == NULL)
-      return;
-
-   struct isl_depth_stencil_hiz_emit_info info = {
-#if GEN_GEN >= 7
-      .mocs = 1, /* GEN7_MOCS_L3 */
-#else
-      .mocs = 0,
-#endif
-   };
-
-   if (params->depth.enabled) {
-      info.view = &params->depth.view;
-   } else if (params->stencil.enabled) {
-      info.view = &params->stencil.view;
-   }
-
-   if (params->depth.enabled) {
-      info.depth_surf = &params->depth.surf;
-
-      info.depth_address =
-         blorp_emit_reloc(batch, dw + isl_dev->ds.depth_offset / 4,
-                          params->depth.addr, 0);
-
-      info.hiz_usage = params->depth.aux_usage;
-      if (info.hiz_usage == ISL_AUX_USAGE_HIZ) {
-         info.hiz_surf = &params->depth.aux_surf;
-
-         info.hiz_address =
-            blorp_emit_reloc(batch, dw + isl_dev->ds.hiz_offset / 4,
-                             params->depth.aux_addr, 0);
-
-         info.depth_clear_value = params->depth.clear_color.u32[0];
-      }
-   }
-
-   if (params->stencil.enabled) {
-      info.stencil_surf = &params->stencil.surf;
-
-      info.stencil_address =
-         blorp_emit_reloc(batch, dw + isl_dev->ds.stencil_offset / 4,
-                          params->stencil.addr, 0);
-   }
-
-   isl_emit_depth_stencil_hiz_s(isl_dev, dw, &info);
-}
-
 static uint32_t
 blorp_emit_blend_state(struct blorp_batch *batch,
                        const struct blorp_params *params)
 {
-   uint32_t offset;
-   blorp_emit_dynamic(batch, GENX(BLEND_STATE), blend, 64, &offset) {
-      for (unsigned i = 0; i < params->num_draw_buffers; ++i) {
-         blend.Entry[i].PreBlendColorClampEnable = true;
-         blend.Entry[i].PostBlendColorClampEnable = true;
-         blend.Entry[i].ColorClampRange = COLORCLAMP_RTFORMAT;
+   struct GENX(BLEND_STATE) blend;
+   memset(&blend, 0, sizeof(blend));
 
-         blend.Entry[i].WriteDisableRed = params->color_write_disable[0];
-         blend.Entry[i].WriteDisableGreen = params->color_write_disable[1];
-         blend.Entry[i].WriteDisableBlue = params->color_write_disable[2];
-         blend.Entry[i].WriteDisableAlpha = params->color_write_disable[3];
-      }
+   uint32_t offset;
+   int size = GENX(BLEND_STATE_length) * 4;
+   size += GENX(BLEND_STATE_ENTRY_length) * 4 * params->num_draw_buffers;
+   uint32_t *state = blorp_alloc_dynamic_state(batch, size, 64, &offset);
+   uint32_t *pos = state;
+
+   GENX(BLEND_STATE_pack)(NULL, pos, &blend);
+   pos += GENX(BLEND_STATE_length);
+
+   for (unsigned i = 0; i < params->num_draw_buffers; ++i) {
+      struct GENX(BLEND_STATE_ENTRY) entry = {
+         .PreBlendColorClampEnable = true,
+         .PostBlendColorClampEnable = true,
+         .ColorClampRange = COLORCLAMP_RTFORMAT,
+
+         .WriteDisableRed = params->color_write_disable[0],
+         .WriteDisableGreen = params->color_write_disable[1],
+         .WriteDisableBlue = params->color_write_disable[2],
+         .WriteDisableAlpha = params->color_write_disable[3],
+      };
+      GENX(BLEND_STATE_ENTRY_pack)(NULL, pos, &entry);
+      pos += GENX(BLEND_STATE_ENTRY_length);
    }
+
+   blorp_flush_range(batch, state, size);
 
 #if GEN_GEN >= 7
    blorp_emit(batch, GENX(3DSTATE_BLEND_STATE_POINTERS), sp) {
@@ -992,9 +1072,141 @@ blorp_emit_depth_stencil_state(struct blorp_batch *batch,
 }
 
 static void
+blorp_emit_3dstate_multisample(struct blorp_batch *batch,
+                               const struct blorp_params *params)
+{
+   blorp_emit(batch, GENX(3DSTATE_MULTISAMPLE), ms) {
+      ms.NumberofMultisamples       = __builtin_ffs(params->num_samples) - 1;
+
+#if GEN_GEN >= 8
+      /* The PRM says that this bit is valid only for DX9:
+       *
+       *    SW can choose to set this bit only for DX9 API. DX10/OGL API's
+       *    should not have any effect by setting or not setting this bit.
+       */
+      ms.PixelPositionOffsetEnable  = false;
+#elif GEN_GEN >= 7
+
+      switch (params->num_samples) {
+      case 1:
+         GEN_SAMPLE_POS_1X(ms.Sample);
+         break;
+      case 2:
+         GEN_SAMPLE_POS_2X(ms.Sample);
+         break;
+      case 4:
+         GEN_SAMPLE_POS_4X(ms.Sample);
+         break;
+      case 8:
+         GEN_SAMPLE_POS_8X(ms.Sample);
+         break;
+      default:
+         break;
+      }
+#else
+      GEN_SAMPLE_POS_4X(ms.Sample);
+#endif
+      ms.PixelLocation              = CENTER;
+   }
+}
+
+static void
+blorp_emit_pipeline(struct blorp_batch *batch,
+                    const struct blorp_params *params)
+{
+   uint32_t blend_state_offset = 0;
+   uint32_t color_calc_state_offset;
+   uint32_t depth_stencil_state_offset;
+
+   emit_urb_config(batch, params);
+
+   if (params->wm_prog_data) {
+      blend_state_offset = blorp_emit_blend_state(batch, params);
+   }
+   color_calc_state_offset = blorp_emit_color_calc_state(batch, params);
+   depth_stencil_state_offset = blorp_emit_depth_stencil_state(batch, params);
+
+#if GEN_GEN == 6
+   /* 3DSTATE_CC_STATE_POINTERS
+    *
+    * The pointer offsets are relative to
+    * CMD_STATE_BASE_ADDRESS.DynamicStateBaseAddress.
+    *
+    * The HiZ op doesn't use BLEND_STATE or COLOR_CALC_STATE.
+    *
+    * The dynamic state emit helpers emit their own STATE_POINTERS packets on
+    * gen7+.  However, on gen6 and earlier, they're all lumpped together in
+    * one CC_STATE_POINTERS packet so we have to emit that here.
+    */
+   blorp_emit(batch, GENX(3DSTATE_CC_STATE_POINTERS), cc) {
+      cc.BLEND_STATEChange = true;
+      cc.ColorCalcStatePointerValid = true;
+      cc.DEPTH_STENCIL_STATEChange = true;
+      cc.PointertoBLEND_STATE = blend_state_offset;
+      cc.ColorCalcStatePointer = color_calc_state_offset;
+      cc.PointertoDEPTH_STENCIL_STATE = depth_stencil_state_offset;
+   }
+#else
+   (void)blend_state_offset;
+   (void)color_calc_state_offset;
+   (void)depth_stencil_state_offset;
+#endif
+
+   blorp_emit(batch, GENX(3DSTATE_CONSTANT_VS), vs);
+#if GEN_GEN >= 7
+   blorp_emit(batch, GENX(3DSTATE_CONSTANT_HS), hs);
+   blorp_emit(batch, GENX(3DSTATE_CONSTANT_DS), DS);
+#endif
+   blorp_emit(batch, GENX(3DSTATE_CONSTANT_GS), gs);
+   blorp_emit(batch, GENX(3DSTATE_CONSTANT_PS), ps);
+
+   if (params->src.enabled)
+      blorp_emit_sampler_state(batch, params);
+
+   blorp_emit_3dstate_multisample(batch, params);
+
+   blorp_emit(batch, GENX(3DSTATE_SAMPLE_MASK), mask) {
+      mask.SampleMask = (1 << params->num_samples) - 1;
+   }
+
+   /* From the BSpec, 3D Pipeline > Geometry > Vertex Shader > State,
+    * 3DSTATE_VS, Dword 5.0 "VS Function Enable":
+    *
+    *   [DevSNB] A pipeline flush must be programmed prior to a
+    *   3DSTATE_VS command that causes the VS Function Enable to
+    *   toggle. Pipeline flush can be executed by sending a PIPE_CONTROL
+    *   command with CS stall bit set and a post sync operation.
+    *
+    * We've already done one at the start of the BLORP operation.
+    */
+   blorp_emit_vs_config(batch, params);
+#if GEN_GEN >= 7
+   blorp_emit(batch, GENX(3DSTATE_HS), hs);
+   blorp_emit(batch, GENX(3DSTATE_TE), te);
+   blorp_emit(batch, GENX(3DSTATE_DS), DS);
+   blorp_emit(batch, GENX(3DSTATE_STREAMOUT), so);
+#endif
+   blorp_emit(batch, GENX(3DSTATE_GS), gs);
+
+   blorp_emit(batch, GENX(3DSTATE_CLIP), clip) {
+      clip.PerspectiveDivideDisable = true;
+   }
+
+   blorp_emit_sf_config(batch, params);
+   blorp_emit_ps_config(batch, params);
+
+   blorp_emit_cc_viewport(batch, params);
+}
+
+/******** This is the end of the pipeline setup code ********/
+
+#endif /* GEN_GEN >= 6 */
+
+static void
 blorp_emit_surface_state(struct blorp_batch *batch,
                          const struct brw_blorp_surface_info *surface,
                          void *state, uint32_t state_offset,
+                         const bool color_write_disables[4],
                          bool is_render_target)
 {
    const struct isl_device *isl_dev = batch->blorp->isl_dev;
@@ -1011,13 +1223,26 @@ blorp_emit_surface_state(struct blorp_batch *batch,
    if (aux_usage == ISL_AUX_USAGE_HIZ)
       aux_usage = ISL_AUX_USAGE_NONE;
 
+   isl_channel_mask_t write_disable_mask = 0;
+   if (is_render_target && GEN_GEN <= 5) {
+      if (color_write_disables[0])
+         write_disable_mask |= ISL_CHANNEL_RED_BIT;
+      if (color_write_disables[1])
+         write_disable_mask |= ISL_CHANNEL_GREEN_BIT;
+      if (color_write_disables[2])
+         write_disable_mask |= ISL_CHANNEL_BLUE_BIT;
+      if (color_write_disables[3])
+         write_disable_mask |= ISL_CHANNEL_ALPHA_BIT;
+   }
+
    const uint32_t mocs =
       is_render_target ? batch->blorp->mocs.rb : batch->blorp->mocs.tex;
 
    isl_surf_fill_state(batch->blorp->isl_dev, state,
                        .surf = &surf, .view = &surface->view,
                        .aux_surf = &surface->aux_surf, .aux_usage = aux_usage,
-                       .mocs = mocs, .clear_color = surface->clear_color);
+                       .mocs = mocs, .clear_color = surface->clear_color,
+                       .write_disables = write_disable_mask);
 
    blorp_surface_reloc(batch, state_offset + isl_dev->ss.addr_offset,
                        surface->addr, 0);
@@ -1050,7 +1275,9 @@ blorp_emit_null_surface_state(struct blorp_batch *batch,
       .MinimumArrayElement = surface->view.base_array_layer,
       .Depth = surface->view.array_len - 1,
       .RenderTargetViewExtent = surface->view.array_len - 1,
+#if GEN_GEN >= 6
       .NumberofMultisamples = ffs(surface->surf.samples) - 1,
+#endif
 
 #if GEN_GEN >= 7
       .SurfaceArray = surface->surf.dim != ISL_SURF_DIM_3D,
@@ -1088,7 +1315,7 @@ blorp_emit_surface_states(struct blorp_batch *batch,
          blorp_emit_surface_state(batch, &params->dst,
                                   surface_maps[BLORP_RENDERBUFFER_BT_INDEX],
                                   surface_offsets[BLORP_RENDERBUFFER_BT_INDEX],
-                                  true);
+                                  params->color_write_disable, true);
       } else {
          assert(params->depth.enabled || params->stencil.enabled);
          const struct brw_blorp_surface_info *surface =
@@ -1100,7 +1327,8 @@ blorp_emit_surface_states(struct blorp_batch *batch,
       if (params->src.enabled) {
          blorp_emit_surface_state(batch, &params->src,
                                   surface_maps[BLORP_TEXTURE_BT_INDEX],
-                                  surface_offsets[BLORP_TEXTURE_BT_INDEX], false);
+                                  surface_offsets[BLORP_TEXTURE_BT_INDEX],
+                                  NULL, false);
       }
    }
 
@@ -1113,91 +1341,98 @@ blorp_emit_surface_states(struct blorp_batch *batch,
    blorp_emit(batch, GENX(3DSTATE_BINDING_TABLE_POINTERS_PS), bt) {
       bt.PointertoPSBindingTable = bind_offset;
    }
-#else
+#elif GEN_GEN >= 6
    blorp_emit(batch, GENX(3DSTATE_BINDING_TABLE_POINTERS), bt) {
       bt.PSBindingTableChange = true;
+      bt.PointertoPSBindingTable = bind_offset;
+   }
+#else
+   blorp_emit(batch, GENX(3DSTATE_BINDING_TABLE_POINTERS), bt) {
       bt.PointertoPSBindingTable = bind_offset;
    }
 #endif
 }
 
 static void
-blorp_emit_sampler_state(struct blorp_batch *batch,
-                         const struct blorp_params *params)
+blorp_emit_depth_stencil_config(struct blorp_batch *batch,
+                                const struct blorp_params *params)
 {
-   uint32_t offset;
-   blorp_emit_dynamic(batch, GENX(SAMPLER_STATE), sampler, 32, &offset) {
-      sampler.MipModeFilter = MIPFILTER_NONE;
-      sampler.MagModeFilter = MAPFILTER_LINEAR;
-      sampler.MinModeFilter = MAPFILTER_LINEAR;
-      sampler.MinLOD = 0;
-      sampler.MaxLOD = 0;
-      sampler.TCXAddressControlMode = TCM_CLAMP;
-      sampler.TCYAddressControlMode = TCM_CLAMP;
-      sampler.TCZAddressControlMode = TCM_CLAMP;
-      sampler.MaximumAnisotropy = RATIO21;
-      sampler.RAddressMinFilterRoundingEnable = true;
-      sampler.RAddressMagFilterRoundingEnable = true;
-      sampler.VAddressMinFilterRoundingEnable = true;
-      sampler.VAddressMagFilterRoundingEnable = true;
-      sampler.UAddressMinFilterRoundingEnable = true;
-      sampler.UAddressMagFilterRoundingEnable = true;
-      sampler.NonnormalizedCoordinateEnable = true;
-   }
+   const struct isl_device *isl_dev = batch->blorp->isl_dev;
 
+   uint32_t *dw = blorp_emit_dwords(batch, isl_dev->ds.size / 4);
+   if (dw == NULL)
+      return;
+
+   struct isl_depth_stencil_hiz_emit_info info = {
 #if GEN_GEN >= 7
-   blorp_emit(batch, GENX(3DSTATE_SAMPLER_STATE_POINTERS_PS), ssp) {
-      ssp.PointertoPSSamplerState = offset;
-   }
+      .mocs = 1, /* GEN7_MOCS_L3 */
 #else
-   blorp_emit(batch, GENX(3DSTATE_SAMPLER_STATE_POINTERS), ssp) {
-      ssp.VSSamplerStateChange = true;
-      ssp.GSSamplerStateChange = true;
-      ssp.PSSamplerStateChange = true;
-      ssp.PointertoPSSamplerState = offset;
-   }
+      .mocs = 0,
 #endif
-}
+   };
 
-static void
-blorp_emit_3dstate_multisample(struct blorp_batch *batch,
-                               const struct blorp_params *params)
-{
-   blorp_emit(batch, GENX(3DSTATE_MULTISAMPLE), ms) {
-      ms.NumberofMultisamples       = __builtin_ffs(params->num_samples) - 1;
+   if (params->depth.enabled) {
+      info.view = &params->depth.view;
+   } else if (params->stencil.enabled) {
+      info.view = &params->stencil.view;
+   }
 
-#if GEN_GEN >= 8
-      /* The PRM says that this bit is valid only for DX9:
-       *
-       *    SW can choose to set this bit only for DX9 API. DX10/OGL API's
-       *    should not have any effect by setting or not setting this bit.
-       */
-      ms.PixelPositionOffsetEnable  = false;
-      ms.PixelLocation              = CENTER;
-#elif GEN_GEN >= 7
-      ms.PixelLocation              = PIXLOC_CENTER;
+   if (params->depth.enabled) {
+      info.depth_surf = &params->depth.surf;
 
-      switch (params->num_samples) {
-      case 1:
-         GEN_SAMPLE_POS_1X(ms.Sample);
-         break;
-      case 2:
-         GEN_SAMPLE_POS_2X(ms.Sample);
-         break;
-      case 4:
-         GEN_SAMPLE_POS_4X(ms.Sample);
-         break;
-      case 8:
-         GEN_SAMPLE_POS_8X(ms.Sample);
-         break;
-      default:
-         break;
+      info.depth_address =
+         blorp_emit_reloc(batch, dw + isl_dev->ds.depth_offset / 4,
+                          params->depth.addr, 0);
+
+      info.hiz_usage = params->depth.aux_usage;
+      if (info.hiz_usage == ISL_AUX_USAGE_HIZ) {
+         info.hiz_surf = &params->depth.aux_surf;
+
+         struct blorp_address hiz_address = params->depth.aux_addr;
+#if GEN_GEN == 6
+         /* Sandy bridge hardware does not technically support mipmapped HiZ.
+          * However, we have a special layout that allows us to make it work
+          * anyway by manually offsetting to the specified miplevel.
+          */
+         assert(info.hiz_surf->dim_layout == ISL_DIM_LAYOUT_GEN6_STENCIL_HIZ);
+         uint32_t offset_B;
+         isl_surf_get_image_offset_B_tile_sa(info.hiz_surf,
+                                             info.view->base_level, 0, 0,
+                                             &offset_B, NULL, NULL);
+         hiz_address.offset += offset_B;
+#endif
+
+         info.hiz_address =
+            blorp_emit_reloc(batch, dw + isl_dev->ds.hiz_offset / 4,
+                             hiz_address, 0);
+
+         info.depth_clear_value = params->depth.clear_color.f32[0];
       }
-#else
-      ms.PixelLocation              = PIXLOC_CENTER;
-      GEN_SAMPLE_POS_4X(ms.Sample);
-#endif
    }
+
+   if (params->stencil.enabled) {
+      info.stencil_surf = &params->stencil.surf;
+
+      struct blorp_address stencil_address = params->stencil.addr;
+#if GEN_GEN == 6
+      /* Sandy bridge hardware does not technically support mipmapped stencil.
+       * However, we have a special layout that allows us to make it work
+       * anyway by manually offsetting to the specified miplevel.
+       */
+      assert(info.stencil_surf->dim_layout == ISL_DIM_LAYOUT_GEN6_STENCIL_HIZ);
+      uint32_t offset_B;
+      isl_surf_get_image_offset_B_tile_sa(info.stencil_surf,
+                                          info.view->base_level, 0, 0,
+                                          &offset_B, NULL, NULL);
+      stencil_address.offset += offset_B;
+#endif
+
+      info.stencil_address =
+         blorp_emit_reloc(batch, dw + isl_dev->ds.stencil_offset / 4,
+                          stencil_address, 0);
+   }
+
+   isl_emit_depth_stencil_hiz_s(isl_dev, dw, &info);
 }
 
 #if GEN_GEN >= 8
@@ -1235,11 +1470,14 @@ blorp_emit_gen8_hiz_op(struct blorp_batch *batch,
          hzp.StencilBufferClearEnable = params->stencil.enabled;
          hzp.DepthBufferClearEnable = params->depth.enabled;
          hzp.StencilClearValue = params->stencil_ref;
+         hzp.FullSurfaceDepthandStencilClear = params->full_surface_hiz_op;
          break;
       case BLORP_HIZ_OP_DEPTH_RESOLVE:
+         assert(params->full_surface_hiz_op);
          hzp.DepthBufferResolveEnable = true;
          break;
       case BLORP_HIZ_OP_HIZ_RESOLVE:
+         assert(params->full_surface_hiz_op);
          hzp.HierarchicalDepthBufferResolveEnable = true;
          break;
       case BLORP_HIZ_OP_NONE:
@@ -1266,43 +1504,12 @@ blorp_emit_gen8_hiz_op(struct blorp_batch *batch,
     */
    blorp_emit(batch, GENX(PIPE_CONTROL), pc) {
       pc.PostSyncOperation = WriteImmediateData;
+      pc.Address = blorp_get_workaround_page(batch);
    }
 
    blorp_emit(batch, GENX(3DSTATE_WM_HZ_OP), hzp);
-
-   /* Perform depth clear specific flushing */
-   if (params->hiz_op == BLORP_HIZ_OP_DEPTH_CLEAR && params->depth.enabled) {
-      blorp_emit(batch, GENX(PIPE_CONTROL), pc) {
-         pc.DepthStallEnable = true;
-         pc.DepthCacheFlushEnable = true;
-      }
-   }
 }
 #endif
-
-/* 3DSTATE_VIEWPORT_STATE_POINTERS */
-static void
-blorp_emit_viewport_state(struct blorp_batch *batch,
-                          const struct blorp_params *params)
-{
-   uint32_t cc_vp_offset;
-   blorp_emit_dynamic(batch, GENX(CC_VIEWPORT), vp, 32, &cc_vp_offset) {
-      vp.MinimumDepth = 0.0;
-      vp.MaximumDepth = 1.0;
-   }
-
-#if GEN_GEN >= 7
-   blorp_emit(batch, GENX(3DSTATE_VIEWPORT_STATE_POINTERS_CC), vsp) {
-      vsp.CCViewportPointer = cc_vp_offset;
-   }
-#else
-   blorp_emit(batch, GENX(3DSTATE_VIEWPORT_STATE_POINTERS), vsp) {
-      vsp.CCViewportStateChange = true;
-      vsp.PointertoCC_VIEWPORT = cc_vp_offset;
-   }
-#endif
-}
-
 
 /**
  * \brief Execute a blit or render pass operation.
@@ -1316,10 +1523,6 @@ blorp_emit_viewport_state(struct blorp_batch *batch,
 static void
 blorp_exec(struct blorp_batch *batch, const struct blorp_params *params)
 {
-   uint32_t blend_state_offset = 0;
-   uint32_t color_calc_state_offset = 0;
-   uint32_t depth_stencil_state_offset;
-
 #if GEN_GEN >= 8
    if (params->hiz_op != BLORP_HIZ_OP_NONE) {
       blorp_emit_gen8_hiz_op(batch, params);
@@ -1330,86 +1533,9 @@ blorp_exec(struct blorp_batch *batch, const struct blorp_params *params)
    blorp_emit_vertex_buffers(batch, params);
    blorp_emit_vertex_elements(batch, params);
 
-   emit_urb_config(batch, params);
-
-   if (params->wm_prog_data) {
-      blend_state_offset = blorp_emit_blend_state(batch, params);
-   }
-   color_calc_state_offset = blorp_emit_color_calc_state(batch, params);
-   depth_stencil_state_offset = blorp_emit_depth_stencil_state(batch, params);
-
-#if GEN_GEN <= 6
-   /* 3DSTATE_CC_STATE_POINTERS
-    *
-    * The pointer offsets are relative to
-    * CMD_STATE_BASE_ADDRESS.DynamicStateBaseAddress.
-    *
-    * The HiZ op doesn't use BLEND_STATE or COLOR_CALC_STATE.
-    *
-    * The dynamic state emit helpers emit their own STATE_POINTERS packets on
-    * gen7+.  However, on gen6 and earlier, they're all lumpped together in
-    * one CC_STATE_POINTERS packet so we have to emit that here.
-    */
-   blorp_emit(batch, GENX(3DSTATE_CC_STATE_POINTERS), cc) {
-      cc.BLEND_STATEChange = true;
-      cc.COLOR_CALC_STATEChange = true;
-      cc.DEPTH_STENCIL_STATEChange = true;
-      cc.PointertoBLEND_STATE = blend_state_offset;
-      cc.PointertoCOLOR_CALC_STATE = color_calc_state_offset;
-      cc.PointertoDEPTH_STENCIL_STATE = depth_stencil_state_offset;
-   }
-#else
-   (void)blend_state_offset;
-   (void)color_calc_state_offset;
-   (void)depth_stencil_state_offset;
-#endif
-
-   blorp_emit(batch, GENX(3DSTATE_CONSTANT_VS), vs);
-#if GEN_GEN >= 7
-   blorp_emit(batch, GENX(3DSTATE_CONSTANT_HS), hs);
-   blorp_emit(batch, GENX(3DSTATE_CONSTANT_DS), DS);
-#endif
-   blorp_emit(batch, GENX(3DSTATE_CONSTANT_GS), gs);
-   blorp_emit(batch, GENX(3DSTATE_CONSTANT_PS), ps);
+   blorp_emit_pipeline(batch, params);
 
    blorp_emit_surface_states(batch, params);
-
-   if (params->src.enabled)
-      blorp_emit_sampler_state(batch, params);
-
-   blorp_emit_3dstate_multisample(batch, params);
-
-   blorp_emit(batch, GENX(3DSTATE_SAMPLE_MASK), mask) {
-      mask.SampleMask = (1 << params->num_samples) - 1;
-   }
-
-   /* From the BSpec, 3D Pipeline > Geometry > Vertex Shader > State,
-    * 3DSTATE_VS, Dword 5.0 "VS Function Enable":
-    *
-    *   [DevSNB] A pipeline flush must be programmed prior to a
-    *   3DSTATE_VS command that causes the VS Function Enable to
-    *   toggle. Pipeline flush can be executed by sending a PIPE_CONTROL
-    *   command with CS stall bit set and a post sync operation.
-    *
-    * We've already done one at the start of the BLORP operation.
-    */
-   blorp_emit_vs_config(batch, params);
-#if GEN_GEN >= 7
-   blorp_emit(batch, GENX(3DSTATE_HS), hs);
-   blorp_emit(batch, GENX(3DSTATE_TE), te);
-   blorp_emit(batch, GENX(3DSTATE_DS), DS);
-   blorp_emit(batch, GENX(3DSTATE_STREAMOUT), so);
-#endif
-   blorp_emit(batch, GENX(3DSTATE_GS), gs);
-
-   blorp_emit(batch, GENX(3DSTATE_CLIP), clip) {
-      clip.PerspectiveDivideDisable = true;
-   }
-
-   blorp_emit_sf_config(batch, params);
-   blorp_emit_ps_config(batch, params);
-
-   blorp_emit_viewport_state(batch, params);
 
    if (!(batch->flags & BLORP_BATCH_NO_EMIT_DEPTH_STENCIL))
       blorp_emit_depth_stencil_config(batch, params);
@@ -1417,6 +1543,9 @@ blorp_exec(struct blorp_batch *batch, const struct blorp_params *params)
    blorp_emit(batch, GENX(3DPRIMITIVE), prim) {
       prim.VertexAccessType = SEQUENTIAL;
       prim.PrimitiveTopologyType = _3DPRIM_RECTLIST;
+#if GEN_GEN >= 7
+      prim.PredicateEnable = batch->flags & BLORP_BATCH_PREDICATE_ENABLE;
+#endif
       prim.VertexCountPerInstance = 3;
       prim.InstanceCount = params->num_layers;
    }

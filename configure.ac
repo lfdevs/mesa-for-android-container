@@ -74,13 +74,12 @@ AC_SUBST([OPENCL_VERSION])
 # in the first entry.
 LIBDRM_REQUIRED=2.4.75
 LIBDRM_RADEON_REQUIRED=2.4.71
-LIBDRM_AMDGPU_REQUIRED=2.4.79
+LIBDRM_AMDGPU_REQUIRED=2.4.82
 LIBDRM_INTEL_REQUIRED=2.4.75
 LIBDRM_NVVIEUX_REQUIRED=2.4.66
 LIBDRM_NOUVEAU_REQUIRED=2.4.66
 LIBDRM_FREEDRENO_REQUIRED=2.4.74
-LIBDRM_VC4_REQUIRED=2.4.69
-LIBDRM_ETNAVIV_REQUIRED=2.4.80
+LIBDRM_ETNAVIV_REQUIRED=2.4.82
 
 dnl Versions for external dependencies
 DRI2PROTO_REQUIRED=2.8
@@ -89,6 +88,7 @@ LIBOMXIL_BELLAGIO_REQUIRED=0.0
 LIBVA_REQUIRED=0.38.0
 VDPAU_REQUIRED=1.1
 WAYLAND_REQUIRED=1.11
+WAYLAND_PROTOCOLS_REQUIRED=1.8
 XCB_REQUIRED=1.9.3
 XCBDRI2_REQUIRED=1.8
 XCBGLX_REQUIRED=1.8.1
@@ -102,8 +102,8 @@ ZLIB_REQUIRED=1.2.3
 dnl LLVM versions
 LLVM_REQUIRED_GALLIUM=3.3.0
 LLVM_REQUIRED_OPENCL=3.6.0
-LLVM_REQUIRED_R600=3.8.0
-LLVM_REQUIRED_RADEONSI=3.8.0
+LLVM_REQUIRED_R600=3.9.0
+LLVM_REQUIRED_RADEONSI=3.9.0
 LLVM_REQUIRED_RADV=3.9.0
 LLVM_REQUIRED_SWR=3.9.0
 
@@ -287,9 +287,9 @@ if test "x$GCC" = xyes; then
     CFLAGS="$CFLAGS -Wall"
 
     if test "x$USE_GNU99" = xyes; then
-	CFLAGS="$CFLAGS -std=gnu99"
+        CFLAGS="$CFLAGS -std=gnu99"
     else
-	CFLAGS="$CFLAGS -std=c99"
+        CFLAGS="$CFLAGS -std=c99"
     fi
 
     # Enable -Werror=implicit-function-declaration and
@@ -301,9 +301,9 @@ if test "x$GCC" = xyes; then
     CFLAGS="$CFLAGS -Werror=implicit-function-declaration"
     CFLAGS="$CFLAGS -Werror=missing-prototypes"
     AC_LINK_IFELSE([AC_LANG_PROGRAM()],
-		   AC_MSG_RESULT([yes]),
-		   [CFLAGS="$save_CFLAGS -Wmissing-prototypes";
-		    AC_MSG_RESULT([no])])
+                   AC_MSG_RESULT([yes]),
+                   [CFLAGS="$save_CFLAGS -Wmissing-prototypes";
+                    AC_MSG_RESULT([no])])
 
     # Enable -fvisibility=hidden if using a gcc that supports it
     save_CFLAGS="$CFLAGS"
@@ -311,7 +311,7 @@ if test "x$GCC" = xyes; then
     VISIBILITY_CFLAGS="-fvisibility=hidden"
     CFLAGS="$CFLAGS $VISIBILITY_CFLAGS"
     AC_LINK_IFELSE([AC_LANG_PROGRAM()], AC_MSG_RESULT([yes]),
-		   [VISIBILITY_CFLAGS=""; AC_MSG_RESULT([no])])
+                   [VISIBILITY_CFLAGS=""; AC_MSG_RESULT([no])])
 
     # Restore CFLAGS; VISIBILITY_CFLAGS are added to it where needed.
     CFLAGS=$save_CFLAGS
@@ -333,10 +333,10 @@ if test "x$GCC" = xyes; then
     AC_MSG_CHECKING([whether $CC supports -Werror=vla])
     CFLAGS="$CFLAGS -Werror=vla"
     AC_LINK_IFELSE([AC_LANG_PROGRAM()],
-		   [MSVC2013_COMPAT_CFLAGS="$MSVC2013_COMPAT_CFLAGS -Werror=vla";
-		    MSVC2013_COMPAT_CXXFLAGS="$MSVC2013_COMPAT_CXXFLAGS -Werror=vla";
-		    AC_MSG_RESULT([yes])],
-		    AC_MSG_RESULT([no]))
+                   [MSVC2013_COMPAT_CFLAGS="$MSVC2013_COMPAT_CFLAGS -Werror=vla";
+                    MSVC2013_COMPAT_CXXFLAGS="$MSVC2013_COMPAT_CXXFLAGS -Werror=vla";
+                    AC_MSG_RESULT([yes])],
+                    AC_MSG_RESULT([no]))
     CFLAGS="$save_CFLAGS"
 fi
 if test "x$GXX" = xyes; then
@@ -349,7 +349,7 @@ if test "x$GXX" = xyes; then
     CXXFLAGS="$CXXFLAGS $VISIBILITY_CXXFLAGS"
     AC_LANG_PUSH([C++])
     AC_LINK_IFELSE([AC_LANG_PROGRAM()], AC_MSG_RESULT([yes]),
-		   [VISIBILITY_CXXFLAGS="" ; AC_MSG_RESULT([no])])
+                   [VISIBILITY_CXXFLAGS="" ; AC_MSG_RESULT([no])])
     AC_LANG_POP([C++])
 
     # Restore CXXFLAGS; VISIBILITY_CXXFLAGS are added to it where needed.
@@ -455,7 +455,7 @@ int main () {
 CFLAGS=$save_CFLAGS
 
 AC_ARG_ENABLE(pwr8,
-   [AS_HELP_STRING([--disable-pwr8-inst],
+   [AS_HELP_STRING([--disable-pwr8],
                    [disable POWER8-specific instructions])],
    [enable_pwr8=$enableval], [enable_pwr8=auto])
 
@@ -766,6 +766,13 @@ if test "x$enable_asm" = xyes; then
             ;;
         esac
         ;;
+    powerpc64le)
+        case "$host_os" in
+        linux*)
+            asm_arch=ppc64le
+            ;;
+        esac
+        ;;
     esac
 
     case "$asm_arch" in
@@ -780,6 +787,10 @@ if test "x$enable_asm" = xyes; then
     sparc)
         DEFINES="$DEFINES -DUSE_SPARC_ASM"
         AC_MSG_RESULT([yes, sparc])
+        ;;
+    ppc64le)
+        DEFINES="$DEFINES -DUSE_PPC64LE_ASM"
+        AC_MSG_RESULT([yes, ppc64le])
         ;;
     *)
         AC_MSG_RESULT([no, platform not supported])
@@ -856,8 +867,6 @@ esac
 
 if test "x$pthread_stubs_possible" = xyes; then
     PKG_CHECK_MODULES(PTHREADSTUBS, pthread-stubs >= 0.4)
-    AC_SUBST(PTHREADSTUBS_CFLAGS)
-    AC_SUBST(PTHREADSTUBS_LIBS)
 fi
 
 dnl SELinux awareness.
@@ -1071,16 +1080,12 @@ AC_SUBST([LLVM_INCLUDEDIR])
 dnl
 dnl libunwind
 dnl
+PKG_CHECK_EXISTS(libunwind, [HAVE_LIBUNWIND=yes], [HAVE_LIBUNWIND=no])
 AC_ARG_ENABLE([libunwind],
     [AS_HELP_STRING([--enable-libunwind],
             [Use libunwind for backtracing (default: auto)])],
         [LIBUNWIND="$enableval"],
-        [LIBUNWIND="auto"])
-
-PKG_CHECK_EXISTS(libunwind, [HAVE_LIBUNWIND=yes], [HAVE_LIBUNWIND=no])
-if test "x$LIBUNWIND" = "xauto"; then
-    LIBUNWIND="$HAVE_LIBUNWIND"
-fi
+        [LIBUNWIND="$HAVE_LIBUNWIND"])
 
 if test "x$LIBUNWIND" = "xyes"; then
     PKG_CHECK_MODULES(LIBUNWIND, libunwind)
@@ -1245,7 +1250,7 @@ GALLIUM_DRIVERS_DEFAULT="r300,r600,svga,swrast"
 AC_ARG_WITH([gallium-drivers],
     [AS_HELP_STRING([--with-gallium-drivers@<:@=DIRS...@:>@],
         [comma delimited Gallium drivers list, e.g.
-        "i915,nouveau,r300,r600,radeonsi,freedreno,svga,swrast,swr,vc4,virgl,etnaviv,imx"
+        "i915,nouveau,r300,r600,radeonsi,freedreno,pl111,svga,swrast,swr,vc4,virgl,etnaviv,imx"
         @<:@default=r300,r600,svga,swrast@:>@])],
     [with_gallium_drivers="$withval"],
     [with_gallium_drivers="$GALLIUM_DRIVERS_DEFAULT"])
@@ -1287,6 +1292,9 @@ AM_CONDITIONAL(HAVE_OPENGL_ES2, test "x$enable_gles2" = xyes)
 AM_CONDITIONAL(NEED_OPENGL_COMMON, test "x$enable_opengl" = xyes -o \
                                         "x$enable_gles1" = xyes -o \
                                         "x$enable_gles2" = xyes)
+AM_CONDITIONAL(NEED_KHRPLATFORM, test "x$enable_egl" = xyes -o \
+                                      "x$enable_gles1" = xyes -o \
+                                      "x$enable_gles2" = xyes)
 
 # Validate GLX options
 if test "x$enable_glx" = xyes; then
@@ -1408,7 +1416,7 @@ AC_SUBST([OSMESA_LIB])
 PKG_CHECK_MODULES([LIBDRM], [libdrm >= $LIBDRM_REQUIRED],
                   [have_libdrm=yes], [have_libdrm=no])
 if test "x$have_libdrm" = xyes; then
-	DEFINES="$DEFINES -DHAVE_LIBDRM"
+    DEFINES="$DEFINES -DHAVE_LIBDRM"
 fi
 
 require_libdrm() {
@@ -1673,55 +1681,64 @@ if test "x$WAYLAND_SCANNER" = x; then
     AC_PATH_PROG([WAYLAND_SCANNER], [wayland-scanner], [:])
 fi
 
+PKG_CHECK_EXISTS([wayland-protocols >= $WAYLAND_PROTOCOLS_REQUIRED], [have_wayland_protocols=yes], [have_wayland_protocols=no])
+if test "x$have_wayland_protocols" = xyes; then
+    ac_wayland_protocols_pkgdatadir=`$PKG_CONFIG --variable=pkgdatadir wayland-protocols`
+fi
+AC_SUBST(WAYLAND_PROTOCOLS_DATADIR, $ac_wayland_protocols_pkgdatadir)
+
 # Do per platform setups and checks
 platforms=`IFS=', '; echo $with_platforms`
 for plat in $platforms; do
-	case "$plat" in
-	wayland)
+    case "$plat" in
+    wayland)
 
-		PKG_CHECK_MODULES([WAYLAND], [wayland-client >= $WAYLAND_REQUIRED wayland-server >= $WAYLAND_REQUIRED])
+        PKG_CHECK_MODULES([WAYLAND], [wayland-client >= $WAYLAND_REQUIRED wayland-server >= $WAYLAND_REQUIRED])
 
-		if test "x$WAYLAND_SCANNER" = "x:"; then
-			AC_MSG_ERROR([wayland-scanner is needed to compile the wayland platform])
-		fi
-		DEFINES="$DEFINES -DHAVE_WAYLAND_PLATFORM"
-		;;
+        if test "x$WAYLAND_SCANNER" = "x:"; then
+                AC_MSG_ERROR([wayland-scanner is needed to compile the wayland platform])
+        fi
+        if test "x$have_wayland_protocols" = xno; then
+                AC_MSG_ERROR([wayland-protocols >= $WAYLAND_PROTOCOLS_REQUIRED is needed to compile the wayland platform])
+        fi
+        DEFINES="$DEFINES -DHAVE_WAYLAND_PLATFORM"
+        ;;
 
-	x11)
-		PKG_CHECK_MODULES([XCB_DRI2], [x11-xcb xcb xcb-dri2 >= $XCBDRI2_REQUIRED xcb-xfixes])
-		DEFINES="$DEFINES -DHAVE_X11_PLATFORM"
-		;;
+    x11)
+        PKG_CHECK_MODULES([XCB_DRI2], [x11-xcb xcb xcb-dri2 >= $XCBDRI2_REQUIRED xcb-xfixes])
+        DEFINES="$DEFINES -DHAVE_X11_PLATFORM"
+        ;;
 
-	drm)
-		test "x$enable_gbm" = "xno" &&
-			AC_MSG_ERROR([EGL platform drm needs gbm])
-		DEFINES="$DEFINES -DHAVE_DRM_PLATFORM"
-		;;
+    drm)
+        test "x$enable_gbm" = "xno" &&
+                AC_MSG_ERROR([EGL platform drm needs gbm])
+        DEFINES="$DEFINES -DHAVE_DRM_PLATFORM"
+        ;;
 
-	surfaceless)
-		DEFINES="$DEFINES -DHAVE_SURFACELESS_PLATFORM"
-		;;
+    surfaceless)
+        DEFINES="$DEFINES -DHAVE_SURFACELESS_PLATFORM"
+        ;;
 
-	android)
-		PKG_CHECK_MODULES([ANDROID], [cutils hardware sync])
-		DEFINES="$DEFINES -DHAVE_ANDROID_PLATFORM"
-		;;
+    android)
+        PKG_CHECK_MODULES([ANDROID], [cutils hardware sync])
+        DEFINES="$DEFINES -DHAVE_ANDROID_PLATFORM"
+        ;;
 
-	*)
-		AC_MSG_ERROR([platform '$plat' does not exist])
-		;;
-	esac
+    *)
+        AC_MSG_ERROR([platform '$plat' does not exist])
+        ;;
+    esac
 
-	case "$plat" in
-	wayland|drm|surfaceless)
-		require_libdrm "Platform $plat"
-		;;
-	esac
+    case "$plat" in
+    wayland|drm|surfaceless)
+        require_libdrm "Platform $plat"
+        ;;
+    esac
 done
 
 if test "x$enable_glx" != xno; then
     if ! echo "$platforms" | grep -q 'x11'; then
-        AC_MSG_ERROR([Building without the x11 platform as GLX is enabled, is not supported])
+        AC_MSG_ERROR([Building GLX without the x11 platform is not supported])
     fi
 fi
 
@@ -1836,12 +1853,11 @@ if test -n "$with_dri_drivers"; then
         xi915)
             require_libdrm "i915"
             HAVE_I915_DRI=yes
-            PKG_CHECK_MODULES([INTEL], [libdrm >= $LIBDRM_INTEL_REQUIRED libdrm_intel >= $LIBDRM_INTEL_REQUIRED])
+            PKG_CHECK_MODULES([I915], [libdrm >= $LIBDRM_INTEL_REQUIRED libdrm_intel >= $LIBDRM_INTEL_REQUIRED])
             ;;
         xi965)
             require_libdrm "i965"
             HAVE_I965_DRI=yes
-            PKG_CHECK_MODULES([INTEL], [libdrm >= $LIBDRM_INTEL_REQUIRED libdrm_intel >= $LIBDRM_INTEL_REQUIRED])
             ;;
         xnouveau)
             require_libdrm "nouveau"
@@ -1953,7 +1969,6 @@ if test -n "$with_vulkan_drivers"; then
         case "x$driver" in
         xintel)
             require_libdrm "ANV"
-            PKG_CHECK_MODULES([INTEL], [libdrm >= $LIBDRM_INTEL_REQUIRED libdrm_intel >= $LIBDRM_INTEL_REQUIRED])
             require_x11_dri3 "ANV"
             HAVE_INTEL_VULKAN=yes
             ;;
@@ -2096,15 +2111,15 @@ dnl Gallium G3DVL configuration
 dnl
 if test -n "$with_gallium_drivers" -a "x$with_gallium_drivers" != xswrast; then
     if test "x$enable_xvmc" = xauto -a "x$have_xvmc_platform" = xyes; then
-	PKG_CHECK_EXISTS([xvmc >= $XVMC_REQUIRED], [enable_xvmc=yes], [enable_xvmc=no])
+        PKG_CHECK_EXISTS([xvmc >= $XVMC_REQUIRED], [enable_xvmc=yes], [enable_xvmc=no])
     fi
 
     if test "x$enable_vdpau" = xauto -a "x$have_vdpau_platform" = xyes; then
-	PKG_CHECK_EXISTS([vdpau >= $VDPAU_REQUIRED], [enable_vdpau=yes], [enable_vdpau=no])
+        PKG_CHECK_EXISTS([vdpau >= $VDPAU_REQUIRED], [enable_vdpau=yes], [enable_vdpau=no])
     fi
 
     if test "x$enable_omx" = xauto -a "x$have_omx_platform" = xyes; then
-	PKG_CHECK_EXISTS([libomxil-bellagio >= $LIBOMXIL_BELLAGIO_REQUIRED], [enable_omx=yes], [enable_omx=no])
+        PKG_CHECK_EXISTS([libomxil-bellagio >= $LIBOMXIL_BELLAGIO_REQUIRED], [enable_omx=yes], [enable_omx=no])
     fi
 
     if test "x$enable_va" = xauto -a "x$have_va_platform" = xyes; then
@@ -2344,6 +2359,15 @@ AC_ARG_WITH([d3d-libdir],
     [D3D_DRIVER_INSTALL_DIR="${libdir}/d3d"])
 AC_SUBST([D3D_DRIVER_INSTALL_DIR])
 
+dnl Architectures to build SWR library for
+
+AC_ARG_WITH([swr-archs],
+    [AS_HELP_STRING([--with-swr-archs@<:@=DIRS...@:>@],
+        [comma delimited swr architectures list, e.g.
+        "avx,avx2,knl,skx" @<:@default="avx,avx2"@:>@])],
+    [with_swr_archs="$withval"],
+    [with_swr_archs="avx,avx2"])
+
 dnl
 dnl r300 doesn't strictly require LLVM, but for performance reasons we
 dnl highly recommend LLVM usage. So require it at least on x86 and x86_64
@@ -2424,7 +2448,7 @@ if test -n "$with_gallium_drivers"; then
             ;;
         xi915)
             HAVE_GALLIUM_I915=yes
-            PKG_CHECK_MODULES([INTEL], [libdrm >= $LIBDRM_INTEL_REQUIRED libdrm_intel >= $LIBDRM_INTEL_REQUIRED])
+            PKG_CHECK_MODULES([I915], [libdrm >= $LIBDRM_INTEL_REQUIRED libdrm_intel >= $LIBDRM_INTEL_REQUIRED])
             require_libdrm "Gallium i915"
             ;;
         xr300)
@@ -2491,22 +2515,59 @@ if test -n "$with_gallium_drivers"; then
                 SWR_AVX_CXXFLAGS
             AC_SUBST([SWR_AVX_CXXFLAGS])
 
-            swr_require_cxx_feature_flags "AVX2" "defined(__AVX2__)" \
-                ",-mavx2 -mfma -mbmi2 -mf16c,-march=core-avx2" \
-                SWR_AVX2_CXXFLAGS
-            AC_SUBST([SWR_AVX2_CXXFLAGS])
+            swr_archs=`IFS=', '; echo $with_swr_archs`
+            for arch in $swr_archs; do
+                case "x$arch" in
+                xavx)
+                    HAVE_SWR_AVX=yes
+                    ;;
+                xavx2)
+                    swr_require_cxx_feature_flags "AVX2" "defined(__AVX2__)" \
+                        ",-mavx2 -mfma -mbmi2 -mf16c,-march=core-avx2" \
+                        SWR_AVX2_CXXFLAGS
+                    AC_SUBST([SWR_AVX2_CXXFLAGS])
+                    HAVE_SWR_AVX2=yes
+                    ;;
+                xknl)
+                    swr_require_cxx_feature_flags "KNL" "defined(__AVX512F__) && defined(__AVX512ER__)" \
+                        ",-march=knl,-xMIC-AVX512" \
+                        SWR_KNL_CXXFLAGS
+                    AC_SUBST([SWR_KNL_CXXFLAGS])
+                    HAVE_SWR_KNL=yes
+                    ;;
+                xskx)
+                    swr_require_cxx_feature_flags "SKX" "defined(__AVX512F__) && defined(__AVX512BW__)" \
+                        ",-march=skylake-avx512,-xCORE-AVX512" \
+                        SWR_SKX_CXXFLAGS
+                    AC_SUBST([SWR_SKX_CXXFLAGS])
+                    HAVE_SWR_SKX=yes
+                    ;;
+                *)
+                    AC_MSG_ERROR([unknown SWR build architecture '$arch'])
+                    ;;
+                esac
+            done
+
+            if test "x$HAVE_SWR_AVX" != xyes -a \
+                    "x$HAVE_SWR_AVX2" != xyes -a \
+                    "x$HAVE_SWR_KNL" != xyes -a \
+                    "x$HAVE_SWR_SKX" != xyes -a; then
+               AC_MSG_ERROR([swr enabled but no swr architectures selected])
+            fi
 
             HAVE_GALLIUM_SWR=yes
             ;;
         xvc4)
             HAVE_GALLIUM_VC4=yes
-            PKG_CHECK_MODULES([VC4], [libdrm >= $LIBDRM_VC4_REQUIRED libdrm_vc4 >= $LIBDRM_VC4_REQUIRED])
             require_libdrm "vc4"
 
             PKG_CHECK_MODULES([SIMPENROSE], [simpenrose],
                               [USE_VC4_SIMULATOR=yes;
                                DEFINES="$DEFINES -DUSE_VC4_SIMULATOR"],
                               [USE_VC4_SIMULATOR=no])
+            ;;
+        xpl111)
+            HAVE_GALLIUM_PL111=yes
             ;;
         xvirgl)
             HAVE_GALLIUM_VIRGL=yes
@@ -2531,10 +2592,19 @@ if test "x$enable_llvm" = "xyes" -a "$with_gallium_drivers"; then
     llvm_add_default_components "gallium"
 fi
 
+AM_CONDITIONAL(HAVE_SWR_AVX, test "x$HAVE_SWR_AVX" = xyes)
+AM_CONDITIONAL(HAVE_SWR_AVX2, test "x$HAVE_SWR_AVX2" = xyes)
+AM_CONDITIONAL(HAVE_SWR_KNL, test "x$HAVE_SWR_KNL" = xyes)
+AM_CONDITIONAL(HAVE_SWR_SKX, test "x$HAVE_SWR_SKX" = xyes)
+
 dnl We need to validate some needed dependencies for renderonly drivers.
 
 if test "x$HAVE_GALLIUM_ETNAVIV" != xyes -a "x$HAVE_GALLIUM_IMX" = xyes  ; then
     AC_MSG_ERROR([Building with imx requires etnaviv])
+fi
+
+if test "x$HAVE_GALLIUM_VC4" != xyes -a "x$HAVE_GALLIUM_PL111" = xyes  ; then
+    AC_MSG_ERROR([Building with pl111 requires vc4])
 fi
 
 dnl
@@ -2601,6 +2671,7 @@ fi
 
 AM_CONDITIONAL(HAVE_GALLIUM_SVGA, test "x$HAVE_GALLIUM_SVGA" = xyes)
 AM_CONDITIONAL(HAVE_GALLIUM_I915, test "x$HAVE_GALLIUM_I915" = xyes)
+AM_CONDITIONAL(HAVE_GALLIUM_PL111, test "x$HAVE_GALLIUM_PL111" = xyes)
 AM_CONDITIONAL(HAVE_GALLIUM_R300, test "x$HAVE_GALLIUM_R300" = xyes)
 AM_CONDITIONAL(HAVE_GALLIUM_R600, test "x$HAVE_GALLIUM_R600" = xyes)
 AM_CONDITIONAL(HAVE_GALLIUM_RADEONSI, test "x$HAVE_GALLIUM_RADEONSI" = xyes)
@@ -2640,8 +2711,7 @@ AM_CONDITIONAL(HAVE_SWRAST_DRI, test x$HAVE_SWRAST_DRI = xyes)
 AM_CONDITIONAL(HAVE_RADEON_VULKAN, test "x$HAVE_RADEON_VULKAN" = xyes)
 AM_CONDITIONAL(HAVE_INTEL_VULKAN, test "x$HAVE_INTEL_VULKAN" = xyes)
 
-AM_CONDITIONAL(HAVE_AMD_DRIVERS, test "x$HAVE_GALLIUM_R600" = xyes -o \
-                                      "x$HAVE_GALLIUM_RADEONSI" = xyes -o \
+AM_CONDITIONAL(HAVE_AMD_DRIVERS, test "x$HAVE_GALLIUM_RADEONSI" = xyes -o \
                                       "x$HAVE_RADEON_VULKAN" = xyes)
 
 AM_CONDITIONAL(HAVE_INTEL_DRIVERS, test "x$HAVE_INTEL_VULKAN" = xyes -o \
@@ -2664,6 +2734,7 @@ AM_CONDITIONAL(HAVE_COMMON_OSMESA, test "x$enable_osmesa" = xyes -o \
 AM_CONDITIONAL(HAVE_X86_ASM, test "x$asm_arch" = xx86 -o "x$asm_arch" = xx86_64)
 AM_CONDITIONAL(HAVE_X86_64_ASM, test "x$asm_arch" = xx86_64)
 AM_CONDITIONAL(HAVE_SPARC_ASM, test "x$asm_arch" = xsparc)
+AM_CONDITIONAL(HAVE_PPC64LE_ASM, test "x$asm_arch" = xppc64le)
 
 AC_SUBST([NINE_MAJOR], 1)
 AC_SUBST([NINE_MINOR], 0)
@@ -2700,18 +2771,18 @@ AC_ARG_ENABLE(valgrind,
                              [Build mesa with valgrind support (default: auto)])],
                              [VALGRIND=$enableval], [VALGRIND=auto])
 if test "x$VALGRIND" != xno; then
-	PKG_CHECK_MODULES(VALGRIND, [valgrind], [have_valgrind=yes], [have_valgrind=no])
+    PKG_CHECK_MODULES(VALGRIND, [valgrind], [have_valgrind=yes], [have_valgrind=no])
 fi
 AC_MSG_CHECKING([whether to enable Valgrind support])
 if test "x$VALGRIND" = xauto; then
-	VALGRIND="$have_valgrind"
+    VALGRIND="$have_valgrind"
 fi
 
 if test "x$VALGRIND" = "xyes"; then
-	if ! test "x$have_valgrind" = xyes; then
-		AC_MSG_ERROR([Valgrind support required but not present])
-	fi
-	AC_DEFINE([HAVE_VALGRIND], 1, [Use valgrind intrinsics to suppress false warnings])
+    if ! test "x$have_valgrind" = xyes; then
+        AC_MSG_ERROR([Valgrind support required but not present])
+    fi
+    AC_DEFINE([HAVE_VALGRIND], 1, [Use valgrind intrinsics to suppress false warnings])
 fi
 
 AC_MSG_RESULT([$VALGRIND])
@@ -2732,113 +2803,116 @@ CXXFLAGS="$CXXFLAGS $USER_CXXFLAGS"
 
 dnl Substitute the config
 AC_CONFIG_FILES([Makefile
-		src/Makefile
-		src/amd/Makefile
-		src/amd/vulkan/Makefile
-		src/compiler/Makefile
-		src/egl/Makefile
-		src/egl/main/egl.pc
-		src/egl/wayland/wayland-drm/Makefile
-		src/egl/wayland/wayland-egl/Makefile
-		src/egl/wayland/wayland-egl/wayland-egl.pc
-		src/gallium/Makefile
-		src/gallium/auxiliary/Makefile
-		src/gallium/auxiliary/pipe-loader/Makefile
-		src/gallium/drivers/freedreno/Makefile
-		src/gallium/drivers/ddebug/Makefile
-		src/gallium/drivers/i915/Makefile
-		src/gallium/drivers/llvmpipe/Makefile
-		src/gallium/drivers/noop/Makefile
-		src/gallium/drivers/nouveau/Makefile
-		src/gallium/drivers/r300/Makefile
-		src/gallium/drivers/r600/Makefile
-		src/gallium/drivers/radeon/Makefile
-		src/gallium/drivers/radeonsi/Makefile
-		src/gallium/drivers/rbug/Makefile
-		src/gallium/drivers/softpipe/Makefile
-		src/gallium/drivers/svga/Makefile
-		src/gallium/drivers/swr/Makefile
-		src/gallium/drivers/trace/Makefile
-		src/gallium/drivers/etnaviv/Makefile
-		src/gallium/drivers/imx/Makefile
-		src/gallium/drivers/vc4/Makefile
-		src/gallium/drivers/virgl/Makefile
-		src/gallium/state_trackers/clover/Makefile
-		src/gallium/state_trackers/dri/Makefile
-		src/gallium/state_trackers/glx/xlib/Makefile
-		src/gallium/state_trackers/nine/Makefile
-		src/gallium/state_trackers/omx/Makefile
-		src/gallium/state_trackers/osmesa/Makefile
-		src/gallium/state_trackers/va/Makefile
-		src/gallium/state_trackers/vdpau/Makefile
-		src/gallium/state_trackers/xa/Makefile
-		src/gallium/state_trackers/xvmc/Makefile
-		src/gallium/targets/d3dadapter9/Makefile
-		src/gallium/targets/d3dadapter9/d3d.pc
-		src/gallium/targets/dri/Makefile
-		src/gallium/targets/libgl-xlib/Makefile
-		src/gallium/targets/omx/Makefile
-		src/gallium/targets/opencl/Makefile
-		src/gallium/targets/opencl/mesa.icd
-		src/gallium/targets/osmesa/Makefile
-		src/gallium/targets/osmesa/osmesa.pc
-		src/gallium/targets/pipe-loader/Makefile
-		src/gallium/targets/va/Makefile
-		src/gallium/targets/vdpau/Makefile
-		src/gallium/targets/xa/Makefile
-		src/gallium/targets/xa/xatracker.pc
-		src/gallium/targets/xvmc/Makefile
-		src/gallium/tests/trivial/Makefile
-		src/gallium/tests/unit/Makefile
-		src/gallium/winsys/etnaviv/drm/Makefile
-		src/gallium/winsys/imx/drm/Makefile
-		src/gallium/winsys/freedreno/drm/Makefile
-		src/gallium/winsys/i915/drm/Makefile
-		src/gallium/winsys/nouveau/drm/Makefile
-		src/gallium/winsys/radeon/drm/Makefile
-		src/gallium/winsys/amdgpu/drm/Makefile
-		src/gallium/winsys/svga/drm/Makefile
-		src/gallium/winsys/sw/dri/Makefile
-		src/gallium/winsys/sw/kms-dri/Makefile
-		src/gallium/winsys/sw/null/Makefile
-		src/gallium/winsys/sw/wrapper/Makefile
-		src/gallium/winsys/sw/xlib/Makefile
-		src/gallium/winsys/vc4/drm/Makefile
-		src/gallium/winsys/virgl/drm/Makefile
-		src/gallium/winsys/virgl/vtest/Makefile
-		src/gbm/Makefile
-		src/gbm/main/gbm.pc
-		src/glx/Makefile
-		src/glx/apple/Makefile
-		src/glx/tests/Makefile
-		src/glx/windows/Makefile
-		src/glx/windows/windowsdriproto.pc
-		src/gtest/Makefile
-		src/intel/Makefile
-		src/loader/Makefile
-		src/mapi/Makefile
-		src/mapi/es1api/glesv1_cm.pc
-		src/mapi/es2api/glesv2.pc
-		src/mapi/glapi/gen/Makefile
-		src/mesa/Makefile
-		src/mesa/gl.pc
-		src/mesa/drivers/dri/dri.pc
-		src/mesa/drivers/dri/common/Makefile
-		src/mesa/drivers/dri/common/xmlpool/Makefile
-		src/mesa/drivers/dri/i915/Makefile
-		src/mesa/drivers/dri/i965/Makefile
-		src/mesa/drivers/dri/Makefile
-		src/mesa/drivers/dri/nouveau/Makefile
-		src/mesa/drivers/dri/r200/Makefile
-		src/mesa/drivers/dri/radeon/Makefile
-		src/mesa/drivers/dri/swrast/Makefile
-		src/mesa/drivers/osmesa/Makefile
-		src/mesa/drivers/osmesa/osmesa.pc
-		src/mesa/drivers/x11/Makefile
-		src/mesa/main/tests/Makefile
-		src/util/Makefile
-		src/util/tests/hash_table/Makefile
-		src/vulkan/Makefile])
+                 src/Makefile
+                 src/amd/Makefile
+                 src/amd/vulkan/Makefile
+                 src/broadcom/Makefile
+                 src/compiler/Makefile
+                 src/egl/Makefile
+                 src/egl/main/egl.pc
+                 src/egl/wayland/wayland-drm/Makefile
+                 src/egl/wayland/wayland-egl/Makefile
+                 src/egl/wayland/wayland-egl/wayland-egl.pc
+                 src/gallium/Makefile
+                 src/gallium/auxiliary/Makefile
+                 src/gallium/auxiliary/pipe-loader/Makefile
+                 src/gallium/drivers/freedreno/Makefile
+                 src/gallium/drivers/ddebug/Makefile
+                 src/gallium/drivers/i915/Makefile
+                 src/gallium/drivers/llvmpipe/Makefile
+                 src/gallium/drivers/noop/Makefile
+                 src/gallium/drivers/nouveau/Makefile
+                 src/gallium/drivers/pl111/Makefile
+                 src/gallium/drivers/r300/Makefile
+                 src/gallium/drivers/r600/Makefile
+                 src/gallium/drivers/radeon/Makefile
+                 src/gallium/drivers/radeonsi/Makefile
+                 src/gallium/drivers/rbug/Makefile
+                 src/gallium/drivers/softpipe/Makefile
+                 src/gallium/drivers/svga/Makefile
+                 src/gallium/drivers/swr/Makefile
+                 src/gallium/drivers/trace/Makefile
+                 src/gallium/drivers/etnaviv/Makefile
+                 src/gallium/drivers/imx/Makefile
+                 src/gallium/drivers/vc4/Makefile
+                 src/gallium/drivers/virgl/Makefile
+                 src/gallium/state_trackers/clover/Makefile
+                 src/gallium/state_trackers/dri/Makefile
+                 src/gallium/state_trackers/glx/xlib/Makefile
+                 src/gallium/state_trackers/nine/Makefile
+                 src/gallium/state_trackers/omx/Makefile
+                 src/gallium/state_trackers/osmesa/Makefile
+                 src/gallium/state_trackers/va/Makefile
+                 src/gallium/state_trackers/vdpau/Makefile
+                 src/gallium/state_trackers/xa/Makefile
+                 src/gallium/state_trackers/xvmc/Makefile
+                 src/gallium/targets/d3dadapter9/Makefile
+                 src/gallium/targets/d3dadapter9/d3d.pc
+                 src/gallium/targets/dri/Makefile
+                 src/gallium/targets/libgl-xlib/Makefile
+                 src/gallium/targets/omx/Makefile
+                 src/gallium/targets/opencl/Makefile
+                 src/gallium/targets/opencl/mesa.icd
+                 src/gallium/targets/osmesa/Makefile
+                 src/gallium/targets/osmesa/osmesa.pc
+                 src/gallium/targets/pipe-loader/Makefile
+                 src/gallium/targets/va/Makefile
+                 src/gallium/targets/vdpau/Makefile
+                 src/gallium/targets/xa/Makefile
+                 src/gallium/targets/xa/xatracker.pc
+                 src/gallium/targets/xvmc/Makefile
+                 src/gallium/tests/trivial/Makefile
+                 src/gallium/tests/unit/Makefile
+                 src/gallium/winsys/etnaviv/drm/Makefile
+                 src/gallium/winsys/imx/drm/Makefile
+                 src/gallium/winsys/freedreno/drm/Makefile
+                 src/gallium/winsys/i915/drm/Makefile
+                 src/gallium/winsys/nouveau/drm/Makefile
+                 src/gallium/winsys/pl111/drm/Makefile
+                 src/gallium/winsys/radeon/drm/Makefile
+                 src/gallium/winsys/amdgpu/drm/Makefile
+                 src/gallium/winsys/svga/drm/Makefile
+                 src/gallium/winsys/sw/dri/Makefile
+                 src/gallium/winsys/sw/kms-dri/Makefile
+                 src/gallium/winsys/sw/null/Makefile
+                 src/gallium/winsys/sw/wrapper/Makefile
+                 src/gallium/winsys/sw/xlib/Makefile
+                 src/gallium/winsys/vc4/drm/Makefile
+                 src/gallium/winsys/virgl/drm/Makefile
+                 src/gallium/winsys/virgl/vtest/Makefile
+                 src/gbm/Makefile
+                 src/gbm/main/gbm.pc
+                 src/glx/Makefile
+                 src/glx/apple/Makefile
+                 src/glx/tests/Makefile
+                 src/glx/windows/Makefile
+                 src/glx/windows/windowsdriproto.pc
+                 src/gtest/Makefile
+                 src/intel/Makefile
+                 src/loader/Makefile
+                 src/mapi/Makefile
+                 src/mapi/es1api/glesv1_cm.pc
+                 src/mapi/es2api/glesv2.pc
+                 src/mapi/glapi/gen/Makefile
+                 src/mesa/Makefile
+                 src/mesa/gl.pc
+                 src/mesa/drivers/dri/dri.pc
+                 src/mesa/drivers/dri/common/Makefile
+                 src/mesa/drivers/dri/common/xmlpool/Makefile
+                 src/mesa/drivers/dri/i915/Makefile
+                 src/mesa/drivers/dri/i965/Makefile
+                 src/mesa/drivers/dri/Makefile
+                 src/mesa/drivers/dri/nouveau/Makefile
+                 src/mesa/drivers/dri/r200/Makefile
+                 src/mesa/drivers/dri/radeon/Makefile
+                 src/mesa/drivers/dri/swrast/Makefile
+                 src/mesa/drivers/osmesa/Makefile
+                 src/mesa/drivers/osmesa/osmesa.pc
+                 src/mesa/drivers/x11/Makefile
+                 src/mesa/main/tests/Makefile
+                 src/util/Makefile
+                 src/util/tests/hash_table/Makefile
+                 src/vulkan/Makefile])
 
 AC_OUTPUT
 
@@ -2962,6 +3036,11 @@ else
     echo "        HUD lmsensors:   yes"
 fi
 
+echo ""
+if test "x$HAVE_GALLIUM_SWR" != x; then
+    echo "        SWR archs:       $swr_archs"
+fi
+
 dnl Libraries
 echo ""
 echo "        Shared libs:     $enable_shared"
@@ -2969,15 +3048,17 @@ echo "        Static libs:     $enable_static"
 echo "        Shared-glapi:    $enable_shared_glapi"
 
 dnl Compiler options
-# cleanup the CFLAGS/CXXFLAGS/DEFINES vars
+# cleanup the CFLAGS/CXXFLAGS/LDFLAGS/DEFINES vars
 cflags=`echo $CFLAGS | \
     $SED 's/^ *//;s/  */ /;s/ *$//'`
 cxxflags=`echo $CXXFLAGS | \
     $SED 's/^ *//;s/  */ /;s/ *$//'`
+ldflags=`echo $LDFLAGS | $SED 's/^ *//;s/  */ /;s/ *$//'`
 defines=`echo $DEFINES | $SED 's/^ *//;s/  */ /;s/ *$//'`
 echo ""
 echo "        CFLAGS:          $cflags"
 echo "        CXXFLAGS:        $cxxflags"
+echo "        LDFLAGS:         $ldflags"
 echo "        Macros:          $defines"
 echo ""
 if test "x$enable_llvm" = xyes; then

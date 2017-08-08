@@ -34,6 +34,8 @@
 
 #include "anv_private.h"
 
+#include "util/hash_table.h"
+
 #ifdef HAVE_VALGRIND
 #define VG_NOACCESS_READ(__ptr) ({                       \
    VALGRIND_MAKE_MEM_DEFINED((__ptr), sizeof(*(__ptr))); \
@@ -177,10 +179,21 @@ anv_free_list_pop(union anv_free_list *list, void **map, int32_t *offset)
 }
 
 static void
-anv_free_list_push(union anv_free_list *list, void *map, int32_t offset)
+anv_free_list_push(union anv_free_list *list, void *map, int32_t offset,
+                   uint32_t size, uint32_t count)
 {
    union anv_free_list current, old, new;
    int32_t *next_ptr = map + offset;
+
+   /* If we're returning more than one chunk, we need to build a chain to add
+    * to the list.  Fortunately, we can do this without any atomics since we
+    * own everything in the chain right now.  `offset` is left pointing to the
+    * head of our chain list while `next_ptr` points to the tail.
+    */
+   for (uint32_t i = 1; i < count; i++) {
+      VG_NOACCESS_WRITE(next_ptr, offset + i * size);
+      next_ptr = map + offset + i * size;
+   }
 
    old = *list;
    do {
@@ -243,22 +256,19 @@ anv_ptr_free_list_push(void **list, void *elem)
    } while (old != current);
 }
 
-static uint32_t
-anv_block_pool_grow(struct anv_block_pool *pool, struct anv_block_state *state);
+static VkResult
+anv_block_pool_expand_range(struct anv_block_pool *pool,
+                            uint32_t center_bo_offset, uint32_t size);
 
 VkResult
 anv_block_pool_init(struct anv_block_pool *pool,
-                    struct anv_device *device, uint32_t block_size)
+                    struct anv_device *device,
+                    uint32_t initial_size)
 {
    VkResult result;
 
-   assert(util_is_power_of_two(block_size));
-
    pool->device = device;
    anv_bo_init(&pool->bo, 0, 0);
-   pool->block_size = block_size;
-   pool->free_list = ANV_FREE_LIST_EMPTY;
-   pool->back_free_list = ANV_FREE_LIST_EMPTY;
 
    pool->fd = memfd_create("block pool", MFD_CLOEXEC);
    if (pool->fd == -1)
@@ -285,11 +295,14 @@ anv_block_pool_init(struct anv_block_pool *pool,
    pool->back_state.next = 0;
    pool->back_state.end = 0;
 
-   /* Immediately grow the pool so we'll have a backing bo. */
-   pool->state.end = anv_block_pool_grow(pool, &pool->state);
+   result = anv_block_pool_expand_range(pool, 0, initial_size);
+   if (result != VK_SUCCESS)
+      goto fail_mmap_cleanups;
 
    return VK_SUCCESS;
 
+ fail_mmap_cleanups:
+   u_vector_finish(&pool->mmap_cleanups);
  fail_fd:
    close(pool->fd);
 
@@ -315,126 +328,27 @@ anv_block_pool_finish(struct anv_block_pool *pool)
 
 #define PAGE_SIZE 4096
 
-/** Grows and re-centers the block pool.
- *
- * We grow the block pool in one or both directions in such a way that the
- * following conditions are met:
- *
- *  1) The size of the entire pool is always a power of two.
- *
- *  2) The pool only grows on both ends.  Neither end can get
- *     shortened.
- *
- *  3) At the end of the allocation, we have about twice as much space
- *     allocated for each end as we have used.  This way the pool doesn't
- *     grow too far in one direction or the other.
- *
- *  4) If the _alloc_back() has never been called, then the back portion of
- *     the pool retains a size of zero.  (This makes it easier for users of
- *     the block pool that only want a one-sided pool.)
- *
- *  5) We have enough space allocated for at least one more block in
- *     whichever side `state` points to.
- *
- *  6) The center of the pool is always aligned to both the block_size of
- *     the pool and a 4K CPU page.
- */
-static uint32_t
-anv_block_pool_grow(struct anv_block_pool *pool, struct anv_block_state *state)
+static VkResult
+anv_block_pool_expand_range(struct anv_block_pool *pool,
+                            uint32_t center_bo_offset, uint32_t size)
 {
-   size_t size;
    void *map;
    uint32_t gem_handle;
    struct anv_mmap_cleanup *cleanup;
-
-   pthread_mutex_lock(&pool->device->mutex);
-
-   assert(state == &pool->state || state == &pool->back_state);
-
-   /* Gather a little usage information on the pool.  Since we may have
-    * threadsd waiting in queue to get some storage while we resize, it's
-    * actually possible that total_used will be larger than old_size.  In
-    * particular, block_pool_alloc() increments state->next prior to
-    * calling block_pool_grow, so this ensures that we get enough space for
-    * which ever side tries to grow the pool.
-    *
-    * We align to a page size because it makes it easier to do our
-    * calculations later in such a way that we state page-aigned.
-    */
-   uint32_t back_used = align_u32(pool->back_state.next, PAGE_SIZE);
-   uint32_t front_used = align_u32(pool->state.next, PAGE_SIZE);
-   uint32_t total_used = front_used + back_used;
-
-   assert(state == &pool->state || back_used > 0);
-
-   size_t old_size = pool->bo.size;
-
-   if (old_size != 0 &&
-       back_used * 2 <= pool->center_bo_offset &&
-       front_used * 2 <= (old_size - pool->center_bo_offset)) {
-      /* If we're in this case then this isn't the firsta allocation and we
-       * already have enough space on both sides to hold double what we
-       * have allocated.  There's nothing for us to do.
-       */
-      goto done;
-   }
-
-   if (old_size == 0) {
-      /* This is the first allocation */
-      size = MAX2(32 * pool->block_size, PAGE_SIZE);
-   } else {
-      size = old_size * 2;
-   }
-
-   /* We can't have a block pool bigger than 1GB because we use signed
-    * 32-bit offsets in the free list and we don't want overflow.  We
-    * should never need a block pool bigger than 1GB anyway.
-    */
-   assert(size <= (1u << 31));
-
-   /* We compute a new center_bo_offset such that, when we double the size
-    * of the pool, we maintain the ratio of how much is used by each side.
-    * This way things should remain more-or-less balanced.
-    */
-   uint32_t center_bo_offset;
-   if (back_used == 0) {
-      /* If we're in this case then we have never called alloc_back().  In
-       * this case, we want keep the offset at 0 to make things as simple
-       * as possible for users that don't care about back allocations.
-       */
-      center_bo_offset = 0;
-   } else {
-      /* Try to "center" the allocation based on how much is currently in
-       * use on each side of the center line.
-       */
-      center_bo_offset = ((uint64_t)size * back_used) / total_used;
-
-      /* Align down to a multiple of both the block size and page size */
-      uint32_t granularity = MAX2(pool->block_size, PAGE_SIZE);
-      assert(util_is_power_of_two(granularity));
-      center_bo_offset &= ~(granularity - 1);
-
-      assert(center_bo_offset >= back_used);
-
-      /* Make sure we don't shrink the back end of the pool */
-      if (center_bo_offset < pool->back_state.end)
-         center_bo_offset = pool->back_state.end;
-
-      /* Make sure that we don't shrink the front end of the pool */
-      if (size - center_bo_offset < pool->state.end)
-         center_bo_offset = size - pool->state.end;
-   }
-
-   assert(center_bo_offset % pool->block_size == 0);
-   assert(center_bo_offset % PAGE_SIZE == 0);
 
    /* Assert that we only ever grow the pool */
    assert(center_bo_offset >= pool->back_state.end);
    assert(size - center_bo_offset >= pool->state.end);
 
+   /* Assert that we don't go outside the bounds of the memfd */
+   assert(center_bo_offset <= BLOCK_POOL_MEMFD_CENTER);
+   assert(size - center_bo_offset <=
+          BLOCK_POOL_MEMFD_SIZE - BLOCK_POOL_MEMFD_CENTER);
+
    cleanup = u_vector_add(&pool->mmap_cleanups);
    if (!cleanup)
-      goto fail;
+      return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
+
    *cleanup = ANV_MMAP_CLEANUP_INIT;
 
    /* Just leak the old map until we destroy the pool.  We can't munmap it
@@ -446,15 +360,17 @@ anv_block_pool_grow(struct anv_block_pool *pool, struct anv_block_state *state)
    map = mmap(NULL, size, PROT_READ | PROT_WRITE,
               MAP_SHARED | MAP_POPULATE, pool->fd,
               BLOCK_POOL_MEMFD_CENTER - center_bo_offset);
-   cleanup->map = map;
-   cleanup->size = size;
-
    if (map == MAP_FAILED)
-      goto fail;
+      return vk_errorf(VK_ERROR_MEMORY_MAP_FAILED, "mmap failed: %m");
 
    gem_handle = anv_gem_userptr(pool->device, map, size);
-   if (gem_handle == 0)
-      goto fail;
+   if (gem_handle == 0) {
+      munmap(map, size);
+      return vk_errorf(VK_ERROR_TOO_MANY_OBJECTS, "userptr failed: %m");
+   }
+
+   cleanup->map = map;
+   cleanup->size = size;
    cleanup->gem_handle = gem_handle;
 
 #if 0
@@ -504,48 +420,166 @@ anv_block_pool_grow(struct anv_block_pool *pool, struct anv_block_state *state)
    anv_bo_init(&pool->bo, gem_handle, size);
    pool->bo.map = map;
 
+   return VK_SUCCESS;
+}
+
+/** Grows and re-centers the block pool.
+ *
+ * We grow the block pool in one or both directions in such a way that the
+ * following conditions are met:
+ *
+ *  1) The size of the entire pool is always a power of two.
+ *
+ *  2) The pool only grows on both ends.  Neither end can get
+ *     shortened.
+ *
+ *  3) At the end of the allocation, we have about twice as much space
+ *     allocated for each end as we have used.  This way the pool doesn't
+ *     grow too far in one direction or the other.
+ *
+ *  4) If the _alloc_back() has never been called, then the back portion of
+ *     the pool retains a size of zero.  (This makes it easier for users of
+ *     the block pool that only want a one-sided pool.)
+ *
+ *  5) We have enough space allocated for at least one more block in
+ *     whichever side `state` points to.
+ *
+ *  6) The center of the pool is always aligned to both the block_size of
+ *     the pool and a 4K CPU page.
+ */
+static uint32_t
+anv_block_pool_grow(struct anv_block_pool *pool, struct anv_block_state *state)
+{
+   VkResult result = VK_SUCCESS;
+
+   pthread_mutex_lock(&pool->device->mutex);
+
+   assert(state == &pool->state || state == &pool->back_state);
+
+   /* Gather a little usage information on the pool.  Since we may have
+    * threadsd waiting in queue to get some storage while we resize, it's
+    * actually possible that total_used will be larger than old_size.  In
+    * particular, block_pool_alloc() increments state->next prior to
+    * calling block_pool_grow, so this ensures that we get enough space for
+    * which ever side tries to grow the pool.
+    *
+    * We align to a page size because it makes it easier to do our
+    * calculations later in such a way that we state page-aigned.
+    */
+   uint32_t back_used = align_u32(pool->back_state.next, PAGE_SIZE);
+   uint32_t front_used = align_u32(pool->state.next, PAGE_SIZE);
+   uint32_t total_used = front_used + back_used;
+
+   assert(state == &pool->state || back_used > 0);
+
+   uint32_t old_size = pool->bo.size;
+
+   /* The block pool is always initialized to a nonzero size and this function
+    * is always called after initialization.
+    */
+   assert(old_size > 0);
+
+   /* The back_used and front_used may actually be smaller than the actual
+    * requirement because they are based on the next pointers which are
+    * updated prior to calling this function.
+    */
+   uint32_t back_required = MAX2(back_used, pool->center_bo_offset);
+   uint32_t front_required = MAX2(front_used, old_size - pool->center_bo_offset);
+
+   if (back_used * 2 <= back_required && front_used * 2 <= front_required) {
+      /* If we're in this case then this isn't the firsta allocation and we
+       * already have enough space on both sides to hold double what we
+       * have allocated.  There's nothing for us to do.
+       */
+      goto done;
+   }
+
+   uint32_t size = old_size * 2;
+   while (size < back_required + front_required)
+      size *= 2;
+
+   assert(size > pool->bo.size);
+
+   /* We compute a new center_bo_offset such that, when we double the size
+    * of the pool, we maintain the ratio of how much is used by each side.
+    * This way things should remain more-or-less balanced.
+    */
+   uint32_t center_bo_offset;
+   if (back_used == 0) {
+      /* If we're in this case then we have never called alloc_back().  In
+       * this case, we want keep the offset at 0 to make things as simple
+       * as possible for users that don't care about back allocations.
+       */
+      center_bo_offset = 0;
+   } else {
+      /* Try to "center" the allocation based on how much is currently in
+       * use on each side of the center line.
+       */
+      center_bo_offset = ((uint64_t)size * back_used) / total_used;
+
+      /* Align down to a multiple of the page size */
+      center_bo_offset &= ~(PAGE_SIZE - 1);
+
+      assert(center_bo_offset >= back_used);
+
+      /* Make sure we don't shrink the back end of the pool */
+      if (center_bo_offset < pool->back_state.end)
+         center_bo_offset = pool->back_state.end;
+
+      /* Make sure that we don't shrink the front end of the pool */
+      if (size - center_bo_offset < pool->state.end)
+         center_bo_offset = size - pool->state.end;
+   }
+
+   assert(center_bo_offset % PAGE_SIZE == 0);
+
+   result = anv_block_pool_expand_range(pool, center_bo_offset, size);
+
    if (pool->device->instance->physicalDevice.has_exec_async)
       pool->bo.flags |= EXEC_OBJECT_ASYNC;
 
 done:
    pthread_mutex_unlock(&pool->device->mutex);
 
-   /* Return the appropreate new size.  This function never actually
-    * updates state->next.  Instead, we let the caller do that because it
-    * needs to do so in order to maintain its concurrency model.
-    */
-   if (state == &pool->state) {
-      return pool->bo.size - pool->center_bo_offset;
+   if (result == VK_SUCCESS) {
+      /* Return the appropriate new size.  This function never actually
+       * updates state->next.  Instead, we let the caller do that because it
+       * needs to do so in order to maintain its concurrency model.
+       */
+      if (state == &pool->state) {
+         return pool->bo.size - pool->center_bo_offset;
+      } else {
+         assert(pool->center_bo_offset > 0);
+         return pool->center_bo_offset;
+      }
    } else {
-      assert(pool->center_bo_offset > 0);
-      return pool->center_bo_offset;
+      return 0;
    }
-
-fail:
-   pthread_mutex_unlock(&pool->device->mutex);
-
-   return 0;
 }
 
 static uint32_t
 anv_block_pool_alloc_new(struct anv_block_pool *pool,
-                         struct anv_block_state *pool_state)
+                         struct anv_block_state *pool_state,
+                         uint32_t block_size)
 {
    struct anv_block_state state, old, new;
 
    while (1) {
-      state.u64 = __sync_fetch_and_add(&pool_state->u64, pool->block_size);
-      if (state.next < state.end) {
+      state.u64 = __sync_fetch_and_add(&pool_state->u64, block_size);
+      if (state.next + block_size <= state.end) {
          assert(pool->map);
          return state.next;
-      } else if (state.next == state.end) {
-         /* We allocated the first block outside the pool, we have to grow it.
-          * pool_state->next acts a mutex: threads who try to allocate now will
-          * get block indexes above the current limit and hit futex_wait
-          * below. */
-         new.next = state.next + pool->block_size;
-         new.end = anv_block_pool_grow(pool, pool_state);
-         assert(new.end >= new.next && new.end % pool->block_size == 0);
+      } else if (state.next <= state.end) {
+         /* We allocated the first block outside the pool so we have to grow
+          * the pool.  pool_state->next acts a mutex: threads who try to
+          * allocate now will get block indexes above the current limit and
+          * hit futex_wait below.
+          */
+         new.next = state.next + block_size;
+         do {
+            new.end = anv_block_pool_grow(pool, pool_state);
+         } while (new.end < new.next);
+
          old.u64 = __sync_lock_test_and_set(&pool_state->u64, new.u64);
          if (old.next != state.next)
             futex_wake(&pool_state->end, INT_MAX);
@@ -558,18 +592,10 @@ anv_block_pool_alloc_new(struct anv_block_pool *pool,
 }
 
 int32_t
-anv_block_pool_alloc(struct anv_block_pool *pool)
+anv_block_pool_alloc(struct anv_block_pool *pool,
+                     uint32_t block_size)
 {
-   int32_t offset;
-
-   /* Try free list first. */
-   if (anv_free_list_pop(&pool->free_list, &pool->map, &offset)) {
-      assert(offset >= 0);
-      assert(pool->map);
-      return offset;
-   }
-
-   return anv_block_pool_alloc_new(pool, &pool->state);
+   return anv_block_pool_alloc_new(pool, &pool->state, block_size);
 }
 
 /* Allocates a block out of the back of the block pool.
@@ -582,18 +608,11 @@ anv_block_pool_alloc(struct anv_block_pool *pool)
  * gymnastics with the block pool's BO when doing relocations.
  */
 int32_t
-anv_block_pool_alloc_back(struct anv_block_pool *pool)
+anv_block_pool_alloc_back(struct anv_block_pool *pool,
+                          uint32_t block_size)
 {
-   int32_t offset;
-
-   /* Try free list first. */
-   if (anv_free_list_pop(&pool->back_free_list, &pool->map, &offset)) {
-      assert(offset < 0);
-      assert(pool->map);
-      return offset;
-   }
-
-   offset = anv_block_pool_alloc_new(pool, &pool->back_state);
+   int32_t offset = anv_block_pool_alloc_new(pool, &pool->back_state,
+                                             block_size);
 
    /* The offset we get out of anv_block_pool_alloc_new() is actually the
     * number of bytes downwards from the middle to the end of the block.
@@ -601,56 +620,63 @@ anv_block_pool_alloc_back(struct anv_block_pool *pool)
     * start of the block.
     */
    assert(offset >= 0);
-   return -(offset + pool->block_size);
+   return -(offset + block_size);
+}
+
+VkResult
+anv_state_pool_init(struct anv_state_pool *pool,
+                    struct anv_device *device,
+                    uint32_t block_size)
+{
+   VkResult result = anv_block_pool_init(&pool->block_pool, device,
+                                         block_size * 16);
+   if (result != VK_SUCCESS)
+      return result;
+
+   assert(util_is_power_of_two(block_size));
+   pool->block_size = block_size;
+   pool->back_alloc_free_list = ANV_FREE_LIST_EMPTY;
+   for (unsigned i = 0; i < ANV_STATE_BUCKETS; i++) {
+      pool->buckets[i].free_list = ANV_FREE_LIST_EMPTY;
+      pool->buckets[i].block.next = 0;
+      pool->buckets[i].block.end = 0;
+   }
+   VG(VALGRIND_CREATE_MEMPOOL(pool, 0, false));
+
+   return VK_SUCCESS;
 }
 
 void
-anv_block_pool_free(struct anv_block_pool *pool, int32_t offset)
+anv_state_pool_finish(struct anv_state_pool *pool)
 {
-   if (offset < 0) {
-      anv_free_list_push(&pool->back_free_list, pool->map, offset);
-   } else {
-      anv_free_list_push(&pool->free_list, pool->map, offset);
-   }
-}
-
-static void
-anv_fixed_size_state_pool_init(struct anv_fixed_size_state_pool *pool,
-                               size_t state_size)
-{
-   /* At least a cache line and must divide the block size. */
-   assert(state_size >= 64 && util_is_power_of_two(state_size));
-
-   pool->state_size = state_size;
-   pool->free_list = ANV_FREE_LIST_EMPTY;
-   pool->block.next = 0;
-   pool->block.end = 0;
+   VG(VALGRIND_DESTROY_MEMPOOL(pool));
+   anv_block_pool_finish(&pool->block_pool);
 }
 
 static uint32_t
-anv_fixed_size_state_pool_alloc(struct anv_fixed_size_state_pool *pool,
-                                struct anv_block_pool *block_pool)
+anv_fixed_size_state_pool_alloc_new(struct anv_fixed_size_state_pool *pool,
+                                    struct anv_block_pool *block_pool,
+                                    uint32_t state_size,
+                                    uint32_t block_size)
 {
-   int32_t offset;
    struct anv_block_state block, old, new;
+   uint32_t offset;
 
-   /* Try free list first. */
-   if (anv_free_list_pop(&pool->free_list, &block_pool->map, &offset)) {
-      assert(offset >= 0);
-      return offset;
-   }
+   /* If our state is large, we don't need any sub-allocation from a block.
+    * Instead, we just grab whole (potentially large) blocks.
+    */
+   if (state_size >= block_size)
+      return anv_block_pool_alloc(block_pool, state_size);
 
-   /* If free list was empty (or somebody raced us and took the items) we
-    * allocate a new item from the end of the block */
  restart:
-   block.u64 = __sync_fetch_and_add(&pool->block.u64, pool->state_size);
+   block.u64 = __sync_fetch_and_add(&pool->block.u64, state_size);
 
    if (block.next < block.end) {
       return block.next;
    } else if (block.next == block.end) {
-      offset = anv_block_pool_alloc(block_pool);
-      new.next = offset + pool->state_size;
-      new.end = offset + block_pool->block_size;
+      offset = anv_block_pool_alloc(block_pool, block_size);
+      new.next = offset + state_size;
+      new.end = offset + block_size;
       old.u64 = __sync_lock_test_and_set(&pool->block.u64, new.u64);
       if (old.next != block.next)
          futex_wake(&pool->block.end, INT_MAX);
@@ -661,71 +687,177 @@ anv_fixed_size_state_pool_alloc(struct anv_fixed_size_state_pool *pool,
    }
 }
 
-static void
-anv_fixed_size_state_pool_free(struct anv_fixed_size_state_pool *pool,
-                               struct anv_block_pool *block_pool,
-                               uint32_t offset)
+static uint32_t
+anv_state_pool_get_bucket(uint32_t size)
 {
-   anv_free_list_push(&pool->free_list, block_pool->map, offset);
-}
-
-void
-anv_state_pool_init(struct anv_state_pool *pool,
-                    struct anv_block_pool *block_pool)
-{
-   pool->block_pool = block_pool;
-   for (unsigned i = 0; i < ANV_STATE_BUCKETS; i++) {
-      size_t size = 1 << (ANV_MIN_STATE_SIZE_LOG2 + i);
-      anv_fixed_size_state_pool_init(&pool->buckets[i], size);
-   }
-   VG(VALGRIND_CREATE_MEMPOOL(pool, 0, false));
-}
-
-void
-anv_state_pool_finish(struct anv_state_pool *pool)
-{
-   VG(VALGRIND_DESTROY_MEMPOOL(pool));
-}
-
-struct anv_state
-anv_state_pool_alloc(struct anv_state_pool *pool, size_t size, size_t align)
-{
-   unsigned size_log2 = ilog2_round_up(size < align ? align : size);
+   unsigned size_log2 = ilog2_round_up(size);
    assert(size_log2 <= ANV_MAX_STATE_SIZE_LOG2);
    if (size_log2 < ANV_MIN_STATE_SIZE_LOG2)
       size_log2 = ANV_MIN_STATE_SIZE_LOG2;
-   unsigned bucket = size_log2 - ANV_MIN_STATE_SIZE_LOG2;
+   return size_log2 - ANV_MIN_STATE_SIZE_LOG2;
+}
+
+static uint32_t
+anv_state_pool_get_bucket_size(uint32_t bucket)
+{
+   uint32_t size_log2 = bucket + ANV_MIN_STATE_SIZE_LOG2;
+   return 1 << size_log2;
+}
+
+static struct anv_state
+anv_state_pool_alloc_no_vg(struct anv_state_pool *pool,
+                           uint32_t size, uint32_t align)
+{
+   uint32_t bucket = anv_state_pool_get_bucket(MAX2(size, align));
 
    struct anv_state state;
-   state.alloc_size = 1 << size_log2;
-   state.offset = anv_fixed_size_state_pool_alloc(&pool->buckets[bucket],
-                                                  pool->block_pool);
-   state.map = pool->block_pool->map + state.offset;
+   state.alloc_size = anv_state_pool_get_bucket_size(bucket);
+
+   /* Try free list first. */
+   if (anv_free_list_pop(&pool->buckets[bucket].free_list,
+                         &pool->block_pool.map, &state.offset)) {
+      assert(state.offset >= 0);
+      goto done;
+   }
+
+   /* Try to grab a chunk from some larger bucket and split it up */
+   for (unsigned b = bucket + 1; b < ANV_STATE_BUCKETS; b++) {
+      int32_t chunk_offset;
+      if (anv_free_list_pop(&pool->buckets[b].free_list,
+                            &pool->block_pool.map, &chunk_offset)) {
+         unsigned chunk_size = anv_state_pool_get_bucket_size(b);
+
+         /* We've found a chunk that's larger than the requested state size.
+          * There are a couple of options as to what we do with it:
+          *
+          *    1) We could fully split the chunk into state.alloc_size sized
+          *       pieces.  However, this would mean that allocating a 16B
+          *       state could potentially split a 2MB chunk into 512K smaller
+          *       chunks.  This would lead to unnecessary fragmentation.
+          *
+          *    2) The classic "buddy allocator" method would have us split the
+          *       chunk in half and return one half.  Then we would split the
+          *       remaining half in half and return one half, and repeat as
+          *       needed until we get down to the size we want.  However, if
+          *       you are allocating a bunch of the same size state (which is
+          *       the common case), this means that every other allocation has
+          *       to go up a level and every fourth goes up two levels, etc.
+          *       This is not nearly as efficient as it could be if we did a
+          *       little more work up-front.
+          *
+          *    3) Split the difference between (1) and (2) by doing a
+          *       two-level split.  If it's bigger than some fixed block_size,
+          *       we split it into block_size sized chunks and return all but
+          *       one of them.  Then we split what remains into
+          *       state.alloc_size sized chunks and return all but one.
+          *
+          * We choose option (3).
+          */
+         if (chunk_size > pool->block_size &&
+             state.alloc_size < pool->block_size) {
+            assert(chunk_size % pool->block_size == 0);
+            /* We don't want to split giant chunks into tiny chunks.  Instead,
+             * break anything bigger than a block into block-sized chunks and
+             * then break it down into bucket-sized chunks from there.  Return
+             * all but the first block of the chunk to the block bucket.
+             */
+            const uint32_t block_bucket =
+               anv_state_pool_get_bucket(pool->block_size);
+            anv_free_list_push(&pool->buckets[block_bucket].free_list,
+                               pool->block_pool.map,
+                               chunk_offset + pool->block_size,
+                               pool->block_size,
+                               (chunk_size / pool->block_size) - 1);
+            chunk_size = pool->block_size;
+         }
+
+         assert(chunk_size % state.alloc_size == 0);
+         anv_free_list_push(&pool->buckets[bucket].free_list,
+                            pool->block_pool.map,
+                            chunk_offset + state.alloc_size,
+                            state.alloc_size,
+                            (chunk_size / state.alloc_size) - 1);
+
+         state.offset = chunk_offset;
+         goto done;
+      }
+   }
+
+   state.offset = anv_fixed_size_state_pool_alloc_new(&pool->buckets[bucket],
+                                                      &pool->block_pool,
+                                                      state.alloc_size,
+                                                      pool->block_size);
+
+done:
+   state.map = pool->block_pool.map + state.offset;
+   return state;
+}
+
+struct anv_state
+anv_state_pool_alloc(struct anv_state_pool *pool, uint32_t size, uint32_t align)
+{
+   if (size == 0)
+      return ANV_STATE_NULL;
+
+   struct anv_state state = anv_state_pool_alloc_no_vg(pool, size, align);
    VG(VALGRIND_MEMPOOL_ALLOC(pool, state.map, size));
    return state;
+}
+
+struct anv_state
+anv_state_pool_alloc_back(struct anv_state_pool *pool)
+{
+   struct anv_state state;
+   state.alloc_size = pool->block_size;
+
+   if (anv_free_list_pop(&pool->back_alloc_free_list,
+                         &pool->block_pool.map, &state.offset)) {
+      assert(state.offset < 0);
+      goto done;
+   }
+
+   state.offset = anv_block_pool_alloc_back(&pool->block_pool,
+                                            pool->block_size);
+
+done:
+   state.map = pool->block_pool.map + state.offset;
+   VG(VALGRIND_MEMPOOL_ALLOC(pool, state.map, state.alloc_size));
+   return state;
+}
+
+static void
+anv_state_pool_free_no_vg(struct anv_state_pool *pool, struct anv_state state)
+{
+   assert(util_is_power_of_two(state.alloc_size));
+   unsigned bucket = anv_state_pool_get_bucket(state.alloc_size);
+
+   if (state.offset < 0) {
+      assert(state.alloc_size == pool->block_size);
+      anv_free_list_push(&pool->back_alloc_free_list,
+                         pool->block_pool.map, state.offset,
+                         state.alloc_size, 1);
+   } else {
+      anv_free_list_push(&pool->buckets[bucket].free_list,
+                         pool->block_pool.map, state.offset,
+                         state.alloc_size, 1);
+   }
 }
 
 void
 anv_state_pool_free(struct anv_state_pool *pool, struct anv_state state)
 {
-   assert(util_is_power_of_two(state.alloc_size));
-   unsigned size_log2 = ilog2_round_up(state.alloc_size);
-   assert(size_log2 >= ANV_MIN_STATE_SIZE_LOG2 &&
-          size_log2 <= ANV_MAX_STATE_SIZE_LOG2);
-   unsigned bucket = size_log2 - ANV_MIN_STATE_SIZE_LOG2;
+   if (state.alloc_size == 0)
+      return;
 
    VG(VALGRIND_MEMPOOL_FREE(pool, state.map));
-   anv_fixed_size_state_pool_free(&pool->buckets[bucket],
-                                  pool->block_pool, state.offset);
+   anv_state_pool_free_no_vg(pool, state);
 }
 
-#define NULL_BLOCK 1
 struct anv_state_stream_block {
+   struct anv_state block;
+
    /* The next block */
    struct anv_state_stream_block *next;
-
-   /* The offset into the block pool at which this block starts */
-   uint32_t offset;
 
 #ifdef HAVE_VALGRIND
    /* A pointer to the first user-allocated thing in this block.  This is
@@ -740,16 +872,20 @@ struct anv_state_stream_block {
  */
 void
 anv_state_stream_init(struct anv_state_stream *stream,
-                      struct anv_block_pool *block_pool)
+                      struct anv_state_pool *state_pool,
+                      uint32_t block_size)
 {
-   stream->block_pool = block_pool;
-   stream->block = NULL;
+   stream->state_pool = state_pool;
+   stream->block_size = block_size;
 
-   /* Ensure that next + whatever > end.  This way the first call to
+   stream->block = ANV_STATE_NULL;
+
+   stream->block_list = NULL;
+
+   /* Ensure that next + whatever > block_size.  This way the first call to
     * state_stream_alloc fetches a new block.
     */
-   stream->next = 1;
-   stream->end = 0;
+   stream->next = block_size;
 
    VG(VALGRIND_CREATE_MEMPOOL(stream, 0, false));
 }
@@ -757,14 +893,12 @@ anv_state_stream_init(struct anv_state_stream *stream,
 void
 anv_state_stream_finish(struct anv_state_stream *stream)
 {
-   VG(const uint32_t block_size = stream->block_pool->block_size);
-
-   struct anv_state_stream_block *next = stream->block;
+   struct anv_state_stream_block *next = stream->block_list;
    while (next != NULL) {
       struct anv_state_stream_block sb = VG_NOACCESS_READ(next);
       VG(VALGRIND_MEMPOOL_FREE(stream, sb._vg_ptr));
-      VG(VALGRIND_MAKE_MEM_UNDEFINED(next, block_size));
-      anv_block_pool_free(stream->block_pool, sb.offset);
+      VG(VALGRIND_MAKE_MEM_UNDEFINED(next, stream->block_size));
+      anv_state_pool_free_no_vg(stream->state_pool, sb.block);
       next = sb.next;
    }
 
@@ -775,35 +909,44 @@ struct anv_state
 anv_state_stream_alloc(struct anv_state_stream *stream,
                        uint32_t size, uint32_t alignment)
 {
-   struct anv_state_stream_block *sb = stream->block;
+   if (size == 0)
+      return ANV_STATE_NULL;
 
-   struct anv_state state;
+   assert(alignment <= PAGE_SIZE);
 
-   state.offset = align_u32(stream->next, alignment);
-   if (state.offset + size > stream->end) {
-      uint32_t block = anv_block_pool_alloc(stream->block_pool);
-      sb = stream->block_pool->map + block;
+   uint32_t offset = align_u32(stream->next, alignment);
+   if (offset + size > stream->block.alloc_size) {
+      uint32_t block_size = stream->block_size;
+      if (block_size < size)
+         block_size = round_to_power_of_two(size);
 
-      VG(VALGRIND_MAKE_MEM_UNDEFINED(sb, sizeof(*sb)));
-      sb->next = stream->block;
-      sb->offset = block;
-      VG(sb->_vg_ptr = NULL);
-      VG(VALGRIND_MAKE_MEM_NOACCESS(sb, stream->block_pool->block_size));
+      stream->block = anv_state_pool_alloc_no_vg(stream->state_pool,
+                                                 block_size, PAGE_SIZE);
 
-      stream->block = sb;
-      stream->start = block;
-      stream->next = block + sizeof(*sb);
-      stream->end = block + stream->block_pool->block_size;
+      struct anv_state_stream_block *sb = stream->block.map;
+      VG_NOACCESS_WRITE(&sb->block, stream->block);
+      VG_NOACCESS_WRITE(&sb->next, stream->block_list);
+      stream->block_list = sb;
+      VG(VG_NOACCESS_WRITE(&sb->_vg_ptr, NULL));
 
-      state.offset = align_u32(stream->next, alignment);
-      assert(state.offset + size <= stream->end);
+      VG(VALGRIND_MAKE_MEM_NOACCESS(stream->block.map, stream->block_size));
+
+      /* Reset back to the start plus space for the header */
+      stream->next = sizeof(*sb);
+
+      offset = align_u32(stream->next, alignment);
+      assert(offset + size <= stream->block.alloc_size);
    }
 
-   assert(state.offset > stream->start);
-   state.map = (void *)sb + (state.offset - stream->start);
+   struct anv_state state = stream->block;
+   state.offset += offset;
    state.alloc_size = size;
+   state.map += offset;
+
+   stream->next = offset + size;
 
 #ifdef HAVE_VALGRIND
+   struct anv_state_stream_block *sb = stream->block_list;
    void *vg_ptr = VG_NOACCESS_READ(&sb->_vg_ptr);
    if (vg_ptr == NULL) {
       vg_ptr = state.map;
@@ -818,8 +961,6 @@ anv_state_stream_alloc(struct anv_state_stream *stream,
       VALGRIND_MAKE_MEM_UNDEFINED(state.map, state.alloc_size);
    }
 #endif
-
-   stream->next = state.offset + size;
 
    return state;
 }
@@ -1031,4 +1172,253 @@ anv_scratch_pool_alloc(struct anv_device *device, struct anv_scratch_pool *pool,
    pthread_mutex_unlock(&device->mutex);
 
    return &bo->bo;
+}
+
+struct anv_cached_bo {
+   struct anv_bo bo;
+
+   uint32_t refcount;
+};
+
+VkResult
+anv_bo_cache_init(struct anv_bo_cache *cache)
+{
+   cache->bo_map = _mesa_hash_table_create(NULL, _mesa_hash_pointer,
+                                           _mesa_key_pointer_equal);
+   if (!cache->bo_map)
+      return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
+
+   if (pthread_mutex_init(&cache->mutex, NULL)) {
+      _mesa_hash_table_destroy(cache->bo_map, NULL);
+      return vk_errorf(VK_ERROR_OUT_OF_HOST_MEMORY,
+                       "pthread_mutex_init failed: %m");
+   }
+
+   return VK_SUCCESS;
+}
+
+void
+anv_bo_cache_finish(struct anv_bo_cache *cache)
+{
+   _mesa_hash_table_destroy(cache->bo_map, NULL);
+   pthread_mutex_destroy(&cache->mutex);
+}
+
+static struct anv_cached_bo *
+anv_bo_cache_lookup_locked(struct anv_bo_cache *cache, uint32_t gem_handle)
+{
+   struct hash_entry *entry =
+      _mesa_hash_table_search(cache->bo_map,
+                              (const void *)(uintptr_t)gem_handle);
+   if (!entry)
+      return NULL;
+
+   struct anv_cached_bo *bo = (struct anv_cached_bo *)entry->data;
+   assert(bo->bo.gem_handle == gem_handle);
+
+   return bo;
+}
+
+static struct anv_bo *
+anv_bo_cache_lookup(struct anv_bo_cache *cache, uint32_t gem_handle)
+{
+   pthread_mutex_lock(&cache->mutex);
+
+   struct anv_cached_bo *bo = anv_bo_cache_lookup_locked(cache, gem_handle);
+
+   pthread_mutex_unlock(&cache->mutex);
+
+   return bo ? &bo->bo : NULL;
+}
+
+VkResult
+anv_bo_cache_alloc(struct anv_device *device,
+                   struct anv_bo_cache *cache,
+                   uint64_t size, struct anv_bo **bo_out)
+{
+   struct anv_cached_bo *bo =
+      vk_alloc(&device->alloc, sizeof(struct anv_cached_bo), 8,
+               VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+   if (!bo)
+      return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
+
+   bo->refcount = 1;
+
+   /* The kernel is going to give us whole pages anyway */
+   size = align_u64(size, 4096);
+
+   VkResult result = anv_bo_init_new(&bo->bo, device, size);
+   if (result != VK_SUCCESS) {
+      vk_free(&device->alloc, bo);
+      return result;
+   }
+
+   assert(bo->bo.gem_handle);
+
+   pthread_mutex_lock(&cache->mutex);
+
+   _mesa_hash_table_insert(cache->bo_map,
+                           (void *)(uintptr_t)bo->bo.gem_handle, bo);
+
+   pthread_mutex_unlock(&cache->mutex);
+
+   *bo_out = &bo->bo;
+
+   return VK_SUCCESS;
+}
+
+VkResult
+anv_bo_cache_import(struct anv_device *device,
+                    struct anv_bo_cache *cache,
+                    int fd, uint64_t size, struct anv_bo **bo_out)
+{
+   pthread_mutex_lock(&cache->mutex);
+
+   /* The kernel is going to give us whole pages anyway */
+   size = align_u64(size, 4096);
+
+   uint32_t gem_handle = anv_gem_fd_to_handle(device, fd);
+   if (!gem_handle) {
+      pthread_mutex_unlock(&cache->mutex);
+      return vk_error(VK_ERROR_INVALID_EXTERNAL_HANDLE_KHR);
+   }
+
+   struct anv_cached_bo *bo = anv_bo_cache_lookup_locked(cache, gem_handle);
+   if (bo) {
+      if (bo->bo.size != size) {
+         pthread_mutex_unlock(&cache->mutex);
+         return vk_error(VK_ERROR_INVALID_EXTERNAL_HANDLE_KHR);
+      }
+      __sync_fetch_and_add(&bo->refcount, 1);
+   } else {
+      /* For security purposes, we reject BO imports where the size does not
+       * match exactly.  This prevents a malicious client from passing a
+       * buffer to a trusted client, lying about the size, and telling the
+       * trusted client to try and texture from an image that goes
+       * out-of-bounds.  This sort of thing could lead to GPU hangs or worse
+       * in the trusted client.  The trusted client can protect itself against
+       * this sort of attack but only if it can trust the buffer size.
+       */
+      off_t import_size = lseek(fd, 0, SEEK_END);
+      if (import_size == (off_t)-1 || import_size != size) {
+         anv_gem_close(device, gem_handle);
+         pthread_mutex_unlock(&cache->mutex);
+         return vk_error(VK_ERROR_INVALID_EXTERNAL_HANDLE_KHR);
+      }
+
+      bo = vk_alloc(&device->alloc, sizeof(struct anv_cached_bo), 8,
+                    VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+      if (!bo) {
+         anv_gem_close(device, gem_handle);
+         pthread_mutex_unlock(&cache->mutex);
+         return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
+      }
+
+      bo->refcount = 1;
+
+      anv_bo_init(&bo->bo, gem_handle, size);
+
+      _mesa_hash_table_insert(cache->bo_map, (void *)(uintptr_t)gem_handle, bo);
+   }
+
+   pthread_mutex_unlock(&cache->mutex);
+
+   /* From the Vulkan spec:
+    *
+    *    "Importing memory from a file descriptor transfers ownership of
+    *    the file descriptor from the application to the Vulkan
+    *    implementation. The application must not perform any operations on
+    *    the file descriptor after a successful import."
+    *
+    * If the import fails, we leave the file descriptor open.
+    */
+   close(fd);
+
+   *bo_out = &bo->bo;
+
+   return VK_SUCCESS;
+}
+
+VkResult
+anv_bo_cache_export(struct anv_device *device,
+                    struct anv_bo_cache *cache,
+                    struct anv_bo *bo_in, int *fd_out)
+{
+   assert(anv_bo_cache_lookup(cache, bo_in->gem_handle) == bo_in);
+   struct anv_cached_bo *bo = (struct anv_cached_bo *)bo_in;
+
+   int fd = anv_gem_handle_to_fd(device, bo->bo.gem_handle);
+   if (fd < 0)
+      return vk_error(VK_ERROR_TOO_MANY_OBJECTS);
+
+   *fd_out = fd;
+
+   return VK_SUCCESS;
+}
+
+static bool
+atomic_dec_not_one(uint32_t *counter)
+{
+   uint32_t old, val;
+
+   val = *counter;
+   while (1) {
+      if (val == 1)
+         return false;
+
+      old = __sync_val_compare_and_swap(counter, val, val - 1);
+      if (old == val)
+         return true;
+
+      val = old;
+   }
+}
+
+void
+anv_bo_cache_release(struct anv_device *device,
+                     struct anv_bo_cache *cache,
+                     struct anv_bo *bo_in)
+{
+   assert(anv_bo_cache_lookup(cache, bo_in->gem_handle) == bo_in);
+   struct anv_cached_bo *bo = (struct anv_cached_bo *)bo_in;
+
+   /* Try to decrement the counter but don't go below one.  If this succeeds
+    * then the refcount has been decremented and we are not the last
+    * reference.
+    */
+   if (atomic_dec_not_one(&bo->refcount))
+      return;
+
+   pthread_mutex_lock(&cache->mutex);
+
+   /* We are probably the last reference since our attempt to decrement above
+    * failed.  However, we can't actually know until we are inside the mutex.
+    * Otherwise, someone could import the BO between the decrement and our
+    * taking the mutex.
+    */
+   if (unlikely(__sync_sub_and_fetch(&bo->refcount, 1) > 0)) {
+      /* Turns out we're not the last reference.  Unlock and bail. */
+      pthread_mutex_unlock(&cache->mutex);
+      return;
+   }
+
+   struct hash_entry *entry =
+      _mesa_hash_table_search(cache->bo_map,
+                              (const void *)(uintptr_t)bo->bo.gem_handle);
+   assert(entry);
+   _mesa_hash_table_remove(cache->bo_map, entry);
+
+   if (bo->bo.map)
+      anv_gem_munmap(bo->bo.map, bo->bo.size);
+
+   anv_gem_close(device, bo->bo.gem_handle);
+
+   /* Don't unlock until we've actually closed the BO.  The whole point of
+    * the BO cache is to ensure that we correctly handle races with creating
+    * and releasing GEM handles and we don't want to let someone import the BO
+    * again between mutex unlock and closing the GEM handle.
+    */
+   pthread_mutex_unlock(&cache->mutex);
+
+   vk_free(&device->alloc, bo);
 }

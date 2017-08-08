@@ -28,7 +28,7 @@
 #pragma once
 
 #include "core/state.h"
-#include "common/simdintrin.h"
+#include "common/intrin.h"
 
 template<SWR_TILE_MODE mode, int>
 struct TilingTraits

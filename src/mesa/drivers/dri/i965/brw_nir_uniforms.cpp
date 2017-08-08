@@ -135,7 +135,7 @@ brw_nir_setup_glsl_uniform(gl_shader_stage stage, nir_variable *var,
       struct gl_uniform_storage *storage =
          &prog->sh.data->UniformStorage[u];
 
-      if (storage->builtin)
+      if (storage->builtin || storage->type->is_sampler())
          continue;
 
       if (strncmp(var->name, storage->name, namelen) != 0 ||

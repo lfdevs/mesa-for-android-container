@@ -63,7 +63,7 @@ static void r300_release_referenced_objects(struct r300_context *r300)
     }
 
     /* Manually-created vertex buffers. */
-    pipe_resource_reference(&r300->dummy_vb.buffer, NULL);
+    pipe_vertex_buffer_unreference(&r300->dummy_vb);
     pb_reference(&r300->vbo, NULL);
 
     r300->context.delete_depth_stencil_alpha_state(&r300->context,
@@ -468,7 +468,7 @@ struct pipe_context* r300_create_context(struct pipe_screen* screen,
         vb.height0 = 1;
         vb.depth0 = 1;
 
-        r300->dummy_vb.buffer = screen->resource_create(screen, &vb);
+        r300->dummy_vb.buffer.resource = screen->resource_create(screen, &vb);
         r300->context.set_vertex_buffers(&r300->context, 0, 1, &r300->dummy_vb);
     }
 

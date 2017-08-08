@@ -151,7 +151,7 @@
 #define LDMATRIX_0_5_10(BASE) 			\
 	ld	[BASE + ( 0 * 0x4)], M0;	\
 	ld	[BASE + ( 5 * 0x4)], M5;	\
-	ld	[BASE + (10 * 0x4)], M10;	\
+	ld	[BASE + (10 * 0x4)], M10;
 
 #define LDMATRIX_0_5_10_12_13_14(BASE) 		\
 	ld	[BASE + ( 0 * 0x4)], M0;	\

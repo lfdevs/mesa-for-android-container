@@ -45,6 +45,26 @@ fd5_zsa_state_create(struct pipe_context *pctx,
 
 	so->base = *cso;
 
+	switch (cso->depth.func) {
+	case PIPE_FUNC_LESS:
+	case PIPE_FUNC_LEQUAL:
+		so->gras_lrz_cntl = A5XX_GRAS_LRZ_CNTL_ENABLE;
+		break;
+
+	case PIPE_FUNC_GREATER:
+	case PIPE_FUNC_GEQUAL:
+		so->gras_lrz_cntl = A5XX_GRAS_LRZ_CNTL_ENABLE | A5XX_GRAS_LRZ_CNTL_GREATER;
+		break;
+
+	default:
+		/* LRZ not enabled */
+		so->gras_lrz_cntl = 0;
+		break;
+	}
+
+	if (!(cso->stencil->enabled || cso->alpha.enabled || !cso->depth.writemask))
+		so->lrz_write = true;
+
 	so->rb_depth_cntl |=
 		A5XX_RB_DEPTH_CNTL_ZFUNC(cso->depth.func); /* maps 1:1 */
 
@@ -79,9 +99,9 @@ fd5_zsa_state_create(struct pipe_context *pctx,
 				A5XX_RB_STENCIL_CONTROL_FAIL_BF(fd_stencil_op(bs->fail_op)) |
 				A5XX_RB_STENCIL_CONTROL_ZPASS_BF(fd_stencil_op(bs->zpass_op)) |
 				A5XX_RB_STENCIL_CONTROL_ZFAIL_BF(fd_stencil_op(bs->zfail_op));
-//			so->rb_stencilrefmask_bf |=
-//				A5XX_RB_STENCILREFMASK_BF_STENCILWRITEMASK(bs->writemask) |
-//				A5XX_RB_STENCILREFMASK_BF_STENCILMASK(bs->valuemask);
+			so->rb_stencilrefmask_bf |=
+				A5XX_RB_STENCILREFMASK_BF_STENCILWRITEMASK(bs->writemask) |
+				A5XX_RB_STENCILREFMASK_BF_STENCILMASK(bs->valuemask);
 		}
 	}
 

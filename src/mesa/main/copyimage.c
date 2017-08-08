@@ -57,16 +57,16 @@ enum mesa_block_class {
  * \return true if success, false if error
  */
 static bool
-prepare_target(struct gl_context *ctx, GLuint name, GLenum target,
-               int level, int z, int depth,
-               struct gl_texture_image **tex_image,
-               struct gl_renderbuffer **renderbuffer,
-               mesa_format *format,
-               GLenum *internalFormat,
-               GLuint *width,
-               GLuint *height,
-               GLuint *num_samples,
-               const char *dbg_prefix)
+prepare_target_err(struct gl_context *ctx, GLuint name, GLenum target,
+                   int level, int z, int depth,
+                   struct gl_texture_image **tex_image,
+                   struct gl_renderbuffer **renderbuffer,
+                   mesa_format *format,
+                   GLenum *internalFormat,
+                   GLuint *width,
+                   GLuint *height,
+                   GLuint *num_samples,
+                   const char *dbg_prefix)
 {
    if (name == 0) {
       _mesa_error(ctx, GL_INVALID_VALUE,
@@ -149,9 +149,64 @@ prepare_target(struct gl_context *ctx, GLuint name, GLenum target,
          return false;
       }
 
+      /* The ARB_copy_image specification says:
+       *
+       *    "INVALID_OPERATION is generated if either object is a texture and
+       *     the texture is not complete (as defined in section 3.9.14)"
+       *
+       * The cited section says:
+       *
+       *    "Using the preceding definitions, a texture is complete unless any
+       *     of the following conditions hold true: [...]
+       *
+       *     * The minification filter requires a mipmap (is neither NEAREST
+       *       nor LINEAR), and the texture is not mipmap complete."
+       *
+       * This imposes the bizarre restriction that glCopyImageSubData requires
+       * mipmap completion based on the sampler minification filter, even
+       * though the call fundamentally ignores the sampler.  Additionally, it
+       * doesn't work with texture units, so it can't consider any bound
+       * separate sampler objects.  It appears that you're supposed to use
+       * the sampler object which is built-in to the texture object.
+       *
+       * dEQP and the Android CTS mandate this behavior, and the Khronos
+       * GL and ES working groups both affirmed that this is unfortunate but
+       * correct.  See https://cvs.khronos.org/bugzilla/show_bug.cgi?id=16224.
+       *
+       * Integer textures with filtering cause another completeness snag:
+       *
+       *    "Any of:
+       *     – The internal format of the texture is integer (see table 8.12).
+       *     – The internal format is STENCIL_INDEX.
+       *     – The internal format is DEPTH_STENCIL, and the value of
+       *       DEPTH_STENCIL_TEXTURE_MODE for the texture is STENCIL_INDEX.
+       *     and either the magnification filter is not NEAREST, or the
+       *     minification filter is neither NEAREST nor
+       *     NEAREST_MIPMAP_NEAREST."
+       *
+       * However, applications in the wild (such as "Total War: WARHAMMER")
+       * appear to call glCopyImageSubData with integer textures and the
+       * default mipmap filters of GL_LINEAR and GL_NEAREST_MIPMAP_LINEAR,
+       * which would be considered incomplete, but expect this to work.  In
+       * fact, until VK-GL-CTS commit fef80039ff875a51806b54d151c5f2d0c12da,
+       * the GL 4.5 CTS contained three tests which did the exact same thing
+       * by accident, and all conformant implementations allowed it.
+       *
+       * A proposal was made to amend the spec to say "is not complete (as
+       * defined in section <X>, but ignoring format-based completeness
+       * rules)" to allow this case.  It makes some sense, given that
+       * glCopyImageSubData copies raw data without considering format.
+       * While the official edits have not yet been made, the OpenGL
+       * working group agreed with the idea of allowing this behavior.
+       *
+       * To ignore formats, we check texObj->_MipmapComplete directly
+       * rather than calling _mesa_is_texture_complete().
+       */
       _mesa_test_texobj_completeness(ctx, texObj);
-      if (!texObj->_BaseComplete ||
-          (level != 0 && !texObj->_MipmapComplete)) {
+      const bool texture_complete_aside_from_formats =
+         _mesa_is_mipmap_filter(&texObj->Sampler) ? texObj->_MipmapComplete
+                                                  : texObj->_BaseComplete;
+      if (!texture_complete_aside_from_formats) {
          _mesa_error(ctx, GL_INVALID_OPERATION,
                      "glCopyImageSubData(%sName incomplete)", dbg_prefix);
          return false;
@@ -214,6 +269,30 @@ prepare_target(struct gl_context *ctx, GLuint name, GLenum target,
    return true;
 }
 
+static void
+prepare_target(struct gl_context *ctx, GLuint name, GLenum target,
+               int level, int z,
+               struct gl_texture_image **texImage,
+               struct gl_renderbuffer **renderbuffer)
+{
+   if (target == GL_RENDERBUFFER) {
+      struct gl_renderbuffer *rb = _mesa_lookup_renderbuffer(ctx, name);
+
+      *renderbuffer = rb;
+      *texImage = NULL;
+   } else {
+      struct gl_texture_object *texObj = _mesa_lookup_texture(ctx, name);
+
+      if (target == GL_TEXTURE_CUBE_MAP) {
+         *texImage = texObj->Image[z][level];
+      }
+      else {
+         *texImage = _mesa_select_tex_image(texObj, target, level);
+      }
+
+      *renderbuffer = NULL;
+   }
+}
 
 /**
  * Check that the x,y,z,width,height,region is within the texture image
@@ -450,6 +529,71 @@ copy_format_compatible(const struct gl_context *ctx,
    return false;
 }
 
+static void
+copy_image_subdata(struct gl_context *ctx,
+                   struct gl_texture_image *srcTexImage,
+                   struct gl_renderbuffer *srcRenderbuffer,
+                   int srcX, int srcY, int srcZ, int srcLevel,
+                   struct gl_texture_image *dstTexImage,
+                   struct gl_renderbuffer *dstRenderbuffer,
+                   int dstX, int dstY, int dstZ, int dstLevel,
+                   int srcWidth, int srcHeight, int srcDepth)
+{
+   /* loop over 2D slices/faces/layers */
+   for (int i = 0; i < srcDepth; ++i) {
+      int newSrcZ = srcZ + i;
+      int newDstZ = dstZ + i;
+
+      if (srcTexImage &&
+          srcTexImage->TexObject->Target == GL_TEXTURE_CUBE_MAP) {
+         /* need to update srcTexImage pointer for the cube face */
+         assert(srcZ + i < MAX_FACES);
+         srcTexImage = srcTexImage->TexObject->Image[srcZ + i][srcLevel];
+         assert(srcTexImage);
+         newSrcZ = 0;
+      }
+
+      if (dstTexImage &&
+          dstTexImage->TexObject->Target == GL_TEXTURE_CUBE_MAP) {
+         /* need to update dstTexImage pointer for the cube face */
+         assert(dstZ + i < MAX_FACES);
+         dstTexImage = dstTexImage->TexObject->Image[dstZ + i][dstLevel];
+         assert(dstTexImage);
+         newDstZ = 0;
+      }
+
+      ctx->Driver.CopyImageSubData(ctx,
+                                   srcTexImage, srcRenderbuffer,
+                                   srcX, srcY, newSrcZ,
+                                   dstTexImage, dstRenderbuffer,
+                                   dstX, dstY, newDstZ,
+                                   srcWidth, srcHeight);
+   }
+}
+
+void GLAPIENTRY
+_mesa_CopyImageSubData_no_error(GLuint srcName, GLenum srcTarget, GLint srcLevel,
+                                GLint srcX, GLint srcY, GLint srcZ,
+                                GLuint dstName, GLenum dstTarget, GLint dstLevel,
+                                GLint dstX, GLint dstY, GLint dstZ,
+                                GLsizei srcWidth, GLsizei srcHeight, GLsizei srcDepth)
+{
+   struct gl_texture_image *srcTexImage, *dstTexImage;
+   struct gl_renderbuffer *srcRenderbuffer, *dstRenderbuffer;
+
+   GET_CURRENT_CONTEXT(ctx);
+
+   prepare_target(ctx, srcName, srcTarget, srcLevel, srcZ, &srcTexImage,
+                  &srcRenderbuffer);
+
+   prepare_target(ctx, dstName, dstTarget, dstLevel, dstZ, &dstTexImage,
+                  &dstRenderbuffer);
+
+   copy_image_subdata(ctx, srcTexImage, srcRenderbuffer, srcX, srcY, srcZ,
+                      srcLevel, dstTexImage, dstRenderbuffer, dstX, dstY, dstZ,
+                      dstLevel, srcWidth, srcHeight, srcDepth);
+}
+
 void GLAPIENTRY
 _mesa_CopyImageSubData(GLuint srcName, GLenum srcTarget, GLint srcLevel,
                        GLint srcX, GLint srcY, GLint srcZ,
@@ -466,7 +610,6 @@ _mesa_CopyImageSubData(GLuint srcName, GLenum srcTarget, GLint srcLevel,
    GLuint src_bw, src_bh, dst_bw, dst_bh;
    GLuint src_num_samples, dst_num_samples;
    int dstWidth, dstHeight, dstDepth;
-   int i;
 
    if (MESA_VERBOSE & VERBOSE_API)
       _mesa_debug(ctx, "glCopyImageSubData(%u, %s, %d, %d, %d, %d, "
@@ -484,14 +627,16 @@ _mesa_CopyImageSubData(GLuint srcName, GLenum srcTarget, GLint srcLevel,
       return;
    }
 
-   if (!prepare_target(ctx, srcName, srcTarget, srcLevel, srcZ, srcDepth,
-                       &srcTexImage, &srcRenderbuffer, &srcFormat,
-                       &srcIntFormat, &src_w, &src_h, &src_num_samples, "src"))
+   if (!prepare_target_err(ctx, srcName, srcTarget, srcLevel, srcZ, srcDepth,
+                           &srcTexImage, &srcRenderbuffer, &srcFormat,
+                           &srcIntFormat, &src_w, &src_h, &src_num_samples,
+                           "src"))
       return;
 
-   if (!prepare_target(ctx, dstName, dstTarget, dstLevel, dstZ, srcDepth,
-                       &dstTexImage, &dstRenderbuffer, &dstFormat,
-                       &dstIntFormat, &dst_w, &dst_h, &dst_num_samples, "dst"))
+   if (!prepare_target_err(ctx, dstName, dstTarget, dstLevel, dstZ, srcDepth,
+                           &dstTexImage, &dstRenderbuffer, &dstFormat,
+                           &dstIntFormat, &dst_w, &dst_h, &dst_num_samples,
+                           "dst"))
       return;
 
    _mesa_get_format_block_size(srcFormat, &src_bw, &src_bh);
@@ -580,34 +725,7 @@ _mesa_CopyImageSubData(GLuint srcName, GLenum srcTarget, GLint srcLevel,
       return;
    }
 
-   /* loop over 2D slices/faces/layers */
-   for (i = 0; i < srcDepth; ++i) {
-      int newSrcZ = srcZ + i;
-      int newDstZ = dstZ + i;
-
-      if (srcTexImage &&
-          srcTexImage->TexObject->Target == GL_TEXTURE_CUBE_MAP) {
-         /* need to update srcTexImage pointer for the cube face */
-         assert(srcZ + i < MAX_FACES);
-         srcTexImage = srcTexImage->TexObject->Image[srcZ + i][srcLevel];
-         assert(srcTexImage);
-         newSrcZ = 0;
-      }
-
-      if (dstTexImage &&
-          dstTexImage->TexObject->Target == GL_TEXTURE_CUBE_MAP) {
-         /* need to update dstTexImage pointer for the cube face */
-         assert(dstZ + i < MAX_FACES);
-         dstTexImage = dstTexImage->TexObject->Image[dstZ + i][dstLevel];
-         assert(dstTexImage);
-         newDstZ = 0;
-      }
-
-      ctx->Driver.CopyImageSubData(ctx,
-                                   srcTexImage, srcRenderbuffer,
-                                   srcX, srcY, newSrcZ,
-                                   dstTexImage, dstRenderbuffer,
-                                   dstX, dstY, newDstZ,
-                                   srcWidth, srcHeight);
-   }
+   copy_image_subdata(ctx, srcTexImage, srcRenderbuffer, srcX, srcY, srcZ,
+                      srcLevel, dstTexImage, dstRenderbuffer, dstX, dstY, dstZ,
+                      dstLevel, srcWidth, srcHeight, srcDepth);
 }

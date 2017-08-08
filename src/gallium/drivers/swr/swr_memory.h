@@ -23,28 +23,6 @@
 
 #pragma once
 
-void LoadHotTile(
-    const SWR_SURFACE_STATE *pSrcSurface,
-    SWR_FORMAT dstFormat,
-    SWR_RENDERTARGET_ATTACHMENT renderTargetIndex,
-    UINT x, UINT y, uint32_t renderTargetArrayIndex,
-    uint8_t *pDstHotTile);
-
-void StoreHotTileToSurface(
-    SWR_SURFACE_STATE *pDstSurface,
-    SWR_FORMAT srcFormat,
-    SWR_RENDERTARGET_ATTACHMENT renderTargetIndex,
-    UINT x, UINT y, uint32_t renderTargetArrayIndex,
-    uint8_t *pSrcHotTile);
-
-void StoreHotTileClear(
-    SWR_SURFACE_STATE *pDstSurface,
-    SWR_RENDERTARGET_ATTACHMENT renderTargetIndex,
-    UINT x,
-    UINT y,
-    uint32_t renderTargetArrayIndex,
-    const float* pClearColor);
-
 INLINE void
 swr_LoadHotTile(HANDLE hPrivateContext,
                 SWR_FORMAT dstFormat,
@@ -56,7 +34,7 @@ swr_LoadHotTile(HANDLE hPrivateContext,
    swr_draw_context *pDC = (swr_draw_context*)hPrivateContext;
    SWR_SURFACE_STATE *pSrcSurface = &pDC->renderTargets[renderTargetIndex];
 
-   LoadHotTile(pSrcSurface, dstFormat, renderTargetIndex, x, y, renderTargetArrayIndex, pDstHotTile);
+   pDC->pAPI->pfnSwrLoadHotTile(pSrcSurface, dstFormat, renderTargetIndex, x, y, renderTargetArrayIndex, pDstHotTile);
 }
 
 INLINE void
@@ -70,7 +48,7 @@ swr_StoreHotTile(HANDLE hPrivateContext,
    swr_draw_context *pDC = (swr_draw_context*)hPrivateContext;
    SWR_SURFACE_STATE *pDstSurface = &pDC->renderTargets[renderTargetIndex];
 
-   StoreHotTileToSurface(pDstSurface, srcFormat, renderTargetIndex, x, y, renderTargetArrayIndex, pSrcHotTile);
+   pDC->pAPI->pfnSwrStoreHotTileToSurface(pDstSurface, srcFormat, renderTargetIndex, x, y, renderTargetArrayIndex, pSrcHotTile);
 }
 
 INLINE void
@@ -85,17 +63,5 @@ swr_StoreHotTileClear(HANDLE hPrivateContext,
    swr_draw_context *pDC = (swr_draw_context*)hPrivateContext;
    SWR_SURFACE_STATE *pDstSurface = &pDC->renderTargets[renderTargetIndex];
 
-   StoreHotTileClear(pDstSurface, renderTargetIndex, x, y, renderTargetArrayIndex, pClearColor);
-}
-
-void InitSimLoadTilesTable();
-void InitSimStoreTilesTable();
-void InitSimClearTilesTable();
-
-/* Init Load/Store/ClearTiles Tables */
-INLINE void swr_InitMemoryModule()
-{
-   InitSimLoadTilesTable();
-   InitSimStoreTilesTable();
-   InitSimClearTilesTable();
+   pDC->pAPI->pfnSwrStoreHotTileClear(pDstSurface, renderTargetIndex, x, y, renderTargetArrayIndex, pClearColor);
 }

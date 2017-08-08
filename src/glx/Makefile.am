@@ -20,7 +20,6 @@
 # IN THE SOFTWARE.
 
 if HAVE_SHARED_GLAPI
-SHARED_GLAPI_CFLAGS = -DGLX_SHARED_GLAPI
 SHARED_GLAPI_LIB = $(top_builddir)/src/mapi/shared-glapi/libglapi.la
 endif
 
@@ -42,7 +41,6 @@ AM_CFLAGS = \
 	-I$(top_builddir)/src/mapi/glapi \
 	-I$(top_srcdir)/src/mapi/glapi \
 	$(VISIBILITY_CFLAGS) \
-	$(SHARED_GLAPI_CFLAGS) \
 	$(EXTRA_DEFINES_XF86VIDMODE) \
 	-D_REENTRANT \
 	-DDEFAULT_DRIVER_DIR=\"$(DRI_DRIVER_SEARCH_DIR)\" \

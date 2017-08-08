@@ -133,6 +133,13 @@ static const struct fd_hw_sample_provider occlusion_predicate = {
 
 void fd3_query_context_init(struct pipe_context *pctx)
 {
+	struct fd_context *ctx = fd_context(pctx);
+
+	ctx->create_query = fd_hw_create_query;
+	ctx->query_prepare = fd_hw_query_prepare;
+	ctx->query_prepare_tile = fd_hw_query_prepare_tile;
+	ctx->query_set_stage = fd_hw_query_set_stage;
+
 	fd_hw_query_register_provider(pctx, &occlusion_counter);
 	fd_hw_query_register_provider(pctx, &occlusion_predicate);
 }

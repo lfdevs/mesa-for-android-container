@@ -30,6 +30,7 @@
 
 #include "anv_private.h"
 #include "vk_enum_to_str.h"
+#include "util/debug.h"
 
 /** Log an error message.  */
 void anv_printflike(1, 2)
@@ -94,6 +95,10 @@ __vk_errorf(VkResult error, const char *file, int line, const char *format, ...)
    } else {
       fprintf(stderr, "%s:%d: %s\n", file, line, error_str);
    }
+
+   if (error == VK_ERROR_DEVICE_LOST &&
+       env_var_as_boolean("ANV_ABORT_ON_DEVICE_LOSS", false))
+      abort();
 
    return error;
 }

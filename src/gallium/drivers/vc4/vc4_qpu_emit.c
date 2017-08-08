@@ -204,9 +204,9 @@ fixup_raddr_conflict(struct qblock *block,
 static void
 set_last_dst_pack(struct qblock *block, struct qinst *inst)
 {
-        bool had_pm = *last_inst(block) & QPU_PM;
-        bool had_ws = *last_inst(block) & QPU_WS;
-        uint32_t unpack = QPU_GET_FIELD(*last_inst(block), QPU_UNPACK);
+        MAYBE_UNUSED bool had_pm = *last_inst(block) & QPU_PM;
+        MAYBE_UNUSED bool had_ws = *last_inst(block) & QPU_WS;
+        MAYBE_UNUSED uint32_t unpack = QPU_GET_FIELD(*last_inst(block), QPU_UNPACK);
 
         if (!inst->dst.pack)
                 return;
@@ -419,7 +419,7 @@ vc4_generate_code_block(struct vc4_compile *c,
                         break;
                 }
 
-                bool handled_qinst_cond = false;
+                MAYBE_UNUSED bool handled_qinst_cond = false;
 
                 switch (qinst->op) {
                 case QOP_RCP:

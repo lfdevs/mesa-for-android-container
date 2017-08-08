@@ -212,9 +212,9 @@ static VkResult anv_create_cmd_buffer(
       goto fail;
 
    anv_state_stream_init(&cmd_buffer->surface_state_stream,
-                         &device->surface_state_block_pool);
+                         &device->surface_state_pool, 4096);
    anv_state_stream_init(&cmd_buffer->dynamic_state_stream,
-                         &device->dynamic_state_block_pool);
+                         &device->dynamic_state_pool, 16384);
 
    memset(&cmd_buffer->state.push_descriptor, 0,
           sizeof(cmd_buffer->state.push_descriptor));
@@ -306,11 +306,11 @@ anv_cmd_buffer_reset(struct anv_cmd_buffer *cmd_buffer)
 
    anv_state_stream_finish(&cmd_buffer->surface_state_stream);
    anv_state_stream_init(&cmd_buffer->surface_state_stream,
-                         &cmd_buffer->device->surface_state_block_pool);
+                         &cmd_buffer->device->surface_state_pool, 4096);
 
    anv_state_stream_finish(&cmd_buffer->dynamic_state_stream);
    anv_state_stream_init(&cmd_buffer->dynamic_state_stream,
-                         &cmd_buffer->device->dynamic_state_block_pool);
+                         &cmd_buffer->device->dynamic_state_pool, 16384);
    return VK_SUCCESS;
 }
 
@@ -335,6 +335,8 @@ anv_cmd_buffer_emit_state_base_address(struct anv_cmd_buffer *cmd_buffer)
       return gen8_cmd_buffer_emit_state_base_address(cmd_buffer);
    case 9:
       return gen9_cmd_buffer_emit_state_base_address(cmd_buffer);
+   case 10:
+      return gen10_cmd_buffer_emit_state_base_address(cmd_buffer);
    default:
       unreachable("unsupported gen\n");
    }
@@ -564,7 +566,7 @@ void anv_CmdBindVertexBuffers(
    /* We have to defer setting up vertex buffer since we need the buffer
     * stride from the pipeline. */
 
-   assert(firstBinding + bindingCount < MAX_VBS);
+   assert(firstBinding + bindingCount <= MAX_VBS);
    for (uint32_t i = 0; i < bindingCount; i++) {
       vb[firstBinding + i].buffer = anv_buffer_from_handle(pBuffers[i]);
       vb[firstBinding + i].offset = pOffsets[i];

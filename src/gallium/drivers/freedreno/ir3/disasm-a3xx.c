@@ -159,16 +159,16 @@ static void print_instr_cat0(instr_t *instr)
 		break;
 	case OPC_BR:
 		printf(" %sp0.%c, #%d", cat0->inv ? "!" : "",
-				component[cat0->comp], cat0->a3xx.immed);
+				component[cat0->comp], cat0->a5xx.immed);
 		break;
 	case OPC_JUMP:
 	case OPC_CALL:
-		printf(" #%d", cat0->a3xx.immed);
+		printf(" #%d", cat0->a5xx.immed);
 		break;
 	}
 
-	if ((debug & PRINT_VERBOSE) && (cat0->a3xx.dummy1|cat0->dummy2|cat0->dummy3|cat0->dummy4))
-		printf("\t{0: %x,%x,%x,%x}", cat0->a3xx.dummy1, cat0->dummy2, cat0->dummy3, cat0->dummy4);
+	if ((debug & PRINT_VERBOSE) && (cat0->dummy2|cat0->dummy3|cat0->dummy4))
+		printf("\t{0: %x,%x,%x}", cat0->dummy2, cat0->dummy3, cat0->dummy4);
 }
 
 static void print_instr_cat1(instr_t *instr)
@@ -506,7 +506,6 @@ static void print_instr_cat6(instr_t *instr)
 	case OPC_STP:
 	case OPC_STI:
 	case OPC_STLW:
-	case OPC_STGB_4D_4:
 	case OPC_STIB:
 		dst.full  = true;
 		src1.full = type_size(cat6->type) == 32;
@@ -522,6 +521,18 @@ static void print_instr_cat6(instr_t *instr)
 	switch (_OPC(6, cat6->opc)) {
 	case OPC_PREFETCH:
 	case OPC_RESINFO:
+		break;
+	case OPC_LDGB:
+		printf(".%s", cat6->ldgb.typed ? "typed" : "untyped");
+		printf(".%dd", cat6->ldgb.d + 1);
+		printf(".%s", type[cat6->type]);
+		printf(".%d", cat6->ldgb.type_size + 1);
+		break;
+	case OPC_STGB:
+		printf(".%s", cat6->stgb.typed ? "typed" : "untyped");
+		printf(".%dd", cat6->stgb.d + 1);
+		printf(".%s", type[cat6->type]);
+		printf(".%d", cat6->stgb.type_size + 1);
 		break;
 	case OPC_ATOMIC_ADD:
 	case OPC_ATOMIC_SUB:
@@ -558,6 +569,7 @@ static void print_instr_cat6(instr_t *instr)
 		break;
 
 	case OPC_LDG:
+	case OPC_LDC:
 		ss = 'g';
 		break;
 	case OPC_LDP:
@@ -589,6 +601,61 @@ static void print_instr_cat6(instr_t *instr)
 		break;
 	}
 
+	if (_OPC(6, cat6->opc) == OPC_STGB) {
+		struct reginfo src3;
+
+		memset(&src3, 0, sizeof(src3));
+
+		src1.reg = (reg_t)(cat6->stgb.src1);
+		src2.reg = (reg_t)(cat6->stgb.src2);
+		src2.im  = cat6->stgb.src2_im;
+		src3.reg = (reg_t)(cat6->stgb.src3);
+		src3.im  = cat6->stgb.src3_im;
+		src3.full = true;
+
+		printf("g[%u], ", cat6->stgb.dst_ssbo);
+		print_src(&src1);
+		printf(", ");
+		print_src(&src2);
+		printf(", ");
+		print_src(&src3);
+
+		if (debug & PRINT_VERBOSE)
+			printf(" (pad0=%x, pad3=%x)", cat6->stgb.pad0, cat6->stgb.pad3);
+
+		return;
+	}
+
+	if ((_OPC(6, cat6->opc) == OPC_LDGB) || is_atomic(_OPC(6, cat6->opc))) {
+
+		src1.reg = (reg_t)(cat6->ldgb.src1);
+		src1.im  = cat6->ldgb.src1_im;
+		src2.reg = (reg_t)(cat6->ldgb.src2);
+		src2.im  = cat6->ldgb.src2_im;
+		dst.reg  = (reg_t)(cat6->ldgb.dst);
+
+		print_src(&dst);
+		printf(", ");
+		printf("g[%u], ", cat6->ldgb.src_ssbo);
+		print_src(&src1);
+		printf(", ");
+		print_src(&src2);
+
+		if (is_atomic(_OPC(6, cat6->opc))) {
+			struct reginfo src3;
+			memset(&src3, 0, sizeof(src3));
+			src3.reg = (reg_t)(cat6->ldgb.src3);
+			src3.full = true;
+
+			printf(", ");
+			print_src(&src3);
+		}
+
+		if (debug & PRINT_VERBOSE)
+			printf(" (pad0=%x, pad3=%x, mustbe0=%x)", cat6->ldgb.pad0, cat6->ldgb.pad3, cat6->ldgb.mustbe0);
+
+		return;
+	}
 	if (cat6->dst_off) {
 		dst.reg = (reg_t)(cat6->c.dst);
 		dstoff  = cat6->c.off;
@@ -806,10 +873,10 @@ static const struct opc_info {
 	OPC(6, OPC_ATOMIC_AND,     atomic.and),
 	OPC(6, OPC_ATOMIC_OR,      atomic.or),
 	OPC(6, OPC_ATOMIC_XOR,     atomic.xor),
-	OPC(6, OPC_LDGB_TYPED_4D,    ldgb.typed.3d),
-	OPC(6, OPC_STGB_4D_4,    stgb.4d.4),
+	OPC(6, OPC_LDGB,         ldgb),
+	OPC(6, OPC_STGB,         stgb),
 	OPC(6, OPC_STIB,         stib),
-	OPC(6, OPC_LDC_4,        ldc.4),
+	OPC(6, OPC_LDC,          ldc),
 	OPC(6, OPC_LDLV,         ldlv),
 
 

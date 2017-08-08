@@ -367,6 +367,19 @@ vk_format_is_depth(VkFormat format)
 }
 
 static inline bool
+vk_format_is_stencil(VkFormat format)
+{
+	const struct vk_format_description *desc = vk_format_description(format);
+
+	assert(desc);
+	if (!desc) {
+		return false;
+	}
+
+	return vk_format_has_stencil(desc);
+}
+
+static inline bool
 vk_format_is_color(VkFormat format)
 {
 	return !vk_format_is_depth_or_stencil(format);
@@ -394,6 +407,13 @@ vk_format_is_int(VkFormat format)
 	int channel =  vk_format_get_first_non_void_channel(format);
 
 	return channel >= 0 && desc->channel[channel].pure_integer;
+}
+
+static inline bool
+vk_format_is_srgb(VkFormat format)
+{
+	const struct vk_format_description *desc = vk_format_description(format);
+	return desc->colorspace == VK_FORMAT_COLORSPACE_SRGB;
 }
 
 static inline VkFormat

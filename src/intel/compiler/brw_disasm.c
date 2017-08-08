@@ -719,7 +719,7 @@ reg(FILE *file, unsigned _reg_file, unsigned _reg_nr)
 }
 
 static int
-dest(FILE *file, const struct gen_device_info *devinfo, brw_inst *inst)
+dest(FILE *file, const struct gen_device_info *devinfo, const brw_inst *inst)
 {
    unsigned elem_size = brw_element_size(devinfo, inst, dst);
    int err = 0;
@@ -776,7 +776,7 @@ dest(FILE *file, const struct gen_device_info *devinfo, brw_inst *inst)
 }
 
 static int
-dest_3src(FILE *file, const struct gen_device_info *devinfo, brw_inst *inst)
+dest_3src(FILE *file, const struct gen_device_info *devinfo, const brw_inst *inst)
 {
    int err = 0;
    uint32_t reg_file;
@@ -942,7 +942,7 @@ src_da16(FILE *file,
 }
 
 static int
-src0_3src(FILE *file, const struct gen_device_info *devinfo, brw_inst *inst)
+src0_3src(FILE *file, const struct gen_device_info *devinfo, const brw_inst *inst)
 {
    int err = 0;
    unsigned src0_subreg_nr = brw_inst_3src_src0_subreg_nr(devinfo, inst);
@@ -969,7 +969,7 @@ src0_3src(FILE *file, const struct gen_device_info *devinfo, brw_inst *inst)
 }
 
 static int
-src1_3src(FILE *file, const struct gen_device_info *devinfo, brw_inst *inst)
+src1_3src(FILE *file, const struct gen_device_info *devinfo, const brw_inst *inst)
 {
    int err = 0;
    unsigned src1_subreg_nr = brw_inst_3src_src1_subreg_nr(devinfo, inst);
@@ -997,7 +997,7 @@ src1_3src(FILE *file, const struct gen_device_info *devinfo, brw_inst *inst)
 
 
 static int
-src2_3src(FILE *file, const struct gen_device_info *devinfo, brw_inst *inst)
+src2_3src(FILE *file, const struct gen_device_info *devinfo, const brw_inst *inst)
 {
    int err = 0;
    unsigned src2_subreg_nr = brw_inst_3src_src2_subreg_nr(devinfo, inst);
@@ -1024,7 +1024,7 @@ src2_3src(FILE *file, const struct gen_device_info *devinfo, brw_inst *inst)
 }
 
 static int
-imm(FILE *file, const struct gen_device_info *devinfo, unsigned type, brw_inst *inst)
+imm(FILE *file, const struct gen_device_info *devinfo, unsigned type, const brw_inst *inst)
 {
    switch (type) {
    case BRW_HW_REG_TYPE_UD:
@@ -1066,7 +1066,7 @@ imm(FILE *file, const struct gen_device_info *devinfo, unsigned type, brw_inst *
 }
 
 static int
-src0(FILE *file, const struct gen_device_info *devinfo, brw_inst *inst)
+src0(FILE *file, const struct gen_device_info *devinfo, const brw_inst *inst)
 {
    if (brw_inst_src0_reg_file(devinfo, inst) == BRW_IMMEDIATE_VALUE) {
       return imm(file, devinfo, brw_inst_src0_reg_type(devinfo, inst), inst);
@@ -1122,7 +1122,7 @@ src0(FILE *file, const struct gen_device_info *devinfo, brw_inst *inst)
 }
 
 static int
-src1(FILE *file, const struct gen_device_info *devinfo, brw_inst *inst)
+src1(FILE *file, const struct gen_device_info *devinfo, const brw_inst *inst)
 {
    if (brw_inst_src1_reg_file(devinfo, inst) == BRW_IMMEDIATE_VALUE) {
       return imm(file, devinfo, brw_inst_src1_reg_type(devinfo, inst), inst);
@@ -1178,7 +1178,7 @@ src1(FILE *file, const struct gen_device_info *devinfo, brw_inst *inst)
 }
 
 static int
-qtr_ctrl(FILE *file, const struct gen_device_info *devinfo, brw_inst *inst)
+qtr_ctrl(FILE *file, const struct gen_device_info *devinfo, const brw_inst *inst)
 {
    int qtr_ctl = brw_inst_qtr_control(devinfo, inst);
    int exec_size = 1 << brw_inst_exec_size(devinfo, inst);
@@ -1225,7 +1225,7 @@ brw_disassemble_imm(const struct gen_device_info *devinfo,
 
 int
 brw_disassemble_inst(FILE *file, const struct gen_device_info *devinfo,
-                     brw_inst *inst, bool is_compacted)
+                     const brw_inst *inst, bool is_compacted)
 {
    int err = 0;
    int space = 0;

@@ -132,26 +132,41 @@ blorp_alloc_vertex_buffer(struct blorp_batch *batch, uint32_t size,
       anv_cmd_buffer_alloc_dynamic_state(cmd_buffer, size, 64);
 
    *addr = (struct blorp_address) {
-      .buffer = &cmd_buffer->device->dynamic_state_block_pool.bo,
+      .buffer = &cmd_buffer->device->dynamic_state_pool.block_pool.bo,
       .offset = vb_state.offset,
    };
 
    return vb_state.map;
 }
 
+#if GEN_GEN >= 8
+static struct blorp_address
+blorp_get_workaround_page(struct blorp_batch *batch)
+{
+   struct anv_cmd_buffer *cmd_buffer = batch->driver_batch;
+
+   return (struct blorp_address) {
+      .buffer = &cmd_buffer->device->workaround_bo,
+   };
+}
+#endif
+
 static void
 blorp_flush_range(struct blorp_batch *batch, void *start, size_t size)
 {
    struct anv_device *device = batch->blorp->driver_ctx;
    if (!device->info.has_llc)
-      anv_flush_range(start, size);
+      gen_flush_range(start, size);
 }
 
 static void
-blorp_emit_urb_config(struct blorp_batch *batch, unsigned vs_entry_size)
+blorp_emit_urb_config(struct blorp_batch *batch,
+                      unsigned vs_entry_size, unsigned sf_entry_size)
 {
    struct anv_device *device = batch->blorp->driver_ctx;
    struct anv_cmd_buffer *cmd_buffer = batch->driver_batch;
+
+   assert(sf_entry_size == 0);
 
    const unsigned entry_size[4] = { vs_entry_size, 1, 1, 1 };
 

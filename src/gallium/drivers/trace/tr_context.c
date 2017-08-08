@@ -1034,24 +1034,6 @@ trace_context_set_vertex_buffers(struct pipe_context *_pipe,
 }
 
 
-static void
-trace_context_set_index_buffer(struct pipe_context *_pipe,
-                               const struct pipe_index_buffer *ib)
-{
-   struct trace_context *tr_ctx = trace_context(_pipe);
-   struct pipe_context *pipe = tr_ctx->pipe;
-
-   trace_dump_call_begin("pipe_context", "set_index_buffer");
-
-   trace_dump_arg(ptr, pipe);
-   trace_dump_arg(index_buffer, ib);
-
-   pipe->set_index_buffer(pipe, ib);
-
-   trace_dump_call_end();
-}
-
-
 static struct pipe_stream_output_target *
 trace_context_create_stream_output_target(struct pipe_context *_pipe,
                                           struct pipe_resource *res,
@@ -1722,6 +1704,112 @@ static void trace_context_launch_grid(struct pipe_context *_pipe,
    trace_dump_call_end();
 }
 
+static uint64_t trace_context_create_texture_handle(struct pipe_context *_pipe,
+                                                    struct pipe_sampler_view *view,
+                                                    const struct pipe_sampler_state *state)
+{
+   struct trace_context *tr_ctx = trace_context(_pipe);
+   struct pipe_context *pipe = tr_ctx->pipe;
+   uint64_t handle;
+
+   trace_dump_call_begin("pipe_context", "create_texture_handle");
+   trace_dump_arg(ptr, pipe);
+   trace_dump_arg(ptr, view);
+   trace_dump_arg_begin("state");
+   trace_dump_arg(sampler_state, state);
+   trace_dump_arg_end();
+
+   handle = pipe->create_texture_handle(pipe, view, state);
+
+   trace_dump_ret(uint, handle);
+   trace_dump_call_end();
+
+   return handle;
+}
+
+static void trace_context_delete_texture_handle(struct pipe_context *_pipe,
+                                                uint64_t handle)
+{
+   struct trace_context *tr_ctx = trace_context(_pipe);
+   struct pipe_context *pipe = tr_ctx->pipe;
+
+   trace_dump_call_begin("pipe_context", "delete_texture_handle");
+   trace_dump_arg(ptr, pipe);
+   trace_dump_arg(uint, handle);
+   trace_dump_call_end();
+
+   pipe->delete_texture_handle(pipe, handle);
+}
+
+static void trace_context_make_texture_handle_resident(struct pipe_context *_pipe,
+                                                       uint64_t handle,
+                                                       bool resident)
+{
+   struct trace_context *tr_ctx = trace_context(_pipe);
+   struct pipe_context *pipe = tr_ctx->pipe;
+
+   trace_dump_call_begin("pipe_context", "make_texture_handle_resident");
+   trace_dump_arg(ptr, pipe);
+   trace_dump_arg(uint, handle);
+   trace_dump_arg(bool, resident);
+   trace_dump_call_end();
+
+   pipe->make_texture_handle_resident(pipe, handle, resident);
+}
+
+static uint64_t trace_context_create_image_handle(struct pipe_context *_pipe,
+                                                  const struct pipe_image_view *image)
+{
+   struct trace_context *tr_ctx = trace_context(_pipe);
+   struct pipe_context *pipe = tr_ctx->pipe;
+   uint64_t handle;
+
+   trace_dump_call_begin("pipe_context", "create_image_handle");
+   trace_dump_arg(ptr, pipe);
+   trace_dump_arg_begin("image");
+   trace_dump_image_view(image);
+   trace_dump_arg_end();
+
+   handle = pipe->create_image_handle(pipe, image);
+
+   trace_dump_ret(uint, handle);
+   trace_dump_call_end();
+
+   return handle;
+}
+
+static void trace_context_delete_image_handle(struct pipe_context *_pipe,
+                                              uint64_t handle)
+{
+   struct trace_context *tr_ctx = trace_context(_pipe);
+   struct pipe_context *pipe = tr_ctx->pipe;
+
+   trace_dump_call_begin("pipe_context", "delete_image_handle");
+   trace_dump_arg(ptr, pipe);
+   trace_dump_arg(uint, handle);
+   trace_dump_call_end();
+
+   pipe->delete_image_handle(pipe, handle);
+}
+
+static void trace_context_make_image_handle_resident(struct pipe_context *_pipe,
+                                                    uint64_t handle,
+                                                    unsigned access,
+                                                    bool resident)
+{
+   struct trace_context *tr_ctx = trace_context(_pipe);
+   struct pipe_context *pipe = tr_ctx->pipe;
+
+   trace_dump_call_begin("pipe_context", "make_image_handle_resident");
+   trace_dump_arg(ptr, pipe);
+   trace_dump_arg(uint, handle);
+   trace_dump_arg(uint, access);
+   trace_dump_arg(bool, resident);
+   trace_dump_call_end();
+
+   pipe->make_image_handle_resident(pipe, handle, access, resident);
+}
+
 struct pipe_context *
 trace_context_create(struct trace_screen *tr_scr,
                      struct pipe_context *pipe)
@@ -1804,7 +1892,6 @@ trace_context_create(struct trace_screen *tr_scr,
    TR_CTX_INIT(create_surface);
    TR_CTX_INIT(surface_destroy);
    TR_CTX_INIT(set_vertex_buffers);
-   TR_CTX_INIT(set_index_buffer);
    TR_CTX_INIT(create_stream_output_target);
    TR_CTX_INIT(stream_output_target_destroy);
    TR_CTX_INIT(set_stream_output_targets);
@@ -1824,6 +1911,12 @@ trace_context_create(struct trace_screen *tr_scr,
    TR_CTX_INIT(set_shader_buffers);
    TR_CTX_INIT(launch_grid);
    TR_CTX_INIT(set_shader_images);
+   TR_CTX_INIT(create_texture_handle);
+   TR_CTX_INIT(delete_texture_handle);
+   TR_CTX_INIT(make_texture_handle_resident);
+   TR_CTX_INIT(create_image_handle);
+   TR_CTX_INIT(delete_image_handle);
+   TR_CTX_INIT(make_image_handle_resident);
 
    TR_CTX_INIT(transfer_map);
    TR_CTX_INIT(transfer_unmap);

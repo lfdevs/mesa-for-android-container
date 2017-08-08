@@ -87,132 +87,6 @@ isl_gen8_choose_msaa_layout(const struct isl_device *dev,
    return true;
 }
 
-/**
- * Choose horizontal subimage alignment, in units of surface elements.
- */
-static uint32_t
-gen8_choose_halign_el(const struct isl_device *dev,
-                      const struct isl_surf_init_info *restrict info)
-{
-   /* From the Broadwell PRM, Volume 2d "Command Reference: Structures",
-    * RENDER_SURFACE_STATE Surface Horizontal Alignment, p326:
-    *
-    *    - This field is intended to be set to HALIGN_8 only if the surface
-    *      was rendered as a depth buffer with Z16 format or a stencil buffer.
-    *      In this case it must be set to HALIGN_8 since these surfaces
-    *      support only alignment of 8.  For Z32 formats it must be set to
-    *      HALIGN_4.
-    *
-    * From the Broadwell PRM, Volume 4, "Memory Views" p. 186, the alignment
-    * parameters are summarized in the following table:
-    *
-    *     Surface Defined By | Surface Format  | Align Width | Align Height
-    *    --------------------+-----------------+-------------+--------------
-    *       DEPTH_BUFFER     |   D16_UNORM     |      8      |      4
-    *                        |     other       |      4      |      4
-    *    --------------------+-----------------+-------------+--------------
-    *       STENCIL_BUFFER   |      N/A        |      8      |      8
-    *    --------------------+-----------------+-------------+--------------
-    *       SURFACE_STATE    | BC*, ETC*, EAC* |      4      |      4
-    *                        |      FXT1       |      8      |      4
-    *                        |   all others    |   HALIGN    |   VALIGN
-    *    -------------------------------------------------------------------
-    */
-   if (isl_surf_usage_is_depth(info->usage))
-      return info->format == ISL_FORMAT_R16_UNORM ? 8 : 4;
-
-   if (isl_surf_usage_is_stencil(info->usage))
-      return 8;
-
-   /* All compressed formats in the above table have an alignment equal to
-    * their compression block size.  This translates to an alignment in
-    * elements of 1.
-    */
-   if (isl_format_is_compressed(info->format))
-      return 1;
-
-   if (!(info->usage & ISL_SURF_USAGE_DISABLE_AUX_BIT)) {
-      /* From the Broadwell PRM, Volume 2d "Command Reference: Structures",
-       * RENDER_SURFACE_STATE Surface Horizontal Alignment, p326:
-       *
-       *    - When Auxiliary Surface Mode is set to AUX_CCS_D or AUX_CCS_E,
-       *      HALIGN 16 must be used.
-       *
-       * This case handles color surfaces that may own an auxiliary MCS, CCS_D,
-       * or CCS_E. Depth buffers, including those that own an auxiliary HiZ
-       * surface, are handled above and do not require HALIGN_16.
-       */
-      assert(!isl_surf_usage_is_depth(info->usage));
-      return 16;
-   }
-
-   /* XXX(chadv): I believe the hardware requires each image to be
-    * cache-aligned. If that's true, then defaulting to halign=4 is wrong for
-    * many formats. Depending on the format's block size, we may need to
-    * increase halign to 8.
-    */
-   return 4;
-}
-
-/**
- * Choose vertical subimage alignment, in units of surface elements.
- */
-static uint32_t
-gen8_choose_valign_el(const struct isl_device *dev,
-                      const struct isl_surf_init_info *restrict info)
-{
-   /* From the Broadwell PRM > Volume 2d: Command Reference: Structures
-    * > RENDER_SURFACE_STATE Surface Vertical Alignment (p325):
-    *
-    *    - For Sampling Engine and Render Target Surfaces: This field
-    *      specifies the vertical alignment requirement in elements for the
-    *      surface. [...] An element is defined as a pixel in uncompresed
-    *      surface formats, and as a compression block in compressed surface
-    *      formats. For MSFMT_DEPTH_STENCIL type multisampled surfaces, an
-    *      element is a sample.
-    *
-    *    - This field is intended to be set to VALIGN_4 if the surface was
-    *      rendered as a depth buffer, for a multisampled (4x) render target,
-    *      or for a multisampled (8x) render target, since these surfaces
-    *      support only alignment of 4. Use of VALIGN_4 for other surfaces is
-    *      supported, but increases memory usage.
-    *
-    *    - This field is intended to be set to VALIGN_8 only if the surface
-    *       was rendered as a stencil buffer, since stencil buffer surfaces
-    *       support only alignment of 8. If set to VALIGN_8, Surface Format
-    *       must be R8_UINT.
-    *
-    * From the Broadwell PRM, Volume 4, "Memory Views" p. 186, the alignment
-    * parameters are summarized in the following table:
-    *
-    *     Surface Defined By | Surface Format  | Align Width | Align Height
-    *    --------------------+-----------------+-------------+--------------
-    *       DEPTH_BUFFER     |   D16_UNORM     |      8      |      4
-    *                        |     other       |      4      |      4
-    *    --------------------+-----------------+-------------+--------------
-    *       STENCIL_BUFFER   |      N/A        |      8      |      8
-    *    --------------------+-----------------+-------------+--------------
-    *       SURFACE_STATE    | BC*, ETC*, EAC* |      4      |      4
-    *                        |      FXT1       |      8      |      4
-    *                        |   all others    |   HALIGN    |   VALIGN
-    *    -------------------------------------------------------------------
-    */
-   if (isl_surf_usage_is_depth(info->usage))
-      return 4;
-
-   if (isl_surf_usage_is_stencil(info->usage))
-      return 8;
-
-   /* All compressed formats in the above table have an alignment equal to
-    * their compression block size.  This translates to an alignment in
-    * elements of 1.
-    */
-   if (isl_format_is_compressed(info->format))
-      return 1;
-
-   return 4;
-}
-
 void
 isl_gen8_choose_image_alignment_el(const struct isl_device *dev,
                                    const struct isl_surf_init_info *restrict info,
@@ -239,30 +113,65 @@ isl_gen8_choose_image_alignment_el(const struct isl_device *dev,
       return;
    }
 
-   /* The below text from the Broadwell PRM provides some insight into the
-    * hardware's requirements for LOD alignment.  From the Broadwell PRM >>
-    * Volume 5: Memory Views >> Surface Layout >> 2D Surfaces:
+   /* From the Broadwell PRM, Volume 4, "Memory Views" p. 186, the alignment
+    * parameters are summarized in the following table:
     *
-    *    These [2D surfaces] must adhere to the following memory organization
-    *    rules:
-    *
-    *       - For non-compressed texture formats, each mipmap must start on an
-    *         even row within the monolithic rectangular area. For
-    *         1-texel-high mipmaps, this may require a row of padding below
-    *         the previous mipmap. This restriction does not apply to any
-    *         compressed texture formats; each subsequent (lower-res)
-    *         compressed mipmap is positioned directly below the previous
-    *         mipmap.
-    *
-    *       - Vertical alignment restrictions vary with memory tiling type:
-    *         1 DWord for linear, 16-byte (DQWord) for tiled. (Note that tiled
-    *         mipmaps are not required to start at the left edge of a tile
-    *         row.)
+    *     Surface Defined By | Surface Format  | Align Width | Align Height
+    *    --------------------+-----------------+-------------+--------------
+    *       DEPTH_BUFFER     |   D16_UNORM     |      8      |      4
+    *                        |     other       |      4      |      4
+    *    --------------------+-----------------+-------------+--------------
+    *       STENCIL_BUFFER   |      N/A        |      8      |      8
+    *    --------------------+-----------------+-------------+--------------
+    *       SURFACE_STATE    | BC*, ETC*, EAC* |      4      |      4
+    *                        |      FXT1       |      8      |      4
+    *                        |   all others    |   HALIGN    |   VALIGN
+    *    -------------------------------------------------------------------
+    */
+   if (isl_surf_usage_is_depth(info->usage)) {
+      *image_align_el = info->format == ISL_FORMAT_R16_UNORM ?
+                        isl_extent3d(8, 4, 1) : isl_extent3d(4, 4, 1);
+      return;
+   } else if (isl_surf_usage_is_stencil(info->usage)) {
+      *image_align_el = isl_extent3d(8, 8, 1);
+      return;
+   } else if (isl_format_is_compressed(info->format)) {
+      /* Compressed formats all have alignment equal to block size. */
+      *image_align_el = isl_extent3d(1, 1, 1);
+      return;
+   }
+
+   /* For all other formats, the alignment is determined by the horizontal and
+    * vertical alignment fields of RENDER_SURFACE_STATE.  There are a few
+    * restrictions, but we generally have a choice.
     */
 
-   *image_align_el = (struct isl_extent3d) {
-      .w = gen8_choose_halign_el(dev, info),
-      .h = gen8_choose_valign_el(dev, info),
-      .d = 1,
-   };
+   /* Vertical alignment is unrestricted so we choose the smallest allowed
+    * alignment because that will use the least memory
+    */
+   const uint32_t valign = 4;
+
+   bool needs_halign16 = false;
+   if (!(info->usage & ISL_SURF_USAGE_DISABLE_AUX_BIT)) {
+      /* From the Broadwell PRM, Volume 2d "Command Reference: Structures",
+       * RENDER_SURFACE_STATE Surface Horizontal Alignment, p326:
+       *
+       *    - When Auxiliary Surface Mode is set to AUX_CCS_D or AUX_CCS_E,
+       *      HALIGN 16 must be used.
+       *
+       * This case handles color surfaces that may own an auxiliary MCS, CCS_D,
+       * or CCS_E. Depth buffers, including those that own an auxiliary HiZ
+       * surface, are handled above and do not require HALIGN_16.
+       */
+      needs_halign16 = true;
+   }
+
+   /* XXX(chadv): I believe the hardware requires each image to be
+    * cache-aligned. If that's true, then defaulting to halign=4 is wrong for
+    * many formats. Depending on the format's block size, we may need to
+    * increase halign to 8.
+    */
+   const uint32_t halign = needs_halign16 ? 16 : 4;
+
+   *image_align_el = isl_extent3d(halign, valign, 1);
 }

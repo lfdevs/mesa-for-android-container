@@ -41,6 +41,7 @@
 #include "main/pack.h"
 #include "main/pbo.h"
 #include "main/readpix.h"
+#include "main/state.h"
 #include "main/texformat.h"
 #include "main/teximage.h"
 #include "main/texstore.h"
@@ -1072,6 +1073,8 @@ st_DrawPixels(struct gl_context *ctx, GLint x, GLint y,
    /* Mesa state should be up to date by now */
    assert(ctx->NewState == 0x0);
 
+   _mesa_update_draw_buffer_bounds(ctx, ctx->DrawBuffer);
+
    st_flush_bitmap_cache(st);
    st_invalidate_readpix_cache(st);
 
@@ -1123,7 +1126,7 @@ st_DrawPixels(struct gl_context *ctx, GLint x, GLint y,
       /* compiling a new fragment shader variant added new state constants
        * into the constant buffer, we need to update them
        */
-      st_upload_constants(st, st->fp->Base.Parameters, MESA_SHADER_FRAGMENT);
+      st_upload_constants(st, &st->fp->Base);
    }
 
    /* Put glDrawPixels image into a texture */
@@ -1317,7 +1320,7 @@ blit_copy_pixels(struct gl_context *ctx, GLint srcx, GLint srcy,
        !ctx->FragmentProgram.Enabled &&
        !ctx->VertexProgram.Enabled &&
        !ctx->_Shader->CurrentProgram[MESA_SHADER_FRAGMENT] &&
-       !ctx->ATIFragmentShader._Enabled &&
+       !_mesa_ati_fragment_shader_enabled(ctx) &&
        ctx->DrawBuffer->_NumColorDrawBuffers == 1 &&
        !ctx->Query.CondRenderQuery &&
        !ctx->Query.CurrentOcclusionObject) {
@@ -1437,6 +1440,8 @@ st_CopyPixels(struct gl_context *ctx, GLint srcx, GLint srcy,
    GLint readX, readY, readW, readH;
    struct gl_pixelstore_attrib pack = ctx->DefaultPacking;
 
+   _mesa_update_draw_buffer_bounds(ctx, ctx->DrawBuffer);
+
    st_flush_bitmap_cache(st);
    st_invalidate_readpix_cache(st);
 
@@ -1486,7 +1491,7 @@ st_CopyPixels(struct gl_context *ctx, GLint srcx, GLint srcy,
       /* compiling a new fragment shader variant added new state constants
        * into the constant buffer, we need to update them
        */
-      st_upload_constants(st, st->fp->Base.Parameters, MESA_SHADER_FRAGMENT);
+      st_upload_constants(st, &st->fp->Base);
    }
    else {
       assert(type == GL_DEPTH);

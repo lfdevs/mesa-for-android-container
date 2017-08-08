@@ -116,6 +116,23 @@ static const struct gen_l3_config bxt_2x6_l3_configs[] = {
 };
 
 /**
+ * CNL validated L3 configurations.  \sa ivb_l3_configs.
+ */
+static const struct gen_l3_config cnl_l3_configs[] = {
+   /* SLM URB ALL DC  RO  IS   C   T */
+   {{  0, 64, 64,  0,  0,  0,  0,  0 }},
+   {{  0, 64,  0, 16, 48,  0,  0,  0 }},
+   {{  0, 48,  0, 16, 64,  0,  0,  0 }},
+   {{  0, 32,  0,  0, 96,  0,  0,  0 }},
+   {{  0, 32, 96,  0,  0,  0,  0,  0 }},
+   {{  0, 32,  0, 16, 80,  0,  0,  0 }},
+   {{ 32, 16, 80,  0,  0,  0,  0,  0 }},
+   {{ 32, 16,  0, 64, 16,  0,  0,  0 }},
+   {{ 32,  0, 96,  0,  0,  0,  0,  0 }},
+   {{ 0 }}
+};
+
+/**
  * Return a zero-terminated array of validated L3 configurations for the
  * specified device.
  */
@@ -131,8 +148,11 @@ get_l3_configs(const struct gen_device_info *devinfo)
 
    case 9:
       if (devinfo->l3_banks == 1)
-	 return bxt_2x6_l3_configs;
+         return bxt_2x6_l3_configs;
       return chv_l3_configs;
+
+   case 10:
+      return cnl_l3_configs;
 
    default:
       unreachable("Not implemented");
@@ -270,16 +290,11 @@ gen_get_l3_config(const struct gen_device_info *devinfo,
 static unsigned
 get_l3_way_size(const struct gen_device_info *devinfo)
 {
-   if (devinfo->is_baytrail)
-      return 2;
+   const unsigned way_size_per_bank =
+      devinfo->gen >= 9 && devinfo->l3_banks == 1 ? 4 : 2;
 
-   else if (devinfo->gt == 1 ||
-            devinfo->is_cherryview ||
-            devinfo->is_broxton)
-      return 4;
-
-   else
-      return 8 * devinfo->num_slices;
+   assert(devinfo->l3_banks);
+   return way_size_per_bank * devinfo->l3_banks;
 }
 
 /**

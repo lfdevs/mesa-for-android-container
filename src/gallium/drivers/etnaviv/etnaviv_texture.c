@@ -36,6 +36,8 @@
 #include "util/u_inlines.h"
 #include "util/u_memory.h"
 
+#include <drm_fourcc.h>
+
 static void *
 etna_create_sampler_state(struct pipe_context *pipe,
                           const struct pipe_sampler_state *ss)
@@ -113,13 +115,24 @@ etna_delete_sampler_state(struct pipe_context *pctx, void *ss)
 static void
 etna_update_sampler_source(struct pipe_sampler_view *view)
 {
-   struct etna_resource *res = etna_resource(view->texture);
+   struct etna_resource *base = etna_resource(view->texture);
+   struct etna_resource *to = base, *from = base;
 
-   if (res->texture && etna_resource_older(etna_resource(res->texture), res)) {
-      /* Texture is older than render buffer, copy the texture using RS */
-      etna_copy_resource(view->context, res->texture, view->texture, 0,
+   if (base->external && etna_resource_newer(etna_resource(base->external), base))
+      from = etna_resource(base->external);
+
+   if (base->texture)
+      to = etna_resource(base->texture);
+
+   if ((to != from) && etna_resource_older(to, from)) {
+      etna_copy_resource(view->context, &to->base, &from->base, 0,
                          view->texture->last_level);
-      etna_resource(res->texture)->seqno = res->seqno;
+      to->seqno = from->seqno;
+   } else if ((to == from) && etna_resource_needs_flush(to)) {
+      /* Resolve TS if needed, remove when adding sampler TS */
+      etna_copy_resource(view->context, &to->base, &from->base, 0,
+                         view->texture->last_level);
+      to->flush_seqno = from->seqno;
    }
 }
 
@@ -129,12 +142,18 @@ etna_resource_sampler_compatible(struct etna_resource *res)
    if (util_format_is_compressed(res->base.format))
       return true;
 
-   /* The sampler (as we currently know it) only accepts tiled layouts */
+   struct etna_screen *screen = etna_screen(res->base.screen);
+   /* This GPU supports texturing from supertiled textures? */
+   if (res->layout == ETNA_LAYOUT_SUPER_TILED && VIV_FEATURE(screen, chipMinorFeatures2, SUPERTILED_TEXTURE))
+      return true;
+
+   /* TODO: LINEAR_TEXTURE_SUPPORT */
+
+   /* Otherwise, only support tiled layouts */
    if (res->layout != ETNA_LAYOUT_TILED)
       return false;
 
    /* If we have HALIGN support, we can allow for the RS padding */
-   struct etna_screen *screen = etna_screen(res->base.screen);
    if (VIV_FEATURE(screen, chipMinorFeatures1, TEXTURE_HALIGN))
       return true;
 
@@ -152,6 +171,11 @@ etna_create_sampler_view(struct pipe_context *pctx, struct pipe_resource *prsc,
    struct etna_sampler_view *sv = CALLOC_STRUCT(etna_sampler_view);
    struct etna_resource *res = etna_resource(prsc);
    struct etna_context *ctx = etna_context(pctx);
+   const uint32_t format = translate_texture_format(so->format);
+   const bool ext = !!(format & EXT_FORMAT);
+   const uint32_t swiz = get_texture_swiz(so->format, so->swizzle_r,
+                                          so->swizzle_g, so->swizzle_b,
+                                          so->swizzle_a);
 
    if (!sv)
       return NULL;
@@ -165,7 +189,8 @@ etna_create_sampler_view(struct pipe_context *pctx, struct pipe_resource *prsc,
          templat.bind &= ~(PIPE_BIND_DEPTH_STENCIL | PIPE_BIND_RENDER_TARGET |
                            PIPE_BIND_BLENDABLE);
          res->texture =
-            etna_resource_alloc(pctx->screen, ETNA_LAYOUT_TILED, &templat);
+            etna_resource_alloc(pctx->screen, ETNA_LAYOUT_TILED,
+                                DRM_FORMAT_MOD_LINEAR, &templat);
       }
 
       if (!res->texture) {
@@ -176,14 +201,13 @@ etna_create_sampler_view(struct pipe_context *pctx, struct pipe_resource *prsc,
    }
 
    sv->base = *so;
-   pipe_reference(NULL, &prsc->reference);
-   sv->base.texture = prsc;
-   sv->base.reference.count = 1;
+   pipe_reference_init(&sv->base.reference, 1);
+   sv->base.texture = NULL;
+   pipe_resource_reference(&sv->base.texture, prsc);
    sv->base.context = pctx;
 
    /* merged with sampler state */
-   sv->TE_SAMPLER_CONFIG0 =
-      VIVS_TE_SAMPLER_CONFIG0_FORMAT(translate_texture_format(sv->base.format));
+   sv->TE_SAMPLER_CONFIG0 = COND(!ext, VIVS_TE_SAMPLER_CONFIG0_FORMAT(format));
    sv->TE_SAMPLER_CONFIG0_MASK = 0xffffffff;
 
    switch (sv->base.target) {
@@ -206,11 +230,8 @@ etna_create_sampler_view(struct pipe_context *pctx, struct pipe_resource *prsc,
       return NULL;
    }
 
-   sv->TE_SAMPLER_CONFIG1 = VIVS_TE_SAMPLER_CONFIG1_SWIZZLE_R(so->swizzle_r) |
-                            VIVS_TE_SAMPLER_CONFIG1_SWIZZLE_G(so->swizzle_g) |
-                            VIVS_TE_SAMPLER_CONFIG1_SWIZZLE_B(so->swizzle_b) |
-                            VIVS_TE_SAMPLER_CONFIG1_SWIZZLE_A(so->swizzle_a) |
-                            VIVS_TE_SAMPLER_CONFIG1_HALIGN(res->halign);
+   sv->TE_SAMPLER_CONFIG1 = COND(ext, VIVS_TE_SAMPLER_CONFIG1_FORMAT_EXT(format)) |
+                            VIVS_TE_SAMPLER_CONFIG1_HALIGN(res->halign) | swiz;
    sv->TE_SAMPLER_SIZE = VIVS_TE_SAMPLER_SIZE_WIDTH(res->base.width0) |
                          VIVS_TE_SAMPLER_SIZE_HEIGHT(res->base.height0);
    sv->TE_SAMPLER_LOG_SIZE =

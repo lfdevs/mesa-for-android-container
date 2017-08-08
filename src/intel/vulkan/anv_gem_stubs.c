@@ -34,7 +34,7 @@ memfd_create(const char *name, unsigned int flags)
 }
 
 uint32_t
-anv_gem_create(struct anv_device *device, size_t size)
+anv_gem_create(struct anv_device *device, uint64_t size)
 {
    int fd = memfd_create("fake bo", MFD_CLOEXEC);
    if (fd == -1)

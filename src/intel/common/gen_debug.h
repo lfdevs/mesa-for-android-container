@@ -57,7 +57,7 @@ extern uint64_t INTEL_DEBUG;
 #define DEBUG_VERTS               (1ull << 13)
 #define DEBUG_DRI                 (1ull << 14)
 #define DEBUG_SF                  (1ull << 15)
-#define DEBUG_STATS               (1ull << 16)
+/* Hole - feel free to reuse      (1ull << 16) */
 #define DEBUG_WM                  (1ull << 17)
 #define DEBUG_URB                 (1ull << 18)
 #define DEBUG_VS                  (1ull << 19)
@@ -69,7 +69,7 @@ extern uint64_t INTEL_DEBUG;
 #define DEBUG_OPTIMIZER           (1ull << 25)
 #define DEBUG_ANNOTATION          (1ull << 26)
 #define DEBUG_NO8                 (1ull << 27)
-#define DEBUG_VEC4VS              (1ull << 28)
+/* Hole - feel free to reuse      (1ull << 28) */
 #define DEBUG_SPILL_FS            (1ull << 29)
 #define DEBUG_SPILL_VEC4          (1ull << 30)
 #define DEBUG_CS                  (1ull << 31)

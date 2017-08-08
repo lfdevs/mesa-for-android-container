@@ -39,6 +39,11 @@ swr_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
 {
    struct swr_context *ctx = swr_context(pipe);
 
+   if (!info->count_from_stream_output && !info->indirect &&
+       !info->primitive_restart &&
+       !u_trim_pipe_prim(info->mode, (unsigned*)&info->count))
+      return;
+
    if (!swr_check_render_cond(pipe))
       return;
 
@@ -76,8 +81,11 @@ swr_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
                offsets[output_buffer] = so->output[i].dst_offset;
             }
 
+            unsigned attrib_slot = so->output[i].register_index;
+            attrib_slot = swr_so_adjust_attrib(attrib_slot, ctx->vs);
+
             state.stream.decl[num].bufferIndex = output_buffer;
-            state.stream.decl[num].attribSlot = so->output[i].register_index - 1;
+            state.stream.decl[num].attribSlot = attrib_slot;
             state.stream.decl[num].componentMask =
                ((1 << so->output[i].num_components) - 1)
                << so->output[i].start_component;
@@ -95,7 +103,7 @@ swr_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
          assert(ctx->vs->soFunc[info->mode] && "Error: SoShader = NULL");
       }
 
-      SwrSetSoFunc(ctx->swrContext, ctx->vs->soFunc[info->mode], 0);
+      ctx->api.pfnSwrSetSoFunc(ctx->swrContext, ctx->vs->soFunc[info->mode], 0);
    }
 
    struct swr_vertex_element_state *velems = ctx->velems;
@@ -118,11 +126,43 @@ swr_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
       velems->map.insert(std::make_pair(key, velems->fsFunc));
    }
 
-   SwrSetFetchFunc(ctx->swrContext, velems->fsFunc);
+   ctx->api.pfnSwrSetFetchFunc(ctx->swrContext, velems->fsFunc);
 
    /* Set up frontend state
     * XXX setup provokingVertex & topologyProvokingVertex */
    SWR_FRONTEND_STATE feState = {0};
+
+   // feState.vsVertexSize seeds the PA size that is used as an interface
+   // between all the shader stages, so it has to be large enough to
+   // incorporate all interfaces between stages
+
+   // max of gs and vs num_outputs
+   feState.vsVertexSize = ctx->vs->info.base.num_outputs;
+   if (ctx->gs &&
+       ctx->gs->info.base.num_outputs > feState.vsVertexSize) {
+      feState.vsVertexSize = ctx->gs->info.base.num_outputs;
+   }
+
+   if (ctx->vs->info.base.num_outputs) {
+      // gs does not adjust for position in SGV slot at input from vs
+      if (!ctx->gs)
+         feState.vsVertexSize--;
+   }
+
+   // other (non-SGV) slots start at VERTEX_ATTRIB_START_SLOT
+   feState.vsVertexSize += VERTEX_ATTRIB_START_SLOT;
+
+   // The PA in the clipper does not handle BE vertex sizes
+   // different from FE. Increase vertexsize only for the cases that needed it
+
+   // primid needs a slot
+   if (ctx->fs->info.base.uses_primid)
+      feState.vsVertexSize++;
+   // sprite coord enable
+   if (ctx->rasterizer->sprite_coord_enable)
+      feState.vsVertexSize++;
+
+
    if (ctx->rasterizer->flatshade_first) {
       feState.provokingVertex = {1, 0, 0};
    } else {
@@ -160,23 +200,32 @@ swr_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
    }
 
    feState.bEnableCutIndex = info->primitive_restart;
-   SwrSetFrontendState(ctx->swrContext, &feState);
+   ctx->api.pfnSwrSetFrontendState(ctx->swrContext, &feState);
 
-   if (info->indexed)
-      SwrDrawIndexedInstanced(ctx->swrContext,
-                              swr_convert_prim_topology(info->mode),
-                              info->count,
-                              info->instance_count,
-                              info->start,
-                              info->index_bias,
-                              info->start_instance);
+   if (info->index_size)
+      ctx->api.pfnSwrDrawIndexedInstanced(ctx->swrContext,
+                                          swr_convert_prim_topology(info->mode),
+                                          info->count,
+                                          info->instance_count,
+                                          info->start,
+                                          info->index_bias,
+                                          info->start_instance);
    else
-      SwrDrawInstanced(ctx->swrContext,
-                       swr_convert_prim_topology(info->mode),
-                       info->count,
-                       info->instance_count,
-                       info->start,
-                       info->start_instance);
+      ctx->api.pfnSwrDrawInstanced(ctx->swrContext,
+                                   swr_convert_prim_topology(info->mode),
+                                   info->count,
+                                   info->instance_count,
+                                   info->start,
+                                   info->start_instance);
+
+   /* On large client-buffer draw, we used client buffer directly, without
+    * copy.  Block until draw is finished.
+    * VMD is an example application that benefits from this. */
+   if (ctx->dirty & SWR_LARGE_CLIENT_DRAW) {
+      struct swr_screen *screen = swr_screen(pipe->screen);
+      swr_fence_submit(ctx, screen->flush_fence);
+      swr_fence_finish(pipe->screen, NULL, screen->flush_fence, 0);
+   }
 }
 
 
@@ -210,6 +259,25 @@ swr_finish(struct pipe_context *pipe)
    swr_fence_reference(pipe->screen, &fence, NULL);
 }
 
+/*
+ * Invalidate tiles so they can be reloaded back when needed
+ */
+void
+swr_invalidate_render_target(struct pipe_context *pipe,
+                             uint32_t attachment,
+                             uint16_t width, uint16_t height)
+{
+   struct swr_context *ctx = swr_context(pipe);
+
+   /* grab the rect from the passed in arguments */
+   swr_update_draw_context(ctx);
+   SWR_RECT full_rect =
+      {0, 0, (int32_t)width, (int32_t)height};
+   ctx->api.pfnSwrInvalidateTiles(ctx->swrContext,
+                                  1 << attachment,
+                                  full_rect);
+}
+
 
 /*
  * Store SWR HotTiles back to renderTarget surface.
@@ -230,10 +298,10 @@ swr_store_render_target(struct pipe_context *pipe,
          {0, 0,
           (int32_t)u_minify(renderTarget->width, renderTarget->lod),
           (int32_t)u_minify(renderTarget->height, renderTarget->lod)};
-      SwrStoreTiles(ctx->swrContext,
-                    1 << attachment,
-                    post_tile_state,
-                    full_rect);
+      ctx->api.pfnSwrStoreTiles(ctx->swrContext,
+                                1 << attachment,
+                                post_tile_state,
+                                full_rect);
    }
 }
 

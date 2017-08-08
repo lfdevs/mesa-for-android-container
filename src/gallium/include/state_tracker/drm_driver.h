@@ -45,6 +45,12 @@ struct winsys_handle
     * Output for texture_get_handle.
     */
    unsigned offset;
+
+   /**
+    * Input to resource_from_handle.
+    * Output from resource_get_handle.
+    */
+   uint64_t modifier;
 };
 
 
@@ -96,7 +102,7 @@ struct drm_driver_descriptor
     * This function does any wrapping of the screen.
     * For example wrapping trace or rbug debugging drivers around it.
     */
-   struct pipe_screen* (*create_screen)(int drm_fd);
+   struct pipe_screen* (*create_screen)(int drm_fd, unsigned flags);
 
    /**
     * Return a configuration value.

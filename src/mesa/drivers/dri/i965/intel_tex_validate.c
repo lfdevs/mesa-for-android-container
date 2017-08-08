@@ -146,7 +146,7 @@ intel_finalize_mipmap_tree(struct brw_context *brw, GLuint unit)
                                           width,
                                           height,
                                           depth,
-                                          0 /* num_samples */,
+                                          1 /* num_samples */,
                                           layout_flags);
       if (!intelObj->mt)
          return;

@@ -128,12 +128,6 @@ private:
 
 } /* anonymous namespace */
 
-static bool
-is_integer_64(const glsl_type *t)
-{
-   return t->base_type == GLSL_TYPE_UINT64 || t->base_type == GLSL_TYPE_INT64;
-}
-
 /**
  * Determine if a particular type of lowering should occur
  */
@@ -208,8 +202,7 @@ lower_64bit::expand_source(ir_factory &body,
                            ir_rvalue *val,
                            ir_variable **expanded_src)
 {
-   assert(val->type->base_type == GLSL_TYPE_UINT64 ||
-          val->type->base_type == GLSL_TYPE_INT64);
+   assert(val->type->is_integer_64());
 
    ir_variable *const temp = body.make_temp(val->type, "tmp");
 
@@ -327,7 +320,7 @@ lower_64bit_visitor::handle_op(ir_expression *ir,
                                function_generator generator)
 {
    for (unsigned i = 0; i < ir->get_num_operands(); i++)
-      if (!is_integer_64(ir->operands[i]->type))
+      if (!ir->operands[i]->type->is_integer_64())
          return ir;
 
    /* Get a handle to the correct ir_function_signature for the core
@@ -348,6 +341,7 @@ lower_64bit_visitor::handle_op(ir_expression *ir,
       add_function(f);
    }
 
+   this->progress = true;
    return lower_op_to_function_call(this->base_ir, ir, callee);
 }
 
@@ -364,7 +358,6 @@ lower_64bit_visitor::handle_rvalue(ir_rvalue **rvalue)
    case ir_unop_sign:
       if (lowering(SIGN64)) {
          *rvalue = handle_op(ir, "__builtin_sign64", generate_ir::sign64);
-         this->progress = true;
       }
       break;
 
@@ -375,7 +368,6 @@ lower_64bit_visitor::handle_rvalue(ir_rvalue **rvalue)
          } else {
             *rvalue = handle_op(ir, "__builtin_idiv64", generate_ir::idiv64);
          }
-         this->progress = true;
       }
       break;
 
@@ -386,14 +378,12 @@ lower_64bit_visitor::handle_rvalue(ir_rvalue **rvalue)
          } else {
             *rvalue = handle_op(ir, "__builtin_imod64", generate_ir::imod64);
          }
-         this->progress = true;
       }
       break;
 
    case ir_binop_mul:
       if (lowering(MUL64)) {
          *rvalue = handle_op(ir, "__builtin_umul64", generate_ir::umul64);
-         this->progress = true;
       }
       break;
 

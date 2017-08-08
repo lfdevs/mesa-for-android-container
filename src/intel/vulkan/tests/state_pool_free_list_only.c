@@ -37,12 +37,10 @@ int main(int argc, char **argv)
    struct anv_device device = {
       .instance = &instance,
    };
-   struct anv_block_pool block_pool;
    struct anv_state_pool state_pool;
 
    pthread_mutex_init(&device.mutex, NULL);
-   anv_block_pool_init(&block_pool, &device, 4096);
-   anv_state_pool_init(&state_pool, &block_pool);
+   anv_state_pool_init(&state_pool, &device, 4096);
 
    /* Grab one so a zero offset is impossible */
    anv_state_pool_alloc(&state_pool, 16, 16);
@@ -64,6 +62,5 @@ int main(int argc, char **argv)
    run_state_pool_test(&state_pool);
 
    anv_state_pool_finish(&state_pool);
-   anv_block_pool_finish(&block_pool);
    pthread_mutex_destroy(&device.mutex);
 }

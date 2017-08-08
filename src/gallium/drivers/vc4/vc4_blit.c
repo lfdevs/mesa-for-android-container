@@ -212,14 +212,16 @@ vc4_blit(struct pipe_context *pctx, const struct pipe_blit_info *blit_info)
         if (vc4_tile_blit(pctx, blit_info))
                 return;
 
-        if (util_try_blit_via_copy_region(pctx, &info)) {
-                return; /* done */
-        }
-
         if (info.mask & PIPE_MASK_S) {
-                fprintf(stderr, "cannot blit stencil, skipping\n");
+                if (util_try_blit_via_copy_region(pctx, &info))
+                        return;
+
                 info.mask &= ~PIPE_MASK_S;
+                fprintf(stderr, "cannot blit stencil, skipping\n");
         }
 
-        vc4_render_blit(pctx, &info);
+        if (vc4_render_blit(pctx, &info))
+                return;
+
+        fprintf(stderr, "Unsupported blit\n");
 }

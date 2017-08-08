@@ -1060,7 +1060,7 @@ nv50_set_vertex_buffers(struct pipe_context *pipe,
    for (i = 0; i < count; ++i) {
       unsigned dst_index = start_slot + i;
 
-      if (!vb[i].buffer && vb[i].user_buffer) {
+      if (vb[i].is_user_buffer) {
          nv50->vbo_user |= 1 << dst_index;
          if (!vb[i].stride)
             nv50->vbo_constant |= 1 << dst_index;
@@ -1071,35 +1071,12 @@ nv50_set_vertex_buffers(struct pipe_context *pipe,
          nv50->vbo_user &= ~(1 << dst_index);
          nv50->vbo_constant &= ~(1 << dst_index);
 
-         if (vb[i].buffer &&
-             vb[i].buffer->flags & PIPE_RESOURCE_FLAG_MAP_COHERENT)
+         if (vb[i].buffer.resource &&
+             vb[i].buffer.resource->flags & PIPE_RESOURCE_FLAG_MAP_COHERENT)
             nv50->vtxbufs_coherent |= (1 << dst_index);
          else
             nv50->vtxbufs_coherent &= ~(1 << dst_index);
       }
-   }
-}
-
-static void
-nv50_set_index_buffer(struct pipe_context *pipe,
-                      const struct pipe_index_buffer *ib)
-{
-   struct nv50_context *nv50 = nv50_context(pipe);
-
-   if (nv50->idxbuf.buffer)
-      nouveau_bufctx_reset(nv50->bufctx_3d, NV50_BIND_3D_INDEX);
-
-   if (ib) {
-      pipe_resource_reference(&nv50->idxbuf.buffer, ib->buffer);
-      nv50->idxbuf.index_size = ib->index_size;
-      if (ib->buffer) {
-         nv50->idxbuf.offset = ib->offset;
-         BCTX_REFN(nv50->bufctx_3d, 3D_INDEX, nv04_resource(ib->buffer), RD);
-      } else {
-         nv50->idxbuf.user_buffer = ib->user_buffer;
-      }
-   } else {
-      pipe_resource_reference(&nv50->idxbuf.buffer, NULL);
    }
 }
 
@@ -1341,7 +1318,6 @@ nv50_init_state_functions(struct nv50_context *nv50)
    pipe->bind_vertex_elements_state = nv50_vertex_state_bind;
 
    pipe->set_vertex_buffers = nv50_set_vertex_buffers;
-   pipe->set_index_buffer = nv50_set_index_buffer;
 
    pipe->create_stream_output_target = nv50_so_target_create;
    pipe->stream_output_target_destroy = nv50_so_target_destroy;

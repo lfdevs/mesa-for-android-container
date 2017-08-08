@@ -1,8 +1,8 @@
 /**************************************************************************
- * 
+ *
  * Copyright 2007 VMware, Inc.
  * All Rights Reserved.
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
  * "Software"), to deal in the Software without restriction, including
@@ -10,11 +10,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -22,7 +22,7 @@
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- * 
+ *
  **************************************************************************/
 
  /*
@@ -49,7 +49,9 @@ struct exec_vertex_shader {
    struct tgsi_exec_machine *machine;
 };
 
-static struct exec_vertex_shader *exec_vertex_shader( struct draw_vertex_shader *vs )
+
+static struct exec_vertex_shader *
+exec_vertex_shader(struct draw_vertex_shader *vs)
 {
    return (struct exec_vertex_shader *)vs;
 }
@@ -58,8 +60,8 @@ static struct exec_vertex_shader *exec_vertex_shader( struct draw_vertex_shader 
 /* Not required for run_linear.
  */
 static void
-vs_exec_prepare( struct draw_vertex_shader *shader,
-		 struct draw_context *draw )
+vs_exec_prepare(struct draw_vertex_shader *shader,
+                struct draw_context *draw)
 {
    struct exec_vertex_shader *evs = exec_vertex_shader(shader);
 
@@ -78,20 +80,20 @@ vs_exec_prepare( struct draw_vertex_shader *shader,
 
 
 
-
-/* Simplified vertex shader interface for the pt paths.  Given the
+/**
+ * Simplified vertex shader interface for the pt paths.  Given the
  * complexity of code-generating all the above operations together,
  * it's time to try doing all the other stuff separately.
  */
 static void
-vs_exec_run_linear( struct draw_vertex_shader *shader,
-		    const float (*input)[4],
-		    float (*output)[4],
-                    const void *constants[PIPE_MAX_CONSTANT_BUFFERS],
+vs_exec_run_linear(struct draw_vertex_shader *shader,
+                   const float (*input)[4],
+                   float (*output)[4],
+                   const void *constants[PIPE_MAX_CONSTANT_BUFFERS],
                     const unsigned const_size[PIPE_MAX_CONSTANT_BUFFERS],
-		    unsigned count,
-		    unsigned input_stride,
-		    unsigned output_stride )
+                   unsigned count,
+                   unsigned input_stride,
+                   unsigned output_stride)
 {
    struct exec_vertex_shader *evs = exec_vertex_shader(shader);
    struct tgsi_exec_machine *machine = evs->machine;
@@ -113,17 +115,17 @@ vs_exec_run_linear( struct draw_vertex_shader *shader,
    for (i = 0; i < count; i += MAX_TGSI_VERTICES) {
       unsigned int max_vertices = MIN2(MAX_TGSI_VERTICES, count - i);
 
-      /* Swizzle inputs.  
+      /* Swizzle inputs.
        */
       for (j = 0; j < max_vertices; j++) {
 #if 0
          debug_printf("%d) Input vert:\n", i + j);
          for (slot = 0; slot < shader->info.num_inputs; slot++) {
             debug_printf("\t%d: %f %f %f %f\n", slot,
-			 input[slot][0],
-			 input[slot][1],
-			 input[slot][2],
-			 input[slot][3]);
+                         input[slot][0],
+                         input[slot][1],
+                         input[slot][2],
+                         input[slot][3]);
          }
 #endif
 
@@ -159,27 +161,24 @@ vs_exec_run_linear( struct draw_vertex_shader *shader,
          }
 
          input = (const float (*)[4])((const char *)input + input_stride);
-      } 
+      }
 
       machine->NonHelperMask = (1 << max_vertices) - 1;
       /* run interpreter */
-      tgsi_exec_machine_run( machine, 0 );
+      tgsi_exec_machine_run(machine, 0);
 
-      /* Unswizzle all output results.  
+      /* Unswizzle all output results.
        */
       for (j = 0; j < max_vertices; j++) {
          for (slot = 0; slot < shader->info.num_outputs; slot++) {
-            unsigned name = shader->info.output_semantic_name[slot];
-            if(clamp_vertex_color &&
-                  (name == TGSI_SEMANTIC_COLOR || name == TGSI_SEMANTIC_BCOLOR))
-            {
+            enum tgsi_semantic name = shader->info.output_semantic_name[slot];
+            if (clamp_vertex_color &&
+                (name == TGSI_SEMANTIC_COLOR || name == TGSI_SEMANTIC_BCOLOR)) {
                output[slot][0] = CLAMP(machine->Outputs[slot].xyzw[0].f[j], 0.0f, 1.0f);
                output[slot][1] = CLAMP(machine->Outputs[slot].xyzw[1].f[j], 0.0f, 1.0f);
                output[slot][2] = CLAMP(machine->Outputs[slot].xyzw[2].f[j], 0.0f, 1.0f);
                output[slot][3] = CLAMP(machine->Outputs[slot].xyzw[3].f[j], 0.0f, 1.0f);
-            }
-            else
-            {
+            } else {
                output[slot][0] = machine->Outputs[slot].xyzw[0].f[j];
                output[slot][1] = machine->Outputs[slot].xyzw[1].f[j];
                output[slot][2] = machine->Outputs[slot].xyzw[2].f[j];
@@ -188,39 +187,36 @@ vs_exec_run_linear( struct draw_vertex_shader *shader,
          }
 
 #if 0
-	 debug_printf("%d) Post xform vert:\n", i + j);
-	 for (slot = 0; slot < shader->info.num_outputs; slot++) {
-	    debug_printf("\t%d: %f %f %f %f\n", slot,
-			 output[slot][0],
-			 output[slot][1],
-			 output[slot][2],
-			 output[slot][3]);
+         debug_printf("%d) Post xform vert:\n", i + j);
+         for (slot = 0; slot < shader->info.num_outputs; slot++) {
+            debug_printf("\t%d: %f %f %f %f\n", slot,
+                         output[slot][0],
+                         output[slot][1],
+                         output[slot][2],
+                         output[slot][3]);
             assert(!util_is_inf_or_nan(output[slot][0]));
          }
 #endif
 
-	 output = (float (*)[4])((char *)output + output_stride);
-      } 
-
+         output = (float (*)[4])((char *)output + output_stride);
+      }
    }
 }
 
 
-
-
 static void
-vs_exec_delete( struct draw_vertex_shader *dvs )
+vs_exec_delete(struct draw_vertex_shader *dvs)
 {
    FREE((void*) dvs->state.tokens);
-   FREE( dvs );
+   FREE(dvs);
 }
 
 
 struct draw_vertex_shader *
 draw_create_vs_exec(struct draw_context *draw,
-		    const struct pipe_shader_state *state)
+                    const struct pipe_shader_state *state)
 {
-   struct exec_vertex_shader *vs = CALLOC_STRUCT( exec_vertex_shader );
+   struct exec_vertex_shader *vs = CALLOC_STRUCT(exec_vertex_shader);
 
    if (!vs)
       return NULL;

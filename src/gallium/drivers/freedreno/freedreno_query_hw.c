@@ -40,26 +40,6 @@ struct fd_hw_sample_period {
 	struct list_head list;
 };
 
-/* maps query_type to sample provider idx: */
-static int pidx(unsigned query_type)
-{
-	switch (query_type) {
-	case PIPE_QUERY_OCCLUSION_COUNTER:
-		return 0;
-	case PIPE_QUERY_OCCLUSION_PREDICATE:
-		return 1;
-	/* TODO currently queries only emitted in main pass (not in binning pass)..
-	 * which is fine for occlusion query, but pretty much not anything else.
-	 */
-	case PIPE_QUERY_TIME_ELAPSED:
-		return 2;
-	case PIPE_QUERY_TIMESTAMP:
-		return 3;
-	default:
-		return -1;
-	}
-}
-
 static struct fd_hw_sample *
 get_sample(struct fd_batch *batch, struct fd_ringbuffer *ring,
 		unsigned query_type)
@@ -72,7 +52,7 @@ get_sample(struct fd_batch *batch, struct fd_ringbuffer *ring,
 
 	if (!batch->sample_cache[idx]) {
 		struct fd_hw_sample *new_samp =
-			ctx->sample_providers[idx]->get_sample(batch, ring);
+			ctx->hw_sample_providers[idx]->get_sample(batch, ring);
 		fd_hw_sample_reference(ctx, &batch->sample_cache[idx], new_samp);
 		util_dynarray_append(&batch->samples, struct fd_hw_sample *, new_samp);
 		batch->needs_flush = true;
@@ -162,20 +142,15 @@ fd_hw_begin_query(struct fd_context *ctx, struct fd_query *q)
 
 	DBG("%p: active=%d", q, q->active);
 
-	if (q->active)
-		return false;
-
 	/* begin_query() should clear previous results: */
 	destroy_periods(ctx, hq);
 
 	if (batch && is_active(hq, batch->stage))
 		resume_query(batch, hq, batch->draw);
 
-	q->active = true;
-
 	/* add to active list: */
 	assert(list_empty(&hq->list));
-	list_addtail(&hq->list, &ctx->active_queries);
+	list_addtail(&hq->list, &ctx->hw_active_queries);
 
 	return true;
 }
@@ -186,22 +161,11 @@ fd_hw_end_query(struct fd_context *ctx, struct fd_query *q)
 	struct fd_batch *batch = ctx->batch;
 	struct fd_hw_query *hq = fd_hw_query(q);
 
-	/* there are a couple special cases, which don't have
-	 * a matching ->begin_query():
-	 */
-	if (skip_begin_query(q->type) && !q->active) {
-		fd_hw_begin_query(ctx, q);
-	}
-
 	DBG("%p: active=%d", q, q->active);
-
-	if (!q->active)
-		return;
 
 	if (batch && is_active(hq, batch->stage))
 		pause_query(batch, hq, batch->draw);
 
-	q->active = false;
 	/* remove from active list: */
 	list_delinit(&hq->list);
 }
@@ -221,11 +185,6 @@ fd_hw_get_query_result(struct fd_context *ctx, struct fd_query *q,
 	struct fd_hw_sample_period *period;
 
 	DBG("%p: wait=%d, active=%d", q, wait, q->active);
-
-	if (q->active)
-		return false;
-
-	util_query_clear_result(result, q->type);
 
 	if (LIST_IS_EMPTY(&hq->periods))
 		return true;
@@ -315,7 +274,7 @@ fd_hw_create_query(struct fd_context *ctx, unsigned query_type)
 	struct fd_query *q;
 	int idx = pidx(query_type);
 
-	if ((idx < 0) || !ctx->sample_providers[idx])
+	if ((idx < 0) || !ctx->hw_sample_providers[idx])
 		return NULL;
 
 	hq = CALLOC_STRUCT(fd_hw_query);
@@ -324,7 +283,7 @@ fd_hw_create_query(struct fd_context *ctx, unsigned query_type)
 
 	DBG("%p: query_type=%u", hq, query_type);
 
-	hq->provider = ctx->sample_providers[idx];
+	hq->provider = ctx->hw_sample_providers[idx];
 
 	list_inithead(&hq->periods);
 	list_inithead(&hq->list);
@@ -421,33 +380,21 @@ fd_hw_query_prepare_tile(struct fd_batch *batch, uint32_t n,
 }
 
 void
-fd_hw_query_set_stage(struct fd_batch *batch, struct fd_ringbuffer *ring,
-		enum fd_render_stage stage)
+fd_hw_query_set_stage(struct fd_batch *batch, enum fd_render_stage stage)
 {
-	/* special case: internal blits (like mipmap level generation)
-	 * go through normal draw path (via util_blitter_blit()).. but
-	 * we need to ignore the FD_STAGE_DRAW which will be set, so we
-	 * don't enable queries which should be paused during internal
-	 * blits:
-	 */
-	if ((batch->stage == FD_STAGE_BLIT) &&
-			(stage != FD_STAGE_NULL))
-		return;
-
 	if (stage != batch->stage) {
 		struct fd_hw_query *hq;
-		LIST_FOR_EACH_ENTRY(hq, &batch->ctx->active_queries, list) {
+		LIST_FOR_EACH_ENTRY(hq, &batch->ctx->hw_active_queries, list) {
 			bool was_active = is_active(hq, batch->stage);
 			bool now_active = is_active(hq, stage);
 
 			if (now_active && !was_active)
-				resume_query(batch, hq, ring);
+				resume_query(batch, hq, batch->draw);
 			else if (was_active && !now_active)
-				pause_query(batch, hq, ring);
+				pause_query(batch, hq, batch->draw);
 		}
 	}
 	clear_sample_cache(batch);
-	batch->stage = stage;
 }
 
 /* call the provider->enable() for all the hw queries that were active
@@ -460,9 +407,9 @@ fd_hw_query_enable(struct fd_batch *batch, struct fd_ringbuffer *ring)
 	struct fd_context *ctx = batch->ctx;
 	for (int idx = 0; idx < MAX_HW_SAMPLE_PROVIDERS; idx++) {
 		if (batch->active_providers & (1 << idx)) {
-			assert(ctx->sample_providers[idx]);
-			if (ctx->sample_providers[idx]->enable)
-				ctx->sample_providers[idx]->enable(ctx, ring);
+			assert(ctx->hw_sample_providers[idx]);
+			if (ctx->hw_sample_providers[idx]->enable)
+				ctx->hw_sample_providers[idx]->enable(ctx, ring);
 		}
 	}
 	batch->active_providers = 0;  /* clear it for next frame */
@@ -476,9 +423,9 @@ fd_hw_query_register_provider(struct pipe_context *pctx,
 	int idx = pidx(provider->query_type);
 
 	assert((0 <= idx) && (idx < MAX_HW_SAMPLE_PROVIDERS));
-	assert(!ctx->sample_providers[idx]);
+	assert(!ctx->hw_sample_providers[idx]);
 
-	ctx->sample_providers[idx] = provider;
+	ctx->hw_sample_providers[idx] = provider;
 }
 
 void
@@ -490,7 +437,6 @@ fd_hw_query_init(struct pipe_context *pctx)
 			16);
 	slab_create(&ctx->sample_period_pool, sizeof(struct fd_hw_sample_period),
 			16);
-	list_inithead(&ctx->active_queries);
 }
 
 void

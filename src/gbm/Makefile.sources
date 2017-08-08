@@ -1,7 +1,6 @@
 gbm_core_FILES = \
 	main/backend.c \
 	main/backend.h \
-	main/common_drm.h \
 	main/gbm.c \
 	main/gbm.h \
 	main/gbmint.h

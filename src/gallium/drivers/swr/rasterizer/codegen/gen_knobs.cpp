@@ -33,6 +33,61 @@
 #include <common/os.h>
 #include <sstream>
 #include <iomanip>
+#include <regex>
+#include <core/utils.h>
+
+//========================================================
+// Implementation
+//========================================================
+void KnobBase::autoExpandEnvironmentVariables(std::string &text)
+{
+#if (__GNUC__) && (GCC_VERSION < 409000)
+    // <regex> isn't implemented prior to gcc-4.9.0
+    // unix style variable replacement
+    size_t start;
+    while ((start = text.find("${")) != std::string::npos) {
+        size_t end = text.find("}");
+        if (end == std::string::npos)
+            break;
+        const std::string var = GetEnv(text.substr(start + 2, end - start - 2));
+        text.replace(start, end - start + 1, var);
+    }
+    // win32 style variable replacement
+    while ((start = text.find("%")) != std::string::npos) {
+        size_t end = text.find("%", start + 1);
+        if (end == std::string::npos)
+            break;
+        const std::string var = GetEnv(text.substr(start + 1, end - start - 1));
+        text.replace(start, end - start + 1, var);
+    }
+#else
+    {
+        // unix style variable replacement
+        static std::regex env("\\$\\{([^}]+)\\}");
+        std::smatch match;
+        while (std::regex_search(text, match, env))
+        {
+            const std::string var = GetEnv(match[1].str());
+            // certain combinations of gcc/libstd++ have problems with this
+            // text.replace(match[0].first, match[0].second, var);
+            text.replace(match.prefix().length(), match[0].length(), var);
+        }
+    }
+    {
+        // win32 style variable replacement
+        static std::regex env("\\%([^}]+)\\%");
+        std::smatch match;
+        while (std::regex_search(text, match, env))
+        {
+            const std::string var = GetEnv(match[1].str());
+            // certain combinations of gcc/libstd++ have problems with this
+            // text.replace(match[0].first, match[0].second, var);
+            text.replace(match.prefix().length(), match[0].length(), var);
+        }
+    }
+#endif
+}
+
 
 //========================================================
 // Static Data Members
@@ -60,6 +115,8 @@ GlobalKnobs::GlobalKnobs()
     InitKnob(MAX_PRIMS_PER_DRAW);
     InitKnob(MAX_TESS_PRIMS_PER_DRAW);
     InitKnob(DEBUG_OUTPUT_DIR);
+    InitKnob(JIT_ENABLE_CACHE);
+    InitKnob(JIT_CACHE_DIR);
     InitKnob(TOSS_DRAW);
     InitKnob(TOSS_QUEUE_FE);
     InitKnob(TOSS_FETCH);
@@ -122,6 +179,10 @@ std::string GlobalKnobs::ToString(const char* optPerLinePrefix)
     str << std::dec << KNOB_MAX_TESS_PRIMS_PER_DRAW << "\n";
     str << optPerLinePrefix << "KNOB_DEBUG_OUTPUT_DIR:           ";
     str << KNOB_DEBUG_OUTPUT_DIR << "\n";
+    str << optPerLinePrefix << "KNOB_JIT_ENABLE_CACHE:           ";
+    str << (KNOB_JIT_ENABLE_CACHE ? "+\n" : "-\n");
+    str << optPerLinePrefix << "KNOB_JIT_CACHE_DIR:              ";
+    str << KNOB_JIT_CACHE_DIR << "\n";
     str << optPerLinePrefix << "KNOB_TOSS_DRAW:                  ";
     str << (KNOB_TOSS_DRAW ? "+\n" : "-\n");
     str << optPerLinePrefix << "KNOB_TOSS_QUEUE_FE:              ";
@@ -142,5 +203,6 @@ std::string GlobalKnobs::ToString(const char* optPerLinePrefix)
 
     return str.str();
 }
+
 
 

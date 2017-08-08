@@ -42,6 +42,9 @@ static void svga_flush( struct pipe_context *pipe,
     */
    svga_surfaces_flush( svga );
 
+   if (flags & PIPE_FLUSH_FENCE_FD)
+      svga->swc->hints |= SVGA_HINT_FLAG_EXPORT_FENCE_FD;
+
    /* Flush command queue.
     */
    svga_context_flush(svga, fence);
@@ -71,7 +74,45 @@ static void svga_flush( struct pipe_context *pipe,
 }
 
 
+/**
+ * svga_create_fence_fd
+ *
+ * Wraps a SVGA fence around an imported file descriptor.  This
+ * fd represents a fence from another process/device.  The fence created
+ * here can then be fed into fence_server_sync() so SVGA can synchronize
+ * with an external process
+ */
+static void
+svga_create_fence_fd(struct pipe_context *pipe,
+                     struct pipe_fence_handle **fence,
+                     int fd)
+{
+   struct svga_winsys_screen *sws = svga_winsys_screen(pipe->screen);
+
+   sws->fence_create_fd(sws, fence, fd);
+}
+
+
+/**
+ * svga_fence_server_sync
+ *
+ * This function imports a fence from another process/device into the current
+ * software context so that SVGA can synchronize with it.
+ */
+static void
+svga_fence_server_sync(struct pipe_context *pipe,
+                       struct pipe_fence_handle *fence)
+{
+   struct svga_winsys_screen *sws = svga_winsys_screen(pipe->screen);
+   struct svga_context *svga = svga_context(pipe);
+
+   sws->fence_server_sync(sws, &svga->swc->imported_fence_fd, fence);
+}
+
+
 void svga_init_flush_functions( struct svga_context *svga )
 {
    svga->pipe.flush = svga_flush;
+   svga->pipe.create_fence_fd = svga_create_fence_fd;
+   svga->pipe.fence_server_sync = svga_fence_server_sync;
 }

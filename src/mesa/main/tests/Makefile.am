@@ -23,8 +23,6 @@ main_test_LDADD = \
 	$(CLOCK_LIB)
 
 if HAVE_SHARED_GLAPI
-AM_CPPFLAGS += -DHAVE_SHARED_GLAPI
-
 main_test_SOURCES +=			\
 	dispatch_sanity.cpp		\
 	mesa_formats.cpp			\

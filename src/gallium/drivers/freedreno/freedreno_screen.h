@@ -38,6 +38,7 @@
 #include "os/os_thread.h"
 
 #include "freedreno_batch_cache.h"
+#include "freedreno_util.h"
 
 struct fd_bo;
 
@@ -65,6 +66,7 @@ struct fd_screen {
 	uint32_t max_freq;
 	uint32_t max_rts;        /* max # of render targets */
 	uint32_t gmem_alignw, gmem_alignh;
+	uint32_t num_vsc_pipes;
 	bool has_timestamp;
 
 	void *compiler;          /* currently unused for a2xx */
@@ -125,6 +127,12 @@ static inline boolean
 is_ir3(struct fd_screen *screen)
 {
 	return is_a3xx(screen) || is_a4xx(screen) || is_a5xx(screen);
+}
+
+static inline bool
+has_compute(struct fd_screen *screen)
+{
+	return is_a5xx(screen);
 }
 
 #endif /* FREEDRENO_SCREEN_H_ */

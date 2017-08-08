@@ -273,6 +273,7 @@ xmesa_st_framebuffer_flush_front(struct st_context_iface *stctx,
    return ret;
 }
 
+static uint32_t xmesa_stfbi_ID = 0;
 
 struct st_framebuffer_iface *
 xmesa_create_st_framebuffer(XMesaDisplay xmdpy, XMesaBuffer b)
@@ -302,6 +303,8 @@ xmesa_create_st_framebuffer(XMesaDisplay xmdpy, XMesaBuffer b)
    stfbi->visual = &xstfb->stvis;
    stfbi->flush_front = xmesa_st_framebuffer_flush_front;
    stfbi->validate = xmesa_st_framebuffer_validate;
+   stfbi->ID = p_atomic_inc_return(&xmesa_stfbi_ID);
+   stfbi->state_manager = xmdpy->smapi;
    p_atomic_set(&stfbi->stamp, 1);
    stfbi->st_manager_private = (void *) xstfb;
 

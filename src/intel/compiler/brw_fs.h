@@ -50,6 +50,8 @@ offset(const fs_reg &reg, const brw::fs_builder &bld, unsigned delta)
    return offset(reg, bld.dispatch_width(), delta);
 }
 
+#define UBO_START ((1 << 16) - 4)
+
 /**
  * The fragment shader front-end.
  *
@@ -125,6 +127,8 @@ public:
    void split_virtual_grfs();
    bool compact_virtual_grfs();
    void assign_constant_locations();
+   bool get_pull_locs(const fs_reg &src, unsigned *out_surf_index,
+                      unsigned *out_pull_index);
    void lower_constant_loads();
    void invalidate_live_intervals();
    void calculate_live_intervals();
@@ -175,7 +179,6 @@ public:
    fs_reg *emit_samplepos_setup();
    fs_reg *emit_sampleid_setup();
    fs_reg *emit_samplemaskin_setup();
-   fs_reg *emit_vs_system_value(int location);
    void emit_interpolation_setup_gen4();
    void emit_interpolation_setup_gen6();
    void compute_sample_position(fs_reg dst, fs_reg int_sample_pos);

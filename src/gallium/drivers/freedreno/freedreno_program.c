@@ -37,7 +37,8 @@ fd_fp_state_bind(struct pipe_context *pctx, void *hwcso)
 {
 	struct fd_context *ctx = fd_context(pctx);
 	ctx->prog.fp = hwcso;
-	ctx->dirty |= FD_SHADER_DIRTY_FP;
+	ctx->dirty_shader[PIPE_SHADER_FRAGMENT] |= FD_DIRTY_SHADER_PROG;
+	ctx->dirty |= FD_DIRTY_PROG;
 }
 
 static void
@@ -45,7 +46,8 @@ fd_vp_state_bind(struct pipe_context *pctx, void *hwcso)
 {
 	struct fd_context *ctx = fd_context(pctx);
 	ctx->prog.vp = hwcso;
-	ctx->dirty |= FD_SHADER_DIRTY_VP;
+	ctx->dirty_shader[PIPE_SHADER_VERTEX] |= FD_DIRTY_SHADER_PROG;
+	ctx->dirty |= FD_DIRTY_PROG;
 }
 
 static const char *solid_fp =

@@ -158,6 +158,30 @@ __gen_ufixed(float v, uint32_t start, uint32_t end, uint32_t fract_bits)
 #endif
 
 
+enum GEN45_3D_Prim_Topo_Type {
+   _3DPRIM_POINTLIST                    =      1,
+   _3DPRIM_LINELIST                     =      2,
+   _3DPRIM_LINESTRIP                    =      3,
+   _3DPRIM_TRILIST                      =      4,
+   _3DPRIM_TRISTRIP                     =      5,
+   _3DPRIM_TRIFAN                       =      6,
+   _3DPRIM_QUADLIST                     =      7,
+   _3DPRIM_QUADSTRIP                    =      8,
+   _3DPRIM_LINELIST_ADJ                 =      9,
+   _3DPRIM_LINESTRIP_ADJ                =     10,
+   _3DPRIM_TRILIST_ADJ                  =     11,
+   _3DPRIM_TRISTRIP_ADJ                 =     12,
+   _3DPRIM_TRISTRIP_REVERSE             =     13,
+   _3DPRIM_POLYGON                      =     14,
+   _3DPRIM_RECTLIST                     =     15,
+   _3DPRIM_LINELOOP                     =     16,
+   _3DPRIM_POINTLIST_BF                 =     17,
+   _3DPRIM_LINESTRIP_CONT               =     18,
+   _3DPRIM_LINESTRIP_BF                 =     19,
+   _3DPRIM_LINESTRIP_CONT_BF            =     20,
+   _3DPRIM_TRIFAN_NOSTIPPLE             =     22,
+};
+
 enum GEN45_3D_Vertex_Component_Control {
    VFCOMP_NOSTORE                       =      0,
    VFCOMP_STORE_SRC                     =      1,
@@ -167,6 +191,36 @@ enum GEN45_3D_Vertex_Component_Control {
    VFCOMP_STORE_VID                     =      5,
    VFCOMP_STORE_IID                     =      6,
    VFCOMP_STORE_PID                     =      7,
+};
+
+enum GEN45_3D_Color_Buffer_Blend_Function {
+   BLENDFUNCTION_ADD                    =      0,
+   BLENDFUNCTION_SUBTRACT               =      1,
+   BLENDFUNCTION_REVERSE_SUBTRACT       =      2,
+   BLENDFUNCTION_MIN                    =      3,
+   BLENDFUNCTION_MAX                    =      4,
+};
+
+enum GEN45_3D_Color_Buffer_Blend_Factor {
+   BLENDFACTOR_ONE                      =      1,
+   BLENDFACTOR_SRC_COLOR                =      2,
+   BLENDFACTOR_SRC_ALPHA                =      3,
+   BLENDFACTOR_DST_ALPHA                =      4,
+   BLENDFACTOR_DST_COLOR                =      5,
+   BLENDFACTOR_SRC_ALPHA_SATURATE       =      6,
+   BLENDFACTOR_CONST_COLOR              =      7,
+   BLENDFACTOR_CONST_ALPHA              =      8,
+   BLENDFACTOR_SRC1_COLOR               =      9,
+   BLENDFACTOR_SRC1_ALPHA               =     10,
+   BLENDFACTOR_ZERO                     =     17,
+   BLENDFACTOR_INV_SRC_COLOR            =     18,
+   BLENDFACTOR_INV_SRC_ALPHA            =     19,
+   BLENDFACTOR_INV_DST_ALPHA            =     20,
+   BLENDFACTOR_INV_DST_COLOR            =     21,
+   BLENDFACTOR_INV_CONST_COLOR          =     23,
+   BLENDFACTOR_INV_CONST_ALPHA          =     24,
+   BLENDFACTOR_INV_SRC1_COLOR           =     25,
+   BLENDFACTOR_INV_SRC1_ALPHA           =     26,
 };
 
 enum GEN45_3D_Compare_Function {
@@ -180,6 +234,36 @@ enum GEN45_3D_Compare_Function {
    COMPAREFUNCTION_GEQUAL               =      7,
 };
 
+enum GEN45_3D_Stencil_Operation {
+   STENCILOP_KEEP                       =      0,
+   STENCILOP_ZERO                       =      1,
+   STENCILOP_REPLACE                    =      2,
+   STENCILOP_INCRSAT                    =      3,
+   STENCILOP_DECRSAT                    =      4,
+   STENCILOP_INCR                       =      5,
+   STENCILOP_DECR                       =      6,
+   STENCILOP_INVERT                     =      7,
+};
+
+enum GEN45_3D_Logic_Op_Function {
+   LOGICOP_CLEAR                        =      0,
+   LOGICOP_NOR                          =      1,
+   LOGICOP_AND_INVERTED                 =      2,
+   LOGICOP_COPY_INVERTED                =      3,
+   LOGICOP_AND_REVERSE                  =      4,
+   LOGICOP_INVERT                       =      5,
+   LOGICOP_XOR                          =      6,
+   LOGICOP_NAND                         =      7,
+   LOGICOP_AND                          =      8,
+   LOGICOP_EQUIV                        =      9,
+   LOGICOP_NOOP                         =     10,
+   LOGICOP_OR_INVERTED                  =     11,
+   LOGICOP_COPY                         =     12,
+   LOGICOP_OR_REVERSE                   =     13,
+   LOGICOP_OR                           =     14,
+   LOGICOP_SET                          =     15,
+};
+
 enum GEN45_SURFACE_FORMAT {
    SF_R32G32B32A32_FLOAT                =      0,
    SF_R32G32B32A32_SINT                 =      1,
@@ -190,8 +274,6 @@ enum GEN45_SURFACE_FORMAT {
    SF_R32G32B32X32_FLOAT                =      6,
    SF_R32G32B32A32_SSCALED              =      7,
    SF_R32G32B32A32_USCALED              =      8,
-   SF_R32G32B32A32_SFIXED               =     32,
-   SF_R64G64_PASSTHRU                   =     33,
    SF_R32G32B32_FLOAT                   =     64,
    SF_R32G32B32_SINT                    =     65,
    SF_R32G32B32_UINT                    =     66,
@@ -223,8 +305,6 @@ enum GEN45_SURFACE_FORMAT {
    SF_R16G16B16A16_USCALED              =    148,
    SF_R32G32_SSCALED                    =    149,
    SF_R32G32_USCALED                    =    150,
-   SF_R32G32_SFIXED                     =    160,
-   SF_R64_PASSTHRU                      =    161,
    SF_B8G8R8A8_UNORM                    =    192,
    SF_B8G8R8A8_UNORM_SRGB               =    193,
    SF_R10G10B10A2_UNORM                 =    194,
@@ -404,7 +484,7 @@ enum GEN45_SURFACE_FORMAT {
    SF_RAW                               =    511,
 };
 
-enum GEN45_TextureCoordinateMode {
+enum GEN45_Texture_Coordinate_Mode {
    TCM_WRAP                             =      0,
    TCM_MIRROR                           =      1,
    TCM_CLAMP                            =      2,
@@ -413,643 +493,6 @@ enum GEN45_TextureCoordinateMode {
    TCM_MIRROR_ONCE                      =      5,
 };
 
-#define GEN45_VS_STATE_length                  7
-struct GEN45_VS_STATE {
-   __gen_address_type                   KernelStartPointer;
-   uint32_t                             GRFRegisterCount;
-   bool                                 SingleProgramFlow;
-   uint32_t                             BindingTableEntryCount;
-   uint32_t                             ThreadPriority;
-   uint32_t                             FloatingPointMode;
-#define IEEE754                                  0
-#define Alternate                                1
-   bool                                 IllegalOpcodeExceptionEnable;
-   bool                                 MaskStackExceptionEnable;
-   bool                                 SoftwareExceptionEnable;
-   uint64_t                             ScratchSpaceBasePointer;
-   uint32_t                             PerThreadScratchSpace;
-   uint32_t                             ConstantURBEntryReadLength;
-   uint32_t                             ConstantURBEntryReadOffset;
-   uint32_t                             VertexURBEntryReadLength;
-   uint32_t                             VertexURBEntryReadOffset;
-   uint32_t                             DispatchGRFStartRegisterforURBData;
-   uint32_t                             MaximumNumberofThreads;
-   uint32_t                             URBEntryAllocationSize;
-   uint32_t                             NumberofURBEntries;
-   bool                                 StatisticsEnable;
-   __gen_address_type                   SamplerStatePointer;
-   uint32_t                             SamplerCount;
-   bool                                 VertexCacheDisable;
-   bool                                 VSFunctionEnable;
-};
-
-static inline void
-GEN45_VS_STATE_pack(__gen_user_data *data, void * restrict dst,
-                    const struct GEN45_VS_STATE * restrict values)
-{
-   uint32_t * restrict dw = (uint32_t * restrict) dst;
-
-   const uint32_t v0 =
-      __gen_uint(values->GRFRegisterCount, 1, 3);
-   dw[0] = __gen_combine_address(data, &dw[0], values->KernelStartPointer, v0);
-
-   dw[1] =
-      __gen_uint(values->SingleProgramFlow, 31, 31) |
-      __gen_uint(values->BindingTableEntryCount, 18, 25) |
-      __gen_uint(values->ThreadPriority, 17, 17) |
-      __gen_uint(values->FloatingPointMode, 16, 16) |
-      __gen_uint(values->IllegalOpcodeExceptionEnable, 13, 13) |
-      __gen_uint(values->MaskStackExceptionEnable, 11, 11) |
-      __gen_uint(values->SoftwareExceptionEnable, 7, 7);
-
-   dw[2] =
-      __gen_offset(values->ScratchSpaceBasePointer, 10, 31) |
-      __gen_uint(values->PerThreadScratchSpace, 0, 3);
-
-   dw[3] =
-      __gen_uint(values->ConstantURBEntryReadLength, 25, 30) |
-      __gen_uint(values->ConstantURBEntryReadOffset, 18, 23) |
-      __gen_uint(values->VertexURBEntryReadLength, 11, 16) |
-      __gen_uint(values->VertexURBEntryReadOffset, 4, 9) |
-      __gen_uint(values->DispatchGRFStartRegisterforURBData, 0, 3);
-
-   dw[4] =
-      __gen_uint(values->MaximumNumberofThreads, 25, 30) |
-      __gen_uint(values->URBEntryAllocationSize, 19, 23) |
-      __gen_uint(values->NumberofURBEntries, 11, 17) |
-      __gen_uint(values->StatisticsEnable, 10, 10);
-
-   const uint32_t v5 =
-      __gen_uint(values->SamplerCount, 0, 2);
-   dw[5] = __gen_combine_address(data, &dw[5], values->SamplerStatePointer, v5);
-
-   dw[6] =
-      __gen_uint(values->VertexCacheDisable, 1, 1) |
-      __gen_uint(values->VSFunctionEnable, 0, 0);
-}
-
-#define GEN45_GS_STATE_length                  7
-struct GEN45_GS_STATE {
-   __gen_address_type                   KernelStartPointer;
-   uint32_t                             GRFRegisterCount;
-   bool                                 SingleProgramFlow;
-   uint32_t                             BindingTableEntryCount;
-   uint32_t                             FloatingPointMode;
-#define IEEE754                                  0
-#define Alternate                                1
-   bool                                 IllegalOpcodeExceptionEnable;
-   bool                                 MaskStackExceptionEnable;
-   bool                                 SoftwareExceptionEnable;
-   uint64_t                             ScratchSpaceBasePointer;
-   uint32_t                             PerThreadScratchSpace;
-   uint32_t                             ConstantURBEntryReadLength;
-   uint32_t                             ConstantURBEntryReadOffset;
-   uint32_t                             VertexURBEntryReadLength;
-   uint32_t                             VertexURBEntryReadOffset;
-   uint32_t                             DispatchGRFStartRegisterforURBData;
-   uint32_t                             MaximumNumberofThreads;
-   uint32_t                             URBEntryAllocationSize;
-   uint32_t                             NumberofURBEntries;
-   bool                                 StatisticsEnable;
-   __gen_address_type                   SamplerStatePointer;
-   uint32_t                             SamplerCount;
-   bool                                 ReorderEnable;
-   bool                                 DiscardAdjacency;
-   uint32_t                             MaximumVPIndex;
-};
-
-static inline void
-GEN45_GS_STATE_pack(__gen_user_data *data, void * restrict dst,
-                    const struct GEN45_GS_STATE * restrict values)
-{
-   uint32_t * restrict dw = (uint32_t * restrict) dst;
-
-   const uint32_t v0 =
-      __gen_uint(values->GRFRegisterCount, 1, 3);
-   dw[0] = __gen_combine_address(data, &dw[0], values->KernelStartPointer, v0);
-
-   dw[1] =
-      __gen_uint(values->SingleProgramFlow, 31, 31) |
-      __gen_uint(values->BindingTableEntryCount, 18, 25) |
-      __gen_uint(values->FloatingPointMode, 16, 16) |
-      __gen_uint(values->IllegalOpcodeExceptionEnable, 13, 13) |
-      __gen_uint(values->MaskStackExceptionEnable, 11, 11) |
-      __gen_uint(values->SoftwareExceptionEnable, 7, 7);
-
-   dw[2] =
-      __gen_offset(values->ScratchSpaceBasePointer, 10, 31) |
-      __gen_uint(values->PerThreadScratchSpace, 0, 3);
-
-   dw[3] =
-      __gen_uint(values->ConstantURBEntryReadLength, 25, 30) |
-      __gen_uint(values->ConstantURBEntryReadOffset, 18, 23) |
-      __gen_uint(values->VertexURBEntryReadLength, 11, 16) |
-      __gen_uint(values->VertexURBEntryReadOffset, 4, 9) |
-      __gen_uint(values->DispatchGRFStartRegisterforURBData, 0, 3);
-
-   dw[4] =
-      __gen_uint(values->MaximumNumberofThreads, 25, 29) |
-      __gen_uint(values->URBEntryAllocationSize, 19, 23) |
-      __gen_uint(values->NumberofURBEntries, 11, 17) |
-      __gen_uint(values->StatisticsEnable, 10, 10);
-
-   const uint32_t v5 =
-      __gen_uint(values->SamplerCount, 0, 2);
-   dw[5] = __gen_combine_address(data, &dw[5], values->SamplerStatePointer, v5);
-
-   dw[6] =
-      __gen_uint(values->ReorderEnable, 30, 30) |
-      __gen_uint(values->DiscardAdjacency, 29, 29) |
-      __gen_uint(values->MaximumVPIndex, 0, 3);
-}
-
-#define GEN45_CLIP_STATE_length               11
-struct GEN45_CLIP_STATE {
-   __gen_address_type                   KernelStartPointer;
-   uint32_t                             GRFRegisterCount;
-   bool                                 SingleProgramFlow;
-   uint32_t                             BindingTableEntryCount;
-   uint32_t                             ThreadPriority;
-   uint32_t                             FloatingPointMode;
-#define IEEE754                                  0
-#define Alternate                                1
-   bool                                 IllegalOpcodeExceptionEnable;
-   bool                                 MaskStackExceptionEnable;
-   bool                                 SoftwareExceptionEnable;
-   uint64_t                             ScratchSpaceBasePointer;
-   uint32_t                             PerThreadScratchSpace;
-   uint32_t                             ConstantURBEntryReadLength;
-   uint32_t                             ConstantURBEntryReadOffset;
-   uint32_t                             VertexURBEntryReadLength;
-   uint32_t                             VertexURBEntryReadOffset;
-   uint32_t                             DispatchGRFStartRegisterforURBData;
-   uint32_t                             MaximumNumberofThreads;
-   uint32_t                             URBEntryAllocationSize;
-   uint32_t                             NumberofURBEntries;
-   bool                                 ClipperStatisticsEnable;
-   bool                                 GSOutputObjectStatisticsEnable;
-   uint32_t                             APIMode;
-#define APIMODE_OGL                              0
-#define APIMODE_D3D                              1
-   uint32_t                             VertexPositionSpace;
-   bool                                 ViewportXYClipTestEnable;
-   bool                                 ViewportZClipTestEnable;
-   bool                                 GuardbandClipTestEnable;
-   bool                                 NegativeWClipTestEnable;
-   bool                                 UserClipFlagsMustClipEnable;
-   uint32_t                             UserClipFlagsClipTestEnableBitmask;
-   uint32_t                             ClipMode;
-#define CLIPMODE_NORMAL                          0
-#define CLIPMODE_ALL                             1
-#define CLIPMODE_CLIP_NON_REJECTED               2
-#define CLIPMODE_REJECT_ALL                      3
-#define CLIPMODE_ACCEPT_ALL                      4
-#define CLIPMODE_NORMAL_FFCLIP                   5
-   uint64_t                             ClipperViewportStatePointer;
-   uint32_t                             ScreenSpaceViewportXMin;
-   uint32_t                             ScreenSpaceViewportXMax;
-   uint32_t                             ScreenSpaceViewportYMin;
-   uint32_t                             ScreenSpaceViewportYMax;
-};
-
-static inline void
-GEN45_CLIP_STATE_pack(__gen_user_data *data, void * restrict dst,
-                      const struct GEN45_CLIP_STATE * restrict values)
-{
-   uint32_t * restrict dw = (uint32_t * restrict) dst;
-
-   const uint32_t v0 =
-      __gen_uint(values->GRFRegisterCount, 1, 3);
-   dw[0] = __gen_combine_address(data, &dw[0], values->KernelStartPointer, v0);
-
-   dw[1] =
-      __gen_uint(values->SingleProgramFlow, 31, 31) |
-      __gen_uint(values->BindingTableEntryCount, 18, 25) |
-      __gen_uint(values->ThreadPriority, 17, 17) |
-      __gen_uint(values->FloatingPointMode, 16, 16) |
-      __gen_uint(values->IllegalOpcodeExceptionEnable, 13, 13) |
-      __gen_uint(values->MaskStackExceptionEnable, 11, 11) |
-      __gen_uint(values->SoftwareExceptionEnable, 7, 7);
-
-   dw[2] =
-      __gen_offset(values->ScratchSpaceBasePointer, 10, 31) |
-      __gen_uint(values->PerThreadScratchSpace, 0, 3);
-
-   dw[3] =
-      __gen_uint(values->ConstantURBEntryReadLength, 25, 30) |
-      __gen_uint(values->ConstantURBEntryReadOffset, 18, 23) |
-      __gen_uint(values->VertexURBEntryReadLength, 11, 16) |
-      __gen_uint(values->VertexURBEntryReadOffset, 4, 9) |
-      __gen_uint(values->DispatchGRFStartRegisterforURBData, 0, 3);
-
-   dw[4] =
-      __gen_uint(values->MaximumNumberofThreads, 25, 29) |
-      __gen_uint(values->URBEntryAllocationSize, 19, 23) |
-      __gen_uint(values->NumberofURBEntries, 11, 17) |
-      __gen_uint(values->ClipperStatisticsEnable, 10, 10) |
-      __gen_uint(values->GSOutputObjectStatisticsEnable, 9, 9);
-
-   dw[5] =
-      __gen_uint(values->APIMode, 30, 30) |
-      __gen_uint(values->VertexPositionSpace, 29, 29) |
-      __gen_uint(values->ViewportXYClipTestEnable, 28, 28) |
-      __gen_uint(values->ViewportZClipTestEnable, 27, 27) |
-      __gen_uint(values->GuardbandClipTestEnable, 26, 26) |
-      __gen_uint(values->NegativeWClipTestEnable, 25, 25) |
-      __gen_uint(values->UserClipFlagsMustClipEnable, 24, 24) |
-      __gen_uint(values->UserClipFlagsClipTestEnableBitmask, 16, 23) |
-      __gen_uint(values->ClipMode, 13, 15);
-
-   dw[6] =
-      __gen_offset(values->ClipperViewportStatePointer, 5, 31);
-
-   dw[7] =
-      __gen_uint(values->ScreenSpaceViewportXMin, 0, 31);
-
-   dw[8] =
-      __gen_uint(values->ScreenSpaceViewportXMax, 0, 31);
-
-   dw[9] =
-      __gen_uint(values->ScreenSpaceViewportYMin, 0, 31);
-
-   dw[10] =
-      __gen_uint(values->ScreenSpaceViewportYMax, 0, 31);
-}
-
-#define GEN45_SF_STATE_length                  8
-struct GEN45_SF_STATE {
-   __gen_address_type                   KernelStartPointer;
-   uint32_t                             GRFRegisterCount;
-   bool                                 SingleProgramFlow;
-   uint32_t                             BindingTableEntryCount;
-   uint32_t                             ThreadPriority;
-   uint32_t                             FloatingPointMode;
-#define IEEE754                                  0
-#define Alternate                                1
-   bool                                 IllegalOpcodeExceptionEnable;
-   bool                                 MaskStackExceptionEnable;
-   bool                                 SoftwareExceptionEnable;
-   uint64_t                             ScratchSpaceBasePointer;
-   uint32_t                             PerThreadScratchSpace;
-   uint32_t                             ConstantURBEntryReadLength;
-   uint32_t                             ConstantURBEntryReadOffset;
-   uint32_t                             VertexURBEntryReadLength;
-   uint32_t                             VertexURBEntryReadOffset;
-   uint32_t                             DispatchGRFStartRegisterforURBData;
-   uint32_t                             MaximumNumberofThreads;
-   uint32_t                             URBEntryAllocationSize;
-   uint32_t                             NumberofURBEntries;
-   bool                                 StatisticsEnable;
-   uint64_t                             SetupViewportStatePointer;
-   uint32_t                             ViewportTransformEnable;
-   uint32_t                             FrontWinding;
-#define FRONTWINDING_CW                          0
-#define FRONTWINDING_CCW                         1
-   bool                                 AntialiasingEnable;
-   uint32_t                             CullMode;
-#define CULLMODE_BOTH                            0
-#define CULLMODE_NONE                            1
-#define CULLMODE_FRONT                           2
-#define CULLMODE_BACK                            3
-   bool                                 FastScissorClipDisable;
-   uint32_t                             LineWidth;
-   uint32_t                             LineEndCapAntialiasingRegionWidth;
-   uint32_t                             PointRasterizationRule;
-#define RASTRULE_UPPER_LEFT                      0
-#define RASTRULE_UPPER_RIGHT                     1
-   bool                                 ZeroPixelTriangleFilterDisable;
-   bool                                 _2x2PixelTriangleFilterDisable;
-   bool                                 ScissorRectangleEnable;
-   uint32_t                             DestinationOriginHorizontalBias;
-   uint32_t                             DestinationOriginVerticalBias;
-   bool                                 LastPixelEnable;
-   uint32_t                             TriangleStripListProvokingVertexSelect;
-   uint32_t                             LineStripListProvokingVertexSelect;
-   uint32_t                             TriangleFanProvokingVertexSelect;
-   uint32_t                             AALineDistanceMode;
-#define AALINEDISTANCE_MANHATTAN                 0
-#define AALINEDISTANCE_TRUE                      1
-   bool                                 SpritePointEnable;
-   uint32_t                             VertexSubPixelPrecisionSelect;
-   uint32_t                             UsePointWidthState;
-   uint32_t                             PointWidth;
-};
-
-static inline void
-GEN45_SF_STATE_pack(__gen_user_data *data, void * restrict dst,
-                    const struct GEN45_SF_STATE * restrict values)
-{
-   uint32_t * restrict dw = (uint32_t * restrict) dst;
-
-   const uint32_t v0 =
-      __gen_uint(values->GRFRegisterCount, 1, 3);
-   dw[0] = __gen_combine_address(data, &dw[0], values->KernelStartPointer, v0);
-
-   dw[1] =
-      __gen_uint(values->SingleProgramFlow, 31, 31) |
-      __gen_uint(values->BindingTableEntryCount, 18, 25) |
-      __gen_uint(values->ThreadPriority, 17, 17) |
-      __gen_uint(values->FloatingPointMode, 16, 16) |
-      __gen_uint(values->IllegalOpcodeExceptionEnable, 13, 13) |
-      __gen_uint(values->MaskStackExceptionEnable, 11, 11) |
-      __gen_uint(values->SoftwareExceptionEnable, 7, 7);
-
-   dw[2] =
-      __gen_offset(values->ScratchSpaceBasePointer, 10, 31) |
-      __gen_uint(values->PerThreadScratchSpace, 0, 3);
-
-   dw[3] =
-      __gen_uint(values->ConstantURBEntryReadLength, 25, 30) |
-      __gen_uint(values->ConstantURBEntryReadOffset, 18, 23) |
-      __gen_uint(values->VertexURBEntryReadLength, 11, 16) |
-      __gen_uint(values->VertexURBEntryReadOffset, 4, 9) |
-      __gen_uint(values->DispatchGRFStartRegisterforURBData, 0, 3);
-
-   dw[4] =
-      __gen_uint(values->MaximumNumberofThreads, 25, 30) |
-      __gen_uint(values->URBEntryAllocationSize, 19, 23) |
-      __gen_uint(values->NumberofURBEntries, 11, 18) |
-      __gen_uint(values->StatisticsEnable, 10, 10);
-
-   const uint64_t v5 =
-      __gen_offset(values->SetupViewportStatePointer, 5, 35) |
-      __gen_uint(values->ViewportTransformEnable, 1, 1) |
-      __gen_uint(values->FrontWinding, 0, 0) |
-      __gen_uint(values->AntialiasingEnable, 63, 63) |
-      __gen_uint(values->CullMode, 61, 62) |
-      __gen_uint(values->FastScissorClipDisable, 60, 60) |
-      __gen_uint(values->LineWidth, 56, 59) |
-      __gen_uint(values->LineEndCapAntialiasingRegionWidth, 54, 55) |
-      __gen_uint(values->PointRasterizationRule, 52, 53) |
-      __gen_uint(values->ZeroPixelTriangleFilterDisable, 51, 51) |
-      __gen_uint(values->_2x2PixelTriangleFilterDisable, 50, 50) |
-      __gen_uint(values->ScissorRectangleEnable, 49, 49) |
-      __gen_uint(values->DestinationOriginHorizontalBias, 45, 48) |
-      __gen_uint(values->DestinationOriginVerticalBias, 41, 44);
-   dw[5] = v5;
-   dw[6] = v5 >> 32;
-
-   dw[7] =
-      __gen_uint(values->LastPixelEnable, 31, 31) |
-      __gen_uint(values->TriangleStripListProvokingVertexSelect, 29, 30) |
-      __gen_uint(values->LineStripListProvokingVertexSelect, 27, 28) |
-      __gen_uint(values->TriangleFanProvokingVertexSelect, 25, 26) |
-      __gen_uint(values->AALineDistanceMode, 14, 14) |
-      __gen_uint(values->SpritePointEnable, 13, 13) |
-      __gen_uint(values->VertexSubPixelPrecisionSelect, 12, 12) |
-      __gen_uint(values->UsePointWidthState, 11, 11) |
-      __gen_uint(values->PointWidth, 0, 10);
-}
-
-#define GEN45_WM_STATE_length                  7
-struct GEN45_WM_STATE {
-   __gen_address_type                   KernelStartPointer0;
-   uint32_t                             GRFRegisterCount;
-   bool                                 SingleProgramFlow;
-   uint32_t                             BindingTableEntryCount;
-   uint32_t                             ThreadPriority;
-   uint32_t                             FloatingPointMode;
-#define IEEE754                                  0
-#define Alternate                                1
-   uint32_t                             DepthCoefficientURBReadOffset;
-   bool                                 IllegalOpcodeExceptionEnable;
-   bool                                 MaskStackExceptionEnable;
-   bool                                 SoftwareExceptionEnable;
-   uint64_t                             ScratchSpaceBasePointer;
-   uint32_t                             PerThreadScratchSpace;
-   uint32_t                             ConstantURBEntryReadLength;
-   uint32_t                             ConstantURBEntryReadOffset;
-   uint32_t                             SetupURBEntryReadLength;
-   uint32_t                             SetupURBEntryReadOffset;
-   uint32_t                             DispatchGRFStartRegisterforURBData;
-   __gen_address_type                   SamplerStatePointer;
-   uint32_t                             SamplerCount;
-   bool                                 StatisticsEnable;
-   uint32_t                             MaximumNumberofThreads;
-   bool                                 TransposedURBReadEnable;
-   bool                                 LegacyDiamondLineRasterization;
-   bool                                 PixelShaderKillPixel;
-   bool                                 PixelShaderComputedDepth;
-   bool                                 PixelShaderUsesSourceDepth;
-   bool                                 ThreadDispatchEnable;
-   bool                                 EarlyDepthTestEnable;
-   uint32_t                             LineEndCapAntialiasingRegionWidth;
-   uint32_t                             LineAntialiasingRegionWidth;
-   bool                                 PolygonStippleEnable;
-   bool                                 GlobalDepthOffsetEnable;
-   bool                                 LineStippleEnable;
-   bool                                 LegacyGlobalDepthBiasEnable;
-   bool                                 Contiguous64PixelDispatchEnable;
-   bool                                 Contiguous32PixelDispatchEnable;
-   bool                                 _32PixelDispatchEnable;
-   bool                                 _16PixelDispatchEnable;
-   bool                                 _8PixelDispatchEnable;
-   float                                GlobalDepthOffsetConstant;
-   float                                GlobalDepthOffsetScale;
-};
-
-static inline void
-GEN45_WM_STATE_pack(__gen_user_data *data, void * restrict dst,
-                    const struct GEN45_WM_STATE * restrict values)
-{
-   uint32_t * restrict dw = (uint32_t * restrict) dst;
-
-   const uint32_t v0 =
-      __gen_uint(values->GRFRegisterCount, 1, 3);
-   dw[0] = __gen_combine_address(data, &dw[0], values->KernelStartPointer0, v0);
-
-   dw[1] =
-      __gen_uint(values->SingleProgramFlow, 31, 31) |
-      __gen_uint(values->BindingTableEntryCount, 18, 25) |
-      __gen_uint(values->ThreadPriority, 17, 17) |
-      __gen_uint(values->FloatingPointMode, 16, 16) |
-      __gen_uint(values->DepthCoefficientURBReadOffset, 8, 13) |
-      __gen_uint(values->IllegalOpcodeExceptionEnable, 4, 4) |
-      __gen_uint(values->MaskStackExceptionEnable, 2, 2) |
-      __gen_uint(values->SoftwareExceptionEnable, 1, 1);
-
-   dw[2] =
-      __gen_offset(values->ScratchSpaceBasePointer, 10, 31) |
-      __gen_uint(values->PerThreadScratchSpace, 0, 3);
-
-   dw[3] =
-      __gen_uint(values->ConstantURBEntryReadLength, 25, 30) |
-      __gen_uint(values->ConstantURBEntryReadOffset, 18, 23) |
-      __gen_uint(values->SetupURBEntryReadLength, 11, 17) |
-      __gen_uint(values->SetupURBEntryReadOffset, 4, 9) |
-      __gen_uint(values->DispatchGRFStartRegisterforURBData, 0, 3);
-
-   const uint32_t v4 =
-      __gen_uint(values->SamplerCount, 2, 4) |
-      __gen_uint(values->StatisticsEnable, 0, 0);
-   dw[4] = __gen_combine_address(data, &dw[4], values->SamplerStatePointer, v4);
-
-   dw[5] =
-      __gen_uint(values->MaximumNumberofThreads, 25, 31) |
-      __gen_uint(values->TransposedURBReadEnable, 24, 24) |
-      __gen_uint(values->LegacyDiamondLineRasterization, 23, 23) |
-      __gen_uint(values->PixelShaderKillPixel, 22, 22) |
-      __gen_uint(values->PixelShaderComputedDepth, 21, 21) |
-      __gen_uint(values->PixelShaderUsesSourceDepth, 20, 20) |
-      __gen_uint(values->ThreadDispatchEnable, 19, 19) |
-      __gen_uint(values->EarlyDepthTestEnable, 18, 18) |
-      __gen_uint(values->LineEndCapAntialiasingRegionWidth, 16, 17) |
-      __gen_uint(values->LineAntialiasingRegionWidth, 14, 15) |
-      __gen_uint(values->PolygonStippleEnable, 13, 13) |
-      __gen_uint(values->GlobalDepthOffsetEnable, 12, 12) |
-      __gen_uint(values->LineStippleEnable, 11, 11) |
-      __gen_uint(values->LegacyGlobalDepthBiasEnable, 10, 10) |
-      __gen_uint(values->Contiguous64PixelDispatchEnable, 4, 4) |
-      __gen_uint(values->Contiguous32PixelDispatchEnable, 3, 3) |
-      __gen_uint(values->_32PixelDispatchEnable, 2, 2) |
-      __gen_uint(values->_16PixelDispatchEnable, 1, 1) |
-      __gen_uint(values->_8PixelDispatchEnable, 0, 0);
-
-   dw[6] =
-      __gen_float(values->GlobalDepthOffsetConstant);
-}
-
-#define GEN45_VERTEX_BUFFER_STATE_length       4
-struct GEN45_VERTEX_BUFFER_STATE {
-   uint32_t                             VertexBufferIndex;
-   uint32_t                             BufferAccessType;
-#define VERTEXDATA                               0
-#define INSTANCEDATA                             1
-   uint32_t                             VertexFetchInvalidate;
-   uint32_t                             BufferPitch;
-   __gen_address_type                   BufferStartingAddress;
-   uint32_t                             MaxIndex;
-   uint32_t                             InstanceDataStepRate;
-};
-
-static inline void
-GEN45_VERTEX_BUFFER_STATE_pack(__gen_user_data *data, void * restrict dst,
-                               const struct GEN45_VERTEX_BUFFER_STATE * restrict values)
-{
-   uint32_t * restrict dw = (uint32_t * restrict) dst;
-
-   dw[0] =
-      __gen_uint(values->VertexBufferIndex, 27, 31) |
-      __gen_uint(values->BufferAccessType, 26, 26) |
-      __gen_uint(values->VertexFetchInvalidate, 12, 12) |
-      __gen_uint(values->BufferPitch, 0, 11);
-
-   dw[1] = __gen_combine_address(data, &dw[1], values->BufferStartingAddress, 0);
-
-   dw[2] =
-      __gen_uint(values->MaxIndex, 0, 31);
-
-   dw[3] =
-      __gen_uint(values->InstanceDataStepRate, 0, 31);
-}
-
-#define GEN45_VERTEX_ELEMENT_STATE_length      2
-struct GEN45_VERTEX_ELEMENT_STATE {
-   uint32_t                             VertexBufferIndex;
-   uint32_t                             Valid;
-   uint32_t                             SourceElementFormat;
-   uint32_t                             SourceElementOffset;
-   uint32_t                             Component0Control;
-   uint32_t                             Component1Control;
-   uint32_t                             Component2Control;
-   uint32_t                             Component3Control;
-   uint32_t                             DestinationElementOffset;
-};
-
-static inline void
-GEN45_VERTEX_ELEMENT_STATE_pack(__gen_user_data *data, void * restrict dst,
-                                const struct GEN45_VERTEX_ELEMENT_STATE * restrict values)
-{
-   uint32_t * restrict dw = (uint32_t * restrict) dst;
-
-   dw[0] =
-      __gen_uint(values->VertexBufferIndex, 27, 31) |
-      __gen_uint(values->Valid, 26, 26) |
-      __gen_uint(values->SourceElementFormat, 16, 24) |
-      __gen_uint(values->SourceElementOffset, 0, 10);
-
-   dw[1] =
-      __gen_uint(values->Component0Control, 28, 30) |
-      __gen_uint(values->Component1Control, 24, 26) |
-      __gen_uint(values->Component2Control, 20, 22) |
-      __gen_uint(values->Component3Control, 16, 18) |
-      __gen_uint(values->DestinationElementOffset, 0, 7);
-}
-
-#define GEN45_CLIP_VIEWPORT_length             4
-struct GEN45_CLIP_VIEWPORT {
-   uint32_t                             XMinClipGuardband;
-   uint32_t                             XMaxClipGuardband;
-   uint32_t                             YMinClipGuardband;
-   uint32_t                             YMaxClipGuardband;
-};
-
-static inline void
-GEN45_CLIP_VIEWPORT_pack(__gen_user_data *data, void * restrict dst,
-                         const struct GEN45_CLIP_VIEWPORT * restrict values)
-{
-   uint32_t * restrict dw = (uint32_t * restrict) dst;
-
-   dw[0] =
-      __gen_uint(values->XMinClipGuardband, 0, 31);
-
-   dw[1] =
-      __gen_uint(values->XMaxClipGuardband, 0, 31);
-
-   dw[2] =
-      __gen_uint(values->YMinClipGuardband, 0, 31);
-
-   dw[3] =
-      __gen_uint(values->YMaxClipGuardband, 0, 31);
-}
-
-#define GEN45_SF_VIEWPORT_length               8
-struct GEN45_SF_VIEWPORT {
-   float                                ViewportMatrixElementm00;
-   float                                ViewportMatrixElementm11;
-   float                                ViewportMatrixElementm22;
-   float                                ViewportMatrixElementm30;
-   float                                ViewportMatrixElementm31;
-   float                                ViewportMatrixElementm32;
-   uint32_t                             ScissorRectangleYMin;
-   uint32_t                             ScissorRectangleXMin;
-   uint32_t                             ScissorRectangleYMax;
-   uint32_t                             ScissorRectangleXMax;
-};
-
-static inline void
-GEN45_SF_VIEWPORT_pack(__gen_user_data *data, void * restrict dst,
-                       const struct GEN45_SF_VIEWPORT * restrict values)
-{
-   uint32_t * restrict dw = (uint32_t * restrict) dst;
-
-   dw[0] =
-      __gen_float(values->ViewportMatrixElementm00);
-
-   dw[1] =
-      __gen_float(values->ViewportMatrixElementm11);
-
-   dw[2] =
-      __gen_float(values->ViewportMatrixElementm22);
-
-   dw[3] =
-      __gen_float(values->ViewportMatrixElementm30);
-
-   dw[4] =
-      __gen_float(values->ViewportMatrixElementm31);
-
-   dw[5] =
-      __gen_float(values->ViewportMatrixElementm32);
-
-   dw[6] =
-      __gen_uint(values->ScissorRectangleYMin, 16, 31) |
-      __gen_uint(values->ScissorRectangleXMin, 0, 15);
-
-   dw[7] =
-      __gen_uint(values->ScissorRectangleYMax, 0, 15) |
-      __gen_uint(values->ScissorRectangleXMax, 16, 31);
-}
-
 #define GEN45_CC_VIEWPORT_length               2
 struct GEN45_CC_VIEWPORT {
    float                                MinimumDepth;
@@ -1057,8 +500,9 @@ struct GEN45_CC_VIEWPORT {
 };
 
 static inline void
-GEN45_CC_VIEWPORT_pack(__gen_user_data *data, void * restrict dst,
-                       const struct GEN45_CC_VIEWPORT * restrict values)
+GEN45_CC_VIEWPORT_pack(__attribute__((unused)) __gen_user_data *data,
+                       __attribute__((unused)) void * restrict dst,
+                       __attribute__((unused)) const struct GEN45_CC_VIEWPORT * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -1069,39 +513,191 @@ GEN45_CC_VIEWPORT_pack(__gen_user_data *data, void * restrict dst,
       __gen_float(values->MaximumDepth);
 }
 
-#define GEN45_COLOR_CALC_STATE_length          6
+#define GEN45_CLIP_STATE_length               11
+struct GEN45_CLIP_STATE {
+   __gen_address_type                   KernelStartPointer;
+   uint32_t                             GRFRegisterCount;
+   bool                                 SingleProgramFlow;
+   uint32_t                             BindingTableEntryCount;
+   uint32_t                             ThreadPriority;
+#define NormalPriority                           0
+#define HighPriority                             1
+   uint32_t                             FloatingPointMode;
+#define FLOATING_POINT_MODE_IEEE754              0
+#define FLOATING_POINT_MODE_Alternate            1
+   bool                                 IllegalOpcodeExceptionEnable;
+   bool                                 MaskStackExceptionEnable;
+   bool                                 SoftwareExceptionEnable;
+   __gen_address_type                   ScratchSpaceBasePointer;
+   uint32_t                             PerThreadScratchSpace;
+   uint32_t                             ConstantURBEntryReadLength;
+   uint32_t                             ConstantURBEntryReadOffset;
+   uint32_t                             VertexURBEntryReadLength;
+   uint32_t                             VertexURBEntryReadOffset;
+   uint32_t                             DispatchGRFStartRegisterForURBData;
+   uint32_t                             MaximumNumberofThreads;
+   uint32_t                             URBEntryAllocationSize;
+   uint32_t                             NumberofURBEntries;
+   bool                                 ClipperStatisticsEnable;
+   bool                                 GSOutputObjectStatisticsEnable;
+   uint32_t                             APIMode;
+#define APIMODE_OGL                              0
+#define APIMODE_D3D                              1
+   uint32_t                             VertexPositionSpace;
+#define VPOS_NDCSPACE                            0
+#define VPOS_SCREENSPACE                         1
+   bool                                 ViewportXYClipTestEnable;
+   bool                                 ViewportZClipTestEnable;
+   bool                                 GuardbandClipTestEnable;
+   bool                                 NegativeWClipTestEnable;
+   bool                                 UserClipFlagsMustClipEnable;
+   uint32_t                             UserClipDistanceClipTestEnableBitmask;
+   uint32_t                             ClipMode;
+#define CLIPMODE_NORMAL                          0
+#define CLIPMODE_ALL                             1
+#define CLIPMODE_CLIP_NON_REJECTED               2
+#define CLIPMODE_REJECT_ALL                      3
+#define CLIPMODE_ACCEPT_ALL                      4
+   __gen_address_type                   ClipperViewportStatePointer;
+   float                                ScreenSpaceViewportXMin;
+   float                                ScreenSpaceViewportXMax;
+   float                                ScreenSpaceViewportYMin;
+   float                                ScreenSpaceViewportYMax;
+};
+
+static inline void
+GEN45_CLIP_STATE_pack(__attribute__((unused)) __gen_user_data *data,
+                      __attribute__((unused)) void * restrict dst,
+                      __attribute__((unused)) const struct GEN45_CLIP_STATE * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   const uint32_t v0 =
+      __gen_uint(values->GRFRegisterCount, 1, 3);
+   dw[0] = __gen_combine_address(data, &dw[0], values->KernelStartPointer, v0);
+
+   dw[1] =
+      __gen_uint(values->SingleProgramFlow, 31, 31) |
+      __gen_uint(values->BindingTableEntryCount, 18, 25) |
+      __gen_uint(values->ThreadPriority, 17, 17) |
+      __gen_uint(values->FloatingPointMode, 16, 16) |
+      __gen_uint(values->IllegalOpcodeExceptionEnable, 13, 13) |
+      __gen_uint(values->MaskStackExceptionEnable, 11, 11) |
+      __gen_uint(values->SoftwareExceptionEnable, 7, 7);
+
+   const uint32_t v2 =
+      __gen_uint(values->PerThreadScratchSpace, 0, 3);
+   dw[2] = __gen_combine_address(data, &dw[2], values->ScratchSpaceBasePointer, v2);
+
+   dw[3] =
+      __gen_uint(values->ConstantURBEntryReadLength, 25, 30) |
+      __gen_uint(values->ConstantURBEntryReadOffset, 18, 23) |
+      __gen_uint(values->VertexURBEntryReadLength, 11, 16) |
+      __gen_uint(values->VertexURBEntryReadOffset, 4, 9) |
+      __gen_uint(values->DispatchGRFStartRegisterForURBData, 0, 3);
+
+   dw[4] =
+      __gen_uint(values->MaximumNumberofThreads, 25, 30) |
+      __gen_uint(values->URBEntryAllocationSize, 19, 23) |
+      __gen_uint(values->NumberofURBEntries, 11, 18) |
+      __gen_uint(values->ClipperStatisticsEnable, 10, 10) |
+      __gen_uint(values->GSOutputObjectStatisticsEnable, 10, 10);
+
+   dw[5] =
+      __gen_uint(values->APIMode, 30, 30) |
+      __gen_uint(values->VertexPositionSpace, 29, 29) |
+      __gen_uint(values->ViewportXYClipTestEnable, 28, 28) |
+      __gen_uint(values->ViewportZClipTestEnable, 27, 27) |
+      __gen_uint(values->GuardbandClipTestEnable, 26, 26) |
+      __gen_uint(values->NegativeWClipTestEnable, 25, 25) |
+      __gen_uint(values->UserClipFlagsMustClipEnable, 24, 24) |
+      __gen_uint(values->UserClipDistanceClipTestEnableBitmask, 16, 23) |
+      __gen_uint(values->ClipMode, 13, 15);
+
+   dw[6] = __gen_combine_address(data, &dw[6], values->ClipperViewportStatePointer, 0);
+
+   dw[7] =
+      __gen_float(values->ScreenSpaceViewportXMin);
+
+   dw[8] =
+      __gen_float(values->ScreenSpaceViewportXMax);
+
+   dw[9] =
+      __gen_float(values->ScreenSpaceViewportYMin);
+
+   dw[10] =
+      __gen_float(values->ScreenSpaceViewportYMax);
+}
+
+#define GEN45_CLIP_VIEWPORT_length             4
+struct GEN45_CLIP_VIEWPORT {
+   float                                XMinClipGuardband;
+   float                                XMaxClipGuardband;
+   float                                YMinClipGuardband;
+   float                                YMaxClipGuardband;
+};
+
+static inline void
+GEN45_CLIP_VIEWPORT_pack(__attribute__((unused)) __gen_user_data *data,
+                         __attribute__((unused)) void * restrict dst,
+                         __attribute__((unused)) const struct GEN45_CLIP_VIEWPORT * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   dw[0] =
+      __gen_float(values->XMinClipGuardband);
+
+   dw[1] =
+      __gen_float(values->XMaxClipGuardband);
+
+   dw[2] =
+      __gen_float(values->YMinClipGuardband);
+
+   dw[3] =
+      __gen_float(values->YMaxClipGuardband);
+}
+
+#define GEN45_SCISSOR_RECT_length              2
+struct GEN45_SCISSOR_RECT {
+   uint32_t                             ScissorRectangleYMin;
+   uint32_t                             ScissorRectangleXMin;
+   uint32_t                             ScissorRectangleYMax;
+   uint32_t                             ScissorRectangleXMax;
+};
+
+static inline void
+GEN45_SCISSOR_RECT_pack(__attribute__((unused)) __gen_user_data *data,
+                        __attribute__((unused)) void * restrict dst,
+                        __attribute__((unused)) const struct GEN45_SCISSOR_RECT * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   dw[0] =
+      __gen_uint(values->ScissorRectangleYMin, 16, 31) |
+      __gen_uint(values->ScissorRectangleXMin, 0, 15);
+
+   dw[1] =
+      __gen_uint(values->ScissorRectangleYMax, 16, 31) |
+      __gen_uint(values->ScissorRectangleXMax, 0, 15);
+}
+
+#define GEN45_COLOR_CALC_STATE_length          8
 struct GEN45_COLOR_CALC_STATE {
    bool                                 StencilTestEnable;
    enum GEN45_3D_Compare_Function       StencilTestFunction;
-   uint32_t                             StencilFailOp;
-#define STENCILOP_KEEP                           0
-#define STENCILOP_ZERO                           1
-#define STENCILOP_REPLACE                        2
-#define STENCILOP_INCRSAT                        3
-#define STENCILOP_DECRSAT                        4
-#define STENCILOP_INCR                           5
-#define STENCILOP_DECR                           6
-#define STENCILOP_INVERT                         7
-   uint32_t                             StencilPassDepthFailOp;
-   uint32_t                             StencilPassDepthPassOp;
+   enum GEN45_3D_Stencil_Operation      StencilFailOp;
+   enum GEN45_3D_Stencil_Operation      StencilPassDepthFailOp;
+   enum GEN45_3D_Stencil_Operation      StencilPassDepthPassOp;
    bool                                 StencilBufferWriteEnable;
    bool                                 DoubleSidedStencilEnable;
-   enum GEN45_3D_Compare_Function       BackFaceStencilTestFunction;
-   uint32_t                             BackfaceStencilFailOp;
-#define STENCILOP_KEEP                           0
-#define STENCILOP_ZERO                           1
-#define STENCILOP_REPLACE                        2
-#define STENCILOP_INCRSAT                        3
-#define STENCILOP_DECRSAT                        4
-#define STENCILOP_INCR                           5
-#define STENCILOP_DECR                           6
-#define STENCILOP_INVERT                         7
-   uint32_t                             BackfaceStencilPassDepthFailOp;
-   uint32_t                             BackfaceStencilPassDepthPassOp;
+   enum GEN45_3D_Compare_Function       BackfaceStencilTestFunction;
+   enum GEN45_3D_Stencil_Operation      BackfaceStencilFailOp;
+   enum GEN45_3D_Stencil_Operation      BackfaceStencilPassDepthFailOp;
+   enum GEN45_3D_Stencil_Operation      BackfaceStencilPassDepthPassOp;
    uint32_t                             StencilReferenceValue;
    uint32_t                             StencilTestMask;
    uint32_t                             StencilWriteMask;
-   uint32_t                             BackFaceStencilReferenceValue;
+   uint32_t                             BackfaceStencilReferenceValue;
    uint32_t                             BackfaceStencilTestMask;
    uint32_t                             BackfaceStencilWriteMask;
    bool                                 DepthTestEnable;
@@ -1115,62 +711,17 @@ struct GEN45_COLOR_CALC_STATE {
    bool                                 ColorBufferBlendEnable;
    bool                                 AlphaTestEnable;
    enum GEN45_3D_Compare_Function       AlphaTestFunction;
-   __gen_address_type                   ColorCalculatorViewportStatePointer;
+   __gen_address_type                   CCViewportStatePointer;
    bool                                 ColorDitherEnable;
    bool                                 RoundDisableFunctionDisable;
-   uint32_t                             LogicOpFunction;
-#define LOGICOP_CLEAR                            0
-#define LOGICOP_NOR                              1
-#define LOGICOP_AND_INVERTED                     2
-#define LOGICOP_COPY_INVERTED                    3
-#define LOGICOP_AND_REVERSE                      4
-#define LOGICOP_INVERT                           5
-#define LOGICOP_XOR                              6
-#define LOGICOP_NAND                             7
-#define LOGICOP_AND                              8
-#define LOGICOP_EQUIV                            9
-#define LOGICOP_NOOP                             10
-#define LOGICOP_OR_INVERTED                      11
-#define LOGICOP_COPY                             12
-#define LOGICOP_OR_REVERSE                       13
-#define LOGICOP_OR                               14
-#define LOGICOP_SET                              15
+   enum GEN45_3D_Logic_Op_Function      LogicOpFunction;
    bool                                 StatisticsEnable;
-   uint32_t                             AlphaBlendFunction;
-#define BLENDFUNCTION_ADD                        0
-#define BLENDFUNCTION_SUBTRACT                   1
-#define BLENDFUNCTION_REVERSE_SUBTRACT           2
-#define BLENDFUNCTION_MIN                        3
-#define BLENDFUNCTION_MAX                        4
-   uint32_t                             SourceAlphaBlendFactor;
-#define BLENDFACTOR_ONE                          1
-#define BLENDFACTOR_SRC_COLOR                    2
-#define BLENDFACTOR_SRC_ALPHA                    3
-#define BLENDFACTOR_DST_ALPHA                    4
-#define BLENDFACTOR_DST_COLOR                    5
-#define BLENDFACTOR_SRC_ALPHA_SATURATE           6
-#define BLENDFACTOR_CONST_COLOR                  7
-#define BLENDFACTOR_CONST_ALPHA                  8
-#define BLENDFACTOR_SRC1_COLOR                   9
-#define BLENDFACTOR_SRC1_ALPHA                   10
-#define BLENDFACTOR_ZERO                         17
-#define BLENDFACTOR_INV_SRC_COLOR                18
-#define BLENDFACTOR_INV_SRC_ALPHA                19
-#define BLENDFACTOR_INV_DST_ALPHA                20
-#define BLENDFACTOR_INV_DST_COLOR                21
-#define BLENDFACTOR_INV_CONST_COLOR              23
-#define BLENDFACTOR_INV_CONST_ALPHA              24
-#define BLENDFACTOR_INV_SRC1_COLOR               25
-#define BLENDFACTOR_INV_SRC1_ALPHA               26
-   uint32_t                             DestinationAlphaBlendFactor;
-   uint32_t                             ColorBlendFunction;
-#define BLENDFUNCTION_ADD                        0
-#define BLENDFUNCTION_SUBTRACT                   1
-#define BLENDFUNCTION_REVERSE_SUBTRACT           2
-#define BLENDFUNCTION_MIN                        3
-#define BLENDFUNCTION_MAX                        4
-   uint32_t                             SourceBlendFactor;
-   uint32_t                             DestinationBlendFactor;
+   enum GEN45_3D_Color_Buffer_Blend_Function AlphaBlendFunction;
+   enum GEN45_3D_Color_Buffer_Blend_Factor SourceAlphaBlendFactor;
+   enum GEN45_3D_Color_Buffer_Blend_Factor DestinationAlphaBlendFactor;
+   enum GEN45_3D_Color_Buffer_Blend_Function ColorBlendFunction;
+   enum GEN45_3D_Color_Buffer_Blend_Factor SourceBlendFactor;
+   enum GEN45_3D_Color_Buffer_Blend_Factor DestinationBlendFactor;
    uint32_t                             XDitherOffset;
    uint32_t                             YDitherOffset;
    uint32_t                             ColorClampRange;
@@ -1179,12 +730,14 @@ struct GEN45_COLOR_CALC_STATE {
 #define COLORCLAMP_RTFORMAT                      2
    bool                                 PreBlendColorClampEnable;
    bool                                 PostBlendColorClampEnable;
-   float                                AlphaReferenceValue;
+   uint32_t                             AlphaReferenceValueAsUNORM8;
+   float                                AlphaReferenceValueAsFLOAT32;
 };
 
 static inline void
-GEN45_COLOR_CALC_STATE_pack(__gen_user_data *data, void * restrict dst,
-                            const struct GEN45_COLOR_CALC_STATE * restrict values)
+GEN45_COLOR_CALC_STATE_pack(__attribute__((unused)) __gen_user_data *data,
+                            __attribute__((unused)) void * restrict dst,
+                            __attribute__((unused)) const struct GEN45_COLOR_CALC_STATE * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -1196,7 +749,7 @@ GEN45_COLOR_CALC_STATE_pack(__gen_user_data *data, void * restrict dst,
       __gen_uint(values->StencilPassDepthPassOp, 19, 21) |
       __gen_uint(values->StencilBufferWriteEnable, 18, 18) |
       __gen_uint(values->DoubleSidedStencilEnable, 15, 15) |
-      __gen_uint(values->BackFaceStencilTestFunction, 12, 14) |
+      __gen_uint(values->BackfaceStencilTestFunction, 12, 14) |
       __gen_uint(values->BackfaceStencilFailOp, 9, 11) |
       __gen_uint(values->BackfaceStencilPassDepthFailOp, 6, 8) |
       __gen_uint(values->BackfaceStencilPassDepthPassOp, 3, 5);
@@ -1205,7 +758,7 @@ GEN45_COLOR_CALC_STATE_pack(__gen_user_data *data, void * restrict dst,
       __gen_uint(values->StencilReferenceValue, 24, 31) |
       __gen_uint(values->StencilTestMask, 16, 23) |
       __gen_uint(values->StencilWriteMask, 8, 15) |
-      __gen_uint(values->BackFaceStencilReferenceValue, 0, 7);
+      __gen_uint(values->BackfaceStencilReferenceValue, 0, 7);
 
    dw[2] =
       __gen_uint(values->BackfaceStencilTestMask, 24, 31) |
@@ -1222,7 +775,7 @@ GEN45_COLOR_CALC_STATE_pack(__gen_user_data *data, void * restrict dst,
       __gen_uint(values->AlphaTestEnable, 11, 11) |
       __gen_uint(values->AlphaTestFunction, 8, 10);
 
-   dw[4] = __gen_combine_address(data, &dw[4], values->ColorCalculatorViewportStatePointer, 0);
+   dw[4] = __gen_combine_address(data, &dw[4], values->CCViewportStatePointer, 0);
 
    dw[5] =
       __gen_uint(values->ColorDitherEnable, 31, 31) |
@@ -1232,6 +785,98 @@ GEN45_COLOR_CALC_STATE_pack(__gen_user_data *data, void * restrict dst,
       __gen_uint(values->AlphaBlendFunction, 12, 14) |
       __gen_uint(values->SourceAlphaBlendFactor, 7, 11) |
       __gen_uint(values->DestinationAlphaBlendFactor, 2, 6);
+
+   dw[6] =
+      __gen_uint(values->ColorBlendFunction, 29, 31) |
+      __gen_uint(values->SourceBlendFactor, 24, 28) |
+      __gen_uint(values->DestinationBlendFactor, 19, 23) |
+      __gen_uint(values->XDitherOffset, 17, 18) |
+      __gen_uint(values->YDitherOffset, 15, 16) |
+      __gen_uint(values->ColorClampRange, 2, 3) |
+      __gen_uint(values->PreBlendColorClampEnable, 1, 1) |
+      __gen_uint(values->PostBlendColorClampEnable, 0, 0);
+
+   dw[7] =
+      __gen_uint(values->AlphaReferenceValueAsUNORM8, 0, 31) |
+      __gen_float(values->AlphaReferenceValueAsFLOAT32);
+}
+
+#define GEN45_GS_STATE_length                  7
+struct GEN45_GS_STATE {
+   __gen_address_type                   KernelStartPointer;
+   uint32_t                             GRFRegisterCount;
+   bool                                 SingleProgramFlow;
+   uint32_t                             BindingTableEntryCount;
+   uint32_t                             FloatingPointMode;
+#define FLOATING_POINT_MODE_IEEE754              0
+#define FLOATING_POINT_MODE_Alternate            1
+   bool                                 IllegalOpcodeExceptionEnable;
+   bool                                 MaskStackExceptionEnable;
+   bool                                 SoftwareExceptionEnable;
+   __gen_address_type                   ScratchSpaceBasePointer;
+   uint32_t                             PerThreadScratchSpace;
+   uint32_t                             ConstantURBEntryReadLength;
+   uint32_t                             ConstantURBEntryReadOffset;
+   uint32_t                             VertexURBEntryReadLength;
+   uint32_t                             VertexURBEntryReadOffset;
+   uint32_t                             DispatchGRFStartRegisterForURBData;
+   uint32_t                             MaximumNumberofThreads;
+   uint32_t                             URBEntryAllocationSize;
+   uint32_t                             NumberofURBEntries;
+   bool                                 GSStatisticsEnable;
+   bool                                 RenderingEnable;
+   __gen_address_type                   SamplerStatePointer;
+   uint32_t                             SamplerCount;
+   bool                                 ReorderEnable;
+   bool                                 DiscardAdjacency;
+   uint32_t                             MaximumVPIndex;
+};
+
+static inline void
+GEN45_GS_STATE_pack(__attribute__((unused)) __gen_user_data *data,
+                    __attribute__((unused)) void * restrict dst,
+                    __attribute__((unused)) const struct GEN45_GS_STATE * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   const uint32_t v0 =
+      __gen_uint(values->GRFRegisterCount, 1, 3);
+   dw[0] = __gen_combine_address(data, &dw[0], values->KernelStartPointer, v0);
+
+   dw[1] =
+      __gen_uint(values->SingleProgramFlow, 31, 31) |
+      __gen_uint(values->BindingTableEntryCount, 18, 25) |
+      __gen_uint(values->FloatingPointMode, 16, 16) |
+      __gen_uint(values->IllegalOpcodeExceptionEnable, 13, 13) |
+      __gen_uint(values->MaskStackExceptionEnable, 11, 11) |
+      __gen_uint(values->SoftwareExceptionEnable, 7, 7);
+
+   const uint32_t v2 =
+      __gen_uint(values->PerThreadScratchSpace, 0, 3);
+   dw[2] = __gen_combine_address(data, &dw[2], values->ScratchSpaceBasePointer, v2);
+
+   dw[3] =
+      __gen_uint(values->ConstantURBEntryReadLength, 25, 30) |
+      __gen_uint(values->ConstantURBEntryReadOffset, 18, 23) |
+      __gen_uint(values->VertexURBEntryReadLength, 11, 16) |
+      __gen_uint(values->VertexURBEntryReadOffset, 4, 9) |
+      __gen_uint(values->DispatchGRFStartRegisterForURBData, 0, 3);
+
+   dw[4] =
+      __gen_uint(values->MaximumNumberofThreads, 25, 30) |
+      __gen_uint(values->URBEntryAllocationSize, 19, 23) |
+      __gen_uint(values->NumberofURBEntries, 11, 18) |
+      __gen_uint(values->GSStatisticsEnable, 10, 10) |
+      __gen_uint(values->RenderingEnable, 8, 8);
+
+   const uint32_t v5 =
+      __gen_uint(values->SamplerCount, 0, 2);
+   dw[5] = __gen_combine_address(data, &dw[5], values->SamplerStatePointer, v5);
+
+   dw[6] =
+      __gen_uint(values->ReorderEnable, 30, 30) |
+      __gen_uint(values->DiscardAdjacency, 29, 29) |
+      __gen_uint(values->MaximumVPIndex, 0, 3);
 }
 
 #define GEN45_RENDER_SURFACE_STATE_length      6
@@ -1284,8 +929,9 @@ struct GEN45_RENDER_SURFACE_STATE {
 };
 
 static inline void
-GEN45_RENDER_SURFACE_STATE_pack(__gen_user_data *data, void * restrict dst,
-                                const struct GEN45_RENDER_SURFACE_STATE * restrict values)
+GEN45_RENDER_SURFACE_STATE_pack(__attribute__((unused)) __gen_user_data *data,
+                                __attribute__((unused)) void * restrict dst,
+                                __attribute__((unused)) const struct GEN45_RENDER_SURFACE_STATE * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -1325,15 +971,54 @@ GEN45_RENDER_SURFACE_STATE_pack(__gen_user_data *data, void * restrict dst,
       __gen_uint(values->YOffset, 20, 23);
 }
 
+#define GEN45_SAMPLER_BORDER_COLOR_STATE_length     12
+struct GEN45_SAMPLER_BORDER_COLOR_STATE {
+   float                                BorderColorRed;
+   float                                BorderColorGreen;
+   float                                BorderColorBlue;
+   float                                BorderColorAlpha;
+};
+
+static inline void
+GEN45_SAMPLER_BORDER_COLOR_STATE_pack(__attribute__((unused)) __gen_user_data *data,
+                                      __attribute__((unused)) void * restrict dst,
+                                      __attribute__((unused)) const struct GEN45_SAMPLER_BORDER_COLOR_STATE * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   dw[0] =
+      __gen_float(values->BorderColorRed);
+
+   dw[1] =
+      __gen_float(values->BorderColorGreen);
+
+   dw[2] =
+      __gen_float(values->BorderColorBlue);
+
+   dw[3] =
+      __gen_float(values->BorderColorAlpha);
+
+   dw[4] = 0;
+
+   dw[5] = 0;
+
+   dw[6] = 0;
+
+   dw[7] = 0;
+
+   dw[8] = 0;
+
+   dw[9] = 0;
+
+   dw[10] = 0;
+
+   dw[11] = 0;
+}
+
 #define GEN45_SAMPLER_STATE_length             4
 struct GEN45_SAMPLER_STATE {
    bool                                 SamplerDisable;
-   uint32_t                             TextureBorderColorMode;
-#define DX10OGL                                  0
-#define DX9                                      1
-   uint32_t                             LODPreClampEnable;
-#define CLAMP_ENABLE_D3D                         0
-#define CLAMP_ENABLE_OGL                         1
+   bool                                 LODPreClampEnable;
    float                                BaseMipLevel;
    uint32_t                             MipModeFilter;
 #define MIPFILTER_NONE                           0
@@ -1360,11 +1045,11 @@ struct GEN45_SAMPLER_STATE {
    uint32_t                             CubeSurfaceControlMode;
 #define CUBECTRLMODE_PROGRAMMED                  0
 #define CUBECTRLMODE_OVERRIDE                    1
-   uint32_t                             TCXAddressControlMode;
-   uint32_t                             TCYAddressControlMode;
-   uint32_t                             TCZAddressControlMode;
+   enum GEN45_Texture_Coordinate_Mode   TCXAddressControlMode;
+   enum GEN45_Texture_Coordinate_Mode   TCYAddressControlMode;
+   enum GEN45_Texture_Coordinate_Mode   TCZAddressControlMode;
    uint64_t                             BorderColorPointer;
-   uint32_t                             MonochromeFilterHeightReserved;
+   uint32_t                             MonochromeFilterHeight;
    uint32_t                             MonochromeFilterWidth;
    bool                                 ChromaKeyEnable;
    uint32_t                             ChromaKeyIndex;
@@ -1389,14 +1074,14 @@ struct GEN45_SAMPLER_STATE {
 };
 
 static inline void
-GEN45_SAMPLER_STATE_pack(__gen_user_data *data, void * restrict dst,
-                         const struct GEN45_SAMPLER_STATE * restrict values)
+GEN45_SAMPLER_STATE_pack(__attribute__((unused)) __gen_user_data *data,
+                         __attribute__((unused)) void * restrict dst,
+                         __attribute__((unused)) const struct GEN45_SAMPLER_STATE * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
    dw[0] =
       __gen_uint(values->SamplerDisable, 31, 31) |
-      __gen_uint(values->TextureBorderColorMode, 29, 29) |
       __gen_uint(values->LODPreClampEnable, 28, 28) |
       __gen_ufixed(values->BaseMipLevel, 22, 26, 1) |
       __gen_uint(values->MipModeFilter, 20, 21) |
@@ -1417,7 +1102,7 @@ GEN45_SAMPLER_STATE_pack(__gen_user_data *data, void * restrict dst,
       __gen_offset(values->BorderColorPointer, 5, 31);
 
    dw[3] =
-      __gen_uint(values->MonochromeFilterHeightReserved, 29, 31) |
+      __gen_uint(values->MonochromeFilterHeight, 29, 31) |
       __gen_uint(values->MonochromeFilterWidth, 26, 28) |
       __gen_uint(values->ChromaKeyEnable, 25, 25) |
       __gen_uint(values->ChromaKeyIndex, 23, 24) |
@@ -1429,6 +1114,454 @@ GEN45_SAMPLER_STATE_pack(__gen_user_data *data, void * restrict dst,
       __gen_uint(values->VAddressMagFilterRoundingEnable, 16, 16) |
       __gen_uint(values->UAddressMinFilterRoundingEnable, 17, 17) |
       __gen_uint(values->UAddressMagFilterRoundingEnable, 18, 18);
+}
+
+#define GEN45_SF_STATE_length                  8
+struct GEN45_SF_STATE {
+   __gen_address_type                   KernelStartPointer;
+   uint32_t                             GRFRegisterCount;
+   bool                                 SingleProgramFlow;
+   uint32_t                             BindingTableEntryCount;
+   uint32_t                             ThreadPriority;
+#define NormalPriority                           0
+#define HighPriority                             1
+   uint32_t                             FloatingPointMode;
+#define FLOATING_POINT_MODE_IEEE754              0
+#define FLOATING_POINT_MODE_Alternate            1
+   bool                                 IllegalOpcodeExceptionEnable;
+   bool                                 MaskStackExceptionEnable;
+   bool                                 SoftwareExceptionEnable;
+   __gen_address_type                   ScratchSpaceBasePointer;
+   uint32_t                             PerThreadScratchSpace;
+   uint32_t                             ConstantURBEntryReadLength;
+   uint32_t                             ConstantURBEntryReadOffset;
+   uint32_t                             VertexURBEntryReadLength;
+   uint32_t                             VertexURBEntryReadOffset;
+   uint32_t                             DispatchGRFStartRegisterForURBData;
+   uint32_t                             MaximumNumberofThreads;
+   uint32_t                             URBEntryAllocationSize;
+   uint32_t                             NumberofURBEntries;
+   bool                                 StatisticsEnable;
+   __gen_address_type                   SetupViewportStateOffset;
+   bool                                 ViewportTransformEnable;
+   uint32_t                             FrontWinding;
+#define FRONTWINDING_CW                          0
+#define FRONTWINDING_CCW                         1
+   bool                                 AntiAliasingEnable;
+   uint32_t                             CullMode;
+#define CULLMODE_BOTH                            0
+#define CULLMODE_NONE                            1
+#define CULLMODE_FRONT                           2
+#define CULLMODE_BACK                            3
+   bool                                 FastScissorClipDisable;
+   float                                LineWidth;
+   uint32_t                             LineEndCapAntialiasingRegionWidth;
+#define _05pixels                                0
+#define _10pixels                                1
+#define _20pixels                                2
+#define _40pixels                                3
+   uint32_t                             PointRasterizationRule;
+#define RASTRULE_UPPER_LEFT                      0
+#define RASTRULE_UPPER_RIGHT                     1
+   bool                                 ZeroPixelTriangleFilterDisable;
+   bool                                 _2x2PixelTriangleFilterDisable;
+   bool                                 ScissorRectangleEnable;
+   float                                DestinationOriginHorizontalBias;
+   float                                DestinationOriginVerticalBias;
+   bool                                 LastPixelEnable;
+   uint32_t                             TriangleStripListProvokingVertexSelect;
+#define Vertex0                                  0
+#define Vertex1                                  1
+#define Vertex2                                  2
+   uint32_t                             LineStripListProvokingVertexSelect;
+#define Vertex0                                  0
+#define Vertex1                                  1
+   uint32_t                             TriangleFanProvokingVertexSelect;
+#define Vertex0                                  0
+#define Vertex1                                  1
+#define Vertex2                                  2
+   uint32_t                             AALineDistanceMode;
+#define AALINEDISTANCE_MANHATTAN                 0
+#define AALINEDISTANCE_TRUE                      1
+   bool                                 SpritePointEnable;
+   uint32_t                             VertexSubPixelPrecisionSelect;
+#define _8SubPixelPrecisionBits                  0
+#define _4SubPixelPrecisionBits                  1
+   uint32_t                             PointWidthSource;
+#define Vertex                                   0
+#define State                                    1
+   float                                PointWidth;
+};
+
+static inline void
+GEN45_SF_STATE_pack(__attribute__((unused)) __gen_user_data *data,
+                    __attribute__((unused)) void * restrict dst,
+                    __attribute__((unused)) const struct GEN45_SF_STATE * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   const uint32_t v0 =
+      __gen_uint(values->GRFRegisterCount, 1, 3);
+   dw[0] = __gen_combine_address(data, &dw[0], values->KernelStartPointer, v0);
+
+   dw[1] =
+      __gen_uint(values->SingleProgramFlow, 31, 31) |
+      __gen_uint(values->BindingTableEntryCount, 18, 25) |
+      __gen_uint(values->ThreadPriority, 17, 17) |
+      __gen_uint(values->FloatingPointMode, 16, 16) |
+      __gen_uint(values->IllegalOpcodeExceptionEnable, 13, 13) |
+      __gen_uint(values->MaskStackExceptionEnable, 11, 11) |
+      __gen_uint(values->SoftwareExceptionEnable, 7, 7);
+
+   const uint32_t v2 =
+      __gen_uint(values->PerThreadScratchSpace, 0, 3);
+   dw[2] = __gen_combine_address(data, &dw[2], values->ScratchSpaceBasePointer, v2);
+
+   dw[3] =
+      __gen_uint(values->ConstantURBEntryReadLength, 25, 30) |
+      __gen_uint(values->ConstantURBEntryReadOffset, 18, 23) |
+      __gen_uint(values->VertexURBEntryReadLength, 11, 16) |
+      __gen_uint(values->VertexURBEntryReadOffset, 4, 9) |
+      __gen_uint(values->DispatchGRFStartRegisterForURBData, 0, 3);
+
+   dw[4] =
+      __gen_uint(values->MaximumNumberofThreads, 25, 30) |
+      __gen_uint(values->URBEntryAllocationSize, 19, 23) |
+      __gen_uint(values->NumberofURBEntries, 11, 18) |
+      __gen_uint(values->StatisticsEnable, 10, 10);
+
+   const uint32_t v5 =
+      __gen_uint(values->ViewportTransformEnable, 1, 1) |
+      __gen_uint(values->FrontWinding, 0, 0);
+   dw[5] = __gen_combine_address(data, &dw[5], values->SetupViewportStateOffset, v5);
+
+   dw[6] =
+      __gen_uint(values->AntiAliasingEnable, 31, 31) |
+      __gen_uint(values->CullMode, 29, 30) |
+      __gen_uint(values->FastScissorClipDisable, 28, 28) |
+      __gen_ufixed(values->LineWidth, 24, 27, 1) |
+      __gen_uint(values->LineEndCapAntialiasingRegionWidth, 22, 23) |
+      __gen_uint(values->PointRasterizationRule, 20, 21) |
+      __gen_uint(values->ZeroPixelTriangleFilterDisable, 19, 19) |
+      __gen_uint(values->_2x2PixelTriangleFilterDisable, 18, 18) |
+      __gen_uint(values->ScissorRectangleEnable, 17, 17) |
+      __gen_ufixed(values->DestinationOriginHorizontalBias, 13, 16, 4) |
+      __gen_ufixed(values->DestinationOriginVerticalBias, 9, 12, 4);
+
+   dw[7] =
+      __gen_uint(values->LastPixelEnable, 31, 31) |
+      __gen_uint(values->TriangleStripListProvokingVertexSelect, 29, 30) |
+      __gen_uint(values->LineStripListProvokingVertexSelect, 27, 28) |
+      __gen_uint(values->TriangleFanProvokingVertexSelect, 25, 26) |
+      __gen_uint(values->AALineDistanceMode, 14, 14) |
+      __gen_uint(values->SpritePointEnable, 13, 13) |
+      __gen_uint(values->VertexSubPixelPrecisionSelect, 12, 12) |
+      __gen_uint(values->PointWidthSource, 11, 11) |
+      __gen_ufixed(values->PointWidth, 0, 10, 3);
+}
+
+#define GEN45_SF_VIEWPORT_length               8
+struct GEN45_SF_VIEWPORT {
+   float                                ViewportMatrixElementm00;
+   float                                ViewportMatrixElementm11;
+   float                                ViewportMatrixElementm22;
+   float                                ViewportMatrixElementm30;
+   float                                ViewportMatrixElementm31;
+   float                                ViewportMatrixElementm32;
+   struct GEN45_SCISSOR_RECT            ScissorRectangle;
+};
+
+static inline void
+GEN45_SF_VIEWPORT_pack(__attribute__((unused)) __gen_user_data *data,
+                       __attribute__((unused)) void * restrict dst,
+                       __attribute__((unused)) const struct GEN45_SF_VIEWPORT * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   dw[0] =
+      __gen_float(values->ViewportMatrixElementm00);
+
+   dw[1] =
+      __gen_float(values->ViewportMatrixElementm11);
+
+   dw[2] =
+      __gen_float(values->ViewportMatrixElementm22);
+
+   dw[3] =
+      __gen_float(values->ViewportMatrixElementm30);
+
+   dw[4] =
+      __gen_float(values->ViewportMatrixElementm31);
+
+   dw[5] =
+      __gen_float(values->ViewportMatrixElementm32);
+
+   GEN45_SCISSOR_RECT_pack(data, &dw[6], &values->ScissorRectangle);
+}
+
+#define GEN45_VERTEX_BUFFER_STATE_length       4
+struct GEN45_VERTEX_BUFFER_STATE {
+   uint32_t                             VertexBufferIndex;
+   uint32_t                             BufferAccessType;
+#define VERTEXDATA                               0
+#define INSTANCEDATA                             1
+   uint32_t                             BufferPitch;
+   __gen_address_type                   BufferStartingAddress;
+   uint32_t                             MaxIndex;
+   uint32_t                             InstanceDataStepRate;
+};
+
+static inline void
+GEN45_VERTEX_BUFFER_STATE_pack(__attribute__((unused)) __gen_user_data *data,
+                               __attribute__((unused)) void * restrict dst,
+                               __attribute__((unused)) const struct GEN45_VERTEX_BUFFER_STATE * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   dw[0] =
+      __gen_uint(values->VertexBufferIndex, 27, 31) |
+      __gen_uint(values->BufferAccessType, 26, 26) |
+      __gen_uint(values->BufferPitch, 0, 10);
+
+   dw[1] = __gen_combine_address(data, &dw[1], values->BufferStartingAddress, 0);
+
+   dw[2] =
+      __gen_uint(values->MaxIndex, 0, 31);
+
+   dw[3] =
+      __gen_uint(values->InstanceDataStepRate, 0, 31);
+}
+
+#define GEN45_VERTEX_ELEMENT_STATE_length      2
+struct GEN45_VERTEX_ELEMENT_STATE {
+   uint32_t                             VertexBufferIndex;
+   bool                                 Valid;
+   enum GEN45_SURFACE_FORMAT            SourceElementFormat;
+   uint32_t                             SourceElementOffset;
+   uint32_t                             DestinationElementOffset;
+   enum GEN45_3D_Vertex_Component_Control Component0Control;
+   enum GEN45_3D_Vertex_Component_Control Component1Control;
+   enum GEN45_3D_Vertex_Component_Control Component2Control;
+   enum GEN45_3D_Vertex_Component_Control Component3Control;
+};
+
+static inline void
+GEN45_VERTEX_ELEMENT_STATE_pack(__attribute__((unused)) __gen_user_data *data,
+                                __attribute__((unused)) void * restrict dst,
+                                __attribute__((unused)) const struct GEN45_VERTEX_ELEMENT_STATE * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   dw[0] =
+      __gen_uint(values->VertexBufferIndex, 27, 31) |
+      __gen_uint(values->Valid, 26, 26) |
+      __gen_uint(values->SourceElementFormat, 16, 24) |
+      __gen_uint(values->SourceElementOffset, 0, 10);
+
+   dw[1] =
+      __gen_uint(values->DestinationElementOffset, 0, 7) |
+      __gen_uint(values->Component0Control, 28, 30) |
+      __gen_uint(values->Component1Control, 24, 26) |
+      __gen_uint(values->Component2Control, 20, 22) |
+      __gen_uint(values->Component3Control, 16, 18);
+}
+
+#define GEN45_VS_STATE_length                  7
+struct GEN45_VS_STATE {
+   __gen_address_type                   KernelStartPointer;
+   uint32_t                             GRFRegisterCount;
+   bool                                 SingleProgramFlow;
+   uint32_t                             BindingTableEntryCount;
+   uint32_t                             ThreadPriority;
+#define NormalPriority                           0
+#define HighPriority                             1
+   uint32_t                             FloatingPointMode;
+#define FLOATING_POINT_MODE_IEEE754              0
+#define FLOATING_POINT_MODE_Alternate            1
+   bool                                 IllegalOpcodeExceptionEnable;
+   bool                                 MaskStackExceptionEnable;
+   bool                                 SoftwareExceptionEnable;
+   __gen_address_type                   ScratchSpaceBasePointer;
+   uint32_t                             PerThreadScratchSpace;
+   uint32_t                             ConstantURBEntryReadLength;
+   uint32_t                             ConstantURBEntryReadOffset;
+   uint32_t                             VertexURBEntryReadLength;
+   uint32_t                             VertexURBEntryReadOffset;
+   uint32_t                             DispatchGRFStartRegisterForURBData;
+   uint32_t                             MaximumNumberofThreads;
+   uint32_t                             URBEntryAllocationSize;
+   uint32_t                             NumberofURBEntries;
+   bool                                 StatisticsEnable;
+   __gen_address_type                   SamplerStatePointer;
+   uint32_t                             SamplerCount;
+   bool                                 VertexCacheDisable;
+   bool                                 Enable;
+};
+
+static inline void
+GEN45_VS_STATE_pack(__attribute__((unused)) __gen_user_data *data,
+                    __attribute__((unused)) void * restrict dst,
+                    __attribute__((unused)) const struct GEN45_VS_STATE * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   const uint32_t v0 =
+      __gen_uint(values->GRFRegisterCount, 1, 3);
+   dw[0] = __gen_combine_address(data, &dw[0], values->KernelStartPointer, v0);
+
+   dw[1] =
+      __gen_uint(values->SingleProgramFlow, 31, 31) |
+      __gen_uint(values->BindingTableEntryCount, 18, 25) |
+      __gen_uint(values->ThreadPriority, 17, 17) |
+      __gen_uint(values->FloatingPointMode, 16, 16) |
+      __gen_uint(values->IllegalOpcodeExceptionEnable, 13, 13) |
+      __gen_uint(values->MaskStackExceptionEnable, 11, 11) |
+      __gen_uint(values->SoftwareExceptionEnable, 7, 7);
+
+   const uint32_t v2 =
+      __gen_uint(values->PerThreadScratchSpace, 0, 3);
+   dw[2] = __gen_combine_address(data, &dw[2], values->ScratchSpaceBasePointer, v2);
+
+   dw[3] =
+      __gen_uint(values->ConstantURBEntryReadLength, 25, 30) |
+      __gen_uint(values->ConstantURBEntryReadOffset, 18, 23) |
+      __gen_uint(values->VertexURBEntryReadLength, 11, 16) |
+      __gen_uint(values->VertexURBEntryReadOffset, 4, 9) |
+      __gen_uint(values->DispatchGRFStartRegisterForURBData, 0, 3);
+
+   dw[4] =
+      __gen_uint(values->MaximumNumberofThreads, 25, 30) |
+      __gen_uint(values->URBEntryAllocationSize, 19, 23) |
+      __gen_uint(values->NumberofURBEntries, 11, 18) |
+      __gen_uint(values->StatisticsEnable, 10, 10);
+
+   const uint32_t v5 =
+      __gen_uint(values->SamplerCount, 0, 2);
+   dw[5] = __gen_combine_address(data, &dw[5], values->SamplerStatePointer, v5);
+
+   dw[6] =
+      __gen_uint(values->VertexCacheDisable, 1, 1) |
+      __gen_uint(values->Enable, 0, 0);
+}
+
+#define GEN45_WM_STATE_length                  8
+struct GEN45_WM_STATE {
+   __gen_address_type                   KernelStartPointer0;
+   uint32_t                             GRFRegisterCount0;
+   bool                                 SingleProgramFlow;
+   uint32_t                             BindingTableEntryCount;
+   uint32_t                             ThreadPriority;
+#define Normal                                   0
+#define High                                     1
+   uint32_t                             FloatingPointMode;
+#define FLOATING_POINT_MODE_IEEE754              0
+#define FLOATING_POINT_MODE_Alternate            1
+   uint32_t                             DepthCoefficientURBReadOffset;
+   bool                                 IllegalOpcodeExceptionEnable;
+   bool                                 MaskStackExceptionEnable;
+   bool                                 SoftwareExceptionEnable;
+   __gen_address_type                   ScratchSpaceBasePointer;
+   uint32_t                             PerThreadScratchSpace;
+   uint32_t                             ConstantURBEntryReadLength;
+   uint32_t                             ConstantURBEntryReadOffset;
+   uint32_t                             SetupURBEntryReadLength;
+   uint32_t                             SetupURBEntryReadOffset;
+   uint32_t                             DispatchGRFStartRegisterForConstantSetupData0;
+   __gen_address_type                   SamplerStatePointer;
+   uint32_t                             SamplerCount;
+   bool                                 StatisticsEnable;
+   uint32_t                             MaximumNumberofThreads;
+   bool                                 LegacyDiamondLineRasterization;
+   bool                                 PixelShaderKillsPixel;
+   bool                                 PixelShaderComputedDepth;
+   bool                                 PixelShaderUsesSourceDepth;
+   bool                                 ThreadDispatchEnable;
+   bool                                 EarlyDepthTestEnable;
+   uint32_t                             LineEndCapAntialiasingRegionWidth;
+#define _05pixels                                0
+#define _10pixels                                1
+#define _20pixels                                2
+#define _40pixels                                3
+   uint32_t                             LineAntialiasingRegionWidth;
+#define _05pixels                                0
+#define _10pixels                                1
+#define _20pixels                                2
+#define _40pixels                                3
+   bool                                 PolygonStippleEnable;
+   bool                                 GlobalDepthOffsetEnable;
+   bool                                 LineStippleEnable;
+   bool                                 LegacyGlobalDepthBiasEnable;
+   bool                                 Contiguous64PixelDispatchEnable;
+   bool                                 Contiguous32PixelDispatchEnable;
+   bool                                 _32PixelDispatchEnable;
+   bool                                 _16PixelDispatchEnable;
+   bool                                 _8PixelDispatchEnable;
+   float                                GlobalDepthOffsetConstant;
+   float                                GlobalDepthOffsetScale;
+};
+
+static inline void
+GEN45_WM_STATE_pack(__attribute__((unused)) __gen_user_data *data,
+                    __attribute__((unused)) void * restrict dst,
+                    __attribute__((unused)) const struct GEN45_WM_STATE * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   const uint32_t v0 =
+      __gen_uint(values->GRFRegisterCount0, 1, 3);
+   dw[0] = __gen_combine_address(data, &dw[0], values->KernelStartPointer0, v0);
+
+   dw[1] =
+      __gen_uint(values->SingleProgramFlow, 31, 31) |
+      __gen_uint(values->BindingTableEntryCount, 18, 25) |
+      __gen_uint(values->ThreadPriority, 17, 17) |
+      __gen_uint(values->FloatingPointMode, 16, 16) |
+      __gen_uint(values->DepthCoefficientURBReadOffset, 8, 13) |
+      __gen_uint(values->IllegalOpcodeExceptionEnable, 4, 4) |
+      __gen_uint(values->MaskStackExceptionEnable, 2, 2) |
+      __gen_uint(values->SoftwareExceptionEnable, 1, 1);
+
+   const uint32_t v2 =
+      __gen_uint(values->PerThreadScratchSpace, 0, 3);
+   dw[2] = __gen_combine_address(data, &dw[2], values->ScratchSpaceBasePointer, v2);
+
+   dw[3] =
+      __gen_uint(values->ConstantURBEntryReadLength, 25, 30) |
+      __gen_uint(values->ConstantURBEntryReadOffset, 18, 23) |
+      __gen_uint(values->SetupURBEntryReadLength, 11, 16) |
+      __gen_uint(values->SetupURBEntryReadOffset, 4, 9) |
+      __gen_uint(values->DispatchGRFStartRegisterForConstantSetupData0, 0, 3);
+
+   const uint32_t v4 =
+      __gen_uint(values->SamplerCount, 2, 4) |
+      __gen_uint(values->StatisticsEnable, 0, 0);
+   dw[4] = __gen_combine_address(data, &dw[4], values->SamplerStatePointer, v4);
+
+   dw[5] =
+      __gen_uint(values->MaximumNumberofThreads, 25, 31) |
+      __gen_uint(values->LegacyDiamondLineRasterization, 23, 23) |
+      __gen_uint(values->PixelShaderKillsPixel, 22, 22) |
+      __gen_uint(values->PixelShaderComputedDepth, 21, 21) |
+      __gen_uint(values->PixelShaderUsesSourceDepth, 20, 20) |
+      __gen_uint(values->ThreadDispatchEnable, 19, 19) |
+      __gen_uint(values->EarlyDepthTestEnable, 18, 18) |
+      __gen_uint(values->LineEndCapAntialiasingRegionWidth, 16, 17) |
+      __gen_uint(values->LineAntialiasingRegionWidth, 14, 15) |
+      __gen_uint(values->PolygonStippleEnable, 13, 13) |
+      __gen_uint(values->GlobalDepthOffsetEnable, 12, 12) |
+      __gen_uint(values->LineStippleEnable, 11, 11) |
+      __gen_uint(values->LegacyGlobalDepthBiasEnable, 10, 10) |
+      __gen_uint(values->Contiguous64PixelDispatchEnable, 4, 4) |
+      __gen_uint(values->Contiguous32PixelDispatchEnable, 3, 3) |
+      __gen_uint(values->_32PixelDispatchEnable, 2, 2) |
+      __gen_uint(values->_16PixelDispatchEnable, 1, 1) |
+      __gen_uint(values->_8PixelDispatchEnable, 0, 0);
+
+   dw[6] =
+      __gen_float(values->GlobalDepthOffsetConstant);
+
+   dw[7] =
+      __gen_float(values->GlobalDepthOffsetScale);
 }
 
 #define GEN45_3DPRIMITIVE_length               6
@@ -1448,21 +1581,20 @@ struct GEN45_3DPRIMITIVE {
    uint32_t                             VertexAccessType;
 #define SEQUENTIAL                               0
 #define RANDOM                                   1
-   uint32_t                             PrimitiveTopologyType;
+   enum GEN45_3D_Prim_Topo_Type         PrimitiveTopologyType;
    uint32_t                             IndirectVertexCount;
    uint32_t                             DWordLength;
    uint32_t                             VertexCountPerInstance;
    uint32_t                             StartVertexLocation;
    uint32_t                             InstanceCount;
-#define UNDEFINED                                0
-#define noninstancedoperation                    1
    uint32_t                             StartInstanceLocation;
    int32_t                              BaseVertexLocation;
 };
 
 static inline void
-GEN45_3DPRIMITIVE_pack(__gen_user_data *data, void * restrict dst,
-                       const struct GEN45_3DPRIMITIVE * restrict values)
+GEN45_3DPRIMITIVE_pack(__attribute__((unused)) __gen_user_data *data,
+                       __attribute__((unused)) void * restrict dst,
+                       __attribute__((unused)) const struct GEN45_3DPRIMITIVE * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -1492,61 +1624,6 @@ GEN45_3DPRIMITIVE_pack(__gen_user_data *data, void * restrict dst,
       __gen_sint(values->BaseVertexLocation, 0, 31);
 }
 
-#define GEN45_3DSTATE_PIPELINED_POINTERS_length      7
-#define GEN45_3DSTATE_PIPELINED_POINTERS_length_bias      2
-#define GEN45_3DSTATE_PIPELINED_POINTERS_header \
-   .CommandType                         =      3,  \
-   .CommandSubType                      =      3,  \
-   ._3DCommandOpcode                    =      0,  \
-   ._3DCommandSubOpcode                 =      0,  \
-   .DWordLength                         =      5
-
-struct GEN45_3DSTATE_PIPELINED_POINTERS {
-   uint32_t                             CommandType;
-   uint32_t                             CommandSubType;
-   uint32_t                             _3DCommandOpcode;
-   uint32_t                             _3DCommandSubOpcode;
-   uint32_t                             DWordLength;
-   __gen_address_type                   PointertoVS_STATE;
-   __gen_address_type                   PointertoGS_STATE;
-   bool                                 GSEnable;
-   __gen_address_type                   PointertoCLIP_STATE;
-   bool                                 CLIPEnable;
-   __gen_address_type                   PointertoSF_STATE;
-   __gen_address_type                   PointertoWM_STATE;
-   __gen_address_type                   PointertoCOLOR_CALC_STATE;
-};
-
-static inline void
-GEN45_3DSTATE_PIPELINED_POINTERS_pack(__gen_user_data *data, void * restrict dst,
-                                      const struct GEN45_3DSTATE_PIPELINED_POINTERS * restrict values)
-{
-   uint32_t * restrict dw = (uint32_t * restrict) dst;
-
-   dw[0] =
-      __gen_uint(values->CommandType, 29, 31) |
-      __gen_uint(values->CommandSubType, 27, 28) |
-      __gen_uint(values->_3DCommandOpcode, 24, 26) |
-      __gen_uint(values->_3DCommandSubOpcode, 16, 23) |
-      __gen_uint(values->DWordLength, 0, 7);
-
-   dw[1] = __gen_combine_address(data, &dw[1], values->PointertoVS_STATE, 0);
-
-   const uint32_t v2 =
-      __gen_uint(values->GSEnable, 0, 0);
-   dw[2] = __gen_combine_address(data, &dw[2], values->PointertoGS_STATE, v2);
-
-   const uint32_t v3 =
-      __gen_uint(values->CLIPEnable, 0, 0);
-   dw[3] = __gen_combine_address(data, &dw[3], values->PointertoCLIP_STATE, v3);
-
-   dw[4] = __gen_combine_address(data, &dw[4], values->PointertoSF_STATE, 0);
-
-   dw[5] = __gen_combine_address(data, &dw[5], values->PointertoWM_STATE, 0);
-
-   dw[6] = __gen_combine_address(data, &dw[6], values->PointertoCOLOR_CALC_STATE, 0);
-}
-
 #define GEN45_3DSTATE_AA_LINE_PARAMETERS_length      3
 #define GEN45_3DSTATE_AA_LINE_PARAMETERS_length_bias      2
 #define GEN45_3DSTATE_AA_LINE_PARAMETERS_header \
@@ -1569,8 +1646,9 @@ struct GEN45_3DSTATE_AA_LINE_PARAMETERS {
 };
 
 static inline void
-GEN45_3DSTATE_AA_LINE_PARAMETERS_pack(__gen_user_data *data, void * restrict dst,
-                                      const struct GEN45_3DSTATE_AA_LINE_PARAMETERS * restrict values)
+GEN45_3DSTATE_AA_LINE_PARAMETERS_pack(__attribute__((unused)) __gen_user_data *data,
+                                      __attribute__((unused)) void * restrict dst,
+                                      __attribute__((unused)) const struct GEN45_3DSTATE_AA_LINE_PARAMETERS * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -1613,8 +1691,9 @@ struct GEN45_3DSTATE_BINDING_TABLE_POINTERS {
 };
 
 static inline void
-GEN45_3DSTATE_BINDING_TABLE_POINTERS_pack(__gen_user_data *data, void * restrict dst,
-                                          const struct GEN45_3DSTATE_BINDING_TABLE_POINTERS * restrict values)
+GEN45_3DSTATE_BINDING_TABLE_POINTERS_pack(__attribute__((unused)) __gen_user_data *data,
+                                          __attribute__((unused)) void * restrict dst,
+                                          __attribute__((unused)) const struct GEN45_3DSTATE_BINDING_TABLE_POINTERS * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -1663,8 +1742,9 @@ struct GEN45_3DSTATE_CONSTANT_COLOR {
 };
 
 static inline void
-GEN45_3DSTATE_CONSTANT_COLOR_pack(__gen_user_data *data, void * restrict dst,
-                                  const struct GEN45_3DSTATE_CONSTANT_COLOR * restrict values)
+GEN45_3DSTATE_CONSTANT_COLOR_pack(__attribute__((unused)) __gen_user_data *data,
+                                  __attribute__((unused)) void * restrict dst,
+                                  __attribute__((unused)) const struct GEN45_3DSTATE_CONSTANT_COLOR * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -1684,20 +1764,18 @@ GEN45_3DSTATE_CONSTANT_COLOR_pack(__gen_user_data *data, void * restrict dst,
    dw[3] =
       __gen_float(values->BlendConstantColorBlue);
 
-   const uint64_t v4 =
+   dw[4] =
       __gen_float(values->BlendConstantColorAlpha);
-   dw[4] = v4;
-   dw[5] = v4 >> 32;
 }
 
-#define GEN45_3DSTATE_DEPTH_BUFFER_length      7
+#define GEN45_3DSTATE_DEPTH_BUFFER_length      6
 #define GEN45_3DSTATE_DEPTH_BUFFER_length_bias      2
 #define GEN45_3DSTATE_DEPTH_BUFFER_header       \
    .CommandType                         =      3,  \
    .CommandSubType                      =      3,  \
    ._3DCommandOpcode                    =      1,  \
    ._3DCommandSubOpcode                 =      5,  \
-   .DWordLength                         =      5
+   .DWordLength                         =      4
 
 struct GEN45_3DSTATE_DEPTH_BUFFER {
    uint32_t                             CommandType;
@@ -1743,8 +1821,9 @@ struct GEN45_3DSTATE_DEPTH_BUFFER {
 };
 
 static inline void
-GEN45_3DSTATE_DEPTH_BUFFER_pack(__gen_user_data *data, void * restrict dst,
-                                const struct GEN45_3DSTATE_DEPTH_BUFFER * restrict values)
+GEN45_3DSTATE_DEPTH_BUFFER_pack(__attribute__((unused)) __gen_user_data *data,
+                                __attribute__((unused)) void * restrict dst,
+                                __attribute__((unused)) const struct GEN45_3DSTATE_DEPTH_BUFFER * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -1780,8 +1859,6 @@ GEN45_3DSTATE_DEPTH_BUFFER_pack(__gen_user_data *data, void * restrict dst,
    dw[5] =
       __gen_sint(values->DepthCoordinateOffsetY, 16, 31) |
       __gen_sint(values->DepthCoordinateOffsetX, 0, 15);
-
-   dw[6] = 0;
 }
 
 #define GEN45_3DSTATE_DRAWING_RECTANGLE_length      4
@@ -1808,8 +1885,9 @@ struct GEN45_3DSTATE_DRAWING_RECTANGLE {
 };
 
 static inline void
-GEN45_3DSTATE_DRAWING_RECTANGLE_pack(__gen_user_data *data, void * restrict dst,
-                                     const struct GEN45_3DSTATE_DRAWING_RECTANGLE * restrict values)
+GEN45_3DSTATE_DRAWING_RECTANGLE_pack(__attribute__((unused)) __gen_user_data *data,
+                                     __attribute__((unused)) void * restrict dst,
+                                     __attribute__((unused)) const struct GEN45_3DSTATE_DRAWING_RECTANGLE * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -1831,6 +1909,42 @@ GEN45_3DSTATE_DRAWING_RECTANGLE_pack(__gen_user_data *data, void * restrict dst,
    dw[3] =
       __gen_sint(values->DrawingRectangleOriginY, 16, 31) |
       __gen_sint(values->DrawingRectangleOriginX, 0, 15);
+}
+
+#define GEN45_3DSTATE_GLOBAL_DEPTH_OFFSET_CLAMP_length      2
+#define GEN45_3DSTATE_GLOBAL_DEPTH_OFFSET_CLAMP_length_bias      2
+#define GEN45_3DSTATE_GLOBAL_DEPTH_OFFSET_CLAMP_header\
+   .CommandType                         =      3,  \
+   .CommandSubType                      =      3,  \
+   ._3DCommandOpcode                    =      1,  \
+   ._3DCommandSubOpcode                 =      9,  \
+   .DWordLength                         =      0
+
+struct GEN45_3DSTATE_GLOBAL_DEPTH_OFFSET_CLAMP {
+   uint32_t                             CommandType;
+   uint32_t                             CommandSubType;
+   uint32_t                             _3DCommandOpcode;
+   uint32_t                             _3DCommandSubOpcode;
+   uint32_t                             DWordLength;
+   float                                GlobalDepthOffsetClamp;
+};
+
+static inline void
+GEN45_3DSTATE_GLOBAL_DEPTH_OFFSET_CLAMP_pack(__attribute__((unused)) __gen_user_data *data,
+                                             __attribute__((unused)) void * restrict dst,
+                                             __attribute__((unused)) const struct GEN45_3DSTATE_GLOBAL_DEPTH_OFFSET_CLAMP * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   dw[0] =
+      __gen_uint(values->CommandType, 29, 31) |
+      __gen_uint(values->CommandSubType, 27, 28) |
+      __gen_uint(values->_3DCommandOpcode, 24, 26) |
+      __gen_uint(values->_3DCommandSubOpcode, 16, 23) |
+      __gen_uint(values->DWordLength, 0, 7);
+
+   dw[1] =
+      __gen_float(values->GlobalDepthOffsetClamp);
 }
 
 #define GEN45_3DSTATE_INDEX_BUFFER_length      3
@@ -1858,8 +1972,9 @@ struct GEN45_3DSTATE_INDEX_BUFFER {
 };
 
 static inline void
-GEN45_3DSTATE_INDEX_BUFFER_pack(__gen_user_data *data, void * restrict dst,
-                                const struct GEN45_3DSTATE_INDEX_BUFFER * restrict values)
+GEN45_3DSTATE_INDEX_BUFFER_pack(__attribute__((unused)) __gen_user_data *data,
+                                __attribute__((unused)) void * restrict dst,
+                                __attribute__((unused)) const struct GEN45_3DSTATE_INDEX_BUFFER * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -1901,8 +2016,9 @@ struct GEN45_3DSTATE_LINE_STIPPLE {
 };
 
 static inline void
-GEN45_3DSTATE_LINE_STIPPLE_pack(__gen_user_data *data, void * restrict dst,
-                                const struct GEN45_3DSTATE_LINE_STIPPLE * restrict values)
+GEN45_3DSTATE_LINE_STIPPLE_pack(__attribute__((unused)) __gen_user_data *data,
+                                __attribute__((unused)) void * restrict dst,
+                                __attribute__((unused)) const struct GEN45_3DSTATE_LINE_STIPPLE * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -1920,8 +2036,64 @@ GEN45_3DSTATE_LINE_STIPPLE_pack(__gen_user_data *data, void * restrict dst,
       __gen_uint(values->LineStipplePattern, 0, 15);
 
    dw[2] =
-      __gen_ufixed(values->LineStippleInverseRepeatCount, 15, 31, 16) |
+      __gen_ufixed(values->LineStippleInverseRepeatCount, 16, 31, 13) |
       __gen_uint(values->LineStippleRepeatCount, 0, 8);
+}
+
+#define GEN45_3DSTATE_PIPELINED_POINTERS_length      7
+#define GEN45_3DSTATE_PIPELINED_POINTERS_length_bias      2
+#define GEN45_3DSTATE_PIPELINED_POINTERS_header \
+   .CommandType                         =      3,  \
+   .CommandSubType                      =      3,  \
+   ._3DCommandOpcode                    =      0,  \
+   ._3DCommandSubOpcode                 =      0,  \
+   .DWordLength                         =      5
+
+struct GEN45_3DSTATE_PIPELINED_POINTERS {
+   uint32_t                             CommandType;
+   uint32_t                             CommandSubType;
+   uint32_t                             _3DCommandOpcode;
+   uint32_t                             _3DCommandSubOpcode;
+   uint32_t                             DWordLength;
+   __gen_address_type                   PointertoVSState;
+   __gen_address_type                   PointertoGSState;
+   bool                                 GSEnable;
+   __gen_address_type                   PointertoCLIPState;
+   bool                                 ClipEnable;
+   __gen_address_type                   PointertoSFState;
+   __gen_address_type                   PointertoWMState;
+   __gen_address_type                   PointertoColorCalcState;
+};
+
+static inline void
+GEN45_3DSTATE_PIPELINED_POINTERS_pack(__attribute__((unused)) __gen_user_data *data,
+                                      __attribute__((unused)) void * restrict dst,
+                                      __attribute__((unused)) const struct GEN45_3DSTATE_PIPELINED_POINTERS * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   dw[0] =
+      __gen_uint(values->CommandType, 29, 31) |
+      __gen_uint(values->CommandSubType, 27, 28) |
+      __gen_uint(values->_3DCommandOpcode, 24, 26) |
+      __gen_uint(values->_3DCommandSubOpcode, 16, 23) |
+      __gen_uint(values->DWordLength, 0, 7);
+
+   dw[1] = __gen_combine_address(data, &dw[1], values->PointertoVSState, 0);
+
+   const uint32_t v2 =
+      __gen_uint(values->GSEnable, 0, 0);
+   dw[2] = __gen_combine_address(data, &dw[2], values->PointertoGSState, v2);
+
+   const uint32_t v3 =
+      __gen_uint(values->ClipEnable, 0, 0);
+   dw[3] = __gen_combine_address(data, &dw[3], values->PointertoCLIPState, v3);
+
+   dw[4] = __gen_combine_address(data, &dw[4], values->PointertoSFState, 0);
+
+   dw[5] = __gen_combine_address(data, &dw[5], values->PointertoWMState, 0);
+
+   dw[6] = __gen_combine_address(data, &dw[6], values->PointertoColorCalcState, 0);
 }
 
 #define GEN45_3DSTATE_POLY_STIPPLE_OFFSET_length      2
@@ -1944,8 +2116,9 @@ struct GEN45_3DSTATE_POLY_STIPPLE_OFFSET {
 };
 
 static inline void
-GEN45_3DSTATE_POLY_STIPPLE_OFFSET_pack(__gen_user_data *data, void * restrict dst,
-                                       const struct GEN45_3DSTATE_POLY_STIPPLE_OFFSET * restrict values)
+GEN45_3DSTATE_POLY_STIPPLE_OFFSET_pack(__attribute__((unused)) __gen_user_data *data,
+                                       __attribute__((unused)) void * restrict dst,
+                                       __attribute__((unused)) const struct GEN45_3DSTATE_POLY_STIPPLE_OFFSET * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -1980,8 +2153,9 @@ struct GEN45_3DSTATE_POLY_STIPPLE_PATTERN {
 };
 
 static inline void
-GEN45_3DSTATE_POLY_STIPPLE_PATTERN_pack(__gen_user_data *data, void * restrict dst,
-                                        const struct GEN45_3DSTATE_POLY_STIPPLE_PATTERN * restrict values)
+GEN45_3DSTATE_POLY_STIPPLE_PATTERN_pack(__attribute__((unused)) __gen_user_data *data,
+                                        __attribute__((unused)) void * restrict dst,
+                                        __attribute__((unused)) const struct GEN45_3DSTATE_POLY_STIPPLE_PATTERN * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -2089,40 +2263,6 @@ GEN45_3DSTATE_POLY_STIPPLE_PATTERN_pack(__gen_user_data *data, void * restrict d
       __gen_uint(values->PatternRow[31], 0, 31);
 }
 
-#define GEN45_3DSTATE_GLOBAL_DEPTH_OFFSET_CLAMP_length      2
-#define GEN45_3DSTATE_GLOBAL_DEPTH_OFFSET_CLAMP_length_bias      2
-#define GEN45_3DSTATE_GLOBAL_DEPTH_OFFSET_CLAMP_header\
-   .CommandType                         =      3,  \
-   .CommandSubType                      =      3,  \
-   ._3DCommandOpcode                    =      1,  \
-   ._3DCommandSubOpcode                 =      9
-
-struct GEN45_3DSTATE_GLOBAL_DEPTH_OFFSET_CLAMP {
-   uint32_t                             CommandType;
-   uint32_t                             CommandSubType;
-   uint32_t                             _3DCommandOpcode;
-   uint32_t                             _3DCommandSubOpcode;
-   uint32_t                             DWordLength;
-   float                                GlobalDepthOffsetClamp;
-};
-
-static inline void
-GEN45_3DSTATE_GLOBAL_DEPTH_OFFSET_CLAMP_pack(__gen_user_data *data, void * restrict dst,
-                                             const struct GEN45_3DSTATE_GLOBAL_DEPTH_OFFSET_CLAMP * restrict values)
-{
-   uint32_t * restrict dw = (uint32_t * restrict) dst;
-
-   dw[0] =
-      __gen_uint(values->CommandType, 29, 31) |
-      __gen_uint(values->CommandSubType, 27, 28) |
-      __gen_uint(values->_3DCommandOpcode, 24, 26) |
-      __gen_uint(values->_3DCommandSubOpcode, 16, 23) |
-      __gen_uint(values->DWordLength, 0, 7);
-
-   dw[1] =
-      __gen_float(values->GlobalDepthOffsetClamp);
-}
-
 #define GEN45_3DSTATE_VERTEX_BUFFERS_length_bias      2
 #define GEN45_3DSTATE_VERTEX_BUFFERS_header     \
    .CommandType                         =      3,  \
@@ -2141,8 +2281,9 @@ struct GEN45_3DSTATE_VERTEX_BUFFERS {
 };
 
 static inline void
-GEN45_3DSTATE_VERTEX_BUFFERS_pack(__gen_user_data *data, void * restrict dst,
-                                  const struct GEN45_3DSTATE_VERTEX_BUFFERS * restrict values)
+GEN45_3DSTATE_VERTEX_BUFFERS_pack(__attribute__((unused)) __gen_user_data *data,
+                                  __attribute__((unused)) void * restrict dst,
+                                  __attribute__((unused)) const struct GEN45_3DSTATE_VERTEX_BUFFERS * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -2172,8 +2313,9 @@ struct GEN45_3DSTATE_VERTEX_ELEMENTS {
 };
 
 static inline void
-GEN45_3DSTATE_VERTEX_ELEMENTS_pack(__gen_user_data *data, void * restrict dst,
-                                   const struct GEN45_3DSTATE_VERTEX_ELEMENTS * restrict values)
+GEN45_3DSTATE_VERTEX_ELEMENTS_pack(__attribute__((unused)) __gen_user_data *data,
+                                   __attribute__((unused)) void * restrict dst,
+                                   __attribute__((unused)) const struct GEN45_3DSTATE_VERTEX_ELEMENTS * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -2202,8 +2344,9 @@ struct GEN45_3DSTATE_VF_STATISTICS {
 };
 
 static inline void
-GEN45_3DSTATE_VF_STATISTICS_pack(__gen_user_data *data, void * restrict dst,
-                                 const struct GEN45_3DSTATE_VF_STATISTICS * restrict values)
+GEN45_3DSTATE_VF_STATISTICS_pack(__attribute__((unused)) __gen_user_data *data,
+                                 __attribute__((unused)) void * restrict dst,
+                                 __attribute__((unused)) const struct GEN45_3DSTATE_VF_STATISTICS * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -2213,6 +2356,301 @@ GEN45_3DSTATE_VF_STATISTICS_pack(__gen_user_data *data, void * restrict dst,
       __gen_uint(values->_3DCommandOpcode, 24, 26) |
       __gen_uint(values->_3DCommandSubOpcode, 16, 23) |
       __gen_uint(values->StatisticsEnable, 0, 0);
+}
+
+#define GEN45_CS_URB_STATE_length              2
+#define GEN45_CS_URB_STATE_length_bias         2
+#define GEN45_CS_URB_STATE_header               \
+   .CommandType                         =      3,  \
+   .CommandSubType                      =      0,  \
+   ._3DCommandOpcode                    =      0,  \
+   ._3DCommandSubOpcode                 =      1,  \
+   .DWordLength                         =      0
+
+struct GEN45_CS_URB_STATE {
+   uint32_t                             CommandType;
+   uint32_t                             CommandSubType;
+   uint32_t                             _3DCommandOpcode;
+   uint32_t                             _3DCommandSubOpcode;
+   uint32_t                             DWordLength;
+   uint32_t                             URBEntryAllocationSize;
+   uint32_t                             NumberofURBEntries;
+};
+
+static inline void
+GEN45_CS_URB_STATE_pack(__attribute__((unused)) __gen_user_data *data,
+                        __attribute__((unused)) void * restrict dst,
+                        __attribute__((unused)) const struct GEN45_CS_URB_STATE * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   dw[0] =
+      __gen_uint(values->CommandType, 29, 31) |
+      __gen_uint(values->CommandSubType, 27, 28) |
+      __gen_uint(values->_3DCommandOpcode, 24, 26) |
+      __gen_uint(values->_3DCommandSubOpcode, 16, 23) |
+      __gen_uint(values->DWordLength, 0, 7);
+
+   dw[1] =
+      __gen_uint(values->URBEntryAllocationSize, 4, 8) |
+      __gen_uint(values->NumberofURBEntries, 0, 2);
+}
+
+#define GEN45_CONSTANT_BUFFER_length           2
+#define GEN45_CONSTANT_BUFFER_length_bias      2
+#define GEN45_CONSTANT_BUFFER_header            \
+   .CommandType                         =      3,  \
+   .CommandSubType                      =      0,  \
+   ._3DCommandOpcode                    =      0,  \
+   ._3DCommandSubOpcode                 =      2,  \
+   .Valid                               =      0,  \
+   .DWordLength                         =      0
+
+struct GEN45_CONSTANT_BUFFER {
+   uint32_t                             CommandType;
+   uint32_t                             CommandSubType;
+   uint32_t                             _3DCommandOpcode;
+   uint32_t                             _3DCommandSubOpcode;
+   bool                                 Valid;
+   uint32_t                             DWordLength;
+   __gen_address_type                   BufferStartingAddress;
+   uint32_t                             BufferLength;
+};
+
+static inline void
+GEN45_CONSTANT_BUFFER_pack(__attribute__((unused)) __gen_user_data *data,
+                           __attribute__((unused)) void * restrict dst,
+                           __attribute__((unused)) const struct GEN45_CONSTANT_BUFFER * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   dw[0] =
+      __gen_uint(values->CommandType, 29, 31) |
+      __gen_uint(values->CommandSubType, 27, 28) |
+      __gen_uint(values->_3DCommandOpcode, 24, 26) |
+      __gen_uint(values->_3DCommandSubOpcode, 16, 23) |
+      __gen_uint(values->Valid, 8, 8) |
+      __gen_uint(values->DWordLength, 0, 7);
+
+   const uint32_t v1 =
+      __gen_uint(values->BufferLength, 0, 5);
+   dw[1] = __gen_combine_address(data, &dw[1], values->BufferStartingAddress, v1);
+}
+
+#define GEN45_MI_FLUSH_length                  1
+#define GEN45_MI_FLUSH_length_bias             1
+#define GEN45_MI_FLUSH_header                   \
+   .CommandType                         =      0,  \
+   .MICommandOpcode                     =      4
+
+struct GEN45_MI_FLUSH {
+   uint32_t                             CommandType;
+   uint32_t                             MICommandOpcode;
+   uint32_t                             GlobalSnapshotCountReset;
+#define DontReset                                0
+#define Reset                                    1
+   uint32_t                             RenderCacheFlushInhibit;
+#define Flush                                    0
+#define DontFlush                                1
+   uint32_t                             StateInstructionCacheInvalidate;
+#define DontInvalidate                           0
+#define Invalidate                               1
+};
+
+static inline void
+GEN45_MI_FLUSH_pack(__attribute__((unused)) __gen_user_data *data,
+                    __attribute__((unused)) void * restrict dst,
+                    __attribute__((unused)) const struct GEN45_MI_FLUSH * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   dw[0] =
+      __gen_uint(values->CommandType, 29, 31) |
+      __gen_uint(values->MICommandOpcode, 23, 28) |
+      __gen_uint(values->GlobalSnapshotCountReset, 3, 3) |
+      __gen_uint(values->RenderCacheFlushInhibit, 2, 2) |
+      __gen_uint(values->StateInstructionCacheInvalidate, 1, 1);
+}
+
+#define GEN45_MI_LOAD_REGISTER_IMM_length      3
+#define GEN45_MI_LOAD_REGISTER_IMM_length_bias      2
+#define GEN45_MI_LOAD_REGISTER_IMM_header       \
+   .CommandType                         =      0,  \
+   .MICommandOpcode                     =     34,  \
+   .DWordLength                         =      1
+
+struct GEN45_MI_LOAD_REGISTER_IMM {
+   uint32_t                             CommandType;
+   uint32_t                             MICommandOpcode;
+   uint32_t                             ByteWriteDisables;
+   uint32_t                             DWordLength;
+   uint64_t                             RegisterOffset;
+   uint32_t                             DataDWord;
+};
+
+static inline void
+GEN45_MI_LOAD_REGISTER_IMM_pack(__attribute__((unused)) __gen_user_data *data,
+                                __attribute__((unused)) void * restrict dst,
+                                __attribute__((unused)) const struct GEN45_MI_LOAD_REGISTER_IMM * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   dw[0] =
+      __gen_uint(values->CommandType, 29, 31) |
+      __gen_uint(values->MICommandOpcode, 23, 28) |
+      __gen_uint(values->ByteWriteDisables, 8, 11) |
+      __gen_uint(values->DWordLength, 0, 5);
+
+   dw[1] =
+      __gen_offset(values->RegisterOffset, 2, 31);
+
+   dw[2] =
+      __gen_uint(values->DataDWord, 0, 31);
+}
+
+#define GEN45_MI_STORE_DATA_IMM_length         5
+#define GEN45_MI_STORE_DATA_IMM_length_bias      2
+#define GEN45_MI_STORE_DATA_IMM_header          \
+   .CommandType                         =      0,  \
+   .MICommandOpcode                     =     32,  \
+   .DWordLength                         =      2
+
+struct GEN45_MI_STORE_DATA_IMM {
+   uint32_t                             CommandType;
+   uint32_t                             MICommandOpcode;
+   bool                                 MemoryAddressType;
+   uint32_t                             BitFieldName;
+   uint32_t                             DWordLength;
+   __gen_address_type                   PhysicalStartAddressExtension;
+   __gen_address_type                   Address;
+   uint32_t                             DataDWord0;
+   uint32_t                             DataDWord1;
+};
+
+static inline void
+GEN45_MI_STORE_DATA_IMM_pack(__attribute__((unused)) __gen_user_data *data,
+                             __attribute__((unused)) void * restrict dst,
+                             __attribute__((unused)) const struct GEN45_MI_STORE_DATA_IMM * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   dw[0] =
+      __gen_uint(values->CommandType, 29, 31) |
+      __gen_uint(values->MICommandOpcode, 23, 28) |
+      __gen_uint(values->MemoryAddressType, 22, 22) |
+      __gen_uint(values->BitFieldName, 21, 21) |
+      __gen_uint(values->DWordLength, 0, 5);
+
+   dw[1] = __gen_combine_address(data, &dw[1], values->PhysicalStartAddressExtension, 0);
+
+   dw[2] = __gen_combine_address(data, &dw[2], values->Address, 0);
+
+   dw[3] =
+      __gen_uint(values->DataDWord0, 0, 31);
+
+   dw[4] =
+      __gen_uint(values->DataDWord1, 0, 31);
+}
+
+#define GEN45_MI_STORE_REGISTER_MEM_length      3
+#define GEN45_MI_STORE_REGISTER_MEM_length_bias      2
+#define GEN45_MI_STORE_REGISTER_MEM_header      \
+   .CommandType                         =      0,  \
+   .MICommandOpcode                     =     36,  \
+   .DWordLength                         =      1
+
+struct GEN45_MI_STORE_REGISTER_MEM {
+   uint32_t                             CommandType;
+   uint32_t                             MICommandOpcode;
+   bool                                 UseGlobalGTT;
+   uint32_t                             DWordLength;
+   __gen_address_type                   PhysicalStartAddressExtension;
+   uint64_t                             RegisterAddress;
+   __gen_address_type                   MemoryAddress;
+};
+
+static inline void
+GEN45_MI_STORE_REGISTER_MEM_pack(__attribute__((unused)) __gen_user_data *data,
+                                 __attribute__((unused)) void * restrict dst,
+                                 __attribute__((unused)) const struct GEN45_MI_STORE_REGISTER_MEM * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   dw[0] =
+      __gen_uint(values->CommandType, 29, 31) |
+      __gen_uint(values->MICommandOpcode, 23, 28) |
+      __gen_uint(values->UseGlobalGTT, 22, 22) |
+      __gen_uint(values->DWordLength, 0, 7);
+
+   const uint32_t v1 =
+      __gen_offset(values->RegisterAddress, 2, 22);
+   dw[1] = __gen_combine_address(data, &dw[1], values->PhysicalStartAddressExtension, v1);
+
+   dw[2] = __gen_combine_address(data, &dw[2], values->MemoryAddress, 0);
+}
+
+#define GEN45_PIPE_CONTROL_length              4
+#define GEN45_PIPE_CONTROL_length_bias         2
+#define GEN45_PIPE_CONTROL_header               \
+   .CommandType                         =      3,  \
+   .CommandSubType                      =      3,  \
+   ._3DCommandOpcode                    =      2,  \
+   ._3DCommandSubOpcode                 =      0,  \
+   .DWordLength                         =      2
+
+struct GEN45_PIPE_CONTROL {
+   uint32_t                             CommandType;
+   uint32_t                             CommandSubType;
+   uint32_t                             _3DCommandOpcode;
+   uint32_t                             _3DCommandSubOpcode;
+   uint32_t                             DWordLength;
+   uint32_t                             PostSyncOperation;
+#define NoWrite                                  0
+#define WriteImmediateData                       1
+#define WritePSDepthCount                        2
+#define WriteTimestamp                           3
+   bool                                 DepthStallEnable;
+   bool                                 WriteCacheFlush;
+   bool                                 InstructionCacheInvalidateEnable;
+   bool                                 TextureCacheFlushEnable;
+   bool                                 IndirectStatePointersDisable;
+   bool                                 NotifyEnable;
+   __gen_address_type                   Address;
+   uint32_t                             DestinationAddressType;
+#define DAT_PGTT                                 0
+#define DAT_GGTT                                 1
+   uint64_t                             ImmediateData;
+};
+
+static inline void
+GEN45_PIPE_CONTROL_pack(__attribute__((unused)) __gen_user_data *data,
+                        __attribute__((unused)) void * restrict dst,
+                        __attribute__((unused)) const struct GEN45_PIPE_CONTROL * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   dw[0] =
+      __gen_uint(values->CommandType, 29, 31) |
+      __gen_uint(values->CommandSubType, 27, 28) |
+      __gen_uint(values->_3DCommandOpcode, 24, 26) |
+      __gen_uint(values->_3DCommandSubOpcode, 16, 23) |
+      __gen_uint(values->DWordLength, 0, 7) |
+      __gen_uint(values->PostSyncOperation, 14, 15) |
+      __gen_uint(values->DepthStallEnable, 13, 13) |
+      __gen_uint(values->WriteCacheFlush, 12, 12) |
+      __gen_uint(values->InstructionCacheInvalidateEnable, 11, 11) |
+      __gen_uint(values->TextureCacheFlushEnable, 10, 10) |
+      __gen_uint(values->IndirectStatePointersDisable, 9, 9) |
+      __gen_uint(values->NotifyEnable, 8, 8);
+
+   const uint32_t v1 =
+      __gen_uint(values->DestinationAddressType, 2, 2);
+   dw[1] = __gen_combine_address(data, &dw[1], values->Address, v1);
+
+   const uint64_t v2 =
+      __gen_uint(values->ImmediateData, 0, 63);
+   dw[2] = v2;
+   dw[3] = v2 >> 32;
 }
 
 #define GEN45_PIPELINE_SELECT_length           1
@@ -2234,8 +2672,9 @@ struct GEN45_PIPELINE_SELECT {
 };
 
 static inline void
-GEN45_PIPELINE_SELECT_pack(__gen_user_data *data, void * restrict dst,
-                           const struct GEN45_PIPELINE_SELECT * restrict values)
+GEN45_PIPELINE_SELECT_pack(__attribute__((unused)) __gen_user_data *data,
+                           __attribute__((unused)) void * restrict dst,
+                           __attribute__((unused)) const struct GEN45_PIPELINE_SELECT * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -2247,72 +2686,7 @@ GEN45_PIPELINE_SELECT_pack(__gen_user_data *data, void * restrict dst,
       __gen_uint(values->PipelineSelection, 0, 1);
 }
 
-#define GEN45_PIPE_CONTROL_length              5
-#define GEN45_PIPE_CONTROL_length_bias         2
-#define GEN45_PIPE_CONTROL_header               \
-   .CommandType                         =      3,  \
-   .CommandSubType                      =      3,  \
-   ._3DCommandOpcode                    =      2,  \
-   ._3DCommandSubOpcode                 =      0,  \
-   .DWordLength                         =      3
-
-struct GEN45_PIPE_CONTROL {
-   uint32_t                             CommandType;
-   uint32_t                             CommandSubType;
-   uint32_t                             _3DCommandOpcode;
-   uint32_t                             _3DCommandSubOpcode;
-   uint32_t                             PostSyncOperation;
-#define NoWrite                                  0
-#define WriteImmediateData                       1
-#define WritePSDepthCount                        2
-#define WriteTimestamp                           3
-   bool                                 DepthStallEnable;
-   bool                                 WriteCacheFlushEnable;
-   bool                                 InstructionStateCacheFlushEnable;
-   bool                                 TextureCacheFlushEnable;
-   bool                                 IndirectStatePointersDisable;
-   bool                                 NotifyEnable;
-   uint32_t                             DWordLength;
-   __gen_address_type                   DestinationAddress;
-   uint32_t                             DestinationAddressType;
-#define DAT_PPGTT                                0
-#define DAT_GGTT                                 1
-   uint64_t                             ImmediateData;
-};
-
-static inline void
-GEN45_PIPE_CONTROL_pack(__gen_user_data *data, void * restrict dst,
-                        const struct GEN45_PIPE_CONTROL * restrict values)
-{
-   uint32_t * restrict dw = (uint32_t * restrict) dst;
-
-   dw[0] =
-      __gen_uint(values->CommandType, 29, 31) |
-      __gen_uint(values->CommandSubType, 27, 28) |
-      __gen_uint(values->_3DCommandOpcode, 24, 26) |
-      __gen_uint(values->_3DCommandSubOpcode, 16, 23) |
-      __gen_uint(values->PostSyncOperation, 14, 15) |
-      __gen_uint(values->DepthStallEnable, 13, 13) |
-      __gen_uint(values->WriteCacheFlushEnable, 12, 12) |
-      __gen_uint(values->InstructionStateCacheFlushEnable, 11, 11) |
-      __gen_uint(values->TextureCacheFlushEnable, 10, 10) |
-      __gen_uint(values->IndirectStatePointersDisable, 9, 9) |
-      __gen_uint(values->NotifyEnable, 8, 8) |
-      __gen_uint(values->DWordLength, 0, 7);
-
-   const uint32_t v1 =
-      __gen_uint(values->DestinationAddressType, 2, 2);
-   dw[1] = __gen_combine_address(data, &dw[1], values->DestinationAddress, v1);
-
-   const uint64_t v2 =
-      __gen_uint(values->ImmediateData, 0, 63);
-   dw[2] = v2;
-   dw[3] = v2 >> 32;
-
-   dw[4] = 0;
-}
-
-#define GEN45_STATE_BASE_ADDRESS_length       10
+#define GEN45_STATE_BASE_ADDRESS_length        6
 #define GEN45_STATE_BASE_ADDRESS_length_bias      2
 #define GEN45_STATE_BASE_ADDRESS_header         \
    .CommandType                         =      3,  \
@@ -2340,8 +2714,9 @@ struct GEN45_STATE_BASE_ADDRESS {
 };
 
 static inline void
-GEN45_STATE_BASE_ADDRESS_pack(__gen_user_data *data, void * restrict dst,
-                              const struct GEN45_STATE_BASE_ADDRESS * restrict values)
+GEN45_STATE_BASE_ADDRESS_pack(__attribute__((unused)) __gen_user_data *data,
+                              __attribute__((unused)) void * restrict dst,
+                              __attribute__((unused)) const struct GEN45_STATE_BASE_ADDRESS * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -2371,51 +2746,6 @@ GEN45_STATE_BASE_ADDRESS_pack(__gen_user_data *data, void * restrict dst,
    const uint32_t v5 =
       __gen_uint(values->IndirectObjectAccessUpperBoundModifyEnable, 0, 0);
    dw[5] = __gen_combine_address(data, &dw[5], values->IndirectObjectAccessUpperBound, v5);
-
-   dw[6] = 0;
-
-   dw[7] = 0;
-
-   dw[8] = 0;
-
-   dw[9] = 0;
-}
-
-#define GEN45_STATE_PREFETCH_length            2
-#define GEN45_STATE_PREFETCH_length_bias       2
-#define GEN45_STATE_PREFETCH_header             \
-   .CommandType                         =      3,  \
-   .CommandSubType                      =      0,  \
-   ._3DCommandOpcode                    =      0,  \
-   ._3DCommandSubOpcode                 =      3,  \
-   .DWordLength                         =      0
-
-struct GEN45_STATE_PREFETCH {
-   uint32_t                             CommandType;
-   uint32_t                             CommandSubType;
-   uint32_t                             _3DCommandOpcode;
-   uint32_t                             _3DCommandSubOpcode;
-   uint32_t                             DWordLength;
-   __gen_address_type                   PrefetchPointer;
-   uint32_t                             PrefetchCount;
-};
-
-static inline void
-GEN45_STATE_PREFETCH_pack(__gen_user_data *data, void * restrict dst,
-                          const struct GEN45_STATE_PREFETCH * restrict values)
-{
-   uint32_t * restrict dw = (uint32_t * restrict) dst;
-
-   dw[0] =
-      __gen_uint(values->CommandType, 29, 31) |
-      __gen_uint(values->CommandSubType, 27, 28) |
-      __gen_uint(values->_3DCommandOpcode, 24, 26) |
-      __gen_uint(values->_3DCommandSubOpcode, 16, 23) |
-      __gen_uint(values->DWordLength, 0, 7);
-
-   const uint32_t v1 =
-      __gen_uint(values->PrefetchCount, 0, 2);
-   dw[1] = __gen_combine_address(data, &dw[1], values->PrefetchPointer, v1);
 }
 
 #define GEN45_STATE_SIP_length                 2
@@ -2437,8 +2767,9 @@ struct GEN45_STATE_SIP {
 };
 
 static inline void
-GEN45_STATE_SIP_pack(__gen_user_data *data, void * restrict dst,
-                     const struct GEN45_STATE_SIP * restrict values)
+GEN45_STATE_SIP_pack(__attribute__((unused)) __gen_user_data *data,
+                     __attribute__((unused)) void * restrict dst,
+                     __attribute__((unused)) const struct GEN45_STATE_SIP * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -2451,6 +2782,324 @@ GEN45_STATE_SIP_pack(__gen_user_data *data, void * restrict dst,
 
    dw[1] =
       __gen_offset(values->SystemInstructionPointer, 4, 31);
+}
+
+#define GEN45_URB_FENCE_length                 3
+#define GEN45_URB_FENCE_length_bias            2
+#define GEN45_URB_FENCE_header                  \
+   .CommandType                         =      3,  \
+   .CommandSubType                      =      0,  \
+   ._3DCommandOpcode                    =      0,  \
+   ._3DCommandSubOpcode                 =      0,  \
+   .DWordLength                         =      1
+
+struct GEN45_URB_FENCE {
+   uint32_t                             CommandType;
+   uint32_t                             CommandSubType;
+   uint32_t                             _3DCommandOpcode;
+   uint32_t                             _3DCommandSubOpcode;
+   uint32_t                             DWordLength;
+   bool                                 CSUnitURBReallocationRequest;
+   bool                                 VFEUnitURBReallocationRequest;
+   bool                                 SFUnitURBReallocationRequest;
+   bool                                 CLIPUnitURBReallocationRequest;
+   bool                                 GSUnitURBReallocationRequest;
+   bool                                 VSUnitURBReallocationRequest;
+   bool                                 CLIPFence;
+   bool                                 GSFence;
+   bool                                 VSFence;
+   bool                                 CSFence;
+   bool                                 VFEFence;
+   bool                                 SFFence;
+};
+
+static inline void
+GEN45_URB_FENCE_pack(__attribute__((unused)) __gen_user_data *data,
+                     __attribute__((unused)) void * restrict dst,
+                     __attribute__((unused)) const struct GEN45_URB_FENCE * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   dw[0] =
+      __gen_uint(values->CommandType, 29, 31) |
+      __gen_uint(values->CommandSubType, 27, 28) |
+      __gen_uint(values->_3DCommandOpcode, 24, 26) |
+      __gen_uint(values->_3DCommandSubOpcode, 16, 23) |
+      __gen_uint(values->DWordLength, 0, 7) |
+      __gen_uint(values->CSUnitURBReallocationRequest, 13, 13) |
+      __gen_uint(values->VFEUnitURBReallocationRequest, 12, 12) |
+      __gen_uint(values->SFUnitURBReallocationRequest, 11, 11) |
+      __gen_uint(values->CLIPUnitURBReallocationRequest, 10, 10) |
+      __gen_uint(values->GSUnitURBReallocationRequest, 9, 9) |
+      __gen_uint(values->VSUnitURBReallocationRequest, 8, 8);
+
+   dw[1] =
+      __gen_uint(values->CLIPFence, 20, 29) |
+      __gen_uint(values->GSFence, 10, 19) |
+      __gen_uint(values->VSFence, 0, 9);
+
+   dw[2] =
+      __gen_uint(values->CSFence, 20, 30) |
+      __gen_uint(values->VFEFence, 10, 19) |
+      __gen_uint(values->SFFence, 0, 9);
+}
+
+#define GEN45_XY_COLOR_BLT_length              6
+#define GEN45_XY_COLOR_BLT_length_bias         2
+#define GEN45_XY_COLOR_BLT_header               \
+   .CommandType                         =      2,  \
+   ._2DCommandOpcode                    =     80,  \
+   .DWordLength                         =      4
+
+struct GEN45_XY_COLOR_BLT {
+   uint32_t                             CommandType;
+   uint32_t                             _2DCommandOpcode;
+   uint32_t                             DWordLength;
+   uint32_t                             _32bppByteMask;
+   bool                                 TilingEnable;
+   bool                                 ClippingEnabled;
+   uint32_t                             ColorDepth;
+#define COLOR_DEPTH__8bit                        0
+#define COLOR_DEPTH__565                         1
+#define COLOR_DEPTH__1555                        2
+#define COLOR_DEPTH__32bit                       3
+   int32_t                              RasterOperation;
+   int32_t                              DestinationPitch;
+   int32_t                              DestinationY1Coordinate;
+   int32_t                              DestinationX1Coordinate;
+   int32_t                              DestinationY2Coordinate;
+   int32_t                              DestinationX2Coordinate;
+   __gen_address_type                   DestinationBaseAddress;
+   int32_t                              SolidPatternColor;
+};
+
+static inline void
+GEN45_XY_COLOR_BLT_pack(__attribute__((unused)) __gen_user_data *data,
+                        __attribute__((unused)) void * restrict dst,
+                        __attribute__((unused)) const struct GEN45_XY_COLOR_BLT * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   dw[0] =
+      __gen_uint(values->CommandType, 29, 31) |
+      __gen_uint(values->_2DCommandOpcode, 22, 28) |
+      __gen_uint(values->DWordLength, 0, 7) |
+      __gen_uint(values->_32bppByteMask, 20, 21) |
+      __gen_uint(values->TilingEnable, 11, 11);
+
+   dw[1] =
+      __gen_uint(values->ClippingEnabled, 30, 30) |
+      __gen_uint(values->ColorDepth, 24, 25) |
+      __gen_sint(values->RasterOperation, 16, 23) |
+      __gen_sint(values->DestinationPitch, 0, 15);
+
+   dw[2] =
+      __gen_sint(values->DestinationY1Coordinate, 16, 31) |
+      __gen_sint(values->DestinationX1Coordinate, 0, 15);
+
+   dw[3] =
+      __gen_sint(values->DestinationY2Coordinate, 16, 31) |
+      __gen_sint(values->DestinationX2Coordinate, 0, 15);
+
+   dw[4] = __gen_combine_address(data, &dw[4], values->DestinationBaseAddress, 0);
+
+   dw[5] =
+      __gen_sint(values->SolidPatternColor, 0, 31);
+}
+
+#define GEN45_XY_SETUP_BLT_length              8
+#define GEN45_XY_SETUP_BLT_length_bias         2
+#define GEN45_XY_SETUP_BLT_header               \
+   .CommandType                         =      2,  \
+   ._2DCommandOpcode                    =      1,  \
+   .DWordLength                         =      6
+
+struct GEN45_XY_SETUP_BLT {
+   uint32_t                             CommandType;
+   uint32_t                             _2DCommandOpcode;
+   uint32_t                             DWordLength;
+   uint32_t                             _32bppByteMask;
+   bool                                 TilingEnable;
+   bool                                 ClippingEnabled;
+   bool                                 MonoSourceTransparencyMode;
+   uint32_t                             ColorDepth;
+#define COLOR_DEPTH__8bit                        0
+#define COLOR_DEPTH__565                         1
+#define COLOR_DEPTH__1555                        2
+#define COLOR_DEPTH__32bit                       3
+   int32_t                              RasterOperation;
+   int32_t                              DestinationPitch;
+   int32_t                              ClipRectY1Coordinate;
+   int32_t                              ClipRectX1Coordinate;
+   int32_t                              ClipRectY2Coordinate;
+   int32_t                              ClipRectX2Coordinate;
+   __gen_address_type                   DestinationBaseAddress;
+   uint32_t                             BackgroundColor;
+   uint32_t                             ForegroundColor;
+   uint32_t                             PatternBaseAddress;
+};
+
+static inline void
+GEN45_XY_SETUP_BLT_pack(__attribute__((unused)) __gen_user_data *data,
+                        __attribute__((unused)) void * restrict dst,
+                        __attribute__((unused)) const struct GEN45_XY_SETUP_BLT * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   dw[0] =
+      __gen_uint(values->CommandType, 29, 31) |
+      __gen_uint(values->_2DCommandOpcode, 22, 28) |
+      __gen_uint(values->DWordLength, 0, 7) |
+      __gen_uint(values->_32bppByteMask, 20, 21) |
+      __gen_uint(values->TilingEnable, 11, 11);
+
+   dw[1] =
+      __gen_uint(values->ClippingEnabled, 30, 30) |
+      __gen_uint(values->MonoSourceTransparencyMode, 29, 29) |
+      __gen_uint(values->ColorDepth, 24, 25) |
+      __gen_sint(values->RasterOperation, 16, 23) |
+      __gen_sint(values->DestinationPitch, 0, 15);
+
+   dw[2] =
+      __gen_sint(values->ClipRectY1Coordinate, 16, 31) |
+      __gen_sint(values->ClipRectX1Coordinate, 0, 15);
+
+   dw[3] =
+      __gen_sint(values->ClipRectY2Coordinate, 16, 31) |
+      __gen_sint(values->ClipRectX2Coordinate, 0, 15);
+
+   dw[4] = __gen_combine_address(data, &dw[4], values->DestinationBaseAddress, 0);
+
+   dw[5] =
+      __gen_uint(values->BackgroundColor, 0, 31);
+
+   dw[6] =
+      __gen_uint(values->ForegroundColor, 0, 31);
+
+   dw[7] =
+      __gen_uint(values->PatternBaseAddress, 0, 31);
+}
+
+#define GEN45_XY_SRC_COPY_BLT_length           8
+#define GEN45_XY_SRC_COPY_BLT_length_bias      2
+#define GEN45_XY_SRC_COPY_BLT_header            \
+   .CommandType                         =      2,  \
+   ._2DCommandOpcode                    =     83,  \
+   .DWordLength                         =      6
+
+struct GEN45_XY_SRC_COPY_BLT {
+   uint32_t                             CommandType;
+   uint32_t                             _2DCommandOpcode;
+   uint32_t                             DWordLength;
+   uint32_t                             _32bppByteMask;
+   bool                                 SourceTilingEnable;
+   bool                                 DestinationTilingEnable;
+   bool                                 ClippingEnabled;
+   uint32_t                             ColorDepth;
+#define COLOR_DEPTH__8bit                        0
+#define COLOR_DEPTH__565                         1
+#define COLOR_DEPTH__1555                        2
+#define COLOR_DEPTH__32bit                       3
+   int32_t                              RasterOperation;
+   int32_t                              DestinationPitch;
+   int32_t                              DestinationY1Coordinate;
+   int32_t                              DestinationX1Coordinate;
+   int32_t                              DestinationY2Coordinate;
+   int32_t                              DestinationX2Coordinate;
+   __gen_address_type                   DestinationBaseAddress;
+   int32_t                              SourceY1Coordinate;
+   int32_t                              SourceX1Coordinate;
+   int32_t                              SourcePitch;
+   __gen_address_type                   SourceBaseAddress;
+};
+
+static inline void
+GEN45_XY_SRC_COPY_BLT_pack(__attribute__((unused)) __gen_user_data *data,
+                           __attribute__((unused)) void * restrict dst,
+                           __attribute__((unused)) const struct GEN45_XY_SRC_COPY_BLT * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   dw[0] =
+      __gen_uint(values->CommandType, 29, 31) |
+      __gen_uint(values->_2DCommandOpcode, 22, 28) |
+      __gen_uint(values->DWordLength, 0, 7) |
+      __gen_uint(values->_32bppByteMask, 20, 21) |
+      __gen_uint(values->SourceTilingEnable, 15, 15) |
+      __gen_uint(values->DestinationTilingEnable, 11, 11);
+
+   dw[1] =
+      __gen_uint(values->ClippingEnabled, 30, 30) |
+      __gen_uint(values->ColorDepth, 24, 25) |
+      __gen_sint(values->RasterOperation, 16, 23) |
+      __gen_sint(values->DestinationPitch, 0, 15);
+
+   dw[2] =
+      __gen_sint(values->DestinationY1Coordinate, 16, 31) |
+      __gen_sint(values->DestinationX1Coordinate, 0, 15);
+
+   dw[3] =
+      __gen_sint(values->DestinationY2Coordinate, 16, 31) |
+      __gen_sint(values->DestinationX2Coordinate, 0, 15);
+
+   dw[4] = __gen_combine_address(data, &dw[4], values->DestinationBaseAddress, 0);
+
+   dw[5] =
+      __gen_sint(values->SourceY1Coordinate, 16, 31) |
+      __gen_sint(values->SourceX1Coordinate, 0, 15);
+
+   dw[6] =
+      __gen_sint(values->SourcePitch, 0, 15);
+
+   dw[7] = __gen_combine_address(data, &dw[7], values->SourceBaseAddress, 0);
+}
+
+#define GEN45_XY_TEXT_IMMEDIATE_BLT_length      3
+#define GEN45_XY_TEXT_IMMEDIATE_BLT_length_bias      2
+#define GEN45_XY_TEXT_IMMEDIATE_BLT_header      \
+   .CommandType                         =      2,  \
+   ._2DCommandOpcode                    =     49,  \
+   .DWordLength                         =      1
+
+struct GEN45_XY_TEXT_IMMEDIATE_BLT {
+   uint32_t                             CommandType;
+   uint32_t                             _2DCommandOpcode;
+   uint32_t                             DWordLength;
+   uint32_t                             _32bppByteMask;
+   uint32_t                             Packing;
+#define BitPacked                                0
+#define BytePacked                               1
+   bool                                 TilingEnable;
+   int32_t                              DestinationPitch;
+   int32_t                              DestinationY1Coordinate;
+   int32_t                              DestinationX1Coordinate;
+   int32_t                              DestinationY2Coordinate;
+   int32_t                              DestinationX2Coordinate;
+};
+
+static inline void
+GEN45_XY_TEXT_IMMEDIATE_BLT_pack(__attribute__((unused)) __gen_user_data *data,
+                                 __attribute__((unused)) void * restrict dst,
+                                 __attribute__((unused)) const struct GEN45_XY_TEXT_IMMEDIATE_BLT * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   dw[0] =
+      __gen_uint(values->CommandType, 29, 31) |
+      __gen_uint(values->_2DCommandOpcode, 22, 28) |
+      __gen_uint(values->DWordLength, 0, 7) |
+      __gen_uint(values->_32bppByteMask, 20, 21) |
+      __gen_uint(values->Packing, 16, 16) |
+      __gen_uint(values->TilingEnable, 11, 11);
+
+   dw[1] =
+      __gen_sint(values->DestinationPitch, 0, 15) |
+      __gen_sint(values->DestinationY1Coordinate, 16, 31) |
+      __gen_sint(values->DestinationX1Coordinate, 0, 15);
+
+   dw[2] =
+      __gen_sint(values->DestinationY2Coordinate, 16, 31) |
+      __gen_sint(values->DestinationX2Coordinate, 0, 15);
 }
 
 #endif /* GEN45_PACK_H */

@@ -32,6 +32,7 @@
 //============================================================================
 
 #include "core/backend.h"
+#include "core/backend_impl.h"
 
 void InitBackendPixelRate${fileNum}()
 {

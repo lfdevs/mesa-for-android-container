@@ -383,7 +383,7 @@ static GLboolean r200_run_tcl_render( struct gl_context *ctx,
       if (!r200ValidateState( ctx ))
          return GL_TRUE; /* fallback to sw t&l */
 
-   if (!ctx->VertexProgram._Enabled) {
+   if (!_mesa_arb_vertex_program_enabled(ctx)) {
    /* NOTE: inputs != tnl->render_inputs - these are the untransformed
     * inputs.
     */
@@ -553,7 +553,7 @@ static void transition_to_hwtnl( struct gl_context *ctx )
    rmesa->hw.vap.cmd[VAP_SE_VAP_CNTL] |= R200_VAP_TCL_ENABLE;
    rmesa->hw.vap.cmd[VAP_SE_VAP_CNTL] &= ~R200_VAP_FORCE_W_TO_ONE;
 
-   if (ctx->VertexProgram._Enabled) {
+   if (_mesa_arb_vertex_program_enabled(ctx)) {
       rmesa->hw.vap.cmd[VAP_SE_VAP_CNTL] |= R200_VAP_PROG_VTX_SHADER_ENABLE;
    }
 

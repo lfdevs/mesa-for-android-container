@@ -45,12 +45,24 @@ namespace SwrJit
         LLVMContext& ctx = pJitMgr->mContext;
         std::vector<Type*> members;
         
-        /* attrib */ members.push_back( ArrayType::get(ArrayType::get(VectorType::get(Type::getFloatTy(ctx), pJitMgr->mVWidth), 4), KNOB_NUM_ATTRIBUTES) );
+        /* attrib */ members.push_back( ArrayType::get(ArrayType::get(VectorType::get(Type::getFloatTy(ctx), 8), 4), SWR_VTX_NUM_SLOTS) );
 
         return StructType::get(ctx, members, false);
     }
 
     static const uint32_t simdvertex_attrib = 0;
+
+    INLINE static StructType *Gen_simd16vertex(JitManager* pJitMgr)
+    {
+        LLVMContext& ctx = pJitMgr->mContext;
+        std::vector<Type*> members;
+        
+        /* attrib */ members.push_back( ArrayType::get(ArrayType::get(VectorType::get(Type::getFloatTy(ctx), 16), 4), SWR_VTX_NUM_SLOTS) );
+
+        return StructType::get(ctx, members, false);
+    }
+
+    static const uint32_t simd16vertex_attrib = 0;
 
     INLINE static StructType *Gen_SWR_VS_CONTEXT(JitManager* pJitMgr)
     {
@@ -97,7 +109,7 @@ namespace SwrJit
         LLVMContext& ctx = pJitMgr->mContext;
         std::vector<Type*> members;
         
-        /* attrib */ members.push_back( ArrayType::get(Gen_ScalarAttrib(pJitMgr), KNOB_NUM_ATTRIBUTES) );
+        /* attrib */ members.push_back( ArrayType::get(Gen_ScalarAttrib(pJitMgr), SWR_VTX_NUM_SLOTS) );
 
         return StructType::get(ctx, members, false);
     }
@@ -225,74 +237,78 @@ namespace SwrJit
         LLVMContext& ctx = pJitMgr->mContext;
         std::vector<Type*> members;
         
-        /* vX                    */ members.push_back( Gen_PixelPositions(pJitMgr) );
-        /* vY                    */ members.push_back( Gen_PixelPositions(pJitMgr) );
-        /* vZ                    */ members.push_back( VectorType::get(Type::getFloatTy(ctx), pJitMgr->mVWidth) );
-        /* activeMask            */ members.push_back( VectorType::get(Type::getInt32Ty(ctx), pJitMgr->mVWidth) );
-        /* inputMask             */ members.push_back( VectorType::get(Type::getFloatTy(ctx), pJitMgr->mVWidth) );
-        /* oMask                 */ members.push_back( VectorType::get(Type::getInt32Ty(ctx), pJitMgr->mVWidth) );
-        /* vI                    */ members.push_back( Gen_PixelPositions(pJitMgr) );
-        /* vJ                    */ members.push_back( Gen_PixelPositions(pJitMgr) );
-        /* vOneOverW             */ members.push_back( Gen_PixelPositions(pJitMgr) );
-        /* pAttribs              */ members.push_back( PointerType::get(Type::getFloatTy(ctx), 0) );
-        /* pPerspAttribs         */ members.push_back( PointerType::get(Type::getFloatTy(ctx), 0) );
-        /* pRecipW               */ members.push_back( PointerType::get(Type::getFloatTy(ctx), 0) );
-        /* I                     */ members.push_back( PointerType::get(Type::getFloatTy(ctx), 0) );
-        /* J                     */ members.push_back( PointerType::get(Type::getFloatTy(ctx), 0) );
-        /* recipDet              */ members.push_back( Type::getFloatTy(ctx) );
-        /* pSamplePosX           */ members.push_back( PointerType::get(Type::getFloatTy(ctx), 0) );
-        /* pSamplePosY           */ members.push_back( PointerType::get(Type::getFloatTy(ctx), 0) );
-        /* shaded                */ members.push_back( ArrayType::get(ArrayType::get(VectorType::get(Type::getFloatTy(ctx), pJitMgr->mVWidth), 4), SWR_NUM_RENDERTARGETS) );
-        /* frontFace             */ members.push_back( Type::getInt32Ty(ctx) );
-        /* primID                */ members.push_back( Type::getInt32Ty(ctx) );
-        /* sampleIndex           */ members.push_back( Type::getInt32Ty(ctx) );
-        /* rasterizerSampleCount */ members.push_back( Type::getInt32Ty(ctx) );
-        /* pColorBuffer          */ members.push_back( ArrayType::get(PointerType::get(Type::getInt8Ty(ctx), 0), SWR_NUM_RENDERTARGETS) );
+        /* vX                     */ members.push_back( Gen_PixelPositions(pJitMgr) );
+        /* vY                     */ members.push_back( Gen_PixelPositions(pJitMgr) );
+        /* vZ                     */ members.push_back( VectorType::get(Type::getFloatTy(ctx), pJitMgr->mVWidth) );
+        /* activeMask             */ members.push_back( VectorType::get(Type::getInt32Ty(ctx), pJitMgr->mVWidth) );
+        /* inputMask              */ members.push_back( VectorType::get(Type::getFloatTy(ctx), pJitMgr->mVWidth) );
+        /* oMask                  */ members.push_back( VectorType::get(Type::getInt32Ty(ctx), pJitMgr->mVWidth) );
+        /* vI                     */ members.push_back( Gen_PixelPositions(pJitMgr) );
+        /* vJ                     */ members.push_back( Gen_PixelPositions(pJitMgr) );
+        /* vOneOverW              */ members.push_back( Gen_PixelPositions(pJitMgr) );
+        /* pAttribs               */ members.push_back( PointerType::get(Type::getFloatTy(ctx), 0) );
+        /* pPerspAttribs          */ members.push_back( PointerType::get(Type::getFloatTy(ctx), 0) );
+        /* pRecipW                */ members.push_back( PointerType::get(Type::getFloatTy(ctx), 0) );
+        /* I                      */ members.push_back( PointerType::get(Type::getFloatTy(ctx), 0) );
+        /* J                      */ members.push_back( PointerType::get(Type::getFloatTy(ctx), 0) );
+        /* recipDet               */ members.push_back( Type::getFloatTy(ctx) );
+        /* pSamplePosX            */ members.push_back( PointerType::get(Type::getFloatTy(ctx), 0) );
+        /* pSamplePosY            */ members.push_back( PointerType::get(Type::getFloatTy(ctx), 0) );
+        /* shaded                 */ members.push_back( ArrayType::get(ArrayType::get(VectorType::get(Type::getFloatTy(ctx), 8), 4), SWR_NUM_RENDERTARGETS) );
+        /* frontFace              */ members.push_back( Type::getInt32Ty(ctx) );
+        /* sampleIndex            */ members.push_back( Type::getInt32Ty(ctx) );
+        /* renderTargetArrayIndex */ members.push_back( Type::getInt32Ty(ctx) );
+        /* rasterizerSampleCount  */ members.push_back( Type::getInt32Ty(ctx) );
+        /* pColorBuffer           */ members.push_back( ArrayType::get(PointerType::get(Type::getInt8Ty(ctx), 0), SWR_NUM_RENDERTARGETS) );
 
         return StructType::get(ctx, members, false);
     }
 
-    static const uint32_t SWR_PS_CONTEXT_vX                    = 0;
-    static const uint32_t SWR_PS_CONTEXT_vY                    = 1;
-    static const uint32_t SWR_PS_CONTEXT_vZ                    = 2;
-    static const uint32_t SWR_PS_CONTEXT_activeMask            = 3;
-    static const uint32_t SWR_PS_CONTEXT_inputMask             = 4;
-    static const uint32_t SWR_PS_CONTEXT_oMask                 = 5;
-    static const uint32_t SWR_PS_CONTEXT_vI                    = 6;
-    static const uint32_t SWR_PS_CONTEXT_vJ                    = 7;
-    static const uint32_t SWR_PS_CONTEXT_vOneOverW             = 8;
-    static const uint32_t SWR_PS_CONTEXT_pAttribs              = 9;
-    static const uint32_t SWR_PS_CONTEXT_pPerspAttribs         = 10;
-    static const uint32_t SWR_PS_CONTEXT_pRecipW               = 11;
-    static const uint32_t SWR_PS_CONTEXT_I                     = 12;
-    static const uint32_t SWR_PS_CONTEXT_J                     = 13;
-    static const uint32_t SWR_PS_CONTEXT_recipDet              = 14;
-    static const uint32_t SWR_PS_CONTEXT_pSamplePosX           = 15;
-    static const uint32_t SWR_PS_CONTEXT_pSamplePosY           = 16;
-    static const uint32_t SWR_PS_CONTEXT_shaded                = 17;
-    static const uint32_t SWR_PS_CONTEXT_frontFace             = 18;
-    static const uint32_t SWR_PS_CONTEXT_primID                = 19;
-    static const uint32_t SWR_PS_CONTEXT_sampleIndex           = 20;
-    static const uint32_t SWR_PS_CONTEXT_rasterizerSampleCount = 21;
-    static const uint32_t SWR_PS_CONTEXT_pColorBuffer          = 22;
+    static const uint32_t SWR_PS_CONTEXT_vX                     = 0;
+    static const uint32_t SWR_PS_CONTEXT_vY                     = 1;
+    static const uint32_t SWR_PS_CONTEXT_vZ                     = 2;
+    static const uint32_t SWR_PS_CONTEXT_activeMask             = 3;
+    static const uint32_t SWR_PS_CONTEXT_inputMask              = 4;
+    static const uint32_t SWR_PS_CONTEXT_oMask                  = 5;
+    static const uint32_t SWR_PS_CONTEXT_vI                     = 6;
+    static const uint32_t SWR_PS_CONTEXT_vJ                     = 7;
+    static const uint32_t SWR_PS_CONTEXT_vOneOverW              = 8;
+    static const uint32_t SWR_PS_CONTEXT_pAttribs               = 9;
+    static const uint32_t SWR_PS_CONTEXT_pPerspAttribs          = 10;
+    static const uint32_t SWR_PS_CONTEXT_pRecipW                = 11;
+    static const uint32_t SWR_PS_CONTEXT_I                      = 12;
+    static const uint32_t SWR_PS_CONTEXT_J                      = 13;
+    static const uint32_t SWR_PS_CONTEXT_recipDet               = 14;
+    static const uint32_t SWR_PS_CONTEXT_pSamplePosX            = 15;
+    static const uint32_t SWR_PS_CONTEXT_pSamplePosY            = 16;
+    static const uint32_t SWR_PS_CONTEXT_shaded                 = 17;
+    static const uint32_t SWR_PS_CONTEXT_frontFace              = 18;
+    static const uint32_t SWR_PS_CONTEXT_sampleIndex            = 19;
+    static const uint32_t SWR_PS_CONTEXT_renderTargetArrayIndex = 20;
+    static const uint32_t SWR_PS_CONTEXT_rasterizerSampleCount  = 21;
+    static const uint32_t SWR_PS_CONTEXT_pColorBuffer           = 22;
 
     INLINE static StructType *Gen_SWR_CS_CONTEXT(JitManager* pJitMgr)
     {
         LLVMContext& ctx = pJitMgr->mContext;
         std::vector<Type*> members;
         
-        /* tileCounter      */ members.push_back( Type::getInt32Ty(ctx) );
-        /* dispatchDims     */ members.push_back( ArrayType::get(Type::getInt32Ty(ctx), 3) );
-        /* pTGSM            */ members.push_back( PointerType::get(Type::getInt8Ty(ctx), 0) );
-        /* pSpillFillBuffer */ members.push_back( PointerType::get(Type::getInt8Ty(ctx), 0) );
+        /* tileCounter         */ members.push_back( Type::getInt32Ty(ctx) );
+        /* dispatchDims        */ members.push_back( ArrayType::get(Type::getInt32Ty(ctx), 3) );
+        /* pTGSM               */ members.push_back( PointerType::get(Type::getInt8Ty(ctx), 0) );
+        /* pSpillFillBuffer    */ members.push_back( PointerType::get(Type::getInt8Ty(ctx), 0) );
+        /* pScratchSpace       */ members.push_back( PointerType::get(Type::getInt8Ty(ctx), 0) );
+        /* scratchSpacePerSimd */ members.push_back( Type::getInt32Ty(ctx) );
 
         return StructType::get(ctx, members, false);
     }
 
-    static const uint32_t SWR_CS_CONTEXT_tileCounter      = 0;
-    static const uint32_t SWR_CS_CONTEXT_dispatchDims     = 1;
-    static const uint32_t SWR_CS_CONTEXT_pTGSM            = 2;
-    static const uint32_t SWR_CS_CONTEXT_pSpillFillBuffer = 3;
+    static const uint32_t SWR_CS_CONTEXT_tileCounter         = 0;
+    static const uint32_t SWR_CS_CONTEXT_dispatchDims        = 1;
+    static const uint32_t SWR_CS_CONTEXT_pTGSM               = 2;
+    static const uint32_t SWR_CS_CONTEXT_pSpillFillBuffer    = 3;
+    static const uint32_t SWR_CS_CONTEXT_pScratchSpace       = 4;
+    static const uint32_t SWR_CS_CONTEXT_scratchSpacePerSimd = 5;
 
     INLINE static StructType *Gen_SWR_SURFACE_STATE(JitManager* pJitMgr)
     {
@@ -457,6 +473,7 @@ namespace SwrJit
         /* streamToRasterizer */ members.push_back( Type::getInt32Ty(ctx) );
         /* streamMasks        */ members.push_back( ArrayType::get(Type::getInt32Ty(ctx), MAX_SO_STREAMS) );
         /* streamNumEntries   */ members.push_back( ArrayType::get(Type::getInt32Ty(ctx), MAX_SO_STREAMS) );
+        /* vertexAttribOffset */ members.push_back( ArrayType::get(Type::getInt32Ty(ctx), MAX_SO_STREAMS) );
 
         return StructType::get(ctx, members, false);
     }
@@ -467,6 +484,7 @@ namespace SwrJit
     static const uint32_t SWR_STREAMOUT_STATE_streamToRasterizer = 3;
     static const uint32_t SWR_STREAMOUT_STATE_streamMasks        = 4;
     static const uint32_t SWR_STREAMOUT_STATE_streamNumEntries   = 5;
+    static const uint32_t SWR_STREAMOUT_STATE_vertexAttribOffset = 6;
 
     INLINE static StructType *Gen_SWR_STREAMOUT_CONTEXT(JitManager* pJitMgr)
     {
@@ -491,30 +509,26 @@ namespace SwrJit
         LLVMContext& ctx = pJitMgr->mContext;
         std::vector<Type*> members;
         
-        /* gsEnable                    */ members.push_back( Type::getInt8Ty(ctx) );
-        /* numInputAttribs             */ members.push_back( Type::getInt32Ty(ctx) );
-        /* outputTopology              */ members.push_back( Type::getInt32Ty(ctx) );
-        /* maxNumVerts                 */ members.push_back( Type::getInt32Ty(ctx) );
-        /* instanceCount               */ members.push_back( Type::getInt32Ty(ctx) );
-        /* emitsRenderTargetArrayIndex */ members.push_back( Type::getInt8Ty(ctx) );
-        /* emitsPrimitiveID            */ members.push_back( Type::getInt8Ty(ctx) );
-        /* emitsViewportArrayIndex     */ members.push_back( Type::getInt8Ty(ctx) );
-        /* isSingleStream              */ members.push_back( Type::getInt8Ty(ctx) );
-        /* singleStreamID              */ members.push_back( Type::getInt32Ty(ctx) );
+        /* gsEnable           */ members.push_back( Type::getInt8Ty(ctx) );
+        /* numInputAttribs    */ members.push_back( Type::getInt32Ty(ctx) );
+        /* outputTopology     */ members.push_back( Type::getInt32Ty(ctx) );
+        /* maxNumVerts        */ members.push_back( Type::getInt32Ty(ctx) );
+        /* instanceCount      */ members.push_back( Type::getInt32Ty(ctx) );
+        /* isSingleStream     */ members.push_back( Type::getInt8Ty(ctx) );
+        /* singleStreamID     */ members.push_back( Type::getInt32Ty(ctx) );
+        /* vertexAttribOffset */ members.push_back( Type::getInt32Ty(ctx) );
 
         return StructType::get(ctx, members, false);
     }
 
-    static const uint32_t SWR_GS_STATE_gsEnable                    = 0;
-    static const uint32_t SWR_GS_STATE_numInputAttribs             = 1;
-    static const uint32_t SWR_GS_STATE_outputTopology              = 2;
-    static const uint32_t SWR_GS_STATE_maxNumVerts                 = 3;
-    static const uint32_t SWR_GS_STATE_instanceCount               = 4;
-    static const uint32_t SWR_GS_STATE_emitsRenderTargetArrayIndex = 5;
-    static const uint32_t SWR_GS_STATE_emitsPrimitiveID            = 6;
-    static const uint32_t SWR_GS_STATE_emitsViewportArrayIndex     = 7;
-    static const uint32_t SWR_GS_STATE_isSingleStream              = 8;
-    static const uint32_t SWR_GS_STATE_singleStreamID              = 9;
+    static const uint32_t SWR_GS_STATE_gsEnable           = 0;
+    static const uint32_t SWR_GS_STATE_numInputAttribs    = 1;
+    static const uint32_t SWR_GS_STATE_outputTopology     = 2;
+    static const uint32_t SWR_GS_STATE_maxNumVerts        = 3;
+    static const uint32_t SWR_GS_STATE_instanceCount      = 4;
+    static const uint32_t SWR_GS_STATE_isSingleStream     = 5;
+    static const uint32_t SWR_GS_STATE_singleStreamID     = 6;
+    static const uint32_t SWR_GS_STATE_vertexAttribOffset = 7;
 
     INLINE static StructType *Gen_SWR_TS_STATE(JitManager* pJitMgr)
     {
@@ -529,6 +543,7 @@ namespace SwrJit
         /* numHsInputAttribs  */ members.push_back( Type::getInt32Ty(ctx) );
         /* numHsOutputAttribs */ members.push_back( Type::getInt32Ty(ctx) );
         /* numDsOutputAttribs */ members.push_back( Type::getInt32Ty(ctx) );
+        /* vertexAttribOffset */ members.push_back( Type::getInt32Ty(ctx) );
 
         return StructType::get(ctx, members, false);
     }
@@ -541,6 +556,7 @@ namespace SwrJit
     static const uint32_t SWR_TS_STATE_numHsInputAttribs  = 5;
     static const uint32_t SWR_TS_STATE_numHsOutputAttribs = 6;
     static const uint32_t SWR_TS_STATE_numDsOutputAttribs = 7;
+    static const uint32_t SWR_TS_STATE_vertexAttribOffset = 8;
 
     INLINE static StructType *Gen_SWR_RENDER_TARGET_BLEND_STATE(JitManager* pJitMgr)
     {
@@ -777,22 +793,28 @@ namespace SwrJit
         LLVMContext& ctx = pJitMgr->mContext;
         std::vector<Type*> members;
         
-        /* constantInterpolationMask */ members.push_back( Type::getInt32Ty(ctx) );
-        /* pointSpriteTexCoordMask   */ members.push_back( Type::getInt32Ty(ctx) );
-        /* numAttributes             */ members.push_back( Type::getInt8Ty(ctx) );
-        /* numComponents             */ members.push_back( ArrayType::get(Type::getInt8Ty(ctx), 32) );
-        /* swizzleEnable             */ members.push_back( Type::getInt8Ty(ctx) );
-        /* swizzleMap                */ members.push_back( ArrayType::get(Gen_SWR_ATTRIB_SWIZZLE(pJitMgr), 32) );
+        /* constantInterpolationMask  */ members.push_back( Type::getInt32Ty(ctx) );
+        /* pointSpriteTexCoordMask    */ members.push_back( Type::getInt32Ty(ctx) );
+        /* numAttributes              */ members.push_back( Type::getInt8Ty(ctx) );
+        /* numComponents              */ members.push_back( ArrayType::get(Type::getInt8Ty(ctx), 32) );
+        /* swizzleEnable              */ members.push_back( Type::getInt8Ty(ctx) );
+        /* swizzleMap                 */ members.push_back( ArrayType::get(Gen_SWR_ATTRIB_SWIZZLE(pJitMgr), 32) );
+        /* readRenderTargetArrayIndex */ members.push_back( Type::getInt8Ty(ctx) );
+        /* readViewportArrayIndex     */ members.push_back( Type::getInt8Ty(ctx) );
+        /* vertexAttribOffset         */ members.push_back( Type::getInt32Ty(ctx) );
 
         return StructType::get(ctx, members, false);
     }
 
-    static const uint32_t SWR_BACKEND_STATE_constantInterpolationMask = 0;
-    static const uint32_t SWR_BACKEND_STATE_pointSpriteTexCoordMask   = 1;
-    static const uint32_t SWR_BACKEND_STATE_numAttributes             = 2;
-    static const uint32_t SWR_BACKEND_STATE_numComponents             = 3;
-    static const uint32_t SWR_BACKEND_STATE_swizzleEnable             = 4;
-    static const uint32_t SWR_BACKEND_STATE_swizzleMap                = 5;
+    static const uint32_t SWR_BACKEND_STATE_constantInterpolationMask  = 0;
+    static const uint32_t SWR_BACKEND_STATE_pointSpriteTexCoordMask    = 1;
+    static const uint32_t SWR_BACKEND_STATE_numAttributes              = 2;
+    static const uint32_t SWR_BACKEND_STATE_numComponents              = 3;
+    static const uint32_t SWR_BACKEND_STATE_swizzleEnable              = 4;
+    static const uint32_t SWR_BACKEND_STATE_swizzleMap                 = 5;
+    static const uint32_t SWR_BACKEND_STATE_readRenderTargetArrayIndex = 6;
+    static const uint32_t SWR_BACKEND_STATE_readViewportArrayIndex     = 7;
+    static const uint32_t SWR_BACKEND_STATE_vertexAttribOffset         = 8;
 
     INLINE static StructType *Gen_SWR_PS_STATE(JitManager* pJitMgr)
     {
@@ -805,11 +827,11 @@ namespace SwrJit
         /* writesODepth     */ members.push_back( Type::getInt32Ty(ctx) );
         /* usesSourceDepth  */ members.push_back( Type::getInt32Ty(ctx) );
         /* shadingRate      */ members.push_back( Type::getInt32Ty(ctx) );
-        /* numRenderTargets */ members.push_back( Type::getInt32Ty(ctx) );
         /* posOffset        */ members.push_back( Type::getInt32Ty(ctx) );
         /* barycentricsMask */ members.push_back( Type::getInt32Ty(ctx) );
         /* usesUAV          */ members.push_back( Type::getInt32Ty(ctx) );
         /* forceEarlyZ      */ members.push_back( Type::getInt32Ty(ctx) );
+        /* renderTargetMask */ members.push_back( Type::getInt8Ty(ctx) );
 
         return StructType::get(ctx, members, false);
     }
@@ -820,11 +842,11 @@ namespace SwrJit
     static const uint32_t SWR_PS_STATE_writesODepth     = 3;
     static const uint32_t SWR_PS_STATE_usesSourceDepth  = 4;
     static const uint32_t SWR_PS_STATE_shadingRate      = 5;
-    static const uint32_t SWR_PS_STATE_numRenderTargets = 6;
-    static const uint32_t SWR_PS_STATE_posOffset        = 7;
-    static const uint32_t SWR_PS_STATE_barycentricsMask = 8;
-    static const uint32_t SWR_PS_STATE_usesUAV          = 9;
-    static const uint32_t SWR_PS_STATE_forceEarlyZ      = 10;
+    static const uint32_t SWR_PS_STATE_posOffset        = 6;
+    static const uint32_t SWR_PS_STATE_barycentricsMask = 7;
+    static const uint32_t SWR_PS_STATE_usesUAV          = 8;
+    static const uint32_t SWR_PS_STATE_forceEarlyZ      = 9;
+    static const uint32_t SWR_PS_STATE_renderTargetMask = 10;
 
     INLINE static StructType *Gen_SWR_DEPTH_BOUNDS_STATE(JitManager* pJitMgr)
     {

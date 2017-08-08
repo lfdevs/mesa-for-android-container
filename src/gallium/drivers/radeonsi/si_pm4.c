@@ -45,8 +45,7 @@ void si_pm4_cmd_end(struct si_pm4_state *state, bool predicate)
 	unsigned count;
 	count = state->ndw - state->last_pm4 - 2;
 	state->pm4[state->last_pm4] =
-		PKT3(state->last_opcode, count, predicate)
-		   | PKT3_SHADER_TYPE_S(state->compute_pkt);
+		PKT3(state->last_opcode, count, predicate);
 
 	assert(state->ndw <= SI_PM4_MAX_DW);
 }
@@ -110,12 +109,6 @@ void si_pm4_clear_state(struct si_pm4_state *state)
 	state->ndw = 0;
 }
 
-void si_pm4_free_state_simple(struct si_pm4_state *state)
-{
-	si_pm4_clear_state(state);
-	FREE(state);
-}
-
 void si_pm4_free_state(struct si_context *sctx,
 		       struct si_pm4_state *state,
 		       unsigned idx)
@@ -127,7 +120,8 @@ void si_pm4_free_state(struct si_context *sctx,
 		sctx->emitted.array[idx] = NULL;
 	}
 
-	si_pm4_free_state_simple(state);
+	si_pm4_clear_state(state);
+	FREE(state);
 }
 
 void si_pm4_emit(struct si_context *sctx, struct si_pm4_state *state)

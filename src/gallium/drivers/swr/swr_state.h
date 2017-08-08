@@ -376,4 +376,24 @@ swr_convert_prim_topology(const unsigned mode)
       return TOP_UNKNOWN;
    }
 };
+
+/*
+ * convert mesa PIPE_POLYGON_MODE_X to SWR enum SWR_FILLMODE
+ */
+static INLINE enum SWR_FILLMODE
+swr_convert_fill_mode(const unsigned mode)
+{
+   switch(mode) {
+   case PIPE_POLYGON_MODE_FILL:
+      return SWR_FILLMODE_SOLID;
+   case PIPE_POLYGON_MODE_LINE:
+      return SWR_FILLMODE_WIREFRAME;
+   case PIPE_POLYGON_MODE_POINT:
+      return SWR_FILLMODE_POINT;
+   default:
+      assert(0 && "Unknown fillmode");
+      return SWR_FILLMODE_SOLID; // at least do something sensible
+   }
+}
+
 #endif

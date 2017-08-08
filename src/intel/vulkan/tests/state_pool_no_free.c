@@ -58,12 +58,10 @@ static void run_test()
    struct anv_device device = {
       .instance = &instance,
    };
-   struct anv_block_pool block_pool;
    struct anv_state_pool state_pool;
 
    pthread_mutex_init(&device.mutex, NULL);
-   anv_block_pool_init(&block_pool, &device, 64);
-   anv_state_pool_init(&state_pool, &block_pool);
+   anv_state_pool_init(&state_pool, &device, 64);
 
    pthread_barrier_init(&barrier, NULL, NUM_THREADS);
 
@@ -109,7 +107,6 @@ static void run_test()
    }
 
    anv_state_pool_finish(&state_pool);
-   anv_block_pool_finish(&block_pool);
    pthread_mutex_destroy(&device.mutex);
 }
 

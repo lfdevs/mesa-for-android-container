@@ -25,7 +25,9 @@
 #define __VC4_DRM_PUBLIC_H__
 
 struct pipe_screen;
+struct renderonly;
 
 struct pipe_screen *vc4_drm_screen_create(int drmFD);
+struct pipe_screen *vc4_drm_screen_create_renderonly(struct renderonly *ro);
 
 #endif /* __VC4_DRM_PUBLIC_H__ */

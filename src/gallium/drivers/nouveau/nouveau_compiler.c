@@ -109,7 +109,7 @@ nouveau_codegen(int chipset, int type, struct tgsi_token tokens[],
 
    info.type = type;
    info.target = chipset;
-   info.bin.sourceRep = NV50_PROGRAM_IR_TGSI;
+   info.bin.sourceRep = PIPE_SHADER_IR_TGSI;
    info.bin.source = tokens;
 
    info.io.auxCBSlot = 15;

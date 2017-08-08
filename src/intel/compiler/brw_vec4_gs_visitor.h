@@ -50,10 +50,8 @@ public:
                    int shader_time_index);
 
    virtual void nir_setup_inputs();
-   virtual void nir_setup_system_value_intrinsic(nir_intrinsic_instr *instr);
 
 protected:
-   virtual dst_reg *make_reg_for_system_value(int location);
    virtual void setup_payload();
    virtual void emit_prolog();
    virtual void emit_thread_end();
@@ -64,8 +62,7 @@ protected:
    virtual void nir_emit_intrinsic(nir_intrinsic_instr *instr);
 
 protected:
-   int setup_varying_inputs(int payload_reg, int *attribute_map,
-                            int attributes_per_reg);
+   int setup_varying_inputs(int payload_reg, int attributes_per_reg);
    void emit_control_data_bits();
    void set_stream_control_data_bits(unsigned stream_id);
 

@@ -885,6 +885,8 @@ etna_amode(struct tgsi_ind_register indirect)
    default:
       assert(!"Invalid swizzle");
    }
+
+   unreachable("bad swizzle");
 }
 
 /* convert destination operand */
@@ -1389,12 +1391,27 @@ trans_lit(const struct instr_translater *t, struct etna_compile *c,
    else
       src_w = swizzle(src[0], SWIZZLE(W, W, W, W));
 
-   struct etna_inst ins[3] = { };
-   ins[0].opcode = INST_OPCODE_LOG;
-   ins[0].dst = etna_native_to_dst(inner_temp, INST_COMPS_X);
-   ins[0].src[2] = src_y;
+   if (c->specs->has_new_transcendentals) { /* Alternative LOG sequence */
+      emit_inst(c, &(struct etna_inst) {
+         .opcode = INST_OPCODE_LOG,
+         .dst = etna_native_to_dst(inner_temp, INST_COMPS_X | INST_COMPS_Y),
+         .src[2] = src_y,
+         .tex = { .amode=1 }, /* Unknown bit needs to be set */
+      });
+      emit_inst(c, &(struct etna_inst) {
+         .opcode = INST_OPCODE_MUL,
+         .dst = etna_native_to_dst(inner_temp, INST_COMPS_X),
+         .src[0] = etna_native_to_src(inner_temp, SWIZZLE(X, X, X, X)),
+         .src[1] = etna_native_to_src(inner_temp, SWIZZLE(Y, Y, Y, Y)),
+      });
+   } else {
+      struct etna_inst ins[3] = { };
+      ins[0].opcode = INST_OPCODE_LOG;
+      ins[0].dst = etna_native_to_dst(inner_temp, INST_COMPS_X);
+      ins[0].src[2] = src_y;
 
-   emit_inst(c, &ins[0]);
+      emit_inst(c, &ins[0]);
+   }
    emit_inst(c, &(struct etna_inst) {
       .opcode = INST_OPCODE_MUL,
       .sat = 0,
@@ -1450,7 +1467,7 @@ static void
 trans_trig(const struct instr_translater *t, struct etna_compile *c,
            const struct tgsi_full_instruction *inst, struct etna_inst_src *src)
 {
-   if (c->specs->has_new_sin_cos) { /* Alternative SIN/COS */
+   if (c->specs->has_new_transcendentals) { /* Alternative SIN/COS */
       /* On newer chips alternative SIN/COS instructions are implemented,
        * which:
        * - Need their input scaled by 1/pi instead of 2/pi
@@ -1613,6 +1630,40 @@ trans_trig(const struct instr_translater *t, struct etna_compile *c,
 }
 
 static void
+trans_lg2(const struct instr_translater *t, struct etna_compile *c,
+            const struct tgsi_full_instruction *inst, struct etna_inst_src *src)
+{
+   if (c->specs->has_new_transcendentals) {
+      /* On newer chips alternative LOG instruction is implemented,
+       * which outputs an x and y component, which need to be multiplied to
+       * get the result.
+       */
+      struct etna_native_reg temp = etna_compile_get_inner_temp(c); /* only using .xy */
+      emit_inst(c, &(struct etna_inst) {
+         .opcode = INST_OPCODE_LOG,
+         .sat = 0,
+         .dst = etna_native_to_dst(temp, INST_COMPS_X | INST_COMPS_Y),
+         .src[2] = src[0],
+         .tex = { .amode=1 }, /* Unknown bit needs to be set */
+      });
+      emit_inst(c, &(struct etna_inst) {
+         .opcode = INST_OPCODE_MUL,
+         .sat = inst->Instruction.Saturate,
+         .dst = convert_dst(c, &inst->Dst[0]),
+         .src[0] = etna_native_to_src(temp, SWIZZLE(X, X, X, X)),
+         .src[1] = etna_native_to_src(temp, SWIZZLE(Y, Y, Y, Y)),
+      });
+   } else {
+      emit_inst(c, &(struct etna_inst) {
+         .opcode = INST_OPCODE_LOG,
+         .sat = inst->Instruction.Saturate,
+         .dst = convert_dst(c, &inst->Dst[0]),
+         .src[2] = src[0],
+      });
+   }
+}
+
+static void
 trans_dph(const struct instr_translater *t, struct etna_compile *c,
           const struct tgsi_full_instruction *inst, struct etna_inst_src *src)
 {
@@ -1753,7 +1804,7 @@ static const struct instr_translater translaters[TGSI_OPCODE_LAST] = {
    INSTR(DST, trans_instr, .opc = INST_OPCODE_DST, .src = {0, 1, -1}),
    INSTR(MAD, trans_instr, .opc = INST_OPCODE_MAD, .src = {0, 1, 2}),
    INSTR(EX2, trans_instr, .opc = INST_OPCODE_EXP, .src = {2, -1, -1}),
-   INSTR(LG2, trans_instr, .opc = INST_OPCODE_LOG, .src = {2, -1, -1}),
+   INSTR(LG2, trans_lg2),
    INSTR(SQRT, trans_instr, .opc = INST_OPCODE_SQRT, .src = {2, -1, -1}),
    INSTR(FRC, trans_instr, .opc = INST_OPCODE_FRC, .src = {2, -1, -1}),
    INSTR(CEIL, trans_instr, .opc = INST_OPCODE_CEIL, .src = {2, -1, -1}),
@@ -2302,7 +2353,7 @@ etna_compile_shader(struct etna_shader_variant *v)
    if (!c)
       return false;
 
-   memset(&c->lbl_usage, -1, ARRAY_SIZE(c->lbl_usage));
+   memset(&c->lbl_usage, -1, sizeof(c->lbl_usage));
 
    const struct tgsi_token *tokens = v->shader->tokens;
 

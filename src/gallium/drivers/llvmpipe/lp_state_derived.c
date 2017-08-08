@@ -194,6 +194,7 @@ void llvmpipe_update_derived( struct llvmpipe_context *llvmpipe )
    /* This needs LP_NEW_RASTERIZER because of draw_prepare_shader_outputs(). */
    if (llvmpipe->dirty & (LP_NEW_RASTERIZER |
                           LP_NEW_FS |
+                          LP_NEW_GS |
                           LP_NEW_VS))
       compute_vertex_info(llvmpipe);
 

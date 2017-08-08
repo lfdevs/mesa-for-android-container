@@ -30,161 +30,291 @@
 #include <assert.h>
 #include <string.h>
 
+#include "eglcurrent.h"
 #include "eglimage.h"
 #include "egllog.h"
 
+static EGLint
+_eglParseKHRImageAttribs(_EGLImageAttribs *attrs, _EGLDisplay *dpy,
+                         EGLint attr, EGLint val)
+{
+   switch (attr) {
+   case EGL_IMAGE_PRESERVED_KHR:
+      if (!dpy->Extensions.KHR_image_base)
+          return EGL_BAD_PARAMETER;
+
+      attrs->ImagePreserved = val;
+      break;
+
+   case EGL_GL_TEXTURE_LEVEL_KHR:
+      if (!dpy->Extensions.KHR_gl_texture_2D_image)
+         return EGL_BAD_PARAMETER;
+
+      attrs->GLTextureLevel = val;
+      break;
+   case EGL_GL_TEXTURE_ZOFFSET_KHR:
+      if (!dpy->Extensions.KHR_gl_texture_3D_image)
+         return EGL_BAD_PARAMETER;
+
+      attrs->GLTextureZOffset = val;
+      break;
+   default:
+      return EGL_BAD_PARAMETER;
+   }
+
+   return EGL_SUCCESS;
+}
+
+static EGLint
+_eglParseMESADrmImageAttribs(_EGLImageAttribs *attrs, _EGLDisplay *dpy,
+                             EGLint attr, EGLint val)
+{
+   if (!dpy->Extensions.MESA_drm_image)
+      return EGL_BAD_PARAMETER;
+
+   switch (attr) {
+   case EGL_WIDTH:
+      attrs->Width = val;
+      break;
+   case EGL_HEIGHT:
+      attrs->Height = val;
+      break;
+   case EGL_DRM_BUFFER_FORMAT_MESA:
+      attrs->DRMBufferFormatMESA = val;
+      break;
+   case EGL_DRM_BUFFER_USE_MESA:
+      attrs->DRMBufferUseMESA = val;
+      break;
+   case EGL_DRM_BUFFER_STRIDE_MESA:
+      attrs->DRMBufferStrideMESA = val;
+      break;
+   default:
+      return EGL_BAD_PARAMETER;
+   }
+
+   return EGL_SUCCESS;
+}
+
+static EGLint
+_eglParseWLBindWaylandDisplayAttribs(_EGLImageAttribs *attrs, _EGLDisplay *dpy,
+                                     EGLint attr, EGLint val)
+{
+   if (!dpy->Extensions.WL_bind_wayland_display)
+      return EGL_BAD_PARAMETER;
+
+   switch (attr) {
+   case EGL_WAYLAND_PLANE_WL:
+      attrs->PlaneWL = val;
+      break;
+   default:
+      return EGL_BAD_PARAMETER;
+   }
+
+   return EGL_SUCCESS;
+}
+
+static EGLint
+_eglParseEXTImageDmaBufImportAttribs(_EGLImageAttribs *attrs, _EGLDisplay *dpy,
+                                     EGLint attr, EGLint val)
+{
+   if (!dpy->Extensions.EXT_image_dma_buf_import)
+      return EGL_BAD_PARAMETER;
+
+   switch (attr) {
+   case EGL_WIDTH:
+      attrs->Width = val;
+      break;
+   case EGL_HEIGHT:
+      attrs->Height = val;
+      break;
+   case EGL_LINUX_DRM_FOURCC_EXT:
+      attrs->DMABufFourCC.Value = val;
+      attrs->DMABufFourCC.IsPresent = EGL_TRUE;
+      break;
+   case EGL_DMA_BUF_PLANE0_FD_EXT:
+      attrs->DMABufPlaneFds[0].Value = val;
+      attrs->DMABufPlaneFds[0].IsPresent = EGL_TRUE;
+      break;
+   case EGL_DMA_BUF_PLANE0_OFFSET_EXT:
+      attrs->DMABufPlaneOffsets[0].Value = val;
+      attrs->DMABufPlaneOffsets[0].IsPresent = EGL_TRUE;
+      break;
+   case EGL_DMA_BUF_PLANE0_PITCH_EXT:
+      attrs->DMABufPlanePitches[0].Value = val;
+      attrs->DMABufPlanePitches[0].IsPresent = EGL_TRUE;
+      break;
+   case EGL_DMA_BUF_PLANE1_FD_EXT:
+       attrs->DMABufPlaneFds[1].Value = val;
+       attrs->DMABufPlaneFds[1].IsPresent = EGL_TRUE;
+       break;
+   case EGL_DMA_BUF_PLANE1_OFFSET_EXT:
+      attrs->DMABufPlaneOffsets[1].Value = val;
+      attrs->DMABufPlaneOffsets[1].IsPresent = EGL_TRUE;
+      break;
+   case EGL_DMA_BUF_PLANE1_PITCH_EXT:
+      attrs->DMABufPlanePitches[1].Value = val;
+      attrs->DMABufPlanePitches[1].IsPresent = EGL_TRUE;
+      break;
+   case EGL_DMA_BUF_PLANE2_FD_EXT:
+      attrs->DMABufPlaneFds[2].Value = val;
+      attrs->DMABufPlaneFds[2].IsPresent = EGL_TRUE;
+      break;
+   case EGL_DMA_BUF_PLANE2_OFFSET_EXT:
+      attrs->DMABufPlaneOffsets[2].Value = val;
+      attrs->DMABufPlaneOffsets[2].IsPresent = EGL_TRUE;
+      break;
+   case EGL_DMA_BUF_PLANE2_PITCH_EXT:
+      attrs->DMABufPlanePitches[2].Value = val;
+      attrs->DMABufPlanePitches[2].IsPresent = EGL_TRUE;
+      break;
+   case EGL_YUV_COLOR_SPACE_HINT_EXT:
+      if (val != EGL_ITU_REC601_EXT && val != EGL_ITU_REC709_EXT &&
+          val != EGL_ITU_REC2020_EXT)
+         return EGL_BAD_ATTRIBUTE;
+
+      attrs->DMABufYuvColorSpaceHint.Value = val;
+      attrs->DMABufYuvColorSpaceHint.IsPresent = EGL_TRUE;
+      break;
+   case EGL_SAMPLE_RANGE_HINT_EXT:
+      if (val != EGL_YUV_FULL_RANGE_EXT && val != EGL_YUV_NARROW_RANGE_EXT)
+         return EGL_BAD_ATTRIBUTE;
+
+      attrs->DMABufSampleRangeHint.Value = val;
+      attrs->DMABufSampleRangeHint.IsPresent = EGL_TRUE;
+      break;
+   case EGL_YUV_CHROMA_HORIZONTAL_SITING_HINT_EXT:
+      if (val != EGL_YUV_CHROMA_SITING_0_EXT &&
+          val != EGL_YUV_CHROMA_SITING_0_5_EXT)
+         return EGL_BAD_ATTRIBUTE;
+
+      attrs->DMABufChromaHorizontalSiting.Value = val;
+      attrs->DMABufChromaHorizontalSiting.IsPresent = EGL_TRUE;
+      break;
+   case EGL_YUV_CHROMA_VERTICAL_SITING_HINT_EXT:
+      if (val != EGL_YUV_CHROMA_SITING_0_EXT &&
+          val != EGL_YUV_CHROMA_SITING_0_5_EXT)
+         return EGL_BAD_ATTRIBUTE;
+
+      attrs->DMABufChromaVerticalSiting.Value = val;
+      attrs->DMABufChromaVerticalSiting.IsPresent = EGL_TRUE;
+      break;
+   default:
+      return EGL_BAD_PARAMETER;
+   }
+
+   return EGL_SUCCESS;
+}
+
+static EGLint
+_eglParseEXTImageDmaBufImportModifiersAttribs(_EGLImageAttribs *attrs,
+                                              _EGLDisplay *dpy,
+                                              EGLint attr, EGLint val)
+{
+   if (!dpy->Extensions.EXT_image_dma_buf_import_modifiers)
+      return EGL_BAD_PARAMETER;
+
+   switch (attr) {
+   case EGL_DMA_BUF_PLANE0_MODIFIER_LO_EXT:
+      attrs->DMABufPlaneModifiersLo[0].Value = val;
+      attrs->DMABufPlaneModifiersLo[0].IsPresent = EGL_TRUE;
+      break;
+   case EGL_DMA_BUF_PLANE0_MODIFIER_HI_EXT:
+      attrs->DMABufPlaneModifiersHi[0].Value = val;
+      attrs->DMABufPlaneModifiersHi[0].IsPresent = EGL_TRUE;
+      break;
+   case EGL_DMA_BUF_PLANE1_MODIFIER_LO_EXT:
+      attrs->DMABufPlaneModifiersLo[1].Value = val;
+      attrs->DMABufPlaneModifiersLo[1].IsPresent = EGL_TRUE;
+      break;
+   case EGL_DMA_BUF_PLANE1_MODIFIER_HI_EXT:
+      attrs->DMABufPlaneModifiersHi[1].Value = val;
+      attrs->DMABufPlaneModifiersHi[1].IsPresent = EGL_TRUE;
+      break;
+   case EGL_DMA_BUF_PLANE2_MODIFIER_LO_EXT:
+      attrs->DMABufPlaneModifiersLo[2].Value = val;
+      attrs->DMABufPlaneModifiersLo[2].IsPresent = EGL_TRUE;
+      break;
+   case EGL_DMA_BUF_PLANE2_MODIFIER_HI_EXT:
+      attrs->DMABufPlaneModifiersHi[2].Value = val;
+      attrs->DMABufPlaneModifiersHi[2].IsPresent = EGL_TRUE;
+      break;
+   case EGL_DMA_BUF_PLANE3_FD_EXT:
+      attrs->DMABufPlaneFds[3].Value = val;
+      attrs->DMABufPlaneFds[3].IsPresent = EGL_TRUE;
+      break;
+   case EGL_DMA_BUF_PLANE3_OFFSET_EXT:
+      attrs->DMABufPlaneOffsets[3].Value = val;
+      attrs->DMABufPlaneOffsets[3].IsPresent = EGL_TRUE;
+      break;
+   case EGL_DMA_BUF_PLANE3_PITCH_EXT:
+      attrs->DMABufPlanePitches[3].Value = val;
+      attrs->DMABufPlanePitches[3].IsPresent = EGL_TRUE;
+      break;
+   case EGL_DMA_BUF_PLANE3_MODIFIER_LO_EXT:
+      attrs->DMABufPlaneModifiersLo[3].Value = val;
+      attrs->DMABufPlaneModifiersLo[3].IsPresent = EGL_TRUE;
+      break;
+   case EGL_DMA_BUF_PLANE3_MODIFIER_HI_EXT:
+      attrs->DMABufPlaneModifiersHi[3].Value = val;
+      attrs->DMABufPlaneModifiersHi[3].IsPresent = EGL_TRUE;
+      break;
+   default:
+      return EGL_BAD_PARAMETER;
+   }
+
+   return EGL_SUCCESS;
+}
 
 /**
- * Parse the list of image attributes and return the proper error code.
+ * Parse the list of image attributes.
+ *
+ * Returns EGL_TRUE on success and EGL_FALSE otherwise.
+ * Function calls _eglError to set the correct error code.
  */
-EGLint
+EGLBoolean
 _eglParseImageAttribList(_EGLImageAttribs *attrs, _EGLDisplay *dpy,
                          const EGLint *attrib_list)
 {
-   EGLint i, err = EGL_SUCCESS;
-
-   (void) dpy;
+   EGLint i, err;
 
    memset(attrs, 0, sizeof(*attrs));
 
    if (!attrib_list)
-      return err;
+      return EGL_TRUE;
 
    for (i = 0; attrib_list[i] != EGL_NONE; i++) {
       EGLint attr = attrib_list[i++];
       EGLint val = attrib_list[i];
 
-      switch (attr) {
-      /* EGL_KHR_image_base */
-      case EGL_IMAGE_PRESERVED_KHR:
-         attrs->ImagePreserved = val;
-         break;
+      err = _eglParseKHRImageAttribs(attrs, dpy, attr, val);
+      if (err == EGL_SUCCESS)
+          continue;
 
-      /* EGL_KHR_gl_image */
-      case EGL_GL_TEXTURE_LEVEL_KHR:
-         attrs->GLTextureLevel = val;
-         break;
-      case EGL_GL_TEXTURE_ZOFFSET_KHR:
-         attrs->GLTextureZOffset = val;
-         break;
+      err = _eglParseMESADrmImageAttribs(attrs, dpy, attr, val);
+      if (err == EGL_SUCCESS)
+          continue;
 
-      /* EGL_MESA_drm_image */
-      case EGL_WIDTH:
-         attrs->Width = val;
-         break;
-      case EGL_HEIGHT:
-         attrs->Height = val;
-         break;
-      case EGL_DRM_BUFFER_FORMAT_MESA:
-         attrs->DRMBufferFormatMESA = val;
-         break;
-      case EGL_DRM_BUFFER_USE_MESA:
-         attrs->DRMBufferUseMESA = val;
-         break;
-      case EGL_DRM_BUFFER_STRIDE_MESA:
-         attrs->DRMBufferStrideMESA = val;
-         break;
+      err = _eglParseWLBindWaylandDisplayAttribs(attrs, dpy, attr, val);
+      if (err == EGL_SUCCESS)
+          continue;
 
-      /* EGL_WL_bind_wayland_display */
-      case EGL_WAYLAND_PLANE_WL:
-         attrs->PlaneWL = val;
-         break;
+      err = _eglParseEXTImageDmaBufImportAttribs(attrs, dpy, attr, val);
+      if (err == EGL_SUCCESS)
+          continue;
 
-      case EGL_LINUX_DRM_FOURCC_EXT:
-         attrs->DMABufFourCC.Value = val;
-         attrs->DMABufFourCC.IsPresent = EGL_TRUE;
-         break;
-      case EGL_DMA_BUF_PLANE0_FD_EXT:
-         attrs->DMABufPlaneFds[0].Value = val;
-         attrs->DMABufPlaneFds[0].IsPresent = EGL_TRUE;
-         break;
-      case EGL_DMA_BUF_PLANE0_OFFSET_EXT:
-         attrs->DMABufPlaneOffsets[0].Value = val;
-         attrs->DMABufPlaneOffsets[0].IsPresent = EGL_TRUE;
-         break;
-      case EGL_DMA_BUF_PLANE0_PITCH_EXT:
-         attrs->DMABufPlanePitches[0].Value = val;
-         attrs->DMABufPlanePitches[0].IsPresent = EGL_TRUE;
-         break;
-      case EGL_DMA_BUF_PLANE1_FD_EXT:
-         attrs->DMABufPlaneFds[1].Value = val;
-         attrs->DMABufPlaneFds[1].IsPresent = EGL_TRUE;
-         break;
-      case EGL_DMA_BUF_PLANE1_OFFSET_EXT:
-         attrs->DMABufPlaneOffsets[1].Value = val;
-         attrs->DMABufPlaneOffsets[1].IsPresent = EGL_TRUE;
-         break;
-      case EGL_DMA_BUF_PLANE1_PITCH_EXT:
-         attrs->DMABufPlanePitches[1].Value = val;
-         attrs->DMABufPlanePitches[1].IsPresent = EGL_TRUE;
-         break;
-      case EGL_DMA_BUF_PLANE2_FD_EXT:
-         attrs->DMABufPlaneFds[2].Value = val;
-         attrs->DMABufPlaneFds[2].IsPresent = EGL_TRUE;
-         break;
-      case EGL_DMA_BUF_PLANE2_OFFSET_EXT:
-         attrs->DMABufPlaneOffsets[2].Value = val;
-         attrs->DMABufPlaneOffsets[2].IsPresent = EGL_TRUE;
-         break;
-      case EGL_DMA_BUF_PLANE2_PITCH_EXT:
-         attrs->DMABufPlanePitches[2].Value = val;
-         attrs->DMABufPlanePitches[2].IsPresent = EGL_TRUE;
-         break;
-      case EGL_YUV_COLOR_SPACE_HINT_EXT:
-         if (val != EGL_ITU_REC601_EXT && val != EGL_ITU_REC709_EXT &&
-             val != EGL_ITU_REC2020_EXT) {
-            err = EGL_BAD_ATTRIBUTE;
-         } else {
-            attrs->DMABufYuvColorSpaceHint.Value = val;
-            attrs->DMABufYuvColorSpaceHint.IsPresent = EGL_TRUE;
-         }
-         break;
-      case EGL_SAMPLE_RANGE_HINT_EXT:
-         if (val != EGL_YUV_FULL_RANGE_EXT && val != EGL_YUV_NARROW_RANGE_EXT) {
-            err = EGL_BAD_ATTRIBUTE;
-         } else {
-            attrs->DMABufSampleRangeHint.Value = val;
-            attrs->DMABufSampleRangeHint.IsPresent = EGL_TRUE;
-         }
-         break;
-      case EGL_YUV_CHROMA_HORIZONTAL_SITING_HINT_EXT:
-         if (val != EGL_YUV_CHROMA_SITING_0_EXT &&
-             val != EGL_YUV_CHROMA_SITING_0_5_EXT) {
-            err = EGL_BAD_ATTRIBUTE;
-         } else {
-            attrs->DMABufChromaHorizontalSiting.Value = val;
-            attrs->DMABufChromaHorizontalSiting.IsPresent = EGL_TRUE;
-         }
-         break;
-      case EGL_YUV_CHROMA_VERTICAL_SITING_HINT_EXT:
-         if (val != EGL_YUV_CHROMA_SITING_0_EXT &&
-             val != EGL_YUV_CHROMA_SITING_0_5_EXT) {
-            err = EGL_BAD_ATTRIBUTE;
-         } else {
-            attrs->DMABufChromaVerticalSiting.Value = val;
-            attrs->DMABufChromaVerticalSiting.IsPresent = EGL_TRUE;
-         }
-         break;
+      /* EXT_image_dma_buf_import states that if invalid value is provided for
+       * its attributes, we should return EGL_BAD_ATTRIBUTE.
+       * Bail out ASAP, since follow-up calls can return another EGL_BAD error.
+       */
+      if (err == EGL_BAD_ATTRIBUTE)
+          return _eglError(err, __func__);
 
-      default:
-         /* unknown attrs are ignored */
-         break;
-      }
+      err = _eglParseEXTImageDmaBufImportModifiersAttribs(attrs, dpy, attr, val);
+      if (err == EGL_SUCCESS)
+          continue;
 
-      if (err != EGL_SUCCESS) {
-         _eglLog(_EGL_DEBUG, "bad image attribute 0x%04x", attr);
-         break;
-      }
+      return _eglError(err, __func__);
    }
-
-   return err;
-}
-
-
-EGLBoolean
-_eglInitImage(_EGLImage *img, _EGLDisplay *dpy)
-{
-   _eglInitResource(&img->Resource, sizeof(*img), dpy);
 
    return EGL_TRUE;
 }

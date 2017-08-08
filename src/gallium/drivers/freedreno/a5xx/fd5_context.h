@@ -80,6 +80,12 @@ struct fd5_context {
 	 * due to variant change.  See fixup_shader_state()
 	 */
 	struct ir3_shader_key last_key;
+
+	/* number of active samples-passed queries: */
+	int samples_passed_queries;
+
+	/* cached state about current emitted shader program (3d): */
+	unsigned max_loc;
 };
 
 static inline struct fd5_context *

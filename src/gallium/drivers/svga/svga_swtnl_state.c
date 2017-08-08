@@ -48,7 +48,8 @@
 #define SVGA_TRIANGLE_ADJ_Y -0.5f
 
 
-static void set_draw_viewport( struct svga_context *svga )
+static void
+set_draw_viewport(struct svga_context *svga)
 {
    struct pipe_viewport_state vp = svga->curr.viewport;
    float adjx = 0.0f;
@@ -97,39 +98,38 @@ static void set_draw_viewport( struct svga_context *svga )
 }
 
 static enum pipe_error
-update_swtnl_draw( struct svga_context *svga,
-                   unsigned dirty )
+update_swtnl_draw(struct svga_context *svga, unsigned dirty)
 {
    SVGA_STATS_TIME_PUSH(svga_sws(svga), SVGA_STATS_TIME_SWTNLUPDATEDRAW);
 
-   draw_flush( svga->swtnl.draw );
+   draw_flush(svga->swtnl.draw);
 
-   if (dirty & SVGA_NEW_VS) 
+   if (dirty & SVGA_NEW_VS)
       draw_bind_vertex_shader(svga->swtnl.draw,
                               svga->curr.vs->draw_shader);
 
-   if (dirty & SVGA_NEW_FS) 
+   if (dirty & SVGA_NEW_FS)
       draw_bind_fragment_shader(svga->swtnl.draw,
                                 svga->curr.fs->draw_shader);
 
    if (dirty & SVGA_NEW_VBUFFER)
       draw_set_vertex_buffers(svga->swtnl.draw, 0,
-                              svga->curr.num_vertex_buffers, 
+                              svga->curr.num_vertex_buffers,
                               svga->curr.vb);
 
    if (dirty & SVGA_NEW_VELEMENT)
-      draw_set_vertex_elements(svga->swtnl.draw, 
-                               svga->curr.velems->count, 
-                               svga->curr.velems->velem );
+      draw_set_vertex_elements(svga->swtnl.draw,
+                               svga->curr.velems->count,
+                               svga->curr.velems->velem);
 
    if (dirty & SVGA_NEW_CLIP)
-      draw_set_clip_state(svga->swtnl.draw, 
+      draw_set_clip_state(svga->swtnl.draw,
                           &svga->curr.clip);
 
    if (dirty & (SVGA_NEW_VIEWPORT |
-                SVGA_NEW_REDUCED_PRIMITIVE | 
+                SVGA_NEW_REDUCED_PRIMITIVE |
                 SVGA_NEW_RAST))
-      set_draw_viewport( svga );
+      set_draw_viewport(svga);
 
    if (dirty & SVGA_NEW_RAST)
       draw_set_rasterizer_state(svga->swtnl.draw,
@@ -142,7 +142,7 @@ update_swtnl_draw( struct svga_context *svga,
     * format for no bound depth (PIPE_FORMAT_NONE).
     */
    if (dirty & SVGA_NEW_FRAME_BUFFER)
-      draw_set_zs_format(svga->swtnl.draw, 
+      draw_set_zs_format(svga->swtnl.draw,
          (svga->curr.framebuffer.zsbuf) ?
              svga->curr.framebuffer.zsbuf->format : PIPE_FORMAT_NONE);
 
@@ -211,7 +211,8 @@ svga_vdecl_to_input_element(struct svga_context *svga,
    ret = SVGA3D_vgpu10_DefineElementLayout(svga->swc, num_decls, id, elements);
    if (ret != PIPE_OK) {
       svga_context_flush(svga, NULL);
-      ret = SVGA3D_vgpu10_DefineElementLayout(svga->swc, num_decls, id, elements);
+      ret = SVGA3D_vgpu10_DefineElementLayout(svga->swc, num_decls,
+                                              id, elements);
       assert(ret == PIPE_OK);
    }
 
@@ -220,7 +221,7 @@ svga_vdecl_to_input_element(struct svga_context *svga,
 
 
 enum pipe_error
-svga_swtnl_update_vdecl( struct svga_context *svga )
+svga_swtnl_update_vdecl(struct svga_context *svga)
 {
    struct svga_vbuf_render *svga_render = svga_vbuf_render(svga->swtnl.backend);
    struct draw_context *draw = svga->swtnl.draw;
@@ -253,7 +254,7 @@ svga_swtnl_update_vdecl( struct svga_context *svga )
    nr_decls++;
 
    for (i = 0; i < fs->base.info.num_inputs; i++) {
-      const unsigned sem_name = fs->base.info.input_semantic_name[i];
+      const enum tgsi_semantic sem_name = fs->base.info.input_semantic_name[i];
       const unsigned sem_index = fs->base.info.input_semantic_index[i];
 
       src = draw_find_shader_output(draw, sem_name, sem_index);
@@ -364,10 +365,9 @@ done:
 
 
 static enum pipe_error
-update_swtnl_vdecl( struct svga_context *svga,
-                    unsigned dirty )
+update_swtnl_vdecl(struct svga_context *svga, unsigned dirty)
 {
-   return svga_swtnl_update_vdecl( svga );
+   return svga_swtnl_update_vdecl(svga);
 }
 
 

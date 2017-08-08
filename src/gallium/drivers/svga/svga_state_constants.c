@@ -72,9 +72,9 @@ svga_get_extra_constants_common(struct svga_context *svga,
    unsigned count = 0;
 
    for (i = 0; i < variant->key.num_textures; i++) {
-      struct pipe_sampler_view *sv = svga->curr.sampler_views[shader][i];
+      const struct pipe_sampler_view *sv = svga->curr.sampler_views[shader][i];
       if (sv) {
-         struct pipe_resource *tex = sv->texture;
+         const struct pipe_resource *tex = sv->texture;
          /* Scaling factors needed for handling unnormalized texture coordinates
           * for texture rectangles.
           */
@@ -150,7 +150,7 @@ svga_get_prescale_constants(struct svga_context *svga, float **dest)
 static unsigned
 svga_get_pt_sprite_constants(struct svga_context *svga, float **dest)
 {
-   struct svga_screen *screen = svga_screen(svga->pipe.screen);
+   const struct svga_screen *screen = svga_screen(svga->pipe.screen);
    float *dst = *dest;
 
    dst[0] = 1.0 / (svga->curr.viewport.scale[0] * 2);
@@ -591,7 +591,8 @@ emit_constbuf_vgpu10(struct svga_context *svga, enum pipe_shader_type shader)
       /* we must unmap the buffer before getting the winsys handle */
       u_upload_unmap(svga->const0_upload);
 
-      dst_handle = svga_buffer_handle(svga, dst_buffer);
+      dst_handle = svga_buffer_handle(svga, dst_buffer,
+                                      PIPE_BIND_CONSTANT_BUFFER);
       if (!dst_handle) {
          pipe_resource_reference(&dst_buffer, NULL);
          return PIPE_ERROR_OUT_OF_MEMORY;
@@ -660,7 +661,8 @@ emit_consts_vgpu10(struct svga_context *svga, enum pipe_shader_type shader)
       struct svga_winsys_surface *handle;
 
       if (buffer) {
-         handle = svga_buffer_handle(svga, &buffer->b.b);
+         handle = svga_buffer_handle(svga, &buffer->b.b,
+                                     PIPE_BIND_CONSTANT_BUFFER);
          enabled_constbufs |= 1 << index;
       }
       else {

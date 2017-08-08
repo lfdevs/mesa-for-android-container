@@ -38,6 +38,57 @@ isl_gen4_choose_msaa_layout(const struct isl_device *dev,
 }
 
 void
+isl_gen4_filter_tiling(const struct isl_device *dev,
+                       const struct isl_surf_init_info *restrict info,
+                       isl_tiling_flags_t *flags)
+{
+   /* Gen4-5 only support linear, X, and Y-tiling. */
+   *flags &= (ISL_TILING_LINEAR_BIT | ISL_TILING_X_BIT | ISL_TILING_Y0_BIT);
+
+   if (isl_surf_usage_is_depth_or_stencil(info->usage)) {
+      assert(!ISL_DEV_USE_SEPARATE_STENCIL(dev));
+
+      /* From the g35 PRM Vol. 2, 3DSTATE_DEPTH_BUFFER::Tile Walk:
+       *
+       *    "The Depth Buffer, if tiled, must use Y-Major tiling"
+       */
+      *flags &= (ISL_TILING_LINEAR_BIT | ISL_TILING_Y0_BIT);
+   }
+
+   if (info->usage & (ISL_SURF_USAGE_DISPLAY_ROTATE_90_BIT |
+                      ISL_SURF_USAGE_DISPLAY_ROTATE_180_BIT |
+                      ISL_SURF_USAGE_DISPLAY_ROTATE_270_BIT)) {
+      assert(*flags & ISL_SURF_USAGE_DISPLAY_BIT);
+      isl_finishme("%s:%s: handle rotated display surfaces",
+                   __FILE__, __func__);
+   }
+
+   if (info->usage & (ISL_SURF_USAGE_DISPLAY_FLIP_X_BIT |
+                      ISL_SURF_USAGE_DISPLAY_FLIP_Y_BIT)) {
+      assert(*flags & ISL_SURF_USAGE_DISPLAY_BIT);
+      isl_finishme("%s:%s: handle flipped display surfaces",
+                   __FILE__, __func__);
+   }
+
+   if (info->usage & ISL_SURF_USAGE_DISPLAY_BIT) {
+      /* Before Skylake, the display engine does not accept Y */
+      *flags &= (ISL_TILING_LINEAR_BIT | ISL_TILING_X_BIT);
+   }
+
+   assert(info->samples == 1);
+
+   /* From the g35 PRM, Volume 1, 11.5.5, "Per-Stream Tile Format Support":
+    *
+    *    "NOTE: 128BPE Format Color buffer ( render target ) MUST be either
+    *    TileX or Linear."
+    *
+    * This is required all the way up to Sandy Bridge.
+    */
+   if (isl_format_get_layout(info->format)->bpb >= 128)
+      *flags &= ~ISL_TILING_Y0_BIT;
+}
+
+void
 isl_gen4_choose_image_alignment_el(const struct isl_device *dev,
                                    const struct isl_surf_init_info *restrict info,
                                    enum isl_tiling tiling,

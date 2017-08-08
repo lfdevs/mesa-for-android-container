@@ -28,6 +28,8 @@
 
 #include "si_shader.h"
 
+#include "util/u_dynarray.h"
+
 #ifdef PIPE_ARCH_BIG_ENDIAN
 #define SI_BIG_ENDIAN 1
 #else
@@ -67,6 +69,7 @@
 #define SI_CONTEXT_VGT_STREAMOUT_SYNC	(R600_CONTEXT_PRIVATE_FLAG << 13)
 
 #define SI_MAX_BORDER_COLORS	4096
+#define SIX_BITS		0x3F
 
 struct si_compute;
 struct hash_table;
@@ -80,6 +83,7 @@ struct si_screen {
 	bool				has_draw_indirect_multi;
 	bool				has_ds_bpermute;
 	bool				has_msaa_sample_loc_bug;
+	bool				llvm_has_working_vgpr_indexing;
 
 	/* Whether shaders are monolithic (1-part) or separate (3-part). */
 	bool				use_monolithic_shaders;
@@ -87,7 +91,6 @@ struct si_screen {
 
 	mtx_t			shader_parts_mutex;
 	struct si_shader_part		*vs_prologs;
-	struct si_shader_part		*vs_epilogs;
 	struct si_shader_part		*tcs_epilogs;
 	struct si_shader_part		*gs_prologs;
 	struct si_shader_part		*ps_prologs;
@@ -110,7 +113,15 @@ struct si_screen {
 
 	/* Shader compiler queue for multithreaded compilation. */
 	struct util_queue		shader_compiler_queue;
-	LLVMTargetMachineRef		tm[4]; /* used by the queue only */
+	/* Use at most 3 normal compiler threads on quadcore and better.
+	 * Hyperthreaded CPUs report the number of threads, but we want
+	 * the number of cores. */
+	LLVMTargetMachineRef		tm[3]; /* used by the queue only */
+
+	struct util_queue		shader_compiler_queue_low_priority;
+	/* Use at most 2 low priority threads on quadcore and better.
+	 * We want to minimize the impact on multithreaded Mesa. */
+	LLVMTargetMachineRef		tm_low_priority[2]; /* at most 2 threads */
 };
 
 struct si_blend_color {
@@ -125,8 +136,8 @@ struct si_sampler_view {
 	uint32_t			state[8];
 	uint32_t			fmask_state[8];
 	const struct legacy_surf_level	*base_level_info;
-	unsigned			base_level;
-	unsigned			block_width;
+	ubyte				base_level;
+	ubyte				block_width;
 	bool is_stencil_sampler;
 	bool dcc_incompatible;
 };
@@ -150,33 +161,32 @@ struct si_cs_shader_state {
 
 struct si_textures_info {
 	struct si_sampler_views		views;
-	uint32_t			depth_texture_mask; /* which textures are depth */
-	uint32_t			compressed_colortex_mask;
+	uint32_t			needs_depth_decompress_mask;
+	uint32_t			needs_color_decompress_mask;
 };
 
 struct si_images_info {
 	struct pipe_image_view		views[SI_NUM_IMAGES];
-	uint32_t			compressed_colortex_mask;
+	uint32_t			needs_color_decompress_mask;
 	unsigned			enabled_mask;
 };
 
 struct si_framebuffer {
 	struct r600_atom		atom;
 	struct pipe_framebuffer_state	state;
-	unsigned			nr_samples;
-	unsigned			log_samples;
-	unsigned			compressed_cb_mask;
 	unsigned			colorbuf_enabled_4bit;
 	unsigned			spi_shader_col_format;
 	unsigned			spi_shader_col_format_alpha;
 	unsigned			spi_shader_col_format_blend;
 	unsigned			spi_shader_col_format_blend_alpha;
-	unsigned			color_is_int8;
-	unsigned			color_is_int10;
-	unsigned			dirty_cbufs;
+	ubyte				nr_samples:5; /* at most 16xAA */
+	ubyte				log_samples:3; /* at most 4 = 16xAA */
+	ubyte				compressed_cb_mask;
+	ubyte				color_is_int8;
+	ubyte				color_is_int10;
+	ubyte				dirty_cbufs;
 	bool				dirty_zsbuf;
 	bool				any_dst_linear;
-	bool				do_update_surf_dirtiness;
 };
 
 struct si_clip_state {
@@ -218,11 +228,33 @@ union si_vgt_param_key {
 		unsigned count_from_stream_output:1;
 		unsigned line_stipple_enabled:1;
 		unsigned uses_tess:1;
-		unsigned tcs_tes_uses_prim_id:1;
+		unsigned tess_uses_prim_id:1;
 		unsigned uses_gs:1;
 		unsigned _pad:32 - SI_NUM_VGT_PARAM_KEY_BITS;
 	} u;
 	uint32_t index;
+};
+
+struct si_bindless_descriptor
+{
+	struct pb_slab_entry		entry;
+	struct r600_resource		*buffer;
+	unsigned			offset;
+	uint32_t			desc_list[16];
+	bool				dirty;
+};
+
+struct si_texture_handle
+{
+	struct si_bindless_descriptor	*desc;
+	struct pipe_sampler_view	*view;
+	struct si_sampler_state		sstate;
+};
+
+struct si_image_handle
+{
+	struct si_bindless_descriptor	*desc;
+	struct pipe_image_view		view;
 };
 
 struct si_context {
@@ -230,20 +262,25 @@ struct si_context {
 	struct blitter_context		*blitter;
 	void				*custom_dsa_flush;
 	void				*custom_blend_resolve;
-	void				*custom_blend_decompress;
-	void				*custom_blend_fastclear;
+	void				*custom_blend_fmask_decompress;
+	void				*custom_blend_eliminate_fastclear;
 	void				*custom_blend_dcc_decompress;
 	struct si_screen		*screen;
+	LLVMTargetMachineRef		tm; /* only non-threaded compilation */
+	struct si_shader_ctx_state	fixed_func_tcs_shader;
+	struct r600_resource		*wait_mem_scratch;
+	unsigned			wait_mem_number;
 
 	struct radeon_winsys_cs		*ce_ib;
 	struct radeon_winsys_cs		*ce_preamble_ib;
-	bool				ce_need_synchronization;
+	struct r600_resource		*ce_ram_saved_buffer;
 	struct u_suballocator		*ce_suballocator;
+	unsigned			ce_ram_saved_offset;
+	uint16_t			total_ce_ram_allocated;
+	bool				ce_need_synchronization:1;
 
-	struct si_shader_ctx_state	fixed_func_tcs_shader;
-	LLVMTargetMachineRef		tm; /* only non-threaded compilation */
-	bool				gfx_flush_in_progress;
-	bool				compute_is_busy;
+	bool				gfx_flush_in_progress:1;
+	bool				compute_is_busy:1;
 
 	/* Atoms (direct states). */
 	union si_state_atoms		atoms;
@@ -284,7 +321,7 @@ struct si_context {
 	struct si_cs_shader_state	cs_shader_state;
 
 	/* shader information */
-	struct si_vertex_element	*vertex_elements;
+	struct si_vertex_elements	*vertex_elements;
 	unsigned			sprite_coord_enable;
 	bool				flatshade;
 	bool				do_update_shaders;
@@ -294,10 +331,9 @@ struct si_context {
 	struct si_descriptors		descriptors[SI_NUM_DESCS];
 	unsigned			descriptors_dirty;
 	unsigned			shader_pointers_dirty;
-	unsigned			compressed_tex_shader_mask;
+	unsigned			shader_needs_decompress_mask;
 	struct si_buffer_resources	rw_buffers;
-	struct si_buffer_resources	const_buffers[SI_NUM_SHADERS];
-	struct si_buffer_resources	shader_buffers[SI_NUM_SHADERS];
+	struct si_buffer_resources	const_and_shader_buffers[SI_NUM_SHADERS];
 	struct si_textures_info		samplers[SI_NUM_SHADERS];
 	struct si_images_info		images[SI_NUM_SHADERS];
 
@@ -315,7 +351,6 @@ struct si_context {
 	/* Vertex and index buffers. */
 	bool				vertex_buffers_dirty;
 	bool				vertex_buffer_pointer_dirty;
-	struct pipe_index_buffer	index_buffer;
 	struct pipe_vertex_buffer	vertex_buffer[SI_NUM_VERTEX_BUFFERS];
 
 	/* MSAA config state. */
@@ -323,19 +358,21 @@ struct si_context {
 	bool				smoothing_enabled;
 
 	/* DB render state. */
-	bool			dbcb_depth_copy_enabled;
-	bool			dbcb_stencil_copy_enabled;
-	unsigned		dbcb_copy_sample;
-	bool			db_flush_depth_inplace;
-	bool			db_flush_stencil_inplace;
-	bool			db_depth_clear;
-	bool			db_depth_disable_expclear;
-	bool			db_stencil_clear;
-	bool			db_stencil_disable_expclear;
 	unsigned		ps_db_shader_control;
-	bool			occlusion_queries_disabled;
+	unsigned		dbcb_copy_sample;
+	bool			dbcb_depth_copy_enabled:1;
+	bool			dbcb_stencil_copy_enabled:1;
+	bool			db_flush_depth_inplace:1;
+	bool			db_flush_stencil_inplace:1;
+	bool			db_depth_clear:1;
+	bool			db_depth_disable_expclear:1;
+	bool			db_stencil_clear:1;
+	bool			db_stencil_disable_expclear:1;
+	bool			occlusion_queries_disabled:1;
+	bool			generate_mipmap_for_depth:1;
 
 	/* Emitted draw state. */
+	bool			gs_tri_strip_adj_fix:1;
 	int			last_index_size;
 	int			last_base_vertex;
 	int			last_start_instance;
@@ -351,7 +388,6 @@ struct si_context {
 	unsigned		current_vs_state;
 	unsigned		last_vs_state;
 	enum pipe_prim_type	current_rast_prim; /* primitive type after TES, GS */
-	bool			gs_tri_strip_adj_fix;
 
 	/* Scratch buffer */
 	struct r600_atom	scratch_state;
@@ -362,7 +398,8 @@ struct si_context {
 	struct r600_resource	*compute_scratch_buffer;
 
 	/* Emitted derived tessellation state. */
-	struct si_shader	*last_ls; /* local shader (VS) */
+	/* Local shader (VS), or HS if LS-HS are merged. */
+	struct si_shader	*last_ls;
 	struct si_shader_selector *last_tcs;
 	int			last_num_tcs_input_cp;
 	int			last_tes_sh_base;
@@ -380,10 +417,35 @@ struct si_context {
 
 	/* Other state */
 	bool need_check_render_feedback;
+	bool			decompression_enabled;
 
 	/* Precomputed IA_MULTI_VGT_PARAM */
 	union si_vgt_param_key  ia_multi_vgt_param_key;
 	unsigned		ia_multi_vgt_param[SI_NUM_VGT_PARAM_STATES];
+
+	/* Slab allocator for bindless descriptors. */
+	struct pb_slabs		bindless_descriptor_slabs;
+
+	/* Bindless descriptors. */
+	struct util_dynarray	bindless_descriptors;
+	bool			bindless_descriptors_dirty;
+
+	/* Allocated bindless handles */
+	struct hash_table	*tex_handles;
+	struct hash_table	*img_handles;
+
+	/* Resident bindless handles */
+	struct util_dynarray	resident_tex_handles;
+	struct util_dynarray	resident_img_handles;
+
+	/* Resident bindless handles which need decompression */
+	struct util_dynarray	resident_tex_needs_color_decompress;
+	struct util_dynarray	resident_img_needs_color_decompress;
+	struct util_dynarray	resident_tex_needs_depth_decompress;
+
+	/* Bindless state */
+	bool			uses_bindless_samplers;
+	bool			uses_bindless_images;
 };
 
 /* cik_sdma.c */
@@ -487,36 +549,30 @@ si_mark_atom_dirty(struct si_context *sctx,
 	si_set_atom_dirty(sctx, atom, true);
 }
 
-static inline struct tgsi_shader_info *si_get_vs_info(struct si_context *sctx)
+static inline struct si_shader_ctx_state *si_get_vs(struct si_context *sctx)
 {
 	if (sctx->gs_shader.cso)
-		return &sctx->gs_shader.cso->info;
-	else if (sctx->tes_shader.cso)
-		return &sctx->tes_shader.cso->info;
-	else if (sctx->vs_shader.cso)
-		return &sctx->vs_shader.cso->info;
-	else
-		return NULL;
+		return &sctx->gs_shader;
+	if (sctx->tes_shader.cso)
+		return &sctx->tes_shader;
+
+	return &sctx->vs_shader;
+}
+
+static inline struct tgsi_shader_info *si_get_vs_info(struct si_context *sctx)
+{
+	struct si_shader_ctx_state *vs = si_get_vs(sctx);
+
+	return vs->cso ? &vs->cso->info : NULL;
 }
 
 static inline struct si_shader* si_get_vs_state(struct si_context *sctx)
 {
-	if (sctx->gs_shader.current)
+	if (sctx->gs_shader.cso)
 		return sctx->gs_shader.cso->gs_copy_shader;
-	else if (sctx->tes_shader.current)
-		return sctx->tes_shader.current;
-	else
-		return sctx->vs_shader.current;
-}
 
-static inline bool si_vs_exports_prim_id(struct si_shader *shader)
-{
-	if (shader->selector->type == PIPE_SHADER_VERTEX)
-		return shader->key.part.vs.epilog.export_prim_id;
-	else if (shader->selector->type == PIPE_SHADER_TESS_EVAL)
-		return shader->key.part.tes.epilog.export_prim_id;
-	else
-		return false;
+	struct si_shader_ctx_state *vs = si_get_vs(sctx);
+	return vs->current ? vs->current : NULL;
 }
 
 static inline unsigned

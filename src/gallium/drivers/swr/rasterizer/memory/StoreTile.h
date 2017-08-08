@@ -199,15 +199,15 @@ struct StorePixels<32, 2>
     static void Store(const uint8_t* pSrc, uint8_t* (&ppDsts)[2])
     {
         // Each 4-pixel row is 16-bytes
-        __m128i *pZRow01 = (__m128i*)pSrc;
-        __m128i vQuad00 = _mm_load_si128(pZRow01);
-        __m128i vQuad01 = _mm_load_si128(pZRow01 + 1);
+        simd4scalari *pZRow01 = (simd4scalari*)pSrc;
+        simd4scalari vQuad00 = SIMD128::load_si(pZRow01);
+        simd4scalari vQuad01 = SIMD128::load_si(pZRow01 + 1);
 
-        __m128i vRow00 = _mm_unpacklo_epi64(vQuad00, vQuad01);
-        __m128i vRow10 = _mm_unpackhi_epi64(vQuad00, vQuad01);
+        simd4scalari vRow00 = SIMD128::unpacklo_epi64(vQuad00, vQuad01);
+        simd4scalari vRow10 = SIMD128::unpackhi_epi64(vQuad00, vQuad01);
 
-        _mm_storeu_si128((__m128i*)ppDsts[0], vRow00);
-        _mm_storeu_si128((__m128i*)ppDsts[1], vRow10);
+        SIMD128::storeu_si((simd4scalari*)ppDsts[0], vRow00);
+        SIMD128::storeu_si((simd4scalari*)ppDsts[1], vRow10);
     }
 };
 
@@ -218,20 +218,20 @@ struct StorePixels<32, 4>
     static void Store(const uint8_t* pSrc, uint8_t* (&ppDsts)[4])
     {
         // 4 x 16 bytes = 64 bytes, 16 pixels
-        const __m128i *pSrc128 = reinterpret_cast<const __m128i *>(pSrc);
+        const simd4scalari *pSrc128 = reinterpret_cast<const simd4scalari *>(pSrc);
 
-        __m128i **ppDsts128 = reinterpret_cast<__m128i **>(ppDsts);
+        simd4scalari **ppDsts128 = reinterpret_cast<simd4scalari **>(ppDsts);
 
         // Unswizzle from SWR-Z order
-        __m128i quad0 = _mm_load_si128(&pSrc128[0]);                        // 0 1 2 3
-        __m128i quad1 = _mm_load_si128(&pSrc128[1]);                        // 4 5 6 7
-        __m128i quad2 = _mm_load_si128(&pSrc128[2]);                        // 8 9 A B
-        __m128i quad3 = _mm_load_si128(&pSrc128[3]);                        // C D E F
+        simd4scalari quad0 = SIMD128::load_si(&pSrc128[0]);                        // 0 1 2 3
+        simd4scalari quad1 = SIMD128::load_si(&pSrc128[1]);                        // 4 5 6 7
+        simd4scalari quad2 = SIMD128::load_si(&pSrc128[2]);                        // 8 9 A B
+        simd4scalari quad3 = SIMD128::load_si(&pSrc128[3]);                        // C D E F
 
-        _mm_storeu_si128(ppDsts128[0], _mm_unpacklo_epi64(quad0, quad1));   // 0 1 4 5
-        _mm_storeu_si128(ppDsts128[1], _mm_unpackhi_epi64(quad0, quad1));   // 2 3 6 7
-        _mm_storeu_si128(ppDsts128[2], _mm_unpacklo_epi64(quad2, quad3));   // 8 9 C D
-        _mm_storeu_si128(ppDsts128[3], _mm_unpackhi_epi64(quad2, quad3));   // A B E F
+        SIMD128::storeu_si(ppDsts128[0], SIMD128::unpacklo_epi64(quad0, quad1));   // 0 1 4 5
+        SIMD128::storeu_si(ppDsts128[1], SIMD128::unpackhi_epi64(quad0, quad1));   // 2 3 6 7
+        SIMD128::storeu_si(ppDsts128[2], SIMD128::unpacklo_epi64(quad2, quad3));   // 8 9 C D
+        SIMD128::storeu_si(ppDsts128[3], SIMD128::unpackhi_epi64(quad2, quad3));   // A B E F
     }
 };
 
@@ -251,10 +251,10 @@ struct StorePixels<64, 4>
     static void Store(const uint8_t* pSrc, uint8_t* (&ppDsts)[4])
     {
         // Each 4-pixel row is 32 bytes.
-        const __m128i* pPixSrc = (const __m128i*)pSrc;
+        const simd4scalari* pPixSrc = (const simd4scalari*)pSrc;
 
         // order of pointers match SWR-Z layout
-        __m128i** pvDsts = (__m128i**)&ppDsts[0];
+        simd4scalari** pvDsts = (simd4scalari**)&ppDsts[0];
         *pvDsts[0] = pPixSrc[0];
         *pvDsts[1] = pPixSrc[1];
         *pvDsts[2] = pPixSrc[2];
@@ -269,9 +269,9 @@ struct StorePixels<64, 8>
     static void Store(const uint8_t* pSrc, uint8_t* (&ppDsts)[8])
     {
         // 8 x 16 bytes = 128 bytes, 16 pixels
-        const __m128i *pSrc128 = reinterpret_cast<const __m128i *>(pSrc);
+        const simd4scalari *pSrc128 = reinterpret_cast<const simd4scalari *>(pSrc);
 
-        __m128i **ppDsts128 = reinterpret_cast<__m128i **>(ppDsts);
+        simd4scalari **ppDsts128 = reinterpret_cast<simd4scalari **>(ppDsts);
 
         // order of pointers match SWR-Z layout
         *ppDsts128[0] = pSrc128[0];     // 0 1
@@ -301,10 +301,10 @@ struct StorePixels<128, 8>
     static void Store(const uint8_t* pSrc, uint8_t* (&ppDsts)[8])
     {
         // Each 4-pixel row is 64 bytes.
-        const __m128i* pPixSrc = (const __m128i*)pSrc;
+        const simd4scalari* pPixSrc = (const simd4scalari*)pSrc;
 
         // Unswizzle from SWR-Z order
-        __m128i** pvDsts = (__m128i**)&ppDsts[0];
+        simd4scalari** pvDsts = (simd4scalari**)&ppDsts[0];
         *pvDsts[0] = pPixSrc[0];
         *pvDsts[1] = pPixSrc[2];
         *pvDsts[2] = pPixSrc[1];
@@ -323,9 +323,9 @@ struct StorePixels<128, 16>
     static void Store(const uint8_t* pSrc, uint8_t* (&ppDsts)[16])
     {
         // 16 x 16 bytes = 256 bytes, 16 pixels
-        const __m128i *pSrc128 = reinterpret_cast<const __m128i *>(pSrc);
+        const simd4scalari *pSrc128 = reinterpret_cast<const simd4scalari *>(pSrc);
 
-        __m128i **ppDsts128 = reinterpret_cast<__m128i **>(ppDsts);
+        simd4scalari **ppDsts128 = reinterpret_cast<simd4scalari **>(ppDsts);
 
         for (uint32_t i = 0; i < 16; i += 4)
         {
@@ -563,8 +563,8 @@ struct ConvertPixelsSOAtoAOS<R32_FLOAT, R24_UNORM_X8_TYPELESS>
         temp = _simd16_permute_epi32(temp, _simd16_set_epi32(15, 14, 11, 10, 13, 12, 9, 8, 7, 6, 3, 2, 5, 4, 1, 0));
 
         // merge/store data into destination but don't overwrite the X8 bits
-        simdscalari destlo = _simd_loadu2_si(reinterpret_cast<__m128i *>(ppDsts[1]), reinterpret_cast<__m128i *>(ppDsts[0]));
-        simdscalari desthi = _simd_loadu2_si(reinterpret_cast<__m128i *>(ppDsts[3]), reinterpret_cast<__m128i *>(ppDsts[2]));
+        simdscalari destlo = _simd_loadu2_si(reinterpret_cast<simd4scalari *>(ppDsts[1]), reinterpret_cast<simd4scalari *>(ppDsts[0]));
+        simdscalari desthi = _simd_loadu2_si(reinterpret_cast<simd4scalari *>(ppDsts[3]), reinterpret_cast<simd4scalari *>(ppDsts[2]));
 
         simd16scalari dest = _simd16_setzero_si();
 
@@ -575,8 +575,8 @@ struct ConvertPixelsSOAtoAOS<R32_FLOAT, R24_UNORM_X8_TYPELESS>
 
         dest = _simd16_or_si(_simd16_andnot_si(mask, dest), _simd16_and_si(mask, temp));
 
-        _simd_storeu2_si(reinterpret_cast<__m128i *>(ppDsts[1]), reinterpret_cast<__m128i *>(ppDsts[0]), _simd16_extract_si(dest, 0));
-        _simd_storeu2_si(reinterpret_cast<__m128i *>(ppDsts[3]), reinterpret_cast<__m128i *>(ppDsts[2]), _simd16_extract_si(dest, 1));
+        _simd_storeu2_si(reinterpret_cast<simd4scalari *>(ppDsts[1]), reinterpret_cast<simd4scalari *>(ppDsts[0]), _simd16_extract_si(dest, 0));
+        _simd_storeu2_si(reinterpret_cast<simd4scalari *>(ppDsts[3]), reinterpret_cast<simd4scalari *>(ppDsts[2]), _simd16_extract_si(dest, 1));
 #else
         static const uint32_t MAX_RASTER_TILE_BYTES = 128; // 8 pixels * 16 bytes per pixel
 
@@ -593,25 +593,25 @@ struct ConvertPixelsSOAtoAOS<R32_FLOAT, R24_UNORM_X8_TYPELESS>
 
         // Store data into destination but don't overwrite the X8 bits
         // Each 4-pixel row is 16-bytes
-        __m128i *pZRow01 = (__m128i*)aosTile;
-        __m128i vQuad00 = _mm_load_si128(pZRow01);
-        __m128i vQuad01 = _mm_load_si128(pZRow01 + 1);
+        simd4scalari *pZRow01 = (simd4scalari*)aosTile;
+        simd4scalari vQuad00 = SIMD128::load_si(pZRow01);
+        simd4scalari vQuad01 = SIMD128::load_si(pZRow01 + 1);
 
-        __m128i vRow00 = _mm_unpacklo_epi64(vQuad00, vQuad01);
-        __m128i vRow10 = _mm_unpackhi_epi64(vQuad00, vQuad01);
+        simd4scalari vRow00 = SIMD128::unpacklo_epi64(vQuad00, vQuad01);
+        simd4scalari vRow10 = SIMD128::unpackhi_epi64(vQuad00, vQuad01);
 
-        __m128i vDst0 = _mm_loadu_si128((const __m128i*)ppDsts[0]);
-        __m128i vDst1 = _mm_loadu_si128((const __m128i*)ppDsts[1]);
+        simd4scalari vDst0 = SIMD128::loadu_si((const simd4scalari*)ppDsts[0]);
+        simd4scalari vDst1 = SIMD128::loadu_si((const simd4scalari*)ppDsts[1]);
 
-        __m128i vMask = _mm_set1_epi32(0xFFFFFF);
+        simd4scalari vMask = _mm_set1_epi32(0xFFFFFF);
 
-        vDst0 = _mm_andnot_si128(vMask, vDst0);
-        vDst0 = _mm_or_si128(vDst0, _mm_and_si128(vRow00, vMask));
-        vDst1 = _mm_andnot_si128(vMask, vDst1);
-        vDst1 = _mm_or_si128(vDst1, _mm_and_si128(vRow10, vMask));
+        vDst0 = SIMD128::andnot_si(vMask, vDst0);
+        vDst0 = SIMD128::or_si(vDst0, SIMD128::and_si(vRow00, vMask));
+        vDst1 = SIMD128::andnot_si(vMask, vDst1);
+        vDst1 = SIMD128::or_si(vDst1, SIMD128::and_si(vRow10, vMask));
 
-        _mm_storeu_si128((__m128i*)ppDsts[0], vDst0);
-        _mm_storeu_si128((__m128i*)ppDsts[1], vDst1);
+        SIMD128::storeu_si((simd4scalari*)ppDsts[0], vDst0);
+        SIMD128::storeu_si((simd4scalari*)ppDsts[1], vDst1);
 #endif
     }
 };
@@ -683,8 +683,8 @@ INLINE static void FlatConvert(const uint8_t* pSrc, uint8_t* pDst0, uint8_t* pDs
     // store 8x2 memory order:
     //  row0: [ pDst0, pDst2 ] = { 0 1 4 5 }, { 8 9 C D }
     //  row1: [ pDst1, pDst3 ] = { 2 3 6 7 }, { A B E F }
-    _simd_storeu2_si(reinterpret_cast<__m128i *>(pDst1), reinterpret_cast<__m128i *>(pDst0), _simd16_extract_si(final, 0));
-    _simd_storeu2_si(reinterpret_cast<__m128i *>(pDst3), reinterpret_cast<__m128i *>(pDst2), _simd16_extract_si(final, 1));
+    _simd_storeu2_si(reinterpret_cast<simd4scalari *>(pDst1), reinterpret_cast<simd4scalari *>(pDst0), _simd16_extract_si(final, 0));
+    _simd_storeu2_si(reinterpret_cast<simd4scalari *>(pDst3), reinterpret_cast<simd4scalari *>(pDst2), _simd16_extract_si(final, 1));
 }
 
 #endif
@@ -736,15 +736,15 @@ INLINE static void FlatConvert(const uint8_t* pSrc, uint8_t* pDst, uint8_t* pDst
 
     // splitting into two sets of 4 wide integer vector types
     // because AVX doesn't have instructions to support this operation at 8 wide
-    __m128i srcLo0 = _mm256_castsi256_si128(src0); // 000r000r000r000r
-    __m128i srcLo1 = _mm256_castsi256_si128(src1); // 000g000g000g000g
-    __m128i srcLo2 = _mm256_castsi256_si128(src2); // 000b000b000b000b
-    __m128i srcLo3 = _mm256_castsi256_si128(src3); // 000a000a000a000a
+    simd4scalari srcLo0 = _mm256_castsi256_si128(src0); // 000r000r000r000r
+    simd4scalari srcLo1 = _mm256_castsi256_si128(src1); // 000g000g000g000g
+    simd4scalari srcLo2 = _mm256_castsi256_si128(src2); // 000b000b000b000b
+    simd4scalari srcLo3 = _mm256_castsi256_si128(src3); // 000a000a000a000a
 
-    __m128i srcHi0 = _mm256_extractf128_si256(src0, 1); // 000r000r000r000r
-    __m128i srcHi1 = _mm256_extractf128_si256(src1, 1); // 000g000g000g000g
-    __m128i srcHi2 = _mm256_extractf128_si256(src2, 1); // 000b000b000b000b
-    __m128i srcHi3 = _mm256_extractf128_si256(src3, 1); // 000a000a000a000a
+    simd4scalari srcHi0 = _mm256_extractf128_si256(src0, 1); // 000r000r000r000r
+    simd4scalari srcHi1 = _mm256_extractf128_si256(src1, 1); // 000g000g000g000g
+    simd4scalari srcHi2 = _mm256_extractf128_si256(src2, 1); // 000b000b000b000b
+    simd4scalari srcHi3 = _mm256_extractf128_si256(src3, 1); // 000a000a000a000a
 
     srcLo1 = _mm_slli_si128(srcLo1, 1); // 00g000g000g000g0
     srcHi1 = _mm_slli_si128(srcHi1, 1); // 00g000g000g000g0
@@ -753,18 +753,18 @@ INLINE static void FlatConvert(const uint8_t* pSrc, uint8_t* pDst, uint8_t* pDst
     srcLo3 = _mm_slli_si128(srcLo3, 3); // a000a000a000a000
     srcHi3 = _mm_slli_si128(srcHi3, 3); // a000a000a000a000
 
-    srcLo0 = _mm_or_si128(srcLo0, srcLo1); // 00gr00gr00gr00gr
-    srcLo2 = _mm_or_si128(srcLo2, srcLo3); // ab00ab00ab00ab00
+    srcLo0 = SIMD128::or_si(srcLo0, srcLo1); // 00gr00gr00gr00gr
+    srcLo2 = SIMD128::or_si(srcLo2, srcLo3); // ab00ab00ab00ab00
 
-    srcHi0 = _mm_or_si128(srcHi0, srcHi1); // 00gr00gr00gr00gr
-    srcHi2 = _mm_or_si128(srcHi2, srcHi3); // ab00ab00ab00ab00
+    srcHi0 = SIMD128::or_si(srcHi0, srcHi1); // 00gr00gr00gr00gr
+    srcHi2 = SIMD128::or_si(srcHi2, srcHi3); // ab00ab00ab00ab00
 
-    srcLo0 = _mm_or_si128(srcLo0, srcLo2); // abgrabgrabgrabgr
-    srcHi0 = _mm_or_si128(srcHi0, srcHi2); // abgrabgrabgrabgr
+    srcLo0 = SIMD128::or_si(srcLo0, srcLo2); // abgrabgrabgrabgr
+    srcHi0 = SIMD128::or_si(srcHi0, srcHi2); // abgrabgrabgrabgr
 
     // unpack into rows that get the tiling order correct
-    __m128i vRow00 = _mm_unpacklo_epi64(srcLo0, srcHi0);  // abgrabgrabgrabgrabgrabgrabgrabgr
-    __m128i vRow10 = _mm_unpackhi_epi64(srcLo0, srcHi0);
+    simd4scalari vRow00 = SIMD128::unpacklo_epi64(srcLo0, srcHi0);  // abgrabgrabgrabgrabgrabgrabgrabgr
+    simd4scalari vRow10 = SIMD128::unpackhi_epi64(srcLo0, srcHi0);
 
     simdscalari final = _mm256_castsi128_si256(vRow00);
     final = _mm256_insertf128_si256(final, vRow10, 1);
@@ -785,7 +785,7 @@ INLINE static void FlatConvert(const uint8_t* pSrc, uint8_t* pDst, uint8_t* pDst
     final = _mm256_permute4x64_epi64(final, 0xD8);
 #endif
 
-    _simd_storeu2_si((__m128i*)pDst1, (__m128i*)pDst, final);
+    _simd_storeu2_si((simd4scalari*)pDst1, (simd4scalari*)pDst, final);
 }
 
 #if USE_8x2_TILE_BACKEND
@@ -848,8 +848,8 @@ INLINE static void FlatConvertNoAlpha(const uint8_t* pSrc, uint8_t* pDst0, uint8
     // store 8x2 memory order:
     //  row0: [ pDst0, pDst2 ] = { 0 1 4 5 }, { 8 9 C D }
     //  row1: [ pDst1, pDst3 ] = { 2 3 6 7 }, { A B E F }
-    _simd_storeu2_si(reinterpret_cast<__m128i *>(pDst1), reinterpret_cast<__m128i *>(pDst0), _simd16_extract_si(final, 0));
-    _simd_storeu2_si(reinterpret_cast<__m128i *>(pDst3), reinterpret_cast<__m128i *>(pDst2), _simd16_extract_si(final, 1));
+    _simd_storeu2_si(reinterpret_cast<simd4scalari *>(pDst1), reinterpret_cast<simd4scalari *>(pDst0), _simd16_extract_si(final, 0));
+    _simd_storeu2_si(reinterpret_cast<simd4scalari *>(pDst3), reinterpret_cast<simd4scalari *>(pDst2), _simd16_extract_si(final, 1));
 }
 
 #endif
@@ -894,29 +894,29 @@ INLINE static void FlatConvertNoAlpha(const uint8_t* pSrc, uint8_t* pDst, uint8_
 
     // splitting into two sets of 4 wide integer vector types
     // because AVX doesn't have instructions to support this operation at 8 wide
-    __m128i srcLo0 = _mm256_castsi256_si128(src0); // 000r000r000r000r
-    __m128i srcLo1 = _mm256_castsi256_si128(src1); // 000g000g000g000g
-    __m128i srcLo2 = _mm256_castsi256_si128(src2); // 000b000b000b000b
+    simd4scalari srcLo0 = _mm256_castsi256_si128(src0); // 000r000r000r000r
+    simd4scalari srcLo1 = _mm256_castsi256_si128(src1); // 000g000g000g000g
+    simd4scalari srcLo2 = _mm256_castsi256_si128(src2); // 000b000b000b000b
 
-    __m128i srcHi0 = _mm256_extractf128_si256(src0, 1); // 000r000r000r000r
-    __m128i srcHi1 = _mm256_extractf128_si256(src1, 1); // 000g000g000g000g
-    __m128i srcHi2 = _mm256_extractf128_si256(src2, 1); // 000b000b000b000b
+    simd4scalari srcHi0 = _mm256_extractf128_si256(src0, 1); // 000r000r000r000r
+    simd4scalari srcHi1 = _mm256_extractf128_si256(src1, 1); // 000g000g000g000g
+    simd4scalari srcHi2 = _mm256_extractf128_si256(src2, 1); // 000b000b000b000b
 
     srcLo1 = _mm_slli_si128(srcLo1, 1); // 00g000g000g000g0
     srcHi1 = _mm_slli_si128(srcHi1, 1); // 00g000g000g000g0
     srcLo2 = _mm_slli_si128(srcLo2, 2); // 0b000b000b000b00
     srcHi2 = _mm_slli_si128(srcHi2, 2); // 0b000b000b000b00
 
-    srcLo0 = _mm_or_si128(srcLo0, srcLo1); // 00gr00gr00gr00gr
+    srcLo0 = SIMD128::or_si(srcLo0, srcLo1); // 00gr00gr00gr00gr
 
-    srcHi0 = _mm_or_si128(srcHi0, srcHi1); // 00gr00gr00gr00gr
+    srcHi0 = SIMD128::or_si(srcHi0, srcHi1); // 00gr00gr00gr00gr
 
-    srcLo0 = _mm_or_si128(srcLo0, srcLo2); // 0bgr0bgr0bgr0bgr
-    srcHi0 = _mm_or_si128(srcHi0, srcHi2); // 0bgr0bgr0bgr0bgr
+    srcLo0 = SIMD128::or_si(srcLo0, srcLo2); // 0bgr0bgr0bgr0bgr
+    srcHi0 = SIMD128::or_si(srcHi0, srcHi2); // 0bgr0bgr0bgr0bgr
 
     // unpack into rows that get the tiling order correct
-    __m128i vRow00 = _mm_unpacklo_epi64(srcLo0, srcHi0);  // 0bgr0bgr0bgr0bgr0bgr0bgr0bgr0bgr
-    __m128i vRow10 = _mm_unpackhi_epi64(srcLo0, srcHi0);
+    simd4scalari vRow00 = SIMD128::unpacklo_epi64(srcLo0, srcHi0);  // 0bgr0bgr0bgr0bgr0bgr0bgr0bgr0bgr
+    simd4scalari vRow10 = SIMD128::unpackhi_epi64(srcLo0, srcHi0);
 
     simdscalari final = _mm256_castsi128_si256(vRow00);
     final = _mm256_insertf128_si256(final, vRow10, 1);
@@ -936,7 +936,7 @@ INLINE static void FlatConvertNoAlpha(const uint8_t* pSrc, uint8_t* pDst, uint8_
 
 #endif
 
-    _simd_storeu2_si((__m128i*)pDst1, (__m128i*)pDst, final);
+    _simd_storeu2_si((simd4scalari*)pDst1, (simd4scalari*)pDst, final);
 }
 
 template<>

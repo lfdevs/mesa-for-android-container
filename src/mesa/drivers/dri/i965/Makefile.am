@@ -38,19 +38,34 @@ AM_CFLAGS = \
 	-I$(top_srcdir)/src/compiler/nir \
 	-I$(top_builddir)/src/intel \
 	-I$(top_srcdir)/src/intel \
+	-I$(top_srcdir)/include/drm-uapi \
 	$(DEFINES) \
 	$(VISIBILITY_CFLAGS) \
 	$(LIBDRM_CFLAGS) \
-	$(VALGRIND_CFLAGS)
+	$(VALGRIND_CFLAGS) \
+	-msse2
 
 AM_CXXFLAGS = $(AM_CFLAGS)
 
 I965_PERGEN_LIBS = \
+	libi965_gen4.la \
+	libi965_gen45.la \
+	libi965_gen5.la \
 	libi965_gen6.la \
 	libi965_gen7.la \
 	libi965_gen75.la \
 	libi965_gen8.la \
-	libi965_gen9.la
+	libi965_gen9.la \
+	libi965_gen10.la
+
+libi965_gen4_la_SOURCES = $(i965_gen4_FILES)
+libi965_gen4_la_CFLAGS = $(AM_CFLAGS) -DGEN_VERSIONx10=40
+
+libi965_gen45_la_SOURCES = $(i965_gen45_FILES)
+libi965_gen45_la_CFLAGS = $(AM_CFLAGS) -DGEN_VERSIONx10=45
+
+libi965_gen5_la_SOURCES = $(i965_gen5_FILES)
+libi965_gen5_la_CFLAGS = $(AM_CFLAGS) -DGEN_VERSIONx10=50
 
 libi965_gen6_la_SOURCES = $(i965_gen6_FILES)
 libi965_gen6_la_CFLAGS = $(AM_CFLAGS) -DGEN_VERSIONx10=60
@@ -66,6 +81,9 @@ libi965_gen8_la_CFLAGS = $(AM_CFLAGS) -DGEN_VERSIONx10=80
 
 libi965_gen9_la_SOURCES = $(i965_gen9_FILES)
 libi965_gen9_la_CFLAGS = $(AM_CFLAGS) -DGEN_VERSIONx10=90
+
+libi965_gen10_la_SOURCES = $(i965_gen10_FILES)
+libi965_gen10_la_CFLAGS = $(AM_CFLAGS) -DGEN_VERSIONx10=100
 
 noinst_LTLIBRARIES = \
 	libi965_dri.la \
@@ -87,13 +105,22 @@ CLEANFILES = $(BUILT_SOURCES)
 
 EXTRA_DIST = \
 	brw_oa_hsw.xml \
+	brw_oa_bdw.xml \
+	brw_oa_chv.xml \
+	brw_oa_sklgt2.xml \
+	brw_oa_sklgt3.xml \
+	brw_oa_sklgt4.xml \
+	brw_oa_bxt.xml \
+	brw_oa_kblgt2.xml \
+	brw_oa_kblgt3.xml \
+	brw_oa_glk.xml \
 	brw_oa.py
 
 # Note: we avoid using a multi target rule here and outputting both the
 # .c and .h files in one go so we don't hit problems with parallel
 # make and multiple invocations of the same script trying to write
 # to the same files.
-brw_oa_hsw.h: brw_oa.py brw_oa_hsw.xml
-	$(PYTHON2) $(PYTHON_FLAGS) $(srcdir)/brw_oa.py --header=$(builddir)/brw_oa_hsw.h --chipset=hsw $(srcdir)/brw_oa_hsw.xml
-brw_oa_hsw.c: brw_oa.py brw_oa_hsw.xml
-	$(PYTHON2) $(PYTHON_FLAGS) $(srcdir)/brw_oa.py --code=$(builddir)/brw_oa_hsw.c --chipset=hsw $(srcdir)/brw_oa_hsw.xml
+brw_oa_%.h: brw_oa.py brw_oa_%.xml Makefile.am
+	$(PYTHON2) $(PYTHON_FLAGS) $(srcdir)/brw_oa.py --header=$(builddir)/brw_oa_$(*).h --chipset=$(*) $(srcdir)/brw_oa_$(*).xml
+brw_oa_%.c: brw_oa.py brw_oa_%.xml Makefile.am
+	$(PYTHON2) $(PYTHON_FLAGS) $(srcdir)/brw_oa.py --code=$(builddir)/brw_oa_$(*).c --chipset=$(*) $(srcdir)/brw_oa_$(*).xml

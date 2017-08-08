@@ -591,7 +591,6 @@ struct r300_context {
 
     void *dsa_decompress_zmask;
 
-    struct pipe_index_buffer index_buffer;
     struct pipe_vertex_buffer vertex_buffer[PIPE_MAX_ATTRIBS];
     unsigned nr_vertex_buffers;
     struct u_upload_mgr *uploader;
@@ -733,7 +732,7 @@ void r300_stop_query(struct r300_context *r300);
 
 /* r300_render_translate.c */
 void r300_translate_index_buffer(struct r300_context *r300,
-                                 struct pipe_index_buffer *ib,
+                                 const struct pipe_draw_info *info,
                                  struct pipe_resource **out_index_buffer,
                                  unsigned *index_size, unsigned index_offset,
                                  unsigned *start, unsigned count);

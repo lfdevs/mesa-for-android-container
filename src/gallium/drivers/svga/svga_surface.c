@@ -158,15 +158,19 @@ svga_texture_view_surface(struct svga_context *svga,
                           int layer_pick,
                           unsigned num_layers,
                           int zslice_pick,
+                          boolean cacheable,
                           struct svga_host_surface_cache_key *key) /* OUT */
 {
    struct svga_screen *ss = svga_screen(svga->pipe.screen);
-   struct svga_winsys_surface *handle;
+   struct svga_winsys_surface *handle = NULL;
    boolean validated;
+   boolean needCopyResource;
 
    SVGA_DBG(DEBUG_PERF,
             "svga: Create surface view: layer %d zslice %d mips %d..%d\n",
             layer_pick, zslice_pick, start_mip, start_mip+num_mip-1);
+
+   SVGA_STATS_TIME_PUSH(ss->sws, SVGA_STATS_TIME_EMULATESURFACEVIEW);
 
    key->flags = flags;
    key->format = format;
@@ -195,15 +199,28 @@ svga_texture_view_surface(struct svga_context *svga,
 
    if (key->format == SVGA3D_FORMAT_INVALID) {
       key->cachable = 0;
-      return NULL;
+      goto done;
    }
 
-   SVGA_DBG(DEBUG_DMA, "surface_create for texture view\n");
-   handle = svga_screen_surface_create(ss, bind_flags, PIPE_USAGE_DEFAULT,
-                                       &validated, key);
+   if (cacheable && tex->backed_handle &&
+       memcmp(key, &tex->backed_key, sizeof *key) == 0) {
+      handle = tex->backed_handle;
+      needCopyResource = tex->backed_age < tex->age;
+   } else {
+      SVGA_DBG(DEBUG_DMA, "surface_create for texture view\n");
+      handle = svga_screen_surface_create(ss, bind_flags, PIPE_USAGE_DEFAULT,
+                                          &validated, key);
+      needCopyResource = TRUE;
+
+      if (cacheable && !tex->backed_handle) {
+         tex->backed_handle = handle;
+         memcpy(&tex->backed_key, key, sizeof *key);
+      }
+   }
+
    if (!handle) {
       key->cachable = 0;
-      return NULL;
+      goto done;
    }
 
    SVGA_DBG(DEBUG_DMA, " --> got sid %p (texture view)\n", handle);
@@ -211,10 +228,16 @@ svga_texture_view_surface(struct svga_context *svga,
    if (layer_pick < 0)
       layer_pick = 0;
 
-   svga_texture_copy_handle_resource(svga, tex, handle,
-                                     key->numMipLevels,
-                                     key->numFaces * key->arraySize,
-                                     zslice_pick, start_mip, layer_pick);
+   if (needCopyResource) {
+      svga_texture_copy_handle_resource(svga, tex, handle,
+                                        key->numMipLevels,
+                                        key->numFaces * key->arraySize,
+                                        zslice_pick, start_mip, layer_pick);
+      tex->backed_age = tex->age;
+   }
+
+done:
+   SVGA_STATS_TIME_POP(ss->sws);
 
    return handle;
 }
@@ -287,15 +310,23 @@ svga_create_surface_view(struct pipe_context *pipe,
       bind = PIPE_BIND_RENDER_TARGET;
    }
 
-   if (tex->imported)
+   if (tex->imported) {
+      /* imported resource (a window) */
       format = tex->key.format;
-   else
+      if (util_format_is_srgb(surf_tmpl->format)) {
+         /* sRGB rendering to window */
+         format = svga_linear_to_srgb(format);
+      }
+   }
+   else {
       format = svga_translate_format(ss, surf_tmpl->format, bind);
+   }
 
    assert(format != SVGA3D_FORMAT_INVALID);
 
    if (view) {
-      SVGA_DBG(DEBUG_VIEWS, "svga: Surface view: yes %p, level %u layer %u z %u, %p\n",
+      SVGA_DBG(DEBUG_VIEWS,
+               "New backed surface view: resource %p, level %u layer %u z %u, %p\n",
                pt, surf_tmpl->u.tex.level, layer, zslice, s);
 
       if (svga_have_vgpu10(svga)) {
@@ -327,7 +358,8 @@ svga_create_surface_view(struct pipe_context *pipe,
       s->handle = svga_texture_view_surface(svga, tex, bind, flags,
                                             tex->key.format,
                                             surf_tmpl->u.tex.level, 1,
-                                            layer, nlayers, zslice, &s->key);
+                                            layer, nlayers, zslice,
+                                            TRUE, &s->key);
       if (!s->handle) {
          FREE(s);
          goto done;
@@ -339,7 +371,7 @@ svga_create_surface_view(struct pipe_context *pipe,
       s->real_zslice = 0;
    } else {
       SVGA_DBG(DEBUG_VIEWS,
-               "svga: Surface view: no %p, level %u, layer %u, z %u, %p\n",
+               "New surface view: resource %p, level %u, layer %u, z %u, %p\n",
                pt, surf_tmpl->u.tex.level, layer, zslice, s);
 
       memset(&s->key, 0, sizeof s->key);
@@ -400,25 +432,28 @@ create_backed_surface_view(struct svga_context *svga, struct svga_surface *s)
 {
    struct svga_texture *tex = svga_texture(s->base.texture);
 
-   SVGA_STATS_TIME_PUSH(svga_sws(svga),
-                        SVGA_STATS_TIME_CREATEBACKEDSURFACEVIEW);
-
    if (!s->backed) {
       struct pipe_surface *backed_view;
+
+      SVGA_STATS_TIME_PUSH(svga_sws(svga),
+                           SVGA_STATS_TIME_CREATEBACKEDSURFACEVIEW);
 
       backed_view = svga_create_surface_view(&svga->pipe,
                                              &tex->b.b,
                                              &s->base,
                                              TRUE);
       if (!backed_view)
-         return NULL;
+         goto done;
 
       s->backed = svga_surface(backed_view);
+
+      SVGA_STATS_TIME_POP(svga_sws(svga));
    }
-   else {
+   else if (s->backed->age < tex->age) {
       /*
        * There is already an existing backing surface, but we still need to
-       * sync the handles.
+       * sync the backing resource if the original resource has been modified
+       * since the last copy.
        */
       struct svga_surface *bs = s->backed;
       unsigned int layer, zslice;
@@ -444,9 +479,9 @@ create_backed_surface_view(struct svga_context *svga, struct svga_surface *s)
    }
 
    svga_mark_surface_dirty(&s->backed->base);
+   s->backed->age = tex->age;
 
-   SVGA_STATS_TIME_POP(svga_sws(svga));
-
+done:
    return s->backed;
 }
 
@@ -556,7 +591,6 @@ svga_validate_surface_view(struct svga_context *svga, struct svga_surface *s)
       }
    }
    
-done:
    SVGA_STATS_TIME_POP(svga_sws(svga));
 
    return s ? &s->base : NULL;
@@ -582,7 +616,10 @@ svga_surface_destroy(struct pipe_context *pipe,
       s->backed = NULL;
    }
 
-   if (s->handle != t->handle) {
+   /* Destroy the surface handle if this is a backed handle and
+    * it is not being cached in the texture.
+    */
+   if (s->handle != t->handle && s->handle != t->backed_handle) {
       SVGA_DBG(DEBUG_DMA, "unref sid %p (tex surface)\n", s->handle);
       svga_screen_surface_destroy(ss, &s->key, &s->handle);
    }
@@ -646,8 +683,11 @@ svga_mark_surface_dirty(struct pipe_surface *surf)
 
    /* Increment the view_age and texture age for this surface's mipmap
     * level so that any sampler views into the texture are re-validated too.
+    * Note: we age the texture for backed surface view only when the
+    *       backed surface is propagated to the original surface.
     */
-   svga_age_texture_view(tex, surf->u.tex.level);
+   if (s->handle == tex->handle)
+      svga_age_texture_view(tex, surf->u.tex.level);
 }
 
 
@@ -655,13 +695,27 @@ void
 svga_mark_surfaces_dirty(struct svga_context *svga)
 {
    unsigned i;
+   struct svga_hw_clear_state *hw = &svga->state.hw_clear;
 
-   for (i = 0; i < svga->curr.framebuffer.nr_cbufs; i++) {
-      if (svga->curr.framebuffer.cbufs[i])
-         svga_mark_surface_dirty(svga->curr.framebuffer.cbufs[i]);
+   if (svga_have_vgpu10(svga)) {
+
+      /* For VGPU10, mark the dirty bit in the rendertarget/depth stencil view surface.
+       * This surface can be the backed surface.
+       */
+      for (i = 0; i < hw->num_rendertargets; i++) {
+         if (hw->rtv[i])
+            svga_mark_surface_dirty(hw->rtv[i]);
+      }
+      if (hw->dsv)
+         svga_mark_surface_dirty(hw->dsv);
+   } else {
+      for (i = 0; i < svga->curr.framebuffer.nr_cbufs; i++) {
+         if (svga->curr.framebuffer.cbufs[i])
+            svga_mark_surface_dirty(svga->curr.framebuffer.cbufs[i]);
+      }
+      if (svga->curr.framebuffer.zsbuf)
+         svga_mark_surface_dirty(svga->curr.framebuffer.zsbuf);
    }
-   if (svga->curr.framebuffer.zsbuf)
-      svga_mark_surface_dirty(svga->curr.framebuffer.zsbuf);
 }
 
 
@@ -714,8 +768,8 @@ svga_propagate_surface(struct svga_context *svga, struct pipe_surface *surf,
       }
 
       SVGA_DBG(DEBUG_VIEWS,
-               "svga: Surface propagate: tex %p, level %u, from %p\n",
-               tex, surf->u.tex.level, surf);
+               "Propagate surface %p to resource %p, level %u\n",
+               surf, tex, surf->u.tex.level);
       for (i = 0; i < nlayers; i++) {
          svga_texture_copy_handle(svga,
                                   s->handle, 0, 0, 0, s->real_level,
@@ -726,6 +780,16 @@ svga_propagate_surface(struct svga_context *svga, struct pipe_surface *surf,
                                   u_minify(tex->b.b.height0, surf->u.tex.level),
                                   1);
          svga_define_texture_level(tex, layer + i, surf->u.tex.level);
+      }
+
+      /* Sync the surface view age with the texture age */
+      s->age = tex->age;
+
+      /* If this backed surface is cached in the texture,
+       * update the backed age as well.
+       */
+      if (tex->backed_handle == s->handle) {
+         tex->backed_age = tex->age;
       }
    }
 
@@ -750,15 +814,15 @@ svga_propagate_rendertargets(struct svga_context *svga)
     * not the svga->curr.framebuffer surfaces, because it's the former
     * surfaces which may be backing surface views (the actual render targets).
     */
-   for (i = 0; i < svga->state.hw_draw.num_rendertargets; i++) {
-      struct pipe_surface *s = svga->state.hw_draw.rtv[i];
+   for (i = 0; i < svga->state.hw_clear.num_rendertargets; i++) {
+      struct pipe_surface *s = svga->state.hw_clear.rtv[i];
       if (s) {
          svga_propagate_surface(svga, s, FALSE);
       }
    }
 
-   if (svga->state.hw_draw.dsv) {
-      svga_propagate_surface(svga, svga->state.hw_draw.dsv, FALSE);
+   if (svga->state.hw_clear.dsv) {
+      svga_propagate_surface(svga, svga->state.hw_clear.dsv, FALSE);
    }
 }
 

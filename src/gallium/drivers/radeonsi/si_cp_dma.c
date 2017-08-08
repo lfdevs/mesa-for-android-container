@@ -142,8 +142,11 @@ static unsigned get_flush_flags(struct si_context *sctx, enum r600_coherency coh
 
 static unsigned get_tc_l2_flag(struct si_context *sctx, enum r600_coherency coher)
 {
-	return coher == R600_COHERENCY_SHADER &&
-	       sctx->b.chip_class >= CIK ? CP_DMA_USE_L2 : 0;
+	if ((sctx->b.chip_class >= GFX9 && coher == R600_COHERENCY_CB_META) ||
+	    (sctx->b.chip_class >= CIK && coher == R600_COHERENCY_SHADER))
+		return CP_DMA_USE_L2;
+
+	return 0;
 }
 
 static void si_cp_dma_prepare(struct si_context *sctx, struct pipe_resource *dst,
@@ -212,7 +215,7 @@ static void si_clear_buffer(struct pipe_context *ctx, struct pipe_resource *dst,
 	if (!size)
 		return;
 
-	dma_clear_size = size & ~3llu;
+       dma_clear_size = size & ~3ull;
 
 	/* Mark the buffer range of destination as valid (initialized),
 	 * so that transfer_map knows it should wait for the GPU when mapping

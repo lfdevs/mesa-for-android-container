@@ -137,10 +137,13 @@ void
 dri_fill_st_visual(struct st_visual *stvis, struct dri_screen *screen,
                    const struct gl_config *mode);
 
+unsigned
+dri_init_options_get_screen_flags(struct dri_screen *screen,
+                                  const char* driver_name);
+
 const __DRIconfig **
 dri_init_screen_helper(struct dri_screen *screen,
-                       struct pipe_screen *pscreen,
-                       const char* driver_name);
+                       struct pipe_screen *pscreen);
 
 void
 dri_destroy_screen_helper(struct dri_screen * screen);

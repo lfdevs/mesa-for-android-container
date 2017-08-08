@@ -55,6 +55,16 @@ dd_screen_get_device_vendor(struct pipe_screen *_screen)
    return screen->get_device_vendor(screen);
 }
 
+static const void *
+dd_screen_get_compiler_options(struct pipe_screen *_screen,
+                               enum pipe_shader_ir ir,
+                               enum pipe_shader_type shader)
+{
+   struct pipe_screen *screen = dd_screen(_screen)->screen;
+
+   return screen->get_compiler_options(screen, ir, shader);
+}
+
 static struct disk_cache *
 dd_screen_get_disk_shader_cache(struct pipe_screen *_screen)
 {
@@ -364,7 +374,7 @@ ddebug_screen_create(struct pipe_screen *screen)
 
       if (sscanf(option+8, "%u", &apitrace_dump_call) != 1)
          return screen;
-   } else if (!strncmp(option, "pipelined", 8)) {
+   } else if (!strncmp(option, "pipelined", 9)) {
       mode = DD_DETECT_HANGS_PIPELINED;
 
       if (sscanf(option+10, "%u", &timeout) != 1)
@@ -411,6 +421,7 @@ ddebug_screen_create(struct pipe_screen *screen)
    SCR_INIT(fence_finish);
    SCR_INIT(get_driver_query_info);
    SCR_INIT(get_driver_query_group_info);
+   SCR_INIT(get_compiler_options);
 
 #undef SCR_INIT
 

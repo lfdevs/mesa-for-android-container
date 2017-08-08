@@ -109,13 +109,6 @@
 #define BRW_CLIP_API_OGL     0
 #define BRW_CLIP_API_DX      1
 
-#define BRW_CLIPMODE_NORMAL              0
-#define BRW_CLIPMODE_CLIP_ALL            1
-#define BRW_CLIPMODE_CLIP_NON_REJECTED   2
-#define BRW_CLIPMODE_REJECT_ALL          3
-#define BRW_CLIPMODE_ACCEPT_ALL          4
-#define BRW_CLIPMODE_KERNEL_CLIP         5
-
 #define BRW_CLIP_NDCSPACE     0
 #define BRW_CLIP_SCREENSPACE  1
 
@@ -152,8 +145,6 @@
 
 #define BRW_FRONTWINDING_CW      0
 #define BRW_FRONTWINDING_CCW     1
-
-#define BRW_SPRITE_POINT_ENABLE  16
 
 #define BRW_CUT_INDEX_ENABLE     (1 << 10)
 
@@ -1359,53 +1350,12 @@ enum brw_pixel_shader_coverage_mask_mode {
 
 #define GEN6_MI_REPORT_PERF_COUNT ((0x28 << 23) | (3 - 2))
 
+#define GEN8_MI_REPORT_PERF_COUNT ((0x28 << 23) | (4 - 2))
 
 /* Maximum number of entries that can be addressed using a binding table
  * pointer of type SURFTYPE_BUFFER
  */
 #define BRW_MAX_NUM_BUFFER_ENTRIES	(1 << 27)
-
-/* Memory Object Control State:
- * Specifying zero for L3 means "uncached in L3", at least on Haswell
- * and Baytrail, since there are no PTE flags for setting L3 cacheability.
- * On Ivybridge, the PTEs do have a cache-in-L3 bit, so setting MOCS to 0
- * may still respect that.
- */
-#define GEN7_MOCS_L3                    1
-
-/* Ivybridge only: cache in LLC.
- * Specifying zero here means to use the PTE values set by the kernel;
- * non-zero overrides the PTE values.
- */
-#define IVB_MOCS_LLC                    (1 << 1)
-
-/* Baytrail only: snoop in CPU cache */
-#define BYT_MOCS_SNOOP                  (1 << 1)
-
-/* Haswell only: LLC/eLLC controls (write-back or uncached).
- * Specifying zero here means to use the PTE values set by the kernel,
- * which is useful since it offers additional control (write-through
- * cacheing and age).  Non-zero overrides the PTE values.
- */
-#define HSW_MOCS_UC_LLC_UC_ELLC         (1 << 1)
-#define HSW_MOCS_WB_LLC_WB_ELLC         (2 << 1)
-#define HSW_MOCS_UC_LLC_WB_ELLC         (3 << 1)
-
-/* Broadwell: these defines always use all available caches (L3, LLC, eLLC),
- * and let you force write-back (WB) or write-through (WT) caching, or leave
- * it up to the page table entry (PTE) specified by the kernel.
- */
-#define BDW_MOCS_WB  0x78
-#define BDW_MOCS_WT  0x58
-#define BDW_MOCS_PTE 0x18
-
-/* Skylake: MOCS is now an index into an array of 62 different caching
- * configurations programmed by the kernel.
- */
-/* TC=LLC/eLLC, LeCC=WB, LRUM=3, L3CC=WB */
-#define SKL_MOCS_WB  (2 << 1)
-/* TC=LLC/eLLC, LeCC=PTE, LRUM=3, L3CC=WB */
-#define SKL_MOCS_PTE (1 << 1)
 
 #define MEDIA_VFE_STATE                         0x7000
 /* GEN7 DW2, GEN8+ DW3 */
@@ -1660,6 +1610,7 @@ enum brw_pixel_shader_coverage_mask_mode {
 #define GEN7_GPGPU_DISPATCHDIMZ         0x2508
 
 #define GEN7_CACHE_MODE_1               0x7004
+# define GEN9_FLOAT_BLEND_OPTIMIZATION_ENABLE (1 << 4)
 # define GEN8_HIZ_NP_PMA_FIX_ENABLE        (1 << 11)
 # define GEN8_HIZ_NP_EARLY_Z_FAILS_DISABLE (1 << 13)
 # define GEN9_PARTIAL_RESOLVE_DISABLE_IN_VC (1 << 1)
@@ -1728,5 +1679,11 @@ enum brw_pixel_shader_coverage_mask_mode {
 # define GEN8_L3CNTLREG_DC_ALLOC_MASK      INTEL_MASK(24, 18)
 # define GEN8_L3CNTLREG_ALL_ALLOC_SHIFT    25
 # define GEN8_L3CNTLREG_ALL_ALLOC_MASK     INTEL_MASK(31, 25)
+
+#define INSTPM                             0x20c0
+# define INSTPM_CONSTANT_BUFFER_ADDRESS_OFFSET_DISABLE (1 << 6)
+
+#define CS_DEBUG_MODE2                     0x20d8 /* Gen9+ */
+# define CSDBG2_CONSTANT_BUFFER_ADDRESS_OFFSET_DISABLE (1 << 4)
 
 #endif

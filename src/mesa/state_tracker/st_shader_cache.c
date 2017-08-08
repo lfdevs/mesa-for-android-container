@@ -86,25 +86,11 @@ st_store_tgsi_in_disk_cache(struct st_context *st, struct gl_program *prog,
       write_tgsi_to_cache(blob, &stvp->tgsi, st, sha1, num_tokens);
       break;
    }
-   case MESA_SHADER_TESS_CTRL: {
-      struct st_tessctrl_program *stcp = (struct st_tessctrl_program *) prog;
-      sha1 = stcp->sha1;
-
-      write_stream_out_to_cache(blob, out_state);
-      write_tgsi_to_cache(blob, out_state, st, sha1, num_tokens);
-      break;
-   }
-   case MESA_SHADER_TESS_EVAL: {
-      struct st_tesseval_program *step = (struct st_tesseval_program *) prog;
-      sha1 = step->sha1;
-
-      write_stream_out_to_cache(blob, out_state);
-      write_tgsi_to_cache(blob, out_state, st, sha1, num_tokens);
-      break;
-   }
+   case MESA_SHADER_TESS_CTRL:
+   case MESA_SHADER_TESS_EVAL:
    case MESA_SHADER_GEOMETRY: {
-      struct st_geometry_program *stgp = (struct st_geometry_program *) prog;
-      sha1 = stgp->sha1;
+      struct st_common_program *p = st_common_program(prog);
+      sha1 = p->sha1;
 
       write_stream_out_to_cache(blob, out_state);
       write_tgsi_to_cache(blob, out_state, st, sha1, num_tokens);
@@ -188,24 +174,21 @@ st_load_tgsi_from_disk_cache(struct gl_context *ctx,
          break;
       }
       case MESA_SHADER_TESS_CTRL: {
-         struct st_tessctrl_program *stcp =
-            (struct st_tessctrl_program *) glprog;
+         struct st_common_program *stcp = st_common_program(glprog);
          stage_sha1[i] = stcp->sha1;
          ralloc_strcat(&buf, " tcs");
          disk_cache_compute_key(ctx->Cache, buf, strlen(buf), stage_sha1[i]);
          break;
       }
       case MESA_SHADER_TESS_EVAL: {
-         struct st_tesseval_program *step =
-            (struct st_tesseval_program *) glprog;
+         struct st_common_program *step = st_common_program(glprog);
          stage_sha1[i] = step->sha1;
          ralloc_strcat(&buf, " tes");
          disk_cache_compute_key(ctx->Cache, buf, strlen(buf), stage_sha1[i]);
          break;
       }
       case MESA_SHADER_GEOMETRY: {
-         struct st_geometry_program *stgp =
-            (struct st_geometry_program *) glprog;
+         struct st_common_program *stgp = st_common_program(glprog);
          stage_sha1[i] = stgp->sha1;
          ralloc_strcat(&buf, " gs");
          disk_cache_compute_key(ctx->Cache, buf, strlen(buf), stage_sha1[i]);
@@ -242,8 +225,12 @@ st_load_tgsi_from_disk_cache(struct gl_context *ctx,
    if (prog->data->LinkStatus != linking_skipped)
       return false;
 
-   struct st_context *st = st_context(ctx);
    uint8_t *buffer = NULL;
+   if (ctx->_Shader->Flags & GLSL_CACHE_FALLBACK) {
+      goto fallback_recompile;
+   }
+
+   struct st_context *st = st_context(ctx);
    for (unsigned i = 0; i < MESA_SHADER_STAGES; i++) {
       if (prog->_LinkedShaders[i] == NULL)
          continue;
@@ -278,8 +265,7 @@ st_load_tgsi_from_disk_cache(struct gl_context *ctx,
             break;
          }
          case MESA_SHADER_TESS_CTRL: {
-            struct st_tessctrl_program *sttcp =
-               (struct st_tessctrl_program *) glprog;
+            struct st_common_program *sttcp = st_common_program(glprog);
 
             st_release_basic_variants(st, sttcp->Base.Target,
                                       &sttcp->variants, &sttcp->tgsi);
@@ -293,8 +279,7 @@ st_load_tgsi_from_disk_cache(struct gl_context *ctx,
             break;
          }
          case MESA_SHADER_TESS_EVAL: {
-            struct st_tesseval_program *sttep =
-               (struct st_tesseval_program *) glprog;
+            struct st_common_program *sttep = st_common_program(glprog);
 
             st_release_basic_variants(st, sttep->Base.Target,
                                       &sttep->variants, &sttep->tgsi);
@@ -308,8 +293,7 @@ st_load_tgsi_from_disk_cache(struct gl_context *ctx,
             break;
          }
          case MESA_SHADER_GEOMETRY: {
-            struct st_geometry_program *stgp =
-               (struct st_geometry_program *) glprog;
+            struct st_common_program *stgp = st_common_program(glprog);
 
             st_release_basic_variants(st, stgp->Base.Target, &stgp->variants,
                                       &stgp->tgsi);
@@ -380,8 +364,7 @@ st_load_tgsi_from_disk_cache(struct gl_context *ctx,
          }
 
          st_set_prog_affected_state_flags(glprog);
-         _mesa_associate_uniform_storage(ctx, prog, glprog->Parameters,
-                                         false);
+         _mesa_associate_uniform_storage(ctx, prog, glprog, false);
 
          /* Create Gallium shaders now instead of on demand. */
          if (ST_DEBUG & DEBUG_PRECOMPILE ||
@@ -393,8 +376,7 @@ st_load_tgsi_from_disk_cache(struct gl_context *ctx,
          /* Failed to find a matching cached shader so fallback to recompile.
           */
          if (ctx->_Shader->Flags & GLSL_CACHE_INFO) {
-            fprintf(stderr, "TGSI cache item not found falling back to "
-                    "compile.\n");
+            fprintf(stderr, "TGSI cache item not found.\n");
          }
 
          goto fallback_recompile;
@@ -405,6 +387,9 @@ st_load_tgsi_from_disk_cache(struct gl_context *ctx,
 
 fallback_recompile:
    free(buffer);
+
+   if (ctx->_Shader->Flags & GLSL_CACHE_INFO)
+      fprintf(stderr, "TGSI cache falling back to recompile.\n");
 
    for (unsigned i = 0; i < prog->NumShaders; i++) {
       _mesa_glsl_compile_shader(ctx, prog->Shaders[i], false, false, true);

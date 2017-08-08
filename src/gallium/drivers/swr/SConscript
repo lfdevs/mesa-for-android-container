@@ -30,12 +30,6 @@ else:
     llvm_includedir = env.backtick('%s --includedir' % llvm_config).rstrip()
     print "llvm include dir %s" % llvm_includedir
 
-# the loader is included in the mesa lib itself
-# All the remaining files are in loadable modules
-loadersource = env.ParseSourceList('Makefile.sources', [
-    'LOADER_SOURCES'
-])
-
 if not env['msvc'] :
     env.Append(CCFLAGS = [
         '-std=c++11',
@@ -59,7 +53,7 @@ env.CodeGenerate(
     source = '',
     command = python_cmd + ' $SCRIPT --output $TARGET --gen_h'
 )
-Depends('rasterizer/codegen/gen_knobs.cpp',
+Depends('rasterizer/codegen/gen_knobs.h',
         swrroot + 'rasterizer/codegen/templates/gen_knobs.cpp')
 
 env.CodeGenerate(
@@ -140,12 +134,44 @@ Depends('rasterizer/jitter/gen_state_llvm.h',
 # 2 centroid
 # 2 forcedSampleCount
 # 2 canEarlyZ
+backendPixelRateFileCount = 4
+backendPixelRateFilePat = "rasterizer/core/backends/gen_BackendPixelRate%s.cpp"
+backendPixelRateFiles = map(lambda x: backendPixelRateFilePat % x,
+                            range(0, backendPixelRateFileCount))
 env.CodeGenerate(
-    target = 'rasterizer/core/gen_BackendPixelRate0.cpp',
+    target = 'rasterizer/core/backends/gen_BackendPixelRate.hpp',
     script = swrroot + 'rasterizer/codegen/gen_backends.py',
     source = '',
-    command = python_cmd + ' $SCRIPT --outdir ' + bldroot + '/rasterizer/core --dim 5 2 3 2 2 2 --split 0 --cpp'
-)
+    command = python_cmd + ' $SCRIPT --outdir ' + bldroot + '/rasterizer/core/backends --dim 5 2 3 2 2 2 --numfiles ' + str(backendPixelRateFileCount) + ' --cpp --hpp'
+    )
+Depends(backendPixelRateFiles,
+        ['rasterizer/core/backends/gen_BackendPixelRate.hpp',
+         'rasterizer/archrast/gen_ar_event.hpp',
+         'rasterizer/codegen/gen_knobs.h']
+        )
+
+# 5 SWR_MULTISAMPLE_TYPE_COUNT
+# 2 CenterPattern
+# 2 Conservative
+# 3 SWR_INPUT_COVERAGE_COUNT
+# 5 STATE_VALID_TRI_EDGE_COUNT
+# 2 RasterScissorEdges
+genRasterizerFileCount = 4
+genRasterizerFilePat = "rasterizer/core/backends/gen_rasterizer%s.cpp"
+genRasterizerFiles = map(lambda x: genRasterizerFilePat % x,
+                         range(0, genRasterizerFileCount))
+env.CodeGenerate(
+    target = 'rasterizer/core/backends/gen_rasterizer.hpp',
+    script = swrroot + 'rasterizer/codegen/gen_backends.py',
+    source = '',
+    command = python_cmd + ' $SCRIPT --outdir ' + bldroot + '/rasterizer/core/backends --rast --dim 5 2 2 3 5 2 --numfiles ' + str(genRasterizerFileCount) + ' --cpp --hpp'
+    )
+Depends(genRasterizerFiles,
+        ['rasterizer/core/backends/gen_rasterizer.hpp',
+         'rasterizer/archrast/gen_ar_event.hpp',
+         'rasterizer/codegen/gen_knobs.h']
+        )
+
 Depends('rasterizer/jitter/gen_state_llvm.h',
         swrroot + 'rasterizer/codegen/templates/gen_backend.cpp')
 
@@ -153,20 +179,17 @@ Depends('rasterizer/jitter/gen_state_llvm.h',
 built_sources = [
     'rasterizer/codegen/gen_knobs.cpp',
     'rasterizer/archrast/gen_ar_event.cpp',
-    'rasterizer/core/gen_BackendPixelRate0.cpp',
     ]
+
+built_sources += [backendPixelRateFiles, genRasterizerFiles]
 
 source = built_sources
 source += env.ParseSourceList(swrroot + 'Makefile.sources', [
-    'CXX_SOURCES',
     'ARCHRAST_CXX_SOURCES',
     'COMMON_CXX_SOURCES',
     'CORE_CXX_SOURCES',
-    'JITTER_CXX_SOURCES',
     'MEMORY_CXX_SOURCES'
 ])
-
-env.Prepend(LIBS = [ mesautil, mesa, gallium ])
 
 env.Prepend(CPPPATH = [
     '.',
@@ -209,13 +232,24 @@ swrAVX2 = envavx2.SharedLibrary(
     )
 env.Alias('swrAVX2', swrAVX2)
 
+source = env.ParseSourceList(swrroot + 'Makefile.sources', [
+    'CXX_SOURCES',
+    'COMMON_CXX_SOURCES',
+    'JITTER_CXX_SOURCES',
+    'LOADER_SOURCES'
+])
+source += [
+    'rasterizer/codegen/gen_knobs.cpp',
+    'rasterizer/archrast/gen_ar_event.cpp',
+    ]
 
 # main SWR lib
-swr = env.ConvenienceLibrary(
+envSWR = envavx.Clone() # pick up the arch flag for intrinsic usage
+envSWR.Append(CPPDEFINES = ['HAVE_SWR_AVX', 'HAVE_SWR_AVX2'])
+swr = envSWR.ConvenienceLibrary(
     target = 'swr',
-    source = loadersource,
+    source = source,
     )
-
 
 # treat arch libs as dependencies, even though they are not linked
 # into swr, so we don't have to build them separately

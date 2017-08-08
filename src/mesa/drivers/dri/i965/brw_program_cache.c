@@ -45,6 +45,8 @@
  */
 
 #include "main/imports.h"
+#include "main/streaming-load-memcpy.h"
+#include "x86/common_x86_asm.h"
 #include "intel_batchbuffer.h"
 #include "brw_state.h"
 #include "brw_wm.h"
@@ -216,26 +218,26 @@ brw_cache_new_bo(struct brw_cache *cache, uint32_t new_size)
    struct brw_bo *new_bo;
 
    new_bo = brw_bo_alloc(brw->bufmgr, "program cache", new_size, 64);
-   if (brw->has_llc)
-      brw_bo_map_unsynchronized(brw, new_bo);
+   if (can_do_exec_capture(brw->screen))
+      new_bo->kflags = EXEC_OBJECT_CAPTURE;
+
+   void *map = brw_bo_map(brw, new_bo, MAP_READ | MAP_WRITE |
+                                       MAP_ASYNC | MAP_PERSISTENT);
 
    /* Copy any existing data that needs to be saved. */
    if (cache->next_offset != 0) {
-      if (brw->has_llc) {
-         memcpy(new_bo->virtual, cache->bo->virtual, cache->next_offset);
-      } else {
-         brw_bo_map(brw, cache->bo, false);
-         brw_bo_subdata(new_bo, 0, cache->next_offset,
-                              cache->bo->virtual);
-         brw_bo_unmap(cache->bo);
-      }
+#ifdef USE_SSE41
+      if (!cache->bo->cache_coherent && cpu_has_sse4_1)
+         _mesa_streaming_load_memcpy(map, cache->map, cache->next_offset);
+      else
+#endif
+         memcpy(map, cache->map, cache->next_offset);
    }
 
-   if (brw->has_llc)
-      brw_bo_unmap(cache->bo);
+   brw_bo_unmap(cache->bo);
    brw_bo_unreference(cache->bo);
    cache->bo = new_bo;
-   cache->bo_used_by_gpu = false;
+   cache->map = map;
 
    /* Since we have a new BO in place, we need to signal the units
     * that depend on it (state base address on gen5+, or unit state before).
@@ -252,23 +254,13 @@ brw_lookup_prog(const struct brw_cache *cache,
                 enum brw_cache_id cache_id,
                 const void *data, unsigned data_size)
 {
-   struct brw_context *brw = cache->brw;
    unsigned i;
    const struct brw_cache_item *item;
 
    for (i = 0; i < cache->size; i++) {
       for (item = cache->items[i]; item; item = item->next) {
-         int ret;
-
-         if (item->cache_id != cache_id || item->size != data_size)
-            continue;
-
-         if (!brw->has_llc)
-            brw_bo_map(brw, cache->bo, false);
-         ret = memcmp(cache->bo->virtual + item->offset, data, item->size);
-         if (!brw->has_llc)
-            brw_bo_unmap(cache->bo);
-         if (ret)
+         if (item->cache_id != cache_id || item->size != data_size ||
+             memcmp(cache->map + item->offset, data, item->size) != 0)
             continue;
 
          return item;
@@ -282,7 +274,6 @@ static uint32_t
 brw_alloc_item_data(struct brw_cache *cache, uint32_t size)
 {
    uint32_t offset;
-   struct brw_context *brw = cache->brw;
 
    /* Allocate space in the cache BO for our new program. */
    if (cache->next_offset + size > cache->bo->size) {
@@ -292,14 +283,6 @@ brw_alloc_item_data(struct brw_cache *cache, uint32_t size)
          new_size *= 2;
 
       brw_cache_new_bo(cache, new_size);
-   }
-
-   /* If we would block on writing to an in-use program BO, just
-    * recreate it.
-    */
-   if (!brw->has_llc && cache->bo_used_by_gpu) {
-      perf_debug("Copying busy program cache buffer.\n");
-      brw_cache_new_bo(cache, cache->bo->size);
    }
 
    offset = cache->next_offset;
@@ -339,7 +322,6 @@ brw_upload_cache(struct brw_cache *cache,
                  uint32_t *out_offset,
                  void *out_aux)
 {
-   struct brw_context *brw = cache->brw;
    struct brw_cache_item *item = CALLOC_STRUCT(brw_cache_item);
    const struct brw_cache_item *matching_data =
       brw_lookup_prog(cache, cache_id, data, data_size);
@@ -366,11 +348,7 @@ brw_upload_cache(struct brw_cache *cache,
       item->offset = brw_alloc_item_data(cache, data_size);
 
       /* Copy data to the buffer */
-      if (brw->has_llc) {
-         memcpy((char *)cache->bo->virtual + item->offset, data, data_size);
-      } else {
-         brw_bo_subdata(cache->bo, item->offset, data_size, data);
-      }
+      memcpy(cache->map + item->offset, data, data_size);
    }
 
    /* Set up the memory containing the key and aux_data */
@@ -407,8 +385,11 @@ brw_init_caches(struct brw_context *brw)
       calloc(cache->size, sizeof(struct brw_cache_item *));
 
    cache->bo = brw_bo_alloc(brw->bufmgr, "program cache",  4096, 64);
-   if (brw->has_llc)
-      brw_bo_map_unsynchronized(brw, cache->bo);
+   if (can_do_exec_capture(brw->screen))
+      cache->bo->kflags = EXEC_OBJECT_CAPTURE;
+
+   cache->map = brw_bo_map(brw, cache->bo, MAP_READ | MAP_WRITE |
+                                           MAP_ASYNC | MAP_PERSISTENT);
 }
 
 static void
@@ -487,10 +468,10 @@ brw_destroy_cache(struct brw_context *brw, struct brw_cache *cache)
 
    /* This can be NULL if context creation failed early on */
    if (cache->bo) {
-      if (brw->has_llc)
-         brw_bo_unmap(cache->bo);
+      brw_bo_unmap(cache->bo);
       brw_bo_unreference(cache->bo);
       cache->bo = NULL;
+      cache->map = NULL;
    }
    brw_clear_cache(brw, cache);
    free(cache->items);
@@ -538,17 +519,11 @@ brw_print_program_cache(struct brw_context *brw)
    const struct brw_cache *cache = &brw->cache;
    struct brw_cache_item *item;
 
-   if (!brw->has_llc)
-      brw_bo_map(brw, cache->bo, false);
-
    for (unsigned i = 0; i < cache->size; i++) {
       for (item = cache->items[i]; item; item = item->next) {
          fprintf(stderr, "%s:\n", cache_name(i));
-         brw_disassemble(&brw->screen->devinfo, cache->bo->virtual,
+         brw_disassemble(&brw->screen->devinfo, cache->map,
                          item->offset, item->size, stderr);
       }
    }
-
-   if (!brw->has_llc)
-      brw_bo_unmap(cache->bo);
 }

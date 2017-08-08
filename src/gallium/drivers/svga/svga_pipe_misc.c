@@ -150,15 +150,6 @@ svga_set_framebuffer_state(struct pipe_context *pipe,
 
    util_copy_framebuffer_state(dst, fb);
 
-   /* Set the rendered-to flags */
-   for (i = 0; i < dst->nr_cbufs; i++) {
-      struct pipe_surface *s = dst->cbufs[i];
-      if (s) {
-         struct svga_texture *t = svga_texture(s->texture);
-         svga_set_texture_rendered_to(t, s->u.tex.first_layer, s->u.tex.level);
-      }
-   }
-
    if (svga->curr.framebuffer.zsbuf) {
       switch (svga->curr.framebuffer.zsbuf->format) {
       case PIPE_FORMAT_Z16_UNORM:
@@ -179,13 +170,6 @@ svga_set_framebuffer_state(struct pipe_context *pipe,
       default:
          svga->curr.depthscale = 0.0f;
          break;
-      }
-
-      /* Set rendered-to flag */
-      {
-         struct pipe_surface *s = dst->zsbuf;
-         struct svga_texture *t = svga_texture(s->texture);
-         svga_set_texture_rendered_to(t, s->u.tex.first_layer, s->u.tex.level);
       }
    }
    else {

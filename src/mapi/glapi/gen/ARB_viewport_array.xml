@@ -29,44 +29,44 @@
     <enum name="PROVOKING_VERTEX" value="0x8E4F"/>
     <enum name="UNDEFINED_VERTEX" value="0x8260"/>
 
-    <function name="ViewportArrayv">
+    <function name="ViewportArrayv" no_error="true">
         <param name="first" type="GLuint"/>
         <param name="count" type="GLsizei"/>
-        <param name="v" type="const GLfloat *"/>
+        <param name="v" type="const GLfloat *" count="count" count_scale="4"/>
     </function>
-    <function name="ViewportIndexedf">
+    <function name="ViewportIndexedf" no_error="true">
         <param name="index" type="GLuint"/>
         <param name="x" type="GLfloat"/>
         <param name="y" type="GLfloat"/>
         <param name="w" type="GLfloat"/>
         <param name="h" type="GLfloat"/>
     </function>
-    <function name="ViewportIndexedfv">
+    <function name="ViewportIndexedfv" no_error="true">
         <param name="index" type="GLuint"/>
-        <param name="v" type="const GLfloat *"/>
+        <param name="v" type="const GLfloat *" count="4"/>
     </function>
-    <function name="ScissorArrayv">
+    <function name="ScissorArrayv" no_error="true">
         <param name="first" type="GLuint"/>
         <param name="count" type="GLsizei"/>
-        <param name="v" type="const int *"/>
+        <param name="v" type="const int *" count="count" count_scale="4"/>
     </function>
-    <function name="ScissorIndexed">
+    <function name="ScissorIndexed" no_error="true">
         <param name="index" type="GLuint"/>
         <param name="left" type="GLint"/>
         <param name="bottom" type="GLint"/>
         <param name="width" type="GLsizei"/>
         <param name="height" type="GLsizei"/>
     </function>
-    <function name="ScissorIndexedv">
+    <function name="ScissorIndexedv" no_error="true">
         <param name="index" type="GLuint"/>
-        <param name="v" type="const GLint *"/>
+        <param name="v" type="const GLint *" count="4"/>
     </function>
     <function name="DepthRangeArrayv">
         <param name="first" type="GLuint"/>
         <param name="count" type="GLsizei"/>
-        <param name="v" type="const GLclampd *"/>
+        <param name="v" type="const GLclampd *" count="count" count_scale="2"/>
     </function>
-    <function name="DepthRangeIndexed">
+    <function name="DepthRangeIndexed" no_error="true">
         <param name="index" type="GLuint"/>
         <param name="n" type="GLclampd"/>
         <param name="f" type="GLclampd"/>

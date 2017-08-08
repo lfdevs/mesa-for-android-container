@@ -110,7 +110,6 @@ struct nv30_context {
 
    struct pipe_vertex_buffer vtxbuf[PIPE_MAX_ATTRIBS];
    unsigned num_vtxbufs;
-   struct pipe_index_buffer idxbuf;
    uint32_t vbo_fifo;
    uint32_t vbo_user;
    unsigned vbo_min_index;

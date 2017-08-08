@@ -20,6 +20,8 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
+#include "pipe/p_defines.h"
+
 #include "nv50/nv50_program.h"
 #include "nv50/nv50_context.h"
 
@@ -331,7 +333,7 @@ nv50_program_translate(struct nv50_program *prog, uint16_t chipset,
 
    info->type = prog->type;
    info->target = chipset;
-   info->bin.sourceRep = NV50_PROGRAM_IR_TGSI;
+   info->bin.sourceRep = PIPE_SHADER_IR_TGSI;
    info->bin.source = (void *)prog->pipe.tokens;
 
    info->io.auxCBSlot = 15;

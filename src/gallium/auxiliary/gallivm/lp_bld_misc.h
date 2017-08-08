@@ -42,9 +42,6 @@ extern "C" {
 
 struct lp_generated_code;
 
-extern void
-gallivm_init_llvm_targets(void);
-
 extern LLVMTargetLibraryInfoRef
 gallivm_create_target_library_info(const char *triple);
 

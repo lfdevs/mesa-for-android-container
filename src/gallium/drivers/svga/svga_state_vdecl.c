@@ -73,10 +73,10 @@ emit_hw_vs_vdecl(struct svga_context *svga, unsigned dirty)
       unsigned int offset = vb->buffer_offset + ve[i].src_offset;
       unsigned tmp_neg_bias = 0;
 
-      if (!vb->buffer)
+      if (!vb->buffer.resource)
          continue;
 
-      buffer = svga_buffer(vb->buffer);
+      buffer = svga_buffer(vb->buffer.resource);
       if (buffer->uploaded.start > offset) {
          tmp_neg_bias = buffer->uploaded.start - offset;
          if (vb->stride)
@@ -91,10 +91,10 @@ emit_hw_vs_vdecl(struct svga_context *svga, unsigned dirty)
       unsigned usage, index;
       struct svga_buffer *buffer;
 
-      if (!vb->buffer)
+      if (!vb->buffer.resource)
          continue;
 
-      buffer = svga_buffer(vb->buffer);
+      buffer = svga_buffer(vb->buffer.resource);
       svga_generate_vdecl_semantics( i, &usage, &index );
 
       /* SVGA_NEW_VELEMENT

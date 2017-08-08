@@ -60,8 +60,17 @@ set_query_availability(struct brw_context *brw, struct brw_query_object *query,
     */
    if (brw->ctx.Extensions.ARB_query_buffer_object &&
        brw_is_query_pipelined(query)) {
-      brw_emit_pipe_control_write(brw,
-                                  PIPE_CONTROL_WRITE_IMMEDIATE,
+      unsigned flags = PIPE_CONTROL_WRITE_IMMEDIATE;
+
+      if (available) {
+         /* Order available *after* the query results. */
+         flags |= PIPE_CONTROL_FLUSH_ENABLE;
+      } else {
+         /* Make it unavailable *before* any pipelined reads. */
+         flags |= PIPE_CONTROL_CS_STALL;
+      }
+
+      brw_emit_pipe_control_write(brw, flags,
                                   query->bo, 2 * sizeof(uint64_t),
                                   available);
    }
@@ -212,8 +221,7 @@ gen6_queryobj_get_results(struct gl_context *ctx,
    if (query->bo == NULL)
       return;
 
-   brw_bo_map(brw, query->bo, false);
-   uint64_t *results = query->bo->virtual;
+   uint64_t *results = brw_bo_map(brw, query->bo, MAP_READ);
    switch (query->Base.Target) {
    case GL_TIME_ELAPSED:
       /* The query BO contains the starting and ending timestamps.

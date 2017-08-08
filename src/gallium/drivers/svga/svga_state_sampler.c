@@ -44,7 +44,7 @@
 #include "svga_shader.h"
 #include "svga_state.h"
 #include "svga_surface.h"
-
+#include "svga3d_surfacedefs.h"
 
 /** Get resource handle for a texture or buffer */
 static inline struct svga_winsys_surface *
@@ -64,8 +64,8 @@ svga_resource_handle(struct pipe_resource *res)
  * any of the resources bound to any of the currently bound sampler views.
  */
 boolean
-svga_check_sampler_view_resource_collision(struct svga_context *svga,
-                                           struct svga_winsys_surface *res,
+svga_check_sampler_view_resource_collision(const struct svga_context *svga,
+                                           const struct svga_winsys_surface *res,
                                            enum pipe_shader_type shader)
 {
    struct pipe_screen *screen = svga->pipe.screen;
@@ -141,11 +141,11 @@ svga_validate_pipe_sampler_view(struct svga_context *svga,
        * create a BGRA view (and vice versa).
        */
       if (viewFormat == PIPE_FORMAT_B8G8R8X8_UNORM &&
-          texture->format == PIPE_FORMAT_B8G8R8A8_UNORM) {
+          svga_texture_device_format_has_alpha(texture)) {
          viewFormat = PIPE_FORMAT_B8G8R8A8_UNORM;
       }
       else if (viewFormat == PIPE_FORMAT_B8G8R8A8_UNORM &&
-          texture->format == PIPE_FORMAT_B8G8R8X8_UNORM) {
+               !svga_texture_device_format_has_alpha(texture)) {
          viewFormat = PIPE_FORMAT_B8G8R8X8_UNORM;
       }
 

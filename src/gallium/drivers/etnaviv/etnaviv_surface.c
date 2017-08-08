@@ -66,7 +66,7 @@ etna_create_surface(struct pipe_context *pctx, struct pipe_resource *prsc,
 
    if (VIV_FEATURE(ctx->screen, chipFeatures, FAST_CLEAR) &&
        VIV_FEATURE(ctx->screen, chipMinorFeatures0, MC20) &&
-       !DBG_ENABLED(ETNA_DBG_NO_TS) && !rsc->ts_bo &&
+       !rsc->ts_bo &&
        (rsc->levels[level].padded_width & ETNA_RS_WIDTH_MASK) == 0 &&
        (rsc->levels[level].padded_height & ETNA_RS_HEIGHT_MASK) == 0) {
       etna_screen_resource_alloc_ts(pctx->screen, rsc);

@@ -151,7 +151,7 @@ svga_get_tex_sampler_view(struct pipe_context *pipe,
                                           flags, format,
                                           min_lod,
                                           max_lod - min_lod + 1,
-                                          -1, 1, -1,
+                                          -1, 1, -1, FALSE,
                                           &sv->key);
 
    if (!sv->handle) {

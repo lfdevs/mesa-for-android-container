@@ -143,7 +143,7 @@ intel_map_renderbuffer(struct gl_context *ctx,
          irb->singlesample_mt =
             intel_miptree_create_for_renderbuffer(brw, irb->mt->format,
                                                   rb->Width, rb->Height,
-                                                  0 /*num_samples*/);
+                                                  1 /*num_samples*/);
          if (!irb->singlesample_mt)
             goto fail;
          irb->singlesample_mt_is_tmp = true;
@@ -303,7 +303,7 @@ intel_alloc_private_renderbuffer_storage(struct gl_context * ctx, struct gl_rend
 
    irb->mt = intel_miptree_create_for_renderbuffer(brw, rb->Format,
 						   width, height,
-                                                   rb->NumSamples);
+                                                   MAX2(rb->NumSamples, 1));
    if (!irb->mt)
       return false;
 
@@ -348,7 +348,7 @@ intel_image_target_renderbuffer_storage(struct gl_context *ctx,
    }
 
    /* __DRIimage is opaque to the core so it has to be checked here */
-   if (!brw->format_supported_as_render_target[image->format]) {
+   if (!brw->mesa_format_supports_render[image->format]) {
       _mesa_error(ctx, GL_INVALID_OPERATION,
             "glEGLImageTargetRenderbufferStorage(unsupported image format)");
       return;
@@ -362,30 +362,10 @@ intel_image_target_renderbuffer_storage(struct gl_context *ctx,
     * buffer's content to the main buffer nor for invalidating the aux buffer's
     * content.
     */
-   irb->mt = intel_miptree_create_for_bo(brw,
-                                         image->bo,
-                                         image->format,
-                                         image->offset,
-                                         image->width,
-                                         image->height,
-                                         1,
-                                         image->pitch,
-                                         MIPTREE_LAYOUT_DISABLE_AUX);
+   irb->mt = intel_miptree_create_for_dri_image(brw, image, GL_TEXTURE_2D,
+                                                ISL_COLORSPACE_NONE, false);
    if (!irb->mt)
       return;
-
-   /* Adjust the miptree's upper-left coordinate.
-    *
-    * FIXME: Adjusting the miptree's layout outside of
-    * intel_miptree_create_layout() is fragile. Plumb the adjustment through
-    * intel_miptree_create_layout() and brw_tex_layout().
-    */
-   irb->mt->level[0].level_x = image->tile_x;
-   irb->mt->level[0].level_y = image->tile_y;
-   irb->mt->level[0].slice[0].x_offset = image->tile_x;
-   irb->mt->level[0].slice[0].y_offset = image->tile_y;
-   irb->mt->total_width += image->tile_x;
-   irb->mt->total_height += image->tile_y;
 
    rb->InternalFormat = image->internal_format;
    rb->Width = image->width;
@@ -431,30 +411,48 @@ intel_nop_alloc_storage(struct gl_context * ctx, struct gl_renderbuffer *rb,
 }
 
 /**
- * Create a new intel_renderbuffer which corresponds to an on-screen window,
- * not a user-created renderbuffer.
+ * Create an intel_renderbuffer for a __DRIdrawable. This function is
+ * unrelated to GL renderbuffers (that is, those created by
+ * glGenRenderbuffers).
  *
  * \param num_samples must be quantized.
  */
 struct intel_renderbuffer *
-intel_create_renderbuffer(mesa_format format, unsigned num_samples)
+intel_create_winsys_renderbuffer(struct intel_screen *screen,
+                                 mesa_format format, unsigned num_samples)
 {
-   struct intel_renderbuffer *irb;
-   struct gl_renderbuffer *rb;
-
-   irb = CALLOC_STRUCT(intel_renderbuffer);
+   struct intel_renderbuffer *irb = CALLOC_STRUCT(intel_renderbuffer);
    if (!irb)
       return NULL;
 
-   rb = &irb->Base.Base;
+   struct gl_renderbuffer *rb = &irb->Base.Base;
    irb->layer_count = 1;
 
    _mesa_init_renderbuffer(rb, 0);
    rb->ClassID = INTEL_RB_CLASS;
-   rb->_BaseFormat = _mesa_get_format_base_format(format);
-   rb->Format = format;
-   rb->InternalFormat = rb->_BaseFormat;
    rb->NumSamples = num_samples;
+
+   /* The base format and internal format must be derived from the user-visible
+    * format (that is, the gl_config's format), even if we internally use
+    * choose a different format for the renderbuffer. Otherwise, rendering may
+    * use incorrect channel write masks.
+    */
+   rb->_BaseFormat = _mesa_get_format_base_format(format);
+   rb->InternalFormat = rb->_BaseFormat;
+
+   rb->Format = format;
+   if (!screen->mesa_format_supports_render[rb->Format]) {
+      /* The glRenderbufferStorage paths in core Mesa detect if the driver
+       * does not support the user-requested format, and then searches for
+       * a falback format. The DRI code bypasses core Mesa, though. So we do
+       * the fallbacks here.
+       *
+       * We must support MESA_FORMAT_R8G8B8X8 on Android because the Android
+       * framework requires HAL_PIXEL_FORMAT_RGBX8888 winsys surfaces.
+       */
+      rb->Format = _mesa_format_fallback_rgbx_to_rgba(rb->Format);
+      assert(screen->mesa_format_supports_render[rb->Format]);
+   }
 
    /* intel-specific methods */
    rb->Delete = intel_delete_renderbuffer;
@@ -465,18 +463,19 @@ intel_create_renderbuffer(mesa_format format, unsigned num_samples)
 
 /**
  * Private window-system buffers (as opposed to ones shared with the display
- * server created with intel_create_renderbuffer()) are most similar in their
+ * server created with intel_create_winsys_renderbuffer()) are most similar in their
  * handling to user-created renderbuffers, but they have a resize handler that
  * may be called at intel_update_renderbuffers() time.
  *
  * \param num_samples must be quantized.
  */
 struct intel_renderbuffer *
-intel_create_private_renderbuffer(mesa_format format, unsigned num_samples)
+intel_create_private_renderbuffer(struct intel_screen *screen,
+                                  mesa_format format, unsigned num_samples)
 {
    struct intel_renderbuffer *irb;
 
-   irb = intel_create_renderbuffer(format, num_samples);
+   irb = intel_create_winsys_renderbuffer(screen, format, num_samples);
    irb->Base.Base.AllocStorage = intel_alloc_private_renderbuffer_storage;
 
    return irb;
@@ -531,37 +530,21 @@ intel_renderbuffer_update_wrapper(struct brw_context *brw,
 
    intel_miptree_check_level_layer(mt, level, layer);
    irb->mt_level = level;
-
-   int layer_multiplier;
-   switch (mt->msaa_layout) {
-      case INTEL_MSAA_LAYOUT_UMS:
-      case INTEL_MSAA_LAYOUT_CMS:
-         layer_multiplier = MAX2(mt->num_samples, 1);
-         break;
-
-      default:
-         layer_multiplier = 1;
-   }
-
-   irb->mt_layer = layer_multiplier * layer;
+   irb->mt_layer = layer;
 
    if (!layered) {
       irb->layer_count = 1;
    } else if (mt->target != GL_TEXTURE_3D && image->TexObject->NumLayers > 0) {
       irb->layer_count = image->TexObject->NumLayers;
    } else {
-      irb->layer_count = mt->level[level].depth / layer_multiplier;
+      irb->layer_count = mt->surf.dim == ISL_SURF_DIM_3D ?
+                            minify(mt->surf.logical_level0_px.depth, level) :
+                            mt->surf.logical_level0_px.array_len;
    }
 
    intel_miptree_reference(&irb->mt, mt);
 
    intel_renderbuffer_set_draw_offset(irb);
-
-   if (intel_miptree_wants_hiz_buffer(brw, mt)) {
-      intel_miptree_alloc_hiz(brw, mt);
-      if (!mt->hiz_buf)
-	 return false;
-   }
 
    return true;
 }
@@ -672,14 +655,26 @@ intel_validate_framebuffer(struct gl_context *ctx, struct gl_framebuffer *fb)
 
    if (depth_mt && stencil_mt) {
       if (brw->gen >= 6) {
+         const unsigned d_width = depth_mt->surf.phys_level0_sa.width;
+         const unsigned d_height = depth_mt->surf.phys_level0_sa.height;
+         const unsigned d_depth = depth_mt->surf.dim == ISL_SURF_DIM_3D ?
+                                     depth_mt->surf.phys_level0_sa.depth :
+                                     depth_mt->surf.phys_level0_sa.array_len;
+
+         const unsigned s_width = stencil_mt->surf.phys_level0_sa.width;
+         const unsigned s_height = stencil_mt->surf.phys_level0_sa.height;
+         const unsigned s_depth = stencil_mt->surf.dim == ISL_SURF_DIM_3D ?
+                                     stencil_mt->surf.phys_level0_sa.depth :
+                                     stencil_mt->surf.phys_level0_sa.array_len;
+
          /* For gen >= 6, we are using the lod/minimum-array-element fields
           * and supporting layered rendering. This means that we must restrict
           * the depth & stencil attachments to match in various more retrictive
           * ways. (width, height, depth, LOD and layer)
           */
-	 if (depth_mt->physical_width0 != stencil_mt->physical_width0 ||
-             depth_mt->physical_height0 != stencil_mt->physical_height0 ||
-             depth_mt->physical_depth0 != stencil_mt->physical_depth0 ||
+	 if (d_width != s_width ||
+             d_height != s_height ||
+             d_depth != s_depth ||
              depthRb->mt_level != stencilRb->mt_level ||
 	     depthRb->mt_layer != stencilRb->mt_layer) {
 	    fbo_incomplete(fb,
@@ -882,6 +877,22 @@ intel_blit_framebuffer(struct gl_context *ctx,
    if (!_mesa_check_conditional_render(ctx))
       return;
 
+   if (brw->gen < 6) {
+      /* On gen4-5, try BLT first.
+       *
+       * Gen4-5 have a single ring for both 3D and BLT operations, so there's
+       * no inter-ring synchronization issues like on Gen6+.  It is apparently
+       * faster than using the 3D pipeline.  Original Gen4 also has to rebase
+       * and copy miptree slices in order to render to unaligned locations.
+       */
+      mask = intel_blit_framebuffer_with_blitter(ctx, readFb, drawFb,
+                                                 srcX0, srcY0, srcX1, srcY1,
+                                                 dstX0, dstY0, dstX1, dstY1,
+                                                 mask);
+      if (mask == 0x0)
+         return;
+   }
+
    mask = brw_blorp_framebuffer(brw, readFb, drawFb,
                                 srcX0, srcY0, srcX1, srcY1,
                                 dstX0, dstY0, dstX1, dstY1,
@@ -915,98 +926,12 @@ intel_blit_framebuffer(struct gl_context *ctx,
 }
 
 /**
- * Gen4-5 implementation of glBlitFrameBuffer().
- *
- * Tries BLT, Meta, then swrast.
- *
- * Gen4-5 have a single ring for both 3D and BLT operations, so there's no
- * inter-ring synchronization issues like on Gen6+.  It is apparently faster
- * than using the 3D pipeline.  Original Gen4 also has to rebase and copy
- * miptree slices in order to render to unaligned locations.
- */
-static void
-gen4_blit_framebuffer(struct gl_context *ctx,
-                      struct gl_framebuffer *readFb,
-                      struct gl_framebuffer *drawFb,
-                      GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1,
-                      GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1,
-                      GLbitfield mask, GLenum filter)
-{
-   /* Page 679 of OpenGL 4.4 spec says:
-    * "Added BlitFramebuffer to commands affected by conditional rendering in
-    *  section 10.10 (Bug 9562)."
-    */
-   if (!_mesa_check_conditional_render(ctx))
-      return;
-
-   mask = intel_blit_framebuffer_with_blitter(ctx, readFb, drawFb,
-                                              srcX0, srcY0, srcX1, srcY1,
-                                              dstX0, dstY0, dstX1, dstY1,
-                                              mask);
-   if (mask == 0x0)
-      return;
-
-   mask = _mesa_meta_BlitFramebuffer(ctx, readFb, drawFb,
-                                     srcX0, srcY0, srcX1, srcY1,
-                                     dstX0, dstY0, dstX1, dstY1,
-                                     mask, filter);
-   if (mask == 0x0)
-      return;
-
-   _swrast_BlitFramebuffer(ctx, readFb, drawFb,
-                           srcX0, srcY0, srcX1, srcY1,
-                           dstX0, dstY0, dstX1, dstY1,
-                           mask, filter);
-}
-
-/**
  * Does the renderbuffer have hiz enabled?
  */
 bool
 intel_renderbuffer_has_hiz(struct intel_renderbuffer *irb)
 {
    return intel_miptree_level_has_hiz(irb->mt, irb->mt_level);
-}
-
-bool
-intel_renderbuffer_resolve_hiz(struct brw_context *brw,
-			       struct intel_renderbuffer *irb)
-{
-   if (irb->mt)
-      return intel_miptree_slice_resolve_hiz(brw,
-                                             irb->mt,
-                                             irb->mt_level,
-                                             irb->mt_layer);
-
-   return false;
-}
-
-void
-intel_renderbuffer_att_set_needs_depth_resolve(struct gl_renderbuffer_attachment *att)
-{
-   struct intel_renderbuffer *irb = intel_renderbuffer(att->Renderbuffer);
-   if (irb->mt) {
-      if (att->Layered) {
-         intel_miptree_set_all_slices_need_depth_resolve(irb->mt, irb->mt_level);
-      } else {
-         intel_miptree_slice_set_needs_depth_resolve(irb->mt,
-                                                     irb->mt_level,
-                                                     irb->mt_layer);
-      }
-   }
-}
-
-bool
-intel_renderbuffer_resolve_depth(struct brw_context *brw,
-				 struct intel_renderbuffer *irb)
-{
-   if (irb->mt)
-      return intel_miptree_slice_resolve_depth(brw,
-                                               irb->mt,
-                                               irb->mt_level,
-                                               irb->mt_layer);
-
-   return false;
 }
 
 void
@@ -1024,23 +949,24 @@ intel_renderbuffer_move_to_temp(struct brw_context *brw,
 
    intel_get_image_dims(rb->TexImage, &width, &height, &depth);
 
-   new_mt = intel_miptree_create(brw, rb->TexImage->TexObject->Target,
+   assert(irb->align_wa_mt == NULL);
+   new_mt = intel_miptree_create(brw, GL_TEXTURE_2D,
                                  intel_image->base.Base.TexFormat,
-                                 intel_image->base.Base.Level,
-                                 intel_image->base.Base.Level,
-                                 width, height, depth,
-                                 irb->mt->num_samples,
+                                 0, 0,
+                                 width, height, 1,
+                                 irb->mt->surf.samples,
                                  layout_flags);
 
-   if (intel_miptree_wants_hiz_buffer(brw, new_mt)) {
-      intel_miptree_alloc_hiz(brw, new_mt);
-   }
+   if (!invalidate)
+      intel_miptree_copy_slice(brw, intel_image->mt,
+                               intel_image->base.Base.Level, irb->mt_layer,
+                               new_mt, 0, 0);
 
-   intel_miptree_copy_teximage(brw, intel_image, new_mt, invalidate);
-
-   intel_miptree_reference(&irb->mt, intel_image->mt);
-   intel_renderbuffer_set_draw_offset(irb);
+   intel_miptree_reference(&irb->align_wa_mt, new_mt);
    intel_miptree_release(&new_mt);
+
+   irb->draw_x = 0;
+   irb->draw_y = 0;
 }
 
 void
@@ -1106,10 +1032,7 @@ intel_fbo_init(struct brw_context *brw)
    dd->UnmapRenderbuffer = intel_unmap_renderbuffer;
    dd->RenderTexture = intel_render_texture;
    dd->ValidateFramebuffer = intel_validate_framebuffer;
-   if (brw->gen >= 6)
-      dd->BlitFramebuffer = intel_blit_framebuffer;
-   else
-      dd->BlitFramebuffer = gen4_blit_framebuffer;
+   dd->BlitFramebuffer = intel_blit_framebuffer;
    dd->EGLImageTargetRenderbufferStorage =
       intel_image_target_renderbuffer_storage;
 

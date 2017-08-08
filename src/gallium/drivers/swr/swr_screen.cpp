@@ -46,11 +46,6 @@
 #include <stdio.h>
 #include <map>
 
-/* MSVC case instensitive compare */
-#if defined(PIPE_CC_MSVC)
-   #define strcasecmp lstrcmpiA
-#endif
-
 /*
  * Max texture sizes
  * XXX Check max texture size values against core and sampler.
@@ -60,6 +55,9 @@
 #define SWR_MAX_TEXTURE_3D_LEVELS 12  /* 2K x 2K x 2K for now */
 #define SWR_MAX_TEXTURE_CUBE_LEVELS 14  /* 8K x 8K for now */
 #define SWR_MAX_TEXTURE_ARRAY_LAYERS 512 /* 8K x 512 / 8K x 8K x 512 */
+
+/* Default max client_copy_limit */
+#define SWR_CLIENT_COPY_LIMIT 32768
 
 /* Flag indicates creation of alternate surface, to prevent recursive loop
  * in resource creation when msaa_force_enable is set. */
@@ -337,6 +335,10 @@ swr_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_SPARSE_BUFFER_PAGE_SIZE:
    case PIPE_CAP_TGSI_BALLOT:
    case PIPE_CAP_TGSI_TES_LAYER_VIEWPORT:
+   case PIPE_CAP_CAN_BIND_CONST_BUFFER_AS_VERTEX:
+   case PIPE_CAP_ALLOW_MAPPED_BUFFERS_DURING_EXECUTION:
+   case PIPE_CAP_POST_DEPTH_COVERAGE:
+   case PIPE_CAP_BINDLESS_TEXTURE:
       return 0;
 
    case PIPE_CAP_VENDOR_ID:
@@ -1012,11 +1014,12 @@ swr_flush_frontbuffer(struct pipe_screen *p_screen,
    struct sw_winsys *winsys = screen->winsys;
    struct swr_resource *spr = swr_resource(resource);
    struct pipe_context *pipe = screen->pipe;
+   struct swr_context *ctx = swr_context(pipe);
 
    if (pipe) {
       swr_fence_finish(p_screen, NULL, screen->flush_fence, 0);
       swr_resource_unused(resource);
-      SwrEndFrame(swr_context(pipe)->swrContext);
+      ctx->api.pfnSwrEndFrame(ctx->swrContext);
    }
 
    /* Multisample resolved into resolve_target at flush with store_resource */
@@ -1058,46 +1061,19 @@ swr_destroy_screen(struct pipe_screen *p_screen)
    FREE(screen);
 }
 
-PUBLIC
-struct pipe_screen *
-swr_create_screen_internal(struct sw_winsys *winsys)
+
+static void
+swr_validate_env_options(struct swr_screen *screen)
 {
-   struct swr_screen *screen = CALLOC_STRUCT(swr_screen);
-
-   if (!screen)
-      return NULL;
-
-   if (!getenv("KNOB_MAX_PRIMS_PER_DRAW")) {
-      g_GlobalKnobs.MAX_PRIMS_PER_DRAW.Value(49152);
-   }
-
-   if (!lp_build_init()) {
-      FREE(screen);
-      return NULL;
-   }
-
-   screen->winsys = winsys;
-   screen->base.get_name = swr_get_name;
-   screen->base.get_vendor = swr_get_vendor;
-   screen->base.is_format_supported = swr_is_format_supported;
-   screen->base.context_create = swr_create_context;
-   screen->base.can_create_resource = swr_can_create_resource;
-
-   screen->base.destroy = swr_destroy_screen;
-   screen->base.get_param = swr_get_param;
-   screen->base.get_shader_param = swr_get_shader_param;
-   screen->base.get_paramf = swr_get_paramf;
-
-   screen->base.resource_create = swr_resource_create;
-   screen->base.resource_destroy = swr_resource_destroy;
-
-   screen->base.flush_frontbuffer = swr_flush_frontbuffer;
-
-   screen->hJitMgr = JitCreateContext(KNOB_SIMD_WIDTH, KNOB_ARCH_STR, "swr");
-
-   swr_fence_init(&screen->base);
-
-   util_format_s3tc_init();
+   /* The client_copy_limit sets a maximum on the amount of user-buffer memory
+    * copied to scratch space on a draw.  Past this, the draw will access
+    * user-buffer directly and then block.  This is faster than queuing many
+    * large client draws. */
+   screen->client_copy_limit = SWR_CLIENT_COPY_LIMIT;
+   int client_copy_limit =
+      debug_get_num_option("SWR_CLIENT_COPY_LIMIT", SWR_CLIENT_COPY_LIMIT);
+   if (client_copy_limit > 0)
+      screen->client_copy_limit = client_copy_limit;
 
    /* XXX msaa under development, disable by default for now */
    screen->msaa_max_count = 0; /* was SWR_MAX_NUM_MULTISAMPLES; */
@@ -1125,6 +1101,48 @@ swr_create_screen_internal(struct sw_winsys *winsys)
          "SWR_MSAA_FORCE_ENABLE", false);
    if (screen->msaa_force_enable)
       fprintf(stderr, "SWR_MSAA_FORCE_ENABLE: true\n");
+}
+
+
+PUBLIC
+struct pipe_screen *
+swr_create_screen_internal(struct sw_winsys *winsys)
+{
+   struct swr_screen *screen = CALLOC_STRUCT(swr_screen);
+
+   if (!screen)
+      return NULL;
+
+   if (!lp_build_init()) {
+      FREE(screen);
+      return NULL;
+   }
+
+   screen->winsys = winsys;
+   screen->base.get_name = swr_get_name;
+   screen->base.get_vendor = swr_get_vendor;
+   screen->base.is_format_supported = swr_is_format_supported;
+   screen->base.context_create = swr_create_context;
+   screen->base.can_create_resource = swr_can_create_resource;
+
+   screen->base.destroy = swr_destroy_screen;
+   screen->base.get_param = swr_get_param;
+   screen->base.get_shader_param = swr_get_shader_param;
+   screen->base.get_paramf = swr_get_paramf;
+
+   screen->base.resource_create = swr_resource_create;
+   screen->base.resource_destroy = swr_resource_destroy;
+
+   screen->base.flush_frontbuffer = swr_flush_frontbuffer;
+
+   // Pass in "" for architecture for run-time determination
+   screen->hJitMgr = JitCreateContext(KNOB_SIMD_WIDTH, "", "swr");
+
+   swr_fence_init(&screen->base);
+
+   util_format_s3tc_init();
+
+   swr_validate_env_options(screen);
 
    return &screen->base;
 }

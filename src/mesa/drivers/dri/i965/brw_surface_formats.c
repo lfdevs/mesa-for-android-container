@@ -28,7 +28,7 @@
 #include "brw_state.h"
 #include "brw_defines.h"
 
-uint32_t
+enum isl_format
 brw_isl_format_for_mesa_format(mesa_format mesa_format)
 {
    /* This table is ordered according to the enum ordering in formats.h.  We do
@@ -36,31 +36,19 @@ brw_isl_format_for_mesa_format(mesa_format mesa_format)
     * staying in sync, so we initialize to 0 even though
     * ISL_FORMAT_R32G32B32A32_FLOAT happens to also be 0.
     */
-   static const uint32_t table[MESA_FORMAT_COUNT] =
-   {
-      [MESA_FORMAT_A8B8G8R8_UNORM] = 0,
+   static const enum isl_format table[MESA_FORMAT_COUNT] = {
+      [0 ... MESA_FORMAT_COUNT-1] = ISL_FORMAT_UNSUPPORTED,
+
       [MESA_FORMAT_R8G8B8A8_UNORM] = ISL_FORMAT_R8G8B8A8_UNORM,
       [MESA_FORMAT_B8G8R8A8_UNORM] = ISL_FORMAT_B8G8R8A8_UNORM,
-      [MESA_FORMAT_A8R8G8B8_UNORM] = 0,
-      [MESA_FORMAT_X8B8G8R8_UNORM] = 0,
       [MESA_FORMAT_R8G8B8X8_UNORM] = ISL_FORMAT_R8G8B8X8_UNORM,
       [MESA_FORMAT_B8G8R8X8_UNORM] = ISL_FORMAT_B8G8R8X8_UNORM,
-      [MESA_FORMAT_X8R8G8B8_UNORM] = 0,
-      [MESA_FORMAT_BGR_UNORM8] = 0,
       [MESA_FORMAT_RGB_UNORM8] = ISL_FORMAT_R8G8B8_UNORM,
       [MESA_FORMAT_B5G6R5_UNORM] = ISL_FORMAT_B5G6R5_UNORM,
-      [MESA_FORMAT_R5G6B5_UNORM] = 0,
       [MESA_FORMAT_B4G4R4A4_UNORM] = ISL_FORMAT_B4G4R4A4_UNORM,
-      [MESA_FORMAT_A4R4G4B4_UNORM] = 0,
-      [MESA_FORMAT_A1B5G5R5_UNORM] = 0,
       [MESA_FORMAT_B5G5R5A1_UNORM] = ISL_FORMAT_B5G5R5A1_UNORM,
-      [MESA_FORMAT_A1R5G5B5_UNORM] = 0,
-      [MESA_FORMAT_L4A4_UNORM] = 0,
       [MESA_FORMAT_L8A8_UNORM] = ISL_FORMAT_L8A8_UNORM,
-      [MESA_FORMAT_A8L8_UNORM] = 0,
       [MESA_FORMAT_L16A16_UNORM] = ISL_FORMAT_L16A16_UNORM,
-      [MESA_FORMAT_A16L16_UNORM] = 0,
-      [MESA_FORMAT_B2G3R3_UNORM] = 0,
       [MESA_FORMAT_A_UNORM8] = ISL_FORMAT_A8_UNORM,
       [MESA_FORMAT_A_UNORM16] = ISL_FORMAT_A16_UNORM,
       [MESA_FORMAT_L_UNORM8] = ISL_FORMAT_L8_UNORM,
@@ -71,29 +59,16 @@ brw_isl_format_for_mesa_format(mesa_format mesa_format)
       [MESA_FORMAT_YCBCR] = ISL_FORMAT_YCRCB_SWAPUVY,
       [MESA_FORMAT_R_UNORM8] = ISL_FORMAT_R8_UNORM,
       [MESA_FORMAT_R8G8_UNORM] = ISL_FORMAT_R8G8_UNORM,
-      [MESA_FORMAT_G8R8_UNORM] = 0,
       [MESA_FORMAT_R_UNORM16] = ISL_FORMAT_R16_UNORM,
       [MESA_FORMAT_R16G16_UNORM] = ISL_FORMAT_R16G16_UNORM,
-      [MESA_FORMAT_G16R16_UNORM] = 0,
       [MESA_FORMAT_B10G10R10A2_UNORM] = ISL_FORMAT_B10G10R10A2_UNORM,
-      [MESA_FORMAT_S8_UINT_Z24_UNORM] = 0,
-      [MESA_FORMAT_Z24_UNORM_S8_UINT] = 0,
-      [MESA_FORMAT_Z_UNORM16] = 0,
-      [MESA_FORMAT_Z24_UNORM_X8_UINT] = 0,
-      [MESA_FORMAT_X8_UINT_Z24_UNORM] = 0,
-      [MESA_FORMAT_Z_UNORM32] = 0,
       [MESA_FORMAT_S_UINT8] = ISL_FORMAT_R8_UINT,
 
-      [MESA_FORMAT_BGR_SRGB8] = 0,
-      [MESA_FORMAT_A8B8G8R8_SRGB] = 0,
       [MESA_FORMAT_B8G8R8A8_SRGB] = ISL_FORMAT_B8G8R8A8_UNORM_SRGB,
-      [MESA_FORMAT_A8R8G8B8_SRGB] = 0,
       [MESA_FORMAT_R8G8B8A8_SRGB] = ISL_FORMAT_R8G8B8A8_UNORM_SRGB,
-      [MESA_FORMAT_X8R8G8B8_SRGB] = 0,
       [MESA_FORMAT_B8G8R8X8_SRGB] = ISL_FORMAT_B8G8R8X8_UNORM_SRGB,
       [MESA_FORMAT_L_SRGB8] = ISL_FORMAT_L8_UNORM_SRGB,
       [MESA_FORMAT_L8A8_SRGB] = ISL_FORMAT_L8A8_UNORM_SRGB,
-      [MESA_FORMAT_A8L8_SRGB] = 0,
       [MESA_FORMAT_SRGB_DXT1] = ISL_FORMAT_BC1_UNORM_SRGB,
       [MESA_FORMAT_SRGBA_DXT1] = ISL_FORMAT_BC1_UNORM_SRGB,
       [MESA_FORMAT_SRGBA_DXT3] = ISL_FORMAT_BC2_UNORM_SRGB,
@@ -109,7 +84,6 @@ brw_isl_format_for_mesa_format(mesa_format mesa_format)
       [MESA_FORMAT_RGBA_FLOAT32] = ISL_FORMAT_R32G32B32A32_FLOAT,
       [MESA_FORMAT_RGBA_FLOAT16] = ISL_FORMAT_R16G16B16A16_FLOAT,
       [MESA_FORMAT_RGB_FLOAT32] = ISL_FORMAT_R32G32B32_FLOAT,
-      [MESA_FORMAT_RGB_FLOAT16] = 0,
       [MESA_FORMAT_A_FLOAT32] = ISL_FORMAT_A32_FLOAT,
       [MESA_FORMAT_A_FLOAT16] = ISL_FORMAT_A16_FLOAT,
       [MESA_FORMAT_L_FLOAT32] = ISL_FORMAT_L32_FLOAT,
@@ -122,34 +96,6 @@ brw_isl_format_for_mesa_format(mesa_format mesa_format)
       [MESA_FORMAT_R_FLOAT16] = ISL_FORMAT_R16_FLOAT,
       [MESA_FORMAT_RG_FLOAT32] = ISL_FORMAT_R32G32_FLOAT,
       [MESA_FORMAT_RG_FLOAT16] = ISL_FORMAT_R16G16_FLOAT,
-
-      [MESA_FORMAT_A_UINT8] = 0,
-      [MESA_FORMAT_A_UINT16] = 0,
-      [MESA_FORMAT_A_UINT32] = 0,
-      [MESA_FORMAT_A_SINT8] = 0,
-      [MESA_FORMAT_A_SINT16] = 0,
-      [MESA_FORMAT_A_SINT32] = 0,
-
-      [MESA_FORMAT_I_UINT8] = 0,
-      [MESA_FORMAT_I_UINT16] = 0,
-      [MESA_FORMAT_I_UINT32] = 0,
-      [MESA_FORMAT_I_SINT8] = 0,
-      [MESA_FORMAT_I_SINT16] = 0,
-      [MESA_FORMAT_I_SINT32] = 0,
-
-      [MESA_FORMAT_L_UINT8] = 0,
-      [MESA_FORMAT_L_UINT16] = 0,
-      [MESA_FORMAT_L_UINT32] = 0,
-      [MESA_FORMAT_L_SINT8] = 0,
-      [MESA_FORMAT_L_SINT16] = 0,
-      [MESA_FORMAT_L_SINT32] = 0,
-
-      [MESA_FORMAT_LA_UINT8] = 0,
-      [MESA_FORMAT_LA_UINT16] = 0,
-      [MESA_FORMAT_LA_UINT32] = 0,
-      [MESA_FORMAT_LA_SINT8] = 0,
-      [MESA_FORMAT_LA_SINT16] = 0,
-      [MESA_FORMAT_LA_SINT32] = 0,
 
       [MESA_FORMAT_R_SINT8] = ISL_FORMAT_R8_SINT,
       [MESA_FORMAT_RG_SINT8] = ISL_FORMAT_R8G8_SINT,
@@ -179,8 +125,6 @@ brw_isl_format_for_mesa_format(mesa_format mesa_format)
 
       [MESA_FORMAT_R_SNORM8] = ISL_FORMAT_R8_SNORM,
       [MESA_FORMAT_R8G8_SNORM] = ISL_FORMAT_R8G8_SNORM,
-      [MESA_FORMAT_X8B8G8R8_SNORM] = 0,
-      [MESA_FORMAT_A8B8G8R8_SNORM] = 0,
       [MESA_FORMAT_R8G8B8A8_SNORM] = ISL_FORMAT_R8G8B8A8_SNORM,
       [MESA_FORMAT_R_SNORM16] = ISL_FORMAT_R16_SNORM,
       [MESA_FORMAT_R16G16_SNORM] = ISL_FORMAT_R16G16_SNORM,
@@ -192,11 +136,6 @@ brw_isl_format_for_mesa_format(mesa_format mesa_format)
       [MESA_FORMAT_R_RGTC1_SNORM] = ISL_FORMAT_BC4_SNORM,
       [MESA_FORMAT_RG_RGTC2_UNORM] = ISL_FORMAT_BC5_UNORM,
       [MESA_FORMAT_RG_RGTC2_SNORM] = ISL_FORMAT_BC5_SNORM,
-
-      [MESA_FORMAT_L_LATC1_UNORM] = 0,
-      [MESA_FORMAT_L_LATC1_SNORM] = 0,
-      [MESA_FORMAT_LA_LATC2_UNORM] = 0,
-      [MESA_FORMAT_LA_LATC2_SNORM] = 0,
 
       [MESA_FORMAT_ETC1_RGB8] = ISL_FORMAT_ETC1_RGB8,
       [MESA_FORMAT_ETC2_RGB8] = ISL_FORMAT_ETC2_RGB8,
@@ -244,71 +183,45 @@ brw_isl_format_for_mesa_format(mesa_format mesa_format)
       [MESA_FORMAT_SRGB8_ALPHA8_ASTC_12x10] = ISL_FORMAT_ASTC_LDR_2D_12X10_U8SRGB,
       [MESA_FORMAT_SRGB8_ALPHA8_ASTC_12x12] = ISL_FORMAT_ASTC_LDR_2D_12X12_U8SRGB,
 
-      [MESA_FORMAT_A_SNORM8] = 0,
-      [MESA_FORMAT_L_SNORM8] = 0,
-      [MESA_FORMAT_L8A8_SNORM] = 0,
-      [MESA_FORMAT_A8L8_SNORM] = 0,
-      [MESA_FORMAT_I_SNORM8] = 0,
-      [MESA_FORMAT_A_SNORM16] = 0,
-      [MESA_FORMAT_L_SNORM16] = 0,
-      [MESA_FORMAT_LA_SNORM16] = 0,
-      [MESA_FORMAT_I_SNORM16] = 0,
-
       [MESA_FORMAT_R9G9B9E5_FLOAT] = ISL_FORMAT_R9G9B9E5_SHAREDEXP,
       [MESA_FORMAT_R11G11B10_FLOAT] = ISL_FORMAT_R11G11B10_FLOAT,
-
-      [MESA_FORMAT_Z_FLOAT32] = 0,
-      [MESA_FORMAT_Z32_FLOAT_S8X24_UINT] = 0,
 
       [MESA_FORMAT_R10G10B10A2_UNORM] = ISL_FORMAT_R10G10B10A2_UNORM,
       [MESA_FORMAT_B10G10R10A2_UINT] = ISL_FORMAT_B10G10R10A2_UINT,
       [MESA_FORMAT_R10G10B10A2_UINT] = ISL_FORMAT_R10G10B10A2_UINT,
 
-      [MESA_FORMAT_B4G4R4X4_UNORM] = 0,
       [MESA_FORMAT_B5G5R5X1_UNORM] = ISL_FORMAT_B5G5R5X1_UNORM,
-      [MESA_FORMAT_R8G8B8X8_SNORM] = 0,
       [MESA_FORMAT_R8G8B8X8_SRGB] = ISL_FORMAT_R8G8B8X8_UNORM_SRGB,
-      [MESA_FORMAT_X8B8G8R8_SRGB] = 0,
-      [MESA_FORMAT_RGBX_UINT8] = 0,
-      [MESA_FORMAT_RGBX_SINT8] = 0,
       [MESA_FORMAT_B10G10R10X2_UNORM] = ISL_FORMAT_B10G10R10X2_UNORM,
       [MESA_FORMAT_RGBX_UNORM16] = ISL_FORMAT_R16G16B16X16_UNORM,
-      [MESA_FORMAT_RGBX_SNORM16] = 0,
       [MESA_FORMAT_RGBX_FLOAT16] = ISL_FORMAT_R16G16B16X16_FLOAT,
-      [MESA_FORMAT_RGBX_UINT16] = 0,
-      [MESA_FORMAT_RGBX_SINT16] = 0,
       [MESA_FORMAT_RGBX_FLOAT32] = ISL_FORMAT_R32G32B32X32_FLOAT,
-      [MESA_FORMAT_RGBX_UINT32] = 0,
-      [MESA_FORMAT_RGBX_SINT32] = 0,
    };
+
    assert(mesa_format < MESA_FORMAT_COUNT);
    return table[mesa_format];
 }
 
 void
-brw_init_surface_formats(struct brw_context *brw)
+intel_screen_init_surface_formats(struct intel_screen *screen)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
-   struct gl_context *ctx = &brw->ctx;
-   int gen;
+   const struct gen_device_info *devinfo = &screen->devinfo;
    mesa_format format;
 
-   memset(&ctx->TextureFormatSupported, 0, sizeof(ctx->TextureFormatSupported));
+   memset(&screen->mesa_format_supports_texture, 0,
+          sizeof(screen->mesa_format_supports_texture));
 
-   gen = brw->gen * 10;
-   if (brw->is_g4x || brw->is_haswell)
+   int gen = devinfo->gen * 10;
+   if (devinfo->is_g4x || devinfo->is_haswell)
       gen += 5;
 
    for (format = MESA_FORMAT_NONE + 1; format < MESA_FORMAT_COUNT; format++) {
-      uint32_t texture, render;
+      enum isl_format texture, render;
       bool is_integer = _mesa_is_format_integer_color(format);
 
       render = texture = brw_isl_format_for_mesa_format(format);
 
-      /* The value of ISL_FORMAT_R32G32B32A32_FLOAT is 0, so don't skip
-       * it.
-       */
-      if (texture == 0 && format != MESA_FORMAT_RGBA_FLOAT32)
+      if (texture == ISL_FORMAT_UNSUPPORTED)
 	 continue;
 
       /* Don't advertise 8 and 16-bit RGB formats to core mesa.  This ensures
@@ -323,7 +236,7 @@ brw_init_surface_formats(struct brw_context *brw)
 
       if (isl_format_supports_sampling(devinfo, texture) &&
           (isl_format_supports_filtering(devinfo, texture) || is_integer))
-	 ctx->TextureFormatSupported[format] = true;
+	 screen->mesa_format_supports_texture[format] = true;
 
       /* Re-map some render target formats to make them supported when they
        * wouldn't be using their format for texturing.
@@ -376,6 +289,8 @@ brw_init_surface_formats(struct brw_context *brw)
       case ISL_FORMAT_R8G8B8X8_UNORM_SRGB:
          render = ISL_FORMAT_R8G8B8A8_UNORM_SRGB;
          break;
+      default:
+         break;
       }
 
       /* Note that GL_EXT_texture_integer says that blending doesn't occur for
@@ -385,30 +300,30 @@ brw_init_surface_formats(struct brw_context *brw)
        */
       if (isl_format_supports_rendering(devinfo, render) &&
           (isl_format_supports_alpha_blending(devinfo, render) || is_integer)) {
-	 brw->render_target_format[format] = render;
-	 brw->format_supported_as_render_target[format] = true;
+	 screen->mesa_to_isl_render_format[format] = render;
+	 screen->mesa_format_supports_render[format] = true;
       }
    }
 
    /* We will check this table for FBO completeness, but the surface format
     * table above only covered color rendering.
     */
-   brw->format_supported_as_render_target[MESA_FORMAT_Z24_UNORM_S8_UINT] = true;
-   brw->format_supported_as_render_target[MESA_FORMAT_Z24_UNORM_X8_UINT] = true;
-   brw->format_supported_as_render_target[MESA_FORMAT_S_UINT8] = true;
-   brw->format_supported_as_render_target[MESA_FORMAT_Z_FLOAT32] = true;
-   brw->format_supported_as_render_target[MESA_FORMAT_Z32_FLOAT_S8X24_UINT] = true;
-   if (brw->gen >= 8)
-      brw->format_supported_as_render_target[MESA_FORMAT_Z_UNORM16] = true;
+   screen->mesa_format_supports_render[MESA_FORMAT_Z24_UNORM_S8_UINT] = true;
+   screen->mesa_format_supports_render[MESA_FORMAT_Z24_UNORM_X8_UINT] = true;
+   screen->mesa_format_supports_render[MESA_FORMAT_S_UINT8] = true;
+   screen->mesa_format_supports_render[MESA_FORMAT_Z_FLOAT32] = true;
+   screen->mesa_format_supports_render[MESA_FORMAT_Z32_FLOAT_S8X24_UINT] = true;
+   if (gen >= 80)
+      screen->mesa_format_supports_render[MESA_FORMAT_Z_UNORM16] = true;
 
    /* We remap depth formats to a supported texturing format in
     * translate_tex_format().
     */
-   ctx->TextureFormatSupported[MESA_FORMAT_Z24_UNORM_S8_UINT] = true;
-   ctx->TextureFormatSupported[MESA_FORMAT_Z24_UNORM_X8_UINT] = true;
-   ctx->TextureFormatSupported[MESA_FORMAT_Z_FLOAT32] = true;
-   ctx->TextureFormatSupported[MESA_FORMAT_Z32_FLOAT_S8X24_UINT] = true;
-   ctx->TextureFormatSupported[MESA_FORMAT_S_UINT8] = true;
+   screen->mesa_format_supports_texture[MESA_FORMAT_Z24_UNORM_S8_UINT] = true;
+   screen->mesa_format_supports_texture[MESA_FORMAT_Z24_UNORM_X8_UINT] = true;
+   screen->mesa_format_supports_texture[MESA_FORMAT_Z_FLOAT32] = true;
+   screen->mesa_format_supports_texture[MESA_FORMAT_Z32_FLOAT_S8X24_UINT] = true;
+   screen->mesa_format_supports_texture[MESA_FORMAT_S_UINT8] = true;
 
    /* Benchmarking shows that Z16 is slower than Z24, so there's no reason to
     * use it unless you're under memory (not memory bandwidth) pressure.
@@ -424,8 +339,8 @@ brw_init_surface_formats(struct brw_context *brw)
     * With the PMA stall workaround in place, Z16 is faster than Z24, as it
     * should be.
     */
-   if (brw->gen >= 8)
-      ctx->TextureFormatSupported[MESA_FORMAT_Z_UNORM16] = true;
+   if (gen >= 80)
+      screen->mesa_format_supports_texture[MESA_FORMAT_Z_UNORM16] = true;
 
    /* The RGBX formats are not renderable. Normally these get mapped
     * internally to RGBA formats when rendering. However on Gen9+ when this
@@ -440,7 +355,7 @@ brw_init_surface_formats(struct brw_context *brw)
     * doesn't implement this swizzle override. We don't need to do this for
     * BGRX because that actually is supported natively on Gen8+.
     */
-   if (brw->gen >= 9) {
+   if (gen >= 90) {
       static const mesa_format rgbx_formats[] = {
          MESA_FORMAT_R8G8B8X8_UNORM,
          MESA_FORMAT_R8G8B8X8_SRGB,
@@ -450,30 +365,47 @@ brw_init_surface_formats(struct brw_context *brw)
       };
 
       for (int i = 0; i < ARRAY_SIZE(rgbx_formats); i++) {
-         ctx->TextureFormatSupported[rgbx_formats[i]] = false;
-         brw->format_supported_as_render_target[rgbx_formats[i]] = false;
+         screen->mesa_format_supports_texture[rgbx_formats[i]] = false;
+         screen->mesa_format_supports_render[rgbx_formats[i]] = false;
       }
    }
 
    /* On hardware that lacks support for ETC1, we map ETC1 to RGBX
     * during glCompressedTexImage2D(). See intel_mipmap_tree::wraps_etc1.
     */
-   ctx->TextureFormatSupported[MESA_FORMAT_ETC1_RGB8] = true;
+   screen->mesa_format_supports_texture[MESA_FORMAT_ETC1_RGB8] = true;
 
    /* On hardware that lacks support for ETC2, we map ETC2 to a suitable
     * MESA_FORMAT during glCompressedTexImage2D().
     * See intel_mipmap_tree::wraps_etc2.
     */
-   ctx->TextureFormatSupported[MESA_FORMAT_ETC2_RGB8] = true;
-   ctx->TextureFormatSupported[MESA_FORMAT_ETC2_SRGB8] = true;
-   ctx->TextureFormatSupported[MESA_FORMAT_ETC2_RGBA8_EAC] = true;
-   ctx->TextureFormatSupported[MESA_FORMAT_ETC2_SRGB8_ALPHA8_EAC] = true;
-   ctx->TextureFormatSupported[MESA_FORMAT_ETC2_R11_EAC] = true;
-   ctx->TextureFormatSupported[MESA_FORMAT_ETC2_RG11_EAC] = true;
-   ctx->TextureFormatSupported[MESA_FORMAT_ETC2_SIGNED_R11_EAC] = true;
-   ctx->TextureFormatSupported[MESA_FORMAT_ETC2_SIGNED_RG11_EAC] = true;
-   ctx->TextureFormatSupported[MESA_FORMAT_ETC2_RGB8_PUNCHTHROUGH_ALPHA1] = true;
-   ctx->TextureFormatSupported[MESA_FORMAT_ETC2_SRGB8_PUNCHTHROUGH_ALPHA1] = true;
+   screen->mesa_format_supports_texture[MESA_FORMAT_ETC2_RGB8] = true;
+   screen->mesa_format_supports_texture[MESA_FORMAT_ETC2_SRGB8] = true;
+   screen->mesa_format_supports_texture[MESA_FORMAT_ETC2_RGBA8_EAC] = true;
+   screen->mesa_format_supports_texture[MESA_FORMAT_ETC2_SRGB8_ALPHA8_EAC] = true;
+   screen->mesa_format_supports_texture[MESA_FORMAT_ETC2_R11_EAC] = true;
+   screen->mesa_format_supports_texture[MESA_FORMAT_ETC2_RG11_EAC] = true;
+   screen->mesa_format_supports_texture[MESA_FORMAT_ETC2_SIGNED_R11_EAC] = true;
+   screen->mesa_format_supports_texture[MESA_FORMAT_ETC2_SIGNED_RG11_EAC] = true;
+   screen->mesa_format_supports_texture[MESA_FORMAT_ETC2_RGB8_PUNCHTHROUGH_ALPHA1] = true;
+   screen->mesa_format_supports_texture[MESA_FORMAT_ETC2_SRGB8_PUNCHTHROUGH_ALPHA1] = true;
+}
+
+void
+brw_init_surface_formats(struct brw_context *brw)
+{
+   struct intel_screen *screen = brw->screen;
+   struct gl_context *ctx = &brw->ctx;
+
+   brw->mesa_format_supports_render = screen->mesa_format_supports_render;
+   brw->mesa_to_isl_render_format = screen->mesa_to_isl_render_format;
+
+   STATIC_ASSERT(ARRAY_SIZE(ctx->TextureFormatSupported) ==
+                 ARRAY_SIZE(screen->mesa_format_supports_texture));
+
+   for (unsigned i = 0; i < ARRAY_SIZE(ctx->TextureFormatSupported); ++i) {
+      ctx->TextureFormatSupported[i] = screen->mesa_format_supports_texture[i];
+   }
 }
 
 bool
@@ -508,10 +440,10 @@ brw_render_target_supported(struct brw_context *brw,
          return false;
    }
 
-   return brw->format_supported_as_render_target[format];
+   return brw->mesa_format_supports_render[format];
 }
 
-GLuint
+enum isl_format
 translate_tex_format(struct brw_context *brw,
                      mesa_format mesa_format,
 		     GLenum srgb_decode)
@@ -555,7 +487,8 @@ translate_tex_format(struct brw_context *brw,
    case MESA_FORMAT_RGBA_ASTC_10x10:
    case MESA_FORMAT_RGBA_ASTC_12x10:
    case MESA_FORMAT_RGBA_ASTC_12x12: {
-      GLuint brw_fmt = brw_isl_format_for_mesa_format(mesa_format);
+      enum isl_format isl_fmt =
+         brw_isl_format_for_mesa_format(mesa_format);
 
       /**
        * It is possible to process these formats using the LDR Profile
@@ -566,13 +499,12 @@ translate_tex_format(struct brw_context *brw,
        * processing sRGBs, which are incompatible with this mode.
        */
       if (ctx->Extensions.KHR_texture_compression_astc_hdr)
-         brw_fmt |= GEN9_SURFACE_ASTC_HDR_FORMAT_BIT;
+         isl_fmt |= GEN9_SURFACE_ASTC_HDR_FORMAT_BIT;
 
-      return brw_fmt;
+      return isl_fmt;
    }
 
    default:
-      assert(brw_isl_format_for_mesa_format(mesa_format) != 0);
       return brw_isl_format_for_mesa_format(mesa_format);
    }
 }

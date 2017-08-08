@@ -19,7 +19,7 @@
       return;                                                       \
    default:                                                         \
       break;                                                        \
-   }                                                                \
+   }
 
 
 #define POINT(i0)                             prim_point(asmblr, i0)

@@ -69,21 +69,3 @@ gen8_emit_3dstate_sample_pattern(struct brw_context *brw)
    OUT_BATCH(brw_multisample_positions_1x_2x);
    ADVANCE_BATCH();
 }
-
-
-static void
-upload_multisample_state(struct brw_context *brw)
-{
-   gen8_emit_3dstate_multisample(brw, brw->num_samples);
-   gen6_emit_3dstate_sample_mask(brw, gen6_determine_sample_mask(brw));
-}
-
-const struct brw_tracked_state gen8_multisample_state = {
-   .dirty = {
-      .mesa = _NEW_MULTISAMPLE,
-      .brw = BRW_NEW_BLORP |
-             BRW_NEW_CONTEXT |
-             BRW_NEW_NUM_SAMPLES,
-   },
-   .emit = upload_multisample_state
-};

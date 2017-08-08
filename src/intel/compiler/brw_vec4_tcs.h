@@ -49,8 +49,6 @@ public:
                     const struct brw_vue_map *input_vue_map);
 
 protected:
-   virtual dst_reg *make_reg_for_system_value(int location);
-   virtual void nir_setup_system_value_intrinsic(nir_intrinsic_instr *instr);
    virtual void setup_payload();
    virtual void emit_prolog();
    virtual void emit_thread_end();

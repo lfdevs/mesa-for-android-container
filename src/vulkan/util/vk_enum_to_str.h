@@ -32,6 +32,7 @@
     const char * vk_BlendOp_to_str(VkBlendOp input);
     const char * vk_StructureType_to_str(VkStructureType input);
     const char * vk_StencilOp_to_str(VkStencilOp input);
+    const char * vk_CoverageModulationModeNV_to_str(VkCoverageModulationModeNV input);
     const char * vk_DiscardRectangleModeEXT_to_str(VkDiscardRectangleModeEXT input);
     const char * vk_ObjectEntryTypeNVX_to_str(VkObjectEntryTypeNVX input);
     const char * vk_BorderColor_to_str(VkBorderColor input);
@@ -48,8 +49,10 @@
     const char * vk_ImageLayout_to_str(VkImageLayout input);
     const char * vk_BlendFactor_to_str(VkBlendFactor input);
     const char * vk_ImageType_to_str(VkImageType input);
+    const char * vk_ObjectType_to_str(VkObjectType input);
     const char * vk_IndirectCommandsTokenTypeNVX_to_str(VkIndirectCommandsTokenTypeNVX input);
     const char * vk_ValidationCheckEXT_to_str(VkValidationCheckEXT input);
+    const char * vk_BlendOverlapEXT_to_str(VkBlendOverlapEXT input);
     const char * vk_QueryType_to_str(VkQueryType input);
     const char * vk_Format_to_str(VkFormat input);
     const char * vk_DebugReportObjectTypeEXT_to_str(VkDebugReportObjectTypeEXT input);
@@ -60,6 +63,7 @@
     const char * vk_InternalAllocationType_to_str(VkInternalAllocationType input);
     const char * vk_SamplerMipmapMode_to_str(VkSamplerMipmapMode input);
     const char * vk_ColorSpaceKHR_to_str(VkColorSpaceKHR input);
+    const char * vk_SamplerReductionModeEXT_to_str(VkSamplerReductionModeEXT input);
     const char * vk_DescriptorUpdateTemplateTypeKHR_to_str(VkDescriptorUpdateTemplateTypeKHR input);
     const char * vk_SamplerAddressMode_to_str(VkSamplerAddressMode input);
     const char * vk_ComponentSwizzle_to_str(VkComponentSwizzle input);
@@ -72,7 +76,6 @@
     const char * vk_SystemAllocationScope_to_str(VkSystemAllocationScope input);
     const char * vk_IndexType_to_str(VkIndexType input);
     const char * vk_DynamicState_to_str(VkDynamicState input);
-    const char * vk_DebugReportErrorEXT_to_str(VkDebugReportErrorEXT input);
     const char * vk_ImageViewType_to_str(VkImageViewType input);
     const char * vk_DisplayPowerStateEXT_to_str(VkDisplayPowerStateEXT input);
     const char * vk_CompareOp_to_str(VkCompareOp input);

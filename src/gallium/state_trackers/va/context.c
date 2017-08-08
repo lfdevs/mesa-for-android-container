@@ -103,7 +103,6 @@ PUBLIC VAStatus
 VA_DRIVER_INIT_FUNC(VADriverContextP ctx)
 {
    vlVaDriver *drv;
-   struct drm_state *drm_info;
 
    if (!ctx)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
@@ -121,13 +120,11 @@ VA_DRIVER_INIT_FUNC(VADriverContextP ctx)
       drv->vscreen = vl_dri3_screen_create(ctx->native_dpy, ctx->x11_screen);
       if (!drv->vscreen)
          drv->vscreen = vl_dri2_screen_create(ctx->native_dpy, ctx->x11_screen);
-      if (!drv->vscreen)
-         goto error_screen;
       break;
    case VA_DISPLAY_WAYLAND:
    case VA_DISPLAY_DRM:
    case VA_DISPLAY_DRM_RENDERNODES: {
-      drm_info = (struct drm_state *) ctx->drm_state;
+      const struct drm_state *drm_info = (struct drm_state *) ctx->drm_state;
 
       if (!drm_info || drm_info->fd < 0) {
          FREE(drv);
@@ -135,8 +132,6 @@ VA_DRIVER_INIT_FUNC(VADriverContextP ctx)
       }
 
       drv->vscreen = vl_drm_screen_create(drm_info->fd);
-      if (!drv->vscreen)
-         goto error_screen;
       break;
    }
    default:
@@ -144,8 +139,11 @@ VA_DRIVER_INIT_FUNC(VADriverContextP ctx)
       return VA_STATUS_ERROR_INVALID_DISPLAY;
    }
 
+   if (!drv->vscreen)
+      goto error_screen;
+
    drv->pipe = drv->vscreen->pscreen->context_create(drv->vscreen->pscreen,
-                                                     drv->vscreen, 0);
+                                                     NULL, 0);
    if (!drv->pipe)
       goto error_pipe;
 

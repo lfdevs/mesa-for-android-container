@@ -48,6 +48,7 @@
 
 #include "gbmint.h"
 #include "loader.h"
+#include "util/macros.h"
 
 /* For importing wl_buffer */
 #if HAVE_WAYLAND_PLATFORM
@@ -256,7 +257,6 @@ static struct dri_extension_match dri_core_extensions[] = {
    { __DRI2_FLUSH, 1, offsetof(struct gbm_dri_device, flush) },
    { __DRI_IMAGE, 1, offsetof(struct gbm_dri_device, image) },
    { __DRI2_FENCE, 1, offsetof(struct gbm_dri_device, fence), 1 },
-   { __DRI2_INTEROP, 1, offsetof(struct gbm_dri_device, interop), 1 },
    { NULL, 0, 0 }
 };
 
@@ -344,26 +344,17 @@ dri_open_driver(struct gbm_dri_device *dri)
       len = next - p;
 #if GLX_USE_TLS
       snprintf(path, sizeof path,
-               "%.*s/tls/%s_dri.so", len, p, dri->base.driver_name);
+               "%.*s/tls/%s_dri.so", len, p, dri->driver_name);
       dri->driver = dlopen(path, RTLD_NOW | RTLD_GLOBAL);
 #endif
       if (dri->driver == NULL) {
          snprintf(path, sizeof path,
-                  "%.*s/%s_dri.so", len, p, dri->base.driver_name);
+                  "%.*s/%s_dri.so", len, p, dri->driver_name);
          dri->driver = dlopen(path, RTLD_NOW | RTLD_GLOBAL);
       }
       /* not need continue to loop all paths once the driver is found */
       if (dri->driver != NULL)
          break;
-
-#ifdef ANDROID
-      snprintf(path, sizeof path, "%.*s/gallium_dri.so", len, p);
-      dri->driver = dlopen(path, RTLD_NOW | RTLD_GLOBAL);
-      if (dri->driver == NULL)
-         sprintf("failed to open %s: %s\n", path, dlerror());
-      else
-         break;
-#endif
    }
 
    if (dri->driver == NULL) {
@@ -373,7 +364,7 @@ dri_open_driver(struct gbm_dri_device *dri)
       return NULL;
    }
 
-   get_extensions_name = loader_get_extensions_name(dri->base.driver_name);
+   get_extensions_name = loader_get_extensions_name(dri->driver_name);
    if (get_extensions_name) {
       const __DRIextension **(*get_extensions)(void);
 
@@ -440,13 +431,13 @@ dri_screen_create_dri2(struct gbm_dri_device *dri, char *driver_name)
    const __DRIextension **extensions;
    int ret = 0;
 
-   dri->base.driver_name = driver_name;
-   if (dri->base.driver_name == NULL)
+   dri->driver_name = driver_name;
+   if (dri->driver_name == NULL)
       return -1;
 
    ret = dri_load_driver(dri);
    if (ret) {
-      fprintf(stderr, "failed to load driver: %s\n", dri->base.driver_name);
+      fprintf(stderr, "failed to load driver: %s\n", dri->driver_name);
       return ret;
    };
 
@@ -456,12 +447,12 @@ dri_screen_create_dri2(struct gbm_dri_device *dri, char *driver_name)
       return -1;
 
    if (dri->dri2->base.version >= 4) {
-      dri->screen = dri->dri2->createNewScreen2(0, dri->base.base.fd,
+      dri->screen = dri->dri2->createNewScreen2(0, dri->base.fd,
                                                 dri->loader_extensions,
                                                 dri->driver_extensions,
                                                 &dri->driver_configs, dri);
    } else {
-      dri->screen = dri->dri2->createNewScreen(0, dri->base.base.fd,
+      dri->screen = dri->dri2->createNewScreen(0, dri->base.fd,
                                                dri->loader_extensions,
                                                &dri->driver_configs, dri);
    }
@@ -490,8 +481,8 @@ dri_screen_create_swrast(struct gbm_dri_device *dri)
 {
    int ret;
 
-   dri->base.driver_name = strdup("swrast");
-   if (dri->base.driver_name == NULL)
+   dri->driver_name = strdup("swrast");
+   if (dri->driver_name == NULL)
       return -1;
 
    ret = dri_load_driver_swrast(dri);
@@ -527,7 +518,7 @@ dri_screen_create(struct gbm_dri_device *dri)
 {
    char *driver_name;
 
-   driver_name = loader_get_driver_for_fd(dri->base.base.fd);
+   driver_name = loader_get_driver_for_fd(dri->base.fd);
    if (!driver_name)
       return -1;
 
@@ -551,30 +542,100 @@ dri_screen_create_sw(struct gbm_dri_device *dri)
    return dri_screen_create_swrast(dri);
 }
 
+static const struct {
+   uint32_t gbm_format;
+   int dri_image_format;
+} gbm_to_dri_image_formats[] = {
+   { GBM_FORMAT_R8,          __DRI_IMAGE_FORMAT_R8          },
+   { GBM_FORMAT_GR88,        __DRI_IMAGE_FORMAT_GR88        },
+   { GBM_FORMAT_RGB565,      __DRI_IMAGE_FORMAT_RGB565      },
+   { GBM_FORMAT_XRGB8888,    __DRI_IMAGE_FORMAT_XRGB8888    },
+   { GBM_FORMAT_ARGB8888,    __DRI_IMAGE_FORMAT_ARGB8888    },
+   { GBM_FORMAT_XBGR8888,    __DRI_IMAGE_FORMAT_XBGR8888    },
+   { GBM_FORMAT_ABGR8888,    __DRI_IMAGE_FORMAT_ABGR8888    },
+   { GBM_FORMAT_XRGB2101010, __DRI_IMAGE_FORMAT_XRGB2101010 },
+   { GBM_FORMAT_ARGB2101010, __DRI_IMAGE_FORMAT_ARGB2101010 },
+};
+
+/* The two GBM_BO_FORMAT_[XA]RGB8888 formats alias the GBM_FORMAT_*
+ * formats of the same name. We want to accept them whenever someone
+ * has a GBM format, but never return them to the user. */
+static int
+gbm_format_canonicalize(uint32_t gbm_format)
+{
+   switch (gbm_format) {
+   case GBM_BO_FORMAT_XRGB8888:
+      return GBM_FORMAT_XRGB8888;
+   case GBM_BO_FORMAT_ARGB8888:
+      return GBM_FORMAT_ARGB8888;
+   default:
+      return gbm_format;
+   }
+}
+
+static int
+gbm_format_to_dri_format(uint32_t gbm_format)
+{
+   int i;
+
+   gbm_format = gbm_format_canonicalize(gbm_format);
+   for (i = 0; i < ARRAY_SIZE(gbm_to_dri_image_formats); i++) {
+      if (gbm_to_dri_image_formats[i].gbm_format == gbm_format)
+         return gbm_to_dri_image_formats[i].dri_image_format;
+   }
+
+   return 0;
+}
+
+static uint32_t
+gbm_dri_to_gbm_format(int dri_format)
+{
+   int i;
+
+   for (i = 0; i < ARRAY_SIZE(gbm_to_dri_image_formats); i++) {
+      if (gbm_to_dri_image_formats[i].dri_image_format == dri_format)
+         return gbm_to_dri_image_formats[i].gbm_format;
+   }
+
+   return 0;
+}
+
 static int
 gbm_dri_is_format_supported(struct gbm_device *gbm,
                             uint32_t format,
                             uint32_t usage)
 {
-   switch (format) {
-   case GBM_BO_FORMAT_XRGB8888:
-   case GBM_FORMAT_XBGR8888:
-   case GBM_FORMAT_XRGB8888:
-      break;
-   case GBM_BO_FORMAT_ARGB8888:
-   case GBM_FORMAT_ARGB8888:
-      if (usage & GBM_BO_USE_SCANOUT)
-         return 0;
-      break;
-   default:
+   struct gbm_dri_device *dri = gbm_dri_device(gbm);
+   int count;
+
+   if ((usage & GBM_BO_USE_CURSOR) && (usage & GBM_BO_USE_RENDERING))
       return 0;
+
+   format = gbm_format_canonicalize(format);
+   if (gbm_format_to_dri_format(format) == 0)
+      return 0;
+
+   /* If there is no query, fall back to the small table which was originally
+    * here. */
+   if (dri->image->base.version <= 15 || !dri->image->queryDmaBufModifiers) {
+      switch (format) {
+      case GBM_FORMAT_XRGB8888:
+      case GBM_FORMAT_ARGB8888:
+      case GBM_FORMAT_XBGR8888:
+         return 1;
+      default:
+         return 0;
+      }
    }
 
-   if (usage & GBM_BO_USE_CURSOR &&
-       usage & GBM_BO_USE_RENDERING)
+   /* Check if the driver returns any modifiers for this format; since linear
+    * is counted as a modifier, we will have at least one modifier for any
+    * supported format. */
+   if (!dri->image->queryDmaBufModifiers(dri->screen, format, 0, NULL, NULL,
+                                         &count))
       return 0;
 
-   return 1;
+   return (count > 0);
 }
 
 static int
@@ -790,39 +851,10 @@ gbm_dri_bo_destroy(struct gbm_bo *_bo)
       gbm_dri_bo_unmap_dumb(bo);
       memset(&arg, 0, sizeof(arg));
       arg.handle = bo->handle;
-      drmIoctl(dri->base.base.fd, DRM_IOCTL_MODE_DESTROY_DUMB, &arg);
+      drmIoctl(dri->base.fd, DRM_IOCTL_MODE_DESTROY_DUMB, &arg);
    }
 
    free(bo);
-}
-
-static uint32_t
-gbm_dri_to_gbm_format(uint32_t dri_format)
-{
-   uint32_t ret = 0;
-
-   switch (dri_format) {
-   case __DRI_IMAGE_FORMAT_RGB565:
-      ret = GBM_FORMAT_RGB565;
-      break;
-   case __DRI_IMAGE_FORMAT_XRGB8888:
-      ret = GBM_FORMAT_XRGB8888;
-      break;
-   case __DRI_IMAGE_FORMAT_ARGB8888:
-      ret = GBM_FORMAT_ARGB8888;
-      break;
-   case __DRI_IMAGE_FORMAT_XBGR8888:
-      ret = GBM_FORMAT_XBGR8888;
-      break;
-   case __DRI_IMAGE_FORMAT_ABGR8888:
-      ret = GBM_FORMAT_ABGR8888;
-      break;
-   default:
-      ret = 0;
-      break;
-   }
-
-   return ret;
 }
 
 static struct gbm_bo *
@@ -860,23 +892,9 @@ gbm_dri_bo_import(struct gbm_device *gbm,
 
       image = dri->image->dupImage(wb->driver_buffer, NULL);
 
-      switch (wb->format) {
-      case WL_DRM_FORMAT_XRGB8888:
-         gbm_format = GBM_FORMAT_XRGB8888;
-         break;
-      case WL_DRM_FORMAT_ARGB8888:
-         gbm_format = GBM_FORMAT_ARGB8888;
-         break;
-      case WL_DRM_FORMAT_RGB565:
-         gbm_format = GBM_FORMAT_RGB565;
-         break;
-      case WL_DRM_FORMAT_YUYV:
-         gbm_format = GBM_FORMAT_YUYV;
-         break;
-      default:
-         dri->image->destroyImage(image);
-         return NULL;
-      }
+      /* GBM_FORMAT_* is identical to WL_DRM_FORMAT_*, so no conversion
+       * required. */
+      gbm_format = wb->format;
       break;
    }
 #endif
@@ -905,23 +923,17 @@ gbm_dri_bo_import(struct gbm_device *gbm,
    {
       struct gbm_import_fd_data *fd_data = buffer;
       int stride = fd_data->stride, offset = 0;
-      int dri_format;
+      int fourcc;
 
-      switch (fd_data->format) {
-      case GBM_BO_FORMAT_XRGB8888:
-         dri_format = GBM_FORMAT_XRGB8888;
-         break;
-      case GBM_BO_FORMAT_ARGB8888:
-         dri_format = GBM_FORMAT_ARGB8888;
-         break;
-      default:
-         dri_format = fd_data->format;
-      }
+      /* GBM's GBM_FORMAT_* tokens are a strict superset of the DRI FourCC
+       * tokens accepted by createImageFromFds, except for not supporting
+       * the sARGB format. */
+      fourcc = gbm_format_canonicalize(fd_data->format);
 
       image = dri->image->createImageFromFds(dri->screen,
                                              fd_data->width,
                                              fd_data->height,
-                                             dri_format,
+                                             fourcc,
                                              &fd_data->fd, 1,
                                              &stride, &offset,
                                              NULL);
@@ -930,6 +942,42 @@ gbm_dri_bo_import(struct gbm_device *gbm,
          return NULL;
       }
       gbm_format = fd_data->format;
+      break;
+   }
+
+   case GBM_BO_IMPORT_FD_MODIFIER:
+   {
+      struct gbm_import_fd_modifier_data *fd_data = buffer;
+      unsigned int error;
+      int fourcc;
+
+      /* Import with modifier requires createImageFromDmaBufs2 */
+      if (dri->image == NULL || dri->image->base.version < 15 ||
+          dri->image->createImageFromDmaBufs2 == NULL) {
+         errno = ENOSYS;
+         return NULL;
+      }
+
+      /* GBM's GBM_FORMAT_* tokens are a strict superset of the DRI FourCC
+       * tokens accepted by createImageFromDmaBufs2, except for not supporting
+       * the sARGB format. */
+      fourcc = gbm_format_canonicalize(fd_data->format);
+
+      image = dri->image->createImageFromDmaBufs2(dri->screen, fd_data->width,
+                                                  fd_data->height, fourcc,
+                                                  fd_data->modifier,
+                                                  fd_data->fds,
+                                                  fd_data->num_fds,
+                                                  fd_data->strides,
+                                                  fd_data->offsets,
+                                                  0, 0, 0, 0,
+                                                  &error, NULL);
+      if (image == NULL) {
+         errno = ENOSYS;
+         return NULL;
+      }
+
+      gbm_format = fourcc;
       break;
    }
 
@@ -959,44 +1007,19 @@ gbm_dri_bo_import(struct gbm_device *gbm,
       return NULL;
    }
 
-   bo->base.base.gbm = gbm;
-   bo->base.base.format = gbm_format;
+   bo->base.gbm = gbm;
+   bo->base.format = gbm_format;
 
    dri->image->queryImage(bo->image, __DRI_IMAGE_ATTRIB_WIDTH,
-                          (int*)&bo->base.base.width);
+                          (int*)&bo->base.width);
    dri->image->queryImage(bo->image, __DRI_IMAGE_ATTRIB_HEIGHT,
-                          (int*)&bo->base.base.height);
+                          (int*)&bo->base.height);
    dri->image->queryImage(bo->image, __DRI_IMAGE_ATTRIB_STRIDE,
-                          (int*)&bo->base.base.stride);
+                          (int*)&bo->base.stride);
    dri->image->queryImage(bo->image, __DRI_IMAGE_ATTRIB_HANDLE,
-                          &bo->base.base.handle.s32);
+                          &bo->base.handle.s32);
 
-   return &bo->base.base;
-}
-
-static bool
-is_planar_format(uint32_t format)
-{
-   switch (format) {
-   case GBM_FORMAT_NV12:
-   case GBM_FORMAT_NV21:
-   case GBM_FORMAT_NV16:
-   case GBM_FORMAT_NV61:
-   case GBM_FORMAT_YUV410:
-   case GBM_FORMAT_YVU410:
-   case GBM_FORMAT_YUV411:
-   case GBM_FORMAT_YVU411:
-   case GBM_FORMAT_YUV420:
-   case GBM_FORMAT_YVU420:
-   case GBM_FORMAT_YUV422:
-   case GBM_FORMAT_YVU422:
-   case GBM_FORMAT_YUV444:
-   case GBM_FORMAT_YVU444:
-      return true;
-   default:
-      return false;
-   }
-
+   return &bo->base;
 }
 
 static struct gbm_bo *
@@ -1014,13 +1037,8 @@ create_dumb(struct gbm_device *gbm,
    is_cursor = (usage & GBM_BO_USE_CURSOR) != 0 &&
       format == GBM_FORMAT_ARGB8888;
    is_scanout = (usage & GBM_BO_USE_SCANOUT) != 0 &&
-      format == GBM_FORMAT_XRGB8888;
+      (format == GBM_FORMAT_XRGB8888 || format == GBM_FORMAT_XBGR8888);
    if (!is_cursor && !is_scanout) {
-      errno = EINVAL;
-      return NULL;
-   }
-
-   if (is_planar_format(format)) {
       errno = EINVAL;
       return NULL;
    }
@@ -1034,28 +1052,28 @@ create_dumb(struct gbm_device *gbm,
    create_arg.width = width;
    create_arg.height = height;
 
-   ret = drmIoctl(dri->base.base.fd, DRM_IOCTL_MODE_CREATE_DUMB, &create_arg);
+   ret = drmIoctl(dri->base.fd, DRM_IOCTL_MODE_CREATE_DUMB, &create_arg);
    if (ret)
       goto free_bo;
 
-   bo->base.base.gbm = gbm;
-   bo->base.base.width = width;
-   bo->base.base.height = height;
-   bo->base.base.stride = create_arg.pitch;
-   bo->base.base.format = format;
-   bo->base.base.handle.u32 = create_arg.handle;
+   bo->base.gbm = gbm;
+   bo->base.width = width;
+   bo->base.height = height;
+   bo->base.stride = create_arg.pitch;
+   bo->base.format = format;
+   bo->base.handle.u32 = create_arg.handle;
    bo->handle = create_arg.handle;
    bo->size = create_arg.size;
 
    if (gbm_dri_bo_map_dumb(bo) == NULL)
       goto destroy_dumb;
 
-   return &bo->base.base;
+   return &bo->base;
 
 destroy_dumb:
    memset(&destroy_arg, 0, sizeof destroy_arg);
    destroy_arg.handle = create_arg.handle;
-   drmIoctl(dri->base.base.fd, DRM_IOCTL_MODE_DESTROY_DUMB, &destroy_arg);
+   drmIoctl(dri->base.fd, DRM_IOCTL_MODE_DESTROY_DUMB, &destroy_arg);
 free_bo:
    free(bo);
 
@@ -1079,6 +1097,8 @@ gbm_dri_bo_create(struct gbm_device *gbm,
     */
    assert(!(usage && count));
 
+   format = gbm_format_canonicalize(format);
+
    if (usage & GBM_BO_USE_WRITE || dri->image == NULL)
       return create_dumb(gbm, width, height, format, usage);
 
@@ -1086,42 +1106,13 @@ gbm_dri_bo_create(struct gbm_device *gbm,
    if (bo == NULL)
       return NULL;
 
-   bo->base.base.gbm = gbm;
-   bo->base.base.width = width;
-   bo->base.base.height = height;
-   bo->base.base.format = format;
+   bo->base.gbm = gbm;
+   bo->base.width = width;
+   bo->base.height = height;
+   bo->base.format = format;
 
-   switch (format) {
-   case GBM_FORMAT_R8:
-      dri_format = __DRI_IMAGE_FORMAT_R8;
-      break;
-   case GBM_FORMAT_GR88:
-      dri_format = __DRI_IMAGE_FORMAT_GR88;
-      break;
-   case GBM_FORMAT_RGB565:
-      dri_format = __DRI_IMAGE_FORMAT_RGB565;
-      break;
-   case GBM_FORMAT_XRGB8888:
-   case GBM_BO_FORMAT_XRGB8888:
-      dri_format = __DRI_IMAGE_FORMAT_XRGB8888;
-      break;
-   case GBM_FORMAT_ARGB8888:
-   case GBM_BO_FORMAT_ARGB8888:
-      dri_format = __DRI_IMAGE_FORMAT_ARGB8888;
-      break;
-   case GBM_FORMAT_ABGR8888:
-      dri_format = __DRI_IMAGE_FORMAT_ABGR8888;
-      break;
-   case GBM_FORMAT_XBGR8888:
-      dri_format = __DRI_IMAGE_FORMAT_XBGR8888;
-      break;
-   case GBM_FORMAT_ARGB2101010:
-      dri_format = __DRI_IMAGE_FORMAT_ARGB2101010;
-      break;
-   case GBM_FORMAT_XRGB2101010:
-      dri_format = __DRI_IMAGE_FORMAT_XRGB2101010;
-      break;
-   default:
+   dri_format = gbm_format_to_dri_format(format);
+   if (dri_format == 0) {
       errno = EINVAL;
       goto failed;
    }
@@ -1165,7 +1156,7 @@ gbm_dri_bo_create(struct gbm_device *gbm,
 
       if (bo->image) {
          /* The client passed in a list of invalid modifiers */
-         assert(gbm_dri_bo_get_modifier(&bo->base.base) != DRM_FORMAT_MOD_INVALID);
+         assert(gbm_dri_bo_get_modifier(&bo->base) != DRM_FORMAT_MOD_INVALID);
       }
    } else {
       bo->image = dri->image->createImage(dri->screen, width, height,
@@ -1176,11 +1167,11 @@ gbm_dri_bo_create(struct gbm_device *gbm,
       goto failed;
 
    dri->image->queryImage(bo->image, __DRI_IMAGE_ATTRIB_HANDLE,
-                          &bo->base.base.handle.s32);
+                          &bo->base.handle.s32);
    dri->image->queryImage(bo->image, __DRI_IMAGE_ATTRIB_STRIDE,
-                          (int *) &bo->base.base.stride);
+                          (int *) &bo->base.stride);
 
-   return &bo->base.base;
+   return &bo->base;
 
 failed:
    free(bo);
@@ -1198,8 +1189,8 @@ gbm_dri_bo_map(struct gbm_bo *_bo,
 
    /* If it's a dumb buffer, we already have a mapping */
    if (bo->map) {
-      *map_data = (char *)bo->map + (bo->base.base.stride * y) + (x * 4);
-      *stride = bo->base.base.stride;
+      *map_data = (char *)bo->map + (bo->base.stride * y) + (x * 4);
+      *stride = bo->base.stride;
       return *map_data;
    }
 
@@ -1289,7 +1280,7 @@ gbm_dri_surface_create(struct gbm_device *gbm,
    surf->base.gbm = gbm;
    surf->base.width = width;
    surf->base.height = height;
-   surf->base.format = format;
+   surf->base.format = gbm_format_canonicalize(format);
    surf->base.flags = flags;
    if (!modifiers) {
       assert(!count);
@@ -1336,7 +1327,7 @@ dri_destroy(struct gbm_device *gbm)
       free((__DRIconfig *) dri->driver_configs[i]);
    free(dri->driver_configs);
    dlclose(dri->driver);
-   free(dri->base.driver_name);
+   free(dri->driver_name);
 
    free(dri);
 }
@@ -1351,26 +1342,25 @@ dri_device_create(int fd)
    if (!dri)
       return NULL;
 
-   dri->base.base.fd = fd;
-   dri->base.base.bo_create = gbm_dri_bo_create;
-   dri->base.base.bo_import = gbm_dri_bo_import;
-   dri->base.base.bo_map = gbm_dri_bo_map;
-   dri->base.base.bo_unmap = gbm_dri_bo_unmap;
-   dri->base.base.is_format_supported = gbm_dri_is_format_supported;
-   dri->base.base.bo_write = gbm_dri_bo_write;
-   dri->base.base.bo_get_fd = gbm_dri_bo_get_fd;
-   dri->base.base.bo_get_planes = gbm_dri_bo_get_planes;
-   dri->base.base.bo_get_handle = gbm_dri_bo_get_handle_for_plane;
-   dri->base.base.bo_get_stride = gbm_dri_bo_get_stride;
-   dri->base.base.bo_get_offset = gbm_dri_bo_get_offset;
-   dri->base.base.bo_get_modifier = gbm_dri_bo_get_modifier;
-   dri->base.base.bo_destroy = gbm_dri_bo_destroy;
-   dri->base.base.destroy = dri_destroy;
-   dri->base.base.surface_create = gbm_dri_surface_create;
-   dri->base.base.surface_destroy = gbm_dri_surface_destroy;
+   dri->base.fd = fd;
+   dri->base.bo_create = gbm_dri_bo_create;
+   dri->base.bo_import = gbm_dri_bo_import;
+   dri->base.bo_map = gbm_dri_bo_map;
+   dri->base.bo_unmap = gbm_dri_bo_unmap;
+   dri->base.is_format_supported = gbm_dri_is_format_supported;
+   dri->base.bo_write = gbm_dri_bo_write;
+   dri->base.bo_get_fd = gbm_dri_bo_get_fd;
+   dri->base.bo_get_planes = gbm_dri_bo_get_planes;
+   dri->base.bo_get_handle = gbm_dri_bo_get_handle_for_plane;
+   dri->base.bo_get_stride = gbm_dri_bo_get_stride;
+   dri->base.bo_get_offset = gbm_dri_bo_get_offset;
+   dri->base.bo_get_modifier = gbm_dri_bo_get_modifier;
+   dri->base.bo_destroy = gbm_dri_bo_destroy;
+   dri->base.destroy = dri_destroy;
+   dri->base.surface_create = gbm_dri_surface_create;
+   dri->base.surface_destroy = gbm_dri_surface_destroy;
 
-   dri->base.type = GBM_DRM_DRIVER_TYPE_DRI;
-   dri->base.base.name = "drm";
+   dri->base.name = "drm";
 
    mtx_init(&dri->mutex, mtx_plain);
 
@@ -1386,7 +1376,7 @@ dri_device_create(int fd)
    if (ret)
       goto err_dri;
 
-   return &dri->base.base;
+   return &dri->base;
 
 err_dri:
    free(dri);

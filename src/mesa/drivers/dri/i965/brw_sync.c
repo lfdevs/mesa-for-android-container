@@ -110,6 +110,35 @@ brw_fence_finish(struct brw_fence *fence)
 static bool MUST_CHECK
 brw_fence_insert_locked(struct brw_context *brw, struct brw_fence *fence)
 {
+   __DRIcontext *driContext = brw->driContext;
+   __DRIdrawable *driDrawable = driContext->driDrawablePriv;
+
+   /*
+    * From KHR_fence_sync:
+    *
+    *   When the condition of the sync object is satisfied by the fence
+    *   command, the sync is signaled by the associated client API context,
+    *   causing any eglClientWaitSyncKHR commands (see below) blocking on
+    *   <sync> to unblock. The only condition currently supported is
+    *   EGL_SYNC_PRIOR_COMMANDS_COMPLETE_KHR, which is satisfied by
+    *   completion of the fence command corresponding to the sync object,
+    *   and all preceding commands in the associated client API context's
+    *   command stream. The sync object will not be signaled until all
+    *   effects from these commands on the client API's internal and
+    *   framebuffer state are fully realized. No other state is affected by
+    *   execution of the fence command.
+    *
+    * Note the emphasis there on ensuring that the framebuffer is fully
+    * realised before the fence is signaled. We cannot just flush the batch,
+    * but must also resolve the drawable first. The importance of this is,
+    * for example, in creating a fence for a frame to be passed to a
+    * remote compositor. Without us flushing the drawable explicitly, the
+    * resolve will be in a following batch (when the client finally calls
+    * SwapBuffers, or triggers a resolve via some other path) and so the
+    * compositor may read the incomplete framebuffer instead.
+    */
+   if (driDrawable)
+      intel_resolve_for_dri2_flush(brw, driDrawable);
    brw_emit_mi_flush(brw);
 
    switch (fence->type) {
@@ -334,6 +363,9 @@ brw_gl_fence_sync(struct gl_context *ctx, struct gl_sync_object *_sync,
 {
    struct brw_context *brw = brw_context(ctx);
    struct brw_gl_sync *sync = (struct brw_gl_sync *) _sync;
+
+   /* brw_fence_insert_locked() assumes it must do a complete flush */
+   assert(condition == GL_SYNC_GPU_COMMANDS_COMPLETE);
 
    brw_fence_init(brw, &sync->fence, BRW_FENCE_TYPE_BO_WAIT);
 

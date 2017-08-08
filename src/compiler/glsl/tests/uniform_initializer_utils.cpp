@@ -214,7 +214,7 @@ verify_data(gl_constant_value *storage, unsigned storage_array_size,
             ir_constant *val, unsigned red_zone_size,
             unsigned int boolean_true)
 {
-   if (val->type->base_type == GLSL_TYPE_ARRAY) {
+   if (val->type->is_array()) {
       const glsl_type *const element_type = val->array_elements[0]->type;
 
       for (unsigned i = 0; i < storage_array_size; i++) {

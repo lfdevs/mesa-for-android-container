@@ -77,6 +77,7 @@ _eglInitDriverFallbacks(_EGLDriver *drv)
    drv->API.ReleaseTexImage = (void*) _eglReturnFalse;
    drv->API.CopyBuffers = (void*) _eglReturnFalse;
    drv->API.SwapBuffers = (void*) _eglReturnFalse;
+   drv->API.SetDamageRegion = (void*) _eglReturnFalse;
    drv->API.SwapInterval = _eglSwapInterval;
 
    drv->API.WaitClient = (void*) _eglReturnFalse;

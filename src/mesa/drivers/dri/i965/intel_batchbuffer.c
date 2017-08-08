@@ -78,8 +78,8 @@ intel_batchbuffer_init(struct intel_batchbuffer *batch,
    batch->exec_array_size = 100;
    batch->exec_bos =
       malloc(batch->exec_array_size * sizeof(batch->exec_bos[0]));
-   batch->exec_objects =
-      malloc(batch->exec_array_size * sizeof(batch->exec_objects[0]));
+   batch->validation_list =
+      malloc(batch->exec_array_size * sizeof(batch->validation_list[0]));
 
    if (INTEL_DEBUG & DEBUG_BATCH) {
       batch->state_batch_sizes =
@@ -100,8 +100,7 @@ intel_batchbuffer_reset(struct intel_batchbuffer *batch,
 
    batch->bo = brw_bo_alloc(bufmgr, "batchbuffer", BATCH_SZ, 4096);
    if (has_llc) {
-      brw_bo_map(NULL, batch->bo, true);
-      batch->map = batch->bo->virtual;
+      batch->map = brw_bo_map(NULL, batch->bo, MAP_READ | MAP_WRITE);
    }
    batch->map_next = batch->map;
 
@@ -163,7 +162,7 @@ intel_batchbuffer_free(struct intel_batchbuffer *batch)
    }
    free(batch->relocs);
    free(batch->exec_bos);
-   free(batch->exec_objects);
+   free(batch->validation_list);
 
    brw_bo_unreference(batch->last_bo);
    brw_bo_unreference(batch->bo);
@@ -240,16 +239,16 @@ do_batch_dump(struct brw_context *brw)
    if (batch->ring != RENDER_RING)
       return;
 
-   int ret = brw_bo_map(brw, batch->bo, false);
-   if (ret != 0) {
+   void *map = brw_bo_map(brw, batch->bo, MAP_READ);
+   if (map == NULL) {
       fprintf(stderr,
-	      "WARNING: failed to map batchbuffer (%s), "
-	      "dumping uploaded data instead.\n", strerror(ret));
+	      "WARNING: failed to map batchbuffer, "
+	      "dumping uploaded data instead.\n");
    }
 
-   uint32_t *data = batch->bo->virtual ? batch->bo->virtual : batch->map;
+   uint32_t *data = map ? map : batch->map;
    uint32_t *end = data + USED_BATCH(*batch);
-   uint32_t gtt_offset = batch->bo->virtual ? batch->bo->offset64 : 0;
+   uint32_t gtt_offset = map ? batch->bo->offset64 : 0;
    int length;
 
    bool color = INTEL_DEBUG & DEBUG_COLOR;
@@ -275,7 +274,27 @@ do_batch_dump(struct brw_context *brw)
 
       switch (gen_group_get_opcode(inst) >> 16) {
       case _3DSTATE_PIPELINED_POINTERS:
-         /* TODO: Decode Gen4-5 pipelined pointers */
+         /* Note: these Gen4-5 pointers are full relocations rather than
+          * offsets from the start of the batch.  So we need to subtract
+          * gtt_offset (the start of the batch) to obtain an offset we
+          * can add to the map and get at the data.
+          */
+         decode_struct(brw, spec, "VS_STATE", data, gtt_offset,
+                       (p[1] & ~0x1fu) - gtt_offset, color);
+         if (p[2] & 1) {
+            decode_struct(brw, spec, "GS_STATE", data, gtt_offset,
+                          (p[2] & ~0x1fu) - gtt_offset, color);
+         }
+         if (p[3] & 1) {
+            decode_struct(brw, spec, "CLIP_STATE", data, gtt_offset,
+                          (p[3] & ~0x1fu) - gtt_offset, color);
+         }
+         decode_struct(brw, spec, "SF_STATE", data, gtt_offset,
+                       (p[4] & ~0x1fu) - gtt_offset, color);
+         decode_struct(brw, spec, "WM_STATE", data, gtt_offset,
+                       (p[5] & ~0x1fu) - gtt_offset, color);
+         decode_struct(brw, spec, "COLOR_CALC_STATE", data, gtt_offset,
+                       (p[6] & ~0x3fu) - gtt_offset, color);
          break;
       case _3DSTATE_BINDING_TABLE_POINTERS_VS:
       case _3DSTATE_BINDING_TABLE_POINTERS_HS:
@@ -350,7 +369,7 @@ do_batch_dump(struct brw_context *brw)
       }
    }
 
-   if (ret == 0) {
+   if (map != NULL) {
       brw_bo_unmap(batch->bo);
    }
 }
@@ -389,7 +408,7 @@ brw_new_batch(struct brw_context *brw)
 
    brw->ctx.NewDriverState |= BRW_NEW_BATCH;
 
-   brw->ib.type = -1;
+   brw->ib.index_size = -1;
 
    /* We need to periodically reap the shader time results, because rollover
     * happens every few seconds.  We also want to see results every once in a
@@ -446,12 +465,6 @@ brw_finish_batch(struct brw_context *brw)
                                           PIPE_CONTROL_CS_STALL);
       }
    }
-
-   /* Mark that the current program cache BO has been used by the GPU.
-    * It will be reallocated if we need to put new programs in for the
-    * next batch.
-    */
-   brw->cache.bo_used_by_gpu = true;
 }
 
 static void
@@ -478,7 +491,7 @@ throttle(struct brw_context *brw)
             /* Pass NULL rather than brw so we avoid perf_debug warnings;
              * stalling is common and expected here...
              */
-            brw_bo_wait_rendering(NULL, brw->throttle_batch[1]);
+            brw_bo_wait_rendering(brw->throttle_batch[1]);
          }
          brw_bo_unreference(brw->throttle_batch[1]);
       }
@@ -513,13 +526,13 @@ add_exec_bo(struct intel_batchbuffer *batch, struct brw_bo *bo)
       batch->exec_bos =
          realloc(batch->exec_bos,
                  batch->exec_array_size * sizeof(batch->exec_bos[0]));
-      batch->exec_objects =
-         realloc(batch->exec_objects,
-                 batch->exec_array_size * sizeof(batch->exec_objects[0]));
+      batch->validation_list =
+         realloc(batch->validation_list,
+                 batch->exec_array_size * sizeof(batch->validation_list[0]));
    }
 
    struct drm_i915_gem_exec_object2 *validation_entry =
-      &batch->exec_objects[batch->exec_count];
+      &batch->validation_list[batch->exec_count];
    validation_entry->handle = bo->gem_handle;
    if (bo == batch->bo) {
       validation_entry->relocation_count = batch->reloc_count;
@@ -530,7 +543,7 @@ add_exec_bo(struct intel_batchbuffer *batch, struct brw_bo *bo)
    }
    validation_entry->alignment = bo->align;
    validation_entry->offset = bo->offset64;
-   validation_entry->flags = 0;
+   validation_entry->flags = bo->kflags;
    validation_entry->rsvd1 = 0;
    validation_entry->rsvd2 = 0;
 
@@ -549,7 +562,7 @@ execbuffer(int fd,
            int flags)
 {
    struct drm_i915_gem_execbuffer2 execbuf = {
-      .buffers_ptr = (uintptr_t) batch->exec_objects,
+      .buffers_ptr = (uintptr_t) batch->validation_list,
       .buffer_count = batch->exec_count,
       .batch_start_offset = 0,
       .batch_len = used,
@@ -580,10 +593,10 @@ execbuffer(int fd,
       bo->idle = false;
 
       /* Update brw_bo::offset64 */
-      if (batch->exec_objects[i].offset != bo->offset64) {
+      if (batch->validation_list[i].offset != bo->offset64) {
          DBG("BO %d migrated: 0x%" PRIx64 " -> 0x%llx\n",
-             bo->gem_handle, bo->offset64, batch->exec_objects[i].offset);
-         bo->offset64 = batch->exec_objects[i].offset;
+             bo->gem_handle, bo->offset64, batch->validation_list[i].offset);
+         bo->offset64 = batch->validation_list[i].offset;
       }
    }
 
@@ -704,7 +717,7 @@ _intel_batchbuffer_flush_fence(struct brw_context *brw,
 
    if (unlikely(INTEL_DEBUG & DEBUG_SYNC)) {
       fprintf(stderr, "waiting for idle\n");
-      brw_bo_wait_rendering(brw, brw->batch.bo);
+      brw_bo_wait_rendering(brw->batch.bo);
    }
 
    /* Start a new batch buffer. */

@@ -37,6 +37,11 @@ isl_gen4_choose_msaa_layout(const struct isl_device *dev,
                             enum isl_msaa_layout *msaa_layout);
 
 void
+isl_gen4_filter_tiling(const struct isl_device *dev,
+                       const struct isl_surf_init_info *restrict info,
+                       isl_tiling_flags_t *flags);
+
+void
 isl_gen4_choose_image_alignment_el(const struct isl_device *dev,
                                    const struct isl_surf_init_info *restrict info,
                                    enum isl_tiling tiling,

@@ -29,25 +29,12 @@
 #include <sys/mman.h>
 
 #if defined(ANDROID) && !defined(__LP64__)
-#include <errno.h> /* for EINVAL */
-
-extern void *__mmap2(void *, size_t, int, int, int, size_t);
-
-static inline void *drm_mmap(void *addr, size_t length, int prot, int flags,
-                             int fd, loff_t offset)
-{
-   /* offset must be aligned to 4096 (not necessarily the page size) */
-   if (offset & 4095) {
-      errno = EINVAL;
-      return MAP_FAILED;
-   }
-
-   return __mmap2(addr, length, prot, flags, fd, (size_t) (offset >> 12));
-}
+/* 32-bit needs mmap64 for 64-bit offsets */
+#  define drm_mmap(addr, length, prot, flags, fd, offset) \
+              mmap64(addr, length, prot, flags, fd, offset)
 
 #  define drm_munmap(addr, length) \
               munmap(addr, length)
-
 
 #else
 

@@ -101,7 +101,11 @@ gen7_allocate_push_constants(struct brw_context *brw)
     * Similar text exists for the other 3DSTATE_PUSH_CONSTANT_ALLOC_*
     * commands.
     */
-   brw->ctx.NewDriverState |= BRW_NEW_PUSH_CONSTANT_ALLOCATION;
+   brw->vs.base.push_constants_dirty = true;
+   brw->tcs.base.push_constants_dirty = true;
+   brw->tes.base.push_constants_dirty = true;
+   brw->gs.base.push_constants_dirty = true;
+   brw->wm.base.push_constants_dirty = true;
 }
 
 void
@@ -224,6 +228,7 @@ gen7_upload_urb(struct brw_context *brw, unsigned vs_size,
 
    BEGIN_BATCH(8);
    for (int i = MESA_SHADER_VERTEX; i <= MESA_SHADER_GEOMETRY; i++) {
+      assert(brw->gen != 10 || entry_size[i] % 3);
       OUT_BATCH((_3DSTATE_URB_VS + i) << 16 | (2 - 2));
       OUT_BATCH(entries[i] |
                 ((entry_size[i] - 1) << GEN7_URB_ENTRY_SIZE_SHIFT) |
@@ -235,7 +240,8 @@ gen7_upload_urb(struct brw_context *brw, unsigned vs_size,
 const struct brw_tracked_state gen7_urb = {
    .dirty = {
       .mesa = 0,
-      .brw = BRW_NEW_CONTEXT |
+      .brw = BRW_NEW_BLORP |
+             BRW_NEW_CONTEXT |
              BRW_NEW_URB_SIZE |
              BRW_NEW_GS_PROG_DATA |
              BRW_NEW_TCS_PROG_DATA |

@@ -34,9 +34,6 @@
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 
-#include "eglcompiler.h"
-
-
 #ifdef __cplusplus
 extern "C" {
 #endif

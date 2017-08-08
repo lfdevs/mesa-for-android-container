@@ -965,12 +965,28 @@ const struct function common_desktop_functions_possible[] = {
    { "glBufferPageCommitmentARB", 43, -1 },
    { "glNamedBufferPageCommitmentARB", 43, -1 },
 
+   /* GL_ARB_bindless_texture */
+   { "glGetTextureHandleARB", 40, -1 },
+   { "glGetTextureSamplerHandleARB", 40, -1 },
+   { "glMakeTextureHandleResidentARB", 40, -1 },
+   { "glMakeTextureHandleNonResidentARB", 40, -1 },
+   { "glIsTextureHandleResidentARB", 40, -1 },
+   { "glGetImageHandleARB", 40, -1 },
+   { "glMakeImageHandleResidentARB", 40, -1 },
+   { "glMakeImageHandleNonResidentARB", 40, -1 },
+   { "glIsImageHandleResidentARB", 40, -1 },
+   { "glUniformHandleui64ARB", 40, -1 },
+   { "glUniformHandleui64vARB", 40, -1 },
+   { "glProgramUniformHandleui64ARB", 40, -1 },
+   { "glProgramUniformHandleui64vARB", 40, -1 },
+   { "glVertexAttribL1ui64ARB", 40, -1 },
+   { "glVertexAttribL1ui64vARB", 40, -1 },
+   { "glGetVertexAttribLui64vARB", 40, -1 },
+
    { NULL, 0, -1 }
 };
 
 const struct function gl_compatibility_functions_possible[] = {
-   { "glBindVertexArrayAPPLE", 10, -1 },
-   { "glGenVertexArraysAPPLE", 10, -1 },
    { "glBindRenderbufferEXT", 10, -1 },
    { "glBindFramebufferEXT", 10, -1 },
    { "glNewList", 10, _gloffset_NewList },

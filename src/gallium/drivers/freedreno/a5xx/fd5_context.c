@@ -24,8 +24,10 @@
  *    Rob Clark <robclark@freedesktop.org>
  */
 
+#include "freedreno_query_acc.h"
 
 #include "fd5_context.h"
+#include "fd5_compute.h"
 #include "fd5_blend.h"
 #include "fd5_draw.h"
 #include "fd5_emit.h"
@@ -85,6 +87,7 @@ fd5_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
 	pctx->create_depth_stencil_alpha_state = fd5_zsa_state_create;
 
 	fd5_draw_init(pctx);
+	fd5_compute_init(pctx);
 	fd5_gmem_init(pctx);
 	fd5_texture_init(pctx);
 	fd5_prog_init(pctx);

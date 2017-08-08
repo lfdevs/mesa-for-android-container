@@ -141,12 +141,6 @@ try_pbo_upload(struct gl_context *ctx,
       return false;
    }
 
-   if (image->TexObject->Target == GL_TEXTURE_1D_ARRAY ||
-       image->TexObject->Target == GL_TEXTURE_2D_ARRAY) {
-      DBG("%s: no support for array textures\n", __func__);
-      return false;
-   }
-
    src_buffer = intel_bufferobj_source(intel, pbo, 64, &src_offset);
    /* note: potential 64-bit ptr to 32-bit int cast */
    src_offset += (GLuint) (unsigned long) pixels;

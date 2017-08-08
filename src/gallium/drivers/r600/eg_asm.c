@@ -196,7 +196,12 @@ int egcm_load_index_reg(struct r600_bytecode *bc, unsigned id, bool inside_alu_c
 
 int eg_bytecode_gds_build(struct r600_bytecode *bc, struct r600_bytecode_gds *gds, unsigned id)
 {
-	unsigned opcode = r600_isa_fetch_opcode(bc->isa->hw_class, gds->op) >> 8;
+	unsigned gds_op = (r600_isa_fetch_opcode(bc->isa->hw_class, gds->op) >> 8) & 0x3f;
+	unsigned opcode;
+	if (gds->op == FETCH_OP_TF_WRITE)
+		opcode = 5;
+	else
+		opcode = 4;
 	bc->bytecode[id++] = S_SQ_MEM_GDS_WORD0_MEM_INST(2) |
 		S_SQ_MEM_GDS_WORD0_MEM_OP(opcode) |
 		S_SQ_MEM_GDS_WORD0_SRC_GPR(gds->src_gpr) |
@@ -207,8 +212,12 @@ int eg_bytecode_gds_build(struct r600_bytecode *bc, struct r600_bytecode_gds *gd
 
 	bc->bytecode[id++] = S_SQ_MEM_GDS_WORD1_DST_GPR(gds->dst_gpr) |
 		S_SQ_MEM_GDS_WORD1_DST_REL(gds->dst_rel) |
-		S_SQ_MEM_GDS_WORD1_GDS_OP(gds->gds_op) |
-		S_SQ_MEM_GDS_WORD1_SRC_GPR(gds->src_gpr2);
+		S_SQ_MEM_GDS_WORD1_GDS_OP(gds_op) |
+		S_SQ_MEM_GDS_WORD1_SRC_GPR(gds->src_gpr2) |
+		S_SQ_MEM_GDS_WORD1_UAV_INDEX_MODE(gds->uav_index_mode) |
+		S_SQ_MEM_GDS_WORD1_UAV_ID(gds->uav_id) |
+		S_SQ_MEM_GDS_WORD1_ALLOC_CONSUME(gds->alloc_consume) |
+		S_SQ_MEM_GDS_WORD1_BCAST_FIRST_REQ(gds->bcast_first_req);
 
 	bc->bytecode[id++] = S_SQ_MEM_GDS_WORD2_DST_SEL_X(gds->dst_sel_x) |
 		S_SQ_MEM_GDS_WORD2_DST_SEL_Y(gds->dst_sel_y) |

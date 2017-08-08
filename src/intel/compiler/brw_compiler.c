@@ -57,6 +57,8 @@ static const struct nir_shader_compiler_options scalar_nir_options = {
    .lower_unpack_snorm_4x8 = true,
    .lower_unpack_unorm_2x16 = true,
    .lower_unpack_unorm_4x8 = true,
+   .lower_subgroup_masks = true,
+   .max_subgroup_size = 32,
    .max_unroll_iterations = 32,
 };
 
@@ -78,6 +80,7 @@ static const struct nir_shader_compiler_options vector_nir_options = {
    .lower_unpack_unorm_2x16 = true,
    .lower_extract_byte = true,
    .lower_extract_word = true,
+   .lower_vote_trivial = true,
    .max_unroll_iterations = 32,
 };
 
@@ -96,6 +99,7 @@ static const struct nir_shader_compiler_options vector_nir_options_gen6 = {
    .lower_unpack_unorm_2x16 = true,
    .lower_extract_byte = true,
    .lower_extract_word = true,
+   .lower_vote_trivial = true,
    .max_unroll_iterations = 32,
 };
 
@@ -112,16 +116,22 @@ brw_compiler_create(void *mem_ctx, const struct gen_device_info *devinfo)
 
    compiler->precise_trig = env_var_as_boolean("INTEL_PRECISE_TRIG", false);
 
-   compiler->scalar_stage[MESA_SHADER_VERTEX] =
-      devinfo->gen >= 8 && !(INTEL_DEBUG & DEBUG_VEC4VS);
-   compiler->scalar_stage[MESA_SHADER_TESS_CTRL] =
-      devinfo->gen >= 8 && env_var_as_boolean("INTEL_SCALAR_TCS", true);
-   compiler->scalar_stage[MESA_SHADER_TESS_EVAL] =
-      devinfo->gen >= 8 && env_var_as_boolean("INTEL_SCALAR_TES", true);
-   compiler->scalar_stage[MESA_SHADER_GEOMETRY] =
-      devinfo->gen >= 8 && env_var_as_boolean("INTEL_SCALAR_GS", true);
-   compiler->scalar_stage[MESA_SHADER_FRAGMENT] = true;
-   compiler->scalar_stage[MESA_SHADER_COMPUTE] = true;
+   if (devinfo->gen >= 10) {
+      /* We don't support vec4 mode on Cannonlake. */
+      for (int i = MESA_SHADER_VERTEX; i < MESA_SHADER_STAGES; i++)
+         compiler->scalar_stage[i] = true;
+   } else {
+      compiler->scalar_stage[MESA_SHADER_VERTEX] =
+         devinfo->gen >= 8 && env_var_as_boolean("INTEL_SCALAR_VS", true);
+      compiler->scalar_stage[MESA_SHADER_TESS_CTRL] =
+         devinfo->gen >= 8 && env_var_as_boolean("INTEL_SCALAR_TCS", true);
+      compiler->scalar_stage[MESA_SHADER_TESS_EVAL] =
+         devinfo->gen >= 8 && env_var_as_boolean("INTEL_SCALAR_TES", true);
+      compiler->scalar_stage[MESA_SHADER_GEOMETRY] =
+         devinfo->gen >= 8 && env_var_as_boolean("INTEL_SCALAR_GS", true);
+      compiler->scalar_stage[MESA_SHADER_FRAGMENT] = true;
+      compiler->scalar_stage[MESA_SHADER_COMPUTE] = true;
+   }
 
    /* We want the GLSL compiler to emit code that uses condition codes */
    for (int i = 0; i < MESA_SHADER_STAGES; i++) {

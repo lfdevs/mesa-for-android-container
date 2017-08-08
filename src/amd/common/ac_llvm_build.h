@@ -40,11 +40,20 @@ struct ac_llvm_context {
 	LLVMTypeRef voidt;
 	LLVMTypeRef i1;
 	LLVMTypeRef i8;
+	LLVMTypeRef i16;
 	LLVMTypeRef i32;
+	LLVMTypeRef i64;
+	LLVMTypeRef f16;
 	LLVMTypeRef f32;
+	LLVMTypeRef f64;
 	LLVMTypeRef v4i32;
 	LLVMTypeRef v4f32;
-	LLVMTypeRef v16i8;
+	LLVMTypeRef v8i32;
+
+	LLVMValueRef i32_0;
+	LLVMValueRef i32_1;
+	LLVMValueRef f32_0;
+	LLVMValueRef f32_1;
 
 	unsigned range_md_kind;
 	unsigned invariant_load_md_kind;
@@ -143,13 +152,14 @@ ac_build_buffer_load(struct ac_llvm_context *ctx,
 		     unsigned inst_offset,
 		     unsigned glc,
 		     unsigned slc,
-		     bool readonly_memory);
+		     bool can_speculate,
+		     bool allow_smem);
 
 LLVMValueRef ac_build_buffer_load_format(struct ac_llvm_context *ctx,
 					 LLVMValueRef rsrc,
 					 LLVMValueRef vindex,
 					 LLVMValueRef voffset,
-					 bool readonly_memory);
+					 bool can_speculate);
 
 LLVMValueRef
 ac_get_thread_id(struct ac_llvm_context *ctx);
@@ -163,7 +173,6 @@ ac_build_ddxy(struct ac_llvm_context *ctx,
 	      bool has_ds_bpermute,
 	      uint32_t mask,
 	      int idx,
-	      LLVMValueRef lds,
 	      LLVMValueRef val);
 
 #define AC_SENDMSG_GS 2
@@ -239,6 +248,12 @@ void ac_get_image_intr_name(const char *base_name,
 			    LLVMTypeRef coords_type,
 			    LLVMTypeRef rsrc_type,
 			    char *out_name, unsigned out_len);
+
+void ac_optimize_vs_outputs(struct ac_llvm_context *ac,
+			    LLVMValueRef main_fn,
+			    uint8_t *vs_output_param_offset,
+			    uint32_t num_outputs,
+			    uint8_t *num_param_exports);
 #ifdef __cplusplus
 }
 #endif

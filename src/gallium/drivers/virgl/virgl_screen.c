@@ -27,7 +27,6 @@
 #include "os/os_time.h"
 #include "pipe/p_defines.h"
 #include "pipe/p_screen.h"
-#include "draw/draw_context.h"
 
 #include "tgsi/tgsi_exec.h"
 
@@ -262,6 +261,10 @@ virgl_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_TGSI_BALLOT:
    case PIPE_CAP_DOUBLES:
    case PIPE_CAP_TGSI_TES_LAYER_VIEWPORT:
+   case PIPE_CAP_CAN_BIND_CONST_BUFFER_AS_VERTEX:
+   case PIPE_CAP_ALLOW_MAPPED_BUFFERS_DURING_EXECUTION:
+   case PIPE_CAP_POST_DEPTH_COVERAGE:
+   case PIPE_CAP_BINDLESS_TEXTURE:
       return 0;
    case PIPE_CAP_VENDOR_ID:
       return 0x1af4;
@@ -327,6 +330,7 @@ virgl_get_shader_param(struct pipe_screen *screen,
       case PIPE_SHADER_CAP_MAX_CONST_BUFFER_SIZE:
          return 4096 * sizeof(float[4]);
       case PIPE_SHADER_CAP_LOWER_IF_THRESHOLD:
+      case PIPE_SHADER_CAP_TGSI_SKIP_MERGE_REGISTERS:
       default:
          return 0;
       }

@@ -33,8 +33,6 @@
 #include "dispatch.h"
 #include "marshal_generated.h"
 
-#ifdef HAVE_PTHREAD
-
 struct marshal_cmd_Flush
 {
    struct marshal_cmd_base cmd_base;
@@ -410,8 +408,125 @@ _mesa_marshal_BufferSubData(GLenum target, GLintptr offset, GLsizeiptr size,
    }
 }
 
-/* ClearBufferfv: marshalled asynchronously */
-struct marshal_cmd_ClearBufferfv
+/* NamedBufferData: marshalled asynchronously */
+struct marshal_cmd_NamedBufferData
+{
+   struct marshal_cmd_base cmd_base;
+   GLuint name;
+   GLsizei size;
+   GLenum usage;
+   bool data_null; /* If set, no data follows for "data" */
+   /* Next size bytes are GLubyte data[size] */
+};
+
+void
+_mesa_unmarshal_NamedBufferData(struct gl_context *ctx,
+                                const struct marshal_cmd_NamedBufferData *cmd)
+{
+   const GLuint name = cmd->name;
+   const GLsizei size = cmd->size;
+   const GLenum usage = cmd->usage;
+   const void *data;
+
+   if (cmd->data_null)
+      data = NULL;
+   else
+      data = (const void *) (cmd + 1);
+
+   CALL_NamedBufferData(ctx->CurrentServerDispatch,
+                        (name, size, data, usage));
+}
+
+void GLAPIENTRY
+_mesa_marshal_NamedBufferData(GLuint buffer, GLsizeiptr size,
+                              const GLvoid * data, GLenum usage)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   size_t cmd_size = sizeof(struct marshal_cmd_NamedBufferData) + (data ? size : 0);
+
+   debug_print_marshal("NamedBufferData");
+   if (unlikely(size < 0)) {
+      _mesa_glthread_finish(ctx);
+      _mesa_error(ctx, GL_INVALID_VALUE, "NamedBufferData(size < 0)");
+      return;
+   }
+
+   if (buffer > 0 && cmd_size <= MARSHAL_MAX_CMD_SIZE) {
+      struct marshal_cmd_NamedBufferData *cmd =
+         _mesa_glthread_allocate_command(ctx, DISPATCH_CMD_NamedBufferData,
+                                         cmd_size);
+      cmd->name = buffer;
+      cmd->size = size;
+      cmd->usage = usage;
+      cmd->data_null = !data;
+      if (data) {
+         char *variable_data = (char *) (cmd + 1);
+         memcpy(variable_data, data, size);
+      }
+      _mesa_post_marshal_hook(ctx);
+   } else {
+      _mesa_glthread_finish(ctx);
+      CALL_NamedBufferData(ctx->CurrentServerDispatch,
+                           (buffer, size, data, usage));
+   }
+}
+
+/* NamedBufferSubData: marshalled asynchronously */
+struct marshal_cmd_NamedBufferSubData
+{
+   struct marshal_cmd_base cmd_base;
+   GLuint name;
+   GLintptr offset;
+   GLsizei size;
+   /* Next size bytes are GLubyte data[size] */
+};
+
+void
+_mesa_unmarshal_NamedBufferSubData(struct gl_context *ctx,
+                                   const struct marshal_cmd_NamedBufferSubData *cmd)
+{
+   const GLuint name = cmd->name;
+   const GLintptr offset = cmd->offset;
+   const GLsizei size = cmd->size;
+   const void *data = (const void *) (cmd + 1);
+
+   CALL_NamedBufferSubData(ctx->CurrentServerDispatch,
+                           (name, offset, size, data));
+}
+
+void GLAPIENTRY
+_mesa_marshal_NamedBufferSubData(GLuint buffer, GLintptr offset,
+                                 GLsizeiptr size, const GLvoid * data)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   size_t cmd_size = sizeof(struct marshal_cmd_NamedBufferSubData) + size;
+
+   debug_print_marshal("NamedBufferSubData");
+   if (unlikely(size < 0)) {
+      _mesa_glthread_finish(ctx);
+      _mesa_error(ctx, GL_INVALID_VALUE, "NamedBufferSubData(size < 0)");
+      return;
+   }
+
+   if (buffer > 0 && cmd_size <= MARSHAL_MAX_CMD_SIZE) {
+      struct marshal_cmd_NamedBufferSubData *cmd =
+         _mesa_glthread_allocate_command(ctx, DISPATCH_CMD_NamedBufferSubData,
+                                         cmd_size);
+      cmd->name = buffer;
+      cmd->offset = offset;
+      cmd->size = size;
+      char *variable_data = (char *) (cmd + 1);
+      memcpy(variable_data, data, size);
+      _mesa_post_marshal_hook(ctx);
+   } else {
+      _mesa_glthread_finish(ctx);
+      CALL_NamedBufferSubData(ctx->CurrentServerDispatch,
+                              (buffer, offset, size, data));
+   }
+}
+
+/* ClearBuffer* (all variants): marshalled asynchronously */
+struct marshal_cmd_ClearBuffer
 {
    struct marshal_cmd_base cmd_base;
    GLenum buffer;
@@ -420,7 +535,7 @@ struct marshal_cmd_ClearBufferfv
 
 void
 _mesa_unmarshal_ClearBufferfv(struct gl_context *ctx,
-                              const struct marshal_cmd_ClearBufferfv *cmd)
+                              const struct marshal_cmd_ClearBuffer *cmd)
 {
    const GLenum buffer = cmd->buffer;
    const GLint drawbuffer = cmd->drawbuffer;
@@ -431,6 +546,87 @@ _mesa_unmarshal_ClearBufferfv(struct gl_context *ctx,
                       (buffer, drawbuffer, value));
 }
 
+void
+_mesa_unmarshal_ClearBufferiv(struct gl_context *ctx,
+                              const struct marshal_cmd_ClearBuffer *cmd)
+{
+   const GLenum buffer = cmd->buffer;
+   const GLint drawbuffer = cmd->drawbuffer;
+   const char *variable_data = (const char *) (cmd + 1);
+   const GLint *value = (const GLint *) variable_data;
+
+   CALL_ClearBufferiv(ctx->CurrentServerDispatch,
+                      (buffer, drawbuffer, value));
+}
+
+void
+_mesa_unmarshal_ClearBufferuiv(struct gl_context *ctx,
+                               const struct marshal_cmd_ClearBuffer *cmd)
+{
+   const GLenum buffer = cmd->buffer;
+   const GLint drawbuffer = cmd->drawbuffer;
+   const char *variable_data = (const char *) (cmd + 1);
+   const GLuint *value = (const GLuint *) variable_data;
+
+   CALL_ClearBufferuiv(ctx->CurrentServerDispatch,
+                       (buffer, drawbuffer, value));
+}
+
+void
+_mesa_unmarshal_ClearBufferfi(struct gl_context *ctx,
+                              const struct marshal_cmd_ClearBuffer *cmd)
+{
+   const GLenum buffer = cmd->buffer;
+   const GLint drawbuffer = cmd->drawbuffer;
+   const char *variable_data = (const char *) (cmd + 1);
+   const GLfloat *depth = (const GLfloat *) variable_data;
+   const GLint *stencil = (const GLint *) (variable_data + 4);
+
+   CALL_ClearBufferfi(ctx->CurrentServerDispatch,
+                      (buffer, drawbuffer, *depth, *stencil));
+}
+
+static inline size_t buffer_to_size(GLenum buffer)
+{
+   switch (buffer) {
+   case GL_COLOR:
+      return 4;
+   case GL_DEPTH_STENCIL:
+      return 2;
+   case GL_STENCIL:
+   case GL_DEPTH:
+      return 1;
+   default:
+      return 0;
+   }
+}
+
+static inline bool clear_buffer_add_command(struct gl_context *ctx, uint16_t id,
+                                            GLenum buffer, GLint drawbuffer,
+                                            const GLuint *value, size_t size)
+{
+   size_t cmd_size = sizeof(struct marshal_cmd_ClearBuffer) + 4 * size;
+   if (cmd_size <= MARSHAL_MAX_CMD_SIZE) {
+      struct marshal_cmd_ClearBuffer *cmd =
+         _mesa_glthread_allocate_command(ctx, id,
+                                         cmd_size);
+      cmd->buffer = buffer;
+      cmd->drawbuffer = drawbuffer;
+      GLuint *variable_data = (GLuint *) (cmd + 1);
+      if (size == 4)
+         COPY_4V(variable_data,  value);
+      else if (size == 2)
+         COPY_2V(variable_data, value);
+      else
+         *variable_data = *value;
+
+      _mesa_post_marshal_hook(ctx);
+      return true;
+   }
+
+   return false;
+}
+
 void GLAPIENTRY
 _mesa_marshal_ClearBufferfv(GLenum buffer, GLint drawbuffer,
                             const GLfloat *value)
@@ -438,15 +634,7 @@ _mesa_marshal_ClearBufferfv(GLenum buffer, GLint drawbuffer,
    GET_CURRENT_CONTEXT(ctx);
    debug_print_marshal("ClearBufferfv");
 
-   size_t size;
-   switch (buffer) {
-   case GL_DEPTH:
-      size = sizeof(GLfloat);
-      break;
-   case GL_COLOR:
-      size = sizeof(GLfloat) * 4;
-      break;
-   default:
+   if (!(buffer == GL_DEPTH || buffer == GL_COLOR)) {
       _mesa_glthread_finish(ctx);
 
       /* Page 498 of the PDF, section '17.4.3.1 Clearing Individual Buffers'
@@ -457,24 +645,11 @@ _mesa_marshal_ClearBufferfv(GLenum buffer, GLint drawbuffer,
        */
       _mesa_error(ctx, GL_INVALID_ENUM, "glClearBufferfv(buffer=%s)",
                   _mesa_enum_to_string(buffer));
-      return;
    }
 
-   size_t cmd_size = sizeof(struct marshal_cmd_ClearBufferfv) + size;
-   if (cmd_size <= MARSHAL_MAX_CMD_SIZE) {
-      struct marshal_cmd_ClearBufferfv *cmd =
-         _mesa_glthread_allocate_command(ctx, DISPATCH_CMD_ClearBufferfv,
-                                         cmd_size);
-      cmd->buffer = buffer;
-      cmd->drawbuffer = drawbuffer;
-      GLfloat *variable_data = (GLfloat *) (cmd + 1);
-      if (buffer == GL_COLOR)
-         COPY_4V(variable_data, value);
-      else
-         *variable_data = *value;
-
-      _mesa_post_marshal_hook(ctx);
-   } else {
+   size_t size = buffer_to_size(buffer);
+   if (!clear_buffer_add_command(ctx, DISPATCH_CMD_ClearBufferfv, buffer,
+                                 drawbuffer, (GLuint *)value, size)) {
       debug_print_sync("ClearBufferfv");
       _mesa_glthread_finish(ctx);
       CALL_ClearBufferfv(ctx->CurrentServerDispatch,
@@ -482,4 +657,93 @@ _mesa_marshal_ClearBufferfv(GLenum buffer, GLint drawbuffer,
    }
 }
 
-#endif
+void GLAPIENTRY
+_mesa_marshal_ClearBufferiv(GLenum buffer, GLint drawbuffer,
+                            const GLint *value)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   debug_print_marshal("ClearBufferiv");
+
+   if (!(buffer == GL_STENCIL || buffer == GL_COLOR)) {
+      _mesa_glthread_finish(ctx);
+
+      /* Page 498 of the PDF, section '17.4.3.1 Clearing Individual Buffers'
+       * of the OpenGL 4.5 spec states:
+       *
+       *    "An INVALID_ENUM error is generated by ClearBufferiv and
+       *     ClearNamedFramebufferiv if buffer is not COLOR or STENCIL."
+       */
+      _mesa_error(ctx, GL_INVALID_ENUM, "glClearBufferiv(buffer=%s)",
+                  _mesa_enum_to_string(buffer));
+   }
+
+   size_t size = buffer_to_size(buffer);
+   if (!clear_buffer_add_command(ctx, DISPATCH_CMD_ClearBufferiv, buffer,
+                                 drawbuffer, (GLuint *)value, size)) {
+      debug_print_sync("ClearBufferiv");
+      _mesa_glthread_finish(ctx);
+      CALL_ClearBufferiv(ctx->CurrentServerDispatch,
+                         (buffer, drawbuffer, value));
+   }
+}
+
+void GLAPIENTRY
+_mesa_marshal_ClearBufferuiv(GLenum buffer, GLint drawbuffer,
+                             const GLuint *value)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   debug_print_marshal("ClearBufferuiv");
+
+   if (buffer != GL_COLOR) {
+      _mesa_glthread_finish(ctx);
+
+      /* Page 498 of the PDF, section '17.4.3.1 Clearing Individual Buffers'
+       * of the OpenGL 4.5 spec states:
+       *
+       *    "An INVALID_ENUM error is generated by ClearBufferuiv and
+       *     ClearNamedFramebufferuiv if buffer is not COLOR."
+       */
+      _mesa_error(ctx, GL_INVALID_ENUM, "glClearBufferuiv(buffer=%s)",
+                  _mesa_enum_to_string(buffer));
+   }
+
+   if (!clear_buffer_add_command(ctx, DISPATCH_CMD_ClearBufferuiv, buffer,
+                                 drawbuffer, (GLuint *)value, 4)) {
+      debug_print_sync("ClearBufferuiv");
+      _mesa_glthread_finish(ctx);
+      CALL_ClearBufferuiv(ctx->CurrentServerDispatch,
+                         (buffer, drawbuffer, value));
+   }
+}
+
+void GLAPIENTRY
+_mesa_marshal_ClearBufferfi(GLenum buffer, GLint drawbuffer,
+                            const GLfloat depth, const GLint stencil)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   debug_print_marshal("ClearBufferfi");
+
+   if (buffer != GL_DEPTH_STENCIL) {
+      _mesa_glthread_finish(ctx);
+
+      /* Page 498 of the PDF, section '17.4.3.1 Clearing Individual Buffers'
+       * of the OpenGL 4.5 spec states:
+       *
+       *    "An INVALID_ENUM error is generated by ClearBufferfi and
+       *     ClearNamedFramebufferfi if buffer is not DEPTH_STENCIL."
+       */
+      _mesa_error(ctx, GL_INVALID_ENUM, "glClearBufferfi(buffer=%s)",
+                  _mesa_enum_to_string(buffer));
+   }
+
+   fi_type value[2];
+   value[0].f = depth;
+   value[1].i = stencil;
+   if (!clear_buffer_add_command(ctx, DISPATCH_CMD_ClearBufferfi, buffer,
+                                 drawbuffer, (GLuint *)value, 2)) {
+      debug_print_sync("ClearBufferfi");
+      _mesa_glthread_finish(ctx);
+      CALL_ClearBufferfi(ctx->CurrentServerDispatch,
+                         (buffer, drawbuffer, depth, stencil));
+   }
+}

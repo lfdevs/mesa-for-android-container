@@ -37,6 +37,7 @@
 #include "hw/state_3d.xml.h"
 
 #include "util/u_format.h"
+#include "util/u_math.h"
 
 #include <stdio.h>
 
@@ -403,6 +404,18 @@ etna_layout_multiple(unsigned layout, unsigned pixel_pipes, bool rs_align,
    default:
       DBG("Unhandled layout %i", layout);
    }
+}
+
+static inline void etna_adjust_rs_align(unsigned num_pixelpipes,
+                                        unsigned *paddingX, unsigned *paddingY)
+{
+   unsigned alignX = ETNA_RS_WIDTH_MASK + 1;
+   unsigned alignY = (ETNA_RS_HEIGHT_MASK + 1) * num_pixelpipes;
+
+   if (paddingX)
+      *paddingX = align(*paddingX, alignX);
+   if (paddingY)
+      *paddingY = align(*paddingY, alignY);
 }
 
 static inline uint32_t

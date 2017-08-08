@@ -117,13 +117,13 @@
 
   <!-- These functions are unique to GL3 -->
 
-  <function name="ClearBufferiv" es2="3.0">
+  <function name="ClearBufferiv" es2="3.0" marshal="custom">
     <param name="buffer" type="GLenum"/>
     <param name="drawbuffer" type="GLint"/>
     <param name="value" type="const GLint *"/>
   </function>
 
-  <function name="ClearBufferuiv" es2="3.0">
+  <function name="ClearBufferuiv" es2="3.0" marshal="custom">
     <param name="buffer" type="GLenum"/>
     <param name="drawbuffer" type="GLint"/>
     <param name="value" type="const GLuint *"/>
@@ -135,7 +135,7 @@
     <param name="value" type="const GLfloat *"/>
   </function>
 
-  <function name="ClearBufferfi" es2="3.0">
+  <function name="ClearBufferfi" es2="3.0" marshal="custom">
     <param name="buffer" type="GLenum"/>
     <param name="drawbuffer" type="GLint"/>
     <param name="depth" type="GLfloat"/>
@@ -200,7 +200,7 @@
       <return type="GLint"/>
   </function>
 
-  <function name="BindFragDataLocation">
+  <function name="BindFragDataLocation" no_error="true">
     <param name="program" type="GLuint"/>
     <param name="colorNumber" type="GLuint"/>
     <param name="name" type="const GLchar *"/>
@@ -213,7 +213,7 @@
   <function name="EndTransformFeedback" es2="3.0">
   </function>
 
-  <function name="BindBufferRange" es2="3.0">
+  <function name="BindBufferRange" es2="3.0" no_error="true">
     <param name="target" type="GLenum"/>
     <param name="index" type="GLuint"/>
     <param name="buffer" type="GLuint"/>
@@ -257,6 +257,7 @@
   <!-- These functions alias ones from GL_EXT_gpu_shader4 -->
 
   <function name="VertexAttribIPointer" es2="3.0" marshal="async"
+            no_error="true"
             marshal_fail="_mesa_glthread_is_non_vbo_vertex_attrib_pointer(ctx)">
     <param name="index" type="GLuint"/>
     <param name="size" type="GLint"/>
@@ -606,7 +607,7 @@
     <param name="params" type="GLint64 *"/>
   </function>
 
-  <function name="FramebufferTexture" es2="3.2">
+  <function name="FramebufferTexture" es2="3.2" no_error="true">
     <param name="target" type="GLenum"/>
     <param name="attachment" type="GLenum"/>
     <param name="texture" type="GLuint"/>
@@ -624,7 +625,7 @@
   <enum name="TEXTURE_SWIZZLE_A"                value="0x8E45"/>
   <enum name="TEXTURE_SWIZZLE_RGBA"             value="0x8E46"/>
 
-  <function name="VertexAttribDivisor" es2="3.0">
+  <function name="VertexAttribDivisor" es2="3.0" no_error="true">
     <param name="index" type="GLuint"/>
     <param name="divisor" type="GLuint"/>
   </function>

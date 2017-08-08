@@ -118,8 +118,12 @@ _mesa_meta_framebuffer_texture_image(struct gl_context *ctx,
       ? GL_TEXTURE_CUBE_MAP_POSITIVE_X + texImage->Face
       : texObj->Target;
 
-   _mesa_framebuffer_texture(ctx, fb, attachment, texObj, texTarget,
-                             level, layer, false, __func__);
+   struct gl_renderbuffer_attachment *att =
+      _mesa_get_and_validate_attachment(ctx, fb, attachment, __func__);
+   assert(att);
+
+   _mesa_framebuffer_texture(ctx, fb, attachment, att, texObj, texTarget,
+                             level, layer, false);
 }
 
 static struct gl_shader *
@@ -1898,8 +1902,7 @@ _mesa_meta_CopyPixels(struct gl_context *ctx, GLint srcX, GLint srcY,
       verts[3].tex[1] = tex->Ttop;
 
       /* upload new vertex data */
-      _mesa_buffer_sub_data(ctx, copypix->buf_obj, 0, sizeof(verts), verts,
-                            __func__);
+      _mesa_buffer_sub_data(ctx, copypix->buf_obj, 0, sizeof(verts), verts);
    }
 
    _mesa_set_enable(ctx, tex->Target, GL_TRUE);
@@ -2347,7 +2350,7 @@ _mesa_meta_Bitmap(struct gl_context *ctx,
     * Check if swrast fallback is needed.
     */
    if (ctx->_ImageTransferState ||
-       ctx->FragmentProgram._Enabled ||
+       _mesa_arb_fragment_program_enabled(ctx) ||
        ctx->Fog.Enabled ||
        ctx->Texture._MaxEnabledTexImageUnit != -1 ||
        width > tex->MaxSize ||
@@ -2418,8 +2421,7 @@ _mesa_meta_Bitmap(struct gl_context *ctx,
       }
 
       /* upload new vertex data */
-      _mesa_buffer_sub_data(ctx, bitmap->buf_obj, 0, sizeof(verts), verts,
-                            __func__);
+      _mesa_buffer_sub_data(ctx, bitmap->buf_obj, 0, sizeof(verts), verts);
    }
 
    /* choose different foreground/background alpha values */
@@ -2768,7 +2770,7 @@ get_temp_image_type(struct gl_context *ctx, mesa_format format)
  * glBlitFramebuffer() to implement glCopyTexSubImage().
  */
 static bool
-copytexsubimage_using_blit_framebuffer(struct gl_context *ctx, GLuint dims,
+copytexsubimage_using_blit_framebuffer(struct gl_context *ctx,
                                        struct gl_texture_image *texImage,
                                        GLint xoffset,
                                        GLint yoffset,
@@ -2862,7 +2864,7 @@ _mesa_meta_CopyTexSubImage(struct gl_context *ctx, GLuint dims,
    GLint bpp;
    void *buf;
 
-   if (copytexsubimage_using_blit_framebuffer(ctx, dims,
+   if (copytexsubimage_using_blit_framebuffer(ctx,
                                               texImage,
                                               xoffset, yoffset, zoffset,
                                               rb,
@@ -3062,6 +3064,11 @@ decompress_texture_image(struct gl_context *ctx,
    if (width > decompress_fbo->Width || height > decompress_fbo->Height) {
       _mesa_renderbuffer_storage(ctx, decompress_fbo->rb, rbFormat,
                                  width, height, 0);
+
+      /* Do the full completeness check to recompute
+       * ctx->DrawBuffer->Width/Height.
+       */
+      ctx->DrawBuffer->_Status = GL_FRAMEBUFFER_UNDEFINED;
       status = _mesa_check_framebuffer_status(ctx, ctx->DrawBuffer);
       if (status != GL_FRAMEBUFFER_COMPLETE) {
          /* If the framebuffer isn't complete then we'll leave
@@ -3136,8 +3143,7 @@ decompress_texture_image(struct gl_context *ctx,
    _mesa_set_viewport(ctx, 0, 0, 0, width, height);
 
    /* upload new vertex data */
-   _mesa_buffer_sub_data(ctx, decompress->buf_obj, 0, sizeof(verts), verts,
-                         __func__);
+   _mesa_buffer_sub_data(ctx, decompress->buf_obj, 0, sizeof(verts), verts);
 
    /* setup texture state */
    _mesa_BindTexture(target, texObj->Name);
@@ -3405,8 +3411,7 @@ _mesa_meta_DrawTex(struct gl_context *ctx, GLfloat x, GLfloat y, GLfloat z,
          verts[3].st[i][1] = t1;
       }
 
-      _mesa_buffer_sub_data(ctx, drawtex->buf_obj, 0, sizeof(verts), verts,
-                            __func__);
+      _mesa_buffer_sub_data(ctx, drawtex->buf_obj, 0, sizeof(verts), verts);
    }
 
    _mesa_DrawArrays(GL_TRIANGLE_FAN, 0, 4);

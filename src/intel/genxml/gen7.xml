@@ -378,15 +378,13 @@
   </struct>
 
   <struct name="3DSTATE_CONSTANT_BODY" length="6">
-    <field name="Constant Buffer 1 Read Length" start="16" end="31" type="uint"/>
-    <field name="Constant Buffer 0 Read Length" start="0" end="15" type="uint"/>
-    <field name="Constant Buffer 3 Read Length" start="48" end="63" type="uint"/>
-    <field name="Constant Buffer 2 Read Length" start="32" end="47" type="uint"/>
-    <field name="Pointer To Constant Buffer 0" start="69" end="95" type="address"/>
+    <group count="4" start="0" size="16">
+      <field name="Read Length" start="0" end="15" type="uint"/>
+    </group>
     <field name="Constant Buffer Object Control State" start="64" end="68" type="MEMORY_OBJECT_CONTROL_STATE"/>
-    <field name="Pointer To Constant Buffer 1" start="101" end="127" type="address"/>
-    <field name="Pointer To Constant Buffer 2" start="133" end="159" type="address"/>
-    <field name="Pointer To Constant Buffer 3" start="165" end="191" type="address"/>
+    <group count="4" start="64" size="32">
+      <field name="Buffer" start="5" end="31" type="address"/>
+    </group>
   </struct>
 
   <struct name="VERTEX_BUFFER_STATE" length="4">
@@ -507,8 +505,8 @@
     <field name="Post-Blend Color Clamp Enable" start="32" end="32" type="bool"/>
   </struct>
 
-  <struct name="BLEND_STATE" length="16">
-    <group count="8" start="0" size="64">
+  <struct name="BLEND_STATE" length="0">
+    <group count="0" start="0" size="64">
       <field name="Entry" start="0" end="63" type="BLEND_STATE_ENTRY"/>
     </group>
   </struct>
@@ -786,9 +784,9 @@
       <value name="LOW" value="3"/>
     </field>
     <field name="Non-normalized Coordinate Enable" start="106" end="106" type="bool"/>
-    <field name="TCX Address Control Mode" start="102" end="104" type="uint"/>
-    <field name="TCY Address Control Mode" start="99" end="101" type="uint"/>
-    <field name="TCZ Address Control Mode" start="96" end="98" type="uint"/>
+    <field name="TCX Address Control Mode" start="102" end="104" type="Texture Coordinate Mode"/>
+    <field name="TCY Address Control Mode" start="99" end="101" type="Texture Coordinate Mode"/>
+    <field name="TCZ Address Control Mode" start="96" end="98" type="Texture Coordinate Mode"/>
   </struct>
 
   <instruction name="3DPRIMITIVE" bias="2" length="7">
@@ -1101,7 +1099,7 @@
     <field name="Statistics Enable" start="170" end="170" type="bool"/>
     <field name="Compute W Coordinate Enable" start="162" end="162" type="bool"/>
     <field name="DS Cache Disable" start="161" end="161" type="bool"/>
-    <field name="Function Enable" start="160" end="160" type="bool"/>
+    <field name="Enable" start="160" end="160" type="bool"/>
   </instruction>
 
   <instruction name="3DSTATE_GS" bias="2" length="7">
@@ -1157,9 +1155,12 @@
     <field name="GS Invocations Increment Value" start="165" end="169" type="uint"/>
     <field name="Include Primitive ID" start="164" end="164" type="bool"/>
     <field name="Hint" start="163" end="163" type="uint"/>
-    <field name="Reorder Enable" start="162" end="162" type="bool"/>
+    <field name="Reorder Mode" start="162" end="162" type="uint">
+      <value name="LEADING" value="0"/>
+      <value name="TRAILING" value="1"/>
+    </field>
     <field name="Discard Adjacency" start="161" end="161" type="bool"/>
-    <field name="Function Enable" start="160" end="160" type="bool"/>
+    <field name="Enable" start="160" end="160" type="bool"/>
     <field name="Semaphore Handle" start="192" end="203" type="offset"/>
   </instruction>
 
@@ -1196,7 +1197,7 @@
     <field name="Illegal Opcode Exception Enable" start="45" end="45" type="bool"/>
     <field name="Software Exception Enable" start="39" end="39" type="bool"/>
     <field name="Maximum Number of Threads" start="32" end="38" type="uint"/>
-    <field name="Function Enable" start="95" end="95" type="bool"/>
+    <field name="Enable" start="95" end="95" type="bool"/>
     <field name="Statistics Enable" start="93" end="93" type="bool"/>
     <field name="Instance Count" start="64" end="67" type="uint"/>
     <field name="Kernel Start Pointer" start="102" end="127" type="offset"/>
@@ -1217,6 +1218,7 @@
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
     <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="10"/>
     <field name="Memory Object Control State" start="12" end="15" type="MEMORY_OBJECT_CONTROL_STATE"/>
+    <field name="IndexBufferMOCS" start="12" end="15" type="uint"/>
     <field name="Cut Index Enable" start="10" end="10" type="bool"/>
     <field name="Index Format" start="8" end="9" type="uint" prefix="INDEX">
       <value name="BYTE" value="0"/>
@@ -1259,8 +1261,8 @@
     <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="13"/>
     <field name="DWord Length" start="0" end="7" type="uint" default="2"/>
     <field name="Pixel Location" start="36" end="36" type="uint">
-      <value name="PIXLOC_CENTER" value="0"/>
-      <value name="PIXLOC_UL_CORNER" value="1"/>
+      <value name="CENTER" value="0"/>
+      <value name="UL_CORNER" value="1"/>
     </field>
     <field name="Number of Multisamples" start="33" end="35" type="uint">
       <value name="NUMSAMPLES_1" value="0"/>
@@ -1602,7 +1604,12 @@
       <value name="4.0 pixels" value="3"/>
     </field>
     <field name="Scissor Rectangle Enable" start="75" end="75" type="bool"/>
-    <field name="Multisample Rasterization Mode" start="72" end="73" type="uint"/>
+    <field name="Multisample Rasterization Mode" start="72" end="73" type="uint">
+      <value name="MSRASTMODE_OFF_PIXEL" value="0"/>
+      <value name="MSRASTMODE_OFF_PATTERN" value="1"/>
+      <value name="MSRASTMODE_ON_PIXEL" value="2"/>
+      <value name="MSRASTMODE_ON_PATTERN" value="3"/>
+   </field>
     <field name="Last Pixel Enable" start="127" end="127" type="bool"/>
     <field name="Triangle Strip/List Provoking Vertex Select" start="125" end="126" type="uint">
       <value name="Vertex 0" value="0"/>
@@ -1637,6 +1644,7 @@
     <field name="DWord Length" start="0" end="7" type="uint" default="2"/>
     <field name="SO Buffer Index" start="61" end="62" type="uint"/>
     <field name="SO Buffer Object Control State" start="57" end="60" type="MEMORY_OBJECT_CONTROL_STATE"/>
+    <field name="SO Buffer MOCS" start="57" end="60" type="uint"/>
     <field name="Surface Pitch" start="32" end="43" type="uint"/>
     <field name="Surface Base Address" start="66" end="95" type="address"/>
     <field name="Surface End Address" start="98" end="127" type="address"/>
@@ -1855,7 +1863,7 @@
     <field name="Maximum Number of Threads" start="185" end="191" type="uint"/>
     <field name="Statistics Enable" start="170" end="170" type="bool"/>
     <field name="Vertex Cache Disable" start="161" end="161" type="bool"/>
-    <field name="Function Enable" start="160" end="160" type="bool"/>
+    <field name="Enable" start="160" end="160" type="bool"/>
   </instruction>
 
   <instruction name="3DSTATE_WM" bias="2" length="3">

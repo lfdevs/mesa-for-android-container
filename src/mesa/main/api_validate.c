@@ -99,7 +99,7 @@ check_blend_func_error(struct gl_context *ctx)
        *     the blend equation or "blend_support_all_equations", the error
        *     INVALID_OPERATION is generated [...]"
        */
-      const struct gl_program *prog = ctx->_Shader->_CurrentFragmentProgram;
+      const struct gl_program *prog = ctx->FragmentProgram._Current;
       const GLbitfield blend_support = !prog ? 0 : prog->sh.fs.BlendSupport;
 
       if ((blend_support & ctx->Color._AdvancedBlendMode) == 0) {
@@ -133,15 +133,17 @@ _mesa_valid_to_render(struct gl_context *ctx, const char *where)
       /* Any shader stages that are not supplied by the GLSL shader and have
        * assembly shaders enabled must now be validated.
        */
-      if (!ctx->_Shader->CurrentProgram[MESA_SHADER_VERTEX]
-          && ctx->VertexProgram.Enabled && !ctx->VertexProgram._Enabled) {
+      if (!ctx->_Shader->CurrentProgram[MESA_SHADER_VERTEX] &&
+          ctx->VertexProgram.Enabled &&
+          !_mesa_arb_vertex_program_enabled(ctx)) {
          _mesa_error(ctx, GL_INVALID_OPERATION,
                      "%s(vertex program not valid)", where);
          return GL_FALSE;
       }
 
       if (!ctx->_Shader->CurrentProgram[MESA_SHADER_FRAGMENT]) {
-         if (ctx->FragmentProgram.Enabled && !ctx->FragmentProgram._Enabled) {
+         if (ctx->FragmentProgram.Enabled &&
+             !_mesa_arb_fragment_program_enabled(ctx)) {
             _mesa_error(ctx, GL_INVALID_OPERATION,
                         "%s(fragment program not valid)", where);
             return GL_FALSE;
@@ -243,7 +245,20 @@ check_valid_to_render(struct gl_context *ctx, const char *function)
       return false;
    }
 
-   if (!_mesa_all_buffers_are_unmapped(ctx->Array.VAO)) {
+   /* Section 6.3.2 from the GL 4.5:
+    * "Any GL command which attempts to read from, write to, or change
+    *  the state of a buffer object may generate an INVALID_OPERATION error if
+    *  all or part of the buffer object is mapped ... However, only commands
+    *  which explicitly describe this error are required to do so. If an error
+    *  is not generated, such commands will have undefined results and may
+    *  result in GL interruption or termination."
+    *
+    * Only some buffer API functions require INVALID_OPERATION with mapped
+    * buffers. No other functions list such an error, thus it's not required
+    * to report INVALID_OPERATION for draw calls with mapped buffers.
+    */
+   if (!ctx->Const.AllowMappedBuffersDuringExecution &&
+       !_mesa_all_buffers_are_unmapped(ctx->Array.VAO)) {
       _mesa_error(ctx, GL_INVALID_OPERATION,
                   "%s(vertex buffers are mapped)", function);
       return false;
@@ -290,15 +305,6 @@ check_valid_to_render(struct gl_context *ctx, const char *function)
                      "%s(tess ctrl shader is missing)", function);
          return false;
       }
-
-      /* For ES2, we can draw if we have a vertex program/shader). */
-      return ctx->VertexProgram._Current != NULL;
-
-   case API_OPENGLES:
-      /* For OpenGL ES, only draw if we have vertex positions
-       */
-      if (!ctx->Array.VAO->VertexAttrib[VERT_ATTRIB_POS].Enabled)
-         return false;
       break;
 
    case API_OPENGL_CORE:
@@ -312,32 +318,10 @@ check_valid_to_render(struct gl_context *ctx, const char *function)
          _mesa_error(ctx, GL_INVALID_OPERATION, "%s(no VAO bound)", function);
          return false;
       }
+      break;
 
-      /* Section 7.3 (Program Objects) of the OpenGL 4.5 Core Profile spec
-       * says:
-       *
-       *     "If there is no active program for the vertex or fragment shader
-       *     stages, the results of vertex and/or fragment processing will be
-       *     undefined. However, this is not an error."
-       *
-       * The fragment shader is not tested here because other state (e.g.,
-       * GL_RASTERIZER_DISCARD) affects whether or not we actually care.
-       */
-      return ctx->VertexProgram._Current != NULL;
-
+   case API_OPENGLES:
    case API_OPENGL_COMPAT:
-      if (ctx->VertexProgram._Current != NULL) {
-         /* Draw regardless of whether or not we have any vertex arrays.
-          * (Ex: could draw a point using a constant vertex pos)
-          */
-         return true;
-      } else {
-         /* Draw if we have vertex positions (GL_VERTEX_ARRAY or generic
-          * array [0]).
-          */
-         return (ctx->Array.VAO->VertexAttrib[VERT_ATTRIB_POS].Enabled ||
-                 ctx->Array.VAO->VertexAttrib[VERT_ATTRIB_GENERIC0].Enabled);
-      }
       break;
 
    default:
@@ -355,7 +339,7 @@ check_valid_to_render(struct gl_context *ctx, const char *function)
  * Note: This may be called during display list compilation.
  */
 bool
-_mesa_is_valid_prim_mode(struct gl_context *ctx, GLenum mode)
+_mesa_is_valid_prim_mode(const struct gl_context *ctx, GLenum mode)
 {
    /* The overwhelmingly common case is (mode <= GL_TRIANGLE_FAN).  Test that
     * first and exit.  You would think that a switch-statement would be the
@@ -698,14 +682,6 @@ validate_DrawElements_common(struct gl_context *ctx,
       return false;
 
    if (!check_valid_to_render(ctx, caller))
-      return false;
-
-   /* Not using a VBO for indices, so avoid NULL pointer derefs later.
-    */
-   if (!_mesa_is_bufferobj(ctx->Array.VAO->IndexBufferObj) && indices == NULL)
-      return false;
-
-   if (count == 0)
       return false;
 
    return true;
@@ -1401,238 +1377,4 @@ _mesa_validate_MultiDrawElementsIndirectCount(struct gl_context *ctx,
 
    return valid_draw_indirect_parameters(
          ctx, "glMultiDrawElementsIndirectCountARB", drawcount);
-}
-
-static bool
-check_valid_to_compute(struct gl_context *ctx, const char *function)
-{
-   if (!_mesa_has_compute_shaders(ctx)) {
-      _mesa_error(ctx, GL_INVALID_OPERATION,
-                  "unsupported function (%s) called",
-                  function);
-      return false;
-   }
-
-   /* From the OpenGL 4.3 Core Specification, Chapter 19, Compute Shaders:
-    *
-    * "An INVALID_OPERATION error is generated if there is no active program
-    *  for the compute shader stage."
-    */
-   if (ctx->_Shader->CurrentProgram[MESA_SHADER_COMPUTE] == NULL) {
-      _mesa_error(ctx, GL_INVALID_OPERATION,
-                  "%s(no active compute shader)",
-                  function);
-      return false;
-   }
-
-   return true;
-}
-
-GLboolean
-_mesa_validate_DispatchCompute(struct gl_context *ctx,
-                               const GLuint *num_groups)
-{
-   int i;
-   FLUSH_CURRENT(ctx, 0);
-
-   if (!check_valid_to_compute(ctx, "glDispatchCompute"))
-      return GL_FALSE;
-
-   for (i = 0; i < 3; i++) {
-      /* From the OpenGL 4.3 Core Specification, Chapter 19, Compute Shaders:
-       *
-       * "An INVALID_VALUE error is generated if any of num_groups_x,
-       *  num_groups_y and num_groups_z are greater than or equal to the
-       *  maximum work group count for the corresponding dimension."
-       *
-       * However, the "or equal to" portions appears to be a specification
-       * bug. In all other areas, the specification appears to indicate that
-       * the number of workgroups can match the MAX_COMPUTE_WORK_GROUP_COUNT
-       * value. For example, under DispatchComputeIndirect:
-       *
-       * "If any of num_groups_x, num_groups_y or num_groups_z is greater than
-       *  the value of MAX_COMPUTE_WORK_GROUP_COUNT for the corresponding
-       *  dimension then the results are undefined."
-       *
-       * Additionally, the OpenGLES 3.1 specification does not contain "or
-       * equal to" as an error condition.
-       */
-      if (num_groups[i] > ctx->Const.MaxComputeWorkGroupCount[i]) {
-         _mesa_error(ctx, GL_INVALID_VALUE,
-                     "glDispatchCompute(num_groups_%c)", 'x' + i);
-         return GL_FALSE;
-      }
-   }
-
-   /* The ARB_compute_variable_group_size spec says:
-    *
-    * "An INVALID_OPERATION error is generated by DispatchCompute if the active
-    *  program for the compute shader stage has a variable work group size."
-    */
-   struct gl_program *prog = ctx->_Shader->CurrentProgram[MESA_SHADER_COMPUTE];
-   if (prog->info.cs.local_size_variable) {
-      _mesa_error(ctx, GL_INVALID_OPERATION,
-                  "glDispatchCompute(variable work group size forbidden)");
-      return GL_FALSE;
-   }
-
-   return GL_TRUE;
-}
-
-GLboolean
-_mesa_validate_DispatchComputeGroupSizeARB(struct gl_context *ctx,
-                                           const GLuint *num_groups,
-                                           const GLuint *group_size)
-{
-   GLuint total_invocations = 1;
-   int i;
-
-   FLUSH_CURRENT(ctx, 0);
-
-   if (!check_valid_to_compute(ctx, "glDispatchComputeGroupSizeARB"))
-      return GL_FALSE;
-
-   /* The ARB_compute_variable_group_size spec says:
-    *
-    * "An INVALID_OPERATION error is generated by
-    *  DispatchComputeGroupSizeARB if the active program for the compute
-    *  shader stage has a fixed work group size."
-    */
-   struct gl_program *prog = ctx->_Shader->CurrentProgram[MESA_SHADER_COMPUTE];
-   if (!prog->info.cs.local_size_variable) {
-      _mesa_error(ctx, GL_INVALID_OPERATION,
-                  "glDispatchComputeGroupSizeARB(fixed work group size "
-                  "forbidden)");
-      return GL_FALSE;
-   }
-
-   for (i = 0; i < 3; i++) {
-      /* The ARB_compute_variable_group_size spec says:
-       *
-       * "An INVALID_VALUE error is generated if any of num_groups_x,
-       *  num_groups_y and num_groups_z are greater than or equal to the
-       *  maximum work group count for the corresponding dimension."
-       */
-      if (num_groups[i] > ctx->Const.MaxComputeWorkGroupCount[i]) {
-         _mesa_error(ctx, GL_INVALID_VALUE,
-                     "glDispatchComputeGroupSizeARB(num_groups_%c)", 'x' + i);
-         return GL_FALSE;
-      }
-
-      /* The ARB_compute_variable_group_size spec says:
-       *
-       * "An INVALID_VALUE error is generated by DispatchComputeGroupSizeARB if
-       *  any of <group_size_x>, <group_size_y>, or <group_size_z> is less than
-       *  or equal to zero or greater than the maximum local work group size
-       *  for compute shaders with variable group size
-       *  (MAX_COMPUTE_VARIABLE_GROUP_SIZE_ARB) in the corresponding
-       *  dimension."
-       *
-       * However, the "less than" is a spec bug because they are declared as
-       * unsigned integers.
-       */
-      if (group_size[i] == 0 ||
-          group_size[i] > ctx->Const.MaxComputeVariableGroupSize[i]) {
-         _mesa_error(ctx, GL_INVALID_VALUE,
-                     "glDispatchComputeGroupSizeARB(group_size_%c)", 'x' + i);
-         return GL_FALSE;
-      }
-
-      total_invocations *= group_size[i];
-   }
-
-   /* The ARB_compute_variable_group_size spec says:
-    *
-    * "An INVALID_VALUE error is generated by DispatchComputeGroupSizeARB if
-    *  the product of <group_size_x>, <group_size_y>, and <group_size_z> exceeds
-    *  the implementation-dependent maximum local work group invocation count
-    *  for compute shaders with variable group size
-    *  (MAX_COMPUTE_VARIABLE_GROUP_INVOCATIONS_ARB)."
-    */
-   if (total_invocations > ctx->Const.MaxComputeVariableGroupInvocations) {
-      _mesa_error(ctx, GL_INVALID_VALUE,
-                  "glDispatchComputeGroupSizeARB(product of local_sizes "
-                  "exceeds MAX_COMPUTE_VARIABLE_GROUP_INVOCATIONS_ARB "
-                  "(%d > %d))", total_invocations,
-                  ctx->Const.MaxComputeVariableGroupInvocations);
-      return GL_FALSE;
-   }
-
-   return GL_TRUE;
-}
-
-static GLboolean
-valid_dispatch_indirect(struct gl_context *ctx,
-                        GLintptr indirect,
-                        GLsizei size, const char *name)
-{
-   const uint64_t end = (uint64_t) indirect + size;
-
-   if (!check_valid_to_compute(ctx, name))
-      return GL_FALSE;
-
-   /* From the OpenGL 4.3 Core Specification, Chapter 19, Compute Shaders:
-    *
-    * "An INVALID_VALUE error is generated if indirect is negative or is not a
-    *  multiple of four."
-    */
-   if (indirect & (sizeof(GLuint) - 1)) {
-      _mesa_error(ctx, GL_INVALID_VALUE,
-                  "%s(indirect is not aligned)", name);
-      return GL_FALSE;
-   }
-
-   if (indirect < 0) {
-      _mesa_error(ctx, GL_INVALID_VALUE,
-                  "%s(indirect is less than zero)", name);
-      return GL_FALSE;
-   }
-
-   /* From the OpenGL 4.3 Core Specification, Chapter 19, Compute Shaders:
-    *
-    * "An INVALID_OPERATION error is generated if no buffer is bound to the
-    *  DRAW_INDIRECT_BUFFER binding, or if the command would source data
-    *  beyond the end of the buffer object."
-    */
-   if (!_mesa_is_bufferobj(ctx->DispatchIndirectBuffer)) {
-      _mesa_error(ctx, GL_INVALID_OPERATION,
-                  "%s: no buffer bound to DISPATCH_INDIRECT_BUFFER", name);
-      return GL_FALSE;
-   }
-
-   if (_mesa_check_disallowed_mapping(ctx->DispatchIndirectBuffer)) {
-      _mesa_error(ctx, GL_INVALID_OPERATION,
-                  "%s(DISPATCH_INDIRECT_BUFFER is mapped)", name);
-      return GL_FALSE;
-   }
-
-   if (ctx->DispatchIndirectBuffer->Size < end) {
-      _mesa_error(ctx, GL_INVALID_OPERATION,
-                  "%s(DISPATCH_INDIRECT_BUFFER too small)", name);
-      return GL_FALSE;
-   }
-
-   /* The ARB_compute_variable_group_size spec says:
-    *
-    * "An INVALID_OPERATION error is generated if the active program for the
-    *  compute shader stage has a variable work group size."
-    */
-   struct gl_program *prog = ctx->_Shader->CurrentProgram[MESA_SHADER_COMPUTE];
-   if (prog->info.cs.local_size_variable) {
-      _mesa_error(ctx, GL_INVALID_OPERATION,
-                  "%s(variable work group size forbidden)", name);
-      return GL_FALSE;
-   }
-
-   return GL_TRUE;
-}
-
-GLboolean
-_mesa_validate_DispatchComputeIndirect(struct gl_context *ctx,
-                                       GLintptr indirect)
-{
-   FLUSH_CURRENT(ctx, 0);
-
-   return valid_dispatch_indirect(ctx, indirect, 3 * sizeof(GLuint),
-                                  "glDispatchComputeIndirect");
 }

@@ -68,6 +68,8 @@ extern const int vl_zscan_normal_16[];
 extern const int vl_zscan_linear[];
 extern const int vl_zscan_normal[];
 extern const int vl_zscan_alternate[];
+extern const int vl_zscan_h265_up_right_diagonal_16[];
+extern const int vl_zscan_h265_up_right_diagonal[];
 
 struct pipe_sampler_view *
 vl_zscan_layout(struct pipe_context *pipe, const int layout[64], unsigned blocks_per_line);

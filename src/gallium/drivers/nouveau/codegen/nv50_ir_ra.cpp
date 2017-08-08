@@ -37,11 +37,9 @@ namespace nv50_ir {
 #if __cplusplus >= 201103L
 using std::hash;
 using std::unordered_map;
-#elif !defined(ANDROID)
+#else
 using std::tr1::hash;
 using std::tr1::unordered_map;
-#else
-#error Android release before Lollipop is not supported!
 #endif
 
 #define MAX_REGISTER_FILE_SIZE 256

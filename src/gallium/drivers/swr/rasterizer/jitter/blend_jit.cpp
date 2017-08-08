@@ -514,10 +514,8 @@ struct BlendJit : public Builder
 
     Function* Create(const BLEND_COMPILE_STATE& state)
     {
-        static std::size_t jitNum = 0;
-
-        std::stringstream fnName("BlendShader", std::ios_base::in | std::ios_base::out | std::ios_base::ate);
-        fnName << jitNum++;
+        std::stringstream fnName("BlendShader_", std::ios_base::in | std::ios_base::out | std::ios_base::ate);
+        fnName << ComputeCRC(0, &state, sizeof(state));
 
         // blend function signature
         //typedef void(*PFN_BLEND_JIT_FUNC)(const SWR_BLEND_STATE*, simdvector&, simdvector&, uint32_t, BYTE*, simdvector&, simdscalari*, simdscalari*);
@@ -536,6 +534,7 @@ struct BlendJit : public Builder
 
         FunctionType* fTy = FunctionType::get(IRB()->getVoidTy(), args, false);
         Function* blendFunc = Function::Create(fTy, GlobalValue::ExternalLinkage, fnName.str(), JM()->mpCurrentModule);
+        blendFunc->getParent()->setModuleIdentifier(blendFunc->getName());
 
         BasicBlock* entry = BasicBlock::Create(JM()->mContext, "entry", blendFunc);
 

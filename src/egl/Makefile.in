@@ -126,8 +126,13 @@ target_triplet = @target@
 @HAVE_PLATFORM_WAYLAND_TRUE@am__append_6 = $(WAYLAND_CFLAGS)
 @HAVE_PLATFORM_WAYLAND_TRUE@am__append_7 = $(WAYLAND_LIBS) \
 @HAVE_PLATFORM_WAYLAND_TRUE@	$(LIBDRM_LIBS) \
-@HAVE_PLATFORM_WAYLAND_TRUE@	$(top_builddir)/src/egl/wayland/wayland-drm/libwayland-drm.la
-@HAVE_PLATFORM_WAYLAND_TRUE@am__append_8 = drivers/dri2/platform_wayland.c
+@HAVE_PLATFORM_WAYLAND_TRUE@	$(top_builddir)/src/egl/wayland/wayland-drm/libwayland-drm.la \
+@HAVE_PLATFORM_WAYLAND_TRUE@	$(top_builddir)/src/util/libmesautil.la
+@HAVE_PLATFORM_WAYLAND_TRUE@am__append_8 = \
+@HAVE_PLATFORM_WAYLAND_TRUE@	drivers/dri2/platform_wayland.c	\
+@HAVE_PLATFORM_WAYLAND_TRUE@	drivers/dri2/linux-dmabuf-unstable-v1-protocol.c \
+@HAVE_PLATFORM_WAYLAND_TRUE@	drivers/dri2/linux-dmabuf-unstable-v1-client-protocol.h
+
 @HAVE_PLATFORM_DRM_TRUE@am__append_9 = $(top_builddir)/src/gbm/libgbm.la
 @HAVE_PLATFORM_DRM_TRUE@am__append_10 = drivers/dri2/platform_drm.c
 @HAVE_PLATFORM_SURFACELESS_TRUE@am__append_11 = drivers/dri2/platform_surfaceless.c
@@ -201,7 +206,8 @@ am__DEPENDENCIES_1 =
 @HAVE_PLATFORM_WAYLAND_TRUE@am__DEPENDENCIES_3 =  \
 @HAVE_PLATFORM_WAYLAND_TRUE@	$(am__DEPENDENCIES_1) \
 @HAVE_PLATFORM_WAYLAND_TRUE@	$(am__DEPENDENCIES_1) \
-@HAVE_PLATFORM_WAYLAND_TRUE@	$(top_builddir)/src/egl/wayland/wayland-drm/libwayland-drm.la
+@HAVE_PLATFORM_WAYLAND_TRUE@	$(top_builddir)/src/egl/wayland/wayland-drm/libwayland-drm.la \
+@HAVE_PLATFORM_WAYLAND_TRUE@	$(top_builddir)/src/util/libmesautil.la
 @HAVE_PLATFORM_ANDROID_TRUE@am__DEPENDENCIES_4 =  \
 @HAVE_PLATFORM_ANDROID_TRUE@	$(am__DEPENDENCIES_1)
 libEGL_common_la_DEPENDENCIES = $(am__DEPENDENCIES_1) \
@@ -210,18 +216,21 @@ libEGL_common_la_DEPENDENCIES = $(am__DEPENDENCIES_1) \
 	$(top_builddir)/src/loader/libloader.la $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
 am__libEGL_common_la_SOURCES_DIST = main/eglapi.c main/eglapi.h \
-	main/eglarray.c main/eglarray.h main/eglcompiler.h \
-	main/eglconfig.c main/eglconfig.h main/eglcontext.c \
-	main/eglcontext.h main/eglcurrent.c main/eglcurrent.h \
-	main/egldefines.h main/egldisplay.c main/egldisplay.h \
-	main/egldriver.c main/egldriver.h main/eglfallbacks.c \
-	main/eglglobals.c main/eglglobals.h main/eglimage.c \
-	main/eglimage.h main/egllog.c main/egllog.h main/eglsurface.c \
+	main/eglarray.c main/eglarray.h main/eglconfig.c \
+	main/eglconfig.h main/eglcontext.c main/eglcontext.h \
+	main/eglcurrent.c main/eglcurrent.h main/egldefines.h \
+	main/egldisplay.c main/egldisplay.h main/egldriver.c \
+	main/egldriver.h main/eglfallbacks.c main/eglglobals.c \
+	main/eglglobals.h main/eglimage.c main/eglimage.h \
+	main/egllog.c main/egllog.h main/eglsurface.c \
 	main/eglsurface.h main/eglsync.c main/eglsync.h \
 	main/eglentrypoint.h main/egltypedefs.h \
 	drivers/dri2/egl_dri2.c drivers/dri2/egl_dri2.h \
 	drivers/dri2/egl_dri2_fallbacks.h drivers/dri2/platform_x11.c \
-	drivers/dri2/platform_wayland.c drivers/dri2/platform_drm.c \
+	drivers/dri2/platform_wayland.c \
+	drivers/dri2/linux-dmabuf-unstable-v1-protocol.c \
+	drivers/dri2/linux-dmabuf-unstable-v1-client-protocol.h \
+	drivers/dri2/platform_drm.c \
 	drivers/dri2/platform_surfaceless.c \
 	drivers/dri2/platform_android.c \
 	drivers/dri2/platform_x11_dri3.c \
@@ -235,7 +244,8 @@ am__objects_1 = main/eglapi.lo main/eglarray.lo main/eglconfig.lo \
 am__objects_2 = drivers/dri2/egl_dri2.lo
 @HAVE_PLATFORM_X11_TRUE@am__objects_3 = drivers/dri2/platform_x11.lo
 @HAVE_PLATFORM_WAYLAND_TRUE@am__objects_4 =  \
-@HAVE_PLATFORM_WAYLAND_TRUE@	drivers/dri2/platform_wayland.lo
+@HAVE_PLATFORM_WAYLAND_TRUE@	drivers/dri2/platform_wayland.lo \
+@HAVE_PLATFORM_WAYLAND_TRUE@	drivers/dri2/linux-dmabuf-unstable-v1-protocol.lo
 @HAVE_PLATFORM_DRM_TRUE@am__objects_5 = drivers/dri2/platform_drm.lo
 @HAVE_PLATFORM_SURFACELESS_TRUE@am__objects_6 = drivers/dri2/platform_surfaceless.lo
 @HAVE_PLATFORM_ANDROID_TRUE@am__objects_7 =  \
@@ -586,6 +596,8 @@ GL_PC_LIB_PRIV = @GL_PC_LIB_PRIV@
 GL_PC_REQ_PRIV = @GL_PC_REQ_PRIV@
 GREP = @GREP@
 HAVE_XF86VIDMODE = @HAVE_XF86VIDMODE@
+I915_CFLAGS = @I915_CFLAGS@
+I915_LIBS = @I915_LIBS@
 INDENT = @INDENT@
 INDENT_FLAGS = @INDENT_FLAGS@
 INSTALL = @INSTALL@
@@ -593,8 +605,6 @@ INSTALL_DATA = @INSTALL_DATA@
 INSTALL_PROGRAM = @INSTALL_PROGRAM@
 INSTALL_SCRIPT = @INSTALL_SCRIPT@
 INSTALL_STRIP_PROGRAM = @INSTALL_STRIP_PROGRAM@
-INTEL_CFLAGS = @INTEL_CFLAGS@
-INTEL_LIBS = @INTEL_LIBS@
 LD = @LD@
 LDFLAGS = @LDFLAGS@
 LD_NO_UNDEFINED = @LD_NO_UNDEFINED@
@@ -690,6 +700,8 @@ STRIP = @STRIP@
 SWR_AVX2_CXXFLAGS = @SWR_AVX2_CXXFLAGS@
 SWR_AVX_CXXFLAGS = @SWR_AVX_CXXFLAGS@
 SWR_CXX11_CXXFLAGS = @SWR_CXX11_CXXFLAGS@
+SWR_KNL_CXXFLAGS = @SWR_KNL_CXXFLAGS@
+SWR_SKX_CXXFLAGS = @SWR_SKX_CXXFLAGS@
 VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
 VALGRIND_LIBS = @VALGRIND_LIBS@
 VA_CFLAGS = @VA_CFLAGS@
@@ -697,8 +709,6 @@ VA_LIBS = @VA_LIBS@
 VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
 VA_MAJOR = @VA_MAJOR@
 VA_MINOR = @VA_MINOR@
-VC4_CFLAGS = @VC4_CFLAGS@
-VC4_LIBS = @VC4_LIBS@
 VDPAU_CFLAGS = @VDPAU_CFLAGS@
 VDPAU_LIBS = @VDPAU_LIBS@
 VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
@@ -712,6 +722,7 @@ VL_LIBS = @VL_LIBS@
 VULKAN_ICD_INSTALL_DIR = @VULKAN_ICD_INSTALL_DIR@
 WAYLAND_CFLAGS = @WAYLAND_CFLAGS@
 WAYLAND_LIBS = @WAYLAND_LIBS@
+WAYLAND_PROTOCOLS_DATADIR = @WAYLAND_PROTOCOLS_DATADIR@
 WAYLAND_SCANNER = @WAYLAND_SCANNER@
 WAYLAND_SCANNER_CFLAGS = @WAYLAND_SCANNER_CFLAGS@
 WAYLAND_SCANNER_LIBS = @WAYLAND_SCANNER_LIBS@
@@ -785,7 +796,6 @@ pdfdir = @pdfdir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
-runstatedir = @runstatedir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
@@ -803,7 +813,6 @@ LIBEGL_C_FILES := \
 	main/eglapi.h \
 	main/eglarray.c \
 	main/eglarray.h \
-	main/eglcompiler.h \
 	main/eglconfig.c \
 	main/eglconfig.h \
 	main/eglcontext.c \
@@ -834,11 +843,14 @@ dri2_backend_core_FILES := \
 	drivers/dri2/egl_dri2.h \
 	drivers/dri2/egl_dri2_fallbacks.h
 
+MKDIR_GEN = $(AM_V_at)$(MKDIR_P) $(@D)
+BUILT_SOURCES = g_egldispatchstubs.c g_egldispatchstubs.h
 AM_CFLAGS = -I$(top_srcdir)/include -I$(top_srcdir)/src/egl/main \
 	-I$(top_srcdir)/src/gbm/main -I$(top_srcdir)/src $(DEFINES) \
 	$(VISIBILITY_CFLAGS) $(LIBDRM_CFLAGS) $(EGL_CFLAGS) \
 	-D_EGL_NATIVE_PLATFORM=$(EGL_NATIVE_PLATFORM) $(am__append_1) \
 	$(am__append_6) $(am__append_12) -I$(top_srcdir)/src/loader \
+	-I$(top_builddir)/src/egl/drivers/dri2 \
 	-I$(top_srcdir)/src/egl/drivers/dri2 \
 	-I$(top_srcdir)/src/gbm/backends/dri \
 	-I$(top_srcdir)/src/egl/wayland/wayland-egl \
@@ -862,12 +874,12 @@ libEGL_common_la_LIBADD = $(EGL_LIB_DEPS) $(am__append_2) \
 dri2_backend_FILES = $(am__append_3) $(am__append_8) $(am__append_10) \
 	$(am__append_11) $(am__append_14)
 dri3_backend_FILES = $(am__append_4)
+WL_DMABUF_XML = $(WAYLAND_PROTOCOLS_DATADIR)/unstable/linux-dmabuf/linux-dmabuf-unstable-v1.xml
 GLVND_GEN_DEPS = generate/gen_egl_dispatch.py \
 	generate/egl.xml generate/eglFunctionList.py generate/genCommon.py \
 	generate/egl_other.xml
 
 PYTHON_GEN = $(AM_V_GEN)$(PYTHON2) $(PYTHON_FLAGS)
-BUILT_SOURCES = g_egldispatchstubs.c g_egldispatchstubs.h
 CLEANFILES = $(BUILT_SOURCES)
 @USE_LIBGLVND_TRUE@vendorjsondir = @LIBGLVND_DATADIR@/glvnd/egl_vendor.d
 @USE_LIBGLVND_TRUE@vendorjson_DATA = main/50_mesa.json
@@ -1040,6 +1052,9 @@ drivers/dri2/platform_x11.lo: drivers/dri2/$(am__dirstamp) \
 	drivers/dri2/$(DEPDIR)/$(am__dirstamp)
 drivers/dri2/platform_wayland.lo: drivers/dri2/$(am__dirstamp) \
 	drivers/dri2/$(DEPDIR)/$(am__dirstamp)
+drivers/dri2/linux-dmabuf-unstable-v1-protocol.lo:  \
+	drivers/dri2/$(am__dirstamp) \
+	drivers/dri2/$(DEPDIR)/$(am__dirstamp)
 drivers/dri2/platform_drm.lo: drivers/dri2/$(am__dirstamp) \
 	drivers/dri2/$(DEPDIR)/$(am__dirstamp)
 drivers/dri2/platform_surfaceless.lo: drivers/dri2/$(am__dirstamp) \
@@ -1070,6 +1085,7 @@ distclean-compile:
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/g_egldispatchstubs.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/dri2/$(DEPDIR)/egl_dri2.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@drivers/dri2/$(DEPDIR)/linux-dmabuf-unstable-v1-protocol.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/dri2/$(DEPDIR)/platform_android.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/dri2/$(DEPDIR)/platform_drm.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@drivers/dri2/$(DEPDIR)/platform_surfaceless.Plo@am__quote@
@@ -1588,6 +1604,17 @@ uninstall-am: uninstall-eglHEADERS uninstall-libLTLIBRARIES \
 
 .PRECIOUS: Makefile
 
+
+drivers/dri2/linux-dmabuf-unstable-v1-protocol.c: $(WL_DMABUF_XML)
+	$(MKDIR_GEN)
+	$(AM_V_GEN)$(WAYLAND_SCANNER) code < $< > $@
+
+drivers/dri2/linux-dmabuf-unstable-v1-client-protocol.h: $(WL_DMABUF_XML)
+	$(MKDIR_GEN)
+	$(AM_V_GEN)$(WAYLAND_SCANNER) client-header < $< > $@
+
+@HAVE_PLATFORM_WAYLAND_TRUE@drivers/dri2/linux-dmabuf-unstable-v1-protocol.lo: drivers/dri2/linux-dmabuf-unstable-v1-client-protocol.h
+@HAVE_PLATFORM_WAYLAND_TRUE@drivers/dri2/egl_dri2.lo: drivers/dri2/linux-dmabuf-unstable-v1-client-protocol.h
 g_egldispatchstubs.c: $(GLVND_GEN_DEPS)
 	$(PYTHON_GEN) $(top_srcdir)/src/egl/generate/gen_egl_dispatch.py source \
 		$(top_srcdir)/src/egl/generate/eglFunctionList.py \

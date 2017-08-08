@@ -140,6 +140,29 @@ ir_array_reference_visitor::get_variable_entry(ir_variable *var)
    if (var->type->is_unsized_array())
       return NULL;
 
+   /* FIXME: arrays of arrays are not handled correctly by this pass so we
+    * skip it for now. While the pass will create functioning code it actually
+    * produces worse code.
+    *
+    * For example the array:
+    *
+    *    int[3][2] a;
+    *
+    * ends up being split up into:
+    *
+    *    int[3][2] a_0;
+    *    int[3][2] a_1;
+    *    int[3][2] a_2;
+    *
+    * And we end up referencing each of these new arrays for example:
+    *
+    *    a[0][1] will be turned into a_0[0][1]
+    *    a[1][0] will be turned into a_1[1][0]
+    *    a[2][0] will be turned into a_2[2][0]
+    */
+   if (var->type->is_array() && var->type->fields.array->is_array())
+      return NULL;
+
    foreach_in_list(variable_entry, entry, &this->variable_list) {
       if (entry->var == var)
          return entry;
@@ -449,9 +472,20 @@ optimize_split_arrays(exec_list *instructions, bool linked)
       for (unsigned int i = 0; i < entry->size; i++) {
          const char *name = ralloc_asprintf(mem_ctx, "%s_%d",
                                             entry->var->name, i);
-
-         entry->components[i] =
+         ir_variable *new_var =
             new(entry->mem_ctx) ir_variable(subtype, name, ir_var_temporary);
+
+         /* Do not lose memory/format qualifiers when arrays of images are
+          * split.
+          */
+         new_var->data.memory_read_only = entry->var->data.memory_read_only;
+         new_var->data.memory_write_only = entry->var->data.memory_write_only;
+         new_var->data.memory_coherent = entry->var->data.memory_coherent;
+         new_var->data.memory_volatile = entry->var->data.memory_volatile;
+         new_var->data.memory_restrict = entry->var->data.memory_restrict;
+         new_var->data.image_format = entry->var->data.image_format;
+
+         entry->components[i] = new_var;
          entry->var->insert_before(entry->components[i]);
       }
 

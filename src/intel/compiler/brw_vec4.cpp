@@ -985,7 +985,7 @@ vec4_visitor::is_dep_ctrl_unsafe(const vec4_instruction *inst)
     * affected, at least by the 64b restriction, since DepCtrl with double
     * precision instructions seems to produce GPU hangs in some cases.
     */
-   if (devinfo->gen == 8 || devinfo->is_broxton) {
+   if (devinfo->gen == 8 || gen_device_info_is_9lp(devinfo)) {
       if (inst->opcode == BRW_OPCODE_MUL &&
          IS_DWORD(inst->src[0]) &&
          IS_DWORD(inst->src[1]))
@@ -1730,102 +1730,25 @@ vec4_visitor::dump_instruction(backend_instruction *be_inst, FILE *file)
 }
 
 
-static inline struct brw_reg
-attribute_to_hw_reg(int attr, brw_reg_type type, bool interleaved)
-{
-   struct brw_reg reg;
-
-   unsigned width = REG_SIZE / 2 / MAX2(4, type_sz(type));
-   if (interleaved) {
-      reg = stride(brw_vecn_grf(width, attr / 2, (attr % 2) * 4), 0, width, 1);
-   } else {
-      reg = brw_vecn_grf(width, attr, 0);
-   }
-
-   reg.type = type;
-   return reg;
-}
-
-
-/**
- * Replace each register of type ATTR in this->instructions with a reference
- * to a fixed HW register.
- *
- * If interleaved is true, then each attribute takes up half a register, with
- * register N containing attribute 2*N in its first half and attribute 2*N+1
- * in its second half (this corresponds to the payload setup used by geometry
- * shaders in "single" or "dual instanced" dispatch mode).  If interleaved is
- * false, then each attribute takes up a whole register, with register N
- * containing attribute N (this corresponds to the payload setup used by
- * vertex shaders, and by geometry shaders in "dual object" dispatch mode).
- */
-void
-vec4_visitor::lower_attributes_to_hw_regs(const int *attribute_map,
-                                          bool interleaved)
-{
-   foreach_block_and_inst(block, vec4_instruction, inst, cfg) {
-      for (int i = 0; i < 3; i++) {
-         if (inst->src[i].file != ATTR)
-            continue;
-
-         int grf = attribute_map[inst->src[i].nr +
-                                 inst->src[i].offset / REG_SIZE];
-         assert(inst->src[i].offset % REG_SIZE == 0);
-
-         /* All attributes used in the shader need to have been assigned a
-          * hardware register by the caller
-          */
-         assert(grf != 0);
-
-         struct brw_reg reg =
-            attribute_to_hw_reg(grf, inst->src[i].type, interleaved);
-         reg.swizzle = inst->src[i].swizzle;
-         if (inst->src[i].abs)
-            reg = brw_abs(reg);
-         if (inst->src[i].negate)
-            reg = negate(reg);
-
-         inst->src[i] = reg;
-      }
-   }
-}
-
 int
 vec4_vs_visitor::setup_attributes(int payload_reg)
 {
-   int nr_attributes;
-   int attribute_map[VERT_ATTRIB_MAX + 2];
-   memset(attribute_map, 0, sizeof(attribute_map));
+   foreach_block_and_inst(block, vec4_instruction, inst, cfg) {
+      for (int i = 0; i < 3; i++) {
+         if (inst->src[i].file == ATTR) {
+            assert(inst->src[i].offset % REG_SIZE == 0);
+            int grf = payload_reg + inst->src[i].nr +
+                      inst->src[i].offset / REG_SIZE;
 
-   nr_attributes = 0;
-   GLbitfield64 vs_inputs = vs_prog_data->inputs_read;
-   while (vs_inputs) {
-      GLuint first = ffsll(vs_inputs) - 1;
-      int needed_slots =
-         (vs_prog_data->double_inputs_read & BITFIELD64_BIT(first)) ? 2 : 1;
-      for (int c = 0; c < needed_slots; c++) {
-         attribute_map[first + c] = payload_reg + nr_attributes;
-         nr_attributes++;
-         vs_inputs &= ~BITFIELD64_BIT(first + c);
+            struct brw_reg reg = brw_vec8_grf(grf, 0);
+            reg.swizzle = inst->src[i].swizzle;
+            reg.type = inst->src[i].type;
+            reg.abs = inst->src[i].abs;
+            reg.negate = inst->src[i].negate;
+            inst->src[i] = reg;
+         }
       }
    }
-
-   /* VertexID is stored by the VF as the last vertex element, but we
-    * don't represent it with a flag in inputs_read, so we call it
-    * VERT_ATTRIB_MAX.
-    */
-   if (vs_prog_data->uses_vertexid || vs_prog_data->uses_instanceid ||
-       vs_prog_data->uses_basevertex || vs_prog_data->uses_baseinstance) {
-      attribute_map[VERT_ATTRIB_MAX] = payload_reg + nr_attributes;
-      nr_attributes++;
-   }
-
-   if (vs_prog_data->uses_drawid) {
-      attribute_map[VERT_ATTRIB_MAX + 1] = payload_reg + nr_attributes;
-      nr_attributes++;
-   }
-
-   lower_attributes_to_hw_regs(attribute_map, false /* interleaved */);
 
    return payload_reg + vs_prog_data->nr_attribute_slots;
 }
@@ -1852,6 +1775,9 @@ vec4_visitor::setup_uniforms(int reg)
    } else {
       reg += ALIGN(uniforms, 2) / 2;
    }
+
+   for (int i = 0; i < 4; i++)
+      reg += stage_prog_data->ubo_ranges[i].length;
 
    stage_prog_data->nr_params = this->uniforms * 4;
 
@@ -2673,7 +2599,7 @@ vec4_visitor::run()
       if (unlikely(INTEL_DEBUG & DEBUG_OPTIMIZER) && this_progress) {  \
          char filename[64];                                            \
          snprintf(filename, 64, "%s-%s-%02d-%02d-" #pass,              \
-                  stage_abbrev, nir->info->name, iteration, pass_num); \
+                  stage_abbrev, nir->info.name, iteration, pass_num); \
                                                                        \
          backend_shader::dump_instructions(filename);                  \
       }                                                                \
@@ -2686,7 +2612,7 @@ vec4_visitor::run()
    if (unlikely(INTEL_DEBUG & DEBUG_OPTIMIZER)) {
       char filename[64];
       snprintf(filename, 64, "%s-%s-00-00-start",
-               stage_abbrev, nir->info->name);
+               stage_abbrev, nir->info.name);
 
       backend_shader::dump_instructions(filename);
    }
@@ -2824,25 +2750,44 @@ brw_compile_vs(const struct brw_compiler *compiler, void *log_data,
    const bool is_scalar = compiler->scalar_stage[MESA_SHADER_VERTEX];
    nir_shader *shader = nir_shader_clone(mem_ctx, src_shader);
    shader = brw_nir_apply_sampler_key(shader, compiler, &key->tex, is_scalar);
-   brw_nir_lower_vs_inputs(shader, is_scalar,
-                           use_legacy_snorm_formula, key->gl_attrib_wa_flags);
-   brw_nir_lower_vue_outputs(shader, is_scalar);
-   shader = brw_postprocess_nir(shader, compiler, is_scalar);
 
    const unsigned *assembly = NULL;
 
+   if (prog_data->base.vue_map.varying_to_slot[VARYING_SLOT_EDGE] != -1) {
+      /* If the output VUE map contains VARYING_SLOT_EDGE then we need to copy
+       * the edge flag from VERT_ATTRIB_EDGEFLAG.  This will be done
+       * automatically by brw_vec4_visitor::emit_urb_slot but we need to
+       * ensure that prog_data->inputs_read is accurate.
+       *
+       * In order to make late NIR passes aware of the change, we actually
+       * whack shader->info.inputs_read instead.  This is safe because we just
+       * made a copy of the shader.
+       */
+      assert(!is_scalar);
+      assert(key->copy_edgeflag);
+      shader->info.inputs_read |= VERT_BIT_EDGEFLAG;
+   }
+
+   prog_data->inputs_read = shader->info.inputs_read;
+   prog_data->double_inputs_read = shader->info.double_inputs_read;
+
+   brw_nir_lower_vs_inputs(shader, use_legacy_snorm_formula,
+                           key->gl_attrib_wa_flags);
+   brw_nir_lower_vue_outputs(shader, is_scalar);
+   shader = brw_postprocess_nir(shader, compiler, is_scalar);
+
    prog_data->base.clip_distance_mask =
-      ((1 << shader->info->clip_distance_array_size) - 1);
+      ((1 << shader->info.clip_distance_array_size) - 1);
    prog_data->base.cull_distance_mask =
-      ((1 << shader->info->cull_distance_array_size) - 1) <<
-      shader->info->clip_distance_array_size;
+      ((1 << shader->info.cull_distance_array_size) - 1) <<
+      shader->info.clip_distance_array_size;
 
    unsigned nr_attribute_slots = _mesa_bitcount_64(prog_data->inputs_read);
 
    /* gl_VertexID and gl_InstanceID are system values, but arrive via an
     * incoming vertex attribute.  So, add an extra slot.
     */
-   if (shader->info->system_values_read &
+   if (shader->info.system_values_read &
        (BITFIELD64_BIT(SYSTEM_VALUE_BASE_VERTEX) |
         BITFIELD64_BIT(SYSTEM_VALUE_BASE_INSTANCE) |
         BITFIELD64_BIT(SYSTEM_VALUE_VERTEX_ID_ZERO_BASE) |
@@ -2850,14 +2795,31 @@ brw_compile_vs(const struct brw_compiler *compiler, void *log_data,
       nr_attribute_slots++;
    }
 
+   if (shader->info.system_values_read &
+       BITFIELD64_BIT(SYSTEM_VALUE_BASE_VERTEX))
+      prog_data->uses_basevertex = true;
+
+   if (shader->info.system_values_read &
+       BITFIELD64_BIT(SYSTEM_VALUE_BASE_INSTANCE))
+      prog_data->uses_baseinstance = true;
+
+   if (shader->info.system_values_read &
+       BITFIELD64_BIT(SYSTEM_VALUE_VERTEX_ID_ZERO_BASE))
+      prog_data->uses_vertexid = true;
+
+   if (shader->info.system_values_read &
+       BITFIELD64_BIT(SYSTEM_VALUE_INSTANCE_ID))
+      prog_data->uses_instanceid = true;
+
    /* gl_DrawID has its very own vec4 */
-   if (shader->info->system_values_read &
+   if (shader->info.system_values_read &
        BITFIELD64_BIT(SYSTEM_VALUE_DRAW_ID)) {
+      prog_data->uses_drawid = true;
       nr_attribute_slots++;
    }
 
    unsigned nr_attributes = nr_attribute_slots -
-      DIV_ROUND_UP(_mesa_bitcount_64(shader->info->double_inputs_read), 2);
+      DIV_ROUND_UP(_mesa_bitcount_64(shader->info.double_inputs_read), 2);
 
    /* The 3DSTATE_VS documentation lists the lower bound on "Vertex URB Entry
     * Read Length" as 1 in vec4 mode, and 0 in SIMD8 mode.  Empirically, in
@@ -2880,10 +2842,17 @@ brw_compile_vs(const struct brw_compiler *compiler, void *log_data,
    const unsigned vue_entries =
       MAX2(nr_attribute_slots, (unsigned)prog_data->base.vue_map.num_slots);
 
-   if (compiler->devinfo->gen == 6)
+   if (compiler->devinfo->gen == 6) {
       prog_data->base.urb_entry_size = DIV_ROUND_UP(vue_entries, 8);
-   else
+   } else {
       prog_data->base.urb_entry_size = DIV_ROUND_UP(vue_entries, 4);
+      /* On Cannonlake software shall not program an allocation size that
+       * specifies a size that is a multiple of 3 64B (512-bit) cachelines.
+       */
+      if (compiler->devinfo->gen == 10 &&
+          prog_data->base.urb_entry_size % 3 == 0)
+         prog_data->base.urb_entry_size++;
+   }
 
    if (INTEL_DEBUG & DEBUG_VS) {
       fprintf(stderr, "VS Output ");
@@ -2911,9 +2880,9 @@ brw_compile_vs(const struct brw_compiler *compiler, void *log_data,
       if (INTEL_DEBUG & DEBUG_VS) {
          const char *debug_name =
             ralloc_asprintf(mem_ctx, "%s vertex shader %s",
-                            shader->info->label ? shader->info->label :
+                            shader->info.label ? shader->info.label :
                                "unnamed",
-                            shader->info->name);
+                            shader->info.name);
 
          g.enable_debug(debug_name);
       }

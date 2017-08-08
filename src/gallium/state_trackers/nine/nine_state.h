@@ -271,7 +271,9 @@ struct nine_context {
     uint32_t stream_instancedata_mask; /* derived from stream_freq */
     uint32_t stream_usage_mask; /* derived from VS and vdecl */
 
-    struct pipe_index_buffer idxbuf;
+    struct pipe_resource *idxbuf;
+    unsigned index_offset;
+    unsigned index_size;
 
     struct pipe_clip_state clip;
 
@@ -515,7 +517,10 @@ nine_context_draw_indexed_primitive_from_vtxbuf_idxbuf(struct NineDevice9 *devic
                                                        UINT NumVertices,
                                                        UINT PrimitiveCount,
                                                        struct pipe_vertex_buffer *vbuf,
-                                                       struct pipe_index_buffer *ibuf);
+                                                       struct pipe_resource *ibuf,
+                                                       void *user_ibuf,
+                                                       unsigned index_offset,
+						       unsigned index_size);
 
 void
 nine_context_resource_copy_region(struct NineDevice9 *device,

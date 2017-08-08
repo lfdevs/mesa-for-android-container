@@ -146,8 +146,7 @@ void __fd_hw_sample_destroy(struct fd_context *ctx, struct fd_hw_sample *samp);
 void fd_hw_query_prepare(struct fd_batch *batch, uint32_t num_tiles);
 void fd_hw_query_prepare_tile(struct fd_batch *batch, uint32_t n,
 		struct fd_ringbuffer *ring);
-void fd_hw_query_set_stage(struct fd_batch *batch,
-		struct fd_ringbuffer *ring, enum fd_render_stage stage);
+void fd_hw_query_set_stage(struct fd_batch *batch, enum fd_render_stage stage);
 void fd_hw_query_enable(struct fd_batch *batch, struct fd_ringbuffer *ring);
 void fd_hw_query_register_provider(struct pipe_context *pctx,
 		const struct fd_hw_sample_provider *provider);

@@ -112,12 +112,10 @@ static bool check_urb_layout(struct brw_context *brw)
 /* Most minimal update, forces re-emit of URB fence packet after GS
  * unit turned on/off.
  */
-static void recalculate_urb_fence( struct brw_context *brw )
+void
+brw_calculate_urb_fence(struct brw_context *brw, unsigned csize,
+                        unsigned vsize, unsigned sfsize)
 {
-   GLuint csize = brw->curbe.total_size;
-   GLuint vsize = brw_vue_prog_data(brw->vs.base.prog_data)->urb_entry_size;
-   GLuint sfsize = brw->sf.prog_data->urb_entry_size;
-
    if (csize < limits[CS].min_entry_size)
       csize = limits[CS].min_entry_size;
 
@@ -208,12 +206,19 @@ done:
    }
 }
 
+static void recalculate_urb_fence( struct brw_context *brw )
+{
+   brw_calculate_urb_fence(brw, brw->curbe.total_size,
+                           brw_vue_prog_data(brw->vs.base.prog_data)->urb_entry_size,
+                           brw->sf.prog_data->urb_entry_size);
+}
+
 
 const struct brw_tracked_state brw_recalculate_urb_fence = {
    .dirty = {
       .mesa = 0,
       .brw = BRW_NEW_BLORP |
-             BRW_NEW_CURBE_OFFSETS |
+             BRW_NEW_PUSH_CONSTANT_ALLOCATION |
              BRW_NEW_SF_PROG_DATA |
              BRW_NEW_VS_PROG_DATA,
    },

@@ -40,7 +40,6 @@
 #include <stdio.h>
 #include <llvm-c/Transforms/IPO.h>
 #include <llvm-c/Transforms/Scalar.h>
-#include <llvm-c/Support.h>
 
 /* Data for if/else/endif and bgnloop/endloop control flow structures.
  */
@@ -50,25 +49,12 @@ struct si_llvm_flow {
 	LLVMBasicBlockRef loop_entry_block;
 };
 
-#define CPU_STRING_LEN 30
-#define FS_STRING_LEN 30
-#define TRIPLE_STRING_LEN 7
-
-/**
- * Shader types for the LLVM backend.
- */
-enum si_llvm_shader_type {
-	RADEON_LLVM_SHADER_PS = 0,
-	RADEON_LLVM_SHADER_VS = 1,
-	RADEON_LLVM_SHADER_GS = 2,
-	RADEON_LLVM_SHADER_CS = 3,
-};
-
 enum si_llvm_calling_convention {
 	RADEON_LLVM_AMDGPU_VS = 87,
 	RADEON_LLVM_AMDGPU_GS = 88,
 	RADEON_LLVM_AMDGPU_PS = 89,
 	RADEON_LLVM_AMDGPU_CS = 90,
+	RADEON_LLVM_AMDGPU_HS = 93,
 };
 
 void si_llvm_add_attribute(LLVMValueRef F, const char *name, int value)
@@ -77,87 +63,6 @@ void si_llvm_add_attribute(LLVMValueRef F, const char *name, int value)
 
 	snprintf(str, sizeof(str), "%i", value);
 	LLVMAddTargetDependentFunctionAttr(F, name, str);
-}
-
-/**
- * Set the shader type we want to compile
- *
- * @param type shader type to set
- */
-void si_llvm_shader_type(LLVMValueRef F, unsigned type)
-{
-	enum si_llvm_shader_type llvm_type;
-	enum si_llvm_calling_convention calling_conv;
-
-	switch (type) {
-	case PIPE_SHADER_VERTEX:
-	case PIPE_SHADER_TESS_CTRL:
-	case PIPE_SHADER_TESS_EVAL:
-		llvm_type = RADEON_LLVM_SHADER_VS;
-		calling_conv = RADEON_LLVM_AMDGPU_VS;
-		break;
-	case PIPE_SHADER_GEOMETRY:
-		llvm_type = RADEON_LLVM_SHADER_GS;
-		calling_conv = RADEON_LLVM_AMDGPU_GS;
-		break;
-	case PIPE_SHADER_FRAGMENT:
-		llvm_type = RADEON_LLVM_SHADER_PS;
-		calling_conv = RADEON_LLVM_AMDGPU_PS;
-		break;
-	case PIPE_SHADER_COMPUTE:
-		llvm_type = RADEON_LLVM_SHADER_CS;
-		calling_conv = RADEON_LLVM_AMDGPU_CS;
-		break;
-	default:
-		unreachable("Unhandle shader type");
-	}
-
-	if (HAVE_LLVM >= 0x309)
-		LLVMSetFunctionCallConv(F, calling_conv);
-	else
-		si_llvm_add_attribute(F, "ShaderType", llvm_type);
-}
-
-static void init_amdgpu_target()
-{
-	gallivm_init_llvm_targets();
-	LLVMInitializeAMDGPUTargetInfo();
-	LLVMInitializeAMDGPUTarget();
-	LLVMInitializeAMDGPUTargetMC();
-	LLVMInitializeAMDGPUAsmPrinter();
-
-	/* For inline assembly. */
-	LLVMInitializeAMDGPUAsmParser();
-
-	if (HAVE_LLVM >= 0x0400) {
-		/*
-		 * Workaround for bug in llvm 4.0 that causes image intrinsics
-		 * to disappear.
-		 * https://reviews.llvm.org/D26348
-		 */
-		const char *argv[2] = {"mesa", "-simplifycfg-sink-common=false"};
-		LLVMParseCommandLineOptions(2, argv, NULL);
-	}
-}
-
-static once_flag init_amdgpu_target_once_flag = ONCE_FLAG_INIT;
-
-LLVMTargetRef si_llvm_get_amdgpu_target(const char *triple)
-{
-	LLVMTargetRef target = NULL;
-	char *err_message = NULL;
-
-	call_once(&init_amdgpu_target_once_flag, init_amdgpu_target);
-
-	if (LLVMGetTargetFromTriple(triple, &target, &err_message)) {
-		fprintf(stderr, "Cannot find target for triple %s ", triple);
-		if (err_message) {
-			fprintf(stderr, "%s\n", err_message);
-		}
-		LLVMDisposeMessage(err_message);
-		return NULL;
-	}
-	return target;
 }
 
 struct si_llvm_diagnostics {
@@ -848,13 +753,10 @@ static void emit_declaration(struct lp_build_tgsi_context *bld_base,
 			 * FIXME: We shouldn't need to have the non-alloca
 			 * code path for arrays. LLVM should be smart enough to
 			 * promote allocas into registers when profitable.
-			 *
-			 * LLVM 3.8 crashes with this.
 			 */
-			if ((HAVE_LLVM >= 0x0309 && array_size > 16) ||
-			    /* TODO: VGPR indexing is buggy on GFX9. */
-			    ctx->screen->b.chip_class == GFX9) {
-				array_alloca = LLVMBuildAlloca(builder,
+			if (array_size > 16 ||
+			    !ctx->screen->llvm_has_working_vgpr_indexing) {
+				array_alloca = lp_build_alloca_undef(&ctx->gallivm,
 					LLVMArrayType(ctx->f32,
 						      array_size), "array");
 				ctx->temp_array_allocas[id] = array_alloca;
@@ -1256,10 +1158,7 @@ static void emit_immediate(struct lp_build_tgsi_context *bld_base,
 
 void si_llvm_context_init(struct si_shader_context *ctx,
 			  struct si_screen *sscreen,
-			  struct si_shader *shader,
-			  LLVMTargetMachineRef tm,
-			  const struct tgsi_shader_info *info,
-			  const struct tgsi_token *tokens)
+			  LLVMTargetMachineRef tm)
 {
 	struct lp_type type;
 
@@ -1269,23 +1168,19 @@ void si_llvm_context_init(struct si_shader_context *ctx,
 	 * helper functions in the gallivm module.
 	 */
 	memset(ctx, 0, sizeof(*ctx));
-	ctx->shader = shader;
 	ctx->screen = sscreen;
 	ctx->tm = tm;
-	ctx->type = info ? info->processor : -1;
 
 	ctx->gallivm.context = LLVMContextCreate();
 	ctx->gallivm.module = LLVMModuleCreateWithNameInContext("tgsi",
 						ctx->gallivm.context);
 	LLVMSetTarget(ctx->gallivm.module, "amdgcn--");
 
-#if HAVE_LLVM >= 0x0309
 	LLVMTargetDataRef data_layout = LLVMCreateTargetDataLayout(tm);
 	char *data_layout_str = LLVMCopyStringRepOfTargetData(data_layout);
 	LLVMSetDataLayout(ctx->gallivm.module, data_layout_str);
 	LLVMDisposeTargetData(data_layout);
 	LLVMDisposeMessage(data_layout_str);
-#endif
 
 	bool unsafe_fpmath = (sscreen->b.debug_flags & DBG_UNSAFE_MATH) != 0;
 	enum lp_float_mode float_mode =
@@ -1300,24 +1195,6 @@ void si_llvm_context_init(struct si_shader_context *ctx,
 	ctx->ac.builder = ctx->gallivm.builder;
 
 	struct lp_build_tgsi_context *bld_base = &ctx->bld_base;
-
-	bld_base->info = info;
-
-	if (info && info->array_max[TGSI_FILE_TEMPORARY] > 0) {
-		int size = info->array_max[TGSI_FILE_TEMPORARY];
-
-		ctx->temp_arrays = CALLOC(size, sizeof(ctx->temp_arrays[0]));
-		ctx->temp_array_allocas = CALLOC(size, sizeof(ctx->temp_array_allocas[0]));
-
-		if (tokens)
-			tgsi_scan_arrays(tokens, TGSI_FILE_TEMPORARY, size,
-					 ctx->temp_arrays);
-	}
-
-	if (info && info->file_max[TGSI_FILE_IMMEDIATE] >= 0) {
-		int size = info->file_max[TGSI_FILE_IMMEDIATE] + 1;
-		ctx->imms = MALLOC(size * TGSI_NUM_CHANNELS * sizeof(LLVMValueRef));
-	}
 
 	type.floating = true;
 	type.fixed = false;
@@ -1335,16 +1212,9 @@ void si_llvm_context_init(struct si_shader_context *ctx,
 	lp_build_context_init(&ctx->bld_base.int64_bld, &ctx->gallivm, lp_int_type(type));
 
 	bld_base->soa = 1;
-	bld_base->emit_store = si_llvm_emit_store;
 	bld_base->emit_swizzle = emit_swizzle;
 	bld_base->emit_declaration = emit_declaration;
 	bld_base->emit_immediate = emit_immediate;
-
-	bld_base->emit_fetch_funcs[TGSI_FILE_IMMEDIATE] = si_llvm_emit_fetch;
-	bld_base->emit_fetch_funcs[TGSI_FILE_INPUT] = si_llvm_emit_fetch;
-	bld_base->emit_fetch_funcs[TGSI_FILE_TEMPORARY] = si_llvm_emit_fetch;
-	bld_base->emit_fetch_funcs[TGSI_FILE_OUTPUT] = si_llvm_emit_fetch;
-	bld_base->emit_fetch_funcs[TGSI_FILE_SYSTEM_VALUE] = fetch_system_value;
 
 	/* metadata allowing 2.5 ULP */
 	ctx->fpmath_md_kind = LLVMGetMDKindIDInContext(ctx->gallivm.context,
@@ -1363,6 +1233,7 @@ void si_llvm_context_init(struct si_shader_context *ctx,
 	bld_base->op_actions[TGSI_OPCODE_ENDLOOP].emit = endloop_emit;
 
 	si_shader_context_init_alu(&ctx->bld_base);
+	si_shader_context_init_mem(ctx);
 
 	ctx->voidt = LLVMVoidTypeInContext(ctx->gallivm.context);
 	ctx->i1 = LLVMInt1TypeInContext(ctx->gallivm.context);
@@ -1371,7 +1242,6 @@ void si_llvm_context_init(struct si_shader_context *ctx,
 	ctx->i64 = LLVMInt64TypeInContext(ctx->gallivm.context);
 	ctx->i128 = LLVMIntTypeInContext(ctx->gallivm.context, 128);
 	ctx->f32 = LLVMFloatTypeInContext(ctx->gallivm.context);
-	ctx->v16i8 = LLVMVectorType(ctx->i8, 16);
 	ctx->v2i32 = LLVMVectorType(ctx->i32, 2);
 	ctx->v4i32 = LLVMVectorType(ctx->i32, 4);
 	ctx->v4f32 = LLVMVectorType(ctx->f32, 4);
@@ -1381,6 +1251,72 @@ void si_llvm_context_init(struct si_shader_context *ctx,
 	ctx->i32_1 = LLVMConstInt(ctx->i32, 1, 0);
 }
 
+/* Set the context to a certain TGSI shader. Can be called repeatedly
+ * to change the shader. */
+void si_llvm_context_set_tgsi(struct si_shader_context *ctx,
+			      struct si_shader *shader)
+{
+	const struct tgsi_shader_info *info = NULL;
+	const struct tgsi_token *tokens = NULL;
+
+	if (shader && shader->selector) {
+		info = &shader->selector->info;
+		tokens = shader->selector->tokens;
+	}
+
+	ctx->shader = shader;
+	ctx->type = info ? info->processor : -1;
+	ctx->bld_base.info = info;
+
+	/* Clean up the old contents. */
+	FREE(ctx->temp_arrays);
+	ctx->temp_arrays = NULL;
+	FREE(ctx->temp_array_allocas);
+	ctx->temp_array_allocas = NULL;
+
+	FREE(ctx->imms);
+	ctx->imms = NULL;
+	ctx->imms_num = 0;
+
+	FREE(ctx->temps);
+	ctx->temps = NULL;
+	ctx->temps_count = 0;
+
+	if (!info || !tokens)
+		return;
+
+	if (info->array_max[TGSI_FILE_TEMPORARY] > 0) {
+		int size = info->array_max[TGSI_FILE_TEMPORARY];
+
+		ctx->temp_arrays = CALLOC(size, sizeof(ctx->temp_arrays[0]));
+		ctx->temp_array_allocas = CALLOC(size, sizeof(ctx->temp_array_allocas[0]));
+
+		tgsi_scan_arrays(tokens, TGSI_FILE_TEMPORARY, size,
+				 ctx->temp_arrays);
+	}
+	if (info->file_max[TGSI_FILE_IMMEDIATE] >= 0) {
+		int size = info->file_max[TGSI_FILE_IMMEDIATE] + 1;
+		ctx->imms = MALLOC(size * TGSI_NUM_CHANNELS * sizeof(LLVMValueRef));
+	}
+
+	/* Re-set these to start with a clean slate. */
+	ctx->bld_base.num_instructions = 0;
+	ctx->bld_base.pc = 0;
+	memset(ctx->outputs, 0, sizeof(ctx->outputs));
+
+	ctx->bld_base.emit_store = si_llvm_emit_store;
+	ctx->bld_base.emit_fetch_funcs[TGSI_FILE_IMMEDIATE] = si_llvm_emit_fetch;
+	ctx->bld_base.emit_fetch_funcs[TGSI_FILE_INPUT] = si_llvm_emit_fetch;
+	ctx->bld_base.emit_fetch_funcs[TGSI_FILE_TEMPORARY] = si_llvm_emit_fetch;
+	ctx->bld_base.emit_fetch_funcs[TGSI_FILE_OUTPUT] = si_llvm_emit_fetch;
+	ctx->bld_base.emit_fetch_funcs[TGSI_FILE_SYSTEM_VALUE] = fetch_system_value;
+
+	ctx->num_const_buffers = util_last_bit(info->const_buffers_declared);
+	ctx->num_shader_buffers = util_last_bit(info->shader_buffers_declared);
+	ctx->num_samplers = util_last_bit(info->samplers_declared);
+	ctx->num_images = util_last_bit(info->images_declared);
+}
+
 void si_llvm_create_func(struct si_shader_context *ctx,
 			 const char *name,
 			 LLVMTypeRef *return_types, unsigned num_return_elems,
@@ -1388,6 +1324,8 @@ void si_llvm_create_func(struct si_shader_context *ctx,
 {
 	LLVMTypeRef main_fn_type, ret_type;
 	LLVMBasicBlockRef main_fn_body;
+	enum si_llvm_calling_convention call_conv;
+	unsigned real_shader_type;
 
 	if (num_return_elems)
 		ret_type = LLVMStructTypeInContext(ctx->gallivm.context,
@@ -1403,14 +1341,52 @@ void si_llvm_create_func(struct si_shader_context *ctx,
 	main_fn_body = LLVMAppendBasicBlockInContext(ctx->gallivm.context,
 			ctx->main_fn, "main_body");
 	LLVMPositionBuilderAtEnd(ctx->gallivm.builder, main_fn_body);
+
+	real_shader_type = ctx->type;
+
+	/* LS is merged into HS (TCS), and ES is merged into GS. */
+	if (ctx->screen->b.chip_class >= GFX9) {
+		if (ctx->shader->key.as_ls)
+			real_shader_type = PIPE_SHADER_TESS_CTRL;
+		else if (ctx->shader->key.as_es)
+			real_shader_type = PIPE_SHADER_GEOMETRY;
+	}
+
+	switch (real_shader_type) {
+	case PIPE_SHADER_VERTEX:
+	case PIPE_SHADER_TESS_EVAL:
+		call_conv = RADEON_LLVM_AMDGPU_VS;
+		break;
+	case PIPE_SHADER_TESS_CTRL:
+		call_conv = HAVE_LLVM >= 0x0500 ? RADEON_LLVM_AMDGPU_HS :
+						  RADEON_LLVM_AMDGPU_VS;
+		break;
+	case PIPE_SHADER_GEOMETRY:
+		call_conv = RADEON_LLVM_AMDGPU_GS;
+		break;
+	case PIPE_SHADER_FRAGMENT:
+		call_conv = RADEON_LLVM_AMDGPU_PS;
+		break;
+	case PIPE_SHADER_COMPUTE:
+		call_conv = RADEON_LLVM_AMDGPU_CS;
+		break;
+	default:
+		unreachable("Unhandle shader type");
+	}
+
+	LLVMSetFunctionCallConv(ctx->main_fn, call_conv);
 }
 
-void si_llvm_finalize_module(struct si_shader_context *ctx,
-			     bool run_verifier)
+void si_llvm_optimize_module(struct si_shader_context *ctx)
 {
 	struct gallivm_state *gallivm = &ctx->gallivm;
 	const char *triple = LLVMGetTarget(gallivm->module);
 	LLVMTargetLibraryInfoRef target_library_info;
+
+	/* Dump LLVM IR before any optimization passes */
+	if (ctx->screen->b.debug_flags & DBG_PREOPT_IR &&
+	    r600_can_dump_shader(&ctx->screen->b, ctx->type))
+		LLVMDumpModule(ctx->gallivm.module);
 
 	/* Create the pass manager */
 	gallivm->passmgr = LLVMCreatePassManager();
@@ -1418,7 +1394,7 @@ void si_llvm_finalize_module(struct si_shader_context *ctx,
 	target_library_info = gallivm_create_target_library_info(triple);
 	LLVMAddTargetLibraryInfo(target_library_info, gallivm->passmgr);
 
-	if (run_verifier)
+	if (r600_extra_shader_checks(&ctx->screen->b, ctx->type))
 		LLVMAddVerifierPass(gallivm->passmgr);
 
 	LLVMAddAlwaysInlinerPass(gallivm->passmgr);
@@ -1431,6 +1407,10 @@ void si_llvm_finalize_module(struct si_shader_context *ctx,
 	LLVMAddLICMPass(gallivm->passmgr);
 	LLVMAddAggressiveDCEPass(gallivm->passmgr);
 	LLVMAddCFGSimplificationPass(gallivm->passmgr);
+#if HAVE_LLVM >= 0x0400
+	/* This is recommended by the instruction combining pass. */
+	LLVMAddEarlyCSEMemSSAPass(gallivm->passmgr);
+#endif
 	LLVMAddInstructionCombiningPass(gallivm->passmgr);
 
 	/* Run the pass */

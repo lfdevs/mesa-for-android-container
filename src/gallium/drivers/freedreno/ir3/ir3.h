@@ -58,8 +58,14 @@ struct ir3_register {
 		IR3_REG_CONST  = 0x001,
 		IR3_REG_IMMED  = 0x002,
 		IR3_REG_HALF   = 0x004,
-		IR3_REG_RELATIV= 0x008,
-		IR3_REG_R      = 0x010,
+		/* high registers are used for some things in compute shaders,
+		 * for example.  Seems to be for things that are global to all
+		 * threads in a wave, so possibly these are global/shared by
+		 * all the threads in the wave?
+		 */
+		IR3_REG_HIGH   = 0x008,
+		IR3_REG_RELATIV= 0x010,
+		IR3_REG_R      = 0x020,
 		/* Most instructions, it seems, can do float abs/neg but not
 		 * integer.  The CP pass needs to know what is intended (int or
 		 * float) in order to do the right thing.  For this reason the
@@ -68,23 +74,23 @@ struct ir3_register {
 		 * bitwise not, so split that out into a new flag to make it
 		 * more clear.
 		 */
-		IR3_REG_FNEG   = 0x020,
-		IR3_REG_FABS   = 0x040,
-		IR3_REG_SNEG   = 0x080,
-		IR3_REG_SABS   = 0x100,
-		IR3_REG_BNOT   = 0x200,
-		IR3_REG_EVEN   = 0x400,
-		IR3_REG_POS_INF= 0x800,
+		IR3_REG_FNEG   = 0x040,
+		IR3_REG_FABS   = 0x080,
+		IR3_REG_SNEG   = 0x100,
+		IR3_REG_SABS   = 0x200,
+		IR3_REG_BNOT   = 0x400,
+		IR3_REG_EVEN   = 0x800,
+		IR3_REG_POS_INF= 0x1000,
 		/* (ei) flag, end-input?  Set on last bary, presumably to signal
 		 * that the shader needs no more input:
 		 */
-		IR3_REG_EI     = 0x1000,
+		IR3_REG_EI     = 0x2000,
 		/* meta-flags, for intermediate stages of IR, ie.
 		 * before register assignment is done:
 		 */
-		IR3_REG_SSA    = 0x2000,   /* 'instr' is ptr to assigning instr */
-		IR3_REG_ARRAY  = 0x4000,
-		IR3_REG_PHI_SRC= 0x8000,   /* phi src, regs[0]->instr points to phi */
+		IR3_REG_SSA    = 0x4000,   /* 'instr' is ptr to assigning instr */
+		IR3_REG_ARRAY  = 0x8000,
+		IR3_REG_PHI_SRC= 0x10000,  /* phi src, regs[0]->instr points to phi */
 
 	} flags;
 	union {
@@ -220,7 +226,7 @@ struct ir3_instruction {
 			type_t type;
 			int src_offset;
 			int dst_offset;
-			int iim_val;
+			int iim_val;          /* for ldgb/stgb, # of components */
 		} cat6;
 		/* for meta-instructions, just used to hold extra data
 		 * before instruction scheduling, etc
@@ -337,6 +343,21 @@ static inline int ir3_neighbor_count(struct ir3_instruction *instr)
 	return num;
 }
 
+/*
+ * Stupid/simple growable array implementation:
+ */
+#define DECLARE_ARRAY(type, name) \
+	unsigned name ## _count, name ## _sz; \
+	type * name;
+
+#define array_insert(ctx, arr, val) do { \
+		if (arr ## _count == arr ## _sz) { \
+			arr ## _sz = MAX2(2 * arr ## _sz, 16); \
+			arr = reralloc_size(ctx, arr, arr ## _sz * sizeof(arr[0])); \
+		} \
+		arr[arr ##_count++] = val; \
+	} while (0)
+
 struct ir3 {
 	struct ir3_compiler *compiler;
 
@@ -350,8 +371,7 @@ struct ir3 {
 	 * threads in a group are killed before the last bary.f gets
 	 * a chance to signal end of input (ei).
 	 */
-	unsigned baryfs_count, baryfs_sz;
-	struct ir3_instruction **baryfs;
+	DECLARE_ARRAY(struct ir3_instruction *, baryfs);
 
 	/* Track all indirect instructions (read and write).  To avoid
 	 * deadlock scenario where an address register gets scheduled,
@@ -363,17 +383,15 @@ struct ir3 {
 	 * convenient list of instructions that reference some address
 	 * register simplifies this.
 	 */
-	unsigned indirects_count, indirects_sz;
-	struct ir3_instruction **indirects;
+	DECLARE_ARRAY(struct ir3_instruction *, indirects);
+
 	/* and same for instructions that consume predicate register: */
-	unsigned predicates_count, predicates_sz;
-	struct ir3_instruction **predicates;
+	DECLARE_ARRAY(struct ir3_instruction *, predicates);
 
 	/* Track texture sample instructions which need texture state
 	 * patched in (for astc-srgb workaround):
 	 */
-	unsigned astc_srgb_count, astc_srgb_sz;
-	struct ir3_instruction **astc_srgb;
+	DECLARE_ARRAY(struct ir3_instruction *, astc_srgb);
 
 	/* List of blocks: */
 	struct list_head block_list;
@@ -382,14 +400,14 @@ struct ir3 {
 	struct list_head array_list;
 };
 
-typedef struct nir_variable nir_variable;
+typedef struct nir_register nir_register;
 
 struct ir3_array {
 	struct list_head node;
 	unsigned length;
 	unsigned id;
 
-	nir_variable *var;
+	nir_register *r;
 
 	/* We track the last write and last access (read or write) to
 	 * setup dependencies on instructions that read or write the
@@ -432,8 +450,7 @@ struct ir3_block {
 	/* Track instructions which do not write a register but other-
 	 * wise must not be discarded (such as kill, stg, etc)
 	 */
-	unsigned keeps_count, keeps_sz;
-	struct ir3_instruction **keeps;
+	DECLARE_ARRAY(struct ir3_instruction *, keeps);
 
 	/* used for per-pass extra block data.  Mainly used right
 	 * now in RA step to track livein/liveout.
@@ -596,6 +613,7 @@ is_store(struct ir3_instruction *instr)
 	 */
 	switch (instr->opc) {
 	case OPC_STG:
+	case OPC_STGB:
 	case OPC_STP:
 	case OPC_STL:
 	case OPC_STLW:
@@ -611,11 +629,12 @@ static inline bool is_load(struct ir3_instruction *instr)
 {
 	switch (instr->opc) {
 	case OPC_LDG:
+	case OPC_LDGB:
 	case OPC_LDL:
 	case OPC_LDP:
 	case OPC_L2G:
 	case OPC_LDLW:
-	case OPC_LDC_4:
+	case OPC_LDC:
 	case OPC_LDLV:
 		/* probably some others too.. */
 		return true;
@@ -854,14 +873,6 @@ static inline unsigned ir3_cat3_absneg(opc_t opc)
 	}
 }
 
-#define array_insert(ctx, arr, val) do { \
-		if (arr ## _count == arr ## _sz) { \
-			arr ## _sz = MAX2(2 * arr ## _sz, 16); \
-			arr = reralloc_size(ctx, arr, arr ## _sz * sizeof(arr[0])); \
-		} \
-		arr[arr ##_count++] = val; \
-	} while (0)
-
 /* iterator for an instructions's sources (reg), also returns src #: */
 #define foreach_src_n(__srcreg, __n, __instr) \
 	if ((__instr)->regs_count) \
@@ -925,7 +936,7 @@ int ir3_ra(struct ir3 *ir3, enum shader_t type,
 		bool frag_coord, bool frag_face);
 
 /* legalize: */
-void ir3_legalize(struct ir3 *ir, bool *has_samp, int *max_bary);
+void ir3_legalize(struct ir3 *ir, bool *has_samp, bool *has_ssbo, int *max_bary);
 
 /* ************************************************************************* */
 /* instruction helpers */
@@ -1016,6 +1027,24 @@ ir3_##name(struct ir3_block *block,                                      \
 	ir3_reg_create(instr, 0, IR3_REG_SSA | aflags)->instr = a;           \
 	ir3_reg_create(instr, 0, IR3_REG_SSA | bflags)->instr = b;           \
 	ir3_reg_create(instr, 0, IR3_REG_SSA | cflags)->instr = c;           \
+	return instr;                                                        \
+}
+
+#define INSTR4(name)                                                     \
+static inline struct ir3_instruction *                                   \
+ir3_##name(struct ir3_block *block,                                      \
+		struct ir3_instruction *a, unsigned aflags,                      \
+		struct ir3_instruction *b, unsigned bflags,                      \
+		struct ir3_instruction *c, unsigned cflags,                      \
+		struct ir3_instruction *d, unsigned dflags)                      \
+{                                                                        \
+	struct ir3_instruction *instr =                                      \
+		ir3_instr_create2(block, OPC_##name, 5);                         \
+	ir3_reg_create(instr, 0, 0);   /* dst */                             \
+	ir3_reg_create(instr, 0, IR3_REG_SSA | aflags)->instr = a;           \
+	ir3_reg_create(instr, 0, IR3_REG_SSA | bflags)->instr = b;           \
+	ir3_reg_create(instr, 0, IR3_REG_SSA | cflags)->instr = c;           \
+	ir3_reg_create(instr, 0, IR3_REG_SSA | dflags)->instr = d;           \
 	return instr;                                                        \
 }
 
@@ -1136,6 +1165,19 @@ ir3_SAM(struct ir3_block *block, opc_t opc, type_t type,
 INSTR2(LDLV)
 INSTR2(LDG)
 INSTR3(STG)
+INSTR3(LDGB);
+INSTR4(STGB);
+INSTR4(ATOMIC_ADD);
+INSTR4(ATOMIC_SUB);
+INSTR4(ATOMIC_XCHG);
+INSTR4(ATOMIC_INC);
+INSTR4(ATOMIC_DEC);
+INSTR4(ATOMIC_CMPXCHG);
+INSTR4(ATOMIC_MIN);
+INSTR4(ATOMIC_MAX);
+INSTR4(ATOMIC_AND);
+INSTR4(ATOMIC_OR);
+INSTR4(ATOMIC_XOR);
 
 /* ************************************************************************* */
 /* split this out or find some helper to use.. like main/bitset.h.. */

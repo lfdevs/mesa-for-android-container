@@ -5,6 +5,7 @@ pkgconfig_DATA = main/gbm.pc
 
 AM_CFLAGS = \
 	-I$(top_srcdir)/include \
+	-I$(top_srcdir)/src \
 	-I$(top_srcdir)/src/loader \
 	-I$(top_srcdir)/src/gbm/main \
 	$(DLOPEN_CFLAGS) \

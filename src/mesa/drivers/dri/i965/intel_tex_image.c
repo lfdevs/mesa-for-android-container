@@ -56,10 +56,19 @@ intel_miptree_create_for_teximage(struct brw_context *brw,
 {
    GLuint lastLevel;
    int width, height, depth;
+   unsigned old_width = 0, old_height = 0, old_depth = 0;
    const struct intel_mipmap_tree *old_mt = intelObj->mt;
    const unsigned level = intelImage->base.Base.Level;
 
    intel_get_image_dims(&intelImage->base.Base, &width, &height, &depth);
+
+   if (old_mt) {
+      old_width = old_mt->surf.logical_level0_px.width;
+      old_height = old_mt->surf.logical_level0_px.height;
+      old_depth = old_mt->surf.dim == ISL_SURF_DIM_3D ?
+                     old_mt->surf.logical_level0_px.depth :
+                     old_mt->surf.logical_level0_px.array_len;
+   }
 
    DBG("%s\n", __func__);
 
@@ -72,19 +81,19 @@ intel_miptree_create_for_teximage(struct brw_context *brw,
       assert(level == 0);
       break;
    case GL_TEXTURE_3D:
-      depth = old_mt ? get_base_dim(old_mt->logical_depth0, depth, level) :
+      depth = old_mt ? get_base_dim(old_depth, depth, level) :
                        depth << level;
       /* Fall through */
    case GL_TEXTURE_2D:
    case GL_TEXTURE_2D_ARRAY:
    case GL_TEXTURE_CUBE_MAP:
    case GL_TEXTURE_CUBE_MAP_ARRAY:
-      height = old_mt ? get_base_dim(old_mt->logical_height0, height, level) :
+      height = old_mt ? get_base_dim(old_height, height, level) :
                         height << level;
       /* Fall through */
    case GL_TEXTURE_1D:
    case GL_TEXTURE_1D_ARRAY:
-      width = old_mt ? get_base_dim(old_mt->logical_width0, width, level) :
+      width = old_mt ? get_base_dim(old_width, width, level) :
                        width << level;
       break;
    default:
@@ -114,7 +123,7 @@ intel_miptree_create_for_teximage(struct brw_context *brw,
 			       width,
 			       height,
 			       depth,
-                               intelImage->base.Base.NumSamples,
+                               MAX2(intelImage->base.Base.NumSamples, 1),
                                layout_flags | MIPTREE_LAYOUT_TILING_ANY);
 }
 
@@ -186,14 +195,15 @@ intel_set_texture_image_mt(struct brw_context *brw,
    struct intel_texture_image *intel_image = intel_texture_image(image);
 
    _mesa_init_teximage_fields(&brw->ctx, image,
-			      mt->logical_width0, mt->logical_height0, 1,
-			      0, internal_format, mt->format);
+                              mt->surf.logical_level0_px.width,
+                              mt->surf.logical_level0_px.height, 1,
+                              0, internal_format, mt->format);
 
    brw->ctx.Driver.FreeTextureImageBuffer(&brw->ctx, image);
 
    intel_texobj->needs_validate = true;
-   intel_image->base.RowStride = mt->pitch / mt->cpp;
-   assert(mt->pitch % mt->cpp == 0);
+   intel_image->base.RowStride = mt->surf.row_pitch / mt->cpp;
+   assert(mt->surf.row_pitch % mt->cpp == 0);
 
    intel_miptree_reference(&intel_image->mt, mt);
 
@@ -201,94 +211,6 @@ intel_set_texture_image_mt(struct brw_context *brw,
    intel_miptree_reference(&intel_texobj->mt, mt);
 }
 
-static struct intel_mipmap_tree *
-create_mt_for_planar_dri_image(struct brw_context *brw,
-                               GLenum target, __DRIimage *image)
-{
-   struct intel_image_format *f = image->planar_format;
-   struct intel_mipmap_tree *planar_mt;
-
-   for (int i = 0; i < f->nplanes; i++) {
-      const int index = f->planes[i].buffer_index;
-      const uint32_t dri_format = f->planes[i].dri_format;
-      const mesa_format format = driImageFormatToGLFormat(dri_format);
-      const uint32_t width = image->width >> f->planes[i].width_shift;
-      const uint32_t height = image->height >> f->planes[i].height_shift;
-
-      /* Disable creation of the texture's aux buffers because the driver
-       * exposes no EGL API to manage them. That is, there is no API for
-       * resolving the aux buffer's content to the main buffer nor for
-       * invalidating the aux buffer's content.
-       */
-      struct intel_mipmap_tree *mt =
-         intel_miptree_create_for_bo(brw, image->bo, format,
-                                     image->offsets[index],
-                                     width, height, 1,
-                                     image->strides[index],
-                                     MIPTREE_LAYOUT_DISABLE_AUX);
-      if (mt == NULL)
-         return NULL;
-
-      mt->target = target;
-      mt->total_width = width;
-      mt->total_height = height;
-
-      if (i == 0)
-         planar_mt = mt;
-      else
-         planar_mt->plane[i - 1] = mt;
-   }
-
-   return planar_mt;
-}
-
-/**
- * Binds a BO to a texture image, as if it was uploaded by glTexImage2D().
- *
- * Used for GLX_EXT_texture_from_pixmap and EGL image extensions,
- */
-static struct intel_mipmap_tree *
-create_mt_for_dri_image(struct brw_context *brw,
-                        GLenum target, __DRIimage *image)
-{
-   struct intel_mipmap_tree *mt;
-   uint32_t draw_x, draw_y;
-
-   /* Disable creation of the texture's aux buffers because the driver exposes
-    * no EGL API to manage them. That is, there is no API for resolving the aux
-    * buffer's content to the main buffer nor for invalidating the aux buffer's
-    * content.
-    */
-   mt = intel_miptree_create_for_bo(brw, image->bo, image->format,
-                                    0, image->width, image->height, 1,
-                                    image->pitch,
-                                    MIPTREE_LAYOUT_DISABLE_AUX);
-   if (mt == NULL)
-      return NULL;
-
-   mt->target = target;
-   mt->total_width = image->width;
-   mt->total_height = image->height;
-   mt->level[0].slice[0].x_offset = image->tile_x;
-   mt->level[0].slice[0].y_offset = image->tile_y;
-
-   intel_miptree_get_tile_offsets(mt, 0, 0, &draw_x, &draw_y);
-
-   /* From "OES_EGL_image" error reporting. We report GL_INVALID_OPERATION
-    * for EGL images from non-tile aligned sufaces in gen4 hw and earlier which has
-    * trouble resolving back to destination image due to alignment issues.
-    */
-   if (!brw->has_surface_tile_offset &&
-       (draw_x != 0 || draw_y != 0)) {
-      _mesa_error(&brw->ctx, GL_INVALID_OPERATION, __func__);
-      intel_miptree_release(&mt);
-      return NULL;
-   }
-
-   mt->offset = image->offset;
-
-   return mt;
-}
 
 void
 intelSetTexBuffer2(__DRIcontext *pDRICtx, GLint target,
@@ -339,12 +261,10 @@ intelSetTexBuffer2(__DRIcontext *pDRICtx, GLint target,
    mt = intel_miptree_create_for_bo(brw, rb->mt->bo, texFormat, 0,
                                     rb->Base.Base.Width,
                                     rb->Base.Base.Height,
-                                    1, rb->mt->pitch, 0);
+                                    1, rb->mt->surf.row_pitch, 0);
    if (mt == NULL)
        return;
    mt->target = target;
-   mt->total_width = rb->Base.Base.Width;
-   mt->total_height = rb->Base.Base.Height;
 
    _mesa_lock_texture(&brw->ctx, texObj);
    texImage = _mesa_get_tex_image(ctx, texObj, target, 0);
@@ -431,10 +351,8 @@ intel_image_target_texture_2d(struct gl_context *ctx, GLenum target,
       return;
    }
 
-   if (image->planar_format && image->planar_format->nplanes > 0)
-      mt = create_mt_for_planar_dri_image(brw, target, image);
-   else
-      mt = create_mt_for_dri_image(brw, target, image);
+   mt = intel_miptree_create_for_dri_image(brw, image, target,
+                                           ISL_COLORSPACE_NONE, false);
    if (mt == NULL)
       return;
 
@@ -468,8 +386,6 @@ intel_gettexsubimage_tiled_memcpy(struct gl_context *ctx,
 
    /* The miptree's buffer. */
    struct brw_bo *bo;
-
-   int error = 0;
 
    uint32_t cpp;
    mem_copy_fn mem_copy = NULL;
@@ -514,16 +430,32 @@ intel_gettexsubimage_tiled_memcpy(struct gl_context *ctx,
       return false;
 
    if (!image->mt ||
-       (image->mt->tiling != I915_TILING_X &&
-       image->mt->tiling != I915_TILING_Y)) {
+       (image->mt->surf.tiling != ISL_TILING_X &&
+        image->mt->surf.tiling != ISL_TILING_Y0)) {
       /* The algorithm is written only for X- or Y-tiled memory. */
       return false;
    }
 
+   /* tiled_to_linear() assumes that if the object is swizzled, it is using
+    * I915_BIT6_SWIZZLE_9_10 for X and I915_BIT6_SWIZZLE_9 for Y.  This is only
+    * true on gen5 and above.
+    *
+    * The killer on top is that some gen4 have an L-shaped swizzle mode, where
+    * parts of the memory aren't swizzled at all. Userspace just can't handle
+    * that.
+    */
+   if (brw->gen < 5 && brw->has_swizzling)
+      return false;
+
+   int level = texImage->Level + texImage->TexObject->MinLevel;
+
    /* Since we are going to write raw data to the miptree, we need to resolve
     * any pending fast color clears before we start.
     */
-   intel_miptree_all_slices_resolve_color(brw, image->mt, 0);
+   assert(image->mt->surf.logical_level0_px.depth == 1);
+   assert(image->mt->surf.logical_level0_px.array_len == 1);
+
+   intel_miptree_access_raw(brw, image->mt, level, 0, true);
 
    bo = image->mt->bo;
 
@@ -532,8 +464,8 @@ intel_gettexsubimage_tiled_memcpy(struct gl_context *ctx,
       intel_batchbuffer_flush(brw);
    }
 
-   error = brw_bo_map(brw, bo, false /* write enable */);
-   if (error) {
+   void *map = brw_bo_map(brw, bo, MAP_READ | MAP_RAW);
+   if (map == NULL) {
       DBG("%s: failed to map bo\n", __func__);
       return false;
    }
@@ -544,24 +476,24 @@ intel_gettexsubimage_tiled_memcpy(struct gl_context *ctx,
        "mesa_format=0x%x tiling=%d "
        "packing=(alignment=%d row_length=%d skip_pixels=%d skip_rows=%d)\n",
        __func__, texImage->Level, xoffset, yoffset, width, height,
-       format, type, texImage->TexFormat, image->mt->tiling,
+       format, type, texImage->TexFormat, image->mt->surf.tiling,
        packing->Alignment, packing->RowLength, packing->SkipPixels,
        packing->SkipRows);
 
-   int level = texImage->Level + texImage->TexObject->MinLevel;
-
    /* Adjust x and y offset based on miplevel */
-   xoffset += image->mt->level[level].level_x;
-   yoffset += image->mt->level[level].level_y;
+   unsigned level_x, level_y;
+   intel_miptree_get_image_offset(image->mt, level, 0, &level_x, &level_y);
+   xoffset += level_x;
+   yoffset += level_y;
 
    tiled_to_linear(
       xoffset * cpp, (xoffset + width) * cpp,
       yoffset, yoffset + height,
       pixels - (ptrdiff_t) yoffset * dst_pitch - (ptrdiff_t) xoffset * cpp,
-      bo->virtual,
-      dst_pitch, image->mt->pitch,
+      map,
+      dst_pitch, image->mt->surf.row_pitch,
       brw->has_swizzling,
-      image->mt->tiling,
+      image->mt->surf.tiling,
       mem_copy
    );
 

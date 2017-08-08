@@ -154,6 +154,9 @@ struct fd_batch {
 	/** tiling/gmem (IB0) cmdstream: */
 	struct fd_ringbuffer *gmem;
 
+	// TODO maybe more generically split out clear and clear_binning rings?
+	struct fd_ringbuffer *lrz_clear;
+
 	/**
 	 * hw query related state:
 	 */

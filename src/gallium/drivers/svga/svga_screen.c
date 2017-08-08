@@ -23,16 +23,20 @@
  *
  **********************************************************/
 
+#include "git_sha1.h" /* For MESA_GIT_SHA1 */
 #include "util/u_format.h"
 #include "util/u_memory.h"
 #include "util/u_inlines.h"
 #include "util/u_string.h"
 #include "util/u_math.h"
 
+#include "os/os_process.h"
+
 #include "svga_winsys.h"
 #include "svga_public.h"
 #include "svga_context.h"
 #include "svga_format.h"
+#include "svga_msg.h"
 #include "svga_screen.h"
 #include "svga_tgsi.h"
 #include "svga_resource_texture.h"
@@ -44,6 +48,10 @@
 
 /* NOTE: this constant may get moved into a svga3d*.h header file */
 #define SVGA3D_DX_MAX_RESOURCE_SIZE (128 * 1024 * 1024)
+
+#ifndef MESA_GIT_SHA1
+#define MESA_GIT_SHA1 "(unknown git revision)"
+#endif
 
 #ifdef DEBUG
 int SVGA_DEBUG = 0;
@@ -65,6 +73,7 @@ static const struct debug_named_value svga_debug_flags[] = {
    { "cache",       DEBUG_CACHE, NULL },
    { "streamout",   DEBUG_STREAMOUT, NULL },
    { "query",       DEBUG_QUERY, NULL },
+   { "samplers",    DEBUG_SAMPLERS, NULL },
    DEBUG_NAMED_VALUE_END
 };
 #endif
@@ -328,6 +337,9 @@ svga_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_GENERATE_MIPMAP:
       return sws->have_generate_mipmap_cmd;
 
+   case PIPE_CAP_NATIVE_FENCE_FD:
+      return sws->have_fence_fd;
+
    /* Unsupported features */
    case PIPE_CAP_QUADS_FOLLOW_PROVOKING_VERTEX_CONVENTION:
    case PIPE_CAP_TEXTURE_MIRROR_CLAMP:
@@ -371,7 +383,6 @@ svga_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_PCI_DEVICE:
    case PIPE_CAP_PCI_FUNCTION:
    case PIPE_CAP_ROBUST_BUFFER_ACCESS_BEHAVIOR:
-   case PIPE_CAP_NATIVE_FENCE_FD:
       return 0;
    case PIPE_CAP_MIN_MAP_BUFFER_ALIGNMENT:
       return 64;
@@ -435,6 +446,10 @@ svga_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_SPARSE_BUFFER_PAGE_SIZE:
    case PIPE_CAP_TGSI_BALLOT:
    case PIPE_CAP_TGSI_TES_LAYER_VIEWPORT:
+   case PIPE_CAP_CAN_BIND_CONST_BUFFER_AS_VERTEX:
+   case PIPE_CAP_ALLOW_MAPPED_BUFFERS_DURING_EXECUTION:
+   case PIPE_CAP_POST_DEPTH_COVERAGE:
+   case PIPE_CAP_BINDLESS_TEXTURE:
       return 0;
    }
 
@@ -514,6 +529,7 @@ vgpu9_get_shader_param(struct pipe_screen *screen,
       case PIPE_SHADER_CAP_MAX_SHADER_BUFFERS:
       case PIPE_SHADER_CAP_MAX_SHADER_IMAGES:
       case PIPE_SHADER_CAP_LOWER_IF_THRESHOLD:
+      case PIPE_SHADER_CAP_TGSI_SKIP_MERGE_REGISTERS:
          return 0;
       case PIPE_SHADER_CAP_MAX_UNROLL_ITERATIONS_HINT:
          return 32;
@@ -574,6 +590,7 @@ vgpu9_get_shader_param(struct pipe_screen *screen,
       case PIPE_SHADER_CAP_MAX_SHADER_BUFFERS:
       case PIPE_SHADER_CAP_MAX_SHADER_IMAGES:
       case PIPE_SHADER_CAP_LOWER_IF_THRESHOLD:
+      case PIPE_SHADER_CAP_TGSI_SKIP_MERGE_REGISTERS:
          return 0;
       case PIPE_SHADER_CAP_MAX_UNROLL_ITERATIONS_HINT:
          return 32;
@@ -668,6 +685,7 @@ vgpu10_get_shader_param(struct pipe_screen *screen,
    case PIPE_SHADER_CAP_MAX_SHADER_BUFFERS:
    case PIPE_SHADER_CAP_MAX_SHADER_IMAGES:
    case PIPE_SHADER_CAP_LOWER_IF_THRESHOLD:
+   case PIPE_SHADER_CAP_TGSI_SKIP_MERGE_REGISTERS:
       return 0;
    case PIPE_SHADER_CAP_MAX_UNROLL_ITERATIONS_HINT:
       return 32;
@@ -838,12 +856,22 @@ svga_fence_finish(struct pipe_screen *screen,
       SVGA_DBG(DEBUG_DMA|DEBUG_PERF, "%s fence_ptr %p\n",
                __FUNCTION__, fence);
 
-      retVal = sws->fence_finish(sws, fence, 0) == 0;
+      retVal = sws->fence_finish(sws, fence, timeout, 0) == 0;
    }
 
    SVGA_STATS_TIME_POP(sws);
 
    return retVal;
+}
+
+
+static int
+svga_fence_get_fd(struct pipe_screen *screen,
+                  struct pipe_fence_handle *fence)
+{
+   struct svga_winsys_screen *sws = svga_screen(screen)->sws;
+
+   return sws->fence_get_fd(sws, fence, TRUE);
 }
 
 
@@ -903,6 +931,8 @@ svga_get_driver_query_info(struct pipe_screen *screen,
             PIPE_DRIVER_QUERY_TYPE_UINT64),
       QUERY("num-generate-mipmap", SVGA_QUERY_NUM_GENERATE_MIPMAP,
             PIPE_DRIVER_QUERY_TYPE_UINT64),
+      QUERY("num-failed-allocations", SVGA_QUERY_NUM_FAILED_ALLOCATIONS,
+            PIPE_DRIVER_QUERY_TYPE_UINT64),
    };
 #undef QUERY
 
@@ -914,6 +944,35 @@ svga_get_driver_query_info(struct pipe_screen *screen,
 
    *info = queries[index];
    return 1;
+}
+
+
+static void
+init_logging(struct pipe_screen *screen)
+{
+   static const char *log_prefix = "Mesa: ";
+   char host_log[1000];
+
+   /* Log Version to Host */
+   util_snprintf(host_log, sizeof(host_log) - strlen(log_prefix),
+                 "%s%s", log_prefix, svga_get_name(screen));
+   svga_host_log(host_log);
+
+   util_snprintf(host_log, sizeof(host_log) - strlen(log_prefix),
+                 "%s%s (%s)", log_prefix, PACKAGE_VERSION, MESA_GIT_SHA1);
+   svga_host_log(host_log);
+
+   /* If the SVGA_EXTRA_LOGGING env var is set, log the process's command
+    * line (program name and arguments).
+    */
+   if (debug_get_bool_option("SVGA_EXTRA_LOGGING", FALSE)) {
+      char cmdline[1000];
+      if (os_get_command_line(cmdline, sizeof(cmdline))) {
+         util_snprintf(host_log, sizeof(host_log) - strlen(log_prefix),
+                       "%s%s", log_prefix, cmdline);
+         svga_host_log(host_log);
+      }
+   }
 }
 
 
@@ -977,6 +1036,8 @@ svga_screen_create(struct svga_winsys_screen *sws)
    screen->context_create = svga_context_create;
    screen->fence_reference = svga_fence_reference;
    screen->fence_finish = svga_fence_finish;
+   screen->fence_get_fd = svga_fence_get_fd;
+
    screen->get_driver_query_info = svga_get_driver_query_info;
    svgascreen->sws = sws;
 
@@ -986,6 +1047,13 @@ svga_screen_create(struct svga_winsys_screen *sws)
       svgascreen->hw_version = sws->get_hw_version(sws);
    } else {
       svgascreen->hw_version = SVGA3D_HWVERSION_WS65_B1;
+   }
+
+   if (svgascreen->hw_version < SVGA3D_HWVERSION_WS8_B1) {
+      /* too old for 3D acceleration */
+      debug_printf("Hardware version 0x%x is too old for accerated 3D\n",
+                   svgascreen->hw_version);
+      goto error2;
    }
 
    /*
@@ -1047,6 +1115,11 @@ svga_screen_create(struct svga_winsys_screen *sws)
          svgascreen->ms_samples =
             get_uint_cap(sws, SVGA3D_DEVCAP_MULTISAMPLE_MASKABLESAMPLES, 0);
       }
+
+      /* We only support 4x, 8x, 16x MSAA */
+      svgascreen->ms_samples &= ((1 << (4-1)) |
+                                 (1 << (8-1)) |
+                                 (1 << (16-1)));
 
       /* Maximum number of constant buffers */
       svgascreen->max_const_buffers =
@@ -1110,9 +1183,11 @@ svga_screen_create(struct svga_winsys_screen *sws)
    }
 
    (void) mtx_init(&svgascreen->tex_mutex, mtx_plain);
-   (void) mtx_init(&svgascreen->swc_mutex, mtx_plain);
+   (void) mtx_init(&svgascreen->swc_mutex, mtx_recursive);
 
    svga_screen_cache_init(svgascreen);
+
+   init_logging(screen);
 
    return screen;
 error2:

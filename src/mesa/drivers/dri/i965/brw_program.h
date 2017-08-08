@@ -32,9 +32,6 @@ extern "C" {
 
 struct brw_context;
 
-bool brw_do_channel_expressions(struct exec_list *instructions);
-bool brw_do_vector_splitting(struct exec_list *instructions);
-
 struct nir_shader *brw_create_nir(struct brw_context *brw,
                                   const struct gl_shader_program *shader_prog,
                                   struct gl_program *prog,

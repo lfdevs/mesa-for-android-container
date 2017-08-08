@@ -2327,12 +2327,12 @@ const nir_op_info nir_op_infos[nir_num_opcodes] = {
    .name = "sge",
    .num_inputs = 2,
    .output_size = 0,
-   .output_type = nir_type_float32,
+   .output_type = nir_type_float,
    .input_sizes = {
       0, 0
    },
    .input_types = {
-      nir_type_float32, nir_type_float32
+      nir_type_float, nir_type_float
    },
    .algebraic_properties =
       0

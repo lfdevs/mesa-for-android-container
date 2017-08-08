@@ -162,11 +162,13 @@ vmw_ioctl_surface_destroy(struct vmw_winsys_screen *vws,
 
 void
 vmw_ioctl_command(struct vmw_winsys_screen *vws,
-		  int32_t cid,
-		  uint32_t throttle_us,
-		  void *commands,
-		  uint32_t size,
-		  struct pipe_fence_handle **fence);
+                  int32_t cid,
+                  uint32_t throttle_us,
+                  void *commands,
+                  uint32_t size,
+                  struct pipe_fence_handle **fence,
+                  int32_t imported_fence_fd,
+                  uint32_t flags);
 
 struct vmw_region *
 vmw_ioctl_region_create(struct vmw_winsys_screen *vws, uint32_t size);

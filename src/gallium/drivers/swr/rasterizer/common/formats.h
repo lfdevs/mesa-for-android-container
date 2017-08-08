@@ -20,7 +20,7 @@
 * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 * IN THE SOFTWARE.
 * 
-* @file gen_formats.h
+* @file formats.h
 * 
 * @brief auto-generated file
 * 
@@ -181,6 +181,7 @@ enum SWR_FORMAT
     L8_SINT                     = 0x153,
     I8_UINT                     = 0x154,
     I8_SINT                     = 0x155,
+    DXT1_RGB_SRGB               = 0x180,
     YCRCB_SWAPUVY               = 0x183,
     BC1_UNORM                   = 0x186,
     BC2_UNORM                   = 0x187,
@@ -191,6 +192,7 @@ enum SWR_FORMAT
     BC2_UNORM_SRGB              = 0x18C,
     BC3_UNORM_SRGB              = 0x18D,
     YCRCB_SWAPUV                = 0x18F,
+    DXT1_RGB                    = 0x191,
     R8G8B8_UNORM                = 0x193,
     R8G8B8_SNORM                = 0x194,
     R8G8B8_SSCALED              = 0x195,

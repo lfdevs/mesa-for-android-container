@@ -29,6 +29,7 @@
 
 #include "brw_vec4_gs_visitor.h"
 #include "gen6_gs_visitor.h"
+#include "brw_cfg.h"
 #include "brw_fs.h"
 #include "brw_nir.h"
 #include "common/gen_debug.h"
@@ -52,29 +53,36 @@ vec4_gs_visitor::vec4_gs_visitor(const struct brw_compiler *compiler,
 }
 
 
-dst_reg *
-vec4_gs_visitor::make_reg_for_system_value(int location)
+static inline struct brw_reg
+attribute_to_hw_reg(int attr, brw_reg_type type, bool interleaved)
 {
-   dst_reg *reg = new(mem_ctx) dst_reg(this, glsl_type::int_type);
+   struct brw_reg reg;
 
-   switch (location) {
-   case SYSTEM_VALUE_INVOCATION_ID:
-      this->current_annotation = "initialize gl_InvocationID";
-      if (gs_prog_data->invocations > 1)
-         emit(GS_OPCODE_GET_INSTANCE_ID, *reg);
-      else
-         emit(MOV(*reg, brw_imm_ud(0)));
-      break;
-   default:
-      unreachable("not reached");
+   unsigned width = REG_SIZE / 2 / MAX2(4, type_sz(type));
+   if (interleaved) {
+      reg = stride(brw_vecn_grf(width, attr / 2, (attr % 2) * 4), 0, width, 1);
+   } else {
+      reg = brw_vecn_grf(width, attr, 0);
    }
 
+   reg.type = type;
    return reg;
 }
 
-
+/**
+ * Replace each register of type ATTR in this->instructions with a reference
+ * to a fixed HW register.
+ *
+ * If interleaved is true, then each attribute takes up half a register, with
+ * register N containing attribute 2*N in its first half and attribute 2*N+1
+ * in its second half (this corresponds to the payload setup used by geometry
+ * shaders in "single" or "dual instanced" dispatch mode).  If interleaved is
+ * false, then each attribute takes up a whole register, with register N
+ * containing attribute N (this corresponds to the payload setup used by
+ * vertex shaders, and by geometry shaders in "dual object" dispatch mode).
+ */
 int
-vec4_gs_visitor::setup_varying_inputs(int payload_reg, int *attribute_map,
+vec4_gs_visitor::setup_varying_inputs(int payload_reg,
                                       int attributes_per_reg)
 {
    /* For geometry shaders there are N copies of the input attributes, where N
@@ -85,16 +93,28 @@ vec4_gs_visitor::setup_varying_inputs(int payload_reg, int *attribute_map,
     * so the total number of input slots that will be delivered to the GS (and
     * thus the stride of the input arrays) is urb_read_length * 2.
     */
-   const unsigned num_input_vertices = nir->info->gs.vertices_in;
+   const unsigned num_input_vertices = nir->info.gs.vertices_in;
    assert(num_input_vertices <= MAX_GS_INPUT_VERTICES);
    unsigned input_array_stride = prog_data->urb_read_length * 2;
 
-   for (int slot = 0; slot < c->input_vue_map.num_slots; slot++) {
-      int varying = c->input_vue_map.slot_to_varying[slot];
-      for (unsigned vertex = 0; vertex < num_input_vertices; vertex++) {
-         attribute_map[BRW_VARYING_SLOT_COUNT * vertex + varying] =
-            attributes_per_reg * payload_reg + input_array_stride * vertex +
-            slot;
+   foreach_block_and_inst(block, vec4_instruction, inst, cfg) {
+      for (int i = 0; i < 3; i++) {
+         if (inst->src[i].file != ATTR)
+            continue;
+
+         assert(inst->src[i].offset % REG_SIZE == 0);
+         int grf = payload_reg * attributes_per_reg +
+                   inst->src[i].nr + inst->src[i].offset / REG_SIZE;
+
+         struct brw_reg reg =
+            attribute_to_hw_reg(grf, inst->src[i].type, attributes_per_reg > 1);
+         reg.swizzle = inst->src[i].swizzle;
+         if (inst->src[i].abs)
+            reg = brw_abs(reg);
+         if (inst->src[i].negate)
+            reg = negate(reg);
+
+         inst->src[i] = reg;
       }
    }
 
@@ -103,24 +123,14 @@ vec4_gs_visitor::setup_varying_inputs(int payload_reg, int *attribute_map,
    return payload_reg + regs_used;
 }
 
-
 void
 vec4_gs_visitor::setup_payload()
 {
-   int attribute_map[BRW_VARYING_SLOT_COUNT * MAX_GS_INPUT_VERTICES];
-
    /* If we are in dual instanced or single mode, then attributes are going
     * to be interleaved, so one register contains two attribute slots.
     */
    int attributes_per_reg =
       prog_data->dispatch_mode == DISPATCH_MODE_4X2_DUAL_OBJECT ? 1 : 2;
-
-   /* If a geometry shader tries to read from an input that wasn't written by
-    * the vertex shader, that produces undefined results, but it shouldn't
-    * crash anything.  So initialize attribute_map to zeros--that ensures that
-    * these undefined results are read from r0.
-    */
-   memset(attribute_map, 0, sizeof(attribute_map));
 
    int reg = 0;
 
@@ -132,13 +142,11 @@ vec4_gs_visitor::setup_payload()
 
    /* If the shader uses gl_PrimitiveIDIn, that goes in r1. */
    if (gs_prog_data->include_primitive_id)
-      attribute_map[VARYING_SLOT_PRIMITIVE_ID] = attributes_per_reg * reg++;
+      reg++;
 
    reg = setup_uniforms(reg);
 
-   reg = setup_varying_inputs(reg, attribute_map, attributes_per_reg);
-
-   lower_attributes_to_hw_regs(attribute_map, attributes_per_reg > 1);
+   reg = setup_varying_inputs(reg, attributes_per_reg);
 
    this->first_non_payload_grf = reg;
 }
@@ -414,7 +422,7 @@ vec4_gs_visitor::set_stream_control_data_bits(unsigned stream_id)
    assert(c->control_data_bits_per_vertex == 2);
 
    /* Must be a valid stream */
-   assert(stream_id >= 0 && stream_id < MAX_VERTEX_STREAMS);
+   assert(stream_id < MAX_VERTEX_STREAMS);
 
    /* Control data bits are initialized to 0 so we don't have to set any
     * bits when sending vertices to stream 0.
@@ -455,7 +463,7 @@ vec4_gs_visitor::gs_emit_vertex(int stream_id)
     * be recorded by transform feedback, we can simply discard all geometry
     * bound to these streams when transform feedback is disabled.
     */
-   if (stream_id > 0 && !nir->info->has_transform_feedback_varyings)
+   if (stream_id > 0 && !nir->info.has_transform_feedback_varyings)
       return;
 
    /* If we're outputting 32 control data bits or less, then we can wait
@@ -628,32 +636,32 @@ brw_compile_gs(const struct brw_compiler *compiler, void *log_data,
     * For SSO pipelines, we use a fixed VUE map layout based on variable
     * locations, so we can rely on rendezvous-by-location making this work.
     */
-   GLbitfield64 inputs_read = shader->info->inputs_read;
+   GLbitfield64 inputs_read = shader->info.inputs_read;
    brw_compute_vue_map(compiler->devinfo,
                        &c.input_vue_map, inputs_read,
-                       shader->info->separate_shader);
+                       shader->info.separate_shader);
 
    shader = brw_nir_apply_sampler_key(shader, compiler, &key->tex, is_scalar);
-   brw_nir_lower_vue_inputs(shader, is_scalar, &c.input_vue_map);
+   brw_nir_lower_vue_inputs(shader, &c.input_vue_map);
    brw_nir_lower_vue_outputs(shader, is_scalar);
    shader = brw_postprocess_nir(shader, compiler, is_scalar);
 
    prog_data->base.clip_distance_mask =
-      ((1 << shader->info->clip_distance_array_size) - 1);
+      ((1 << shader->info.clip_distance_array_size) - 1);
    prog_data->base.cull_distance_mask =
-      ((1 << shader->info->cull_distance_array_size) - 1) <<
-      shader->info->clip_distance_array_size;
+      ((1 << shader->info.cull_distance_array_size) - 1) <<
+      shader->info.clip_distance_array_size;
 
    prog_data->include_primitive_id =
-      (shader->info->system_values_read & (1 << SYSTEM_VALUE_PRIMITIVE_ID)) != 0;
+      (shader->info.system_values_read & (1 << SYSTEM_VALUE_PRIMITIVE_ID)) != 0;
 
-   prog_data->invocations = shader->info->gs.invocations;
+   prog_data->invocations = shader->info.gs.invocations;
 
    if (compiler->devinfo->gen >= 8)
       prog_data->static_vertex_count = nir_gs_count_vertices(shader);
 
    if (compiler->devinfo->gen >= 7) {
-      if (shader->info->gs.output_primitive == GL_POINTS) {
+      if (shader->info.gs.output_primitive == GL_POINTS) {
          /* When the output type is points, the geometry shader may output data
           * to multiple streams, and EndPrimitive() has no effect.  So we
           * configure the hardware to interpret the control data as stream ID.
@@ -678,14 +686,14 @@ brw_compile_gs(const struct brw_compiler *compiler, void *log_data,
           * EndPrimitive().
           */
          c.control_data_bits_per_vertex =
-            shader->info->gs.uses_end_primitive ? 1 : 0;
+            shader->info.gs.uses_end_primitive ? 1 : 0;
       }
    } else {
       /* There are no control data bits in gen6. */
       c.control_data_bits_per_vertex = 0;
    }
    c.control_data_header_size_bits =
-      shader->info->gs.vertices_out * c.control_data_bits_per_vertex;
+      shader->info.gs.vertices_out * c.control_data_bits_per_vertex;
 
    /* 1 HWORD = 32 bytes = 256 bits */
    prog_data->control_data_header_size_hwords =
@@ -780,7 +788,7 @@ brw_compile_gs(const struct brw_compiler *compiler, void *log_data,
    unsigned output_size_bytes;
    if (compiler->devinfo->gen >= 7) {
       output_size_bytes =
-         prog_data->output_vertex_size_hwords * 32 * shader->info->gs.vertices_out;
+         prog_data->output_vertex_size_hwords * 32 * shader->info.gs.vertices_out;
       output_size_bytes += 32 * prog_data->control_data_header_size_hwords;
    } else {
       output_size_bytes = prog_data->output_vertex_size_hwords * 32;
@@ -809,16 +817,23 @@ brw_compile_gs(const struct brw_compiler *compiler, void *log_data,
    /* URB entry sizes are stored as a multiple of 64 bytes in gen7+ and
     * a multiple of 128 bytes in gen6.
     */
-   if (compiler->devinfo->gen >= 7)
+   if (compiler->devinfo->gen >= 7) {
       prog_data->base.urb_entry_size = ALIGN(output_size_bytes, 64) / 64;
-   else
+      /* On Cannonlake software shall not program an allocation size that
+       * specifies a size that is a multiple of 3 64B (512-bit) cachelines.
+       */
+      if (compiler->devinfo->gen == 10 &&
+          prog_data->base.urb_entry_size % 3 == 0)
+         prog_data->base.urb_entry_size++;
+   } else {
       prog_data->base.urb_entry_size = ALIGN(output_size_bytes, 128) / 128;
+   }
 
-   assert(shader->info->gs.output_primitive < ARRAY_SIZE(gl_prim_to_hw_prim));
+   assert(shader->info.gs.output_primitive < ARRAY_SIZE(gl_prim_to_hw_prim));
    prog_data->output_topology =
-      gl_prim_to_hw_prim[shader->info->gs.output_primitive];
+      gl_prim_to_hw_prim[shader->info.gs.output_primitive];
 
-   prog_data->vertices_in = shader->info->gs.vertices_in;
+   prog_data->vertices_in = shader->info.gs.vertices_in;
 
    /* GS inputs are read from the VUE 256 bits (2 vec4's) at a time, so we
     * need to program a URB read length of ceiling(num_slots / 2).
@@ -847,9 +862,9 @@ brw_compile_gs(const struct brw_compiler *compiler, void *log_data,
                         false, MESA_SHADER_GEOMETRY);
          if (unlikely(INTEL_DEBUG & DEBUG_GS)) {
             const char *label =
-               shader->info->label ? shader->info->label : "unnamed";
+               shader->info.label ? shader->info.label : "unnamed";
             char *name = ralloc_asprintf(mem_ctx, "%s geometry shader %s",
-                                         label, shader->info->name);
+                                         label, shader->info.name);
             g.enable_debug(name);
          }
          g.generate_code(v.cfg, 8);
@@ -897,6 +912,7 @@ brw_compile_gs(const struct brw_compiler *compiler, void *log_data,
             memcpy(prog_data->base.base.param, param,
                    sizeof(gl_constant_value*) * param_count);
             prog_data->base.base.nr_params = param_count;
+            prog_data->base.base.nr_pull_params = 0;
             ralloc_free(param);
          }
       }

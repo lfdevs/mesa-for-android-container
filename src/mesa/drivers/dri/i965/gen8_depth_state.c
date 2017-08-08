@@ -24,7 +24,6 @@
 #include "intel_batchbuffer.h"
 #include "intel_mipmap_tree.h"
 #include "intel_fbo.h"
-#include "intel_resolve_map.h"
 #include "brw_context.h"
 #include "brw_state.h"
 #include "brw_defines.h"
@@ -68,7 +67,7 @@ emit_depth_packets(struct brw_context *brw,
              (stencil_mt != NULL && stencil_writable) << 27 |
              (hiz ? 1 : 0) << 22 |
              depthbuffer_format << 18 |
-             (depth_mt ? depth_mt->pitch - 1 : 0));
+             (depth_mt ? depth_mt->surf.row_pitch - 1 : 0));
    if (depth_mt) {
       OUT_RELOC64(depth_mt->bo,
                   I915_GEM_DOMAIN_RENDER, I915_GEM_DOMAIN_RENDER, 0);
@@ -79,7 +78,8 @@ emit_depth_packets(struct brw_context *brw,
    OUT_BATCH(((width - 1) << 4) | ((height - 1) << 18) | lod);
    OUT_BATCH(((depth - 1) << 21) | (min_array_element << 10) | mocs_wb);
    OUT_BATCH(0);
-   OUT_BATCH(((depth - 1) << 21) | (depth_mt ? depth_mt->qpitch >> 2 : 0));
+   OUT_BATCH(((depth - 1) << 21) |
+              (depth_mt ? depth_mt->surf.array_pitch_el_rows >> 2 : 0));
    ADVANCE_BATCH();
 
    if (!hiz) {
@@ -94,10 +94,10 @@ emit_depth_packets(struct brw_context *brw,
       assert(depth_mt);
       BEGIN_BATCH(5);
       OUT_BATCH(GEN7_3DSTATE_HIER_DEPTH_BUFFER << 16 | (5 - 2));
-      OUT_BATCH((depth_mt->hiz_buf->aux_base.pitch - 1) | mocs_wb << 25);
-      OUT_RELOC64(depth_mt->hiz_buf->aux_base.bo,
+      OUT_BATCH((depth_mt->hiz_buf->pitch - 1) | mocs_wb << 25);
+      OUT_RELOC64(depth_mt->hiz_buf->bo,
                   I915_GEM_DOMAIN_RENDER, I915_GEM_DOMAIN_RENDER, 0);
-      OUT_BATCH(depth_mt->hiz_buf->aux_base.qpitch >> 2);
+      OUT_BATCH(depth_mt->hiz_buf->qpitch >> 2);
       ADVANCE_BATCH();
    }
 
@@ -112,31 +112,17 @@ emit_depth_packets(struct brw_context *brw,
    } else {
       BEGIN_BATCH(5);
       OUT_BATCH(GEN7_3DSTATE_STENCIL_BUFFER << 16 | (5 - 2));
-      /* The stencil buffer has quirky pitch requirements.  From the Graphics
-       * BSpec: vol2a.11 3D Pipeline Windower > Early Depth/Stencil Processing
-       * > Depth/Stencil Buffer State > 3DSTATE_STENCIL_BUFFER [DevIVB+],
-       * field "Surface Pitch":
-       *
-       *    The pitch must be set to 2x the value computed based on width, as
-       *    the stencil buffer is stored with two rows interleaved.
-       *
-       * (Note that it is not 100% clear whether this intended to apply to
-       * Gen7; the BSpec flags this comment as "DevILK,DevSNB" (which would
-       * imply that it doesn't), however the comment appears on a "DevIVB+"
-       * page (which would imply that it does).  Experiments with the hardware
-       * indicate that it does.
-       */
       OUT_BATCH(HSW_STENCIL_ENABLED | mocs_wb << 22 |
-                (2 * stencil_mt->pitch - 1));
+                (stencil_mt->surf.row_pitch - 1));
       OUT_RELOC64(stencil_mt->bo,
                   I915_GEM_DOMAIN_RENDER, I915_GEM_DOMAIN_RENDER, 0);
-      OUT_BATCH(stencil_mt ? stencil_mt->qpitch >> 2 : 0);
+      OUT_BATCH(stencil_mt->surf.array_pitch_el_rows >> 2);
       ADVANCE_BATCH();
    }
 
    BEGIN_BATCH(3);
    OUT_BATCH(GEN7_3DSTATE_CLEAR_PARAMS << 16 | (3 - 2));
-   OUT_BATCH(depth_mt ? depth_mt->depth_clear_value : 0);
+   OUT_BATCH(depth_mt ? depth_mt->fast_clear_color.u32[0] : 0);
    OUT_BATCH(1);
    ADVANCE_BATCH();
 
@@ -190,7 +176,7 @@ gen8_emit_depth_stencil_hiz(struct brw_context *brw,
       break;
    case GL_TEXTURE_3D:
       assert(mt);
-      depth = MAX2(mt->logical_depth0, 1);
+      depth = mt->surf.logical_level0_px.depth;
       surftype = translate_tex_target(gl_target);
       break;
    case GL_TEXTURE_1D_ARRAY:
@@ -214,13 +200,13 @@ gen8_emit_depth_stencil_hiz(struct brw_context *brw,
    lod = irb ? irb->mt_level - irb->mt->first_level : 0;
 
    if (mt) {
-      width = mt->logical_width0;
-      height = mt->logical_height0;
+      width = mt->surf.logical_level0_px.width;
+      height = mt->surf.logical_level0_px.height;
    }
 
    emit_depth_packets(brw, depth_mt, brw_depthbuffer_format(brw), surftype,
                       brw_depth_writes_enabled(brw),
-                      stencil_mt, ctx->Stencil._WriteEnabled,
+                      stencil_mt, brw->stencil_write_enabled,
                       hiz, width, height, depth, lod, min_array_element);
 }
 
@@ -288,7 +274,7 @@ pma_fix_enable(const struct brw_context *brw)
     * !3DSTATE_DEPTH_BUFFER::Stencil Buffer Enable ||
     * !3DSTATE_STENCIL_BUFFER::Stencil Buffer Enable
     */
-   const bool stencil_writes_enabled = ctx->Stencil._WriteEnabled;
+   const bool stencil_writes_enabled = brw->stencil_write_enabled;
 
    /* 3DSTATE_PS_EXTRA::Pixel Shader Computed Depth Mode != PSCDEPTH_OFF */
    const bool ps_computes_depth =
@@ -325,8 +311,6 @@ pma_fix_enable(const struct brw_context *brw)
 void
 gen8_write_pma_stall_bits(struct brw_context *brw, uint32_t pma_stall_bits)
 {
-   struct gl_context *ctx = &brw->ctx;
-
    /* If we haven't actually changed the value, bail now to avoid unnecessary
     * pipeline stalls and register writes.
     */
@@ -341,7 +325,7 @@ gen8_write_pma_stall_bits(struct brw_context *brw, uint32_t pma_stall_bits)
     * Flush is also necessary.
     */
    const uint32_t render_cache_flush =
-      ctx->Stencil._WriteEnabled ? PIPE_CONTROL_RENDER_TARGET_FLUSH : 0;
+      brw->stencil_write_enabled ? PIPE_CONTROL_RENDER_TARGET_FLUSH : 0;
    brw_emit_pipe_control_flush(brw,
                                PIPE_CONTROL_CS_STALL |
                                PIPE_CONTROL_DEPTH_CACHE_FLUSH |
@@ -391,163 +375,3 @@ const struct brw_tracked_state gen8_pma_fix = {
    },
    .emit = gen8_emit_pma_stall_workaround
 };
-
-/**
- * Emit packets to perform a depth/HiZ resolve or fast depth/stencil clear.
- *
- * See the "Optimized Depth Buffer Clear and/or Stencil Buffer Clear" section
- * of the hardware documentation for details.
- */
-void
-gen8_hiz_exec(struct brw_context *brw, struct intel_mipmap_tree *mt,
-              unsigned int level, unsigned int layer, enum blorp_hiz_op op)
-{
-   if (op == BLORP_HIZ_OP_NONE)
-      return;
-
-   /* Disable the PMA stall fix since we're about to do a HiZ operation. */
-   if (brw->gen == 8)
-      gen8_write_pma_stall_bits(brw, 0);
-
-   assert(mt->first_level == 0);
-   assert(mt->logical_depth0 >= 1);
-
-   /* If we're operating on LOD 0, align to 8x4 to meet the alignment
-    * requirements for most HiZ operations.  Otherwise, use the actual size
-    * to allow the hardware to calculate the miplevel offsets correctly.
-    */
-   uint32_t surface_width  = ALIGN(mt->logical_width0,  level == 0 ? 8 : 1);
-   uint32_t surface_height = ALIGN(mt->logical_height0, level == 0 ? 4 : 1);
-
-   /* From the documentation for 3DSTATE_WM_HZ_OP: "3DSTATE_MULTISAMPLE packet
-    * must be used prior to this packet to change the Number of Multisamples.
-    * This packet must not be used to change Number of Multisamples in a
-    * rendering sequence."
-    */
-   if (brw->num_samples != mt->num_samples) {
-      gen8_emit_3dstate_multisample(brw, mt->num_samples);
-      brw->NewGLState |= _NEW_MULTISAMPLE;
-   }
-
-   /* The basic algorithm is:
-    * - If needed, emit 3DSTATE_{DEPTH,HIER_DEPTH,STENCIL}_BUFFER and
-    *   3DSTATE_CLEAR_PARAMS packets to set up the relevant buffers.
-    * - If needed, emit 3DSTATE_DRAWING_RECTANGLE.
-    * - Emit 3DSTATE_WM_HZ_OP with a bit set for the particular operation.
-    * - Do a special PIPE_CONTROL to trigger an implicit rectangle primitive.
-    * - Emit 3DSTATE_WM_HZ_OP with no bits set to return to normal rendering.
-    */
-   emit_depth_packets(brw, mt,
-                      brw_depth_format(brw, mt->format),
-                      BRW_SURFACE_2D,
-                      true, /* depth writes */
-                      NULL, false, /* no stencil for now */
-                      true, /* hiz */
-                      surface_width,
-                      surface_height,
-                      mt->logical_depth0,
-                      level,
-                      layer); /* min_array_element */
-
-   /* Depth buffer clears and HiZ resolves must use an 8x4 aligned rectangle.
-    * Note that intel_miptree_level_enable_hiz disables HiZ for miplevels > 0
-    * which aren't 8x4 aligned, so expanding the size is safe - it'll just
-    * draw into empty padding space.
-    */
-   unsigned rect_width = ALIGN(minify(mt->logical_width0, level), 8);
-   unsigned rect_height = ALIGN(minify(mt->logical_height0, level), 4);
-
-   BEGIN_BATCH(4);
-   OUT_BATCH(_3DSTATE_DRAWING_RECTANGLE << 16 | (4 - 2));
-   OUT_BATCH(0);
-   OUT_BATCH(((rect_width - 1) & 0xffff) | ((rect_height - 1) << 16));
-   OUT_BATCH(0);
-   ADVANCE_BATCH();
-
-   /* Emit 3DSTATE_WM_HZ_OP to override pipeline state for the particular
-    * resolve or clear operation we want to perform.
-    */
-   uint32_t dw1 = 0;
-
-   switch (op) {
-   case BLORP_HIZ_OP_DEPTH_RESOLVE:
-      dw1 |= GEN8_WM_HZ_DEPTH_RESOLVE;
-      break;
-   case BLORP_HIZ_OP_HIZ_RESOLVE:
-      dw1 |= GEN8_WM_HZ_HIZ_RESOLVE;
-      break;
-   case BLORP_HIZ_OP_DEPTH_CLEAR:
-      dw1 |= GEN8_WM_HZ_DEPTH_CLEAR;
-
-      /* The "Clear Rectangle X Max" (and Y Max) fields are exclusive,
-       * rather than inclusive, and limited to 16383.  This means that
-       * for a 16384x16384 render target, we would miss the last row
-       * or column of pixels along the edge.
-       *
-       * To work around this, we have to set the "Full Surface Depth
-       * and Stencil Clear" bit.  We can do this in all cases because
-       * we always clear the full rectangle anyway.  We'll need to
-       * change this if we ever add scissored clear support.
-       */
-      dw1 |= GEN8_WM_HZ_FULL_SURFACE_DEPTH_CLEAR;
-      break;
-   case BLORP_HIZ_OP_NONE:
-      unreachable("Should not get here.");
-   }
-
-   if (mt->num_samples > 0)
-      dw1 |= SET_FIELD(ffs(mt->num_samples) - 1, GEN8_WM_HZ_NUM_SAMPLES);
-
-   BEGIN_BATCH(5);
-   OUT_BATCH(_3DSTATE_WM_HZ_OP << 16 | (5 - 2));
-   OUT_BATCH(dw1);
-   OUT_BATCH(0);
-   OUT_BATCH(SET_FIELD(rect_width, GEN8_WM_HZ_CLEAR_RECTANGLE_X_MAX) |
-             SET_FIELD(rect_height, GEN8_WM_HZ_CLEAR_RECTANGLE_Y_MAX));
-   OUT_BATCH(SET_FIELD(0xFFFF, GEN8_WM_HZ_SAMPLE_MASK));
-   ADVANCE_BATCH();
-
-   /* Emit a PIPE_CONTROL with "Post-Sync Operation" set to "Write Immediate
-    * Data", and no other bits set.  This causes 3DSTATE_WM_HZ_OP's state to
-    * take effect, and spawns a rectangle primitive.
-    */
-   brw_emit_pipe_control_write(brw,
-                               PIPE_CONTROL_WRITE_IMMEDIATE,
-                               brw->workaround_bo, 0, 0);
-
-   /* Emit 3DSTATE_WM_HZ_OP again to disable the state overrides. */
-   BEGIN_BATCH(5);
-   OUT_BATCH(_3DSTATE_WM_HZ_OP << 16 | (5 - 2));
-   OUT_BATCH(0);
-   OUT_BATCH(0);
-   OUT_BATCH(0);
-   OUT_BATCH(0);
-   ADVANCE_BATCH();
-
-   /*
-    * From the Broadwell PRM, volume 7, "Depth Buffer Clear":
-    *
-    *  Depth buffer clear pass using any of the methods (WM_STATE, 3DSTATE_WM
-    *  or 3DSTATE_WM_HZ_OP) must be followed by a PIPE_CONTROL command with
-    *  DEPTH_STALL bit and Depth FLUSH bits "set" before starting to render.
-    *  DepthStall and DepthFlush are not needed between consecutive depth
-    *  clear passes nor is it required if th e depth clear pass was done with
-    *  "full_surf_clear" bit set in the 3DSTATE_WM_HZ_OP.
-    *
-    *  TODO: Such as the spec says, this could be conditional.
-    */
-   brw_emit_pipe_control_flush(brw, 
-                               PIPE_CONTROL_DEPTH_CACHE_FLUSH |
-                               PIPE_CONTROL_DEPTH_STALL);
-
-   /* Mark this buffer as needing a TC flush, as we've rendered to it. */
-   brw_render_cache_set_add_bo(brw, mt->bo);
-
-   /* We've clobbered all of the depth packets, and the drawing rectangle,
-    * so we need to ensure those packets are re-emitted before the next
-    * primitive.
-    *
-    * Setting _NEW_DEPTH and _NEW_BUFFERS covers it, but is rather overkill.
-    */
-   brw->NewGLState |= _NEW_DEPTH | _NEW_BUFFERS;
-}

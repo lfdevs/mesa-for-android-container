@@ -32,6 +32,10 @@
 
 #include "blorp/blorp_genX_exec.h"
 
+#if GEN_GEN <= 5
+#include "gen4_blorp_exec.h"
+#endif
+
 #include "brw_blorp.h"
 
 static void *
@@ -69,10 +73,10 @@ blorp_surface_reloc(struct blorp_batch *batch, uint32_t ss_offset,
    struct brw_context *brw = batch->driver_batch;
    struct brw_bo *bo = address.buffer;
 
-   brw_emit_reloc(&brw->batch, ss_offset, bo, address.offset + delta,
-                  address.read_domains, address.write_domain);
+   uint64_t reloc_val =
+      brw_emit_reloc(&brw->batch, ss_offset, bo, address.offset + delta,
+                     address.read_domains, address.write_domain);
 
-   uint64_t reloc_val = bo->offset64 + address.offset + delta;
    void *reloc_ptr = (void *)brw->batch.map + ss_offset;
 #if GEN_GEN >= 8
    *(uint64_t *)reloc_ptr = reloc_val;
@@ -146,6 +150,19 @@ blorp_alloc_vertex_buffer(struct blorp_batch *batch, uint32_t size,
    return data;
 }
 
+#if GEN_GEN >= 8
+static struct blorp_address
+blorp_get_workaround_page(struct blorp_batch *batch)
+{
+   assert(batch->blorp->driver_ctx == batch->driver_batch);
+   struct brw_context *brw = batch->driver_batch;
+
+   return (struct blorp_address) {
+      .buffer = brw->workaround_bo,
+   };
+}
+#endif
+
 static void
 blorp_flush_range(struct blorp_batch *batch, void *start, size_t size)
 {
@@ -155,7 +172,8 @@ blorp_flush_range(struct blorp_batch *batch, void *start, size_t size)
 }
 
 static void
-blorp_emit_urb_config(struct blorp_batch *batch, unsigned vs_entry_size)
+blorp_emit_urb_config(struct blorp_batch *batch,
+                      unsigned vs_entry_size, unsigned sf_entry_size)
 {
    assert(batch->blorp->driver_ctx == batch->driver_batch);
    struct brw_context *brw = batch->driver_batch;
@@ -165,11 +183,12 @@ blorp_emit_urb_config(struct blorp_batch *batch, unsigned vs_entry_size)
        brw->urb.vsize >= vs_entry_size)
       return;
 
-   brw->ctx.NewDriverState |= BRW_NEW_URB_SIZE;
-
    gen7_upload_urb(brw, vs_entry_size, false, false);
-#else
+#elif GEN_GEN == 6
    gen6_upload_urb(brw, vs_entry_size, false, 0);
+#else
+   /* We calculate it now and emit later. */
+   brw_calculate_urb_fence(brw, 0, vs_entry_size, sf_entry_size);
 #endif
 }
 
@@ -214,7 +233,9 @@ retry:
    gen7_l3_state.emit(brw);
 #endif
 
+#if GEN_GEN >= 6
    brw_emit_depth_stall_flushes(brw);
+#endif
 
 #if GEN_GEN == 8
    gen8_write_pma_stall_bits(brw, 0);
@@ -263,8 +284,9 @@ retry:
     * rendering tracks for GL.
     */
    brw->ctx.NewDriverState |= BRW_NEW_BLORP;
-   brw->no_depth_or_stencil = false;
-   brw->ib.type = -1;
+   brw->no_depth_or_stencil = !params->depth.enabled &&
+                              !params->stencil.enabled;
+   brw->ib.index_size = -1;
 
    if (params->dst.enabled)
       brw_render_cache_set_add_bo(brw, params->dst.addr.buffer);

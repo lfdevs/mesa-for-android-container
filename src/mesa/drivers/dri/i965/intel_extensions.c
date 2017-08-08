@@ -65,11 +65,11 @@ intelInitExtensions(struct gl_context *ctx)
    ctx->Extensions.ARB_map_buffer_range = true;
    ctx->Extensions.ARB_occlusion_query = true;
    ctx->Extensions.ARB_occlusion_query2 = true;
-   ctx->Extensions.ARB_pipeline_statistics_query = true;
    ctx->Extensions.ARB_point_sprite = true;
    ctx->Extensions.ARB_seamless_cube_map = true;
    ctx->Extensions.ARB_shader_bit_encoding = true;
    ctx->Extensions.ARB_shader_draw_parameters = true;
+   ctx->Extensions.ARB_shader_group_vote = true;
    ctx->Extensions.ARB_shader_texture_lod = true;
    ctx->Extensions.ARB_shading_language_packing = true;
    ctx->Extensions.ARB_shadow = true;
@@ -172,6 +172,7 @@ intelInitExtensions(struct gl_context *ctx)
       ctx->Extensions.ARB_enhanced_layouts = true;
       ctx->Extensions.ARB_ES3_compatibility = true;
       ctx->Extensions.ARB_fragment_layer_viewport = true;
+      ctx->Extensions.ARB_pipeline_statistics_query = true;
       ctx->Extensions.ARB_sample_shading = true;
       ctx->Extensions.ARB_shading_language_420pack = true;
       ctx->Extensions.ARB_texture_buffer_object = true;
@@ -196,7 +197,6 @@ intelInitExtensions(struct gl_context *ctx)
        * slightly differently when the extension is enabled.
        */
       if (ctx->API == API_OPENGL_CORE) {
-         ctx->Extensions.ARB_shader_subroutine = true;
          ctx->Extensions.ARB_shader_viewport_layer_array = true;
          ctx->Extensions.ARB_viewport_array = true;
          ctx->Extensions.AMD_vertex_shader_viewport_index = true;
@@ -271,6 +271,7 @@ intelInitExtensions(struct gl_context *ctx)
 
    if (brw->gen >= 8) {
       ctx->Extensions.ARB_gpu_shader_int64 = true;
+      ctx->Extensions.ARB_shader_ballot = true; /* requires ARB_gpu_shader_int64 */
       ctx->Extensions.ARB_ES3_2_compatibility = true;
    }
 
@@ -284,6 +285,9 @@ intelInitExtensions(struct gl_context *ctx)
       ctx->Extensions.MESA_shader_framebuffer_fetch = true;
       ctx->Extensions.ARB_post_depth_coverage = true;
    }
+
+   if (brw->is_broxton)
+      ctx->Extensions.KHR_texture_compression_astc_hdr = true;
 
    if (brw->gen >= 6)
       ctx->Extensions.INTEL_performance_query = true;

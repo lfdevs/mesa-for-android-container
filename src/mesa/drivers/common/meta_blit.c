@@ -59,7 +59,7 @@ static void
 setup_glsl_msaa_blit_scaled_shader(struct gl_context *ctx,
                                    struct blit_state *blit,
                                    struct gl_renderbuffer *src_rb,
-                                   GLenum target, GLenum filter)
+                                   GLenum target)
 {
    GLint loc_src_width, loc_src_height;
    int i, samples;
@@ -581,7 +581,7 @@ setup_glsl_blit_framebuffer(struct gl_context *ctx,
                                    2, texcoord_size, 0);
 
    if (is_target_multisample && is_filter_scaled_resolve && is_scaled_blit) {
-      setup_glsl_msaa_blit_scaled_shader(ctx, blit, src_rb, target, filter);
+      setup_glsl_msaa_blit_scaled_shader(ctx, blit, src_rb, target);
    } else if (is_target_multisample) {
       setup_glsl_msaa_blit_shader(ctx, blit, drawFb, src_rb, target);
    } else {
@@ -800,8 +800,7 @@ blitframebuffer_texture(struct gl_context *ctx,
       verts[3].tex[1] = t1;
       verts[3].tex[2] = readAtt->Zoffset;
 
-      _mesa_buffer_sub_data(ctx, blit->buf_obj, 0, sizeof(verts), verts,
-                            __func__);
+      _mesa_buffer_sub_data(ctx, blit->buf_obj, 0, sizeof(verts), verts);
    }
 
    /* setup viewport */

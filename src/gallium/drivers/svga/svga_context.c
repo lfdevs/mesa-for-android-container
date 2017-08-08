@@ -130,6 +130,8 @@ svga_context_create(struct pipe_screen *screen, void *priv, unsigned flags)
    struct svga_context *svga = NULL;
    enum pipe_error ret;
 
+   SVGA_STATS_TIME_PUSH(svgascreen->sws, SVGA_STATS_TIME_CREATECONTEXT);
+
    svga = CALLOC_STRUCT(svga_context);
    if (!svga)
       goto cleanup;
@@ -241,6 +243,8 @@ svga_context_create(struct pipe_screen *screen, void *priv, unsigned flags)
    memset(&svga->state.hw_clear, 0xcd, sizeof(svga->state.hw_clear));
    memset(&svga->state.hw_clear.framebuffer, 0x0,
           sizeof(svga->state.hw_clear.framebuffer));
+   svga->state.hw_clear.num_rendertargets = 0;
+   svga->state.hw_clear.dsv = NULL;
 
    memset(&svga->state.hw_draw, 0xcd, sizeof(svga->state.hw_draw));
    memset(&svga->state.hw_draw.views, 0x0, sizeof(svga->state.hw_draw.views));
@@ -251,8 +255,7 @@ svga_context_create(struct pipe_screen *screen, void *priv, unsigned flags)
    memset(svga->state.hw_draw.sampler_views, 0,
           sizeof(svga->state.hw_draw.sampler_views));
    svga->state.hw_draw.num_views = 0;
-   svga->state.hw_draw.num_rendertargets = 0;
-   svga->state.hw_draw.dsv = NULL;
+   svga->state.hw_draw.num_backed_views = 0;
    svga->state.hw_draw.rasterizer_discard = FALSE;
 
    /* Initialize the shader pointers */
@@ -297,7 +300,7 @@ svga_context_create(struct pipe_screen *screen, void *priv, unsigned flags)
    svga->pred.query_id = SVGA3D_INVALID_ID;
    svga->disable_rasterizer = FALSE;
 
-   return &svga->pipe;
+   goto done;
 
 cleanup:
    svga_destroy_swtnl(svga);
@@ -324,7 +327,10 @@ cleanup:
    util_bitmask_destroy(svga->stream_output_id_bm);
    util_bitmask_destroy(svga->query_id_bm);
    FREE(svga);
-   return NULL;
+
+done:
+   SVGA_STATS_TIME_POP(svgascreen->sws);
+   return svga ? &svga->pipe:NULL;
 }
 
 

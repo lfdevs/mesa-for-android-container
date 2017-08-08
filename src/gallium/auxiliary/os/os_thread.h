@@ -42,17 +42,6 @@
 #include "util/u_thread.h"
 
 
-static inline int pipe_thread_is_self( thrd_t thread )
-{
-#if defined(HAVE_PTHREAD)
-#  if defined(__GNU_LIBRARY__) && defined(__GLIBC__) && defined(__GLIBC_MINOR__) && \
-      (__GLIBC__ >= 3 || (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 12))
-   return pthread_equal(pthread_self(), thread);
-#  endif
-#endif
-   return 0;
-}
-
 #define pipe_mutex_assert_locked(mutex) \
    __pipe_mutex_assert_locked(&(mutex))
 
@@ -75,7 +64,7 @@ __pipe_mutex_assert_locked(mtx_t *mutex)
  * pipe_barrier
  */
 
-#if (defined(PIPE_OS_LINUX) || defined(PIPE_OS_BSD) || defined(PIPE_OS_SOLARIS) || defined(PIPE_OS_HURD)) && !defined(PIPE_OS_ANDROID)
+#if (defined(PIPE_OS_LINUX) || defined(PIPE_OS_BSD) || defined(PIPE_OS_SOLARIS) || defined(PIPE_OS_HURD)) && (!defined(PIPE_OS_ANDROID) || ANDROID_API_LEVEL >= 24)
 
 typedef pthread_barrier_t pipe_barrier;
 

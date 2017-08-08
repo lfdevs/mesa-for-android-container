@@ -567,7 +567,7 @@ static void r300_resource_copy_region(struct pipe_context *pipe,
      * colorbuffers. */
 
     util_blitter_default_dst_texture(&dst_templ, dst, dst_level, dstz);
-    util_blitter_default_src_texture(&src_templ, src, src_level);
+    util_blitter_default_src_texture(r300->blitter, &src_templ, src, src_level);
 
     layout = util_format_description(dst_templ.format)->layout;
 

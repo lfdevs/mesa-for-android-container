@@ -37,8 +37,8 @@
 #include <string.h>
 #include <assert.h>
 #include "c99_compat.h"
+#include "util/macros.h"
 
-#include "eglcompiler.h"
 #include "eglconfig.h"
 #include "egldisplay.h"
 #include "eglcurrent.h"

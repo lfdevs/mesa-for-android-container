@@ -28,6 +28,7 @@
 #ifndef EGL_DRI2_INCLUDED
 #define EGL_DRI2_INCLUDED
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #ifdef HAVE_X11_PLATFORM
@@ -44,6 +45,8 @@
 #ifdef HAVE_WAYLAND_PLATFORM
 #include <wayland-client.h>
 #include "wayland-egl-priv.h"
+/* forward declarations of protocol elements */
+struct zwp_linux_dmabuf_v1;
 #endif
 
 #include <GL/gl.h>
@@ -59,7 +62,6 @@
 #include <system/window.h>
 #include <hardware/gralloc.h>
 #include <gralloc_drm_handle.h>
-#include <cutils/log.h>
 
 #endif /* HAVE_ANDROID_PLATFORM */
 
@@ -72,6 +74,8 @@
 #include "eglsurface.h"
 #include "eglimage.h"
 #include "eglsync.h"
+
+#include "util/u_vector.h"
 
 struct wl_buffer;
 
@@ -119,6 +123,10 @@ struct dri2_egl_display_vtbl {
                                           _EGLSurface *surface,
                                           const EGLint *rects, EGLint n_rects);
 
+   EGLBoolean (*set_damage_region)(_EGLDriver *drv, _EGLDisplay *dpy,
+                                   _EGLSurface *surface,
+                                   const EGLint *rects, EGLint n_rects);
+
    EGLBoolean (*swap_buffers_region)(_EGLDriver *drv, _EGLDisplay *dpy,
                                      _EGLSurface *surf, EGLint numRects,
                                      const EGLint *rects);
@@ -155,7 +163,7 @@ struct dri2_egl_display
    int                       dri2_major;
    int                       dri2_minor;
    __DRIscreen              *dri_screen;
-   int                       own_dri_screen;
+   bool                      own_dri_screen;
    const __DRIconfig       **driver_configs;
    void                     *driver;
    const __DRIcoreExtension       *core;
@@ -166,6 +174,7 @@ struct dri2_egl_display
    const __DRItexBufferExtension  *tex_buffer;
    const __DRIimageExtension      *image;
    const __DRIrobustnessExtension *robustness;
+   const __DRInoErrorExtension    *no_error;
    const __DRI2configQueryExtension *config;
    const __DRI2fenceExtension *fence;
    const __DRI2rendererQueryExtension *rendererQuery;
@@ -176,8 +185,8 @@ struct dri2_egl_display
     * dri2_make_current (tracks if there are active contexts/surfaces). */
    int                       ref_count;
 
-   int                       own_device;
-   int                       invalidate_available;
+   bool                      own_device;
+   bool                      invalidate_available;
    int                       min_swap_interval;
    int                       max_swap_interval;
    int                       default_swap_interval;
@@ -193,7 +202,7 @@ struct dri2_egl_display
 #ifdef HAVE_X11_PLATFORM
    xcb_connection_t         *conn;
    xcb_screen_t             *screen;
-   int                      swap_available;
+   bool                     swap_available;
 #ifdef HAVE_DRI3
    struct loader_dri3_extensions loader_dri3_ext;
 #endif
@@ -207,7 +216,13 @@ struct dri2_egl_display
    struct wl_drm            *wl_drm;
    struct wl_shm            *wl_shm;
    struct wl_event_queue    *wl_queue;
-   int                       authenticated;
+   struct zwp_linux_dmabuf_v1 *wl_dmabuf;
+   struct {
+      struct u_vector        xrgb8888;
+      struct u_vector        argb8888;
+      struct u_vector        rgb565;
+   } wl_modifiers;
+   bool                      authenticated;
    int                       formats;
    uint32_t                  capabilities;
    char                     *device_name;
@@ -217,8 +232,8 @@ struct dri2_egl_display
    const gralloc_module_t *gralloc;
 #endif
 
-   int                       is_render_node;
-   int                       is_different_gpu;
+   bool                      is_render_node;
+   bool                      is_different_gpu;
 };
 
 struct dri2_egl_context
@@ -241,8 +256,7 @@ struct dri2_egl_surface
    _EGLSurface          base;
    __DRIdrawable       *dri_drawable;
    __DRIbuffer          buffers[5];
-   int                  buffer_count;
-   int                  have_fake_front;
+   bool                 have_fake_front;
 
 #ifdef HAVE_X11_PLATFORM
    xcb_drawable_t       drawable;
@@ -284,7 +298,7 @@ struct dri2_egl_surface
 #ifdef HAVE_DRM_PLATFORM
       struct gbm_bo       *bo;
 #endif
-      int                 locked;
+      bool                locked;
       int                 age;
    } color_buffers[4], *back, *current;
 #endif
@@ -317,8 +331,7 @@ struct dri2_egl_surface
 struct dri2_egl_config
 {
    _EGLConfig         base;
-   const __DRIconfig *dri_single_config[2];
-   const __DRIconfig *dri_double_config[2];
+   const __DRIconfig *dri_config[2][2];
 };
 
 struct dri2_egl_image
@@ -365,6 +378,9 @@ dri2_load_driver_dri3(_EGLDisplay *disp);
 
 EGLBoolean
 dri2_create_screen(_EGLDisplay *disp);
+
+EGLBoolean
+dri2_setup_extensions(_EGLDisplay *disp);
 
 __DRIdrawable *
 dri2_surface_get_dri_drawable(_EGLSurface *surf);
@@ -431,5 +447,8 @@ dri2_set_WL_bind_wayland_display(_EGLDriver *drv, _EGLDisplay *disp)
    }
 #endif
 }
+
+void
+dri2_display_destroy(_EGLDisplay *disp);
 
 #endif /* EGL_DRI2_INCLUDED */

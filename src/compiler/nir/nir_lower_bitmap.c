@@ -111,7 +111,7 @@ lower_bitmap(nir_shader *shader, nir_builder *b,
    discard->src[0] = nir_src_for_ssa(cond);
    nir_builder_instr_insert(b, &discard->instr);
 
-   shader->info->fs.uses_discard = true;
+   shader->info.fs.uses_discard = true;
 }
 
 static void

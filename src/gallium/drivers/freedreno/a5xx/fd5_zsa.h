@@ -40,6 +40,9 @@ struct fd5_zsa_stateobj {
 	uint32_t rb_depth_cntl;
 	uint32_t rb_stencil_control;
 	uint32_t rb_stencilrefmask;
+	uint32_t rb_stencilrefmask_bf;
+	uint32_t gras_lrz_cntl;
+	bool lrz_write;
 };
 
 static inline struct fd5_zsa_stateobj *

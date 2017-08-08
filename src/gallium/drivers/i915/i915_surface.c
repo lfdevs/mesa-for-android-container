@@ -105,7 +105,7 @@ i915_surface_copy_render(struct pipe_context *pipe,
       goto fallback;
 
    util_blitter_default_dst_texture(&dst_templ, dst, dst_level, dstz);
-   util_blitter_default_src_texture(&src_templ, src, src_level);
+   util_blitter_default_src_texture(i915->blitter, &src_templ, src, src_level);
 
    if (!util_blitter_is_copy_supported(i915->blitter, dst, src))
       goto fallback;

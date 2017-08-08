@@ -54,11 +54,6 @@ struct nv50_ir_varying
    ubyte si; /* TGSI semantic index */
 };
 
-#define NV50_PROGRAM_IR_TGSI 0
-#define NV50_PROGRAM_IR_SM4  1
-#define NV50_PROGRAM_IR_GLSL 2
-#define NV50_PROGRAM_IR_LLVM 3
-
 #ifdef DEBUG
 # define NV50_IR_DEBUG_BASIC     (1 << 0)
 # define NV50_IR_DEBUG_VERBOSE   (2 << 0)
@@ -95,7 +90,7 @@ struct nv50_ir_prog_info
       uint32_t *code;
       uint32_t codeSize;
       uint32_t instructions;
-      uint8_t sourceRep;  /* NV50_PROGRAM_IR */
+      uint8_t sourceRep;  /* PIPE_SHADER_IR_* */
       const void *source;
       void *relocData;
       void *fixupData;
@@ -142,6 +137,7 @@ struct nv50_ir_prog_info
          unsigned numColourResults;
          bool writesDepth;
          bool earlyFragTests;
+         bool postDepthCoverage;
          bool separateFragData;
          bool usesDiscard;
          bool persampleInvocation;

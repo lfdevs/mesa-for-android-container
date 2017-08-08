@@ -27,6 +27,7 @@
 
 #include "i915_context.h"
 #include "main/api_exec.h"
+#include "main/framebuffer.h"
 #include "main/imports.h"
 #include "main/macros.h"
 #include "main/version.h"
@@ -52,14 +53,18 @@
 /* Override intel default.
  */
 static void
-i915InvalidateState(struct gl_context * ctx, GLuint new_state)
+i915InvalidateState(struct gl_context * ctx)
 {
+   GLuint new_state = ctx->NewState;
+
    _swrast_InvalidateState(ctx, new_state);
    _swsetup_InvalidateState(ctx, new_state);
-   _vbo_InvalidateState(ctx, new_state);
    _tnl_InvalidateState(ctx, new_state);
    _tnl_invalidate_vertex_state(ctx, new_state);
    intel_context(ctx)->NewGLState |= new_state;
+
+   if (new_state & (_NEW_SCISSOR | _NEW_BUFFERS | _NEW_VIEWPORT))
+      _mesa_update_draw_buffer_bounds(ctx, ctx->DrawBuffer);
 
    /* Todo: gather state values under which tracked parameters become
     * invalidated, add callbacks for things like

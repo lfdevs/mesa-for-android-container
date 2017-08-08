@@ -1168,8 +1168,8 @@ brw_compile_tes(const struct brw_compiler *compiler,
    const bool is_scalar = compiler->scalar_stage[MESA_SHADER_TESS_EVAL];
 
    nir_shader *nir = nir_shader_clone(mem_ctx, src_shader);
-   nir->info->inputs_read = key->inputs_read;
-   nir->info->patch_inputs_read = key->patch_inputs_read;
+   nir->info.inputs_read = key->inputs_read;
+   nir->info.patch_inputs_read = key->patch_inputs_read;
 
    nir = brw_nir_apply_sampler_key(nir, compiler, &key->tex, is_scalar);
    brw_nir_lower_tes_inputs(nir, input_vue_map);
@@ -1177,8 +1177,8 @@ brw_compile_tes(const struct brw_compiler *compiler,
    nir = brw_postprocess_nir(nir, compiler, is_scalar);
 
    brw_compute_vue_map(devinfo, &prog_data->base.vue_map,
-                       nir->info->outputs_written,
-                       nir->info->separate_shader);
+                       nir->info.outputs_written,
+                       nir->info.separate_shader);
 
    unsigned output_size_bytes = prog_data->base.vue_map.num_slots * 4 * 4;
 
@@ -1190,13 +1190,21 @@ brw_compile_tes(const struct brw_compiler *compiler,
    }
 
    prog_data->base.clip_distance_mask =
-      ((1 << nir->info->clip_distance_array_size) - 1);
+      ((1 << nir->info.clip_distance_array_size) - 1);
    prog_data->base.cull_distance_mask =
-      ((1 << nir->info->cull_distance_array_size) - 1) <<
-      nir->info->clip_distance_array_size;
+      ((1 << nir->info.cull_distance_array_size) - 1) <<
+      nir->info.clip_distance_array_size;
 
    /* URB entry sizes are stored as a multiple of 64 bytes. */
    prog_data->base.urb_entry_size = ALIGN(output_size_bytes, 64) / 64;
+
+   /* On Cannonlake software shall not program an allocation size that
+    * specifies a size that is a multiple of 3 64B (512-bit) cachelines.
+    */
+   if (devinfo->gen == 10 &&
+       prog_data->base.urb_entry_size % 3 == 0)
+      prog_data->base.urb_entry_size++;
+
    prog_data->base.urb_read_length = 0;
 
    STATIC_ASSERT(BRW_TESS_PARTITIONING_INTEGER == TESS_SPACING_EQUAL - 1);
@@ -1206,9 +1214,9 @@ brw_compile_tes(const struct brw_compiler *compiler,
                  TESS_SPACING_FRACTIONAL_EVEN - 1);
 
    prog_data->partitioning =
-      (enum brw_tess_partitioning) (nir->info->tess.spacing - 1);
+      (enum brw_tess_partitioning) (nir->info.tess.spacing - 1);
 
-   switch (nir->info->tess.primitive_mode) {
+   switch (nir->info.tess.primitive_mode) {
    case GL_QUADS:
       prog_data->domain = BRW_TESS_DOMAIN_QUAD;
       break;
@@ -1222,14 +1230,14 @@ brw_compile_tes(const struct brw_compiler *compiler,
       unreachable("invalid domain shader primitive mode");
    }
 
-   if (nir->info->tess.point_mode) {
+   if (nir->info.tess.point_mode) {
       prog_data->output_topology = BRW_TESS_OUTPUT_TOPOLOGY_POINT;
-   } else if (nir->info->tess.primitive_mode == GL_ISOLINES) {
+   } else if (nir->info.tess.primitive_mode == GL_ISOLINES) {
       prog_data->output_topology = BRW_TESS_OUTPUT_TOPOLOGY_LINE;
    } else {
       /* Hardware winding order is backwards from OpenGL */
       prog_data->output_topology =
-         nir->info->tess.ccw ? BRW_TESS_OUTPUT_TOPOLOGY_TRI_CW
+         nir->info.tess.ccw ? BRW_TESS_OUTPUT_TOPOLOGY_TRI_CW
                              : BRW_TESS_OUTPUT_TOPOLOGY_TRI_CCW;
    }
 
@@ -1259,9 +1267,9 @@ brw_compile_tes(const struct brw_compiler *compiler,
       if (unlikely(INTEL_DEBUG & DEBUG_TES)) {
          g.enable_debug(ralloc_asprintf(mem_ctx,
                                         "%s tessellation evaluation shader %s",
-                                        nir->info->label ? nir->info->label
+                                        nir->info.label ? nir->info.label
                                                         : "unnamed",
-                                        nir->info->name));
+                                        nir->info.name));
       }
 
       g.generate_code(v.cfg, 8);

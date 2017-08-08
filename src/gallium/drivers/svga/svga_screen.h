@@ -86,6 +86,7 @@ struct svga_screen
       /** Memory used by all resources (buffers and surfaces) */
       uint64_t total_resource_bytes;
       uint64_t num_resources;
+      uint64_t num_failed_allocations;
    } hud;
 };
 

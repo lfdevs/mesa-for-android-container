@@ -140,10 +140,6 @@ intel_map_texture_image(struct gl_context *ctx,
    /* Our texture data is always stored in a miptree. */
    assert(mt);
 
-   /* Check that our caller wasn't confused about how to map a 1D texture. */
-   assert(tex_image->TexObject->Target != GL_TEXTURE_1D_ARRAY ||
-	  h == 1);
-
    /* intel_miptree_map operates on a unified "slice" number that references the
     * cube face, since it's all just slices to the miptree code.
     */

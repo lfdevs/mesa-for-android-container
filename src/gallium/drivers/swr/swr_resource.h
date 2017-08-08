@@ -96,6 +96,10 @@ swr_resource_data(struct pipe_resource *resource)
 }
 
 
+void swr_invalidate_render_target(struct pipe_context *pipe,
+                                  uint32_t attachment,
+                                  uint16_t width, uint16_t height);
+
 void swr_store_render_target(struct pipe_context *pipe,
                              uint32_t attachment,
                              enum SWR_TILE_STATE post_tile_state);

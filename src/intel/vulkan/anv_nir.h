@@ -35,9 +35,8 @@ void anv_nir_lower_input_attachments(nir_shader *shader);
 
 void anv_nir_lower_push_constants(nir_shader *shader);
 
-void anv_nir_apply_dynamic_offsets(struct anv_pipeline *pipeline,
-                                   nir_shader *shader,
-                                   struct brw_stage_prog_data *prog_data);
+bool anv_nir_lower_multiview(nir_shader *shader, uint32_t view_mask);
+
 void anv_nir_apply_pipeline_layout(struct anv_pipeline *pipeline,
                                    nir_shader *shader,
                                    struct brw_stage_prog_data *prog_data,

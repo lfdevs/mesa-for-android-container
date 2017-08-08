@@ -1,8 +1,8 @@
 /**************************************************************************
- * 
+ *
  * Copyright 2008 VMware, Inc.
  * All Rights Reserved.
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
  * "Software"), to deal in the Software without restriction, including
@@ -10,11 +10,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -22,7 +22,7 @@
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- * 
+ *
  **************************************************************************/
 
 #include "pipe/p_format.h"
@@ -88,10 +88,10 @@ stw_pf_color[] = {
 
 static const struct stw_pf_color_info
 stw_pf_color_extended[] = {
-    { PIPE_FORMAT_R32G32B32A32_FLOAT, { 32,  32, 32,  32}, { 0,  32, 64, 96} }
+   { PIPE_FORMAT_R32G32B32A32_FLOAT, {32, 32, 32, 32}, {0, 32, 64, 96} }
 };
 
-static const struct stw_pf_depth_info 
+static const struct stw_pf_depth_info
 stw_pf_depth_stencil[] = {
    /* pure depth */
    { PIPE_FORMAT_Z32_UNORM,   {32, 0} },
@@ -104,14 +104,14 @@ stw_pf_depth_stencil[] = {
 };
 
 
-static const boolean 
+static const boolean
 stw_pf_doublebuffer[] = {
    FALSE,
    TRUE,
 };
 
 
-const unsigned 
+const unsigned
 stw_pf_multisample[] = {
    0,
    4,
@@ -121,19 +121,18 @@ stw_pf_multisample[] = {
 
 
 static void
-stw_pixelformat_add(
-   struct stw_device *stw_dev,
-   boolean extended,
-   const struct stw_pf_color_info *color,
-   const struct stw_pf_depth_info *depth,
-   unsigned accum,
-   boolean doublebuffer,
-   unsigned samples )
+stw_pixelformat_add(struct stw_device *stw_dev,
+                    boolean extended,
+                    const struct stw_pf_color_info *color,
+                    const struct stw_pf_depth_info *depth,
+                    unsigned accum,
+                    boolean doublebuffer,
+                    unsigned samples)
 {
    struct stw_pixelformat_info *pfi;
-   
+
    assert(stw_dev->pixelformat_extended_count < STW_MAX_PIXELFORMATS);
-   if(stw_dev->pixelformat_extended_count >= STW_MAX_PIXELFORMATS)
+   if (stw_dev->pixelformat_extended_count >= STW_MAX_PIXELFORMATS)
       return;
 
    assert(util_format_get_component_bits(color->format, UTIL_FORMAT_COLORSPACE_RGB, 0) == color->bits.red);
@@ -142,16 +141,16 @@ stw_pixelformat_add(
    assert(util_format_get_component_bits(color->format, UTIL_FORMAT_COLORSPACE_RGB, 3) == color->bits.alpha);
    assert(util_format_get_component_bits(depth->format, UTIL_FORMAT_COLORSPACE_ZS, 0) == depth->bits.depth);
    assert(util_format_get_component_bits(depth->format, UTIL_FORMAT_COLORSPACE_ZS, 1) == depth->bits.stencil);
-   
+
    pfi = &stw_dev->pixelformats[stw_dev->pixelformat_extended_count];
-   
+
    memset(pfi, 0, sizeof *pfi);
-   
+
    pfi->pfd.nSize = sizeof pfi->pfd;
    pfi->pfd.nVersion = 1;
 
    pfi->pfd.dwFlags = PFD_SUPPORT_OPENGL;
-   
+
    /* TODO: also support non-native pixel formats */
    if (!extended) {
       pfi->pfd.dwFlags |= PFD_DRAW_TO_WINDOW;
@@ -162,10 +161,11 @@ stw_pixelformat_add(
 
    if (doublebuffer)
       pfi->pfd.dwFlags |= PFD_DOUBLEBUFFER | PFD_SWAP_EXCHANGE;
-   
+
    pfi->pfd.iPixelType = PFD_TYPE_RGBA;
 
-   pfi->pfd.cColorBits = color->bits.red + color->bits.green + color->bits.blue + color->bits.alpha;
+   pfi->pfd.cColorBits =
+      color->bits.red + color->bits.green + color->bits.blue + color->bits.alpha;
    pfi->pfd.cRedBits = color->bits.red;
    pfi->pfd.cRedShift = color->shift.red;
    pfi->pfd.cGreenBits = color->bits.green;
@@ -204,16 +204,16 @@ stw_pixelformat_add(
 
    pfi->stvis.samples = samples;
    pfi->stvis.render_buffer = ST_ATTACHMENT_INVALID;
-   
+
    /* WGL_ARB_render_texture */
    if (color->bits.alpha)
       pfi->bindToTextureRGBA = TRUE;
-   else
-      pfi->bindToTextureRGB = TRUE;
+
+   pfi->bindToTextureRGB = TRUE;
 
    ++stw_dev->pixelformat_extended_count;
-   
-   if(!extended) {
+
+   if (!extended) {
       ++stw_dev->pixelformat_count;
       assert(stw_dev->pixelformat_count == stw_dev->pixelformat_extended_count);
    }
@@ -225,8 +225,7 @@ stw_pixelformat_add(
  */
 static unsigned
 add_color_format_variants(const struct stw_pf_color_info *color_formats,
-                          unsigned num_color_formats,
-                          boolean extended)
+                          unsigned num_color_formats, boolean extended)
 {
    struct pipe_screen *screen = stw_dev->screen;
    unsigned cfmt, ms, db, ds, acc;
@@ -288,12 +287,12 @@ add_color_format_variants(const struct stw_pf_color_info *color_formats,
 
 
 void
-stw_pixelformat_init( void )
+stw_pixelformat_init(void)
 {
    unsigned num_formats;
 
-   assert( !stw_dev->pixelformat_count );
-   assert( !stw_dev->pixelformat_extended_count );
+   assert(!stw_dev->pixelformat_count);
+   assert(!stw_dev->pixelformat_extended_count);
 
    /* normal, displayable formats */
    num_formats = add_color_format_variants(stw_pf_color,
@@ -304,24 +303,27 @@ stw_pixelformat_init( void )
    add_color_format_variants(stw_pf_color_extended,
                              ARRAY_SIZE(stw_pf_color_extended), TRUE);
 
-   assert( stw_dev->pixelformat_count <= stw_dev->pixelformat_extended_count );
-   assert( stw_dev->pixelformat_extended_count <= STW_MAX_PIXELFORMATS );
+   assert(stw_dev->pixelformat_count <= stw_dev->pixelformat_extended_count);
+   assert(stw_dev->pixelformat_extended_count <= STW_MAX_PIXELFORMATS);
 }
 
+
 uint
-stw_pixelformat_get_count( void )
+stw_pixelformat_get_count(void)
 {
    return stw_dev->pixelformat_count;
 }
 
+
 uint
-stw_pixelformat_get_extended_count( void )
+stw_pixelformat_get_extended_count(void)
 {
    return stw_dev->pixelformat_extended_count;
 }
 
+
 const struct stw_pixelformat_info *
-stw_pixelformat_get_info( int iPixelFormat )
+stw_pixelformat_get_info(int iPixelFormat)
 {
    unsigned index;
 
@@ -339,11 +341,8 @@ stw_pixelformat_get_info( int iPixelFormat )
 
 
 LONG APIENTRY
-DrvDescribePixelFormat(
-   HDC hdc,
-   INT iPixelFormat,
-   ULONG cjpfd,
-   PIXELFORMATDESCRIPTOR *ppfd )
+DrvDescribePixelFormat(HDC hdc, INT iPixelFormat, ULONG cjpfd,
+                       PIXELFORMATDESCRIPTOR *ppfd)
 {
    uint count;
    const struct stw_pixelformat_info *pfi;
@@ -357,70 +356,61 @@ DrvDescribePixelFormat(
 
    if (ppfd == NULL)
       return count;
-   if (cjpfd != sizeof( PIXELFORMATDESCRIPTOR ))
+
+   if (cjpfd != sizeof(PIXELFORMATDESCRIPTOR))
       return 0;
 
-   pfi = stw_pixelformat_get_info( iPixelFormat );
+   pfi = stw_pixelformat_get_info(iPixelFormat);
    if (!pfi) {
       return 0;
    }
-   
-   memcpy(ppfd, &pfi->pfd, sizeof( PIXELFORMATDESCRIPTOR ));
+
+   memcpy(ppfd, &pfi->pfd, sizeof(PIXELFORMATDESCRIPTOR));
 
    return count;
 }
 
+
 BOOL APIENTRY
-DrvDescribeLayerPlane(
-   HDC hdc,
-   INT iPixelFormat,
-   INT iLayerPlane,
-   UINT nBytes,
-   LPLAYERPLANEDESCRIPTOR plpd )
+DrvDescribeLayerPlane(HDC hdc, INT iPixelFormat, INT iLayerPlane,
+                      UINT nBytes, LPLAYERPLANEDESCRIPTOR plpd)
 {
    assert(0);
    return FALSE;
 }
 
+
 int APIENTRY
-DrvGetLayerPaletteEntries(
-   HDC hdc,
-   INT iLayerPlane,
-   INT iStart,
-   INT cEntries,
-   COLORREF *pcr )
+DrvGetLayerPaletteEntries(HDC hdc, INT iLayerPlane, INT iStart,
+                          INT cEntries, COLORREF *pcr)
 {
    assert(0);
    return 0;
 }
 
+
 int APIENTRY
-DrvSetLayerPaletteEntries(
-   HDC hdc,
-   INT iLayerPlane,
-   INT iStart,
-   INT cEntries,
-   CONST COLORREF *pcr )
+DrvSetLayerPaletteEntries(HDC hdc, INT iLayerPlane, INT iStart,
+                          INT cEntries, CONST COLORREF *pcr)
 {
    assert(0);
    return 0;
 }
+
 
 BOOL APIENTRY
-DrvRealizeLayerPalette(
-   HDC hdc,
-   INT iLayerPlane,
-   BOOL bRealize )
+DrvRealizeLayerPalette(HDC hdc, INT iLayerPlane, BOOL bRealize)
 {
    assert(0);
    return FALSE;
 }
+
 
 /* Only used by the wgl code, but have it here to avoid exporting the
  * pixelformat.h functionality.
  */
-int stw_pixelformat_choose( HDC hdc,
-                            CONST PIXELFORMATDESCRIPTOR *ppfd )
+int
+stw_pixelformat_choose(HDC hdc, CONST PIXELFORMATDESCRIPTOR *ppfd)
 {
    uint count;
    uint index;
@@ -435,7 +425,7 @@ int stw_pixelformat_choose( HDC hdc,
 
    for (index = 1; index <= count; index++) {
       uint delta = 0;
-      const struct stw_pixelformat_info *pfi = stw_pixelformat_get_info( index );
+      const struct stw_pixelformat_info *pfi = stw_pixelformat_get_info(index);
 
       if (!(ppfd->dwFlags & PFD_DOUBLEBUFFER_DONTCARE) &&
           !!(ppfd->dwFlags & PFD_DOUBLEBUFFER) !=

@@ -43,11 +43,6 @@
 #include "fd5_format.h"
 #include "fd5_zsa.h"
 
-static const enum adreno_state_block sb[] = {
-	[SHADER_VERTEX]   = SB_VERT_SHADER,
-	[SHADER_FRAGMENT] = SB_FRAG_SHADER,
-};
-
 /* regid:          base const register
  * prsc or dwords: buffer containing constant values
  * sizedwords:     size of const value buffer
@@ -58,32 +53,32 @@ fd5_emit_const(struct fd_ringbuffer *ring, enum shader_t type,
 		const uint32_t *dwords, struct pipe_resource *prsc)
 {
 	uint32_t i, sz;
-	enum adreno_state_src src;
+	enum a4xx_state_src src;
 
 	debug_assert((regid % 4) == 0);
 	debug_assert((sizedwords % 4) == 0);
 
 	if (prsc) {
 		sz = 0;
-		src = 0x2;  // TODO ??
+		src = SS4_INDIRECT;
 	} else {
 		sz = sizedwords;
-		src = SS_DIRECT;
+		src = SS4_DIRECT;
 	}
 
-	OUT_PKT7(ring, CP_LOAD_STATE, 3 + sz);
-	OUT_RING(ring, CP_LOAD_STATE_0_DST_OFF(regid/4) |
-			CP_LOAD_STATE_0_STATE_SRC(src) |
-			CP_LOAD_STATE_0_STATE_BLOCK(sb[type]) |
-			CP_LOAD_STATE_0_NUM_UNIT(sizedwords/4));
+	OUT_PKT7(ring, CP_LOAD_STATE4, 3 + sz);
+	OUT_RING(ring, CP_LOAD_STATE4_0_DST_OFF(regid/4) |
+			CP_LOAD_STATE4_0_STATE_SRC(src) |
+			CP_LOAD_STATE4_0_STATE_BLOCK(fd4_stage2shadersb(type)) |
+			CP_LOAD_STATE4_0_NUM_UNIT(sizedwords/4));
 	if (prsc) {
 		struct fd_bo *bo = fd_resource(prsc)->bo;
 		OUT_RELOC(ring, bo, offset,
-				CP_LOAD_STATE_1_STATE_TYPE(ST_CONSTANTS), 0);
+				CP_LOAD_STATE4_1_STATE_TYPE(ST4_CONSTANTS), 0);
 	} else {
-		OUT_RING(ring, CP_LOAD_STATE_1_EXT_SRC_ADDR(0) |
-				CP_LOAD_STATE_1_STATE_TYPE(ST_CONSTANTS));
-		OUT_RING(ring, CP_LOAD_STATE_2_EXT_SRC_ADDR_HI(0));
+		OUT_RING(ring, CP_LOAD_STATE4_1_EXT_SRC_ADDR(0) |
+				CP_LOAD_STATE4_1_STATE_TYPE(ST4_CONSTANTS));
+		OUT_RING(ring, CP_LOAD_STATE4_2_EXT_SRC_ADDR_HI(0));
 		dwords = (uint32_t *)&((uint8_t *)dwords)[offset];
 	}
 	for (i = 0; i < sz; i++) {
@@ -100,14 +95,14 @@ fd5_emit_const_bo(struct fd_ringbuffer *ring, enum shader_t type, boolean write,
 
 	debug_assert((regid % 4) == 0);
 
-	OUT_PKT7(ring, CP_LOAD_STATE, 3 + (2 * anum));
-	OUT_RING(ring, CP_LOAD_STATE_0_DST_OFF(regid/4) |
-			CP_LOAD_STATE_0_STATE_SRC(SS_DIRECT) |
-			CP_LOAD_STATE_0_STATE_BLOCK(sb[type]) |
-			CP_LOAD_STATE_0_NUM_UNIT(anum/2));
-	OUT_RING(ring, CP_LOAD_STATE_1_EXT_SRC_ADDR(0) |
-			CP_LOAD_STATE_1_STATE_TYPE(ST_CONSTANTS));
-	OUT_RING(ring, CP_LOAD_STATE_2_EXT_SRC_ADDR_HI(0));
+	OUT_PKT7(ring, CP_LOAD_STATE4, 3 + (2 * anum));
+	OUT_RING(ring, CP_LOAD_STATE4_0_DST_OFF(regid/4) |
+			CP_LOAD_STATE4_0_STATE_SRC(SS4_DIRECT) |
+			CP_LOAD_STATE4_0_STATE_BLOCK(fd4_stage2shadersb(type)) |
+			CP_LOAD_STATE4_0_NUM_UNIT(anum/2));
+	OUT_RING(ring, CP_LOAD_STATE4_1_EXT_SRC_ADDR(0) |
+			CP_LOAD_STATE4_1_STATE_TYPE(ST4_CONSTANTS));
+	OUT_RING(ring, CP_LOAD_STATE4_2_EXT_SRC_ADDR_HI(0));
 
 	for (i = 0; i < num; i++) {
 		if (prscs[i]) {
@@ -132,38 +127,6 @@ fd5_emit_const_bo(struct fd_ringbuffer *ring, enum shader_t type, boolean write,
  * the same as a6xx then move this somewhere common ;-)
  *
  * Entry layout looks like (total size, 0x60 bytes):
- *
- *   offset | description
- *   -------+-------------
- *     0x00 | fp32[0]
- *          | fp32[1]
- *          | fp32[2]
- *          | fp32[3]
- *     0x10 | uint16[0]
- *          | uint16[1]
- *          | uint16[2]
- *          | uint16[3]
- *     0x18 | int16[0]
- *          | int16[1]
- *          | int16[2]
- *          | int16[3]
- *     0x20 | fp16[0]
- *          | fp16[1]
- *          | fp16[2]
- *          | fp16[3]
- *     0x28 | ?? maybe padding ??
- *     0x30 | uint8[0]
- *          | uint8[1]
- *          | uint8[2]
- *          | uint8[3]
- *     0x34 | int8[0]
- *          | int8[1]
- *          | int8[2]
- *          | int8[3]
- *     0x38 | ?? maybe padding ??
- *
- * Some uncertainty, because not clear that this actually works properly
- * with blob, so who knows..
  */
 
 struct PACKED bcolor_entry {
@@ -171,22 +134,25 @@ struct PACKED bcolor_entry {
 	uint16_t ui16[4];
 	int16_t  si16[4];
 	uint16_t fp16[4];
-	uint8_t  __pad0[8];
+	uint16_t rgb565;
+	uint16_t rgb5a1;
+	uint16_t rgba4;
+	uint8_t __pad0[2];
 	uint8_t  ui8[4];
 	int8_t   si8[4];
-	uint8_t  __pad1[40];
+	uint32_t rgb10a2;
+	uint32_t z24; /* also s8? */
+	uint8_t  __pad1[32];
 };
 
 #define FD5_BORDER_COLOR_SIZE        0x60
 #define FD5_BORDER_COLOR_UPLOAD_SIZE (2 * PIPE_MAX_SAMPLERS * FD5_BORDER_COLOR_SIZE)
-#define FD5_BORDER_COLOR_OFFSET      8   /* TODO probably should be dynamic */
 
 static void
 setup_border_colors(struct fd_texture_stateobj *tex, struct bcolor_entry *entries)
 {
 	unsigned i, j;
-
-	debug_assert(tex->num_samplers < FD5_BORDER_COLOR_OFFSET);  // TODO
+	STATIC_ASSERT(sizeof(struct bcolor_entry) == FD5_BORDER_COLOR_SIZE);
 
 	for (i = 0; i < tex->num_samplers; i++) {
 		struct bcolor_entry *e = &entries[i];
@@ -213,6 +179,12 @@ setup_border_colors(struct fd_texture_stateobj *tex, struct bcolor_entry *entrie
 		const struct util_format_description *desc =
 				util_format_description(tex->textures[i]->format);
 
+		e->rgb565 = 0;
+		e->rgb5a1 = 0;
+		e->rgba4 = 0;
+		e->rgb10a2 = 0;
+		e->z24 = 0;
+
 		for (j = 0; j < 4; j++) {
 			int c = desc->swizzle[j];
 
@@ -220,23 +192,62 @@ setup_border_colors(struct fd_texture_stateobj *tex, struct bcolor_entry *entrie
 				continue;
 
 			if (desc->channel[c].pure_integer) {
-				float f = bc->i[c];
-
-				e->fp32[j] = fui(f);
-				e->fp16[j] = util_float_to_half(f);
-				e->ui16[j] = bc->ui[c];
-				e->si16[j] = bc->i[c];
-				e->ui8[j]  = bc->ui[c];
-				e->si8[j]  = bc->i[c];
+				uint16_t clamped;
+				switch (desc->channel[c].size) {
+				case 2:
+					assert(desc->channel[c].type == UTIL_FORMAT_TYPE_UNSIGNED);
+					clamped = CLAMP(bc->ui[j], 0, 0x3);
+					break;
+				case 8:
+					if (desc->channel[c].type == UTIL_FORMAT_TYPE_SIGNED)
+						clamped = CLAMP(bc->i[j], -128, 127);
+					else
+						clamped = CLAMP(bc->ui[j], 0, 255);
+					break;
+				case 10:
+					assert(desc->channel[c].type == UTIL_FORMAT_TYPE_UNSIGNED);
+					clamped = CLAMP(bc->ui[j], 0, 0x3ff);
+					break;
+				case 16:
+					if (desc->channel[c].type == UTIL_FORMAT_TYPE_SIGNED)
+						clamped = CLAMP(bc->i[j], -32768, 32767);
+					else
+						clamped = CLAMP(bc->ui[j], 0, 65535);
+					break;
+				default:
+					assert(!"Unexpected bit size");
+				case 32:
+					clamped = 0;
+					break;
+				}
+				e->fp32[c] = bc->ui[j];
+				e->fp16[c] = clamped;
 			} else {
-				float f = bc->f[c];
+				float f = bc->f[j];
+				float f_u = CLAMP(f, 0, 1);
+				float f_s = CLAMP(f, -1, 1);
 
-				e->fp32[j] = fui(f);
-				e->fp16[j] = util_float_to_half(f);
-				e->ui16[j] = f * 65535.0;
-				e->si16[j] = f * 32767.5;
-				e->ui8[j]  = f * 255.0;
-				e->si8[j]  = f * 128.0;
+				e->fp32[c] = fui(f);
+				e->fp16[c] = util_float_to_half(f);
+				e->ui16[c] = f_u * 0xffff;
+				e->si16[c] = f_s * 0x7fff;
+				e->ui8[c]  = f_u * 0xff;
+				e->si8[c]  = f_s * 0x7f;
+				if (c == 1)
+					e->rgb565 |= (int)(f_u * 0x3f) << 5;
+				else if (c < 3)
+					e->rgb565 |= (int)(f_u * 0x1f) << (c ? 11 : 0);
+				if (c == 3)
+					e->rgb5a1 |= (f_u > 0.5) ? 0x8000 : 0;
+				else
+					e->rgb5a1 |= (int)(f_u * 0x1f) << (c * 5);
+				if (c == 3)
+					e->rgb10a2 |= (int)(f_u * 0x3) << 30;
+				else
+					e->rgb10a2 |= (int)(f_u * 0x3ff) << (c * 10);
+				e->rgba4 |= (int)(f_u * 0xf) << (c * 4);
+				if (c == 0)
+					e->z24 = f_u * 0xffffff;
 			}
 		}
 
@@ -265,8 +276,9 @@ emit_border_color(struct fd_context *ctx, struct fd_ringbuffer *ring)
 
 	entries = ptr;
 
-	setup_border_colors(&ctx->verttex, &entries[0]);
-	setup_border_colors(&ctx->fragtex, &entries[ctx->verttex.num_samplers]);
+	setup_border_colors(&ctx->tex[PIPE_SHADER_VERTEX], &entries[0]);
+	setup_border_colors(&ctx->tex[PIPE_SHADER_FRAGMENT],
+			&entries[ctx->tex[PIPE_SHADER_VERTEX].num_samplers]);
 
 	OUT_PKT4(ring, REG_A5XX_TPL1_TP_BORDER_COLOR_BASE_ADDR_LO, 2);
 	OUT_RELOC(ring, fd_resource(fd5_ctx->border_color_buf)->bo, off, 0, 0);
@@ -276,22 +288,22 @@ emit_border_color(struct fd_context *ctx, struct fd_ringbuffer *ring)
 
 static bool
 emit_textures(struct fd_context *ctx, struct fd_ringbuffer *ring,
-		enum adreno_state_block sb, struct fd_texture_stateobj *tex)
+		enum a4xx_state_block sb, struct fd_texture_stateobj *tex)
 {
 	bool needs_border = false;
-	unsigned bcolor_offset = (sb == SB_FRAG_TEX) ? ctx->verttex.num_samplers : 0;
+	unsigned bcolor_offset = (sb == SB4_FS_TEX) ? ctx->tex[PIPE_SHADER_VERTEX].num_samplers : 0;
 	unsigned i;
 
 	if (tex->num_samplers > 0) {
 		/* output sampler state: */
-		OUT_PKT7(ring, CP_LOAD_STATE, 3 + (4 * tex->num_samplers));
-		OUT_RING(ring, CP_LOAD_STATE_0_DST_OFF(0) |
-				CP_LOAD_STATE_0_STATE_SRC(SS_DIRECT) |
-				CP_LOAD_STATE_0_STATE_BLOCK(sb) |
-				CP_LOAD_STATE_0_NUM_UNIT(tex->num_samplers));
-		OUT_RING(ring, CP_LOAD_STATE_1_STATE_TYPE(ST_SHADER) |
-				CP_LOAD_STATE_1_EXT_SRC_ADDR(0));
-		OUT_RING(ring, CP_LOAD_STATE_2_EXT_SRC_ADDR_HI(0));
+		OUT_PKT7(ring, CP_LOAD_STATE4, 3 + (4 * tex->num_samplers));
+		OUT_RING(ring, CP_LOAD_STATE4_0_DST_OFF(0) |
+				CP_LOAD_STATE4_0_STATE_SRC(SS4_DIRECT) |
+				CP_LOAD_STATE4_0_STATE_BLOCK(sb) |
+				CP_LOAD_STATE4_0_NUM_UNIT(tex->num_samplers));
+		OUT_RING(ring, CP_LOAD_STATE4_1_STATE_TYPE(ST4_SHADER) |
+				CP_LOAD_STATE4_1_EXT_SRC_ADDR(0));
+		OUT_RING(ring, CP_LOAD_STATE4_2_EXT_SRC_ADDR_HI(0));
 		for (i = 0; i < tex->num_samplers; i++) {
 			static const struct fd5_sampler_stateobj dummy_sampler = {};
 			const struct fd5_sampler_stateobj *sampler = tex->samplers[i] ?
@@ -311,14 +323,14 @@ emit_textures(struct fd_context *ctx, struct fd_ringbuffer *ring,
 		unsigned num_textures = tex->num_textures;
 
 		/* emit texture state: */
-		OUT_PKT7(ring, CP_LOAD_STATE, 3 + (12 * num_textures));
-		OUT_RING(ring, CP_LOAD_STATE_0_DST_OFF(0) |
-				CP_LOAD_STATE_0_STATE_SRC(SS_DIRECT) |
-				CP_LOAD_STATE_0_STATE_BLOCK(sb) |
-				CP_LOAD_STATE_0_NUM_UNIT(num_textures));
-		OUT_RING(ring, CP_LOAD_STATE_1_STATE_TYPE(ST_CONSTANTS) |
-				CP_LOAD_STATE_1_EXT_SRC_ADDR(0));
-		OUT_RING(ring, CP_LOAD_STATE_2_EXT_SRC_ADDR_HI(0));
+		OUT_PKT7(ring, CP_LOAD_STATE4, 3 + (12 * num_textures));
+		OUT_RING(ring, CP_LOAD_STATE4_0_DST_OFF(0) |
+				CP_LOAD_STATE4_0_STATE_SRC(SS4_DIRECT) |
+				CP_LOAD_STATE4_0_STATE_BLOCK(sb) |
+				CP_LOAD_STATE4_0_NUM_UNIT(num_textures));
+		OUT_RING(ring, CP_LOAD_STATE4_1_STATE_TYPE(ST4_CONSTANTS) |
+				CP_LOAD_STATE4_1_EXT_SRC_ADDR(0));
+		OUT_RING(ring, CP_LOAD_STATE4_2_EXT_SRC_ADDR_HI(0));
 		for (i = 0; i < tex->num_textures; i++) {
 			static const struct fd5_pipe_sampler_view dummy_view = {};
 			const struct fd5_pipe_sampler_view *view = tex->textures[i] ?
@@ -349,6 +361,72 @@ emit_textures(struct fd_context *ctx, struct fd_ringbuffer *ring,
 	return needs_border;
 }
 
+static void
+emit_ssbos(struct fd_context *ctx, struct fd_ringbuffer *ring,
+		enum a4xx_state_block sb, struct fd_shaderbuf_stateobj *so)
+{
+	unsigned count = util_last_bit(so->enabled_mask);
+
+	if (count == 0)
+		return;
+
+	OUT_PKT7(ring, CP_LOAD_STATE4, 3 + (4 * count));
+	OUT_RING(ring, CP_LOAD_STATE4_0_DST_OFF(0) |
+			CP_LOAD_STATE4_0_STATE_SRC(SS4_DIRECT) |
+			CP_LOAD_STATE4_0_STATE_BLOCK(sb) |
+			CP_LOAD_STATE4_0_NUM_UNIT(count));
+	OUT_RING(ring, CP_LOAD_STATE4_1_STATE_TYPE(0) |
+			CP_LOAD_STATE4_1_EXT_SRC_ADDR(0));
+	OUT_RING(ring, CP_LOAD_STATE4_2_EXT_SRC_ADDR_HI(0));
+	for (unsigned i = 0; i < count; i++) {
+		struct pipe_shader_buffer *buf = &so->sb[i];
+		if (buf->buffer) {
+			struct fd_resource *rsc = fd_resource(buf->buffer);
+			OUT_RELOCW(ring, rsc->bo, 0, 0, 0);
+		} else {
+			OUT_RING(ring, 0x00000000);
+			OUT_RING(ring, 0x00000000);
+		}
+		OUT_RING(ring, 0x00000000);
+		OUT_RING(ring, 0x00000000);
+	}
+
+	OUT_PKT7(ring, CP_LOAD_STATE4, 3 + (2 * count));
+	OUT_RING(ring, CP_LOAD_STATE4_0_DST_OFF(0) |
+			CP_LOAD_STATE4_0_STATE_SRC(SS4_DIRECT) |
+			CP_LOAD_STATE4_0_STATE_BLOCK(sb) |
+			CP_LOAD_STATE4_0_NUM_UNIT(count));
+	OUT_RING(ring, CP_LOAD_STATE4_1_STATE_TYPE(1) |
+			CP_LOAD_STATE4_1_EXT_SRC_ADDR(0));
+	OUT_RING(ring, CP_LOAD_STATE4_2_EXT_SRC_ADDR_HI(0));
+	for (unsigned i = 0; i < count; i++) {
+		struct pipe_shader_buffer *buf = &so->sb[i];
+
+		// TODO maybe offset encoded somewhere here??
+		OUT_RING(ring, (buf->buffer_size << 16));
+		OUT_RING(ring, 0x00000000);
+	}
+
+	OUT_PKT7(ring, CP_LOAD_STATE4, 3 + (2 * count));
+	OUT_RING(ring, CP_LOAD_STATE4_0_DST_OFF(0) |
+			CP_LOAD_STATE4_0_STATE_SRC(SS4_DIRECT) |
+			CP_LOAD_STATE4_0_STATE_BLOCK(sb) |
+			CP_LOAD_STATE4_0_NUM_UNIT(count));
+	OUT_RING(ring, CP_LOAD_STATE4_1_STATE_TYPE(2) |
+			CP_LOAD_STATE4_1_EXT_SRC_ADDR(0));
+	OUT_RING(ring, CP_LOAD_STATE4_2_EXT_SRC_ADDR_HI(0));
+	for (unsigned i = 0; i < count; i++) {
+		struct pipe_shader_buffer *buf = &so->sb[i];
+		if (buf->buffer) {
+			struct fd_resource *rsc = fd_resource(buf->buffer);
+			OUT_RELOCW(ring, rsc->bo, 0, 0, 0);
+		} else {
+			OUT_RING(ring, 0x00000000);
+			OUT_RING(ring, 0x00000000);
+		}
+	}
+}
+
 void
 fd5_emit_vertex_bufs(struct fd_ringbuffer *ring, struct fd5_emit *emit)
 {
@@ -363,7 +441,7 @@ fd5_emit_vertex_bufs(struct fd_ringbuffer *ring, struct fd5_emit *emit)
 			struct pipe_vertex_element *elem = &vtx->vtx->pipe[i];
 			const struct pipe_vertex_buffer *vb =
 					&vtx->vertexbuf.vb[elem->vertex_buffer_index];
-			struct fd_resource *rsc = fd_resource(vb->buffer);
+			struct fd_resource *rsc = fd_resource(vb->buffer.resource);
 			enum pipe_format pfmt = elem->src_format;
 			enum a5xx_vtx_fmt fmt = fd5_pipe2vtx(pfmt);
 			bool isint = util_format_is_pure_integer(pfmt);
@@ -380,6 +458,7 @@ fd5_emit_vertex_bufs(struct fd_ringbuffer *ring, struct fd5_emit *emit)
 			OUT_RING(ring, A5XX_VFD_DECODE_INSTR_IDX(j) |
 					A5XX_VFD_DECODE_INSTR_FORMAT(fmt) |
 					COND(elem->instance_divisor, A5XX_VFD_DECODE_INSTR_INSTANCED) |
+					A5XX_VFD_DECODE_INSTR_SWAP(fd5_pipe2swap(pfmt)) |
 					A5XX_VFD_DECODE_INSTR_UNK30 |
 					COND(!isint, A5XX_VFD_DECODE_INSTR_FLOAT));
 			OUT_RING(ring, MAX2(1, elem->instance_divisor)); /* VFD_DECODE[j].STEP_RATE */
@@ -400,15 +479,15 @@ void
 fd5_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 		struct fd5_emit *emit)
 {
+	struct pipe_framebuffer_state *pfb = &ctx->batch->framebuffer;
 	const struct ir3_shader_variant *vp = fd5_emit_get_vp(emit);
 	const struct ir3_shader_variant *fp = fd5_emit_get_fp(emit);
-	uint32_t dirty = emit->dirty;
+	const enum fd_dirty_3d_state dirty = emit->dirty;
 	bool needs_border = false;
 
 	emit_marker5(ring, 5);
 
 	if ((dirty & FD_DIRTY_FRAMEBUFFER) && !emit->key.binning_pass) {
-		struct pipe_framebuffer_state *pfb = &ctx->batch->framebuffer;
 		unsigned char mrt_comp[A5XX_MAX_RENDER_TARGETS] = {0};
 
 		for (unsigned i = 0; i < A5XX_MAX_RENDER_TARGETS; i++) {
@@ -428,7 +507,6 @@ fd5_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 
 	if (dirty & (FD_DIRTY_ZSA | FD_DIRTY_FRAMEBUFFER)) {
 		struct fd5_zsa_stateobj *zsa = fd5_zsa_stateobj(ctx->zsa);
-		struct pipe_framebuffer_state *pfb = &ctx->batch->framebuffer;
 		uint32_t rb_alpha_control = zsa->rb_alpha_control;
 
 		if (util_format_is_pure_integer(pipe_surface_format(pfb->cbufs[0])))
@@ -441,13 +519,33 @@ fd5_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 		OUT_RING(ring, zsa->rb_stencil_control);
 	}
 
+	if (dirty & (FD_DIRTY_ZSA | FD_DIRTY_BLEND | FD_DIRTY_PROG)) {
+		struct fd5_blend_stateobj *blend = fd5_blend_stateobj(ctx->blend);
+		struct fd5_zsa_stateobj *zsa = fd5_zsa_stateobj(ctx->zsa);
+
+		if (pfb->zsbuf) {
+			struct fd_resource *rsc = fd_resource(pfb->zsbuf->texture);
+			uint32_t gras_lrz_cntl = zsa->gras_lrz_cntl;
+
+			if (emit->no_lrz_write || !rsc->lrz || !rsc->lrz_valid)
+				gras_lrz_cntl = 0;
+			else if (emit->key.binning_pass && blend->lrz_write && zsa->lrz_write)
+				gras_lrz_cntl |= A5XX_GRAS_LRZ_CNTL_LRZ_WRITE;
+
+			OUT_PKT4(ring, REG_A5XX_GRAS_LRZ_CNTL, 1);
+			OUT_RING(ring, gras_lrz_cntl);
+		}
+	}
+
 	if (dirty & (FD_DIRTY_ZSA | FD_DIRTY_STENCIL_REF)) {
 		struct fd5_zsa_stateobj *zsa = fd5_zsa_stateobj(ctx->zsa);
 		struct pipe_stencil_ref *sr = &ctx->stencil_ref;
 
-		OUT_PKT4(ring, REG_A5XX_RB_STENCILREFMASK, 1);
+		OUT_PKT4(ring, REG_A5XX_RB_STENCILREFMASK, 2);
 		OUT_RING(ring, zsa->rb_stencilrefmask |
 				A5XX_RB_STENCILREFMASK_STENCILREF(sr->ref_value[0]));
+		OUT_RING(ring, zsa->rb_stencilrefmask_bf |
+				A5XX_RB_STENCILREFMASK_BF_STENCILREF(sr->ref_value[1]));
 	}
 
 	if (dirty & (FD_DIRTY_ZSA | FD_DIRTY_RASTERIZER | FD_DIRTY_PROG)) {
@@ -464,39 +562,6 @@ fd5_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 		OUT_PKT4(ring, REG_A5XX_GRAS_SU_DEPTH_PLANE_CNTL, 1);
 		OUT_RING(ring, COND(fragz, A5XX_GRAS_SU_DEPTH_PLANE_CNTL_FRAG_WRITES_Z) |
 				COND(fragz && fp->frag_coord, A5XX_GRAS_SU_DEPTH_PLANE_CNTL_UNK1));
-	}
-
-	if (dirty & FD_DIRTY_RASTERIZER) {
-		struct fd5_rasterizer_stateobj *rasterizer =
-				fd5_rasterizer_stateobj(ctx->rasterizer);
-
-		OUT_PKT4(ring, REG_A5XX_GRAS_SU_CNTL, 1);
-		OUT_RING(ring, rasterizer->gras_su_cntl);
-
-		OUT_PKT4(ring, REG_A5XX_GRAS_SU_POINT_MINMAX, 2);
-		OUT_RING(ring, rasterizer->gras_su_point_minmax);
-		OUT_RING(ring, rasterizer->gras_su_point_size);
-
-		OUT_PKT4(ring, REG_A5XX_GRAS_SU_POLY_OFFSET_SCALE, 3);
-		OUT_RING(ring, rasterizer->gras_su_poly_offset_scale);
-		OUT_RING(ring, rasterizer->gras_su_poly_offset_offset);
-		OUT_RING(ring, rasterizer->gras_su_poly_offset_clamp);
-	}
-
-	/* NOTE: since primitive_restart is not actually part of any
-	 * state object, we need to make sure that we always emit
-	 * PRIM_VTX_CNTL.. either that or be more clever and detect
-	 * when it changes.
-	 */
-	if (emit->info) {
-		struct fd5_rasterizer_stateobj *rast =
-			fd5_rasterizer_stateobj(ctx->rasterizer);
-		uint32_t val = rast->pc_prim_vtx_cntl;
-
-		val |= COND(vp->writes_psize, A5XX_PC_PRIM_VTX_CNTL_PSIZE);
-
-		OUT_PKT4(ring, REG_A5XX_PC_PRIM_VTX_CNTL, 1);
-		OUT_RING(ring, val);
 	}
 
 	if (dirty & FD_DIRTY_SCISSOR) {
@@ -532,10 +597,52 @@ fd5_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 	}
 
 	if (dirty & FD_DIRTY_PROG)
-		fd5_program_emit(ring, emit);
+		fd5_program_emit(ctx, ring, emit);
 
-	if (dirty & (FD_DIRTY_FRAMEBUFFER | FD_DIRTY_RASTERIZER)) {
-		struct pipe_framebuffer_state *pfb = &ctx->batch->framebuffer;
+	if (dirty & FD_DIRTY_RASTERIZER) {
+		struct fd5_rasterizer_stateobj *rasterizer =
+				fd5_rasterizer_stateobj(ctx->rasterizer);
+
+		OUT_PKT4(ring, REG_A5XX_GRAS_SU_CNTL, 1);
+		OUT_RING(ring, rasterizer->gras_su_cntl);
+
+		OUT_PKT4(ring, REG_A5XX_GRAS_SU_POINT_MINMAX, 2);
+		OUT_RING(ring, rasterizer->gras_su_point_minmax);
+		OUT_RING(ring, rasterizer->gras_su_point_size);
+
+		OUT_PKT4(ring, REG_A5XX_GRAS_SU_POLY_OFFSET_SCALE, 3);
+		OUT_RING(ring, rasterizer->gras_su_poly_offset_scale);
+		OUT_RING(ring, rasterizer->gras_su_poly_offset_offset);
+		OUT_RING(ring, rasterizer->gras_su_poly_offset_clamp);
+
+		OUT_PKT4(ring, REG_A5XX_PC_RASTER_CNTL, 1);
+		OUT_RING(ring, rasterizer->pc_raster_cntl);
+
+		OUT_PKT4(ring, REG_A5XX_GRAS_CL_CNTL, 1);
+		OUT_RING(ring, rasterizer->gras_cl_clip_cntl);
+	}
+
+	/* note: must come after program emit.. because there is some overlap
+	 * in registers, ex. PC_PRIMITIVE_CNTL and we rely on some cached
+	 * values from fd5_program_emit() to avoid having to re-emit the prog
+	 * every time rast state changes.
+	 *
+	 * Since the primitive restart state is not part of a tracked object, we
+	 * re-emit this register every time.
+	 */
+	if (emit->info && ctx->rasterizer) {
+		struct fd5_rasterizer_stateobj *rasterizer =
+				fd5_rasterizer_stateobj(ctx->rasterizer);
+		unsigned max_loc = fd5_context(ctx)->max_loc;
+
+		OUT_PKT4(ring, REG_A5XX_PC_PRIMITIVE_CNTL, 1);
+		OUT_RING(ring, rasterizer->pc_primitive_cntl |
+				 A5XX_PC_PRIMITIVE_CNTL_STRIDE_IN_VPC(max_loc) |
+				 COND(emit->info->primitive_restart && emit->info->index_size,
+					  A5XX_PC_PRIMITIVE_CNTL_PRIMITIVE_RESTART));
+	}
+
+	if (dirty & (FD_DIRTY_FRAMEBUFFER | FD_DIRTY_RASTERIZER | FD_DIRTY_PROG)) {
 		uint32_t posz_regid = ir3_find_output_regid(fp, FRAG_RESULT_DEPTH);
 		unsigned nr = pfb->nr_cbufs;
 
@@ -555,9 +662,9 @@ fd5_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 	}
 
 	if (emit->prog == &ctx->prog) { /* evil hack to deal sanely with clear path */
-		ir3_emit_consts(vp, ring, ctx, emit->info, dirty);
+		ir3_emit_vs_consts(vp, ring, ctx, emit->info);
 		if (!emit->key.binning_pass)
-			ir3_emit_consts(fp, ring, ctx, emit->info, dirty);
+			ir3_emit_fs_consts(fp, ring, ctx);
 
 		struct pipe_stream_output_info *info = &vp->shader->stream_output;
 		if (info->num_outputs) {
@@ -595,8 +702,7 @@ fd5_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 		uint32_t i;
 
 		for (i = 0; i < A5XX_MAX_RENDER_TARGETS; i++) {
-			enum pipe_format format = pipe_surface_format(
-					ctx->batch->framebuffer.cbufs[i]);
+			enum pipe_format format = pipe_surface_format(pfb->cbufs[i]);
 			bool is_int = util_format_is_pure_integer(format);
 			bool has_alpha = util_format_has_alpha(format);
 			uint32_t control = blend->rb_mrt[i].control;
@@ -604,7 +710,7 @@ fd5_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 
 			if (is_int) {
 				control &= A5XX_RB_MRT_CONTROL_COMPONENT_ENABLE__MASK;
-//				control |= A5XX_RB_MRT_CONTROL_ROP_CODE(ROP_COPY);
+				control |= A5XX_RB_MRT_CONTROL_ROP_CODE(ROP_COPY);
 			}
 
 			if (has_alpha) {
@@ -626,7 +732,7 @@ fd5_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 				A5XX_RB_BLEND_CNTL_SAMPLE_MASK(0xffff));
 
 		OUT_PKT4(ring, REG_A5XX_SP_BLEND_CNTL, 1);
-		OUT_RING(ring, 0x00000100);
+		OUT_RING(ring, blend->sp_blend_cntl);
 	}
 
 	if (dirty & FD_DIRTY_BLEND_COLOR) {
@@ -651,30 +757,65 @@ fd5_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 		OUT_RING(ring, A5XX_RB_BLEND_ALPHA_F32(bcolor->color[3]));
 	}
 
-	if (dirty & FD_DIRTY_VERTTEX) {
-		if (vp->has_samp) {
-			needs_border |= emit_textures(ctx, ring, SB_VERT_TEX, &ctx->verttex);
-			OUT_PKT4(ring, REG_A5XX_TPL1_VS_TEX_COUNT, 1);
-			OUT_RING(ring, ctx->verttex.num_textures);
-		} else {
-			dirty &= ~FD_DIRTY_VERTTEX;
-		}
+	if (ctx->dirty_shader[PIPE_SHADER_VERTEX] & FD_DIRTY_SHADER_TEX) {
+		needs_border |= emit_textures(ctx, ring, SB4_VS_TEX,
+				&ctx->tex[PIPE_SHADER_VERTEX]);
+		OUT_PKT4(ring, REG_A5XX_TPL1_VS_TEX_COUNT, 1);
+		OUT_RING(ring, ctx->tex[PIPE_SHADER_VERTEX].num_textures);
 	}
 
-	if (dirty & FD_DIRTY_FRAGTEX) {
-		if (fp->has_samp) {
-			needs_border |= emit_textures(ctx, ring, SB_FRAG_TEX, &ctx->fragtex);
-			OUT_PKT4(ring, REG_A5XX_TPL1_FS_TEX_COUNT, 1);
-			OUT_RING(ring, ctx->fragtex.num_textures);
-		} else {
-			dirty &= ~FD_DIRTY_FRAGTEX;
-		}
+	if (ctx->dirty_shader[PIPE_SHADER_FRAGMENT] & FD_DIRTY_SHADER_TEX) {
+		needs_border |= emit_textures(ctx, ring, SB4_FS_TEX,
+				&ctx->tex[PIPE_SHADER_FRAGMENT]);
+		OUT_PKT4(ring, REG_A5XX_TPL1_FS_TEX_COUNT, 1);
+		OUT_RING(ring, ctx->tex[PIPE_SHADER_FRAGMENT].num_textures);
 	}
+
+	OUT_PKT4(ring, REG_A5XX_TPL1_CS_TEX_COUNT, 1);
+	OUT_RING(ring, 0);
 
 	if (needs_border)
 		emit_border_color(ctx, ring);
 
-	ctx->dirty &= ~dirty;
+	if (ctx->dirty_shader[PIPE_SHADER_FRAGMENT] & FD_DIRTY_SHADER_SSBO)
+		emit_ssbos(ctx, ring, SB4_SSBO, &ctx->shaderbuf[PIPE_SHADER_FRAGMENT]);
+}
+
+void
+fd5_emit_cs_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
+		struct ir3_shader_variant *cp)
+{
+	enum fd_dirty_shader_state dirty = ctx->dirty_shader[PIPE_SHADER_COMPUTE];
+
+	if (dirty & FD_DIRTY_SHADER_TEX) {
+		bool needs_border = false;
+		needs_border |= emit_textures(ctx, ring, SB4_CS_TEX,
+				&ctx->tex[PIPE_SHADER_COMPUTE]);
+
+		if (needs_border)
+			emit_border_color(ctx, ring);
+
+		OUT_PKT4(ring, REG_A5XX_TPL1_VS_TEX_COUNT, 1);
+		OUT_RING(ring, 0);
+
+		OUT_PKT4(ring, REG_A5XX_TPL1_HS_TEX_COUNT, 1);
+		OUT_RING(ring, 0);
+
+		OUT_PKT4(ring, REG_A5XX_TPL1_DS_TEX_COUNT, 1);
+		OUT_RING(ring, 0);
+
+		OUT_PKT4(ring, REG_A5XX_TPL1_GS_TEX_COUNT, 1);
+		OUT_RING(ring, 0);
+
+		OUT_PKT4(ring, REG_A5XX_TPL1_FS_TEX_COUNT, 1);
+		OUT_RING(ring, 0);
+
+		OUT_PKT4(ring, REG_A5XX_TPL1_CS_TEX_COUNT, 1);
+		OUT_RING(ring, ctx->tex[PIPE_SHADER_COMPUTE].num_textures);
+	}
+
+	if (dirty & FD_DIRTY_SHADER_SSBO)
+		emit_ssbos(ctx, ring, SB4_CS_SSBO, &ctx->shaderbuf[PIPE_SHADER_COMPUTE]);
 }
 
 /* emit setup at begin of new cmdstream buffer (don't rely on previous
@@ -706,9 +847,6 @@ t7              opcode: CP_WAIT_FOR_IDLE (26) (1 dwords)
 
 	OUT_PKT4(ring, REG_A5XX_PC_RASTER_CNTL, 1);
 	OUT_RING(ring, 0x00000012);
-
-	OUT_PKT4(ring, REG_A5XX_GRAS_LRZ_CNTL, 1);
-	OUT_RING(ring, 0x00000000);
 
 	OUT_PKT4(ring, REG_A5XX_GRAS_SU_POINT_MINMAX, 2);
 	OUT_RING(ring, A5XX_GRAS_SU_POINT_MINMAX_MIN(1.0) |
@@ -773,10 +911,6 @@ t7              opcode: CP_WAIT_FOR_IDLE (26) (1 dwords)
 	OUT_RING(ring, CP_SET_DRAW_STATE__1_ADDR_LO(0));
 	OUT_RING(ring, CP_SET_DRAW_STATE__2_ADDR_HI(0));
 
-	/* other regs not used (yet?) and always seem to have same value: */
-	OUT_PKT4(ring, REG_A5XX_GRAS_CL_CNTL, 1);
-	OUT_RING(ring, 0x00000080);   /* GRAS_CL_CNTL */
-
 	OUT_PKT4(ring, REG_A5XX_GRAS_SU_CONSERVATIVE_RAS_CNTL, 1);
 	OUT_RING(ring, 0x00000000);   /* GRAS_SU_CONSERVATIVE_RAS_CNTL */
 
@@ -818,9 +952,6 @@ t7              opcode: CP_WAIT_FOR_IDLE (26) (1 dwords)
 
 	OUT_PKT4(ring, REG_A5XX_UNKNOWN_E093, 1);
 	OUT_RING(ring, 0x00000000);   /* UNKNOWN_E093 */
-
-	OUT_PKT4(ring, REG_A5XX_UNKNOWN_E1C7, 1);
-	OUT_RING(ring, 0x00000000);   /* UNKNOWN_E1C7 */
 
 	OUT_PKT4(ring, REG_A5XX_UNKNOWN_E29A, 1);
 	OUT_RING(ring, 0x00ffff00);   /* UNKNOWN_E29A */
@@ -917,12 +1048,6 @@ t7              opcode: CP_WAIT_FOR_IDLE (26) (1 dwords)
 	OUT_RING(ring, 0x00000000);
 	OUT_RING(ring, 0x00000000);
 	OUT_RING(ring, 0x00000000);
-
-	// TODO hacks.. these should not be hardcoded:
-	OUT_PKT4(ring, REG_A5XX_GRAS_SC_CNTL, 1);
-	OUT_RING(ring, 0x00000008);   /* GRAS_SC_CNTL */
-
-	fd_hw_query_enable(batch, ring);
 }
 
 static void

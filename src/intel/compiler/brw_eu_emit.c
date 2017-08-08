@@ -306,7 +306,7 @@ validate_reg(const struct gen_device_info *devinfo,
        reg.nr == BRW_ARF_ACCUMULATOR)
       assert(reg.swizzle == BRW_SWIZZLE_XYZW);
 
-   assert(reg.hstride >= 0 && reg.hstride < ARRAY_SIZE(hstride_for_reg));
+   assert(reg.hstride < ARRAY_SIZE(hstride_for_reg));
    hstride = hstride_for_reg[reg.hstride];
 
    if (reg.vstride == 0xf) {

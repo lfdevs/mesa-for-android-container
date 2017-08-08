@@ -112,6 +112,7 @@ calculate_tiles(struct fd_batch *batch)
 	struct pipe_framebuffer_state *pfb = &batch->framebuffer;
 	const uint32_t gmem_alignw = ctx->screen->gmem_alignw;
 	const uint32_t gmem_alignh = ctx->screen->gmem_alignh;
+	const unsigned npipes = ctx->screen->num_vsc_pipes;
 	const uint32_t gmem_size = ctx->screen->gmemsize_bytes;
 	uint32_t minx, miny, width, height;
 	uint32_t nbins_x = 1, nbins_y = 1;
@@ -121,7 +122,7 @@ calculate_tiles(struct fd_batch *batch)
 	uint32_t i, j, t, xoff, yoff;
 	uint32_t tpp_x, tpp_y;
 	bool has_zs = !!(batch->resolve & (FD_BUFFER_DEPTH | FD_BUFFER_STENCIL));
-	int tile_n[ARRAY_SIZE(ctx->pipe)];
+	int tile_n[npipes];
 
 	if (has_zs) {
 		struct fd_resource *rsc = fd_resource(pfb->zsbuf->texture);
@@ -224,7 +225,7 @@ calculate_tiles(struct fd_batch *batch)
 
 	/* configure pipes: */
 	xoff = yoff = 0;
-	for (i = 0; i < ARRAY_SIZE(ctx->pipe); i++) {
+	for (i = 0; i < npipes; i++) {
 		struct fd_vsc_pipe *pipe = &ctx->pipe[i];
 
 		if (xoff >= nbins_x) {
@@ -244,7 +245,7 @@ calculate_tiles(struct fd_batch *batch)
 		xoff += tpp_x;
 	}
 
-	for (; i < ARRAY_SIZE(ctx->pipe); i++) {
+	for (; i < npipes; i++) {
 		struct fd_vsc_pipe *pipe = &ctx->pipe[i];
 		pipe->x = pipe->y = pipe->w = pipe->h = 0;
 	}
@@ -335,7 +336,8 @@ render_tiles(struct fd_batch *batch)
 
 		ctx->emit_tile_renderprep(batch, tile);
 
-		fd_hw_query_prepare_tile(batch, i, batch->gmem);
+		if (ctx->query_prepare_tile)
+			ctx->query_prepare_tile(batch, i, batch->gmem);
 
 		/* emit IB to drawcmds: */
 		ctx->emit_ib(batch->gmem, batch->draw);
@@ -356,7 +358,8 @@ render_sysmem(struct fd_batch *batch)
 
 	ctx->emit_sysmem_prep(batch);
 
-	fd_hw_query_prepare_tile(batch, 0, batch->gmem);
+	if (ctx->query_prepare_tile)
+		ctx->query_prepare_tile(batch, 0, batch->gmem);
 
 	/* emit IB to drawcmds: */
 	ctx->emit_ib(batch->gmem, batch->draw);
@@ -405,7 +408,8 @@ fd_gmem_render_tiles(struct fd_batch *batch)
 			batch, pfb->width, pfb->height,
 			util_format_short_name(pipe_surface_format(pfb->cbufs[0])),
 			util_format_short_name(pipe_surface_format(pfb->zsbuf)));
-		fd_hw_query_prepare(batch, 1);
+		if (ctx->query_prepare)
+			ctx->query_prepare(batch, 1);
 		render_sysmem(batch);
 		ctx->stats.batch_sysmem++;
 	} else {
@@ -415,7 +419,8 @@ fd_gmem_render_tiles(struct fd_batch *batch)
 			batch, pfb->width, pfb->height, gmem->nbins_x, gmem->nbins_y,
 			util_format_short_name(pipe_surface_format(pfb->cbufs[0])),
 			util_format_short_name(pipe_surface_format(pfb->zsbuf)));
-		fd_hw_query_prepare(batch, gmem->nbins_x * gmem->nbins_y);
+		if (ctx->query_prepare)
+			ctx->query_prepare(batch, gmem->nbins_x * gmem->nbins_y);
 		render_tiles(batch);
 		ctx->stats.batch_gmem++;
 	}
@@ -435,6 +440,13 @@ fd_gmem_render_noop(struct fd_batch *batch)
 	pctx->emit_string_marker(pctx, "noop", 4);
 	/* emit IB to drawcmds (which contain the string marker): */
 	ctx->emit_ib(batch->gmem, batch->draw);
+	flush_ring(batch);
+}
+
+void
+fd_gmem_flush_compute(struct fd_batch *batch)
+{
+	render_sysmem(batch);
 	flush_ring(batch);
 }
 

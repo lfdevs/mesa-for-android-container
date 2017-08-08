@@ -857,14 +857,29 @@ namespace {
       const unsigned end = start + inst->exec_size;
       return ((1 << DIV_ROUND_UP(end, 8)) - 1) & ~((1 << (start / 8)) - 1);
    }
+
+   unsigned
+   bit_mask(unsigned n)
+   {
+      return (n >= CHAR_BIT * sizeof(bit_mask(n)) ? ~0u : (1u << n) - 1);
+   }
+
+   unsigned
+   flag_mask(const fs_reg &r, unsigned sz)
+   {
+      if (r.file == ARF) {
+         const unsigned start = (r.nr - BRW_ARF_FLAG) * 4 + r.subnr;
+         const unsigned end = start + sz;
+         return bit_mask(end) & ~bit_mask(start);
+      } else {
+         return 0;
+      }
+   }
 }
 
 unsigned
 fs_inst::flags_read(const gen_device_info *devinfo) const
 {
-   /* XXX - This doesn't consider explicit uses of the flag register as source
-    *       region.
-    */
    if (predicate == BRW_PREDICATE_ALIGN1_ANYV ||
        predicate == BRW_PREDICATE_ALIGN1_ALLV) {
       /* The vertical predication modes combine corresponding bits from
@@ -875,23 +890,24 @@ fs_inst::flags_read(const gen_device_info *devinfo) const
    } else if (predicate) {
       return flag_mask(this);
    } else {
-      return 0;
+      unsigned mask = 0;
+      for (int i = 0; i < sources; i++) {
+         mask |= flag_mask(src[i], size_read(i));
+      }
+      return mask;
    }
 }
 
 unsigned
 fs_inst::flags_written() const
 {
-   /* XXX - This doesn't consider explicit uses of the flag register as
-    *       destination region.
-    */
    if ((conditional_mod && (opcode != BRW_OPCODE_SEL &&
                             opcode != BRW_OPCODE_IF &&
                             opcode != BRW_OPCODE_WHILE)) ||
        opcode == FS_OPCODE_MOV_DISPATCH_TO_FLAGS) {
       return flag_mask(this);
    } else {
-      return 0;
+      return flag_mask(dst, size_written);
    }
 }
 
@@ -1383,7 +1399,16 @@ fs_visitor::emit_gs_thread_end()
 void
 fs_visitor::assign_curb_setup()
 {
-   prog_data->curb_read_length = ALIGN(stage_prog_data->nr_params, 8) / 8;
+   unsigned uniform_push_length = DIV_ROUND_UP(stage_prog_data->nr_params, 8);
+
+   unsigned ubo_push_length = 0;
+   unsigned ubo_push_start[4];
+   for (int i = 0; i < 4; i++) {
+      ubo_push_start[i] = 8 * (ubo_push_length + uniform_push_length);
+      ubo_push_length += stage_prog_data->ubo_ranges[i].length;
+   }
+
+   prog_data->curb_read_length = uniform_push_length + ubo_push_length;
 
    /* Map the offsets in the UNIFORM file to fixed HW regs. */
    foreach_block_and_inst(block, fs_inst, inst, cfg) {
@@ -1391,7 +1416,11 @@ fs_visitor::assign_curb_setup()
 	 if (inst->src[i].file == UNIFORM) {
             int uniform_nr = inst->src[i].nr + inst->src[i].offset / 4;
             int constant_nr;
-            if (uniform_nr >= 0 && uniform_nr < (int) uniforms) {
+            if (inst->src[i].nr >= UBO_START) {
+               /* constant_nr is in 32-bit units, the rest are in bytes */
+               constant_nr = ubo_push_start[inst->src[i].nr - UBO_START] +
+                             inst->src[i].offset / 4;
+            } else if (uniform_nr >= 0 && uniform_nr < (int) uniforms) {
                constant_nr = push_constant_loc[uniform_nr];
             } else {
                /* Section 5.11 of the OpenGL 4.1 spec says:
@@ -1433,7 +1462,7 @@ fs_visitor::calculate_urb_setup()
    int urb_next = 0;
    /* Figure out where each of the incoming setup attributes lands. */
    if (devinfo->gen >= 6) {
-      if (_mesa_bitcount_64(nir->info->inputs_read &
+      if (_mesa_bitcount_64(nir->info.inputs_read &
                             BRW_FS_VARYING_INPUT_MASK) <= 16) {
          /* The SF/SBE pipeline stage can do arbitrary rearrangement of the
           * first 16 varying inputs, so we can put them wherever we want.
@@ -1445,14 +1474,14 @@ fs_visitor::calculate_urb_setup()
           * a different vertex (or geometry) shader.
           */
          for (unsigned int i = 0; i < VARYING_SLOT_MAX; i++) {
-            if (nir->info->inputs_read & BRW_FS_VARYING_INPUT_MASK &
+            if (nir->info.inputs_read & BRW_FS_VARYING_INPUT_MASK &
                 BITFIELD64_BIT(i)) {
                prog_data->urb_setup[i] = urb_next++;
             }
          }
       } else {
          bool include_vue_header =
-            nir->info->inputs_read & (VARYING_BIT_LAYER | VARYING_BIT_VIEWPORT);
+            nir->info.inputs_read & (VARYING_BIT_LAYER | VARYING_BIT_VIEWPORT);
 
          /* We have enough input varyings that the SF/SBE pipeline stage can't
           * arbitrarily rearrange them to suit our whim; we have to put them
@@ -1462,7 +1491,7 @@ fs_visitor::calculate_urb_setup()
          struct brw_vue_map prev_stage_vue_map;
          brw_compute_vue_map(devinfo, &prev_stage_vue_map,
                              key->input_slots_valid,
-                             nir->info->separate_shader);
+                             nir->info.separate_shader);
          int first_slot =
             include_vue_header ? 0 : 2 * BRW_SF_URB_ENTRY_READ_OFFSET;
 
@@ -1471,7 +1500,7 @@ fs_visitor::calculate_urb_setup()
               slot++) {
             int varying = prev_stage_vue_map.slot_to_varying[slot];
             if (varying != BRW_VARYING_SLOT_PAD &&
-                (nir->info->inputs_read & BRW_FS_VARYING_INPUT_MASK &
+                (nir->info.inputs_read & BRW_FS_VARYING_INPUT_MASK &
                  BITFIELD64_BIT(varying))) {
                prog_data->urb_setup[varying] = slot - first_slot;
             }
@@ -1504,7 +1533,7 @@ fs_visitor::calculate_urb_setup()
        *
        * See compile_sf_prog() for more info.
        */
-      if (nir->info->inputs_read & BITFIELD64_BIT(VARYING_SLOT_PNTC))
+      if (nir->info.inputs_read & BITFIELD64_BIT(VARYING_SLOT_PNTC))
          prog_data->urb_setup[VARYING_SLOT_PNTC] = urb_next++;
    }
 
@@ -1631,7 +1660,7 @@ fs_visitor::assign_gs_urb_setup()
    struct brw_vue_prog_data *vue_prog_data = brw_vue_prog_data(prog_data);
 
    first_non_payload_grf +=
-      8 * vue_prog_data->urb_read_length * nir->info->gs.vertices_in;
+      8 * vue_prog_data->urb_read_length * nir->info.gs.vertices_in;
 
    foreach_block_and_inst(block, fs_inst, inst, cfg) {
       /* Rewrite all ATTR file references to GRFs. */
@@ -2062,6 +2091,20 @@ fs_visitor::assign_constant_locations()
    stage_prog_data->nr_params = num_push_constants;
    stage_prog_data->nr_pull_params = num_pull_constants;
 
+   /* Now that we know how many regular uniforms we'll push, reduce the
+    * UBO push ranges so we don't exceed the 3DSTATE_CONSTANT limits.
+    */
+   unsigned push_length = DIV_ROUND_UP(stage_prog_data->nr_params, 8);
+   for (int i = 0; i < 4; i++) {
+      struct brw_ubo_range *range = &prog_data->ubo_ranges[i];
+
+      if (push_length + range->length > 64)
+         range->length = 64 - push_length;
+
+      push_length += range->length;
+   }
+   assert(push_length <= 64);
+
    /* Up until now, the param[] array has been indexed by reg + offset
     * of UNIFORM registers.  Move pull constants into pull_param[] and
     * condense param[] to only contain the uniforms we chose to push.
@@ -2089,6 +2132,38 @@ fs_visitor::assign_constant_locations()
          new_thread_local_id_index;
 }
 
+bool
+fs_visitor::get_pull_locs(const fs_reg &src,
+                          unsigned *out_surf_index,
+                          unsigned *out_pull_index)
+{
+   assert(src.file == UNIFORM);
+
+   if (src.nr >= UBO_START) {
+      const struct brw_ubo_range *range =
+         &prog_data->ubo_ranges[src.nr - UBO_START];
+
+      /* If this access is in our (reduced) range, use the push data. */
+      if (src.offset / 32 < range->length)
+         return false;
+
+      *out_surf_index = prog_data->binding_table.ubo_start + range->block;
+      *out_pull_index = (32 * range->start + src.offset) / 4;
+      return true;
+   }
+
+   const unsigned location = src.nr + src.offset / 4;
+
+   if (location < uniforms && pull_constant_loc[location] != -1) {
+      /* A regular uniform push constant */
+      *out_surf_index = stage_prog_data->binding_table.pull_constants_start;
+      *out_pull_index = pull_constant_loc[location];
+      return true;
+   }
+
+   return false;
+}
+
 /**
  * Replace UNIFORM register file access with either UNIFORM_PULL_CONSTANT_LOAD
  * or VARYING_PULL_CONSTANT_LOAD instructions which load values into VGRFs.
@@ -2096,7 +2171,7 @@ fs_visitor::assign_constant_locations()
 void
 fs_visitor::lower_constant_loads()
 {
-   const unsigned index = stage_prog_data->binding_table.pull_constants_start;
+   unsigned index, pull_index;
 
    foreach_block_and_inst_safe (block, fs_inst, inst, cfg) {
       /* Set up the annotation tracking for new generated instructions. */
@@ -2110,18 +2185,11 @@ fs_visitor::lower_constant_loads()
          if (inst->opcode == SHADER_OPCODE_MOV_INDIRECT && i == 0)
             continue;
 
-         unsigned location = inst->src[i].nr + inst->src[i].offset / 4;
-         if (location >= uniforms)
-            continue; /* Out of bounds access */
-
-         int pull_index = pull_constant_loc[location];
-
-         if (pull_index == -1)
+         if (!get_pull_locs(inst->src[i], &index, &pull_index))
 	    continue;
 
          assert(inst->src[i].stride == 0);
 
-         const unsigned index = stage_prog_data->binding_table.pull_constants_start;
          const unsigned block_sz = 64; /* Fetch one cacheline at a time. */
          const fs_builder ubld = ibld.exec_all().group(block_sz / 4, 0);
          const fs_reg dst = ubld.vgrf(BRW_REGISTER_TYPE_UD);
@@ -2142,14 +2210,8 @@ fs_visitor::lower_constant_loads()
       if (inst->opcode == SHADER_OPCODE_MOV_INDIRECT &&
           inst->src[0].file == UNIFORM) {
 
-         unsigned location = inst->src[0].nr + inst->src[0].offset / 4;
-         if (location >= uniforms)
-            continue; /* Out of bounds access */
-
-         int pull_index = pull_constant_loc[location];
-
-         if (pull_index == -1)
-	    continue;
+         if (!get_pull_locs(inst->src[0], &index, &pull_index))
+            continue;
 
          VARYING_PULL_CONSTANT_LOAD(ibld, inst->dst,
                                     brw_imm_ud(index),
@@ -2445,7 +2507,7 @@ fs_visitor::opt_sampler_eot()
    if (stage != MESA_SHADER_FRAGMENT)
       return false;
 
-   if (devinfo->gen < 9 && !devinfo->is_cherryview)
+   if (devinfo->gen != 9 && !devinfo->is_cherryview)
       return false;
 
    /* FINISHME: It should be possible to implement this optimization when there
@@ -3349,7 +3411,7 @@ fs_visitor::lower_integer_multiplication()
           * operation directly, but CHV/BXT cannot.
           */
          if (devinfo->gen >= 8 &&
-             !devinfo->is_cherryview && !devinfo->is_broxton)
+             !devinfo->is_cherryview && !gen_device_info_is_9lp(devinfo))
             continue;
 
          if (inst->src[1].file == IMM &&
@@ -5456,7 +5518,7 @@ fs_visitor::setup_fs_payload_gen6()
 
    /* R27: interpolated depth if uses source depth */
    prog_data->uses_src_depth =
-      (nir->info->inputs_read & (1 << VARYING_SLOT_POS)) != 0;
+      (nir->info.inputs_read & (1 << VARYING_SLOT_POS)) != 0;
    if (prog_data->uses_src_depth) {
       payload.source_depth_reg = payload.num_regs;
       payload.num_regs++;
@@ -5468,7 +5530,7 @@ fs_visitor::setup_fs_payload_gen6()
 
    /* R29: interpolated W set if GEN6_WM_USES_SOURCE_W. */
    prog_data->uses_src_w =
-      (nir->info->inputs_read & (1 << VARYING_SLOT_POS)) != 0;
+      (nir->info.inputs_read & (1 << VARYING_SLOT_POS)) != 0;
    if (prog_data->uses_src_w) {
       payload.source_w_reg = payload.num_regs;
       payload.num_regs++;
@@ -5480,7 +5542,7 @@ fs_visitor::setup_fs_payload_gen6()
 
    /* R31: MSAA position offsets. */
    if (prog_data->persample_dispatch &&
-       (nir->info->system_values_read & SYSTEM_BIT_SAMPLE_POS)) {
+       (nir->info.system_values_read & SYSTEM_BIT_SAMPLE_POS)) {
       /* From the Ivy Bridge PRM documentation for 3DSTATE_PS:
        *
        *    "MSDISPMODE_PERSAMPLE is required in order to select
@@ -5497,7 +5559,7 @@ fs_visitor::setup_fs_payload_gen6()
 
    /* R32: MSAA input coverage mask */
    prog_data->uses_sample_mask =
-      (nir->info->system_values_read & SYSTEM_BIT_SAMPLE_MASK_IN) != 0;
+      (nir->info.system_values_read & SYSTEM_BIT_SAMPLE_MASK_IN) != 0;
    if (prog_data->uses_sample_mask) {
       assert(devinfo->gen >= 7);
       payload.sample_mask_in_reg = payload.num_regs;
@@ -5511,7 +5573,7 @@ fs_visitor::setup_fs_payload_gen6()
    /* R34-: bary for 32-pixel. */
    /* R58-59: interp W for 32-pixel. */
 
-   if (nir->info->outputs_written & BITFIELD64_BIT(FRAG_RESULT_DEPTH)) {
+   if (nir->info.outputs_written & BITFIELD64_BIT(FRAG_RESULT_DEPTH)) {
       source_depth_to_render_target = true;
    }
 }
@@ -5548,15 +5610,15 @@ fs_visitor::setup_gs_payload()
     * Note that the GS reads <URB Read Length> HWords for every vertex - so we
     * have to multiply by VerticesIn to obtain the total storage requirement.
     */
-   if (8 * vue_prog_data->urb_read_length * nir->info->gs.vertices_in >
+   if (8 * vue_prog_data->urb_read_length * nir->info.gs.vertices_in >
        max_push_components || gs_prog_data->invocations > 1) {
       gs_prog_data->base.include_vue_handles = true;
 
       /* R3..RN: ICP Handles for each incoming vertex (when using pull model) */
-      payload.num_regs += nir->info->gs.vertices_in;
+      payload.num_regs += nir->info.gs.vertices_in;
 
       vue_prog_data->urb_read_length =
-         ROUND_DOWN_TO(max_push_components / nir->info->gs.vertices_in, 8) / 8;
+         ROUND_DOWN_TO(max_push_components / nir->info.gs.vertices_in, 8) / 8;
    }
 }
 
@@ -5657,7 +5719,7 @@ fs_visitor::optimize()
       if (unlikely(INTEL_DEBUG & DEBUG_OPTIMIZER) && this_progress) {   \
          char filename[64];                                             \
          snprintf(filename, 64, "%s%d-%s-%02d-%02d-" #pass,              \
-                  stage_abbrev, dispatch_width, nir->info->name, iteration, pass_num); \
+                  stage_abbrev, dispatch_width, nir->info.name, iteration, pass_num); \
                                                                         \
          backend_shader::dump_instructions(filename);                   \
       }                                                                 \
@@ -5671,7 +5733,7 @@ fs_visitor::optimize()
    if (unlikely(INTEL_DEBUG & DEBUG_OPTIMIZER)) {
       char filename[64];
       snprintf(filename, 64, "%s%d-%s-00-00-start",
-               stage_abbrev, dispatch_width, nir->info->name);
+               stage_abbrev, dispatch_width, nir->info.name);
 
       backend_shader::dump_instructions(filename);
    }
@@ -5968,15 +6030,15 @@ fs_visitor::run_tcs_single_patch()
    }
 
    /* Fix the disptach mask */
-   if (nir->info->tess.tcs_vertices_out % 8) {
+   if (nir->info.tess.tcs_vertices_out % 8) {
       bld.CMP(bld.null_reg_ud(), invocation_id,
-              brw_imm_ud(nir->info->tess.tcs_vertices_out), BRW_CONDITIONAL_L);
+              brw_imm_ud(nir->info.tess.tcs_vertices_out), BRW_CONDITIONAL_L);
       bld.IF(BRW_PREDICATE_NORMAL);
    }
 
    emit_nir_code();
 
-   if (nir->info->tess.tcs_vertices_out % 8) {
+   if (nir->info.tess.tcs_vertices_out % 8) {
       bld.emit(BRW_OPCODE_ENDIF);
    }
 
@@ -6119,8 +6181,8 @@ fs_visitor::run_fs(bool allow_spilling, bool do_rep_send)
          emit_shader_time_begin();
 
       calculate_urb_setup();
-      if (nir->info->inputs_read > 0 ||
-          (nir->info->outputs_read > 0 && !wm_key->coherent_fb_fetch)) {
+      if (nir->info.inputs_read > 0 ||
+          (nir->info.outputs_read > 0 && !wm_key->coherent_fb_fetch)) {
          if (devinfo->gen < 6)
             emit_interpolation_setup_gen4();
          else
@@ -6284,8 +6346,8 @@ brw_compute_flat_inputs(struct brw_wm_prog_data *prog_data,
 static uint8_t
 computed_depth_mode(const nir_shader *shader)
 {
-   if (shader->info->outputs_written & BITFIELD64_BIT(FRAG_RESULT_DEPTH)) {
-      switch (shader->info->fs.depth_layout) {
+   if (shader->info.outputs_written & BITFIELD64_BIT(FRAG_RESULT_DEPTH)) {
+      switch (shader->info.fs.depth_layout) {
       case FRAG_DEPTH_LAYOUT_NONE:
       case FRAG_DEPTH_LAYOUT_ANY:
          return BRW_PSCDEPTH_ON;
@@ -6465,25 +6527,25 @@ brw_compile_fs(const struct brw_compiler *compiler, void *log_data,
    /* key->alpha_test_func means simulating alpha testing via discards,
     * so the shader definitely kills pixels.
     */
-   prog_data->uses_kill = shader->info->fs.uses_discard ||
+   prog_data->uses_kill = shader->info.fs.uses_discard ||
       key->alpha_test_func;
    prog_data->uses_omask = key->multisample_fbo &&
-      shader->info->outputs_written & BITFIELD64_BIT(FRAG_RESULT_SAMPLE_MASK);
+      shader->info.outputs_written & BITFIELD64_BIT(FRAG_RESULT_SAMPLE_MASK);
    prog_data->computed_depth_mode = computed_depth_mode(shader);
    prog_data->computed_stencil =
-      shader->info->outputs_written & BITFIELD64_BIT(FRAG_RESULT_STENCIL);
+      shader->info.outputs_written & BITFIELD64_BIT(FRAG_RESULT_STENCIL);
 
    prog_data->persample_dispatch =
       key->multisample_fbo &&
       (key->persample_interp ||
-       (shader->info->system_values_read & (SYSTEM_BIT_SAMPLE_ID |
+       (shader->info.system_values_read & (SYSTEM_BIT_SAMPLE_ID |
                                             SYSTEM_BIT_SAMPLE_POS)) ||
-       shader->info->fs.uses_sample_qualifier ||
-       shader->info->outputs_read);
+       shader->info.fs.uses_sample_qualifier ||
+       shader->info.outputs_read);
 
-   prog_data->early_fragment_tests = shader->info->fs.early_fragment_tests;
-   prog_data->post_depth_coverage = shader->info->fs.post_depth_coverage;
-   prog_data->inner_coverage = shader->info->fs.inner_coverage;
+   prog_data->early_fragment_tests = shader->info.fs.early_fragment_tests;
+   prog_data->post_depth_coverage = shader->info.fs.post_depth_coverage;
+   prog_data->inner_coverage = shader->info.fs.inner_coverage;
 
    prog_data->barycentric_interp_modes =
       brw_compute_barycentric_interp_modes(compiler->devinfo, shader);
@@ -6566,9 +6628,9 @@ brw_compile_fs(const struct brw_compiler *compiler, void *log_data,
 
    if (unlikely(INTEL_DEBUG & DEBUG_WM)) {
       g.enable_debug(ralloc_asprintf(mem_ctx, "%s fragment shader %s",
-                                     shader->info->label ?
-                                        shader->info->label : "unnamed",
-                                     shader->info->name));
+                                     shader->info.label ?
+                                        shader->info.label : "unnamed",
+                                     shader->info.name));
    }
 
    if (simd8_cfg) {
@@ -6700,12 +6762,12 @@ brw_compile_cs(const struct brw_compiler *compiler, void *log_data,
    brw_nir_lower_intrinsics(shader, &prog_data->base);
    shader = brw_postprocess_nir(shader, compiler, true);
 
-   prog_data->local_size[0] = shader->info->cs.local_size[0];
-   prog_data->local_size[1] = shader->info->cs.local_size[1];
-   prog_data->local_size[2] = shader->info->cs.local_size[2];
+   prog_data->local_size[0] = shader->info.cs.local_size[0];
+   prog_data->local_size[1] = shader->info.cs.local_size[1];
+   prog_data->local_size[2] = shader->info.cs.local_size[2];
    unsigned local_workgroup_size =
-      shader->info->cs.local_size[0] * shader->info->cs.local_size[1] *
-      shader->info->cs.local_size[2];
+      shader->info.cs.local_size[0] * shader->info.cs.local_size[1] *
+      shader->info.cs.local_size[2];
 
    unsigned max_cs_threads = compiler->devinfo->max_cs_threads;
    unsigned simd_required = DIV_ROUND_UP(local_workgroup_size, max_cs_threads);
@@ -6795,9 +6857,9 @@ brw_compile_cs(const struct brw_compiler *compiler, void *log_data,
                   MESA_SHADER_COMPUTE);
    if (INTEL_DEBUG & DEBUG_CS) {
       char *name = ralloc_asprintf(mem_ctx, "%s compute shader %s",
-                                   shader->info->label ? shader->info->label :
+                                   shader->info.label ? shader->info.label :
                                                         "unnamed",
-                                   shader->info->name);
+                                   shader->info.name);
       g.enable_debug(name);
    }
 

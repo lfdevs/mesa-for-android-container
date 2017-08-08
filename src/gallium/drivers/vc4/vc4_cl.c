@@ -26,11 +26,12 @@
 #include "vc4_context.h"
 
 void
-vc4_init_cl(void *mem_ctx, struct vc4_cl *cl)
+vc4_init_cl(struct vc4_job *job, struct vc4_cl *cl)
 {
-        cl->base = rzalloc_size(mem_ctx, 1); /* TODO: don't use rzalloc */
+        cl->base = rzalloc_size(job, 1); /* TODO: don't use rzalloc */
         cl->next = cl->base;
         cl->size = 0;
+        cl->job = job;
 }
 
 void

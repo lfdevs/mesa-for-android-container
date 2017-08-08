@@ -26,6 +26,14 @@
 #include "main/macros.h"
 #include "blob.h"
 
+#ifdef HAVE_VALGRIND
+#include <valgrind.h>
+#include <memcheck.h>
+#define VG(x) x
+#else
+#define VG(x)
+#endif
+
 #define BLOB_INITIAL_SIZE 4096
 
 /* Ensure that \blob will be able to fit an additional object of size
@@ -107,8 +115,10 @@ blob_overwrite_bytes(struct blob *blob,
                      size_t to_write)
 {
    /* Detect an attempt to overwrite data out of bounds. */
-   if (offset < 0 || blob->size - offset < to_write)
+   if (blob->size < offset + to_write)
       return false;
+
+   VG(VALGRIND_CHECK_MEM_IS_DEFINED(bytes, to_write));
 
    memcpy(blob->data + offset, bytes, to_write);
 
@@ -120,6 +130,8 @@ blob_write_bytes(struct blob *blob, const void *bytes, size_t to_write)
 {
    if (! grow_to_fit(blob, to_write))
        return false;
+
+   VG(VALGRIND_CHECK_MEM_IS_DEFINED(bytes, to_write));
 
    memcpy(blob->data + blob->size, bytes, to_write);
    blob->size += to_write;

@@ -137,7 +137,7 @@ static void TAG(triangle)( struct gl_context *ctx, GLuint e0, GLuint e1, GLuint 
 
       if (DO_TWOSIDE || DO_UNFILLED || DO_TWOSTENCIL)
       {
-	 facing = AREA_IS_CCW( cc ) ^ ctx->Polygon._FrontBit;
+	 facing = AREA_IS_CCW( cc ) ^ _mesa_polygon_get_front_bit(ctx);
 
 	 if (DO_UNFILLED) {
 	    if (facing) {
@@ -362,7 +362,7 @@ static void TAG(quadr)( struct gl_context *ctx,
 
       if (DO_TWOSIDE || DO_UNFILLED || DO_TWOSTENCIL)
       {
-	 facing = AREA_IS_CCW( cc ) ^ ctx->Polygon._FrontBit;
+	 facing = AREA_IS_CCW( cc ) ^ _mesa_polygon_get_front_bit(ctx);
 
 	 if (DO_UNFILLED) {
 	    if (facing) {

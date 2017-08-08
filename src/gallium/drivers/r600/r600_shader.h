@@ -49,11 +49,11 @@ struct r600_shader_io {
 	int			spi_sid;
 	unsigned		interpolate;
 	unsigned		ij_index;
-	unsigned        interpolate_location; //  TGSI_INTERPOLATE_LOC_CENTER, CENTROID, SAMPLE
+	unsigned		interpolate_location; //  TGSI_INTERPOLATE_LOC_CENTER, CENTROID, SAMPLE
 	unsigned		lds_pos; /* for evergreen */
 	unsigned		back_color_input;
 	unsigned		write_mask;
-	int				ring_offset;
+	int			ring_offset;
 };
 
 struct r600_shader {
@@ -62,6 +62,7 @@ struct r600_shader {
 	unsigned		ninput;
 	unsigned		noutput;
 	unsigned		nlds;
+	unsigned		nsys_inputs;
 	struct r600_shader_io	input[64];
 	struct r600_shader_io	output[64];
 	boolean			uses_kill;

@@ -39,7 +39,7 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 #define ENABLE_AVX512_SIMD16    1
-#define USE_8x2_TILE_BACKEND    0
+#define USE_8x2_TILE_BACKEND    1
 #define USE_SIMD16_FRONTEND     0
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -96,9 +96,6 @@
 ///////////////////////////////////////////////////////////////////////////////
 // Maximum supported number of active vertex buffer streams
 #define KNOB_NUM_STREAMS                    32
-
-// Maximum supported number of attributes per vertex
-#define KNOB_NUM_ATTRIBUTES                 39
 
 // Maximum supported active viewports and scissors
 #define KNOB_NUM_VIEWPORTS_SCISSORS         16

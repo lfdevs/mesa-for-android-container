@@ -111,6 +111,11 @@ static void r600_destroy_context(struct pipe_context *context)
 	FREE(rctx->start_compute_cs_cmd.buf);
 
 	r600_common_context_cleanup(&rctx->b);
+
+	r600_resource_reference(&rctx->trace_buf, NULL);
+	r600_resource_reference(&rctx->last_trace_buf, NULL);
+	radeon_clear_saved_cs(&rctx->last_gfx);
+
 	FREE(rctx);
 }
 
@@ -125,7 +130,8 @@ static struct pipe_context *r600_create_context(struct pipe_screen *screen,
 		return NULL;
 
 	rctx->b.b.screen = screen;
-	rctx->b.b.priv = priv;
+	assert(!priv);
+	rctx->b.b.priv = NULL; /* for threaded_context_unwrap_sync */
 	rctx->b.b.destroy = r600_destroy_context;
 	rctx->b.set_atom_dirty = (void *)r600_set_atom_dirty;
 
@@ -137,7 +143,7 @@ static struct pipe_context *r600_create_context(struct pipe_screen *screen,
 
 	r600_init_blit_functions(rctx);
 
-	if (rscreen->b.info.has_uvd) {
+	if (rscreen->b.info.has_hw_decode) {
 		rctx->b.b.create_video_codec = r600_uvd_create_decoder;
 		rctx->b.b.create_video_buffer = r600_video_buffer_create;
 	} else {
@@ -145,6 +151,8 @@ static struct pipe_context *r600_create_context(struct pipe_screen *screen,
 		rctx->b.b.create_video_buffer = vl_video_buffer_create;
 	}
 
+	if (getenv("R600_TRACE"))
+		rctx->is_debug = true;
 	r600_init_common_state_functions(rctx);
 
 	switch (rctx->b.chip_class) {
@@ -286,6 +294,8 @@ static int r600_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 	case PIPE_CAP_POLYGON_OFFSET_UNITS_UNSCALED:
 	case PIPE_CAP_CLEAR_TEXTURE:
 	case PIPE_CAP_TGSI_MUL_ZERO_WINS:
+	case PIPE_CAP_CAN_BIND_CONST_BUFFER_AS_VERTEX:
+	case PIPE_CAP_ALLOW_MAPPED_BUFFERS_DURING_EXECUTION:
 		return 1;
 
 	case PIPE_CAP_DEVICE_RESET_STATUS_QUERY:
@@ -386,6 +396,8 @@ static int r600_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 	case PIPE_CAP_SPARSE_BUFFER_PAGE_SIZE:
 	case PIPE_CAP_TGSI_BALLOT:
 	case PIPE_CAP_TGSI_TES_LAYER_VIEWPORT:
+	case PIPE_CAP_POST_DEPTH_COVERAGE:
+	case PIPE_CAP_BINDLESS_TEXTURE:
 		return 0;
 
 	case PIPE_CAP_DOUBLES:
@@ -581,6 +593,7 @@ static int r600_get_shader_param(struct pipe_screen* pscreen,
 	case PIPE_SHADER_CAP_MAX_SHADER_BUFFERS:
 	case PIPE_SHADER_CAP_MAX_SHADER_IMAGES:
 	case PIPE_SHADER_CAP_LOWER_IF_THRESHOLD:
+	case PIPE_SHADER_CAP_TGSI_SKIP_MERGE_REGISTERS:
 		return 0;
 	case PIPE_SHADER_CAP_MAX_UNROLL_ITERATIONS_HINT:
 		/* due to a bug in the shader compiler, some loops hang
@@ -619,7 +632,7 @@ static struct pipe_resource *r600_resource_create(struct pipe_screen *screen,
 	return r600_resource_create_common(screen, templ);
 }
 
-struct pipe_screen *r600_screen_create(struct radeon_winsys *ws)
+struct pipe_screen *r600_screen_create(struct radeon_winsys *ws, unsigned flags)
 {
 	struct r600_screen *rscreen = CALLOC_STRUCT(r600_screen);
 
@@ -634,7 +647,7 @@ struct pipe_screen *r600_screen_create(struct radeon_winsys *ws)
 	rscreen->b.b.get_shader_param = r600_get_shader_param;
 	rscreen->b.b.resource_create = r600_resource_create;
 
-	if (!r600_common_screen_init(&rscreen->b, ws)) {
+	if (!r600_common_screen_init(&rscreen->b, ws, flags)) {
 		FREE(rscreen);
 		return NULL;
 	}

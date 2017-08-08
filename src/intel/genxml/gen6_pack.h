@@ -504,8 +504,9 @@ struct GEN6_MEMORY_OBJECT_CONTROL_STATE {
 };
 
 static inline void
-GEN6_MEMORY_OBJECT_CONTROL_STATE_pack(__gen_user_data *data, void * restrict dst,
-                                      const struct GEN6_MEMORY_OBJECT_CONTROL_STATE * restrict values)
+GEN6_MEMORY_OBJECT_CONTROL_STATE_pack(__attribute__((unused)) __gen_user_data *data,
+                                      __attribute__((unused)) void * restrict dst,
+                                      __attribute__((unused)) const struct GEN6_MEMORY_OBJECT_CONTROL_STATE * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -531,8 +532,9 @@ struct GEN6_VERTEX_BUFFER_STATE {
 };
 
 static inline void
-GEN6_VERTEX_BUFFER_STATE_pack(__gen_user_data *data, void * restrict dst,
-                              const struct GEN6_VERTEX_BUFFER_STATE * restrict values)
+GEN6_VERTEX_BUFFER_STATE_pack(__attribute__((unused)) __gen_user_data *data,
+                              __attribute__((unused)) void * restrict dst,
+                              __attribute__((unused)) const struct GEN6_VERTEX_BUFFER_STATE * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -570,8 +572,9 @@ struct GEN6_VERTEX_ELEMENT_STATE {
 };
 
 static inline void
-GEN6_VERTEX_ELEMENT_STATE_pack(__gen_user_data *data, void * restrict dst,
-                               const struct GEN6_VERTEX_ELEMENT_STATE * restrict values)
+GEN6_VERTEX_ELEMENT_STATE_pack(__attribute__((unused)) __gen_user_data *data,
+                               __attribute__((unused)) void * restrict dst,
+                               __attribute__((unused)) const struct GEN6_VERTEX_ELEMENT_STATE * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -610,8 +613,9 @@ struct GEN6_SF_OUTPUT_ATTRIBUTE_DETAIL {
 };
 
 static inline void
-GEN6_SF_OUTPUT_ATTRIBUTE_DETAIL_pack(__gen_user_data *data, void * restrict dst,
-                                     const struct GEN6_SF_OUTPUT_ATTRIBUTE_DETAIL * restrict values)
+GEN6_SF_OUTPUT_ATTRIBUTE_DETAIL_pack(__attribute__((unused)) __gen_user_data *data,
+                                     __attribute__((unused)) void * restrict dst,
+                                     __attribute__((unused)) const struct GEN6_SF_OUTPUT_ATTRIBUTE_DETAIL * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -628,29 +632,30 @@ GEN6_SF_OUTPUT_ATTRIBUTE_DETAIL_pack(__gen_user_data *data, void * restrict dst,
 
 #define GEN6_CLIP_VIEWPORT_length              4
 struct GEN6_CLIP_VIEWPORT {
-   uint32_t                             XMinClipGuardband;
-   uint32_t                             XMaxClipGuardband;
-   uint32_t                             YMinClipGuardband;
-   uint32_t                             YMaxClipGuardband;
+   float                                XMinClipGuardband;
+   float                                XMaxClipGuardband;
+   float                                YMinClipGuardband;
+   float                                YMaxClipGuardband;
 };
 
 static inline void
-GEN6_CLIP_VIEWPORT_pack(__gen_user_data *data, void * restrict dst,
-                        const struct GEN6_CLIP_VIEWPORT * restrict values)
+GEN6_CLIP_VIEWPORT_pack(__attribute__((unused)) __gen_user_data *data,
+                        __attribute__((unused)) void * restrict dst,
+                        __attribute__((unused)) const struct GEN6_CLIP_VIEWPORT * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
    dw[0] =
-      __gen_uint(values->XMinClipGuardband, 0, 31);
+      __gen_float(values->XMinClipGuardband);
 
    dw[1] =
-      __gen_uint(values->XMaxClipGuardband, 0, 31);
+      __gen_float(values->XMaxClipGuardband);
 
    dw[2] =
-      __gen_uint(values->YMinClipGuardband, 0, 31);
+      __gen_float(values->YMinClipGuardband);
 
    dw[3] =
-      __gen_uint(values->YMaxClipGuardband, 0, 31);
+      __gen_float(values->YMaxClipGuardband);
 }
 
 #define GEN6_SCISSOR_RECT_length               2
@@ -662,8 +667,9 @@ struct GEN6_SCISSOR_RECT {
 };
 
 static inline void
-GEN6_SCISSOR_RECT_pack(__gen_user_data *data, void * restrict dst,
-                       const struct GEN6_SCISSOR_RECT * restrict values)
+GEN6_SCISSOR_RECT_pack(__attribute__((unused)) __gen_user_data *data,
+                       __attribute__((unused)) void * restrict dst,
+                       __attribute__((unused)) const struct GEN6_SCISSOR_RECT * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -688,8 +694,9 @@ struct GEN6_SF_VIEWPORT {
 };
 
 static inline void
-GEN6_SF_VIEWPORT_pack(__gen_user_data *data, void * restrict dst,
-                      const struct GEN6_SF_VIEWPORT * restrict values)
+GEN6_SF_VIEWPORT_pack(__attribute__((unused)) __gen_user_data *data,
+                      __attribute__((unused)) void * restrict dst,
+                      __attribute__((unused)) const struct GEN6_SF_VIEWPORT * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -749,8 +756,9 @@ struct GEN6_BLEND_STATE_ENTRY {
 };
 
 static inline void
-GEN6_BLEND_STATE_ENTRY_pack(__gen_user_data *data, void * restrict dst,
-                            const struct GEN6_BLEND_STATE_ENTRY * restrict values)
+GEN6_BLEND_STATE_ENTRY_pack(__attribute__((unused)) __gen_user_data *data,
+                            __attribute__((unused)) void * restrict dst,
+                            __attribute__((unused)) const struct GEN6_BLEND_STATE_ENTRY * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -784,32 +792,16 @@ GEN6_BLEND_STATE_ENTRY_pack(__gen_user_data *data, void * restrict dst,
       __gen_uint(values->PostBlendColorClampEnable, 0, 0);
 }
 
-#define GEN6_BLEND_STATE_length               16
+#define GEN6_BLEND_STATE_length                0
 struct GEN6_BLEND_STATE {
-   struct GEN6_BLEND_STATE_ENTRY        Entry[8];
+   /* variable length fields follow */
 };
 
 static inline void
-GEN6_BLEND_STATE_pack(__gen_user_data *data, void * restrict dst,
-                      const struct GEN6_BLEND_STATE * restrict values)
+GEN6_BLEND_STATE_pack(__attribute__((unused)) __gen_user_data *data,
+                      __attribute__((unused)) void * restrict dst,
+                      __attribute__((unused)) const struct GEN6_BLEND_STATE * restrict values)
 {
-   uint32_t * restrict dw = (uint32_t * restrict) dst;
-
-   GEN6_BLEND_STATE_ENTRY_pack(data, &dw[0], &values->Entry[0]);
-
-   GEN6_BLEND_STATE_ENTRY_pack(data, &dw[2], &values->Entry[1]);
-
-   GEN6_BLEND_STATE_ENTRY_pack(data, &dw[4], &values->Entry[2]);
-
-   GEN6_BLEND_STATE_ENTRY_pack(data, &dw[6], &values->Entry[3]);
-
-   GEN6_BLEND_STATE_ENTRY_pack(data, &dw[8], &values->Entry[4]);
-
-   GEN6_BLEND_STATE_ENTRY_pack(data, &dw[10], &values->Entry[5]);
-
-   GEN6_BLEND_STATE_ENTRY_pack(data, &dw[12], &values->Entry[6]);
-
-   GEN6_BLEND_STATE_ENTRY_pack(data, &dw[14], &values->Entry[7]);
 }
 
 #define GEN6_CC_VIEWPORT_length                2
@@ -819,8 +811,9 @@ struct GEN6_CC_VIEWPORT {
 };
 
 static inline void
-GEN6_CC_VIEWPORT_pack(__gen_user_data *data, void * restrict dst,
-                      const struct GEN6_CC_VIEWPORT * restrict values)
+GEN6_CC_VIEWPORT_pack(__attribute__((unused)) __gen_user_data *data,
+                      __attribute__((unused)) void * restrict dst,
+                      __attribute__((unused)) const struct GEN6_CC_VIEWPORT * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -848,8 +841,9 @@ struct GEN6_COLOR_CALC_STATE {
 };
 
 static inline void
-GEN6_COLOR_CALC_STATE_pack(__gen_user_data *data, void * restrict dst,
-                           const struct GEN6_COLOR_CALC_STATE * restrict values)
+GEN6_COLOR_CALC_STATE_pack(__attribute__((unused)) __gen_user_data *data,
+                           __attribute__((unused)) void * restrict dst,
+                           __attribute__((unused)) const struct GEN6_COLOR_CALC_STATE * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -899,8 +893,9 @@ struct GEN6_DEPTH_STENCIL_STATE {
 };
 
 static inline void
-GEN6_DEPTH_STENCIL_STATE_pack(__gen_user_data *data, void * restrict dst,
-                              const struct GEN6_DEPTH_STENCIL_STATE * restrict values)
+GEN6_DEPTH_STENCIL_STATE_pack(__attribute__((unused)) __gen_user_data *data,
+                              __attribute__((unused)) void * restrict dst,
+                              __attribute__((unused)) const struct GEN6_DEPTH_STENCIL_STATE * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -959,8 +954,9 @@ struct GEN6_INTERFACE_DESCRIPTOR_DATA {
 };
 
 static inline void
-GEN6_INTERFACE_DESCRIPTOR_DATA_pack(__gen_user_data *data, void * restrict dst,
-                                    const struct GEN6_INTERFACE_DESCRIPTOR_DATA * restrict values)
+GEN6_INTERFACE_DESCRIPTOR_DATA_pack(__attribute__((unused)) __gen_user_data *data,
+                                    __attribute__((unused)) void * restrict dst,
+                                    __attribute__((unused)) const struct GEN6_INTERFACE_DESCRIPTOR_DATA * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -1006,8 +1002,9 @@ struct GEN6_PALETTE_ENTRY {
 };
 
 static inline void
-GEN6_PALETTE_ENTRY_pack(__gen_user_data *data, void * restrict dst,
-                        const struct GEN6_PALETTE_ENTRY * restrict values)
+GEN6_PALETTE_ENTRY_pack(__attribute__((unused)) __gen_user_data *data,
+                        __attribute__((unused)) void * restrict dst,
+                        __attribute__((unused)) const struct GEN6_PALETTE_ENTRY * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -1024,8 +1021,9 @@ struct GEN6_BINDING_TABLE_STATE {
 };
 
 static inline void
-GEN6_BINDING_TABLE_STATE_pack(__gen_user_data *data, void * restrict dst,
-                              const struct GEN6_BINDING_TABLE_STATE * restrict values)
+GEN6_BINDING_TABLE_STATE_pack(__attribute__((unused)) __gen_user_data *data,
+                              __attribute__((unused)) void * restrict dst,
+                              __attribute__((unused)) const struct GEN6_BINDING_TABLE_STATE * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -1092,8 +1090,9 @@ struct GEN6_RENDER_SURFACE_STATE {
 };
 
 static inline void
-GEN6_RENDER_SURFACE_STATE_pack(__gen_user_data *data, void * restrict dst,
-                               const struct GEN6_RENDER_SURFACE_STATE * restrict values)
+GEN6_RENDER_SURFACE_STATE_pack(__attribute__((unused)) __gen_user_data *data,
+                               __attribute__((unused)) void * restrict dst,
+                               __attribute__((unused)) const struct GEN6_RENDER_SURFACE_STATE * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -1170,8 +1169,9 @@ struct GEN6_SAMPLER_BORDER_COLOR_STATE {
 };
 
 static inline void
-GEN6_SAMPLER_BORDER_COLOR_STATE_pack(__gen_user_data *data, void * restrict dst,
-                                     const struct GEN6_SAMPLER_BORDER_COLOR_STATE * restrict values)
+GEN6_SAMPLER_BORDER_COLOR_STATE_pack(__attribute__((unused)) __gen_user_data *data,
+                                     __attribute__((unused)) void * restrict dst,
+                                     __attribute__((unused)) const struct GEN6_SAMPLER_BORDER_COLOR_STATE * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -1261,9 +1261,9 @@ struct GEN6_SAMPLER_STATE {
    uint32_t                             CubeSurfaceControlMode;
 #define CUBECTRLMODE_PROGRAMMED                  0
 #define CUBECTRLMODE_OVERRIDE                    1
-   uint32_t                             TCXAddressControlMode;
-   uint32_t                             TCYAddressControlMode;
-   uint32_t                             TCZAddressControlMode;
+   enum GEN6_TextureCoordinateMode      TCXAddressControlMode;
+   enum GEN6_TextureCoordinateMode      TCYAddressControlMode;
+   enum GEN6_TextureCoordinateMode      TCZAddressControlMode;
    uint64_t                             BorderColorPointer;
    uint32_t                             MonochromeFilterHeightReserved;
    uint32_t                             MonochromeFilterWidth;
@@ -1291,8 +1291,9 @@ struct GEN6_SAMPLER_STATE {
 };
 
 static inline void
-GEN6_SAMPLER_STATE_pack(__gen_user_data *data, void * restrict dst,
-                        const struct GEN6_SAMPLER_STATE * restrict values)
+GEN6_SAMPLER_STATE_pack(__attribute__((unused)) __gen_user_data *data,
+                        __attribute__((unused)) void * restrict dst,
+                        __attribute__((unused)) const struct GEN6_SAMPLER_STATE * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -1365,8 +1366,9 @@ struct GEN6_3DPRIMITIVE {
 };
 
 static inline void
-GEN6_3DPRIMITIVE_pack(__gen_user_data *data, void * restrict dst,
-                      const struct GEN6_3DPRIMITIVE * restrict values)
+GEN6_3DPRIMITIVE_pack(__attribute__((unused)) __gen_user_data *data,
+                      __attribute__((unused)) void * restrict dst,
+                      __attribute__((unused)) const struct GEN6_3DPRIMITIVE * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -1418,8 +1420,9 @@ struct GEN6_3DSTATE_AA_LINE_PARAMETERS {
 };
 
 static inline void
-GEN6_3DSTATE_AA_LINE_PARAMETERS_pack(__gen_user_data *data, void * restrict dst,
-                                     const struct GEN6_3DSTATE_AA_LINE_PARAMETERS * restrict values)
+GEN6_3DSTATE_AA_LINE_PARAMETERS_pack(__attribute__((unused)) __gen_user_data *data,
+                                     __attribute__((unused)) void * restrict dst,
+                                     __attribute__((unused)) const struct GEN6_3DSTATE_AA_LINE_PARAMETERS * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -1463,8 +1466,9 @@ struct GEN6_3DSTATE_BINDING_TABLE_POINTERS {
 };
 
 static inline void
-GEN6_3DSTATE_BINDING_TABLE_POINTERS_pack(__gen_user_data *data, void * restrict dst,
-                                         const struct GEN6_3DSTATE_BINDING_TABLE_POINTERS * restrict values)
+GEN6_3DSTATE_BINDING_TABLE_POINTERS_pack(__attribute__((unused)) __gen_user_data *data,
+                                         __attribute__((unused)) void * restrict dst,
+                                         __attribute__((unused)) const struct GEN6_3DSTATE_BINDING_TABLE_POINTERS * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -1507,13 +1511,14 @@ struct GEN6_3DSTATE_CC_STATE_POINTERS {
    bool                                 BLEND_STATEChange;
    uint64_t                             PointertoDEPTH_STENCIL_STATE;
    bool                                 DEPTH_STENCIL_STATEChange;
-   uint64_t                             PointertoCOLOR_CALC_STATE;
-   bool                                 COLOR_CALC_STATEChange;
+   uint64_t                             ColorCalcStatePointer;
+   bool                                 ColorCalcStatePointerValid;
 };
 
 static inline void
-GEN6_3DSTATE_CC_STATE_POINTERS_pack(__gen_user_data *data, void * restrict dst,
-                                    const struct GEN6_3DSTATE_CC_STATE_POINTERS * restrict values)
+GEN6_3DSTATE_CC_STATE_POINTERS_pack(__attribute__((unused)) __gen_user_data *data,
+                                    __attribute__((unused)) void * restrict dst,
+                                    __attribute__((unused)) const struct GEN6_3DSTATE_CC_STATE_POINTERS * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -1533,8 +1538,8 @@ GEN6_3DSTATE_CC_STATE_POINTERS_pack(__gen_user_data *data, void * restrict dst,
       __gen_uint(values->DEPTH_STENCIL_STATEChange, 0, 0);
 
    dw[3] =
-      __gen_offset(values->PointertoCOLOR_CALC_STATE, 6, 31) |
-      __gen_uint(values->COLOR_CALC_STATEChange, 0, 0);
+      __gen_offset(values->ColorCalcStatePointer, 6, 31) |
+      __gen_uint(values->ColorCalcStatePointerValid, 0, 0);
 }
 
 #define GEN6_3DSTATE_CHROMA_KEY_length         4
@@ -1558,8 +1563,9 @@ struct GEN6_3DSTATE_CHROMA_KEY {
 };
 
 static inline void
-GEN6_3DSTATE_CHROMA_KEY_pack(__gen_user_data *data, void * restrict dst,
-                             const struct GEN6_3DSTATE_CHROMA_KEY * restrict values)
+GEN6_3DSTATE_CHROMA_KEY_pack(__attribute__((unused)) __gen_user_data *data,
+                             __attribute__((unused)) void * restrict dst,
+                             __attribute__((unused)) const struct GEN6_3DSTATE_CHROMA_KEY * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -1600,8 +1606,9 @@ struct GEN6_3DSTATE_CLEAR_PARAMS {
 };
 
 static inline void
-GEN6_3DSTATE_CLEAR_PARAMS_pack(__gen_user_data *data, void * restrict dst,
-                               const struct GEN6_3DSTATE_CLEAR_PARAMS * restrict values)
+GEN6_3DSTATE_CLEAR_PARAMS_pack(__attribute__((unused)) __gen_user_data *data,
+                               __attribute__((unused)) void * restrict dst,
+                               __attribute__((unused)) const struct GEN6_3DSTATE_CLEAR_PARAMS * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -1634,7 +1641,7 @@ struct GEN6_3DSTATE_CLIP {
    uint32_t                             DWordLength;
    bool                                 StatisticsEnable;
    uint32_t                             UserClipDistanceCullTestEnableBitmask;
-   bool                                 CLIPEnable;
+   bool                                 ClipEnable;
    uint32_t                             APIMode;
 #define APIMODE_OGL                              0
 #define APIMODE_D3D                              1
@@ -1667,8 +1674,9 @@ struct GEN6_3DSTATE_CLIP {
 };
 
 static inline void
-GEN6_3DSTATE_CLIP_pack(__gen_user_data *data, void * restrict dst,
-                       const struct GEN6_3DSTATE_CLIP * restrict values)
+GEN6_3DSTATE_CLIP_pack(__attribute__((unused)) __gen_user_data *data,
+                       __attribute__((unused)) void * restrict dst,
+                       __attribute__((unused)) const struct GEN6_3DSTATE_CLIP * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -1684,7 +1692,7 @@ GEN6_3DSTATE_CLIP_pack(__gen_user_data *data, void * restrict dst,
       __gen_uint(values->UserClipDistanceCullTestEnableBitmask, 0, 7);
 
    dw[2] =
-      __gen_uint(values->CLIPEnable, 31, 31) |
+      __gen_uint(values->ClipEnable, 31, 31) |
       __gen_uint(values->APIMode, 30, 30) |
       __gen_uint(values->ViewportXYClipTestEnable, 28, 28) |
       __gen_uint(values->ViewportZClipTestEnable, 27, 27) |
@@ -1735,8 +1743,9 @@ struct GEN6_3DSTATE_CONSTANT_GS {
 };
 
 static inline void
-GEN6_3DSTATE_CONSTANT_GS_pack(__gen_user_data *data, void * restrict dst,
-                              const struct GEN6_3DSTATE_CONSTANT_GS * restrict values)
+GEN6_3DSTATE_CONSTANT_GS_pack(__attribute__((unused)) __gen_user_data *data,
+                              __attribute__((unused)) void * restrict dst,
+                              __attribute__((unused)) const struct GEN6_3DSTATE_CONSTANT_GS * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -1803,8 +1812,9 @@ struct GEN6_3DSTATE_CONSTANT_PS {
 };
 
 static inline void
-GEN6_3DSTATE_CONSTANT_PS_pack(__gen_user_data *data, void * restrict dst,
-                              const struct GEN6_3DSTATE_CONSTANT_PS * restrict values)
+GEN6_3DSTATE_CONSTANT_PS_pack(__attribute__((unused)) __gen_user_data *data,
+                              __attribute__((unused)) void * restrict dst,
+                              __attribute__((unused)) const struct GEN6_3DSTATE_CONSTANT_PS * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -1871,8 +1881,9 @@ struct GEN6_3DSTATE_CONSTANT_VS {
 };
 
 static inline void
-GEN6_3DSTATE_CONSTANT_VS_pack(__gen_user_data *data, void * restrict dst,
-                              const struct GEN6_3DSTATE_CONSTANT_VS * restrict values)
+GEN6_3DSTATE_CONSTANT_VS_pack(__attribute__((unused)) __gen_user_data *data,
+                              __attribute__((unused)) void * restrict dst,
+                              __attribute__((unused)) const struct GEN6_3DSTATE_CONSTANT_VS * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -1962,8 +1973,9 @@ struct GEN6_3DSTATE_DEPTH_BUFFER {
 };
 
 static inline void
-GEN6_3DSTATE_DEPTH_BUFFER_pack(__gen_user_data *data, void * restrict dst,
-                               const struct GEN6_3DSTATE_DEPTH_BUFFER * restrict values)
+GEN6_3DSTATE_DEPTH_BUFFER_pack(__attribute__((unused)) __gen_user_data *data,
+                               __attribute__((unused)) void * restrict dst,
+                               __attribute__((unused)) const struct GEN6_3DSTATE_DEPTH_BUFFER * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -2033,8 +2045,9 @@ struct GEN6_3DSTATE_DRAWING_RECTANGLE {
 };
 
 static inline void
-GEN6_3DSTATE_DRAWING_RECTANGLE_pack(__gen_user_data *data, void * restrict dst,
-                                    const struct GEN6_3DSTATE_DRAWING_RECTANGLE * restrict values)
+GEN6_3DSTATE_DRAWING_RECTANGLE_pack(__attribute__((unused)) __gen_user_data *data,
+                                    __attribute__((unused)) void * restrict dst,
+                                    __attribute__((unused)) const struct GEN6_3DSTATE_DRAWING_RECTANGLE * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -2101,17 +2114,20 @@ struct GEN6_3DSTATE_GS {
    bool                                 StatisticsEnable;
    bool                                 SOStatisticsEnable;
    uint32_t                             RenderingEnabled;
-   bool                                 ReorderEnable;
+   uint32_t                             ReorderMode;
+#define LEADING                                  0
+#define TRAILING                                 1
    bool                                 DiscardAdjacency;
    bool                                 SVBIPayloadEnable;
    bool                                 SVBIPostIncrementEnable;
    uint32_t                             SVBIPostIncrementValue;
-   bool                                 FunctionEnable;
+   bool                                 Enable;
 };
 
 static inline void
-GEN6_3DSTATE_GS_pack(__gen_user_data *data, void * restrict dst,
-                     const struct GEN6_3DSTATE_GS * restrict values)
+GEN6_3DSTATE_GS_pack(__attribute__((unused)) __gen_user_data *data,
+                     __attribute__((unused)) void * restrict dst,
+                     __attribute__((unused)) const struct GEN6_3DSTATE_GS * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -2152,12 +2168,12 @@ GEN6_3DSTATE_GS_pack(__gen_user_data *data, void * restrict dst,
       __gen_uint(values->RenderingEnabled, 8, 8);
 
    dw[6] =
-      __gen_uint(values->ReorderEnable, 30, 30) |
+      __gen_uint(values->ReorderMode, 30, 30) |
       __gen_uint(values->DiscardAdjacency, 29, 29) |
       __gen_uint(values->SVBIPayloadEnable, 28, 28) |
       __gen_uint(values->SVBIPostIncrementEnable, 27, 27) |
       __gen_uint(values->SVBIPostIncrementValue, 16, 25) |
-      __gen_uint(values->FunctionEnable, 15, 15);
+      __gen_uint(values->Enable, 15, 15);
 }
 
 #define GEN6_3DSTATE_GS_SVB_INDEX_length       7
@@ -2182,8 +2198,9 @@ struct GEN6_3DSTATE_GS_SVB_INDEX {
 };
 
 static inline void
-GEN6_3DSTATE_GS_SVB_INDEX_pack(__gen_user_data *data, void * restrict dst,
-                               const struct GEN6_3DSTATE_GS_SVB_INDEX * restrict values)
+GEN6_3DSTATE_GS_SVB_INDEX_pack(__attribute__((unused)) __gen_user_data *data,
+                               __attribute__((unused)) void * restrict dst,
+                               __attribute__((unused)) const struct GEN6_3DSTATE_GS_SVB_INDEX * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -2233,8 +2250,9 @@ struct GEN6_3DSTATE_HIER_DEPTH_BUFFER {
 };
 
 static inline void
-GEN6_3DSTATE_HIER_DEPTH_BUFFER_pack(__gen_user_data *data, void * restrict dst,
-                                    const struct GEN6_3DSTATE_HIER_DEPTH_BUFFER * restrict values)
+GEN6_3DSTATE_HIER_DEPTH_BUFFER_pack(__attribute__((unused)) __gen_user_data *data,
+                                    __attribute__((unused)) void * restrict dst,
+                                    __attribute__((unused)) const struct GEN6_3DSTATE_HIER_DEPTH_BUFFER * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -2271,6 +2289,7 @@ struct GEN6_3DSTATE_INDEX_BUFFER {
    uint32_t                             _3DCommandOpcode;
    uint32_t                             _3DCommandSubOpcode;
    struct GEN6_MEMORY_OBJECT_CONTROL_STATE MemoryObjectControlState;
+   uint32_t                             IndexBufferMOCS;
    bool                                 CutIndexEnable;
    uint32_t                             IndexFormat;
 #define INDEX_BYTE                               0
@@ -2282,8 +2301,9 @@ struct GEN6_3DSTATE_INDEX_BUFFER {
 };
 
 static inline void
-GEN6_3DSTATE_INDEX_BUFFER_pack(__gen_user_data *data, void * restrict dst,
-                               const struct GEN6_3DSTATE_INDEX_BUFFER * restrict values)
+GEN6_3DSTATE_INDEX_BUFFER_pack(__attribute__((unused)) __gen_user_data *data,
+                               __attribute__((unused)) void * restrict dst,
+                               __attribute__((unused)) const struct GEN6_3DSTATE_INDEX_BUFFER * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -2296,6 +2316,7 @@ GEN6_3DSTATE_INDEX_BUFFER_pack(__gen_user_data *data, void * restrict dst,
       __gen_uint(values->_3DCommandOpcode, 24, 26) |
       __gen_uint(values->_3DCommandSubOpcode, 16, 23) |
       __gen_uint(v0_0, 12, 15) |
+      __gen_uint(values->IndexBufferMOCS, 12, 15) |
       __gen_uint(values->CutIndexEnable, 10, 10) |
       __gen_uint(values->IndexFormat, 8, 9) |
       __gen_uint(values->DWordLength, 0, 7);
@@ -2329,8 +2350,9 @@ struct GEN6_3DSTATE_LINE_STIPPLE {
 };
 
 static inline void
-GEN6_3DSTATE_LINE_STIPPLE_pack(__gen_user_data *data, void * restrict dst,
-                               const struct GEN6_3DSTATE_LINE_STIPPLE * restrict values)
+GEN6_3DSTATE_LINE_STIPPLE_pack(__attribute__((unused)) __gen_user_data *data,
+                               __attribute__((unused)) void * restrict dst,
+                               __attribute__((unused)) const struct GEN6_3DSTATE_LINE_STIPPLE * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -2348,7 +2370,7 @@ GEN6_3DSTATE_LINE_STIPPLE_pack(__gen_user_data *data, void * restrict dst,
       __gen_uint(values->LineStipplePattern, 0, 15);
 
    dw[2] =
-      __gen_ufixed(values->LineStippleInverseRepeatCount, 15, 31, 16) |
+      __gen_ufixed(values->LineStippleInverseRepeatCount, 16, 31, 13) |
       __gen_uint(values->LineStippleRepeatCount, 0, 8);
 }
 
@@ -2372,8 +2394,9 @@ struct GEN6_3DSTATE_MONOFILTER_SIZE {
 };
 
 static inline void
-GEN6_3DSTATE_MONOFILTER_SIZE_pack(__gen_user_data *data, void * restrict dst,
-                                  const struct GEN6_3DSTATE_MONOFILTER_SIZE * restrict values)
+GEN6_3DSTATE_MONOFILTER_SIZE_pack(__attribute__((unused)) __gen_user_data *data,
+                                  __attribute__((unused)) void * restrict dst,
+                                  __attribute__((unused)) const struct GEN6_3DSTATE_MONOFILTER_SIZE * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -2405,8 +2428,8 @@ struct GEN6_3DSTATE_MULTISAMPLE {
    uint32_t                             _3DCommandSubOpcode;
    uint32_t                             DWordLength;
    uint32_t                             PixelLocation;
-#define PIXLOC_CENTER                            0
-#define PIXLOC_UL_CORNER                         1
+#define CENTER                                   0
+#define UL_CORNER                                1
    uint32_t                             NumberofMultisamples;
 #define NUMSAMPLES_1                             0
 #define NUMSAMPLES_4                             2
@@ -2421,8 +2444,9 @@ struct GEN6_3DSTATE_MULTISAMPLE {
 };
 
 static inline void
-GEN6_3DSTATE_MULTISAMPLE_pack(__gen_user_data *data, void * restrict dst,
-                              const struct GEN6_3DSTATE_MULTISAMPLE * restrict values)
+GEN6_3DSTATE_MULTISAMPLE_pack(__attribute__((unused)) __gen_user_data *data,
+                              __attribute__((unused)) void * restrict dst,
+                              __attribute__((unused)) const struct GEN6_3DSTATE_MULTISAMPLE * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -2468,8 +2492,9 @@ struct GEN6_3DSTATE_POLY_STIPPLE_OFFSET {
 };
 
 static inline void
-GEN6_3DSTATE_POLY_STIPPLE_OFFSET_pack(__gen_user_data *data, void * restrict dst,
-                                      const struct GEN6_3DSTATE_POLY_STIPPLE_OFFSET * restrict values)
+GEN6_3DSTATE_POLY_STIPPLE_OFFSET_pack(__attribute__((unused)) __gen_user_data *data,
+                                      __attribute__((unused)) void * restrict dst,
+                                      __attribute__((unused)) const struct GEN6_3DSTATE_POLY_STIPPLE_OFFSET * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -2504,8 +2529,9 @@ struct GEN6_3DSTATE_POLY_STIPPLE_PATTERN {
 };
 
 static inline void
-GEN6_3DSTATE_POLY_STIPPLE_PATTERN_pack(__gen_user_data *data, void * restrict dst,
-                                       const struct GEN6_3DSTATE_POLY_STIPPLE_PATTERN * restrict values)
+GEN6_3DSTATE_POLY_STIPPLE_PATTERN_pack(__attribute__((unused)) __gen_user_data *data,
+                                       __attribute__((unused)) void * restrict dst,
+                                       __attribute__((unused)) const struct GEN6_3DSTATE_POLY_STIPPLE_PATTERN * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -2630,8 +2656,9 @@ struct GEN6_3DSTATE_SAMPLER_PALETTE_LOAD0 {
 };
 
 static inline void
-GEN6_3DSTATE_SAMPLER_PALETTE_LOAD0_pack(__gen_user_data *data, void * restrict dst,
-                                        const struct GEN6_3DSTATE_SAMPLER_PALETTE_LOAD0 * restrict values)
+GEN6_3DSTATE_SAMPLER_PALETTE_LOAD0_pack(__attribute__((unused)) __gen_user_data *data,
+                                        __attribute__((unused)) void * restrict dst,
+                                        __attribute__((unused)) const struct GEN6_3DSTATE_SAMPLER_PALETTE_LOAD0 * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -2661,8 +2688,9 @@ struct GEN6_3DSTATE_SAMPLER_PALETTE_LOAD1 {
 };
 
 static inline void
-GEN6_3DSTATE_SAMPLER_PALETTE_LOAD1_pack(__gen_user_data *data, void * restrict dst,
-                                        const struct GEN6_3DSTATE_SAMPLER_PALETTE_LOAD1 * restrict values)
+GEN6_3DSTATE_SAMPLER_PALETTE_LOAD1_pack(__attribute__((unused)) __gen_user_data *data,
+                                        __attribute__((unused)) void * restrict dst,
+                                        __attribute__((unused)) const struct GEN6_3DSTATE_SAMPLER_PALETTE_LOAD1 * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -2698,8 +2726,9 @@ struct GEN6_3DSTATE_SAMPLER_STATE_POINTERS {
 };
 
 static inline void
-GEN6_3DSTATE_SAMPLER_STATE_POINTERS_pack(__gen_user_data *data, void * restrict dst,
-                                         const struct GEN6_3DSTATE_SAMPLER_STATE_POINTERS * restrict values)
+GEN6_3DSTATE_SAMPLER_STATE_POINTERS_pack(__attribute__((unused)) __gen_user_data *data,
+                                         __attribute__((unused)) void * restrict dst,
+                                         __attribute__((unused)) const struct GEN6_3DSTATE_SAMPLER_STATE_POINTERS * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -2742,8 +2771,9 @@ struct GEN6_3DSTATE_SAMPLE_MASK {
 };
 
 static inline void
-GEN6_3DSTATE_SAMPLE_MASK_pack(__gen_user_data *data, void * restrict dst,
-                              const struct GEN6_3DSTATE_SAMPLE_MASK * restrict values)
+GEN6_3DSTATE_SAMPLE_MASK_pack(__attribute__((unused)) __gen_user_data *data,
+                              __attribute__((unused)) void * restrict dst,
+                              __attribute__((unused)) const struct GEN6_3DSTATE_SAMPLE_MASK * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -2777,8 +2807,9 @@ struct GEN6_3DSTATE_SCISSOR_STATE_POINTERS {
 };
 
 static inline void
-GEN6_3DSTATE_SCISSOR_STATE_POINTERS_pack(__gen_user_data *data, void * restrict dst,
-                                         const struct GEN6_3DSTATE_SCISSOR_STATE_POINTERS * restrict values)
+GEN6_3DSTATE_SCISSOR_STATE_POINTERS_pack(__attribute__((unused)) __gen_user_data *data,
+                                         __attribute__((unused)) void * restrict dst,
+                                         __attribute__((unused)) const struct GEN6_3DSTATE_SCISSOR_STATE_POINTERS * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -2832,7 +2863,7 @@ struct GEN6_3DSTATE_SF {
    uint32_t                             FrontWinding;
 #define FRONTWINDING_CW                          0
 #define FRONTWINDING_CCW                         1
-   bool                                 AntialiasingEnable;
+   bool                                 AntiAliasingEnable;
    uint32_t                             CullMode;
 #define CULLMODE_BOTH                            0
 #define CULLMODE_NONE                            1
@@ -2846,6 +2877,10 @@ struct GEN6_3DSTATE_SF {
 #define _40pixels                                3
    bool                                 ScissorRectangleEnable;
    uint32_t                             MultisampleRasterizationMode;
+#define MSRASTMODE_OFF_PIXEL                     0
+#define MSRASTMODE_OFF_PATTERN                   1
+#define MSRASTMODE_ON_PIXEL                      2
+#define MSRASTMODE_ON_PATTERN                    3
    bool                                 LastPixelEnable;
    uint32_t                             TriangleStripListProvokingVertexSelect;
 #define Vertex0                                  0
@@ -2863,9 +2898,9 @@ struct GEN6_3DSTATE_SF {
    uint32_t                             VertexSubPixelPrecisionSelect;
 #define _8SubPixelPrecisionBits                  0
 #define _4SubPixelPrecisionBits                  1
-   uint32_t                             UsePointWidthState;
-#define UsePointWidthonVertex                    0
-#define UsePointWidthfromState                   1
+   uint32_t                             PointWidthSource;
+#define Vertex                                   0
+#define State                                    1
    float                                PointWidth;
    float                                GlobalDepthOffsetConstant;
    float                                GlobalDepthOffsetScale;
@@ -2892,8 +2927,9 @@ struct GEN6_3DSTATE_SF {
 };
 
 static inline void
-GEN6_3DSTATE_SF_pack(__gen_user_data *data, void * restrict dst,
-                     const struct GEN6_3DSTATE_SF * restrict values)
+GEN6_3DSTATE_SF_pack(__attribute__((unused)) __gen_user_data *data,
+                     __attribute__((unused)) void * restrict dst,
+                     __attribute__((unused)) const struct GEN6_3DSTATE_SF * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -2923,7 +2959,7 @@ GEN6_3DSTATE_SF_pack(__gen_user_data *data, void * restrict dst,
       __gen_uint(values->FrontWinding, 0, 0);
 
    dw[3] =
-      __gen_uint(values->AntialiasingEnable, 31, 31) |
+      __gen_uint(values->AntiAliasingEnable, 31, 31) |
       __gen_uint(values->CullMode, 29, 30) |
       __gen_ufixed(values->LineWidth, 18, 27, 7) |
       __gen_uint(values->LineEndCapAntialiasingRegionWidth, 16, 17) |
@@ -2937,7 +2973,7 @@ GEN6_3DSTATE_SF_pack(__gen_user_data *data, void * restrict dst,
       __gen_uint(values->TriangleFanProvokingVertexSelect, 25, 26) |
       __gen_uint(values->AALineDistanceMode, 14, 14) |
       __gen_uint(values->VertexSubPixelPrecisionSelect, 12, 12) |
-      __gen_uint(values->UsePointWidthState, 11, 11) |
+      __gen_uint(values->PointWidthSource, 11, 11) |
       __gen_ufixed(values->PointWidth, 0, 10, 3);
 
    dw[5] =
@@ -3078,8 +3114,9 @@ struct GEN6_3DSTATE_STENCIL_BUFFER {
 };
 
 static inline void
-GEN6_3DSTATE_STENCIL_BUFFER_pack(__gen_user_data *data, void * restrict dst,
-                                 const struct GEN6_3DSTATE_STENCIL_BUFFER * restrict values)
+GEN6_3DSTATE_STENCIL_BUFFER_pack(__attribute__((unused)) __gen_user_data *data,
+                                 __attribute__((unused)) void * restrict dst,
+                                 __attribute__((unused)) const struct GEN6_3DSTATE_STENCIL_BUFFER * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -3123,8 +3160,9 @@ struct GEN6_3DSTATE_URB {
 };
 
 static inline void
-GEN6_3DSTATE_URB_pack(__gen_user_data *data, void * restrict dst,
-                      const struct GEN6_3DSTATE_URB * restrict values)
+GEN6_3DSTATE_URB_pack(__attribute__((unused)) __gen_user_data *data,
+                      __attribute__((unused)) void * restrict dst,
+                      __attribute__((unused)) const struct GEN6_3DSTATE_URB * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -3162,8 +3200,9 @@ struct GEN6_3DSTATE_VERTEX_BUFFERS {
 };
 
 static inline void
-GEN6_3DSTATE_VERTEX_BUFFERS_pack(__gen_user_data *data, void * restrict dst,
-                                 const struct GEN6_3DSTATE_VERTEX_BUFFERS * restrict values)
+GEN6_3DSTATE_VERTEX_BUFFERS_pack(__attribute__((unused)) __gen_user_data *data,
+                                 __attribute__((unused)) void * restrict dst,
+                                 __attribute__((unused)) const struct GEN6_3DSTATE_VERTEX_BUFFERS * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -3193,8 +3232,9 @@ struct GEN6_3DSTATE_VERTEX_ELEMENTS {
 };
 
 static inline void
-GEN6_3DSTATE_VERTEX_ELEMENTS_pack(__gen_user_data *data, void * restrict dst,
-                                  const struct GEN6_3DSTATE_VERTEX_ELEMENTS * restrict values)
+GEN6_3DSTATE_VERTEX_ELEMENTS_pack(__attribute__((unused)) __gen_user_data *data,
+                                  __attribute__((unused)) void * restrict dst,
+                                  __attribute__((unused)) const struct GEN6_3DSTATE_VERTEX_ELEMENTS * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -3223,8 +3263,9 @@ struct GEN6_3DSTATE_VF_STATISTICS {
 };
 
 static inline void
-GEN6_3DSTATE_VF_STATISTICS_pack(__gen_user_data *data, void * restrict dst,
-                                const struct GEN6_3DSTATE_VF_STATISTICS * restrict values)
+GEN6_3DSTATE_VF_STATISTICS_pack(__attribute__((unused)) __gen_user_data *data,
+                                __attribute__((unused)) void * restrict dst,
+                                __attribute__((unused)) const struct GEN6_3DSTATE_VF_STATISTICS * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -3260,8 +3301,9 @@ struct GEN6_3DSTATE_VIEWPORT_STATE_POINTERS {
 };
 
 static inline void
-GEN6_3DSTATE_VIEWPORT_STATE_POINTERS_pack(__gen_user_data *data, void * restrict dst,
-                                          const struct GEN6_3DSTATE_VIEWPORT_STATE_POINTERS * restrict values)
+GEN6_3DSTATE_VIEWPORT_STATE_POINTERS_pack(__attribute__((unused)) __gen_user_data *data,
+                                          __attribute__((unused)) void * restrict dst,
+                                          __attribute__((unused)) const struct GEN6_3DSTATE_VIEWPORT_STATE_POINTERS * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -3323,12 +3365,13 @@ struct GEN6_3DSTATE_VS {
    uint32_t                             MaximumNumberofThreads;
    bool                                 StatisticsEnable;
    bool                                 VertexCacheDisable;
-   bool                                 FunctionEnable;
+   bool                                 Enable;
 };
 
 static inline void
-GEN6_3DSTATE_VS_pack(__gen_user_data *data, void * restrict dst,
-                     const struct GEN6_3DSTATE_VS * restrict values)
+GEN6_3DSTATE_VS_pack(__attribute__((unused)) __gen_user_data *data,
+                     __attribute__((unused)) void * restrict dst,
+                     __attribute__((unused)) const struct GEN6_3DSTATE_VS * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -3364,7 +3407,7 @@ GEN6_3DSTATE_VS_pack(__gen_user_data *data, void * restrict dst,
       __gen_uint(values->MaximumNumberofThreads, 25, 31) |
       __gen_uint(values->StatisticsEnable, 10, 10) |
       __gen_uint(values->VertexCacheDisable, 1, 1) |
-      __gen_uint(values->FunctionEnable, 0, 0);
+      __gen_uint(values->Enable, 0, 0);
 }
 
 #define GEN6_3DSTATE_WM_length                 9
@@ -3390,8 +3433,8 @@ struct GEN6_3DSTATE_WM {
    uint32_t                             ThreadPriority;
 #define High                                     1
    uint32_t                             FloatingPointMode;
-#define IEEE745                                  0
-#define Alt                                      1
+#define FLOATING_POINT_MODE_IEEE745              0
+#define FLOATING_POINT_MODE_Alternate            1
    bool                                 IllegalOpcodeExceptionEnable;
    bool                                 MaskStackExceptionEnable;
    bool                                 SoftwareExceptionEnable;
@@ -3460,8 +3503,9 @@ struct GEN6_3DSTATE_WM {
 };
 
 static inline void
-GEN6_3DSTATE_WM_pack(__gen_user_data *data, void * restrict dst,
-                     const struct GEN6_3DSTATE_WM * restrict values)
+GEN6_3DSTATE_WM_pack(__attribute__((unused)) __gen_user_data *data,
+                     __attribute__((unused)) void * restrict dst,
+                     __attribute__((unused)) const struct GEN6_3DSTATE_WM * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -3553,8 +3597,9 @@ struct GEN6_MEDIA_CURBE_LOAD {
 };
 
 static inline void
-GEN6_MEDIA_CURBE_LOAD_pack(__gen_user_data *data, void * restrict dst,
-                           const struct GEN6_MEDIA_CURBE_LOAD * restrict values)
+GEN6_MEDIA_CURBE_LOAD_pack(__attribute__((unused)) __gen_user_data *data,
+                           __attribute__((unused)) void * restrict dst,
+                           __attribute__((unused)) const struct GEN6_MEDIA_CURBE_LOAD * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -3595,8 +3640,9 @@ struct GEN6_MEDIA_GATEWAY_STATE {
 };
 
 static inline void
-GEN6_MEDIA_GATEWAY_STATE_pack(__gen_user_data *data, void * restrict dst,
-                              const struct GEN6_MEDIA_GATEWAY_STATE * restrict values)
+GEN6_MEDIA_GATEWAY_STATE_pack(__attribute__((unused)) __gen_user_data *data,
+                              __attribute__((unused)) void * restrict dst,
+                              __attribute__((unused)) const struct GEN6_MEDIA_GATEWAY_STATE * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -3633,8 +3679,9 @@ struct GEN6_MEDIA_INTERFACE_DESCRIPTOR_LOAD {
 };
 
 static inline void
-GEN6_MEDIA_INTERFACE_DESCRIPTOR_LOAD_pack(__gen_user_data *data, void * restrict dst,
-                                          const struct GEN6_MEDIA_INTERFACE_DESCRIPTOR_LOAD * restrict values)
+GEN6_MEDIA_INTERFACE_DESCRIPTOR_LOAD_pack(__attribute__((unused)) __gen_user_data *data,
+                                          __attribute__((unused)) void * restrict dst,
+                                          __attribute__((unused)) const struct GEN6_MEDIA_INTERFACE_DESCRIPTOR_LOAD * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -3686,8 +3733,9 @@ struct GEN6_MEDIA_OBJECT {
 };
 
 static inline void
-GEN6_MEDIA_OBJECT_pack(__gen_user_data *data, void * restrict dst,
-                       const struct GEN6_MEDIA_OBJECT * restrict values)
+GEN6_MEDIA_OBJECT_pack(__attribute__((unused)) __gen_user_data *data,
+                       __attribute__((unused)) void * restrict dst,
+                       __attribute__((unused)) const struct GEN6_MEDIA_OBJECT * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -3743,8 +3791,9 @@ struct GEN6_MEDIA_OBJECT_PRT {
 };
 
 static inline void
-GEN6_MEDIA_OBJECT_PRT_pack(__gen_user_data *data, void * restrict dst,
-                           const struct GEN6_MEDIA_OBJECT_PRT * restrict values)
+GEN6_MEDIA_OBJECT_PRT_pack(__attribute__((unused)) __gen_user_data *data,
+                           __attribute__((unused)) void * restrict dst,
+                           __attribute__((unused)) const struct GEN6_MEDIA_OBJECT_PRT * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -3857,8 +3906,9 @@ struct GEN6_MEDIA_OBJECT_WALKER {
 };
 
 static inline void
-GEN6_MEDIA_OBJECT_WALKER_pack(__gen_user_data *data, void * restrict dst,
-                              const struct GEN6_MEDIA_OBJECT_WALKER * restrict values)
+GEN6_MEDIA_OBJECT_WALKER_pack(__attribute__((unused)) __gen_user_data *data,
+                              __attribute__((unused)) void * restrict dst,
+                              __attribute__((unused)) const struct GEN6_MEDIA_OBJECT_WALKER * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -3957,8 +4007,9 @@ struct GEN6_MEDIA_STATE_FLUSH {
 };
 
 static inline void
-GEN6_MEDIA_STATE_FLUSH_pack(__gen_user_data *data, void * restrict dst,
-                            const struct GEN6_MEDIA_STATE_FLUSH * restrict values)
+GEN6_MEDIA_STATE_FLUSH_pack(__attribute__((unused)) __gen_user_data *data,
+                            __attribute__((unused)) void * restrict dst,
+                            __attribute__((unused)) const struct GEN6_MEDIA_STATE_FLUSH * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -4028,8 +4079,9 @@ struct GEN6_MEDIA_VFE_STATE {
 };
 
 static inline void
-GEN6_MEDIA_VFE_STATE_pack(__gen_user_data *data, void * restrict dst,
-                          const struct GEN6_MEDIA_VFE_STATE * restrict values)
+GEN6_MEDIA_VFE_STATE_pack(__attribute__((unused)) __gen_user_data *data,
+                          __attribute__((unused)) void * restrict dst,
+                          __attribute__((unused)) const struct GEN6_MEDIA_VFE_STATE * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -4095,8 +4147,9 @@ struct GEN6_MI_ARB_CHECK {
 };
 
 static inline void
-GEN6_MI_ARB_CHECK_pack(__gen_user_data *data, void * restrict dst,
-                       const struct GEN6_MI_ARB_CHECK * restrict values)
+GEN6_MI_ARB_CHECK_pack(__attribute__((unused)) __gen_user_data *data,
+                       __attribute__((unused)) void * restrict dst,
+                       __attribute__((unused)) const struct GEN6_MI_ARB_CHECK * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -4118,8 +4171,9 @@ struct GEN6_MI_ARB_ON_OFF {
 };
 
 static inline void
-GEN6_MI_ARB_ON_OFF_pack(__gen_user_data *data, void * restrict dst,
-                        const struct GEN6_MI_ARB_ON_OFF * restrict values)
+GEN6_MI_ARB_ON_OFF_pack(__attribute__((unused)) __gen_user_data *data,
+                        __attribute__((unused)) void * restrict dst,
+                        __attribute__((unused)) const struct GEN6_MI_ARB_ON_OFF * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -4141,8 +4195,9 @@ struct GEN6_MI_BATCH_BUFFER_END {
 };
 
 static inline void
-GEN6_MI_BATCH_BUFFER_END_pack(__gen_user_data *data, void * restrict dst,
-                              const struct GEN6_MI_BATCH_BUFFER_END * restrict values)
+GEN6_MI_BATCH_BUFFER_END_pack(__attribute__((unused)) __gen_user_data *data,
+                              __attribute__((unused)) void * restrict dst,
+                              __attribute__((unused)) const struct GEN6_MI_BATCH_BUFFER_END * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -4170,8 +4225,9 @@ struct GEN6_MI_BATCH_BUFFER_START {
 };
 
 static inline void
-GEN6_MI_BATCH_BUFFER_START_pack(__gen_user_data *data, void * restrict dst,
-                                const struct GEN6_MI_BATCH_BUFFER_START * restrict values)
+GEN6_MI_BATCH_BUFFER_START_pack(__attribute__((unused)) __gen_user_data *data,
+                                __attribute__((unused)) void * restrict dst,
+                                __attribute__((unused)) const struct GEN6_MI_BATCH_BUFFER_START * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -4202,8 +4258,9 @@ struct GEN6_MI_CLFLUSH {
 };
 
 static inline void
-GEN6_MI_CLFLUSH_pack(__gen_user_data *data, void * restrict dst,
-                     const struct GEN6_MI_CLFLUSH * restrict values)
+GEN6_MI_CLFLUSH_pack(__attribute__((unused)) __gen_user_data *data,
+                     __attribute__((unused)) void * restrict dst,
+                     __attribute__((unused)) const struct GEN6_MI_CLFLUSH * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -4237,8 +4294,9 @@ struct GEN6_MI_CONDITIONAL_BATCH_BUFFER_END {
 };
 
 static inline void
-GEN6_MI_CONDITIONAL_BATCH_BUFFER_END_pack(__gen_user_data *data, void * restrict dst,
-                                          const struct GEN6_MI_CONDITIONAL_BATCH_BUFFER_END * restrict values)
+GEN6_MI_CONDITIONAL_BATCH_BUFFER_END_pack(__attribute__((unused)) __gen_user_data *data,
+                                          __attribute__((unused)) void * restrict dst,
+                                          __attribute__((unused)) const struct GEN6_MI_CONDITIONAL_BATCH_BUFFER_END * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -4276,8 +4334,9 @@ struct GEN6_MI_FLUSH {
 };
 
 static inline void
-GEN6_MI_FLUSH_pack(__gen_user_data *data, void * restrict dst,
-                   const struct GEN6_MI_FLUSH * restrict values)
+GEN6_MI_FLUSH_pack(__attribute__((unused)) __gen_user_data *data,
+                   __attribute__((unused)) void * restrict dst,
+                   __attribute__((unused)) const struct GEN6_MI_FLUSH * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -4308,8 +4367,9 @@ struct GEN6_MI_LOAD_REGISTER_IMM {
 };
 
 static inline void
-GEN6_MI_LOAD_REGISTER_IMM_pack(__gen_user_data *data, void * restrict dst,
-                               const struct GEN6_MI_LOAD_REGISTER_IMM * restrict values)
+GEN6_MI_LOAD_REGISTER_IMM_pack(__attribute__((unused)) __gen_user_data *data,
+                               __attribute__((unused)) void * restrict dst,
+                               __attribute__((unused)) const struct GEN6_MI_LOAD_REGISTER_IMM * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -4346,8 +4406,9 @@ struct GEN6_MI_LOAD_SCAN_LINES_EXCL {
 };
 
 static inline void
-GEN6_MI_LOAD_SCAN_LINES_EXCL_pack(__gen_user_data *data, void * restrict dst,
-                                  const struct GEN6_MI_LOAD_SCAN_LINES_EXCL * restrict values)
+GEN6_MI_LOAD_SCAN_LINES_EXCL_pack(__attribute__((unused)) __gen_user_data *data,
+                                  __attribute__((unused)) void * restrict dst,
+                                  __attribute__((unused)) const struct GEN6_MI_LOAD_SCAN_LINES_EXCL * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -4376,8 +4437,9 @@ struct GEN6_MI_NOOP {
 };
 
 static inline void
-GEN6_MI_NOOP_pack(__gen_user_data *data, void * restrict dst,
-                  const struct GEN6_MI_NOOP * restrict values)
+GEN6_MI_NOOP_pack(__attribute__((unused)) __gen_user_data *data,
+                  __attribute__((unused)) void * restrict dst,
+                  __attribute__((unused)) const struct GEN6_MI_NOOP * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -4400,8 +4462,9 @@ struct GEN6_MI_REPORT_HEAD {
 };
 
 static inline void
-GEN6_MI_REPORT_HEAD_pack(__gen_user_data *data, void * restrict dst,
-                         const struct GEN6_MI_REPORT_HEAD * restrict values)
+GEN6_MI_REPORT_HEAD_pack(__attribute__((unused)) __gen_user_data *data,
+                         __attribute__((unused)) void * restrict dst,
+                         __attribute__((unused)) const struct GEN6_MI_REPORT_HEAD * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -4429,8 +4492,9 @@ struct GEN6_MI_SEMAPHORE_MBOX {
 };
 
 static inline void
-GEN6_MI_SEMAPHORE_MBOX_pack(__gen_user_data *data, void * restrict dst,
-                            const struct GEN6_MI_SEMAPHORE_MBOX * restrict values)
+GEN6_MI_SEMAPHORE_MBOX_pack(__attribute__((unused)) __gen_user_data *data,
+                            __attribute__((unused)) void * restrict dst,
+                            __attribute__((unused)) const struct GEN6_MI_SEMAPHORE_MBOX * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -4467,8 +4531,9 @@ struct GEN6_MI_SET_CONTEXT {
 };
 
 static inline void
-GEN6_MI_SET_CONTEXT_pack(__gen_user_data *data, void * restrict dst,
-                         const struct GEN6_MI_SET_CONTEXT * restrict values)
+GEN6_MI_SET_CONTEXT_pack(__attribute__((unused)) __gen_user_data *data,
+                         __attribute__((unused)) void * restrict dst,
+                         __attribute__((unused)) const struct GEN6_MI_SET_CONTEXT * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -4505,8 +4570,9 @@ struct GEN6_MI_STORE_DATA_IMM {
 };
 
 static inline void
-GEN6_MI_STORE_DATA_IMM_pack(__gen_user_data *data, void * restrict dst,
-                            const struct GEN6_MI_STORE_DATA_IMM * restrict values)
+GEN6_MI_STORE_DATA_IMM_pack(__attribute__((unused)) __gen_user_data *data,
+                            __attribute__((unused)) void * restrict dst,
+                            __attribute__((unused)) const struct GEN6_MI_STORE_DATA_IMM * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -4545,8 +4611,9 @@ struct GEN6_MI_STORE_DATA_INDEX {
 };
 
 static inline void
-GEN6_MI_STORE_DATA_INDEX_pack(__gen_user_data *data, void * restrict dst,
-                              const struct GEN6_MI_STORE_DATA_INDEX * restrict values)
+GEN6_MI_STORE_DATA_INDEX_pack(__attribute__((unused)) __gen_user_data *data,
+                              __attribute__((unused)) void * restrict dst,
+                              __attribute__((unused)) const struct GEN6_MI_STORE_DATA_INDEX * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -4579,8 +4646,9 @@ struct GEN6_MI_STORE_REGISTER_MEM {
 };
 
 static inline void
-GEN6_MI_STORE_REGISTER_MEM_pack(__gen_user_data *data, void * restrict dst,
-                                const struct GEN6_MI_STORE_REGISTER_MEM * restrict values)
+GEN6_MI_STORE_REGISTER_MEM_pack(__attribute__((unused)) __gen_user_data *data,
+                                __attribute__((unused)) void * restrict dst,
+                                __attribute__((unused)) const struct GEN6_MI_STORE_REGISTER_MEM * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -4609,8 +4677,9 @@ struct GEN6_MI_SUSPEND_FLUSH {
 };
 
 static inline void
-GEN6_MI_SUSPEND_FLUSH_pack(__gen_user_data *data, void * restrict dst,
-                           const struct GEN6_MI_SUSPEND_FLUSH * restrict values)
+GEN6_MI_SUSPEND_FLUSH_pack(__attribute__((unused)) __gen_user_data *data,
+                           __attribute__((unused)) void * restrict dst,
+                           __attribute__((unused)) const struct GEN6_MI_SUSPEND_FLUSH * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -4636,8 +4705,9 @@ struct GEN6_MI_URB_CLEAR {
 };
 
 static inline void
-GEN6_MI_URB_CLEAR_pack(__gen_user_data *data, void * restrict dst,
-                       const struct GEN6_MI_URB_CLEAR * restrict values)
+GEN6_MI_URB_CLEAR_pack(__attribute__((unused)) __gen_user_data *data,
+                       __attribute__((unused)) void * restrict dst,
+                       __attribute__((unused)) const struct GEN6_MI_URB_CLEAR * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -4663,8 +4733,9 @@ struct GEN6_MI_USER_INTERRUPT {
 };
 
 static inline void
-GEN6_MI_USER_INTERRUPT_pack(__gen_user_data *data, void * restrict dst,
-                            const struct GEN6_MI_USER_INTERRUPT * restrict values)
+GEN6_MI_USER_INTERRUPT_pack(__attribute__((unused)) __gen_user_data *data,
+                            __attribute__((unused)) void * restrict dst,
+                            __attribute__((unused)) const struct GEN6_MI_USER_INTERRUPT * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -4697,8 +4768,9 @@ struct GEN6_MI_WAIT_FOR_EVENT {
 };
 
 static inline void
-GEN6_MI_WAIT_FOR_EVENT_pack(__gen_user_data *data, void * restrict dst,
-                            const struct GEN6_MI_WAIT_FOR_EVENT * restrict values)
+GEN6_MI_WAIT_FOR_EVENT_pack(__attribute__((unused)) __gen_user_data *data,
+                            __attribute__((unused)) void * restrict dst,
+                            __attribute__((unused)) const struct GEN6_MI_WAIT_FOR_EVENT * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -4737,8 +4809,9 @@ struct GEN6_PIPELINE_SELECT {
 };
 
 static inline void
-GEN6_PIPELINE_SELECT_pack(__gen_user_data *data, void * restrict dst,
-                          const struct GEN6_PIPELINE_SELECT * restrict values)
+GEN6_PIPELINE_SELECT_pack(__attribute__((unused)) __gen_user_data *data,
+                          __attribute__((unused)) void * restrict dst,
+                          __attribute__((unused)) const struct GEN6_PIPELINE_SELECT * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -4794,8 +4867,9 @@ struct GEN6_PIPE_CONTROL {
 };
 
 static inline void
-GEN6_PIPE_CONTROL_pack(__gen_user_data *data, void * restrict dst,
-                       const struct GEN6_PIPE_CONTROL * restrict values)
+GEN6_PIPE_CONTROL_pack(__attribute__((unused)) __gen_user_data *data,
+                       __attribute__((unused)) void * restrict dst,
+                       __attribute__((unused)) const struct GEN6_PIPE_CONTROL * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -4885,8 +4959,9 @@ struct GEN6_STATE_BASE_ADDRESS {
 };
 
 static inline void
-GEN6_STATE_BASE_ADDRESS_pack(__gen_user_data *data, void * restrict dst,
-                             const struct GEN6_STATE_BASE_ADDRESS * restrict values)
+GEN6_STATE_BASE_ADDRESS_pack(__attribute__((unused)) __gen_user_data *data,
+                             __attribute__((unused)) void * restrict dst,
+                             __attribute__((unused)) const struct GEN6_STATE_BASE_ADDRESS * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -4985,8 +5060,9 @@ struct GEN6_STATE_PREFETCH {
 };
 
 static inline void
-GEN6_STATE_PREFETCH_pack(__gen_user_data *data, void * restrict dst,
-                         const struct GEN6_STATE_PREFETCH * restrict values)
+GEN6_STATE_PREFETCH_pack(__attribute__((unused)) __gen_user_data *data,
+                         __attribute__((unused)) void * restrict dst,
+                         __attribute__((unused)) const struct GEN6_STATE_PREFETCH * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -5021,8 +5097,9 @@ struct GEN6_STATE_SIP {
 };
 
 static inline void
-GEN6_STATE_SIP_pack(__gen_user_data *data, void * restrict dst,
-                    const struct GEN6_STATE_SIP * restrict values)
+GEN6_STATE_SIP_pack(__attribute__((unused)) __gen_user_data *data,
+                    __attribute__((unused)) void * restrict dst,
+                    __attribute__((unused)) const struct GEN6_STATE_SIP * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -5047,8 +5124,9 @@ struct GEN6_BCS_INSTDONE {
 };
 
 static inline void
-GEN6_BCS_INSTDONE_pack(__gen_user_data *data, void * restrict dst,
-                       const struct GEN6_BCS_INSTDONE * restrict values)
+GEN6_BCS_INSTDONE_pack(__attribute__((unused)) __gen_user_data *data,
+                       __attribute__((unused)) void * restrict dst,
+                       __attribute__((unused)) const struct GEN6_BCS_INSTDONE * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -5096,8 +5174,9 @@ struct GEN6_INSTDONE_1 {
 };
 
 static inline void
-GEN6_INSTDONE_1_pack(__gen_user_data *data, void * restrict dst,
-                     const struct GEN6_INSTDONE_1 * restrict values)
+GEN6_INSTDONE_1_pack(__attribute__((unused)) __gen_user_data *data,
+                     __attribute__((unused)) void * restrict dst,
+                     __attribute__((unused)) const struct GEN6_INSTDONE_1 * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -5173,8 +5252,9 @@ struct GEN6_INSTDONE_2 {
 };
 
 static inline void
-GEN6_INSTDONE_2_pack(__gen_user_data *data, void * restrict dst,
-                     const struct GEN6_INSTDONE_2 * restrict values)
+GEN6_INSTDONE_2_pack(__attribute__((unused)) __gen_user_data *data,
+                     __attribute__((unused)) void * restrict dst,
+                     __attribute__((unused)) const struct GEN6_INSTDONE_2 * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -5250,8 +5330,9 @@ struct GEN6_VCS_INSTDONE {
 };
 
 static inline void
-GEN6_VCS_INSTDONE_pack(__gen_user_data *data, void * restrict dst,
-                       const struct GEN6_VCS_INSTDONE * restrict values)
+GEN6_VCS_INSTDONE_pack(__attribute__((unused)) __gen_user_data *data,
+                       __attribute__((unused)) void * restrict dst,
+                       __attribute__((unused)) const struct GEN6_VCS_INSTDONE * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -5304,8 +5385,9 @@ struct GEN6_GFX_ARB_ERROR_RPT {
 };
 
 static inline void
-GEN6_GFX_ARB_ERROR_RPT_pack(__gen_user_data *data, void * restrict dst,
-                            const struct GEN6_GFX_ARB_ERROR_RPT * restrict values)
+GEN6_GFX_ARB_ERROR_RPT_pack(__attribute__((unused)) __gen_user_data *data,
+                            __attribute__((unused)) void * restrict dst,
+                            __attribute__((unused)) const struct GEN6_GFX_ARB_ERROR_RPT * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -5338,8 +5420,9 @@ struct GEN6_BCS_FAULT_REG {
 };
 
 static inline void
-GEN6_BCS_FAULT_REG_pack(__gen_user_data *data, void * restrict dst,
-                        const struct GEN6_BCS_FAULT_REG * restrict values)
+GEN6_BCS_FAULT_REG_pack(__attribute__((unused)) __gen_user_data *data,
+                        __attribute__((unused)) void * restrict dst,
+                        __attribute__((unused)) const struct GEN6_BCS_FAULT_REG * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -5368,8 +5451,9 @@ struct GEN6_RCS_FAULT_REG {
 };
 
 static inline void
-GEN6_RCS_FAULT_REG_pack(__gen_user_data *data, void * restrict dst,
-                        const struct GEN6_RCS_FAULT_REG * restrict values)
+GEN6_RCS_FAULT_REG_pack(__attribute__((unused)) __gen_user_data *data,
+                        __attribute__((unused)) void * restrict dst,
+                        __attribute__((unused)) const struct GEN6_RCS_FAULT_REG * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -5398,8 +5482,9 @@ struct GEN6_VCS_FAULT_REG {
 };
 
 static inline void
-GEN6_VCS_FAULT_REG_pack(__gen_user_data *data, void * restrict dst,
-                        const struct GEN6_VCS_FAULT_REG * restrict values)
+GEN6_VCS_FAULT_REG_pack(__attribute__((unused)) __gen_user_data *data,
+                        __attribute__((unused)) void * restrict dst,
+                        __attribute__((unused)) const struct GEN6_VCS_FAULT_REG * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -5427,8 +5512,9 @@ struct GEN6_BCS_RING_BUFFER_CTL {
 };
 
 static inline void
-GEN6_BCS_RING_BUFFER_CTL_pack(__gen_user_data *data, void * restrict dst,
-                              const struct GEN6_BCS_RING_BUFFER_CTL * restrict values)
+GEN6_BCS_RING_BUFFER_CTL_pack(__attribute__((unused)) __gen_user_data *data,
+                              __attribute__((unused)) void * restrict dst,
+                              __attribute__((unused)) const struct GEN6_BCS_RING_BUFFER_CTL * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -5455,8 +5541,9 @@ struct GEN6_RCS_RING_BUFFER_CTL {
 };
 
 static inline void
-GEN6_RCS_RING_BUFFER_CTL_pack(__gen_user_data *data, void * restrict dst,
-                              const struct GEN6_RCS_RING_BUFFER_CTL * restrict values)
+GEN6_RCS_RING_BUFFER_CTL_pack(__attribute__((unused)) __gen_user_data *data,
+                              __attribute__((unused)) void * restrict dst,
+                              __attribute__((unused)) const struct GEN6_RCS_RING_BUFFER_CTL * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
@@ -5484,8 +5571,9 @@ struct GEN6_VCS_RING_BUFFER_CTL {
 };
 
 static inline void
-GEN6_VCS_RING_BUFFER_CTL_pack(__gen_user_data *data, void * restrict dst,
-                              const struct GEN6_VCS_RING_BUFFER_CTL * restrict values)
+GEN6_VCS_RING_BUFFER_CTL_pack(__attribute__((unused)) __gen_user_data *data,
+                              __attribute__((unused)) void * restrict dst,
+                              __attribute__((unused)) const struct GEN6_VCS_RING_BUFFER_CTL * restrict values)
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 

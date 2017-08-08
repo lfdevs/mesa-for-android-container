@@ -199,7 +199,7 @@ nv30_push_vbo(struct nv30_context *nv30, const struct pipe_draw_info *info)
 {
    struct push_context ctx;
    unsigned i, index_size;
-   bool apply_bias = info->indexed && info->index_bias;
+   bool apply_bias = info->index_size && info->index_bias;
 
    ctx.push = nv30->base.pushbuf;
    ctx.translate = nv30->vertex->translate;
@@ -209,9 +209,9 @@ nv30_push_vbo(struct nv30_context *nv30, const struct pipe_draw_info *info)
    for (i = 0; i < nv30->num_vtxbufs; ++i) {
       uint8_t *data;
       struct pipe_vertex_buffer *vb = &nv30->vtxbuf[i];
-      struct nv04_resource *res = nv04_resource(vb->buffer);
+      struct nv04_resource *res = nv04_resource(vb->buffer.resource);
 
-      if (!vb->buffer && !vb->user_buffer) {
+      if (!vb->buffer.resource) {
          continue;
       }
 
@@ -224,18 +224,18 @@ nv30_push_vbo(struct nv30_context *nv30, const struct pipe_draw_info *info)
       ctx.translate->set_buffer(ctx.translate, i, data, vb->stride, ~0);
    }
 
-   if (info->indexed) {
-      if (nv30->idxbuf.buffer)
+   if (info->index_size) {
+      if (!info->has_user_indices)
          ctx.idxbuf = nouveau_resource_map_offset(&nv30->base,
-            nv04_resource(nv30->idxbuf.buffer), nv30->idxbuf.offset,
+            nv04_resource(info->index.resource), info->start * info->index_size,
             NOUVEAU_BO_RD);
       else
-         ctx.idxbuf = nv30->idxbuf.user_buffer;
+         ctx.idxbuf = info->index.user;
       if (!ctx.idxbuf) {
          nv30_state_release(nv30);
          return;
       }
-      index_size = nv30->idxbuf.index_size;
+      index_size = info->index_size;
       ctx.primitive_restart = info->primitive_restart;
       ctx.restart_index = info->restart_index;
    } else {
@@ -277,12 +277,12 @@ nv30_push_vbo(struct nv30_context *nv30, const struct pipe_draw_info *info)
    BEGIN_NV04(ctx.push, NV30_3D(VERTEX_BEGIN_END), 1);
    PUSH_DATA (ctx.push, NV30_3D_VERTEX_BEGIN_END_STOP);
 
-   if (info->indexed)
-      nouveau_resource_unmap(nv04_resource(nv30->idxbuf.buffer));
+   if (info->index_size && !info->has_user_indices)
+      nouveau_resource_unmap(nv04_resource(info->index.resource));
 
    for (i = 0; i < nv30->num_vtxbufs; ++i) {
-      if (nv30->vtxbuf[i].buffer) {
-         nouveau_resource_unmap(nv04_resource(nv30->vtxbuf[i].buffer));
+      if (nv30->vtxbuf[i].buffer.resource) {
+         nouveau_resource_unmap(nv04_resource(nv30->vtxbuf[i].buffer.resource));
       }
    }
 

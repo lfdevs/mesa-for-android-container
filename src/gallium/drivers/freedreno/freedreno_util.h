@@ -76,10 +76,10 @@ enum adreno_stencil_op fd_stencil_op(unsigned op);
 #define FD_DBG_SHADERDB 0x0800
 #define FD_DBG_FLUSH    0x1000
 #define FD_DBG_DEQP     0x2000
-#define FD_DBG_NIR      0x4000
-#define FD_DBG_INORDER  0x8000
-#define FD_DBG_BSTAT   0x10000
-#define FD_DBG_NOGROW  0x20000
+#define FD_DBG_INORDER  0x4000
+#define FD_DBG_BSTAT    0x8000
+#define FD_DBG_NOGROW  0x10000
+#define FD_DBG_LRZ     0x20000
 
 extern int fd_mesa_debug;
 extern bool fd_binning_enabled;
@@ -411,13 +411,8 @@ emit_marker5(struct fd_ringbuffer *ring, int scratch_idx)
 	extern unsigned marker_cnt;
 //XXX	unsigned reg = REG_A5XX_CP_SCRATCH_REG(scratch_idx);
 	unsigned reg = 0x00000b78 + scratch_idx;
-	assert(reg != HW_QUERY_BASE_REG);
-	if (reg == HW_QUERY_BASE_REG)
-		return;
-	OUT_WFI5(ring);
 	OUT_PKT4(ring, reg, 1);
 	OUT_RING(ring, ++marker_cnt);
-	OUT_WFI5(ring);
 }
 
 /* helper to get numeric value from environment variable..  mostly
@@ -448,5 +443,28 @@ pack_rgba(enum pipe_format format, const float *rgba)
 
 #define foreach_bit(b, mask) \
 	for (uint32_t _m = (mask); _m && ({(b) = u_bit_scan(&_m); 1;});)
+
+
+#define BIT(bit) (1u << bit)
+
+/*
+ * a4xx+ helpers:
+ */
+
+static inline enum a4xx_state_block
+fd4_stage2shadersb(enum shader_t type)
+{
+	switch (type) {
+	case SHADER_VERTEX:
+		return SB4_VS_SHADER;
+	case SHADER_FRAGMENT:
+		return SB4_FS_SHADER;
+	case SHADER_COMPUTE:
+		return SB4_CS_SHADER;
+	default:
+		unreachable("bad shader type");
+		return ~0;
+	}
+}
 
 #endif /* FREEDRENO_UTIL_H_ */

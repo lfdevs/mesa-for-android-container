@@ -45,7 +45,7 @@
 
 
 static const struct vertex_info *
-svga_vbuf_render_get_vertex_info( struct vbuf_render *render )
+svga_vbuf_render_get_vertex_info(struct vbuf_render *render)
 {
    struct svga_vbuf_render *svga_render = svga_vbuf_render(render);
    struct svga_context *svga = svga_render->svga;
@@ -57,9 +57,9 @@ svga_vbuf_render_get_vertex_info( struct vbuf_render *render )
 
 
 static boolean
-svga_vbuf_render_allocate_vertices( struct vbuf_render *render,
-                                    ushort vertex_size,
-                                    ushort nr_vertices )
+svga_vbuf_render_allocate_vertices(struct vbuf_render *render,
+                                   ushort vertex_size,
+                                   ushort nr_vertices)
 {
    struct svga_vbuf_render *svga_render = svga_vbuf_render(render);
    struct svga_context *svga = svga_render->svga;
@@ -79,7 +79,8 @@ svga_vbuf_render_allocate_vertices( struct vbuf_render *render,
       new_ibuf = new_vbuf = TRUE;
    svga->swtnl.new_vbuf = FALSE;
 
-   if (svga_render->vbuf_size < svga_render->vbuf_offset + svga_render->vbuf_used + size)
+   if (svga_render->vbuf_size
+       < svga_render->vbuf_offset + svga_render->vbuf_used + size)
       new_vbuf = TRUE;
 
    if (new_vbuf)
@@ -93,7 +94,7 @@ svga_vbuf_render_allocate_vertices( struct vbuf_render *render,
                                              PIPE_BIND_VERTEX_BUFFER,
                                              PIPE_USAGE_STREAM,
                                              svga_render->vbuf_size);
-      if(!svga_render->vbuf) {
+      if (!svga_render->vbuf) {
          svga_context_flush(svga, NULL);
          assert(!svga_render->vbuf);
          svga_render->vbuf = pipe_buffer_create(screen,
@@ -121,8 +122,9 @@ svga_vbuf_render_allocate_vertices( struct vbuf_render *render,
    return TRUE;
 }
 
+
 static void *
-svga_vbuf_render_map_vertices( struct vbuf_render *render )
+svga_vbuf_render_map_vertices(struct vbuf_render *render)
 {
    struct svga_vbuf_render *svga_render = svga_vbuf_render(render);
    struct svga_context *svga = svga_render->svga;
@@ -158,10 +160,11 @@ svga_vbuf_render_map_vertices( struct vbuf_render *render )
    return retPtr;
 }
 
+
 static void
-svga_vbuf_render_unmap_vertices( struct vbuf_render *render,
-                                 ushort min_index,
-                                 ushort max_index )
+svga_vbuf_render_unmap_vertices(struct vbuf_render *render,
+                                ushort min_index,
+                                ushort max_index)
 {
    struct svga_vbuf_render *svga_render = svga_vbuf_render(render);
    struct svga_context *svga = svga_render->svga;
@@ -186,8 +189,8 @@ svga_vbuf_render_unmap_vertices( struct vbuf_render *render,
    }
 
    pipe_buffer_flush_mapped_range(&svga->pipe,
-				  svga_render->vbuf_transfer,
-				  offset, length);
+                                  svga_render->vbuf_transfer,
+                                  offset, length);
    pipe_buffer_unmap(&svga->pipe, svga_render->vbuf_transfer);
    svga_render->min_index = min_index;
    svga_render->max_index = max_index;
@@ -196,16 +199,18 @@ svga_vbuf_render_unmap_vertices( struct vbuf_render *render,
    SVGA_STATS_TIME_POP(svga_sws(svga));
 }
 
+
 static void
-svga_vbuf_render_set_primitive( struct vbuf_render *render,
-                                enum pipe_prim_type prim )
+svga_vbuf_render_set_primitive(struct vbuf_render *render,
+                               enum pipe_prim_type prim)
 {
    struct svga_vbuf_render *svga_render = svga_vbuf_render(render);
    svga_render->prim = prim;
 }
 
+
 static void
-svga_vbuf_submit_state( struct svga_vbuf_render *svga_render )
+svga_vbuf_submit_state(struct svga_vbuf_render *svga_render)
 {
    struct svga_context *svga = svga_render->svga;
    SVGA3dVertexDecl vdecl[PIPE_MAX_ATTRIBS];
@@ -245,10 +250,10 @@ svga_vbuf_submit_state( struct svga_vbuf_render *svga_render )
    /* Specify the vertex buffer (there's only ever one) */
    {
       struct pipe_vertex_buffer vb;
-      vb.buffer = svga_render->vbuf;
+      vb.is_user_buffer = false;
+      vb.buffer.resource = svga_render->vbuf;
       vb.buffer_offset = svga_render->vdecl_offset;
       vb.stride = vdecl[0].array.stride;
-      vb.user_buffer = NULL;
       svga_hwtnl_vertex_buffers(svga->hwtnl, 1, &vb);
    }
 
@@ -260,10 +265,10 @@ svga_vbuf_submit_state( struct svga_vbuf_render *svga_render )
       svga_hwtnl_set_fillmode(svga->hwtnl, PIPE_POLYGON_MODE_FILL);
    }
    else {
-      svga_hwtnl_set_flatshade( svga->hwtnl,
+      svga_hwtnl_set_flatshade(svga->hwtnl,
                                 svga->curr.rast->templ.flatshade ||
                                 svga->state.hw_draw.fs->uses_flat_interp,
-                                svga->curr.rast->templ.flatshade_first );
+                                svga->curr.rast->templ.flatshade_first);
 
       svga_hwtnl_set_fillmode(svga->hwtnl, svga->curr.rast->hw_fillmode);
    }
@@ -272,13 +277,15 @@ svga_vbuf_submit_state( struct svga_vbuf_render *svga_render )
    SVGA_STATS_TIME_POP(svga_sws(svga));
 }
 
+
 static void
-svga_vbuf_render_draw_arrays( struct vbuf_render *render,
-                              unsigned start, uint nr )
+svga_vbuf_render_draw_arrays(struct vbuf_render *render,
+                              unsigned start, uint nr)
 {
    struct svga_vbuf_render *svga_render = svga_vbuf_render(render);
    struct svga_context *svga = svga_render->svga;
-   unsigned bias = (svga_render->vbuf_offset - svga_render->vdecl_offset) / svga_render->vertex_size;
+   unsigned bias = (svga_render->vbuf_offset - svga_render->vdecl_offset)
+      / svga_render->vertex_size;
    enum pipe_error ret = PIPE_OK;
    /* instancing will already have been resolved at this point by 'draw' */
    const unsigned start_instance = 0;
@@ -293,10 +300,10 @@ svga_vbuf_render_draw_arrays( struct vbuf_render *render,
     * altered some of our state behind our backs.  Testcase:
     * redbook/polys.c
     */
-   svga_update_state_retry( svga, SVGA_STATE_HW_DRAW );
+   svga_update_state_retry(svga, SVGA_STATE_HW_DRAW);
 
-   ret = svga_hwtnl_draw_arrays(svga->hwtnl, svga_render->prim, start + bias, nr,
-                                start_instance, instance_count);
+   ret = svga_hwtnl_draw_arrays(svga->hwtnl, svga_render->prim, start + bias,
+                                 nr, start_instance, instance_count);
    if (ret != PIPE_OK) {
       svga_context_flush(svga, NULL);
       ret = svga_hwtnl_draw_arrays(svga->hwtnl, svga_render->prim,
@@ -310,22 +317,24 @@ svga_vbuf_render_draw_arrays( struct vbuf_render *render,
 
 
 static void
-svga_vbuf_render_draw_elements( struct vbuf_render *render,
+svga_vbuf_render_draw_elements(struct vbuf_render *render,
                                 const ushort *indices,
                                 uint nr_indices)
 {
    struct svga_vbuf_render *svga_render = svga_vbuf_render(render);
    struct svga_context *svga = svga_render->svga;
    struct pipe_screen *screen = svga->pipe.screen;
-   int bias = (svga_render->vbuf_offset - svga_render->vdecl_offset) / svga_render->vertex_size;
+   int bias = (svga_render->vbuf_offset - svga_render->vdecl_offset)
+      / svga_render->vertex_size;
    boolean ret;
    size_t size = 2 * nr_indices;
    /* instancing will already have been resolved at this point by 'draw' */
    const unsigned start_instance = 0;
    const unsigned instance_count = 1;
 
-   assert(( svga_render->vbuf_offset - svga_render->vdecl_offset) % svga_render->vertex_size == 0);
-   
+   assert((svga_render->vbuf_offset - svga_render->vdecl_offset)
+          % svga_render->vertex_size == 0);
+
    SVGA_STATS_TIME_PUSH(svga_sws(svga), SVGA_STATS_TIME_VBUFDRAWELEMENTS);
 
    if (svga_render->ibuf_size < svga_render->ibuf_offset + size)
@@ -341,7 +350,8 @@ svga_vbuf_render_draw_elements( struct vbuf_render *render,
    }
 
    pipe_buffer_write_nooverlap(&svga->pipe, svga_render->ibuf,
-			       svga_render->ibuf_offset, 2 * nr_indices, indices);
+                               svga_render->ibuf_offset, 2 * nr_indices,
+                               indices);
 
    /* off to hardware */
    svga_vbuf_submit_state(svga_render);
@@ -350,7 +360,7 @@ svga_vbuf_render_draw_elements( struct vbuf_render *render,
     * altered some of our state behind our backs.  Testcase:
     * redbook/polys.c
     */
-   svga_update_state_retry( svga, SVGA_STATE_HW_DRAW );
+   svga_update_state_retry(svga, SVGA_STATE_HW_DRAW);
 
    ret = svga_hwtnl_draw_range_elements(svga->hwtnl,
                                         svga_render->ibuf,
@@ -359,9 +369,10 @@ svga_vbuf_render_draw_elements( struct vbuf_render *render,
                                         svga_render->min_index,
                                         svga_render->max_index,
                                         svga_render->prim,
-                                        svga_render->ibuf_offset / 2, nr_indices,
+                                        svga_render->ibuf_offset / 2,
+                                        nr_indices,
                                         start_instance, instance_count);
-   if(ret != PIPE_OK) {
+   if (ret != PIPE_OK) {
       svga_context_flush(svga, NULL);
       ret = svga_hwtnl_draw_range_elements(svga->hwtnl,
                                            svga_render->ibuf,
@@ -383,14 +394,14 @@ svga_vbuf_render_draw_elements( struct vbuf_render *render,
 
 
 static void
-svga_vbuf_render_release_vertices( struct vbuf_render *render )
+svga_vbuf_render_release_vertices(struct vbuf_render *render)
 {
 
 }
 
 
 static void
-svga_vbuf_render_destroy( struct vbuf_render *render )
+svga_vbuf_render_destroy(struct vbuf_render *render)
 {
    struct svga_vbuf_render *svga_render = svga_vbuf_render(render);
 
@@ -404,7 +415,7 @@ svga_vbuf_render_destroy( struct vbuf_render *render )
  * Create a new primitive render.
  */
 struct vbuf_render *
-svga_vbuf_render_create( struct svga_context *svga )
+svga_vbuf_render_create(struct svga_context *svga)
 {
    struct svga_vbuf_render *svga_render = CALLOC_STRUCT(svga_vbuf_render);
 

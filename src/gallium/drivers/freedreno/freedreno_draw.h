@@ -115,22 +115,21 @@ static inline void
 fd_draw_emit(struct fd_batch *batch, struct fd_ringbuffer *ring,
 		enum pc_di_primtype primtype,
 		enum pc_di_vis_cull_mode vismode,
-		const struct pipe_draw_info *info)
+		const struct pipe_draw_info *info,
+		unsigned index_offset)
 {
 	struct pipe_resource *idx_buffer = NULL;
 	enum pc_di_index_size idx_type = INDEX_SIZE_IGN;
 	enum pc_di_src_sel src_sel;
 	uint32_t idx_size, idx_offset;
 
-	if (info->indexed) {
-		struct pipe_index_buffer *idx = &batch->ctx->indexbuf;
+	if (info->index_size) {
+		assert(!info->has_user_indices);
 
-		assert(!idx->user_buffer);
-
-		idx_buffer = idx->buffer;
-		idx_type = size2indextype(idx->index_size);
-		idx_size = idx->index_size * info->count;
-		idx_offset = idx->offset + (info->start * idx->index_size);
+		idx_buffer = info->index.resource;
+		idx_type = size2indextype(info->index_size);
+		idx_size = info->index_size * info->count;
+		idx_offset = index_offset + info->start * info->index_size;
 		src_sel = DI_SRC_SEL_DMA;
 	} else {
 		idx_buffer = NULL;

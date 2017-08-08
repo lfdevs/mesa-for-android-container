@@ -28,6 +28,7 @@
 #include "compiler/glsl/ir_optimization.h"
 #include "compiler/glsl/program.h"
 #include "program/program.h"
+#include "main/mtypes.h"
 #include "main/shaderapi.h"
 #include "main/shaderobj.h"
 #include "main/uniforms.h"
@@ -88,9 +89,6 @@ process_glsl_ir(struct brw_context *brw,
                 struct gl_linked_shader *shader)
 {
    struct gl_context *ctx = &brw->ctx;
-   const struct brw_compiler *compiler = brw->screen->compiler;
-   const struct gl_shader_compiler_options *options =
-      &ctx->Const.ShaderCompilerOptions[shader->Stage];
 
    /* Temporary memory context for any new IR. */
    void *mem_ctx = ralloc_context(NULL);
@@ -131,21 +129,6 @@ process_glsl_ir(struct brw_context *brw,
    lower_offset_arrays(shader->ir);
    lower_noise(shader->ir);
    lower_quadop_vector(shader->ir, false);
-
-   bool progress;
-   do {
-      progress = false;
-
-      if (compiler->scalar_stage[shader->Stage]) {
-         if (shader->Stage == MESA_SHADER_VERTEX ||
-             shader->Stage == MESA_SHADER_FRAGMENT)
-            brw_do_channel_expressions(shader->ir);
-         brw_do_vector_splitting(shader->ir);
-      }
-
-      progress = do_common_optimization(shader->ir, true, true,
-                                        options, ctx->Const.NativeIntegers) || progress;
-   } while (progress);
 
    validate_ir_tree(shader->ir);
 
@@ -194,6 +177,39 @@ unify_interfaces(struct shader_info **infos)
    }
 }
 
+static void
+update_xfb_info(struct gl_transform_feedback_info *xfb_info)
+{
+   if (!xfb_info)
+      return;
+
+   for (unsigned i = 0; i < xfb_info->NumOutputs; i++) {
+      struct gl_transform_feedback_output *output = &xfb_info->Outputs[i];
+
+      /* The VUE header contains three scalar fields packed together:
+       * - gl_PointSize is stored in VARYING_SLOT_PSIZ.w
+       * - gl_Layer is stored in VARYING_SLOT_PSIZ.y
+       * - gl_ViewportIndex is stored in VARYING_SLOT_PSIZ.z
+       */
+      switch (output->OutputRegister) {
+      case VARYING_SLOT_LAYER:
+         assert(output->NumComponents == 1);
+         output->OutputRegister = VARYING_SLOT_PSIZ;
+         output->ComponentOffset = 1;
+         break;
+      case VARYING_SLOT_VIEWPORT:
+         assert(output->NumComponents == 1);
+         output->OutputRegister = VARYING_SLOT_PSIZ;
+         output->ComponentOffset = 2;
+         break;
+      case VARYING_SLOT_PSIZ:
+         assert(output->NumComponents == 1);
+         output->ComponentOffset = 3;
+         break;
+      }
+   }
+}
+
 extern "C" GLboolean
 brw_link_shader(struct gl_context *ctx, struct gl_shader_program *shProg)
 {
@@ -217,6 +233,8 @@ brw_link_shader(struct gl_context *ctx, struct gl_shader_program *shProg)
       prog->ShadowSamplers = shader->shadow_samplers;
       _mesa_update_shader_textures_used(shProg, prog);
 
+      update_xfb_info(prog->sh.LinkedTransformFeedback);
+
       bool debug_enabled =
          (INTEL_DEBUG & intel_debug_flag_for_shader_stage(shader->Stage));
 
@@ -229,7 +247,7 @@ brw_link_shader(struct gl_context *ctx, struct gl_shader_program *shProg)
 
       prog->nir = brw_create_nir(brw, shProg, prog, (gl_shader_stage) stage,
                                  compiler->scalar_stage[stage]);
-      infos[stage] = prog->nir->info;
+      infos[stage] = &prog->nir->info;
 
       /* Make a pass over the IR to add state references for any built-in
        * uniforms that are used.  This has to be done now (during linking).

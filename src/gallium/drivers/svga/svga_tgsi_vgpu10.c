@@ -706,7 +706,7 @@ emit_null_dst_register(struct svga_shader_emitter_v10 *emit)
  */
 static unsigned
 get_temp_array_id(const struct svga_shader_emitter_v10 *emit,
-                  unsigned file, unsigned index)
+                  enum tgsi_file_type file, unsigned index)
 {
    if (file == TGSI_FILE_TEMPORARY) {
       return emit->temp_map[index].arrayId;
@@ -723,7 +723,7 @@ get_temp_array_id(const struct svga_shader_emitter_v10 *emit,
  */
 static unsigned
 remap_temp_index(const struct svga_shader_emitter_v10 *emit,
-                 unsigned file, unsigned index)
+                 enum tgsi_file_type file, unsigned index)
 {
    if (file == TGSI_FILE_TEMPORARY) {
       return emit->temp_map[index].index;
@@ -741,7 +741,7 @@ remap_temp_index(const struct svga_shader_emitter_v10 *emit,
 static VGPU10OperandToken0
 setup_operand0_indexing(struct svga_shader_emitter_v10 *emit,
                         VGPU10OperandToken0 operand0,
-                        unsigned file,
+                        enum tgsi_file_type file,
                         boolean indirect, boolean index2D,
                         unsigned tempArrayID)
 {
@@ -849,9 +849,9 @@ static void
 emit_dst_register(struct svga_shader_emitter_v10 *emit,
                   const struct tgsi_full_dst_register *reg)
 {
-   unsigned file = reg->Register.File;
+   enum tgsi_file_type file = reg->Register.File;
    unsigned index = reg->Register.Index;
-   const unsigned sem_name = emit->info.output_semantic_name[index];
+   const enum tgsi_semantic sem_name = emit->info.output_semantic_name[index];
    const unsigned sem_index = emit->info.output_semantic_index[index];
    unsigned writemask = reg->Register.WriteMask;
    const unsigned indirect = reg->Register.Indirect;
@@ -967,7 +967,7 @@ static void
 emit_src_register(struct svga_shader_emitter_v10 *emit,
                   const struct tgsi_full_src_register *reg)
 {
-   unsigned file = reg->Register.File;
+   enum tgsi_file_type file = reg->Register.File;
    unsigned index = reg->Register.Index;
    const unsigned indirect = reg->Register.Indirect;
    const unsigned tempArrayId = get_temp_array_id(emit, file, index);
@@ -1030,6 +1030,9 @@ emit_src_register(struct svga_shader_emitter_v10 *emit,
    operand0.value = operand1.value = 0;
 
    if (is_prim_id) {
+      /* NOTE: we should be using VGPU10_OPERAND_1_COMPONENT here, but
+       * our virtual GPU accepts this as-is.
+       */
       operand0.numComponents = VGPU10_OPERAND_0_COMPONENT;
       operand0.operandType = VGPU10_OPERAND_TYPE_INPUT_PRIMITIVEID;
    }
@@ -1361,7 +1364,7 @@ free_temp_indexes(struct svga_shader_emitter_v10 *emit)
  * Create a tgsi_full_src_register.
  */
 static struct tgsi_full_src_register
-make_src_reg(unsigned file, unsigned index)
+make_src_reg(enum tgsi_file_type file, unsigned index)
 {
    struct tgsi_full_src_register reg;
 
@@ -1410,7 +1413,7 @@ make_src_immediate_reg(unsigned index)
  * Create a tgsi_full_dst_register.
  */
 static struct tgsi_full_dst_register
-make_dst_reg(unsigned file, unsigned index)
+make_dst_reg(enum tgsi_file_type file, unsigned index)
 {
    struct tgsi_full_dst_register reg;
 
@@ -1467,7 +1470,7 @@ absolute_src(const struct tgsi_full_src_register *reg)
 
 /** Return the named swizzle term from the src register */
 static inline unsigned
-get_swizzle(const struct tgsi_full_src_register *reg, unsigned term)
+get_swizzle(const struct tgsi_full_src_register *reg, enum tgsi_swizzle term)
 {
    switch (term) {
    case TGSI_SWIZZLE_X:
@@ -1490,8 +1493,8 @@ get_swizzle(const struct tgsi_full_src_register *reg, unsigned term)
  */
 static struct tgsi_full_src_register
 swizzle_src(const struct tgsi_full_src_register *reg,
-            unsigned swizzleX, unsigned swizzleY,
-            unsigned swizzleZ, unsigned swizzleW)
+            enum tgsi_swizzle swizzleX, enum tgsi_swizzle swizzleY,
+            enum tgsi_swizzle swizzleZ, enum tgsi_swizzle swizzleW)
 {
    struct tgsi_full_src_register swizzled = *reg;
    /* Note: we swizzle the current swizzle */
@@ -1508,7 +1511,7 @@ swizzle_src(const struct tgsi_full_src_register *reg,
  * terms are the same.
  */
 static struct tgsi_full_src_register
-scalar_src(const struct tgsi_full_src_register *reg, unsigned swizzle)
+scalar_src(const struct tgsi_full_src_register *reg, enum tgsi_swizzle swizzle)
 {
    struct tgsi_full_src_register swizzled = *reg;
    /* Note: we swizzle the current swizzle */
@@ -1840,7 +1843,8 @@ emit_vgpu10_immediates_block(struct svga_shader_emitter_v10 *emit)
  */
 static unsigned
 translate_interpolation(const struct svga_shader_emitter_v10 *emit,
-                        unsigned interp, unsigned interpolate_loc)
+                        enum tgsi_interpolate_mode interp,
+                        enum tgsi_interpolate_loc interpolate_loc)
 {
    if (interp == TGSI_INTERPOLATE_COLOR) {
       interp = emit->key.fs.flatshade ?
@@ -2175,7 +2179,7 @@ emit_fragdepth_output_declaration(struct svga_shader_emitter_v10 *emit)
  */
 static void
 emit_system_value_declaration(struct svga_shader_emitter_v10 *emit,
-                              unsigned semantic_name, unsigned index)
+                              enum tgsi_semantic semantic_name, unsigned index)
 {
    switch (semantic_name) {
    case TGSI_SEMANTIC_INSTANCEID:
@@ -2342,7 +2346,7 @@ emit_input_declarations(struct svga_shader_emitter_v10 *emit)
    if (emit->unit == PIPE_SHADER_FRAGMENT) {
 
       for (i = 0; i < emit->linkage.num_inputs; i++) {
-         unsigned semantic_name = emit->info.input_semantic_name[i];
+         enum tgsi_semantic semantic_name = emit->info.input_semantic_name[i];
          unsigned usage_mask = emit->info.input_usage_mask[i];
          unsigned index = emit->linkage.input_map[i];
          unsigned type, interpolationMode, name;
@@ -2401,7 +2405,7 @@ emit_input_declarations(struct svga_shader_emitter_v10 *emit)
    else if (emit->unit == PIPE_SHADER_GEOMETRY) {
 
       for (i = 0; i < emit->info.num_inputs; i++) {
-         unsigned semantic_name = emit->info.input_semantic_name[i];
+         enum tgsi_semantic semantic_name = emit->info.input_semantic_name[i];
          unsigned usage_mask = emit->info.input_usage_mask[i];
          unsigned index = emit->linkage.input_map[i];
          unsigned opcodeType, operandType;
@@ -2484,7 +2488,8 @@ emit_output_declarations(struct svga_shader_emitter_v10 *emit)
 
    for (i = 0; i < emit->info.num_outputs; i++) {
       /*const unsigned usage_mask = emit->info.output_usage_mask[i];*/
-      const unsigned semantic_name = emit->info.output_semantic_name[i];
+      const enum tgsi_semantic semantic_name =
+         emit->info.output_semantic_name[i];
       const unsigned semantic_index = emit->info.output_semantic_index[i];
       unsigned index = i;
 
@@ -2848,7 +2853,11 @@ emit_constant_declaration(struct svga_shader_emitter_v10 *emit)
     */
    total_consts = emit->num_shader_consts[0];
 
-   /* Now, allocate constant slots for the "extra" constants */
+   /* Now, allocate constant slots for the "extra" constants.
+    * Note: it's critical that these extra constant locations
+    * exactly match what's emitted by the "extra" constants code
+    * in svga_state_constants.c
+    */
 
    /* Vertex position scale/translation */
    if (emit->vposition.need_prescale) {
@@ -2872,17 +2881,14 @@ emit_constant_declaration(struct svga_shader_emitter_v10 *emit)
       }
    }
 
-   /* Texcoord scale factors for RECT textures */
-   {
-      for (i = 0; i < emit->num_samplers; i++) {
-         if (emit->key.tex[i].unnormalized) {
-            emit->texcoord_scale_index[i] = total_consts++;
-         }
-      }
-   }
-
-   /* Texture buffer sizes */
    for (i = 0; i < emit->num_samplers; i++) {
+
+      /* Texcoord scale factors for RECT textures */
+      if (emit->key.tex[i].unnormalized) {
+         emit->texcoord_scale_index[i] = total_consts++;
+      }
+
+      /* Texture buffer sizes */
       if (emit->sampler_target[i] == TGSI_TEXTURE_BUFFER) {
          emit->texture_buffer_size_index[i] = total_consts++;
       }
@@ -2950,7 +2956,8 @@ emit_sampler_declarations(struct svga_shader_emitter_v10 *emit)
  * Translate TGSI_TEXTURE_x to VGAPU10_RESOURCE_DIMENSION_x.
  */
 static unsigned
-tgsi_texture_to_resource_dimension(unsigned target, boolean is_array)
+tgsi_texture_to_resource_dimension(enum tgsi_texture_type target,
+                                   boolean is_array)
 {
    switch (target) {
    case TGSI_TEXTURE_BUFFER:
@@ -4844,9 +4851,24 @@ setup_texcoord(struct svga_shader_emitter_v10 *emit,
       struct tgsi_full_dst_register tmp_dst = make_dst_temp_reg(tmp);
       struct tgsi_full_src_register scale_src = make_src_const_reg(scale_index);
 
-      /* MUL tmp, coord, const[] */
-      emit_instruction_op2(emit, VGPU10_OPCODE_MUL, &tmp_dst,
-                           coord, &scale_src, FALSE);
+      if (emit->key.tex[unit].texel_bias) {
+         /* to fix texture coordinate rounding issue, 0.0001 offset is
+          * been added. This fixes piglit test fbo-blit-scaled-linear. */
+         struct tgsi_full_src_register offset =
+            make_immediate_reg_float(emit, 0.0001f);
+
+         /* ADD tmp, coord, offset */
+         emit_instruction_op2(emit, VGPU10_OPCODE_ADD, &tmp_dst,
+                              coord, &offset, FALSE);
+         /* MUL tmp, tmp, scale */
+         emit_instruction_op2(emit, VGPU10_OPCODE_MUL, &tmp_dst,
+                              &tmp_src, &scale_src, FALSE);
+      }
+      else {
+         /* MUL tmp, coord, const[] */
+         emit_instruction_op2(emit, VGPU10_OPCODE_MUL, &tmp_dst,
+                              coord, &scale_src, FALSE);
+      }
       return tmp_src;
    }
    else {
@@ -4862,7 +4884,7 @@ setup_texcoord(struct svga_shader_emitter_v10 *emit,
  */
 static void
 emit_tex_compare_refcoord(struct svga_shader_emitter_v10 *emit,
-                          unsigned target,
+                          enum tgsi_texture_type target,
                           const struct tgsi_full_src_register *coord)
 {
    struct tgsi_full_src_register coord_src_ref;
@@ -4896,7 +4918,7 @@ struct tex_swizzle_info
    boolean swizzled;
    boolean shadow_compare;
    unsigned unit;
-   unsigned texture_target;  /**< TGSI_TEXTURE_x */
+   enum tgsi_texture_type texture_target;  /**< TGSI_TEXTURE_x */
    struct tgsi_full_src_register tmp_src;
    struct tgsi_full_dst_register tmp_dst;
    const struct tgsi_full_dst_register *inst_dst;
@@ -5041,6 +5063,7 @@ end_tex_swizzle(struct svga_shader_emitter_v10 *emit,
                      ((swz_g == PIPE_SWIZZLE_0) << 1) |
                      ((swz_b == PIPE_SWIZZLE_0) << 2) |
                      ((swz_a == PIPE_SWIZZLE_0) << 3));
+      writemask_0 &= swz->inst_dst->Register.WriteMask;
 
       if (writemask_0) {
          struct tgsi_full_src_register zero = int_tex ?
@@ -5059,6 +5082,7 @@ end_tex_swizzle(struct svga_shader_emitter_v10 *emit,
                      ((swz_g == PIPE_SWIZZLE_1) << 1) |
                      ((swz_b == PIPE_SWIZZLE_1) << 2) |
                      ((swz_a == PIPE_SWIZZLE_1) << 3));
+      writemask_1 &= swz->inst_dst->Register.WriteMask;
 
       if (writemask_1) {
          struct tgsi_full_src_register one = int_tex ?
@@ -5096,6 +5120,9 @@ emit_sample(struct svga_shader_emitter_v10 *emit,
    /* SAMPLE dst, coord(s0), resource, sampler */
    begin_emit_instruction(emit);
 
+   /* NOTE: for non-fragment shaders, we should use VGPU10_OPCODE_SAMPLE_L
+    * with LOD=0.  But our virtual GPU accepts this as-is.
+    */
    emit_sample_opcode(emit, VGPU10_OPCODE_SAMPLE,
                       inst->Instruction.Saturate, offsets);
    emit_dst_register(emit, get_tex_swizzle_dst(&swz_info));
@@ -5236,6 +5263,9 @@ emit_txp(struct svga_shader_emitter_v10 *emit,
    begin_emit_instruction(emit);
 
    if (tgsi_is_shadow_target(target))
+      /* NOTE: for non-fragment shaders, we should use
+       * VGPU10_OPCODE_SAMPLE_C_LZ, but our virtual GPU accepts this as-is.
+       */
       opcode = VGPU10_OPCODE_SAMPLE_C;
    else
       opcode = VGPU10_OPCODE_SAMPLE;
@@ -6245,15 +6275,17 @@ alloc_common_immediates(struct svga_shader_emitter_v10 *emit)
    emit->common_immediate_pos[n++] =
       alloc_immediate_float4(emit, 0.0f, 1.0f, 0.5f, -1.0f);
 
-   emit->common_immediate_pos[n++] =
-      alloc_immediate_float4(emit, 128.0f, -128.0f, 2.0f, 3.0f);
+   if (emit->info.opcode_count[TGSI_OPCODE_LIT] > 0) {
+      emit->common_immediate_pos[n++] =
+         alloc_immediate_float4(emit, 128.0f, -128.0f, 0.0f, 0.0f);
+   }
 
    emit->common_immediate_pos[n++] =
       alloc_immediate_int4(emit, 0, 1, 0, -1);
 
    if (emit->key.vs.attrib_puint_to_snorm) {
       emit->common_immediate_pos[n++] =
-         alloc_immediate_float4(emit, -2.0f, -2.0f, -2.0f, -1.66666f);
+         alloc_immediate_float4(emit, -2.0f, 2.0f, 3.0f, -1.66666f);
    }
 
    if (emit->key.vs.attrib_puint_to_uscaled) {
@@ -6267,6 +6299,17 @@ alloc_common_immediates(struct svga_shader_emitter_v10 *emit)
 
       emit->common_immediate_pos[n++] =
          alloc_immediate_int4(emit, 22, 30, 0, 0);
+   }
+
+   unsigned i;
+
+   for (i = 0; i < PIPE_MAX_SAMPLERS; i++) {
+      if (emit->key.tex[i].texel_bias) {
+         /* Replace 0.0f if more immediate float value is needed */
+         emit->common_immediate_pos[n++] =
+            alloc_immediate_float4(emit, 0.0001f, 0.0f, 0.0f, 0.0f);
+         break;
+      }
    }
 
    assert(n <= ARRAY_SIZE(emit->common_immediate_pos));

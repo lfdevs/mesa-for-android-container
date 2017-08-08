@@ -94,8 +94,6 @@ struct intel_mipmap_level
     *
     * The exact semantics of depth varies according to the texture target:
     *    - For GL_TEXTURE_CUBE_MAP, depth is 6.
-    *    - For GL_TEXTURE_2D_ARRAY, depth is the number of array slices. It is
-    *      identical for all miplevels in the texture.
     *    - For GL_TEXTURE_3D, it is the texture's depth at this miplevel. Its
     *      value, like width and height, varies with miplevel.
     *    - For other texture types, depth is 1.
@@ -160,34 +158,13 @@ struct intel_mipmap_tree
    /**
     * Level zero image dimensions.  These dimensions correspond to the
     * physical layout of data in memory.  Accordingly, they account for the
-    * extra width, height, and or depth that must be allocated in order to
-    * accommodate multisample formats, and they account for the extra factor
-    * of 6 in depth that must be allocated in order to accommodate cubemap
-    * textures.
+    * extra factor of 6 in depth that must be allocated in order to
+    * accommodate cubemap textures.
     */
    GLuint physical_width0, physical_height0, physical_depth0;
 
    GLuint cpp;
    bool compressed;
-
-   /**
-    * Level zero image dimensions.  These dimensions correspond to the
-    * logical width, height, and depth of the region as seen by client code.
-    * Accordingly, they do not account for the extra width, height, and/or
-    * depth that must be allocated in order to accommodate multisample
-    * formats, nor do they account for the extra factor of 6 in depth that
-    * must be allocated in order to accommodate cubemap textures.
-    */
-   uint32_t logical_width0, logical_height0, logical_depth0;
-
-   /**
-    * For 1D array, 2D array, cube, and 2D multisampled surfaces on Gen7: true
-    * if the surface only contains LOD 0, and hence no space is for LOD's
-    * other than 0 in between array slices.
-    *
-    * Corresponds to the surface_array_spacing bit in gen7_surface_state.
-    */
-   bool array_spacing_lod0;
 
    /* Derived from the above:
     */

@@ -77,4 +77,25 @@ skip_begin_query(int type)
 	}
 }
 
+/* maps query_type to sample provider idx: */
+static inline
+int pidx(unsigned query_type)
+{
+	switch (query_type) {
+	case PIPE_QUERY_OCCLUSION_COUNTER:
+		return 0;
+	case PIPE_QUERY_OCCLUSION_PREDICATE:
+		return 1;
+	/* TODO currently queries only emitted in main pass (not in binning pass)..
+	 * which is fine for occlusion query, but pretty much not anything else.
+	 */
+	case PIPE_QUERY_TIME_ELAPSED:
+		return 2;
+	case PIPE_QUERY_TIMESTAMP:
+		return 3;
+	default:
+		return -1;
+	}
+}
+
 #endif /* FREEDRENO_QUERY_H_ */

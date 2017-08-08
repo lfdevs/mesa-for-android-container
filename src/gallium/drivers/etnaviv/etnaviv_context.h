@@ -44,7 +44,6 @@ struct pipe_screen;
 struct etna_shader_variant;
 
 struct etna_index_buffer {
-   struct pipe_index_buffer ib;
    struct etna_reloc FE_INDEX_STREAM_BASE_ADDR;
    uint32_t FE_INDEX_STREAM_CONTROL;
    uint32_t FE_PRIMITIVE_RESTART_INDEX;
@@ -175,6 +174,7 @@ struct etna_context {
    struct {
       uint64_t prims_emitted;
       uint64_t draw_calls;
+      uint64_t rs_operations;
    } stats;
 
    struct pipe_debug_callback debug;

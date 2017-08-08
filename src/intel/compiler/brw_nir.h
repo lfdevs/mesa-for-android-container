@@ -98,10 +98,9 @@ nir_shader *brw_preprocess_nir(const struct brw_compiler *compiler,
 bool brw_nir_lower_intrinsics(nir_shader *nir,
                               struct brw_stage_prog_data *prog_data);
 void brw_nir_lower_vs_inputs(nir_shader *nir,
-                             bool is_scalar,
                              bool use_legacy_snorm_formula,
                              const uint8_t *vs_attrib_wa_flags);
-void brw_nir_lower_vue_inputs(nir_shader *nir, bool is_scalar,
+void brw_nir_lower_vue_inputs(nir_shader *nir,
                               const struct brw_vue_map *vue_map);
 void brw_nir_lower_tes_inputs(nir_shader *nir, const struct brw_vue_map *vue);
 void brw_nir_lower_fs_inputs(nir_shader *nir,
@@ -142,6 +141,10 @@ void brw_nir_setup_glsl_uniforms(nir_shader *shader,
 
 void brw_nir_setup_arb_uniforms(nir_shader *shader, struct gl_program *prog,
                                 struct brw_stage_prog_data *stage_prog_data);
+
+void brw_nir_analyze_ubo_ranges(const struct brw_compiler *compiler,
+                                nir_shader *nir,
+                                struct brw_ubo_range out_ranges[4]);
 
 bool brw_nir_opt_peephole_ffma(nir_shader *shader);
 

@@ -128,9 +128,9 @@ am__DEPENDENCIES_1 =
 am__objects_1 = cayman_msaa.lo r600_buffer_common.lo r600_gpu_load.lo \
 	r600_perfcounter.lo r600_pipe_common.lo r600_query.lo \
 	r600_streamout.lo r600_test_dma.lo r600_texture.lo \
-	r600_viewport.lo radeon_uvd.lo radeon_vce_40_2_2.lo \
-	radeon_vce_50.lo radeon_vce_52.lo radeon_vce.lo \
-	radeon_video.lo
+	r600_viewport.lo radeon_uvd.lo radeon_vcn_dec.lo \
+	radeon_vce_40_2_2.lo radeon_vce_50.lo radeon_vce_52.lo \
+	radeon_vce.lo radeon_video.lo
 am_libradeon_la_OBJECTS = $(am__objects_1)
 libradeon_la_OBJECTS = $(am_libradeon_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
@@ -284,6 +284,8 @@ GL_PC_LIB_PRIV = @GL_PC_LIB_PRIV@
 GL_PC_REQ_PRIV = @GL_PC_REQ_PRIV@
 GREP = @GREP@
 HAVE_XF86VIDMODE = @HAVE_XF86VIDMODE@
+I915_CFLAGS = @I915_CFLAGS@
+I915_LIBS = @I915_LIBS@
 INDENT = @INDENT@
 INDENT_FLAGS = @INDENT_FLAGS@
 INSTALL = @INSTALL@
@@ -291,8 +293,6 @@ INSTALL_DATA = @INSTALL_DATA@
 INSTALL_PROGRAM = @INSTALL_PROGRAM@
 INSTALL_SCRIPT = @INSTALL_SCRIPT@
 INSTALL_STRIP_PROGRAM = @INSTALL_STRIP_PROGRAM@
-INTEL_CFLAGS = @INTEL_CFLAGS@
-INTEL_LIBS = @INTEL_LIBS@
 LD = @LD@
 LDFLAGS = @LDFLAGS@
 LD_NO_UNDEFINED = @LD_NO_UNDEFINED@
@@ -388,6 +388,8 @@ STRIP = @STRIP@
 SWR_AVX2_CXXFLAGS = @SWR_AVX2_CXXFLAGS@
 SWR_AVX_CXXFLAGS = @SWR_AVX_CXXFLAGS@
 SWR_CXX11_CXXFLAGS = @SWR_CXX11_CXXFLAGS@
+SWR_KNL_CXXFLAGS = @SWR_KNL_CXXFLAGS@
+SWR_SKX_CXXFLAGS = @SWR_SKX_CXXFLAGS@
 VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
 VALGRIND_LIBS = @VALGRIND_LIBS@
 VA_CFLAGS = @VA_CFLAGS@
@@ -395,8 +397,6 @@ VA_LIBS = @VA_LIBS@
 VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
 VA_MAJOR = @VA_MAJOR@
 VA_MINOR = @VA_MINOR@
-VC4_CFLAGS = @VC4_CFLAGS@
-VC4_LIBS = @VC4_LIBS@
 VDPAU_CFLAGS = @VDPAU_CFLAGS@
 VDPAU_LIBS = @VDPAU_LIBS@
 VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
@@ -410,6 +410,7 @@ VL_LIBS = @VL_LIBS@
 VULKAN_ICD_INSTALL_DIR = @VULKAN_ICD_INSTALL_DIR@
 WAYLAND_CFLAGS = @WAYLAND_CFLAGS@
 WAYLAND_LIBS = @WAYLAND_LIBS@
+WAYLAND_PROTOCOLS_DATADIR = @WAYLAND_PROTOCOLS_DATADIR@
 WAYLAND_SCANNER = @WAYLAND_SCANNER@
 WAYLAND_SCANNER_CFLAGS = @WAYLAND_SCANNER_CFLAGS@
 WAYLAND_SCANNER_LIBS = @WAYLAND_SCANNER_LIBS@
@@ -483,7 +484,6 @@ pdfdir = @pdfdir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
-runstatedir = @runstatedir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
@@ -512,6 +512,8 @@ C_SOURCES := \
 	r600_viewport.c \
 	radeon_uvd.c \
 	radeon_uvd.h \
+	radeon_vcn_dec.c \
+	radeon_vcn_dec.h \
 	radeon_vce_40_2_2.c \
 	radeon_vce_50.c \
 	radeon_vce_52.c \
@@ -596,9 +598,6 @@ libradeon_la_SOURCES = \
 @HAVE_GALLIUM_LLVM_TRUE@libradeon_la_LDFLAGS = \
 @HAVE_GALLIUM_LLVM_TRUE@	$(LLVM_LDFLAGS)
 
-EXTRA_DIST = \
-	LLVM_REVISION.txt
-
 all: all-am
 
 .SUFFIXES:
@@ -669,6 +668,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radeon_vce_40_2_2.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radeon_vce_50.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radeon_vce_52.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radeon_vcn_dec.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radeon_video.Plo@am__quote@
 
 .c.o:

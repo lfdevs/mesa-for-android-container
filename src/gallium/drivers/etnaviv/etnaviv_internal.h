@@ -70,8 +70,8 @@ struct etna_specs {
    unsigned has_sign_floor_ceil : 1;
    /* can use VS_RANGE, PS_RANGE registers*/
    unsigned has_shader_range_registers : 1;
-   /* has the new sin/cos functions */
-   unsigned has_new_sin_cos : 1;
+   /* has the new sin/cos/log functions */
+   unsigned has_new_transcendentals : 1;
    /* supports single-buffer rendering with multiple pixel pipes */
    unsigned single_buffer : 1;
    /* can use any kind of wrapping mode on npot textures */
@@ -126,6 +126,7 @@ struct etna_specs {
 
 /* Compiled pipe_blend_color */
 struct compiled_blend_color {
+   float color[4];
    uint32_t PE_ALPHA_BLEND_COLOR;
 };
 

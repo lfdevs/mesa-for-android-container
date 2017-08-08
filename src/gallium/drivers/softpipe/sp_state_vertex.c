@@ -97,19 +97,6 @@ softpipe_set_vertex_buffers(struct pipe_context *pipe,
 }
 
 
-static void
-softpipe_set_index_buffer(struct pipe_context *pipe,
-                          const struct pipe_index_buffer *ib)
-{
-   struct softpipe_context *softpipe = softpipe_context(pipe);
-
-   if (ib)
-      memcpy(&softpipe->index_buffer, ib, sizeof(softpipe->index_buffer));
-   else
-      memset(&softpipe->index_buffer, 0, sizeof(softpipe->index_buffer));
-}
-
-
 void
 softpipe_init_vertex_funcs(struct pipe_context *pipe)
 {
@@ -118,5 +105,4 @@ softpipe_init_vertex_funcs(struct pipe_context *pipe)
    pipe->delete_vertex_elements_state = softpipe_delete_vertex_elements_state;
 
    pipe->set_vertex_buffers = softpipe_set_vertex_buffers;
-   pipe->set_index_buffer = softpipe_set_index_buffer;
 }

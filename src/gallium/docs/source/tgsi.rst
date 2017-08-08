@@ -26,7 +26,13 @@ each of the components of *dst*. When this happens, the result is said to be
 Modifiers
 ^^^^^^^^^^^^^^^
 
-TGSI supports modifiers on inputs (as well as saturate modifier on instructions).
+TGSI supports modifiers on inputs (as well as saturate and precise modifier
+on instructions).
+
+For arithmetic instruction having a precise modifier certain optimizations
+which may alter the result are disallowed. Example: *add(mul(a,b),c)* can't be
+optimized to TGSI_OPCODE_MAD, because some hardware only supports the fused
+MAD instruction.
 
 For inputs which have a floating point type, both absolute value and
 negation modifiers are supported (with absolute value being applied
@@ -236,6 +242,9 @@ This instruction replicates its result.
 
 
 .. opcode:: MAD - Multiply And Add
+
+Perform a * b + c. The implementation is free to decide whether there is an
+intermediate rounding step or not.
 
 .. math::
 
@@ -939,7 +948,8 @@ XXX doesn't look like most of the opcodes really belong here.
 .. opcode:: TXF - Texel Fetch
 
   As per NV_gpu_shader4, extract a single texel from a specified texture
-  image. The source sampler may not be a CUBE or SHADOW.  src 0 is a
+  image or PIPE_BUFFER resource. The source sampler may not be a CUBE or
+  SHADOW.  src 0 is a
   four-component signed integer vector used to identify the single texel
   accessed. 3 components + level.  Just like texture instructions, an optional
   offset vector is provided, which is subject to various driver restrictions
@@ -982,7 +992,9 @@ XXX doesn't look like most of the opcodes really belong here.
 .. opcode:: TXQS - Texture Samples Query
 
   This retrieves the number of samples in the texture, and stores it
-  into the x component. The other components are undefined.
+  into the x component as an unsigned integer. The other components are
+  undefined.  If the texture is not multisampled, this function returns
+  (1, undef, undef, undef).
 
 .. math::
 
@@ -2538,15 +2550,46 @@ after lookup.
 
 .. opcode:: SAMPLE_POS
 
-  Query the position of a given sample.  dst receives float4 (x, y, 0, 0)
-  indicated where the sample is located. If the resource is not a multi-sample
-  resource and not a render target, the result is 0.
+  Query the position of a sample in the given resource or render target
+  when per-sample fragment shading is in effect.
+
+  Syntax: ``SAMPLE_POS dst, source, sample_index``
+
+  dst receives float4 (x, y, undef, undef) indicated where the sample is
+  located. Sample locations are in the range [0, 1] where 0.5 is the center
+  of the fragment.
+
+  source is either a sampler view (to indicate a shader resource) or temp
+  register (to indicate the render target).  The source register may have
+  an optional swizzle to apply to the returned result
+
+  sample_index is an integer scalar indicating which sample position is to
+  be queried.
+
+  If per-sample shading is not in effect or the source resource or render
+  target is not multisampled, the result is (0.5, 0.5, undef, undef).
+
+  NOTE: no driver has implemented this opcode yet (and no state tracker
+  emits it).  This information is subject to change.
 
 .. opcode:: SAMPLE_INFO
 
-  dst receives number of samples in x.  If the resource is not a multi-sample
-  resource and not a render target, the result is 0.
+  Query the number of samples in a multisampled resource or render target.
 
+  Syntax: ``SAMPLE_INFO dst, source``
+
+  dst receives int4 (n, 0, 0, 0) where n is the number of samples in a
+  resource or the render target.
+
+  source is either a sampler view (to indicate a shader resource) or temp
+  register (to indicate the render target).  The source register may have
+  an optional swizzle to apply to the returned result
+
+  If per-sample shading is not in effect or the source resource or render
+  target is not multisampled, the result is (1, 0, 0, 0).
+
+  NOTE: no driver has implemented this opcode yet (and no state tracker
+  emits it).  This information is subject to change.
 
 .. _resourceopcodes:
 
@@ -3284,22 +3327,33 @@ TGSI_SEMANTIC_SAMPLEID
 """"""""""""""""""""""
 
 For fragment shaders, this semantic label indicates that a system value
-contains the current sample id (i.e. gl_SampleID).
-This is an integer value, and only the X component is used.
+contains the current sample id (i.e. gl_SampleID) as an unsigned int.
+Only the X component is used.  If per-sample shading is not enabled,
+the result is (0, undef, undef, undef).
 
 TGSI_SEMANTIC_SAMPLEPOS
 """""""""""""""""""""""
 
-For fragment shaders, this semantic label indicates that a system value
-contains the current sample's position (i.e. gl_SamplePosition). Only the X
-and Y values are used.
+For fragment shaders, this semantic label indicates that a system
+value contains the current sample's position as float4(x, y, undef, undef)
+in the render target (i.e.  gl_SamplePosition) when per-fragment shading
+is in effect.  Position values are in the range [0, 1] where 0.5 is
+the center of the fragment.
 
 TGSI_SEMANTIC_SAMPLEMASK
 """"""""""""""""""""""""
 
-For fragment shaders, this semantic label indicates that an output contains
-the sample mask used to disable further sample processing
-(i.e. gl_SampleMask). Only the X value is used, up to 32x MS.
+For fragment shaders, this semantic label can be applied to either a
+shader system value input or output.
+
+For a system value, the sample mask indicates the set of samples covered by
+the current primitive.  If MSAA is not enabled, the value is (1, 0, 0, 0).
+
+For an output, the sample mask is used to disable further sample processing.
+
+For both, the register type is uint[4] but only the X component is used
+(i.e. gl_SampleMask[0]). Each bit corresponds to one sample position (up
+to 32x MSAA is supported).
 
 TGSI_SEMANTIC_INVOCATIONID
 """"""""""""""""""""""""""
@@ -3719,6 +3773,13 @@ multiplications implied by other operations, such as MAD, FMA, DP2,
 DP3, DP4, DPH, DST, LOG, LRP, XPD, and possibly others. If there is a
 mismatch between shaders, then it is unspecified whether this behavior
 will be enabled.
+
+FS_POST_DEPTH_COVERAGE
+""""""""""""""""""""""
+
+When enabled, the input for TGSI_SEMANTIC_SAMPLEMASK will exclude samples
+that have failed the depth/stencil tests. This is only valid when
+FS_EARLY_DEPTH_STENCIL is also specified.
 
 
 Texture Sampling and Texture Formats

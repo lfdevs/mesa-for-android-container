@@ -172,7 +172,7 @@ enum {
    lp_build_struct_get(_gallivm, _ptr, 0, "stride")
 
 #define draw_jit_vbuffer_offset(_gallivm, _ptr)         \
-   lp_build_struct_get(_gallivm, _ptr, 1, "buffer_offset")
+   lp_build_struct_get(_gallivm, _ptr, 2, "buffer_offset")
 
 enum {
    DRAW_JIT_DVBUFFER_MAP = 0,

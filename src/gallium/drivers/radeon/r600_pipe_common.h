@@ -45,6 +45,7 @@
 #include "util/slab.h"
 #include "util/u_suballoc.h"
 #include "util/u_transfer.h"
+#include "util/u_threaded_context.h"
 
 #define ATI_VENDOR_ID 0x1002
 
@@ -84,32 +85,33 @@
 #define DBG_PREOPT_IR		(1 << 15)
 #define DBG_CHECK_IR		(1 << 16)
 #define DBG_NO_OPT_VARIANT	(1 << 17)
+#define DBG_FS_CORRECT_DERIVS_AFTER_KILL (1 << 18)
 /* gaps */
 #define DBG_TEST_DMA		(1 << 20)
 /* Bits 21-31 are reserved for the r600g driver. */
 /* features */
-#define DBG_NO_ASYNC_DMA	(1llu << 32)
-#define DBG_NO_HYPERZ		(1llu << 33)
-#define DBG_NO_DISCARD_RANGE	(1llu << 34)
-#define DBG_NO_2D_TILING	(1llu << 35)
-#define DBG_NO_TILING		(1llu << 36)
-#define DBG_SWITCH_ON_EOP	(1llu << 37)
-#define DBG_FORCE_DMA		(1llu << 38)
-#define DBG_PRECOMPILE		(1llu << 39)
-#define DBG_INFO		(1llu << 40)
-#define DBG_NO_WC		(1llu << 41)
-#define DBG_CHECK_VM		(1llu << 42)
-#define DBG_NO_DCC		(1llu << 43)
-#define DBG_NO_DCC_CLEAR	(1llu << 44)
-#define DBG_NO_RB_PLUS		(1llu << 45)
-#define DBG_SI_SCHED		(1llu << 46)
-#define DBG_MONOLITHIC_SHADERS	(1llu << 47)
-#define DBG_NO_CE		(1llu << 48)
-#define DBG_UNSAFE_MATH		(1llu << 49)
-#define DBG_NO_DCC_FB		(1llu << 50)
-#define DBG_TEST_VMFAULT_CP	(1llu << 51)
-#define DBG_TEST_VMFAULT_SDMA	(1llu << 52)
-#define DBG_TEST_VMFAULT_SHADER	(1llu << 53)
+#define DBG_NO_ASYNC_DMA	(1ull << 32)
+#define DBG_NO_HYPERZ		(1ull << 33)
+#define DBG_NO_DISCARD_RANGE	(1ull << 34)
+#define DBG_NO_2D_TILING	(1ull << 35)
+#define DBG_NO_TILING		(1ull << 36)
+#define DBG_SWITCH_ON_EOP	(1ull << 37)
+#define DBG_FORCE_DMA		(1ull << 38)
+#define DBG_PRECOMPILE		(1ull << 39)
+#define DBG_INFO		(1ull << 40)
+#define DBG_NO_WC		(1ull << 41)
+#define DBG_CHECK_VM		(1ull << 42)
+#define DBG_NO_DCC		(1ull << 43)
+#define DBG_NO_DCC_CLEAR	(1ull << 44)
+#define DBG_NO_RB_PLUS		(1ull << 45)
+#define DBG_SI_SCHED		(1ull << 46)
+#define DBG_MONOLITHIC_SHADERS	(1ull << 47)
+#define DBG_NO_CE		(1ull << 48)
+#define DBG_UNSAFE_MATH		(1ull << 49)
+#define DBG_NO_DCC_FB		(1ull << 50)
+#define DBG_TEST_VMFAULT_CP	(1ull << 51)
+#define DBG_TEST_VMFAULT_SDMA	(1ull << 52)
+#define DBG_TEST_VMFAULT_SHADER	(1ull << 53)
 
 #define R600_MAP_BUFFER_ALIGNMENT 64
 #define R600_MAX_VIEWPORTS        16
@@ -140,7 +142,7 @@ void radeon_shader_binary_clean(struct ac_shader_binary *b);
  * at the moment.
  */
 struct r600_resource {
-	struct u_resource		b;
+	struct threaded_resource	b;
 
 	/* Winsys objects. */
 	struct pb_buffer		*buf;
@@ -179,12 +181,15 @@ struct r600_resource {
 	bool				TC_L2_dirty;
 
 	/* Whether the resource has been exported via resource_get_handle. */
-	bool				is_shared;
 	unsigned			external_usage; /* PIPE_HANDLE_USAGE_* */
+
+	/* Whether this resource is referenced by bindless handles. */
+	bool				texture_handle_allocated;
+	bool				image_handle_allocated;
 };
 
 struct r600_transfer {
-	struct pipe_transfer		transfer;
+	struct threaded_transfer	b;
 	struct r600_resource		*staging;
 	unsigned			offset;
 };
@@ -232,7 +237,7 @@ struct r600_texture {
 	unsigned			last_msaa_resolve_target_micro_mode;
 
 	/* Depth buffer compression and fast clear. */
-	struct r600_resource		*htile_buffer;
+	uint64_t			htile_offset;
 	bool				tc_compatible_htile;
 	bool				depth_cleared; /* if it was cleared at least once */
 	float				depth_clear_value;
@@ -553,8 +558,10 @@ struct r600_common_context {
 	unsigned			last_dirty_tex_counter;
 	unsigned			last_compressed_colortex_counter;
 
+	struct threaded_context		*tc;
 	struct u_suballocator		*allocator_zeroed_memory;
 	struct slab_child_pool		pool_transfers;
+	struct slab_child_pool		pool_transfers_unsync; /* for threaded_context */
 
 	/* Current unaccounted memory usage. */
 	uint64_t			vram;
@@ -580,6 +587,7 @@ struct r600_common_context {
 	unsigned			num_cs_dw_queries_suspend;
 	/* Misc stats. */
 	unsigned			num_draw_calls;
+	unsigned			num_prim_restart_calls;
 	unsigned			num_spill_draw_calls;
 	unsigned			num_compute_calls;
 	unsigned			num_spill_compute_calls;
@@ -588,9 +596,11 @@ struct r600_common_context {
 	unsigned			num_vs_flushes;
 	unsigned			num_ps_flushes;
 	unsigned			num_cs_flushes;
-	unsigned			num_fb_cache_flushes;
+	unsigned			num_cb_cache_flushes;
+	unsigned			num_db_cache_flushes;
 	unsigned			num_L2_invalidates;
 	unsigned			num_L2_writebacks;
+	unsigned			num_resident_handles;
 	uint64_t			num_alloc_tex_transfer_bytes;
 	unsigned			last_tex_ps_draw_ratio; /* for query */
 
@@ -664,6 +674,12 @@ struct r600_common_context {
 	 * the buffer is bound, including all resource descriptors. */
 	void (*invalidate_buffer)(struct pipe_context *ctx, struct pipe_resource *buf);
 
+	/* Update all resource bindings where the buffer is bound, including
+	 * all resource descriptors. This is invalidate_buffer without
+	 * the invalidation. */
+	void (*rebind_buffer)(struct pipe_context *ctx, struct pipe_resource *buf,
+			      uint64_t old_gpu_address);
+
 	/* Enable or disable occlusion queries. */
 	void (*set_occlusion_query_state)(struct pipe_context *ctx, bool enable);
 
@@ -681,7 +697,7 @@ struct r600_common_context {
 				enum ring_type ring);
 };
 
-/* r600_buffer.c */
+/* r600_buffer_common.c */
 bool r600_rings_is_buffer_referenced(struct r600_common_context *ctx,
 				     struct pb_buffer *buf,
 				     enum radeon_bo_usage usage);
@@ -712,6 +728,9 @@ r600_buffer_from_user_memory(struct pipe_screen *screen,
 void
 r600_invalidate_resource(struct pipe_context *ctx,
 			 struct pipe_resource *resource);
+void r600_replace_buffer_storage(struct pipe_context *ctx,
+				 struct pipe_resource *dst,
+				 struct pipe_resource *src);
 
 /* r600_common_pipe.c */
 void r600_gfx_write_event_eop(struct r600_common_context *ctx,
@@ -727,7 +746,7 @@ void r600_draw_rectangle(struct blitter_context *blitter,
 			 enum blitter_attrib_type type,
 			 const union pipe_color_union *attrib);
 bool r600_common_screen_init(struct r600_common_screen *rscreen,
-			     struct radeon_winsys *ws);
+			     struct radeon_winsys *ws, unsigned flags);
 void r600_destroy_common_screen(struct r600_common_screen *rscreen);
 void r600_preflush_suspend_features(struct r600_common_context *ctx);
 void r600_postflush_resume_features(struct r600_common_context *ctx);
@@ -830,7 +849,7 @@ void vi_dcc_clear_level(struct r600_common_context *rctx,
 void evergreen_do_fast_color_clear(struct r600_common_context *rctx,
 				   struct pipe_framebuffer_state *fb,
 				   struct r600_atom *fb_state,
-				   unsigned *buffers, unsigned *dirty_cbufs,
+				   unsigned *buffers, ubyte *dirty_cbufs,
 				   const union pipe_color_union *color);
 bool r600_texture_disable_dcc(struct r600_common_context *rctx,
 			      struct r600_texture *rtex);
@@ -986,5 +1005,10 @@ vi_dcc_enabled(struct r600_texture *tex, unsigned level)
 	(((unsigned)(s1x) & 0xf) << 8) | (((unsigned)(s1y) & 0xf) << 12) |	   \
 	(((unsigned)(s2x) & 0xf) << 16) | (((unsigned)(s2y) & 0xf) << 20) |	   \
 	 (((unsigned)(s3x) & 0xf) << 24) | (((unsigned)(s3y) & 0xf) << 28))
+
+static inline int S_FIXED(float value, unsigned frac_bits)
+{
+	return value * (1 << frac_bits);
+}
 
 #endif

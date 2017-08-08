@@ -32,9 +32,11 @@
 struct radeon_winsys;
 struct pipe_screen;
 
-typedef struct pipe_screen *(*radeon_screen_create_t)(struct radeon_winsys *);
+typedef struct pipe_screen *(*radeon_screen_create_t)(struct radeon_winsys *,
+						      unsigned);
 
 struct radeon_winsys *
-amdgpu_winsys_create(int fd, radeon_screen_create_t screen_create);
+amdgpu_winsys_create(int fd, unsigned flags,
+		     radeon_screen_create_t screen_create);
 
 #endif

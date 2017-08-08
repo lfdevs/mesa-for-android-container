@@ -145,12 +145,11 @@ ir_print_visitor::unique_name(ir_variable *var)
 static void
 print_type(FILE *f, const glsl_type *t)
 {
-   if (t->base_type == GLSL_TYPE_ARRAY) {
+   if (t->is_array()) {
       fprintf(f, "(array ");
       print_type(f, t->fields.array);
       fprintf(f, " %u)", t->length);
-   } else if ((t->base_type == GLSL_TYPE_STRUCT)
-              && !is_gl_identifier(t->name)) {
+   } else if (t->is_record() && !is_gl_identifier(t->name)) {
       fprintf(f, "%s@%p", t->name, (void *) t);
    } else {
       fprintf(f, "%s", t->name);
@@ -175,7 +174,7 @@ void ir_print_visitor::visit(ir_variable *ir)
       snprintf(loc, sizeof(loc), "location=%i ", ir->data.location);
 
    char component[32] = {0};
-   if (ir->data.explicit_component)
+   if (ir->data.explicit_component || ir->data.location_frac != 0)
       snprintf(component, sizeof(component), "component=%i ", ir->data.location_frac);
 
    char stream[32] = {0};
@@ -189,11 +188,24 @@ void ir_print_visitor::visit(ir_variable *ir)
       snprintf(stream, sizeof(stream), "stream%u ", ir->data.stream);
    }
 
+   char image_format[32] = {0};
+   if (ir->data.image_format) {
+      snprintf(image_format, sizeof(image_format), "format=%x ",
+               ir->data.image_format);
+   }
+
    const char *const cent = (ir->data.centroid) ? "centroid " : "";
    const char *const samp = (ir->data.sample) ? "sample " : "";
    const char *const patc = (ir->data.patch) ? "patch " : "";
    const char *const inv = (ir->data.invariant) ? "invariant " : "";
    const char *const prec = (ir->data.precise) ? "precise " : "";
+   const char *const bindless = (ir->data.bindless) ? "bindless " : "";
+   const char *const bound = (ir->data.bound) ? "bound " : "";
+   const char *const memory_read_only = (ir->data.memory_read_only) ? "readonly " : "";
+   const char *const memory_write_only = (ir->data.memory_write_only) ? "writeonly " : "";
+   const char *const memory_coherent = (ir->data.memory_coherent) ? "coherent " : "";
+   const char *const memory_volatile = (ir->data.memory_volatile) ? "volatile " : "";
+   const char *const memory_restrict = (ir->data.memory_restrict) ? "restrict " : "";
    const char *const mode[] = { "", "uniform ", "shader_storage ",
                                 "shader_shared ", "shader_in ", "shader_out ",
                                 "in ", "out ", "inout ",
@@ -202,8 +214,11 @@ void ir_print_visitor::visit(ir_variable *ir)
    const char *const interp[] = { "", "smooth", "flat", "noperspective" };
    STATIC_ASSERT(ARRAY_SIZE(interp) == INTERP_MODE_COUNT);
 
-   fprintf(f, "(%s%s%s%s%s%s%s%s%s%s%s) ",
-           binding, loc, component, cent, samp, patc, inv, prec, mode[ir->data.mode],
+   fprintf(f, "(%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s) ",
+           binding, loc, component, cent, bindless, bound,
+           image_format, memory_read_only, memory_write_only,
+           memory_coherent, memory_volatile, memory_restrict,
+           samp, patc, inv, prec, mode[ir->data.mode],
            stream,
            interp[ir->data.interpolation]);
 
@@ -477,7 +492,11 @@ void ir_print_visitor::visit(ir_constant *ir)
             else
                fprintf(f, "%f", ir->value.f[i]);
             break;
-	 case GLSL_TYPE_UINT64:fprintf(f, "%" PRIu64, ir->value.u64[i]); break;
+	 case GLSL_TYPE_SAMPLER:
+	 case GLSL_TYPE_IMAGE:
+	 case GLSL_TYPE_UINT64:
+            fprintf(f, "%" PRIu64, ir->value.u64[i]);
+            break;
 	 case GLSL_TYPE_INT64: fprintf(f, "%" PRIi64, ir->value.i64[i]); break;
 	 case GLSL_TYPE_BOOL:  fprintf(f, "%d", ir->value.b[i]); break;
 	 case GLSL_TYPE_DOUBLE:

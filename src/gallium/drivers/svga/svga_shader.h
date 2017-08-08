@@ -97,6 +97,7 @@ struct svga_compile_key
       unsigned compare_mode:1;
       unsigned compare_func:3;
       unsigned unnormalized:1;
+      unsigned texel_bias:1;
       unsigned width_height_idx:5; /**< texture unit */
       unsigned is_array:1;
       unsigned sprite_texgen:1;

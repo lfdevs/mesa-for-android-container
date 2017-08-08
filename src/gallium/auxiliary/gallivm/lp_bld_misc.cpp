@@ -124,20 +124,6 @@ static void init_native_targets()
    llvm::InitializeNativeTargetDisassembler();
 }
 
-/**
- * The llvm target registry is not thread-safe, so drivers and state-trackers
- * that want to initialize targets should use the gallivm_init_llvm_targets()
- * function to safely initialize targets.
- *
- * LLVM targets should be initialized before the driver or state-tracker tries
- * to access the registry.
- */
-extern "C" void
-gallivm_init_llvm_targets(void)
-{
-   call_once(&init_native_targets_once_flag, init_native_targets);
-}
-
 extern "C" void
 lp_set_target_options(void)
 {
@@ -150,7 +136,14 @@ lp_set_target_options(void)
    llvm::DisablePrettyStackTrace = true;
 #endif
 
-   gallivm_init_llvm_targets();
+   /* The llvm target registry is not thread-safe, so drivers and state-trackers
+    * that want to initialize targets should use the lp_set_target_options()
+    * function to safely initialize targets.
+    *
+    * LLVM targets should be initialized before the driver or state-tracker tries
+    * to access the registry.
+    */
+   call_once(&init_native_targets_once_flag, init_native_targets);
 }
 
 extern "C"
@@ -342,12 +335,18 @@ class DelegatingJITMemoryManager : public BaseMemoryManager {
       virtual void registerEHFrames(uint8_t *Addr, uint64_t LoadAddr, size_t Size) {
          mgr()->registerEHFrames(Addr, LoadAddr, Size);
       }
-      virtual void deregisterEHFrames(uint8_t *Addr, uint64_t LoadAddr, size_t Size) {
-         mgr()->deregisterEHFrames(Addr, LoadAddr, Size);
-      }
 #else
       virtual void registerEHFrames(llvm::StringRef SectionData) {
          mgr()->registerEHFrames(SectionData);
+      }
+#endif
+#if HAVE_LLVM >= 0x0500
+      virtual void deregisterEHFrames() {
+         mgr()->deregisterEHFrames();
+      }
+#elif HAVE_LLVM >= 0x0304
+      virtual void deregisterEHFrames(uint8_t *Addr, uint64_t LoadAddr, size_t Size) {
+         mgr()->deregisterEHFrames(Addr, LoadAddr, Size);
       }
 #endif
       virtual void *getPointerToNamedFunction(const std::string &Name,

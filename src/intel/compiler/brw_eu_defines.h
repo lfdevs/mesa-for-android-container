@@ -72,31 +72,12 @@
 #define _3DPRIM_TRIFAN_NOSTIPPLE  0x16
 #define _3DPRIM_PATCHLIST(n) ({ assert(n > 0 && n <= 32); 0x20 + (n - 1); })
 
-enum brw_barycentric_mode {
-   BRW_BARYCENTRIC_PERSPECTIVE_PIXEL       = 0,
-   BRW_BARYCENTRIC_PERSPECTIVE_CENTROID    = 1,
-   BRW_BARYCENTRIC_PERSPECTIVE_SAMPLE      = 2,
-   BRW_BARYCENTRIC_NONPERSPECTIVE_PIXEL    = 3,
-   BRW_BARYCENTRIC_NONPERSPECTIVE_CENTROID = 4,
-   BRW_BARYCENTRIC_NONPERSPECTIVE_SAMPLE   = 5,
-   BRW_BARYCENTRIC_MODE_COUNT              = 6
-};
-#define BRW_BARYCENTRIC_NONPERSPECTIVE_BITS \
-   ((1 << BRW_BARYCENTRIC_NONPERSPECTIVE_PIXEL) | \
-    (1 << BRW_BARYCENTRIC_NONPERSPECTIVE_CENTROID) | \
-    (1 << BRW_BARYCENTRIC_NONPERSPECTIVE_SAMPLE))
-
-enum brw_pixel_shader_computed_depth_mode {
-   BRW_PSCDEPTH_OFF   = 0, /* PS does not compute depth */
-   BRW_PSCDEPTH_ON    = 1, /* PS computes depth; no guarantee about value */
-   BRW_PSCDEPTH_ON_GE = 2, /* PS guarantees output depth >= source depth */
-   BRW_PSCDEPTH_ON_LE = 3, /* PS guarantees output depth <= source depth */
-};
-
 /* Bitfields for the URB_WRITE message, DW2 of message header: */
 #define URB_WRITE_PRIM_END		0x1
 #define URB_WRITE_PRIM_START		0x2
 #define URB_WRITE_PRIM_TYPE_SHIFT	2
+
+#define BRW_SPRITE_POINT_ENABLE  16
 
 # define GEN7_GS_CONTROL_DATA_FORMAT_GSCTL_CUT		0
 # define GEN7_GS_CONTROL_DATA_FORMAT_GSCTL_SID		1

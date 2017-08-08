@@ -1362,6 +1362,7 @@ brw_init_compaction_tables(const struct gen_device_info *devinfo)
    assert(gen8_src_index_table[ARRAY_SIZE(gen8_src_index_table) - 1] != 0);
 
    switch (devinfo->gen) {
+   case 10:
    case 9:
    case 8:
       control_index_table = gen8_control_index_table;

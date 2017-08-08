@@ -109,14 +109,12 @@ brw_create_nir(struct brw_context *brw,
 
    nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
 
-   /* nir_shader may have been cloned so make sure shader_info is in sync */
-   if (nir->info != &prog->info) {
-      const char *name = prog->info.name;
-      const char *label = prog->info.label;
-      prog->info = *nir->info;
-      prog->info.name = name;
-      prog->info.label = label;
-   }
+   /* Copy the info we just generated back into the gl_program */
+   const char *prog_name = prog->info.name;
+   const char *prog_label = prog->info.label;
+   prog->info = nir->info;
+   prog->info.name = prog_name;
+   prog->info.label = prog_label;
 
    if (shader_prog) {
       NIR_PASS_V(nir, nir_lower_samplers, shader_prog);
@@ -292,7 +290,7 @@ brw_memory_barrier(struct gl_context *ctx, GLbitfield barriers)
    unsigned bits = (PIPE_CONTROL_DATA_CACHE_FLUSH |
                     PIPE_CONTROL_NO_WRITE |
                     PIPE_CONTROL_CS_STALL);
-   assert(brw->gen >= 7 && brw->gen <= 9);
+   assert(brw->gen >= 7 && brw->gen <= 10);
 
    if (barriers & (GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT |
                    GL_ELEMENT_ARRAY_BARRIER_BIT |
@@ -580,8 +578,7 @@ brw_collect_shader_time(struct brw_context *brw)
     * delaying reading the reports, but it doesn't look like it's a big
     * overhead compared to the cost of tracking the time in the first place.
     */
-   brw_bo_map(brw, brw->shader_time.bo, true);
-   void *bo_map = brw->shader_time.bo->virtual;
+   void *bo_map = brw_bo_map(brw, brw->shader_time.bo, MAP_READ | MAP_WRITE);
 
    for (int i = 0; i < brw->shader_time.num_entries; i++) {
       uint32_t *times = bo_map + i * 3 * BRW_SHADER_TIME_STRIDE;
@@ -726,7 +723,7 @@ brw_assign_common_binding_table_offsets(const struct gen_device_info *devinfo,
       stage_prog_data->binding_table.shader_time_start = 0xd0d0d0d0;
    }
 
-   if (prog->nir->info->uses_texture_gather) {
+   if (prog->nir->info.uses_texture_gather) {
       if (devinfo->gen >= 8) {
          stage_prog_data->binding_table.gather_texture_start =
             stage_prog_data->binding_table.texture_start;

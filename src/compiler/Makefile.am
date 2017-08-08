@@ -33,9 +33,11 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/compiler/glsl/glcpp\
 	-I$(top_builddir)/src/compiler/nir \
 	-I$(top_srcdir)/src/compiler/nir \
+	-I$(top_srcdir)/src/compiler/spirv \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
 	-I$(top_srcdir)/src/gtest/include \
+	$(VALGRIND_CFLAGS) \
 	$(DEFINES)
 
 AM_CFLAGS = \

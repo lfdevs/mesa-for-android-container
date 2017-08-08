@@ -46,3 +46,5 @@ libEGL.so.1 libegl1-mesa #MINVER# | libegl1-x11
  eglWaitNative@Base 7.8.1
  eglWaitSync@Base 10.7.0~
  (arch=linux-any)wl_drm_interface@Base 8.0-2~
+ (arch=linux-any)zwp_linux_buffer_params_v1_interface@Base 17.2.0~
+ (arch=linux-any)zwp_linux_dmabuf_v1_interface@Base 17.2.0~

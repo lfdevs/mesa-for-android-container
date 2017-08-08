@@ -82,7 +82,7 @@ static const struct value_desc values[] = {
     { GL_RENDERBUFFER_BINDING_EXT, LOC_CUSTOM, TYPE_INT, 0, NO_EXTRA },
     { GL_MAX_RENDERBUFFER_SIZE_EXT, CONTEXT_INT(Const.MaxRenderbufferSize), NO_EXTRA },
     { GL_MAX_CLIP_PLANES, CONTEXT_INT(Const.MaxClipPlanes), NO_EXTRA },
-    { GL_VERTEX_ARRAY_BINDING_APPLE, ARRAY_INT(Name), NO_EXTRA },
+    { GL_VERTEX_ARRAY_BINDING, ARRAY_INT(Name), NO_EXTRA },
     { GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, CONTEXT_FLOAT(Const.MaxTextureMaxAnisotropy), extra_EXT_texture_filter_anisotropic },
     { GL_DEBUG_OUTPUT, LOC_CUSTOM, TYPE_BOOLEAN, 0, NO_EXTRA },
     { GL_DEBUG_OUTPUT_SYNCHRONOUS, LOC_CUSTOM, TYPE_BOOLEAN, 0, NO_EXTRA },
@@ -596,7 +596,7 @@ static const struct value_desc values[] = {
     { GL_NUM_LOOPBACK_COMPONENTS_ATI, CONST(3), extra_ATI_fragment_shader },
     { GL_NUM_INPUT_INTERPOLATOR_COMPONENTS_ATI, CONST(3), extra_ATI_fragment_shader },
     { GL_PROVOKING_VERTEX_EXT, CONTEXT_ENUM(Light.ProvokingVertex), extra_EXT_provoking_vertex },
-    { GL_QUADS_FOLLOW_PROVOKING_VERTEX_CONVENTION_EXT, CONTEXT_BOOL(Const.QuadsFollowProvokingVertexConvention), extra_EXT_provoking_vertex },
+    { GL_QUADS_FOLLOW_PROVOKING_VERTEX_CONVENTION_EXT, CONTEXT_BOOL(Const.QuadsFollowProvokingVertexConvention), extra_EXT_provoking_vertex_32 },
     { GL_TEXTURE_CUBE_MAP_SEAMLESS, CONTEXT_BOOL(Texture.CubeMapSeamless), extra_ARB_seamless_cube_map },
     { GL_RGBA_INTEGER_MODE_EXT, LOC_CUSTOM, TYPE_INT, 0, extra_EXT_texture_integer_and_new_buffers },
     { GL_MAX_TRANSFORM_FEEDBACK_BUFFERS, CONTEXT_INT(Const.MaxTransformFeedbackBuffers), extra_ARB_transform_feedback3 },
@@ -624,8 +624,8 @@ static const struct value_desc values[] = {
     { GL_MAX_COMBINED_CLIP_AND_CULL_DISTANCES, CONTEXT_INT(Const.MaxClipPlanes), extra_ARB_cull_distance },
     { GL_MAX_COMPUTE_VARIABLE_GROUP_INVOCATIONS_ARB, CONTEXT_INT(Const.MaxComputeVariableGroupInvocations), extra_ARB_compute_variable_group_size },
     { GL_SPARSE_BUFFER_PAGE_SIZE_ARB, CONTEXT_INT(Const.SparseBufferPageSize), extra_ARB_sparse_buffer },
-    { GL_MAX_SUBROUTINES, CONST(MAX_SUBROUTINES), extra_ARB_shader_subroutine },
-    { GL_MAX_SUBROUTINE_UNIFORM_LOCATIONS, CONST(MAX_SUBROUTINE_UNIFORM_LOCATIONS), extra_ARB_shader_subroutine },
+    { GL_MAX_SUBROUTINES, CONST(MAX_SUBROUTINES), NO_EXTRA },
+    { GL_MAX_SUBROUTINE_UNIFORM_LOCATIONS, CONST(MAX_SUBROUTINE_UNIFORM_LOCATIONS), NO_EXTRA },
     { GL_PARAMETER_BUFFER_BINDING_ARB, LOC_CUSTOM, TYPE_INT, 0, extra_ARB_indirect_parameters },
 };
 

@@ -22,6 +22,7 @@
 # Python source
 from __future__ import print_function
 import os
+import errno
 import sys
 import argparse
 from mako.template import Template
@@ -62,6 +63,12 @@ class MakoTemplateWriter:
         '''
             Write template data to a file
         '''
+        if not os.path.exists(os.path.dirname(output_filename)):
+            try:
+                os.makedirs(os.path.dirname(output_filename))
+            except OSError as err:
+                if err.errno != errno.EEXIST:
+                    raise
         with open(output_filename, 'w') as outfile:
             print(MakoTemplateWriter.to_string(template_filename, **kwargs), file=outfile)
 

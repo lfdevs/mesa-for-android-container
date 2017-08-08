@@ -26,6 +26,7 @@
 #define GEN_DEVICE_INFO_H
 
 #include <stdbool.h>
+#include <stdint.h>
 
 /**
  * Intel hardware information and quirks
@@ -39,9 +40,14 @@ struct gen_device_info
    bool is_ivybridge;
    bool is_baytrail;
    bool is_haswell;
+   bool is_broadwell;
    bool is_cherryview;
+   bool is_skylake;
    bool is_broxton;
    bool is_kabylake;
+   bool is_geminilake;
+   bool is_coffeelake;
+   bool is_cannonlake;
 
    bool has_hiz_and_separate_stencil;
    bool must_use_separate_stencil;
@@ -96,6 +102,17 @@ struct gen_device_info
     * to change, so we program @max_cs_threads as the lower maximum.
     */
    unsigned num_slices;
+
+   /**
+    * Number of subslices for each slice (used to be uniform until CNL).
+    */
+   unsigned num_subslices[3];
+
+   /**
+    * Number of threads per eu, varies between 4 and 8 between generations.
+    */
+   unsigned num_thread_per_eu;
+
    unsigned l3_banks;
    unsigned max_vs_threads;   /**< Maximum Vertex Shader threads */
    unsigned max_tcs_threads;  /**< Maximum Hull Shader threads */
@@ -155,7 +172,7 @@ struct gen_device_info
     * corresponded to 80 nanoseconds.
     *
     * Since Gen9 the numbers aren't so round, with a a frequency of 12MHz for
-    * SKL (or scale factor of 83.33333333) and a frequency of 19200123Hz for
+    * SKL (or scale factor of 83.33333333) and a frequency of 19200000Hz for
     * BXT.
     *
     * For simplicty to fit with the current code scaling by a single constant
@@ -170,10 +187,13 @@ struct gen_device_info
     * E.g. with crude testing on my system using the 'correct' scale factor I'm
     * seeing a drift of ~2 milliseconds per second.
     */
-   double timebase_scale;
+   uint64_t timestamp_frequency;
 
    /** @} */
 };
+
+#define gen_device_info_is_9lp(devinfo) \
+   (devinfo->is_broxton || devinfo->is_geminilake)
 
 bool gen_get_device_info(int devid, struct gen_device_info *devinfo);
 const char *gen_get_device_name(int devid);

@@ -31,28 +31,6 @@ vec4_gs_visitor::nir_setup_inputs()
 }
 
 void
-vec4_gs_visitor::nir_setup_system_value_intrinsic(nir_intrinsic_instr *instr)
-{
-   dst_reg *reg;
-
-   switch (instr->intrinsic) {
-   case nir_intrinsic_load_primitive_id:
-      /* We'll just read g1 directly; don't create a temporary. */
-      break;
-
-   case nir_intrinsic_load_invocation_id:
-      reg = &this->nir_system_values[SYSTEM_VALUE_INVOCATION_ID];
-      if (reg->file == BAD_FILE)
-         *reg = *this->make_reg_for_system_value(SYSTEM_VALUE_INVOCATION_ID);
-      break;
-
-   default:
-      vec4_visitor::nir_setup_system_value_intrinsic(instr);
-   }
-
-}
-
-void
 vec4_gs_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
 {
    dst_reg dest;
@@ -66,8 +44,10 @@ vec4_gs_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
       nir_const_value *vertex = nir_src_as_const_value(instr->src[0]);
       nir_const_value *offset_reg = nir_src_as_const_value(instr->src[1]);
 
+      const unsigned input_array_stride = prog_data->urb_read_length * 2;
+
       if (nir_dest_bit_size(instr->dest) == 64) {
-         src = src_reg(ATTR, BRW_VARYING_SLOT_COUNT * vertex->u32[0] +
+         src = src_reg(ATTR, input_array_stride * vertex->u32[0] +
                        instr->const_index[0] + offset_reg->u32[0],
                        glsl_type::dvec4_type);
 
@@ -85,14 +65,10 @@ vec4_gs_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
          /* Make up a type...we have no way of knowing... */
          const glsl_type *const type = glsl_type::ivec(instr->num_components);
 
-         src = src_reg(ATTR, BRW_VARYING_SLOT_COUNT * vertex->u32[0] +
+         src = src_reg(ATTR, input_array_stride * vertex->u32[0] +
                        instr->const_index[0] + offset_reg->u32[0],
                        type);
          src.swizzle = BRW_SWZ_COMP_INPUT(nir_intrinsic_component(instr));
-
-         /* gl_PointSize is passed in the .w component of the VUE header */
-         if (instr->const_index[0] == VARYING_SLOT_PSIZ)
-            src.swizzle = BRW_SWIZZLE_WWWW;
 
          dest = get_nir_dest(instr->dest, src.type);
          dest.writemask = brw_writemask_for_size(instr->num_components);
@@ -130,11 +106,11 @@ vec4_gs_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
       break;
 
    case nir_intrinsic_load_invocation_id: {
-      src_reg invocation_id =
-         src_reg(nir_system_values[SYSTEM_VALUE_INVOCATION_ID]);
-      assert(invocation_id.file != BAD_FILE);
-      dest = get_nir_dest(instr->dest, invocation_id.type);
-      emit(MOV(dest, invocation_id));
+      dest = get_nir_dest(instr->dest, BRW_REGISTER_TYPE_D);
+      if (gs_prog_data->invocations > 1)
+         emit(GS_OPCODE_GET_INSTANCE_ID, dest);
+      else
+         emit(MOV(dest, brw_imm_ud(0)));
       break;
    }
 
