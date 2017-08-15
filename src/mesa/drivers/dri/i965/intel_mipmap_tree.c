@@ -847,8 +847,14 @@ intel_miptree_create_for_bo(struct brw_context *brw,
    mt->bo = bo;
    mt->offset = offset;
 
-   if (!(layout_flags & MIPTREE_LAYOUT_DISABLE_AUX))
+   if (!(layout_flags & MIPTREE_LAYOUT_DISABLE_AUX)) {
       intel_miptree_choose_aux_usage(brw, mt);
+
+      if (!intel_miptree_alloc_aux(brw, mt)) {
+         intel_miptree_release(&mt);
+         return NULL;
+      }
+   }
 
    return mt;
 }
@@ -977,11 +983,6 @@ intel_miptree_create_for_dri_image(struct brw_context *brw,
          intel_miptree_release(&mt);
          return NULL;
       }
-   }
-
-   if (!intel_miptree_alloc_aux(brw, mt)) {
-      intel_miptree_release(&mt);
-      return NULL;
    }
 
    return mt;

@@ -3079,9 +3079,13 @@ radv_initialise_color_surface(struct radv_device *device,
 				    format != V_028C70_COLOR_24_8) |
 		S_028C70_NUMBER_TYPE(ntype) |
 		S_028C70_ENDIAN(endian);
-	if (iview->image->info.samples > 1)
-		if (iview->image->fmask.size)
-			cb->cb_color_info |= S_028C70_COMPRESSION(1);
+	if ((iview->image->info.samples > 1) && iview->image->fmask.size) {
+		cb->cb_color_info |= S_028C70_COMPRESSION(1);
+		if (device->physical_device->rad_info.chip_class == SI) {
+			unsigned fmask_bankh = util_logbase2(iview->image->fmask.bank_height);
+			cb->cb_color_attrib |= S_028C74_FMASK_BANK_HEIGHT(fmask_bankh);
+		}
+	}
 
 	if (iview->image->cmask.size &&
 	    !(device->debug_flags & RADV_DEBUG_NO_FAST_CLEARS))

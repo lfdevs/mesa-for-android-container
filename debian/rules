@@ -124,6 +124,7 @@ confflags += \
 	--with-dri-driverdir=/usr/lib/$(DEB_HOST_MULTIARCH)/dri \
 	--with-dri-searchpath='/usr/lib/$(DEB_HOST_MULTIARCH)/dri:\$$$${ORIGIN}/dri:/usr/lib/dri' \
 	--with-vulkan-drivers="$(VULKAN_DRIVERS)" \
+	--enable-libglvnd \
 	--enable-osmesa \
 	--enable-glx-tls \
 	--enable-shared-glapi \
@@ -180,6 +181,12 @@ override_dh_install:
 	set -e; for file in $(NOT_INSTALLED_EITHER); do rm -f debian/tmp/$$file; done
 	# purge .la files
 	find debian/tmp/ -name '*.la' -exec rm '{}' ';'
+
+	# GLESv2 libs still get built for some reason
+	rm -f debian/tmp/usr/lib/*/libGLESv2*
+	# these are not needed
+	rm -f debian/tmp/usr/lib/*/libEGL_mesa.so
+	rm -f debian/tmp/usr/lib/*/libGLX_mesa.so
 
 	# Copy the hardlinked *_dri.so correctly.
 	install -m755 -d debian/libgl1-mesa-dri/usr/lib/${DEB_HOST_MULTIARCH}/dri/

@@ -395,7 +395,8 @@ anv_physical_device_get_format_properties(struct anv_physical_device *physical_d
       /* Nothing to do here */
    } else if (vk_format_is_depth_or_stencil(format)) {
       tiled |= VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT;
-      if (physical_device->info.gen >= 8)
+      if (vk_format_aspects(format) == VK_IMAGE_ASPECT_DEPTH_BIT ||
+          physical_device->info.gen >= 8)
          tiled |= VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT;
 
       tiled |= VK_FORMAT_FEATURE_BLIT_SRC_BIT |

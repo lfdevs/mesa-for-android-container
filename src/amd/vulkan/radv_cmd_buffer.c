@@ -2233,8 +2233,11 @@ VkResult radv_EndCommandBuffer(
 {
 	RADV_FROM_HANDLE(radv_cmd_buffer, cmd_buffer, commandBuffer);
 
-	if (cmd_buffer->queue_family_index != RADV_QUEUE_TRANSFER)
+	if (cmd_buffer->queue_family_index != RADV_QUEUE_TRANSFER) {
+		if (cmd_buffer->device->physical_device->rad_info.chip_class == SI)
+			cmd_buffer->state.flush_bits |= RADV_CMD_FLAG_CS_PARTIAL_FLUSH | RADV_CMD_FLAG_PS_PARTIAL_FLUSH | RADV_CMD_FLAG_WRITEBACK_GLOBAL_L2;
 		si_emit_cache_flush(cmd_buffer);
+	}
 
 	if (!cmd_buffer->device->ws->cs_finalize(cmd_buffer->cs) ||
 	    cmd_buffer->record_fail)

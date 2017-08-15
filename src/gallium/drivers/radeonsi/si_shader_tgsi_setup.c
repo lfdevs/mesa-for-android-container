@@ -148,7 +148,10 @@ unsigned si_llvm_compile(LLVMModuleRef M, struct ac_shader_binary *binary,
 	buffer_size = LLVMGetBufferSize(out_buffer);
 	buffer_data = LLVMGetBufferStart(out_buffer);
 
-	ac_elf_read(buffer_data, buffer_size, binary);
+	if (!ac_elf_read(buffer_data, buffer_size, binary)) {
+		fprintf(stderr, "radeonsi: cannot read an ELF shader binary\n");
+		diag.retval = 1;
+	}
 
 	/* Clean up */
 	LLVMDisposeMemoryBuffer(out_buffer);

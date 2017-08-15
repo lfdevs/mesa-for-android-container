@@ -1509,6 +1509,14 @@ ConstantFolding::opnd(Instruction *i, ImmediateValue &imm0, int s)
    default:
       return;
    }
+
+   // This can get left behind some of the optimizations which simplify
+   // saturatable values.
+   if (newi->op == OP_MOV && newi->saturate) {
+      newi->saturate = 0;
+      newi->op = OP_SAT;
+   }
+
    if (newi->op != op)
       foldCount++;
 }

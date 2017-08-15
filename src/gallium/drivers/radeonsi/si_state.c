@@ -3162,14 +3162,13 @@ si_make_texture_descriptor(struct si_screen *screen,
 			   uint32_t *fmask_state)
 {
 	struct pipe_resource *res = &tex->resource.b.b;
-	const struct util_format_description *base_desc, *desc;
+	const struct util_format_description *desc;
 	unsigned char swizzle[4];
 	int first_non_void;
 	unsigned num_format, data_format, type;
 	uint64_t va;
 
 	desc = util_format_description(pipe_format);
-	base_desc = util_format_description(res->format);
 
 	if (desc->colorspace == UTIL_FORMAT_COLORSPACE_ZS) {
 		const unsigned char swizzle_xxxx[4] = {0, 0, 0, 0};
@@ -3268,15 +3267,6 @@ si_make_texture_descriptor(struct si_screen *screen,
 	data_format = si_translate_texformat(&screen->b.b, pipe_format, desc, first_non_void);
 	if (data_format == ~0) {
 		data_format = 0;
-	}
-
-	/* Enable clamping for UNORM depth formats promoted to Z32F. */
-	if (screen->b.chip_class >= GFX9 &&
-	    util_format_has_depth(desc) &&
-	    num_format == V_008F14_IMG_NUM_FORMAT_FLOAT &&
-	    util_get_depth_format_type(base_desc) != UTIL_FORMAT_TYPE_FLOAT) {
-		/* NUM_FORMAT=FLOAT and DATA_FORMAT=24_8 means "clamp to [0,1]". */
-		data_format = V_008F14_IMG_DATA_FORMAT_24_8;
 	}
 
 	/* S8 with Z32 HTILE needs a special format. */

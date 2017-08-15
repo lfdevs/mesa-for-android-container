@@ -433,8 +433,6 @@ struct radv_meta_state {
 		VkPipelineLayout                          p_layout;
 
 		struct {
-			VkRenderPass srgb_render_pass;
-			VkPipeline   srgb_pipeline;
 			VkRenderPass render_pass[NUM_META_FS_KEYS];
 			VkPipeline   pipeline[NUM_META_FS_KEYS];
 		} rc[MAX_SAMPLES_LOG2];
@@ -444,7 +442,7 @@ struct radv_meta_state {
 		VkPipeline                                decompress_pipeline;
 		VkPipeline                                resummarize_pipeline;
 		VkRenderPass                              pass;
-	} depth_decomp;
+	} depth_decomp[1 + MAX_SAMPLES_LOG2];
 
 	struct {
 		VkPipeline                                cmask_eliminate_pipeline;

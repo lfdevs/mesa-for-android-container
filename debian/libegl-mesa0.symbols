@@ -1,6 +1,7 @@
-libEGL.so.1 libegl1-mesa #MINVER# | libegl1-x11
+libEGL_mesa.so.0 libegl-mesa0 #MINVER#
  MesaGLInteropEGLExportObject@Base 12.0.4
  MesaGLInteropEGLQueryDeviceInfo@Base 12.0.4
+ __egl_Main@Base 17.0.0~
  eglBindAPI@Base 7.8.1
  eglBindTexImage@Base 7.8.1
  eglChooseConfig@Base 7.8.1

@@ -1400,7 +1400,7 @@ static void tex_fetch_args(
 		 * It's unnecessary if the original texture format was
 		 * Z32_FLOAT, but we don't know that here.
 		 */
-		if (ctx->screen->b.chip_class == VI)
+		if (ctx->screen->b.chip_class >= VI)
 			z = ac_build_clamp(&ctx->ac, z);
 
 		address[count++] = z;

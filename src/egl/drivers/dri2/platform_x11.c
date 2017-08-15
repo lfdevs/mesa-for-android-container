@@ -646,6 +646,7 @@ dri2_x11_connect(struct dri2_egl_display *dri2_dpy)
        error != NULL || xfixes_query->major_version < 2) {
       _eglLog(_EGL_WARNING, "DRI2: failed to query xfixes version");
       free(error);
+      free(xfixes_query);
       return EGL_FALSE;
    }
    free(xfixes_query);

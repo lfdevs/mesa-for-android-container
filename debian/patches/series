@@ -1,1 +1,4 @@
 07_gallium-fix-build-failure-on-powerpcspe.diff
+
+# glvnd support patches
+glvnd-fix-gl-dot-pc.patch

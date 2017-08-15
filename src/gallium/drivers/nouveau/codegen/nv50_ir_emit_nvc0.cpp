@@ -2006,6 +2006,7 @@ CodeEmitterNVC0::getSRegEncoding(const ValueRef& ref)
 void
 CodeEmitterNVC0::emitMOV(const Instruction *i)
 {
+   assert(!i->saturate);
    if (i->def(0).getFile() == FILE_PREDICATE) {
       if (i->src(0).getFile() == FILE_GPR) {
          code[0] = 0xfc01c003;

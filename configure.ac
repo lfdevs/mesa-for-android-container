@@ -2551,7 +2551,7 @@ if test -n "$with_gallium_drivers"; then
             if test "x$HAVE_SWR_AVX" != xyes -a \
                     "x$HAVE_SWR_AVX2" != xyes -a \
                     "x$HAVE_SWR_KNL" != xyes -a \
-                    "x$HAVE_SWR_SKX" != xyes -a; then
+                    "x$HAVE_SWR_SKX" != xyes; then
                AC_MSG_ERROR([swr enabled but no swr architectures selected])
             fi
 

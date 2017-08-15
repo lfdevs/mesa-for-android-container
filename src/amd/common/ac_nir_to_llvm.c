@@ -1315,7 +1315,6 @@ static LLVMValueRef emit_f2f16(struct nir_to_llvm_context *ctx,
 	src0 = to_float(&ctx->ac, src0);
 	result = LLVMBuildFPTrunc(ctx->builder, src0, ctx->f16, "");
 
-	/* TODO SI/CIK options here */
 	if (ctx->options->chip_class >= VI) {
 		LLVMValueRef args[2];
 		/* Check if the result is a denormal - and flush to 0 if so. */
@@ -1329,7 +1328,22 @@ static LLVMValueRef emit_f2f16(struct nir_to_llvm_context *ctx,
 
 	if (ctx->options->chip_class >= VI)
 		result = LLVMBuildSelect(ctx->builder, cond, ctx->f32zero, result, "");
-
+	else {
+		/* for SI/CIK */
+		/* 0x38800000 is smallest half float value (2^-14) in 32-bit float,
+		 * so compare the result and flush to 0 if it's smaller.
+		 */
+		LLVMValueRef temp, cond2;
+		temp = emit_intrin_1f_param(&ctx->ac, "llvm.fabs",
+					    ctx->f32, result);
+		cond = LLVMBuildFCmp(ctx->builder, LLVMRealUGT,
+				     LLVMBuildBitCast(ctx->builder, LLVMConstInt(ctx->i32, 0x38800000, false), ctx->f32, ""),
+				     temp, "");
+		cond2 = LLVMBuildFCmp(ctx->builder, LLVMRealUNE,
+				      temp, ctx->f32zero, "");
+		cond = LLVMBuildAnd(ctx->builder, cond, cond2, "");
+		result = LLVMBuildSelect(ctx->builder, cond, ctx->f32zero, result, "");
+	}
 	return result;
 }
 

@@ -1,6 +1,7 @@
-libGL.so.1 libgl1-mesa-glx | libgl1
+libGLX_mesa.so.0 libglx-mesa0
  (arch=!hurd-any)MesaGLInteropGLXExportObject@Base 12.0.4
  (arch=!hurd-any)MesaGLInteropGLXQueryDeviceInfo@Base 12.0.4
+ __glx_Main@Base 17.0.0~
  glAccum@Base 0
  glActiveShaderProgram@Base 12.0.1
  glActiveTexture@Base 0
@@ -1295,63 +1296,3 @@ libGL.so.1 libgl1-mesa-glx | libgl1
  glWindowPos3sARB@Base 0
  glWindowPos3sv@Base 0
  glWindowPos3svARB@Base 0
- glXChooseFBConfig@Base 0
- glXChooseFBConfigSGIX@Base 0
- glXChooseVisual@Base 0
- glXCopyContext@Base 0
- glXCreateContext@Base 0
- glXCreateContextWithConfigSGIX@Base 0
- glXCreateGLXPbufferSGIX@Base 0
- glXCreateGLXPixmap@Base 0
- glXCreateGLXPixmapMESA@Base 0
- glXCreateGLXPixmapWithConfigSGIX@Base 0
- glXCreateNewContext@Base 0
- glXCreatePbuffer@Base 0
- glXCreatePixmap@Base 0
- glXCreateWindow@Base 0
- glXDestroyContext@Base 0
- glXDestroyGLXPbufferSGIX@Base 0
- glXDestroyGLXPixmap@Base 0
- glXDestroyPbuffer@Base 0
- glXDestroyPixmap@Base 0
- glXDestroyWindow@Base 0
- glXFreeContextEXT@Base 0
- glXGetClientString@Base 0
- glXGetConfig@Base 0
- glXGetContextIDEXT@Base 0
- glXGetCurrentContext@Base 0
- glXGetCurrentDisplay@Base 0
- glXGetCurrentDisplayEXT@Base 0
- glXGetCurrentDrawable@Base 0
- glXGetCurrentReadDrawable@Base 0
- (arch=!hurd-any)glXGetDriverConfig@Base 0
- glXGetFBConfigAttrib@Base 0
- glXGetFBConfigAttribSGIX@Base 0
- glXGetFBConfigFromVisualSGIX@Base 0
- glXGetFBConfigs@Base 0
- glXGetProcAddress@Base 0
- glXGetProcAddressARB@Base 0
- (arch=!hurd-any)glXGetScreenDriver@Base 0
- glXGetSelectedEvent@Base 0
- glXGetSelectedEventSGIX@Base 0
- glXGetVisualFromFBConfig@Base 0
- glXGetVisualFromFBConfigSGIX@Base 0
- glXImportContextEXT@Base 0
- glXIsDirect@Base 0
- glXMakeContextCurrent@Base 0
- glXMakeCurrent@Base 0
- glXMakeCurrentReadSGI@Base 0
- glXQueryContext@Base 0
- glXQueryContextInfoEXT@Base 0
- glXQueryDrawable@Base 0
- glXQueryExtension@Base 0
- glXQueryExtensionsString@Base 0
- glXQueryGLXPbufferSGIX@Base 0
- glXQueryServerString@Base 0
- glXQueryVersion@Base 0
- glXSelectEvent@Base 0
- glXSelectEventSGIX@Base 0
- glXSwapBuffers@Base 0
- glXUseXFont@Base 0
- glXWaitGL@Base 0
- glXWaitX@Base 0

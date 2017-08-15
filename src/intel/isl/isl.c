@@ -982,7 +982,8 @@ isl_calc_phys_total_extent_el_gen4_2d(
                                            &phys_slice0_sa);
    *total_extent_el = (struct isl_extent2d) {
       .w = isl_assert_div(phys_slice0_sa.w, fmtl->bw),
-      .h = *array_pitch_el_rows * phys_level0_sa->array_len,
+      .h = *array_pitch_el_rows * (phys_level0_sa->array_len - 1) +
+           isl_assert_div(phys_slice0_sa.h, fmtl->bh),
    };
 }
 
@@ -1366,122 +1367,17 @@ isl_calc_row_pitch(const struct isl_device *dev,
        !pitch_in_range(row_pitch, _3DSTATE_HIER_DEPTH_BUFFER_SurfacePitch_bits(dev->info)))
       return false;
 
-   if (surf_info->usage & ISL_SURF_USAGE_STENCIL_BIT)
-      isl_finishme("validate row pitch of stencil surfaces");
+   const uint32_t stencil_pitch_bits = dev->use_separate_stencil ?
+      _3DSTATE_STENCIL_BUFFER_SurfacePitch_bits(dev->info) :
+      _3DSTATE_DEPTH_BUFFER_SurfacePitch_bits(dev->info);
+
+   if ((surf_info->usage & ISL_SURF_USAGE_STENCIL_BIT) &&
+       !pitch_in_range(row_pitch, stencil_pitch_bits))
+      return false;
 
  done:
    *out_row_pitch = row_pitch;
    return true;
-}
-
-/**
- * Calculate and apply any padding required for the surface.
- *
- * @param[inout] total_h_el is updated with the new height
- * @param[out] pad_bytes is overwritten with additional padding requirements.
- */
-static void
-isl_apply_surface_padding(const struct isl_device *dev,
-                          const struct isl_surf_init_info *restrict info,
-                          const struct isl_tile_info *tile_info,
-                          uint32_t *total_h_el,
-                          uint32_t *pad_bytes)
-{
-   const struct isl_format_layout *fmtl = isl_format_get_layout(info->format);
-
-   *pad_bytes = 0;
-
-   /* From the Broadwell PRM >> Volume 5: Memory Views >> Common Surface
-    * Formats >> Surface Padding Requirements >> Render Target and Media
-    * Surfaces:
-    *
-    *   The data port accesses data (pixels) outside of the surface if they
-    *   are contained in the same cache request as pixels that are within the
-    *   surface. These pixels will not be returned by the requesting message,
-    *   however if these pixels lie outside of defined pages in the GTT,
-    *   a GTT error will result when the cache request is processed. In
-    *   order to avoid these GTT errors, “padding” at the bottom of the
-    *   surface is sometimes necessary.
-    *
-    * From the Broadwell PRM >> Volume 5: Memory Views >> Common Surface
-    * Formats >> Surface Padding Requirements >> Sampling Engine Surfaces:
-    *
-    *    ... Lots of padding requirements, all listed separately below.
-    */
-
-   /* We can safely ignore the first padding requirement, quoted below,
-    * because isl doesn't do buffers.
-    *
-    *    - [pre-BDW] For buffers, which have no inherent “height,” padding
-    *      requirements are different. A buffer must be padded to the next
-    *      multiple of 256 array elements, with an additional 16 bytes added
-    *      beyond that to account for the L1 cache line.
-    */
-
-   /*
-    *    - For compressed textures [...], padding at the bottom of the surface
-    *      is to an even compressed row.
-    */
-   if (isl_format_is_compressed(info->format))
-      *total_h_el = isl_align(*total_h_el, 2);
-
-   /*
-    *    - For cube surfaces, an additional two rows of padding are required
-    *      at the bottom of the surface.
-    */
-   if (info->usage & ISL_SURF_USAGE_CUBE_BIT)
-      *total_h_el += 2;
-
-   /*
-    *    - For packed YUV, 96 bpt, 48 bpt, and 24 bpt surface formats,
-    *      additional padding is required. These surfaces require an extra row
-    *      plus 16 bytes of padding at the bottom in addition to the general
-    *      padding requirements.
-    */
-   if (isl_format_is_yuv(info->format) &&
-       (fmtl->bpb == 96 || fmtl->bpb == 48|| fmtl->bpb == 24)) {
-      *total_h_el += 1;
-      *pad_bytes += 16;
-   }
-
-   /*
-    *    - For linear surfaces, additional padding of 64 bytes is required at
-    *      the bottom of the surface. This is in addition to the padding
-    *      required above.
-    */
-   if (tile_info->tiling == ISL_TILING_LINEAR)
-      *pad_bytes += 64;
-
-   /* The below text weakens, not strengthens, the padding requirements for
-    * linear surfaces. Therefore we can safely ignore it.
-    *
-    *    - [BDW+] For SURFTYPE_BUFFER, SURFTYPE_1D, and SURFTYPE_2D non-array,
-    *      non-MSAA, non-mip-mapped surfaces in linear memory, the only
-    *      padding requirement is to the next aligned 64-byte boundary beyond
-    *      the end of the surface. The rest of the padding requirements
-    *      documented above do not apply to these surfaces.
-    */
-
-   /*
-    *    - [SKL+] For SURFTYPE_2D and SURFTYPE_3D with linear mode and
-    *      height % 4 != 0, the surface must be padded with
-    *      4-(height % 4)*Surface Pitch # of bytes.
-    */
-   if (ISL_DEV_GEN(dev) >= 9 &&
-       tile_info->tiling == ISL_TILING_LINEAR &&
-       (info->dim == ISL_SURF_DIM_2D || info->dim == ISL_SURF_DIM_3D)) {
-      *total_h_el = isl_align(*total_h_el, 4);
-   }
-
-   /*
-    *    - [SKL+] For SURFTYPE_1D with linear mode, the surface must be padded
-    *      to 4 times the Surface Pitch # of bytes
-    */
-   if (ISL_DEV_GEN(dev) >= 9 &&
-       tile_info->tiling == ISL_TILING_LINEAR &&
-       info->dim == ISL_SURF_DIM_1D) {
-      *total_h_el += 4;
-   }
 }
 
 bool
@@ -1536,10 +1432,6 @@ isl_surf_init_s(const struct isl_device *dev,
                                  array_pitch_span, &array_pitch_el_rows,
                                  &phys_total_el);
 
-   uint32_t padded_h_el = phys_total_el.h;
-   uint32_t pad_bytes;
-   isl_apply_surface_padding(dev, info, &tile_info, &padded_h_el, &pad_bytes);
-
    uint32_t row_pitch;
    if (!isl_calc_row_pitch(dev, info, &tile_info, dim_layout,
                            &phys_total_el, &row_pitch))
@@ -1548,7 +1440,7 @@ isl_surf_init_s(const struct isl_device *dev,
    uint32_t base_alignment;
    uint64_t size;
    if (tiling == ISL_TILING_LINEAR) {
-      size = (uint64_t) row_pitch * padded_h_el + pad_bytes;
+      size = (uint64_t) row_pitch * phys_total_el.h;
 
       /* From the Broadwell PRM Vol 2d, RENDER_SURFACE_STATE::SurfaceBaseAddress:
        *
@@ -1569,9 +1461,8 @@ isl_surf_init_s(const struct isl_device *dev,
       }
       base_alignment = isl_round_up_to_power_of_two(base_alignment);
    } else {
-      padded_h_el += isl_align_div_npot(pad_bytes, row_pitch);
       const uint32_t total_h_tl =
-         isl_align_div(padded_h_el, tile_info.logical_extent_el.height);
+         isl_align_div(phys_total_el.h, tile_info.logical_extent_el.height);
 
       size = (uint64_t) total_h_tl * tile_info.phys_extent_B.height * row_pitch;
 

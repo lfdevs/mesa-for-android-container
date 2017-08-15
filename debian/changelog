@@ -1,3 +1,28 @@
+mesa (17.2.0~rc4-1) experimental; urgency=medium
+
+  * Migrate mesa to build against libglvnd:
+    + patches:
+      - Fix gl.pc
+    + control:
+      - Add libglvnd-core-dev to build-depends
+      - Drop libgles2-mesa, provide a transitional package which
+        depends on libgles2
+    + control, install, symbols, lintian-overrides:
+      - Drop libegl1-mesa, libgl1-mesa-glx, add libegl-mesa0, libglx-mesa0,
+        provide transitional packages for libegl1-mesa, libgl1-mesa-glx
+      - Replace depends on libegl1-mesa with libegl1 or libglvnd-dev
+      - Add Provides: libegl-vendor to libegl-mesa0 and libglx-vendor to
+        libglx-mesa0
+    + control, lib{,e}gl1-mesa-dev.install:
+      - Drop .so files, provided by libglvnd-dev now
+      - Depend on libglvnd-dev instead of libegl1-mesa/libgl1-mesa-glx
+    + rules:
+      - Add --enable-libglvnd
+      - GLESv2 libs still get built, purge them from debian/tmp
+      - Remove lib{EGL,GLX}_mesa.so which are not needed for anything
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Tue, 15 Aug 2017 09:44:24 +0300
+
 mesa (17.2.0~rc3-1) experimental; urgency=medium
 
   * New upstream release candidate.
