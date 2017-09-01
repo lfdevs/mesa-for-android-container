@@ -136,8 +136,6 @@ intel_finalize_mipmap_tree(struct brw_context *brw, GLuint unit)
                  _mesa_get_format_name(firstImage->base.Base.TexFormat),
                  width, height, depth, validate_last_level + 1);
 
-      const uint32_t layout_flags = MIPTREE_LAYOUT_ACCELERATED_UPLOAD |
-                                    MIPTREE_LAYOUT_TILING_ANY;
       intelObj->mt = intel_miptree_create(brw,
                                           intelObj->base.Target,
 					  firstImage->base.Base.TexFormat,
@@ -147,7 +145,7 @@ intel_finalize_mipmap_tree(struct brw_context *brw, GLuint unit)
                                           height,
                                           depth,
                                           1 /* num_samples */,
-                                          layout_flags);
+                                          MIPTREE_CREATE_BUSY);
       if (!intelObj->mt)
          return;
    }

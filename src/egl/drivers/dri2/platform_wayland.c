@@ -149,7 +149,7 @@ dri2_wl_create_window_surface(_EGLDriver *drv, _EGLDisplay *disp,
    if (!_eglInitSurface(&dri2_surf->base, disp, EGL_WINDOW_BIT, conf, attrib_list))
       goto cleanup_surf;
 
-   if (dri2_dpy->wl_drm) {
+   if (dri2_dpy->wl_dmabuf || dri2_dpy->wl_drm) {
       if (conf->RedSize == 5)
          dri2_surf->format = WL_DRM_FORMAT_RGB565;
       else if (conf->AlphaSize == 0)
@@ -199,7 +199,7 @@ dri2_wl_create_window_surface(_EGLDriver *drv, _EGLDisplay *disp,
    dri2_surf->wl_surface_wrapper = get_wl_surface_proxy(window);
    if (!dri2_surf->wl_surface_wrapper) {
       _eglError(EGL_BAD_ALLOC, "dri2_create_surface");
-      goto cleanup_drm;
+      goto cleanup_dpy_wrapper;
    }
    wl_proxy_set_queue((struct wl_proxy *)dri2_surf->wl_surface_wrapper,
                       dri2_surf->wl_queue);
@@ -227,7 +227,7 @@ dri2_wl_create_window_surface(_EGLDriver *drv, _EGLDisplay *disp,
                                                   dri2_surf);
     if (dri2_surf->dri_drawable == NULL) {
       _eglError(EGL_BAD_ALLOC, "createNewDrawable");
-       goto cleanup_surf;
+       goto cleanup_surf_wrapper;
     }
 
    dri2_wl_swap_interval(drv, disp, &dri2_surf->base,
@@ -235,6 +235,10 @@ dri2_wl_create_window_surface(_EGLDriver *drv, _EGLDisplay *disp,
 
    return &dri2_surf->base;
 
+ cleanup_surf_wrapper:
+   wl_proxy_wrapper_destroy(dri2_surf->wl_surface_wrapper);
+ cleanup_dpy_wrapper:
+   wl_proxy_wrapper_destroy(dri2_surf->wl_dpy_wrapper);
  cleanup_drm:
    if (dri2_surf->wl_drm_wrapper)
       wl_proxy_wrapper_destroy(dri2_surf->wl_drm_wrapper);
@@ -304,10 +308,10 @@ dri2_wl_destroy_surface(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *surf)
       dri2_surf->wl_win->destroy_window_callback = NULL;
    }
 
-   if (dri2_surf->wl_drm_wrapper)
-      wl_proxy_wrapper_destroy(dri2_surf->wl_drm_wrapper);
    wl_proxy_wrapper_destroy(dri2_surf->wl_surface_wrapper);
    wl_proxy_wrapper_destroy(dri2_surf->wl_dpy_wrapper);
+   if (dri2_surf->wl_drm_wrapper)
+      wl_proxy_wrapper_destroy(dri2_surf->wl_drm_wrapper);
    wl_event_queue_destroy(dri2_surf->wl_queue);
 
    free(surf);
@@ -403,8 +407,13 @@ get_back_bo(struct dri2_egl_surface *dri2_surf)
          break;
 
       /* If we don't have a buffer, then block on the server to release one for
-       * us, and try again. */
-      if (wl_display_dispatch_queue(dri2_dpy->wl_dpy, dri2_surf->wl_queue) < 0)
+       * us, and try again. wl_display_dispatch_queue will process any pending
+       * events, however not all servers flush on issuing a buffer release
+       * event. So, we spam the server with roundtrips as they always cause a
+       * client flush.
+       */
+      if (wl_display_roundtrip_queue(dri2_dpy->wl_dpy,
+                                     dri2_surf->wl_queue) < 0)
           return -1;
    }
 
@@ -1090,12 +1099,15 @@ dmabuf_handle_modifier(void *data, struct zwp_linux_dmabuf_v1 *dmabuf,
    switch (format) {
    case WL_DRM_FORMAT_ARGB8888:
       mod = u_vector_add(&dri2_dpy->wl_modifiers.argb8888);
+      dri2_dpy->formats |= HAS_ARGB8888;
       break;
    case WL_DRM_FORMAT_XRGB8888:
       mod = u_vector_add(&dri2_dpy->wl_modifiers.xrgb8888);
+      dri2_dpy->formats |= HAS_XRGB8888;
       break;
    case WL_DRM_FORMAT_RGB565:
       mod = u_vector_add(&dri2_dpy->wl_modifiers.rgb565);
+      dri2_dpy->formats |= HAS_RGB565;
       break;
    default:
       break;

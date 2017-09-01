@@ -3121,9 +3121,9 @@ radv_initialise_color_surface(struct radv_device *device,
 		cb->cb_color_view |= S_028C6C_MIP_LEVEL(iview->base_mip);
 		cb->cb_color_attrib |= S_028C74_MIP0_DEPTH(mip0_depth) |
 			S_028C74_RESOURCE_TYPE(iview->image->surface.u.gfx9.resource_type);
-		cb->cb_color_attrib2 = S_028C68_MIP0_WIDTH(iview->image->info.width - 1) |
-			S_028C68_MIP0_HEIGHT(iview->image->info.height - 1) |
-			S_028C68_MAX_MIP(iview->image->info.levels);
+		cb->cb_color_attrib2 = S_028C68_MIP0_WIDTH(iview->extent.width - 1) |
+			S_028C68_MIP0_HEIGHT(iview->extent.height - 1) |
+			S_028C68_MAX_MIP(iview->image->info.levels - 1);
 
 		cb->gfx9_epitch = S_0287A0_EPITCH(iview->image->surface.u.gfx9.surf.epitch);
 

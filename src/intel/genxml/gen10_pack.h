@@ -996,7 +996,7 @@ GEN10_BLEND_STATE_ENTRY_pack(__attribute__((unused)) __gen_user_data *data,
       __gen_uint(values->PostBlendColorClampEnable, 0, 0);
 }
 
-#define GEN10_BLEND_STATE_length              17
+#define GEN10_BLEND_STATE_length               1
 struct GEN10_BLEND_STATE {
    bool                                 AlphaToCoverageEnable;
    bool                                 IndependentAlphaBlendEnable;
@@ -1007,7 +1007,7 @@ struct GEN10_BLEND_STATE {
    bool                                 ColorDitherEnable;
    uint32_t                             XDitherOffset;
    uint32_t                             YDitherOffset;
-   struct GEN10_BLEND_STATE_ENTRY       Entry[8];
+   /* variable length fields follow */
 };
 
 static inline void
@@ -1027,22 +1027,6 @@ GEN10_BLEND_STATE_pack(__attribute__((unused)) __gen_user_data *data,
       __gen_uint(values->ColorDitherEnable, 23, 23) |
       __gen_uint(values->XDitherOffset, 21, 22) |
       __gen_uint(values->YDitherOffset, 19, 20);
-
-   GEN10_BLEND_STATE_ENTRY_pack(data, &dw[1], &values->Entry[0]);
-
-   GEN10_BLEND_STATE_ENTRY_pack(data, &dw[3], &values->Entry[1]);
-
-   GEN10_BLEND_STATE_ENTRY_pack(data, &dw[5], &values->Entry[2]);
-
-   GEN10_BLEND_STATE_ENTRY_pack(data, &dw[7], &values->Entry[3]);
-
-   GEN10_BLEND_STATE_ENTRY_pack(data, &dw[9], &values->Entry[4]);
-
-   GEN10_BLEND_STATE_ENTRY_pack(data, &dw[11], &values->Entry[5]);
-
-   GEN10_BLEND_STATE_ENTRY_pack(data, &dw[13], &values->Entry[6]);
-
-   GEN10_BLEND_STATE_ENTRY_pack(data, &dw[15], &values->Entry[7]);
 }
 
 #define GEN10_CC_VIEWPORT_length               2

@@ -836,14 +836,15 @@ static void si_shader_gs(struct si_screen *sscreen, struct si_shader *shader)
 static void si_shader_vs(struct si_screen *sscreen, struct si_shader *shader,
                          struct si_shader_selector *gs)
 {
+	const struct tgsi_shader_info *info = &shader->selector->info;
 	struct si_pm4_state *pm4;
 	unsigned num_user_sgprs;
 	unsigned nparams, vgpr_comp_cnt;
 	uint64_t va;
 	unsigned oc_lds_en;
 	unsigned window_space =
-	   shader->selector->info.properties[TGSI_PROPERTY_VS_WINDOW_SPACE_POSITION];
-	bool enable_prim_id = shader->key.mono.u.vs_export_prim_id || shader->selector->info.uses_primid;
+	   info->properties[TGSI_PROPERTY_VS_WINDOW_SPACE_POSITION];
+	bool enable_prim_id = shader->key.mono.u.vs_export_prim_id || info->uses_primid;
 
 	pm4 = si_get_shader_pm4_state(shader);
 	if (!pm4)
@@ -872,6 +873,12 @@ static void si_shader_vs(struct si_screen *sscreen, struct si_shader *shader,
 	} else {
 		si_pm4_set_reg(pm4, R_028A40_VGT_GS_MODE, si_vgt_gs_mode(gs));
 		si_pm4_set_reg(pm4, R_028A84_VGT_PRIMITIVEID_EN, 0);
+	}
+
+	if (sscreen->b.chip_class <= VI) {
+		/* Reuse needs to be set off if we write oViewport. */
+		si_pm4_set_reg(pm4, R_028AB4_VGT_REUSE_OFF,
+			       S_028AB4_REUSE_OFF(info->writes_viewport_index));
 	}
 
 	va = shader->bo->gpu_address;

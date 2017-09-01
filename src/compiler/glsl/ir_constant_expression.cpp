@@ -725,6 +725,8 @@ ir_swizzle::constant_expression_value(struct hash_table *variable_context)
          case GLSL_TYPE_FLOAT: data.f[i] = v->value.f[swiz_idx[i]]; break;
          case GLSL_TYPE_BOOL:  data.b[i] = v->value.b[swiz_idx[i]]; break;
          case GLSL_TYPE_DOUBLE:data.d[i] = v->value.d[swiz_idx[i]]; break;
+         case GLSL_TYPE_UINT64:data.u64[i] = v->value.u64[swiz_idx[i]]; break;
+         case GLSL_TYPE_INT64: data.i64[i] = v->value.i64[swiz_idx[i]]; break;
          default:              assert(!"Should not get here."); break;
          }
       }

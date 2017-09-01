@@ -820,7 +820,7 @@ glXSwapBuffers(Display * dpy, GLXDrawable drawable)
 {
 #ifdef GLX_USE_APPLEGL
    struct glx_context * gc = __glXGetCurrentContext();
-   if(gc != &DummyContext && apple_glx_is_current_drawable(dpy, gc->driContext, drawable)) {
+   if(gc != &dummyContext && apple_glx_is_current_drawable(dpy, gc->driContext, drawable)) {
       apple_glx_swap_buffers(gc->driContext);
    } else {
       __glXSendError(dpy, GLXBadCurrentWindow, 0, X_GLXSwapBuffers, false);

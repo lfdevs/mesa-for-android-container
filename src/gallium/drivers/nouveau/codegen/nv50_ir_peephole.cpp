@@ -727,7 +727,9 @@ ConstantFolding::expr(Instruction *i,
       // Leave PFETCH alone... we just folded its 2 args into 1.
       break;
    default:
-      i->op = i->saturate ? OP_SAT : OP_MOV; /* SAT handled by unary() */
+      i->op = i->saturate ? OP_SAT : OP_MOV;
+      if (i->saturate)
+         unary(i, *i->getSrc(0)->asImm());
       break;
    }
    i->subOp = 0;
@@ -1513,8 +1515,11 @@ ConstantFolding::opnd(Instruction *i, ImmediateValue &imm0, int s)
    // This can get left behind some of the optimizations which simplify
    // saturatable values.
    if (newi->op == OP_MOV && newi->saturate) {
+      ImmediateValue tmp;
       newi->saturate = 0;
       newi->op = OP_SAT;
+      if (newi->src(0).getImmediate(tmp))
+         unary(newi, tmp);
    }
 
    if (newi->op != op)

@@ -94,7 +94,7 @@ intel_alloc_texture_image_buffer(struct gl_context *ctx,
    } else {
       intel_image->mt = intel_miptree_create_for_teximage(brw, intel_texobj,
                                                           intel_image,
-                                                          1 /* samples */);
+                                                          MIPTREE_CREATE_DEFAULT);
       if (!intel_image->mt)
          return false;
 
@@ -150,7 +150,7 @@ intel_alloc_texture_storage(struct gl_context *ctx,
                                               0, levels - 1,
                                               width, height, depth,
                                               MAX2(num_samples, 1),
-                                              MIPTREE_LAYOUT_TILING_ANY);
+                                              MIPTREE_CREATE_DEFAULT);
 
       if (intel_texobj->mt == NULL) {
          return false;
@@ -345,7 +345,7 @@ intel_set_texture_storage_for_buffer_object(struct gl_context *ctx,
                                   buffer_offset,
                                   image->Width, image->Height, image->Depth,
                                   row_stride,
-                                  0);
+                                  MIPTREE_CREATE_DEFAULT);
    if (!intel_texobj->mt)
       return false;
 

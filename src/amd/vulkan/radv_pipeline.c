@@ -852,6 +852,79 @@ static uint32_t si_translate_blend_factor(VkBlendFactor factor)
 	}
 }
 
+static uint32_t si_translate_blend_opt_function(VkBlendOp op)
+{
+	switch (op) {
+	case VK_BLEND_OP_ADD:
+		return V_028760_OPT_COMB_ADD;
+	case VK_BLEND_OP_SUBTRACT:
+		return V_028760_OPT_COMB_SUBTRACT;
+	case VK_BLEND_OP_REVERSE_SUBTRACT:
+		return V_028760_OPT_COMB_REVSUBTRACT;
+	case VK_BLEND_OP_MIN:
+		return V_028760_OPT_COMB_MIN;
+	case VK_BLEND_OP_MAX:
+		return V_028760_OPT_COMB_MAX;
+	default:
+		return V_028760_OPT_COMB_BLEND_DISABLED;
+	}
+}
+
+static uint32_t si_translate_blend_opt_factor(VkBlendFactor factor, bool is_alpha)
+{
+	switch (factor) {
+	case VK_BLEND_FACTOR_ZERO:
+		return V_028760_BLEND_OPT_PRESERVE_NONE_IGNORE_ALL;
+	case VK_BLEND_FACTOR_ONE:
+		return V_028760_BLEND_OPT_PRESERVE_ALL_IGNORE_NONE;
+	case VK_BLEND_FACTOR_SRC_COLOR:
+		return is_alpha ? V_028760_BLEND_OPT_PRESERVE_A1_IGNORE_A0
+				: V_028760_BLEND_OPT_PRESERVE_C1_IGNORE_C0;
+	case VK_BLEND_FACTOR_ONE_MINUS_SRC_COLOR:
+		return is_alpha ? V_028760_BLEND_OPT_PRESERVE_A0_IGNORE_A1
+				: V_028760_BLEND_OPT_PRESERVE_C0_IGNORE_C1;
+	case VK_BLEND_FACTOR_SRC_ALPHA:
+		return V_028760_BLEND_OPT_PRESERVE_A1_IGNORE_A0;
+	case VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA:
+		return V_028760_BLEND_OPT_PRESERVE_A0_IGNORE_A1;
+	case VK_BLEND_FACTOR_SRC_ALPHA_SATURATE:
+		return is_alpha ? V_028760_BLEND_OPT_PRESERVE_ALL_IGNORE_NONE
+				: V_028760_BLEND_OPT_PRESERVE_NONE_IGNORE_A0;
+	default:
+		return V_028760_BLEND_OPT_PRESERVE_NONE_IGNORE_NONE;
+	}
+}
+
+/**
+ * Get rid of DST in the blend factors by commuting the operands:
+ *    func(src * DST, dst * 0) ---> func(src * 0, dst * SRC)
+ */
+static void si_blend_remove_dst(unsigned *func, unsigned *src_factor,
+				unsigned *dst_factor, unsigned expected_dst,
+				unsigned replacement_src)
+{
+	if (*src_factor == expected_dst &&
+	    *dst_factor == VK_BLEND_FACTOR_ZERO) {
+		*src_factor = VK_BLEND_FACTOR_ZERO;
+		*dst_factor = replacement_src;
+
+		/* Commuting the operands requires reversing subtractions. */
+		if (*func == VK_BLEND_OP_SUBTRACT)
+			*func = VK_BLEND_OP_REVERSE_SUBTRACT;
+		else if (*func == VK_BLEND_OP_REVERSE_SUBTRACT)
+			*func = VK_BLEND_OP_SUBTRACT;
+	}
+}
+
+static bool si_blend_factor_uses_dst(unsigned factor)
+{
+	return factor == VK_BLEND_FACTOR_DST_COLOR ||
+		factor == VK_BLEND_FACTOR_DST_ALPHA ||
+		factor == VK_BLEND_FACTOR_SRC_ALPHA_SATURATE ||
+		factor == VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA ||
+		factor == VK_BLEND_FACTOR_ONE_MINUS_DST_COLOR;
+}
+
 static bool is_dual_src(VkBlendFactor factor)
 {
 	switch (factor) {
@@ -1149,6 +1222,7 @@ radv_pipeline_init_blend_state(struct radv_pipeline *pipeline,
 	for (i = 0; i < vkblend->attachmentCount; i++) {
 		const VkPipelineColorBlendAttachmentState *att = &vkblend->pAttachments[i];
 		unsigned blend_cntl = 0;
+		unsigned srcRGB_opt, dstRGB_opt, srcA_opt, dstA_opt;
 		VkBlendOp eqRGB = att->colorBlendOp;
 		VkBlendFactor srcRGB = att->srcColorBlendFactor;
 		VkBlendFactor dstRGB = att->dstColorBlendFactor;
@@ -1156,7 +1230,7 @@ radv_pipeline_init_blend_state(struct radv_pipeline *pipeline,
 		VkBlendFactor srcA = att->srcAlphaBlendFactor;
 		VkBlendFactor dstA = att->dstAlphaBlendFactor;
 
-		blend->sx_mrt0_blend_opt[i] = S_028760_COLOR_COMB_FCN(V_028760_OPT_COMB_BLEND_DISABLED) | S_028760_ALPHA_COMB_FCN(V_028760_OPT_COMB_BLEND_DISABLED);
+		blend->sx_mrt_blend_opt[i] = S_028760_COLOR_COMB_FCN(V_028760_OPT_COMB_BLEND_DISABLED) | S_028760_ALPHA_COMB_FCN(V_028760_OPT_COMB_BLEND_DISABLED);
 
 		if (!att->colorWriteMask)
 			continue;
@@ -1180,6 +1254,50 @@ radv_pipeline_init_blend_state(struct radv_pipeline *pipeline,
 			dstA = VK_BLEND_FACTOR_ONE;
 		}
 
+		/* Blending optimizations for RB+.
+		 * These transformations don't change the behavior.
+		 *
+		 * First, get rid of DST in the blend factors:
+		 *    func(src * DST, dst * 0) ---> func(src * 0, dst * SRC)
+		 */
+		si_blend_remove_dst(&eqRGB, &srcRGB, &dstRGB,
+				    VK_BLEND_FACTOR_DST_COLOR,
+				    VK_BLEND_FACTOR_SRC_COLOR);
+
+		si_blend_remove_dst(&eqA, &srcA, &dstA,
+				    VK_BLEND_FACTOR_DST_COLOR,
+				    VK_BLEND_FACTOR_SRC_COLOR);
+
+		si_blend_remove_dst(&eqA, &srcA, &dstA,
+				    VK_BLEND_FACTOR_DST_ALPHA,
+				    VK_BLEND_FACTOR_SRC_ALPHA);
+
+		/* Look up the ideal settings from tables. */
+		srcRGB_opt = si_translate_blend_opt_factor(srcRGB, false);
+		dstRGB_opt = si_translate_blend_opt_factor(dstRGB, false);
+		srcA_opt = si_translate_blend_opt_factor(srcA, true);
+		dstA_opt = si_translate_blend_opt_factor(dstA, true);
+
+				/* Handle interdependencies. */
+		if (si_blend_factor_uses_dst(srcRGB))
+			dstRGB_opt = V_028760_BLEND_OPT_PRESERVE_NONE_IGNORE_NONE;
+		if (si_blend_factor_uses_dst(srcA))
+			dstA_opt = V_028760_BLEND_OPT_PRESERVE_NONE_IGNORE_NONE;
+
+		if (srcRGB == VK_BLEND_FACTOR_SRC_ALPHA_SATURATE &&
+		    (dstRGB == VK_BLEND_FACTOR_ZERO ||
+		     dstRGB == VK_BLEND_FACTOR_SRC_ALPHA ||
+		     dstRGB == VK_BLEND_FACTOR_SRC_ALPHA_SATURATE))
+			dstRGB_opt = V_028760_BLEND_OPT_PRESERVE_NONE_IGNORE_A0;
+
+		/* Set the final value. */
+		blend->sx_mrt_blend_opt[i] =
+			S_028760_COLOR_SRC_OPT(srcRGB_opt) |
+			S_028760_COLOR_DST_OPT(dstRGB_opt) |
+			S_028760_COLOR_COMB_FCN(si_translate_blend_opt_function(eqRGB)) |
+			S_028760_ALPHA_SRC_OPT(srcA_opt) |
+			S_028760_ALPHA_DST_OPT(dstA_opt) |
+			S_028760_ALPHA_COMB_FCN(si_translate_blend_opt_function(eqA));
 		blend_cntl |= S_028780_ENABLE(1);
 
 		blend_cntl |= S_028780_COLOR_COMB_FCN(si_translate_blend_function(eqRGB));
@@ -1203,8 +1321,14 @@ radv_pipeline_init_blend_state(struct radv_pipeline *pipeline,
 		    dstRGB == VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA)
 			blend_need_alpha |= 1 << i;
 	}
-	for (i = vkblend->attachmentCount; i < 8; i++)
+	for (i = vkblend->attachmentCount; i < 8; i++) {
 		blend->cb_blend_control[i] = 0;
+		blend->sx_mrt_blend_opt[i] = S_028760_COLOR_COMB_FCN(V_028760_OPT_COMB_BLEND_DISABLED) | S_028760_ALPHA_COMB_FCN(V_028760_OPT_COMB_BLEND_DISABLED);
+	}
+
+	/* disable RB+ for now */
+	if (pipeline->device->physical_device->has_rbplus)
+		blend->cb_color_control |= S_028808_DISABLE_DUAL_QUAD(1);
 
 	if (blend->cb_target_mask)
 		blend->cb_color_control |= S_028808_MODE(mode);
@@ -2198,6 +2322,9 @@ radv_pipeline_init(struct radv_pipeline *pipeline,
 		S_02880C_DEPTH_BEFORE_SHADER(ps->info.fs.early_fragment_test) |
 		S_02880C_EXEC_ON_HIER_FAIL(ps->info.fs.writes_memory) |
 		S_02880C_EXEC_ON_NOOP(ps->info.fs.writes_memory);
+
+	if (pipeline->device->physical_device->has_rbplus)
+		pipeline->graphics.db_shader_control |= S_02880C_DUAL_QUAD_DISABLE(1);
 
 	pipeline->graphics.shader_z_format =
 		ps->info.fs.writes_sample_mask ? V_028710_SPI_SHADER_32_ABGR :

@@ -41,11 +41,11 @@ Build-Depends:
  python-mako,
  flex,
  bison,
- llvm-4.0-dev (>= 1:4.0~) [amd64 arm64 armel armhf i386 kfreebsd-amd64 kfreebsd-i386 mips mips64el mipsel powerpc ppc64 sparc64 ppc64el],
+ llvm-5.0-dev (>= 1:4.0~) [amd64 arm64 armel armhf i386 kfreebsd-amd64 kfreebsd-i386 mips mips64el mipsel powerpc ppc64 sparc64 ppc64el],
  libelf-dev [amd64 arm64 armel armhf i386 kfreebsd-amd64 kfreebsd-i386 mips mips64el mipsel powerpc ppc64 sparc64 ppc64el],
  libwayland-dev (>= 1.11.0) [linux-any],
- libclang-4.0-dev (>= 1:4.0~) [amd64 arm64 armel armhf i386 kfreebsd-amd64 kfreebsd-i386 mips mips64el mipsel powerpc ppc64 sparc64 ppc64el],
- libclc-dev (>= 0.2.0+git20170213) [amd64 arm64 armel armhf i386 kfreebsd-amd64 kfreebsd-i386 mips mips64el mipsel powerpc ppc64 sparc64 ppc64el],
+ libclang-5.0-dev (>= 1:4.0~) [amd64 arm64 armel armhf i386 kfreebsd-amd64 kfreebsd-i386 mips mips64el mipsel powerpc ppc64 sparc64 ppc64el],
+ libclc-dev (>= 0.2.0+git20170330-3) [amd64 arm64 armel armhf i386 kfreebsd-amd64 kfreebsd-i386 mips mips64el mipsel powerpc ppc64 sparc64 ppc64el],
  wayland-protocols (>= 1.9),
  zlib1g-dev,
  libglvnd-core-dev,
@@ -55,7 +55,7 @@ Homepage: https://mesa3d.org/
 
 Package: libxatracker2
 Section: libs
-Architecture: linux-any 
+Architecture: amd64 i386 x32
 Depends:
  ${shlibs:Depends},
  ${misc:Depends},
@@ -69,7 +69,7 @@ Description: X acceleration library -- runtime
 
 Package: libxatracker-dev
 Section: libdevel
-Architecture: linux-any
+Architecture: amd64 i386 x32
 Depends:
  libxatracker2 (= ${binary:Version}),
  ${misc:Depends},
@@ -240,8 +240,8 @@ Depends:
  ${shlibs:Depends},
  ${misc:Depends},
  libglapi-mesa (= ${binary:Version}),
+ libgl1-mesa-dri,
 Provides: libglx-vendor
-Recommends: libgl1-mesa-dri
 Breaks:
  libopengl-perl (<< 0.6704+dfsg-2),
 Pre-Depends: ${misc:Pre-Depends}
@@ -436,8 +436,8 @@ Section: libs
 Architecture: amd64 arm64 armel armhf i386 kfreebsd-amd64 kfreebsd-i386 mips mips64el mipsel powerpc ppc64 sparc64 ppc64el
 Pre-Depends: ${misc:Pre-Depends}
 Depends:
- libclc-r600 (>= 0.2.0+git20170213),
- libclc-amdgcn (>= 0.2.0+git20170213),
+ libclc-r600 (>= 0.2.0+git20170330-3),
+ libclc-amdgcn (>= 0.2.0+git20170330-3),
  ocl-icd-libopencl1 | libopencl1,
  ${shlibs:Depends},
  ${misc:Depends},

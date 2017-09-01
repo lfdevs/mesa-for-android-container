@@ -1549,6 +1549,7 @@ surf_fake_rgb_with_red(const struct isl_device *isl_dev,
 
    info->surf.logical_level0_px.width *= 3;
    info->surf.phys_level0_sa.width *= 3;
+   info->tile_x_sa *= 3;
    *x *= 3;
    *width *= 3;
 

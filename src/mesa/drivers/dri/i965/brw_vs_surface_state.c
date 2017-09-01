@@ -198,6 +198,7 @@ const struct brw_tracked_state brw_vs_image_surfaces = {
       .mesa = _NEW_TEXTURE,
       .brw = BRW_NEW_BATCH |
              BRW_NEW_BLORP |
+             BRW_NEW_FAST_CLEAR_COLOR |
              BRW_NEW_IMAGE_UNITS |
              BRW_NEW_VERTEX_PROGRAM |
              BRW_NEW_VS_PROG_DATA,

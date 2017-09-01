@@ -773,6 +773,20 @@ if test "x$enable_asm" = xyes; then
             ;;
         esac
         ;;
+    aarch64)
+        case "$host_os" in
+        linux*)
+            asm_arch=aarch64
+            ;;
+        esac
+        ;;
+    arm)
+        case "$host_os" in
+        linux*)
+            asm_arch=arm
+            ;;
+        esac
+        ;;
     esac
 
     case "$asm_arch" in
@@ -791,6 +805,14 @@ if test "x$enable_asm" = xyes; then
     ppc64le)
         DEFINES="$DEFINES -DUSE_PPC64LE_ASM"
         AC_MSG_RESULT([yes, ppc64le])
+        ;;
+    aarch64)
+        DEFINES="$DEFINES -DUSE_AARCH64_ASM"
+        AC_MSG_RESULT([yes, aarch64])
+        ;;
+    arm)
+        DEFINES="$DEFINES -DUSE_ARM_ASM"
+        AC_MSG_RESULT([yes, arm])
         ;;
     *)
         AC_MSG_RESULT([no, platform not supported])
@@ -2735,6 +2757,8 @@ AM_CONDITIONAL(HAVE_X86_ASM, test "x$asm_arch" = xx86 -o "x$asm_arch" = xx86_64)
 AM_CONDITIONAL(HAVE_X86_64_ASM, test "x$asm_arch" = xx86_64)
 AM_CONDITIONAL(HAVE_SPARC_ASM, test "x$asm_arch" = xsparc)
 AM_CONDITIONAL(HAVE_PPC64LE_ASM, test "x$asm_arch" = xppc64le)
+AM_CONDITIONAL(HAVE_AARCH64_ASM, test "x$asm_arch" = xaarch64)
+AM_CONDITIONAL(HAVE_ARM_ASM, test "x$asm_arch" = xarm)
 
 AC_SUBST([NINE_MAJOR], 1)
 AC_SUBST([NINE_MINOR], 0)

@@ -396,7 +396,7 @@ etna_try_rs_blit(struct pipe_context *pctx,
    }
 
    unsigned src_format = etna_compatible_rs_format(blit_info->src.format);
-   unsigned dst_format = etna_compatible_rs_format(blit_info->src.format);
+   unsigned dst_format = etna_compatible_rs_format(blit_info->dst.format);
    if (translate_rs_format(src_format) == ETNA_NO_MATCH ||
        translate_rs_format(dst_format) == ETNA_NO_MATCH ||
        blit_info->scissor_enable || blit_info->src.box.x != 0 ||

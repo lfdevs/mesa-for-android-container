@@ -133,6 +133,7 @@ const struct brw_tracked_state brw_tcs_image_surfaces = {
    .dirty = {
       .brw = BRW_NEW_BATCH |
              BRW_NEW_BLORP |
+             BRW_NEW_FAST_CLEAR_COLOR |
              BRW_NEW_TCS_PROG_DATA |
              BRW_NEW_IMAGE_UNITS |
              BRW_NEW_TESS_PROGRAMS,

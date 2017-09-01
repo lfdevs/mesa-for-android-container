@@ -47,12 +47,12 @@
 #include "compiler/glsl/linker.h"
 #include "compiler/glsl/program.h"
 #include "compiler/glsl/shader_cache.h"
+#include "compiler/glsl/string_to_uint_map.h"
 #include "program/prog_instruction.h"
 #include "program/prog_optimize.h"
 #include "program/prog_print.h"
 #include "program/program.h"
 #include "program/prog_parameter.h"
-#include "util/string_to_uint_map.h"
 
 
 static int swizzle_for_size(int size);
@@ -2409,8 +2409,10 @@ namespace {
 class add_uniform_to_shader : public program_resource_visitor {
 public:
    add_uniform_to_shader(struct gl_shader_program *shader_program,
-			 struct gl_program_parameter_list *params)
-      : shader_program(shader_program), params(params), idx(-1)
+			 struct gl_program_parameter_list *params,
+                         gl_shader_stage shader_type)
+      : shader_program(shader_program), params(params), idx(-1),
+        shader_type(shader_type)
    {
       /* empty */
    }
@@ -2433,6 +2435,7 @@ private:
    struct gl_program_parameter_list *params;
    int idx;
    ir_variable *var;
+   gl_shader_stage shader_type;
 };
 
 } /* anonymous namespace */
@@ -2444,18 +2447,49 @@ add_uniform_to_shader::visit_field(const glsl_type *type, const char *name,
                                    const enum glsl_interface_packing,
                                    bool /* last_field */)
 {
-   /* opaque types don't use storage in the param list unless they are
-    * bindless samplers or images.
-    */
-   if (type->contains_opaque() && !var->data.bindless)
+   /* atomics don't get real storage */
+   if (type->contains_atomic())
       return;
 
-   assert(_mesa_lookup_parameter_index(params, name) < 0);
+   gl_register_file file;
+   if (type->without_array()->is_sampler() && !var->data.bindless) {
+      file = PROGRAM_SAMPLER;
+   } else {
+      file = PROGRAM_UNIFORM;
+   }
 
-   unsigned size = type_size(type) * 4;
+   int index = _mesa_lookup_parameter_index(params, name);
+   if (index < 0) {
+      unsigned size = type_size(type) * 4;
 
-   int index = _mesa_add_parameter(params, PROGRAM_UNIFORM, name, size,
-                                   type->gl_type, NULL, NULL);
+      index = _mesa_add_parameter(params, file, name, size, type->gl_type,
+				  NULL, NULL);
+
+      /* Sampler uniform values are stored in prog->SamplerUnits,
+       * and the entry in that array is selected by this index we
+       * store in ParameterValues[].
+       */
+      if (file == PROGRAM_SAMPLER) {
+	 unsigned location;
+	 const bool found =
+	    this->shader_program->UniformHash->get(location,
+						   params->Parameters[index].Name);
+	 assert(found);
+
+	 if (!found)
+	    return;
+
+	 struct gl_uniform_storage *storage =
+            &this->shader_program->data->UniformStorage[location];
+
+         assert(storage->type->is_sampler() &&
+                storage->opaque[shader_type].active);
+
+	 for (unsigned int j = 0; j < size / 4; j++)
+            params->ParameterValues[index + j][0].f =
+               storage->opaque[shader_type].index + j;
+      }
+   }
 
    /* The first part of the uniform that's processed determines the base
     * location of the whole uniform (for structures).
@@ -2479,7 +2513,7 @@ _mesa_generate_parameters_list_for_uniforms(struct gl_shader_program
 					    struct gl_program_parameter_list
 					    *params)
 {
-   add_uniform_to_shader add(shader_program, params);
+   add_uniform_to_shader add(shader_program, params, sh->Stage);
 
    foreach_in_list(ir_instruction, node, sh->ir) {
       ir_variable *var = node->as_variable();

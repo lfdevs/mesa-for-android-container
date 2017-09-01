@@ -61,6 +61,8 @@ enum {
     __EGL_DISPATCH_eglPostSubBufferNV,
     __EGL_DISPATCH_eglQueryAPI,
     __EGL_DISPATCH_eglQueryContext,
+    __EGL_DISPATCH_eglQueryDmaBufFormatsEXT,
+    __EGL_DISPATCH_eglQueryDmaBufModifiersEXT,
     __EGL_DISPATCH_eglQueryString,
     __EGL_DISPATCH_eglQuerySurface,
     __EGL_DISPATCH_eglQueryWaylandBufferWL,

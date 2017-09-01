@@ -204,6 +204,15 @@ update_urb_size(struct brw_context *brw, const struct gen_l3_config *cfg)
    if (brw->urb.size != sz) {
       brw->urb.size = sz;
       brw->ctx.NewDriverState |= BRW_NEW_URB_SIZE;
+
+      /* If we change the total URB size, reset the individual stage sizes to
+       * zero so that, even if there is no URB size change, gen7_upload_urb
+       * still re-emits 3DSTATE_URB_*.
+       */
+      brw->urb.vsize = 0;
+      brw->urb.gsize = 0;
+      brw->urb.hsize = 0;
+      brw->urb.dsize = 0;
    }
 }
 

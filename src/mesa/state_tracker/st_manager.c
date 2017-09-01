@@ -634,7 +634,7 @@ st_context_flush(struct st_context_iface *stctxi, unsigned flags,
 
    st_flush(st, fence, pipe_flags);
 
-   if ((flags & ST_FLUSH_WAIT) && fence) {
+   if ((flags & ST_FLUSH_WAIT) && fence && *fence) {
       st->pipe->screen->fence_finish(st->pipe->screen, NULL, *fence,
                                      PIPE_TIMEOUT_INFINITE);
       st->pipe->screen->fence_reference(st->pipe->screen, fence, NULL);

@@ -750,7 +750,7 @@ brw_bo_map_cpu(struct brw_context *brw, struct brw_bo *bo, unsigned flags)
       bo_wait_with_stall_warning(brw, bo, "CPU mapping");
    }
 
-   if (!bo->cache_coherent) {
+   if (!bo->cache_coherent && !bo->bufmgr->has_llc) {
       /* If we're reusing an existing CPU mapping, the CPU caches may
        * contain stale data from the last time we read from that mapping.
        * (With the BO cache, it might even be data from a previous buffer!)
@@ -760,6 +760,12 @@ brw_bo_map_cpu(struct brw_context *brw, struct brw_bo *bo, unsigned flags)
        * We need to invalidate those cachelines so that we see the latest
        * contents, and so long as we only read from the CPU mmap we do not
        * need to write those cachelines back afterwards.
+       *
+       * On LLC, the emprical evidence suggests that writes from the GPU
+       * that bypass the LLC (i.e. for scanout) do *invalidate* the CPU
+       * cachelines. (Other reads, such as the display engine, bypass the
+       * LLC entirely requiring us to keep dirty pixels for the scanout
+       * out of any cache.)
        */
       gen_invalidate_range(bo->map_cpu, bo->size);
    }
@@ -895,6 +901,14 @@ static bool
 can_map_cpu(struct brw_bo *bo, unsigned flags)
 {
    if (bo->cache_coherent)
+      return true;
+
+   /* Even if the buffer itself is not cache-coherent (such as a scanout), on
+    * an LLC platform reads always are coherent (as they are performed via the
+    * central system agent). It is just the writes that we need to take special
+    * care to ensure that land in main memory and not stick in the CPU cache.
+    */
+   if (!(flags & MAP_WRITE) && bo->bufmgr->has_llc)
       return true;
 
    /* If PERSISTENT or COHERENT are set, the mmapping needs to remain valid

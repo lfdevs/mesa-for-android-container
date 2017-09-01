@@ -771,6 +771,7 @@ static const struct debug_named_value common_debug_options[] = {
 	{ "norbplus", DBG_NO_RB_PLUS, "Disable RB+." },
 	{ "sisched", DBG_SI_SCHED, "Enable LLVM SI Machine Instruction Scheduler." },
 	{ "mono", DBG_MONOLITHIC_SHADERS, "Use old-style monolithic shaders compiled on demand" },
+	{ "ce", DBG_CE, "Force enable the constant engine" },
 	{ "noce", DBG_NO_CE, "Disable the constant engine"},
 	{ "unsafemath", DBG_UNSAFE_MATH, "Enable unsafe math shader optimizations" },
 	{ "nodccfb", DBG_NO_DCC_FB, "Disable separate DCC on the main framebuffer" },

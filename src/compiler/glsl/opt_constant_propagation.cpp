@@ -237,6 +237,12 @@ ir_constant_propagation_visitor::constant_propagation(ir_rvalue **rvalue) {
       case GLSL_TYPE_BOOL:
 	 data.b[i] = found->constant->value.b[rhs_channel];
 	 break;
+      case GLSL_TYPE_UINT64:
+	 data.u64[i] = found->constant->value.u64[rhs_channel];
+	 break;
+      case GLSL_TYPE_INT64:
+	 data.i64[i] = found->constant->value.i64[rhs_channel];
+	 break;
       default:
 	 assert(!"not reached");
 	 break;

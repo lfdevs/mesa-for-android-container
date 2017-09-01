@@ -409,12 +409,12 @@ struct DRAW_CONTEXT
     bool            dependent;      // Backend work is dependent on all previous BE
     bool            isCompute;      // Is this DC a compute context?
     bool            cleanupState;   // True if this is the last draw using an entry in the state ring.
-    volatile bool   doneFE;         // Is FE work done for this draw?
 
     FE_WORK         FeWork;
 
+    volatile OSALIGNLINE(bool)       doneFE;         // Is FE work done for this draw?
     volatile OSALIGNLINE(uint32_t)   FeLock;
-    volatile int32_t    threadsDone;
+    volatile OSALIGNLINE(uint32_t)   threadsDone;
 
     SYNC_DESC       retireCallback; // Call this func when this DC is retired.
 };
@@ -503,9 +503,9 @@ struct SWR_CONTEXT
     // Scratch space for workers.
     uint8_t** ppScratch;
 
-    volatile int32_t  drawsOutstandingFE;
+    volatile OSALIGNLINE(uint32_t)  drawsOutstandingFE;
 
-    CachingAllocator cachingArenaAllocator;
+    OSALIGNLINE(CachingAllocator) cachingArenaAllocator;
     uint32_t frameCount;
 
     uint32_t lastFrameChecked;

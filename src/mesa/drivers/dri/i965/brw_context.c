@@ -1518,11 +1518,17 @@ intel_process_dri2_buffer(struct brw_context *brw,
                                   drawable->h,
                                   1,
                                   buffer->pitch,
-                                  MIPTREE_LAYOUT_FOR_SCANOUT);
+                                  MIPTREE_CREATE_DEFAULT);
    if (!mt) {
       brw_bo_unreference(bo);
       return;
    }
+
+   /* We got this BO from X11.  We cana't assume that we have coherent texture
+    * access because X may suddenly decide to use it for scan-out which would
+    * destroy coherency.
+    */
+   bo->cache_coherent = false;
 
    if (!intel_update_winsys_renderbuffer_miptree(brw, rb, mt,
                                                  drawable->w, drawable->h,

@@ -1974,45 +1974,55 @@ static void si_upload_bindless_descriptors(struct si_context *sctx)
 }
 
 /* Update mutable image descriptor fields of all resident textures. */
+static void si_update_resident_texture_descriptor(struct si_context *sctx,
+						  struct si_texture_handle *tex_handle)
+{
+	struct si_sampler_view *sview = (struct si_sampler_view *)tex_handle->view;
+	struct si_bindless_descriptor *desc = tex_handle->desc;
+	uint32_t desc_list[16];
+
+	if (sview->base.texture->target == PIPE_BUFFER)
+		return;
+
+	memcpy(desc_list, desc->desc_list, sizeof(desc_list));
+	si_set_sampler_view_desc(sctx, sview, &tex_handle->sstate,
+				 &desc->desc_list[0]);
+
+	if (memcmp(desc_list, desc->desc_list, sizeof(desc_list))) {
+		desc->dirty = true;
+		sctx->bindless_descriptors_dirty = true;
+	}
+}
+
+static void si_update_resident_image_descriptor(struct si_context *sctx,
+						struct si_image_handle *img_handle)
+{
+	struct si_bindless_descriptor *desc = img_handle->desc;
+	struct pipe_image_view *view = &img_handle->view;
+	uint32_t desc_list[16];
+
+	if (view->resource->target == PIPE_BUFFER)
+		return;
+
+	memcpy(desc_list, desc->desc_list, sizeof(desc_list));
+	si_set_shader_image_desc(sctx, view, true, &desc->desc_list[0]);
+
+	if (memcmp(desc_list, desc->desc_list, sizeof(desc_list))) {
+		desc->dirty = true;
+		sctx->bindless_descriptors_dirty = true;
+	}
+}
+
 static void si_update_all_resident_texture_descriptors(struct si_context *sctx)
 {
 	util_dynarray_foreach(&sctx->resident_tex_handles,
 			      struct si_texture_handle *, tex_handle) {
-		struct si_bindless_descriptor *desc = (*tex_handle)->desc;
-		struct si_sampler_view *sview =
-			(struct si_sampler_view *)(*tex_handle)->view;
-		uint32_t desc_list[16];
-
-		if (sview->base.texture->target == PIPE_BUFFER)
-			continue;
-
-		memcpy(desc_list, desc->desc_list, sizeof(desc_list));
-		si_set_sampler_view_desc(sctx, sview, &(*tex_handle)->sstate,
-					 &desc->desc_list[0]);
-
-		if (memcmp(desc_list, desc->desc_list, sizeof(desc_list))) {
-			desc->dirty = true;
-			sctx->bindless_descriptors_dirty = true;
-		}
+		si_update_resident_texture_descriptor(sctx, *tex_handle);
 	}
 
 	util_dynarray_foreach(&sctx->resident_img_handles,
 			      struct si_image_handle *, img_handle) {
-		struct si_bindless_descriptor *desc = (*img_handle)->desc;
-		struct pipe_image_view *view = &(*img_handle)->view;
-		uint32_t desc_list[16];
-
-		if (view->resource->target == PIPE_BUFFER)
-			continue;
-
-		memcpy(desc_list, desc->desc_list, sizeof(desc_list));
-		si_set_shader_image_desc(sctx, view, true,
-					 &desc->desc_list[0]);
-
-		if (memcmp(desc_list, desc->desc_list, sizeof(desc_list))) {
-			desc->dirty = true;
-			sctx->bindless_descriptors_dirty = true;
-		}
+		si_update_resident_image_descriptor(sctx, *img_handle);
 	}
 
 	si_upload_bindless_descriptors(sctx);
@@ -2490,6 +2500,13 @@ static void si_make_texture_handle_resident(struct pipe_context *ctx,
 			if (rtex->dcc_offset &&
 			    p_atomic_read(&rtex->framebuffers_bound))
 				sctx->need_check_render_feedback = true;
+
+			/* Re-upload the descriptor if it has been updated
+			 * while it wasn't resident.
+			 */
+			si_update_resident_texture_descriptor(sctx, tex_handle);
+			if (tex_handle->desc->dirty)
+				sctx->bindless_descriptors_dirty = true;
 		} else {
 			si_invalidate_bindless_buf_desc(sctx, tex_handle->desc,
 							sview->base.texture,
@@ -2626,6 +2643,14 @@ static void si_make_image_handle_resident(struct pipe_context *ctx,
 			if (vi_dcc_enabled(rtex, level) &&
 			    p_atomic_read(&rtex->framebuffers_bound))
 				sctx->need_check_render_feedback = true;
+
+			/* Re-upload the descriptor if it has been updated
+			 * while it wasn't resident.
+			 */
+			si_update_resident_image_descriptor(sctx, img_handle);
+			if (img_handle->desc->dirty)
+				sctx->bindless_descriptors_dirty = true;
+
 		} else {
 			si_invalidate_bindless_buf_desc(sctx, img_handle->desc,
 							view->resource,

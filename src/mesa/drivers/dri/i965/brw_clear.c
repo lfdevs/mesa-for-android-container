@@ -159,14 +159,24 @@ brw_fast_clear_depth(struct gl_context *ctx)
       break;
    }
 
+   /* Quantize the clear value to what can be stored in the actual depth
+    * buffer.  This makes the following check more accurate because it now
+    * checks if the actual depth bits will match.  It also prevents us from
+    * getting a too-accurate depth value during depth testing or when sampling
+    * with HiZ enabled.
+    */
+   float clear_value =
+      mt->format == MESA_FORMAT_Z_FLOAT32 ? ctx->Depth.Clear :
+      (unsigned)(ctx->Depth.Clear * fb->_DepthMax) / (float)fb->_DepthMax;
+
    /* If we're clearing to a new clear value, then we need to resolve any clear
     * flags out of the HiZ buffer into the real depth buffer.
     */
-   if (mt->fast_clear_color.f32[0] != ctx->Depth.Clear) {
+   if (mt->fast_clear_color.f32[0] != clear_value) {
       intel_miptree_prepare_access(brw, mt, 0, INTEL_REMAINING_LEVELS,
                                    0, INTEL_REMAINING_LAYERS,
                                    ISL_AUX_USAGE_HIZ, false);
-      mt->fast_clear_color.f32[0] = ctx->Depth.Clear;
+      mt->fast_clear_color.f32[0] = clear_value;
    }
 
    if (depth_att->Layered) {

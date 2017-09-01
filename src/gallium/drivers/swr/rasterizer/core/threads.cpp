@@ -393,7 +393,7 @@ INLINE void ExecuteCallbacks(SWR_CONTEXT* pContext, uint32_t workerId, DRAW_CONT
 // inlined-only version
 INLINE int32_t CompleteDrawContextInl(SWR_CONTEXT* pContext, uint32_t workerId, DRAW_CONTEXT* pDC)
 {
-    int32_t result = InterlockedDecrement((volatile LONG*)&pDC->threadsDone);
+    int32_t result = static_cast<int32_t>(InterlockedDecrement(&pDC->threadsDone));
     SWR_ASSERT(result >= 0);
 
     AR_FLUSH(pDC->drawId);
@@ -639,7 +639,7 @@ INLINE void CompleteDrawFE(SWR_CONTEXT* pContext, uint32_t workerId, DRAW_CONTEX
     _mm_mfence();
     pDC->doneFE = true;
 
-    InterlockedDecrement((volatile LONG*)&pContext->drawsOutstandingFE);
+    InterlockedDecrement(&pContext->drawsOutstandingFE);
 }
 
 void WorkOnFifoFE(SWR_CONTEXT *pContext, uint32_t workerId, uint32_t &curDrawFE)

@@ -2072,7 +2072,8 @@ reserved_varying_slot(struct gl_linked_shader *stage,
       var_slot = var->data.location - VARYING_SLOT_VAR0;
 
       unsigned num_elements = get_varying_type(var, stage->Stage)
-         ->count_attribute_slots(stage->Stage == MESA_SHADER_VERTEX);
+         ->count_attribute_slots(io_mode == ir_var_shader_in &&
+                                 stage->Stage == MESA_SHADER_VERTEX);
       for (unsigned i = 0; i < num_elements; i++) {
          if (var_slot >= 0 && var_slot < MAX_VARYINGS_INCL_PATCH)
             slots |= UINT64_C(1) << var_slot;

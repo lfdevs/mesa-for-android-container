@@ -676,7 +676,8 @@ dri2_setup_screen(_EGLDisplay *disp)
       disp->Extensions.KHR_wait_sync = EGL_TRUE;
       if (dri2_dpy->fence->get_fence_from_cl_event)
          disp->Extensions.KHR_cl_event2 = EGL_TRUE;
-      if (dri2_dpy->fence->base.version >= 2) {
+      if (dri2_dpy->fence->base.version >= 2 &&
+          dri2_dpy->fence->get_capabilities) {
          unsigned capabilities =
             dri2_dpy->fence->get_capabilities(dri2_dpy->dri_screen);
          disp->Extensions.ANDROID_native_fence_sync =

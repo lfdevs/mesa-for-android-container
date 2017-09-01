@@ -189,7 +189,7 @@ void QueueWork(SWR_CONTEXT *pContext)
 
     if (IsDraw)
     {
-        InterlockedIncrement((volatile LONG*)&pContext->drawsOutstandingFE);
+        InterlockedIncrement(&pContext->drawsOutstandingFE);
     }
 
     _ReadWriteBarrier();

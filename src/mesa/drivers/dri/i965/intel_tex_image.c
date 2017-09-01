@@ -52,7 +52,7 @@ struct intel_mipmap_tree *
 intel_miptree_create_for_teximage(struct brw_context *brw,
 				  struct intel_texture_object *intelObj,
 				  struct intel_texture_image *intelImage,
-                                  uint32_t layout_flags)
+                                  enum intel_miptree_create_flags flags)
 {
    GLuint lastLevel;
    int width, height, depth;
@@ -124,7 +124,7 @@ intel_miptree_create_for_teximage(struct brw_context *brw,
 			       height,
 			       depth,
                                MAX2(intelImage->base.Base.NumSamples, 1),
-                               layout_flags | MIPTREE_LAYOUT_TILING_ANY);
+                               flags);
 }
 
 static void
@@ -261,7 +261,8 @@ intelSetTexBuffer2(__DRIcontext *pDRICtx, GLint target,
    mt = intel_miptree_create_for_bo(brw, rb->mt->bo, texFormat, 0,
                                     rb->Base.Base.Width,
                                     rb->Base.Base.Height,
-                                    1, rb->mt->surf.row_pitch, 0);
+                                    1, rb->mt->surf.row_pitch,
+                                    MIPTREE_CREATE_DEFAULT);
    if (mt == NULL)
        return;
    mt->target = target;

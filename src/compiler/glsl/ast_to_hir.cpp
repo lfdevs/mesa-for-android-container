@@ -4495,7 +4495,7 @@ process_initializer(ir_variable *var, ast_declaration *decl,
       } else {
          if (var->type->is_numeric()) {
             /* Reduce cascading errors. */
-            var->constant_value = type->qualifier.flags.q.constant
+            rhs = var->constant_value = type->qualifier.flags.q.constant
                ? ir_constant::zero(state, var->type) : NULL;
          }
       }

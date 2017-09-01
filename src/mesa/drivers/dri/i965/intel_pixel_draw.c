@@ -118,7 +118,7 @@ do_blit_drawpixels(struct gl_context * ctx,
                                   src_offset,
                                   width, height, 1,
                                   src_stride,
-                                  0);
+                                  MIPTREE_CREATE_DEFAULT);
    if (!pbo_mt)
       return false;
 

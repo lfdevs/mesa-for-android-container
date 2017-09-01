@@ -554,7 +554,7 @@
     <field name="Write Disable Blue" start="0" end="0" type="bool"/>
   </struct>
 
-  <struct name="BLEND_STATE" length="17">
+  <struct name="BLEND_STATE" length="1">
     <field name="Alpha To Coverage Enable" start="31" end="31" type="bool"/>
     <field name="Independent Alpha Blend Enable" start="30" end="30" type="bool"/>
     <field name="Alpha To One Enable" start="29" end="29" type="bool"/>
@@ -564,7 +564,7 @@
     <field name="Color Dither Enable" start="23" end="23" type="bool"/>
     <field name="X Dither Offset" start="21" end="22" type="uint"/>
     <field name="Y Dither Offset" start="19" end="20" type="uint"/>
-    <group count="8" start="32" size="64">
+    <group count="0" start="32" size="64">
       <field name="Entry" start="0" end="63" type="BLEND_STATE_ENTRY"/>
     </group>
   </struct>

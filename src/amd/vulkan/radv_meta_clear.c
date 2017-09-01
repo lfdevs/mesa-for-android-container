@@ -979,7 +979,7 @@ emit_fast_color_clear(struct radv_cmd_buffer *cmd_buffer,
 	if (iview->image->info.levels > 1)
 		goto fail;
 
-	if (iview->image->surface.u.legacy.level[0].mode < RADEON_SURF_MODE_1D)
+	if (iview->image->surface.is_linear)
 		goto fail;
 	if (!radv_image_extent_compare(iview->image, &iview->extent))
 		goto fail;

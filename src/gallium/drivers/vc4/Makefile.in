@@ -120,6 +120,8 @@ target_triplet = @target@
 @HAVE_DRISW_KMS_TRUE@	$(top_builddir)/src/gallium/winsys/sw/kms-dri/libswkmsdri.la \
 @HAVE_DRISW_KMS_TRUE@	$(LIBDRM_LIBS)
 
+@HAVE_ARM_ASM_TRUE@am__append_4 = libvc4_neon.la
+@HAVE_ARM_ASM_TRUE@am__append_5 = libvc4_neon.la
 subdir = src/gallium/drivers/vc4
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_gnu_make.m4 \
@@ -139,7 +141,7 @@ mkinstalldirs = $(install_sh) -d
 CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
-libvc4_la_DEPENDENCIES =
+libvc4_la_DEPENDENCIES = $(am__append_5)
 am__dirstamp = $(am__leading_dot)dirstamp
 am__objects_1 = kernel/vc4_gem.lo kernel/vc4_render_cl.lo \
 	kernel/vc4_validate.lo kernel/vc4_validate_shaders.lo \
@@ -158,7 +160,7 @@ am__objects_1 = kernel/vc4_gem.lo kernel/vc4_render_cl.lo \
 	vc4_qpu_validate.lo vc4_query.lo vc4_register_allocate.lo \
 	vc4_reorder_uniforms.lo vc4_resource.lo vc4_screen.lo \
 	vc4_simulator.lo vc4_state.lo vc4_tiling.lo vc4_tiling_lt.lo \
-	vc4_tiling_lt_neon.lo vc4_uniforms.lo
+	vc4_uniforms.lo
 am_libvc4_la_OBJECTS = $(am__objects_1)
 libvc4_la_OBJECTS = $(am_libvc4_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
@@ -168,6 +170,16 @@ am__v_lt_1 =
 libvc4_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
 	$(LIBTOOLFLAGS) --mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) \
 	$(libvc4_la_LDFLAGS) $(LDFLAGS) -o $@
+libvc4_neon_la_LIBADD =
+am__libvc4_neon_la_SOURCES_DIST = vc4_tiling_lt_neon.c
+am__objects_2 = libvc4_neon_la-vc4_tiling_lt_neon.lo
+@HAVE_ARM_ASM_TRUE@am_libvc4_neon_la_OBJECTS = $(am__objects_2)
+libvc4_neon_la_OBJECTS = $(am_libvc4_neon_la_OBJECTS)
+libvc4_neon_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
+	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
+	$(libvc4_neon_la_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) $(LDFLAGS) -o \
+	$@
+@HAVE_ARM_ASM_TRUE@am_libvc4_neon_la_rpath =
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -202,8 +214,8 @@ AM_V_CCLD = $(am__v_CCLD_@AM_V@)
 am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
-SOURCES = $(libvc4_la_SOURCES)
-DIST_SOURCES = $(libvc4_la_SOURCES)
+SOURCES = $(libvc4_la_SOURCES) $(libvc4_neon_la_SOURCES)
+DIST_SOURCES = $(libvc4_la_SOURCES) $(am__libvc4_neon_la_SOURCES_DIST)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -583,11 +595,11 @@ C_SOURCES := \
 	vc4_state.c \
 	vc4_tiling.c \
 	vc4_tiling_lt.c \
-	vc4_tiling_lt_neon.c \
 	vc4_tiling.h \
 	vc4_uniforms.c \
 	$()
 
+NEON_C_SOURCES := vc4_tiling_lt_neon.c
 GALLIUM_CFLAGS = \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/src \
@@ -659,9 +671,11 @@ AM_CFLAGS = \
 	$(VALGRIND_CFLAGS) \
 	$()
 
-noinst_LTLIBRARIES = libvc4.la
+noinst_LTLIBRARIES = libvc4.la $(am__append_4)
 libvc4_la_SOURCES = $(C_SOURCES)
-libvc4_la_LIBADD = $(SIM_LIB)
+libvc4_la_LIBADD = $(SIM_LIB) $(am__append_5)
+@HAVE_ARM_ASM_TRUE@libvc4_neon_la_SOURCES = $(NEON_C_SOURCES)
+@HAVE_ARM_ASM_TRUE@libvc4_neon_la_CFLAGS = $(AM_CFLAGS) -mfpu=neon
 libvc4_la_LDFLAGS = $(SIM_LDFLAGS)
 EXTRA_DIST = kernel/README
 all: all-am
@@ -727,6 +741,9 @@ kernel/vc4_validate_shaders.lo: kernel/$(am__dirstamp) \
 libvc4.la: $(libvc4_la_OBJECTS) $(libvc4_la_DEPENDENCIES) $(EXTRA_libvc4_la_DEPENDENCIES) 
 	$(AM_V_CCLD)$(libvc4_la_LINK)  $(libvc4_la_OBJECTS) $(libvc4_la_LIBADD) $(LIBS)
 
+libvc4_neon.la: $(libvc4_neon_la_OBJECTS) $(libvc4_neon_la_DEPENDENCIES) $(EXTRA_libvc4_neon_la_DEPENDENCIES) 
+	$(AM_V_CCLD)$(libvc4_neon_la_LINK) $(am_libvc4_neon_la_rpath) $(libvc4_neon_la_OBJECTS) $(libvc4_neon_la_LIBADD) $(LIBS)
+
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
 	-rm -f kernel/*.$(OBJEXT)
@@ -735,6 +752,7 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libvc4_neon_la-vc4_tiling_lt_neon.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vc4_blit.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vc4_bufmgr.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vc4_cl.Plo@am__quote@
@@ -777,7 +795,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vc4_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vc4_tiling.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vc4_tiling_lt.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vc4_tiling_lt_neon.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vc4_uniforms.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@kernel/$(DEPDIR)/vc4_gem.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@kernel/$(DEPDIR)/vc4_render_cl.Plo@am__quote@
@@ -807,6 +824,13 @@ distclean-compile:
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LTCOMPILE) -c -o $@ $<
+
+libvc4_neon_la-vc4_tiling_lt_neon.lo: vc4_tiling_lt_neon.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libvc4_neon_la_CFLAGS) $(CFLAGS) -MT libvc4_neon_la-vc4_tiling_lt_neon.lo -MD -MP -MF $(DEPDIR)/libvc4_neon_la-vc4_tiling_lt_neon.Tpo -c -o libvc4_neon_la-vc4_tiling_lt_neon.lo `test -f 'vc4_tiling_lt_neon.c' || echo '$(srcdir)/'`vc4_tiling_lt_neon.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libvc4_neon_la-vc4_tiling_lt_neon.Tpo $(DEPDIR)/libvc4_neon_la-vc4_tiling_lt_neon.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='vc4_tiling_lt_neon.c' object='libvc4_neon_la-vc4_tiling_lt_neon.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libvc4_neon_la_CFLAGS) $(CFLAGS) -c -o libvc4_neon_la-vc4_tiling_lt_neon.lo `test -f 'vc4_tiling_lt_neon.c' || echo '$(srcdir)/'`vc4_tiling_lt_neon.c
 
 mostlyclean-libtool:
 	-rm -f *.lo

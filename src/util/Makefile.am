@@ -44,7 +44,9 @@ libmesautil_la_SOURCES = \
 	$(MESA_UTIL_FILES) \
 	$(MESA_UTIL_GENERATED_FILES)
 
-libmesautil_la_LIBADD = $(ZLIB_LIBS)
+libmesautil_la_LIBADD = \
+	$(CLOCK_LIB) \
+	$(ZLIB_LIBS)
 
 roundeven_test_LDADD = -lm
 

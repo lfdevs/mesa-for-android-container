@@ -305,6 +305,8 @@ unsigned int Instruction::srcMask(unsigned int s) const
    case TGSI_OPCODE_TXD:
    case TGSI_OPCODE_TXL:
    case TGSI_OPCODE_TXP:
+   case TGSI_OPCODE_TXF:
+   case TGSI_OPCODE_TG4:
    case TGSI_OPCODE_TEX_LZ:
    case TGSI_OPCODE_TXF_LZ:
    case TGSI_OPCODE_LODQ:
@@ -343,6 +345,8 @@ unsigned int Instruction::srcMask(unsigned int s) const
       }
    }
       return mask;
+   case TGSI_OPCODE_TXQ:
+      return 1;
    case TGSI_OPCODE_XPD:
    {
       unsigned int x = 0;

@@ -201,9 +201,7 @@ gen7_upload_urb(struct brw_context *brw, unsigned vs_size,
    /* If we're just switching between programs with the same URB requirements,
     * skip the rest of the logic.
     */
-   if (!(brw->ctx.NewDriverState & BRW_NEW_CONTEXT) &&
-       !(brw->ctx.NewDriverState & BRW_NEW_URB_SIZE) &&
-       brw->urb.vsize == entry_size[MESA_SHADER_VERTEX] &&
+   if (brw->urb.vsize == entry_size[MESA_SHADER_VERTEX] &&
        brw->urb.gs_present == gs_present &&
        brw->urb.gsize == entry_size[MESA_SHADER_GEOMETRY] &&
        brw->urb.tess_present == tess_present &&

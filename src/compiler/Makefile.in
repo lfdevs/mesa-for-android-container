@@ -260,7 +260,8 @@ am__objects_3 = glsl/ast_array_index.lo glsl/ast_expr.lo \
 	glsl/opt_rebalance_tree.lo glsl/opt_redundant_jumps.lo \
 	glsl/opt_structure_splitting.lo glsl/opt_swizzle_swizzle.lo \
 	glsl/opt_tree_grafting.lo glsl/opt_vectorize.lo \
-	glsl/propagate_invariance.lo glsl/s_expression.lo
+	glsl/propagate_invariance.lo glsl/s_expression.lo \
+	glsl/string_to_uint_map.lo
 am__objects_4 = glsl/shader_cache.lo
 am_glsl_libglsl_la_OBJECTS = $(am__objects_2) $(am__objects_3) \
 	$(am__objects_4)
@@ -1136,7 +1137,9 @@ LIBGLSL_FILES = \
 	glsl/program.h \
 	glsl/propagate_invariance.cpp \
 	glsl/s_expression.cpp \
-	glsl/s_expression.h
+	glsl/s_expression.h \
+	glsl/string_to_uint_map.cpp \
+	glsl/string_to_uint_map.h
 
 LIBGLSL_SHADER_CACHE_FILES = \
 	glsl/shader_cache.cpp \
@@ -1811,6 +1814,8 @@ glsl/propagate_invariance.lo: glsl/$(am__dirstamp) \
 	glsl/$(DEPDIR)/$(am__dirstamp)
 glsl/s_expression.lo: glsl/$(am__dirstamp) \
 	glsl/$(DEPDIR)/$(am__dirstamp)
+glsl/string_to_uint_map.lo: glsl/$(am__dirstamp) \
+	glsl/$(DEPDIR)/$(am__dirstamp)
 glsl/shader_cache.lo: glsl/$(am__dirstamp) \
 	glsl/$(DEPDIR)/$(am__dirstamp)
 
@@ -2250,6 +2255,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@glsl/$(DEPDIR)/shader_cache.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@glsl/$(DEPDIR)/standalone.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@glsl/$(DEPDIR)/standalone_scaffolding.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@glsl/$(DEPDIR)/string_to_uint_map.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@glsl/$(DEPDIR)/test.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@glsl/$(DEPDIR)/test_optpass.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@glsl/glcpp/$(DEPDIR)/glcpp-lex.Plo@am__quote@

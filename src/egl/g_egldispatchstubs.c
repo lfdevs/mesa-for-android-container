@@ -181,6 +181,26 @@ static EGLBoolean EGLAPIENTRY dispatch_eglPostSubBufferNV(EGLDisplay dpy, EGLSur
     }
     return _ret;
 }
+static EGLBoolean EGLAPIENTRY dispatch_eglQueryDmaBufFormatsEXT(EGLDisplay dpy, EGLint max_formats, EGLint *formats, EGLint *num_formats)
+{
+    typedef EGLBoolean EGLAPIENTRY (* _pfn_eglQueryDmaBufFormatsEXT)(EGLDisplay dpy, EGLint max_formats, EGLint *formats, EGLint *num_formats);
+    EGLBoolean _ret = EGL_FALSE;
+    _pfn_eglQueryDmaBufFormatsEXT _ptr_eglQueryDmaBufFormatsEXT = (_pfn_eglQueryDmaBufFormatsEXT) __eglDispatchFetchByDisplay(dpy, __EGL_DISPATCH_eglQueryDmaBufFormatsEXT);
+    if(_ptr_eglQueryDmaBufFormatsEXT != NULL) {
+        _ret = _ptr_eglQueryDmaBufFormatsEXT(dpy, max_formats, formats, num_formats);
+    }
+    return _ret;
+}
+static EGLBoolean EGLAPIENTRY dispatch_eglQueryDmaBufModifiersEXT(EGLDisplay dpy, EGLint format, EGLint max_modifiers, EGLuint64KHR *modifiers, EGLBoolean *external_only, EGLint *num_modifiers)
+{
+    typedef EGLBoolean EGLAPIENTRY (* _pfn_eglQueryDmaBufModifiersEXT)(EGLDisplay dpy, EGLint format, EGLint max_modifiers, EGLuint64KHR *modifiers, EGLBoolean *external_only, EGLint *num_modifiers);
+    EGLBoolean _ret = EGL_FALSE;
+    _pfn_eglQueryDmaBufModifiersEXT _ptr_eglQueryDmaBufModifiersEXT = (_pfn_eglQueryDmaBufModifiersEXT) __eglDispatchFetchByDisplay(dpy, __EGL_DISPATCH_eglQueryDmaBufModifiersEXT);
+    if(_ptr_eglQueryDmaBufModifiersEXT != NULL) {
+        _ret = _ptr_eglQueryDmaBufModifiersEXT(dpy, format, max_modifiers, modifiers, external_only, num_modifiers);
+    }
+    return _ret;
+}
 static EGLBoolean EGLAPIENTRY dispatch_eglQueryWaylandBufferWL(EGLDisplay dpy, struct wl_resource *buffer, EGLint attribute, EGLint *value)
 {
     typedef EGLBoolean EGLAPIENTRY (* _pfn_eglQueryWaylandBufferWL)(EGLDisplay dpy, struct wl_resource *buffer, EGLint attribute, EGLint *value);
@@ -304,6 +324,8 @@ const char * const __EGL_DISPATCH_FUNC_NAMES[__EGL_DISPATCH_COUNT + 1] = {
     "eglPostSubBufferNV",
     "eglQueryAPI",
     "eglQueryContext",
+    "eglQueryDmaBufFormatsEXT",
+    "eglQueryDmaBufModifiersEXT",
     "eglQueryString",
     "eglQuerySurface",
     "eglQueryWaylandBufferWL",
@@ -377,6 +399,8 @@ const __eglMustCastToProperFunctionPointerType __EGL_DISPATCH_FUNCS[__EGL_DISPAT
     (__eglMustCastToProperFunctionPointerType) dispatch_eglPostSubBufferNV,
     NULL, // eglQueryAPI
     NULL, // eglQueryContext
+    (__eglMustCastToProperFunctionPointerType) dispatch_eglQueryDmaBufFormatsEXT,
+    (__eglMustCastToProperFunctionPointerType) dispatch_eglQueryDmaBufModifiersEXT,
     NULL, // eglQueryString
     NULL, // eglQuerySurface
     (__eglMustCastToProperFunctionPointerType) dispatch_eglQueryWaylandBufferWL,

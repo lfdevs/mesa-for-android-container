@@ -304,8 +304,9 @@ brw_blorp_blit_miptrees(struct brw_context *brw,
       src_format = dst_format = MESA_FORMAT_R_FLOAT32;
    }
 
+   enum isl_format src_isl_format = brw_isl_format_for_mesa_format(src_format);
    enum isl_aux_usage src_aux_usage =
-      intel_miptree_texture_aux_usage(brw, src_mt, src_format);
+      intel_miptree_texture_aux_usage(brw, src_mt, src_isl_format);
    /* We do format workarounds for some depth formats so we can't reliably
     * sample with HiZ.  One of these days, we should fix that.
     */
@@ -821,15 +822,22 @@ do_single_blorp_clear(struct brw_context *brw, struct gl_framebuffer *fb,
          brw_meta_convert_fast_clear_color(brw, irb->mt,
                                            &ctx->Color.ClearColor);
 
+      bool same_clear_color = memcmp(&irb->mt->fast_clear_color,
+                                     &clear_color, sizeof(clear_color)) == 0;
+
       /* If the buffer is already in INTEL_FAST_CLEAR_STATE_CLEAR, the clear
        * is redundant and can be skipped.
        */
-      if (aux_state == ISL_AUX_STATE_CLEAR &&
-          memcmp(&irb->mt->fast_clear_color,
-                 &clear_color, sizeof(clear_color)) == 0)
+      if (aux_state == ISL_AUX_STATE_CLEAR && same_clear_color)
          return;
 
       irb->mt->fast_clear_color = clear_color;
+
+      /* If the clear color has changed, we need to emit a new SURFACE_STATE
+       * on the next draw call.
+       */
+      if (!same_clear_color)
+         ctx->NewDriverState |= BRW_NEW_FAST_CLEAR_COLOR;
 
       DBG("%s (fast) to mt %p level %d layers %d+%d\n", __FUNCTION__,
           irb->mt, irb->mt_level, irb->mt_layer, num_layers);

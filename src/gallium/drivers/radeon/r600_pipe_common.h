@@ -65,12 +65,12 @@
 #define R600_PRIM_RECTANGLE_LIST	PIPE_PRIM_MAX
 
 /* Debug flags. */
-/* logging */
+/* logging and features */
 #define DBG_TEX			(1 << 0)
 /* gap - reuse */
 #define DBG_COMPUTE		(1 << 2)
 #define DBG_VM			(1 << 3)
-/* gap - reuse */
+#define DBG_CE			(1 << 4)
 /* shader logging */
 #define DBG_FS			(1 << 5)
 #define DBG_VS			(1 << 6)

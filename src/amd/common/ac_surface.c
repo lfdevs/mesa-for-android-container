@@ -1009,6 +1009,11 @@ static int gfx9_compute_surface(ADDR_HANDLE addrlib,
 
 	case RADEON_SURF_MODE_1D:
 	case RADEON_SURF_MODE_2D:
+		if (surf->flags & RADEON_SURF_IMPORTED) {
+			AddrSurfInfoIn.swizzleMode = surf->u.gfx9.surf.swizzle_mode;
+			break;
+		}
+
 		r = gfx9_get_preferred_swizzle_mode(addrlib, &AddrSurfInfoIn, false,
 						    &AddrSurfInfoIn.swizzleMode);
 		if (r)

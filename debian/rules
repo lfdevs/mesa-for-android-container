@@ -39,7 +39,7 @@ else
   ifeq ($(DEB_HOST_ARCH_OS), linux)
 	confflags_DRI3 = --enable-dri3
 	# Gallium drivers which require kernel support, not yet ported to non-Linux
-	GALLIUM_DRIVERS += nouveau svga virgl
+	GALLIUM_DRIVERS += nouveau virgl
 
 	# Freedreno requires arm in addition
 	ifneq (,$(filter arm arm64,$(DEB_HOST_ARCH_CPU)))
@@ -56,17 +56,19 @@ else
 		GALLIUM_DRIVERS += etnaviv imx
 	endif
 
-	# svga needs xa state tracker
-	confflags_GALLIUM += --enable-xa
+	ifneq (,$(filter $(DEB_HOST_ARCH), amd64 i386 x32))
+		GALLIUM_DRIVERS += svga
+		# svga needs xa state tracker
+		confflags_GALLIUM += --enable-xa
+		VULKAN_DRIVERS += intel
+	endif
 
-# Non-Linux ports also lack *_CLOEXEC and epoll, so wayland isn't ready yet:
+	# Non-Linux ports also lack *_CLOEXEC and epoll, so wayland isn't ready yet:
 	EGL_PLATFORMS += wayland
-    ifeq (,$(filter $(DEB_HOST_ARCH), s390 s390x))
-	DRI_DRIVERS += nouveau
-    endif
-    ifneq (,$(filter $(DEB_HOST_ARCH), amd64 i386 x32))
-	VULKAN_DRIVERS += intel
-    endif
+
+	ifeq (,$(filter $(DEB_HOST_ARCH), s390 s390x))
+		DRI_DRIVERS += nouveau
+	endif
   endif
 
 	EGL_PLATFORMS += drm
@@ -77,8 +79,8 @@ else
   endif
 
   ifeq (,$(filter $(DEB_HOST_ARCH), s390 s390x))
-    DRI_DRIVERS += r200 radeon
-    GALLIUM_DRIVERS += r600 r300
+	DRI_DRIVERS += r200 radeon
+	GALLIUM_DRIVERS += r600 r300
   endif
 
   # LLVM is required for building r300g, radeonsi and llvmpipe drivers.
@@ -87,7 +89,7 @@ else
 	GALLIUM_DRIVERS += radeonsi
 	confflags_GALLIUM += --enable-gallium-llvm
 	confflags_GALLIUM += --enable-opencl --enable-opencl-icd
-	confflags_GALLIUM += ac_cv_path_LLVM_CONFIG=llvm-config-4.0
+	confflags_GALLIUM += ac_cv_path_LLVM_CONFIG=llvm-config-5.0
 	GALLIUM_DRIVERS += swrast
   else
 	DRI_DRIVERS += swrast

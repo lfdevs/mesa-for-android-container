@@ -193,8 +193,8 @@ skip_validated_draw(struct gl_context *ctx)
    case API_OPENGLES:
       /* For OpenGL ES, only draw if we have vertex positions
        */
-      if (ctx->Array.VAO->VertexAttrib[VERT_ATTRIB_POS].Enabled)
-         return false;
+      if (!ctx->Array.VAO->VertexAttrib[VERT_ATTRIB_POS].Enabled)
+         return true;
       break;
 
    case API_OPENGL_CORE:

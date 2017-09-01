@@ -1798,10 +1798,12 @@ static void visit_alu(struct nir_to_llvm_context *ctx, const nir_alu_instr *inst
 		break;
 	case nir_op_i2f32:
 	case nir_op_i2f64:
+		src[0] = to_integer(&ctx->ac, src[0]);
 		result = LLVMBuildSIToFP(ctx->builder, src[0], to_float_type(&ctx->ac, def_type), "");
 		break;
 	case nir_op_u2f32:
 	case nir_op_u2f64:
+		src[0] = to_integer(&ctx->ac, src[0]);
 		result = LLVMBuildUIToFP(ctx->builder, src[0], to_float_type(&ctx->ac, def_type), "");
 		break;
 	case nir_op_f2f64:
@@ -1812,6 +1814,7 @@ static void visit_alu(struct nir_to_llvm_context *ctx, const nir_alu_instr *inst
 		break;
 	case nir_op_u2u32:
 	case nir_op_u2u64:
+		src[0] = to_integer(&ctx->ac, src[0]);
 		if (get_elem_bits(&ctx->ac, LLVMTypeOf(src[0])) < get_elem_bits(&ctx->ac, def_type))
 			result = LLVMBuildZExt(ctx->builder, src[0], def_type, "");
 		else
@@ -1819,6 +1822,7 @@ static void visit_alu(struct nir_to_llvm_context *ctx, const nir_alu_instr *inst
 		break;
 	case nir_op_i2i32:
 	case nir_op_i2i64:
+		src[0] = to_integer(&ctx->ac, src[0]);
 		if (get_elem_bits(&ctx->ac, LLVMTypeOf(src[0])) < get_elem_bits(&ctx->ac, def_type))
 			result = LLVMBuildSExt(ctx->builder, src[0], def_type, "");
 		else
@@ -1828,18 +1832,25 @@ static void visit_alu(struct nir_to_llvm_context *ctx, const nir_alu_instr *inst
 		result = emit_bcsel(&ctx->ac, src[0], src[1], src[2]);
 		break;
 	case nir_op_find_lsb:
+		src[0] = to_integer(&ctx->ac, src[0]);
 		result = emit_find_lsb(&ctx->ac, src[0]);
 		break;
 	case nir_op_ufind_msb:
+		src[0] = to_integer(&ctx->ac, src[0]);
 		result = emit_ufind_msb(&ctx->ac, src[0]);
 		break;
 	case nir_op_ifind_msb:
+		src[0] = to_integer(&ctx->ac, src[0]);
 		result = emit_ifind_msb(&ctx->ac, src[0]);
 		break;
 	case nir_op_uadd_carry:
+		src[0] = to_integer(&ctx->ac, src[0]);
+		src[1] = to_integer(&ctx->ac, src[1]);
 		result = emit_uint_carry(&ctx->ac, "llvm.uadd.with.overflow.i32", src[0], src[1]);
 		break;
 	case nir_op_usub_borrow:
+		src[0] = to_integer(&ctx->ac, src[0]);
+		src[1] = to_integer(&ctx->ac, src[1]);
 		result = emit_uint_carry(&ctx->ac, "llvm.usub.with.overflow.i32", src[0], src[1]);
 		break;
 	case nir_op_b2f:
@@ -1852,15 +1863,20 @@ static void visit_alu(struct nir_to_llvm_context *ctx, const nir_alu_instr *inst
 		result = emit_b2i(&ctx->ac, src[0]);
 		break;
 	case nir_op_i2b:
+		src[0] = to_integer(&ctx->ac, src[0]);
 		result = emit_i2b(&ctx->ac, src[0]);
 		break;
 	case nir_op_fquantize2f16:
 		result = emit_f2f16(ctx, src[0]);
 		break;
 	case nir_op_umul_high:
+		src[0] = to_integer(&ctx->ac, src[0]);
+		src[1] = to_integer(&ctx->ac, src[1]);
 		result = emit_umul_high(&ctx->ac, src[0], src[1]);
 		break;
 	case nir_op_imul_high:
+		src[0] = to_integer(&ctx->ac, src[0]);
+		src[1] = to_integer(&ctx->ac, src[1]);
 		result = emit_imul_high(&ctx->ac, src[0], src[1]);
 		break;
 	case nir_op_pack_half_2x16:
@@ -2177,7 +2193,7 @@ static LLVMValueRef build_tex_intrinsic(struct nir_to_llvm_context *ctx,
 		break;
 	}
 
-	if (instr->op == nir_texop_tg4) {
+	if (instr->op == nir_texop_tg4 && ctx->options->chip_class <= VI) {
 		enum glsl_base_type stype = glsl_get_sampler_result_type(instr->texture->var->type);
 		if (stype == GLSL_TYPE_UINT || stype == GLSL_TYPE_INT) {
 			return radv_lower_gather4_integer(ctx, args, instr);
@@ -5395,11 +5411,11 @@ handle_vs_outputs_post(struct nir_to_llvm_context *ctx,
 		                                     ctx->outputs[radeon_llvm_reg_index_soa(VARYING_SLOT_VIEWPORT, 0)], "");
 	}
 
-	uint32_t mask = ((outinfo->writes_pointsize == true ? 1 : 0) |
-			 (outinfo->writes_layer == true ? 4 : 0) |
-			 (outinfo->writes_viewport_index == true ? 8 : 0));
-	if (mask) {
-		pos_args[1].enabled_channels = mask;
+	if (outinfo->writes_pointsize ||
+	    outinfo->writes_layer ||
+	    outinfo->writes_viewport_index) {
+		pos_args[1].enabled_channels = ((outinfo->writes_pointsize == true ? 1 : 0) |
+						(outinfo->writes_layer == true ? 4 : 0));
 		pos_args[1].valid_mask = 0;
 		pos_args[1].done = 0;
 		pos_args[1].target = V_008DFC_SQ_EXP_POS + 1;
@@ -5413,8 +5429,26 @@ handle_vs_outputs_post(struct nir_to_llvm_context *ctx,
 			pos_args[1].out[0] = psize_value;
 		if (outinfo->writes_layer == true)
 			pos_args[1].out[2] = layer_value;
-		if (outinfo->writes_viewport_index == true)
-			pos_args[1].out[3] = viewport_index_value;
+		if (outinfo->writes_viewport_index == true) {
+			if (ctx->options->chip_class >= GFX9) {
+				/* GFX9 has the layer in out.z[10:0] and the viewport
+				 * index in out.z[19:16].
+				 */
+				LLVMValueRef v = viewport_index_value;
+				v = to_integer(&ctx->ac, v);
+				v = LLVMBuildShl(ctx->builder, v,
+						 LLVMConstInt(ctx->i32, 16, false),
+						 "");
+				v = LLVMBuildOr(ctx->builder, v,
+						to_integer(&ctx->ac, pos_args[1].out[2]), "");
+
+				pos_args[1].out[2] = to_float(&ctx->ac, v);
+				pos_args[1].enabled_channels |= 1 << 2;
+			} else {
+				pos_args[1].out[3] = viewport_index_value;
+				pos_args[1].enabled_channels |= 1 << 3;
+			}
+		}
 	}
 	for (i = 0; i < 4; i++) {
 		if (pos_args[i].out[0])

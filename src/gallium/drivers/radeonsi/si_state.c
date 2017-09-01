@@ -715,12 +715,6 @@ static void si_emit_clip_regs(struct si_context *sctx, struct r600_atom *atom)
 		rs->pa_cl_clip_cntl |
 		ucp_mask |
 		S_028810_CLIP_DISABLE(window_space));
-
-	if (sctx->b.chip_class <= VI) {
-		/* reuse needs to be set off if we write oViewport */
-		radeon_set_context_reg(cs, R_028AB4_VGT_REUSE_OFF,
-				       S_028AB4_REUSE_OFF(info->writes_viewport_index));
-	}
 }
 
 /*

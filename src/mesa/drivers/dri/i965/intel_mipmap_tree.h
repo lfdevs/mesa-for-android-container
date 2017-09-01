@@ -348,19 +348,29 @@ bool
 intel_miptree_alloc_ccs(struct brw_context *brw,
                         struct intel_mipmap_tree *mt);
 
-enum {
-   MIPTREE_LAYOUT_ACCELERATED_UPLOAD       = 1 << 0,
-   MIPTREE_LAYOUT_GEN6_HIZ_STENCIL         = 1 << 1,
-   MIPTREE_LAYOUT_FOR_BO                   = 1 << 2,
-   MIPTREE_LAYOUT_DISABLE_AUX              = 1 << 3,
-   MIPTREE_LAYOUT_FORCE_HALIGN16           = 1 << 4,
+enum intel_miptree_create_flags {
+   /** No miptree create flags */
+   MIPTREE_CREATE_DEFAULT  = 0,
 
-   MIPTREE_LAYOUT_TILING_Y                 = 1 << 5,
-   MIPTREE_LAYOUT_TILING_NONE              = 1 << 6,
-   MIPTREE_LAYOUT_TILING_ANY               = MIPTREE_LAYOUT_TILING_Y |
-                                             MIPTREE_LAYOUT_TILING_NONE,
+   /** Miptree creation should try to allocate a currently busy BO
+    *
+    * This may be advantageous if we know the next thing to touch the BO will
+    * be the GPU because the BO will likely already be in the GTT and maybe
+    * even in some caches.  If there is a chance that the next thing to touch
+    * the miptree BO will be the CPU, this flag should not be set.
+    */
+   MIPTREE_CREATE_BUSY     = 1 << 0,
 
-   MIPTREE_LAYOUT_FOR_SCANOUT              = 1 << 7,
+   /** Create a linear (not tiled) miptree */
+   MIPTREE_CREATE_LINEAR   = 1 << 1,
+
+   /** Create the miptree with auxiliary compression disabled
+    *
+    * This does not prevent the caller of intel_miptree_create from coming
+    * along later and turning auxiliary compression back on but it does mean
+    * that the miptree will be created with mt->aux_usage == NONE.
+    */
+   MIPTREE_CREATE_NO_AUX   = 1 << 2,
 };
 
 struct intel_mipmap_tree *intel_miptree_create(struct brw_context *brw,
@@ -372,7 +382,7 @@ struct intel_mipmap_tree *intel_miptree_create(struct brw_context *brw,
                                                GLuint height0,
                                                GLuint depth0,
                                                GLuint num_samples,
-                                               uint32_t flags);
+                                               enum intel_miptree_create_flags flags);
 
 struct intel_mipmap_tree *
 intel_miptree_create_for_bo(struct brw_context *brw,
@@ -383,7 +393,7 @@ intel_miptree_create_for_bo(struct brw_context *brw,
                             uint32_t height,
                             uint32_t depth,
                             int pitch,
-                            uint32_t layout_flags);
+                            enum intel_miptree_create_flags flags);
 
 struct intel_mipmap_tree *
 intel_miptree_create_for_dri_image(struct brw_context *brw,

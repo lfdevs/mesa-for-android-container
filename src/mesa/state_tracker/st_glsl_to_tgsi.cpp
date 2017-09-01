@@ -2751,7 +2751,9 @@ glsl_to_tgsi_visitor::visit(ir_dereference_variable *ir)
 
    this->result = st_src_reg(entry->file, entry->index, var->type,
                              entry->component, entry->array_id);
-   if (this->shader->Stage == MESA_SHADER_VERTEX && var->data.mode == ir_var_shader_in && var->type->is_double())
+   if (this->shader->Stage == MESA_SHADER_VERTEX &&
+       var->data.mode == ir_var_shader_in &&
+       var->type->without_array()->is_double())
       this->result.is_double_vertex_input = true;
    if (!native_integers)
       this->result.type = GLSL_TYPE_FLOAT;

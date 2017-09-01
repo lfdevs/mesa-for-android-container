@@ -1975,10 +1975,10 @@ nir_system_value_from_intrinsic(nir_intrinsic_op intrin)
       return SYSTEM_VALUE_HELPER_INVOCATION;
    case nir_intrinsic_load_view_index:
       return SYSTEM_VALUE_VIEW_INDEX;
-   case SYSTEM_VALUE_SUBGROUP_SIZE:
-      return nir_intrinsic_load_subgroup_size;
-   case SYSTEM_VALUE_SUBGROUP_INVOCATION:
-      return nir_intrinsic_load_subgroup_invocation;
+   case nir_intrinsic_load_subgroup_size:
+      return SYSTEM_VALUE_SUBGROUP_SIZE;
+   case nir_intrinsic_load_subgroup_invocation:
+      return SYSTEM_VALUE_SUBGROUP_INVOCATION;
    case nir_intrinsic_load_subgroup_eq_mask:
       return SYSTEM_VALUE_SUBGROUP_EQ_MASK;
    case nir_intrinsic_load_subgroup_ge_mask:
