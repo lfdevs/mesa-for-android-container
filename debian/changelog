@@ -1,3 +1,10 @@
+mesa (17.2.0-2) unstable; urgency=medium
+
+  * control: Mark transitional packages M-A: same. (Closes: #874013,
+    #874509).
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Wed, 06 Sep 2017 21:53:24 +0300
+
 mesa (17.2.0-1) unstable; urgency=medium
 
   * New upstream release.

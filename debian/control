@@ -137,7 +137,7 @@ Architecture: any
 Depends:
  libegl1,
  ${misc:Depends},
-Multi-Arch: foreign
+Multi-Arch: same
 Description: transitional dummy package
  This is a transitional dummy package, it can be safely removed.
 
@@ -196,7 +196,7 @@ Architecture: any
 Depends:
  libgles2,
  ${misc:Depends},
-Multi-Arch: foreign
+Multi-Arch: same
 Description: transitional dummy package
  This is a transitional dummy package, it can be safely removed.
 
@@ -269,7 +269,7 @@ Depends:
  libgl1,
  libglx-mesa0,
  ${misc:Depends},
-Multi-Arch: foreign
+Multi-Arch: same
 Description: transitional dummy package
  This is a transitional dummy package, it can be safely removed.
 
