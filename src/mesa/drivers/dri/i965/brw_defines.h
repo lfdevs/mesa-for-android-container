@@ -1617,6 +1617,13 @@ enum brw_pixel_shader_coverage_mask_mode {
 # define GEN8_HIZ_PMA_MASK_BITS \
    REG_MASK(GEN8_HIZ_NP_PMA_FIX_ENABLE | GEN8_HIZ_NP_EARLY_Z_FAILS_DISABLE)
 
+#define GEN7_GT_MODE                    0x7008
+# define GEN9_SUBSLICE_HASHING_8x8      (0 << 8)
+# define GEN9_SUBSLICE_HASHING_16x4     (1 << 8)
+# define GEN9_SUBSLICE_HASHING_8x4      (2 << 8)
+# define GEN9_SUBSLICE_HASHING_16x16    (3 << 8)
+# define GEN9_SUBSLICE_HASHING_MASK_BITS REG_MASK(3 << 8)
+
 /* Predicate registers */
 #define MI_PREDICATE_SRC0               0x2400
 #define MI_PREDICATE_SRC1               0x2408

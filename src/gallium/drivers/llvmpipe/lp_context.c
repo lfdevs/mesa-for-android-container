@@ -227,6 +227,12 @@ llvmpipe_create_context(struct pipe_screen *screen, void *priv,
 
    lp_reset_counters();
 
+   /* If llvmpipe_set_scissor_states() is never called, we still need to
+    * make sure that derived scissor state is computed.
+    * See https://bugs.freedesktop.org/show_bug.cgi?id=101709
+    */
+   llvmpipe->dirty |= LP_NEW_SCISSOR;
+
    return &llvmpipe->pipe;
 
  fail:

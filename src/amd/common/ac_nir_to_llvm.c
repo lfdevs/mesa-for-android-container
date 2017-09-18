@@ -3309,13 +3309,13 @@ static LLVMValueRef get_image_coords(struct nir_to_llvm_context *ctx,
 
 	int count;
 	enum glsl_sampler_dim dim = glsl_get_sampler_dim(type);
+	bool is_array = glsl_sampler_type_is_array(type);
 	bool add_frag_pos = (dim == GLSL_SAMPLER_DIM_SUBPASS ||
 			     dim == GLSL_SAMPLER_DIM_SUBPASS_MS);
 	bool is_ms = (dim == GLSL_SAMPLER_DIM_MS ||
 		      dim == GLSL_SAMPLER_DIM_SUBPASS_MS);
-
-	count = image_type_to_components_count(dim,
-					       glsl_sampler_type_is_array(type));
+	bool gfx9_1d = ctx->options->chip_class >= GFX9 && dim == GLSL_SAMPLER_DIM_1D;
+	count = image_type_to_components_count(dim, is_array);
 
 	if (is_ms) {
 		LLVMValueRef fmask_load_address[3];
@@ -3323,7 +3323,7 @@ static LLVMValueRef get_image_coords(struct nir_to_llvm_context *ctx,
 
 		fmask_load_address[0] = LLVMBuildExtractElement(ctx->builder, src0, masks[0], "");
 		fmask_load_address[1] = LLVMBuildExtractElement(ctx->builder, src0, masks[1], "");
-		if (glsl_sampler_type_is_array(type))
+		if (is_array)
 			fmask_load_address[2] = LLVMBuildExtractElement(ctx->builder, src0, masks[2], "");
 		else
 			fmask_load_address[2] = NULL;
@@ -3338,7 +3338,7 @@ static LLVMValueRef get_image_coords(struct nir_to_llvm_context *ctx,
 							       sample_index,
 							       get_sampler_desc(ctx, instr->variables[0], DESC_FMASK));
 	}
-	if (count == 1) {
+	if (count == 1 && !gfx9_1d) {
 		if (instr->src[0].ssa->num_components)
 			res = LLVMBuildExtractElement(ctx->builder, src0, masks[0], "");
 		else
@@ -3348,13 +3348,22 @@ static LLVMValueRef get_image_coords(struct nir_to_llvm_context *ctx,
 		if (is_ms)
 			count--;
 		for (chan = 0; chan < count; ++chan) {
-			coords[chan] = LLVMBuildExtractElement(ctx->builder, src0, masks[chan], "");
+			coords[chan] = llvm_extract_elem(ctx, src0, chan);
 		}
-
 		if (add_frag_pos) {
 			for (chan = 0; chan < count; ++chan)
 				coords[chan] = LLVMBuildAdd(ctx->builder, coords[chan], LLVMBuildFPToUI(ctx->builder, ctx->frag_pos[chan], ctx->i32, ""), "");
 		}
+
+		if (gfx9_1d) {
+			if (is_array) {
+				coords[2] = coords[1];
+				coords[1] = ctx->ac.i32_0;
+			} else
+				coords[1] = ctx->ac.i32_0;
+			count++;
+		}
+
 		if (is_ms) {
 			coords[count] = sample_index;
 			count++;
@@ -3490,7 +3499,7 @@ static void visit_image_store(struct nir_to_llvm_context *ctx,
 static LLVMValueRef visit_image_atomic(struct nir_to_llvm_context *ctx,
                                        const nir_intrinsic_instr *instr)
 {
-	LLVMValueRef params[6];
+	LLVMValueRef params[7];
 	int param_count = 0;
 	const nir_variable *var = instr->variables[0]->var;
 
@@ -3591,13 +3600,21 @@ static LLVMValueRef visit_image_size(struct nir_to_llvm_context *ctx,
 
 	res = ac_build_image_opcode(&ctx->ac, &args);
 
+	LLVMValueRef two = LLVMConstInt(ctx->i32, 2, false);
+
 	if (glsl_get_sampler_dim(type) == GLSL_SAMPLER_DIM_CUBE &&
 	    glsl_sampler_type_is_array(type)) {
-		LLVMValueRef two = LLVMConstInt(ctx->i32, 2, false);
 		LLVMValueRef six = LLVMConstInt(ctx->i32, 6, false);
 		LLVMValueRef z = LLVMBuildExtractElement(ctx->builder, res, two, "");
 		z = LLVMBuildSDiv(ctx->builder, z, six, "");
 		res = LLVMBuildInsertElement(ctx->builder, res, z, two, "");
+	}
+	if (glsl_get_sampler_dim(type) == GLSL_SAMPLER_DIM_1D &&
+	    glsl_sampler_type_is_array(type)) {
+		LLVMValueRef layers = LLVMBuildExtractElement(ctx->builder, res, two, "");
+		res = LLVMBuildInsertElement(ctx->builder, res, layers,
+						ctx->ac.i32_1, "");
+
 	}
 	return res;
 }
@@ -4455,23 +4472,39 @@ static void visit_tex(struct nir_to_llvm_context *ctx, nir_tex_instr *instr)
 
 	/* pack derivatives */
 	if (ddx || ddy) {
+		int num_src_deriv_channels, num_dest_deriv_channels;
 		switch (instr->sampler_dim) {
 		case GLSL_SAMPLER_DIM_3D:
 		case GLSL_SAMPLER_DIM_CUBE:
 			num_deriv_comp = 3;
+			num_src_deriv_channels = 3;
+			num_dest_deriv_channels = 3;
 			break;
 		case GLSL_SAMPLER_DIM_2D:
 		default:
+			num_src_deriv_channels = 2;
+			num_dest_deriv_channels = 2;
 			num_deriv_comp = 2;
 			break;
 		case GLSL_SAMPLER_DIM_1D:
-			num_deriv_comp = 1;
+			num_src_deriv_channels = 1;
+			if (ctx->options->chip_class >= GFX9) {
+				num_dest_deriv_channels = 2;
+				num_deriv_comp = 2;
+			} else {
+				num_dest_deriv_channels = 1;
+				num_deriv_comp = 1;
+			}
 			break;
 		}
 
-		for (unsigned i = 0; i < num_deriv_comp; i++) {
+		for (unsigned i = 0; i < num_src_deriv_channels; i++) {
 			derivs[i] = to_float(&ctx->ac, llvm_extract_elem(ctx, ddx, i));
-			derivs[num_deriv_comp + i] = to_float(&ctx->ac, llvm_extract_elem(ctx, ddy, i));
+			derivs[num_dest_deriv_channels + i] = to_float(&ctx->ac, llvm_extract_elem(ctx, ddy, i));
+		}
+		for (unsigned i = num_src_deriv_channels; i < num_dest_deriv_channels; i++) {
+			derivs[i] = ctx->ac.f32_0;
+			derivs[num_dest_deriv_channels + i] = ctx->ac.f32_0;
 		}
 	}
 
@@ -4511,6 +4544,23 @@ static void visit_tex(struct nir_to_llvm_context *ctx, nir_tex_instr *instr)
 				coords[2] = apply_round_slice(ctx, coords[2]);
 			}
 			address[count++] = coords[2];
+		}
+
+		if (ctx->options->chip_class >= GFX9) {
+			LLVMValueRef filler;
+			if (instr->op == nir_texop_txf)
+				filler = ctx->ac.i32_0;
+			else
+				filler = LLVMConstReal(ctx->f32, 0.5);
+
+			if (instr->sampler_dim == GLSL_SAMPLER_DIM_1D) {
+				if (instr->is_array) {
+					address[count] = address[count - 1];
+					address[count - 1] = filler;
+					count++;
+				} else
+					address[count++] = filler;
+			}
 		}
 	}
 
@@ -4606,6 +4656,14 @@ static void visit_tex(struct nir_to_llvm_context *ctx, nir_tex_instr *instr)
 		LLVMValueRef z = LLVMBuildExtractElement(ctx->builder, result, two, "");
 		z = LLVMBuildSDiv(ctx->builder, z, six, "");
 		result = LLVMBuildInsertElement(ctx->builder, result, z, two, "");
+	} else if (ctx->options->chip_class >= GFX9 &&
+		   instr->op == nir_texop_txs &&
+		   instr->sampler_dim == GLSL_SAMPLER_DIM_1D &&
+		   instr->is_array) {
+		LLVMValueRef two = LLVMConstInt(ctx->i32, 2, false);
+		LLVMValueRef layers = LLVMBuildExtractElement(ctx->builder, result, two, "");
+		result = LLVMBuildInsertElement(ctx->builder, result, layers,
+						ctx->ac.i32_1, "");
 	} else if (instr->dest.ssa.num_components != 4)
 		result = trim_vector(ctx, result, instr->dest.ssa.num_components);
 

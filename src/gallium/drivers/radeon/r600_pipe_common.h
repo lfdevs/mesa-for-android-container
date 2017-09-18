@@ -557,6 +557,7 @@ struct r600_common_context {
 	unsigned			gpu_reset_counter;
 	unsigned			last_dirty_tex_counter;
 	unsigned			last_compressed_colortex_counter;
+	unsigned			last_num_draw_calls;
 
 	struct threaded_context		*tc;
 	struct u_suballocator		*allocator_zeroed_memory;

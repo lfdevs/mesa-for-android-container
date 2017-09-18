@@ -346,6 +346,7 @@ nvc0_hw_get_query_result(struct nvc0_context *nvc0, struct nvc0_query *q,
    case PIPE_QUERY_PIPELINE_STATISTICS:
       for (i = 0; i < 10; ++i)
          res64[i] = data64[i * 2] - data64[24 + i * 2];
+      result->pipeline_statistics.cs_invocations = 0;
       break;
    case NVC0_HW_QUERY_TFB_BUFFER_OFFSET:
       res32[0] = hq->data[1];

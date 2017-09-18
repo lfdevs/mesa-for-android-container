@@ -34,7 +34,7 @@
 #include "util/debug.h"
 #include "util/u_atomic.h"
 static unsigned
-radv_choose_tiling(struct radv_device *Device,
+radv_choose_tiling(struct radv_device *device,
 		   const struct radv_image_create_info *create_info)
 {
 	const VkImageCreateInfo *pCreateInfo = create_info->vk_info;
@@ -45,14 +45,15 @@ radv_choose_tiling(struct radv_device *Device,
 	}
 
 	if (!vk_format_is_compressed(pCreateInfo->format) &&
-	    !vk_format_is_depth_or_stencil(pCreateInfo->format)) {
+	    !vk_format_is_depth_or_stencil(pCreateInfo->format)
+	    && device->physical_device->rad_info.chip_class <= VI) {
+		/* this causes hangs in some VK CTS tests on GFX9. */
 		/* Textures with a very small height are recommended to be linear. */
 		if (pCreateInfo->imageType == VK_IMAGE_TYPE_1D ||
 		    /* Only very thin and long 2D textures should benefit from
 		     * linear_aligned. */
 		    (pCreateInfo->extent.width > 8 && pCreateInfo->extent.height <= 2))
 			return RADEON_SURF_MODE_LINEAR_ALIGNED;
-
 	}
 
 	/* MSAA resources must be 2D tiled. */
@@ -119,6 +120,7 @@ radv_init_surface(struct radv_device *device,
 	                           VK_IMAGE_USAGE_STORAGE_BIT)) ||
 	    (pCreateInfo->flags & VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT) ||
             (pCreateInfo->tiling == VK_IMAGE_TILING_LINEAR) ||
+            pCreateInfo->mipLevels > 1 || pCreateInfo->arrayLayers > 1 ||
             device->physical_device->rad_info.chip_class < VI ||
             create_info->scanout || (device->debug_flags & RADV_DEBUG_NO_DCC) ||
             !radv_is_colorbuffer_format_supported(pCreateInfo->format, &blendable))
@@ -279,10 +281,14 @@ si_set_mutable_tex_desc_fields(struct radv_device *device,
 }
 
 static unsigned radv_tex_dim(VkImageType image_type, VkImageViewType view_type,
-			     unsigned nr_layers, unsigned nr_samples, bool is_storage_image)
+			     unsigned nr_layers, unsigned nr_samples, bool is_storage_image, bool gfx9)
 {
 	if (view_type == VK_IMAGE_VIEW_TYPE_CUBE || view_type == VK_IMAGE_VIEW_TYPE_CUBE_ARRAY)
 		return is_storage_image ? V_008F1C_SQ_RSRC_IMG_2D_ARRAY : V_008F1C_SQ_RSRC_IMG_CUBE;
+
+	/* GFX9 allocates 1D textures as 2D. */
+	if (gfx9 && image_type == VK_IMAGE_TYPE_1D)
+		image_type = VK_IMAGE_TYPE_2D;
 	switch (image_type) {
 	case VK_IMAGE_TYPE_1D:
 		return nr_layers > 1 ? V_008F1C_SQ_RSRC_IMG_1D_ARRAY : V_008F1C_SQ_RSRC_IMG_1D;
@@ -373,7 +379,7 @@ si_make_texture_descriptor(struct radv_device *device,
 	}
 
 	type = radv_tex_dim(image->type, view_type, image->info.array_size, image->info.samples,
-			    is_storage_image);
+			    is_storage_image, device->physical_device->rad_info.chip_class >= GFX9);
 	if (type == V_008F1C_SQ_RSRC_IMG_1D_ARRAY) {
 	        height = 1;
 		depth = image->info.array_size;
@@ -494,7 +500,7 @@ si_make_texture_descriptor(struct radv_device *device,
 			S_008F1C_DST_SEL_Y(V_008F1C_SQ_SEL_X) |
 			S_008F1C_DST_SEL_Z(V_008F1C_SQ_SEL_X) |
 			S_008F1C_DST_SEL_W(V_008F1C_SQ_SEL_X) |
-			S_008F1C_TYPE(radv_tex_dim(image->type, view_type, 1, 0, false));
+			S_008F1C_TYPE(radv_tex_dim(image->type, view_type, 1, 0, false, false));
 		fmask_state[4] = 0;
 		fmask_state[5] = S_008F24_BASE_ARRAY(first_layer);
 		fmask_state[6] = 0;
@@ -832,8 +838,10 @@ radv_image_create(VkDevice _device,
 
 	if ((pCreateInfo->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) &&
 	    pCreateInfo->mipLevels == 1 &&
-	    !image->surface.dcc_size && image->info.depth == 1 && can_cmask_dcc)
+	    !image->surface.dcc_size && image->info.depth == 1 && can_cmask_dcc &&
+	    !image->surface.is_linear)
 		radv_image_alloc_cmask(device, image);
+
 	if (image->info.samples > 1 && vk_format_is_color(pCreateInfo->format)) {
 		radv_image_alloc_fmask(device, image);
 	} else if (vk_format_is_depth(pCreateInfo->format)) {
@@ -870,6 +878,7 @@ radv_image_view_make_descriptor(struct radv_image_view *iview,
 	uint32_t blk_w;
 	uint32_t *descriptor;
 	uint32_t *fmask_descriptor;
+	uint32_t hw_level = 0;
 
 	if (is_storage_image) {
 		descriptor = iview->storage_descriptor;
@@ -882,11 +891,13 @@ radv_image_view_make_descriptor(struct radv_image_view *iview,
 	assert(image->surface.blk_w % vk_format_get_blockwidth(image->vk_format) == 0);
 	blk_w = image->surface.blk_w / vk_format_get_blockwidth(image->vk_format) * vk_format_get_blockwidth(iview->vk_format);
 
+	if (device->physical_device->rad_info.chip_class >= GFX9)
+		hw_level = iview->base_mip;
 	si_make_texture_descriptor(device, image, is_storage_image,
 				   iview->type,
 				   iview->vk_format,
 				   components,
-				   0, iview->level_count - 1,
+				   hw_level, hw_level + iview->level_count - 1,
 				   iview->base_layer,
 				   iview->base_layer + iview->layer_count - 1,
 				   iview->extent.width,
@@ -1043,23 +1054,34 @@ radv_DestroyImage(VkDevice _device, VkImage _image,
 }
 
 void radv_GetImageSubresourceLayout(
-	VkDevice                                    device,
+	VkDevice                                    _device,
 	VkImage                                     _image,
 	const VkImageSubresource*                   pSubresource,
 	VkSubresourceLayout*                        pLayout)
 {
 	RADV_FROM_HANDLE(radv_image, image, _image);
+	RADV_FROM_HANDLE(radv_device, device, _device);
 	int level = pSubresource->mipLevel;
 	int layer = pSubresource->arrayLayer;
 	struct radeon_surf *surface = &image->surface;
 
-	pLayout->offset = surface->u.legacy.level[level].offset + surface->u.legacy.level[level].slice_size * layer;
-	pLayout->rowPitch = surface->u.legacy.level[level].nblk_x * surface->bpe;
-	pLayout->arrayPitch = surface->u.legacy.level[level].slice_size;
-	pLayout->depthPitch = surface->u.legacy.level[level].slice_size;
-	pLayout->size = surface->u.legacy.level[level].slice_size;
-	if (image->type == VK_IMAGE_TYPE_3D)
-		pLayout->size *= u_minify(image->info.depth, level);
+	if (device->physical_device->rad_info.chip_class >= GFX9) {
+		pLayout->offset = surface->u.gfx9.offset[level] + surface->u.gfx9.surf_slice_size * layer;
+		pLayout->rowPitch = surface->u.gfx9.surf_pitch * surface->bpe;
+		pLayout->arrayPitch = surface->u.gfx9.surf_slice_size;
+		pLayout->depthPitch = surface->u.gfx9.surf_slice_size;
+		pLayout->size = surface->u.gfx9.surf_slice_size;
+		if (image->type == VK_IMAGE_TYPE_3D)
+			pLayout->size *= u_minify(image->info.depth, level);
+	} else {
+		pLayout->offset = surface->u.legacy.level[level].offset + surface->u.legacy.level[level].slice_size * layer;
+		pLayout->rowPitch = surface->u.legacy.level[level].nblk_x * surface->bpe;
+		pLayout->arrayPitch = surface->u.legacy.level[level].slice_size;
+		pLayout->depthPitch = surface->u.legacy.level[level].slice_size;
+		pLayout->size = surface->u.legacy.level[level].slice_size;
+		if (image->type == VK_IMAGE_TYPE_3D)
+			pLayout->size *= u_minify(image->info.depth, level);
+	}
 }
 
 

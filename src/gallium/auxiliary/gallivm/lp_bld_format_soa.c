@@ -650,7 +650,13 @@ lp_build_fetch_rgba_soa(struct gallivm_state *gallivm,
          for (i = 0; i < format_desc->nr_channels; i++) {
             struct util_format_channel_description chan_desc = format_desc->channel[i];
             unsigned blockbits = type.width;
-            unsigned vec_nr = chan_desc.shift / type.width;
+            unsigned vec_nr;
+
+#ifdef PIPE_ARCH_BIG_ENDIAN
+            vec_nr = (format_desc->block.bits - (chan_desc.shift + chan_desc.size)) / type.width;
+#else
+            vec_nr = chan_desc.shift / type.width;
+#endif
             chan_desc.shift %= type.width;
 
             output[i] = lp_build_extract_soa_chan(&bld,

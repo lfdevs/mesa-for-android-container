@@ -781,6 +781,11 @@ static void si_launch_grid(
 	    program->shader.compilation_failed)
 		return;
 
+	if (sctx->b.last_num_draw_calls != sctx->b.num_draw_calls) {
+		si_update_fb_dirtiness_after_rendering(sctx);
+		sctx->b.last_num_draw_calls = sctx->b.num_draw_calls;
+	}
+
 	si_decompress_compute_textures(sctx);
 
 	/* Add buffer sizes for memory checking in need_cs_space. */

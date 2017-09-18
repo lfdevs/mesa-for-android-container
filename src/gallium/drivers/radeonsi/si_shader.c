@@ -83,10 +83,10 @@ static void si_build_ps_prolog_function(struct si_shader_context *ctx,
 static void si_build_ps_epilog_function(struct si_shader_context *ctx,
 					union si_shader_part_key *key);
 
-/* Ideally pass the sample mask input to the PS epilog as v13, which
+/* Ideally pass the sample mask input to the PS epilog as v14, which
  * is its usual location, so that the shader doesn't have to add v_mov.
  */
-#define PS_EPILOG_SAMPLEMASK_MIN_LOC 13
+#define PS_EPILOG_SAMPLEMASK_MIN_LOC 14
 
 enum {
 	CONST_ADDR_SPACE = 2,
@@ -4420,6 +4420,7 @@ static void create_function(struct si_shader_context *ctx)
 		params[SI_PARAM_FRONT_FACE] = ctx->i32;
 		shader->info.face_vgpr_index = 20;
 		params[SI_PARAM_ANCILLARY] = ctx->i32;
+		shader->info.ancillary_vgpr_index = 21;
 		params[SI_PARAM_SAMPLE_COVERAGE] = ctx->f32;
 		params[SI_PARAM_POS_FIXED_PT] = ctx->i32;
 		num_params = SI_PARAM_POS_FIXED_PT+1;
@@ -4495,6 +4496,7 @@ static void create_function(struct si_shader_context *ctx)
 				      S_0286D0_LINEAR_CENTER_ENA(1) |
 				      S_0286D0_LINEAR_CENTROID_ENA(1) |
 				      S_0286D0_FRONT_FACE_ENA(1) |
+				      S_0286D0_ANCILLARY_ENA(1) |
 				      S_0286D0_POS_FIXED_PT_ENA(1));
 	}
 
@@ -5649,6 +5651,7 @@ static void si_get_ps_prolog_key(struct si_shader *shader,
 		 key->ps_prolog.states.force_linear_center_interp ||
 		 key->ps_prolog.states.bc_optimize_for_persp ||
 		 key->ps_prolog.states.bc_optimize_for_linear);
+	key->ps_prolog.ancillary_vgpr_index = shader->info.ancillary_vgpr_index;
 
 	if (info->colors_read) {
 		unsigned *color = shader->selector->color_attr_index;
@@ -5758,7 +5761,8 @@ static bool si_need_ps_prolog(const union si_shader_part_key *key)
 	       key->ps_prolog.states.force_linear_center_interp ||
 	       key->ps_prolog.states.bc_optimize_for_persp ||
 	       key->ps_prolog.states.bc_optimize_for_linear ||
-	       key->ps_prolog.states.poly_stipple;
+	       key->ps_prolog.states.poly_stipple ||
+	       key->ps_prolog.states.samplemask_log_ps_iter;
 }
 
 /**
@@ -6405,6 +6409,7 @@ int si_compile_tgsi_shader(struct si_screen *sscreen,
 	if (ctx.type == PIPE_SHADER_FRAGMENT) {
 		shader->info.num_input_vgprs = 0;
 		shader->info.face_vgpr_index = -1;
+		shader->info.ancillary_vgpr_index = -1;
 
 		if (G_0286CC_PERSP_SAMPLE_ENA(shader->config.spi_ps_input_addr))
 			shader->info.num_input_vgprs += 2;
@@ -6434,8 +6439,10 @@ int si_compile_tgsi_shader(struct si_screen *sscreen,
 			shader->info.face_vgpr_index = shader->info.num_input_vgprs;
 			shader->info.num_input_vgprs += 1;
 		}
-		if (G_0286CC_ANCILLARY_ENA(shader->config.spi_ps_input_addr))
+		if (G_0286CC_ANCILLARY_ENA(shader->config.spi_ps_input_addr)) {
+			shader->info.ancillary_vgpr_index = shader->info.num_input_vgprs;
 			shader->info.num_input_vgprs += 1;
+		}
 		if (G_0286CC_SAMPLE_COVERAGE_ENA(shader->config.spi_ps_input_addr))
 			shader->info.num_input_vgprs += 1;
 		if (G_0286CC_POS_FIXED_PT_ENA(shader->config.spi_ps_input_addr))
@@ -7079,6 +7086,54 @@ static void si_build_ps_prolog_function(struct si_shader_context *ctx,
 		}
 	}
 
+	/* Section 15.2.2 (Shader Inputs) of the OpenGL 4.5 (Core Profile) spec
+	 * says:
+	 *
+	 *    "When per-sample shading is active due to the use of a fragment
+	 *     input qualified by sample or due to the use of the gl_SampleID
+	 *     or gl_SamplePosition variables, only the bit for the current
+	 *     sample is set in gl_SampleMaskIn. When state specifies multiple
+	 *     fragment shader invocations for a given fragment, the sample
+	 *     mask for any single fragment shader invocation may specify a
+	 *     subset of the covered samples for the fragment. In this case,
+	 *     the bit corresponding to each covered sample will be set in
+	 *     exactly one fragment shader invocation."
+	 *
+	 * The samplemask loaded by hardware is always the coverage of the
+	 * entire pixel/fragment, so mask bits out based on the sample ID.
+	 */
+	if (key->ps_prolog.states.samplemask_log_ps_iter) {
+		/* The bit pattern matches that used by fixed function fragment
+		 * processing. */
+		static const uint16_t ps_iter_masks[] = {
+			0xffff, /* not used */
+			0x5555,
+			0x1111,
+			0x0101,
+			0x0001,
+		};
+		assert(key->ps_prolog.states.samplemask_log_ps_iter < ARRAY_SIZE(ps_iter_masks));
+
+		uint32_t ps_iter_mask = ps_iter_masks[key->ps_prolog.states.samplemask_log_ps_iter];
+		unsigned ancillary_vgpr = key->ps_prolog.num_input_sgprs +
+					  key->ps_prolog.ancillary_vgpr_index;
+		LLVMValueRef sampleid = unpack_param(ctx, ancillary_vgpr, 8, 4);
+		LLVMValueRef samplemask = LLVMGetParam(func, ancillary_vgpr + 1);
+
+		samplemask = LLVMBuildBitCast(gallivm->builder, samplemask, ctx->i32, "");
+		samplemask = LLVMBuildAnd(
+			gallivm->builder,
+			samplemask,
+			LLVMBuildShl(gallivm->builder,
+				     LLVMConstInt(ctx->i32, ps_iter_mask, false),
+				     sampleid, ""),
+			"");
+		samplemask = LLVMBuildBitCast(gallivm->builder, samplemask, ctx->f32, "");
+
+		ret = LLVMBuildInsertValue(gallivm->builder, ret, samplemask,
+					   ancillary_vgpr + 1, "");
+	}
+
 	/* Tell LLVM to insert WQM instruction sequence when needed. */
 	if (key->ps_prolog.wqm) {
 		LLVMAddTargetDependentFunctionAttr(func,
@@ -7276,6 +7331,12 @@ static bool si_shader_select_ps_parts(struct si_screen *sscreen,
 		assert(G_0286CC_LINEAR_CENTER_ENA(shader->config.spi_ps_input_addr));
 	}
 
+	/* Samplemask fixup requires the sample ID. */
+	if (shader->key.part.ps.prolog.samplemask_log_ps_iter) {
+		shader->config.spi_ps_input_ena |= S_0286CC_ANCILLARY_ENA(1);
+		assert(G_0286CC_ANCILLARY_ENA(shader->config.spi_ps_input_addr));
+	}
+
 	/* The sample mask input is always enabled, because the API shader always
 	 * passes it through to the epilog. Disable it here if it's unused.
 	 */
@@ -7353,6 +7414,7 @@ int si_shader_create(struct si_screen *sscreen, LLVMTargetMachineRef tm,
 		shader->info.num_input_sgprs = mainp->info.num_input_sgprs;
 		shader->info.num_input_vgprs = mainp->info.num_input_vgprs;
 		shader->info.face_vgpr_index = mainp->info.face_vgpr_index;
+		shader->info.ancillary_vgpr_index = mainp->info.ancillary_vgpr_index;
 		memcpy(shader->info.vs_output_param_offset,
 		       mainp->info.vs_output_param_offset,
 		       sizeof(mainp->info.vs_output_param_offset));

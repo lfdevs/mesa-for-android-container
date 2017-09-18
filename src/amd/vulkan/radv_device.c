@@ -2813,7 +2813,7 @@ VkResult radv_CreateEvent(
 
 	event->bo = device->ws->buffer_create(device->ws, 8, 8,
 					      RADEON_DOMAIN_GTT,
-					      RADEON_FLAG_CPU_ACCESS);
+					      RADEON_FLAG_VA_UNCACHED | RADEON_FLAG_CPU_ACCESS);
 	if (!event->bo) {
 		vk_free2(&device->alloc, pAllocator, event);
 		return VK_ERROR_OUT_OF_DEVICE_MEMORY;
@@ -3115,8 +3115,8 @@ radv_initialise_color_surface(struct radv_device *device,
 	}
 
 	if (device->physical_device->rad_info.chip_class >= GFX9) {
-		uint32_t max_slice = radv_surface_layer_count(iview);
-		unsigned mip0_depth = iview->base_layer + max_slice - 1;
+		unsigned mip0_depth = iview->image->type == VK_IMAGE_TYPE_3D ?
+		  (iview->extent.depth - 1) : (iview->image->info.array_size - 1);
 
 		cb->cb_color_view |= S_028C6C_MIP_LEVEL(iview->base_mip);
 		cb->cb_color_attrib |= S_028C74_MIP0_DEPTH(mip0_depth) |

@@ -72,6 +72,15 @@ brw_upload_initial_gpu_state(struct brw_context *brw)
                 GEN9_FLOAT_BLEND_OPTIMIZATION_ENABLE |
                 GEN9_PARTIAL_RESOLVE_DISABLE_IN_VC);
       ADVANCE_BATCH();
+
+      if (brw->is_broxton) {
+         BEGIN_BATCH(3);
+         OUT_BATCH(MI_LOAD_REGISTER_IMM | (3 - 2));
+         OUT_BATCH(GEN7_GT_MODE);
+         OUT_BATCH(GEN9_SUBSLICE_HASHING_MASK_BITS |
+                   GEN9_SUBSLICE_HASHING_16x16);
+         ADVANCE_BATCH();
+      }
    }
 
    if (brw->gen >= 8) {

@@ -953,8 +953,10 @@ brw_bo_map(struct brw_context *brw, struct brw_bo *bo, unsigned flags)
     * We skip MAP_RAW because we want to avoid map_gtt's fence detiling.
     */
    if (!map && !(flags & MAP_RAW)) {
-      perf_debug("Fallback GTT mapping for %s with access flags %x\n",
-                 bo->name, flags);
+      if (brw) {
+         perf_debug("Fallback GTT mapping for %s with access flags %x\n",
+                    bo->name, flags);
+      }
       map = brw_bo_map_gtt(brw, bo, flags);
    }
 

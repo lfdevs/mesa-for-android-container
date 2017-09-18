@@ -910,7 +910,8 @@ void si_emit_cache_flush(struct si_context *sctx)
 		radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 0, 0));
 		radeon_emit(cs, EVENT_TYPE(V_028A90_FLUSH_AND_INV_CB_META) | EVENT_INDEX(0));
 	}
-	if (rctx->flags & SI_CONTEXT_FLUSH_AND_INV_DB) {
+	if (rctx->flags & (SI_CONTEXT_FLUSH_AND_INV_DB |
+			   SI_CONTEXT_FLUSH_AND_INV_DB_META)) {
 		/* Flush HTILE. SURFACE_SYNC will wait for idle. */
 		radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 0, 0));
 		radeon_emit(cs, EVENT_TYPE(V_028A90_FLUSH_AND_INV_DB_META) | EVENT_INDEX(0));

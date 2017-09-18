@@ -2579,6 +2579,14 @@ static void si_set_framebuffer_state(struct pipe_context *ctx,
 		sctx->b.flags |= SI_CONTEXT_INV_VMEM_L1 |
 				 SI_CONTEXT_INV_GLOBAL_L2 |
 				 SI_CONTEXT_FLUSH_AND_INV_DB;
+	} else if (sctx->b.chip_class == GFX9) {
+		/* It appears that DB metadata "leaks" in a sequence of:
+		 *  - depth clear
+		 *  - DCC decompress for shader image writes (with DB disabled)
+		 *  - render with DEPTH_BEFORE_SHADER=1
+		 * Flushing DB metadata works around the problem.
+		 */
+		sctx->b.flags |= SI_CONTEXT_FLUSH_AND_INV_DB_META;
 	}
 
 	/* Take the maximum of the old and new count. If the new count is lower,

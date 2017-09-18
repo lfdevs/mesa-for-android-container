@@ -428,13 +428,7 @@ fd_launch_grid(struct pipe_context *pctx, const struct pipe_grid_info *info)
 	struct fd_batch *batch, *save_batch = NULL;
 	unsigned i;
 
-	/* TODO maybe we don't want to allocate and flush a batch each time?
-	 * We could use a special bogus (ie. won't match any fb state) key
-	 * in the batch-case for compute shaders, and rely on the rest of
-	 * the dependency tracking mechanism to tell us when the compute
-	 * batch needs to be flushed?
-	 */
-	batch = fd_bc_alloc_batch(&ctx->screen->batch_cache, ctx);
+	batch = fd_batch_create(ctx);
 	fd_batch_reference(&save_batch, ctx->batch);
 	fd_batch_reference(&ctx->batch, batch);
 

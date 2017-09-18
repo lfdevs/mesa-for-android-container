@@ -2843,7 +2843,7 @@ glsl_to_tgsi_visitor::visit(ir_dereference_array *ir)
    ir->array->accept(this);
    src = this->result;
 
-   if (ir->array->ir_type != ir_type_dereference_array) {
+   if (!src.has_index2) {
       switch (this->prog->Target) {
       case GL_TESS_CONTROL_PROGRAM_NV:
          is_2D = (src.file == PROGRAM_INPUT || src.file == PROGRAM_OUTPUT) &&

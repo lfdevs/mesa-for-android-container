@@ -945,9 +945,12 @@ dri2_display_destroy(_EGLDisplay *disp)
           zwp_linux_dmabuf_v1_destroy(dri2_dpy->wl_dmabuf);
       if (dri2_dpy->wl_shm)
           wl_shm_destroy(dri2_dpy->wl_shm);
-      wl_registry_destroy(dri2_dpy->wl_registry);
-      wl_event_queue_destroy(dri2_dpy->wl_queue);
-      wl_proxy_wrapper_destroy(dri2_dpy->wl_dpy_wrapper);
+      if (dri2_dpy->wl_registry)
+         wl_registry_destroy(dri2_dpy->wl_registry);
+      if (dri2_dpy->wl_queue)
+         wl_event_queue_destroy(dri2_dpy->wl_queue);
+      if (dri2_dpy->wl_dpy_wrapper)
+         wl_proxy_wrapper_destroy(dri2_dpy->wl_dpy_wrapper);
       u_vector_finish(&dri2_dpy->wl_modifiers.argb8888);
       u_vector_finish(&dri2_dpy->wl_modifiers.xrgb8888);
       u_vector_finish(&dri2_dpy->wl_modifiers.rgb565);

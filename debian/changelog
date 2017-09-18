@@ -1,3 +1,9 @@
+mesa (17.2.1-1) unstable; urgency=medium
+
+  * New upstream bugfix release. (LP: #1716250)
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Mon, 18 Sep 2017 14:33:02 +0300
+
 mesa (17.2.0-2) unstable; urgency=medium
 
   * control: Mark transitional packages M-A: same. (Closes: #874013,
