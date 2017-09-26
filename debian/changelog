@@ -1,3 +1,11 @@
+mesa (17.2.1-2) unstable; urgency=medium
+
+  * Cherry-pick 2ef7f23820a (configure: check if -latomic is needed for
+    __atomic_*) from upstream. Should fix FTBFS on armel (Closes:
+    #874531).
+
+ -- Andreas Boll <andreas.boll.dev@gmail.com>  Tue, 26 Sep 2017 11:25:54 +0200
+
 mesa (17.2.1-1) unstable; urgency=medium
 
   * New upstream bugfix release. (LP: #1716250)

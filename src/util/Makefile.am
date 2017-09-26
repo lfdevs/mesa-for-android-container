@@ -46,7 +46,8 @@ libmesautil_la_SOURCES = \
 
 libmesautil_la_LIBADD = \
 	$(CLOCK_LIB) \
-	$(ZLIB_LIBS)
+	$(ZLIB_LIBS) \
+	$(LIBATOMIC_LIBS)
 
 roundeven_test_LDADD = -lm
 
