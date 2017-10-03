@@ -1193,7 +1193,7 @@ void si_llvm_context_init(struct si_shader_context *ctx,
 	ctx->gallivm.builder = lp_create_builder(ctx->gallivm.context,
 						 float_mode);
 
-	ac_llvm_context_init(&ctx->ac, ctx->gallivm.context);
+	ac_llvm_context_init(&ctx->ac, ctx->gallivm.context, sscreen->b.chip_class);
 	ctx->ac.module = ctx->gallivm.module;
 	ctx->ac.builder = ctx->gallivm.builder;
 

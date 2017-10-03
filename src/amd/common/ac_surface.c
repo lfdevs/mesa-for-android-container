@@ -1083,9 +1083,16 @@ static int gfx9_compute_surface(ADDR_HANDLE addrlib,
 
 	/* Calculate texture layout information for stencil. */
 	if (surf->flags & RADEON_SURF_SBUFFER) {
-		AddrSurfInfoIn.bpp = 8;
-		AddrSurfInfoIn.flags.depth = 0;
 		AddrSurfInfoIn.flags.stencil = 1;
+		AddrSurfInfoIn.bpp = 8;
+
+		if (!AddrSurfInfoIn.flags.depth) {
+			r = gfx9_get_preferred_swizzle_mode(addrlib, &AddrSurfInfoIn, false,
+							    &AddrSurfInfoIn.swizzleMode);
+			if (r)
+				return r;
+		} else
+			AddrSurfInfoIn.flags.depth = 0;
 
 		r = gfx9_compute_miptree(addrlib, surf, compressed, &AddrSurfInfoIn);
 		if (r)

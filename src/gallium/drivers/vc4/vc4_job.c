@@ -118,11 +118,16 @@ vc4_flush_jobs_reading_resource(struct vc4_context *vc4,
                 struct vc4_job *job = entry->data;
 
                 struct vc4_bo **referenced_bos = job->bo_pointers.base;
+                bool found = false;
                 for (int i = 0; i < cl_offset(&job->bo_handles) / 4; i++) {
                         if (referenced_bos[i] == rsc->bo) {
-                                vc4_job_submit(vc4, job);
-                                continue;
+                                found = true;
+                                break;
                         }
+                }
+                if (found) {
+                        vc4_job_submit(vc4, job);
+                        continue;
                 }
 
                 /* Also check for the Z/color buffers, since the references to

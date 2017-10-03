@@ -106,7 +106,7 @@ pack_rgba(enum pipe_format format, const float *rgba)
    union util_color uc;
    util_pack_color(rgba, format, &uc);
    if (util_format_get_blocksize(format) == 2)
-      return uc.ui[0] << 16 | uc.ui[0];
+      return uc.ui[0] << 16 | (uc.ui[0] & 0xffff);
    else
       return uc.ui[0];
 }

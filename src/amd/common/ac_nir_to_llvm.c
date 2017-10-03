@@ -3609,7 +3609,8 @@ static LLVMValueRef visit_image_size(struct nir_to_llvm_context *ctx,
 		z = LLVMBuildSDiv(ctx->builder, z, six, "");
 		res = LLVMBuildInsertElement(ctx->builder, res, z, two, "");
 	}
-	if (glsl_get_sampler_dim(type) == GLSL_SAMPLER_DIM_1D &&
+	if (ctx->options->chip_class >= GFX9 &&
+	    glsl_get_sampler_dim(type) == GLSL_SAMPLER_DIM_1D &&
 	    glsl_sampler_type_is_array(type)) {
 		LLVMValueRef layers = LLVMBuildExtractElement(ctx->builder, res, two, "");
 		res = LLVMBuildInsertElement(ctx->builder, res, layers,
@@ -4509,15 +4510,13 @@ static void visit_tex(struct nir_to_llvm_context *ctx, nir_tex_instr *instr)
 	}
 
 	if (instr->sampler_dim == GLSL_SAMPLER_DIM_CUBE && coord) {
-		if (instr->is_array && instr->op != nir_texop_lod)
-			coords[3] = apply_round_slice(ctx, coords[3]);
 		for (chan = 0; chan < instr->coord_components; chan++)
 			coords[chan] = to_float(&ctx->ac, coords[chan]);
 		if (instr->coord_components == 3)
 			coords[3] = LLVMGetUndef(ctx->f32);
 		ac_prepare_cube_coords(&ctx->ac,
 			instr->op == nir_texop_txd, instr->is_array,
-			coords, derivs);
+			instr->op == nir_texop_lod, coords, derivs);
 		if (num_deriv_comp)
 			num_deriv_comp--;
 	}
@@ -6162,7 +6161,7 @@ LLVMModuleRef ac_translate_nir_to_llvm(LLVMTargetMachineRef tm,
 	ctx.context = LLVMContextCreate();
 	ctx.module = LLVMModuleCreateWithNameInContext("shader", ctx.context);
 
-	ac_llvm_context_init(&ctx.ac, ctx.context);
+	ac_llvm_context_init(&ctx.ac, ctx.context, options->chip_class);
 	ctx.ac.module = ctx.module;
 
 	ctx.has_ds_bpermute = ctx.options->chip_class >= VI;
@@ -6496,7 +6495,7 @@ void ac_create_gs_copy_shader(LLVMTargetMachineRef tm,
 	ctx.options = options;
 	ctx.shader_info = shader_info;
 
-	ac_llvm_context_init(&ctx.ac, ctx.context);
+	ac_llvm_context_init(&ctx.ac, ctx.context, options->chip_class);
 	ctx.ac.module = ctx.module;
 
 	ctx.is_gs_copy_shader = true;

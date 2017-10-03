@@ -2762,11 +2762,11 @@ vc4_update_compiled_fs(struct vc4_context *vc4, uint8_t prim_mode)
         vc4->dirty |= VC4_DIRTY_COMPILED_FS;
 
         if (vc4->rasterizer->base.flatshade &&
-            old_fs && vc4->prog.fs->color_inputs != old_fs->color_inputs) {
+            (!old_fs || vc4->prog.fs->color_inputs != old_fs->color_inputs)) {
                 vc4->dirty |= VC4_DIRTY_FLAT_SHADE_FLAGS;
         }
 
-        if (old_fs && vc4->prog.fs->fs_inputs != old_fs->fs_inputs)
+        if (!old_fs || vc4->prog.fs->fs_inputs != old_fs->fs_inputs)
                 vc4->dirty |= VC4_DIRTY_FS_INPUTS;
 }
 
@@ -2876,6 +2876,7 @@ fs_inputs_compare(const void *key1, const void *key2)
 
 static void
 delete_from_cache_if_matches(struct hash_table *ht,
+                             struct vc4_compiled_shader **last_compile,
                              struct hash_entry *entry,
                              struct vc4_uncompiled_shader *so)
 {
@@ -2885,6 +2886,10 @@ delete_from_cache_if_matches(struct hash_table *ht,
                 struct vc4_compiled_shader *shader = entry->data;
                 _mesa_hash_table_remove(ht, entry);
                 vc4_bo_unreference(&shader->bo);
+
+                if (shader == *last_compile)
+                        *last_compile = NULL;
+
                 ralloc_free(shader);
         }
 }
@@ -2896,10 +2901,14 @@ vc4_shader_state_delete(struct pipe_context *pctx, void *hwcso)
         struct vc4_uncompiled_shader *so = hwcso;
 
         struct hash_entry *entry;
-        hash_table_foreach(vc4->fs_cache, entry)
-                delete_from_cache_if_matches(vc4->fs_cache, entry, so);
-        hash_table_foreach(vc4->vs_cache, entry)
-                delete_from_cache_if_matches(vc4->vs_cache, entry, so);
+        hash_table_foreach(vc4->fs_cache, entry) {
+                delete_from_cache_if_matches(vc4->fs_cache, &vc4->prog.fs,
+                                             entry, so);
+        }
+        hash_table_foreach(vc4->vs_cache, entry) {
+                delete_from_cache_if_matches(vc4->vs_cache, &vc4->prog.vs,
+                                             entry, so);
+        }
 
         ralloc_free(so->base.ir.nir);
         free(so);

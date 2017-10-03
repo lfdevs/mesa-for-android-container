@@ -556,6 +556,9 @@ vc4_create_sampler_view(struct pipe_context *pctx, struct pipe_resource *prsc,
         so->base = *cso;
 
         pipe_reference(NULL, &prsc->reference);
+        so->base.texture = prsc;
+        so->base.reference.count = 1;
+        so->base.context = pctx;
 
         /* There is no hardware level clamping, and the start address of a
          * texture may be misaligned, so in that case we have to copy to a
@@ -567,33 +570,36 @@ vc4_create_sampler_view(struct pipe_context *pctx, struct pipe_resource *prsc,
         if ((cso->u.tex.first_level &&
              (cso->u.tex.first_level != cso->u.tex.last_level)) ||
             rsc->vc4_format == VC4_TEXTURE_TYPE_RGBA32R) {
-                struct vc4_resource *shadow_parent = vc4_resource(prsc);
-                struct pipe_resource tmpl = shadow_parent->base;
-                struct vc4_resource *clone;
+                struct vc4_resource *shadow_parent = rsc;
+                struct pipe_resource tmpl = *prsc;
 
                 tmpl.bind = PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_RENDER_TARGET;
                 tmpl.width0 = u_minify(tmpl.width0, cso->u.tex.first_level);
                 tmpl.height0 = u_minify(tmpl.height0, cso->u.tex.first_level);
                 tmpl.last_level = cso->u.tex.last_level - cso->u.tex.first_level;
 
+                /* Create the shadow texture.  The rest of the texture
+                 * parameter setup will use the shadow.
+                 */
                 prsc = vc4_resource_create(pctx->screen, &tmpl);
                 if (!prsc) {
                         free(so);
                         return NULL;
                 }
                 rsc = vc4_resource(prsc);
-                clone = vc4_resource(prsc);
-                clone->shadow_parent = &shadow_parent->base;
-                /* Flag it as needing update of the contents from the parent. */
-                clone->writes = shadow_parent->writes - 1;
 
-                assert(clone->vc4_format != VC4_TEXTURE_TYPE_RGBA32R);
-        } else if (cso->u.tex.first_level) {
-                so->force_first_level = true;
+                /* Flag it as needing update of the contents from the parent. */
+                rsc->writes = shadow_parent->writes - 1;
+                assert(rsc->vc4_format != VC4_TEXTURE_TYPE_RGBA32R);
+
+                so->texture = prsc;
+        } else {
+                pipe_resource_reference(&so->texture, prsc);
+
+                if (cso->u.tex.first_level) {
+                        so->force_first_level = true;
+                }
         }
-        so->base.texture = prsc;
-        so->base.reference.count = 1;
-        so->base.context = pctx;
 
         so->texture_p0 =
                 (VC4_SET_FIELD(rsc->slices[0].offset >> 12, VC4_TEX_P0_OFFSET) |
@@ -617,8 +623,10 @@ vc4_create_sampler_view(struct pipe_context *pctx, struct pipe_resource *prsc,
 
 static void
 vc4_sampler_view_destroy(struct pipe_context *pctx,
-                         struct pipe_sampler_view *view)
+                         struct pipe_sampler_view *pview)
 {
+        struct vc4_sampler_view *view = vc4_sampler_view(pview);
+        pipe_resource_reference(&pview->texture, NULL);
         pipe_resource_reference(&view->texture, NULL);
         free(view);
 }

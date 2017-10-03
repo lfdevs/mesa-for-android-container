@@ -84,6 +84,13 @@ struct vc4_sampler_view {
         uint32_t texture_p0;
         uint32_t texture_p1;
         bool force_first_level;
+        /**
+         * Resource containing the actual texture that will be sampled.
+         *
+         * We may need to rebase the .base.texture resource to work around the
+         * lack of GL_TEXTURE_BASE_LEVEL, or to upload the texture as tiled.
+         */
+        struct pipe_resource *texture;
 };
 
 struct vc4_sampler_state {

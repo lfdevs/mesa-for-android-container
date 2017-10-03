@@ -653,7 +653,7 @@ static void radv_query_shader(struct radv_cmd_buffer *cmd_buffer,
 	struct radv_device *device = cmd_buffer->device;
 	struct radv_meta_saved_compute_state saved_state;
 
-	radv_meta_save_compute(&saved_state, cmd_buffer, 4);
+	radv_meta_save_compute(&saved_state, cmd_buffer, 16);
 
 	struct radv_buffer dst_buffer = {
 		.bo = dst_bo,
@@ -737,7 +737,7 @@ static void radv_query_shader(struct radv_cmd_buffer *cmd_buffer,
 	                                RADV_CMD_FLAG_INV_VMEM_L1 |
 	                                RADV_CMD_FLAG_CS_PARTIAL_FLUSH;
 
-	radv_meta_restore_compute(&saved_state, cmd_buffer, 4);
+	radv_meta_restore_compute(&saved_state, cmd_buffer, 16);
 }
 
 VkResult radv_CreateQueryPool(

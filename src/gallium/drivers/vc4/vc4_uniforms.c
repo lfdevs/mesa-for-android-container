@@ -35,7 +35,7 @@ write_texture_p0(struct vc4_job *job,
 {
         struct vc4_sampler_view *sview =
                 vc4_sampler_view(texstate->textures[unit]);
-        struct vc4_resource *rsc = vc4_resource(sview->base.texture);
+        struct vc4_resource *rsc = vc4_resource(sview->texture);
 
         cl_reloc(job, &job->uniforms, uniforms, rsc->bo, sview->texture_p0);
 }

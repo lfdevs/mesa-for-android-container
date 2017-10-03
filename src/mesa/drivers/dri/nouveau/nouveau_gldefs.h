@@ -239,6 +239,25 @@ nvgl_wrap_mode(unsigned wrap)
 }
 
 static inline unsigned
+nvgl_wrap_mode_nv20(unsigned wrap)
+{
+	switch (wrap) {
+	case GL_REPEAT:
+		return 0x1;
+	case GL_MIRRORED_REPEAT:
+		return 0x2;
+	case GL_CLAMP:
+		return 0x5;
+	case GL_CLAMP_TO_EDGE:
+		return 0x3;
+	case GL_CLAMP_TO_BORDER:
+		return 0x4;
+	default:
+		unreachable("Bad GL texture wrap mode");
+	}
+}
+
+static inline unsigned
 nvgl_filter_mode(unsigned filter)
 {
 	switch (filter) {

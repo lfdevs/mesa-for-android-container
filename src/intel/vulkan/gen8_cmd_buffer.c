@@ -49,10 +49,10 @@ gen8_cmd_buffer_emit_viewport(struct anv_cmd_buffer *cmd_buffer)
       struct GENX(SF_CLIP_VIEWPORT) sf_clip_viewport = {
          .ViewportMatrixElementm00 = vp->width / 2,
          .ViewportMatrixElementm11 = vp->height / 2,
-         .ViewportMatrixElementm22 = 1.0,
+         .ViewportMatrixElementm22 = vp->maxDepth - vp->minDepth,
          .ViewportMatrixElementm30 = vp->x + vp->width / 2,
          .ViewportMatrixElementm31 = vp->y + vp->height / 2,
-         .ViewportMatrixElementm32 = 0.0,
+         .ViewportMatrixElementm32 = vp->minDepth,
          .XMinClipGuardband = -1.0f,
          .XMaxClipGuardband = 1.0f,
          .YMinClipGuardband = -1.0f,

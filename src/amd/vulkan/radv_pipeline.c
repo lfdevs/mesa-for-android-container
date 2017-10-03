@@ -161,6 +161,7 @@ radv_optimize_nir(struct nir_shader *shader)
                 if (nir_opt_trivial_continues(shader)) {
                         progress = true;
                         NIR_PASS(progress, shader, nir_copy_prop);
+                        NIR_PASS(progress, shader, nir_opt_remove_phis);
                         NIR_PASS(progress, shader, nir_opt_dce);
                 }
                 NIR_PASS(progress, shader, nir_opt_if);

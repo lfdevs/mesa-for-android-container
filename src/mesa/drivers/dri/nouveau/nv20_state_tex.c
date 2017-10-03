@@ -193,9 +193,19 @@ nv20_emit_tex_obj(struct gl_context *ctx, int emit)
 		| NV20_3D_TEX_FORMAT_NO_BORDER
 		| 1 << 16;
 
-	tx_wrap = nvgl_wrap_mode(sa->WrapR) << 16
-		| nvgl_wrap_mode(sa->WrapT) << 8
-		| nvgl_wrap_mode(sa->WrapS) << 0;
+	switch (t->Target) {
+	case GL_TEXTURE_1D:
+		tx_wrap = NV20_3D_TEX_WRAP_R_CLAMP_TO_EDGE
+			| NV20_3D_TEX_WRAP_T_CLAMP_TO_EDGE
+			| nvgl_wrap_mode_nv20(sa->WrapS) << 0;
+		break;
+
+	default:
+		tx_wrap = nvgl_wrap_mode_nv20(sa->WrapR) << 16
+			| nvgl_wrap_mode_nv20(sa->WrapT) << 8
+			| nvgl_wrap_mode_nv20(sa->WrapS) << 0;
+		break;
+	}
 
 	tx_filter = nvgl_filter_mode(sa->MagFilter) << 24
 		| nvgl_filter_mode(sa->MinFilter) << 16

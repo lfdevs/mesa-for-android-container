@@ -81,20 +81,6 @@ struct vc4_resource {
          * buffer) may get marked.
          */
         uint32_t initialized_buffers;
-
-        /**
-         * Resource containing the non-GL_TEXTURE_BASE_LEVEL-rebased texture
-         * contents, or the 4-byte index buffer.
-         *
-         * If the parent is set for an texture, then this resource is actually
-         * the texture contents just starting from the sampler_view's
-         * first_level.
-         *
-         * If the parent is set for an index index buffer, then this resource
-         * is actually a shadow containing a 2-byte index buffer starting from
-         * the ib's offset.
-         */
-        struct pipe_resource *shadow_parent;
 };
 
 static inline struct vc4_resource *

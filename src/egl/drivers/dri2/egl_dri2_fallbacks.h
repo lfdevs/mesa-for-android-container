@@ -59,7 +59,14 @@ static inline EGLBoolean
 dri2_fallback_swap_interval(_EGLDriver *drv, _EGLDisplay *dpy,
                             _EGLSurface *surf, EGLint interval)
 {
-   return EGL_FALSE;
+   if (interval > surf->Config->MaxSwapInterval)
+      interval = surf->Config->MaxSwapInterval;
+   else if (interval < surf->Config->MinSwapInterval)
+      interval = surf->Config->MinSwapInterval;
+
+   surf->SwapInterval = interval;
+
+   return EGL_TRUE;
 }
 
 static inline EGLBoolean

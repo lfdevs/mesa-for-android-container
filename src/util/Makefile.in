@@ -132,7 +132,7 @@ CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 am__DEPENDENCIES_1 =
 libmesautil_la_DEPENDENCIES = $(am__DEPENDENCIES_1) \
-	$(am__DEPENDENCIES_1)
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
 am__dirstamp = $(am__leading_dot)dirstamp
 am__objects_1 = libmesautil_la-bitscan.lo libmesautil_la-build_id.lo \
 	libmesautil_la-crc32.lo libmesautil_la-debug.lo \
@@ -156,7 +156,7 @@ roundeven_test_OBJECTS = roundeven_test.$(OBJEXT)
 roundeven_test_DEPENDENCIES =
 u_atomic_test_SOURCES = u_atomic_test.c
 u_atomic_test_OBJECTS = u_atomic_test.$(OBJEXT)
-u_atomic_test_LDADD = $(LDADD)
+u_atomic_test_DEPENDENCIES = libmesautil.la
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -561,6 +561,7 @@ LD_NO_UNDEFINED = @LD_NO_UNDEFINED@
 LEX = @LEX@
 LEXLIB = @LEXLIB@
 LEX_OUTPUT_ROOT = @LEX_OUTPUT_ROOT@
+LIBATOMIC_LIBS = @LIBATOMIC_LIBS@
 LIBCLC_INCLUDEDIR = @LIBCLC_INCLUDEDIR@
 LIBCLC_LIBEXECDIR = @LIBCLC_LIBEXECDIR@
 LIBDRM_CFLAGS = @LIBDRM_CFLAGS@
@@ -746,6 +747,7 @@ pdfdir = @pdfdir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
+runstatedir = @runstatedir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
@@ -838,8 +840,10 @@ libmesautil_la_SOURCES = \
 
 libmesautil_la_LIBADD = \
 	$(CLOCK_LIB) \
-	$(ZLIB_LIBS)
+	$(ZLIB_LIBS) \
+	$(LIBATOMIC_LIBS)
 
+u_atomic_test_LDADD = libmesautil.la
 roundeven_test_LDADD = -lm
 TESTS = $(check_PROGRAMS)
 BUILT_SOURCES = $(MESA_UTIL_GENERATED_FILES)

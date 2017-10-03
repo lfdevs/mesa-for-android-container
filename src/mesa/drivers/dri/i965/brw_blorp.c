@@ -133,6 +133,8 @@ blorp_surf_for_miptree(struct brw_context *brw,
                        unsigned start_layer, unsigned num_layers,
                        struct isl_surf tmp_surfs[1])
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+
    if (mt->surf.msaa_layout == ISL_MSAA_LAYOUT_ARRAY) {
       const unsigned num_samples = mt->surf.samples;
       for (unsigned i = 0; i < num_layers; i++) {
@@ -162,6 +164,10 @@ blorp_surf_for_miptree(struct brw_context *brw,
       aux_surf = &mt->mcs_buf->surf;
    else if (mt->hiz_buf)
       aux_surf = &mt->hiz_buf->surf;
+
+   if (mt->format == MESA_FORMAT_S_UINT8 && is_render_target &&
+       devinfo->gen <= 7)
+      mt->r8stencil_needs_update = true;
 
    if (surf->aux_usage == ISL_AUX_USAGE_HIZ &&
        !intel_miptree_level_has_hiz(mt, *level))

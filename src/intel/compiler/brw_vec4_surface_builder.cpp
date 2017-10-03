@@ -212,10 +212,15 @@ namespace brw {
          const unsigned size = (src0.file != BAD_FILE) + (src1.file != BAD_FILE);
          const dst_reg srcs = bld.vgrf(BRW_REGISTER_TYPE_UD);
 
-         if (size >= 1)
-            bld.MOV(writemask(srcs, WRITEMASK_X), src0);
-         if (size >= 2)
-            bld.MOV(writemask(srcs, WRITEMASK_Y), src1);
+         if (size >= 1) {
+            bld.MOV(writemask(srcs, WRITEMASK_X),
+                    swizzle(src0, BRW_SWIZZLE_XXXX));
+         }
+
+         if (size >= 2) {
+            bld.MOV(writemask(srcs, WRITEMASK_Y),
+                    swizzle(src1, BRW_SWIZZLE_XXXX));
+         }
 
          return emit_send(bld, SHADER_OPCODE_UNTYPED_ATOMIC, src_reg(),
                           emit_insert(bld, addr, dims, has_simd4x2),

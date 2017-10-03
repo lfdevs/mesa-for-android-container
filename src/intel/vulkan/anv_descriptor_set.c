@@ -764,7 +764,7 @@ void anv_UpdateDescriptorSets(
 
    for (uint32_t i = 0; i < descriptorCopyCount; i++) {
       const VkCopyDescriptorSet *copy = &pDescriptorCopies[i];
-      ANV_FROM_HANDLE(anv_descriptor_set, src, copy->dstSet);
+      ANV_FROM_HANDLE(anv_descriptor_set, src, copy->srcSet);
       ANV_FROM_HANDLE(anv_descriptor_set, dst, copy->dstSet);
 
       const struct anv_descriptor_set_binding_layout *src_layout =

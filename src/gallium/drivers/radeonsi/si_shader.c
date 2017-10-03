@@ -175,20 +175,6 @@ unsigned si_shader_io_get_unique_index(unsigned semantic_name, unsigned index)
 }
 
 /**
- * Helper function that builds an LLVM IR PHI node and immediately adds
- * incoming edges.
- */
-static LLVMValueRef
-build_phi(struct ac_llvm_context *ctx, LLVMTypeRef type,
-	  unsigned count_incoming, LLVMValueRef *values,
-	  LLVMBasicBlockRef *blocks)
-{
-	LLVMValueRef phi = LLVMBuildPhi(ctx->builder, type, "");
-	LLVMAddIncoming(phi, values, blocks, count_incoming);
-	return phi;
-}
-
-/**
  * Get the value of a shader input parameter and extract a bitfield.
  */
 static LLVMValueRef unpack_param(struct si_shader_context *ctx,
@@ -2732,15 +2718,15 @@ static void si_llvm_emit_tcs_epilogue(struct lp_build_tgsi_context *bld_base)
 
 		values[0] = rel_patch_id;
 		values[1] = LLVMGetUndef(ctx->i32);
-		rel_patch_id = build_phi(&ctx->ac, ctx->i32, 2, values, blocks);
+		rel_patch_id = ac_build_phi(&ctx->ac, ctx->i32, 2, values, blocks);
 
 		values[0] = tf_lds_offset;
 		values[1] = LLVMGetUndef(ctx->i32);
-		tf_lds_offset = build_phi(&ctx->ac, ctx->i32, 2, values, blocks);
+		tf_lds_offset = ac_build_phi(&ctx->ac, ctx->i32, 2, values, blocks);
 
 		values[0] = invocation_id;
 		values[1] = ctx->i32_1; /* cause the epilog to skip threads */
-		invocation_id = build_phi(&ctx->ac, ctx->i32, 2, values, blocks);
+		invocation_id = ac_build_phi(&ctx->ac, ctx->i32, 2, values, blocks);
 	}
 
 	/* Return epilog parameters from this function. */

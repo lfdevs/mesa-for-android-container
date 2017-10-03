@@ -29,7 +29,7 @@
 // Generation Command Line:
 //  ./rasterizer/codegen/gen_llvm_ir_macros.py
 //    --input
-//    /usr/local/include/llvm/IR/IRBuilder.h
+//    /usr/lib/llvm-3.9/include/llvm/IR/IRBuilder.h
 //    --output
 //    rasterizer/jitter
 //    --gen_h
@@ -499,21 +499,6 @@ LoadInst* ALIGNED_LOAD(Value *Ptr, unsigned Align, bool isVolatile, const Twine 
 StoreInst* ALIGNED_STORE(Value *Val, Value *Ptr, unsigned Align, bool isVolatile = false)
 {
     return IRB()->CreateAlignedStore(Val, Ptr, Align, isVolatile);
-}
-
-FenceInst* FENCE(AtomicOrdering Ordering, SynchronizationScope SynchScope = CrossThread, const Twine &Name = "")
-{
-    return IRB()->CreateFence(Ordering, SynchScope, Name);
-}
-
-AtomicCmpXchgInst* ATOMIC_CMP_XCHG(Value *Ptr, Value *Cmp, Value *New, AtomicOrdering SuccessOrdering, AtomicOrdering FailureOrdering, SynchronizationScope SynchScope = CrossThread)
-{
-    return IRB()->CreateAtomicCmpXchg(Ptr, Cmp, New, SuccessOrdering, FailureOrdering, SynchScope);
-}
-
-AtomicRMWInst* ATOMIC_RMW(AtomicRMWInst::BinOp Op, Value *Ptr, Value *Val, AtomicOrdering Ordering, SynchronizationScope SynchScope = CrossThread)
-{
-    return IRB()->CreateAtomicRMW(Op, Ptr, Val, Ordering, SynchScope);
 }
 
 Value* GEPA(Value *Ptr, ArrayRef<Value *> IdxList, const Twine &Name = "")

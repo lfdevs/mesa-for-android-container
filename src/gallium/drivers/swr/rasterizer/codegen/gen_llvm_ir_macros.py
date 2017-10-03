@@ -139,6 +139,14 @@ def parse_ir_builder(input_file):
 
                     ignore = False
 
+                    # The following functions need to be ignored in openswr.
+                    # API change in llvm-5.0 breaks baked autogen files
+                    if (
+                        (func_name == 'CreateFence' or
+                         func_name == 'CreateAtomicCmpXchg' or
+                         func_name == 'CreateAtomicRMW')):
+                        ignore = True
+
                     # The following functions need to be ignored.
                     if (func_name == 'CreateInsertNUWNSWBinOp' or
                         func_name == 'CreateMaskedIntrinsic' or

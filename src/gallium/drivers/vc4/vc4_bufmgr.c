@@ -123,6 +123,8 @@ vc4_bo_from_cache(struct vc4_screen *screen, uint32_t size, const char *name)
 struct vc4_bo *
 vc4_bo_alloc(struct vc4_screen *screen, uint32_t size, const char *name)
 {
+        bool cleared_and_retried = false;
+        struct drm_vc4_create_bo create;
         struct vc4_bo *bo;
         int ret;
 
@@ -149,12 +151,8 @@ vc4_bo_alloc(struct vc4_screen *screen, uint32_t size, const char *name)
         bo->private = true;
 
  retry:
-        ;
-
-        bool cleared_and_retried = false;
-        struct drm_vc4_create_bo create = {
-                .size = size
-        };
+        memset(&create, 0, sizeof(create));
+        create.size = size;
 
         ret = vc4_ioctl(screen->fd, DRM_IOCTL_VC4_CREATE_BO, &create);
         bo->handle = create.handle;

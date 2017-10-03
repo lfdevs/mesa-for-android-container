@@ -45,9 +45,12 @@
  * The caller is responsible for initializing ctx::module and ctx::builder.
  */
 void
-ac_llvm_context_init(struct ac_llvm_context *ctx, LLVMContextRef context)
+ac_llvm_context_init(struct ac_llvm_context *ctx, LLVMContextRef context,
+		     enum chip_class chip_class)
 {
 	LLVMValueRef args[1];
+
+	ctx->chip_class = chip_class;
 
 	ctx->context = context;
 	ctx->module = NULL;
@@ -174,6 +177,20 @@ void ac_build_type_name_for_intr(LLVMTypeRef type, char *buf, unsigned bufsize)
 		snprintf(buf, bufsize, "f64");
 		break;
 	}
+}
+
+/**
+ * Helper function that builds an LLVM IR PHI node and immediately adds
+ * incoming edges.
+ */
+LLVMValueRef
+ac_build_phi(struct ac_llvm_context *ctx, LLVMTypeRef type,
+	     unsigned count_incoming, LLVMValueRef *values,
+	     LLVMBasicBlockRef *blocks)
+{
+	LLVMValueRef phi = LLVMBuildPhi(ctx->builder, type, "");
+	LLVMAddIncoming(phi, values, blocks, count_incoming);
+	return phi;
 }
 
 LLVMValueRef
@@ -312,7 +329,7 @@ static void build_cube_select(LLVMBuilderRef builder,
 
 void
 ac_prepare_cube_coords(struct ac_llvm_context *ctx,
-		       bool is_deriv, bool is_array,
+		       bool is_deriv, bool is_array, bool is_lod,
 		       LLVMValueRef *coords_arg,
 		       LLVMValueRef *derivs_arg)
 {
@@ -321,6 +338,38 @@ ac_prepare_cube_coords(struct ac_llvm_context *ctx,
 	struct cube_selection_coords selcoords;
 	LLVMValueRef coords[3];
 	LLVMValueRef invma;
+
+	if (is_array && !is_lod) {
+		LLVMValueRef tmp = coords_arg[3];
+		tmp = ac_build_intrinsic(ctx, "llvm.rint.f32", ctx->f32, &tmp, 1, 0);
+
+		/* Section 8.9 (Texture Functions) of the GLSL 4.50 spec says:
+		 *
+		 *    "For Array forms, the array layer used will be
+		 *
+		 *       max(0, min(d−1, floor(layer+0.5)))
+		 *
+		 *     where d is the depth of the texture array and layer
+		 *     comes from the component indicated in the tables below.
+		 *     Workaroudn for an issue where the layer is taken from a
+		 *     helper invocation which happens to fall on a different
+		 *     layer due to extrapolation."
+		 *
+		 * VI and earlier attempt to implement this in hardware by
+		 * clamping the value of coords[2] = (8 * layer) + face.
+		 * Unfortunately, this means that the we end up with the wrong
+		 * face when clamping occurs.
+		 *
+		 * Clamp the layer earlier to work around the issue.
+		 */
+		if (ctx->chip_class <= VI) {
+			LLVMValueRef ge0;
+			ge0 = LLVMBuildFCmp(builder, LLVMRealOGE, tmp, ctx->f32_0, "");
+			tmp = LLVMBuildSelect(builder, ge0, tmp, ctx->f32_0, "");
+		}
+
+		coords_arg[3] = tmp;
+	}
 
 	build_cube_intrinsic(ctx, coords_arg, &selcoords);
 

@@ -1,3 +1,9 @@
+mesa (17.2.2-1) unstable; urgency=medium
+
+  * New upstream bugfix release.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Tue, 03 Oct 2017 14:20:47 +0300
+
 mesa (17.2.1-2) unstable; urgency=medium
 
   * Cherry-pick 2ef7f23820a (configure: check if -latomic is needed for

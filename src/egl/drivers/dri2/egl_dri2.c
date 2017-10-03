@@ -629,6 +629,18 @@ dri2_setup_screen(_EGLDisplay *disp)
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
    unsigned int api_mask;
 
+   /*
+    * EGL 1.5 specification defines the default value to 1. Moreover,
+    * eglSwapInterval() is required to clamp requested value to the supported
+    * range. Since the default value is implicitly assumed to be supported,
+    * use it as both minimum and maximum for the platforms that do not allow
+    * changing the interval. Platforms, which allow it (e.g. x11, wayland)
+    * override these values already.
+    */
+   dri2_dpy->min_swap_interval = 1;
+   dri2_dpy->max_swap_interval = 1;
+   dri2_dpy->default_swap_interval = 1;
+
    if (dri2_dpy->image_driver) {
       api_mask = dri2_dpy->image_driver->getAPIMask(dri2_dpy->dri_screen);
    } else if (dri2_dpy->dri2) {

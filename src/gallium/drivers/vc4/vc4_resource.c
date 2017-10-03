@@ -373,7 +373,6 @@ vc4_resource_destroy(struct pipe_screen *pscreen,
 {
         struct vc4_screen *screen = vc4_screen(pscreen);
         struct vc4_resource *rsc = vc4_resource(prsc);
-        pipe_resource_reference(&rsc->shadow_parent, NULL);
         vc4_bo_unreference(&rsc->bo);
 
         if (rsc->scanout)
@@ -1078,19 +1077,21 @@ vc4_flush_resource(struct pipe_context *pctx, struct pipe_resource *resource)
 
 void
 vc4_update_shadow_baselevel_texture(struct pipe_context *pctx,
-                                    struct pipe_sampler_view *view)
+                                    struct pipe_sampler_view *pview)
 {
+        struct vc4_sampler_view *view = vc4_sampler_view(pview);
         struct vc4_resource *shadow = vc4_resource(view->texture);
-        struct vc4_resource *orig = vc4_resource(shadow->shadow_parent);
-        assert(orig);
+        struct vc4_resource *orig = vc4_resource(pview->texture);
+
+        assert(view->texture != pview->texture);
 
         if (shadow->writes == orig->writes && orig->bo->private)
                 return;
 
         perf_debug("Updating %dx%d@%d shadow texture due to %s\n",
                    orig->base.width0, orig->base.height0,
-                   view->u.tex.first_level,
-                   view->u.tex.first_level ? "base level" : "raster layout");
+                   pview->u.tex.first_level,
+                   pview->u.tex.first_level ? "base level" : "raster layout");
 
         for (int i = 0; i <= shadow->base.last_level; i++) {
                 unsigned width = u_minify(shadow->base.width0, i);
@@ -1111,7 +1112,7 @@ vc4_update_shadow_baselevel_texture(struct pipe_context *pctx,
                         },
                         .src = {
                                 .resource = &orig->base,
-                                .level = view->u.tex.first_level + i,
+                                .level = pview->u.tex.first_level + i,
                                 .box = {
                                         .x = 0,
                                         .y = 0,

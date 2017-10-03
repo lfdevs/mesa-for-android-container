@@ -28,6 +28,8 @@
 #include <stdbool.h>
 #include <llvm-c/TargetMachine.h>
 
+#include "amd_family.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -61,10 +63,13 @@ struct ac_llvm_context {
 	unsigned fpmath_md_kind;
 	LLVMValueRef fpmath_md_2p5_ulp;
 	LLVMValueRef empty_md;
+
+	enum chip_class chip_class;
 };
 
 void
-ac_llvm_context_init(struct ac_llvm_context *ctx, LLVMContextRef context);
+ac_llvm_context_init(struct ac_llvm_context *ctx, LLVMContextRef context,
+		     enum chip_class chip_class);
 
 LLVMValueRef
 ac_build_intrinsic(struct ac_llvm_context *ctx, const char *name,
@@ -72,6 +77,11 @@ ac_build_intrinsic(struct ac_llvm_context *ctx, const char *name,
 		   unsigned param_count, unsigned attrib_mask);
 
 void ac_build_type_name_for_intr(LLVMTypeRef type, char *buf, unsigned bufsize);
+
+LLVMValueRef
+ac_build_phi(struct ac_llvm_context *ctx, LLVMTypeRef type,
+	     unsigned count_incoming, LLVMValueRef *values,
+	     LLVMBasicBlockRef *blocks);
 
 LLVMValueRef
 ac_build_gather_values_extended(struct ac_llvm_context *ctx,
@@ -91,7 +101,7 @@ ac_build_fdiv(struct ac_llvm_context *ctx,
 
 void
 ac_prepare_cube_coords(struct ac_llvm_context *ctx,
-		       bool is_deriv, bool is_array,
+		       bool is_deriv, bool is_array, bool is_lod,
 		       LLVMValueRef *coords_arg,
 		       LLVMValueRef *derivs_arg);
 

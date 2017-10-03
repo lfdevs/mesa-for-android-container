@@ -1278,6 +1278,7 @@ dri2_x11_setup_swap_interval(struct dri2_egl_display *dri2_dpy)
     */
    dri2_dpy->min_swap_interval = 0;
    dri2_dpy->max_swap_interval = 0;
+   dri2_dpy->default_swap_interval = 0;
 
    if (!dri2_dpy->swap_available)
       return;
