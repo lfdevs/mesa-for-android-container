@@ -1300,7 +1300,7 @@ anv_bo_cache_import(struct anv_device *device,
        * this sort of attack but only if it can trust the buffer size.
        */
       off_t import_size = lseek(fd, 0, SEEK_END);
-      if (import_size == (off_t)-1 || import_size != size) {
+      if (import_size == (off_t)-1 || import_size < size) {
          anv_gem_close(device, gem_handle);
          pthread_mutex_unlock(&cache->mutex);
          return vk_error(VK_ERROR_INVALID_EXTERNAL_HANDLE_KHR);

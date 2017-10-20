@@ -606,7 +606,7 @@ gallivm_compile_module(struct gallivm_state *gallivm)
       LLVMWriteBitcodeToFile(gallivm->module, filename);
       debug_printf("%s written\n", filename);
       debug_printf("Invoke as \"llc %s%s -o - %s\"\n",
-                   (HAVE_LLVM >= 0x0305) ? "[-mcpu=<-mcpu option] " : "",
+                   (HAVE_LLVM >= 0x0305) ? "[-mcpu=<-mcpu option>] " : "",
                    "[-mattr=<-mattr option(s)>]",
                    filename);
    }

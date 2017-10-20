@@ -120,11 +120,13 @@ anv_cmd_state_reset(struct anv_cmd_buffer *cmd_buffer)
    cmd_buffer->batch.status = VK_SUCCESS;
 
    memset(&state->descriptors, 0, sizeof(state->descriptors));
+   for (uint32_t i = 0; i < ARRAY_SIZE(state->push_descriptors); i++) {
+      vk_free(&cmd_buffer->pool->alloc, state->push_descriptors[i]);
+      state->push_descriptors[i] = NULL;
+   }
    for (uint32_t i = 0; i < MESA_SHADER_STAGES; i++) {
-      if (state->push_constants[i] != NULL) {
-         vk_free(&cmd_buffer->pool->alloc, state->push_constants[i]);
-         state->push_constants[i] = NULL;
-      }
+      vk_free(&cmd_buffer->pool->alloc, state->push_constants[i]);
+      state->push_constants[i] = NULL;
    }
    memset(state->binding_tables, 0, sizeof(state->binding_tables));
    memset(state->samplers, 0, sizeof(state->samplers));
@@ -148,10 +150,8 @@ anv_cmd_state_reset(struct anv_cmd_buffer *cmd_buffer)
    state->pma_fix_enabled = false;
    state->hiz_enabled = false;
 
-   if (state->attachments != NULL) {
-      vk_free(&cmd_buffer->pool->alloc, state->attachments);
-      state->attachments = NULL;
-   }
+   vk_free(&cmd_buffer->pool->alloc, state->attachments);
+   state->attachments = NULL;
 
    state->gen7.index_buffer = NULL;
 }
@@ -216,8 +216,8 @@ static VkResult anv_create_cmd_buffer(
    anv_state_stream_init(&cmd_buffer->dynamic_state_stream,
                          &device->dynamic_state_pool, 16384);
 
-   memset(&cmd_buffer->state.push_descriptor, 0,
-          sizeof(cmd_buffer->state.push_descriptor));
+   memset(cmd_buffer->state.push_descriptors, 0,
+          sizeof(cmd_buffer->state.push_descriptors));
 
    if (pool) {
       list_addtail(&cmd_buffer->pool_link, &pool->cmd_buffers);
@@ -276,7 +276,8 @@ anv_cmd_buffer_destroy(struct anv_cmd_buffer *cmd_buffer)
    anv_state_stream_finish(&cmd_buffer->surface_state_stream);
    anv_state_stream_finish(&cmd_buffer->dynamic_state_stream);
 
-   vk_free(&cmd_buffer->pool->alloc, cmd_buffer->state.attachments);
+   anv_cmd_state_reset(cmd_buffer);
+
    vk_free(&cmd_buffer->pool->alloc, cmd_buffer);
 }
 
@@ -834,6 +835,26 @@ anv_cmd_buffer_get_depth_stencil_view(const struct anv_cmd_buffer *cmd_buffer)
    return iview;
 }
 
+static VkResult
+anv_cmd_buffer_ensure_push_descriptor_set(struct anv_cmd_buffer *cmd_buffer,
+                                          uint32_t set)
+{
+   struct anv_push_descriptor_set **push_set =
+      &cmd_buffer->state.push_descriptors[set];
+
+   if (*push_set == NULL) {
+      *push_set = vk_alloc(&cmd_buffer->pool->alloc,
+                           sizeof(struct anv_push_descriptor_set), 8,
+                           VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+      if (*push_set == NULL) {
+         anv_batch_set_error(&cmd_buffer->batch, VK_ERROR_OUT_OF_HOST_MEMORY);
+         return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
+      }
+   }
+
+   return VK_SUCCESS;
+}
+
 void anv_CmdPushDescriptorSetKHR(
     VkCommandBuffer commandBuffer,
     VkPipelineBindPoint pipelineBindPoint,
@@ -851,12 +872,17 @@ void anv_CmdPushDescriptorSetKHR(
 
    const struct anv_descriptor_set_layout *set_layout =
       layout->set[_set].layout;
-   struct anv_descriptor_set *set = &cmd_buffer->state.push_descriptor.set;
+
+   if (anv_cmd_buffer_ensure_push_descriptor_set(cmd_buffer, _set) != VK_SUCCESS)
+      return;
+   struct anv_push_descriptor_set *push_set =
+      cmd_buffer->state.push_descriptors[_set];
+   struct anv_descriptor_set *set = &push_set->set;
 
    set->layout = set_layout;
    set->size = anv_descriptor_set_layout_size(set_layout);
    set->buffer_count = set_layout->buffer_count;
-   set->buffer_views = cmd_buffer->state.push_descriptor.buffer_views;
+   set->buffer_views = push_set->buffer_views;
 
    /* Go through the user supplied descriptors. */
    for (uint32_t i = 0; i < descriptorWriteCount; i++) {
@@ -937,12 +963,17 @@ void anv_CmdPushDescriptorSetWithTemplateKHR(
 
    const struct anv_descriptor_set_layout *set_layout =
       layout->set[_set].layout;
-   struct anv_descriptor_set *set = &cmd_buffer->state.push_descriptor.set;
+
+   if (anv_cmd_buffer_ensure_push_descriptor_set(cmd_buffer, _set) != VK_SUCCESS)
+      return;
+   struct anv_push_descriptor_set *push_set =
+      cmd_buffer->state.push_descriptors[_set];
+   struct anv_descriptor_set *set = &push_set->set;
 
    set->layout = set_layout;
    set->size = anv_descriptor_set_layout_size(set_layout);
    set->buffer_count = set_layout->buffer_count;
-   set->buffer_views = cmd_buffer->state.push_descriptor.buffer_views;
+   set->buffer_views = push_set->buffer_views;
 
    anv_descriptor_set_write_template(set,
                                      cmd_buffer->device,

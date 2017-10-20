@@ -347,7 +347,8 @@ static INLINE std::string GetEnv(const std::string& variableName)
     output.resize(valueSize - 1); // valueSize includes null, output.resize() does not
     GetEnvironmentVariableA(variableName.c_str(), &output[0], valueSize);
 #else
-    output = getenv(variableName.c_str());
+    char *env = getenv(variableName.c_str());
+    output = env ? env : "";
 #endif
 
     return output;

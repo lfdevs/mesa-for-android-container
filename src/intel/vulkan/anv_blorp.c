@@ -533,8 +533,8 @@ isl_format_for_size(unsigned size_B)
    switch (size_B) {
    case 1:  return ISL_FORMAT_R8_UINT;
    case 2:  return ISL_FORMAT_R8G8_UINT;
-   case 4:  return ISL_FORMAT_R8G8B8A8_UINT;
-   case 8:  return ISL_FORMAT_R16G16B16A16_UINT;
+   case 4:  return ISL_FORMAT_R32_UINT;
+   case 8:  return ISL_FORMAT_R32G32_UINT;
    case 16: return ISL_FORMAT_R32G32B32A32_UINT;
    default:
       unreachable("Not a power-of-two format size");

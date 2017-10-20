@@ -129,6 +129,31 @@ opt_cmod_propagation_local(bblock_t *block)
                 scan_inst->opcode == BRW_OPCODE_CMPN)
                break;
 
+            /* From the Sky Lake PRM Vol. 7 "Assigning Conditional Mods":
+             *
+             *    * Note that the [post condition signal] bits generated at
+             *      the output of a compute are before the .sat.
+             */
+            if (scan_inst->saturate)
+               break;
+
+            /* From the Sky Lake PRM, Vol 2a, "Multiply":
+             *
+             *    "When multiplying integer data types, if one of the sources
+             *    is a DW, the resulting full precision data is stored in
+             *    the accumulator. However, if the destination data type is
+             *    either W or DW, the low bits of the result are written to
+             *    the destination register and the remaining high bits are
+             *    discarded. This results in undefined Overflow and Sign
+             *    flags. Therefore, conditional modifiers and saturation
+             *    (.sat) cannot be used in this case.
+             *
+             * We just disallow cmod propagation on all integer multiplies.
+             */
+            if (!brw_reg_type_is_floating_point(scan_inst->dst.type) &&
+                scan_inst->opcode == BRW_OPCODE_MUL)
+               break;
+
             /* Otherwise, try propagating the conditional. */
             enum brw_conditional_mod cond =
                inst->src[0].negate ? brw_swap_cmod(inst->conditional_mod)

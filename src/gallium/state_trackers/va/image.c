@@ -487,10 +487,13 @@ vlVaPutImage(VADriverContextP ctx, VASurfaceID surface, VAImageID image,
          ((format != PIPE_FORMAT_YV12) || (surf->buffer->buffer_format != PIPE_FORMAT_NV12)) &&
          ((format != PIPE_FORMAT_IYUV) || (surf->buffer->buffer_format != PIPE_FORMAT_NV12))) {
       struct pipe_video_buffer *tmp_buf;
-      struct pipe_video_buffer templat = surf->templat;
 
-      templat.buffer_format = format;
-      tmp_buf = drv->pipe->create_video_buffer(drv->pipe, &templat);
+      surf->templat.buffer_format = format;
+      if (format == PIPE_FORMAT_YUYV || format == PIPE_FORMAT_UYVY ||
+          format == PIPE_FORMAT_B8G8R8A8_UNORM || format == PIPE_FORMAT_B8G8R8X8_UNORM ||
+          format == PIPE_FORMAT_R8G8B8A8_UNORM || format == PIPE_FORMAT_R8G8B8X8_UNORM)
+         surf->templat.interlaced = false;
+      tmp_buf = drv->pipe->create_video_buffer(drv->pipe, &surf->templat);
 
       if (!tmp_buf) {
          mtx_unlock(&drv->mutex);
@@ -499,7 +502,6 @@ vlVaPutImage(VADriverContextP ctx, VASurfaceID surface, VAImageID image,
 
       surf->buffer->destroy(surf->buffer);
       surf->buffer = tmp_buf;
-      surf->templat.buffer_format = format;
    }
 
    views = surf->buffer->get_sampler_view_planes(surf->buffer);

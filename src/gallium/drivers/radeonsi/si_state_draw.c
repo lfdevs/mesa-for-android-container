@@ -535,7 +535,7 @@ static unsigned si_get_ia_multi_vgt_param(struct si_context *sctx,
 static void si_emit_rasterizer_prim_state(struct si_context *sctx)
 {
 	struct radeon_winsys_cs *cs = sctx->b.gfx.cs;
-	enum pipe_prim_type rast_prim = sctx->current_rast_prim;
+	enum pipe_prim_type rast_prim = sctx->b.current_rast_prim;
 	struct si_state_rasterizer *rs = sctx->emitted.named.rasterizer;
 
 	/* Skip this if not rendering lines. */
@@ -585,7 +585,7 @@ static void si_emit_draw_registers(struct si_context *sctx,
 {
 	struct radeon_winsys_cs *cs = sctx->b.gfx.cs;
 	unsigned prim = si_conv_pipe_prim(info->mode);
-	unsigned gs_out_prim = si_conv_prim_to_gs_out(sctx->current_rast_prim);
+	unsigned gs_out_prim = si_conv_prim_to_gs_out(sctx->b.current_rast_prim);
 	unsigned ia_multi_vgt_param;
 
 	ia_multi_vgt_param = si_get_ia_multi_vgt_param(sctx, info, num_patches);
@@ -1225,13 +1225,23 @@ void si_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info *info)
 	 * current_rast_prim for this draw_vbo call. */
 	if (sctx->gs_shader.cso)
 		rast_prim = sctx->gs_shader.cso->gs_output_prim;
-	else if (sctx->tes_shader.cso)
-		rast_prim = sctx->tes_shader.cso->info.properties[TGSI_PROPERTY_TES_PRIM_MODE];
-	else
+	else if (sctx->tes_shader.cso) {
+		if (sctx->tes_shader.cso->info.properties[TGSI_PROPERTY_TES_POINT_MODE])
+			rast_prim = PIPE_PRIM_POINTS;
+		else
+			rast_prim = sctx->tes_shader.cso->info.properties[TGSI_PROPERTY_TES_PRIM_MODE];
+	} else
 		rast_prim = info->mode;
 
-	if (rast_prim != sctx->current_rast_prim) {
-		sctx->current_rast_prim = rast_prim;
+	if (rast_prim != sctx->b.current_rast_prim) {
+		bool old_is_poly = sctx->b.current_rast_prim >= PIPE_PRIM_TRIANGLES;
+		bool new_is_poly = rast_prim >= PIPE_PRIM_TRIANGLES;
+		if (old_is_poly != new_is_poly) {
+			sctx->b.scissors.dirty_mask = (1 << R600_MAX_VIEWPORTS) - 1;
+			si_set_atom_dirty(sctx, &sctx->b.scissors.atom, true);
+		}
+
+		sctx->b.current_rast_prim = rast_prim;
 		sctx->do_update_shaders = true;
 	}
 

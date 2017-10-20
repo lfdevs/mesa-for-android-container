@@ -3,7 +3,7 @@ Import('*')
 env = drienv.Clone()
 
 if env['suncc']:
-    print 'warning: not building dri-vmwgfx'
+    print('warning: not building dri-vmwgfx')
     Return()
 
 env.Append(CPPPATH = [

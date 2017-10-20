@@ -84,13 +84,12 @@ nvc0_vertex_configure_translate(struct nvc0_context *nvc0, int32_t index_bias)
 
 static inline void
 nvc0_push_map_idxbuf(struct push_context *ctx, struct nvc0_context *nvc0,
-                     const struct pipe_draw_info *info,
-                     unsigned offset)
+                     const struct pipe_draw_info *info)
 {
    if (!info->has_user_indices) {
       struct nv04_resource *buf = nv04_resource(info->index.resource);
-      ctx->idxbuf = nouveau_resource_map_offset(&nvc0->base,
-         buf, offset, NOUVEAU_BO_RD);
+      ctx->idxbuf = nouveau_resource_map_offset(
+            &nvc0->base, buf, 0, NOUVEAU_BO_RD);
    } else {
       ctx->idxbuf = info->index.user;
    }
@@ -509,7 +508,7 @@ nvc0_push_vbo(struct nvc0_context *nvc0, const struct pipe_draw_info *info)
    nvc0->state.prim_restart = info->primitive_restart;
 
    if (info->index_size) {
-      nvc0_push_map_idxbuf(&ctx, nvc0, info, info->start * info->index_size);
+      nvc0_push_map_idxbuf(&ctx, nvc0, info);
       index_size = info->index_size;
    } else {
       if (unlikely(info->count_from_stream_output)) {

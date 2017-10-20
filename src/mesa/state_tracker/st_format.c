@@ -2373,9 +2373,10 @@ st_QueryInternalFormat(struct gl_context *ctx, GLenum target,
       break;
 
    case GL_NUM_SAMPLE_COUNTS: {
+      int samples[16];
       size_t num_samples;
       num_samples = st_QuerySamplesForFormat(ctx, target, internalFormat,
-                                             params);
+                                             samples);
       params[0] = (GLint) num_samples;
       break;
    }

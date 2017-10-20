@@ -55,6 +55,12 @@ struct blob {
 
    /** The number of bytes that have actual data written to them. */
    size_t size;
+
+   /**
+    * True if we've ever failed to realloc or if we go pas the end of a fixed
+    * allocation blob.
+    */
+   bool out_of_memory;
 };
 
 /* When done reading, the caller can ensure that everything was consumed by

@@ -1187,8 +1187,11 @@ r600_texture_create_object(struct pipe_screen *screen,
 		if (rscreen->chip_class >= GFX9 &&
 		    base->format == PIPE_FORMAT_Z16_UNORM)
 			rtex->db_render_format = base->format;
-		else
+		else {
 			rtex->db_render_format = PIPE_FORMAT_Z32_FLOAT;
+			rtex->upgraded_depth = base->format != PIPE_FORMAT_Z32_FLOAT &&
+					       base->format != PIPE_FORMAT_Z32_FLOAT_S8X24_UINT;
+		}
 	} else {
 		rtex->db_render_format = base->format;
 	}

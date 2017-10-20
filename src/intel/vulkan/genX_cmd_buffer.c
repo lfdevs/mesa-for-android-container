@@ -2941,9 +2941,10 @@ cmd_buffer_subpass_sync_fast_clear_values(struct anv_cmd_buffer *cmd_buffer)
        * render pass and used in the subpass.
        */
       const uint32_t a = state->subpass->color_attachments[i].attachment;
-      assert(a < state->pass->attachment_count);
       if (a == VK_ATTACHMENT_UNUSED)
          continue;
+
+      assert(a < state->pass->attachment_count);
 
       /* Store some information regarding this attachment. */
       const struct anv_attachment_state *att_state = &state->attachments[a];

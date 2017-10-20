@@ -4,7 +4,7 @@ import distutils.version
 Import('*')
 
 if not env['llvm']:
-    print 'warning: LLVM disabled: not building llvmpipe'
+    print('warning: LLVM disabled: not building llvmpipe')
     Return()
 
 env = env.Clone()

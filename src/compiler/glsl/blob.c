@@ -46,6 +46,9 @@ grow_to_fit(struct blob *blob, size_t additional)
    size_t to_allocate;
    uint8_t *new_data;
 
+   if (blob->out_of_memory)
+      return false;
+
    if (blob->size + additional <= blob->allocated)
       return true;
 
@@ -57,8 +60,10 @@ grow_to_fit(struct blob *blob, size_t additional)
    to_allocate = MAX2(to_allocate, blob->allocated + additional);
 
    new_data = realloc(blob->data, to_allocate);
-   if (new_data == NULL)
+   if (new_data == NULL) {
+      blob->out_of_memory = true;
       return false;
+   }
 
    blob->data = new_data;
    blob->allocated = to_allocate;
@@ -104,6 +109,7 @@ blob_create()
    blob->data = NULL;
    blob->allocated = 0;
    blob->size = 0;
+   blob->out_of_memory = false;
 
    return blob;
 }
@@ -207,6 +213,9 @@ blob_reader_init(struct blob_reader *blob, uint8_t *data, size_t size)
 static bool
 ensure_can_read(struct blob_reader *blob, size_t size)
 {
+   if (blob->overrun)
+      return false;
+
    if (blob->current < blob->end && blob->end - blob->current >= size)
       return true;
 

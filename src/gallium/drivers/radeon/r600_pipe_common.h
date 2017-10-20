@@ -243,6 +243,7 @@ struct r600_texture {
 	float				depth_clear_value;
 	bool				stencil_cleared; /* if it was cleared at least once */
 	uint8_t				stencil_clear_value;
+	bool				upgraded_depth; /* upgraded from unorm to Z32_FLOAT */
 
 	bool				non_disp_tiling; /* R600-Cayman only */
 
@@ -579,6 +580,7 @@ struct r600_common_context {
 
 	/* Additional context states. */
 	unsigned flags; /* flush flags */
+	enum pipe_prim_type		current_rast_prim; /* primitive type after TES, GS */
 
 	/* Queries. */
 	/* Maintain the list of active queries for pausing between IBs. */

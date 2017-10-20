@@ -704,8 +704,9 @@ static uint32_t
 setup_slices(struct fd_resource *rsc, uint32_t alignment, enum pipe_format format)
 {
 	struct pipe_resource *prsc = &rsc->base.b;
+	struct fd_screen *screen = fd_screen(prsc->screen);
 	enum util_format_layout layout = util_format_description(format)->layout;
-	uint32_t pitchalign = fd_screen(prsc->screen)->gmem_alignw;
+	uint32_t pitchalign = screen->gmem_alignw;
 	uint32_t level, size = 0;
 	uint32_t width = prsc->width0;
 	uint32_t height = prsc->height0;
@@ -714,6 +715,9 @@ setup_slices(struct fd_resource *rsc, uint32_t alignment, enum pipe_format forma
 	 * layer (since in fact the layer contains the slices)
 	 */
 	uint32_t layers_in_level = rsc->layer_first ? 1 : prsc->array_size;
+
+	if (is_a5xx(screen) && (rsc->base.b.target >= PIPE_TEXTURE_2D))
+		height = align(height, screen->gmem_alignh);
 
 	for (level = 0; level <= prsc->last_level; level++) {
 		struct fd_resource_slice *slice = fd_resource_slice(rsc, level);

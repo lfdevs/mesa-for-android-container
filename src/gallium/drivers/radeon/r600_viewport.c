@@ -165,6 +165,7 @@ static void r600_emit_guardband(struct r600_common_context *rctx,
 	struct radeon_winsys_cs *cs = rctx->gfx.cs;
 	struct pipe_viewport_state vp;
 	float left, top, right, bottom, max_range, guardband_x, guardband_y;
+	float discard_x, discard_y;
 
 	/* Reconstruct the viewport transformation from the scissor. */
 	vp.translate[0] = (vp_as_scissor->minx + vp_as_scissor->maxx) / 2.0;
@@ -198,6 +199,22 @@ static void r600_emit_guardband(struct r600_common_context *rctx,
 	guardband_x = MIN2(-left, right);
 	guardband_y = MIN2(-top, bottom);
 
+	discard_x = 1.0;
+	discard_y = 1.0;
+
+	if (rctx->current_rast_prim < PIPE_PRIM_TRIANGLES) {
+		/* When rendering wide points or lines, we need to be more
+		 * conservative about when to discard them entirely. Since
+		 * point size can be determined by the VS output, we basically
+		 * disable discard completely completely here.
+		 *
+		 * TODO: This can hurt performance when rendering lines and
+		 * points with fixed size, and could be improved.
+		 */
+		discard_x = guardband_x;
+		discard_y = guardband_y;
+	}
+
 	/* If any of the GB registers is updated, all of them must be updated. */
 	if (rctx->chip_class >= CAYMAN)
 		radeon_set_context_reg_seq(cs, CM_R_028BE8_PA_CL_GB_VERT_CLIP_ADJ, 4);
@@ -205,9 +222,9 @@ static void r600_emit_guardband(struct r600_common_context *rctx,
 		radeon_set_context_reg_seq(cs, R600_R_028C0C_PA_CL_GB_VERT_CLIP_ADJ, 4);
 
 	radeon_emit(cs, fui(guardband_y)); /* R_028BE8_PA_CL_GB_VERT_CLIP_ADJ */
-	radeon_emit(cs, fui(1.0));         /* R_028BEC_PA_CL_GB_VERT_DISC_ADJ */
+	radeon_emit(cs, fui(discard_y));   /* R_028BEC_PA_CL_GB_VERT_DISC_ADJ */
 	radeon_emit(cs, fui(guardband_x)); /* R_028BF0_PA_CL_GB_HORZ_CLIP_ADJ */
-	radeon_emit(cs, fui(1.0));         /* R_028BF4_PA_CL_GB_HORZ_DISC_ADJ */
+	radeon_emit(cs, fui(discard_x));   /* R_028BF4_PA_CL_GB_HORZ_DISC_ADJ */
 }
 
 static void r600_emit_scissors(struct r600_common_context *rctx, struct r600_atom *atom)

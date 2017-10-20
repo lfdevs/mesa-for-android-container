@@ -1119,7 +1119,6 @@ struct anv_push_descriptor_set {
    /* Put this field right behind anv_descriptor_set so it fills up the
     * descriptors[0] field. */
    struct anv_descriptor descriptors[MAX_PUSH_DESCRIPTORS];
-
    struct anv_buffer_view buffer_views[MAX_PUSH_DESCRIPTORS];
 };
 
@@ -1520,7 +1519,7 @@ struct anv_cmd_state {
    struct anv_dynamic_state                     dynamic;
    bool                                         need_query_wa;
 
-   struct anv_push_descriptor_set               push_descriptor;
+   struct anv_push_descriptor_set *             push_descriptors[MAX_SETS];
 
    /**
     * Whether or not the gen8 PMA fix is enabled.  We ensure that, at the top

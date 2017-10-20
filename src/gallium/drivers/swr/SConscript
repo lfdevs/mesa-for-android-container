@@ -8,12 +8,12 @@ if not env['swr']:
     Return()
 
 if not env['llvm']:
-    print 'warning: LLVM disabled: not building swr'
+    print('warning: LLVM disabled: not building swr')
     env['swr'] = False
     Return()
 
 if env['LLVM_VERSION'] < distutils.version.LooseVersion('3.9'):
-    print "warning: swr requires LLVM >= 3.9: not building swr"
+    print("warning: swr requires LLVM >= 3.9: not building swr")
     env['swr'] = False
     Return()
 
@@ -28,7 +28,7 @@ if env['platform'] == 'windows':
 else:
     llvm_config = os.environ.get('LLVM_CONFIG', 'llvm-config')
     llvm_includedir = env.backtick('%s --includedir' % llvm_config).rstrip()
-    print "llvm include dir %s" % llvm_includedir
+    print("llvm include dir %s" % llvm_includedir)
 
 if not env['msvc'] :
     env.Append(CCFLAGS = [

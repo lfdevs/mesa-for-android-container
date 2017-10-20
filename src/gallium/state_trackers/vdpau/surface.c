@@ -350,6 +350,8 @@ vlVdpVideoSurfacePutBitsYCbCr(VdpVideoSurface surface,
 
          /* adjust the template parameters */
          p_surf->templat.buffer_format = nformat;
+         if (nformat == PIPE_FORMAT_YUYV || nformat == PIPE_FORMAT_UYVY)
+            p_surf->templat.interlaced = false;
 
          /* and try to create the video buffer with the new format */
          p_surf->video_buffer = pipe->create_video_buffer(pipe, &p_surf->templat);

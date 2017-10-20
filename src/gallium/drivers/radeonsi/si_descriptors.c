@@ -524,8 +524,13 @@ static void si_set_sampler_view_desc(struct si_context *sctx,
 		/* Disable FMASK and bind sampler state in [12:15]. */
 		memcpy(desc + 8, null_texture_descriptor, 4*4);
 
-		if (sstate)
-			memcpy(desc + 12, sstate->val, 4*4);
+		if (sstate) {
+			if (!is_buffer && rtex->upgraded_depth &&
+			    !sview->is_stencil_sampler)
+				memcpy(desc + 12, sstate->upgraded_depth_val, 4*4);
+			else
+				memcpy(desc + 12, sstate->val, 4*4);
+		}
 	}
 }
 
@@ -952,14 +957,26 @@ static void si_bind_sampler_states(struct pipe_context *ctx,
 		/* If FMASK is bound, don't overwrite it.
 		 * The sampler state will be set after FMASK is unbound.
 		 */
-		if (samplers->views.views[slot] &&
-		    samplers->views.views[slot]->texture &&
-		    samplers->views.views[slot]->texture->target != PIPE_BUFFER &&
-		    ((struct r600_texture*)samplers->views.views[slot]->texture)->fmask.size)
+		struct si_sampler_view *sview =
+			(struct si_sampler_view *)samplers->views.views[slot];
+
+		struct r600_texture *tex = NULL;
+
+		if (sview && sview->base.texture &&
+		    sview->base.texture->target != PIPE_BUFFER)
+			tex = (struct r600_texture *)sview->base.texture;
+
+		if (tex && tex->fmask.size)
 			continue;
 
-		memcpy(desc->list + desc_slot * 16 + 12, sstates[i]->val, 4*4);
+		if (tex && tex->upgraded_depth && !sview->is_stencil_sampler)
+			memcpy(desc->list + desc_slot * 16 + 12,
+			       sstates[i]->upgraded_depth_val, 4*4);
+		else
+			memcpy(desc->list + desc_slot * 16 + 12,
+			       sstates[i]->val, 4*4);
 		desc->dirty_mask |= 1ull << desc_slot;
+
 		sctx->descriptors_dirty |= 1u << si_sampler_and_image_descriptors_idx(shader);
 	}
 }

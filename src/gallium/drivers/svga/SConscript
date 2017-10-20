@@ -5,7 +5,7 @@ env = env.Clone()
 env.MSVC2013Compat()
 
 if env['suncc']:
-	print 'warning: not building svga'
+	print('warning: not building svga')
 	Return()
 
 env.Append(CPPDEFINES = [

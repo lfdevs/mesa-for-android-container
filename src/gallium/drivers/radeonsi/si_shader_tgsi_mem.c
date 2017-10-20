@@ -1393,15 +1393,28 @@ static void tex_fetch_args(
 			z = coords[ref_pos];
 		}
 
-		/* TC-compatible HTILE promotes Z16 and Z24 to Z32_FLOAT,
+		/* Section 8.23.1 (Depth Texture Comparison Mode) of the
+		 * OpenGL 4.5 spec says:
+		 *
+		 *    "If the texture’s internal format indicates a fixed-point
+		 *     depth texture, then D_t and D_ref are clamped to the
+		 *     range [0, 1]; otherwise no clamping is performed."
+		 *
+		 * TC-compatible HTILE promotes Z16 and Z24 to Z32_FLOAT,
 		 * so the depth comparison value isn't clamped for Z16 and
 		 * Z24 anymore. Do it manually here.
-		 *
-		 * It's unnecessary if the original texture format was
-		 * Z32_FLOAT, but we don't know that here.
 		 */
-		if (ctx->screen->b.chip_class >= VI)
-			z = ac_build_clamp(&ctx->ac, z);
+		if (ctx->screen->b.chip_class >= VI) {
+			LLVMValueRef upgraded;
+			LLVMValueRef clamped;
+			upgraded = LLVMBuildExtractElement(gallivm->builder, samp_ptr,
+							   LLVMConstInt(ctx->i32, 3, false), "");
+			upgraded = LLVMBuildLShr(gallivm->builder, upgraded,
+						 LLVMConstInt(ctx->i32, 29, false), "");
+			upgraded = LLVMBuildTrunc(gallivm->builder, upgraded, ctx->i1, "");
+			clamped = ac_build_clamp(&ctx->ac, z);
+			z = LLVMBuildSelect(gallivm->builder, upgraded, clamped, z, "");
+		}
 
 		address[count++] = z;
 	}

@@ -47,7 +47,7 @@ struct wl_drm {
 	char *device_name;
         uint32_t flags;
 
-	struct wayland_drm_callbacks *callbacks;
+	struct wayland_drm_callbacks callbacks;
 
         struct wl_buffer_interface buffer_interface;
 };
@@ -58,7 +58,7 @@ destroy_buffer(struct wl_resource *resource)
 	struct wl_drm_buffer *buffer = resource->data;
 	struct wl_drm *drm = buffer->drm;
 
-	drm->callbacks->release_buffer(drm->user_data, buffer);
+	drm->callbacks.release_buffer(drm->user_data, buffer);
 	free(buffer);
 }
 
@@ -97,7 +97,7 @@ create_buffer(struct wl_client *client, struct wl_resource *resource,
 	buffer->offset[2] = offset2;
 	buffer->stride[2] = stride2;
 
-        drm->callbacks->reference_buffer(drm->user_data, name, fd, buffer);
+        drm->callbacks.reference_buffer(drm->user_data, name, fd, buffer);
 	if (buffer->driver_buffer == NULL) {
 		wl_resource_post_error(resource,
 				       WL_DRM_ERROR_INVALID_NAME,
@@ -189,7 +189,7 @@ drm_authenticate(struct wl_client *client,
 {
 	struct wl_drm *drm = resource->data;
 
-	if (drm->callbacks->authenticate(drm->user_data, id) < 0)
+	if (drm->callbacks.authenticate(drm->user_data, id) < 0)
 		wl_resource_post_error(resource,
 				       WL_DRM_ERROR_AUTHENTICATE_FAIL,
 				       "authenicate failed");
@@ -270,7 +270,7 @@ wayland_drm_init(struct wl_display *display, char *device_name,
 
 	drm->display = display;
 	drm->device_name = strdup(device_name);
-	drm->callbacks = callbacks;
+	drm->callbacks = *callbacks;
 	drm->user_data = user_data;
         drm->flags = flags;
 

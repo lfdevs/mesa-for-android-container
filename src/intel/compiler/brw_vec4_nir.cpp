@@ -2227,6 +2227,15 @@ vec4_visitor::nir_emit_texture(nir_tex_instr *instr)
       }
    }
 
+   /* TXS and TXL require a LOD but not everything we implement using those
+    * two opcodes provides one.  Provide a default LOD of 0.
+    */
+   if ((instr->op == nir_texop_txs ||
+        instr->op == nir_texop_txl) &&
+       lod.file == BAD_FILE) {
+      lod = brw_imm_ud(0u);
+   }
+
    if (instr->op == nir_texop_txf_ms ||
        instr->op == nir_texop_samples_identical) {
       assert(coord_type != NULL);

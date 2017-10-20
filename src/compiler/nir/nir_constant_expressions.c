@@ -11606,7 +11606,7 @@ evaluate_ufind_msb(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
 
             
 dst = -1;
-for (int bit = 31; bit > 0; bit--) {
+for (int bit = 31; bit >= 0; bit--) {
    if ((src0 >> bit) & 1) {
       dst = bit;
       break;

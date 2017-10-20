@@ -279,8 +279,7 @@ nv50_push_vbo(struct nv50_context *nv50, const struct pipe_draw_info *info)
    if (info->index_size) {
       if (!info->has_user_indices) {
          ctx.idxbuf = nouveau_resource_map_offset(&nv50->base,
-            nv04_resource(info->index.resource), info->start * info->index_size,
-            NOUVEAU_BO_RD);
+            nv04_resource(info->index.resource), 0, NOUVEAU_BO_RD);
       } else {
          ctx.idxbuf = info->index.user;
       }

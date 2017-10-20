@@ -1555,7 +1555,7 @@ glsl_to_tgsi_visitor::reladdr_to_temp(ir_instruction *ir,
    if (reg->reladdr2) emit_arl(ir, address_reg2, *reg->reladdr2);
 
    if (*num_reladdr != 1) {
-      st_src_reg temp = get_temp(reg->type == GLSL_TYPE_DOUBLE ? glsl_type::dvec4_type : glsl_type::vec4_type);
+      st_src_reg temp = get_temp(glsl_type::get_instance(reg->type, 4, 1));
 
       emit_asm(ir, TGSI_OPCODE_MOV, st_dst_reg(temp), *reg);
       *reg = temp;
@@ -3143,7 +3143,15 @@ glsl_to_tgsi_visitor::emit_block_mov(ir_assignment *ir, const struct glsl_type *
    r->type = type->base_type;
    if (cond) {
       st_src_reg l_src = st_src_reg(*l);
-      l_src.swizzle = swizzle_for_size(type->vector_elements);
+
+      if (l_src.file == PROGRAM_OUTPUT &&
+          this->prog->Target == GL_FRAGMENT_PROGRAM_ARB &&
+          (l_src.index == FRAG_RESULT_DEPTH || l_src.index == FRAG_RESULT_STENCIL)) {
+         /* This is a special case because the source swizzles will be shifted
+          * later to account for the difference between GLSL (where they're
+          * plain floats) and TGSI (where they're Z and Y components). */
+         l_src.swizzle = SWIZZLE_XXXX;
+      }
 
       if (native_integers) {
          emit_asm(ir, TGSI_OPCODE_UCMP, *l, *cond,
@@ -3882,6 +3890,12 @@ glsl_to_tgsi_visitor::visit_image_intrinsic(ir_call *ir)
 
    glsl_to_tgsi_instruction *inst;
 
+   st_src_reg bindless;
+   if (imgvar->contains_bindless()) {
+      img->accept(this);
+      bindless = this->result;
+   }
+
    if (ir->callee->intrinsic_id == ir_intrinsic_image_size) {
       dst.writemask = WRITEMASK_XYZ;
       inst = emit_asm(ir, TGSI_OPCODE_RESQ, dst);
@@ -3979,8 +3993,7 @@ glsl_to_tgsi_visitor::visit_image_intrinsic(ir_call *ir)
    }
 
    if (imgvar->contains_bindless()) {
-      img->accept(this);
-      inst->resource = this->result;
+      inst->resource = bindless;
       inst->resource.swizzle = MAKE_SWIZZLE4(SWIZZLE_X, SWIZZLE_Y,
                                              SWIZZLE_X, SWIZZLE_Y);
    } else {
@@ -4499,6 +4512,12 @@ glsl_to_tgsi_visitor::visit(ir_texture *ir)
       emit_arl(ir, sampler_reladdr, reladdr);
    }
 
+   st_src_reg bindless;
+   if (var->contains_bindless()) {
+      ir->sampler->accept(this);
+      bindless = this->result;
+   }
+
    if (opcode == TGSI_OPCODE_TXD)
       inst = emit_asm(ir, opcode, result_dst, coord, dx, dy);
    else if (opcode == TGSI_OPCODE_TXQ) {
@@ -4529,8 +4548,7 @@ glsl_to_tgsi_visitor::visit(ir_texture *ir)
       inst->tex_shadow = GL_TRUE;
 
    if (var->contains_bindless()) {
-      ir->sampler->accept(this);
-      inst->resource = this->result;
+      inst->resource = bindless;
       inst->resource.swizzle = MAKE_SWIZZLE4(SWIZZLE_X, SWIZZLE_Y,
                                              SWIZZLE_X, SWIZZLE_Y);
    } else {
@@ -5411,7 +5429,8 @@ glsl_to_tgsi_visitor::eliminate_dead_code(void)
 void
 glsl_to_tgsi_visitor::merge_two_dsts(void)
 {
-   foreach_in_list_safe(glsl_to_tgsi_instruction, inst, &this->instructions) {
+   /* We never delete inst, but we may delete its successor. */
+   foreach_in_list(glsl_to_tgsi_instruction, inst, &this->instructions) {
       glsl_to_tgsi_instruction *inst2;
       bool merged;
       if (num_inst_dst_regs(inst) != 2)

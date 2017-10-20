@@ -831,8 +831,8 @@ static void *si_create_rs_state(struct pipe_context *ctx,
 			S_028A04_MIN_SIZE(si_pack_float_12p4(psize_min/2)) |
 			S_028A04_MAX_SIZE(si_pack_float_12p4(psize_max/2)));
 
-	tmp = (unsigned)state->line_width * 8;
-	si_pm4_set_reg(pm4, R_028A08_PA_SU_LINE_CNTL, S_028A08_WIDTH(tmp));
+	si_pm4_set_reg(pm4, R_028A08_PA_SU_LINE_CNTL,
+		       S_028A08_WIDTH(si_pack_float_12p4(state->line_width/2)));
 	si_pm4_set_reg(pm4, R_028A48_PA_SC_MODE_CNTL_0,
 		       S_028A48_LINE_STIPPLE_ENABLE(state->line_stipple_enable) |
 		       S_028A48_MSAA_ENABLE(state->multisample ||
@@ -3613,16 +3613,54 @@ static bool wrap_mode_uses_border_color(unsigned wrap, bool linear_filter)
 		 wrap == PIPE_TEX_WRAP_MIRROR_CLAMP));
 }
 
-static bool sampler_state_needs_border_color(const struct pipe_sampler_state *state)
+static uint32_t si_translate_border_color(struct si_context *sctx,
+					  const struct pipe_sampler_state *state,
+					  const union pipe_color_union *color)
 {
 	bool linear_filter = state->min_img_filter != PIPE_TEX_FILTER_NEAREST ||
 			     state->mag_img_filter != PIPE_TEX_FILTER_NEAREST;
 
-	return (state->border_color.ui[0] || state->border_color.ui[1] ||
-		state->border_color.ui[2] || state->border_color.ui[3]) &&
-	       (wrap_mode_uses_border_color(state->wrap_s, linear_filter) ||
-		wrap_mode_uses_border_color(state->wrap_t, linear_filter) ||
-		wrap_mode_uses_border_color(state->wrap_r, linear_filter));
+	if ((color->f[0] == 0 && color->f[1] == 0 &&
+	     color->f[2] == 0 && color->f[3] == 0) ||
+	    (!wrap_mode_uses_border_color(state->wrap_s, linear_filter) &&
+	     !wrap_mode_uses_border_color(state->wrap_t, linear_filter) &&
+	     !wrap_mode_uses_border_color(state->wrap_r, linear_filter)))
+		return S_008F3C_BORDER_COLOR_TYPE(V_008F3C_SQ_TEX_BORDER_COLOR_TRANS_BLACK);
+
+	if (color->f[0] == 0 && color->f[1] == 0 &&
+	    color->f[2] == 0 && color->f[3] == 1)
+		return S_008F3C_BORDER_COLOR_TYPE(V_008F3C_SQ_TEX_BORDER_COLOR_OPAQUE_BLACK);
+	if (color->f[0] == 1 && color->f[1] == 1 &&
+	    color->f[2] == 1 && color->f[3] == 1)
+		return S_008F3C_BORDER_COLOR_TYPE(V_008F3C_SQ_TEX_BORDER_COLOR_OPAQUE_WHITE);
+
+	int i;
+
+	/* Check if the border has been uploaded already. */
+	for (i = 0; i < sctx->border_color_count; i++)
+		if (memcmp(&sctx->border_color_table[i], color,
+			   sizeof(*color)) == 0)
+			break;
+
+	if (i >= SI_MAX_BORDER_COLORS) {
+		/* Getting 4096 unique border colors is very unlikely. */
+		fprintf(stderr, "radeonsi: The border color table is full. "
+			"Any new border colors will be just black. "
+			"Please file a bug.\n");
+		return S_008F3C_BORDER_COLOR_TYPE(V_008F3C_SQ_TEX_BORDER_COLOR_TRANS_BLACK);
+	}
+
+	if (i == sctx->border_color_count) {
+		/* Upload a new border color. */
+		memcpy(&sctx->border_color_table[i], color,
+		       sizeof(*color));
+		util_memcpy_cpu_to_le32(&sctx->border_color_map[i],
+					color, sizeof(*color));
+		sctx->border_color_count++;
+	}
+
+	return S_008F3C_BORDER_COLOR_PTR(i) |
+	       S_008F3C_BORDER_COLOR_TYPE(V_008F3C_SQ_TEX_BORDER_COLOR_REGISTER);
 }
 
 static void *si_create_sampler_state(struct pipe_context *ctx,
@@ -3631,62 +3669,13 @@ static void *si_create_sampler_state(struct pipe_context *ctx,
 	struct si_context *sctx = (struct si_context *)ctx;
 	struct r600_common_screen *rscreen = sctx->b.screen;
 	struct si_sampler_state *rstate = CALLOC_STRUCT(si_sampler_state);
-	unsigned border_color_type, border_color_index = 0;
 	unsigned max_aniso = rscreen->force_aniso >= 0 ? rscreen->force_aniso
 						       : state->max_anisotropy;
 	unsigned max_aniso_ratio = r600_tex_aniso_filter(max_aniso);
+	union pipe_color_union clamped_border_color;
 
 	if (!rstate) {
 		return NULL;
-	}
-
-	if (!sampler_state_needs_border_color(state))
-		border_color_type = V_008F3C_SQ_TEX_BORDER_COLOR_TRANS_BLACK;
-	else if (state->border_color.f[0] == 0 &&
-		 state->border_color.f[1] == 0 &&
-		 state->border_color.f[2] == 0 &&
-		 state->border_color.f[3] == 0)
-		border_color_type = V_008F3C_SQ_TEX_BORDER_COLOR_TRANS_BLACK;
-	else if (state->border_color.f[0] == 0 &&
-		 state->border_color.f[1] == 0 &&
-		 state->border_color.f[2] == 0 &&
-		 state->border_color.f[3] == 1)
-		border_color_type = V_008F3C_SQ_TEX_BORDER_COLOR_OPAQUE_BLACK;
-	else if (state->border_color.f[0] == 1 &&
-		 state->border_color.f[1] == 1 &&
-		 state->border_color.f[2] == 1 &&
-		 state->border_color.f[3] == 1)
-		border_color_type = V_008F3C_SQ_TEX_BORDER_COLOR_OPAQUE_WHITE;
-	else {
-		int i;
-
-		border_color_type = V_008F3C_SQ_TEX_BORDER_COLOR_REGISTER;
-
-		/* Check if the border has been uploaded already. */
-		for (i = 0; i < sctx->border_color_count; i++)
-			if (memcmp(&sctx->border_color_table[i], &state->border_color,
-				   sizeof(state->border_color)) == 0)
-				break;
-
-		if (i >= SI_MAX_BORDER_COLORS) {
-			/* Getting 4096 unique border colors is very unlikely. */
-			fprintf(stderr, "radeonsi: The border color table is full. "
-				"Any new border colors will be just black. "
-				"Please file a bug.\n");
-			border_color_type = V_008F3C_SQ_TEX_BORDER_COLOR_TRANS_BLACK;
-		} else {
-			if (i == sctx->border_color_count) {
-				/* Upload a new border color. */
-				memcpy(&sctx->border_color_table[i], &state->border_color,
-				       sizeof(state->border_color));
-				util_memcpy_cpu_to_le32(&sctx->border_color_map[i],
-							&state->border_color,
-							sizeof(state->border_color));
-				sctx->border_color_count++;
-			}
-
-			border_color_index = i;
-		}
 	}
 
 #ifdef DEBUG
@@ -3713,8 +3702,24 @@ static void *si_create_sampler_state(struct pipe_context *ctx,
 			  S_008F38_DISABLE_LSB_CEIL(sctx->b.chip_class <= VI) |
 			  S_008F38_FILTER_PREC_FIX(1) |
 			  S_008F38_ANISO_OVERRIDE(sctx->b.chip_class >= VI));
-	rstate->val[3] = S_008F3C_BORDER_COLOR_PTR(border_color_index) |
-			 S_008F3C_BORDER_COLOR_TYPE(border_color_type);
+	rstate->val[3] = si_translate_border_color(sctx, state, &state->border_color);
+
+	/* Create sampler resource for upgraded depth textures. */
+	memcpy(rstate->upgraded_depth_val, rstate->val, sizeof(rstate->val));
+
+	for (unsigned i = 0; i < 4; ++i) {
+		/* Use channel 0 on purpose, so that we can use OPAQUE_WHITE
+		 * when the border color is 1.0. */
+		clamped_border_color.f[i] = CLAMP(state->border_color.f[0], 0, 1);
+	}
+
+	if (memcmp(&state->border_color, &clamped_border_color, sizeof(clamped_border_color)) == 0)
+		rstate->upgraded_depth_val[3] |= S_008F3C_UPGRADED_DEPTH(1);
+	else
+		rstate->upgraded_depth_val[3] =
+			si_translate_border_color(sctx, state, &clamped_border_color) |
+			S_008F3C_UPGRADED_DEPTH(1);
+
 	return rstate;
 }
 

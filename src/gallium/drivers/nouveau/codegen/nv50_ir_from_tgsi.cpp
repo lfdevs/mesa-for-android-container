@@ -4090,7 +4090,9 @@ Converter::handleInstruction(const struct tgsi_full_instruction *insn)
          tmp[0] = fetchSrc(0, c);
          tmp[1] = fetchSrc(0, c + 1);
          mkOp2(OP_MERGE, TYPE_U64, src0, tmp[0], tmp[1]);
-         src1 = fetchSrc(1, c / 2);
+         // Theoretically src1 is a 64-bit value but in practice only the low
+         // bits matter. The IR expects this to be a 32-bit value.
+         src1 = fetchSrc(1, c);
          mkOp2(op, dstTy, dst, src0, src1);
          mkSplit(&dst0[c], 4, dst);
          c++;

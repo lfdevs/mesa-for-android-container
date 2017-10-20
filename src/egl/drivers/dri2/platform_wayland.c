@@ -718,23 +718,41 @@ create_wl_buffer(struct dri2_egl_display *dri2_dpy,
                  __DRIimage *image)
 {
    struct wl_buffer *ret;
+   EGLBoolean query;
    int width, height, fourcc, num_planes;
+   uint64_t modifier = DRM_FORMAT_MOD_INVALID;
 
-   dri2_dpy->image->queryImage(image, __DRI_IMAGE_ATTRIB_WIDTH, &width);
-   dri2_dpy->image->queryImage(image, __DRI_IMAGE_ATTRIB_HEIGHT, &height);
-   dri2_dpy->image->queryImage(image, __DRI_IMAGE_ATTRIB_FOURCC, &fourcc);
-   dri2_dpy->image->queryImage(image, __DRI_IMAGE_ATTRIB_NUM_PLANES,
-                               &num_planes);
+   query = dri2_dpy->image->queryImage(image, __DRI_IMAGE_ATTRIB_WIDTH, &width);
+   query &= dri2_dpy->image->queryImage(image, __DRI_IMAGE_ATTRIB_HEIGHT,
+                                        &height);
+   query &= dri2_dpy->image->queryImage(image, __DRI_IMAGE_ATTRIB_FOURCC,
+                                        &fourcc);
+   if (!query)
+      return NULL;
 
-   if (dri2_dpy->wl_dmabuf && dri2_dpy->image->base.version >= 15) {
-      struct zwp_linux_buffer_params_v1 *params;
+   query = dri2_dpy->image->queryImage(image, __DRI_IMAGE_ATTRIB_NUM_PLANES,
+                                       &num_planes);
+   if (!query)
+      num_planes = 1;
+
+   if (dri2_dpy->image->base.version >= 15) {
       int mod_hi, mod_lo;
-      int i;
 
-      dri2_dpy->image->queryImage(image, __DRI_IMAGE_ATTRIB_MODIFIER_UPPER,
-                                  &mod_hi);
-      dri2_dpy->image->queryImage(image, __DRI_IMAGE_ATTRIB_MODIFIER_LOWER,
-                                  &mod_lo);
+      query = dri2_dpy->image->queryImage(image,
+                                          __DRI_IMAGE_ATTRIB_MODIFIER_UPPER,
+                                          &mod_hi);
+      query &= dri2_dpy->image->queryImage(image,
+                                           __DRI_IMAGE_ATTRIB_MODIFIER_LOWER,
+                                           &mod_lo);
+      if (query) {
+         modifier = (uint64_t) mod_hi << 32;
+         modifier |= (uint64_t) (mod_lo & 0xffffffff);
+      }
+   }
+
+   if (dri2_dpy->wl_dmabuf && modifier != DRM_FORMAT_MOD_INVALID) {
+      struct zwp_linux_buffer_params_v1 *params;
+      int i;
 
       /* We don't need a wrapper for wl_dmabuf objects, because we have to
        * create the intermediate params object; we can set the queue on this,
@@ -745,7 +763,8 @@ create_wl_buffer(struct dri2_egl_display *dri2_dpy,
 
       for (i = 0; i < num_planes; i++) {
          __DRIimage *p_image;
-         int stride, offset, fd;
+         int stride, offset;
+         int fd = -1;
 
          if (i == 0)
             p_image = image;
@@ -756,16 +775,27 @@ create_wl_buffer(struct dri2_egl_display *dri2_dpy,
             return NULL;
          }
 
-         dri2_dpy->image->queryImage(p_image, __DRI_IMAGE_ATTRIB_FD, &fd);
-         dri2_dpy->image->queryImage(p_image, __DRI_IMAGE_ATTRIB_STRIDE,
-                                     &stride);
-         dri2_dpy->image->queryImage(p_image, __DRI_IMAGE_ATTRIB_OFFSET,
-                                     &offset);
+         query = dri2_dpy->image->queryImage(p_image,
+                                             __DRI_IMAGE_ATTRIB_FD,
+                                             &fd);
+         query &= dri2_dpy->image->queryImage(p_image,
+                                              __DRI_IMAGE_ATTRIB_STRIDE,
+                                              &stride);
+         query &= dri2_dpy->image->queryImage(p_image,
+                                              __DRI_IMAGE_ATTRIB_OFFSET,
+                                              &offset);
          if (image != p_image)
             dri2_dpy->image->destroyImage(p_image);
 
+         if (!query) {
+            if (fd >= 0)
+               close(fd);
+            zwp_linux_buffer_params_v1_destroy(params);
+            return NULL;
+         }
+
          zwp_linux_buffer_params_v1_add(params, fd, i, offset, stride,
-                                        mod_hi, mod_lo);
+                                        modifier >> 32, modifier & 0xffffffff);
          close(fd);
       }
 

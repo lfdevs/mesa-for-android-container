@@ -307,15 +307,15 @@ static void build_cube_select(LLVMBuilderRef builder,
 	is_ma_x = LLVMBuildAnd(builder, is_not_ma_z, LLVMBuildNot(builder, is_ma_y, ""), "");
 
 	/* Select sc */
-	tmp = LLVMBuildSelect(builder, is_ma_z, coords[2], coords[0], "");
+	tmp = LLVMBuildSelect(builder, is_ma_x, coords[2], coords[0], "");
 	sgn = LLVMBuildSelect(builder, is_ma_y, LLVMConstReal(f32, 1.0),
-		LLVMBuildSelect(builder, is_ma_x, sgn_ma,
+		LLVMBuildSelect(builder, is_ma_z, sgn_ma,
 			LLVMBuildFNeg(builder, sgn_ma, ""), ""), "");
 	out_st[0] = LLVMBuildFMul(builder, tmp, sgn, "");
 
 	/* Select tc */
 	tmp = LLVMBuildSelect(builder, is_ma_y, coords[2], coords[1], "");
-	sgn = LLVMBuildSelect(builder, is_ma_y, LLVMBuildFNeg(builder, sgn_ma, ""),
+	sgn = LLVMBuildSelect(builder, is_ma_y, sgn_ma,
 		LLVMConstReal(f32, -1.0), "");
 	out_st[1] = LLVMBuildFMul(builder, tmp, sgn, "");
 
