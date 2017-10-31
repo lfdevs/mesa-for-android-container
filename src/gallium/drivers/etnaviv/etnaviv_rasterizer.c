@@ -38,10 +38,6 @@ etna_rasterizer_state_create(struct pipe_context *pctx,
    struct etna_rasterizer_state *cs;
    struct etna_context *ctx = etna_context(pctx);
 
-    /* Disregard flatshading on GC880+, as a HW bug there seem to disable all
-     * varying interpolation if it's enabled */
-   bool flatshade = ctx->screen->model < 880 ? so->flatshade : false;
-
    if (so->fill_front != so->fill_back)
       DBG("Different front and back fill mode not supported");
 
@@ -51,7 +47,7 @@ etna_rasterizer_state_create(struct pipe_context *pctx,
 
    cs->base = *so;
 
-   cs->PA_CONFIG = (flatshade ? VIVS_PA_CONFIG_SHADE_MODEL_FLAT : VIVS_PA_CONFIG_SHADE_MODEL_SMOOTH) |
+   cs->PA_CONFIG = (so->flatshade ? VIVS_PA_CONFIG_SHADE_MODEL_FLAT : VIVS_PA_CONFIG_SHADE_MODEL_SMOOTH) |
                    translate_cull_face(so->cull_face, so->front_ccw) |
                    translate_polygon_mode(so->fill_front) |
                    COND(so->point_quad_rasterization, VIVS_PA_CONFIG_POINT_SPRITE_ENABLE) |
@@ -65,7 +61,8 @@ etna_rasterizer_state_create(struct pipe_context *pctx,
    /* XXX anything else? */
    /* XXX bottom_edge_rule */
    cs->PA_SYSTEM_MODE =
-      COND(so->half_pixel_center, VIVS_PA_SYSTEM_MODE_UNK0 | VIVS_PA_SYSTEM_MODE_UNK4);
+      COND(!so->flatshade_first, VIVS_PA_SYSTEM_MODE_PROVOKING_VERTEX_LAST) |
+      COND(so->half_pixel_center, VIVS_PA_SYSTEM_MODE_HALF_PIXEL_CENTER);
 
    /* so->scissor overrides the scissor, defaulting to the whole framebuffer,
     * with the scissor state */

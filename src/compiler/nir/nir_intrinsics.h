@@ -322,6 +322,7 @@ INTRINSIC(shared_atomic_comp_swap, 3, ARR(1, 1, 1), true, 1, 0, 1, BASE, xx, xx,
    idx0, idx1, idx2, \
    NIR_INTRINSIC_CAN_ELIMINATE | NIR_INTRINSIC_CAN_REORDER)
 
+SYSTEM_VALUE(frag_coord, 4, 0, xx, xx, xx)
 SYSTEM_VALUE(front_face, 1, 0, xx, xx, xx)
 SYSTEM_VALUE(vertex_id, 1, 0, xx, xx, xx)
 SYSTEM_VALUE(vertex_id_zero_base, 1, 0, xx, xx, xx)
@@ -433,7 +434,7 @@ INTRINSIC(load_interpolated_input, 2, ARR(2, 1), true, 0, 0,
 /* src[] = { buffer_index, offset }. No const_index */
 LOAD(ssbo, 2, 0, xx, xx, xx, NIR_INTRINSIC_CAN_ELIMINATE)
 /* src[] = { offset }. const_index[] = { base, component } */
-LOAD(output, 1, 1, BASE, COMPONENT, xx, NIR_INTRINSIC_CAN_ELIMINATE)
+LOAD(output, 1, 2, BASE, COMPONENT, xx, NIR_INTRINSIC_CAN_ELIMINATE)
 /* src[] = { vertex, offset }. const_index[] = { base, component } */
 LOAD(per_vertex_output, 2, 1, BASE, COMPONENT, xx, NIR_INTRINSIC_CAN_ELIMINATE)
 /* src[] = { offset }. const_index[] = { base } */

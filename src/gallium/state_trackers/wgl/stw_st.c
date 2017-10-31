@@ -161,10 +161,8 @@ stw_st_framebuffer_validate(struct st_context_iface *stctx,
       stwfb->fb->must_resize = FALSE;
    }
 
-   for (i = 0; i < count; i++) {
-      out[i] = NULL;
+   for (i = 0; i < count; i++)
       pipe_resource_reference(&out[i], stwfb->textures[statts[i]]);
-   }
 
    stw_framebuffer_unlock(stwfb->fb);
 

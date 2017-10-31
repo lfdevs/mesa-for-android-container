@@ -354,7 +354,6 @@ struct vc4_fs_key {
         bool stencil_full_writemasks;
         bool is_points;
         bool is_lines;
-        bool alpha_test;
         bool point_coord_upper_left;
         bool light_twoside;
         bool msaa;

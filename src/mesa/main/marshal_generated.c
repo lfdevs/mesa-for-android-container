@@ -1493,6 +1493,17 @@ _mesa_marshal_GetClipPlane(GLenum plane, GLdouble * equation)
 }
 
 
+/* DeleteSemaphoresEXT: marshalled synchronously */
+static void GLAPIENTRY
+_mesa_marshal_DeleteSemaphoresEXT(GLsizei n, const GLuint * semaphores)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   _mesa_glthread_finish(ctx);
+   debug_print_sync("DeleteSemaphoresEXT");
+   CALL_DeleteSemaphoresEXT(ctx->CurrentServerDispatch, (n, semaphores));
+}
+
+
 /* TexCoordP4uiv: marshalled synchronously */
 static void GLAPIENTRY
 _mesa_marshal_TexCoordP4uiv(GLenum type, const GLuint * coords)
@@ -4617,6 +4628,56 @@ _mesa_marshal_SecondaryColor3s(GLshort red, GLshort green, GLshort blue)
 }
 
 
+/* TexStorageMem2DEXT: marshalled asynchronously */
+struct marshal_cmd_TexStorageMem2DEXT
+{
+   struct marshal_cmd_base cmd_base;
+   GLenum target;
+   GLsizei levels;
+   GLenum internalFormat;
+   GLsizei width;
+   GLsizei height;
+   GLuint memory;
+   GLuint64 offset;
+};
+static inline void
+_mesa_unmarshal_TexStorageMem2DEXT(struct gl_context *ctx, const struct marshal_cmd_TexStorageMem2DEXT *cmd)
+{
+   const GLenum target = cmd->target;
+   const GLsizei levels = cmd->levels;
+   const GLenum internalFormat = cmd->internalFormat;
+   const GLsizei width = cmd->width;
+   const GLsizei height = cmd->height;
+   const GLuint memory = cmd->memory;
+   const GLuint64 offset = cmd->offset;
+   CALL_TexStorageMem2DEXT(ctx->CurrentServerDispatch, (target, levels, internalFormat, width, height, memory, offset));
+}
+static void GLAPIENTRY
+_mesa_marshal_TexStorageMem2DEXT(GLenum target, GLsizei levels, GLenum internalFormat, GLsizei width, GLsizei height, GLuint memory, GLuint64 offset)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   size_t cmd_size = sizeof(struct marshal_cmd_TexStorageMem2DEXT);
+   struct marshal_cmd_TexStorageMem2DEXT *cmd;
+   debug_print_marshal("TexStorageMem2DEXT");
+   if (cmd_size <= MARSHAL_MAX_CMD_SIZE) {
+      cmd = _mesa_glthread_allocate_command(ctx, DISPATCH_CMD_TexStorageMem2DEXT, cmd_size);
+      cmd->target = target;
+      cmd->levels = levels;
+      cmd->internalFormat = internalFormat;
+      cmd->width = width;
+      cmd->height = height;
+      cmd->memory = memory;
+      cmd->offset = offset;
+      _mesa_post_marshal_hook(ctx);
+      return;
+   }
+
+   _mesa_glthread_finish(ctx);
+   debug_print_sync_fallback("TexStorageMem2DEXT");
+   CALL_TexStorageMem2DEXT(ctx->CurrentServerDispatch, (target, levels, internalFormat, width, height, memory, offset));
+}
+
+
 /* VertexAttribP2uiv: marshalled synchronously */
 static void GLAPIENTRY
 _mesa_marshal_VertexAttribP2uiv(GLuint index, GLenum type, GLboolean normalized, const GLuint * value)
@@ -4873,6 +4934,59 @@ _mesa_marshal_FlushMappedBufferRange(GLenum target, GLintptr offset, GLsizeiptr 
    _mesa_glthread_finish(ctx);
    debug_print_sync_fallback("FlushMappedBufferRange");
    CALL_FlushMappedBufferRange(ctx->CurrentServerDispatch, (target, offset, length));
+}
+
+
+/* TexStorageMem3DEXT: marshalled asynchronously */
+struct marshal_cmd_TexStorageMem3DEXT
+{
+   struct marshal_cmd_base cmd_base;
+   GLenum target;
+   GLsizei levels;
+   GLenum internalFormat;
+   GLsizei width;
+   GLsizei height;
+   GLsizei depth;
+   GLuint memory;
+   GLuint64 offset;
+};
+static inline void
+_mesa_unmarshal_TexStorageMem3DEXT(struct gl_context *ctx, const struct marshal_cmd_TexStorageMem3DEXT *cmd)
+{
+   const GLenum target = cmd->target;
+   const GLsizei levels = cmd->levels;
+   const GLenum internalFormat = cmd->internalFormat;
+   const GLsizei width = cmd->width;
+   const GLsizei height = cmd->height;
+   const GLsizei depth = cmd->depth;
+   const GLuint memory = cmd->memory;
+   const GLuint64 offset = cmd->offset;
+   CALL_TexStorageMem3DEXT(ctx->CurrentServerDispatch, (target, levels, internalFormat, width, height, depth, memory, offset));
+}
+static void GLAPIENTRY
+_mesa_marshal_TexStorageMem3DEXT(GLenum target, GLsizei levels, GLenum internalFormat, GLsizei width, GLsizei height, GLsizei depth, GLuint memory, GLuint64 offset)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   size_t cmd_size = sizeof(struct marshal_cmd_TexStorageMem3DEXT);
+   struct marshal_cmd_TexStorageMem3DEXT *cmd;
+   debug_print_marshal("TexStorageMem3DEXT");
+   if (cmd_size <= MARSHAL_MAX_CMD_SIZE) {
+      cmd = _mesa_glthread_allocate_command(ctx, DISPATCH_CMD_TexStorageMem3DEXT, cmd_size);
+      cmd->target = target;
+      cmd->levels = levels;
+      cmd->internalFormat = internalFormat;
+      cmd->width = width;
+      cmd->height = height;
+      cmd->depth = depth;
+      cmd->memory = memory;
+      cmd->offset = offset;
+      _mesa_post_marshal_hook(ctx);
+      return;
+   }
+
+   _mesa_glthread_finish(ctx);
+   debug_print_sync_fallback("TexStorageMem3DEXT");
+   CALL_TexStorageMem3DEXT(ctx->CurrentServerDispatch, (target, levels, internalFormat, width, height, depth, memory, offset));
 }
 
 
@@ -5187,6 +5301,47 @@ _mesa_marshal_MakeImageHandleNonResidentARB(GLuint64 handle)
 }
 
 
+/* ImportMemoryFdEXT: marshalled asynchronously */
+struct marshal_cmd_ImportMemoryFdEXT
+{
+   struct marshal_cmd_base cmd_base;
+   GLuint memory;
+   GLuint64 size;
+   GLenum handleType;
+   GLint fd;
+};
+static inline void
+_mesa_unmarshal_ImportMemoryFdEXT(struct gl_context *ctx, const struct marshal_cmd_ImportMemoryFdEXT *cmd)
+{
+   const GLuint memory = cmd->memory;
+   const GLuint64 size = cmd->size;
+   const GLenum handleType = cmd->handleType;
+   const GLint fd = cmd->fd;
+   CALL_ImportMemoryFdEXT(ctx->CurrentServerDispatch, (memory, size, handleType, fd));
+}
+static void GLAPIENTRY
+_mesa_marshal_ImportMemoryFdEXT(GLuint memory, GLuint64 size, GLenum handleType, GLint fd)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   size_t cmd_size = sizeof(struct marshal_cmd_ImportMemoryFdEXT);
+   struct marshal_cmd_ImportMemoryFdEXT *cmd;
+   debug_print_marshal("ImportMemoryFdEXT");
+   if (cmd_size <= MARSHAL_MAX_CMD_SIZE) {
+      cmd = _mesa_glthread_allocate_command(ctx, DISPATCH_CMD_ImportMemoryFdEXT, cmd_size);
+      cmd->memory = memory;
+      cmd->size = size;
+      cmd->handleType = handleType;
+      cmd->fd = fd;
+      _mesa_post_marshal_hook(ctx);
+      return;
+   }
+
+   _mesa_glthread_finish(ctx);
+   debug_print_sync_fallback("ImportMemoryFdEXT");
+   CALL_ImportMemoryFdEXT(ctx->CurrentServerDispatch, (memory, size, handleType, fd));
+}
+
+
 /* ProgramEnvParameters4fvEXT: marshalled synchronously */
 static void GLAPIENTRY
 _mesa_marshal_ProgramEnvParameters4fvEXT(GLenum target, GLuint index, GLsizei count, const GLfloat * params)
@@ -5195,6 +5350,53 @@ _mesa_marshal_ProgramEnvParameters4fvEXT(GLenum target, GLuint index, GLsizei co
    _mesa_glthread_finish(ctx);
    debug_print_sync("ProgramEnvParameters4fvEXT");
    CALL_ProgramEnvParameters4fvEXT(ctx->CurrentServerDispatch, (target, index, count, params));
+}
+
+
+/* TexStorageMem1DEXT: marshalled asynchronously */
+struct marshal_cmd_TexStorageMem1DEXT
+{
+   struct marshal_cmd_base cmd_base;
+   GLenum target;
+   GLsizei levels;
+   GLenum internalFormat;
+   GLsizei width;
+   GLuint memory;
+   GLuint64 offset;
+};
+static inline void
+_mesa_unmarshal_TexStorageMem1DEXT(struct gl_context *ctx, const struct marshal_cmd_TexStorageMem1DEXT *cmd)
+{
+   const GLenum target = cmd->target;
+   const GLsizei levels = cmd->levels;
+   const GLenum internalFormat = cmd->internalFormat;
+   const GLsizei width = cmd->width;
+   const GLuint memory = cmd->memory;
+   const GLuint64 offset = cmd->offset;
+   CALL_TexStorageMem1DEXT(ctx->CurrentServerDispatch, (target, levels, internalFormat, width, memory, offset));
+}
+static void GLAPIENTRY
+_mesa_marshal_TexStorageMem1DEXT(GLenum target, GLsizei levels, GLenum internalFormat, GLsizei width, GLuint memory, GLuint64 offset)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   size_t cmd_size = sizeof(struct marshal_cmd_TexStorageMem1DEXT);
+   struct marshal_cmd_TexStorageMem1DEXT *cmd;
+   debug_print_marshal("TexStorageMem1DEXT");
+   if (cmd_size <= MARSHAL_MAX_CMD_SIZE) {
+      cmd = _mesa_glthread_allocate_command(ctx, DISPATCH_CMD_TexStorageMem1DEXT, cmd_size);
+      cmd->target = target;
+      cmd->levels = levels;
+      cmd->internalFormat = internalFormat;
+      cmd->width = width;
+      cmd->memory = memory;
+      cmd->offset = offset;
+      _mesa_post_marshal_hook(ctx);
+      return;
+   }
+
+   _mesa_glthread_finish(ctx);
+   debug_print_sync_fallback("TexStorageMem1DEXT");
+   CALL_TexStorageMem1DEXT(ctx->CurrentServerDispatch, (target, levels, internalFormat, width, memory, offset));
 }
 
 
@@ -6812,6 +7014,47 @@ _mesa_marshal_DepthBoundsEXT(GLclampd zmin, GLclampd zmax)
 }
 
 
+/* BufferStorageMemEXT: marshalled asynchronously */
+struct marshal_cmd_BufferStorageMemEXT
+{
+   struct marshal_cmd_base cmd_base;
+   GLenum target;
+   GLsizeiptr size;
+   GLuint memory;
+   GLuint64 offset;
+};
+static inline void
+_mesa_unmarshal_BufferStorageMemEXT(struct gl_context *ctx, const struct marshal_cmd_BufferStorageMemEXT *cmd)
+{
+   const GLenum target = cmd->target;
+   const GLsizeiptr size = cmd->size;
+   const GLuint memory = cmd->memory;
+   const GLuint64 offset = cmd->offset;
+   CALL_BufferStorageMemEXT(ctx->CurrentServerDispatch, (target, size, memory, offset));
+}
+static void GLAPIENTRY
+_mesa_marshal_BufferStorageMemEXT(GLenum target, GLsizeiptr size, GLuint memory, GLuint64 offset)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   size_t cmd_size = sizeof(struct marshal_cmd_BufferStorageMemEXT);
+   struct marshal_cmd_BufferStorageMemEXT *cmd;
+   debug_print_marshal("BufferStorageMemEXT");
+   if (cmd_size <= MARSHAL_MAX_CMD_SIZE) {
+      cmd = _mesa_glthread_allocate_command(ctx, DISPATCH_CMD_BufferStorageMemEXT, cmd_size);
+      cmd->target = target;
+      cmd->size = size;
+      cmd->memory = memory;
+      cmd->offset = offset;
+      _mesa_post_marshal_hook(ctx);
+      return;
+   }
+
+   _mesa_glthread_finish(ctx);
+   debug_print_sync_fallback("BufferStorageMemEXT");
+   CALL_BufferStorageMemEXT(ctx->CurrentServerDispatch, (target, size, memory, offset));
+}
+
+
 /* WindowPos3fv: marshalled asynchronously */
 struct marshal_cmd_WindowPos3fv
 {
@@ -7020,6 +7263,59 @@ _mesa_marshal_PrimitiveRestartIndex(GLuint index)
    _mesa_glthread_finish(ctx);
    debug_print_sync_fallback("PrimitiveRestartIndex");
    CALL_PrimitiveRestartIndex(ctx->CurrentServerDispatch, (index));
+}
+
+
+/* TextureStorageMem3DEXT: marshalled asynchronously */
+struct marshal_cmd_TextureStorageMem3DEXT
+{
+   struct marshal_cmd_base cmd_base;
+   GLuint texture;
+   GLsizei levels;
+   GLenum internalFormat;
+   GLsizei width;
+   GLsizei height;
+   GLsizei depth;
+   GLuint memory;
+   GLuint64 offset;
+};
+static inline void
+_mesa_unmarshal_TextureStorageMem3DEXT(struct gl_context *ctx, const struct marshal_cmd_TextureStorageMem3DEXT *cmd)
+{
+   const GLuint texture = cmd->texture;
+   const GLsizei levels = cmd->levels;
+   const GLenum internalFormat = cmd->internalFormat;
+   const GLsizei width = cmd->width;
+   const GLsizei height = cmd->height;
+   const GLsizei depth = cmd->depth;
+   const GLuint memory = cmd->memory;
+   const GLuint64 offset = cmd->offset;
+   CALL_TextureStorageMem3DEXT(ctx->CurrentServerDispatch, (texture, levels, internalFormat, width, height, depth, memory, offset));
+}
+static void GLAPIENTRY
+_mesa_marshal_TextureStorageMem3DEXT(GLuint texture, GLsizei levels, GLenum internalFormat, GLsizei width, GLsizei height, GLsizei depth, GLuint memory, GLuint64 offset)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   size_t cmd_size = sizeof(struct marshal_cmd_TextureStorageMem3DEXT);
+   struct marshal_cmd_TextureStorageMem3DEXT *cmd;
+   debug_print_marshal("TextureStorageMem3DEXT");
+   if (cmd_size <= MARSHAL_MAX_CMD_SIZE) {
+      cmd = _mesa_glthread_allocate_command(ctx, DISPATCH_CMD_TextureStorageMem3DEXT, cmd_size);
+      cmd->texture = texture;
+      cmd->levels = levels;
+      cmd->internalFormat = internalFormat;
+      cmd->width = width;
+      cmd->height = height;
+      cmd->depth = depth;
+      cmd->memory = memory;
+      cmd->offset = offset;
+      _mesa_post_marshal_hook(ctx);
+      return;
+   }
+
+   _mesa_glthread_finish(ctx);
+   debug_print_sync_fallback("TextureStorageMem3DEXT");
+   CALL_TextureStorageMem3DEXT(ctx->CurrentServerDispatch, (texture, levels, internalFormat, width, height, depth, memory, offset));
 }
 
 
@@ -9792,6 +10088,17 @@ _mesa_marshal_CompressedTexImage3D(GLenum target, GLint level, GLenum internalfo
    _mesa_glthread_finish(ctx);
    debug_print_sync("CompressedTexImage3D");
    CALL_CompressedTexImage3D(ctx->CurrentServerDispatch, (target, level, internalformat, width, height, depth, border, imageSize, data));
+}
+
+
+/* GenSemaphoresEXT: marshalled synchronously */
+static void GLAPIENTRY
+_mesa_marshal_GenSemaphoresEXT(GLsizei n, GLuint * semaphores)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   _mesa_glthread_finish(ctx);
+   debug_print_sync("GenSemaphoresEXT");
+   CALL_GenSemaphoresEXT(ctx->CurrentServerDispatch, (n, semaphores));
 }
 
 
@@ -14958,6 +15265,17 @@ _mesa_marshal_ColorTableParameterfv(GLenum target, GLenum pname, const GLfloat *
 }
 
 
+/* IsSemaphoreEXT: marshalled synchronously */
+static GLboolean GLAPIENTRY
+_mesa_marshal_IsSemaphoreEXT(GLuint semaphore)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   _mesa_glthread_finish(ctx);
+   debug_print_sync("IsSemaphoreEXT");
+   return CALL_IsSemaphoreEXT(ctx->CurrentServerDispatch, (semaphore));
+}
+
+
 /* IsTexture: marshalled synchronously */
 static GLboolean GLAPIENTRY
 _mesa_marshal_IsTexture(GLuint texture)
@@ -15330,6 +15648,59 @@ _mesa_marshal_GetnUniformui64vARB(GLuint program, GLint location, GLsizei bufSiz
    _mesa_glthread_finish(ctx);
    debug_print_sync("GetnUniformui64vARB");
    CALL_GetnUniformui64vARB(ctx->CurrentServerDispatch, (program, location, bufSize, params));
+}
+
+
+/* TextureStorageMem2DMultisampleEXT: marshalled asynchronously */
+struct marshal_cmd_TextureStorageMem2DMultisampleEXT
+{
+   struct marshal_cmd_base cmd_base;
+   GLuint texture;
+   GLsizei samples;
+   GLenum internalFormat;
+   GLsizei width;
+   GLsizei height;
+   GLboolean fixedSampleLocations;
+   GLuint memory;
+   GLuint64 offset;
+};
+static inline void
+_mesa_unmarshal_TextureStorageMem2DMultisampleEXT(struct gl_context *ctx, const struct marshal_cmd_TextureStorageMem2DMultisampleEXT *cmd)
+{
+   const GLuint texture = cmd->texture;
+   const GLsizei samples = cmd->samples;
+   const GLenum internalFormat = cmd->internalFormat;
+   const GLsizei width = cmd->width;
+   const GLsizei height = cmd->height;
+   const GLboolean fixedSampleLocations = cmd->fixedSampleLocations;
+   const GLuint memory = cmd->memory;
+   const GLuint64 offset = cmd->offset;
+   CALL_TextureStorageMem2DMultisampleEXT(ctx->CurrentServerDispatch, (texture, samples, internalFormat, width, height, fixedSampleLocations, memory, offset));
+}
+static void GLAPIENTRY
+_mesa_marshal_TextureStorageMem2DMultisampleEXT(GLuint texture, GLsizei samples, GLenum internalFormat, GLsizei width, GLsizei height, GLboolean fixedSampleLocations, GLuint memory, GLuint64 offset)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   size_t cmd_size = sizeof(struct marshal_cmd_TextureStorageMem2DMultisampleEXT);
+   struct marshal_cmd_TextureStorageMem2DMultisampleEXT *cmd;
+   debug_print_marshal("TextureStorageMem2DMultisampleEXT");
+   if (cmd_size <= MARSHAL_MAX_CMD_SIZE) {
+      cmd = _mesa_glthread_allocate_command(ctx, DISPATCH_CMD_TextureStorageMem2DMultisampleEXT, cmd_size);
+      cmd->texture = texture;
+      cmd->samples = samples;
+      cmd->internalFormat = internalFormat;
+      cmd->width = width;
+      cmd->height = height;
+      cmd->fixedSampleLocations = fixedSampleLocations;
+      cmd->memory = memory;
+      cmd->offset = offset;
+      _mesa_post_marshal_hook(ctx);
+      return;
+   }
+
+   _mesa_glthread_finish(ctx);
+   debug_print_sync_fallback("TextureStorageMem2DMultisampleEXT");
+   CALL_TextureStorageMem2DMultisampleEXT(ctx->CurrentServerDispatch, (texture, samples, internalFormat, width, height, fixedSampleLocations, memory, offset));
 }
 
 
@@ -16621,6 +16992,17 @@ fallback_to_sync:
    _mesa_glthread_finish(ctx);
    debug_print_sync_fallback("Uniform4dv");
    CALL_Uniform4dv(ctx->CurrentServerDispatch, (location, count, value));
+}
+
+
+/* GetUnsignedBytevEXT: marshalled synchronously */
+static void GLAPIENTRY
+_mesa_marshal_GetUnsignedBytevEXT(GLenum pname, GLubyte * data)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   _mesa_glthread_finish(ctx);
+   debug_print_sync("GetUnsignedBytevEXT");
+   CALL_GetUnsignedBytevEXT(ctx->CurrentServerDispatch, (pname, data));
 }
 
 
@@ -17929,6 +18311,53 @@ _mesa_marshal_SecondaryColor3us(GLushort red, GLushort green, GLushort blue)
 }
 
 
+/* TextureStorageMem1DEXT: marshalled asynchronously */
+struct marshal_cmd_TextureStorageMem1DEXT
+{
+   struct marshal_cmd_base cmd_base;
+   GLuint texture;
+   GLsizei levels;
+   GLenum internalFormat;
+   GLsizei width;
+   GLuint memory;
+   GLuint64 offset;
+};
+static inline void
+_mesa_unmarshal_TextureStorageMem1DEXT(struct gl_context *ctx, const struct marshal_cmd_TextureStorageMem1DEXT *cmd)
+{
+   const GLuint texture = cmd->texture;
+   const GLsizei levels = cmd->levels;
+   const GLenum internalFormat = cmd->internalFormat;
+   const GLsizei width = cmd->width;
+   const GLuint memory = cmd->memory;
+   const GLuint64 offset = cmd->offset;
+   CALL_TextureStorageMem1DEXT(ctx->CurrentServerDispatch, (texture, levels, internalFormat, width, memory, offset));
+}
+static void GLAPIENTRY
+_mesa_marshal_TextureStorageMem1DEXT(GLuint texture, GLsizei levels, GLenum internalFormat, GLsizei width, GLuint memory, GLuint64 offset)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   size_t cmd_size = sizeof(struct marshal_cmd_TextureStorageMem1DEXT);
+   struct marshal_cmd_TextureStorageMem1DEXT *cmd;
+   debug_print_marshal("TextureStorageMem1DEXT");
+   if (cmd_size <= MARSHAL_MAX_CMD_SIZE) {
+      cmd = _mesa_glthread_allocate_command(ctx, DISPATCH_CMD_TextureStorageMem1DEXT, cmd_size);
+      cmd->texture = texture;
+      cmd->levels = levels;
+      cmd->internalFormat = internalFormat;
+      cmd->width = width;
+      cmd->memory = memory;
+      cmd->offset = offset;
+      _mesa_post_marshal_hook(ctx);
+      return;
+   }
+
+   _mesa_glthread_finish(ctx);
+   debug_print_sync_fallback("TextureStorageMem1DEXT");
+   CALL_TextureStorageMem1DEXT(ctx->CurrentServerDispatch, (texture, levels, internalFormat, width, memory, offset));
+}
+
+
 /* SecondaryColor3ub: marshalled asynchronously */
 struct marshal_cmd_SecondaryColor3ub
 {
@@ -17964,6 +18393,47 @@ _mesa_marshal_SecondaryColor3ub(GLubyte red, GLubyte green, GLubyte blue)
    _mesa_glthread_finish(ctx);
    debug_print_sync_fallback("SecondaryColor3ub");
    CALL_SecondaryColor3ub(ctx->CurrentServerDispatch, (red, green, blue));
+}
+
+
+/* NamedBufferStorageMemEXT: marshalled asynchronously */
+struct marshal_cmd_NamedBufferStorageMemEXT
+{
+   struct marshal_cmd_base cmd_base;
+   GLuint buffer;
+   GLsizeiptr size;
+   GLuint memory;
+   GLuint64 offset;
+};
+static inline void
+_mesa_unmarshal_NamedBufferStorageMemEXT(struct gl_context *ctx, const struct marshal_cmd_NamedBufferStorageMemEXT *cmd)
+{
+   const GLuint buffer = cmd->buffer;
+   const GLsizeiptr size = cmd->size;
+   const GLuint memory = cmd->memory;
+   const GLuint64 offset = cmd->offset;
+   CALL_NamedBufferStorageMemEXT(ctx->CurrentServerDispatch, (buffer, size, memory, offset));
+}
+static void GLAPIENTRY
+_mesa_marshal_NamedBufferStorageMemEXT(GLuint buffer, GLsizeiptr size, GLuint memory, GLuint64 offset)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   size_t cmd_size = sizeof(struct marshal_cmd_NamedBufferStorageMemEXT);
+   struct marshal_cmd_NamedBufferStorageMemEXT *cmd;
+   debug_print_marshal("NamedBufferStorageMemEXT");
+   if (cmd_size <= MARSHAL_MAX_CMD_SIZE) {
+      cmd = _mesa_glthread_allocate_command(ctx, DISPATCH_CMD_NamedBufferStorageMemEXT, cmd_size);
+      cmd->buffer = buffer;
+      cmd->size = size;
+      cmd->memory = memory;
+      cmd->offset = offset;
+      _mesa_post_marshal_hook(ctx);
+      return;
+   }
+
+   _mesa_glthread_finish(ctx);
+   debug_print_sync_fallback("NamedBufferStorageMemEXT");
+   CALL_NamedBufferStorageMemEXT(ctx->CurrentServerDispatch, (buffer, size, memory, offset));
 }
 
 
@@ -18084,6 +18554,17 @@ _mesa_marshal_VertexAttrib1sNV(GLuint index, GLshort x)
    _mesa_glthread_finish(ctx);
    debug_print_sync_fallback("VertexAttrib1sNV");
    CALL_VertexAttrib1sNV(ctx->CurrentServerDispatch, (index, x));
+}
+
+
+/* SignalSemaphoreEXT: marshalled synchronously */
+static void GLAPIENTRY
+_mesa_marshal_SignalSemaphoreEXT(GLuint semaphore, GLuint numBufferBarriers, const GLuint * buffers, GLuint numTextureBarriers, const GLuint * textures, const GLenum * dstLayouts)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   _mesa_glthread_finish(ctx);
+   debug_print_sync("SignalSemaphoreEXT");
+   CALL_SignalSemaphoreEXT(ctx->CurrentServerDispatch, (semaphore, numBufferBarriers, buffers, numTextureBarriers, textures, dstLayouts));
 }
 
 
@@ -23394,6 +23875,17 @@ _mesa_marshal_TexParameteriv(GLenum target, GLenum pname, const GLint * params)
 }
 
 
+/* WaitSemaphoreEXT: marshalled synchronously */
+static void GLAPIENTRY
+_mesa_marshal_WaitSemaphoreEXT(GLuint semaphore, GLuint numBufferBarriers, const GLuint * buffers, GLuint numTextureBarriers, const GLuint * textures, const GLenum * srcLayouts)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   _mesa_glthread_finish(ctx);
+   debug_print_sync("WaitSemaphoreEXT");
+   CALL_WaitSemaphoreEXT(ctx->CurrentServerDispatch, (semaphore, numBufferBarriers, buffers, numTextureBarriers, textures, srcLayouts));
+}
+
+
 /* VertexAttrib3fvARB: marshalled asynchronously */
 struct marshal_cmd_VertexAttrib3fvARB
 {
@@ -24407,6 +24899,44 @@ fallback_to_sync:
 }
 
 
+/* ImportSemaphoreFdEXT: marshalled asynchronously */
+struct marshal_cmd_ImportSemaphoreFdEXT
+{
+   struct marshal_cmd_base cmd_base;
+   GLuint semaphore;
+   GLenum handleType;
+   GLint fd;
+};
+static inline void
+_mesa_unmarshal_ImportSemaphoreFdEXT(struct gl_context *ctx, const struct marshal_cmd_ImportSemaphoreFdEXT *cmd)
+{
+   const GLuint semaphore = cmd->semaphore;
+   const GLenum handleType = cmd->handleType;
+   const GLint fd = cmd->fd;
+   CALL_ImportSemaphoreFdEXT(ctx->CurrentServerDispatch, (semaphore, handleType, fd));
+}
+static void GLAPIENTRY
+_mesa_marshal_ImportSemaphoreFdEXT(GLuint semaphore, GLenum handleType, GLint fd)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   size_t cmd_size = sizeof(struct marshal_cmd_ImportSemaphoreFdEXT);
+   struct marshal_cmd_ImportSemaphoreFdEXT *cmd;
+   debug_print_marshal("ImportSemaphoreFdEXT");
+   if (cmd_size <= MARSHAL_MAX_CMD_SIZE) {
+      cmd = _mesa_glthread_allocate_command(ctx, DISPATCH_CMD_ImportSemaphoreFdEXT, cmd_size);
+      cmd->semaphore = semaphore;
+      cmd->handleType = handleType;
+      cmd->fd = fd;
+      _mesa_post_marshal_hook(ctx);
+      return;
+   }
+
+   _mesa_glthread_finish(ctx);
+   debug_print_sync_fallback("ImportSemaphoreFdEXT");
+   CALL_ImportSemaphoreFdEXT(ctx->CurrentServerDispatch, (semaphore, handleType, fd));
+}
+
+
 /* IsQuery: marshalled synchronously */
 static GLboolean GLAPIENTRY
 _mesa_marshal_IsQuery(GLuint id)
@@ -25203,6 +25733,17 @@ _mesa_marshal_VertexAttrib1dvNV(GLuint index, const GLdouble * v)
    _mesa_glthread_finish(ctx);
    debug_print_sync_fallback("VertexAttrib1dvNV");
    CALL_VertexAttrib1dvNV(ctx->CurrentServerDispatch, (index, v));
+}
+
+
+/* GetSemaphoreParameterui64vEXT: marshalled synchronously */
+static void GLAPIENTRY
+_mesa_marshal_GetSemaphoreParameterui64vEXT(GLuint semaphore, GLenum pname, GLuint64 * params)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   _mesa_glthread_finish(ctx);
+   debug_print_sync("GetSemaphoreParameterui64vEXT");
+   CALL_GetSemaphoreParameterui64vEXT(ctx->CurrentServerDispatch, (semaphore, pname, params));
 }
 
 
@@ -26736,6 +27277,17 @@ _mesa_marshal_InvalidateNamedFramebufferData(GLuint framebuffer, GLsizei numAtta
    _mesa_glthread_finish(ctx);
    debug_print_sync("InvalidateNamedFramebufferData");
    CALL_InvalidateNamedFramebufferData(ctx->CurrentServerDispatch, (framebuffer, numAttachments, attachments));
+}
+
+
+/* SemaphoreParameterui64vEXT: marshalled synchronously */
+static void GLAPIENTRY
+_mesa_marshal_SemaphoreParameterui64vEXT(GLuint semaphore, GLenum pname, const GLuint64 * params)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   _mesa_glthread_finish(ctx);
+   debug_print_sync("SemaphoreParameterui64vEXT");
+   CALL_SemaphoreParameterui64vEXT(ctx->CurrentServerDispatch, (semaphore, pname, params));
 }
 
 
@@ -29147,6 +29699,62 @@ _mesa_marshal_DrawArraysInstancedBaseInstance(GLenum mode, GLint first, GLsizei 
 }
 
 
+/* TextureStorageMem3DMultisampleEXT: marshalled asynchronously */
+struct marshal_cmd_TextureStorageMem3DMultisampleEXT
+{
+   struct marshal_cmd_base cmd_base;
+   GLuint texture;
+   GLsizei samples;
+   GLenum internalFormat;
+   GLsizei width;
+   GLsizei height;
+   GLsizei depth;
+   GLboolean fixedSampleLocations;
+   GLuint memory;
+   GLuint64 offset;
+};
+static inline void
+_mesa_unmarshal_TextureStorageMem3DMultisampleEXT(struct gl_context *ctx, const struct marshal_cmd_TextureStorageMem3DMultisampleEXT *cmd)
+{
+   const GLuint texture = cmd->texture;
+   const GLsizei samples = cmd->samples;
+   const GLenum internalFormat = cmd->internalFormat;
+   const GLsizei width = cmd->width;
+   const GLsizei height = cmd->height;
+   const GLsizei depth = cmd->depth;
+   const GLboolean fixedSampleLocations = cmd->fixedSampleLocations;
+   const GLuint memory = cmd->memory;
+   const GLuint64 offset = cmd->offset;
+   CALL_TextureStorageMem3DMultisampleEXT(ctx->CurrentServerDispatch, (texture, samples, internalFormat, width, height, depth, fixedSampleLocations, memory, offset));
+}
+static void GLAPIENTRY
+_mesa_marshal_TextureStorageMem3DMultisampleEXT(GLuint texture, GLsizei samples, GLenum internalFormat, GLsizei width, GLsizei height, GLsizei depth, GLboolean fixedSampleLocations, GLuint memory, GLuint64 offset)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   size_t cmd_size = sizeof(struct marshal_cmd_TextureStorageMem3DMultisampleEXT);
+   struct marshal_cmd_TextureStorageMem3DMultisampleEXT *cmd;
+   debug_print_marshal("TextureStorageMem3DMultisampleEXT");
+   if (cmd_size <= MARSHAL_MAX_CMD_SIZE) {
+      cmd = _mesa_glthread_allocate_command(ctx, DISPATCH_CMD_TextureStorageMem3DMultisampleEXT, cmd_size);
+      cmd->texture = texture;
+      cmd->samples = samples;
+      cmd->internalFormat = internalFormat;
+      cmd->width = width;
+      cmd->height = height;
+      cmd->depth = depth;
+      cmd->fixedSampleLocations = fixedSampleLocations;
+      cmd->memory = memory;
+      cmd->offset = offset;
+      _mesa_post_marshal_hook(ctx);
+      return;
+   }
+
+   _mesa_glthread_finish(ctx);
+   debug_print_sync_fallback("TextureStorageMem3DMultisampleEXT");
+   CALL_TextureStorageMem3DMultisampleEXT(ctx->CurrentServerDispatch, (texture, samples, internalFormat, width, height, depth, fixedSampleLocations, memory, offset));
+}
+
+
 /* CompressedTextureSubImage3D: marshalled synchronously */
 static void GLAPIENTRY
 _mesa_marshal_CompressedTextureSubImage3D(GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLsizei imageSize, const GLvoid * data)
@@ -29377,6 +29985,17 @@ _mesa_marshal_IsTransformFeedback(GLuint id)
    _mesa_glthread_finish(ctx);
    debug_print_sync("IsTransformFeedback");
    return CALL_IsTransformFeedback(ctx->CurrentServerDispatch, (id));
+}
+
+
+/* GetMemoryObjectParameterivEXT: marshalled synchronously */
+static void GLAPIENTRY
+_mesa_marshal_GetMemoryObjectParameterivEXT(GLuint memoryObject, GLenum pname, GLint * params)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   _mesa_glthread_finish(ctx);
+   debug_print_sync("GetMemoryObjectParameterivEXT");
+   CALL_GetMemoryObjectParameterivEXT(ctx->CurrentServerDispatch, (memoryObject, pname, params));
 }
 
 
@@ -29632,6 +30251,56 @@ _mesa_marshal_GetMinmaxParameterfv(GLenum target, GLenum pname, GLfloat * params
    _mesa_glthread_finish(ctx);
    debug_print_sync("GetMinmaxParameterfv");
    CALL_GetMinmaxParameterfv(ctx->CurrentServerDispatch, (target, pname, params));
+}
+
+
+/* TextureStorageMem2DEXT: marshalled asynchronously */
+struct marshal_cmd_TextureStorageMem2DEXT
+{
+   struct marshal_cmd_base cmd_base;
+   GLenum texture;
+   GLsizei levels;
+   GLenum internalFormat;
+   GLsizei width;
+   GLsizei height;
+   GLuint memory;
+   GLuint64 offset;
+};
+static inline void
+_mesa_unmarshal_TextureStorageMem2DEXT(struct gl_context *ctx, const struct marshal_cmd_TextureStorageMem2DEXT *cmd)
+{
+   const GLenum texture = cmd->texture;
+   const GLsizei levels = cmd->levels;
+   const GLenum internalFormat = cmd->internalFormat;
+   const GLsizei width = cmd->width;
+   const GLsizei height = cmd->height;
+   const GLuint memory = cmd->memory;
+   const GLuint64 offset = cmd->offset;
+   CALL_TextureStorageMem2DEXT(ctx->CurrentServerDispatch, (texture, levels, internalFormat, width, height, memory, offset));
+}
+static void GLAPIENTRY
+_mesa_marshal_TextureStorageMem2DEXT(GLenum texture, GLsizei levels, GLenum internalFormat, GLsizei width, GLsizei height, GLuint memory, GLuint64 offset)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   size_t cmd_size = sizeof(struct marshal_cmd_TextureStorageMem2DEXT);
+   struct marshal_cmd_TextureStorageMem2DEXT *cmd;
+   debug_print_marshal("TextureStorageMem2DEXT");
+   if (cmd_size <= MARSHAL_MAX_CMD_SIZE) {
+      cmd = _mesa_glthread_allocate_command(ctx, DISPATCH_CMD_TextureStorageMem2DEXT, cmd_size);
+      cmd->texture = texture;
+      cmd->levels = levels;
+      cmd->internalFormat = internalFormat;
+      cmd->width = width;
+      cmd->height = height;
+      cmd->memory = memory;
+      cmd->offset = offset;
+      _mesa_post_marshal_hook(ctx);
+      return;
+   }
+
+   _mesa_glthread_finish(ctx);
+   debug_print_sync_fallback("TextureStorageMem2DEXT");
+   CALL_TextureStorageMem2DEXT(ctx->CurrentServerDispatch, (texture, levels, internalFormat, width, height, memory, offset));
 }
 
 
@@ -30503,6 +31172,17 @@ _mesa_marshal_TexGeniv(GLenum coord, GLenum pname, const GLint * params)
    _mesa_glthread_finish(ctx);
    debug_print_sync("TexGeniv");
    CALL_TexGeniv(ctx->CurrentServerDispatch, (coord, pname, params));
+}
+
+
+/* IsMemoryObjectEXT: marshalled synchronously */
+static GLboolean GLAPIENTRY
+_mesa_marshal_IsMemoryObjectEXT(GLuint memoryObject)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   _mesa_glthread_finish(ctx);
+   debug_print_sync("IsMemoryObjectEXT");
+   return CALL_IsMemoryObjectEXT(ctx->CurrentServerDispatch, (memoryObject));
 }
 
 
@@ -32506,6 +33186,17 @@ _mesa_marshal_Color4b(GLbyte red, GLbyte green, GLbyte blue, GLbyte alpha)
 }
 
 
+/* MemoryObjectParameterivEXT: marshalled synchronously */
+static void GLAPIENTRY
+_mesa_marshal_MemoryObjectParameterivEXT(GLuint memoryObject, GLenum pname, const GLint * params)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   _mesa_glthread_finish(ctx);
+   debug_print_sync("MemoryObjectParameterivEXT");
+   CALL_MemoryObjectParameterivEXT(ctx->CurrentServerDispatch, (memoryObject, pname, params));
+}
+
+
 /* GetAttachedObjectsARB: marshalled synchronously */
 static void GLAPIENTRY
 _mesa_marshal_GetAttachedObjectsARB(GLhandleARB containerObj, GLsizei maxLength, GLsizei * length, GLhandleARB * infoLog)
@@ -33315,6 +34006,17 @@ fallback_to_sync:
 }
 
 
+/* DeleteMemoryObjectsEXT: marshalled synchronously */
+static void GLAPIENTRY
+_mesa_marshal_DeleteMemoryObjectsEXT(GLsizei n, const GLuint * memoryObjects)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   _mesa_glthread_finish(ctx);
+   debug_print_sync("DeleteMemoryObjectsEXT");
+   CALL_DeleteMemoryObjectsEXT(ctx->CurrentServerDispatch, (n, memoryObjects));
+}
+
+
 /* LoadMatrixf: marshalled asynchronously */
 struct marshal_cmd_LoadMatrixf
 {
@@ -33746,6 +34448,17 @@ _mesa_marshal_ColorP3ui(GLenum type, GLuint color)
    _mesa_glthread_finish(ctx);
    debug_print_sync_fallback("ColorP3ui");
    CALL_ColorP3ui(ctx->CurrentServerDispatch, (type, color));
+}
+
+
+/* GetUnsignedBytei_vEXT: marshalled synchronously */
+static void GLAPIENTRY
+_mesa_marshal_GetUnsignedBytei_vEXT(GLenum target, GLuint index, GLubyte * data)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   _mesa_glthread_finish(ctx);
+   debug_print_sync("GetUnsignedBytei_vEXT");
+   CALL_GetUnsignedBytei_vEXT(ctx->CurrentServerDispatch, (target, index, data));
 }
 
 
@@ -35348,6 +36061,59 @@ _mesa_marshal_GenVertexArrays(GLsizei n, GLuint * arrays)
    _mesa_glthread_finish(ctx);
    debug_print_sync("GenVertexArrays");
    CALL_GenVertexArrays(ctx->CurrentServerDispatch, (n, arrays));
+}
+
+
+/* TexStorageMem2DMultisampleEXT: marshalled asynchronously */
+struct marshal_cmd_TexStorageMem2DMultisampleEXT
+{
+   struct marshal_cmd_base cmd_base;
+   GLenum target;
+   GLsizei samples;
+   GLenum internalFormat;
+   GLsizei width;
+   GLsizei height;
+   GLboolean fixedSampleLocations;
+   GLuint memory;
+   GLuint64 offset;
+};
+static inline void
+_mesa_unmarshal_TexStorageMem2DMultisampleEXT(struct gl_context *ctx, const struct marshal_cmd_TexStorageMem2DMultisampleEXT *cmd)
+{
+   const GLenum target = cmd->target;
+   const GLsizei samples = cmd->samples;
+   const GLenum internalFormat = cmd->internalFormat;
+   const GLsizei width = cmd->width;
+   const GLsizei height = cmd->height;
+   const GLboolean fixedSampleLocations = cmd->fixedSampleLocations;
+   const GLuint memory = cmd->memory;
+   const GLuint64 offset = cmd->offset;
+   CALL_TexStorageMem2DMultisampleEXT(ctx->CurrentServerDispatch, (target, samples, internalFormat, width, height, fixedSampleLocations, memory, offset));
+}
+static void GLAPIENTRY
+_mesa_marshal_TexStorageMem2DMultisampleEXT(GLenum target, GLsizei samples, GLenum internalFormat, GLsizei width, GLsizei height, GLboolean fixedSampleLocations, GLuint memory, GLuint64 offset)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   size_t cmd_size = sizeof(struct marshal_cmd_TexStorageMem2DMultisampleEXT);
+   struct marshal_cmd_TexStorageMem2DMultisampleEXT *cmd;
+   debug_print_marshal("TexStorageMem2DMultisampleEXT");
+   if (cmd_size <= MARSHAL_MAX_CMD_SIZE) {
+      cmd = _mesa_glthread_allocate_command(ctx, DISPATCH_CMD_TexStorageMem2DMultisampleEXT, cmd_size);
+      cmd->target = target;
+      cmd->samples = samples;
+      cmd->internalFormat = internalFormat;
+      cmd->width = width;
+      cmd->height = height;
+      cmd->fixedSampleLocations = fixedSampleLocations;
+      cmd->memory = memory;
+      cmd->offset = offset;
+      _mesa_post_marshal_hook(ctx);
+      return;
+   }
+
+   _mesa_glthread_finish(ctx);
+   debug_print_sync_fallback("TexStorageMem2DMultisampleEXT");
+   CALL_TexStorageMem2DMultisampleEXT(ctx->CurrentServerDispatch, (target, samples, internalFormat, width, height, fixedSampleLocations, memory, offset));
 }
 
 
@@ -38684,6 +39450,62 @@ _mesa_marshal_MultMatrixx(const GLfixed * m)
 }
 
 
+/* TexStorageMem3DMultisampleEXT: marshalled asynchronously */
+struct marshal_cmd_TexStorageMem3DMultisampleEXT
+{
+   struct marshal_cmd_base cmd_base;
+   GLenum target;
+   GLsizei samples;
+   GLenum internalFormat;
+   GLsizei width;
+   GLsizei height;
+   GLsizei depth;
+   GLboolean fixedSampleLocations;
+   GLuint memory;
+   GLuint64 offset;
+};
+static inline void
+_mesa_unmarshal_TexStorageMem3DMultisampleEXT(struct gl_context *ctx, const struct marshal_cmd_TexStorageMem3DMultisampleEXT *cmd)
+{
+   const GLenum target = cmd->target;
+   const GLsizei samples = cmd->samples;
+   const GLenum internalFormat = cmd->internalFormat;
+   const GLsizei width = cmd->width;
+   const GLsizei height = cmd->height;
+   const GLsizei depth = cmd->depth;
+   const GLboolean fixedSampleLocations = cmd->fixedSampleLocations;
+   const GLuint memory = cmd->memory;
+   const GLuint64 offset = cmd->offset;
+   CALL_TexStorageMem3DMultisampleEXT(ctx->CurrentServerDispatch, (target, samples, internalFormat, width, height, depth, fixedSampleLocations, memory, offset));
+}
+static void GLAPIENTRY
+_mesa_marshal_TexStorageMem3DMultisampleEXT(GLenum target, GLsizei samples, GLenum internalFormat, GLsizei width, GLsizei height, GLsizei depth, GLboolean fixedSampleLocations, GLuint memory, GLuint64 offset)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   size_t cmd_size = sizeof(struct marshal_cmd_TexStorageMem3DMultisampleEXT);
+   struct marshal_cmd_TexStorageMem3DMultisampleEXT *cmd;
+   debug_print_marshal("TexStorageMem3DMultisampleEXT");
+   if (cmd_size <= MARSHAL_MAX_CMD_SIZE) {
+      cmd = _mesa_glthread_allocate_command(ctx, DISPATCH_CMD_TexStorageMem3DMultisampleEXT, cmd_size);
+      cmd->target = target;
+      cmd->samples = samples;
+      cmd->internalFormat = internalFormat;
+      cmd->width = width;
+      cmd->height = height;
+      cmd->depth = depth;
+      cmd->fixedSampleLocations = fixedSampleLocations;
+      cmd->memory = memory;
+      cmd->offset = offset;
+      _mesa_post_marshal_hook(ctx);
+      return;
+   }
+
+   _mesa_glthread_finish(ctx);
+   debug_print_sync_fallback("TexStorageMem3DMultisampleEXT");
+   CALL_TexStorageMem3DMultisampleEXT(ctx->CurrentServerDispatch, (target, samples, internalFormat, width, height, depth, fixedSampleLocations, memory, offset));
+}
+
+
 /* Rects: marshalled asynchronously */
 struct marshal_cmd_Rects
 {
@@ -39400,6 +40222,17 @@ fallback_to_sync:
 }
 
 
+/* CreateMemoryObjectsEXT: marshalled synchronously */
+static void GLAPIENTRY
+_mesa_marshal_CreateMemoryObjectsEXT(GLsizei n, GLuint * memoryObjects)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   _mesa_glthread_finish(ctx);
+   debug_print_sync("CreateMemoryObjectsEXT");
+   CALL_CreateMemoryObjectsEXT(ctx->CurrentServerDispatch, (n, memoryObjects));
+}
+
+
 size_t
 _mesa_unmarshal_dispatch_cmd(struct gl_context *ctx, const void *cmd)
 {
@@ -39793,6 +40626,10 @@ _mesa_unmarshal_dispatch_cmd(struct gl_context *ctx, const void *cmd)
       debug_print_unmarshal("SecondaryColor3s");
       _mesa_unmarshal_SecondaryColor3s(ctx, (const struct marshal_cmd_SecondaryColor3s *) cmd);
       break;
+   case DISPATCH_CMD_TexStorageMem2DEXT:
+      debug_print_unmarshal("TexStorageMem2DEXT");
+      _mesa_unmarshal_TexStorageMem2DEXT(ctx, (const struct marshal_cmd_TexStorageMem2DEXT *) cmd);
+      break;
    case DISPATCH_CMD_UniformMatrix3x4dv:
       debug_print_unmarshal("UniformMatrix3x4dv");
       _mesa_unmarshal_UniformMatrix3x4dv(ctx, (const struct marshal_cmd_UniformMatrix3x4dv *) cmd);
@@ -39817,6 +40654,10 @@ _mesa_unmarshal_dispatch_cmd(struct gl_context *ctx, const void *cmd)
       debug_print_unmarshal("FlushMappedBufferRange");
       _mesa_unmarshal_FlushMappedBufferRange(ctx, (const struct marshal_cmd_FlushMappedBufferRange *) cmd);
       break;
+   case DISPATCH_CMD_TexStorageMem3DEXT:
+      debug_print_unmarshal("TexStorageMem3DEXT");
+      _mesa_unmarshal_TexStorageMem3DEXT(ctx, (const struct marshal_cmd_TexStorageMem3DEXT *) cmd);
+      break;
    case DISPATCH_CMD_EndPerfMonitorAMD:
       debug_print_unmarshal("EndPerfMonitorAMD");
       _mesa_unmarshal_EndPerfMonitorAMD(ctx, (const struct marshal_cmd_EndPerfMonitorAMD *) cmd);
@@ -39840,6 +40681,14 @@ _mesa_unmarshal_dispatch_cmd(struct gl_context *ctx, const void *cmd)
    case DISPATCH_CMD_MakeImageHandleNonResidentARB:
       debug_print_unmarshal("MakeImageHandleNonResidentARB");
       _mesa_unmarshal_MakeImageHandleNonResidentARB(ctx, (const struct marshal_cmd_MakeImageHandleNonResidentARB *) cmd);
+      break;
+   case DISPATCH_CMD_ImportMemoryFdEXT:
+      debug_print_unmarshal("ImportMemoryFdEXT");
+      _mesa_unmarshal_ImportMemoryFdEXT(ctx, (const struct marshal_cmd_ImportMemoryFdEXT *) cmd);
+      break;
+   case DISPATCH_CMD_TexStorageMem1DEXT:
+      debug_print_unmarshal("TexStorageMem1DEXT");
+      _mesa_unmarshal_TexStorageMem1DEXT(ctx, (const struct marshal_cmd_TexStorageMem1DEXT *) cmd);
       break;
    case DISPATCH_CMD_BlendBarrier:
       debug_print_unmarshal("BlendBarrier");
@@ -39977,6 +40826,10 @@ _mesa_unmarshal_dispatch_cmd(struct gl_context *ctx, const void *cmd)
       debug_print_unmarshal("DepthBoundsEXT");
       _mesa_unmarshal_DepthBoundsEXT(ctx, (const struct marshal_cmd_DepthBoundsEXT *) cmd);
       break;
+   case DISPATCH_CMD_BufferStorageMemEXT:
+      debug_print_unmarshal("BufferStorageMemEXT");
+      _mesa_unmarshal_BufferStorageMemEXT(ctx, (const struct marshal_cmd_BufferStorageMemEXT *) cmd);
+      break;
    case DISPATCH_CMD_WindowPos3fv:
       debug_print_unmarshal("WindowPos3fv");
       _mesa_unmarshal_WindowPos3fv(ctx, (const struct marshal_cmd_WindowPos3fv *) cmd);
@@ -39996,6 +40849,10 @@ _mesa_unmarshal_dispatch_cmd(struct gl_context *ctx, const void *cmd)
    case DISPATCH_CMD_PrimitiveRestartIndex:
       debug_print_unmarshal("PrimitiveRestartIndex");
       _mesa_unmarshal_PrimitiveRestartIndex(ctx, (const struct marshal_cmd_PrimitiveRestartIndex *) cmd);
+      break;
+   case DISPATCH_CMD_TextureStorageMem3DEXT:
+      debug_print_unmarshal("TextureStorageMem3DEXT");
+      _mesa_unmarshal_TextureStorageMem3DEXT(ctx, (const struct marshal_cmd_TextureStorageMem3DEXT *) cmd);
       break;
    case DISPATCH_CMD_ActiveStencilFaceEXT:
       debug_print_unmarshal("ActiveStencilFaceEXT");
@@ -40749,6 +41606,10 @@ _mesa_unmarshal_dispatch_cmd(struct gl_context *ctx, const void *cmd)
       debug_print_unmarshal("TextureStorage3D");
       _mesa_unmarshal_TextureStorage3D(ctx, (const struct marshal_cmd_TextureStorage3D *) cmd);
       break;
+   case DISPATCH_CMD_TextureStorageMem2DMultisampleEXT:
+      debug_print_unmarshal("TextureStorageMem2DMultisampleEXT");
+      _mesa_unmarshal_TextureStorageMem2DMultisampleEXT(ctx, (const struct marshal_cmd_TextureStorageMem2DMultisampleEXT *) cmd);
+      break;
    case DISPATCH_CMD_Uniform1iv:
       debug_print_unmarshal("Uniform1iv");
       _mesa_unmarshal_Uniform1iv(ctx, (const struct marshal_cmd_Uniform1iv *) cmd);
@@ -40989,9 +41850,17 @@ _mesa_unmarshal_dispatch_cmd(struct gl_context *ctx, const void *cmd)
       debug_print_unmarshal("SecondaryColor3us");
       _mesa_unmarshal_SecondaryColor3us(ctx, (const struct marshal_cmd_SecondaryColor3us *) cmd);
       break;
+   case DISPATCH_CMD_TextureStorageMem1DEXT:
+      debug_print_unmarshal("TextureStorageMem1DEXT");
+      _mesa_unmarshal_TextureStorageMem1DEXT(ctx, (const struct marshal_cmd_TextureStorageMem1DEXT *) cmd);
+      break;
    case DISPATCH_CMD_SecondaryColor3ub:
       debug_print_unmarshal("SecondaryColor3ub");
       _mesa_unmarshal_SecondaryColor3ub(ctx, (const struct marshal_cmd_SecondaryColor3ub *) cmd);
+      break;
+   case DISPATCH_CMD_NamedBufferStorageMemEXT:
+      debug_print_unmarshal("NamedBufferStorageMemEXT");
+      _mesa_unmarshal_NamedBufferStorageMemEXT(ctx, (const struct marshal_cmd_NamedBufferStorageMemEXT *) cmd);
       break;
    case DISPATCH_CMD_SecondaryColor3ui:
       debug_print_unmarshal("SecondaryColor3ui");
@@ -41589,6 +42458,10 @@ _mesa_unmarshal_dispatch_cmd(struct gl_context *ctx, const void *cmd)
       debug_print_unmarshal("VertexAttribs1dvNV");
       _mesa_unmarshal_VertexAttribs1dvNV(ctx, (const struct marshal_cmd_VertexAttribs1dvNV *) cmd);
       break;
+   case DISPATCH_CMD_ImportSemaphoreFdEXT:
+      debug_print_unmarshal("ImportSemaphoreFdEXT");
+      _mesa_unmarshal_ImportSemaphoreFdEXT(ctx, (const struct marshal_cmd_ImportSemaphoreFdEXT *) cmd);
+      break;
    case DISPATCH_CMD_EdgeFlagPointerEXT:
       debug_print_unmarshal("EdgeFlagPointerEXT");
       _mesa_unmarshal_EdgeFlagPointerEXT(ctx, (const struct marshal_cmd_EdgeFlagPointerEXT *) cmd);
@@ -42005,6 +42878,10 @@ _mesa_unmarshal_dispatch_cmd(struct gl_context *ctx, const void *cmd)
       debug_print_unmarshal("DrawArraysInstancedBaseInstance");
       _mesa_unmarshal_DrawArraysInstancedBaseInstance(ctx, (const struct marshal_cmd_DrawArraysInstancedBaseInstance *) cmd);
       break;
+   case DISPATCH_CMD_TextureStorageMem3DMultisampleEXT:
+      debug_print_unmarshal("TextureStorageMem3DMultisampleEXT");
+      _mesa_unmarshal_TextureStorageMem3DMultisampleEXT(ctx, (const struct marshal_cmd_TextureStorageMem3DMultisampleEXT *) cmd);
+      break;
    case DISPATCH_CMD_PopAttrib:
       debug_print_unmarshal("PopAttrib");
       _mesa_unmarshal_PopAttrib(ctx, (const struct marshal_cmd_PopAttrib *) cmd);
@@ -42048,6 +42925,10 @@ _mesa_unmarshal_dispatch_cmd(struct gl_context *ctx, const void *cmd)
    case DISPATCH_CMD_BeginFragmentShaderATI:
       debug_print_unmarshal("BeginFragmentShaderATI");
       _mesa_unmarshal_BeginFragmentShaderATI(ctx, (const struct marshal_cmd_BeginFragmentShaderATI *) cmd);
+      break;
+   case DISPATCH_CMD_TextureStorageMem2DEXT:
+      debug_print_unmarshal("TextureStorageMem2DEXT");
+      _mesa_unmarshal_TextureStorageMem2DEXT(ctx, (const struct marshal_cmd_TextureStorageMem2DEXT *) cmd);
       break;
    case DISPATCH_CMD_WaitSync:
       debug_print_unmarshal("WaitSync");
@@ -42577,6 +43458,10 @@ _mesa_unmarshal_dispatch_cmd(struct gl_context *ctx, const void *cmd)
       debug_print_unmarshal("UseProgram");
       _mesa_unmarshal_UseProgram(ctx, (const struct marshal_cmd_UseProgram *) cmd);
       break;
+   case DISPATCH_CMD_TexStorageMem2DMultisampleEXT:
+      debug_print_unmarshal("TexStorageMem2DMultisampleEXT");
+      _mesa_unmarshal_TexStorageMem2DMultisampleEXT(ctx, (const struct marshal_cmd_TexStorageMem2DMultisampleEXT *) cmd);
+      break;
    case DISPATCH_CMD_Color3s:
       debug_print_unmarshal("Color3s");
       _mesa_unmarshal_Color3s(ctx, (const struct marshal_cmd_Color3s *) cmd);
@@ -42885,6 +43770,10 @@ _mesa_unmarshal_dispatch_cmd(struct gl_context *ctx, const void *cmd)
       debug_print_unmarshal("MultMatrixx");
       _mesa_unmarshal_MultMatrixx(ctx, (const struct marshal_cmd_MultMatrixx *) cmd);
       break;
+   case DISPATCH_CMD_TexStorageMem3DMultisampleEXT:
+      debug_print_unmarshal("TexStorageMem3DMultisampleEXT");
+      _mesa_unmarshal_TexStorageMem3DMultisampleEXT(ctx, (const struct marshal_cmd_TexStorageMem3DMultisampleEXT *) cmd);
+      break;
    case DISPATCH_CMD_Rects:
       debug_print_unmarshal("Rects");
       _mesa_unmarshal_Rects(ctx, (const struct marshal_cmd_Rects *) cmd);
@@ -43012,6 +43901,7 @@ _mesa_create_marshal_table(const struct gl_context *ctx)
    SET_ValidateProgramPipeline(table, _mesa_marshal_ValidateProgramPipeline);
    SET_BindFragDataLocationIndexed(table, _mesa_marshal_BindFragDataLocationIndexed);
    SET_GetClipPlane(table, _mesa_marshal_GetClipPlane);
+   SET_DeleteSemaphoresEXT(table, _mesa_marshal_DeleteSemaphoresEXT);
    SET_TexCoordP4uiv(table, _mesa_marshal_TexCoordP4uiv);
    SET_VertexAttribs3dvNV(table, _mesa_marshal_VertexAttribs3dvNV);
    SET_ProgramUniformMatrix2x4dv(table, _mesa_marshal_ProgramUniformMatrix2x4dv);
@@ -43119,6 +44009,7 @@ _mesa_create_marshal_table(const struct gl_context *ctx)
    SET_VDPAUUnmapSurfacesNV(table, _mesa_marshal_VDPAUUnmapSurfacesNV);
    SET_GetnHistogramARB(table, _mesa_marshal_GetnHistogramARB);
    SET_SecondaryColor3s(table, _mesa_marshal_SecondaryColor3s);
+   SET_TexStorageMem2DEXT(table, _mesa_marshal_TexStorageMem2DEXT);
    SET_VertexAttribP2uiv(table, _mesa_marshal_VertexAttribP2uiv);
    SET_UniformMatrix3x4dv(table, _mesa_marshal_UniformMatrix3x4dv);
    SET_VertexAttrib3fNV(table, _mesa_marshal_VertexAttrib3fNV);
@@ -43127,6 +44018,7 @@ _mesa_create_marshal_table(const struct gl_context *ctx)
    SET_GetActiveSubroutineName(table, _mesa_marshal_GetActiveSubroutineName);
    SET_SecondaryColor3i(table, _mesa_marshal_SecondaryColor3i);
    SET_FlushMappedBufferRange(table, _mesa_marshal_FlushMappedBufferRange);
+   SET_TexStorageMem3DEXT(table, _mesa_marshal_TexStorageMem3DEXT);
    SET_Lightfv(table, _mesa_marshal_Lightfv);
    SET_GetFramebufferAttachmentParameteriv(table, _mesa_marshal_GetFramebufferAttachmentParameteriv);
    SET_ColorSubTable(table, _mesa_marshal_ColorSubTable);
@@ -43140,7 +44032,9 @@ _mesa_create_marshal_table(const struct gl_context *ctx)
    SET_Rectdv(table, _mesa_marshal_Rectdv);
    SET_DrawArraysInstancedARB(table, _mesa_marshal_DrawArraysInstancedARB);
    SET_MakeImageHandleNonResidentARB(table, _mesa_marshal_MakeImageHandleNonResidentARB);
+   SET_ImportMemoryFdEXT(table, _mesa_marshal_ImportMemoryFdEXT);
    SET_ProgramEnvParameters4fvEXT(table, _mesa_marshal_ProgramEnvParameters4fvEXT);
+   SET_TexStorageMem1DEXT(table, _mesa_marshal_TexStorageMem1DEXT);
    SET_BlendBarrier(table, _mesa_marshal_BlendBarrier);
    SET_VertexAttrib2svNV(table, _mesa_marshal_VertexAttrib2svNV);
    SET_SecondaryColorP3uiv(table, _mesa_marshal_SecondaryColorP3uiv);
@@ -43203,6 +44097,7 @@ _mesa_create_marshal_table(const struct gl_context *ctx)
    SET_Uniform1fv(table, _mesa_marshal_Uniform1fv);
    SET_GetProgramPipelineInfoLog(table, _mesa_marshal_GetProgramPipelineInfoLog);
    SET_DepthBoundsEXT(table, _mesa_marshal_DepthBoundsEXT);
+   SET_BufferStorageMemEXT(table, _mesa_marshal_BufferStorageMemEXT);
    SET_WindowPos3fv(table, _mesa_marshal_WindowPos3fv);
    SET_GetHistogramParameteriv(table, _mesa_marshal_GetHistogramParameteriv);
    SET_PointParameteriv(table, _mesa_marshal_PointParameteriv);
@@ -43211,6 +44106,7 @@ _mesa_create_marshal_table(const struct gl_context *ctx)
    SET_BindRenderbuffer(table, _mesa_marshal_BindRenderbuffer);
    SET_SecondaryColor3fEXT(table, _mesa_marshal_SecondaryColor3fEXT);
    SET_PrimitiveRestartIndex(table, _mesa_marshal_PrimitiveRestartIndex);
+   SET_TextureStorageMem3DEXT(table, _mesa_marshal_TextureStorageMem3DEXT);
    SET_VertexAttribI4ubv(table, _mesa_marshal_VertexAttribI4ubv);
    SET_GetGraphicsResetStatusARB(table, _mesa_marshal_GetGraphicsResetStatusARB);
    SET_CreateRenderbuffers(table, _mesa_marshal_CreateRenderbuffers);
@@ -43299,6 +44195,7 @@ _mesa_create_marshal_table(const struct gl_context *ctx)
    SET_DeleteSync(table, _mesa_marshal_DeleteSync);
    SET_WindowPos4fvMESA(table, _mesa_marshal_WindowPos4fvMESA);
    SET_CompressedTexImage3D(table, _mesa_marshal_CompressedTexImage3D);
+   SET_GenSemaphoresEXT(table, _mesa_marshal_GenSemaphoresEXT);
    SET_VertexAttribI1uiv(table, _mesa_marshal_VertexAttribI1uiv);
    SET_SecondaryColor3dv(table, _mesa_marshal_SecondaryColor3dv);
    SET_GetnPixelMapusvARB(table, _mesa_marshal_GetnPixelMapusvARB);
@@ -43477,6 +44374,7 @@ _mesa_create_marshal_table(const struct gl_context *ctx)
    SET_PixelZoom(table, _mesa_marshal_PixelZoom);
    SET_ProgramEnvParameter4dARB(table, _mesa_marshal_ProgramEnvParameter4dARB);
    SET_ColorTableParameterfv(table, _mesa_marshal_ColorTableParameterfv);
+   SET_IsSemaphoreEXT(table, _mesa_marshal_IsSemaphoreEXT);
    SET_IsTexture(table, _mesa_marshal_IsTexture);
    SET_ProgramUniform3uiv(table, _mesa_marshal_ProgramUniform3uiv);
    SET_IndexPointer(table, _mesa_marshal_IndexPointer);
@@ -43490,6 +44388,7 @@ _mesa_create_marshal_table(const struct gl_context *ctx)
    SET_TextureStorage3D(table, _mesa_marshal_TextureStorage3D);
    SET_TexCoordP3uiv(table, _mesa_marshal_TexCoordP3uiv);
    SET_GetnUniformui64vARB(table, _mesa_marshal_GetnUniformui64vARB);
+   SET_TextureStorageMem2DMultisampleEXT(table, _mesa_marshal_TextureStorageMem2DMultisampleEXT);
    SET_Uniform1iv(table, _mesa_marshal_Uniform1iv);
    SET_Uniform4uiv(table, _mesa_marshal_Uniform4uiv);
    SET_PopDebugGroup(table, _mesa_marshal_PopDebugGroup);
@@ -43531,6 +44430,7 @@ _mesa_create_marshal_table(const struct gl_context *ctx)
    SET_ProgramUniformMatrix2fv(table, _mesa_marshal_ProgramUniformMatrix2fv);
    SET_ProgramLocalParameter4fvARB(table, _mesa_marshal_ProgramLocalParameter4fvARB);
    SET_Uniform4dv(table, _mesa_marshal_Uniform4dv);
+   SET_GetUnsignedBytevEXT(table, _mesa_marshal_GetUnsignedBytevEXT);
    SET_LightModelx(table, _mesa_marshal_LightModelx);
    SET_VertexAttribI3iEXT(table, _mesa_marshal_VertexAttribI3iEXT);
    SET_ClearColorx(table, _mesa_marshal_ClearColorx);
@@ -43580,10 +44480,13 @@ _mesa_create_marshal_table(const struct gl_context *ctx)
    SET_CreateVertexArrays(table, _mesa_marshal_CreateVertexArrays);
    SET_FogCoordPointer(table, _mesa_marshal_FogCoordPointer);
    SET_SecondaryColor3us(table, _mesa_marshal_SecondaryColor3us);
+   SET_TextureStorageMem1DEXT(table, _mesa_marshal_TextureStorageMem1DEXT);
    SET_SecondaryColor3ub(table, _mesa_marshal_SecondaryColor3ub);
+   SET_NamedBufferStorageMemEXT(table, _mesa_marshal_NamedBufferStorageMemEXT);
    SET_SecondaryColor3ui(table, _mesa_marshal_SecondaryColor3ui);
    SET_ProgramUniform4ui64ARB(table, _mesa_marshal_ProgramUniform4ui64ARB);
    SET_VertexAttrib1sNV(table, _mesa_marshal_VertexAttrib1sNV);
+   SET_SignalSemaphoreEXT(table, _mesa_marshal_SignalSemaphoreEXT);
    SET_TextureBuffer(table, _mesa_marshal_TextureBuffer);
    SET_InitNames(table, _mesa_marshal_InitNames);
    SET_Normal3sv(table, _mesa_marshal_Normal3sv);
@@ -43767,6 +44670,7 @@ _mesa_create_marshal_table(const struct gl_context *ctx)
    SET_RasterPos3sv(table, _mesa_marshal_RasterPos3sv);
    SET_TexCoordP2ui(table, _mesa_marshal_TexCoordP2ui);
    SET_TexParameteriv(table, _mesa_marshal_TexParameteriv);
+   SET_WaitSemaphoreEXT(table, _mesa_marshal_WaitSemaphoreEXT);
    SET_VertexAttrib3fvARB(table, _mesa_marshal_VertexAttrib3fvARB);
    SET_ProgramUniformMatrix3x4fv(table, _mesa_marshal_ProgramUniformMatrix3x4fv);
    SET_GetColorTable(table, _mesa_marshal_GetColorTable);
@@ -43796,6 +44700,7 @@ _mesa_create_marshal_table(const struct gl_context *ctx)
    SET_ProgramUniform2i64vARB(table, _mesa_marshal_ProgramUniform2i64vARB);
    SET_MultiTexCoordP2ui(table, _mesa_marshal_MultiTexCoordP2ui);
    SET_VertexAttribs1dvNV(table, _mesa_marshal_VertexAttribs1dvNV);
+   SET_ImportSemaphoreFdEXT(table, _mesa_marshal_ImportSemaphoreFdEXT);
    SET_IsQuery(table, _mesa_marshal_IsQuery);
    SET_EdgeFlagPointerEXT(table, _mesa_marshal_EdgeFlagPointerEXT);
    SET_VertexAttribs2svNV(table, _mesa_marshal_VertexAttribs2svNV);
@@ -43820,6 +44725,7 @@ _mesa_create_marshal_table(const struct gl_context *ctx)
    SET_VertexAttrib4s(table, _mesa_marshal_VertexAttrib4s);
    SET_ProgramUniform1i64vARB(table, _mesa_marshal_ProgramUniform1i64vARB);
    SET_VertexAttrib1dvNV(table, _mesa_marshal_VertexAttrib1dvNV);
+   SET_GetSemaphoreParameterui64vEXT(table, _mesa_marshal_GetSemaphoreParameterui64vEXT);
    SET_TexStorage3DMultisample(table, _mesa_marshal_TexStorage3DMultisample);
    SET_SamplerParameteriv(table, _mesa_marshal_SamplerParameteriv);
    SET_VertexAttribP3uiv(table, _mesa_marshal_VertexAttribP3uiv);
@@ -43874,6 +44780,7 @@ _mesa_create_marshal_table(const struct gl_context *ctx)
    SET_DrawTexivOES(table, _mesa_marshal_DrawTexivOES);
    SET_CopyTexImage1D(table, _mesa_marshal_CopyTexImage1D);
    SET_InvalidateNamedFramebufferData(table, _mesa_marshal_InvalidateNamedFramebufferData);
+   SET_SemaphoreParameterui64vEXT(table, _mesa_marshal_SemaphoreParameterui64vEXT);
    SET_GetnColorTableARB(table, _mesa_marshal_GetnColorTableARB);
    SET_VertexAttribFormat(table, _mesa_marshal_VertexAttribFormat);
    SET_Vertex3i(table, _mesa_marshal_Vertex3i);
@@ -43953,6 +44860,7 @@ _mesa_create_marshal_table(const struct gl_context *ctx)
    SET_IndexMask(table, _mesa_marshal_IndexMask);
    SET_VertexAttribIFormat(table, _mesa_marshal_VertexAttribIFormat);
    SET_DrawArraysInstancedBaseInstance(table, _mesa_marshal_DrawArraysInstancedBaseInstance);
+   SET_TextureStorageMem3DMultisampleEXT(table, _mesa_marshal_TextureStorageMem3DMultisampleEXT);
    SET_CompressedTextureSubImage3D(table, _mesa_marshal_CompressedTextureSubImage3D);
    SET_PopAttrib(table, _mesa_marshal_PopAttrib);
    SET_Uniform3ui(table, _mesa_marshal_Uniform3ui);
@@ -43962,6 +44870,7 @@ _mesa_create_marshal_table(const struct gl_context *ctx)
    SET_ProgramUniformMatrix3x2fv(table, _mesa_marshal_ProgramUniformMatrix3x2fv);
    SET_GetDoublei_v(table, _mesa_marshal_GetDoublei_v);
    SET_IsTransformFeedback(table, _mesa_marshal_IsTransformFeedback);
+   SET_GetMemoryObjectParameterivEXT(table, _mesa_marshal_GetMemoryObjectParameterivEXT);
    SET_ClipPlanex(table, _mesa_marshal_ClipPlanex);
    SET_GetLightfv(table, _mesa_marshal_GetLightfv);
    SET_ClipPlanef(table, _mesa_marshal_ClipPlanef);
@@ -43971,6 +44880,7 @@ _mesa_create_marshal_table(const struct gl_context *ctx)
    SET_BeginFragmentShaderATI(table, _mesa_marshal_BeginFragmentShaderATI);
    SET_GenRenderbuffers(table, _mesa_marshal_GenRenderbuffers);
    SET_GetMinmaxParameterfv(table, _mesa_marshal_GetMinmaxParameterfv);
+   SET_TextureStorageMem2DEXT(table, _mesa_marshal_TextureStorageMem2DEXT);
    SET_IsEnabledi(table, _mesa_marshal_IsEnabledi);
    SET_WaitSync(table, _mesa_marshal_WaitSync);
    SET_GetVertexAttribPointerv(table, _mesa_marshal_GetVertexAttribPointerv);
@@ -44001,6 +44911,7 @@ _mesa_create_marshal_table(const struct gl_context *ctx)
    SET_GetVertexAttribfv(table, _mesa_marshal_GetVertexAttribfv);
    SET_MultiTexCoordP4uiv(table, _mesa_marshal_MultiTexCoordP4uiv);
    SET_TexGeniv(table, _mesa_marshal_TexGeniv);
+   SET_IsMemoryObjectEXT(table, _mesa_marshal_IsMemoryObjectEXT);
    SET_BlendColor(table, _mesa_marshal_BlendColor);
    SET_VertexAttribs2dvNV(table, _mesa_marshal_VertexAttribs2dvNV);
    SET_VertexAttrib2dvNV(table, _mesa_marshal_VertexAttrib2dvNV);
@@ -44067,6 +44978,7 @@ _mesa_create_marshal_table(const struct gl_context *ctx)
    SET_ShaderStorageBlockBinding(table, _mesa_marshal_ShaderStorageBlockBinding);
    SET_Color4d(table, _mesa_marshal_Color4d);
    SET_Color4b(table, _mesa_marshal_Color4b);
+   SET_MemoryObjectParameterivEXT(table, _mesa_marshal_MemoryObjectParameterivEXT);
    SET_GetAttachedObjectsARB(table, _mesa_marshal_GetAttachedObjectsARB);
    SET_EvalCoord1fv(table, _mesa_marshal_EvalCoord1fv);
    SET_VertexAttribLFormat(table, _mesa_marshal_VertexAttribLFormat);
@@ -44097,6 +45009,7 @@ _mesa_create_marshal_table(const struct gl_context *ctx)
    SET_FramebufferTextureLayer(table, _mesa_marshal_FramebufferTextureLayer);
    SET_TexEnvfv(table, _mesa_marshal_TexEnvfv);
    SET_ProgramUniformMatrix3fv(table, _mesa_marshal_ProgramUniformMatrix3fv);
+   SET_DeleteMemoryObjectsEXT(table, _mesa_marshal_DeleteMemoryObjectsEXT);
    SET_LoadMatrixf(table, _mesa_marshal_LoadMatrixf);
    SET_GetProgramLocalParameterfvARB(table, _mesa_marshal_GetProgramLocalParameterfvARB);
    SET_MakeTextureHandleResidentARB(table, _mesa_marshal_MakeTextureHandleResidentARB);
@@ -44112,6 +45025,7 @@ _mesa_create_marshal_table(const struct gl_context *ctx)
    SET_VDPAUUnregisterSurfaceNV(table, _mesa_marshal_VDPAUUnregisterSurfaceNV);
    SET_ColorP3ui(table, _mesa_marshal_ColorP3ui);
    SET_ClearBufferuiv(table, _mesa_marshal_ClearBufferuiv);
+   SET_GetUnsignedBytei_vEXT(table, _mesa_marshal_GetUnsignedBytei_vEXT);
    SET_GetShaderPrecisionFormat(table, _mesa_marshal_GetShaderPrecisionFormat);
    SET_Flush(table, _mesa_marshal_Flush);
    SET_MakeTextureHandleNonResidentARB(table, _mesa_marshal_MakeTextureHandleNonResidentARB);
@@ -44167,6 +45081,7 @@ _mesa_create_marshal_table(const struct gl_context *ctx)
    SET_ClearNamedBufferSubData(table, _mesa_marshal_ClearNamedBufferSubData);
    SET_GetNamedFramebufferAttachmentParameteriv(table, _mesa_marshal_GetNamedFramebufferAttachmentParameteriv);
    SET_GenVertexArrays(table, _mesa_marshal_GenVertexArrays);
+   SET_TexStorageMem2DMultisampleEXT(table, _mesa_marshal_TexStorageMem2DMultisampleEXT);
    SET_Color3s(table, _mesa_marshal_Color3s);
    SET_TextureStorage2DMultisample(table, _mesa_marshal_TextureStorage2DMultisample);
    SET_TexCoordPointer(table, _mesa_marshal_TexCoordPointer);
@@ -44280,6 +45195,7 @@ _mesa_create_marshal_table(const struct gl_context *ctx)
    SET_Rectf(table, _mesa_marshal_Rectf);
    SET_Rectd(table, _mesa_marshal_Rectd);
    SET_MultMatrixx(table, _mesa_marshal_MultMatrixx);
+   SET_TexStorageMem3DMultisampleEXT(table, _mesa_marshal_TexStorageMem3DMultisampleEXT);
    SET_Rects(table, _mesa_marshal_Rects);
    SET_GetVertexAttribIiv(table, _mesa_marshal_GetVertexAttribIiv);
    SET_ClientWaitSync(table, _mesa_marshal_ClientWaitSync);
@@ -44307,6 +45223,7 @@ _mesa_create_marshal_table(const struct gl_context *ctx)
    SET_GetPerfMonitorCounterStringAMD(table, _mesa_marshal_GetPerfMonitorCounterStringAMD);
    SET_EndFragmentShaderATI(table, _mesa_marshal_EndFragmentShaderATI);
    SET_Uniform4iv(table, _mesa_marshal_Uniform4iv);
+   SET_CreateMemoryObjectsEXT(table, _mesa_marshal_CreateMemoryObjectsEXT);
 
    return table;
 }

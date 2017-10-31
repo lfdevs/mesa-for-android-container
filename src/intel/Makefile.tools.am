@@ -31,7 +31,6 @@ tools_aubinator_SOURCES = \
 
 tools_aubinator_CFLAGS = \
 	$(AM_CFLAGS) \
-	$(EXPAT_CFLAGS) \
 	$(ZLIB_CFLAGS)
 
 tools_aubinator_LDADD = \
@@ -41,7 +40,6 @@ tools_aubinator_LDADD = \
 	$(PER_GEN_LIBS) \
 	$(PTHREAD_LIBS) \
 	$(DLOPEN_LIBS) \
-	$(EXPAT_LIBS) \
 	$(ZLIB_LIBS) \
 	-lm
 
@@ -56,10 +54,8 @@ tools_aubinator_error_decode_LDADD = \
 	compiler/libintel_compiler.la \
 	$(top_builddir)/src/util/libmesautil.la \
 	$(PTHREAD_LIBS) \
-	$(EXPAT_LIBS) \
 	$(ZLIB_LIBS)
 
 tools_aubinator_error_decode_CFLAGS = \
 	$(AM_CFLAGS) \
-	$(EXPAT_CFLAGS) \
 	$(ZLIB_CFLAGS)

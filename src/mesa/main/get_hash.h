@@ -93,7 +93,7 @@ static const struct value_desc values[] = {
     { GL_MAX_LABEL_LENGTH, CONST(MAX_LABEL_LENGTH), NO_EXTRA },
     { GL_MAX_DEBUG_GROUP_STACK_DEPTH, CONST(MAX_DEBUG_GROUP_STACK_DEPTH), NO_EXTRA },
     { GL_DEBUG_GROUP_STACK_DEPTH, LOC_CUSTOM, TYPE_INT, 0, NO_EXTRA },
-    { GL_POLYGON_OFFSET_CLAMP_EXT, CONTEXT_FLOAT(Polygon.OffsetClamp), extra_EXT_polygon_offset_clamp },
+    { GL_POLYGON_OFFSET_CLAMP_EXT, CONTEXT_FLOAT(Polygon.OffsetClamp), extra_ARB_polygon_offset_clamp },
     { GL_MAX_LIGHTS, CONTEXT_INT(Const.MaxLights), NO_EXTRA },
     { GL_LIGHT0, CONTEXT_BOOL(Light.Light[0].Enabled), NO_EXTRA },
     { GL_LIGHT1, CONTEXT_BOOL(Light.Light[1].Enabled), NO_EXTRA },

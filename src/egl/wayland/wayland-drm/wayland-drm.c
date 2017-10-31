@@ -55,7 +55,7 @@ struct wl_drm {
 static void
 destroy_buffer(struct wl_resource *resource)
 {
-	struct wl_drm_buffer *buffer = resource->data;
+	struct wl_drm_buffer *buffer = wl_resource_get_user_data(resource);
 	struct wl_drm *drm = buffer->drm;
 
 	drm->callbacks.release_buffer(drm->user_data, buffer);
@@ -77,7 +77,7 @@ create_buffer(struct wl_client *client, struct wl_resource *resource,
               int32_t offset1, int32_t stride1,
               int32_t offset2, int32_t stride2)
 {
-	struct wl_drm *drm = resource->data;
+	struct wl_drm *drm = wl_resource_get_user_data(resource);
 	struct wl_drm_buffer *buffer;
 
 	buffer = calloc(1, sizeof *buffer);
@@ -187,7 +187,7 @@ static void
 drm_authenticate(struct wl_client *client,
 		 struct wl_resource *resource, uint32_t id)
 {
-	struct wl_drm *drm = resource->data;
+	struct wl_drm *drm = wl_resource_get_user_data(resource);
 
 	if (drm->callbacks.authenticate(drm->user_data, id) < 0)
 		wl_resource_post_error(resource,
@@ -259,7 +259,7 @@ wayland_drm_buffer_get(struct wl_drm *drm, struct wl_resource *resource)
 
 struct wl_drm *
 wayland_drm_init(struct wl_display *display, char *device_name,
-                 struct wayland_drm_callbacks *callbacks, void *user_data,
+                 const struct wayland_drm_callbacks *callbacks, void *user_data,
                  uint32_t flags)
 {
 	struct wl_drm *drm;
@@ -291,16 +291,4 @@ wayland_drm_uninit(struct wl_drm *drm)
 	wl_global_destroy(drm->wl_drm_global);
 
 	free(drm);
-}
-
-uint32_t
-wayland_drm_buffer_get_format(struct wl_drm_buffer *buffer)
-{
-	return buffer->format;
-}
-
-void *
-wayland_drm_buffer_get_buffer(struct wl_drm_buffer *buffer)
-{
-	return buffer->driver_buffer;
 }

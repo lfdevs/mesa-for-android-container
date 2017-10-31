@@ -92,14 +92,10 @@ tally_prims_written(struct brw_context *brw,
       /* GPR0 = Tally */
       brw_load_register_imm32(brw, HSW_CS_GPR(0) + 4, 0);
       brw_load_register_mem(brw, HSW_CS_GPR(0), obj->prim_count_bo,
-                            I915_GEM_DOMAIN_INSTRUCTION,
-                            I915_GEM_DOMAIN_INSTRUCTION,
                             TALLY_OFFSET + i * sizeof(uint32_t));
       if (!obj->base.Paused) {
          /* GPR1 = Start Snapshot */
          brw_load_register_mem64(brw, HSW_CS_GPR(1), obj->prim_count_bo,
-                                 I915_GEM_DOMAIN_INSTRUCTION,
-                                 I915_GEM_DOMAIN_INSTRUCTION,
                                  START_OFFSET + i * sizeof(uint64_t));
          /* GPR2 = Ending Snapshot */
          brw_load_register_reg64(brw, GEN7_SO_NUM_PRIMS_WRITTEN(i), HSW_CS_GPR(2));
@@ -165,11 +161,12 @@ hsw_begin_transform_feedback(struct gl_context *ctx, GLenum mode,
    struct brw_context *brw = brw_context(ctx);
    struct brw_transform_feedback_object *brw_obj =
       (struct brw_transform_feedback_object *) obj;
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
 
    brw_obj->primitive_mode = mode;
 
    /* Reset the SO buffer offsets to 0. */
-   if (brw->gen >= 8) {
+   if (devinfo->gen >= 8) {
       brw_obj->zero_offsets = true;
    } else {
       BEGIN_BATCH(1 + 2 * BRW_MAX_XFB_STREAMS);
@@ -199,8 +196,9 @@ hsw_pause_transform_feedback(struct gl_context *ctx,
    struct brw_context *brw = brw_context(ctx);
    struct brw_transform_feedback_object *brw_obj =
       (struct brw_transform_feedback_object *) obj;
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
 
-   if (brw->is_haswell) {
+   if (devinfo->is_haswell) {
       /* Flush any drawing so that the counters have the right values. */
       brw_emit_mi_flush(brw);
 
@@ -209,9 +207,7 @@ hsw_pause_transform_feedback(struct gl_context *ctx,
          BEGIN_BATCH(3);
          OUT_BATCH(MI_STORE_REGISTER_MEM | (3 - 2));
          OUT_BATCH(GEN7_SO_WRITE_OFFSET(i));
-         OUT_RELOC(brw_obj->offset_bo,
-                   I915_GEM_DOMAIN_INSTRUCTION, I915_GEM_DOMAIN_INSTRUCTION,
-                   i * sizeof(uint32_t));
+         OUT_RELOC(brw_obj->offset_bo, RELOC_WRITE, i * sizeof(uint32_t));
          ADVANCE_BATCH();
       }
    }
@@ -230,16 +226,15 @@ hsw_resume_transform_feedback(struct gl_context *ctx,
    struct brw_context *brw = brw_context(ctx);
    struct brw_transform_feedback_object *brw_obj =
       (struct brw_transform_feedback_object *) obj;
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
 
-   if (brw->is_haswell) {
+   if (devinfo->is_haswell) {
       /* Reload the SOL buffer offset registers. */
       for (int i = 0; i < BRW_MAX_XFB_STREAMS; i++) {
          BEGIN_BATCH(3);
          OUT_BATCH(GEN7_MI_LOAD_REGISTER_MEM | (3 - 2));
          OUT_BATCH(GEN7_SO_WRITE_OFFSET(i));
-         OUT_RELOC(brw_obj->offset_bo,
-                   I915_GEM_DOMAIN_INSTRUCTION, I915_GEM_DOMAIN_INSTRUCTION,
-                   i * sizeof(uint32_t));
+         OUT_RELOC(brw_obj->offset_bo, RELOC_WRITE, i * sizeof(uint32_t));
          ADVANCE_BATCH();
       }
    }

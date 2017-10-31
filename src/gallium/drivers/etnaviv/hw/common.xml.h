@@ -8,13 +8,13 @@ http://0x04.net/cgit/index.cgi/rules-ng-ng
 git clone git://0x04.net/rules-ng-ng
 
 The rules-ng-ng source files this header was generated from are:
-- state.xml     (  19930 bytes, from 2017-01-07 14:27:54)
-- common.xml    (  23473 bytes, from 2017-01-07 14:27:54)
-- state_hi.xml  (  26403 bytes, from 2017-01-07 14:27:54)
-- copyright.xml (   1597 bytes, from 2016-10-29 07:29:22)
-- state_2d.xml  (  51552 bytes, from 2016-10-29 07:29:22)
-- state_3d.xml  (  66964 bytes, from 2017-04-13 12:38:05)
-- state_vg.xml  (   5975 bytes, from 2016-10-29 07:29:22)
+- state.xml     (  26245 bytes, from 2017-10-05 21:32:06)
+- common.xml    (  26135 bytes, from 2017-10-05 21:20:32)
+- state_hi.xml  (  27733 bytes, from 2017-10-05 21:20:32)
+- copyright.xml (   1597 bytes, from 2016-11-13 13:46:17)
+- state_2d.xml  (  51552 bytes, from 2016-11-13 13:46:17)
+- state_3d.xml  (  80819 bytes, from 2017-10-05 21:20:32)
+- state_vg.xml  (   5975 bytes, from 2016-11-13 13:46:17)
 
 Copyright (C) 2012-2017 by the following authors:
 - Wladimir J. van der Laan <laanwj@gmail.com>
@@ -49,12 +49,7 @@ DEALINGS IN THE SOFTWARE.
 #define SYNC_RECIPIENT_RA					0x00000005
 #define SYNC_RECIPIENT_PE					0x00000007
 #define SYNC_RECIPIENT_DE					0x0000000b
-#define SYNC_RECIPIENT_VG					0x0000000f
-#define SYNC_RECIPIENT_TESSELATOR				0x00000010
-#define SYNC_RECIPIENT_VG2					0x00000011
-#define SYNC_RECIPIENT_TESSELATOR2				0x00000012
-#define SYNC_RECIPIENT_VG3					0x00000013
-#define SYNC_RECIPIENT_TESSELATOR3				0x00000014
+#define SYNC_RECIPIENT_BLT					0x00000010
 #define ENDIAN_MODE_NO_SWAP					0x00000000
 #define ENDIAN_MODE_SWAP_16					0x00000001
 #define ENDIAN_MODE_SWAP_32					0x00000002
@@ -77,6 +72,7 @@ DEALINGS IN THE SOFTWARE.
 #define chipModel_GC800						0x00000800
 #define chipModel_GC860						0x00000860
 #define chipModel_GC880						0x00000880
+#define chipModel_GC900						0x00000900
 #define chipModel_GC1000					0x00001000
 #define chipModel_GC1500					0x00001500
 #define chipModel_GC2000					0x00002000
@@ -88,6 +84,12 @@ DEALINGS IN THE SOFTWARE.
 #define chipModel_GC5000					0x00005000
 #define chipModel_GC5200					0x00005200
 #define chipModel_GC6400					0x00006400
+#define chipModel_GC7000					0x00007000
+#define chipModel_GC7400					0x00007400
+#define chipModel_GC8000					0x00008000
+#define chipModel_GC8100					0x00008100
+#define chipModel_GC8200					0x00008200
+#define chipModel_GC8400					0x00008400
 #define RGBA_BITS_R						0x00000001
 #define RGBA_BITS_G						0x00000002
 #define RGBA_BITS_B						0x00000004
@@ -203,7 +205,7 @@ DEALINGS IN THE SOFTWARE.
 #define chipMinorFeatures2_RGB888				0x00001000
 #define chipMinorFeatures2_TX__YUV_ASSEMBLER			0x00002000
 #define chipMinorFeatures2_DYNAMIC_FREQUENCY_SCALING		0x00004000
-#define chipMinorFeatures2_EXTRA_TEXTURE_STATE			0x00008000
+#define chipMinorFeatures2_TX_FILTER				0x00008000
 #define chipMinorFeatures2_FULL_DIRECTFB			0x00010000
 #define chipMinorFeatures2_2D_TILING				0x00020000
 #define chipMinorFeatures2_THREAD_WALKER_IN_PS			0x00040000
@@ -242,36 +244,36 @@ DEALINGS IN THE SOFTWARE.
 #define chipMinorFeatures3_TX_ENHANCEMENTS1			0x00080000
 #define chipMinorFeatures3_SH_ENHANCEMENTS1			0x00100000
 #define chipMinorFeatures3_SH_ENHANCEMENTS2			0x00200000
-#define chipMinorFeatures3_UNK22				0x00400000
+#define chipMinorFeatures3_PE_ENHANCEMENTS1			0x00400000
 #define chipMinorFeatures3_2D_FC_SOURCE				0x00800000
-#define chipMinorFeatures3_UNK24				0x01000000
-#define chipMinorFeatures3_UNK25				0x02000000
+#define chipMinorFeatures3_BUG_FIXES_14				0x01000000
+#define chipMinorFeatures3_POWER_OPTIMIZATIONS_0		0x02000000
 #define chipMinorFeatures3_NEW_HZ				0x04000000
-#define chipMinorFeatures3_UNK27				0x08000000
-#define chipMinorFeatures3_UNK28				0x10000000
+#define chipMinorFeatures3_PE_DITHER_FIX			0x08000000
+#define chipMinorFeatures3_DE_ENHANCEMENTS3			0x10000000
 #define chipMinorFeatures3_SH_ENHANCEMENTS3			0x20000000
-#define chipMinorFeatures3_UNK30				0x40000000
-#define chipMinorFeatures3_UNK31				0x80000000
-#define chipMinorFeatures4_UNK0					0x00000001
+#define chipMinorFeatures3_SH_ENHANCEMENTS4			0x40000000
+#define chipMinorFeatures3_TX_ENHANCEMENTS2			0x80000000
+#define chipMinorFeatures4_FE_ENHANCEMENTS1			0x00000001
 #define chipMinorFeatures4_PE_ENHANCEMENTS2			0x00000002
 #define chipMinorFeatures4_FRUSTUM_CLIP_FIX			0x00000004
-#define chipMinorFeatures4_UNK3					0x00000008
-#define chipMinorFeatures4_UNK4					0x00000010
+#define chipMinorFeatures4_DE_NO_GAMMA				0x00000008
+#define chipMinorFeatures4_PA_ENHANCEMENTS_2			0x00000010
 #define chipMinorFeatures4_2D_GAMMA				0x00000020
 #define chipMinorFeatures4_SINGLE_BUFFER			0x00000040
-#define chipMinorFeatures4_UNK7					0x00000080
-#define chipMinorFeatures4_UNK8					0x00000100
-#define chipMinorFeatures4_UNK9					0x00000200
-#define chipMinorFeatures4_UNK10				0x00000400
+#define chipMinorFeatures4_HI_ENHANCEMENTS_1			0x00000080
+#define chipMinorFeatures4_TX_ENHANCEMENTS_3			0x00000100
+#define chipMinorFeatures4_SH_ENHANCEMENTS_5			0x00000200
+#define chipMinorFeatures4_FE_ENHANCEMENTS_2			0x00000400
 #define chipMinorFeatures4_TX_LERP_PRECISION_FIX		0x00000800
 #define chipMinorFeatures4_2D_COLOR_SPACE_CONVERSION		0x00001000
 #define chipMinorFeatures4_TEXTURE_ASTC				0x00002000
-#define chipMinorFeatures4_UNK14				0x00004000
-#define chipMinorFeatures4_UNK15				0x00008000
+#define chipMinorFeatures4_PE_ENHANCEMENTS_4			0x00004000
+#define chipMinorFeatures4_MC_ENHANCEMENTS_1			0x00008000
 #define chipMinorFeatures4_HALTI2				0x00010000
-#define chipMinorFeatures4_UNK17				0x00020000
+#define chipMinorFeatures4_2D_MIRROR_EXTENSION			0x00020000
 #define chipMinorFeatures4_SMALL_MSAA				0x00040000
-#define chipMinorFeatures4_UNK19				0x00080000
+#define chipMinorFeatures4_BUG_FIXES_17				0x00080000
 #define chipMinorFeatures4_NEW_RA				0x00100000
 #define chipMinorFeatures4_2D_OPF_YUV_OUTPUT			0x00200000
 #define chipMinorFeatures4_2D_MULTI_SOURCE_BLT_EX2		0x00400000
@@ -280,41 +282,46 @@ DEALINGS IN THE SOFTWARE.
 #define chipMinorFeatures4_BUG_FIXES18				0x02000000
 #define chipMinorFeatures4_2D_COMPRESSION			0x04000000
 #define chipMinorFeatures4_PROBE				0x08000000
-#define chipMinorFeatures4_UNK28				0x10000000
+#define chipMinorFeatures4_MEDIUM_PRECISION			0x10000000
 #define chipMinorFeatures4_2D_SUPER_TILE_VERSION		0x20000000
-#define chipMinorFeatures4_UNK30				0x40000000
-#define chipMinorFeatures4_UNK31				0x80000000
-#define chipMinorFeatures5_UNK0					0x00000001
-#define chipMinorFeatures5_UNK1					0x00000002
-#define chipMinorFeatures5_UNK2					0x00000004
-#define chipMinorFeatures5_UNK3					0x00000008
+#define chipMinorFeatures4_BUG_FIXES19				0x40000000
+#define chipMinorFeatures4_SH_ENHANCEMENTS6			0x80000000
+#define chipMinorFeatures5_SH_ENHANCEMENTS7			0x00000001
+#define chipMinorFeatures5_BUG_FIXES20				0x00000002
+#define chipMinorFeatures5_DE_ADDRESS_40			0x00000004
+#define chipMinorFeatures5_MINI_MMU_FIX				0x00000008
 #define chipMinorFeatures5_EEZ					0x00000010
-#define chipMinorFeatures5_UNK5					0x00000020
-#define chipMinorFeatures5_UNK6					0x00000040
-#define chipMinorFeatures5_UNK7					0x00000080
-#define chipMinorFeatures5_UNK8					0x00000100
+#define chipMinorFeatures5_BUG_FIXES21				0x00000020
+#define chipMinorFeatures5_EXTRA_VG_CAPS			0x00000040
+#define chipMinorFeatures5_MULTI_SRC_V15			0x00000080
+#define chipMinorFeatures5_BUG_FIXES22				0x00000100
 #define chipMinorFeatures5_HALTI3				0x00000200
-#define chipMinorFeatures5_UNK10				0x00000400
+#define chipMinorFeatures5_TESSELATION_SHADERS			0x00000400
 #define chipMinorFeatures5_2D_ONE_PASS_FILTER_TAP		0x00000800
-#define chipMinorFeatures5_UNK12				0x00001000
+#define chipMinorFeatures5_MULTI_SRC_V2_STR_QUAD		0x00001000
 #define chipMinorFeatures5_SEPARATE_SRC_DST			0x00002000
 #define chipMinorFeatures5_HALTI4				0x00004000
-#define chipMinorFeatures5_UNK15				0x00008000
+#define chipMinorFeatures5_RA_WRITE_DEPTH			0x00008000
 #define chipMinorFeatures5_ANDROID_ONLY				0x00010000
 #define chipMinorFeatures5_HAS_PRODUCTID			0x00020000
-#define chipMinorFeatures5_UNK18				0x00040000
-#define chipMinorFeatures5_UNK19				0x00080000
+#define chipMinorFeatures5_TX_SUPPORT_DEC			0x00040000
+#define chipMinorFeatures5_S8_MSAA_COMPRESSION			0x00080000
 #define chipMinorFeatures5_PE_DITHER_FIX2			0x00100000
-#define chipMinorFeatures5_UNK21				0x00200000
-#define chipMinorFeatures5_UNK22				0x00400000
-#define chipMinorFeatures5_UNK23				0x00800000
-#define chipMinorFeatures5_UNK24				0x01000000
-#define chipMinorFeatures5_UNK25				0x02000000
-#define chipMinorFeatures5_UNK26				0x04000000
+#define chipMinorFeatures5_L2_CACHE_REMOVE			0x00200000
+#define chipMinorFeatures5_FE_ALLOW_RND_VTX_CNT			0x00400000
+#define chipMinorFeatures5_CUBE_MAP_FL28			0x00800000
+#define chipMinorFeatures5_TX_6BIT_FRAC				0x01000000
+#define chipMinorFeatures5_FE_ALLOW_STALL_PREFETCH_ENG		0x02000000
+#define chipMinorFeatures5_THIRD_PARTY_COMPRESSION		0x04000000
 #define chipMinorFeatures5_RS_DEPTHSTENCIL_NATIVE_SUPPORT	0x08000000
 #define chipMinorFeatures5_V2_MSAA_COMP_FIX			0x10000000
-#define chipMinorFeatures5_UNK29				0x20000000
-#define chipMinorFeatures5_UNK30				0x40000000
-#define chipMinorFeatures5_UNK31				0x80000000
+#define chipMinorFeatures5_HALTI5				0x20000000
+#define chipMinorFeatures5_EVIS					0x40000000
+#define chipMinorFeatures5_BLT_ENGINE				0x80000000
+#define chipMinorFeatures6_BUG_FIXES_23				0x00000001
+#define chipMinorFeatures6_BUG_FIXES_24				0x00000002
+#define chipMinorFeatures6_DEC					0x00000004
+#define chipMinorFeatures6_VS_TILE_NV12				0x00000008
+#define chipMinorFeatures6_VS_TILE_NV12_10BIT			0x00000010
 
 #endif /* COMMON_XML */

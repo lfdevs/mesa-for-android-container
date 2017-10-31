@@ -28,22 +28,6 @@
 #include "nir/nir_builder.h"
 #include "vk_format.h"
 
-enum blit2d_dst_type {
-	/* We can bind this destination as a "normal" render target and render
-	 * to it just like you would anywhere else.
-	 */
-	BLIT2D_DST_TYPE_NORMAL,
-
-	/* The destination has a 3-channel RGB format.  Since we can't render to
-	 * non-power-of-two textures, we have to bind it as a red texture and
-	 * select the correct component for the given red pixel in the shader.
-	 */
-	BLIT2D_DST_TYPE_RGB,
-
-	BLIT2D_NUM_DST_TYPES,
-};
-
-
 enum blit2d_src_type {
 	BLIT2D_SRC_TYPE_IMAGE,
 	BLIT2D_SRC_TYPE_BUFFER,
@@ -98,7 +82,7 @@ create_bview(struct radv_cmd_buffer *cmd_buffer,
 				      .format = format,
 				      .offset = src->offset,
 				      .range = VK_WHOLE_SIZE,
-			      }, cmd_buffer);
+			      });
 
 }
 
@@ -196,24 +180,14 @@ blit2d_bind_dst(struct radv_cmd_buffer *cmd_buffer,
 }
 
 static void
-blit2d_unbind_dst(struct radv_cmd_buffer *cmd_buffer,
-                  struct blit2d_dst_temps *tmp)
-{
-	VkDevice vk_device = radv_device_to_handle(cmd_buffer->device);
-	radv_DestroyFramebuffer(vk_device, tmp->fb, &cmd_buffer->pool->alloc);
-}
-
-static void
 bind_pipeline(struct radv_cmd_buffer *cmd_buffer,
               enum blit2d_src_type src_type, unsigned fs_key)
 {
 	VkPipeline pipeline =
 		cmd_buffer->device->meta_state.blit2d.pipelines[src_type][fs_key];
 
-	if (cmd_buffer->state.pipeline != radv_pipeline_from_handle(pipeline)) {
-		radv_CmdBindPipeline(radv_cmd_buffer_to_handle(cmd_buffer),
-				     VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-	}
+	radv_CmdBindPipeline(radv_cmd_buffer_to_handle(cmd_buffer),
+			     VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 }
 
 static void
@@ -223,10 +197,8 @@ bind_depth_pipeline(struct radv_cmd_buffer *cmd_buffer,
 	VkPipeline pipeline =
 		cmd_buffer->device->meta_state.blit2d.depth_only_pipeline[src_type];
 
-	if (cmd_buffer->state.pipeline != radv_pipeline_from_handle(pipeline)) {
-		radv_CmdBindPipeline(radv_cmd_buffer_to_handle(cmd_buffer),
-				     VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-	}
+	radv_CmdBindPipeline(radv_cmd_buffer_to_handle(cmd_buffer),
+			     VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 }
 
 static void
@@ -236,10 +208,8 @@ bind_stencil_pipeline(struct radv_cmd_buffer *cmd_buffer,
 	VkPipeline pipeline =
 		cmd_buffer->device->meta_state.blit2d.stencil_only_pipeline[src_type];
 
-	if (cmd_buffer->state.pipeline != radv_pipeline_from_handle(pipeline)) {
-		radv_CmdBindPipeline(radv_cmd_buffer_to_handle(cmd_buffer),
-				     VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-	}
+	radv_CmdBindPipeline(radv_cmd_buffer_to_handle(cmd_buffer),
+			     VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 }
 
 static void
@@ -356,7 +326,9 @@ radv_meta_blit2d_normal_dst(struct radv_cmd_buffer *cmd_buffer,
 			/* At the point where we emit the draw call, all data from the
 			* descriptor sets, etc. has been used.  We are free to delete it.
 			*/
-			blit2d_unbind_dst(cmd_buffer, &dst_temps);
+			radv_DestroyFramebuffer(radv_device_to_handle(device),
+						dst_temps.fb,
+						&cmd_buffer->pool->alloc);
 		}
 	}
 }
@@ -606,48 +578,39 @@ build_nir_copy_fragment_shader_stencil(struct radv_device *device,
 void
 radv_device_finish_meta_blit2d_state(struct radv_device *device)
 {
+	struct radv_meta_state *state = &device->meta_state;
+
 	for(unsigned j = 0; j < NUM_META_FS_KEYS; ++j) {
-		if (device->meta_state.blit2d.render_passes[j]) {
-			radv_DestroyRenderPass(radv_device_to_handle(device),
-					       device->meta_state.blit2d.render_passes[j],
-					       &device->meta_state.alloc);
-		}
+		radv_DestroyRenderPass(radv_device_to_handle(device),
+				       state->blit2d.render_passes[j],
+				       &state->alloc);
 	}
 
 	radv_DestroyRenderPass(radv_device_to_handle(device),
-			       device->meta_state.blit2d.depth_only_rp,
-			       &device->meta_state.alloc);
+			       state->blit2d.depth_only_rp, &state->alloc);
 	radv_DestroyRenderPass(radv_device_to_handle(device),
-			       device->meta_state.blit2d.stencil_only_rp,
-			       &device->meta_state.alloc);
+			       state->blit2d.stencil_only_rp, &state->alloc);
 
 	for (unsigned src = 0; src < BLIT2D_NUM_SRC_TYPES; src++) {
-		if (device->meta_state.blit2d.p_layouts[src]) {
-			radv_DestroyPipelineLayout(radv_device_to_handle(device),
-						device->meta_state.blit2d.p_layouts[src],
-						&device->meta_state.alloc);
-		}
-
-		if (device->meta_state.blit2d.ds_layouts[src]) {
-			radv_DestroyDescriptorSetLayout(radv_device_to_handle(device),
-							device->meta_state.blit2d.ds_layouts[src],
-							&device->meta_state.alloc);
-		}
+		radv_DestroyPipelineLayout(radv_device_to_handle(device),
+					   state->blit2d.p_layouts[src],
+					   &state->alloc);
+		radv_DestroyDescriptorSetLayout(radv_device_to_handle(device),
+						state->blit2d.ds_layouts[src],
+						&state->alloc);
 
 		for (unsigned j = 0; j < NUM_META_FS_KEYS; ++j) {
-			if (device->meta_state.blit2d.pipelines[src][j]) {
-				radv_DestroyPipeline(radv_device_to_handle(device),
-						     device->meta_state.blit2d.pipelines[src][j],
-						     &device->meta_state.alloc);
-			}
+			radv_DestroyPipeline(radv_device_to_handle(device),
+					     state->blit2d.pipelines[src][j],
+					     &state->alloc);
 		}
 
 		radv_DestroyPipeline(radv_device_to_handle(device),
-				     device->meta_state.blit2d.depth_only_pipeline[src],
-				     &device->meta_state.alloc);
+				     state->blit2d.depth_only_pipeline[src],
+				     &state->alloc);
 		radv_DestroyPipeline(radv_device_to_handle(device),
-				     device->meta_state.blit2d.stencil_only_pipeline[src],
-				     &device->meta_state.alloc);
+				     state->blit2d.stencil_only_pipeline[src],
+				     &state->alloc);
 	}
 }
 
@@ -1157,8 +1120,6 @@ VkResult
 radv_device_init_meta_blit2d_state(struct radv_device *device)
 {
 	VkResult result;
-
-	zero(device->meta_state.blit2d);
 
 	const VkPushConstantRange push_constant_ranges[] = {
 		{VK_SHADER_STAGE_VERTEX_BIT, 0, 16},

@@ -74,10 +74,12 @@ static void
 brw_lower_packing_builtins(struct brw_context *brw,
                            exec_list *ir)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+
    /* Gens < 7 don't have instructions to convert to or from half-precision,
     * and Gens < 6 don't expose that functionality.
     */
-   if (brw->gen != 6)
+   if (devinfo->gen != 6)
       return;
 
    lower_packing_builtins(ir, LOWER_PACK_HALF_2x16 | LOWER_UNPACK_HALF_2x16);
@@ -88,6 +90,7 @@ process_glsl_ir(struct brw_context *brw,
                 struct gl_shader_program *shader_prog,
                 struct gl_linked_shader *shader)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    struct gl_context *ctx = &brw->ctx;
 
    /* Temporary memory context for any new IR. */
@@ -108,7 +111,7 @@ process_glsl_ir(struct brw_context *brw,
                                      EXP_TO_EXP2 |
                                      LOG_TO_LOG2 |
                                      DFREXP_DLDEXP_TO_ARITH);
-   if (brw->gen < 7) {
+   if (devinfo->gen < 7) {
       instructions_to_lower |= BIT_COUNT_TO_MATH |
                                EXTRACT_TO_SHIFTS |
                                INSERT_TO_SHIFTS |
@@ -120,7 +123,7 @@ process_glsl_ir(struct brw_context *brw,
    /* Pre-gen6 HW can only nest if-statements 16 deep.  Beyond this,
     * if-statements need to be flattened.
     */
-   if (brw->gen < 6)
+   if (devinfo->gen < 6)
       lower_if_to_cond_assign(shader->Stage, shader->ir, 16);
 
    do_lower_texture_projection(shader->ir);
@@ -178,7 +181,8 @@ unify_interfaces(struct shader_info **infos)
 }
 
 static void
-update_xfb_info(struct gl_transform_feedback_info *xfb_info)
+update_xfb_info(struct gl_transform_feedback_info *xfb_info,
+                struct shader_info *info)
 {
    if (!xfb_info)
       return;
@@ -207,6 +211,8 @@ update_xfb_info(struct gl_transform_feedback_info *xfb_info)
          output->ComponentOffset = 3;
          break;
       }
+
+      info->outputs_written |= 1ull << output->OutputRegister;
    }
 }
 
@@ -233,8 +239,6 @@ brw_link_shader(struct gl_context *ctx, struct gl_shader_program *shProg)
       prog->ShadowSamplers = shader->shadow_samplers;
       _mesa_update_shader_textures_used(shProg, prog);
 
-      update_xfb_info(prog->sh.LinkedTransformFeedback);
-
       bool debug_enabled =
          (INTEL_DEBUG & intel_debug_flag_for_shader_stage(shader->Stage));
 
@@ -247,7 +251,81 @@ brw_link_shader(struct gl_context *ctx, struct gl_shader_program *shProg)
 
       prog->nir = brw_create_nir(brw, shProg, prog, (gl_shader_stage) stage,
                                  compiler->scalar_stage[stage]);
+   }
+
+   /* Determine first and last stage. */
+   unsigned first = MESA_SHADER_STAGES;
+   unsigned last = 0;
+   for (unsigned i = 0; i < MESA_SHADER_STAGES; i++) {
+      if (!shProg->_LinkedShaders[i])
+         continue;
+      if (first == MESA_SHADER_STAGES)
+         first = i;
+      last = i;
+   }
+
+   /* Linking the stages in the opposite order (from fragment to vertex)
+    * ensures that inter-shader outputs written to in an earlier stage
+    * are eliminated if they are (transitively) not used in a later
+    * stage.
+    */
+    if (first != last) {
+       int next = last;
+       for (int i = next - 1; i >= 0; i--) {
+          if (shProg->_LinkedShaders[i] == NULL)
+             continue;
+
+            nir_shader *producer = shProg->_LinkedShaders[i]->Program->nir;
+            nir_shader *consumer = shProg->_LinkedShaders[next]->Program->nir;
+
+            NIR_PASS_V(producer, nir_remove_dead_variables, nir_var_shader_out);
+            NIR_PASS_V(consumer, nir_remove_dead_variables, nir_var_shader_in);
+
+            if (nir_remove_unused_varyings(producer, consumer)) {
+               NIR_PASS_V(producer, nir_lower_global_vars_to_local);
+               NIR_PASS_V(consumer, nir_lower_global_vars_to_local);
+
+               nir_variable_mode indirect_mask = (nir_variable_mode) 0;
+               if (compiler->glsl_compiler_options[i].EmitNoIndirectTemp)
+                  indirect_mask = (nir_variable_mode) nir_var_local;
+
+               /* The backend might not be able to handle indirects on
+                * temporaries so we need to lower indirects on any of the
+                * varyings we have demoted here.
+                */
+               NIR_PASS_V(producer, nir_lower_indirect_derefs, indirect_mask);
+               NIR_PASS_V(consumer, nir_lower_indirect_derefs, indirect_mask);
+
+               const bool p_is_scalar =
+                  compiler->scalar_stage[producer->info.stage];
+               producer = brw_nir_optimize(producer, compiler, p_is_scalar);
+
+               const bool c_is_scalar =
+                  compiler->scalar_stage[producer->info.stage];
+               consumer = brw_nir_optimize(consumer, compiler, c_is_scalar);
+            }
+
+            shProg->_LinkedShaders[i]->Program->nir = producer;
+            shProg->_LinkedShaders[next]->Program->nir = consumer;
+
+            next = i;
+       }
+    }
+
+   for (stage = 0; stage < ARRAY_SIZE(shProg->_LinkedShaders); stage++) {
+      struct gl_linked_shader *shader = shProg->_LinkedShaders[stage];
+      if (!shader)
+         continue;
+
+      struct gl_program *prog = shader->Program;
+      brw_shader_gather_info(prog->nir, prog);
+
+      NIR_PASS_V(prog->nir, nir_lower_samplers, shProg);
+      NIR_PASS_V(prog->nir, nir_lower_atomics, shProg);
+
       infos[stage] = &prog->nir->info;
+
+      update_xfb_info(prog->sh.LinkedTransformFeedback, infos[stage]);
 
       /* Make a pass over the IR to add state references for any built-in
        * uniforms that are used.  This has to be done now (during linking).

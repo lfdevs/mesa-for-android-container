@@ -159,20 +159,10 @@ typedef SIMD512                             SIMD16;
 #define _simd16_packus_epi32                SIMD16::packus_epi32
 #define _simd16_packs_epi32                 SIMD16::packs_epi32
 #define _simd16_cmplt_ps_mask               SIMD16::cmp_ps_mask<SIMD16::CompareType::LT_OQ>
+#define _simd16_cmpeq_ps_mask               SIMD16::cmp_ps_mask<SIMD16::CompareType::EQ_OQ>
 #define _simd16_int2mask(mask)              simd16mask(mask)
 #define _simd16_mask2int(mask)              int(mask)
-
-// convert bitmask to vector mask
-SIMDINLINE simd16scalar vMask16(int32_t mask)
-{
-    simd16scalari temp = _simd16_set1_epi32(mask);
-
-    simd16scalari bits = _simd16_set_epi32(0x8000, 0x4000, 0x2000, 0x1000, 0x0800, 0x0400, 0x0200, 0x0100, 0x0080, 0x0040, 0x0020, 0x0010, 0x0008, 0x0004, 0x0002, 0x0001);
-
-    simd16scalari result = _simd16_cmplt_epi32(_simd16_setzero_si(), _simd16_and_si(temp, bits));
-
-    return _simd16_castsi_ps(result);
-}
+#define _simd16_vmask_ps                    SIMD16::vmask_ps
 
 #endif//ENABLE_AVX512_SIMD16
 

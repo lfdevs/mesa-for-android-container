@@ -115,7 +115,8 @@ upload_urb(struct brw_context *brw)
    const unsigned vs_size = MAX2(vs_vue_prog_data->urb_entry_size, 1);
 
    /* BRW_NEW_GEOMETRY_PROGRAM, BRW_NEW_GS_PROG_DATA */
-   const bool gs_present = brw->ff_gs.prog_active || brw->geometry_program;
+   const bool gs_present =
+      brw->ff_gs.prog_active || brw->programs[MESA_SHADER_GEOMETRY];
 
    /* Whe using GS to do transform feedback only we use the same VUE layout for
     * VS outputs and GS outputs (as it's what the SF and Clipper expect), so we
@@ -128,7 +129,7 @@ upload_urb(struct brw_context *brw)
     * outputs can be different from the VS outputs.
     */
    unsigned gs_size = vs_size;
-   if (brw->geometry_program) {
+   if (brw->programs[MESA_SHADER_GEOMETRY]) {
       const struct brw_vue_prog_data *gs_vue_prog_data =
          brw_vue_prog_data(brw->gs.base.prog_data);
       gs_size = gs_vue_prog_data->urb_entry_size;

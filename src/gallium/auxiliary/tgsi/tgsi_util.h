@@ -98,6 +98,18 @@ tgsi_is_msaa_target(unsigned target)
            target == TGSI_TEXTURE_2D_ARRAY_MSAA);
 }
 
+static inline bool
+tgsi_is_array_sampler(unsigned target)
+{
+   return target == TGSI_TEXTURE_1D_ARRAY ||
+          target == TGSI_TEXTURE_SHADOW1D_ARRAY ||
+          target == TGSI_TEXTURE_2D_ARRAY ||
+          target == TGSI_TEXTURE_SHADOW2D_ARRAY ||
+          target == TGSI_TEXTURE_CUBE_ARRAY ||
+          target == TGSI_TEXTURE_SHADOWCUBE_ARRAY ||
+          target == TGSI_TEXTURE_2D_ARRAY_MSAA;
+}
+
 #if defined __cplusplus
 }
 #endif

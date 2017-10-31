@@ -260,6 +260,12 @@ etna_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_ALLOW_MAPPED_BUFFERS_DURING_EXECUTION:
    case PIPE_CAP_POST_DEPTH_COVERAGE:
    case PIPE_CAP_BINDLESS_TEXTURE:
+   case PIPE_CAP_NIR_SAMPLERS_AS_DEREF:
+   case PIPE_CAP_QUERY_SO_OVERFLOW:
+   case PIPE_CAP_MEMOBJ:
+   case PIPE_CAP_LOAD_CONSTBUF:
+   case PIPE_CAP_TGSI_ANY_REG_AS_ADDRESS:
+   case PIPE_CAP_TILE_RASTER_ORDER:
       return 0;
 
    /* Stream output. */
@@ -313,8 +319,9 @@ etna_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 
    /* Timer queries. */
    case PIPE_CAP_QUERY_TIME_ELAPSED:
-   case PIPE_CAP_OCCLUSION_QUERY:
       return 0;
+   case PIPE_CAP_OCCLUSION_QUERY:
+      return VIV_FEATURE(screen, chipMinorFeatures1, HALTI0);
    case PIPE_CAP_QUERY_TIMESTAMP:
       return 1;
    case PIPE_CAP_QUERY_PIPELINE_STATISTICS:
@@ -424,6 +431,8 @@ etna_screen_get_shader_param(struct pipe_screen *pscreen,
    case PIPE_SHADER_CAP_TGSI_SQRT_SUPPORTED:
       return VIV_FEATURE(screen, chipMinorFeatures0, HAS_SQRT_TRIG);
    case PIPE_SHADER_CAP_INTEGERS:
+   case PIPE_SHADER_CAP_INT64_ATOMICS:
+   case PIPE_SHADER_CAP_FP16:
       return 0;
    case PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS:
    case PIPE_SHADER_CAP_MAX_SAMPLER_VIEWS:
@@ -436,6 +445,7 @@ etna_screen_get_shader_param(struct pipe_screen *pscreen,
       return 4096;
    case PIPE_SHADER_CAP_TGSI_DROUND_SUPPORTED:
    case PIPE_SHADER_CAP_TGSI_DFRACEXP_DLDEXP_SUPPORTED:
+   case PIPE_SHADER_CAP_TGSI_LDEXP_SUPPORTED:
    case PIPE_SHADER_CAP_TGSI_FMA_SUPPORTED:
    case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
       return false;
@@ -693,6 +703,8 @@ etna_get_specs(struct etna_screen *screen)
       VIV_FEATURE(screen, chipMinorFeatures1, NON_POWER_OF_TWO);
    screen->specs.has_new_transcendentals =
       VIV_FEATURE(screen, chipMinorFeatures3, HAS_FAST_TRANSCENDENTALS);
+   screen->specs.has_halti2_instructions =
+      VIV_FEATURE(screen, chipMinorFeatures4, HALTI2);
 
    if (VIV_FEATURE(screen, chipMinorFeatures3, INSTRUCTION_CACHE)) {
       /* GC3000 - this core is capable of loading shaders from
@@ -707,7 +719,8 @@ etna_get_specs(struct etna_screen *screen)
        * same.
        */
       screen->specs.ps_offset = 0x8000 + 0x1000;
-      screen->specs.max_instructions = 256;
+      screen->specs.max_instructions = 256; /* maximum number instructions for non-icache use */
+      screen->specs.has_icache = true;
    } else {
       if (instruction_count > 256) { /* unified instruction memory? */
          screen->specs.vs_offset = 0xC000;
@@ -718,6 +731,7 @@ etna_get_specs(struct etna_screen *screen)
          screen->specs.ps_offset = 0x6000;
          screen->specs.max_instructions = instruction_count / 2;
       }
+      screen->specs.has_icache = false;
    }
 
    if (VIV_FEATURE(screen, chipMinorFeatures1, HALTI0)) {
@@ -744,6 +758,21 @@ etna_get_specs(struct etna_screen *screen)
    } else {
       screen->specs.max_vs_uniforms = 256;
       screen->specs.max_ps_uniforms = 256;
+   }
+   /* unified uniform memory on GC3000 - HALTI1 feature bit is just a guess
+   */
+   if (VIV_FEATURE(screen, chipMinorFeatures2, HALTI1)) {
+      screen->specs.has_unified_uniforms = true;
+      screen->specs.vs_uniforms_offset = VIVS_SH_UNIFORMS(0);
+      /* hardcode PS uniforms to start after end of VS uniforms -
+       * for more flexibility this offset could be variable based on the
+       * shader.
+       */
+      screen->specs.ps_uniforms_offset = VIVS_SH_UNIFORMS(screen->specs.max_vs_uniforms*4);
+   } else {
+      screen->specs.has_unified_uniforms = false;
+      screen->specs.vs_uniforms_offset = VIVS_VS_UNIFORMS(0);
+      screen->specs.ps_uniforms_offset = VIVS_PS_UNIFORMS(0);
    }
 
    screen->specs.max_texture_size =

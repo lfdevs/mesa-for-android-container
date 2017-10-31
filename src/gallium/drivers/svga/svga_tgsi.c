@@ -209,6 +209,12 @@ svga_tgsi_vgpu9_translate(struct svga_context *svga,
       goto fail;
    }
 
+   if (emit.info.indirect_files & (1 << TGSI_FILE_TEMPORARY)) {
+      debug_printf(
+         "svga: indirect indexing of temporary registers is not supported.\n");
+      goto fail;
+   }
+
    emit.in_main_func = TRUE;
 
    if (!svga_shader_emit_header(&emit)) {

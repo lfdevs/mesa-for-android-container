@@ -193,10 +193,8 @@ hgl_st_framebuffer_validate(struct st_context_iface *stctxi,
 		//}
 	}
 
-	for (i = 0; i < count; i++) {
-		out[i] = NULL;
+	for (i = 0; i < count; i++)
 		pipe_resource_reference(&out[i], buffer->textures[statts[i]]);
-	}
 
 	return TRUE;
 }

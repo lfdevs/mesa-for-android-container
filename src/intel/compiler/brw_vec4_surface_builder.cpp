@@ -31,7 +31,7 @@ namespace {
        * Copy one every \p src_stride logical components of the argument into
        * one every \p dst_stride logical components of the result.
        */
-      src_reg
+      static src_reg
       emit_stride(const vec4_builder &bld, const src_reg &src, unsigned size,
                   unsigned dst_stride, unsigned src_stride)
       {
@@ -57,7 +57,7 @@ namespace {
        * left unmodified in SIMD4x2 form, otherwise it will be rearranged into
        * a SIMD8 vector.
        */
-      src_reg
+      static src_reg
       emit_insert(const vec4_builder &bld, const src_reg &src,
                   unsigned n, bool has_simd4x2)
       {
@@ -83,7 +83,7 @@ namespace {
        * argument is left unmodified in SIMD4x2 form, otherwise it will be
        * rearranged from SIMD8 form.
        */
-      src_reg
+      static src_reg
       emit_extract(const vec4_builder &bld, const src_reg src,
                    unsigned n, bool has_simd4x2)
       {

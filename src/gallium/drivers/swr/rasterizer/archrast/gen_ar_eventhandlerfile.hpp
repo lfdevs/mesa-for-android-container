@@ -23,7 +23,7 @@
 * @file gen_ar_eventhandlerfile.hpp
 *
 * @brief Event handler interface.  auto-generated file
-* 
+*
 * DO NOT EDIT
 *
 * Generation Command Line:
@@ -41,6 +41,7 @@
 #include "gen_ar_eventhandler.hpp"
 #include <fstream>
 #include <sstream>
+#include <thread>
 
 namespace ArchRast
 {
@@ -62,20 +63,21 @@ namespace ArchRast
             outDir << KNOB_DEBUG_OUTPUT_DIR << pBaseName << "_" << pid << std::ends;
             CreateDirectory(outDir.str().c_str(), NULL);
 
-            char buf[255];
             // There could be multiple threads creating thread pools. We
             // want to make sure they are uniquly identified by adding in
             // the creator's thread id into the filename.
-            sprintf(buf, "%s\\ar_event%d_%d.bin", outDir.str().c_str(), GetCurrentThreadId(), id);
-            mFilename = std::string(buf);
+            std::stringstream fstr;
+            fstr << outDir.str().c_str() << "\\ar_event" << std::this_thread::get_id();
+            fstr << "_" << id << ".bin" << std::ends;
+            mFilename = fstr.str();
 #else
-            char buf[255];
             // There could be multiple threads creating thread pools. We
             // want to make sure they are uniquly identified by adding in
-            // the creator's thread (process) id into the filename.
-            // Assumes a 1:1 thread:LWP mapping as in linux.
-            sprintf(buf, "%s/ar_event%d_%d.bin", "/tmp", GetCurrentProcessId(), id);
-            mFilename = std::string(buf);
+            // the creator's thread id into the filename.
+            std::stringstream fstr;
+            fstr << "/tmp/ar_event" << std::this_thread::get_id();
+            fstr << "_" << id << ".bin" << std::ends;
+            mFilename = fstr.str();
 #endif
         }
 

@@ -44,7 +44,6 @@ translate_opcode(uint opcode)
 {
    switch (opcode) {
    case TGSI_OPCODE_ADD:        return SVGA3DOP_ADD;
-   case TGSI_OPCODE_DP2A:       return SVGA3DOP_DP2ADD;
    case TGSI_OPCODE_DP3:        return SVGA3DOP_DP3;
    case TGSI_OPCODE_DP4:        return SVGA3DOP_DP4;
    case TGSI_OPCODE_FRC:        return SVGA3DOP_FRC;
@@ -1238,39 +1237,6 @@ emit_dp2(struct svga_shader_emitter *emit,
 
 
 /**
- * Translate the following TGSI DPH instruction.
- *    DPH  DST, SRC1, SRC2
- * To the following SVGA3D instruction sequence.
- *    DP3  TMP, SRC1, SRC2
- *    ADD  DST, TMP, SRC2.wwww
- */
-static boolean
-emit_dph(struct svga_shader_emitter *emit,
-         const struct tgsi_full_instruction *insn )
-{
-   SVGA3dShaderDestToken dst = translate_dst_register( emit, insn, 0 );
-   const struct src_register src0 = translate_src_register(
-      emit, &insn->Src[0] );
-   struct src_register src1 =
-      translate_src_register(emit, &insn->Src[1]);
-   SVGA3dShaderDestToken temp = get_temp( emit );
-
-   /* DP3  TMP, SRC1, SRC2 */
-   if (!submit_op2( emit, inst_token( SVGA3DOP_DP3 ), temp, src0, src1 ))
-      return FALSE;
-
-   src1 = scalar(src1, TGSI_SWIZZLE_W);
-
-   /* ADD  DST, TMP, SRC2.wwww */
-   if (!submit_op2( emit, inst_token( SVGA3DOP_ADD ), dst,
-                    src( temp ), src1 ))
-      return FALSE;
-
-   return TRUE;
-}
-
-
-/**
  * Sine / Cosine helper function.
  */
 static boolean
@@ -1280,29 +1246,6 @@ do_emit_sincos(struct svga_shader_emitter *emit,
 {
    src0 = scalar(src0, TGSI_SWIZZLE_X);
    return submit_op1(emit, inst_token(SVGA3DOP_SINCOS), dst, src0);
-}
-
-
-/**
- * Translate/emit a TGSI SIN, COS or CSC instruction.
- */
-static boolean
-emit_sincos(struct svga_shader_emitter *emit,
-            const struct tgsi_full_instruction *insn)
-{
-   SVGA3dShaderDestToken dst = translate_dst_register( emit, insn, 0 );
-   struct src_register src0 = translate_src_register(emit, &insn->Src[0]);
-   SVGA3dShaderDestToken temp = get_temp( emit );
-
-   /* SCS TMP SRC */
-   if (!do_emit_sincos(emit, writemask(temp, TGSI_WRITEMASK_XY), src0 ))
-      return FALSE;
-
-   /* MOV DST TMP */
-   if (!submit_op1( emit, inst_token( SVGA3DOP_MOV ), dst, src( temp ) ))
-      return FALSE;
-
-   return TRUE;
 }
 
 
@@ -2230,63 +2173,6 @@ emit_pow(struct svga_shader_emitter *emit,
 
 
 /**
- * Translate/emit TGSI XPD (vector cross product) instruction.
- */
-static boolean
-emit_xpd(struct svga_shader_emitter *emit,
-         const struct tgsi_full_instruction *insn)
-{
-   SVGA3dShaderDestToken dst = translate_dst_register( emit, insn, 0 );
-   const struct src_register src0 = translate_src_register(
-      emit, &insn->Src[0] );
-   const struct src_register src1 = translate_src_register(
-      emit, &insn->Src[1] );
-   boolean need_dst_tmp = FALSE;
-
-   /* XPD can only output to a temporary */
-   if (SVGA3dShaderGetRegType(dst.value) != SVGA3DREG_TEMP)
-      need_dst_tmp = TRUE;
-
-   /* The dst reg must not be the same as src0 or src1*/
-   if (alias_src_dst(src0, dst) ||
-       alias_src_dst(src1, dst))
-      need_dst_tmp = TRUE;
-
-   if (need_dst_tmp) {
-      SVGA3dShaderDestToken tmp = get_temp( emit );
-
-      /* Obey DX9 restrictions on mask:
-       */
-      tmp.mask = dst.mask & TGSI_WRITEMASK_XYZ;
-
-      if (!submit_op2(emit, inst_token( SVGA3DOP_CRS ), tmp, src0, src1))
-         return FALSE;
-
-      if (!submit_op1(emit, inst_token( SVGA3DOP_MOV ), dst, src( tmp )))
-         return FALSE;
-   }
-   else {
-      if (!submit_op2(emit, inst_token( SVGA3DOP_CRS ), dst, src0, src1))
-         return FALSE;
-   }
-
-   /* Need to emit 1.0 to dst.w?
-    */
-   if (dst.mask & TGSI_WRITEMASK_W) {
-      struct src_register one = get_one_immediate( emit );
-
-      if (!submit_op1(emit,
-                      inst_token( SVGA3DOP_MOV ),
-                      writemask(dst, TGSI_WRITEMASK_W),
-                      one))
-         return FALSE;
-   }
-
-   return TRUE;
-}
-
-
-/**
  * Emit a LRP (linear interpolation) instruction.
  */
 static boolean
@@ -2925,17 +2811,11 @@ svga_emit_instruction(struct svga_shader_emitter *emit,
    case TGSI_OPCODE_DP2:
       return emit_dp2( emit, insn );
 
-   case TGSI_OPCODE_DPH:
-      return emit_dph( emit, insn );
-
    case TGSI_OPCODE_COS:
       return emit_cos( emit, insn );
 
    case TGSI_OPCODE_SIN:
       return emit_sin( emit, insn );
-
-   case TGSI_OPCODE_SCS:
-      return emit_sincos( emit, insn );
 
    case TGSI_OPCODE_END:
       /* TGSI always finishes the main func with an END */
@@ -3022,9 +2902,6 @@ svga_emit_instruction(struct svga_shader_emitter *emit,
       return emit_endloop( emit, insn );
    case TGSI_OPCODE_BRK:
       return emit_brk( emit, insn );
-
-   case TGSI_OPCODE_XPD:
-      return emit_xpd( emit, insn );
 
    case TGSI_OPCODE_KILL:
       return emit_kill( emit, insn );
@@ -3641,7 +3518,6 @@ needs_to_create_common_immediate(const struct svga_shader_emitter *emit)
        emit->info.opcode_count[TGSI_OPCODE_SEQ] >= 1 ||
        emit->info.opcode_count[TGSI_OPCODE_EXP] >= 1 ||
        emit->info.opcode_count[TGSI_OPCODE_LOG] >= 1 ||
-       emit->info.opcode_count[TGSI_OPCODE_XPD] >= 1 ||
        emit->info.opcode_count[TGSI_OPCODE_KILL] >= 1)
       return TRUE;
 

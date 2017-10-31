@@ -66,6 +66,16 @@ vc4_pipe_flush(struct pipe_context *pctx, struct pipe_fence_handle **fence,
         }
 }
 
+/* We can't flush the texture cache within rendering a tile, so we have to
+ * flush all rendering to the kernel so that the next job reading from the
+ * tile gets a flushed cache.
+ */
+static void
+vc4_texture_barrier(struct pipe_context *pctx, unsigned flags)
+{
+        vc4_flush(pctx);
+}
+
 static void
 vc4_invalidate_resource(struct pipe_context *pctx, struct pipe_resource *prsc)
 {
@@ -132,6 +142,7 @@ vc4_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
         pctx->destroy = vc4_context_destroy;
         pctx->flush = vc4_pipe_flush;
         pctx->invalidate_resource = vc4_invalidate_resource;
+        pctx->texture_barrier = vc4_texture_barrier;
 
         vc4_draw_init(pctx);
         vc4_state_init(pctx);

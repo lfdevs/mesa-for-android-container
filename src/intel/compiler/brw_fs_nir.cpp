@@ -53,14 +53,27 @@ fs_visitor::nir_setup_outputs()
    if (stage == MESA_SHADER_TESS_CTRL || stage == MESA_SHADER_FRAGMENT)
       return;
 
+   unsigned vec4s[VARYING_SLOT_TESS_MAX] = { 0, };
+
+   /* Calculate the size of output registers in a separate pass, before
+    * allocating them.  With ARB_enhanced_layouts, multiple output variables
+    * may occupy the same slot, but have different type sizes.
+    */
    nir_foreach_variable(var, &nir->outputs) {
-      const unsigned vec4s =
+      const int loc = var->data.driver_location;
+      const unsigned var_vec4s =
          var->data.compact ? DIV_ROUND_UP(glsl_get_length(var->type), 4)
                            : type_size_vec4(var->type);
-      fs_reg reg = bld.vgrf(BRW_REGISTER_TYPE_F, 4 * vec4s);
-      for (unsigned i = 0; i < vec4s; i++) {
-         if (outputs[var->data.driver_location + i].file == BAD_FILE)
-            outputs[var->data.driver_location + i] = offset(reg, bld, 4 * i);
+      vec4s[loc] = MAX2(vec4s[loc], var_vec4s);
+   }
+
+   nir_foreach_variable(var, &nir->outputs) {
+      const int loc = var->data.driver_location;
+      if (outputs[loc].file == BAD_FILE) {
+         fs_reg reg = bld.vgrf(BRW_REGISTER_TYPE_F, 4 * vec4s[loc]);
+         for (unsigned i = 0; i < vec4s[loc]; i++) {
+            outputs[loc + i] = offset(reg, bld, 4 * i);
+         }
       }
    }
 }
@@ -693,53 +706,21 @@ fs_visitor::nir_emit_alu(const fs_builder &bld, nir_alu_instr *instr)
           *
           * - 2-src instructions can't operate with 64-bit immediates
           * - The sign is encoded in the high 32-bit of each DF
-          * - CMP with DF requires special handling in SIMD16
           * - We need to produce a DF result.
           */
 
-         /* 2-src instructions can't have 64-bit immediates, so put 0.0 in
-          * a register and compare with that.
-          */
-         fs_reg tmp = vgrf(glsl_type::double_type);
-         bld.MOV(tmp, setup_imm_df(bld, 0.0));
+         fs_reg zero = vgrf(glsl_type::double_type);
+         bld.MOV(zero, setup_imm_df(bld, 0.0));
+         bld.CMP(bld.null_reg_df(), op[0], zero, BRW_CONDITIONAL_NZ);
 
-         /* A direct DF CMP using the flag register (null dst) won't work in
-          * SIMD16 because the CMP will be split in two by lower_simd_width,
-          * resulting in two CMP instructions with the same dst (NULL),
-          * leading to dead code elimination of the first one. In SIMD8,
-          * however, there is no need to split the CMP and we can save some
-          * work.
-          */
-         fs_reg dst_tmp = vgrf(glsl_type::double_type);
-         bld.CMP(dst_tmp, op[0], tmp, BRW_CONDITIONAL_NZ);
+         bld.MOV(result, zero);
 
-         /* In SIMD16 we want to avoid using a NULL dst register with DF CMP,
-          * so we store the result of the comparison in a vgrf instead and
-          * then we generate a UD comparison from that that won't have to
-          * be split by lower_simd_width. This is what NIR does to handle
-          * double comparisons in the general case.
-          */
-         if (bld.dispatch_width() == 16 ) {
-            fs_reg dst_tmp_ud = retype(dst_tmp, BRW_REGISTER_TYPE_UD);
-            bld.MOV(dst_tmp_ud, subscript(dst_tmp, BRW_REGISTER_TYPE_UD, 0));
-            bld.CMP(bld.null_reg_ud(),
-                    dst_tmp_ud, brw_imm_ud(0), BRW_CONDITIONAL_NZ);
-         }
+         fs_reg r = subscript(result, BRW_REGISTER_TYPE_UD, 1);
+         bld.AND(r, subscript(op[0], BRW_REGISTER_TYPE_UD, 1),
+                 brw_imm_ud(0x80000000u));
 
-         /* Get the high 32-bit of each double component where the sign is */
-         fs_reg result_int = retype(result, BRW_REGISTER_TYPE_UD);
-         bld.MOV(result_int, subscript(op[0], BRW_REGISTER_TYPE_UD, 1));
-
-         /* Get the sign bit */
-         bld.AND(result_int, result_int, brw_imm_ud(0x80000000u));
-
-         /* Add 1.0 to the sign, predicated to skip the case of op[0] == 0.0 */
-         inst = bld.OR(result_int, result_int, brw_imm_ud(0x3f800000u));
-         inst->predicate = BRW_PREDICATE_NORMAL;
-
-         /* Convert from 32-bit float to 64-bit double */
-         result.type = BRW_REGISTER_TYPE_DF;
-         inst = bld.MOV(result, retype(result_int, BRW_REGISTER_TYPE_F));
+         set_predicate(BRW_PREDICATE_NORMAL,
+                       bld.OR(r, r, brw_imm_ud(0x3ff00000u)));
 
          if (instr->dest.saturate) {
             inst = bld.MOV(result, result);
@@ -1267,14 +1248,36 @@ fs_visitor::nir_emit_alu(const fs_builder &bld, nir_alu_instr *instr)
       unreachable("not reached: should have been lowered");
 
    case nir_op_ishl:
-      bld.SHL(result, op[0], op[1]);
-      break;
    case nir_op_ishr:
-      bld.ASR(result, op[0], op[1]);
+   case nir_op_ushr: {
+      fs_reg shift_count = op[1];
+
+      if (devinfo->is_cherryview || gen_device_info_is_9lp(devinfo)) {
+         if (op[1].file == VGRF &&
+             (result.type == BRW_REGISTER_TYPE_Q ||
+              result.type == BRW_REGISTER_TYPE_UQ)) {
+            shift_count = fs_reg(VGRF, alloc.allocate(dispatch_width / 4),
+                                 BRW_REGISTER_TYPE_UD);
+            shift_count.stride = 2;
+            bld.MOV(shift_count, op[1]);
+         }
+      }
+
+      switch (instr->op) {
+      case nir_op_ishl:
+         bld.SHL(result, op[0], shift_count);
+         break;
+      case nir_op_ishr:
+         bld.ASR(result, op[0], shift_count);
+         break;
+      case nir_op_ushr:
+         bld.SHR(result, op[0], shift_count);
+         break;
+      default:
+         unreachable("not reached");
+      }
       break;
-   case nir_op_ushr:
-      bld.SHR(result, op[0], op[1]);
-      break;
+   }
 
    case nir_op_pack_half_2x16_split:
       bld.emit(FS_OPCODE_PACK_HALF_2x16_SPLIT, result, op[0], op[1]);
@@ -1915,7 +1918,9 @@ fs_visitor::emit_gs_input_load(const fs_reg &dst,
    const unsigned push_reg_count = gs_prog_data->base.urb_read_length * 8;
 
    /* TODO: figure out push input layout for invocations == 1 */
+   /* TODO: make this work with 64-bit inputs */
    if (gs_prog_data->invocations == 1 &&
+       type_sz(dst.type) <= 4 &&
        offset_const != NULL && vertex_const != NULL &&
        4 * (base_offset + offset_const->u32[0]) < push_reg_count) {
       int imm_offset = (base_offset + offset_const->u32[0]) * 4 +
@@ -1928,7 +1933,7 @@ fs_visitor::emit_gs_input_load(const fs_reg &dst,
    }
 
    /* Resort to the pull model.  Ensure the VUE handles are provided. */
-   gs_prog_data->base.include_vue_handles = true;
+   assert(gs_prog_data->base.include_vue_handles);
 
    unsigned first_icp_handle = gs_prog_data->include_primitive_id ? 3 : 2;
    fs_reg icp_handle = bld.vgrf(BRW_REGISTER_TYPE_UD, 1);
@@ -2673,17 +2678,22 @@ fs_visitor::nir_emit_tes_intrinsic(const fs_builder &bld,
          /* Arbitrarily only push up to 32 vec4 slots worth of data,
           * which is 16 registers (since each holds 2 vec4 slots).
           */
+         unsigned slot_count = 1;
+         if (type_sz(dest.type) == 8 && instr->num_components > 2)
+            slot_count++;
+
          const unsigned max_push_slots = 32;
-         if (imm_offset < max_push_slots) {
+         if (imm_offset + slot_count <= max_push_slots) {
             fs_reg src = fs_reg(ATTR, imm_offset / 2, dest.type);
             for (int i = 0; i < instr->num_components; i++) {
                unsigned comp = 16 / type_sz(dest.type) * (imm_offset % 2) +
                   i + first_component;
                bld.MOV(offset(dest, bld, i), component(src, comp));
             }
+
             tes_prog_data->base.urb_read_length =
                MAX2(tes_prog_data->base.urb_read_length,
-                    DIV_ROUND_UP(imm_offset + 1, 2));
+                    DIV_ROUND_UP(imm_offset + slot_count, 2));
          } else {
             /* Replicate the patch handle to all enabled channels */
             const fs_reg srcs[] = {
@@ -4524,15 +4534,6 @@ fs_visitor::nir_emit_texture(const fs_builder &bld, nir_tex_instr *instr)
    }
    default:
       unreachable("unknown texture opcode");
-   }
-
-   /* TXS and TXL require a LOD but not everything we implement using those
-    * two opcodes provides one.  Provide a default LOD of 0.
-    */
-   if ((opcode == SHADER_OPCODE_TXS_LOGICAL ||
-        opcode == SHADER_OPCODE_TXL_LOGICAL) &&
-       srcs[TEX_LOGICAL_SRC_LOD].file == BAD_FILE) {
-      srcs[TEX_LOGICAL_SRC_LOD] = brw_imm_ud(0u);
    }
 
    if (instr->op == nir_texop_tg4) {

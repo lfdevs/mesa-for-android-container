@@ -43,6 +43,11 @@ etna_copy_resource(struct pipe_context *pctx, struct pipe_resource *dst,
                    struct pipe_resource *src, int first_level, int last_level);
 
 void
+etna_copy_resource_box(struct pipe_context *pctx, struct pipe_resource *dst,
+                       struct pipe_resource *src, int level,
+                       struct pipe_box *box);
+
+void
 etna_clear_blit_init(struct pipe_context *pctx);
 
 #endif

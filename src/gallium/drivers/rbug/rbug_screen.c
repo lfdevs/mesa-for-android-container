@@ -183,6 +183,19 @@ rbug_screen_resource_from_handle(struct pipe_screen *_screen,
    return result;
 }
 
+static bool
+rbug_screen_check_resource_capability(struct pipe_screen *_screen,
+                                      struct pipe_resource *_resource,
+                                      unsigned bind)
+{
+   struct rbug_screen *rb_screen = rbug_screen(_screen);
+   struct rbug_resource *rb_resource = rbug_resource(_resource);
+   struct pipe_screen *screen = rb_screen->screen;
+   struct pipe_resource *resource = rb_resource->resource;
+
+   return screen->check_resource_capability(screen, resource, bind);
+}
+
 static boolean
 rbug_screen_resource_get_handle(struct pipe_screen *_screen,
                                 struct pipe_context *_pipe,
@@ -301,6 +314,7 @@ rbug_screen_create(struct pipe_screen *screen)
    rb_screen->base.context_create = rbug_screen_context_create;
    rb_screen->base.resource_create = rbug_screen_resource_create;
    rb_screen->base.resource_from_handle = rbug_screen_resource_from_handle;
+   SCR_INIT(check_resource_capability);
    rb_screen->base.resource_get_handle = rbug_screen_resource_get_handle;
    SCR_INIT(resource_changed);
    rb_screen->base.resource_destroy = rbug_screen_resource_destroy;

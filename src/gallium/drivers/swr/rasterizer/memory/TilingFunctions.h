@@ -694,5 +694,5 @@ template<bool UseCachedOffsets, bool IsRead>
 INLINE
 void* ComputeSurfaceAddress(uint32_t x, uint32_t y, uint32_t z, uint32_t array, uint32_t sampleNum, uint32_t lod, const SWR_SURFACE_STATE *pState)
 {
-    return pState->pBaseAddress + ComputeSurfaceOffset<UseCachedOffsets>(x, y, z, array, sampleNum, lod, pState);
+    return (void*)(pState->xpBaseAddress + ComputeSurfaceOffset<UseCachedOffsets>(x, y, z, array, sampleNum, lod, pState));
 }

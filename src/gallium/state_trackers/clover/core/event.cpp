@@ -27,7 +27,7 @@ using namespace clover;
 
 event::event(clover::context &ctx, const ref_vector<event> &deps,
              action action_ok, action action_fail) :
-   context(ctx), wait_count(1), _status(0),
+   context(ctx), _wait_count(1), _status(0),
    action_ok(action_ok), action_fail(action_fail) {
    for (auto &ev : deps)
       ev.chain(*this);
@@ -41,22 +41,19 @@ event::trigger_self() {
    std::lock_guard<std::mutex> lock(mutex);
    std::vector<intrusive_ref<event>> evs;
 
-   if (!--wait_count)
+   if (!--_wait_count)
       std::swap(_chain, evs);
 
+   cv.notify_all();
    return evs;
 }
 
 void
 event::trigger() {
-   auto evs = trigger_self();
-
-   if (signalled()) {
+   if (wait_count() == 1)
       action_ok(*this);
-      cv.notify_all();
-   }
 
-   for (event &ev : evs)
+   for (event &ev : trigger_self())
       ev.trigger();
 }
 
@@ -73,18 +70,21 @@ event::abort_self(cl_int status) {
 
 void
 event::abort(cl_int status) {
-   auto evs = abort_self(status);
-
    action_fail(*this);
 
-   for (event &ev : evs)
+   for (event &ev : abort_self(status))
       ev.abort(status);
+}
+
+unsigned
+event::wait_count() const {
+   std::lock_guard<std::mutex> lock(mutex);
+   return _wait_count;
 }
 
 bool
 event::signalled() const {
-   std::lock_guard<std::mutex> lock(mutex);
-   return !wait_count;
+   return !wait_count();
 }
 
 cl_int
@@ -99,11 +99,17 @@ event::chain(event &ev) {
    std::unique_lock<std::mutex> lock_ev(ev.mutex, std::defer_lock);
    std::lock(lock, lock_ev);
 
-   if (wait_count) {
-      ev.wait_count++;
+   if (_wait_count) {
+      ev._wait_count++;
       _chain.push_back(ev);
    }
    ev.deps.push_back(*this);
+}
+
+void
+event::wait_signalled() const {
+   std::unique_lock<std::mutex> lock(mutex);
+   cv.wait(lock, [=]{ return !_wait_count; });
 }
 
 void
@@ -111,8 +117,7 @@ event::wait() const {
    for (event &ev : deps)
       ev.wait();
 
-   std::unique_lock<std::mutex> lock(mutex);
-   cv.wait(lock, [=]{ return !wait_count; });
+   wait_signalled();
 }
 
 hard_event::hard_event(command_queue &q, cl_command_type command,

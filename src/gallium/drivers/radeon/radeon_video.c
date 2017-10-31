@@ -46,7 +46,7 @@
 #define UVD_FW_1_66_16 ((1 << 24) | (66 << 16) | (16 << 8))
 
 /* generate an stream handle */
-unsigned rvid_alloc_stream_handle()
+unsigned si_vid_alloc_stream_handle()
 {
 	static unsigned counter = 0;
 	unsigned stream_handle = 0;
@@ -61,8 +61,8 @@ unsigned rvid_alloc_stream_handle()
 }
 
 /* create a buffer in the winsys */
-bool rvid_create_buffer(struct pipe_screen *screen, struct rvid_buffer *buffer,
-			unsigned size, unsigned usage)
+bool si_vid_create_buffer(struct pipe_screen *screen, struct rvid_buffer *buffer,
+			  unsigned size, unsigned usage)
 {
 	memset(buffer, 0, sizeof(*buffer));
 	buffer->usage = usage;
@@ -79,14 +79,14 @@ bool rvid_create_buffer(struct pipe_screen *screen, struct rvid_buffer *buffer,
 }
 
 /* destroy a buffer */
-void rvid_destroy_buffer(struct rvid_buffer *buffer)
+void si_vid_destroy_buffer(struct rvid_buffer *buffer)
 {
 	r600_resource_reference(&buffer->res, NULL);
 }
 
 /* reallocate a buffer, preserving its content */
-bool rvid_resize_buffer(struct pipe_screen *screen, struct radeon_winsys_cs *cs,
-			struct rvid_buffer *new_buf, unsigned new_size)
+bool si_vid_resize_buffer(struct pipe_screen *screen, struct radeon_winsys_cs *cs,
+			  struct rvid_buffer *new_buf, unsigned new_size)
 {
 	struct r600_common_screen *rscreen = (struct r600_common_screen *)screen;
 	struct radeon_winsys* ws = rscreen->ws;
@@ -94,7 +94,7 @@ bool rvid_resize_buffer(struct pipe_screen *screen, struct radeon_winsys_cs *cs,
 	struct rvid_buffer old_buf = *new_buf;
 	void *src = NULL, *dst = NULL;
 
-	if (!rvid_create_buffer(screen, new_buf, new_size, new_buf->usage))
+	if (!si_vid_create_buffer(screen, new_buf, new_size, new_buf->usage))
 		goto error;
 
 	src = ws->buffer_map(old_buf.res->buf, cs, PIPE_TRANSFER_READ);
@@ -113,19 +113,19 @@ bool rvid_resize_buffer(struct pipe_screen *screen, struct radeon_winsys_cs *cs,
 	}
 	ws->buffer_unmap(new_buf->res->buf);
 	ws->buffer_unmap(old_buf.res->buf);
-	rvid_destroy_buffer(&old_buf);
+	si_vid_destroy_buffer(&old_buf);
 	return true;
 
 error:
 	if (src)
 		ws->buffer_unmap(old_buf.res->buf);
-	rvid_destroy_buffer(new_buf);
+	si_vid_destroy_buffer(new_buf);
 	*new_buf = old_buf;
 	return false;
 }
 
 /* clear the buffer with zeros */
-void rvid_clear_buffer(struct pipe_context *context, struct rvid_buffer* buffer)
+void si_vid_clear_buffer(struct pipe_context *context, struct rvid_buffer* buffer)
 {
 	struct r600_common_context *rctx = (struct r600_common_context*)context;
 
@@ -138,9 +138,9 @@ void rvid_clear_buffer(struct pipe_context *context, struct rvid_buffer* buffer)
  * join surfaces into the same buffer with identical tiling params
  * sumup their sizes and replace the backend buffers with a single bo
  */
-void rvid_join_surfaces(struct r600_common_context *rctx,
-			struct pb_buffer** buffers[VL_NUM_COMPONENTS],
-			struct radeon_surf *surfaces[VL_NUM_COMPONENTS])
+void si_vid_join_surfaces(struct r600_common_context *rctx,
+			  struct pb_buffer** buffers[VL_NUM_COMPONENTS],
+			  struct radeon_surf *surfaces[VL_NUM_COMPONENTS])
 {
 	struct radeon_winsys* ws;
 	unsigned best_tiling, best_wh, off;
@@ -182,8 +182,11 @@ void rvid_join_surfaces(struct r600_common_context *rctx,
 
 			for (j = 0; j < ARRAY_SIZE(surfaces[i]->u.legacy.level); ++j)
 				surfaces[i]->u.legacy.level[j].offset += off;
-		} else
+		} else {
 			surfaces[i]->u.gfx9.surf_offset += off;
+			for (j = 0; j < ARRAY_SIZE(surfaces[i]->u.gfx9.offset); ++j)
+				surfaces[i]->u.gfx9.offset[j] += off;
+		}
 
 		off += surfaces[i]->surf_size;
 	}
@@ -218,10 +221,10 @@ void rvid_join_surfaces(struct r600_common_context *rctx,
 	pb_reference(&pb, NULL);
 }
 
-int rvid_get_video_param(struct pipe_screen *screen,
-			 enum pipe_video_profile profile,
-			 enum pipe_video_entrypoint entrypoint,
-			 enum pipe_video_cap param)
+int si_vid_get_video_param(struct pipe_screen *screen,
+			   enum pipe_video_profile profile,
+			   enum pipe_video_entrypoint entrypoint,
+			   enum pipe_video_cap param)
 {
 	struct r600_common_screen *rscreen = (struct r600_common_screen *)screen;
 	enum pipe_video_format codec = u_reduce_video_profile(profile);
@@ -233,7 +236,7 @@ int rvid_get_video_param(struct pipe_screen *screen,
 		switch (param) {
 		case PIPE_VIDEO_CAP_SUPPORTED:
 			return codec == PIPE_VIDEO_FORMAT_MPEG4_AVC &&
-				rvce_is_fw_version_supported(rscreen);
+				si_vce_is_fw_version_supported(rscreen);
 		case PIPE_VIDEO_CAP_NPOT_TEXTURES:
 			return 1;
 		case PIPE_VIDEO_CAP_MAX_WIDTH:
@@ -261,8 +264,7 @@ int rvid_get_video_param(struct pipe_screen *screen,
 		case PIPE_VIDEO_FORMAT_MPEG12:
 			return profile != PIPE_VIDEO_PROFILE_MPEG1;
 		case PIPE_VIDEO_FORMAT_MPEG4:
-			/* no support for MPEG4 on older hw */
-			return rscreen->family >= CHIP_PALM;
+			return 1;
 		case PIPE_VIDEO_FORMAT_MPEG4_AVC:
 			if ((rscreen->family == CHIP_POLARIS10 ||
 			     rscreen->family == CHIP_POLARIS11) &&
@@ -280,6 +282,15 @@ int rvid_get_video_param(struct pipe_screen *screen,
 					profile == PIPE_VIDEO_PROFILE_HEVC_MAIN_10);
 			else if (rscreen->family >= CHIP_CARRIZO)
 				return profile == PIPE_VIDEO_PROFILE_HEVC_MAIN;
+			return false;
+		case PIPE_VIDEO_FORMAT_JPEG:
+			if (rscreen->family < CHIP_CARRIZO || rscreen->family >= CHIP_VEGA10)
+				return false;
+			if (!(rscreen->info.drm_major == 3 && rscreen->info.drm_minor >= 19)) {
+				RVID_ERR("No MJPEG support for the kernel version\n");
+				return false;
+			}
+			return true;
 		default:
 			return false;
 		}
@@ -296,17 +307,15 @@ int rvid_get_video_param(struct pipe_screen *screen,
 			return PIPE_FORMAT_NV12;
 
 	case PIPE_VIDEO_CAP_PREFERS_INTERLACED:
-	case PIPE_VIDEO_CAP_SUPPORTS_INTERLACED:
-		if (rscreen->family < CHIP_PALM) {
-			/* MPEG2 only with shaders and no support for
-			   interlacing on R6xx style UVD */
-			return codec != PIPE_VIDEO_FORMAT_MPEG12 &&
-			       rscreen->family > CHIP_RV770;
-		} else {
-			if (u_reduce_video_profile(profile) == PIPE_VIDEO_FORMAT_HEVC)
-				return false; //The firmware doesn't support interlaced HEVC.
-			return true;
-		}
+	case PIPE_VIDEO_CAP_SUPPORTS_INTERLACED: {
+		enum pipe_video_format format = u_reduce_video_profile(profile);
+
+		if (format == PIPE_VIDEO_FORMAT_HEVC)
+			return false; //The firmware doesn't support interlaced HEVC.
+		else if (format == PIPE_VIDEO_FORMAT_JPEG)
+			return false;
+		return true;
+	}
 	case PIPE_VIDEO_CAP_SUPPORTS_PROGRESSIVE:
 		return true;
 	case PIPE_VIDEO_CAP_MAX_LEVEL:
@@ -341,10 +350,10 @@ int rvid_get_video_param(struct pipe_screen *screen,
 	}
 }
 
-boolean rvid_is_format_supported(struct pipe_screen *screen,
-				 enum pipe_format format,
-				 enum pipe_video_profile profile,
-				 enum pipe_video_entrypoint entrypoint)
+boolean si_vid_is_format_supported(struct pipe_screen *screen,
+				   enum pipe_format format,
+				   enum pipe_video_profile profile,
+				   enum pipe_video_entrypoint entrypoint)
 {
 	/* HEVC 10 bit decoding should use P016 instead of NV12 if possible */
 	if (profile == PIPE_VIDEO_PROFILE_HEVC_MAIN_10)

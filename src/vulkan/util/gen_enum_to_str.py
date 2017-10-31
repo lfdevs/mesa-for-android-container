@@ -58,23 +58,33 @@ C_TEMPLATE = Template(textwrap.dedent(u"""\
      */
 
     #include <vulkan/vulkan.h>
+    #include <vulkan/vk_android_native_buffer.h>
     #include "util/macros.h"
     #include "vk_enum_to_str.h"
 
     % for enum in enums:
 
-        const char *
-        vk_${enum.name[2:]}_to_str(${enum.name} input)
-        {
-            switch(input) {
-            % for v in enum.values:
-                case ${v}:
-                    return "${v}";
-            % endfor
-            default:
-                unreachable("Undefined enum value.");
-            }
+    const char *
+    vk_${enum.name[2:]}_to_str(${enum.name} input)
+    {
+        switch(input) {
+        % for v in sorted(enum.values.keys()):
+            % if enum.values[v] in FOREIGN_ENUM_VALUES:
+
+            #pragma GCC diagnostic push
+            #pragma GCC diagnostic ignored "-Wswitch"
+            % endif
+            case ${v}:
+                return "${enum.values[v]}";
+            % if enum.values[v] in FOREIGN_ENUM_VALUES:
+            #pragma GCC diagnostic pop
+
+            % endif
+        % endfor
+        default:
+            unreachable("Undefined enum value.");
         }
+    }
     %endfor"""),
     output_encoding='utf-8')
 
@@ -89,28 +99,50 @@ H_TEMPLATE = Template(textwrap.dedent(u"""\
     #define MESA_VK_ENUM_TO_STR_H
 
     #include <vulkan/vulkan.h>
+    #include <vulkan/vk_android_native_buffer.h>
+
+    % for ext in extensions:
+    #define _${ext.name}_number (${ext.number})
+    % endfor
 
     % for enum in enums:
-        const char * vk_${enum.name[2:]}_to_str(${enum.name} input);
+    const char * vk_${enum.name[2:]}_to_str(${enum.name} input);
     % endfor
 
     #endif"""),
     output_encoding='utf-8')
 
+# These enums are defined outside their respective enum blocks, and thus cause
+# -Wswitch warnings.
+FOREIGN_ENUM_VALUES = [
+    "VK_STRUCTURE_TYPE_NATIVE_BUFFER_ANDROID",
+]
 
-class EnumFactory(object):
+
+class NamedFactory(object):
     """Factory for creating enums."""
 
     def __init__(self, type_):
         self.registry = {}
         self.type = type_
 
-    def __call__(self, name):
+    def __call__(self, name, **kwargs):
         try:
             return self.registry[name]
         except KeyError:
-            n = self.registry[name] = self.type(name)
+            n = self.registry[name] = self.type(name, **kwargs)
         return n
+
+    def get(self, name):
+        return self.registry.get(name)
+
+
+class VkExtension(object):
+    """Simple struct-like class representing extensions"""
+
+    def __init__(self, name, number=None):
+        self.name = name
+        self.number = number
 
 
 class VkEnum(object):
@@ -118,61 +150,84 @@ class VkEnum(object):
 
     def __init__(self, name, values=None):
         self.name = name
-        self.values = values or []
+        # Maps numbers to names
+        self.values = values or dict()
+
+    def add_value(self, name, value=None,
+                  extension=None, offset=None,
+                  error=False):
+        assert value is not None or extension is not None
+        if value is None:
+            value = 1000000000 + (extension.number - 1) * 1000 + offset
+            if error:
+                value = -value
+
+        if value not in self.values:
+            self.values[value] = name
 
 
-def xml_parser(filename):
-    """Parse the XML file and return parsed data.
+def parse_xml(enum_factory, ext_factory, filename):
+    """Parse the XML file. Accumulate results into the factories.
 
     This parser is a memory efficient iterative XML parser that returns a list
     of VkEnum objects.
     """
-    efactory = EnumFactory(VkEnum)
 
-    with open(filename, 'rb') as f:
-        context = iter(et.iterparse(f, events=('start', 'end')))
+    xml = et.parse(filename)
 
-        # This gives the root element, since goal is to iterate over the
-        # elements without building a tree, this allows the root to be cleared
-        # (erase the elements) after the children have been processed.
-        _, root = next(context)
+    for enum_type in xml.findall('./enums[@type="enum"]'):
+        enum = enum_factory(enum_type.attrib['name'])
+        for value in enum_type.findall('./enum'):
+            enum.add_value(value.attrib['name'],
+                           value=int(value.attrib['value']))
 
-        for event, elem in context:
-            if event == 'end' and elem.tag == 'enums':
-                type_ = elem.attrib.get('type')
-                if type_ == 'enum':
-                    enum = efactory(elem.attrib['name'])
-                    enum.values.extend([e.attrib['name'] for e in elem
-                                        if e.tag == 'enum'])
-            elif event == 'end' and elem.tag == 'extension':
-                if elem.attrib['supported'] != 'vulkan':
-                    continue
-                for e in elem.findall('.//enum[@extends][@offset]'):
-                    enum = efactory(e.attrib['extends'])
-                    enum.values.append(e.attrib['name'])
+    for ext_elem in xml.findall('./extensions/extension[@supported="vulkan"]'):
+        extension = ext_factory(ext_elem.attrib['name'],
+                                number=int(ext_elem.attrib['number']))
 
-            root.clear()
-
-    return efactory.registry.values()
+        for value in ext_elem.findall('./require/enum[@extends]'):
+            enum = enum_factory.get(value.attrib['extends'])
+            if enum is None:
+                continue
+            if 'value' in value.attrib:
+                enum.add_value(value.attrib['name'],
+                               value=int(value.attrib['value']))
+            else:
+                error = 'dir' in value.attrib and value.attrib['dir'] == '-'
+                enum.add_value(value.attrib['name'],
+                               extension=extension,
+                               offset=int(value.attrib['offset']),
+                               error=error)
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--xml', help='Vulkan API XML file.', required=True)
+    parser.add_argument('--xml', required=True,
+                        help='Vulkan API XML files',
+                        action='append',
+                        dest='xml_files')
     parser.add_argument('--outdir',
                         help='Directory to put the generated files in',
                         required=True)
 
     args = parser.parse_args()
 
-    enums = xml_parser(args.xml)
+    enum_factory = NamedFactory(VkEnum)
+    ext_factory = NamedFactory(VkExtension)
+    for filename in args.xml_files:
+        parse_xml(enum_factory, ext_factory, filename)
+    enums = sorted(enum_factory.registry.values(), key=lambda e: e.name)
+    extensions = sorted(ext_factory.registry.values(), key=lambda e: e.name)
+
     for template, file_ in [(C_TEMPLATE, os.path.join(args.outdir, 'vk_enum_to_str.c')),
                             (H_TEMPLATE, os.path.join(args.outdir, 'vk_enum_to_str.h'))]:
         with open(file_, 'wb') as f:
             f.write(template.render(
                 file=os.path.basename(__file__),
                 enums=enums,
-                copyright=COPYRIGHT))
+                extensions=extensions,
+                copyright=COPYRIGHT,
+                FOREIGN_ENUM_VALUES=FOREIGN_ENUM_VALUES))
 
 
 if __name__ == '__main__':

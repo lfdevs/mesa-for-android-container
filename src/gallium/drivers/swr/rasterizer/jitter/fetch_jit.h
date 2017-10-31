@@ -45,16 +45,17 @@ struct INPUT_ELEMENT_DESC
             uint32_t            Format : 10;
             uint32_t            StreamIndex : 6;
             uint32_t            InstanceEnable : 1;
+            uint32_t            InstanceStrideEnable : 1;
             uint32_t            ComponentControl0 : 3;
             uint32_t            ComponentControl1 : 3;
             uint32_t            ComponentControl2 : 3;
             uint32_t            ComponentControl3 : 3;
             uint32_t            ComponentPacking : 4;
-            uint32_t            _reserved : 19;
+            uint32_t            _reserved : 18;
         };
         uint64_t bits;
     };
-    uint32_t InstanceDataStepRate;
+    uint32_t InstanceAdvancementState;
 };
 
 // used to set ComponentPacking
@@ -106,6 +107,9 @@ struct FETCH_COMPILE_STATE
     bool bVertexIDOffsetEnable{ false };    // Offset vertexID by StartVertex for non-indexed draws or BaseVertex for indexed draws
     bool bPartialVertexBuffer{ false };     // for indexed draws, map illegal indices to a known resident vertex
 
+    bool bForceSequentialAccessEnable{ false };
+    bool bInstanceIDOffsetEnable{ false };
+
     FETCH_COMPILE_STATE(bool disableVGATHER = false, bool diableIndexOOBCheck = false):
         bDisableVGATHER(disableVGATHER), bDisableIndexOOBCheck(diableIndexOOBCheck){ };
 
@@ -119,12 +123,14 @@ struct FETCH_COMPILE_STATE
         if (cutIndex != other.cutIndex) return false;
         if (bVertexIDOffsetEnable != other.bVertexIDOffsetEnable) return false;
         if (bPartialVertexBuffer != other.bPartialVertexBuffer) return false;
+        if (bForceSequentialAccessEnable != other.bForceSequentialAccessEnable) return false;
+        if (bInstanceIDOffsetEnable != other.bInstanceIDOffsetEnable) return false;
 
         for(uint32_t i = 0; i < numAttribs; ++i)
         {
             if((layout[i].bits != other.layout[i].bits) ||
-               ((layout[i].InstanceEnable == 1) &&
-                (layout[i].InstanceDataStepRate != other.layout[i].InstanceDataStepRate))){
+               (((layout[i].InstanceEnable == 1) || (layout[i].InstanceStrideEnable == 1)) &&
+                (layout[i].InstanceAdvancementState != other.layout[i].InstanceAdvancementState))){
                 return false;
             }
         }

@@ -275,7 +275,7 @@ void viewportTransform(simd16vector *v, const SWR_VIEWPORT_MATRICES & vpMatrices
 #endif
 template<uint32_t NumVerts>
 INLINE
-void viewportTransform(simdvector *v, const SWR_VIEWPORT_MATRICES & vpMatrices, simdscalari vViewportIdx)
+void viewportTransform(simdvector *v, const SWR_VIEWPORT_MATRICES & vpMatrices, simdscalari const &vViewportIdx)
 {
     // perform a gather of each matrix element based on the viewport array indexes
     simdscalar m00 = _simd_i32gather_ps(&vpMatrices.m00[0], vViewportIdx, 4);
@@ -296,7 +296,7 @@ void viewportTransform(simdvector *v, const SWR_VIEWPORT_MATRICES & vpMatrices, 
 #if USE_SIMD16_FRONTEND
 template<uint32_t NumVerts>
 INLINE
-void viewportTransform(simd16vector *v, const SWR_VIEWPORT_MATRICES & vpMatrices, simd16scalari vViewportIdx)
+void viewportTransform(simd16vector *v, const SWR_VIEWPORT_MATRICES & vpMatrices, simd16scalari const &vViewportIdx)
 {
     // perform a gather of each matrix element based on the viewport array indexes
     const simd16scalar m00 = _simd16_i32gather_ps(&vpMatrices.m00[0], vViewportIdx, 4);
@@ -388,10 +388,10 @@ PFN_PROCESS_PRIMS_SIMD16 GetBinTrianglesFunc_simd16(bool IsConservative);
 #endif
 
 struct PA_STATE_BASE;  // forward decl
-void BinPoints(DRAW_CONTEXT *pDC, PA_STATE& pa, uint32_t workerId, simdvector prims[3], uint32_t primMask, simdscalari primID);
-void BinLines(DRAW_CONTEXT *pDC, PA_STATE& pa, uint32_t workerId, simdvector prims[3], uint32_t primMask, simdscalari primID);
+void BinPoints(DRAW_CONTEXT *pDC, PA_STATE& pa, uint32_t workerId, simdvector prims[3], uint32_t primMask, simdscalari const &primID);
+void BinLines(DRAW_CONTEXT *pDC, PA_STATE& pa, uint32_t workerId, simdvector prims[3], uint32_t primMask, simdscalari const &primID);
 #if USE_SIMD16_FRONTEND
-void SIMDCALL BinPoints_simd16(DRAW_CONTEXT *pDC, PA_STATE& pa, uint32_t workerId, simd16vector prims[3], uint32_t primMask, simd16scalari primID);
-void SIMDCALL BinLines_simd16(DRAW_CONTEXT *pDC, PA_STATE& pa, uint32_t workerId, simd16vector prims[3], uint32_t primMask, simd16scalari primID);
+void SIMDCALL BinPoints_simd16(DRAW_CONTEXT *pDC, PA_STATE& pa, uint32_t workerId, simd16vector prims[3], uint32_t primMask, simd16scalari const &primID);
+void SIMDCALL BinLines_simd16(DRAW_CONTEXT *pDC, PA_STATE& pa, uint32_t workerId, simd16vector prims[3], uint32_t primMask, simd16scalari const &primID);
 #endif
 

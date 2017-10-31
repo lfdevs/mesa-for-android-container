@@ -88,6 +88,7 @@ _mesa_choose_tex_format(struct gl_context *ctx, GLenum target,
       break;
    case GL_RGB5_A1:
       RETURN_IF_SUPPORTED(MESA_FORMAT_B5G5R5A1_UNORM);
+      RETURN_IF_SUPPORTED(MESA_FORMAT_A1B5G5R5_UNORM);
       break;
    case GL_RGBA2:
       RETURN_IF_SUPPORTED(MESA_FORMAT_A4R4G4B4_UNORM); /* just to test another format*/
@@ -116,6 +117,9 @@ _mesa_choose_tex_format(struct gl_context *ctx, GLenum target,
    case GL_RGB:
       if (type == GL_UNSIGNED_INT_2_10_10_10_REV) {
          RETURN_IF_SUPPORTED(MESA_FORMAT_B10G10R10A2_UNORM);
+      }
+      if (type == GL_UNSIGNED_SHORT_5_6_5) {
+         RETURN_IF_SUPPORTED(MESA_FORMAT_B5G6R5_UNORM);
       }
       /* fallthrough */
    case GL_RGB8:
@@ -249,9 +253,7 @@ _mesa_choose_tex_format(struct gl_context *ctx, GLenum target,
        * 1D ARRAY textures in S3TC format.
        */
       if (target != GL_TEXTURE_1D && target != GL_TEXTURE_1D_ARRAY) {
-         if (ctx->Mesa_DXTn)
-            RETURN_IF_SUPPORTED(MESA_FORMAT_RGB_DXT1);
-         RETURN_IF_SUPPORTED(MESA_FORMAT_RGB_FXT1);
+         RETURN_IF_SUPPORTED(MESA_FORMAT_RGB_DXT1);
       }
       RETURN_IF_SUPPORTED(MESA_FORMAT_BGR_UNORM8);
       RETURN_IF_SUPPORTED(MESA_FORMAT_B8G8R8X8_UNORM);
@@ -260,9 +262,7 @@ _mesa_choose_tex_format(struct gl_context *ctx, GLenum target,
    case GL_COMPRESSED_RGBA_ARB:
       /* We don't use texture compression for 1D and 1D array textures. */
       if (target != GL_TEXTURE_1D && target != GL_TEXTURE_1D_ARRAY) {
-         if (ctx->Mesa_DXTn)
-            RETURN_IF_SUPPORTED(MESA_FORMAT_RGBA_DXT3); /* Not rgba_dxt1, see spec */
-         RETURN_IF_SUPPORTED(MESA_FORMAT_RGBA_FXT1);
+         RETURN_IF_SUPPORTED(MESA_FORMAT_RGBA_DXT3); /* Not rgba_dxt1, see spec */
       }
       RETURN_IF_SUPPORTED(MESA_FORMAT_A8B8G8R8_UNORM);
       RETURN_IF_SUPPORTED(MESA_FORMAT_B8G8R8A8_UNORM);
@@ -502,15 +502,13 @@ _mesa_choose_tex_format(struct gl_context *ctx, GLenum target,
       RETURN_IF_SUPPORTED(MESA_FORMAT_A8R8G8B8_SRGB);
       break;
    case GL_COMPRESSED_SRGB_EXT:
-      if (ctx->Mesa_DXTn)
-         RETURN_IF_SUPPORTED(MESA_FORMAT_SRGB_DXT1);
+      RETURN_IF_SUPPORTED(MESA_FORMAT_SRGB_DXT1);
       RETURN_IF_SUPPORTED(MESA_FORMAT_BGR_SRGB8);
       RETURN_IF_SUPPORTED(MESA_FORMAT_B8G8R8A8_SRGB);
       RETURN_IF_SUPPORTED(MESA_FORMAT_A8R8G8B8_SRGB);
       break;
    case GL_COMPRESSED_SRGB_ALPHA_EXT:
-      if (ctx->Mesa_DXTn)
-         RETURN_IF_SUPPORTED(MESA_FORMAT_SRGBA_DXT3); /* Not srgba_dxt1, see spec */
+      RETURN_IF_SUPPORTED(MESA_FORMAT_SRGBA_DXT3); /* Not srgba_dxt1, see spec */
       RETURN_IF_SUPPORTED(MESA_FORMAT_A8B8G8R8_SRGB);
       RETURN_IF_SUPPORTED(MESA_FORMAT_B8G8R8A8_SRGB);
       RETURN_IF_SUPPORTED(MESA_FORMAT_A8R8G8B8_SRGB);

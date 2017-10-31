@@ -30,7 +30,7 @@
 #include "format_conversion.h"
 
 INLINE
-void StencilOp(SWR_STENCILOP op, simdscalar mask, simdscalar stencilRefps, simdscalar &stencilps)
+void StencilOp(SWR_STENCILOP op, simdscalar const &mask, simdscalar const &stencilRefps, simdscalar &stencilps)
 {
     simdscalari stencil = _simd_castps_si(stencilps);
 
@@ -81,7 +81,7 @@ void StencilOp(SWR_STENCILOP op, simdscalar mask, simdscalar stencilRefps, simds
 
 
 template<SWR_FORMAT depthFormatT>
-simdscalar QuantizeDepth(simdscalar depth)
+simdscalar QuantizeDepth(simdscalar const &depth)
 {
     SWR_TYPE depthType = FormatTraits<depthFormatT>::GetType(0);
     uint32_t depthBpc = FormatTraits<depthFormatT>::GetBPC(0);
@@ -117,7 +117,7 @@ simdscalar QuantizeDepth(simdscalar depth)
 
 INLINE
 simdscalar DepthStencilTest(const API_STATE* pState,
-                 bool frontFacing, uint32_t viewportIndex, simdscalar interpZ, uint8_t* pDepthBase, simdscalar coverageMask,
+                 bool frontFacing, uint32_t viewportIndex, simdscalar const &iZ, uint8_t* pDepthBase, simdscalar const &coverageMask,
                  uint8_t *pStencilBase, simdscalar* pStencilMask)
 {
     static_assert(KNOB_DEPTH_HOT_TILE_FORMAT == R32_FLOAT, "Unsupported depth hot tile format");
@@ -132,7 +132,7 @@ simdscalar DepthStencilTest(const API_STATE* pState,
     // clamp Z to viewport [minZ..maxZ]
     simdscalar vMinZ = _simd_broadcast_ss(&pViewport->minZ);
     simdscalar vMaxZ = _simd_broadcast_ss(&pViewport->maxZ);
-    interpZ = _simd_min_ps(vMaxZ, _simd_max_ps(vMinZ, interpZ));
+    simdscalar interpZ = _simd_min_ps(vMaxZ, _simd_max_ps(vMinZ, iZ));
     
     if (pDSState->depthTestEnable)
     {
@@ -215,7 +215,7 @@ simdscalar DepthStencilTest(const API_STATE* pState,
 
 INLINE
 void DepthStencilWrite(const SWR_VIEWPORT* pViewport, const SWR_DEPTH_STENCIL_STATE* pDSState,
-        bool frontFacing, simdscalar interpZ, uint8_t* pDepthBase, const simdscalar& depthMask, const simdscalar& coverageMask, 
+        bool frontFacing, simdscalar const &iZ, uint8_t* pDepthBase, const simdscalar& depthMask, const simdscalar& coverageMask,
         uint8_t *pStencilBase, const simdscalar& stencilMask)
 {
     if (pDSState->depthWriteEnable)
@@ -223,7 +223,7 @@ void DepthStencilWrite(const SWR_VIEWPORT* pViewport, const SWR_DEPTH_STENCIL_ST
         // clamp Z to viewport [minZ..maxZ]
         simdscalar vMinZ = _simd_broadcast_ss(&pViewport->minZ);
         simdscalar vMaxZ = _simd_broadcast_ss(&pViewport->maxZ);
-        interpZ = _simd_min_ps(vMaxZ, _simd_max_ps(vMinZ, interpZ));
+        simdscalar interpZ = _simd_min_ps(vMaxZ, _simd_max_ps(vMinZ, iZ));
 
         simdscalar vMask = _simd_and_ps(depthMask, coverageMask);
         _simd_maskstore_ps((float*)pDepthBase, _simd_castps_si(vMask), interpZ);

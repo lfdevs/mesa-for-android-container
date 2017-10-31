@@ -67,7 +67,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "radeon_fog.h"
 
 #include "utils.h"
-#include "xmlpool.h" /* for symbolic values of enum-type options */
+#include "util/xmlpool.h" /* for symbolic values of enum-type options */
 
 extern const struct tnl_pipeline_stage _radeon_render_stage;
 extern const struct tnl_pipeline_stage _radeon_tcl_stage;
@@ -144,6 +144,7 @@ r100CreateContext( gl_api api,
 		   unsigned minor_version,
 		   uint32_t flags,
                    bool notify_reset,
+		   unsigned priority,
 		   unsigned *error,
 		   void *sharedContextPrivate)
 {
@@ -300,6 +301,7 @@ r100CreateContext( gl_api api,
    ctx->Extensions.ARB_texture_env_combine = true;
    ctx->Extensions.ARB_texture_env_crossbar = true;
    ctx->Extensions.ARB_texture_env_dot3 = true;
+   ctx->Extensions.ARB_texture_filter_anisotropic = true;
    ctx->Extensions.ARB_texture_mirror_clamp_to_edge = true;
    ctx->Extensions.ATI_texture_env_combine3 = true;
    ctx->Extensions.ATI_texture_mirror_once = true;
@@ -310,14 +312,8 @@ r100CreateContext( gl_api api,
    ctx->Extensions.NV_texture_rectangle = true;
    ctx->Extensions.OES_EGL_image = true;
 
-   if (rmesa->radeon.glCtx.Mesa_DXTn) {
-      ctx->Extensions.EXT_texture_compression_s3tc = true;
-      ctx->Extensions.ANGLE_texture_compression_dxt = true;
-   }
-   else if (driQueryOptionb (&rmesa->radeon.optionCache, "force_s3tc_enable")) {
-      ctx->Extensions.EXT_texture_compression_s3tc = true;
-      ctx->Extensions.ANGLE_texture_compression_dxt = true;
-   }
+   ctx->Extensions.EXT_texture_compression_s3tc = true;
+   ctx->Extensions.ANGLE_texture_compression_dxt = true;
 
    /* XXX these should really go right after _mesa_init_driver_functions() */
    radeon_fbo_init(&rmesa->radeon);

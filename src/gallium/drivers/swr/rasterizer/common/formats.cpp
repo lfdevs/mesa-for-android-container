@@ -2729,16 +2729,27 @@ const SWR_FORMAT_INFO gFormatInfo[] = {
         { 0.0f, 0.0f, 0.0f, 0.0f },
         1, 1
     },
-    // padding (0xD5)
+
+    // R10G10B10_FLOAT_A2_UNORM (0xD5)
     {
-        nullptr,
-        { SWR_TYPE_UNKNOWN, SWR_TYPE_UNKNOWN, SWR_TYPE_UNKNOWN, SWR_TYPE_UNKNOWN },
-        { 0, 0, 0, 0 },{ 0, 0, 0, 0 },{ 0, 0, 0, 0 },
-        0, 0, 0, false, false, false, false,
-        { false, false, false, false },
-        { 0.0f, 0.0f, 0.0f, 0.0f },
-        1, 1
+        "R10G10B10_FLOAT_A2_UNORM",
+        { SWR_TYPE_FLOAT, SWR_TYPE_FLOAT, SWR_TYPE_FLOAT, SWR_TYPE_UNORM },
+        { 0, 0, 0, 0x3f800000 }, // Defaults for missing components
+        { 0, 1, 2, 3 }, // Swizzle
+        { 10, 10, 10, 2 }, // Bits per component
+        32, // Bits per element
+        4, // Bytes per element
+        4, // Num components
+        false, // isSRGB
+        false, // isBC
+        false, // isSubsampled
+        false, // isLuminance
+        { false, false, false, false }, // Is normalized?
+        { 1.0f, 1.0f, 1.0f, 1.0f / 3.0f }, // To float scale factor
+        1, // bcWidth
+        1, // bcHeight
     },
+
     // R32_SINT (0xD6)
     {
         "R32_SINT",

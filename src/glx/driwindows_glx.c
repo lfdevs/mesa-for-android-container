@@ -24,6 +24,7 @@
 #include "glxclient.h"
 #include "glx_error.h"
 #include "dri_common.h"
+#include "util/macros.h"
 #include "windows/xwindowsdri.h"
 #include "windows/windowsgl.h"
 
@@ -427,7 +428,7 @@ driwindowsBindExtensions(struct driwindows_screen *psc)
 
    windows_extensions(&gl_extensions, &wgl_extensions);
 
-   for (i = 0; i < sizeof(extensionMap)/sizeof(extensionMap[0]); i++) {
+   for (i = 0; i < ARRAY_SIZE(extensionMap); i++) {
       if (strstr(wgl_extensions, extensionMap[i].wglext)) {
           __glXEnableDirectExtension(&psc->base, extensionMap[i].glxext);
           InfoMessageF("enabled %s\n", extensionMap[i].glxext);

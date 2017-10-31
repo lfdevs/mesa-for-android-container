@@ -118,7 +118,7 @@ If texture format is different than template format, it is said the texture
 is being cast to another format. Casting can be done only between compatible
 formats, that is formats that have matching component order and sizes.
 
-Swizzle fields specify they way in which fetched texel components are placed
+Swizzle fields specify the way in which fetched texel components are placed
 in the result register. For example, ``swizzle_r`` specifies what is going to be
 placed in first component of result register.
 
@@ -394,6 +394,12 @@ value of FALSE for cases where COUNTER would result in 0 and TRUE
 for all other cases.
 This query can be used with ``render_condition``.
 
+In cases where a conservative approximation of an occlusion query is enough,
+``PIPE_QUERY_OCCLUSION_PREDICATE_CONSERVATIVE`` should be used. It behaves
+like ``PIPE_QUERY_OCCLUSION_PREDICATE``, except that it may return TRUE in
+additional, implementation-dependent cases.
+This query can be used with ``render_condition``.
+
 ``PIPE_QUERY_TIME_ELAPSED`` returns the amount of time, in nanoseconds,
 the context takes to perform operations.
 The result is an unsigned 64-bit integer.
@@ -428,9 +434,17 @@ XXX the 2nd value is equivalent to ``PIPE_QUERY_PRIMITIVES_GENERATED`` but it is
 unclear if it should be increased if stream output is not active.
 
 ``PIPE_QUERY_SO_OVERFLOW_PREDICATE`` returns a boolean value indicating
-whether the stream output targets have overflowed as a result of the
+whether a selected stream output target has overflowed as a result of the
 commands issued between ``begin_query`` and ``end_query``.
-This query can be used with ``render_condition``.
+This query can be used with ``render_condition``. The output stream is
+selected by the stream number passed to ``create_query``.
+
+``PIPE_QUERY_SO_OVERFLOW_ANY_PREDICATE`` returns a boolean value indicating
+whether any stream output target has overflowed as a result of the commands
+issued between ``begin_query`` and ``end_query``. This query can be used
+with ``render_condition``, and its result is the logical OR of multiple
+``PIPE_QUERY_SO_OVERFLOW_PREDICATE`` queries, one for each stream output
+target.
 
 ``PIPE_QUERY_GPU_FINISHED`` returns a boolean value indicating whether
 all commands issued before ``end_query`` have completed. However, this

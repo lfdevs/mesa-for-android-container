@@ -144,16 +144,17 @@ target_triplet = @target@
 @HAVE_PLATFORM_X11_TRUE@am__append_2 = $(VULKAN_WSI_X11_FILES)
 @HAVE_PLATFORM_X11_TRUE@am__append_3 = $(XCB_DRI3_LIBS)
 @HAVE_PLATFORM_WAYLAND_TRUE@am__append_4 = \
-@HAVE_PLATFORM_WAYLAND_TRUE@	$(WAYLAND_CFLAGS) \
+@HAVE_PLATFORM_WAYLAND_TRUE@	$(WAYLAND_CLIENT_CFLAGS) \
 @HAVE_PLATFORM_WAYLAND_TRUE@	-DVK_USE_PLATFORM_WAYLAND_KHR
 
 @HAVE_PLATFORM_WAYLAND_TRUE@am__append_5 = $(VULKAN_WSI_WAYLAND_FILES)
 @HAVE_PLATFORM_WAYLAND_TRUE@am__append_6 = \
-@HAVE_PLATFORM_WAYLAND_TRUE@	$(WAYLAND_LIBS)
+@HAVE_PLATFORM_WAYLAND_TRUE@	$(WAYLAND_CLIENT_LIBS)
 
 subdir = src/amd/vulkan
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_gnu_make.m4 \
+am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_compile_flag.m4 \
+	$(top_srcdir)/m4/ax_check_gnu_make.m4 \
 	$(top_srcdir)/m4/ax_check_python_mako_module.m4 \
 	$(top_srcdir)/m4/ax_gcc_builtin.m4 \
 	$(top_srcdir)/m4/ax_gcc_func_attribute.m4 \
@@ -201,41 +202,42 @@ am__installdirs = "$(DESTDIR)$(libdir)" "$(DESTDIR)$(icdconfdir)"
 LTLIBRARIES = $(lib_LTLIBRARIES) $(noinst_LTLIBRARIES)
 libvulkan_common_la_LIBADD =
 am__libvulkan_common_la_SOURCES_DIST = radv_entrypoints.c \
-	radv_entrypoints.h radv_cmd_buffer.c radv_cs.h radv_debug.h \
-	radv_device.c radv_descriptor_set.c radv_descriptor_set.h \
-	radv_formats.c radv_image.c radv_meta.c radv_meta.h \
-	radv_meta_blit.c radv_meta_blit2d.c radv_meta_buffer.c \
-	radv_meta_bufimage.c radv_meta_clear.c radv_meta_copy.c \
-	radv_meta_decompress.c radv_meta_fast_clear.c \
-	radv_meta_resolve.c radv_meta_resolve_cs.c \
-	radv_meta_resolve_fs.c radv_pass.c radv_pipeline.c \
-	radv_pipeline_cache.c radv_private.h radv_radeon_winsys.h \
-	radv_query.c radv_util.c radv_util.h radv_wsi.c \
-	si_cmd_buffer.c vk_format_table.c vk_format.h \
-	winsys/amdgpu/radv_amdgpu_bo.c winsys/amdgpu/radv_amdgpu_bo.h \
-	winsys/amdgpu/radv_amdgpu_cs.c winsys/amdgpu/radv_amdgpu_cs.h \
+	radv_entrypoints.h radv_extensions.c radv_cmd_buffer.c \
+	radv_cs.h radv_debug.c radv_debug.h radv_device.c \
+	radv_descriptor_set.c radv_descriptor_set.h radv_formats.c \
+	radv_image.c radv_meta.c radv_meta.h radv_meta_blit.c \
+	radv_meta_blit2d.c radv_meta_buffer.c radv_meta_bufimage.c \
+	radv_meta_clear.c radv_meta_copy.c radv_meta_decompress.c \
+	radv_meta_fast_clear.c radv_meta_resolve.c \
+	radv_meta_resolve_cs.c radv_meta_resolve_fs.c radv_pass.c \
+	radv_pipeline.c radv_pipeline_cache.c radv_private.h \
+	radv_radeon_winsys.h radv_shader.c radv_shader.h radv_query.c \
+	radv_util.c radv_util.h radv_wsi.c si_cmd_buffer.c \
+	vk_format_table.c vk_format.h winsys/amdgpu/radv_amdgpu_bo.c \
+	winsys/amdgpu/radv_amdgpu_bo.h winsys/amdgpu/radv_amdgpu_cs.c \
+	winsys/amdgpu/radv_amdgpu_cs.h \
 	winsys/amdgpu/radv_amdgpu_surface.c \
 	winsys/amdgpu/radv_amdgpu_surface.h \
 	winsys/amdgpu/radv_amdgpu_winsys.c \
 	winsys/amdgpu/radv_amdgpu_winsys.h \
 	winsys/amdgpu/radv_amdgpu_winsys_public.h radv_wsi_x11.c \
 	radv_wsi_wayland.c
-am__objects_1 = radv_entrypoints.lo
+am__objects_1 = radv_entrypoints.lo radv_extensions.lo
 am__dirstamp = $(am__leading_dot)dirstamp
 am__objects_2 = winsys/amdgpu/radv_amdgpu_bo.lo \
 	winsys/amdgpu/radv_amdgpu_cs.lo \
 	winsys/amdgpu/radv_amdgpu_surface.lo \
 	winsys/amdgpu/radv_amdgpu_winsys.lo
-am__objects_3 = radv_cmd_buffer.lo radv_device.lo \
+am__objects_3 = radv_cmd_buffer.lo radv_debug.lo radv_device.lo \
 	radv_descriptor_set.lo radv_formats.lo radv_image.lo \
 	radv_meta.lo radv_meta_blit.lo radv_meta_blit2d.lo \
 	radv_meta_buffer.lo radv_meta_bufimage.lo radv_meta_clear.lo \
 	radv_meta_copy.lo radv_meta_decompress.lo \
 	radv_meta_fast_clear.lo radv_meta_resolve.lo \
 	radv_meta_resolve_cs.lo radv_meta_resolve_fs.lo radv_pass.lo \
-	radv_pipeline.lo radv_pipeline_cache.lo radv_query.lo \
-	radv_util.lo radv_wsi.lo si_cmd_buffer.lo vk_format_table.lo \
-	$(am__objects_2)
+	radv_pipeline.lo radv_pipeline_cache.lo radv_shader.lo \
+	radv_query.lo radv_util.lo radv_wsi.lo si_cmd_buffer.lo \
+	vk_format_table.lo $(am__objects_2)
 am__objects_4 = radv_wsi_x11.lo
 @HAVE_PLATFORM_X11_TRUE@am__objects_5 = $(am__objects_4)
 am__objects_6 = radv_wsi_wayland.lo
@@ -494,9 +496,9 @@ NVVIEUX_CFLAGS = @NVVIEUX_CFLAGS@
 NVVIEUX_LIBS = @NVVIEUX_LIBS@
 OBJDUMP = @OBJDUMP@
 OBJEXT = @OBJEXT@
-OMX_CFLAGS = @OMX_CFLAGS@
-OMX_LIBS = @OMX_LIBS@
-OMX_LIB_INSTALL_DIR = @OMX_LIB_INSTALL_DIR@
+OMX_BELLAGIO_CFLAGS = @OMX_BELLAGIO_CFLAGS@
+OMX_BELLAGIO_LIBS = @OMX_BELLAGIO_LIBS@
+OMX_BELLAGIO_LIB_INSTALL_DIR = @OMX_BELLAGIO_LIB_INSTALL_DIR@
 OPENCL_LIBNAME = @OPENCL_LIBNAME@
 OPENCL_VERSION = @OPENCL_VERSION@
 OSMESA_LIB = @OSMESA_LIB@
@@ -550,6 +552,8 @@ VA_LIBS = @VA_LIBS@
 VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
 VA_MAJOR = @VA_MAJOR@
 VA_MINOR = @VA_MINOR@
+VC5_SIMULATOR_CFLAGS = @VC5_SIMULATOR_CFLAGS@
+VC5_SIMULATOR_LIBS = @VC5_SIMULATOR_LIBS@
 VDPAU_CFLAGS = @VDPAU_CFLAGS@
 VDPAU_LIBS = @VDPAU_LIBS@
 VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
@@ -561,12 +565,15 @@ VISIBILITY_CXXFLAGS = @VISIBILITY_CXXFLAGS@
 VL_CFLAGS = @VL_CFLAGS@
 VL_LIBS = @VL_LIBS@
 VULKAN_ICD_INSTALL_DIR = @VULKAN_ICD_INSTALL_DIR@
-WAYLAND_CFLAGS = @WAYLAND_CFLAGS@
-WAYLAND_LIBS = @WAYLAND_LIBS@
+WAYLAND_CLIENT_CFLAGS = @WAYLAND_CLIENT_CFLAGS@
+WAYLAND_CLIENT_LIBS = @WAYLAND_CLIENT_LIBS@
 WAYLAND_PROTOCOLS_DATADIR = @WAYLAND_PROTOCOLS_DATADIR@
 WAYLAND_SCANNER = @WAYLAND_SCANNER@
 WAYLAND_SCANNER_CFLAGS = @WAYLAND_SCANNER_CFLAGS@
 WAYLAND_SCANNER_LIBS = @WAYLAND_SCANNER_LIBS@
+WAYLAND_SERVER_CFLAGS = @WAYLAND_SERVER_CFLAGS@
+WAYLAND_SERVER_LIBS = @WAYLAND_SERVER_LIBS@
+WNO_OVERRIDE_INIT = @WNO_OVERRIDE_INIT@
 X11_INCLUDES = @X11_INCLUDES@
 XA_MAJOR = @XA_MAJOR@
 XA_MINOR = @XA_MINOR@
@@ -663,6 +670,7 @@ RADV_WS_AMDGPU_FILES := \
 VULKAN_FILES := \
 	radv_cmd_buffer.c \
 	radv_cs.h \
+	radv_debug.c \
 	radv_debug.h \
 	radv_device.c \
 	radv_descriptor_set.c \
@@ -687,6 +695,8 @@ VULKAN_FILES := \
 	radv_pipeline_cache.c \
 	radv_private.h \
 	radv_radeon_winsys.h \
+	radv_shader.c \
+	radv_shader.h \
 	radv_query.c \
 	radv_util.c \
 	radv_util.h \
@@ -704,7 +714,8 @@ VULKAN_WSI_X11_FILES := \
 
 VULKAN_GENERATED_FILES := \
 	radv_entrypoints.c \
-	radv_entrypoints.h
+	radv_entrypoints.h \
+	radv_extensions.c
 
 noinst_HEADERS = \
 	$(top_srcdir)/include/vulkan/vk_platform.h \
@@ -754,6 +765,7 @@ EXTRA_DIST = \
 	dev_icd.json.in \
 	radeon_icd.json.in \
 	radv_entrypoints_gen.py \
+	radv_extensions.py \
 	vk_format_layout.csv \
 	vk_format_parse.py \
 	vk_format_table.py
@@ -885,9 +897,11 @@ distclean-compile:
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dummy.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radv_cmd_buffer.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radv_debug.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radv_descriptor_set.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radv_device.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radv_entrypoints.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radv_extensions.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radv_formats.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radv_image.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radv_meta.Plo@am__quote@
@@ -906,6 +920,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radv_pipeline.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radv_pipeline_cache.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radv_query.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radv_shader.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radv_util.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radv_wsi.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radv_wsi_wayland.Plo@am__quote@
@@ -1214,11 +1229,18 @@ uninstall-am: uninstall-icdconfDATA uninstall-libLTLIBRARIES
 .PRECIOUS: Makefile
 
 
-radv_entrypoints.c: radv_entrypoints_gen.py $(vulkan_api_xml)
+radv_entrypoints.c: radv_entrypoints_gen.py radv_extensions.py $(vulkan_api_xml)
 	$(MKDIR_GEN)
 	$(AM_V_GEN)$(PYTHON2) $(srcdir)/radv_entrypoints_gen.py \
 		--xml $(vulkan_api_xml) --outdir $(builddir)
 radv_entrypoints.h: radv_entrypoints.c
+
+radv_extensions.c: radv_extensions.py \
+		 $(vulkan_api_xml)
+	$(MKDIR_GEN)
+	$(AM_V_GEN)$(PYTHON2) $(srcdir)/radv_extensions.py \
+		--xml $(vulkan_api_xml) \
+		--out $@
 
 vk_format_table.c: vk_format_table.py \
 		   vk_format_parse.py \
@@ -1227,7 +1249,7 @@ vk_format_table.c: vk_format_table.py \
 
 dev_icd.json : dev_icd.json.in
 	$(AM_V_GEN) $(SED) \
-		-e "s#@build_libdir@#${abs_top_builddir}/${LIB_DIR}#" \
+		-e "s#@libvulkan_radeon_path@#${abs_top_builddir}/${LIB_DIR}/libvulkan_radeon.so#" \
 		< $(srcdir)/dev_icd.json.in > $@
 
 radeon_icd.@host_cpu@.json : radeon_icd.json.in

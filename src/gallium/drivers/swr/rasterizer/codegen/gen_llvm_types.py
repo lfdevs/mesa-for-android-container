@@ -42,7 +42,7 @@ def gen_llvm_type(type, name, is_pointer, is_pointer_pointer, is_array, is_array
     else:
         if type == 'BYTE' or type == 'char' or type == 'uint8_t' or type == 'int8_t' or type == 'bool':
             llvm_type = 'Type::getInt8Ty(ctx)'
-        elif type == 'UINT64' or type == 'INT64' or type == 'uint64_t' or type == 'int64_t':
+        elif type == 'UINT64' or type == 'INT64' or type == 'uint64_t' or type == 'int64_t' or type == 'gfxptr_t':
             llvm_type = 'Type::getInt64Ty(ctx)'
         elif type == 'UINT16' or type == 'int16_t' or type == 'uint16_t':
             llvm_type = 'Type::getInt16Ty(ctx)'

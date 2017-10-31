@@ -154,7 +154,8 @@ target_triplet = @target@
 @HAVE_SWR_SKX_TRUE@am__append_11 = libswrSKX.la
 subdir = src/gallium/drivers/swr
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_gnu_make.m4 \
+am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_compile_flag.m4 \
+	$(top_srcdir)/m4/ax_check_gnu_make.m4 \
 	$(top_srcdir)/m4/ax_check_python_mako_module.m4 \
 	$(top_srcdir)/m4/ax_gcc_builtin.m4 \
 	$(top_srcdir)/m4/ax_gcc_func_attribute.m4 \
@@ -246,11 +247,19 @@ am__libswrAVX_la_SOURCES_DIST = rasterizer/archrast/archrast.cpp \
 	rasterizer/common/simdlib_128_avx.inl \
 	rasterizer/common/simdlib_128_avx2.inl \
 	rasterizer/common/simdlib_128_avx512.inl \
+	rasterizer/common/simdlib_128_avx512_core.inl \
+	rasterizer/common/simdlib_128_avx512_knights.inl \
 	rasterizer/common/simdlib_256_avx.inl \
 	rasterizer/common/simdlib_256_avx2.inl \
 	rasterizer/common/simdlib_256_avx512.inl \
+	rasterizer/common/simdlib_256_avx512_core.inl \
+	rasterizer/common/simdlib_256_avx512_knights.inl \
 	rasterizer/common/simdlib_512_avx512.inl \
+	rasterizer/common/simdlib_512_avx512_core.inl \
+	rasterizer/common/simdlib_512_avx512_knights.inl \
 	rasterizer/common/simdlib_512_avx512_masks.inl \
+	rasterizer/common/simdlib_512_avx512_masks_core.inl \
+	rasterizer/common/simdlib_512_avx512_masks_knights.inl \
 	rasterizer/common/simdlib_512_emu.inl \
 	rasterizer/common/simdlib_512_emu_masks.inl \
 	rasterizer/common/simdlib_interface.hpp \
@@ -379,11 +388,19 @@ am__libswrAVX2_la_SOURCES_DIST = rasterizer/archrast/archrast.cpp \
 	rasterizer/common/simdlib_128_avx.inl \
 	rasterizer/common/simdlib_128_avx2.inl \
 	rasterizer/common/simdlib_128_avx512.inl \
+	rasterizer/common/simdlib_128_avx512_core.inl \
+	rasterizer/common/simdlib_128_avx512_knights.inl \
 	rasterizer/common/simdlib_256_avx.inl \
 	rasterizer/common/simdlib_256_avx2.inl \
 	rasterizer/common/simdlib_256_avx512.inl \
+	rasterizer/common/simdlib_256_avx512_core.inl \
+	rasterizer/common/simdlib_256_avx512_knights.inl \
 	rasterizer/common/simdlib_512_avx512.inl \
+	rasterizer/common/simdlib_512_avx512_core.inl \
+	rasterizer/common/simdlib_512_avx512_knights.inl \
 	rasterizer/common/simdlib_512_avx512_masks.inl \
+	rasterizer/common/simdlib_512_avx512_masks_core.inl \
+	rasterizer/common/simdlib_512_avx512_masks_knights.inl \
 	rasterizer/common/simdlib_512_emu.inl \
 	rasterizer/common/simdlib_512_emu_masks.inl \
 	rasterizer/common/simdlib_interface.hpp \
@@ -512,11 +529,19 @@ am__libswrKNL_la_SOURCES_DIST = rasterizer/archrast/archrast.cpp \
 	rasterizer/common/simdlib_128_avx.inl \
 	rasterizer/common/simdlib_128_avx2.inl \
 	rasterizer/common/simdlib_128_avx512.inl \
+	rasterizer/common/simdlib_128_avx512_core.inl \
+	rasterizer/common/simdlib_128_avx512_knights.inl \
 	rasterizer/common/simdlib_256_avx.inl \
 	rasterizer/common/simdlib_256_avx2.inl \
 	rasterizer/common/simdlib_256_avx512.inl \
+	rasterizer/common/simdlib_256_avx512_core.inl \
+	rasterizer/common/simdlib_256_avx512_knights.inl \
 	rasterizer/common/simdlib_512_avx512.inl \
+	rasterizer/common/simdlib_512_avx512_core.inl \
+	rasterizer/common/simdlib_512_avx512_knights.inl \
 	rasterizer/common/simdlib_512_avx512_masks.inl \
+	rasterizer/common/simdlib_512_avx512_masks_core.inl \
+	rasterizer/common/simdlib_512_avx512_masks_knights.inl \
 	rasterizer/common/simdlib_512_emu.inl \
 	rasterizer/common/simdlib_512_emu_masks.inl \
 	rasterizer/common/simdlib_interface.hpp \
@@ -644,11 +669,19 @@ am__libswrSKX_la_SOURCES_DIST = rasterizer/archrast/archrast.cpp \
 	rasterizer/common/simdlib_128_avx.inl \
 	rasterizer/common/simdlib_128_avx2.inl \
 	rasterizer/common/simdlib_128_avx512.inl \
+	rasterizer/common/simdlib_128_avx512_core.inl \
+	rasterizer/common/simdlib_128_avx512_knights.inl \
 	rasterizer/common/simdlib_256_avx.inl \
 	rasterizer/common/simdlib_256_avx2.inl \
 	rasterizer/common/simdlib_256_avx512.inl \
+	rasterizer/common/simdlib_256_avx512_core.inl \
+	rasterizer/common/simdlib_256_avx512_knights.inl \
 	rasterizer/common/simdlib_512_avx512.inl \
+	rasterizer/common/simdlib_512_avx512_core.inl \
+	rasterizer/common/simdlib_512_avx512_knights.inl \
 	rasterizer/common/simdlib_512_avx512_masks.inl \
+	rasterizer/common/simdlib_512_avx512_masks_core.inl \
+	rasterizer/common/simdlib_512_avx512_masks_knights.inl \
 	rasterizer/common/simdlib_512_emu.inl \
 	rasterizer/common/simdlib_512_emu_masks.inl \
 	rasterizer/common/simdlib_interface.hpp \
@@ -988,9 +1021,9 @@ NVVIEUX_CFLAGS = @NVVIEUX_CFLAGS@
 NVVIEUX_LIBS = @NVVIEUX_LIBS@
 OBJDUMP = @OBJDUMP@
 OBJEXT = @OBJEXT@
-OMX_CFLAGS = @OMX_CFLAGS@
-OMX_LIBS = @OMX_LIBS@
-OMX_LIB_INSTALL_DIR = @OMX_LIB_INSTALL_DIR@
+OMX_BELLAGIO_CFLAGS = @OMX_BELLAGIO_CFLAGS@
+OMX_BELLAGIO_LIBS = @OMX_BELLAGIO_LIBS@
+OMX_BELLAGIO_LIB_INSTALL_DIR = @OMX_BELLAGIO_LIB_INSTALL_DIR@
 OPENCL_LIBNAME = @OPENCL_LIBNAME@
 OPENCL_VERSION = @OPENCL_VERSION@
 OSMESA_LIB = @OSMESA_LIB@
@@ -1044,6 +1077,8 @@ VA_LIBS = @VA_LIBS@
 VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
 VA_MAJOR = @VA_MAJOR@
 VA_MINOR = @VA_MINOR@
+VC5_SIMULATOR_CFLAGS = @VC5_SIMULATOR_CFLAGS@
+VC5_SIMULATOR_LIBS = @VC5_SIMULATOR_LIBS@
 VDPAU_CFLAGS = @VDPAU_CFLAGS@
 VDPAU_LIBS = @VDPAU_LIBS@
 VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
@@ -1055,12 +1090,15 @@ VISIBILITY_CXXFLAGS = @VISIBILITY_CXXFLAGS@
 VL_CFLAGS = @VL_CFLAGS@
 VL_LIBS = @VL_LIBS@
 VULKAN_ICD_INSTALL_DIR = @VULKAN_ICD_INSTALL_DIR@
-WAYLAND_CFLAGS = @WAYLAND_CFLAGS@
-WAYLAND_LIBS = @WAYLAND_LIBS@
+WAYLAND_CLIENT_CFLAGS = @WAYLAND_CLIENT_CFLAGS@
+WAYLAND_CLIENT_LIBS = @WAYLAND_CLIENT_LIBS@
 WAYLAND_PROTOCOLS_DATADIR = @WAYLAND_PROTOCOLS_DATADIR@
 WAYLAND_SCANNER = @WAYLAND_SCANNER@
 WAYLAND_SCANNER_CFLAGS = @WAYLAND_SCANNER_CFLAGS@
 WAYLAND_SCANNER_LIBS = @WAYLAND_SCANNER_LIBS@
+WAYLAND_SERVER_CFLAGS = @WAYLAND_SERVER_CFLAGS@
+WAYLAND_SERVER_LIBS = @WAYLAND_SERVER_LIBS@
+WNO_OVERRIDE_INIT = @WNO_OVERRIDE_INIT@
 X11_INCLUDES = @X11_INCLUDES@
 XA_MAJOR = @XA_MAJOR@
 XA_MINOR = @XA_MINOR@
@@ -1193,11 +1231,19 @@ COMMON_CXX_SOURCES := \
 	rasterizer/common/simdlib_128_avx.inl \
 	rasterizer/common/simdlib_128_avx2.inl \
 	rasterizer/common/simdlib_128_avx512.inl \
+	rasterizer/common/simdlib_128_avx512_core.inl \
+	rasterizer/common/simdlib_128_avx512_knights.inl \
 	rasterizer/common/simdlib_256_avx.inl \
 	rasterizer/common/simdlib_256_avx2.inl \
 	rasterizer/common/simdlib_256_avx512.inl \
+	rasterizer/common/simdlib_256_avx512_core.inl \
+	rasterizer/common/simdlib_256_avx512_knights.inl \
 	rasterizer/common/simdlib_512_avx512.inl \
+	rasterizer/common/simdlib_512_avx512_core.inl \
+	rasterizer/common/simdlib_512_avx512_knights.inl \
 	rasterizer/common/simdlib_512_avx512_masks.inl \
+	rasterizer/common/simdlib_512_avx512_masks_core.inl \
+	rasterizer/common/simdlib_512_avx512_masks_knights.inl \
 	rasterizer/common/simdlib_512_emu.inl \
 	rasterizer/common/simdlib_512_emu_masks.inl \
 	rasterizer/common/simdlib_interface.hpp \
@@ -1328,6 +1374,8 @@ GALLIUM_TARGET_CFLAGS = \
 	-I$(top_srcdir)/src/gallium/auxiliary \
 	-I$(top_srcdir)/src/gallium/drivers \
 	-I$(top_srcdir)/src/gallium/winsys \
+	-I$(top_builddir)/src/util/ \
+	-I$(top_builddir)/src/gallium/drivers/ \
 	$(DEFINES) \
 	$(PTHREAD_CFLAGS) \
 	$(LIBDRM_CFLAGS) \
@@ -1452,7 +1500,7 @@ lib_LTLIBRARIES = $(am__append_8) $(am__append_9) $(am__append_10) \
 @HAVE_SWR_KNL_TRUE@libswrKNL_la_CXXFLAGS = \
 @HAVE_SWR_KNL_TRUE@	$(PTHREAD_CFLAGS) \
 @HAVE_SWR_KNL_TRUE@	$(SWR_KNL_CXXFLAGS) \
-@HAVE_SWR_KNL_TRUE@	-DKNOB_ARCH=KNOB_ARCH_AVX512 -DAVX512F_STRICT \
+@HAVE_SWR_KNL_TRUE@	-DKNOB_ARCH=KNOB_ARCH_AVX512 -DSIMD_ARCH_KNIGHTS \
 @HAVE_SWR_KNL_TRUE@	$(COMMON_CXXFLAGS)
 
 @HAVE_SWR_KNL_TRUE@libswrKNL_la_SOURCES = \
@@ -1497,6 +1545,7 @@ EXTRA_DIST = \
 	rasterizer/codegen/templates/gen_builder.hpp \
 	rasterizer/codegen/templates/gen_header_init.hpp \
 	rasterizer/codegen/templates/gen_knobs.cpp \
+	rasterizer/codegen/templates/gen_knobs.h \
 	rasterizer/codegen/templates/gen_llvm.hpp \
 	rasterizer/codegen/templates/gen_rasterizer.cpp
 
@@ -3956,7 +4005,7 @@ rasterizer/codegen/gen_knobs.cpp: rasterizer/codegen/gen_knobs.py rasterizer/cod
 		--output rasterizer/codegen/gen_knobs.cpp \
 		--gen_cpp
 
-rasterizer/codegen/gen_knobs.h: rasterizer/codegen/gen_knobs.py rasterizer/codegen/knob_defs.py rasterizer/codegen/templates/gen_knobs.cpp rasterizer/codegen/gen_common.py
+rasterizer/codegen/gen_knobs.h: rasterizer/codegen/gen_knobs.py rasterizer/codegen/knob_defs.py rasterizer/codegen/templates/gen_knobs.h rasterizer/codegen/gen_common.py
 	$(MKDIR_GEN)
 	$(PYTHON_GEN) \
 		$(srcdir)/rasterizer/codegen/gen_knobs.py \

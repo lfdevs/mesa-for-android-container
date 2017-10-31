@@ -332,6 +332,60 @@ _eglParseContextAttribList(_EGLContext *ctx, _EGLDisplay *dpy,
          ctx->NoError = !!val;
          break;
 
+      case EGL_CONTEXT_PRIORITY_LEVEL_IMG:
+         /* The  EGL_IMG_context_priority spec says:
+          *
+          * "EGL_CONTEXT_PRIORITY_LEVEL_IMG determines the priority level of
+          * the context to be created. This attribute is a hint, as an
+          * implementation may not support multiple contexts at some
+          * priority levels and system policy may limit access to high
+          * priority contexts to appropriate system privilege level. The
+          * default value for EGL_CONTEXT_PRIORITY_LEVEL_IMG is
+          * EGL_CONTEXT_PRIORITY_MEDIUM_IMG."
+          */
+         {
+            int bit;
+
+            switch (val) {
+            case EGL_CONTEXT_PRIORITY_HIGH_IMG:
+               bit = __EGL_CONTEXT_PRIORITY_HIGH_BIT;
+               break;
+            case EGL_CONTEXT_PRIORITY_MEDIUM_IMG:
+               bit = __EGL_CONTEXT_PRIORITY_MEDIUM_BIT;
+               break;
+            case EGL_CONTEXT_PRIORITY_LOW_IMG:
+               bit = __EGL_CONTEXT_PRIORITY_LOW_BIT;
+               break;
+            default:
+               bit = -1;
+               break;
+            }
+
+            if (bit < 0) {
+               err = EGL_BAD_ATTRIBUTE;
+               break;
+            }
+
+            /* "This extension allows an EGLContext to be created with a
+             * priority hint. It is possible that an implementation will not
+             * honour the hint, especially if there are constraints on the
+             * number of high priority contexts available in the system, or
+             * system policy limits access to high priority contexts to
+             * appropriate system privilege level. A query is provided to find
+             * the real priority level assigned to the context after creation."
+             *
+             * We currently assume that the driver applies the priority hint
+             * and filters out any it cannot handle during the screen setup,
+             * e.g. dri2_setup_screen(). As such we can mask any change that
+             * the driver would fail, and ctx->ContextPriority matches the
+             * hint applied to the driver/hardware backend.
+             */
+            if (dpy->Extensions.IMG_context_priority & (1 << bit))
+               ctx->ContextPriority = val;
+
+            break;
+         }
+
       default:
          err = EGL_BAD_ATTRIBUTE;
          break;
@@ -533,6 +587,7 @@ _eglInitContext(_EGLContext *ctx, _EGLDisplay *dpy, _EGLConfig *conf,
    ctx->Flags = 0;
    ctx->Profile = EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT_KHR;
    ctx->ResetNotificationStrategy = EGL_NO_RESET_NOTIFICATION_KHR;
+   ctx->ContextPriority = EGL_CONTEXT_PRIORITY_MEDIUM_IMG;
 
    err = _eglParseContextAttribList(ctx, dpy, attrib_list);
    if (err == EGL_SUCCESS && ctx->Config) {
@@ -597,6 +652,9 @@ _eglQueryContext(_EGLDriver *drv, _EGLDisplay *dpy, _EGLContext *c,
       break;
    case EGL_RENDER_BUFFER:
       *value = _eglQueryContextRenderBuffer(c);
+      break;
+   case EGL_CONTEXT_PRIORITY_LEVEL_IMG:
+      *value = c->ContextPriority;
       break;
    default:
       return _eglError(EGL_BAD_ATTRIBUTE, "eglQueryContext");

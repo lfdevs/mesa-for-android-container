@@ -554,23 +554,13 @@ emit_viewport( struct svga_context *svga,
          }
       }
       else {
-         switch (svga->curr.reduced_prim) {
-         case PIPE_PRIM_POINTS:
-            adjust_x = -0.375;
-            adjust_y = -0.75;
-            break;
-         case PIPE_PRIM_LINES:
-            adjust_x = -0.5;
-            adjust_y = -0.125;
-            break;
-         case PIPE_PRIM_TRIANGLES:
-            adjust_x = -0.5;
-            adjust_y = -0.5;
-            break;
-         default:
-            /* nothing */
-            break;
-         }
+         /* Use (-0.5, -0.5) bias for all prim types.
+          * Regarding line rasterization, this does not seem to satisfy
+          * the Piglit gl-1.0-ortho-pos test but it generally produces
+          * results identical or very similar to VGPU10.
+          */
+         adjust_x = -0.5;
+         adjust_y = -0.5;
       }
 
       if (invertY)

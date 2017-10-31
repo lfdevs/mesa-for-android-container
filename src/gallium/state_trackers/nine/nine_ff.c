@@ -483,7 +483,7 @@ nine_ff_build_vs(struct NineDevice9 *device, struct vs_build_ctx *vs)
 
         for (i = 0; i < key->vertexblend; ++i) {
             for (c = 0; c < 4; ++c) {
-                cWM[c] = ureg_src_register(TGSI_FILE_CONSTANT, (160 + i * 4) * !key->vertexblend_indexed + c);
+                cWM[c] = ureg_src_dimension(ureg_src_register(TGSI_FILE_CONSTANT, (160 + i * 4) * !key->vertexblend_indexed + c), 0);
                 if (key->vertexblend_indexed)
                     cWM[c] = ureg_src_indirect(cWM[c], ureg_scalar(ureg_src(AR), i));
             }

@@ -56,7 +56,7 @@
 #include <GL/gl.h>
 #include <GL/internal/dri_interface.h>
 #include "main/mtypes.h"
-#include "xmlconfig.h"
+#include "util/xmlconfig.h"
 #include <stdbool.h>
 
 /**
@@ -85,11 +85,12 @@ struct __DriverAPIRec {
     GLboolean (*CreateContext)(gl_api api,
                                const struct gl_config *glVis,
                                __DRIcontext *driContextPriv,
-			       unsigned major_version,
-			       unsigned minor_version,
-			       uint32_t flags,
+                               unsigned major_version,
+                               unsigned minor_version,
+                               uint32_t flags,
                                bool notify_reset,
-			       unsigned *error,
+                               unsigned priority,
+                               unsigned *error,
                                void *sharedContextPrivate);
 
     void (*DestroyContext)(__DRIcontext *driContextPriv);

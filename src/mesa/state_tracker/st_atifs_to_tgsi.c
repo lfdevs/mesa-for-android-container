@@ -228,7 +228,6 @@ emit_special_inst(struct st_translate *t, const struct instruction_desc *desc,
       src[2] = args[0];
       ureg_insn(t->ureg, TGSI_OPCODE_CMP, dst, 1, src, 3, 0);
    } else if (!strcmp(desc->name, "DOT2_ADD")) {
-      /* note: DP2A is not implemented in most pipe drivers */
       tmp[0] = get_temp(t, MAX_NUM_FRAGMENT_REGISTERS_ATI); /* re-purpose a1 */
       src[0] = args[0];
       src[1] = args[1];
@@ -638,6 +637,10 @@ set_src(struct tgsi_full_instruction *inst, unsigned i, unsigned file, unsigned 
    inst->Src[i].Register.SwizzleY = y;
    inst->Src[i].Register.SwizzleZ = z;
    inst->Src[i].Register.SwizzleW = w;
+   if (file == TGSI_FILE_CONSTANT) {
+      inst->Src[i].Register.Dimension = 1;
+      inst->Src[i].Dimension.Index = 0;
+   }
 }
 
 #define SET_SRC(inst, i, file, index, x, y, z, w) \

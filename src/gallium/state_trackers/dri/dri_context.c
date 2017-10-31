@@ -37,6 +37,7 @@
 #include "state_tracker/drm_driver.h"
 
 #include "pipe/p_context.h"
+#include "pipe-loader/pipe_loader.h"
 #include "state_tracker/st_context.h"
 
 GLboolean
@@ -46,6 +47,7 @@ dri_create_context(gl_api api, const struct gl_config * visual,
 		   unsigned minor_version,
 		   uint32_t flags,
                    bool notify_reset,
+                   unsigned priority,
 		   unsigned *error,
 		   void *sharedContextPrivate)
 {
@@ -124,7 +126,7 @@ dri_create_context(gl_api api, const struct gl_config * visual,
    ctx->cPriv = cPriv;
    ctx->sPriv = sPriv;
 
-   if (driQueryOptionb(&screen->optionCache, "mesa_no_error"))
+   if (driQueryOptionb(&screen->dev->option_cache, "mesa_no_error"))
       attribs.flags |= ST_CONTEXT_FLAG_NO_ERROR;
 
    attribs.options = screen->options;
@@ -167,7 +169,7 @@ dri_create_context(gl_api api, const struct gl_config * visual,
 
    /* Do this last. */
    if (ctx->st->start_thread &&
-         driQueryOptionb(&screen->optionCache, "mesa_glthread")) {
+         driQueryOptionb(&screen->dev->option_cache, "mesa_glthread")) {
 
       if (backgroundCallable && backgroundCallable->base.version >= 2 &&
             backgroundCallable->isThreadSafe) {

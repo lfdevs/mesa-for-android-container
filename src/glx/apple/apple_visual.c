@@ -82,7 +82,7 @@ apple_visual_create_pfobj(CGLPixelFormatObj * pfobj, const struct glx_config * m
    int numattr = 0;
    GLint vsref = 0;
    CGLError error = 0;
-   bool use_core_profile = getenv("LIBGL_PROFILE_CORE");
+   bool use_core_profile = env_var_as_boolean("LIBGL_PROFILE_CORE", false);
 
    if (offscreen) {
       apple_glx_diagnostic
@@ -90,13 +90,13 @@ apple_visual_create_pfobj(CGLPixelFormatObj * pfobj, const struct glx_config * m
 
       attr[numattr++] = kCGLPFAOffScreen;
    }
-   else if (getenv("LIBGL_ALWAYS_SOFTWARE") != NULL) {
+   else if (env_var_as_boolean("LIBGL_ALWAYS_SOFTWARE", false)) {
       apple_glx_diagnostic
          ("Software rendering requested.  Using kCGLRendererGenericFloatID.\n");
       attr[numattr++] = kCGLPFARendererID;
       attr[numattr++] = kCGLRendererGenericFloatID;
    }
-   else if (getenv("LIBGL_ALLOW_SOFTWARE") != NULL) {
+   else if (env_var_as_boolean("LIBGL_ALLOW_SOFTWARE", false)) {
       apple_glx_diagnostic
          ("Software rendering is not being excluded.  Not using kCGLPFAAccelerated.\n");
    }
@@ -190,7 +190,7 @@ apple_visual_create_pfobj(CGLPixelFormatObj * pfobj, const struct glx_config * m
 
    if (!*pfobj) {
       snprintf(__crashreporter_info_buff__, sizeof(__crashreporter_info_buff__),
-               "No matching pixelformats found, perhaps try using LIBGL_ALLOW_SOFTWARE\n");
+               "No matching pixelformats found, perhaps try setting LIBGL_ALLOW_SOFTWARE=true\n");
       fprintf(stderr, "%s", __crashreporter_info_buff__);
       abort();
    }

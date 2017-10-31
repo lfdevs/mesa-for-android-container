@@ -93,6 +93,17 @@ static int amdgpu_surface_init(struct radeon_winsys *rws,
    config.is_3d = !!(tex->target == PIPE_TEXTURE_3D);
    config.is_cube = !!(tex->target == PIPE_TEXTURE_CUBE);
 
+   /* Use different surface counters for color and FMASK, so that MSAA MRTs
+    * always use consecutive surface indices when FMASK is allocated between
+    * them.
+    */
+   if (flags & RADEON_SURF_FMASK)
+      config.info.surf_index = &ws->surf_index_fmask;
+   else if (!(flags & RADEON_SURF_Z_OR_SBUFFER))
+      config.info.surf_index = &ws->surf_index_color;
+   else
+      config.info.surf_index = NULL;
+
    return ac_compute_surface(ws->addrlib, &ws->info, &config, mode, surf);
 }
 

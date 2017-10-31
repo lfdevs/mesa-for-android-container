@@ -53,9 +53,16 @@ namespace SIMDImpl
 #if SIMD_ARCH >= SIMD_ARCH_AVX512
         struct AVX512Impl : AVX2Impl
         {
+#if defined(SIMD_OPT_128_AVX512)
 #define __SIMD_LIB_AVX512_HPP__
 #include "simdlib_128_avx512.inl"
+#if defined(SIMD_ARCH_KNIGHTS)
+#include "simdlib_128_avx512_knights.inl"
+#else // optimize for core
+#include "simdlib_128_avx512_core.inl"
+#endif // defined(SIMD_ARCH_KNIGHTS)
 #undef __SIMD_LIB_AVX512_HPP__
+#endif // SIMD_OPT_128_AVX512
         }; // struct AVX2Impl
 #endif // #if SIMD_ARCH >= SIMD_ARCH_AVX512
 
@@ -103,9 +110,16 @@ namespace SIMDImpl
 #if SIMD_ARCH >= SIMD_ARCH_AVX512
         struct AVX512Impl : AVX2Impl
         {
+#if defined(SIMD_OPT_256_AVX512)
 #define __SIMD_LIB_AVX512_HPP__
 #include "simdlib_256_avx512.inl"
+#if defined(SIMD_ARCH_KNIGHTS)
+#include "simdlib_256_avx512_knights.inl"
+#else // optimize for core
+#include "simdlib_256_avx512_core.inl"
+#endif // defined(SIMD_ARCH_KNIGHTS)
 #undef __SIMD_LIB_AVX512_HPP__
+#endif // SIMD_OPT_256_AVX512
         }; // struct AVX2Impl
 #endif // #if SIMD_ARCH >= SIMD_ARCH_AVX512
 
@@ -150,13 +164,20 @@ namespace SIMDImpl
 
 
 #if SIMD_ARCH >= SIMD_ARCH_AVX512
-        struct AVX512Impl
+        struct AVX512Impl : AVXImplBase<SIMD256Impl::AVX512Impl>
         {
 #define __SIMD_LIB_AVX512_HPP__
 #include "simdlib_512_avx512.inl"
 #include "simdlib_512_avx512_masks.inl"
+#if defined(SIMD_ARCH_KNIGHTS)
+#include "simdlib_512_avx512_knights.inl"
+#include "simdlib_512_avx512_masks_knights.inl"
+#else // optimize for core
+#include "simdlib_512_avx512_core.inl"
+#include "simdlib_512_avx512_masks_core.inl"
+#endif // defined(SIMD_ARCH_KNIGHTS)
 #undef __SIMD_LIB_AVX512_HPP__
-        }; // struct AVX512Impl
+        }; // struct AVX512ImplBase
 #endif // #if SIMD_ARCH >= SIMD_ARCH_AVX512
 
         struct Traits : SIMDImpl::Traits
@@ -193,6 +214,8 @@ struct SIMDBase : Traits::IsaImpl
     using Vec4          = typename Traits::Vec4;
     using Mask          = typename Traits::Mask;
 
+    static const size_t VECTOR_BYTES = sizeof(Float);
+
     // Populates a SIMD Vec4 from a non-simd vector. So p = xyzw becomes xxxx yyyy zzzz wwww.
     static SIMDINLINE
     void vec4_load1_ps(Vec4& r, const float *p)
@@ -204,7 +227,7 @@ struct SIMDBase : Traits::IsaImpl
     }
 
     static SIMDINLINE
-    void vec4_set1_vps(Vec4& r, Float s)
+    void vec4_set1_vps(Vec4& r, Float const &s)
     {
         r[0] = s;
         r[1] = s;
@@ -264,7 +287,7 @@ struct SIMDBase : Traits::IsaImpl
     }
 
     static SIMDINLINE
-    void vec4_mul_ps(Vec4& r, const Vec4& v, Float s)
+    void vec4_mul_ps(Vec4& r, const Vec4& v, Float const &s)
     {
         r[0] = SIMD::mul_ps(v[0], s);
         r[1] = SIMD::mul_ps(v[1], s);
@@ -282,7 +305,7 @@ struct SIMDBase : Traits::IsaImpl
     }
 
     static SIMDINLINE
-    void vec4_add_ps(Vec4& r, const Vec4& v0, Float s)
+    void vec4_add_ps(Vec4& r, const Vec4& v0, Float const &s)
     {
         r[0] = SIMD::add_ps(v0[0], s);
         r[1] = SIMD::add_ps(v0[1], s);
@@ -300,7 +323,7 @@ struct SIMDBase : Traits::IsaImpl
     }
 
     static SIMDINLINE
-    void vec4_min_ps(Vec4& r, const Vec4& v0, Float s)
+    void vec4_min_ps(Vec4& r, const Vec4& v0, Float const &s)
     {
         r[0] = SIMD::min_ps(v0[0], s);
         r[1] = SIMD::min_ps(v0[1], s);
@@ -309,7 +332,7 @@ struct SIMDBase : Traits::IsaImpl
     }
 
     static SIMDINLINE
-    void vec4_max_ps(Vec4& r, const Vec4& v0, Float s)
+    void vec4_max_ps(Vec4& r, const Vec4& v0, Float const &s)
     {
         r[0] = SIMD::max_ps(v0[0], s);
         r[1] = SIMD::max_ps(v0[1], s);

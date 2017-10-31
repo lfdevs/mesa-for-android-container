@@ -31,7 +31,7 @@
  * Batch buffer pool management.
  * 
  * \author Jose Fonseca <jfonseca-at-vmware-dot-com>
- * \author Thomas Hellström <thellstom-at-vmware-dot-com>
+ * \author Thomas Hellström <thellstrom-at-vmware-dot-com>
  */
 
 

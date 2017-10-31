@@ -39,7 +39,7 @@
 #include <inttypes.h>
 
 
-static FILE *
+FILE *
 dd_get_file_stream(struct dd_screen *dscreen, unsigned apitrace_call_number)
 {
    struct pipe_screen *screen = dscreen->screen;
@@ -154,6 +154,12 @@ util_dump_uint(FILE *f, unsigned i)
 }
 
 static void
+util_dump_int(FILE *f, int i)
+{
+   fprintf(f, "%d", i);
+}
+
+static void
 util_dump_hex(FILE *f, unsigned i)
 {
    fprintf(f, "0x%x", i);
@@ -180,21 +186,11 @@ util_dump_color_union(FILE *f, const union pipe_color_union *color)
 }
 
 static void
-util_dump_query(FILE *f, struct dd_query *query)
-{
-   if (query->type >= PIPE_QUERY_DRIVER_SPECIFIC)
-      fprintf(f, "PIPE_QUERY_DRIVER_SPECIFIC + %i",
-              query->type - PIPE_QUERY_DRIVER_SPECIFIC);
-   else
-      fprintf(f, "%s", util_dump_query_type(query->type, false));
-}
-
-static void
 dd_dump_render_condition(struct dd_draw_state *dstate, FILE *f)
 {
    if (dstate->render_cond.query) {
       fprintf(f, "render condition:\n");
-      DUMP_M(query, &dstate->render_cond, query);
+      DUMP_M(query_type, &dstate->render_cond, query->type);
       DUMP_M(uint, &dstate->render_cond, condition);
       DUMP_M(uint, &dstate->render_cond, mode);
       fprintf(f, "\n");
@@ -429,6 +425,18 @@ dd_dump_generate_mipmap(struct dd_draw_state *dstate, FILE *f)
 }
 
 static void
+dd_dump_get_query_result_resource(struct call_get_query_result_resource *info, FILE *f)
+{
+   fprintf(f, "%s:\n", __func__ + 8);
+   DUMP_M(query_type, info, query_type);
+   DUMP_M(uint, info, wait);
+   DUMP_M(query_value_type, info, result_type);
+   DUMP_M(int, info, index);
+   DUMP_M(resource, info, resource);
+   DUMP_M(uint, info, offset);
+}
+
+static void
 dd_dump_flush_resource(struct dd_draw_state *dstate, struct pipe_resource *res,
                        FILE *f)
 {
@@ -535,6 +543,9 @@ dd_dump_call(FILE *f, struct dd_draw_state *state, struct dd_call *call)
    case CALL_GENERATE_MIPMAP:
       dd_dump_generate_mipmap(state, f);
       break;
+   case CALL_GET_QUERY_RESULT_RESOURCE:
+      dd_dump_get_query_result_resource(&call->info.get_query_result_resource, f);
+      break;
    }
 }
 
@@ -550,6 +561,12 @@ dd_write_report(struct dd_context *dctx, struct dd_call *call, unsigned flags,
 
    dd_dump_call(f, &dctx->draw_state, call);
    dd_dump_driver_state(dctx, f, flags);
+
+   fprintf(f,"\n\n**************************************************"
+             "***************************\n");
+   fprintf(f, "Context Log:\n\n");
+   u_log_new_page_print(&dctx->log, f);
+
    if (dump_dmesg)
       dd_dump_dmesg(f);
    dd_close_file_stream(f);
@@ -603,10 +620,7 @@ dd_flush_and_handle_hang(struct dd_context *dctx,
       if (f) {
          fprintf(f, "dd: %s.\n", cause);
          dd_dump_driver_state(dctx, f,
-                              PIPE_DUMP_DEVICE_STATUS_REGISTERS |
-                              PIPE_DUMP_CURRENT_STATES |
-                              PIPE_DUMP_CURRENT_SHADERS |
-                              PIPE_DUMP_LAST_COMMAND_BUFFER);
+                              PIPE_DUMP_DEVICE_STATUS_REGISTERS);
          dd_dump_dmesg(f);
          dd_close_file_stream(f);
       }
@@ -657,6 +671,9 @@ dd_unreference_copy_of_call(struct dd_call *dst)
       break;
    case CALL_GENERATE_MIPMAP:
       pipe_resource_reference(&dst->info.generate_mipmap.res, NULL);
+      break;
+   case CALL_GET_QUERY_RESULT_RESOURCE:
+      pipe_resource_reference(&dst->info.get_query_result_resource.resource, NULL);
       break;
    }
 }
@@ -734,6 +751,12 @@ dd_copy_call(struct dd_call *dst, struct dd_call *src)
       pipe_resource_reference(&dst->info.generate_mipmap.res,
                               src->info.generate_mipmap.res);
       dst->info.generate_mipmap = src->info.generate_mipmap;
+      break;
+   case CALL_GET_QUERY_RESULT_RESOURCE:
+      pipe_resource_reference(&dst->info.get_query_result_resource.resource,
+                              src->info.get_query_result_resource.resource);
+      dst->info.get_query_result_resource = src->info.get_query_result_resource;
+      dst->info.get_query_result_resource.query = NULL;
       break;
    }
 }
@@ -916,9 +939,9 @@ dd_free_record(struct dd_draw_record **record)
 {
    struct dd_draw_record *next = (*record)->next;
 
+   u_log_page_destroy((*record)->log_page);
    dd_unreference_copy_of_call(&(*record)->call);
    dd_unreference_copy_of_draw_state(&(*record)->draw_state);
-   FREE((*record)->driver_state_log);
    FREE(*record);
    *record = next;
 }
@@ -938,7 +961,11 @@ dd_dump_record(struct dd_context *dctx, struct dd_draw_record *record,
            (now - record->timestamp) / 1000);
 
    dd_dump_call(f, &record->draw_state.base, &record->call);
-   fprintf(f, "%s\n", record->driver_state_log);
+
+   fprintf(f,"\n\n**************************************************"
+             "***************************\n");
+   fprintf(f, "Context Log:\n\n");
+   u_log_page_print(record->log_page, f);
 
    dctx->pipe->dump_debug_state(dctx->pipe, f,
                                 PIPE_DUMP_DEVICE_STATUS_REGISTERS);
@@ -1003,70 +1030,16 @@ dd_thread_pipelined_hang_detect(void *input)
    return 0;
 }
 
-static char *
-dd_get_driver_shader_log(struct dd_context *dctx)
-{
-#if defined(PIPE_OS_LINUX)
-   FILE *f;
-   char *buf;
-   int written_bytes;
-
-   if (!dctx->max_log_buffer_size)
-      dctx->max_log_buffer_size = 16 * 1024;
-
-   /* Keep increasing the buffer size until there is enough space.
-    *
-    * open_memstream can resize automatically, but it's VERY SLOW.
-    * fmemopen is much faster.
-    */
-   while (1) {
-      buf = malloc(dctx->max_log_buffer_size);
-      buf[0] = 0;
-
-      f = fmemopen(buf, dctx->max_log_buffer_size, "a");
-      if (!f) {
-         free(buf);
-         return NULL;
-      }
-
-      dd_dump_driver_state(dctx, f, PIPE_DUMP_CURRENT_SHADERS);
-      written_bytes = ftell(f);
-      fclose(f);
-
-      /* Return if the backing buffer is large enough. */
-      if (written_bytes < dctx->max_log_buffer_size - 1)
-         break;
-
-      /* Try again. */
-      free(buf);
-      dctx->max_log_buffer_size *= 2;
-   }
-
-   return buf;
-#else
-   /* Return an empty string. */
-   return (char*)calloc(1, 4);
-#endif
-}
-
 static void
 dd_pipelined_process_draw(struct dd_context *dctx, struct dd_call *call)
 {
    struct pipe_context *pipe = dctx->pipe;
    struct dd_draw_record *record;
-   char *log;
 
    /* Make a record of the draw call. */
    record = MALLOC_STRUCT(dd_draw_record);
    if (!record)
       return;
-
-   /* Create the log. */
-   log = dd_get_driver_shader_log(dctx);
-   if (!log) {
-      FREE(record);
-      return;
-   }
 
    /* Update the fence with the GPU.
     *
@@ -1080,7 +1053,7 @@ dd_pipelined_process_draw(struct dd_context *dctx, struct dd_call *call)
    /* Initialize the record. */
    record->timestamp = os_time_get();
    record->sequence_no = dctx->sequence_no;
-   record->driver_state_log = log;
+   record->log_page = u_log_new_page(&dctx->log);
 
    memset(&record->call, 0, sizeof(record->call));
    dd_copy_call(&record->call, call);
@@ -1142,14 +1115,13 @@ dd_after_draw(struct dd_context *dctx, struct dd_call *call)
          if (!dscreen->no_flush &&
             dd_flush_and_check_hang(dctx, NULL, 0)) {
             dd_write_report(dctx, call,
-                         PIPE_DUMP_DEVICE_STATUS_REGISTERS |
-                         PIPE_DUMP_CURRENT_STATES |
-                         PIPE_DUMP_CURRENT_SHADERS |
-                         PIPE_DUMP_LAST_COMMAND_BUFFER,
+                         PIPE_DUMP_DEVICE_STATUS_REGISTERS,
                          true);
 
             /* Terminate the process to prevent future hangs. */
             dd_kill_process();
+         } else {
+            u_log_page_destroy(u_log_new_page(&dctx->log));
          }
          break;
       case DD_DETECT_HANGS_PIPELINED:
@@ -1158,21 +1130,16 @@ dd_after_draw(struct dd_context *dctx, struct dd_call *call)
       case DD_DUMP_ALL_CALLS:
          if (!dscreen->no_flush)
             pipe->flush(pipe, NULL, 0);
-         dd_write_report(dctx, call,
-                         PIPE_DUMP_CURRENT_STATES |
-                         PIPE_DUMP_CURRENT_SHADERS |
-                         PIPE_DUMP_LAST_COMMAND_BUFFER,
-                         false);
+         dd_write_report(dctx, call, 0, false);
          break;
       case DD_DUMP_APITRACE_CALL:
          if (dscreen->apitrace_dump_call ==
              dctx->draw_state.apitrace_call_number) {
-            dd_write_report(dctx, call,
-                            PIPE_DUMP_CURRENT_STATES |
-                            PIPE_DUMP_CURRENT_SHADERS,
-                            false);
+            dd_write_report(dctx, call, 0, false);
             /* No need to continue. */
             exit(0);
+         } else {
+            u_log_page_destroy(u_log_new_page(&dctx->log));
          }
          break;
       default:
@@ -1294,6 +1261,39 @@ dd_context_generate_mipmap(struct pipe_context *_pipe,
                                   first_layer, last_layer);
    dd_after_draw(dctx, &call);
    return result;
+}
+
+static void
+dd_context_get_query_result_resource(struct pipe_context *_pipe,
+                                     struct pipe_query *query,
+                                     boolean wait,
+                                     enum pipe_query_value_type result_type,
+                                     int index,
+                                     struct pipe_resource *resource,
+                                     unsigned offset)
+{
+   struct dd_context *dctx = dd_context(_pipe);
+   struct dd_query *dquery = dd_query(query);
+   struct pipe_context *pipe = dctx->pipe;
+   struct dd_call call;
+
+   call.type = CALL_GET_QUERY_RESULT_RESOURCE;
+   call.info.get_query_result_resource.query = query;
+   call.info.get_query_result_resource.wait = wait;
+   call.info.get_query_result_resource.result_type = result_type;
+   call.info.get_query_result_resource.index = index;
+   call.info.get_query_result_resource.resource = resource;
+   call.info.get_query_result_resource.offset = offset;
+
+   /* In pipelined mode, the query may be deleted by the time we need to
+    * print it.
+    */
+   call.info.get_query_result_resource.query_type = dquery->type;
+
+   dd_before_draw(dctx);
+   pipe->get_query_result_resource(pipe, dquery->query, wait,
+                                   result_type, index, resource, offset);
+   dd_after_draw(dctx, &call);
 }
 
 static void
@@ -1426,4 +1426,5 @@ dd_init_draw_functions(struct dd_context *dctx)
    CTX_INIT(clear_texture);
    CTX_INIT(flush_resource);
    CTX_INIT(generate_mipmap);
+   CTX_INIT(get_query_result_resource);
 }

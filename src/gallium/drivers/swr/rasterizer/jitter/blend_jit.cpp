@@ -518,7 +518,7 @@ struct BlendJit : public Builder
         fnName << ComputeCRC(0, &state, sizeof(state));
 
         // blend function signature
-        //typedef void(*PFN_BLEND_JIT_FUNC)(const SWR_BLEND_STATE*, simdvector&, simdvector&, uint32_t, BYTE*, simdvector&, simdscalari*, simdscalari*);
+        //typedef void(*PFN_BLEND_JIT_FUNC)(const SWR_BLEND_STATE*, simdvector&, simdvector&, uint32_t, uint8_t*, simdvector&, simdscalari*, simdscalari*);
 
         std::vector<Type*> args{
             PointerType::get(Gen_SWR_BLEND_STATE(JM()), 0), // SWR_BLEND_STATE*
@@ -581,13 +581,13 @@ struct BlendJit : public Builder
             // load src1
             src1[i] = LOAD(pSrc1, { i });
         }
-        Value* currentMask = VIMMED1(-1);
+        Value* currentSampleMask = VIMMED1(-1);
         if (state.desc.alphaToCoverageEnable)
         {
             Value* pClampedSrc = FCLAMP(src[3], 0.0f, 1.0f);
             uint32_t bits = (1 << state.desc.numSamples) - 1;
-            currentMask = FMUL(pClampedSrc, VBROADCAST(C((float)bits)));
-            currentMask = FP_TO_SI(FADD(currentMask, VIMMED1(0.5f)), mSimdInt32Ty);
+            currentSampleMask = FMUL(pClampedSrc, VBROADCAST(C((float)bits)));
+            currentSampleMask = FP_TO_SI(FADD(currentSampleMask, VIMMED1(0.5f)), mSimdInt32Ty);
         }
 
         // alpha test
@@ -766,34 +766,24 @@ struct BlendJit : public Builder
             assert(!(state.desc.alphaToCoverageEnable));
             // load current mask
             Value* oMask = LOAD(ppoMask);
-            Value* sampleMasked = VBROADCAST(SHL(C(1), sampleNum));
-            oMask = AND(oMask, sampleMasked);
-            currentMask = AND(oMask, currentMask);
+            currentSampleMask = AND(oMask, currentSampleMask);
         }
 
         if(state.desc.sampleMaskEnable)
         {
             Value* sampleMask = LOAD(pBlendState, { 0, SWR_BLEND_STATE_sampleMask});
-            Value* sampleMasked = SHL(C(1), sampleNum);
-            sampleMask = AND(sampleMask, sampleMasked);
-            sampleMask = VBROADCAST(ICMP_SGT(sampleMask, C(0)));
-            sampleMask = S_EXT(sampleMask, mSimdInt32Ty);
-            currentMask = AND(sampleMask, currentMask);
-        }
-
-        if (state.desc.alphaToCoverageEnable)
-        {
-            Value* sampleMasked = SHL(C(1), sampleNum);
-            currentMask = AND(currentMask, VBROADCAST(sampleMasked));
+            currentSampleMask = AND(VBROADCAST(sampleMask), currentSampleMask);
         }
 
         if(state.desc.sampleMaskEnable || state.desc.alphaToCoverageEnable ||
            state.desc.oMaskEnable)
         {
-            // load coverage mask
+            // load coverage mask and mask off any lanes with no samples
             Value* pMask = LOAD(ppMask);
-            currentMask = S_EXT(ICMP_UGT(currentMask, VBROADCAST(C(0))), mSimdInt32Ty);
-            Value* outputMask = AND(pMask, currentMask);
+            Value* sampleMasked = SHL(C(1), sampleNum);
+            currentSampleMask = AND(currentSampleMask, VBROADCAST(sampleMasked));
+            currentSampleMask = S_EXT(ICMP_UGT(currentSampleMask, VBROADCAST(C(0))), mSimdInt32Ty);
+            Value* outputMask = AND(pMask, currentSampleMask);
             // store new mask
             STORE(outputMask, GEP(ppMask, C(0)));
         }

@@ -30,6 +30,7 @@
 #include "amdgpu_id.h"
 #include "ac_gpu_info.h"
 #include "util/macros.h"
+#include "util/u_atomic.h"
 #include "util/u_math.h"
 
 #include <errno.h>
@@ -406,12 +407,16 @@ static unsigned cik_get_macro_tile_index(struct radeon_surf *surf)
 }
 
 /**
+ * This must be called after the first level is computed.
+ *
  * Copy surface-global settings like pipe/bank config from level 0 surface
- * computation.
+ * computation, and compute tile swizzle.
  */
-static void gfx6_surface_settings(const struct radeon_info* info,
-				  ADDR_COMPUTE_SURFACE_INFO_OUTPUT* csio,
-				  struct radeon_surf *surf)
+static int gfx6_surface_settings(ADDR_HANDLE addrlib,
+				 const struct radeon_info *info,
+				 const struct ac_surf_config *config,
+				 ADDR_COMPUTE_SURFACE_INFO_OUTPUT* csio,
+				 struct radeon_surf *surf)
 {
 	surf->surf_alignment = csio->baseAlign;
 	surf->u.legacy.pipe_config = csio->pTileInfo->pipeConfig - 1;
@@ -428,6 +433,36 @@ static void gfx6_surface_settings(const struct radeon_info* info,
 	} else {
 		surf->u.legacy.macro_tile_index = 0;
 	}
+
+	/* Compute tile swizzle. */
+	/* TODO: fix tile swizzle with mipmapping for SI */
+	if ((info->chip_class >= CIK || config->info.levels == 1) &&
+	    config->info.surf_index &&
+	    surf->u.legacy.level[0].mode == RADEON_SURF_MODE_2D &&
+	    !(surf->flags & (RADEON_SURF_Z_OR_SBUFFER | RADEON_SURF_SHAREABLE)) &&
+	    (config->info.samples > 1 || !(surf->flags & RADEON_SURF_SCANOUT))) {
+		ADDR_COMPUTE_BASE_SWIZZLE_INPUT AddrBaseSwizzleIn = {0};
+		ADDR_COMPUTE_BASE_SWIZZLE_OUTPUT AddrBaseSwizzleOut = {0};
+
+		AddrBaseSwizzleIn.size = sizeof(ADDR_COMPUTE_BASE_SWIZZLE_INPUT);
+		AddrBaseSwizzleOut.size = sizeof(ADDR_COMPUTE_BASE_SWIZZLE_OUTPUT);
+
+		AddrBaseSwizzleIn.surfIndex = p_atomic_inc_return(config->info.surf_index) - 1;
+		AddrBaseSwizzleIn.tileIndex = csio->tileIndex;
+		AddrBaseSwizzleIn.macroModeIndex = csio->macroModeIndex;
+		AddrBaseSwizzleIn.pTileInfo = csio->pTileInfo;
+		AddrBaseSwizzleIn.tileMode = csio->tileMode;
+
+		int r = AddrComputeBaseSwizzle(addrlib, &AddrBaseSwizzleIn,
+					       &AddrBaseSwizzleOut);
+		if (r != ADDR_OK)
+			return r;
+
+		assert(AddrBaseSwizzleOut.tileSwizzle <=
+		       u_bit_consecutive(0, sizeof(surf->tile_swizzle) * 8));
+		surf->tile_swizzle = AddrBaseSwizzleOut.tileSwizzle;
+	}
+	return 0;
 }
 
 /**
@@ -640,6 +675,7 @@ static int gfx6_compute_surface(ADDR_HANDLE addrlib,
 		}
 	}
 
+	surf->has_stencil = !!(surf->flags & RADEON_SURF_SBUFFER);
 	surf->num_dcc_levels = 0;
 	surf->surf_size = 0;
 	surf->dcc_size = 0;
@@ -683,7 +719,10 @@ static int gfx6_compute_surface(ADDR_HANDLE addrlib,
 				assert(stencil_tile_idx >= 0);
 			}
 
-			gfx6_surface_settings(info, &AddrSurfInfoOut, surf);
+			r = gfx6_surface_settings(addrlib, info, config,
+						  &AddrSurfInfoOut, surf);
+			if (r)
+				return r;
 		}
 	}
 
@@ -716,8 +755,12 @@ static int gfx6_compute_surface(ADDR_HANDLE addrlib,
 			}
 
 			if (level == 0) {
-				if (only_stencil)
-					gfx6_surface_settings(info, &AddrSurfInfoOut, surf);
+				if (only_stencil) {
+					r = gfx6_surface_settings(addrlib, info, config,
+								  &AddrSurfInfoOut, surf);
+					if (r)
+						return r;
+				}
 
 				/* For 2D modes only. */
 				if (AddrSurfInfoOut.tileMode >= ADDR_TM_2D_TILED_THIN1) {
@@ -733,9 +776,16 @@ static int gfx6_compute_surface(ADDR_HANDLE addrlib,
 	 * complicated.
 	 */
 	if (surf->dcc_size && config->info.levels > 1) {
+		/* The smallest miplevels that are never compressed by DCC
+		 * still read the DCC buffer via TC if the base level uses DCC,
+		 * and for some reason the DCC buffer needs to be larger if
+		 * the miptree uses non-zero tile_swizzle. Otherwise there are
+		 * VM faults.
+		 *
+		 * "dcc_alignment * 4" was determined by trial and error.
+		 */
 		surf->dcc_size = align64(surf->surf_size >> 8,
-					 info->pipe_interleave_bytes *
-					 info->num_tile_pipes);
+					 surf->dcc_alignment * 4);
 	}
 
 	/* Make sure HTILE covers the whole miptree, because the shader reads
@@ -745,20 +795,9 @@ static int gfx6_compute_surface(ADDR_HANDLE addrlib,
 		surf->htile_size *= 2;
 
 	surf->is_linear = surf->u.legacy.level[0].mode == RADEON_SURF_MODE_LINEAR_ALIGNED;
-
-	/* workout base swizzle */
-	if (!(surf->flags & RADEON_SURF_Z_OR_SBUFFER)) {
-		ADDR_COMPUTE_BASE_SWIZZLE_INPUT AddrBaseSwizzleIn = {0};
-		ADDR_COMPUTE_BASE_SWIZZLE_OUTPUT AddrBaseSwizzleOut = {0};
-
-		AddrBaseSwizzleIn.surfIndex = config->info.surf_index;
-		AddrBaseSwizzleIn.tileIndex = AddrSurfInfoIn.tileIndex;
-		AddrBaseSwizzleIn.macroModeIndex = AddrSurfInfoOut.macroModeIndex;
-		AddrBaseSwizzleIn.pTileInfo = AddrSurfInfoOut.pTileInfo;
-		AddrBaseSwizzleIn.tileMode = AddrSurfInfoOut.tileMode;
-		AddrComputeBaseSwizzle(addrlib, &AddrBaseSwizzleIn, &AddrBaseSwizzleOut);
-		surf->u.legacy.tile_swizzle = AddrBaseSwizzleOut.tileSwizzle;
-	}
+	surf->is_displayable = surf->is_linear ||
+			       surf->micro_tile_mode == RADEON_MICRO_MODE_DISPLAY ||
+			       surf->micro_tile_mode == RADEON_MICRO_MODE_ROTATED;
 	return 0;
 }
 
@@ -888,9 +927,11 @@ static int gfx9_compute_miptree(ADDR_HANDLE addrlib,
 		    in->numSamples == 1) {
 			ADDR2_COMPUTE_DCCINFO_INPUT din = {0};
 			ADDR2_COMPUTE_DCCINFO_OUTPUT dout = {0};
+			ADDR2_META_MIP_INFO meta_mip_info[RADEON_SURF_MAX_LEVELS] = {};
 
 			din.size = sizeof(ADDR2_COMPUTE_DCCINFO_INPUT);
 			dout.size = sizeof(ADDR2_COMPUTE_DCCINFO_OUTPUT);
+			dout.pMipInfo = meta_mip_info;
 
 			din.dccKeyFlags.pipeAligned = 1;
 			din.dccKeyFlags.rbAligned = 1;
@@ -914,6 +955,39 @@ static int gfx9_compute_miptree(ADDR_HANDLE addrlib,
 			surf->u.gfx9.dcc_pitch_max = dout.pitch - 1;
 			surf->dcc_size = dout.dccRamSize;
 			surf->dcc_alignment = dout.dccRamBaseAlign;
+			surf->num_dcc_levels = in->numMipLevels;
+
+			/* Disable DCC for levels that are in the mip tail.
+			 *
+			 * There are two issues that this is intended to
+			 * address:
+			 *
+			 * 1. Multiple mip levels may share a cache line. This
+			 *    can lead to corruption when switching between
+			 *    rendering to different mip levels because the
+			 *    RBs don't maintain coherency.
+			 *
+			 * 2. Texturing with metadata after rendering sometimes
+			 *    fails with corruption, probably for a similar
+			 *    reason.
+			 *
+			 * Working around these issues for all levels in the
+			 * mip tail may be overly conservative, but it's what
+			 * Vulkan does.
+			 *
+			 * Alternative solutions that also work but are worse:
+			 * - Disable DCC entirely.
+			 * - Flush TC L2 after rendering.
+			 */
+			for (unsigned i = 0; i < in->numMipLevels; i++) {
+				if (meta_mip_info[i].inMiptail) {
+					surf->num_dcc_levels = i;
+					break;
+				}
+			}
+
+			if (!surf->num_dcc_levels)
+				surf->dcc_size = 0;
 		}
 
 		/* FMASK */
@@ -1066,7 +1140,9 @@ static int gfx9_compute_surface(ADDR_HANDLE addrlib,
 	}
 
 	surf->u.gfx9.resource_type = AddrSurfInfoIn.resourceType;
+	surf->has_stencil = !!(surf->flags & RADEON_SURF_SBUFFER);
 
+	surf->num_dcc_levels = 0;
 	surf->surf_size = 0;
 	surf->dcc_size = 0;
 	surf->htile_size = 0;
@@ -1100,7 +1176,14 @@ static int gfx9_compute_surface(ADDR_HANDLE addrlib,
 	}
 
 	surf->is_linear = surf->u.gfx9.surf.swizzle_mode == ADDR_SW_LINEAR;
-	surf->num_dcc_levels = surf->dcc_size ? config->info.levels : 0;
+
+	/* Query whether the surface is displayable. */
+	bool displayable = false;
+	r = Addr2IsValidDisplaySwizzleMode(addrlib, surf->u.gfx9.surf.swizzle_mode,
+					   surf->bpe * 8, &displayable);
+	if (r)
+		return r;
+	surf->is_displayable = displayable;
 
 	switch (surf->u.gfx9.surf.swizzle_mode) {
 		/* S = standard. */

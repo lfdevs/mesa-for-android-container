@@ -33,6 +33,7 @@ RADV_WS_AMDGPU_FILES := \
 VULKAN_FILES := \
 	radv_cmd_buffer.c \
 	radv_cs.h \
+	radv_debug.c \
 	radv_debug.h \
 	radv_device.c \
 	radv_descriptor_set.c \
@@ -57,6 +58,8 @@ VULKAN_FILES := \
 	radv_pipeline_cache.c \
 	radv_private.h \
 	radv_radeon_winsys.h \
+	radv_shader.c \
+	radv_shader.h \
 	radv_query.c \
 	radv_util.c \
 	radv_util.h \
@@ -74,5 +77,6 @@ VULKAN_WSI_X11_FILES := \
 
 VULKAN_GENERATED_FILES := \
 	radv_entrypoints.c \
-	radv_entrypoints.h
+	radv_entrypoints.h \
+	radv_extensions.c
 

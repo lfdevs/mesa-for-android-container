@@ -314,7 +314,6 @@ static void decode(struct gen_spec *spec,
                   .command = inst->name,
                   .command_offset = offset,
                   .instruction_base_address = current_instruction_base_address,
-                  .ksp = ksp[0],
                   .ksp = ksp[0], /* SIMD8 shader is specified by ksp[0] */
                };
             }

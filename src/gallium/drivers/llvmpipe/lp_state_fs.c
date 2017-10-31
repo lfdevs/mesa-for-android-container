@@ -84,6 +84,7 @@
 #include "gallivm/lp_bld_flow.h"
 #include "gallivm/lp_bld_debug.h"
 #include "gallivm/lp_bld_arit.h"
+#include "gallivm/lp_bld_bitarit.h"
 #include "gallivm/lp_bld_pack.h"
 #include "gallivm/lp_bld_format.h"
 #include "gallivm/lp_bld_quad.h"
@@ -347,7 +348,8 @@ generate_fs_loop(struct gallivm_state *gallivm,
       if (!shader->info.base.writes_z && !shader->info.base.writes_stencil) {
          if (key->alpha.enabled ||
              key->blend.alpha_to_coverage ||
-             shader->info.base.uses_kill) {
+             shader->info.base.uses_kill ||
+             shader->info.base.writes_samplemask) {
             /* With alpha test and kill, can do the depth test early
              * and hopefully eliminate some quads.  But need to do a
              * special deferred depth write once the final mask value
@@ -514,6 +516,25 @@ generate_fs_loop(struct gallivm_state *gallivm,
                                     &mask, alpha,
                                     (depth_mode & LATE_DEPTH_TEST) != 0);
       }
+   }
+
+   if (shader->info.base.writes_samplemask) {
+      int smaski = find_output_by_semantic(&shader->info.base,
+                                           TGSI_SEMANTIC_SAMPLEMASK,
+                                           0);
+      LLVMValueRef smask;
+      struct lp_build_context smask_bld;
+      lp_build_context_init(&smask_bld, gallivm, int_type);
+
+      assert(smaski >= 0);
+      smask = LLVMBuildLoad(builder, outputs[smaski][0], "smask");
+      /*
+       * Pixel is alive according to the first sample in the mask.
+       */
+      smask = LLVMBuildBitCast(builder, smask, smask_bld.vec_type, "");
+      smask = lp_build_and(&smask_bld, smask, smask_bld.one);
+      smask = lp_build_cmp(&smask_bld, PIPE_FUNC_NOTEQUAL, smask, smask_bld.zero);
+      lp_build_mask_update(&mask, smask);
    }
 
    /* Late Z test */
@@ -2679,23 +2700,23 @@ dump_fs_variant_key(const struct lp_fragment_shader_variant_key *key)
       debug_printf("depth.format = %s\n", util_format_name(key->zsbuf_format));
    }
    if (key->depth.enabled) {
-      debug_printf("depth.func = %s\n", util_dump_func(key->depth.func, TRUE));
+      debug_printf("depth.func = %s\n", util_str_func(key->depth.func, TRUE));
       debug_printf("depth.writemask = %u\n", key->depth.writemask);
    }
 
    for (i = 0; i < 2; ++i) {
       if (key->stencil[i].enabled) {
-         debug_printf("stencil[%u].func = %s\n", i, util_dump_func(key->stencil[i].func, TRUE));
-         debug_printf("stencil[%u].fail_op = %s\n", i, util_dump_stencil_op(key->stencil[i].fail_op, TRUE));
-         debug_printf("stencil[%u].zpass_op = %s\n", i, util_dump_stencil_op(key->stencil[i].zpass_op, TRUE));
-         debug_printf("stencil[%u].zfail_op = %s\n", i, util_dump_stencil_op(key->stencil[i].zfail_op, TRUE));
+         debug_printf("stencil[%u].func = %s\n", i, util_str_func(key->stencil[i].func, TRUE));
+         debug_printf("stencil[%u].fail_op = %s\n", i, util_str_stencil_op(key->stencil[i].fail_op, TRUE));
+         debug_printf("stencil[%u].zpass_op = %s\n", i, util_str_stencil_op(key->stencil[i].zpass_op, TRUE));
+         debug_printf("stencil[%u].zfail_op = %s\n", i, util_str_stencil_op(key->stencil[i].zfail_op, TRUE));
          debug_printf("stencil[%u].valuemask = 0x%x\n", i, key->stencil[i].valuemask);
          debug_printf("stencil[%u].writemask = 0x%x\n", i, key->stencil[i].writemask);
       }
    }
 
    if (key->alpha.enabled) {
-      debug_printf("alpha.func = %s\n", util_dump_func(key->alpha.func, TRUE));
+      debug_printf("alpha.func = %s\n", util_str_func(key->alpha.func, TRUE));
    }
 
    if (key->occlusion_count) {
@@ -2703,15 +2724,15 @@ dump_fs_variant_key(const struct lp_fragment_shader_variant_key *key)
    }
 
    if (key->blend.logicop_enable) {
-      debug_printf("blend.logicop_func = %s\n", util_dump_logicop(key->blend.logicop_func, TRUE));
+      debug_printf("blend.logicop_func = %s\n", util_str_logicop(key->blend.logicop_func, TRUE));
    }
    else if (key->blend.rt[0].blend_enable) {
-      debug_printf("blend.rgb_func = %s\n",   util_dump_blend_func  (key->blend.rt[0].rgb_func, TRUE));
-      debug_printf("blend.rgb_src_factor = %s\n",   util_dump_blend_factor(key->blend.rt[0].rgb_src_factor, TRUE));
-      debug_printf("blend.rgb_dst_factor = %s\n",   util_dump_blend_factor(key->blend.rt[0].rgb_dst_factor, TRUE));
-      debug_printf("blend.alpha_func = %s\n",       util_dump_blend_func  (key->blend.rt[0].alpha_func, TRUE));
-      debug_printf("blend.alpha_src_factor = %s\n", util_dump_blend_factor(key->blend.rt[0].alpha_src_factor, TRUE));
-      debug_printf("blend.alpha_dst_factor = %s\n", util_dump_blend_factor(key->blend.rt[0].alpha_dst_factor, TRUE));
+      debug_printf("blend.rgb_func = %s\n",   util_str_blend_func  (key->blend.rt[0].rgb_func, TRUE));
+      debug_printf("blend.rgb_src_factor = %s\n",   util_str_blend_factor(key->blend.rt[0].rgb_src_factor, TRUE));
+      debug_printf("blend.rgb_dst_factor = %s\n",   util_str_blend_factor(key->blend.rt[0].rgb_dst_factor, TRUE));
+      debug_printf("blend.alpha_func = %s\n",       util_str_blend_func  (key->blend.rt[0].alpha_func, TRUE));
+      debug_printf("blend.alpha_src_factor = %s\n", util_str_blend_factor(key->blend.rt[0].alpha_src_factor, TRUE));
+      debug_printf("blend.alpha_dst_factor = %s\n", util_str_blend_factor(key->blend.rt[0].alpha_dst_factor, TRUE));
    }
    debug_printf("blend.colormask = 0x%x\n", key->blend.rt[0].colormask);
    if (key->blend.alpha_to_coverage) {
@@ -2721,17 +2742,17 @@ dump_fs_variant_key(const struct lp_fragment_shader_variant_key *key)
       const struct lp_static_sampler_state *sampler = &key->state[i].sampler_state;
       debug_printf("sampler[%u] = \n", i);
       debug_printf("  .wrap = %s %s %s\n",
-                   util_dump_tex_wrap(sampler->wrap_s, TRUE),
-                   util_dump_tex_wrap(sampler->wrap_t, TRUE),
-                   util_dump_tex_wrap(sampler->wrap_r, TRUE));
+                   util_str_tex_wrap(sampler->wrap_s, TRUE),
+                   util_str_tex_wrap(sampler->wrap_t, TRUE),
+                   util_str_tex_wrap(sampler->wrap_r, TRUE));
       debug_printf("  .min_img_filter = %s\n",
-                   util_dump_tex_filter(sampler->min_img_filter, TRUE));
+                   util_str_tex_filter(sampler->min_img_filter, TRUE));
       debug_printf("  .min_mip_filter = %s\n",
-                   util_dump_tex_mipfilter(sampler->min_mip_filter, TRUE));
+                   util_str_tex_mipfilter(sampler->min_mip_filter, TRUE));
       debug_printf("  .mag_img_filter = %s\n",
-                   util_dump_tex_filter(sampler->mag_img_filter, TRUE));
+                   util_str_tex_filter(sampler->mag_img_filter, TRUE));
       if (sampler->compare_mode != PIPE_TEX_COMPARE_NONE)
-         debug_printf("  .compare_func = %s\n", util_dump_func(sampler->compare_func, TRUE));
+         debug_printf("  .compare_func = %s\n", util_str_func(sampler->compare_func, TRUE));
       debug_printf("  .normalized_coords = %u\n", sampler->normalized_coords);
       debug_printf("  .min_max_lod_equal = %u\n", sampler->min_max_lod_equal);
       debug_printf("  .lod_bias_non_zero = %u\n", sampler->lod_bias_non_zero);
@@ -2744,7 +2765,7 @@ dump_fs_variant_key(const struct lp_fragment_shader_variant_key *key)
       debug_printf("  .format = %s\n",
                    util_format_name(texture->format));
       debug_printf("  .target = %s\n",
-                   util_dump_tex_target(texture->target, TRUE));
+                   util_str_tex_target(texture->target, TRUE));
       debug_printf("  .level_zero_only = %u\n",
                    texture->level_zero_only);
       debug_printf("  .pot = %u %u %u\n",
@@ -2777,7 +2798,7 @@ generate_variant(struct llvmpipe_context *lp,
                  const struct lp_fragment_shader_variant_key *key)
 {
    struct lp_fragment_shader_variant *variant;
-   const struct util_format_description *cbuf0_format_desc;
+   const struct util_format_description *cbuf0_format_desc = NULL;
    boolean fullcolormask;
    char module_name[64];
 
@@ -2818,7 +2839,8 @@ generate_variant(struct llvmpipe_context *lp,
          !key->alpha.enabled &&
          !key->blend.alpha_to_coverage &&
          !key->depth.enabled &&
-         !shader->info.base.uses_kill
+         !shader->info.base.uses_kill &&
+         !shader->info.base.writes_samplemask
       ? TRUE : FALSE;
 
    if ((shader->info.base.num_tokens <= 1) &&
@@ -2993,14 +3015,13 @@ void
 llvmpipe_remove_shader_variant(struct llvmpipe_context *lp,
                                struct lp_fragment_shader_variant *variant)
 {
-   if (gallivm_debug & GALLIVM_DEBUG_IR) {
-      debug_printf("llvmpipe: del fs #%u var #%u v created #%u v cached"
-                   " #%u v total cached #%u\n",
-                   variant->shader->no,
-                   variant->no,
+   if ((LP_DEBUG & DEBUG_FS) || (gallivm_debug & GALLIVM_DEBUG_IR)) {
+      debug_printf("llvmpipe: del fs #%u var %u v created %u v cached %u "
+                   "v total cached %u inst %u total inst %u\n",
+                   variant->shader->no, variant->no,
                    variant->shader->variants_created,
                    variant->shader->variants_cached,
-                   lp->nr_fs_variants);
+                   lp->nr_fs_variants, variant->nr_instrs, lp->nr_fs_instrs);
    }
 
    gallivm_destroy(variant->gallivm);
@@ -3357,7 +3378,7 @@ llvmpipe_update_fs(struct llvmpipe_context *lp)
       unsigned i;
       unsigned variants_to_cull;
 
-      if (0) {
+      if (LP_DEBUG & DEBUG_FS) {
          debug_printf("%u variants,\t%u instrs,\t%u instrs/variant\n",
                       lp->nr_fs_variants,
                       lp->nr_fs_instrs,
@@ -3365,13 +3386,21 @@ llvmpipe_update_fs(struct llvmpipe_context *lp)
       }
 
       /* First, check if we've exceeded the max number of shader variants.
-       * If so, free 25% of them (the least recently used ones).
+       * If so, free 6.25% of them (the least recently used ones).
        */
-      variants_to_cull = lp->nr_fs_variants >= LP_MAX_SHADER_VARIANTS ? LP_MAX_SHADER_VARIANTS / 4 : 0;
+      variants_to_cull = lp->nr_fs_variants >= LP_MAX_SHADER_VARIANTS ? LP_MAX_SHADER_VARIANTS / 16 : 0;
 
       if (variants_to_cull ||
           lp->nr_fs_instrs >= LP_MAX_SHADER_INSTRUCTIONS) {
          struct pipe_context *pipe = &lp->pipe;
+
+         if (gallivm_debug & GALLIVM_DEBUG_PERF) {
+            debug_printf("Evicting FS: %u fs variants,\t%u total variants,"
+                         "\t%u instrs,\t%u instrs/variant\n",
+                         shader->variants_cached,
+                         lp->nr_fs_variants, lp->nr_fs_instrs,
+                         lp->nr_fs_instrs / lp->nr_fs_variants);
+         }
 
          /*
           * XXX: we need to flush the context until we have some sort of

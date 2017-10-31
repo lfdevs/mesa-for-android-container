@@ -27,8 +27,7 @@ libr600_la_SOURCES = \
 if HAVE_GALLIUM_LLVM
 
 AM_CFLAGS += \
-	$(LLVM_CFLAGS) \
-	-I$(top_srcdir)/src/gallium/drivers/radeon/
+	$(LLVM_CFLAGS)
 
 endif
 

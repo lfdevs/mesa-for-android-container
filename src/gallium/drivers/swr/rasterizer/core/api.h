@@ -215,6 +215,10 @@ struct SWR_CREATECONTEXT_INFO
 
     // Input (optional): Threading info that overrides any set KNOB values.
     SWR_THREADING_INFO* pThreadInfo;
+
+    // Input: if set to non-zero value, overrides KNOB value for maximum
+    // number of draws in flight
+    uint32_t MAX_DRAWS_IN_FLIGHT;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -261,6 +265,13 @@ SWR_FUNC(void, SwrSync,
     uint64_t userData,
     uint64_t userData2,
     uint64_t userData3);
+
+//////////////////////////////////////////////////////////////////////////
+/// @brief Stall cmd. Stalls the backend until all previous work has been completed.
+///        Frontend work can continue to make progress
+/// @param hContext - Handle passed back from SwrCreateContext
+SWR_FUNC(void, SwrStallBE,
+    HANDLE hContext);
 
 //////////////////////////////////////////////////////////////////////////
 /// @brief Blocks until all rendering has been completed.
@@ -697,8 +708,8 @@ SWR_FUNC(void, SwrStoreHotTileToSurface,
 SWR_FUNC(void, SwrStoreHotTileClear,
          SWR_SURFACE_STATE *pDstSurface,
          SWR_RENDERTARGET_ATTACHMENT renderTargetIndex,
-         UINT x,
-         UINT y,
+         uint32_t x,
+         uint32_t y,
          uint32_t renderTargetArrayIndex,
          const float* pClearColor);
 
@@ -709,6 +720,7 @@ struct SWR_INTERFACE
     PFNSwrSaveState pfnSwrSaveState;
     PFNSwrRestoreState pfnSwrRestoreState;
     PFNSwrSync pfnSwrSync;
+    PFNSwrStallBE pfnSwrStallBE;
     PFNSwrWaitForIdle pfnSwrWaitForIdle;
     PFNSwrWaitForIdleFE pfnSwrWaitForIdleFE;
     PFNSwrSetVertexBuffers pfnSwrSetVertexBuffers;

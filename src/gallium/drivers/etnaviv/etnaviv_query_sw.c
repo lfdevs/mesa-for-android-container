@@ -27,7 +27,6 @@
 
 #include "os/os_time.h"
 #include "pipe/p_state.h"
-#include "util/u_inlines.h"
 #include "util/u_memory.h"
 #include "util/u_string.h"
 
@@ -43,7 +42,7 @@ etna_sw_destroy_query(struct etna_context *ctx, struct etna_query *q)
 }
 
 static uint64_t
-read_counter(struct etna_context *ctx, int type)
+read_counter(struct etna_context *ctx, unsigned type)
 {
    switch (type) {
    case PIPE_QUERY_PRIMITIVES_EMITTED:
@@ -62,7 +61,6 @@ etna_sw_begin_query(struct etna_context *ctx, struct etna_query *q)
 {
    struct etna_sw_query *sq = etna_sw_query(q);
 
-   q->active = true;
    sq->begin_value = read_counter(ctx, q->type);
 
    return true;
@@ -73,7 +71,6 @@ etna_sw_end_query(struct etna_context *ctx, struct etna_query *q)
 {
    struct etna_sw_query *sq = etna_sw_query(q);
 
-   q->active = false;
    sq->end_value = read_counter(ctx, q->type);
 }
 
@@ -83,10 +80,6 @@ etna_sw_get_query_result(struct etna_context *ctx, struct etna_query *q,
 {
    struct etna_sw_query *sq = etna_sw_query(q);
 
-   if (q->active)
-      return false;
-
-   util_query_clear_result(result, q->type);
    result->u64 = sq->end_value - sq->begin_value;
 
    return true;
@@ -123,4 +116,25 @@ etna_sw_create_query(struct etna_context *ctx, unsigned query_type)
    q->type = query_type;
 
    return q;
+}
+
+int
+etna_sw_get_driver_query_info(struct pipe_screen *pscreen, unsigned index,
+                              struct pipe_driver_query_info *info)
+{
+   static const struct pipe_driver_query_info list[] = {
+      {"prims-emitted", PIPE_QUERY_PRIMITIVES_EMITTED, { 0 }},
+      {"draw-calls", ETNA_QUERY_DRAW_CALLS, { 0 }},
+      {"rs-operations", ETNA_QUERY_RS_OPERATIONS, { 0 }},
+   };
+
+   if (!info)
+      return ARRAY_SIZE(list);
+
+   if (index >= ARRAY_SIZE(list))
+      return 0;
+
+   *info = list[index];
+
+   return 1;
 }

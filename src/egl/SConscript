@@ -24,6 +24,8 @@ env.Append(CPPDEFINES = [
 ])
 egl_sources.append('drivers/haiku/egl_haiku.cpp')
 
+env.Prepend(LIBS = [mesautil])
+
 egl = env.SharedLibrary(
     target = 'EGL',
     source = egl_sources,

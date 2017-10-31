@@ -165,7 +165,6 @@ etna_set_framebuffer_state(struct pipe_context *pctx,
       cs->PE_COLOR_STRIDE = cbuf->surf.stride;
 
       if (cbuf->surf.ts_size) {
-         ts_mem_config |= VIVS_TS_MEM_CONFIG_COLOR_FAST_CLEAR;
          cs->TS_COLOR_CLEAR_VALUE = cbuf->level->clear_value;
 
          cs->TS_COLOR_STATUS_BASE = cbuf->ts_reloc;
@@ -231,7 +230,6 @@ etna_set_framebuffer_state(struct pipe_context *pctx,
       cs->PE_DEPTH_NORMALIZE = fui(exp2f(depth_bits) - 1.0f);
 
       if (zsbuf->surf.ts_size) {
-         ts_mem_config |= VIVS_TS_MEM_CONFIG_DEPTH_FAST_CLEAR;
          cs->TS_DEPTH_CLEAR_VALUE = zsbuf->level->clear_value;
 
          cs->TS_DEPTH_STATUS_BASE = zsbuf->ts_reloc;
@@ -325,7 +323,7 @@ etna_set_framebuffer_state(struct pipe_context *pctx,
    cs->PE_LOGIC_OP = VIVS_PE_LOGIC_OP_SINGLE_BUFFER(ctx->specs.single_buffer ? 2 : 0);
 
    ctx->framebuffer_s = *sv; /* keep copy of original structure */
-   ctx->dirty |= ETNA_DIRTY_FRAMEBUFFER;
+   ctx->dirty |= ETNA_DIRTY_FRAMEBUFFER | ETNA_DIRTY_DERIVE_TS;
 }
 
 static void
@@ -572,6 +570,41 @@ etna_vertex_elements_state_bind(struct pipe_context *pctx, void *ve)
    ctx->dirty |= ETNA_DIRTY_VERTEX_ELEMENTS;
 }
 
+static bool
+etna_update_ts_config(struct etna_context *ctx)
+{
+   uint32_t new_ts_config = ctx->framebuffer.TS_MEM_CONFIG;
+
+   if (ctx->framebuffer_s.nr_cbufs > 0) {
+      struct etna_surface *c_surf = etna_surface(ctx->framebuffer_s.cbufs[0]);
+
+      if(c_surf->level->ts_size && c_surf->level->ts_valid) {
+         new_ts_config |= VIVS_TS_MEM_CONFIG_COLOR_FAST_CLEAR;
+      } else {
+         new_ts_config &= ~VIVS_TS_MEM_CONFIG_COLOR_FAST_CLEAR;
+      }
+   }
+
+   if (ctx->framebuffer_s.zsbuf) {
+      struct etna_surface *zs_surf = etna_surface(ctx->framebuffer_s.zsbuf);
+
+      if(zs_surf->level->ts_size && zs_surf->level->ts_valid) {
+         new_ts_config |= VIVS_TS_MEM_CONFIG_DEPTH_FAST_CLEAR;
+      } else {
+         new_ts_config &= ~VIVS_TS_MEM_CONFIG_DEPTH_FAST_CLEAR;
+      }
+   }
+
+   if (new_ts_config != ctx->framebuffer.TS_MEM_CONFIG) {
+      ctx->framebuffer.TS_MEM_CONFIG = new_ts_config;
+      ctx->dirty |= ETNA_DIRTY_TS;
+   }
+
+   ctx->dirty &= ~ETNA_DIRTY_DERIVE_TS;
+
+   return true;
+}
+
 struct etna_state_updater {
    bool (*update)(struct etna_context *ctx);
    uint32_t dirty;
@@ -589,6 +622,9 @@ static const struct etna_state_updater etna_state_updates[] = {
    },
    {
       etna_update_blend_color, ETNA_DIRTY_BLEND_COLOR | ETNA_DIRTY_FRAMEBUFFER,
+   },
+   {
+      etna_update_ts_config, ETNA_DIRTY_DERIVE_TS,
    }
 };
 

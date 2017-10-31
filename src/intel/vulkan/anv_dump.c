@@ -424,20 +424,25 @@ anv_dump_add_framebuffer(struct anv_cmd_buffer *cmd_buffer,
       uint32_t b;
       for_each_bit(b, iview->image->aspects) {
          VkImageAspectFlagBits aspect = (1 << b);
-         char suffix;
+         const char *suffix;
          switch (aspect) {
-         case VK_IMAGE_ASPECT_COLOR_BIT:     suffix = 'c'; break;
-         case VK_IMAGE_ASPECT_DEPTH_BIT:     suffix = 'd'; break;
-         case VK_IMAGE_ASPECT_STENCIL_BIT:   suffix = 's'; break;
+         case VK_IMAGE_ASPECT_COLOR_BIT:       suffix = "c"; break;
+         case VK_IMAGE_ASPECT_DEPTH_BIT:       suffix = "d"; break;
+         case VK_IMAGE_ASPECT_STENCIL_BIT:     suffix = "s"; break;
+         case VK_IMAGE_ASPECT_PLANE_0_BIT_KHR: suffix = "c0"; break;
+         case VK_IMAGE_ASPECT_PLANE_1_BIT_KHR: suffix = "c1"; break;
+         case VK_IMAGE_ASPECT_PLANE_2_BIT_KHR: suffix = "c2"; break;
          default:
             unreachable("Invalid aspect");
          }
 
-         char *filename = ralloc_asprintf(dump_ctx, "framebuffer%04d-%d%c.ppm",
+         char *filename = ralloc_asprintf(dump_ctx, "framebuffer%04d-%d%s.ppm",
                                           dump_idx, i, suffix);
 
+         unsigned plane = anv_image_aspect_to_plane(iview->image->aspects, aspect);
          dump_add_image(cmd_buffer, (struct anv_image *)iview->image, aspect,
-                        iview->isl.base_level, iview->isl.base_array_layer,
+                        iview->planes[plane].isl.base_level,
+                        iview->planes[plane].isl.base_array_layer,
                         filename);
       }
    }

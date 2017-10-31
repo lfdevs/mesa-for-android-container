@@ -441,7 +441,7 @@ anv_batch_bo_list_clone(const struct list_head *list,
  * Functions related to anv_batch_bo
  *-----------------------------------------------------------------------*/
 
-static inline struct anv_batch_bo *
+static struct anv_batch_bo *
 anv_cmd_buffer_current_batch_bo(struct anv_cmd_buffer *cmd_buffer)
 {
    return LIST_ENTRY(struct anv_batch_bo, cmd_buffer->batch_bos.prev, link);
@@ -846,7 +846,7 @@ anv_cmd_buffer_end_batch_buffer(struct anv_cmd_buffer *cmd_buffer)
    }
 }
 
-static inline VkResult
+static VkResult
 anv_cmd_buffer_add_seen_bbos(struct anv_cmd_buffer *cmd_buffer,
                              struct list_head *list)
 {
@@ -957,6 +957,11 @@ struct anv_execbuf {
 
    /* Allocated length of the 'objects' and 'bos' arrays */
    uint32_t                                  array_length;
+
+   uint32_t                                  fence_count;
+   uint32_t                                  fence_array_length;
+   struct drm_i915_gem_exec_fence *          fences;
+   struct anv_syncobj **                     syncobjs;
 };
 
 static void
@@ -971,6 +976,8 @@ anv_execbuf_finish(struct anv_execbuf *exec,
 {
    vk_free(alloc, exec->objects);
    vk_free(alloc, exec->bos);
+   vk_free(alloc, exec->fences);
+   vk_free(alloc, exec->syncobjs);
 }
 
 static VkResult
@@ -1057,6 +1064,35 @@ anv_execbuf_add_bo(struct anv_execbuf *exec,
             return result;
       }
    }
+
+   return VK_SUCCESS;
+}
+
+static VkResult
+anv_execbuf_add_syncobj(struct anv_execbuf *exec,
+                        uint32_t handle, uint32_t flags,
+                        const VkAllocationCallbacks *alloc)
+{
+   assert(flags != 0);
+
+   if (exec->fence_count >= exec->fence_array_length) {
+      uint32_t new_len = MAX2(exec->fence_array_length * 2, 64);
+
+      exec->fences = vk_realloc(alloc, exec->fences,
+                                new_len * sizeof(*exec->fences),
+                                8, VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
+      if (exec->fences == NULL)
+         return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
+
+      exec->fence_array_length = new_len;
+   }
+
+   exec->fences[exec->fence_count] = (struct drm_i915_gem_exec_fence) {
+      .handle = handle,
+      .flags = flags,
+   };
+
+   exec->fence_count++;
 
    return VK_SUCCESS;
 }
@@ -1388,22 +1424,48 @@ setup_execbuf_for_cmd_buffer(struct anv_execbuf *execbuf,
    return VK_SUCCESS;
 }
 
+static VkResult
+setup_empty_execbuf(struct anv_execbuf *execbuf, struct anv_device *device)
+{
+   VkResult result = anv_execbuf_add_bo(execbuf, &device->trivial_batch_bo,
+                                        NULL, 0, &device->alloc);
+   if (result != VK_SUCCESS)
+      return result;
+
+   execbuf->execbuf = (struct drm_i915_gem_execbuffer2) {
+      .buffers_ptr = (uintptr_t) execbuf->objects,
+      .buffer_count = execbuf->bo_count,
+      .batch_start_offset = 0,
+      .batch_len = 8, /* GEN7_MI_BATCH_BUFFER_END and NOOP */
+      .flags = I915_EXEC_HANDLE_LUT | I915_EXEC_RENDER,
+      .rsvd1 = device->context_id,
+      .rsvd2 = 0,
+   };
+
+   return VK_SUCCESS;
+}
+
 VkResult
 anv_cmd_buffer_execbuf(struct anv_device *device,
                        struct anv_cmd_buffer *cmd_buffer,
                        const VkSemaphore *in_semaphores,
                        uint32_t num_in_semaphores,
                        const VkSemaphore *out_semaphores,
-                       uint32_t num_out_semaphores)
+                       uint32_t num_out_semaphores,
+                       VkFence _fence)
 {
+   ANV_FROM_HANDLE(anv_fence, fence, _fence);
+
    struct anv_execbuf execbuf;
    anv_execbuf_init(&execbuf);
 
+   int in_fence = -1;
    VkResult result = VK_SUCCESS;
    for (uint32_t i = 0; i < num_in_semaphores; i++) {
       ANV_FROM_HANDLE(anv_semaphore, semaphore, in_semaphores[i]);
-      assert(semaphore->temporary.type == ANV_SEMAPHORE_TYPE_NONE);
-      struct anv_semaphore_impl *impl = &semaphore->permanent;
+      struct anv_semaphore_impl *impl =
+         semaphore->temporary.type != ANV_SEMAPHORE_TYPE_NONE ?
+         &semaphore->temporary : &semaphore->permanent;
 
       switch (impl->type) {
       case ANV_SEMAPHORE_TYPE_BO:
@@ -1412,15 +1474,54 @@ anv_cmd_buffer_execbuf(struct anv_device *device,
          if (result != VK_SUCCESS)
             return result;
          break;
+
+      case ANV_SEMAPHORE_TYPE_SYNC_FILE:
+         if (in_fence == -1) {
+            in_fence = impl->fd;
+         } else {
+            int merge = anv_gem_sync_file_merge(device, in_fence, impl->fd);
+            if (merge == -1)
+               return vk_error(VK_ERROR_INVALID_EXTERNAL_HANDLE_KHR);
+
+            close(impl->fd);
+            close(in_fence);
+            in_fence = merge;
+         }
+
+         impl->fd = -1;
+         break;
+
+      case ANV_SEMAPHORE_TYPE_DRM_SYNCOBJ:
+         result = anv_execbuf_add_syncobj(&execbuf, impl->syncobj,
+                                          I915_EXEC_FENCE_WAIT,
+                                          &device->alloc);
+         if (result != VK_SUCCESS)
+            return result;
+         break;
+
       default:
          break;
       }
    }
 
+   bool need_out_fence = false;
    for (uint32_t i = 0; i < num_out_semaphores; i++) {
       ANV_FROM_HANDLE(anv_semaphore, semaphore, out_semaphores[i]);
-      assert(semaphore->temporary.type == ANV_SEMAPHORE_TYPE_NONE);
-      struct anv_semaphore_impl *impl = &semaphore->permanent;
+
+      /* Under most circumstances, out fences won't be temporary.  However,
+       * the spec does allow it for opaque_fd.  From the Vulkan 1.0.53 spec:
+       *
+       *    "If the import is temporary, the implementation must restore the
+       *    semaphore to its prior permanent state after submitting the next
+       *    semaphore wait operation."
+       *
+       * The spec says nothing whatsoever about signal operations on
+       * temporarily imported semaphores so it appears they are allowed.
+       * There are also CTS tests that require this to work.
+       */
+      struct anv_semaphore_impl *impl =
+         semaphore->temporary.type != ANV_SEMAPHORE_TYPE_NONE ?
+         &semaphore->temporary : &semaphore->permanent;
 
       switch (impl->type) {
       case ANV_SEMAPHORE_TYPE_BO:
@@ -1429,16 +1530,138 @@ anv_cmd_buffer_execbuf(struct anv_device *device,
          if (result != VK_SUCCESS)
             return result;
          break;
+
+      case ANV_SEMAPHORE_TYPE_SYNC_FILE:
+         need_out_fence = true;
+         break;
+
+      case ANV_SEMAPHORE_TYPE_DRM_SYNCOBJ:
+         result = anv_execbuf_add_syncobj(&execbuf, impl->syncobj,
+                                          I915_EXEC_FENCE_SIGNAL,
+                                          &device->alloc);
+         if (result != VK_SUCCESS)
+            return result;
+         break;
+
       default:
          break;
       }
    }
 
-   result = setup_execbuf_for_cmd_buffer(&execbuf, cmd_buffer);
+   if (fence) {
+      /* Under most circumstances, out fences won't be temporary.  However,
+       * the spec does allow it for opaque_fd.  From the Vulkan 1.0.53 spec:
+       *
+       *    "If the import is temporary, the implementation must restore the
+       *    semaphore to its prior permanent state after submitting the next
+       *    semaphore wait operation."
+       *
+       * The spec says nothing whatsoever about signal operations on
+       * temporarily imported semaphores so it appears they are allowed.
+       * There are also CTS tests that require this to work.
+       */
+      struct anv_fence_impl *impl =
+         fence->temporary.type != ANV_FENCE_TYPE_NONE ?
+         &fence->temporary : &fence->permanent;
+
+      switch (impl->type) {
+      case ANV_FENCE_TYPE_BO:
+         result = anv_execbuf_add_bo(&execbuf, &impl->bo.bo, NULL,
+                                     EXEC_OBJECT_WRITE, &device->alloc);
+         if (result != VK_SUCCESS)
+            return result;
+         break;
+
+      case ANV_FENCE_TYPE_SYNCOBJ:
+         result = anv_execbuf_add_syncobj(&execbuf, impl->syncobj,
+                                          I915_EXEC_FENCE_SIGNAL,
+                                          &device->alloc);
+         if (result != VK_SUCCESS)
+            return result;
+         break;
+
+      default:
+         unreachable("Invalid fence type");
+      }
+   }
+
+   if (cmd_buffer)
+      result = setup_execbuf_for_cmd_buffer(&execbuf, cmd_buffer);
+   else
+      result = setup_empty_execbuf(&execbuf, device);
+
    if (result != VK_SUCCESS)
       return result;
 
+   if (execbuf.fence_count > 0) {
+      assert(device->instance->physicalDevice.has_syncobj);
+      execbuf.execbuf.flags |= I915_EXEC_FENCE_ARRAY;
+      execbuf.execbuf.num_cliprects = execbuf.fence_count;
+      execbuf.execbuf.cliprects_ptr = (uintptr_t) execbuf.fences;
+   }
+
+   if (in_fence != -1) {
+      execbuf.execbuf.flags |= I915_EXEC_FENCE_IN;
+      execbuf.execbuf.rsvd2 |= (uint32_t)in_fence;
+   }
+
+   if (need_out_fence)
+      execbuf.execbuf.flags |= I915_EXEC_FENCE_OUT;
+
    result = anv_device_execbuf(device, &execbuf.execbuf, execbuf.bos);
+
+   /* Execbuf does not consume the in_fence.  It's our job to close it. */
+   if (in_fence != -1)
+      close(in_fence);
+
+   for (uint32_t i = 0; i < num_in_semaphores; i++) {
+      ANV_FROM_HANDLE(anv_semaphore, semaphore, in_semaphores[i]);
+      /* From the Vulkan 1.0.53 spec:
+       *
+       *    "If the import is temporary, the implementation must restore the
+       *    semaphore to its prior permanent state after submitting the next
+       *    semaphore wait operation."
+       *
+       * This has to happen after the execbuf in case we close any syncobjs in
+       * the process.
+       */
+      anv_semaphore_reset_temporary(device, semaphore);
+   }
+
+   if (fence && fence->permanent.type == ANV_FENCE_TYPE_BO) {
+      /* BO fences can't be shared, so they can't be temporary. */
+      assert(fence->temporary.type == ANV_FENCE_TYPE_NONE);
+
+      /* Once the execbuf has returned, we need to set the fence state to
+       * SUBMITTED.  We can't do this before calling execbuf because
+       * anv_GetFenceStatus does take the global device lock before checking
+       * fence->state.
+       *
+       * We set the fence state to SUBMITTED regardless of whether or not the
+       * execbuf succeeds because we need to ensure that vkWaitForFences() and
+       * vkGetFenceStatus() return a valid result (VK_ERROR_DEVICE_LOST or
+       * VK_SUCCESS) in a finite amount of time even if execbuf fails.
+       */
+      fence->permanent.bo.state = ANV_BO_FENCE_STATE_SUBMITTED;
+   }
+
+   if (result == VK_SUCCESS && need_out_fence) {
+      int out_fence = execbuf.execbuf.rsvd2 >> 32;
+      for (uint32_t i = 0; i < num_out_semaphores; i++) {
+         ANV_FROM_HANDLE(anv_semaphore, semaphore, out_semaphores[i]);
+         /* Out fences can't have temporary state because that would imply
+          * that we imported a sync file and are trying to signal it.
+          */
+         assert(semaphore->temporary.type == ANV_SEMAPHORE_TYPE_NONE);
+         struct anv_semaphore_impl *impl = &semaphore->permanent;
+
+         if (impl->type == ANV_SEMAPHORE_TYPE_SYNC_FILE) {
+            assert(impl->fd == -1);
+            impl->fd = dup(out_fence);
+         }
+      }
+      close(out_fence);
+   }
 
    anv_execbuf_finish(&execbuf, &device->alloc);
 

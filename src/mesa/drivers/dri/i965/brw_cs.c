@@ -53,7 +53,6 @@ brw_codegen_cs_prog(struct brw_context *brw,
                     struct brw_cs_prog_key *key)
 {
    const struct gen_device_info *devinfo = &brw->screen->devinfo;
-   struct gl_context *ctx = &brw->ctx;
    const GLuint *program;
    void *mem_ctx = ralloc_context(NULL);
    GLuint program_size;
@@ -78,29 +77,8 @@ brw_codegen_cs_prog(struct brw_context *brw,
 
    assign_cs_binding_table_offsets(devinfo, &cp->program, &prog_data);
 
-   /* Allocate the references to the uniforms that will end up in the
-    * prog_data associated with the compiled program, and which will be freed
-    * by the state cache.
-    */
-   int param_count = cp->program.nir->num_uniforms / 4;
-
-   /* The backend also sometimes add a param for the thread local id. */
-   prog_data.thread_local_id_index = param_count++;
-
-   /* The backend also sometimes adds params for texture size. */
-   param_count += 2 * ctx->Const.Program[MESA_SHADER_COMPUTE].MaxTextureImageUnits;
-   prog_data.base.param =
-      rzalloc_array(NULL, const gl_constant_value *, param_count);
-   prog_data.base.pull_param =
-      rzalloc_array(NULL, const gl_constant_value *, param_count);
-   prog_data.base.image_param =
-      rzalloc_array(NULL, struct brw_image_param,
-                    cp->program.info.num_images);
-   prog_data.base.nr_params = param_count;
-   prog_data.base.nr_image_params = cp->program.info.num_images;
-
-   brw_nir_setup_glsl_uniforms(cp->program.nir, &cp->program,&prog_data.base,
-                               true);
+   brw_nir_setup_glsl_uniforms(mem_ctx, cp->program.nir,
+                               &cp->program, &prog_data.base, true);
 
    if (unlikely(brw->perf_debug)) {
       start_busy = (brw->batch.last_bo &&
@@ -155,12 +133,15 @@ brw_codegen_cs_prog(struct brw_context *brw,
     * number of threads per subslice.
     */
    const unsigned scratch_ids_per_subslice =
-      brw->is_haswell ? 16 * 8 : devinfo->max_cs_threads;
+      devinfo->is_haswell ? 16 * 8 : devinfo->max_cs_threads;
 
    brw_alloc_stage_scratch(brw, &brw->cs.base,
                            prog_data.base.total_scratch,
                            scratch_ids_per_subslice * subslices);
 
+   /* The param and pull_param arrays will be freed by the shader cache. */
+   ralloc_steal(NULL, prog_data.base.param);
+   ralloc_steal(NULL, prog_data.base.pull_param);
    brw_upload_cache(&brw->cache, BRW_CACHE_CS_PROG,
                     key, sizeof(*key),
                     program, program_size,
@@ -177,7 +158,8 @@ brw_cs_populate_key(struct brw_context *brw, struct brw_cs_prog_key *key)
 {
    struct gl_context *ctx = &brw->ctx;
    /* BRW_NEW_COMPUTE_PROGRAM */
-   const struct brw_program *cp = (struct brw_program *) brw->compute_program;
+   const struct brw_program *cp =
+      (struct brw_program *) brw->programs[MESA_SHADER_COMPUTE];
    const struct gl_program *prog = (struct gl_program *) cp;
 
    memset(key, 0, sizeof(*key));
@@ -195,7 +177,8 @@ brw_upload_cs_prog(struct brw_context *brw)
 {
    struct gl_context *ctx = &brw->ctx;
    struct brw_cs_prog_key key;
-   struct brw_program *cp = (struct brw_program *) brw->compute_program;
+   struct brw_program *cp =
+      (struct brw_program *) brw->programs[MESA_SHADER_COMPUTE];
 
    if (!cp)
       return;

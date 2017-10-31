@@ -101,7 +101,9 @@ static const struct qpu_reg vc4_regs[] = {
         QPU_R(B, 31),
 };
 #define ACC_INDEX     0
-#define AB_INDEX      (ACC_INDEX + 5)
+#define ACC_COUNT     5
+#define AB_INDEX      (ACC_INDEX + ACC_COUNT)
+#define AB_COUNT      64
 
 static void
 vc4_alloc_reg_set(struct vc4_context *vc4)
@@ -200,6 +202,49 @@ node_to_temp_priority(const void *in_a, const void *in_b)
 #define CLASS_BIT_R4			(1 << 2)
 #define CLASS_BIT_R0_R3			(1 << 4)
 
+struct vc4_ra_select_callback_data {
+        uint32_t next_acc;
+        uint32_t next_ab;
+};
+
+static unsigned int
+vc4_ra_select_callback(struct ra_graph *g, BITSET_WORD *regs, void *data)
+{
+        struct vc4_ra_select_callback_data *vc4_ra = data;
+
+        /* If r4 is available, always choose it -- few other things can go
+         * there, and choosing anything else means inserting a mov.
+         */
+        if (BITSET_TEST(regs, ACC_INDEX + 4))
+                return ACC_INDEX + 4;
+
+        /* Choose an accumulator if possible (no delay between write and
+         * read), but round-robin through them to give post-RA instruction
+         * selection more options.
+         */
+        for (int i = 0; i < ACC_COUNT; i++) {
+                int acc_off = (vc4_ra->next_acc + i) % ACC_COUNT;
+                int acc = ACC_INDEX + acc_off;
+
+                if (BITSET_TEST(regs, acc)) {
+                        vc4_ra->next_acc = acc_off + 1;
+                        return acc;
+                }
+        }
+
+        for (int i = 0; i < AB_COUNT; i++) {
+                int ab_off = (vc4_ra->next_ab + i) % AB_COUNT;
+                int ab = AB_INDEX + ab_off;
+
+                if (BITSET_TEST(regs, ab)) {
+                        vc4_ra->next_ab = ab_off + 1;
+                        return ab;
+                }
+        }
+
+        unreachable("RA must pass us at least one possible reg.");
+}
+
 /**
  * Returns a mapping from QFILE_TEMP indices to struct qpu_regs.
  *
@@ -213,6 +258,10 @@ vc4_register_allocate(struct vc4_context *vc4, struct vc4_compile *c)
         uint8_t class_bits[c->num_temps];
         struct qpu_reg *temp_registers = calloc(c->num_temps,
                                                 sizeof(*temp_registers));
+        struct vc4_ra_select_callback_data callback_data = {
+                .next_acc = 0,
+                .next_ab = 0,
+        };
 
         /* If things aren't ever written (undefined values), just read from
          * r0.
@@ -227,6 +276,8 @@ vc4_register_allocate(struct vc4_context *vc4, struct vc4_compile *c)
 
         /* Compute the live ranges so we can figure out interference. */
         qir_calculate_live_intervals(c);
+
+        ra_set_select_reg_callback(g, vc4_ra_select_callback, &callback_data);
 
         for (uint32_t i = 0; i < c->num_temps; i++) {
                 map[i].temp = i;

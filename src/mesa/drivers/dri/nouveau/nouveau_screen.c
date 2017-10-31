@@ -65,7 +65,7 @@ nouveau_get_configs(uint32_t chipset)
 	};
 
 	const GLenum back_buffer_modes[] = {
-		GLX_NONE, GLX_SWAP_UNDEFINED_OML
+		__DRI_ATTRIB_SWAP_NONE, __DRI_ATTRIB_SWAP_UNDEFINED
 	};
 
 	for (i = 0; i < ARRAY_SIZE(formats); i++) {

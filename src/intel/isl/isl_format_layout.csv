@@ -222,8 +222,8 @@ I8_UINT                     ,   8,  1,  1,  1,     ,     ,     ,     ,     ,  ui
 I8_SINT                     ,   8,  1,  1,  1,     ,     ,     ,     ,     ,  si8,    , linear,
 DXT1_RGB_SRGB               ,  64,  4,  4,  1,  un4,  un4,  un4,     ,     ,     ,    ,   srgb,  dxt1
 R1_UNORM                    ,   1,  1,  1,  1,  un1,     ,     ,     ,     ,     ,    , linear,
-YCRCB_NORMAL                ,   0,  0,  0,  0,     ,     ,     ,     ,     ,     ,    ,    yuv,
-YCRCB_SWAPUVY               ,   0,  0,  0,  0,     ,     ,     ,     ,     ,     ,    ,    yuv,
+YCRCB_NORMAL                ,  16,  1,  1,  1,  un8,  un8,  un8,     ,     ,     ,    ,    yuv,
+YCRCB_SWAPUVY               ,  16,  1,  1,  1,  un8,  un8,  un8,     ,     ,     ,    ,    yuv,
 P2_UNORM_PALETTE0           ,   2,  1,  1,  1,     ,     ,     ,     ,     ,     , un2, linear,
 P2_UNORM_PALETTE1           ,   2,  1,  1,  1,     ,     ,     ,     ,     ,     , un2, linear,
 BC1_UNORM                   ,  64,  4,  4,  1,  un4,  un4,  un4,  un4,     ,     ,    , linear,  dxt1
@@ -235,8 +235,8 @@ BC1_UNORM_SRGB              ,  64,  4,  4,  1,  un4,  un4,  un4,  un4,     ,    
 BC2_UNORM_SRGB              , 128,  4,  4,  1,  un4,  un4,  un4,  un4,     ,     ,    ,   srgb,  dxt3
 BC3_UNORM_SRGB              , 128,  4,  4,  1,  un4,  un4,  un4,  un4,     ,     ,    ,   srgb,  dxt5
 MONO8                       ,   1,  1,  1,  1,     ,     ,     ,     ,     ,     ,    ,       ,
-YCRCB_SWAPUV                ,   0,  0,  0,  0,     ,     ,     ,     ,     ,     ,    ,    yuv,
-YCRCB_SWAPY                 ,   0,  0,  0,  0,     ,     ,     ,     ,     ,     ,    ,    yuv,
+YCRCB_SWAPUV                ,  16,  1,  1,  1,  un8,  un8,  un8,     ,     ,     ,    ,    yuv,
+YCRCB_SWAPY                 ,  16,  1,  1,  1,  un8,  un8,  un8,     ,     ,     ,    ,    yuv,
 DXT1_RGB                    ,  64,  4,  4,  1,  un4,  un4,  un4,     ,     ,     ,    , linear,  dxt1
 FXT1                        , 128,  8,  4,  1,  un4,  un4,  un4,     ,     ,     ,    , linear,  fxt1
 R8G8B8_UNORM                ,  24,  1,  1,  1,  un8,  un8,  un8,     ,     ,     ,    , linear,

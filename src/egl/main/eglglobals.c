@@ -49,22 +49,22 @@ static mtx_t _eglGlobalMutex = _MTX_INITIALIZER_NP;
 
 struct _egl_global _eglGlobal =
 {
-   &_eglGlobalMutex,       /* Mutex */
-   NULL,                   /* DisplayList */
-   2,                      /* NumAtExitCalls */
-   {
+   .Mutex = &_eglGlobalMutex,
+   .DisplayList = NULL,
+   .NumAtExitCalls = 2,
+   .AtExitCalls = {
       /* default AtExitCalls, called in reverse order */
       _eglUnloadDrivers, /* always called last */
       _eglFiniDisplay
    },
 
-   /* ClientOnlyExtensionString */
+   .ClientOnlyExtensionString =
    "EGL_EXT_client_extensions"
    " EGL_EXT_platform_base"
    " EGL_KHR_client_get_all_proc_addresses"
    " EGL_KHR_debug",
 
-   /* PlatformExtensionString */
+   .PlatformExtensionString =
 #ifdef HAVE_WAYLAND_PLATFORM
    " EGL_EXT_platform_wayland"
 #endif
@@ -79,10 +79,10 @@ struct _egl_global _eglGlobal =
 #endif
    "",
 
-   NULL, /* ClientExtensionsString */
+   .ClientExtensionString = NULL,
 
-   NULL, /* debugCallback */
-   _EGL_DEBUG_BIT_CRITICAL | _EGL_DEBUG_BIT_ERROR, /* debugTypesEnabled */
+   .debugCallback = NULL,
+   .debugTypesEnabled = _EGL_DEBUG_BIT_CRITICAL | _EGL_DEBUG_BIT_ERROR,
 };
 
 

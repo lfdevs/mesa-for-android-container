@@ -167,11 +167,11 @@ ir3_optimize_nir(struct ir3_shader *shader, nir_shader *s,
 	OPT_V(s, nir_lower_regs_to_ssa);
 
 	if (key) {
-		if (s->stage == MESA_SHADER_VERTEX) {
+		if (s->info.stage == MESA_SHADER_VERTEX) {
 			OPT_V(s, nir_lower_clip_vs, key->ucp_enables);
 			if (key->vclamp_color)
 				OPT_V(s, nir_lower_clamp_color_outputs);
-		} else if (s->stage == MESA_SHADER_FRAGMENT) {
+		} else if (s->info.stage == MESA_SHADER_FRAGMENT) {
 			OPT_V(s, nir_lower_clip_fs, key->ucp_enables);
 			if (key->fclamp_color)
 				OPT_V(s, nir_lower_clamp_color_outputs);

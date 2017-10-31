@@ -40,9 +40,9 @@
 #define RVCE_BEGIN(cmd) { \
 	uint32_t *begin = &enc->cs->current.buf[enc->cs->current.cdw++]; \
 	RVCE_CS(cmd)
-#define RVCE_READ(buf, domain, off) rvce_add_buffer(enc, (buf), RADEON_USAGE_READ, (domain), (off))
-#define RVCE_WRITE(buf, domain, off) rvce_add_buffer(enc, (buf), RADEON_USAGE_WRITE, (domain), (off))
-#define RVCE_READWRITE(buf, domain, off) rvce_add_buffer(enc, (buf), RADEON_USAGE_READWRITE, (domain), (off))
+#define RVCE_READ(buf, domain, off) si_vce_add_buffer(enc, (buf), RADEON_USAGE_READ, (domain), (off))
+#define RVCE_WRITE(buf, domain, off) si_vce_add_buffer(enc, (buf), RADEON_USAGE_WRITE, (domain), (off))
+#define RVCE_READWRITE(buf, domain, off) si_vce_add_buffer(enc, (buf), RADEON_USAGE_READWRITE, (domain), (off))
 #define RVCE_END() *begin = (&enc->cs->current.buf[enc->cs->current.cdw] - begin) * 4; }
 
 #define RVCE_MAX_BITSTREAM_OUTPUT_ROW_SIZE (4096 * 16 * 2.5)
@@ -417,46 +417,46 @@ struct rvce_encoder {
 };
 
 /* CPB handling functions */
-struct rvce_cpb_slot *current_slot(struct rvce_encoder *enc);
-struct rvce_cpb_slot *l0_slot(struct rvce_encoder *enc);
-struct rvce_cpb_slot *l1_slot(struct rvce_encoder *enc);
-void rvce_frame_offset(struct rvce_encoder *enc, struct rvce_cpb_slot *slot,
-		       signed *luma_offset, signed *chroma_offset);
+struct rvce_cpb_slot *si_current_slot(struct rvce_encoder *enc);
+struct rvce_cpb_slot *si_l0_slot(struct rvce_encoder *enc);
+struct rvce_cpb_slot *si_l1_slot(struct rvce_encoder *enc);
+void si_vce_frame_offset(struct rvce_encoder *enc, struct rvce_cpb_slot *slot,
+			 signed *luma_offset, signed *chroma_offset);
 
-struct pipe_video_codec *rvce_create_encoder(struct pipe_context *context,
-					     const struct pipe_video_codec *templat,
-					     struct radeon_winsys* ws,
-					     rvce_get_buffer get_buffer);
+struct pipe_video_codec *si_vce_create_encoder(struct pipe_context *context,
+					       const struct pipe_video_codec *templat,
+					       struct radeon_winsys* ws,
+					       rvce_get_buffer get_buffer);
 
-bool rvce_is_fw_version_supported(struct r600_common_screen *rscreen);
+bool si_vce_is_fw_version_supported(struct r600_common_screen *rscreen);
 
-void rvce_add_buffer(struct rvce_encoder *enc, struct pb_buffer *buf,
-		     enum radeon_bo_usage usage, enum radeon_bo_domain domain,
-		     signed offset);
+void si_vce_add_buffer(struct rvce_encoder *enc, struct pb_buffer *buf,
+		       enum radeon_bo_usage usage, enum radeon_bo_domain domain,
+		       signed offset);
 
 /* init vce fw 40.2.2 specific callbacks */
-void radeon_vce_40_2_2_init(struct rvce_encoder *enc);
+void si_vce_40_2_2_init(struct rvce_encoder *enc);
 
 /* init vce fw 50 specific callbacks */
-void radeon_vce_50_init(struct rvce_encoder *enc);
+void si_vce_50_init(struct rvce_encoder *enc);
 
 /* init vce fw 52 specific callbacks */
-void radeon_vce_52_init(struct rvce_encoder *enc);
+void si_vce_52_init(struct rvce_encoder *enc);
 
 /* version specific function for getting parameters */
-void (*get_pic_param)(struct rvce_encoder *enc,
+void (*si_get_pic_param)(struct rvce_encoder *enc,
                       struct pipe_h264_enc_picture_desc *pic);
 
 /* get parameters for vce 40.2.2 */
-void radeon_vce_40_2_2_get_param(struct rvce_encoder *enc,
-                                 struct pipe_h264_enc_picture_desc *pic);
+void si_vce_40_2_2_get_param(struct rvce_encoder *enc,
+			     struct pipe_h264_enc_picture_desc *pic);
 
 /* get parameters for vce 50 */
-void radeon_vce_50_get_param(struct rvce_encoder *enc,
-                             struct pipe_h264_enc_picture_desc *pic);
+void si_vce_50_get_param(struct rvce_encoder *enc,
+			 struct pipe_h264_enc_picture_desc *pic);
 
 /* get parameters for vce 52 */
-void radeon_vce_52_get_param(struct rvce_encoder *enc,
-                             struct pipe_h264_enc_picture_desc *pic);
+void si_vce_52_get_param(struct rvce_encoder *enc,
+			 struct pipe_h264_enc_picture_desc *pic);
 
 #endif

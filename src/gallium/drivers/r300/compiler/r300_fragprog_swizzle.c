@@ -35,6 +35,8 @@
 
 #include <stdio.h>
 
+#include "util/macros.h"
+
 #include "r300_reg.h"
 #include "radeon_compiler.h"
 
@@ -61,7 +63,7 @@ static const struct swizzle_data native_swizzles[] = {
 	{MAKE_SWZ3(HALF, HALF, HALF), R300_ALU_ARGC_HALF, 0, 0}
 };
 
-static const int num_native_swizzles = sizeof(native_swizzles)/sizeof(native_swizzles[0]);
+static const int num_native_swizzles = ARRAY_SIZE(native_swizzles);
 
 /**
  * Find a native RGB swizzle that matches the given swizzle.

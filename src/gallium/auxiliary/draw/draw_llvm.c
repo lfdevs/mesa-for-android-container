@@ -2156,6 +2156,11 @@ draw_llvm_destroy_variant(struct draw_llvm_variant *variant)
 {
    struct draw_llvm *llvm = variant->llvm;
 
+   if (gallivm_debug & (GALLIVM_DEBUG_TGSI | GALLIVM_DEBUG_IR)) {
+      debug_printf("Deleting VS variant: %u vs variants,\t%u total variants\n",
+                    variant->shader->variants_cached, llvm->nr_variants);
+   }
+
    gallivm_destroy(variant->gallivm);
 
    remove_from_list(&variant->list_item_local);
@@ -2417,6 +2422,11 @@ void
 draw_gs_llvm_destroy_variant(struct draw_gs_llvm_variant *variant)
 {
    struct draw_llvm *llvm = variant->llvm;
+
+   if (gallivm_debug & (GALLIVM_DEBUG_TGSI | GALLIVM_DEBUG_IR)) {
+      debug_printf("Deleting GS variant: %u gs variants,\t%u total variants\n",
+                    variant->shader->variants_cached, llvm->nr_gs_variants);
+   }
 
    gallivm_destroy(variant->gallivm);
 

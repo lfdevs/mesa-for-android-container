@@ -32,9 +32,11 @@
 #include "main/readpix.h"
 #include "main/state.h"
 #include "main/glformats.h"
+#include "program/prog_instruction.h"
 #include "drivers/common/meta.h"
 
 #include "brw_context.h"
+#include "brw_blorp.h"
 #include "intel_screen.h"
 #include "intel_batchbuffer.h"
 #include "intel_blit.h"
@@ -73,6 +75,7 @@ intel_readpixels_tiled_memcpy(struct gl_context * ctx,
 {
    struct brw_context *brw = brw_context(ctx);
    struct gl_renderbuffer *rb = ctx->ReadBuffer->_ColorReadBuffer;
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
 
    /* This path supports reading from color buffers only */
    if (rb == NULL)
@@ -91,7 +94,7 @@ intel_readpixels_tiled_memcpy(struct gl_context * ctx,
     * a 2D BGRA, RGBA, L8 or A8 texture. It could be generalized to support
     * more types.
     */
-   if (!brw->has_llc ||
+   if (!devinfo->has_llc ||
        !(type == GL_UNSIGNED_BYTE || type == GL_UNSIGNED_INT_8_8_8_8_REV) ||
        pixels == NULL ||
        _mesa_is_bufferobj(pack->BufferObj) ||
@@ -141,7 +144,7 @@ intel_readpixels_tiled_memcpy(struct gl_context * ctx,
     * parts of the memory aren't swizzled at all. Userspace just can't handle
     * that.
     */
-   if (brw->gen < 5 && brw->has_swizzling)
+   if (devinfo->gen < 5 && brw->has_swizzling)
       return false;
 
    /* Since we are going to read raw data to the miptree, we need to resolve
@@ -211,6 +214,45 @@ intel_readpixels_tiled_memcpy(struct gl_context * ctx,
    return true;
 }
 
+static bool
+intel_readpixels_blorp(struct gl_context *ctx,
+                       unsigned x, unsigned y,
+                       unsigned w, unsigned h,
+                       GLenum format, GLenum type, const void *pixels,
+                       const struct gl_pixelstore_attrib *packing)
+{
+   struct brw_context *brw = brw_context(ctx);
+   struct gl_renderbuffer *rb = ctx->ReadBuffer->_ColorReadBuffer;
+   if (!rb)
+      return false;
+
+   struct intel_renderbuffer *irb = intel_renderbuffer(rb);
+
+   /* _mesa_get_readpixels_transfer_ops() includes the cases of read
+    * color clamping along with the ctx->_ImageTransferState.
+    */
+   if (_mesa_get_readpixels_transfer_ops(ctx, rb->Format, format,
+                                         type, GL_FALSE))
+      return false;
+
+   GLenum dst_base_format = _mesa_unpack_format_to_base_format(format);
+   if (_mesa_need_rgb_to_luminance_conversion(rb->_BaseFormat,
+                                              dst_base_format))
+      return false;
+
+   unsigned swizzle;
+   if (irb->Base.Base._BaseFormat == GL_RGB) {
+      swizzle = MAKE_SWIZZLE4(SWIZZLE_X, SWIZZLE_Y, SWIZZLE_Z, SWIZZLE_ONE);
+   } else {
+      swizzle = SWIZZLE_XYZW;
+   }
+
+   return brw_blorp_download_miptree(brw, irb->mt, rb->Format, swizzle,
+                                     irb->mt_level, x, y, irb->mt_layer,
+                                     w, h, 1, GL_TEXTURE_2D, format, type,
+                                     rb->Name == 0, pixels, packing);
+}
+
 void
 intelReadPixels(struct gl_context * ctx,
                 GLint x, GLint y, GLsizei width, GLsizei height,
@@ -224,41 +266,20 @@ intelReadPixels(struct gl_context * ctx,
 
    DBG("%s\n", __func__);
 
-   if (_mesa_is_bufferobj(pack->BufferObj)) {
-      if (_mesa_meta_pbo_GetTexSubImage(ctx, 2, NULL, x, y, 0, width, height, 1,
-                                        format, type, pixels, pack)) {
-         /* _mesa_meta_pbo_GetTexSubImage() implements PBO transfers by
-          * binding the user-provided BO as a fake framebuffer and rendering
-          * to it.  This breaks the invariant of the GL that nothing is able
-          * to render to a BO, causing nondeterministic corruption issues
-          * because the render cache is not coherent with a number of other
-          * caches that the BO could potentially be bound to afterwards.
-          *
-          * This could be solved in the same way that we guarantee texture
-          * coherency after a texture is attached to a framebuffer and
-          * rendered to, but that would involve checking *all* BOs bound to
-          * the pipeline for the case we need to emit a cache flush due to
-          * previous rendering to any of them -- Including vertex, index,
-          * uniform, atomic counter, shader image, transform feedback,
-          * indirect draw buffers, etc.
-          *
-          * That would increase the per-draw call overhead even though it's
-          * very unlikely that any of the BOs bound to the pipeline has been
-          * rendered to via a PBO at any point, so it seems better to just
-          * flush here unconditionally.
-          */
-         brw_emit_mi_flush(brw);
-         return;
-      }
-
-      perf_debug("%s: fallback to CPU mapping in PBO case\n", __func__);
-   }
-
    /* Reading pixels wont dirty the front buffer, so reset the dirty
-    * flag after calling intel_prepare_render(). */
+    * flag after calling intel_prepare_render().
+    */
    dirty = brw->front_buffer_dirty;
    intel_prepare_render(brw);
    brw->front_buffer_dirty = dirty;
+
+   if (_mesa_is_bufferobj(pack->BufferObj)) {
+      if (intel_readpixels_blorp(ctx, x, y, width, height,
+                                 format, type, pixels, pack))
+         return;
+
+      perf_debug("%s: fallback to CPU mapping in PBO case\n", __func__);
+   }
 
    ok = intel_readpixels_tiled_memcpy(ctx, x, y, width, height,
                                       format, type, pixels, pack);

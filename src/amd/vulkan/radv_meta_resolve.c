@@ -219,26 +219,17 @@ void
 radv_device_finish_meta_resolve_state(struct radv_device *device)
 {
 	struct radv_meta_state *state = &device->meta_state;
-	VkDevice device_h = radv_device_to_handle(device);
-	VkRenderPass pass_h = device->meta_state.resolve.pass;
-	const VkAllocationCallbacks *alloc = &device->meta_state.alloc;
 
-	if (pass_h)
-		radv_DestroyRenderPass(device_h, pass_h,
-					     &device->meta_state.alloc);
-
-	VkPipeline pipeline_h = state->resolve.pipeline;
-	if (pipeline_h) {
-		radv_DestroyPipeline(device_h, pipeline_h, alloc);
-	}
+	radv_DestroyRenderPass(radv_device_to_handle(device),
+			       state->resolve.pass, &state->alloc);
+	radv_DestroyPipeline(radv_device_to_handle(device),
+			     state->resolve.pipeline, &state->alloc);
 }
 
 VkResult
 radv_device_init_meta_resolve_state(struct radv_device *device)
 {
 	VkResult res = VK_SUCCESS;
-
-	zero(device->meta_state.resolve);
 
 	struct radv_shader_module vs_module = { .nir = radv_meta_build_nir_vs_generate_vertices() };
 	if (!vs_module.nir) {
@@ -277,13 +268,8 @@ emit_resolve(struct radv_cmd_buffer *cmd_buffer,
 
 	cmd_buffer->state.flush_bits |= RADV_CMD_FLAG_FLUSH_AND_INV_CB;
 
-	VkPipeline pipeline_h = device->meta_state.resolve.pipeline;
-	RADV_FROM_HANDLE(radv_pipeline, pipeline, pipeline_h);
-
-	if (cmd_buffer->state.pipeline != pipeline) {
-		radv_CmdBindPipeline(cmd_buffer_h, VK_PIPELINE_BIND_POINT_GRAPHICS,
-				     pipeline_h);
-	}
+	radv_CmdBindPipeline(cmd_buffer_h, VK_PIPELINE_BIND_POINT_GRAPHICS,
+			     device->meta_state.resolve.pipeline);
 
 	radv_CmdSetViewport(radv_cmd_buffer_to_handle(cmd_buffer), 0, 1, &(VkViewport) {
 		.x = dest_offset->x,
@@ -379,7 +365,8 @@ void radv_CmdResolveImage(
 		return;
 	}
 
-	radv_meta_save_graphics_reset_vport_scissor_novertex(&saved_state, cmd_buffer);
+	radv_meta_save(&saved_state, cmd_buffer,
+		       RADV_META_SAVE_GRAPHICS_PIPELINE);
 
 	assert(src_image->info.samples > 1);
 	if (src_image->info.samples <= 1) {
@@ -587,7 +574,8 @@ radv_cmd_buffer_resolve_subpass(struct radv_cmd_buffer *cmd_buffer)
 		return;
 	}
 
-	radv_meta_save_graphics_reset_vport_scissor_novertex(&saved_state, cmd_buffer);
+	radv_meta_save(&saved_state, cmd_buffer,
+		       RADV_META_SAVE_GRAPHICS_PIPELINE);
 
 	for (uint32_t i = 0; i < subpass->color_count; ++i) {
 		VkAttachmentReference src_att = subpass->color_attachments[i];

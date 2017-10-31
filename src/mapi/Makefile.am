@@ -47,7 +47,9 @@ AM_CPPFLAGS =							\
 	-I$(top_srcdir)/include					\
 	-I$(top_srcdir)/src					\
 	-I$(top_builddir)/src/mapi				\
-	-I$(top_srcdir)/src/mapi
+	-I$(top_srcdir)/src/mapi				\
+	-I$(top_builddir)/src/mapi/glapi			\
+	-I$(top_srcdir)/src/mapi/glapi
 
 include Makefile.sources
 
@@ -113,7 +115,6 @@ endif
 glapi_libglapi_la_SOURCES =
 glapi_libglapi_la_CPPFLAGS = \
 	$(AM_CPPFLAGS) \
-	-I$(top_srcdir)/src/mapi/glapi \
 	-I$(top_srcdir)/src/mesa
 
 if HAVE_APPLEDRI

@@ -39,6 +39,7 @@ gen7_emit_depth_stencil_hiz(struct brw_context *brw,
                             uint32_t width, uint32_t height,
                             uint32_t tile_x, uint32_t tile_y)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    struct gl_context *ctx = &brw->ctx;
    const uint8_t mocs = GEN7_MOCS_L3;
    struct gl_framebuffer *fb = ctx->DrawBuffer;
@@ -114,9 +115,7 @@ gen7_emit_depth_stencil_hiz(struct brw_context *brw,
 
    /* 3DSTATE_DEPTH_BUFFER dw2 */
    if (depth_mt) {
-      OUT_RELOC(depth_mt->bo,
-	        I915_GEM_DOMAIN_RENDER, I915_GEM_DOMAIN_RENDER,
-	        0);
+      OUT_RELOC(depth_mt->bo, RELOC_WRITE, 0);
    } else {
       OUT_BATCH(0);
    }
@@ -151,10 +150,7 @@ gen7_emit_depth_stencil_hiz(struct brw_context *brw,
       OUT_BATCH(GEN7_3DSTATE_HIER_DEPTH_BUFFER << 16 | (3 - 2));
       OUT_BATCH((mocs << 25) |
                 (depth_mt->hiz_buf->pitch - 1));
-      OUT_RELOC(depth_mt->hiz_buf->bo,
-                I915_GEM_DOMAIN_RENDER,
-                I915_GEM_DOMAIN_RENDER,
-                0);
+      OUT_RELOC(depth_mt->hiz_buf->bo, RELOC_WRITE, 0);
       ADVANCE_BATCH();
    }
 
@@ -166,16 +162,14 @@ gen7_emit_depth_stencil_hiz(struct brw_context *brw,
       ADVANCE_BATCH();
    } else {
       stencil_mt->r8stencil_needs_update = true;
-      const int enabled = brw->is_haswell ? HSW_STENCIL_ENABLED : 0;
+      const int enabled = devinfo->is_haswell ? HSW_STENCIL_ENABLED : 0;
 
       BEGIN_BATCH(3);
       OUT_BATCH(GEN7_3DSTATE_STENCIL_BUFFER << 16 | (3 - 2));
       OUT_BATCH(enabled |
                 mocs << 25 |
 	        (stencil_mt->surf.row_pitch - 1));
-      OUT_RELOC(stencil_mt->bo,
-	        I915_GEM_DOMAIN_RENDER, I915_GEM_DOMAIN_RENDER,
-		0);
+      OUT_RELOC(stencil_mt->bo, RELOC_WRITE, 0);
       ADVANCE_BATCH();
    }
 

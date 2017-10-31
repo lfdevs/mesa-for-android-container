@@ -37,20 +37,15 @@
 static void
 prepare_indirect_gpgpu_walker(struct brw_context *brw)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    GLintptr indirect_offset = brw->compute.num_work_groups_offset;
    struct brw_bo *bo = brw->compute.num_work_groups_bo;
 
-   brw_load_register_mem(brw, GEN7_GPGPU_DISPATCHDIMX, bo,
-                         I915_GEM_DOMAIN_VERTEX, 0,
-                         indirect_offset + 0);
-   brw_load_register_mem(brw, GEN7_GPGPU_DISPATCHDIMY, bo,
-                         I915_GEM_DOMAIN_VERTEX, 0,
-                         indirect_offset + 4);
-   brw_load_register_mem(brw, GEN7_GPGPU_DISPATCHDIMZ, bo,
-                         I915_GEM_DOMAIN_VERTEX, 0,
-                         indirect_offset + 8);
+   brw_load_register_mem(brw, GEN7_GPGPU_DISPATCHDIMX, bo, indirect_offset + 0);
+   brw_load_register_mem(brw, GEN7_GPGPU_DISPATCHDIMY, bo, indirect_offset + 4);
+   brw_load_register_mem(brw, GEN7_GPGPU_DISPATCHDIMZ, bo, indirect_offset + 8);
 
-   if (brw->gen > 7)
+   if (devinfo->gen > 7)
       return;
 
    /* Clear upper 32-bits of SRC0 and all 64-bits of SRC1 */
@@ -65,9 +60,7 @@ prepare_indirect_gpgpu_walker(struct brw_context *brw)
    ADVANCE_BATCH();
 
    /* Load compute_dispatch_indirect_x_size into SRC0 */
-   brw_load_register_mem(brw, MI_PREDICATE_SRC0, bo,
-                         I915_GEM_DOMAIN_INSTRUCTION, 0,
-                         indirect_offset + 0);
+   brw_load_register_mem(brw, MI_PREDICATE_SRC0, bo, indirect_offset + 0);
 
    /* predicate = (compute_dispatch_indirect_x_size == 0); */
    BEGIN_BATCH(1);
@@ -78,9 +71,7 @@ prepare_indirect_gpgpu_walker(struct brw_context *brw)
    ADVANCE_BATCH();
 
    /* Load compute_dispatch_indirect_y_size into SRC0 */
-   brw_load_register_mem(brw, MI_PREDICATE_SRC0, bo,
-                         I915_GEM_DOMAIN_INSTRUCTION, 0,
-                         indirect_offset + 4);
+   brw_load_register_mem(brw, MI_PREDICATE_SRC0, bo, indirect_offset + 4);
 
    /* predicate |= (compute_dispatch_indirect_y_size == 0); */
    BEGIN_BATCH(1);
@@ -91,9 +82,7 @@ prepare_indirect_gpgpu_walker(struct brw_context *brw)
    ADVANCE_BATCH();
 
    /* Load compute_dispatch_indirect_z_size into SRC0 */
-   brw_load_register_mem(brw, MI_PREDICATE_SRC0, bo,
-                         I915_GEM_DOMAIN_INSTRUCTION, 0,
-                         indirect_offset + 8);
+   brw_load_register_mem(brw, MI_PREDICATE_SRC0, bo, indirect_offset + 8);
 
    /* predicate |= (compute_dispatch_indirect_z_size == 0); */
    BEGIN_BATCH(1);
@@ -115,6 +104,7 @@ prepare_indirect_gpgpu_walker(struct brw_context *brw)
 static void
 brw_emit_gpgpu_walker(struct brw_context *brw)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    const struct brw_cs_prog_data *prog_data =
       brw_cs_prog_data(brw->cs.base.prog_data);
 
@@ -126,7 +116,7 @@ brw_emit_gpgpu_walker(struct brw_context *brw)
    } else {
       indirect_flag =
          GEN7_GPGPU_INDIRECT_PARAMETER_ENABLE |
-         (brw->gen == 7 ? GEN7_GPGPU_PREDICATE_ENABLE : 0);
+         (devinfo->gen == 7 ? GEN7_GPGPU_PREDICATE_ENABLE : 0);
       prepare_indirect_gpgpu_walker(brw);
    }
 
@@ -141,11 +131,11 @@ brw_emit_gpgpu_walker(struct brw_context *brw)
    if (right_non_aligned != 0)
       right_mask >>= (simd_size - right_non_aligned);
 
-   uint32_t dwords = brw->gen < 8 ? 11 : 15;
+   uint32_t dwords = devinfo->gen < 8 ? 11 : 15;
    BEGIN_BATCH(dwords);
    OUT_BATCH(GPGPU_WALKER << 16 | (dwords - 2) | indirect_flag);
    OUT_BATCH(0);
-   if (brw->gen >= 8) {
+   if (devinfo->gen >= 8) {
       OUT_BATCH(0);                     /* Indirect Data Length */
       OUT_BATCH(0);                     /* Indirect Data Start Address */
    }
@@ -153,11 +143,11 @@ brw_emit_gpgpu_walker(struct brw_context *brw)
    OUT_BATCH(SET_FIELD(simd_size / 16, GPGPU_WALKER_SIMD_SIZE) |
              SET_FIELD(thread_width_max - 1, GPGPU_WALKER_THREAD_WIDTH_MAX));
    OUT_BATCH(0);                        /* Thread Group ID Starting X */
-   if (brw->gen >= 8)
+   if (devinfo->gen >= 8)
       OUT_BATCH(0);                     /* MBZ */
    OUT_BATCH(num_groups[0]);            /* Thread Group ID X Dimension */
    OUT_BATCH(0);                        /* Thread Group ID Starting Y */
-   if (brw->gen >= 8)
+   if (devinfo->gen >= 8)
       OUT_BATCH(0);                     /* MBZ */
    OUT_BATCH(num_groups[1]);            /* Thread Group ID Y Dimension */
    OUT_BATCH(0);                        /* Thread Group ID Starting/Resume Z */
@@ -177,7 +167,6 @@ static void
 brw_dispatch_compute_common(struct gl_context *ctx)
 {
    struct brw_context *brw = brw_context(ctx);
-   int estimated_buffer_space_needed;
    bool fail_next = false;
 
    if (!_mesa_check_conditional_render(ctx))
@@ -190,29 +179,20 @@ brw_dispatch_compute_common(struct gl_context *ctx)
 
    brw_predraw_resolve_inputs(brw);
 
-   const int sampler_state_size = 16; /* 16 bytes */
-   estimated_buffer_space_needed = 512; /* batchbuffer commands */
-   estimated_buffer_space_needed += (BRW_MAX_TEX_UNIT *
-                                     (sampler_state_size +
-                                      sizeof(struct gen5_sampler_default_color)));
-   estimated_buffer_space_needed += 1024; /* push constants */
-   estimated_buffer_space_needed += 512; /* misc. pad */
-
-   /* Flush the batch if it's approaching full, so that we don't wrap while
-    * we've got validated state that needs to be in the same batch as the
-    * primitives.
+   /* Flush the batch if the batch/state buffers are nearly full.  We can
+    * grow them if needed, but this is not free, so we'd like to avoid it.
     */
-   intel_batchbuffer_require_space(brw, estimated_buffer_space_needed,
-                                   RENDER_RING);
+   intel_batchbuffer_require_space(brw, 600, RENDER_RING);
+   brw_require_statebuffer_space(brw, 2500);
    intel_batchbuffer_save_state(brw);
 
  retry:
-   brw->no_batch_wrap = true;
+   brw->batch.no_wrap = true;
    brw_upload_compute_state(brw);
 
    brw_emit_gpgpu_walker(brw);
 
-   brw->no_batch_wrap = false;
+   brw->batch.no_wrap = false;
 
    if (!brw_batch_has_aperture_space(brw, 0)) {
       if (!fail_next) {

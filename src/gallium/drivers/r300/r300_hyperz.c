@@ -26,7 +26,6 @@
 #include "r300_fs.h"
 
 #include "util/u_format.h"
-#include "util/u_mm.h"
 
 /*
   HiZ rules - taken from various docs 

@@ -64,6 +64,16 @@ namespace SwrJit
 
     static const uint32_t simd16vertex_attrib = 0;
 
+    INLINE static StructType *Gen_SIMDVERTEX_T(JitManager* pJitMgr)
+    {
+        LLVMContext& ctx = pJitMgr->mContext;
+        std::vector<Type*> members;
+        
+
+        return StructType::get(ctx, members, false);
+    }
+
+
     INLINE static StructType *Gen_SWR_VS_CONTEXT(JitManager* pJitMgr)
     {
         LLVMContext& ctx = pJitMgr->mContext;
@@ -195,24 +205,22 @@ namespace SwrJit
         LLVMContext& ctx = pJitMgr->mContext;
         std::vector<Type*> members;
         
-        /* vert                 */ members.push_back( ArrayType::get(Gen_simdvertex(pJitMgr), MAX_NUM_VERTS_PER_PRIM) );
-        /* PrimitiveID          */ members.push_back( VectorType::get(Type::getInt32Ty(ctx), pJitMgr->mVWidth) );
-        /* InstanceID           */ members.push_back( Type::getInt32Ty(ctx) );
-        /* mask                 */ members.push_back( VectorType::get(Type::getInt32Ty(ctx), pJitMgr->mVWidth) );
-        /* pStream              */ members.push_back( PointerType::get(Type::getInt8Ty(ctx), 0) );
-        /* pCutOrStreamIdBuffer */ members.push_back( PointerType::get(Type::getInt8Ty(ctx), 0) );
-        /* vertexCount          */ members.push_back( VectorType::get(Type::getInt32Ty(ctx), pJitMgr->mVWidth) );
+        /* pVerts          */ members.push_back( PointerType::get(ArrayType::get(VectorType::get(Type::getFloatTy(ctx), 8), 4), 0) );
+        /* inputVertStride */ members.push_back( Type::getInt32Ty(ctx) );
+        /* PrimitiveID     */ members.push_back( VectorType::get(Type::getInt32Ty(ctx), pJitMgr->mVWidth) );
+        /* InstanceID      */ members.push_back( Type::getInt32Ty(ctx) );
+        /* mask            */ members.push_back( VectorType::get(Type::getInt32Ty(ctx), pJitMgr->mVWidth) );
+        /* pStreams        */ members.push_back( ArrayType::get(PointerType::get(Type::getInt8Ty(ctx), 0), KNOB_SIMD_WIDTH) );
 
         return StructType::get(ctx, members, false);
     }
 
-    static const uint32_t SWR_GS_CONTEXT_vert                 = 0;
-    static const uint32_t SWR_GS_CONTEXT_PrimitiveID          = 1;
-    static const uint32_t SWR_GS_CONTEXT_InstanceID           = 2;
-    static const uint32_t SWR_GS_CONTEXT_mask                 = 3;
-    static const uint32_t SWR_GS_CONTEXT_pStream              = 4;
-    static const uint32_t SWR_GS_CONTEXT_pCutOrStreamIdBuffer = 5;
-    static const uint32_t SWR_GS_CONTEXT_vertexCount          = 6;
+    static const uint32_t SWR_GS_CONTEXT_pVerts          = 0;
+    static const uint32_t SWR_GS_CONTEXT_inputVertStride = 1;
+    static const uint32_t SWR_GS_CONTEXT_PrimitiveID     = 2;
+    static const uint32_t SWR_GS_CONTEXT_InstanceID      = 3;
+    static const uint32_t SWR_GS_CONTEXT_mask            = 4;
+    static const uint32_t SWR_GS_CONTEXT_pStreams        = 5;
 
     INLINE static StructType *Gen_PixelPositions(JitManager* pJitMgr)
     {
@@ -315,7 +323,7 @@ namespace SwrJit
         LLVMContext& ctx = pJitMgr->mContext;
         std::vector<Type*> members;
         
-        /* pBaseAddress        */ members.push_back( PointerType::get(Type::getInt8Ty(ctx), 0) );
+        /* xpBaseAddress       */ members.push_back( Type::getInt64Ty(ctx) );
         /* type                */ members.push_back( Type::getInt32Ty(ctx) );
         /* format              */ members.push_back( Type::getInt32Ty(ctx) );
         /* width               */ members.push_back( Type::getInt32Ty(ctx) );
@@ -336,14 +344,14 @@ namespace SwrJit
         /* xOffset             */ members.push_back( Type::getInt32Ty(ctx) );
         /* yOffset             */ members.push_back( Type::getInt32Ty(ctx) );
         /* lodOffsets          */ members.push_back( ArrayType::get(ArrayType::get(Type::getInt32Ty(ctx), 15), 2) );
-        /* pAuxBaseAddress     */ members.push_back( PointerType::get(Type::getInt8Ty(ctx), 0) );
+        /* xpAuxBaseAddress    */ members.push_back( Type::getInt64Ty(ctx) );
         /* auxMode             */ members.push_back( Type::getInt32Ty(ctx) );
         /* bInterleavedSamples */ members.push_back( Type::getInt8Ty(ctx) );
 
         return StructType::get(ctx, members, false);
     }
 
-    static const uint32_t SWR_SURFACE_STATE_pBaseAddress        = 0;
+    static const uint32_t SWR_SURFACE_STATE_xpBaseAddress       = 0;
     static const uint32_t SWR_SURFACE_STATE_type                = 1;
     static const uint32_t SWR_SURFACE_STATE_format              = 2;
     static const uint32_t SWR_SURFACE_STATE_width               = 3;
@@ -364,7 +372,7 @@ namespace SwrJit
     static const uint32_t SWR_SURFACE_STATE_xOffset             = 18;
     static const uint32_t SWR_SURFACE_STATE_yOffset             = 19;
     static const uint32_t SWR_SURFACE_STATE_lodOffsets          = 20;
-    static const uint32_t SWR_SURFACE_STATE_pAuxBaseAddress     = 21;
+    static const uint32_t SWR_SURFACE_STATE_xpAuxBaseAddress    = 21;
     static const uint32_t SWR_SURFACE_STATE_auxMode             = 22;
     static const uint32_t SWR_SURFACE_STATE_bInterleavedSamples = 23;
 
@@ -424,6 +432,8 @@ namespace SwrJit
         /* StartInstance */ members.push_back( Type::getInt32Ty(ctx) );
         /* VertexID      */ members.push_back( VectorType::get(Type::getInt32Ty(ctx), pJitMgr->mVWidth) );
         /* CutMask       */ members.push_back( VectorType::get(Type::getInt32Ty(ctx), pJitMgr->mVWidth) );
+        /* VertexID2     */ members.push_back( VectorType::get(Type::getInt32Ty(ctx), pJitMgr->mVWidth) );
+        /* CutMask2      */ members.push_back( VectorType::get(Type::getInt32Ty(ctx), pJitMgr->mVWidth) );
 
         return StructType::get(ctx, members, false);
     }
@@ -437,6 +447,8 @@ namespace SwrJit
     static const uint32_t SWR_FETCH_CONTEXT_StartInstance = 6;
     static const uint32_t SWR_FETCH_CONTEXT_VertexID      = 7;
     static const uint32_t SWR_FETCH_CONTEXT_CutMask       = 8;
+    static const uint32_t SWR_FETCH_CONTEXT_VertexID2     = 9;
+    static const uint32_t SWR_FETCH_CONTEXT_CutMask2      = 10;
 
     INLINE static StructType *Gen_SWR_STREAMOUT_BUFFER(JitManager* pJitMgr)
     {
@@ -509,26 +521,42 @@ namespace SwrJit
         LLVMContext& ctx = pJitMgr->mContext;
         std::vector<Type*> members;
         
-        /* gsEnable           */ members.push_back( Type::getInt8Ty(ctx) );
-        /* numInputAttribs    */ members.push_back( Type::getInt32Ty(ctx) );
-        /* outputTopology     */ members.push_back( Type::getInt32Ty(ctx) );
-        /* maxNumVerts        */ members.push_back( Type::getInt32Ty(ctx) );
-        /* instanceCount      */ members.push_back( Type::getInt32Ty(ctx) );
-        /* isSingleStream     */ members.push_back( Type::getInt8Ty(ctx) );
-        /* singleStreamID     */ members.push_back( Type::getInt32Ty(ctx) );
-        /* vertexAttribOffset */ members.push_back( Type::getInt32Ty(ctx) );
+        /* gsEnable              */ members.push_back( Type::getInt8Ty(ctx) );
+        /* numInputAttribs       */ members.push_back( Type::getInt32Ty(ctx) );
+        /* inputVertStride       */ members.push_back( Type::getInt32Ty(ctx) );
+        /* outputTopology        */ members.push_back( Type::getInt32Ty(ctx) );
+        /* maxNumVerts           */ members.push_back( Type::getInt32Ty(ctx) );
+        /* instanceCount         */ members.push_back( Type::getInt32Ty(ctx) );
+        /* isSingleStream        */ members.push_back( Type::getInt8Ty(ctx) );
+        /* singleStreamID        */ members.push_back( Type::getInt32Ty(ctx) );
+        /* allocationSize        */ members.push_back( Type::getInt32Ty(ctx) );
+        /* vertexAttribOffset    */ members.push_back( Type::getInt32Ty(ctx) );
+        /* srcVertexAttribOffset */ members.push_back( Type::getInt32Ty(ctx) );
+        /* controlDataSize       */ members.push_back( Type::getInt32Ty(ctx) );
+        /* controlDataOffset     */ members.push_back( Type::getInt32Ty(ctx) );
+        /* outputVertexSize      */ members.push_back( Type::getInt32Ty(ctx) );
+        /* outputVertexOffset    */ members.push_back( Type::getInt32Ty(ctx) );
+        /* staticVertexCount     */ members.push_back( Type::getInt32Ty(ctx) );
 
         return StructType::get(ctx, members, false);
     }
 
-    static const uint32_t SWR_GS_STATE_gsEnable           = 0;
-    static const uint32_t SWR_GS_STATE_numInputAttribs    = 1;
-    static const uint32_t SWR_GS_STATE_outputTopology     = 2;
-    static const uint32_t SWR_GS_STATE_maxNumVerts        = 3;
-    static const uint32_t SWR_GS_STATE_instanceCount      = 4;
-    static const uint32_t SWR_GS_STATE_isSingleStream     = 5;
-    static const uint32_t SWR_GS_STATE_singleStreamID     = 6;
-    static const uint32_t SWR_GS_STATE_vertexAttribOffset = 7;
+    static const uint32_t SWR_GS_STATE_gsEnable              = 0;
+    static const uint32_t SWR_GS_STATE_numInputAttribs       = 1;
+    static const uint32_t SWR_GS_STATE_inputVertStride       = 2;
+    static const uint32_t SWR_GS_STATE_outputTopology        = 3;
+    static const uint32_t SWR_GS_STATE_maxNumVerts           = 4;
+    static const uint32_t SWR_GS_STATE_instanceCount         = 5;
+    static const uint32_t SWR_GS_STATE_isSingleStream        = 6;
+    static const uint32_t SWR_GS_STATE_singleStreamID        = 7;
+    static const uint32_t SWR_GS_STATE_allocationSize        = 8;
+    static const uint32_t SWR_GS_STATE_vertexAttribOffset    = 9;
+    static const uint32_t SWR_GS_STATE_srcVertexAttribOffset = 10;
+    static const uint32_t SWR_GS_STATE_controlDataSize       = 11;
+    static const uint32_t SWR_GS_STATE_controlDataOffset     = 12;
+    static const uint32_t SWR_GS_STATE_outputVertexSize      = 13;
+    static const uint32_t SWR_GS_STATE_outputVertexOffset    = 14;
+    static const uint32_t SWR_GS_STATE_staticVertexCount     = 15;
 
     INLINE static StructType *Gen_SWR_TS_STATE(JitManager* pJitMgr)
     {
@@ -543,6 +571,7 @@ namespace SwrJit
         /* numHsInputAttribs  */ members.push_back( Type::getInt32Ty(ctx) );
         /* numHsOutputAttribs */ members.push_back( Type::getInt32Ty(ctx) );
         /* numDsOutputAttribs */ members.push_back( Type::getInt32Ty(ctx) );
+        /* dsAllocationSize   */ members.push_back( Type::getInt32Ty(ctx) );
         /* vertexAttribOffset */ members.push_back( Type::getInt32Ty(ctx) );
 
         return StructType::get(ctx, members, false);
@@ -556,7 +585,8 @@ namespace SwrJit
     static const uint32_t SWR_TS_STATE_numHsInputAttribs  = 5;
     static const uint32_t SWR_TS_STATE_numHsOutputAttribs = 6;
     static const uint32_t SWR_TS_STATE_numDsOutputAttribs = 7;
-    static const uint32_t SWR_TS_STATE_vertexAttribOffset = 8;
+    static const uint32_t SWR_TS_STATE_dsAllocationSize   = 8;
+    static const uint32_t SWR_TS_STATE_vertexAttribOffset = 9;
 
     INLINE static StructType *Gen_SWR_RENDER_TARGET_BLEND_STATE(JitManager* pJitMgr)
     {
@@ -740,8 +770,6 @@ namespace SwrJit
         /* pixelLocation        */ members.push_back( Type::getInt32Ty(ctx) );
         /* samplePositions      */ members.push_back( ArrayType::get(Type::getInt8Ty(ctx), sizeof(SWR_MULTISAMPLE_POS)) );
         /* bIsCenterPattern     */ members.push_back( Type::getInt32Ty(ctx) );
-        /* cullDistanceMask     */ members.push_back( Type::getInt8Ty(ctx) );
-        /* clipDistanceMask     */ members.push_back( Type::getInt8Ty(ctx) );
 
         return StructType::get(ctx, members, false);
     }
@@ -769,8 +797,6 @@ namespace SwrJit
     static const uint32_t SWR_RASTSTATE_pixelLocation        = 20;
     static const uint32_t SWR_RASTSTATE_samplePositions      = 21;
     static const uint32_t SWR_RASTSTATE_bIsCenterPattern     = 22;
-    static const uint32_t SWR_RASTSTATE_cullDistanceMask     = 23;
-    static const uint32_t SWR_RASTSTATE_clipDistanceMask     = 24;
 
     INLINE static StructType *Gen_SWR_ATTRIB_SWIZZLE(JitManager* pJitMgr)
     {
@@ -802,6 +828,9 @@ namespace SwrJit
         /* readRenderTargetArrayIndex */ members.push_back( Type::getInt8Ty(ctx) );
         /* readViewportArrayIndex     */ members.push_back( Type::getInt8Ty(ctx) );
         /* vertexAttribOffset         */ members.push_back( Type::getInt32Ty(ctx) );
+        /* cullDistanceMask           */ members.push_back( Type::getInt8Ty(ctx) );
+        /* clipDistanceMask           */ members.push_back( Type::getInt8Ty(ctx) );
+        /* vertexClipCullOffset       */ members.push_back( Type::getInt32Ty(ctx) );
 
         return StructType::get(ctx, members, false);
     }
@@ -815,6 +844,9 @@ namespace SwrJit
     static const uint32_t SWR_BACKEND_STATE_readRenderTargetArrayIndex = 6;
     static const uint32_t SWR_BACKEND_STATE_readViewportArrayIndex     = 7;
     static const uint32_t SWR_BACKEND_STATE_vertexAttribOffset         = 8;
+    static const uint32_t SWR_BACKEND_STATE_cullDistanceMask           = 9;
+    static const uint32_t SWR_BACKEND_STATE_clipDistanceMask           = 10;
+    static const uint32_t SWR_BACKEND_STATE_vertexClipCullOffset       = 11;
 
     INLINE static StructType *Gen_SWR_PS_STATE(JitManager* pJitMgr)
     {

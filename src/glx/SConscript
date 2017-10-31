@@ -29,6 +29,7 @@ env.Append(CPPDEFINES = [
 
 env.Prepend(LIBS = [
     libloader,
+    mesautil,
     glapi
 ])
 

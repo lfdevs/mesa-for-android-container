@@ -552,6 +552,34 @@ _mesa_BlendEquation( GLenum mode )
 /**
  * Set blend equation for one color buffer/target.
  */
+static void
+blend_equationi(struct gl_context *ctx, GLuint buf, GLenum mode,
+                enum gl_advanced_blend_mode advanced_mode)
+{
+   if (ctx->Color.Blend[buf].EquationRGB == mode &&
+       ctx->Color.Blend[buf].EquationA == mode)
+      return;  /* no change */
+
+   _mesa_flush_vertices_for_blend_state(ctx);
+   ctx->Color.Blend[buf].EquationRGB = mode;
+   ctx->Color.Blend[buf].EquationA = mode;
+   ctx->Color._BlendEquationPerBuffer = GL_TRUE;
+
+   if (buf == 0)
+      ctx->Color._AdvancedBlendMode = advanced_mode;
+}
+
+
+void GLAPIENTRY
+_mesa_BlendEquationiARB_no_error(GLuint buf, GLenum mode)
+{
+   GET_CURRENT_CONTEXT(ctx);
+
+   enum gl_advanced_blend_mode advanced_mode = advanced_blend_mode(ctx, mode);
+   blend_equationi(ctx, buf, mode, advanced_mode);
+}
+
+
 void GLAPIENTRY
 _mesa_BlendEquationiARB(GLuint buf, GLenum mode)
 {
@@ -573,32 +601,17 @@ _mesa_BlendEquationiARB(GLuint buf, GLenum mode)
       return;
    }
 
-   if (ctx->Color.Blend[buf].EquationRGB == mode &&
-       ctx->Color.Blend[buf].EquationA == mode)
-      return;  /* no change */
-
-   _mesa_flush_vertices_for_blend_state(ctx);
-   ctx->Color.Blend[buf].EquationRGB = mode;
-   ctx->Color.Blend[buf].EquationA = mode;
-   ctx->Color._BlendEquationPerBuffer = GL_TRUE;
-
-   if (buf == 0)
-      ctx->Color._AdvancedBlendMode = advanced_mode;
+   blend_equationi(ctx, buf, mode, advanced_mode);
 }
 
 
-void GLAPIENTRY
-_mesa_BlendEquationSeparate( GLenum modeRGB, GLenum modeA )
+static void
+blend_equation_separate(struct gl_context *ctx, GLenum modeRGB, GLenum modeA,
+                        bool no_error)
 {
-   GET_CURRENT_CONTEXT(ctx);
    const unsigned numBuffers = num_buffers(ctx);
    unsigned buf;
    bool changed = false;
-
-   if (MESA_VERBOSE & VERBOSE_API)
-      _mesa_debug(ctx, "glBlendEquationSeparateEXT(%s %s)\n",
-                  _mesa_enum_to_string(modeRGB),
-                  _mesa_enum_to_string(modeA));
 
    if (ctx->Color._BlendEquationPerBuffer) {
       /* Check all per-buffer states */
@@ -609,8 +622,7 @@ _mesa_BlendEquationSeparate( GLenum modeRGB, GLenum modeA )
             break;
          }
       }
-   }
-   else {
+   } else {
       /* only need to check 0th per-buffer state */
       if (ctx->Color.Blend[0].EquationRGB != modeRGB ||
           ctx->Color.Blend[0].EquationA != modeA) {
@@ -621,26 +633,29 @@ _mesa_BlendEquationSeparate( GLenum modeRGB, GLenum modeA )
    if (!changed)
       return;
 
-   if ( (modeRGB != modeA) && !ctx->Extensions.EXT_blend_equation_separate ) {
-      _mesa_error(ctx, GL_INVALID_OPERATION,
-		  "glBlendEquationSeparateEXT not supported by driver");
-      return;
-   }
+   if (!no_error) {
+      if ((modeRGB != modeA) && !ctx->Extensions.EXT_blend_equation_separate) {
+         _mesa_error(ctx, GL_INVALID_OPERATION,
+                     "glBlendEquationSeparateEXT not supported by driver");
+         return;
+      }
 
-   /* Only allow simple blending equations.
-    * The GL_KHR_blend_equation_advanced spec says:
-    *
-    *    "NOTE: These enums are not accepted by the <modeRGB> or <modeAlpha>
-    *     parameters of BlendEquationSeparate or BlendEquationSeparatei."
-    */
-   if (!legal_simple_blend_equation(ctx, modeRGB)) {
-      _mesa_error(ctx, GL_INVALID_ENUM, "glBlendEquationSeparateEXT(modeRGB)");
-      return;
-   }
+      /* Only allow simple blending equations.
+       * The GL_KHR_blend_equation_advanced spec says:
+       *
+       *    "NOTE: These enums are not accepted by the <modeRGB> or <modeAlpha>
+       *     parameters of BlendEquationSeparate or BlendEquationSeparatei."
+       */
+      if (!legal_simple_blend_equation(ctx, modeRGB)) {
+         _mesa_error(ctx, GL_INVALID_ENUM,
+                     "glBlendEquationSeparateEXT(modeRGB)");
+         return;
+      }
 
-   if (!legal_simple_blend_equation(ctx, modeA)) {
-      _mesa_error(ctx, GL_INVALID_ENUM, "glBlendEquationSeparateEXT(modeA)");
-      return;
+      if (!legal_simple_blend_equation(ctx, modeA)) {
+         _mesa_error(ctx, GL_INVALID_ENUM, "glBlendEquationSeparateEXT(modeA)");
+         return;
+      }
    }
 
    _mesa_flush_vertices_for_blend_state(ctx);
@@ -657,13 +672,53 @@ _mesa_BlendEquationSeparate( GLenum modeRGB, GLenum modeA )
 }
 
 
-static void
+void GLAPIENTRY
+_mesa_BlendEquationSeparate_no_error(GLenum modeRGB, GLenum modeA)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   blend_equation_separate(ctx, modeRGB, modeA, true);
+}
+
+
+void GLAPIENTRY
+_mesa_BlendEquationSeparate(GLenum modeRGB, GLenum modeA)
+{
+   GET_CURRENT_CONTEXT(ctx);
+
+   if (MESA_VERBOSE & VERBOSE_API)
+      _mesa_debug(ctx, "glBlendEquationSeparateEXT(%s %s)\n",
+                  _mesa_enum_to_string(modeRGB),
+                  _mesa_enum_to_string(modeA));
+
+   blend_equation_separate(ctx, modeRGB, modeA, false);
+}
+
+
+static ALWAYS_INLINE void
 blend_equation_separatei(struct gl_context *ctx, GLuint buf, GLenum modeRGB,
-                         GLenum modeA)
+                         GLenum modeA, bool no_error)
 {
    if (ctx->Color.Blend[buf].EquationRGB == modeRGB &&
        ctx->Color.Blend[buf].EquationA == modeA)
       return;  /* no change */
+
+   if (!no_error) {
+      /* Only allow simple blending equations.
+       * The GL_KHR_blend_equation_advanced spec says:
+       *
+       *    "NOTE: These enums are not accepted by the <modeRGB> or <modeAlpha>
+       *     parameters of BlendEquationSeparate or BlendEquationSeparatei."
+       */
+      if (!legal_simple_blend_equation(ctx, modeRGB)) {
+         _mesa_error(ctx, GL_INVALID_ENUM, "glBlendEquationSeparatei(modeRGB)");
+         return;
+      }
+
+      if (!legal_simple_blend_equation(ctx, modeA)) {
+         _mesa_error(ctx, GL_INVALID_ENUM, "glBlendEquationSeparatei(modeA)");
+         return;
+      }
+   }
 
    _mesa_flush_vertices_for_blend_state(ctx);
    ctx->Color.Blend[buf].EquationRGB = modeRGB;
@@ -678,7 +733,7 @@ _mesa_BlendEquationSeparateiARB_no_error(GLuint buf, GLenum modeRGB,
                                          GLenum modeA)
 {
    GET_CURRENT_CONTEXT(ctx);
-   blend_equation_separatei(ctx, buf, modeRGB, modeA);
+   blend_equation_separatei(ctx, buf, modeRGB, modeA, true);
 }
 
 
@@ -701,23 +756,7 @@ _mesa_BlendEquationSeparateiARB(GLuint buf, GLenum modeRGB, GLenum modeA)
       return;
    }
 
-   /* Only allow simple blending equations.
-    * The GL_KHR_blend_equation_advanced spec says:
-    *
-    *    "NOTE: These enums are not accepted by the <modeRGB> or <modeAlpha>
-    *     parameters of BlendEquationSeparate or BlendEquationSeparatei."
-    */
-   if (!legal_simple_blend_equation(ctx, modeRGB)) {
-      _mesa_error(ctx, GL_INVALID_ENUM, "glBlendEquationSeparatei(modeRGB)");
-      return;
-   }
-
-   if (!legal_simple_blend_equation(ctx, modeA)) {
-      _mesa_error(ctx, GL_INVALID_ENUM, "glBlendEquationSeparatei(modeA)");
-      return;
-   }
-
-   blend_equation_separatei(ctx, buf, modeRGB, modeA);
+   blend_equation_separatei(ctx, buf, modeRGB, modeA, false);
 }
 
 
@@ -811,11 +850,36 @@ _mesa_AlphaFunc( GLenum func, GLclampf ref )
 }
 
 
-static void
-logic_op(struct gl_context *ctx, GLenum opcode)
+static ALWAYS_INLINE void
+logic_op(struct gl_context *ctx, GLenum opcode, bool no_error)
 {
    if (ctx->Color.LogicOp == opcode)
       return;
+
+   if (!no_error) {
+      switch (opcode) {
+         case GL_CLEAR:
+         case GL_SET:
+         case GL_COPY:
+         case GL_COPY_INVERTED:
+         case GL_NOOP:
+         case GL_INVERT:
+         case GL_AND:
+         case GL_NAND:
+         case GL_OR:
+         case GL_NOR:
+         case GL_XOR:
+         case GL_EQUIV:
+         case GL_AND_REVERSE:
+         case GL_AND_INVERTED:
+         case GL_OR_REVERSE:
+         case GL_OR_INVERTED:
+            break;
+         default:
+            _mesa_error( ctx, GL_INVALID_ENUM, "glLogicOp" );
+            return;
+      }
+   }
 
    FLUSH_VERTICES(ctx, ctx->DriverFlags.NewLogicOp ? 0 : _NEW_COLOR);
    ctx->NewDriverState |= ctx->DriverFlags.NewLogicOp;
@@ -844,30 +908,7 @@ _mesa_LogicOp( GLenum opcode )
    if (MESA_VERBOSE & VERBOSE_API)
       _mesa_debug(ctx, "glLogicOp(%s)\n", _mesa_enum_to_string(opcode));
 
-   switch (opcode) {
-      case GL_CLEAR:
-      case GL_SET:
-      case GL_COPY:
-      case GL_COPY_INVERTED:
-      case GL_NOOP:
-      case GL_INVERT:
-      case GL_AND:
-      case GL_NAND:
-      case GL_OR:
-      case GL_NOR:
-      case GL_XOR:
-      case GL_EQUIV:
-      case GL_AND_REVERSE:
-      case GL_AND_INVERTED:
-      case GL_OR_REVERSE:
-      case GL_OR_INVERTED:
-	 break;
-      default:
-         _mesa_error( ctx, GL_INVALID_ENUM, "glLogicOp" );
-	 return;
-   }
-
-   logic_op(ctx, opcode);
+   logic_op(ctx, opcode, false);
 }
 
 
@@ -875,7 +916,7 @@ void GLAPIENTRY
 _mesa_LogicOp_no_error(GLenum opcode)
 {
    GET_CURRENT_CONTEXT(ctx);
-   logic_op(ctx, opcode);
+   logic_op(ctx, opcode, true);
 }
 
 
@@ -949,18 +990,18 @@ _mesa_ColorMask( GLboolean red, GLboolean green,
  * For GL_EXT_draw_buffers2 and GL3
  */
 void GLAPIENTRY
-_mesa_ColorMaski( GLuint buf, GLboolean red, GLboolean green,
-                        GLboolean blue, GLboolean alpha )
+_mesa_ColorMaski(GLuint buf, GLboolean red, GLboolean green,
+                 GLboolean blue, GLboolean alpha)
 {
    GLubyte tmp[4];
    GET_CURRENT_CONTEXT(ctx);
 
    if (MESA_VERBOSE & VERBOSE_API)
-      _mesa_debug(ctx, "glColorMaskIndexed %u %d %d %d %d\n",
+      _mesa_debug(ctx, "glColorMaski %u %d %d %d %d\n",
                   buf, red, green, blue, alpha);
 
    if (buf >= ctx->Const.MaxDrawBuffers) {
-      _mesa_error(ctx, GL_INVALID_VALUE, "glColorMaskIndexed(buf=%u)", buf);
+      _mesa_error(ctx, GL_INVALID_VALUE, "glColorMaski(buf=%u)", buf);
       return;
    }
 

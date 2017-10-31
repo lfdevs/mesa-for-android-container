@@ -7,6 +7,8 @@
 
 #include "graw_util.h"
 
+#include "util/macros.h"
+
 
 static int width = 300;
 static int height = 300;
@@ -44,7 +46,7 @@ static struct vertex vertices[] =
    }
 };
 
-#define NUM_VERTS (sizeof(vertices) / sizeof(vertices[0]))
+#define NUM_VERTS ARRAY_SIZE(vertices)
 
 
 static void

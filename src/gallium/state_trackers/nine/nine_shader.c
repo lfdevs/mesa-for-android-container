@@ -91,7 +91,7 @@ static inline const char *d3dsio_to_string(unsigned opcode);
    TGSI_SWIZZLE_##x, TGSI_SWIZZLE_##y, TGSI_SWIZZLE_##z, TGSI_SWIZZLE_##w
 
 #define NINE_CONSTANT_SRC(index) \
-   ureg_src_register(TGSI_FILE_CONSTANT, index)
+   ureg_src_dimension(ureg_src_register(TGSI_FILE_CONSTANT, index), 0)
 
 #define NINE_APPLY_SWIZZLE(src, s) \
    ureg_swizzle(src, NINE_SWIZZLE4(s, s, s, s))
@@ -1009,7 +1009,7 @@ tx_src_param(struct shader_translator *tx, const struct sm1_src_param *param)
                     src = ureg_src_dimension(src, 0);
                 }
             } else
-                src = ureg_src_register(TGSI_FILE_CONSTANT, param->idx);
+                src = NINE_CONSTANT_SRC(param->idx);
         }
         if (!IS_VS && tx->version.major < 2) {
             /* ps 1.X clamps constants */
@@ -1035,8 +1035,7 @@ tx_src_param(struct shader_translator *tx, const struct sm1_src_param *param)
                 src = ureg_src_register(TGSI_FILE_CONSTANT, param->idx);
                 src = ureg_src_dimension(src, 2);
             } else
-                src = ureg_src_register(TGSI_FILE_CONSTANT,
-                                        tx->info->const_i_base + param->idx);
+                src = NINE_CONSTANT_SRC(tx->info->const_i_base + param->idx);
         }
         break;
     case D3DSPR_CONSTBOOL:
@@ -1049,8 +1048,7 @@ tx_src_param(struct shader_translator *tx, const struct sm1_src_param *param)
                src = ureg_src_register(TGSI_FILE_CONSTANT, r);
                src = ureg_src_dimension(src, 3);
            } else
-               src = ureg_src_register(TGSI_FILE_CONSTANT,
-                                       tx->info->const_b_base + r);
+               src = NINE_CONSTANT_SRC(tx->info->const_b_base + r);
            src = ureg_swizzle(src, s, s, s, s);
         }
         break;
@@ -1588,6 +1586,29 @@ DECL_SPECIAL(ABS)
     return D3D_OK;
 }
 
+DECL_SPECIAL(XPD)
+{
+    struct ureg_program *ureg = tx->ureg;
+    struct ureg_dst dst = tx_dst_param(tx, &tx->insn.dst[0]);
+    struct ureg_src src0 = tx_src_param(tx, &tx->insn.src[0]);
+    struct ureg_src src1 = tx_src_param(tx, &tx->insn.src[1]);
+
+    ureg_MUL(ureg, ureg_writemask(dst, TGSI_WRITEMASK_XYZ),
+             ureg_swizzle(src0, TGSI_SWIZZLE_Y, TGSI_SWIZZLE_Z,
+                          TGSI_SWIZZLE_X, 0),
+             ureg_swizzle(src1, TGSI_SWIZZLE_Z, TGSI_SWIZZLE_X,
+                          TGSI_SWIZZLE_Y, 0));
+    ureg_MAD(ureg, ureg_writemask(dst, TGSI_WRITEMASK_XYZ),
+             ureg_swizzle(src0, TGSI_SWIZZLE_Z, TGSI_SWIZZLE_X,
+                          TGSI_SWIZZLE_Y, 0),
+             ureg_negate(ureg_swizzle(src1, TGSI_SWIZZLE_Y,
+                                      TGSI_SWIZZLE_Z, TGSI_SWIZZLE_X, 0)),
+             ureg_src(dst));
+    ureg_MOV(ureg, ureg_writemask(dst, TGSI_WRITEMASK_W),
+             ureg_imm1f(ureg, 1));
+    return D3D_OK;
+}
+
 DECL_SPECIAL(M4x4)
 {
     return NineTranslateInstruction_Mkxn(tx, 4, 4);
@@ -1761,13 +1782,17 @@ DECL_SPECIAL(LABEL)
 
 DECL_SPECIAL(SINCOS)
 {
+    struct ureg_program *ureg = tx->ureg;
     struct ureg_dst dst = tx_dst_param(tx, &tx->insn.dst[0]);
     struct ureg_src src = tx_src_param(tx, &tx->insn.src[0]);
 
     assert(!(dst.WriteMask & 0xc));
 
-    dst.WriteMask &= TGSI_WRITEMASK_XY; /* z undefined, w untouched */
-    ureg_SCS(tx->ureg, dst, src);
+    /* z undefined, w untouched */
+    ureg_COS(ureg, ureg_writemask(dst, TGSI_WRITEMASK_X),
+             ureg_scalar(src, TGSI_SWIZZLE_X));
+    ureg_SIN(ureg, ureg_writemask(dst, TGSI_WRITEMASK_Y),
+             ureg_scalar(src, TGSI_SWIZZLE_X));
     return D3D_OK;
 }
 
@@ -2915,13 +2940,13 @@ struct sm1_op_info inst_table[] =
     _OPI(DCL, NOP, V(0,0), V(3,0), V(0,0), V(3,0), 0, 0, SPECIAL(DCL)),
 
     _OPI(POW, POW, V(0,0), V(3,0), V(0,0), V(3,0), 1, 2, SPECIAL(POW)),
-    _OPI(CRS, XPD, V(0,0), V(3,0), V(0,0), V(3,0), 1, 2, NULL), /* XXX: .w */
+    _OPI(CRS, NOP, V(0,0), V(3,0), V(0,0), V(3,0), 1, 2, SPECIAL(XPD)), /* XXX: .w */
     _OPI(SGN, SSG, V(2,0), V(3,0), V(0,0), V(0,0), 1, 3, SPECIAL(SGN)), /* ignore src1,2 */
     _OPI(ABS, NOP, V(0,0), V(3,0), V(0,0), V(3,0), 1, 1, SPECIAL(ABS)),
     _OPI(NRM, NOP, V(0,0), V(3,0), V(0,0), V(3,0), 1, 1, SPECIAL(NRM)), /* NRM doesn't fit */
 
-    _OPI(SINCOS, SCS, V(2,0), V(2,1), V(2,0), V(2,1), 1, 3, SPECIAL(SINCOS)),
-    _OPI(SINCOS, SCS, V(3,0), V(3,0), V(3,0), V(3,0), 1, 1, SPECIAL(SINCOS)),
+    _OPI(SINCOS, NOP, V(2,0), V(2,1), V(2,0), V(2,1), 1, 3, SPECIAL(SINCOS)),
+    _OPI(SINCOS, NOP, V(3,0), V(3,0), V(3,0), V(3,0), 1, 1, SPECIAL(SINCOS)),
 
     /* More flow control */
     _OPI(REP,    NOP,    V(2,0), V(3,0), V(2,1), V(3,0), 0, 1, SPECIAL(REP)),
@@ -2931,7 +2956,7 @@ struct sm1_op_info inst_table[] =
     _OPI(ELSE,   ELSE,   V(2,0), V(3,0), V(2,1), V(3,0), 0, 0, SPECIAL(ELSE)),
     _OPI(ENDIF,  ENDIF,  V(2,0), V(3,0), V(2,1), V(3,0), 0, 0, SPECIAL(ENDIF)),
     _OPI(BREAK,  BRK,    V(2,1), V(3,0), V(2,1), V(3,0), 0, 0, NULL),
-    _OPI(BREAKC, BREAKC, V(2,1), V(3,0), V(2,1), V(3,0), 0, 2, SPECIAL(BREAKC)),
+    _OPI(BREAKC, NOP,    V(2,1), V(3,0), V(2,1), V(3,0), 0, 2, SPECIAL(BREAKC)),
     /* we don't write to the address register, but a normal register (copied
      * when needed to the address register), thus we don't use ARR */
     _OPI(MOVA, MOV, V(2,0), V(3,0), V(0,0), V(0,0), 1, 1, NULL),

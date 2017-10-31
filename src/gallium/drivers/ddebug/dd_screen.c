@@ -197,6 +197,22 @@ dd_screen_get_driver_query_group_info(struct pipe_screen *_screen,
 }
 
 
+static void
+dd_screen_get_driver_uuid(struct pipe_screen *_screen, char *uuid)
+{
+   struct pipe_screen *screen = dd_screen(_screen)->screen;
+
+   screen->get_driver_uuid(screen, uuid);
+}
+
+static void
+dd_screen_get_device_uuid(struct pipe_screen *_screen, char *uuid)
+{
+   struct pipe_screen *screen = dd_screen(_screen)->screen;
+
+   screen->get_device_uuid(screen, uuid);
+}
+
 /********************************************************************
  * resource
  */
@@ -245,6 +261,22 @@ dd_screen_resource_from_user_memory(struct pipe_screen *_screen,
    return res;
 }
 
+static struct pipe_resource *
+dd_screen_resource_from_memobj(struct pipe_screen *_screen,
+                               const struct pipe_resource *templ,
+                               struct pipe_memory_object *memobj,
+                               uint64_t offset)
+{
+   struct pipe_screen *screen = dd_screen(_screen)->screen;
+   struct pipe_resource *res =
+      screen->resource_from_memobj(screen, templ, memobj, offset);
+
+   if (!res)
+      return NULL;
+   res->screen = _screen;
+   return res;
+}
+
 static void
 dd_screen_resource_changed(struct pipe_screen *_screen,
                            struct pipe_resource *res)
@@ -276,6 +308,16 @@ dd_screen_resource_get_handle(struct pipe_screen *_screen,
    return screen->resource_get_handle(screen, pipe, resource, handle, usage);
 }
 
+static bool
+dd_screen_check_resource_capability(struct pipe_screen *_screen,
+                                    struct pipe_resource *resource,
+                                    unsigned bind)
+{
+   struct pipe_screen *screen = dd_screen(_screen)->screen;
+
+   return screen->check_resource_capability(screen, resource, bind);
+}
+
 
 /********************************************************************
  * fence
@@ -303,7 +345,28 @@ dd_screen_fence_finish(struct pipe_screen *_screen,
    return screen->fence_finish(screen, ctx, fence, timeout);
 }
 
+/********************************************************************
+ * memobj
+ */
 
+static struct pipe_memory_object *
+dd_screen_memobj_create_from_handle(struct pipe_screen *_screen,
+                                    struct winsys_handle *handle,
+                                    bool dedicated)
+{
+   struct pipe_screen *screen = dd_screen(_screen)->screen;
+
+   return screen->memobj_create_from_handle(screen, handle, dedicated);
+}
+
+static void
+dd_screen_memobj_destroy(struct pipe_screen *_screen,
+                         struct pipe_memory_object *memobj)
+{
+   struct pipe_screen *screen = dd_screen(_screen)->screen;
+
+   screen->memobj_destroy(screen, memobj);
+}
 /********************************************************************
  * screen
  */
@@ -412,16 +475,22 @@ ddebug_screen_create(struct pipe_screen *screen)
    SCR_INIT(can_create_resource);
    dscreen->base.resource_create = dd_screen_resource_create;
    dscreen->base.resource_from_handle = dd_screen_resource_from_handle;
+   SCR_INIT(resource_from_memobj);
    SCR_INIT(resource_from_user_memory);
+   SCR_INIT(check_resource_capability);
    dscreen->base.resource_get_handle = dd_screen_resource_get_handle;
    SCR_INIT(resource_changed);
    dscreen->base.resource_destroy = dd_screen_resource_destroy;
    SCR_INIT(flush_frontbuffer);
    SCR_INIT(fence_reference);
    SCR_INIT(fence_finish);
+   SCR_INIT(memobj_create_from_handle);
+   SCR_INIT(memobj_destroy);
    SCR_INIT(get_driver_query_info);
    SCR_INIT(get_driver_query_group_info);
    SCR_INIT(get_compiler_options);
+   SCR_INIT(get_driver_uuid);
+   SCR_INIT(get_device_uuid);
 
 #undef SCR_INIT
 

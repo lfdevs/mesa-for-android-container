@@ -37,6 +37,7 @@
 #include "draw/draw_vs.h"
 #include "draw/draw_llvm.h"
 #include "gallivm/lp_bld_init.h"
+#include "gallivm/lp_bld_debug.h"
 
 
 struct llvm_middle_end {
@@ -71,6 +72,7 @@ static void
 llvm_middle_end_prepare_gs(struct llvm_middle_end *fpme)
 {
    struct draw_context *draw = fpme->draw;
+   struct draw_llvm *llvm = fpme->llvm;
    struct draw_geometry_shader *gs = draw->gs.geometry_shader;
    struct draw_gs_llvm_variant_key *key;
    struct draw_gs_llvm_variant *variant = NULL;
@@ -79,7 +81,7 @@ llvm_middle_end_prepare_gs(struct llvm_middle_end *fpme)
    char store[DRAW_GS_LLVM_MAX_VARIANT_KEY_SIZE];
    unsigned i;
 
-   key = draw_gs_llvm_make_variant_key(fpme->llvm, store);
+   key = draw_gs_llvm_make_variant_key(llvm, store);
 
    /* Search shader's list of variants for the key */
    li = first_elem(&shader->variants);
@@ -93,38 +95,42 @@ llvm_middle_end_prepare_gs(struct llvm_middle_end *fpme)
 
    if (variant) {
       /* found the variant, move to head of global list (for LRU) */
-      move_to_head(&fpme->llvm->gs_variants_list,
-                   &variant->list_item_global);
+      move_to_head(&llvm->gs_variants_list, &variant->list_item_global);
    }
    else {
       /* Need to create new variant */
 
       /* First check if we've created too many variants.  If so, free
-       * 25% of the LRU to avoid using too much memory.
+       * 3.125% of the LRU to avoid using too much memory.
        */
-      if (fpme->llvm->nr_gs_variants >= DRAW_MAX_SHADER_VARIANTS) {
+      if (llvm->nr_gs_variants >= DRAW_MAX_SHADER_VARIANTS) {
+         if (gallivm_debug & GALLIVM_DEBUG_PERF) {
+            debug_printf("Evicting GS: %u gs variants,\t%u total variants\n",
+                      shader->variants_cached, llvm->nr_gs_variants);
+         }
+
          /*
           * XXX: should we flush here ?
           */
-         for (i = 0; i < DRAW_MAX_SHADER_VARIANTS / 4; i++) {
+         for (i = 0; i < DRAW_MAX_SHADER_VARIANTS / 32; i++) {
             struct draw_gs_llvm_variant_list_item *item;
-            if (is_empty_list(&fpme->llvm->gs_variants_list)) {
+            if (is_empty_list(&llvm->gs_variants_list)) {
                break;
             }
-            item = last_elem(&fpme->llvm->gs_variants_list);
+            item = last_elem(&llvm->gs_variants_list);
             assert(item);
             assert(item->base);
             draw_gs_llvm_destroy_variant(item->base);
          }
       }
 
-      variant = draw_gs_llvm_create_variant(fpme->llvm, gs->info.num_outputs, key);
+      variant = draw_gs_llvm_create_variant(llvm, gs->info.num_outputs, key);
 
       if (variant) {
          insert_at_head(&shader->variants, &variant->list_item_local);
-         insert_at_head(&fpme->llvm->gs_variants_list,
+         insert_at_head(&llvm->gs_variants_list,
                         &variant->list_item_global);
-         fpme->llvm->nr_gs_variants++;
+         llvm->nr_gs_variants++;
          shader->variants_cached++;
       }
    }
@@ -145,6 +151,7 @@ llvm_middle_end_prepare( struct draw_pt_middle_end *middle,
 {
    struct llvm_middle_end *fpme = llvm_middle_end(middle);
    struct draw_context *draw = fpme->draw;
+   struct draw_llvm *llvm = fpme->llvm;
    struct draw_vertex_shader *vs = draw->vs.vertex_shader;
    struct draw_geometry_shader *gs = draw->gs.geometry_shader;
    const unsigned out_prim = gs ? gs->output_primitive :
@@ -203,7 +210,7 @@ llvm_middle_end_prepare( struct draw_pt_middle_end *middle,
       char store[DRAW_LLVM_MAX_VARIANT_KEY_SIZE];
       unsigned i;
 
-      key = draw_llvm_make_variant_key(fpme->llvm, store);
+      key = draw_llvm_make_variant_key(llvm, store);
 
       /* Search shader's list of variants for the key */
       li = first_elem(&shader->variants);
@@ -217,38 +224,42 @@ llvm_middle_end_prepare( struct draw_pt_middle_end *middle,
 
       if (variant) {
          /* found the variant, move to head of global list (for LRU) */
-         move_to_head(&fpme->llvm->vs_variants_list,
-                      &variant->list_item_global);
+         move_to_head(&llvm->vs_variants_list, &variant->list_item_global);
       }
       else {
          /* Need to create new variant */
 
          /* First check if we've created too many variants.  If so, free
-          * 25% of the LRU to avoid using too much memory.
+          * 3.125% of the LRU to avoid using too much memory.
           */
-         if (fpme->llvm->nr_variants >= DRAW_MAX_SHADER_VARIANTS) {
+         if (llvm->nr_variants >= DRAW_MAX_SHADER_VARIANTS) {
+            if (gallivm_debug & GALLIVM_DEBUG_PERF) {
+               debug_printf("Evicting VS: %u vs variants,\t%u total variants\n",
+                         shader->variants_cached, llvm->nr_variants);
+            }
+
             /*
              * XXX: should we flush here ?
              */
-            for (i = 0; i < DRAW_MAX_SHADER_VARIANTS / 4; i++) {
+            for (i = 0; i < DRAW_MAX_SHADER_VARIANTS / 32; i++) {
                struct draw_llvm_variant_list_item *item;
-               if (is_empty_list(&fpme->llvm->vs_variants_list)) {
+               if (is_empty_list(&llvm->vs_variants_list)) {
                   break;
                }
-               item = last_elem(&fpme->llvm->vs_variants_list);
+               item = last_elem(&llvm->vs_variants_list);
                assert(item);
                assert(item->base);
                draw_llvm_destroy_variant(item->base);
             }
          }
 
-         variant = draw_llvm_create_variant(fpme->llvm, nr, key);
+         variant = draw_llvm_create_variant(llvm, nr, key);
 
          if (variant) {
             insert_at_head(&shader->variants, &variant->list_item_local);
-            insert_at_head(&fpme->llvm->vs_variants_list,
+            insert_at_head(&llvm->vs_variants_list,
                            &variant->list_item_global);
-            fpme->llvm->nr_variants++;
+            llvm->nr_variants++;
             shader->variants_cached++;
          }
       }

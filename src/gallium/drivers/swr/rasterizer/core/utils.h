@@ -53,6 +53,14 @@ struct simd16BBox
 };
 #endif
 
+template<typename SIMD_T>
+struct SIMDBBOX_T
+{
+    typename SIMD_T::Integer            ymin;
+    typename SIMD_T::Integer            ymax;
+    typename SIMD_T::Integer            xmin;
+    typename SIMD_T::Integer            xmax;
+};
 
 // helper function to unroll loops
 template<int Begin, int End, int Step = 1>
@@ -120,6 +128,16 @@ uint32_t ComputeCRC(uint32_t crc, const void *pData, uint32_t size)
     }
 
     return crc;
+}
+
+//////////////////////////////////////////////////////////////////////////
+/// Check specified bit within a data word
+//////////////////////////////////////////////////////////////////////////
+template <typename T>
+INLINE
+static bool CheckBit(T word, uint32_t bit)
+{
+    return 0 != (word & (T(1) << bit));
 }
 
 //////////////////////////////////////////////////////////////////////////

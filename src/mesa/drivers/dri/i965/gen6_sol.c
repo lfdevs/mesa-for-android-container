@@ -55,7 +55,7 @@ gen6_update_sol_surfaces(struct brw_context *brw)
          unsigned buffer_offset =
             xfb_obj->Offset[buffer] / 4 +
             linked_xfb_info->Outputs[i].DstOffset;
-         if (brw->geometry_program) {
+         if (brw->programs[MESA_SHADER_GEOMETRY]) {
             brw_update_sol_surface(
                brw, xfb_obj->Buffers[buffer],
                &brw->gs.base.surf_offset[surf_index],
@@ -69,7 +69,7 @@ gen6_update_sol_surfaces(struct brw_context *brw)
                linked_xfb_info->Buffers[buffer].Stride, buffer_offset);
          }
       } else {
-         if (!brw->geometry_program)
+         if (!brw->programs[MESA_SHADER_GEOMETRY])
             brw->ff_gs.surf_offset[surf_index] = 0;
          else
             brw->gs.base.surf_offset[surf_index] = 0;
@@ -103,14 +103,15 @@ brw_gs_upload_binding_table(struct brw_context *brw)
 
    /* We have two scenarios here:
     * 1) We are using a geometry shader only to implement transform feedback
-    *    for a vertex shader (brw->geometry_program == NULL). In this case, we
-    *    only need surfaces for transform feedback in the GS stage.
+    *    for a vertex shader (brw->programs[MESA_SHADER_GEOMETRY] == NULL).
+    *    In this case, we only need surfaces for transform feedback in the
+    *    GS stage.
     * 2) We have a user-provided geometry shader. In this case we may need
     *    surfaces for transform feedback and/or other stuff, like textures,
     *    in the GS stage.
     */
 
-   if (!brw->geometry_program) {
+   if (!brw->programs[MESA_SHADER_GEOMETRY]) {
       /* BRW_NEW_VERTEX_PROGRAM */
       prog = ctx->_Shader->CurrentProgram[MESA_SHADER_VERTEX];
       if (prog) {
@@ -280,6 +281,7 @@ void
 brw_save_primitives_written_counters(struct brw_context *brw,
                                      struct brw_transform_feedback_object *obj)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    const struct gl_context *ctx = &brw->ctx;
    const int streams = ctx->Const.MaxVertexStreams;
 
@@ -295,7 +297,7 @@ brw_save_primitives_written_counters(struct brw_context *brw,
    brw_emit_mi_flush(brw);
 
    /* Emit MI_STORE_REGISTER_MEM commands to write the values. */
-   if (brw->gen >= 7) {
+   if (devinfo->gen >= 7) {
       for (int i = 0; i < streams; i++) {
          int offset = (obj->prim_count_buffer_index + i) * sizeof(uint64_t);
          brw_store_register_mem64(brw, obj->prim_count_bo,
@@ -384,6 +386,7 @@ brw_begin_transform_feedback(struct gl_context *ctx, GLenum mode,
 			     struct gl_transform_feedback_object *obj)
 {
    struct brw_context *brw = brw_context(ctx);
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    const struct gl_program *prog;
    const struct gl_transform_feedback_info *linked_xfb_info;
    struct gl_transform_feedback_object *xfb_obj =
@@ -391,7 +394,7 @@ brw_begin_transform_feedback(struct gl_context *ctx, GLenum mode,
    struct brw_transform_feedback_object *brw_obj =
       (struct brw_transform_feedback_object *) xfb_obj;
 
-   assert(brw->gen == 6);
+   assert(devinfo->gen == 6);
 
    if (ctx->_Shader->CurrentProgram[MESA_SHADER_GEOMETRY]) {
       /* BRW_NEW_GEOMETRY_PROGRAM */

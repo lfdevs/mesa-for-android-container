@@ -5,6 +5,7 @@ include $(top_srcdir)/src/gallium/Automake.inc
 AM_CFLAGS = \
 	-I$(top_srcdir)/src/loader \
 	-I$(top_srcdir)/src/gallium/winsys \
+	-I$(top_builddir)/src/util \
 	$(GALLIUM_PIPE_LOADER_DEFINES) \
 	$(GALLIUM_CFLAGS) \
 	$(VISIBILITY_CFLAGS)
@@ -40,9 +41,11 @@ libpipe_loader_dynamic_la_SOURCES += \
 endif
 
 libpipe_loader_static_la_LIBADD = \
-	$(top_builddir)/src/loader/libloader.la
+	$(top_builddir)/src/loader/libloader.la \
+	$(top_builddir)/src/util/libxmlconfig.la
 
 libpipe_loader_dynamic_la_LIBADD = \
-	$(top_builddir)/src/loader/libloader.la
+	$(top_builddir)/src/loader/libloader.la \
+	$(top_builddir)/src/util/libxmlconfig.la
 
 EXTRA_DIST = SConscript

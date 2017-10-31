@@ -94,9 +94,8 @@ static const struct vc4_format vc4_format_table[] = {
         FORMAT(B4G4R4A4_UNORM, NO, RGBA4444, SWIZ(Y, Z, W, X)),
         FORMAT(B4G4R4X4_UNORM, NO, RGBA4444, SWIZ(Y, Z, W, 1)),
 
-        /* It looks like 5551 in the hardware is the other way around from
-         * gallium.
-         */
+        FORMAT(A1B5G5R5_UNORM, NO, RGBA5551, SWIZ(X, Y, Z, W)),
+        FORMAT(X1B5G5R5_UNORM, NO, RGBA5551, SWIZ(X, Y, Z, 1)),
 
         FORMAT(A8_UNORM, NO, ALPHA, SWIZ(0, 0, 0, W)),
         FORMAT(L8_UNORM, NO, ALPHA, SWIZ(W, W, W, 1)),

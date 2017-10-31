@@ -67,6 +67,7 @@ intel_update_max_level(struct intel_texture_object *intelObj,
 void
 intel_finalize_mipmap_tree(struct brw_context *brw, GLuint unit)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    struct gl_context *ctx = &brw->ctx;
    struct gl_texture_object *tObj = ctx->Texture.Unit[unit]._Current;
    struct intel_texture_object *intelObj = intel_texture_object(tObj);
@@ -111,7 +112,7 @@ intel_finalize_mipmap_tree(struct brw_context *brw, GLuint unit)
     *
     * FINISHME: Avoid doing this.
     */
-   assert(!tObj->Immutable || brw->gen < 6);
+   assert(!tObj->Immutable || devinfo->gen < 6);
 
    firstImage = intel_texture_image(tObj->Image[0][tObj->BaseLevel]);
 
@@ -161,10 +162,8 @@ intel_finalize_mipmap_tree(struct brw_context *brw, GLuint unit)
  	 if (intelImage == NULL)
 		 break;
 
-         if (intelObj->mt != intelImage->mt) {
-            intel_miptree_copy_teximage(brw, intelImage, intelObj->mt,
-                                        false /* invalidate */);
-         }
+         if (intelObj->mt != intelImage->mt)
+            intel_miptree_copy_teximage(brw, intelImage, intelObj->mt);
 
          /* After we're done, we'd better agree that our layout is
           * appropriate, or we'll end up hitting this function again on the

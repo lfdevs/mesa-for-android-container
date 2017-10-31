@@ -57,7 +57,7 @@ extern uint64_t INTEL_DEBUG;
 #define DEBUG_VERTS               (1ull << 13)
 #define DEBUG_DRI                 (1ull << 14)
 #define DEBUG_SF                  (1ull << 15)
-/* Hole - feel free to reuse      (1ull << 16) */
+#define DEBUG_SUBMIT              (1ull << 16)
 #define DEBUG_WM                  (1ull << 17)
 #define DEBUG_URB                 (1ull << 18)
 #define DEBUG_VS                  (1ull << 19)
@@ -82,6 +82,7 @@ extern uint64_t INTEL_DEBUG;
 #define DEBUG_NO_RBC              (1ull << 38)
 #define DEBUG_NO_HIZ              (1ull << 39)
 #define DEBUG_COLOR               (1ull << 40)
+#define DEBUG_REEMIT              (1ull << 41)
 
 #ifdef HAVE_ANDROID_PLATFORM
 #define LOG_TAG "INTEL-MESA"

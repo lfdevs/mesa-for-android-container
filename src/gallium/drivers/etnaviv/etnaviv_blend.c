@@ -27,7 +27,9 @@
 #include "etnaviv_blend.h"
 
 #include "etnaviv_context.h"
+#include "etnaviv_screen.h"
 #include "etnaviv_translate.h"
+#include "hw/common.xml.h"
 #include "pipe/p_defines.h"
 #include "util/u_memory.h"
 
@@ -35,8 +37,10 @@ void *
 etna_blend_state_create(struct pipe_context *pctx,
                         const struct pipe_blend_state *so)
 {
+   struct etna_context *ctx = etna_context(pctx);
    const struct pipe_rt_blend_state *rt0 = &so->rt[0];
    struct etna_blend_state *co = CALLOC_STRUCT(etna_blend_state);
+   bool alpha_enable, logicop_enable;
 
    if (!co)
       return NULL;
@@ -48,7 +52,7 @@ etna_blend_state_create(struct pipe_context *pctx,
     * - NOT source factor is ONE and destination factor ZERO for both rgb and
     *   alpha (which would mean that blending is effectively disabled)
     */
-   co->enable = rt0->blend_enable &&
+   alpha_enable = rt0->blend_enable &&
                  !(rt0->rgb_src_factor == PIPE_BLENDFACTOR_ONE &&
                    rt0->rgb_dst_factor == PIPE_BLENDFACTOR_ZERO &&
                    rt0->alpha_src_factor == PIPE_BLENDFACTOR_ONE &&
@@ -59,11 +63,11 @@ etna_blend_state_create(struct pipe_context *pctx,
     * - NOT source factor is equal to destination factor for both rgb abd
     *   alpha (which would effectively that mean alpha is not separate)
     */
-   bool separate_alpha = co->enable &&
+   bool separate_alpha = alpha_enable &&
                          !(rt0->rgb_src_factor == rt0->alpha_src_factor &&
                            rt0->rgb_dst_factor == rt0->alpha_dst_factor);
 
-   if (co->enable) {
+   if (alpha_enable) {
       co->PE_ALPHA_CONFIG =
          VIVS_PE_ALPHA_CONFIG_BLEND_ENABLE_COLOR |
          COND(separate_alpha, VIVS_PE_ALPHA_CONFIG_BLEND_SEPARATE_ALPHA) |
@@ -77,9 +81,14 @@ etna_blend_state_create(struct pipe_context *pctx,
       co->PE_ALPHA_CONFIG = 0;
    }
 
+   logicop_enable = so->logicop_enable &&
+                    VIV_FEATURE(ctx->screen, chipMinorFeatures2, LOGIC_OP);
+
    co->PE_LOGIC_OP =
-         VIVS_PE_LOGIC_OP_OP(so->logicop_enable ? so->logicop_func : LOGIC_OP_COPY) |
+         VIVS_PE_LOGIC_OP_OP(logicop_enable ? so->logicop_func : LOGIC_OP_COPY) |
          0x000E4000 /* ??? */;
+
+   co->fo_allowed = !alpha_enable && !logicop_enable;
 
    /* independent_blend_enable not needed: only one rt supported */
    /* XXX alpha_to_coverage / alpha_to_one? */
@@ -122,7 +131,8 @@ etna_update_blend(struct etna_context *ctx)
     * - The color mask is 1111
     * - No blending is used
     */
-   bool full_overwrite = (rt0->colormask == 0xf) && !blend->enable;
+   bool full_overwrite = (rt0->colormask == 0xf) &&
+                         blend->fo_allowed;
    blend->PE_COLOR_FORMAT =
             VIVS_PE_COLOR_FORMAT_COMPONENTS(colormask) |
             COND(full_overwrite, VIVS_PE_COLOR_FORMAT_OVERWRITE);

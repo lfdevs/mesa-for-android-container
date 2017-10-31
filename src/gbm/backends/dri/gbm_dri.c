@@ -48,6 +48,7 @@
 
 #include "gbmint.h"
 #include "loader.h"
+#include "util/debug.h"
 #include "util/macros.h"
 
 /* For importing wl_buffer */
@@ -636,6 +637,30 @@ gbm_dri_is_format_supported(struct gbm_device *gbm,
       return 0;
 
    return (count > 0);
+}
+
+static int
+gbm_dri_get_format_modifier_plane_count(struct gbm_device *gbm,
+                                        uint32_t format,
+                                        uint64_t modifier)
+{
+   struct gbm_dri_device *dri = gbm_dri_device(gbm);
+   uint64_t plane_count;
+
+   if (dri->image->base.version < 16 ||
+       !dri->image->queryDmaBufFormatModifierAttribs)
+      return -1;
+
+   format = gbm_format_canonicalize(format);
+   if (gbm_format_to_dri_format(format) == 0)
+      return -1;
+
+   if (!dri->image->queryDmaBufFormatModifierAttribs(
+         dri->screen, format, modifier,
+         __DRI_IMAGE_FORMAT_MODIFIER_ATTRIB_PLANE_COUNT, &plane_count))
+      return -1;
+
+   return plane_count;
 }
 
 static int
@@ -1336,7 +1361,8 @@ static struct gbm_device *
 dri_device_create(int fd)
 {
    struct gbm_dri_device *dri;
-   int ret, force_sw;
+   int ret;
+   bool force_sw;
 
    dri = calloc(1, sizeof *dri);
    if (!dri)
@@ -1348,6 +1374,8 @@ dri_device_create(int fd)
    dri->base.bo_map = gbm_dri_bo_map;
    dri->base.bo_unmap = gbm_dri_bo_unmap;
    dri->base.is_format_supported = gbm_dri_is_format_supported;
+   dri->base.get_format_modifier_plane_count =
+      gbm_dri_get_format_modifier_plane_count;
    dri->base.bo_write = gbm_dri_bo_write;
    dri->base.bo_get_fd = gbm_dri_bo_get_fd;
    dri->base.bo_get_planes = gbm_dri_bo_get_planes;
@@ -1364,7 +1392,7 @@ dri_device_create(int fd)
 
    mtx_init(&dri->mutex, mtx_plain);
 
-   force_sw = getenv("GBM_ALWAYS_SOFTWARE") != NULL;
+   force_sw = env_var_as_boolean("GBM_ALWAYS_SOFTWARE", false);
    if (!force_sw) {
       ret = dri_screen_create(dri);
       if (ret)

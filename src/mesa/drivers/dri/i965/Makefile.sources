@@ -41,7 +41,6 @@ i965_FILES = \
 	brw_queryobj.c \
 	brw_reset.c \
 	brw_sf.c \
-	brw_state_batch.c \
 	brw_state.h \
 	brw_state_upload.c \
 	brw_structs.h \
@@ -69,15 +68,12 @@ i965_FILES = \
 	gen6_sampler_state.c \
 	gen6_sol.c \
 	gen6_urb.c \
-	gen7_cs_state.c \
 	gen7_l3_state.c \
 	gen7_misc_state.c \
 	gen7_sol_state.c \
 	gen7_urb.c \
-	gen7_wm_surface_state.c \
 	gen8_depth_state.c \
 	gen8_multisample_state.c \
-	gen8_surface_state.c \
 	hsw_queryobj.c \
 	hsw_sol.c \
 	intel_batchbuffer.c \
@@ -109,7 +105,6 @@ i965_FILES = \
 	intel_tex.h \
 	intel_tex_image.c \
 	intel_tex_obj.h \
-	intel_tex_subimage.c \
 	intel_tex_validate.c \
 	intel_tiled_memcpy.c \
 	intel_tiled_memcpy.h \

@@ -123,6 +123,7 @@
 #include "shared.h"
 #include "shaderobj.h"
 #include "shaderimage.h"
+#include "util/debug.h"
 #include "util/disk_cache.h"
 #include "util/strtod.h"
 #include "stencil.h"
@@ -138,6 +139,7 @@
 #include "math/m_matrix.h"
 #include "main/dispatch.h" /* for _gloffset_COUNT */
 #include "macros.h"
+#include "git_sha1.h"
 
 #ifdef USE_SPARC_ASM
 #include "sparc/sparc.h"
@@ -398,10 +400,13 @@ one_time_init( struct gl_context *ctx )
 
       atexit(one_time_fini);
 
-#if defined(DEBUG) && defined(__DATE__) && defined(__TIME__)
+#if defined(DEBUG)
       if (MESA_VERBOSE != 0) {
-         _mesa_debug(ctx, "Mesa %s DEBUG build %s %s\n",
-                     PACKAGE_VERSION, __DATE__, __TIME__);
+         _mesa_debug(ctx, "Mesa " PACKAGE_VERSION " DEBUG build"
+#ifdef MESA_GIT_SHA1
+                     " (" MESA_GIT_SHA1 ")"
+#endif
+                     "\n");
       }
 #endif
    }
@@ -861,9 +866,9 @@ init_attrib_groups(struct gl_context *ctx)
    if (!_mesa_init_texture( ctx ))
       return GL_FALSE;
 
-   _mesa_init_texture_s3tc( ctx );
-
    /* Miscellaneous */
+   ctx->TileRasterOrderIncreasingX = GL_TRUE;
+   ctx->TileRasterOrderIncreasingY = GL_TRUE;
    ctx->NewState = _NEW_ALL;
    ctx->NewDriverState = ~0;
    ctx->ErrorValue = GL_NO_ERROR;
@@ -1213,7 +1218,7 @@ _mesa_initialize_context(struct gl_context *ctx,
    /* KHR_no_error is likely to crash, overflow memory, etc if an application
     * has errors so don't enable it for setuid processes.
     */
-   if (getenv("MESA_NO_ERROR")) {
+   if (env_var_as_boolean("MESA_NO_ERROR", false)) {
 #if !defined(_WIN32)
       if (geteuid() == getuid())
 #endif
@@ -1541,8 +1546,8 @@ check_compatible(const struct gl_context *ctx,
  * Check if the viewport/scissor size has not yet been initialized.
  * Initialize the size if the given width and height are non-zero.
  */
-void
-_mesa_check_init_viewport(struct gl_context *ctx, GLuint width, GLuint height)
+static void
+check_init_viewport(struct gl_context *ctx, GLuint width, GLuint height)
 {
    if (!ctx->ViewportInitialized && width > 0 && height > 0) {
       unsigned i;
@@ -1607,6 +1612,23 @@ handle_first_current(struct gl_context *ctx)
 
          _mesa_readbuffer(ctx, ctx->ReadBuffer, buffer, bufferIndex);
       }
+   }
+
+   /* Determine if generic vertex attribute 0 aliases the conventional
+    * glVertex position.
+    */
+   {
+      const bool is_forward_compatible_context =
+         ctx->Const.ContextFlags & GL_CONTEXT_FLAG_FORWARD_COMPATIBLE_BIT;
+
+      /* In OpenGL 3.1 attribute 0 becomes non-magic, just like in OpenGL ES
+       * 2.0.  Note that we cannot just check for API_OPENGL_COMPAT here because
+       * that will erroneously allow this usage in a 3.0 forward-compatible
+       * context too.
+       */
+      ctx->_AttribZeroAliasesVertex = (ctx->API == API_OPENGLES
+                                       || (ctx->API == API_OPENGL_COMPAT
+                                           && !is_forward_compatible_context));
    }
 
    /* We can use this to help debug user's problems.  Tell them to set
@@ -1726,8 +1748,7 @@ _mesa_make_current( struct gl_context *newCtx,
           */
          newCtx->NewState |= _NEW_BUFFERS;
 
-         _mesa_check_init_viewport(newCtx,
-                                   drawBuffer->Width, drawBuffer->Height);
+         check_init_viewport(newCtx, drawBuffer->Width, drawBuffer->Height);
       }
 
       if (newCtx->FirstTimeCurrent) {

@@ -188,6 +188,12 @@ struct tgsi_array_info
    struct tgsi_declaration_range range;
 };
 
+struct tgsi_tessctrl_info
+{
+   /** Whether all codepaths write tess factors in all invocations. */
+   bool tessfactors_are_def_in_all_invocs;
+};
+
 extern void
 tgsi_scan_shader(const struct tgsi_token *tokens,
                  struct tgsi_shader_info *info);
@@ -197,6 +203,11 @@ tgsi_scan_arrays(const struct tgsi_token *tokens,
                  unsigned file,
                  unsigned max_array_id,
                  struct tgsi_array_info *arrays);
+
+void
+tgsi_scan_tess_ctrl(const struct tgsi_token *tokens,
+                    const struct tgsi_shader_info *info,
+                    struct tgsi_tessctrl_info *out);
 
 static inline bool
 tgsi_is_bindless_image_file(unsigned file)

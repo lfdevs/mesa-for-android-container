@@ -181,7 +181,7 @@ vl_dri2_screen_texture_from_drawable(struct vl_screen *vscreen, void *drawable)
    struct vl_dri_screen *scrn = (struct vl_dri_screen *)vscreen;
 
    struct winsys_handle dri2_handle;
-   struct pipe_resource template, *tex;
+   struct pipe_resource templ, *tex;
 
    xcb_dri2_get_buffers_reply_t *reply;
    xcb_dri2_dri2_buffer_t *buffers, *back_left;
@@ -235,19 +235,19 @@ vl_dri2_screen_texture_from_drawable(struct vl_screen *vscreen, void *drawable)
    dri2_handle.handle = back_left->name;
    dri2_handle.stride = back_left->pitch;
 
-   memset(&template, 0, sizeof(template));
-   template.target = PIPE_TEXTURE_2D;
-   template.format = PIPE_FORMAT_B8G8R8X8_UNORM;
-   template.last_level = 0;
-   template.width0 = reply->width;
-   template.height0 = reply->height;
-   template.depth0 = 1;
-   template.array_size = 1;
-   template.usage = PIPE_USAGE_DEFAULT;
-   template.bind = PIPE_BIND_RENDER_TARGET;
-   template.flags = 0;
+   memset(&templ, 0, sizeof(templ));
+   templ.target = PIPE_TEXTURE_2D;
+   templ.format = PIPE_FORMAT_B8G8R8X8_UNORM;
+   templ.last_level = 0;
+   templ.width0 = reply->width;
+   templ.height0 = reply->height;
+   templ.depth0 = 1;
+   templ.array_size = 1;
+   templ.usage = PIPE_USAGE_DEFAULT;
+   templ.bind = PIPE_BIND_RENDER_TARGET;
+   templ.flags = 0;
 
-   tex = scrn->base.pscreen->resource_from_handle(scrn->base.pscreen, &template,
+   tex = scrn->base.pscreen->resource_from_handle(scrn->base.pscreen, &templ,
                                                   &dri2_handle,
                                                   PIPE_HANDLE_USAGE_READ_WRITE);
    free(reply);
@@ -406,7 +406,7 @@ vl_dri2_screen_create(Display *display, int screen)
       goto free_authenticate;
 
    if (pipe_loader_drm_probe_fd(&scrn->base.dev, fd))
-      scrn->base.pscreen = pipe_loader_create_screen(scrn->base.dev, 0);
+      scrn->base.pscreen = pipe_loader_create_screen(scrn->base.dev);
 
    if (!scrn->base.pscreen)
       goto release_pipe;

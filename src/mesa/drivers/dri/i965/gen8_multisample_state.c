@@ -28,22 +28,6 @@
 #include "brw_multisample_state.h"
 
 /**
- * 3DSTATE_MULTISAMPLE
- */
-void
-gen8_emit_3dstate_multisample(struct brw_context *brw, unsigned num_samples)
-{
-   assert(num_samples <= 16);
-
-   unsigned log2_samples = ffs(MAX2(num_samples, 1)) - 1;
-
-   BEGIN_BATCH(2);
-   OUT_BATCH(GEN8_3DSTATE_MULTISAMPLE << 16 | (2 - 2));
-   OUT_BATCH(MS_PIXEL_LOCATION_CENTER | log2_samples << 1);
-   ADVANCE_BATCH();
-}
-
-/**
  * 3DSTATE_SAMPLE_PATTERN
  */
 void

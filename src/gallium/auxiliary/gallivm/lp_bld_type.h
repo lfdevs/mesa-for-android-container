@@ -59,7 +59,7 @@ extern unsigned lp_native_vector_width;
  * Should only be used when lp_native_vector_width isn't available,
  * i.e. sizing/alignment of non-malloced variables.
  */
-#define LP_MAX_VECTOR_WIDTH 256
+#define LP_MAX_VECTOR_WIDTH 512
 
 /**
  * Minimum vector alignment for static variable alignment
@@ -67,7 +67,7 @@ extern unsigned lp_native_vector_width;
  * It should always be a constant equal to LP_MAX_VECTOR_WIDTH/8.  An
  * expression is non-portable.
  */
-#define LP_MIN_VECTOR_ALIGN 32
+#define LP_MIN_VECTOR_ALIGN 64
 
 /**
  * Several functions can only cope with vectors of length up to this value.

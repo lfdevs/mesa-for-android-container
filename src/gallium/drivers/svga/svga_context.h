@@ -106,6 +106,7 @@ struct svga_blend_state {
    unsigned need_white_fragments:1;
    unsigned independent_blend_enable:1;
    unsigned alpha_to_coverage:1;
+   unsigned alpha_to_one:1;
    unsigned blend_color_alpha:1;  /**< set blend color to alpha value */
 
    /** Per-render target state */

@@ -33,7 +33,6 @@
 #define DRI_SCREEN_H
 
 #include "dri_util.h"
-#include "xmlconfig.h"
 
 #include "pipe/p_compiler.h"
 #include "pipe/p_context.h"
@@ -60,12 +59,6 @@ struct dri_screen
    __DRIscreen *sPriv;
    boolean throttling_enabled;
    int default_throttle_frames;
-
-   /** Configuration cache with default values for all contexts */
-   driOptionCache optionCacheDefaults;
-
-   /** The screen's effective configuration options */
-   driOptionCache optionCache;
 
    struct st_config_options options;
 
@@ -137,9 +130,8 @@ void
 dri_fill_st_visual(struct st_visual *stvis, struct dri_screen *screen,
                    const struct gl_config *mode);
 
-unsigned
-dri_init_options_get_screen_flags(struct dri_screen *screen,
-                                  const char* driver_name);
+void
+dri_init_options(struct dri_screen *screen);
 
 const __DRIconfig **
 dri_init_screen_helper(struct dri_screen *screen,

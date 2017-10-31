@@ -22,6 +22,7 @@
  */
 
 #include "anv_private.h"
+#include "vk_enum_to_str.h"
 #include "vk_format_info.h"
 #include "vk_util.h"
 
@@ -44,249 +45,395 @@
 #define BGRA _ISL_SWIZZLE(BLUE, GREEN, RED, ALPHA)
 #define RGB1 _ISL_SWIZZLE(RED, GREEN, BLUE, ONE)
 
-#define swiz_fmt(__vk_fmt, __hw_fmt, __swizzle)     \
-   [__vk_fmt] = { \
-      .isl_format = __hw_fmt, \
-      .swizzle = __swizzle, \
+#define swiz_fmt1(__vk_fmt, __hw_fmt, __swizzle) \
+   [VK_ENUM_OFFSET(__vk_fmt)] = { \
+      .planes = { \
+         { .isl_format = __hw_fmt, .swizzle = __swizzle, \
+           .denominator_scales = { 1, 1, }, \
+         }, \
+      }, \
+      .n_planes = 1, \
    }
 
-#define fmt(__vk_fmt, __hw_fmt) \
-   swiz_fmt(__vk_fmt, __hw_fmt, RGBA)
+#define fmt1(__vk_fmt, __hw_fmt) \
+   swiz_fmt1(__vk_fmt, __hw_fmt, RGBA)
+
+#define fmt2(__vk_fmt, __fmt1, __fmt2) \
+   [VK_ENUM_OFFSET(__vk_fmt)] = { \
+      .planes = { \
+         { .isl_format = __fmt1, \
+           .swizzle = RGBA,       \
+           .denominator_scales = { 1, 1, }, \
+         }, \
+         { .isl_format = __fmt2, \
+           .swizzle = RGBA,       \
+           .denominator_scales = { 1, 1, }, \
+         }, \
+      }, \
+      .n_planes = 2, \
+   }
+
+#define fmt_unsupported(__vk_fmt) \
+   [VK_ENUM_OFFSET(__vk_fmt)] = { \
+      .planes = { \
+         { .isl_format = ISL_FORMAT_UNSUPPORTED, }, \
+      }, \
+   }
+
+#define y_plane(__hw_fmt, __swizzle, __ycbcr_swizzle, dhs, dvs) \
+   { .isl_format = __hw_fmt, \
+     .swizzle = __swizzle, \
+     .ycbcr_swizzle = __ycbcr_swizzle, \
+     .denominator_scales = { dhs, dvs, }, \
+     .has_chroma = false, \
+   }
+
+#define chroma_plane(__hw_fmt, __swizzle, __ycbcr_swizzle, dhs, dvs) \
+   { .isl_format = __hw_fmt, \
+     .swizzle = __swizzle, \
+     .ycbcr_swizzle = __ycbcr_swizzle, \
+     .denominator_scales = { dhs, dvs, }, \
+     .has_chroma = true, \
+   }
+
+#define ycbcr_fmt(__vk_fmt, __n_planes, ...) \
+   [VK_ENUM_OFFSET(__vk_fmt)] = { \
+      .planes = { \
+         __VA_ARGS__, \
+      }, \
+      .n_planes = __n_planes, \
+      .can_ycbcr = true, \
+   }
 
 /* HINT: For array formats, the ISL name should match the VK name.  For
  * packed formats, they should have the channels in reverse order from each
  * other.  The reason for this is that, for packed formats, the ISL (and
  * bspec) names are in LSB -> MSB order while VK formats are MSB -> LSB.
  */
-static const struct anv_format anv_formats[] = {
-   fmt(VK_FORMAT_UNDEFINED,               ISL_FORMAT_UNSUPPORTED),
-   fmt(VK_FORMAT_R4G4_UNORM_PACK8,        ISL_FORMAT_UNSUPPORTED),
-   fmt(VK_FORMAT_R4G4B4A4_UNORM_PACK16,   ISL_FORMAT_A4B4G4R4_UNORM),
-   swiz_fmt(VK_FORMAT_B4G4R4A4_UNORM_PACK16,   ISL_FORMAT_A4B4G4R4_UNORM,  BGRA),
-   fmt(VK_FORMAT_R5G6B5_UNORM_PACK16,     ISL_FORMAT_B5G6R5_UNORM),
-   swiz_fmt(VK_FORMAT_B5G6R5_UNORM_PACK16,     ISL_FORMAT_B5G6R5_UNORM, BGRA),
-   fmt(VK_FORMAT_R5G5B5A1_UNORM_PACK16,   ISL_FORMAT_A1B5G5R5_UNORM),
-   fmt(VK_FORMAT_B5G5R5A1_UNORM_PACK16,   ISL_FORMAT_UNSUPPORTED),
-   fmt(VK_FORMAT_A1R5G5B5_UNORM_PACK16,   ISL_FORMAT_B5G5R5A1_UNORM),
-   fmt(VK_FORMAT_R8_UNORM,                ISL_FORMAT_R8_UNORM),
-   fmt(VK_FORMAT_R8_SNORM,                ISL_FORMAT_R8_SNORM),
-   fmt(VK_FORMAT_R8_USCALED,              ISL_FORMAT_R8_USCALED),
-   fmt(VK_FORMAT_R8_SSCALED,              ISL_FORMAT_R8_SSCALED),
-   fmt(VK_FORMAT_R8_UINT,                 ISL_FORMAT_R8_UINT),
-   fmt(VK_FORMAT_R8_SINT,                 ISL_FORMAT_R8_SINT),
-   fmt(VK_FORMAT_R8_SRGB,                 ISL_FORMAT_UNSUPPORTED),
-   fmt(VK_FORMAT_R8G8_UNORM,              ISL_FORMAT_R8G8_UNORM),
-   fmt(VK_FORMAT_R8G8_SNORM,              ISL_FORMAT_R8G8_SNORM),
-   fmt(VK_FORMAT_R8G8_USCALED,            ISL_FORMAT_R8G8_USCALED),
-   fmt(VK_FORMAT_R8G8_SSCALED,            ISL_FORMAT_R8G8_SSCALED),
-   fmt(VK_FORMAT_R8G8_UINT,               ISL_FORMAT_R8G8_UINT),
-   fmt(VK_FORMAT_R8G8_SINT,               ISL_FORMAT_R8G8_SINT),
-   fmt(VK_FORMAT_R8G8_SRGB,               ISL_FORMAT_UNSUPPORTED), /* L8A8_UNORM_SRGB */
-   fmt(VK_FORMAT_R8G8B8_UNORM,            ISL_FORMAT_R8G8B8_UNORM),
-   fmt(VK_FORMAT_R8G8B8_SNORM,            ISL_FORMAT_R8G8B8_SNORM),
-   fmt(VK_FORMAT_R8G8B8_USCALED,          ISL_FORMAT_R8G8B8_USCALED),
-   fmt(VK_FORMAT_R8G8B8_SSCALED,          ISL_FORMAT_R8G8B8_SSCALED),
-   fmt(VK_FORMAT_R8G8B8_UINT,             ISL_FORMAT_R8G8B8_UINT),
-   fmt(VK_FORMAT_R8G8B8_SINT,             ISL_FORMAT_R8G8B8_SINT),
-   fmt(VK_FORMAT_R8G8B8_SRGB,             ISL_FORMAT_R8G8B8_UNORM_SRGB),
-   fmt(VK_FORMAT_R8G8B8A8_UNORM,          ISL_FORMAT_R8G8B8A8_UNORM),
-   fmt(VK_FORMAT_R8G8B8A8_SNORM,          ISL_FORMAT_R8G8B8A8_SNORM),
-   fmt(VK_FORMAT_R8G8B8A8_USCALED,        ISL_FORMAT_R8G8B8A8_USCALED),
-   fmt(VK_FORMAT_R8G8B8A8_SSCALED,        ISL_FORMAT_R8G8B8A8_SSCALED),
-   fmt(VK_FORMAT_R8G8B8A8_UINT,           ISL_FORMAT_R8G8B8A8_UINT),
-   fmt(VK_FORMAT_R8G8B8A8_SINT,           ISL_FORMAT_R8G8B8A8_SINT),
-   fmt(VK_FORMAT_R8G8B8A8_SRGB,           ISL_FORMAT_R8G8B8A8_UNORM_SRGB),
-   fmt(VK_FORMAT_A8B8G8R8_UNORM_PACK32,   ISL_FORMAT_R8G8B8A8_UNORM),
-   fmt(VK_FORMAT_A8B8G8R8_SNORM_PACK32,   ISL_FORMAT_R8G8B8A8_SNORM),
-   fmt(VK_FORMAT_A8B8G8R8_USCALED_PACK32, ISL_FORMAT_R8G8B8A8_USCALED),
-   fmt(VK_FORMAT_A8B8G8R8_SSCALED_PACK32, ISL_FORMAT_R8G8B8A8_SSCALED),
-   fmt(VK_FORMAT_A8B8G8R8_UINT_PACK32,    ISL_FORMAT_R8G8B8A8_UINT),
-   fmt(VK_FORMAT_A8B8G8R8_SINT_PACK32,    ISL_FORMAT_R8G8B8A8_SINT),
-   fmt(VK_FORMAT_A8B8G8R8_SRGB_PACK32,    ISL_FORMAT_R8G8B8A8_UNORM_SRGB),
-   fmt(VK_FORMAT_A2R10G10B10_UNORM_PACK32, ISL_FORMAT_B10G10R10A2_UNORM),
-   fmt(VK_FORMAT_A2R10G10B10_SNORM_PACK32, ISL_FORMAT_B10G10R10A2_SNORM),
-   fmt(VK_FORMAT_A2R10G10B10_USCALED_PACK32, ISL_FORMAT_B10G10R10A2_USCALED),
-   fmt(VK_FORMAT_A2R10G10B10_SSCALED_PACK32, ISL_FORMAT_B10G10R10A2_SSCALED),
-   fmt(VK_FORMAT_A2R10G10B10_UINT_PACK32, ISL_FORMAT_B10G10R10A2_UINT),
-   fmt(VK_FORMAT_A2R10G10B10_SINT_PACK32, ISL_FORMAT_B10G10R10A2_SINT),
-   fmt(VK_FORMAT_A2B10G10R10_UNORM_PACK32, ISL_FORMAT_R10G10B10A2_UNORM),
-   fmt(VK_FORMAT_A2B10G10R10_SNORM_PACK32, ISL_FORMAT_R10G10B10A2_SNORM),
-   fmt(VK_FORMAT_A2B10G10R10_USCALED_PACK32, ISL_FORMAT_R10G10B10A2_USCALED),
-   fmt(VK_FORMAT_A2B10G10R10_SSCALED_PACK32, ISL_FORMAT_R10G10B10A2_SSCALED),
-   fmt(VK_FORMAT_A2B10G10R10_UINT_PACK32, ISL_FORMAT_R10G10B10A2_UINT),
-   fmt(VK_FORMAT_A2B10G10R10_SINT_PACK32, ISL_FORMAT_R10G10B10A2_SINT),
-   fmt(VK_FORMAT_R16_UNORM,               ISL_FORMAT_R16_UNORM),
-   fmt(VK_FORMAT_R16_SNORM,               ISL_FORMAT_R16_SNORM),
-   fmt(VK_FORMAT_R16_USCALED,             ISL_FORMAT_R16_USCALED),
-   fmt(VK_FORMAT_R16_SSCALED,             ISL_FORMAT_R16_SSCALED),
-   fmt(VK_FORMAT_R16_UINT,                ISL_FORMAT_R16_UINT),
-   fmt(VK_FORMAT_R16_SINT,                ISL_FORMAT_R16_SINT),
-   fmt(VK_FORMAT_R16_SFLOAT,              ISL_FORMAT_R16_FLOAT),
-   fmt(VK_FORMAT_R16G16_UNORM,            ISL_FORMAT_R16G16_UNORM),
-   fmt(VK_FORMAT_R16G16_SNORM,            ISL_FORMAT_R16G16_SNORM),
-   fmt(VK_FORMAT_R16G16_USCALED,          ISL_FORMAT_R16G16_USCALED),
-   fmt(VK_FORMAT_R16G16_SSCALED,          ISL_FORMAT_R16G16_SSCALED),
-   fmt(VK_FORMAT_R16G16_UINT,             ISL_FORMAT_R16G16_UINT),
-   fmt(VK_FORMAT_R16G16_SINT,             ISL_FORMAT_R16G16_SINT),
-   fmt(VK_FORMAT_R16G16_SFLOAT,           ISL_FORMAT_R16G16_FLOAT),
-   fmt(VK_FORMAT_R16G16B16_UNORM,         ISL_FORMAT_R16G16B16_UNORM),
-   fmt(VK_FORMAT_R16G16B16_SNORM,         ISL_FORMAT_R16G16B16_SNORM),
-   fmt(VK_FORMAT_R16G16B16_USCALED,       ISL_FORMAT_R16G16B16_USCALED),
-   fmt(VK_FORMAT_R16G16B16_SSCALED,       ISL_FORMAT_R16G16B16_SSCALED),
-   fmt(VK_FORMAT_R16G16B16_UINT,          ISL_FORMAT_R16G16B16_UINT),
-   fmt(VK_FORMAT_R16G16B16_SINT,          ISL_FORMAT_R16G16B16_SINT),
-   fmt(VK_FORMAT_R16G16B16_SFLOAT,        ISL_FORMAT_R16G16B16_FLOAT),
-   fmt(VK_FORMAT_R16G16B16A16_UNORM,      ISL_FORMAT_R16G16B16A16_UNORM),
-   fmt(VK_FORMAT_R16G16B16A16_SNORM,      ISL_FORMAT_R16G16B16A16_SNORM),
-   fmt(VK_FORMAT_R16G16B16A16_USCALED,    ISL_FORMAT_R16G16B16A16_USCALED),
-   fmt(VK_FORMAT_R16G16B16A16_SSCALED,    ISL_FORMAT_R16G16B16A16_SSCALED),
-   fmt(VK_FORMAT_R16G16B16A16_UINT,       ISL_FORMAT_R16G16B16A16_UINT),
-   fmt(VK_FORMAT_R16G16B16A16_SINT,       ISL_FORMAT_R16G16B16A16_SINT),
-   fmt(VK_FORMAT_R16G16B16A16_SFLOAT,     ISL_FORMAT_R16G16B16A16_FLOAT),
-   fmt(VK_FORMAT_R32_UINT,                ISL_FORMAT_R32_UINT),
-   fmt(VK_FORMAT_R32_SINT,                ISL_FORMAT_R32_SINT),
-   fmt(VK_FORMAT_R32_SFLOAT,              ISL_FORMAT_R32_FLOAT),
-   fmt(VK_FORMAT_R32G32_UINT,             ISL_FORMAT_R32G32_UINT),
-   fmt(VK_FORMAT_R32G32_SINT,             ISL_FORMAT_R32G32_SINT),
-   fmt(VK_FORMAT_R32G32_SFLOAT,           ISL_FORMAT_R32G32_FLOAT),
-   fmt(VK_FORMAT_R32G32B32_UINT,          ISL_FORMAT_R32G32B32_UINT),
-   fmt(VK_FORMAT_R32G32B32_SINT,          ISL_FORMAT_R32G32B32_SINT),
-   fmt(VK_FORMAT_R32G32B32_SFLOAT,        ISL_FORMAT_R32G32B32_FLOAT),
-   fmt(VK_FORMAT_R32G32B32A32_UINT,       ISL_FORMAT_R32G32B32A32_UINT),
-   fmt(VK_FORMAT_R32G32B32A32_SINT,       ISL_FORMAT_R32G32B32A32_SINT),
-   fmt(VK_FORMAT_R32G32B32A32_SFLOAT,     ISL_FORMAT_R32G32B32A32_FLOAT),
-   fmt(VK_FORMAT_R64_UINT,                ISL_FORMAT_R64_PASSTHRU),
-   fmt(VK_FORMAT_R64_SINT,                ISL_FORMAT_R64_PASSTHRU),
-   fmt(VK_FORMAT_R64_SFLOAT,              ISL_FORMAT_R64_PASSTHRU),
-   fmt(VK_FORMAT_R64G64_UINT,             ISL_FORMAT_R64G64_PASSTHRU),
-   fmt(VK_FORMAT_R64G64_SINT,             ISL_FORMAT_R64G64_PASSTHRU),
-   fmt(VK_FORMAT_R64G64_SFLOAT,           ISL_FORMAT_R64G64_PASSTHRU),
-   fmt(VK_FORMAT_R64G64B64_UINT,          ISL_FORMAT_R64G64B64_PASSTHRU),
-   fmt(VK_FORMAT_R64G64B64_SINT,          ISL_FORMAT_R64G64B64_PASSTHRU),
-   fmt(VK_FORMAT_R64G64B64_SFLOAT,        ISL_FORMAT_R64G64B64_PASSTHRU),
-   fmt(VK_FORMAT_R64G64B64A64_UINT,       ISL_FORMAT_R64G64B64A64_PASSTHRU),
-   fmt(VK_FORMAT_R64G64B64A64_SINT,       ISL_FORMAT_R64G64B64A64_PASSTHRU),
-   fmt(VK_FORMAT_R64G64B64A64_SFLOAT,     ISL_FORMAT_R64G64B64A64_PASSTHRU),
-   fmt(VK_FORMAT_B10G11R11_UFLOAT_PACK32, ISL_FORMAT_R11G11B10_FLOAT),
-   fmt(VK_FORMAT_E5B9G9R9_UFLOAT_PACK32,  ISL_FORMAT_R9G9B9E5_SHAREDEXP),
+static const struct anv_format main_formats[] = {
+   fmt_unsupported(VK_FORMAT_UNDEFINED),
+   fmt_unsupported(VK_FORMAT_R4G4_UNORM_PACK8),
+   fmt1(VK_FORMAT_R4G4B4A4_UNORM_PACK16,             ISL_FORMAT_A4B4G4R4_UNORM),
+   swiz_fmt1(VK_FORMAT_B4G4R4A4_UNORM_PACK16,        ISL_FORMAT_A4B4G4R4_UNORM,  BGRA),
+   fmt1(VK_FORMAT_R5G6B5_UNORM_PACK16,               ISL_FORMAT_B5G6R5_UNORM),
+   swiz_fmt1(VK_FORMAT_B5G6R5_UNORM_PACK16,          ISL_FORMAT_B5G6R5_UNORM, BGRA),
+   fmt1(VK_FORMAT_R5G5B5A1_UNORM_PACK16,             ISL_FORMAT_A1B5G5R5_UNORM),
+   fmt_unsupported(VK_FORMAT_B5G5R5A1_UNORM_PACK16),
+   fmt1(VK_FORMAT_A1R5G5B5_UNORM_PACK16,             ISL_FORMAT_B5G5R5A1_UNORM),
+   fmt1(VK_FORMAT_R8_UNORM,                          ISL_FORMAT_R8_UNORM),
+   fmt1(VK_FORMAT_R8_SNORM,                          ISL_FORMAT_R8_SNORM),
+   fmt1(VK_FORMAT_R8_USCALED,                        ISL_FORMAT_R8_USCALED),
+   fmt1(VK_FORMAT_R8_SSCALED,                        ISL_FORMAT_R8_SSCALED),
+   fmt1(VK_FORMAT_R8_UINT,                           ISL_FORMAT_R8_UINT),
+   fmt1(VK_FORMAT_R8_SINT,                           ISL_FORMAT_R8_SINT),
+   swiz_fmt1(VK_FORMAT_R8_SRGB,                      ISL_FORMAT_L8_UNORM_SRGB,
+                                                     _ISL_SWIZZLE(RED, ZERO, ZERO, ONE)),
+   fmt1(VK_FORMAT_R8G8_UNORM,                        ISL_FORMAT_R8G8_UNORM),
+   fmt1(VK_FORMAT_R8G8_SNORM,                        ISL_FORMAT_R8G8_SNORM),
+   fmt1(VK_FORMAT_R8G8_USCALED,                      ISL_FORMAT_R8G8_USCALED),
+   fmt1(VK_FORMAT_R8G8_SSCALED,                      ISL_FORMAT_R8G8_SSCALED),
+   fmt1(VK_FORMAT_R8G8_UINT,                         ISL_FORMAT_R8G8_UINT),
+   fmt1(VK_FORMAT_R8G8_SINT,                         ISL_FORMAT_R8G8_SINT),
+   fmt_unsupported(VK_FORMAT_R8G8_SRGB),             /* L8A8_UNORM_SRGB */
+   fmt1(VK_FORMAT_R8G8B8_UNORM,                      ISL_FORMAT_R8G8B8_UNORM),
+   fmt1(VK_FORMAT_R8G8B8_SNORM,                      ISL_FORMAT_R8G8B8_SNORM),
+   fmt1(VK_FORMAT_R8G8B8_USCALED,                    ISL_FORMAT_R8G8B8_USCALED),
+   fmt1(VK_FORMAT_R8G8B8_SSCALED,                    ISL_FORMAT_R8G8B8_SSCALED),
+   fmt1(VK_FORMAT_R8G8B8_UINT,                       ISL_FORMAT_R8G8B8_UINT),
+   fmt1(VK_FORMAT_R8G8B8_SINT,                       ISL_FORMAT_R8G8B8_SINT),
+   fmt1(VK_FORMAT_R8G8B8_SRGB,                       ISL_FORMAT_R8G8B8_UNORM_SRGB),
+   fmt1(VK_FORMAT_R8G8B8A8_UNORM,                    ISL_FORMAT_R8G8B8A8_UNORM),
+   fmt1(VK_FORMAT_R8G8B8A8_SNORM,                    ISL_FORMAT_R8G8B8A8_SNORM),
+   fmt1(VK_FORMAT_R8G8B8A8_USCALED,                  ISL_FORMAT_R8G8B8A8_USCALED),
+   fmt1(VK_FORMAT_R8G8B8A8_SSCALED,                  ISL_FORMAT_R8G8B8A8_SSCALED),
+   fmt1(VK_FORMAT_R8G8B8A8_UINT,                     ISL_FORMAT_R8G8B8A8_UINT),
+   fmt1(VK_FORMAT_R8G8B8A8_SINT,                     ISL_FORMAT_R8G8B8A8_SINT),
+   fmt1(VK_FORMAT_R8G8B8A8_SRGB,                     ISL_FORMAT_R8G8B8A8_UNORM_SRGB),
+   fmt1(VK_FORMAT_A8B8G8R8_UNORM_PACK32,             ISL_FORMAT_R8G8B8A8_UNORM),
+   fmt1(VK_FORMAT_A8B8G8R8_SNORM_PACK32,             ISL_FORMAT_R8G8B8A8_SNORM),
+   fmt1(VK_FORMAT_A8B8G8R8_USCALED_PACK32,           ISL_FORMAT_R8G8B8A8_USCALED),
+   fmt1(VK_FORMAT_A8B8G8R8_SSCALED_PACK32,           ISL_FORMAT_R8G8B8A8_SSCALED),
+   fmt1(VK_FORMAT_A8B8G8R8_UINT_PACK32,              ISL_FORMAT_R8G8B8A8_UINT),
+   fmt1(VK_FORMAT_A8B8G8R8_SINT_PACK32,              ISL_FORMAT_R8G8B8A8_SINT),
+   fmt1(VK_FORMAT_A8B8G8R8_SRGB_PACK32,              ISL_FORMAT_R8G8B8A8_UNORM_SRGB),
+   fmt1(VK_FORMAT_A2R10G10B10_UNORM_PACK32,          ISL_FORMAT_B10G10R10A2_UNORM),
+   fmt1(VK_FORMAT_A2R10G10B10_SNORM_PACK32,          ISL_FORMAT_B10G10R10A2_SNORM),
+   fmt1(VK_FORMAT_A2R10G10B10_USCALED_PACK32,        ISL_FORMAT_B10G10R10A2_USCALED),
+   fmt1(VK_FORMAT_A2R10G10B10_SSCALED_PACK32,        ISL_FORMAT_B10G10R10A2_SSCALED),
+   fmt1(VK_FORMAT_A2R10G10B10_UINT_PACK32,           ISL_FORMAT_B10G10R10A2_UINT),
+   fmt1(VK_FORMAT_A2R10G10B10_SINT_PACK32,           ISL_FORMAT_B10G10R10A2_SINT),
+   fmt1(VK_FORMAT_A2B10G10R10_UNORM_PACK32,          ISL_FORMAT_R10G10B10A2_UNORM),
+   fmt1(VK_FORMAT_A2B10G10R10_SNORM_PACK32,          ISL_FORMAT_R10G10B10A2_SNORM),
+   fmt1(VK_FORMAT_A2B10G10R10_USCALED_PACK32,        ISL_FORMAT_R10G10B10A2_USCALED),
+   fmt1(VK_FORMAT_A2B10G10R10_SSCALED_PACK32,        ISL_FORMAT_R10G10B10A2_SSCALED),
+   fmt1(VK_FORMAT_A2B10G10R10_UINT_PACK32,           ISL_FORMAT_R10G10B10A2_UINT),
+   fmt1(VK_FORMAT_A2B10G10R10_SINT_PACK32,           ISL_FORMAT_R10G10B10A2_SINT),
+   fmt1(VK_FORMAT_R16_UNORM,                         ISL_FORMAT_R16_UNORM),
+   fmt1(VK_FORMAT_R16_SNORM,                         ISL_FORMAT_R16_SNORM),
+   fmt1(VK_FORMAT_R16_USCALED,                       ISL_FORMAT_R16_USCALED),
+   fmt1(VK_FORMAT_R16_SSCALED,                       ISL_FORMAT_R16_SSCALED),
+   fmt1(VK_FORMAT_R16_UINT,                          ISL_FORMAT_R16_UINT),
+   fmt1(VK_FORMAT_R16_SINT,                          ISL_FORMAT_R16_SINT),
+   fmt1(VK_FORMAT_R16_SFLOAT,                        ISL_FORMAT_R16_FLOAT),
+   fmt1(VK_FORMAT_R16G16_UNORM,                      ISL_FORMAT_R16G16_UNORM),
+   fmt1(VK_FORMAT_R16G16_SNORM,                      ISL_FORMAT_R16G16_SNORM),
+   fmt1(VK_FORMAT_R16G16_USCALED,                    ISL_FORMAT_R16G16_USCALED),
+   fmt1(VK_FORMAT_R16G16_SSCALED,                    ISL_FORMAT_R16G16_SSCALED),
+   fmt1(VK_FORMAT_R16G16_UINT,                       ISL_FORMAT_R16G16_UINT),
+   fmt1(VK_FORMAT_R16G16_SINT,                       ISL_FORMAT_R16G16_SINT),
+   fmt1(VK_FORMAT_R16G16_SFLOAT,                     ISL_FORMAT_R16G16_FLOAT),
+   fmt1(VK_FORMAT_R16G16B16_UNORM,                   ISL_FORMAT_R16G16B16_UNORM),
+   fmt1(VK_FORMAT_R16G16B16_SNORM,                   ISL_FORMAT_R16G16B16_SNORM),
+   fmt1(VK_FORMAT_R16G16B16_USCALED,                 ISL_FORMAT_R16G16B16_USCALED),
+   fmt1(VK_FORMAT_R16G16B16_SSCALED,                 ISL_FORMAT_R16G16B16_SSCALED),
+   fmt1(VK_FORMAT_R16G16B16_UINT,                    ISL_FORMAT_R16G16B16_UINT),
+   fmt1(VK_FORMAT_R16G16B16_SINT,                    ISL_FORMAT_R16G16B16_SINT),
+   fmt1(VK_FORMAT_R16G16B16_SFLOAT,                  ISL_FORMAT_R16G16B16_FLOAT),
+   fmt1(VK_FORMAT_R16G16B16A16_UNORM,                ISL_FORMAT_R16G16B16A16_UNORM),
+   fmt1(VK_FORMAT_R16G16B16A16_SNORM,                ISL_FORMAT_R16G16B16A16_SNORM),
+   fmt1(VK_FORMAT_R16G16B16A16_USCALED,              ISL_FORMAT_R16G16B16A16_USCALED),
+   fmt1(VK_FORMAT_R16G16B16A16_SSCALED,              ISL_FORMAT_R16G16B16A16_SSCALED),
+   fmt1(VK_FORMAT_R16G16B16A16_UINT,                 ISL_FORMAT_R16G16B16A16_UINT),
+   fmt1(VK_FORMAT_R16G16B16A16_SINT,                 ISL_FORMAT_R16G16B16A16_SINT),
+   fmt1(VK_FORMAT_R16G16B16A16_SFLOAT,               ISL_FORMAT_R16G16B16A16_FLOAT),
+   fmt1(VK_FORMAT_R32_UINT,                          ISL_FORMAT_R32_UINT),
+   fmt1(VK_FORMAT_R32_SINT,                          ISL_FORMAT_R32_SINT),
+   fmt1(VK_FORMAT_R32_SFLOAT,                        ISL_FORMAT_R32_FLOAT),
+   fmt1(VK_FORMAT_R32G32_UINT,                       ISL_FORMAT_R32G32_UINT),
+   fmt1(VK_FORMAT_R32G32_SINT,                       ISL_FORMAT_R32G32_SINT),
+   fmt1(VK_FORMAT_R32G32_SFLOAT,                     ISL_FORMAT_R32G32_FLOAT),
+   fmt1(VK_FORMAT_R32G32B32_UINT,                    ISL_FORMAT_R32G32B32_UINT),
+   fmt1(VK_FORMAT_R32G32B32_SINT,                    ISL_FORMAT_R32G32B32_SINT),
+   fmt1(VK_FORMAT_R32G32B32_SFLOAT,                  ISL_FORMAT_R32G32B32_FLOAT),
+   fmt1(VK_FORMAT_R32G32B32A32_UINT,                 ISL_FORMAT_R32G32B32A32_UINT),
+   fmt1(VK_FORMAT_R32G32B32A32_SINT,                 ISL_FORMAT_R32G32B32A32_SINT),
+   fmt1(VK_FORMAT_R32G32B32A32_SFLOAT,               ISL_FORMAT_R32G32B32A32_FLOAT),
+   fmt1(VK_FORMAT_R64_UINT,                          ISL_FORMAT_R64_PASSTHRU),
+   fmt1(VK_FORMAT_R64_SINT,                          ISL_FORMAT_R64_PASSTHRU),
+   fmt1(VK_FORMAT_R64_SFLOAT,                        ISL_FORMAT_R64_PASSTHRU),
+   fmt1(VK_FORMAT_R64G64_UINT,                       ISL_FORMAT_R64G64_PASSTHRU),
+   fmt1(VK_FORMAT_R64G64_SINT,                       ISL_FORMAT_R64G64_PASSTHRU),
+   fmt1(VK_FORMAT_R64G64_SFLOAT,                     ISL_FORMAT_R64G64_PASSTHRU),
+   fmt1(VK_FORMAT_R64G64B64_UINT,                    ISL_FORMAT_R64G64B64_PASSTHRU),
+   fmt1(VK_FORMAT_R64G64B64_SINT,                    ISL_FORMAT_R64G64B64_PASSTHRU),
+   fmt1(VK_FORMAT_R64G64B64_SFLOAT,                  ISL_FORMAT_R64G64B64_PASSTHRU),
+   fmt1(VK_FORMAT_R64G64B64A64_UINT,                 ISL_FORMAT_R64G64B64A64_PASSTHRU),
+   fmt1(VK_FORMAT_R64G64B64A64_SINT,                 ISL_FORMAT_R64G64B64A64_PASSTHRU),
+   fmt1(VK_FORMAT_R64G64B64A64_SFLOAT,               ISL_FORMAT_R64G64B64A64_PASSTHRU),
+   fmt1(VK_FORMAT_B10G11R11_UFLOAT_PACK32,           ISL_FORMAT_R11G11B10_FLOAT),
+   fmt1(VK_FORMAT_E5B9G9R9_UFLOAT_PACK32,            ISL_FORMAT_R9G9B9E5_SHAREDEXP),
 
-   fmt(VK_FORMAT_D16_UNORM,               ISL_FORMAT_R16_UNORM),
-   fmt(VK_FORMAT_X8_D24_UNORM_PACK32,     ISL_FORMAT_R24_UNORM_X8_TYPELESS),
-   fmt(VK_FORMAT_D32_SFLOAT,              ISL_FORMAT_R32_FLOAT),
-   fmt(VK_FORMAT_S8_UINT,                 ISL_FORMAT_R8_UINT),
-   fmt(VK_FORMAT_D16_UNORM_S8_UINT,       ISL_FORMAT_UNSUPPORTED),
-   fmt(VK_FORMAT_D24_UNORM_S8_UINT,       ISL_FORMAT_R24_UNORM_X8_TYPELESS),
-   fmt(VK_FORMAT_D32_SFLOAT_S8_UINT,      ISL_FORMAT_R32_FLOAT),
+   fmt1(VK_FORMAT_D16_UNORM,                         ISL_FORMAT_R16_UNORM),
+   fmt1(VK_FORMAT_X8_D24_UNORM_PACK32,               ISL_FORMAT_R24_UNORM_X8_TYPELESS),
+   fmt1(VK_FORMAT_D32_SFLOAT,                        ISL_FORMAT_R32_FLOAT),
+   fmt1(VK_FORMAT_S8_UINT,                           ISL_FORMAT_R8_UINT),
+   fmt_unsupported(VK_FORMAT_D16_UNORM_S8_UINT),
+   fmt2(VK_FORMAT_D24_UNORM_S8_UINT,                 ISL_FORMAT_R24_UNORM_X8_TYPELESS, ISL_FORMAT_R8_UINT),
+   fmt2(VK_FORMAT_D32_SFLOAT_S8_UINT,                ISL_FORMAT_R32_FLOAT, ISL_FORMAT_R8_UINT),
 
-   swiz_fmt(VK_FORMAT_BC1_RGB_UNORM_BLOCK,     ISL_FORMAT_BC1_UNORM, RGB1),
-   swiz_fmt(VK_FORMAT_BC1_RGB_SRGB_BLOCK,      ISL_FORMAT_BC1_UNORM_SRGB, RGB1),
-   fmt(VK_FORMAT_BC1_RGBA_UNORM_BLOCK,    ISL_FORMAT_BC1_UNORM),
-   fmt(VK_FORMAT_BC1_RGBA_SRGB_BLOCK,     ISL_FORMAT_BC1_UNORM_SRGB),
-   fmt(VK_FORMAT_BC2_UNORM_BLOCK,         ISL_FORMAT_BC2_UNORM),
-   fmt(VK_FORMAT_BC2_SRGB_BLOCK,          ISL_FORMAT_BC2_UNORM_SRGB),
-   fmt(VK_FORMAT_BC3_UNORM_BLOCK,         ISL_FORMAT_BC3_UNORM),
-   fmt(VK_FORMAT_BC3_SRGB_BLOCK,          ISL_FORMAT_BC3_UNORM_SRGB),
-   fmt(VK_FORMAT_BC4_UNORM_BLOCK,         ISL_FORMAT_BC4_UNORM),
-   fmt(VK_FORMAT_BC4_SNORM_BLOCK,         ISL_FORMAT_BC4_SNORM),
-   fmt(VK_FORMAT_BC5_UNORM_BLOCK,         ISL_FORMAT_BC5_UNORM),
-   fmt(VK_FORMAT_BC5_SNORM_BLOCK,         ISL_FORMAT_BC5_SNORM),
-   fmt(VK_FORMAT_BC6H_UFLOAT_BLOCK,       ISL_FORMAT_BC6H_UF16),
-   fmt(VK_FORMAT_BC6H_SFLOAT_BLOCK,       ISL_FORMAT_BC6H_SF16),
-   fmt(VK_FORMAT_BC7_UNORM_BLOCK,         ISL_FORMAT_BC7_UNORM),
-   fmt(VK_FORMAT_BC7_SRGB_BLOCK,          ISL_FORMAT_BC7_UNORM_SRGB),
-   fmt(VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK, ISL_FORMAT_ETC2_RGB8),
-   fmt(VK_FORMAT_ETC2_R8G8B8_SRGB_BLOCK,  ISL_FORMAT_ETC2_SRGB8),
-   fmt(VK_FORMAT_ETC2_R8G8B8A1_UNORM_BLOCK, ISL_FORMAT_ETC2_RGB8_PTA),
-   fmt(VK_FORMAT_ETC2_R8G8B8A1_SRGB_BLOCK, ISL_FORMAT_ETC2_SRGB8_PTA),
-   fmt(VK_FORMAT_ETC2_R8G8B8A8_UNORM_BLOCK, ISL_FORMAT_ETC2_EAC_RGBA8),
-   fmt(VK_FORMAT_ETC2_R8G8B8A8_SRGB_BLOCK, ISL_FORMAT_ETC2_EAC_SRGB8_A8),
-   fmt(VK_FORMAT_EAC_R11_UNORM_BLOCK,     ISL_FORMAT_EAC_R11),
-   fmt(VK_FORMAT_EAC_R11_SNORM_BLOCK,     ISL_FORMAT_EAC_SIGNED_R11),
-   fmt(VK_FORMAT_EAC_R11G11_UNORM_BLOCK,  ISL_FORMAT_EAC_RG11),
-   fmt(VK_FORMAT_EAC_R11G11_SNORM_BLOCK,  ISL_FORMAT_EAC_SIGNED_RG11),
-   fmt(VK_FORMAT_ASTC_4x4_SRGB_BLOCK,     ISL_FORMAT_ASTC_LDR_2D_4X4_U8SRGB),
-   fmt(VK_FORMAT_ASTC_5x4_SRGB_BLOCK,     ISL_FORMAT_ASTC_LDR_2D_5X4_U8SRGB),
-   fmt(VK_FORMAT_ASTC_5x5_SRGB_BLOCK,     ISL_FORMAT_ASTC_LDR_2D_5X5_U8SRGB),
-   fmt(VK_FORMAT_ASTC_6x5_SRGB_BLOCK,     ISL_FORMAT_ASTC_LDR_2D_6X5_U8SRGB),
-   fmt(VK_FORMAT_ASTC_6x6_SRGB_BLOCK,     ISL_FORMAT_ASTC_LDR_2D_6X6_U8SRGB),
-   fmt(VK_FORMAT_ASTC_8x5_SRGB_BLOCK,     ISL_FORMAT_ASTC_LDR_2D_8X5_U8SRGB),
-   fmt(VK_FORMAT_ASTC_8x6_SRGB_BLOCK,     ISL_FORMAT_ASTC_LDR_2D_8X6_U8SRGB),
-   fmt(VK_FORMAT_ASTC_8x8_SRGB_BLOCK,     ISL_FORMAT_ASTC_LDR_2D_8X8_U8SRGB),
-   fmt(VK_FORMAT_ASTC_10x5_SRGB_BLOCK,    ISL_FORMAT_ASTC_LDR_2D_10X5_U8SRGB),
-   fmt(VK_FORMAT_ASTC_10x6_SRGB_BLOCK,    ISL_FORMAT_ASTC_LDR_2D_10X6_U8SRGB),
-   fmt(VK_FORMAT_ASTC_10x8_SRGB_BLOCK,    ISL_FORMAT_ASTC_LDR_2D_10X8_U8SRGB),
-   fmt(VK_FORMAT_ASTC_10x10_SRGB_BLOCK,   ISL_FORMAT_ASTC_LDR_2D_10X10_U8SRGB),
-   fmt(VK_FORMAT_ASTC_12x10_SRGB_BLOCK,   ISL_FORMAT_ASTC_LDR_2D_12X10_U8SRGB),
-   fmt(VK_FORMAT_ASTC_12x12_SRGB_BLOCK,   ISL_FORMAT_ASTC_LDR_2D_12X12_U8SRGB),
-   fmt(VK_FORMAT_ASTC_4x4_UNORM_BLOCK,    ISL_FORMAT_ASTC_LDR_2D_4X4_FLT16),
-   fmt(VK_FORMAT_ASTC_5x4_UNORM_BLOCK,    ISL_FORMAT_ASTC_LDR_2D_5X4_FLT16),
-   fmt(VK_FORMAT_ASTC_5x5_UNORM_BLOCK,    ISL_FORMAT_ASTC_LDR_2D_5X5_FLT16),
-   fmt(VK_FORMAT_ASTC_6x5_UNORM_BLOCK,    ISL_FORMAT_ASTC_LDR_2D_6X5_FLT16),
-   fmt(VK_FORMAT_ASTC_6x6_UNORM_BLOCK,    ISL_FORMAT_ASTC_LDR_2D_6X6_FLT16),
-   fmt(VK_FORMAT_ASTC_8x5_UNORM_BLOCK,    ISL_FORMAT_ASTC_LDR_2D_8X5_FLT16),
-   fmt(VK_FORMAT_ASTC_8x6_UNORM_BLOCK,    ISL_FORMAT_ASTC_LDR_2D_8X6_FLT16),
-   fmt(VK_FORMAT_ASTC_8x8_UNORM_BLOCK,    ISL_FORMAT_ASTC_LDR_2D_8X8_FLT16),
-   fmt(VK_FORMAT_ASTC_10x5_UNORM_BLOCK,   ISL_FORMAT_ASTC_LDR_2D_10X5_FLT16),
-   fmt(VK_FORMAT_ASTC_10x6_UNORM_BLOCK,   ISL_FORMAT_ASTC_LDR_2D_10X6_FLT16),
-   fmt(VK_FORMAT_ASTC_10x8_UNORM_BLOCK,   ISL_FORMAT_ASTC_LDR_2D_10X8_FLT16),
-   fmt(VK_FORMAT_ASTC_10x10_UNORM_BLOCK,  ISL_FORMAT_ASTC_LDR_2D_10X10_FLT16),
-   fmt(VK_FORMAT_ASTC_12x10_UNORM_BLOCK,  ISL_FORMAT_ASTC_LDR_2D_12X10_FLT16),
-   fmt(VK_FORMAT_ASTC_12x12_UNORM_BLOCK,  ISL_FORMAT_ASTC_LDR_2D_12X12_FLT16),
-   fmt(VK_FORMAT_B8G8R8_UNORM,            ISL_FORMAT_UNSUPPORTED),
-   fmt(VK_FORMAT_B8G8R8_SNORM,            ISL_FORMAT_UNSUPPORTED),
-   fmt(VK_FORMAT_B8G8R8_USCALED,          ISL_FORMAT_UNSUPPORTED),
-   fmt(VK_FORMAT_B8G8R8_SSCALED,          ISL_FORMAT_UNSUPPORTED),
-   fmt(VK_FORMAT_B8G8R8_UINT,             ISL_FORMAT_UNSUPPORTED),
-   fmt(VK_FORMAT_B8G8R8_SINT,             ISL_FORMAT_UNSUPPORTED),
-   fmt(VK_FORMAT_B8G8R8_SRGB,             ISL_FORMAT_UNSUPPORTED),
-   fmt(VK_FORMAT_B8G8R8A8_UNORM,          ISL_FORMAT_B8G8R8A8_UNORM),
-   fmt(VK_FORMAT_B8G8R8A8_SNORM,          ISL_FORMAT_UNSUPPORTED),
-   fmt(VK_FORMAT_B8G8R8A8_USCALED,        ISL_FORMAT_UNSUPPORTED),
-   fmt(VK_FORMAT_B8G8R8A8_SSCALED,        ISL_FORMAT_UNSUPPORTED),
-   fmt(VK_FORMAT_B8G8R8A8_UINT,           ISL_FORMAT_UNSUPPORTED),
-   fmt(VK_FORMAT_B8G8R8A8_SINT,           ISL_FORMAT_UNSUPPORTED),
-   fmt(VK_FORMAT_B8G8R8A8_SRGB,           ISL_FORMAT_B8G8R8A8_UNORM_SRGB),
+   swiz_fmt1(VK_FORMAT_BC1_RGB_UNORM_BLOCK,          ISL_FORMAT_BC1_UNORM, RGB1),
+   swiz_fmt1(VK_FORMAT_BC1_RGB_SRGB_BLOCK,           ISL_FORMAT_BC1_UNORM_SRGB, RGB1),
+   fmt1(VK_FORMAT_BC1_RGBA_UNORM_BLOCK,              ISL_FORMAT_BC1_UNORM),
+   fmt1(VK_FORMAT_BC1_RGBA_SRGB_BLOCK,               ISL_FORMAT_BC1_UNORM_SRGB),
+   fmt1(VK_FORMAT_BC2_UNORM_BLOCK,                   ISL_FORMAT_BC2_UNORM),
+   fmt1(VK_FORMAT_BC2_SRGB_BLOCK,                    ISL_FORMAT_BC2_UNORM_SRGB),
+   fmt1(VK_FORMAT_BC3_UNORM_BLOCK,                   ISL_FORMAT_BC3_UNORM),
+   fmt1(VK_FORMAT_BC3_SRGB_BLOCK,                    ISL_FORMAT_BC3_UNORM_SRGB),
+   fmt1(VK_FORMAT_BC4_UNORM_BLOCK,                   ISL_FORMAT_BC4_UNORM),
+   fmt1(VK_FORMAT_BC4_SNORM_BLOCK,                   ISL_FORMAT_BC4_SNORM),
+   fmt1(VK_FORMAT_BC5_UNORM_BLOCK,                   ISL_FORMAT_BC5_UNORM),
+   fmt1(VK_FORMAT_BC5_SNORM_BLOCK,                   ISL_FORMAT_BC5_SNORM),
+   fmt1(VK_FORMAT_BC6H_UFLOAT_BLOCK,                 ISL_FORMAT_BC6H_UF16),
+   fmt1(VK_FORMAT_BC6H_SFLOAT_BLOCK,                 ISL_FORMAT_BC6H_SF16),
+   fmt1(VK_FORMAT_BC7_UNORM_BLOCK,                   ISL_FORMAT_BC7_UNORM),
+   fmt1(VK_FORMAT_BC7_SRGB_BLOCK,                    ISL_FORMAT_BC7_UNORM_SRGB),
+   fmt1(VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK,           ISL_FORMAT_ETC2_RGB8),
+   fmt1(VK_FORMAT_ETC2_R8G8B8_SRGB_BLOCK,            ISL_FORMAT_ETC2_SRGB8),
+   fmt1(VK_FORMAT_ETC2_R8G8B8A1_UNORM_BLOCK,         ISL_FORMAT_ETC2_RGB8_PTA),
+   fmt1(VK_FORMAT_ETC2_R8G8B8A1_SRGB_BLOCK,          ISL_FORMAT_ETC2_SRGB8_PTA),
+   fmt1(VK_FORMAT_ETC2_R8G8B8A8_UNORM_BLOCK,         ISL_FORMAT_ETC2_EAC_RGBA8),
+   fmt1(VK_FORMAT_ETC2_R8G8B8A8_SRGB_BLOCK,          ISL_FORMAT_ETC2_EAC_SRGB8_A8),
+   fmt1(VK_FORMAT_EAC_R11_UNORM_BLOCK,               ISL_FORMAT_EAC_R11),
+   fmt1(VK_FORMAT_EAC_R11_SNORM_BLOCK,               ISL_FORMAT_EAC_SIGNED_R11),
+   fmt1(VK_FORMAT_EAC_R11G11_UNORM_BLOCK,            ISL_FORMAT_EAC_RG11),
+   fmt1(VK_FORMAT_EAC_R11G11_SNORM_BLOCK,            ISL_FORMAT_EAC_SIGNED_RG11),
+   fmt1(VK_FORMAT_ASTC_4x4_SRGB_BLOCK,               ISL_FORMAT_ASTC_LDR_2D_4X4_U8SRGB),
+   fmt1(VK_FORMAT_ASTC_5x4_SRGB_BLOCK,               ISL_FORMAT_ASTC_LDR_2D_5X4_U8SRGB),
+   fmt1(VK_FORMAT_ASTC_5x5_SRGB_BLOCK,               ISL_FORMAT_ASTC_LDR_2D_5X5_U8SRGB),
+   fmt1(VK_FORMAT_ASTC_6x5_SRGB_BLOCK,               ISL_FORMAT_ASTC_LDR_2D_6X5_U8SRGB),
+   fmt1(VK_FORMAT_ASTC_6x6_SRGB_BLOCK,               ISL_FORMAT_ASTC_LDR_2D_6X6_U8SRGB),
+   fmt1(VK_FORMAT_ASTC_8x5_SRGB_BLOCK,               ISL_FORMAT_ASTC_LDR_2D_8X5_U8SRGB),
+   fmt1(VK_FORMAT_ASTC_8x6_SRGB_BLOCK,               ISL_FORMAT_ASTC_LDR_2D_8X6_U8SRGB),
+   fmt1(VK_FORMAT_ASTC_8x8_SRGB_BLOCK,               ISL_FORMAT_ASTC_LDR_2D_8X8_U8SRGB),
+   fmt1(VK_FORMAT_ASTC_10x5_SRGB_BLOCK,              ISL_FORMAT_ASTC_LDR_2D_10X5_U8SRGB),
+   fmt1(VK_FORMAT_ASTC_10x6_SRGB_BLOCK,              ISL_FORMAT_ASTC_LDR_2D_10X6_U8SRGB),
+   fmt1(VK_FORMAT_ASTC_10x8_SRGB_BLOCK,              ISL_FORMAT_ASTC_LDR_2D_10X8_U8SRGB),
+   fmt1(VK_FORMAT_ASTC_10x10_SRGB_BLOCK,             ISL_FORMAT_ASTC_LDR_2D_10X10_U8SRGB),
+   fmt1(VK_FORMAT_ASTC_12x10_SRGB_BLOCK,             ISL_FORMAT_ASTC_LDR_2D_12X10_U8SRGB),
+   fmt1(VK_FORMAT_ASTC_12x12_SRGB_BLOCK,             ISL_FORMAT_ASTC_LDR_2D_12X12_U8SRGB),
+   fmt1(VK_FORMAT_ASTC_4x4_UNORM_BLOCK,              ISL_FORMAT_ASTC_LDR_2D_4X4_FLT16),
+   fmt1(VK_FORMAT_ASTC_5x4_UNORM_BLOCK,              ISL_FORMAT_ASTC_LDR_2D_5X4_FLT16),
+   fmt1(VK_FORMAT_ASTC_5x5_UNORM_BLOCK,              ISL_FORMAT_ASTC_LDR_2D_5X5_FLT16),
+   fmt1(VK_FORMAT_ASTC_6x5_UNORM_BLOCK,              ISL_FORMAT_ASTC_LDR_2D_6X5_FLT16),
+   fmt1(VK_FORMAT_ASTC_6x6_UNORM_BLOCK,              ISL_FORMAT_ASTC_LDR_2D_6X6_FLT16),
+   fmt1(VK_FORMAT_ASTC_8x5_UNORM_BLOCK,              ISL_FORMAT_ASTC_LDR_2D_8X5_FLT16),
+   fmt1(VK_FORMAT_ASTC_8x6_UNORM_BLOCK,              ISL_FORMAT_ASTC_LDR_2D_8X6_FLT16),
+   fmt1(VK_FORMAT_ASTC_8x8_UNORM_BLOCK,              ISL_FORMAT_ASTC_LDR_2D_8X8_FLT16),
+   fmt1(VK_FORMAT_ASTC_10x5_UNORM_BLOCK,             ISL_FORMAT_ASTC_LDR_2D_10X5_FLT16),
+   fmt1(VK_FORMAT_ASTC_10x6_UNORM_BLOCK,             ISL_FORMAT_ASTC_LDR_2D_10X6_FLT16),
+   fmt1(VK_FORMAT_ASTC_10x8_UNORM_BLOCK,             ISL_FORMAT_ASTC_LDR_2D_10X8_FLT16),
+   fmt1(VK_FORMAT_ASTC_10x10_UNORM_BLOCK,            ISL_FORMAT_ASTC_LDR_2D_10X10_FLT16),
+   fmt1(VK_FORMAT_ASTC_12x10_UNORM_BLOCK,            ISL_FORMAT_ASTC_LDR_2D_12X10_FLT16),
+   fmt1(VK_FORMAT_ASTC_12x12_UNORM_BLOCK,            ISL_FORMAT_ASTC_LDR_2D_12X12_FLT16),
+   fmt_unsupported(VK_FORMAT_B8G8R8_UNORM),
+   fmt_unsupported(VK_FORMAT_B8G8R8_SNORM),
+   fmt_unsupported(VK_FORMAT_B8G8R8_USCALED),
+   fmt_unsupported(VK_FORMAT_B8G8R8_SSCALED),
+   fmt_unsupported(VK_FORMAT_B8G8R8_UINT),
+   fmt_unsupported(VK_FORMAT_B8G8R8_SINT),
+   fmt_unsupported(VK_FORMAT_B8G8R8_SRGB),
+   fmt1(VK_FORMAT_B8G8R8A8_UNORM,                    ISL_FORMAT_B8G8R8A8_UNORM),
+   fmt_unsupported(VK_FORMAT_B8G8R8A8_SNORM),
+   fmt_unsupported(VK_FORMAT_B8G8R8A8_USCALED),
+   fmt_unsupported(VK_FORMAT_B8G8R8A8_SSCALED),
+   fmt_unsupported(VK_FORMAT_B8G8R8A8_UINT),
+   fmt_unsupported(VK_FORMAT_B8G8R8A8_SINT),
+   fmt1(VK_FORMAT_B8G8R8A8_SRGB,                     ISL_FORMAT_B8G8R8A8_UNORM_SRGB),
 };
 
+static const struct anv_format ycbcr_formats[] = {
+   ycbcr_fmt(VK_FORMAT_G8B8G8R8_422_UNORM_KHR, 1,
+             y_plane(ISL_FORMAT_YCRCB_SWAPUV, RGBA, _ISL_SWIZZLE(BLUE, GREEN, RED, ZERO), 1, 1)),
+   ycbcr_fmt(VK_FORMAT_B8G8R8G8_422_UNORM_KHR, 1,
+             y_plane(ISL_FORMAT_YCRCB_SWAPUVY, RGBA, _ISL_SWIZZLE(BLUE, GREEN, RED, ZERO), 1, 1)),
+   ycbcr_fmt(VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM_KHR, 3,
+             y_plane(ISL_FORMAT_R8_UNORM, RGBA, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO), 1, 1),
+             chroma_plane(ISL_FORMAT_R8_UNORM, RGBA, _ISL_SWIZZLE(BLUE, ZERO, ZERO, ZERO), 2, 2),
+             chroma_plane(ISL_FORMAT_R8_UNORM, RGBA, _ISL_SWIZZLE(RED, ZERO, ZERO, ZERO), 2, 2)),
+   ycbcr_fmt(VK_FORMAT_G8_B8R8_2PLANE_420_UNORM_KHR, 2,
+             y_plane(ISL_FORMAT_R8_UNORM, RGBA, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO), 1, 1),
+             chroma_plane(ISL_FORMAT_R8G8_UNORM, RGBA, _ISL_SWIZZLE(BLUE, RED, ZERO, ZERO), 2, 2)),
+   ycbcr_fmt(VK_FORMAT_G8_B8_R8_3PLANE_422_UNORM_KHR, 3,
+             y_plane(ISL_FORMAT_R8_UNORM, RGBA, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO), 1, 1),
+             chroma_plane(ISL_FORMAT_R8_UNORM, RGBA, _ISL_SWIZZLE(BLUE, ZERO, ZERO, ZERO), 2, 1),
+             chroma_plane(ISL_FORMAT_R8_UNORM, RGBA, _ISL_SWIZZLE(RED, ZERO, ZERO, ZERO), 2, 1)),
+   ycbcr_fmt(VK_FORMAT_G8_B8R8_2PLANE_422_UNORM_KHR, 2,
+             y_plane(ISL_FORMAT_R8_UNORM, RGBA, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO), 1, 1),
+             chroma_plane(ISL_FORMAT_R8G8_UNORM, RGBA, _ISL_SWIZZLE(BLUE, RED, ZERO, ZERO), 2, 1)),
+   ycbcr_fmt(VK_FORMAT_G8_B8_R8_3PLANE_444_UNORM_KHR, 3,
+             y_plane(ISL_FORMAT_R8_UNORM, RGBA, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO), 1, 1),
+             chroma_plane(ISL_FORMAT_R8_UNORM, RGBA, _ISL_SWIZZLE(BLUE, ZERO, ZERO, ZERO), 1, 1),
+             chroma_plane(ISL_FORMAT_R8_UNORM, RGBA, _ISL_SWIZZLE(RED, ZERO, ZERO, ZERO), 1, 1)),
+
+   fmt_unsupported(VK_FORMAT_R10X6_UNORM_PACK16_KHR),
+   fmt_unsupported(VK_FORMAT_R10X6G10X6_UNORM_2PACK16_KHR),
+   fmt_unsupported(VK_FORMAT_R10X6G10X6B10X6A10X6_UNORM_4PACK16_KHR),
+   fmt_unsupported(VK_FORMAT_G10X6B10X6G10X6R10X6_422_UNORM_4PACK16_KHR),
+   fmt_unsupported(VK_FORMAT_B10X6G10X6R10X6G10X6_422_UNORM_4PACK16_KHR),
+   fmt_unsupported(VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_420_UNORM_3PACK16_KHR),
+   fmt_unsupported(VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16_KHR),
+   fmt_unsupported(VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_422_UNORM_3PACK16_KHR),
+   fmt_unsupported(VK_FORMAT_G10X6_B10X6R10X6_2PLANE_422_UNORM_3PACK16_KHR),
+   fmt_unsupported(VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_444_UNORM_3PACK16_KHR),
+   fmt_unsupported(VK_FORMAT_R12X4_UNORM_PACK16_KHR),
+   fmt_unsupported(VK_FORMAT_R12X4G12X4_UNORM_2PACK16_KHR),
+   fmt_unsupported(VK_FORMAT_R12X4G12X4B12X4A12X4_UNORM_4PACK16_KHR),
+   fmt_unsupported(VK_FORMAT_G12X4B12X4G12X4R12X4_422_UNORM_4PACK16_KHR),
+   fmt_unsupported(VK_FORMAT_B12X4G12X4R12X4G12X4_422_UNORM_4PACK16_KHR),
+   fmt_unsupported(VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_420_UNORM_3PACK16_KHR),
+   fmt_unsupported(VK_FORMAT_G12X4_B12X4R12X4_2PLANE_420_UNORM_3PACK16_KHR),
+   fmt_unsupported(VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_422_UNORM_3PACK16_KHR),
+   fmt_unsupported(VK_FORMAT_G12X4_B12X4R12X4_2PLANE_422_UNORM_3PACK16_KHR),
+   fmt_unsupported(VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_444_UNORM_3PACK16_KHR),
+   /* TODO: it is possible to enable the following 2 formats, but that
+    * requires further refactoring of how we handle multiplanar formats.
+    */
+   fmt_unsupported(VK_FORMAT_G16B16G16R16_422_UNORM_KHR),
+   fmt_unsupported(VK_FORMAT_B16G16R16G16_422_UNORM_KHR),
+
+   ycbcr_fmt(VK_FORMAT_G16_B16_R16_3PLANE_420_UNORM_KHR, 3,
+             y_plane(ISL_FORMAT_R16_UNORM, RGBA, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO), 1, 1),
+             chroma_plane(ISL_FORMAT_R16_UNORM, RGBA, _ISL_SWIZZLE(BLUE, ZERO, ZERO, ZERO), 2, 2),
+             chroma_plane(ISL_FORMAT_R16_UNORM, RGBA, _ISL_SWIZZLE(RED, ZERO, ZERO, ZERO), 2, 2)),
+   ycbcr_fmt(VK_FORMAT_G16_B16R16_2PLANE_420_UNORM_KHR, 2,
+             y_plane(ISL_FORMAT_R16_UNORM, RGBA, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO), 1, 1),
+             chroma_plane(ISL_FORMAT_R16G16_UNORM, RGBA, _ISL_SWIZZLE(BLUE, RED, ZERO, ZERO), 2, 2)),
+   ycbcr_fmt(VK_FORMAT_G16_B16_R16_3PLANE_422_UNORM_KHR, 3,
+             y_plane(ISL_FORMAT_R16_UNORM, RGBA, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO), 1, 1),
+             chroma_plane(ISL_FORMAT_R16_UNORM, RGBA, _ISL_SWIZZLE(BLUE, ZERO, ZERO, ZERO), 2, 1),
+             chroma_plane(ISL_FORMAT_R16_UNORM, RGBA, _ISL_SWIZZLE(RED, ZERO, ZERO, ZERO), 2, 1)),
+   ycbcr_fmt(VK_FORMAT_G16_B16R16_2PLANE_422_UNORM_KHR, 2,
+             y_plane(ISL_FORMAT_R16_UNORM, RGBA, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO), 1, 1),
+             chroma_plane(ISL_FORMAT_R16G16_UNORM, RGBA, _ISL_SWIZZLE(BLUE, RED, ZERO, ZERO), 2, 1)),
+   ycbcr_fmt(VK_FORMAT_G16_B16_R16_3PLANE_444_UNORM_KHR, 3,
+             y_plane(ISL_FORMAT_R16_UNORM, RGBA, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO), 1, 1),
+             chroma_plane(ISL_FORMAT_R16_UNORM, RGBA, _ISL_SWIZZLE(BLUE, ZERO, ZERO, ZERO), 1, 1),
+             chroma_plane(ISL_FORMAT_R16_UNORM, RGBA, _ISL_SWIZZLE(RED, ZERO, ZERO, ZERO), 1, 1)),
+};
+
+#undef _fmt
+#undef swiz_fmt1
+#undef fmt1
 #undef fmt
 
-static bool
-format_supported(VkFormat vk_format)
-{
-   if (vk_format >= ARRAY_SIZE(anv_formats))
-      return false;
+static const struct {
+   const struct anv_format *formats;
+   uint32_t n_formats;
+} anv_formats[] = {
+   [0]                                       = { .formats = main_formats,
+                                                 .n_formats = ARRAY_SIZE(main_formats), },
+   [_VK_KHR_sampler_ycbcr_conversion_number] = { .formats = ycbcr_formats,
+                                                 .n_formats = ARRAY_SIZE(ycbcr_formats), },
+};
 
-   return anv_formats[vk_format].isl_format != ISL_FORMAT_UNSUPPORTED;
+const struct anv_format *
+anv_get_format(VkFormat vk_format)
+{
+   uint32_t enum_offset = VK_ENUM_OFFSET(vk_format);
+   uint32_t ext_number = VK_ENUM_EXTENSION(vk_format);
+
+   if (ext_number >= ARRAY_SIZE(anv_formats) ||
+       enum_offset >= anv_formats[ext_number].n_formats)
+      return NULL;
+
+   const struct anv_format *format =
+      &anv_formats[ext_number].formats[enum_offset];
+   if (format->planes[0].isl_format == ISL_FORMAT_UNSUPPORTED)
+      return NULL;
+
+   return format;
 }
 
 /**
  * Exactly one bit must be set in \a aspect.
  */
-struct anv_format
-anv_get_format(const struct gen_device_info *devinfo, VkFormat vk_format,
-               VkImageAspectFlags aspect, VkImageTiling tiling)
+struct anv_format_plane
+anv_get_format_plane(const struct gen_device_info *devinfo, VkFormat vk_format,
+                     VkImageAspectFlags aspect, VkImageTiling tiling)
 {
-   if (!format_supported(vk_format))
-      return anv_formats[VK_FORMAT_UNDEFINED];
+   const struct anv_format *format = anv_get_format(vk_format);
+   struct anv_format_plane plane_format = {
+      .isl_format = ISL_FORMAT_UNSUPPORTED,
+   };
 
-   struct anv_format format = anv_formats[vk_format];
+   if (format == NULL)
+      return plane_format;
 
-   if (aspect == VK_IMAGE_ASPECT_STENCIL_BIT) {
-      assert(vk_format_aspects(vk_format) & VK_IMAGE_ASPECT_STENCIL_BIT);
-      format.isl_format = ISL_FORMAT_R8_UINT;
-      return format;
+   uint32_t plane = anv_image_aspect_to_plane(vk_format_aspects(vk_format), aspect);
+   plane_format = format->planes[plane];
+   if (plane_format.isl_format == ISL_FORMAT_UNSUPPORTED)
+      return plane_format;
+
+   if (aspect & (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)) {
+      assert(vk_format_aspects(vk_format) &
+             (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT));
+      return plane_format;
    }
 
-   if (aspect & VK_IMAGE_ASPECT_DEPTH_BIT) {
-      assert(vk_format_aspects(vk_format) & VK_IMAGE_ASPECT_DEPTH_BIT);
-      return format;
-   }
-
-   assert(aspect == VK_IMAGE_ASPECT_COLOR_BIT);
-   assert(vk_format_aspects(vk_format) == VK_IMAGE_ASPECT_COLOR_BIT);
+   assert((aspect & ~VK_IMAGE_ASPECT_ANY_COLOR_BIT) == 0);
 
    const struct isl_format_layout *isl_layout =
-      isl_format_get_layout(format.isl_format);
+      isl_format_get_layout(plane_format.isl_format);
 
    if (tiling == VK_IMAGE_TILING_OPTIMAL &&
        !util_is_power_of_two(isl_layout->bpb)) {
@@ -295,13 +442,14 @@ anv_get_format(const struct gen_device_info *devinfo, VkFormat vk_format,
        * this by switching them over to RGBX or RGBA formats under the
        * hood.
        */
-      enum isl_format rgbx = isl_format_rgb_to_rgbx(format.isl_format);
+      enum isl_format rgbx = isl_format_rgb_to_rgbx(plane_format.isl_format);
       if (rgbx != ISL_FORMAT_UNSUPPORTED &&
           isl_format_supports_rendering(devinfo, rgbx)) {
-         format.isl_format = rgbx;
+         plane_format.isl_format = rgbx;
       } else {
-         format.isl_format = isl_format_rgb_to_rgba(format.isl_format);
-         format.swizzle = ISL_SWIZZLE(RED, GREEN, BLUE, ONE);
+         plane_format.isl_format =
+            isl_format_rgb_to_rgba(plane_format.isl_format);
+         plane_format.swizzle = ISL_SWIZZLE(RED, GREEN, BLUE, ONE);
       }
    }
 
@@ -309,20 +457,18 @@ anv_get_format(const struct gen_device_info *devinfo, VkFormat vk_format,
     * back to a format with a more complex swizzle.
     */
    if (vk_format == VK_FORMAT_B4G4R4A4_UNORM_PACK16 && devinfo->gen < 8) {
-      return (struct anv_format) {
-         .isl_format = ISL_FORMAT_B4G4R4A4_UNORM,
-         .swizzle = ISL_SWIZZLE(GREEN, RED, ALPHA, BLUE),
-      };
+      plane_format.isl_format = ISL_FORMAT_B4G4R4A4_UNORM;
+      plane_format.swizzle = ISL_SWIZZLE(GREEN, RED, ALPHA, BLUE);
    }
 
-   return format;
+   return plane_format;
 }
 
 // Format capabilities
 
 static VkFormatFeatureFlags
 get_image_format_properties(const struct gen_device_info *devinfo,
-                            enum isl_format base, struct anv_format format)
+                            enum isl_format base, struct anv_format_plane format)
 {
    if (format.isl_format == ISL_FORMAT_UNSUPPORTED)
       return 0;
@@ -392,19 +538,20 @@ get_buffer_format_properties(const struct gen_device_info *devinfo,
 
 static void
 anv_physical_device_get_format_properties(struct anv_physical_device *physical_device,
-                                          VkFormat format,
+                                          VkFormat vk_format,
                                           VkFormatProperties *out_properties)
 {
    int gen = physical_device->info.gen * 10;
    if (physical_device->info.is_haswell)
       gen += 5;
 
+   const struct anv_format *format = anv_get_format(vk_format);
    VkFormatFeatureFlags linear = 0, tiled = 0, buffer = 0;
-   if (!format_supported(format)) {
+   if (format == NULL) {
       /* Nothing to do here */
-   } else if (vk_format_is_depth_or_stencil(format)) {
+   } else if (vk_format_is_depth_or_stencil(vk_format)) {
       tiled |= VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT;
-      if (vk_format_aspects(format) == VK_IMAGE_ASPECT_DEPTH_BIT ||
+      if (vk_format_aspects(vk_format) == VK_IMAGE_ASPECT_DEPTH_BIT ||
           physical_device->info.gen >= 8)
          tiled |= VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT;
 
@@ -413,13 +560,13 @@ anv_physical_device_get_format_properties(struct anv_physical_device *physical_d
                VK_FORMAT_FEATURE_TRANSFER_SRC_BIT_KHR |
                VK_FORMAT_FEATURE_TRANSFER_DST_BIT_KHR;
    } else {
-      struct anv_format linear_fmt, tiled_fmt;
-      linear_fmt = anv_get_format(&physical_device->info, format,
-                                  VK_IMAGE_ASPECT_COLOR_BIT,
-                                  VK_IMAGE_TILING_LINEAR);
-      tiled_fmt = anv_get_format(&physical_device->info, format,
-                                 VK_IMAGE_ASPECT_COLOR_BIT,
-                                 VK_IMAGE_TILING_OPTIMAL);
+      struct anv_format_plane linear_fmt, tiled_fmt;
+      linear_fmt = anv_get_format_plane(&physical_device->info, vk_format,
+                                        VK_IMAGE_ASPECT_COLOR_BIT,
+                                        VK_IMAGE_TILING_LINEAR);
+      tiled_fmt = anv_get_format_plane(&physical_device->info, vk_format,
+                                       VK_IMAGE_ASPECT_COLOR_BIT,
+                                       VK_IMAGE_TILING_OPTIMAL);
 
       linear = get_image_format_properties(&physical_device->info,
                                            linear_fmt.isl_format, linear_fmt);
@@ -445,6 +592,53 @@ anv_physical_device_get_format_properties(struct anv_physical_device *physical_d
       /* ASTC textures must be in Y-tiled memory */
       if (isl_format_get_layout(linear_fmt.isl_format)->txc == ISL_TXC_ASTC)
          linear = 0;
+   }
+
+   if (format && format->can_ycbcr) {
+      VkFormatFeatureFlags ycbcr_features = 0;
+
+      /* The sampler doesn't have support for mid point when it handles YUV on
+       * its own.
+       */
+      if (isl_format_is_yuv(format->planes[0].isl_format)) {
+         /* TODO: We've disabled linear implicit reconstruction with the
+          * sampler. The failures show a slightly out of range values on the
+          * bottom left of the sampled image.
+          */
+         ycbcr_features |= VK_FORMAT_FEATURE_MIDPOINT_CHROMA_SAMPLES_BIT_KHR;
+      } else {
+         ycbcr_features |= VK_FORMAT_FEATURE_SAMPLED_IMAGE_YCBCR_CONVERSION_LINEAR_FILTER_BIT_KHR |
+            VK_FORMAT_FEATURE_MIDPOINT_CHROMA_SAMPLES_BIT_KHR |
+            VK_FORMAT_FEATURE_SAMPLED_IMAGE_YCBCR_CONVERSION_SEPARATE_RECONSTRUCTION_FILTER_BIT_KHR;
+      }
+
+      /* We can support cosited chroma locations when handle planes with our
+       * own shader snippets.
+       */
+      for (unsigned p = 0; p < format->n_planes; p++) {
+         if (format->planes[p].denominator_scales[0] > 1 ||
+             format->planes[p].denominator_scales[1] > 1) {
+            ycbcr_features |= VK_FORMAT_FEATURE_COSITED_CHROMA_SAMPLES_BIT_KHR;
+            break;
+         }
+      }
+
+      if (format->n_planes > 1)
+         ycbcr_features |= VK_FORMAT_FEATURE_DISJOINT_BIT_KHR;
+
+      linear |= ycbcr_features;
+      tiled |= ycbcr_features;
+
+      const VkFormatFeatureFlags disallowed_ycbcr_image_features =
+         VK_FORMAT_FEATURE_BLIT_SRC_BIT |
+         VK_FORMAT_FEATURE_BLIT_DST_BIT |
+         VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
+         VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT |
+         VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT;
+
+      linear &= ~disallowed_ycbcr_image_features;
+      tiled &= ~disallowed_ycbcr_image_features;
+      buffer = 0;
    }
 
    out_properties->linearTilingFeatures = linear;
@@ -489,7 +683,8 @@ static VkResult
 anv_get_image_format_properties(
    struct anv_physical_device *physical_device,
    const VkPhysicalDeviceImageFormatInfo2KHR *info,
-   VkImageFormatProperties *pImageFormatProperties)
+   VkImageFormatProperties *pImageFormatProperties,
+   VkSamplerYcbcrConversionImageFormatPropertiesKHR *pYcbcrImageFormatProperties)
 {
    VkFormatProperties format_props;
    VkFormatFeatureFlags format_feature_flags;
@@ -497,8 +692,9 @@ anv_get_image_format_properties(
    uint32_t maxMipLevels;
    uint32_t maxArraySize;
    VkSampleCountFlags sampleCounts = VK_SAMPLE_COUNT_1_BIT;
+   const struct anv_format *format = anv_get_format(info->format);
 
-   if (!format_supported(info->format))
+   if (format == NULL)
       goto unsupported;
 
    anv_physical_device_get_format_properties(physical_device, info->format,
@@ -552,7 +748,7 @@ anv_get_image_format_properties(
     *    * This field cannot be ASTC format if the Surface Type is SURFTYPE_1D.
     */
    if (info->type == VK_IMAGE_TYPE_1D &&
-       isl_format_is_compressed(anv_formats[info->format].isl_format)) {
+       isl_format_is_compressed(format->planes[0].isl_format)) {
        goto unsupported;
    }
 
@@ -621,6 +817,11 @@ anv_get_image_format_properties(
       .maxResourceSize = UINT32_MAX,
    };
 
+   if (pYcbcrImageFormatProperties) {
+      pYcbcrImageFormatProperties->combinedImageSamplerDescriptorCount =
+         format->n_planes;
+   }
+
    return VK_SUCCESS;
 
 unsupported:
@@ -657,7 +858,7 @@ VkResult anv_GetPhysicalDeviceImageFormatProperties(
    };
 
    return anv_get_image_format_properties(physical_device, &info,
-                                          pImageFormatProperties);
+                                          pImageFormatProperties, NULL);
 }
 
 static const VkExternalMemoryPropertiesKHR prime_fd_props = {
@@ -679,12 +880,8 @@ VkResult anv_GetPhysicalDeviceImageFormatProperties2KHR(
    ANV_FROM_HANDLE(anv_physical_device, physical_device, physicalDevice);
    const VkPhysicalDeviceExternalImageFormatInfoKHR *external_info = NULL;
    VkExternalImageFormatPropertiesKHR *external_props = NULL;
+   VkSamplerYcbcrConversionImageFormatPropertiesKHR *ycbcr_props = NULL;
    VkResult result;
-
-   result = anv_get_image_format_properties(physical_device, base_info,
-               &base_props->imageFormatProperties);
-   if (result != VK_SUCCESS)
-      goto fail;
 
    /* Extract input structs */
    vk_foreach_struct_const(s, base_info->pNext) {
@@ -704,11 +901,19 @@ VkResult anv_GetPhysicalDeviceImageFormatProperties2KHR(
       case VK_STRUCTURE_TYPE_EXTERNAL_IMAGE_FORMAT_PROPERTIES_KHR:
          external_props = (void *) s;
          break;
+      case VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_IMAGE_FORMAT_PROPERTIES_KHR:
+         ycbcr_props = (void *) s;
+         break;
       default:
          anv_debug_ignored_stype(s->sType);
          break;
       }
    }
+
+   result = anv_get_image_format_properties(physical_device, base_info,
+               &base_props->imageFormatProperties, ycbcr_props);
+   if (result != VK_SUCCESS)
+      goto fail;
 
    /* From the Vulkan 1.0.42 spec:
     *
@@ -730,7 +935,8 @@ VkResult anv_GetPhysicalDeviceImageFormatProperties2KHR(
           *    vkGetPhysicalDeviceImageFormatProperties2KHR returns
           *    VK_ERROR_FORMAT_NOT_SUPPORTED.
           */
-         result = vk_errorf(VK_ERROR_FORMAT_NOT_SUPPORTED,
+         result = vk_errorf(physical_device->instance, physical_device,
+                            VK_ERROR_FORMAT_NOT_SUPPORTED,
                             "unsupported VkExternalMemoryTypeFlagBitsKHR 0x%x",
                             external_info->handleType);
          goto fail;
@@ -748,7 +954,7 @@ VkResult anv_GetPhysicalDeviceImageFormatProperties2KHR(
        *    the implementation for use in vkCreateImage, then all members of
        *    imageFormatProperties will be filled with zero.
        */
-      base_props->imageFormatProperties = (VkImageFormatProperties) {0};
+      base_props->imageFormatProperties = (VkImageFormatProperties) {};
    }
 
    return result;
@@ -809,4 +1015,63 @@ void anv_GetPhysicalDeviceExternalBufferPropertiesKHR(
  unsupported:
    pExternalBufferProperties->externalMemoryProperties =
       (VkExternalMemoryPropertiesKHR) {0};
+}
+
+VkResult anv_CreateSamplerYcbcrConversionKHR(
+    VkDevice                                    _device,
+    const VkSamplerYcbcrConversionCreateInfoKHR* pCreateInfo,
+    const VkAllocationCallbacks*                pAllocator,
+    VkSamplerYcbcrConversionKHR*                pYcbcrConversion)
+{
+   ANV_FROM_HANDLE(anv_device, device, _device);
+   struct anv_ycbcr_conversion *conversion;
+
+   assert(pCreateInfo->sType == VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_CREATE_INFO_KHR);
+
+   conversion = vk_alloc2(&device->alloc, pAllocator, sizeof(*conversion), 8,
+                          VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+   if (!conversion)
+      return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
+
+   memset(conversion, 0, sizeof(*conversion));
+
+   conversion->format = anv_get_format(pCreateInfo->format);
+   conversion->ycbcr_model = pCreateInfo->ycbcrModel;
+   conversion->ycbcr_range = pCreateInfo->ycbcrRange;
+   conversion->mapping[0] = pCreateInfo->components.r;
+   conversion->mapping[1] = pCreateInfo->components.g;
+   conversion->mapping[2] = pCreateInfo->components.b;
+   conversion->mapping[3] = pCreateInfo->components.a;
+   conversion->chroma_offsets[0] = pCreateInfo->xChromaOffset;
+   conversion->chroma_offsets[1] = pCreateInfo->yChromaOffset;
+   conversion->chroma_filter = pCreateInfo->chromaFilter;
+
+   bool has_chroma_subsampled = false;
+   for (uint32_t p = 0; p < conversion->format->n_planes; p++) {
+      if (conversion->format->planes[p].has_chroma &&
+          (conversion->format->planes[p].denominator_scales[0] > 1 ||
+           conversion->format->planes[p].denominator_scales[1] > 1))
+         has_chroma_subsampled = true;
+   }
+   conversion->chroma_reconstruction = has_chroma_subsampled &&
+      (conversion->chroma_offsets[0] == VK_CHROMA_LOCATION_COSITED_EVEN_KHR ||
+       conversion->chroma_offsets[1] == VK_CHROMA_LOCATION_COSITED_EVEN_KHR);
+
+   *pYcbcrConversion = anv_ycbcr_conversion_to_handle(conversion);
+
+   return VK_SUCCESS;
+}
+
+void anv_DestroySamplerYcbcrConversionKHR(
+    VkDevice                                    _device,
+    VkSamplerYcbcrConversionKHR                 YcbcrConversion,
+    const VkAllocationCallbacks*                pAllocator)
+{
+   ANV_FROM_HANDLE(anv_device, device, _device);
+   ANV_FROM_HANDLE(anv_ycbcr_conversion, conversion, YcbcrConversion);
+
+   if (!conversion)
+      return;
+
+   vk_free2(&device->alloc, pAllocator, conversion);
 }

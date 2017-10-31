@@ -158,98 +158,38 @@ isl_extent3d_el_to_sa(enum isl_format fmt, struct isl_extent3d extent_el)
    };
 }
 
-void
-isl_gen4_surf_fill_state_s(const struct isl_device *dev, void *state,
-                           const struct isl_surf_fill_state_info *restrict info);
+/* This is useful for adding the isl_prefix to genX functions */
+#define __PASTE2(x, y) x ## y
+#define __PASTE(x, y) __PASTE2(x, y)
+#define isl_genX(x) __PASTE(isl_, genX(x))
 
-void
-isl_gen5_surf_fill_state_s(const struct isl_device *dev, void *state,
-                           const struct isl_surf_fill_state_info *restrict info);
-
-void
-isl_gen6_surf_fill_state_s(const struct isl_device *dev, void *state,
-                           const struct isl_surf_fill_state_info *restrict info);
-
-void
-isl_gen7_surf_fill_state_s(const struct isl_device *dev, void *state,
-                           const struct isl_surf_fill_state_info *restrict info);
-
-void
-isl_gen75_surf_fill_state_s(const struct isl_device *dev, void *state,
-                            const struct isl_surf_fill_state_info *restrict info);
-void
-isl_gen8_surf_fill_state_s(const struct isl_device *dev, void *state,
-                           const struct isl_surf_fill_state_info *restrict info);
-void
-isl_gen9_surf_fill_state_s(const struct isl_device *dev, void *state,
-                           const struct isl_surf_fill_state_info *restrict info);
-
-void
-isl_gen10_surf_fill_state_s(const struct isl_device *dev, void *state,
-                            const struct isl_surf_fill_state_info *restrict info);
-
-void
-isl_gen4_buffer_fill_state_s(void *state,
-                             const struct isl_buffer_fill_state_info *restrict info);
-
-void
-isl_gen5_buffer_fill_state_s(void *state,
-                             const struct isl_buffer_fill_state_info *restrict info);
-
-void
-isl_gen6_buffer_fill_state_s(void *state,
-                             const struct isl_buffer_fill_state_info *restrict info);
-
-void
-isl_gen7_buffer_fill_state_s(void *state,
-                             const struct isl_buffer_fill_state_info *restrict info);
-
-void
-isl_gen75_buffer_fill_state_s(void *state,
-                              const struct isl_buffer_fill_state_info *restrict info);
-
-void
-isl_gen8_buffer_fill_state_s(void *state,
-                             const struct isl_buffer_fill_state_info *restrict info);
-
-void
-isl_gen9_buffer_fill_state_s(void *state,
-                             const struct isl_buffer_fill_state_info *restrict info);
-
-void
-isl_gen10_buffer_fill_state_s(void *state,
-                              const struct isl_buffer_fill_state_info *restrict info);
-
-void
-isl_gen4_emit_depth_stencil_hiz_s(const struct isl_device *dev, void *batch,
-                                  const struct isl_depth_stencil_hiz_emit_info *restrict info);
-
-void
-isl_gen5_emit_depth_stencil_hiz_s(const struct isl_device *dev, void *batch,
-                                  const struct isl_depth_stencil_hiz_emit_info *restrict info);
-
-void
-isl_gen6_emit_depth_stencil_hiz_s(const struct isl_device *dev, void *batch,
-                                  const struct isl_depth_stencil_hiz_emit_info *restrict info);
-
-void
-isl_gen7_emit_depth_stencil_hiz_s(const struct isl_device *dev, void *batch,
-                                  const struct isl_depth_stencil_hiz_emit_info *restrict info);
-
-void
-isl_gen75_emit_depth_stencil_hiz_s(const struct isl_device *dev, void *batch,
-                                   const struct isl_depth_stencil_hiz_emit_info *restrict info);
-
-void
-isl_gen8_emit_depth_stencil_hiz_s(const struct isl_device *dev, void *batch,
-                                  const struct isl_depth_stencil_hiz_emit_info *restrict info);
-
-void
-isl_gen9_emit_depth_stencil_hiz_s(const struct isl_device *dev, void *batch,
-                                  const struct isl_depth_stencil_hiz_emit_info *restrict info);
-
-void
-isl_gen10_emit_depth_stencil_hiz_s(const struct isl_device *dev, void *batch,
-                                   const struct isl_depth_stencil_hiz_emit_info *restrict info);
+#ifdef genX
+#  include "isl_genX_priv.h"
+#else
+#  define genX(x) gen4_##x
+#  include "isl_genX_priv.h"
+#  undef genX
+#  define genX(x) gen5_##x
+#  include "isl_genX_priv.h"
+#  undef genX
+#  define genX(x) gen6_##x
+#  include "isl_genX_priv.h"
+#  undef genX
+#  define genX(x) gen7_##x
+#  include "isl_genX_priv.h"
+#  undef genX
+#  define genX(x) gen75_##x
+#  include "isl_genX_priv.h"
+#  undef genX
+#  define genX(x) gen8_##x
+#  include "isl_genX_priv.h"
+#  undef genX
+#  define genX(x) gen9_##x
+#  include "isl_genX_priv.h"
+#  undef genX
+#  define genX(x) gen10_##x
+#  include "isl_genX_priv.h"
+#  undef genX
+#endif
 
 #endif /* ISL_PRIV_H */

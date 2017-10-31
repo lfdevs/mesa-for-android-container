@@ -95,6 +95,9 @@ _mesa_CreateShaderObjectARB(GLenum type);
 extern void GLAPIENTRY
 _mesa_DeleteObjectARB(GLhandleARB obj);
 
+void GLAPIENTRY
+_mesa_DetachObjectARB_no_error(GLhandleARB, GLhandleARB);
+
 extern void GLAPIENTRY
 _mesa_DetachObjectARB(GLhandleARB, GLhandleARB);
 
@@ -128,8 +131,15 @@ _mesa_IsProgram(GLuint name);
 extern GLboolean GLAPIENTRY
 _mesa_IsShader(GLuint name);
 
+void GLAPIENTRY
+_mesa_LinkProgram_no_error(GLuint programObj);
+
 extern void GLAPIENTRY
 _mesa_LinkProgram(GLuint programObj);
+
+void GLAPIENTRY
+_mesa_ShaderSource_no_error(GLuint, GLsizei, const GLchar* const *,
+                            const GLint *);
 
 extern void GLAPIENTRY
 _mesa_ShaderSource(GLuint, GLsizei, const GLchar* const *, const GLint *);
@@ -193,6 +203,9 @@ _mesa_DeleteProgram(GLuint program);
 extern void GLAPIENTRY
 _mesa_DeleteShader(GLuint shader);
 
+void GLAPIENTRY
+_mesa_DetachShader_no_error(GLuint program, GLuint shader);
+
 extern void GLAPIENTRY
 _mesa_DetachShader(GLuint program, GLuint shader);
 
@@ -233,6 +246,9 @@ _mesa_GetProgramBinary(GLuint program, GLsizei bufSize, GLsizei *length,
 extern void GLAPIENTRY
 _mesa_ProgramBinary(GLuint program, GLenum binaryFormat,
                     const GLvoid *binary, GLsizei length);
+
+void GLAPIENTRY
+_mesa_ProgramParameteri_no_error(GLuint program, GLenum pname, GLint value);
 
 extern void GLAPIENTRY
 _mesa_ProgramParameteri(GLuint program, GLenum pname, GLint value);
@@ -305,6 +321,9 @@ _mesa_get_program_resourceiv(struct gl_shader_program *shProg,
                              GLint *params);
 
 /* GL_ARB_tessellation_shader */
+void GLAPIENTRY
+_mesa_PatchParameteri_no_error(GLenum pname, GLint value);
+
 extern void GLAPIENTRY
 _mesa_PatchParameteri(GLenum pname, GLint value);
 

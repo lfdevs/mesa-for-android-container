@@ -486,6 +486,7 @@ lp_rast_begin_query(struct lp_rasterizer_task *task,
    switch (pq->type) {
    case PIPE_QUERY_OCCLUSION_COUNTER:
    case PIPE_QUERY_OCCLUSION_PREDICATE:
+   case PIPE_QUERY_OCCLUSION_PREDICATE_CONSERVATIVE:
       pq->start[task->thread_index] = task->thread_data.vis_counter;
       break;
    case PIPE_QUERY_PIPELINE_STATISTICS:
@@ -512,6 +513,7 @@ lp_rast_end_query(struct lp_rasterizer_task *task,
    switch (pq->type) {
    case PIPE_QUERY_OCCLUSION_COUNTER:
    case PIPE_QUERY_OCCLUSION_PREDICATE:
+   case PIPE_QUERY_OCCLUSION_PREDICATE_CONSERVATIVE:
       pq->end[task->thread_index] +=
          task->thread_data.vis_counter - pq->start[task->thread_index];
       pq->start[task->thread_index] = 0;

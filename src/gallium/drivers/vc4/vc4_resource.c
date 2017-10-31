@@ -675,6 +675,11 @@ vc4_resource_create_with_modifiers(struct pipe_screen *pscreen,
                         goto fail;
         }
 
+        vc4_bo_label(screen, rsc->bo, "%sresource %dx%d@%d/%d",
+                     (tmpl->bind & PIPE_BIND_SCANOUT) ? "scanout " : "",
+                     tmpl->width0, tmpl->height0,
+                     rsc->cpp * 8, prsc->last_level);
+
         return prsc;
 fail:
         vc4_resource_destroy(pscreen, prsc);

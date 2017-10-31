@@ -119,6 +119,7 @@ nvc0_render_condition(struct pipe_context *pipe,
          break;
       case PIPE_QUERY_OCCLUSION_COUNTER:
       case PIPE_QUERY_OCCLUSION_PREDICATE:
+      case PIPE_QUERY_OCCLUSION_PREDICATE_CONSERVATIVE:
          if (likely(!condition)) {
             if (unlikely(hq->nesting))
                cond = wait ? NVC0_3D_COND_MODE_NOT_EQUAL :

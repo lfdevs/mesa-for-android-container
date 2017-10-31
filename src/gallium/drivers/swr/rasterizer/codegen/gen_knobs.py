@@ -37,27 +37,25 @@ def main(args=sys.argv[1:]):
     args = parser.parse_args()
 
     cur_dir = os.path.dirname(os.path.abspath(__file__))
-    template_file = os.path.join(cur_dir, 'templates', 'gen_knobs.cpp')
+    template_cpp = os.path.join(cur_dir, 'templates', 'gen_knobs.cpp')
+    template_h = os.path.join(cur_dir, 'templates', 'gen_knobs.h')
 
     if args.gen_h:
         MakoTemplateWriter.to_file(
-            template_file,
+            template_h,
             args.output,
             cmdline=sys.argv,
             filename='gen_knobs',
-            knobs=knob_defs.KNOBS,
-            includes=['core/knobs_init.h', 'common/os.h', 'sstream', 'iomanip'],
-            gen_header=True)
+            knobs=knob_defs.KNOBS)
 
     if args.gen_cpp:
         MakoTemplateWriter.to_file(
-            template_file,
+            template_cpp,
             args.output,
             cmdline=sys.argv,
             filename='gen_knobs',
             knobs=knob_defs.KNOBS,
-            includes=['core/knobs_init.h', 'common/os.h', 'sstream', 'iomanip'],
-            gen_header=False)
+            includes=['core/knobs_init.h', 'common/os.h', 'sstream', 'iomanip'])
 
     return 0
 

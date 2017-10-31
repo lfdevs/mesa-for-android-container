@@ -331,6 +331,7 @@ svga_create_blend_state(struct pipe_context *pipe,
    blend->independent_blend_enable = templ->independent_blend_enable;
 
    blend->alpha_to_coverage = templ->alpha_to_coverage;
+   blend->alpha_to_one = templ->alpha_to_one;
 
    if (svga_have_vgpu10(svga)) {
       define_blend_state_object(svga, blend);

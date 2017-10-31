@@ -370,6 +370,7 @@ struct lp_build_tgsi_context
    void (*emit_store)(struct lp_build_tgsi_context *,
                       const struct tgsi_full_instruction *,
                       const struct tgsi_opcode_info *,
+                      unsigned index,
                       LLVMValueRef dst[4]);
 
    void (*emit_declaration)(struct lp_build_tgsi_context *,

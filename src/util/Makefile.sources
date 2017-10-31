@@ -37,6 +37,8 @@ MESA_UTIL_FILES := \
 	simple_list.h \
 	slab.c \
 	slab.h \
+	string_buffer.c \
+	string_buffer.h \
 	strndup.h \
 	strtod.c \
 	strtod.h \
@@ -54,3 +56,7 @@ MESA_UTIL_FILES := \
 
 MESA_UTIL_GENERATED_FILES = \
 	format_srgb.c
+
+XMLCONFIG_FILES := \
+	xmlconfig.c \
+	xmlconfig.h

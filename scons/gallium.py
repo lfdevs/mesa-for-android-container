@@ -193,15 +193,15 @@ def generate(env):
     env.Tool(env['toolchain'])
 
     # Allow override compiler and specify additional flags from environment
-    if os.environ.has_key('CC'):
+    if 'CC' in os.environ:
         env['CC'] = os.environ['CC']
-    if os.environ.has_key('CFLAGS'):
+    if 'CFLAGS' in os.environ:
         env['CCFLAGS'] += SCons.Util.CLVar(os.environ['CFLAGS'])
-    if os.environ.has_key('CXX'):
+    if 'CXX' in os.environ:
         env['CXX'] = os.environ['CXX']
-    if os.environ.has_key('CXXFLAGS'):
+    if 'CXXFLAGS' in os.environ:
         env['CXXFLAGS'] += SCons.Util.CLVar(os.environ['CXXFLAGS'])
-    if os.environ.has_key('LDFLAGS'):
+    if 'LDFLAGS' in os.environ:
         env['LINKFLAGS'] += SCons.Util.CLVar(os.environ['LDFLAGS'])
 
     # Detect gcc/clang not by executable name, but through pre-defined macros

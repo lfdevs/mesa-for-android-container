@@ -33,16 +33,22 @@
 #include "tgsi/tgsi_parse.h"
 #include "compiler/nir/nir.h"
 #include "compiler/nir/nir_builder.h"
+#include "compiler/nir_types.h"
 #include "nir/tgsi_to_nir.h"
 #include "vc4_context.h"
 #include "vc4_qpu.h"
 #include "vc4_qir.h"
-#include "mesa/state_tracker/st_glsl_types.h"
 
 static struct qreg
 ntq_get_src(struct vc4_compile *c, nir_src src, int i);
 static void
 ntq_emit_cf_list(struct vc4_compile *c, struct exec_list *list);
+
+static int
+type_size(const struct glsl_type *type)
+{
+   return glsl_count_attribute_slots(type, false);
+}
 
 static void
 resize_qreg_array(struct vc4_compile *c,
@@ -1653,7 +1659,7 @@ static void
 ntq_setup_uniforms(struct vc4_compile *c)
 {
         nir_foreach_variable(var, &c->s->uniforms) {
-                uint32_t vec4_count = st_glsl_type_size(var->type);
+                uint32_t vec4_count = type_size(var->type);
                 unsigned vec4_size = 4 * sizeof(float);
 
                 declare_uniform_range(c, var->data.driver_location * vec4_size,
@@ -2244,8 +2250,15 @@ vc4_shader_ntq(struct vc4_context *vc4, enum qstage stage,
 
         c->s = nir_shader_clone(c, key->shader_state->base.ir.nir);
 
-        if (stage == QSTAGE_FRAG)
+        if (stage == QSTAGE_FRAG) {
+                if (c->fs_key->alpha_test_func != COMPARE_FUNC_ALWAYS) {
+                        NIR_PASS_V(c->s, nir_lower_alpha_test,
+                                   c->fs_key->alpha_test_func,
+                                   c->fs_key->sample_alpha_to_one &&
+                                   c->fs_key->msaa);
+                }
                 NIR_PASS_V(c->s, vc4_nir_lower_blend, c);
+        }
 
         struct nir_lower_tex_options tex_options = {
                 /* We would need to implement txs, but we don't want the
@@ -2421,6 +2434,9 @@ vc4_shader_state_create(struct pipe_context *pctx,
                  * creation.
                  */
                 s = cso->ir.nir;
+
+                NIR_PASS_V(s, nir_lower_io, nir_var_all, type_size,
+                           (nir_lower_io_options)0);
         } else {
                 assert(cso->type == PIPE_SHADER_IR_TGSI);
 
@@ -2451,7 +2467,7 @@ vc4_shader_state_create(struct pipe_context *pctx,
 
         if (vc4_debug & VC4_DEBUG_NIR) {
                 fprintf(stderr, "%s prog %d NIR:\n",
-                        gl_shader_stage_name(s->stage),
+                        gl_shader_stage_name(s->info.stage),
                         so->program_id);
                 nir_print_shader(s, stderr);
                 fprintf(stderr, "\n");
@@ -2739,10 +2755,10 @@ vc4_update_compiled_fs(struct vc4_context *vc4, uint8_t prim_mode)
         key->stencil_full_writemasks = vc4->zsa->stencil_uniforms[2] != 0;
         key->depth_enabled = (vc4->zsa->base.depth.enabled ||
                               key->stencil_enabled);
-        if (vc4->zsa->base.alpha.enabled) {
-                key->alpha_test = true;
+        if (vc4->zsa->base.alpha.enabled)
                 key->alpha_test_func = vc4->zsa->base.alpha.func;
-        }
+        else
+                key->alpha_test_func = COMPARE_FUNC_ALWAYS;
 
         if (key->is_points) {
                 key->point_sprite_mask =

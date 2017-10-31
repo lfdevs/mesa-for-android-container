@@ -33,8 +33,8 @@
 extern "C" {
 #endif
 
-int st_glsl_attrib_type_size(const struct glsl_type *type, bool is_vs_input);
-int st_glsl_type_size(const struct glsl_type *type);
+int st_glsl_storage_type_size(const struct glsl_type *type,
+                              bool is_bindless);
 
 
 #ifdef __cplusplus

@@ -37,69 +37,6 @@
 #include "brw_state.h"
 #include "intel_buffer_objects.h"
 
-/**
- * Creates a temporary BO containing the pull constant data for the shader
- * stage, and the SURFACE_STATE struct that points at it.
- *
- * Pull constants are GLSL uniforms (and other constant data) beyond what we
- * could fit as push constants, or that have variable-index array access
- * (which is easiest to support using pull constants, and avoids filling
- * register space with mostly-unused data).
- *
- * Compare this path to brw_curbe.c for gen4/5 push constants, and
- * gen6_vs_state.c for gen6+ push constants.
- */
-void
-brw_upload_pull_constants(struct brw_context *brw,
-                          GLbitfield64 brw_new_constbuf,
-                          const struct gl_program *prog,
-                          struct brw_stage_state *stage_state,
-                          const struct brw_stage_prog_data *prog_data)
-{
-   unsigned i;
-   uint32_t surf_index = prog_data->binding_table.pull_constants_start;
-
-   if (!prog_data->nr_pull_params) {
-      if (stage_state->surf_offset[surf_index]) {
-	 stage_state->surf_offset[surf_index] = 0;
-	 brw->ctx.NewDriverState |= brw_new_constbuf;
-      }
-      return;
-   }
-
-   /* Updates the ParamaterValues[i] pointers for all parameters of the
-    * basic type of PROGRAM_STATE_VAR.
-    */
-   _mesa_load_state_parameters(&brw->ctx, prog->Parameters);
-
-   /* BRW_NEW_*_PROG_DATA | _NEW_PROGRAM_CONSTANTS */
-   uint32_t size = prog_data->nr_pull_params * 4;
-   struct brw_bo *const_bo = NULL;
-   uint32_t const_offset;
-   gl_constant_value *constants = intel_upload_space(brw, size, 64,
-                                                     &const_bo, &const_offset);
-
-   STATIC_ASSERT(sizeof(gl_constant_value) == sizeof(float));
-
-   for (i = 0; i < prog_data->nr_pull_params; i++) {
-      constants[i] = *prog_data->pull_param[i];
-   }
-
-   if (0) {
-      for (i = 0; i < ALIGN(prog_data->nr_pull_params, 4) / 4; i++) {
-	 const gl_constant_value *row = &constants[i * 4];
-	 fprintf(stderr, "const surface %3d: %4.3f %4.3f %4.3f %4.3f\n",
-                 i, row[0].f, row[1].f, row[2].f, row[3].f);
-      }
-   }
-
-   brw_create_constant_surface(brw, const_bo, const_offset, size,
-                               &stage_state->surf_offset[surf_index]);
-   brw_bo_unreference(const_bo);
-
-   brw->ctx.NewDriverState |= brw_new_constbuf;
-}
-
 
 /* Creates a new VS constant buffer reflecting the current VS program's
  * constants, if needed by the VS program.
@@ -113,7 +50,8 @@ brw_upload_vs_pull_constants(struct brw_context *brw)
    struct brw_stage_state *stage_state = &brw->vs.base;
 
    /* BRW_NEW_VERTEX_PROGRAM */
-   struct brw_program *vp = (struct brw_program *) brw->vertex_program;
+   struct brw_program *vp =
+      (struct brw_program *) brw->programs[MESA_SHADER_VERTEX];
 
    /* BRW_NEW_VS_PROG_DATA */
    const struct brw_stage_prog_data *prog_data = brw->vs.base.prog_data;
@@ -128,7 +66,6 @@ const struct brw_tracked_state brw_vs_pull_constants = {
    .dirty = {
       .mesa = _NEW_PROGRAM_CONSTANTS,
       .brw = BRW_NEW_BATCH |
-             BRW_NEW_BLORP |
              BRW_NEW_VERTEX_PROGRAM |
              BRW_NEW_VS_PROG_DATA,
    },
@@ -150,7 +87,6 @@ const struct brw_tracked_state brw_vs_ubo_surfaces = {
    .dirty = {
       .mesa = _NEW_PROGRAM,
       .brw = BRW_NEW_BATCH |
-             BRW_NEW_BLORP |
              BRW_NEW_UNIFORM_BUFFER |
              BRW_NEW_VS_PROG_DATA,
    },
@@ -161,7 +97,7 @@ static void
 brw_upload_vs_abo_surfaces(struct brw_context *brw)
 {
    /* _NEW_PROGRAM */
-   const struct gl_program *vp = brw->vertex_program;
+   const struct gl_program *vp = brw->programs[MESA_SHADER_VERTEX];
 
    if (vp) {
       /* BRW_NEW_VS_PROG_DATA */
@@ -174,7 +110,6 @@ const struct brw_tracked_state brw_vs_abo_surfaces = {
       .mesa = _NEW_PROGRAM,
       .brw = BRW_NEW_ATOMIC_BUFFER |
              BRW_NEW_BATCH |
-             BRW_NEW_BLORP |
              BRW_NEW_VS_PROG_DATA,
    },
    .emit = brw_upload_vs_abo_surfaces,
@@ -184,7 +119,7 @@ static void
 brw_upload_vs_image_surfaces(struct brw_context *brw)
 {
    /* BRW_NEW_VERTEX_PROGRAM */
-   const struct gl_program *vp = brw->vertex_program;
+   const struct gl_program *vp = brw->programs[MESA_SHADER_VERTEX];
 
    if (vp) {
       /* BRW_NEW_VS_PROG_DATA, BRW_NEW_IMAGE_UNITS, _NEW_TEXTURE */
@@ -197,8 +132,7 @@ const struct brw_tracked_state brw_vs_image_surfaces = {
    .dirty = {
       .mesa = _NEW_TEXTURE,
       .brw = BRW_NEW_BATCH |
-             BRW_NEW_BLORP |
-             BRW_NEW_FAST_CLEAR_COLOR |
+             BRW_NEW_AUX_STATE |
              BRW_NEW_IMAGE_UNITS |
              BRW_NEW_VERTEX_PROGRAM |
              BRW_NEW_VS_PROG_DATA,

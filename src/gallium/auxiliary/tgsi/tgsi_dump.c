@@ -578,7 +578,7 @@ iter_instruction(
       TXT( "  " );
    ctx->indent += info->post_indent;
 
-   TXT( info->mnemonic );
+   TXT( tgsi_get_opcode_name(inst->Instruction.Opcode) );
 
    if (inst->Instruction.Saturate) {
       TXT( "_SAT" );

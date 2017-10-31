@@ -87,18 +87,8 @@ set_predicate_for_occlusion_query(struct brw_context *brw,
     */
    brw_emit_pipe_control_flush(brw, PIPE_CONTROL_FLUSH_ENABLE);
 
-   brw_load_register_mem64(brw,
-                           MI_PREDICATE_SRC0,
-                           query->bo,
-                           I915_GEM_DOMAIN_INSTRUCTION,
-                           0, /* write domain */
-                           0 /* offset */);
-   brw_load_register_mem64(brw,
-                           MI_PREDICATE_SRC1,
-                           query->bo,
-                           I915_GEM_DOMAIN_INSTRUCTION,
-                           0, /* write domain */
-                           8 /* offset */);
+   brw_load_register_mem64(brw, MI_PREDICATE_SRC0, query->bo, 0 /* offset */);
+   brw_load_register_mem64(brw, MI_PREDICATE_SRC1, query->bo, 8 /* offset */);
 }
 
 static void

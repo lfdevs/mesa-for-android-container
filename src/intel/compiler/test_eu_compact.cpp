@@ -68,11 +68,16 @@ clear_pad_bits(const struct gen_device_info *devinfo, brw_inst *inst)
 {
    if (brw_inst_opcode(devinfo, inst) != BRW_OPCODE_SEND &&
        brw_inst_opcode(devinfo, inst) != BRW_OPCODE_SENDC &&
-       brw_inst_opcode(devinfo, inst) != BRW_OPCODE_BREAK &&
-       brw_inst_opcode(devinfo, inst) != BRW_OPCODE_CONTINUE &&
        brw_inst_src0_reg_file(devinfo, inst) != BRW_IMMEDIATE_VALUE &&
        brw_inst_src1_reg_file(devinfo, inst) != BRW_IMMEDIATE_VALUE) {
       brw_inst_set_bits(inst, 127, 111, 0);
+   }
+
+   if (devinfo->gen == 8 && !devinfo->is_cherryview &&
+       is_3src(devinfo, (opcode)brw_inst_opcode(devinfo, inst))) {
+      brw_inst_set_bits(inst, 105, 105, 0);
+      brw_inst_set_bits(inst, 84, 84, 0);
+      brw_inst_set_bits(inst, 36, 35, 0);
    }
 }
 
@@ -87,19 +92,45 @@ skip_bit(const struct gen_device_info *devinfo, brw_inst *src, int bit)
    if (bit == 29)
       return true;
 
-   /* pad bit */
-   if (bit == 47)
-      return true;
+   if (is_3src(devinfo, (opcode)brw_inst_opcode(devinfo, src))) {
+      if (devinfo->gen >= 9 || devinfo->is_cherryview) {
+         if (bit == 127)
+            return true;
+      } else {
+         if (bit >= 126 && bit <= 127)
+            return true;
 
-   /* pad bits */
-   if (bit >= 90 && bit <= 95)
-      return true;
+         if (bit == 105)
+            return true;
+
+         if (bit == 84)
+            return true;
+
+         if (bit >= 35 && bit <= 36)
+            return true;
+      }
+   } else {
+      if (bit == 47)
+         return true;
+
+      if (devinfo->gen >= 8) {
+         if (bit == 11)
+            return true;
+
+         if (bit == 95)
+            return true;
+      } else {
+         if (devinfo->gen < 7 && bit == 90)
+            return true;
+
+         if (bit >= 91 && bit <= 95)
+            return true;
+      }
+   }
 
    /* sometimes these are pad bits. */
    if (brw_inst_opcode(devinfo, src) != BRW_OPCODE_SEND &&
        brw_inst_opcode(devinfo, src) != BRW_OPCODE_SENDC &&
-       brw_inst_opcode(devinfo, src) != BRW_OPCODE_BREAK &&
-       brw_inst_opcode(devinfo, src) != BRW_OPCODE_CONTINUE &&
        brw_inst_src0_reg_file(devinfo, src) != BRW_IMMEDIATE_VALUE &&
        brw_inst_src1_reg_file(devinfo, src) != BRW_IMMEDIATE_VALUE &&
        bit >= 121) {
@@ -254,7 +285,7 @@ run_tests(const struct gen_device_info *devinfo)
    brw_init_compaction_tables(devinfo);
    bool fail = false;
 
-   for (int i = 0; i < ARRAY_SIZE(tests); i++) {
+   for (unsigned i = 0; i < ARRAY_SIZE(tests); i++) {
       for (int align_16 = 0; align_16 <= 1; align_16++) {
 	 struct brw_codegen *p = rzalloc(NULL, struct brw_codegen);
 	 brw_init_codegen(devinfo, p, p);
@@ -289,10 +320,9 @@ int
 main(int argc, char **argv)
 {
    struct gen_device_info *devinfo = (struct gen_device_info *)calloc(1, sizeof(*devinfo));
-   devinfo->gen = 6;
    bool fail = false;
 
-   for (devinfo->gen = 6; devinfo->gen <= 7; devinfo->gen++) {
+   for (devinfo->gen = 5; devinfo->gen <= 9; devinfo->gen++) {
       fail |= run_tests(devinfo);
    }
 

@@ -44,7 +44,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "radeon_ioctl.h"
 #include "radeon_tex.h"
 
-#include "xmlpool.h"
+#include "util/xmlpool.h"
 
 
 

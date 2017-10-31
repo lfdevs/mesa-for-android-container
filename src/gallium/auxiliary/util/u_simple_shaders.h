@@ -56,7 +56,7 @@ util_make_vertex_passthrough_shader_with_so(struct pipe_context *pipe,
                                     uint num_attribs,
                                     const uint *semantic_names,
                                     const uint *semantic_indexes,
-                                    bool window_space,
+                                    bool window_space, bool layered,
                                     const struct pipe_stream_output_info *so);
 
 extern void *
@@ -129,35 +129,36 @@ util_make_fragment_cloneinput_shader(struct pipe_context *pipe, int num_cbufs,
 
 extern void *
 util_make_fs_blit_msaa_color(struct pipe_context *pipe,
-                             unsigned tgsi_tex,
+                             enum tgsi_texture_type tgsi_tex,
                              enum tgsi_return_type stype,
                              enum tgsi_return_type dtype);
 
 
 extern void *
 util_make_fs_blit_msaa_depth(struct pipe_context *pipe,
-                             unsigned tgsi_tex);
+                             enum tgsi_texture_type tgsi_tex);
 
 
 extern void *
 util_make_fs_blit_msaa_depthstencil(struct pipe_context *pipe,
-                                    unsigned tgsi_tex);
+                                    enum tgsi_texture_type tgsi_tex);
 
 
 void *
 util_make_fs_blit_msaa_stencil(struct pipe_context *pipe,
-                               unsigned tgsi_tex);
+                               enum tgsi_texture_type tgsi_tex);
 
 
 void *
 util_make_fs_msaa_resolve(struct pipe_context *pipe,
-                          unsigned tgsi_tex, unsigned nr_samples,
+                          enum tgsi_texture_type tgsi_tex, unsigned nr_samples,
                           enum tgsi_return_type stype);
 
 
 void *
 util_make_fs_msaa_resolve_bilinear(struct pipe_context *pipe,
-                                   unsigned tgsi_tex, unsigned nr_samples,
+                                   enum tgsi_texture_type tgsi_tex,
+                                   unsigned nr_samples,
                                    enum tgsi_return_type stype);
 
 extern void *

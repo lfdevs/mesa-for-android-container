@@ -76,7 +76,7 @@ static void init_ctx(struct context *ctx)
         ret = pipe_loader_probe(&ctx->dev, 1);
         assert(ret);
 
-        ctx->screen = pipe_loader_create_screen(ctx->dev, 0);
+        ctx->screen = pipe_loader_create_screen(ctx->dev);
         assert(ctx->screen);
 
         ctx->pipe = ctx->screen->context_create(ctx->screen, NULL, 0);

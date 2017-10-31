@@ -4,7 +4,7 @@
 #include "nouveau/drm/nouveau_drm_public.h"
 
 static struct pipe_screen *
-create_screen(int fd, unsigned flags)
+create_screen(int fd, const struct pipe_screen_config *config)
 {
    struct pipe_screen *screen;
 

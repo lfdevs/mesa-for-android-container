@@ -217,7 +217,7 @@ fd2_emit_state(struct fd_context *ctx, const enum fd_dirty_3d_state dirty)
 		OUT_RING(ring, zsa->rb_alpha_ref);
 	}
 
-	if (dirty & (FD_DIRTY_RASTERIZER | FD_DIRTY_FRAMEBUFFER)) {
+	if (ctx->rasterizer && dirty & FD_DIRTY_RASTERIZER) {
 		struct fd2_rasterizer_stateobj *rasterizer =
 				fd2_rasterizer_stateobj(ctx->rasterizer);
 		OUT_PKT3(ring, CP_SET_CONSTANT, 3);
@@ -299,14 +299,29 @@ fd2_emit_state(struct fd_context *ctx, const enum fd_dirty_3d_state dirty)
 		OUT_RING(ring, zsa->rb_colorcontrol | blend->rb_colorcontrol);
 	}
 
-	if (dirty & FD_DIRTY_BLEND) {
+	if (dirty & (FD_DIRTY_BLEND | FD_DIRTY_FRAMEBUFFER)) {
+		enum pipe_format format =
+			pipe_surface_format(ctx->batch->framebuffer.cbufs[0]);
+		bool has_alpha = util_format_has_alpha(format);
+
 		OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 		OUT_RING(ring, CP_REG(REG_A2XX_RB_BLEND_CONTROL));
-		OUT_RING(ring, blend->rb_blendcontrol);
+		OUT_RING(ring, blend->rb_blendcontrol_alpha |
+			COND(has_alpha, blend->rb_blendcontrol_rgb) |
+			COND(!has_alpha, blend->rb_blendcontrol_no_alpha_rgb));
 
 		OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 		OUT_RING(ring, CP_REG(REG_A2XX_RB_COLOR_MASK));
 		OUT_RING(ring, blend->rb_colormask);
+	}
+
+	if (dirty & FD_DIRTY_BLEND_COLOR) {
+		OUT_PKT3(ring, CP_SET_CONSTANT, 5);
+		OUT_RING(ring, CP_REG(REG_A2XX_RB_BLEND_RED));
+		OUT_RING(ring, float_to_ubyte(ctx->blend_color.color[0]));
+		OUT_RING(ring, float_to_ubyte(ctx->blend_color.color[1]));
+		OUT_RING(ring, float_to_ubyte(ctx->blend_color.color[2]));
+		OUT_RING(ring, float_to_ubyte(ctx->blend_color.color[3]));
 	}
 
 	if (dirty & (FD_DIRTY_TEX | FD_DIRTY_PROG))

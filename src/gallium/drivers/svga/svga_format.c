@@ -49,6 +49,11 @@ struct format_compat_entry
    const SVGA3dSurfaceFormat *compat_format;
 };
 
+
+/**
+ * Table mapping Gallium formats to SVGA3d vertex/pixel formats.
+ * Note: the table is ordered according to PIPE_FORMAT_x order.
+ */
 static const struct vgpu10_format_entry format_conversion_table[] =
 {
    /* Gallium format                    SVGA3D vertex format        SVGA3D pixel format          Flags */
@@ -360,6 +365,9 @@ static const struct vgpu10_format_entry format_conversion_table[] =
    { PIPE_FORMAT_ASTC_12x10_SRGB,       SVGA3D_FORMAT_INVALID,      SVGA3D_FORMAT_INVALID,       0 },
    { PIPE_FORMAT_ASTC_12x12_SRGB,       SVGA3D_FORMAT_INVALID,      SVGA3D_FORMAT_INVALID,       0 },
    { PIPE_FORMAT_P016,                  SVGA3D_FORMAT_INVALID,      SVGA3D_FORMAT_INVALID,       0 },
+   { PIPE_FORMAT_R10G10B10X2_UNORM,     SVGA3D_FORMAT_INVALID,      SVGA3D_FORMAT_INVALID,       0 },
+   { PIPE_FORMAT_A1B5G5R5_UNORM,        SVGA3D_FORMAT_INVALID,      SVGA3D_FORMAT_INVALID,       0 },
+   { PIPE_FORMAT_X1B5G5R5_UNORM,        SVGA3D_FORMAT_INVALID,      SVGA3D_FORMAT_INVALID,       0 },
 };
 
 
@@ -1826,9 +1834,9 @@ svga_typeless_format(SVGA3dSurfaceFormat format)
    case SVGA3D_R32G32_FLOAT:
       return SVGA3D_R32G32_TYPELESS;
    case SVGA3D_D32_FLOAT_S8X24_UINT:
-      return SVGA3D_R32G8X24_TYPELESS;
    case SVGA3D_X32_G8X24_UINT:
-      return SVGA3D_R32_FLOAT_X8X24;
+   case SVGA3D_R32G8X24_TYPELESS:
+      return SVGA3D_R32G8X24_TYPELESS;
    case SVGA3D_R10G10B10A2_UINT:
    case SVGA3D_R10G10B10A2_UNORM:
       return SVGA3D_R10G10B10A2_TYPELESS;
@@ -1837,6 +1845,7 @@ svga_typeless_format(SVGA3dSurfaceFormat format)
    case SVGA3D_R8G8B8A8_UNORM_SRGB:
    case SVGA3D_R8G8B8A8_UINT:
    case SVGA3D_R8G8B8A8_SINT:
+   case SVGA3D_R8G8B8A8_TYPELESS:
       return SVGA3D_R8G8B8A8_TYPELESS;
    case SVGA3D_R16G16_UINT:
    case SVGA3D_R16G16_SINT:
@@ -1848,8 +1857,10 @@ svga_typeless_format(SVGA3dSurfaceFormat format)
    case SVGA3D_R32_FLOAT:
    case SVGA3D_R32_UINT:
    case SVGA3D_R32_SINT:
+   case SVGA3D_R32_TYPELESS:
       return SVGA3D_R32_TYPELESS;
    case SVGA3D_D24_UNORM_S8_UINT:
+   case SVGA3D_R24G8_TYPELESS:
       return SVGA3D_R24G8_TYPELESS;
    case SVGA3D_X24_G8_UINT:
       return SVGA3D_R24_UNORM_X8;
@@ -1864,6 +1875,7 @@ svga_typeless_format(SVGA3dSurfaceFormat format)
    case SVGA3D_R16_SNORM:
    case SVGA3D_R16_SINT:
    case SVGA3D_R16_FLOAT:
+   case SVGA3D_R16_TYPELESS:
       return SVGA3D_R16_TYPELESS;
    case SVGA3D_R8_UNORM:
    case SVGA3D_R8_UINT:
@@ -1872,18 +1884,23 @@ svga_typeless_format(SVGA3dSurfaceFormat format)
       return SVGA3D_R8_TYPELESS;
    case SVGA3D_B8G8R8A8_UNORM_SRGB:
    case SVGA3D_B8G8R8A8_UNORM:
+   case SVGA3D_B8G8R8A8_TYPELESS:
       return SVGA3D_B8G8R8A8_TYPELESS;
    case SVGA3D_B8G8R8X8_UNORM_SRGB:
    case SVGA3D_B8G8R8X8_UNORM:
+   case SVGA3D_B8G8R8X8_TYPELESS:
       return SVGA3D_B8G8R8X8_TYPELESS;
    case SVGA3D_BC1_UNORM:
    case SVGA3D_BC1_UNORM_SRGB:
+   case SVGA3D_BC1_TYPELESS:
       return SVGA3D_BC1_TYPELESS;
    case SVGA3D_BC2_UNORM:
    case SVGA3D_BC2_UNORM_SRGB:
+   case SVGA3D_BC2_TYPELESS:
       return SVGA3D_BC2_TYPELESS;
    case SVGA3D_BC3_UNORM:
    case SVGA3D_BC3_UNORM_SRGB:
+   case SVGA3D_BC3_TYPELESS:
       return SVGA3D_BC3_TYPELESS;
    case SVGA3D_BC4_UNORM:
    case SVGA3D_BC4_SNORM:

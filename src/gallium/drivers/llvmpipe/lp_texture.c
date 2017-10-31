@@ -303,12 +303,15 @@ llvmpipe_resource_create_front(struct pipe_screen *_screen,
    FREE(lpr);
    return NULL;
 }
+
+
 static struct pipe_resource *
 llvmpipe_resource_create(struct pipe_screen *_screen,
                          const struct pipe_resource *templat)
 {
    return llvmpipe_resource_create_front(_screen, templat, NULL);
 }
+
 
 static void
 llvmpipe_resource_destroy(struct pipe_screen *pscreen,

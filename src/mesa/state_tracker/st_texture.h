@@ -49,6 +49,19 @@ struct st_texture_image_transfer {
 
 
 /**
+ * Container for one context's validated sampler view.
+ */
+struct st_sampler_view {
+   struct pipe_sampler_view *view;
+
+   /** The glsl version of the shader seen during validation */
+   bool glsl130_or_later;
+   /** Derived from the sampler's sRGBDecode state during validation */
+   bool srgb_skip_decode;
+};
+
+
+/**
  * Subclass of gl_texure_image.
  */
 struct st_texture_image
@@ -70,7 +83,7 @@ struct st_texture_image
     * mapping/unmapping, as well as image copies.
     */
    GLubyte *etc_data;
- };
+};
 
 
 /**
@@ -98,7 +111,7 @@ struct st_texture_object
    /* Array of sampler views (one per context) attached to this texture
     * object. Created lazily on first binding in context.
     */
-   struct pipe_sampler_view **sampler_views;
+   struct st_sampler_view *sampler_views;
 
    /* True if this texture comes from the window system. Such a texture
     * cannot be reallocated and the format can only be changed with a sampler
@@ -111,19 +124,23 @@ struct st_texture_object
     */
    enum pipe_format surface_format;
 
+   /* When non-zero, samplers should use this level instead of the level
+    * range specified by the GL state.
+    *
+    * This is used for EGL images, which may correspond to a single level out
+    * of an imported pipe_resources with multiple mip levels.
+    */
+   uint level_override;
+
    /* When non-zero, samplers should use this layer instead of the one
     * specified by the GL state.
     *
-    * This is used for VDPAU interop, where imported pipe_resources may be
-    * array textures (containing layers with different fields) even though the
-    * GL state describes one non-array texture per field.
+    * This is used for EGL images and VDPAU interop, where imported
+    * pipe_resources may be cube, 3D, or array textures (containing layers
+    * with different fields in the case of VDPAU) even though the GL state
+    * describes one non-array texture per field.
     */
    uint layer_override;
-
-   /** The glsl version of the shader seen during the previous validation */
-   bool prev_glsl130_or_later;
-   /** The value of the sampler's sRGBDecode state at the previous validation */
-   GLenum prev_sRGBDecode;
 
     /**
      * Set when the texture images of this texture object might not all be in
@@ -281,6 +298,7 @@ void
 st_convert_sampler(const struct st_context *st,
                    const struct gl_texture_object *texobj,
                    const struct gl_sampler_object *msamp,
+                   float tex_unit_lod_bias,
                    struct pipe_sampler_state *sampler);
 
 void
@@ -291,7 +309,8 @@ st_convert_sampler_from_unit(const struct st_context *st,
 void
 st_update_single_texture(struct st_context *st,
                          struct pipe_sampler_view **sampler_view,
-                         GLuint texUnit, bool glsl130_or_later);
+                         GLuint texUnit, bool glsl130_or_later,
+                         bool ignore_srgb_decode);
 
 void
 st_make_bound_samplers_resident(struct st_context *st,

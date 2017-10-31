@@ -33,6 +33,7 @@
 #include "pipe/p_screen.h"
 #include "dd_util.h"
 #include "os/os_thread.h"
+#include "util/u_log.h"
 
 enum dd_mode {
    DD_DETECT_HANGS,
@@ -66,6 +67,7 @@ enum call_type
    CALL_CLEAR_RENDER_TARGET,
    CALL_CLEAR_DEPTH_STENCIL,
    CALL_GENERATE_MIPMAP,
+   CALL_GET_QUERY_RESULT_RESOURCE,
 };
 
 struct call_resource_copy_region
@@ -109,6 +111,16 @@ struct call_draw_info {
    struct pipe_draw_indirect_info indirect;
 };
 
+struct call_get_query_result_resource {
+   struct pipe_query *query;
+   enum pipe_query_type query_type;
+   boolean wait;
+   enum pipe_query_value_type result_type;
+   int index;
+   struct pipe_resource *resource;
+   unsigned offset;
+};
+
 struct dd_call
 {
    enum call_type type;
@@ -122,6 +134,7 @@ struct dd_call
       struct call_clear clear;
       struct call_clear_buffer clear_buffer;
       struct call_generate_mipmap generate_mipmap;
+      struct call_get_query_result_resource get_query_result_resource;
    } info;
 };
 
@@ -212,7 +225,7 @@ struct dd_draw_record {
 
    struct dd_call call;
    struct dd_draw_state_copy draw_state;
-   char *driver_state_log;
+   struct u_log_page *log_page;
 };
 
 struct dd_context
@@ -222,6 +235,8 @@ struct dd_context
 
    struct dd_draw_state draw_state;
    unsigned num_draw_calls;
+
+   struct u_log_context log;
 
    /* Pipelined hang detection.
     *
@@ -259,6 +274,8 @@ dd_init_draw_functions(struct dd_context *dctx);
 int
 dd_thread_pipelined_hang_detect(void *input);
 
+FILE *
+dd_get_file_stream(struct dd_screen *dscreen, unsigned apitrace_call_number);
 
 static inline struct dd_context *
 dd_context(struct pipe_context *pipe)
@@ -270,6 +287,22 @@ static inline struct dd_screen *
 dd_screen(struct pipe_screen *screen)
 {
    return (struct dd_screen*)screen;
+}
+
+static inline struct dd_query *
+dd_query(struct pipe_query *query)
+{
+   return (struct dd_query *)query;
+}
+
+static inline struct pipe_query *
+dd_query_unwrap(struct pipe_query *query)
+{
+   if (query) {
+      return dd_query(query)->query;
+   } else {
+      return NULL;
+   }
 }
 
 

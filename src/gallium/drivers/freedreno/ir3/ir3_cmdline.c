@@ -46,6 +46,7 @@
 
 #include "compiler/glsl/standalone.h"
 #include "compiler/glsl/glsl_to_nir.h"
+#include "compiler/nir_types.h"
 
 static void dump_info(struct ir3_shader_variant *so, const char *str)
 {
@@ -56,8 +57,6 @@ static void dump_info(struct ir3_shader_variant *so, const char *str)
 	ir3_shader_disasm(so, bin);
 	free(bin);
 }
-
-int st_glsl_type_size(const struct glsl_type *type);
 
 static void
 insert_sorted(struct exec_list *var_list, nir_variable *new_var)
@@ -131,7 +130,7 @@ load_glsl(unsigned num_files, char* const* files, gl_shader_stage stage)
 	case MESA_SHADER_VERTEX:
 		nir_assign_var_locations(&nir->inputs,
 				&nir->num_inputs,
-				st_glsl_type_size);
+				ir3_glsl_type_size);
 
 		/* Re-lower global vars, to deal with any dead VS inputs. */
 		NIR_PASS_V(nir, nir_lower_global_vars_to_local);
@@ -139,18 +138,18 @@ load_glsl(unsigned num_files, char* const* files, gl_shader_stage stage)
 		sort_varyings(&nir->outputs);
 		nir_assign_var_locations(&nir->outputs,
 				&nir->num_outputs,
-				st_glsl_type_size);
+				ir3_glsl_type_size);
 		fixup_varying_slots(&nir->outputs);
 		break;
 	case MESA_SHADER_FRAGMENT:
 		sort_varyings(&nir->inputs);
 		nir_assign_var_locations(&nir->inputs,
 				&nir->num_inputs,
-				st_glsl_type_size);
+				ir3_glsl_type_size);
 		fixup_varying_slots(&nir->inputs);
 		nir_assign_var_locations(&nir->outputs,
 				&nir->num_outputs,
-				st_glsl_type_size);
+				ir3_glsl_type_size);
 		break;
 	default:
 		errx(1, "unhandled shader stage: %d", stage);
@@ -158,10 +157,10 @@ load_glsl(unsigned num_files, char* const* files, gl_shader_stage stage)
 
 	nir_assign_var_locations(&nir->uniforms,
 			&nir->num_uniforms,
-			st_glsl_type_size);
+			ir3_glsl_type_size);
 
 	NIR_PASS_V(nir, nir_lower_system_values);
-	NIR_PASS_V(nir, nir_lower_io, nir_var_all, st_glsl_type_size, 0);
+	NIR_PASS_V(nir, nir_lower_io, nir_var_all, ir3_glsl_type_size, 0);
 	NIR_PASS_V(nir, nir_lower_samplers, prog);
 
 	return nir;
@@ -400,7 +399,7 @@ int main(int argc, char **argv)
 	v.key = key;
 	v.shader = &s;
 
-	switch (nir->stage) {
+	switch (nir->info.stage) {
 	case MESA_SHADER_FRAGMENT:
 		s.type = v.type = SHADER_FRAGMENT;
 		break;
@@ -411,7 +410,7 @@ int main(int argc, char **argv)
 		s.type = v.type = SHADER_COMPUTE;
 		break;
 	default:
-		errx(1, "unhandled shader stage: %d", nir->stage);
+		errx(1, "unhandled shader stage: %d", nir->info.stage);
 	}
 
 	info = "NIR compiler";

@@ -189,6 +189,9 @@ static const char strings[] =
     "vkGetPhysicalDeviceXlibPresentationSupportKHR\0"
     "vkCreateXcbSurfaceKHR\0"
     "vkGetPhysicalDeviceXcbPresentationSupportKHR\0"
+    "vkCreateDebugReportCallbackEXT\0"
+    "vkDestroyDebugReportCallbackEXT\0"
+    "vkDebugReportMessageEXT\0"
     "vkGetPhysicalDeviceFeatures2KHR\0"
     "vkGetPhysicalDeviceProperties2KHR\0"
     "vkGetPhysicalDeviceFormatProperties2KHR\0"
@@ -201,6 +204,14 @@ static const char strings[] =
     "vkGetPhysicalDeviceExternalBufferPropertiesKHR\0"
     "vkGetMemoryFdKHR\0"
     "vkGetMemoryFdPropertiesKHR\0"
+    "vkGetPhysicalDeviceExternalSemaphorePropertiesKHR\0"
+    "vkGetSemaphoreFdKHR\0"
+    "vkImportSemaphoreFdKHR\0"
+    "vkGetPhysicalDeviceExternalFencePropertiesKHR\0"
+    "vkGetFenceFdKHR\0"
+    "vkImportFenceFdKHR\0"
+    "vkBindBufferMemory2KHR\0"
+    "vkBindImageMemory2KHR\0"
     "vkCreateDescriptorUpdateTemplateKHR\0"
     "vkDestroyDescriptorUpdateTemplateKHR\0"
     "vkUpdateDescriptorSetWithTemplateKHR\0"
@@ -210,185 +221,206 @@ static const char strings[] =
     "vkGetBufferMemoryRequirements2KHR\0"
     "vkGetImageMemoryRequirements2KHR\0"
     "vkGetImageSparseMemoryRequirements2KHR\0"
+    "vkCreateSamplerYcbcrConversionKHR\0"
+    "vkDestroySamplerYcbcrConversionKHR\0"
+    "vkGetSwapchainGrallocUsageANDROID\0"
+    "vkAcquireImageANDROID\0"
+    "vkQueueSignalReleaseImageANDROID\0"
     "vkCreateDmaBufImageINTEL\0"
 ;
 
 static const struct anv_entrypoint entrypoints[] = {
-    { 0, 0x38a581a6 },
-    { 17, 0x9bd21af2 },
-    { 35, 0x5787c327 },
-    { 62, 0xba013486 },
-    { 82, 0x3d2ae9ad },
-    { 104, 0x52fe22c9 },
-    { 134, 0x4e5fc88a },
-    { 175, 0xa90da4da },
-    { 211, 0x113e2f33 },
-    { 239, 0x3e54b398 },
-    { 275, 0xdd36a867 },
-    { 316, 0x85ed23f },
-    { 331, 0x1fbcc9cb },
-    { 347, 0x81f69d8 },
-    { 382, 0xeb27627e },
-    { 421, 0x2f8566e7 },
-    { 454, 0x5fd13eed },
-    { 491, 0xcc920d9a },
-    { 508, 0xfa4713ec },
-    { 522, 0x6f8fc2a5 },
-    { 538, 0xd46c5f24 },
-    { 555, 0x522b85d3 },
-    { 572, 0x8f6f838a },
-    { 585, 0xcb977bd8 },
-    { 597, 0x1a1a0e2f },
-    { 611, 0xff52f051 },
-    { 637, 0x1e115cca },
-    { 668, 0x46e38db5 },
-    { 696, 0xab98422a },
-    { 726, 0x6bcbdcb },
-    { 745, 0x916f1e63 },
-    { 774, 0x5caaae4a },
-    { 792, 0x15855f5b },
-    { 827, 0x272ef8ef },
-    { 874, 0xc3628a09 },
-    { 892, 0x958af968 },
-    { 906, 0xfc64ee3c },
-    { 921, 0x684781dc },
-    { 935, 0x5f391892 },
-    { 952, 0x19d64c81 },
-    { 968, 0xf2065e5b },
-    { 986, 0xcaab1faf },
-    { 1005, 0xe7188731 },
-    { 1019, 0x4df27c05 },
-    { 1034, 0x96d834b },
-    { 1051, 0x592ae5f5 },
-    { 1062, 0x6d373ba8 },
-    { 1075, 0x5edcd92b },
-    { 1093, 0x37819a7f },
-    { 1112, 0xbf3f2cb3 },
-    { 1134, 0x7d4282b9 },
-    { 1149, 0x94a07a45 },
-    { 1165, 0x925bd256 },
-    { 1184, 0x98b27962 },
-    { 1204, 0x652128c2 },
-    { 1218, 0xcbfb1d96 },
-    { 1233, 0x9163b686 },
-    { 1261, 0xdce077ff },
-    { 1279, 0xb5853953 },
-    { 1298, 0xa0d3cea2 },
-    { 1319, 0x2d77af6e },
-    { 1341, 0xcbf6489f },
-    { 1363, 0x4112a673 },
-    { 1386, 0x2092a349 },
-    { 1409, 0xc3499606 },
-    { 1431, 0x4b59f96d },
-    { 1457, 0xf70c85eb },
-    { 1482, 0x6aac68af },
-    { 1500, 0x451ef1ed },
-    { 1523, 0x9146f879 },
-    { 1547, 0x13cf03f },
-    { 1563, 0x3b645153 },
-    { 1580, 0x3c14cc74 },
-    { 1608, 0xa4227b08 },
-    { 1637, 0xfb95a8a4 },
-    { 1660, 0x47bdaf30 },
-    { 1684, 0x9bd85f5 },
-    { 1706, 0x4c449d3a },
-    { 1731, 0x7a1347b1 },
-    { 1752, 0xbfd090ae },
-    { 1775, 0x887a38c4 },
-    { 1795, 0xdc428e58 },
-    { 1816, 0x109a9c18 },
-    { 1835, 0x16f14324 },
-    { 1855, 0xa9820d22 },
-    { 1882, 0x820fe476 },
-    { 1902, 0xd5d83a0a },
-    { 1923, 0x6da9f7fd },
-    { 1942, 0x8c0c811a },
-    { 1967, 0xb9db2b91 },
-    { 1988, 0xc54f7327 },
-    { 2009, 0xaffb5725 },
-    { 2028, 0x847dc731 },
-    { 2049, 0x3af9fd84 },
-    { 2067, 0x53d6c2b },
-    { 2084, 0x48f28c7f },
-    { 2100, 0x32282165 },
-    { 2118, 0x30f14d07 },
-    { 2136, 0x1c989dfb },
-    { 2159, 0x7b3a8a63 },
-    { 2179, 0xa8f534e2 },
-    { 2206, 0xe7c4b134 },
-    { 2231, 0x83e2b024 },
-    { 2256, 0x28c7a5da },
-    { 2280, 0x4c22d870 },
-    { 2301, 0xa9c83f1d },
-    { 2324, 0x9912c1a1 },
-    { 2334, 0xbe5a8058 },
-    { 2351, 0xe9ac41bf },
-    { 2369, 0x94e7ed36 },
-    { 2394, 0xbd58e867 },
-    { 2408, 0xd6353005 },
-    { 2430, 0xc939a0da },
-    { 2446, 0x278effa9 },
-    { 2461, 0x331ebf89 },
-    { 2476, 0x929847e },
-    { 2499, 0x68cddbac },
-    { 2522, 0xd2986b5e },
-    { 2540, 0x5bdd2ae0 },
-    { 2556, 0xb4bc8d08 },
-    { 2577, 0x4f88e4ba },
-    { 2605, 0x93cb5cb8 },
-    { 2627, 0x671bb594 },
-    { 2645, 0xe257f075 },
-    { 2659, 0x4fccce28 },
-    { 2675, 0x3b9346b3 },
-    { 2691, 0x97fccfe8 },
-    { 2712, 0xf5064ea4 },
-    { 2728, 0xd556fd22 },
-    { 2742, 0x2f614082 },
-    { 2762, 0xec4d324c },
-    { 2782, 0xdee8c6d4 },
-    { 2808, 0xb1c6b468 },
-    { 2827, 0xcb7a58e3 },
-    { 2848, 0x2eeec2f9 },
-    { 2865, 0xdcdb0235 },
-    { 2884, 0x9eaabe40 },
-    { 2905, 0xf204ce7d },
-    { 2925, 0x1a687885 },
-    { 2962, 0x77890558 },
-    { 3004, 0xe32227c8 },
-    { 3041, 0x31c3cbd1 },
-    { 3083, 0xcdefcaa8 },
-    { 3104, 0x5a93ab74 },
-    { 3126, 0x57695f28 },
-    { 3150, 0xc3fedb2e },
-    { 3172, 0xfc5fb6ce },
-    { 3190, 0x2b2a4b79 },
-    { 3216, 0x84e085ac },
-    { 3265, 0xa693bc66 },
-    { 3288, 0x34a063ab },
-    { 3334, 0xc5e5b106 },
-    { 3356, 0x41782cb9 },
-    { 3401, 0x6a9a3636 },
-    { 3433, 0xcd15838c },
-    { 3467, 0x9099cbbb },
-    { 3507, 0x102ff7ea },
-    { 3552, 0x5ceb2bed },
-    { 3597, 0xc8c3da3d },
-    { 3637, 0x8746ed72 },
-    { 3688, 0xf17232a1 },
-    { 3714, 0x51177c8d },
-    { 3735, 0xee68b389 },
-    { 3782, 0x503c14c5 },
-    { 3799, 0xb028a792 },
-    { 3826, 0x5189488a },
-    { 3862, 0xaa83901e },
-    { 3899, 0x214ad230 },
-    { 3936, 0x3d528981 },
-    { 3974, 0x9497e378 },
-    { 4017, 0xd00b7188 },
-    { 4055, 0x78dbe98d },
-    { 4089, 0x8de28366 },
-    { 4122, 0x3df40f5e },
-    { 4161, 0x6392dfa7 },
+    [0] = { 0, 0x38a581a6 }, /* vkCreateInstance */
+    [1] = { 17, 0x9bd21af2 }, /* vkDestroyInstance */
+    [2] = { 35, 0x5787c327 }, /* vkEnumeratePhysicalDevices */
+    [3] = { 62, 0xba013486 }, /* vkGetDeviceProcAddr */
+    [4] = { 82, 0x3d2ae9ad }, /* vkGetInstanceProcAddr */
+    [5] = { 104, 0x52fe22c9 }, /* vkGetPhysicalDeviceProperties */
+    [6] = { 134, 0x4e5fc88a }, /* vkGetPhysicalDeviceQueueFamilyProperties */
+    [7] = { 175, 0xa90da4da }, /* vkGetPhysicalDeviceMemoryProperties */
+    [8] = { 211, 0x113e2f33 }, /* vkGetPhysicalDeviceFeatures */
+    [9] = { 239, 0x3e54b398 }, /* vkGetPhysicalDeviceFormatProperties */
+    [10] = { 275, 0xdd36a867 }, /* vkGetPhysicalDeviceImageFormatProperties */
+    [11] = { 316, 0x85ed23f }, /* vkCreateDevice */
+    [12] = { 331, 0x1fbcc9cb }, /* vkDestroyDevice */
+    [13] = { 347, 0x81f69d8 }, /* vkEnumerateInstanceLayerProperties */
+    [14] = { 382, 0xeb27627e }, /* vkEnumerateInstanceExtensionProperties */
+    [15] = { 421, 0x2f8566e7 }, /* vkEnumerateDeviceLayerProperties */
+    [16] = { 454, 0x5fd13eed }, /* vkEnumerateDeviceExtensionProperties */
+    [17] = { 491, 0xcc920d9a }, /* vkGetDeviceQueue */
+    [18] = { 508, 0xfa4713ec }, /* vkQueueSubmit */
+    [19] = { 522, 0x6f8fc2a5 }, /* vkQueueWaitIdle */
+    [20] = { 538, 0xd46c5f24 }, /* vkDeviceWaitIdle */
+    [21] = { 555, 0x522b85d3 }, /* vkAllocateMemory */
+    [22] = { 572, 0x8f6f838a }, /* vkFreeMemory */
+    [23] = { 585, 0xcb977bd8 }, /* vkMapMemory */
+    [24] = { 597, 0x1a1a0e2f }, /* vkUnmapMemory */
+    [25] = { 611, 0xff52f051 }, /* vkFlushMappedMemoryRanges */
+    [26] = { 637, 0x1e115cca }, /* vkInvalidateMappedMemoryRanges */
+    [27] = { 668, 0x46e38db5 }, /* vkGetDeviceMemoryCommitment */
+    [28] = { 696, 0xab98422a }, /* vkGetBufferMemoryRequirements */
+    [29] = { 726, 0x6bcbdcb }, /* vkBindBufferMemory */
+    [30] = { 745, 0x916f1e63 }, /* vkGetImageMemoryRequirements */
+    [31] = { 774, 0x5caaae4a }, /* vkBindImageMemory */
+    [32] = { 792, 0x15855f5b }, /* vkGetImageSparseMemoryRequirements */
+    [33] = { 827, 0x272ef8ef }, /* vkGetPhysicalDeviceSparseImageFormatProperties */
+    [34] = { 874, 0xc3628a09 }, /* vkQueueBindSparse */
+    [35] = { 892, 0x958af968 }, /* vkCreateFence */
+    [36] = { 906, 0xfc64ee3c }, /* vkDestroyFence */
+    [37] = { 921, 0x684781dc }, /* vkResetFences */
+    [38] = { 935, 0x5f391892 }, /* vkGetFenceStatus */
+    [39] = { 952, 0x19d64c81 }, /* vkWaitForFences */
+    [40] = { 968, 0xf2065e5b }, /* vkCreateSemaphore */
+    [41] = { 986, 0xcaab1faf }, /* vkDestroySemaphore */
+    [42] = { 1005, 0xe7188731 }, /* vkCreateEvent */
+    [43] = { 1019, 0x4df27c05 }, /* vkDestroyEvent */
+    [44] = { 1034, 0x96d834b }, /* vkGetEventStatus */
+    [45] = { 1051, 0x592ae5f5 }, /* vkSetEvent */
+    [46] = { 1062, 0x6d373ba8 }, /* vkResetEvent */
+    [47] = { 1075, 0x5edcd92b }, /* vkCreateQueryPool */
+    [48] = { 1093, 0x37819a7f }, /* vkDestroyQueryPool */
+    [49] = { 1112, 0xbf3f2cb3 }, /* vkGetQueryPoolResults */
+    [50] = { 1134, 0x7d4282b9 }, /* vkCreateBuffer */
+    [51] = { 1149, 0x94a07a45 }, /* vkDestroyBuffer */
+    [52] = { 1165, 0x925bd256 }, /* vkCreateBufferView */
+    [53] = { 1184, 0x98b27962 }, /* vkDestroyBufferView */
+    [54] = { 1204, 0x652128c2 }, /* vkCreateImage */
+    [55] = { 1218, 0xcbfb1d96 }, /* vkDestroyImage */
+    [56] = { 1233, 0x9163b686 }, /* vkGetImageSubresourceLayout */
+    [57] = { 1261, 0xdce077ff }, /* vkCreateImageView */
+    [58] = { 1279, 0xb5853953 }, /* vkDestroyImageView */
+    [59] = { 1298, 0xa0d3cea2 }, /* vkCreateShaderModule */
+    [60] = { 1319, 0x2d77af6e }, /* vkDestroyShaderModule */
+    [61] = { 1341, 0xcbf6489f }, /* vkCreatePipelineCache */
+    [62] = { 1363, 0x4112a673 }, /* vkDestroyPipelineCache */
+    [63] = { 1386, 0x2092a349 }, /* vkGetPipelineCacheData */
+    [64] = { 1409, 0xc3499606 }, /* vkMergePipelineCaches */
+    [65] = { 1431, 0x4b59f96d }, /* vkCreateGraphicsPipelines */
+    [66] = { 1457, 0xf70c85eb }, /* vkCreateComputePipelines */
+    [67] = { 1482, 0x6aac68af }, /* vkDestroyPipeline */
+    [68] = { 1500, 0x451ef1ed }, /* vkCreatePipelineLayout */
+    [69] = { 1523, 0x9146f879 }, /* vkDestroyPipelineLayout */
+    [70] = { 1547, 0x13cf03f }, /* vkCreateSampler */
+    [71] = { 1563, 0x3b645153 }, /* vkDestroySampler */
+    [72] = { 1580, 0x3c14cc74 }, /* vkCreateDescriptorSetLayout */
+    [73] = { 1608, 0xa4227b08 }, /* vkDestroyDescriptorSetLayout */
+    [74] = { 1637, 0xfb95a8a4 }, /* vkCreateDescriptorPool */
+    [75] = { 1660, 0x47bdaf30 }, /* vkDestroyDescriptorPool */
+    [76] = { 1684, 0x9bd85f5 }, /* vkResetDescriptorPool */
+    [77] = { 1706, 0x4c449d3a }, /* vkAllocateDescriptorSets */
+    [78] = { 1731, 0x7a1347b1 }, /* vkFreeDescriptorSets */
+    [79] = { 1752, 0xbfd090ae }, /* vkUpdateDescriptorSets */
+    [80] = { 1775, 0x887a38c4 }, /* vkCreateFramebuffer */
+    [81] = { 1795, 0xdc428e58 }, /* vkDestroyFramebuffer */
+    [82] = { 1816, 0x109a9c18 }, /* vkCreateRenderPass */
+    [83] = { 1835, 0x16f14324 }, /* vkDestroyRenderPass */
+    [84] = { 1855, 0xa9820d22 }, /* vkGetRenderAreaGranularity */
+    [85] = { 1882, 0x820fe476 }, /* vkCreateCommandPool */
+    [86] = { 1902, 0xd5d83a0a }, /* vkDestroyCommandPool */
+    [87] = { 1923, 0x6da9f7fd }, /* vkResetCommandPool */
+    [88] = { 1942, 0x8c0c811a }, /* vkAllocateCommandBuffers */
+    [89] = { 1967, 0xb9db2b91 }, /* vkFreeCommandBuffers */
+    [90] = { 1988, 0xc54f7327 }, /* vkBeginCommandBuffer */
+    [91] = { 2009, 0xaffb5725 }, /* vkEndCommandBuffer */
+    [92] = { 2028, 0x847dc731 }, /* vkResetCommandBuffer */
+    [93] = { 2049, 0x3af9fd84 }, /* vkCmdBindPipeline */
+    [94] = { 2067, 0x53d6c2b }, /* vkCmdSetViewport */
+    [95] = { 2084, 0x48f28c7f }, /* vkCmdSetScissor */
+    [96] = { 2100, 0x32282165 }, /* vkCmdSetLineWidth */
+    [97] = { 2118, 0x30f14d07 }, /* vkCmdSetDepthBias */
+    [98] = { 2136, 0x1c989dfb }, /* vkCmdSetBlendConstants */
+    [99] = { 2159, 0x7b3a8a63 }, /* vkCmdSetDepthBounds */
+    [100] = { 2179, 0xa8f534e2 }, /* vkCmdSetStencilCompareMask */
+    [101] = { 2206, 0xe7c4b134 }, /* vkCmdSetStencilWriteMask */
+    [102] = { 2231, 0x83e2b024 }, /* vkCmdSetStencilReference */
+    [103] = { 2256, 0x28c7a5da }, /* vkCmdBindDescriptorSets */
+    [104] = { 2280, 0x4c22d870 }, /* vkCmdBindIndexBuffer */
+    [105] = { 2301, 0xa9c83f1d }, /* vkCmdBindVertexBuffers */
+    [106] = { 2324, 0x9912c1a1 }, /* vkCmdDraw */
+    [107] = { 2334, 0xbe5a8058 }, /* vkCmdDrawIndexed */
+    [108] = { 2351, 0xe9ac41bf }, /* vkCmdDrawIndirect */
+    [109] = { 2369, 0x94e7ed36 }, /* vkCmdDrawIndexedIndirect */
+    [110] = { 2394, 0xbd58e867 }, /* vkCmdDispatch */
+    [111] = { 2408, 0xd6353005 }, /* vkCmdDispatchIndirect */
+    [112] = { 2430, 0xc939a0da }, /* vkCmdCopyBuffer */
+    [113] = { 2446, 0x278effa9 }, /* vkCmdCopyImage */
+    [114] = { 2461, 0x331ebf89 }, /* vkCmdBlitImage */
+    [115] = { 2476, 0x929847e }, /* vkCmdCopyBufferToImage */
+    [116] = { 2499, 0x68cddbac }, /* vkCmdCopyImageToBuffer */
+    [117] = { 2522, 0xd2986b5e }, /* vkCmdUpdateBuffer */
+    [118] = { 2540, 0x5bdd2ae0 }, /* vkCmdFillBuffer */
+    [119] = { 2556, 0xb4bc8d08 }, /* vkCmdClearColorImage */
+    [120] = { 2577, 0x4f88e4ba }, /* vkCmdClearDepthStencilImage */
+    [121] = { 2605, 0x93cb5cb8 }, /* vkCmdClearAttachments */
+    [122] = { 2627, 0x671bb594 }, /* vkCmdResolveImage */
+    [123] = { 2645, 0xe257f075 }, /* vkCmdSetEvent */
+    [124] = { 2659, 0x4fccce28 }, /* vkCmdResetEvent */
+    [125] = { 2675, 0x3b9346b3 }, /* vkCmdWaitEvents */
+    [126] = { 2691, 0x97fccfe8 }, /* vkCmdPipelineBarrier */
+    [127] = { 2712, 0xf5064ea4 }, /* vkCmdBeginQuery */
+    [128] = { 2728, 0xd556fd22 }, /* vkCmdEndQuery */
+    [129] = { 2742, 0x2f614082 }, /* vkCmdResetQueryPool */
+    [130] = { 2762, 0xec4d324c }, /* vkCmdWriteTimestamp */
+    [131] = { 2782, 0xdee8c6d4 }, /* vkCmdCopyQueryPoolResults */
+    [132] = { 2808, 0xb1c6b468 }, /* vkCmdPushConstants */
+    [133] = { 2827, 0xcb7a58e3 }, /* vkCmdBeginRenderPass */
+    [134] = { 2848, 0x2eeec2f9 }, /* vkCmdNextSubpass */
+    [135] = { 2865, 0xdcdb0235 }, /* vkCmdEndRenderPass */
+    [136] = { 2884, 0x9eaabe40 }, /* vkCmdExecuteCommands */
+    [137] = { 2905, 0xf204ce7d }, /* vkDestroySurfaceKHR */
+    [138] = { 2925, 0x1a687885 }, /* vkGetPhysicalDeviceSurfaceSupportKHR */
+    [139] = { 2962, 0x77890558 }, /* vkGetPhysicalDeviceSurfaceCapabilitiesKHR */
+    [140] = { 3004, 0xe32227c8 }, /* vkGetPhysicalDeviceSurfaceFormatsKHR */
+    [141] = { 3041, 0x31c3cbd1 }, /* vkGetPhysicalDeviceSurfacePresentModesKHR */
+    [142] = { 3083, 0xcdefcaa8 }, /* vkCreateSwapchainKHR */
+    [143] = { 3104, 0x5a93ab74 }, /* vkDestroySwapchainKHR */
+    [144] = { 3126, 0x57695f28 }, /* vkGetSwapchainImagesKHR */
+    [145] = { 3150, 0xc3fedb2e }, /* vkAcquireNextImageKHR */
+    [146] = { 3172, 0xfc5fb6ce }, /* vkQueuePresentKHR */
+    [147] = { 3190, 0x2b2a4b79 }, /* vkCreateWaylandSurfaceKHR */
+    [148] = { 3216, 0x84e085ac }, /* vkGetPhysicalDeviceWaylandPresentationSupportKHR */
+    [149] = { 3265, 0xa693bc66 }, /* vkCreateXlibSurfaceKHR */
+    [150] = { 3288, 0x34a063ab }, /* vkGetPhysicalDeviceXlibPresentationSupportKHR */
+    [151] = { 3334, 0xc5e5b106 }, /* vkCreateXcbSurfaceKHR */
+    [152] = { 3356, 0x41782cb9 }, /* vkGetPhysicalDeviceXcbPresentationSupportKHR */
+    [153] = { 3401, 0x987ef56 }, /* vkCreateDebugReportCallbackEXT */
+    [154] = { 3432, 0x43d4c4e2 }, /* vkDestroyDebugReportCallbackEXT */
+    [155] = { 3464, 0xa4e75334 }, /* vkDebugReportMessageEXT */
+    [156] = { 3488, 0x6a9a3636 }, /* vkGetPhysicalDeviceFeatures2KHR */
+    [157] = { 3520, 0xcd15838c }, /* vkGetPhysicalDeviceProperties2KHR */
+    [158] = { 3554, 0x9099cbbb }, /* vkGetPhysicalDeviceFormatProperties2KHR */
+    [159] = { 3594, 0x102ff7ea }, /* vkGetPhysicalDeviceImageFormatProperties2KHR */
+    [160] = { 3639, 0x5ceb2bed }, /* vkGetPhysicalDeviceQueueFamilyProperties2KHR */
+    [161] = { 3684, 0xc8c3da3d }, /* vkGetPhysicalDeviceMemoryProperties2KHR */
+    [162] = { 3724, 0x8746ed72 }, /* vkGetPhysicalDeviceSparseImageFormatProperties2KHR */
+    [163] = { 3775, 0xf17232a1 }, /* vkCmdPushDescriptorSetKHR */
+    [164] = { 3801, 0x51177c8d }, /* vkTrimCommandPoolKHR */
+    [165] = { 3822, 0xee68b389 }, /* vkGetPhysicalDeviceExternalBufferPropertiesKHR */
+    [166] = { 3869, 0x503c14c5 }, /* vkGetMemoryFdKHR */
+    [167] = { 3886, 0xb028a792 }, /* vkGetMemoryFdPropertiesKHR */
+    [168] = { 3913, 0x984c3fa7 }, /* vkGetPhysicalDeviceExternalSemaphorePropertiesKHR */
+    [169] = { 3963, 0x3e0e9884 }, /* vkGetSemaphoreFdKHR */
+    [170] = { 3983, 0x36337c05 }, /* vkImportSemaphoreFdKHR */
+    [171] = { 4006, 0x99b35492 }, /* vkGetPhysicalDeviceExternalFencePropertiesKHR */
+    [172] = { 4052, 0x69a5d6af }, /* vkGetFenceFdKHR */
+    [173] = { 4068, 0x51df0390 }, /* vkImportFenceFdKHR */
+    [174] = { 4087, 0x6878d3ce }, /* vkBindBufferMemory2KHR */
+    [175] = { 4110, 0xf18729ad }, /* vkBindImageMemory2KHR */
+    [176] = { 4132, 0x5189488a }, /* vkCreateDescriptorUpdateTemplateKHR */
+    [177] = { 4168, 0xaa83901e }, /* vkDestroyDescriptorUpdateTemplateKHR */
+    [178] = { 4205, 0x214ad230 }, /* vkUpdateDescriptorSetWithTemplateKHR */
+    [179] = { 4242, 0x3d528981 }, /* vkCmdPushDescriptorSetWithTemplateKHR */
+    [180] = { 4280, 0x9497e378 }, /* vkGetPhysicalDeviceSurfaceCapabilities2KHR */
+    [181] = { 4323, 0xd00b7188 }, /* vkGetPhysicalDeviceSurfaceFormats2KHR */
+    [182] = { 4361, 0x78dbe98d }, /* vkGetBufferMemoryRequirements2KHR */
+    [183] = { 4395, 0x8de28366 }, /* vkGetImageMemoryRequirements2KHR */
+    [184] = { 4428, 0x3df40f5e }, /* vkGetImageSparseMemoryRequirements2KHR */
+    [185] = { 4467, 0x7482104f }, /* vkCreateSamplerYcbcrConversionKHR */
+    [186] = { 4501, 0xaaa623a3 }, /* vkDestroySamplerYcbcrConversionKHR */
+    [187] = { 4536, 0x4979c9a3 }, /* vkGetSwapchainGrallocUsageANDROID */
+    [188] = { 4570, 0x6bf780dd }, /* vkAcquireImageANDROID */
+    [189] = { 4592, 0xa0313eef }, /* vkQueueSignalReleaseImageANDROID */
+    [190] = { 4625, 0x6392dfa7 }, /* vkCreateDmaBufImageINTEL */
 };
 
 /* Weak aliases for all potential implementations. These will resolve to
@@ -561,6 +593,9 @@ static const struct anv_entrypoint entrypoints[] = {
 #ifdef VK_USE_PLATFORM_XCB_KHR
     VkBool32 anv_GetPhysicalDeviceXcbPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, xcb_connection_t* connection, xcb_visualid_t visual_id) __attribute__ ((weak));
 #endif // VK_USE_PLATFORM_XCB_KHR
+    VkResult anv_CreateDebugReportCallbackEXT(VkInstance instance, const VkDebugReportCallbackCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugReportCallbackEXT* pCallback) __attribute__ ((weak));
+    void anv_DestroyDebugReportCallbackEXT(VkInstance instance, VkDebugReportCallbackEXT callback, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
+    void anv_DebugReportMessageEXT(VkInstance instance, VkDebugReportFlagsEXT flags, VkDebugReportObjectTypeEXT objectType, uint64_t object, size_t location, int32_t messageCode, const char* pLayerPrefix, const char* pMessage) __attribute__ ((weak));
     void anv_GetPhysicalDeviceFeatures2KHR(VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures2KHR* pFeatures) __attribute__ ((weak));
     void anv_GetPhysicalDeviceProperties2KHR(VkPhysicalDevice physicalDevice, VkPhysicalDeviceProperties2KHR* pProperties) __attribute__ ((weak));
     void anv_GetPhysicalDeviceFormatProperties2KHR(VkPhysicalDevice physicalDevice, VkFormat format, VkFormatProperties2KHR* pFormatProperties) __attribute__ ((weak));
@@ -573,6 +608,14 @@ static const struct anv_entrypoint entrypoints[] = {
     void anv_GetPhysicalDeviceExternalBufferPropertiesKHR(VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalBufferInfoKHR* pExternalBufferInfo, VkExternalBufferPropertiesKHR* pExternalBufferProperties) __attribute__ ((weak));
     VkResult anv_GetMemoryFdKHR(VkDevice device, const VkMemoryGetFdInfoKHR* pGetFdInfo, int* pFd) __attribute__ ((weak));
     VkResult anv_GetMemoryFdPropertiesKHR(VkDevice device, VkExternalMemoryHandleTypeFlagBitsKHR handleType, int fd, VkMemoryFdPropertiesKHR* pMemoryFdProperties) __attribute__ ((weak));
+    void anv_GetPhysicalDeviceExternalSemaphorePropertiesKHR(VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalSemaphoreInfoKHR* pExternalSemaphoreInfo, VkExternalSemaphorePropertiesKHR* pExternalSemaphoreProperties) __attribute__ ((weak));
+    VkResult anv_GetSemaphoreFdKHR(VkDevice device, const VkSemaphoreGetFdInfoKHR* pGetFdInfo, int* pFd) __attribute__ ((weak));
+    VkResult anv_ImportSemaphoreFdKHR(VkDevice device, const VkImportSemaphoreFdInfoKHR* pImportSemaphoreFdInfo) __attribute__ ((weak));
+    void anv_GetPhysicalDeviceExternalFencePropertiesKHR(VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalFenceInfoKHR* pExternalFenceInfo, VkExternalFencePropertiesKHR* pExternalFenceProperties) __attribute__ ((weak));
+    VkResult anv_GetFenceFdKHR(VkDevice device, const VkFenceGetFdInfoKHR* pGetFdInfo, int* pFd) __attribute__ ((weak));
+    VkResult anv_ImportFenceFdKHR(VkDevice device, const VkImportFenceFdInfoKHR* pImportFenceFdInfo) __attribute__ ((weak));
+    VkResult anv_BindBufferMemory2KHR(VkDevice device, uint32_t bindInfoCount, const VkBindBufferMemoryInfoKHR* pBindInfos) __attribute__ ((weak));
+    VkResult anv_BindImageMemory2KHR(VkDevice device, uint32_t bindInfoCount, const VkBindImageMemoryInfoKHR* pBindInfos) __attribute__ ((weak));
     VkResult anv_CreateDescriptorUpdateTemplateKHR(VkDevice device, const VkDescriptorUpdateTemplateCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDescriptorUpdateTemplateKHR* pDescriptorUpdateTemplate) __attribute__ ((weak));
     void anv_DestroyDescriptorUpdateTemplateKHR(VkDevice device, VkDescriptorUpdateTemplateKHR descriptorUpdateTemplate, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
     void anv_UpdateDescriptorSetWithTemplateKHR(VkDevice device, VkDescriptorSet descriptorSet, VkDescriptorUpdateTemplateKHR descriptorUpdateTemplate, const void* pData) __attribute__ ((weak));
@@ -582,6 +625,17 @@ static const struct anv_entrypoint entrypoints[] = {
     void anv_GetBufferMemoryRequirements2KHR(VkDevice device, const VkBufferMemoryRequirementsInfo2KHR* pInfo, VkMemoryRequirements2KHR* pMemoryRequirements) __attribute__ ((weak));
     void anv_GetImageMemoryRequirements2KHR(VkDevice device, const VkImageMemoryRequirementsInfo2KHR* pInfo, VkMemoryRequirements2KHR* pMemoryRequirements) __attribute__ ((weak));
     void anv_GetImageSparseMemoryRequirements2KHR(VkDevice device, const VkImageSparseMemoryRequirementsInfo2KHR* pInfo, uint32_t* pSparseMemoryRequirementCount, VkSparseImageMemoryRequirements2KHR* pSparseMemoryRequirements) __attribute__ ((weak));
+    VkResult anv_CreateSamplerYcbcrConversionKHR(VkDevice device, const VkSamplerYcbcrConversionCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSamplerYcbcrConversionKHR* pYcbcrConversion) __attribute__ ((weak));
+    void anv_DestroySamplerYcbcrConversionKHR(VkDevice device, VkSamplerYcbcrConversionKHR ycbcrConversion, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
+#ifdef ANDROID
+    VkResult anv_GetSwapchainGrallocUsageANDROID(VkDevice device, VkFormat format, VkImageUsageFlags imageUsage, int* grallocUsage) __attribute__ ((weak));
+#endif // ANDROID
+#ifdef ANDROID
+    VkResult anv_AcquireImageANDROID(VkDevice device, VkImage image, int nativeFenceFd, VkSemaphore semaphore, VkFence fence) __attribute__ ((weak));
+#endif // ANDROID
+#ifdef ANDROID
+    VkResult anv_QueueSignalReleaseImageANDROID(VkQueue queue, uint32_t waitSemaphoreCount, const VkSemaphore* pWaitSemaphores, VkImage image, int* pNativeFenceFd) __attribute__ ((weak));
+#endif // ANDROID
     VkResult anv_CreateDmaBufImageINTEL(VkDevice device, const VkDmaBufImageCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator,VkDeviceMemory* pMem,VkImage* pImage) __attribute__ ((weak));
 
   const struct anv_dispatch_table anv_layer = {
@@ -750,6 +804,9 @@ static const struct anv_entrypoint entrypoints[] = {
 #ifdef VK_USE_PLATFORM_XCB_KHR
     .GetPhysicalDeviceXcbPresentationSupportKHR = anv_GetPhysicalDeviceXcbPresentationSupportKHR,
 #endif // VK_USE_PLATFORM_XCB_KHR
+    .CreateDebugReportCallbackEXT = anv_CreateDebugReportCallbackEXT,
+    .DestroyDebugReportCallbackEXT = anv_DestroyDebugReportCallbackEXT,
+    .DebugReportMessageEXT = anv_DebugReportMessageEXT,
     .GetPhysicalDeviceFeatures2KHR = anv_GetPhysicalDeviceFeatures2KHR,
     .GetPhysicalDeviceProperties2KHR = anv_GetPhysicalDeviceProperties2KHR,
     .GetPhysicalDeviceFormatProperties2KHR = anv_GetPhysicalDeviceFormatProperties2KHR,
@@ -762,6 +819,14 @@ static const struct anv_entrypoint entrypoints[] = {
     .GetPhysicalDeviceExternalBufferPropertiesKHR = anv_GetPhysicalDeviceExternalBufferPropertiesKHR,
     .GetMemoryFdKHR = anv_GetMemoryFdKHR,
     .GetMemoryFdPropertiesKHR = anv_GetMemoryFdPropertiesKHR,
+    .GetPhysicalDeviceExternalSemaphorePropertiesKHR = anv_GetPhysicalDeviceExternalSemaphorePropertiesKHR,
+    .GetSemaphoreFdKHR = anv_GetSemaphoreFdKHR,
+    .ImportSemaphoreFdKHR = anv_ImportSemaphoreFdKHR,
+    .GetPhysicalDeviceExternalFencePropertiesKHR = anv_GetPhysicalDeviceExternalFencePropertiesKHR,
+    .GetFenceFdKHR = anv_GetFenceFdKHR,
+    .ImportFenceFdKHR = anv_ImportFenceFdKHR,
+    .BindBufferMemory2KHR = anv_BindBufferMemory2KHR,
+    .BindImageMemory2KHR = anv_BindImageMemory2KHR,
     .CreateDescriptorUpdateTemplateKHR = anv_CreateDescriptorUpdateTemplateKHR,
     .DestroyDescriptorUpdateTemplateKHR = anv_DestroyDescriptorUpdateTemplateKHR,
     .UpdateDescriptorSetWithTemplateKHR = anv_UpdateDescriptorSetWithTemplateKHR,
@@ -771,6 +836,17 @@ static const struct anv_entrypoint entrypoints[] = {
     .GetBufferMemoryRequirements2KHR = anv_GetBufferMemoryRequirements2KHR,
     .GetImageMemoryRequirements2KHR = anv_GetImageMemoryRequirements2KHR,
     .GetImageSparseMemoryRequirements2KHR = anv_GetImageSparseMemoryRequirements2KHR,
+    .CreateSamplerYcbcrConversionKHR = anv_CreateSamplerYcbcrConversionKHR,
+    .DestroySamplerYcbcrConversionKHR = anv_DestroySamplerYcbcrConversionKHR,
+#ifdef ANDROID
+    .GetSwapchainGrallocUsageANDROID = anv_GetSwapchainGrallocUsageANDROID,
+#endif // ANDROID
+#ifdef ANDROID
+    .AcquireImageANDROID = anv_AcquireImageANDROID,
+#endif // ANDROID
+#ifdef ANDROID
+    .QueueSignalReleaseImageANDROID = anv_QueueSignalReleaseImageANDROID,
+#endif // ANDROID
     .CreateDmaBufImageINTEL = anv_CreateDmaBufImageINTEL,
   };
     VkResult gen7_CreateInstance(const VkInstanceCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkInstance* pInstance) __attribute__ ((weak));
@@ -938,6 +1014,9 @@ static const struct anv_entrypoint entrypoints[] = {
 #ifdef VK_USE_PLATFORM_XCB_KHR
     VkBool32 gen7_GetPhysicalDeviceXcbPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, xcb_connection_t* connection, xcb_visualid_t visual_id) __attribute__ ((weak));
 #endif // VK_USE_PLATFORM_XCB_KHR
+    VkResult gen7_CreateDebugReportCallbackEXT(VkInstance instance, const VkDebugReportCallbackCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugReportCallbackEXT* pCallback) __attribute__ ((weak));
+    void gen7_DestroyDebugReportCallbackEXT(VkInstance instance, VkDebugReportCallbackEXT callback, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
+    void gen7_DebugReportMessageEXT(VkInstance instance, VkDebugReportFlagsEXT flags, VkDebugReportObjectTypeEXT objectType, uint64_t object, size_t location, int32_t messageCode, const char* pLayerPrefix, const char* pMessage) __attribute__ ((weak));
     void gen7_GetPhysicalDeviceFeatures2KHR(VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures2KHR* pFeatures) __attribute__ ((weak));
     void gen7_GetPhysicalDeviceProperties2KHR(VkPhysicalDevice physicalDevice, VkPhysicalDeviceProperties2KHR* pProperties) __attribute__ ((weak));
     void gen7_GetPhysicalDeviceFormatProperties2KHR(VkPhysicalDevice physicalDevice, VkFormat format, VkFormatProperties2KHR* pFormatProperties) __attribute__ ((weak));
@@ -950,6 +1029,14 @@ static const struct anv_entrypoint entrypoints[] = {
     void gen7_GetPhysicalDeviceExternalBufferPropertiesKHR(VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalBufferInfoKHR* pExternalBufferInfo, VkExternalBufferPropertiesKHR* pExternalBufferProperties) __attribute__ ((weak));
     VkResult gen7_GetMemoryFdKHR(VkDevice device, const VkMemoryGetFdInfoKHR* pGetFdInfo, int* pFd) __attribute__ ((weak));
     VkResult gen7_GetMemoryFdPropertiesKHR(VkDevice device, VkExternalMemoryHandleTypeFlagBitsKHR handleType, int fd, VkMemoryFdPropertiesKHR* pMemoryFdProperties) __attribute__ ((weak));
+    void gen7_GetPhysicalDeviceExternalSemaphorePropertiesKHR(VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalSemaphoreInfoKHR* pExternalSemaphoreInfo, VkExternalSemaphorePropertiesKHR* pExternalSemaphoreProperties) __attribute__ ((weak));
+    VkResult gen7_GetSemaphoreFdKHR(VkDevice device, const VkSemaphoreGetFdInfoKHR* pGetFdInfo, int* pFd) __attribute__ ((weak));
+    VkResult gen7_ImportSemaphoreFdKHR(VkDevice device, const VkImportSemaphoreFdInfoKHR* pImportSemaphoreFdInfo) __attribute__ ((weak));
+    void gen7_GetPhysicalDeviceExternalFencePropertiesKHR(VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalFenceInfoKHR* pExternalFenceInfo, VkExternalFencePropertiesKHR* pExternalFenceProperties) __attribute__ ((weak));
+    VkResult gen7_GetFenceFdKHR(VkDevice device, const VkFenceGetFdInfoKHR* pGetFdInfo, int* pFd) __attribute__ ((weak));
+    VkResult gen7_ImportFenceFdKHR(VkDevice device, const VkImportFenceFdInfoKHR* pImportFenceFdInfo) __attribute__ ((weak));
+    VkResult gen7_BindBufferMemory2KHR(VkDevice device, uint32_t bindInfoCount, const VkBindBufferMemoryInfoKHR* pBindInfos) __attribute__ ((weak));
+    VkResult gen7_BindImageMemory2KHR(VkDevice device, uint32_t bindInfoCount, const VkBindImageMemoryInfoKHR* pBindInfos) __attribute__ ((weak));
     VkResult gen7_CreateDescriptorUpdateTemplateKHR(VkDevice device, const VkDescriptorUpdateTemplateCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDescriptorUpdateTemplateKHR* pDescriptorUpdateTemplate) __attribute__ ((weak));
     void gen7_DestroyDescriptorUpdateTemplateKHR(VkDevice device, VkDescriptorUpdateTemplateKHR descriptorUpdateTemplate, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
     void gen7_UpdateDescriptorSetWithTemplateKHR(VkDevice device, VkDescriptorSet descriptorSet, VkDescriptorUpdateTemplateKHR descriptorUpdateTemplate, const void* pData) __attribute__ ((weak));
@@ -959,6 +1046,17 @@ static const struct anv_entrypoint entrypoints[] = {
     void gen7_GetBufferMemoryRequirements2KHR(VkDevice device, const VkBufferMemoryRequirementsInfo2KHR* pInfo, VkMemoryRequirements2KHR* pMemoryRequirements) __attribute__ ((weak));
     void gen7_GetImageMemoryRequirements2KHR(VkDevice device, const VkImageMemoryRequirementsInfo2KHR* pInfo, VkMemoryRequirements2KHR* pMemoryRequirements) __attribute__ ((weak));
     void gen7_GetImageSparseMemoryRequirements2KHR(VkDevice device, const VkImageSparseMemoryRequirementsInfo2KHR* pInfo, uint32_t* pSparseMemoryRequirementCount, VkSparseImageMemoryRequirements2KHR* pSparseMemoryRequirements) __attribute__ ((weak));
+    VkResult gen7_CreateSamplerYcbcrConversionKHR(VkDevice device, const VkSamplerYcbcrConversionCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSamplerYcbcrConversionKHR* pYcbcrConversion) __attribute__ ((weak));
+    void gen7_DestroySamplerYcbcrConversionKHR(VkDevice device, VkSamplerYcbcrConversionKHR ycbcrConversion, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
+#ifdef ANDROID
+    VkResult gen7_GetSwapchainGrallocUsageANDROID(VkDevice device, VkFormat format, VkImageUsageFlags imageUsage, int* grallocUsage) __attribute__ ((weak));
+#endif // ANDROID
+#ifdef ANDROID
+    VkResult gen7_AcquireImageANDROID(VkDevice device, VkImage image, int nativeFenceFd, VkSemaphore semaphore, VkFence fence) __attribute__ ((weak));
+#endif // ANDROID
+#ifdef ANDROID
+    VkResult gen7_QueueSignalReleaseImageANDROID(VkQueue queue, uint32_t waitSemaphoreCount, const VkSemaphore* pWaitSemaphores, VkImage image, int* pNativeFenceFd) __attribute__ ((weak));
+#endif // ANDROID
     VkResult gen7_CreateDmaBufImageINTEL(VkDevice device, const VkDmaBufImageCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator,VkDeviceMemory* pMem,VkImage* pImage) __attribute__ ((weak));
 
   const struct anv_dispatch_table gen7_layer = {
@@ -1127,6 +1225,9 @@ static const struct anv_entrypoint entrypoints[] = {
 #ifdef VK_USE_PLATFORM_XCB_KHR
     .GetPhysicalDeviceXcbPresentationSupportKHR = gen7_GetPhysicalDeviceXcbPresentationSupportKHR,
 #endif // VK_USE_PLATFORM_XCB_KHR
+    .CreateDebugReportCallbackEXT = gen7_CreateDebugReportCallbackEXT,
+    .DestroyDebugReportCallbackEXT = gen7_DestroyDebugReportCallbackEXT,
+    .DebugReportMessageEXT = gen7_DebugReportMessageEXT,
     .GetPhysicalDeviceFeatures2KHR = gen7_GetPhysicalDeviceFeatures2KHR,
     .GetPhysicalDeviceProperties2KHR = gen7_GetPhysicalDeviceProperties2KHR,
     .GetPhysicalDeviceFormatProperties2KHR = gen7_GetPhysicalDeviceFormatProperties2KHR,
@@ -1139,6 +1240,14 @@ static const struct anv_entrypoint entrypoints[] = {
     .GetPhysicalDeviceExternalBufferPropertiesKHR = gen7_GetPhysicalDeviceExternalBufferPropertiesKHR,
     .GetMemoryFdKHR = gen7_GetMemoryFdKHR,
     .GetMemoryFdPropertiesKHR = gen7_GetMemoryFdPropertiesKHR,
+    .GetPhysicalDeviceExternalSemaphorePropertiesKHR = gen7_GetPhysicalDeviceExternalSemaphorePropertiesKHR,
+    .GetSemaphoreFdKHR = gen7_GetSemaphoreFdKHR,
+    .ImportSemaphoreFdKHR = gen7_ImportSemaphoreFdKHR,
+    .GetPhysicalDeviceExternalFencePropertiesKHR = gen7_GetPhysicalDeviceExternalFencePropertiesKHR,
+    .GetFenceFdKHR = gen7_GetFenceFdKHR,
+    .ImportFenceFdKHR = gen7_ImportFenceFdKHR,
+    .BindBufferMemory2KHR = gen7_BindBufferMemory2KHR,
+    .BindImageMemory2KHR = gen7_BindImageMemory2KHR,
     .CreateDescriptorUpdateTemplateKHR = gen7_CreateDescriptorUpdateTemplateKHR,
     .DestroyDescriptorUpdateTemplateKHR = gen7_DestroyDescriptorUpdateTemplateKHR,
     .UpdateDescriptorSetWithTemplateKHR = gen7_UpdateDescriptorSetWithTemplateKHR,
@@ -1148,6 +1257,17 @@ static const struct anv_entrypoint entrypoints[] = {
     .GetBufferMemoryRequirements2KHR = gen7_GetBufferMemoryRequirements2KHR,
     .GetImageMemoryRequirements2KHR = gen7_GetImageMemoryRequirements2KHR,
     .GetImageSparseMemoryRequirements2KHR = gen7_GetImageSparseMemoryRequirements2KHR,
+    .CreateSamplerYcbcrConversionKHR = gen7_CreateSamplerYcbcrConversionKHR,
+    .DestroySamplerYcbcrConversionKHR = gen7_DestroySamplerYcbcrConversionKHR,
+#ifdef ANDROID
+    .GetSwapchainGrallocUsageANDROID = gen7_GetSwapchainGrallocUsageANDROID,
+#endif // ANDROID
+#ifdef ANDROID
+    .AcquireImageANDROID = gen7_AcquireImageANDROID,
+#endif // ANDROID
+#ifdef ANDROID
+    .QueueSignalReleaseImageANDROID = gen7_QueueSignalReleaseImageANDROID,
+#endif // ANDROID
     .CreateDmaBufImageINTEL = gen7_CreateDmaBufImageINTEL,
   };
     VkResult gen75_CreateInstance(const VkInstanceCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkInstance* pInstance) __attribute__ ((weak));
@@ -1315,6 +1435,9 @@ static const struct anv_entrypoint entrypoints[] = {
 #ifdef VK_USE_PLATFORM_XCB_KHR
     VkBool32 gen75_GetPhysicalDeviceXcbPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, xcb_connection_t* connection, xcb_visualid_t visual_id) __attribute__ ((weak));
 #endif // VK_USE_PLATFORM_XCB_KHR
+    VkResult gen75_CreateDebugReportCallbackEXT(VkInstance instance, const VkDebugReportCallbackCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugReportCallbackEXT* pCallback) __attribute__ ((weak));
+    void gen75_DestroyDebugReportCallbackEXT(VkInstance instance, VkDebugReportCallbackEXT callback, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
+    void gen75_DebugReportMessageEXT(VkInstance instance, VkDebugReportFlagsEXT flags, VkDebugReportObjectTypeEXT objectType, uint64_t object, size_t location, int32_t messageCode, const char* pLayerPrefix, const char* pMessage) __attribute__ ((weak));
     void gen75_GetPhysicalDeviceFeatures2KHR(VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures2KHR* pFeatures) __attribute__ ((weak));
     void gen75_GetPhysicalDeviceProperties2KHR(VkPhysicalDevice physicalDevice, VkPhysicalDeviceProperties2KHR* pProperties) __attribute__ ((weak));
     void gen75_GetPhysicalDeviceFormatProperties2KHR(VkPhysicalDevice physicalDevice, VkFormat format, VkFormatProperties2KHR* pFormatProperties) __attribute__ ((weak));
@@ -1327,6 +1450,14 @@ static const struct anv_entrypoint entrypoints[] = {
     void gen75_GetPhysicalDeviceExternalBufferPropertiesKHR(VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalBufferInfoKHR* pExternalBufferInfo, VkExternalBufferPropertiesKHR* pExternalBufferProperties) __attribute__ ((weak));
     VkResult gen75_GetMemoryFdKHR(VkDevice device, const VkMemoryGetFdInfoKHR* pGetFdInfo, int* pFd) __attribute__ ((weak));
     VkResult gen75_GetMemoryFdPropertiesKHR(VkDevice device, VkExternalMemoryHandleTypeFlagBitsKHR handleType, int fd, VkMemoryFdPropertiesKHR* pMemoryFdProperties) __attribute__ ((weak));
+    void gen75_GetPhysicalDeviceExternalSemaphorePropertiesKHR(VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalSemaphoreInfoKHR* pExternalSemaphoreInfo, VkExternalSemaphorePropertiesKHR* pExternalSemaphoreProperties) __attribute__ ((weak));
+    VkResult gen75_GetSemaphoreFdKHR(VkDevice device, const VkSemaphoreGetFdInfoKHR* pGetFdInfo, int* pFd) __attribute__ ((weak));
+    VkResult gen75_ImportSemaphoreFdKHR(VkDevice device, const VkImportSemaphoreFdInfoKHR* pImportSemaphoreFdInfo) __attribute__ ((weak));
+    void gen75_GetPhysicalDeviceExternalFencePropertiesKHR(VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalFenceInfoKHR* pExternalFenceInfo, VkExternalFencePropertiesKHR* pExternalFenceProperties) __attribute__ ((weak));
+    VkResult gen75_GetFenceFdKHR(VkDevice device, const VkFenceGetFdInfoKHR* pGetFdInfo, int* pFd) __attribute__ ((weak));
+    VkResult gen75_ImportFenceFdKHR(VkDevice device, const VkImportFenceFdInfoKHR* pImportFenceFdInfo) __attribute__ ((weak));
+    VkResult gen75_BindBufferMemory2KHR(VkDevice device, uint32_t bindInfoCount, const VkBindBufferMemoryInfoKHR* pBindInfos) __attribute__ ((weak));
+    VkResult gen75_BindImageMemory2KHR(VkDevice device, uint32_t bindInfoCount, const VkBindImageMemoryInfoKHR* pBindInfos) __attribute__ ((weak));
     VkResult gen75_CreateDescriptorUpdateTemplateKHR(VkDevice device, const VkDescriptorUpdateTemplateCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDescriptorUpdateTemplateKHR* pDescriptorUpdateTemplate) __attribute__ ((weak));
     void gen75_DestroyDescriptorUpdateTemplateKHR(VkDevice device, VkDescriptorUpdateTemplateKHR descriptorUpdateTemplate, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
     void gen75_UpdateDescriptorSetWithTemplateKHR(VkDevice device, VkDescriptorSet descriptorSet, VkDescriptorUpdateTemplateKHR descriptorUpdateTemplate, const void* pData) __attribute__ ((weak));
@@ -1336,6 +1467,17 @@ static const struct anv_entrypoint entrypoints[] = {
     void gen75_GetBufferMemoryRequirements2KHR(VkDevice device, const VkBufferMemoryRequirementsInfo2KHR* pInfo, VkMemoryRequirements2KHR* pMemoryRequirements) __attribute__ ((weak));
     void gen75_GetImageMemoryRequirements2KHR(VkDevice device, const VkImageMemoryRequirementsInfo2KHR* pInfo, VkMemoryRequirements2KHR* pMemoryRequirements) __attribute__ ((weak));
     void gen75_GetImageSparseMemoryRequirements2KHR(VkDevice device, const VkImageSparseMemoryRequirementsInfo2KHR* pInfo, uint32_t* pSparseMemoryRequirementCount, VkSparseImageMemoryRequirements2KHR* pSparseMemoryRequirements) __attribute__ ((weak));
+    VkResult gen75_CreateSamplerYcbcrConversionKHR(VkDevice device, const VkSamplerYcbcrConversionCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSamplerYcbcrConversionKHR* pYcbcrConversion) __attribute__ ((weak));
+    void gen75_DestroySamplerYcbcrConversionKHR(VkDevice device, VkSamplerYcbcrConversionKHR ycbcrConversion, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
+#ifdef ANDROID
+    VkResult gen75_GetSwapchainGrallocUsageANDROID(VkDevice device, VkFormat format, VkImageUsageFlags imageUsage, int* grallocUsage) __attribute__ ((weak));
+#endif // ANDROID
+#ifdef ANDROID
+    VkResult gen75_AcquireImageANDROID(VkDevice device, VkImage image, int nativeFenceFd, VkSemaphore semaphore, VkFence fence) __attribute__ ((weak));
+#endif // ANDROID
+#ifdef ANDROID
+    VkResult gen75_QueueSignalReleaseImageANDROID(VkQueue queue, uint32_t waitSemaphoreCount, const VkSemaphore* pWaitSemaphores, VkImage image, int* pNativeFenceFd) __attribute__ ((weak));
+#endif // ANDROID
     VkResult gen75_CreateDmaBufImageINTEL(VkDevice device, const VkDmaBufImageCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator,VkDeviceMemory* pMem,VkImage* pImage) __attribute__ ((weak));
 
   const struct anv_dispatch_table gen75_layer = {
@@ -1504,6 +1646,9 @@ static const struct anv_entrypoint entrypoints[] = {
 #ifdef VK_USE_PLATFORM_XCB_KHR
     .GetPhysicalDeviceXcbPresentationSupportKHR = gen75_GetPhysicalDeviceXcbPresentationSupportKHR,
 #endif // VK_USE_PLATFORM_XCB_KHR
+    .CreateDebugReportCallbackEXT = gen75_CreateDebugReportCallbackEXT,
+    .DestroyDebugReportCallbackEXT = gen75_DestroyDebugReportCallbackEXT,
+    .DebugReportMessageEXT = gen75_DebugReportMessageEXT,
     .GetPhysicalDeviceFeatures2KHR = gen75_GetPhysicalDeviceFeatures2KHR,
     .GetPhysicalDeviceProperties2KHR = gen75_GetPhysicalDeviceProperties2KHR,
     .GetPhysicalDeviceFormatProperties2KHR = gen75_GetPhysicalDeviceFormatProperties2KHR,
@@ -1516,6 +1661,14 @@ static const struct anv_entrypoint entrypoints[] = {
     .GetPhysicalDeviceExternalBufferPropertiesKHR = gen75_GetPhysicalDeviceExternalBufferPropertiesKHR,
     .GetMemoryFdKHR = gen75_GetMemoryFdKHR,
     .GetMemoryFdPropertiesKHR = gen75_GetMemoryFdPropertiesKHR,
+    .GetPhysicalDeviceExternalSemaphorePropertiesKHR = gen75_GetPhysicalDeviceExternalSemaphorePropertiesKHR,
+    .GetSemaphoreFdKHR = gen75_GetSemaphoreFdKHR,
+    .ImportSemaphoreFdKHR = gen75_ImportSemaphoreFdKHR,
+    .GetPhysicalDeviceExternalFencePropertiesKHR = gen75_GetPhysicalDeviceExternalFencePropertiesKHR,
+    .GetFenceFdKHR = gen75_GetFenceFdKHR,
+    .ImportFenceFdKHR = gen75_ImportFenceFdKHR,
+    .BindBufferMemory2KHR = gen75_BindBufferMemory2KHR,
+    .BindImageMemory2KHR = gen75_BindImageMemory2KHR,
     .CreateDescriptorUpdateTemplateKHR = gen75_CreateDescriptorUpdateTemplateKHR,
     .DestroyDescriptorUpdateTemplateKHR = gen75_DestroyDescriptorUpdateTemplateKHR,
     .UpdateDescriptorSetWithTemplateKHR = gen75_UpdateDescriptorSetWithTemplateKHR,
@@ -1525,6 +1678,17 @@ static const struct anv_entrypoint entrypoints[] = {
     .GetBufferMemoryRequirements2KHR = gen75_GetBufferMemoryRequirements2KHR,
     .GetImageMemoryRequirements2KHR = gen75_GetImageMemoryRequirements2KHR,
     .GetImageSparseMemoryRequirements2KHR = gen75_GetImageSparseMemoryRequirements2KHR,
+    .CreateSamplerYcbcrConversionKHR = gen75_CreateSamplerYcbcrConversionKHR,
+    .DestroySamplerYcbcrConversionKHR = gen75_DestroySamplerYcbcrConversionKHR,
+#ifdef ANDROID
+    .GetSwapchainGrallocUsageANDROID = gen75_GetSwapchainGrallocUsageANDROID,
+#endif // ANDROID
+#ifdef ANDROID
+    .AcquireImageANDROID = gen75_AcquireImageANDROID,
+#endif // ANDROID
+#ifdef ANDROID
+    .QueueSignalReleaseImageANDROID = gen75_QueueSignalReleaseImageANDROID,
+#endif // ANDROID
     .CreateDmaBufImageINTEL = gen75_CreateDmaBufImageINTEL,
   };
     VkResult gen8_CreateInstance(const VkInstanceCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkInstance* pInstance) __attribute__ ((weak));
@@ -1692,6 +1856,9 @@ static const struct anv_entrypoint entrypoints[] = {
 #ifdef VK_USE_PLATFORM_XCB_KHR
     VkBool32 gen8_GetPhysicalDeviceXcbPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, xcb_connection_t* connection, xcb_visualid_t visual_id) __attribute__ ((weak));
 #endif // VK_USE_PLATFORM_XCB_KHR
+    VkResult gen8_CreateDebugReportCallbackEXT(VkInstance instance, const VkDebugReportCallbackCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugReportCallbackEXT* pCallback) __attribute__ ((weak));
+    void gen8_DestroyDebugReportCallbackEXT(VkInstance instance, VkDebugReportCallbackEXT callback, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
+    void gen8_DebugReportMessageEXT(VkInstance instance, VkDebugReportFlagsEXT flags, VkDebugReportObjectTypeEXT objectType, uint64_t object, size_t location, int32_t messageCode, const char* pLayerPrefix, const char* pMessage) __attribute__ ((weak));
     void gen8_GetPhysicalDeviceFeatures2KHR(VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures2KHR* pFeatures) __attribute__ ((weak));
     void gen8_GetPhysicalDeviceProperties2KHR(VkPhysicalDevice physicalDevice, VkPhysicalDeviceProperties2KHR* pProperties) __attribute__ ((weak));
     void gen8_GetPhysicalDeviceFormatProperties2KHR(VkPhysicalDevice physicalDevice, VkFormat format, VkFormatProperties2KHR* pFormatProperties) __attribute__ ((weak));
@@ -1704,6 +1871,14 @@ static const struct anv_entrypoint entrypoints[] = {
     void gen8_GetPhysicalDeviceExternalBufferPropertiesKHR(VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalBufferInfoKHR* pExternalBufferInfo, VkExternalBufferPropertiesKHR* pExternalBufferProperties) __attribute__ ((weak));
     VkResult gen8_GetMemoryFdKHR(VkDevice device, const VkMemoryGetFdInfoKHR* pGetFdInfo, int* pFd) __attribute__ ((weak));
     VkResult gen8_GetMemoryFdPropertiesKHR(VkDevice device, VkExternalMemoryHandleTypeFlagBitsKHR handleType, int fd, VkMemoryFdPropertiesKHR* pMemoryFdProperties) __attribute__ ((weak));
+    void gen8_GetPhysicalDeviceExternalSemaphorePropertiesKHR(VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalSemaphoreInfoKHR* pExternalSemaphoreInfo, VkExternalSemaphorePropertiesKHR* pExternalSemaphoreProperties) __attribute__ ((weak));
+    VkResult gen8_GetSemaphoreFdKHR(VkDevice device, const VkSemaphoreGetFdInfoKHR* pGetFdInfo, int* pFd) __attribute__ ((weak));
+    VkResult gen8_ImportSemaphoreFdKHR(VkDevice device, const VkImportSemaphoreFdInfoKHR* pImportSemaphoreFdInfo) __attribute__ ((weak));
+    void gen8_GetPhysicalDeviceExternalFencePropertiesKHR(VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalFenceInfoKHR* pExternalFenceInfo, VkExternalFencePropertiesKHR* pExternalFenceProperties) __attribute__ ((weak));
+    VkResult gen8_GetFenceFdKHR(VkDevice device, const VkFenceGetFdInfoKHR* pGetFdInfo, int* pFd) __attribute__ ((weak));
+    VkResult gen8_ImportFenceFdKHR(VkDevice device, const VkImportFenceFdInfoKHR* pImportFenceFdInfo) __attribute__ ((weak));
+    VkResult gen8_BindBufferMemory2KHR(VkDevice device, uint32_t bindInfoCount, const VkBindBufferMemoryInfoKHR* pBindInfos) __attribute__ ((weak));
+    VkResult gen8_BindImageMemory2KHR(VkDevice device, uint32_t bindInfoCount, const VkBindImageMemoryInfoKHR* pBindInfos) __attribute__ ((weak));
     VkResult gen8_CreateDescriptorUpdateTemplateKHR(VkDevice device, const VkDescriptorUpdateTemplateCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDescriptorUpdateTemplateKHR* pDescriptorUpdateTemplate) __attribute__ ((weak));
     void gen8_DestroyDescriptorUpdateTemplateKHR(VkDevice device, VkDescriptorUpdateTemplateKHR descriptorUpdateTemplate, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
     void gen8_UpdateDescriptorSetWithTemplateKHR(VkDevice device, VkDescriptorSet descriptorSet, VkDescriptorUpdateTemplateKHR descriptorUpdateTemplate, const void* pData) __attribute__ ((weak));
@@ -1713,6 +1888,17 @@ static const struct anv_entrypoint entrypoints[] = {
     void gen8_GetBufferMemoryRequirements2KHR(VkDevice device, const VkBufferMemoryRequirementsInfo2KHR* pInfo, VkMemoryRequirements2KHR* pMemoryRequirements) __attribute__ ((weak));
     void gen8_GetImageMemoryRequirements2KHR(VkDevice device, const VkImageMemoryRequirementsInfo2KHR* pInfo, VkMemoryRequirements2KHR* pMemoryRequirements) __attribute__ ((weak));
     void gen8_GetImageSparseMemoryRequirements2KHR(VkDevice device, const VkImageSparseMemoryRequirementsInfo2KHR* pInfo, uint32_t* pSparseMemoryRequirementCount, VkSparseImageMemoryRequirements2KHR* pSparseMemoryRequirements) __attribute__ ((weak));
+    VkResult gen8_CreateSamplerYcbcrConversionKHR(VkDevice device, const VkSamplerYcbcrConversionCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSamplerYcbcrConversionKHR* pYcbcrConversion) __attribute__ ((weak));
+    void gen8_DestroySamplerYcbcrConversionKHR(VkDevice device, VkSamplerYcbcrConversionKHR ycbcrConversion, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
+#ifdef ANDROID
+    VkResult gen8_GetSwapchainGrallocUsageANDROID(VkDevice device, VkFormat format, VkImageUsageFlags imageUsage, int* grallocUsage) __attribute__ ((weak));
+#endif // ANDROID
+#ifdef ANDROID
+    VkResult gen8_AcquireImageANDROID(VkDevice device, VkImage image, int nativeFenceFd, VkSemaphore semaphore, VkFence fence) __attribute__ ((weak));
+#endif // ANDROID
+#ifdef ANDROID
+    VkResult gen8_QueueSignalReleaseImageANDROID(VkQueue queue, uint32_t waitSemaphoreCount, const VkSemaphore* pWaitSemaphores, VkImage image, int* pNativeFenceFd) __attribute__ ((weak));
+#endif // ANDROID
     VkResult gen8_CreateDmaBufImageINTEL(VkDevice device, const VkDmaBufImageCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator,VkDeviceMemory* pMem,VkImage* pImage) __attribute__ ((weak));
 
   const struct anv_dispatch_table gen8_layer = {
@@ -1881,6 +2067,9 @@ static const struct anv_entrypoint entrypoints[] = {
 #ifdef VK_USE_PLATFORM_XCB_KHR
     .GetPhysicalDeviceXcbPresentationSupportKHR = gen8_GetPhysicalDeviceXcbPresentationSupportKHR,
 #endif // VK_USE_PLATFORM_XCB_KHR
+    .CreateDebugReportCallbackEXT = gen8_CreateDebugReportCallbackEXT,
+    .DestroyDebugReportCallbackEXT = gen8_DestroyDebugReportCallbackEXT,
+    .DebugReportMessageEXT = gen8_DebugReportMessageEXT,
     .GetPhysicalDeviceFeatures2KHR = gen8_GetPhysicalDeviceFeatures2KHR,
     .GetPhysicalDeviceProperties2KHR = gen8_GetPhysicalDeviceProperties2KHR,
     .GetPhysicalDeviceFormatProperties2KHR = gen8_GetPhysicalDeviceFormatProperties2KHR,
@@ -1893,6 +2082,14 @@ static const struct anv_entrypoint entrypoints[] = {
     .GetPhysicalDeviceExternalBufferPropertiesKHR = gen8_GetPhysicalDeviceExternalBufferPropertiesKHR,
     .GetMemoryFdKHR = gen8_GetMemoryFdKHR,
     .GetMemoryFdPropertiesKHR = gen8_GetMemoryFdPropertiesKHR,
+    .GetPhysicalDeviceExternalSemaphorePropertiesKHR = gen8_GetPhysicalDeviceExternalSemaphorePropertiesKHR,
+    .GetSemaphoreFdKHR = gen8_GetSemaphoreFdKHR,
+    .ImportSemaphoreFdKHR = gen8_ImportSemaphoreFdKHR,
+    .GetPhysicalDeviceExternalFencePropertiesKHR = gen8_GetPhysicalDeviceExternalFencePropertiesKHR,
+    .GetFenceFdKHR = gen8_GetFenceFdKHR,
+    .ImportFenceFdKHR = gen8_ImportFenceFdKHR,
+    .BindBufferMemory2KHR = gen8_BindBufferMemory2KHR,
+    .BindImageMemory2KHR = gen8_BindImageMemory2KHR,
     .CreateDescriptorUpdateTemplateKHR = gen8_CreateDescriptorUpdateTemplateKHR,
     .DestroyDescriptorUpdateTemplateKHR = gen8_DestroyDescriptorUpdateTemplateKHR,
     .UpdateDescriptorSetWithTemplateKHR = gen8_UpdateDescriptorSetWithTemplateKHR,
@@ -1902,6 +2099,17 @@ static const struct anv_entrypoint entrypoints[] = {
     .GetBufferMemoryRequirements2KHR = gen8_GetBufferMemoryRequirements2KHR,
     .GetImageMemoryRequirements2KHR = gen8_GetImageMemoryRequirements2KHR,
     .GetImageSparseMemoryRequirements2KHR = gen8_GetImageSparseMemoryRequirements2KHR,
+    .CreateSamplerYcbcrConversionKHR = gen8_CreateSamplerYcbcrConversionKHR,
+    .DestroySamplerYcbcrConversionKHR = gen8_DestroySamplerYcbcrConversionKHR,
+#ifdef ANDROID
+    .GetSwapchainGrallocUsageANDROID = gen8_GetSwapchainGrallocUsageANDROID,
+#endif // ANDROID
+#ifdef ANDROID
+    .AcquireImageANDROID = gen8_AcquireImageANDROID,
+#endif // ANDROID
+#ifdef ANDROID
+    .QueueSignalReleaseImageANDROID = gen8_QueueSignalReleaseImageANDROID,
+#endif // ANDROID
     .CreateDmaBufImageINTEL = gen8_CreateDmaBufImageINTEL,
   };
     VkResult gen9_CreateInstance(const VkInstanceCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkInstance* pInstance) __attribute__ ((weak));
@@ -2069,6 +2277,9 @@ static const struct anv_entrypoint entrypoints[] = {
 #ifdef VK_USE_PLATFORM_XCB_KHR
     VkBool32 gen9_GetPhysicalDeviceXcbPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, xcb_connection_t* connection, xcb_visualid_t visual_id) __attribute__ ((weak));
 #endif // VK_USE_PLATFORM_XCB_KHR
+    VkResult gen9_CreateDebugReportCallbackEXT(VkInstance instance, const VkDebugReportCallbackCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugReportCallbackEXT* pCallback) __attribute__ ((weak));
+    void gen9_DestroyDebugReportCallbackEXT(VkInstance instance, VkDebugReportCallbackEXT callback, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
+    void gen9_DebugReportMessageEXT(VkInstance instance, VkDebugReportFlagsEXT flags, VkDebugReportObjectTypeEXT objectType, uint64_t object, size_t location, int32_t messageCode, const char* pLayerPrefix, const char* pMessage) __attribute__ ((weak));
     void gen9_GetPhysicalDeviceFeatures2KHR(VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures2KHR* pFeatures) __attribute__ ((weak));
     void gen9_GetPhysicalDeviceProperties2KHR(VkPhysicalDevice physicalDevice, VkPhysicalDeviceProperties2KHR* pProperties) __attribute__ ((weak));
     void gen9_GetPhysicalDeviceFormatProperties2KHR(VkPhysicalDevice physicalDevice, VkFormat format, VkFormatProperties2KHR* pFormatProperties) __attribute__ ((weak));
@@ -2081,6 +2292,14 @@ static const struct anv_entrypoint entrypoints[] = {
     void gen9_GetPhysicalDeviceExternalBufferPropertiesKHR(VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalBufferInfoKHR* pExternalBufferInfo, VkExternalBufferPropertiesKHR* pExternalBufferProperties) __attribute__ ((weak));
     VkResult gen9_GetMemoryFdKHR(VkDevice device, const VkMemoryGetFdInfoKHR* pGetFdInfo, int* pFd) __attribute__ ((weak));
     VkResult gen9_GetMemoryFdPropertiesKHR(VkDevice device, VkExternalMemoryHandleTypeFlagBitsKHR handleType, int fd, VkMemoryFdPropertiesKHR* pMemoryFdProperties) __attribute__ ((weak));
+    void gen9_GetPhysicalDeviceExternalSemaphorePropertiesKHR(VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalSemaphoreInfoKHR* pExternalSemaphoreInfo, VkExternalSemaphorePropertiesKHR* pExternalSemaphoreProperties) __attribute__ ((weak));
+    VkResult gen9_GetSemaphoreFdKHR(VkDevice device, const VkSemaphoreGetFdInfoKHR* pGetFdInfo, int* pFd) __attribute__ ((weak));
+    VkResult gen9_ImportSemaphoreFdKHR(VkDevice device, const VkImportSemaphoreFdInfoKHR* pImportSemaphoreFdInfo) __attribute__ ((weak));
+    void gen9_GetPhysicalDeviceExternalFencePropertiesKHR(VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalFenceInfoKHR* pExternalFenceInfo, VkExternalFencePropertiesKHR* pExternalFenceProperties) __attribute__ ((weak));
+    VkResult gen9_GetFenceFdKHR(VkDevice device, const VkFenceGetFdInfoKHR* pGetFdInfo, int* pFd) __attribute__ ((weak));
+    VkResult gen9_ImportFenceFdKHR(VkDevice device, const VkImportFenceFdInfoKHR* pImportFenceFdInfo) __attribute__ ((weak));
+    VkResult gen9_BindBufferMemory2KHR(VkDevice device, uint32_t bindInfoCount, const VkBindBufferMemoryInfoKHR* pBindInfos) __attribute__ ((weak));
+    VkResult gen9_BindImageMemory2KHR(VkDevice device, uint32_t bindInfoCount, const VkBindImageMemoryInfoKHR* pBindInfos) __attribute__ ((weak));
     VkResult gen9_CreateDescriptorUpdateTemplateKHR(VkDevice device, const VkDescriptorUpdateTemplateCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDescriptorUpdateTemplateKHR* pDescriptorUpdateTemplate) __attribute__ ((weak));
     void gen9_DestroyDescriptorUpdateTemplateKHR(VkDevice device, VkDescriptorUpdateTemplateKHR descriptorUpdateTemplate, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
     void gen9_UpdateDescriptorSetWithTemplateKHR(VkDevice device, VkDescriptorSet descriptorSet, VkDescriptorUpdateTemplateKHR descriptorUpdateTemplate, const void* pData) __attribute__ ((weak));
@@ -2090,6 +2309,17 @@ static const struct anv_entrypoint entrypoints[] = {
     void gen9_GetBufferMemoryRequirements2KHR(VkDevice device, const VkBufferMemoryRequirementsInfo2KHR* pInfo, VkMemoryRequirements2KHR* pMemoryRequirements) __attribute__ ((weak));
     void gen9_GetImageMemoryRequirements2KHR(VkDevice device, const VkImageMemoryRequirementsInfo2KHR* pInfo, VkMemoryRequirements2KHR* pMemoryRequirements) __attribute__ ((weak));
     void gen9_GetImageSparseMemoryRequirements2KHR(VkDevice device, const VkImageSparseMemoryRequirementsInfo2KHR* pInfo, uint32_t* pSparseMemoryRequirementCount, VkSparseImageMemoryRequirements2KHR* pSparseMemoryRequirements) __attribute__ ((weak));
+    VkResult gen9_CreateSamplerYcbcrConversionKHR(VkDevice device, const VkSamplerYcbcrConversionCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSamplerYcbcrConversionKHR* pYcbcrConversion) __attribute__ ((weak));
+    void gen9_DestroySamplerYcbcrConversionKHR(VkDevice device, VkSamplerYcbcrConversionKHR ycbcrConversion, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
+#ifdef ANDROID
+    VkResult gen9_GetSwapchainGrallocUsageANDROID(VkDevice device, VkFormat format, VkImageUsageFlags imageUsage, int* grallocUsage) __attribute__ ((weak));
+#endif // ANDROID
+#ifdef ANDROID
+    VkResult gen9_AcquireImageANDROID(VkDevice device, VkImage image, int nativeFenceFd, VkSemaphore semaphore, VkFence fence) __attribute__ ((weak));
+#endif // ANDROID
+#ifdef ANDROID
+    VkResult gen9_QueueSignalReleaseImageANDROID(VkQueue queue, uint32_t waitSemaphoreCount, const VkSemaphore* pWaitSemaphores, VkImage image, int* pNativeFenceFd) __attribute__ ((weak));
+#endif // ANDROID
     VkResult gen9_CreateDmaBufImageINTEL(VkDevice device, const VkDmaBufImageCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator,VkDeviceMemory* pMem,VkImage* pImage) __attribute__ ((weak));
 
   const struct anv_dispatch_table gen9_layer = {
@@ -2258,6 +2488,9 @@ static const struct anv_entrypoint entrypoints[] = {
 #ifdef VK_USE_PLATFORM_XCB_KHR
     .GetPhysicalDeviceXcbPresentationSupportKHR = gen9_GetPhysicalDeviceXcbPresentationSupportKHR,
 #endif // VK_USE_PLATFORM_XCB_KHR
+    .CreateDebugReportCallbackEXT = gen9_CreateDebugReportCallbackEXT,
+    .DestroyDebugReportCallbackEXT = gen9_DestroyDebugReportCallbackEXT,
+    .DebugReportMessageEXT = gen9_DebugReportMessageEXT,
     .GetPhysicalDeviceFeatures2KHR = gen9_GetPhysicalDeviceFeatures2KHR,
     .GetPhysicalDeviceProperties2KHR = gen9_GetPhysicalDeviceProperties2KHR,
     .GetPhysicalDeviceFormatProperties2KHR = gen9_GetPhysicalDeviceFormatProperties2KHR,
@@ -2270,6 +2503,14 @@ static const struct anv_entrypoint entrypoints[] = {
     .GetPhysicalDeviceExternalBufferPropertiesKHR = gen9_GetPhysicalDeviceExternalBufferPropertiesKHR,
     .GetMemoryFdKHR = gen9_GetMemoryFdKHR,
     .GetMemoryFdPropertiesKHR = gen9_GetMemoryFdPropertiesKHR,
+    .GetPhysicalDeviceExternalSemaphorePropertiesKHR = gen9_GetPhysicalDeviceExternalSemaphorePropertiesKHR,
+    .GetSemaphoreFdKHR = gen9_GetSemaphoreFdKHR,
+    .ImportSemaphoreFdKHR = gen9_ImportSemaphoreFdKHR,
+    .GetPhysicalDeviceExternalFencePropertiesKHR = gen9_GetPhysicalDeviceExternalFencePropertiesKHR,
+    .GetFenceFdKHR = gen9_GetFenceFdKHR,
+    .ImportFenceFdKHR = gen9_ImportFenceFdKHR,
+    .BindBufferMemory2KHR = gen9_BindBufferMemory2KHR,
+    .BindImageMemory2KHR = gen9_BindImageMemory2KHR,
     .CreateDescriptorUpdateTemplateKHR = gen9_CreateDescriptorUpdateTemplateKHR,
     .DestroyDescriptorUpdateTemplateKHR = gen9_DestroyDescriptorUpdateTemplateKHR,
     .UpdateDescriptorSetWithTemplateKHR = gen9_UpdateDescriptorSetWithTemplateKHR,
@@ -2279,6 +2520,17 @@ static const struct anv_entrypoint entrypoints[] = {
     .GetBufferMemoryRequirements2KHR = gen9_GetBufferMemoryRequirements2KHR,
     .GetImageMemoryRequirements2KHR = gen9_GetImageMemoryRequirements2KHR,
     .GetImageSparseMemoryRequirements2KHR = gen9_GetImageSparseMemoryRequirements2KHR,
+    .CreateSamplerYcbcrConversionKHR = gen9_CreateSamplerYcbcrConversionKHR,
+    .DestroySamplerYcbcrConversionKHR = gen9_DestroySamplerYcbcrConversionKHR,
+#ifdef ANDROID
+    .GetSwapchainGrallocUsageANDROID = gen9_GetSwapchainGrallocUsageANDROID,
+#endif // ANDROID
+#ifdef ANDROID
+    .AcquireImageANDROID = gen9_AcquireImageANDROID,
+#endif // ANDROID
+#ifdef ANDROID
+    .QueueSignalReleaseImageANDROID = gen9_QueueSignalReleaseImageANDROID,
+#endif // ANDROID
     .CreateDmaBufImageINTEL = gen9_CreateDmaBufImageINTEL,
   };
     VkResult gen10_CreateInstance(const VkInstanceCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkInstance* pInstance) __attribute__ ((weak));
@@ -2446,6 +2698,9 @@ static const struct anv_entrypoint entrypoints[] = {
 #ifdef VK_USE_PLATFORM_XCB_KHR
     VkBool32 gen10_GetPhysicalDeviceXcbPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, xcb_connection_t* connection, xcb_visualid_t visual_id) __attribute__ ((weak));
 #endif // VK_USE_PLATFORM_XCB_KHR
+    VkResult gen10_CreateDebugReportCallbackEXT(VkInstance instance, const VkDebugReportCallbackCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugReportCallbackEXT* pCallback) __attribute__ ((weak));
+    void gen10_DestroyDebugReportCallbackEXT(VkInstance instance, VkDebugReportCallbackEXT callback, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
+    void gen10_DebugReportMessageEXT(VkInstance instance, VkDebugReportFlagsEXT flags, VkDebugReportObjectTypeEXT objectType, uint64_t object, size_t location, int32_t messageCode, const char* pLayerPrefix, const char* pMessage) __attribute__ ((weak));
     void gen10_GetPhysicalDeviceFeatures2KHR(VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures2KHR* pFeatures) __attribute__ ((weak));
     void gen10_GetPhysicalDeviceProperties2KHR(VkPhysicalDevice physicalDevice, VkPhysicalDeviceProperties2KHR* pProperties) __attribute__ ((weak));
     void gen10_GetPhysicalDeviceFormatProperties2KHR(VkPhysicalDevice physicalDevice, VkFormat format, VkFormatProperties2KHR* pFormatProperties) __attribute__ ((weak));
@@ -2458,6 +2713,14 @@ static const struct anv_entrypoint entrypoints[] = {
     void gen10_GetPhysicalDeviceExternalBufferPropertiesKHR(VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalBufferInfoKHR* pExternalBufferInfo, VkExternalBufferPropertiesKHR* pExternalBufferProperties) __attribute__ ((weak));
     VkResult gen10_GetMemoryFdKHR(VkDevice device, const VkMemoryGetFdInfoKHR* pGetFdInfo, int* pFd) __attribute__ ((weak));
     VkResult gen10_GetMemoryFdPropertiesKHR(VkDevice device, VkExternalMemoryHandleTypeFlagBitsKHR handleType, int fd, VkMemoryFdPropertiesKHR* pMemoryFdProperties) __attribute__ ((weak));
+    void gen10_GetPhysicalDeviceExternalSemaphorePropertiesKHR(VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalSemaphoreInfoKHR* pExternalSemaphoreInfo, VkExternalSemaphorePropertiesKHR* pExternalSemaphoreProperties) __attribute__ ((weak));
+    VkResult gen10_GetSemaphoreFdKHR(VkDevice device, const VkSemaphoreGetFdInfoKHR* pGetFdInfo, int* pFd) __attribute__ ((weak));
+    VkResult gen10_ImportSemaphoreFdKHR(VkDevice device, const VkImportSemaphoreFdInfoKHR* pImportSemaphoreFdInfo) __attribute__ ((weak));
+    void gen10_GetPhysicalDeviceExternalFencePropertiesKHR(VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalFenceInfoKHR* pExternalFenceInfo, VkExternalFencePropertiesKHR* pExternalFenceProperties) __attribute__ ((weak));
+    VkResult gen10_GetFenceFdKHR(VkDevice device, const VkFenceGetFdInfoKHR* pGetFdInfo, int* pFd) __attribute__ ((weak));
+    VkResult gen10_ImportFenceFdKHR(VkDevice device, const VkImportFenceFdInfoKHR* pImportFenceFdInfo) __attribute__ ((weak));
+    VkResult gen10_BindBufferMemory2KHR(VkDevice device, uint32_t bindInfoCount, const VkBindBufferMemoryInfoKHR* pBindInfos) __attribute__ ((weak));
+    VkResult gen10_BindImageMemory2KHR(VkDevice device, uint32_t bindInfoCount, const VkBindImageMemoryInfoKHR* pBindInfos) __attribute__ ((weak));
     VkResult gen10_CreateDescriptorUpdateTemplateKHR(VkDevice device, const VkDescriptorUpdateTemplateCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDescriptorUpdateTemplateKHR* pDescriptorUpdateTemplate) __attribute__ ((weak));
     void gen10_DestroyDescriptorUpdateTemplateKHR(VkDevice device, VkDescriptorUpdateTemplateKHR descriptorUpdateTemplate, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
     void gen10_UpdateDescriptorSetWithTemplateKHR(VkDevice device, VkDescriptorSet descriptorSet, VkDescriptorUpdateTemplateKHR descriptorUpdateTemplate, const void* pData) __attribute__ ((weak));
@@ -2467,6 +2730,17 @@ static const struct anv_entrypoint entrypoints[] = {
     void gen10_GetBufferMemoryRequirements2KHR(VkDevice device, const VkBufferMemoryRequirementsInfo2KHR* pInfo, VkMemoryRequirements2KHR* pMemoryRequirements) __attribute__ ((weak));
     void gen10_GetImageMemoryRequirements2KHR(VkDevice device, const VkImageMemoryRequirementsInfo2KHR* pInfo, VkMemoryRequirements2KHR* pMemoryRequirements) __attribute__ ((weak));
     void gen10_GetImageSparseMemoryRequirements2KHR(VkDevice device, const VkImageSparseMemoryRequirementsInfo2KHR* pInfo, uint32_t* pSparseMemoryRequirementCount, VkSparseImageMemoryRequirements2KHR* pSparseMemoryRequirements) __attribute__ ((weak));
+    VkResult gen10_CreateSamplerYcbcrConversionKHR(VkDevice device, const VkSamplerYcbcrConversionCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSamplerYcbcrConversionKHR* pYcbcrConversion) __attribute__ ((weak));
+    void gen10_DestroySamplerYcbcrConversionKHR(VkDevice device, VkSamplerYcbcrConversionKHR ycbcrConversion, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
+#ifdef ANDROID
+    VkResult gen10_GetSwapchainGrallocUsageANDROID(VkDevice device, VkFormat format, VkImageUsageFlags imageUsage, int* grallocUsage) __attribute__ ((weak));
+#endif // ANDROID
+#ifdef ANDROID
+    VkResult gen10_AcquireImageANDROID(VkDevice device, VkImage image, int nativeFenceFd, VkSemaphore semaphore, VkFence fence) __attribute__ ((weak));
+#endif // ANDROID
+#ifdef ANDROID
+    VkResult gen10_QueueSignalReleaseImageANDROID(VkQueue queue, uint32_t waitSemaphoreCount, const VkSemaphore* pWaitSemaphores, VkImage image, int* pNativeFenceFd) __attribute__ ((weak));
+#endif // ANDROID
     VkResult gen10_CreateDmaBufImageINTEL(VkDevice device, const VkDmaBufImageCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator,VkDeviceMemory* pMem,VkImage* pImage) __attribute__ ((weak));
 
   const struct anv_dispatch_table gen10_layer = {
@@ -2635,6 +2909,9 @@ static const struct anv_entrypoint entrypoints[] = {
 #ifdef VK_USE_PLATFORM_XCB_KHR
     .GetPhysicalDeviceXcbPresentationSupportKHR = gen10_GetPhysicalDeviceXcbPresentationSupportKHR,
 #endif // VK_USE_PLATFORM_XCB_KHR
+    .CreateDebugReportCallbackEXT = gen10_CreateDebugReportCallbackEXT,
+    .DestroyDebugReportCallbackEXT = gen10_DestroyDebugReportCallbackEXT,
+    .DebugReportMessageEXT = gen10_DebugReportMessageEXT,
     .GetPhysicalDeviceFeatures2KHR = gen10_GetPhysicalDeviceFeatures2KHR,
     .GetPhysicalDeviceProperties2KHR = gen10_GetPhysicalDeviceProperties2KHR,
     .GetPhysicalDeviceFormatProperties2KHR = gen10_GetPhysicalDeviceFormatProperties2KHR,
@@ -2647,6 +2924,14 @@ static const struct anv_entrypoint entrypoints[] = {
     .GetPhysicalDeviceExternalBufferPropertiesKHR = gen10_GetPhysicalDeviceExternalBufferPropertiesKHR,
     .GetMemoryFdKHR = gen10_GetMemoryFdKHR,
     .GetMemoryFdPropertiesKHR = gen10_GetMemoryFdPropertiesKHR,
+    .GetPhysicalDeviceExternalSemaphorePropertiesKHR = gen10_GetPhysicalDeviceExternalSemaphorePropertiesKHR,
+    .GetSemaphoreFdKHR = gen10_GetSemaphoreFdKHR,
+    .ImportSemaphoreFdKHR = gen10_ImportSemaphoreFdKHR,
+    .GetPhysicalDeviceExternalFencePropertiesKHR = gen10_GetPhysicalDeviceExternalFencePropertiesKHR,
+    .GetFenceFdKHR = gen10_GetFenceFdKHR,
+    .ImportFenceFdKHR = gen10_ImportFenceFdKHR,
+    .BindBufferMemory2KHR = gen10_BindBufferMemory2KHR,
+    .BindImageMemory2KHR = gen10_BindImageMemory2KHR,
     .CreateDescriptorUpdateTemplateKHR = gen10_CreateDescriptorUpdateTemplateKHR,
     .DestroyDescriptorUpdateTemplateKHR = gen10_DestroyDescriptorUpdateTemplateKHR,
     .UpdateDescriptorSetWithTemplateKHR = gen10_UpdateDescriptorSetWithTemplateKHR,
@@ -2656,6 +2941,17 @@ static const struct anv_entrypoint entrypoints[] = {
     .GetBufferMemoryRequirements2KHR = gen10_GetBufferMemoryRequirements2KHR,
     .GetImageMemoryRequirements2KHR = gen10_GetImageMemoryRequirements2KHR,
     .GetImageSparseMemoryRequirements2KHR = gen10_GetImageSparseMemoryRequirements2KHR,
+    .CreateSamplerYcbcrConversionKHR = gen10_CreateSamplerYcbcrConversionKHR,
+    .DestroySamplerYcbcrConversionKHR = gen10_DestroySamplerYcbcrConversionKHR,
+#ifdef ANDROID
+    .GetSwapchainGrallocUsageANDROID = gen10_GetSwapchainGrallocUsageANDROID,
+#endif // ANDROID
+#ifdef ANDROID
+    .AcquireImageANDROID = gen10_AcquireImageANDROID,
+#endif // ANDROID
+#ifdef ANDROID
+    .QueueSignalReleaseImageANDROID = gen10_QueueSignalReleaseImageANDROID,
+#endif // ANDROID
     .CreateDmaBufImageINTEL = gen10_CreateDmaBufImageINTEL,
   };
 
@@ -2666,44 +2962,44 @@ anv_resolve_entrypoint(const struct gen_device_info *devinfo, uint32_t index)
       return anv_layer.entrypoints[index];
    }
 
+   const struct anv_dispatch_table *genX_table;
    switch (devinfo->gen) {
    case 10:
-      if (gen10_layer.entrypoints[index])
-         return gen10_layer.entrypoints[index];
-      /* fall through */
+      genX_table = &gen10_layer;
+      break;
    case 9:
-      if (gen9_layer.entrypoints[index])
-         return gen9_layer.entrypoints[index];
-      /* fall through */
+      genX_table = &gen9_layer;
+      break;
    case 8:
-      if (gen8_layer.entrypoints[index])
-         return gen8_layer.entrypoints[index];
-      /* fall through */
+      genX_table = &gen8_layer;
+      break;
    case 7:
-      if (devinfo->is_haswell && gen75_layer.entrypoints[index])
-         return gen75_layer.entrypoints[index];
-
-      if (gen7_layer.entrypoints[index])
-         return gen7_layer.entrypoints[index];
-      /* fall through */
-   case 0:
-      return anv_layer.entrypoints[index];
+      if (devinfo->is_haswell)
+         genX_table = &gen75_layer;
+      else
+         genX_table = &gen7_layer;
+      break;
    default:
       unreachable("unsupported gen\n");
    }
+
+   if (genX_table->entrypoints[index])
+      return genX_table->entrypoints[index];
+   else
+      return anv_layer.entrypoints[index];
 }
 
 /* Hash table stats:
  * size 256 entries
  * collisions entries:
- *     0     116
- *     1     31
- *     2     10
+ *     0     119
+ *     1     37
+ *     2     13
  *     3     7
- *     4     6
+ *     4     4
  *     5     1
- *     6     1
- *     7     1
+ *     6     5
+ *     7     3
  *     8     1
  *     9+     1
  */
@@ -2712,9 +3008,9 @@ anv_resolve_entrypoint(const struct gen_device_info *devinfo, uint32_t index)
 static const uint16_t map[] = {
       0x0044,
       none,
-      none,
-      none,
-      0x00a4,
+      0x00bd,
+      0x00bc,
+      0x00a7,
       0x002b,
       0x0040,
       0x0061,
@@ -2724,26 +3020,26 @@ static const uint16_t map[] = {
       none,
       none,
       none,
-      0x00a2,
+      0x00a5,
       none,
       none,
-      0x00a3,
+      0x00a6,
       none,
       0x0067,
       none,
       none,
       none,
-      none,
+      0x00ab,
       0x0052,
       0x0097,
       0x0058,
       0x004c,
       none,
       0x0069,
-      0x00a6,
+      0x00b1,
       none,
       none,
-      none,
+      0x00ac,
       0x0054,
       none,
       0x0014,
@@ -2754,7 +3050,7 @@ static const uint16_t map[] = {
       none,
       0x001c,
       0x002f,
-      none,
+      0x00be,
       none,
       0x0077,
       0x0018,
@@ -2767,21 +3063,21 @@ static const uint16_t map[] = {
       0x006d,
       0x0053,
       none,
-      0x009d,
+      0x00a0,
       0x004d,
       0x0090,
       0x0024,
-      0x009e,
+      0x00a1,
       0x005e,
       0x000b,
       0x0088,
       0x0091,
       none,
-      0x00a7,
+      0x00b2,
       0x005c,
       0x0033,
       none,
-      none,
+      0x009b,
       0x0087,
       0x003f,
       0x001f,
@@ -2789,12 +3085,12 @@ static const uint16_t map[] = {
       0x0082,
       0x005a,
       none,
-      none,
+      0x00b9,
       none,
       0x0019,
       0x0046,
       0x003a,
-      none,
+      0x009a,
       none,
       0x0034,
       none,
@@ -2802,7 +3098,7 @@ static const uint16_t map[] = {
       none,
       none,
       0x0020,
-      0x0099,
+      0x009c,
       0x0066,
       0x0075,
       none,
@@ -2815,7 +3111,7 @@ static const uint16_t map[] = {
       0x0047,
       0x000a,
       0x0023,
-      none,
+      0x0099,
       none,
       0x006b,
       none,
@@ -2823,14 +3119,14 @@ static const uint16_t map[] = {
       0x0028,
       none,
       0x0068,
-      0x00ad,
-      0x009f,
+      0x00b8,
+      0x00a2,
       0x003e,
       0x0048,
       0x007b,
       0x0055,
-      none,
-      0x00a9,
+      0x00aa,
+      0x00b4,
       0x0045,
       0x006e,
       0x0084,
@@ -2841,27 +3137,27 @@ static const uint16_t map[] = {
       none,
       0x0027,
       0x0081,
-      0x00ac,
+      0x00b7,
       0x005d,
       0x008a,
       0x0003,
       0x008f,
-      0x00aa,
+      0x00b5,
       0x0063,
       0x0006,
       none,
       0x0093,
-      0x00a1,
+      0x00a4,
       none,
       none,
-      none,
+      0x00ad,
       0x0059,
       0x0026,
       none,
       0x003c,
       none,
       0x0037,
-      none,
+      0x00a9,
       0x0009,
       0x0038,
       0x0011,
@@ -2870,10 +3166,10 @@ static const uint16_t map[] = {
       0x0016,
       none,
       0x003d,
-      0x00ab,
+      0x00b6,
       0x006a,
       0x003b,
-      none,
+      0x00ba,
       0x004a,
       0x0013,
       0x0000,
@@ -2886,13 +3182,13 @@ static const uint16_t map[] = {
       0x0004,
       0x004f,
       0x0029,
-      0x00a5,
+      0x00b0,
       0x004e,
       0x0095,
       0x0031,
-      0x00a0,
+      0x00a3,
       0x001b,
-      none,
+      0x00bb,
       0x0073,
       0x005f,
       0x0032,
@@ -2902,12 +3198,12 @@ static const uint16_t map[] = {
       none,
       none,
       0x006c,
-      none,
+      0x00af,
       none,
       0x0036,
       none,
       0x0050,
-      0x009a,
+      0x009d,
       0x007d,
       none,
       0x008c,
@@ -2935,7 +3231,7 @@ static const uint16_t map[] = {
       0x001d,
       none,
       0x0076,
-      0x009b,
+      0x009e,
       0x0064,
       0x0085,
       none,
@@ -2944,7 +3240,7 @@ static const uint16_t map[] = {
       0x000f,
       0x007e,
       none,
-      0x009c,
+      0x009f,
       0x0017,
       0x0012,
       0x0010,
@@ -2953,8 +3249,8 @@ static const uint16_t map[] = {
       0x008b,
       0x0079,
       0x0001,
+      0x00b3,
       0x00ae,
-      none,
       0x002d,
       none,
       none,

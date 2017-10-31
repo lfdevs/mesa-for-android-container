@@ -54,6 +54,9 @@ struct swr_resource {
    size_t secondary_mip_offsets[PIPE_MAX_TEXTURE_LEVELS];
 
    enum swr_resource_status status;
+
+   /* last pipe that used (validated) this resource */
+   struct pipe_context *curr_pipe;
 };
 
 
@@ -92,7 +95,7 @@ swr_resource_data(struct pipe_resource *resource)
 
    assert(!swr_resource_is_texture(resource));
 
-   return swr_r->swr.pBaseAddress;
+   return (uint8_t*)(swr_r->swr.xpBaseAddress);
 }
 
 

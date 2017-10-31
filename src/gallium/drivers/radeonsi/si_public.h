@@ -26,6 +26,6 @@
 struct radeon_winsys;
 
 struct pipe_screen *radeonsi_screen_create(struct radeon_winsys *ws,
-					   unsigned flags);
+					   const struct pipe_screen_config *config);
 
 #endif

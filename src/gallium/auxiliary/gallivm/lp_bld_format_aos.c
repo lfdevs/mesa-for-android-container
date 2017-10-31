@@ -532,7 +532,7 @@ lp_build_fetch_rgba_aos(struct gallivm_state *gallivm,
        util_format_fits_8unorm(format_desc) &&
        type.width == 8 && type.norm == 1 && type.sign == 0 &&
        type.fixed == 0 && type.floating == 0) {
-      LLVMValueRef packed, res, chans[4], rgba[4];
+      LLVMValueRef packed, res = NULL, chans[4], rgba[4];
       LLVMTypeRef dst_vec_type, conv_vec_type;
       struct lp_type fetch_type, conv_type;
       struct lp_build_context bld_conv;

@@ -32,7 +32,7 @@ static const int TARGET_SIMD_WIDTH = 8;
 using SIMD128T = SIMD128Impl::AVXImpl;
 
 #define SIMD_WRAPPER_1(op)  \
-    static SIMDINLINE Float SIMDCALL op(Float a)   \
+    static SIMDINLINE Float SIMDCALL op(Float const &a)   \
     {\
         return Float\
         {\
@@ -42,7 +42,7 @@ using SIMD128T = SIMD128Impl::AVXImpl;
     }
 
 #define SIMD_WRAPPER_2(op)  \
-    static SIMDINLINE Float SIMDCALL op(Float a, Float b)   \
+    static SIMDINLINE Float SIMDCALL op(Float const &a, Float const &b)    \
     {\
         return Float\
         {\
@@ -53,7 +53,7 @@ using SIMD128T = SIMD128Impl::AVXImpl;
 
 #define SIMD_WRAPPER_2I(op)  \
     template<int ImmT>\
-    static SIMDINLINE Float SIMDCALL op(Float a, Float b)   \
+    static SIMDINLINE Float SIMDCALL op(Float const &a, Float const &b)   \
     {\
         return Float\
         {\
@@ -64,7 +64,7 @@ using SIMD128T = SIMD128Impl::AVXImpl;
 
 #define SIMD_WRAPPER_2I_1(op)  \
     template<int ImmT>\
-    static SIMDINLINE Float SIMDCALL op(Float a, Float b)   \
+    static SIMDINLINE Float SIMDCALL op(Float const &a, Float const &b)   \
     {\
         return Float\
         {\
@@ -74,7 +74,7 @@ using SIMD128T = SIMD128Impl::AVXImpl;
     }
 
 #define SIMD_WRAPPER_3(op)  \
-        static SIMDINLINE Float SIMDCALL op(Float a, Float b, Float c)   \
+        static SIMDINLINE Float SIMDCALL op(Float const &a, Float const &b, Float const &c)   \
         {\
             return Float\
             {\
@@ -84,7 +84,7 @@ using SIMD128T = SIMD128Impl::AVXImpl;
         }
 
 #define SIMD_IWRAPPER_1(op)  \
-    static SIMDINLINE Integer SIMDCALL op(Integer a)   \
+    static SIMDINLINE Integer SIMDCALL op(Integer const &a)   \
     {\
         return Integer\
         {\
@@ -94,7 +94,7 @@ using SIMD128T = SIMD128Impl::AVXImpl;
     }
 
 #define SIMD_IWRAPPER_2(op)  \
-    static SIMDINLINE Integer SIMDCALL op(Integer a, Integer b)   \
+    static SIMDINLINE Integer SIMDCALL op(Integer const &a, Integer const &b)   \
     {\
         return Integer\
         {\
@@ -105,7 +105,7 @@ using SIMD128T = SIMD128Impl::AVXImpl;
 
 #define SIMD_IWRAPPER_2I(op)  \
     template<int ImmT>\
-    static SIMDINLINE Integer SIMDCALL op(Integer a, Integer b)   \
+    static SIMDINLINE Integer SIMDCALL op(Integer const &a, Integer const &b)   \
     {\
         return Integer\
         {\
@@ -116,7 +116,7 @@ using SIMD128T = SIMD128Impl::AVXImpl;
 
 #define SIMD_IWRAPPER_2I_1(op)  \
     template<int ImmT>\
-    static SIMDINLINE Integer SIMDCALL op(Integer a, Integer b)   \
+    static SIMDINLINE Integer SIMDCALL op(Integer const &a, Integer const &b)   \
     {\
         return Integer\
         {\
@@ -127,7 +127,7 @@ using SIMD128T = SIMD128Impl::AVXImpl;
 
 #define SIMD_IWRAPPER_2I_2(op)  \
     template<int ImmT>\
-    static SIMDINLINE Integer SIMDCALL op(Integer a, Integer b)   \
+    static SIMDINLINE Integer SIMDCALL op(Integer const &a, Integer const &b)   \
     {\
         return Integer\
         {\
@@ -137,7 +137,7 @@ using SIMD128T = SIMD128Impl::AVXImpl;
     }
 
 #define SIMD_IWRAPPER_3(op)  \
-    static SIMDINLINE Integer SIMDCALL op(Integer a, Integer b, Integer c)   \
+    static SIMDINLINE Integer SIMDCALL op(Integer const &a, Integer const &b, Integer const &c)   \
     {\
         return Integer\
         {\
@@ -161,7 +161,7 @@ SIMD_WRAPPER_1(rsqrt_ps);   // return 1.0f / sqrt(a)
 SIMD_WRAPPER_2(sub_ps);     // return a - b
 
 template <RoundMode RMT>
-static SIMDINLINE Float SIMDCALL round_ps(Float a)
+static SIMDINLINE Float SIMDCALL round_ps(Float const &a)
 {
     return Float
     {
@@ -170,8 +170,8 @@ static SIMDINLINE Float SIMDCALL round_ps(Float a)
     };
 }
 
-static SIMDINLINE Float SIMDCALL ceil_ps(Float a) { return round_ps<RoundMode::CEIL_NOEXC>(a); }
-static SIMDINLINE Float SIMDCALL floor_ps(Float a) { return round_ps<RoundMode::FLOOR_NOEXC>(a); }
+static SIMDINLINE Float SIMDCALL ceil_ps(Float const &a) { return round_ps<RoundMode::CEIL_NOEXC>(a); }
+static SIMDINLINE Float SIMDCALL floor_ps(Float const &a) { return round_ps<RoundMode::FLOOR_NOEXC>(a); }
 
 //-----------------------------------------------------------------------
 // Integer (various width) arithmetic operations
@@ -212,7 +212,7 @@ SIMD_IWRAPPER_2(xor_si);    // return a ^ b       (int)
 // Shift operations
 //-----------------------------------------------------------------------
 template<int ImmT>
-static SIMDINLINE Integer SIMDCALL slli_epi32(Integer a)      // return a << ImmT
+static SIMDINLINE Integer SIMDCALL slli_epi32(Integer const &a)      // return a << ImmT
 {
     return Integer
     {
@@ -224,7 +224,7 @@ static SIMDINLINE Integer SIMDCALL slli_epi32(Integer a)      // return a << Imm
 SIMD_IWRAPPER_2(sllv_epi32);                                // return a << b      (uint32)
 
 template<int ImmT>
-static SIMDINLINE Integer SIMDCALL srai_epi32(Integer a)      // return a >> ImmT   (int32)
+static SIMDINLINE Integer SIMDCALL srai_epi32(Integer const &a)      // return a >> ImmT   (int32)
 {
     return Integer
     {
@@ -234,7 +234,7 @@ static SIMDINLINE Integer SIMDCALL srai_epi32(Integer a)      // return a >> Imm
 }
 
 template<int ImmT>
-static SIMDINLINE Integer SIMDCALL srli_epi32(Integer a)      // return a >> ImmT   (uint32)
+static SIMDINLINE Integer SIMDCALL srli_epi32(Integer const &a)      // return a >> ImmT   (uint32)
 {
     return Integer
     {
@@ -244,7 +244,7 @@ static SIMDINLINE Integer SIMDCALL srli_epi32(Integer a)      // return a >> Imm
 }
 
 template<int ImmT>                                          // for each 128-bit lane:
-static SIMDINLINE Integer SIMDCALL srli_si(Integer a)         //  return a >> (ImmT*8) (uint)
+static SIMDINLINE Integer SIMDCALL srli_si(Integer const &a)         //  return a >> (ImmT*8) (uint)
 {
     return Integer
     {
@@ -253,7 +253,7 @@ static SIMDINLINE Integer SIMDCALL srli_si(Integer a)         //  return a >> (I
     };
 }
 template<int ImmT>
-static SIMDINLINE Float SIMDCALL srlisi_ps(Float a)       // same as srli_si, but with Float cast to int
+static SIMDINLINE Float SIMDCALL srlisi_ps(Float const &a)       // same as srli_si, but with Float cast to int
 {
     return Float
     {
@@ -267,7 +267,7 @@ SIMD_IWRAPPER_2(srlv_epi32);                                // return a >> b    
 //-----------------------------------------------------------------------
 // Conversion operations
 //-----------------------------------------------------------------------
-static SIMDINLINE Float SIMDCALL castpd_ps(Double a)              // return *(Float*)(&a)
+static SIMDINLINE Float SIMDCALL castpd_ps(Double const &a)              // return *(Float*)(&a)
 {
     return Float
     {
@@ -276,7 +276,7 @@ static SIMDINLINE Float SIMDCALL castpd_ps(Double a)              // return *(Fl
     };
 }
 
-static SIMDINLINE Integer SIMDCALL castps_si(Float a)              // return *(Integer*)(&a)
+static SIMDINLINE Integer SIMDCALL castps_si(Float const &a)              // return *(Integer*)(&a)
 {
     return Integer
     {
@@ -285,7 +285,7 @@ static SIMDINLINE Integer SIMDCALL castps_si(Float a)              // return *(I
     };
 }
 
-static SIMDINLINE Double SIMDCALL castsi_pd(Integer a)              // return *(Double*)(&a)
+static SIMDINLINE Double SIMDCALL castsi_pd(Integer const &a)              // return *(Double*)(&a)
 {
     return Double
     {
@@ -294,7 +294,7 @@ static SIMDINLINE Double SIMDCALL castsi_pd(Integer a)              // return *(
     };
 }
 
-static SIMDINLINE Double SIMDCALL castps_pd(Float a)   // return *(Double*)(&a)
+static SIMDINLINE Double SIMDCALL castps_pd(Float const &a)   // return *(Double*)(&a)
 {
     return Double
     {
@@ -303,7 +303,7 @@ static SIMDINLINE Double SIMDCALL castps_pd(Float a)   // return *(Double*)(&a)
     };
 }
 
-static SIMDINLINE Float SIMDCALL castsi_ps(Integer a)              // return *(Float*)(&a)
+static SIMDINLINE Float SIMDCALL castsi_ps(Integer const &a)              // return *(Float*)(&a)
 {
     return Float
     {
@@ -312,7 +312,7 @@ static SIMDINLINE Float SIMDCALL castsi_ps(Integer a)              // return *(F
     };
 }
 
-static SIMDINLINE Float SIMDCALL cvtepi32_ps(Integer a)            // return (float)a    (int32 --> float)
+static SIMDINLINE Float SIMDCALL cvtepi32_ps(Integer const &a)            // return (float)a    (int32 --> float)
 {
     return Float
     {
@@ -321,7 +321,7 @@ static SIMDINLINE Float SIMDCALL cvtepi32_ps(Integer a)            // return (fl
     };
 }
 
-static SIMDINLINE Integer SIMDCALL cvtepu8_epi16(SIMD256Impl::Integer a)          // return (int16)a    (uint8 --> int16)
+static SIMDINLINE Integer SIMDCALL cvtepu8_epi16(SIMD256Impl::Integer const &a)          // return (int16)a    (uint8 --> int16)
 {
     return Integer
     {
@@ -330,7 +330,7 @@ static SIMDINLINE Integer SIMDCALL cvtepu8_epi16(SIMD256Impl::Integer a)        
     };
 }
 
-static SIMDINLINE Integer SIMDCALL cvtepu8_epi32(SIMD256Impl::Integer a)          // return (int32)a    (uint8 --> int32)
+static SIMDINLINE Integer SIMDCALL cvtepu8_epi32(SIMD256Impl::Integer const &a)          // return (int32)a    (uint8 --> int32)
 {
     return Integer
 	{
@@ -339,7 +339,7 @@ static SIMDINLINE Integer SIMDCALL cvtepu8_epi32(SIMD256Impl::Integer a)        
 	};
 }
 
-static SIMDINLINE Integer SIMDCALL cvtepu16_epi32(SIMD256Impl::Integer a)         // return (int32)a    (uint16 --> int32)
+static SIMDINLINE Integer SIMDCALL cvtepu16_epi32(SIMD256Impl::Integer const &a)         // return (int32)a    (uint16 --> int32)
 {
     return Integer
     {
@@ -348,7 +348,7 @@ static SIMDINLINE Integer SIMDCALL cvtepu16_epi32(SIMD256Impl::Integer a)       
     };
 }
 
-static SIMDINLINE Integer SIMDCALL cvtepu16_epi64(SIMD256Impl::Integer a)         // return (int64)a    (uint16 --> int64)
+static SIMDINLINE Integer SIMDCALL cvtepu16_epi64(SIMD256Impl::Integer const &a)         // return (int64)a    (uint16 --> int64)
 {
     return Integer
     {
@@ -357,7 +357,7 @@ static SIMDINLINE Integer SIMDCALL cvtepu16_epi64(SIMD256Impl::Integer a)       
     };
 }
 
-static SIMDINLINE Integer SIMDCALL cvtepu32_epi64(SIMD256Impl::Integer a)         // return (int64)a    (uint32 --> int64)
+static SIMDINLINE Integer SIMDCALL cvtepu32_epi64(SIMD256Impl::Integer const &a)         // return (int64)a    (uint32 --> int64)
 {
     return Integer
     {
@@ -366,7 +366,7 @@ static SIMDINLINE Integer SIMDCALL cvtepu32_epi64(SIMD256Impl::Integer a)       
     };
 }
 
-static SIMDINLINE Integer SIMDCALL cvtps_epi32(Float a)            // return (int32)a    (float --> int32)
+static SIMDINLINE Integer SIMDCALL cvtps_epi32(Float const &a)            // return (int32)a    (float --> int32)
 {
     return Integer
     {
@@ -375,7 +375,7 @@ static SIMDINLINE Integer SIMDCALL cvtps_epi32(Float a)            // return (in
     };
 }
 
-static SIMDINLINE Integer SIMDCALL cvttps_epi32(Float a)           // return (int32)a    (rnd_to_zero(float) --> int32)
+static SIMDINLINE Integer SIMDCALL cvttps_epi32(Float const &a)           // return (int32)a    (rnd_to_zero(float) --> int32)
 {
     return Integer
     {
@@ -388,7 +388,7 @@ static SIMDINLINE Integer SIMDCALL cvttps_epi32(Float a)           // return (in
 // Comparison operations
 //-----------------------------------------------------------------------
 template<CompareType CmpTypeT>
-static SIMDINLINE Float SIMDCALL cmp_ps(Float a, Float b) // return a (CmpTypeT) b
+static SIMDINLINE Float SIMDCALL cmp_ps(Float const &a, Float const &b) // return a (CmpTypeT) b
 {
     return Float
     {
@@ -396,15 +396,15 @@ static SIMDINLINE Float SIMDCALL cmp_ps(Float a, Float b) // return a (CmpTypeT)
         SIMD256T::template cmp_ps<CmpTypeT>(a.v8[1], b.v8[1]),
     };
 }
-static SIMDINLINE Float SIMDCALL cmplt_ps(Float a, Float b) { return cmp_ps<CompareType::LT_OQ>(a, b); }
-static SIMDINLINE Float SIMDCALL cmpgt_ps(Float a, Float b) { return cmp_ps<CompareType::GT_OQ>(a, b); }
-static SIMDINLINE Float SIMDCALL cmpneq_ps(Float a, Float b) { return cmp_ps<CompareType::NEQ_OQ>(a, b); }
-static SIMDINLINE Float SIMDCALL cmpeq_ps(Float a, Float b) { return cmp_ps<CompareType::EQ_OQ>(a, b); }
-static SIMDINLINE Float SIMDCALL cmpge_ps(Float a, Float b) { return cmp_ps<CompareType::GE_OQ>(a, b); }
-static SIMDINLINE Float SIMDCALL cmple_ps(Float a, Float b) { return cmp_ps<CompareType::LE_OQ>(a, b); }
+static SIMDINLINE Float SIMDCALL cmplt_ps(Float const &a, Float const &b) { return cmp_ps<CompareType::LT_OQ>(a, b); }
+static SIMDINLINE Float SIMDCALL cmpgt_ps(Float const &a, Float const &b) { return cmp_ps<CompareType::GT_OQ>(a, b); }
+static SIMDINLINE Float SIMDCALL cmpneq_ps(Float const &a, Float const &b) { return cmp_ps<CompareType::NEQ_OQ>(a, b); }
+static SIMDINLINE Float SIMDCALL cmpeq_ps(Float const &a, Float const &b) { return cmp_ps<CompareType::EQ_OQ>(a, b); }
+static SIMDINLINE Float SIMDCALL cmpge_ps(Float const &a, Float const &b) { return cmp_ps<CompareType::GE_OQ>(a, b); }
+static SIMDINLINE Float SIMDCALL cmple_ps(Float const &a, Float const &b) { return cmp_ps<CompareType::LE_OQ>(a, b); }
 
 template<CompareType CmpTypeT>
-static SIMDINLINE Mask SIMDCALL cmp_ps_mask(Float a, Float b)
+static SIMDINLINE Mask SIMDCALL cmp_ps_mask(Float const &a, Float const &b)
 {
     return static_cast<Mask>(movemask_ps(cmp_ps<CmpTypeT>(a, b)));
 }
@@ -420,13 +420,13 @@ SIMD_IWRAPPER_2(cmpgt_epi32);   // return a > b (int32)
 SIMD_IWRAPPER_2(cmpgt_epi64);   // return a > b (int64)
 SIMD_IWRAPPER_2(cmplt_epi32);   // return a < b (int32)
 
-static SIMDINLINE bool SIMDCALL testz_ps(Float a, Float b)  // return all_lanes_zero(a & b) ? 1 : 0 (float)
+static SIMDINLINE bool SIMDCALL testz_ps(Float const &a, Float const &b)  // return all_lanes_zero(a & b) ? 1 : 0 (float)
 {
     return  0 != (SIMD256T::testz_ps(a.v8[0], b.v8[0]) &
                   SIMD256T::testz_ps(a.v8[1], b.v8[1]));
 }
 
-static SIMDINLINE int SIMDCALL testz_si(Integer a, Integer b)  // return all_lanes_zero(a & b) ? 1 : 0 (int)
+static SIMDINLINE int SIMDCALL testz_si(Integer const &a, Integer const &b)  // return all_lanes_zero(a & b) ? 1 : 0 (int)
 {
     return  0 != (SIMD256T::testz_si(a.v8[0], b.v8[0]) &
                   SIMD256T::testz_si(a.v8[1], b.v8[1]));
@@ -438,7 +438,7 @@ static SIMDINLINE int SIMDCALL testz_si(Integer a, Integer b)  // return all_lan
 SIMD_WRAPPER_2I(blend_ps);  // return ImmT ? b : a  (float)
 SIMD_IWRAPPER_2I(blend_epi32);  // return ImmT ? b : a  (int32)
 SIMD_WRAPPER_3(blendv_ps);  // return mask ? b : a  (float)
-static SIMDINLINE Integer SIMDCALL blendv_epi32(Integer a, Integer b, Float mask) // return mask ? b : a (int)
+static SIMDINLINE Integer SIMDCALL blendv_epi32(Integer const &a, Integer const &b, Float const &mask) // return mask ? b : a (int)
 {
     return Integer
     {
@@ -447,7 +447,7 @@ static SIMDINLINE Integer SIMDCALL blendv_epi32(Integer a, Integer b, Float mask
     };
 }
 
-static SIMDINLINE Integer SIMDCALL blendv_epi32(Integer a, Integer b, Integer mask) // return mask ? b : a (int)
+static SIMDINLINE Integer SIMDCALL blendv_epi32(Integer const &a, Integer const &b, Integer const &mask) // return mask ? b : a (int)
 {
     return Integer
     {
@@ -467,48 +467,51 @@ static SIMDINLINE Float SIMDCALL broadcast_ss(float const *p)         // return 
 }
 
 template<int imm>
-static SIMDINLINE SIMD256Impl::Float SIMDCALL extract_ps(Float a)
+static SIMDINLINE SIMD256Impl::Float SIMDCALL extract_ps(Float const &a)
 {
     SWR_ASSERT(imm == 0 || imm == 1, "Invalid control code: %d", imm);
     return a.v8[imm];
 }
 
 template<int imm>
-static SIMDINLINE SIMD256Impl::Double SIMDCALL extract_pd(Double a)
+static SIMDINLINE SIMD256Impl::Double SIMDCALL extract_pd(Double const &a)
 {
     SWR_ASSERT(imm == 0 || imm == 1, "Invalid control code: %d", imm);
     return a.v8[imm];
 }
 
 template<int imm>
-static SIMDINLINE SIMD256Impl::Integer SIMDCALL extract_si(Integer a)
+static SIMDINLINE SIMD256Impl::Integer SIMDCALL extract_si(Integer const &a)
 {
     SWR_ASSERT(imm == 0 || imm == 1, "Invalid control code: %d", imm);
     return a.v8[imm];
 }
 
 template<int imm>
-static SIMDINLINE Float SIMDCALL insert_ps(Float a, SIMD256Impl::Float b)
+static SIMDINLINE Float SIMDCALL insert_ps(Float const &a, SIMD256Impl::Float const &b)
 {
     SWR_ASSERT(imm == 0 || imm == 1, "Invalid control code: %d", imm);
-    a.v8[imm] = b;
-    return a;
+    Float r = a;
+    r.v8[imm] = b;
+    return r;
 }
 
 template<int imm>
-static SIMDINLINE Double SIMDCALL insert_pd(Double a, SIMD256Impl::Double b)
+static SIMDINLINE Double SIMDCALL insert_pd(Double const &a, SIMD256Impl::Double const &b)
 {
     SWR_ASSERT(imm == 0 || imm == 1, "Invalid control code: %d", imm);
-    a.v8[imm] = b;
-    return a;
+    Double r = a;
+    r.v8[imm] = b;
+    return r;
 }
 
 template<int imm>
-static SIMDINLINE Integer SIMDCALL insert_si(Integer a, SIMD256Impl::Integer b)
+static SIMDINLINE Integer SIMDCALL insert_si(Integer const &a, SIMD256Impl::Integer const &b)
 {
     SWR_ASSERT(imm == 0 || imm == 1, "Invalid control code: %d", imm);
-    a.v8[imm] = b;
-    return a;
+    Integer r = a;
+    r.v8[imm] = b;
+    return r;
 }
 
 SIMD_IWRAPPER_2(packs_epi16);      // See documentation for _mm256_packs_epi16 and _mm512_packs_epi16
@@ -516,7 +519,7 @@ SIMD_IWRAPPER_2(packs_epi32);      // See documentation for _mm256_packs_epi32 a
 SIMD_IWRAPPER_2(packus_epi16);     // See documentation for _mm256_packus_epi16 and _mm512_packus_epi16
 SIMD_IWRAPPER_2(packus_epi32);     // See documentation for _mm256_packus_epi32 and _mm512_packus_epi32
 
-static SIMDINLINE Integer SIMDCALL permute_epi32(Integer a, Integer swiz) // return a[swiz[i]] for each 32-bit lane i (int32)
+static SIMDINLINE Integer SIMDCALL permute_epi32(Integer const &a, Integer const &swiz) // return a[swiz[i]] for each 32-bit lane i (int32)
 {
     Integer result;
 
@@ -533,7 +536,7 @@ static SIMDINLINE Integer SIMDCALL permute_epi32(Integer a, Integer swiz) // ret
     return result;
 }
 
-static SIMDINLINE Float SIMDCALL permute_ps(Float a, Integer swiz)    // return a[swiz[i]] for each 32-bit lane i (float)
+static SIMDINLINE Float SIMDCALL permute_ps(Float const &a, Integer const &swiz)    // return a[swiz[i]] for each 32-bit lane i (float)
 {
     Float result;
 
@@ -573,7 +576,7 @@ static SIMDINLINE Float SIMDCALL permute_ps(Float a, Integer swiz)    // return 
 // AVX instructions for emulation.
 //
 template <int shuf>
-static SIMDINLINE Float SIMDCALL permute2f128_ps(Float a, Float b)
+static SIMDINLINE Float SIMDCALL permute2f128_ps(Float const &a, Float const &b)
 {
     return Float
     {
@@ -583,7 +586,7 @@ static SIMDINLINE Float SIMDCALL permute2f128_ps(Float a, Float b)
 }
 
 template <int shuf>
-static SIMDINLINE Double SIMDCALL permute2f128_pd(Double a, Double b)
+static SIMDINLINE Double SIMDCALL permute2f128_pd(Double const &a, Double const &b)
 {
     return Double
     {
@@ -593,7 +596,7 @@ static SIMDINLINE Double SIMDCALL permute2f128_pd(Double a, Double b)
 }
 
 template <int shuf>
-static SIMDINLINE Integer SIMDCALL permute2f128_si(Integer a, Integer b)
+static SIMDINLINE Integer SIMDCALL permute2f128_si(Integer const &a, Integer const &b)
 {
     return Integer
 	{
@@ -624,7 +627,7 @@ SIMD_WRAPPER_2(unpacklo_ps);
 // Load / store operations
 //-----------------------------------------------------------------------
 template<ScaleFactor ScaleT>
-static SIMDINLINE Float SIMDCALL i32gather_ps(float const* p, Integer idx) // return *(float*)(((int8*)p) + (idx * ScaleT))
+static SIMDINLINE Float SIMDCALL i32gather_ps(float const* p, Integer const &idx) // return *(float*)(((int8*)p) + (idx * ScaleT))
 {
     return Float
     {
@@ -676,7 +679,7 @@ static SIMDINLINE Integer SIMDCALL loadu_si(Integer const *p) // return *p    (s
 
 // for each element: (mask & (1 << 31)) ? (i32gather_ps<ScaleT>(p, idx), mask = 0) : old
 template<ScaleFactor ScaleT>
-static SIMDINLINE Float SIMDCALL mask_i32gather_ps(Float old, float const* p, Integer idx, Float mask)
+static SIMDINLINE Float SIMDCALL mask_i32gather_ps(Float const &old, float const* p, Integer const &idx, Float const &mask)
 {
     return Float
     {
@@ -685,13 +688,13 @@ static SIMDINLINE Float SIMDCALL mask_i32gather_ps(Float old, float const* p, In
     };
 }
 
-static SIMDINLINE void SIMDCALL maskstore_ps(float *p, Integer mask, Float src)
+static SIMDINLINE void SIMDCALL maskstore_ps(float *p, Integer const &mask, Float const &src)
 {
     SIMD256T::maskstore_ps(p, mask.v8[0], src.v8[0]);
     SIMD256T::maskstore_ps(p + TARGET_SIMD_WIDTH, mask.v8[1], src.v8[1]);
 }
 
-static SIMDINLINE uint64_t SIMDCALL movemask_epi8(Integer a)
+static SIMDINLINE uint64_t SIMDCALL movemask_epi8(Integer const &a)
 {
     uint64_t mask = static_cast<uint64_t>(SIMD256T::movemask_epi8(a.v8[0]));
              mask |= static_cast<uint64_t>(SIMD256T::movemask_epi8(a.v8[1])) << (TARGET_SIMD_WIDTH * 4);
@@ -699,14 +702,14 @@ static SIMDINLINE uint64_t SIMDCALL movemask_epi8(Integer a)
     return mask;
 }
 
-static SIMDINLINE uint32_t SIMDCALL movemask_pd(Double a)
+static SIMDINLINE uint32_t SIMDCALL movemask_pd(Double const &a)
 {
     uint32_t mask = static_cast<uint32_t>(SIMD256T::movemask_pd(a.v8[0]));
              mask |= static_cast<uint32_t>(SIMD256T::movemask_pd(a.v8[1])) << (TARGET_SIMD_WIDTH / 2);
 
     return mask;
 }
-static SIMDINLINE uint32_t SIMDCALL movemask_ps(Float a)
+static SIMDINLINE uint32_t SIMDCALL movemask_ps(Float const &a)
 {
     uint32_t mask = static_cast<uint32_t>(SIMD256T::movemask_ps(a.v8[0]));
              mask |= static_cast<uint32_t>(SIMD256T::movemask_ps(a.v8[1])) << TARGET_SIMD_WIDTH;
@@ -759,19 +762,19 @@ static SIMDINLINE Integer SIMDCALL setzero_si()      // return 0 (integer)
     };
 }
 
-static SIMDINLINE void SIMDCALL store_ps(float *p, Float a)    // *p = a   (stores all elements contiguously in memory)
+static SIMDINLINE void SIMDCALL store_ps(float *p, Float const &a)    // *p = a   (stores all elements contiguously in memory)
 {
     SIMD256T::store_ps(p, a.v8[0]);
     SIMD256T::store_ps(p + TARGET_SIMD_WIDTH, a.v8[1]);
 }
 
-static SIMDINLINE void SIMDCALL store_si(Integer *p, Integer a)   // *p = a
+static SIMDINLINE void SIMDCALL store_si(Integer *p, Integer const &a)   // *p = a
 {
     SIMD256T::store_si(&p->v8[0], a.v8[0]);
     SIMD256T::store_si(&p->v8[1], a.v8[1]);
 }
 
-static SIMDINLINE void SIMDCALL stream_ps(float *p, Float a)   // *p = a   (same as store_ps, but doesn't keep memory in cache)
+static SIMDINLINE void SIMDCALL stream_ps(float *p, Float const &a)   // *p = a   (same as store_ps, but doesn't keep memory in cache)
 {
     SIMD256T::stream_ps(p, a.v8[0]);
     SIMD256T::stream_ps(p + TARGET_SIMD_WIDTH, a.v8[1]);
@@ -821,13 +824,11 @@ static SIMDINLINE Float SIMDCALL set_ps(
 
 static SIMDINLINE Float SIMDCALL vmask_ps(int32_t mask)
 {
-    Integer vec = set1_epi32(mask);
-    const Integer bit = set_epi32(
-        0x8000, 0x4000, 0x2000, 0x1000, 0x0800, 0x0400, 0x0200, 0x0100,
-        0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01);
-    vec = and_si(vec, bit);
-    vec = cmplt_epi32(setzero_si(), vec);
-    return castsi_ps(vec);
+    return Float
+    {
+        SIMD256T::vmask_ps(mask),
+        SIMD256T::vmask_ps(mask >> TARGET_SIMD_WIDTH)
+    };
 }
 
 #undef SIMD_WRAPPER_1

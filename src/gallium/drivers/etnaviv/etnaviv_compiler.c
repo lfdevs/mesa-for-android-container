@@ -1474,9 +1474,6 @@ trans_trig(const struct instr_translater *t, struct etna_compile *c,
        * - Output an x and y component, which need to be multiplied to
        *   get the result
        */
-      /* TGSI lowering should deal with SCS */
-      assert(inst->Instruction.Opcode != TGSI_OPCODE_SCS);
-
       struct etna_native_reg temp = etna_compile_get_inner_temp(c); /* only using .xyz */
       emit_inst(c, &(struct etna_inst) {
          .opcode = INST_OPCODE_MUL,
@@ -1503,9 +1500,6 @@ trans_trig(const struct instr_translater *t, struct etna_compile *c,
       });
 
    } else if (c->specs->has_sin_cos_sqrt) {
-      /* TGSI lowering should deal with SCS */
-      assert(inst->Instruction.Opcode != TGSI_OPCODE_SCS);
-
       struct etna_native_reg temp = etna_compile_get_inner_temp(c);
       /* add divide by PI/2, using a temp register. GC2000
        * fails with src==dst for the trig instruction. */
@@ -1540,8 +1534,6 @@ trans_trig(const struct instr_translater *t, struct etna_compile *c,
        *  DP3 t.x___, t.xyww, C, void         (for scs)
        *  MAD t._y_w, t,xxzz, |t.xxzz|, -t.xxzz
        *  MAD dst, t.ywyw, .2225, t.xzxz
-       *
-       * TODO: we don't set dst.zw correctly for SCS.
        */
       struct etna_inst *p, ins[9] = { };
       struct etna_native_reg t0 = etna_compile_get_inner_temp(c);
@@ -1597,19 +1589,7 @@ trans_trig(const struct instr_translater *t, struct etna_compile *c,
       ins[4].src[0] = swizzle(t0s, dp3_swiz);
       ins[4].src[1] = swizzle(sincos[0], SWIZZLE(Z, W, W, W));
 
-      if (inst->Instruction.Opcode == TGSI_OPCODE_SCS) {
-         ins[5] = ins[3];
-         ins[6] = ins[4];
-         ins[4].dst.comps = INST_COMPS_X;
-         ins[6].dst.comps = INST_COMPS_Z;
-         ins[5].src[0] = swizzle(t0s, SWIZZLE(W, Z, W, W));
-         ins[6].src[0] = swizzle(t0s, SWIZZLE(Z, Y, W, W));
-         ins[5].src[1] = absolute(ins[5].src[0]);
-         p = &ins[7];
-      } else {
-         p = &ins[5];
-      }
-
+      p = &ins[5];
       p->opcode = INST_OPCODE_MAD;
       p->dst = etna_native_to_dst(t0, INST_COMPS_Y | INST_COMPS_W);
       p->src[0] = swizzle(t0s, SWIZZLE(X, X, Z, Z));
@@ -1661,33 +1641,6 @@ trans_lg2(const struct instr_translater *t, struct etna_compile *c,
          .src[2] = src[0],
       });
    }
-}
-
-static void
-trans_dph(const struct instr_translater *t, struct etna_compile *c,
-          const struct tgsi_full_instruction *inst, struct etna_inst_src *src)
-{
-   /*
-   DP3 tmp.xyzw, src0.xyzw, src1,xyzw, void
-   ADD dst.xyzw, tmp.xyzw, void, src1.wwww
-   */
-   struct etna_native_reg temp = etna_compile_get_inner_temp(c);
-   struct etna_inst ins[2] = { };
-
-   ins[0].opcode = INST_OPCODE_DP3;
-   ins[0].dst = etna_native_to_dst(temp, INST_COMPS_X | INST_COMPS_Y |
-                                         INST_COMPS_Z | INST_COMPS_W);
-   ins[0].src[0] = src[0];
-   ins[0].src[1] = src[1];
-
-   ins[1].opcode = INST_OPCODE_ADD;
-   ins[1].sat = inst->Instruction.Saturate;
-   ins[1].dst = convert_dst(c, &inst->Dst[0]);
-   ins[1].src[0] = etna_native_to_src(temp, INST_SWIZ_IDENTITY);
-   ins[1].src[2] = swizzle(src[1], SWIZZLE(W, W, W, W));
-
-   emit_inst(c, &ins[0]);
-   emit_inst(c, &ins[1]);
 }
 
 static void
@@ -1799,6 +1752,7 @@ static const struct instr_translater translaters[TGSI_OPCODE_LAST] = {
    INSTR(RSQ, trans_instr, .opc = INST_OPCODE_RSQ, .src = {2, -1, -1}),
    INSTR(MUL, trans_instr, .opc = INST_OPCODE_MUL, .src = {0, 1, -1}),
    INSTR(ADD, trans_instr, .opc = INST_OPCODE_ADD, .src = {0, 2, -1}),
+   INSTR(DP2, trans_instr, .opc = INST_OPCODE_DP2, .src = {0, 1, -1}),
    INSTR(DP3, trans_instr, .opc = INST_OPCODE_DP3, .src = {0, 1, -1}),
    INSTR(DP4, trans_instr, .opc = INST_OPCODE_DP4, .src = {0, 1, -1}),
    INSTR(DST, trans_instr, .opc = INST_OPCODE_DST, .src = {0, 1, -1}),
@@ -1833,11 +1787,9 @@ static const struct instr_translater translaters[TGSI_OPCODE_LAST] = {
    INSTR(LRP, trans_lrp),
    INSTR(LIT, trans_lit),
    INSTR(SSG, trans_ssg),
-   INSTR(DPH, trans_dph),
 
    INSTR(SIN, trans_trig),
    INSTR(COS, trans_trig),
-   INSTR(SCS, trans_trig),
 
    INSTR(SLT, trans_instr, .opc = INST_OPCODE_SET, .src = {0, 1, -1}, .cond = INST_CONDITION_LT),
    INSTR(SGE, trans_instr, .opc = INST_OPCODE_SET, .src = {0, 1, -1}, .cond = INST_CONDITION_GE),
@@ -2174,6 +2126,10 @@ fill_in_vs_inputs(struct etna_shader_variant *sobj, struct etna_compile *c)
    for (int idx = 0; idx < c->file[TGSI_FILE_INPUT].reg_size; ++idx) {
       struct etna_reg_desc *reg = &c->file[TGSI_FILE_INPUT].reg[idx];
       assert(sf->num_reg < ETNA_NUM_INPUTS);
+
+      if (!reg->native.valid)
+         continue;
+
       /* XXX exclude inputs with special semantics such as gl_frontFacing */
       sf->reg[sf->num_reg].reg = reg->native.id;
       sf->reg[sf->num_reg].semantic = reg->semantic;
@@ -2277,7 +2233,7 @@ etna_compile_check_limits(struct etna_compile *c)
    /* round up number of uniforms, including immediates, in units of four */
    int num_uniforms = c->imm_base / 4 + (c->imm_size + 3) / 4;
 
-   if (c->inst_ptr > c->specs->max_instructions) {
+   if (!c->specs->has_icache && c->inst_ptr > c->specs->max_instructions) {
       DBG("Number of instructions (%d) exceeds maximum %d", c->inst_ptr,
           c->specs->max_instructions);
       return false;
@@ -2337,16 +2293,13 @@ etna_compile_shader(struct etna_shader_variant *v)
    const struct etna_specs *specs = v->shader->specs;
 
    struct tgsi_lowering_config lconfig = {
-      .lower_SCS = specs->has_sin_cos_sqrt,
       .lower_FLR = !specs->has_sign_floor_ceil,
       .lower_CEIL = !specs->has_sign_floor_ceil,
       .lower_POW = true,
       .lower_EXP = true,
       .lower_LOG = true,
-      .lower_DP2 = true,
-      .lower_DP2A = true,
+      .lower_DP2 = !specs->has_halti2_instructions,
       .lower_TRUNC = true,
-      .lower_XPD = true
    };
 
    c = CALLOC_STRUCT(etna_compile);
@@ -2501,6 +2454,7 @@ etna_compile_shader(struct etna_shader_variant *v)
    v->vs_pointsize_out_reg = -1;
    v->ps_color_out_reg = -1;
    v->ps_depth_out_reg = -1;
+   v->needs_icache = c->inst_ptr > c->specs->max_instructions;
    copy_uniform_state_to_shader(c, v);
 
    if (c->info.processor == PIPE_SHADER_VERTEX) {
@@ -2607,6 +2561,7 @@ etna_link_shader(struct etna_shader_link_info *info,
       const struct etna_shader_inout *fsio = &fs->infile.reg[idx];
       const struct etna_shader_inout *vsio = etna_shader_vs_lookup(vs, fsio);
       struct etna_varying *varying;
+      bool interpolate_always = fsio->semantic.Name != TGSI_SEMANTIC_COLOR;
 
       assert(fsio->reg > 0 && fsio->reg <= ARRAY_SIZE(info->varyings));
 
@@ -2616,27 +2571,24 @@ etna_link_shader(struct etna_shader_link_info *info,
       varying = &info->varyings[fsio->reg - 1];
       varying->num_components = fsio->num_components;
 
-      if (fsio->semantic.Name == TGSI_SEMANTIC_COLOR) /* colors affected by flat shading */
+      if (!interpolate_always) /* colors affected by flat shading */
          varying->pa_attributes = 0x200;
       else /* texture coord or other bypasses flat shading */
          varying->pa_attributes = 0x2f1;
 
-      if (fsio->semantic.Name == TGSI_SEMANTIC_PCOORD) {
-         varying->use[0] = VARYING_COMPONENT_USE_POINTCOORD_X;
-         varying->use[1] = VARYING_COMPONENT_USE_POINTCOORD_Y;
-         varying->use[2] = VARYING_COMPONENT_USE_USED;
-         varying->use[3] = VARYING_COMPONENT_USE_USED;
-         varying->reg = 0; /* replaced by point coord -- doesn't matter */
+      varying->use[0] = interpolate_always ? VARYING_COMPONENT_USE_POINTCOORD_X : VARYING_COMPONENT_USE_USED;
+      varying->use[1] = interpolate_always ? VARYING_COMPONENT_USE_POINTCOORD_Y : VARYING_COMPONENT_USE_USED;
+      varying->use[2] = VARYING_COMPONENT_USE_USED;
+      varying->use[3] = VARYING_COMPONENT_USE_USED;
+
+
+      /* point coord is position output from VS, so has no dedicated reg */
+      if (fsio->semantic.Name == TGSI_SEMANTIC_PCOORD)
          continue;
-      }
 
       if (vsio == NULL)
          return true; /* not found -- link error */
 
-      varying->use[0] = VARYING_COMPONENT_USE_USED;
-      varying->use[1] = VARYING_COMPONENT_USE_USED;
-      varying->use[2] = VARYING_COMPONENT_USE_USED;
-      varying->use[3] = VARYING_COMPONENT_USE_USED;
       varying->reg = vsio->reg;
    }
 

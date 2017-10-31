@@ -493,7 +493,8 @@ class Parser(object):
 
         self.instruction = None
         self.structs = {}
-        self.enums = {}
+        # Set of enum names we've seen.
+        self.enums = set()
         self.registers = {}
 
     def gen_prefix(self, name):
@@ -540,7 +541,7 @@ class Parser(object):
         elif name == "enum":
             self.values = []
             self.enum = safe_name(attrs["name"])
-            self.enums[attrs["name"]] = 1
+            self.enums.add(attrs["name"])
             if "prefix" in attrs:
                 self.prefix = safe_name(attrs["prefix"])
             else:

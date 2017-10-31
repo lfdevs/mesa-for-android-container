@@ -61,6 +61,9 @@ struct gbm_device {
    int (*is_format_supported)(struct gbm_device *gbm,
                               uint32_t format,
                               uint32_t usage);
+   int (*get_format_modifier_plane_count)(struct gbm_device *device,
+                                          uint32_t format,
+                                          uint64_t modifier);
 
    struct gbm_bo *(*bo_create)(struct gbm_device *gbm,
                                uint32_t width, uint32_t height,

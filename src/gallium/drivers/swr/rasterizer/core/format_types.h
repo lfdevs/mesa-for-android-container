@@ -38,12 +38,12 @@ struct PackTraits
 {
     static const uint32_t MyNumBits = NumBits;
     static simdscalar loadSOA(const uint8_t *pSrc) = delete;
-    static void storeSOA(uint8_t *pDst, simdscalar src) = delete;
+    static void storeSOA(uint8_t *pDst, simdscalar const &src) = delete;
     static simdscalar unpack(simdscalar &in) = delete;
     static simdscalar pack(simdscalar &in) = delete;
 #if ENABLE_AVX512_SIMD16
     static simd16scalar loadSOA_16(const uint8_t *pSrc) = delete;
-    static void SIMDCALL storeSOA(uint8_t *pDst, simd16scalar src) = delete;
+    static void SIMDCALL storeSOA(uint8_t *pDst, simd16scalar const &src) = delete;
     static simd16scalar unpack(simd16scalar &in) = delete;
     static simd16scalar pack(simd16scalar &in) = delete;
 #endif
@@ -58,12 +58,12 @@ struct PackTraits<0, false>
     static const uint32_t MyNumBits = 0;
 
     static simdscalar loadSOA(const uint8_t *pSrc) { return _simd_setzero_ps(); }
-    static void storeSOA(uint8_t *pDst, simdscalar src) { return; }
+    static void storeSOA(uint8_t *pDst, simdscalar const &src) { return; }
     static simdscalar unpack(simdscalar &in) { return _simd_setzero_ps(); }
     static simdscalar pack(simdscalar &in) { return _simd_setzero_ps(); }
 #if ENABLE_AVX512_SIMD16
     static simd16scalar loadSOA_16(const uint8_t *pSrc) { return _simd16_setzero_ps(); }
-    static void SIMDCALL storeSOA(uint8_t *pDst, simd16scalar src) { return; }
+    static void SIMDCALL storeSOA(uint8_t *pDst, simd16scalar const &src) { return; }
     static simd16scalar unpack(simd16scalar &in) { return _simd16_setzero_ps(); }
     static simd16scalar pack(simd16scalar &in) { return _simd16_setzero_ps(); }
 #endif
@@ -88,7 +88,7 @@ struct PackTraits<8, false>
 #endif
     }
 
-    static void storeSOA(uint8_t *pDst, simdscalar src)
+    static void storeSOA(uint8_t *pDst, simdscalar const &src)
     {
         // store simd bytes
 #if KNOB_SIMD_WIDTH == 8
@@ -144,7 +144,7 @@ struct PackTraits<8, false>
         return result;
     }
 
-    static void SIMDCALL storeSOA(uint8_t *pDst, simd16scalar src)
+    static void SIMDCALL storeSOA(uint8_t *pDst, simd16scalar const &src)
     {
         // store simd16 bytes
         _mm_store_ps(reinterpret_cast<float *>(pDst), _mm256_castps256_ps128(_simd16_extract_ps(src, 0)));
@@ -203,7 +203,7 @@ struct PackTraits<8, true>
 #endif
     }
 
-    static void storeSOA(uint8_t *pDst, simdscalar src)
+    static void storeSOA(uint8_t *pDst, simdscalar const &src)
     {
         // store simd bytes
 #if KNOB_SIMD_WIDTH == 8
@@ -260,7 +260,7 @@ struct PackTraits<8, true>
         return result;
     }
 
-    static void SIMDCALL storeSOA(uint8_t *pDst, simd16scalar src)
+    static void SIMDCALL storeSOA(uint8_t *pDst, simd16scalar const &src)
     {
         // store simd16 bytes
         _mm_store_ps(reinterpret_cast<float *>(pDst), _mm256_castps256_ps128(_simd16_extract_ps(src, 0)));
@@ -319,7 +319,7 @@ struct PackTraits<16, false>
 #endif
     }
 
-    static void storeSOA(uint8_t *pDst, simdscalar src)
+    static void storeSOA(uint8_t *pDst, simdscalar const &src)
     {
 #if KNOB_SIMD_WIDTH == 8
         // store 16B (2B * 8)
@@ -372,7 +372,7 @@ struct PackTraits<16, false>
         return result;
     }
 
-    static void SIMDCALL storeSOA(uint8_t *pDst, simd16scalar src)
+    static void SIMDCALL storeSOA(uint8_t *pDst, simd16scalar const &src)
     {
         _simd_store_ps(reinterpret_cast<float *>(pDst), _simd16_extract_ps(src, 0));
     }
@@ -417,7 +417,7 @@ struct PackTraits<16, true>
 #endif
     }
 
-    static void storeSOA(uint8_t *pDst, simdscalar src)
+    static void storeSOA(uint8_t *pDst, simdscalar const &src)
     {
 #if KNOB_SIMD_WIDTH == 8
         // store 16B (2B * 8)
@@ -471,7 +471,7 @@ struct PackTraits<16, true>
         return result;
     }
 
-    static void SIMDCALL storeSOA(uint8_t *pDst, simd16scalar src)
+    static void SIMDCALL storeSOA(uint8_t *pDst, simd16scalar const &src)
     {
         _simd_store_ps(reinterpret_cast<float *>(pDst), _simd16_extract_ps(src, 0));
     }
@@ -506,7 +506,7 @@ struct PackTraits<32, false>
     static const uint32_t MyNumBits = 32;
 
     static simdscalar loadSOA(const uint8_t *pSrc) { return _simd_load_ps((const float*)pSrc); }
-    static void storeSOA(uint8_t *pDst, simdscalar src) { _simd_store_ps((float*)pDst, src); }
+    static void storeSOA(uint8_t *pDst, simdscalar const &src) { _simd_store_ps((float*)pDst, src); }
     static simdscalar unpack(simdscalar &in) { return in; }
     static simdscalar pack(simdscalar &in) { return in; }
 #if ENABLE_AVX512_SIMD16
@@ -516,7 +516,7 @@ struct PackTraits<32, false>
         return _simd16_load_ps(reinterpret_cast<const float *>(pSrc));
     }
 
-    static void SIMDCALL storeSOA(uint8_t *pDst, simd16scalar src)
+    static void SIMDCALL storeSOA(uint8_t *pDst, simd16scalar const &src)
     {
         _simd16_store_ps(reinterpret_cast<float *>(pDst), src);
     }
@@ -814,7 +814,7 @@ static inline __m128 ConvertFloatToSRGB2(__m128& Src)
 
 #if ENABLE_AVX512_SIMD16
 template< unsigned expnum, unsigned expden, unsigned coeffnum, unsigned coeffden >
-inline static simd16scalar SIMDCALL fastpow(simd16scalar value)
+inline static simd16scalar SIMDCALL fastpow(simd16scalar const &value)
 {
     static const float factor1 = exp2(127.0f * expden / expnum - 127.0f)
         * powf(1.0f * coeffnum / coeffden, 1.0f * expden / expnum);
@@ -836,7 +836,7 @@ inline static simd16scalar SIMDCALL fastpow(simd16scalar value)
     return result;
 }
 
-inline static simd16scalar SIMDCALL pow512_4(simd16scalar arg)
+inline static simd16scalar SIMDCALL pow512_4(simd16scalar const &arg)
 {
     // 5/12 is too small, so compute the 4th root of 20/12 instead.
     // 20/12 = 5/3 = 1 + 2/3 = 2 - 1/3. 2/3 is a suitable argument for fastpow.
@@ -857,7 +857,7 @@ inline static simd16scalar SIMDCALL pow512_4(simd16scalar arg)
     return xavg;
 }
 
-inline static simd16scalar SIMDCALL powf_wrapper(const simd16scalar base, float exp)
+inline static simd16scalar SIMDCALL powf_wrapper(const simd16scalar &base, float exp)
 {
     const float *f = reinterpret_cast<const float *>(&base);
 
@@ -1322,7 +1322,7 @@ struct ComponentTraits
         return TypeTraits<X, NumBitsX>::loadSOA(pSrc);
     }
 
-    INLINE static void storeSOA(uint32_t comp, uint8_t *pDst, simdscalar src)
+    INLINE static void storeSOA(uint32_t comp, uint8_t *pDst, simdscalar const &src)
     {
         switch (comp)
         {
@@ -1340,41 +1340,48 @@ struct ComponentTraits
             return;
         }
         SWR_INVALID("Invalid component: %d", comp);
-        TypeTraits<X, NumBitsX>::storeSOA(pDst, src);
     }
 
     INLINE static simdscalar unpack(uint32_t comp, simdscalar &in)
     {
+        simdscalar out;
         switch (comp)
         {
         case 0:
-            return TypeTraits<X, NumBitsX>::unpack(in);
+            out = TypeTraits<X, NumBitsX>::unpack(in); break;
         case 1:
-            return TypeTraits<Y, NumBitsY>::unpack(in);
+            out = TypeTraits<Y, NumBitsY>::unpack(in); break;
         case 2:
-            return TypeTraits<Z, NumBitsZ>::unpack(in);
+            out = TypeTraits<Z, NumBitsZ>::unpack(in); break;
         case 3:
-            return TypeTraits<W, NumBitsW>::unpack(in);
+            out = TypeTraits<W, NumBitsW>::unpack(in); break;
+        default:
+            SWR_INVALID("Invalid component: %d", comp);
+            out = in;
+            break;
         }
-        SWR_INVALID("Invalid component: %d", comp);
-        return TypeTraits<X, NumBitsX>::unpack(in);
+        return out;
     }
 
     INLINE static simdscalar pack(uint32_t comp, simdscalar &in)
     {
+        simdscalar out;
         switch (comp)
         {
         case 0:
-            return TypeTraits<X, NumBitsX>::pack(in);
+            out = TypeTraits<X, NumBitsX>::pack(in); break;
         case 1:
-            return TypeTraits<Y, NumBitsY>::pack(in);
+            out = TypeTraits<Y, NumBitsY>::pack(in); break;
         case 2:
-            return TypeTraits<Z, NumBitsZ>::pack(in);
+            out = TypeTraits<Z, NumBitsZ>::pack(in); break;
         case 3:
-            return TypeTraits<W, NumBitsW>::pack(in);
+            out = TypeTraits<W, NumBitsW>::pack(in); break;
+        default:
+            SWR_INVALID("Invalid component: %d", comp);
+            out = in;
+            break;
         }
-        SWR_INVALID("Invalid component: %d", comp);
-        return TypeTraits<X, NumBitsX>::pack(in);
+        return out;
     }
 
     INLINE static simdscalar convertSrgb(uint32_t comp, simdscalar &in)
@@ -1412,7 +1419,7 @@ struct ComponentTraits
         return TypeTraits<X, NumBitsX>::loadSOA_16(pSrc);
     }
 
-    INLINE static void SIMDCALL storeSOA(uint32_t comp, uint8_t *pDst, simd16scalar src)
+    INLINE static void SIMDCALL storeSOA(uint32_t comp, uint8_t *pDst, simd16scalar const &src)
     {
         switch (comp)
         {

@@ -152,6 +152,8 @@ class Field(object):
             type = 'uint32_t'
         elif self.type in self.parser.structs:
             type = 'struct ' + self.parser.gen_prefix(safe_name(self.type))
+        elif self.type in self.parser.enums:
+            type = 'enum ' + self.parser.gen_prefix(safe_name(self.type))
         elif self.type == 'mbo':
             return
         else:
@@ -283,6 +285,9 @@ class Group(object):
                 elif field.type == "uint":
                     s = "__gen_uint(values->%s, %d, %d)" % \
                         (name, start, end)
+                elif field.type in self.parser.enums:
+                    s = "__gen_uint(values->%s, %d, %d)" % \
+                        (name, start, end)
                 elif field.type == "int":
                     s = "__gen_sint(values->%s, %d, %d)" % \
                         (name, start, end)
@@ -335,6 +340,8 @@ class Group(object):
                     convert = "__gen_unpack_address"
                 elif field.type == "uint":
                     convert = "__gen_unpack_uint"
+                elif field.type in self.parser.enums:
+                    convert = "__gen_unpack_uint"
                 elif field.type == "int":
                     convert = "__gen_unpack_sint"
                 elif field.type == "bool":
@@ -370,6 +377,8 @@ class Parser(object):
         self.packet = None
         self.struct = None
         self.structs = {}
+        # Set of enum names we've seen.
+        self.enums = set()
         self.registers = {}
 
     def gen_prefix(self, name):
@@ -423,6 +432,7 @@ class Parser(object):
         elif name == "enum":
             self.values = []
             self.enum = safe_name(attrs["name"])
+            self.enums.add(attrs["name"])
             if "prefix" in attrs:
                 self.prefix = safe_name(attrs["prefix"])
             else:
@@ -478,13 +488,7 @@ class Parser(object):
 
         print("}\n#endif\n")
 
-    def emit_packet(self):
-        name = self.packet
-
-        assert(self.group.fields[0].name == "opcode")
-        print('#define %-33s %6d' %
-              (name + "_opcode", self.group.fields[0].default))
-
+    def emit_header(self, name):
         default_fields = []
         for field in self.group.fields:
             if not type(field) is Field:
@@ -493,11 +497,18 @@ class Parser(object):
                 continue
             default_fields.append("   .%-35s = %6d" % (field.name, field.default))
 
-        if default_fields:
-            print('#define %-40s\\' % (name + '_header'))
-            print(",  \\\n".join(default_fields))
-            print('')
+        print('#define %-40s\\' % (name + '_header'))
+        print(",  \\\n".join(default_fields))
+        print('')
 
+    def emit_packet(self):
+        name = self.packet
+
+        assert(self.group.fields[0].name == "opcode")
+        print('#define %-33s %6d' %
+              (name + "_opcode", self.group.fields[0].default))
+
+        self.emit_header(name)
         self.emit_template_struct(self.packet, self.group)
         self.emit_pack_function(self.packet, self.group)
         self.emit_unpack_function(self.packet, self.group)
@@ -516,10 +527,8 @@ class Parser(object):
 
     def emit_struct(self):
         name = self.struct
-        # Emit an empty header define so that we can use the CL pack functions
-        # with structs.
-        print('#define ' + name + '_header')
 
+        self.emit_header(name)
         self.emit_template_struct(self.struct, self.group)
         self.emit_pack_function(self.struct, self.group)
         self.emit_unpack_function(self.struct, self.group)
@@ -527,14 +536,14 @@ class Parser(object):
         print('')
 
     def emit_enum(self):
-        print('/* enum %s */' % self.gen_prefix(self.enum))
+        print('enum %s {' % self.gen_prefix(self.enum))
         for value in self.values:
             if self.prefix:
                 name = self.prefix + "_" + value.name
             else:
                 name = value.name
-                print('#define %-36s %6d' % (name.upper(), value.value))
-        print('')
+            print('        % -36s = %6d,' % (name.upper(), value.value))
+        print('};\n')
 
     def parse(self, filename):
         file = open(filename, "rb")

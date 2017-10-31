@@ -25,6 +25,7 @@
 
 #include "main/macros.h" /* Needed for MAX3 and MAX2 for format_rgb9e5 */
 #include "util/format_rgb9e5.h"
+#include "util/format_srgb.h"
 
 #include "blorp_priv.h"
 #include "compiler/brw_eu_defines.h"
@@ -382,6 +383,9 @@ blorp_clear(struct blorp_batch *batch,
    if (format == ISL_FORMAT_R9G9B9E5_SHAREDEXP) {
       clear_color.u32[0] = float3_to_rgb9e5(clear_color.f32);
       format = ISL_FORMAT_R32_UINT;
+   } else if (format == ISL_FORMAT_L8_UNORM_SRGB) {
+      clear_color.f32[0] = util_format_linear_to_srgb_float(clear_color.f32[0]);
+      format = ISL_FORMAT_R8_UNORM;
    } else if (format == ISL_FORMAT_A4B4G4R4_UNORM) {
       /* Broadwell and earlier cannot render to this format so we need to work
        * around it by swapping the colors around and using B4G4R4A4 instead.
@@ -442,14 +446,24 @@ blorp_clear(struct blorp_batch *batch,
       if (batch->blorp->isl_dev->info->gen == 4 &&
           (params.dst.surf.usage & ISL_SURF_USAGE_CUBE_BIT)) {
          blorp_surf_convert_to_single_slice(batch->blorp->isl_dev, &params.dst);
+      }
 
-         if (params.dst.tile_x_sa || params.dst.tile_y_sa) {
-            /* This is gen4 so there is no multisampling and sa == px. */
-            params.x0 += params.dst.tile_x_sa;
-            params.y0 += params.dst.tile_y_sa;
-            params.x1 += params.dst.tile_x_sa;
-            params.y1 += params.dst.tile_y_sa;
-         }
+      if (isl_format_is_compressed(params.dst.surf.format)) {
+         blorp_surf_convert_to_uncompressed(batch->blorp->isl_dev, &params.dst,
+                                            NULL, NULL, NULL, NULL);
+                                            //&dst_x, &dst_y, &dst_w, &dst_h);
+      }
+
+      if (params.dst.tile_x_sa || params.dst.tile_y_sa) {
+         /* Either we're on gen4 where there is no multisampling or the
+          * surface is compressed which also implies no multisampling.
+          * Therefore, sa == px and we don't need to do a conversion.
+          */
+         assert(params.dst.surf.samples == 1);
+         params.x0 += params.dst.tile_x_sa;
+         params.y0 += params.dst.tile_y_sa;
+         params.x1 += params.dst.tile_x_sa;
+         params.y1 += params.dst.tile_y_sa;
       }
 
       params.num_samples = params.dst.surf.samples;

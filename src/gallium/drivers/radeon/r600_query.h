@@ -42,6 +42,8 @@ struct r600_resource;
 
 enum {
 	R600_QUERY_DRAW_CALLS = PIPE_QUERY_DRIVER_SPECIFIC,
+	R600_QUERY_DECOMPRESS_CALLS,
+	R600_QUERY_MRT_DRAW_CALLS,
 	R600_QUERY_PRIM_RESTART_CALLS,
 	R600_QUERY_SPILL_DRAW_CALLS,
 	R600_QUERY_COMPUTE_CALLS,
@@ -70,6 +72,7 @@ enum {
 	R600_QUERY_NUM_GFX_IBS,
 	R600_QUERY_NUM_SDMA_IBS,
 	R600_QUERY_GFX_BO_LIST_SIZE,
+	R600_QUERY_GFX_IB_SIZE,
 	R600_QUERY_NUM_BYTES_MOVED,
 	R600_QUERY_NUM_EVICTIONS,
 	R600_QUERY_NUM_VRAM_CPU_PAGE_FAULTS,
@@ -98,9 +101,8 @@ enum {
 	R600_QUERY_GPU_MEQ_BUSY,
 	R600_QUERY_GPU_ME_BUSY,
 	R600_QUERY_GPU_SURF_SYNC_BUSY,
-	R600_QUERY_GPU_DMA_BUSY,
+	R600_QUERY_GPU_CP_DMA_BUSY,
 	R600_QUERY_GPU_SCRATCH_RAM_BUSY,
-	R600_QUERY_GPU_CE_BUSY,
 	R600_QUERY_NUM_COMPILATIONS,
 	R600_QUERY_NUM_SHADERS_CREATED,
 	R600_QUERY_BACK_BUFFER_PS_DRAW_RATIO,
@@ -193,20 +195,24 @@ struct r600_query_hw {
 	struct list_head list;
 	/* For transform feedback: which stream the query is for */
 	unsigned stream;
+
+	/* Workaround via compute shader */
+	struct r600_resource *workaround_buf;
+	unsigned workaround_offset;
 };
 
-bool r600_query_hw_init(struct r600_common_screen *rscreen,
-			struct r600_query_hw *query);
-void r600_query_hw_destroy(struct r600_common_screen *rscreen,
-			   struct r600_query *rquery);
-bool r600_query_hw_begin(struct r600_common_context *rctx,
+bool si_query_hw_init(struct r600_common_screen *rscreen,
+		      struct r600_query_hw *query);
+void si_query_hw_destroy(struct r600_common_screen *rscreen,
 			 struct r600_query *rquery);
-bool r600_query_hw_end(struct r600_common_context *rctx,
+bool si_query_hw_begin(struct r600_common_context *rctx,
 		       struct r600_query *rquery);
-bool r600_query_hw_get_result(struct r600_common_context *rctx,
-			      struct r600_query *rquery,
-			      bool wait,
-			      union pipe_query_result *result);
+bool si_query_hw_end(struct r600_common_context *rctx,
+		     struct r600_query *rquery);
+bool si_query_hw_get_result(struct r600_common_context *rctx,
+			    struct r600_query *rquery,
+			    bool wait,
+			    union pipe_query_result *result);
 
 /* Performance counters */
 enum {
@@ -292,26 +298,26 @@ struct r600_perfcounters {
 	bool separate_instance;
 };
 
-struct pipe_query *r600_create_batch_query(struct pipe_context *ctx,
-					   unsigned num_queries,
-					   unsigned *query_types);
+struct pipe_query *si_create_batch_query(struct pipe_context *ctx,
+					 unsigned num_queries,
+					 unsigned *query_types);
 
-int r600_get_perfcounter_info(struct r600_common_screen *,
-			      unsigned index,
-			      struct pipe_driver_query_info *info);
-int r600_get_perfcounter_group_info(struct r600_common_screen *,
-				    unsigned index,
-				    struct pipe_driver_query_group_info *info);
+int si_get_perfcounter_info(struct r600_common_screen *,
+			    unsigned index,
+			    struct pipe_driver_query_info *info);
+int si_get_perfcounter_group_info(struct r600_common_screen *,
+				  unsigned index,
+				  struct pipe_driver_query_group_info *info);
 
-bool r600_perfcounters_init(struct r600_perfcounters *, unsigned num_blocks);
-void r600_perfcounters_add_block(struct r600_common_screen *,
-				 struct r600_perfcounters *,
-				 const char *name, unsigned flags,
-				 unsigned counters, unsigned selectors,
-				 unsigned instances, void *data);
-void r600_perfcounters_do_destroy(struct r600_perfcounters *);
-void r600_query_hw_reset_buffers(struct r600_common_context *rctx,
-				 struct r600_query_hw *query);
+bool si_perfcounters_init(struct r600_perfcounters *, unsigned num_blocks);
+void si_perfcounters_add_block(struct r600_common_screen *,
+			       struct r600_perfcounters *,
+			       const char *name, unsigned flags,
+			       unsigned counters, unsigned selectors,
+			       unsigned instances, void *data);
+void si_perfcounters_do_destroy(struct r600_perfcounters *);
+void si_query_hw_reset_buffers(struct r600_common_context *rctx,
+			       struct r600_query_hw *query);
 
 struct r600_qbo_state {
 	void *saved_compute;

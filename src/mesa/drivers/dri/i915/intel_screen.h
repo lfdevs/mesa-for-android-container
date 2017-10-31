@@ -33,7 +33,7 @@
 #include "dri_util.h"
 #include "intel_bufmgr.h"
 #include "i915_drm.h"
-#include "xmlconfig.h"
+#include "util/xmlconfig.h"
 
 struct intel_screen
 {

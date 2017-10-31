@@ -229,19 +229,18 @@ droid_window_enqueue_buffer(_EGLDisplay *disp, struct dri2_egl_surface *dri2_sur
     */
    mtx_unlock(&disp->Mutex);
 
-   /* Queue the buffer without a sync fence. This informs the ANativeWindow
-    * that it may access the buffer immediately.
+   /* Queue the buffer with stored out fence fd. The ANativeWindow or buffer
+    * consumer may choose to wait for the fence to signal before accessing
+    * it. If fence fd value is -1, buffer can be accessed by consumer
+    * immediately. Consumer or application shouldn't rely on timestamp
+    * associated with fence if the fence fd is -1.
     *
-    * From ANativeWindow::dequeueBuffer:
-    *
-    *    The fenceFd argument specifies a libsync fence file descriptor for
-    *    a fence that must signal before the buffer can be accessed.  If
-    *    the buffer can be accessed immediately then a value of -1 should
-    *    be used.  The caller must not use the file descriptor after it
-    *    is passed to queueBuffer, and the ANativeWindow implementation
-    *    is responsible for closing it.
+    * Ownership of fd is transferred to consumer after queueBuffer and the
+    * consumer is responsible for closing it. Caller must not use the fd
+    * after passing it to queueBuffer.
     */
-   int fence_fd = -1;
+   int fence_fd = dri2_surf->out_fence_fd;
+   dri2_surf->out_fence_fd = -1;
    dri2_surf->window->queueBuffer(dri2_surf->window, dri2_surf->buffer,
                                   fence_fd);
 
@@ -263,45 +262,14 @@ static void
 droid_window_cancel_buffer(struct dri2_egl_surface *dri2_surf)
 {
    int ret;
+   int fence_fd = dri2_surf->out_fence_fd;
 
-   ret = dri2_surf->window->cancelBuffer(dri2_surf->window, dri2_surf->buffer, -1);
+   dri2_surf->out_fence_fd = -1;
+   ret = dri2_surf->window->cancelBuffer(dri2_surf->window,
+                                         dri2_surf->buffer, fence_fd);
    if (ret < 0) {
       _eglLog(_EGL_WARNING, "ANativeWindow::cancelBuffer failed");
       dri2_surf->base.Lost = EGL_TRUE;
-   }
-}
-
-static __DRIbuffer *
-droid_alloc_local_buffer(struct dri2_egl_surface *dri2_surf,
-                         unsigned int att, unsigned int format)
-{
-   struct dri2_egl_display *dri2_dpy =
-      dri2_egl_display(dri2_surf->base.Resource.Display);
-
-   if (att >= ARRAY_SIZE(dri2_surf->local_buffers))
-      return NULL;
-
-   if (!dri2_surf->local_buffers[att]) {
-      dri2_surf->local_buffers[att] =
-         dri2_dpy->dri2->allocateBuffer(dri2_dpy->dri_screen, att, format,
-               dri2_surf->base.Width, dri2_surf->base.Height);
-   }
-
-   return dri2_surf->local_buffers[att];
-}
-
-static void
-droid_free_local_buffers(struct dri2_egl_surface *dri2_surf)
-{
-   struct dri2_egl_display *dri2_dpy =
-      dri2_egl_display(dri2_surf->base.Resource.Display);
-
-   for (int i = 0; i < ARRAY_SIZE(dri2_surf->local_buffers); i++) {
-      if (dri2_surf->local_buffers[i]) {
-         dri2_dpy->dri2->releaseBuffer(dri2_dpy->dri_screen,
-               dri2_surf->local_buffers[i]);
-         dri2_surf->local_buffers[i] = NULL;
-      }
    }
 }
 
@@ -323,13 +291,13 @@ droid_create_surface(_EGLDriver *drv, _EGLDisplay *disp, EGLint type,
       return NULL;
    }
 
-   if (!_eglInitSurface(&dri2_surf->base, disp, type, conf, attrib_list))
+   if (!dri2_init_surface(&dri2_surf->base, disp, type, conf, attrib_list, true))
       goto cleanup_surface;
 
    if (type == EGL_WINDOW_BIT) {
       int format;
 
-      if (!window || window->common.magic != ANDROID_NATIVE_WINDOW_MAGIC) {
+      if (window->common.magic != ANDROID_NATIVE_WINDOW_MAGIC) {
          _eglError(EGL_BAD_NATIVE_WINDOW, "droid_create_surface");
          goto cleanup_surface;
       }
@@ -400,7 +368,7 @@ droid_destroy_surface(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *surf)
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
    struct dri2_egl_surface *dri2_surf = dri2_egl_surface(surf);
 
-   droid_free_local_buffers(dri2_surf);
+   dri2_egl_surface_free_local_buffers(dri2_surf);
 
    if (dri2_surf->base.Type == EGL_WINDOW_BIT) {
       if (dri2_surf->buffer)
@@ -423,6 +391,7 @@ droid_destroy_surface(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *surf)
 
    dri2_dpy->core->destroyDrawable(dri2_surf->dri_drawable);
 
+   dri2_fini_surface(surf);
    free(dri2_surf);
 
    return EGL_TRUE;
@@ -447,7 +416,7 @@ update_buffers(struct dri2_egl_surface *dri2_surf)
    /* free outdated buffers and update the surface size */
    if (dri2_surf->base.Width != dri2_surf->buffer->width ||
        dri2_surf->base.Height != dri2_surf->buffer->height) {
-      droid_free_local_buffers(dri2_surf);
+      dri2_egl_surface_free_local_buffers(dri2_surf);
       dri2_surf->base.Width = dri2_surf->buffer->width;
       dri2_surf->base.Height = dri2_surf->buffer->height;
    }
@@ -970,7 +939,7 @@ droid_get_buffers_parse_attachments(struct dri2_egl_surface *dri2_surf,
       case __DRI_BUFFER_ACCUM:
       case __DRI_BUFFER_DEPTH_STENCIL:
       case __DRI_BUFFER_HIZ:
-         local = droid_alloc_local_buffer(dri2_surf,
+         local = dri2_egl_surface_alloc_local_buffer(dri2_surf,
                attachments[i], attachments[i + 1]);
 
          if (local) {
@@ -1011,6 +980,18 @@ droid_get_buffers_with_format(__DRIdrawable * driDrawable,
       *height = dri2_surf->base.Height;
 
    return dri2_surf->buffers;
+}
+
+static unsigned
+droid_get_capability(void *loaderPrivate, enum dri_loader_cap cap)
+{
+   /* Note: loaderPrivate is _EGLDisplay* */
+   switch (cap) {
+   case DRI_LOADER_CAP_RGBA_ORDERING:
+      return 1;
+   default:
+      return 0;
+   }
 }
 
 static EGLBoolean
@@ -1106,7 +1087,6 @@ static const struct dri2_egl_display_vtbl droid_display_vtbl = {
    .create_pbuffer_surface = droid_create_pbuffer_surface,
    .destroy_surface = droid_destroy_surface,
    .create_image = droid_create_image_khr,
-   .swap_interval = dri2_fallback_swap_interval,
    .swap_buffers = droid_swap_buffers,
    .swap_buffers_with_damage = dri2_fallback_swap_buffers_with_damage,
    .swap_buffers_region = dri2_fallback_swap_buffers_region,
@@ -1125,18 +1105,20 @@ static const struct dri2_egl_display_vtbl droid_display_vtbl = {
 };
 
 static const __DRIdri2LoaderExtension droid_dri2_loader_extension = {
-   .base = { __DRI_DRI2_LOADER, 3 },
+   .base = { __DRI_DRI2_LOADER, 4 },
 
    .getBuffers           = NULL,
    .flushFrontBuffer     = droid_flush_front_buffer,
    .getBuffersWithFormat = droid_get_buffers_with_format,
+   .getCapability        = droid_get_capability,
 };
 
 static const __DRIimageLoaderExtension droid_image_loader_extension = {
-   .base = { __DRI_IMAGE_LOADER, 1 },
+   .base = { __DRI_IMAGE_LOADER, 2 },
 
    .getBuffers          = droid_image_get_buffers,
    .flushFrontBuffer    = droid_flush_front_buffer,
+   .getCapability       = droid_get_capability,
 };
 
 static const __DRIextension *droid_dri2_loader_extensions[] = {

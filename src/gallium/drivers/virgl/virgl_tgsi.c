@@ -31,6 +31,24 @@ struct virgl_transform_context {
    struct tgsi_transform_context base;
 };
 
+static void
+virgl_tgsi_transform_declaration(struct tgsi_transform_context *ctx,
+                                 struct tgsi_full_declaration *decl)
+{
+   switch (decl->Declaration.File) {
+   case TGSI_FILE_CONSTANT:
+      if (decl->Declaration.Dimension) {
+         if (decl->Dim.Index2D == 0)
+            decl->Declaration.Dimension = 0;
+      }
+      break;
+   default:
+      break;
+   }
+   ctx->emit_declaration(ctx, decl);
+
+}
+
 /* for now just strip out the new properties the remote doesn't understand
    yet */
 static void
@@ -54,6 +72,14 @@ virgl_tgsi_transform_instruction(struct tgsi_transform_context *ctx,
 {
    if (inst->Instruction.Precise)
       inst->Instruction.Precise = 0;
+
+   for (unsigned i = 0; i < inst->Instruction.NumSrcRegs; i++) {
+      if (inst->Src[i].Register.File == TGSI_FILE_CONSTANT &&
+          inst->Src[i].Register.Dimension &&
+          !inst->Src[i].Register.Indirect &&
+          inst->Src[i].Dimension.Index == 0)
+         inst->Src[i].Register.Dimension = 0;
+   }
    ctx->emit_instruction(ctx, inst);
 }
 
@@ -69,6 +95,7 @@ struct tgsi_token *virgl_tgsi_transform(const struct tgsi_token *tokens_in)
       return NULL;
 
    memset(&transform, 0, sizeof(transform));
+   transform.base.transform_declaration = virgl_tgsi_transform_declaration;
    transform.base.transform_property = virgl_tgsi_transform_property;
    transform.base.transform_instruction = virgl_tgsi_transform_instruction;
    tgsi_transform_shader(tokens_in, new_tokens, newLen, &transform.base);

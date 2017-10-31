@@ -135,6 +135,18 @@ vc4_create_rasterizer_state(struct pipe_context *pctx,
         V3D21_POINT_SIZE_pack(NULL, so->packed.point_size, &point_size);
         V3D21_LINE_WIDTH_pack(NULL, so->packed.line_width, &line_width);
 
+        if (cso->tile_raster_order_fixed) {
+                so->tile_raster_order_flags |= VC4_SUBMIT_CL_FIXED_RCL_ORDER;
+                if (cso->tile_raster_order_increasing_x) {
+                        so->tile_raster_order_flags |=
+                                VC4_SUBMIT_CL_RCL_ORDER_INCREASING_X;
+                }
+                if (cso->tile_raster_order_increasing_y) {
+                        so->tile_raster_order_flags |=
+                                VC4_SUBMIT_CL_RCL_ORDER_INCREASING_Y;
+                }
+        }
+
         return so;
 }
 
@@ -587,6 +599,9 @@ vc4_create_sampler_view(struct pipe_context *pctx, struct pipe_resource *prsc,
                         return NULL;
                 }
                 rsc = vc4_resource(prsc);
+                vc4_bo_label(vc4_screen(pctx->screen), rsc->bo,
+                            "tiling shadow %dx%d",
+                             tmpl.width0, tmpl.height0);
 
                 /* Flag it as needing update of the contents from the parent. */
                 rsc->writes = shadow_parent->writes - 1;

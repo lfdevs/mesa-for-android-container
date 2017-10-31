@@ -225,7 +225,7 @@ blorp_compile_vs(struct blorp_context *blorp, void *mem_ctx,
    const unsigned *program =
       brw_compile_vs(compiler, blorp->driver_ctx, mem_ctx,
                      &vs_key, vs_prog_data, nir,
-                     NULL, false, -1, program_size, NULL);
+                     false, -1, program_size, NULL);
 
    return program;
 }

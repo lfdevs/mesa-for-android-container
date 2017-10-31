@@ -72,8 +72,14 @@ struct etna_specs {
    unsigned has_shader_range_registers : 1;
    /* has the new sin/cos/log functions */
    unsigned has_new_transcendentals : 1;
+   /* has the new dp2/dpX_norm instructions, among others */
+   unsigned has_halti2_instructions : 1;
    /* supports single-buffer rendering with multiple pixel pipes */
    unsigned single_buffer : 1;
+   /* has unified uniforms memory */
+   unsigned has_unified_uniforms : 1;
+   /* can load shader instructions from memory */
+   unsigned has_icache : 1;
    /* can use any kind of wrapping mode on npot textures */
    unsigned npot_tex_any_wrap;
    /* number of bits per TS tile */
@@ -100,6 +106,10 @@ struct etna_specs {
    uint32_t vs_offset;
    /* pixel shader memory address*/
    uint32_t ps_offset;
+   /* vertex shader uniforms address*/
+   uint32_t vs_uniforms_offset;
+   /* pixel shader uniforms address*/
+   uint32_t ps_uniforms_offset;
    /* vertex/fragment shader max instructions */
    uint32_t max_instructions;
    /* maximum number of varyings */
@@ -244,6 +254,8 @@ struct compiled_shader_state {
    uint32_t VS_UNIFORMS[ETNA_MAX_UNIFORMS * 4];
    uint32_t *PS_INST_MEM;
    uint32_t PS_UNIFORMS[ETNA_MAX_UNIFORMS * 4];
+   struct etna_reloc PS_INST_ADDR;
+   struct etna_reloc VS_INST_ADDR;
 };
 
 /* state of some 3d and common registers relevant to etna driver */

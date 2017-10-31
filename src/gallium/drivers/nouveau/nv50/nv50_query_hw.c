@@ -157,6 +157,7 @@ nv50_hw_begin_query(struct nv50_context *nv50, struct nv50_query *q)
    switch (q->type) {
    case PIPE_QUERY_OCCLUSION_COUNTER:
    case PIPE_QUERY_OCCLUSION_PREDICATE:
+   case PIPE_QUERY_OCCLUSION_PREDICATE_CONSERVATIVE:
       hq->nesting = nv50->screen->num_occlusion_queries_active++;
       if (hq->nesting) {
          nv50_hw_query_get(push, q, 0x10, 0x0100f002);
@@ -215,6 +216,7 @@ nv50_hw_end_query(struct nv50_context *nv50, struct nv50_query *q)
    switch (q->type) {
    case PIPE_QUERY_OCCLUSION_COUNTER:
    case PIPE_QUERY_OCCLUSION_PREDICATE:
+   case PIPE_QUERY_OCCLUSION_PREDICATE_CONSERVATIVE:
       nv50_hw_query_get(push, q, 0, 0x0100f002);
       if (--nv50->screen->num_occlusion_queries_active == 0) {
          PUSH_SPACE(push, 2);
@@ -307,6 +309,7 @@ nv50_hw_get_query_result(struct nv50_context *nv50, struct nv50_query *q,
       res64[0] = hq->data[1] - hq->data[5];
       break;
    case PIPE_QUERY_OCCLUSION_PREDICATE:
+   case PIPE_QUERY_OCCLUSION_PREDICATE_CONSERVATIVE:
       res8[0] = hq->data[1] != hq->data[5];
       break;
    case PIPE_QUERY_PRIMITIVES_GENERATED: /* u64 count, u64 time */
@@ -378,6 +381,7 @@ nv50_hw_create_query(struct nv50_context *nv50, unsigned type, unsigned index)
    switch (q->type) {
    case PIPE_QUERY_OCCLUSION_COUNTER:
    case PIPE_QUERY_OCCLUSION_PREDICATE:
+   case PIPE_QUERY_OCCLUSION_PREDICATE_CONSERVATIVE:
       hq->rotate = 32;
       break;
    case PIPE_QUERY_PRIMITIVES_GENERATED:

@@ -438,10 +438,8 @@ analyse_instruction(struct analysis_context *ctx,
    case TGSI_OPCODE_ENDIF:
    case TGSI_OPCODE_BGNLOOP:
    case TGSI_OPCODE_BRK:
-   case TGSI_OPCODE_BREAKC:
    case TGSI_OPCODE_CONT:
    case TGSI_OPCODE_ENDLOOP:
-   case TGSI_OPCODE_CALLNZ:
    case TGSI_OPCODE_CAL:
    case TGSI_OPCODE_BGNSUB:
    case TGSI_OPCODE_ENDSUB:

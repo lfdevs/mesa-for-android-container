@@ -167,6 +167,76 @@ glXGetScreenDriver(Display * dpy, int scrNum)
    return NULL;
 }
 
+/* glXGetDriverConfig must return a pointer with a static lifetime. To avoid
+ * keeping drivers loaded and other leaks, we keep a cache of results here that
+ * is cleared by an atexit handler.
+ */
+struct driver_config_entry {
+   struct driver_config_entry *next;
+   char *driverName;
+   char *config;
+};
+
+static pthread_mutex_t driver_config_mutex = PTHREAD_MUTEX_INITIALIZER;
+static struct driver_config_entry *driver_config_cache = NULL;
+
+/* Called as an atexit function. Otherwise, this would have to be called with
+ * driver_config_mutex locked.
+ */
+static void
+clear_driver_config_cache()
+{
+   while (driver_config_cache) {
+      struct driver_config_entry *e = driver_config_cache;
+      driver_config_cache = e->next;
+
+      free(e->driverName);
+      free(e->config);
+      free(e);
+   }
+}
+
+static char *
+get_driver_config(const char *driverName)
+{
+   void *handle = driOpenDriver(driverName);
+   const __DRIextension **extensions;
+
+   if (!handle)
+      return NULL;
+
+   char *config = NULL;
+
+   extensions = driGetDriverExtensions(handle, driverName);
+   if (extensions) {
+      for (int i = 0; extensions[i]; i++) {
+         if (strcmp(extensions[i]->name, __DRI_CONFIG_OPTIONS) != 0)
+            continue;
+
+         __DRIconfigOptionsExtension *ext =
+            (__DRIconfigOptionsExtension *)extensions[i];
+
+         if (ext->base.version >= 2)
+            config = ext->getXml(driverName);
+         else
+            config = strdup(ext->xml);
+
+         break;
+      }
+   }
+
+   if (!config) {
+      /* Fall back to the old method */
+      config = dlsym(handle, "__driConfigOptions");
+      if (config)
+         config = strdup(config);
+   }
+
+   dlclose(handle);
+
+   return config;
+}
+
 /*
  * Exported function for obtaining a driver's option list (UTF-8 encoded XML).
  *
@@ -175,28 +245,43 @@ glXGetScreenDriver(Display * dpy, int scrNum)
  *
  * If the driver was not found or does not support configuration NULL is
  * returned.
- *
- * Note: The driver remains opened after this function returns.
  */
 _GLX_PUBLIC const char *
 glXGetDriverConfig(const char *driverName)
 {
-   void *handle = driOpenDriver(driverName);
-   const __DRIextension **extensions;
+   struct driver_config_entry *e;
 
-   if (!handle)
-      return NULL;
+   pthread_mutex_lock(&driver_config_mutex);
 
-   extensions = driGetDriverExtensions(handle, driverName);
-   if (extensions) {
-      for (int i = 0; extensions[i]; i++) {
-         if (strcmp(extensions[i]->name, __DRI_CONFIG_OPTIONS) == 0)
-            return ((__DRIconfigOptionsExtension *)extensions[i])->xml;
-      }
+   for (e = driver_config_cache; e; e = e->next) {
+      if (strcmp(e->driverName, driverName) == 0)
+         goto out;
    }
 
-   /* Fall back to the old method */
-   return dlsym(handle, "__driConfigOptions");
+   e = malloc(sizeof(*e));
+   if (!e)
+      goto out;
+
+   e->config = get_driver_config(driverName);
+   e->driverName = strdup(driverName);
+   if (!e->config || !e->driverName) {
+      free(e->config);
+      free(e->driverName);
+      free(e);
+      e = NULL;
+      goto out;
+   }
+
+   e->next = driver_config_cache;
+   driver_config_cache = e;
+
+   if (!e->next)
+      atexit(clear_driver_config_cache);
+
+out:
+   pthread_mutex_unlock(&driver_config_mutex);
+
+   return e ? e->config : NULL;
 }
 
 static GLboolean
@@ -473,14 +558,14 @@ CallCreateNewScreen(Display *dpy, int scrn, struct dri_screen *psc,
     * non-conformant to prevent apps from picking them up accidentally.
     */
    for (visual = psc->base.visuals; visual; visual = visual->next) {
-      XVisualInfo template;
+      XVisualInfo templ;
       XVisualInfo *visuals;
       int num_visuals;
       long mask;
 
-      template.visualid = visual->visualID;
+      templ.visualid = visual->visualID;
       mask = VisualIDMask;
-      visuals = XGetVisualInfo(dpy, mask, &template, &num_visuals);
+      visuals = XGetVisualInfo(dpy, mask, &templ, &num_visuals);
 
       if (visuals) {
          if (num_visuals > 0 && visuals->depth != DefaultDepth(dpy, scrn))

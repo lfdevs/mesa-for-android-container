@@ -48,6 +48,8 @@ const struct glsl_type *glsl_get_struct_field(const struct glsl_type *type,
 
 const struct glsl_type *glsl_get_array_element(const struct glsl_type *type);
 const struct glsl_type *glsl_without_array(const struct glsl_type *type);
+const struct glsl_type *glsl_get_array_instance(const struct glsl_type *type,
+                                                unsigned array_size);
 
 const struct glsl_type *glsl_get_column_type(const struct glsl_type *type);
 
@@ -104,6 +106,7 @@ glsl_get_bit_size(const struct glsl_type *type)
    return 0;
 }
 
+bool glsl_type_is_64bit(const struct glsl_type *type);
 bool glsl_type_is_void(const struct glsl_type *type);
 bool glsl_type_is_error(const struct glsl_type *type);
 bool glsl_type_is_vector(const struct glsl_type *type);
@@ -159,6 +162,8 @@ const struct glsl_type * glsl_function_type(const struct glsl_type *return_type,
                                             unsigned num_params);
 
 const struct glsl_type *glsl_transposed_type(const struct glsl_type *type);
+
+const struct glsl_type *glsl_channel_type(const struct glsl_type *type);
 
 #ifdef __cplusplus
 }

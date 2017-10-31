@@ -56,20 +56,6 @@ dri2_fallback_create_image_khr(_EGLDriver *drv, _EGLDisplay *disp,
 }
 
 static inline EGLBoolean
-dri2_fallback_swap_interval(_EGLDriver *drv, _EGLDisplay *dpy,
-                            _EGLSurface *surf, EGLint interval)
-{
-   if (interval > surf->Config->MaxSwapInterval)
-      interval = surf->Config->MaxSwapInterval;
-   else if (interval < surf->Config->MinSwapInterval)
-      interval = surf->Config->MinSwapInterval;
-
-   surf->SwapInterval = interval;
-
-   return EGL_TRUE;
-}
-
-static inline EGLBoolean
 dri2_fallback_swap_buffers_with_damage(_EGLDriver *drv, _EGLDisplay *dpy,
                                       _EGLSurface *surf,
                                       const EGLint *rects, EGLint n_rects)

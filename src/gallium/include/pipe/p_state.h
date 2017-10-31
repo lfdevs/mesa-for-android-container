@@ -125,6 +125,16 @@ struct pipe_rasterizer_state
    unsigned rasterizer_discard:1;
 
    /**
+    * Exposed by PIPE_CAP_TILE_RASTER_ORDER.  When true,
+    * tile_raster_order_increasing_* indicate the order that the rasterizer
+    * should render tiles, to meet the requirements of
+    * GL_MESA_tile_raster_order.
+    */
+   unsigned tile_raster_order_fixed:1;
+   unsigned tile_raster_order_increasing_x:1;
+   unsigned tile_raster_order_increasing_y:1;
+
+   /**
     * When false, depth clipping is disabled and the depth value will be
     * clamped later at the per-pixel level before depth testing.
     * This depends on PIPE_CAP_DEPTH_CLIP_DISABLE.
@@ -886,6 +896,14 @@ struct pipe_memory_info
    unsigned avail_staging_memory; /**< free staging memory at the moment */
    unsigned device_memory_evicted; /**< size of memory evicted (monotonic counter) */
    unsigned nr_device_memory_evictions; /**< # of evictions (monotonic counter) */
+};
+
+/**
+ * Structure that contains information about external memory
+ */
+struct pipe_memory_object
+{
+   bool dedicated;
 };
 
 #ifdef __cplusplus

@@ -167,7 +167,7 @@ genX(cmd_buffer_enable_pma_fix)(struct anv_cmd_buffer *cmd_buffer, bool enable)
    }
 }
 
-static inline bool
+UNUSED static bool
 want_depth_pma_fix(struct anv_cmd_buffer *cmd_buffer)
 {
    assert(GEN_GEN == 8);
@@ -256,9 +256,11 @@ want_depth_pma_fix(struct anv_cmd_buffer *cmd_buffer)
           wm_prog_data->computed_depth_mode != PSCDEPTH_OFF;
 }
 
-static inline bool
+UNUSED static bool
 want_stencil_pma_fix(struct anv_cmd_buffer *cmd_buffer)
 {
+   if (GEN_GEN > 9)
+      return false;
    assert(GEN_GEN == 9);
 
    /* From the Skylake PRM Vol. 2c CACHE_MODE_1::STC PMA Optimization Enable:
@@ -323,7 +325,7 @@ want_stencil_pma_fix(struct anv_cmd_buffer *cmd_buffer)
    /* HiZ is enabled so we had better have a depth buffer with HiZ */
    const struct anv_image_view *ds_iview =
       anv_cmd_buffer_get_depth_stencil_view(cmd_buffer);
-   assert(ds_iview && ds_iview->image->aux_usage == ISL_AUX_USAGE_HIZ);
+   assert(ds_iview && ds_iview->image->planes[0].aux_usage == ISL_AUX_USAGE_HIZ);
 
    /* 3DSTATE_PS_EXTRA::PixelShaderValid */
    struct anv_pipeline *pipeline = cmd_buffer->state.pipeline;

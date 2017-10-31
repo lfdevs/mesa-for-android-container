@@ -25,8 +25,10 @@ include $(top_srcdir)/src/gallium/Automake.inc
 AM_CPPFLAGS = \
 	$(GALLIUM_CFLAGS) \
 	-I$(top_srcdir)/include \
+	-I$(top_builddir)/src/gallium/drivers \
 	-I$(top_srcdir)/src/gallium/drivers \
 	-I$(top_srcdir)/src/gallium/winsys \
+	-I$(top_builddir)/src/util \
 	$(GALLIUM_PIPE_LOADER_DEFINES) \
 	$(LIBDRM_CFLAGS) \
 	$(VISIBILITY_CFLAGS) \
@@ -126,7 +128,6 @@ nodist_EXTRA_pipe_r600_la_SOURCES = dummy.cpp
 pipe_r600_la_LIBADD = \
 	$(PIPE_LIBS) \
 	$(top_builddir)/src/gallium/winsys/radeon/drm/libradeonwinsys.la \
-	$(top_builddir)/src/gallium/drivers/radeon/libradeon.la \
 	$(top_builddir)/src/gallium/drivers/r600/libr600.la \
 	$(LIBDRM_LIBS) \
 	$(RADEON_LIBS) \
@@ -145,6 +146,7 @@ pipe_radeonsi_la_LIBADD = \
 	$(top_builddir)/src/gallium/drivers/radeon/libradeon.la \
 	$(top_builddir)/src/gallium/drivers/radeonsi/libradeonsi.la \
 	$(top_builddir)/src/amd/common/libamd_common.la \
+	$(top_builddir)/src/util/libxmlconfig.la \
 	$(LIBDRM_LIBS) \
 	$(RADEON_LIBS) \
 	$(AMDGPU_LIBS)

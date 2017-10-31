@@ -110,23 +110,14 @@ POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
 target_triplet = @target@
-@HAVE_DRICOMMON_TRUE@am__append_1 = \
-@HAVE_DRICOMMON_TRUE@	-I$(top_builddir)/src/mesa/drivers/dri/common/ \
-@HAVE_DRICOMMON_TRUE@	-I$(top_srcdir)/src/mesa/drivers/dri/common/ \
-@HAVE_DRICOMMON_TRUE@	-I$(top_srcdir)/src/mesa/ \
-@HAVE_DRICOMMON_TRUE@	-I$(top_srcdir)/src/mapi/ \
-@HAVE_DRICOMMON_TRUE@	-DUSE_DRICONF
-
-@HAVE_DRICOMMON_TRUE@am__append_2 = \
-@HAVE_DRICOMMON_TRUE@	$(top_builddir)/src/mesa/drivers/dri/common/libxmlconfig.la
-
-@HAVE_LIBDRM_TRUE@am__append_3 = \
+@HAVE_LIBDRM_TRUE@am__append_1 = \
 @HAVE_LIBDRM_TRUE@	$(LIBDRM_LIBS)
 
-@HAVE_DRI3_TRUE@@HAVE_PLATFORM_X11_TRUE@am__append_4 = libloader_dri3_helper.la
+@HAVE_DRI3_TRUE@@HAVE_PLATFORM_X11_TRUE@am__append_2 = libloader_dri3_helper.la
 subdir = src/loader
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_gnu_make.m4 \
+am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_compile_flag.m4 \
+	$(top_srcdir)/m4/ax_check_gnu_make.m4 \
 	$(top_srcdir)/m4/ax_check_python_mako_module.m4 \
 	$(top_srcdir)/m4/ax_gcc_builtin.m4 \
 	$(top_srcdir)/m4/ax_gcc_func_attribute.m4 \
@@ -145,7 +136,7 @@ CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 am__DEPENDENCIES_1 =
 @HAVE_LIBDRM_TRUE@am__DEPENDENCIES_2 = $(am__DEPENDENCIES_1)
-libloader_la_DEPENDENCIES = $(am__append_2) $(am__DEPENDENCIES_2)
+libloader_la_DEPENDENCIES = $(am__DEPENDENCIES_2)
 am__objects_1 = libloader_la-loader.lo \
 	libloader_la-pci_id_driver_map.lo
 am_libloader_la_OBJECTS = $(am__objects_1)
@@ -365,9 +356,9 @@ NVVIEUX_CFLAGS = @NVVIEUX_CFLAGS@
 NVVIEUX_LIBS = @NVVIEUX_LIBS@
 OBJDUMP = @OBJDUMP@
 OBJEXT = @OBJEXT@
-OMX_CFLAGS = @OMX_CFLAGS@
-OMX_LIBS = @OMX_LIBS@
-OMX_LIB_INSTALL_DIR = @OMX_LIB_INSTALL_DIR@
+OMX_BELLAGIO_CFLAGS = @OMX_BELLAGIO_CFLAGS@
+OMX_BELLAGIO_LIBS = @OMX_BELLAGIO_LIBS@
+OMX_BELLAGIO_LIB_INSTALL_DIR = @OMX_BELLAGIO_LIB_INSTALL_DIR@
 OPENCL_LIBNAME = @OPENCL_LIBNAME@
 OPENCL_VERSION = @OPENCL_VERSION@
 OSMESA_LIB = @OSMESA_LIB@
@@ -421,6 +412,8 @@ VA_LIBS = @VA_LIBS@
 VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
 VA_MAJOR = @VA_MAJOR@
 VA_MINOR = @VA_MINOR@
+VC5_SIMULATOR_CFLAGS = @VC5_SIMULATOR_CFLAGS@
+VC5_SIMULATOR_LIBS = @VC5_SIMULATOR_LIBS@
 VDPAU_CFLAGS = @VDPAU_CFLAGS@
 VDPAU_LIBS = @VDPAU_LIBS@
 VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
@@ -432,12 +425,15 @@ VISIBILITY_CXXFLAGS = @VISIBILITY_CXXFLAGS@
 VL_CFLAGS = @VL_CFLAGS@
 VL_LIBS = @VL_LIBS@
 VULKAN_ICD_INSTALL_DIR = @VULKAN_ICD_INSTALL_DIR@
-WAYLAND_CFLAGS = @WAYLAND_CFLAGS@
-WAYLAND_LIBS = @WAYLAND_LIBS@
+WAYLAND_CLIENT_CFLAGS = @WAYLAND_CLIENT_CFLAGS@
+WAYLAND_CLIENT_LIBS = @WAYLAND_CLIENT_LIBS@
 WAYLAND_PROTOCOLS_DATADIR = @WAYLAND_PROTOCOLS_DATADIR@
 WAYLAND_SCANNER = @WAYLAND_SCANNER@
 WAYLAND_SCANNER_CFLAGS = @WAYLAND_SCANNER_CFLAGS@
 WAYLAND_SCANNER_LIBS = @WAYLAND_SCANNER_LIBS@
+WAYLAND_SERVER_CFLAGS = @WAYLAND_SERVER_CFLAGS@
+WAYLAND_SERVER_LIBS = @WAYLAND_SERVER_LIBS@
+WNO_OVERRIDE_INIT = @WNO_OVERRIDE_INIT@
 X11_INCLUDES = @X11_INCLUDES@
 XA_MAJOR = @XA_MAJOR@
 XA_MINOR = @XA_MINOR@
@@ -527,8 +523,10 @@ LOADER_C_FILES := \
 	pci_id_driver_map.h
 
 EXTRA_DIST = SConscript
-noinst_LTLIBRARIES = libloader.la $(am__append_4)
+noinst_LTLIBRARIES = libloader.la $(am__append_2)
 AM_CPPFLAGS = \
+	-I$(top_builddir)/src/util/ \
+	-DUSE_DRICONF \
 	$(DEFINES) \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/src \
@@ -536,9 +534,9 @@ AM_CPPFLAGS = \
 	$(XCB_DRI3_CFLAGS) \
 	$(LIBDRM_CFLAGS)
 
-libloader_la_CPPFLAGS = $(AM_CPPFLAGS) $(am__append_1)
+libloader_la_CPPFLAGS = $(AM_CPPFLAGS)
 libloader_la_SOURCES = $(LOADER_C_FILES)
-libloader_la_LIBADD = $(am__append_2) $(am__append_3)
+libloader_la_LIBADD = $(am__append_1)
 @HAVE_DRI3_TRUE@@HAVE_PLATFORM_X11_TRUE@libloader_dri3_helper_la_SOURCES = \
 @HAVE_DRI3_TRUE@@HAVE_PLATFORM_X11_TRUE@	loader_dri3_helper.c \
 @HAVE_DRI3_TRUE@@HAVE_PLATFORM_X11_TRUE@	loader_dri3_helper.h

@@ -54,6 +54,7 @@
 #include "st_cb_eglimage.h"
 #include "st_cb_fbo.h"
 #include "st_cb_feedback.h"
+#include "st_cb_memoryobjects.h"
 #include "st_cb_msaa.h"
 #include "st_cb_perfmon.h"
 #include "st_cb_program.h"
@@ -312,9 +313,11 @@ st_create_context_priv( struct gl_context *ctx, struct pipe_context *pipe,
    st->can_bind_const_buffer_as_vertex =
       screen->get_param(screen, PIPE_CAP_CAN_BIND_CONST_BUFFER_AS_VERTEX);
 
-   /* Drivers still have to upload zero-stride vertex attribs manually
-    * with the GL core profile, but they don't have to deal with any complex
-    * user vertex buffer uploads.
+   /* st/mesa always uploads zero-stride vertex attribs, and other user
+    * vertex buffers are only possible with a compatibility profile.
+    * So tell the u_vbuf module that user VBOs are not possible with the Core
+    * profile, so that u_vbuf is bypassed completely if there is nothing else
+    * to do.
     */
    unsigned vbuf_flags =
       ctx->API == API_OPENGL_CORE ? U_VBUF_FLAG_NO_USER_VBOS : 0;
@@ -405,7 +408,7 @@ st_create_context_priv( struct gl_context *ctx, struct pipe_context *pipe,
    /* GL limits and extensions */
    st_init_limits(pipe->screen, &ctx->Const, &ctx->Extensions);
    st_init_extensions(pipe->screen, &ctx->Const,
-                      &ctx->Extensions, &st->options, ctx->Mesa_DXTn);
+                      &ctx->Extensions, &st->options);
 
    if (st_have_perfmon(st)) {
       ctx->Extensions.AMD_performance_monitor = GL_TRUE;
@@ -488,6 +491,7 @@ static void st_init_driver_flags(struct st_context *st)
 
    f->NewArray = ST_NEW_VERTEX_ARRAYS;
    f->NewRasterizerDiscard = ST_NEW_RASTERIZER;
+   f->NewTileRasterOrder = ST_NEW_RASTERIZER;
    f->NewUniformBuffer = ST_NEW_UNIFORM_BUFFER;
    f->NewDefaultTessLevels = ST_NEW_TESS_STATE;
 
@@ -664,6 +668,26 @@ st_set_background_context(struct gl_context *ctx,
    smapi->set_background_context(&st->iface, queue_info);
 }
 
+static void
+st_get_device_uuid(struct gl_context *ctx, char *uuid)
+{
+   struct pipe_screen *screen = st_context(ctx)->pipe->screen;
+
+   assert(GL_UUID_SIZE_EXT >= PIPE_UUID_SIZE);
+   memset(uuid, 0, GL_UUID_SIZE_EXT);
+   screen->get_device_uuid(screen, uuid);
+}
+
+static void
+st_get_driver_uuid(struct gl_context *ctx, char *uuid)
+{
+   struct pipe_screen *screen = st_context(ctx)->pipe->screen;
+
+   assert(GL_UUID_SIZE_EXT >= PIPE_UUID_SIZE);
+   memset(uuid, 0, GL_UUID_SIZE_EXT);
+   screen->get_driver_uuid(screen, uuid);
+}
+
 void st_init_driver_functions(struct pipe_screen *screen,
                               struct dd_function_table *functions)
 {
@@ -684,6 +708,7 @@ void st_init_driver_functions(struct pipe_screen *screen,
 
    st_init_fbo_functions(functions);
    st_init_feedback_functions(functions);
+   st_init_memoryobject_functions(functions);
    st_init_msaa_functions(functions);
    st_init_perfmon_functions(functions);
    st_init_program_functions(functions);
@@ -709,4 +734,6 @@ void st_init_driver_functions(struct pipe_screen *screen,
    functions->UpdateState = st_invalidate_state;
    functions->QueryMemoryInfo = st_query_memory_info;
    functions->SetBackgroundContext = st_set_background_context;
+   functions->GetDriverUuid = st_get_device_uuid;
+   functions->GetDeviceUuid = st_get_driver_uuid;
 }

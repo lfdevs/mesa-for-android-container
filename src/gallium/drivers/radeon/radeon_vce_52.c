@@ -138,7 +138,7 @@ static void get_vui_param(struct rvce_encoder *enc, struct pipe_h264_enc_picture
 	enc->enc_pic.vui.max_dec_frame_buffering = 0x00000003;
 }
 
-void radeon_vce_52_get_param(struct rvce_encoder *enc, struct pipe_h264_enc_picture_desc *pic)
+void si_vce_52_get_param(struct rvce_encoder *enc, struct pipe_h264_enc_picture_desc *pic)
 {
 	get_rate_control_param(enc, pic);
 	get_motion_estimation_param(enc, pic);
@@ -319,8 +319,8 @@ static void encode(struct rvce_encoder *enc)
 	RVCE_CS(0x00000000); // pictureStructure
 	if(enc->enc_pic.picture_type == PIPE_H264_ENC_PICTURE_TYPE_P ||
 		enc->enc_pic.picture_type == PIPE_H264_ENC_PICTURE_TYPE_B) {
-		struct rvce_cpb_slot *l0 = l0_slot(enc);
-		rvce_frame_offset(enc, l0, &luma_offset, &chroma_offset);
+		struct rvce_cpb_slot *l0 = si_l0_slot(enc);
+		si_vce_frame_offset(enc, l0, &luma_offset, &chroma_offset);
 		RVCE_CS(l0->picture_type);
 		RVCE_CS(l0->frame_num);
 		RVCE_CS(l0->pic_order_cnt);
@@ -356,8 +356,8 @@ static void encode(struct rvce_encoder *enc)
 	// encReferencePictureL1[0]
 	RVCE_CS(0x00000000); // pictureStructure
 	if(enc->enc_pic.picture_type == PIPE_H264_ENC_PICTURE_TYPE_B) {
-		struct rvce_cpb_slot *l1 = l1_slot(enc);
-		rvce_frame_offset(enc, l1, &luma_offset, &chroma_offset);
+		struct rvce_cpb_slot *l1 = si_l1_slot(enc);
+		si_vce_frame_offset(enc, l1, &luma_offset, &chroma_offset);
 		RVCE_CS(l1->picture_type);
 		RVCE_CS(l1->frame_num);
 		RVCE_CS(l1->pic_order_cnt);
@@ -376,7 +376,7 @@ static void encode(struct rvce_encoder *enc)
 		RVCE_CS(enc->enc_pic.eo.l1_chroma_offset);
 	}
 
-	rvce_frame_offset(enc, current_slot(enc), &luma_offset, &chroma_offset);
+	si_vce_frame_offset(enc, si_current_slot(enc), &luma_offset, &chroma_offset);
 	RVCE_CS(luma_offset);
 	RVCE_CS(chroma_offset);
 	RVCE_CS(enc->enc_pic.eo.enc_coloc_buffer_offset);
@@ -646,7 +646,7 @@ static void vui(struct rvce_encoder *enc)
 	RVCE_END();
 }
 
-void radeon_vce_52_init(struct rvce_encoder *enc)
+void si_vce_52_init(struct rvce_encoder *enc)
 {
 	enc->session = session;
 	enc->task_info = task_info;

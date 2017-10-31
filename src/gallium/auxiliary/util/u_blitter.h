@@ -41,14 +41,32 @@ struct pipe_context;
 enum blitter_attrib_type {
    UTIL_BLITTER_ATTRIB_NONE,
    UTIL_BLITTER_ATTRIB_COLOR,
-   UTIL_BLITTER_ATTRIB_TEXCOORD
+   UTIL_BLITTER_ATTRIB_TEXCOORD_XY,
+   UTIL_BLITTER_ATTRIB_TEXCOORD_XYZW,
 };
+
+union blitter_attrib {
+   float color[4];
+
+   struct {
+      float x1, y1, x2, y2, z, w;
+   } texcoord;
+};
+
+struct blitter_context;
+
+typedef void *(*blitter_get_vs_func)(struct blitter_context *blitter);
 
 struct blitter_context
 {
    /**
     * Draw a rectangle.
     *
+    * \param get_vs  Callback for obtaining the vertex shader for the draw call.
+    *                It might invoke the shader compiler. The driver is
+    *                responsible for setting the vertex shader, and the callback
+    *                allows the driver to query the vertex shader CSO if it
+    *                wants to use the default one.
     * \param x1      An X coordinate of the top-left corner.
     * \param y1      A Y coordinate of the top-left corner.
     * \param x2      An X coordinate of the bottom-right corner.
@@ -72,22 +90,15 @@ struct blitter_context
     *       a rectangular point sprite.
     */
    void (*draw_rectangle)(struct blitter_context *blitter,
+                          void *vertex_elements_cso,
+                          blitter_get_vs_func get_vs,
                           int x1, int y1, int x2, int y2,
-                          float depth,
+                          float depth, unsigned num_instances,
                           enum blitter_attrib_type type,
-                          const union pipe_color_union *color);
-
-   /**
-    * Get the next surface layer for the pipe surface, i.e. make a copy
-    * of the surface and increment the first and last layer by 1.
-    *
-    * This callback is exposed, so that drivers can override it if needed.
-    */
-   struct pipe_surface *(*get_next_surface_layer)(struct pipe_context *pipe,
-                                                  struct pipe_surface *surf);
+                          const union blitter_attrib *attrib);
 
    /* Whether the blitter is running. */
-   boolean running;
+   bool running;
 
    /* Private members, really. */
    struct pipe_context *pipe; /**< pipe context */
@@ -102,7 +113,8 @@ struct blitter_context
    struct pipe_stencil_ref saved_stencil_ref;     /**< stencil ref */
    struct pipe_viewport_state saved_viewport;
    struct pipe_scissor_state saved_scissor;
-   boolean is_sample_mask_saved;
+   bool skip_viewport_restore;
+   bool is_sample_mask_saved;
    unsigned saved_sample_mask;
 
    unsigned saved_num_sampler_states;
@@ -122,7 +134,7 @@ struct blitter_context
 
    struct pipe_query *saved_render_cond_query;
    uint saved_render_cond_mode;
-   boolean saved_render_cond_cond;
+   bool saved_render_cond_cond;
 };
 
 /**
@@ -150,14 +162,17 @@ struct pipe_context *util_blitter_get_pipe(struct blitter_context *blitter)
  * Override PIPE_CAP_TEXTURE_MULTISAMPLE as reported by the driver.
  */
 void util_blitter_set_texture_multisample(struct blitter_context *blitter,
-                                          boolean supported);
+                                          bool supported);
 
 /* The default function to draw a rectangle. This can only be used
  * inside of the draw_rectangle callback if the driver overrides it. */
 void util_blitter_draw_rectangle(struct blitter_context *blitter,
-                                 int x1, int y1, int x2, int y2, float depth,
+                                 void *vertex_elements_cso,
+                                 blitter_get_vs_func get_vs,
+                                 int x1, int y1, int x2, int y2,
+                                 float depth, unsigned num_instances,
                                  enum blitter_attrib_type type,
-                                 const union pipe_color_union *attrib);
+                                 const union blitter_attrib *attrib);
 
 
 /*
@@ -189,12 +204,12 @@ void util_blitter_clear(struct blitter_context *blitter,
  * Check if the blitter (with the help of the driver) can blit between
  * the two resources.
  */
-boolean util_blitter_is_copy_supported(struct blitter_context *blitter,
-                                       const struct pipe_resource *dst,
-                                       const struct pipe_resource *src);
+bool util_blitter_is_copy_supported(struct blitter_context *blitter,
+                                    const struct pipe_resource *dst,
+                                    const struct pipe_resource *src);
 
-boolean util_blitter_is_blit_supported(struct blitter_context *blitter,
-				       const struct pipe_blit_info *info);
+bool util_blitter_is_blit_supported(struct blitter_context *blitter,
+				    const struct pipe_blit_info *info);
 
 /**
  * Copy a block of pixels from one surface to another.
@@ -244,7 +259,7 @@ void util_blitter_blit_generic(struct blitter_context *blitter,
                                unsigned src_width0, unsigned src_height0,
                                unsigned mask, unsigned filter,
                                const struct pipe_scissor_state *scissor,
-                               boolean alpha_blend);
+                               bool alpha_blend);
 
 void util_blitter_blit(struct blitter_context *blitter,
 		       const struct pipe_blit_info *info);
@@ -526,14 +541,14 @@ static inline void
 util_blitter_save_sample_mask(struct blitter_context *blitter,
                               unsigned sample_mask)
 {
-   blitter->is_sample_mask_saved = TRUE;
+   blitter->is_sample_mask_saved = true;
    blitter->saved_sample_mask = sample_mask;
 }
 
 static inline void
 util_blitter_save_render_condition(struct blitter_context *blitter,
                                    struct pipe_query *query,
-                                   boolean condition,
+                                   bool condition,
                                    enum pipe_render_cond_flag mode)
 {
    blitter->saved_render_cond_query = query;

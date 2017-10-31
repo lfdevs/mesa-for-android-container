@@ -40,6 +40,8 @@
 #include <array>
 #include <sstream>
 
+#define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
+
 // Function pointer to different storing functions for color, depth, and stencil based on incoming formats.
 typedef void(*PFN_STORE_TILES)(uint8_t*, SWR_SURFACE_STATE*, uint32_t, uint32_t, uint32_t);
 
@@ -1179,7 +1181,7 @@ struct StoreRasterTile
                     resolveColor[3] *= oneOverNumSamples;
 
                     // Use the resolve surface state
-                    SWR_SURFACE_STATE* pResolveSurface = (SWR_SURFACE_STATE*)pDstSurface->pAuxBaseAddress;
+                    SWR_SURFACE_STATE* pResolveSurface = (SWR_SURFACE_STATE*)pDstSurface->xpAuxBaseAddress;
                     uint8_t *pDst = (uint8_t*)ComputeSurfaceAddress<false, false>((x + rx), (y + ry),
                         pResolveSurface->arrayIndex + renderTargetArrayIndex, pResolveSurface->arrayIndex + renderTargetArrayIndex,
                         0, pResolveSurface->lod, pResolveSurface);
@@ -1523,7 +1525,7 @@ struct OptStoreRasterTile< TilingTraits<SWR_TILE_NONE, 64>, SrcFormat, DstFormat
 
             pSrc += KNOB_SIMD16_WIDTH * SRC_BYTES_PER_PIXEL;
 
-            for (uint32_t i = 0; i < sizeof(ppDsts) / sizeof(ppDsts[0]); i += 1)
+            for (uint32_t i = 0; i < ARRAY_SIZE(ppDsts); i += 1)
             {
                 ppDsts[i] += dy;
             }
@@ -1641,7 +1643,7 @@ struct OptStoreRasterTile< TilingTraits<SWR_TILE_NONE, 128>, SrcFormat, DstForma
 
             pSrc += KNOB_SIMD16_WIDTH * SRC_BYTES_PER_PIXEL;
 
-            for (uint32_t i = 0; i < sizeof(ppDsts) / sizeof(ppDsts[0]); i += 1)
+            for (uint32_t i = 0; i < ARRAY_SIZE(ppDsts); i += 1)
             {
                 ppDsts[i] += dy;
             }
@@ -2124,7 +2126,7 @@ struct OptStoreRasterTile< TilingTraits<SWR_TILE_MODE_YMAJOR, 64>, SrcFormat, Ds
 
             pSrc += KNOB_SIMD16_WIDTH * SRC_BYTES_PER_PIXEL;
 
-            for (uint32_t i = 0; i < sizeof(ppDsts) / sizeof(ppDsts[0]); i += 1)
+            for (uint32_t i = 0; i < ARRAY_SIZE(ppDsts); i += 1)
             {
                 ppDsts[i] += dy;
             }
@@ -2253,7 +2255,7 @@ struct OptStoreRasterTile< TilingTraits<SWR_TILE_MODE_YMAJOR, 128>, SrcFormat, D
 
             pSrc += KNOB_SIMD16_WIDTH * SRC_BYTES_PER_PIXEL;
 
-            for (uint32_t i = 0; i < sizeof(ppDsts) / sizeof(ppDsts[0]); i += 1)
+            for (uint32_t i = 0; i < ARRAY_SIZE(ppDsts); i += 1)
             {
                 ppDsts[i] += dy;
             }
@@ -2390,7 +2392,7 @@ struct StoreMacroTile
             }
         }
 
-        if (pDstSurface->pAuxBaseAddress)
+        if (pDstSurface->xpAuxBaseAddress)
         {
             uint32_t sampleOffset = KNOB_TILE_X_DIM * KNOB_TILE_Y_DIM * (FormatTraits<SrcFormat>::bpp / 8);
             // Store each raster tile from the hot tile to the destination surface.

@@ -36,12 +36,13 @@
 #include <inttypes.h>
 #include <pthread.h>
 #include "apple_glx_log.h"
+#include "util/debug.h"
 
 static bool diagnostic = false;
 static aslclient aslc;
 
 void apple_glx_log_init(void) {
-    if (getenv("LIBGL_DIAGNOSTIC")) {
+    if (env_var_as_boolean("LIBGL_DIAGNOSTIC", false)) {
         diagnostic = true;
     }
 

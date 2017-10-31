@@ -190,6 +190,8 @@ st_framebuffer_validate(struct st_framebuffer *stfb,
    if (stfb->iface_stamp == new_stamp)
       return;
 
+   memset(textures, 0, stfb->num_statts * sizeof(textures[0]));
+
    /* validate the fb */
    do {
       if (!stfb->iface->validate(&st->iface, stfb->iface, stfb->statts,
@@ -694,7 +696,7 @@ st_context_teximage(struct st_context_iface *stctxi,
    stObj = st_texture_object(texObj);
    /* switch to surface based */
    if (!stObj->surface_based) {
-      _mesa_clear_texture_object(ctx, texObj);
+      _mesa_clear_texture_object(ctx, texObj, NULL);
       stObj->surface_based = GL_TRUE;
    }
 
@@ -1036,11 +1038,18 @@ st_manager_flush_frontbuffer(struct st_context *st)
 
    if (stfb)
       strb = st_renderbuffer(stfb->Base.Attachment[BUFFER_FRONT_LEFT].Renderbuffer);
-   if (!strb)
-      return;
 
-   /* never a dummy fb */
-   stfb->iface->flush_front(&st->iface, stfb->iface, ST_ATTACHMENT_FRONT_LEFT);
+   /* Do we have a front color buffer and has it been drawn to since last
+    * frontbuffer flush?
+    */
+   if (strb && strb->defined) {
+      stfb->iface->flush_front(&st->iface, stfb->iface,
+                               ST_ATTACHMENT_FRONT_LEFT);
+      strb->defined = GL_FALSE;
+
+      /* Trigger an update of strb->defined on next draw */
+      st->dirty |= ST_NEW_FB_STATE;
+   }
 }
 
 /**
@@ -1059,6 +1068,28 @@ st_manager_validate_framebuffers(struct st_context *st)
 
    st_context_validate(st, stdraw, stread);
 }
+
+
+/**
+ * Flush any outstanding swapbuffers on the current draw framebuffer.
+ */
+void
+st_manager_flush_swapbuffers(void)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   struct st_context *st = (ctx) ? ctx->st : NULL;
+   struct st_framebuffer *stfb;
+
+   if (!st)
+      return;
+
+   stfb = st_ws_framebuffer(ctx->DrawBuffer);
+   if (!stfb || !stfb->iface->flush_swapbuffers)
+      return;
+
+   stfb->iface->flush_swapbuffers(&st->iface, stfb->iface);
+}
+
 
 /**
  * Add a color renderbuffer on demand.  The FBO must correspond to a window,
@@ -1137,7 +1168,7 @@ get_version(struct pipe_screen *screen,
    _mesa_init_extensions(&extensions);
 
    st_init_limits(screen, &consts, &extensions);
-   st_init_extensions(screen, &consts, &extensions, options, GL_TRUE);
+   st_init_extensions(screen, &consts, &extensions, options);
 
    return _mesa_get_version(&extensions, &consts, api);
 }

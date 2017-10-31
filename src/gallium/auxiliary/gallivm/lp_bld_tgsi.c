@@ -201,8 +201,8 @@ void lp_build_fetch_args(
 static int get_src_chan_idx(unsigned opcode,
                             int dst_chan_index)
 {
-   enum tgsi_opcode_type dtype = tgsi_opcode_infer_dst_type(opcode);
-   enum tgsi_opcode_type stype = tgsi_opcode_infer_src_type(opcode);
+   enum tgsi_opcode_type dtype = tgsi_opcode_infer_dst_type(opcode, 0);
+   enum tgsi_opcode_type stype = tgsi_opcode_infer_src_type(opcode, 0);
 
    if (!tgsi_type_is_64bit(dtype) && !tgsi_type_is_64bit(stype))
       return dst_chan_index;
@@ -251,9 +251,6 @@ lp_build_tgsi_inst_llvm(
    case TGSI_OPCODE_UP2US:
    case TGSI_OPCODE_UP4B:
    case TGSI_OPCODE_UP4UB:
-   case TGSI_OPCODE_PUSHA:
-   case TGSI_OPCODE_POPA:
-   case TGSI_OPCODE_SAD:
       /* deprecated? */
       assert(0);
       return FALSE;
@@ -267,10 +264,16 @@ lp_build_tgsi_inst_llvm(
 
    memset(&emit_data, 0, sizeof(emit_data));
 
-   assert(info->num_dst <= 1);
+   assert(info->num_dst <= 2);
    if (info->num_dst) {
       TGSI_FOR_EACH_DST0_ENABLED_CHANNEL( inst, chan_index ) {
          emit_data.output[chan_index] = bld_base->base.undef;
+      }
+
+      if (info->num_dst >= 2) {
+         TGSI_FOR_EACH_DST1_ENABLED_CHANNEL( inst, chan_index ) {
+            emit_data.output1[chan_index] = bld_base->base.undef;
+         }
       }
    }
 
@@ -312,11 +315,21 @@ lp_build_tgsi_inst_llvm(
          TGSI_FOR_EACH_DST0_ENABLED_CHANNEL(inst, chan_index) {
             emit_data.output[chan_index] = val;
          }
+
+         if (info->num_dst >= 2) {
+            val = emit_data.output1[0];
+            memset(emit_data.output1, 0, sizeof(emit_data.output1));
+            TGSI_FOR_EACH_DST1_ENABLED_CHANNEL(inst, chan_index) {
+               emit_data.output1[chan_index] = val;
+            }
+         }
       }
    }
 
    if (info->num_dst > 0 && info->opcode != TGSI_OPCODE_STORE) {
-      bld_base->emit_store(bld_base, inst, info, emit_data.output);
+      bld_base->emit_store(bld_base, inst, info, 0, emit_data.output);
+      if (info->num_dst >= 2)
+         bld_base->emit_store(bld_base, inst, info, 1, emit_data.output1);
    }
    return TRUE;
 }
@@ -423,7 +436,7 @@ lp_build_emit_fetch(
 {
    const struct tgsi_full_src_register *reg = &inst->Src[src_op];
    enum tgsi_opcode_type stype =
-      tgsi_opcode_infer_src_type(inst->Instruction.Opcode);
+      tgsi_opcode_infer_src_type(inst->Instruction.Opcode, src_op);
 
    return lp_build_emit_fetch_src(bld_base, reg, stype, chan_index);
 }
@@ -530,11 +543,9 @@ lp_build_tgsi_llvm(
    while (bld_base->pc != -1) {
       const struct tgsi_full_instruction *instr =
          bld_base->instructions + bld_base->pc;
-      const struct tgsi_opcode_info *opcode_info =
-         tgsi_get_opcode_info(instr->Instruction.Opcode);
       if (!lp_build_tgsi_inst_llvm(bld_base, instr)) {
          _debug_printf("warning: failed to translate tgsi opcode %s to LLVM\n",
-                       opcode_info->mnemonic);
+                       tgsi_get_opcode_name(instr->Instruction.Opcode));
          return FALSE;
       }
    }

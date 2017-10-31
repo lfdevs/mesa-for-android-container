@@ -135,9 +135,9 @@ vc4_emit_state(struct pipe_context *pctx)
 
                 cl_emit(&job->bcl, VIEWPORT_OFFSET, vp) {
                         vp.viewport_centre_x_coordinate =
-                                16 * vc4->viewport.translate[0];
+                                vc4->viewport.translate[0];
                         vp.viewport_centre_y_coordinate =
-                                16 * vc4->viewport.translate[1];
+                                vc4->viewport.translate[1];
                 }
         }
 

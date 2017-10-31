@@ -24,11 +24,14 @@
 #ifndef SI_COMPUTE_H
 #define SI_COMPUTE_H
 
+#include "util/u_inlines.h"
+
 #include "si_shader.h"
 
 #define MAX_GLOBAL_BUFFERS 22
 
 struct si_compute {
+	struct pipe_reference reference;
 	struct si_screen *screen;
 	struct tgsi_token *tokens;
 	struct util_queue_fence ready;
@@ -52,5 +55,16 @@ struct si_compute {
 	unsigned uses_bindless_samplers:1;
 	unsigned uses_bindless_images:1;
 };
+
+void si_destroy_compute(struct si_compute *program);
+
+static inline void
+si_compute_reference(struct si_compute **dst, struct si_compute *src)
+{
+	if (pipe_reference(&(*dst)->reference, &src->reference))
+		si_destroy_compute(*dst);
+
+	*dst = src;
+}
 
 #endif /* SI_COMPUTE_H */

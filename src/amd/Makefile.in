@@ -153,13 +153,10 @@ build_triplet = @build@
 host_triplet = @host@
 target_triplet = @target@
 @HAVE_GALLIUM_LLVM_TRUE@am__append_1 = $(COMMON_LIBS)
-
-# nir_to_llvm requires LLVM 3.9, which is only required as a minimum when
-# radv is built.
-@HAVE_GALLIUM_LLVM_TRUE@@HAVE_RADEON_VULKAN_TRUE@am__append_2 = $(AMD_NIR_FILES)
 subdir = src/amd
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_gnu_make.m4 \
+am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_compile_flag.m4 \
+	$(top_srcdir)/m4/ax_check_gnu_make.m4 \
 	$(top_srcdir)/m4/ax_check_python_mako_module.m4 \
 	$(top_srcdir)/m4/ax_gcc_builtin.m4 \
 	$(top_srcdir)/m4/ax_gcc_func_attribute.m4 \
@@ -208,10 +205,10 @@ am__common_libamd_common_la_SOURCES_DIST = common/ac_gpu_info.c \
 	common/ac_binary.c common/ac_binary.h common/ac_exp_param.h \
 	common/ac_llvm_build.c common/ac_llvm_build.h \
 	common/ac_llvm_helper.cpp common/ac_llvm_util.c \
-	common/ac_llvm_util.h common/ac_shader_info.c \
-	common/ac_shader_info.h common/ac_debug.c common/ac_debug.h \
-	common/sid_tables.h common/ac_nir_to_llvm.c \
-	common/ac_nir_to_llvm.h
+	common/ac_llvm_util.h common/ac_shader_abi.h \
+	common/ac_shader_info.c common/ac_shader_info.h \
+	common/ac_debug.c common/ac_debug.h common/sid_tables.h \
+	common/ac_nir_to_llvm.c common/ac_nir_to_llvm.h
 am__objects_2 = common/common_libamd_common_la-ac_gpu_info.lo \
 	common/common_libamd_common_la-ac_surface.lo
 am__objects_3 = common/common_libamd_common_la-ac_binary.lo \
@@ -222,11 +219,10 @@ am__objects_3 = common/common_libamd_common_la-ac_binary.lo \
 am__objects_4 = common/common_libamd_common_la-ac_debug.lo
 am__objects_5 =
 am__objects_6 = common/common_libamd_common_la-ac_nir_to_llvm.lo
-@HAVE_GALLIUM_LLVM_TRUE@@HAVE_RADEON_VULKAN_TRUE@am__objects_7 = $(am__objects_6)
 @HAVE_GALLIUM_LLVM_TRUE@am_common_libamd_common_la_OBJECTS =  \
 @HAVE_GALLIUM_LLVM_TRUE@	$(am__objects_2) $(am__objects_3) \
 @HAVE_GALLIUM_LLVM_TRUE@	$(am__objects_4) $(am__objects_5) \
-@HAVE_GALLIUM_LLVM_TRUE@	$(am__objects_7)
+@HAVE_GALLIUM_LLVM_TRUE@	$(am__objects_6)
 common_libamd_common_la_OBJECTS =  \
 	$(am_common_libamd_common_la_OBJECTS)
 common_libamd_common_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CXX \
@@ -456,9 +452,9 @@ NVVIEUX_CFLAGS = @NVVIEUX_CFLAGS@
 NVVIEUX_LIBS = @NVVIEUX_LIBS@
 OBJDUMP = @OBJDUMP@
 OBJEXT = @OBJEXT@
-OMX_CFLAGS = @OMX_CFLAGS@
-OMX_LIBS = @OMX_LIBS@
-OMX_LIB_INSTALL_DIR = @OMX_LIB_INSTALL_DIR@
+OMX_BELLAGIO_CFLAGS = @OMX_BELLAGIO_CFLAGS@
+OMX_BELLAGIO_LIBS = @OMX_BELLAGIO_LIBS@
+OMX_BELLAGIO_LIB_INSTALL_DIR = @OMX_BELLAGIO_LIB_INSTALL_DIR@
 OPENCL_LIBNAME = @OPENCL_LIBNAME@
 OPENCL_VERSION = @OPENCL_VERSION@
 OSMESA_LIB = @OSMESA_LIB@
@@ -512,6 +508,8 @@ VA_LIBS = @VA_LIBS@
 VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
 VA_MAJOR = @VA_MAJOR@
 VA_MINOR = @VA_MINOR@
+VC5_SIMULATOR_CFLAGS = @VC5_SIMULATOR_CFLAGS@
+VC5_SIMULATOR_LIBS = @VC5_SIMULATOR_LIBS@
 VDPAU_CFLAGS = @VDPAU_CFLAGS@
 VDPAU_LIBS = @VDPAU_LIBS@
 VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
@@ -523,12 +521,15 @@ VISIBILITY_CXXFLAGS = @VISIBILITY_CXXFLAGS@
 VL_CFLAGS = @VL_CFLAGS@
 VL_LIBS = @VL_LIBS@
 VULKAN_ICD_INSTALL_DIR = @VULKAN_ICD_INSTALL_DIR@
-WAYLAND_CFLAGS = @WAYLAND_CFLAGS@
-WAYLAND_LIBS = @WAYLAND_LIBS@
+WAYLAND_CLIENT_CFLAGS = @WAYLAND_CLIENT_CFLAGS@
+WAYLAND_CLIENT_LIBS = @WAYLAND_CLIENT_LIBS@
 WAYLAND_PROTOCOLS_DATADIR = @WAYLAND_PROTOCOLS_DATADIR@
 WAYLAND_SCANNER = @WAYLAND_SCANNER@
 WAYLAND_SCANNER_CFLAGS = @WAYLAND_SCANNER_CFLAGS@
 WAYLAND_SCANNER_LIBS = @WAYLAND_SCANNER_LIBS@
+WAYLAND_SERVER_CFLAGS = @WAYLAND_SERVER_CFLAGS@
+WAYLAND_SERVER_LIBS = @WAYLAND_SERVER_LIBS@
+WNO_OVERRIDE_INIT = @WNO_OVERRIDE_INIT@
 X11_INCLUDES = @X11_INCLUDES@
 XA_MAJOR = @XA_MAJOR@
 XA_MINOR = @XA_MINOR@
@@ -614,7 +615,6 @@ top_srcdir = @top_srcdir@
 COMMON_HEADER_FILES = \
 	common/gfx9d.h \
 	common/sid.h \
-	common/r600d_common.h \
 	common/amd_family.h \
 	common/amd_kernel_code_t.h \
 	common/amdgpu_id.h
@@ -661,6 +661,7 @@ AMD_COMPILER_FILES = \
 	common/ac_llvm_helper.cpp \
 	common/ac_llvm_util.c \
 	common/ac_llvm_util.h \
+	common/ac_shader_abi.h \
 	common/ac_shader_info.c \
 	common/ac_shader_info.h
 
@@ -730,11 +731,13 @@ addrlib_libamdgpu_addrlib_la_SOURCES = $(ADDRLIB_FILES)
 @HAVE_GALLIUM_LLVM_TRUE@	$(VISIBILITY_CXXFLAGS) \
 @HAVE_GALLIUM_LLVM_TRUE@	$(LLVM_CXXFLAGS)
 
-@HAVE_GALLIUM_LLVM_TRUE@common_libamd_common_la_SOURCES =  \
+@HAVE_GALLIUM_LLVM_TRUE@common_libamd_common_la_SOURCES = \
 @HAVE_GALLIUM_LLVM_TRUE@	$(AMD_COMMON_FILES) \
 @HAVE_GALLIUM_LLVM_TRUE@	$(AMD_COMPILER_FILES) \
 @HAVE_GALLIUM_LLVM_TRUE@	$(AMD_DEBUG_FILES) \
-@HAVE_GALLIUM_LLVM_TRUE@	$(AMD_GENERATED_FILES) $(am__append_2)
+@HAVE_GALLIUM_LLVM_TRUE@	$(AMD_GENERATED_FILES) \
+@HAVE_GALLIUM_LLVM_TRUE@	$(AMD_NIR_FILES)
+
 common_libamd_common_la_LIBADD = $(LIBELF_LIBS)
 BUILT_SOURCES = $(AMD_GENERATED_FILES)
 all: $(BUILT_SOURCES)

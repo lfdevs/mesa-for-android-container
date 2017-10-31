@@ -326,10 +326,12 @@ iter_instruction(
    }
 
    if (info->num_dst != inst->Instruction.NumDstRegs) {
-      report_error( ctx, "%s: Invalid number of destination operands, should be %u", info->mnemonic, info->num_dst );
+      report_error( ctx, "%s: Invalid number of destination operands, should be %u",
+                    tgsi_get_opcode_name(inst->Instruction.Opcode), info->num_dst );
    }
    if (info->num_src != inst->Instruction.NumSrcRegs) {
-      report_error( ctx, "%s: Invalid number of source operands, should be %u", info->mnemonic, info->num_src );
+      report_error( ctx, "%s: Invalid number of source operands, should be %u",
+                    tgsi_get_opcode_name(inst->Instruction.Opcode), info->num_src );
    }
 
    /* Check destination and source registers' validity.

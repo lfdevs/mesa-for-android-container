@@ -28,6 +28,12 @@
 #include "sid.h"
 #include "radeon/r600_cs.h"
 
+/* Recommended maximum sizes for optimal performance.
+ * Fall back to compute or SDMA if the size is greater.
+ */
+#define CP_DMA_COPY_PERF_THRESHOLD	(64 * 1024) /* copied from Vulkan */
+#define CP_DMA_CLEAR_PERF_THRESHOLD	(32 * 1024) /* guess (clear is much slower) */
+
 /* Set this if you want the ME to wait until CP DMA is done.
  * It should be set on the last CP DMA packet. */
 #define CP_DMA_SYNC		(1 << 0)
@@ -230,7 +236,7 @@ static void si_clear_buffer(struct pipe_context *ctx, struct pipe_resource *dst,
 	    (offset % 4 == 0) &&
 	    /* CP DMA is very slow. Always use SDMA for big clears. This
 	     * alone improves DeusEx:MD performance by 70%. */
-	    (size > 128 * 1024 ||
+	    (size > CP_DMA_CLEAR_PERF_THRESHOLD ||
 	     /* Buffers not used by the GFX IB yet will be cleared by SDMA.
 	      * This happens to move most buffer clears to SDMA, including
 	      * DCC and CMASK clears, because pipe->clear clears them before
@@ -309,7 +315,7 @@ static void si_cp_dma_realign_engine(struct si_context *sctx, unsigned size,
 	    sctx->scratch_buffer->b.b.width0 < scratch_size) {
 		r600_resource_reference(&sctx->scratch_buffer, NULL);
 		sctx->scratch_buffer = (struct r600_resource*)
-			r600_aligned_buffer_create(&sctx->screen->b.b,
+			si_aligned_buffer_create(&sctx->screen->b.b,
 						   R600_RESOURCE_FLAG_UNMAPPABLE,
 						   PIPE_USAGE_DEFAULT,
 						   scratch_size, 256);
@@ -442,43 +448,90 @@ void cik_prefetch_TC_L2_async(struct si_context *sctx, struct pipe_resource *buf
 static void cik_prefetch_shader_async(struct si_context *sctx,
 				      struct si_pm4_state *state)
 {
-	if (state) {
-		struct pipe_resource *bo = &state->bo[0]->b.b;
-		assert(state->nbo == 1);
+	struct pipe_resource *bo = &state->bo[0]->b.b;
+	assert(state->nbo == 1);
 
-		cik_prefetch_TC_L2_async(sctx, bo, 0, bo->width0);
-	}
+	cik_prefetch_TC_L2_async(sctx, bo, 0, bo->width0);
 }
 
-static void cik_emit_prefetch_L2(struct si_context *sctx, struct r600_atom *atom)
+static void cik_prefetch_VBO_descriptors(struct si_context *sctx)
+{
+	if (!sctx->vertex_elements)
+		return;
+
+	cik_prefetch_TC_L2_async(sctx, &sctx->vertex_buffers.buffer->b.b,
+				 sctx->vertex_buffers.gpu_address -
+				 sctx->vertex_buffers.buffer->gpu_address,
+				 sctx->vertex_elements->desc_list_byte_size);
+}
+
+void cik_emit_prefetch_L2(struct si_context *sctx)
 {
 	/* Prefetch shaders and VBO descriptors to TC L2. */
-	if (si_pm4_state_changed(sctx, ls))
-		cik_prefetch_shader_async(sctx, sctx->queued.named.ls);
-	if (si_pm4_state_changed(sctx, hs))
-		cik_prefetch_shader_async(sctx, sctx->queued.named.hs);
-	if (si_pm4_state_changed(sctx, es))
-		cik_prefetch_shader_async(sctx, sctx->queued.named.es);
-	if (si_pm4_state_changed(sctx, gs))
-		cik_prefetch_shader_async(sctx, sctx->queued.named.gs);
-	if (si_pm4_state_changed(sctx, vs))
-		cik_prefetch_shader_async(sctx, sctx->queued.named.vs);
-
-	/* Vertex buffer descriptors are uploaded uncached, so prefetch
-	 * them right after the VS binary. */
-	if (sctx->vertex_buffer_pointer_dirty) {
-		cik_prefetch_TC_L2_async(sctx, &sctx->vertex_buffers.buffer->b.b,
-					 sctx->vertex_buffers.buffer_offset,
-					 sctx->vertex_elements->desc_list_byte_size);
+	if (sctx->b.chip_class >= GFX9) {
+		/* Choose the right spot for the VBO prefetch. */
+		if (sctx->tes_shader.cso) {
+			if (sctx->prefetch_L2_mask & SI_PREFETCH_HS)
+				cik_prefetch_shader_async(sctx, sctx->queued.named.hs);
+			if (sctx->prefetch_L2_mask & SI_PREFETCH_VBO_DESCRIPTORS)
+				cik_prefetch_VBO_descriptors(sctx);
+			if (sctx->prefetch_L2_mask & SI_PREFETCH_GS)
+				cik_prefetch_shader_async(sctx, sctx->queued.named.gs);
+			if (sctx->prefetch_L2_mask & SI_PREFETCH_VS)
+				cik_prefetch_shader_async(sctx, sctx->queued.named.vs);
+		} else if (sctx->gs_shader.cso) {
+			if (sctx->prefetch_L2_mask & SI_PREFETCH_GS)
+				cik_prefetch_shader_async(sctx, sctx->queued.named.gs);
+			if (sctx->prefetch_L2_mask & SI_PREFETCH_VBO_DESCRIPTORS)
+				cik_prefetch_VBO_descriptors(sctx);
+			if (sctx->prefetch_L2_mask & SI_PREFETCH_VS)
+				cik_prefetch_shader_async(sctx, sctx->queued.named.vs);
+		} else {
+			if (sctx->prefetch_L2_mask & SI_PREFETCH_VS)
+				cik_prefetch_shader_async(sctx, sctx->queued.named.vs);
+			if (sctx->prefetch_L2_mask & SI_PREFETCH_VBO_DESCRIPTORS)
+				cik_prefetch_VBO_descriptors(sctx);
+		}
+	} else {
+		/* SI-CI-VI */
+		/* Choose the right spot for the VBO prefetch. */
+		if (sctx->tes_shader.cso) {
+			if (sctx->prefetch_L2_mask & SI_PREFETCH_LS)
+				cik_prefetch_shader_async(sctx, sctx->queued.named.ls);
+			if (sctx->prefetch_L2_mask & SI_PREFETCH_VBO_DESCRIPTORS)
+				cik_prefetch_VBO_descriptors(sctx);
+			if (sctx->prefetch_L2_mask & SI_PREFETCH_HS)
+				cik_prefetch_shader_async(sctx, sctx->queued.named.hs);
+			if (sctx->prefetch_L2_mask & SI_PREFETCH_ES)
+				cik_prefetch_shader_async(sctx, sctx->queued.named.es);
+			if (sctx->prefetch_L2_mask & SI_PREFETCH_GS)
+				cik_prefetch_shader_async(sctx, sctx->queued.named.gs);
+			if (sctx->prefetch_L2_mask & SI_PREFETCH_VS)
+				cik_prefetch_shader_async(sctx, sctx->queued.named.vs);
+		} else if (sctx->gs_shader.cso) {
+			if (sctx->prefetch_L2_mask & SI_PREFETCH_ES)
+				cik_prefetch_shader_async(sctx, sctx->queued.named.es);
+			if (sctx->prefetch_L2_mask & SI_PREFETCH_VBO_DESCRIPTORS)
+				cik_prefetch_VBO_descriptors(sctx);
+			if (sctx->prefetch_L2_mask & SI_PREFETCH_GS)
+				cik_prefetch_shader_async(sctx, sctx->queued.named.gs);
+			if (sctx->prefetch_L2_mask & SI_PREFETCH_VS)
+				cik_prefetch_shader_async(sctx, sctx->queued.named.vs);
+		} else {
+			if (sctx->prefetch_L2_mask & SI_PREFETCH_VS)
+				cik_prefetch_shader_async(sctx, sctx->queued.named.vs);
+			if (sctx->prefetch_L2_mask & SI_PREFETCH_VBO_DESCRIPTORS)
+				cik_prefetch_VBO_descriptors(sctx);
+		}
 	}
-	if (si_pm4_state_changed(sctx, ps))
+
+	if (sctx->prefetch_L2_mask & SI_PREFETCH_PS)
 		cik_prefetch_shader_async(sctx, sctx->queued.named.ps);
+
+	sctx->prefetch_L2_mask = 0;
 }
 
 void si_init_cp_dma_functions(struct si_context *sctx)
 {
 	sctx->b.clear_buffer = si_clear_buffer;
-
-	si_init_atom(sctx, &sctx->prefetch_L2, &sctx->atoms.s.prefetch_L2,
-		     cik_emit_prefetch_L2);
 }

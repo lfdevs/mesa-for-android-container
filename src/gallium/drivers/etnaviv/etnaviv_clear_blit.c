@@ -130,7 +130,7 @@ etna_blit_clear_color(struct pipe_context *pctx, struct pipe_surface *dst,
       }
 
       surf->level->ts_valid = true;
-      ctx->dirty |= ETNA_DIRTY_TS;
+      ctx->dirty |= ETNA_DIRTY_TS | ETNA_DIRTY_DERIVE_TS;
    } else if (unlikely(new_clear_value != surf->level->clear_value)) { /* Queue normal RS clear for non-TS surfaces */
       /* If clear color changed, re-generate stored command */
       etna_rs_gen_clear_surface(ctx, surf, new_clear_value);
@@ -189,7 +189,7 @@ etna_blit_clear_zs(struct pipe_context *pctx, struct pipe_surface *dst,
       }
 
       surf->level->ts_valid = true;
-      ctx->dirty |= ETNA_DIRTY_TS;
+      ctx->dirty |= ETNA_DIRTY_TS | ETNA_DIRTY_DERIVE_TS;
    } else {
       if (unlikely(new_clear_value != surf->level->clear_value)) { /* Queue normal RS clear for non-TS surfaces */
          /* If clear depth value changed, re-generate stored command */
@@ -358,6 +358,59 @@ etna_manual_blit(struct etna_resource *dst, struct etna_resource_level *dst_lev,
    return true;
 }
 
+static inline size_t
+etna_compute_tileoffset(const struct pipe_box *box, enum pipe_format format,
+                        size_t stride, enum etna_surface_layout layout)
+{
+   size_t offset;
+   unsigned int x = box->x, y = box->y;
+   unsigned int blocksize = util_format_get_blocksize(format);
+
+   switch (layout) {
+   case ETNA_LAYOUT_LINEAR:
+      offset = y * stride + x * blocksize;
+      break;
+   case ETNA_LAYOUT_MULTI_TILED:
+      y >>= 1;
+      /* fall-through */
+   case ETNA_LAYOUT_TILED:
+      assert(!(x & 0x03) && !(y & 0x03));
+      offset = (y & ~0x03) * stride + blocksize * ((x & ~0x03) << 2);
+      break;
+   case ETNA_LAYOUT_MULTI_SUPERTILED:
+      y >>= 1;
+      /* fall-through */
+   case ETNA_LAYOUT_SUPER_TILED:
+      assert(!(x & 0x3f) && !(y & 0x3f));
+      offset = (y & ~0x3f) * stride + blocksize * ((x & ~0x3f) << 6);
+      break;
+   default:
+      unreachable("invalid resource layout");
+   }
+
+   return offset;
+}
+
+static inline void
+etna_get_rs_alignment_mask(const struct etna_context *ctx,
+                           const enum etna_surface_layout layout,
+                           unsigned int *width_mask, unsigned int *height_mask)
+{
+   unsigned int h_align, w_align;
+
+   if (layout & ETNA_LAYOUT_BIT_SUPER) {
+      w_align = h_align = 64;
+   } else {
+      w_align = ETNA_RS_WIDTH_MASK + 1;
+      h_align = ETNA_RS_HEIGHT_MASK + 1;
+   }
+
+   h_align *= ctx->screen->specs.pixel_pipes;
+
+   *width_mask = w_align - 1;
+   *height_mask = h_align -1;
+}
+
 static bool
 etna_try_rs_blit(struct pipe_context *pctx,
                  const struct pipe_blit_info *blit_info)
@@ -399,13 +452,21 @@ etna_try_rs_blit(struct pipe_context *pctx,
    unsigned dst_format = etna_compatible_rs_format(blit_info->dst.format);
    if (translate_rs_format(src_format) == ETNA_NO_MATCH ||
        translate_rs_format(dst_format) == ETNA_NO_MATCH ||
-       blit_info->scissor_enable || blit_info->src.box.x != 0 ||
-       blit_info->src.box.y != 0 || blit_info->dst.box.x != 0 ||
-       blit_info->dst.box.y != 0 ||
+       blit_info->scissor_enable ||
        blit_info->dst.box.depth != blit_info->src.box.depth ||
        blit_info->dst.box.depth != 1) {
       return FALSE;
    }
+
+   unsigned w_mask, h_mask;
+
+   etna_get_rs_alignment_mask(ctx, src->layout, &w_mask, &h_mask);
+   if ((blit_info->src.box.x & w_mask) || (blit_info->src.box.y & h_mask))
+      return FALSE;
+
+   etna_get_rs_alignment_mask(ctx, dst->layout, &w_mask, &h_mask);
+   if ((blit_info->dst.box.x & w_mask) || (blit_info->dst.box.y & h_mask))
+      return FALSE;
 
    /* Ensure that the Z coordinate is sane */
    if (dst->base.target != PIPE_TEXTURE_CUBE)
@@ -426,10 +487,18 @@ etna_try_rs_blit(struct pipe_context *pctx,
    assert(blit_info->dst.box.x + blit_info->dst.box.width <= dst_lev->padded_width);
    assert(blit_info->dst.box.y + blit_info->dst.box.height <= dst_lev->padded_height);
 
-   unsigned src_offset =
-      src_lev->offset + blit_info->src.box.z * src_lev->layer_stride;
-   unsigned dst_offset =
-      dst_lev->offset + blit_info->dst.box.z * dst_lev->layer_stride;
+   unsigned src_offset = src_lev->offset +
+                         blit_info->src.box.z * src_lev->layer_stride +
+                         etna_compute_tileoffset(&blit_info->src.box,
+                                                 blit_info->src.format,
+                                                 src_lev->stride,
+                                                 src->layout);
+   unsigned dst_offset = dst_lev->offset +
+                         blit_info->dst.box.z * dst_lev->layer_stride +
+                         etna_compute_tileoffset(&blit_info->dst.box,
+                                                 blit_info->dst.format,
+                                                 dst_lev->stride,
+                                                 dst->layout);
 
    if (src_lev->padded_width <= ETNA_RS_WIDTH_MASK ||
        dst_lev->padded_width <= ETNA_RS_WIDTH_MASK ||
@@ -503,7 +572,8 @@ etna_try_rs_blit(struct pipe_context *pctx,
 
       memset(&reloc, 0, sizeof(struct etna_reloc));
       reloc.bo = src->bo;
-      reloc.offset = src_offset;
+      reloc.offset = src_lev->offset +
+                     blit_info->src.box.z * src_lev->layer_stride;
       reloc.flags = ETNA_RELOC_READ;
       etna_set_state_reloc(ctx->stream, VIVS_TS_COLOR_SURFACE_BASE, &reloc);
 
@@ -521,6 +591,7 @@ etna_try_rs_blit(struct pipe_context *pctx,
       .source = src->bo,
       .source_offset = src_offset,
       .source_stride = src_lev->stride,
+      .source_padded_width = src_lev->padded_width,
       .source_padded_height = src_lev->padded_height,
       .dest_format = translate_rs_format(dst_format),
       .dest_tiling = dst->layout,
@@ -541,6 +612,7 @@ etna_try_rs_blit(struct pipe_context *pctx,
    resource_written(ctx, &dst->base);
    dst->seqno++;
    dst->levels[blit_info->dst.level].ts_valid = false;
+   ctx->dirty |= ETNA_DIRTY_DERIVE_TS;
 
    return TRUE;
 
@@ -653,6 +725,33 @@ etna_copy_resource(struct pipe_context *pctx, struct pipe_resource *dst,
          blit.src.box.z = blit.dst.box.z = layer;
          pctx->blit(pctx, &blit);
       }
+   }
+}
+
+void
+etna_copy_resource_box(struct pipe_context *pctx, struct pipe_resource *dst,
+                       struct pipe_resource *src, int level,
+                       struct pipe_box *box)
+{
+   assert(src->format == dst->format);
+   assert(src->array_size == dst->array_size);
+
+   struct pipe_blit_info blit = {};
+   blit.mask = util_format_get_mask(dst->format);
+   blit.filter = PIPE_TEX_FILTER_NEAREST;
+   blit.src.resource = src;
+   blit.src.format = src->format;
+   blit.src.box = *box;
+   blit.dst.resource = dst;
+   blit.dst.format = dst->format;
+   blit.dst.box = *box;
+
+   blit.dst.box.depth = blit.src.box.depth = 1;
+   blit.src.level = blit.dst.level = level;
+
+   for (int layer = 0; layer < dst->array_size; layer++) {
+      blit.src.box.z = blit.dst.box.z = layer;
+      pctx->blit(pctx, &blit);
    }
 }
 

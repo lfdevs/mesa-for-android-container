@@ -77,21 +77,6 @@ static unsigned passthrough_program[] =
    0
 };
 
-
-/* 1, -1/3!, 1/5!, -1/7! */
-static const float scs_sin_constants[4] = { 1.0,
-   -1.0f / (3 * 2 * 1),
-   1.0f / (5 * 4 * 3 * 2 * 1),
-   -1.0f / (7 * 6 * 5 * 4 * 3 * 2 * 1)
-};
-
-/* 1, -1/2!, 1/4!, -1/6! */
-static const float scs_cos_constants[4] = { 1.0,
-   -1.0f / (2 * 1),
-   1.0f / (4 * 3 * 2 * 1),
-   -1.0f / (6 * 5 * 4 * 3 * 2 * 1)
-};
-
 /* 2*pi, -(2*pi)^3/3!, (2*pi)^5/5!, -(2*pi)^7/7! */
 static const float sin_constants[4] = { 2.0 * M_PI,
    -8.0f * M_PI * M_PI * M_PI / (3 * 2 * 1),
@@ -495,7 +480,6 @@ i915_translate_instruction(struct i915_fp_compile *p,
                            const struct i915_full_instruction *inst,
                            struct i915_fragment_shader *fs)
 {
-   uint writemask;
    uint src0, src1, src2, flags;
    uint tmp = 0;
 
@@ -602,17 +586,6 @@ i915_translate_instruction(struct i915_fp_compile *p,
 
    case TGSI_OPCODE_DP4:
       emit_simple_arith(p, inst, A0_DP4, 2, fs);
-      break;
-
-   case TGSI_OPCODE_DPH:
-      src0 = src_vector(p, &inst->Src[0], fs);
-      src1 = src_vector(p, &inst->Src[1], fs);
-
-      i915_emit_arith(p,
-                      A0_DP4,
-                      get_result_vector(p, &inst->Dst[0]),
-                      get_result_flags(inst), 0,
-                      swizzle(src0, X, Y, Z, ONE), src1, 0);
       break;
 
    case TGSI_OPCODE_DST:
@@ -814,70 +787,6 @@ i915_translate_instruction(struct i915_fp_compile *p,
                       swizzle(src0, X, X, X, X), 0, 0);
       break;
 
-   case TGSI_OPCODE_SCS:
-      src0 = src_vector(p, &inst->Src[0], fs);
-      tmp = i915_get_utemp(p);
-
-      /* 
-       * t0.xy = MUL x.xx11, x.x1111  ; x^2, x, 1, 1
-       * t0 = MUL t0.xyxy t0.xx11 ; x^4, x^3, x^2, x
-       * t1 = MUL t0.xyyw t0.yz11    ; x^7 x^5 x^3 x
-       * scs.x = DP4 t1, scs_sin_constants
-       * t1 = MUL t0.xxz1 t0.z111    ; x^6 x^4 x^2 1
-       * scs.y = DP4 t1, scs_cos_constants
-       */
-      i915_emit_arith(p,
-                      A0_MUL,
-                      tmp, A0_DEST_CHANNEL_XY, 0,
-                      swizzle(src0, X, X, ONE, ONE),
-                      swizzle(src0, X, ONE, ONE, ONE), 0);
-
-      i915_emit_arith(p,
-                      A0_MUL,
-                      tmp, A0_DEST_CHANNEL_ALL, 0,
-                      swizzle(tmp, X, Y, X, Y),
-                      swizzle(tmp, X, X, ONE, ONE), 0);
-
-      writemask = inst->Dst[0].Register.WriteMask;
-
-      if (writemask & TGSI_WRITEMASK_Y) {
-         uint tmp1;
-
-         if (writemask & TGSI_WRITEMASK_X)
-            tmp1 = i915_get_utemp(p);
-         else
-            tmp1 = tmp;
-
-         i915_emit_arith(p,
-                         A0_MUL,
-                         tmp1, A0_DEST_CHANNEL_ALL, 0,
-                         swizzle(tmp, X, Y, Y, W),
-                         swizzle(tmp, X, Z, ONE, ONE), 0);
-
-         i915_emit_arith(p,
-                         A0_DP4,
-                         get_result_vector(p, &inst->Dst[0]),
-                         A0_DEST_CHANNEL_Y, 0,
-                         swizzle(tmp1, W, Z, Y, X),
-                         i915_emit_const4fv(p, scs_sin_constants), 0);
-      }
-
-      if (writemask & TGSI_WRITEMASK_X) {
-         i915_emit_arith(p,
-                         A0_MUL,
-                         tmp, A0_DEST_CHANNEL_XYZ, 0,
-                         swizzle(tmp, X, X, Z, ONE),
-                         swizzle(tmp, Z, ONE, ONE, ONE), 0);
-
-         i915_emit_arith(p,
-                         A0_DP4,
-                         get_result_vector(p, &inst->Dst[0]),
-                         A0_DEST_CHANNEL_X, 0,
-                         swizzle(tmp, ONE, Z, Y, X),
-                         i915_emit_const4fv(p, scs_cos_constants), 0);
-      }
-      break;
-
    case TGSI_OPCODE_SEQ:
       /* if we're both >= and <= then we're == */
       src0 = src_vector(p, &inst->Src[0], fs);
@@ -1036,32 +945,6 @@ i915_translate_instruction(struct i915_fp_compile *p,
 
    case TGSI_OPCODE_TXP:
       emit_tex(p, inst, T0_TEXLDP, fs);
-      break;
-
-   case TGSI_OPCODE_XPD:
-      /* Cross product:
-       *      result.x = src0.y * src1.z - src0.z * src1.y;
-       *      result.y = src0.z * src1.x - src0.x * src1.z;
-       *      result.z = src0.x * src1.y - src0.y * src1.x;
-       *      result.w = undef;
-       */
-      src0 = src_vector(p, &inst->Src[0], fs);
-      src1 = src_vector(p, &inst->Src[1], fs);
-      tmp = i915_get_utemp(p);
-
-      i915_emit_arith(p,
-                      A0_MUL,
-                      tmp, A0_DEST_CHANNEL_ALL, 0,
-                      swizzle(src0, Z, X, Y, ONE),
-                      swizzle(src1, Y, Z, X, ONE), 0);
-
-      i915_emit_arith(p,
-                      A0_MAD,
-                      get_result_vector(p, &inst->Dst[0]),
-                      get_result_flags(inst), 0,
-                      swizzle(src0, Y, Z, X, ONE),
-                      swizzle(src1, Z, X, Y, ONE),
-                      negate(tmp, 1, 1, 1, 0));
       break;
 
    default:

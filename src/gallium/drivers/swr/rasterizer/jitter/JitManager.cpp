@@ -48,8 +48,9 @@
 #include "llvm/Support/FormattedStream.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/MemoryBuffer.h"
+#include "llvm/Config/llvm-config.h"
 
-#if HAVE_LLVM < 0x400
+#if LLVM_VERSION_MAJOR < 4
 #include "llvm/Bitcode/ReaderWriter.h"
 #else
 #include "llvm/Bitcode/BitcodeWriter.h"
@@ -152,10 +153,18 @@ JitManager::JitManager(uint32_t simdWidth, const char *arch, const char* core)
     mInt64Ty = Type::getInt64Ty(mContext);   // int type
 
     // fetch function signature
+#if USE_SIMD16_SHADERS
+    // typedef void(__cdecl *PFN_FETCH_FUNC)(SWR_FETCH_CONTEXT& fetchInfo, simd16vertex& out);
+#else
     // typedef void(__cdecl *PFN_FETCH_FUNC)(SWR_FETCH_CONTEXT& fetchInfo, simdvertex& out);
+#endif
     std::vector<Type*> fsArgs;
     fsArgs.push_back(PointerType::get(Gen_SWR_FETCH_CONTEXT(this), 0));
+#if USE_SIMD16_SHADERS
+    fsArgs.push_back(PointerType::get(Gen_simd16vertex(this), 0));
+#else
     fsArgs.push_back(PointerType::get(Gen_simdvertex(this), 0));
+#endif
 
     mFetchShaderTy = FunctionType::get(Type::getVoidTy(mContext), fsArgs, false);
 
@@ -165,6 +174,14 @@ JitManager::JitManager(uint32_t simdWidth, const char *arch, const char* core)
     mSimdVectorTy = ArrayType::get(mSimtFP32Ty, 4);
     mSimdVectorInt32Ty = ArrayType::get(mSimtInt32Ty, 4);
 
+#if USE_SIMD16_SHADERS
+    mSimd16FP32Ty = ArrayType::get(mSimtFP32Ty, 2);
+    mSimd16Int32Ty = ArrayType::get(mSimtInt32Ty, 2);
+
+    mSimd16VectorFP32Ty = ArrayType::get(mSimd16FP32Ty, 4);
+    mSimd16VectorInt32Ty = ArrayType::get(mSimd16Int32Ty, 4);
+
+#endif
 #if defined(_WIN32)
     // explicitly instantiate used symbols from potentially staticly linked libs
     sys::DynamicLibrary::AddSymbol("exp2f", &exp2f);
@@ -215,8 +232,8 @@ void JitManager::DumpAsm(Function* pFunction, const char* fileName)
 
 #if defined(_WIN32)
         DWORD pid = GetCurrentProcessId();
-        TCHAR procname[MAX_PATH];
-        GetModuleFileName(NULL, procname, MAX_PATH);
+        char procname[MAX_PATH];
+        GetModuleFileNameA(NULL, procname, MAX_PATH);
         const char* pBaseName = strrchr(procname, '\\');
         std::stringstream outDir;
         outDir << JITTER_OUTPUT_DIR << pBaseName << "_" << pid << std::ends;
@@ -253,8 +270,8 @@ void JitManager::DumpToFile(Function *f, const char *fileName)
     {
 #if defined(_WIN32)
         DWORD pid = GetCurrentProcessId();
-        TCHAR procname[MAX_PATH];
-        GetModuleFileName(NULL, procname, MAX_PATH);
+        char procname[MAX_PATH];
+        GetModuleFileNameA(NULL, procname, MAX_PATH);
         const char* pBaseName = strrchr(procname, '\\');
         std::stringstream outDir;
         outDir << JITTER_OUTPUT_DIR << pBaseName << "_" << pid << std::ends;
@@ -280,10 +297,10 @@ void JitManager::DumpToFile(Function *f, const char *fileName)
 #endif
         fd.flush();
 
-        //raw_fd_ostream fd_cfg(fName, EC, llvm::sys::fs::F_Text);
-        //WriteGraph(fd_cfg, (const Function*)f);
+        raw_fd_ostream fd_cfg(fName, EC, llvm::sys::fs::F_Text);
+        WriteGraph(fd_cfg, (const Function*)f);
 
-        //fd_cfg.flush();
+        fd_cfg.flush();
     }
 }
 

@@ -1497,9 +1497,9 @@ generate_code(struct brw_codegen *p,
               const struct cfg_t *cfg)
 {
    const struct gen_device_info *devinfo = p->devinfo;
-   const char *stage_abbrev = _mesa_shader_stage_to_abbrev(nir->stage);
+   const char *stage_abbrev = _mesa_shader_stage_to_abbrev(nir->info.stage);
    bool debug_flag = INTEL_DEBUG &
-      intel_debug_flag_for_shader_stage(nir->stage);
+      intel_debug_flag_for_shader_stage(nir->info.stage);
    struct annotation_info annotation;
    memset(&annotation, 0, sizeof(annotation));
    int spill_count = 0, fill_count = 0;
@@ -1646,27 +1646,25 @@ generate_code(struct brw_codegen *p,
 
       case BRW_OPCODE_BFREV:
          assert(devinfo->gen >= 7);
-         /* BFREV only supports UD type for src and dst. */
          brw_BFREV(p, retype(dst, BRW_REGISTER_TYPE_UD),
                    retype(src[0], BRW_REGISTER_TYPE_UD));
          break;
       case BRW_OPCODE_FBH:
          assert(devinfo->gen >= 7);
-         /* FBH only supports UD type for dst. */
-         brw_FBH(p, retype(dst, BRW_REGISTER_TYPE_UD), src[0]);
+         brw_FBH(p, retype(dst, src[0].type), src[0]);
          break;
       case BRW_OPCODE_FBL:
          assert(devinfo->gen >= 7);
-         /* FBL only supports UD type for dst. */
-         brw_FBL(p, retype(dst, BRW_REGISTER_TYPE_UD), src[0]);
+         brw_FBL(p, retype(dst, BRW_REGISTER_TYPE_UD),
+                 retype(src[0], BRW_REGISTER_TYPE_UD));
          break;
       case BRW_OPCODE_LZD:
          brw_LZD(p, dst, src[0]);
          break;
       case BRW_OPCODE_CBIT:
          assert(devinfo->gen >= 7);
-         /* CBIT only supports UD type for dst. */
-         brw_CBIT(p, retype(dst, BRW_REGISTER_TYPE_UD), src[0]);
+         brw_CBIT(p, retype(dst, BRW_REGISTER_TYPE_UD),
+                  retype(src[0], BRW_REGISTER_TYPE_UD));
          break;
       case BRW_OPCODE_ADDC:
          assert(devinfo->gen >= 7);
@@ -1772,7 +1770,7 @@ generate_code(struct brw_codegen *p,
       case SHADER_OPCODE_TG4:
       case SHADER_OPCODE_TG4_OFFSET:
       case SHADER_OPCODE_SAMPLEINFO:
-         generate_tex(p, prog_data, nir->stage,
+         generate_tex(p, prog_data, nir->info.stage,
                       inst, dst, src[0], src[1], src[2]);
          break;
 
@@ -1912,7 +1910,7 @@ generate_code(struct brw_codegen *p,
 
       case SHADER_OPCODE_FIND_LIVE_CHANNEL: {
          const struct brw_reg mask =
-            brw_stage_has_packed_dispatch(devinfo, nir->stage,
+            brw_stage_has_packed_dispatch(devinfo, nir->info.stage,
                                           &prog_data->base) ? brw_imm_ud(~0u) :
             brw_dmask_reg();
          brw_find_live_channel(p, dst, mask);
@@ -2197,7 +2195,7 @@ generate_code(struct brw_codegen *p,
    if (unlikely(debug_flag)) {
       fprintf(stderr, "Native code for %s %s shader %s:\n",
               nir->info.label ? nir->info.label : "unnamed",
-              _mesa_shader_stage_to_string(nir->stage), nir->info.name);
+              _mesa_shader_stage_to_string(nir->info.stage), nir->info.name);
 
       fprintf(stderr, "%s vec4 shader: %d instructions. %d loops. %u cycles. %d:%d "
                       "spills:fills. Compacted %d to %d bytes (%.0f%%)\n",

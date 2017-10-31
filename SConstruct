@@ -152,8 +152,7 @@ try:
 except ImportError:
     pass
 else:
-    aliases = default_ans.keys()
-    aliases.sort()
+    aliases = sorted(default_ans.keys())
     env.Help('\n')
     env.Help('Recognized targets:\n')
     for alias in aliases:

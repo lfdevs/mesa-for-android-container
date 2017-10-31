@@ -89,7 +89,7 @@ namespace {
    create_context(std::string &r_log) {
       init_targets();
       std::unique_ptr<LLVMContext> ctx { new LLVMContext };
-      ctx->setDiagnosticHandler(diagnostic_handler, &r_log);
+      compat::set_diagnostic_handler(*ctx, diagnostic_handler, &r_log);
       return ctx;
    }
 

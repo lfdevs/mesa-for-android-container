@@ -41,7 +41,7 @@ _eglParseKHRImageAttribs(_EGLImageAttribs *attrs, _EGLDisplay *dpy,
    switch (attr) {
    case EGL_IMAGE_PRESERVED_KHR:
       if (!dpy->Extensions.KHR_image_base)
-          return EGL_BAD_PARAMETER;
+         return EGL_BAD_PARAMETER;
 
       attrs->ImagePreserved = val;
       break;
@@ -144,9 +144,9 @@ _eglParseEXTImageDmaBufImportAttribs(_EGLImageAttribs *attrs, _EGLDisplay *dpy,
       attrs->DMABufPlanePitches[0].IsPresent = EGL_TRUE;
       break;
    case EGL_DMA_BUF_PLANE1_FD_EXT:
-       attrs->DMABufPlaneFds[1].Value = val;
-       attrs->DMABufPlaneFds[1].IsPresent = EGL_TRUE;
-       break;
+      attrs->DMABufPlaneFds[1].Value = val;
+      attrs->DMABufPlaneFds[1].IsPresent = EGL_TRUE;
+      break;
    case EGL_DMA_BUF_PLANE1_OFFSET_EXT:
       attrs->DMABufPlaneOffsets[1].Value = val;
       attrs->DMABufPlaneOffsets[1].IsPresent = EGL_TRUE;
@@ -288,30 +288,30 @@ _eglParseImageAttribList(_EGLImageAttribs *attrs, _EGLDisplay *dpy,
 
       err = _eglParseKHRImageAttribs(attrs, dpy, attr, val);
       if (err == EGL_SUCCESS)
-          continue;
+         continue;
 
       err = _eglParseMESADrmImageAttribs(attrs, dpy, attr, val);
       if (err == EGL_SUCCESS)
-          continue;
+         continue;
 
       err = _eglParseWLBindWaylandDisplayAttribs(attrs, dpy, attr, val);
       if (err == EGL_SUCCESS)
-          continue;
+         continue;
 
       err = _eglParseEXTImageDmaBufImportAttribs(attrs, dpy, attr, val);
       if (err == EGL_SUCCESS)
-          continue;
+         continue;
 
       /* EXT_image_dma_buf_import states that if invalid value is provided for
        * its attributes, we should return EGL_BAD_ATTRIBUTE.
        * Bail out ASAP, since follow-up calls can return another EGL_BAD error.
        */
       if (err == EGL_BAD_ATTRIBUTE)
-          return _eglError(err, __func__);
+         return _eglError(err, __func__);
 
       err = _eglParseEXTImageDmaBufImportModifiersAttribs(attrs, dpy, attr, val);
       if (err == EGL_SUCCESS)
-          continue;
+         continue;
 
       return _eglError(err, __func__);
    }

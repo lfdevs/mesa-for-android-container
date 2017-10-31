@@ -38,6 +38,10 @@
 #include <stdio.h>
 #include <inttypes.h>
 
+#ifndef AMDGPU_GEM_CREATE_VM_ALWAYS_VALID
+#define AMDGPU_GEM_CREATE_VM_ALWAYS_VALID (1 << 6)
+#endif
+
 /* Set to 1 for verbose output showing committed sparse buffer ranges. */
 #define DEBUG_SPARSE_COMMITS 0
 
@@ -167,10 +171,12 @@ void amdgpu_bo_destroy(struct pb_buffer *_buf)
 
    assert(bo->bo && "must not be called for slab entries");
 
-   mtx_lock(&bo->ws->global_bo_list_lock);
-   LIST_DEL(&bo->u.real.global_list_item);
-   bo->ws->num_buffers--;
-   mtx_unlock(&bo->ws->global_bo_list_lock);
+   if (bo->ws->debug_all_bos) {
+      mtx_lock(&bo->ws->global_bo_list_lock);
+      LIST_DEL(&bo->u.real.global_list_item);
+      bo->ws->num_buffers--;
+      mtx_unlock(&bo->ws->global_bo_list_lock);
+   }
 
    amdgpu_bo_va_op(bo->bo, 0, bo->base.size, bo->va, 0, AMDGPU_VA_OP_UNMAP);
    amdgpu_va_range_free(bo->u.real.va_handle);
@@ -360,10 +366,12 @@ static void amdgpu_add_buffer_to_global_list(struct amdgpu_winsys_bo *bo)
 
    assert(bo->bo);
 
-   mtx_lock(&ws->global_bo_list_lock);
-   LIST_ADDTAIL(&bo->u.real.global_list_item, &ws->global_bo_list);
-   ws->num_buffers++;
-   mtx_unlock(&ws->global_bo_list_lock);
+   if (ws->debug_all_bos) {
+      mtx_lock(&ws->global_bo_list_lock);
+      LIST_ADDTAIL(&bo->u.real.global_list_item, &ws->global_bo_list);
+      ws->num_buffers++;
+      mtx_unlock(&ws->global_bo_list_lock);
+   }
 }
 
 static struct amdgpu_winsys_bo *amdgpu_create_bo(struct amdgpu_winsys *ws,
@@ -402,6 +410,9 @@ static struct amdgpu_winsys_bo *amdgpu_create_bo(struct amdgpu_winsys *ws,
       request.flags |= AMDGPU_GEM_CREATE_NO_CPU_ACCESS;
    if (flags & RADEON_FLAG_GTT_WC)
       request.flags |= AMDGPU_GEM_CREATE_CPU_GTT_USWC;
+   if (flags & RADEON_FLAG_NO_INTERPROCESS_SHARING &&
+       ws->info.drm_minor >= 20)
+      request.flags |= AMDGPU_GEM_CREATE_VM_ALWAYS_VALID;
 
    r = amdgpu_bo_alloc(ws->dev, &request, &buf_handle);
    if (r) {
@@ -435,6 +446,7 @@ static struct amdgpu_winsys_bo *amdgpu_create_bo(struct amdgpu_winsys *ws,
    bo->u.real.va_handle = va_handle;
    bo->initial_domain = initial_domain;
    bo->unique_id = __sync_fetch_and_add(&ws->next_bo_unique_id, 1);
+   bo->is_local = !!(request.flags & AMDGPU_GEM_CREATE_VM_ALWAYS_VALID);
 
    if (initial_domain & RADEON_DOMAIN_VRAM)
       ws->allocated_vram += align64(size, ws->info.gart_page_size);
@@ -1134,7 +1146,7 @@ amdgpu_bo_create(struct radeon_winsys *rws,
 {
    struct amdgpu_winsys *ws = amdgpu_winsys(rws);
    struct amdgpu_winsys_bo *bo;
-   unsigned usage = 0, pb_cache_bucket;
+   unsigned usage = 0, pb_cache_bucket = 0;
 
    /* VRAM implies WC. This is not optional. */
    assert(!(domain & RADEON_DOMAIN_VRAM) || flags & RADEON_FLAG_GTT_WC);
@@ -1189,19 +1201,23 @@ no_slab:
    size = align64(size, ws->info.gart_page_size);
    alignment = align(alignment, ws->info.gart_page_size);
 
-   int heap = radeon_get_heap_index(domain, flags);
-   assert(heap >= 0 && heap < RADEON_MAX_CACHED_HEAPS);
-   usage = 1 << heap; /* Only set one usage bit for each heap. */
+   bool use_reusable_pool = flags & RADEON_FLAG_NO_INTERPROCESS_SHARING;
 
-   pb_cache_bucket = radeon_get_pb_cache_bucket_index(heap);
-   assert(pb_cache_bucket < ARRAY_SIZE(ws->bo_cache.buckets));
+   if (use_reusable_pool) {
+       int heap = radeon_get_heap_index(domain, flags);
+       assert(heap >= 0 && heap < RADEON_MAX_CACHED_HEAPS);
+       usage = 1 << heap; /* Only set one usage bit for each heap. */
 
-   /* Get a buffer from the cache. */
-   bo = (struct amdgpu_winsys_bo*)
-        pb_cache_reclaim_buffer(&ws->bo_cache, size, alignment, usage,
-                                pb_cache_bucket);
-   if (bo)
-      return &bo->base;
+       pb_cache_bucket = radeon_get_pb_cache_bucket_index(heap);
+       assert(pb_cache_bucket < ARRAY_SIZE(ws->bo_cache.buckets));
+
+       /* Get a buffer from the cache. */
+       bo = (struct amdgpu_winsys_bo*)
+            pb_cache_reclaim_buffer(&ws->bo_cache, size, alignment, usage,
+                                    pb_cache_bucket);
+       if (bo)
+          return &bo->base;
+   }
 
    /* Create a new one. */
    bo = amdgpu_create_bo(ws, size, alignment, usage, domain, flags,
@@ -1216,7 +1232,7 @@ no_slab:
          return NULL;
    }
 
-   bo->u.real.use_reusable_pool = true;
+   bo->u.real.use_reusable_pool = use_reusable_pool;
    return &bo->base;
 }
 

@@ -77,6 +77,7 @@ struct svga_compile_key
       unsigned light_twoside:1;
       unsigned front_ccw:1;
       unsigned white_fragments:1;
+      unsigned alpha_to_one:1;
       unsigned flatshade:1;
       unsigned pstipple:1;
       unsigned alpha_func:4;  /**< SVGA3D_CMP_x */

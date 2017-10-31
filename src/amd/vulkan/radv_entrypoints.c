@@ -189,6 +189,9 @@ static const char strings[] =
     "vkGetPhysicalDeviceXlibPresentationSupportKHR\0"
     "vkCreateXcbSurfaceKHR\0"
     "vkGetPhysicalDeviceXcbPresentationSupportKHR\0"
+    "vkCreateDebugReportCallbackEXT\0"
+    "vkDestroyDebugReportCallbackEXT\0"
+    "vkDebugReportMessageEXT\0"
     "vkCmdDrawIndirectCountAMD\0"
     "vkCmdDrawIndexedIndirectCountAMD\0"
     "vkGetPhysicalDeviceFeatures2KHR\0"
@@ -206,6 +209,8 @@ static const char strings[] =
     "vkGetPhysicalDeviceExternalSemaphorePropertiesKHR\0"
     "vkGetSemaphoreFdKHR\0"
     "vkImportSemaphoreFdKHR\0"
+    "vkBindBufferMemory2KHR\0"
+    "vkBindImageMemory2KHR\0"
     "vkCreateDescriptorUpdateTemplateKHR\0"
     "vkDestroyDescriptorUpdateTemplateKHR\0"
     "vkUpdateDescriptorSetWithTemplateKHR\0"
@@ -216,183 +221,188 @@ static const char strings[] =
 ;
 
 static const struct radv_entrypoint entrypoints[] = {
-    { 0, 0x38a581a6 },
-    { 17, 0x9bd21af2 },
-    { 35, 0x5787c327 },
-    { 62, 0xba013486 },
-    { 82, 0x3d2ae9ad },
-    { 104, 0x52fe22c9 },
-    { 134, 0x4e5fc88a },
-    { 175, 0xa90da4da },
-    { 211, 0x113e2f33 },
-    { 239, 0x3e54b398 },
-    { 275, 0xdd36a867 },
-    { 316, 0x85ed23f },
-    { 331, 0x1fbcc9cb },
-    { 347, 0x81f69d8 },
-    { 382, 0xeb27627e },
-    { 421, 0x2f8566e7 },
-    { 454, 0x5fd13eed },
-    { 491, 0xcc920d9a },
-    { 508, 0xfa4713ec },
-    { 522, 0x6f8fc2a5 },
-    { 538, 0xd46c5f24 },
-    { 555, 0x522b85d3 },
-    { 572, 0x8f6f838a },
-    { 585, 0xcb977bd8 },
-    { 597, 0x1a1a0e2f },
-    { 611, 0xff52f051 },
-    { 637, 0x1e115cca },
-    { 668, 0x46e38db5 },
-    { 696, 0xab98422a },
-    { 726, 0x6bcbdcb },
-    { 745, 0x916f1e63 },
-    { 774, 0x5caaae4a },
-    { 792, 0x15855f5b },
-    { 827, 0x272ef8ef },
-    { 874, 0xc3628a09 },
-    { 892, 0x958af968 },
-    { 906, 0xfc64ee3c },
-    { 921, 0x684781dc },
-    { 935, 0x5f391892 },
-    { 952, 0x19d64c81 },
-    { 968, 0xf2065e5b },
-    { 986, 0xcaab1faf },
-    { 1005, 0xe7188731 },
-    { 1019, 0x4df27c05 },
-    { 1034, 0x96d834b },
-    { 1051, 0x592ae5f5 },
-    { 1062, 0x6d373ba8 },
-    { 1075, 0x5edcd92b },
-    { 1093, 0x37819a7f },
-    { 1112, 0xbf3f2cb3 },
-    { 1134, 0x7d4282b9 },
-    { 1149, 0x94a07a45 },
-    { 1165, 0x925bd256 },
-    { 1184, 0x98b27962 },
-    { 1204, 0x652128c2 },
-    { 1218, 0xcbfb1d96 },
-    { 1233, 0x9163b686 },
-    { 1261, 0xdce077ff },
-    { 1279, 0xb5853953 },
-    { 1298, 0xa0d3cea2 },
-    { 1319, 0x2d77af6e },
-    { 1341, 0xcbf6489f },
-    { 1363, 0x4112a673 },
-    { 1386, 0x2092a349 },
-    { 1409, 0xc3499606 },
-    { 1431, 0x4b59f96d },
-    { 1457, 0xf70c85eb },
-    { 1482, 0x6aac68af },
-    { 1500, 0x451ef1ed },
-    { 1523, 0x9146f879 },
-    { 1547, 0x13cf03f },
-    { 1563, 0x3b645153 },
-    { 1580, 0x3c14cc74 },
-    { 1608, 0xa4227b08 },
-    { 1637, 0xfb95a8a4 },
-    { 1660, 0x47bdaf30 },
-    { 1684, 0x9bd85f5 },
-    { 1706, 0x4c449d3a },
-    { 1731, 0x7a1347b1 },
-    { 1752, 0xbfd090ae },
-    { 1775, 0x887a38c4 },
-    { 1795, 0xdc428e58 },
-    { 1816, 0x109a9c18 },
-    { 1835, 0x16f14324 },
-    { 1855, 0xa9820d22 },
-    { 1882, 0x820fe476 },
-    { 1902, 0xd5d83a0a },
-    { 1923, 0x6da9f7fd },
-    { 1942, 0x8c0c811a },
-    { 1967, 0xb9db2b91 },
-    { 1988, 0xc54f7327 },
-    { 2009, 0xaffb5725 },
-    { 2028, 0x847dc731 },
-    { 2049, 0x3af9fd84 },
-    { 2067, 0x53d6c2b },
-    { 2084, 0x48f28c7f },
-    { 2100, 0x32282165 },
-    { 2118, 0x30f14d07 },
-    { 2136, 0x1c989dfb },
-    { 2159, 0x7b3a8a63 },
-    { 2179, 0xa8f534e2 },
-    { 2206, 0xe7c4b134 },
-    { 2231, 0x83e2b024 },
-    { 2256, 0x28c7a5da },
-    { 2280, 0x4c22d870 },
-    { 2301, 0xa9c83f1d },
-    { 2324, 0x9912c1a1 },
-    { 2334, 0xbe5a8058 },
-    { 2351, 0xe9ac41bf },
-    { 2369, 0x94e7ed36 },
-    { 2394, 0xbd58e867 },
-    { 2408, 0xd6353005 },
-    { 2430, 0xc939a0da },
-    { 2446, 0x278effa9 },
-    { 2461, 0x331ebf89 },
-    { 2476, 0x929847e },
-    { 2499, 0x68cddbac },
-    { 2522, 0xd2986b5e },
-    { 2540, 0x5bdd2ae0 },
-    { 2556, 0xb4bc8d08 },
-    { 2577, 0x4f88e4ba },
-    { 2605, 0x93cb5cb8 },
-    { 2627, 0x671bb594 },
-    { 2645, 0xe257f075 },
-    { 2659, 0x4fccce28 },
-    { 2675, 0x3b9346b3 },
-    { 2691, 0x97fccfe8 },
-    { 2712, 0xf5064ea4 },
-    { 2728, 0xd556fd22 },
-    { 2742, 0x2f614082 },
-    { 2762, 0xec4d324c },
-    { 2782, 0xdee8c6d4 },
-    { 2808, 0xb1c6b468 },
-    { 2827, 0xcb7a58e3 },
-    { 2848, 0x2eeec2f9 },
-    { 2865, 0xdcdb0235 },
-    { 2884, 0x9eaabe40 },
-    { 2905, 0xf204ce7d },
-    { 2925, 0x1a687885 },
-    { 2962, 0x77890558 },
-    { 3004, 0xe32227c8 },
-    { 3041, 0x31c3cbd1 },
-    { 3083, 0xcdefcaa8 },
-    { 3104, 0x5a93ab74 },
-    { 3126, 0x57695f28 },
-    { 3150, 0xc3fedb2e },
-    { 3172, 0xfc5fb6ce },
-    { 3190, 0x2b2a4b79 },
-    { 3216, 0x84e085ac },
-    { 3265, 0xa693bc66 },
-    { 3288, 0x34a063ab },
-    { 3334, 0xc5e5b106 },
-    { 3356, 0x41782cb9 },
-    { 3401, 0xe5ad0a50 },
-    { 3427, 0xc86e9287 },
-    { 3460, 0x6a9a3636 },
-    { 3492, 0xcd15838c },
-    { 3526, 0x9099cbbb },
-    { 3566, 0x102ff7ea },
-    { 3611, 0x5ceb2bed },
-    { 3656, 0xc8c3da3d },
-    { 3696, 0x8746ed72 },
-    { 3747, 0xf17232a1 },
-    { 3773, 0x51177c8d },
-    { 3794, 0xee68b389 },
-    { 3841, 0x503c14c5 },
-    { 3858, 0xb028a792 },
-    { 3885, 0x984c3fa7 },
-    { 3935, 0x3e0e9884 },
-    { 3955, 0x36337c05 },
-    { 3978, 0x5189488a },
-    { 4014, 0xaa83901e },
-    { 4051, 0x214ad230 },
-    { 4088, 0x3d528981 },
-    { 4126, 0x78dbe98d },
-    { 4160, 0x8de28366 },
-    { 4193, 0x3df40f5e },
+    [0] = { 0, 0x38a581a6 }, /* vkCreateInstance */
+    [1] = { 17, 0x9bd21af2 }, /* vkDestroyInstance */
+    [2] = { 35, 0x5787c327 }, /* vkEnumeratePhysicalDevices */
+    [3] = { 62, 0xba013486 }, /* vkGetDeviceProcAddr */
+    [4] = { 82, 0x3d2ae9ad }, /* vkGetInstanceProcAddr */
+    [5] = { 104, 0x52fe22c9 }, /* vkGetPhysicalDeviceProperties */
+    [6] = { 134, 0x4e5fc88a }, /* vkGetPhysicalDeviceQueueFamilyProperties */
+    [7] = { 175, 0xa90da4da }, /* vkGetPhysicalDeviceMemoryProperties */
+    [8] = { 211, 0x113e2f33 }, /* vkGetPhysicalDeviceFeatures */
+    [9] = { 239, 0x3e54b398 }, /* vkGetPhysicalDeviceFormatProperties */
+    [10] = { 275, 0xdd36a867 }, /* vkGetPhysicalDeviceImageFormatProperties */
+    [11] = { 316, 0x85ed23f }, /* vkCreateDevice */
+    [12] = { 331, 0x1fbcc9cb }, /* vkDestroyDevice */
+    [13] = { 347, 0x81f69d8 }, /* vkEnumerateInstanceLayerProperties */
+    [14] = { 382, 0xeb27627e }, /* vkEnumerateInstanceExtensionProperties */
+    [15] = { 421, 0x2f8566e7 }, /* vkEnumerateDeviceLayerProperties */
+    [16] = { 454, 0x5fd13eed }, /* vkEnumerateDeviceExtensionProperties */
+    [17] = { 491, 0xcc920d9a }, /* vkGetDeviceQueue */
+    [18] = { 508, 0xfa4713ec }, /* vkQueueSubmit */
+    [19] = { 522, 0x6f8fc2a5 }, /* vkQueueWaitIdle */
+    [20] = { 538, 0xd46c5f24 }, /* vkDeviceWaitIdle */
+    [21] = { 555, 0x522b85d3 }, /* vkAllocateMemory */
+    [22] = { 572, 0x8f6f838a }, /* vkFreeMemory */
+    [23] = { 585, 0xcb977bd8 }, /* vkMapMemory */
+    [24] = { 597, 0x1a1a0e2f }, /* vkUnmapMemory */
+    [25] = { 611, 0xff52f051 }, /* vkFlushMappedMemoryRanges */
+    [26] = { 637, 0x1e115cca }, /* vkInvalidateMappedMemoryRanges */
+    [27] = { 668, 0x46e38db5 }, /* vkGetDeviceMemoryCommitment */
+    [28] = { 696, 0xab98422a }, /* vkGetBufferMemoryRequirements */
+    [29] = { 726, 0x6bcbdcb }, /* vkBindBufferMemory */
+    [30] = { 745, 0x916f1e63 }, /* vkGetImageMemoryRequirements */
+    [31] = { 774, 0x5caaae4a }, /* vkBindImageMemory */
+    [32] = { 792, 0x15855f5b }, /* vkGetImageSparseMemoryRequirements */
+    [33] = { 827, 0x272ef8ef }, /* vkGetPhysicalDeviceSparseImageFormatProperties */
+    [34] = { 874, 0xc3628a09 }, /* vkQueueBindSparse */
+    [35] = { 892, 0x958af968 }, /* vkCreateFence */
+    [36] = { 906, 0xfc64ee3c }, /* vkDestroyFence */
+    [37] = { 921, 0x684781dc }, /* vkResetFences */
+    [38] = { 935, 0x5f391892 }, /* vkGetFenceStatus */
+    [39] = { 952, 0x19d64c81 }, /* vkWaitForFences */
+    [40] = { 968, 0xf2065e5b }, /* vkCreateSemaphore */
+    [41] = { 986, 0xcaab1faf }, /* vkDestroySemaphore */
+    [42] = { 1005, 0xe7188731 }, /* vkCreateEvent */
+    [43] = { 1019, 0x4df27c05 }, /* vkDestroyEvent */
+    [44] = { 1034, 0x96d834b }, /* vkGetEventStatus */
+    [45] = { 1051, 0x592ae5f5 }, /* vkSetEvent */
+    [46] = { 1062, 0x6d373ba8 }, /* vkResetEvent */
+    [47] = { 1075, 0x5edcd92b }, /* vkCreateQueryPool */
+    [48] = { 1093, 0x37819a7f }, /* vkDestroyQueryPool */
+    [49] = { 1112, 0xbf3f2cb3 }, /* vkGetQueryPoolResults */
+    [50] = { 1134, 0x7d4282b9 }, /* vkCreateBuffer */
+    [51] = { 1149, 0x94a07a45 }, /* vkDestroyBuffer */
+    [52] = { 1165, 0x925bd256 }, /* vkCreateBufferView */
+    [53] = { 1184, 0x98b27962 }, /* vkDestroyBufferView */
+    [54] = { 1204, 0x652128c2 }, /* vkCreateImage */
+    [55] = { 1218, 0xcbfb1d96 }, /* vkDestroyImage */
+    [56] = { 1233, 0x9163b686 }, /* vkGetImageSubresourceLayout */
+    [57] = { 1261, 0xdce077ff }, /* vkCreateImageView */
+    [58] = { 1279, 0xb5853953 }, /* vkDestroyImageView */
+    [59] = { 1298, 0xa0d3cea2 }, /* vkCreateShaderModule */
+    [60] = { 1319, 0x2d77af6e }, /* vkDestroyShaderModule */
+    [61] = { 1341, 0xcbf6489f }, /* vkCreatePipelineCache */
+    [62] = { 1363, 0x4112a673 }, /* vkDestroyPipelineCache */
+    [63] = { 1386, 0x2092a349 }, /* vkGetPipelineCacheData */
+    [64] = { 1409, 0xc3499606 }, /* vkMergePipelineCaches */
+    [65] = { 1431, 0x4b59f96d }, /* vkCreateGraphicsPipelines */
+    [66] = { 1457, 0xf70c85eb }, /* vkCreateComputePipelines */
+    [67] = { 1482, 0x6aac68af }, /* vkDestroyPipeline */
+    [68] = { 1500, 0x451ef1ed }, /* vkCreatePipelineLayout */
+    [69] = { 1523, 0x9146f879 }, /* vkDestroyPipelineLayout */
+    [70] = { 1547, 0x13cf03f }, /* vkCreateSampler */
+    [71] = { 1563, 0x3b645153 }, /* vkDestroySampler */
+    [72] = { 1580, 0x3c14cc74 }, /* vkCreateDescriptorSetLayout */
+    [73] = { 1608, 0xa4227b08 }, /* vkDestroyDescriptorSetLayout */
+    [74] = { 1637, 0xfb95a8a4 }, /* vkCreateDescriptorPool */
+    [75] = { 1660, 0x47bdaf30 }, /* vkDestroyDescriptorPool */
+    [76] = { 1684, 0x9bd85f5 }, /* vkResetDescriptorPool */
+    [77] = { 1706, 0x4c449d3a }, /* vkAllocateDescriptorSets */
+    [78] = { 1731, 0x7a1347b1 }, /* vkFreeDescriptorSets */
+    [79] = { 1752, 0xbfd090ae }, /* vkUpdateDescriptorSets */
+    [80] = { 1775, 0x887a38c4 }, /* vkCreateFramebuffer */
+    [81] = { 1795, 0xdc428e58 }, /* vkDestroyFramebuffer */
+    [82] = { 1816, 0x109a9c18 }, /* vkCreateRenderPass */
+    [83] = { 1835, 0x16f14324 }, /* vkDestroyRenderPass */
+    [84] = { 1855, 0xa9820d22 }, /* vkGetRenderAreaGranularity */
+    [85] = { 1882, 0x820fe476 }, /* vkCreateCommandPool */
+    [86] = { 1902, 0xd5d83a0a }, /* vkDestroyCommandPool */
+    [87] = { 1923, 0x6da9f7fd }, /* vkResetCommandPool */
+    [88] = { 1942, 0x8c0c811a }, /* vkAllocateCommandBuffers */
+    [89] = { 1967, 0xb9db2b91 }, /* vkFreeCommandBuffers */
+    [90] = { 1988, 0xc54f7327 }, /* vkBeginCommandBuffer */
+    [91] = { 2009, 0xaffb5725 }, /* vkEndCommandBuffer */
+    [92] = { 2028, 0x847dc731 }, /* vkResetCommandBuffer */
+    [93] = { 2049, 0x3af9fd84 }, /* vkCmdBindPipeline */
+    [94] = { 2067, 0x53d6c2b }, /* vkCmdSetViewport */
+    [95] = { 2084, 0x48f28c7f }, /* vkCmdSetScissor */
+    [96] = { 2100, 0x32282165 }, /* vkCmdSetLineWidth */
+    [97] = { 2118, 0x30f14d07 }, /* vkCmdSetDepthBias */
+    [98] = { 2136, 0x1c989dfb }, /* vkCmdSetBlendConstants */
+    [99] = { 2159, 0x7b3a8a63 }, /* vkCmdSetDepthBounds */
+    [100] = { 2179, 0xa8f534e2 }, /* vkCmdSetStencilCompareMask */
+    [101] = { 2206, 0xe7c4b134 }, /* vkCmdSetStencilWriteMask */
+    [102] = { 2231, 0x83e2b024 }, /* vkCmdSetStencilReference */
+    [103] = { 2256, 0x28c7a5da }, /* vkCmdBindDescriptorSets */
+    [104] = { 2280, 0x4c22d870 }, /* vkCmdBindIndexBuffer */
+    [105] = { 2301, 0xa9c83f1d }, /* vkCmdBindVertexBuffers */
+    [106] = { 2324, 0x9912c1a1 }, /* vkCmdDraw */
+    [107] = { 2334, 0xbe5a8058 }, /* vkCmdDrawIndexed */
+    [108] = { 2351, 0xe9ac41bf }, /* vkCmdDrawIndirect */
+    [109] = { 2369, 0x94e7ed36 }, /* vkCmdDrawIndexedIndirect */
+    [110] = { 2394, 0xbd58e867 }, /* vkCmdDispatch */
+    [111] = { 2408, 0xd6353005 }, /* vkCmdDispatchIndirect */
+    [112] = { 2430, 0xc939a0da }, /* vkCmdCopyBuffer */
+    [113] = { 2446, 0x278effa9 }, /* vkCmdCopyImage */
+    [114] = { 2461, 0x331ebf89 }, /* vkCmdBlitImage */
+    [115] = { 2476, 0x929847e }, /* vkCmdCopyBufferToImage */
+    [116] = { 2499, 0x68cddbac }, /* vkCmdCopyImageToBuffer */
+    [117] = { 2522, 0xd2986b5e }, /* vkCmdUpdateBuffer */
+    [118] = { 2540, 0x5bdd2ae0 }, /* vkCmdFillBuffer */
+    [119] = { 2556, 0xb4bc8d08 }, /* vkCmdClearColorImage */
+    [120] = { 2577, 0x4f88e4ba }, /* vkCmdClearDepthStencilImage */
+    [121] = { 2605, 0x93cb5cb8 }, /* vkCmdClearAttachments */
+    [122] = { 2627, 0x671bb594 }, /* vkCmdResolveImage */
+    [123] = { 2645, 0xe257f075 }, /* vkCmdSetEvent */
+    [124] = { 2659, 0x4fccce28 }, /* vkCmdResetEvent */
+    [125] = { 2675, 0x3b9346b3 }, /* vkCmdWaitEvents */
+    [126] = { 2691, 0x97fccfe8 }, /* vkCmdPipelineBarrier */
+    [127] = { 2712, 0xf5064ea4 }, /* vkCmdBeginQuery */
+    [128] = { 2728, 0xd556fd22 }, /* vkCmdEndQuery */
+    [129] = { 2742, 0x2f614082 }, /* vkCmdResetQueryPool */
+    [130] = { 2762, 0xec4d324c }, /* vkCmdWriteTimestamp */
+    [131] = { 2782, 0xdee8c6d4 }, /* vkCmdCopyQueryPoolResults */
+    [132] = { 2808, 0xb1c6b468 }, /* vkCmdPushConstants */
+    [133] = { 2827, 0xcb7a58e3 }, /* vkCmdBeginRenderPass */
+    [134] = { 2848, 0x2eeec2f9 }, /* vkCmdNextSubpass */
+    [135] = { 2865, 0xdcdb0235 }, /* vkCmdEndRenderPass */
+    [136] = { 2884, 0x9eaabe40 }, /* vkCmdExecuteCommands */
+    [137] = { 2905, 0xf204ce7d }, /* vkDestroySurfaceKHR */
+    [138] = { 2925, 0x1a687885 }, /* vkGetPhysicalDeviceSurfaceSupportKHR */
+    [139] = { 2962, 0x77890558 }, /* vkGetPhysicalDeviceSurfaceCapabilitiesKHR */
+    [140] = { 3004, 0xe32227c8 }, /* vkGetPhysicalDeviceSurfaceFormatsKHR */
+    [141] = { 3041, 0x31c3cbd1 }, /* vkGetPhysicalDeviceSurfacePresentModesKHR */
+    [142] = { 3083, 0xcdefcaa8 }, /* vkCreateSwapchainKHR */
+    [143] = { 3104, 0x5a93ab74 }, /* vkDestroySwapchainKHR */
+    [144] = { 3126, 0x57695f28 }, /* vkGetSwapchainImagesKHR */
+    [145] = { 3150, 0xc3fedb2e }, /* vkAcquireNextImageKHR */
+    [146] = { 3172, 0xfc5fb6ce }, /* vkQueuePresentKHR */
+    [147] = { 3190, 0x2b2a4b79 }, /* vkCreateWaylandSurfaceKHR */
+    [148] = { 3216, 0x84e085ac }, /* vkGetPhysicalDeviceWaylandPresentationSupportKHR */
+    [149] = { 3265, 0xa693bc66 }, /* vkCreateXlibSurfaceKHR */
+    [150] = { 3288, 0x34a063ab }, /* vkGetPhysicalDeviceXlibPresentationSupportKHR */
+    [151] = { 3334, 0xc5e5b106 }, /* vkCreateXcbSurfaceKHR */
+    [152] = { 3356, 0x41782cb9 }, /* vkGetPhysicalDeviceXcbPresentationSupportKHR */
+    [153] = { 3401, 0x987ef56 }, /* vkCreateDebugReportCallbackEXT */
+    [154] = { 3432, 0x43d4c4e2 }, /* vkDestroyDebugReportCallbackEXT */
+    [155] = { 3464, 0xa4e75334 }, /* vkDebugReportMessageEXT */
+    [156] = { 3488, 0xe5ad0a50 }, /* vkCmdDrawIndirectCountAMD */
+    [157] = { 3514, 0xc86e9287 }, /* vkCmdDrawIndexedIndirectCountAMD */
+    [158] = { 3547, 0x6a9a3636 }, /* vkGetPhysicalDeviceFeatures2KHR */
+    [159] = { 3579, 0xcd15838c }, /* vkGetPhysicalDeviceProperties2KHR */
+    [160] = { 3613, 0x9099cbbb }, /* vkGetPhysicalDeviceFormatProperties2KHR */
+    [161] = { 3653, 0x102ff7ea }, /* vkGetPhysicalDeviceImageFormatProperties2KHR */
+    [162] = { 3698, 0x5ceb2bed }, /* vkGetPhysicalDeviceQueueFamilyProperties2KHR */
+    [163] = { 3743, 0xc8c3da3d }, /* vkGetPhysicalDeviceMemoryProperties2KHR */
+    [164] = { 3783, 0x8746ed72 }, /* vkGetPhysicalDeviceSparseImageFormatProperties2KHR */
+    [165] = { 3834, 0xf17232a1 }, /* vkCmdPushDescriptorSetKHR */
+    [166] = { 3860, 0x51177c8d }, /* vkTrimCommandPoolKHR */
+    [167] = { 3881, 0xee68b389 }, /* vkGetPhysicalDeviceExternalBufferPropertiesKHR */
+    [168] = { 3928, 0x503c14c5 }, /* vkGetMemoryFdKHR */
+    [169] = { 3945, 0xb028a792 }, /* vkGetMemoryFdPropertiesKHR */
+    [170] = { 3972, 0x984c3fa7 }, /* vkGetPhysicalDeviceExternalSemaphorePropertiesKHR */
+    [171] = { 4022, 0x3e0e9884 }, /* vkGetSemaphoreFdKHR */
+    [172] = { 4042, 0x36337c05 }, /* vkImportSemaphoreFdKHR */
+    [173] = { 4065, 0x6878d3ce }, /* vkBindBufferMemory2KHR */
+    [174] = { 4088, 0xf18729ad }, /* vkBindImageMemory2KHR */
+    [175] = { 4110, 0x5189488a }, /* vkCreateDescriptorUpdateTemplateKHR */
+    [176] = { 4146, 0xaa83901e }, /* vkDestroyDescriptorUpdateTemplateKHR */
+    [177] = { 4183, 0x214ad230 }, /* vkUpdateDescriptorSetWithTemplateKHR */
+    [178] = { 4220, 0x3d528981 }, /* vkCmdPushDescriptorSetWithTemplateKHR */
+    [179] = { 4258, 0x78dbe98d }, /* vkGetBufferMemoryRequirements2KHR */
+    [180] = { 4292, 0x8de28366 }, /* vkGetImageMemoryRequirements2KHR */
+    [181] = { 4325, 0x3df40f5e }, /* vkGetImageSparseMemoryRequirements2KHR */
 };
 
 /* Weak aliases for all potential implementations. These will resolve to
@@ -565,6 +575,9 @@ static const struct radv_entrypoint entrypoints[] = {
 #ifdef VK_USE_PLATFORM_XCB_KHR
     VkBool32 radv_GetPhysicalDeviceXcbPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, xcb_connection_t* connection, xcb_visualid_t visual_id) __attribute__ ((weak));
 #endif // VK_USE_PLATFORM_XCB_KHR
+    VkResult radv_CreateDebugReportCallbackEXT(VkInstance instance, const VkDebugReportCallbackCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugReportCallbackEXT* pCallback) __attribute__ ((weak));
+    void radv_DestroyDebugReportCallbackEXT(VkInstance instance, VkDebugReportCallbackEXT callback, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
+    void radv_DebugReportMessageEXT(VkInstance instance, VkDebugReportFlagsEXT flags, VkDebugReportObjectTypeEXT objectType, uint64_t object, size_t location, int32_t messageCode, const char* pLayerPrefix, const char* pMessage) __attribute__ ((weak));
     void radv_CmdDrawIndirectCountAMD(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, VkBuffer countBuffer, VkDeviceSize countBufferOffset, uint32_t maxDrawCount, uint32_t stride) __attribute__ ((weak));
     void radv_CmdDrawIndexedIndirectCountAMD(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, VkBuffer countBuffer, VkDeviceSize countBufferOffset, uint32_t maxDrawCount, uint32_t stride) __attribute__ ((weak));
     void radv_GetPhysicalDeviceFeatures2KHR(VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures2KHR* pFeatures) __attribute__ ((weak));
@@ -582,6 +595,8 @@ static const struct radv_entrypoint entrypoints[] = {
     void radv_GetPhysicalDeviceExternalSemaphorePropertiesKHR(VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalSemaphoreInfoKHR* pExternalSemaphoreInfo, VkExternalSemaphorePropertiesKHR* pExternalSemaphoreProperties) __attribute__ ((weak));
     VkResult radv_GetSemaphoreFdKHR(VkDevice device, const VkSemaphoreGetFdInfoKHR* pGetFdInfo, int* pFd) __attribute__ ((weak));
     VkResult radv_ImportSemaphoreFdKHR(VkDevice device, const VkImportSemaphoreFdInfoKHR* pImportSemaphoreFdInfo) __attribute__ ((weak));
+    VkResult radv_BindBufferMemory2KHR(VkDevice device, uint32_t bindInfoCount, const VkBindBufferMemoryInfoKHR* pBindInfos) __attribute__ ((weak));
+    VkResult radv_BindImageMemory2KHR(VkDevice device, uint32_t bindInfoCount, const VkBindImageMemoryInfoKHR* pBindInfos) __attribute__ ((weak));
     VkResult radv_CreateDescriptorUpdateTemplateKHR(VkDevice device, const VkDescriptorUpdateTemplateCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDescriptorUpdateTemplateKHR* pDescriptorUpdateTemplate) __attribute__ ((weak));
     void radv_DestroyDescriptorUpdateTemplateKHR(VkDevice device, VkDescriptorUpdateTemplateKHR descriptorUpdateTemplate, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
     void radv_UpdateDescriptorSetWithTemplateKHR(VkDevice device, VkDescriptorSet descriptorSet, VkDescriptorUpdateTemplateKHR descriptorUpdateTemplate, const void* pData) __attribute__ ((weak));
@@ -756,6 +771,9 @@ static const struct radv_entrypoint entrypoints[] = {
 #ifdef VK_USE_PLATFORM_XCB_KHR
     .GetPhysicalDeviceXcbPresentationSupportKHR = radv_GetPhysicalDeviceXcbPresentationSupportKHR,
 #endif // VK_USE_PLATFORM_XCB_KHR
+    .CreateDebugReportCallbackEXT = radv_CreateDebugReportCallbackEXT,
+    .DestroyDebugReportCallbackEXT = radv_DestroyDebugReportCallbackEXT,
+    .DebugReportMessageEXT = radv_DebugReportMessageEXT,
     .CmdDrawIndirectCountAMD = radv_CmdDrawIndirectCountAMD,
     .CmdDrawIndexedIndirectCountAMD = radv_CmdDrawIndexedIndirectCountAMD,
     .GetPhysicalDeviceFeatures2KHR = radv_GetPhysicalDeviceFeatures2KHR,
@@ -773,6 +791,8 @@ static const struct radv_entrypoint entrypoints[] = {
     .GetPhysicalDeviceExternalSemaphorePropertiesKHR = radv_GetPhysicalDeviceExternalSemaphorePropertiesKHR,
     .GetSemaphoreFdKHR = radv_GetSemaphoreFdKHR,
     .ImportSemaphoreFdKHR = radv_ImportSemaphoreFdKHR,
+    .BindBufferMemory2KHR = radv_BindBufferMemory2KHR,
+    .BindImageMemory2KHR = radv_BindImageMemory2KHR,
     .CreateDescriptorUpdateTemplateKHR = radv_CreateDescriptorUpdateTemplateKHR,
     .DestroyDescriptorUpdateTemplateKHR = radv_DestroyDescriptorUpdateTemplateKHR,
     .UpdateDescriptorSetWithTemplateKHR = radv_UpdateDescriptorSetWithTemplateKHR,
@@ -792,12 +812,12 @@ radv_resolve_entrypoint(uint32_t index)
  * size 256 entries
  * collisions entries:
  *     0     115
- *     1     32
- *     2     11
- *     3     8
+ *     1     34
+ *     2     12
+ *     3     9
  *     4     4
  *     5     1
- *     6     3
+ *     6     4
  *     7     1
  *     8     1
  *     9+     1
@@ -809,7 +829,7 @@ static const uint16_t map[] = {
       none,
       none,
       none,
-      0x00a6,
+      0x00a9,
       0x002b,
       0x0040,
       0x0061,
@@ -819,10 +839,10 @@ static const uint16_t map[] = {
       none,
       none,
       none,
-      0x00a4,
+      0x00a7,
       none,
       none,
-      0x00a5,
+      0x00a8,
       none,
       0x0067,
       none,
@@ -835,7 +855,7 @@ static const uint16_t map[] = {
       0x004c,
       none,
       0x0069,
-      0x00ab,
+      0x00b0,
       none,
       none,
       none,
@@ -862,21 +882,21 @@ static const uint16_t map[] = {
       0x006d,
       0x0053,
       none,
-      0x009f,
+      0x00a2,
       0x004d,
       0x0090,
       0x0024,
-      0x00a0,
+      0x00a3,
       0x005e,
       0x000b,
       0x0088,
       0x0091,
       none,
-      0x00ac,
+      0x00b1,
       0x005c,
       0x0033,
       none,
-      none,
+      0x009b,
       0x0087,
       0x003f,
       0x001f,
@@ -885,11 +905,11 @@ static const uint16_t map[] = {
       0x005a,
       none,
       none,
-      0x0099,
+      0x009c,
       0x0019,
       0x0046,
       0x003a,
-      none,
+      0x009a,
       none,
       0x0034,
       none,
@@ -897,7 +917,7 @@ static const uint16_t map[] = {
       none,
       none,
       0x0020,
-      0x009b,
+      0x009e,
       0x0066,
       0x0075,
       none,
@@ -910,7 +930,7 @@ static const uint16_t map[] = {
       0x0047,
       0x000a,
       0x0023,
-      none,
+      0x0099,
       none,
       0x006b,
       none,
@@ -918,13 +938,13 @@ static const uint16_t map[] = {
       0x0028,
       none,
       0x0068,
-      0x00b0,
-      0x00a1,
+      0x00b5,
+      0x00a4,
       0x003e,
       0x0048,
       0x007b,
       0x0055,
-      0x00a9,
+      0x00ac,
       none,
       0x0045,
       0x006e,
@@ -936,7 +956,7 @@ static const uint16_t map[] = {
       none,
       0x0027,
       0x0081,
-      0x00af,
+      0x00b4,
       0x005d,
       0x008a,
       0x0003,
@@ -946,7 +966,7 @@ static const uint16_t map[] = {
       0x0006,
       none,
       0x0093,
-      0x00a3,
+      0x00a6,
       none,
       none,
       none,
@@ -956,7 +976,7 @@ static const uint16_t map[] = {
       0x003c,
       none,
       0x0037,
-      0x00a8,
+      0x00ab,
       0x0009,
       0x0038,
       0x0011,
@@ -965,7 +985,7 @@ static const uint16_t map[] = {
       0x0016,
       none,
       0x003d,
-      0x00ae,
+      0x00b3,
       0x006a,
       0x003b,
       none,
@@ -981,11 +1001,11 @@ static const uint16_t map[] = {
       0x0004,
       0x004f,
       0x0029,
-      0x00aa,
+      0x00af,
       0x004e,
       0x0095,
       0x0031,
-      0x00a2,
+      0x00a5,
       0x001b,
       none,
       0x0073,
@@ -997,12 +1017,12 @@ static const uint16_t map[] = {
       none,
       none,
       0x006c,
-      0x009a,
+      0x009d,
       none,
       0x0036,
       none,
       0x0050,
-      0x009c,
+      0x009f,
       0x007d,
       none,
       0x008c,
@@ -1010,7 +1030,7 @@ static const uint16_t map[] = {
       0x001a,
       0x000c,
       0x0098,
-      0x00a7,
+      0x00aa,
       0x0092,
       none,
       none,
@@ -1030,16 +1050,16 @@ static const uint16_t map[] = {
       0x001d,
       none,
       0x0076,
-      0x009d,
+      0x00a0,
       0x0064,
       0x0085,
       none,
       none,
-      none,
+      0x00ae,
       0x000f,
       0x007e,
       none,
-      0x009e,
+      0x00a1,
       0x0017,
       0x0012,
       0x0010,
@@ -1048,8 +1068,8 @@ static const uint16_t map[] = {
       0x008b,
       0x0079,
       0x0001,
+      0x00b2,
       0x00ad,
-      none,
       0x002d,
       none,
       none,

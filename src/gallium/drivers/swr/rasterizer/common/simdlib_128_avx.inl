@@ -519,11 +519,26 @@ static SIMDINLINE Float SIMDCALL set_ps(float in3, float in2, float in1, float i
     return _mm_set_ps(in3, in2, in1, in0);
 }
 
+static SIMDINLINE Integer SIMDCALL set_epi32(int in3, int in2, int in1, int in0)
+{
+    return _mm_set_epi32(in3, in2, in1, in0);
+}
+
 template <int ImmT>
 static SIMDINLINE float SIMDCALL extract_ps(Float a)
 {
     int tmp = _mm_extract_ps(a, ImmT);
     return *reinterpret_cast<float*>(&tmp);
+}
+
+static SIMDINLINE Float SIMDCALL vmask_ps(int32_t mask)
+{
+    Integer vec = set1_epi32(mask);
+    const Integer bit = set_epi32(
+        0x08, 0x04, 0x02, 0x01);
+    vec = and_si(vec, bit);
+    vec = cmplt_epi32(setzero_si(), vec);
+    return castsi_ps(vec);
 }
 
 #undef SIMD_WRAPPER_1

@@ -132,7 +132,7 @@ confflags += \
 	--enable-shared-glapi \
 	--enable-texture-float \
 	--disable-xvmc \
-	--disable-omx \
+	--disable-omx-bellagio \
 	$(confflags_DIRECT_RENDERING) \
 	$(confflags_GBM) \
 	$(confflags_DRI3) \
@@ -227,7 +227,7 @@ override_dh_makeshlibs:
 	dh_makeshlibs -a -- -c4
 
 %:
-	dh $@ --with quilt,autoreconf \
+	dh $@ --with quilt,autoreconf,libva \
 		--parallel \
 		--builddirectory=build/
 

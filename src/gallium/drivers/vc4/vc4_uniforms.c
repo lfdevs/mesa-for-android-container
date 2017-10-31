@@ -149,6 +149,7 @@ write_texture_border_color(struct vc4_job *job,
                                         PIPE_FORMAT_R8G8B8A8_UNORM, &uc);
                         break;
                 case VC4_TEXTURE_TYPE_RGBA4444:
+                case VC4_TEXTURE_TYPE_RGBA5551:
                         util_pack_color(storage_color,
                                         PIPE_FORMAT_A8B8G8R8_UNORM, &uc);
                         break;

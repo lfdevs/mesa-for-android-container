@@ -1,5 +1,4 @@
 C_SOURCES := \
-	cayman_msaa.c \
 	r600_buffer_common.c \
 	r600_cs.h \
 	r600_gpu_load.c \
@@ -8,10 +7,8 @@ C_SOURCES := \
 	r600_pipe_common.h \
 	r600_query.c \
 	r600_query.h \
-	r600_streamout.c \
 	r600_test_dma.c \
 	r600_texture.c \
-	r600_viewport.c \
 	radeon_uvd.c \
 	radeon_uvd.h \
 	radeon_vcn_dec.c \

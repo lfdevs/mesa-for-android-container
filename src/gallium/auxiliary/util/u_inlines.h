@@ -536,7 +536,9 @@ util_query_clear_result(union pipe_query_result *result, unsigned type)
 {
    switch (type) {
    case PIPE_QUERY_OCCLUSION_PREDICATE:
+   case PIPE_QUERY_OCCLUSION_PREDICATE_CONSERVATIVE:
    case PIPE_QUERY_SO_OVERFLOW_PREDICATE:
+   case PIPE_QUERY_SO_OVERFLOW_ANY_PREDICATE:
    case PIPE_QUERY_GPU_FINISHED:
       result->b = FALSE;
       break;
@@ -562,7 +564,7 @@ util_query_clear_result(union pipe_query_result *result, unsigned type)
 }
 
 /** Convert PIPE_TEXTURE_x to TGSI_TEXTURE_x */
-static inline unsigned
+static inline enum tgsi_texture_type
 util_pipe_tex_to_tgsi_tex(enum pipe_texture_target pipe_tex_target,
                           unsigned nr_samples)
 {

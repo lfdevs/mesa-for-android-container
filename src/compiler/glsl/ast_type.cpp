@@ -186,10 +186,7 @@ validate_point_mode(MAYBE_UNUSED const ast_type_qualifier &qualifier,
 }
 
 static void
-merge_bindless_qualifier(YYLTYPE *loc,
-                         _mesa_glsl_parse_state *state,
-                         const ast_type_qualifier &qualifier,
-                         const ast_type_qualifier &new_qualifier)
+merge_bindless_qualifier(_mesa_glsl_parse_state *state)
 {
    if (state->default_uniform_qualifier->flags.q.bindless_sampler) {
       state->bindless_sampler_specified = true;
@@ -484,7 +481,7 @@ ast_type_qualifier::merge_qualifier(YYLTYPE *loc,
        q.flags.q.bindless_image ||
        q.flags.q.bound_sampler ||
        q.flags.q.bound_image)
-      merge_bindless_qualifier(loc, state, *this, q);
+      merge_bindless_qualifier(state);
 
    return r;
 }
@@ -866,7 +863,9 @@ ast_layout_expression::process_qualifier_constant(struct _mesa_glsl_parse_state 
 
       ir_rvalue *const ir = const_expression->hir(&dummy_instructions, state);
 
-      ir_constant *const const_int = ir->constant_expression_value();
+      ir_constant *const const_int =
+         ir->constant_expression_value(ralloc_parent(ir));
+
       if (const_int == NULL || !const_int->type->is_integer()) {
          YYLTYPE loc = const_expression->get_location();
          _mesa_glsl_error(&loc, state, "%s must be an integral constant "
@@ -921,7 +920,8 @@ process_qualifier_constant(struct _mesa_glsl_parse_state *state,
 
    ir_rvalue *const ir = const_expression->hir(&dummy_instructions, state);
 
-   ir_constant *const const_int = ir->constant_expression_value();
+   ir_constant *const const_int =
+      ir->constant_expression_value(ralloc_parent(ir));
    if (const_int == NULL || !const_int->type->is_integer()) {
       _mesa_glsl_error(loc, state, "%s must be an integral constant "
                        "expression", qual_indentifier);

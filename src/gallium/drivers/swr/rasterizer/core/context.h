@@ -214,12 +214,12 @@ struct PA_STATE;
 
 // function signature for pipeline stages that execute after primitive assembly
 typedef void(*PFN_PROCESS_PRIMS)(DRAW_CONTEXT *pDC, PA_STATE& pa, uint32_t workerId, simdvector prims[], 
-    uint32_t primMask, simdscalari primID);
+    uint32_t primMask, simdscalari const &primID);
 
 #if ENABLE_AVX512_SIMD16
 // function signature for pipeline stages that execute after primitive assembly
 typedef void(SIMDCALL *PFN_PROCESS_PRIMS_SIMD16)(DRAW_CONTEXT *pDC, PA_STATE& pa, uint32_t workerId, simd16vector prims[],
-    uint32_t primMask, simd16scalari primID);
+    uint32_t primMask, simd16scalari const &primID);
 
 #endif
 OSALIGNLINE(struct) API_STATE
@@ -343,11 +343,11 @@ struct BarycentricCoeffs
 // pipeline function pointer types
 typedef void(*PFN_BACKEND_FUNC)(DRAW_CONTEXT*, uint32_t, uint32_t, uint32_t, SWR_TRIANGLE_DESC&, RenderOutputBuffers&);
 typedef void(*PFN_OUTPUT_MERGER)(SWR_PS_CONTEXT &, uint8_t* (&)[SWR_NUM_RENDERTARGETS], uint32_t, const SWR_BLEND_STATE*,
-                                 const PFN_BLEND_JIT_FUNC (&)[SWR_NUM_RENDERTARGETS], simdscalar&, simdscalar);
+                                 const PFN_BLEND_JIT_FUNC (&)[SWR_NUM_RENDERTARGETS], simdscalar&, simdscalar const &);
 typedef void(*PFN_CALC_PIXEL_BARYCENTRICS)(const BarycentricCoeffs&, SWR_PS_CONTEXT &);
 typedef void(*PFN_CALC_SAMPLE_BARYCENTRICS)(const BarycentricCoeffs&, SWR_PS_CONTEXT&);
 typedef void(*PFN_CALC_CENTROID_BARYCENTRICS)(const BarycentricCoeffs&, SWR_PS_CONTEXT &, const uint64_t *const, const uint32_t,
-                                              const simdscalar, const simdscalar);
+                                              simdscalar const &, simdscalar const &);
 
 struct BACKEND_FUNCS
 {
@@ -480,6 +480,8 @@ struct SWR_CONTEXT
 
     THREAD_POOL threadPool; // Thread pool associated with this context
     SWR_THREADING_INFO threadInfo;
+
+    uint32_t MAX_DRAWS_IN_FLIGHT;
 
     std::condition_variable FifosNotEmpty;
     std::mutex WaitLock;

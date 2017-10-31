@@ -45,22 +45,6 @@ safe_memcpy(void *dst, const void *src, size_t size)
  * queries
  */
 
-static struct dd_query *
-dd_query(struct pipe_query *query)
-{
-   return (struct dd_query *)query;
-}
-
-static struct pipe_query *
-dd_query_unwrap(struct pipe_query *query)
-{
-   if (query) {
-      return dd_query(query)->query;
-   } else {
-      return NULL;
-   }
-}
-
 static struct pipe_query *
 dd_context_create_query(struct pipe_context *_pipe, unsigned query_type,
                         unsigned index)
@@ -148,21 +132,6 @@ dd_context_get_query_result(struct pipe_context *_pipe,
    struct pipe_context *pipe = dd_context(_pipe)->pipe;
 
    return pipe->get_query_result(pipe, dd_query_unwrap(query), wait, result);
-}
-
-static void
-dd_context_get_query_result_resource(struct pipe_context *_pipe,
-                                     struct pipe_query *query,
-                                     boolean wait,
-                                     enum pipe_query_value_type result_type,
-                                     int index,
-                                     struct pipe_resource *resource,
-                                     unsigned offset)
-{
-   struct pipe_context *pipe = dd_context(_pipe)->pipe;
-
-   pipe->get_query_result_resource(pipe, dd_query_unwrap(query), wait,
-                                   result_type, index, resource, offset);
 }
 
 static void
@@ -614,6 +583,22 @@ dd_context_destroy(struct pipe_context *_pipe)
       pipe->transfer_unmap(pipe, dctx->fence_transfer);
       pipe_resource_reference(&dctx->fence, NULL);
    }
+
+   if (pipe->set_log_context) {
+      pipe->set_log_context(pipe, NULL);
+
+      if (dd_screen(dctx->base.screen)->mode == DD_DUMP_ALL_CALLS) {
+         FILE *f = dd_get_file_stream(dd_screen(dctx->base.screen), 0);
+         if (f) {
+            fprintf(f, "Remainder of driver log:\n\n");
+         }
+
+         u_log_new_page_print(&dctx->log, f);
+         fclose(f);
+      }
+   }
+   u_log_context_destroy(&dctx->log);
+
    pipe->destroy(pipe);
    FREE(dctx);
 }
@@ -847,7 +832,6 @@ dd_context_create(struct dd_screen *dscreen, struct pipe_context *pipe)
    CTX_INIT(begin_query);
    CTX_INIT(end_query);
    CTX_INIT(get_query_result);
-   CTX_INIT(get_query_result_resource);
    CTX_INIT(set_active_query_state);
    CTX_INIT(create_blend_state);
    CTX_INIT(bind_blend_state);
@@ -930,6 +914,10 @@ dd_context_create(struct dd_screen *dscreen, struct pipe_context *pipe)
    CTX_INIT(make_image_handle_resident);
 
    dd_init_draw_functions(dctx);
+
+   u_log_context_init(&dctx->log);
+   if (pipe->set_log_context)
+      pipe->set_log_context(pipe, &dctx->log);
 
    dctx->draw_state.sample_mask = ~0;
 

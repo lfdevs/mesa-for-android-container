@@ -28,6 +28,8 @@
 #include <string.h>
 #include <assert.h>
 
+#include "shader_enums.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -99,13 +101,6 @@ enum glsl_sampler_dim {
    GLSL_SAMPLER_DIM_MS,
    GLSL_SAMPLER_DIM_SUBPASS, /* for vulkan input attachments */
    GLSL_SAMPLER_DIM_SUBPASS_MS, /* for multisampled vulkan input attachments */
-};
-
-enum glsl_interface_packing {
-   GLSL_INTERFACE_PACKING_STD140,
-   GLSL_INTERFACE_PACKING_SHARED,
-   GLSL_INTERFACE_PACKING_PACKED,
-   GLSL_INTERFACE_PACKING_STD430
 };
 
 enum glsl_matrix_layout {
@@ -819,6 +814,27 @@ struct glsl_type {
    enum glsl_interface_packing get_interface_packing() const
    {
       return (enum glsl_interface_packing)interface_packing;
+   }
+
+   /**
+    * Get the type interface packing used internally. For shared and packing
+    * layouts this is implementation defined.
+    */
+   enum glsl_interface_packing get_internal_ifc_packing(bool std430_supported) const
+   {
+      enum glsl_interface_packing packing = this->get_interface_packing();
+      if (packing == GLSL_INTERFACE_PACKING_STD140 ||
+          (!std430_supported &&
+           (packing == GLSL_INTERFACE_PACKING_SHARED ||
+            packing == GLSL_INTERFACE_PACKING_PACKED))) {
+         return GLSL_INTERFACE_PACKING_STD140;
+      } else {
+         assert(packing == GLSL_INTERFACE_PACKING_STD430 ||
+                (std430_supported &&
+                 (packing == GLSL_INTERFACE_PACKING_SHARED ||
+                  packing == GLSL_INTERFACE_PACKING_PACKED)));
+         return GLSL_INTERFACE_PACKING_STD430;
+      }
    }
 
    /**

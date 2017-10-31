@@ -5,11 +5,11 @@
 #include "r300/r300_public.h"
 
 static struct pipe_screen *
-create_screen(int fd, unsigned flags)
+create_screen(int fd, const struct pipe_screen_config *config)
 {
    struct radeon_winsys *sws;
 
-   sws = radeon_drm_winsys_create(fd, flags, r300_screen_create);
+   sws = radeon_drm_winsys_create(fd, config, r300_screen_create);
    return sws ? debug_screen_wrap(sws->screen) : NULL;
 }
 

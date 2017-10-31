@@ -95,8 +95,8 @@ void brw_nir_analyze_boolean_resolves(nir_shader *nir);
 nir_shader *brw_preprocess_nir(const struct brw_compiler *compiler,
                                nir_shader *nir);
 
-bool brw_nir_lower_intrinsics(nir_shader *nir,
-                              struct brw_stage_prog_data *prog_data);
+bool brw_nir_lower_cs_intrinsics(nir_shader *nir,
+                                 struct brw_cs_prog_data *prog_data);
 void brw_nir_lower_vs_inputs(nir_shader *nir,
                              bool use_legacy_snorm_formula,
                              const uint8_t *vs_attrib_wa_flags);
@@ -134,12 +134,13 @@ enum brw_reg_type brw_type_for_nir_type(const struct gen_device_info *devinfo,
 
 enum glsl_base_type brw_glsl_base_type_for_nir_type(nir_alu_type type);
 
-void brw_nir_setup_glsl_uniforms(nir_shader *shader,
+void brw_nir_setup_glsl_uniforms(void *mem_ctx, nir_shader *shader,
                                  const struct gl_program *prog,
                                  struct brw_stage_prog_data *stage_prog_data,
                                  bool is_scalar);
 
-void brw_nir_setup_arb_uniforms(nir_shader *shader, struct gl_program *prog,
+void brw_nir_setup_arb_uniforms(void *mem_ctx, nir_shader *shader,
+                                struct gl_program *prog,
                                 struct brw_stage_prog_data *stage_prog_data);
 
 void brw_nir_analyze_ubo_ranges(const struct brw_compiler *compiler,
@@ -147,6 +148,10 @@ void brw_nir_analyze_ubo_ranges(const struct brw_compiler *compiler,
                                 struct brw_ubo_range out_ranges[4]);
 
 bool brw_nir_opt_peephole_ffma(nir_shader *shader);
+
+nir_shader *brw_nir_optimize(nir_shader *nir,
+                             const struct brw_compiler *compiler,
+                             bool is_scalar);
 
 #define BRW_NIR_FRAG_OUTPUT_INDEX_SHIFT 0
 #define BRW_NIR_FRAG_OUTPUT_INDEX_MASK INTEL_MASK(0, 0)

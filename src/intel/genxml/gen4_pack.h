@@ -902,7 +902,12 @@ struct GEN4_RENDER_SURFACE_STATE {
 #define READ_WRITE                               1
    uint32_t                             MediaBoundaryPixelMode;
 #define NORMAL_MODE                              0
-   uint32_t                             CubeFaceEnables;
+   bool                                 CubeFaceEnablePositiveZ;
+   bool                                 CubeFaceEnableNegativeZ;
+   bool                                 CubeFaceEnablePositiveY;
+   bool                                 CubeFaceEnableNegativeY;
+   bool                                 CubeFaceEnablePositiveX;
+   bool                                 CubeFaceEnableNegativeX;
    __gen_address_type                   SurfaceBaseAddress;
    uint32_t                             Height;
    uint32_t                             Width;
@@ -936,7 +941,12 @@ GEN4_RENDER_SURFACE_STATE_pack(__attribute__((unused)) __gen_user_data *data,
       __gen_uint(values->MIPMapLayoutMode, 10, 10) |
       __gen_uint(values->RenderCacheReadWriteMode, 8, 8) |
       __gen_uint(values->MediaBoundaryPixelMode, 6, 7) |
-      __gen_uint(values->CubeFaceEnables, 0, 5);
+      __gen_uint(values->CubeFaceEnablePositiveZ, 0, 0) |
+      __gen_uint(values->CubeFaceEnableNegativeZ, 1, 1) |
+      __gen_uint(values->CubeFaceEnablePositiveY, 2, 2) |
+      __gen_uint(values->CubeFaceEnableNegativeY, 3, 3) |
+      __gen_uint(values->CubeFaceEnablePositiveX, 4, 4) |
+      __gen_uint(values->CubeFaceEnableNegativeX, 5, 5);
 
    dw[1] = __gen_combine_address(data, &dw[1], values->SurfaceBaseAddress, 0);
 
@@ -1034,7 +1044,7 @@ struct GEN4_SAMPLER_STATE {
    enum GEN4_Texture_Coordinate_Mode    TCXAddressControlMode;
    enum GEN4_Texture_Coordinate_Mode    TCYAddressControlMode;
    enum GEN4_Texture_Coordinate_Mode    TCZAddressControlMode;
-   uint64_t                             BorderColorPointer;
+   __gen_address_type                   BorderColorPointer;
    bool                                 ChromaKeyEnable;
    uint32_t                             ChromaKeyIndex;
    uint32_t                             ChromaKeyMode;
@@ -1082,8 +1092,7 @@ GEN4_SAMPLER_STATE_pack(__attribute__((unused)) __gen_user_data *data,
       __gen_uint(values->TCYAddressControlMode, 3, 5) |
       __gen_uint(values->TCZAddressControlMode, 0, 2);
 
-   dw[2] =
-      __gen_offset(values->BorderColorPointer, 5, 31);
+   dw[2] = __gen_combine_address(data, &dw[2], values->BorderColorPointer, 0);
 
    dw[3] =
       __gen_uint(values->ChromaKeyEnable, 25, 25) |

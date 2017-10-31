@@ -299,6 +299,7 @@ lp_build_coord_repeat_npot_linear(struct lp_build_sample_context *bld,
  */
 static void
 lp_build_sample_wrap_linear(struct lp_build_sample_context *bld,
+                            boolean is_gather,
                             LLVMValueRef coord,
                             LLVMValueRef length,
                             LLVMValueRef length_f,
@@ -388,13 +389,29 @@ lp_build_sample_wrap_linear(struct lp_build_sample_context *bld,
          /* clamp to length max */
          coord = lp_build_min_ext(coord_bld, coord, length_f,
                                   GALLIVM_NAN_RETURN_OTHER_SECOND_NONNAN);
-         /* subtract 0.5 */
-         coord = lp_build_sub(coord_bld, coord, half);
-         /* clamp to [0, length - 0.5] */
-         coord = lp_build_max(coord_bld, coord, coord_bld->zero);
-         /* convert to int, compute lerp weight */
-         lp_build_ifloor_fract(&abs_coord_bld, coord, &coord0, &weight);
-         coord1 = lp_build_add(int_coord_bld, coord0, int_coord_bld->one);
+         if (!is_gather) {
+            /* subtract 0.5 */
+            coord = lp_build_sub(coord_bld, coord, half);
+            /* clamp to [0, length - 0.5] */
+            coord = lp_build_max(coord_bld, coord, coord_bld->zero);
+            /* convert to int, compute lerp weight */
+            lp_build_ifloor_fract(&abs_coord_bld, coord, &coord0, &weight);
+            coord1 = lp_build_add(int_coord_bld, coord0, int_coord_bld->one);
+         } else {
+            /*
+             * The non-gather path will end up with coords 0, 1 if coord was
+             * smaller than 0.5 (with corresponding weight 0.0 so it doesn't
+             * really matter what the second coord is). But for gather, we
+             * really need to end up with coords 0, 0.
+             */
+            coord = lp_build_max(coord_bld, coord, coord_bld->zero);
+            coord0 = lp_build_sub(coord_bld, coord, half);
+            coord1 = lp_build_add(coord_bld, coord, half);
+            /* Values range ([-0.5, length_f - 0.5], [0.5, length_f + 0.5] */
+            coord0 = lp_build_itrunc(coord_bld, coord0);
+            coord1 = lp_build_itrunc(coord_bld, coord1);
+            weight = coord_bld->undef;
+         }
          /* coord1 = min(coord1, length-1) */
          coord1 = lp_build_min(int_coord_bld, coord1, length_minus_one);
          break;
@@ -424,6 +441,13 @@ lp_build_sample_wrap_linear(struct lp_build_sample_context *bld,
          coord = lp_build_add(coord_bld, coord, offset);
       }
       /* compute mirror function */
+      /*
+       * XXX: This looks incorrect wrt gather. Due to wrap specification,
+       * it is possible the first coord ends up larger than the second one.
+       * However, with our simplifications the coordinates will be swapped
+       * in this case. (Albeit some other api tests don't like it even
+       * with this fixed...)
+       */
       coord = lp_build_coord_mirror(bld, coord);
 
       /* scale coord to length */
@@ -474,6 +498,20 @@ lp_build_sample_wrap_linear(struct lp_build_sample_context *bld,
             offset = lp_build_int_to_float(coord_bld, offset);
             coord = lp_build_add(coord_bld, coord, offset);
          }
+         /*
+          * XXX: This looks incorrect wrt gather. Due to wrap specification,
+          * the first and second texel actually end up with "different order"
+          * for negative coords. For example, if the scaled coord would
+          * be -0.6, then the first coord should end up as 1
+          * (floor(-0.6 - 0.5) == -2, mirror makes that 1), the second as 0
+          * (floor(-0.6 - 0.5) + 1 == -1, mirror makes that 0).
+          * But with our simplifications the second coord will always be the
+          * larger one. The other two mirror_clamp modes have the same problem.
+          * Moreover, for coords close to zero we should end up with both
+          * coords being 0, but we will end up with coord1 being 1 instead
+          * (with bilinear filtering this is ok as the weight is 0.0) (this
+          * problem is specific to mirror_clamp_to_edge).
+          */
          coord = lp_build_abs(coord_bld, coord);
 
          /* clamp to length max */
@@ -929,7 +967,7 @@ lp_build_sample_image_linear(struct lp_build_sample_context *bld,
     */
 
    if (!seamless_cube_filter) {
-      lp_build_sample_wrap_linear(bld, coords[0], width_vec,
+      lp_build_sample_wrap_linear(bld, is_gather, coords[0], width_vec,
                                   flt_width_vec, offsets[0],
                                   bld->static_texture_state->pot_width,
                                   bld->static_sampler_state->wrap_s,
@@ -940,7 +978,7 @@ lp_build_sample_image_linear(struct lp_build_sample_context *bld,
       x11 = x01;
 
       if (dims >= 2) {
-         lp_build_sample_wrap_linear(bld, coords[1], height_vec,
+         lp_build_sample_wrap_linear(bld, is_gather, coords[1], height_vec,
                                      flt_height_vec, offsets[1],
                                      bld->static_texture_state->pot_height,
                                      bld->static_sampler_state->wrap_t,
@@ -951,7 +989,7 @@ lp_build_sample_image_linear(struct lp_build_sample_context *bld,
          y11 = y10;
 
          if (dims == 3) {
-            lp_build_sample_wrap_linear(bld, coords[2], depth_vec,
+            lp_build_sample_wrap_linear(bld, is_gather, coords[2], depth_vec,
                                         flt_depth_vec, offsets[2],
                                         bld->static_texture_state->pot_depth,
                                         bld->static_sampler_state->wrap_r,
@@ -1791,6 +1829,7 @@ lp_build_layer_coord(struct lp_build_sample_context *bld,
  */
 static void
 lp_build_sample_common(struct lp_build_sample_context *bld,
+                       boolean is_lodq,
                        unsigned texture_index,
                        unsigned sampler_index,
                        LLVMValueRef *coords,
@@ -1798,6 +1837,7 @@ lp_build_sample_common(struct lp_build_sample_context *bld,
                        LLVMValueRef lod_bias, /* optional */
                        LLVMValueRef explicit_lod, /* optional */
                        LLVMValueRef *lod_pos_or_zero,
+                       LLVMValueRef *lod,
                        LLVMValueRef *lod_fpart,
                        LLVMValueRef *ilevel0,
                        LLVMValueRef *ilevel1)
@@ -1870,15 +1910,44 @@ lp_build_sample_common(struct lp_build_sample_context *bld,
     * Compute the level of detail (float).
     */
    if (min_filter != mag_filter ||
-       mip_filter != PIPE_TEX_MIPFILTER_NONE) {
+       mip_filter != PIPE_TEX_MIPFILTER_NONE || is_lodq) {
       /* Need to compute lod either to choose mipmap levels or to
        * distinguish between minification/magnification with one mipmap level.
        */
-      lp_build_lod_selector(bld, texture_index, sampler_index,
+      lp_build_lod_selector(bld, is_lodq, texture_index, sampler_index,
                             coords[0], coords[1], coords[2], cube_rho,
                             derivs, lod_bias, explicit_lod,
-                            mip_filter,
+                            mip_filter, lod,
                             &lod_ipart, lod_fpart, lod_pos_or_zero);
+      if (is_lodq) {
+         LLVMValueRef last_level;
+         last_level = bld->dynamic_state->last_level(bld->dynamic_state,
+                                                     bld->gallivm,
+                                                     bld->context_ptr,
+                                                     texture_index);
+         first_level = bld->dynamic_state->first_level(bld->dynamic_state,
+                                                       bld->gallivm,
+                                                       bld->context_ptr,
+                                                       texture_index);
+         last_level = lp_build_sub(&bld->int_bld, last_level, first_level);
+         last_level = lp_build_int_to_float(&bld->float_bld, last_level);
+         last_level = lp_build_broadcast_scalar(&bld->lodf_bld, last_level);
+
+         switch (mip_filter) {
+         case PIPE_TEX_MIPFILTER_NONE:
+            *lod_fpart = bld->lodf_bld.zero;
+            break;
+         case PIPE_TEX_MIPFILTER_NEAREST:
+             *lod_fpart = lp_build_round(&bld->lodf_bld, *lod_fpart);
+             /* fallthrough */
+         case PIPE_TEX_MIPFILTER_LINEAR:
+            *lod_fpart = lp_build_clamp(&bld->lodf_bld, *lod_fpart,
+                                        bld->lodf_bld.zero, last_level);
+            break;
+         }
+         return;
+      }
+
    } else {
       lod_ipart = bld->lodi_bld.zero;
       *lod_pos_or_zero = bld->lodi_bld.zero;
@@ -2484,7 +2553,7 @@ lp_build_sample_soa_code(struct gallivm_state *gallivm,
    enum lp_sampler_op_type op_type;
    LLVMValueRef lod_bias = NULL;
    LLVMValueRef explicit_lod = NULL;
-   boolean op_is_tex;
+   boolean op_is_tex, op_is_lodq, op_is_gather;
 
    if (0) {
       enum pipe_format fmt = static_texture_state->format;
@@ -2499,6 +2568,8 @@ lp_build_sample_soa_code(struct gallivm_state *gallivm,
                  LP_SAMPLER_OP_TYPE_SHIFT;
 
    op_is_tex = op_type == LP_SAMPLER_OP_TEXTURE;
+   op_is_lodq = op_type == LP_SAMPLER_OP_LODQ;
+   op_is_gather = op_type == LP_SAMPLER_OP_GATHER;
 
    if (lod_control == LP_SAMPLER_LOD_BIAS) {
       lod_bias = lod;
@@ -2544,6 +2615,16 @@ lp_build_sample_soa_code(struct gallivm_state *gallivm,
    bld.format_desc = util_format_description(static_texture_state->format);
    bld.dims = dims;
 
+   if (gallivm_debug & GALLIVM_DEBUG_NO_QUAD_LOD || op_is_lodq) {
+      bld.no_quad_lod = TRUE;
+   }
+   if (gallivm_debug & GALLIVM_DEBUG_NO_RHO_APPROX || op_is_lodq) {
+      bld.no_rho_approx = TRUE;
+   }
+   if (gallivm_debug & GALLIVM_DEBUG_NO_BRILINEAR || op_is_lodq) {
+      bld.no_brilinear = TRUE;
+   }
+
    bld.vector_width = lp_type_width(type);
 
    bld.float_type = lp_type_float(32);
@@ -2573,12 +2654,13 @@ lp_build_sample_soa_code(struct gallivm_state *gallivm,
       bld.texel_type = lp_type_int_vec(type.width, type.width * type.length);
    }
 
-   if (!static_texture_state->level_zero_only) {
+   if (!static_texture_state->level_zero_only ||
+       !static_sampler_state->max_lod_pos || op_is_lodq) {
       derived_sampler_state.min_mip_filter = static_sampler_state->min_mip_filter;
    } else {
       derived_sampler_state.min_mip_filter = PIPE_TEX_MIPFILTER_NONE;
    }
-   if (op_type == LP_SAMPLER_OP_GATHER) {
+   if (op_is_gather) {
       /*
        * gather4 is exactly like GL_LINEAR filtering but in the end skipping
        * the actual filtering. Using mostly the same paths, so cube face
@@ -2639,11 +2721,11 @@ lp_build_sample_soa_code(struct gallivm_state *gallivm,
     */
    bld.num_mips = bld.num_lods = 1;
 
-   if ((gallivm_debug & GALLIVM_DEBUG_NO_QUAD_LOD) &&
-       (gallivm_debug & GALLIVM_DEBUG_NO_RHO_APPROX) &&
-       (static_texture_state->target == PIPE_TEXTURE_CUBE ||
-        static_texture_state->target == PIPE_TEXTURE_CUBE_ARRAY) &&
-       (op_is_tex && mip_filter != PIPE_TEX_MIPFILTER_NONE)) {
+   if (bld.no_quad_lod && bld.no_rho_approx &&
+       ((mip_filter != PIPE_TEX_MIPFILTER_NONE && op_is_tex &&
+         (static_texture_state->target == PIPE_TEXTURE_CUBE ||
+          static_texture_state->target == PIPE_TEXTURE_CUBE_ARRAY)) ||
+        op_is_lodq)) {
       /*
        * special case for using per-pixel lod even for implicit lod,
        * which is generally never required (ok by APIs) except to please
@@ -2651,6 +2733,8 @@ lp_build_sample_soa_code(struct gallivm_state *gallivm,
        * can cause derivatives to be different for pixels outside the primitive
        * due to the major axis division even if pre-project derivatives are
        * looking normal).
+       * For lodq, we do it to simply avoid scalar pack / unpack (albeit for
+       * cube maps we do indeed get per-pixel lod values).
        */
       bld.num_mips = type.length;
       bld.num_lods = type.length;
@@ -2764,6 +2848,32 @@ lp_build_sample_soa_code(struct gallivm_state *gallivm,
       newcoords[i] = coords[i];
    }
 
+   if (util_format_is_pure_integer(static_texture_state->format) &&
+       !util_format_has_depth(bld.format_desc) && op_is_tex &&
+       (static_sampler_state->min_mip_filter == PIPE_TEX_MIPFILTER_LINEAR ||
+        static_sampler_state->min_img_filter == PIPE_TEX_FILTER_LINEAR ||
+        static_sampler_state->mag_img_filter == PIPE_TEX_FILTER_LINEAR)) {
+      /*
+       * Bail if impossible filtering is specified (the awkard additional
+       * depth check is because it is legal in gallium to have things like S8Z24
+       * here which would say it's pure int despite such formats should sample
+       * the depth component).
+       * In GL such filters make the texture incomplete, this makes it robust
+       * against state trackers which set this up regardless (we'd crash in the
+       * lerp later otherwise).
+       * At least in some apis it may be legal to use such filters with lod
+       * queries and/or gather (at least for gather d3d10 says only the wrap
+       * bits are really used hence filter bits are likely simply ignored).
+       * For fetch, we don't get valid samplers either way here.
+       */
+      unsigned chan;
+      LLVMValueRef zero = lp_build_zero(gallivm, type);
+      for (chan = 0; chan < 4; chan++) {
+         texel_out[chan] = zero;
+      }
+      return;
+   }
+
    if (0) {
       /* For debug: no-op texture sampling */
       lp_build_sample_nop(gallivm,
@@ -2780,32 +2890,8 @@ lp_build_sample_soa_code(struct gallivm_state *gallivm,
 
    else {
       LLVMValueRef lod_fpart = NULL, lod_positive = NULL;
-      LLVMValueRef ilevel0 = NULL, ilevel1 = NULL;
+      LLVMValueRef ilevel0 = NULL, ilevel1 = NULL, lod = NULL;
       boolean use_aos;
-
-      if (util_format_is_pure_integer(static_texture_state->format) &&
-          !util_format_has_depth(bld.format_desc) &&
-          (static_sampler_state->min_mip_filter == PIPE_TEX_MIPFILTER_LINEAR ||
-           static_sampler_state->min_img_filter == PIPE_TEX_FILTER_LINEAR ||
-           static_sampler_state->mag_img_filter == PIPE_TEX_FILTER_LINEAR)) {
-         /*
-          * Bail if impossible filtering is specified (the awkard additional
-          * depth check is because it is legal in gallium to have things like S8Z24
-          * here which would say it's pure int despite such formats should sample
-          * the depth component).
-          * In GL such filters make the texture incomplete, this makes it robust
-          * against state trackers which set this up regardless (we'd crash in the
-          * lerp later (except for gather)).
-          * Must do this after fetch_texel code since with GL state tracker we'll
-          * get some junk sampler for buffer textures.
-          */
-         unsigned chan;
-         LLVMValueRef zero = lp_build_zero(gallivm, type);
-         for (chan = 0; chan < 4; chan++) {
-            texel_out[chan] = zero;
-         }
-         return;
-      }
 
       use_aos = util_format_fits_8unorm(bld.format_desc) &&
                 op_is_tex &&
@@ -2847,11 +2933,18 @@ lp_build_sample_soa_code(struct gallivm_state *gallivm,
                       derived_sampler_state.wrap_r);
       }
 
-      lp_build_sample_common(&bld, texture_index, sampler_index,
+      lp_build_sample_common(&bld, op_is_lodq, texture_index, sampler_index,
                              newcoords,
                              derivs, lod_bias, explicit_lod,
-                             &lod_positive, &lod_fpart,
+                             &lod_positive, &lod, &lod_fpart,
                              &ilevel0, &ilevel1);
+
+      if (op_is_lodq) {
+         texel_out[0] = lod_fpart;
+         texel_out[1] = lod;
+         texel_out[2] = texel_out[3] = bld.coord_bld.zero;
+         return;
+      }
 
       if (use_aos && static_texture_state->target == PIPE_TEXTURE_CUBE_ARRAY) {
          /* The aos path doesn't do seamless filtering so simply add cube layer
@@ -2899,6 +2992,9 @@ lp_build_sample_soa_code(struct gallivm_state *gallivm,
 
          /* Setup our build context */
          memset(&bld4, 0, sizeof bld4);
+         bld4.no_quad_lod = bld.no_quad_lod;
+         bld4.no_rho_approx = bld.no_rho_approx;
+         bld4.no_brilinear = bld.no_brilinear;
          bld4.gallivm = bld.gallivm;
          bld4.context_ptr = bld.context_ptr;
          bld4.static_texture_state = bld.static_texture_state;
@@ -2926,8 +3022,7 @@ lp_build_sample_soa_code(struct gallivm_state *gallivm,
          bld4.texel_type.length = 4;
 
          bld4.num_mips = bld4.num_lods = 1;
-         if ((gallivm_debug & GALLIVM_DEBUG_NO_QUAD_LOD) &&
-             (gallivm_debug & GALLIVM_DEBUG_NO_RHO_APPROX) &&
+         if (bld4.no_quad_lod && bld4.no_rho_approx &&
              (static_texture_state->target == PIPE_TEXTURE_CUBE ||
               static_texture_state->target == PIPE_TEXTURE_CUBE_ARRAY) &&
              (op_is_tex && mip_filter != PIPE_TEX_MIPFILTER_NONE)) {

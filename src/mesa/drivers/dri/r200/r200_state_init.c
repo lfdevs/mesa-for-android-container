@@ -49,7 +49,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "r200_state.h"
 #include "radeon_queryobj.h"
 
-#include "xmlpool.h"
+#include "util/xmlpool.h"
 
 /* New (1.3) state mechanism.  3 commands (packet, scalar, vector) in
  * 1.3 cmdbuffers allow all previous state to be updated as well as

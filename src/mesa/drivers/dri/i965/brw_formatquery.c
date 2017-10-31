@@ -32,11 +32,12 @@ brw_query_samples_for_format(struct gl_context *ctx, GLenum target,
                              GLenum internalFormat, int samples[16])
 {
    struct brw_context *brw = brw_context(ctx);
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
 
    (void) target;
    (void) internalFormat;
 
-   switch (brw->gen) {
+   switch (devinfo->gen) {
    case 10:
    case 9:
       samples[0] = 16;
@@ -76,7 +77,7 @@ brw_query_samples_for_format(struct gl_context *ctx, GLenum target,
       return 1;
 
    default:
-      assert(brw->gen < 6);
+      assert(devinfo->gen < 6);
       samples[0] = 1;
       return 1;
    }

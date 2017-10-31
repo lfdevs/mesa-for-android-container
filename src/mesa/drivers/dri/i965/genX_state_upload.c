@@ -71,22 +71,9 @@ emit_dwords(struct brw_context *brw, unsigned n)
 
 struct brw_address {
    struct brw_bo *bo;
-   uint32_t read_domains;
-   uint32_t write_domain;
+   unsigned reloc_flags;
    uint32_t offset;
 };
-
-static uint64_t
-emit_reloc(struct brw_context *brw,
-           void *location, struct brw_address address, uint32_t delta)
-{
-   uint32_t offset = (char *) location - (char *) brw->batch.map;
-
-   return brw_emit_reloc(&brw->batch, offset, address.bo,
-                         address.offset + delta,
-                         address.read_domains,
-                         address.write_domain);
-}
 
 #define __gen_address_type struct brw_address
 #define __gen_user_data struct brw_context
@@ -95,89 +82,69 @@ static uint64_t
 __gen_combine_address(struct brw_context *brw, void *location,
                       struct brw_address address, uint32_t delta)
 {
+   struct intel_batchbuffer *batch = &brw->batch;
+   uint32_t offset;
+
    if (address.bo == NULL) {
       return address.offset + delta;
    } else {
-      return emit_reloc(brw, location, address, delta);
+      if (GEN_GEN < 6 && brw_ptr_in_state_buffer(batch, location)) {
+         offset = (char *) location - (char *) brw->batch.state_map;
+         return brw_state_reloc(batch, offset, address.bo,
+                                address.offset + delta,
+                                address.reloc_flags);
+      }
+
+      assert(!brw_ptr_in_state_buffer(batch, location));
+
+      offset = (char *) location - (char *) brw->batch.map;
+      return brw_batch_reloc(batch, offset, address.bo,
+                             address.offset + delta,
+                             address.reloc_flags);
    }
 }
 
-static inline struct brw_address
-render_bo(struct brw_bo *bo, uint32_t offset)
+static struct brw_address
+rw_bo(struct brw_bo *bo, uint32_t offset)
 {
    return (struct brw_address) {
             .bo = bo,
             .offset = offset,
-            .read_domains = I915_GEM_DOMAIN_RENDER,
-            .write_domain = I915_GEM_DOMAIN_RENDER,
+            .reloc_flags = RELOC_WRITE,
    };
 }
 
-static inline struct brw_address
-render_ro_bo(struct brw_bo *bo, uint32_t offset)
+static struct brw_address
+ro_bo(struct brw_bo *bo, uint32_t offset)
 {
    return (struct brw_address) {
             .bo = bo,
             .offset = offset,
-            .read_domains = I915_GEM_DOMAIN_RENDER,
-            .write_domain = 0,
    };
 }
 
-static inline struct brw_address
-instruction_bo(struct brw_bo *bo, uint32_t offset)
+UNUSED static struct brw_address
+ggtt_bo(struct brw_bo *bo, uint32_t offset)
 {
    return (struct brw_address) {
             .bo = bo,
             .offset = offset,
-            .read_domains = I915_GEM_DOMAIN_INSTRUCTION,
-            .write_domain = I915_GEM_DOMAIN_INSTRUCTION,
-   };
-}
-
-static inline struct brw_address
-instruction_ro_bo(struct brw_bo *bo, uint32_t offset)
-{
-   return (struct brw_address) {
-            .bo = bo,
-            .offset = offset,
-            .read_domains = I915_GEM_DOMAIN_INSTRUCTION,
-            .write_domain = 0,
-   };
-}
-
-static inline struct brw_address
-vertex_bo(struct brw_bo *bo, uint32_t offset)
-{
-   return (struct brw_address) {
-            .bo = bo,
-            .offset = offset,
-            .read_domains = I915_GEM_DOMAIN_VERTEX,
-            .write_domain = 0,
+            .reloc_flags = RELOC_WRITE | RELOC_NEEDS_GGTT,
    };
 }
 
 #if GEN_GEN == 4
-static inline struct brw_address
+static struct brw_address
 KSP(struct brw_context *brw, uint32_t offset)
 {
-   return instruction_bo(brw->cache.bo, offset);
-}
-
-static inline struct brw_address
-KSP_ro(struct brw_context *brw, uint32_t offset)
-{
-   return instruction_ro_bo(brw->cache.bo, offset);
+   return ro_bo(brw->cache.bo, offset);
 }
 #else
-static inline uint32_t
+static uint32_t
 KSP(struct brw_context *brw, uint32_t offset)
 {
    return offset;
 }
-
-#define KSP_ro KSP
-
 #endif
 
 #include "genxml/genX_pack.h"
@@ -206,7 +173,7 @@ KSP(struct brw_context *brw, uint32_t offset)
    })
 
 #define brw_state_emit(brw, cmd, align, offset, name)              \
-   for (struct cmd name = { 0, },                                  \
+   for (struct cmd name = {},                                      \
         *_dst = brw_state_batch(brw, _brw_cmd_length(cmd) * 4,     \
                                 align, offset);                    \
         __builtin_expect(_dst != NULL, 1);                         \
@@ -353,7 +320,7 @@ genX(emit_vertex_buffer_state)(struct brw_context *brw,
    struct GENX(VERTEX_BUFFER_STATE) buf_state = {
       .VertexBufferIndex = buffer_nr,
       .BufferPitch = stride,
-      .BufferStartingAddress = vertex_bo(bo, start_offset),
+      .BufferStartingAddress = ro_bo(bo, start_offset),
 #if GEN_GEN >= 8
       .BufferSize = end_offset - start_offset,
 #endif
@@ -366,7 +333,7 @@ genX(emit_vertex_buffer_state)(struct brw_context *brw,
       .BufferAccessType = step_rate ? INSTANCEDATA : VERTEXDATA,
       .InstanceDataStepRate = step_rate,
 #if GEN_GEN >= 5
-      .EndAddress = vertex_bo(bo, end_offset - 1),
+      .EndAddress = ro_bo(bo, end_offset - 1),
 #endif
 #endif
 
@@ -468,6 +435,7 @@ upload_format_size(uint32_t upload_format)
 static void
 genX(emit_vertices)(struct brw_context *brw)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    uint32_t *dw;
 
    brw_prepare_vertices(brw);
@@ -569,7 +537,7 @@ genX(emit_vertices)(struct brw_context *brw)
                            1 + GENX(VERTEX_ELEMENT_STATE_length));
       struct GENX(VERTEX_ELEMENT_STATE) elem = {
          .Valid = true,
-         .SourceElementFormat = ISL_FORMAT_R32G32B32A32_FLOAT,
+         .SourceElementFormat = (enum GENX(SURFACE_FORMAT)) ISL_FORMAT_R32G32B32A32_FLOAT,
          .Component0Control = VFCOMP_STORE_0,
          .Component1Control = VFCOMP_STORE_0,
          .Component2Control = VFCOMP_STORE_0,
@@ -600,7 +568,7 @@ genX(emit_vertices)(struct brw_context *brw)
           * vertex element may poke over the end of the buffer by 2 bytes.
           */
          const unsigned padding =
-            (GEN_GEN <= 7 && !brw->is_baytrail && !brw->is_haswell) * 2;
+            (GEN_GEN <= 7 && !GEN_IS_HASWELL && !devinfo->is_baytrail) * 2;
          const unsigned end = buffer->offset + buffer->size + padding;
          dw = genX(emit_vertex_buffer_state)(brw, dw, i, buffer->bo,
                                              buffer->offset,
@@ -762,13 +730,13 @@ genX(emit_vertices)(struct brw_context *brw)
       if (vs_prog_data->uses_basevertex ||
           vs_prog_data->uses_baseinstance) {
          elem_state.VertexBufferIndex = brw->vb.nr_buffers;
-         elem_state.SourceElementFormat = ISL_FORMAT_R32G32_UINT;
+         elem_state.SourceElementFormat = (enum GENX(SURFACE_FORMAT)) ISL_FORMAT_R32G32_UINT;
          elem_state.Component0Control = VFCOMP_STORE_SRC;
          elem_state.Component1Control = VFCOMP_STORE_SRC;
       }
 #else
       elem_state.VertexBufferIndex = brw->vb.nr_buffers;
-      elem_state.SourceElementFormat = ISL_FORMAT_R32G32_UINT;
+      elem_state.SourceElementFormat = (enum GENX(SURFACE_FORMAT)) ISL_FORMAT_R32G32_UINT;
       if (vs_prog_data->uses_basevertex)
          elem_state.Component0Control = VFCOMP_STORE_SRC;
 
@@ -790,7 +758,7 @@ genX(emit_vertices)(struct brw_context *brw)
       struct GENX(VERTEX_ELEMENT_STATE) elem_state = {
          .Valid = true,
          .VertexBufferIndex = brw->vb.nr_buffers + 1,
-         .SourceElementFormat = ISL_FORMAT_R32_UINT,
+         .SourceElementFormat = (enum GENX(SURFACE_FORMAT)) ISL_FORMAT_R32_UINT,
          .Component0Control = VFCOMP_STORE_SRC,
          .Component1Control = VFCOMP_STORE_0,
          .Component2Control = VFCOMP_STORE_0,
@@ -882,12 +850,12 @@ genX(emit_index_buffer)(struct brw_context *brw)
       ib.CutIndexEnable = brw->prim_restart.enable_cut_index;
 #endif
       ib.IndexFormat = brw_get_index_type(index_buffer->index_size);
-      ib.BufferStartingAddress = vertex_bo(brw->ib.bo, 0);
+      ib.BufferStartingAddress = ro_bo(brw->ib.bo, 0);
 #if GEN_GEN >= 8
       ib.IndexBufferMOCS = GEN_GEN >= 9 ? SKL_MOCS_WB : BDW_MOCS_WB;
       ib.BufferSize = brw->ib.size;
 #else
-      ib.BufferEndingAddress = vertex_bo(brw->ib.bo, brw->ib.size - 1);
+      ib.BufferEndingAddress = ro_bo(brw->ib.bo, brw->ib.size - 1);
 #endif
    }
 }
@@ -1051,6 +1019,9 @@ genX(calculate_attr_overrides)(const struct brw_context *brw,
    /* _NEW_POINT */
    const struct gl_point_attrib *point = &ctx->Point;
 
+   /* BRW_NEW_FRAGMENT_PROGRAM */
+   const struct gl_program *fp = brw->programs[MESA_SHADER_FRAGMENT];
+
    /* BRW_NEW_FS_PROG_DATA */
    const struct brw_wm_prog_data *wm_prog_data =
       brw_wm_prog_data(brw->wm.base.prog_data);
@@ -1058,19 +1029,13 @@ genX(calculate_attr_overrides)(const struct brw_context *brw,
 
    *point_sprite_enables = 0;
 
-   /* BRW_NEW_FRAGMENT_PROGRAM
-    *
-    * If the fragment shader reads VARYING_SLOT_LAYER, then we need to pass in
-    * the full vertex header.  Otherwise, we can program the SF to start
-    * reading at an offset of 1 (2 varying slots) to skip unnecessary data:
-    * - VARYING_SLOT_PSIZ and BRW_VARYING_SLOT_NDC on gen4-5
-    * - VARYING_SLOT_{PSIZ,LAYER} and VARYING_SLOT_POS on gen6+
-    */
+   int first_slot =
+      brw_compute_first_urb_slot_required(fp->info.inputs_read,
+                                          &brw->vue_map_geom_out);
 
-   bool fs_needs_vue_header = brw->fragment_program->info.inputs_read &
-      (VARYING_BIT_LAYER | VARYING_BIT_VIEWPORT);
-
-   *urb_entry_read_offset = fs_needs_vue_header ? 0 : 1;
+   /* Each URB offset packs two varying slots */
+   assert(first_slot % 2 == 0);
+   *urb_entry_read_offset = first_slot / 2;
 
    /* From the Ivybridge PRM, Vol 2 Part 1, 3DSTATE_SBE,
     * description of dw10 Point Sprite Texture Coordinate Enable:
@@ -1277,7 +1242,7 @@ genX(upload_clip_state)(struct brw_context *brw)
 
    ctx->NewDriverState |= BRW_NEW_GEN4_UNIT_STATE;
    brw_state_emit(brw, GENX(CLIP_STATE), 32, &brw->clip.state_offset, clip) {
-      clip.KernelStartPointer = KSP_ro(brw, brw->clip.prog_offset);
+      clip.KernelStartPointer = KSP(brw, brw->clip.prog_offset);
       clip.GRFRegisterCount =
          DIV_ROUND_UP(brw->clip.prog_data->total_grf, 16) - 1;
       clip.FloatingPointMode = FLOATING_POINT_MODE_Alternate;
@@ -1314,7 +1279,7 @@ genX(upload_clip_state)(struct brw_context *brw)
       clip.GuardbandClipTestEnable = true;
 
       clip.ClipperViewportStatePointer =
-         instruction_ro_bo(brw->batch.bo, brw->clip.vp_offset);
+         ro_bo(brw->batch.state_bo, brw->clip.vp_offset);
 
       clip.ScreenSpaceViewportXMin = -1;
       clip.ScreenSpaceViewportXMax = 1;
@@ -1517,7 +1482,7 @@ genX(upload_sf)(struct brw_context *brw)
    ctx->NewDriverState |= BRW_NEW_GEN4_UNIT_STATE;
 
    brw_state_emit(brw, GENX(SF_STATE), 64, &brw->sf.state_offset, sf) {
-      sf.KernelStartPointer = KSP_ro(brw, brw->sf.prog_offset);
+      sf.KernelStartPointer = KSP(brw, brw->sf.prog_offset);
       sf.FloatingPointMode = FLOATING_POINT_MODE_Alternate;
       sf.GRFRegisterCount = DIV_ROUND_UP(sf_prog_data->total_grf, 16) - 1;
       sf.DispatchGRFStartRegisterForURBData = 3;
@@ -1531,7 +1496,7 @@ genX(upload_sf)(struct brw_context *brw)
        * domain.
        */
       sf.SetupViewportStateOffset =
-         instruction_ro_bo(brw->batch.bo, brw->sf.vp_offset);
+         ro_bo(brw->batch.state_bo, brw->sf.vp_offset);
 
       sf.PointRasterizationRule = RASTRULE_UPPER_RIGHT;
 
@@ -1628,7 +1593,9 @@ genX(upload_sf)(struct brw_context *brw)
 
       /* _NEW_LINE */
 #if GEN_GEN == 8
-      if (brw->is_cherryview)
+      const struct gen_device_info *devinfo = &brw->screen->devinfo;
+
+      if (devinfo->is_cherryview)
          sf.CHVLineWidth = brw_get_line_width(brw);
       else
          sf.LineWidth = brw_get_line_width(brw);
@@ -1743,7 +1710,7 @@ brw_color_buffer_write_enabled(struct brw_context *brw)
 {
    struct gl_context *ctx = &brw->ctx;
    /* BRW_NEW_FRAGMENT_PROGRAM */
-   const struct gl_program *fp = brw->fragment_program;
+   const struct gl_program *fp = brw->programs[MESA_SHADER_FRAGMENT];
    unsigned i;
 
    /* _NEW_BUFFERS */
@@ -1822,7 +1789,7 @@ genX(upload_wm)(struct brw_context *brw)
 
       if (stage_state->sampler_count)
          wm.SamplerStatePointer =
-            instruction_ro_bo(brw->batch.bo, stage_state->sampler_offset);
+            ro_bo(brw->batch.state_bo, stage_state->sampler_offset);
 #if GEN_GEN == 5
       if (wm_prog_data->prog_offset_2)
          wm.GRFRegisterCount2 = wm_prog_data->reg_blocks_2;
@@ -1873,15 +1840,13 @@ genX(upload_wm)(struct brw_context *brw)
          wm_prog_data->base.dispatch_grf_start_reg;
       if (GEN_GEN == 6 ||
           wm_prog_data->dispatch_8 || wm_prog_data->dispatch_16) {
-         wm.KernelStartPointer0 = KSP_ro(brw,
-                                         stage_state->prog_offset);
+         wm.KernelStartPointer0 = KSP(brw, stage_state->prog_offset);
       }
 
 #if GEN_GEN >= 5
       if (GEN_GEN == 6 || wm_prog_data->prog_offset_2) {
          wm.KernelStartPointer2 =
-            KSP_ro(brw, stage_state->prog_offset +
-                   wm_prog_data->prog_offset_2);
+            KSP(brw, stage_state->prog_offset + wm_prog_data->prog_offset_2);
       }
 #endif
 
@@ -1914,8 +1879,7 @@ genX(upload_wm)(struct brw_context *brw)
 #endif
 
       if (wm_prog_data->base.total_scratch) {
-         wm.ScratchSpaceBasePointer =
-            render_bo(stage_state->scratch_bo, 0);
+         wm.ScratchSpaceBasePointer = rw_bo(stage_state->scratch_bo, 0);
          wm.PerThreadScratchSpace =
             ffs(stage_state->per_thread_scratch) - 11;
       }
@@ -2043,8 +2007,7 @@ static const struct brw_tracked_state genX(wm_state) = {
    pkt.FloatingPointMode  = stage_prog_data->use_alt_mode;                \
                                                                           \
    if (stage_prog_data->total_scratch) {                                  \
-      pkt.ScratchSpaceBasePointer =                                       \
-         render_bo(stage_state->scratch_bo, 0);                           \
+      pkt.ScratchSpaceBasePointer = rw_bo(stage_state->scratch_bo, 0);    \
       pkt.PerThreadScratchSpace =                                         \
          ffs(stage_state->per_thread_scratch) - 11;                       \
    }                                                                      \
@@ -2119,7 +2082,7 @@ genX(upload_vs_state)(struct brw_context *brw)
 
       vs.StatisticsEnable = false;
       vs.SamplerStatePointer =
-         instruction_ro_bo(brw->batch.bo, stage_state->sampler_offset);
+         ro_bo(brw->batch.state_bo, stage_state->sampler_offset);
 #endif
 
 #if GEN_GEN == 5
@@ -2243,7 +2206,7 @@ const struct brw_tracked_state genX(cc_vp) = {
 
 /* ---------------------------------------------------------------------- */
 
-static inline void
+static void
 set_scissor_bits(const struct gl_context *ctx, int i,
                  bool render_to_fbo, unsigned fb_width, unsigned fb_height,
                  struct GENX(SCISSOR_RECT) *sc)
@@ -2558,8 +2521,9 @@ genX(upload_gs_state)(struct brw_context *brw)
    UNUSED struct gl_context *ctx = &brw->ctx;
    UNUSED const struct gen_device_info *devinfo = &brw->screen->devinfo;
    const struct brw_stage_state *stage_state = &brw->gs.base;
+   const struct gl_program *gs_prog = brw->programs[MESA_SHADER_GEOMETRY];
    /* BRW_NEW_GEOMETRY_PROGRAM */
-   bool active = GEN_GEN >= 6 && brw->geometry_program;
+   bool active = GEN_GEN >= 6 && gs_prog;
 
    /* BRW_NEW_GS_PROG_DATA */
    struct brw_stage_prog_data *stage_prog_data = stage_state->prog_data;
@@ -2593,7 +2557,7 @@ genX(upload_gs_state)(struct brw_context *brw)
     * whole fixed function pipeline" means to emit a PIPE_CONTROL with the "CS
     * Stall" bit set.
     */
-   if (brw->gt == 2 && brw->gs.enabled != active)
+   if (devinfo->gt == 2 && brw->gs.enabled != active)
       gen7_emit_cs_stall_flush(brw);
 #endif
 
@@ -2655,7 +2619,7 @@ genX(upload_gs_state)(struct brw_context *brw)
 
 #if GEN_GEN < 7
          gs.SOStatisticsEnable = true;
-         if (brw->geometry_program->info.has_transform_feedback_varyings)
+         if (gs_prog->info.has_transform_feedback_varyings)
             gs.SVBIPayloadEnable = true;
 
          /* GEN6_GS_SPF_MODE and GEN6_GS_VECTOR_MASK_ENABLE are enabled as it
@@ -3060,6 +3024,7 @@ UNUSED static const uint32_t push_constant_opcodes[] = {
 static void
 genX(upload_push_constant_packets)(struct brw_context *brw)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    struct gl_context *ctx = &brw->ctx;
 
    UNUSED uint32_t mocs = GEN_GEN < 8 ? GEN7_MOCS_L3 : 0;
@@ -3072,13 +3037,13 @@ genX(upload_push_constant_packets)(struct brw_context *brw)
       &brw->wm.base,
    };
 
-   if (GEN_GEN == 7 && !GEN_IS_HASWELL && !brw->is_baytrail &&
+   if (GEN_GEN == 7 && !GEN_IS_HASWELL && !devinfo->is_baytrail &&
        stage_states[MESA_SHADER_VERTEX]->push_constants_dirty)
       gen7_emit_vs_workaround_flush(brw);
 
    for (int stage = 0; stage <= MESA_SHADER_FRAGMENT; stage++) {
       struct brw_stage_state *stage_state = stage_states[stage];
-      struct gl_program *prog = ctx->_Shader->CurrentProgram[stage];
+      UNUSED struct gl_program *prog = ctx->_Shader->CurrentProgram[stage];
 
       if (!stage_state->push_constants_dirty)
          continue;
@@ -3109,7 +3074,7 @@ genX(upload_push_constant_packets)(struct brw_context *brw)
 
                const struct gl_uniform_block *block =
                   prog->sh.UniformBlocks[range->block];
-               const struct gl_uniform_buffer_binding *binding =
+               const struct gl_buffer_binding *binding =
                   &ctx->UniformBufferBindings[block->Binding];
 
                if (binding->BufferObject == ctx->Shared->NullBufferObj) {
@@ -3132,7 +3097,7 @@ genX(upload_push_constant_packets)(struct brw_context *brw)
 
                pkt.ConstantBody.ReadLength[n] = range->length;
                pkt.ConstantBody.Buffer[n] =
-                  render_ro_bo(bo, range->start * 32 + binding->Offset);
+                  ro_bo(bo, range->start * 32 + binding->Offset);
                n--;
             }
 
@@ -3140,8 +3105,8 @@ genX(upload_push_constant_packets)(struct brw_context *brw)
                assert(n >= 0);
                pkt.ConstantBody.ReadLength[n] = stage_state->push_const_size;
                pkt.ConstantBody.Buffer[n] =
-                  render_ro_bo(stage_state->push_const_bo,
-                               stage_state->push_const_offset);
+                  ro_bo(stage_state->push_const_bo,
+                        stage_state->push_const_offset);
             }
 #else
             pkt.ConstantBody.ReadLength[0] = stage_state->push_const_size;
@@ -3172,8 +3137,9 @@ genX(upload_vs_push_constants)(struct brw_context *brw)
 {
    struct brw_stage_state *stage_state = &brw->vs.base;
 
-   /* _BRW_NEW_VERTEX_PROGRAM */
-   const struct brw_program *vp = brw_program_const(brw->vertex_program);
+   /* BRW_NEW_VERTEX_PROGRAM */
+   const struct brw_program *vp =
+      brw_program_const(brw->programs[MESA_SHADER_VERTEX]);
    /* BRW_NEW_VS_PROG_DATA */
    const struct brw_stage_prog_data *prog_data = brw->vs.base.prog_data;
 
@@ -3199,7 +3165,8 @@ genX(upload_gs_push_constants)(struct brw_context *brw)
    struct brw_stage_state *stage_state = &brw->gs.base;
 
    /* BRW_NEW_GEOMETRY_PROGRAM */
-   const struct brw_program *gp = brw_program_const(brw->geometry_program);
+   const struct brw_program *gp =
+      brw_program_const(brw->programs[MESA_SHADER_GEOMETRY]);
 
    if (gp) {
       /* BRW_NEW_GS_PROG_DATA */
@@ -3227,7 +3194,8 @@ genX(upload_wm_push_constants)(struct brw_context *brw)
 {
    struct brw_stage_state *stage_state = &brw->wm.base;
    /* BRW_NEW_FRAGMENT_PROGRAM */
-   const struct brw_program *fp = brw_program_const(brw->fragment_program);
+   const struct brw_program *fp =
+      brw_program_const(brw->programs[MESA_SHADER_FRAGMENT]);
    /* BRW_NEW_FS_PROG_DATA */
    const struct brw_stage_prog_data *prog_data = brw->wm.base.prog_data;
 
@@ -3363,7 +3331,7 @@ genX(upload_color_calc_state)(struct brw_context *brw)
       cc.StatisticsEnable = brw->stats_wm;
 
       cc.CCViewportStatePointer =
-         instruction_ro_bo(brw->batch.bo, brw->cc.vp_offset);
+         ro_bo(brw->batch.state_bo, brw->cc.vp_offset);
 #else
       /* _NEW_COLOR */
       cc.BlendConstantColorRed = ctx->Color.BlendColorUnclamped[0];
@@ -3422,6 +3390,8 @@ static void
 genX(upload_sbe)(struct brw_context *brw)
 {
    struct gl_context *ctx = &brw->ctx;
+   /* BRW_NEW_FRAGMENT_PROGRAM */
+   UNUSED const struct gl_program *fp = brw->programs[MESA_SHADER_FRAGMENT];
    /* BRW_NEW_FS_PROG_DATA */
    const struct brw_wm_prog_data *wm_prog_data =
       brw_wm_prog_data(brw->wm.base.prog_data);
@@ -3482,17 +3452,9 @@ genX(upload_sbe)(struct brw_context *brw)
 
 #if GEN_GEN >= 9
       /* prepare the active component dwords */
-      int input_index = 0;
-      for (int attr = 0; attr < VARYING_SLOT_MAX; attr++) {
-         if (!(brw->fragment_program->info.inputs_read &
-               BITFIELD64_BIT(attr))) {
-            continue;
-         }
-
-         assert(input_index < 32);
-
+      const int num_inputs = urb_entry_read_length * 2;
+      for (int input_index = 0; input_index < num_inputs; input_index++) {
          sbe.AttributeActiveComponentFormat[input_index] = ACTIVE_COMPONENT_XYZW;
-         ++input_index;
       }
 #endif
    }
@@ -3669,10 +3631,10 @@ genX(upload_3dstate_so_buffers)(struct brw_context *brw)
       brw_batch_emit(brw, GENX(3DSTATE_SO_BUFFER), sob) {
          sob.SOBufferIndex = i;
 
-         sob.SurfaceBaseAddress = render_bo(bo, start);
+         sob.SurfaceBaseAddress = rw_bo(bo, start);
 #if GEN_GEN < 8
          sob.SurfacePitch = linked_xfb_info->Buffers[i].Stride * 4;
-         sob.SurfaceEndAddress = render_bo(bo, end);
+         sob.SurfaceEndAddress = rw_bo(bo, end);
 #else
          sob.SOBufferEnable = true;
          sob.StreamOffsetWriteEnable = true;
@@ -3681,7 +3643,7 @@ genX(upload_3dstate_so_buffers)(struct brw_context *brw)
 
          sob.SurfaceSize = MAX2(xfb_obj->Size[i] / 4, 1) - 1;
          sob.StreamOutputBufferOffsetAddress =
-            instruction_bo(brw_obj->offset_bo, i * sizeof(uint32_t));
+            rw_bo(brw_obj->offset_bo, i * sizeof(uint32_t));
 
          if (brw_obj->zero_offsets) {
             /* Zero out the offset and write that to offset_bo */
@@ -3699,7 +3661,7 @@ genX(upload_3dstate_so_buffers)(struct brw_context *brw)
 #endif
 }
 
-static inline bool
+static bool
 query_active(struct gl_query_object *q)
 {
    return q && q->Active;
@@ -3729,7 +3691,7 @@ genX(upload_3dstate_streamout)(struct brw_context *brw, bool active,
                sos.RenderingDisable = true;
             } else {
                perf_debug("Rasterizer discard with a GL_PRIMITIVES_GENERATED "
-                          "query active relies on the clipper.");
+                          "query active relies on the clipper.\n");
             }
          }
 
@@ -3908,7 +3870,6 @@ genX(upload_ps)(struct brw_context *brw)
       else
          ps.PositionXYOffsetSelect = POSOFFSET_NONE;
 
-      ps.RenderTargetFastClearEnable = brw->wm.fast_clear_op;
       ps._8PixelDispatchEnable = prog_data->dispatch_8;
       ps._16PixelDispatchEnable = prog_data->dispatch_16;
       ps.DispatchGRFStartRegisterForConstantSetupData0 =
@@ -3922,8 +3883,8 @@ genX(upload_ps)(struct brw_context *brw)
 
       if (prog_data->base.total_scratch) {
          ps.ScratchSpaceBasePointer =
-            render_bo(stage_state->scratch_bo,
-                      ffs(stage_state->per_thread_scratch) - 11);
+            rw_bo(stage_state->scratch_bo,
+                  ffs(stage_state->per_thread_scratch) - 11);
       }
    }
 }
@@ -4033,7 +3994,7 @@ static void
 upload_te_state(struct brw_context *brw)
 {
    /* BRW_NEW_TESS_PROGRAMS */
-   bool active = brw->tess_eval_program;
+   bool active = brw->programs[MESA_SHADER_TESS_EVAL];
 
    /* BRW_NEW_TES_PROG_DATA */
    const struct brw_tes_prog_data *tes_prog_data =
@@ -4071,7 +4032,8 @@ genX(upload_tes_push_constants)(struct brw_context *brw)
 {
    struct brw_stage_state *stage_state = &brw->tes.base;
    /* BRW_NEW_TESS_PROGRAMS */
-   const struct brw_program *tep = brw_program_const(brw->tess_eval_program);
+   const struct brw_program *tep =
+      brw_program_const(brw->programs[MESA_SHADER_TESS_EVAL]);
 
    if (tep) {
       /* BRW_NEW_TES_PROG_DATA */
@@ -4097,8 +4059,9 @@ genX(upload_tcs_push_constants)(struct brw_context *brw)
 {
    struct brw_stage_state *stage_state = &brw->tcs.base;
    /* BRW_NEW_TESS_PROGRAMS */
-   const struct brw_program *tcp = brw_program_const(brw->tess_ctrl_program);
-   bool active = brw->tess_eval_program;
+   const struct brw_program *tcp =
+      brw_program_const(brw->programs[MESA_SHADER_TESS_CTRL]);
+   bool active = brw->programs[MESA_SHADER_TESS_EVAL];
 
    if (active) {
       /* BRW_NEW_TCS_PROG_DATA */
@@ -4127,6 +4090,70 @@ static const struct brw_tracked_state genX(tcs_push_constants) = {
 
 #if GEN_GEN >= 7
 static void
+genX(upload_cs_push_constants)(struct brw_context *brw)
+{
+   struct brw_stage_state *stage_state = &brw->cs.base;
+
+   /* BRW_NEW_COMPUTE_PROGRAM */
+   const struct brw_program *cp =
+      (struct brw_program *) brw->programs[MESA_SHADER_COMPUTE];
+
+   if (cp) {
+      /* BRW_NEW_CS_PROG_DATA */
+      struct brw_cs_prog_data *cs_prog_data =
+         brw_cs_prog_data(brw->cs.base.prog_data);
+
+      _mesa_shader_write_subroutine_indices(&brw->ctx, MESA_SHADER_COMPUTE);
+      brw_upload_cs_push_constants(brw, &cp->program, cs_prog_data,
+                                   stage_state);
+   }
+}
+
+const struct brw_tracked_state genX(cs_push_constants) = {
+   .dirty = {
+      .mesa = _NEW_PROGRAM_CONSTANTS,
+      .brw = BRW_NEW_BATCH |
+             BRW_NEW_BLORP |
+             BRW_NEW_COMPUTE_PROGRAM |
+             BRW_NEW_CS_PROG_DATA,
+   },
+   .emit = genX(upload_cs_push_constants),
+};
+
+/**
+ * Creates a new CS constant buffer reflecting the current CS program's
+ * constants, if needed by the CS program.
+ */
+static void
+genX(upload_cs_pull_constants)(struct brw_context *brw)
+{
+   struct brw_stage_state *stage_state = &brw->cs.base;
+
+   /* BRW_NEW_COMPUTE_PROGRAM */
+   struct brw_program *cp =
+      (struct brw_program *) brw->programs[MESA_SHADER_COMPUTE];
+
+   /* BRW_NEW_CS_PROG_DATA */
+   const struct brw_stage_prog_data *prog_data = brw->cs.base.prog_data;
+
+   _mesa_shader_write_subroutine_indices(&brw->ctx, MESA_SHADER_COMPUTE);
+   /* _NEW_PROGRAM_CONSTANTS */
+   brw_upload_pull_constants(brw, BRW_NEW_SURFACES, &cp->program,
+                             stage_state, prog_data);
+}
+
+const struct brw_tracked_state genX(cs_pull_constants) = {
+   .dirty = {
+      .mesa = _NEW_PROGRAM_CONSTANTS,
+      .brw = BRW_NEW_BATCH |
+             BRW_NEW_BLORP |
+             BRW_NEW_COMPUTE_PROGRAM |
+             BRW_NEW_CS_PROG_DATA,
+   },
+   .emit = genX(upload_cs_pull_constants),
+};
+
+static void
 genX(upload_cs_state)(struct brw_context *brw)
 {
    if (!brw->cs.base.prog_data)
@@ -4147,7 +4174,8 @@ genX(upload_cs_state)(struct brw_context *brw)
          brw, &stage_state->surf_offset[
                  prog_data->binding_table.shader_time_start],
          brw->shader_time.bo, 0, ISL_FORMAT_RAW,
-         brw->shader_time.bo->size, 1, true);
+         brw->shader_time.bo->size, 1,
+         RELOC_WRITE);
    }
 
    uint32_t *bind = brw_state_batch(brw, prog_data->binding_table.size_bytes,
@@ -4174,7 +4202,7 @@ genX(upload_cs_state)(struct brw_context *brw)
             bo_offset = stage_state->per_thread_scratch / 1024 - 1;
          }
          vfe.ScratchSpaceBasePointer =
-            render_bo(stage_state->scratch_bo, bo_offset);
+            rw_bo(stage_state->scratch_bo, bo_offset);
       }
 
       const uint32_t subslices = MAX2(brw->screen->subslice_total, 1);
@@ -4233,7 +4261,7 @@ genX(upload_cs_state)(struct brw_context *brw)
       .BindingTablePointer = stage_state->bind_bo_offset,
       .ConstantURBEntryReadLength = cs_prog_data->push.per_thread.regs,
       .NumberofThreadsinGPGPUThreadGroup = cs_prog_data->threads,
-      .SharedLocalMemorySize = encode_slm_size(devinfo->gen,
+      .SharedLocalMemorySize = encode_slm_size(GEN_GEN,
                                                prog_data->total_shared),
       .BarrierEnable = cs_prog_data->uses_barrier,
 #if GEN_GEN >= 8 || GEN_IS_HASWELL
@@ -4614,7 +4642,7 @@ genX(emit_mi_report_perf_count)(struct brw_context *brw,
                                 uint32_t report_id)
 {
    brw_batch_emit(brw, GENX(MI_REPORT_PERF_COUNT), mi_rpc) {
-      mi_rpc.MemoryAddress = instruction_bo(bo, offset_in_bytes);
+      mi_rpc.MemoryAddress = ggtt_bo(bo, offset_in_bytes);
       mi_rpc.ReportID = report_id;
    }
 }
@@ -4724,9 +4752,9 @@ genX(upload_default_color)(struct brw_context *brw,
       color.ui[3] = float_as_int(1.0);
 
    int alignment = 32;
-   if (brw->gen >= 8) {
+   if (GEN_GEN >= 8) {
       alignment = 64;
-   } else if (brw->is_haswell && (is_integer_format || is_stencil_sampling)) {
+   } else if (GEN_IS_HASWELL && (is_integer_format || is_stencil_sampling)) {
       alignment = 512;
    }
 
@@ -5053,15 +5081,12 @@ genX(update_sampler_state)(struct brw_context *brw,
                                  texObj->StencilSampling,
                                  &border_color_offset);
    }
-
-   samp_st.BorderColorPointer = border_color_offset;
-
-   if (GEN_GEN < 6) {
-      samp_st.BorderColorPointer += brw->batch.bo->offset64; /* reloc */
-      brw_emit_reloc(&brw->batch, batch_offset_for_sampler_state + 8,
-                     brw->batch.bo, border_color_offset,
-                     I915_GEM_DOMAIN_SAMPLER, 0);
-   }
+#if GEN_GEN < 6
+      samp_st.BorderColorPointer =
+         ro_bo(brw->batch.state_bo, border_color_offset);
+#else
+      samp_st.BorderColorPointer = border_color_offset;
+#endif
 
 #if GEN_GEN >= 8
    samp_st.LODPreClampMode = CLAMP_MODE_OGL;
@@ -5148,7 +5173,7 @@ static void
 genX(upload_fs_samplers)(struct brw_context *brw)
 {
    /* BRW_NEW_FRAGMENT_PROGRAM */
-   struct gl_program *fs = (struct gl_program *) brw->fragment_program;
+   struct gl_program *fs = brw->programs[MESA_SHADER_FRAGMENT];
    genX(upload_sampler_state_table)(brw, fs, &brw->wm.base);
 }
 
@@ -5166,7 +5191,7 @@ static void
 genX(upload_vs_samplers)(struct brw_context *brw)
 {
    /* BRW_NEW_VERTEX_PROGRAM */
-   struct gl_program *vs = (struct gl_program *) brw->vertex_program;
+   struct gl_program *vs = brw->programs[MESA_SHADER_VERTEX];
    genX(upload_sampler_state_table)(brw, vs, &brw->vs.base);
 }
 
@@ -5185,7 +5210,7 @@ static void
 genX(upload_gs_samplers)(struct brw_context *brw)
 {
    /* BRW_NEW_GEOMETRY_PROGRAM */
-   struct gl_program *gs = (struct gl_program *) brw->geometry_program;
+   struct gl_program *gs = brw->programs[MESA_SHADER_GEOMETRY];
    if (!gs)
       return;
 
@@ -5209,7 +5234,7 @@ static void
 genX(upload_tcs_samplers)(struct brw_context *brw)
 {
    /* BRW_NEW_TESS_PROGRAMS */
-   struct gl_program *tcs = (struct gl_program *) brw->tess_ctrl_program;
+   struct gl_program *tcs = brw->programs[MESA_SHADER_TESS_CTRL];
    if (!tcs)
       return;
 
@@ -5232,7 +5257,7 @@ static void
 genX(upload_tes_samplers)(struct brw_context *brw)
 {
    /* BRW_NEW_TESS_PROGRAMS */
-   struct gl_program *tes = (struct gl_program *) brw->tess_eval_program;
+   struct gl_program *tes = brw->programs[MESA_SHADER_TESS_EVAL];
    if (!tes)
       return;
 
@@ -5255,7 +5280,7 @@ static void
 genX(upload_cs_samplers)(struct brw_context *brw)
 {
    /* BRW_NEW_COMPUTE_PROGRAM */
-   struct gl_program *cs = (struct gl_program *) brw->compute_program;
+   struct gl_program *cs = brw->programs[MESA_SHADER_COMPUTE];
    if (!cs)
       return;
 
@@ -5629,8 +5654,8 @@ genX(init_atoms)(struct brw_context *brw)
    {
       &gen7_l3_state,
       &brw_cs_image_surfaces,
-      &gen7_cs_push_constants,
-      &brw_cs_pull_constants,
+      &genX(cs_push_constants),
+      &genX(cs_pull_constants),
       &brw_cs_ubo_surfaces,
       &brw_cs_abo_surfaces,
       &brw_cs_texture_surfaces,

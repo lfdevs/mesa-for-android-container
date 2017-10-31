@@ -32,12 +32,15 @@
 #include "main/imports.h"
 #include "main/mtypes.h"
 #include "main/macros.h"
+#include "main/streaming-load-memcpy.h"
 #include "main/bufferobj.h"
+#include "x86/common_x86_asm.h"
 
 #include "brw_context.h"
-#include "intel_blit.h"
+#include "brw_blorp.h"
 #include "intel_buffer_objects.h"
 #include "intel_batchbuffer.h"
+#include "intel_tiled_memcpy.h"
 
 static void
 mark_buffer_gpu_usage(struct intel_buffer_object *intel_obj,
@@ -208,7 +211,7 @@ brw_buffer_data(struct gl_context *ctx,
          return false;
 
       if (data != NULL) {
-	 brw_bo_subdata(intel_obj->buffer, 0, size, data);
+         brw_bo_subdata(intel_obj->buffer, 0, size, data);
          mark_buffer_valid_data(intel_obj, 0, size);
       }
    }
@@ -274,9 +277,9 @@ brw_buffer_subdata(struct gl_context *ctx,
       if (size == intel_obj->Base.Size ||
           (intel_obj->valid_data_start >= offset &&
            intel_obj->valid_data_end <= offset + size)) {
-	 /* Replace the current busy bo so the subdata doesn't stall. */
-	 brw_bo_unreference(intel_obj->buffer);
-	 alloc_buffer_object(brw, intel_obj);
+         /* Replace the current busy bo so the subdata doesn't stall. */
+         brw_bo_unreference(intel_obj->buffer);
+         alloc_buffer_object(brw, intel_obj);
       } else if (!intel_obj->prefer_stall_to_blit) {
          perf_debug("Using a blit copy to avoid stalling on "
                     "glBufferSubData(%ld, %ld) (%ldkb) to a busy "
@@ -286,17 +289,18 @@ brw_buffer_subdata(struct gl_context *ctx,
                     intel_obj->gpu_active_end,
                     intel_obj->valid_data_start,
                     intel_obj->valid_data_end);
-	 struct brw_bo *temp_bo =
-	    brw_bo_alloc(brw->bufmgr, "subdata temp", size, 64);
+         struct brw_bo *temp_bo =
+            brw_bo_alloc(brw->bufmgr, "subdata temp", size, 64);
 
-	 brw_bo_subdata(temp_bo, 0, size, data);
+         brw_bo_subdata(temp_bo, 0, size, data);
 
-	 intel_emit_linear_blit(brw,
-				intel_obj->buffer, offset,
-				temp_bo, 0,
-				size);
+         brw_blorp_copy_buffers(brw,
+                                temp_bo, 0,
+                                intel_obj->buffer, offset,
+                                size);
+         brw_emit_mi_flush(brw);
 
-	 brw_bo_unreference(temp_bo);
+         brw_bo_unreference(temp_bo);
          mark_buffer_valid_data(intel_obj, offset, size);
          return;
       } else {
@@ -337,14 +341,25 @@ brw_get_buffer_subdata(struct gl_context *ctx,
       intel_batchbuffer_flush(brw);
    }
 
-   void *map = brw_bo_map(brw, intel_obj->buffer, MAP_READ);
+   unsigned int map_flags = MAP_READ;
+   mem_copy_fn memcpy_fn = memcpy;
+#ifdef USE_SSE41
+   if (!intel_obj->buffer->cache_coherent && cpu_has_sse4_1) {
+      /* Rather than acquire a new WB mmaping of the buffer object and pull
+       * it into the CPU cache, keep using the WC mmap that we have for writes,
+       * and use the magic movntd instructions instead.
+       */
+      map_flags |= MAP_COHERENT;
+      memcpy_fn = (mem_copy_fn) _mesa_streaming_load_memcpy;
+   }
+#endif
 
+   void *map = brw_bo_map(brw, intel_obj->buffer, map_flags);
    if (unlikely(!map)) {
       _mesa_error_no_memory(__func__);
       return;
    }
-
-   memcpy(data, map + offset, size);
+   memcpy_fn(data, map + offset, size);
    brw_bo_unmap(intel_obj->buffer);
 
    mark_buffer_inactive(intel_obj);
@@ -409,18 +424,18 @@ brw_map_buffer_range(struct gl_context *ctx,
     */
    if (!(access & GL_MAP_UNSYNCHRONIZED_BIT)) {
       if (brw_batch_references(&brw->batch, intel_obj->buffer)) {
-	 if (access & GL_MAP_INVALIDATE_BUFFER_BIT) {
-	    brw_bo_unreference(intel_obj->buffer);
-	    alloc_buffer_object(brw, intel_obj);
-	 } else {
+         if (access & GL_MAP_INVALIDATE_BUFFER_BIT) {
+            brw_bo_unreference(intel_obj->buffer);
+            alloc_buffer_object(brw, intel_obj);
+         } else {
             perf_debug("Stalling on the GPU for mapping a busy buffer "
                        "object\n");
-	    intel_batchbuffer_flush(brw);
-	 }
+            intel_batchbuffer_flush(brw);
+         }
       } else if (brw_bo_busy(intel_obj->buffer) &&
-		 (access & GL_MAP_INVALIDATE_BUFFER_BIT)) {
-	 brw_bo_unreference(intel_obj->buffer);
-	 alloc_buffer_object(brw, intel_obj);
+                 (access & GL_MAP_INVALIDATE_BUFFER_BIT)) {
+         brw_bo_unreference(intel_obj->buffer);
+         alloc_buffer_object(brw, intel_obj);
       }
    }
 
@@ -445,11 +460,9 @@ brw_map_buffer_range(struct gl_context *ctx,
       const unsigned alignment = ctx->Const.MinMapBufferAlignment;
 
       intel_obj->map_extra[index] = (uintptr_t) offset % alignment;
-      intel_obj->range_map_bo[index] = brw_bo_alloc(brw->bufmgr,
-                                                          "BO blit temp",
-                                                          length +
-                                                          intel_obj->map_extra[index],
-                                                          alignment);
+      intel_obj->range_map_bo[index] =
+         brw_bo_alloc(brw->bufmgr, "BO blit temp",
+                      length + intel_obj->map_extra[index], alignment);
       void *map = brw_bo_map(brw, intel_obj->range_map_bo[index], access);
       obj->Mappings[index].Pointer = map + intel_obj->map_extra[index];
       return obj->Mappings[index].Pointer;
@@ -520,15 +533,16 @@ brw_flush_mapped_buffer_range(struct gl_context *ctx,
     * another blit of that area and the complete newer data will land the
     * second time.
     */
-   intel_emit_linear_blit(brw,
-			  intel_obj->buffer,
-                          obj->Mappings[index].Offset + offset,
-			  intel_obj->range_map_bo[index],
+   brw_blorp_copy_buffers(brw,
+                          intel_obj->range_map_bo[index],
                           intel_obj->map_extra[index] + offset,
-			  length);
+                          intel_obj->buffer,
+                          obj->Mappings[index].Offset + offset,
+                          length);
    mark_buffer_gpu_usage(intel_obj,
                          obj->Mappings[index].Offset + offset,
                          length);
+   brw_emit_mi_flush(brw);
 }
 
 
@@ -551,13 +565,14 @@ brw_unmap_buffer(struct gl_context *ctx,
       brw_bo_unmap(intel_obj->range_map_bo[index]);
 
       if (!(obj->Mappings[index].AccessFlags & GL_MAP_FLUSH_EXPLICIT_BIT)) {
-         intel_emit_linear_blit(brw,
-                                intel_obj->buffer, obj->Mappings[index].Offset,
+         brw_blorp_copy_buffers(brw,
                                 intel_obj->range_map_bo[index],
                                 intel_obj->map_extra[index],
+                                intel_obj->buffer, obj->Mappings[index].Offset,
                                 obj->Mappings[index].Length);
          mark_buffer_gpu_usage(intel_obj, obj->Mappings[index].Offset,
                                obj->Mappings[index].Length);
+         brw_emit_mi_flush(brw);
       }
 
       /* Since we've emitted some blits to buffers that will (likely) be used
@@ -565,7 +580,6 @@ brw_unmap_buffer(struct gl_context *ctx,
        * flush.  Once again, we wish for a domain tracker in libdrm to cover
        * usage inside of a batchbuffer.
        */
-      brw_emit_mi_flush(brw);
 
       brw_bo_unreference(intel_obj->range_map_bo[index]);
       intel_obj->range_map_bo[index] = NULL;
@@ -632,9 +646,9 @@ brw_copy_buffer_subdata(struct gl_context *ctx,
    dst_bo = intel_bufferobj_buffer(brw, intel_dst, write_offset, size, true);
    src_bo = intel_bufferobj_buffer(brw, intel_src, read_offset, size, false);
 
-   intel_emit_linear_blit(brw,
-			  dst_bo, write_offset,
-			  src_bo, read_offset, size);
+   brw_blorp_copy_buffers(brw,
+                          src_bo, read_offset,
+                          dst_bo, write_offset, size);
 
    /* Since we've emitted some blits to buffers that will (likely) be used
     * in rendering operations in other cache domains in this batch, emit a

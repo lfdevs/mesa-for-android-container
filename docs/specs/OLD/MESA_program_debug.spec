@@ -133,7 +133,7 @@ New Tokens
     GetFloatv and GetIntegerv:
 
         FRAGMENT_PROGRAM_POSITION_MESA      0x8bb0
-        VERTEX_PROGRAM_POSITION_MESA        0x8bb4
+        VERTEX_PROGRAM_POSITION_MESA        0x8bb5
 
     Accepted by the <pname> parameter of GetPointerv:
 

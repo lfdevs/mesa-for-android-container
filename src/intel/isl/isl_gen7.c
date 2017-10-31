@@ -132,7 +132,7 @@ isl_gen7_choose_msaa_layout(const struct isl_device *dev,
     *    is >= 8192 (meaning the actual surface width is >= 8193 pixels), this
     *    field must be set to MSFMT_MSS.
     */
-   if (info->samples == 8 && info->width == 8192)
+   if (info->samples == 8 && info->width > 8192)
       require_array = true;
 
    /* From the Ivybridge PRM, Volume 4 Part 1 p72, SURFACE_STATE, Multisampled

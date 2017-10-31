@@ -134,6 +134,7 @@ struct svga_shader_emitter_v10
 
    /* Samplers */
    unsigned num_samplers;
+   boolean sampler_view[PIPE_MAX_SAMPLERS];  /**< True if sampler view exists*/
    ubyte sampler_target[PIPE_MAX_SAMPLERS];  /**< TGSI_TEXTURE_x */
    ubyte sampler_return_type[PIPE_MAX_SAMPLERS];  /**< TGSI_RETURN_TYPE_x */
 
@@ -167,8 +168,8 @@ struct svga_shader_emitter_v10
 
    /* For fragment shaders only */
    struct {
-      /* apha test */
       unsigned color_out_index[PIPE_MAX_COLOR_BUFS];  /**< the real color output regs */
+      unsigned num_color_outputs;
       unsigned color_tmp_index;  /**< fake/temp color output reg */
       unsigned alpha_ref_index;  /**< immediate constant for alpha ref */
 
@@ -578,8 +579,6 @@ translate_opcode(unsigned opcode)
       return VGPU10_OPCODE_RET;
    case TGSI_OPCODE_NOP:
       return VGPU10_OPCODE_NOP;
-   case TGSI_OPCODE_BREAKC:
-      return VGPU10_OPCODE_BREAKC;
    case TGSI_OPCODE_END:
       return VGPU10_OPCODE_RET;
    case TGSI_OPCODE_F2I:
@@ -1871,9 +1870,9 @@ translate_interpolation(const struct svga_shader_emitter_v10 *emit,
 
 /**
  * Translate a TGSI property to VGPU10.
- * Don't emit any instructions yet, only need to gather the primitive property information.
- * The output primitive topology might be changed later. The final property instructions
- * will be emitted as part of the pre-helper code.
+ * Don't emit any instructions yet, only need to gather the primitive property
+ * information.  The output primitive topology might be changed later. The
+ * final property instructions will be emitted as part of the pre-helper code.
  */
 static boolean
 emit_vgpu10_property(struct svga_shader_emitter_v10 *emit,
@@ -2324,6 +2323,7 @@ emit_vgpu10_declaration(struct svga_shader_emitter_v10 *emit,
          emit->sampler_target[unit] = decl->SamplerView.Resource;
          /* Note: we can ignore YZW return types for now */
          emit->sampler_return_type[unit] = decl->SamplerView.ReturnTypeX;
+         emit->sampler_view[unit] = TRUE;
       }
       return TRUE;
 
@@ -2422,7 +2422,9 @@ emit_input_declarations(struct svga_shader_emitter_v10 *emit)
          selMode = VGPU10_OPERAND_4_COMPONENT_MASK_MODE;
          name = VGPU10_NAME_UNDEFINED;
 
-         /* all geometry shader inputs are two dimensional except gl_PrimitiveID */
+         /* all geometry shader inputs are two dimensional except
+          * gl_PrimitiveID
+          */
          dim = VGPU10_OPERAND_INDEX_2D;
 
          if (semantic_name == TGSI_SEMANTIC_PRIMID) {
@@ -2499,6 +2501,9 @@ emit_output_declarations(struct svga_shader_emitter_v10 *emit)
 
             emit->fs.color_out_index[semantic_index] = index;
 
+            emit->fs.num_color_outputs = MAX2(emit->fs.num_color_outputs,
+                                              index + 1);
+
             /* The semantic index is the shader's color output/buffer index */
             emit_output_declaration(emit,
                                     VGPU10_OPCODE_DCL_OUTPUT, semantic_index,
@@ -2521,6 +2526,9 @@ emit_output_declarations(struct svga_shader_emitter_v10 *emit)
                                         VGPU10_OPERAND_4_COMPONENT_MASK_ALL);
                      emit->info.output_semantic_index[idx] = j;
                   }
+
+                  emit->fs.num_color_outputs =
+                     emit->key.fs.write_color0_to_n_cbufs;
                }
             }
             else {
@@ -2707,7 +2715,6 @@ emit_temporaries_declaration(struct svga_shader_emitter_v10 *emit)
    }
    else if (emit->unit == PIPE_SHADER_FRAGMENT) {
       if (emit->key.fs.alpha_func != SVGA3D_CMP_ALWAYS ||
-          emit->key.fs.white_fragments ||
           emit->key.fs.write_color0_to_n_cbufs > 1) {
          /* Allocate a temp to hold the output color */
          emit->fs.color_tmp_index = total_temps;
@@ -2883,14 +2890,17 @@ emit_constant_declaration(struct svga_shader_emitter_v10 *emit)
 
    for (i = 0; i < emit->num_samplers; i++) {
 
-      /* Texcoord scale factors for RECT textures */
-      if (emit->key.tex[i].unnormalized) {
-         emit->texcoord_scale_index[i] = total_consts++;
-      }
+      if (emit->sampler_view[i]) {
 
-      /* Texture buffer sizes */
-      if (emit->sampler_target[i] == TGSI_TEXTURE_BUFFER) {
-         emit->texture_buffer_size_index[i] = total_consts++;
+         /* Texcoord scale factors for RECT textures */
+         if (emit->key.tex[i].unnormalized) {
+            emit->texcoord_scale_index[i] = total_consts++;
+         }
+
+         /* Texture buffer sizes */
+         if (emit->sampler_target[i] == TGSI_TEXTURE_BUFFER) {
+            emit->texture_buffer_size_index[i] = total_consts++;
+         }
       }
    }
 
@@ -3565,89 +3575,6 @@ emit_cmp(struct svga_shader_emitter_v10 *emit,
    emit_instruction_op3(emit, VGPU10_OPCODE_MOVC, &inst->Dst[0],
                         &tmp_src, &inst->Src[1], &inst->Src[2],
                         inst->Instruction.Saturate);
-
-   free_temp_indexes(emit);
-
-   return TRUE;
-}
-
-
-/**
- * Emit code for TGSI_OPCODE_DP2A instruction.
- */
-static boolean
-emit_dp2a(struct svga_shader_emitter_v10 *emit,
-          const struct tgsi_full_instruction *inst)
-{
-   /* dst.x = src0.x * src1.x + src0.y * src1.y + src2.x
-    * dst.y = src0.x * src1.x + src0.y * src1.y + src2.x
-    * dst.z = src0.x * src1.x + src0.y * src1.y + src2.x
-    * dst.w = src0.x * src1.x + src0.y * src1.y + src2.x
-    * Translate into
-    *   MAD tmp.x, s0.y, s1.y, s2.x
-    *   MAD tmp.x, s0.x, s1.x, tmp.x
-    *   MOV dst.xyzw, tmp.xxxx
-    */
-   unsigned tmp = get_temp_index(emit);
-   struct tgsi_full_src_register tmp_src = make_src_temp_reg(tmp);
-   struct tgsi_full_dst_register tmp_dst = make_dst_temp_reg(tmp);
-
-   struct tgsi_full_src_register tmp_src_xxxx =
-      scalar_src(&tmp_src, TGSI_SWIZZLE_X);
-   struct tgsi_full_dst_register tmp_dst_x =
-      writemask_dst(&tmp_dst, TGSI_WRITEMASK_X);
-
-   struct tgsi_full_src_register src0_xxxx =
-      scalar_src(&inst->Src[0], TGSI_SWIZZLE_X);
-   struct tgsi_full_src_register src0_yyyy =
-      scalar_src(&inst->Src[0], TGSI_SWIZZLE_Y);
-   struct tgsi_full_src_register src1_xxxx =
-      scalar_src(&inst->Src[1], TGSI_SWIZZLE_X);
-   struct tgsi_full_src_register src1_yyyy =
-      scalar_src(&inst->Src[1], TGSI_SWIZZLE_Y);
-   struct tgsi_full_src_register src2_xxxx =
-      scalar_src(&inst->Src[2], TGSI_SWIZZLE_X);
-
-   emit_instruction_op3(emit, VGPU10_OPCODE_MAD, &tmp_dst_x, &src0_yyyy,
-                        &src1_yyyy, &src2_xxxx, FALSE);
-   emit_instruction_op3(emit, VGPU10_OPCODE_MAD, &tmp_dst_x, &src0_xxxx,
-                        &src1_xxxx, &tmp_src_xxxx, FALSE);
-   emit_instruction_op1(emit, VGPU10_OPCODE_MOV, &inst->Dst[0],
-                        &tmp_src_xxxx, inst->Instruction.Saturate);
-
-   free_temp_indexes(emit);
-
-   return TRUE;
-}
-
-
-/**
- * Emit code for TGSI_OPCODE_DPH instruction.
- */
-static boolean
-emit_dph(struct svga_shader_emitter_v10 *emit,
-         const struct tgsi_full_instruction *inst)
-{
-   /*
-    * DP3 tmp, s0, s1
-    * ADD dst, tmp, s1.wwww
-    */
-
-   struct tgsi_full_src_register s1_wwww =
-      swizzle_src(&inst->Src[1], TGSI_SWIZZLE_W, TGSI_SWIZZLE_W,
-                  TGSI_SWIZZLE_W, TGSI_SWIZZLE_W);
-
-   unsigned tmp = get_temp_index(emit);
-   struct tgsi_full_src_register tmp_src = make_src_temp_reg(tmp);
-   struct tgsi_full_dst_register tmp_dst = make_dst_temp_reg(tmp);
-
-   /* DP3 tmp, s0, s1 */
-   emit_instruction_op2(emit, VGPU10_OPCODE_DP3, &tmp_dst, &inst->Src[0],
-                        &inst->Src[1], FALSE);
-
-   /* ADD dst, tmp, s1.wwww */
-   emit_instruction_op2(emit, VGPU10_OPCODE_ADD, &inst->Dst[0], &tmp_src,
-                        &s1_wwww, inst->Instruction.Saturate);
 
    free_temp_indexes(emit);
 
@@ -4353,42 +4280,6 @@ emit_rsq(struct svga_shader_emitter_v10 *emit,
 
    /* free tmp */
    free_temp_indexes(emit);
-
-   return TRUE;
-}
-
-
-/**
- * Emit code for TGSI_OPCODE_SCS instruction.
- */
-static boolean
-emit_scs(struct svga_shader_emitter_v10 *emit,
-         const struct tgsi_full_instruction *inst)
-{
-   /* dst.x = cos(src.x)
-    * dst.y = sin(src.x)
-    * dst.z = 0.0
-    * dst.w = 1.0
-    */
-   struct tgsi_full_dst_register dst_x =
-      writemask_dst(&inst->Dst[0], TGSI_WRITEMASK_X);
-   struct tgsi_full_dst_register dst_y =
-      writemask_dst(&inst->Dst[0], TGSI_WRITEMASK_Y);
-   struct tgsi_full_dst_register dst_zw =
-      writemask_dst(&inst->Dst[0], TGSI_WRITEMASK_ZW);
-
-   struct tgsi_full_src_register zero_one =
-      make_immediate_reg_float4(emit, 0.0f, 0.0f, 0.0f, 1.0f);
-
-   begin_emit_instruction(emit);
-   emit_opcode(emit, VGPU10_OPCODE_SINCOS, inst->Instruction.Saturate);
-   emit_dst_register(emit, &dst_y);
-   emit_dst_register(emit, &dst_x);
-   emit_src_register(emit, &inst->Src[0]);
-   end_emit_instruction(emit);
-
-   emit_instruction_op1(emit, VGPU10_OPCODE_MOV,
-                        &dst_zw, &zero_one, inst->Instruction.Saturate);
 
    return TRUE;
 }
@@ -5288,117 +5179,6 @@ emit_txp(struct svga_shader_emitter_v10 *emit,
 }
 
 
-/*
- * Emit code for TGSI_OPCODE_XPD instruction.
- */
-static boolean
-emit_xpd(struct svga_shader_emitter_v10 *emit,
-         const struct tgsi_full_instruction *inst)
-{
-   /* dst.x = src0.y * src1.z - src1.y * src0.z
-    * dst.y = src0.z * src1.x - src1.z * src0.x
-    * dst.z = src0.x * src1.y - src1.x * src0.y
-    * dst.w = 1
-    */
-   struct tgsi_full_src_register s0_xxxx =
-      scalar_src(&inst->Src[0], TGSI_SWIZZLE_X);
-   struct tgsi_full_src_register s0_yyyy =
-      scalar_src(&inst->Src[0], TGSI_SWIZZLE_Y);
-   struct tgsi_full_src_register s0_zzzz =
-      scalar_src(&inst->Src[0], TGSI_SWIZZLE_Z);
-
-   struct tgsi_full_src_register s1_xxxx =
-      scalar_src(&inst->Src[1], TGSI_SWIZZLE_X);
-   struct tgsi_full_src_register s1_yyyy =
-      scalar_src(&inst->Src[1], TGSI_SWIZZLE_Y);
-   struct tgsi_full_src_register s1_zzzz =
-      scalar_src(&inst->Src[1], TGSI_SWIZZLE_Z);
-
-   unsigned tmp1 = get_temp_index(emit);
-   struct tgsi_full_src_register tmp1_src = make_src_temp_reg(tmp1);
-   struct tgsi_full_dst_register tmp1_dst = make_dst_temp_reg(tmp1);
-
-   unsigned tmp2 = get_temp_index(emit);
-   struct tgsi_full_src_register tmp2_src = make_src_temp_reg(tmp2);
-   struct tgsi_full_dst_register tmp2_dst = make_dst_temp_reg(tmp2);
-   struct tgsi_full_src_register neg_tmp2_src = negate_src(&tmp2_src);
-
-   unsigned tmp3 = get_temp_index(emit);
-   struct tgsi_full_src_register tmp3_src = make_src_temp_reg(tmp3);
-   struct tgsi_full_dst_register tmp3_dst = make_dst_temp_reg(tmp3);
-   struct tgsi_full_dst_register tmp3_dst_x =
-      writemask_dst(&tmp3_dst, TGSI_WRITEMASK_X);
-   struct tgsi_full_dst_register tmp3_dst_y =
-      writemask_dst(&tmp3_dst, TGSI_WRITEMASK_Y);
-   struct tgsi_full_dst_register tmp3_dst_z =
-      writemask_dst(&tmp3_dst, TGSI_WRITEMASK_Z);
-   struct tgsi_full_dst_register tmp3_dst_w =
-      writemask_dst(&tmp3_dst, TGSI_WRITEMASK_W);
-
-   /* Note: we put all the intermediate computations into tmp3 in case
-    * the XPD dest register is that same as one of the src regs (in which
-    * case we could clobber a src reg before we're done with it) .
-    *
-    * Note: we could get by with just one temp register instead of three
-    * since we're doing scalar operations and there's enough room in one
-    * temp for everything.
-    */
-
-   /* MUL tmp1, src0.y, src1.z */
-   /* MUL tmp2, src1.y, src0.z */
-   /* ADD tmp3.x, tmp1, -tmp2 */
-   if (inst->Dst[0].Register.WriteMask & TGSI_WRITEMASK_X) {
-      emit_instruction_op2(emit, VGPU10_OPCODE_MUL, &tmp1_dst,
-                           &s0_yyyy, &s1_zzzz, FALSE);
-      emit_instruction_op2(emit, VGPU10_OPCODE_MUL, &tmp2_dst,
-                           &s1_yyyy, &s0_zzzz, FALSE);
-      emit_instruction_op2(emit, VGPU10_OPCODE_ADD, &tmp3_dst_x,
-                           &tmp1_src, &neg_tmp2_src, FALSE);
-   }
-
-   /* MUL tmp1, src0.z, src1.x */
-   /* MUL tmp2, src1.z, src0.x */
-   /* ADD tmp3.y, tmp1, -tmp2 */
-   if (inst->Dst[0].Register.WriteMask & TGSI_WRITEMASK_Y) {
-      emit_instruction_op2(emit, VGPU10_OPCODE_MUL, &tmp1_dst, &s0_zzzz,
-                           &s1_xxxx, FALSE);
-      emit_instruction_op2(emit, VGPU10_OPCODE_MUL, &tmp2_dst, &s1_zzzz,
-                           &s0_xxxx, FALSE);
-      emit_instruction_op2(emit, VGPU10_OPCODE_ADD, &tmp3_dst_y,
-                           &tmp1_src, &neg_tmp2_src, FALSE);
-   }
-
-   /* MUL tmp1, src0.x, src1.y */
-   /* MUL tmp2, src1.x, src0.y */
-   /* ADD tmp3.z, tmp1, -tmp2 */
-   if (inst->Dst[0].Register.WriteMask & TGSI_WRITEMASK_Z) {
-      emit_instruction_op2(emit, VGPU10_OPCODE_MUL, &tmp1_dst, &s0_xxxx,
-                           &s1_yyyy, FALSE);
-      emit_instruction_op2(emit, VGPU10_OPCODE_MUL, &tmp2_dst, &s1_xxxx,
-                           &s0_yyyy, FALSE);
-      emit_instruction_op2(emit, VGPU10_OPCODE_ADD, &tmp3_dst_z,
-                           &tmp1_src, &neg_tmp2_src, FALSE);
-   }
-
-   /* MOV tmp3.w, 1.0 */
-   if (inst->Dst[0].Register.WriteMask & TGSI_WRITEMASK_W) {
-      struct tgsi_full_src_register one =
-         make_immediate_reg_float(emit, 1.0f);
-
-      emit_instruction_op1(emit, VGPU10_OPCODE_MOV, &tmp3_dst_w, &one, FALSE);
-   }
-
-   /* MOV dst, tmp3 */
-   emit_instruction_op1(emit, VGPU10_OPCODE_MOV, &inst->Dst[0], &tmp3_src,
-                        inst->Instruction.Saturate);
-
-
-   free_temp_indexes(emit);
-
-   return TRUE;
-}
-
-
 /**
  * Emit code for TGSI_OPCODE_TXD (explicit derivatives)
  */
@@ -5756,10 +5536,6 @@ emit_vgpu10_instruction(struct svga_shader_emitter_v10 *emit,
       return emit_cmp(emit, inst);
    case TGSI_OPCODE_COS:
       return emit_sincos(emit, inst);
-   case TGSI_OPCODE_DP2A:
-      return emit_dp2a(emit, inst);
-   case TGSI_OPCODE_DPH:
-      return emit_dph(emit, inst);
    case TGSI_OPCODE_DST:
       return emit_dst(emit, inst);
    case TGSI_OPCODE_EX2:
@@ -5788,8 +5564,6 @@ emit_vgpu10_instruction(struct svga_shader_emitter_v10 *emit,
       return emit_rsq(emit, inst);
    case TGSI_OPCODE_SAMPLE:
       return emit_sample(emit, inst);
-   case TGSI_OPCODE_SCS:
-      return emit_scs(emit, inst);
    case TGSI_OPCODE_SEQ:
       return emit_seq(emit, inst);
    case TGSI_OPCODE_SGE:
@@ -5824,8 +5598,6 @@ emit_vgpu10_instruction(struct svga_shader_emitter_v10 *emit,
       return emit_txq(emit, inst);
    case TGSI_OPCODE_UIF:
       return emit_if(emit, inst);
-   case TGSI_OPCODE_XPD:
-      return emit_xpd(emit, inst);
    case TGSI_OPCODE_UMUL_HI:
    case TGSI_OPCODE_IMUL_HI:
    case TGSI_OPCODE_UDIV:
@@ -6379,6 +6151,47 @@ emit_pre_helpers(struct svga_shader_emitter_v10 *emit)
 
 
 /**
+ * The device has no direct support for the pipe_blend_state::alpha_to_one
+ * option so we implement it here with shader code.
+ *
+ * Note that this is kind of pointless, actually.  Here we're clobbering
+ * the alpha value with 1.0.  So if alpha-to-coverage is enabled, we'll wind
+ * up with 100% coverage.  That's almost certainly not what the user wants.
+ * The work-around is to add extra shader code to compute coverage from alpha
+ * and write it to the coverage output register (if the user's shader doesn't
+ * do so already).  We'll probably do that in the future.
+ */
+static void
+emit_alpha_to_one_instructions(struct svga_shader_emitter_v10 *emit,
+                               unsigned fs_color_tmp_index)
+{
+   struct tgsi_full_src_register one = make_immediate_reg_float(emit, 1.0f);
+   unsigned i;
+
+   /* Note: it's not 100% clear from the spec if we're supposed to clobber
+    * the alpha for all render targets.  But that's what NVIDIA does and
+    * that's what Piglit tests.
+    */
+   for (i = 0; i < emit->fs.num_color_outputs; i++) {
+      struct tgsi_full_dst_register color_dst;
+
+      if (fs_color_tmp_index != INVALID_INDEX && i == 0) {
+         /* write to the temp color register */
+         color_dst = make_dst_temp_reg(fs_color_tmp_index);
+      }
+      else {
+         /* write directly to the color[i] output */
+         color_dst = make_dst_output_reg(emit->fs.color_out_index[i]);
+      }
+
+      color_dst = writemask_dst(&color_dst, TGSI_WRITEMASK_W);
+
+      emit_instruction_op1(emit, VGPU10_OPCODE_MOV, &color_dst, &one, FALSE);
+   }
+}
+
+
+/**
  * Emit alpha test code.  This compares TEMP[fs_color_tmp_index].w
  * against the alpha reference value and discards the fragment if the
  * comparison fails.
@@ -6414,34 +6227,15 @@ emit_alpha_test_instructions(struct svga_shader_emitter_v10 *emit,
    emit_src_register(emit, &tmp_src_x);
    end_emit_instruction(emit);
 
-   /* If we don't need to broadcast the color below or set fragments to
-    * white, emit final color here.
+   /* If we don't need to broadcast the color below, emit the final color here.
     */
-   if (emit->key.fs.write_color0_to_n_cbufs <= 1 &&
-       !emit->key.fs.white_fragments) {
+   if (emit->key.fs.write_color0_to_n_cbufs <= 1) {
       /* MOV output.color, tempcolor */
       emit_instruction_op1(emit, VGPU10_OPCODE_MOV, &color_dst,
                            &color_src, FALSE);     /* XXX saturate? */
    }
 
    free_temp_indexes(emit);
-}
-
-
-/**
- * When we need to emit white for all fragments (for emulating XOR logicop
- * mode), this function copies white into the temporary color output register.
- */
-static void
-emit_set_color_white(struct svga_shader_emitter_v10 *emit,
-                     unsigned fs_color_tmp_index)
-{
-   struct tgsi_full_dst_register color_dst =
-      make_dst_temp_reg(fs_color_tmp_index);
-   struct tgsi_full_src_register white =
-      make_immediate_reg_float(emit, 1.0f);
-
-   emit_instruction_op1(emit, VGPU10_OPCODE_MOV, &color_dst, &white, FALSE);
 }
 
 
@@ -6460,8 +6254,17 @@ emit_broadcast_color_instructions(struct svga_shader_emitter_v10 *emit,
 {
    const unsigned n = emit->key.fs.write_color0_to_n_cbufs;
    unsigned i;
-   struct tgsi_full_src_register color_src =
-      make_src_temp_reg(fs_color_tmp_index);
+   struct tgsi_full_src_register color_src;
+
+   if (emit->key.fs.white_fragments) {
+      /* set all color outputs to white */
+      color_src = make_immediate_reg_float(emit, 1.0f);
+   }
+   else {
+      /* set all color outputs to TEMP[fs_color_tmp_index] */
+      assert(fs_color_tmp_index != INVALID_INDEX);
+      color_src = make_src_temp_reg(fs_color_tmp_index);
+   }
 
    assert(emit->unit == PIPE_SHADER_FRAGMENT);
 
@@ -6497,16 +6300,19 @@ emit_post_helpers(struct svga_shader_emitter_v10 *emit)
    else if (emit->unit == PIPE_SHADER_FRAGMENT) {
       const unsigned fs_color_tmp_index = emit->fs.color_tmp_index;
 
+      assert(!(emit->key.fs.white_fragments &&
+               emit->key.fs.write_color0_to_n_cbufs == 0));
+
       /* We no longer want emit_dst_register() to substitute the
        * temporary fragment color register for the real color output.
        */
       emit->fs.color_tmp_index = INVALID_INDEX;
 
+      if (emit->key.fs.alpha_to_one) {
+         emit_alpha_to_one_instructions(emit, fs_color_tmp_index);
+      }
       if (emit->key.fs.alpha_func != SVGA3D_CMP_ALWAYS) {
          emit_alpha_test_instructions(emit, fs_color_tmp_index);
-      }
-      if (emit->key.fs.white_fragments) {
-         emit_set_color_white(emit, fs_color_tmp_index);
       }
       if (emit->key.fs.write_color0_to_n_cbufs > 1 ||
           emit->key.fs.white_fragments) {

@@ -50,6 +50,7 @@
 #include "isl/isl.h"
 #include "blorp/blorp.h"
 #include "brw_bufmgr.h"
+#include "brw_context.h"
 #include <GL/internal/dri_interface.h>
 
 #ifdef __cplusplus
@@ -339,6 +340,13 @@ struct intel_mipmap_tree
     */
    union isl_color_value fast_clear_color;
 
+   /**
+    * For external surfaces, this is DRM format modifier that was used to
+    * create or import the surface.  For internal surfaces, this will always
+    * be DRM_FORMAT_MOD_INVALID.
+    */
+   uint64_t drm_modifier;
+
    /* These are also refcounted:
     */
    GLuint refcount;
@@ -399,7 +407,7 @@ struct intel_mipmap_tree *
 intel_miptree_create_for_dri_image(struct brw_context *brw,
                                    __DRIimage *image,
                                    GLenum target,
-                                   enum isl_colorspace colorspace,
+                                   mesa_format format,
                                    bool is_winsys_image);
 
 bool
@@ -428,6 +436,9 @@ intel_depth_format_for_depthstencil_format(mesa_format format);
 
 mesa_format
 intel_lower_compressed_format(struct brw_context *brw, mesa_format format);
+
+unsigned
+brw_get_num_logical_layers(const struct intel_mipmap_tree *mt, unsigned level);
 
 /** \brief Assert that the level and layer are valid for the miptree. */
 void
@@ -492,7 +503,7 @@ intel_miptree_copy_slice(struct brw_context *brw,
 void
 intel_miptree_copy_teximage(struct brw_context *brw,
                             struct intel_texture_image *intelImage,
-                            struct intel_mipmap_tree *dst_mt, bool invalidate);
+                            struct intel_mipmap_tree *dst_mt);
 
 /**
  * \name Miptree HiZ functions
@@ -629,28 +640,30 @@ void
 intel_miptree_prepare_texture(struct brw_context *brw,
                               struct intel_mipmap_tree *mt,
                               enum isl_format view_format,
-                              bool *aux_supported_out);
+                              uint32_t start_level, uint32_t num_levels,
+                              uint32_t start_layer, uint32_t num_layers,
+                              bool disable_aux);
 void
 intel_miptree_prepare_image(struct brw_context *brw,
                             struct intel_mipmap_tree *mt);
-void
-intel_miptree_prepare_fb_fetch(struct brw_context *brw,
-                               struct intel_mipmap_tree *mt, uint32_t level,
-                               uint32_t start_layer, uint32_t num_layers);
+
 enum isl_aux_usage
 intel_miptree_render_aux_usage(struct brw_context *brw,
                                struct intel_mipmap_tree *mt,
-                               bool srgb_enabled, bool blend_enabled);
+                               enum isl_format render_format,
+                               bool blend_enabled);
 void
 intel_miptree_prepare_render(struct brw_context *brw,
                              struct intel_mipmap_tree *mt, uint32_t level,
                              uint32_t start_layer, uint32_t layer_count,
-                             bool srgb_enabled, bool blend_enabled);
+                             enum isl_format render_format,
+                             bool blend_enabled);
 void
 intel_miptree_finish_render(struct brw_context *brw,
                             struct intel_mipmap_tree *mt, uint32_t level,
                             uint32_t start_layer, uint32_t layer_count,
-                            bool srgb_enabled, bool blend_enabled);
+                            enum isl_format render_format,
+                            bool blend_enabled);
 void
 intel_miptree_prepare_depth(struct brw_context *brw,
                             struct intel_mipmap_tree *mt, uint32_t level,
@@ -660,6 +673,9 @@ intel_miptree_finish_depth(struct brw_context *brw,
                            struct intel_mipmap_tree *mt, uint32_t level,
                            uint32_t start_layer, uint32_t layer_count,
                            bool depth_written);
+void
+intel_miptree_prepare_external(struct brw_context *brw,
+                               struct intel_mipmap_tree *mt);
 
 void
 intel_miptree_make_shareable(struct brw_context *brw,
@@ -673,11 +689,6 @@ intel_miptree_updownsample(struct brw_context *brw,
 void
 intel_update_r8stencil(struct brw_context *brw,
                        struct intel_mipmap_tree *mt);
-
-bool
-brw_miptree_layout(struct brw_context *brw,
-                   struct intel_mipmap_tree *mt,
-                   uint32_t layout_flags);
 
 void
 intel_miptree_map(struct brw_context *brw,
@@ -701,6 +712,33 @@ intel_miptree_unmap(struct brw_context *brw,
 bool
 intel_miptree_sample_with_hiz(struct brw_context *brw,
                               struct intel_mipmap_tree *mt);
+
+
+static inline bool
+intel_miptree_set_clear_color(struct gl_context *ctx,
+                              struct intel_mipmap_tree *mt,
+                              union isl_color_value clear_color)
+{
+   if (memcmp(&mt->fast_clear_color, &clear_color, sizeof(clear_color)) != 0) {
+      mt->fast_clear_color = clear_color;
+      ctx->NewDriverState |= BRW_NEW_AUX_STATE;
+      return true;
+   }
+   return false;
+}
+
+static inline bool
+intel_miptree_set_depth_clear_value(struct gl_context *ctx,
+                                    struct intel_mipmap_tree *mt,
+                                    float clear_value)
+{
+   if (mt->fast_clear_color.f32[0] != clear_value) {
+      mt->fast_clear_color.f32[0] = clear_value;
+      ctx->NewDriverState |= BRW_NEW_AUX_STATE;
+      return true;
+   }
+   return false;
+}
 
 #ifdef __cplusplus
 }

@@ -1799,7 +1799,7 @@ lp_build_abs(struct lp_build_context *bld,
       }
    }
 
-   if(type.width*type.length == 128 && util_cpu_caps.has_ssse3) {
+   if(type.width*type.length == 128 && util_cpu_caps.has_ssse3 && HAVE_LLVM < 0x0600) {
       switch(type.width) {
       case 8:
          return lp_build_intrinsic_unary(builder, "llvm.x86.ssse3.pabs.b.128", vec_type, a);
@@ -1809,7 +1809,7 @@ lp_build_abs(struct lp_build_context *bld,
          return lp_build_intrinsic_unary(builder, "llvm.x86.ssse3.pabs.d.128", vec_type, a);
       }
    }
-   else if (type.width*type.length == 256 && util_cpu_caps.has_avx2) {
+   else if (type.width*type.length == 256 && util_cpu_caps.has_avx2 && HAVE_LLVM < 0x0600) {
       switch(type.width) {
       case 8:
          return lp_build_intrinsic_unary(builder, "llvm.x86.avx2.pabs.b", vec_type, a);
@@ -1819,14 +1819,9 @@ lp_build_abs(struct lp_build_context *bld,
          return lp_build_intrinsic_unary(builder, "llvm.x86.avx2.pabs.d", vec_type, a);
       }
    }
-   else if (type.width*type.length == 256 && util_cpu_caps.has_ssse3 &&
-            (gallivm_debug & GALLIVM_DEBUG_PERF) &&
-            (type.width == 8 || type.width == 16 || type.width == 32)) {
-      debug_printf("%s: inefficient code, should split vectors manually\n",
-                   __FUNCTION__);
-   }
 
-   return lp_build_max(bld, a, LLVMBuildNeg(builder, a, ""));
+   return lp_build_select(bld, lp_build_cmp(bld, PIPE_FUNC_GREATER, a, bld->zero),
+                          a, LLVMBuildNeg(builder, a, ""));
 }
 
 

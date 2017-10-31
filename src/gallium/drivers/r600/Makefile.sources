@@ -1,4 +1,6 @@
+
 C_SOURCES = \
+	r600d_common.h \
 	compute_memory_pool.c \
 	compute_memory_pool.h \
 	eg_asm.c \
@@ -29,7 +31,26 @@ C_SOURCES = \
 	r600_state_common.c \
 	r600_uvd.c \
 	r700_asm.c \
-	r700_sq.h
+	r700_sq.h \
+	cayman_msaa.c \
+	r600_buffer_common.c \
+	r600_cs.h \
+	r600_gpu_load.c \
+	r600_perfcounter.c \
+	r600_pipe_common.c \
+	r600_pipe_common.h \
+	r600_query.c \
+	r600_query.h \
+	r600_streamout.c \
+	r600_test_dma.c \
+	r600_texture.c \
+	r600_viewport.c \
+	radeon_uvd.c \
+	radeon_uvd.h \
+	radeon_vce.c \
+	radeon_vce.h \
+	radeon_video.c \
+	radeon_video.h
 
 CXX_SOURCES = \
 	sb/sb_bc_builder.cpp \

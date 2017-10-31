@@ -499,7 +499,7 @@ ir_to_mesa_visitor::src_reg_for_float(float val)
 }
 
 static int
-type_size(const struct glsl_type *type)
+storage_type_size(const struct glsl_type *type, bool bindless)
 {
    unsigned int i;
    int size;
@@ -541,19 +541,19 @@ type_size(const struct glsl_type *type)
          return 1;
    case GLSL_TYPE_ARRAY:
       assert(type->length > 0);
-      return type_size(type->fields.array) * type->length;
+      return storage_type_size(type->fields.array, bindless) * type->length;
    case GLSL_TYPE_STRUCT:
       size = 0;
       for (i = 0; i < type->length; i++) {
-	 size += type_size(type->fields.structure[i].type);
+	 size += storage_type_size(type->fields.structure[i].type, bindless);
       }
       return size;
    case GLSL_TYPE_SAMPLER:
    case GLSL_TYPE_IMAGE:
+      if (!bindless)
+         return 0;
+      /* fall through */
    case GLSL_TYPE_SUBROUTINE:
-      /* Samplers take up one slot in UNIFORMS[], but they're baked in
-       * at link time.
-       */
       return 1;
    case GLSL_TYPE_ATOMIC_UINT:
    case GLSL_TYPE_VOID:
@@ -565,6 +565,12 @@ type_size(const struct glsl_type *type)
    }
 
    return 0;
+}
+
+static int
+type_size(const struct glsl_type *type)
+{
+   return storage_type_size(type, false);
 }
 
 /**
@@ -1004,7 +1010,7 @@ ir_to_mesa_visitor::visit(ir_expression *ir)
       return;
    }
 
-   for (operand = 0; operand < ir->get_num_operands(); operand++) {
+   for (operand = 0; operand < ir->num_operands; operand++) {
       this->result.file = PROGRAM_UNDEFINED;
       ir->operands[operand]->accept(this);
       if (this->result.file == PROGRAM_UNDEFINED) {
@@ -1543,7 +1549,7 @@ ir_to_mesa_visitor::visit(ir_dereference_array *ir)
    src_reg src;
    int element_size = type_size(ir->type);
 
-   index = ir->array_index->constant_expression_value();
+   index = ir->array_index->constant_expression_value(ralloc_parent(ir));
 
    ir->array->accept(this);
    src = this->result;
@@ -1602,8 +1608,9 @@ ir_to_mesa_visitor::visit(ir_dereference_record *ir)
 
    ir->record->accept(this);
 
+   assert(ir->field_idx >= 0);
    for (i = 0; i < struct_type->length; i++) {
-      if (strcmp(struct_type->fields.structure[i].name, ir->field) == 0)
+      if (i == (unsigned) ir->field_idx)
 	 break;
       offset += type_size(struct_type->fields.structure[i].type);
    }
@@ -1656,8 +1663,10 @@ calc_sampler_offsets(struct gl_shader_program *prog, ir_dereference *deref,
    switch (deref->ir_type) {
    case ir_type_dereference_array: {
       ir_dereference_array *deref_arr = deref->as_dereference_array();
+
+      void *mem_ctx = ralloc_parent(deref_arr);
       ir_constant *array_index =
-         deref_arr->array_index->constant_expression_value();
+         deref_arr->array_index->constant_expression_value(mem_ctx);
 
       if (!array_index) {
 	 /* GLSL 1.10 and 1.20 allowed variable sampler array indices,
@@ -1684,8 +1693,7 @@ calc_sampler_offsets(struct gl_shader_program *prog, ir_dereference *deref,
 
    case ir_type_dereference_record: {
       ir_dereference_record *deref_record = deref->as_dereference_record();
-      unsigned field_index =
-         deref_record->record->type->field_index(deref_record->field);
+      unsigned field_index = deref_record->field_idx;
       *location +=
          deref_record->record->type->record_location_offset(field_index);
       calc_sampler_offsets(prog, deref_record->record->as_dereference(),
@@ -1736,7 +1744,7 @@ ir_to_mesa_visitor::process_move_condition(ir_rvalue *ir)
    bool switch_order = false;
 
    ir_expression *const expr = ir->as_expression();
-   if ((expr != NULL) && (expr->get_num_operands() == 2)) {
+   if ((expr != NULL) && (expr->num_operands == 2)) {
       bool zero_on_left = false;
 
       if (expr->operands[0]->is_zero()) {
@@ -1905,7 +1913,8 @@ ir_to_mesa_visitor::visit(ir_constant *ir)
       src_reg temp_base = get_temp(ir->type);
       dst_reg temp = dst_reg(temp_base);
 
-      foreach_in_list(ir_constant, field_value, &ir->components) {
+      for (i = 0; i < ir->type->length; i++) {
+         ir_constant *const field_value = ir->get_record_field(i);
 	 int size = type_size(field_value->type);
 
 	 assert(size > 0);
@@ -1913,7 +1922,7 @@ ir_to_mesa_visitor::visit(ir_constant *ir)
 	 field_value->accept(this);
 	 src = this->result;
 
-	 for (i = 0; i < (unsigned int)size; i++) {
+         for (unsigned j = 0; j < (unsigned int)size; j++) {
 	    emit(ir, OPCODE_MOV, temp, src);
 
 	    src.index++;
@@ -1932,7 +1941,7 @@ ir_to_mesa_visitor::visit(ir_constant *ir)
       assert(size > 0);
 
       for (i = 0; i < ir->type->length; i++) {
-	 ir->array_elements[i]->accept(this);
+	 ir->const_elements[i]->accept(this);
 	 src = this->result;
 	 for (int j = 0; j < size; j++) {
 	    emit(ir, OPCODE_MOV, temp, src);
@@ -2408,11 +2417,10 @@ namespace {
 
 class add_uniform_to_shader : public program_resource_visitor {
 public:
-   add_uniform_to_shader(struct gl_shader_program *shader_program,
-			 struct gl_program_parameter_list *params,
-                         gl_shader_stage shader_type)
-      : shader_program(shader_program), params(params), idx(-1),
-        shader_type(shader_type)
+   add_uniform_to_shader(struct gl_context *ctx,
+                         struct gl_shader_program *shader_program,
+			 struct gl_program_parameter_list *params)
+      : ctx(ctx), params(params), idx(-1)
    {
       /* empty */
    }
@@ -2421,7 +2429,8 @@ public:
    {
       this->idx = -1;
       this->var = var;
-      this->program_resource_visitor::process(var);
+      this->program_resource_visitor::process(var,
+                                         ctx->Const.UseSTD430AsDefaultPacking);
       var->data.param_index = this->idx;
    }
 
@@ -2431,11 +2440,10 @@ private:
                             const enum glsl_interface_packing packing,
                             bool last_field);
 
-   struct gl_shader_program *shader_program;
+   struct gl_context *ctx;
    struct gl_program_parameter_list *params;
    int idx;
    ir_variable *var;
-   gl_shader_stage shader_type;
 };
 
 } /* anonymous namespace */
@@ -2447,49 +2455,18 @@ add_uniform_to_shader::visit_field(const glsl_type *type, const char *name,
                                    const enum glsl_interface_packing,
                                    bool /* last_field */)
 {
-   /* atomics don't get real storage */
-   if (type->contains_atomic())
+   /* opaque types don't use storage in the param list unless they are
+    * bindless samplers or images.
+    */
+   if (type->contains_opaque() && !var->data.bindless)
       return;
 
-   gl_register_file file;
-   if (type->without_array()->is_sampler() && !var->data.bindless) {
-      file = PROGRAM_SAMPLER;
-   } else {
-      file = PROGRAM_UNIFORM;
-   }
+   assert(_mesa_lookup_parameter_index(params, name) < 0);
 
-   int index = _mesa_lookup_parameter_index(params, name);
-   if (index < 0) {
-      unsigned size = type_size(type) * 4;
+   unsigned size = storage_type_size(type, var->data.bindless) * 4;
 
-      index = _mesa_add_parameter(params, file, name, size, type->gl_type,
-				  NULL, NULL);
-
-      /* Sampler uniform values are stored in prog->SamplerUnits,
-       * and the entry in that array is selected by this index we
-       * store in ParameterValues[].
-       */
-      if (file == PROGRAM_SAMPLER) {
-	 unsigned location;
-	 const bool found =
-	    this->shader_program->UniformHash->get(location,
-						   params->Parameters[index].Name);
-	 assert(found);
-
-	 if (!found)
-	    return;
-
-	 struct gl_uniform_storage *storage =
-            &this->shader_program->data->UniformStorage[location];
-
-         assert(storage->type->is_sampler() &&
-                storage->opaque[shader_type].active);
-
-	 for (unsigned int j = 0; j < size / 4; j++)
-            params->ParameterValues[index + j][0].f =
-               storage->opaque[shader_type].index + j;
-      }
-   }
+   int index = _mesa_add_parameter(params, PROGRAM_UNIFORM, name, size,
+                                   type->gl_type, NULL, NULL);
 
    /* The first part of the uniform that's processed determines the base
     * location of the whole uniform (for structures).
@@ -2507,13 +2484,14 @@ add_uniform_to_shader::visit_field(const glsl_type *type, const char *name,
  * \param params         Parameter list to be filled in.
  */
 void
-_mesa_generate_parameters_list_for_uniforms(struct gl_shader_program
+_mesa_generate_parameters_list_for_uniforms(struct gl_context *ctx,
+                                            struct gl_shader_program
 					    *shader_program,
 					    struct gl_linked_shader *sh,
 					    struct gl_program_parameter_list
 					    *params)
 {
-   add_uniform_to_shader add(shader_program, params, sh->Stage);
+   add_uniform_to_shader add(ctx, shader_program, params);
 
    foreach_in_list(ir_instruction, node, sh->ir) {
       ir_variable *var = node->as_variable();
@@ -2875,7 +2853,7 @@ get_mesa_program(struct gl_context *ctx,
    v.shader_program = shader_program;
    v.options = options;
 
-   _mesa_generate_parameters_list_for_uniforms(shader_program, shader,
+   _mesa_generate_parameters_list_for_uniforms(ctx, shader_program, shader,
 					       prog->Parameters);
 
    /* Emit Mesa IR for main(). */

@@ -33,53 +33,53 @@
 //============================================================================
 
 #define SIMD_IWRAPPER_1(op)  \
-    static SIMDINLINE Integer SIMDCALL op(Integer a)   \
+    static SIMDINLINE Integer SIMDCALL op(Integer const &a)   \
     {\
         return _mm256_##op(a);\
     }
 
 #define SIMD_IWRAPPER_1L(op)  \
-    static SIMDINLINE Integer SIMDCALL op(Integer a)   \
+    static SIMDINLINE Integer SIMDCALL op(Integer const &a)   \
     {\
         return _mm256_##op(_mm256_castsi256_si128(a));\
     }\
 
 #define SIMD_IWRAPPER_1I(op)  \
     template<int ImmT> \
-    static SIMDINLINE Integer SIMDCALL op(Integer a)   \
+    static SIMDINLINE Integer SIMDCALL op(Integer const &a)   \
     {\
         return _mm256_##op(a, ImmT);\
     }
 
 #define SIMD_IWRAPPER_1I_(op, intrin)  \
     template<int ImmT> \
-    static SIMDINLINE Integer SIMDCALL op(Integer a)   \
+    static SIMDINLINE Integer SIMDCALL op(Integer const &a)   \
     {\
         return _mm256_##intrin(a, ImmT);\
     }
 
 #define SIMD_IWRAPPER_2_(op, intrin)  \
-    static SIMDINLINE Integer SIMDCALL op(Integer a, Integer b)   \
+    static SIMDINLINE Integer SIMDCALL op(Integer const &a, Integer const &b)   \
     {\
         return _mm256_##intrin(a, b);\
     }
 
 #define SIMD_IWRAPPER_2(op)  \
-    static SIMDINLINE Integer SIMDCALL op(Integer a, Integer b)   \
+    static SIMDINLINE Integer SIMDCALL op(Integer const &a, Integer const &b)   \
     {\
         return _mm256_##op(a, b);\
     }
 
 #define SIMD_IWRAPPER_2I(op)  \
     template<int ImmT> \
-    static SIMDINLINE Integer SIMDCALL op(Integer a, Integer b)   \
+    static SIMDINLINE Integer SIMDCALL op(Integer const &a, Integer const &b)   \
     {\
         return _mm256_##op(a, b, ImmT);\
     }
 
 #define SIMD_IWRAPPER_2I(op)  \
     template<int ImmT>\
-    static SIMDINLINE Integer SIMDCALL op(Integer a, Integer b)   \
+    static SIMDINLINE Integer SIMDCALL op(Integer const &a, Integer const &b)   \
     {\
         return _mm256_##op(a, b, ImmT);\
     }
@@ -87,7 +87,7 @@
 //-----------------------------------------------------------------------
 // Floating point arithmetic operations
 //-----------------------------------------------------------------------
-static SIMDINLINE Float SIMDCALL fmadd_ps(Float a, Float b, Float c)   // return (a * b) + c
+static SIMDINLINE Float SIMDCALL fmadd_ps(Float const &a, Float const &b, Float const &c)   // return (a * b) + c
 {
     return _mm256_fmadd_ps(a, b, c);
 }
@@ -134,7 +134,7 @@ SIMD_IWRAPPER_2(srlv_epi32);                // return a >> b      (uint32)
 SIMD_IWRAPPER_1I_(srli_si, srli_si256);     // return a >> (ImmT*8) (uint)
 
 template<int ImmT>                          // same as srli_si, but with Float cast to int
-static SIMDINLINE Float SIMDCALL srlisi_ps(Float a)
+static SIMDINLINE Float SIMDCALL srlisi_ps(Float const &a)
 {
     return castsi_ps(srli_si<ImmT>(castps_si(a)));
 }
@@ -161,7 +161,7 @@ SIMD_IWRAPPER_2(cmpgt_epi16);   // return a > b (int16)
 SIMD_IWRAPPER_2(cmpgt_epi32);   // return a > b (int32)
 SIMD_IWRAPPER_2(cmpgt_epi64);   // return a > b (int64)
 
-static SIMDINLINE Integer SIMDCALL cmplt_epi32(Integer a, Integer b)   // return a < b (int32)
+static SIMDINLINE Integer SIMDCALL cmplt_epi32(Integer const &a, Integer const &b)   // return a < b (int32)
 {
     return cmpgt_epi32(b, a);
 }
@@ -176,14 +176,14 @@ SIMD_IWRAPPER_2(packus_epi16);  // See documentation for _mm256_packus_epi16 and
 SIMD_IWRAPPER_2(packus_epi32);  // See documentation for _mm256_packus_epi32 and _mm512_packus_epi32
 SIMD_IWRAPPER_2_(permute_epi32, permutevar8x32_epi32);
 
-static SIMDINLINE Float SIMDCALL permute_ps(Float a, Integer swiz)    // return a[swiz[i]] for each 32-bit lane i (float)
+static SIMDINLINE Float SIMDCALL permute_ps(Float const &a, Integer const &swiz)    // return a[swiz[i]] for each 32-bit lane i (float)
 {
     return _mm256_permutevar8x32_ps(a, swiz);
 }
 
 SIMD_IWRAPPER_1I(shuffle_epi32);
 template<int ImmT>
-static SIMDINLINE Integer SIMDCALL shuffle_epi64(Integer a, Integer b)
+static SIMDINLINE Integer SIMDCALL shuffle_epi64(Integer const &a, Integer const &b)
 {
     return castpd_si(shuffle_pd<ImmT>(castsi_pd(a), castsi_pd(b)));
 }
@@ -201,21 +201,21 @@ SIMD_IWRAPPER_2(unpacklo_epi8);
 // Load / store operations
 //-----------------------------------------------------------------------
 template<ScaleFactor ScaleT>
-static SIMDINLINE Float SIMDCALL i32gather_ps(float const* p, Integer idx) // return *(float*)(((int8*)p) + (idx * ScaleT))
+static SIMDINLINE Float SIMDCALL i32gather_ps(float const* p, Integer const &idx) // return *(float*)(((int8*)p) + (idx * ScaleT))
 {
     return _mm256_i32gather_ps(p, idx, static_cast<int>(ScaleT));
 }
 
 // for each element: (mask & (1 << 31)) ? (i32gather_ps<ScaleT>(p, idx), mask = 0) : old
 template<ScaleFactor ScaleT>
-static SIMDINLINE Float SIMDCALL mask_i32gather_ps(Float old, float const* p, Integer idx, Float mask)
+static SIMDINLINE Float SIMDCALL mask_i32gather_ps(Float const &old, float const* p, Integer const &idx, Float const &mask)
 {
 	// g++ in debug mode needs the explicit .v suffix instead of relying on operator __m256()
 	// Only for this intrinsic - not sure why. :(
     return _mm256_mask_i32gather_ps(old.v, p, idx.v, mask.v, static_cast<int>(ScaleT));
 }
 
-static SIMDINLINE uint32_t SIMDCALL movemask_epi8(Integer a)
+static SIMDINLINE uint32_t SIMDCALL movemask_epi8(Integer const &a)
 {
     return static_cast<uint32_t>(_mm256_movemask_epi8(a));
 }

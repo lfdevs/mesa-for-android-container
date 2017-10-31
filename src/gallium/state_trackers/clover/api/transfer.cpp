@@ -295,6 +295,9 @@ clEnqueueReadBuffer(cl_command_queue d_q, cl_mem d_mem, cl_bool blocking,
                    &mem, obj_origin, obj_pitch,
                    region));
 
+   if (blocking)
+       hev().wait_signalled();
+
    ret_object(rd_ev, hev);
    return CL_SUCCESS;
 
@@ -324,6 +327,9 @@ clEnqueueWriteBuffer(cl_command_queue d_q, cl_mem d_mem, cl_bool blocking,
       soft_copy_op(q, &mem, obj_origin, obj_pitch,
                    ptr, {}, obj_pitch,
                    region));
+
+   if (blocking)
+       hev().wait_signalled();
 
    ret_object(rd_ev, hev);
    return CL_SUCCESS;
@@ -362,6 +368,9 @@ clEnqueueReadBufferRect(cl_command_queue d_q, cl_mem d_mem, cl_bool blocking,
                    &mem, obj_origin, obj_pitch,
                    region));
 
+   if (blocking)
+       hev().wait_signalled();
+
    ret_object(rd_ev, hev);
    return CL_SUCCESS;
 
@@ -398,6 +407,9 @@ clEnqueueWriteBufferRect(cl_command_queue d_q, cl_mem d_mem, cl_bool blocking,
       soft_copy_op(q, &mem, obj_origin, obj_pitch,
                    ptr, host_origin, host_pitch,
                    region));
+
+   if (blocking)
+       hev().wait_signalled();
 
    ret_object(rd_ev, hev);
    return CL_SUCCESS;
@@ -504,6 +516,9 @@ clEnqueueReadImage(cl_command_queue d_q, cl_mem d_mem, cl_bool blocking,
                    &img, src_origin, src_pitch,
                    region));
 
+   if (blocking)
+       hev().wait_signalled();
+
    ret_object(rd_ev, hev);
    return CL_SUCCESS;
 
@@ -537,6 +552,9 @@ clEnqueueWriteImage(cl_command_queue d_q, cl_mem d_mem, cl_bool blocking,
       soft_copy_op(q, &img, dst_origin, dst_pitch,
                    ptr, {}, src_pitch,
                    region));
+
+   if (blocking)
+       hev().wait_signalled();
 
    ret_object(rd_ev, hev);
    return CL_SUCCESS;
@@ -667,7 +685,11 @@ clEnqueueMapBuffer(cl_command_queue d_q, cl_mem d_mem, cl_bool blocking,
 
    void *map = mem.resource(q).add_map(q, flags, blocking, obj_origin, region);
 
-   ret_object(rd_ev, create<hard_event>(q, CL_COMMAND_MAP_BUFFER, deps));
+   auto hev = create<hard_event>(q, CL_COMMAND_MAP_BUFFER, deps);
+   if (blocking)
+       hev().wait_signalled();
+
+   ret_object(rd_ev, hev);
    ret_error(r_errcode, CL_SUCCESS);
    return map;
 
@@ -695,7 +717,11 @@ clEnqueueMapImage(cl_command_queue d_q, cl_mem d_mem, cl_bool blocking,
 
    void *map = img.resource(q).add_map(q, flags, blocking, origin, region);
 
-   ret_object(rd_ev, create<hard_event>(q, CL_COMMAND_MAP_IMAGE, deps));
+   auto hev = create<hard_event>(q, CL_COMMAND_MAP_IMAGE, deps);
+   if (blocking)
+       hev().wait_signalled();
+
+   ret_object(rd_ev, hev);
    ret_error(r_errcode, CL_SUCCESS);
    return map;
 

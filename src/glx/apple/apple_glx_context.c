@@ -55,6 +55,8 @@
 #include "apple_cgl.h"
 #include "apple_glx_drawable.h"
 
+#include "util/debug.h"
+
 static pthread_mutex_t context_lock = PTHREAD_MUTEX_INITIALIZER;
 
 /*
@@ -181,7 +183,7 @@ apple_glx_create_context(void **ptr, Display * dpy, int screen,
          *x11errorptr = false;
       }
 
-      if (getenv("LIBGL_DIAGNOSTIC"))
+      if (env_var_as_boolean("LIBGL_DIAGNOSTIC", false))
          fprintf(stderr, "error: %s\n", apple_cgl.error_string(error));
 
       return true;

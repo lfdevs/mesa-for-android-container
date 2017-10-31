@@ -69,6 +69,7 @@ namespace clover {
       virtual cl_int status() const;
       virtual command_queue *queue() const = 0;
       virtual cl_command_type command() const = 0;
+      void wait_signalled() const;
       virtual void wait() const;
 
       virtual struct pipe_fence_handle *fence() const {
@@ -85,8 +86,9 @@ namespace clover {
    private:
       std::vector<intrusive_ref<event>> trigger_self();
       std::vector<intrusive_ref<event>> abort_self(cl_int status);
+      unsigned wait_count() const;
 
-      unsigned wait_count;
+      unsigned _wait_count;
       cl_int _status;
       action action_ok;
       action action_fail;

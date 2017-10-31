@@ -150,7 +150,7 @@ clGetDeviceInfo(cl_device_id d_dev, cl_device_info param,
       break;
 
    case CL_DEVICE_PREFERRED_VECTOR_WIDTH_HALF:
-      buf.as_scalar<cl_uint>() = 0;
+      buf.as_scalar<cl_uint>() = dev.has_halves() ? 8 : 0;
       break;
 
    case CL_DEVICE_MAX_CLOCK_FREQUENCY:
@@ -205,11 +205,19 @@ clGetDeviceInfo(cl_device_id d_dev, cl_device_info param,
       break;
 
    case CL_DEVICE_MEM_BASE_ADDR_ALIGN:
-      buf.as_scalar<cl_uint>() = 128 * 8;
+      buf.as_scalar<cl_uint>() = 8 *
+         std::max(dev.mem_base_addr_align(), (cl_uint) sizeof(cl_long) * 16);
       break;
 
    case CL_DEVICE_MIN_DATA_TYPE_ALIGN_SIZE:
       buf.as_scalar<cl_uint>() = 128;
+      break;
+
+   case CL_DEVICE_HALF_FP_CONFIG:
+      // This is the "mandated minimum half precision floating-point
+      // capability" for OpenCL 1.x.
+      buf.as_scalar<cl_device_fp_config>() =
+         CL_FP_INF_NAN | CL_FP_ROUND_TO_NEAREST;
       break;
 
    case CL_DEVICE_SINGLE_FP_CONFIG:
@@ -314,7 +322,7 @@ clGetDeviceInfo(cl_device_id d_dev, cl_device_info param,
       break;
 
    case CL_DEVICE_VERSION:
-      buf.as_string() = "OpenCL 1.1 Mesa " PACKAGE_VERSION
+      buf.as_string() = "OpenCL " + dev.device_version() + " Mesa " PACKAGE_VERSION
 #ifdef MESA_GIT_SHA1
                         " (" MESA_GIT_SHA1 ")"
 #endif
@@ -323,12 +331,15 @@ clGetDeviceInfo(cl_device_id d_dev, cl_device_info param,
 
    case CL_DEVICE_EXTENSIONS:
       buf.as_string() =
-         "cl_khr_global_int32_base_atomics"
+         "cl_khr_byte_addressable_store"
+         " cl_khr_global_int32_base_atomics"
          " cl_khr_global_int32_extended_atomics"
          " cl_khr_local_int32_base_atomics"
          " cl_khr_local_int32_extended_atomics"
-         " cl_khr_byte_addressable_store"
-         + std::string(dev.has_doubles() ? " cl_khr_fp64" : "");
+         + std::string(dev.has_int64_atomics() ? " cl_khr_int64_base_atomics" : "")
+         + std::string(dev.has_int64_atomics() ? " cl_khr_int64_extended_atomics" : "")
+         + std::string(dev.has_doubles() ? " cl_khr_fp64" : "")
+         + std::string(dev.has_halves() ? " cl_khr_fp16" : "");
       break;
 
    case CL_DEVICE_PLATFORM:
@@ -364,11 +375,11 @@ clGetDeviceInfo(cl_device_id d_dev, cl_device_info param,
       break;
 
    case CL_DEVICE_NATIVE_VECTOR_WIDTH_HALF:
-      buf.as_scalar<cl_uint>() = 0;
+      buf.as_scalar<cl_uint>() = dev.has_halves() ? 8 : 0;
       break;
 
    case CL_DEVICE_OPENCL_C_VERSION:
-      buf.as_string() = "OpenCL C 1.1 ";
+      buf.as_string() = "OpenCL C " + dev.device_clc_version() + " ";
       break;
 
    case CL_DEVICE_PRINTF_BUFFER_SIZE:

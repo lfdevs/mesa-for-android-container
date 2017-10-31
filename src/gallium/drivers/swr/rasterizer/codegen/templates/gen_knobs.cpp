@@ -1,25 +1,26 @@
 /******************************************************************************
+* Copyright (C) 2015-2017 Intel Corporation.   All Rights Reserved.
 *
-* Copyright 2015-2017
-* Intel Corporation
+* Permission is hereby granted, free of charge, to any person obtaining a
+* copy of this software and associated documentation files (the "Software"),
+* to deal in the Software without restriction, including without limitation
+* the rights to use, copy, modify, merge, publish, distribute, sublicense,
+* and/or sell copies of the Software, and to permit persons to whom the
+* Software is furnished to do so, subject to the following conditions:
 *
-* Licensed under the Apache License, Version 2.0 (the "License");
-* you may not use this file except in compliance with the License.
-* You may obtain a copy of the License at
+* The above copyright notice and this permission notice (including the next
+* paragraph) shall be included in all copies or substantial portions of the
+* Software.
 *
-* http ://www.apache.org/licenses/LICENSE-2.0
+* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+* THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+* FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+* IN THE SOFTWARE.
 *
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*
-% if gen_header:
-* @file ${filename}.h
-% else:
 * @file ${filename}.cpp
-% endif 
 *
 * @brief Dynamic Knobs for Core.
 *
@@ -30,105 +31,6 @@
 *
 ******************************************************************************/
 <% calc_max_knob_len(knobs) %>
-%if gen_header:
-#pragma once
-#include <string>
-
-struct KnobBase
-{
-private:
-    // Update the input string.
-    static void autoExpandEnvironmentVariables(std::string &text);
-
-protected:
-    // Leave input alone and return new string.
-    static std::string expandEnvironmentVariables(std::string const &input)
-    {
-        std::string text = input;
-        autoExpandEnvironmentVariables(text);
-        return text;
-    }
-
-    template <typename T>
-    static T expandEnvironmentVariables(T const &input)
-    {
-        return input;
-    }
-};
-
-template <typename T>
-struct Knob : KnobBase
-{
-public:
-    const   T&  Value() const               { return m_Value; }
-    const   T&  Value(T const &newValue)
-    {
-        m_Value = expandEnvironmentVariables(newValue);
-        return Value();
-    }
-
-protected:
-    Knob(T const &defaultValue) :
-        m_Value(expandEnvironmentVariables(defaultValue))
-    {
-    }
-
-private:
-    T m_Value;
-};
-
-#define DEFINE_KNOB(_name, _type, _default)                     \\
-
-    struct Knob_##_name : Knob<_type>                           \\
-
-    {                                                           \\
-
-        Knob_##_name() : Knob<_type>(_default) { }              \\
-
-        static const char* Name() { return "KNOB_" #_name; }    \\
-
-    } _name;
-
-#define GET_KNOB(_name)             g_GlobalKnobs._name.Value()
-#define SET_KNOB(_name, _newValue)  g_GlobalKnobs._name.Value(_newValue)
-
-struct GlobalKnobs
-{
-    % for knob in knobs:
-    //-----------------------------------------------------------
-    // KNOB_${knob[0]}
-    //
-    % for line in knob[1]['desc']:
-    // ${line}
-    % endfor
-    % if knob[1].get('choices'):
-    <%
-    choices = knob[1].get('choices')
-    _max_len = calc_max_name_len(choices) %>//
-    % for i in range(len(choices)):
-    //     ${choices[i]['name']}${space_name(choices[i]['name'], _max_len)} = ${format(choices[i]['value'], '#010x')}
-    % endfor
-    % endif
-    //
-    % if knob[1]['type'] == 'std::string':
-    DEFINE_KNOB(${knob[0]}, ${knob[1]['type']}, "${repr(knob[1]['default'])[1:-1]}");
-    % else:
-    DEFINE_KNOB(${knob[0]}, ${knob[1]['type']}, ${knob[1]['default']});
-    % endif
-
-    % endfor
-    GlobalKnobs();
-    std::string ToString(const char* optPerLinePrefix="");
-};
-extern GlobalKnobs g_GlobalKnobs;
-
-#undef DEFINE_KNOB
-
-% for knob in knobs:
-#define KNOB_${knob[0]}${space_knob(knob[0])} GET_KNOB(${knob[0]})
-% endfor
-
-% else:
 % for inc in includes:
 #include <${inc}>
 % endfor
@@ -198,8 +100,8 @@ GlobalKnobs g_GlobalKnobs;
 //========================================================
 GlobalKnobs::GlobalKnobs()
 {
-    % for knob in knobs:
-    InitKnob(${knob[0]});
+    % for knob in knobs :
+    InitKnob(${ knob[0] });
     % endfor
 }
 
@@ -228,9 +130,6 @@ std::string GlobalKnobs::ToString(const char* optPerLinePrefix)
 
     return str.str();
 }
-
-% endif
-
 <%!
     # Globally available python 
     max_len = 0
@@ -257,6 +156,4 @@ std::string GlobalKnobs::ToString(const char* optPerLinePrefix)
     def space_name(name, max_len):
         name_len = len(name)
         return ' '*(max_len - name_len)
-
-
 %>

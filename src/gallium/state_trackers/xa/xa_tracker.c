@@ -162,7 +162,7 @@ xa_tracker_create(int drm_fd)
 	goto out_no_fd;
 
     if (pipe_loader_drm_probe_fd(&xa->dev, fd))
-	xa->screen = pipe_loader_create_screen(xa->dev, 0);
+	xa->screen = pipe_loader_create_screen(xa->dev);
 
     if (!xa->screen)
 	goto out_no_screen;

@@ -10,7 +10,6 @@
  *   POW - EX2 + MUL + LG2
  *   SUB - ADD, second source negated
  *   SWZ - MOV
- *   XPD -
  *
  * Register access
  *   - Only one INPUT can be accessed per-instruction (move extras into TEMPs)

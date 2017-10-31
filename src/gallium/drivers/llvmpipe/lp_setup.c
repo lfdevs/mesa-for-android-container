@@ -1380,6 +1380,7 @@ lp_setup_begin_query(struct lp_setup_context *setup,
 
    if (!(pq->type == PIPE_QUERY_OCCLUSION_COUNTER ||
          pq->type == PIPE_QUERY_OCCLUSION_PREDICATE ||
+         pq->type == PIPE_QUERY_OCCLUSION_PREDICATE_CONSERVATIVE ||
          pq->type == PIPE_QUERY_PIPELINE_STATISTICS))
       return;
 
@@ -1430,6 +1431,7 @@ lp_setup_end_query(struct lp_setup_context *setup, struct llvmpipe_query *pq)
 
       if (pq->type == PIPE_QUERY_OCCLUSION_COUNTER ||
           pq->type == PIPE_QUERY_OCCLUSION_PREDICATE ||
+          pq->type == PIPE_QUERY_OCCLUSION_PREDICATE_CONSERVATIVE ||
           pq->type == PIPE_QUERY_PIPELINE_STATISTICS ||
           pq->type == PIPE_QUERY_TIMESTAMP) {
          if (pq->type == PIPE_QUERY_TIMESTAMP &&
@@ -1466,6 +1468,7 @@ fail:
     */
    if (pq->type == PIPE_QUERY_OCCLUSION_COUNTER ||
       pq->type == PIPE_QUERY_OCCLUSION_PREDICATE ||
+      pq->type == PIPE_QUERY_OCCLUSION_PREDICATE_CONSERVATIVE ||
       pq->type == PIPE_QUERY_PIPELINE_STATISTICS) {
       unsigned i;
 

@@ -50,6 +50,8 @@
 static struct util_hash_table *dev_tab = NULL;
 static mtx_t dev_tab_mutex = _MTX_INITIALIZER_NP;
 
+DEBUG_GET_ONCE_BOOL_OPTION(all_bos, "RADEON_ALL_BOS", false)
+
 /* Helper function to do the ioctls needed for setup and init. */
 static bool do_winsys_init(struct amdgpu_winsys *ws, int fd)
 {
@@ -63,13 +65,14 @@ static bool do_winsys_init(struct amdgpu_winsys *ws, int fd)
       goto fail;
    }
 
-   ws->addrlib = amdgpu_addr_create(&ws->info, &ws->amdinfo, NULL);
+   ws->addrlib = amdgpu_addr_create(&ws->info, &ws->amdinfo, &ws->info.max_alignment);
    if (!ws->addrlib) {
       fprintf(stderr, "amdgpu: Cannot create addrlib.\n");
       goto fail;
    }
 
    ws->check_vm = strstr(debug_get_option("R600_DEBUG", ""), "check_vm") != NULL;
+   ws->debug_all_bos = debug_get_option_all_bos();
 
    return true;
 
@@ -142,6 +145,8 @@ static uint64_t amdgpu_query_value(struct radeon_winsys *rws,
       return ws->num_sdma_IBs;
    case RADEON_GFX_BO_LIST_COUNTER:
       return ws->gfx_bo_list_counter;
+   case RADEON_GFX_IB_SIZE_COUNTER:
+      return ws->gfx_ib_size_counter;
    case RADEON_NUM_BYTES_MOVED:
       amdgpu_query_info(ws->dev, AMDGPU_INFO_NUM_BYTES_MOVED, 8, &retval);
       return retval;
@@ -231,7 +236,7 @@ static const char* amdgpu_get_chip_name(struct radeon_winsys *ws)
 
 
 PUBLIC struct radeon_winsys *
-amdgpu_winsys_create(int fd, unsigned flags,
+amdgpu_winsys_create(int fd, const struct pipe_screen_config *config,
 		     radeon_screen_create_t screen_create)
 {
    struct amdgpu_winsys *ws;
@@ -328,7 +333,7 @@ amdgpu_winsys_create(int fd, unsigned flags,
     *
     * Alternatively, we could create the screen based on "ws->gen"
     * and link all drivers into one binary blob. */
-   ws->base.screen = screen_create(&ws->base, flags);
+   ws->base.screen = screen_create(&ws->base, config);
    if (!ws->base.screen) {
       amdgpu_winsys_destroy(&ws->base);
       mtx_unlock(&dev_tab_mutex);

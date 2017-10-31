@@ -77,11 +77,12 @@ struct PA_STATE
 
 #if ENABLE_AVX512_SIMD16
     bool useAlternateOffset{ false };
+    uint32_t numVertsPerPrim{ 0 };
 
 #endif
-    PA_STATE() {}
-    PA_STATE(DRAW_CONTEXT *in_pDC, uint8_t* in_pStreamBase, uint32_t in_streamSizeInVerts, uint32_t in_vertexStride) :
-        pDC(in_pDC), pStreamBase(in_pStreamBase), streamSizeInVerts(in_streamSizeInVerts), vertexStride(in_vertexStride) {}
+    PA_STATE(){}
+    PA_STATE(DRAW_CONTEXT *in_pDC, uint8_t* in_pStreamBase, uint32_t in_streamSizeInVerts, uint32_t in_vertexStride, uint32_t in_numVertsPerPrim) :
+        pDC(in_pDC), pStreamBase(in_pStreamBase), streamSizeInVerts(in_streamSizeInVerts), vertexStride(in_vertexStride), numVertsPerPrim(in_numVertsPerPrim) {}
 
     virtual bool HasWork() = 0;
     virtual simdvector& GetSimdVector(uint32_t index, uint32_t slot) = 0;
@@ -90,7 +91,7 @@ struct PA_STATE
 #endif
     virtual bool Assemble(uint32_t slot, simdvector verts[]) = 0;
 #if ENABLE_AVX512_SIMD16
-    virtual bool Assemble_simd16(uint32_t slot, simd16vector verts[]) = 0;
+    virtual bool Assemble(uint32_t slot, simd16vector verts[]) = 0;
 #endif
     virtual void AssembleSingle(uint32_t slot, uint32_t primIndex, simd4scalar verts[]) = 0;
     virtual bool NextPrim() = 0;
@@ -162,10 +163,10 @@ struct PA_STATE_OPT : public PA_STATE
     bool               isStreaming{ false };
 
     SIMDMASK           junkIndices  { 0 };          // temporary index store for unused virtual function
-    
+
     PA_STATE_OPT() {}
     PA_STATE_OPT(DRAW_CONTEXT* pDC, uint32_t numPrims, uint8_t* pStream, uint32_t streamSizeInVerts,
-        uint32_t vertexStride, bool in_isStreaming, PRIMITIVE_TOPOLOGY topo = TOP_UNKNOWN);
+        uint32_t vertexStride, bool in_isStreaming, uint32_t numVertsPerPrim, PRIMITIVE_TOPOLOGY topo = TOP_UNKNOWN);
 
     bool HasWork()
     {
@@ -198,7 +199,7 @@ struct PA_STATE_OPT : public PA_STATE
     }
 
 #if ENABLE_AVX512_SIMD16
-    bool Assemble_simd16(uint32_t slot, simd16vector verts[])
+    bool Assemble(uint32_t slot, simd16vector verts[])
     {
         return this->pfnPaFunc_simd16(*this, slot, verts);
     }
@@ -412,7 +413,7 @@ struct PA_STATE_CUT : public PA_STATE
     uint32_t vertsPerPrim{ 0 };
     bool processCutVerts{ false };       // vertex indices with cuts should be processed as normal, otherwise they
                                          // are ignored.  Fetch shader sends invalid verts on cuts that should be ignored
-                                         // while the GS sends valid verts for every index 
+                                         // while the GS sends valid verts for every index
 
     simdvector      junkVector;          // junk simdvector for unimplemented API
 #if ENABLE_AVX512_SIMD16
@@ -430,8 +431,8 @@ struct PA_STATE_CUT : public PA_STATE
 
     PA_STATE_CUT() {}
     PA_STATE_CUT(DRAW_CONTEXT* pDC, uint8_t* in_pStream, uint32_t in_streamSizeInVerts, uint32_t in_vertexStride, SIMDMASK* in_pIndices, uint32_t in_numVerts,
-        uint32_t in_numAttribs, PRIMITIVE_TOPOLOGY topo, bool in_processCutVerts)
-        : PA_STATE(pDC, in_pStream, in_streamSizeInVerts, in_vertexStride)
+        uint32_t in_numAttribs, PRIMITIVE_TOPOLOGY topo, bool in_processCutVerts, uint32_t in_numVertsPerPrim)
+        : PA_STATE(pDC, in_pStream, in_streamSizeInVerts, in_vertexStride, in_numVertsPerPrim)
     {
         numVerts = in_streamSizeInVerts;
         numAttribs = in_numAttribs;
@@ -572,10 +573,10 @@ struct PA_STATE_CUT : public PA_STATE
     {
         uint32_t vertexIndex = vertex / SIMD_WIDTH;
         uint32_t vertexOffset = vertex & (SIMD_WIDTH - 1);
-        return _bittest((const LONG*)&this->pCutIndices[vertexIndex], vertexOffset) == 1;
+        return CheckBit(this->pCutIndices[vertexIndex], vertexOffset);
     }
 
-    // iterates across the unprocessed verts until we hit the end or we 
+    // iterates across the unprocessed verts until we hit the end or we
     // have assembled SIMD prims
     void ProcessVerts()
     {
@@ -583,7 +584,7 @@ struct PA_STATE_CUT : public PA_STATE
             this->numRemainingVerts > 0 &&
             this->curVertex != this->headVertex)
         {
-            // if cut index, restart topology 
+            // if cut index, restart topology
             if (IsCutIndex(this->curVertex))
             {
                 if (this->processCutVerts)
@@ -703,7 +704,9 @@ struct PA_STATE_CUT : public PA_STATE
 #if USE_SIMD16_FRONTEND
                 simd16scalar temp = _simd16_i32gather_ps(pBase, offsets, 1);
 
-                verts[v].v[c] = useAlternateOffset ? _simd16_extract_ps(temp, 1) : _simd16_extract_ps(temp, 0);
+                // Assigning to a temporary first to avoid an MSVC 2017 compiler bug
+                simdscalar t = useAlternateOffset ? _simd16_extract_ps(temp, 1) : _simd16_extract_ps(temp, 0);
+                verts[v].v[c] = t;
 #else
                 verts[v].v[c] = _simd_i32gather_ps(pBase, offsets, 1);
 #endif
@@ -717,7 +720,7 @@ struct PA_STATE_CUT : public PA_STATE
     }
 
 #if ENABLE_AVX512_SIMD16
-    bool Assemble_simd16(uint32_t slot, simd16vector verts[])
+    bool Assemble(uint32_t slot, simd16vector verts[])
     {
         // process any outstanding verts
         ProcessVerts();
@@ -921,7 +924,7 @@ struct PA_STATE_CUT : public PA_STATE
         case 6:
             SWR_ASSERT(this->adjExtraVert != -1, "Algorith failure!");
             AssembleTriStripAdj<gsEnabled>();
-            
+
             uint32_t nextTri[6];
             if (this->reverseWinding)
             {
@@ -937,7 +940,7 @@ struct PA_STATE_CUT : public PA_STATE
                 nextTri[1] = this->adjExtraVert;
                 nextTri[2] = this->vert[3];
                 nextTri[4] = this->vert[4];
-                nextTri[5] = this->vert[0]; 
+                nextTri[5] = this->vert[0];
             }
             for (uint32_t i = 0; i < 6; ++i)
             {
@@ -1142,9 +1145,10 @@ struct PA_TESS : PA_STATE
         uint32_t in_numAttributes,
         uint32_t* (&in_ppIndices)[3],
         uint32_t in_numPrims,
-        PRIMITIVE_TOPOLOGY in_binTopology) :
+        PRIMITIVE_TOPOLOGY in_binTopology,
+        uint32_t numVertsPerPrim) :
 
-        PA_STATE(in_pDC, nullptr, 0, in_vertexStride),
+        PA_STATE(in_pDC, nullptr, 0, in_vertexStride, numVertsPerPrim),
         m_pVertexData(in_pVertData),
         m_attributeStrideInVectors(in_attributeStrideInVectors),
         m_numAttributes(in_numAttributes),
@@ -1270,7 +1274,7 @@ struct PA_TESS : PA_STATE
     }
 
 #if ENABLE_AVX512_SIMD16
-    bool Assemble_simd16(uint32_t slot, simd16vector verts[])
+    bool Assemble(uint32_t slot, simd16vector verts[])
     {
         SWR_ASSERT(slot < m_numAttributes);
 
@@ -1414,7 +1418,7 @@ private:
 template <typename IsIndexedT, typename IsCutIndexEnabledT>
 struct PA_FACTORY
 {
-    PA_FACTORY(DRAW_CONTEXT* pDC, PRIMITIVE_TOPOLOGY in_topo, uint32_t numVerts, PA_STATE::SIMDVERTEX *pVertexStore, uint32_t vertexStoreSize, uint32_t vertexStride) : topo(in_topo)
+    PA_FACTORY(DRAW_CONTEXT* pDC, PRIMITIVE_TOPOLOGY in_topo, uint32_t numVerts, PA_STATE::SIMDVERTEX *pVertexStore, uint32_t vertexStoreSize, uint32_t vertexStride, uint32_t numVertsPerPrim) : topo(in_topo)
     {
 #if KNOB_ENABLE_CUT_AWARE_PA == TRUE
         const API_STATE& state = GetApiState(pDC);
@@ -1431,14 +1435,14 @@ struct PA_FACTORY
             uint32_t numAttribs = state.feNumAttributes;
 
             new (&this->paCut) PA_STATE_CUT(pDC, reinterpret_cast<uint8_t *>(pVertexStore), vertexStoreSize * PA_STATE::SIMD_WIDTH,
-                vertexStride, &this->indexStore[0], numVerts, numAttribs, state.topology, false);
+                vertexStride, &this->indexStore[0], numVerts, numAttribs, state.topology, false, numVertsPerPrim);
             cutPA = true;
         }
         else
 #endif
         {
             uint32_t numPrims = GetNumPrims(in_topo, numVerts);
-            new (&this->paOpt) PA_STATE_OPT(pDC, numPrims, reinterpret_cast<uint8_t *>(pVertexStore), vertexStoreSize * PA_STATE::SIMD_WIDTH, vertexStride, false);
+            new (&this->paOpt) PA_STATE_OPT(pDC, numPrims, reinterpret_cast<uint8_t *>(pVertexStore), vertexStoreSize * PA_STATE::SIMD_WIDTH, vertexStride, false, numVertsPerPrim);
             cutPA = false;
         }
 

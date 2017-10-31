@@ -302,73 +302,13 @@ intel_texture_view(struct gl_context *ctx,
    return GL_TRUE;
 }
 
-static bool
-intel_set_texture_storage_for_buffer_object(struct gl_context *ctx,
-                                            struct gl_texture_object *tex_obj,
-                                            struct gl_buffer_object *buffer_obj,
-                                            uint32_t buffer_offset,
-                                            uint32_t row_stride,
-                                            bool read_only)
-{
-   struct brw_context *brw = brw_context(ctx);
-   struct intel_texture_object *intel_texobj = intel_texture_object(tex_obj);
-   struct gl_texture_image *image = tex_obj->Image[0][0];
-   struct intel_texture_image *intel_image = intel_texture_image(image);
-   struct intel_buffer_object *intel_buffer_obj = intel_buffer_object(buffer_obj);
-
-   if (!read_only) {
-      /* Renderbuffers have the restriction that the buffer offset and
-       * surface pitch must be a multiple of the element size.  If it's
-       * not, we have to fail and fall back to software.
-       */
-      int cpp = _mesa_get_format_bytes(image->TexFormat);
-      if (buffer_offset % cpp || row_stride % cpp) {
-         perf_debug("Bad PBO alignment; fallback to CPU mapping\n");
-         return false;
-      }
-
-      if (!brw->mesa_format_supports_render[image->TexFormat]) {
-         perf_debug("Non-renderable PBO format; fallback to CPU mapping\n");
-         return false;
-      }
-   }
-
-   assert(intel_texobj->mt == NULL);
-
-   struct brw_bo *bo = intel_bufferobj_buffer(brw, intel_buffer_obj,
-                                             buffer_offset,
-                                             row_stride * image->Height,
-                                             !read_only);
-   intel_texobj->mt =
-      intel_miptree_create_for_bo(brw, bo,
-                                  image->TexFormat,
-                                  buffer_offset,
-                                  image->Width, image->Height, image->Depth,
-                                  row_stride,
-                                  MIPTREE_CREATE_DEFAULT);
-   if (!intel_texobj->mt)
-      return false;
-
-   if (!_swrast_init_texture_image(image))
-      return false;
-
-   intel_miptree_reference(&intel_image->mt, intel_texobj->mt);
-
-   /* The miptree is in a validated state, so no need to check later. */
-   intel_texobj->needs_validate = false;
-   intel_texobj->validated_first_level = 0;
-   intel_texobj->validated_last_level = 0;
-   intel_texobj->_Format = intel_texobj->mt->format;
-
-   return true;
-}
-
 static void
 intel_texture_barrier(struct gl_context *ctx)
 {
    struct brw_context *brw = brw_context(ctx);
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
 
-   if (brw->gen >= 6) {
+   if (devinfo->gen >= 6) {
       brw_emit_pipe_control_flush(brw,
                                   PIPE_CONTROL_DEPTH_CACHE_FLUSH |
                                   PIPE_CONTROL_RENDER_TARGET_FLUSH |
@@ -394,7 +334,5 @@ intelInitTextureFuncs(struct dd_function_table *functions)
    functions->MapTextureImage = intel_map_texture_image;
    functions->UnmapTextureImage = intel_unmap_texture_image;
    functions->TextureView = intel_texture_view;
-   functions->SetTextureStorageForBufferObject =
-      intel_set_texture_storage_for_buffer_object;
    functions->TextureBarrier = intel_texture_barrier;
 }

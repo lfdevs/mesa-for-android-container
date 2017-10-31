@@ -638,7 +638,12 @@
       <value name="PROGRESSIVE_FRAME" value="2"/>
       <value name="INTERLACED_FRAME" value="3"/>
     </field>
-    <field name="Cube Face Enables" start="0" end="5" type="uint"/>
+    <field name="Cube Face Enable - Positive Z" start="0" end="0" type="bool"/>
+    <field name="Cube Face Enable - Negative Z" start="1" end="1" type="bool"/>
+    <field name="Cube Face Enable - Positive Y" start="2" end="2" type="bool"/>
+    <field name="Cube Face Enable - Negative Y" start="3" end="3" type="bool"/>
+    <field name="Cube Face Enable - Positive X" start="4" end="4" type="bool"/>
+    <field name="Cube Face Enable - Negative X" start="5" end="5" type="bool"/>
     <field name="Surface Base Address" start="32" end="63" type="address"/>
     <field name="Height" start="80" end="93" type="uint"/>
     <field name="Width" start="64" end="77" type="uint"/>

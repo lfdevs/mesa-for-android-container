@@ -71,6 +71,13 @@ void
 ac_llvm_context_init(struct ac_llvm_context *ctx, LLVMContextRef context,
 		     enum chip_class chip_class);
 
+unsigned ac_get_type_size(LLVMTypeRef type);
+
+LLVMTypeRef ac_to_integer_type(struct ac_llvm_context *ctx, LLVMTypeRef t);
+LLVMValueRef ac_to_integer(struct ac_llvm_context *ctx, LLVMValueRef v);
+LLVMTypeRef ac_to_float_type(struct ac_llvm_context *ctx, LLVMTypeRef t);
+LLVMValueRef ac_to_float(struct ac_llvm_context *ctx, LLVMValueRef v);
+
 LLVMValueRef
 ac_build_intrinsic(struct ac_llvm_context *ctx, const char *name,
 		   LLVMTypeRef return_type, LLVMValueRef *params,
@@ -83,12 +90,24 @@ ac_build_phi(struct ac_llvm_context *ctx, LLVMTypeRef type,
 	     unsigned count_incoming, LLVMValueRef *values,
 	     LLVMBasicBlockRef *blocks);
 
+void ac_build_optimization_barrier(struct ac_llvm_context *ctx,
+				   LLVMValueRef *pvgpr);
+
+LLVMValueRef ac_build_ballot(struct ac_llvm_context *ctx, LLVMValueRef value);
+
+LLVMValueRef ac_build_vote_all(struct ac_llvm_context *ctx, LLVMValueRef value);
+
+LLVMValueRef ac_build_vote_any(struct ac_llvm_context *ctx, LLVMValueRef value);
+
+LLVMValueRef ac_build_vote_eq(struct ac_llvm_context *ctx, LLVMValueRef value);
+
 LLVMValueRef
 ac_build_gather_values_extended(struct ac_llvm_context *ctx,
 				LLVMValueRef *values,
 				unsigned value_count,
 				unsigned value_stride,
-				bool load);
+				bool load,
+				bool always_vector);
 LLVMValueRef
 ac_build_gather_values(struct ac_llvm_context *ctx,
 		       LLVMValueRef *values,
@@ -131,14 +150,12 @@ ac_build_indexed_store(struct ac_llvm_context *ctx,
 		       LLVMValueRef base_ptr, LLVMValueRef index,
 		       LLVMValueRef value);
 
-LLVMValueRef
-ac_build_indexed_load(struct ac_llvm_context *ctx,
-		      LLVMValueRef base_ptr, LLVMValueRef index,
-		      bool uniform);
-
-LLVMValueRef
-ac_build_indexed_load_const(struct ac_llvm_context *ctx,
-			    LLVMValueRef base_ptr, LLVMValueRef index);
+LLVMValueRef ac_build_load(struct ac_llvm_context *ctx, LLVMValueRef base_ptr,
+			   LLVMValueRef index);
+LLVMValueRef ac_build_load_invariant(struct ac_llvm_context *ctx,
+				     LLVMValueRef base_ptr, LLVMValueRef index);
+LLVMValueRef ac_build_load_to_sgpr(struct ac_llvm_context *ctx,
+				   LLVMValueRef base_ptr, LLVMValueRef index);
 
 void
 ac_build_buffer_store_dword(struct ac_llvm_context *ctx,
@@ -151,7 +168,7 @@ ac_build_buffer_store_dword(struct ac_llvm_context *ctx,
 		            bool glc,
 		            bool slc,
 			    bool writeonly_memory,
-			    bool has_add_tid);
+			    bool swizzle_enable_hint);
 LLVMValueRef
 ac_build_buffer_load(struct ac_llvm_context *ctx,
 		     LLVMValueRef rsrc,
@@ -180,7 +197,6 @@ ac_get_thread_id(struct ac_llvm_context *ctx);
 
 LLVMValueRef
 ac_build_ddxy(struct ac_llvm_context *ctx,
-	      bool has_ds_bpermute,
 	      uint32_t mask,
 	      int idx,
 	      LLVMValueRef val);
@@ -205,6 +221,7 @@ LLVMValueRef ac_build_umsb(struct ac_llvm_context *ctx,
 			  LLVMValueRef arg,
 			  LLVMTypeRef dst_type);
 
+LLVMValueRef ac_build_umin(struct ac_llvm_context *ctx, LLVMValueRef a, LLVMValueRef b);
 LLVMValueRef ac_build_clamp(struct ac_llvm_context *ctx, LLVMValueRef value);
 
 struct ac_export_args {
@@ -264,6 +281,7 @@ void ac_optimize_vs_outputs(struct ac_llvm_context *ac,
 			    uint8_t *vs_output_param_offset,
 			    uint32_t num_outputs,
 			    uint8_t *num_param_exports);
+void ac_init_exec_full_mask(struct ac_llvm_context *ctx);
 #ifdef __cplusplus
 }
 #endif

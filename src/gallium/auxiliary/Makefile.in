@@ -122,7 +122,8 @@ target_triplet = @target@
 @HAVE_PLATFORM_DRM_TRUE@@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@am__append_13 = $(VL_WINSYS_DRM_SOURCES)
 subdir = src/gallium/auxiliary
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_gnu_make.m4 \
+am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_compile_flag.m4 \
+	$(top_srcdir)/m4/ax_check_gnu_make.m4 \
 	$(top_srcdir)/m4/ax_check_python_mako_module.m4 \
 	$(top_srcdir)/m4/ax_gcc_builtin.m4 \
 	$(top_srcdir)/m4/ax_gcc_func_attribute.m4 \
@@ -203,8 +204,8 @@ am__libgallium_la_SOURCES_DIST = cso_cache/cso_cache.c \
 	tgsi/tgsi_dump.c tgsi/tgsi_dump.h tgsi/tgsi_exec.c \
 	tgsi/tgsi_exec.h tgsi/tgsi_emulate.c tgsi/tgsi_emulate.h \
 	tgsi/tgsi_from_mesa.c tgsi/tgsi_from_mesa.h tgsi/tgsi_info.c \
-	tgsi/tgsi_info.h tgsi/tgsi_iterate.c tgsi/tgsi_iterate.h \
-	tgsi/tgsi_lowering.c tgsi/tgsi_lowering.h \
+	tgsi/tgsi_info.h tgsi/tgsi_info_opcodes.h tgsi/tgsi_iterate.c \
+	tgsi/tgsi_iterate.h tgsi/tgsi_lowering.c tgsi/tgsi_lowering.h \
 	tgsi/tgsi_opcode_tmp.h tgsi/tgsi_parse.c tgsi/tgsi_parse.h \
 	tgsi/tgsi_point_sprite.c tgsi/tgsi_point_sprite.h \
 	tgsi/tgsi_sanity.c tgsi/tgsi_sanity.h tgsi/tgsi_scan.c \
@@ -240,22 +241,23 @@ am__libgallium_la_SOURCES_DIST = cso_cache/cso_cache.c \
 	util/u_framebuffer.h util/u_gen_mipmap.c util/u_gen_mipmap.h \
 	util/u_half.h util/u_handle_table.c util/u_handle_table.h \
 	util/u_hash_table.c util/u_hash_table.h util/u_helpers.c \
-	util/u_helpers.h util/u_index_modify.c util/u_index_modify.h \
-	util/u_inlines.h util/u_keymap.c util/u_keymap.h \
-	util/u_linear.c util/u_linear.h util/u_math.c util/u_math.h \
-	util/u_memory.h util/u_mm.c util/u_mm.h util/u_network.c \
-	util/u_network.h util/u_pack_color.h util/u_pointer.h \
-	util/u_prim.h util/u_prim_restart.c util/u_prim_restart.h \
-	util/u_pstipple.c util/u_pstipple.h util/u_pwr8.h \
-	util/u_range.h util/u_rect.h util/u_resource.c \
-	util/u_resource.h util/u_ringbuffer.c util/u_ringbuffer.h \
-	util/u_sampler.c util/u_sampler.h util/u_simple_shaders.c \
-	util/u_simple_shaders.h util/u_split_prim.h util/u_sse.h \
-	util/u_suballoc.c util/u_suballoc.h util/u_surface.c \
-	util/u_surface.h util/u_surfaces.c util/u_surfaces.h \
-	util/u_tests.c util/u_tests.h util/u_texture.c \
-	util/u_texture.h util/u_tile.c util/u_tile.h util/u_time.h \
-	util/u_transfer.c util/u_transfer.h util/u_threaded_context.c \
+	util/u_helpers.h util/u_idalloc.c util/u_idalloc.h \
+	util/u_index_modify.c util/u_index_modify.h util/u_inlines.h \
+	util/u_linear.c util/u_linear.h util/u_log.c util/u_log.h \
+	util/u_math.c util/u_math.h util/u_memory.h util/u_mm.c \
+	util/u_mm.h util/u_network.c util/u_network.h \
+	util/u_pack_color.h util/u_pointer.h util/u_prim.h \
+	util/u_prim_restart.c util/u_prim_restart.h util/u_pstipple.c \
+	util/u_pstipple.h util/u_pwr8.h util/u_range.h util/u_rect.h \
+	util/u_resource.c util/u_resource.h util/u_ringbuffer.c \
+	util/u_ringbuffer.h util/u_sampler.c util/u_sampler.h \
+	util/u_simple_shaders.c util/u_simple_shaders.h \
+	util/u_split_prim.h util/u_sse.h util/u_suballoc.c \
+	util/u_suballoc.h util/u_surface.c util/u_surface.h \
+	util/u_surfaces.c util/u_surfaces.h util/u_tests.c \
+	util/u_tests.h util/u_texture.c util/u_texture.h util/u_tile.c \
+	util/u_tile.h util/u_time.h util/u_transfer.c \
+	util/u_transfer.h util/u_threaded_context.c \
 	util/u_threaded_context.h util/u_threaded_context_calls.h \
 	util/u_upload_mgr.c util/u_upload_mgr.h util/u_vbuf.c \
 	util/u_vbuf.h util/u_video.h util/u_viewport.h \
@@ -350,8 +352,8 @@ am__objects_1 = cso_cache/cso_cache.lo cso_cache/cso_context.lo \
 	util/u_format_tests.lo util/u_format_yuv.lo \
 	util/u_format_zs.lo util/u_framebuffer.lo util/u_gen_mipmap.lo \
 	util/u_handle_table.lo util/u_hash_table.lo util/u_helpers.lo \
-	util/u_index_modify.lo util/u_keymap.lo util/u_linear.lo \
-	util/u_math.lo util/u_mm.lo util/u_network.lo \
+	util/u_idalloc.lo util/u_index_modify.lo util/u_linear.lo \
+	util/u_log.lo util/u_math.lo util/u_mm.lo util/u_network.lo \
 	util/u_prim_restart.lo util/u_pstipple.lo util/u_resource.lo \
 	util/u_ringbuffer.lo util/u_sampler.lo \
 	util/u_simple_shaders.lo util/u_suballoc.lo util/u_surface.lo \
@@ -673,9 +675,9 @@ NVVIEUX_CFLAGS = @NVVIEUX_CFLAGS@
 NVVIEUX_LIBS = @NVVIEUX_LIBS@
 OBJDUMP = @OBJDUMP@
 OBJEXT = @OBJEXT@
-OMX_CFLAGS = @OMX_CFLAGS@
-OMX_LIBS = @OMX_LIBS@
-OMX_LIB_INSTALL_DIR = @OMX_LIB_INSTALL_DIR@
+OMX_BELLAGIO_CFLAGS = @OMX_BELLAGIO_CFLAGS@
+OMX_BELLAGIO_LIBS = @OMX_BELLAGIO_LIBS@
+OMX_BELLAGIO_LIB_INSTALL_DIR = @OMX_BELLAGIO_LIB_INSTALL_DIR@
 OPENCL_LIBNAME = @OPENCL_LIBNAME@
 OPENCL_VERSION = @OPENCL_VERSION@
 OSMESA_LIB = @OSMESA_LIB@
@@ -729,6 +731,8 @@ VA_LIBS = @VA_LIBS@
 VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
 VA_MAJOR = @VA_MAJOR@
 VA_MINOR = @VA_MINOR@
+VC5_SIMULATOR_CFLAGS = @VC5_SIMULATOR_CFLAGS@
+VC5_SIMULATOR_LIBS = @VC5_SIMULATOR_LIBS@
 VDPAU_CFLAGS = @VDPAU_CFLAGS@
 VDPAU_LIBS = @VDPAU_LIBS@
 VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
@@ -740,12 +744,15 @@ VISIBILITY_CXXFLAGS = @VISIBILITY_CXXFLAGS@
 VL_CFLAGS = @VL_CFLAGS@
 VL_LIBS = @VL_LIBS@
 VULKAN_ICD_INSTALL_DIR = @VULKAN_ICD_INSTALL_DIR@
-WAYLAND_CFLAGS = @WAYLAND_CFLAGS@
-WAYLAND_LIBS = @WAYLAND_LIBS@
+WAYLAND_CLIENT_CFLAGS = @WAYLAND_CLIENT_CFLAGS@
+WAYLAND_CLIENT_LIBS = @WAYLAND_CLIENT_LIBS@
 WAYLAND_PROTOCOLS_DATADIR = @WAYLAND_PROTOCOLS_DATADIR@
 WAYLAND_SCANNER = @WAYLAND_SCANNER@
 WAYLAND_SCANNER_CFLAGS = @WAYLAND_SCANNER_CFLAGS@
 WAYLAND_SCANNER_LIBS = @WAYLAND_SCANNER_LIBS@
+WAYLAND_SERVER_CFLAGS = @WAYLAND_SERVER_CFLAGS@
+WAYLAND_SERVER_LIBS = @WAYLAND_SERVER_LIBS@
+WNO_OVERRIDE_INIT = @WNO_OVERRIDE_INIT@
 X11_INCLUDES = @X11_INCLUDES@
 XA_MAJOR = @XA_MAJOR@
 XA_MINOR = @XA_MINOR@
@@ -981,6 +988,7 @@ C_SOURCES := \
 	tgsi/tgsi_from_mesa.h \
 	tgsi/tgsi_info.c \
 	tgsi/tgsi_info.h \
+	tgsi/tgsi_info_opcodes.h \
 	tgsi/tgsi_iterate.c \
 	tgsi/tgsi_iterate.h \
 	tgsi/tgsi_lowering.c \
@@ -1083,13 +1091,15 @@ C_SOURCES := \
 	util/u_hash_table.h \
 	util/u_helpers.c \
 	util/u_helpers.h \
+	util/u_idalloc.c \
+	util/u_idalloc.h \
 	util/u_index_modify.c \
 	util/u_index_modify.h \
 	util/u_inlines.h \
-	util/u_keymap.c \
-	util/u_keymap.h \
 	util/u_linear.c \
 	util/u_linear.h \
+	util/u_log.c \
+	util/u_log.h \
 	util/u_math.c \
 	util/u_math.h \
 	util/u_memory.h \
@@ -1316,6 +1326,8 @@ GALLIUM_TARGET_CFLAGS = \
 	-I$(top_srcdir)/src/gallium/auxiliary \
 	-I$(top_srcdir)/src/gallium/drivers \
 	-I$(top_srcdir)/src/gallium/winsys \
+	-I$(top_builddir)/src/util/ \
+	-I$(top_builddir)/src/gallium/drivers/ \
 	$(DEFINES) \
 	$(PTHREAD_CFLAGS) \
 	$(LIBDRM_CFLAGS) \
@@ -1732,10 +1744,11 @@ util/u_handle_table.lo: util/$(am__dirstamp) \
 util/u_hash_table.lo: util/$(am__dirstamp) \
 	util/$(DEPDIR)/$(am__dirstamp)
 util/u_helpers.lo: util/$(am__dirstamp) util/$(DEPDIR)/$(am__dirstamp)
+util/u_idalloc.lo: util/$(am__dirstamp) util/$(DEPDIR)/$(am__dirstamp)
 util/u_index_modify.lo: util/$(am__dirstamp) \
 	util/$(DEPDIR)/$(am__dirstamp)
-util/u_keymap.lo: util/$(am__dirstamp) util/$(DEPDIR)/$(am__dirstamp)
 util/u_linear.lo: util/$(am__dirstamp) util/$(DEPDIR)/$(am__dirstamp)
+util/u_log.lo: util/$(am__dirstamp) util/$(DEPDIR)/$(am__dirstamp)
 util/u_math.lo: util/$(am__dirstamp) util/$(DEPDIR)/$(am__dirstamp)
 util/u_mm.lo: util/$(am__dirstamp) util/$(DEPDIR)/$(am__dirstamp)
 util/u_network.lo: util/$(am__dirstamp) util/$(DEPDIR)/$(am__dirstamp)
@@ -2137,9 +2150,10 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_handle_table.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_hash_table.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_helpers.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_idalloc.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_index_modify.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_keymap.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_linear.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_log.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_math.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_mm.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_network.Plo@am__quote@

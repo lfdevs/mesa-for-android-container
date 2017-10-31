@@ -629,6 +629,26 @@ anv_cmd_buffer_merge_dynamic(struct anv_cmd_buffer *cmd_buffer,
    return state;
 }
 
+static uint32_t
+anv_push_constant_value(struct anv_push_constants *data, uint32_t param)
+{
+   if (BRW_PARAM_IS_BUILTIN(param)) {
+      switch (param) {
+      case BRW_PARAM_BUILTIN_ZERO:
+         return 0;
+      default:
+         unreachable("Invalid param builtin");
+      }
+   } else {
+      uint32_t offset = ANV_PARAM_PUSH_OFFSET(param);
+      assert(offset % sizeof(uint32_t) == 0);
+      if (offset < data->size)
+         return *(uint32_t *)((uint8_t *)data + offset);
+      else
+         return 0;
+   }
+}
+
 struct anv_state
 anv_cmd_buffer_push_constants(struct anv_cmd_buffer *cmd_buffer,
                               gl_shader_stage stage)
@@ -653,10 +673,8 @@ anv_cmd_buffer_push_constants(struct anv_cmd_buffer *cmd_buffer,
 
    /* Walk through the param array and fill the buffer with data */
    uint32_t *u32_map = state.map;
-   for (unsigned i = 0; i < prog_data->nr_params; i++) {
-      uint32_t offset = (uintptr_t)prog_data->param[i];
-      u32_map[i] = *(uint32_t *)((uint8_t *)data + offset);
-   }
+   for (unsigned i = 0; i < prog_data->nr_params; i++)
+      u32_map[i] = anv_push_constant_value(data, prog_data->param[i]);
 
    anv_state_flush(cmd_buffer->device, state);
 
@@ -689,14 +707,11 @@ anv_cmd_buffer_cs_push_constants(struct anv_cmd_buffer *cmd_buffer)
    uint32_t *u32_map = state.map;
 
    if (cs_prog_data->push.cross_thread.size > 0) {
-      assert(cs_prog_data->thread_local_id_index < 0 ||
-             cs_prog_data->thread_local_id_index >=
-                cs_prog_data->push.cross_thread.dwords);
       for (unsigned i = 0;
            i < cs_prog_data->push.cross_thread.dwords;
            i++) {
-         uint32_t offset = (uintptr_t)prog_data->param[i];
-         u32_map[i] = *(uint32_t *)((uint8_t *)data + offset);
+         assert(prog_data->param[i] != BRW_PARAM_BUILTIN_THREAD_LOCAL_ID);
+         u32_map[i] = anv_push_constant_value(data, prog_data->param[i]);
       }
    }
 
@@ -707,11 +722,11 @@ anv_cmd_buffer_cs_push_constants(struct anv_cmd_buffer *cmd_buffer)
                  cs_prog_data->push.cross_thread.regs);
          unsigned src = cs_prog_data->push.cross_thread.dwords;
          for ( ; src < prog_data->nr_params; src++, dst++) {
-            if (src != cs_prog_data->thread_local_id_index) {
-               uint32_t offset = (uintptr_t)prog_data->param[src];
-               u32_map[dst] = *(uint32_t *)((uint8_t *)data + offset);
-            } else {
+            if (prog_data->param[src] == BRW_PARAM_BUILTIN_THREAD_LOCAL_ID) {
                u32_map[dst] = t * cs_prog_data->simd_size;
+            } else {
+               u32_map[dst] =
+                  anv_push_constant_value(data, prog_data->param[src]);
             }
          }
       }

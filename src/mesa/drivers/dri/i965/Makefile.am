@@ -30,7 +30,7 @@ AM_CFLAGS = \
 	-I$(top_srcdir)/src/mesa/ \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
-	-I$(top_builddir)/src/mesa/drivers/dri/common \
+	-I$(top_builddir)/src/util \
 	-I$(top_srcdir)/src/mesa/drivers/dri/common \
 	-I$(top_srcdir)/src/gtest/include \
 	-I$(top_builddir)/src/compiler/glsl \
@@ -41,6 +41,7 @@ AM_CFLAGS = \
 	-I$(top_srcdir)/include/drm-uapi \
 	$(DEFINES) \
 	$(VISIBILITY_CFLAGS) \
+	$(WNO_OVERRIDE_INIT) \
 	$(LIBDRM_CFLAGS) \
 	$(VALGRIND_CFLAGS) \
 	-msse2

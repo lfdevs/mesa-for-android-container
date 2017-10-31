@@ -82,6 +82,11 @@ struct lp_build_emit_data {
    LLVMValueRef output[4];
 
    /**
+    * Secondary output for instruction that have a second destination register.
+    */
+   LLVMValueRef output1[4];
+
+   /**
     * The current instruction that is being 'executed'.
     */
    const struct tgsi_full_instruction * inst;

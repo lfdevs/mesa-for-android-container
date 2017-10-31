@@ -91,7 +91,7 @@ static void init_prog(struct program *p)
 	assert(ret);
 
 	/* init a pipe screen */
-	p->screen = pipe_loader_create_screen(p->dev, 0);
+	p->screen = pipe_loader_create_screen(p->dev);
 	assert(p->screen);
 
 	/* create the pipe driver context and cso context */

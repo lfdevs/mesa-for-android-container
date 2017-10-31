@@ -114,7 +114,7 @@ try_lower_input_load(nir_function_impl *impl, nir_intrinsic_instr *load)
 void
 anv_nir_lower_input_attachments(nir_shader *shader)
 {
-   assert(shader->stage == MESA_SHADER_FRAGMENT);
+   assert(shader->info.stage == MESA_SHADER_FRAGMENT);
 
    nir_foreach_function(function, shader) {
       if (!function->impl)

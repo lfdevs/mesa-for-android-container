@@ -44,7 +44,7 @@ struct etna_query_funcs {
 struct etna_query {
    const struct etna_query_funcs *funcs;
    bool active;
-   int type;
+   unsigned type;
 };
 
 static inline struct etna_query *
@@ -53,8 +53,7 @@ etna_query(struct pipe_query *pq)
    return (struct etna_query *)pq;
 }
 
-#define ETNA_QUERY_DRAW_CALLS    (PIPE_QUERY_DRIVER_SPECIFIC + 0)
-#define ETNA_QUERY_RS_OPERATIONS (PIPE_QUERY_DRIVER_SPECIFIC + 1)
+#define ETNA_SW_QUERY_BASE       (PIPE_QUERY_DRIVER_SPECIFIC + 0)
 
 void
 etna_query_screen_init(struct pipe_screen *pscreen);

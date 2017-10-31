@@ -2,7 +2,6 @@
 #ifndef COMMON_CONTEXT_H
 #define COMMON_CONTEXT_H
 
-#include "main/mm.h"
 #include "math/m_vector.h"
 #include "tnl/t_context.h"
 #include "main/colormac.h"

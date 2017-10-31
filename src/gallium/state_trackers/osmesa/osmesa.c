@@ -62,6 +62,7 @@
 #include "util/u_box.h"
 #include "util/u_debug.h"
 #include "util/u_format.h"
+#include "util/u_inlines.h"
 #include "util/u_memory.h"
 
 #include "postprocess/filters.h"
@@ -432,6 +433,7 @@ osmesa_st_framebuffer_validate(struct st_context_iface *stctx,
 
       templat.format = format;
       templat.bind = bind;
+      pipe_resource_reference(&out[i], NULL);
       out[i] = osbuffer->textures[statts[i]] =
          screen->resource_create(screen, &templat);
    }
@@ -688,7 +690,6 @@ OSMesaCreateContextAttribs(const int *attribList, OSMesaContext sharelist)
    attribs.options.disable_blend_func_extended = FALSE;
    attribs.options.disable_glsl_line_continuations = FALSE;
    attribs.options.disable_shader_bit_encoding = FALSE;
-   attribs.options.force_s3tc_enable = FALSE;
    attribs.options.force_glsl_version = 0;
 
    osmesa_init_st_visual(&attribs.visual,

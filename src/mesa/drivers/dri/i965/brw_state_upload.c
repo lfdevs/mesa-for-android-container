@@ -48,6 +48,8 @@
 static void
 brw_upload_initial_gpu_state(struct brw_context *brw)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+
    /* On platforms with hardware contexts, we can set our initial GPU state
     * right away rather than doing it via state atoms.  This saves a small
     * amount of overhead on every draw call.
@@ -55,12 +57,12 @@ brw_upload_initial_gpu_state(struct brw_context *brw)
    if (!brw->hw_ctx)
       return;
 
-   if (brw->gen == 6)
+   if (devinfo->gen == 6)
       brw_emit_post_sync_nonzero_flush(brw);
 
    brw_upload_invariant_state(brw);
 
-   if (brw->gen == 9) {
+   if (devinfo->gen == 9) {
       /* Recommended optimizations for Victim Cache eviction and floating
        * point blending.
        */
@@ -73,7 +75,7 @@ brw_upload_initial_gpu_state(struct brw_context *brw)
                 GEN9_PARTIAL_RESOLVE_DISABLE_IN_VC);
       ADVANCE_BATCH();
 
-      if (brw->is_broxton) {
+      if (gen_device_info_is_9lp(devinfo)) {
          BEGIN_BATCH(3);
          OUT_BATCH(MI_LOAD_REGISTER_IMM | (3 - 2));
          OUT_BATCH(GEN7_GT_MODE);
@@ -83,7 +85,7 @@ brw_upload_initial_gpu_state(struct brw_context *brw)
       }
    }
 
-   if (brw->gen >= 8) {
+   if (devinfo->gen >= 8) {
       gen8_emit_3dstate_sample_pattern(brw);
 
       BEGIN_BATCH(5);
@@ -97,30 +99,6 @@ brw_upload_initial_gpu_state(struct brw_context *brw)
       BEGIN_BATCH(2);
       OUT_BATCH(_3DSTATE_WM_CHROMAKEY << 16 | (2 - 2));
       OUT_BATCH(0);
-      ADVANCE_BATCH();
-   }
-
-   /* Set the "CONSTANT_BUFFER Address Offset Disable" bit, so
-    * 3DSTATE_CONSTANT_XS buffer 0 is an absolute address.
-    *
-    * On Gen6-7.5, we use an execbuf parameter to do this for us.
-    * However, the kernel ignores that when execlists are in use.
-    * Fortunately, we can just write the registers from userspace
-    * on Gen8+, and they're context saved/restored.
-    */
-   if (brw->gen >= 9) {
-      BEGIN_BATCH(3);
-      OUT_BATCH(MI_LOAD_REGISTER_IMM | (3 - 2));
-      OUT_BATCH(CS_DEBUG_MODE2);
-      OUT_BATCH(REG_MASK(CSDBG2_CONSTANT_BUFFER_ADDRESS_OFFSET_DISABLE) |
-                CSDBG2_CONSTANT_BUFFER_ADDRESS_OFFSET_DISABLE);
-      ADVANCE_BATCH();
-   } else if (brw->gen == 8) {
-      BEGIN_BATCH(3);
-      OUT_BATCH(MI_LOAD_REGISTER_IMM | (3 - 2));
-      OUT_BATCH(INSTPM);
-      OUT_BATCH(REG_MASK(INSTPM_CONSTANT_BUFFER_ADDRESS_OFFSET_DISABLE) |
-                INSTPM_CONSTANT_BUFFER_ADDRESS_OFFSET_DISABLE);
       ADVANCE_BATCH();
    }
 }
@@ -165,27 +143,28 @@ brw_copy_pipeline_atoms(struct brw_context *brw,
 void brw_init_state( struct brw_context *brw )
 {
    struct gl_context *ctx = &brw->ctx;
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
 
    /* Force the first brw_select_pipeline to emit pipeline select */
    brw->last_pipeline = BRW_NUM_PIPELINES;
 
    brw_init_caches(brw);
 
-   if (brw->gen >= 10)
+   if (devinfo->gen >= 10)
       gen10_init_atoms(brw);
-   else if (brw->gen >= 9)
+   else if (devinfo->gen >= 9)
       gen9_init_atoms(brw);
-   else if (brw->gen >= 8)
+   else if (devinfo->gen >= 8)
       gen8_init_atoms(brw);
-   else if (brw->is_haswell)
+   else if (devinfo->is_haswell)
       gen75_init_atoms(brw);
-   else if (brw->gen >= 7)
+   else if (devinfo->gen >= 7)
       gen7_init_atoms(brw);
-   else if (brw->gen >= 6)
+   else if (devinfo->gen >= 6)
       gen6_init_atoms(brw);
-   else if (brw->gen >= 5)
+   else if (devinfo->gen >= 5)
       gen5_init_atoms(brw);
-   else if (brw->is_g4x)
+   else if (devinfo->is_g4x)
       gen45_init_atoms(brw);
    else
       gen4_init_atoms(brw);
@@ -350,7 +329,7 @@ static struct dirty_bit_map brw_bits[] = {
    DEFINE_BIT(BRW_NEW_VIEWPORT_COUNT),
    DEFINE_BIT(BRW_NEW_CONSERVATIVE_RASTERIZATION),
    DEFINE_BIT(BRW_NEW_DRAW_CALL),
-   DEFINE_BIT(BRW_NEW_FAST_CLEAR_COLOR),
+   DEFINE_BIT(BRW_NEW_AUX_STATE),
    {0, 0, 0}
 };
 
@@ -377,7 +356,7 @@ brw_print_dirty_count(struct dirty_bit_map *bit_map)
 static inline void
 brw_upload_tess_programs(struct brw_context *brw)
 {
-   if (brw->tess_eval_program) {
+   if (brw->programs[MESA_SHADER_TESS_EVAL]) {
       brw_upload_tcs_prog(brw);
       brw_upload_tes_prog(brw);
    } else {
@@ -391,15 +370,19 @@ brw_upload_programs(struct brw_context *brw,
                     enum brw_pipeline pipeline)
 {
    struct gl_context *ctx = &brw->ctx;
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
 
    if (pipeline == BRW_RENDER_PIPELINE) {
       brw_upload_vs_prog(brw);
       brw_upload_tess_programs(brw);
 
-      if (brw->gen < 6)
-         brw_upload_ff_gs_prog(brw);
-      else
+      if (brw->programs[MESA_SHADER_GEOMETRY]) {
          brw_upload_gs_prog(brw);
+      } else {
+         brw->gs.base.prog_data = NULL;
+         if (devinfo->gen < 7)
+            brw_upload_ff_gs_prog(brw);
+      }
 
       /* Update the VUE map for data exiting the GS stage of the pipeline.
        * This comes from the last enabled shader stage.
@@ -407,9 +390,9 @@ brw_upload_programs(struct brw_context *brw,
       GLbitfield64 old_slots = brw->vue_map_geom_out.slots_valid;
       bool old_separate = brw->vue_map_geom_out.separate;
       struct brw_vue_prog_data *vue_prog_data;
-      if (brw->geometry_program)
+      if (brw->programs[MESA_SHADER_GEOMETRY])
          vue_prog_data = brw_vue_prog_data(brw->gs.base.prog_data);
-      else if (brw->tess_eval_program)
+      else if (brw->programs[MESA_SHADER_TESS_EVAL])
          vue_prog_data = brw_vue_prog_data(brw->tes.base.prog_data);
       else
          vue_prog_data = brw_vue_prog_data(brw->vs.base.prog_data);
@@ -431,7 +414,7 @@ brw_upload_programs(struct brw_context *brw,
 
       brw_upload_wm_prog(brw);
 
-      if (brw->gen < 6) {
+      if (devinfo->gen < 6) {
          brw_upload_clip_prog(brw);
          brw_upload_sf_prog(brw);
       }
@@ -448,7 +431,7 @@ merge_ctx_state(struct brw_context *brw,
    state->brw |= brw->ctx.NewDriverState;
 }
 
-static inline void
+static ALWAYS_INLINE void
 check_and_emit_atom(struct brw_context *brw,
                     struct brw_state_flags *state,
                     const struct brw_tracked_state *atom)
@@ -463,6 +446,7 @@ static inline void
 brw_upload_pipeline_state(struct brw_context *brw,
                           enum brw_pipeline pipeline)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    struct gl_context *ctx = &brw->ctx;
    int i;
    static int dirty_count = 0;
@@ -472,41 +456,45 @@ brw_upload_pipeline_state(struct brw_context *brw,
 
    brw_select_pipeline(brw, pipeline);
 
-   if (0) {
+   if (unlikely(INTEL_DEBUG & DEBUG_REEMIT)) {
       /* Always re-emit all state. */
       brw->NewGLState = ~0;
       ctx->NewDriverState = ~0ull;
    }
 
    if (pipeline == BRW_RENDER_PIPELINE) {
-      if (brw->fragment_program != ctx->FragmentProgram._Current) {
-         brw->fragment_program = ctx->FragmentProgram._Current;
+      if (brw->programs[MESA_SHADER_FRAGMENT] !=
+          ctx->FragmentProgram._Current) {
+         brw->programs[MESA_SHADER_FRAGMENT] = ctx->FragmentProgram._Current;
          brw->ctx.NewDriverState |= BRW_NEW_FRAGMENT_PROGRAM;
       }
 
-      if (brw->tess_eval_program != ctx->TessEvalProgram._Current) {
-         brw->tess_eval_program = ctx->TessEvalProgram._Current;
+      if (brw->programs[MESA_SHADER_TESS_EVAL] !=
+          ctx->TessEvalProgram._Current) {
+         brw->programs[MESA_SHADER_TESS_EVAL] = ctx->TessEvalProgram._Current;
          brw->ctx.NewDriverState |= BRW_NEW_TESS_PROGRAMS;
       }
 
-      if (brw->tess_ctrl_program != ctx->TessCtrlProgram._Current) {
-         brw->tess_ctrl_program = ctx->TessCtrlProgram._Current;
+      if (brw->programs[MESA_SHADER_TESS_CTRL] !=
+          ctx->TessCtrlProgram._Current) {
+         brw->programs[MESA_SHADER_TESS_CTRL] = ctx->TessCtrlProgram._Current;
          brw->ctx.NewDriverState |= BRW_NEW_TESS_PROGRAMS;
       }
 
-      if (brw->geometry_program != ctx->GeometryProgram._Current) {
-         brw->geometry_program = ctx->GeometryProgram._Current;
+      if (brw->programs[MESA_SHADER_GEOMETRY] !=
+          ctx->GeometryProgram._Current) {
+         brw->programs[MESA_SHADER_GEOMETRY] = ctx->GeometryProgram._Current;
          brw->ctx.NewDriverState |= BRW_NEW_GEOMETRY_PROGRAM;
       }
 
-      if (brw->vertex_program != ctx->VertexProgram._Current) {
-         brw->vertex_program = ctx->VertexProgram._Current;
+      if (brw->programs[MESA_SHADER_VERTEX] != ctx->VertexProgram._Current) {
+         brw->programs[MESA_SHADER_VERTEX] = ctx->VertexProgram._Current;
          brw->ctx.NewDriverState |= BRW_NEW_VERTEX_PROGRAM;
       }
    }
 
-   if (brw->compute_program != ctx->ComputeProgram._Current) {
-      brw->compute_program = ctx->ComputeProgram._Current;
+   if (brw->programs[MESA_SHADER_COMPUTE] != ctx->ComputeProgram._Current) {
+      brw->programs[MESA_SHADER_COMPUTE] = ctx->ComputeProgram._Current;
       brw->ctx.NewDriverState |= BRW_NEW_COMPUTE_PROGRAM;
    }
 
@@ -526,7 +514,7 @@ brw_upload_pipeline_state(struct brw_context *brw,
       return;
 
    /* Emit Sandybridge workaround flushes on every primitive, for safety. */
-   if (brw->gen == 6)
+   if (devinfo->gen == 6)
       brw_emit_post_sync_nonzero_flush(brw);
 
    brw_upload_programs(brw, pipeline);

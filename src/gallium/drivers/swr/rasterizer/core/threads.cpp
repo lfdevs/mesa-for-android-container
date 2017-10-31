@@ -30,7 +30,7 @@
 #include <fstream>
 #include <string>
 
-#if defined(__linux__) || defined(__gnu_linux__)
+#if defined(__linux__) || defined(__gnu_linux__) || defined(__APPLE__)
 #include <pthread.h>
 #include <sched.h>
 #include <unistd.h>
@@ -169,37 +169,16 @@ void CalculateProcessorTopology(CPUNumaNodes& out_nodes, uint32_t& out_numThread
     std::ifstream input("/proc/cpuinfo");
     std::string line;
     char* c;
-    uint32_t threadId = uint32_t(-1);
+    uint32_t procId = uint32_t(-1);
     uint32_t coreId = uint32_t(-1);
-    uint32_t numaId = uint32_t(-1);
+    uint32_t physId = uint32_t(-1);
 
     while (std::getline(input, line))
     {
         if (line.find("processor") != std::string::npos)
         {
-            if (threadId != uint32_t(-1))
-            {
-                // Save information.
-                if (out_nodes.size() <= numaId)
-                {
-                    out_nodes.resize(numaId + 1);
-                }
-
-                auto& numaNode = out_nodes[numaId];
-                if (numaNode.cores.size() <= coreId)
-                {
-                    numaNode.cores.resize(coreId + 1);
-                }
-
-                auto& core = numaNode.cores[coreId];
-                core.procGroup = coreId;
-                core.threadIds.push_back(threadId);
-
-                out_numThreadsPerProcGroup++;
-            }
-
             auto data_start = line.find(": ") + 2;
-            threadId = std::strtoul(&line.c_str()[data_start], &c, 10);
+            procId = std::strtoul(&line.c_str()[data_start], &c, 10);
             continue;
         }
         if (line.find("core id") != std::string::npos)
@@ -211,30 +190,35 @@ void CalculateProcessorTopology(CPUNumaNodes& out_nodes, uint32_t& out_numThread
         if (line.find("physical id") != std::string::npos)
         {
             auto data_start = line.find(": ") + 2;
-            numaId = std::strtoul(&line.c_str()[data_start], &c, 10);
+            physId = std::strtoul(&line.c_str()[data_start], &c, 10);
             continue;
         }
+        if (line.length() == 0)
+        {
+            if (physId + 1 > out_nodes.size())
+                out_nodes.resize(physId + 1);
+            auto& numaNode = out_nodes[physId];
+            numaNode.numaId = physId;
+
+            if (coreId + 1 > numaNode.cores.size())
+                numaNode.cores.resize(coreId + 1);
+            auto& core = numaNode.cores[coreId];
+            core.procGroup = coreId;
+            core.threadIds.push_back(procId);
+        }
     }
 
-    if (threadId != uint32_t(-1))
+    out_numThreadsPerProcGroup = 0;
+    for (auto &node : out_nodes)
     {
-        // Save information.
-        if (out_nodes.size() <= numaId)
+        for (auto &core : node.cores)
         {
-            out_nodes.resize(numaId + 1);
+            out_numThreadsPerProcGroup = std::max((size_t)out_numThreadsPerProcGroup,
+                                                  core.threadIds.size());
         }
-        auto& numaNode = out_nodes[numaId];
-        numaNode.numaId = numaId;
-        if (numaNode.cores.size() <= coreId)
-        {
-            numaNode.cores.resize(coreId + 1);
-        }
-        auto& core = numaNode.cores[coreId];
-
-        core.procGroup = coreId;
-        core.threadIds.push_back(threadId);
-        out_numThreadsPerProcGroup++;
     }
+
+#elif defined(__APPLE__)
 
 #else
 
@@ -309,14 +293,18 @@ void bindThread(SWR_CONTEXT* pContext, uint32_t threadId, uint32_t procGroupId =
 
     SetThreadGroupAffinity(GetCurrentThread(), &affinity, nullptr);
 
-#else
+#elif defined(__linux__) || defined(__gnu_linux__)
 
     cpu_set_t cpuset;
     pthread_t thread = pthread_self();
     CPU_ZERO(&cpuset);
     CPU_SET(threadId, &cpuset);
 
-    pthread_setaffinity_np(thread, sizeof(cpu_set_t), &cpuset);
+    int err = pthread_setaffinity_np(thread, sizeof(cpu_set_t), &cpuset);
+    if (err != 0)
+    {
+        fprintf(stderr, "pthread_setaffinity_np failure for tid %u: %s\n", threadId, strerror(err));
+    }
 
 #endif
 }
@@ -330,7 +318,7 @@ uint32_t GetEnqueuedDraw(SWR_CONTEXT *pContext)
 INLINE
 DRAW_CONTEXT *GetDC(SWR_CONTEXT *pContext, uint32_t drawId)
 {
-    return &pContext->dcRing[(drawId-1) % KNOB_MAX_DRAWS_IN_FLIGHT];
+    return &pContext->dcRing[(drawId-1) % pContext->MAX_DRAWS_IN_FLIGHT];
 }
 
 INLINE
@@ -433,7 +421,7 @@ INLINE bool FindFirstIncompleteDraw(SWR_CONTEXT* pContext, uint32_t workerId, ui
     drawEnqueued = GetEnqueuedDraw(pContext);
     while (IDComparesLess(curDrawBE, drawEnqueued))
     {
-        DRAW_CONTEXT *pDC = &pContext->dcRing[curDrawBE % KNOB_MAX_DRAWS_IN_FLIGHT];
+        DRAW_CONTEXT *pDC = &pContext->dcRing[curDrawBE % pContext->MAX_DRAWS_IN_FLIGHT];
 
         // If its not compute and FE is not done then break out of loop.
         if (!pDC->doneFE && !pDC->isCompute) break;
@@ -490,7 +478,7 @@ bool WorkOnFifoBE(
         return false;
     }
 
-    uint32_t lastRetiredDraw = pContext->dcRing[curDrawBE % KNOB_MAX_DRAWS_IN_FLIGHT].drawId - 1;
+    uint32_t lastRetiredDraw = pContext->dcRing[curDrawBE % pContext->MAX_DRAWS_IN_FLIGHT].drawId - 1;
 
     // Reset our history for locked tiles. We'll have to re-learn which tiles are locked.
     lockedTiles.clear();
@@ -502,7 +490,7 @@ bool WorkOnFifoBE(
     //      maintain order. The locked tiles provides the history to ensures this.
     for (uint32_t i = curDrawBE; IDComparesLess(i, drawEnqueued); ++i)
     {
-        DRAW_CONTEXT *pDC = &pContext->dcRing[i % KNOB_MAX_DRAWS_IN_FLIGHT];
+        DRAW_CONTEXT *pDC = &pContext->dcRing[i % pContext->MAX_DRAWS_IN_FLIGHT];
 
         if (pDC->isCompute) return false; // We don't look at compute work.
 
@@ -648,7 +636,7 @@ void WorkOnFifoFE(SWR_CONTEXT *pContext, uint32_t workerId, uint32_t &curDrawFE)
     uint32_t drawEnqueued = GetEnqueuedDraw(pContext);
     while (IDComparesLess(curDrawFE, drawEnqueued))
     {
-        uint32_t dcSlot = curDrawFE % KNOB_MAX_DRAWS_IN_FLIGHT;
+        uint32_t dcSlot = curDrawFE % pContext->MAX_DRAWS_IN_FLIGHT;
         DRAW_CONTEXT *pDC = &pContext->dcRing[dcSlot];
         if (pDC->isCompute || pDC->doneFE)
         {
@@ -665,7 +653,7 @@ void WorkOnFifoFE(SWR_CONTEXT *pContext, uint32_t workerId, uint32_t &curDrawFE)
     uint32_t curDraw = curDrawFE;
     while (IDComparesLess(curDraw, drawEnqueued))
     {
-        uint32_t dcSlot = curDraw % KNOB_MAX_DRAWS_IN_FLIGHT;
+        uint32_t dcSlot = curDraw % pContext->MAX_DRAWS_IN_FLIGHT;
         DRAW_CONTEXT *pDC = &pContext->dcRing[dcSlot];
 
         if (!pDC->isCompute && !pDC->FeLock)
@@ -706,11 +694,11 @@ void WorkOnCompute(
         return;
     }
 
-    uint32_t lastRetiredDraw = pContext->dcRing[curDrawBE % KNOB_MAX_DRAWS_IN_FLIGHT].drawId - 1;
+    uint32_t lastRetiredDraw = pContext->dcRing[curDrawBE % pContext->MAX_DRAWS_IN_FLIGHT].drawId - 1;
 
     for (uint64_t i = curDrawBE; IDComparesLess(i, drawEnqueued); ++i)
     {
-        DRAW_CONTEXT *pDC = &pContext->dcRing[i % KNOB_MAX_DRAWS_IN_FLIGHT];
+        DRAW_CONTEXT *pDC = &pContext->dcRing[i % pContext->MAX_DRAWS_IN_FLIGHT];
         if (pDC->isCompute == false) return;
 
         // check dependencies
@@ -984,7 +972,7 @@ void CreateThreadPool(SWR_CONTEXT* pContext, THREAD_POOL* pPool)
     }
 
     // Initialize DRAW_CONTEXT's per-thread stats
-    for (uint32_t dc = 0; dc < KNOB_MAX_DRAWS_IN_FLIGHT; ++dc)
+    for (uint32_t dc = 0; dc < pContext->MAX_DRAWS_IN_FLIGHT; ++dc)
     {
         pContext->dcRing[dc].dynState.pStats = (SWR_STATS*)AlignedMalloc(sizeof(SWR_STATS) * numThreads, 64);
         memset(pContext->dcRing[dc].dynState.pStats, 0, sizeof(SWR_STATS) * numThreads);
@@ -1031,7 +1019,16 @@ void CreateThreadPool(SWR_CONTEXT* pContext, THREAD_POOL* pPool)
     }
     else
     {
-        pPool->numaMask = numNodes - 1; // Only works for 2**n numa nodes (1, 2, 4, etc.)
+        // numa distribution assumes workers on all nodes
+        bool useNuma = true;
+        if (numCoresPerNode * numHyperThreads == 1)
+            useNuma = false;
+
+        if (useNuma) {
+            pPool->numaMask = numNodes - 1; // Only works for 2**n numa nodes (1, 2, 4, etc.)
+        } else {
+            pPool->numaMask = 0;
+        }
 
         uint32_t workerId = 0;
         for (uint32_t n = 0; n < numNodes; ++n)
@@ -1064,7 +1061,7 @@ void CreateThreadPool(SWR_CONTEXT* pContext, THREAD_POOL* pPool)
                     pPool->pThreadData[workerId].workerId = workerId;
                     pPool->pThreadData[workerId].procGroupId = core.procGroup;
                     pPool->pThreadData[workerId].threadId = core.threadIds[t];
-                    pPool->pThreadData[workerId].numaId = node.numaId;
+                    pPool->pThreadData[workerId].numaId = useNuma ? n : 0;
                     pPool->pThreadData[workerId].coreId = c;
                     pPool->pThreadData[workerId].htId = t;
                     pPool->pThreadData[workerId].pContext = pContext;

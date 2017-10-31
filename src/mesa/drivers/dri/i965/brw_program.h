@@ -25,6 +25,7 @@
 #define BRW_PROGRAM_H
 
 #include "compiler/brw_compiler.h"
+#include "nir.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -32,11 +33,36 @@ extern "C" {
 
 struct brw_context;
 
+enum brw_param_domain {
+   BRW_PARAM_DOMAIN_BUILTIN = 0,
+   BRW_PARAM_DOMAIN_PARAMETER,
+   BRW_PARAM_DOMAIN_UNIFORM,
+   BRW_PARAM_DOMAIN_IMAGE,
+};
+
+#define BRW_PARAM(domain, val)   (BRW_PARAM_DOMAIN_##domain << 24 | (val))
+#define BRW_PARAM_DOMAIN(param)  ((uint32_t)(param) >> 24)
+#define BRW_PARAM_VALUE(param)   ((uint32_t)(param) & 0x00ffffff)
+
+#define BRW_PARAM_PARAMETER(idx, comp) \
+   BRW_PARAM(PARAMETER, ((idx) << 2) | (comp))
+#define BRW_PARAM_PARAMETER_IDX(param)    (BRW_PARAM_VALUE(param) >> 2)
+#define BRW_PARAM_PARAMETER_COMP(param)   (BRW_PARAM_VALUE(param) & 0x3)
+
+#define BRW_PARAM_UNIFORM(idx)            BRW_PARAM(UNIFORM, (idx))
+#define BRW_PARAM_UNIFORM_IDX(param)      BRW_PARAM_VALUE(param)
+
+#define BRW_PARAM_IMAGE(idx, offset) BRW_PARAM(IMAGE, ((idx) << 8) | (offset))
+#define BRW_PARAM_IMAGE_IDX(value)        (BRW_PARAM_VALUE(value) >> 8)
+#define BRW_PARAM_IMAGE_OFFSET(value)     (BRW_PARAM_VALUE(value) & 0xf)
+
 struct nir_shader *brw_create_nir(struct brw_context *brw,
                                   const struct gl_shader_program *shader_prog,
                                   struct gl_program *prog,
                                   gl_shader_stage stage,
                                   bool is_scalar);
+
+void brw_shader_gather_info(nir_shader *nir, struct gl_program *prog);
 
 void brw_setup_tex_for_precompile(struct brw_context *brw,
                                   struct brw_sampler_prog_key_data *tex,

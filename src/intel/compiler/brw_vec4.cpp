@@ -42,8 +42,8 @@ void
 src_reg::init()
 {
    memset(this, 0, sizeof(*this));
-
    this->file = BAD_FILE;
+   this->type = BRW_REGISTER_TYPE_UD;
 }
 
 src_reg::src_reg(enum brw_reg_file file, int nr, const glsl_type *type)
@@ -85,6 +85,7 @@ dst_reg::init()
 {
    memset(this, 0, sizeof(*this));
    this->file = BAD_FILE;
+   this->type = BRW_REGISTER_TYPE_UD;
    this->writemask = WRITEMASK_XYZW;
 }
 
@@ -697,10 +698,9 @@ vec4_visitor::pack_uniform_registers()
    /* As the uniforms are going to be reordered, take the data from a temporary
     * copy of the original param[].
     */
-   gl_constant_value **param = ralloc_array(NULL, gl_constant_value*,
-                                            stage_prog_data->nr_params);
+   uint32_t *param = ralloc_array(NULL, uint32_t, stage_prog_data->nr_params);
    memcpy(param, stage_prog_data->param,
-          sizeof(gl_constant_value*) * stage_prog_data->nr_params);
+          sizeof(uint32_t) * stage_prog_data->nr_params);
 
    /* Now, figure out a packing of the live uniform vectors into our
     * push constants. Start with dvec{3,4} because they are aligned to
@@ -906,7 +906,7 @@ vec4_visitor::move_push_constants_to_pull_constants()
       pull_constant_loc[i / 4] = -1;
 
       if (i >= max_uniform_components) {
-         const gl_constant_value **values = &stage_prog_data->param[i];
+         uint32_t *values = &stage_prog_data->param[i];
 
          /* Try to find an existing copy of this uniform in the pull
           * constants if it was part of an array access already.
@@ -1618,7 +1618,7 @@ vec4_visitor::dump_instruction(backend_instruction *be_inst, FILE *file)
       if (inst->dst.writemask & 8)
          fprintf(file, "w");
    }
-   fprintf(file, ":%s", brw_reg_type_letters(inst->dst.type));
+   fprintf(file, ":%s", brw_reg_type_to_letters(inst->dst.type));
 
    if (inst->src[0].file != BAD_FILE)
       fprintf(file, ", ");
@@ -1713,7 +1713,7 @@ vec4_visitor::dump_instruction(backend_instruction *be_inst, FILE *file)
          fprintf(file, "|");
 
       if (inst->src[i].file != IMM) {
-         fprintf(file, ":%s", brw_reg_type_letters(inst->src[i].type));
+         fprintf(file, ":%s", brw_reg_type_to_letters(inst->src[i].type));
       }
 
       if (i < 2 && inst->src[i + 1].file != BAD_FILE)
@@ -1762,12 +1762,10 @@ vec4_visitor::setup_uniforms(int reg)
     * matter what, or the GPU would hang.
     */
    if (devinfo->gen < 6 && this->uniforms == 0) {
-      stage_prog_data->param =
-         reralloc(NULL, stage_prog_data->param, const gl_constant_value *, 4);
+      brw_stage_prog_data_add_params(stage_prog_data, 4);
       for (unsigned int i = 0; i < 4; i++) {
 	 unsigned int slot = this->uniforms * 4 + i;
-	 static gl_constant_value zero = { 0.0 };
-	 stage_prog_data->param[slot] = &zero;
+	 stage_prog_data->param[slot] = BRW_PARAM_BUILTIN_ZERO;
       }
 
       this->uniforms++;
@@ -1950,7 +1948,7 @@ vec4_visitor::convert_to_hw_regs()
 {
    foreach_block_and_inst(block, vec4_instruction, inst, cfg) {
       for (int i = 0; i < 3; i++) {
-         struct src_reg &src = inst->src[i];
+         class src_reg &src = inst->src[i];
          struct brw_reg reg;
          switch (src.file) {
          case VGRF: {
@@ -2741,7 +2739,6 @@ brw_compile_vs(const struct brw_compiler *compiler, void *log_data,
                const struct brw_vs_prog_key *key,
                struct brw_vs_prog_data *prog_data,
                const nir_shader *src_shader,
-               gl_clip_plane *clip_planes,
                bool use_legacy_snorm_formula,
                int shader_time_index,
                unsigned *final_assembly_size,
@@ -2865,7 +2862,7 @@ brw_compile_vs(const struct brw_compiler *compiler, void *log_data,
       fs_visitor v(compiler, log_data, mem_ctx, key, &prog_data->base.base,
                    NULL, /* prog; Only used for TEXTURE_RECTANGLE on gen < 8 */
                    shader, 8, shader_time_index);
-      if (!v.run_vs(clip_planes)) {
+      if (!v.run_vs()) {
          if (error_str)
             *error_str = ralloc_strdup(mem_ctx, v.fail_msg);
 
@@ -2894,7 +2891,7 @@ brw_compile_vs(const struct brw_compiler *compiler, void *log_data,
       prog_data->base.dispatch_mode = DISPATCH_MODE_4X2_DUAL_OBJECT;
 
       vec4_vs_visitor v(compiler, log_data, key, prog_data,
-                        shader, clip_planes, mem_ctx,
+                        shader, mem_ctx,
                         shader_time_index, use_legacy_snorm_formula);
       if (!v.run()) {
          if (error_str)

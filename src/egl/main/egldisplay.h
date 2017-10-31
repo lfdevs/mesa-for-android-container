@@ -105,6 +105,11 @@ struct _egl_extensions
    EGLBoolean EXT_image_dma_buf_import_modifiers;
    EGLBoolean EXT_swap_buffers_with_damage;
 
+   unsigned int IMG_context_priority;
+#define  __EGL_CONTEXT_PRIORITY_LOW_BIT    0
+#define  __EGL_CONTEXT_PRIORITY_MEDIUM_BIT 1
+#define  __EGL_CONTEXT_PRIORITY_HIGH_BIT   2
+
    EGLBoolean KHR_cl_event2;
    EGLBoolean KHR_config_attribs;
    EGLBoolean KHR_create_context;
@@ -152,7 +157,6 @@ struct _egl_display
 
    /* options that affect how the driver initializes the display */
    struct {
-      EGLBoolean TestOnly;    /**< Driver should not set fields when true */
       EGLBoolean UseFallback; /**< Use fallback driver (sw or less features) */
       void *Platform;         /**< Platform-specific options */
    } Options;
@@ -168,7 +172,6 @@ struct _egl_display
    char ClientAPIsString[100];                     /**< EGL_CLIENT_APIS */
    char ExtensionsString[_EGL_MAX_EXTENSIONS_LEN]; /**< EGL_EXTENSIONS */
 
-   _EGLArray *Screens;
    _EGLArray *Configs;
 
    /* lists of resources */

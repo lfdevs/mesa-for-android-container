@@ -448,7 +448,15 @@ void trace_dump_box_bytes(const void *data,
 			  unsigned stride,
 			  unsigned slice_stride)
 {
+   enum pipe_format format = resource->format;
    size_t size;
+
+   assert(box->height > 0);
+   assert(box->depth > 0);
+
+   size =  util_format_get_nblocksx(format, box->width )      * util_format_get_blocksize(format)
+        + (util_format_get_nblocksy(format, box->height) - 1) * stride
+        +                                  (box->depth   - 1) * slice_stride;
 
    /*
     * Only dump buffer transfers to avoid huge files.
@@ -456,15 +464,6 @@ void trace_dump_box_bytes(const void *data,
     */
    if (resource->target != PIPE_BUFFER) {
       size = 0;
-   } else {
-      enum pipe_format format = resource->format;
-      if (slice_stride)
-         size = box->depth * slice_stride;
-      else if (stride)
-         size = util_format_get_nblocksy(format, box->height) * stride;
-      else {
-         size = util_format_get_nblocksx(format, box->width) * util_format_get_blocksize(format);
-      }
    }
 
    trace_dump_bytes(data, size);

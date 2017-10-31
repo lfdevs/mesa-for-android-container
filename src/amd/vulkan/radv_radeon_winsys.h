@@ -53,6 +53,7 @@ enum radeon_bo_flag { /* bitfield */
 	RADEON_FLAG_NO_CPU_ACCESS = (1 << 2),
 	RADEON_FLAG_VIRTUAL =       (1 << 3),
 	RADEON_FLAG_VA_UNCACHED =   (1 << 4),
+	RADEON_FLAG_IMPLICIT_SYNC = (1 << 5),
 };
 
 enum radeon_bo_usage { /* bitfield */
@@ -68,6 +69,14 @@ enum ring_type {
 	RING_UVD,
 	RING_VCE,
 	RING_LAST,
+};
+
+enum radeon_ctx_priority {
+	RADEON_CTX_PRIORITY_INVALID = -1,
+	RADEON_CTX_PRIORITY_LOW = 0,
+	RADEON_CTX_PRIORITY_MEDIUM,
+	RADEON_CTX_PRIORITY_HIGH,
+	RADEON_CTX_PRIORITY_REALTIME,
 };
 
 struct radeon_winsys_cs {
@@ -133,9 +142,11 @@ struct radeon_bo_metadata {
 };
 
 uint32_t syncobj_handle;
-struct radeon_winsys_bo;
 struct radeon_winsys_fence;
 
+struct radeon_winsys_bo {
+	uint64_t va;
+};
 struct radv_winsys_sem_counts {
 	uint32_t syncobj_count;
 	uint32_t sem_count;
@@ -156,6 +167,11 @@ struct radeon_winsys {
 	void (*query_info)(struct radeon_winsys *ws,
 			   struct radeon_info *info);
 
+	bool (*read_registers)(struct radeon_winsys *ws, unsigned reg_offset,
+			       unsigned num_registers, uint32_t *out);
+
+	const char *(*get_chip_name)(struct radeon_winsys *ws);
+
 	struct radeon_winsys_bo *(*buffer_create)(struct radeon_winsys *ws,
 						  uint64_t size,
 						  unsigned alignment,
@@ -175,15 +191,14 @@ struct radeon_winsys {
 
 	void (*buffer_unmap)(struct radeon_winsys_bo *bo);
 
-	uint64_t (*buffer_get_va)(struct radeon_winsys_bo *bo);
-
 	void (*buffer_set_metadata)(struct radeon_winsys_bo *bo,
 				    struct radeon_bo_metadata *md);
 
 	void (*buffer_virtual_bind)(struct radeon_winsys_bo *parent,
 	                            uint64_t offset, uint64_t size,
 	                            struct radeon_winsys_bo *bo, uint64_t bo_offset);
-	struct radeon_winsys_ctx *(*ctx_create)(struct radeon_winsys *ws);
+	struct radeon_winsys_ctx *(*ctx_create)(struct radeon_winsys *ws,
+						enum radeon_ctx_priority priority);
 	void (*ctx_destroy)(struct radeon_winsys_ctx *ctx);
 
 	bool (*ctx_wait_idle)(struct radeon_winsys_ctx *ctx,
@@ -217,7 +232,7 @@ struct radeon_winsys {
 	void (*cs_execute_secondary)(struct radeon_winsys_cs *parent,
 				    struct radeon_winsys_cs *child);
 
-	void (*cs_dump)(struct radeon_winsys_cs *cs, FILE* file, uint32_t trace_id);
+	void (*cs_dump)(struct radeon_winsys_cs *cs, FILE* file, const int *trace_ids, int trace_id_count);
 
 	int (*surface_init)(struct radeon_winsys *ws,
 			    const struct ac_surf_info *surf_info,
@@ -256,6 +271,11 @@ static inline void radeon_emit_array(struct radeon_winsys_cs *cs,
 {
 	memcpy(cs->buf + cs->cdw, values, count * 4);
 	cs->cdw += count;
+}
+
+static inline uint64_t radv_buffer_get_va(struct radeon_winsys_bo *bo)
+{
+	return bo->va;
 }
 
 #endif /* RADV_RADEON_WINSYS_H */

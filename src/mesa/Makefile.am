@@ -21,6 +21,11 @@
 
 SUBDIRS = . main/tests
 
+# state tracker tests depend on libmesagallium.la
+if HAVE_GALLIUM
+SUBDIRS += state_tracker/tests
+endif
+
 if HAVE_XLIB_GLX
 SUBDIRS += drivers/x11
 endif

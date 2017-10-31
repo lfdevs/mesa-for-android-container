@@ -124,6 +124,8 @@ tgsi_transform_const_decl(struct tgsi_transform_context *ctx,
    decl.Declaration.File = TGSI_FILE_CONSTANT;
    decl.Range.First = firstIdx;
    decl.Range.Last = lastIdx;
+   decl.Declaration.Dimension = 1;
+   /* Dim.Index2D is already 0 */
    ctx->emit_declaration(ctx, &decl);
 }
  
@@ -231,6 +233,18 @@ tgsi_transform_dst_reg(struct tgsi_full_dst_register *reg,
 }
 
 static inline void
+tgsi_transform_src_reg_xyzw(struct tgsi_full_src_register *reg,
+                            unsigned file, unsigned index)
+{
+   reg->Register.File = file;
+   reg->Register.Index = index;
+   if (file == TGSI_FILE_CONSTANT) {
+      reg->Register.Dimension = 1;
+      reg->Dimension.Index = 0;
+   }
+}
+
+static inline void
 tgsi_transform_src_reg(struct tgsi_full_src_register *reg,
                        unsigned file, unsigned index, 
                        unsigned swizzleX, unsigned swizzleY,
@@ -238,7 +252,11 @@ tgsi_transform_src_reg(struct tgsi_full_src_register *reg,
 {
    reg->Register.File = file;
    reg->Register.Index = index;
-   reg->Register.SwizzleX = swizzleX; 
+   if (file == TGSI_FILE_CONSTANT) {
+      reg->Register.Dimension = 1;
+      reg->Dimension.Index = 0;
+   }
+   reg->Register.SwizzleX = swizzleX;
    reg->Register.SwizzleY = swizzleY; 
    reg->Register.SwizzleZ = swizzleZ; 
    reg->Register.SwizzleW = swizzleW; 
@@ -265,8 +283,7 @@ tgsi_transform_op1_inst(struct tgsi_transform_context *ctx,
    inst.Dst[0].Register.Index = dst_index;
    inst.Dst[0].Register.WriteMask = dst_writemask;
    inst.Instruction.NumSrcRegs = 1;
-   inst.Src[0].Register.File = src0_file;
-   inst.Src[0].Register.Index = src0_index;
+   tgsi_transform_src_reg_xyzw(&inst.Src[0], src0_file, src0_index);
 
    ctx->emit_instruction(ctx, &inst);
 }
@@ -293,10 +310,8 @@ tgsi_transform_op2_inst(struct tgsi_transform_context *ctx,
    inst.Dst[0].Register.Index = dst_index;
    inst.Dst[0].Register.WriteMask = dst_writemask;
    inst.Instruction.NumSrcRegs = 2;
-   inst.Src[0].Register.File = src0_file;
-   inst.Src[0].Register.Index = src0_index;
-   inst.Src[1].Register.File = src1_file;
-   inst.Src[1].Register.Index = src1_index;
+   tgsi_transform_src_reg_xyzw(&inst.Src[0], src0_file, src0_index);
+   tgsi_transform_src_reg_xyzw(&inst.Src[1], src1_file, src1_index);
    inst.Src[1].Register.Negate = src1_negate;
 
    ctx->emit_instruction(ctx, &inst);
@@ -325,12 +340,9 @@ tgsi_transform_op3_inst(struct tgsi_transform_context *ctx,
    inst.Dst[0].Register.Index = dst_index;
    inst.Dst[0].Register.WriteMask = dst_writemask;
    inst.Instruction.NumSrcRegs = 3;
-   inst.Src[0].Register.File = src0_file;
-   inst.Src[0].Register.Index = src0_index;
-   inst.Src[1].Register.File = src1_file;
-   inst.Src[1].Register.Index = src1_index;
-   inst.Src[2].Register.File = src2_file;
-   inst.Src[2].Register.Index = src2_index;
+   tgsi_transform_src_reg_xyzw(&inst.Src[0], src0_file, src0_index);
+   tgsi_transform_src_reg_xyzw(&inst.Src[1], src1_file, src1_index);
+   tgsi_transform_src_reg_xyzw(&inst.Src[2], src2_file, src2_index);
 
    ctx->emit_instruction(ctx, &inst);
 }
@@ -356,8 +368,7 @@ tgsi_transform_op1_swz_inst(struct tgsi_transform_context *ctx,
    inst.Dst[0].Register.Index = dst_index;
    inst.Dst[0].Register.WriteMask = dst_writemask;
    inst.Instruction.NumSrcRegs = 1;
-   inst.Src[0].Register.File = src0_file;
-   inst.Src[0].Register.Index = src0_index;
+   tgsi_transform_src_reg_xyzw(&inst.Src[0], src0_file, src0_index);
    switch (dst_writemask) {
    case TGSI_WRITEMASK_X:
       inst.Src[0].Register.SwizzleX = src0_swizzle;
@@ -402,10 +413,8 @@ tgsi_transform_op2_swz_inst(struct tgsi_transform_context *ctx,
    inst.Dst[0].Register.Index = dst_index;
    inst.Dst[0].Register.WriteMask = dst_writemask;
    inst.Instruction.NumSrcRegs = 2;
-   inst.Src[0].Register.File = src0_file;
-   inst.Src[0].Register.Index = src0_index;
-   inst.Src[1].Register.File = src1_file;
-   inst.Src[1].Register.Index = src1_index;
+   tgsi_transform_src_reg_xyzw(&inst.Src[0], src0_file, src0_index);
+   tgsi_transform_src_reg_xyzw(&inst.Src[1], src1_file, src1_index);
    inst.Src[1].Register.Negate = src1_negate;
    switch (dst_writemask) {
    case TGSI_WRITEMASK_X:
@@ -458,13 +467,10 @@ tgsi_transform_op3_swz_inst(struct tgsi_transform_context *ctx,
    inst.Dst[0].Register.Index = dst_index;
    inst.Dst[0].Register.WriteMask = dst_writemask;
    inst.Instruction.NumSrcRegs = 3;
-   inst.Src[0].Register.File = src0_file;
-   inst.Src[0].Register.Index = src0_index;
+   tgsi_transform_src_reg_xyzw(&inst.Src[0], src0_file, src0_index);
    inst.Src[0].Register.Negate = src0_negate;
-   inst.Src[1].Register.File = src1_file;
-   inst.Src[1].Register.Index = src1_index;
-   inst.Src[2].Register.File = src2_file;
-   inst.Src[2].Register.Index = src2_index;
+   tgsi_transform_src_reg_xyzw(&inst.Src[1], src1_file, src1_index);
+   tgsi_transform_src_reg_xyzw(&inst.Src[2], src2_file, src2_index);
    switch (dst_writemask) {
    case TGSI_WRITEMASK_X:
       inst.Src[0].Register.SwizzleX = src0_swizzle;
@@ -507,8 +513,7 @@ tgsi_transform_kill_inst(struct tgsi_transform_context *ctx,
    inst.Instruction.Opcode = TGSI_OPCODE_KILL_IF;
    inst.Instruction.NumDstRegs = 0;
    inst.Instruction.NumSrcRegs = 1;
-   inst.Src[0].Register.File = src_file;
-   inst.Src[0].Register.Index = src_index;
+   tgsi_transform_src_reg_xyzw(&inst.Src[0], src_file, src_index);
    inst.Src[0].Register.SwizzleX =
    inst.Src[0].Register.SwizzleY =
    inst.Src[0].Register.SwizzleZ =
@@ -540,10 +545,8 @@ tgsi_transform_tex_inst(struct tgsi_transform_context *ctx,
    inst.Instruction.NumSrcRegs = 2;
    inst.Instruction.Texture = TRUE;
    inst.Texture.Texture = tex_target;
-   inst.Src[0].Register.File = src_file;
-   inst.Src[0].Register.Index = src_index;
-   inst.Src[1].Register.File = TGSI_FILE_SAMPLER;
-   inst.Src[1].Register.Index = sampler_index;
+   tgsi_transform_src_reg_xyzw(&inst.Src[0], src_file, src_index);
+   tgsi_transform_src_reg_xyzw(&inst.Src[1], TGSI_FILE_SAMPLER, sampler_index);
 
    ctx->emit_instruction(ctx, &inst);
 }

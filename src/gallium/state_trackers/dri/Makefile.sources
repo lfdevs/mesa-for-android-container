@@ -3,8 +3,8 @@ common_SOURCES := \
 	dri_context.h \
 	dri_drawable.c \
 	dri_drawable.h \
-	dri_extensions.c \
-	dri_extensions.h \
+	dri_helpers.c \
+	dri_helpers.h \
 	dri_query_renderer.c \
 	dri_query_renderer.h \
 	dri_screen.c \

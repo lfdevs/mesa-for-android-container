@@ -126,7 +126,8 @@ clSetEventCallback(cl_event d_ev, cl_int type,
                    void *user_data) try {
    auto &ev = obj(d_ev);
 
-   if (!pfn_notify || type != CL_COMPLETE)
+   if (!pfn_notify ||
+       (type != CL_COMPLETE && type != CL_SUBMITTED && type != CL_RUNNING))
       throw error(CL_INVALID_VALUE);
 
    // Create a temporary soft event that depends on ev, with

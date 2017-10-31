@@ -1371,7 +1371,7 @@ static void evergreen_init_depth_surface(struct r600_context *rctx,
 	surf->db_depth_slice = S_02805C_SLICE_TILE_MAX(levelinfo->nblk_x *
 						       levelinfo->nblk_y / 64 - 1);
 
-	if (rtex->surface.flags & RADEON_SURF_SBUFFER) {
+	if (rtex->surface.has_stencil) {
 		uint64_t stencil_offset;
 		unsigned stile_split = rtex->surface.u.legacy.stencil_tile_split;
 
@@ -1392,8 +1392,7 @@ static void evergreen_init_depth_surface(struct r600_context *rctx,
 					S_028044_FORMAT(V_028044_STENCIL_8);
 	}
 
-	/* use htile only for first level */
-	if (rtex->htile_offset && !level) {
+	if (r600_htile_enabled(rtex, level)) {
 		uint64_t va = rtex->resource.gpu_address + rtex->htile_offset;
 		surf->db_htile_data_base = va >> 8;
 		surf->db_htile_surface = S_028ABC_HTILE_WIDTH(1) |
@@ -1651,7 +1650,7 @@ static void evergreen_emit_msaa_state(struct r600_context *rctx, int nr_samples,
 				     S_028C00_EXPAND_LINE_WIDTH(1)); /* R_028C00_PA_SC_LINE_CNTL */
 		radeon_emit(cs, S_028C04_MSAA_NUM_SAMPLES(util_logbase2(nr_samples)) |
 				     S_028C04_MAX_SAMPLE_DIST(max_dist)); /* R_028C04_PA_SC_AA_CONFIG */
-		radeon_set_context_reg(cs, EG_R_028A4C_PA_SC_MODE_CNTL_1,
+		radeon_set_context_reg(cs, R_028A4C_PA_SC_MODE_CNTL_1,
 				       EG_S_028A4C_PS_ITER_SAMPLE(ps_iter_samples > 1) |
 				       EG_S_028A4C_FORCE_EOV_CNTDWN_ENABLE(1) |
 				       EG_S_028A4C_FORCE_EOV_REZ_ENABLE(1));
@@ -1659,7 +1658,7 @@ static void evergreen_emit_msaa_state(struct r600_context *rctx, int nr_samples,
 		radeon_set_context_reg_seq(cs, R_028C00_PA_SC_LINE_CNTL, 2);
 		radeon_emit(cs, S_028C00_LAST_PIXEL(1)); /* R_028C00_PA_SC_LINE_CNTL */
 		radeon_emit(cs, 0); /* R_028C04_PA_SC_AA_CONFIG */
-		radeon_set_context_reg(cs, EG_R_028A4C_PA_SC_MODE_CNTL_1,
+		radeon_set_context_reg(cs, R_028A4C_PA_SC_MODE_CNTL_1,
 				       EG_S_028A4C_FORCE_EOV_CNTDWN_ENABLE(1) |
 				       EG_S_028A4C_FORCE_EOV_REZ_ENABLE(1));
 	}
@@ -2297,6 +2296,9 @@ static void evergreen_emit_vertex_fetch_shader(struct r600_context *rctx, struct
 	struct radeon_winsys_cs *cs = rctx->b.gfx.cs;
 	struct r600_cso_state *state = (struct r600_cso_state*)a;
 	struct r600_fetch_shader *shader = (struct r600_fetch_shader*)state->cso;
+
+	if (!shader)
+		return;
 
 	radeon_set_context_reg(cs, R_0288A4_SQ_PGM_START_FS,
 			       (shader->buffer->gpu_address + shader->offset) >> 8);

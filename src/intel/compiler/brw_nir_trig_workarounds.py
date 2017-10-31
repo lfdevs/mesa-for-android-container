@@ -20,8 +20,6 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 # IN THE SOFTWARE.
 
-import nir_algebraic
-
 # Prior to Kaby Lake, The SIN and COS instructions on Intel hardware can
 # produce values slightly outside of the [-1.0, 1.0] range for a small set of
 # values.  Obviously, this can break everyone's expectations about trig
@@ -33,11 +31,30 @@ import nir_algebraic
 # amplitude slightly.  Apparently this also minimizes the error function,
 # reducing the maximum error from 0.00006 to about 0.00003.
 
-trig_workarounds = [
-   (('fsin', 'x'), ('fmul', ('fsin', 'x'), 0.99997)),
-   (('fcos', 'x'), ('fmul', ('fcos', 'x'), 0.99997)),
+import argparse
+import sys
+
+TRIG_WORKAROUNDS = [
+    (('fsin', 'x'), ('fmul', ('fsin', 'x'), 0.99997)),
+    (('fcos', 'x'), ('fmul', ('fcos', 'x'), 0.99997)),
 ]
 
-print '#include "brw_nir.h"'
-print nir_algebraic.AlgebraicPass("brw_nir_apply_trig_workarounds",
-                                  trig_workarounds).render()
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-p', '--import-path', required=True)
+    args = parser.parse_args()
+    sys.path.insert(0, args.import_path)
+    run()
+
+
+def run():
+    import nir_algebraic  # pylint: disable=import-error
+
+    print '#include "brw_nir.h"'
+    print nir_algebraic.AlgebraicPass("brw_nir_apply_trig_workarounds",
+                                      TRIG_WORKAROUNDS).render()
+
+
+if __name__ == '__main__':
+    main()

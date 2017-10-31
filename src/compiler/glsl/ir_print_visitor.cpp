@@ -291,7 +291,7 @@ void ir_print_visitor::visit(ir_expression *ir)
 
    fprintf(f, " %s ", ir_expression_operation_strings[ir->operation]);
 
-   for (unsigned i = 0; i < ir->get_num_operands(); i++) {
+   for (unsigned i = 0; i < ir->num_operands; i++) {
       ir->operands[i]->accept(this);
    }
 
@@ -423,7 +423,10 @@ void ir_print_visitor::visit(ir_dereference_record *ir)
 {
    fprintf(f, "(record_ref ");
    ir->record->accept(this);
-   fprintf(f, " %s) ", ir->field);
+
+   const char *field_name =
+      ir->record->type->fields.structure[ir->field_idx].name;
+   fprintf(f, " %s) ", field_name);
 }
 
 
@@ -466,13 +469,10 @@ void ir_print_visitor::visit(ir_constant *ir)
       for (unsigned i = 0; i < ir->type->length; i++)
 	 ir->get_array_element(i)->accept(this);
    } else if (ir->type->is_record()) {
-      ir_constant *value = (ir_constant *) ir->components.get_head();
       for (unsigned i = 0; i < ir->type->length; i++) {
 	 fprintf(f, "(%s ", ir->type->fields.structure[i].name);
-	 value->accept(this);
+         ir->get_record_field(i)->accept(this);
 	 fprintf(f, ")");
-
-	 value = (ir_constant *) value->next;
       }
    } else {
       for (unsigned i = 0; i < ir->type->components(); i++) {

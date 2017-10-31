@@ -42,7 +42,7 @@ if HAVE_GALLIUM_R300
 SUBDIRS += drivers/r300
 endif
 
-## radeon - linked into r600 and radeonsi
+## radeon - linked into radeonsi
 if HAVE_GALLIUM_RADEON_COMMON
 SUBDIRS += drivers/radeon
 endif
@@ -92,6 +92,11 @@ endif
 ## vc4/rpi
 if HAVE_GALLIUM_VC4
 SUBDIRS += drivers/vc4 winsys/vc4/drm
+endif
+
+## vc5
+if HAVE_GALLIUM_VC5
+SUBDIRS += drivers/vc5 winsys/vc5/drm
 endif
 
 ## virgl
@@ -149,8 +154,8 @@ if HAVE_GALLIUM_XLIB_GLX
 SUBDIRS += state_trackers/glx/xlib targets/libgl-xlib
 endif
 
-if HAVE_ST_OMX
-SUBDIRS += state_trackers/omx targets/omx
+if HAVE_ST_OMX_BELLAGIO
+SUBDIRS += state_trackers/omx_bellagio targets/omx-bellagio
 endif
 
 if HAVE_GALLIUM_OSMESA

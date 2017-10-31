@@ -466,6 +466,9 @@ void st_init_limits(struct pipe_screen *screen,
 
    c->AllowMappedBuffersDuringExecution =
       screen->get_param(screen, PIPE_CAP_ALLOW_MAPPED_BUFFERS_DURING_EXECUTION);
+
+   c->UseSTD430AsDefaultPacking =
+      screen->get_param(screen, PIPE_CAP_LOAD_CONSTBUF);
 }
 
 
@@ -541,7 +544,7 @@ init_format_extensions(struct pipe_screen *screen,
 static unsigned
 get_max_samples_for_formats(struct pipe_screen *screen,
                             unsigned num_formats,
-                            enum pipe_format *formats,
+                            const enum pipe_format *formats,
                             unsigned max_samples,
                             unsigned bind)
 {
@@ -569,8 +572,7 @@ get_max_samples_for_formats(struct pipe_screen *screen,
 void st_init_extensions(struct pipe_screen *screen,
                         struct gl_constants *consts,
                         struct gl_extensions *extensions,
-                        struct st_config_options *options,
-                        boolean has_lib_dxtc)
+                        struct st_config_options *options)
 {
    unsigned i;
    GLboolean *extension_table = (GLboolean *) extensions;
@@ -601,6 +603,7 @@ void st_init_extensions(struct pipe_screen *screen,
       { o(ARB_occlusion_query2),             PIPE_CAP_OCCLUSION_QUERY                  },
       { o(ARB_pipeline_statistics_query),    PIPE_CAP_QUERY_PIPELINE_STATISTICS        },
       { o(ARB_point_sprite),                 PIPE_CAP_POINT_SPRITE                     },
+      { o(ARB_polygon_offset_clamp),         PIPE_CAP_POLYGON_OFFSET_CLAMP             },
       { o(ARB_post_depth_coverage),          PIPE_CAP_POST_DEPTH_COVERAGE              },
       { o(ARB_query_buffer_object),          PIPE_CAP_QUERY_BUFFER_OBJECT              },
       { o(ARB_robust_buffer_access_behavior), PIPE_CAP_ROBUST_BUFFER_ACCESS_BEHAVIOR   },
@@ -626,13 +629,15 @@ void st_init_extensions(struct pipe_screen *screen,
       { o(ARB_timer_query),                  PIPE_CAP_QUERY_TIMESTAMP                  },
       { o(ARB_transform_feedback2),          PIPE_CAP_STREAM_OUTPUT_PAUSE_RESUME       },
       { o(ARB_transform_feedback3),          PIPE_CAP_STREAM_OUTPUT_INTERLEAVE_BUFFERS },
+      { o(ARB_transform_feedback_overflow_query), PIPE_CAP_QUERY_SO_OVERFLOW           },
 
       { o(KHR_blend_equation_advanced),      PIPE_CAP_TGSI_FS_FBFETCH                  },
 
       { o(EXT_blend_equation_separate),      PIPE_CAP_BLEND_EQUATION_SEPARATE          },
       { o(EXT_depth_bounds_test),            PIPE_CAP_DEPTH_BOUNDS_TEST                },
       { o(EXT_draw_buffers2),                PIPE_CAP_INDEP_BLEND_ENABLE               },
-      { o(EXT_polygon_offset_clamp),         PIPE_CAP_POLYGON_OFFSET_CLAMP             },
+      { o(EXT_memory_object),                PIPE_CAP_MEMOBJ                           },
+      { o(EXT_memory_object_fd),             PIPE_CAP_MEMOBJ                           },
       { o(EXT_stencil_two_side),             PIPE_CAP_TWO_SIDED_STENCIL                },
       { o(EXT_texture_array),                PIPE_CAP_MAX_TEXTURE_ARRAY_LAYERS         },
       { o(EXT_texture_filter_anisotropic),   PIPE_CAP_ANISOTROPIC_FILTER               },
@@ -646,6 +651,7 @@ void st_init_extensions(struct pipe_screen *screen,
       { o(AMD_seamless_cubemap_per_texture), PIPE_CAP_SEAMLESS_CUBE_MAP_PER_TEXTURE    },
       { o(ATI_separate_stencil),             PIPE_CAP_TWO_SIDED_STENCIL                },
       { o(ATI_texture_mirror_once),          PIPE_CAP_TEXTURE_MIRROR_CLAMP             },
+      { o(MESA_tile_raster_order),           PIPE_CAP_TILE_RASTER_ORDER                },
       { o(NV_conditional_render),            PIPE_CAP_CONDITIONAL_RENDER               },
       { o(NV_fill_rectangle),                PIPE_CAP_POLYGON_MODE_FILL_RECTANGLE      },
       { o(NV_primitive_restart),             PIPE_CAP_PRIMITIVE_RESTART                },
@@ -768,6 +774,11 @@ void st_init_extensions(struct pipe_screen *screen,
         { PIPE_FORMAT_A8B8G8R8_SRGB,
           PIPE_FORMAT_B8G8R8A8_SRGB },
         GL_TRUE }, /* at least one format must be supported */
+
+      { { o(EXT_texture_type_2_10_10_10_REV) },
+        { PIPE_FORMAT_R10G10B10A2_UNORM,
+          PIPE_FORMAT_B10G10R10A2_UNORM },
+         GL_TRUE }, /* at least one format must be supported */
 
       { { o(ATI_texture_compression_3dc) },
         { PIPE_FORMAT_LATC2_UNORM } },
@@ -960,11 +971,6 @@ void st_init_extensions(struct pipe_screen *screen,
 
    /* Below are the cases which cannot be moved into tables easily. */
 
-   if (!has_lib_dxtc && !options->force_s3tc_enable) {
-      extensions->EXT_texture_compression_s3tc = GL_FALSE;
-      extensions->ANGLE_texture_compression_dxt = GL_FALSE;
-   }
-
    if (screen->get_shader_param(screen, PIPE_SHADER_TESS_CTRL,
                                 PIPE_SHADER_CAP_MAX_INSTRUCTIONS) > 0) {
       extensions->ARB_tessellation_shader = GL_TRUE;
@@ -992,23 +998,23 @@ void st_init_extensions(struct pipe_screen *screen,
 
    /* Maximum sample count. */
    {
-      enum pipe_format color_formats[] = {
+      static const enum pipe_format color_formats[] = {
          PIPE_FORMAT_R8G8B8A8_UNORM,
          PIPE_FORMAT_B8G8R8A8_UNORM,
          PIPE_FORMAT_A8R8G8B8_UNORM,
          PIPE_FORMAT_A8B8G8R8_UNORM,
       };
-      enum pipe_format depth_formats[] = {
+      static const enum pipe_format depth_formats[] = {
          PIPE_FORMAT_Z16_UNORM,
          PIPE_FORMAT_Z24X8_UNORM,
          PIPE_FORMAT_X8Z24_UNORM,
          PIPE_FORMAT_Z32_UNORM,
          PIPE_FORMAT_Z32_FLOAT
       };
-      enum pipe_format int_formats[] = {
+      static const enum pipe_format int_formats[] = {
          PIPE_FORMAT_R8G8B8A8_SINT
       };
-      enum pipe_format void_formats[] = {
+      static const enum pipe_format void_formats[] = {
          PIPE_FORMAT_NONE
       };
 
@@ -1043,20 +1049,19 @@ void st_init_extensions(struct pipe_screen *screen,
                                      void_formats, 32,
                                      PIPE_BIND_RENDER_TARGET);
    }
-   if (consts->MaxSamples == 1) {
-      /* one sample doesn't really make sense */
-      consts->MaxSamples = 0;
-   }
-   else if (consts->MaxSamples >= 2) {
+
+   if (consts->MaxSamples >= 2) {
+      /* Real MSAA support */
       extensions->EXT_framebuffer_multisample = GL_TRUE;
       extensions->EXT_framebuffer_multisample_blit_scaled = GL_TRUE;
    }
-
-   if (consts->MaxSamples == 0 && screen->get_param(screen, PIPE_CAP_FAKE_SW_MSAA)) {
-	consts->FakeSWMSAA = GL_TRUE;
-        extensions->EXT_framebuffer_multisample = GL_TRUE;
-        extensions->EXT_framebuffer_multisample_blit_scaled = GL_TRUE;
-        extensions->ARB_texture_multisample = GL_TRUE;
+   else if (consts->MaxSamples > 0 &&
+            screen->get_param(screen, PIPE_CAP_FAKE_SW_MSAA)) {
+      /* fake MSAA support */
+      consts->FakeSWMSAA = GL_TRUE;
+      extensions->EXT_framebuffer_multisample = GL_TRUE;
+      extensions->EXT_framebuffer_multisample_blit_scaled = GL_TRUE;
+      extensions->ARB_texture_multisample = GL_TRUE;
    }
 
    if (consts->MaxDualSourceDrawBuffers > 0 &&
@@ -1246,6 +1251,10 @@ void st_init_extensions(struct pipe_screen *screen,
          }
       }
    }
+
+   if (extensions->EXT_texture_filter_anisotropic &&
+       screen->get_paramf(screen, PIPE_CAPF_MAX_TEXTURE_ANISOTROPY) >= 16.0)
+      extensions->ARB_texture_filter_anisotropic = GL_TRUE;
 
    extensions->KHR_robustness = extensions->ARB_robust_buffer_access_behavior;
 

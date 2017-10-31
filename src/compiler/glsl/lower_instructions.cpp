@@ -193,6 +193,7 @@ void
 lower_instructions_visitor::sub_to_add_neg(ir_expression *ir)
 {
    ir->operation = ir_binop_add;
+   ir->init_num_operands();
    ir->operands[1] = new(ir) ir_expression(ir_unop_neg, ir->operands[1]->type,
 					   ir->operands[1], NULL);
    this->progress = true;
@@ -211,6 +212,7 @@ lower_instructions_visitor::div_to_mul_rcp(ir_expression *ir)
 
    /* op0 / op1 -> op0 * (1.0 / op1) */
    ir->operation = ir_binop_mul;
+   ir->init_num_operands();
    ir->operands[1] = expr;
 
    this->progress = true;
@@ -261,6 +263,7 @@ lower_instructions_visitor::int_div_to_mul_rcp(ir_expression *ir)
       ir->operation = ir_unop_i2u;
       ir->operands[0] = new(ir) ir_expression(ir_unop_f2i, op0);
    }
+   ir->init_num_operands();
    ir->operands[1] = NULL;
 
    this->progress = true;
@@ -272,6 +275,7 @@ lower_instructions_visitor::exp_to_exp2(ir_expression *ir)
    ir_constant *log2_e = new(ir) ir_constant(float(M_LOG2E));
 
    ir->operation = ir_unop_exp2;
+   ir->init_num_operands();
    ir->operands[0] = new(ir) ir_expression(ir_binop_mul, ir->operands[0]->type,
 					   ir->operands[0], log2_e);
    this->progress = true;
@@ -285,6 +289,7 @@ lower_instructions_visitor::pow_to_exp2(ir_expression *ir)
 			    ir->operands[0]);
 
    ir->operation = ir_unop_exp2;
+   ir->init_num_operands();
    ir->operands[0] = new(ir) ir_expression(ir_binop_mul, ir->operands[1]->type,
 					   ir->operands[1], log2_x);
    ir->operands[1] = NULL;
@@ -295,6 +300,7 @@ void
 lower_instructions_visitor::log_to_log2(ir_expression *ir)
 {
    ir->operation = ir_binop_mul;
+   ir->init_num_operands();
    ir->operands[0] = new(ir) ir_expression(ir_unop_log2, ir->operands[0]->type,
 					   ir->operands[0], NULL);
    ir->operands[1] = new(ir) ir_constant(float(1.0 / M_LOG2E));
@@ -313,10 +319,10 @@ lower_instructions_visitor::mod_to_floor(ir_expression *ir)
 
    ir_assignment *const assign_x =
       new(ir) ir_assignment(new(ir) ir_dereference_variable(x),
-                            ir->operands[0], NULL);
+                            ir->operands[0]);
    ir_assignment *const assign_y =
       new(ir) ir_assignment(new(ir) ir_dereference_variable(y),
-                            ir->operands[1], NULL);
+                            ir->operands[1]);
 
    this->base_ir->insert_before(assign_x);
    this->base_ir->insert_before(assign_y);
@@ -345,6 +351,7 @@ lower_instructions_visitor::mod_to_floor(ir_expression *ir)
                             floor_expr);
 
    ir->operation = ir_binop_sub;
+   ir->init_num_operands();
    ir->operands[0] = new(ir) ir_dereference_variable(x);
    ir->operands[1] = mul_expr;
    this->progress = true;
@@ -515,6 +522,7 @@ lower_instructions_visitor::ldexp_to_arith(ir_expression *ir)
    }
 
    ir->operation = ir_triop_csel;
+   ir->init_num_operands();
    ir->operands[0] = gequal(extracted_biased_exp,
                             new(ir) ir_constant(255, vec_elem));
    ir->operands[1] = new(ir) ir_dereference_variable(x);
@@ -640,6 +648,7 @@ lower_instructions_visitor::dldexp_to_arith(ir_expression *ir)
    }
 
    ir->operation = ir_quadop_vector;
+   ir->init_num_operands();
    ir->operands[0] = results[0];
    ir->operands[1] = results[1];
    ir->operands[2] = results[2];
@@ -716,6 +725,7 @@ lower_instructions_visitor::dfrexp_sig_to_arith(ir_expression *ir)
 
    /* Put the dvec back together */
    ir->operation = ir_quadop_vector;
+   ir->init_num_operands();
    ir->operands[0] = results[0];
    ir->operands[1] = results[1];
    ir->operands[2] = results[2];
@@ -769,6 +779,7 @@ lower_instructions_visitor::dfrexp_exp_to_arith(ir_expression *ir)
 
    /* For non-zero inputs, shift the exponent down and apply bias. */
    ir->operation = ir_triop_csel;
+   ir->init_num_operands();
    ir->operands[0] = new(ir) ir_dereference_variable(is_not_zero);
    ir->operands[1] = add(exponent_bias, u2i(rshift(high_words, exponent_shift)));
    ir->operands[2] = izero;
@@ -789,6 +800,7 @@ lower_instructions_visitor::carry_to_arith(ir_expression *ir)
 
    ir_rvalue *x_clone = ir->operands[0]->clone(ir, NULL);
    ir->operation = ir_unop_i2u;
+   ir->init_num_operands();
    ir->operands[0] = b2i(less(add(ir->operands[0], ir->operands[1]), x_clone));
    ir->operands[1] = NULL;
 
@@ -806,6 +818,7 @@ lower_instructions_visitor::borrow_to_arith(ir_expression *ir)
     */
 
    ir->operation = ir_unop_i2u;
+   ir->init_num_operands();
    ir->operands[0] = b2i(less(ir->operands[0], ir->operands[1]));
    ir->operands[1] = NULL;
 
@@ -822,6 +835,7 @@ lower_instructions_visitor::sat_to_clamp(ir_expression *ir)
     */
 
    ir->operation = ir_binop_min;
+   ir->init_num_operands();
    ir->operands[0] = new(ir) ir_expression(ir_binop_max, ir->operands[0]->type,
                                            ir->operands[0],
                                            new(ir) ir_constant(0.0f));
@@ -852,6 +866,7 @@ lower_instructions_visitor::double_dot_to_fma(ir_expression *ir)
    }
 
    ir->operation = ir_triop_fma;
+   ir->init_num_operands();
    ir->operands[0] = swizzle(ir->operands[0], 0, 1);
    ir->operands[1] = swizzle(ir->operands[1], 0, 1);
    ir->operands[2] = new(ir) ir_dereference_variable(temp);
@@ -878,6 +893,7 @@ lower_instructions_visitor::double_lrp(ir_expression *ir)
    }
 
    ir->operation = ir_triop_fma;
+   ir->init_num_operands();
    ir->operands[0] = swizzle(op2, swizval, op0->type->vector_elements);
    ir->operands[2] = mul(sub(one, op2->clone(ir, NULL)), op0);
 
@@ -902,6 +918,7 @@ lower_instructions_visitor::dceil_to_dfrac(ir_expression *ir)
    i.insert_before(assign(frtemp, fract(ir->operands[0])));
 
    ir->operation = ir_binop_add;
+   ir->init_num_operands();
    ir->operands[0] = sub(ir->operands[0]->clone(ir, NULL), frtemp);
    ir->operands[1] = csel(nequal(frtemp, zero), one, zero->clone(ir, NULL));
 
@@ -916,6 +933,7 @@ lower_instructions_visitor::dfloor_to_dfrac(ir_expression *ir)
     * result = sub(x, frtemp);
     */
    ir->operation = ir_binop_sub;
+   ir->init_num_operands();
    ir->operands[1] = fract(ir->operands[0]->clone(ir, NULL));
 
    this->progress = true;
@@ -955,6 +973,7 @@ lower_instructions_visitor::dround_even_to_dfrac(ir_expression *ir)
    i.insert_before(assign(t2, sub(temp, frtemp)));
 
    ir->operation = ir_triop_csel;
+   ir->init_num_operands();
    ir->operands[0] = equal(fract(ir->operands[0]->clone(ir, NULL)),
                            p5->clone(ir, NULL));
    ir->operands[1] = csel(equal(fract(mul(t2, p5->clone(ir, NULL))),
@@ -990,6 +1009,7 @@ lower_instructions_visitor::dtrunc_to_dfrac(ir_expression *ir)
    i.insert_before(assign(temp, sub(arg->clone(ir, NULL), frtemp)));
 
    ir->operation = ir_triop_csel;
+   ir->init_num_operands();
    ir->operands[0] = gequal(arg->clone(ir, NULL), zero);
    ir->operands[1] = new (ir) ir_dereference_variable(temp);
    ir->operands[2] = add(temp,
@@ -1013,6 +1033,7 @@ lower_instructions_visitor::dsign_to_csel(ir_expression *ir)
    ir_constant *neg_one = new(ir) ir_constant(-1.0, arg->type->vector_elements);
 
    ir->operation = ir_triop_csel;
+   ir->init_num_operands();
    ir->operands[0] = less(arg->clone(ir, NULL),
                           zero->clone(ir, NULL));
    ir->operands[1] = neg_one;
@@ -1062,6 +1083,7 @@ lower_instructions_visitor::bit_count_to_math(ir_expression *ir)
 
    /* int(((temp + (temp >> 4) & 0xF0F0F0Fu) * 0x1010101u) >> 24); */
    ir->operation = ir_unop_u2i;
+   ir->init_num_operands();
    ir->operands[0] = rshift(mul(bit_and(add(temp, rshift(temp, c4)), c0F0F0F0F),
                                 c01010101),
                             c24);
@@ -1105,6 +1127,7 @@ lower_instructions_visitor::extract_to_shifts(ir_expression *ir)
        * (value >> offset) & mask;
        */
       ir->operation = ir_binop_bit_and;
+      ir->init_num_operands();
       ir->operands[0] = rshift(ir->operands[0], ir->operands[1]);
       ir->operands[1] = mask;
       ir->operands[2] = NULL;
@@ -1135,6 +1158,7 @@ lower_instructions_visitor::extract_to_shifts(ir_expression *ir)
        * (bits == 0) ? 0 : e;
        */
       ir->operation = ir_triop_csel;
+      ir->init_num_operands();
       ir->operands[0] = equal(c0, bits);
       ir->operands[1] = c0->clone(ir, NULL);
       ir->operands[2] = expr;
@@ -1201,6 +1225,7 @@ lower_instructions_visitor::insert_to_shifts(ir_expression *ir)
 
    /* (base & ~mask) | ((insert << offset) & mask) */
    ir->operation = ir_binop_bit_or;
+   ir->init_num_operands();
    ir->operands[0] = bit_and(ir->operands[0], bit_not(mask));
    ir->operands[1] = bit_and(lshift(ir->operands[1], offset), mask);
    ir->operands[2] = NULL;
@@ -1284,10 +1309,12 @@ lower_instructions_visitor::reverse_to_shifts(ir_expression *ir)
 
    if (ir->operands[0]->type->base_type == GLSL_TYPE_UINT) {
       ir->operation = ir_binop_bit_or;
+      ir->init_num_operands();
       ir->operands[0] = rshift(temp, c16);
       ir->operands[1] = lshift(temp, c16->clone(ir, NULL));
    } else {
       ir->operation = ir_unop_u2i;
+      ir->init_num_operands();
       ir->operands[0] = bit_or(rshift(temp, c16),
                                lshift(temp, c16->clone(ir, NULL)));
    }
@@ -1368,6 +1395,7 @@ lower_instructions_visitor::find_lsb_to_float_cast(ir_expression *ir)
     * small.
     */
    ir->operation = ir_triop_csel;
+   ir->init_num_operands();
    ir->operands[0] = equal(lsb_only, c0);
    ir->operands[1] = cminus1;
    ir->operands[2] = new(ir) ir_dereference_variable(lsb);
@@ -1468,6 +1496,7 @@ lower_instructions_visitor::find_msb_to_float_cast(ir_expression *ir)
     * be negative.  It will only be negative (-0x7f, in fact) if temp is 0.
     */
    ir->operation = ir_triop_csel;
+   ir->init_num_operands();
    ir->operands[0] = less(msb, c0);
    ir->operands[1] = cminus1;
    ir->operands[2] = new(ir) ir_dereference_variable(msb);
@@ -1600,6 +1629,7 @@ lower_instructions_visitor::imul_high_to_mul(ir_expression *ir)
       assert(ir->operands[0]->type->base_type == GLSL_TYPE_UINT);
 
       ir->operation = ir_binop_add;
+      ir->init_num_operands();
       ir->operands[0] = add(hi, rshift(t1, c16->clone(ir, NULL)));
       ir->operands[1] = rshift(t2, c16->clone(ir, NULL));
    } else {
@@ -1622,6 +1652,7 @@ lower_instructions_visitor::imul_high_to_mul(ir_expression *ir)
                                          u2i(_carry(bit_not(lo), c1)))));
 
       ir->operation = ir_triop_csel;
+      ir->init_num_operands();
       ir->operands[0] = new(ir) ir_dereference_variable(different_signs);
       ir->operands[1] = new(ir) ir_dereference_variable(neg_hi);
       ir->operands[2] = u2i(hi);

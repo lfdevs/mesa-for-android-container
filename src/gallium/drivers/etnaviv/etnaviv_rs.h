@@ -43,6 +43,7 @@ struct rs_state {
    struct etna_bo *source;
    uint32_t source_offset;
    uint32_t source_stride;
+   uint32_t source_padded_width; /* total padded width (only needed for source) */
    uint32_t source_padded_height; /* total padded height */
    struct etna_bo *dest;
    uint32_t dest_offset;
@@ -69,6 +70,7 @@ struct compiled_rs_state {
    uint32_t RS_FILL_VALUE[4];
    uint32_t RS_EXTRA_CONFIG;
    uint32_t RS_PIPE_OFFSET[2];
+   uint32_t RS_KICKER_INPLACE; /* Set if source is destination */
 
    struct etna_reloc source[2];
    struct etna_reloc dest[2];

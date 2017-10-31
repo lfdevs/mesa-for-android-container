@@ -2,7 +2,7 @@ AM_CFLAGS = -I$(top_srcdir)/src/egl/main \
 	    -I$(top_srcdir)/include \
 	    $(DEFINES) \
 	    $(VISIBILITY_CFLAGS) \
-	    $(WAYLAND_CFLAGS) 
+	    $(WAYLAND_SERVER_CFLAGS)
 
 noinst_LTLIBRARIES = libwayland-drm.la
 libwayland_drm_la_SOURCES = \

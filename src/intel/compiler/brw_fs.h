@@ -80,8 +80,8 @@ public:
 
    fs_reg vgrf(const glsl_type *const type);
    void import_uniforms(fs_visitor *v);
-   void setup_uniform_clipplane_values(gl_clip_plane *clip_planes);
-   void compute_clip_distance(gl_clip_plane *clip_planes);
+   void setup_uniform_clipplane_values();
+   void compute_clip_distance();
 
    fs_inst *get_instruction_generating_reg(fs_inst *start,
 					   fs_inst *end,
@@ -95,7 +95,7 @@ public:
    void DEP_RESOLVE_MOV(const brw::fs_builder &bld, int grf);
 
    bool run_fs(bool allow_spilling, bool do_rep_send);
-   bool run_vs(gl_clip_plane *clip_planes);
+   bool run_vs();
    bool run_tcs_single_patch();
    bool run_tes();
    bool run_gs();

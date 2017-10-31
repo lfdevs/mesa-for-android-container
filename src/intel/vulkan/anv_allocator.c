@@ -361,12 +361,14 @@ anv_block_pool_expand_range(struct anv_block_pool *pool,
               MAP_SHARED | MAP_POPULATE, pool->fd,
               BLOCK_POOL_MEMFD_CENTER - center_bo_offset);
    if (map == MAP_FAILED)
-      return vk_errorf(VK_ERROR_MEMORY_MAP_FAILED, "mmap failed: %m");
+      return vk_errorf(pool->device->instance, pool->device,
+                       VK_ERROR_MEMORY_MAP_FAILED, "mmap failed: %m");
 
    gem_handle = anv_gem_userptr(pool->device, map, size);
    if (gem_handle == 0) {
       munmap(map, size);
-      return vk_errorf(VK_ERROR_TOO_MANY_OBJECTS, "userptr failed: %m");
+      return vk_errorf(pool->device->instance, pool->device,
+                       VK_ERROR_TOO_MANY_OBJECTS, "userptr failed: %m");
    }
 
    cleanup->map = map;
@@ -1190,7 +1192,7 @@ anv_bo_cache_init(struct anv_bo_cache *cache)
 
    if (pthread_mutex_init(&cache->mutex, NULL)) {
       _mesa_hash_table_destroy(cache->bo_map, NULL);
-      return vk_errorf(VK_ERROR_OUT_OF_HOST_MEMORY,
+      return vk_errorf(NULL, NULL, VK_ERROR_OUT_OF_HOST_MEMORY,
                        "pthread_mutex_init failed: %m");
    }
 
@@ -1219,7 +1221,7 @@ anv_bo_cache_lookup_locked(struct anv_bo_cache *cache, uint32_t gem_handle)
    return bo;
 }
 
-static struct anv_bo *
+UNUSED static struct anv_bo *
 anv_bo_cache_lookup(struct anv_bo_cache *cache, uint32_t gem_handle)
 {
    pthread_mutex_lock(&cache->mutex);
@@ -1270,12 +1272,9 @@ anv_bo_cache_alloc(struct anv_device *device,
 VkResult
 anv_bo_cache_import(struct anv_device *device,
                     struct anv_bo_cache *cache,
-                    int fd, uint64_t size, struct anv_bo **bo_out)
+                    int fd, struct anv_bo **bo_out)
 {
    pthread_mutex_lock(&cache->mutex);
-
-   /* The kernel is going to give us whole pages anyway */
-   size = align_u64(size, 4096);
 
    uint32_t gem_handle = anv_gem_fd_to_handle(device, fd);
    if (!gem_handle) {
@@ -1285,22 +1284,10 @@ anv_bo_cache_import(struct anv_device *device,
 
    struct anv_cached_bo *bo = anv_bo_cache_lookup_locked(cache, gem_handle);
    if (bo) {
-      if (bo->bo.size != size) {
-         pthread_mutex_unlock(&cache->mutex);
-         return vk_error(VK_ERROR_INVALID_EXTERNAL_HANDLE_KHR);
-      }
       __sync_fetch_and_add(&bo->refcount, 1);
    } else {
-      /* For security purposes, we reject BO imports where the size does not
-       * match exactly.  This prevents a malicious client from passing a
-       * buffer to a trusted client, lying about the size, and telling the
-       * trusted client to try and texture from an image that goes
-       * out-of-bounds.  This sort of thing could lead to GPU hangs or worse
-       * in the trusted client.  The trusted client can protect itself against
-       * this sort of attack but only if it can trust the buffer size.
-       */
-      off_t import_size = lseek(fd, 0, SEEK_END);
-      if (import_size == (off_t)-1 || import_size < size) {
+      off_t size = lseek(fd, 0, SEEK_END);
+      if (size == (off_t)-1) {
          anv_gem_close(device, gem_handle);
          pthread_mutex_unlock(&cache->mutex);
          return vk_error(VK_ERROR_INVALID_EXTERNAL_HANDLE_KHR);
@@ -1322,18 +1309,6 @@ anv_bo_cache_import(struct anv_device *device,
    }
 
    pthread_mutex_unlock(&cache->mutex);
-
-   /* From the Vulkan spec:
-    *
-    *    "Importing memory from a file descriptor transfers ownership of
-    *    the file descriptor from the application to the Vulkan
-    *    implementation. The application must not perform any operations on
-    *    the file descriptor after a successful import."
-    *
-    * If the import fails, we leave the file descriptor open.
-    */
-   close(fd);
-
    *bo_out = &bo->bo;
 
    return VK_SUCCESS;

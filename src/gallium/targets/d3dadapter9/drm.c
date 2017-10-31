@@ -37,8 +37,8 @@
 #include "d3dadapter/d3dadapter9.h"
 #include "d3dadapter/drm.h"
 
-#include "xmlconfig.h"
-#include "xmlpool.h"
+#include "util/xmlconfig.h"
+#include "util/xmlpool.h"
 
 #include <drm.h>
 #include <sys/ioctl.h>
@@ -229,7 +229,7 @@ drm_create_adapter( int fd,
         return D3DERR_DRIVERINTERNALERROR;
     }
 
-    ctx->base.hal = pipe_loader_create_screen(ctx->dev, 0);
+    ctx->base.hal = pipe_loader_create_screen(ctx->dev);
     if (!ctx->base.hal) {
         ERR("Unable to load requested driver.\n");
         drm_destroy(&ctx->base);
@@ -312,7 +312,7 @@ drm_create_adapter( int fd,
 
     /* wrap it to create a software screen that can share resources */
     if (pipe_loader_sw_probe_wrapped(&ctx->swdev, ctx->base.hal))
-        ctx->base.ref = pipe_loader_create_screen(ctx->swdev, 0);
+        ctx->base.ref = pipe_loader_create_screen(ctx->swdev);
 
     if (!ctx->base.ref) {
         ERR("Couldn't wrap drm screen to swrast screen. Software devices "

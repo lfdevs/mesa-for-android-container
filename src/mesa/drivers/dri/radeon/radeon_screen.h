@@ -45,7 +45,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "dri_util.h"
 #include "radeon_chipset.h"
 #include "radeon_reg.h"
-#include "xmlconfig.h"
+#include "util/xmlconfig.h"
 
 
 typedef struct {

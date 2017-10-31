@@ -57,6 +57,8 @@ struct amdgpu_winsys {
 
    int num_cs; /* The number of command streams created. */
    unsigned num_total_rejected_cs;
+   uint32_t surf_index_color;
+   uint32_t surf_index_fmask;
    uint32_t next_bo_unique_id;
    uint64_t allocated_vram;
    uint64_t allocated_gtt;
@@ -67,6 +69,7 @@ struct amdgpu_winsys {
    uint64_t num_sdma_IBs;
    uint64_t num_mapped_buffers;
    uint64_t gfx_bo_list_counter;
+   uint64_t gfx_ib_size_counter;
 
    struct radeon_info info;
 
@@ -77,6 +80,7 @@ struct amdgpu_winsys {
    ADDR_HANDLE addrlib;
 
    bool check_vm;
+   bool debug_all_bos;
 
    /* List of all allocated buffers */
    mtx_t global_bo_list_lock;

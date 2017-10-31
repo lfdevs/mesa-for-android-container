@@ -118,15 +118,16 @@ _eglLookupConfig(EGLConfig config, _EGLDisplay *dpy)
 }
 
 
-enum {
-   /* types */
+enum type {
    ATTRIB_TYPE_INTEGER,
    ATTRIB_TYPE_BOOLEAN,
    ATTRIB_TYPE_BITMASK,
    ATTRIB_TYPE_ENUM,
    ATTRIB_TYPE_PSEUDO, /* non-queryable */
    ATTRIB_TYPE_PLATFORM, /* platform-dependent */
-   /* criteria */
+};
+
+enum criterion {
    ATTRIB_CRITERION_EXACT,
    ATTRIB_CRITERION_ATLEAST,
    ATTRIB_CRITERION_MASK,
@@ -138,8 +139,8 @@ enum {
 /* EGL spec Table 3.1 and 3.4 */
 static const struct {
    EGLint attr;
-   EGLint type;
-   EGLint criterion;
+   enum type type;
+   enum criterion criterion;
    EGLint default_value;
 } _eglValidationTable[] =
 {
@@ -355,9 +356,6 @@ _eglValidateConfig(const _EGLConfig *conf, EGLBoolean for_matching)
          if (val != 0)
             valid = EGL_FALSE;
          break;
-      default:
-         assert(0);
-         break;
       }
 
       if (!valid && for_matching) {
@@ -465,8 +463,8 @@ _eglMatchConfig(const _EGLConfig *conf, const _EGLConfig *criteria)
       case ATTRIB_CRITERION_SPECIAL:
          /* ignored here */
          break;
-      default:
-         assert(0);
+      case ATTRIB_CRITERION_IGNORE:
+         unreachable("already handled above");
          break;
       }
 

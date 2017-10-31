@@ -28,6 +28,13 @@
 #include "util/u_upload_mgr.h"
 #include "os/os_time.h"
 #include "tgsi/tgsi_text.h"
+#include "amd/common/sid.h"
+
+/* TODO: remove this: */
+void si_update_prims_generated_query_state(struct r600_common_context *rctx,
+					   unsigned type, int diff);
+
+#define R600_MAX_STREAMS 4
 
 struct r600_hw_query_params {
 	unsigned start_offset;
@@ -72,6 +79,7 @@ static enum radeon_value_id winsys_id_from_type(unsigned type)
 	case R600_QUERY_NUM_GFX_IBS: return RADEON_NUM_GFX_IBS;
 	case R600_QUERY_NUM_SDMA_IBS: return RADEON_NUM_SDMA_IBS;
 	case R600_QUERY_GFX_BO_LIST_SIZE: return RADEON_GFX_BO_LIST_COUNTER;
+	case R600_QUERY_GFX_IB_SIZE: return RADEON_GFX_IB_SIZE_COUNTER;
 	case R600_QUERY_NUM_BYTES_MOVED: return RADEON_NUM_BYTES_MOVED;
 	case R600_QUERY_NUM_EVICTIONS: return RADEON_NUM_EVICTIONS;
 	case R600_QUERY_NUM_VRAM_CPU_PAGE_FAULTS: return RADEON_NUM_VRAM_CPU_PAGE_FAULTS;
@@ -98,6 +106,12 @@ static bool r600_query_sw_begin(struct r600_common_context *rctx,
 		break;
 	case R600_QUERY_DRAW_CALLS:
 		query->begin_result = rctx->num_draw_calls;
+		break;
+	case R600_QUERY_DECOMPRESS_CALLS:
+		query->begin_result = rctx->num_decompress_calls;
+		break;
+	case R600_QUERY_MRT_DRAW_CALLS:
+		query->begin_result = rctx->num_mrt_draw_calls;
 		break;
 	case R600_QUERY_PRIM_RESTART_CALLS:
 		query->begin_result = rctx->num_prim_restart_calls;
@@ -165,6 +179,7 @@ static bool r600_query_sw_begin(struct r600_common_context *rctx,
 		query->begin_result = 0;
 		break;
 	case R600_QUERY_BUFFER_WAIT_TIME:
+	case R600_QUERY_GFX_IB_SIZE:
 	case R600_QUERY_NUM_GFX_IBS:
 	case R600_QUERY_NUM_SDMA_IBS:
 	case R600_QUERY_NUM_BYTES_MOVED:
@@ -209,10 +224,9 @@ static bool r600_query_sw_begin(struct r600_common_context *rctx,
 	case R600_QUERY_GPU_MEQ_BUSY:
 	case R600_QUERY_GPU_ME_BUSY:
 	case R600_QUERY_GPU_SURF_SYNC_BUSY:
-	case R600_QUERY_GPU_DMA_BUSY:
+	case R600_QUERY_GPU_CP_DMA_BUSY:
 	case R600_QUERY_GPU_SCRATCH_RAM_BUSY:
-	case R600_QUERY_GPU_CE_BUSY:
-		query->begin_result = r600_begin_counter(rctx->screen,
+		query->begin_result = si_begin_counter(rctx->screen,
 							 query->b.type);
 		break;
 	case R600_QUERY_NUM_COMPILATIONS:
@@ -252,6 +266,12 @@ static bool r600_query_sw_end(struct r600_common_context *rctx,
 		break;
 	case R600_QUERY_DRAW_CALLS:
 		query->end_result = rctx->num_draw_calls;
+		break;
+	case R600_QUERY_DECOMPRESS_CALLS:
+		query->end_result = rctx->num_decompress_calls;
+		break;
+	case R600_QUERY_MRT_DRAW_CALLS:
+		query->end_result = rctx->num_mrt_draw_calls;
 		break;
 	case R600_QUERY_PRIM_RESTART_CALLS:
 		query->end_result = rctx->num_prim_restart_calls;
@@ -315,6 +335,7 @@ static bool r600_query_sw_end(struct r600_common_context *rctx,
 	case R600_QUERY_CURRENT_GPU_SCLK:
 	case R600_QUERY_CURRENT_GPU_MCLK:
 	case R600_QUERY_BUFFER_WAIT_TIME:
+	case R600_QUERY_GFX_IB_SIZE:
 	case R600_QUERY_NUM_MAPPED_BUFFERS:
 	case R600_QUERY_NUM_GFX_IBS:
 	case R600_QUERY_NUM_SDMA_IBS:
@@ -360,10 +381,9 @@ static bool r600_query_sw_end(struct r600_common_context *rctx,
 	case R600_QUERY_GPU_MEQ_BUSY:
 	case R600_QUERY_GPU_ME_BUSY:
 	case R600_QUERY_GPU_SURF_SYNC_BUSY:
-	case R600_QUERY_GPU_DMA_BUSY:
+	case R600_QUERY_GPU_CP_DMA_BUSY:
 	case R600_QUERY_GPU_SCRATCH_RAM_BUSY:
-	case R600_QUERY_GPU_CE_BUSY:
-		query->end_result = r600_end_counter(rctx->screen,
+		query->end_result = si_end_counter(rctx->screen,
 						     query->b.type,
 						     query->begin_result);
 		query->begin_result = 0;
@@ -482,8 +502,8 @@ static struct pipe_query *r600_query_sw_create(unsigned query_type)
 	return (struct pipe_query *)query;
 }
 
-void r600_query_hw_destroy(struct r600_common_screen *rscreen,
-			   struct r600_query *rquery)
+void si_query_hw_destroy(struct r600_common_screen *rscreen,
+			 struct r600_query *rquery)
 {
 	struct r600_query_hw *query = (struct r600_query_hw *)rquery;
 	struct r600_query_buffer *prev = query->buffer.previous;
@@ -497,6 +517,7 @@ void r600_query_hw_destroy(struct r600_common_screen *rscreen,
 	}
 
 	r600_resource_reference(&query->buffer.buf, NULL);
+	r600_resource_reference(&query->workaround_buf, NULL);
 	FREE(rquery);
 }
 
@@ -538,7 +559,8 @@ static bool r600_query_hw_prepare_buffer(struct r600_common_screen *rscreen,
 	memset(results, 0, buffer->b.b.width0);
 
 	if (query->b.type == PIPE_QUERY_OCCLUSION_COUNTER ||
-	    query->b.type == PIPE_QUERY_OCCLUSION_PREDICATE) {
+	    query->b.type == PIPE_QUERY_OCCLUSION_PREDICATE ||
+	    query->b.type == PIPE_QUERY_OCCLUSION_PREDICATE_CONSERVATIVE) {
 		unsigned max_rbs = rscreen->info.num_render_backends;
 		unsigned enabled_rb_mask = rscreen->info.enabled_rb_mask;
 		unsigned num_results;
@@ -569,10 +591,10 @@ static void r600_query_hw_get_result_resource(struct r600_common_context *rctx,
                                               unsigned offset);
 
 static struct r600_query_ops query_hw_ops = {
-	.destroy = r600_query_hw_destroy,
-	.begin = r600_query_hw_begin,
-	.end = r600_query_hw_end,
-	.get_result = r600_query_hw_get_result,
+	.destroy = si_query_hw_destroy,
+	.begin = si_query_hw_begin,
+	.end = si_query_hw_end,
+	.get_result = si_query_hw_get_result,
 	.get_result_resource = r600_query_hw_get_result_resource,
 };
 
@@ -598,8 +620,8 @@ static struct r600_query_hw_ops query_hw_default_hw_ops = {
 	.add_result = r600_query_hw_add_result,
 };
 
-bool r600_query_hw_init(struct r600_common_screen *rscreen,
-			struct r600_query_hw *query)
+bool si_query_hw_init(struct r600_common_screen *rscreen,
+		      struct r600_query_hw *query)
 {
 	query->buffer.buf = r600_new_query_buffer(rscreen, query);
 	if (!query->buffer.buf)
@@ -623,19 +645,20 @@ static struct pipe_query *r600_query_hw_create(struct r600_common_screen *rscree
 	switch (query_type) {
 	case PIPE_QUERY_OCCLUSION_COUNTER:
 	case PIPE_QUERY_OCCLUSION_PREDICATE:
+	case PIPE_QUERY_OCCLUSION_PREDICATE_CONSERVATIVE:
 		query->result_size = 16 * rscreen->info.num_render_backends;
 		query->result_size += 16; /* for the fence + alignment */
 		query->num_cs_dw_begin = 6;
-		query->num_cs_dw_end = 6 + r600_gfx_write_fence_dwords(rscreen);
+		query->num_cs_dw_end = 6 + si_gfx_write_fence_dwords(rscreen);
 		break;
 	case PIPE_QUERY_TIME_ELAPSED:
 		query->result_size = 24;
 		query->num_cs_dw_begin = 8;
-		query->num_cs_dw_end = 8 + r600_gfx_write_fence_dwords(rscreen);
+		query->num_cs_dw_end = 8 + si_gfx_write_fence_dwords(rscreen);
 		break;
 	case PIPE_QUERY_TIMESTAMP:
 		query->result_size = 16;
-		query->num_cs_dw_end = 8 + r600_gfx_write_fence_dwords(rscreen);
+		query->num_cs_dw_end = 8 + si_gfx_write_fence_dwords(rscreen);
 		query->flags = R600_QUERY_HW_FLAG_NO_START;
 		break;
 	case PIPE_QUERY_PRIMITIVES_EMITTED:
@@ -648,12 +671,18 @@ static struct pipe_query *r600_query_hw_create(struct r600_common_screen *rscree
 		query->num_cs_dw_end = 6;
 		query->stream = index;
 		break;
+	case PIPE_QUERY_SO_OVERFLOW_ANY_PREDICATE:
+		/* NumPrimitivesWritten, PrimitiveStorageNeeded. */
+		query->result_size = 32 * R600_MAX_STREAMS;
+		query->num_cs_dw_begin = 6 * R600_MAX_STREAMS;
+		query->num_cs_dw_end = 6 * R600_MAX_STREAMS;
+		break;
 	case PIPE_QUERY_PIPELINE_STATISTICS:
-		/* 11 values on EG, 8 on R600. */
-		query->result_size = (rscreen->chip_class >= EVERGREEN ? 11 : 8) * 16;
+		/* 11 values on GCN. */
+		query->result_size = 11 * 16;
 		query->result_size += 8; /* for the fence + alignment */
 		query->num_cs_dw_begin = 6;
-		query->num_cs_dw_end = 6 + r600_gfx_write_fence_dwords(rscreen);
+		query->num_cs_dw_end = 6 + si_gfx_write_fence_dwords(rscreen);
 		break;
 	default:
 		assert(0);
@@ -661,7 +690,7 @@ static struct pipe_query *r600_query_hw_create(struct r600_common_screen *rscree
 		return NULL;
 	}
 
-	if (!r600_query_hw_init(rscreen, query)) {
+	if (!si_query_hw_init(rscreen, query)) {
 		FREE(query);
 		return NULL;
 	}
@@ -673,7 +702,8 @@ static void r600_update_occlusion_query_state(struct r600_common_context *rctx,
 					      unsigned type, int diff)
 {
 	if (type == PIPE_QUERY_OCCLUSION_COUNTER ||
-	    type == PIPE_QUERY_OCCLUSION_PREDICATE) {
+	    type == PIPE_QUERY_OCCLUSION_PREDICATE ||
+	    type == PIPE_QUERY_OCCLUSION_PREDICATE_CONSERVATIVE) {
 		bool old_enable = rctx->num_occlusion_queries != 0;
 		bool old_perfect_enable =
 			rctx->num_perfect_occlusion_queries != 0;
@@ -682,7 +712,7 @@ static void r600_update_occlusion_query_state(struct r600_common_context *rctx,
 		rctx->num_occlusion_queries += diff;
 		assert(rctx->num_occlusion_queries >= 0);
 
-		if (type == PIPE_QUERY_OCCLUSION_COUNTER) {
+		if (type != PIPE_QUERY_OCCLUSION_PREDICATE_CONSERVATIVE) {
 			rctx->num_perfect_occlusion_queries += diff;
 			assert(rctx->num_perfect_occlusion_queries >= 0);
 		}
@@ -691,20 +721,30 @@ static void r600_update_occlusion_query_state(struct r600_common_context *rctx,
 		perfect_enable = rctx->num_perfect_occlusion_queries != 0;
 
 		if (enable != old_enable || perfect_enable != old_perfect_enable) {
-			rctx->set_occlusion_query_state(&rctx->b, enable);
+			rctx->set_occlusion_query_state(&rctx->b, old_enable,
+							old_perfect_enable);
 		}
 	}
 }
 
-static unsigned event_type_for_stream(struct r600_query_hw *query)
+static unsigned event_type_for_stream(unsigned stream)
 {
-	switch (query->stream) {
+	switch (stream) {
 	default:
-	case 0: return EVENT_TYPE_SAMPLE_STREAMOUTSTATS;
-	case 1: return EVENT_TYPE_SAMPLE_STREAMOUTSTATS1;
-	case 2: return EVENT_TYPE_SAMPLE_STREAMOUTSTATS2;
-	case 3: return EVENT_TYPE_SAMPLE_STREAMOUTSTATS3;
+	case 0: return V_028A90_SAMPLE_STREAMOUTSTATS;
+	case 1: return V_028A90_SAMPLE_STREAMOUTSTATS1;
+	case 2: return V_028A90_SAMPLE_STREAMOUTSTATS2;
+	case 3: return V_028A90_SAMPLE_STREAMOUTSTATS3;
 	}
+}
+
+static void emit_sample_streamout(struct radeon_winsys_cs *cs, uint64_t va,
+				  unsigned stream)
+{
+	radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 2, 0));
+	radeon_emit(cs, EVENT_TYPE(event_type_for_stream(stream)) | EVENT_INDEX(3));
+	radeon_emit(cs, va);
+	radeon_emit(cs, va >> 32);
 }
 
 static void r600_query_hw_do_emit_start(struct r600_common_context *ctx,
@@ -717,8 +757,9 @@ static void r600_query_hw_do_emit_start(struct r600_common_context *ctx,
 	switch (query->b.type) {
 	case PIPE_QUERY_OCCLUSION_COUNTER:
 	case PIPE_QUERY_OCCLUSION_PREDICATE:
+	case PIPE_QUERY_OCCLUSION_PREDICATE_CONSERVATIVE:
 		radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 2, 0));
-		radeon_emit(cs, EVENT_TYPE(EVENT_TYPE_ZPASS_DONE) | EVENT_INDEX(1));
+		radeon_emit(cs, EVENT_TYPE(V_028A90_ZPASS_DONE) | EVENT_INDEX(1));
 		radeon_emit(cs, va);
 		radeon_emit(cs, va >> 32);
 		break;
@@ -726,43 +767,36 @@ static void r600_query_hw_do_emit_start(struct r600_common_context *ctx,
 	case PIPE_QUERY_PRIMITIVES_GENERATED:
 	case PIPE_QUERY_SO_STATISTICS:
 	case PIPE_QUERY_SO_OVERFLOW_PREDICATE:
-		radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 2, 0));
-		radeon_emit(cs, EVENT_TYPE(event_type_for_stream(query)) | EVENT_INDEX(3));
+		emit_sample_streamout(cs, va, query->stream);
+		break;
+	case PIPE_QUERY_SO_OVERFLOW_ANY_PREDICATE:
+		for (unsigned stream = 0; stream < R600_MAX_STREAMS; ++stream)
+			emit_sample_streamout(cs, va + 32 * stream, stream);
+		break;
+	case PIPE_QUERY_TIME_ELAPSED:
+		/* Write the timestamp from the CP not waiting for
+		 * outstanding draws (top-of-pipe).
+		 */
+		radeon_emit(cs, PKT3(PKT3_COPY_DATA, 4, 0));
+		radeon_emit(cs, COPY_DATA_COUNT_SEL |
+				COPY_DATA_SRC_SEL(COPY_DATA_TIMESTAMP) |
+				COPY_DATA_DST_SEL(COPY_DATA_MEM_ASYNC));
+		radeon_emit(cs, 0);
+		radeon_emit(cs, 0);
 		radeon_emit(cs, va);
 		radeon_emit(cs, va >> 32);
 		break;
-	case PIPE_QUERY_TIME_ELAPSED:
-		if (ctx->chip_class >= SI) {
-			/* Write the timestamp from the CP not waiting for
-			 * outstanding draws (top-of-pipe).
-			 */
-			radeon_emit(cs, PKT3(PKT3_COPY_DATA, 4, 0));
-			radeon_emit(cs, COPY_DATA_COUNT_SEL |
-					COPY_DATA_SRC_SEL(COPY_DATA_TIMESTAMP) |
-					COPY_DATA_DST_SEL(COPY_DATA_MEM_ASYNC));
-			radeon_emit(cs, 0);
-			radeon_emit(cs, 0);
-			radeon_emit(cs, va);
-			radeon_emit(cs, va >> 32);
-		} else {
-			/* Write the timestamp after the last draw is done.
-			 * (bottom-of-pipe)
-			 */
-			r600_gfx_write_event_eop(ctx, EVENT_TYPE_BOTTOM_OF_PIPE_TS,
-						 0, 3, NULL, va, 0, 0);
-		}
-		break;
 	case PIPE_QUERY_PIPELINE_STATISTICS:
 		radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 2, 0));
-		radeon_emit(cs, EVENT_TYPE(EVENT_TYPE_SAMPLE_PIPELINESTAT) | EVENT_INDEX(2));
+		radeon_emit(cs, EVENT_TYPE(V_028A90_SAMPLE_PIPELINESTAT) | EVENT_INDEX(2));
 		radeon_emit(cs, va);
 		radeon_emit(cs, va >> 32);
 		break;
 	default:
 		assert(0);
 	}
-	r600_emit_reloc(ctx, &ctx->gfx, query->buffer.buf, RADEON_USAGE_WRITE,
-			RADEON_PRIO_QUERY);
+	radeon_add_to_buffer_list(ctx, &ctx->gfx, query->buffer.buf, RADEON_USAGE_WRITE,
+				  RADEON_PRIO_QUERY);
 }
 
 static void r600_query_hw_emit_start(struct r600_common_context *ctx,
@@ -774,7 +808,7 @@ static void r600_query_hw_emit_start(struct r600_common_context *ctx,
 		return; // previous buffer allocation failure
 
 	r600_update_occlusion_query_state(ctx, query->b.type, 1);
-	r600_update_prims_generated_query_state(ctx, query->b.type, 1);
+	si_update_prims_generated_query_state(ctx, query->b.type, 1);
 
 	ctx->need_gfx_cs_space(&ctx->b, query->num_cs_dw_begin + query->num_cs_dw_end,
 			       true);
@@ -809,9 +843,10 @@ static void r600_query_hw_do_emit_stop(struct r600_common_context *ctx,
 	switch (query->b.type) {
 	case PIPE_QUERY_OCCLUSION_COUNTER:
 	case PIPE_QUERY_OCCLUSION_PREDICATE:
+	case PIPE_QUERY_OCCLUSION_PREDICATE_CONSERVATIVE:
 		va += 8;
 		radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 2, 0));
-		radeon_emit(cs, EVENT_TYPE(EVENT_TYPE_ZPASS_DONE) | EVENT_INDEX(1));
+		radeon_emit(cs, EVENT_TYPE(V_028A90_ZPASS_DONE) | EVENT_INDEX(1));
 		radeon_emit(cs, va);
 		radeon_emit(cs, va >> 32);
 
@@ -821,18 +856,21 @@ static void r600_query_hw_do_emit_stop(struct r600_common_context *ctx,
 	case PIPE_QUERY_PRIMITIVES_GENERATED:
 	case PIPE_QUERY_SO_STATISTICS:
 	case PIPE_QUERY_SO_OVERFLOW_PREDICATE:
-		va += query->result_size/2;
-		radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 2, 0));
-		radeon_emit(cs, EVENT_TYPE(event_type_for_stream(query)) | EVENT_INDEX(3));
-		radeon_emit(cs, va);
-		radeon_emit(cs, va >> 32);
+		va += 16;
+		emit_sample_streamout(cs, va, query->stream);
+		break;
+	case PIPE_QUERY_SO_OVERFLOW_ANY_PREDICATE:
+		va += 16;
+		for (unsigned stream = 0; stream < R600_MAX_STREAMS; ++stream)
+			emit_sample_streamout(cs, va + 32 * stream, stream);
 		break;
 	case PIPE_QUERY_TIME_ELAPSED:
 		va += 8;
 		/* fall through */
 	case PIPE_QUERY_TIMESTAMP:
-		r600_gfx_write_event_eop(ctx, EVENT_TYPE_BOTTOM_OF_PIPE_TS,
-					 0, 3, NULL, va, 0, 0);
+		si_gfx_write_event_eop(ctx, V_028A90_BOTTOM_OF_PIPE_TS,
+					 0, EOP_DATA_SEL_TIMESTAMP, NULL, va,
+					 0, query->b.type);
 		fence_va = va + 8;
 		break;
 	case PIPE_QUERY_PIPELINE_STATISTICS: {
@@ -840,7 +878,7 @@ static void r600_query_hw_do_emit_stop(struct r600_common_context *ctx,
 
 		va += sample_size;
 		radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 2, 0));
-		radeon_emit(cs, EVENT_TYPE(EVENT_TYPE_SAMPLE_PIPELINESTAT) | EVENT_INDEX(2));
+		radeon_emit(cs, EVENT_TYPE(V_028A90_SAMPLE_PIPELINESTAT) | EVENT_INDEX(2));
 		radeon_emit(cs, va);
 		radeon_emit(cs, va >> 32);
 
@@ -850,12 +888,14 @@ static void r600_query_hw_do_emit_stop(struct r600_common_context *ctx,
 	default:
 		assert(0);
 	}
-	r600_emit_reloc(ctx, &ctx->gfx, query->buffer.buf, RADEON_USAGE_WRITE,
-			RADEON_PRIO_QUERY);
+	radeon_add_to_buffer_list(ctx, &ctx->gfx, query->buffer.buf, RADEON_USAGE_WRITE,
+				  RADEON_PRIO_QUERY);
 
 	if (fence_va)
-		r600_gfx_write_event_eop(ctx, EVENT_TYPE_BOTTOM_OF_PIPE_TS, 0, 1,
-					 query->buffer.buf, fence_va, 0, 0x80000000);
+		si_gfx_write_event_eop(ctx, V_028A90_BOTTOM_OF_PIPE_TS, 0,
+					 EOP_DATA_SEL_VALUE_32BIT,
+					 query->buffer.buf, fence_va, 0x80000000,
+					 query->b.type);
 }
 
 static void r600_query_hw_emit_stop(struct r600_common_context *ctx,
@@ -882,48 +922,85 @@ static void r600_query_hw_emit_stop(struct r600_common_context *ctx,
 		ctx->num_cs_dw_queries_suspend -= query->num_cs_dw_end;
 
 	r600_update_occlusion_query_state(ctx, query->b.type, -1);
-	r600_update_prims_generated_query_state(ctx, query->b.type, -1);
+	si_update_prims_generated_query_state(ctx, query->b.type, -1);
+}
+
+static void emit_set_predicate(struct r600_common_context *ctx,
+			       struct r600_resource *buf, uint64_t va,
+			       uint32_t op)
+{
+	struct radeon_winsys_cs *cs = ctx->gfx.cs;
+
+	if (ctx->chip_class >= GFX9) {
+		radeon_emit(cs, PKT3(PKT3_SET_PREDICATION, 2, 0));
+		radeon_emit(cs, op);
+		radeon_emit(cs, va);
+		radeon_emit(cs, va >> 32);
+	} else {
+		radeon_emit(cs, PKT3(PKT3_SET_PREDICATION, 1, 0));
+		radeon_emit(cs, va);
+		radeon_emit(cs, op | ((va >> 32) & 0xFF));
+	}
+	radeon_add_to_buffer_list(ctx, &ctx->gfx, buf, RADEON_USAGE_READ,
+				  RADEON_PRIO_QUERY);
 }
 
 static void r600_emit_query_predication(struct r600_common_context *ctx,
 					struct r600_atom *atom)
 {
-	struct radeon_winsys_cs *cs = ctx->gfx.cs;
 	struct r600_query_hw *query = (struct r600_query_hw *)ctx->render_cond;
 	struct r600_query_buffer *qbuf;
 	uint32_t op;
-	bool flag_wait;
+	bool flag_wait, invert;
 
 	if (!query)
 		return;
 
+	invert = ctx->render_cond_invert;
 	flag_wait = ctx->render_cond_mode == PIPE_RENDER_COND_WAIT ||
 		    ctx->render_cond_mode == PIPE_RENDER_COND_BY_REGION_WAIT;
 
-	switch (query->b.type) {
-	case PIPE_QUERY_OCCLUSION_COUNTER:
-	case PIPE_QUERY_OCCLUSION_PREDICATE:
-		op = PRED_OP(PREDICATION_OP_ZPASS);
-		break;
-	case PIPE_QUERY_PRIMITIVES_EMITTED:
-	case PIPE_QUERY_PRIMITIVES_GENERATED:
-	case PIPE_QUERY_SO_STATISTICS:
-	case PIPE_QUERY_SO_OVERFLOW_PREDICATE:
-		op = PRED_OP(PREDICATION_OP_PRIMCOUNT);
-		break;
-	default:
-		assert(0);
-		return;
+	if (query->workaround_buf) {
+		op = PRED_OP(PREDICATION_OP_BOOL64);
+	} else {
+		switch (query->b.type) {
+		case PIPE_QUERY_OCCLUSION_COUNTER:
+		case PIPE_QUERY_OCCLUSION_PREDICATE:
+		case PIPE_QUERY_OCCLUSION_PREDICATE_CONSERVATIVE:
+			op = PRED_OP(PREDICATION_OP_ZPASS);
+			break;
+		case PIPE_QUERY_SO_OVERFLOW_PREDICATE:
+		case PIPE_QUERY_SO_OVERFLOW_ANY_PREDICATE:
+			op = PRED_OP(PREDICATION_OP_PRIMCOUNT);
+			invert = !invert;
+			break;
+		default:
+			assert(0);
+			return;
+		}
 	}
 
 	/* if true then invert, see GL_ARB_conditional_render_inverted */
-	if (ctx->render_cond_invert)
-		op |= PREDICATION_DRAW_NOT_VISIBLE; /* Draw if not visable/overflow */
+	if (invert)
+		op |= PREDICATION_DRAW_NOT_VISIBLE; /* Draw if not visible or overflow */
 	else
-		op |= PREDICATION_DRAW_VISIBLE; /* Draw if visable/overflow */
+		op |= PREDICATION_DRAW_VISIBLE; /* Draw if visible or no overflow */
+
+	/* Use the value written by compute shader as a workaround. Note that
+	 * the wait flag does not apply in this predication mode.
+	 *
+	 * The shader outputs the result value to L2. Workarounds only affect VI
+	 * and later, where the CP reads data from L2, so we don't need an
+	 * additional flush.
+	 */
+	if (query->workaround_buf) {
+		uint64_t va = query->workaround_buf->gpu_address + query->workaround_offset;
+		emit_set_predicate(ctx, query->workaround_buf, va, op);
+		return;
+	}
 
 	op |= flag_wait ? PREDICATION_HINT_WAIT : PREDICATION_HINT_NOWAIT_DRAW;
-	
+
 	/* emit predicate packets for all data blocks */
 	for (qbuf = &query->buffer; qbuf; qbuf = qbuf->previous) {
 		unsigned results_base = 0;
@@ -932,22 +1009,19 @@ static void r600_emit_query_predication(struct r600_common_context *ctx,
 		while (results_base < qbuf->results_end) {
 			uint64_t va = va_base + results_base;
 
-			if (ctx->chip_class >= GFX9) {
-				radeon_emit(cs, PKT3(PKT3_SET_PREDICATION, 2, 0));
-				radeon_emit(cs, op);
-				radeon_emit(cs, va);
-				radeon_emit(cs, va >> 32);
-			} else {
-				radeon_emit(cs, PKT3(PKT3_SET_PREDICATION, 1, 0));
-				radeon_emit(cs, va);
-				radeon_emit(cs, op | ((va >> 32) & 0xFF));
-			}
-			r600_emit_reloc(ctx, &ctx->gfx, qbuf->buf, RADEON_USAGE_READ,
-					RADEON_PRIO_QUERY);
-			results_base += query->result_size;
+			if (query->b.type == PIPE_QUERY_SO_OVERFLOW_ANY_PREDICATE) {
+				for (unsigned stream = 0; stream < R600_MAX_STREAMS; ++stream) {
+					emit_set_predicate(ctx, qbuf->buf, va + 32 * stream, op);
 
-			/* set CONTINUE bit for all packets except the first */
-			op |= PREDICATION_CONTINUE;
+					/* set CONTINUE bit for all packets except the first */
+					op |= PREDICATION_CONTINUE;
+				}
+			} else {
+				emit_set_predicate(ctx, qbuf->buf, va, op);
+				op |= PREDICATION_CONTINUE;
+			}
+
+			results_base += query->result_size;
 		}
 	}
 }
@@ -982,8 +1056,8 @@ static boolean r600_begin_query(struct pipe_context *ctx,
 	return rquery->ops->begin(rctx, rquery);
 }
 
-void r600_query_hw_reset_buffers(struct r600_common_context *rctx,
-				 struct r600_query_hw *query)
+void si_query_hw_reset_buffers(struct r600_common_context *rctx,
+			       struct r600_query_hw *query)
 {
 	struct r600_query_buffer *prev = query->buffer.previous;
 
@@ -999,7 +1073,7 @@ void r600_query_hw_reset_buffers(struct r600_common_context *rctx,
 	query->buffer.previous = NULL;
 
 	/* Obtain a new buffer if the current one can't be mapped without a stall. */
-	if (r600_rings_is_buffer_referenced(rctx, query->buffer.buf->buf, RADEON_USAGE_READWRITE) ||
+	if (si_rings_is_buffer_referenced(rctx, query->buffer.buf->buf, RADEON_USAGE_READWRITE) ||
 	    !rctx->ws->buffer_wait(query->buffer.buf->buf, 0, RADEON_USAGE_READWRITE)) {
 		r600_resource_reference(&query->buffer.buf, NULL);
 		query->buffer.buf = r600_new_query_buffer(rctx->screen, query);
@@ -1009,8 +1083,8 @@ void r600_query_hw_reset_buffers(struct r600_common_context *rctx,
 	}
 }
 
-bool r600_query_hw_begin(struct r600_common_context *rctx,
-			 struct r600_query *rquery)
+bool si_query_hw_begin(struct r600_common_context *rctx,
+		       struct r600_query *rquery)
 {
 	struct r600_query_hw *query = (struct r600_query_hw *)rquery;
 
@@ -1020,7 +1094,9 @@ bool r600_query_hw_begin(struct r600_common_context *rctx,
 	}
 
 	if (!(query->flags & R600_QUERY_HW_FLAG_BEGIN_RESUMES))
-		r600_query_hw_reset_buffers(rctx, query);
+		si_query_hw_reset_buffers(rctx, query);
+
+	r600_resource_reference(&query->workaround_buf, NULL);
 
 	r600_query_hw_emit_start(rctx, query);
 	if (!query->buffer.buf)
@@ -1038,13 +1114,13 @@ static bool r600_end_query(struct pipe_context *ctx, struct pipe_query *query)
 	return rquery->ops->end(rctx, rquery);
 }
 
-bool r600_query_hw_end(struct r600_common_context *rctx,
-		       struct r600_query *rquery)
+bool si_query_hw_end(struct r600_common_context *rctx,
+		     struct r600_query *rquery)
 {
 	struct r600_query_hw *query = (struct r600_query_hw *)rquery;
 
 	if (query->flags & R600_QUERY_HW_FLAG_NO_START)
-		r600_query_hw_reset_buffers(rctx, query);
+		si_query_hw_reset_buffers(rctx, query);
 
 	r600_query_hw_emit_stop(rctx, query);
 
@@ -1069,6 +1145,7 @@ static void r600_get_hw_query_params(struct r600_common_context *rctx,
 	switch (rquery->b.type) {
 	case PIPE_QUERY_OCCLUSION_COUNTER:
 	case PIPE_QUERY_OCCLUSION_PREDICATE:
+	case PIPE_QUERY_OCCLUSION_PREDICATE_CONSERVATIVE:
 		params->start_offset = 0;
 		params->end_offset = 8;
 		params->fence_offset = max_rbs * 16;
@@ -1099,6 +1176,19 @@ static void r600_get_hw_query_params(struct r600_common_context *rctx,
 		params->start_offset = 8 - index * 8;
 		params->end_offset = 24 - index * 8;
 		params->fence_offset = params->end_offset + 4;
+		break;
+	case PIPE_QUERY_SO_OVERFLOW_ANY_PREDICATE:
+		params->pair_count = R600_MAX_STREAMS;
+		params->pair_stride = 32;
+	case PIPE_QUERY_SO_OVERFLOW_PREDICATE:
+		params->start_offset = 0;
+		params->end_offset = 16;
+
+		/* We can re-use the high dword of the last 64-bit value as a
+		 * fence: it is initialized as 0, and the high bit is set by
+		 * the write of the streamout stats event.
+		 */
+		params->fence_offset = rquery->result_size - 4;
 		break;
 	case PIPE_QUERY_PIPELINE_STATISTICS:
 	{
@@ -1148,7 +1238,8 @@ static void r600_query_hw_add_result(struct r600_common_screen *rscreen,
 		}
 		break;
 	}
-	case PIPE_QUERY_OCCLUSION_PREDICATE: {
+	case PIPE_QUERY_OCCLUSION_PREDICATE:
+	case PIPE_QUERY_OCCLUSION_PREDICATE_CONSERVATIVE: {
 		for (unsigned i = 0; i < max_rbs; ++i) {
 			unsigned results_base = i * 16;
 			result->b = result->b ||
@@ -1186,48 +1277,37 @@ static void r600_query_hw_add_result(struct r600_common_screen *rscreen,
 			r600_query_read_result(buffer, 2, 6, true) !=
 			r600_query_read_result(buffer, 0, 4, true);
 		break;
-	case PIPE_QUERY_PIPELINE_STATISTICS:
-		if (rscreen->chip_class >= EVERGREEN) {
-			result->pipeline_statistics.ps_invocations +=
-				r600_query_read_result(buffer, 0, 22, false);
-			result->pipeline_statistics.c_primitives +=
-				r600_query_read_result(buffer, 2, 24, false);
-			result->pipeline_statistics.c_invocations +=
-				r600_query_read_result(buffer, 4, 26, false);
-			result->pipeline_statistics.vs_invocations +=
-				r600_query_read_result(buffer, 6, 28, false);
-			result->pipeline_statistics.gs_invocations +=
-				r600_query_read_result(buffer, 8, 30, false);
-			result->pipeline_statistics.gs_primitives +=
-				r600_query_read_result(buffer, 10, 32, false);
-			result->pipeline_statistics.ia_primitives +=
-				r600_query_read_result(buffer, 12, 34, false);
-			result->pipeline_statistics.ia_vertices +=
-				r600_query_read_result(buffer, 14, 36, false);
-			result->pipeline_statistics.hs_invocations +=
-				r600_query_read_result(buffer, 16, 38, false);
-			result->pipeline_statistics.ds_invocations +=
-				r600_query_read_result(buffer, 18, 40, false);
-			result->pipeline_statistics.cs_invocations +=
-				r600_query_read_result(buffer, 20, 42, false);
-		} else {
-			result->pipeline_statistics.ps_invocations +=
-				r600_query_read_result(buffer, 0, 16, false);
-			result->pipeline_statistics.c_primitives +=
-				r600_query_read_result(buffer, 2, 18, false);
-			result->pipeline_statistics.c_invocations +=
-				r600_query_read_result(buffer, 4, 20, false);
-			result->pipeline_statistics.vs_invocations +=
-				r600_query_read_result(buffer, 6, 22, false);
-			result->pipeline_statistics.gs_invocations +=
-				r600_query_read_result(buffer, 8, 24, false);
-			result->pipeline_statistics.gs_primitives +=
-				r600_query_read_result(buffer, 10, 26, false);
-			result->pipeline_statistics.ia_primitives +=
-				r600_query_read_result(buffer, 12, 28, false);
-			result->pipeline_statistics.ia_vertices +=
-				r600_query_read_result(buffer, 14, 30, false);
+	case PIPE_QUERY_SO_OVERFLOW_ANY_PREDICATE:
+		for (unsigned stream = 0; stream < R600_MAX_STREAMS; ++stream) {
+			result->b = result->b ||
+				r600_query_read_result(buffer, 2, 6, true) !=
+				r600_query_read_result(buffer, 0, 4, true);
+			buffer = (char *)buffer + 32;
 		}
+		break;
+	case PIPE_QUERY_PIPELINE_STATISTICS:
+		result->pipeline_statistics.ps_invocations +=
+			r600_query_read_result(buffer, 0, 22, false);
+		result->pipeline_statistics.c_primitives +=
+			r600_query_read_result(buffer, 2, 24, false);
+		result->pipeline_statistics.c_invocations +=
+			r600_query_read_result(buffer, 4, 26, false);
+		result->pipeline_statistics.vs_invocations +=
+			r600_query_read_result(buffer, 6, 28, false);
+		result->pipeline_statistics.gs_invocations +=
+			r600_query_read_result(buffer, 8, 30, false);
+		result->pipeline_statistics.gs_primitives +=
+			r600_query_read_result(buffer, 10, 32, false);
+		result->pipeline_statistics.ia_primitives +=
+			r600_query_read_result(buffer, 12, 34, false);
+		result->pipeline_statistics.ia_vertices +=
+			r600_query_read_result(buffer, 14, 36, false);
+		result->pipeline_statistics.hs_invocations +=
+			r600_query_read_result(buffer, 16, 38, false);
+		result->pipeline_statistics.ds_invocations +=
+			r600_query_read_result(buffer, 18, 40, false);
+		result->pipeline_statistics.cs_invocations +=
+			r600_query_read_result(buffer, 20, 42, false);
 #if 0 /* for testing */
 		printf("Pipeline stats: IA verts=%llu, IA prims=%llu, VS=%llu, HS=%llu, "
 		       "DS=%llu, GS=%llu, GS prims=%llu, Clipper=%llu, "
@@ -1281,9 +1361,9 @@ static void r600_query_hw_clear_result(struct r600_query_hw *query,
 	util_query_clear_result(result, query->b.type);
 }
 
-bool r600_query_hw_get_result(struct r600_common_context *rctx,
-			      struct r600_query *rquery,
-			      bool wait, union pipe_query_result *result)
+bool si_query_hw_get_result(struct r600_common_context *rctx,
+			    struct r600_query *rquery,
+			    bool wait, union pipe_query_result *result)
 {
 	struct r600_common_screen *rscreen = rctx->screen;
 	struct r600_query_hw *query = (struct r600_query_hw *)rquery;
@@ -1300,7 +1380,7 @@ bool r600_query_hw_get_result(struct r600_common_context *rctx,
 		if (rquery->b.flushed)
 			map = rctx->ws->buffer_map(qbuf->buf->buf, NULL, usage);
 		else
-			map = r600_buffer_map_sync_with_rings(rctx, qbuf->buf, usage);
+			map = si_buffer_map_sync_with_rings(rctx, qbuf->buf, usage);
 
 		if (!map)
 			return false;
@@ -1343,6 +1423,7 @@ bool r600_query_hw_get_result(struct r600_common_context *rctx,
  *         32: apply timestamp conversion
  *         64: store full 64 bits result
  *        128: store signed 32 bits result
+ *        256: SO_OVERFLOW mode: take the difference of two successive half-pairs
  *  1.x = fence_offset
  *  1.y = pair_stride
  *  1.z = pair_count
@@ -1367,18 +1448,18 @@ static void r600_create_query_result_shader(struct r600_common_context *rctx)
 		"DCL BUFFER[0]\n"
 		"DCL BUFFER[1]\n"
 		"DCL BUFFER[2]\n"
-		"DCL CONST[0..1]\n"
+		"DCL CONST[0][0..1]\n"
 		"DCL TEMP[0..5]\n"
 		"IMM[0] UINT32 {0, 31, 2147483647, 4294967295}\n"
 		"IMM[1] UINT32 {1, 2, 4, 8}\n"
 		"IMM[2] UINT32 {16, 32, 64, 128}\n"
 		"IMM[3] UINT32 {1000000, 0, %u, 0}\n" /* for timestamp conversion */
-		"IMM[4] UINT32 {0, 0, 0, 0}\n"
+		"IMM[4] UINT32 {256, 0, 0, 0}\n"
 
-		"AND TEMP[5], CONST[0].wwww, IMM[2].xxxx\n"
+		"AND TEMP[5], CONST[0][0].wwww, IMM[2].xxxx\n"
 		"UIF TEMP[5]\n"
 			/* Check result availability. */
-			"LOAD TEMP[1].x, BUFFER[0], CONST[1].xxxx\n"
+			"LOAD TEMP[1].x, BUFFER[0], CONST[0][1].xxxx\n"
 			"ISHR TEMP[0].z, TEMP[1].xxxx, IMM[0].yyyy\n"
 			"MOV TEMP[1], TEMP[0].zzzz\n"
 			"NOT TEMP[0].z, TEMP[0].zzzz\n"
@@ -1390,7 +1471,7 @@ static void r600_create_query_result_shader(struct r600_common_context *rctx)
 		"ELSE\n"
 			/* Load previously accumulated result if requested. */
 			"MOV TEMP[0], IMM[0].xxxx\n"
-			"AND TEMP[4], CONST[0].wwww, IMM[1].xxxx\n"
+			"AND TEMP[4], CONST[0][0].wwww, IMM[1].xxxx\n"
 			"UIF TEMP[4]\n"
 				"LOAD TEMP[0].xyz, BUFFER[1], IMM[0].xxxx\n"
 			"ENDIF\n"
@@ -1403,13 +1484,13 @@ static void r600_create_query_result_shader(struct r600_common_context *rctx)
 				"ENDIF\n"
 
 				/* Break if result_index >= result_count. */
-				"USGE TEMP[5], TEMP[1].xxxx, CONST[0].zzzz\n"
+				"USGE TEMP[5], TEMP[1].xxxx, CONST[0][0].zzzz\n"
 				"UIF TEMP[5]\n"
 					"BRK\n"
 				"ENDIF\n"
 
 				/* Load fence and check result availability */
-				"UMAD TEMP[5].x, TEMP[1].xxxx, CONST[0].yyyy, CONST[1].xxxx\n"
+				"UMAD TEMP[5].x, TEMP[1].xxxx, CONST[0][0].yyyy, CONST[0][1].xxxx\n"
 				"LOAD TEMP[5].x, BUFFER[0], TEMP[5].xxxx\n"
 				"ISHR TEMP[0].z, TEMP[5].xxxx, IMM[0].yyyy\n"
 				"NOT TEMP[0].z, TEMP[0].zzzz\n"
@@ -1420,19 +1501,33 @@ static void r600_create_query_result_shader(struct r600_common_context *rctx)
 				"MOV TEMP[1].y, IMM[0].xxxx\n"
 				"BGNLOOP\n"
 					/* Load start and end. */
-					"UMUL TEMP[5].x, TEMP[1].xxxx, CONST[0].yyyy\n"
-					"UMAD TEMP[5].x, TEMP[1].yyyy, CONST[1].yyyy, TEMP[5].xxxx\n"
+					"UMUL TEMP[5].x, TEMP[1].xxxx, CONST[0][0].yyyy\n"
+					"UMAD TEMP[5].x, TEMP[1].yyyy, CONST[0][1].yyyy, TEMP[5].xxxx\n"
 					"LOAD TEMP[2].xy, BUFFER[0], TEMP[5].xxxx\n"
 
-					"UADD TEMP[5].x, TEMP[5].xxxx, CONST[0].xxxx\n"
-					"LOAD TEMP[3].xy, BUFFER[0], TEMP[5].xxxx\n"
+					"UADD TEMP[5].y, TEMP[5].xxxx, CONST[0][0].xxxx\n"
+					"LOAD TEMP[3].xy, BUFFER[0], TEMP[5].yyyy\n"
 
-					"U64ADD TEMP[3].xy, TEMP[3], -TEMP[2]\n"
-					"U64ADD TEMP[0].xy, TEMP[0], TEMP[3]\n"
+					"U64ADD TEMP[4].xy, TEMP[3], -TEMP[2]\n"
+
+					"AND TEMP[5].z, CONST[0][0].wwww, IMM[4].xxxx\n"
+					"UIF TEMP[5].zzzz\n"
+						/* Load second start/end half-pair and
+						 * take the difference
+						 */
+						"UADD TEMP[5].xy, TEMP[5], IMM[1].wwww\n"
+						"LOAD TEMP[2].xy, BUFFER[0], TEMP[5].xxxx\n"
+						"LOAD TEMP[3].xy, BUFFER[0], TEMP[5].yyyy\n"
+
+						"U64ADD TEMP[3].xy, TEMP[3], -TEMP[2]\n"
+						"U64ADD TEMP[4].xy, TEMP[4], -TEMP[3]\n"
+					"ENDIF\n"
+
+					"U64ADD TEMP[0].xy, TEMP[0], TEMP[4]\n"
 
 					/* Increment pair index */
 					"UADD TEMP[1].y, TEMP[1].yyyy, IMM[1].xxxx\n"
-					"USGE TEMP[5], TEMP[1].yyyy, CONST[1].zzzz\n"
+					"USGE TEMP[5], TEMP[1].yyyy, CONST[0][1].zzzz\n"
 					"UIF TEMP[5]\n"
 						"BRK\n"
 					"ENDIF\n"
@@ -1443,19 +1538,19 @@ static void r600_create_query_result_shader(struct r600_common_context *rctx)
 			"ENDLOOP\n"
 		"ENDIF\n"
 
-		"AND TEMP[4], CONST[0].wwww, IMM[1].yyyy\n"
+		"AND TEMP[4], CONST[0][0].wwww, IMM[1].yyyy\n"
 		"UIF TEMP[4]\n"
 			/* Store accumulated data for chaining. */
 			"STORE BUFFER[2].xyz, IMM[0].xxxx, TEMP[0]\n"
 		"ELSE\n"
-			"AND TEMP[4], CONST[0].wwww, IMM[1].zzzz\n"
+			"AND TEMP[4], CONST[0][0].wwww, IMM[1].zzzz\n"
 			"UIF TEMP[4]\n"
 				/* Store result availability. */
 				"NOT TEMP[0].z, TEMP[0]\n"
 				"AND TEMP[0].z, TEMP[0].zzzz, IMM[1].xxxx\n"
 				"STORE BUFFER[2].x, IMM[0].xxxx, TEMP[0].zzzz\n"
 
-				"AND TEMP[4], CONST[0].wwww, IMM[2].zzzz\n"
+				"AND TEMP[4], CONST[0][0].wwww, IMM[2].zzzz\n"
 				"UIF TEMP[4]\n"
 					"STORE BUFFER[2].y, IMM[0].xxxx, IMM[0].xxxx\n"
 				"ENDIF\n"
@@ -1464,21 +1559,21 @@ static void r600_create_query_result_shader(struct r600_common_context *rctx)
 				"NOT TEMP[4], TEMP[0].zzzz\n"
 				"UIF TEMP[4]\n"
 					/* Apply timestamp conversion */
-					"AND TEMP[4], CONST[0].wwww, IMM[2].yyyy\n"
+					"AND TEMP[4], CONST[0][0].wwww, IMM[2].yyyy\n"
 					"UIF TEMP[4]\n"
 						"U64MUL TEMP[0].xy, TEMP[0], IMM[3].xyxy\n"
 						"U64DIV TEMP[0].xy, TEMP[0], IMM[3].zwzw\n"
 					"ENDIF\n"
 
 					/* Convert to boolean */
-					"AND TEMP[4], CONST[0].wwww, IMM[1].wwww\n"
+					"AND TEMP[4], CONST[0][0].wwww, IMM[1].wwww\n"
 					"UIF TEMP[4]\n"
 						"U64SNE TEMP[0].x, TEMP[0].xyxy, IMM[4].zwzw\n"
 						"AND TEMP[0].x, TEMP[0].xxxx, IMM[1].xxxx\n"
 						"MOV TEMP[0].y, IMM[0].xxxx\n"
 					"ENDIF\n"
 
-					"AND TEMP[4], CONST[0].wwww, IMM[2].zzzz\n"
+					"AND TEMP[4], CONST[0][0].wwww, IMM[2].zzzz\n"
 					"UIF TEMP[4]\n"
 						"STORE BUFFER[2].xy, IMM[0].xxxx, TEMP[0].xyxy\n"
 					"ELSE\n"
@@ -1487,7 +1582,7 @@ static void r600_create_query_result_shader(struct r600_common_context *rctx)
 							"MOV TEMP[0].x, IMM[0].wwww\n"
 						"ENDIF\n"
 
-						"AND TEMP[4], CONST[0].wwww, IMM[2].wwww\n"
+						"AND TEMP[4], CONST[0][0].wwww, IMM[2].wwww\n"
 						"UIF TEMP[4]\n"
 							"UMIN TEMP[0].x, TEMP[0].xxxx, IMM[0].zzzz\n"
 						"ENDIF\n"
@@ -1606,8 +1701,11 @@ static void r600_query_hw_get_result_resource(struct r600_common_context *rctx,
 	if (index < 0)
 		consts.config |= 4;
 	if (query->b.type == PIPE_QUERY_OCCLUSION_PREDICATE ||
-	    query->b.type == PIPE_QUERY_SO_OVERFLOW_PREDICATE)
+	    query->b.type == PIPE_QUERY_OCCLUSION_PREDICATE_CONSERVATIVE)
 		consts.config |= 8;
+	else if (query->b.type == PIPE_QUERY_SO_OVERFLOW_PREDICATE ||
+		 query->b.type == PIPE_QUERY_SO_OVERFLOW_ANY_PREDICATE)
+		consts.config |= 8 | 256;
 	else if (query->b.type == PIPE_QUERY_TIMESTAMP ||
 		 query->b.type == PIPE_QUERY_TIME_ELAPSED)
 		consts.config |= 32;
@@ -1669,7 +1767,7 @@ static void r600_query_hw_get_result_resource(struct r600_common_context *rctx,
 			va = qbuf->buf->gpu_address + qbuf->results_end - query->result_size;
 			va += params.fence_offset;
 
-			r600_gfx_wait_fence(rctx, va, 0x80000000, 0x80000000);
+			si_gfx_wait_fence(rctx, va, 0x80000000, 0x80000000);
 		}
 
 		rctx->b.launch_grid(&rctx->b, &grid);
@@ -1687,24 +1785,60 @@ static void r600_render_condition(struct pipe_context *ctx,
 {
 	struct r600_common_context *rctx = (struct r600_common_context *)ctx;
 	struct r600_query_hw *rquery = (struct r600_query_hw *)query;
-	struct r600_query_buffer *qbuf;
 	struct r600_atom *atom = &rctx->render_cond_atom;
+
+	if (query) {
+		bool needs_workaround = false;
+
+		/* There was a firmware regression in VI which causes successive
+		 * SET_PREDICATION packets to give the wrong answer for
+		 * non-inverted stream overflow predication.
+		 */
+		if (((rctx->chip_class == VI && rctx->screen->info.pfp_fw_feature < 49) ||
+		     (rctx->chip_class == GFX9 && rctx->screen->info.pfp_fw_feature < 38)) &&
+		    !condition &&
+		    (rquery->b.type == PIPE_QUERY_SO_OVERFLOW_ANY_PREDICATE ||
+		     (rquery->b.type == PIPE_QUERY_SO_OVERFLOW_PREDICATE &&
+		      (rquery->buffer.previous ||
+		       rquery->buffer.results_end > rquery->result_size)))) {
+			needs_workaround = true;
+		}
+
+		if (needs_workaround && !rquery->workaround_buf) {
+			bool old_force_off = rctx->render_cond_force_off;
+			rctx->render_cond_force_off = true;
+
+			u_suballocator_alloc(
+				rctx->allocator_zeroed_memory, 8, 8,
+				&rquery->workaround_offset,
+				(struct pipe_resource **)&rquery->workaround_buf);
+
+			/* Reset to NULL to avoid a redundant SET_PREDICATION
+			 * from launching the compute grid.
+			 */
+			rctx->render_cond = NULL;
+
+			ctx->get_query_result_resource(
+				ctx, query, true, PIPE_QUERY_TYPE_U64, 0,
+				&rquery->workaround_buf->b.b, rquery->workaround_offset);
+
+			/* Settings this in the render cond atom is too late,
+			 * so set it here. */
+			rctx->flags |= rctx->screen->barrier_flags.L2_to_cp |
+				       R600_CONTEXT_FLUSH_FOR_RENDER_COND;
+
+			rctx->render_cond_force_off = old_force_off;
+		}
+	}
 
 	rctx->render_cond = query;
 	rctx->render_cond_invert = condition;
 	rctx->render_cond_mode = mode;
 
-	/* Compute the size of SET_PREDICATION packets. */
-	atom->num_dw = 0;
-	if (query) {
-		for (qbuf = &rquery->buffer; qbuf; qbuf = qbuf->previous)
-			atom->num_dw += (qbuf->results_end / rquery->result_size) * 5;
-	}
-
 	rctx->set_atom_dirty(rctx, atom, query != NULL);
 }
 
-void r600_suspend_queries(struct r600_common_context *ctx)
+void si_suspend_queries(struct r600_common_context *ctx)
 {
 	struct r600_query_hw *query;
 
@@ -1731,15 +1865,13 @@ static unsigned r600_queries_num_cs_dw_for_resuming(struct r600_common_context *
 		 */
 		num_dw += query->num_cs_dw_end;
 	}
-	/* primitives generated query */
-	num_dw += ctx->streamout.enable_atom.num_dw;
 	/* guess for ZPASS enable or PERFECT_ZPASS_COUNT enable updates */
 	num_dw += 13;
 
 	return num_dw;
 }
 
-void r600_resume_queries(struct r600_common_context *ctx)
+void si_resume_queries(struct r600_common_context *ctx)
 {
 	struct r600_query_hw *query;
 	unsigned num_cs_dw = r600_queries_num_cs_dw_for_resuming(ctx, &ctx->active_queries);
@@ -1752,84 +1884,6 @@ void r600_resume_queries(struct r600_common_context *ctx)
 	LIST_FOR_EACH_ENTRY(query, &ctx->active_queries, list) {
 		r600_query_hw_emit_start(ctx, query);
 	}
-}
-
-/* Fix radeon_info::enabled_rb_mask for R600, R700, EVERGREEN, NI. */
-void r600_query_fix_enabled_rb_mask(struct r600_common_screen *rscreen)
-{
-	struct r600_common_context *ctx =
-		(struct r600_common_context*)rscreen->aux_context;
-	struct radeon_winsys_cs *cs = ctx->gfx.cs;
-	struct r600_resource *buffer;
-	uint32_t *results;
-	unsigned i, mask = 0;
-	unsigned max_rbs = ctx->screen->info.num_render_backends;
-
-	assert(rscreen->chip_class <= CAYMAN);
-
-	/* if backend_map query is supported by the kernel */
-	if (rscreen->info.r600_gb_backend_map_valid) {
-		unsigned num_tile_pipes = rscreen->info.num_tile_pipes;
-		unsigned backend_map = rscreen->info.r600_gb_backend_map;
-		unsigned item_width, item_mask;
-
-		if (ctx->chip_class >= EVERGREEN) {
-			item_width = 4;
-			item_mask = 0x7;
-		} else {
-			item_width = 2;
-			item_mask = 0x3;
-		}
-
-		while (num_tile_pipes--) {
-			i = backend_map & item_mask;
-			mask |= (1<<i);
-			backend_map >>= item_width;
-		}
-		if (mask != 0) {
-			rscreen->info.enabled_rb_mask = mask;
-			return;
-		}
-	}
-
-	/* otherwise backup path for older kernels */
-
-	/* create buffer for event data */
-	buffer = (struct r600_resource*)
-		pipe_buffer_create(ctx->b.screen, 0,
-				   PIPE_USAGE_STAGING, max_rbs * 16);
-	if (!buffer)
-		return;
-
-	/* initialize buffer with zeroes */
-	results = r600_buffer_map_sync_with_rings(ctx, buffer, PIPE_TRANSFER_WRITE);
-	if (results) {
-		memset(results, 0, max_rbs * 4 * 4);
-
-		/* emit EVENT_WRITE for ZPASS_DONE */
-		radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 2, 0));
-		radeon_emit(cs, EVENT_TYPE(EVENT_TYPE_ZPASS_DONE) | EVENT_INDEX(1));
-		radeon_emit(cs, buffer->gpu_address);
-		radeon_emit(cs, buffer->gpu_address >> 32);
-
-		r600_emit_reloc(ctx, &ctx->gfx, buffer,
-                                RADEON_USAGE_WRITE, RADEON_PRIO_QUERY);
-
-		/* analyze results */
-		results = r600_buffer_map_sync_with_rings(ctx, buffer, PIPE_TRANSFER_READ);
-		if (results) {
-			for(i = 0; i < max_rbs; i++) {
-				/* at least highest bit will be set if backend is used */
-				if (results[i*4 + 1])
-					mask |= (1<<i);
-			}
-		}
-	}
-
-	r600_resource_reference(&buffer, NULL);
-
-	if (mask)
-		rscreen->info.enabled_rb_mask = mask;
 }
 
 #define XFULL(name_, query_type_, type_, result_type_, group_id_) \
@@ -1852,6 +1906,8 @@ static struct pipe_driver_query_info r600_driver_query_list[] = {
 	X("num-shaders-created",	NUM_SHADERS_CREATED,	UINT64, CUMULATIVE),
 	X("num-shader-cache-hits",	NUM_SHADER_CACHE_HITS,	UINT64, CUMULATIVE),
 	X("draw-calls",			DRAW_CALLS,		UINT64, AVERAGE),
+	X("decompress-calls",		DECOMPRESS_CALLS,	UINT64, AVERAGE),
+	X("MRT-draw-calls",		MRT_DRAW_CALLS,		UINT64, AVERAGE),
 	X("prim-restart-calls",		PRIM_RESTART_CALLS,	UINT64, AVERAGE),
 	X("spill-draw-calls",		SPILL_DRAW_CALLS,	UINT64, AVERAGE),
 	X("compute-calls",		COMPUTE_CALLS,		UINT64, AVERAGE),
@@ -1880,6 +1936,7 @@ static struct pipe_driver_query_info r600_driver_query_list[] = {
 	X("num-GFX-IBs",		NUM_GFX_IBS,		UINT64, AVERAGE),
 	X("num-SDMA-IBs",		NUM_SDMA_IBS,		UINT64, AVERAGE),
 	X("GFX-BO-list-size",		GFX_BO_LIST_SIZE,	UINT64, AVERAGE),
+	X("GFX-IB-size",		GFX_IB_SIZE,		UINT64, AVERAGE),
 	X("num-bytes-moved",		NUM_BYTES_MOVED,	BYTES, CUMULATIVE),
 	X("num-evictions",		NUM_EVICTIONS,		UINT64, CUMULATIVE),
 	X("VRAM-CPU-page-faults",	NUM_VRAM_CPU_PAGE_FAULTS, UINT64, CUMULATIVE),
@@ -1924,9 +1981,8 @@ static struct pipe_driver_query_info r600_driver_query_list[] = {
 	X("GPU-meq-busy",		GPU_MEQ_BUSY,		UINT64, AVERAGE),
 	X("GPU-me-busy",		GPU_ME_BUSY,		UINT64, AVERAGE),
 	X("GPU-surf-sync-busy",		GPU_SURF_SYNC_BUSY,	UINT64, AVERAGE),
-	X("GPU-dma-busy",		GPU_DMA_BUSY,		UINT64, AVERAGE),
+	X("GPU-cp-dma-busy",		GPU_CP_DMA_BUSY,	UINT64, AVERAGE),
 	X("GPU-scratch-ram-busy",	GPU_SCRATCH_RAM_BUSY,	UINT64, AVERAGE),
-	X("GPU-ce-busy",		GPU_CE_BUSY,		UINT64, AVERAGE),
 };
 
 #undef X
@@ -1956,13 +2012,13 @@ static int r600_get_driver_query_info(struct pipe_screen *screen,
 
 	if (!info) {
 		unsigned num_perfcounters =
-			r600_get_perfcounter_info(rscreen, 0, NULL);
+			si_get_perfcounter_info(rscreen, 0, NULL);
 
 		return num_queries + num_perfcounters;
 	}
 
 	if (index >= num_queries)
-		return r600_get_perfcounter_info(rscreen, index - num_queries, info);
+		return si_get_perfcounter_info(rscreen, index - num_queries, info);
 
 	*info = r600_driver_query_list[index];
 
@@ -2009,7 +2065,7 @@ static int r600_get_driver_query_group_info(struct pipe_screen *screen,
 		return num_pc_groups + R600_NUM_SW_QUERY_GROUPS;
 
 	if (index < num_pc_groups)
-		return r600_get_perfcounter_group_info(rscreen, index, info);
+		return si_get_perfcounter_group_info(rscreen, index, info);
 
 	index -= num_pc_groups;
 	if (index >= R600_NUM_SW_QUERY_GROUPS)
@@ -2021,10 +2077,10 @@ static int r600_get_driver_query_group_info(struct pipe_screen *screen,
 	return 1;
 }
 
-void r600_query_init(struct r600_common_context *rctx)
+void si_init_query_functions(struct r600_common_context *rctx)
 {
 	rctx->b.create_query = r600_create_query;
-	rctx->b.create_batch_query = r600_create_batch_query;
+	rctx->b.create_batch_query = si_create_batch_query;
 	rctx->b.destroy_query = r600_destroy_query;
 	rctx->b.begin_query = r600_begin_query;
 	rctx->b.end_query = r600_end_query;
@@ -2038,7 +2094,7 @@ void r600_query_init(struct r600_common_context *rctx)
 	LIST_INITHEAD(&rctx->active_queries);
 }
 
-void r600_init_screen_query_functions(struct r600_common_screen *rscreen)
+void si_init_screen_query_functions(struct r600_common_screen *rscreen)
 {
 	rscreen->b.get_driver_query_info = r600_get_driver_query_info;
 	rscreen->b.get_driver_query_group_info = r600_get_driver_query_group_info;

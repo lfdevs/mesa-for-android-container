@@ -26,7 +26,7 @@
 #define __gen_address_type uint64_t
 #define __gen_user_data void
 
-static inline uint64_t
+static uint64_t
 __gen_combine_address(void *data, void *loc, uint64_t addr, uint32_t delta)
 {
    return addr + delta;
@@ -36,10 +36,6 @@ __gen_combine_address(void *data, void *loc, uint64_t addr, uint32_t delta)
 #include "genxml/genX_pack.h"
 
 #include "isl_priv.h"
-
-#define __PASTE2(x, y) x ## y
-#define __PASTE(x, y) __PASTE2(x, y)
-#define isl_genX(x) __PASTE(isl_, genX(x))
 
 static const uint32_t isl_to_gen_ds_surftype[] = {
 #if GEN_GEN >= 9

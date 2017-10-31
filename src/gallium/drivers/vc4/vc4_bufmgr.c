@@ -48,6 +48,32 @@ static bool dump_stats = false;
 static void
 vc4_bo_cache_free_all(struct vc4_bo_cache *cache);
 
+void
+vc4_bo_label(struct vc4_screen *screen, struct vc4_bo *bo, const char *fmt, ...)
+{
+        /* Perform BO labeling by default on debug builds (so that you get
+         * whole-system allocation information), or if VC4_DEBUG=surf is set
+         * (for debugging a single app's allocation).
+         */
+#ifndef DEBUG
+        if (!(vc4_debug & VC4_DEBUG_SURFACE))
+                return;
+#endif
+        va_list va;
+        va_start(va, fmt);
+        char *name = ralloc_vasprintf(NULL, fmt, va);
+        va_end(va);
+
+        struct drm_vc4_label_bo label = {
+                .handle = bo->handle,
+                .len = strlen(name),
+                .name = (uintptr_t)name,
+        };
+        vc4_ioctl(screen->fd, DRM_IOCTL_VC4_LABEL_BO, &label);
+
+        ralloc_free(name);
+}
+
 static void
 vc4_bo_dump_stats(struct vc4_screen *screen)
 {
@@ -114,6 +140,7 @@ vc4_bo_from_cache(struct vc4_screen *screen, uint32_t size, const char *name)
                 pipe_reference_init(&bo->reference, 1);
                 vc4_bo_remove_from_cache(cache, bo);
 
+                vc4_bo_label(screen, bo, "%s", name);
                 bo->name = name;
         }
         mtx_unlock(&cache->lock);
@@ -175,6 +202,8 @@ vc4_bo_alloc(struct vc4_screen *screen, uint32_t size, const char *name)
                 fprintf(stderr, "Allocated %s %dkb:\n", name, size / 1024);
                 vc4_bo_dump_stats(screen);
         }
+
+        vc4_bo_label(screen, bo, "%s", name);
 
         return bo;
 }
@@ -307,6 +336,7 @@ vc4_bo_last_unreference_locked_timed(struct vc4_bo *bo, time_t time)
                 vc4_bo_dump_stats(screen);
         }
         bo->name = NULL;
+        vc4_bo_label(screen, bo, "mesa cache");
 
         free_stale_bos(screen, time);
 }

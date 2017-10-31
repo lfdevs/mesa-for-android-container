@@ -983,6 +983,38 @@ const struct function common_desktop_functions_possible[] = {
    { "glVertexAttribL1ui64vARB", 40, -1 },
    { "glGetVertexAttribLui64vARB", 40, -1 },
 
+   /* GL_EXT_external_objects */
+   { "glGetUnsignedBytevEXT", 45, -1 },
+   { "glGetUnsignedBytei_vEXT", 45, -1 },
+   { "glDeleteMemoryObjectsEXT", 45, -1 },
+   { "glIsMemoryObjectEXT", 45, -1 },
+   { "glCreateMemoryObjectsEXT", 45, -1 },
+   { "glMemoryObjectParameterivEXT", 45, -1 },
+   { "glGetMemoryObjectParameterivEXT", 45, -1 },
+   { "glTexStorageMem2DEXT", 45, -1 },
+   { "glTexStorageMem2DMultisampleEXT", 45, -1 },
+   { "glTexStorageMem3DEXT", 45, -1 },
+   { "glTexStorageMem3DMultisampleEXT", 45, -1 },
+   { "glBufferStorageMemEXT", 45, -1 },
+   { "glTextureStorageMem2DEXT", 45, -1 },
+   { "glTextureStorageMem2DMultisampleEXT", 45, -1 },
+   { "glTextureStorageMem3DEXT", 45, -1 },
+   { "glTextureStorageMem3DMultisampleEXT", 45, -1 },
+   { "glNamedBufferStorageMemEXT", 45, -1 },
+   { "glTexStorageMem1DEXT", 45, -1 },
+   { "glTextureStorageMem1DEXT", 45, -1 },
+   { "glGenSemaphoresEXT", 45, -1 },
+   { "glDeleteSemaphoresEXT", 45, -1 },
+   { "glIsSemaphoreEXT", 45, -1 },
+   { "glSemaphoreParameterui64vEXT", 45, -1 },
+   { "glGetSemaphoreParameterui64vEXT", 45, -1 },
+   { "glWaitSemaphoreEXT", 45, -1 },
+   { "glSignalSemaphoreEXT", 45, -1 },
+
+   /* GL_EXT_external_objects_fd */
+   { "glImportMemoryFdEXT", 45, -1 },
+   { "glImportSemaphoreFdEXT", 45, -1 },
+
    { NULL, 0, -1 }
 };
 

@@ -69,6 +69,7 @@ static void compile_clip_prog( struct brw_context *brw,
 void
 brw_upload_clip_prog(struct brw_context *brw)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    struct gl_context *ctx = &brw->ctx;
    struct brw_clip_prog_key key;
 
@@ -113,7 +114,7 @@ brw_upload_clip_prog(struct brw_context *brw)
    if (ctx->Transform.ClipPlanesEnabled)
       key.nr_userclip = _mesa_logbase2(ctx->Transform.ClipPlanesEnabled) + 1;
 
-   if (brw->gen == 5)
+   if (devinfo->gen == 5)
        key.clip_mode = BRW_CLIP_MODE_KERNEL_CLIP;
    else
        key.clip_mode = BRW_CLIP_MODE_NORMAL;

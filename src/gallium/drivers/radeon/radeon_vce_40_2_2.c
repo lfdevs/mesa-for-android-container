@@ -363,8 +363,8 @@ static void encode(struct rvce_encoder *enc)
 	RVCE_CS(0x00000000); // pictureStructure
 	if(enc->pic.picture_type == PIPE_H264_ENC_PICTURE_TYPE_P ||
 	   enc->pic.picture_type == PIPE_H264_ENC_PICTURE_TYPE_B) {
-		struct rvce_cpb_slot *l0 = l0_slot(enc);
-		rvce_frame_offset(enc, l0, &luma_offset, &chroma_offset);
+		struct rvce_cpb_slot *l0 = si_l0_slot(enc);
+		si_vce_frame_offset(enc, l0, &luma_offset, &chroma_offset);
 		RVCE_CS(l0->picture_type); // encPicType
 		RVCE_CS(l0->frame_num); // frameNumber
 		RVCE_CS(l0->pic_order_cnt); // pictureOrderCount
@@ -389,8 +389,8 @@ static void encode(struct rvce_encoder *enc)
 	// encReferencePictureL1[0]
 	RVCE_CS(0x00000000); // pictureStructure
 	if(enc->pic.picture_type == PIPE_H264_ENC_PICTURE_TYPE_B) {
-		struct rvce_cpb_slot *l1 = l1_slot(enc);
-		rvce_frame_offset(enc, l1, &luma_offset, &chroma_offset);
+		struct rvce_cpb_slot *l1 = si_l1_slot(enc);
+		si_vce_frame_offset(enc, l1, &luma_offset, &chroma_offset);
 		RVCE_CS(l1->picture_type); // encPicType
 		RVCE_CS(l1->frame_num); // frameNumber
 		RVCE_CS(l1->pic_order_cnt); // pictureOrderCount
@@ -404,7 +404,7 @@ static void encode(struct rvce_encoder *enc)
 		RVCE_CS(0xffffffff); // chromaOffset
 	}
 
-	rvce_frame_offset(enc, current_slot(enc), &luma_offset, &chroma_offset);
+	si_vce_frame_offset(enc, si_current_slot(enc), &luma_offset, &chroma_offset);
 	RVCE_CS(luma_offset); // encReconstructedLumaOffset
 	RVCE_CS(chroma_offset); // encReconstructedChromaOffset
 	RVCE_CS(0x00000000); // encColocBufferOffset
@@ -431,11 +431,11 @@ static void destroy(struct rvce_encoder *enc)
 	RVCE_END();
 }
 
-void radeon_vce_40_2_2_get_param(struct rvce_encoder *enc, struct pipe_h264_enc_picture_desc *pic)
+void si_vce_40_2_2_get_param(struct rvce_encoder *enc, struct pipe_h264_enc_picture_desc *pic)
 {
 }
 
-void radeon_vce_40_2_2_init(struct rvce_encoder *enc)
+void si_vce_40_2_2_init(struct rvce_encoder *enc)
 {
 	enc->session = session;
 	enc->task_info = task_info;

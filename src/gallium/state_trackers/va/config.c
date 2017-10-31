@@ -52,7 +52,7 @@ vlVaQueryConfigProfiles(VADriverContextP ctx, VAProfile *profile_list, int *num_
    *num_profiles = 0;
 
    pscreen = VL_VA_PSCREEN(ctx);
-   for (p = PIPE_VIDEO_PROFILE_MPEG2_SIMPLE; p <= PIPE_VIDEO_PROFILE_HEVC_MAIN_444; ++p) {
+   for (p = PIPE_VIDEO_PROFILE_MPEG2_SIMPLE; p <= PIPE_VIDEO_PROFILE_JPEG_BASELINE; ++p) {
       if (u_reduce_video_profile(p) == PIPE_VIDEO_FORMAT_MPEG4 && !debug_get_option_mpeg4())
          continue;
 
@@ -195,7 +195,7 @@ vlVaCreateConfig(VADriverContextP ctx, VAProfile profile, VAEntrypoint entrypoin
       return VA_STATUS_ERROR_ALLOCATION_FAILED;
 
    if (profile == VAProfileNone && entrypoint == VAEntrypointVideoProc) {
-      config->entrypoint = VAEntrypointVideoProc;
+      config->entrypoint = PIPE_VIDEO_ENTRYPOINT_UNKNOWN;
       config->profile = PIPE_VIDEO_PROFILE_UNKNOWN;
       supported_rt_formats = VA_RT_FORMAT_YUV420 |
                              VA_RT_FORMAT_YUV420_10BPP |
@@ -342,13 +342,19 @@ vlVaQueryConfigAttributes(VADriverContextP ctx, VAConfigID config_id, VAProfile 
 
    *profile = PipeToProfile(config->profile);
 
-   if (config->profile == PIPE_VIDEO_PROFILE_UNKNOWN) {
+   switch (config->entrypoint) {
+   case PIPE_VIDEO_ENTRYPOINT_BITSTREAM:
+      *entrypoint = VAEntrypointVLD;
+      break;
+   case PIPE_VIDEO_ENTRYPOINT_ENCODE:
+      *entrypoint = VAEntrypointEncSlice;
+      break;
+   case PIPE_VIDEO_ENTRYPOINT_UNKNOWN:
       *entrypoint = VAEntrypointVideoProc;
-      *num_attribs = 0;
-      return VA_STATUS_SUCCESS;
+      break;
+   default:
+      return VA_STATUS_ERROR_INVALID_CONFIG;
    }
-
-   *entrypoint = config->entrypoint;
 
    *num_attribs = 1;
    attrib_list[0].type = VAConfigAttribRTFormat;

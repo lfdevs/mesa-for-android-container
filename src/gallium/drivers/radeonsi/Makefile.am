@@ -26,6 +26,7 @@ include $(top_srcdir)/src/gallium/Automake.inc
 AM_CFLAGS = \
 	$(GALLIUM_DRIVER_CFLAGS) \
 	-I$(top_builddir)/src/amd/common \
+	-I$(top_builddir)/src/compiler/nir \
 	-I$(top_srcdir)/src/amd/common \
 	$(RADEON_CFLAGS) \
 	$(LLVM_CFLAGS)
@@ -33,3 +34,16 @@ AM_CFLAGS = \
 noinst_LTLIBRARIES = libradeonsi.la
 
 libradeonsi_la_SOURCES = $(C_SOURCES)
+
+GEN_DRIINFO_INPUTS = \
+	$(top_srcdir)/src/gallium/auxiliary/pipe-loader/driinfo_gallium.h \
+	$(srcdir)/driinfo_radeonsi.h
+
+PYTHON_GEN = $(AM_V_GEN)$(PYTHON2) $(PYTHON_FLAGS)
+MERGE_DRIINFO = $(top_srcdir)/src/util/merge_driinfo.py
+
+si_driinfo.h: $(MERGE_DRIINFO) $(GEN_DRIINFO_INPUTS)
+	$(PYTHON_GEN) $(MERGE_DRIINFO) $(GEN_DRIINFO_INPUTS) > $@ || ($(RM) $@; false)
+
+BUILT_SOURCES = $(GENERATED_SOURCES)
+CLEANFILES = $(GENERATED_SOURCES)

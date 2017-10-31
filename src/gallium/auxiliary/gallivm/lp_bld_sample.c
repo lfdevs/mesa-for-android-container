@@ -156,19 +156,19 @@ lp_sampler_static_sampler_state(struct lp_static_sampler_state *state,
    state->wrap_r            = sampler->wrap_r;
    state->min_img_filter    = sampler->min_img_filter;
    state->mag_img_filter    = sampler->mag_img_filter;
+   state->min_mip_filter    = sampler->min_mip_filter;
    state->seamless_cube_map = sampler->seamless_cube_map;
 
    if (sampler->max_lod > 0.0f) {
-      state->min_mip_filter = sampler->min_mip_filter;
-   } else {
-      state->min_mip_filter = PIPE_TEX_MIPFILTER_NONE;
+      state->max_lod_pos = 1;
+   }
+
+   if (sampler->lod_bias != 0.0f) {
+      state->lod_bias_non_zero = 1;
    }
 
    if (state->min_mip_filter != PIPE_TEX_MIPFILTER_NONE ||
        state->min_img_filter != state->mag_img_filter) {
-      if (sampler->lod_bias != 0.0f) {
-         state->lod_bias_non_zero = 1;
-      }
 
       /* If min_lod == max_lod we can greatly simplify mipmap selection.
        * This is a case that occurs during automatic mipmap generation.
@@ -234,7 +234,7 @@ lp_build_rho(struct lp_build_sample_context *bld,
    unsigned length = coord_bld->type.length;
    unsigned num_quads = length / 4;
    boolean rho_per_quad = rho_bld->type.length != length;
-   boolean no_rho_opt = (gallivm_debug & GALLIVM_DEBUG_NO_RHO_APPROX) && (dims > 1);
+   boolean no_rho_opt = bld->no_rho_approx && (dims > 1);
    unsigned i;
    LLVMValueRef i32undef = LLVMGetUndef(LLVMInt32TypeInContext(gallivm->context));
    LLVMValueRef rho_xvec, rho_yvec;
@@ -694,6 +694,7 @@ lp_build_ilog2_sqrt(struct lp_build_context *bld,
  */
 void
 lp_build_lod_selector(struct lp_build_sample_context *bld,
+                      boolean is_lodq,
                       unsigned texture_unit,
                       unsigned sampler_unit,
                       LLVMValueRef s,
@@ -704,6 +705,7 @@ lp_build_lod_selector(struct lp_build_sample_context *bld,
                       LLVMValueRef lod_bias, /* optional */
                       LLVMValueRef explicit_lod, /* optional */
                       unsigned mip_filter,
+                      LLVMValueRef *out_lod,
                       LLVMValueRef *out_lod_ipart,
                       LLVMValueRef *out_lod_fpart,
                       LLVMValueRef *out_lod_positive)
@@ -736,7 +738,7 @@ lp_build_lod_selector(struct lp_build_sample_context *bld,
     * I have no clue about the (undocumented) wishes of d3d9/d3d10 here!
     */
 
-   if (bld->static_sampler_state->min_max_lod_equal) {
+   if (bld->static_sampler_state->min_max_lod_equal && !is_lodq) {
       /* User is forcing sampling from a particular mipmap level.
        * This is hit during mipmap generation.
        */
@@ -756,7 +758,7 @@ lp_build_lod_selector(struct lp_build_sample_context *bld,
       }
       else {
          LLVMValueRef rho;
-         boolean rho_squared = ((gallivm_debug & GALLIVM_DEBUG_NO_RHO_APPROX) &&
+         boolean rho_squared = (bld->no_rho_approx &&
                                 (bld->dims > 1)) || cube_rho;
 
          rho = lp_build_rho(bld, texture_unit, s, t, r, cube_rho, derivs);
@@ -765,7 +767,7 @@ lp_build_lod_selector(struct lp_build_sample_context *bld,
           * Compute lod = log2(rho)
           */
 
-         if (!lod_bias &&
+         if (!lod_bias && !is_lodq &&
              !bld->static_sampler_state->lod_bias_non_zero &&
              !bld->static_sampler_state->apply_max_lod &&
              !bld->static_sampler_state->apply_min_lod) {
@@ -792,8 +794,7 @@ lp_build_lod_selector(struct lp_build_sample_context *bld,
                return;
             }
             if (mip_filter == PIPE_TEX_MIPFILTER_LINEAR &&
-                !(gallivm_debug & GALLIVM_DEBUG_NO_BRILINEAR) &&
-                !rho_squared) {
+                !bld->no_brilinear && !rho_squared) {
                /*
                 * This can't work if rho is squared. Not sure if it could be
                 * fixed while keeping it worthwile, could also do sqrt here
@@ -839,6 +840,10 @@ lp_build_lod_selector(struct lp_build_sample_context *bld,
          lod = LLVMBuildFAdd(builder, lod, sampler_lod_bias, "sampler_lod_bias");
       }
 
+      if (is_lodq) {
+         *out_lod = lod;
+      }
+
       /* clamp lod */
       if (bld->static_sampler_state->apply_max_lod) {
          LLVMValueRef max_lod =
@@ -856,13 +861,18 @@ lp_build_lod_selector(struct lp_build_sample_context *bld,
 
          lod = lp_build_max(lodf_bld, lod, min_lod);
       }
+
+      if (is_lodq) {
+         *out_lod_fpart = lod;
+         return;
+      }
    }
 
    *out_lod_positive = lp_build_cmp(lodf_bld, PIPE_FUNC_GREATER,
                                     lod, lodf_bld->zero);
 
    if (mip_filter == PIPE_TEX_MIPFILTER_LINEAR) {
-      if (!(gallivm_debug & GALLIVM_DEBUG_NO_BRILINEAR)) {
+      if (!bld->no_brilinear) {
          lp_build_brilinear_lod(lodf_bld, lod, BRILINEAR_FACTOR,
                                 out_lod_ipart, out_lod_fpart);
       }
@@ -1679,9 +1689,7 @@ lp_build_cube_lookup(struct lp_build_sample_context *bld,
    maxasat = lp_build_max(coord_bld, as, at);
    ar_ge_as_at = lp_build_cmp(coord_bld, PIPE_FUNC_GEQUAL, ar, maxasat);
 
-   if (need_derivs && (derivs_in ||
-       ((gallivm_debug & GALLIVM_DEBUG_NO_QUAD_LOD) &&
-        (gallivm_debug & GALLIVM_DEBUG_NO_RHO_APPROX)))) {
+   if (need_derivs && (derivs_in || (bld->no_quad_lod && bld->no_rho_approx))) {
       /*
        * XXX: This is really really complex.
        * It is a bit overkill to use this for implicit derivatives as well,

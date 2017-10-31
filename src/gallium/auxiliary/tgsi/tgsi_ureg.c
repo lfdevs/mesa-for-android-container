@@ -180,8 +180,7 @@ struct ureg_program
    unsigned array_temps[UREG_MAX_ARRAY_TEMPS];
    unsigned nr_array_temps;
 
-   struct const_decl const_decls;
-   struct const_decl const_decls2D[PIPE_MAX_CONSTANT_BUFFERS];
+   struct const_decl const_decls[PIPE_MAX_CONSTANT_BUFFERS];
 
    unsigned properties[TGSI_PROPERTY_COUNT];
 
@@ -507,7 +506,7 @@ ureg_DECL_constant2D(struct ureg_program *ureg,
                      unsigned last,
                      unsigned index2D)
 {
-   struct const_decl *decl = &ureg->const_decls2D[index2D];
+   struct const_decl *decl = &ureg->const_decls[index2D];
 
    assert(index2D < PIPE_MAX_CONSTANT_BUFFERS);
 
@@ -529,7 +528,7 @@ struct ureg_src
 ureg_DECL_constant(struct ureg_program *ureg,
                    unsigned index)
 {
-   struct const_decl *decl = &ureg->const_decls;
+   struct const_decl *decl = &ureg->const_decls[0];
    unsigned minconst = index, maxconst = index;
    unsigned i;
 
@@ -579,7 +578,9 @@ out:
    assert(i < decl->nr_constant_ranges);
    assert(decl->constant_range[i].first <= index);
    assert(decl->constant_range[i].last >= index);
-   return ureg_src_register(TGSI_FILE_CONSTANT, index);
+
+   struct ureg_src src = ureg_src_register(TGSI_FILE_CONSTANT, index);
+   return ureg_src_dimension(src, 0);
 }
 
 static struct ureg_dst alloc_temporary( struct ureg_program *ureg,
@@ -1891,17 +1892,8 @@ static void emit_decls( struct ureg_program *ureg )
          emit_decl_memory(ureg, i);
    }
 
-   if (ureg->const_decls.nr_constant_ranges) {
-      for (i = 0; i < ureg->const_decls.nr_constant_ranges; i++) {
-         emit_decl_range(ureg,
-                         TGSI_FILE_CONSTANT,
-                         ureg->const_decls.constant_range[i].first,
-                         ureg->const_decls.constant_range[i].last - ureg->const_decls.constant_range[i].first + 1);
-      }
-   }
-
    for (i = 0; i < PIPE_MAX_CONSTANT_BUFFERS; i++) {
-      struct const_decl *decl = &ureg->const_decls2D[i];
+      struct const_decl *decl = &ureg->const_decls[i];
 
       if (decl->nr_constant_ranges) {
          uint j;

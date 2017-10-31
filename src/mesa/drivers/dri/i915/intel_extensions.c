@@ -100,9 +100,6 @@ intelInitExtensions(struct gl_context *ctx)
          ctx->Extensions.ARB_occlusion_query = true;
    }
 
-   if (intel->ctx.Mesa_DXTn
-       || driQueryOptionb(&intel->optionCache, "force_s3tc_enable"))
-      ctx->Extensions.EXT_texture_compression_s3tc = true;
-
+   ctx->Extensions.EXT_texture_compression_s3tc = true;
    ctx->Extensions.ANGLE_texture_compression_dxt = true;
 }

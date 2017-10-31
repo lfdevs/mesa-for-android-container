@@ -994,15 +994,18 @@ struct isl_format_layout {
    uint8_t bh; /**< Block height, in pixels */
    uint8_t bd; /**< Block depth, in pixels */
 
-   struct {
-      struct isl_channel_layout r; /**< Red channel */
-      struct isl_channel_layout g; /**< Green channel */
-      struct isl_channel_layout b; /**< Blue channel */
-      struct isl_channel_layout a; /**< Alpha channel */
-      struct isl_channel_layout l; /**< Luminance channel */
-      struct isl_channel_layout i; /**< Intensity channel */
-      struct isl_channel_layout p; /**< Palette channel */
-   } channels;
+   union {
+      struct {
+         struct isl_channel_layout r; /**< Red channel */
+         struct isl_channel_layout g; /**< Green channel */
+         struct isl_channel_layout b; /**< Blue channel */
+         struct isl_channel_layout a; /**< Alpha channel */
+         struct isl_channel_layout l; /**< Luminance channel */
+         struct isl_channel_layout i; /**< Intensity channel */
+         struct isl_channel_layout p; /**< Palette channel */
+      } channels;
+      struct isl_channel_layout channels_array[7];
+   };
 
    enum isl_colorspace colorspace;
    enum isl_txc txc;
@@ -1509,6 +1512,8 @@ enum isl_format isl_format_srgb_to_linear(enum isl_format fmt);
 static inline bool
 isl_format_is_rgb(enum isl_format fmt)
 {
+   if (isl_format_is_yuv(fmt))
+      return false;
    return isl_format_layouts[fmt].channels.r.bits > 0 &&
           isl_format_layouts[fmt].channels.g.bits > 0 &&
           isl_format_layouts[fmt].channels.b.bits > 0 &&
@@ -1551,6 +1556,32 @@ isl_tiling_from_i915_tiling(uint32_t tiling);
 
 const struct isl_drm_modifier_info * ATTRIBUTE_CONST
 isl_drm_modifier_get_info(uint64_t modifier);
+
+static inline bool
+isl_drm_modifier_has_aux(uint64_t modifier)
+{
+   return isl_drm_modifier_get_info(modifier)->aux_usage != ISL_AUX_USAGE_NONE;
+}
+
+/** Returns the default isl_aux_state for the given modifier.
+ *
+ * All modified images are required to be kept out of the AUX_INVALID state
+ * but they may or may not actually be compressed and may or may not have
+ * clear color.  This function returns the worst case aux_state that we need
+ * to assume when getting a surface from another process or API.
+ */
+static inline enum isl_aux_state
+isl_drm_modifier_get_default_aux_state(uint64_t modifier)
+{
+   const struct isl_drm_modifier_info *mod_info =
+      isl_drm_modifier_get_info(modifier);
+
+   if (!mod_info || mod_info->aux_usage == ISL_AUX_USAGE_NONE)
+      return ISL_AUX_STATE_AUX_INVALID;
+
+   return mod_info->supports_clear_color ? ISL_AUX_STATE_COMPRESSED_CLEAR :
+                                           ISL_AUX_STATE_COMPRESSED_NO_CLEAR;
+}
 
 struct isl_extent2d ATTRIBUTE_CONST
 isl_get_interleaved_msaa_px_size_sa(uint32_t samples);
@@ -1684,6 +1715,10 @@ isl_surf_fill_state_s(const struct isl_device *dev, void *state,
 void
 isl_buffer_fill_state_s(const struct isl_device *dev, void *state,
                         const struct isl_buffer_fill_state_info *restrict info);
+
+void
+isl_null_fill_state(const struct isl_device *dev, void *state,
+                    struct isl_extent3d size);
 
 #define isl_emit_depth_stencil_hiz(dev, batch, ...) \
    isl_emit_depth_stencil_hiz_s((dev), (batch), \

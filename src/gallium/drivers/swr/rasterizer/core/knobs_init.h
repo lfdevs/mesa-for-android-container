@@ -91,16 +91,18 @@ static inline void ConvertEnvToKnob(const char* pOverride, std::string& knobValu
 template <typename T>
 static inline void InitKnob(T& knob)
 {
-
-    // TODO, read registry first
-
-    // Second, read environment variables
+    // Read environment variables
     const char* pOverride = getenv(knob.Name());
 
     if (pOverride)
     {
-        auto knobValue = knob.Value();
+        auto knobValue = knob.DefaultValue();
         ConvertEnvToKnob(pOverride, knobValue);
         knob.Value(knobValue);
+    }
+    else
+    {
+        // Set default value
+        knob.Value(knob.DefaultValue());
     }
 }

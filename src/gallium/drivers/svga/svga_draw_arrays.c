@@ -286,25 +286,25 @@ svga_hwtnl_draw_arrays(struct svga_hwtnl *hwtnl,
                                          gen_type,
                                          gen_nr,
                                          gen_size, gen_func, &gen_buf);
-      if (ret != PIPE_OK)
-         goto done;
+      if (ret == PIPE_OK) {
+         pipe_debug_message(&svga->debug.callback, PERF_INFO,
+                            "generating temporary index buffer for drawing %s",
+                            u_prim_name(prim));
 
-      pipe_debug_message(&svga->debug.callback, PERF_INFO,
-                         "generating temporary index buffer for drawing %s",
-                         u_prim_name(prim));
+         ret = svga_hwtnl_simple_draw_range_elements(hwtnl,
+                                                     gen_buf,
+                                                     gen_size,
+                                                     start,
+                                                     0,
+                                                     count - 1,
+                                                     gen_prim, 0, gen_nr,
+                                                     start_instance,
+                                                     instance_count);
+      }
 
-      ret = svga_hwtnl_simple_draw_range_elements(hwtnl,
-                                                  gen_buf,
-                                                  gen_size,
-                                                  start,
-                                                  0,
-                                                  count - 1,
-                                                  gen_prim, 0, gen_nr,
-                                                  start_instance,
-                                                  instance_count);
-done:
-      if (gen_buf)
+      if (gen_buf) {
          pipe_resource_reference(&gen_buf, NULL);
+      }
    }
 
    SVGA_STATS_TIME_POP(svga_sws(svga));

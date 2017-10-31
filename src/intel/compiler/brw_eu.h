@@ -542,7 +542,7 @@ void brw_compact_instructions(struct brw_codegen *p, int start_offset,
 void brw_uncompact_instruction(const struct gen_device_info *devinfo,
                                brw_inst *dst, brw_compact_inst *src);
 bool brw_try_compact_instruction(const struct gen_device_info *devinfo,
-                                 brw_compact_inst *dst, brw_inst *src);
+                                 brw_compact_inst *dst, const brw_inst *src);
 
 void brw_debug_compact_uncompact(const struct gen_device_info *devinfo,
                                  brw_inst *orig, brw_inst *uncompacted);

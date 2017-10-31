@@ -54,11 +54,6 @@
 _EGL_DRIVER_STANDARD_TYPECASTS(haiku_egl)
 
 
-struct haiku_egl_driver
-{
-	_EGLDriver base;
-};
-
 struct haiku_egl_config
 {
 	_EGLConfig         base;
@@ -308,48 +303,38 @@ haiku_swap_buffers(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surf)
 }
 
 
-extern "C"
-void
-haiku_unload(_EGLDriver* drv)
-{
-
-}
-
-
 /**
  * This is the main entrypoint into the driver, called by libEGL.
  * Create a new _EGLDriver object and init its dispatch table.
  */
 extern "C"
 _EGLDriver*
-_eglBuiltInDriverHaiku(const char *args)
+_eglBuiltInDriver(void)
 {
 	CALLED();
 
-	struct haiku_egl_driver* driver;
-	driver = (struct haiku_egl_driver*) calloc(1, sizeof(*driver));
+	_EGLDriver* driver = calloc(1, sizeof(*driver));
 	if (!driver) {
 		_eglError(EGL_BAD_ALLOC, "_eglBuiltInDriverHaiku");
 		return NULL;
 	}
 
-	_eglInitDriverFallbacks(&driver->base);
-	driver->base.API.Initialize = init_haiku;
-	driver->base.API.Terminate = haiku_terminate;
-	driver->base.API.CreateContext = haiku_create_context;
-	driver->base.API.DestroyContext = haiku_destroy_context;
-	driver->base.API.MakeCurrent = haiku_make_current;
-	driver->base.API.CreateWindowSurface = haiku_create_window_surface;
-	driver->base.API.CreatePixmapSurface = haiku_create_pixmap_surface;
-	driver->base.API.CreatePbufferSurface = haiku_create_pbuffer_surface;
-	driver->base.API.DestroySurface = haiku_destroy_surface;
+	_eglInitDriverFallbacks(driver);
+	driver->API.Initialize = init_haiku;
+	driver->API.Terminate = haiku_terminate;
+	driver->API.CreateContext = haiku_create_context;
+	driver->API.DestroyContext = haiku_destroy_context;
+	driver->API.MakeCurrent = haiku_make_current;
+	driver->API.CreateWindowSurface = haiku_create_window_surface;
+	driver->API.CreatePixmapSurface = haiku_create_pixmap_surface;
+	driver->API.CreatePbufferSurface = haiku_create_pbuffer_surface;
+	driver->API.DestroySurface = haiku_destroy_surface;
 
-	driver->base.API.SwapBuffers = haiku_swap_buffers;
+	driver->API.SwapBuffers = haiku_swap_buffers;
 
-	driver->base.Name = "Haiku";
-	driver->base.Unload = haiku_unload;
+	driver->Name = "Haiku";
 
 	TRACE("API Calls defined\n");
 
-	return &driver->base;
+	return driver;
 }

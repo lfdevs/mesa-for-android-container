@@ -1,0 +1,26 @@
+C_SOURCES := \
+	vc5_blit.c \
+	vc5_bufmgr.c \
+	vc5_bufmgr.h \
+	vc5_cl.c \
+	vc5_cl.h \
+	vc5_context.c \
+	vc5_context.h \
+	vc5_draw.c \
+	vc5_emit.c \
+	vc5_fence.c \
+	vc5_formats.c \
+	vc5_job.c \
+	vc5_program.c \
+	vc5_query.c \
+	vc5_rcl.c \
+	vc5_resource.c \
+	vc5_resource.h \
+	vc5_screen.c \
+	vc5_screen.h \
+	vc5_simulator.c \
+	vc5_state.c \
+	vc5_tiling.c \
+	vc5_tiling.h \
+	vc5_uniforms.c \
+	$()

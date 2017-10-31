@@ -20,10 +20,10 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-#include <stddef.h> // offsetof
-#include <stdio.h>  // printf
+#include <stddef.h> /* offsetof */
+#include <stdio.h>  /* printf */
 
-#include "wayland-egl-priv.h" // Current struct wl_egl_window implementation
+#include "wayland-egl-backend.h" /* Current struct wl_egl_window implementation */
 
 /*
  * Following are previous implementations of wl_egl_window.
@@ -100,7 +100,7 @@ struct wl_egl_window_v3 {
 
 
 /* This program checks we keep a backwards-compatible struct wl_egl_window
- * definition whenever it is modified in wayland-egl-priv.h.
+ * definition whenever it is modified in wayland-egl-backend.h.
  *
  * The previous definition should be added above as a new struct
  * wl_egl_window_vN, and the appropriate checks should be added below

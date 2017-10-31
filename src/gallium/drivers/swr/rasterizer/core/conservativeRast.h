@@ -109,6 +109,7 @@ template <>
 struct ConservativeRastFETraits<StandardRastT>
 {
     typedef std::false_type IsConservativeT;
+    typedef std::integral_constant<uint32_t, 0> BoundingBoxOffsetT;
 };
 
 //////////////////////////////////////////////////////////////////////////

@@ -325,8 +325,23 @@ cross_validate_types_and_qualifiers(struct gl_shader_program *prog,
     *     "It is a link-time error if, within the same stage, the interpolation
     *     qualifiers of variables of the same name do not match.
     *
+    * Section 4.3.9 (Interpolation) of the GLSL ES 3.00 spec says:
+    *
+    *    "When no interpolation qualifier is present, smooth interpolation
+    *    is used."
+    *
+    * So we match variables where one is smooth and the other has no explicit
+    * qualifier.
     */
-   if (input->data.interpolation != output->data.interpolation &&
+   unsigned input_interpolation = input->data.interpolation;
+   unsigned output_interpolation = output->data.interpolation;
+   if (prog->IsES) {
+      if (input_interpolation == INTERP_MODE_NONE)
+         input_interpolation = INTERP_MODE_SMOOTH;
+      if (output_interpolation == INTERP_MODE_NONE)
+         output_interpolation = INTERP_MODE_SMOOTH;
+   }
+   if (input_interpolation != output_interpolation &&
        prog->data->Version < 440) {
       linker_error(prog,
                    "%s shader output `%s' specifies %s "
@@ -362,11 +377,38 @@ cross_validate_front_and_back_color(struct gl_shader_program *prog,
                                           consumer_stage, producer_stage);
 }
 
+static unsigned
+compute_variable_location_slot(ir_variable *var, gl_shader_stage stage)
+{
+   unsigned location_start = VARYING_SLOT_VAR0;
+
+   switch (stage) {
+      case MESA_SHADER_VERTEX:
+         if (var->data.mode == ir_var_shader_in)
+            location_start = VERT_ATTRIB_GENERIC0;
+         break;
+      case MESA_SHADER_TESS_CTRL:
+      case MESA_SHADER_TESS_EVAL:
+         if (var->data.patch)
+            location_start = VARYING_SLOT_PATCH0;
+         break;
+      case MESA_SHADER_FRAGMENT:
+         if (var->data.mode == ir_var_shader_out)
+            location_start = FRAG_RESULT_DATA0;
+         break;
+      default:
+         break;
+   }
+
+   return var->data.location - location_start;
+}
+
 /**
  * Validate that outputs from one stage match inputs of another
  */
 void
-cross_validate_outputs_to_inputs(struct gl_shader_program *prog,
+cross_validate_outputs_to_inputs(struct gl_context *ctx,
+                                 struct gl_shader_program *prog,
                                  gl_linked_shader *producer,
                                  gl_linked_shader *consumer)
 {
@@ -391,9 +433,18 @@ cross_validate_outputs_to_inputs(struct gl_shader_program *prog,
           */
          const glsl_type *type = get_varying_type(var, producer->Stage);
          unsigned num_elements = type->count_attribute_slots(false);
-         unsigned idx = var->data.location - VARYING_SLOT_VAR0;
+         unsigned idx = compute_variable_location_slot(var, producer->Stage);
          unsigned slot_limit = idx + num_elements;
          unsigned last_comp;
+
+         unsigned slot_max =
+            ctx->Const.Program[producer->Stage].MaxOutputComponents / 4;
+         if (slot_limit > slot_max) {
+            linker_error(prog,
+                         "Invalid location %u in %s shader\n",
+                         idx, _mesa_shader_stage_to_string(producer->Stage));
+            return;
+         }
 
          if (type->without_array()->is_record()) {
             /* The component qualifier can't be used on structs so just treat
@@ -500,7 +551,8 @@ cross_validate_outputs_to_inputs(struct gl_shader_program *prog,
 
             const glsl_type *type = get_varying_type(input, consumer->Stage);
             unsigned num_elements = type->count_attribute_slots(false);
-            unsigned idx = input->data.location - VARYING_SLOT_VAR0;
+            unsigned idx =
+               compute_variable_location_slot(input, consumer->Stage);
             unsigned slot_limit = idx + num_elements;
 
             while (idx < slot_limit) {
@@ -1843,7 +1895,7 @@ public:
 
       this->toplevel_var = var;
       this->varying_floats = 0;
-      program_resource_visitor::process(var);
+      program_resource_visitor::process(var, false);
    }
 
 private:
@@ -2253,9 +2305,6 @@ assign_varying_locations(struct gl_context *ctx,
       }
    }
 
-   _mesa_hash_table_destroy(consumer_inputs, NULL);
-   _mesa_hash_table_destroy(consumer_interface_inputs, NULL);
-
    for (unsigned i = 0; i < num_tfeedback_decls; ++i) {
       if (!tfeedback_decls[i].is_varying())
          continue;
@@ -2268,11 +2317,33 @@ assign_varying_locations(struct gl_context *ctx,
          return false;
       }
 
+      /* Mark xfb varyings as always active */
+      matched_candidate->toplevel_var->data.always_active_io = 1;
+
+      /* Mark any corresponding inputs as always active also. We must do this
+       * because we have a NIR pass that lowers vectors to scalars and another
+       * that removes unused varyings.
+       * We don't split varyings marked as always active because there is no
+       * point in doing so. This means we need to mark both sides of the
+       * interface as always active otherwise we will have a mismatch and
+       * start removing things we shouldn't.
+       */
+      ir_variable *const input_var =
+         linker::get_matching_input(mem_ctx, matched_candidate->toplevel_var,
+                                    consumer_inputs,
+                                    consumer_interface_inputs,
+                                    consumer_inputs_with_locations);
+      if (input_var)
+         input_var->data.always_active_io = 1;
+
       if (matched_candidate->toplevel_var->data.is_unmatched_generic_inout) {
          matched_candidate->toplevel_var->data.is_xfb_only = 1;
          matches.record(matched_candidate->toplevel_var, NULL);
       }
    }
+
+   _mesa_hash_table_destroy(consumer_inputs, NULL);
+   _mesa_hash_table_destroy(consumer_interface_inputs, NULL);
 
    uint8_t components[MAX_VARYINGS_INCL_PATCH] = {0};
    const unsigned slots_used = matches.assign_locations(
@@ -2350,7 +2421,7 @@ assign_varying_locations(struct gl_context *ctx,
    return true;
 }
 
-bool
+static bool
 check_against_output_limit(struct gl_context *ctx,
                            struct gl_shader_program *prog,
                            gl_linked_shader *producer,
@@ -2394,7 +2465,7 @@ check_against_output_limit(struct gl_context *ctx,
    return true;
 }
 
-bool
+static bool
 check_against_input_limit(struct gl_context *ctx,
                           struct gl_shader_program *prog,
                           gl_linked_shader *consumer,

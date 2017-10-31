@@ -123,7 +123,7 @@ emit_quads_workaround(nir_builder *b, nir_block *block)
 void
 brw_nir_apply_tcs_quads_workaround(nir_shader *nir)
 {
-   assert(nir->stage == MESA_SHADER_TESS_CTRL);
+   assert(nir->info.stage == MESA_SHADER_TESS_CTRL);
 
    nir_function_impl *impl = nir_shader_get_entrypoint(nir);
 

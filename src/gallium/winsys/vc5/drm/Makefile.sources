@@ -1,0 +1,3 @@
+C_SOURCES := \
+	vc5_drm_public.h \
+	vc5_drm_winsys.c

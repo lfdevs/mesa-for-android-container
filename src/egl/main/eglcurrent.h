@@ -99,13 +99,6 @@ _eglGetCurrentContext(void);
 extern EGLBoolean
 _eglError(EGLint errCode, const char *msg);
 
-extern EGLLabelKHR
-_eglGetThreadLabel(void);
-
-extern void
-_eglDebugReportFull(EGLenum error, const char *command, const char *funcName,
-      EGLint type, EGLLabelKHR objectLabel, const char *message, ...);
-
 extern void
 _eglDebugReport(EGLenum error, const char *funcName,
       EGLint type, const char *message, ...);

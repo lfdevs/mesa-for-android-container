@@ -193,7 +193,7 @@ struct gen_device_info
 };
 
 #define gen_device_info_is_9lp(devinfo) \
-   (devinfo->is_broxton || devinfo->is_geminilake)
+   ((devinfo)->is_broxton || (devinfo)->is_geminilake)
 
 bool gen_get_device_info(int devid, struct gen_device_info *devinfo);
 const char *gen_get_device_name(int devid);

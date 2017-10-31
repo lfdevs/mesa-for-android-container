@@ -28,6 +28,7 @@
 #include "etnaviv_clear_blit.h"
 #include "etnaviv_context.h"
 #include "etnaviv_debug.h"
+#include "etnaviv_screen.h"
 
 #include "pipe/p_defines.h"
 #include "pipe/p_format.h"
@@ -84,8 +85,7 @@ etna_transfer_unmap(struct pipe_context *pctx, struct pipe_transfer *ptrans)
          /* We have a temporary resource due to either tile status or
           * tiling format. Write back the updated buffer contents.
           * FIXME: we need to invalidate the tile status. */
-         etna_copy_resource(pctx, ptrans->resource, trans->rsc, ptrans->level,
-                            trans->rsc->last_level);
+         etna_copy_resource_box(pctx, ptrans->resource, trans->rsc, ptrans->level, &ptrans->box);
       } else if (trans->staging) {
          /* map buffer object */
          struct etna_resource_level *res_level = &rsc->levels[ptrans->level];
@@ -212,9 +212,30 @@ etna_transfer_map(struct pipe_context *pctx, struct pipe_resource *prsc,
          return NULL;
       }
 
+      /* Need to align the transfer region to satisfy RS restrictions, as we
+       * really want to hit the RS blit path here.
+       */
+      unsigned w_align, h_align;
+
+      if (rsc->layout & ETNA_LAYOUT_BIT_SUPER) {
+         w_align = h_align = 64;
+      } else {
+         w_align = ETNA_RS_WIDTH_MASK + 1;
+         h_align = ETNA_RS_HEIGHT_MASK + 1;
+      }
+      h_align *= ctx->screen->specs.pixel_pipes;
+
+      ptrans->box.width += ptrans->box.x & (w_align - 1);
+      ptrans->box.x = ptrans->box.x & ~(w_align - 1);
+      ptrans->box.width = align(ptrans->box.width, (ETNA_RS_WIDTH_MASK + 1));
+      ptrans->box.height += ptrans->box.y & (h_align - 1);
+      ptrans->box.y = ptrans->box.y & ~(h_align - 1);
+      ptrans->box.height = align(ptrans->box.height,
+                                 (ETNA_RS_HEIGHT_MASK + 1) *
+                                  ctx->screen->specs.pixel_pipes);
+
       if (!(usage & PIPE_TRANSFER_DISCARD_WHOLE_RESOURCE))
-         etna_copy_resource(pctx, trans->rsc, prsc, level,
-                            trans->rsc->last_level);
+         etna_copy_resource_box(pctx, trans->rsc, prsc, level, &ptrans->box);
 
       /* Switch to using the temporary resource instead */
       rsc = etna_resource(trans->rsc);
@@ -222,11 +243,16 @@ etna_transfer_map(struct pipe_context *pctx, struct pipe_resource *prsc,
 
    struct etna_resource_level *res_level = &rsc->levels[level];
 
-   /* Always sync if we have the temporary resource.  The PIPE_TRANSFER_READ
-    * case could be optimised if we knew whether the resource has outstanding
-    * rendering. */
-   if ((usage & PIPE_TRANSFER_READ || trans->rsc) &&
-       rsc->status & ETNA_PENDING_WRITE)
+   /*
+    * Always flush if we have the temporary resource and have a copy to this
+    * outstanding. Otherwise infer flush requirement from resource access and
+    * current GPU usage (reads must wait for GPU writes, writes must have
+    * exclusive access to the buffer).
+    */
+   if ((trans->rsc && (etna_resource(trans->rsc)->status & ETNA_PENDING_WRITE)) ||
+       (!trans->rsc &&
+        (((usage & PIPE_TRANSFER_READ) && (rsc->status & ETNA_PENDING_WRITE)) ||
+        ((usage & PIPE_TRANSFER_WRITE) && rsc->status))))
       pctx->flush(pctx, NULL, 0);
 
    /* XXX we don't handle PIPE_TRANSFER_FLUSH_EXPLICIT; this flag can be ignored

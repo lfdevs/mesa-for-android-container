@@ -36,13 +36,12 @@
 #include "viewport.h"
 
 static void
-set_viewport_no_notify(struct gl_context *ctx, unsigned idx,
-                       GLfloat x, GLfloat y,
-                       GLfloat width, GLfloat height)
+clamp_viewport(struct gl_context *ctx, GLfloat *x, GLfloat *y,
+               GLfloat *width, GLfloat *height)
 {
    /* clamp width and height to the implementation dependent range */
-   width  = MIN2(width, (GLfloat) ctx->Const.MaxViewportWidth);
-   height = MIN2(height, (GLfloat) ctx->Const.MaxViewportHeight);
+   *width  = MIN2(*width, (GLfloat) ctx->Const.MaxViewportWidth);
+   *height = MIN2(*height, (GLfloat) ctx->Const.MaxViewportHeight);
 
    /* The GL_ARB_viewport_array spec says:
     *
@@ -55,12 +54,18 @@ set_viewport_no_notify(struct gl_context *ctx, unsigned idx,
    if (ctx->Extensions.ARB_viewport_array ||
        (ctx->Extensions.OES_viewport_array &&
         _mesa_is_gles31(ctx))) {
-      x = CLAMP(x,
-                ctx->Const.ViewportBounds.Min, ctx->Const.ViewportBounds.Max);
-      y = CLAMP(y,
-                ctx->Const.ViewportBounds.Min, ctx->Const.ViewportBounds.Max);
+      *x = CLAMP(*x,
+                 ctx->Const.ViewportBounds.Min, ctx->Const.ViewportBounds.Max);
+      *y = CLAMP(*y,
+                 ctx->Const.ViewportBounds.Min, ctx->Const.ViewportBounds.Max);
    }
+}
 
+static void
+set_viewport_no_notify(struct gl_context *ctx, unsigned idx,
+                       GLfloat x, GLfloat y,
+                       GLfloat width, GLfloat height)
+{
    if (ctx->ViewportArray[idx].X == x &&
        ctx->ViewportArray[idx].Width == width &&
        ctx->ViewportArray[idx].Y == y &&
@@ -89,6 +94,11 @@ static void
 viewport(struct gl_context *ctx, GLint x, GLint y, GLsizei width,
          GLsizei height)
 {
+   struct gl_viewport_inputs input = { x, y, width, height };
+
+   /* Clamp the viewport to the implementation dependent values. */
+   clamp_viewport(ctx, &input.X, &input.Y, &input.Width, &input.Height);
+
    /* The GL_ARB_viewport_array spec says:
     *
     *     "Viewport sets the parameters for all viewports to the same values
@@ -101,7 +111,7 @@ viewport(struct gl_context *ctx, GLint x, GLint y, GLsizei width,
     * signal the driver once at the end.
     */
    for (unsigned i = 0; i < ctx->Const.MaxViewports; i++)
-      set_viewport_no_notify(ctx, i, x, y, width, height);
+      set_viewport_no_notify(ctx, i, input.X, input.Y, input.Width, input.Height);
 
    if (ctx->Driver.Viewport)
       ctx->Driver.Viewport(ctx);
@@ -153,6 +163,7 @@ void
 _mesa_set_viewport(struct gl_context *ctx, unsigned idx, GLfloat x, GLfloat y,
                     GLfloat width, GLfloat height)
 {
+   clamp_viewport(ctx, &x, &y, &width, &height);
    set_viewport_no_notify(ctx, idx, x, y, width, height);
 
    if (ctx->Driver.Viewport)
@@ -161,9 +172,12 @@ _mesa_set_viewport(struct gl_context *ctx, unsigned idx, GLfloat x, GLfloat y,
 
 static void
 viewport_array(struct gl_context *ctx, GLuint first, GLsizei count,
-               const struct gl_viewport_inputs *inputs)
+               struct gl_viewport_inputs *inputs)
 {
    for (GLsizei i = 0; i < count; i++) {
+      clamp_viewport(ctx, &inputs[i].X, &inputs[i].Y,
+                     &inputs[i].Width, &inputs[i].Height);
+
       set_viewport_no_notify(ctx, i + first, inputs[i].X, inputs[i].Y,
                              inputs[i].Width, inputs[i].Height);
    }
@@ -177,7 +191,7 @@ _mesa_ViewportArrayv_no_error(GLuint first, GLsizei count, const GLfloat *v)
 {
    GET_CURRENT_CONTEXT(ctx);
 
-   const struct gl_viewport_inputs *const p = (struct gl_viewport_inputs *)v;
+   struct gl_viewport_inputs *p = (struct gl_viewport_inputs *)v;
    viewport_array(ctx, first, count, p);
 }
 
@@ -185,7 +199,7 @@ void GLAPIENTRY
 _mesa_ViewportArrayv(GLuint first, GLsizei count, const GLfloat *v)
 {
    int i;
-   const struct gl_viewport_inputs *const p = (struct gl_viewport_inputs *) v;
+   struct gl_viewport_inputs *p = (struct gl_viewport_inputs *)v;
    GET_CURRENT_CONTEXT(ctx);
 
    if (MESA_VERBOSE & VERBOSE_API)
@@ -346,10 +360,30 @@ _mesa_DepthRangef(GLclampf nearval, GLclampf farval)
  * \param v       pointer to memory containing
  *                GLclampd near and far clip-plane values
  */
+static ALWAYS_INLINE void
+depth_range_arrayv(struct gl_context *ctx, GLuint first, GLsizei count,
+                   const struct gl_depthrange_inputs *const inputs)
+{
+   for (GLsizei i = 0; i < count; i++)
+      set_depth_range_no_notify(ctx, i + first, inputs[i].Near, inputs[i].Far);
+
+   if (ctx->Driver.DepthRange)
+      ctx->Driver.DepthRange(ctx);
+}
+
+void GLAPIENTRY
+_mesa_DepthRangeArrayv_no_error(GLuint first, GLsizei count, const GLclampd *v)
+{
+   GET_CURRENT_CONTEXT(ctx);
+
+   const struct gl_depthrange_inputs *const p =
+      (struct gl_depthrange_inputs *)v;
+   depth_range_arrayv(ctx, first, count, p);
+}
+
 void GLAPIENTRY
 _mesa_DepthRangeArrayv(GLuint first, GLsizei count, const GLclampd *v)
 {
-   int i;
    const struct gl_depthrange_inputs *const p =
       (struct gl_depthrange_inputs *) v;
    GET_CURRENT_CONTEXT(ctx);
@@ -364,11 +398,7 @@ _mesa_DepthRangeArrayv(GLuint first, GLsizei count, const GLclampd *v)
       return;
    }
 
-   for (i = 0; i < count; i++)
-      set_depth_range_no_notify(ctx, i + first, p[i].Near, p[i].Far);
-
-   if (ctx->Driver.DepthRange)
-      ctx->Driver.DepthRange(ctx);
+   depth_range_arrayv(ctx, first, count, p);
 }
 
 void GLAPIENTRY
@@ -463,12 +493,24 @@ void _mesa_init_viewport(struct gl_context *ctx)
 }
 
 
-static void
-clip_control(struct gl_context *ctx, GLenum origin, GLenum depth)
+static ALWAYS_INLINE void
+clip_control(struct gl_context *ctx, GLenum origin, GLenum depth, bool no_error)
 {
    if (ctx->Transform.ClipOrigin == origin &&
        ctx->Transform.ClipDepthMode == depth)
       return;
+
+   if (!no_error &&
+       origin != GL_LOWER_LEFT && origin != GL_UPPER_LEFT) {
+      _mesa_error(ctx, GL_INVALID_ENUM, "glClipControl");
+      return;
+   }
+
+   if (!no_error &&
+       depth != GL_NEGATIVE_ONE_TO_ONE && depth != GL_ZERO_TO_ONE) {
+      _mesa_error(ctx, GL_INVALID_ENUM, "glClipControl");
+      return;
+   }
 
    /* Affects transform state and the viewport transform */
    FLUSH_VERTICES(ctx, ctx->DriverFlags.NewClipControl ? 0 :
@@ -501,7 +543,7 @@ void GLAPIENTRY
 _mesa_ClipControl_no_error(GLenum origin, GLenum depth)
 {
    GET_CURRENT_CONTEXT(ctx);
-   clip_control(ctx, origin, depth);
+   clip_control(ctx, origin, depth, true);
 }
 
 
@@ -522,17 +564,7 @@ _mesa_ClipControl(GLenum origin, GLenum depth)
       return;
    }
 
-   if (origin != GL_LOWER_LEFT && origin != GL_UPPER_LEFT) {
-      _mesa_error(ctx, GL_INVALID_ENUM, "glClipControl");
-      return;
-   }
-
-   if (depth != GL_NEGATIVE_ONE_TO_ONE && depth != GL_ZERO_TO_ONE) {
-      _mesa_error(ctx, GL_INVALID_ENUM, "glClipControl");
-      return;
-   }
-
-   clip_control(ctx, origin, depth);
+   clip_control(ctx, origin, depth, false);
 }
 
 /**

@@ -1003,16 +1003,17 @@ match_inst(const char **pcur,
            const struct tgsi_opcode_info *info)
 {
    const char *cur = *pcur;
+   const char *mnemonic = tgsi_get_opcode_name(info->opcode);
 
    /* simple case: the whole string matches the instruction name */
-   if (str_match_nocase_whole(&cur, info->mnemonic)) {
+   if (str_match_nocase_whole(&cur, mnemonic)) {
       *pcur = cur;
       *saturate = 0;
       *precise = 0;
       return TRUE;
    }
 
-   if (str_match_no_case(&cur, info->mnemonic)) {
+   if (str_match_no_case(&cur, mnemonic)) {
       /* the instruction has a suffix, figure it out */
       if (str_match_no_case(&cur, "_SAT")) {
          *pcur = cur;

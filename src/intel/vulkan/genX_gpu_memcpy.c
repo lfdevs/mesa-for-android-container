@@ -36,7 +36,7 @@
 /**
  * Returns the greatest common divisor of a and b that is a power of two.
  */
-static inline uint64_t
+static uint64_t
 gcd_pow2_u64(uint64_t a, uint64_t b)
 {
    assert(a > 0 || b > 0);
@@ -150,7 +150,7 @@ genX(cmd_buffer_so_memcpy)(struct anv_cmd_buffer *cmd_buffer,
       &(struct GENX(VERTEX_ELEMENT_STATE)) {
          .VertexBufferIndex = 32,
          .Valid = true,
-         .SourceElementFormat = format,
+         .SourceElementFormat = (enum GENX(SURFACE_FORMAT)) format,
          .SourceElementOffset = 0,
          .Component0Control = (bs >= 4) ? VFCOMP_STORE_SRC : VFCOMP_STORE_0,
          .Component1Control = (bs >= 8) ? VFCOMP_STORE_SRC : VFCOMP_STORE_0,

@@ -337,7 +337,7 @@ brw_fence_server_wait(struct brw_context *brw, struct brw_fence *fence)
 }
 
 static struct gl_sync_object *
-brw_gl_new_sync(struct gl_context *ctx, GLuint id)
+brw_gl_new_sync(struct gl_context *ctx)
 {
    struct brw_gl_sync *sync;
 

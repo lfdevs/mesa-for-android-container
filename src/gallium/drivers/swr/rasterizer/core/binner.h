@@ -31,67 +31,47 @@
 //////////////////////////////////////////////////////////////////////////
 /// @brief Offsets added to post-viewport vertex positions based on
 /// raster state.
-static const simdscalar g_pixelOffsets[SWR_PIXEL_LOCATION_UL + 1] =
+///
+/// Can't use templated variable because we must stick with C++11 features.
+/// Template variables were introduced with C++14
+template <typename SIMD_T>
+struct SwrPixelOffsets
 {
-    _simd_set1_ps(0.0f),    // SWR_PIXEL_LOCATION_CENTER
-    _simd_set1_ps(0.5f),    // SWR_PIXEL_LOCATION_UL
+public:
+    INLINE static typename SIMD_T::Float GetOffset(uint32_t loc)
+    {
+        SWR_ASSERT(loc <= 1);
+
+        return SIMD_T::set1_ps(loc ? 0.5f : 0.0f);
+    }
 };
 
-#if USE_SIMD16_FRONTEND
-static const simd16scalar g_pixelOffsets_simd16[SWR_PIXEL_LOCATION_UL + 1] =
-{
-    _simd16_set1_ps(0.0f),  // SWR_PIXEL_LOCATION_CENTER
-    _simd16_set1_ps(0.5f),  // SWR_PIXEL_LOCATION_UL
-};
-
-#endif
 //////////////////////////////////////////////////////////////////////////
 /// @brief Convert the X,Y coords of a triangle to the requested Fixed 
 /// Point precision from FP32.
-template <typename PT = FixedPointTraits<Fixed_16_8>>
-INLINE simdscalari fpToFixedPointVertical(const simdscalar vIn)
+template <typename SIMD_T, typename PT = FixedPointTraits<Fixed_16_8>>
+INLINE typename SIMD_T::Integer fpToFixedPointVertical(const typename SIMD_T::Float &vIn)
 {
-    simdscalar vFixed = _simd_mul_ps(vIn, _simd_set1_ps(PT::ScaleT::value));
-    return _simd_cvtps_epi32(vFixed);
+    return SIMD_T::cvtps_epi32(SIMD_T::mul_ps(vIn, SIMD_T::set1_ps(PT::ScaleT::value)));
 }
 
-#if USE_SIMD16_FRONTEND
-template <typename PT = FixedPointTraits<Fixed_16_8>>
-INLINE simd16scalari fpToFixedPointVertical(const simd16scalar vIn)
-{
-    simd16scalar vFixed = _simd16_mul_ps(vIn, _simd16_set1_ps(PT::ScaleT::value));
-    return _simd16_cvtps_epi32(vFixed);
-}
-
-#endif
 //////////////////////////////////////////////////////////////////////////
 /// @brief Helper function to set the X,Y coords of a triangle to the 
 /// requested Fixed Point precision from FP32.
 /// @param tri: simdvector[3] of FP triangle verts
 /// @param vXi: fixed point X coords of tri verts
 /// @param vYi: fixed point Y coords of tri verts
-INLINE static void FPToFixedPoint(const simdvector * const tri, simdscalari(&vXi)[3], simdscalari(&vYi)[3])
+template <typename SIMD_T>
+INLINE static void FPToFixedPoint(const typename SIMD_T::Vec4 *const tri, typename SIMD_T::Integer(&vXi)[3], typename SIMD_T::Integer(&vYi)[3])
 {
-    vXi[0] = fpToFixedPointVertical(tri[0].x);
-    vYi[0] = fpToFixedPointVertical(tri[0].y);
-    vXi[1] = fpToFixedPointVertical(tri[1].x);
-    vYi[1] = fpToFixedPointVertical(tri[1].y);
-    vXi[2] = fpToFixedPointVertical(tri[2].x);
-    vYi[2] = fpToFixedPointVertical(tri[2].y);
+    vXi[0] = fpToFixedPointVertical<SIMD_T>(tri[0].x);
+    vYi[0] = fpToFixedPointVertical<SIMD_T>(tri[0].y);
+    vXi[1] = fpToFixedPointVertical<SIMD_T>(tri[1].x);
+    vYi[1] = fpToFixedPointVertical<SIMD_T>(tri[1].y);
+    vXi[2] = fpToFixedPointVertical<SIMD_T>(tri[2].x);
+    vYi[2] = fpToFixedPointVertical<SIMD_T>(tri[2].y);
 }
 
-#if USE_SIMD16_FRONTEND
-INLINE static void FPToFixedPoint(const simd16vector * const tri, simd16scalari(&vXi)[3], simd16scalari(&vYi)[3])
-{
-    vXi[0] = fpToFixedPointVertical(tri[0].x);
-    vYi[0] = fpToFixedPointVertical(tri[0].y);
-    vXi[1] = fpToFixedPointVertical(tri[1].x);
-    vYi[1] = fpToFixedPointVertical(tri[1].y);
-    vXi[2] = fpToFixedPointVertical(tri[2].x);
-    vYi[2] = fpToFixedPointVertical(tri[2].y);
-}
-
-#endif
 //////////////////////////////////////////////////////////////////////////
 /// @brief Calculate bounding box for current triangle
 /// @tparam CT: ConservativeRastFETraits type
@@ -100,124 +80,44 @@ INLINE static void FPToFixedPoint(const simd16vector * const tri, simd16scalari(
 /// @param bbox: fixed point bbox
 /// *Note*: expects vX, vY to be in the correct precision for the type 
 /// of rasterization. This avoids unnecessary FP->fixed conversions.
-template <typename CT>
-INLINE void calcBoundingBoxIntVertical(const simdvector * const tri, simdscalari(&vX)[3], simdscalari(&vY)[3], simdBBox &bbox)
+template <typename SIMD_T, typename CT>
+INLINE void calcBoundingBoxIntVertical(const typename SIMD_T::Integer(&vX)[3], const typename SIMD_T::Integer(&vY)[3], SIMDBBOX_T<SIMD_T> &bbox)
 {
-    simdscalari vMinX = vX[0];
-    vMinX = _simd_min_epi32(vMinX, vX[1]);
-    vMinX = _simd_min_epi32(vMinX, vX[2]);
+    typename SIMD_T::Integer vMinX = vX[0];
 
-    simdscalari vMaxX = vX[0];
-    vMaxX = _simd_max_epi32(vMaxX, vX[1]);
-    vMaxX = _simd_max_epi32(vMaxX, vX[2]);
+    vMinX = SIMD_T::min_epi32(vMinX, vX[1]);
+    vMinX = SIMD_T::min_epi32(vMinX, vX[2]);
 
-    simdscalari vMinY = vY[0];
-    vMinY = _simd_min_epi32(vMinY, vY[1]);
-    vMinY = _simd_min_epi32(vMinY, vY[2]);
+    typename SIMD_T::Integer vMaxX = vX[0];
 
-    simdscalari vMaxY = vY[0];
-    vMaxY = _simd_max_epi32(vMaxY, vY[1]);
-    vMaxY = _simd_max_epi32(vMaxY, vY[2]);
+    vMaxX = SIMD_T::max_epi32(vMaxX, vX[1]);
+    vMaxX = SIMD_T::max_epi32(vMaxX, vX[2]);
+
+    typename SIMD_T::Integer vMinY = vY[0];
+
+    vMinY = SIMD_T::min_epi32(vMinY, vY[1]);
+    vMinY = SIMD_T::min_epi32(vMinY, vY[2]);
+
+    typename SIMD_T::Integer vMaxY = vY[0];
+
+    vMaxY = SIMD_T::max_epi32(vMaxY, vY[1]);
+    vMaxY = SIMD_T::max_epi32(vMaxY, vY[2]);
+
+    if (CT::BoundingBoxOffsetT::value != 0)
+    {
+        /// Bounding box needs to be expanded by 1/512 before snapping to 16.8 for conservative rasterization
+        /// expand bbox by 1/256; coverage will be correctly handled in the rasterizer.
+
+        const typename SIMD_T::Integer value = SIMD_T::set1_epi32(CT::BoundingBoxOffsetT::value);
+
+        vMinX = SIMD_T::sub_epi32(vMinX, value);
+        vMaxX = SIMD_T::add_epi32(vMaxX, value);
+        vMinY = SIMD_T::sub_epi32(vMinY, value);
+        vMaxY = SIMD_T::add_epi32(vMaxY, value);
+    }
 
     bbox.xmin = vMinX;
     bbox.xmax = vMaxX;
     bbox.ymin = vMinY;
     bbox.ymax = vMaxY;
 }
-
-#if USE_SIMD16_FRONTEND
-template <typename CT>
-INLINE void calcBoundingBoxIntVertical(const simd16vector * const tri, simd16scalari(&vX)[3], simd16scalari(&vY)[3], simd16BBox &bbox)
-{
-    simd16scalari vMinX = vX[0];
-
-    vMinX = _simd16_min_epi32(vMinX, vX[1]);
-    vMinX = _simd16_min_epi32(vMinX, vX[2]);
-
-    simd16scalari vMaxX = vX[0];
-
-    vMaxX = _simd16_max_epi32(vMaxX, vX[1]);
-    vMaxX = _simd16_max_epi32(vMaxX, vX[2]);
-
-    simd16scalari vMinY = vY[0];
-
-    vMinY = _simd16_min_epi32(vMinY, vY[1]);
-    vMinY = _simd16_min_epi32(vMinY, vY[2]);
-
-    simd16scalari vMaxY = vY[0];
-
-    vMaxY = _simd16_max_epi32(vMaxY, vY[1]);
-    vMaxY = _simd16_max_epi32(vMaxY, vY[2]);
-
-    bbox.xmin = vMinX;
-    bbox.xmax = vMaxX;
-    bbox.ymin = vMinY;
-    bbox.ymax = vMaxY;
-}
-
-#endif
-//////////////////////////////////////////////////////////////////////////
-/// @brief FEConservativeRastT specialization of calcBoundingBoxIntVertical
-/// Offsets BBox for conservative rast
-template <>
-INLINE void calcBoundingBoxIntVertical<FEConservativeRastT>(const simdvector * const tri, simdscalari(&vX)[3], simdscalari(&vY)[3], simdBBox &bbox)
-{
-    // FE conservative rast traits
-    typedef FEConservativeRastT CT;
-
-    simdscalari vMinX = vX[0];
-    vMinX = _simd_min_epi32(vMinX, vX[1]);
-    vMinX = _simd_min_epi32(vMinX, vX[2]);
-
-    simdscalari vMaxX = vX[0];
-    vMaxX = _simd_max_epi32(vMaxX, vX[1]);
-    vMaxX = _simd_max_epi32(vMaxX, vX[2]);
-
-    simdscalari vMinY = vY[0];
-    vMinY = _simd_min_epi32(vMinY, vY[1]);
-    vMinY = _simd_min_epi32(vMinY, vY[2]);
-
-    simdscalari vMaxY = vY[0];
-    vMaxY = _simd_max_epi32(vMaxY, vY[1]);
-    vMaxY = _simd_max_epi32(vMaxY, vY[2]);
-
-    /// Bounding box needs to be expanded by 1/512 before snapping to 16.8 for conservative rasterization
-    /// expand bbox by 1/256; coverage will be correctly handled in the rasterizer.
-    bbox.xmin = _simd_sub_epi32(vMinX, _simd_set1_epi32(CT::BoundingBoxOffsetT::value));
-    bbox.xmax = _simd_add_epi32(vMaxX, _simd_set1_epi32(CT::BoundingBoxOffsetT::value));
-    bbox.ymin = _simd_sub_epi32(vMinY, _simd_set1_epi32(CT::BoundingBoxOffsetT::value));
-    bbox.ymax = _simd_add_epi32(vMaxY, _simd_set1_epi32(CT::BoundingBoxOffsetT::value));
-}
-
-#if USE_SIMD16_FRONTEND
-template <>
-INLINE void calcBoundingBoxIntVertical<FEConservativeRastT>(const simd16vector * const tri, simd16scalari(&vX)[3], simd16scalari(&vY)[3], simd16BBox &bbox)
-{
-    // FE conservative rast traits
-    typedef FEConservativeRastT CT;
-
-    simd16scalari vMinX = vX[0];
-    vMinX = _simd16_min_epi32(vMinX, vX[1]);
-    vMinX = _simd16_min_epi32(vMinX, vX[2]);
-
-    simd16scalari vMaxX = vX[0];
-    vMaxX = _simd16_max_epi32(vMaxX, vX[1]);
-    vMaxX = _simd16_max_epi32(vMaxX, vX[2]);
-
-    simd16scalari vMinY = vY[0];
-    vMinY = _simd16_min_epi32(vMinY, vY[1]);
-    vMinY = _simd16_min_epi32(vMinY, vY[2]);
-
-    simd16scalari vMaxY = vY[0];
-    vMaxY = _simd16_max_epi32(vMaxY, vY[1]);
-    vMaxY = _simd16_max_epi32(vMaxY, vY[2]);
-
-    /// Bounding box needs to be expanded by 1/512 before snapping to 16.8 for conservative rasterization
-    /// expand bbox by 1/256; coverage will be correctly handled in the rasterizer.
-    bbox.xmin = _simd16_sub_epi32(vMinX, _simd16_set1_epi32(CT::BoundingBoxOffsetT::value));
-    bbox.xmax = _simd16_add_epi32(vMaxX, _simd16_set1_epi32(CT::BoundingBoxOffsetT::value));
-    bbox.ymin = _simd16_sub_epi32(vMinY, _simd16_set1_epi32(CT::BoundingBoxOffsetT::value));
-    bbox.ymax = _simd16_add_epi32(vMaxY, _simd16_set1_epi32(CT::BoundingBoxOffsetT::value));
-}
-
-#endif

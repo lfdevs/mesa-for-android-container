@@ -1182,7 +1182,7 @@ do_comparison(void *mem_ctx, int operation, ir_rvalue *op0, ir_rvalue *op1)
  * scalar booleans.  If it isn't, emit an error and return a constant
  * boolean to avoid triggering cascading error messages.
  */
-ir_rvalue *
+static ir_rvalue *
 get_scalar_boolean_operand(exec_list *instructions,
                            struct _mesa_glsl_parse_state *state,
                            ast_expression *parent_expr,
@@ -1845,7 +1845,7 @@ ast_expression::do_hir(exec_list *instructions,
          error_emitted = true;
       }
 
-      ir_constant *cond_val = op[0]->constant_expression_value();
+      ir_constant *cond_val = op[0]->constant_expression_value(ctx);
 
       if (then_instructions.is_empty()
           && else_instructions.is_empty()
@@ -2229,6 +2229,8 @@ static unsigned
 process_array_size(exec_node *node,
                    struct _mesa_glsl_parse_state *state)
 {
+   void *mem_ctx = state;
+
    exec_list dummy_instructions;
 
    ast_node *array_size = exec_node_data(ast_node, node, link);
@@ -2261,7 +2263,7 @@ process_array_size(exec_node *node,
       return 0;
    }
 
-   ir_constant *const size = ir->constant_expression_value();
+   ir_constant *const size = ir->constant_expression_value(mem_ctx);
    if (size == NULL ||
        (state->is_version(120, 300) &&
         array_size->has_sequence_subexpression())) {
@@ -3123,17 +3125,6 @@ interpret_interpolation_qualifier(const struct ast_type_qualifier *qual,
    else if (qual->flags.q.noperspective)
       interpolation = INTERP_MODE_NOPERSPECTIVE;
    else if (qual->flags.q.smooth)
-      interpolation = INTERP_MODE_SMOOTH;
-   else if (state->es_shader &&
-            ((mode == ir_var_shader_in &&
-              state->stage != MESA_SHADER_VERTEX) ||
-             (mode == ir_var_shader_out &&
-              state->stage != MESA_SHADER_FRAGMENT)))
-      /* Section 4.3.9 (Interpolation) of the GLSL ES 3.00 spec says:
-       *
-       *    "When no interpolation qualifier is present, smooth interpolation
-       *    is used."
-       */
       interpolation = INTERP_MODE_SMOOTH;
    else
       interpolation = INTERP_MODE_NONE;
@@ -4164,11 +4155,13 @@ apply_type_qualifier_to_variable(const struct ast_type_qualifier *qual,
  * otherwise.
  */
 static ir_variable *
-get_variable_being_redeclared(ir_variable *var, YYLTYPE loc,
+get_variable_being_redeclared(ir_variable **var_ptr, YYLTYPE loc,
                               struct _mesa_glsl_parse_state *state,
                               bool allow_all_redeclarations,
                               bool *is_redeclaration)
 {
+   ir_variable *var = *var_ptr;
+
    /* Check if this declaration is actually a re-declaration, either to
     * resize an array or add qualifiers to an existing variable.
     *
@@ -4209,6 +4202,7 @@ get_variable_being_redeclared(ir_variable *var, YYLTYPE loc,
       earlier->type = var->type;
       delete var;
       var = NULL;
+      *var_ptr = NULL;
    } else if ((state->ARB_fragment_coord_conventions_enable ||
               state->is_version(150, 0))
               && strcmp(var->name, "gl_FragCoord") == 0
@@ -4320,12 +4314,13 @@ get_variable_being_redeclared(ir_variable *var, YYLTYPE loc,
 /**
  * Generate the IR for an initializer in a variable declaration
  */
-ir_rvalue *
+static ir_rvalue *
 process_initializer(ir_variable *var, ast_declaration *decl,
                     ast_fully_specified_type *type,
                     exec_list *initializer_instructions,
                     struct _mesa_glsl_parse_state *state)
 {
+   void *mem_ctx = state;
    ir_rvalue *result = NULL;
 
    YYLTYPE initializer_loc = decl->initializer->get_location();
@@ -4460,7 +4455,9 @@ process_initializer(ir_variable *var, ast_declaration *decl,
           * GLSL ES 3.00.4 spec.  This is a new limitation for these GLSL
           * versions.
           */
-         ir_constant *constant_value = rhs->constant_expression_value();
+         ir_constant *constant_value =
+            rhs->constant_expression_value(mem_ctx);
+
          if (!constant_value ||
              (state->is_version(430, 300) &&
               decl->initializer->has_sequence_subexpression())) {
@@ -4520,7 +4517,7 @@ process_initializer(ir_variable *var, ast_declaration *decl,
       } else
          initializer_type = rhs->type;
 
-      var->constant_initializer = rhs->constant_expression_value();
+      var->constant_initializer = rhs->constant_expression_value(mem_ctx);
       var->data.has_initializer = true;
 
       /* If the declared variable is an unsized array, it must inherrit
@@ -4714,7 +4711,7 @@ handle_geometry_shader_input_decl(struct _mesa_glsl_parse_state *state,
                                           "geometry shader input");
 }
 
-void
+static void
 validate_identifier(const char *identifier, YYLTYPE loc,
                     struct _mesa_glsl_parse_state *state)
 {
@@ -5451,22 +5448,21 @@ ast_declarator_list::hir(exec_list *instructions,
       bool var_is_gl_id = is_gl_identifier(var->name);
 
       bool is_redeclaration;
-      ir_variable *declared_var =
-         get_variable_being_redeclared(var, decl->get_location(), state,
-                                       false /* allow_all_redeclarations */,
-                                       &is_redeclaration);
+      var = get_variable_being_redeclared(&var, decl->get_location(), state,
+                                          false /* allow_all_redeclarations */,
+                                          &is_redeclaration);
       if (is_redeclaration) {
          if (var_is_gl_id &&
-             declared_var->data.how_declared == ir_var_declared_in_block) {
+             var->data.how_declared == ir_var_declared_in_block) {
             _mesa_glsl_error(&loc, state,
                              "`%s' has already been redeclared using "
-                             "gl_PerVertex", declared_var->name);
+                             "gl_PerVertex", var->name);
          }
-         declared_var->data.how_declared = ir_var_declared_normally;
+         var->data.how_declared = ir_var_declared_normally;
       }
 
       if (decl->initializer != NULL) {
-         result = process_initializer(declared_var,
+         result = process_initializer(var,
                                       decl, this->type,
                                       &initializer_instructions, state);
       } else {
@@ -5486,7 +5482,7 @@ ast_declarator_list::hir(exec_list *instructions,
       }
 
       if (state->es_shader) {
-         const glsl_type *const t = declared_var->type;
+         const glsl_type *const t = var->type;
 
          /* Skip the unsized array check for TCS/TES/GS inputs & TCS outputs.
           *
@@ -5508,10 +5504,10 @@ ast_declarator_list::hir(exec_list *instructions,
           *     present, as per the following table."
           */
          const bool implicitly_sized =
-            (declared_var->data.mode == ir_var_shader_in &&
+            (var->data.mode == ir_var_shader_in &&
              state->stage >= MESA_SHADER_TESS_CTRL &&
              state->stage <= MESA_SHADER_GEOMETRY) ||
-            (declared_var->data.mode == ir_var_shader_out &&
+            (var->data.mode == ir_var_shader_out &&
              state->stage == MESA_SHADER_TESS_CTRL);
 
          if (t->is_unsized_array() && !implicitly_sized)
@@ -5537,6 +5533,17 @@ ast_declarator_list::hir(exec_list *instructions,
                              "GLSL ES");
       }
 
+      /* Section 4.4.6.1 Atomic Counter Layout Qualifiers of the GLSL 4.60 spec:
+       *
+       *    "It is a compile-time error to declare an unsized array of
+       *     atomic_uint"
+       */
+      if (var->type->is_unsized_array() &&
+          var->type->without_array()->base_type == GLSL_TYPE_ATOMIC_UINT) {
+         _mesa_glsl_error(& loc, state,
+                          "Unsized array of atomic_uint is not allowed");
+      }
+
       /* If the declaration is not a redeclaration, there are a few additional
        * semantic checks that must be applied.  In addition, variable that was
        * created for the declaration should be added to the IR stream.
@@ -5556,7 +5563,7 @@ ast_declarator_list::hir(exec_list *instructions,
           *     after the initializer if present or immediately after the name
           *     being declared if not."
           */
-         if (!state->symbols->add_variable(declared_var)) {
+         if (!state->symbols->add_variable(var)) {
             YYLTYPE loc = this->get_location();
             _mesa_glsl_error(&loc, state, "name `%s' already taken in the "
                              "current scope", decl->identifier);
@@ -5569,7 +5576,7 @@ ast_declarator_list::hir(exec_list *instructions,
           * global var is decled, then the function is defined with usage of
           * the global var.  See glslparsertest's CorrectModule.frag.
           */
-         instructions->push_head(declared_var);
+         instructions->push_head(var);
       }
 
       instructions->append_list(&initializer_instructions);
@@ -6358,13 +6365,28 @@ ast_selection_statement::hir(exec_list *instructions,
 }
 
 
+struct case_label {
+   /** Value of the case label. */
+   unsigned value;
+
+   /** Does this label occur after the default? */
+   bool after_default;
+
+   /**
+    * AST for the case label.
+    *
+    * This is only used to generate error messages for duplicate labels.
+    */
+   ast_expression *ast;
+};
+
 /* Used for detection of duplicate case values, compare
  * given contents directly.
  */
 static bool
 compare_case_value(const void *a, const void *b)
 {
-   return *(unsigned *) a == *(unsigned *) b;
+   return ((struct case_label *) a)->value == ((struct case_label *) b)->value;
 }
 
 
@@ -6374,7 +6396,7 @@ compare_case_value(const void *a, const void *b)
 static unsigned
 key_contents(const void *key)
 {
-   return *(unsigned *) key;
+   return ((struct case_label *) key)->value;
 }
 
 
@@ -6400,6 +6422,7 @@ ast_switch_statement::hir(exec_list *instructions,
                        state,
                        "switch-statement expression must be scalar "
                        "integer");
+      return NULL;
    }
 
    /* Track the switch-statement nesting in a stack-like manner.
@@ -6556,43 +6579,34 @@ ast_case_statement_list::hir(exec_list *instructions,
     * if default should be chosen or not.
     */
    if (!default_case.is_empty()) {
+      struct hash_entry *entry;
+      ir_factory body(instructions, state);
 
-      ir_rvalue *const true_val = new (state) ir_constant(true);
-      ir_dereference_variable *deref_run_default_var =
-         new(state) ir_dereference_variable(state->switch_state.run_default);
+      ir_expression *cmp = NULL;
 
-      /* Choose to run default case initially, following conditional
-       * assignments might change this.
-       */
-      ir_assignment *const init_var =
-         new(state) ir_assignment(deref_run_default_var, true_val);
-      instructions->push_tail(init_var);
+      hash_table_foreach(state->switch_state.labels_ht, entry) {
+         const struct case_label *const l = (struct case_label *) entry->data;
 
-      /* Default case was the last one, no checks required. */
-      if (after_default.is_empty()) {
-         instructions->append_list(&default_case);
-         return NULL;
+         /* If the switch init-value is the value of one of the labels that
+          * occurs after the default case, disable execution of the default
+          * case.
+          */
+         if (l->after_default) {
+            ir_constant *const cnst =
+               state->switch_state.test_var->type->base_type == GLSL_TYPE_UINT
+               ? body.constant(unsigned(l->value))
+               : body.constant(int(l->value));
+
+            cmp = cmp == NULL
+               ? equal(cnst, state->switch_state.test_var)
+               : logic_or(cmp, equal(cnst, state->switch_state.test_var));
+         }
       }
 
-      foreach_in_list(ir_instruction, ir, &after_default) {
-         ir_assignment *assign = ir->as_assignment();
-
-         if (!assign)
-            continue;
-
-         /* Clone the check between case label and init expression. */
-         ir_expression *exp = (ir_expression*) assign->condition;
-         ir_expression *clone = exp->clone(state, NULL);
-
-         ir_dereference_variable *deref_var =
-            new(state) ir_dereference_variable(state->switch_state.run_default);
-         ir_rvalue *const false_val = new (state) ir_constant(false);
-
-         ir_assignment *const set_false =
-            new(state) ir_assignment(deref_var, false_val, clone);
-
-         instructions->push_tail(set_false);
-      }
+      if (cmp != NULL)
+         body.emit(assign(state->switch_state.run_default, logic_not(cmp)));
+      else
+         body.emit(assign(state->switch_state.run_default, body.constant(true)));
 
       /* Append default case and all cases after it. */
       instructions->append_list(&default_case);
@@ -6639,12 +6653,9 @@ ir_rvalue *
 ast_case_label::hir(exec_list *instructions,
                     struct _mesa_glsl_parse_state *state)
 {
-   void *ctx = state;
+   ir_factory body(instructions, state);
 
-   ir_dereference_variable *deref_fallthru_var =
-      new(ctx) ir_dereference_variable(state->switch_state.is_fallthru_var);
-
-   ir_rvalue *const true_val = new(ctx) ir_constant(true);
+   ir_variable *const fallthru_var = state->switch_state.is_fallthru_var;
 
    /* If not default case, ... */
    if (this->test_value != NULL) {
@@ -6652,7 +6663,8 @@ ast_case_label::hir(exec_list *instructions,
        * comparison of cached test expression value to case label.
        */
       ir_rvalue *const label_rval = this->test_value->hir(instructions, state);
-      ir_constant *label_const = label_rval->constant_expression_value();
+      ir_constant *label_const =
+         label_rval->constant_expression_value(body.mem_ctx);
 
       if (!label_const) {
          YYLTYPE loc = this->test_value->get_location();
@@ -6662,32 +6674,44 @@ ast_case_label::hir(exec_list *instructions,
                           "constant expression");
 
          /* Stuff a dummy value in to allow processing to continue. */
-         label_const = new(ctx) ir_constant(0);
+         label_const = body.constant(0);
       } else {
          hash_entry *entry =
                _mesa_hash_table_search(state->switch_state.labels_ht,
-                     (void *)(uintptr_t)&label_const->value.u[0]);
+                                       &label_const->value.u[0]);
 
          if (entry) {
-            ast_expression *previous_label = (ast_expression *) entry->data;
+            const struct case_label *const l =
+               (struct case_label *) entry->data;
+            const ast_expression *const previous_label = l->ast;
             YYLTYPE loc = this->test_value->get_location();
+
             _mesa_glsl_error(& loc, state, "duplicate case value");
 
             loc = previous_label->get_location();
             _mesa_glsl_error(& loc, state, "this is the previous case label");
          } else {
+            struct case_label *l = ralloc(state->switch_state.labels_ht,
+                                          struct case_label);
+
+            l->value = label_const->value.u[0];
+            l->after_default = state->switch_state.previous_default != NULL;
+            l->ast = this->test_value;
+
             _mesa_hash_table_insert(state->switch_state.labels_ht,
-                                    (void *)(uintptr_t)&label_const->value.u[0],
-                                    this->test_value);
+                                    &label_const->value.u[0],
+                                    l);
          }
       }
 
-      ir_dereference_variable *deref_test_var =
-         new(ctx) ir_dereference_variable(state->switch_state.test_var);
+      /* Create an r-value version of the ir_constant label here (after we may
+       * have created a fake one in error cases) that can be passed to
+       * apply_implicit_conversion below.
+       */
+      ir_rvalue *label = label_const;
 
-      ir_expression *test_cond = new(ctx) ir_expression(ir_binop_all_equal,
-                                                        label_const,
-                                                        deref_test_var);
+      ir_rvalue *deref_test_var =
+         new(body.mem_ctx) ir_dereference_variable(state->switch_state.test_var);
 
       /*
        * From GLSL 4.40 specification section 6.2 ("Selection"):
@@ -6700,10 +6724,10 @@ ast_case_label::hir(exec_list *instructions,
        *     uint (see section 4.1.10 “Implicit Conversions”) before the compare
        *     is done."
        */
-      if (label_const->type != state->switch_state.test_var->type) {
+      if (label->type != state->switch_state.test_var->type) {
          YYLTYPE loc = this->test_value->get_location();
 
-         const glsl_type *type_a = label_const->type;
+         const glsl_type *type_a = label->type;
          const glsl_type *type_b = state->switch_state.test_var->type;
 
          /* Check if int->uint implicit conversion is supported. */
@@ -6720,21 +6744,26 @@ ast_case_label::hir(exec_list *instructions,
             /* Conversion of the case label. */
             if (type_a->base_type == GLSL_TYPE_INT) {
                if (!apply_implicit_conversion(glsl_type::uint_type,
-                                              test_cond->operands[0], state))
+                                              label, state))
                   _mesa_glsl_error(&loc, state, "implicit type conversion error");
             } else {
                /* Conversion of the init-expression value. */
                if (!apply_implicit_conversion(glsl_type::uint_type,
-                                              test_cond->operands[1], state))
+                                              deref_test_var, state))
                   _mesa_glsl_error(&loc, state, "implicit type conversion error");
             }
          }
+
+         /* If the implicit conversion was allowed, the types will already be
+          * the same.  If the implicit conversion wasn't allowed, smash the
+          * type of the label anyway.  This will prevent the expression
+          * constructor (below) from failing an assertion.
+          */
+         label->type = deref_test_var->type;
       }
 
-      ir_assignment *set_fallthru_on_test =
-         new(ctx) ir_assignment(deref_fallthru_var, true_val, test_cond);
-
-      instructions->push_tail(set_fallthru_on_test);
+      body.emit(assign(fallthru_var,
+                       logic_or(fallthru_var, equal(label, deref_test_var))));
    } else { /* default case */
       if (state->switch_state.previous_default) {
          YYLTYPE loc = this->get_location();
@@ -6747,18 +6776,9 @@ ast_case_label::hir(exec_list *instructions,
       state->switch_state.previous_default = this;
 
       /* Set fallthru condition on 'run_default' bool. */
-      ir_dereference_variable *deref_run_default =
-         new(ctx) ir_dereference_variable(state->switch_state.run_default);
-      ir_rvalue *const cond_true = new(ctx) ir_constant(true);
-      ir_expression *test_cond = new(ctx) ir_expression(ir_binop_all_equal,
-                                                        cond_true,
-                                                        deref_run_default);
-
-      /* Set falltrhu state. */
-      ir_assignment *set_fallthru =
-         new(ctx) ir_assignment(deref_fallthru_var, true_val, test_cond);
-
-      instructions->push_tail(set_fallthru);
+      body.emit(assign(fallthru_var,
+                       logic_or(fallthru_var,
+                                state->switch_state.run_default)));
    }
 
    /* Case statements do not have r-values. */
@@ -7236,11 +7256,6 @@ ast_process_struct_or_iface_block_members(exec_list *instructions,
             validate_matrix_layout_for_type(state, &loc, decl_type, NULL);
       }
 
-      if (qual->flags.q.read_only && qual->flags.q.write_only) {
-         _mesa_glsl_error(&loc, state, "buffer variable can't be both "
-                          "readonly and writeonly.");
-      }
-
       foreach_list_typed (ast_declaration, decl, link,
                           &decl_list->declarations) {
          YYLTYPE loc = decl->get_location();
@@ -7372,14 +7387,13 @@ ast_process_struct_or_iface_block_members(exec_list *instructions,
                                            qual->offset, &xfb_offset)) {
                fields[i].offset = xfb_offset;
                block_xfb_offset = fields[i].offset +
-                  MAX2(xfb_stride, (int) (4 * field_type->component_slots()));
+                  4 * field_type->component_slots();
             }
          } else {
             if (layout && layout->flags.q.explicit_xfb_offset) {
                unsigned align = field_type->is_64bit() ? 8 : 4;
                fields[i].offset = glsl_align(block_xfb_offset, align);
-               block_xfb_offset +=
-                  MAX2(xfb_stride, (int) (4 * field_type->component_slots()));
+               block_xfb_offset += 4 * field_type->component_slots();
             }
          }
 
@@ -7417,12 +7431,9 @@ ast_process_struct_or_iface_block_members(exec_list *instructions,
             /* For readonly and writeonly qualifiers the field definition,
              * if set, overwrites the layout qualifier.
              */
-            if (qual->flags.q.read_only) {
-               fields[i].memory_read_only = true;
-               fields[i].memory_write_only = false;
-            } else if (qual->flags.q.write_only) {
-               fields[i].memory_read_only = false;
-               fields[i].memory_write_only = true;
+            if (qual->flags.q.read_only || qual->flags.q.write_only) {
+               fields[i].memory_read_only = qual->flags.q.read_only;
+               fields[i].memory_write_only = qual->flags.q.write_only;
             } else {
                fields[i].memory_read_only =
                   layout ? layout->flags.q.read_only : 0;
@@ -8199,21 +8210,21 @@ ast_interface_block::hir(exec_list *instructions,
 
          if (redeclaring_per_vertex) {
             bool is_redeclaration;
-            ir_variable *declared_var =
-               get_variable_being_redeclared(var, loc, state,
+            var =
+               get_variable_being_redeclared(&var, loc, state,
                                              true /* allow_all_redeclarations */,
                                              &is_redeclaration);
             if (!var_is_gl_id || !is_redeclaration) {
                _mesa_glsl_error(&loc, state,
                                 "redeclaration of gl_PerVertex can only "
                                 "include built-in variables");
-            } else if (declared_var->data.how_declared == ir_var_declared_normally) {
+            } else if (var->data.how_declared == ir_var_declared_normally) {
                _mesa_glsl_error(&loc, state,
                                 "`%s' has already been redeclared",
-                                declared_var->name);
+                                var->name);
             } else {
-               declared_var->data.how_declared = ir_var_declared_in_block;
-               declared_var->reinit_interface_type(block_type);
+               var->data.how_declared = ir_var_declared_in_block;
+               var->reinit_interface_type(block_type);
             }
             continue;
          }

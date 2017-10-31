@@ -412,6 +412,7 @@ bool
 brw_render_target_supported(struct brw_context *brw,
 			    struct gl_renderbuffer *rb)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    mesa_format format = rb->Format;
 
    /* Many integer formats are promoted to RGBA (like XRGB8888 is), which means
@@ -429,10 +430,10 @@ brw_render_target_supported(struct brw_context *brw,
    /* Under some conditions, MSAA is not supported for formats whose width is
     * more than 64 bits.
     */
-   if (brw->gen < 8 &&
+   if (devinfo->gen < 8 &&
        rb->NumSamples > 0 && _mesa_get_format_bytes(format) > 8) {
       /* Gen6: MSAA on >64 bit formats is unsupported. */
-      if (brw->gen <= 6)
+      if (devinfo->gen <= 6)
          return false;
 
       /* Gen7: 8x MSAA on >64 bit formats is unsupported. */
@@ -515,13 +516,15 @@ translate_tex_format(struct brw_context *brw,
 uint32_t
 brw_depth_format(struct brw_context *brw, mesa_format format)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+
    switch (format) {
    case MESA_FORMAT_Z_UNORM16:
       return BRW_DEPTHFORMAT_D16_UNORM;
    case MESA_FORMAT_Z_FLOAT32:
       return BRW_DEPTHFORMAT_D32_FLOAT;
    case MESA_FORMAT_Z24_UNORM_X8_UINT:
-      if (brw->gen >= 6) {
+      if (devinfo->gen >= 6) {
          return BRW_DEPTHFORMAT_D24_UNORM_X8_UINT;
       } else {
          /* Use D24_UNORM_S8, not D24_UNORM_X8.

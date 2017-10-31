@@ -36,7 +36,7 @@
 #include "brw_bufmgr.h"
 #include "common/gen_device_info.h"
 #include "i915_drm.h"
-#include "xmlconfig.h"
+#include "util/xmlconfig.h"
 
 #include "isl/isl.h"
 
@@ -80,6 +80,7 @@ struct intel_screen
 #define KERNEL_ALLOWS_HSW_SCRATCH1_AND_ROW_CHICKEN3 (1<<3)
 #define KERNEL_ALLOWS_COMPUTE_DISPATCH              (1<<4)
 #define KERNEL_ALLOWS_EXEC_CAPTURE                  (1<<5)
+#define KERNEL_ALLOWS_EXEC_BATCH_FIRST              (1<<6)
 
    struct brw_bufmgr *bufmgr;
 

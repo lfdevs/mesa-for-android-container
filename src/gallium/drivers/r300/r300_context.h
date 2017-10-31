@@ -743,10 +743,12 @@ void r300_plug_in_stencil_ref_fallback(struct r300_context *r300);
 /* r300_render.c */
 void r500_emit_index_bias(struct r300_context *r300, int index_bias);
 void r300_blitter_draw_rectangle(struct blitter_context *blitter,
+                                 void *vertex_elements_cso,
+                                 blitter_get_vs_func get_vs,
                                  int x1, int y1, int x2, int y2,
-                                 float depth,
+                                 float depth, unsigned num_instances,
                                  enum blitter_attrib_type type,
-                                 const union pipe_color_union *attrib);
+                                 const union blitter_attrib *attrib);
 
 /* r300_state.c */
 enum r300_fb_state_change {

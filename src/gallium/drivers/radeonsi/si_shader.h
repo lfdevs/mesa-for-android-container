@@ -143,6 +143,8 @@
 #include "ac_binary.h"
 #include "si_state.h"
 
+struct nir_shader;
+
 #define SI_MAX_VS_OUTPUTS	40
 
 /* Shader IO unique indices are supported for TGSI_SEMANTIC_GENERIC with an
@@ -157,7 +159,9 @@ enum {
 	 */
 	SI_SGPR_RW_BUFFERS,  /* rings (& stream-out, VS only) */
 	SI_SGPR_RW_BUFFERS_HI,
-	SI_SGPR_CONST_AND_SHADER_BUFFERS,
+	SI_SGPR_BINDLESS_SAMPLERS_AND_IMAGES,
+	SI_SGPR_BINDLESS_SAMPLERS_AND_IMAGES_HI,
+	SI_SGPR_CONST_AND_SHADER_BUFFERS, /* or just a constant buffer 0 pointer */
 	SI_SGPR_CONST_AND_SHADER_BUFFERS_HI,
 	SI_SGPR_SAMPLERS_AND_IMAGES,
 	SI_SGPR_SAMPLERS_AND_IMAGES_HI,
@@ -171,6 +175,8 @@ enum {
 	SI_SGPR_DRAWID,
 	SI_SGPR_VS_STATE_BITS,
 	SI_VS_NUM_USER_SGPR,
+
+	SI_SGPR_VS_BLIT_DATA = SI_SGPR_CONST_AND_SHADER_BUFFERS,
 
 	/* TES */
 	SI_SGPR_TES_OFFCHIP_LAYOUT = SI_NUM_RESOURCE_SGPRS,
@@ -217,7 +223,7 @@ enum {
 
 /* LLVM function parameter indices */
 enum {
-	SI_NUM_RESOURCE_PARAMS = 3,
+	SI_NUM_RESOURCE_PARAMS = 4,
 
 	/* PS only parameters */
 	SI_PARAM_ALPHA_REF = SI_NUM_RESOURCE_PARAMS,
@@ -257,6 +263,16 @@ enum {
 enum {
 	TGSI_SEMANTIC_DEFAULT_TESSOUTER_SI = TGSI_SEMANTIC_COUNT,
 	TGSI_SEMANTIC_DEFAULT_TESSINNER_SI,
+};
+
+enum {
+	/* Use a property enum that VS wouldn't use. */
+	TGSI_PROPERTY_VS_BLIT_SGPRS = TGSI_PROPERTY_FS_COORD_ORIGIN,
+
+	/* These represent the number of SGPRs the shader uses. */
+	SI_VS_BLIT_SGPRS_POS = 3,
+	SI_VS_BLIT_SGPRS_POS_COLOR = 7,
+	SI_VS_BLIT_SGPRS_POS_TEXCOORD = 9,
 };
 
 /* For VS shader key fix_fetch. */
@@ -320,8 +336,10 @@ struct si_shader_selector {
 	struct si_shader	*gs_copy_shader;
 
 	struct tgsi_token       *tokens;
+	struct nir_shader       *nir;
 	struct pipe_stream_output_info  so;
 	struct tgsi_shader_info		info;
+	struct tgsi_tessctrl_info	tcs_info;
 
 	/* PIPE_SHADER_[VERTEX|FRAGMENT|...] */
 	unsigned	type;
@@ -393,11 +411,13 @@ struct si_vs_prolog_bits {
 	 */
 	uint16_t	instance_divisor_is_one;     /* bitmask of inputs */
 	uint16_t	instance_divisor_is_fetched; /* bitmask of inputs */
+	unsigned	ls_vgpr_fix:1;
 };
 
 /* Common TCS bits between the shader key and the epilog key. */
 struct si_tcs_epilog_bits {
 	unsigned	prim_mode:3;
+	unsigned	invoc0_tess_factors_are_def:1;
 	unsigned	tes_reads_tess_factors:1;
 };
 
@@ -509,6 +529,9 @@ struct si_shader_key {
 			uint64_t	ff_tcs_inputs_to_copy; /* for fixed-func TCS */
 			/* When PS needs PrimID and GS is disabled. */
 			unsigned	vs_export_prim_id:1;
+			struct {
+				unsigned interpolate_at_sample_force_center:1;
+			} ps;
 		} u;
 	} mono;
 
@@ -632,6 +655,11 @@ unsigned si_get_spi_shader_z_format(bool writes_z, bool writes_stencil,
 				    bool writes_samplemask);
 const char *si_get_shader_name(const struct si_shader *shader, unsigned processor);
 
+/* si_shader_nir.c */
+void si_nir_scan_shader(const struct nir_shader *nir,
+			struct tgsi_shader_info *info);
+void si_lower_nir(struct si_shader_selector *sel);
+
 /* Inline helpers. */
 
 /* Return the pointer to the main shader part's pointer. */
@@ -656,6 +684,20 @@ static inline bool
 si_shader_uses_bindless_images(struct si_shader_selector *selector)
 {
 	return selector ? selector->info.uses_bindless_images : false;
+}
+
+void si_destroy_shader_selector(struct si_context *sctx,
+			        struct si_shader_selector *sel);
+
+static inline void
+si_shader_selector_reference(struct si_context *sctx,
+			     struct si_shader_selector **dst,
+			     struct si_shader_selector *src)
+{
+	if (pipe_reference(&(*dst)->reference, &src->reference))
+		si_destroy_shader_selector(sctx, *dst);
+
+	*dst = src;
 }
 
 #endif

@@ -112,12 +112,12 @@ void BackendSingleSample(DRAW_CONTEXT *pDC, uint32_t workerId, uint32_t x, uint3
                 AR_END(BEBarycentric, 1);
 
                 // interpolate user clip distance if available
-                if (state.rastState.clipDistanceMask)
+                if (state.backendState.clipDistanceMask)
                 {
-                    coverageMask &= ~ComputeUserClipMask(state.rastState.clipDistanceMask, work.pUserClipBuffer, psContext.vI.center, psContext.vJ.center);
+                    coverageMask &= ~ComputeUserClipMask(state.backendState.clipDistanceMask, work.pUserClipBuffer, psContext.vI.center, psContext.vJ.center);
                 }
 
-                simdscalar vCoverageMask = vMask(coverageMask);
+                simdscalar vCoverageMask = _simd_vmask_ps(coverageMask);
                 simdscalar depthPassMask = vCoverageMask;
                 simdscalar stencilPassMask = vCoverageMask;
 

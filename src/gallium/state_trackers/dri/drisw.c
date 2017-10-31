@@ -46,7 +46,7 @@
 #include "dri_screen.h"
 #include "dri_context.h"
 #include "dri_drawable.h"
-#include "dri_extensions.h"
+#include "dri_helpers.h"
 #include "dri_query_renderer.h"
 
 DEBUG_GET_ONCE_BOOL_OPTION(swrast_no_present, "SWRAST_NO_PRESENT", FALSE);
@@ -362,6 +362,14 @@ drisw_update_tex_buffer(struct dri_drawable *drawable,
    pipe_transfer_unmap(pipe, transfer);
 }
 
+static __DRIimageExtension driSWImageExtension = {
+    .base = { __DRI_IMAGE, 6 },
+
+    .createImageFromRenderbuffer  = dri2_create_image_from_renderbuffer,
+    .createImageFromTexture = dri2_create_from_texture,
+    .destroyImage = dri2_destroy_image,
+};
+
 /*
  * Backend function for init_screen.
  */
@@ -372,6 +380,7 @@ static const __DRIextension *drisw_screen_extensions[] = {
    &dri2ConfigQueryExtension.base,
    &dri2FenceExtension.base,
    &dri2NoErrorExtension.base,
+   &driSWImageExtension.base,
    NULL
 };
 
@@ -400,10 +409,11 @@ drisw_init_screen(__DRIscreen * sPriv)
    sPriv->driverPrivate = (void *)screen;
    sPriv->extensions = drisw_screen_extensions;
 
-   unsigned flags = dri_init_options_get_screen_flags(screen, "swrast");
+   if (pipe_loader_sw_probe_dri(&screen->dev, &drisw_lf)) {
+      dri_init_options(screen);
 
-   if (pipe_loader_sw_probe_dri(&screen->dev, &drisw_lf))
-      pscreen = pipe_loader_create_screen(screen->dev, flags);
+      pscreen = pipe_loader_create_screen(screen->dev);
+   }
 
    if (!pscreen)
       goto fail;
@@ -411,6 +421,8 @@ drisw_init_screen(__DRIscreen * sPriv)
    configs = dri_init_screen_helper(screen, pscreen);
    if (!configs)
       goto fail;
+
+   screen->lookup_egl_image = dri2_lookup_egl_image;
 
    return configs;
 fail:

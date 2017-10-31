@@ -119,12 +119,19 @@ vec4_vs_visitor::emit_clip_distances(dst_reg reg, int offset)
 void
 vec4_vs_visitor::setup_uniform_clipplane_values()
 {
+   if (key->nr_userclip_plane_consts == 0)
+      return;
+
+   assert(stage_prog_data->nr_params == (unsigned)this->uniforms * 4);
+   brw_stage_prog_data_add_params(stage_prog_data,
+                                  key->nr_userclip_plane_consts * 4);
+
    for (int i = 0; i < key->nr_userclip_plane_consts; ++i) {
       this->userplane[i] = dst_reg(UNIFORM, this->uniforms);
       this->userplane[i].type = BRW_REGISTER_TYPE_F;
       for (int j = 0; j < 4; ++j) {
          stage_prog_data->param[this->uniforms * 4 + j] =
-            (gl_constant_value *) &clip_planes[i][j];
+            BRW_PARAM_BUILTIN_CLIP_PLANE(i, j);
       }
       ++this->uniforms;
    }
@@ -164,7 +171,6 @@ vec4_vs_visitor::vec4_vs_visitor(const struct brw_compiler *compiler,
                                  const struct brw_vs_prog_key *key,
                                  struct brw_vs_prog_data *vs_prog_data,
                                  const nir_shader *shader,
-                                 gl_clip_plane *clip_planes,
                                  void *mem_ctx,
                                  int shader_time_index,
                                  bool use_legacy_snorm_formula)
@@ -172,7 +178,6 @@ vec4_vs_visitor::vec4_vs_visitor(const struct brw_compiler *compiler,
                   mem_ctx, false /* no_spills */, shader_time_index),
      key(key),
      vs_prog_data(vs_prog_data),
-     clip_planes(clip_planes),
      use_legacy_snorm_formula(use_legacy_snorm_formula)
 {
 }

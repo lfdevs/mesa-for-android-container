@@ -165,7 +165,8 @@ nv20_emit_tex_obj(struct gl_context *ctx, int emit)
 	struct nouveau_surface *s;
 	struct gl_texture_image *ti;
 	const struct gl_sampler_object *sa;
-	uint32_t tx_format, tx_filter, tx_wrap, tx_enable;
+	uint8_t r, g, b, a;
+	uint32_t tx_format, tx_filter, tx_wrap, tx_bcolor, tx_enable;
 
 	PUSH_RESET(push, BUFCTX_TEX(i));
 
@@ -210,6 +211,29 @@ nv20_emit_tex_obj(struct gl_context *ctx, int emit)
 	tx_filter = nvgl_filter_mode(sa->MagFilter) << 24
 		| nvgl_filter_mode(sa->MinFilter) << 16
 		| 2 << 12;
+
+	r = FLOAT_TO_UBYTE(sa->BorderColor.f[0]);
+	g = FLOAT_TO_UBYTE(sa->BorderColor.f[1]);
+	b = FLOAT_TO_UBYTE(sa->BorderColor.f[2]);
+	a = FLOAT_TO_UBYTE(sa->BorderColor.f[3]);
+	switch (ti->_BaseFormat) {
+	case GL_LUMINANCE:
+		a = 0xff;
+		/* fallthrough */
+	case GL_LUMINANCE_ALPHA:
+		g = b = r;
+		break;
+	case GL_RGB:
+		a = 0xff;
+		break;
+	case GL_INTENSITY:
+		g = b = a = r;
+		break;
+	case GL_ALPHA:
+		r = g = b = 0;
+		break;
+	}
+	tx_bcolor = b << 0 | g << 8 | r << 16 | a << 24;
 
 	tx_enable = NV20_3D_TEX_ENABLE_ENABLE
 		| log2i(sa->MaxAnisotropy) << 4;
@@ -258,6 +282,9 @@ nv20_emit_tex_obj(struct gl_context *ctx, int emit)
 
 	BEGIN_NV04(push, NV20_3D(TEX_FILTER(i)), 1);
 	PUSH_DATA (push, tx_filter);
+
+	BEGIN_NV04(push, NV20_3D(TEX_BORDER_COLOR(i)), 1);
+	PUSH_DATA (push, tx_bcolor);
 
 	BEGIN_NV04(push, NV20_3D(TEX_ENABLE(i)), 1);
 	PUSH_DATA (push, tx_enable);

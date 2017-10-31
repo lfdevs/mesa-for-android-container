@@ -62,7 +62,7 @@ static void si_dma_copy_buffer(struct si_context *ctx,
 	}
 
 	ncopy = DIV_ROUND_UP(size, max_size);
-	r600_need_dma_space(&ctx->b, ncopy * 5, rdst, rsrc);
+	si_need_dma_space(&ctx->b, ncopy * 5, rdst, rsrc);
 
 	for (i = 0; i < ncopy; i++) {
 		count = MIN2(size, max_size);
@@ -104,7 +104,7 @@ static void si_dma_clear_buffer(struct pipe_context *ctx,
 
 	/* the same maximum size as for copying */
 	ncopy = DIV_ROUND_UP(size, SI_DMA_COPY_MAX_DWORD_ALIGNED_SIZE);
-	r600_need_dma_space(&sctx->b, ncopy * 4, rdst, NULL);
+	si_need_dma_space(&sctx->b, ncopy * 4, rdst, NULL);
 
 	for (i = 0; i < ncopy; i++) {
 		csize = MIN2(size, SI_DMA_COPY_MAX_DWORD_ALIGNED_SIZE);
@@ -193,7 +193,7 @@ static void si_dma_copy_tile(struct si_context *ctx,
 	mt = G_009910_MICRO_TILE_MODE(tile_mode);
 	size = copy_height * pitch;
 	ncopy = DIV_ROUND_UP(size, SI_DMA_COPY_MAX_DWORD_ALIGNED_SIZE);
-	r600_need_dma_space(&ctx->b, ncopy * 9, &rdst->resource, &rsrc->resource);
+	si_need_dma_space(&ctx->b, ncopy * 9, &rdst->resource, &rsrc->resource);
 
 	for (i = 0; i < ncopy; i++) {
 		cheight = copy_height;
@@ -261,7 +261,7 @@ static void si_dma_copy(struct pipe_context *ctx,
 	goto fallback;
 
 	if (src_box->depth > 1 ||
-	    !r600_prepare_for_dma_blit(&sctx->b, rdst, dst_level, dstx, dsty,
+	    !si_prepare_for_dma_blit(&sctx->b, rdst, dst_level, dstx, dsty,
 					dstz, rsrc, src_level, src_box))
 		goto fallback;
 

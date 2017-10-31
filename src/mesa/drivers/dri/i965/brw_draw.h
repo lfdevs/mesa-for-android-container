@@ -68,4 +68,14 @@ brw_handle_primitive_restart(struct gl_context *ctx,
                              const struct _mesa_index_buffer *ib,
                              struct gl_buffer_object *indirect);
 
+void
+brw_draw_indirect_prims(struct gl_context *ctx,
+                        GLuint mode,
+                        struct gl_buffer_object *indirect_data,
+                        GLsizeiptr indirect_offset,
+                        unsigned draw_count,
+                        unsigned stride,
+                        struct gl_buffer_object *indirect_params,
+                        GLsizeiptr indirect_params_offset,
+                        const struct _mesa_index_buffer *ib);
 #endif

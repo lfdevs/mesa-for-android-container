@@ -3084,7 +3084,7 @@ evaluate_fabs(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
                const float src0 =
                   _mesa_half_to_float(_src[0].u16[_i]);
 
-            float16_t dst = bit_size == 64 ? fabs(src0) : fabsf(src0);
+            float16_t dst = fabs(src0);
 
             _dst_val.u16[_i] = _mesa_float_to_half(dst);
       }
@@ -3100,7 +3100,7 @@ evaluate_fabs(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
                const float32_t src0 =
                   _src[0].f32[_i];
 
-            float32_t dst = bit_size == 64 ? fabs(src0) : fabsf(src0);
+            float32_t dst = fabs(src0);
 
             _dst_val.f32[_i] = dst;
       }
@@ -3116,7 +3116,7 @@ evaluate_fabs(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
                const float64_t src0 =
                   _src[0].f64[_i];
 
-            float64_t dst = bit_size == 64 ? fabs(src0) : fabsf(src0);
+            float64_t dst = fabs(src0);
 
             _dst_val.f64[_i] = dst;
       }

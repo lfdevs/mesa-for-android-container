@@ -121,6 +121,7 @@ nv30_query_create(struct pipe_context *pipe, unsigned type, unsigned index)
       break;
    case PIPE_QUERY_OCCLUSION_COUNTER:
    case PIPE_QUERY_OCCLUSION_PREDICATE:
+   case PIPE_QUERY_OCCLUSION_PREDICATE_CONSERVATIVE:
       q->enable = NV30_3D_QUERY_ENABLE;
       q->report = 1;
       break;
@@ -228,7 +229,8 @@ nv30_query_result(struct pipe_context *pipe, struct pipe_query *pq,
       nv30_query_object_del(screen, &q->qo[1]);
    }
 
-   if (q->type == PIPE_QUERY_OCCLUSION_PREDICATE)
+   if (q->type == PIPE_QUERY_OCCLUSION_PREDICATE ||
+       q->type == PIPE_QUERY_OCCLUSION_PREDICATE_CONSERVATIVE)
       result->b = !!q->result;
    else
       result->u64 = q->result;

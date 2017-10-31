@@ -26,9 +26,11 @@
  */
 
 #include "pipe/p_screen.h"
+#include "util/u_inlines.h"
 
 #include "etnaviv_context.h"
 #include "etnaviv_query.h"
+#include "etnaviv_query_hw.h"
 #include "etnaviv_query_sw.h"
 
 static struct pipe_query *
@@ -39,6 +41,8 @@ etna_create_query(struct pipe_context *pctx, unsigned query_type,
    struct etna_query *q;
 
    q = etna_sw_create_query(ctx, query_type);
+   if (!q)
+      q = etna_hw_create_query(ctx, query_type);
 
    return (struct pipe_query *)q;
 }
@@ -55,8 +59,15 @@ static boolean
 etna_begin_query(struct pipe_context *pctx, struct pipe_query *pq)
 {
    struct etna_query *q = etna_query(pq);
+   boolean ret;
 
-   return q->funcs->begin_query(etna_context(pctx), q);
+   if (q->active)
+      return false;
+
+   ret = q->funcs->begin_query(etna_context(pctx), q);
+   q->active = ret;
+
+   return ret;
 }
 
 static bool
@@ -64,7 +75,12 @@ etna_end_query(struct pipe_context *pctx, struct pipe_query *pq)
 {
    struct etna_query *q = etna_query(pq);
 
+   if (!q->active)
+      return false;
+
    q->funcs->end_query(etna_context(pctx), q);
+   q->active = false;
+
    return true;
 }
 
@@ -74,6 +90,11 @@ etna_get_query_result(struct pipe_context *pctx, struct pipe_query *pq,
 {
    struct etna_query *q = etna_query(pq);
 
+   if (q->active)
+      return false;
+
+   util_query_clear_result(result, q->type);
+
    return q->funcs->get_query_result(etna_context(pctx), q, wait, result);
 }
 
@@ -81,21 +102,12 @@ static int
 etna_get_driver_query_info(struct pipe_screen *pscreen, unsigned index,
                            struct pipe_driver_query_info *info)
 {
-   struct pipe_driver_query_info list[] = {
-      {"prims-emitted", PIPE_QUERY_PRIMITIVES_EMITTED, { 0 }},
-      {"draw-calls", ETNA_QUERY_DRAW_CALLS, { 0 }},
-      {"rs-operations", ETNA_QUERY_RS_OPERATIONS, { 0 }},
-   };
+   int nr_sw_queries = etna_sw_get_driver_query_info(pscreen, 0, NULL);
 
    if (!info)
-      return ARRAY_SIZE(list);
+      return nr_sw_queries;
 
-   if (index >= ARRAY_SIZE(list))
-      return 0;
-
-   *info = list[index];
-
-   return 1;
+   return etna_sw_get_driver_query_info(pscreen, index, info);
 }
 
 static void

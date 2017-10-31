@@ -163,6 +163,16 @@ tgsi_default_declaration_range( void )
    return dr;
 }
 
+static struct tgsi_declaration_dimension
+tgsi_default_declaration_dimension()
+{
+   struct tgsi_declaration_dimension dim;
+
+   dim.Index2D = 0;
+
+   return dim;
+}
+
 static struct tgsi_declaration_range
 tgsi_build_declaration_range(
    unsigned first,
@@ -381,6 +391,7 @@ tgsi_default_full_declaration( void )
 
    full_declaration.Declaration  = tgsi_default_declaration();
    full_declaration.Range = tgsi_default_declaration_range();
+   full_declaration.Dim = tgsi_default_declaration_dimension();
    full_declaration.Semantic = tgsi_default_declaration_semantic();
    full_declaration.Interp = tgsi_default_declaration_interp();
    full_declaration.Image = tgsi_default_declaration_image();

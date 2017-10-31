@@ -116,6 +116,8 @@ void
 brw_calculate_urb_fence(struct brw_context *brw, unsigned csize,
                         unsigned vsize, unsigned sfsize)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+
    if (csize < limits[CS].min_entry_size)
       csize = limits[CS].min_entry_size;
 
@@ -145,7 +147,7 @@ brw_calculate_urb_fence(struct brw_context *brw, unsigned csize,
 
       brw->urb.constrained = 0;
 
-      if (brw->gen == 5) {
+      if (devinfo->gen == 5) {
          brw->urb.nr_vs_entries = 128;
          brw->urb.nr_sf_entries = 48;
          if (check_urb_layout(brw)) {
@@ -155,7 +157,7 @@ brw_calculate_urb_fence(struct brw_context *brw, unsigned csize,
             brw->urb.nr_vs_entries = limits[VS].preferred_nr_entries;
             brw->urb.nr_sf_entries = limits[SF].preferred_nr_entries;
          }
-      } else if (brw->is_g4x) {
+      } else if (devinfo->is_g4x) {
 	 brw->urb.nr_vs_entries = 64;
 	 if (check_urb_layout(brw)) {
 	    goto done;
@@ -262,5 +264,5 @@ void brw_upload_urb_fence(struct brw_context *brw)
       while (--pad);
    }
 
-   BRW_BATCH_STRUCT(brw, &uf);
+   intel_batchbuffer_data(brw, &uf, sizeof(uf), RENDER_RING);
 }

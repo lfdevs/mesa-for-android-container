@@ -67,7 +67,6 @@ MAIN_FILES = \
 	main/depth.h \
 	main/dlist.c \
 	main/dlist.h \
-	main/dlopen.h \
 	main/drawpix.c \
 	main/drawpix.h \
 	main/drawtex.c \
@@ -81,10 +80,13 @@ MAIN_FILES = \
 	main/eval.c \
 	main/eval.h \
 	main/execmem.c \
+	main/execmem.h \
 	main/extensions.c \
 	main/extensions.h \
 	main/extensions_table.c \
 	main/extensions_table.h \
+	main/externalobjects.c \
+	main/externalobjects.h \
 	main/fbobject.c \
 	main/fbobject.h \
 	main/feedback.c \
@@ -220,6 +222,7 @@ MAIN_FILES = \
 	main/texcompress_rgtc.h \
 	main/texcompress_s3tc.c \
 	main/texcompress_s3tc.h \
+	main/texcompress_s3tc_tmp.h \
 	main/texenv.c \
 	main/texenv.h \
 	main/texenvprogram.h \
@@ -436,7 +439,6 @@ STATETRACKER_FILES = \
 	state_tracker/st_atom_tess.c \
 	state_tracker/st_atom_texture.c \
 	state_tracker/st_atom_viewport.c \
-	state_tracker/st_cache.h \
 	state_tracker/st_cb_bitmap.c \
 	state_tracker/st_cb_bitmap.h \
 	state_tracker/st_cb_bitmap_shader.c \
@@ -465,6 +467,8 @@ STATETRACKER_FILES = \
 	state_tracker/st_cb_feedback.h \
 	state_tracker/st_cb_flush.c \
 	state_tracker/st_cb_flush.h \
+	state_tracker/st_cb_memoryobjects.c \
+	state_tracker/st_cb_memoryobjects.h \
 	state_tracker/st_cb_msaa.c \
 	state_tracker/st_cb_msaa.h \
 	state_tracker/st_cb_perfmon.c \
@@ -508,6 +512,10 @@ STATETRACKER_FILES = \
 	state_tracker/st_glsl_to_nir.cpp \
 	state_tracker/st_glsl_to_tgsi.cpp \
 	state_tracker/st_glsl_to_tgsi.h \
+	state_tracker/st_glsl_to_tgsi_private.cpp \
+	state_tracker/st_glsl_to_tgsi_private.h \
+	state_tracker/st_glsl_to_tgsi_temprename.cpp \
+	state_tracker/st_glsl_to_tgsi_temprename.h \
 	state_tracker/st_glsl_types.cpp \
 	state_tracker/st_glsl_types.h \
 	state_tracker/st_manager.c \
@@ -635,7 +643,6 @@ COMMON_DRIVER_FILES =			\
 	drivers/common/driverfuncs.h	\
 	drivers/common/meta_blit.c	\
 	drivers/common/meta_generate_mipmap.c	\
-	drivers/common/meta_tex_subimage.c	\
 	drivers/common/meta.c \
 	drivers/common/meta.h
 

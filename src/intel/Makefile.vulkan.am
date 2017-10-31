@@ -23,12 +23,27 @@
 # rules must be outside of any AM_CONDITIONALs. Otherwise they will be commented
 # out and we'll fail at `make dist'
 vulkan_api_xml = $(top_srcdir)/src/vulkan/registry/vk.xml
+vk_android_native_buffer_xml = $(top_srcdir)/src/vulkan/registry/vk_android_native_buffer.xml
 
-vulkan/anv_entrypoints.c: vulkan/anv_entrypoints_gen.py $(vulkan_api_xml)
+vulkan/anv_entrypoints.c: vulkan/anv_entrypoints_gen.py \
+			  vulkan/anv_extensions.py \
+			  $(vulkan_api_xml) \
+			  $(vk_android_native_buffer_xml)
 	$(MKDIR_GEN)
 	$(AM_V_GEN)$(PYTHON2) $(srcdir)/vulkan/anv_entrypoints_gen.py \
-		--xml $(vulkan_api_xml) --outdir $(builddir)/vulkan
+		--xml $(vulkan_api_xml) \
+		--xml $(vk_android_native_buffer_xml) \
+		--outdir $(builddir)/vulkan
 vulkan/anv_entrypoints.h: vulkan/anv_entrypoints.c
+
+vulkan/anv_extensions.c: vulkan/anv_extensions.py \
+			 $(vulkan_api_xml) \
+			 $(vk_android_native_buffer_xml)
+	$(MKDIR_GEN)
+	$(AM_V_GEN)$(PYTHON2) $(srcdir)/vulkan/anv_extensions.py \
+		--xml $(vulkan_api_xml) \
+		--xml $(vk_android_native_buffer_xml) \
+		--out $@
 
 BUILT_SOURCES += $(VULKAN_GENERATED_FILES)
 CLEANFILES += \
@@ -39,19 +54,17 @@ CLEANFILES += \
 EXTRA_DIST += \
 	$(top_srcdir)/include/vulkan/vk_icd.h \
 	vulkan/anv_entrypoints_gen.py \
-	vulkan/dev_icd.json.in \
-	vulkan/intel_icd.json.in \
+	vulkan/anv_extensions.py \
+	vulkan/anv_icd.py \
 	vulkan/TODO
 
-vulkan/dev_icd.json : vulkan/dev_icd.json.in
-	$(AM_V_GEN) $(SED) \
-		-e "s#@build_libdir@#${abs_top_builddir}/${LIB_DIR}#" \
-		< $(srcdir)/vulkan/dev_icd.json.in > $@
+vulkan/dev_icd.json : vulkan/anv_extensions.py vulkan/anv_icd.py
+	$(AM_V_GEN)$(PYTHON2) $(srcdir)/vulkan/anv_icd.py \
+		--lib-path="${abs_top_builddir}/${LIB_DIR}" --out $@
 
-vulkan/intel_icd.@host_cpu@.json : vulkan/intel_icd.json.in
-	$(AM_V_GEN) $(SED) \
-		-e "s#@install_libdir@#${libdir}#" \
-		< $(srcdir)/vulkan/intel_icd.json.in > $@
+vulkan/intel_icd.@host_cpu@.json : vulkan/anv_extensions.py vulkan/anv_icd.py
+	$(AM_V_GEN)$(PYTHON2) $(srcdir)/vulkan/anv_icd.py \
+		--lib-path="${libdir}" --out $@
 
 if HAVE_INTEL_VULKAN
 
@@ -133,6 +146,13 @@ VULKAN_LIB_DEPS = \
 	$(DLOPEN_LIBS) \
 	-lm
 
+if HAVE_PLATFORM_ANDROID
+VULKAN_CPPFLAGS += $(ANDROID_CPPFLAGS)
+VULKAN_CFLAGS += $(ANDROID_CFLAGS)
+VULKAN_LIB_DEPS += $(ANDROID_LIBS)
+VULKAN_SOURCES += $(VULKAN_ANDROID_FILES)
+endif
+
 if HAVE_PLATFORM_X11
 VULKAN_CPPFLAGS += \
 	$(XCB_DRI3_CFLAGS) \
@@ -147,12 +167,12 @@ endif
 
 if HAVE_PLATFORM_WAYLAND
 VULKAN_CPPFLAGS += \
-	$(WAYLAND_CFLAGS) \
+	$(WAYLAND_CLIENT_CFLAGS) \
 	-DVK_USE_PLATFORM_WAYLAND_KHR
 
 VULKAN_SOURCES += $(VULKAN_WSI_WAYLAND_FILES)
 
-VULKAN_LIB_DEPS += $(WAYLAND_LIBS)
+VULKAN_LIB_DEPS += $(WAYLAND_CLIENT_LIBS)
 endif
 
 noinst_LTLIBRARIES += vulkan/libvulkan_common.la

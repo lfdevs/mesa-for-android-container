@@ -37,8 +37,8 @@
 #include "util/u_math.h"
 #include "vl/vl_decoder.h"
 #include "vl/vl_video_buffer.h"
-#include "radeon/radeon_video.h"
-#include "radeon/radeon_uvd.h"
+#include "radeon_video.h"
+#include "radeon_uvd.h"
 #include "os/os_time.h"
 
 static const struct debug_named_value r600_debug_options[] = {
@@ -398,6 +398,12 @@ static int r600_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 	case PIPE_CAP_TGSI_TES_LAYER_VIEWPORT:
 	case PIPE_CAP_POST_DEPTH_COVERAGE:
 	case PIPE_CAP_BINDLESS_TEXTURE:
+	case PIPE_CAP_NIR_SAMPLERS_AS_DEREF:
+	case PIPE_CAP_QUERY_SO_OVERFLOW:
+	case PIPE_CAP_MEMOBJ:
+	case PIPE_CAP_LOAD_CONSTBUF:
+	case PIPE_CAP_TGSI_ANY_REG_AS_ADDRESS:
+	case PIPE_CAP_TILE_RASTER_ORDER:
 		return 0;
 
 	case PIPE_CAP_DOUBLES:
@@ -566,6 +572,8 @@ static int r600_get_shader_param(struct pipe_screen* pscreen,
 	case PIPE_SHADER_CAP_INDIRECT_CONST_ADDR:
 		return 1;
 	case PIPE_SHADER_CAP_SUBROUTINES:
+	case PIPE_SHADER_CAP_INT64_ATOMICS:
+	case PIPE_SHADER_CAP_FP16:
 		return 0;
 	case PIPE_SHADER_CAP_INTEGERS:
 	case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
@@ -590,6 +598,7 @@ static int r600_get_shader_param(struct pipe_screen* pscreen,
 		return 0;
 	case PIPE_SHADER_CAP_TGSI_DROUND_SUPPORTED:
 	case PIPE_SHADER_CAP_TGSI_DFRACEXP_DLDEXP_SUPPORTED:
+	case PIPE_SHADER_CAP_TGSI_LDEXP_SUPPORTED:
 	case PIPE_SHADER_CAP_MAX_SHADER_BUFFERS:
 	case PIPE_SHADER_CAP_MAX_SHADER_IMAGES:
 	case PIPE_SHADER_CAP_LOWER_IF_THRESHOLD:
@@ -632,7 +641,8 @@ static struct pipe_resource *r600_resource_create(struct pipe_screen *screen,
 	return r600_resource_create_common(screen, templ);
 }
 
-struct pipe_screen *r600_screen_create(struct radeon_winsys *ws, unsigned flags)
+struct pipe_screen *r600_screen_create(struct radeon_winsys *ws,
+				       const struct pipe_screen_config *config)
 {
 	struct r600_screen *rscreen = CALLOC_STRUCT(r600_screen);
 
@@ -647,7 +657,7 @@ struct pipe_screen *r600_screen_create(struct radeon_winsys *ws, unsigned flags)
 	rscreen->b.b.get_shader_param = r600_get_shader_param;
 	rscreen->b.b.resource_create = r600_resource_create;
 
-	if (!r600_common_screen_init(&rscreen->b, ws, flags)) {
+	if (!r600_common_screen_init(&rscreen->b, ws)) {
 		FREE(rscreen);
 		return NULL;
 	}
@@ -662,7 +672,7 @@ struct pipe_screen *r600_screen_create(struct radeon_winsys *ws, unsigned flags)
 	if (debug_get_bool_option("R600_DEBUG_COMPUTE", FALSE))
 		rscreen->b.debug_flags |= DBG_COMPUTE;
 	if (debug_get_bool_option("R600_DUMP_SHADERS", FALSE))
-		rscreen->b.debug_flags |= DBG_FS | DBG_VS | DBG_GS | DBG_PS | DBG_CS | DBG_TCS | DBG_TES;
+		rscreen->b.debug_flags |= DBG_ALL_SHADERS | DBG_FS;
 	if (!debug_get_bool_option("R600_HYPERZ", TRUE))
 		rscreen->b.debug_flags |= DBG_NO_HYPERZ;
 

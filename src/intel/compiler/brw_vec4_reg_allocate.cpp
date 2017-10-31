@@ -369,7 +369,7 @@ can_use_scratch_for_source(const vec4_instruction *inst, unsigned i,
    return prev_inst_read_scratch_reg;
 }
 
-static inline unsigned
+static inline float
 spill_cost_for_type(enum brw_reg_type type)
 {
    /* Spilling of a 64-bit register involves emitting 2 32-bit scratch

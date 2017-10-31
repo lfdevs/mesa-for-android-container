@@ -173,6 +173,8 @@ struct swr_context {
    unsigned dirty; /**< Mask of SWR_NEW_x flags */
 
    SWR_INTERFACE api;
+
+   uint32_t max_draws_in_flight;
 };
 
 static INLINE struct swr_context *

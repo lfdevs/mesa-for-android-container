@@ -31,6 +31,10 @@
 #include "util/u_memory.h"
 #include "util/u_string.h"
 #include "util/u_dl.h"
+#include "util/xmlconfig.h"
+#include "util/xmlpool.h"
+
+#include <string.h>
 
 #ifdef _MSC_VER
 #include <stdlib.h>
@@ -45,6 +49,12 @@ static int (*backends[])(struct pipe_loader_device **, int) = {
 #endif
    &pipe_loader_sw_probe
 };
+
+const char gallium_driinfo_xml[] =
+   DRI_CONF_BEGIN
+#include "driinfo_gallium.h"
+   DRI_CONF_END
+;
 
 int
 pipe_loader_probe(struct pipe_loader_device **devs, int ndev)
@@ -66,6 +76,16 @@ pipe_loader_release(struct pipe_loader_device **devs, int ndev)
       devs[i]->ops->release(&devs[i]);
 }
 
+void
+pipe_loader_base_release(struct pipe_loader_device **dev)
+{
+   driDestroyOptionCache(&(*dev)->option_cache);
+   driDestroyOptionInfo(&(*dev)->option_info);
+
+   FREE(*dev);
+   *dev = NULL;
+}
+
 const struct drm_conf_ret *
 pipe_loader_configuration(struct pipe_loader_device *dev,
                           enum drm_conf conf)
@@ -73,14 +93,52 @@ pipe_loader_configuration(struct pipe_loader_device *dev,
    return dev->ops->configuration(dev, conf);
 }
 
-struct pipe_screen *
-pipe_loader_create_screen(struct pipe_loader_device *dev, unsigned flags)
+void
+pipe_loader_load_options(struct pipe_loader_device *dev)
 {
-   return dev->ops->create_screen(dev, flags);
+   if (dev->option_info.info)
+      return;
+
+   const char *xml_options = gallium_driinfo_xml;
+   const struct drm_conf_ret *xml_options_conf =
+      pipe_loader_configuration(dev, DRM_CONF_XML_OPTIONS);
+
+   if (xml_options_conf)
+      xml_options = xml_options_conf->val.val_pointer;
+
+   driParseOptionInfo(&dev->option_info, xml_options);
+   driParseConfigFiles(&dev->option_cache, &dev->option_info, 0,
+                       dev->driver_name);
+}
+
+char *
+pipe_loader_get_driinfo_xml(const char *driver_name)
+{
+#ifdef HAVE_LIBDRM
+   char *xml = pipe_loader_drm_get_driinfo_xml(driver_name);
+#else
+   char *xml = NULL;
+#endif
+
+   if (!xml)
+      xml = strdup(gallium_driinfo_xml);
+
+   return xml;
+}
+
+struct pipe_screen *
+pipe_loader_create_screen(struct pipe_loader_device *dev)
+{
+   struct pipe_screen_config config;
+
+   pipe_loader_load_options(dev);
+   config.options = &dev->option_cache;
+
+   return dev->ops->create_screen(dev, &config);
 }
 
 struct util_dl_library *
-pipe_loader_find_module(struct pipe_loader_device *dev,
+pipe_loader_find_module(const char *driver_name,
                         const char *library_paths)
 {
    struct util_dl_library *lib;
@@ -95,10 +153,10 @@ pipe_loader_find_module(struct pipe_loader_device *dev,
       if (len)
          ret = util_snprintf(path, sizeof(path), "%.*s/%s%s%s",
                              len, library_paths,
-                             MODULE_PREFIX, dev->driver_name, UTIL_DL_EXT);
+                             MODULE_PREFIX, driver_name, UTIL_DL_EXT);
       else
          ret = util_snprintf(path, sizeof(path), "%s%s%s",
-                             MODULE_PREFIX, dev->driver_name, UTIL_DL_EXT);
+                             MODULE_PREFIX, driver_name, UTIL_DL_EXT);
 
       if (ret > 0 && ret < sizeof(path)) {
          lib = util_dl_open(path);

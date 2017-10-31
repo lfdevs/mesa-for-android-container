@@ -27,6 +27,7 @@
  */
 
 #include "pipe/p_state.h"
+#include "util/u_blend.h"
 #include "util/u_string.h"
 #include "util/u_memory.h"
 
@@ -61,11 +62,10 @@ fd2_blend_state_create(struct pipe_context *pctx,
 {
 	const struct pipe_rt_blend_state *rt = &cso->rt[0];
 	struct fd2_blend_stateobj *so;
+	unsigned rop = PIPE_LOGICOP_COPY;
 
-	if (cso->logicop_enable) {
-		DBG("Unsupported! logicop");
-		return NULL;
-	}
+	if (cso->logicop_enable)
+		rop = cso->logicop_func; /* 1:1 mapping with hw */
 
 	if (cso->independent_blend_enable) {
 		DBG("Unsupported! independent blend state");
@@ -78,15 +78,22 @@ fd2_blend_state_create(struct pipe_context *pctx,
 
 	so->base = *cso;
 
-	so->rb_colorcontrol = A2XX_RB_COLORCONTROL_ROP_CODE(12);
+	so->rb_colorcontrol = A2XX_RB_COLORCONTROL_ROP_CODE(rop);
 
-	so->rb_blendcontrol =
+	so->rb_blendcontrol_rgb =
 		A2XX_RB_BLEND_CONTROL_COLOR_SRCBLEND(fd_blend_factor(rt->rgb_src_factor)) |
 		A2XX_RB_BLEND_CONTROL_COLOR_COMB_FCN(blend_func(rt->rgb_func)) |
-		A2XX_RB_BLEND_CONTROL_COLOR_DESTBLEND(fd_blend_factor(rt->rgb_dst_factor)) |
+		A2XX_RB_BLEND_CONTROL_COLOR_DESTBLEND(fd_blend_factor(rt->rgb_dst_factor));
+
+	so->rb_blendcontrol_alpha =
 		A2XX_RB_BLEND_CONTROL_ALPHA_SRCBLEND(fd_blend_factor(rt->alpha_src_factor)) |
 		A2XX_RB_BLEND_CONTROL_ALPHA_COMB_FCN(blend_func(rt->alpha_func)) |
 		A2XX_RB_BLEND_CONTROL_ALPHA_DESTBLEND(fd_blend_factor(rt->alpha_dst_factor));
+
+	so->rb_blendcontrol_no_alpha_rgb =
+		A2XX_RB_BLEND_CONTROL_COLOR_SRCBLEND(fd_blend_factor(util_blend_dst_alpha_to_one(rt->rgb_src_factor))) |
+		A2XX_RB_BLEND_CONTROL_COLOR_COMB_FCN(blend_func(rt->rgb_func)) |
+		A2XX_RB_BLEND_CONTROL_COLOR_DESTBLEND(fd_blend_factor(util_blend_dst_alpha_to_one(rt->rgb_dst_factor)));
 
 	if (rt->colormask & PIPE_MASK_R)
 		so->rb_colormask |= A2XX_RB_COLOR_MASK_WRITE_RED;

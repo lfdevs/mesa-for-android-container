@@ -47,6 +47,7 @@ void
 brw_codegen_ff_gs_prog(struct brw_context *brw,
                        struct brw_ff_gs_prog_key *key)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    struct brw_ff_gs_compile c;
    const GLuint *program;
    void *mem_ctx;
@@ -71,7 +72,7 @@ brw_codegen_ff_gs_prog(struct brw_context *brw,
     */
    brw_set_default_mask_control(&c.func, BRW_MASK_DISABLE);
 
-   if (brw->gen >= 6) {
+   if (devinfo->gen >= 6) {
       unsigned num_verts;
       bool check_edge_flag;
       /* On Sandybridge, we use the GS for implementing transform feedback
@@ -161,6 +162,7 @@ static void
 brw_ff_gs_populate_key(struct brw_context *brw,
                        struct brw_ff_gs_prog_key *key)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    static const unsigned swizzle_for_offset[4] = {
       BRW_SWIZZLE4(0, 1, 2, 3),
       BRW_SWIZZLE4(1, 2, 3, 3),
@@ -169,6 +171,8 @@ brw_ff_gs_populate_key(struct brw_context *brw,
    };
 
    struct gl_context *ctx = &brw->ctx;
+
+   assert(devinfo->gen < 7);
 
    memset(key, 0, sizeof(*key));
 
@@ -187,10 +191,7 @@ brw_ff_gs_populate_key(struct brw_context *brw,
       key->pv_first = true;
    }
 
-   if (brw->gen >= 7) {
-      /* On Gen7 and later, we don't use GS (yet). */
-      key->need_gs_prog = false;
-   } else if (brw->gen == 6) {
+   if (devinfo->gen == 6) {
       /* On Gen6, GS is used for transform feedback. */
       /* BRW_NEW_TRANSFORM_FEEDBACK */
       if (_mesa_is_xfb_active_and_unpaused(ctx)) {
@@ -256,9 +257,4 @@ brw_upload_ff_gs_prog(struct brw_context *brw)
          brw_codegen_ff_gs_prog(brw, &key);
       }
    }
-}
-
-void gen6_brw_upload_ff_gs_prog(struct brw_context *brw)
-{
-   brw_upload_ff_gs_prog(brw);
 }

@@ -36,6 +36,7 @@
 
 #include "util/algorithm.hpp"
 
+#include <llvm/IR/LLVMContext.h>
 #include <llvm/Linker/Linker.h>
 #include <llvm/Transforms/IPO.h>
 #include <llvm/Target/TargetMachine.h>
@@ -68,11 +69,19 @@ namespace clover {
          typedef ::llvm::TargetLibraryInfo target_library_info;
 #endif
 
+         template<typename T, typename AS>
+         unsigned target_address_space(const T &target, const AS lang_as) {
+            const auto &map = target.getAddressSpaceMap();
 #if HAVE_LLVM >= 0x0500
-         const auto lang_as_offset = 0;
+            return map[static_cast<unsigned>(lang_as)];
+#else
+            return map[lang_as - clang::LangAS::Offset];
+#endif
+         }
+
+#if HAVE_LLVM >= 0x0500
          const clang::InputKind ik_opencl = clang::InputKind::OpenCL;
 #else
-         const auto lang_as_offset = clang::LangAS::Offset;
          const clang::InputKind ik_opencl = clang::IK_OpenCL;
 #endif
 
@@ -174,6 +183,12 @@ namespace clover {
 #endif
          }
 
+#if HAVE_LLVM >= 0x0600
+         const auto default_code_model = ::llvm::None;
+#else
+         const auto default_code_model = ::llvm::CodeModel::Default;
+#endif
+
 #if HAVE_LLVM >= 0x0309
          const auto default_reloc_model = ::llvm::None;
 #else
@@ -192,6 +207,16 @@ namespace clover {
                f(mod.getError().message());
 #endif
          }
+
+        template<typename T> void
+        set_diagnostic_handler(::llvm::LLVMContext &ctx,
+                               T *diagnostic_handler, void *data) {
+#if HAVE_LLVM >= 0x0600
+           ctx.setDiagnosticHandlerCallBack(diagnostic_handler, data);
+#else
+           ctx.setDiagnosticHandler(diagnostic_handler, data);
+#endif
+        }
       }
    }
 }

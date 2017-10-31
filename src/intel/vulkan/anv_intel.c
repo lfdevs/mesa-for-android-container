@@ -49,17 +49,7 @@ VkResult anv_CreateDmaBufImageINTEL(
    if (mem == NULL)
       return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
 
-   uint64_t size = (uint64_t)pCreateInfo->strideInBytes * pCreateInfo->extent.height;
-
-   result = anv_bo_cache_import(device, &device->bo_cache,
-                                pCreateInfo->fd, size, &mem->bo);
-   if (result != VK_SUCCESS)
-      goto fail;
-
-   if (device->instance->physicalDevice.supports_48bit_addresses)
-      mem->bo->flags |= EXEC_OBJECT_SUPPORTS_48B_ADDRESS;
-
-   anv_image_create(_device,
+   result = anv_image_create(_device,
       &(struct anv_image_create_info) {
          .isl_tiling_flags = ISL_TILING_X_BIT,
          .stride = pCreateInfo->strideInBytes,
@@ -78,10 +68,35 @@ VkResult anv_CreateDmaBufImageINTEL(
          .flags = 0,
       }},
       pAllocator, &image_h);
+   if (result != VK_SUCCESS)
+      goto fail;
+
+   close(pCreateInfo->fd);
 
    image = anv_image_from_handle(image_h);
-   image->bo = mem->bo;
-   image->offset = 0;
+
+   result = anv_bo_cache_import(device, &device->bo_cache,
+                                pCreateInfo->fd, &mem->bo);
+   if (result != VK_SUCCESS)
+      goto fail_import;
+
+   VkDeviceSize aligned_image_size = align_u64(image->size, 4096);
+
+   if (mem->bo->size < aligned_image_size) {
+      result = vk_errorf(device->instance, device,
+                         VK_ERROR_INVALID_EXTERNAL_HANDLE_KHR,
+                         "dma-buf too small for image in "
+                         "vkCreateDmaBufImageINTEL: %"PRIu64"B < "PRIu64"B",
+                         mem->bo->size, aligned_image_size);
+      anv_bo_cache_release(device, &device->bo_cache, mem->bo);
+      goto fail_import;
+   }
+
+   if (device->instance->physicalDevice.supports_48bit_addresses)
+      mem->bo->flags |= EXEC_OBJECT_SUPPORTS_48B_ADDRESS;
+
+   image->planes[0].bo = mem->bo;
+   image->planes[0].bo_offset = 0;
 
    assert(image->extent.width > 0);
    assert(image->extent.height > 0);
@@ -91,6 +106,9 @@ VkResult anv_CreateDmaBufImageINTEL(
    *pImage = anv_image_to_handle(image);
 
    return VK_SUCCESS;
+
+ fail_import:
+   vk_free2(&device->alloc, pAllocator, image);
 
  fail:
    vk_free2(&device->alloc, pAllocator, mem);

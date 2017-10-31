@@ -985,12 +985,15 @@ svga_texture_create(struct pipe_screen *screen,
    tex->key.arraySize = 1;
    tex->key.numFaces = 1;
 
-   /* single sample texture can be treated as non-multisamples texture */
-   tex->key.sampleCount = template->nr_samples > 1 ? template->nr_samples : 0;
-
-   if (template->nr_samples > 1) {
+   /* nr_samples=1 must be treated as a non-multisample texture */
+   if (tex->b.b.nr_samples == 1) {
+      tex->b.b.nr_samples = 0;
+   }
+   else if (tex->b.b.nr_samples > 1) {
       tex->key.flags |= SVGA3D_SURFACE_MASKABLE_ANTIALIAS;
    }
+
+   tex->key.sampleCount = tex->b.b.nr_samples;
 
    if (svgascreen->sws->have_vgpu10) {
       switch (template->target) {

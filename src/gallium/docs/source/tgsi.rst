@@ -285,19 +285,6 @@ Perform a * b + c with no intermediate rounding step.
   dst.w = src0.w \times src1.w + src2.w
 
 
-.. opcode:: DP2A - 2-component Dot Product And Add
-
-.. math::
-
-  dst.x = src0.x \times src1.x + src0.y \times src1.y + src2.x
-
-  dst.y = src0.x \times src1.x + src0.y \times src1.y + src2.x
-
-  dst.z = src0.x \times src1.x + src0.y \times src1.y + src2.x
-
-  dst.w = src0.x \times src1.x + src0.y \times src1.y + src2.x
-
-
 .. opcode:: FRC - Fraction
 
 .. math::
@@ -363,26 +350,17 @@ This instruction replicates its result.
 
   dst = src0.x^{src1.x}
 
-.. opcode:: XPD - Cross Product
+
+.. opcode:: LDEXP - Multiply Number by Integral Power of 2
+
+src1 is an integer.
 
 .. math::
 
-  dst.x = src0.y \times src1.z - src1.y \times src0.z
-
-  dst.y = src0.z \times src1.x - src1.z \times src0.x
-
-  dst.z = src0.x \times src1.y - src1.x \times src0.y
-
-  dst.w = 1
-
-
-.. opcode:: DPH - Homogeneous Dot Product
-
-This instruction replicates its result.
-
-.. math::
-
-  dst = src0.x \times src1.x + src0.y \times src1.y + src0.z \times src1.z + src1.w
+  dst.x = src0.x * 2^{src1.x}
+  dst.y = src0.y * 2^{src1.y}
+  dst.z = src0.z * 2^{src1.z}
+  dst.w = src0.w * 2^{src1.w}
 
 
 .. opcode:: COS - Cosine
@@ -439,17 +417,35 @@ This instruction replicates its result.
 
 .. opcode:: PK2US - Pack Two Unsigned 16-bit Scalars
 
-  TBD
+This instruction replicates its result.
+
+.. math::
+
+  dst = f32\_to\_unorm16(src.x) | f32\_to\_unorm16(src.y) << 16
 
 
 .. opcode:: PK4B - Pack Four Signed 8-bit Scalars
 
-  TBD
+This instruction replicates its result.
+
+.. math::
+
+  dst = f32\_to\_snorm8(src.x) |
+        (f32\_to\_snorm8(src.y) << 8) |
+        (f32\_to\_snorm8(src.z) << 16) |
+        (f32\_to\_snorm8(src.w) << 24)
 
 
 .. opcode:: PK4UB - Pack Four Unsigned 8-bit Scalars
 
-  TBD
+This instruction replicates its result.
+
+.. math::
+
+  dst = f32\_to\_unorm8(src.x) |
+        (f32\_to\_unorm8(src.y) << 8) |
+        (f32\_to\_unorm8(src.z) << 16) |
+        (f32\_to\_unorm8(src.w) << 24)
 
 
 .. opcode:: SEQ - Set On Equal
@@ -685,19 +681,6 @@ This instruction replicates its result.
   Unconditional discard.  Allowed in fragment shaders only.
 
 
-.. opcode:: SCS - Sine Cosine
-
-.. math::
-
-  dst.x = \cos{src.x}
-
-  dst.y = \sin{src.x}
-
-  dst.z = 0
-
-  dst.w = 1
-
-
 .. opcode:: TXB - Texture Lookup With Bias
 
   for cube map array textures and shadow cube maps, the bias value
@@ -835,50 +818,6 @@ This instruction replicates its result.
   dst = texture\_sample(unit, coord, lod)
 
 
-.. opcode:: PUSHA - Push Address Register On Stack
-
-  push(src.x)
-  push(src.y)
-  push(src.z)
-  push(src.w)
-
-.. note::
-
-   Considered for cleanup.
-
-.. note::
-
-   Considered for removal.
-
-.. opcode:: POPA - Pop Address Register From Stack
-
-  dst.w = pop()
-  dst.z = pop()
-  dst.y = pop()
-  dst.x = pop()
-
-.. note::
-
-   Considered for cleanup.
-
-.. note::
-
-   Considered for removal.
-
-
-.. opcode:: CALLNZ - Subroutine Call If Not Zero
-
-   TBD
-
-.. note::
-
-   Considered for cleanup.
-
-.. note::
-
-   Considered for removal.
-
-
 Compute ISA
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -932,37 +871,20 @@ XXX doesn't look like most of the opcodes really belong here.
   destination register, which is assumed to be an address (ADDR) register.
 
 
-.. opcode:: SAD - Sum Of Absolute Differences
-
-.. math::
-
-  dst.x = |src0.x - src1.x| + src2.x
-
-  dst.y = |src0.y - src1.y| + src2.y
-
-  dst.z = |src0.z - src1.z| + src2.z
-
-  dst.w = |src0.w - src1.w| + src2.w
-
-
 .. opcode:: TXF - Texel Fetch
 
   As per NV_gpu_shader4, extract a single texel from a specified texture
   image or PIPE_BUFFER resource. The source sampler may not be a CUBE or
   SHADOW.  src 0 is a
   four-component signed integer vector used to identify the single texel
-  accessed. 3 components + level.  Just like texture instructions, an optional
+  accessed. 3 components + level.  If the texture is multisampled, then
+  the fourth component indicates the sample, not the mipmap level.
+  Just like texture instructions, an optional
   offset vector is provided, which is subject to various driver restrictions
   (regarding range, source of offsets). This instruction ignores the sampler
   state.
 
   TXF(uint_vec coord, int_vec offset).
-
-
-.. opcode:: TXF_LZ - Texel Fetch
-
-  This is the same as TXF with level = 0. Like TXF, it obeys
-  pipe_sampler_view::u.tex.first_level.
 
 
 .. opcode:: TXQ - Texture Size Query
@@ -1691,7 +1613,7 @@ GLSL ISA
 
 These opcodes are part of :term:`GLSL`'s opcode set. Support for these
 opcodes is determined by a special capability bit, ``GLSL``.
-Some require glsl version 1.30 (UIF/BREAKC/SWITCH/CASE/DEFAULT/ENDSWITCH).
+Some require glsl version 1.30 (UIF/SWITCH/CASE/DEFAULT/ENDSWITCH).
 
 .. opcode:: CAL - Subroutine Call
 
@@ -1745,20 +1667,6 @@ Some require glsl version 1.30 (UIF/BREAKC/SWITCH/CASE/DEFAULT/ENDSWITCH).
   Unconditionally moves the point of execution to the instruction after the
   next endloop or endswitch. The instruction must appear within a loop/endloop
   or switch/endswitch.
-
-
-.. opcode:: BREAKC - Break Conditional
-
-  Conditionally moves the point of execution to the instruction after the
-  next endloop or endswitch. The instruction must appear within a loop/endloop
-  or switch/endswitch.
-  Condition evaluates to true if src0.x != 0 where src0.x is interpreted
-  as an integer register.
-
-.. note::
-
-   Considered for removal as it's quite inconsistent wrt other opcodes
-   (could emulate with UIF/BRK/ENDIF). 
 
 
 .. opcode:: IF - Float If
@@ -1884,7 +1792,7 @@ two-component vectors with doubled precision in each component.
 
   dst.z = src0.zw == src1.zw ? \sim 0 : 0
 
-.. opcode:: DSNE - Set on Equal
+.. opcode:: DSNE - Set on Not Equal
 
 .. math::
 
@@ -1960,17 +1868,15 @@ two-component vectors with doubled precision in each component.
 
 Like the ``frexp()`` routine in many math libraries, this opcode stores the
 exponent of its source to ``dst0``, and the significand to ``dst1``, such that
-:math:`dst1 \times 2^{dst0} = src` .
+:math:`dst1 \times 2^{dst0} = src` . The results are replicated across
+channels.
 
 .. math::
 
-  dst0.xy = exp(src.xy)
+  dst0.xy = dst.zw = frac(src.xy)
 
-  dst1.xy = frac(src.xy)
+  dst1 = frac(src.xy)
 
-  dst0.zw = exp(src.zw)
-
-  dst1.zw = frac(src.zw)
 
 .. opcode:: DLDEXP - Multiply Number by Integral Power of 2
 
@@ -1981,7 +1887,7 @@ source is an integer.
 
   dst.xy = src0.xy \times 2^{src1.x}
 
-  dst.zw = src0.zw \times 2^{src1.y}
+  dst.zw = src0.zw \times 2^{src1.z}
 
 .. opcode:: DMIN - Minimum
 
@@ -2321,9 +2227,9 @@ two-component vectors with 64-bits in each component.
 
 .. math::
 
-   dst.xy = (uint64_t) src0.x
+   dst.xy = (int64_t) src0.x
 
-   dst.zw = (uint64_t) src0.y
+   dst.zw = (int64_t) src0.y
 
 .. opcode:: I2I64 - Signed Integer to 64-bit Integer
 
@@ -2591,6 +2497,18 @@ after lookup.
   NOTE: no driver has implemented this opcode yet (and no state tracker
   emits it).  This information is subject to change.
 
+.. opcode:: LOD - level of detail
+
+   Same syntax as the SAMPLE opcode but instead of performing an actual
+   texture lookup/filter, return the computed LOD information that the
+   texture pipe would use to access the texture. The Y component contains
+   the computed LOD lambda_prime. The X component contains the LOD that will
+   be accessed, based on min/max lod's and mipmap filters.
+   The Z and W components are set to 0.
+
+   Syntax: ``LOD dst, address, sampler_view, sampler``
+
+
 .. _resourceopcodes:
 
 Resource Access Opcodes
@@ -2682,36 +2600,6 @@ Inter-thread synchronization opcodes
 These opcodes are intended for communication between threads running
 within the same compute grid.  For now they're only valid in compute
 programs.
-
-.. opcode:: MFENCE - Memory fence
-
-  Syntax: ``MFENCE resource``
-
-  Example: ``MFENCE RES[0]``
-
-  This opcode forces strong ordering between any memory access
-  operations that affect the specified resource.  This means that
-  previous loads and stores (and only those) will be performed and
-  visible to other threads before the program execution continues.
-
-
-.. opcode:: LFENCE - Load memory fence
-
-  Syntax: ``LFENCE resource``
-
-  Example: ``LFENCE RES[0]``
-
-  Similar to MFENCE, but it only affects the ordering of memory loads.
-
-
-.. opcode:: SFENCE - Store memory fence
-
-  Syntax: ``SFENCE resource``
-
-  Example: ``SFENCE RES[0]``
-
-  Similar to MFENCE, but it only affects the ordering of memory stores.
-
 
 .. opcode:: BARRIER - Thread group barrier
 
@@ -3331,6 +3219,9 @@ contains the current sample id (i.e. gl_SampleID) as an unsigned int.
 Only the X component is used.  If per-sample shading is not enabled,
 the result is (0, undef, undef, undef).
 
+Note that if the fragment shader uses this system value, the fragment
+shader is automatically executed at per sample frequency.
+
 TGSI_SEMANTIC_SAMPLEPOS
 """""""""""""""""""""""
 
@@ -3339,6 +3230,9 @@ value contains the current sample's position as float4(x, y, undef, undef)
 in the render target (i.e.  gl_SamplePosition) when per-fragment shading
 is in effect.  Position values are in the range [0, 1] where 0.5 is
 the center of the fragment.
+
+Note that if the fragment shader uses this system value, the fragment
+shader is automatically executed at per sample frequency.
 
 TGSI_SEMANTIC_SAMPLEMASK
 """"""""""""""""""""""""
@@ -3543,7 +3437,7 @@ A bit mask of ``bit index <= TGSI_SEMANTIC_SUBGROUP_INVOCATION``, i.e.
 TGSI_SEMANTIC_SUBGROUP_LT_MASK
 """"""""""""""""""""""""""""""
 
-A bit mask of ``bit index > TGSI_SEMANTIC_SUBGROUP_INVOCATION``, i.e.
+A bit mask of ``bit index < TGSI_SEMANTIC_SUBGROUP_INVOCATION``, i.e.
 ``(1 << subgroup_invocation) - 1`` in arbitrary precision arithmetic.
 
 
@@ -3770,7 +3664,7 @@ of the operands are equal to 0. That means that 0 * Inf = 0. This
 should be set the same way for an entire pipeline. Note that this
 applies not only to the literal MUL TGSI opcode, but all FP32
 multiplications implied by other operations, such as MAD, FMA, DP2,
-DP3, DP4, DPH, DST, LOG, LRP, XPD, and possibly others. If there is a
+DP3, DP4, DST, LOG, LRP, and possibly others. If there is a
 mismatch between shaders, then it is unspecified whether this behavior
 will be enabled.
 

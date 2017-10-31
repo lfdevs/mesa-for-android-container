@@ -144,6 +144,15 @@ static const struct fd_acc_sample_provider occlusion_predicate = {
 		.result = occlusion_predicate_result,
 };
 
+static const struct fd_acc_sample_provider occlusion_predicate_conservative = {
+		.query_type = PIPE_QUERY_OCCLUSION_PREDICATE_CONSERVATIVE,
+		.active = FD_STAGE_DRAW,
+		.size = sizeof(struct fd5_query_sample),
+		.resume = occlusion_resume,
+		.pause = occlusion_pause,
+		.result = occlusion_predicate_result,
+};
+
 /*
  * Timestamp Queries:
  */
@@ -247,6 +256,7 @@ fd5_query_context_init(struct pipe_context *pctx)
 
 	fd_acc_query_register_provider(pctx, &occlusion_counter);
 	fd_acc_query_register_provider(pctx, &occlusion_predicate);
+	fd_acc_query_register_provider(pctx, &occlusion_predicate_conservative);
 
 	fd_acc_query_register_provider(pctx, &time_elapsed);
 	fd_acc_query_register_provider(pctx, &timestamp);

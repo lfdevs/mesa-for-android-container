@@ -76,11 +76,10 @@ struct tgsi_opcode_info
    unsigned is_tex:1;
    unsigned is_store:1;
    unsigned is_branch:1;
-   int pre_dedent:2;
-   int post_indent:2;
+   unsigned pre_dedent:1;
+   unsigned post_indent:1;
    enum tgsi_output_mode output_mode:3;
-   const char *mnemonic;
-   uint opcode;
+   unsigned opcode:8;
 };
 
 const struct tgsi_opcode_info *
@@ -112,10 +111,10 @@ static inline bool tgsi_type_is_64bit(enum tgsi_opcode_type type)
 }
 
 enum tgsi_opcode_type
-tgsi_opcode_infer_src_type( uint opcode );
+tgsi_opcode_infer_src_type( uint opcode, uint src_idx );
 
 enum tgsi_opcode_type
-tgsi_opcode_infer_dst_type( uint opcode );
+tgsi_opcode_infer_dst_type( uint opcode, uint dst_idx );
 
 #if defined __cplusplus
 }

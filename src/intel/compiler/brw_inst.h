@@ -35,6 +35,7 @@
 #include <stdint.h>
 
 #include "brw_eu_defines.h"
+#include "brw_reg_type.h"
 #include "common/gen_device_info.h"
 
 #ifdef __cplusplus
@@ -135,7 +136,7 @@ F(src1_da16_subreg_nr, 100, 100)
 F(src1_da1_subreg_nr,  100,  96)
 F(src1_da16_swiz_y,     99,  98)
 F(src1_da16_swiz_x,     97,  96)
-F8(src1_reg_type,      /* 4+ */  46,  44, /* 8+ */  94,  91)
+F8(src1_reg_hw_type,   /* 4+ */  46,  44, /* 8+ */  94,  91)
 F8(src1_reg_file,      /* 4+ */  43,  42, /* 8+ */  90,  89)
 F(src0_vstride,         88,  85)
 F(src0_width,           84,  82)
@@ -160,9 +161,9 @@ F(dst_da_reg_nr,        60,  53)
 F(dst_da16_subreg_nr,   52,  52)
 F(dst_da1_subreg_nr,    52,  48)
 F(da16_writemask,       51,  48) /* Dst.ChanEn */
-F8(src0_reg_type,      /* 4+ */  41,  39, /* 8+ */  46,  43)
+F8(src0_reg_hw_type,   /* 4+ */  41,  39, /* 8+ */  46,  43)
 F8(src0_reg_file,      /* 4+ */  38,  37, /* 8+ */  42,  41)
-F8(dst_reg_type,       /* 4+ */  36,  34, /* 8+ */  40,  37)
+F8(dst_reg_hw_type,    /* 4+ */  36,  34, /* 8+ */  40,  37)
 F8(dst_reg_file,       /* 4+ */  33,  32, /* 8+ */  36,  35)
 F8(mask_control,       /* 4+ */   9,   9, /* 8+ */  34,  34)
 FF(flag_reg_nr,
@@ -197,33 +198,33 @@ F(opcode,                6,   0)
  * Three-source instructions:
  *  @{
  */
-F(3src_src2_reg_nr,    125, 118)
-F(3src_src2_subreg_nr, 117, 115) /* Extra discontiguous bit on CHV? */
-F(3src_src2_swizzle,   114, 107)
-F(3src_src2_rep_ctrl,  106, 106)
-F(3src_src1_reg_nr,    104,  97)
-F(3src_src1_subreg_nr,  96,  94) /* Extra discontiguous bit on CHV? */
-F(3src_src1_swizzle,    93,  86)
-F(3src_src1_rep_ctrl,   85,  85)
-F(3src_src0_reg_nr,     83,  76)
-F(3src_src0_subreg_nr,  75,  73) /* Extra discontiguous bit on CHV? */
-F(3src_src0_swizzle,    72,  65)
-F(3src_src0_rep_ctrl,   64,  64)
-F(3src_dst_reg_nr,      63,  56)
-F(3src_dst_subreg_nr,   55,  53)
-F(3src_dst_writemask,   52,  49)
-F8(3src_nib_ctrl,       47, 47, 11, 11) /* only exists on IVB+ */
-F8(3src_dst_type,       45, 44, 48, 46) /* only exists on IVB+ */
-F8(3src_src_type,       43, 42, 45, 43)
-F8(3src_src2_negate,    41, 41, 42, 42)
-F8(3src_src2_abs,       40, 40, 41, 41)
-F8(3src_src1_negate,    39, 39, 40, 40)
-F8(3src_src1_abs,       38, 38, 39, 39)
-F8(3src_src0_negate,    37, 37, 38, 38)
-F8(3src_src0_abs,       36, 36, 37, 37)
-F8(3src_flag_reg_nr,    34, 34, 33, 33)
-F8(3src_flag_subreg_nr, 33, 33, 32, 32)
-FF(3src_dst_reg_file,
+F(3src_src2_reg_nr,        125, 118) /* same in align1 */
+F(3src_a16_src2_subreg_nr, 117, 115) /* Extra discontiguous bit on CHV? */
+F(3src_a16_src2_swizzle,   114, 107)
+F(3src_a16_src2_rep_ctrl,  106, 106)
+F(3src_src1_reg_nr,        104,  97) /* same in align1 */
+F(3src_a16_src1_subreg_nr,  96,  94) /* Extra discontiguous bit on CHV? */
+F(3src_a16_src1_swizzle,    93,  86)
+F(3src_a16_src1_rep_ctrl,   85,  85)
+F(3src_src0_reg_nr,         83,  76) /* same in align1 */
+F(3src_a16_src0_subreg_nr,  75,  73) /* Extra discontiguous bit on CHV? */
+F(3src_a16_src0_swizzle,    72,  65)
+F(3src_a16_src0_rep_ctrl,   64,  64)
+F(3src_dst_reg_nr,          63,  56) /* same in align1 */
+F(3src_a16_dst_subreg_nr,   55,  53)
+F(3src_a16_dst_writemask,   52,  49)
+F8(3src_a16_nib_ctrl,       47, 47, 11, 11) /* only exists on IVB+ */
+F8(3src_a16_dst_hw_type,    45, 44, 48, 46) /* only exists on IVB+ */
+F8(3src_a16_src_hw_type,    43, 42, 45, 43)
+F8(3src_src2_negate,        41, 41, 42, 42)
+F8(3src_src2_abs,           40, 40, 41, 41)
+F8(3src_src1_negate,        39, 39, 40, 40)
+F8(3src_src1_abs,           38, 38, 39, 39)
+F8(3src_src0_negate,        37, 37, 38, 38)
+F8(3src_src0_abs,           36, 36, 37, 37)
+F8(3src_a16_flag_reg_nr,    34, 34, 33, 33)
+F8(3src_a16_flag_subreg_nr, 33, 33, 32, 32)
+FF(3src_a16_dst_reg_file,
    /* 4-5: doesn't exist - no 3-source instructions */ -1, -1, -1, -1, -1, -1,
    /* 6: */ 32, 32,
    /* 7-8: doesn't exist - no MRFs */ -1, -1, -1, -1)
@@ -243,6 +244,135 @@ F8(3src_mask_control,    9,  9, 34, 34)
 F(3src_access_mode,      8,  8)
 /* Bit 7 is Reserved (for future Opcode expansion) */
 F(3src_opcode,           6,  0)
+/** @} */
+
+#define REG_TYPE(reg)                                                         \
+static inline void                                                            \
+brw_inst_set_3src_a16_##reg##_type(const struct gen_device_info *devinfo,     \
+                                   brw_inst *inst, enum brw_reg_type type)    \
+{                                                                             \
+   unsigned hw_type = brw_reg_type_to_a16_hw_3src_type(devinfo, type);        \
+   brw_inst_set_3src_a16_##reg##_hw_type(devinfo, inst, hw_type);             \
+}                                                                             \
+                                                                              \
+static inline enum brw_reg_type                                               \
+brw_inst_3src_a16_##reg##_type(const struct gen_device_info *devinfo,         \
+                               const brw_inst *inst)                          \
+{                                                                             \
+   unsigned hw_type = brw_inst_3src_a16_##reg##_hw_type(devinfo, inst);       \
+   return brw_a16_hw_3src_type_to_reg_type(devinfo, hw_type);                 \
+}
+
+REG_TYPE(dst)
+REG_TYPE(src)
+#undef REG_TYPE
+
+/**
+ * Three-source align1 instructions:
+ *  @{
+ */
+/* Reserved 127:126 */
+/* src2_reg_nr same in align16 */
+FC(3src_a1_src2_subreg_nr, 117, 113, devinfo->gen >= 10)
+FC(3src_a1_src2_hstride,   112, 111, devinfo->gen >= 10)
+/* Reserved 110:109. src2 vstride is an implied parameter */
+FC(3src_a1_src2_hw_type,   108, 106, devinfo->gen >= 10)
+/* Reserved 105 */
+/* src1_reg_nr same in align16 */
+FC(3src_a1_src1_subreg_nr,  96,  92, devinfo->gen >= 10)
+FC(3src_a1_src1_hstride,    91,  90, devinfo->gen >= 10)
+FC(3src_a1_src1_vstride,    89,  88, devinfo->gen >= 10)
+FC(3src_a1_src1_hw_type,    87,  85, devinfo->gen >= 10)
+/* Reserved 84 */
+/* src0_reg_nr same in align16 */
+FC(3src_a1_src0_subreg_nr,  75,  71, devinfo->gen >= 10)
+FC(3src_a1_src0_hstride,    70,  69, devinfo->gen >= 10)
+FC(3src_a1_src0_vstride,    68,  67, devinfo->gen >= 10)
+FC(3src_a1_src0_hw_type,    66,  64, devinfo->gen >= 10)
+/* dst_reg_nr same in align16 */
+FC(3src_a1_dst_subreg_nr,   55,  54, devinfo->gen >= 10)
+FC(3src_a1_special_acc,     55,  52, devinfo->gen >= 10) /* aliases dst_subreg_nr */
+/* Reserved 51:50 */
+FC(3src_a1_dst_hstride,     49,  49, devinfo->gen >= 10)
+FC(3src_a1_dst_hw_type,     48,  46, devinfo->gen >= 10)
+FC(3src_a1_src2_reg_file,   45,  45, devinfo->gen >= 10)
+FC(3src_a1_src1_reg_file,   44,  44, devinfo->gen >= 10)
+FC(3src_a1_src0_reg_file,   43,  43, devinfo->gen >= 10)
+/* Source Modifier fields same in align16 */
+FC(3src_a1_dst_reg_file,    36,  36, devinfo->gen >= 10)
+FC(3src_a1_exec_type,       35,  35, devinfo->gen >= 10)
+/* Fields below this same in align16 */
+/** @} */
+
+#define REG_TYPE(reg)                                                         \
+static inline void                                                            \
+brw_inst_set_3src_a1_##reg##_type(const struct gen_device_info *devinfo,      \
+                                  brw_inst *inst, enum brw_reg_type type)     \
+{                                                                             \
+   UNUSED enum gen10_align1_3src_exec_type exec_type =                        \
+      (enum gen10_align1_3src_exec_type) brw_inst_3src_a1_exec_type(devinfo,  \
+                                                                    inst);    \
+   if (brw_reg_type_is_floating_point(type)) {                                \
+      assert(exec_type == BRW_ALIGN1_3SRC_EXEC_TYPE_FLOAT);                   \
+   } else {                                                                   \
+      assert(exec_type == BRW_ALIGN1_3SRC_EXEC_TYPE_INT);                     \
+   }                                                                          \
+   unsigned hw_type = brw_reg_type_to_a1_hw_3src_type(devinfo, type);         \
+   brw_inst_set_3src_a1_##reg##_hw_type(devinfo, inst, hw_type);              \
+}                                                                             \
+                                                                              \
+static inline enum brw_reg_type                                               \
+brw_inst_3src_a1_##reg##_type(const struct gen_device_info *devinfo,          \
+                              const brw_inst *inst)                           \
+{                                                                             \
+   enum gen10_align1_3src_exec_type exec_type =                               \
+      (enum gen10_align1_3src_exec_type) brw_inst_3src_a1_exec_type(devinfo,  \
+                                                                    inst);    \
+   unsigned hw_type = brw_inst_3src_a1_##reg##_hw_type(devinfo, inst);        \
+   return brw_a1_hw_3src_type_to_reg_type(devinfo, hw_type, exec_type);       \
+}
+
+REG_TYPE(dst)
+REG_TYPE(src0)
+REG_TYPE(src1)
+REG_TYPE(src2)
+#undef REG_TYPE
+
+/**
+ * Three-source align1 instruction immediates:
+ *  @{
+ */
+static inline uint16_t
+brw_inst_3src_a1_src0_imm(const struct gen_device_info *devinfo,
+                          const brw_inst *insn)
+{
+   assert(devinfo->gen >= 10);
+   return brw_inst_bits(insn, 82, 67);
+}
+
+static inline uint16_t
+brw_inst_3src_a1_src2_imm(const struct gen_device_info *devinfo,
+                          const brw_inst *insn)
+{
+   assert(devinfo->gen >= 10);
+   return brw_inst_bits(insn, 124, 109);
+}
+
+static inline void
+brw_inst_set_3src_a1_src0_imm(const struct gen_device_info *devinfo,
+                              brw_inst *insn, uint16_t value)
+{
+   assert(devinfo->gen >= 10);
+   brw_inst_set_bits(insn, 82, 67, value);
+}
+
+static inline void
+brw_inst_set_3src_a1_src2_imm(const struct gen_device_info *devinfo,
+                              brw_inst *insn, uint16_t value)
+{
+   assert(devinfo->gen >= 10);
+   brw_inst_set_bits(insn, 124, 109, value);
+}
 /** @} */
 
 /**
@@ -569,6 +699,13 @@ brw_inst_imm_ud(const struct gen_device_info *devinfo, const brw_inst *insn)
    return brw_inst_bits(insn, 127, 96);
 }
 
+static inline uint64_t
+brw_inst_imm_uq(const struct gen_device_info *devinfo, const brw_inst *insn)
+{
+   assert(devinfo->gen >= 8);
+   return brw_inst_bits(insn, 127, 64);
+}
+
 static inline float
 brw_inst_imm_f(const struct gen_device_info *devinfo, const brw_inst *insn)
 {
@@ -644,6 +781,35 @@ brw_inst_set_imm_uq(const struct gen_device_info *devinfo,
 }
 
 /** @} */
+
+#define REG_TYPE(reg)                                                         \
+static inline void                                                            \
+brw_inst_set_##reg##_file_type(const struct gen_device_info *devinfo,         \
+                               brw_inst *inst, enum brw_reg_file file,        \
+                               enum brw_reg_type type)                        \
+{                                                                             \
+   assert(file <= BRW_IMMEDIATE_VALUE);                                       \
+   unsigned hw_type = brw_reg_type_to_hw_type(devinfo, file, type);           \
+   brw_inst_set_##reg##_reg_file(devinfo, inst, file);                        \
+   brw_inst_set_##reg##_reg_hw_type(devinfo, inst, hw_type);                  \
+}                                                                             \
+                                                                              \
+static inline enum brw_reg_type                                               \
+brw_inst_##reg##_type(const struct gen_device_info *devinfo,                  \
+                      const brw_inst *inst)                                   \
+{                                                                             \
+   unsigned file = __builtin_strcmp("dst", #reg) == 0 ?                       \
+                   BRW_GENERAL_REGISTER_FILE :                                \
+                   brw_inst_##reg##_reg_file(devinfo, inst);                  \
+   unsigned hw_type = brw_inst_##reg##_reg_hw_type(devinfo, inst);            \
+   return brw_hw_type_to_reg_type(devinfo, (enum brw_reg_file)file, hw_type); \
+}
+
+REG_TYPE(dst)
+REG_TYPE(src0)
+REG_TYPE(src1)
+#undef REG_TYPE
+
 
 /* The AddrImm fields are split into two discontiguous sections on Gen8+ */
 #define BRW_IA1_ADDR_IMM(reg, g4_high, g4_low, g8_nine, g8_high, g8_low) \

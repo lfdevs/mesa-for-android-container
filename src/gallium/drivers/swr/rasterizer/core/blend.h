@@ -278,7 +278,7 @@ INLINE void Clamp(simdvector &src)
 }
 
 template<SWR_TYPE type>
-void Blend(const SWR_BLEND_STATE *pBlendState, const SWR_RENDER_TARGET_BLEND_STATE *pState, simdvector &src, simdvector& src1, BYTE *pDst, simdvector &result)
+void Blend(const SWR_BLEND_STATE *pBlendState, const SWR_RENDER_TARGET_BLEND_STATE *pState, simdvector &src, simdvector& src1, uint8_t *pDst, simdvector &result)
 {
     // load render target
     simdvector dst;

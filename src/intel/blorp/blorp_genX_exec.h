@@ -380,7 +380,7 @@ blorp_emit_vertex_elements(struct blorp_batch *batch,
    ve[slot] = (struct GENX(VERTEX_ELEMENT_STATE)) {
       .VertexBufferIndex = 1,
       .Valid = true,
-      .SourceElementFormat = ISL_FORMAT_R32G32B32A32_FLOAT,
+      .SourceElementFormat = (enum GENX(SURFACE_FORMAT)) ISL_FORMAT_R32G32B32A32_FLOAT,
       .SourceElementOffset = 0,
       .Component0Control = VFCOMP_STORE_SRC,
 
@@ -395,8 +395,8 @@ blorp_emit_vertex_elements(struct blorp_batch *batch,
 #else
       .Component1Control = VFCOMP_STORE_0,
 #endif
-      .Component2Control = VFCOMP_STORE_SRC,
-      .Component3Control = VFCOMP_STORE_SRC,
+      .Component2Control = VFCOMP_STORE_0,
+      .Component3Control = VFCOMP_STORE_0,
 #if GEN_GEN <= 5
       .DestinationElementOffset = slot * 4,
 #endif
@@ -412,7 +412,7 @@ blorp_emit_vertex_elements(struct blorp_batch *batch,
    ve[slot] = (struct GENX(VERTEX_ELEMENT_STATE)) {
       .VertexBufferIndex = 0,
       .Valid = true,
-      .SourceElementFormat = ISL_FORMAT_R32G32B32_FLOAT,
+      .SourceElementFormat = (enum GENX(SURFACE_FORMAT)) ISL_FORMAT_R32G32B32_FLOAT,
       .SourceElementOffset = 0,
       .Component0Control = VFCOMP_STORE_SRC,
       .Component1Control = VFCOMP_STORE_SRC,
@@ -426,7 +426,7 @@ blorp_emit_vertex_elements(struct blorp_batch *batch,
    ve[slot] = (struct GENX(VERTEX_ELEMENT_STATE)) {
       .VertexBufferIndex = 0,
       .Valid = true,
-      .SourceElementFormat = ISL_FORMAT_R32G32B32_FLOAT,
+      .SourceElementFormat = (enum GENX(SURFACE_FORMAT)) ISL_FORMAT_R32G32B32_FLOAT,
       .SourceElementOffset = 0,
       .Component0Control = VFCOMP_STORE_SRC,
       .Component1Control = VFCOMP_STORE_SRC,
@@ -442,7 +442,7 @@ blorp_emit_vertex_elements(struct blorp_batch *batch,
       ve[slot] = (struct GENX(VERTEX_ELEMENT_STATE)) {
          .VertexBufferIndex = 1,
          .Valid = true,
-         .SourceElementFormat = ISL_FORMAT_R32G32B32A32_FLOAT,
+         .SourceElementFormat = (enum GENX(SURFACE_FORMAT)) ISL_FORMAT_R32G32B32A32_FLOAT,
          .SourceElementOffset = 16 + i * 4 * sizeof(float),
          .Component0Control = VFCOMP_STORE_SRC,
          .Component1Control = VFCOMP_STORE_SRC,
@@ -1268,7 +1268,7 @@ blorp_emit_null_surface_state(struct blorp_batch *batch,
 {
    struct GENX(RENDER_SURFACE_STATE) ss = {
       .SurfaceType = SURFTYPE_NULL,
-      .SurfaceFormat = ISL_FORMAT_R8G8B8A8_UNORM,
+      .SurfaceFormat = (enum GENX(SURFACE_FORMAT)) ISL_FORMAT_R8G8B8A8_UNORM,
       .Width = surface->surf.logical_level0_px.width - 1,
       .Height = surface->surf.logical_level0_px.height - 1,
       .MIPCountLOD = surface->view.base_level,
@@ -1453,6 +1453,17 @@ blorp_emit_gen8_hiz_op(struct blorp_batch *batch,
     */
    if (params->stencil.enabled)
       assert(params->hiz_op == BLORP_HIZ_OP_DEPTH_CLEAR);
+
+   /* From the BDW PRM Volume 2, 3DSTATE_WM_HZ_OP:
+    *
+    * 3DSTATE_MULTISAMPLE packet must be used prior to this packet to change
+    * the Number of Multisamples. This packet must not be used to change
+    * Number of Multisamples in a rendering sequence.
+    *
+    * Since HIZ may be the first thing in a batch buffer, play safe and always
+    * emit 3DSTATE_MULTISAMPLE.
+    */
+   blorp_emit_3dstate_multisample(batch, params);
 
    /* If we can't alter the depth stencil config and multiple layers are
     * involved, the HiZ op will fail. This is because the op requires that a

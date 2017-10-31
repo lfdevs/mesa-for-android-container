@@ -132,6 +132,9 @@ vc4_wait_seqno(struct vc4_screen *screen, uint64_t seqno, uint64_t timeout_ns,
                const char *reason);
 
 void
+vc4_bo_label(struct vc4_screen *screen, struct vc4_bo *bo, const char *fmt, ...);
+
+void
 vc4_bufmgr_destroy(struct pipe_screen *pscreen);
 
 #endif /* VC4_BUFMGR_H */

@@ -123,11 +123,12 @@ target_triplet = @target@
 @HAVE_DRI3_TRUE@@HAVE_PLATFORM_X11_TRUE@	drivers/dri2/platform_x11_dri3.h
 
 @HAVE_DRI3_TRUE@@HAVE_PLATFORM_X11_TRUE@am__append_5 = $(top_builddir)/src/loader/libloader_dri3_helper.la
-@HAVE_PLATFORM_WAYLAND_TRUE@am__append_6 = $(WAYLAND_CFLAGS)
-@HAVE_PLATFORM_WAYLAND_TRUE@am__append_7 = $(WAYLAND_LIBS) \
+@HAVE_PLATFORM_WAYLAND_TRUE@am__append_6 = $(WAYLAND_CLIENT_CFLAGS) \
+@HAVE_PLATFORM_WAYLAND_TRUE@	$(WAYLAND_SERVER_CFLAGS)
+@HAVE_PLATFORM_WAYLAND_TRUE@am__append_7 = $(WAYLAND_CLIENT_LIBS) \
 @HAVE_PLATFORM_WAYLAND_TRUE@	$(LIBDRM_LIBS) \
 @HAVE_PLATFORM_WAYLAND_TRUE@	$(top_builddir)/src/egl/wayland/wayland-drm/libwayland-drm.la \
-@HAVE_PLATFORM_WAYLAND_TRUE@	$(top_builddir)/src/util/libmesautil.la
+@HAVE_PLATFORM_WAYLAND_TRUE@	$(WAYLAND_SERVER_LIBS)
 @HAVE_PLATFORM_WAYLAND_TRUE@am__append_8 = \
 @HAVE_PLATFORM_WAYLAND_TRUE@	drivers/dri2/platform_wayland.c	\
 @HAVE_PLATFORM_WAYLAND_TRUE@	drivers/dri2/linux-dmabuf-unstable-v1-protocol.c \
@@ -144,7 +145,8 @@ target_triplet = @target@
 
 subdir = src/egl
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_gnu_make.m4 \
+am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_compile_flag.m4 \
+	$(top_srcdir)/m4/ax_check_gnu_make.m4 \
 	$(top_srcdir)/m4/ax_check_python_mako_module.m4 \
 	$(top_srcdir)/m4/ax_gcc_builtin.m4 \
 	$(top_srcdir)/m4/ax_gcc_func_attribute.m4 \
@@ -207,13 +209,16 @@ am__DEPENDENCIES_1 =
 @HAVE_PLATFORM_WAYLAND_TRUE@	$(am__DEPENDENCIES_1) \
 @HAVE_PLATFORM_WAYLAND_TRUE@	$(am__DEPENDENCIES_1) \
 @HAVE_PLATFORM_WAYLAND_TRUE@	$(top_builddir)/src/egl/wayland/wayland-drm/libwayland-drm.la \
-@HAVE_PLATFORM_WAYLAND_TRUE@	$(top_builddir)/src/util/libmesautil.la
+@HAVE_PLATFORM_WAYLAND_TRUE@	$(am__DEPENDENCIES_1)
 @HAVE_PLATFORM_ANDROID_TRUE@am__DEPENDENCIES_4 =  \
 @HAVE_PLATFORM_ANDROID_TRUE@	$(am__DEPENDENCIES_1)
-libEGL_common_la_DEPENDENCIES = $(am__DEPENDENCIES_1) \
+libEGL_common_la_DEPENDENCIES =  \
+	$(top_builddir)/src/mapi/shared-glapi/libglapi.la \
+	$(top_builddir)/src/util/libmesautil.la $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_2) $(am__append_5) $(am__DEPENDENCIES_3) \
 	$(am__append_9) $(am__DEPENDENCIES_4) \
-	$(top_builddir)/src/loader/libloader.la $(am__DEPENDENCIES_1) \
+	$(top_builddir)/src/loader/libloader.la \
+	$(top_builddir)/src/util/libxmlconfig.la $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
 am__libEGL_common_la_SOURCES_DIST = main/eglapi.c main/eglapi.h \
 	main/eglarray.c main/eglarray.h main/eglconfig.c \
@@ -654,9 +659,9 @@ NVVIEUX_CFLAGS = @NVVIEUX_CFLAGS@
 NVVIEUX_LIBS = @NVVIEUX_LIBS@
 OBJDUMP = @OBJDUMP@
 OBJEXT = @OBJEXT@
-OMX_CFLAGS = @OMX_CFLAGS@
-OMX_LIBS = @OMX_LIBS@
-OMX_LIB_INSTALL_DIR = @OMX_LIB_INSTALL_DIR@
+OMX_BELLAGIO_CFLAGS = @OMX_BELLAGIO_CFLAGS@
+OMX_BELLAGIO_LIBS = @OMX_BELLAGIO_LIBS@
+OMX_BELLAGIO_LIB_INSTALL_DIR = @OMX_BELLAGIO_LIB_INSTALL_DIR@
 OPENCL_LIBNAME = @OPENCL_LIBNAME@
 OPENCL_VERSION = @OPENCL_VERSION@
 OSMESA_LIB = @OSMESA_LIB@
@@ -710,6 +715,8 @@ VA_LIBS = @VA_LIBS@
 VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
 VA_MAJOR = @VA_MAJOR@
 VA_MINOR = @VA_MINOR@
+VC5_SIMULATOR_CFLAGS = @VC5_SIMULATOR_CFLAGS@
+VC5_SIMULATOR_LIBS = @VC5_SIMULATOR_LIBS@
 VDPAU_CFLAGS = @VDPAU_CFLAGS@
 VDPAU_LIBS = @VDPAU_LIBS@
 VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
@@ -721,12 +728,15 @@ VISIBILITY_CXXFLAGS = @VISIBILITY_CXXFLAGS@
 VL_CFLAGS = @VL_CFLAGS@
 VL_LIBS = @VL_LIBS@
 VULKAN_ICD_INSTALL_DIR = @VULKAN_ICD_INSTALL_DIR@
-WAYLAND_CFLAGS = @WAYLAND_CFLAGS@
-WAYLAND_LIBS = @WAYLAND_LIBS@
+WAYLAND_CLIENT_CFLAGS = @WAYLAND_CLIENT_CFLAGS@
+WAYLAND_CLIENT_LIBS = @WAYLAND_CLIENT_LIBS@
 WAYLAND_PROTOCOLS_DATADIR = @WAYLAND_PROTOCOLS_DATADIR@
 WAYLAND_SCANNER = @WAYLAND_SCANNER@
 WAYLAND_SCANNER_CFLAGS = @WAYLAND_SCANNER_CFLAGS@
 WAYLAND_SCANNER_LIBS = @WAYLAND_SCANNER_LIBS@
+WAYLAND_SERVER_CFLAGS = @WAYLAND_SERVER_CFLAGS@
+WAYLAND_SERVER_LIBS = @WAYLAND_SERVER_LIBS@
+WNO_OVERRIDE_INIT = @WNO_OVERRIDE_INIT@
 X11_INCLUDES = @X11_INCLUDES@
 XA_MAJOR = @XA_MAJOR@
 XA_MINOR = @XA_MINOR@
@@ -846,9 +856,10 @@ dri2_backend_core_FILES := \
 
 MKDIR_GEN = $(AM_V_at)$(MKDIR_P) $(@D)
 BUILT_SOURCES = g_egldispatchstubs.c g_egldispatchstubs.h
-AM_CFLAGS = -I$(top_srcdir)/include -I$(top_srcdir)/src/egl/main \
-	-I$(top_srcdir)/src/gbm/main -I$(top_srcdir)/src $(DEFINES) \
-	$(VISIBILITY_CFLAGS) $(LIBDRM_CFLAGS) $(EGL_CFLAGS) \
+AM_CFLAGS = -I$(top_srcdir)/include -I$(top_srcdir)/src/mapi \
+	-I$(top_srcdir)/src/egl/main -I$(top_srcdir)/src/gbm/main \
+	-I$(top_srcdir)/src $(DEFINES) $(VISIBILITY_CFLAGS) \
+	$(LIBDRM_CFLAGS) $(EGL_CFLAGS) \
 	-D_EGL_NATIVE_PLATFORM=$(EGL_NATIVE_PLATFORM) $(am__append_1) \
 	$(am__append_6) $(am__append_12) -I$(top_srcdir)/src/loader \
 	-I$(top_builddir)/src/egl/drivers/dri2 \
@@ -868,10 +879,14 @@ noinst_LTLIBRARIES = libEGL_common.la
 libEGL_common_la_SOURCES = $(LIBEGL_C_FILES) \
 	$(dri2_backend_core_FILES) $(dri2_backend_FILES) \
 	$(dri3_backend_FILES)
-libEGL_common_la_LIBADD = $(EGL_LIB_DEPS) $(am__append_2) \
-	$(am__append_5) $(am__append_7) $(am__append_9) \
-	$(am__append_13) $(top_builddir)/src/loader/libloader.la \
-	$(DLOPEN_LIBS) $(LIBDRM_LIBS) $(CLOCK_LIB)
+libEGL_common_la_LIBADD =  \
+	$(top_builddir)/src/mapi/shared-glapi/libglapi.la \
+	$(top_builddir)/src/util/libmesautil.la $(EGL_LIB_DEPS) \
+	$(am__append_2) $(am__append_5) $(am__append_7) \
+	$(am__append_9) $(am__append_13) \
+	$(top_builddir)/src/loader/libloader.la \
+	$(top_builddir)/src/util/libxmlconfig.la $(DLOPEN_LIBS) \
+	$(LIBDRM_LIBS) $(CLOCK_LIB)
 dri2_backend_FILES = $(am__append_3) $(am__append_8) $(am__append_10) \
 	$(am__append_11) $(am__append_14)
 dri3_backend_FILES = $(am__append_4)

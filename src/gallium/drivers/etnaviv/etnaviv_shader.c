@@ -29,11 +29,29 @@
 #include "etnaviv_compiler.h"
 #include "etnaviv_context.h"
 #include "etnaviv_debug.h"
+#include "etnaviv_screen.h"
 #include "etnaviv_util.h"
 
 #include "tgsi/tgsi_parse.h"
 #include "util/u_math.h"
 #include "util/u_memory.h"
+
+/* Upload shader code to bo, if not already done */
+static bool etna_icache_upload_shader(struct etna_context *ctx, struct etna_shader_variant *v)
+{
+   if (v->bo)
+      return true;
+   v->bo = etna_bo_new(ctx->screen->dev, v->code_size*4, DRM_ETNA_GEM_CACHE_UNCACHED);
+   if (!v->bo)
+      return false;
+
+   void *buf = etna_bo_map(v->bo);
+   etna_bo_cpu_prep(v->bo, DRM_ETNA_PREP_WRITE);
+   memcpy(buf, v->code, v->code_size*4);
+   etna_bo_cpu_fini(v->bo);
+   DBG("Uploaded %s of %u words to bo %p", v->processor == PIPE_SHADER_FRAGMENT ? "fs":"vs", v->code_size, v->bo);
+   return true;
+}
 
 /* Link vs and fs together: fill in shader_state from vs and fs
  * as this function is called every time a new fs or vs is bound, the goal is to
@@ -45,7 +63,7 @@
  */
 static bool
 etna_link_shaders(struct etna_context *ctx, struct compiled_shader_state *cs,
-                  const struct etna_shader_variant *vs, const struct etna_shader_variant *fs)
+                  struct etna_shader_variant *vs, struct etna_shader_variant *fs)
 {
    struct etna_shader_link_info link = { };
 
@@ -164,8 +182,31 @@ etna_link_shaders(struct etna_context *ctx, struct compiled_shader_state *cs,
    /* reference instruction memory */
    cs->vs_inst_mem_size = vs->code_size;
    cs->VS_INST_MEM = vs->code;
+
    cs->ps_inst_mem_size = fs->code_size;
    cs->PS_INST_MEM = fs->code;
+
+   if (vs->needs_icache | fs->needs_icache) {
+      /* If either of the shaders needs ICACHE, we use it for both. It is
+       * either switched on or off for the entire shader processor.
+       */
+      if (!etna_icache_upload_shader(ctx, vs) ||
+          !etna_icache_upload_shader(ctx, fs)) {
+         assert(0);
+         return false;
+      }
+
+      cs->VS_INST_ADDR.bo = vs->bo;
+      cs->VS_INST_ADDR.offset = 0;
+      cs->VS_INST_ADDR.flags = ETNA_RELOC_READ;
+      cs->PS_INST_ADDR.bo = fs->bo;
+      cs->PS_INST_ADDR.offset = 0;
+      cs->PS_INST_ADDR.flags = ETNA_RELOC_READ;
+   } else {
+      /* clear relocs */
+      memset(&cs->VS_INST_ADDR, 0, sizeof(cs->VS_INST_ADDR));
+      memset(&cs->PS_INST_ADDR, 0, sizeof(cs->PS_INST_ADDR));
+   }
 
    return true;
 }
@@ -352,6 +393,8 @@ etna_delete_shader_state(struct pipe_context *pctx, void *ss)
    while (v) {
       t = v;
       v = v->next;
+      if (t->bo)
+         etna_bo_del(t->bo);
       etna_destroy_shader(t);
    }
 

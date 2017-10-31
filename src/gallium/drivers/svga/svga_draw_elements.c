@@ -242,21 +242,21 @@ svga_hwtnl_draw_range_elements(struct svga_hwtnl *hwtnl,
                               prim, gen_prim,
                               count, gen_nr, gen_size,
                               gen_func, &gen_buf);
-      if (ret != PIPE_OK)
-         goto done;
+      if (ret == PIPE_OK) {
+         ret = svga_hwtnl_simple_draw_range_elements(hwtnl,
+                                                     gen_buf,
+                                                     gen_size,
+                                                     index_bias,
+                                                     min_index,
+                                                     max_index,
+                                                     gen_prim, 0, gen_nr,
+                                                     start_instance,
+                                                     instance_count);
+      }
 
-      ret = svga_hwtnl_simple_draw_range_elements(hwtnl,
-                                                  gen_buf,
-                                                  gen_size,
-                                                  index_bias,
-                                                  min_index,
-                                                  max_index,
-                                                  gen_prim, 0, gen_nr,
-                                                  start_instance,
-                                                  instance_count);
-done:
-      if (gen_buf)
+      if (gen_buf) {
          pipe_resource_reference(&gen_buf, NULL);
+      }
    }
 
    SVGA_STATS_TIME_POP(svga_sws(hwtnl->svga));

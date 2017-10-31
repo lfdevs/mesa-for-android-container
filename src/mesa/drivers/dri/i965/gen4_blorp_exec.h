@@ -28,10 +28,8 @@ dynamic_state_address(struct blorp_batch *batch, uint32_t offset)
    struct brw_context *brw = batch->driver_batch;
 
    return (struct blorp_address) {
-      .buffer = brw->batch.bo,
+      .buffer = brw->batch.state_bo,
       .offset = offset,
-      .write_domain = 0,
-      .read_domains = I915_GEM_DOMAIN_INSTRUCTION,
    };
 }
 
@@ -44,8 +42,6 @@ instruction_state_address(struct blorp_batch *batch, uint32_t offset)
    return (struct blorp_address) {
       .buffer = brw->cache.bo,
       .offset = offset,
-      .write_domain = 0,
-      .read_domains = I915_GEM_DOMAIN_INSTRUCTION,
    };
 }
 

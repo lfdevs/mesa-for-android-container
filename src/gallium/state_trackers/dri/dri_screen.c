@@ -30,7 +30,6 @@
  */
 
 #include "utils.h"
-#include "xmlpool.h"
 
 #include "dri_screen.h"
 #include "dri_context.h"
@@ -50,45 +49,9 @@
 #undef false
 
 const __DRIconfigOptionsExtension gallium_config_options = {
-   .base = { __DRI_CONFIG_OPTIONS, 1 },
-   .xml =
-
-   DRI_CONF_BEGIN
-      DRI_CONF_SECTION_PERFORMANCE
-         DRI_CONF_MESA_GLTHREAD("false")
-         DRI_CONF_MESA_NO_ERROR("false")
-         DRI_CONF_DISABLE_EXT_BUFFER_AGE("false")
-         DRI_CONF_DISABLE_OML_SYNC_CONTROL("false")
-      DRI_CONF_SECTION_END
-
-      DRI_CONF_SECTION_QUALITY
-         DRI_CONF_FORCE_S3TC_ENABLE("false")
-         DRI_CONF_PP_CELSHADE(0)
-         DRI_CONF_PP_NORED(0)
-         DRI_CONF_PP_NOGREEN(0)
-         DRI_CONF_PP_NOBLUE(0)
-         DRI_CONF_PP_JIMENEZMLAA(0, 0, 32)
-         DRI_CONF_PP_JIMENEZMLAA_COLOR(0, 0, 32)
-      DRI_CONF_SECTION_END
-
-      DRI_CONF_SECTION_DEBUG
-         DRI_CONF_FORCE_GLSL_EXTENSIONS_WARN("false")
-         DRI_CONF_DISABLE_GLSL_LINE_CONTINUATIONS("false")
-         DRI_CONF_DISABLE_BLEND_FUNC_EXTENDED("false")
-         DRI_CONF_DISABLE_SHADER_BIT_ENCODING("false")
-         DRI_CONF_FORCE_GLSL_VERSION(0)
-         DRI_CONF_ALLOW_GLSL_EXTENSION_DIRECTIVE_MIDSHADER("false")
-         DRI_CONF_ALLOW_GLSL_BUILTIN_VARIABLE_REDECLARATION("false")
-         DRI_CONF_ALLOW_HIGHER_COMPAT_VERSION("false")
-         DRI_CONF_FORCE_GLSL_ABS_SQRT("false")
-         DRI_CONF_GLSL_CORRECT_DERIVATIVES_AFTER_DISCARD("false")
-      DRI_CONF_SECTION_END
-
-      DRI_CONF_SECTION_MISCELLANEOUS
-         DRI_CONF_ALWAYS_HAVE_DEPTH_BUFFER("false")
-         DRI_CONF_GLSL_ZERO_INIT("false")
-      DRI_CONF_SECTION_END
-   DRI_CONF_END
+   .base = { __DRI_CONFIG_OPTIONS, 2 },
+   .xml = gallium_driinfo_xml,
+   .getXml = pipe_loader_get_driinfo_xml
 };
 
 #define false 0
@@ -97,7 +60,7 @@ static void
 dri_fill_st_options(struct dri_screen *screen)
 {
    struct st_config_options *options = &screen->options;
-   const struct driOptionCache *optionCache = &screen->optionCache;
+   const struct driOptionCache *optionCache = &screen->dev->option_cache;
 
    options->disable_blend_func_extended =
       driQueryOptionb(optionCache, "disable_blend_func_extended");
@@ -109,8 +72,6 @@ dri_fill_st_options(struct dri_screen *screen)
       driQueryOptionb(optionCache, "force_glsl_extensions_warn");
    options->force_glsl_version =
       driQueryOptioni(optionCache, "force_glsl_version");
-   options->force_s3tc_enable =
-      driQueryOptionb(optionCache, "force_s3tc_enable");
    options->allow_glsl_extension_directive_midshader =
       driQueryOptionb(optionCache, "allow_glsl_extension_directive_midshader");
    options->allow_glsl_builtin_variable_redeclaration =
@@ -124,6 +85,23 @@ dri_fill_st_options(struct dri_screen *screen)
    driComputeOptionsSha1(optionCache, options->config_options_sha1);
 }
 
+static unsigned
+dri_loader_get_cap(struct dri_screen *screen, enum dri_loader_cap cap)
+{
+   const __DRIdri2LoaderExtension *dri2_loader = screen->sPriv->dri2.loader;
+   const __DRIimageLoaderExtension *image_loader = screen->sPriv->image.loader;
+
+   if (dri2_loader && dri2_loader->base.version >= 4 &&
+       dri2_loader->getCapability)
+      return dri2_loader->getCapability(screen->sPriv->loaderPrivate, cap);
+
+   if (image_loader && image_loader->base.version >= 2 &&
+       image_loader->getCapability)
+      return image_loader->getCapability(screen->sPriv->loaderPrivate, cap);
+
+   return 0;
+}
+
 static const __DRIconfig **
 dri_fill_in_modes(struct dri_screen *screen)
 {
@@ -133,11 +111,6 @@ dri_fill_in_modes(struct dri_screen *screen)
       MESA_FORMAT_B8G8R8A8_SRGB,
       MESA_FORMAT_B8G8R8X8_SRGB,
       MESA_FORMAT_B5G6R5_UNORM,
-#ifdef ANDROID
-      /*
-       * To reduce the risk of breaking non-Android users in stable release
-       * let's keep these for Android alone until this is handled properly.
-       */
 
       /* The 32-bit RGBA format must not precede the 32-bit BGRA format.
        * Likewise for RGBX and BGRX.  Otherwise, the GLX client and the GLX
@@ -159,7 +132,6 @@ dri_fill_in_modes(struct dri_screen *screen)
 
       /* Required by Android, for HAL_PIXEL_FORMAT_RGBX_8888. */
       MESA_FORMAT_R8G8B8X8_UNORM,
-#endif
    };
    static const enum pipe_format pipe_formats[] = {
       PIPE_FORMAT_BGRA8888_UNORM,
@@ -167,14 +139,8 @@ dri_fill_in_modes(struct dri_screen *screen)
       PIPE_FORMAT_BGRA8888_SRGB,
       PIPE_FORMAT_BGRX8888_SRGB,
       PIPE_FORMAT_B5G6R5_UNORM,
-#ifdef ANDROID
-      /*
-       * To reduce the risk of breaking non-Android users in stable release
-       * let's keep these for Android alone until this is handled properly.
-       */
       PIPE_FORMAT_RGBA8888_UNORM,
       PIPE_FORMAT_RGBX8888_UNORM,
-#endif
    };
    mesa_format format;
    __DRIconfig **configs = NULL;
@@ -188,10 +154,11 @@ dri_fill_in_modes(struct dri_screen *screen)
    boolean mixed_color_depth;
 
    static const GLenum back_buffer_modes[] = {
-      GLX_NONE, GLX_SWAP_UNDEFINED_OML, GLX_SWAP_COPY_OML
+      __DRI_ATTRIB_SWAP_NONE, __DRI_ATTRIB_SWAP_UNDEFINED,
+      __DRI_ATTRIB_SWAP_COPY
    };
 
-   if (driQueryOptionb(&screen->optionCache, "always_have_depth_buffer")) {
+   if (driQueryOptionb(&screen->dev->option_cache, "always_have_depth_buffer")) {
       /* all visuals will have a depth buffer */
       depth_buffer_factor = 0;
    }
@@ -247,8 +214,15 @@ dri_fill_in_modes(struct dri_screen *screen)
 
    assert(ARRAY_SIZE(mesa_formats) == ARRAY_SIZE(pipe_formats));
 
+   /* Expose only BGRA ordering if the loader doesn't support RGBA ordering. */
+   unsigned num_formats;
+   if (dri_loader_get_cap(screen, DRI_LOADER_CAP_RGBA_ORDERING))
+      num_formats = ARRAY_SIZE(mesa_formats);
+   else
+      num_formats = 5;
+
    /* Add configs. */
-   for (format = 0; format < ARRAY_SIZE(mesa_formats); format++) {
+   for (format = 0; format < num_formats; format++) {
       __DRIconfig **new_configs = NULL;
       unsigned num_msaa_modes = 0; /* includes a single-sample mode */
       uint8_t msaa_modes[MSAA_VISUAL_MAX_SAMPLES];
@@ -444,28 +418,6 @@ dri_get_param(struct st_manager *smapi,
    }
 }
 
-static void
-dri_destroy_option_cache(struct dri_screen * screen)
-{
-   int i;
-
-   if (screen->optionCache.info) {
-      for (i = 0; i < (1 << screen->optionCache.tableSize); ++i) {
-         free(screen->optionCache.info[i].name);
-         free(screen->optionCache.info[i].ranges);
-      }
-      free(screen->optionCache.info);
-   }
-
-   free(screen->optionCache.values);
-
-   /* Default values are copied to screen->optionCache->values in
-    * initOptionCache. The info field, however, is a pointer copy, so don't free
-    * that twice.
-    */
-   free(screen->optionCacheDefaults.values);
-}
-
 void
 dri_destroy_screen_helper(struct dri_screen * screen)
 {
@@ -478,7 +430,6 @@ dri_destroy_screen_helper(struct dri_screen * screen)
    if (screen->base.screen)
       screen->base.screen->destroy(screen->base.screen);
 
-   dri_destroy_option_cache(screen);
    mtx_destroy(&screen->opencl_func_mutex);
 }
 
@@ -502,7 +453,7 @@ dri_postprocessing_init(struct dri_screen *screen)
    unsigned i;
 
    for (i = 0; i < PP_FILTERS; i++) {
-      screen->pp_enabled[i] = driQueryOptioni(&screen->optionCache,
+      screen->pp_enabled[i] = driQueryOptioni(&screen->dev->option_cache,
                                               pp_filters[i].name);
    }
 }
@@ -526,24 +477,12 @@ dri_set_background_context(struct st_context_iface *st,
       hud_add_queue_for_monitoring(ctx->hud, queue_info);
 }
 
-unsigned
-dri_init_options_get_screen_flags(struct dri_screen *screen,
-                                  const char* driver_name)
+void
+dri_init_options(struct dri_screen *screen)
 {
-   unsigned flags = 0;
+   pipe_loader_load_options(screen->dev);
 
-   driParseOptionInfo(&screen->optionCacheDefaults, gallium_config_options.xml);
-   driParseConfigFiles(&screen->optionCache,
-                       &screen->optionCacheDefaults,
-                       screen->sPriv->myNum,
-                       driver_name);
    dri_fill_st_options(screen);
-
-   if (driQueryOptionb(&screen->optionCache,
-                       "glsl_correct_derivatives_after_discard"))
-      flags |= PIPE_SCREEN_ENABLE_CORRECT_TGSI_DERIVATIVES_AFTER_KILL;
-
-   return flags;
 }
 
 const __DRIconfig **
@@ -563,19 +502,6 @@ dri_init_screen_helper(struct dri_screen *screen,
       screen->target = PIPE_TEXTURE_2D;
    else
       screen->target = PIPE_TEXTURE_RECT;
-
-   /* Handle force_s3tc_enable. */
-   if (!util_format_s3tc_enabled && screen->options.force_s3tc_enable) {
-      /* Ensure libtxc_dxtn has been loaded if available.
-       * Forcing S3TC on before calling this would prevent loading
-       * the library.
-       * This is just a precaution, the driver should have called it
-       * already.
-       */
-      util_format_s3tc_init();
-
-      util_format_s3tc_enabled = TRUE;
-   }
 
    dri_postprocessing_init(screen);
 

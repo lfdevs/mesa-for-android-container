@@ -489,6 +489,24 @@ last_command_was_draw(const struct svga_context *svga)
 }
 
 
+/**
+ * A helper function to compare vertex buffers.
+ * They are equal if the vertex buffer attributes and the vertex buffer
+ * resources are identical.
+ */
+static boolean
+vertex_buffers_equal(unsigned count,
+                     SVGA3dVertexBuffer *pVBufAttr1,
+                     struct pipe_resource **pVBuf1,
+                     SVGA3dVertexBuffer *pVBufAttr2,
+                     struct pipe_resource **pVBuf2)
+{
+   return (memcmp(pVBufAttr1, pVBufAttr2,
+                  count * sizeof(*pVBufAttr1)) == 0) &&
+          (memcmp(pVBuf1, pVBuf2, count * sizeof(*pVBuf1)) == 0);
+}
+
+
 static enum pipe_error
 draw_vgpu10(struct svga_hwtnl *hwtnl,
             const SVGA3dPrimitiveRange *range,
@@ -571,12 +589,12 @@ draw_vgpu10(struct svga_hwtnl *hwtnl,
    if (ib) {
       struct svga_buffer *sbuf = svga_buffer(ib);
 
-      assert(sbuf->key.flags & SVGA3D_SURFACE_BIND_INDEX_BUFFER);
-      (void) sbuf; /* silence unused var warning */
-
       ib_handle = svga_buffer_handle(svga, ib, PIPE_BIND_INDEX_BUFFER);
       if (!ib_handle)
          return PIPE_ERROR_OUT_OF_MEMORY;
+
+      assert(sbuf->key.flags & SVGA3D_SURFACE_BIND_INDEX_BUFFER);
+      (void) sbuf; /* silence unused var warning */
    }
    else {
       ib_handle = NULL;
@@ -607,10 +625,11 @@ draw_vgpu10(struct svga_hwtnl *hwtnl,
        */
       if (((hwtnl->cmd.swc->hints & SVGA_HINT_FLAG_CAN_PRE_FLUSH) == 0) ||
           vbuf_count != svga->state.hw_draw.num_vbuffers ||
-          memcmp(vbuffer_attrs, svga->state.hw_draw.vbuffer_attrs,
-                 vbuf_count * sizeof(vbuffer_attrs[0])) ||
-          memcmp(vbuffers, svga->state.hw_draw.vbuffers,
-                 vbuf_count * sizeof(vbuffers[0]))) {
+          !vertex_buffers_equal(vbuf_count,
+                                vbuffer_attrs,
+                                vbuffers,
+                                svga->state.hw_draw.vbuffer_attrs,
+                                svga->state.hw_draw.vbuffers)) {
 
          unsigned num_vbuffers;
 
@@ -631,13 +650,52 @@ draw_vgpu10(struct svga_hwtnl *hwtnl,
          }
 
          if (num_vbuffers > 0) {
+            SVGA3dVertexBuffer *pbufAttrs = vbuffer_attrs;
+            struct svga_winsys_surface **pbufHandles = vbuffer_handles;
+            unsigned numVBuf = 0;
 
-            ret = SVGA3D_vgpu10_SetVertexBuffers(svga->swc, num_vbuffers,
-                                                 0,    /* startBuffer */
-                                                 vbuffer_attrs,
-                                                 vbuffer_handles);
-            if (ret != PIPE_OK)
-               return ret;
+            /* Loop through the vertex buffer lists to only emit
+             * those vertex buffers that are not already in the
+             * corresponding entries in the device's vertex buffer list.
+             */
+            for (i = 0; i < num_vbuffers; i++) {
+               boolean emit;
+
+               emit = vertex_buffers_equal(1,
+                                           &vbuffer_attrs[i],
+                                           &vbuffers[i],
+                                           &svga->state.hw_draw.vbuffer_attrs[i],
+                                           &svga->state.hw_draw.vbuffers[i]);
+                                               
+               if (!emit && i == num_vbuffers-1) {
+                  /* Include the last vertex buffer in the next emit
+                   * if it is different.
+                   */
+                  emit = TRUE;
+                  numVBuf++;
+                  i++;
+               }
+
+               if (emit) {
+                  /* numVBuf can only be 0 if the first vertex buffer
+                   * is the same as the one in the device's list.
+                   * In this case, there is nothing to send yet.
+                   */
+                  if (numVBuf) {
+                     ret = SVGA3D_vgpu10_SetVertexBuffers(svga->swc,
+                                                          numVBuf,
+                                                          i - numVBuf,
+                                                          pbufAttrs, pbufHandles);
+                     if (ret != PIPE_OK)
+                        return ret;
+                  }
+                  pbufAttrs += (numVBuf + 1);
+                  pbufHandles += (numVBuf + 1);
+                  numVBuf = 0;
+               }
+               else
+                  numVBuf++;
+            }
 
             /* save the number of vertex buffers sent to the device, not
              * including trailing unbound vertex buffers.

@@ -82,6 +82,7 @@
 #define RUVD_CODEC_MPEG2	0x00000003
 #define RUVD_CODEC_MPEG4	0x00000004
 #define RUVD_CODEC_H264_PERF	0x00000007
+#define RUVD_CODEC_MJPEG	0x00000008
 #define RUVD_CODEC_H265		0x00000010
 
 /* UVD decode target buffer tiling mode */
@@ -436,11 +437,11 @@ typedef struct pb_buffer* (*ruvd_set_dtb)
 (struct ruvd_msg* msg, struct vl_video_buffer *vb);
 
 /* create an UVD decode */
-struct pipe_video_codec *ruvd_create_decoder(struct pipe_context *context,
-					     const struct pipe_video_codec *templat,
-					     ruvd_set_dtb set_dtb);
+struct pipe_video_codec *si_common_uvd_create_decoder(struct pipe_context *context,
+						      const struct pipe_video_codec *templat,
+						      ruvd_set_dtb set_dtb);
 
 /* fill decoding target field from the luma and chroma surfaces */
-void ruvd_set_dt_surfaces(struct ruvd_msg *msg, struct radeon_surf *luma,
-			struct radeon_surf *chroma, enum ruvd_surface_type type);
+void si_uvd_set_dt_surfaces(struct ruvd_msg *msg, struct radeon_surf *luma,
+			    struct radeon_surf *chroma, enum ruvd_surface_type type);
 #endif

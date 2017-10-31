@@ -36,6 +36,8 @@
 #include "ir3.h"
 #include "disasm.h"
 
+struct glsl_type;
+
 /* driver param indices: */
 enum ir3_driver_param {
 	/* compute shader driver params: */
@@ -338,6 +340,9 @@ void ir3_emit_fs_consts(const struct ir3_shader_variant *v, struct fd_ringbuffer
 		struct fd_context *ctx);
 void ir3_emit_cs_consts(const struct ir3_shader_variant *v, struct fd_ringbuffer *ring,
 		struct fd_context *ctx, const struct pipe_grid_info *info);
+
+int
+ir3_glsl_type_size(const struct glsl_type *type);
 
 static inline const char *
 ir3_shader_stage(struct ir3_shader *shader)

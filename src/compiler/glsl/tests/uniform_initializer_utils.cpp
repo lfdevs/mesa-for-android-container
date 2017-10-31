@@ -215,11 +215,11 @@ verify_data(gl_constant_value *storage, unsigned storage_array_size,
             unsigned int boolean_true)
 {
    if (val->type->is_array()) {
-      const glsl_type *const element_type = val->array_elements[0]->type;
+      const glsl_type *const element_type = val->const_elements[0]->type;
 
       for (unsigned i = 0; i < storage_array_size; i++) {
 	 verify_data(storage + (i * element_type->components()), 0,
-		     val->array_elements[i], 0, boolean_true);
+                     val->const_elements[i], 0, boolean_true);
       }
 
       const unsigned components = element_type->components();

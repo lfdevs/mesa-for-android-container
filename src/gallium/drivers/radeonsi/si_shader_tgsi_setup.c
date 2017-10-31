@@ -165,20 +165,20 @@ out:
 LLVMTypeRef tgsi2llvmtype(struct lp_build_tgsi_context *bld_base,
 			  enum tgsi_opcode_type type)
 {
-	LLVMContextRef ctx = bld_base->base.gallivm->context;
+	struct si_shader_context *ctx = si_shader_context(bld_base);
 
 	switch (type) {
 	case TGSI_TYPE_UNSIGNED:
 	case TGSI_TYPE_SIGNED:
-		return LLVMInt32TypeInContext(ctx);
+		return ctx->i32;
 	case TGSI_TYPE_UNSIGNED64:
 	case TGSI_TYPE_SIGNED64:
-		return LLVMInt64TypeInContext(ctx);
+		return ctx->i64;
 	case TGSI_TYPE_DOUBLE:
-		return LLVMDoubleTypeInContext(ctx);
+		return LLVMDoubleTypeInContext(ctx->ac.context);
 	case TGSI_TYPE_UNTYPED:
 	case TGSI_TYPE_FLOAT:
-		return LLVMFloatTypeInContext(ctx);
+		return ctx->f32;
 	default: break;
 	}
 	return 0;
@@ -187,11 +187,11 @@ LLVMTypeRef tgsi2llvmtype(struct lp_build_tgsi_context *bld_base,
 LLVMValueRef bitcast(struct lp_build_tgsi_context *bld_base,
 		     enum tgsi_opcode_type type, LLVMValueRef value)
 {
-	LLVMBuilderRef builder = bld_base->base.gallivm->builder;
+	struct si_shader_context *ctx = si_shader_context(bld_base);
 	LLVMTypeRef dst_type = tgsi2llvmtype(bld_base, type);
 
 	if (dst_type)
-		return LLVMBuildBitCast(builder, value, dst_type, "");
+		return LLVMBuildBitCast(ctx->ac.builder, value, dst_type, "");
 	else
 		return value;
 }
@@ -204,8 +204,7 @@ LLVMValueRef si_llvm_bound_index(struct si_shader_context *ctx,
 				 LLVMValueRef index,
 				 unsigned num)
 {
-	struct gallivm_state *gallivm = &ctx->gallivm;
-	LLVMBuilderRef builder = gallivm->builder;
+	LLVMBuilderRef builder = ctx->ac.builder;
 	LLVMValueRef c_max = LLVMConstInt(ctx->i32, num - 1, 0);
 	LLVMValueRef cc;
 
@@ -271,16 +270,15 @@ static LLVMValueRef emit_swizzle(struct lp_build_tgsi_context *bld_base,
 				 unsigned swizzle_z,
 				 unsigned swizzle_w)
 {
+	struct si_shader_context *ctx = si_shader_context(bld_base);
 	LLVMValueRef swizzles[4];
-	LLVMTypeRef i32t =
-		LLVMInt32TypeInContext(bld_base->base.gallivm->context);
 
-	swizzles[0] = LLVMConstInt(i32t, swizzle_x, 0);
-	swizzles[1] = LLVMConstInt(i32t, swizzle_y, 0);
-	swizzles[2] = LLVMConstInt(i32t, swizzle_z, 0);
-	swizzles[3] = LLVMConstInt(i32t, swizzle_w, 0);
+	swizzles[0] = LLVMConstInt(ctx->i32, swizzle_x, 0);
+	swizzles[1] = LLVMConstInt(ctx->i32, swizzle_y, 0);
+	swizzles[2] = LLVMConstInt(ctx->i32, swizzle_z, 0);
+	swizzles[3] = LLVMConstInt(ctx->i32, swizzle_w, 0);
 
-	return LLVMBuildShuffleVector(bld_base->base.gallivm->builder,
+	return LLVMBuildShuffleVector(ctx->ac.builder,
 				      value,
 				      LLVMGetUndef(LLVMTypeOf(value)),
 				      LLVMConstVector(swizzles, 4), "");
@@ -331,20 +329,6 @@ get_array_range(struct lp_build_tgsi_context *bld_base,
 	return range;
 }
 
-static LLVMValueRef
-emit_array_index(struct si_shader_context *ctx,
-		 const struct tgsi_ind_register *reg,
-		 unsigned offset)
-{
-	struct gallivm_state *gallivm = &ctx->gallivm;
-
-	if (!reg) {
-		return LLVMConstInt(ctx->i32, offset, 0);
-	}
-	LLVMValueRef addr = LLVMBuildLoad(gallivm->builder, ctx->addrs[reg->Index][reg->Swizzle], "");
-	return LLVMBuildAdd(gallivm->builder, addr, LLVMConstInt(ctx->i32, offset, 0), "");
-}
-
 /**
  * For indirect registers, construct a pointer directly to the requested
  * element using getelementptr if possible.
@@ -361,8 +345,7 @@ get_pointer_into_array(struct si_shader_context *ctx,
 {
 	unsigned array_id;
 	struct tgsi_array_info *array;
-	struct gallivm_state *gallivm = &ctx->gallivm;
-	LLVMBuilderRef builder = gallivm->builder;
+	LLVMBuilderRef builder = ctx->ac.builder;
 	LLVMValueRef idxs[2];
 	LLVMValueRef index;
 	LLVMValueRef alloca;
@@ -383,8 +366,8 @@ get_pointer_into_array(struct si_shader_context *ctx,
 	if (!(array->writemask & (1 << swizzle)))
 		return ctx->undef_alloca;
 
-	index = emit_array_index(ctx, reg_indirect,
-				 reg_index - ctx->temp_arrays[array_id - 1].range.First);
+	index = si_get_indirect_index(ctx, reg_indirect, 1,
+				      reg_index - ctx->temp_arrays[array_id - 1].range.First);
 
 	/* Ensure that the index is within a valid range, to guard against
 	 * VM faults and overwriting critical data (e.g. spilled resource
@@ -411,7 +394,7 @@ get_pointer_into_array(struct si_shader_context *ctx,
 		"");
 	idxs[0] = ctx->i32_0;
 	idxs[1] = index;
-	return LLVMBuildGEP(builder, alloca, idxs, 2, "");
+	return LLVMBuildGEP(ctx->ac.builder, alloca, idxs, 2, "");
 }
 
 LLVMValueRef
@@ -420,19 +403,19 @@ si_llvm_emit_fetch_64bit(struct lp_build_tgsi_context *bld_base,
 			 LLVMValueRef ptr,
 			 LLVMValueRef ptr2)
 {
-	LLVMBuilderRef builder = bld_base->base.gallivm->builder;
+	struct si_shader_context *ctx = si_shader_context(bld_base);
 	LLVMValueRef result;
 
-	result = LLVMGetUndef(LLVMVectorType(LLVMIntTypeInContext(bld_base->base.gallivm->context, 32), bld_base->base.type.length * 2));
+	result = LLVMGetUndef(LLVMVectorType(ctx->i32, 2));
 
-	result = LLVMBuildInsertElement(builder,
+	result = LLVMBuildInsertElement(ctx->ac.builder,
 					result,
-					bitcast(bld_base, TGSI_TYPE_UNSIGNED, ptr),
-					bld_base->int_bld.zero, "");
-	result = LLVMBuildInsertElement(builder,
+					ac_to_integer(&ctx->ac, ptr),
+					ctx->i32_0, "");
+	result = LLVMBuildInsertElement(ctx->ac.builder,
 					result,
-					bitcast(bld_base, TGSI_TYPE_UNSIGNED, ptr2),
-					bld_base->int_bld.one, "");
+					ac_to_integer(&ctx->ac, ptr2),
+					ctx->i32_1, "");
 	return bitcast(bld_base, type, result);
 }
 
@@ -443,9 +426,6 @@ emit_array_fetch(struct lp_build_tgsi_context *bld_base,
 		 unsigned swizzle)
 {
 	struct si_shader_context *ctx = si_shader_context(bld_base);
-
-	LLVMBuilderRef builder = ctx->gallivm.builder;
-
 	unsigned i, size = range.Last - range.First + 1;
 	LLVMTypeRef vec = LLVMVectorType(tgsi2llvmtype(bld_base, type), size);
 	LLVMValueRef result = LLVMGetUndef(vec);
@@ -456,7 +436,7 @@ emit_array_fetch(struct lp_build_tgsi_context *bld_base,
 	for (i = 0; i < size; ++i) {
 		tmp_reg.Register.Index = i + range.First;
 		LLVMValueRef temp = si_llvm_emit_fetch(bld_base, &tmp_reg, type, swizzle);
-		result = LLVMBuildInsertElement(builder, result, temp,
+		result = LLVMBuildInsertElement(ctx->ac.builder, result, temp,
 			LLVMConstInt(ctx->i32, i, 0), "array_vector");
 	}
 	return result;
@@ -471,8 +451,7 @@ load_value_from_array(struct lp_build_tgsi_context *bld_base,
 		      const struct tgsi_ind_register *reg_indirect)
 {
 	struct si_shader_context *ctx = si_shader_context(bld_base);
-	struct gallivm_state *gallivm = &ctx->gallivm;
-	LLVMBuilderRef builder = gallivm->builder;
+	LLVMBuilderRef builder = ctx->ac.builder;
 	LLVMValueRef ptr;
 
 	ptr = get_pointer_into_array(ctx, file, swizzle, reg_index, reg_indirect);
@@ -490,7 +469,7 @@ load_value_from_array(struct lp_build_tgsi_context *bld_base,
 		struct tgsi_declaration_range range =
 			get_array_range(bld_base, file, reg_index, reg_indirect);
 		LLVMValueRef index =
-			emit_array_index(ctx, reg_indirect, reg_index - range.First);
+			si_get_indirect_index(ctx, reg_indirect, 1, reg_index - range.First);
 		LLVMValueRef array =
 			emit_array_fetch(bld_base, file, type, range, swizzle);
 		return LLVMBuildExtractElement(builder, array, index, "");
@@ -506,8 +485,7 @@ store_value_to_array(struct lp_build_tgsi_context *bld_base,
 		     const struct tgsi_ind_register *reg_indirect)
 {
 	struct si_shader_context *ctx = si_shader_context(bld_base);
-	struct gallivm_state *gallivm = &ctx->gallivm;
-	LLVMBuilderRef builder = gallivm->builder;
+	LLVMBuilderRef builder = ctx->ac.builder;
 	LLVMValueRef ptr;
 
 	ptr = get_pointer_into_array(ctx, file, chan_index, reg_index, reg_indirect);
@@ -516,7 +494,7 @@ store_value_to_array(struct lp_build_tgsi_context *bld_base,
 	} else {
 		unsigned i, size;
 		struct tgsi_declaration_range range = get_array_range(bld_base, file, reg_index, reg_indirect);
-		LLVMValueRef index = emit_array_index(ctx, reg_indirect, reg_index - range.First);
+		LLVMValueRef index = si_get_indirect_index(ctx, reg_indirect, 1, reg_index - range.First);
 		LLVMValueRef array =
 			emit_array_fetch(bld_base, file, TGSI_TYPE_FLOAT, range, chan_index);
 		LLVMValueRef temp_ptr;
@@ -575,7 +553,7 @@ LLVMValueRef si_llvm_emit_fetch(struct lp_build_tgsi_context *bld_base,
 				unsigned swizzle)
 {
 	struct si_shader_context *ctx = si_shader_context(bld_base);
-	LLVMBuilderRef builder = ctx->gallivm.builder;
+	LLVMBuilderRef builder = ctx->ac.builder;
 	LLVMValueRef result = NULL, ptr, ptr2;
 
 	if (swizzle == ~0) {
@@ -598,7 +576,7 @@ LLVMValueRef si_llvm_emit_fetch(struct lp_build_tgsi_context *bld_base,
 	case TGSI_FILE_IMMEDIATE: {
 		LLVMTypeRef ctype = tgsi2llvmtype(bld_base, type);
 		if (tgsi_type_is_64bit(type)) {
-			result = LLVMGetUndef(LLVMVectorType(ctx->i32, bld_base->base.type.length * 2));
+			result = LLVMGetUndef(LLVMVectorType(ctx->i32, 2));
 			result = LLVMConstInsertElement(result,
 							ctx->imms[reg->Register.Index * TGSI_NUM_CHANNELS + swizzle],
 							ctx->i32_0);
@@ -673,7 +651,7 @@ static LLVMValueRef fetch_system_value(struct lp_build_tgsi_context *bld_base,
 				       unsigned swizzle)
 {
 	struct si_shader_context *ctx = si_shader_context(bld_base);
-	LLVMBuilderRef builder = ctx->gallivm.builder;
+	LLVMBuilderRef builder = ctx->ac.builder;
 	LLVMValueRef cval = ctx->system_values[reg->Register.Index];
 
 	if (tgsi_type_is_64bit(type)) {
@@ -703,7 +681,7 @@ static void emit_declaration(struct lp_build_tgsi_context *bld_base,
 			     const struct tgsi_full_declaration *decl)
 {
 	struct si_shader_context *ctx = si_shader_context(bld_base);
-	LLVMBuilderRef builder = ctx->gallivm.builder;
+	LLVMBuilderRef builder = ctx->ac.builder;
 	unsigned first, last, i;
 	switch(decl->Declaration.File) {
 	case TGSI_FILE_ADDRESS:
@@ -842,7 +820,7 @@ static void emit_declaration(struct lp_build_tgsi_context *bld_base,
 	{
 		unsigned idx;
 		for (idx = decl->Range.First; idx <= decl->Range.Last; idx++) {
-			ctx->load_system_value(ctx, idx, decl);
+			si_load_system_value(ctx, idx, decl);
 		}
 	}
 	break;
@@ -870,7 +848,7 @@ static void emit_declaration(struct lp_build_tgsi_context *bld_base,
 	}
 
 	case TGSI_FILE_MEMORY:
-		ctx->declare_memory_region(ctx, decl);
+		si_declare_compute_memory(ctx, decl);
 		break;
 
 	default:
@@ -881,16 +859,15 @@ static void emit_declaration(struct lp_build_tgsi_context *bld_base,
 void si_llvm_emit_store(struct lp_build_tgsi_context *bld_base,
 			const struct tgsi_full_instruction *inst,
 			const struct tgsi_opcode_info *info,
+			unsigned index,
 			LLVMValueRef dst[4])
 {
 	struct si_shader_context *ctx = si_shader_context(bld_base);
-	struct gallivm_state *gallivm = &ctx->gallivm;
-	const struct tgsi_full_dst_register *reg = &inst->Dst[0];
-	LLVMBuilderRef builder = ctx->gallivm.builder;
+	const struct tgsi_full_dst_register *reg = &inst->Dst[index];
+	LLVMBuilderRef builder = ctx->ac.builder;
 	LLVMValueRef temp_ptr, temp_ptr2 = NULL;
-	unsigned chan, chan_index;
 	bool is_vec_store = false;
-	enum tgsi_opcode_type dtype = tgsi_opcode_infer_dst_type(inst->Instruction.Opcode);
+	enum tgsi_opcode_type dtype = tgsi_opcode_infer_dst_type(inst->Instruction.Opcode, index);
 
 	if (dst[0]) {
 		LLVMTypeKind k = LLVMGetTypeKind(LLVMTypeOf(dst[0]));
@@ -899,16 +876,20 @@ void si_llvm_emit_store(struct lp_build_tgsi_context *bld_base,
 
 	if (is_vec_store) {
 		LLVMValueRef values[4] = {};
-		TGSI_FOR_EACH_DST0_ENABLED_CHANNEL(inst, chan) {
+		uint32_t writemask = reg->Register.WriteMask;
+		while (writemask) {
+			unsigned chan = u_bit_scan(&writemask);
 			LLVMValueRef index = LLVMConstInt(ctx->i32, chan, 0);
-			values[chan]  = LLVMBuildExtractElement(gallivm->builder,
+			values[chan]  = LLVMBuildExtractElement(ctx->ac.builder,
 							dst[0], index, "");
 		}
-		bld_base->emit_store(bld_base, inst, info, values);
+		bld_base->emit_store(bld_base, inst, info, index, values);
 		return;
 	}
 
-	TGSI_FOR_EACH_DST0_ENABLED_CHANNEL( inst, chan_index ) {
+	uint32_t writemask = reg->Register.WriteMask;
+	while (writemask) {
+		unsigned chan_index = u_bit_scan(&writemask);
 		LLVMValueRef value = dst[chan_index];
 
 		if (tgsi_type_is_64bit(dtype) && (chan_index == 1 || chan_index == 3))
@@ -923,7 +904,7 @@ void si_llvm_emit_store(struct lp_build_tgsi_context *bld_base,
 		}
 
 		if (!tgsi_type_is_64bit(dtype))
-			value = bitcast(bld_base, TGSI_TYPE_FLOAT, value);
+			value = ac_to_float(&ctx->ac, value);
 
 		if (reg->Register.Indirect) {
 			unsigned file = reg->Register.File;
@@ -963,8 +944,8 @@ void si_llvm_emit_store(struct lp_build_tgsi_context *bld_base,
 				val2 = LLVMBuildExtractElement(builder, ptr,
 							       ctx->i32_1, "");
 
-				LLVMBuildStore(builder, bitcast(bld_base, TGSI_TYPE_FLOAT, value), temp_ptr);
-				LLVMBuildStore(builder, bitcast(bld_base, TGSI_TYPE_FLOAT, val2), temp_ptr2);
+				LLVMBuildStore(builder, ac_to_float(&ctx->ac, value), temp_ptr);
+				LLVMBuildStore(builder, ac_to_float(&ctx->ac, val2), temp_ptr2);
 			}
 		}
 	}
@@ -986,18 +967,16 @@ static void set_basicblock_name(LLVMBasicBlockRef bb, const char *base, int pc)
 static LLVMBasicBlockRef append_basic_block(struct si_shader_context *ctx,
 					    const char *name)
 {
-	struct gallivm_state *gallivm = &ctx->gallivm;
-
 	assert(ctx->flow_depth >= 1);
 
 	if (ctx->flow_depth >= 2) {
 		struct si_llvm_flow *flow = &ctx->flow[ctx->flow_depth - 2];
 
-		return LLVMInsertBasicBlockInContext(gallivm->context,
+		return LLVMInsertBasicBlockInContext(ctx->ac.context,
 						     flow->next_block, name);
 	}
 
-	return LLVMAppendBasicBlockInContext(gallivm->context, ctx->main_fn, name);
+	return LLVMAppendBasicBlockInContext(ctx->ac.context, ctx->main_fn, name);
 }
 
 /* Emit a branch to the given default target for the current block if
@@ -1015,13 +994,12 @@ static void bgnloop_emit(const struct lp_build_tgsi_action *action,
 			 struct lp_build_emit_data *emit_data)
 {
 	struct si_shader_context *ctx = si_shader_context(bld_base);
-	struct gallivm_state *gallivm = &ctx->gallivm;
 	struct si_llvm_flow *flow = push_flow(ctx);
 	flow->loop_entry_block = append_basic_block(ctx, "LOOP");
 	flow->next_block = append_basic_block(ctx, "ENDLOOP");
 	set_basicblock_name(flow->loop_entry_block, "loop", bld_base->pc);
-	LLVMBuildBr(gallivm->builder, flow->loop_entry_block);
-	LLVMPositionBuilderAtEnd(gallivm->builder, flow->loop_entry_block);
+	LLVMBuildBr(ctx->ac.builder, flow->loop_entry_block);
+	LLVMPositionBuilderAtEnd(ctx->ac.builder, flow->loop_entry_block);
 }
 
 static void brk_emit(const struct lp_build_tgsi_action *action,
@@ -1029,10 +1007,9 @@ static void brk_emit(const struct lp_build_tgsi_action *action,
 		     struct lp_build_emit_data *emit_data)
 {
 	struct si_shader_context *ctx = si_shader_context(bld_base);
-	struct gallivm_state *gallivm = &ctx->gallivm;
 	struct si_llvm_flow *flow = get_innermost_loop(ctx);
 
-	LLVMBuildBr(gallivm->builder, flow->next_block);
+	LLVMBuildBr(ctx->ac.builder, flow->next_block);
 }
 
 static void cont_emit(const struct lp_build_tgsi_action *action,
@@ -1040,10 +1017,9 @@ static void cont_emit(const struct lp_build_tgsi_action *action,
 		      struct lp_build_emit_data *emit_data)
 {
 	struct si_shader_context *ctx = si_shader_context(bld_base);
-	struct gallivm_state *gallivm = &ctx->gallivm;
 	struct si_llvm_flow *flow = get_innermost_loop(ctx);
 
-	LLVMBuildBr(gallivm->builder, flow->loop_entry_block);
+	LLVMBuildBr(ctx->ac.builder, flow->loop_entry_block);
 }
 
 static void else_emit(const struct lp_build_tgsi_action *action,
@@ -1051,16 +1027,15 @@ static void else_emit(const struct lp_build_tgsi_action *action,
 		      struct lp_build_emit_data *emit_data)
 {
 	struct si_shader_context *ctx = si_shader_context(bld_base);
-	struct gallivm_state *gallivm = &ctx->gallivm;
 	struct si_llvm_flow *current_branch = get_current_flow(ctx);
 	LLVMBasicBlockRef endif_block;
 
 	assert(!current_branch->loop_entry_block);
 
 	endif_block = append_basic_block(ctx, "ENDIF");
-	emit_default_branch(gallivm->builder, endif_block);
+	emit_default_branch(ctx->ac.builder, endif_block);
 
-	LLVMPositionBuilderAtEnd(gallivm->builder, current_branch->next_block);
+	LLVMPositionBuilderAtEnd(ctx->ac.builder, current_branch->next_block);
 	set_basicblock_name(current_branch->next_block, "else", bld_base->pc);
 
 	current_branch->next_block = endif_block;
@@ -1071,13 +1046,12 @@ static void endif_emit(const struct lp_build_tgsi_action *action,
 		       struct lp_build_emit_data *emit_data)
 {
 	struct si_shader_context *ctx = si_shader_context(bld_base);
-	struct gallivm_state *gallivm = &ctx->gallivm;
 	struct si_llvm_flow *current_branch = get_current_flow(ctx);
 
 	assert(!current_branch->loop_entry_block);
 
-	emit_default_branch(gallivm->builder, current_branch->next_block);
-	LLVMPositionBuilderAtEnd(gallivm->builder, current_branch->next_block);
+	emit_default_branch(ctx->ac.builder, current_branch->next_block);
+	LLVMPositionBuilderAtEnd(ctx->ac.builder, current_branch->next_block);
 	set_basicblock_name(current_branch->next_block, "endif", bld_base->pc);
 
 	ctx->flow_depth--;
@@ -1088,14 +1062,13 @@ static void endloop_emit(const struct lp_build_tgsi_action *action,
 			 struct lp_build_emit_data *emit_data)
 {
 	struct si_shader_context *ctx = si_shader_context(bld_base);
-	struct gallivm_state *gallivm = &ctx->gallivm;
 	struct si_llvm_flow *current_loop = get_current_flow(ctx);
 
 	assert(current_loop->loop_entry_block);
 
-	emit_default_branch(gallivm->builder, current_loop->loop_entry_block);
+	emit_default_branch(ctx->ac.builder, current_loop->loop_entry_block);
 
-	LLVMPositionBuilderAtEnd(gallivm->builder, current_loop->next_block);
+	LLVMPositionBuilderAtEnd(ctx->ac.builder, current_loop->next_block);
 	set_basicblock_name(current_loop->next_block, "endloop", bld_base->pc);
 	ctx->flow_depth--;
 }
@@ -1106,27 +1079,26 @@ static void if_cond_emit(const struct lp_build_tgsi_action *action,
 			 LLVMValueRef cond)
 {
 	struct si_shader_context *ctx = si_shader_context(bld_base);
-	struct gallivm_state *gallivm = &ctx->gallivm;
 	struct si_llvm_flow *flow = push_flow(ctx);
 	LLVMBasicBlockRef if_block;
 
 	if_block = append_basic_block(ctx, "IF");
 	flow->next_block = append_basic_block(ctx, "ELSE");
 	set_basicblock_name(if_block, "if", bld_base->pc);
-	LLVMBuildCondBr(gallivm->builder, cond, if_block, flow->next_block);
-	LLVMPositionBuilderAtEnd(gallivm->builder, if_block);
+	LLVMBuildCondBr(ctx->ac.builder, cond, if_block, flow->next_block);
+	LLVMPositionBuilderAtEnd(ctx->ac.builder, if_block);
 }
 
 static void if_emit(const struct lp_build_tgsi_action *action,
 		    struct lp_build_tgsi_context *bld_base,
 		    struct lp_build_emit_data *emit_data)
 {
-	struct gallivm_state *gallivm = bld_base->base.gallivm;
+	struct si_shader_context *ctx = si_shader_context(bld_base);
 	LLVMValueRef cond;
 
-	cond = LLVMBuildFCmp(gallivm->builder, LLVMRealUNE,
+	cond = LLVMBuildFCmp(ctx->ac.builder, LLVMRealUNE,
 			emit_data->args[0],
-			bld_base->base.zero, "");
+			ctx->ac.f32_0, "");
 
 	if_cond_emit(action, bld_base, emit_data, cond);
 }
@@ -1135,12 +1107,11 @@ static void uif_emit(const struct lp_build_tgsi_action *action,
 		     struct lp_build_tgsi_context *bld_base,
 		     struct lp_build_emit_data *emit_data)
 {
-	struct gallivm_state *gallivm = bld_base->base.gallivm;
+	struct si_shader_context *ctx = si_shader_context(bld_base);
 	LLVMValueRef cond;
 
-	cond = LLVMBuildICmp(gallivm->builder, LLVMIntNE,
-	        bitcast(bld_base, TGSI_TYPE_UNSIGNED, emit_data->args[0]),
-			bld_base->int_bld.zero, "");
+	cond = LLVMBuildICmp(ctx->ac.builder, LLVMIntNE,
+	        ac_to_integer(&ctx->ac, emit_data->args[0]), ctx->i32_0, "");
 
 	if_cond_emit(action, bld_base, emit_data, cond);
 }
@@ -1185,7 +1156,7 @@ void si_llvm_context_init(struct si_shader_context *ctx,
 	LLVMDisposeTargetData(data_layout);
 	LLVMDisposeMessage(data_layout_str);
 
-	bool unsafe_fpmath = (sscreen->b.debug_flags & DBG_UNSAFE_MATH) != 0;
+	bool unsafe_fpmath = (sscreen->b.debug_flags & DBG(UNSAFE_MATH)) != 0;
 	enum lp_float_mode float_mode =
 		unsafe_fpmath ? LP_FLOAT_MODE_UNSAFE_FP_MATH :
 				LP_FLOAT_MODE_NO_SIGNED_ZEROS_FP_MATH;
@@ -1220,10 +1191,10 @@ void si_llvm_context_init(struct si_shader_context *ctx,
 	bld_base->emit_immediate = emit_immediate;
 
 	/* metadata allowing 2.5 ULP */
-	ctx->fpmath_md_kind = LLVMGetMDKindIDInContext(ctx->gallivm.context,
+	ctx->fpmath_md_kind = LLVMGetMDKindIDInContext(ctx->ac.context,
 						       "fpmath", 6);
-	LLVMValueRef arg = lp_build_const_float(&ctx->gallivm, 2.5);
-	ctx->fpmath_md_2p5_ulp = LLVMMDNodeInContext(ctx->gallivm.context,
+	LLVMValueRef arg = LLVMConstReal(ctx->ac.f32, 2.5);
+	ctx->fpmath_md_2p5_ulp = LLVMMDNodeInContext(ctx->ac.context,
 						     &arg, 1);
 
 	bld_base->op_actions[TGSI_OPCODE_BGNLOOP].emit = bgnloop_emit;
@@ -1238,13 +1209,13 @@ void si_llvm_context_init(struct si_shader_context *ctx,
 	si_shader_context_init_alu(&ctx->bld_base);
 	si_shader_context_init_mem(ctx);
 
-	ctx->voidt = LLVMVoidTypeInContext(ctx->gallivm.context);
-	ctx->i1 = LLVMInt1TypeInContext(ctx->gallivm.context);
-	ctx->i8 = LLVMInt8TypeInContext(ctx->gallivm.context);
-	ctx->i32 = LLVMInt32TypeInContext(ctx->gallivm.context);
-	ctx->i64 = LLVMInt64TypeInContext(ctx->gallivm.context);
-	ctx->i128 = LLVMIntTypeInContext(ctx->gallivm.context, 128);
-	ctx->f32 = LLVMFloatTypeInContext(ctx->gallivm.context);
+	ctx->voidt = LLVMVoidTypeInContext(ctx->ac.context);
+	ctx->i1 = LLVMInt1TypeInContext(ctx->ac.context);
+	ctx->i8 = LLVMInt8TypeInContext(ctx->ac.context);
+	ctx->i32 = LLVMInt32TypeInContext(ctx->ac.context);
+	ctx->i64 = LLVMInt64TypeInContext(ctx->ac.context);
+	ctx->i128 = LLVMIntTypeInContext(ctx->ac.context, 128);
+	ctx->f32 = LLVMFloatTypeInContext(ctx->ac.context);
 	ctx->v2i32 = LLVMVectorType(ctx->i32, 2);
 	ctx->v4i32 = LLVMVectorType(ctx->i32, 4);
 	ctx->v4f32 = LLVMVectorType(ctx->f32, 4);
@@ -1331,19 +1302,19 @@ void si_llvm_create_func(struct si_shader_context *ctx,
 	unsigned real_shader_type;
 
 	if (num_return_elems)
-		ret_type = LLVMStructTypeInContext(ctx->gallivm.context,
+		ret_type = LLVMStructTypeInContext(ctx->ac.context,
 						   return_types,
 						   num_return_elems, true);
 	else
-		ret_type = LLVMVoidTypeInContext(ctx->gallivm.context);
+		ret_type = ctx->voidt;
 
 	/* Setup the function */
 	ctx->return_type = ret_type;
 	main_fn_type = LLVMFunctionType(ret_type, ParamTypes, ParamCount, 0);
 	ctx->main_fn = LLVMAddFunction(ctx->gallivm.module, name, main_fn_type);
-	main_fn_body = LLVMAppendBasicBlockInContext(ctx->gallivm.context,
+	main_fn_body = LLVMAppendBasicBlockInContext(ctx->ac.context,
 			ctx->main_fn, "main_body");
-	LLVMPositionBuilderAtEnd(ctx->gallivm.builder, main_fn_body);
+	LLVMPositionBuilderAtEnd(ctx->ac.builder, main_fn_body);
 
 	real_shader_type = ctx->type;
 
@@ -1387,8 +1358,8 @@ void si_llvm_optimize_module(struct si_shader_context *ctx)
 	LLVMTargetLibraryInfoRef target_library_info;
 
 	/* Dump LLVM IR before any optimization passes */
-	if (ctx->screen->b.debug_flags & DBG_PREOPT_IR &&
-	    r600_can_dump_shader(&ctx->screen->b, ctx->type))
+	if (ctx->screen->b.debug_flags & DBG(PREOPT_IR) &&
+	    si_can_dump_shader(&ctx->screen->b, ctx->type))
 		LLVMDumpModule(ctx->gallivm.module);
 
 	/* Create the pass manager */
@@ -1397,7 +1368,7 @@ void si_llvm_optimize_module(struct si_shader_context *ctx)
 	target_library_info = gallivm_create_target_library_info(triple);
 	LLVMAddTargetLibraryInfo(target_library_info, gallivm->passmgr);
 
-	if (r600_extra_shader_checks(&ctx->screen->b, ctx->type))
+	if (si_extra_shader_checks(&ctx->screen->b, ctx->type))
 		LLVMAddVerifierPass(gallivm->passmgr);
 
 	LLVMAddAlwaysInlinerPass(gallivm->passmgr);
@@ -1419,7 +1390,7 @@ void si_llvm_optimize_module(struct si_shader_context *ctx)
 	/* Run the pass */
 	LLVMRunPassManager(gallivm->passmgr, ctx->gallivm.module);
 
-	LLVMDisposeBuilder(gallivm->builder);
+	LLVMDisposeBuilder(ctx->ac.builder);
 	LLVMDisposePassManager(gallivm->passmgr);
 	gallivm_dispose_target_library_info(target_library_info);
 }

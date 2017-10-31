@@ -167,7 +167,8 @@ wait_for_available(struct anv_device *device,
       } else if (ret == -1) {
          /* We don't know the real error. */
          device->lost = true;
-         return vk_errorf(VK_ERROR_DEVICE_LOST, "gem wait failed: %m");
+         return vk_errorf(device->instance, device, VK_ERROR_DEVICE_LOST,
+                          "gem wait failed: %m");
       } else {
          assert(ret == 0);
          /* The BO is no longer busy. */
@@ -507,7 +508,7 @@ void genX(CmdWriteTimestamp)(
 
 #if GEN_GEN > 7 || GEN_IS_HASWELL
 
-static inline uint32_t
+static uint32_t
 mi_alu(uint32_t opcode, uint32_t operand1, uint32_t operand2)
 {
    struct GENX(MI_MATH_ALU_INSTRUCTION) instr = {

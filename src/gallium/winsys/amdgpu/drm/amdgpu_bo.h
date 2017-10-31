@@ -115,6 +115,8 @@ struct amdgpu_winsys_bo {
    unsigned num_fences;
    unsigned max_fences;
    struct pipe_fence_handle **fences;
+
+   bool is_local;
 };
 
 struct amdgpu_slab {

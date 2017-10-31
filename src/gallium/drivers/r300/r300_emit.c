@@ -25,7 +25,6 @@
 
 #include "util/u_format.h"
 #include "util/u_math.h"
-#include "util/u_mm.h"
 
 #include "r300_context.h"
 #include "r300_cb.h"

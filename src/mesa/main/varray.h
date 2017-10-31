@@ -73,19 +73,9 @@ _mesa_update_client_array(struct gl_context *ctx,
 }
 
 static inline bool
-_mesa_attr_zero_aliases_vertex(struct gl_context *ctx)
+_mesa_attr_zero_aliases_vertex(const struct gl_context *ctx)
 {
-   const bool is_forward_compatible_context =
-      ctx->Const.ContextFlags & GL_CONTEXT_FLAG_FORWARD_COMPATIBLE_BIT;
-
-   /* In OpenGL 3.1 attribute 0 becomes non-magic, just like in OpenGL ES
-    * 2.0.  Note that we cannot just check for API_OPENGL_COMPAT here because
-    * that will erroneously allow this usage in a 3.0 forward-compatible
-    * context too.
-    */
-   return (ctx->API == API_OPENGLES
-           || (ctx->API == API_OPENGL_COMPAT
-               && !is_forward_compatible_context));
+   return ctx->_AttribZeroAliasesVertex;
 }
 
 extern void
@@ -351,6 +341,9 @@ _mesa_DrawRangeElementsBaseVertex(GLenum mode, GLuint start, GLuint end,
 extern void GLAPIENTRY
 _mesa_DrawTransformFeedback(GLenum mode, GLuint name);
 
+void GLAPIENTRY
+_mesa_PrimitiveRestartIndex_no_error(GLuint index);
+
 extern void GLAPIENTRY
 _mesa_PrimitiveRestartIndex(GLuint index);
 
@@ -452,8 +445,15 @@ extern void GLAPIENTRY
 _mesa_VertexArrayAttribBinding(GLuint vaobj, GLuint attribIndex,
                                GLuint bindingIndex);
 
+void GLAPIENTRY
+_mesa_VertexBindingDivisor_no_error(GLuint bindingIndex, GLuint divisor);
+
 extern void GLAPIENTRY
 _mesa_VertexBindingDivisor(GLuint bindingIndex, GLuint divisor);
+
+void GLAPIENTRY
+_mesa_VertexArrayBindingDivisor_no_error(GLuint vaobj, GLuint bindingIndex,
+                                         GLuint divisor);
 
 extern void GLAPIENTRY
 _mesa_VertexArrayBindingDivisor(GLuint vaobj, GLuint bindingIndex, GLuint divisor);

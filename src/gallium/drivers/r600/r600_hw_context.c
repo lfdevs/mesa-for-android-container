@@ -284,7 +284,7 @@ void r600_context_gfx_flush(void *context, unsigned flags,
 	if (ctx->is_debug) {
 		/* Save the IB for debug contexts. */
 		radeon_clear_saved_cs(&ctx->last_gfx);
-		radeon_save_cs(ws, cs, &ctx->last_gfx);
+		radeon_save_cs(ws, cs, &ctx->last_gfx, true);
 		r600_resource_reference(&ctx->last_trace_buf, ctx->trace_buf);
 		r600_resource_reference(&ctx->trace_buf, NULL);
 	}

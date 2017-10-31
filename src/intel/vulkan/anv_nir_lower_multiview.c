@@ -44,7 +44,7 @@ struct lower_multiview_state {
 static nir_ssa_def *
 build_instance_id(struct lower_multiview_state *state)
 {
-   assert(state->builder.shader->stage == MESA_SHADER_VERTEX);
+   assert(state->builder.shader->info.stage == MESA_SHADER_VERTEX);
 
    if (state->instance_id == NULL) {
       nir_builder *b = &state->builder;
@@ -74,7 +74,7 @@ build_view_index(struct lower_multiview_state *state)
       assert(state->view_mask != 0);
       if (0 && _mesa_bitcount(state->view_mask) == 1) {
          state->view_index = nir_imm_int(b, ffs(state->view_mask) - 1);
-      } else if (state->builder.shader->stage == MESA_SHADER_VERTEX) {
+      } else if (state->builder.shader->info.stage == MESA_SHADER_VERTEX) {
          /* We only support 16 viewports */
          assert((state->view_mask & 0xffff0000) == 0);
 
@@ -122,15 +122,15 @@ build_view_index(struct lower_multiview_state *state)
          }
       } else {
          const struct glsl_type *type = glsl_int_type();
-         if (b->shader->stage == MESA_SHADER_TESS_CTRL ||
-             b->shader->stage == MESA_SHADER_GEOMETRY)
+         if (b->shader->info.stage == MESA_SHADER_TESS_CTRL ||
+             b->shader->info.stage == MESA_SHADER_GEOMETRY)
             type = glsl_array_type(type, 1);
 
          nir_variable *idx_var =
             nir_variable_create(b->shader, nir_var_shader_in,
                                 type, "view index");
          idx_var->data.location = VARYING_SLOT_VIEW_INDEX;
-         if (b->shader->stage == MESA_SHADER_FRAGMENT)
+         if (b->shader->info.stage == MESA_SHADER_FRAGMENT)
             idx_var->data.interpolation = INTERP_MODE_FLAT;
 
          if (glsl_type_is_array(type)) {
@@ -154,7 +154,7 @@ build_view_index(struct lower_multiview_state *state)
 bool
 anv_nir_lower_multiview(nir_shader *shader, uint32_t view_mask)
 {
-   assert(shader->stage != MESA_SHADER_COMPUTE);
+   assert(shader->info.stage != MESA_SHADER_COMPUTE);
 
    /* If multiview isn't enabled, we have nothing to do. */
    if (view_mask == 0)
@@ -202,7 +202,7 @@ anv_nir_lower_multiview(nir_shader *shader, uint32_t view_mask)
     * available in the VS.  If it's not a fragment shader, we need to pass
     * the view index on to the next stage.
     */
-   if (shader->stage != MESA_SHADER_FRAGMENT) {
+   if (shader->info.stage != MESA_SHADER_FRAGMENT) {
       nir_ssa_def *view_index = build_view_index(&state);
 
       nir_builder *b = &state.builder;

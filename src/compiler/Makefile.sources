@@ -1,4 +1,6 @@
 LIBCOMPILER_FILES = \
+	blob.c \
+	blob.h \
 	builtin_type_macros.h \
 	glsl_types.cpp \
 	glsl_types.h \
@@ -17,8 +19,6 @@ LIBGLSL_FILES = \
 	glsl/ast_function.cpp \
 	glsl/ast_to_hir.cpp \
 	glsl/ast_type.cpp \
-	glsl/blob.c \
-	glsl/blob.h \
 	glsl/builtin_functions.cpp \
 	glsl/builtin_functions.h \
 	glsl/builtin_int64.h \
@@ -80,12 +80,12 @@ LIBGLSL_FILES = \
 	glsl/list.h \
 	glsl/loop_analysis.cpp \
 	glsl/loop_analysis.h \
-	glsl/loop_controls.cpp \
 	glsl/loop_unroll.cpp \
 	glsl/lower_blend_equation_advanced.cpp \
 	glsl/lower_buffer_access.cpp \
 	glsl/lower_buffer_access.h \
 	glsl/lower_const_arrays_to_uniforms.cpp \
+	glsl/lower_cs_derived.cpp \
 	glsl/lower_discard.cpp \
 	glsl/lower_discard_flow.cpp \
 	glsl/lower_distance.cpp \
@@ -203,10 +203,12 @@ NIR_FILES = \
 	nir/nir_instr_set.h \
 	nir/nir_intrinsics.c \
 	nir/nir_intrinsics.h \
+	nir/nir_linking_helpers.c \
 	nir/nir_liveness.c \
 	nir/nir_loop_analyze.c \
 	nir/nir_loop_analyze.h \
 	nir/nir_lower_64bit_packing.c \
+	nir/nir_lower_alpha_test.c \
 	nir/nir_lower_alu_to_scalar.c \
 	nir/nir_lower_atomics.c \
 	nir/nir_lower_atomics_to_ssbo.c \
@@ -235,10 +237,12 @@ NIR_FILES = \
 	nir/nir_lower_regs_to_ssa.c \
 	nir/nir_lower_returns.c \
 	nir/nir_lower_samplers.c \
+	nir/nir_lower_samplers_as_deref.c \
 	nir/nir_lower_system_values.c \
 	nir/nir_lower_tex.c \
 	nir/nir_lower_to_source_mods.c \
 	nir/nir_lower_two_sided_color.c \
+	nir/nir_lower_uniforms_to_ubo.c \
 	nir/nir_lower_vars_to_ssa.c \
 	nir/nir_lower_var_copies.c \
 	nir/nir_lower_vec_to_movs.c \

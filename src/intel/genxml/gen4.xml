@@ -526,7 +526,12 @@
     <field name="Media Boundary Pixel Mode" start="6" end="7" type="uint">
       <value name="NORMAL_MODE" value="0"/>
     </field>
-    <field name="Cube Face Enables" start="0" end="5" type="uint"/>
+    <field name="Cube Face Enable - Positive Z" start="0" end="0" type="bool"/>
+    <field name="Cube Face Enable - Negative Z" start="1" end="1" type="bool"/>
+    <field name="Cube Face Enable - Positive Y" start="2" end="2" type="bool"/>
+    <field name="Cube Face Enable - Negative Y" start="3" end="3" type="bool"/>
+    <field name="Cube Face Enable - Positive X" start="4" end="4" type="bool"/>
+    <field name="Cube Face Enable - Negative X" start="5" end="5" type="bool"/>
     <field name="Surface Base Address" start="32" end="63" type="address"/>
     <field name="Height" start="83" end="95" type="uint"/>
     <field name="Width" start="70" end="82" type="uint"/>
@@ -586,7 +591,7 @@
     <field name="TCX Address Control Mode" start="38" end="40" type="Texture_Coordinate_Mode"/>
     <field name="TCY Address Control Mode" start="35" end="37" type="Texture_Coordinate_Mode"/>
     <field name="TCZ Address Control Mode" start="32" end="34" type="Texture_Coordinate_Mode"/>
-    <field name="Border Color Pointer" start="69" end="95" type="offset"/>
+    <field name="Border Color Pointer" start="69" end="95" type="address"/>
     <field name="ChromaKey Enable" start="121" end="121" type="bool"/>
     <field name="ChromaKey Index" start="119" end="120" type="uint"/>
     <field name="ChromaKey Mode" start="118" end="118" type="uint" prefix="KEYFILTER">

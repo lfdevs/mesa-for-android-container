@@ -27,10 +27,12 @@
 #include "st_glsl_types.h"
 
 /**
- * Returns type size in units of vec4 slots.
+ * Returns the number of places to offset the uniform index, given the type of
+ * a struct member. We use this because samplers and images have backing
+ * storeage only when they are bindless.
  */
 int
-st_glsl_attrib_type_size(const struct glsl_type *type, bool is_vs_input)
+st_glsl_storage_type_size(const struct glsl_type *type, bool is_bindless)
 {
    unsigned int i;
    int size;
@@ -53,7 +55,7 @@ st_glsl_attrib_type_size(const struct glsl_type *type, bool is_vs_input)
       break;
    case GLSL_TYPE_DOUBLE:
       if (type->is_matrix()) {
-         if (type->vector_elements <= 2 || is_vs_input)
+         if (type->vector_elements <= 2)
             return type->matrix_columns;
          else
             return type->matrix_columns * 2;
@@ -61,7 +63,7 @@ st_glsl_attrib_type_size(const struct glsl_type *type, bool is_vs_input)
          /* For doubles if we have a double or dvec2 they fit in one
           * vec4, else they need 2 vec4s.
           */
-         if (type->vector_elements <= 2 || is_vs_input)
+         if (type->vector_elements <= 2)
             return 1;
          else
             return 2;
@@ -69,25 +71,27 @@ st_glsl_attrib_type_size(const struct glsl_type *type, bool is_vs_input)
       break;
    case GLSL_TYPE_UINT64:
    case GLSL_TYPE_INT64:
-      if (type->vector_elements <= 2 || is_vs_input)
+      if (type->vector_elements <= 2)
          return 1;
       else
          return 2;
    case GLSL_TYPE_ARRAY:
       assert(type->length > 0);
-      return st_glsl_attrib_type_size(type->fields.array, is_vs_input) * type->length;
+      return st_glsl_storage_type_size(type->fields.array, is_bindless) *
+         type->length;
    case GLSL_TYPE_STRUCT:
       size = 0;
       for (i = 0; i < type->length; i++) {
-         size += st_glsl_attrib_type_size(type->fields.structure[i].type, is_vs_input);
+         size += st_glsl_storage_type_size(type->fields.structure[i].type,
+                                               is_bindless);
       }
       return size;
    case GLSL_TYPE_SAMPLER:
    case GLSL_TYPE_IMAGE:
+      if (!is_bindless)
+         return 0;
+      /* fall through */
    case GLSL_TYPE_SUBROUTINE:
-      /* Samplers take up one slot in UNIFORMS[], but they're baked in
-       * at link time.
-       */
       return 1;
    case GLSL_TYPE_ATOMIC_UINT:
    case GLSL_TYPE_INTERFACE:
@@ -98,10 +102,4 @@ st_glsl_attrib_type_size(const struct glsl_type *type, bool is_vs_input)
       break;
    }
    return 0;
-}
-
-int
-st_glsl_type_size(const struct glsl_type *type)
-{
-   return st_glsl_attrib_type_size(type, false);
 }

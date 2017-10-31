@@ -125,7 +125,7 @@ void RasterizeLine(DRAW_CONTEXT *pDC, uint32_t workerId, uint32_t macroTile, voi
 
     // Store user clip distances for triangle 0
     float newClipBuffer[3 * 8];
-    uint32_t numClipDist = _mm_popcnt_u32(state.rastState.clipDistanceMask);
+    uint32_t numClipDist = _mm_popcnt_u32(state.backendState.clipDistanceMask);
     if (numClipDist)
     {
         newWorkDesc.pUserClipBuffer = newClipBuffer;

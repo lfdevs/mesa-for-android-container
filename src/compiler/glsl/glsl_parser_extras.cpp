@@ -54,9 +54,9 @@ glsl_compute_version_string(void *mem_ctx, bool is_es, unsigned version)
 
 
 static const unsigned known_desktop_glsl_versions[] =
-   { 110, 120, 130, 140, 150, 330, 400, 410, 420, 430, 440, 450 };
+   { 110, 120, 130, 140, 150, 330, 400, 410, 420, 430, 440, 450, 460 };
 static const unsigned known_desktop_gl_versions[] =
-   {  20,  21,  30,  31,  32,  33,  40,  41,  42,  43,  44,  45 };
+   {  20,  21,  30,  31,  32,  33,  40,  41,  42,  43,  44,  45, 46 };
 
 
 _mesa_glsl_parse_state::_mesa_glsl_parse_state(struct gl_context *_ctx,
@@ -1079,7 +1079,7 @@ _mesa_ast_process_interface_block(YYLTYPE *locp,
    }
 }
 
-void
+static void
 _mesa_ast_type_qualifier_print(const struct ast_type_qualifier *q)
 {
    if (q->is_subroutine_decl())
@@ -1866,8 +1866,7 @@ set_shader_inout_layout(struct gl_shader *shader,
 extern "C" {
 
 static void
-assign_subroutine_indexes(struct gl_shader *sh,
-			  struct _mesa_glsl_parse_state *state)
+assign_subroutine_indexes(struct _mesa_glsl_parse_state *state)
 {
    int j, k;
    int index = 0;
@@ -2010,8 +2009,6 @@ opt_shader_and_create_symbol_table(struct gl_context *ctx,
          break;
       }
    }
-
-   _mesa_glsl_initialize_derived_variables(ctx, shader);
 }
 
 void
@@ -2105,7 +2102,7 @@ _mesa_glsl_compile_shader(struct gl_context *ctx, struct gl_shader *shader,
    shader->IsES = state->es_shader;
 
    if (!state->error && !shader->ir->is_empty()) {
-      assign_subroutine_indexes(shader, state);
+      assign_subroutine_indexes(state);
       lower_subroutine(shader->ir, state);
 
       if (!ctx->Cache || force_recompile)
@@ -2217,8 +2214,13 @@ do_common_optimization(exec_list *ir, bool linked,
    if (options->MaxUnrollIterations) {
       loop_state *ls = analyze_loop_variables(ir);
       if (ls->loop_found) {
-         OPT(set_loop_controls, ir, ls);
-         OPT(unroll_loops, ir, ls, options);
+         bool loop_progress = unroll_loops(ir, ls, options);
+         while (loop_progress) {
+            loop_progress = false;
+            loop_progress |= do_constant_propagation(ir);
+            loop_progress |= do_if_simplification(ir);
+         }
+         progress |= loop_progress;
       }
       delete ls;
    }

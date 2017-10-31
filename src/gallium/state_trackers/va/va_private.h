@@ -52,6 +52,19 @@
 #define VL_VA_MAX_IMAGE_FORMATS 11
 #define VL_VA_ENC_GOP_COEFF 16
 
+#define UINT_TO_PTR(x) ((void*)(uintptr_t)(x))
+#define PTR_TO_UINT(x) ((unsigned)((intptr_t)(x)))
+
+static inline unsigned handle_hash(void *key)
+{
+    return PTR_TO_UINT(key);
+}
+
+static inline int handle_compare(void *key1, void *key2)
+{
+    return PTR_TO_UINT(key1) != PTR_TO_UINT(key2);
+}
+
 static inline enum pipe_video_chroma_format
 ChromaToPipe(int format)
 {
@@ -157,6 +170,8 @@ PipeToProfile(enum pipe_video_profile profile)
       return VAProfileHEVCMain;
    case PIPE_VIDEO_PROFILE_HEVC_MAIN_10:
       return VAProfileHEVCMain10;
+   case PIPE_VIDEO_PROFILE_JPEG_BASELINE:
+      return VAProfileJPEGBaseline;
    case PIPE_VIDEO_PROFILE_MPEG4_AVC_EXTENDED:
    case PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH10:
    case PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH422:
@@ -201,6 +216,8 @@ ProfileToPipe(VAProfile profile)
       return PIPE_VIDEO_PROFILE_HEVC_MAIN;
    case VAProfileHEVCMain10:
       return PIPE_VIDEO_PROFILE_HEVC_MAIN_10;
+   case VAProfileJPEGBaseline:
+      return PIPE_VIDEO_PROFILE_JPEG_BASELINE;
    case VAProfileNone:
        return PIPE_VIDEO_PROFILE_UNKNOWN;
    default:
@@ -251,6 +268,7 @@ typedef struct {
       struct pipe_vc1_picture_desc vc1;
       struct pipe_h264_picture_desc h264;
       struct pipe_h265_picture_desc h265;
+      struct pipe_mjpeg_picture_desc mjpeg;
       struct pipe_h264_enc_picture_desc h264enc;
    } desc;
 
@@ -262,6 +280,10 @@ typedef struct {
       VAPictureParameterBufferMPEG4 pps;
       uint8_t start_code[32];
    } mpeg4;
+
+   struct {
+      unsigned sampling_factor;
+   } mjpeg;
 
    struct vl_deint_filter *deint;
    vlVaBuffer *coded_buf;
@@ -372,6 +394,7 @@ VAStatus vlVaQuerySurfaceAttributes(VADriverContextP ctx, VAConfigID config, VAS
 
 VAStatus vlVaAcquireBufferHandle(VADriverContextP ctx, VABufferID buf_id, VABufferInfo *out_buf_info);
 VAStatus vlVaReleaseBufferHandle(VADriverContextP ctx, VABufferID buf_id);
+VAStatus vlVaExportSurfaceHandle(VADriverContextP ctx, VASurfaceID surface_id, uint32_t mem_type, uint32_t flags, void *descriptor);
 
 VAStatus vlVaQueryVideoProcFilters(VADriverContextP ctx, VAContextID context, VAProcFilterType *filters,
                                    unsigned int *num_filters);
@@ -382,6 +405,7 @@ VAStatus vlVaQueryVideoProcPipelineCaps(VADriverContextP ctx, VAContextID contex
 
 // internal functions
 VAStatus vlVaHandleVAProcPipelineParameterBufferType(vlVaDriver *drv, vlVaContext *context, vlVaBuffer *buf);
+VAStatus vlVaHandleSurfaceAllocate(vlVaDriver *drv, vlVaSurface *surface, struct pipe_video_buffer *templat);
 void vlVaGetReferenceFrame(vlVaDriver *drv, VASurfaceID surface_id, struct pipe_video_buffer **ref_frame);
 void vlVaHandlePictureParameterBufferMPEG12(vlVaDriver *drv, vlVaContext *context, vlVaBuffer *buf);
 void vlVaHandleIQMatrixBufferMPEG12(vlVaContext *context, vlVaBuffer *buf);
@@ -398,5 +422,9 @@ void vlVaDecoderFixMPEG4Startcode(vlVaContext *context);
 void vlVaHandlePictureParameterBufferHEVC(vlVaDriver *drv, vlVaContext *context, vlVaBuffer *buf);
 void vlVaHandleIQMatrixBufferHEVC(vlVaContext *context, vlVaBuffer *buf);
 void vlVaHandleSliceParameterBufferHEVC(vlVaContext *context, vlVaBuffer *buf);
+void vlVaHandlePictureParameterBufferMJPEG(vlVaDriver *drv, vlVaContext *context, vlVaBuffer *buf);
+void vlVaHandleIQMatrixBufferMJPEG(vlVaContext *context, vlVaBuffer *buf);
+void vlVaHandleHuffmanTableBufferType(vlVaContext *context, vlVaBuffer *buf);
+void vlVaHandleSliceParameterBufferMJPEG(vlVaContext *context, vlVaBuffer *buf);
 
 #endif //VA_PRIVATE_H

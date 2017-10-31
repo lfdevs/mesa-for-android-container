@@ -46,6 +46,7 @@ vec4_instruction::vec4_instruction(enum opcode opcode, const dst_reg &dst,
    this->predicate_inverse = false;
    this->target = 0;
    this->shadow_compare = false;
+   this->eot = false;
    this->ir = NULL;
    this->urb_write_flags = BRW_URB_WRITE_NO_FLAGS;
    this->header_size = 0;
@@ -915,18 +916,6 @@ vec4_visitor::emit_texture(ir_texture_opcode op,
                            src_reg surface_reg,
                            src_reg sampler_reg)
 {
-   /* The sampler can only meaningfully compute LOD for fragment shader
-    * messages. For all other stages, we change the opcode to TXL and hardcode
-    * the LOD to 0.
-    *
-    * textureQueryLevels() is implemented in terms of TXS so we need to pass a
-    * valid LOD argument.
-    */
-   if (op == ir_tex || op == ir_query_levels) {
-      assert(lod.file == BAD_FILE);
-      lod = brw_imm_f(0.0f);
-   }
-
    enum opcode opcode;
    switch (op) {
    case ir_tex: opcode = SHADER_OPCODE_TXL; break;
@@ -1245,7 +1234,7 @@ vec4_visitor::emit_psiz_and_flags(dst_reg reg)
       emit(MOV(retype(reg, BRW_REGISTER_TYPE_UD), brw_imm_ud(0u)));
    } else {
       emit(MOV(retype(reg, BRW_REGISTER_TYPE_D), brw_imm_d(0)));
-      if (prog_data->vue_map.slots_valid & VARYING_BIT_PSIZ) {
+      if (output_reg[VARYING_SLOT_PSIZ][0].file != BAD_FILE) {
          dst_reg reg_w = reg;
          reg_w.writemask = WRITEMASK_W;
          src_reg reg_as_src = src_reg(output_reg[VARYING_SLOT_PSIZ][0]);
@@ -1253,14 +1242,14 @@ vec4_visitor::emit_psiz_and_flags(dst_reg reg)
          reg_as_src.swizzle = brw_swizzle_for_size(1);
          emit(MOV(reg_w, reg_as_src));
       }
-      if (prog_data->vue_map.slots_valid & VARYING_BIT_LAYER) {
+      if (output_reg[VARYING_SLOT_LAYER][0].file != BAD_FILE) {
          dst_reg reg_y = reg;
          reg_y.writemask = WRITEMASK_Y;
          reg_y.type = BRW_REGISTER_TYPE_D;
          output_reg[VARYING_SLOT_LAYER][0].type = reg_y.type;
          emit(MOV(reg_y, src_reg(output_reg[VARYING_SLOT_LAYER][0])));
       }
-      if (prog_data->vue_map.slots_valid & VARYING_BIT_VIEWPORT) {
+      if (output_reg[VARYING_SLOT_VIEWPORT][0].file != BAD_FILE) {
          dst_reg reg_z = reg;
          reg_z.writemask = WRITEMASK_Z;
          reg_z.type = BRW_REGISTER_TYPE_D;
@@ -1777,10 +1766,15 @@ vec4_visitor::move_uniform_array_access_to_pull_constants()
    /* The vulkan dirver doesn't support pull constants other than UBOs so
     * everything has to be pushed regardless.
     */
-   if (stage_prog_data->pull_param == NULL) {
+   if (!compiler->supports_pull_constants) {
       split_uniform_registers();
       return;
    }
+
+   /* Allocate the pull_params array */
+   assert(stage_prog_data->nr_pull_params == 0);
+   stage_prog_data->pull_param = ralloc_array(mem_ctx, uint32_t,
+                                              this->uniforms * 4);
 
    int pull_constant_loc[this->uniforms];
    memset(pull_constant_loc, -1, sizeof(pull_constant_loc));

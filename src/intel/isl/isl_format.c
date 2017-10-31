@@ -608,7 +608,7 @@ isl_formats_are_ccs_e_compatible(const struct gen_device_info *devinfo,
           fmtl1->channels.a.bits == fmtl2->channels.a.bits;
 }
 
-static inline bool
+static bool
 isl_format_has_channel_type(enum isl_format fmt, enum isl_base_type type)
 {
    const struct isl_format_layout *fmtl = isl_format_get_layout(fmt);

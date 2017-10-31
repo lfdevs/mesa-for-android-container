@@ -131,6 +131,12 @@ static const vl_csc_matrix smpte240m =
    { 1.0f,  1.785f,  0.0f,   0.0f, }
 };
 
+static const vl_csc_matrix bt_709_rev  = {
+   { 0.183f,  0.614f,  0.062f, 0.0625f},
+   {-0.101f, -0.338f,  0.439f, 0.5f   },
+   { 0.439f, -0.399f, -0.040f, 0.5f   }
+};
+
 static const vl_csc_matrix identity =
 {
    { 1.0f, 0.0f, 0.0f, 0.0f, },
@@ -184,6 +190,9 @@ void vl_csc_get_matrix(enum VL_CSC_COLOR_STANDARD cs,
       case VL_CSC_COLOR_STANDARD_SMPTE_240M:
          cstd = &smpte240m;
          break;
+      case VL_CSC_COLOR_STANDARD_BT_709_REV:
+         memcpy(matrix, bt_709_rev, sizeof(vl_csc_matrix));
+         return;
       case VL_CSC_COLOR_STANDARD_IDENTITY:
       default:
          assert(cs == VL_CSC_COLOR_STANDARD_IDENTITY);

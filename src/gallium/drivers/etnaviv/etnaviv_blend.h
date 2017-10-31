@@ -35,7 +35,7 @@ struct etna_context;
 struct etna_blend_state {
    struct pipe_blend_state base;
 
-   bool enable;
+   bool fo_allowed;
 
    uint32_t PE_ALPHA_CONFIG;
    uint32_t PE_COLOR_FORMAT;

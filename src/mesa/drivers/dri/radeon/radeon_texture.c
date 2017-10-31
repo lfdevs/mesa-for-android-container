@@ -41,7 +41,7 @@
 #include "main/texobj.h"
 #include "drivers/common/meta.h"
 
-#include "xmlpool.h"		/* for symbolic values of enum-type options */
+#include "util/xmlpool.h"		/* for symbolic values of enum-type options */
 
 #include "radeon_common.h"
 

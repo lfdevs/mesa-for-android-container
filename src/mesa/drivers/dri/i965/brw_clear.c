@@ -107,8 +107,9 @@ brw_fast_clear_depth(struct gl_context *ctx)
       intel_get_renderbuffer(fb, BUFFER_DEPTH);
    struct intel_mipmap_tree *mt = depth_irb->mt;
    struct gl_renderbuffer_attachment *depth_att = &fb->Attachment[BUFFER_DEPTH];
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
 
-   if (brw->gen < 6)
+   if (devinfo->gen < 6)
       return false;
 
    if (!intel_renderbuffer_has_hiz(depth_irb))
@@ -149,7 +150,7 @@ brw_fast_clear_depth(struct gl_context *ctx)
        *        width of the map (LOD0) is not multiple of 16, fast clear
        *        optimization must be disabled.
        */
-      if (brw->gen == 6 &&
+      if (devinfo->gen == 6 &&
           (minify(mt->surf.phys_level0_sa.width,
                   depth_irb->mt_level - mt->first_level) % 16) != 0)
 	 return false;
@@ -169,37 +170,89 @@ brw_fast_clear_depth(struct gl_context *ctx)
       mt->format == MESA_FORMAT_Z_FLOAT32 ? ctx->Depth.Clear :
       (unsigned)(ctx->Depth.Clear * fb->_DepthMax) / (float)fb->_DepthMax;
 
+   const uint32_t num_layers = depth_att->Layered ? depth_irb->layer_count : 1;
+
    /* If we're clearing to a new clear value, then we need to resolve any clear
     * flags out of the HiZ buffer into the real depth buffer.
     */
    if (mt->fast_clear_color.f32[0] != clear_value) {
-      intel_miptree_prepare_access(brw, mt, 0, INTEL_REMAINING_LEVELS,
-                                   0, INTEL_REMAINING_LAYERS,
-                                   ISL_AUX_USAGE_HIZ, false);
-      mt->fast_clear_color.f32[0] = clear_value;
+      for (uint32_t level = mt->first_level; level <= mt->last_level; level++) {
+         if (!intel_miptree_level_has_hiz(mt, level))
+            continue;
+
+         const unsigned level_layers = brw_get_num_logical_layers(mt, level);
+
+         for (uint32_t layer = 0; layer < level_layers; layer++) {
+            if (level == depth_irb->mt_level &&
+                layer >= depth_irb->mt_layer &&
+                layer < depth_irb->mt_layer + num_layers) {
+               /* We're going to clear this layer anyway.  Leave it alone. */
+               continue;
+            }
+
+            enum isl_aux_state aux_state =
+               intel_miptree_get_aux_state(mt, level, layer);
+
+            if (aux_state != ISL_AUX_STATE_CLEAR &&
+                aux_state != ISL_AUX_STATE_COMPRESSED_CLEAR) {
+               /* This slice doesn't have any fast-cleared bits. */
+               continue;
+            }
+
+            /* If we got here, then the level may have fast-clear bits that
+             * use the old clear value.  We need to do a depth resolve to get
+             * rid of their use of the clear value before we can change it.
+             * Fortunately, few applications ever change their depth clear
+             * value so this shouldn't happen often.
+             */
+            intel_hiz_exec(brw, mt, level, layer, 1,
+                           BLORP_HIZ_OP_DEPTH_RESOLVE);
+            intel_miptree_set_aux_state(brw, mt, level, layer, 1,
+                                        ISL_AUX_STATE_RESOLVED);
+         }
+      }
+
+      intel_miptree_set_depth_clear_value(ctx, mt, clear_value);
    }
 
-   if (depth_att->Layered) {
-      intel_hiz_exec(brw, mt, depth_irb->mt_level,
-                     depth_irb->mt_layer, depth_irb->layer_count,
-                     BLORP_HIZ_OP_DEPTH_CLEAR);
-   } else {
-      intel_hiz_exec(brw, mt, depth_irb->mt_level, depth_irb->mt_layer, 1,
-                     BLORP_HIZ_OP_DEPTH_CLEAR);
+   bool need_clear = false;
+   for (unsigned a = 0; a < num_layers; a++) {
+      enum isl_aux_state aux_state =
+         intel_miptree_get_aux_state(mt, depth_irb->mt_level,
+                                     depth_irb->mt_layer + a);
+
+      if (aux_state != ISL_AUX_STATE_CLEAR) {
+         need_clear = true;
+         break;
+      }
+   }
+
+   if (!need_clear) {
+      /* If all of the layers we intend to clear are already in the clear
+       * state then simply updating the miptree fast clear value is sufficient
+       * to change their clear value.
+       */
+      return true;
+   }
+
+   for (unsigned a = 0; a < num_layers; a++) {
+      enum isl_aux_state aux_state =
+         intel_miptree_get_aux_state(mt, depth_irb->mt_level,
+                                     depth_irb->mt_layer + a);
+
+      if (aux_state != ISL_AUX_STATE_CLEAR) {
+         intel_hiz_exec(brw, mt, depth_irb->mt_level,
+                        depth_irb->mt_layer + a, 1,
+                        BLORP_HIZ_OP_DEPTH_CLEAR);
+      }
    }
 
    /* Now, the HiZ buffer contains data that needs to be resolved to the depth
     * buffer.
     */
-   if (depth_att->Layered) {
-      intel_miptree_set_aux_state(brw, mt, depth_irb->mt_level,
-                                  depth_irb->mt_layer, depth_irb->layer_count,
-                                  ISL_AUX_STATE_CLEAR);
-   } else {
-      intel_miptree_set_aux_state(brw, mt, depth_irb->mt_level,
-                                  depth_irb->mt_layer, 1,
-                                  ISL_AUX_STATE_CLEAR);
-   }
+   intel_miptree_set_aux_state(brw, mt, depth_irb->mt_level,
+                               depth_irb->mt_layer, num_layers,
+                               ISL_AUX_STATE_CLEAR);
 
    return true;
 }
@@ -212,6 +265,7 @@ brw_clear(struct gl_context *ctx, GLbitfield mask)
 {
    struct brw_context *brw = brw_context(ctx);
    struct gl_framebuffer *fb = ctx->DrawBuffer;
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    bool partial_clear = ctx->Scissor.EnableFlags && !noop_scissor(fb);
 
    if (!_mesa_check_conditional_render(ctx))
@@ -246,7 +300,7 @@ brw_clear(struct gl_context *ctx, GLbitfield mask)
       mask &= ~BUFFER_BITS_COLOR;
    }
 
-   if (brw->gen >= 6 && (mask & BUFFER_BITS_DEPTH_STENCIL)) {
+   if (devinfo->gen >= 6 && (mask & BUFFER_BITS_DEPTH_STENCIL)) {
       brw_blorp_clear_depth_stencil(brw, fb, mask, partial_clear);
       debug_mask("blorp depth/stencil", mask & BUFFER_BITS_DEPTH_STENCIL);
       mask &= ~BUFFER_BITS_DEPTH_STENCIL;

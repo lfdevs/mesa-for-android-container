@@ -2206,6 +2206,7 @@ get_ccs_compatible_uint_format(const struct isl_format_layout *fmtl)
    case ISL_FORMAT_R32G32B32A32_UINT:
    case ISL_FORMAT_R32G32B32A32_UNORM:
    case ISL_FORMAT_R32G32B32A32_SNORM:
+   case ISL_FORMAT_R32G32B32X32_FLOAT:
       return ISL_FORMAT_R32G32B32A32_UINT;
 
    case ISL_FORMAT_R16G16B16A16_UNORM:
@@ -2325,11 +2326,11 @@ bitcast_color_value_to_uint(union isl_color_value color,
    return bits;
 }
 
-static void
-surf_convert_to_uncompressed(const struct isl_device *isl_dev,
-                             struct brw_blorp_surface_info *info,
-                             uint32_t *x, uint32_t *y,
-                             uint32_t *width, uint32_t *height)
+void
+blorp_surf_convert_to_uncompressed(const struct isl_device *isl_dev,
+                                   struct brw_blorp_surface_info *info,
+                                   uint32_t *x, uint32_t *y,
+                                   uint32_t *width, uint32_t *height)
 {
    const struct isl_format_layout *fmtl =
       isl_format_get_layout(info->surf.format);
@@ -2356,10 +2357,12 @@ surf_convert_to_uncompressed(const struct isl_device *isl_dev,
       *height = DIV_ROUND_UP(*height, fmtl->bh);
    }
 
-   assert(*x % fmtl->bw == 0);
-   assert(*y % fmtl->bh == 0);
-   *x /= fmtl->bw;
-   *y /= fmtl->bh;
+   if (x || y) {
+      assert(*x % fmtl->bw == 0);
+      assert(*y % fmtl->bh == 0);
+      *x /= fmtl->bw;
+      *y /= fmtl->bh;
+   }
 
    info->surf.logical_level0_px.width =
       DIV_ROUND_UP(info->surf.logical_level0_px.width, fmtl->bw);
@@ -2477,14 +2480,15 @@ blorp_copy(struct blorp_batch *batch,
       isl_format_get_layout(params.dst.view.format)->channels.r.bits;
 
    if (src_fmtl->bw > 1 || src_fmtl->bh > 1) {
-      surf_convert_to_uncompressed(batch->blorp->isl_dev, &params.src,
-                                   &src_x, &src_y, &src_width, &src_height);
+      blorp_surf_convert_to_uncompressed(batch->blorp->isl_dev, &params.src,
+                                         &src_x, &src_y,
+                                         &src_width, &src_height);
       wm_prog_key.need_src_offset = true;
    }
 
    if (dst_fmtl->bw > 1 || dst_fmtl->bh > 1) {
-      surf_convert_to_uncompressed(batch->blorp->isl_dev, &params.dst,
-                                   &dst_x, &dst_y, NULL, NULL);
+      blorp_surf_convert_to_uncompressed(batch->blorp->isl_dev, &params.dst,
+                                         &dst_x, &dst_y, NULL, NULL);
       wm_prog_key.need_dst_offset = true;
    }
 
@@ -2512,4 +2516,124 @@ blorp_copy(struct blorp_batch *batch,
    };
 
    do_blorp_blit(batch, &params, &wm_prog_key, &coords);
+}
+
+static enum isl_format
+isl_format_for_size(unsigned size_B)
+{
+   switch (size_B) {
+   case 1:  return ISL_FORMAT_R8_UINT;
+   case 2:  return ISL_FORMAT_R8G8_UINT;
+   case 4:  return ISL_FORMAT_R8G8B8A8_UINT;
+   case 8:  return ISL_FORMAT_R16G16B16A16_UINT;
+   case 16: return ISL_FORMAT_R32G32B32A32_UINT;
+   default:
+      unreachable("Not a power-of-two format size");
+   }
+}
+
+/**
+ * Returns the greatest common divisor of a and b that is a power of two.
+ */
+static uint64_t
+gcd_pow2_u64(uint64_t a, uint64_t b)
+{
+   assert(a > 0 || b > 0);
+
+   unsigned a_log2 = ffsll(a) - 1;
+   unsigned b_log2 = ffsll(b) - 1;
+
+   /* If either a or b is 0, then a_log2 or b_log2 till be UINT_MAX in which
+    * case, the MIN2() will take the other one.  If both are 0 then we will
+    * hit the assert above.
+    */
+   return 1 << MIN2(a_log2, b_log2);
+}
+
+static void
+do_buffer_copy(struct blorp_batch *batch,
+               struct blorp_address *src,
+               struct blorp_address *dst,
+               int width, int height, int block_size)
+{
+   /* The actual format we pick doesn't matter as blorp will throw it away.
+    * The only thing that actually matters is the size.
+    */
+   enum isl_format format = isl_format_for_size(block_size);
+
+   UNUSED bool ok;
+   struct isl_surf surf;
+   ok = isl_surf_init(batch->blorp->isl_dev, &surf,
+                      .dim = ISL_SURF_DIM_2D,
+                      .format = format,
+                      .width = width,
+                      .height = height,
+                      .depth = 1,
+                      .levels = 1,
+                      .array_len = 1,
+                      .samples = 1,
+                      .row_pitch = width * block_size,
+                      .usage = ISL_SURF_USAGE_TEXTURE_BIT |
+                               ISL_SURF_USAGE_RENDER_TARGET_BIT,
+                      .tiling_flags = ISL_TILING_LINEAR_BIT);
+   assert(ok);
+
+   struct blorp_surf src_blorp_surf = {
+      .surf = &surf,
+      .addr = *src,
+   };
+
+   struct blorp_surf dst_blorp_surf = {
+      .surf = &surf,
+      .addr = *dst,
+   };
+
+   blorp_copy(batch, &src_blorp_surf, 0, 0, &dst_blorp_surf, 0, 0,
+              0, 0, 0, 0, width, height);
+}
+
+void
+blorp_buffer_copy(struct blorp_batch *batch,
+                  struct blorp_address src,
+                  struct blorp_address dst,
+                  uint64_t size)
+{
+   const struct gen_device_info *devinfo = batch->blorp->isl_dev->info;
+   uint64_t copy_size = size;
+
+   /* This is maximum possible width/height our HW can handle */
+   uint64_t max_surface_dim = 1 << (devinfo->gen >= 7 ? 14 : 13);
+
+   /* First, we compute the biggest format that can be used with the
+    * given offsets and size.
+    */
+   int bs = 16;
+   bs = gcd_pow2_u64(bs, src.offset);
+   bs = gcd_pow2_u64(bs, dst.offset);
+   bs = gcd_pow2_u64(bs, size);
+
+   /* First, we make a bunch of max-sized copies */
+   uint64_t max_copy_size = max_surface_dim * max_surface_dim * bs;
+   while (copy_size >= max_copy_size) {
+      do_buffer_copy(batch, &src, &dst, max_surface_dim, max_surface_dim, bs);
+      copy_size -= max_copy_size;
+      src.offset += max_copy_size;
+      dst.offset += max_copy_size;
+   }
+
+   /* Now make a max-width copy */
+   uint64_t height = copy_size / (max_surface_dim * bs);
+   assert(height < max_surface_dim);
+   if (height != 0) {
+      uint64_t rect_copy_size = height * max_surface_dim * bs;
+      do_buffer_copy(batch, &src, &dst, max_surface_dim, height, bs);
+      copy_size -= rect_copy_size;
+      src.offset += rect_copy_size;
+      dst.offset += rect_copy_size;
+   }
+
+   /* Finally, make a small copy to finish it off */
+   if (copy_size != 0) {
+      do_buffer_copy(batch, &src, &dst, copy_size / bs, 1, bs);
+   }
 }

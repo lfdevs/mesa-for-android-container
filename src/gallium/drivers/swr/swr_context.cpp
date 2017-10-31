@@ -39,6 +39,7 @@
 
 #include "api.h"
 #include "backend.h"
+#include "knobs.h"
 
 static struct pipe_surface *
 swr_create_surface(struct pipe_context *pipe,
@@ -152,12 +153,12 @@ swr_transfer_map(struct pipe_context *pipe,
          for (int y = box->y; y < box->y + box->height; y++) {
             if (spr->base.format == PIPE_FORMAT_Z24_UNORM_S8_UINT) {
                for (int x = box->x; x < box->x + box->width; x++)
-                  spr->swr.pBaseAddress[zbase + 4 * x + 3] =
-                     spr->secondary.pBaseAddress[sbase + x];
+                  ((uint8_t*)(spr->swr.xpBaseAddress))[zbase + 4 * x + 3] =
+                     ((uint8_t*)(spr->secondary.xpBaseAddress))[sbase + x];
             } else if (spr->base.format == PIPE_FORMAT_Z32_FLOAT_S8X24_UINT) {
                for (int x = box->x; x < box->x + box->width; x++)
-                  spr->swr.pBaseAddress[zbase + 8 * x + 4] =
-                     spr->secondary.pBaseAddress[sbase + x];
+                  ((uint8_t*)(spr->swr.xpBaseAddress))[zbase + 8 * x + 4] =
+                     ((uint8_t*)(spr->secondary.xpBaseAddress))[sbase + x];
             }
             zbase += spr->swr.pitch;
             sbase += spr->secondary.pitch;
@@ -171,7 +172,7 @@ swr_transfer_map(struct pipe_context *pipe,
 
    *transfer = pt;
 
-   return spr->swr.pBaseAddress + offset + spr->mip_offsets[level];
+   return (void*)(spr->swr.xpBaseAddress + offset + spr->mip_offsets[level]);
 }
 
 static void
@@ -199,12 +200,12 @@ swr_transfer_flush_region(struct pipe_context *pipe,
       for (int y = box.y; y < box.y + box.height; y++) {
          if (spr->base.format == PIPE_FORMAT_Z24_UNORM_S8_UINT) {
             for (int x = box.x; x < box.x + box.width; x++)
-               spr->secondary.pBaseAddress[sbase + x] =
-                  spr->swr.pBaseAddress[zbase + 4 * x + 3];
+               ((uint8_t*)(spr->secondary.xpBaseAddress))[sbase + x] =
+                  ((uint8_t*)(spr->swr.xpBaseAddress))[zbase + 4 * x + 3];
          } else if (spr->base.format == PIPE_FORMAT_Z32_FLOAT_S8X24_UINT) {
             for (int x = box.x; x < box.x + box.width; x++)
-               spr->secondary.pBaseAddress[sbase + x] =
-                  spr->swr.pBaseAddress[zbase + 8 * x + 4];
+               ((uint8_t*)(spr->secondary.xpBaseAddress))[sbase + x] =
+                  ((uint8_t*)(spr->swr.xpBaseAddress))[zbase + 8 * x + 4];
          }
          zbase += spr->swr.pitch;
          sbase += spr->secondary.pitch;
@@ -365,10 +366,20 @@ swr_destroy(struct pipe_context *pipe)
       util_blitter_destroy(ctx->blitter);
 
    for (unsigned i = 0; i < PIPE_MAX_COLOR_BUFS; i++) {
-      pipe_surface_reference(&ctx->framebuffer.cbufs[i], NULL);
+      if (ctx->framebuffer.cbufs[i]) {
+         struct swr_resource *res = swr_resource(ctx->framebuffer.cbufs[i]->texture);
+         /* NULL curr_pipe, so we don't have a reference to a deleted pipe */
+         res->curr_pipe = NULL;
+         pipe_surface_reference(&ctx->framebuffer.cbufs[i], NULL);
+      }
    }
 
-   pipe_surface_reference(&ctx->framebuffer.zsbuf, NULL);
+   if (ctx->framebuffer.zsbuf) {
+      struct swr_resource *res = swr_resource(ctx->framebuffer.zsbuf->texture);
+      /* NULL curr_pipe, so we don't have a reference to a deleted pipe */
+      res->curr_pipe = NULL;
+      pipe_surface_reference(&ctx->framebuffer.zsbuf, NULL);
+   }
 
    for (unsigned i = 0; i < ARRAY_SIZE(ctx->sampler_views[0]); i++) {
       pipe_sampler_view_reference(&ctx->sampler_views[PIPE_SHADER_FRAGMENT][i], NULL);
@@ -473,6 +484,8 @@ swr_create_context(struct pipe_screen *p_screen, void *priv, unsigned flags)
    ctx->blendJIT =
       new std::unordered_map<BLEND_COMPILE_STATE, PFN_BLEND_JIT_FUNC>;
 
+   ctx->max_draws_in_flight = KNOB_MAX_DRAWS_IN_FLIGHT;
+
    SWR_CREATECONTEXT_INFO createInfo;
    memset(&createInfo, 0, sizeof(createInfo));
    createInfo.privateStateSize = sizeof(swr_draw_context);
@@ -481,6 +494,30 @@ swr_create_context(struct pipe_screen *p_screen, void *priv, unsigned flags)
    createInfo.pfnClearTile = swr_StoreHotTileClear;
    createInfo.pfnUpdateStats = swr_UpdateStats;
    createInfo.pfnUpdateStatsFE = swr_UpdateStatsFE;
+
+   SWR_THREADING_INFO threadingInfo {0};
+
+   threadingInfo.MAX_WORKER_THREADS        = KNOB_MAX_WORKER_THREADS;
+   threadingInfo.MAX_NUMA_NODES            = KNOB_MAX_NUMA_NODES;
+   threadingInfo.MAX_CORES_PER_NUMA_NODE   = KNOB_MAX_CORES_PER_NUMA_NODE;
+   threadingInfo.MAX_THREADS_PER_CORE      = KNOB_MAX_THREADS_PER_CORE;
+   threadingInfo.SINGLE_THREADED           = KNOB_SINGLE_THREADED;
+
+   // Use non-standard settings for KNL
+   if (swr_screen(p_screen)->is_knl)
+   {
+      if (nullptr == getenv("KNOB_MAX_THREADS_PER_CORE"))
+         threadingInfo.MAX_THREADS_PER_CORE  = 2;
+
+      if (nullptr == getenv("KNOB_MAX_DRAWS_IN_FLIGHT"))
+      {
+         ctx->max_draws_in_flight = 2048;
+         createInfo.MAX_DRAWS_IN_FLIGHT = ctx->max_draws_in_flight;
+      }
+   }
+
+   createInfo.pThreadInfo = &threadingInfo;
+
    ctx->swrContext = ctx->api.pfnSwrCreateContext(&createInfo);
 
    ctx->api.pfnSwrInit();

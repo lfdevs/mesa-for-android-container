@@ -160,7 +160,7 @@ ir_expression::clone(void *mem_ctx, struct hash_table *ht) const
    ir_rvalue *op[ARRAY_SIZE(this->operands)] = { NULL, };
    unsigned int i;
 
-   for (i = 0; i < get_num_operands(); i++) {
+   for (i = 0; i < num_operands; i++) {
       op[i] = this->operands[i]->clone(mem_ctx, ht);
    }
 
@@ -194,8 +194,10 @@ ir_dereference_array::clone(void *mem_ctx, struct hash_table *ht) const
 ir_dereference_record *
 ir_dereference_record::clone(void *mem_ctx, struct hash_table *ht) const
 {
+   const char *field_name =
+      this->record->type->fields.structure[this->field_idx].name;
    return new(mem_ctx) ir_dereference_record(this->record->clone(mem_ctx, ht),
-					     this->field);
+                                             field_name);
 }
 
 ir_texture *
@@ -343,28 +345,14 @@ ir_constant::clone(void *mem_ctx, struct hash_table *ht) const
    case GLSL_TYPE_IMAGE:
       return new(mem_ctx) ir_constant(this->type, &this->value);
 
-   case GLSL_TYPE_STRUCT: {
-      ir_constant *c = new(mem_ctx) ir_constant;
-
-      c->type = this->type;
-      for (const exec_node *node = this->components.get_head_raw()
-	      ; !node->is_tail_sentinel()
-	      ; node = node->next) {
-	 ir_constant *const orig = (ir_constant *) node;
-
-	 c->components.push_tail(orig->clone(mem_ctx, NULL));
-      }
-
-      return c;
-   }
-
+   case GLSL_TYPE_STRUCT:
    case GLSL_TYPE_ARRAY: {
       ir_constant *c = new(mem_ctx) ir_constant;
 
       c->type = this->type;
-      c->array_elements = ralloc_array(c, ir_constant *, this->type->length);
+      c->const_elements = ralloc_array(c, ir_constant *, this->type->length);
       for (unsigned i = 0; i < this->type->length; i++) {
-	 c->array_elements[i] = this->array_elements[i]->clone(mem_ctx, NULL);
+         c->const_elements[i] = this->const_elements[i]->clone(mem_ctx, NULL);
       }
       return c;
    }

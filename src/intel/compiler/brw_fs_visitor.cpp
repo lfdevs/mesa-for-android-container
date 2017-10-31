@@ -465,16 +465,23 @@ fs_visitor::emit_fb_writes()
 }
 
 void
-fs_visitor::setup_uniform_clipplane_values(gl_clip_plane *clip_planes)
+fs_visitor::setup_uniform_clipplane_values()
 {
    const struct brw_vs_prog_key *key =
       (const struct brw_vs_prog_key *) this->key;
+
+   if (key->nr_userclip_plane_consts == 0)
+      return;
+
+   assert(stage_prog_data->nr_params == uniforms);
+   brw_stage_prog_data_add_params(stage_prog_data,
+                                  key->nr_userclip_plane_consts * 4);
 
    for (int i = 0; i < key->nr_userclip_plane_consts; i++) {
       this->userplane[i] = fs_reg(UNIFORM, uniforms);
       for (int j = 0; j < 4; ++j) {
          stage_prog_data->param[uniforms + j] =
-            (gl_constant_value *) &clip_planes[i][j];
+            BRW_PARAM_BUILTIN_CLIP_PLANE(i, j);
       }
       uniforms += 4;
    }
@@ -486,7 +493,7 @@ fs_visitor::setup_uniform_clipplane_values(gl_clip_plane *clip_planes)
  * This does nothing if the shader uses gl_ClipDistance or user clipping is
  * disabled altogether.
  */
-void fs_visitor::compute_clip_distance(gl_clip_plane *clip_planes)
+void fs_visitor::compute_clip_distance()
 {
    struct brw_vue_prog_data *vue_prog_data = brw_vue_prog_data(prog_data);
    const struct brw_vs_prog_key *key =
@@ -518,7 +525,7 @@ void fs_visitor::compute_clip_distance(gl_clip_plane *clip_planes)
    if (outputs[clip_vertex].file == BAD_FILE)
       return;
 
-   setup_uniform_clipplane_values(clip_planes);
+   setup_uniform_clipplane_values();
 
    const fs_builder abld = bld.annotate("user clip distances");
 

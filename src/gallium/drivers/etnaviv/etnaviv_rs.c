@@ -118,10 +118,21 @@ etna_compile_rs_state(struct etna_context *ctx, struct compiled_rs_state *cs,
    cs->RS_FILL_VALUE[3] = rs->clear_value[3];
    cs->RS_EXTRA_CONFIG = VIVS_RS_EXTRA_CONFIG_AA(rs->aa) |
                          VIVS_RS_EXTRA_CONFIG_ENDIAN(rs->endian_mode);
-   /* TODO: cs->RS_UNK016B0 = s->size / 64 ?
-    * The blob does this consistently but there seems to be no currently supported
-    * model that needs it.
+
+   /* If source the same as destination, and the hardware supports this,
+    * do an in-place resolve to fill in unrendered tiles.
     */
+   if (ctx->specs.single_buffer && rs->source == rs->dest &&
+         rs->source_offset == rs->dest_offset &&
+         rs->source_format == rs->dest_format &&
+         rs->source_tiling == rs->dest_tiling &&
+         rs->source_stride == rs->dest_stride &&
+         !rs->downsample_x && !rs->downsample_y &&
+         !rs->swap_rb && !rs->flip &&
+         !rs->clear_mode && rs->source_padded_width) {
+      /* Total number of tiles (same as for autodisable) */
+      cs->RS_KICKER_INPLACE = rs->source_padded_width * rs->source_padded_height / 16;
+   }
 }
 
 void

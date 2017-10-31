@@ -37,6 +37,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include "util/u_atomic.h"
 #include "util/list.h"
 
 #if defined(__cplusplus)
@@ -69,11 +70,43 @@ struct brw_bo {
    uint32_t gem_handle;
 
    /**
-    * Last seen card virtual address (offset from the beginning of the
-    * aperture) for the object.  This should be used to fill relocation
-    * entries when calling brw_bo_emit_reloc()
+    * Offset of the buffer inside the Graphics Translation Table.
+    *
+    * This is effectively our GPU address for the buffer and we use it
+    * as our base for all state pointers into the buffer. However, since the
+    * kernel may be forced to move it around during the course of the
+    * buffer's lifetime, we can only know where the buffer was on the last
+    * execbuf. We presume, and are usually right, that the buffer will not
+    * move and so we use that last offset for the next batch and by doing
+    * so we can avoid having the kernel perform a relocation fixup pass as
+    * our pointers inside the batch will be using the correct base offset.
+    *
+    * Since we do use it as a base address for the next batch of pointers,
+    * the kernel treats our offset as a request, and if possible will
+    * arrange the buffer to placed at that address (trying to balance
+    * the cost of buffer migration versus the cost of performing
+    * relocations). Furthermore, we can force the kernel to place the buffer,
+    * or report a failure if we specified a conflicting offset, at our chosen
+    * offset by specifying EXEC_OBJECT_PINNED.
+    *
+    * Note the GTT may be either per context, or shared globally across the
+    * system. On a shared system, our buffers have to contend for address
+    * space with both aperture mappings and framebuffers and so are more
+    * likely to be moved. On a full ppGTT system, each batch exists in its
+    * own GTT, and so each buffer may have their own offset within each
+    * context.
     */
-   uint64_t offset64;
+   uint64_t gtt_offset;
+
+   /**
+    * The validation list index for this buffer, or -1 when not in a batch.
+    * Note that a single buffer may be in multiple batches (contexts), and
+    * this is a global field, which refers to the last batch using the BO.
+    * It should not be considered authoritative, but can be used to avoid a
+    * linear walk of the validation list in the common case by guessing that
+    * exec_bos[bo->index] == bo and confirming whether that's the case.
+    */
+   unsigned index;
 
    /**
     * Boolean of whether the GPU is definitely not accessing the buffer.
@@ -134,7 +167,7 @@ struct brw_bo {
    bool cache_coherent;
 };
 
-#define BO_ALLOC_FOR_RENDER (1<<0)
+#define BO_ALLOC_BUSY       (1<<0)
 #define BO_ALLOC_ZEROED     (1<<1)
 
 /**
@@ -188,7 +221,11 @@ struct brw_bo *brw_bo_alloc_tiled_2d(struct brw_bufmgr *bufmgr,
                                      unsigned flags);
 
 /** Takes a reference on a buffer object */
-void brw_bo_reference(struct brw_bo *bo);
+static inline void
+brw_bo_reference(struct brw_bo *bo)
+{
+   p_atomic_inc(&bo->refcount);
+}
 
 /**
  * Releases a reference on a buffer object, freeing the data if
@@ -276,8 +313,7 @@ int brw_bo_busy(struct brw_bo *bo);
 int brw_bo_madvise(struct brw_bo *bo, int madv);
 
 /* drm_bacon_bufmgr_gem.c */
-struct brw_bufmgr *brw_bufmgr_init(struct gen_device_info *devinfo,
-                                   int fd, int batch_size);
+struct brw_bufmgr *brw_bufmgr_init(struct gen_device_info *devinfo, int fd);
 struct brw_bo *brw_bo_gem_create_from_name(struct brw_bufmgr *bufmgr,
                                            const char *name,
                                            unsigned int handle);
@@ -286,6 +322,15 @@ void brw_bufmgr_enable_reuse(struct brw_bufmgr *bufmgr);
 int brw_bo_wait(struct brw_bo *bo, int64_t timeout_ns);
 
 uint32_t brw_create_hw_context(struct brw_bufmgr *bufmgr);
+
+#define BRW_CONTEXT_LOW_PRIORITY ((I915_CONTEXT_MIN_USER_PRIORITY-1)/2)
+#define BRW_CONTEXT_MEDIUM_PRIORITY (I915_CONTEXT_DEFAULT_PRIORITY)
+#define BRW_CONTEXT_HIGH_PRIORITY ((I915_CONTEXT_MAX_USER_PRIORITY+1)/2)
+
+int brw_hw_context_set_priority(struct brw_bufmgr *bufmgr,
+                                uint32_t ctx_id,
+                                int priority);
+
 void brw_destroy_hw_context(struct brw_bufmgr *bufmgr, uint32_t ctx_id);
 
 int brw_bo_gem_export_to_prime(struct brw_bo *bo, int *prime_fd);

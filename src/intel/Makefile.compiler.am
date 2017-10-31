@@ -35,7 +35,7 @@ BUILT_SOURCES += $(COMPILER_GENERATED_FILES)
 compiler/brw_nir_trig_workarounds.c: compiler/brw_nir_trig_workarounds.py \
                                      $(top_srcdir)/src/compiler/nir/nir_algebraic.py
 	$(MKDIR_GEN)
-	$(AM_V_GEN) PYTHONPATH=$(top_srcdir)/src/compiler/nir $(PYTHON2) $(PYTHON_FLAGS) $(srcdir)/compiler/brw_nir_trig_workarounds.py > $@ || ($(RM) $@; false)
+	$(AM_V_GEN) $(PYTHON2) $(PYTHON_FLAGS) $(srcdir)/compiler/brw_nir_trig_workarounds.py -p $(top_srcdir)/src/compiler/nir > $@ || ($(RM) $@; false)
 
 EXTRA_DIST += \
 	compiler/brw_nir_trig_workarounds.py

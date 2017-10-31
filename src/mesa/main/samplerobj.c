@@ -154,7 +154,8 @@ _mesa_new_sampler_object(struct gl_context *ctx, GLuint name)
 }
 
 static void
-create_samplers(struct gl_context *ctx, GLsizei count, GLuint *samplers)
+create_samplers(struct gl_context *ctx, GLsizei count, GLuint *samplers,
+                const char *caller)
 {
    GLuint first;
    GLint i;
@@ -168,10 +169,18 @@ create_samplers(struct gl_context *ctx, GLsizei count, GLuint *samplers)
 
    /* Insert the ID and pointer to new sampler object into hash table */
    for (i = 0; i < count; i++) {
-      struct gl_sampler_object *sampObj =
-         ctx->Driver.NewSamplerObject(ctx, first + i);
-      _mesa_HashInsertLocked(ctx->Shared->SamplerObjects, first + i, sampObj);
-      samplers[i] = first + i;
+      struct gl_sampler_object *sampObj;
+      GLuint name = first + i;
+
+      sampObj = ctx->Driver.NewSamplerObject(ctx, name);
+      if (!sampObj) {
+         _mesa_HashUnlockMutex(ctx->Shared->SamplerObjects);
+         _mesa_error(ctx, GL_OUT_OF_MEMORY, "%s", caller);
+         return;
+      }
+
+      _mesa_HashInsertLocked(ctx->Shared->SamplerObjects, name, sampObj);
+      samplers[i] = name;
    }
 
    _mesa_HashUnlockMutex(ctx->Shared->SamplerObjects);
@@ -190,14 +199,14 @@ create_samplers_err(struct gl_context *ctx, GLsizei count, GLuint *samplers,
       return;
    }
 
-   create_samplers(ctx, count, samplers);
+   create_samplers(ctx, count, samplers, caller);
 }
 
 void GLAPIENTRY
 _mesa_GenSamplers_no_error(GLsizei count, GLuint *samplers)
 {
    GET_CURRENT_CONTEXT(ctx);
-   create_samplers(ctx, count, samplers);
+   create_samplers(ctx, count, samplers, "glGenSamplers");
 }
 
 void GLAPIENTRY
@@ -211,7 +220,7 @@ void GLAPIENTRY
 _mesa_CreateSamplers_no_error(GLsizei count, GLuint *samplers)
 {
    GET_CURRENT_CONTEXT(ctx);
-   create_samplers(ctx, count, samplers);
+   create_samplers(ctx, count, samplers, "glCreateSamplers");
 }
 
 void GLAPIENTRY
@@ -222,22 +231,14 @@ _mesa_CreateSamplers(GLsizei count, GLuint *samplers)
 }
 
 
-void GLAPIENTRY
-_mesa_DeleteSamplers(GLsizei count, const GLuint *samplers)
+static void
+delete_samplers(struct gl_context *ctx, GLsizei count, const GLuint *samplers)
 {
-   GET_CURRENT_CONTEXT(ctx);
-   GLsizei i;
-
    FLUSH_VERTICES(ctx, 0);
-
-   if (count < 0) {
-      _mesa_error(ctx, GL_INVALID_VALUE, "glDeleteSamplers(count)");
-      return;
-   }
 
    _mesa_HashLockMutex(ctx->Shared->SamplerObjects);
 
-   for (i = 0; i < count; i++) {
+   for (GLsizei i = 0; i < count; i++) {
       if (samplers[i]) {
          GLuint j;
          struct gl_sampler_object *sampObj =
@@ -264,6 +265,28 @@ _mesa_DeleteSamplers(GLsizei count, const GLuint *samplers)
 }
 
 
+void GLAPIENTRY
+_mesa_DeleteSamplers_no_error(GLsizei count, const GLuint *samplers)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   delete_samplers(ctx, count, samplers);
+}
+
+
+void GLAPIENTRY
+_mesa_DeleteSamplers(GLsizei count, const GLuint *samplers)
+{
+   GET_CURRENT_CONTEXT(ctx);
+
+   if (count < 0) {
+      _mesa_error(ctx, GL_INVALID_VALUE, "glDeleteSamplers(count)");
+      return;
+   }
+
+   delete_samplers(ctx, count, samplers);
+}
+
+
 GLboolean GLAPIENTRY
 _mesa_IsSampler(GLuint sampler)
 {
@@ -286,27 +309,20 @@ _mesa_bind_sampler(struct gl_context *ctx, GLuint unit,
                                   sampObj);
 }
 
-void GLAPIENTRY
-_mesa_BindSampler(GLuint unit, GLuint sampler)
+static ALWAYS_INLINE void
+bind_sampler(struct gl_context *ctx, GLuint unit, GLuint sampler, bool no_error)
 {
    struct gl_sampler_object *sampObj;
-   GET_CURRENT_CONTEXT(ctx);
-
-   if (unit >= ctx->Const.MaxCombinedTextureImageUnits) {
-      _mesa_error(ctx, GL_INVALID_VALUE, "glBindSampler(unit %u)", unit);
-      return;
-   }
 
    if (sampler == 0) {
       /* Use the default sampler object, the one contained in the texture
        * object.
        */
       sampObj = NULL;
-   }
-   else {
+   } else {
       /* user-defined sampler object */
       sampObj = _mesa_lookup_samplerobj(ctx, sampler);
-      if (!sampObj) {
+      if (!no_error && !sampObj) {
          _mesa_error(ctx, GL_INVALID_OPERATION, "glBindSampler(sampler)");
          return;
       }
@@ -316,26 +332,32 @@ _mesa_BindSampler(GLuint unit, GLuint sampler)
    _mesa_bind_sampler(ctx, unit, sampObj);
 }
 
-
 void GLAPIENTRY
-_mesa_BindSamplers(GLuint first, GLsizei count, const GLuint *samplers)
+_mesa_BindSampler_no_error(GLuint unit, GLuint sampler)
 {
    GET_CURRENT_CONTEXT(ctx);
-   GLint i;
+   bind_sampler(ctx, unit, sampler, true);
+}
 
-   /* The ARB_multi_bind spec says:
-    *
-    *   "An INVALID_OPERATION error is generated if <first> + <count> is
-    *    greater than the number of texture image units supported by
-    *    the implementation."
-    */
-   if (first + count > ctx->Const.MaxCombinedTextureImageUnits) {
-      _mesa_error(ctx, GL_INVALID_OPERATION,
-                  "glBindSamplers(first=%u + count=%d > the value of "
-                  "GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS=%u)",
-                  first, count, ctx->Const.MaxCombinedTextureImageUnits);
+void GLAPIENTRY
+_mesa_BindSampler(GLuint unit, GLuint sampler)
+{
+   GET_CURRENT_CONTEXT(ctx);
+
+   if (unit >= ctx->Const.MaxCombinedTextureImageUnits) {
+      _mesa_error(ctx, GL_INVALID_VALUE, "glBindSampler(unit %u)", unit);
       return;
    }
+
+   bind_sampler(ctx, unit, sampler, false);
+}
+
+
+static ALWAYS_INLINE void
+bind_samplers(struct gl_context *ctx, GLuint first, GLsizei count,
+              const GLuint *samplers, bool no_error)
+{
+   GLsizei i;
 
    FLUSH_VERTICES(ctx, 0);
 
@@ -379,7 +401,7 @@ _mesa_BindSamplers(GLuint first, GLsizei count, const GLuint *samplers)
              *     in <samplers> is not zero or the name of an existing
              *     sampler object (per binding)."
              */
-            if (!sampObj) {
+            if (!no_error && !sampObj) {
                _mesa_error(ctx, GL_INVALID_OPERATION,
                            "glBindSamplers(samplers[%d]=%u is not zero or "
                            "the name of an existing sampler object)",
@@ -413,6 +435,37 @@ _mesa_BindSamplers(GLuint first, GLsizei count, const GLuint *samplers)
          }
       }
    }
+}
+
+
+void GLAPIENTRY
+_mesa_BindSamplers_no_error(GLuint first, GLsizei count, const GLuint *samplers)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   bind_samplers(ctx, first, count, samplers, true);
+}
+
+
+void GLAPIENTRY
+_mesa_BindSamplers(GLuint first, GLsizei count, const GLuint *samplers)
+{
+   GET_CURRENT_CONTEXT(ctx);
+
+   /* The ARB_multi_bind spec says:
+    *
+    *   "An INVALID_OPERATION error is generated if <first> + <count> is
+    *    greater than the number of texture image units supported by
+    *    the implementation."
+    */
+   if (first + count > ctx->Const.MaxCombinedTextureImageUnits) {
+      _mesa_error(ctx, GL_INVALID_OPERATION,
+                  "glBindSamplers(first=%u + count=%d > the value of "
+                  "GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS=%u)",
+                  first, count, ctx->Const.MaxCombinedTextureImageUnits);
+      return;
+   }
+
+   bind_samplers(ctx, first, count, samplers, false);
 }
 
 

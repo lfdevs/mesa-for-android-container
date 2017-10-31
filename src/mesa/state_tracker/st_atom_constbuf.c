@@ -56,7 +56,7 @@ void st_upload_constants(struct st_context *st, struct gl_program *prog)
 {
    gl_shader_stage stage = prog->info.stage;
    struct gl_program_parameter_list *params = prog->Parameters;
-   enum pipe_shader_type shader_type = st_shader_stage_to_ptarget(stage);
+   enum pipe_shader_type shader_type = pipe_shader_type_from_mesa(stage);
 
    assert(shader_type == PIPE_SHADER_VERTEX ||
           shader_type == PIPE_SHADER_FRAGMENT ||
@@ -208,7 +208,7 @@ static void st_bind_ubos(struct st_context *st, struct gl_program *prog,
       return;
 
    for (i = 0; i < prog->info.num_ubos; i++) {
-      struct gl_uniform_buffer_binding *binding;
+      struct gl_buffer_binding *binding;
       struct st_buffer_object *st_obj;
 
       binding =

@@ -70,7 +70,6 @@ namespace {
    make_kernel_args(const Module &mod, const std::string &kernel_name,
                     const clang::CompilerInstance &c) {
       std::vector<module::argument> args;
-      const auto address_spaces = c.getTarget().getAddressSpaceMap();
       const Function &f = *mod.getFunction(kernel_name);
       ::llvm::DataLayout dl(&mod);
       const auto size_type =
@@ -128,8 +127,8 @@ namespace {
                const unsigned address_space =
                   cast< ::llvm::PointerType>(actual_type)->getAddressSpace();
 
-               if (address_space == address_spaces[clang::LangAS::opencl_local
-                                                   - compat::lang_as_offset]) {
+               if (address_space == compat::target_address_space(
+                                  c.getTarget(), clang::LangAS::opencl_local)) {
                   args.emplace_back(module::argument::local, arg_api_size,
                                     target_size, target_align,
                                     module::argument::zero_ext);

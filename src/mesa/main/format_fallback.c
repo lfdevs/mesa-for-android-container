@@ -300,6 +300,8 @@ _mesa_format_fallback_rgbx_to_rgba(mesa_format format)
       return MESA_FORMAT_A8R8G8B8_UNORM;
    case MESA_FORMAT_B4G4R4X4_UNORM:
       return MESA_FORMAT_B4G4R4A4_UNORM;
+   case MESA_FORMAT_X1B5G5R5_UNORM:
+      return MESA_FORMAT_A1B5G5R5_UNORM;
    case MESA_FORMAT_B5G5R5X1_UNORM:
       return MESA_FORMAT_B5G5R5A1_UNORM;
    case MESA_FORMAT_B10G10R10X2_UNORM:

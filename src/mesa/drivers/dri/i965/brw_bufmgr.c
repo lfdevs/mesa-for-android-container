@@ -1,35 +1,32 @@
-/**************************************************************************
- *
+/*
  * Copyright © 2007 Red Hat Inc.
- * Copyright © 2007-2012 Intel Corporation
- * Copyright 2006 Tungsten Graphics, Inc., Bismarck, ND., USA
+ * Copyright © 2007-2017 Intel Corporation
+ * Copyright © 2006 VMware, Inc.
  * All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the
- * "Software"), to deal in the Software without restriction, including
- * without limitation the rights to use, copy, modify, merge, publish,
- * distribute, sub license, and/or sell copies of the Software, and to
- * permit persons to whom the Software is furnished to do so, subject to
- * the following conditions:
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice (including the next
+ * paragraph) shall be included in all copies or substantial portions of the
+ * Software.
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT. IN NO EVENT SHALL
- * THE COPYRIGHT HOLDERS, AUTHORS AND/OR ITS SUPPLIERS BE LIABLE FOR ANY CLAIM,
- * DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
- * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
- * USE OR OTHER DEALINGS IN THE SOFTWARE.
- *
- * The above copyright notice and this permission notice (including the
- * next paragraph) shall be included in all copies or substantial portions
- * of the Software.
- *
- *
- **************************************************************************/
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+ * IN THE SOFTWARE.
+ */
+
 /*
- * Authors: Thomas Hellström <thomas-at-tungstengraphics-dot-com>
- *          Keith Whitwell <keithw-at-tungstengraphics-dot-com>
+ * Authors: Thomas Hellström <thellstrom@vmware.com>
+ *          Keith Whitwell <keithw@vmware.com>
  *          Eric Anholt <eric@anholt.net>
  *          Dave Airlie <airlied@linux.ie>
  */
@@ -46,7 +43,6 @@
 #include <string.h>
 #include <unistd.h>
 #include <assert.h>
-#include <pthread.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -110,7 +106,7 @@ struct bo_cache_bucket {
 struct brw_bufmgr {
    int fd;
 
-   pthread_mutex_t lock;
+   mtx_t lock;
 
    /** Array of lists of cached gem objects of power-of-two sizes */
    struct bo_cache_bucket cache_bucket[14 * 4];
@@ -199,12 +195,6 @@ bucket_for_size(struct brw_bufmgr *bufmgr, uint64_t size)
    return NULL;
 }
 
-inline void
-brw_bo_reference(struct brw_bo *bo)
-{
-   p_atomic_inc(&bo->refcount);
-}
-
 int
 brw_bo_busy(struct brw_bo *bo)
 {
@@ -265,20 +255,19 @@ bo_alloc_internal(struct brw_bufmgr *bufmgr,
    struct bo_cache_bucket *bucket;
    bool alloc_from_cache;
    uint64_t bo_size;
-   bool for_render = false;
+   bool busy = false;
    bool zeroed = false;
 
-   if (flags & BO_ALLOC_FOR_RENDER)
-      for_render = true;
+   if (flags & BO_ALLOC_BUSY)
+      busy = true;
 
    if (flags & BO_ALLOC_ZEROED)
       zeroed = true;
 
-   /* FOR_RENDER really means "I'm ok with a busy BO".  This doesn't really
-    * jive with ZEROED as we have to wait for it to be idle before we can
-    * memset.  Just disallow that combination.
+   /* BUSY does doesn't really jive with ZEROED as we have to wait for it to
+    * be idle before we can memset.  Just disallow that combination.
     */
-   assert(!(for_render && zeroed));
+   assert(!(busy && zeroed));
 
    /* Round the allocated size up to a power of two number of pages. */
    bucket = bucket_for_size(bufmgr, size);
@@ -294,12 +283,12 @@ bo_alloc_internal(struct brw_bufmgr *bufmgr,
       bo_size = bucket->size;
    }
 
-   pthread_mutex_lock(&bufmgr->lock);
+   mtx_lock(&bufmgr->lock);
    /* Get a buffer out of the cache if available */
 retry:
    alloc_from_cache = false;
    if (bucket != NULL && !list_empty(&bucket->head)) {
-      if (for_render && !zeroed) {
+      if (busy && !zeroed) {
          /* Allocate new render-target BOs from the tail (MRU)
           * of the list, as it will likely be hot in the GPU
           * cache and in the aperture for us.  If the caller
@@ -372,7 +361,6 @@ retry:
       }
 
       bo->gem_handle = create.handle;
-      _mesa_hash_table_insert(bufmgr->handle_table, &bo->gem_handle, bo);
 
       bo->bufmgr = bufmgr;
       bo->align = alignment;
@@ -402,17 +390,19 @@ retry:
    p_atomic_set(&bo->refcount, 1);
    bo->reusable = true;
    bo->cache_coherent = bufmgr->has_llc;
+   bo->index = -1;
 
-   pthread_mutex_unlock(&bufmgr->lock);
+   mtx_unlock(&bufmgr->lock);
 
-   DBG("bo_create: buf %d (%s) %ldb\n", bo->gem_handle, bo->name, size);
+   DBG("bo_create: buf %d (%s) %llub\n", bo->gem_handle, bo->name,
+       (unsigned long long) size);
 
    return bo;
 
 err_free:
    bo_free(bo);
 err:
-   pthread_mutex_unlock(&bufmgr->lock);
+   mtx_unlock(&bufmgr->lock);
    return NULL;
 }
 
@@ -493,7 +483,7 @@ brw_bo_gem_create_from_name(struct brw_bufmgr *bufmgr,
     * alternating names for the front/back buffer a linear search
     * provides a sufficiently fast match.
     */
-   pthread_mutex_lock(&bufmgr->lock);
+   mtx_lock(&bufmgr->lock);
    bo = hash_find_bo(bufmgr->name_table, handle);
    if (bo) {
       brw_bo_reference(bo);
@@ -526,7 +516,7 @@ brw_bo_gem_create_from_name(struct brw_bufmgr *bufmgr,
    p_atomic_set(&bo->refcount, 1);
 
    bo->size = open_arg.size;
-   bo->offset64 = 0;
+   bo->gtt_offset = 0;
    bo->bufmgr = bufmgr;
    bo->gem_handle = open_arg.handle;
    bo->name = name;
@@ -549,12 +539,12 @@ brw_bo_gem_create_from_name(struct brw_bufmgr *bufmgr,
    DBG("bo_create_from_handle: %d (%s)\n", handle, bo->name);
 
 out:
-   pthread_mutex_unlock(&bufmgr->lock);
+   mtx_unlock(&bufmgr->lock);
    return bo;
 
 err_unref:
    bo_free(bo);
-   pthread_mutex_unlock(&bufmgr->lock);
+   mtx_unlock(&bufmgr->lock);
    return NULL;
 }
 
@@ -563,7 +553,6 @@ bo_free(struct brw_bo *bo)
 {
    struct brw_bufmgr *bufmgr = bo->bufmgr;
    struct drm_gem_close close;
-   struct hash_entry *entry;
    int ret;
 
    if (bo->map_cpu) {
@@ -579,12 +568,17 @@ bo_free(struct brw_bo *bo)
       drm_munmap(bo->map_gtt, bo->size);
    }
 
-   if (bo->global_name) {
-      entry = _mesa_hash_table_search(bufmgr->name_table, &bo->global_name);
-      _mesa_hash_table_remove(bufmgr->name_table, entry);
+   if (bo->external) {
+      struct hash_entry *entry;
+
+      if (bo->global_name) {
+         entry = _mesa_hash_table_search(bufmgr->name_table, &bo->global_name);
+         _mesa_hash_table_remove(bufmgr->name_table, entry);
+      }
+
+      entry = _mesa_hash_table_search(bufmgr->handle_table, &bo->gem_handle);
+      _mesa_hash_table_remove(bufmgr->handle_table, entry);
    }
-   entry = _mesa_hash_table_search(bufmgr->handle_table, &bo->gem_handle);
-   _mesa_hash_table_remove(bufmgr->handle_table, entry);
 
    /* Close this object */
    memclear(close);
@@ -659,14 +653,14 @@ brw_bo_unreference(struct brw_bo *bo)
 
       clock_gettime(CLOCK_MONOTONIC, &time);
 
-      pthread_mutex_lock(&bufmgr->lock);
+      mtx_lock(&bufmgr->lock);
 
       if (p_atomic_dec_zero(&bo->refcount)) {
          bo_unreference_final(bo, time.tv_sec);
          cleanup_bo_cache(bufmgr, time.tv_sec);
       }
 
-      pthread_mutex_unlock(&bufmgr->lock);
+      mtx_unlock(&bufmgr->lock);
    }
 }
 
@@ -675,11 +669,12 @@ bo_wait_with_stall_warning(struct brw_context *brw,
                            struct brw_bo *bo,
                            const char *action)
 {
-   double elapsed = unlikely(brw && brw->perf_debug) ? -get_time() : 0.0;
+   bool busy = brw && brw->perf_debug && !bo->idle;
+   double elapsed = unlikely(busy) ? -get_time() : 0.0;
 
    brw_bo_wait_rendering(bo);
 
-   if (unlikely(brw && brw->perf_debug)) {
+   if (unlikely(busy)) {
       elapsed += get_time();
       if (elapsed > 1e-5) /* 0.01ms */
          perf_debug("%s a busy \"%s\" BO stalled and took %.03f ms.\n",
@@ -1042,13 +1037,15 @@ brw_bo_wait(struct brw_bo *bo, int64_t timeout_ns)
    if (ret == -1)
       return -errno;
 
+   bo->idle = true;
+
    return ret;
 }
 
 void
 brw_bufmgr_destroy(struct brw_bufmgr *bufmgr)
 {
-   pthread_mutex_destroy(&bufmgr->lock);
+   mtx_destroy(&bufmgr->lock);
 
    /* Free any cached buffer objects we were going to reuse */
    for (int i = 0; i < bufmgr->num_buckets; i++) {
@@ -1117,12 +1114,12 @@ brw_bo_gem_create_from_prime(struct brw_bufmgr *bufmgr, int prime_fd)
    struct brw_bo *bo;
    struct drm_i915_gem_get_tiling get_tiling;
 
-   pthread_mutex_lock(&bufmgr->lock);
+   mtx_lock(&bufmgr->lock);
    ret = drmPrimeFDToHandle(bufmgr->fd, prime_fd, &handle);
    if (ret) {
       DBG("create_from_prime: failed to obtain handle from fd: %s\n",
           strerror(errno));
-      pthread_mutex_unlock(&bufmgr->lock);
+      mtx_unlock(&bufmgr->lock);
       return NULL;
    }
 
@@ -1171,12 +1168,12 @@ brw_bo_gem_create_from_prime(struct brw_bufmgr *bufmgr, int prime_fd)
    /* XXX stride is unknown */
 
 out:
-   pthread_mutex_unlock(&bufmgr->lock);
+   mtx_unlock(&bufmgr->lock);
    return bo;
 
 err:
    bo_free(bo);
-   pthread_mutex_unlock(&bufmgr->lock);
+   mtx_unlock(&bufmgr->lock);
    return NULL;
 }
 
@@ -1185,12 +1182,20 @@ brw_bo_gem_export_to_prime(struct brw_bo *bo, int *prime_fd)
 {
    struct brw_bufmgr *bufmgr = bo->bufmgr;
 
+   if (!bo->external) {
+      mtx_lock(&bufmgr->lock);
+      if (!bo->external) {
+         _mesa_hash_table_insert(bufmgr->handle_table, &bo->gem_handle, bo);
+         bo->external = true;
+      }
+      mtx_unlock(&bufmgr->lock);
+   }
+
    if (drmPrimeHandleToFD(bufmgr->fd, bo->gem_handle,
                           DRM_CLOEXEC, prime_fd) != 0)
       return -errno;
 
    bo->reusable = false;
-   bo->external = true;
 
    return 0;
 }
@@ -1208,15 +1213,18 @@ brw_bo_flink(struct brw_bo *bo, uint32_t *name)
       if (drmIoctl(bufmgr->fd, DRM_IOCTL_GEM_FLINK, &flink))
          return -errno;
 
-      pthread_mutex_lock(&bufmgr->lock);
+      mtx_lock(&bufmgr->lock);
+      if (!bo->external) {
+         _mesa_hash_table_insert(bufmgr->handle_table, &bo->gem_handle, bo);
+         bo->external = true;
+      }
       if (!bo->global_name) {
          bo->global_name = flink.name;
-         bo->reusable = false;
-         bo->external = true;
-
          _mesa_hash_table_insert(bufmgr->name_table, &bo->global_name, bo);
       }
-      pthread_mutex_unlock(&bufmgr->lock);
+      mtx_unlock(&bufmgr->lock);
+
+      bo->reusable = false;
    }
 
    *name = bo->global_name;
@@ -1291,6 +1299,25 @@ brw_create_hw_context(struct brw_bufmgr *bufmgr)
    return create.ctx_id;
 }
 
+int
+brw_hw_context_set_priority(struct brw_bufmgr *bufmgr,
+                            uint32_t ctx_id,
+                            int priority)
+{
+   struct drm_i915_gem_context_param p = {
+      .ctx_id = ctx_id,
+      .param = I915_CONTEXT_PARAM_PRIORITY,
+      .value = priority,
+   };
+   int err;
+
+   err = 0;
+   if (drmIoctl(bufmgr->fd, DRM_IOCTL_I915_GEM_CONTEXT_SETPARAM, &p))
+      err = -errno;
+
+   return err;
+}
+
 void
 brw_destroy_hw_context(struct brw_bufmgr *bufmgr, uint32_t ctx_id)
 {
@@ -1340,7 +1367,7 @@ gem_param(int fd, int name)
  * \param fd File descriptor of the opened DRM device.
  */
 struct brw_bufmgr *
-brw_bufmgr_init(struct gen_device_info *devinfo, int fd, int batch_size)
+brw_bufmgr_init(struct gen_device_info *devinfo, int fd)
 {
    struct brw_bufmgr *bufmgr;
 
@@ -1359,7 +1386,7 @@ brw_bufmgr_init(struct gen_device_info *devinfo, int fd, int batch_size)
     */
    bufmgr->fd = fd;
 
-   if (pthread_mutex_init(&bufmgr->lock, NULL) != 0) {
+   if (mtx_init(&bufmgr->lock, mtx_plain) != 0) {
       free(bufmgr);
       return NULL;
    }

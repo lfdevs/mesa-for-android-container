@@ -107,7 +107,10 @@ swr_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
    }
 
    struct swr_vertex_element_state *velems = ctx->velems;
-   velems->fsState.cutIndex = info->restart_index;
+   if (info->primitive_restart)
+      velems->fsState.cutIndex = info->restart_index;
+   else
+      velems->fsState.cutIndex = 0;
    velems->fsState.bEnableCutIndex = info->primitive_restart;
    velems->fsState.bPartialVertexBuffer = (info->min_index > 0);
 
@@ -236,14 +239,17 @@ swr_flush(struct pipe_context *pipe,
 {
    struct swr_context *ctx = swr_context(pipe);
    struct swr_screen *screen = swr_screen(pipe->screen);
-   struct pipe_surface *cb = ctx->framebuffer.cbufs[0];
 
-   /* If the current renderTarget is the display surface, store tiles back to
-    * the surface, in preparation for present (swr_flush_frontbuffer).
-    * Other renderTargets get stored back when attachment changes or
-    * swr_surface_destroy */
-   if (cb && swr_resource(cb->texture)->display_target)
-      swr_store_dirty_resource(pipe, cb->texture, SWR_TILE_RESOLVED);
+   for (int i=0; i < ctx->framebuffer.nr_cbufs; i++) {
+      struct pipe_surface *cb = ctx->framebuffer.cbufs[i];
+      if (cb) {
+         swr_store_dirty_resource(pipe, cb->texture, SWR_TILE_RESOLVED);
+      }
+   }
+   if (ctx->framebuffer.zsbuf) {
+      swr_store_dirty_resource(pipe, ctx->framebuffer.zsbuf->texture,
+                               SWR_TILE_RESOLVED);
+   }
 
    if (fence)
       swr_fence_reference(pipe->screen, fence, screen->flush_fence);
@@ -292,7 +298,7 @@ swr_store_render_target(struct pipe_context *pipe,
    struct SWR_SURFACE_STATE *renderTarget = &pDC->renderTargets[attachment];
 
    /* Only proceed if there's a valid surface to store to */
-   if (renderTarget->pBaseAddress) {
+   if (renderTarget->xpBaseAddress) {
       swr_update_draw_context(ctx);
       SWR_RECT full_rect =
          {0, 0,
@@ -319,9 +325,9 @@ swr_store_dirty_resource(struct pipe_context *pipe,
       swr_draw_context *pDC = &ctx->swrDC;
       SWR_SURFACE_STATE *renderTargets = pDC->renderTargets;
       for (uint32_t i = 0; i < SWR_NUM_ATTACHMENTS; i++)
-         if (renderTargets[i].pBaseAddress == spr->swr.pBaseAddress ||
-             (spr->secondary.pBaseAddress &&
-              renderTargets[i].pBaseAddress == spr->secondary.pBaseAddress)) {
+         if (renderTargets[i].xpBaseAddress == spr->swr.xpBaseAddress ||
+             (spr->secondary.xpBaseAddress &&
+              renderTargets[i].xpBaseAddress == spr->secondary.xpBaseAddress)) {
             swr_store_render_target(pipe, i, post_tile_state);
 
             /* Mesa thinks depth/stencil are fused, so we'll never get an

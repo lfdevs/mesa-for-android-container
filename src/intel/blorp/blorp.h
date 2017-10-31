@@ -92,8 +92,7 @@ void blorp_batch_finish(struct blorp_batch *batch);
 
 struct blorp_address {
    void *buffer;
-   uint32_t read_domains;
-   uint32_t write_domain;
+   unsigned reloc_flags;
    uint32_t offset;
 };
 
@@ -132,6 +131,12 @@ blorp_copy(struct blorp_batch *batch,
            uint32_t src_x, uint32_t src_y,
            uint32_t dst_x, uint32_t dst_y,
            uint32_t src_width, uint32_t src_height);
+
+void
+blorp_buffer_copy(struct blorp_batch *batch,
+                  struct blorp_address src,
+                  struct blorp_address dst,
+                  uint64_t size);
 
 void
 blorp_fast_clear(struct blorp_batch *batch,

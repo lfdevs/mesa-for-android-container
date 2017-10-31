@@ -41,7 +41,8 @@ brw_upload_gs_pull_constants(struct brw_context *brw)
    struct brw_stage_state *stage_state = &brw->gs.base;
 
    /* BRW_NEW_GEOMETRY_PROGRAM */
-   struct brw_program *gp = (struct brw_program *) brw->geometry_program;
+   struct brw_program *gp =
+      (struct brw_program *) brw->programs[MESA_SHADER_GEOMETRY];
 
    if (!gp)
       return;
@@ -59,7 +60,6 @@ const struct brw_tracked_state brw_gs_pull_constants = {
    .dirty = {
       .mesa = _NEW_PROGRAM_CONSTANTS,
       .brw = BRW_NEW_BATCH |
-             BRW_NEW_BLORP |
              BRW_NEW_GEOMETRY_PROGRAM |
              BRW_NEW_GS_PROG_DATA,
    },
@@ -85,7 +85,6 @@ const struct brw_tracked_state brw_gs_ubo_surfaces = {
    .dirty = {
       .mesa = _NEW_PROGRAM,
       .brw = BRW_NEW_BATCH |
-             BRW_NEW_BLORP |
              BRW_NEW_GS_PROG_DATA |
              BRW_NEW_UNIFORM_BUFFER,
    },
@@ -96,7 +95,7 @@ static void
 brw_upload_gs_abo_surfaces(struct brw_context *brw)
 {
    /* _NEW_PROGRAM */
-   const struct gl_program *gp = brw->geometry_program;
+   const struct gl_program *gp = brw->programs[MESA_SHADER_GEOMETRY];
 
    if (gp) {
       /* BRW_NEW_GS_PROG_DATA */
@@ -109,7 +108,6 @@ const struct brw_tracked_state brw_gs_abo_surfaces = {
       .mesa = _NEW_PROGRAM,
       .brw = BRW_NEW_ATOMIC_BUFFER |
              BRW_NEW_BATCH |
-             BRW_NEW_BLORP |
              BRW_NEW_GS_PROG_DATA,
    },
    .emit = brw_upload_gs_abo_surfaces,
@@ -119,7 +117,7 @@ static void
 brw_upload_gs_image_surfaces(struct brw_context *brw)
 {
    /* BRW_NEW_GEOMETRY_PROGRAM */
-   const struct gl_program *gp = brw->geometry_program;
+   const struct gl_program *gp = brw->programs[MESA_SHADER_GEOMETRY];
 
    if (gp) {
       /* BRW_NEW_GS_PROG_DATA, BRW_NEW_IMAGE_UNITS, _NEW_TEXTURE */
@@ -132,8 +130,7 @@ const struct brw_tracked_state brw_gs_image_surfaces = {
    .dirty = {
       .mesa = _NEW_TEXTURE,
       .brw = BRW_NEW_BATCH |
-             BRW_NEW_BLORP |
-             BRW_NEW_FAST_CLEAR_COLOR |
+             BRW_NEW_AUX_STATE |
              BRW_NEW_GEOMETRY_PROGRAM |
              BRW_NEW_GS_PROG_DATA |
              BRW_NEW_IMAGE_UNITS,

@@ -56,9 +56,11 @@ brw_upload_binding_table(struct brw_context *brw,
                          const struct brw_stage_prog_data *prog_data,
                          struct brw_stage_state *stage_state)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+
    if (prog_data->binding_table.size_bytes == 0) {
       /* There are no surfaces; skip making the binding table altogether. */
-      if (stage_state->bind_bo_offset == 0 && brw->gen < 9)
+      if (stage_state->bind_bo_offset == 0 && devinfo->gen < 9)
          return;
 
       stage_state->bind_bo_offset = 0;
@@ -69,7 +71,7 @@ brw_upload_binding_table(struct brw_context *brw,
             brw, &stage_state->surf_offset[
                     prog_data->binding_table.shader_time_start],
             brw->shader_time.bo, 0, ISL_FORMAT_RAW,
-            brw->shader_time.bo->size, 1, true);
+            brw->shader_time.bo->size, 1, RELOC_WRITE);
       }
       uint32_t *bind =
          brw_state_batch(brw, prog_data->binding_table.size_bytes,
@@ -82,7 +84,7 @@ brw_upload_binding_table(struct brw_context *brw,
 
    brw->ctx.NewDriverState |= BRW_NEW_BINDING_TABLE_POINTERS;
 
-   if (brw->gen >= 7) {
+   if (devinfo->gen >= 7) {
       BEGIN_BATCH(2);
       OUT_BATCH(packet_name << 16 | (2 - 2));
       /* Align SurfaceStateOffset[16:6] format to [15:5] PS Binding Table field
@@ -151,7 +153,7 @@ static void
 brw_tcs_upload_binding_table(struct brw_context *brw)
 {
    /* Skip if the tessellation stages are disabled. */
-   if (brw->tess_eval_program == NULL)
+   if (brw->programs[MESA_SHADER_TESS_EVAL] == NULL)
       return;
 
    /* BRW_NEW_TCS_PROG_DATA */
@@ -180,7 +182,7 @@ static void
 brw_tes_upload_binding_table(struct brw_context *brw)
 {
    /* If there's no TES, skip changing anything. */
-   if (brw->tess_eval_program == NULL)
+   if (brw->programs[MESA_SHADER_TESS_EVAL] == NULL)
       return;
 
    /* BRW_NEW_TES_PROG_DATA */
@@ -208,7 +210,7 @@ static void
 brw_gs_upload_binding_table(struct brw_context *brw)
 {
    /* If there's no GS, skip changing anything. */
-   if (brw->geometry_program == NULL)
+   if (brw->programs[MESA_SHADER_GEOMETRY] == NULL)
       return;
 
    /* BRW_NEW_GS_PROG_DATA */

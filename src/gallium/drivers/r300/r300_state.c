@@ -27,7 +27,6 @@
 #include "util/u_half.h"
 #include "util/u_helpers.h"
 #include "util/u_math.h"
-#include "util/u_mm.h"
 #include "util/u_memory.h"
 #include "util/u_pack_color.h"
 #include "util/u_transfer.h"

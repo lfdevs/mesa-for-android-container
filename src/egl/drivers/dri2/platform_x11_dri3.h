@@ -28,7 +28,7 @@
 _EGL_DRIVER_TYPECAST(dri3_egl_surface, _EGLSurface, obj)
 
 struct dri3_egl_surface {
-   _EGLSurface base;
+   struct dri2_egl_surface surf;
    struct loader_dri3_drawable loader_drawable;
 };
 

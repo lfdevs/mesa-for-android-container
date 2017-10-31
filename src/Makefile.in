@@ -116,7 +116,7 @@ target_triplet = @target@
 @HAVE_VULKAN_COMMON_TRUE@am__append_2 = vulkan
 @HAVE_AMD_DRIVERS_TRUE@am__append_3 = amd
 @HAVE_INTEL_DRIVERS_TRUE@am__append_4 = intel
-@HAVE_GALLIUM_VC4_TRUE@am__append_5 = broadcom
+@HAVE_BROADCOM_DRIVERS_TRUE@am__append_5 = broadcom
 @NEED_OPENGL_COMMON_TRUE@am__append_6 = mesa
 @HAVE_DRI_GLX_TRUE@am__append_7 = glx
 @HAVE_GBM_TRUE@am__append_8 = gbm
@@ -128,7 +128,8 @@ target_triplet = @target@
 @HAVE_GALLIUM_TRUE@am__append_12 = gallium
 subdir = src
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_gnu_make.m4 \
+am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_compile_flag.m4 \
+	$(top_srcdir)/m4/ax_check_gnu_make.m4 \
 	$(top_srcdir)/m4/ax_check_python_mako_module.m4 \
 	$(top_srcdir)/m4/ax_gcc_builtin.m4 \
 	$(top_srcdir)/m4/ax_gcc_func_attribute.m4 \
@@ -440,9 +441,9 @@ NVVIEUX_CFLAGS = @NVVIEUX_CFLAGS@
 NVVIEUX_LIBS = @NVVIEUX_LIBS@
 OBJDUMP = @OBJDUMP@
 OBJEXT = @OBJEXT@
-OMX_CFLAGS = @OMX_CFLAGS@
-OMX_LIBS = @OMX_LIBS@
-OMX_LIB_INSTALL_DIR = @OMX_LIB_INSTALL_DIR@
+OMX_BELLAGIO_CFLAGS = @OMX_BELLAGIO_CFLAGS@
+OMX_BELLAGIO_LIBS = @OMX_BELLAGIO_LIBS@
+OMX_BELLAGIO_LIB_INSTALL_DIR = @OMX_BELLAGIO_LIB_INSTALL_DIR@
 OPENCL_LIBNAME = @OPENCL_LIBNAME@
 OPENCL_VERSION = @OPENCL_VERSION@
 OSMESA_LIB = @OSMESA_LIB@
@@ -496,6 +497,8 @@ VA_LIBS = @VA_LIBS@
 VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
 VA_MAJOR = @VA_MAJOR@
 VA_MINOR = @VA_MINOR@
+VC5_SIMULATOR_CFLAGS = @VC5_SIMULATOR_CFLAGS@
+VC5_SIMULATOR_LIBS = @VC5_SIMULATOR_LIBS@
 VDPAU_CFLAGS = @VDPAU_CFLAGS@
 VDPAU_LIBS = @VDPAU_LIBS@
 VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
@@ -507,12 +510,15 @@ VISIBILITY_CXXFLAGS = @VISIBILITY_CXXFLAGS@
 VL_CFLAGS = @VL_CFLAGS@
 VL_LIBS = @VL_LIBS@
 VULKAN_ICD_INSTALL_DIR = @VULKAN_ICD_INSTALL_DIR@
-WAYLAND_CFLAGS = @WAYLAND_CFLAGS@
-WAYLAND_LIBS = @WAYLAND_LIBS@
+WAYLAND_CLIENT_CFLAGS = @WAYLAND_CLIENT_CFLAGS@
+WAYLAND_CLIENT_LIBS = @WAYLAND_CLIENT_LIBS@
 WAYLAND_PROTOCOLS_DATADIR = @WAYLAND_PROTOCOLS_DATADIR@
 WAYLAND_SCANNER = @WAYLAND_SCANNER@
 WAYLAND_SCANNER_CFLAGS = @WAYLAND_SCANNER_CFLAGS@
 WAYLAND_SCANNER_LIBS = @WAYLAND_SCANNER_LIBS@
+WAYLAND_SERVER_CFLAGS = @WAYLAND_SERVER_CFLAGS@
+WAYLAND_SERVER_LIBS = @WAYLAND_SERVER_LIBS@
+WNO_OVERRIDE_INIT = @WNO_OVERRIDE_INIT@
 X11_INCLUDES = @X11_INCLUDES@
 XA_MAJOR = @XA_MAJOR@
 XA_MINOR = @XA_MINOR@
@@ -597,8 +603,9 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 BUILT_SOURCES = git_sha1.h
 CLEANFILES = $(BUILT_SOURCES)
-EXTRA_DIST = vulkan/registry/vk.xml getopt hgl SConscript \
-	$(top_srcdir)/include/GL/mesa_glinterop.h
+EXTRA_DIST = vulkan/registry/vk.xml \
+	vulkan/registry/vk_android_native_buffer.xml getopt hgl \
+	SConscript $(top_srcdir)/include/GL/mesa_glinterop.h
 
 # include only conditionally ?
 SUBDIRS = . gtest util mapi/glapi/gen mapi compiler $(am__append_1) \
@@ -1142,7 +1149,7 @@ uninstall-am: uninstall-glHEADERS uninstall-glxHEADERS \
 
 .PHONY: git_sha1.h.tmp
 git_sha1.h.tmp:
-	@sh $(top_srcdir)/bin/git_sha1_gen.sh > $@
+	@$(PYTHON2) $(top_srcdir)/bin/git_sha1_gen.py > $@
 
 git_sha1.h: git_sha1.h.tmp
 	@echo "updating git_sha1.h"

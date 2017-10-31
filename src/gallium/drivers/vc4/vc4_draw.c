@@ -308,6 +308,14 @@ vc4_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 
         struct vc4_job *job = vc4_get_job_for_fbo(vc4);
 
+        /* Make sure that the raster order flags haven't changed, which can
+         * only be set at job granularity.
+         */
+        if (job->flags != vc4->rasterizer->tile_raster_order_flags) {
+                vc4_job_submit(vc4, job);
+                job = vc4_get_job_for_fbo(vc4);
+        }
+
         vc4_get_draw_cl_space(job, info->count);
 
         if (vc4->prim_mode != info->mode) {
@@ -518,6 +526,8 @@ vc4_clear(struct pipe_context *pctx, unsigned buffers,
                      zsclear == PIPE_CLEAR_STENCIL) &&
                     (rsc->initialized_buffers & ~(zsclear | job->cleared)) &&
                     util_format_is_depth_and_stencil(vc4->framebuffer.zsbuf->format)) {
+                        static const union pipe_color_union dummy_color = {};
+
                         perf_debug("Partial clear of Z+stencil buffer, "
                                    "drawing a quad instead of fast clearing\n");
                         vc4_blitter_save(vc4);
@@ -526,7 +536,7 @@ vc4_clear(struct pipe_context *pctx, unsigned buffers,
                                            vc4->framebuffer.height,
                                            1,
                                            zsclear,
-                                           NULL, depth, stencil);
+                                           &dummy_color, depth, stencil);
                         buffers &= ~zsclear;
                         if (!buffers)
                                 return;

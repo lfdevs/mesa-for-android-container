@@ -10,6 +10,7 @@ C_SOURCES := \
 	picture_h264.c \
 	picture_hevc.c \
 	picture_vc1.c \
+	picture_mjpeg.c \
 	postproc.c \
 	subpicture.c \
 	surface.c \

@@ -54,6 +54,7 @@ enum radeon_bo_flag { /* bitfield */
     RADEON_FLAG_NO_CPU_ACCESS = (1 << 1),
     RADEON_FLAG_NO_SUBALLOC =   (1 << 2),
     RADEON_FLAG_SPARSE =        (1 << 3),
+    RADEON_FLAG_NO_INTERPROCESS_SHARING = (1 << 4),
 };
 
 enum radeon_bo_usage { /* bitfield */
@@ -91,6 +92,7 @@ enum radeon_value_id {
     RADEON_NUM_GFX_IBS,
     RADEON_NUM_SDMA_IBS,
     RADEON_GFX_BO_LIST_COUNTER, /* number of BOs submitted in gfx IBs */
+    RADEON_GFX_IB_SIZE_COUNTER,
     RADEON_NUM_BYTES_MOVED,
     RADEON_NUM_EVICTIONS,
     RADEON_NUM_VRAM_CPU_PAGE_FAULTS,
@@ -173,8 +175,7 @@ struct radeon_winsys_cs {
     unsigned                      max_prev; /* Space in array pointed to by prev. */
     unsigned                      prev_dw; /* Total number of dwords in previous chunks. */
 
-    /* Memory usage of the buffer list. These are always 0 for CE and preamble
-     * IBs. */
+    /* Memory usage of the buffer list. These are always 0 for preamble IBs. */
     uint64_t                      used_vram;
     uint64_t                      used_gart;
 };
@@ -457,36 +458,6 @@ struct radeon_winsys {
                                           void *flush_ctx);
 
     /**
-     * Add a constant engine IB to a graphics CS. This makes the graphics CS
-     * from "cs_create" a group of two IBs that share a buffer list and are
-     * flushed together.
-     *
-     * The returned constant CS is only a stream for writing packets to the new
-     * IB. Calling other winsys functions with it is not allowed, not even
-     * "cs_destroy".
-     *
-     * In order to add buffers and check memory usage, use the graphics CS.
-     * In order to flush it, use the graphics CS, which will flush both IBs.
-     * Destroying the graphics CS will destroy both of them.
-     *
-     * \param cs  The graphics CS from "cs_create" that will hold the buffer
-     *            list and will be used for flushing.
-     */
-    struct radeon_winsys_cs *(*cs_add_const_ib)(struct radeon_winsys_cs *cs);
-
-     /**
-     * Add a constant engine preamble IB to a graphics CS. This add an extra IB
-     * in similar manner to cs_add_const_ib. This should always be called after
-     * cs_add_const_ib.
-     *
-     * The returned IB is a constant engine IB that only gets flushed if the
-     * context changed.
-     *
-     * \param cs  The graphics CS from "cs_create" that will hold the buffer
-     *            list and will be used for flushing.
-     */
-    struct radeon_winsys_cs *(*cs_add_const_preamble_ib)(struct radeon_winsys_cs *cs);
-    /**
      * Destroy a command stream.
      *
      * \param cs        A command stream to destroy.
@@ -604,6 +575,13 @@ struct radeon_winsys {
     void (*cs_sync_flush)(struct radeon_winsys_cs *cs);
 
     /**
+     * Add a fence dependency to the CS, so that the CS will wait for
+     * the fence before execution.
+     */
+    void (*cs_add_fence_dependency)(struct radeon_winsys_cs *cs,
+                                    struct pipe_fence_handle *fence);
+
+    /**
      * Wait for the fence and return true if the fence has been signalled.
      * The timeout of 0 will only return the status.
      * The timeout of PIPE_TIMEOUT_INFINITE will always wait until the fence
@@ -618,6 +596,18 @@ struct radeon_winsys {
      */
     void (*fence_reference)(struct pipe_fence_handle **dst,
                             struct pipe_fence_handle *src);
+
+    /**
+     * Create a new fence object corresponding to the given sync_file.
+     */
+    struct pipe_fence_handle *(*fence_import_sync_file)(struct radeon_winsys *ws,
+							int fd);
+
+    /**
+     * Return a sync_file FD corresponding to the given fence object.
+     */
+    int (*fence_export_sync_file)(struct radeon_winsys *ws,
+				  struct pipe_fence_handle *fence);
 
     /**
      * Initialize surface
@@ -692,14 +682,19 @@ static inline unsigned radeon_flags_from_heap(enum radeon_heap heap)
 {
     switch (heap) {
     case RADEON_HEAP_VRAM_NO_CPU_ACCESS:
-        return RADEON_FLAG_GTT_WC | RADEON_FLAG_NO_CPU_ACCESS;
+        return RADEON_FLAG_GTT_WC |
+               RADEON_FLAG_NO_CPU_ACCESS |
+               RADEON_FLAG_NO_INTERPROCESS_SHARING;
+
     case RADEON_HEAP_VRAM:
     case RADEON_HEAP_VRAM_GTT:
     case RADEON_HEAP_GTT_WC:
-        return RADEON_FLAG_GTT_WC;
+        return RADEON_FLAG_GTT_WC |
+               RADEON_FLAG_NO_INTERPROCESS_SHARING;
+
     case RADEON_HEAP_GTT:
     default:
-        return 0;
+        return RADEON_FLAG_NO_INTERPROCESS_SHARING;
     }
 }
 
@@ -731,8 +726,14 @@ static inline int radeon_get_heap_index(enum radeon_bo_domain domain,
     /* NO_CPU_ACCESS implies VRAM only. */
     assert(!(flags & RADEON_FLAG_NO_CPU_ACCESS) || domain == RADEON_DOMAIN_VRAM);
 
+    /* Resources with interprocess sharing don't use any winsys allocators. */
+    if (!(flags & RADEON_FLAG_NO_INTERPROCESS_SHARING))
+        return -1;
+
     /* Unsupported flags: NO_SUBALLOC, SPARSE. */
-    if (flags & ~(RADEON_FLAG_GTT_WC | RADEON_FLAG_NO_CPU_ACCESS))
+    if (flags & ~(RADEON_FLAG_GTT_WC |
+                  RADEON_FLAG_NO_CPU_ACCESS |
+                  RADEON_FLAG_NO_INTERPROCESS_SHARING))
         return -1;
 
     switch (domain) {

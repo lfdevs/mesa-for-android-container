@@ -277,7 +277,6 @@ unsigned int Instruction::srcMask(unsigned int s) const
    case TGSI_OPCODE_DP3:
       return 0x7;
    case TGSI_OPCODE_DP4:
-   case TGSI_OPCODE_DPH:
    case TGSI_OPCODE_KILL_IF: /* WriteMask ignored */
       return 0xf;
    case TGSI_OPCODE_DST:
@@ -289,7 +288,6 @@ unsigned int Instruction::srcMask(unsigned int s) const
    case TGSI_OPCODE_POW:
    case TGSI_OPCODE_RCP:
    case TGSI_OPCODE_RSQ:
-   case TGSI_OPCODE_SCS:
       return 0x1;
    case TGSI_OPCODE_IF:
    case TGSI_OPCODE_UIF:
@@ -347,14 +345,6 @@ unsigned int Instruction::srcMask(unsigned int s) const
       return mask;
    case TGSI_OPCODE_TXQ:
       return 1;
-   case TGSI_OPCODE_XPD:
-   {
-      unsigned int x = 0;
-      if (mask & 1) x |= 0x6;
-      if (mask & 2) x |= 0x5;
-      if (mask & 4) x |= 0x3;
-      return x;
-   }
    case TGSI_OPCODE_D2I:
    case TGSI_OPCODE_D2U:
    case TGSI_OPCODE_D2F:
@@ -620,7 +610,6 @@ nv50_ir::DataType Instruction::inferSrcType() const
    case TGSI_OPCODE_ISHR:
    case TGSI_OPCODE_ISLT:
    case TGSI_OPCODE_ISSG:
-   case TGSI_OPCODE_SAD: // not sure about SAD, but no one has a float version
    case TGSI_OPCODE_MOD:
    case TGSI_OPCODE_UARL:
    case TGSI_OPCODE_ATOMIMIN:
@@ -845,7 +834,6 @@ static nv50_ir::operation translateOpcode(uint opcode)
    NV50_IR_OPCODE_CASE(OR, OR);
    NV50_IR_OPCODE_CASE(MOD, MOD);
    NV50_IR_OPCODE_CASE(XOR, XOR);
-   NV50_IR_OPCODE_CASE(SAD, SAD);
    NV50_IR_OPCODE_CASE(TXF, TXF);
    NV50_IR_OPCODE_CASE(TXF_LZ, TXF);
    NV50_IR_OPCODE_CASE(TXQ, TXQ);
@@ -996,9 +984,6 @@ static nv50_ir::operation translateOpcode(uint opcode)
 static uint16_t opcodeToSubOp(uint opcode)
 {
    switch (opcode) {
-   case TGSI_OPCODE_LFENCE:   return NV50_IR_SUBOP_MEMBAR(L, GL);
-   case TGSI_OPCODE_SFENCE:   return NV50_IR_SUBOP_MEMBAR(S, GL);
-   case TGSI_OPCODE_MFENCE:   return NV50_IR_SUBOP_MEMBAR(M, GL);
    case TGSI_OPCODE_ATOMUADD: return NV50_IR_SUBOP_ATOM_ADD;
    case TGSI_OPCODE_ATOMXCHG: return NV50_IR_SUBOP_ATOM_EXCH;
    case TGSI_OPCODE_ATOMCAS:  return NV50_IR_SUBOP_ATOM_CAS;
@@ -3198,7 +3183,6 @@ Converter::handleInstruction(const struct tgsi_full_instruction *insn)
       break;
    case TGSI_OPCODE_MAD:
    case TGSI_OPCODE_UMAD:
-   case TGSI_OPCODE_SAD:
    case TGSI_OPCODE_FMA:
       FOR_EACH_DST_ENABLED_CHANNEL(0, c, tgsi) {
          src0 = fetchSrc(0, c);
@@ -3273,19 +3257,6 @@ Converter::handleInstruction(const struct tgsi_full_instruction *insn)
          mkOp1(op, TYPE_F32, dst0[3], val0);
       }
       break;
-   case TGSI_OPCODE_SCS:
-      if (mask & 3) {
-         val0 = mkOp1v(OP_PRESIN, TYPE_F32, getSSA(), fetchSrc(0, 0));
-         if (dst0[0])
-            mkOp1(OP_COS, TYPE_F32, dst0[0], val0);
-         if (dst0[1])
-            mkOp1(OP_SIN, TYPE_F32, dst0[1], val0);
-      }
-      if (dst0[2])
-         loadImm(dst0[2], 0.0f);
-      if (dst0[3])
-         loadImm(dst0[3], 1.0f);
-      break;
    case TGSI_OPCODE_EXP:
       src0 = fetchSrc(0, 0);
       val0 = mkOp1v(OP_FLOOR, TYPE_F32, getSSA(), src0);
@@ -3327,13 +3298,6 @@ Converter::handleInstruction(const struct tgsi_full_instruction *insn)
       FOR_EACH_DST_ENABLED_CHANNEL(0, c, tgsi)
          mkMov(dst0[c], val0);
       break;
-   case TGSI_OPCODE_DPH:
-      val0 = buildDot(3);
-      src1 = fetchSrc(1, 3);
-      mkOp2(OP_ADD, TYPE_F32, val0, val0, src1);
-      FOR_EACH_DST_ENABLED_CHANNEL(0, c, tgsi)
-         mkMov(dst0[c], val0);
-      break;
    case TGSI_OPCODE_DST:
       if (dst0[0])
          loadImm(dst0[0], 1.0f);
@@ -3360,25 +3324,6 @@ Converter::handleInstruction(const struct tgsi_full_instruction *insn)
       break;
    case TGSI_OPCODE_LIT:
       handleLIT(dst0);
-      break;
-   case TGSI_OPCODE_XPD:
-      FOR_EACH_DST_ENABLED_CHANNEL(0, c, tgsi) {
-         if (c < 3) {
-            val0 = getSSA();
-            src0 = fetchSrc(1, (c + 1) % 3);
-            src1 = fetchSrc(0, (c + 2) % 3);
-            mkOp2(OP_MUL, TYPE_F32, val0, src0, src1)
-               ->dnz = info->io.mul_zero_wins;
-            mkOp1(OP_NEG, TYPE_F32, val0, val0);
-
-            src0 = fetchSrc(0, (c + 1) % 3);
-            src1 = fetchSrc(1, (c + 2) % 3);
-            mkOp3(OP_MAD, TYPE_F32, dst0[c], src0, src1, val0)
-               ->dnz = info->io.mul_zero_wins;
-         } else {
-            loadImm(dst0[c], 1.0f);
-         }
-      }
       break;
    case TGSI_OPCODE_ISSG:
    case TGSI_OPCODE_SSG:
@@ -3785,13 +3730,6 @@ Converter::handleInstruction(const struct tgsi_full_instruction *insn)
       geni = mkOp2(OP_BAR, TYPE_U32, NULL, mkImm(0), mkImm(0));
       geni->fixed = 1;
       geni->subOp = NV50_IR_SUBOP_BAR_SYNC;
-      break;
-   case TGSI_OPCODE_MFENCE:
-   case TGSI_OPCODE_LFENCE:
-   case TGSI_OPCODE_SFENCE:
-      geni = mkOp(OP_MEMBAR, TYPE_NONE, NULL);
-      geni->fixed = 1;
-      geni->subOp = tgsi::opcodeToSubOp(tgsi.getOpcode());
       break;
    case TGSI_OPCODE_MEMBAR:
    {

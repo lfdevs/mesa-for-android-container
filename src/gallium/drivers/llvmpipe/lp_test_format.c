@@ -357,8 +357,6 @@ test_all(unsigned verbose, FILE *fp)
    enum pipe_format format;
    boolean success = TRUE;
 
-   util_format_s3tc_init();
-
 #if USE_TEXTURE_CACHE
    cache_ptr = align_malloc(sizeof(struct lp_build_format_cache), 16);
 #endif
@@ -382,11 +380,6 @@ test_all(unsigned verbose, FILE *fp)
 
       if (util_format_is_pure_integer(format))
 	 continue;
-
-      if (format_desc->layout == UTIL_FORMAT_LAYOUT_S3TC &&
-          !util_format_s3tc_enabled) {
-         continue;
-      }
 
       /* only have util fetch func for etc1 */
       if (format_desc->layout == UTIL_FORMAT_LAYOUT_ETC &&

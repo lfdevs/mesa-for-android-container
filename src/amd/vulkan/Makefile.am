@@ -90,13 +90,13 @@ endif
 
 if HAVE_PLATFORM_WAYLAND
 AM_CPPFLAGS += \
-	$(WAYLAND_CFLAGS) \
+	$(WAYLAND_CLIENT_CFLAGS) \
 	-DVK_USE_PLATFORM_WAYLAND_KHR
 
 VULKAN_SOURCES += $(VULKAN_WSI_WAYLAND_FILES)
 
 VULKAN_LIB_DEPS += \
-	$(WAYLAND_LIBS)
+	$(WAYLAND_CLIENT_LIBS)
 endif
 
 noinst_LTLIBRARIES = libvulkan_common.la
@@ -107,11 +107,18 @@ libvulkan_radeon_la_SOURCES = $(VULKAN_GEM_FILES)
 
 vulkan_api_xml = $(top_srcdir)/src/vulkan/registry/vk.xml
 
-radv_entrypoints.c: radv_entrypoints_gen.py $(vulkan_api_xml)
+radv_entrypoints.c: radv_entrypoints_gen.py radv_extensions.py $(vulkan_api_xml)
 	$(MKDIR_GEN)
 	$(AM_V_GEN)$(PYTHON2) $(srcdir)/radv_entrypoints_gen.py \
 		--xml $(vulkan_api_xml) --outdir $(builddir)
 radv_entrypoints.h: radv_entrypoints.c
+
+radv_extensions.c: radv_extensions.py \
+		 $(vulkan_api_xml)
+	$(MKDIR_GEN)
+	$(AM_V_GEN)$(PYTHON2) $(srcdir)/radv_extensions.py \
+		--xml $(vulkan_api_xml) \
+		--out $@
 
 vk_format_table.c: vk_format_table.py \
 		   vk_format_parse.py \
@@ -125,6 +132,7 @@ EXTRA_DIST = \
 	dev_icd.json.in \
 	radeon_icd.json.in \
 	radv_entrypoints_gen.py \
+	radv_extensions.py \
 	vk_format_layout.csv \
 	vk_format_parse.py \
 	vk_format_table.py
@@ -149,7 +157,7 @@ noinst_DATA = dev_icd.json
 
 dev_icd.json : dev_icd.json.in
 	$(AM_V_GEN) $(SED) \
-		-e "s#@build_libdir@#${abs_top_builddir}/${LIB_DIR}#" \
+		-e "s#@libvulkan_radeon_path@#${abs_top_builddir}/${LIB_DIR}/libvulkan_radeon.so#" \
 		< $(srcdir)/dev_icd.json.in > $@
 
 radeon_icd.@host_cpu@.json : radeon_icd.json.in

@@ -1297,10 +1297,10 @@ tc_improve_map_buffer_flags(struct threaded_context *tc,
 
    /* Handle CPU reads trivially. */
    if (usage & PIPE_TRANSFER_READ) {
-      /* Driver aren't allowed to do buffer invalidations. */
+      /* Drivers aren't allowed to do buffer invalidations. */
       return (usage & ~PIPE_TRANSFER_DISCARD_WHOLE_RESOURCE) |
              TC_TRANSFER_MAP_NO_INVALIDATE |
-             TC_TRANSFER_MAP_IGNORE_VALID_RANGE;
+             TC_TRANSFER_MAP_NO_INFER_UNSYNCHRONIZED;
    }
 
    /* See if the buffer range being mapped has never been initialized,
@@ -1337,13 +1337,15 @@ tc_improve_map_buffer_flags(struct threaded_context *tc,
       usage &= ~PIPE_TRANSFER_DISCARD_RANGE;
 
    /* Unsychronized buffer mappings don't have to synchronize the thread. */
-   if (usage & PIPE_TRANSFER_UNSYNCHRONIZED)
+   if (usage & PIPE_TRANSFER_UNSYNCHRONIZED) {
+      usage &= ~PIPE_TRANSFER_DISCARD_RANGE;
       usage |= TC_TRANSFER_MAP_THREADED_UNSYNC; /* notify the driver */
+   }
 
    /* Never invalidate inside the driver and never infer "unsynchronized". */
    return usage |
           TC_TRANSFER_MAP_NO_INVALIDATE |
-          TC_TRANSFER_MAP_IGNORE_VALID_RANGE;
+          TC_TRANSFER_MAP_NO_INFER_UNSYNCHRONIZED;
 }
 
 static void *
@@ -1978,9 +1980,11 @@ static void
 tc_call_generate_mipmap(struct pipe_context *pipe, union tc_payload *payload)
 {
    struct tc_generate_mipmap *p = (struct tc_generate_mipmap *)payload;
-   bool result = pipe->generate_mipmap(pipe, p->res, p->format, p->base_level,
-                                       p->last_level, p->first_layer,
-                                       p->last_layer);
+   bool MAYBE_UNUSED result = pipe->generate_mipmap(pipe, p->res, p->format,
+                                                    p->base_level,
+                                                    p->last_level,
+                                                    p->first_layer,
+                                                    p->last_layer);
    assert(result);
    pipe_resource_reference(&p->res, NULL);
 }
@@ -2229,6 +2233,13 @@ tc_destroy(struct pipe_context *_pipe)
    struct threaded_context *tc = threaded_context(_pipe);
    struct pipe_context *pipe = tc->pipe;
 
+   if (tc->base.const_uploader &&
+       tc->base.stream_uploader != tc->base.const_uploader)
+      u_upload_destroy(tc->base.const_uploader);
+
+   if (tc->base.stream_uploader)
+      u_upload_destroy(tc->base.stream_uploader);
+
    tc_sync(tc);
 
    if (util_queue_is_initialized(&tc->queue)) {
@@ -2238,14 +2249,8 @@ tc_destroy(struct pipe_context *_pipe)
          util_queue_fence_destroy(&tc->batch_slots[i].fence);
    }
 
-   if (tc->base.const_uploader &&
-       tc->base.stream_uploader != tc->base.const_uploader)
-      u_upload_destroy(tc->base.const_uploader);
-
-   if (tc->base.stream_uploader)
-      u_upload_destroy(tc->base.stream_uploader);
-
    slab_destroy_child(&tc->pool_transfers);
+   assert(tc->batch_slots[tc->next].num_total_call_slots == 0);
    pipe->destroy(pipe);
    os_free_aligned(tc);
 }

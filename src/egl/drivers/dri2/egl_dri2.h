@@ -44,7 +44,7 @@
 
 #ifdef HAVE_WAYLAND_PLATFORM
 #include <wayland-client.h>
-#include "wayland-egl-priv.h"
+#include "wayland-egl-backend.h"
 /* forward declarations of protocol elements */
 struct zwp_linux_dmabuf_v1;
 #endif
@@ -78,15 +78,6 @@ struct zwp_linux_dmabuf_v1;
 #include "util/u_vector.h"
 
 struct wl_buffer;
-
-struct dri2_egl_driver
-{
-   _EGLDriver base;
-
-   void *handle;
-   _EGLProc (*get_proc_address)(const char *procname);
-   void (*glFlush)(void);
-};
 
 struct dri2_egl_display_vtbl {
    int (*authenticate)(_EGLDisplay *disp, uint32_t id);
@@ -154,6 +145,8 @@ struct dri2_egl_display_vtbl {
                                  EGLuint64KHR *sbc);
 
    __DRIdrawable *(*get_dri_drawable)(_EGLSurface *surf);
+
+   void (*close_screen_notify)(_EGLDisplay *dpy);
 };
 
 struct dri2_egl_display
@@ -283,8 +276,10 @@ struct dri2_egl_surface
    struct gbm_dri_surface *gbm_surf;
 #endif
 
+   /* EGL-owned buffers */
+   __DRIbuffer           *local_buffers[__DRI_BUFFER_COUNT];
+
 #if defined(HAVE_WAYLAND_PLATFORM) || defined(HAVE_DRM_PLATFORM)
-   __DRIbuffer           *dri_buffers[__DRI_BUFFER_COUNT];
    struct {
 #ifdef HAVE_WAYLAND_PLATFORM
       struct wl_buffer   *wl_buffer;
@@ -309,9 +304,6 @@ struct dri2_egl_surface
    __DRIimage *dri_image_back;
    __DRIimage *dri_image_front;
 
-   /* EGL-owned buffers */
-   __DRIbuffer           *local_buffers[__DRI_BUFFER_COUNT];
-
    /* Used to record all the buffers created by ANativeWindow and their ages.
     * Usually Android uses at most triple buffers in ANativeWindow
     * so hardcode the number of color_buffers to 3.
@@ -326,6 +318,8 @@ struct dri2_egl_surface
       __DRIimage           *front;
       unsigned int         visual;
 #endif
+   int out_fence_fd;
+   EGLBoolean enable_out_fence;
 };
 
 struct dri2_egl_config
@@ -369,6 +363,9 @@ dri2_load_driver(_EGLDisplay *disp);
 /* Helper for platforms not using dri2_create_screen */
 void
 dri2_setup_screen(_EGLDisplay *disp);
+
+void
+dri2_setup_swap_interval(_EGLDisplay *disp, int max_swap_interval);
 
 EGLBoolean
 dri2_load_driver_swrast(_EGLDisplay *disp);
@@ -450,5 +447,19 @@ dri2_set_WL_bind_wayland_display(_EGLDriver *drv, _EGLDisplay *disp)
 
 void
 dri2_display_destroy(_EGLDisplay *disp);
+
+__DRIbuffer *
+dri2_egl_surface_alloc_local_buffer(struct dri2_egl_surface *dri2_surf,
+                                    unsigned int att, unsigned int format);
+
+void
+dri2_egl_surface_free_local_buffers(struct dri2_egl_surface *dri2_surf);
+
+EGLBoolean
+dri2_init_surface(_EGLSurface *surf, _EGLDisplay *dpy, EGLint type,
+        _EGLConfig *conf, const EGLint *attrib_list, EGLBoolean enable_out_fence);
+
+void
+dri2_fini_surface(_EGLSurface *surf);
 
 #endif /* EGL_DRI2_INCLUDED */

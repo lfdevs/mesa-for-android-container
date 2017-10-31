@@ -36,7 +36,7 @@
 #include <gtest/gtest.h>
 #include <GL/gl.h>
 extern "C" {
-#include "../indirect_size.h"
+#include "indirect_size.h"
 }
 
 TEST(ValidEnumSizes, CallLists)

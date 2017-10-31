@@ -45,11 +45,27 @@ NVC0LegalizeSSA::handleDIV(Instruction *i)
 {
    FlowInstruction *call;
    int builtin;
-   Value *def[2];
 
    bld.setPosition(i, false);
-   def[0] = bld.mkMovToReg(0, i->getSrc(0))->getDef(0);
-   def[1] = bld.mkMovToReg(1, i->getSrc(1))->getDef(0);
+
+   // Generate movs to the input regs for the call we want to generate
+   for (int s = 0; i->srcExists(s); ++s) {
+      Instruction *ld = i->getSrc(s)->getInsn();
+      assert(ld->getSrc(0) != NULL);
+      // check if we are moving an immediate, propagate it in that case
+      if (!ld || ld->fixed || (ld->op != OP_LOAD && ld->op != OP_MOV) ||
+            !(ld->src(0).getFile() == FILE_IMMEDIATE))
+         bld.mkMovToReg(s, i->getSrc(s));
+      else {
+         bld.mkMovToReg(s, ld->getSrc(0));
+         // Clear the src, to make code elimination possible here before we
+         // delete the instruction i later
+         i->setSrc(s, NULL);
+         if (ld->isDead())
+            delete_Instruction(prog, ld);
+      }
+   }
+
    switch (i->dType) {
    case TYPE_U32: builtin = NVC0_BUILTIN_DIV_U32; break;
    case TYPE_S32: builtin = NVC0_BUILTIN_DIV_S32; break;
@@ -57,7 +73,7 @@ NVC0LegalizeSSA::handleDIV(Instruction *i)
       return;
    }
    call = bld.mkFlow(OP_CALL, NULL, CC_ALWAYS, NULL);
-   bld.mkMov(i->getDef(0), def[(i->op == OP_DIV) ? 0 : 1]);
+   bld.mkMovFromReg(i->getDef(0), i->op == OP_DIV ? 0 : 1);
    bld.mkClobber(FILE_GPR, (i->op == OP_DIV) ? 0xe : 0xd, 2);
    bld.mkClobber(FILE_PREDICATE, (i->dType == TYPE_S32) ? 0xf : 0x3, 0);
 

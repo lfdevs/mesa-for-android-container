@@ -79,8 +79,9 @@ INLINE void LoadSOA(const uint8_t *pSrc, simdvector &dst)
 /// @param vComp - SIMD vector of floats
 /// @param Component - component
 template<SWR_FORMAT Format>
-INLINE simdscalar Clamp(simdscalar vComp, uint32_t Component)
+INLINE simdscalar Clamp(simdscalar const &vC, uint32_t Component)
 {
+    simdscalar vComp = vC;
     if (FormatTraits<Format>::isNormalized(Component))
     {
         if (FormatTraits<Format>::GetType(Component) == SWR_TYPE_UNORM)
@@ -125,8 +126,9 @@ INLINE simdscalar Clamp(simdscalar vComp, uint32_t Component)
 /// @param vComp - SIMD vector of floats
 /// @param Component - component
 template<SWR_FORMAT Format>
-INLINE simdscalar Normalize(simdscalar vComp, uint32_t Component)
+INLINE simdscalar Normalize(simdscalar const &vC, uint32_t Component)
 {
+    simdscalar vComp = vC;
     if (FormatTraits<Format>::isNormalized(Component))
     {
         vComp = _simd_mul_ps(vComp, _simd_set1_ps(FormatTraits<Format>::fromFloat(Component)));
@@ -247,8 +249,9 @@ INLINE void SIMDCALL LoadSOA(const uint8_t *pSrc, simd16vector &dst)
 /// @param vComp - SIMD vector of floats
 /// @param Component - component
 template<SWR_FORMAT Format>
-INLINE simd16scalar SIMDCALL Clamp(simd16scalar vComp, uint32_t Component)
+INLINE simd16scalar SIMDCALL Clamp(simd16scalar const &v, uint32_t Component)
 {
+    simd16scalar vComp = v;
     if (FormatTraits<Format>::isNormalized(Component))
     {
         if (FormatTraits<Format>::GetType(Component) == SWR_TYPE_UNORM)
@@ -293,14 +296,15 @@ INLINE simd16scalar SIMDCALL Clamp(simd16scalar vComp, uint32_t Component)
 /// @param vComp - SIMD vector of floats
 /// @param Component - component
 template<SWR_FORMAT Format>
-INLINE simd16scalar SIMDCALL Normalize(simd16scalar vComp, uint32_t Component)
+INLINE simd16scalar SIMDCALL Normalize(simd16scalar const &vComp, uint32_t Component)
 {
+    simd16scalar r = vComp;
     if (FormatTraits<Format>::isNormalized(Component))
     {
-        vComp = _simd16_mul_ps(vComp, _simd16_set1_ps(FormatTraits<Format>::fromFloat(Component)));
-        vComp = _simd16_castsi_ps(_simd16_cvtps_epi32(vComp));
+        r = _simd16_mul_ps(r, _simd16_set1_ps(FormatTraits<Format>::fromFloat(Component)));
+        r = _simd16_castsi_ps(_simd16_cvtps_epi32(r));
     }
-    return vComp;
+    return r;
 }
 
 //////////////////////////////////////////////////////////////////////////

@@ -76,10 +76,10 @@ struct QUEUE
         }
 
         // try to lock the FIFO
-        LONG initial = InterlockedCompareExchange(&mLock, 1, 0);
+        long initial = InterlockedCompareExchange(&mLock, 1, 0);
         return (initial == 0);
     }
-        
+
     void unlock()
     {
         mLock = 0;
@@ -112,7 +112,7 @@ struct QUEUE
             __m256 vSrc = _mm256_load_ps(pSrc + i*KNOB_SIMD_WIDTH);
             _mm256_stream_ps(pDst + i*KNOB_SIMD_WIDTH, vSrc);
         };
-            
+
         const uint32_t numSimdLines = sizeof(T) / (KNOB_SIMD_WIDTH*4);
         static_assert(numSimdLines * KNOB_SIMD_WIDTH * 4 == sizeof(T),
             "FIFO element size should be multiple of SIMD width.");

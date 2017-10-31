@@ -29,6 +29,8 @@ endif
 AM_CFLAGS = \
 	-I$(top_builddir)/src/compiler/nir \
 	-I$(top_srcdir)/include/drm-uapi \
+	-I$(top_builddir)/src \
+	-I$(top_srcdir)/src/broadcom/cle \
 	$(LIBDRM_CFLAGS) \
 	$(GALLIUM_DRIVER_CFLAGS) \
 	$(SIM_CFLAGS) \
@@ -38,7 +40,10 @@ AM_CFLAGS = \
 noinst_LTLIBRARIES = libvc4.la
 
 libvc4_la_SOURCES = $(C_SOURCES)
-libvc4_la_LIBADD = $(SIM_LIB)
+
+libvc4_la_LIBADD = \
+	$(SIM_LIB) \
+	$()
 
 if HAVE_ARM_ASM
 noinst_LTLIBRARIES += libvc4_neon.la

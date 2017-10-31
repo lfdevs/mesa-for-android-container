@@ -6,6 +6,7 @@ gbm_device_get_fd
 gbm_device_get_backend_name
 gbm_device_is_format_supported
 gbm_device_destroy
+gbm_device_get_format_modifier_plane_count
 gbm_create_device
 gbm_bo_create
 gbm_bo_create_with_modifiers
@@ -17,6 +18,7 @@ gbm_bo_get_height
 gbm_bo_get_stride
 gbm_bo_get_stride_for_plane
 gbm_bo_get_format
+gbm_bo_get_bpp
 gbm_bo_get_offset
 gbm_bo_get_device
 gbm_bo_get_handle

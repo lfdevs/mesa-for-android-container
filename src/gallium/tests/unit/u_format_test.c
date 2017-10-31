@@ -722,11 +722,6 @@ test_all(void)
       assert(format_desc->block.height <= UTIL_FORMAT_MAX_UNPACKED_HEIGHT);
       assert(format_desc->block.width  <= UTIL_FORMAT_MAX_UNPACKED_WIDTH);
 
-      if (format_desc->layout == UTIL_FORMAT_LAYOUT_S3TC &&
-          !util_format_s3tc_enabled) {
-         continue;
-      }
-
 #     define TEST_ONE_FUNC(name) \
       if (format_desc->name) { \
          if (!test_one_func(format_desc, &test_format_##name, #name)) { \
@@ -757,8 +752,6 @@ test_all(void)
 int main(int argc, char **argv)
 {
    boolean success;
-
-   util_format_s3tc_init();
 
    success = test_all();
 

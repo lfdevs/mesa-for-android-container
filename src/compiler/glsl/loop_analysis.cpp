@@ -25,13 +25,188 @@
 #include "loop_analysis.h"
 #include "ir_hierarchical_visitor.h"
 
-static bool is_loop_terminator(ir_if *ir);
+static void try_add_loop_terminator(loop_variable_state *ls, ir_if *ir);
 
 static bool all_expression_operands_are_loop_constant(ir_rvalue *,
 						      hash_table *);
 
 static ir_rvalue *get_basic_induction_increment(ir_assignment *, hash_table *);
 
+/**
+ * Find an initializer of a variable outside a loop
+ *
+ * Works backwards from the loop to find the pre-loop value of the variable.
+ * This is used, for example, to find the initial value of loop induction
+ * variables.
+ *
+ * \param loop  Loop where \c var is an induction variable
+ * \param var   Variable whose initializer is to be found
+ *
+ * \return
+ * The \c ir_rvalue assigned to the variable outside the loop.  May return
+ * \c NULL if no initializer can be found.
+ */
+static ir_rvalue *
+find_initial_value(ir_loop *loop, ir_variable *var)
+{
+   for (exec_node *node = loop->prev; !node->is_head_sentinel();
+        node = node->prev) {
+      ir_instruction *ir = (ir_instruction *) node;
+
+      switch (ir->ir_type) {
+      case ir_type_call:
+      case ir_type_loop:
+      case ir_type_loop_jump:
+      case ir_type_return:
+      case ir_type_if:
+         return NULL;
+
+      case ir_type_function:
+      case ir_type_function_signature:
+         assert(!"Should not get here.");
+         return NULL;
+
+      case ir_type_assignment: {
+         ir_assignment *assign = ir->as_assignment();
+         ir_variable *assignee = assign->lhs->whole_variable_referenced();
+
+         if (assignee == var)
+            return (assign->condition != NULL) ? NULL : assign->rhs;
+
+         break;
+      }
+
+      default:
+         break;
+      }
+   }
+
+   return NULL;
+}
+
+
+static int
+calculate_iterations(ir_rvalue *from, ir_rvalue *to, ir_rvalue *increment,
+                     enum ir_expression_operation op, bool continue_from_then)
+{
+   if (from == NULL || to == NULL || increment == NULL)
+      return -1;
+
+   void *mem_ctx = ralloc_context(NULL);
+
+   ir_expression *const sub =
+      new(mem_ctx) ir_expression(ir_binop_sub, from->type, to, from);
+
+   ir_expression *const div =
+      new(mem_ctx) ir_expression(ir_binop_div, sub->type, sub, increment);
+
+   ir_constant *iter = div->constant_expression_value(mem_ctx);
+   if (iter == NULL) {
+      ralloc_free(mem_ctx);
+      return -1;
+   }
+
+   if (!iter->type->is_integer()) {
+      const ir_expression_operation op = iter->type->is_double()
+         ? ir_unop_d2i : ir_unop_f2i;
+      ir_rvalue *cast =
+         new(mem_ctx) ir_expression(op, glsl_type::int_type, iter, NULL);
+
+      iter = cast->constant_expression_value(mem_ctx);
+   }
+
+   int iter_value = iter->get_int_component(0);
+
+   /* Make sure that the calculated number of iterations satisfies the exit
+    * condition.  This is needed to catch off-by-one errors and some types of
+    * ill-formed loops.  For example, we need to detect that the following
+    * loop does not have a maximum iteration count.
+    *
+    *    for (float x = 0.0; x != 0.9; x += 0.2)
+    *        ;
+    */
+   const int bias[] = { -1, 0, 1 };
+   bool valid_loop = false;
+
+   for (unsigned i = 0; i < ARRAY_SIZE(bias); i++) {
+      /* Increment may be of type int, uint or float. */
+      switch (increment->type->base_type) {
+      case GLSL_TYPE_INT:
+         iter = new(mem_ctx) ir_constant(iter_value + bias[i]);
+         break;
+      case GLSL_TYPE_UINT:
+         iter = new(mem_ctx) ir_constant(unsigned(iter_value + bias[i]));
+         break;
+      case GLSL_TYPE_FLOAT:
+         iter = new(mem_ctx) ir_constant(float(iter_value + bias[i]));
+         break;
+      case GLSL_TYPE_DOUBLE:
+         iter = new(mem_ctx) ir_constant(double(iter_value + bias[i]));
+         break;
+      default:
+          unreachable("Unsupported type for loop iterator.");
+      }
+
+      ir_expression *const mul =
+         new(mem_ctx) ir_expression(ir_binop_mul, increment->type, iter,
+                                    increment);
+
+      ir_expression *const add =
+         new(mem_ctx) ir_expression(ir_binop_add, mul->type, mul, from);
+
+      ir_expression *cmp =
+         new(mem_ctx) ir_expression(op, glsl_type::bool_type, add, to);
+      if (continue_from_then)
+         cmp = new(mem_ctx) ir_expression(ir_unop_logic_not, cmp);
+
+      ir_constant *const cmp_result = cmp->constant_expression_value(mem_ctx);
+
+      assert(cmp_result != NULL);
+      if (cmp_result->get_bool_component(0)) {
+         iter_value += bias[i];
+         valid_loop = true;
+         break;
+      }
+   }
+
+   ralloc_free(mem_ctx);
+   return (valid_loop) ? iter_value : -1;
+}
+
+static bool
+incremented_before_terminator(ir_loop *loop, ir_variable *var,
+                              ir_if *terminator)
+{
+   for (exec_node *node = loop->body_instructions.get_head();
+        !node->is_tail_sentinel();
+        node = node->get_next()) {
+      ir_instruction *ir = (ir_instruction *) node;
+
+      switch (ir->ir_type) {
+      case ir_type_if:
+         if (ir->as_if() == terminator)
+            return false;
+         break;
+
+      case ir_type_assignment: {
+         ir_assignment *assign = ir->as_assignment();
+         ir_variable *assignee = assign->lhs->whole_variable_referenced();
+
+         if (assignee == var) {
+            assert(assign->condition == NULL);
+            return true;
+         }
+
+         break;
+      }
+
+      default:
+         break;
+      }
+   }
+
+   unreachable("Unable to find induction variable");
+}
 
 /**
  * Record the fact that the given loop variable was referenced inside the loop.
@@ -133,12 +308,14 @@ loop_variable_state::insert(ir_variable *var)
 
 
 loop_terminator *
-loop_variable_state::insert(ir_if *if_stmt)
+loop_variable_state::insert(ir_if *if_stmt, bool continue_from_then)
 {
    void *mem_ctx = ralloc_parent(this);
    loop_terminator *t = new(mem_ctx) loop_terminator();
 
    t->ir = if_stmt;
+   t->continue_from_then = continue_from_then;
+
    this->terminators.push_tail(t);
 
    return t;
@@ -295,10 +472,8 @@ loop_analysis::visit_leave(ir_loop *ir)
 
       ir_if *if_stmt = ((ir_instruction *) node)->as_if();
 
-      if ((if_stmt != NULL) && is_loop_terminator(if_stmt))
-	 ls->insert(if_stmt);
-      else
-	 break;
+      if (if_stmt != NULL)
+         try_add_loop_terminator(ls, if_stmt);
    }
 
 
@@ -441,7 +616,11 @@ loop_analysis::visit_leave(ir_loop *ir)
          loop_variable *lv = ls->get(var);
          if (lv != NULL && lv->is_induction_var()) {
             t->iterations = calculate_iterations(init, limit, lv->increment,
-                                                 cmp);
+                                                 cmp, t->continue_from_then);
+
+            if (incremented_before_terminator(ir, var, t->ir)) {
+               t->iterations--;
+            }
 
             if (t->iterations >= 0 &&
                 (ls->limiting_terminator == NULL ||
@@ -604,31 +783,26 @@ get_basic_induction_increment(ir_assignment *ir, hash_table *var_hash)
 
 
 /**
- * Detect whether an if-statement is a loop terminating condition
+ * Detect whether an if-statement is a loop terminating condition, if so
+ * add it to the list of loop terminators.
  *
  * Detects if-statements of the form
  *
- *  (if (expression bool ...) (break))
+ *  (if (expression bool ...) (...then_instrs...break))
+ *
+ *     or
+ *
+ *  (if (expression bool ...) ... (...else_instrs...break))
  */
-bool
-is_loop_terminator(ir_if *ir)
+void
+try_add_loop_terminator(loop_variable_state *ls, ir_if *ir)
 {
-   if (!ir->else_instructions.is_empty())
-      return false;
+   ir_instruction *inst = (ir_instruction *) ir->then_instructions.get_tail();
+   ir_instruction *else_inst =
+      (ir_instruction *) ir->else_instructions.get_tail();
 
-   ir_instruction *const inst =
-      (ir_instruction *) ir->then_instructions.get_head();
-   if (inst == NULL)
-      return false;
-
-   if (inst->ir_type != ir_type_loop_jump)
-      return false;
-
-   ir_loop_jump *const jump = (ir_loop_jump *) inst;
-   if (jump->mode != ir_loop_jump::jump_break)
-      return false;
-
-   return true;
+   if (is_break(inst) || is_break(else_inst))
+      ls->insert(ir, is_break(else_inst));
 }
 
 

@@ -54,8 +54,9 @@ get_pipeline_state_l3_weights(const struct brw_context *brw)
       const struct brw_stage_prog_data *prog_data = stage_states[i]->prog_data;
 
       needs_dc |= (prog && (prog->sh.data->NumAtomicBuffers ||
-                            prog->sh.data->NumShaderStorageBlocks)) ||
-         (prog_data && (prog_data->total_scratch || prog_data->nr_image_params));
+                            prog->sh.data->NumShaderStorageBlocks ||
+                            prog->info.num_images)) ||
+         (prog_data && prog_data->total_scratch);
       needs_slm |= prog_data && prog_data->total_shared;
    }
 
@@ -69,6 +70,7 @@ get_pipeline_state_l3_weights(const struct brw_context *brw)
 static void
 setup_l3_config(struct brw_context *brw, const struct gen_l3_config *cfg)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    const bool has_dc = cfg->n[GEN_L3P_DC] || cfg->n[GEN_L3P_ALL];
    const bool has_is = cfg->n[GEN_L3P_IS] || cfg->n[GEN_L3P_RO] ||
                        cfg->n[GEN_L3P_ALL];
@@ -116,7 +118,7 @@ setup_l3_config(struct brw_context *brw, const struct gen_l3_config *cfg)
                                PIPE_CONTROL_NO_WRITE |
                                PIPE_CONTROL_CS_STALL);
 
-   if (brw->gen >= 8) {
+   if (devinfo->gen >= 8) {
       assert(!cfg->n[GEN_L3P_IS] && !cfg->n[GEN_L3P_C] && !cfg->n[GEN_L3P_T]);
 
       BEGIN_BATCH(3);
@@ -140,11 +142,11 @@ setup_l3_config(struct brw_context *brw, const struct gen_l3_config *cfg)
        * client (URB for all validated configurations) set to the
        * lower-bandwidth 2-bank address hashing mode.
        */
-      const bool urb_low_bw = has_slm && !brw->is_baytrail;
+      const bool urb_low_bw = has_slm && !devinfo->is_baytrail;
       assert(!urb_low_bw || cfg->n[GEN_L3P_URB] == cfg->n[GEN_L3P_SLM]);
 
       /* Minimum number of ways that can be allocated to the URB. */
-      const unsigned n0_urb = (brw->is_baytrail ? 32 : 0);
+      const unsigned n0_urb = (devinfo->is_baytrail ? 32 : 0);
       assert(cfg->n[GEN_L3P_URB] >= n0_urb);
 
       BEGIN_BATCH(7);
@@ -152,8 +154,8 @@ setup_l3_config(struct brw_context *brw, const struct gen_l3_config *cfg)
 
       /* Demote any clients with no ways assigned to LLC. */
       OUT_BATCH(GEN7_L3SQCREG1);
-      OUT_BATCH((brw->is_haswell ? HSW_L3SQCREG1_SQGHPCI_DEFAULT :
-                 brw->is_baytrail ? VLV_L3SQCREG1_SQGHPCI_DEFAULT :
+      OUT_BATCH((devinfo->is_haswell ? HSW_L3SQCREG1_SQGHPCI_DEFAULT :
+                 devinfo->is_baytrail ? VLV_L3SQCREG1_SQGHPCI_DEFAULT :
                  IVB_L3SQCREG1_SQGHPCI_DEFAULT) |
                 (has_dc ? 0 : GEN7_L3SQCREG1_CONV_DC_UC) |
                 (has_is ? 0 : GEN7_L3SQCREG1_CONV_IS_UC) |

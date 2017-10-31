@@ -122,9 +122,7 @@ gen6_emit_depth_stencil_hiz(struct brw_context *brw,
 
    /* 3DSTATE_DEPTH_BUFFER dw2 */
    if (depth_mt) {
-      OUT_RELOC(depth_mt->bo,
-		I915_GEM_DOMAIN_RENDER, I915_GEM_DOMAIN_RENDER,
-		0);
+      OUT_RELOC(depth_mt->bo, RELOC_WRITE, 0);
    } else {
       OUT_BATCH(0);
    }
@@ -168,9 +166,7 @@ gen6_emit_depth_stencil_hiz(struct brw_context *brw,
 	 BEGIN_BATCH(3);
 	 OUT_BATCH((_3DSTATE_HIER_DEPTH_BUFFER << 16) | (3 - 2));
 	 OUT_BATCH(depth_mt->hiz_buf->surf.row_pitch - 1);
-	 OUT_RELOC(depth_mt->hiz_buf->bo,
-		   I915_GEM_DOMAIN_RENDER, I915_GEM_DOMAIN_RENDER,
-		   offset);
+	 OUT_RELOC(depth_mt->hiz_buf->bo, RELOC_WRITE, offset);
 	 ADVANCE_BATCH();
       } else {
 	 BEGIN_BATCH(3);
@@ -192,9 +188,7 @@ gen6_emit_depth_stencil_hiz(struct brw_context *brw,
 	 BEGIN_BATCH(3);
 	 OUT_BATCH((_3DSTATE_STENCIL_BUFFER << 16) | (3 - 2));
 	 OUT_BATCH(stencil_mt->surf.row_pitch - 1);
-	 OUT_RELOC(stencil_mt->bo,
-		   I915_GEM_DOMAIN_RENDER, I915_GEM_DOMAIN_RENDER,
-		   offset);
+	 OUT_RELOC(stencil_mt->bo, RELOC_WRITE, offset);
 	 ADVANCE_BATCH();
       } else {
 	 BEGIN_BATCH(3);

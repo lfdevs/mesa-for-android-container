@@ -60,6 +60,34 @@ brw_blorp_copy_miptrees(struct brw_context *brw,
                         unsigned src_width, unsigned src_height);
 
 void
+brw_blorp_copy_buffers(struct brw_context *brw,
+                       struct brw_bo *src_bo,
+                       unsigned src_offset,
+                       struct brw_bo *dst_bo,
+                       unsigned dst_offset,
+                       unsigned size);
+
+bool
+brw_blorp_upload_miptree(struct brw_context *brw,
+                         struct intel_mipmap_tree *dst_mt,
+                         mesa_format dst_format,
+                         uint32_t level, uint32_t x, uint32_t y, uint32_t z,
+                         uint32_t width, uint32_t height, uint32_t depth,
+                         GLenum target, GLenum format, GLenum type,
+                         const void *pixels,
+                         const struct gl_pixelstore_attrib *packing);
+
+bool
+brw_blorp_download_miptree(struct brw_context *brw,
+                           struct intel_mipmap_tree *src_mt,
+                           mesa_format src_format, uint32_t src_swizzle,
+                           uint32_t level, uint32_t x, uint32_t y, uint32_t z,
+                           uint32_t width, uint32_t height, uint32_t depth,
+                           GLenum target, GLenum format, GLenum type,
+                           bool y_flip, const void *pixels,
+                           const struct gl_pixelstore_attrib *packing);
+
+void
 brw_blorp_clear_color(struct brw_context *brw, struct gl_framebuffer *fb,
                       GLbitfield mask, bool partial_clear, bool encode_srgb);
 void

@@ -83,7 +83,7 @@ expect_equal_str(const char *expected, const char *actual, const char *test)
 }
 
 static void
-expect_equal_bytes(uint8_t *expected, uint8_t *actual,
+expect_equal_bytes(uint8_t *expected, const uint8_t *actual,
                    size_t num_bytes, const char *test)
 {
    size_t i;
@@ -118,44 +118,44 @@ expect_equal_bytes(uint8_t *expected, uint8_t *actual,
 static void
 test_write_and_read_functions (void)
 {
-   struct blob *blob;
+   struct blob blob;
    struct blob_reader reader;
-   uint8_t *reserved;
+   ssize_t reserved;
    size_t str_offset, uint_offset;
    uint8_t reserve_buf[sizeof(reserve_test_str)];
 
-   blob = blob_create();
+   blob_init(&blob);
 
    /*** Test blob by writing one of every possible kind of value. */
 
-   blob_write_bytes(blob, bytes_test_str, sizeof(bytes_test_str));
+   blob_write_bytes(&blob, bytes_test_str, sizeof(bytes_test_str));
 
-   reserved = blob_reserve_bytes(blob, sizeof(reserve_test_str));
-   memcpy(reserved, reserve_test_str, sizeof(reserve_test_str));
+   reserved = blob_reserve_bytes(&blob, sizeof(reserve_test_str));
+   blob_overwrite_bytes(&blob, reserved, reserve_test_str, sizeof(reserve_test_str));
 
    /* Write a placeholder, (to be replaced later via overwrite_bytes) */
-   str_offset = blob->size;
-   blob_write_bytes(blob, placeholder_str, sizeof(placeholder_str));
+   str_offset = blob.size;
+   blob_write_bytes(&blob, placeholder_str, sizeof(placeholder_str));
 
-   blob_write_uint32(blob, uint32_test);
+   blob_write_uint32(&blob, uint32_test);
 
    /* Write a placeholder, (to be replaced later via overwrite_uint32) */
-   uint_offset = blob->size;
-   blob_write_uint32(blob, uint32_placeholder);
+   uint_offset = blob.size;
+   blob_write_uint32(&blob, uint32_placeholder);
 
-   blob_write_uint64(blob, uint64_test);
+   blob_write_uint64(&blob, uint64_test);
 
-   blob_write_intptr(blob, (intptr_t) blob);
+   blob_write_intptr(&blob, (intptr_t) &blob);
 
-   blob_write_string(blob, string_test_str);
+   blob_write_string(&blob, string_test_str);
 
    /* Finally, overwrite our placeholders. */
-   blob_overwrite_bytes(blob, str_offset, overwrite_test_str,
+   blob_overwrite_bytes(&blob, str_offset, overwrite_test_str,
                         sizeof(overwrite_test_str));
-   blob_overwrite_uint32(blob, uint_offset, uint32_overwrite);
+   blob_overwrite_uint32(&blob, uint_offset, uint32_overwrite);
 
    /*** Now read each value and verify. */
-   blob_reader_init(&reader, blob->data, blob->size);
+   blob_reader_init(&reader, blob.data, blob.size);
 
    expect_equal_str(bytes_test_str,
                     blob_read_bytes(&reader, sizeof(bytes_test_str)),
@@ -175,7 +175,7 @@ test_write_and_read_functions (void)
                 "blob_overwrite_uint32");
    expect_equal(uint64_test, blob_read_uint64(&reader),
                 "blob_write/read_uint64");
-   expect_equal((intptr_t) blob, blob_read_intptr(&reader),
+   expect_equal((intptr_t) &blob, blob_read_intptr(&reader),
                 "blob_write/read_intptr");
    expect_equal_str(string_test_str, blob_read_string(&reader),
                     "blob_write/read_string");
@@ -184,28 +184,28 @@ test_write_and_read_functions (void)
                 "read_consumes_all_bytes");
    expect_equal(false, reader.overrun, "read_does_not_overrun");
 
-   blob_destroy(blob);
+   blob_finish(&blob);
 }
 
 /* Test that data values are written and read with proper alignment. */
 static void
 test_alignment(void)
 {
-   struct blob *blob;
+   struct blob blob;
    struct blob_reader reader;
    uint8_t bytes[] = "ABCDEFGHIJKLMNOP";
    size_t delta, last, num_bytes;
 
-   blob = blob_create();
+   blob_init(&blob);
 
    /* First, write an intptr value to the blob and capture that size. This is
     * the expected offset between any pair of intptr values (if written with
     * alignment).
     */
-   blob_write_intptr(blob, (intptr_t) blob);
+   blob_write_intptr(&blob, (intptr_t) &blob);
 
-   delta = blob->size;
-   last = blob->size;
+   delta = blob.size;
+   last = blob.size;
 
    /* Then loop doing the following:
     *
@@ -215,56 +215,56 @@ test_alignment(void)
     *   2. Verify that that write results in an aligned size
     */
    for (num_bytes = 1; num_bytes < sizeof(intptr_t); num_bytes++) {
-      blob_write_bytes(blob, bytes, num_bytes);
+      blob_write_bytes(&blob, bytes, num_bytes);
 
-      expect_unequal(delta, blob->size - last, "unaligned write of bytes");
+      expect_unequal(delta, blob.size - last, "unaligned write of bytes");
 
-      blob_write_intptr(blob, (intptr_t) blob);
+      blob_write_intptr(&blob, (intptr_t) &blob);
 
-      expect_equal(2 * delta, blob->size - last, "aligned write of intptr");
+      expect_equal(2 * delta, blob.size - last, "aligned write of intptr");
 
-      last = blob->size;
+      last = blob.size;
    }
 
    /* Finally, test that reading also does proper alignment. Since we know
     * that values were written with all the right alignment, all we have to do
     * here is verify that correct values are read.
     */
-   blob_reader_init(&reader, blob->data, blob->size);
+   blob_reader_init(&reader, blob.data, blob.size);
 
-   expect_equal((intptr_t) blob, blob_read_intptr(&reader),
+   expect_equal((intptr_t) &blob, blob_read_intptr(&reader),
                 "read of initial, aligned intptr_t");
 
    for (num_bytes = 1; num_bytes < sizeof(intptr_t); num_bytes++) {
       expect_equal_bytes(bytes, blob_read_bytes(&reader, num_bytes),
                          num_bytes, "unaligned read of bytes");
-      expect_equal((intptr_t) blob, blob_read_intptr(&reader),
+      expect_equal((intptr_t) &blob, blob_read_intptr(&reader),
                    "aligned read of intptr_t");
    }
 
-   blob_destroy(blob);
+   blob_finish(&blob);
 }
 
 /* Test that we detect overrun. */
 static void
 test_overrun(void)
 {
-   struct blob *blob;
+   struct blob blob;
    struct blob_reader reader;
    uint32_t value = 0xdeadbeef;
 
-   blob = blob_create();
+   blob_init(&blob);
 
-   blob_write_uint32(blob, value);
+   blob_write_uint32(&blob, value);
 
-   blob_reader_init(&reader, blob->data, blob->size);
+   blob_reader_init(&reader, blob.data, blob.size);
 
    expect_equal(value, blob_read_uint32(&reader), "read before overrun");
    expect_equal(false, reader.overrun, "overrun flag not set");
    expect_equal(0, blob_read_uint32(&reader), "read at overrun");
    expect_equal(true, reader.overrun, "overrun flag set");
 
-   blob_destroy(blob);
+   blob_finish(&blob);
 }
 
 /* Test that we can read and write some large objects, (exercising the code in
@@ -274,14 +274,14 @@ static void
 test_big_objects(void)
 {
    void *ctx = ralloc_context(NULL);
-   struct blob *blob;
+   struct blob blob;
    struct blob_reader reader;
    int size = 1000;
    int count = 1000;
    size_t i;
    char *buf;
 
-   blob = blob_create();
+   blob_init(&blob);
 
    /* Initialize our buffer. */
    buf = ralloc_size(ctx, size);
@@ -291,10 +291,10 @@ test_big_objects(void)
 
    /* Write it many times. */
    for (i = 0; i < count; i++) {
-      blob_write_bytes(blob, buf, size);
+      blob_write_bytes(&blob, buf, size);
    }
 
-   blob_reader_init(&reader, blob->data, blob->size);
+   blob_reader_init(&reader, blob.data, blob.size);
 
    /* Read and verify it many times. */
    for (i = 0; i < count; i++) {
@@ -308,7 +308,7 @@ test_big_objects(void)
    expect_equal(false, reader.overrun,
                 "overrun flag not set reading large objects");
 
-   blob_destroy(blob);
+   blob_finish(&blob);
    ralloc_free(ctx);
 }
 

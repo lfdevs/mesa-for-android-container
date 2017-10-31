@@ -70,9 +70,6 @@ extern "C" {
    _EGL_DRIVER_TYPECAST(drvname ## _config, _EGLConfig, obj)
 
 
-typedef _EGLDriver *(*_EGLMain_t)(const char *args);
-
-
 /**
  * Base class for device drivers.
  */
@@ -80,27 +77,16 @@ struct _egl_driver
 {
    const char *Name;  /**< name of this driver */
 
-   /**
-    * Release the driver resource.
-    *
-    * It is called before dlclose().
-    */
-   void (*Unload)(_EGLDriver *drv);
-
    _EGLAPI API;  /**< EGL API dispatch table */
 };
 
 
-extern _EGLDriver *
-_eglBuiltInDriverDRI2(const char *args);
-
-
 extern _EGLDriver*
-_eglBuiltInDriverHaiku(const char* args);
+_eglBuiltInDriver(void);
 
 
 extern _EGLDriver *
-_eglMatchDriver(_EGLDisplay *dpy, EGLBoolean test_only);
+_eglMatchDriver(_EGLDisplay *dpy);
 
 
 extern __eglMustCastToProperFunctionPointerType

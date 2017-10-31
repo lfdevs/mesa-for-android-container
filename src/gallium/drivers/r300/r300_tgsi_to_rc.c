@@ -51,15 +51,12 @@ static unsigned translate_opcode(unsigned opcode)
         case TGSI_OPCODE_SGE: return RC_OPCODE_SGE;
         case TGSI_OPCODE_MAD: return RC_OPCODE_MAD;
         case TGSI_OPCODE_LRP: return RC_OPCODE_LRP;
-     /* case TGSI_OPCODE_DP2A: return RC_OPCODE_DP2A; */
         case TGSI_OPCODE_FRC: return RC_OPCODE_FRC;
         case TGSI_OPCODE_FLR: return RC_OPCODE_FLR;
         case TGSI_OPCODE_ROUND: return RC_OPCODE_ROUND;
         case TGSI_OPCODE_EX2: return RC_OPCODE_EX2;
         case TGSI_OPCODE_LG2: return RC_OPCODE_LG2;
         case TGSI_OPCODE_POW: return RC_OPCODE_POW;
-        case TGSI_OPCODE_XPD: return RC_OPCODE_XPD;
-        case TGSI_OPCODE_DPH: return RC_OPCODE_DPH;
         case TGSI_OPCODE_COS: return RC_OPCODE_COS;
         case TGSI_OPCODE_DDX: return RC_OPCODE_DDX;
         case TGSI_OPCODE_DDY: return RC_OPCODE_DDY;
@@ -85,7 +82,6 @@ static unsigned translate_opcode(unsigned opcode)
      /* case TGSI_OPCODE_RET: return RC_OPCODE_RET; */
         case TGSI_OPCODE_SSG: return RC_OPCODE_SSG;
         case TGSI_OPCODE_CMP: return RC_OPCODE_CMP;
-        case TGSI_OPCODE_SCS: return RC_OPCODE_SCS;
         case TGSI_OPCODE_TXB: return RC_OPCODE_TXB;
      /* case TGSI_OPCODE_DIV: return RC_OPCODE_DIV; */
         case TGSI_OPCODE_DP2: return RC_OPCODE_DP2;
@@ -108,7 +104,6 @@ static unsigned translate_opcode(unsigned opcode)
      /* case TGSI_OPCODE_OR: return RC_OPCODE_OR; */
      /* case TGSI_OPCODE_MOD: return RC_OPCODE_MOD; */
      /* case TGSI_OPCODE_XOR: return RC_OPCODE_XOR; */
-     /* case TGSI_OPCODE_SAD: return RC_OPCODE_SAD; */
      /* case TGSI_OPCODE_TXF: return RC_OPCODE_TXF; */
      /* case TGSI_OPCODE_TXQ: return RC_OPCODE_TXQ; */
         case TGSI_OPCODE_CONT: return RC_OPCODE_CONT;
@@ -119,8 +114,6 @@ static unsigned translate_opcode(unsigned opcode)
      /* case TGSI_OPCODE_ENDLOOP2: return RC_OPCODE_ENDLOOP2; */
      /* case TGSI_OPCODE_ENDSUB: return RC_OPCODE_ENDSUB; */
         case TGSI_OPCODE_NOP: return RC_OPCODE_NOP;
-     /* case TGSI_OPCODE_CALLNZ: return RC_OPCODE_CALLNZ; */
-     /* case TGSI_OPCODE_BREAKC: return RC_OPCODE_BREAKC; */
         case TGSI_OPCODE_KILL_IF: return RC_OPCODE_KIL;
     }
 

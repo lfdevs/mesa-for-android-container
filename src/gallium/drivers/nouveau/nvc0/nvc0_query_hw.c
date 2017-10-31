@@ -157,6 +157,7 @@ nvc0_hw_begin_query(struct nvc0_context *nvc0, struct nvc0_query *q)
    switch (q->type) {
    case PIPE_QUERY_OCCLUSION_COUNTER:
    case PIPE_QUERY_OCCLUSION_PREDICATE:
+   case PIPE_QUERY_OCCLUSION_PREDICATE_CONSERVATIVE:
       hq->nesting = nvc0->screen->num_occlusion_queries_active++;
       if (hq->nesting) {
          nvc0_hw_query_get(push, q, 0x10, 0x0100f002);
@@ -224,6 +225,7 @@ nvc0_hw_end_query(struct nvc0_context *nvc0, struct nvc0_query *q)
    switch (q->type) {
    case PIPE_QUERY_OCCLUSION_COUNTER:
    case PIPE_QUERY_OCCLUSION_PREDICATE:
+   case PIPE_QUERY_OCCLUSION_PREDICATE_CONSERVATIVE:
       nvc0_hw_query_get(push, q, 0, 0x0100f002);
       if (--nvc0->screen->num_occlusion_queries_active == 0) {
          PUSH_SPACE(push, 1);
@@ -320,6 +322,7 @@ nvc0_hw_get_query_result(struct nvc0_context *nvc0, struct nvc0_query *q,
       res64[0] = hq->data[1] - hq->data[5];
       break;
    case PIPE_QUERY_OCCLUSION_PREDICATE:
+   case PIPE_QUERY_OCCLUSION_PREDICATE_CONSERVATIVE:
       res8[0] = hq->data[1] != hq->data[5];
       break;
    case PIPE_QUERY_PRIMITIVES_GENERATED: /* u64 count, u64 time */
@@ -408,7 +411,8 @@ nvc0_hw_get_query_result_resource(struct nvc0_context *nvc0,
    PUSH_REFN (push, hq->bo, NOUVEAU_BO_GART | NOUVEAU_BO_RD);
    PUSH_REFN (push, buf->bo, buf->domain | NOUVEAU_BO_WR);
    BEGIN_1IC0(push, NVC0_3D(MACRO_QUERY_BUFFER_WRITE), 9);
-   if (q->type == PIPE_QUERY_OCCLUSION_PREDICATE) /* XXX what if 64-bit? */
+   if (q->type == PIPE_QUERY_OCCLUSION_PREDICATE ||
+       q->type == PIPE_QUERY_OCCLUSION_PREDICATE_CONSERVATIVE) /* XXX what if 64-bit? */
       PUSH_DATA(push, 0x00000001);
    else if (result_type == PIPE_QUERY_TYPE_I32)
       PUSH_DATA(push, 0x7fffffff);
@@ -513,6 +517,7 @@ nvc0_hw_create_query(struct nvc0_context *nvc0, unsigned type, unsigned index)
    switch (q->type) {
    case PIPE_QUERY_OCCLUSION_COUNTER:
    case PIPE_QUERY_OCCLUSION_PREDICATE:
+   case PIPE_QUERY_OCCLUSION_PREDICATE_CONSERVATIVE:
       hq->rotate = 32;
       space = NVC0_HW_QUERY_ALLOC_SPACE;
       break;

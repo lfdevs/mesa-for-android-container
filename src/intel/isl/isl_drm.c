@@ -87,6 +87,13 @@ struct isl_drm_modifier_info modifier_info[] = {
       .name = "I915_FORMAT_MOD_Y_TILED",
       .tiling = ISL_TILING_Y0,
    },
+   {
+      .modifier = I915_FORMAT_MOD_Y_TILED_CCS,
+      .name = "I915_FORMAT_MOD_Y_TILED_CCS",
+      .tiling = ISL_TILING_Y0,
+      .aux_usage = ISL_AUX_USAGE_CCS_E,
+      .supports_clear_color = false,
+   },
 };
 
 const struct isl_drm_modifier_info *

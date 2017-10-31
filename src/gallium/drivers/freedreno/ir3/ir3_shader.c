@@ -41,6 +41,12 @@
 #include "ir3_compiler.h"
 #include "ir3_nir.h"
 
+int
+ir3_glsl_type_size(const struct glsl_type *type)
+{
+	return glsl_count_attribute_slots(type, false);
+}
+
 static void
 delete_variant(struct ir3_shader_variant *v)
 {
@@ -290,6 +296,9 @@ ir3_shader_create(struct ir3_compiler *compiler,
 	if (cso->type == PIPE_SHADER_IR_NIR) {
 		/* we take ownership of the reference: */
 		nir = cso->ir.nir;
+
+		NIR_PASS_V(nir, nir_lower_io, nir_var_all, ir3_glsl_type_size,
+			   (nir_lower_io_options)0);
 	} else {
 		debug_assert(cso->type == PIPE_SHADER_IR_TGSI);
 		if (fd_mesa_debug & FD_DBG_DISASM) {
@@ -336,6 +345,9 @@ ir3_shader_create_compute(struct ir3_compiler *compiler,
 	if (cso->ir_type == PIPE_SHADER_IR_NIR) {
 		/* we take ownership of the reference: */
 		nir = (nir_shader *)cso->prog;
+
+		NIR_PASS_V(nir, nir_lower_io, nir_var_all, ir3_glsl_type_size,
+			   (nir_lower_io_options)0);
 	} else {
 		debug_assert(cso->ir_type == PIPE_SHADER_IR_TGSI);
 		if (fd_mesa_debug & FD_DBG_DISASM) {

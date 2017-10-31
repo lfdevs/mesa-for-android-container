@@ -567,6 +567,13 @@ enum glsl_interp_mode
    INTERP_MODE_COUNT /**< Number of interpolation qualifiers */
 };
 
+enum glsl_interface_packing {
+   GLSL_INTERFACE_PACKING_STD140,
+   GLSL_INTERFACE_PACKING_SHARED,
+   GLSL_INTERFACE_PACKING_PACKED,
+   GLSL_INTERFACE_PACKING_STD430
+};
+
 const char *glsl_interp_mode_name(enum glsl_interp_mode qual);
 
 /**
@@ -661,6 +668,23 @@ enum gl_tess_spacing
    TESS_SPACING_EQUAL,
    TESS_SPACING_FRACTIONAL_ODD,
    TESS_SPACING_FRACTIONAL_EVEN,
+};
+
+/**
+ * A compare function enum for use in compiler lowering passes.  This is in
+ * the same order as GL's compare functions (shifted down by GL_NEVER), and is
+ * exactly the same as gallium's PIPE_FUNC_*.
+ */
+enum compare_func
+{
+   COMPARE_FUNC_NEVER,
+   COMPARE_FUNC_LESS,
+   COMPARE_FUNC_EQUAL,
+   COMPARE_FUNC_LEQUAL,
+   COMPARE_FUNC_GREATER,
+   COMPARE_FUNC_NOTEQUAL,
+   COMPARE_FUNC_GEQUAL,
+   COMPARE_FUNC_ALWAYS,
 };
 
 #ifdef __cplusplus

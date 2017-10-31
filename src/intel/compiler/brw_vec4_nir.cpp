@@ -2057,7 +2057,7 @@ vec4_visitor::nir_emit_jump(nir_jump_instr *instr)
    }
 }
 
-enum ir_texture_opcode
+static enum ir_texture_opcode
 ir_texture_opcode_for_nir_texop(nir_texop texop)
 {
    enum ir_texture_opcode op;
@@ -2081,7 +2081,8 @@ ir_texture_opcode_for_nir_texop(nir_texop texop)
 
    return op;
 }
-const glsl_type *
+
+static const glsl_type *
 glsl_type_for_nir_alu_type(nir_alu_type alu_type,
                            unsigned components)
 {
@@ -2225,15 +2226,6 @@ vec4_visitor::nir_emit_texture(nir_tex_instr *instr)
       default:
          unreachable("unknown texture source");
       }
-   }
-
-   /* TXS and TXL require a LOD but not everything we implement using those
-    * two opcodes provides one.  Provide a default LOD of 0.
-    */
-   if ((instr->op == nir_texop_txs ||
-        instr->op == nir_texop_txl) &&
-       lod.file == BAD_FILE) {
-      lod = brw_imm_ud(0u);
    }
 
    if (instr->op == nir_texop_txf_ms ||

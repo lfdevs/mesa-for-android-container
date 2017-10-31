@@ -45,22 +45,6 @@
 #include "eglsurface.h"
 
 
-static void
-_eglClampSwapInterval(_EGLSurface *surf, EGLint interval)
-{
-   EGLint bound = surf->Config->MaxSwapInterval;
-   if (interval >= bound) {
-      interval = bound;
-   }
-   else {
-      bound = surf->Config->MinSwapInterval;
-      if (interval < bound)
-         interval = bound;
-   }
-   surf->SwapInterval = interval;
-}
-
-
 /**
  * Parse the list of surface attributes and return the proper error code.
  */
@@ -319,7 +303,7 @@ _eglInitSurface(_EGLSurface *surf, _EGLDisplay *dpy, EGLint type,
    surf->BufferAgeRead = EGL_FALSE;
 
    /* the default swap interval is 1 */
-   _eglClampSwapInterval(surf, 1);
+   surf->SwapInterval = 1;
 
    err = _eglParseSurfaceAttribList(surf, attrib_list);
    if (err != EGL_SUCCESS)
@@ -565,6 +549,5 @@ EGLBoolean
 _eglSwapInterval(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surf,
                  EGLint interval)
 {
-   _eglClampSwapInterval(surf, interval);
    return EGL_TRUE;
 }

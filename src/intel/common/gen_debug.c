@@ -57,6 +57,7 @@ static const struct debug_control debug_control[] = {
    { "vert",        DEBUG_VERTS },
    { "dri",         DEBUG_DRI },
    { "sf",          DEBUG_SF },
+   { "submit",      DEBUG_SUBMIT },
    { "wm",          DEBUG_WM },
    { "urb",         DEBUG_URB },
    { "vs",          DEBUG_VS },
@@ -82,6 +83,7 @@ static const struct debug_control debug_control[] = {
    { "norbc",       DEBUG_NO_RBC },
    { "nohiz",       DEBUG_NO_HIZ },
    { "color",       DEBUG_COLOR },
+   { "reemit",      DEBUG_REEMIT },
    { NULL,    0 }
 };
 

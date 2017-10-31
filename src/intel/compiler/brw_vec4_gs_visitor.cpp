@@ -890,10 +890,9 @@ brw_compile_gs(const struct brw_compiler *compiler, void *log_data,
           * values.
           */
          const unsigned param_count = prog_data->base.base.nr_params;
-         gl_constant_value **param = ralloc_array(NULL, gl_constant_value*,
-                                                  param_count);
+         uint32_t *param = ralloc_array(NULL, uint32_t, param_count);
          memcpy(param, prog_data->base.base.param,
-                sizeof(gl_constant_value*) * param_count);
+                sizeof(uint32_t) * param_count);
 
          if (v.run()) {
             /* Success! Backup is not needed */
@@ -910,7 +909,7 @@ brw_compile_gs(const struct brw_compiler *compiler, void *log_data,
              * FIXME: Could more variables be modified by this execution?
              */
             memcpy(prog_data->base.base.param, param,
-                   sizeof(gl_constant_value*) * param_count);
+                   sizeof(uint32_t) * param_count);
             prog_data->base.base.nr_params = param_count;
             prog_data->base.base.nr_pull_params = 0;
             ralloc_free(param);

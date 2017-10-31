@@ -50,7 +50,7 @@ static void cik_sdma_copy_buffer(struct si_context *ctx,
 	src_offset += rsrc->gpu_address;
 
 	ncopy = DIV_ROUND_UP(size, CIK_SDMA_COPY_MAX_SIZE);
-	r600_need_dma_space(&ctx->b, ncopy * 7, rdst, rsrc);
+	si_need_dma_space(&ctx->b, ncopy * 7, rdst, rsrc);
 
 	for (i = 0; i < ncopy; i++) {
 		csize = MIN2(size, CIK_SDMA_COPY_MAX_SIZE);
@@ -95,7 +95,7 @@ static void cik_sdma_clear_buffer(struct pipe_context *ctx,
 
 	/* the same maximum size as for copying */
 	ncopy = DIV_ROUND_UP(size, CIK_SDMA_COPY_MAX_SIZE);
-	r600_need_dma_space(&sctx->b, ncopy * 5, rdst, NULL);
+	si_need_dma_space(&sctx->b, ncopy * 5, rdst, NULL);
 
 	for (i = 0; i < ncopy; i++) {
 		csize = MIN2(size, CIK_SDMA_COPY_MAX_SIZE);
@@ -162,6 +162,10 @@ static bool cik_sdma_copy_texture(struct si_context *sctx,
 	unsigned src_tile_mode = info->si_tile_mode_array[src_tile_index];
 	unsigned dst_micro_mode = G_009910_MICRO_TILE_MODE_NEW(dst_tile_mode);
 	unsigned src_micro_mode = G_009910_MICRO_TILE_MODE_NEW(src_tile_mode);
+	unsigned dst_tile_swizzle = dst_mode == RADEON_SURF_MODE_2D ?
+					    rdst->surface.tile_swizzle : 0;
+	unsigned src_tile_swizzle = src_mode == RADEON_SURF_MODE_2D ?
+					    rsrc->surface.tile_swizzle : 0;
 	unsigned dst_pitch = rdst->surface.u.legacy.level[dst_level].nblk_x;
 	unsigned src_pitch = rsrc->surface.u.legacy.level[src_level].nblk_x;
 	uint64_t dst_slice_pitch = rdst->surface.u.legacy.level[dst_level].slice_size / bpp;
@@ -190,7 +194,7 @@ static bool cik_sdma_copy_texture(struct si_context *sctx,
 	       src_slice_pitch * bpp * (srcz + src_box->depth) <=
 	       rsrc->resource.buf->size);
 
-	if (!r600_prepare_for_dma_blit(&sctx->b, rdst, dst_level, dstx, dsty,
+	if (!si_prepare_for_dma_blit(&sctx->b, rdst, dst_level, dstx, dsty,
 					dstz, rsrc, src_level, src_box))
 		return false;
 
@@ -204,6 +208,9 @@ static bool cik_sdma_copy_texture(struct si_context *sctx,
 	    dsty >= (1 << 14) ||
 	    dstz >= (1 << 11))
 		return false;
+
+	dst_address |= dst_tile_swizzle << 8;
+	src_address |= src_tile_swizzle << 8;
 
 	/* Linear -> linear sub-window copy. */
 	if (dst_mode == RADEON_SURF_MODE_LINEAR_ALIGNED &&
@@ -228,7 +235,7 @@ static bool cik_sdma_copy_texture(struct si_context *sctx,
 	      srcy + copy_height != (1 << 14)))) {
 		struct radeon_winsys_cs *cs = sctx->b.dma.cs;
 
-		r600_need_dma_space(&sctx->b, 13, &rdst->resource, &rsrc->resource);
+		si_need_dma_space(&sctx->b, 13, &rdst->resource, &rsrc->resource);
 
 		radeon_emit(cs, CIK_SDMA_PACKET(CIK_SDMA_OPCODE_COPY,
 						CIK_SDMA_COPY_SUB_OPCODE_LINEAR_SUB_WINDOW, 0) |
@@ -391,7 +398,7 @@ static bool cik_sdma_copy_texture(struct si_context *sctx,
 			struct radeon_winsys_cs *cs = sctx->b.dma.cs;
 			uint32_t direction = linear == rdst ? 1u << 31 : 0;
 
-			r600_need_dma_space(&sctx->b, 14, &rdst->resource, &rsrc->resource);
+			si_need_dma_space(&sctx->b, 14, &rdst->resource, &rsrc->resource);
 
 			radeon_emit(cs, CIK_SDMA_PACKET(CIK_SDMA_OPCODE_COPY,
 							CIK_SDMA_COPY_SUB_OPCODE_TILED_SUB_WINDOW, 0) |
@@ -485,7 +492,7 @@ static bool cik_sdma_copy_texture(struct si_context *sctx,
 		      dstx + copy_width != (1 << 14)))) {
 			struct radeon_winsys_cs *cs = sctx->b.dma.cs;
 
-			r600_need_dma_space(&sctx->b, 15, &rdst->resource, &rsrc->resource);
+			si_need_dma_space(&sctx->b, 15, &rdst->resource, &rsrc->resource);
 
 			radeon_emit(cs, CIK_SDMA_PACKET(CIK_SDMA_OPCODE_COPY,
 							CIK_SDMA_COPY_SUB_OPCODE_T2T_SUB_WINDOW, 0));

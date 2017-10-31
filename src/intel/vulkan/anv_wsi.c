@@ -239,8 +239,9 @@ anv_wsi_image_create(VkDevice device_h,
    memory->bo->flags |= EXEC_OBJECT_WRITE;
 
    anv_BindImageMemory(device_h, image_h, memory_h, 0);
+   assert(image->planes[0].offset == 0);
 
-   struct anv_surface *surface = &image->color_surface;
+   struct anv_surface *surface = &image->planes[0].surface;
    assert(surface->isl.tiling == ISL_TILING_X);
 
    *row_pitch = surface->isl.row_pitch;
@@ -248,7 +249,8 @@ anv_wsi_image_create(VkDevice device_h,
                                 surface->isl.row_pitch, I915_TILING_X);
    if (ret) {
       /* FINISHME: Choose a better error. */
-      result = vk_errorf(VK_ERROR_OUT_OF_DEVICE_MEMORY,
+      result = vk_errorf(device->instance, device,
+                         VK_ERROR_OUT_OF_DEVICE_MEMORY,
                          "set_tiling failed: %m");
       goto fail_alloc_memory;
    }
@@ -256,7 +258,8 @@ anv_wsi_image_create(VkDevice device_h,
    int fd = anv_gem_handle_to_fd(device, memory->bo->gem_handle);
    if (fd == -1) {
       /* FINISHME: Choose a better error. */
-      result = vk_errorf(VK_ERROR_OUT_OF_DEVICE_MEMORY,
+      result = vk_errorf(device->instance, device,
+                         VK_ERROR_OUT_OF_DEVICE_MEMORY,
                          "handle_to_fd failed: %m");
       goto fail_alloc_memory;
    }
@@ -265,7 +268,7 @@ anv_wsi_image_create(VkDevice device_h,
    *memory_p = memory_h;
    *fd_p = fd;
    *size = image->size;
-   *offset = image->offset;
+   *offset = 0;
    return VK_SUCCESS;
 fail_alloc_memory:
    anv_FreeMemory(device_h, memory_h, pAllocator);
@@ -364,22 +367,25 @@ VkResult anv_GetSwapchainImagesKHR(
 }
 
 VkResult anv_AcquireNextImageKHR(
-    VkDevice                                     device,
+    VkDevice                                     _device,
     VkSwapchainKHR                               _swapchain,
     uint64_t                                     timeout,
     VkSemaphore                                  semaphore,
     VkFence                                      _fence,
     uint32_t*                                    pImageIndex)
 {
+   ANV_FROM_HANDLE(anv_device, device, _device);
    ANV_FROM_HANDLE(wsi_swapchain, swapchain, _swapchain);
    ANV_FROM_HANDLE(anv_fence, fence, _fence);
 
    VkResult result = swapchain->acquire_next_image(swapchain, timeout,
                                                    semaphore, pImageIndex);
 
-   /* Thanks to implicit sync, the image is ready immediately. */
+   /* Thanks to implicit sync, the image is ready immediately.  However, we
+    * should wait for the current GPU state to finish.
+    */
    if (fence)
-      fence->state = ANV_FENCE_STATE_SIGNALED;
+      anv_QueueSubmit(anv_queue_to_handle(&device->queue), 0, NULL, _fence);
 
    return result;
 }

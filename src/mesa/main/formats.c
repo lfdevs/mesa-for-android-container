@@ -109,6 +109,11 @@ _mesa_get_format_name(mesa_format format)
 GLint
 _mesa_get_format_bytes(mesa_format format)
 {
+   if (_mesa_format_is_mesa_array_format(format)) {
+      return _mesa_array_format_get_type_size(format) *
+             _mesa_array_format_get_num_channels(format);
+   }
+
    const struct gl_format_info *info = _mesa_get_format_info(format);
    assert(info->BytesPerBlock);
    assert(info->BytesPerBlock <= MAX_PIXEL_BYTES ||
@@ -875,6 +880,7 @@ _mesa_uncompressed_format_to_type_and_comps(mesa_format format,
 
    case MESA_FORMAT_A1B5G5R5_UNORM:
    case MESA_FORMAT_A1B5G5R5_UINT:
+   case MESA_FORMAT_X1B5G5R5_UNORM:
       *datatype = GL_UNSIGNED_SHORT_5_5_5_1;
       *comps = 4;
       return;
@@ -1526,6 +1532,10 @@ _mesa_format_matches_format_and_type(mesa_format mesa_format,
       return format == GL_RGBA && type == GL_UNSIGNED_SHORT_5_5_5_1 &&
          !swapBytes;
 
+   case MESA_FORMAT_X1B5G5R5_UNORM:
+      return format == GL_RGB && type == GL_UNSIGNED_SHORT_5_5_5_1 &&
+         !swapBytes;
+
    case MESA_FORMAT_B5G5R5A1_UNORM:
       return format == GL_BGRA && type == GL_UNSIGNED_SHORT_1_5_5_5_REV &&
          !swapBytes;
@@ -2005,7 +2015,6 @@ _mesa_format_matches_format_and_type(mesa_format mesa_format,
    case MESA_FORMAT_RGBX_UINT8:
    case MESA_FORMAT_RGBX_SINT8:
    case MESA_FORMAT_B10G10R10X2_UNORM:
-   case MESA_FORMAT_R10G10B10X2_UNORM:
    case MESA_FORMAT_RGBX_UNORM16:
    case MESA_FORMAT_RGBX_SNORM16:
    case MESA_FORMAT_RGBX_FLOAT16:
@@ -2016,6 +2025,9 @@ _mesa_format_matches_format_and_type(mesa_format mesa_format,
    case MESA_FORMAT_RGBX_SINT32:
       return GL_FALSE;
 
+   case MESA_FORMAT_R10G10B10X2_UNORM:
+      return format == GL_RGB && type == GL_UNSIGNED_INT_2_10_10_10_REV &&
+         !swapBytes;
    case MESA_FORMAT_R10G10B10A2_UNORM:
       return format == GL_RGBA && type == GL_UNSIGNED_INT_2_10_10_10_REV &&
          !swapBytes;

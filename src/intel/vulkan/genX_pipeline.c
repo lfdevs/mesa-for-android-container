@@ -28,6 +28,7 @@
 
 #include "common/gen_l3_config.h"
 #include "common/gen_sample_positions.h"
+#include "vk_util.h"
 #include "vk_format_info.h"
 
 static uint32_t
@@ -137,7 +138,7 @@ emit_vertex_input(struct anv_pipeline *pipeline,
       struct GENX(VERTEX_ELEMENT_STATE) element = {
          .VertexBufferIndex = desc->binding,
          .Valid = true,
-         .SourceElementFormat = format,
+         .SourceElementFormat = (enum GENX(SURFACE_FORMAT)) format,
          .EdgeFlagEnable = false,
          .SourceElementOffset = desc->offset,
          .Component0Control = vertex_element_comp_control(format, 0),
@@ -183,7 +184,7 @@ emit_vertex_input(struct anv_pipeline *pipeline,
       struct GENX(VERTEX_ELEMENT_STATE) element = {
          .VertexBufferIndex = ANV_SVGS_VB_INDEX,
          .Valid = true,
-         .SourceElementFormat = ISL_FORMAT_R32G32_UINT,
+         .SourceElementFormat = (enum GENX(SURFACE_FORMAT)) ISL_FORMAT_R32G32_UINT,
          .Component0Control = base_ctrl,
          .Component1Control = base_ctrl,
 #if GEN_GEN >= 8
@@ -213,7 +214,7 @@ emit_vertex_input(struct anv_pipeline *pipeline,
       struct GENX(VERTEX_ELEMENT_STATE) element = {
          .VertexBufferIndex = ANV_DRAWID_VB_INDEX,
          .Valid = true,
-         .SourceElementFormat = ISL_FORMAT_R32_UINT,
+         .SourceElementFormat = (enum GENX(SURFACE_FORMAT)) ISL_FORMAT_R32_UINT,
          .Component0Control = VFCOMP_STORE_SRC,
          .Component1Control = VFCOMP_STORE_0,
          .Component2Control = VFCOMP_STORE_0,
@@ -281,7 +282,7 @@ genX(emit_urb_setup)(struct anv_device *device, struct anv_batch *batch,
    }
 }
 
-static inline void
+static void
 emit_urb_setup(struct anv_pipeline *pipeline)
 {
    unsigned entry_size[4];
@@ -1077,19 +1078,19 @@ emit_3dstate_streamout(struct anv_pipeline *pipeline,
    }
 }
 
-static inline uint32_t
+static uint32_t
 get_sampler_count(const struct anv_shader_bin *bin)
 {
    return DIV_ROUND_UP(bin->bind_map.sampler_count, 4);
 }
 
-static inline uint32_t
+static uint32_t
 get_binding_table_entry_count(const struct anv_shader_bin *bin)
 {
    return DIV_ROUND_UP(bin->bind_map.surface_count, 32);
 }
 
-static inline struct anv_address
+static struct anv_address
 get_scratch_address(struct anv_pipeline *pipeline,
                     gl_shader_stage stage,
                     const struct anv_shader_bin *bin)
@@ -1102,20 +1103,20 @@ get_scratch_address(struct anv_pipeline *pipeline,
    };
 }
 
-static inline uint32_t
+static uint32_t
 get_scratch_space(const struct anv_shader_bin *bin)
 {
    return ffs(bin->prog_data->total_scratch / 2048);
 }
 
-static inline uint32_t
+static uint32_t
 get_urb_output_offset()
 {
    /* Skip the VUE header and position slots */
    return 1;
 }
 
-static inline uint32_t
+UNUSED static uint32_t
 get_urb_output_length(const struct anv_shader_bin *bin)
 {
    const struct brw_vue_prog_data *prog_data =
@@ -1176,7 +1177,8 @@ emit_3dstate_vs(struct anv_pipeline *pipeline)
 }
 
 static void
-emit_3dstate_hs_te_ds(struct anv_pipeline *pipeline)
+emit_3dstate_hs_te_ds(struct anv_pipeline *pipeline,
+                      const VkPipelineTessellationStateCreateInfo *tess_info)
 {
    if (!anv_pipeline_has_stage(pipeline, MESA_SHADER_TESS_EVAL)) {
       anv_batch_emit(&pipeline->batch, GENX(3DSTATE_HS), hs);
@@ -1215,9 +1217,29 @@ emit_3dstate_hs_te_ds(struct anv_pipeline *pipeline)
          get_scratch_address(pipeline, MESA_SHADER_TESS_CTRL, tcs_bin);
    }
 
+   const VkPipelineTessellationDomainOriginStateCreateInfoKHR *domain_origin_state =
+      tess_info ? vk_find_struct_const(tess_info, PIPELINE_TESSELLATION_DOMAIN_ORIGIN_STATE_CREATE_INFO_KHR) : NULL;
+
+   VkTessellationDomainOriginKHR uv_origin =
+      domain_origin_state ? domain_origin_state->domainOrigin :
+                            VK_TESSELLATION_DOMAIN_ORIGIN_UPPER_LEFT_KHR;
+
    anv_batch_emit(&pipeline->batch, GENX(3DSTATE_TE), te) {
       te.Partitioning = tes_prog_data->partitioning;
-      te.OutputTopology = tes_prog_data->output_topology;
+
+      if (uv_origin == VK_TESSELLATION_DOMAIN_ORIGIN_LOWER_LEFT_KHR) {
+         te.OutputTopology = tes_prog_data->output_topology;
+      } else {
+         /* When the origin is upper-left, we have to flip the winding order */
+         if (tes_prog_data->output_topology == OUTPUT_TRI_CCW) {
+            te.OutputTopology = OUTPUT_TRI_CW;
+         } else if (tes_prog_data->output_topology == OUTPUT_TRI_CW) {
+            te.OutputTopology = OUTPUT_TRI_CCW;
+         } else {
+            te.OutputTopology = tes_prog_data->output_topology;
+         }
+      }
+
       te.TEDomain = tes_prog_data->domain;
       te.TEEnable = true;
       te.MaximumTessellationFactorOdd = 63.0;
@@ -1333,7 +1355,7 @@ emit_3dstate_gs(struct anv_pipeline *pipeline)
    }
 }
 
-static inline bool
+static bool
 has_color_buffer_write_enabled(const struct anv_pipeline *pipeline)
 {
    const struct anv_shader_bin *shader_bin =
@@ -1346,7 +1368,7 @@ has_color_buffer_write_enabled(const struct anv_pipeline *pipeline)
       if (bind_map->surface_to_descriptor[i].set !=
           ANV_DESCRIPTOR_SET_COLOR_ATTACHMENTS)
          continue;
-      if (bind_map->surface_to_descriptor[i].index != UINT8_MAX)
+      if (bind_map->surface_to_descriptor[i].index != UINT32_MAX)
          return true;
    }
 
@@ -1418,7 +1440,7 @@ emit_3dstate_wm(struct anv_pipeline *pipeline, struct anv_subpass *subpass,
    }
 }
 
-static inline bool
+UNUSED static bool
 is_dual_src_blend_factor(VkBlendFactor factor)
 {
    return factor == VK_BLEND_FACTOR_SRC1_COLOR ||
@@ -1700,12 +1722,12 @@ genX(graphics_pipeline_create)(
     * whole fixed function pipeline" means to emit a PIPE_CONTROL with the "CS
     * Stall" bit set.
     */
-   if (!brw->is_haswell && !brw->is_baytrail)
+   if (!device->info.is_haswell && !device->info.is_baytrail)
       gen7_emit_vs_workaround_flush(brw);
 #endif
 
    emit_3dstate_vs(pipeline);
-   emit_3dstate_hs_te_ds(pipeline);
+   emit_3dstate_hs_te_ds(pipeline, pCreateInfo->pTessellationState);
    emit_3dstate_gs(pipeline);
    emit_3dstate_sbe(pipeline);
    emit_3dstate_wm(pipeline, subpass, pCreateInfo->pMultisampleState);

@@ -85,6 +85,8 @@ struct dri_drawable
    void (*update_tex_buffer)(struct dri_drawable *drawable,
                              struct dri_context *ctx,
                              struct pipe_resource *res);
+   void (*flush_swapbuffers)(struct dri_context *ctx,
+                             struct dri_drawable *drawable);
 };
 
 static inline struct dri_drawable *

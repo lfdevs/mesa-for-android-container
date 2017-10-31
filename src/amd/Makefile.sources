@@ -1,7 +1,6 @@
 COMMON_HEADER_FILES = \
 	common/gfx9d.h \
 	common/sid.h \
-	common/r600d_common.h \
 	common/amd_family.h \
 	common/amd_kernel_code_t.h \
 	common/amdgpu_id.h
@@ -48,6 +47,7 @@ AMD_COMPILER_FILES = \
 	common/ac_llvm_helper.cpp \
 	common/ac_llvm_util.c \
 	common/ac_llvm_util.h \
+	common/ac_shader_abi.h \
 	common/ac_shader_info.c \
 	common/ac_shader_info.h
 

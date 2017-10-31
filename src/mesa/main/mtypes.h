@@ -990,8 +990,8 @@ struct gl_sampler_object
    GLboolean CubeMapSeamless;   /**< GL_AMD_seamless_cubemap_per_texture */
 
    /** GL_ARB_bindless_texture */
-   struct util_dynarray Handles;
    bool HandleAllocated;
+   struct util_dynarray Handles;
 };
 
 
@@ -1012,7 +1012,6 @@ struct gl_texture_object
    struct gl_sampler_object Sampler;
 
    GLenum DepthMode;           /**< GL_ARB_depth_texture */
-   bool StencilSampling;       /**< Should we sample stencil instead of depth? */
 
    GLfloat Priority;           /**< in [0,1] */
    GLint BaseLevel;            /**< min mipmap level, OpenGL 1.2 */
@@ -1033,11 +1032,16 @@ struct gl_texture_object
    GLboolean Immutable;        /**< GL_ARB_texture_storage */
    GLboolean _IsFloat;         /**< GL_OES_float_texture */
    GLboolean _IsHalfFloat;     /**< GL_OES_half_float_texture */
+   bool StencilSampling;       /**< Should we sample stencil instead of depth? */
+   bool HandleAllocated;       /**< GL_ARB_bindless_texture */
 
    GLuint MinLevel;            /**< GL_ARB_texture_view */
    GLuint MinLayer;            /**< GL_ARB_texture_view */
    GLuint NumLevels;           /**< GL_ARB_texture_view */
    GLuint NumLayers;           /**< GL_ARB_texture_view */
+
+   /** GL_EXT_memory_object */
+   GLenum TextureTiling;
 
    /** Actual texture images, indexed by [cube face] and [mipmap level] */
    struct gl_texture_image *Image[MAX_FACES][MAX_TEXTURE_LEVELS];
@@ -1060,7 +1064,6 @@ struct gl_texture_object
    /** GL_ARB_bindless_texture */
    struct util_dynarray SamplerHandles;
    struct util_dynarray ImageHandles;
-   bool HandleAllocated;
 };
 
 
@@ -1997,11 +2000,11 @@ struct gl_bindless_sampler
    /** Texture unit (set by glUniform1()). */
    GLubyte unit;
 
-   /** Texture Target (TEXTURE_1D/2D/3D/etc_INDEX). */
-   gl_texture_index target;
-
    /** Whether this bindless sampler is bound to a unit. */
    GLboolean bound;
+
+   /** Texture Target (TEXTURE_1D/2D/3D/etc_INDEX). */
+   gl_texture_index target;
 
    /** Pointer to the base of the data. */
    GLvoid *data;
@@ -2015,11 +2018,11 @@ struct gl_bindless_image
    /** Image unit (set by glUniform1()). */
    GLubyte unit;
 
-   /** Access qualifier (GL_READ_WRITE, GL_READ_ONLY, GL_WRITE_ONLY) */
-   GLenum access;
-
    /** Whether this bindless image is bound to a unit. */
    GLboolean bound;
+
+   /** Access qualifier (GL_READ_WRITE, GL_READ_ONLY, GL_WRITE_ONLY) */
+   GLenum access;
 
    /** Pointer to the base of the data. */
    GLvoid *data;
@@ -2253,6 +2256,9 @@ struct gl_vertex_program_state
    GLboolean Enabled;            /**< User-set GL_VERTEX_PROGRAM_ARB/NV flag */
    GLboolean PointSizeEnabled;   /**< GL_VERTEX_PROGRAM_POINT_SIZE_ARB/NV */
    GLboolean TwoSideEnabled;     /**< GL_VERTEX_PROGRAM_TWO_SIDE_ARB/NV */
+   /** Should fixed-function T&L be implemented with a vertex prog? */
+   GLboolean _MaintainTnlProgram;
+
    struct gl_program *Current;  /**< User-bound vertex program */
 
    /** Currently enabled and valid vertex program (including internal
@@ -2262,9 +2268,6 @@ struct gl_vertex_program_state
    struct gl_program *_Current;
 
    GLfloat Parameters[MAX_PROGRAM_ENV_PARAMS][4]; /**< Env params */
-
-   /** Should fixed-function T&L be implemented with a vertex prog? */
-   GLboolean _MaintainTnlProgram;
 
    /** Program to emulate fixed-function T&L (see above) */
    struct gl_program *_TnlProgram;
@@ -2314,6 +2317,9 @@ struct gl_geometry_program_state
 struct gl_fragment_program_state
 {
    GLboolean Enabled;     /**< User-set fragment program enable flag */
+   /** Should fixed-function texturing be implemented with a fragment prog? */
+   GLboolean _MaintainTexEnvProgram;
+
    struct gl_program *Current;  /**< User-bound fragment program */
 
    /** Currently enabled and valid fragment program (including internal
@@ -2323,9 +2329,6 @@ struct gl_fragment_program_state
    struct gl_program *_Current;
 
    GLfloat Parameters[MAX_PROGRAM_ENV_PARAMS][4]; /**< Env params */
-
-   /** Should fixed-function texturing be implemented with a fragment prog? */
-   GLboolean _MaintainTexEnvProgram;
 
    /** Program to emulate fixed-function texture env/combine (see above) */
    struct gl_program *_TexEnvProgram;
@@ -2564,8 +2567,9 @@ struct gl_shader
    GLchar *Label;   /**< GL_KHR_debug */
    unsigned char sha1[20]; /**< SHA1 hash of pre-processed source */
    GLboolean DeletePending;
-   enum gl_compile_status CompileStatus;
    bool IsES;              /**< True if this shader uses GLSL ES */
+
+   enum gl_compile_status CompileStatus;
 
 #ifdef DEBUG
    unsigned SourceChecksum;       /**< for debug/logging purposes */
@@ -2578,13 +2582,13 @@ struct gl_shader
 
    unsigned Version;       /**< GLSL version used for linking */
 
-   struct exec_list *ir;
-   struct glsl_symbol_table *symbols;
-
    /**
     * A bitmask of gl_advanced_blend_mode values
     */
    GLbitfield BlendSupport;
+
+   struct exec_list *ir;
+   struct glsl_symbol_table *symbols;
 
    /**
     * Whether early fragment tests are enabled as defined by
@@ -2645,15 +2649,6 @@ struct gl_uniform_buffer_variable
 };
 
 
-enum gl_uniform_block_packing
-{
-   ubo_packing_std140,
-   ubo_packing_shared,
-   ubo_packing_packed,
-   ubo_packing_std430
-};
-
-
 struct gl_uniform_block
 {
    /** Declared name of the uniform block */
@@ -2699,7 +2694,7 @@ struct gl_uniform_block
     * This isn't accessible through the API, but it is used while
     * cross-validating uniform blocks.
     */
-   enum gl_uniform_block_packing _Packing;
+   enum glsl_interface_packing _Packing;
    GLboolean _RowMajor;
 };
 
@@ -2858,9 +2853,9 @@ struct gl_shader_program_data
    struct gl_uniform_storage *UniformStorage;
 
    unsigned NumUniformBlocks;
-   struct gl_uniform_block *UniformBlocks;
-
    unsigned NumShaderStorageBlocks;
+
+   struct gl_uniform_block *UniformBlocks;
    struct gl_uniform_block *ShaderStorageBlocks;
 
    struct gl_active_atomic_buffer *AtomicBuffers;
@@ -2878,13 +2873,13 @@ struct gl_shader_program_data
     * lands we should switch to using the cache_fallback support.
     */
    bool skip_cache;
+   GLboolean Validated;
 
    /** List of all active resources after linking. */
    struct gl_program_resource *ProgramResourceList;
    unsigned NumProgramResourceList;
 
    enum gl_link_status LinkStatus;   /**< GL_LINK_STATUS */
-   GLboolean Validated;
    GLchar *InfoLog;
 
    unsigned Version;       /**< GLSL version used for linking */
@@ -3197,10 +3192,9 @@ struct gl_query_state
 /** Sync object state */
 struct gl_sync_object
 {
-   GLenum Type;               /**< GL_SYNC_FENCE */
    GLuint Name;               /**< Fence name */
-   GLchar *Label;             /**< GL_KHR_debug */
    GLint RefCount;            /**< Reference count */
+   GLchar *Label;             /**< GL_KHR_debug */
    GLboolean DeletePending;   /**< Object was deleted while there were still
 			       * live references (e.g., sync not yet finished)
 			       */
@@ -3284,6 +3278,10 @@ struct gl_shared_state
     * Once this field becomes true, it is never reset to false.
     */
    bool ShareGroupReset;
+
+   /** EXT_external_objects */
+   struct _mesa_HashTable *MemoryObjects;
+
 };
 
 
@@ -3313,7 +3311,7 @@ struct gl_renderbuffer
     * called without a rb->TexImage.
     */
    GLboolean NeedsFinishRenderTexture;
-   GLubyte NumSamples;
+   GLubyte NumSamples;    /**< zero means not multisampled */
    GLenum InternalFormat; /**< The user-specified format */
    GLenum _BaseFormat;    /**< Either GL_RGB, GL_RGBA, GL_DEPTH_COMPONENT or
                                GL_STENCIL_INDEX. */
@@ -3847,6 +3845,15 @@ struct gl_constants
    GLboolean DisableVaryingPacking;
 
    /**
+    * UBOs and SSBOs can be packed tightly by the OpenGL implementation when
+    * layout is set as shared (the default) or packed. However most Mesa drivers
+    * just use STD140 for these layouts. This flag allows drivers to use STD430
+    * for packed and shared layouts which allows arrays to be packed more
+    * tightly.
+    */
+   bool UseSTD430AsDefaultPacking;
+
+   /**
     * Should meaningful names be generated for compiler temporary variables?
     *
     * Generally, it is not useful to have the compiler generate "meaningful"
@@ -4049,6 +4056,7 @@ struct gl_extensions
    GLboolean ARB_occlusion_query2;
    GLboolean ARB_pipeline_statistics_query;
    GLboolean ARB_point_sprite;
+   GLboolean ARB_polygon_offset_clamp;
    GLboolean ARB_post_depth_coverage;
    GLboolean ARB_query_buffer_object;
    GLboolean ARB_robust_buffer_access_behavior;
@@ -4087,6 +4095,7 @@ struct gl_extensions
    GLboolean ARB_texture_env_combine;
    GLboolean ARB_texture_env_crossbar;
    GLboolean ARB_texture_env_dot3;
+   GLboolean ARB_texture_filter_anisotropic;
    GLboolean ARB_texture_float;
    GLboolean ARB_texture_gather;
    GLboolean ARB_texture_mirror_clamp_to_edge;
@@ -4121,10 +4130,11 @@ struct gl_extensions
    GLboolean EXT_framebuffer_sRGB;
    GLboolean EXT_gpu_program_parameters;
    GLboolean EXT_gpu_shader4;
+   GLboolean EXT_memory_object;
+   GLboolean EXT_memory_object_fd;
    GLboolean EXT_packed_float;
    GLboolean EXT_pixel_buffer_object;
    GLboolean EXT_point_parameters;
-   GLboolean EXT_polygon_offset_clamp;
    GLboolean EXT_provoking_vertex;
    GLboolean EXT_shader_integer_mix;
    GLboolean EXT_shader_samples_identical;
@@ -4141,6 +4151,7 @@ struct gl_extensions
    GLboolean EXT_texture_sRGB;
    GLboolean EXT_texture_sRGB_decode;
    GLboolean EXT_texture_swizzle;
+   GLboolean EXT_texture_type_2_10_10_10_REV;
    GLboolean EXT_transform_feedback;
    GLboolean EXT_timer_query;
    GLboolean EXT_vertex_array_bgra;
@@ -4175,6 +4186,7 @@ struct gl_extensions
    GLboolean KHR_texture_compression_astc_hdr;
    GLboolean KHR_texture_compression_astc_ldr;
    GLboolean KHR_texture_compression_astc_sliced_3d;
+   GLboolean MESA_tile_raster_order;
    GLboolean MESA_pack_invert;
    GLboolean MESA_shader_framebuffer_fetch;
    GLboolean MESA_shader_framebuffer_fetch_non_coherent;
@@ -4333,8 +4345,8 @@ union gl_dlist_node;
 struct gl_display_list
 {
    GLuint Name;
-   GLchar *Label;     /**< GL_KHR_debug */
    GLbitfield Flags;  /**< DLIST_x flags */
+   GLchar *Label;     /**< GL_KHR_debug */
    /** The dlist commands are in a linked list of nodes */
    union gl_dlist_node *Head;
 };
@@ -4345,11 +4357,10 @@ struct gl_display_list
  */
 struct gl_dlist_state
 {
-   GLuint CallDepth;		/**< Current recursion calling depth */
-
    struct gl_display_list *CurrentList; /**< List currently being compiled */
    union gl_dlist_node *CurrentBlock; /**< Pointer to current block of nodes */
    GLuint CurrentPos;		/**< Index into current block of nodes */
+   GLuint CallDepth;		/**< Current recursion calling depth */
 
    GLvertexformat ListVtxfmt;
 
@@ -4426,6 +4437,9 @@ struct gl_driver_flags
 
    /** gl_context::RasterDiscard */
    uint64_t NewRasterizerDiscard;
+
+   /** gl_context::TileRasterOrder* */
+   uint64_t NewTileRasterOrder;
 
    /**
     * gl_context::UniformBufferBindings
@@ -4536,24 +4550,10 @@ struct gl_driver_flags
    uint64_t NewShaderConstants[MESA_SHADER_STAGES];
 };
 
-struct gl_uniform_buffer_binding
+struct gl_buffer_binding
 {
    struct gl_buffer_object *BufferObject;
    /** Start of uniform block data in the buffer */
-   GLintptr Offset;
-   /** Size of data allowed to be referenced from the buffer (in bytes) */
-   GLsizeiptr Size;
-   /**
-    * glBindBufferBase() indicates that the Size should be ignored and only
-    * limited by the current size of the BufferObject.
-    */
-   GLboolean AutomaticSize;
-};
-
-struct gl_shader_storage_buffer_binding
-{
-   struct gl_buffer_object *BufferObject;
-   /** Start of shader storage block data in the buffer */
    GLintptr Offset;
    /** Size of data allowed to be referenced from the buffer (in bytes) */
    GLsizeiptr Size;
@@ -4619,16 +4619,6 @@ struct gl_image_unit
 };
 
 /**
- * Binding point for an atomic counter buffer object.
- */
-struct gl_atomic_buffer_binding
-{
-   struct gl_buffer_object *BufferObject;
-   GLintptr Offset;
-   GLsizeiptr Size;
-};
-
-/**
  * Shader subroutines storage
  */
 struct gl_subroutine_index_binding
@@ -4648,6 +4638,13 @@ struct gl_image_handle_object
 {
    struct gl_image_unit imgObj;
    GLuint64 handle;
+};
+
+struct gl_memory_object
+{
+   GLuint Name;            /**< hash table ID/name */
+   GLboolean Immutable;    /**< denotes mutability state of parameters */
+   GLboolean Dedicated;    /**< import memory from a dedicated allocation */
 };
 
 /**
@@ -4871,7 +4868,7 @@ struct gl_context
     * associated with uniform blocks by glUniformBlockBinding()'s state in the
     * shader program.
     */
-   struct gl_uniform_buffer_binding
+   struct gl_buffer_binding
       UniformBufferBindings[MAX_COMBINED_UNIFORM_BUFFERS];
 
    /**
@@ -4880,7 +4877,7 @@ struct gl_context
     * glBindBufferBase().  They are associated with shader storage blocks by
     * glShaderStorageBlockBinding()'s state in the shader program.
     */
-   struct gl_shader_storage_buffer_binding
+   struct gl_buffer_binding
       ShaderStorageBufferBindings[MAX_COMBINED_SHADER_STORAGE_BUFFERS];
 
    /**
@@ -4898,7 +4895,7 @@ struct gl_context
    /**
     * Array of atomic counter buffer binding points.
     */
-   struct gl_atomic_buffer_binding
+   struct gl_buffer_binding
       AtomicBufferBindings[MAX_COMBINED_ATOMIC_BUFFERS];
 
    /**
@@ -4958,13 +4955,22 @@ struct gl_context
     */
    GLboolean HasConfig;
 
-   /** software compression/decompression supported or not */
-   GLboolean Mesa_DXTn;
-
    GLboolean TextureFormatSupported[MESA_FORMAT_COUNT];
 
    GLboolean RasterDiscard;  /**< GL_RASTERIZER_DISCARD */
    GLboolean IntelConservativeRasterization; /**< GL_INTEL_CONSERVATIVE_RASTERIZATION */
+
+   /** Does glVertexAttrib(0) alias glVertex()? */
+   bool _AttribZeroAliasesVertex;
+
+   /**
+    * When set, TileRasterOrderIncreasingX/Y control the order that a tiled
+    * renderer's tiles should be excecuted, to meet the requirements of
+    * GL_MESA_tile_raster_order.
+    */
+   GLboolean TileRasterOrderFixed;
+   GLboolean TileRasterOrderIncreasingX;
+   GLboolean TileRasterOrderIncreasingY;
 
    /**
     * \name Hooks for module contexts.  

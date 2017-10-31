@@ -38,11 +38,14 @@ swr_create_screen(struct sw_winsys *winsys)
 
    util_cpu_detect();
 
+   bool is_knl = false;
+
    if (!strlen(filename) &&
        util_cpu_caps.has_avx512f && util_cpu_caps.has_avx512er) {
 #if HAVE_SWR_KNL
       fprintf(stderr, "KNL ");
       sprintf(filename, "%s%s%s", UTIL_DL_PREFIX, "swrKNL", UTIL_DL_EXT);
+      is_knl = true;
 #else
       fprintf(stderr, "KNL (not built) ");
 #endif
@@ -99,6 +102,7 @@ swr_create_screen(struct sw_winsys *winsys)
 
    struct pipe_screen *screen = swr_create_screen_internal(winsys);
    swr_screen(screen)->pfnSwrGetInterface = (PFNSwrGetInterface)pApiProc;
+   swr_screen(screen)->is_knl = is_knl;
 
    return screen;
 }

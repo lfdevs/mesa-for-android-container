@@ -59,29 +59,53 @@ _mesa_valid_tex_storage_dim(GLsizei width, GLsizei height, GLsizei depth)
  */
 /*@{*/
 
+void GLAPIENTRY
+_mesa_TexStorage1D_no_error(GLenum target, GLsizei levels,
+                            GLenum internalformat, GLsizei width);
+
 extern void GLAPIENTRY
 _mesa_TexStorage1D(GLenum target, GLsizei levels, GLenum internalformat,
                    GLsizei width);
 
+void GLAPIENTRY
+_mesa_TexStorage2D_no_error(GLenum target, GLsizei levels,
+                            GLenum internalformat, GLsizei width,
+                            GLsizei height);
 
 extern void GLAPIENTRY
 _mesa_TexStorage2D(GLenum target, GLsizei levels, GLenum internalformat,
                    GLsizei width, GLsizei height);
 
+void GLAPIENTRY
+_mesa_TexStorage3D_no_error(GLenum target, GLsizei levels,
+                            GLenum internalformat, GLsizei width,
+                            GLsizei height, GLsizei depth);
 
 extern void GLAPIENTRY
 _mesa_TexStorage3D(GLenum target, GLsizei levels, GLenum internalformat,
                    GLsizei width, GLsizei height, GLsizei depth);
 
+void GLAPIENTRY
+_mesa_TextureStorage1D_no_error(GLuint texture, GLsizei levels,
+                                GLenum internalformat, GLsizei width);
+
 extern void GLAPIENTRY
 _mesa_TextureStorage1D(GLuint texture, GLsizei levels, GLenum internalformat,
                        GLsizei width);
 
+void GLAPIENTRY
+_mesa_TextureStorage2D_no_error(GLuint texture, GLsizei levels,
+                                GLenum internalformat, GLsizei width,
+                                GLsizei height);
 
 extern void GLAPIENTRY
 _mesa_TextureStorage2D(GLuint texture, GLsizei levels, GLenum internalformat,
                        GLsizei width, GLsizei height);
 
+void GLAPIENTRY
+_mesa_TextureStorage3D_no_error(GLuint texture, GLsizei levels,
+                                GLenum internalformat, GLsizei width,
+                                GLsizei height, GLsizei depth);
 
 extern void GLAPIENTRY
 _mesa_TextureStorage3D(GLuint texture, GLsizei levels, GLenum internalformat,
@@ -112,5 +136,14 @@ _mesa_AllocTextureStorage_sw(struct gl_context *ctx,
                              struct gl_texture_object *texObj,
                              GLsizei levels, GLsizei width,
                              GLsizei height, GLsizei depth);
+
+extern void
+_mesa_texture_storage_memory(struct gl_context *ctx, GLuint dims,
+                             struct gl_texture_object *texObj,
+                             struct gl_memory_object *memObj,
+                             GLenum target, GLsizei levels,
+                             GLenum internalformat, GLsizei width,
+                             GLsizei height, GLsizei depth,
+                             GLuint64 offset, bool dsa);
 
 #endif /* TEXSTORAGE_H */

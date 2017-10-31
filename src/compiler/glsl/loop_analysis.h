@@ -34,33 +34,17 @@
 extern class loop_state *
 analyze_loop_variables(exec_list *instructions);
 
-
-/**
- * Fill in loop control fields
- *
- * Based on analysis of loop variables, this function tries to remove
- * redundant sequences in the loop of the form
- *
- *  (if (expression bool ...) (break))
- *
- * For example, if it is provable that one loop exit condition will
- * always be satisfied before another, the unnecessary exit condition will be
- * removed.
- */
-extern bool
-set_loop_controls(exec_list *instructions, loop_state *ls);
+static inline bool
+is_break(ir_instruction *ir)
+{
+   return ir != NULL && ir->ir_type == ir_type_loop_jump &&
+      ((ir_loop_jump *) ir)->is_break();
+}
 
 
 extern bool
 unroll_loops(exec_list *instructions, loop_state *ls,
              const struct gl_shader_compiler_options *options);
-
-ir_rvalue *
-find_initial_value(ir_loop *loop, ir_variable *var);
-
-int
-calculate_iterations(ir_rvalue *from, ir_rvalue *to, ir_rvalue *increment,
-		     enum ir_expression_operation op);
 
 
 /**
@@ -71,7 +55,7 @@ public:
    class loop_variable *get(const ir_variable *);
    class loop_variable *insert(ir_variable *);
    class loop_variable *get_or_insert(ir_variable *, bool in_assignee);
-   class loop_terminator *insert(ir_if *);
+   class loop_terminator *insert(ir_if *, bool continue_from_then);
 
 
    /**
@@ -226,6 +210,9 @@ public:
     * terminate the loop (if that is a fixed value).  Otherwise -1.
     */
    int iterations;
+
+   /* Does the if continue from the then branch or the else branch */
+   bool continue_from_then;
 };
 
 

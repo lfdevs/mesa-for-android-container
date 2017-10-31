@@ -452,6 +452,30 @@ pack_ubyte_a1b5g5r5_unorm(const GLubyte src[4], void *dst)
 }
 
 static inline void
+pack_ubyte_x1b5g5r5_unorm(const GLubyte src[4], void *dst)
+{
+      
+               
+
+      uint8_t b =
+            _mesa_unorm_to_unorm(src[2], 8, 5);
+      
+
+      uint8_t g =
+            _mesa_unorm_to_unorm(src[1], 8, 5);
+      
+
+      uint8_t r =
+            _mesa_unorm_to_unorm(src[0], 8, 5);
+
+      uint16_t d = 0;
+                     d |= PACK(b, 1, 5);
+         d |= PACK(g, 6, 5);
+         d |= PACK(r, 11, 5);
+      (*(uint16_t *)dst) = d;
+}
+
+static inline void
 pack_ubyte_b5g5r5a1_unorm(const GLubyte src[4], void *dst)
 {
       
@@ -3635,7 +3659,7 @@ pack_ubyte_r11g11b10_float(const GLubyte src[4], void *dst)
 
 /* uint packing functions */
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                
 static inline void
 pack_uint_a8b8g8r8_uint(const GLuint src[4], void *dst)
 {
@@ -5502,6 +5526,30 @@ pack_float_a1b5g5r5_unorm(const GLfloat src[4], void *dst)
 }
 
 static inline void
+pack_float_x1b5g5r5_unorm(const GLfloat src[4], void *dst)
+{
+      
+               
+
+      uint8_t b =
+            _mesa_float_to_unorm(src[2], 5);
+      
+
+      uint8_t g =
+            _mesa_float_to_unorm(src[1], 5);
+      
+
+      uint8_t r =
+            _mesa_float_to_unorm(src[0], 5);
+
+      uint16_t d = 0;
+                     d |= PACK(b, 1, 5);
+         d |= PACK(g, 6, 5);
+         d |= PACK(r, 11, 5);
+      (*(uint16_t *)dst) = d;
+}
+
+static inline void
 pack_float_b5g5r5a1_unorm(const GLfloat src[4], void *dst)
 {
       
@@ -7267,6 +7315,9 @@ _mesa_get_pack_ubyte_rgba_function(mesa_format format)
    case MESA_FORMAT_A1B5G5R5_UNORM:
       return pack_ubyte_a1b5g5r5_unorm;
 
+   case MESA_FORMAT_X1B5G5R5_UNORM:
+      return pack_ubyte_x1b5g5r5_unorm;
+
    case MESA_FORMAT_B5G5R5A1_UNORM:
       return pack_ubyte_b5g5r5a1_unorm;
 
@@ -7810,6 +7861,9 @@ _mesa_get_pack_float_rgba_function(mesa_format format)
    case MESA_FORMAT_A1B5G5R5_UNORM:
       return pack_float_a1b5g5r5_unorm;
 
+   case MESA_FORMAT_X1B5G5R5_UNORM:
+      return pack_float_x1b5g5r5_unorm;
+
    case MESA_FORMAT_B5G5R5A1_UNORM:
       return pack_float_b5g5r5a1_unorm;
 
@@ -8195,6 +8249,13 @@ _mesa_pack_ubyte_rgba_row(mesa_format format, GLuint n,
    case MESA_FORMAT_A1B5G5R5_UNORM:
       for (i = 0; i < n; ++i) {
          pack_ubyte_a1b5g5r5_unorm(src[i], d);
+         d += 2;
+      }
+      break;
+
+   case MESA_FORMAT_X1B5G5R5_UNORM:
+      for (i = 0; i < n; ++i) {
+         pack_ubyte_x1b5g5r5_unorm(src[i], d);
          d += 2;
       }
       break;
@@ -9341,7 +9402,7 @@ _mesa_pack_uint_rgba_row(mesa_format format, GLuint n,
    GLubyte *d = dst;
 
    switch (format) {
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                
    case MESA_FORMAT_A8B8G8R8_UINT:
       for (i = 0; i < n; ++i) {
          pack_uint_a8b8g8r8_uint(src[i], d);
@@ -9984,6 +10045,13 @@ _mesa_pack_float_rgba_row(mesa_format format, GLuint n,
    case MESA_FORMAT_A1B5G5R5_UNORM:
       for (i = 0; i < n; ++i) {
          pack_float_a1b5g5r5_unorm(src[i], d);
+         d += 2;
+      }
+      break;
+
+   case MESA_FORMAT_X1B5G5R5_UNORM:
+      for (i = 0; i < n; ++i) {
+         pack_float_x1b5g5r5_unorm(src[i], d);
          d += 2;
       }
       break;

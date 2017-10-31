@@ -513,6 +513,7 @@ static const struct opc_info {
    OPC(AND),
    OPC(XOR),
    OPC(NOT),
+   OPC(DP2),
 };
 
 static void

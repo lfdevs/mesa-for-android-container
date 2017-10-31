@@ -399,7 +399,7 @@ V3D21_STORE_FULL_RESOLUTION_TILE_BUFFER_unpack(const uint8_t * restrict cl,
                                                struct V3D21_STORE_FULL_RESOLUTION_TILE_BUFFER * restrict values)
 {
    values->opcode = __gen_unpack_uint(cl, 0, 7);
-   values->address = __gen_unpack_address(cl, 8, 39);
+   values->address = __gen_unpack_address(cl, 12, 39);
    values->last_tile = __gen_unpack_uint(cl, 11, 11);
    values->disable_clear_on_write = __gen_unpack_uint(cl, 10, 10);
    values->disable_z_stencil_buffer_write = __gen_unpack_uint(cl, 9, 9);
@@ -445,7 +445,7 @@ V3D21_RE_LOAD_FULL_RESOLUTION_TILE_BUFFER_unpack(const uint8_t * restrict cl,
                                                  struct V3D21_RE_LOAD_FULL_RESOLUTION_TILE_BUFFER * restrict values)
 {
    values->opcode = __gen_unpack_uint(cl, 0, 7);
-   values->address = __gen_unpack_address(cl, 8, 39);
+   values->address = __gen_unpack_address(cl, 12, 39);
    values->disable_z_stencil_buffer_read = __gen_unpack_uint(cl, 9, 9);
    values->disable_color_buffer_read = __gen_unpack_uint(cl, 8, 8);
 }
@@ -523,7 +523,7 @@ V3D21_STORE_TILE_BUFFER_GENERAL_unpack(const uint8_t * restrict cl,
                                        struct V3D21_STORE_TILE_BUFFER_GENERAL * restrict values)
 {
    values->opcode = __gen_unpack_uint(cl, 0, 7);
-   values->memory_base_address_of_frame_tile_dump_buffer = __gen_unpack_address(cl, 24, 55);
+   values->memory_base_address_of_frame_tile_dump_buffer = __gen_unpack_address(cl, 28, 55);
    values->last_tile_of_frame = __gen_unpack_uint(cl, 27, 27);
    values->disable_vg_mask_buffer_dump = __gen_unpack_uint(cl, 26, 26);
    values->disable_z_stencil_buffer_dump = __gen_unpack_uint(cl, 25, 25);
@@ -602,7 +602,7 @@ V3D21_LOAD_TILE_BUFFER_GENERAL_unpack(const uint8_t * restrict cl,
                                       struct V3D21_LOAD_TILE_BUFFER_GENERAL * restrict values)
 {
    values->opcode = __gen_unpack_uint(cl, 0, 7);
-   values->memory_base_address_of_frame_tile_dump_buffer = __gen_unpack_address(cl, 24, 55);
+   values->memory_base_address_of_frame_tile_dump_buffer = __gen_unpack_address(cl, 28, 55);
    values->disable_vg_mask_buffer_load = __gen_unpack_uint(cl, 26, 26);
    values->disable_z_stencil_buffer_load = __gen_unpack_uint(cl, 25, 25);
    values->disable_color_buffer_load = __gen_unpack_uint(cl, 24, 24);
@@ -1150,8 +1150,8 @@ V3D21_CLIP_WINDOW_unpack(const uint8_t * restrict cl,
 
 struct V3D21_VIEWPORT_OFFSET {
    uint32_t                             opcode;
-   int32_t                              viewport_centre_y_coordinate;
-   int32_t                              viewport_centre_x_coordinate;
+   float                                viewport_centre_y_coordinate;
+   float                                viewport_centre_x_coordinate;
 };
 
 static inline void
@@ -1160,13 +1160,13 @@ V3D21_VIEWPORT_OFFSET_pack(__gen_user_data *data, uint8_t * restrict cl,
 {
    cl[ 0] = __gen_uint(values->opcode, 0, 7);
 
-   cl[ 1] = __gen_sint(values->viewport_centre_x_coordinate, 0, 15);
+   cl[ 1] = __gen_sfixed(values->viewport_centre_x_coordinate, 0, 15, 4);
 
-   cl[ 2] = __gen_sint(values->viewport_centre_x_coordinate, 0, 15) >> 8;
+   cl[ 2] = __gen_sfixed(values->viewport_centre_x_coordinate, 0, 15, 4) >> 8;
 
-   cl[ 3] = __gen_sint(values->viewport_centre_y_coordinate, 0, 15);
+   cl[ 3] = __gen_sfixed(values->viewport_centre_y_coordinate, 0, 15, 4);
 
-   cl[ 4] = __gen_sint(values->viewport_centre_y_coordinate, 0, 15) >> 8;
+   cl[ 4] = __gen_sfixed(values->viewport_centre_y_coordinate, 0, 15, 4) >> 8;
 
 }
 
@@ -1177,8 +1177,8 @@ V3D21_VIEWPORT_OFFSET_unpack(const uint8_t * restrict cl,
                              struct V3D21_VIEWPORT_OFFSET * restrict values)
 {
    values->opcode = __gen_unpack_uint(cl, 0, 7);
-   values->viewport_centre_y_coordinate = __gen_unpack_sint(cl, 24, 39);
-   values->viewport_centre_x_coordinate = __gen_unpack_sint(cl, 8, 23);
+   values->viewport_centre_y_coordinate = __gen_unpack_sfixed(cl, 24, 39, 4);
+   values->viewport_centre_x_coordinate = __gen_unpack_sfixed(cl, 8, 23, 4);
 }
 #endif
 
@@ -1520,7 +1520,9 @@ V3D21_GEM_RELOCATIONS_unpack(const uint8_t * restrict cl,
 #endif
 
 
-#define V3D21_SHADER_RECORD_header
+#define V3D21_SHADER_RECORD_header              \
+
+
 struct V3D21_SHADER_RECORD {
    bool                                 fragment_shader_is_single_threaded;
    bool                                 point_size_included_in_shaded_vertex_data;
@@ -1639,7 +1641,9 @@ V3D21_SHADER_RECORD_unpack(const uint8_t * restrict cl,
 #endif
 
 
-#define V3D21_ATTRIBUTE_RECORD_header
+#define V3D21_ATTRIBUTE_RECORD_header           \
+
+
 struct V3D21_ATTRIBUTE_RECORD {
    __gen_address_type                   address;
    uint32_t                             number_of_bytes_minus_1;

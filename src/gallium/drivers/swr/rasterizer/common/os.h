@@ -220,12 +220,6 @@ void *AlignedMalloc(unsigned int size, unsigned int alignment)
     return ret;
 }
 
-inline
-unsigned char _bittest(const LONG *a, LONG b)
-{
-    return ((*(unsigned *)(a) & (1 << b)) != 0);
-}
-
 static inline
 void AlignedFree(void* p)
 {

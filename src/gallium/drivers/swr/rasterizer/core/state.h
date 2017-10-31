@@ -29,6 +29,7 @@
 
 #include "common/formats.h"
 #include "common/intrin.h"
+using gfxptr_t = unsigned long long;
 #include <functional>
 #include <algorithm>
 
@@ -205,6 +206,13 @@ struct simd16vertex
 };
 
 #endif
+
+template<typename SIMD_T>
+struct SIMDVERTEX_T
+{
+    typename SIMD_T::Vec4               attrib[SWR_VTX_NUM_SLOTS];
+};
+
 //////////////////////////////////////////////////////////////////////////
 /// SWR_VS_CONTEXT
 /// @brief Input to vertex shader
@@ -293,13 +301,12 @@ struct SWR_DS_CONTEXT
 /////////////////////////////////////////////////////////////////////////
 struct SWR_GS_CONTEXT
 {
-    simdvertex vert[MAX_NUM_VERTS_PER_PRIM]; // IN: input primitive data for SIMD prims
-    simdscalari PrimitiveID;        // IN: input primitive ID generated from the draw call
-    uint32_t InstanceID;            // IN: input instance ID
-    simdscalari mask;               // IN: Active mask for shader
-    uint8_t* pStream;               // OUT: output stream (contains vertices for all output streams)
-    uint8_t* pCutOrStreamIdBuffer;  // OUT: cut or stream id buffer
-    simdscalari vertexCount;        // OUT: num vertices emitted per SIMD lane
+    simdvector* pVerts;                 // IN: input primitive data for SIMD prims
+    uint32_t inputVertStride;           // IN: input vertex stride, in attributes
+    simdscalari PrimitiveID;            // IN: input primitive ID generated from the draw call
+    uint32_t InstanceID;                // IN: input instance ID
+    simdscalari mask;                   // IN: Active mask for shader
+    uint8_t* pStreams[KNOB_SIMD_WIDTH]; // OUT: output stream (contains vertices for all output streams)
 };
 
 struct PixelPositions
@@ -506,7 +513,7 @@ enum SWR_AUX_MODE
 //////////////////////////////////////////////////////////////////////////
 struct SWR_SURFACE_STATE
 {
-    uint8_t *pBaseAddress;
+    gfxptr_t xpBaseAddress;
     SWR_SURFACE_TYPE type;  // @llvm_enum
     SWR_FORMAT format;      // @llvm_enum
     uint32_t width;
@@ -529,7 +536,7 @@ struct SWR_SURFACE_STATE
 
     uint32_t lodOffsets[2][15]; // lod offsets for sampled surfaces
 
-    uint8_t *pAuxBaseAddress;   // Used for compression, append/consume counter, etc.
+    gfxptr_t xpAuxBaseAddress;   // Used for compression, append/consume counter, etc.
     SWR_AUX_MODE auxMode;      // @llvm_enum
 
 
@@ -577,6 +584,12 @@ struct SWR_FETCH_CONTEXT
     uint32_t StartInstance;                     // IN: start instance
     simdscalari VertexID;                       // OUT: vector of vertex IDs
     simdscalari CutMask;                        // OUT: vector mask of indices which have the cut index value
+#if USE_SIMD16_SHADERS
+//    simd16scalari VertexID;                     // OUT: vector of vertex IDs
+//    simd16scalari CutMask;                      // OUT: vector mask of indices which have the cut index value
+    simdscalari VertexID2;                      // OUT: vector of vertex IDs
+    simdscalari CutMask2;                       // OUT: vector mask of indices which have the cut index value
+#endif
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -700,30 +713,56 @@ struct SWR_GS_STATE
 {
     bool gsEnable;
 
-    // number of input attributes per vertex. used by the frontend to
+    // Number of input attributes per vertex. Used by the frontend to
     // optimize assembling primitives for GS
     uint32_t numInputAttribs;
 
-    // output topology - can be point, tristrip, or linestrip
+    // Stride of incoming verts in attributes
+    uint32_t inputVertStride;
+
+    // Output topology - can be point, tristrip, or linestrip
     PRIMITIVE_TOPOLOGY outputTopology;      // @llvm_enum
 
-    // maximum number of verts that can be emitted by a single instance of the GS
+    // Maximum number of verts that can be emitted by a single instance of the GS
     uint32_t maxNumVerts;
     
-    // instance count
+    // Instance count
     uint32_t instanceCount;
 
-    // if true, geometry shader emits a single stream, with separate cut buffer.
-    // if false, geometry shader emits vertices for multiple streams to the stream buffer, with a separate StreamID buffer
+    // If true, geometry shader emits a single stream, with separate cut buffer.
+    // If false, geometry shader emits vertices for multiple streams to the stream buffer, with a separate StreamID buffer
     // to map vertices to streams
     bool isSingleStream;
 
-    // when single stream is enabled, singleStreamID dictates which stream is being output.
+    // When single stream is enabled, singleStreamID dictates which stream is being output.
     // field ignored if isSingleStream is false
     uint32_t singleStreamID;
 
-    // Offset to the start of the attributes of the input vertices, in simdvector units
+    // Total amount of memory to allocate for one instance of the shader output in bytes
+    uint32_t allocationSize;
+
+    // Offset to the start of the attributes of the input vertices, in simdvector units, as read by the GS
     uint32_t vertexAttribOffset;
+
+    // Offset to the attributes as stored by the preceding shader stage.
+    uint32_t srcVertexAttribOffset;
+
+    // Size of the control data section which contains cut or streamID data, in simdscalar units. Should be sized to handle
+    // the maximum number of verts output by the GS. Can be 0 if there are no cuts or streamID bits.
+    uint32_t controlDataSize;
+
+    // Offset to the control data section, in bytes
+    uint32_t controlDataOffset;
+
+    // Total size of an output vertex, in simdvector units
+    uint32_t outputVertexSize;
+
+    // Offset to the start of the vertex section, in bytes
+    uint32_t outputVertexOffset;
+
+    // Set this to non-zero to indicate that the shader outputs a static number of verts. If zero, shader is
+    // expected to store the final vertex count in the first dword of the gs output stream.
+    uint32_t staticVertexCount;
 };
 
 
@@ -779,9 +818,10 @@ struct SWR_TS_STATE
     uint32_t                numHsInputAttribs;
     uint32_t                numHsOutputAttribs;
     uint32_t                numDsOutputAttribs;
+    uint32_t                dsAllocationSize;
 
     // Offset to the start of the attributes of the input vertices, in simdvector units
-    uint32_t vertexAttribOffset;
+    uint32_t                vertexAttribOffset;
 };
 
 // output merger state
@@ -830,7 +870,11 @@ static_assert(sizeof(SWR_BLEND_STATE) == 36, "Invalid SWR_BLEND_STATE size");
 //////////////////////////////////////////////////////////////////////////
 /// FUNCTION POINTERS FOR SHADERS
 
+#if USE_SIMD16_SHADERS
+typedef void(__cdecl *PFN_FETCH_FUNC)(SWR_FETCH_CONTEXT& fetchInfo, simd16vertex& out);
+#else
 typedef void(__cdecl *PFN_FETCH_FUNC)(SWR_FETCH_CONTEXT& fetchInfo, simdvertex& out);
+#endif
 typedef void(__cdecl *PFN_VERTEX_FUNC)(HANDLE hPrivateData, SWR_VS_CONTEXT* pVsContext);
 typedef void(__cdecl *PFN_HS_FUNC)(HANDLE hPrivateData, SWR_HS_CONTEXT* pHsContext);
 typedef void(__cdecl *PFN_DS_FUNC)(HANDLE hPrivateData, SWR_DS_CONTEXT* pDsContext);
@@ -842,7 +886,7 @@ typedef void(__cdecl *PFN_CPIXEL_KERNEL)(HANDLE hPrivateData, SWR_PS_CONTEXT *pC
 typedef void(__cdecl *PFN_BLEND_JIT_FUNC)(const SWR_BLEND_STATE*, 
     simdvector& vSrc, simdvector& vSrc1, simdscalar& vSrc0Alpha, uint32_t sample, 
     uint8_t* pDst, simdvector& vResult, simdscalari* vOMask, simdscalari* vCoverageMask);
-typedef simdscalar(*PFN_QUANTIZE_DEPTH)(simdscalar);
+typedef simdscalar(*PFN_QUANTIZE_DEPTH)(simdscalar const &);
 
 
 
@@ -1018,10 +1062,6 @@ struct SWR_RASTSTATE
     uint32_t pixelLocation;     // UL or Center
     SWR_MULTISAMPLE_POS samplePositions;    // @llvm_struct
     bool bIsCenterPattern;   // @llvm_enum
-
-    // user clip/cull distance enables
-    uint8_t cullDistanceMask;
-    uint8_t clipDistanceMask;
 };
 
 
@@ -1059,6 +1099,13 @@ struct SWR_BACKEND_STATE
     
 	// Offset to the start of the attributes of the input vertices, in simdvector units
     uint32_t vertexAttribOffset;
+
+    // User clip/cull distance enables
+    uint8_t cullDistanceMask;
+    uint8_t clipDistanceMask;
+
+    // Offset to clip/cull attrib section of the vertex, in simdvector units
+    uint32_t vertexClipCullOffset;
 };
 
 

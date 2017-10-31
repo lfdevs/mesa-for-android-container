@@ -57,6 +57,12 @@ Value* VGATHERDD(Value* src, Value* pBase, Value* indices, Value* mask, Value* s
     return CALL(pFunc, std::initializer_list<Value*>{src, pBase, indices, mask, scale});
 }
 
+Value* VPSRLI(Value* src, Value* imm)
+{
+    Function *pFunc = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_avx2_psrli_d);
+    return CALL(pFunc, std::initializer_list<Value*>{src, imm});
+}
+
 Value* VSQRTPS(Value* a)
 {
     Function *pFunc = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_avx_sqrt_ps_256);

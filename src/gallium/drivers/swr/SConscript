@@ -54,7 +54,7 @@ env.CodeGenerate(
     command = python_cmd + ' $SCRIPT --output $TARGET --gen_h'
 )
 Depends('rasterizer/codegen/gen_knobs.h',
-        swrroot + 'rasterizer/codegen/templates/gen_knobs.cpp')
+        swrroot + 'rasterizer/codegen/templates/gen_knobs.h')
 
 env.CodeGenerate(
     target = 'rasterizer/jitter/gen_state_llvm.h',
@@ -136,8 +136,7 @@ Depends('rasterizer/jitter/gen_state_llvm.h',
 # 2 canEarlyZ
 backendPixelRateFileCount = 4
 backendPixelRateFilePat = "rasterizer/core/backends/gen_BackendPixelRate%s.cpp"
-backendPixelRateFiles = map(lambda x: backendPixelRateFilePat % x,
-                            range(0, backendPixelRateFileCount))
+backendPixelRateFiles = list(backendPixelRateFilePat % x for x in range(0, backendPixelRateFileCount))
 env.CodeGenerate(
     target = 'rasterizer/core/backends/gen_BackendPixelRate.hpp',
     script = swrroot + 'rasterizer/codegen/gen_backends.py',
@@ -158,8 +157,7 @@ Depends(backendPixelRateFiles,
 # 2 RasterScissorEdges
 genRasterizerFileCount = 4
 genRasterizerFilePat = "rasterizer/core/backends/gen_rasterizer%s.cpp"
-genRasterizerFiles = map(lambda x: genRasterizerFilePat % x,
-                         range(0, genRasterizerFileCount))
+genRasterizerFiles = list(genRasterizerFilePat % x for x in range(0, genRasterizerFileCount))
 env.CodeGenerate(
     target = 'rasterizer/core/backends/gen_rasterizer.hpp',
     script = swrroot + 'rasterizer/codegen/gen_backends.py',

@@ -2588,8 +2588,8 @@ void PaRectListSingle0(
 }
 
 PA_STATE_OPT::PA_STATE_OPT(DRAW_CONTEXT *in_pDC, uint32_t in_numPrims, uint8_t* pStream, uint32_t in_streamSizeInVerts, 
-    uint32_t in_vertexStride, bool in_isStreaming, PRIMITIVE_TOPOLOGY topo) : 
-    PA_STATE(in_pDC, pStream, in_streamSizeInVerts, in_vertexStride), numPrims(in_numPrims), numPrimsComplete(0), numSimdPrims(0), 
+    uint32_t in_vertexStride, bool in_isStreaming, uint32_t numVertsPerPrim, PRIMITIVE_TOPOLOGY topo) : 
+    PA_STATE(in_pDC, pStream, in_streamSizeInVerts, in_vertexStride, numVertsPerPrim), numPrims(in_numPrims), numPrimsComplete(0), numSimdPrims(0), 
     cur(0), prev(0), first(0), counter(0), reset(false), pfnPaFunc(nullptr), isStreaming(in_isStreaming)
 {
     const API_STATE& state = GetApiState(pDC);

@@ -49,8 +49,6 @@ _eglReturnFalse(void)
 void
 _eglInitDriverFallbacks(_EGLDriver *drv)
 {
-   memset(&drv->API, 0, sizeof(drv->API));
-
    /* the driver has to implement these */
    drv->API.Initialize = NULL;
    drv->API.Terminate = NULL;

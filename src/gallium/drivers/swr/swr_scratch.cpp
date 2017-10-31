@@ -28,8 +28,6 @@
 #include "swr_fence_work.h"
 #include "api.h"
 
-#define SCRATCH_SINGLE_ALLOCATION_LIMIT 2048
-
 void *
 swr_copy_to_scratch_space(struct swr_context *ctx,
                           struct swr_scratch_space *space,
@@ -40,40 +38,35 @@ swr_copy_to_scratch_space(struct swr_context *ctx,
    assert(space);
    assert(size);
 
-   if (size >= SCRATCH_SINGLE_ALLOCATION_LIMIT) {
-      /* Use per draw SwrAllocDrawContextMemory for larger copies */
-      ptr = ctx->api.pfnSwrAllocDrawContextMemory(ctx->swrContext, size, 4);
-   } else {
-      /* Allocate enough so that MAX_DRAWS_IN_FLIGHT sets fit. */
-      unsigned int max_size_in_flight = size * KNOB_MAX_DRAWS_IN_FLIGHT;
+   /* Allocate enough so that MAX_DRAWS_IN_FLIGHT sets fit. */
+   uint32_t max_size_in_flight = size * ctx->max_draws_in_flight;
 
-      /* Need to grow space */
-      if (max_size_in_flight > space->current_size) {
-         space->current_size = max_size_in_flight;
+   /* Need to grow space */
+   if (max_size_in_flight > space->current_size) {
+      space->current_size = max_size_in_flight;
 
-         if (space->base) {
-            /* defer delete, use aligned-free */
-            struct swr_screen *screen = swr_screen(ctx->pipe.screen);
-            swr_fence_work_free(screen->flush_fence, space->base, true);
-            space->base = NULL;
-         }
-
-         if (!space->base) {
-            space->base = (uint8_t *)AlignedMalloc(space->current_size, 
-                                                   sizeof(void *));
-            space->head = (void *)space->base;
-         }
+      if (space->base) {
+         /* defer delete, use aligned-free */
+         struct swr_screen *screen = swr_screen(ctx->pipe.screen);
+         swr_fence_work_free(screen->flush_fence, space->base, true);
+         space->base = NULL;
       }
 
-      /* Wrap */
-      if (((uint8_t *)space->head + size)
-          >= ((uint8_t *)space->base + space->current_size)) {
-         space->head = space->base;
+      if (!space->base) {
+         space->base = (uint8_t *)AlignedMalloc(space->current_size,
+                                                sizeof(void *));
+         space->head = (void *)space->base;
       }
-
-      ptr = space->head;
-      space->head = (uint8_t *)space->head + size;
    }
+
+   /* Wrap */
+   if (((uint8_t *)space->head + size)
+       >= ((uint8_t *)space->base + space->current_size)) {
+      space->head = space->base;
+   }
+
+   ptr = space->head;
+   space->head = (uint8_t *)space->head + size;
 
    /* Copy user_buffer to scratch */
    if (user_buffer)

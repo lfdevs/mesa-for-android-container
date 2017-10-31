@@ -47,42 +47,44 @@ anv_loge(const char *format, ...)
 void
 anv_loge_v(const char *format, va_list va)
 {
-   fprintf(stderr, "vk: error: ");
-   vfprintf(stderr, format, va);
-   fprintf(stderr, "\n");
+   intel_loge_v(format, va);
 }
 
-void anv_printflike(3, 4)
-__anv_finishme(const char *file, int line, const char *format, ...)
+void anv_printflike(6, 7)
+__anv_perf_warn(struct anv_instance *instance, const void *object,
+                VkDebugReportObjectTypeEXT type,
+                const char *file, int line, const char *format, ...)
 {
    va_list ap;
    char buffer[256];
+   char report[256];
 
    va_start(ap, format);
    vsnprintf(buffer, sizeof(buffer), format, ap);
    va_end(ap);
 
-   fprintf(stderr, "%s:%d: FINISHME: %s\n", file, line, buffer);
-}
+   snprintf(report, sizeof(report), "%s: %s", file, buffer);
 
-void anv_printflike(3, 4)
-__anv_perf_warn(const char *file, int line, const char *format, ...)
-{
-   va_list ap;
-   char buffer[256];
+   anv_debug_report(instance,
+                    VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT,
+                    type,
+                    (uint64_t) (uintptr_t) object,
+                    line,
+                    0,
+                    "anv",
+                    report);
 
-   va_start(ap, format);
-   vsnprintf(buffer, sizeof(buffer), format, ap);
-   va_end(ap);
-
-   fprintf(stderr, "%s:%d: PERF: %s\n", file, line, buffer);
+   intel_logw("%s:%d: PERF: %s", file, line, buffer);
 }
 
 VkResult
-__vk_errorf(VkResult error, const char *file, int line, const char *format, ...)
+__vk_errorf(struct anv_instance *instance, const void *object,
+                     VkDebugReportObjectTypeEXT type, VkResult error,
+                     const char *file, int line, const char *format, ...)
 {
    va_list ap;
    char buffer[256];
+   char report[256];
 
    const char *error_str = vk_Result_to_str(error);
 
@@ -91,10 +93,22 @@ __vk_errorf(VkResult error, const char *file, int line, const char *format, ...)
       vsnprintf(buffer, sizeof(buffer), format, ap);
       va_end(ap);
 
-      fprintf(stderr, "%s:%d: %s (%s)\n", file, line, buffer, error_str);
+      snprintf(report, sizeof(report), "%s:%d: %s (%s)", file, line, buffer,
+               error_str);
    } else {
-      fprintf(stderr, "%s:%d: %s\n", file, line, error_str);
+      snprintf(report, sizeof(report), "%s:%d: %s", file, line, error_str);
    }
+
+   anv_debug_report(instance,
+                    VK_DEBUG_REPORT_ERROR_BIT_EXT,
+                    type,
+                    (uint64_t) (uintptr_t) object,
+                    line,
+                    0,
+                    "anv",
+                    report);
+
+   intel_loge("%s", report);
 
    if (error == VK_ERROR_DEVICE_LOST &&
        env_var_as_boolean("ANV_ABORT_ON_DEVICE_LOSS", false))

@@ -32,7 +32,7 @@
  * 
  * @sa http://en.wikipedia.org/wiki/Slab_allocation
  * 
- * @author Thomas Hellstrom <thellstom-at-vmware-dot-com>
+ * @author Thomas Hellstrom <thellstrom-at-vmware-dot-com>
  * @author Jose Fonseca <jfonseca@vmware.com>
  */
 

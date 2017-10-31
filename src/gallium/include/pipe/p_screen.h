@@ -59,6 +59,7 @@ struct pipe_transfer;
 struct pipe_box;
 struct pipe_memory_info;
 struct disk_cache;
+struct driOptionCache;
 
 
 /**
@@ -202,6 +203,23 @@ struct pipe_screen {
    struct pipe_resource * (*resource_from_user_memory)(struct pipe_screen *,
                                                        const struct pipe_resource *t,
                                                        void *user_memory);
+
+   /**
+    * Unlike pipe_resource::bind, which describes what state trackers want,
+    * resources can have much greater capabilities in practice, often implied
+    * by the tiling layout or memory placement. This function allows querying
+    * whether a capability is supported beyond what was requested by state
+    * trackers. It's also useful for querying capabilities of imported
+    * resources where the capabilities are unknown at first.
+    *
+    * Only these flags are allowed:
+    * - PIPE_BIND_SCANOUT
+    * - PIPE_BIND_CURSOR
+    * - PIPE_BIND_LINEAR
+    */
+   bool (*check_resource_capability)(struct pipe_screen *screen,
+                                     struct pipe_resource *resource,
+                                     unsigned bind);
 
    /**
     * Get a winsys_handle from a texture. Some platforms/winsys requires
@@ -357,6 +375,63 @@ struct pipe_screen {
                                   enum pipe_format format, int max,
                                   uint64_t *modifiers,
                                   unsigned int *external_only, int *count);
+
+   /**
+    * Create a memory object from a winsys handle
+    *
+    * The underlying memory is most often allocated in by a foregin API.
+    * Then the underlying memory object is then exported through interfaces
+    * compatible with EXT_external_resources.
+    *
+    * Note: For DRM_API_HANDLE_TYPE_FD handles, the caller retains ownership
+    * of the fd.
+    *
+    * \param handle  A handle representing the memory object to import
+    */
+   struct pipe_memory_object *(*memobj_create_from_handle)(struct pipe_screen *screen,
+                                                           struct winsys_handle *handle,
+                                                           bool dedicated);
+
+   /**
+    * Destroy a memory object
+    *
+    * \param memobj  The memory object to destroy
+    */
+   void (*memobj_destroy)(struct pipe_screen *screen,
+                          struct pipe_memory_object *memobj);
+
+   /**
+    * Create a texture from a memory object
+    *
+    * \param t       texture template
+    * \param memobj  The memory object used to back the texture
+    */
+   struct pipe_resource * (*resource_from_memobj)(struct pipe_screen *screen,
+                                                  const struct pipe_resource *t,
+                                                  struct pipe_memory_object *memobj,
+                                                  uint64_t offset);
+
+   /**
+    * Fill @uuid with a unique driver identifier
+    *
+    * \param uuid    pointer to a memory region of PIPE_UUID_SIZE bytes
+    */
+   void (*get_driver_uuid)(struct pipe_screen *screen, char *uuid);
+
+   /**
+    * Fill @uuid with a unique device identifier
+    *
+    * \param uuid    pointer to a memory region of PIPE_UUID_SIZE bytes
+    */
+   void (*get_device_uuid)(struct pipe_screen *screen, char *uuid);
+};
+
+
+/**
+ * Global configuration options for screen creation.
+ */
+struct pipe_screen_config {
+   const struct driOptionCache *options;
 };
 
 

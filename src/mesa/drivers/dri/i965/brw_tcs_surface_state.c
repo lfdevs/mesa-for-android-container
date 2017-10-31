@@ -41,7 +41,8 @@ brw_upload_tcs_pull_constants(struct brw_context *brw)
    struct brw_stage_state *stage_state = &brw->tcs.base;
 
    /* BRW_NEW_TESS_PROGRAMS */
-   struct brw_program *tcp = (struct brw_program *) brw->tess_ctrl_program;
+   struct brw_program *tcp =
+      (struct brw_program *) brw->programs[MESA_SHADER_TESS_CTRL];
 
    if (!tcp)
       return;
@@ -59,7 +60,6 @@ const struct brw_tracked_state brw_tcs_pull_constants = {
    .dirty = {
       .mesa = _NEW_PROGRAM_CONSTANTS,
       .brw = BRW_NEW_BATCH |
-             BRW_NEW_BLORP |
              BRW_NEW_TCS_PROG_DATA |
              BRW_NEW_TESS_PROGRAMS,
    },
@@ -85,7 +85,6 @@ const struct brw_tracked_state brw_tcs_ubo_surfaces = {
    .dirty = {
       .mesa = _NEW_PROGRAM,
       .brw = BRW_NEW_BATCH |
-             BRW_NEW_BLORP |
              BRW_NEW_TCS_PROG_DATA |
              BRW_NEW_UNIFORM_BUFFER,
    },
@@ -96,7 +95,7 @@ static void
 brw_upload_tcs_abo_surfaces(struct brw_context *brw)
 {
    /* _NEW_PROGRAM */
-   const struct gl_program *tcp = brw->tess_ctrl_program;
+   const struct gl_program *tcp = brw->programs[MESA_SHADER_TESS_CTRL];
 
    if (tcp) {
       /* BRW_NEW_TCS_PROG_DATA */
@@ -110,7 +109,6 @@ const struct brw_tracked_state brw_tcs_abo_surfaces = {
       .mesa = _NEW_PROGRAM,
       .brw = BRW_NEW_ATOMIC_BUFFER |
              BRW_NEW_BATCH |
-             BRW_NEW_BLORP |
              BRW_NEW_TCS_PROG_DATA,
    },
    .emit = brw_upload_tcs_abo_surfaces,
@@ -120,7 +118,7 @@ static void
 brw_upload_tcs_image_surfaces(struct brw_context *brw)
 {
    /* BRW_NEW_TESS_PROGRAMS */
-   const struct gl_program *tcp = brw->tess_ctrl_program;
+   const struct gl_program *tcp = brw->programs[MESA_SHADER_TESS_CTRL];
 
    if (tcp) {
       /* BRW_NEW_TCS_PROG_DATA, BRW_NEW_IMAGE_UNITS */
@@ -132,10 +130,9 @@ brw_upload_tcs_image_surfaces(struct brw_context *brw)
 const struct brw_tracked_state brw_tcs_image_surfaces = {
    .dirty = {
       .brw = BRW_NEW_BATCH |
-             BRW_NEW_BLORP |
-             BRW_NEW_FAST_CLEAR_COLOR |
-             BRW_NEW_TCS_PROG_DATA |
+             BRW_NEW_AUX_STATE |
              BRW_NEW_IMAGE_UNITS |
+             BRW_NEW_TCS_PROG_DATA |
              BRW_NEW_TESS_PROGRAMS,
    },
    .emit = brw_upload_tcs_image_surfaces,

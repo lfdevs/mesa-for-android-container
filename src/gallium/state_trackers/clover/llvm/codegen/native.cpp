@@ -115,7 +115,7 @@ namespace {
       std::unique_ptr<TargetMachine> tm {
          t->createTargetMachine(target.triple, target.cpu, "", {},
                                 compat::default_reloc_model,
-                                ::llvm::CodeModel::Default,
+                                compat::default_code_model,
                                 ::llvm::CodeGenOpt::Default) };
       if (!tm)
          fail(r_log, build_error(),

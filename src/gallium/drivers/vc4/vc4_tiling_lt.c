@@ -105,6 +105,50 @@ vc4_load_utile(void *cpu, void *gpu, uint32_t cpu_stride, uint32_t cpp)
                         : "r"(gpu), "r"(cpu), "r"(cpu + 8), "r"(cpu_stride)
                         : "q0", "q1", "q2", "q3");
         }
+#elif defined (PIPE_ARCH_AARCH64)
+	if (gpu_stride == 8) {
+                __asm__ volatile (
+                        /* Load from the GPU in one shot, no interleave, to
+                         * d0-d7.
+                         */
+                        "ld1 {v0.2d, v1.2d, v2.2d, v3.2d}, [%0]\n"
+                        /* Store each 8-byte line to cpu-side destination,
+                         * incrementing it by the stride each time.
+                         */
+                        "st1 {v0.D}[0], [%1], %2\n"
+                        "st1 {v0.D}[1], [%1], %2\n"
+                        "st1 {v1.D}[0], [%1], %2\n"
+                        "st1 {v1.D}[1], [%1], %2\n"
+                        "st1 {v2.D}[0], [%1], %2\n"
+                        "st1 {v2.D}[1], [%1], %2\n"
+                        "st1 {v3.D}[0], [%1], %2\n"
+                        "st1 {v3.D}[1], [%1]\n"
+			:
+                        : "r"(gpu), "r"(cpu), "r"(cpu_stride)
+                        : "v0", "v1", "v2", "v3");
+        } else {
+                assert(gpu_stride == 16);
+                __asm__ volatile (
+                        /* Load from the GPU in one shot, no interleave, to
+                         * d0-d7.
+                         */
+                        "ld1 {v0.2d, v1.2d, v2.2d, v3.2d}, [%0]\n"
+                        /* Store each 16-byte line in 2 parts to the cpu-side
+                         * destination.  (vld1 can only store one d-register
+                         * at a time).
+                         */
+                        "st1 {v0.D}[0], [%1], %3\n"
+                        "st1 {v0.D}[1], [%2], %3\n"
+                        "st1 {v1.D}[0], [%1], %3\n"
+                        "st1 {v1.D}[1], [%2], %3\n"
+                        "st1 {v2.D}[0], [%1], %3\n"
+                        "st1 {v2.D}[1], [%2], %3\n"
+                        "st1 {v3.D}[0], [%1]\n"
+                        "st1 {v3.D}[1], [%2]\n"
+                        :
+                        : "r"(gpu), "r"(cpu), "r"(cpu + 8), "r"(cpu_stride)
+                        : "v0", "v1", "v2", "v3");
+        }
 #else
         for (uint32_t gpu_offset = 0; gpu_offset < 64; gpu_offset += gpu_stride) {
                 memcpy(cpu, gpu + gpu_offset, gpu_stride);
@@ -159,6 +203,46 @@ vc4_store_utile(void *gpu, void *cpu, uint32_t cpu_stride, uint32_t cpp)
                         :
                         : "r"(gpu), "r"(cpu), "r"(cpu + 8), "r"(cpu_stride)
                         : "q0", "q1", "q2", "q3");
+        }
+#elif defined (PIPE_ARCH_AARCH64)
+	if (gpu_stride == 8) {
+                __asm__ volatile (
+                        /* Load each 8-byte line from cpu-side source,
+                         * incrementing it by the stride each time.
+                         */
+                        "ld1 {v0.D}[0], [%1], %2\n"
+                        "ld1 {v0.D}[1], [%1], %2\n"
+                        "ld1 {v1.D}[0], [%1], %2\n"
+                        "ld1 {v1.D}[1], [%1], %2\n"
+                        "ld1 {v2.D}[0], [%1], %2\n"
+                        "ld1 {v2.D}[1], [%1], %2\n"
+                        "ld1 {v3.D}[0], [%1], %2\n"
+                        "ld1 {v3.D}[1], [%1]\n"
+                        /* Store to the GPU in one shot, no interleave. */
+                        "st1 {v0.2d, v1.2d, v2.2d, v3.2d}, [%0]\n"
+                        :
+                        : "r"(gpu), "r"(cpu), "r"(cpu_stride)
+                        : "v0", "v1", "v2", "v3");
+        } else {
+                assert(gpu_stride == 16);
+                __asm__ volatile (
+                        /* Load each 16-byte line in 2 parts from the cpu-side
+                         * destination.  (vld1 can only store one d-register
+                         * at a time).
+                         */
+                        "ld1 {v0.D}[0], [%1], %3\n"
+                        "ld1 {v0.D}[1], [%2], %3\n"
+                        "ld1 {v1.D}[0], [%1], %3\n"
+                        "ld1 {v1.D}[1], [%2], %3\n"
+                        "ld1 {v2.D}[0], [%1], %3\n"
+                        "ld1 {v2.D}[1], [%2], %3\n"
+                        "ld1 {v3.D}[0], [%1]\n"
+                        "ld1 {v3.D}[1], [%2]\n"
+                        /* Store to the GPU in one shot, no interleave. */
+                        "st1 {v0.2d, v1.2d, v2.2d, v3.2d}, [%0]\n"
+                        :
+                        : "r"(gpu), "r"(cpu), "r"(cpu + 8), "r"(cpu_stride)
+                        : "v0", "v1", "v2", "v3");
         }
 #else
         for (uint32_t gpu_offset = 0; gpu_offset < 64; gpu_offset += gpu_stride) {

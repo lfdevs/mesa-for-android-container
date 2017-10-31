@@ -153,9 +153,9 @@ namespace SIMDImpl
             Float  z;
             Float  w;
         };
-        SIMDINLINE Float& operator[] (const int i) { return v[i]; }
-        SIMDINLINE Float const & operator[] (const int i) const { return v[i]; }
-        SIMDINLINE Vec4& operator=(Vec4 const & in)
+        SIMDINLINE Float& SIMDCALL operator[] (const int i) { return v[i]; }
+        SIMDINLINE Float const & SIMDCALL operator[] (const int i) const { return v[i]; }
+        SIMDINLINE Vec4& SIMDCALL operator=(Vec4 const & in)
         {
             v[0] = in.v[0];
             v[1] = in.v[1];
@@ -171,9 +171,9 @@ namespace SIMDImpl
         {
             SIMDINLINE Float() = default;
             SIMDINLINE Float(__m128 in) : v(in) {}
-            SIMDINLINE Float& operator=(__m128 in) { v = in; return *this; }
-            SIMDINLINE Float& operator=(Float const & in) { v = in.v; return *this; }
-            SIMDINLINE operator __m128() const { return v; }
+            SIMDINLINE Float& SIMDCALL operator=(__m128 in) { v = in; return *this; }
+            SIMDINLINE Float& SIMDCALL operator=(Float const & in) { v = in.v; return *this; }
+            SIMDINLINE SIMDCALL operator __m128() const { return v; }
 
             SIMDALIGN(__m128, 16) v;
         };
@@ -182,9 +182,10 @@ namespace SIMDImpl
         {
             SIMDINLINE Integer() = default;
             SIMDINLINE Integer(__m128i in) : v(in) {}
-            SIMDINLINE Integer& operator=(__m128i in) { v = in; return *this; }
-            SIMDINLINE Integer& operator=(Integer const & in) { v = in.v; return *this; }
-            SIMDINLINE operator __m128i() const { return v; }
+            SIMDINLINE Integer& SIMDCALL operator=(__m128i in) { v = in; return *this; }
+            SIMDINLINE Integer& SIMDCALL operator=(Integer const & in) { v = in.v; return *this; }
+            SIMDINLINE SIMDCALL operator __m128i() const { return v; }
+
             SIMDALIGN(__m128i, 16) v;
         };
 
@@ -192,9 +193,10 @@ namespace SIMDImpl
         {
             SIMDINLINE Double() = default;
             SIMDINLINE Double(__m128d in) : v(in) {}
-            SIMDINLINE Double& operator=(__m128d in) { v = in; return *this; }
-            SIMDINLINE Double& operator=(Double const & in) { v = in.v; return *this; }
-            SIMDINLINE operator __m128d() const { return v; }
+            SIMDINLINE Double& SIMDCALL operator=(__m128d in) { v = in; return *this; }
+            SIMDINLINE Double& SIMDCALL operator=(Double const & in) { v = in.v; return *this; }
+            SIMDINLINE SIMDCALL operator __m128d() const { return v; }
+
             SIMDALIGN(__m128d, 16) v;
         };
 
@@ -210,13 +212,13 @@ namespace SIMDImpl
         {
             SIMDINLINE Float() = default;
             SIMDINLINE Float(__m256 in) : v(in) {}
-            SIMDINLINE Float(SIMD128Impl::Float in_lo, SIMD128Impl::Float in_hi = _mm_setzero_ps())
+            SIMDINLINE Float(SIMD128Impl::Float const &in_lo, SIMD128Impl::Float const &in_hi = _mm_setzero_ps())
             {
                 v = _mm256_insertf128_ps(_mm256_castps128_ps256(in_lo), in_hi, 0x1);
             }
-            SIMDINLINE Float& operator=(__m256 in) { v = in; return *this; }
-            SIMDINLINE Float& operator=(Float const & in) { v = in.v; return *this; }
-            SIMDINLINE operator __m256() const { return v; }
+            SIMDINLINE Float& SIMDCALL operator=(__m256 in) { v = in; return *this; }
+            SIMDINLINE Float& SIMDCALL operator=(Float const & in) { v = in.v; return *this; }
+            SIMDINLINE SIMDCALL operator __m256() const { return v; }
 
             SIMDALIGN(__m256, 32) v;
             SIMD128Impl::Float v4[2];
@@ -226,13 +228,13 @@ namespace SIMDImpl
         {
             SIMDINLINE Integer() = default;
             SIMDINLINE Integer(__m256i in) : v(in) {}
-            SIMDINLINE Integer(SIMD128Impl::Integer in_lo, SIMD128Impl::Integer in_hi = _mm_setzero_si128())
+            SIMDINLINE Integer(SIMD128Impl::Integer const &in_lo, SIMD128Impl::Integer const &in_hi = _mm_setzero_si128())
             {
                 v = _mm256_insertf128_si256(_mm256_castsi128_si256(in_lo), in_hi, 0x1);
             }
-            SIMDINLINE Integer& operator=(__m256i in) { v = in; return *this; }
-            SIMDINLINE Integer& operator=(Integer const & in) { v = in.v; return *this; }
-            SIMDINLINE operator __m256i() const { return v; }
+            SIMDINLINE Integer& SIMDCALL operator=(__m256i in) { v = in; return *this; }
+            SIMDINLINE Integer& SIMDCALL operator=(Integer const & in) { v = in.v; return *this; }
+            SIMDINLINE SIMDCALL operator __m256i() const { return v; }
 
             SIMDALIGN(__m256i, 32) v;
             SIMD128Impl::Integer v4[2];
@@ -241,14 +243,14 @@ namespace SIMDImpl
         union Double
         {
             SIMDINLINE Double() = default;
-            SIMDINLINE Double(__m256d in) : v(in) {}
-            SIMDINLINE Double(SIMD128Impl::Double in_lo, SIMD128Impl::Double in_hi = _mm_setzero_pd())
+            SIMDINLINE Double(__m256d const &in) : v(in) {}
+            SIMDINLINE Double(SIMD128Impl::Double const &in_lo, SIMD128Impl::Double const &in_hi = _mm_setzero_pd())
             {
                 v = _mm256_insertf128_pd(_mm256_castpd128_pd256(in_lo), in_hi, 0x1);
             }
-            SIMDINLINE Double& operator=(__m256d in) { v = in; return *this; }
-            SIMDINLINE Double& operator=(Double const & in) { v = in.v; return *this; }
-            SIMDINLINE operator __m256d() const { return v; }
+            SIMDINLINE Double& SIMDCALL operator=(__m256d in) { v = in; return *this; }
+            SIMDINLINE Double& SIMDCALL operator=(Double const & in) { v = in.v; return *this; }
+            SIMDINLINE SIMDCALL operator __m256d() const { return v; }
 
             SIMDALIGN(__m256d, 32) v;
             SIMD128Impl::Double v4[2];
@@ -262,7 +264,7 @@ namespace SIMDImpl
 
     namespace SIMD512Impl
     {
-#if !defined(__AVX512F__)
+#if !(defined(__AVX512F__) || defined(_MM_K0_REG))
         // Define AVX512 types if not included via immintrin.h.
         // All data members of these types are ONLY to viewed
         // in a debugger.  Do NOT access them via code!
@@ -303,9 +305,9 @@ namespace SIMDImpl
         {
             SIMDINLINE Float() = default;
             SIMDINLINE Float(__m512 in) : v(in) {}
-            SIMDINLINE Float(SIMD256Impl::Float in_lo, SIMD256Impl::Float in_hi = _mm256_setzero_ps()) { v8[0] = in_lo; v8[1] = in_hi; }
-            SIMDINLINE Float& operator=(__m512 in) { v = in; return *this; }
-            SIMDINLINE Float& operator=(Float const & in)
+            SIMDINLINE Float(SIMD256Impl::Float const &in_lo, SIMD256Impl::Float const &in_hi = _mm256_setzero_ps()) { v8[0] = in_lo; v8[1] = in_hi; }
+            SIMDINLINE Float& SIMDCALL operator=(__m512 in) { v = in; return *this; }
+            SIMDINLINE Float& SIMDCALL operator=(Float const & in)
             {
 #if SIMD_ARCH >= SIMD_ARCH_AVX512
                 v = in.v;
@@ -315,7 +317,7 @@ namespace SIMDImpl
 #endif
                 return *this;
             }
-            SIMDINLINE operator __m512() const { return v; }
+            SIMDINLINE SIMDCALL operator __m512() const { return v; }
 
             SIMDALIGN(__m512, SIMD_ALIGNMENT_BYTES) v;
             SIMD256Impl::Float v8[2];
@@ -325,9 +327,9 @@ namespace SIMDImpl
         {
             SIMDINLINE Integer() = default;
             SIMDINLINE Integer(__m512i in) : v(in) {}
-            SIMDINLINE Integer(SIMD256Impl::Integer in_lo, SIMD256Impl::Integer in_hi = _mm256_setzero_si256()) { v8[0] = in_lo; v8[1] = in_hi; }
-            SIMDINLINE Integer& operator=(__m512i in) { v = in; return *this; }
-            SIMDINLINE Integer& operator=(Integer const & in)
+            SIMDINLINE Integer(SIMD256Impl::Integer const &in_lo, SIMD256Impl::Integer const &in_hi = _mm256_setzero_si256()) { v8[0] = in_lo; v8[1] = in_hi; }
+            SIMDINLINE Integer& SIMDCALL operator=(__m512i in) { v = in; return *this; }
+            SIMDINLINE Integer& SIMDCALL operator=(Integer const & in)
             {
 #if SIMD_ARCH >= SIMD_ARCH_AVX512
                 v = in.v;
@@ -338,7 +340,7 @@ namespace SIMDImpl
                 return *this;
             }
 
-            SIMDINLINE operator __m512i() const { return v; }
+            SIMDINLINE SIMDCALL operator __m512i() const { return v; }
 
             SIMDALIGN(__m512i, SIMD_ALIGNMENT_BYTES) v;
             SIMD256Impl::Integer v8[2];
@@ -348,9 +350,9 @@ namespace SIMDImpl
         {
             SIMDINLINE Double() = default;
             SIMDINLINE Double(__m512d in) : v(in) {}
-            SIMDINLINE Double(SIMD256Impl::Double in_lo, SIMD256Impl::Double in_hi = _mm256_setzero_pd()) { v8[0] = in_lo; v8[1] = in_hi; }
-            SIMDINLINE Double& operator=(__m512d in) { v = in; return *this; }
-            SIMDINLINE Double& operator=(Double const & in)
+            SIMDINLINE Double(SIMD256Impl::Double const &in_lo, SIMD256Impl::Double const &in_hi = _mm256_setzero_pd()) { v8[0] = in_lo; v8[1] = in_hi; }
+            SIMDINLINE Double& SIMDCALL operator=(__m512d in) { v = in; return *this; }
+            SIMDINLINE Double& SIMDCALL operator=(Double const & in)
             {
 #if SIMD_ARCH >= SIMD_ARCH_AVX512
                 v = in.v;
@@ -361,7 +363,7 @@ namespace SIMDImpl
                 return *this;
             }
 
-            SIMDINLINE operator __m512d() const { return v; }
+            SIMDINLINE SIMDCALL operator __m512d() const { return v; }
 
             SIMDALIGN(__m512d, SIMD_ALIGNMENT_BYTES) v;
             SIMD256Impl::Double v8[2];

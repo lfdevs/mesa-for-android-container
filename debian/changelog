@@ -1,3 +1,20 @@
+mesa (17.3.0~rc2-1) experimental; urgency=medium
+
+  * New upstream release candidate.
+  * Bump libdrm-dev build-dep to 2.4.85 per configure.ac.
+  * rules: Replace deprecated --disable-omx with --disable-omx-bellagio.
+  * Update libgbm1.symbols.
+  * Update extend-diff-ignore.
+
+ -- Andreas Boll <andreas.boll.dev@gmail.com>  Tue, 31 Oct 2017 14:12:08 +0100
+
+mesa (17.2.4-1) unstable; urgency=medium
+
+  * New upstream release.
+  * Build with dh_libva (Closes: #879064).
+
+ -- Andreas Boll <andreas.boll.dev@gmail.com>  Tue, 31 Oct 2017 12:19:49 +0100
+
 mesa (17.2.3-1) unstable; urgency=medium
 
   * New upstream bugfix release.

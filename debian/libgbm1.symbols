@@ -3,6 +3,7 @@ libgbm.so.1 libgbm1 #MINVER#
  gbm_bo_create@Base 7.11~1
  gbm_bo_create_with_modifiers@Base 17.1.0~rc2
  gbm_bo_destroy@Base 7.11~1
+ gbm_bo_get_bpp@Base 17.3.0~rc1
  gbm_bo_get_device@Base 8.1~0
  gbm_bo_get_fd@Base 10.2~0
  gbm_bo_get_format@Base 8.1~0
@@ -25,6 +26,7 @@ libgbm.so.1 libgbm1 #MINVER#
  gbm_device_destroy@Base 7.11~1
  gbm_device_get_backend_name@Base 7.11~1
  gbm_device_get_fd@Base 7.11~1
+ gbm_device_get_format_modifier_plane_count@Base 17.3.0~rc1
  gbm_device_is_format_supported@Base 8.1~0
  gbm_surface_create@Base 8.1~0
  gbm_surface_create_with_modifiers@Base 17.1.0~rc2

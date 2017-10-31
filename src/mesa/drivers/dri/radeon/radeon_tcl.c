@@ -39,6 +39,8 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "main/enums.h"
 #include "main/state.h"
 
+#include "util/macros.h"
+
 #include "vbo/vbo.h"
 #include "tnl/tnl.h"
 #include "tnl/t_pipeline.h"
@@ -297,7 +299,7 @@ static GLuint radeonEnsureEmitSize( struct gl_context * ctx , GLuint inputs )
     VERT_BIT_FOG
   };
   /* predict number of aos to emit */
-  for (i=0; i < sizeof(flags_to_check)/sizeof(flags_to_check[0]); ++i)
+  for (i=0; i < ARRAY_SIZE(flags_to_check); ++i)
   {
     if (inputs & flags_to_check[i])
       ++nr_aos;

@@ -272,12 +272,12 @@ void BackendNullPS(DRAW_CONTEXT *pDC, uint32_t workerId, uint32_t x, uint32_t y,
                     AR_END(BEBarycentric, 0);
 
                     // interpolate user clip distance if available
-                    if (state.rastState.clipDistanceMask)
+                    if (state.backendState.clipDistanceMask)
                     {
-                        coverageMask &= ~ComputeUserClipMask(state.rastState.clipDistanceMask, work.pUserClipBuffer, psContext.vI.sample, psContext.vJ.sample);
+                        coverageMask &= ~ComputeUserClipMask(state.backendState.clipDistanceMask, work.pUserClipBuffer, psContext.vI.sample, psContext.vJ.sample);
                     }
 
-                    simdscalar vCoverageMask = vMask(coverageMask);
+                    simdscalar vCoverageMask = _simd_vmask_ps(coverageMask);
                     simdscalar stencilPassMask = vCoverageMask;
 
                     AR_BEGIN(BEEarlyDepthTest, pDC->drawId);

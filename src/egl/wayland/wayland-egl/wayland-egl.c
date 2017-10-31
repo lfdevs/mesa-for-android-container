@@ -30,9 +30,15 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <wayland-client.h>
 #include "wayland-egl.h"
-#include "wayland-egl-priv.h"
+#include "wayland-egl-backend.h"
+
+/* GCC visibility */
+#if defined(__GNUC__)
+#define WL_EGL_EXPORT __attribute__ ((visibility("default")))
+#else
+#define WL_EGL_EXPORT
+#endif
 
 WL_EGL_EXPORT void
 wl_egl_window_resize(struct wl_egl_window *egl_window,
@@ -55,26 +61,32 @@ WL_EGL_EXPORT struct wl_egl_window *
 wl_egl_window_create(struct wl_surface *surface,
 		     int width, int height)
 {
-	struct wl_egl_window _INIT_ = { .version = WL_EGL_WINDOW_VERSION };
 	struct wl_egl_window *egl_window;
 
 	if (width <= 0 || height <= 0)
 		return NULL;
 
-	egl_window = malloc(sizeof *egl_window);
+	egl_window = calloc(1, sizeof *egl_window);
 	if (!egl_window)
 		return NULL;
 
-	memcpy(egl_window, &_INIT_, sizeof *egl_window);
+	/* Cast away the constness to set the version number.
+	 *
+	 * We want the const notation since it gives an explicit
+	 * feedback to the backend implementation, should it try to
+	 * change it.
+	 *
+	 * The latter in itself is not too surprising as these days APIs
+	 * tend to provide bidirectional version field.
+	 */
+	intptr_t *version = (intptr_t *)&egl_window->version;
+	*version = WL_EGL_WINDOW_VERSION;
 
 	egl_window->surface = surface;
-	egl_window->private = NULL;
-	egl_window->resize_callback = NULL;
-	egl_window->destroy_window_callback = NULL;
-	wl_egl_window_resize(egl_window, width, height, 0, 0);
-	egl_window->attached_width  = 0;
-	egl_window->attached_height = 0;
-	
+
+	egl_window->width  = width;
+	egl_window->height = height;
+
 	return egl_window;
 }
 

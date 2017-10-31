@@ -112,7 +112,8 @@ host_triplet = @host@
 target_triplet = @target@
 subdir = src/mesa/drivers/dri/i965
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_gnu_make.m4 \
+am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_compile_flag.m4 \
+	$(top_srcdir)/m4/ax_check_gnu_make.m4 \
 	$(top_srcdir)/m4/ax_check_python_mako_module.m4 \
 	$(top_srcdir)/m4/ax_gcc_builtin.m4 \
 	$(top_srcdir)/m4/ax_gcc_func_attribute.m4 \
@@ -145,25 +146,24 @@ am__objects_1 = brw_binding_tables.lo brw_blorp.lo brw_bufmgr.lo \
 	brw_misc_state.lo brw_nir_uniforms.lo brw_object_purgeable.lo \
 	brw_pipe_control.lo brw_performance_query.lo brw_program.lo \
 	brw_program_cache.lo brw_primitive_restart.lo brw_queryobj.lo \
-	brw_reset.lo brw_sf.lo brw_state_batch.lo brw_state_upload.lo \
+	brw_reset.lo brw_sf.lo brw_state_upload.lo \
 	brw_surface_formats.lo brw_sync.lo brw_tcs.lo \
 	brw_tcs_surface_state.lo brw_tes.lo brw_tes_surface_state.lo \
 	brw_urb.lo brw_util.lo brw_vs.lo brw_vs_surface_state.lo \
 	brw_wm.lo brw_wm_surface_state.lo gen6_clip_state.lo \
 	gen6_constant_state.lo gen6_depth_state.lo \
 	gen6_multisample_state.lo gen6_queryobj.lo \
-	gen6_sampler_state.lo gen6_sol.lo gen6_urb.lo gen7_cs_state.lo \
-	gen7_l3_state.lo gen7_misc_state.lo gen7_sol_state.lo \
-	gen7_urb.lo gen7_wm_surface_state.lo gen8_depth_state.lo \
-	gen8_multisample_state.lo gen8_surface_state.lo \
-	hsw_queryobj.lo hsw_sol.lo intel_batchbuffer.lo intel_blit.lo \
+	gen6_sampler_state.lo gen6_sol.lo gen6_urb.lo gen7_l3_state.lo \
+	gen7_misc_state.lo gen7_sol_state.lo gen7_urb.lo \
+	gen8_depth_state.lo gen8_multisample_state.lo hsw_queryobj.lo \
+	hsw_sol.lo intel_batchbuffer.lo intel_blit.lo \
 	intel_buffer_objects.lo intel_buffers.lo intel_copy_image.lo \
 	intel_extensions.lo intel_fbo.lo intel_mipmap_tree.lo \
 	intel_pixel_bitmap.lo intel_pixel.lo intel_pixel_copy.lo \
 	intel_pixel_draw.lo intel_pixel_read.lo intel_screen.lo \
 	intel_state.lo intel_tex.lo intel_tex_copy.lo \
-	intel_tex_image.lo intel_tex_subimage.lo intel_tex_validate.lo \
-	intel_tiled_memcpy.lo intel_upload.lo
+	intel_tex_image.lo intel_tex_validate.lo intel_tiled_memcpy.lo \
+	intel_upload.lo
 am__objects_2 = brw_oa_hsw.lo brw_oa_bdw.lo brw_oa_chv.lo \
 	brw_oa_sklgt2.lo brw_oa_sklgt3.lo brw_oa_sklgt4.lo \
 	brw_oa_bxt.lo brw_oa_kblgt2.lo brw_oa_kblgt3.lo brw_oa_glk.lo
@@ -481,9 +481,9 @@ NVVIEUX_CFLAGS = @NVVIEUX_CFLAGS@
 NVVIEUX_LIBS = @NVVIEUX_LIBS@
 OBJDUMP = @OBJDUMP@
 OBJEXT = @OBJEXT@
-OMX_CFLAGS = @OMX_CFLAGS@
-OMX_LIBS = @OMX_LIBS@
-OMX_LIB_INSTALL_DIR = @OMX_LIB_INSTALL_DIR@
+OMX_BELLAGIO_CFLAGS = @OMX_BELLAGIO_CFLAGS@
+OMX_BELLAGIO_LIBS = @OMX_BELLAGIO_LIBS@
+OMX_BELLAGIO_LIB_INSTALL_DIR = @OMX_BELLAGIO_LIB_INSTALL_DIR@
 OPENCL_LIBNAME = @OPENCL_LIBNAME@
 OPENCL_VERSION = @OPENCL_VERSION@
 OSMESA_LIB = @OSMESA_LIB@
@@ -537,6 +537,8 @@ VA_LIBS = @VA_LIBS@
 VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
 VA_MAJOR = @VA_MAJOR@
 VA_MINOR = @VA_MINOR@
+VC5_SIMULATOR_CFLAGS = @VC5_SIMULATOR_CFLAGS@
+VC5_SIMULATOR_LIBS = @VC5_SIMULATOR_LIBS@
 VDPAU_CFLAGS = @VDPAU_CFLAGS@
 VDPAU_LIBS = @VDPAU_LIBS@
 VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
@@ -548,12 +550,15 @@ VISIBILITY_CXXFLAGS = @VISIBILITY_CXXFLAGS@
 VL_CFLAGS = @VL_CFLAGS@
 VL_LIBS = @VL_LIBS@
 VULKAN_ICD_INSTALL_DIR = @VULKAN_ICD_INSTALL_DIR@
-WAYLAND_CFLAGS = @WAYLAND_CFLAGS@
-WAYLAND_LIBS = @WAYLAND_LIBS@
+WAYLAND_CLIENT_CFLAGS = @WAYLAND_CLIENT_CFLAGS@
+WAYLAND_CLIENT_LIBS = @WAYLAND_CLIENT_LIBS@
 WAYLAND_PROTOCOLS_DATADIR = @WAYLAND_PROTOCOLS_DATADIR@
 WAYLAND_SCANNER = @WAYLAND_SCANNER@
 WAYLAND_SCANNER_CFLAGS = @WAYLAND_SCANNER_CFLAGS@
 WAYLAND_SCANNER_LIBS = @WAYLAND_SCANNER_LIBS@
+WAYLAND_SERVER_CFLAGS = @WAYLAND_SERVER_CFLAGS@
+WAYLAND_SERVER_LIBS = @WAYLAND_SERVER_LIBS@
+WNO_OVERRIDE_INIT = @WNO_OVERRIDE_INIT@
 X11_INCLUDES = @X11_INCLUDES@
 XA_MAJOR = @XA_MAJOR@
 XA_MINOR = @XA_MINOR@
@@ -679,7 +684,6 @@ i965_FILES = \
 	brw_queryobj.c \
 	brw_reset.c \
 	brw_sf.c \
-	brw_state_batch.c \
 	brw_state.h \
 	brw_state_upload.c \
 	brw_structs.h \
@@ -707,15 +711,12 @@ i965_FILES = \
 	gen6_sampler_state.c \
 	gen6_sol.c \
 	gen6_urb.c \
-	gen7_cs_state.c \
 	gen7_l3_state.c \
 	gen7_misc_state.c \
 	gen7_sol_state.c \
 	gen7_urb.c \
-	gen7_wm_surface_state.c \
 	gen8_depth_state.c \
 	gen8_multisample_state.c \
-	gen8_surface_state.c \
 	hsw_queryobj.c \
 	hsw_sol.c \
 	intel_batchbuffer.c \
@@ -747,7 +748,6 @@ i965_FILES = \
 	intel_tex.h \
 	intel_tex_image.c \
 	intel_tex_obj.h \
-	intel_tex_subimage.c \
 	intel_tex_validate.c \
 	intel_tiled_memcpy.c \
 	intel_tiled_memcpy.h \
@@ -819,7 +819,7 @@ AM_CFLAGS = \
 	-I$(top_srcdir)/src/mesa/ \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
-	-I$(top_builddir)/src/mesa/drivers/dri/common \
+	-I$(top_builddir)/src/util \
 	-I$(top_srcdir)/src/mesa/drivers/dri/common \
 	-I$(top_srcdir)/src/gtest/include \
 	-I$(top_builddir)/src/compiler/glsl \
@@ -830,6 +830,7 @@ AM_CFLAGS = \
 	-I$(top_srcdir)/include/drm-uapi \
 	$(DEFINES) \
 	$(VISIBILITY_CFLAGS) \
+	$(WNO_OVERRIDE_INIT) \
 	$(LIBDRM_CFLAGS) \
 	$(VALGRIND_CFLAGS) \
 	-msse2
@@ -1018,7 +1019,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_queryobj.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_reset.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_sf.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_state_batch.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_state_upload.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_surface_formats.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_sync.Plo@am__quote@
@@ -1040,15 +1040,12 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen6_sampler_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen6_sol.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen6_urb.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen7_cs_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen7_l3_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen7_misc_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen7_sol_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen7_urb.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen7_wm_surface_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen8_depth_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen8_multisample_state.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen8_surface_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/hsw_queryobj.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/hsw_sol.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/intel_batchbuffer.Plo@am__quote@
@@ -1069,7 +1066,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/intel_tex.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/intel_tex_copy.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/intel_tex_image.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/intel_tex_subimage.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/intel_tex_validate.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/intel_tiled_memcpy.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/intel_upload.Plo@am__quote@
