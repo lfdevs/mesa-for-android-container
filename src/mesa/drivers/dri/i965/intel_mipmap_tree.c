@@ -241,6 +241,27 @@ intel_miptree_supports_hiz(const struct brw_context *brw,
    }
 }
 
+/**
+ * Return true if the format that will be used to access the miptree is
+ * CCS_E-compatible with the miptree's linear/non-sRGB format.
+ *
+ * Why use the linear format? Well, although the miptree may be specified with
+ * an sRGB format, the usage of that color space/format can be toggled. Since
+ * our HW tends to support more linear formats than sRGB ones, we use this
+ * format variant for check for CCS_E compatibility.
+ */
+static bool
+format_ccs_e_compat_with_miptree(const struct gen_device_info *devinfo,
+                                 const struct intel_mipmap_tree *mt,
+                                 enum isl_format access_format)
+{
+   assert(mt->aux_usage == ISL_AUX_USAGE_CCS_E);
+
+   mesa_format linear_format = _mesa_get_srgb_format_linear(mt->format);
+   enum isl_format isl_format = brw_isl_format_for_mesa_format(linear_format);
+   return isl_formats_are_ccs_e_compatible(devinfo, isl_format, access_format);
+}
+
 static bool
 intel_miptree_supports_ccs_e(struct brw_context *brw,
                              const struct intel_mipmap_tree *mt)
@@ -2549,6 +2570,7 @@ can_texture_with_ccs(struct brw_context *brw,
    if (mt->aux_usage != ISL_AUX_USAGE_CCS_E)
       return false;
 
+   /* TODO: Replace with format_ccs_e_compat_with_miptree for better perf. */
    if (!isl_formats_are_ccs_e_compatible(&brw->screen->devinfo,
                                          mt->surf.format, view_format)) {
       perf_debug("Incompatible sampling format (%s) for rbc (%s)\n",
@@ -2666,8 +2688,11 @@ intel_miptree_render_aux_usage(struct brw_context *brw,
       return mt->mcs_buf ? ISL_AUX_USAGE_CCS_D : ISL_AUX_USAGE_NONE;
 
    case ISL_AUX_USAGE_CCS_E: {
-      /* If the format supports CCS_E, then we can just use it */
-      if (isl_format_supports_ccs_e(&brw->screen->devinfo, render_format))
+      /* If the format supports CCS_E and is compatible with the miptree,
+       * then we can use it.
+       */
+      if (format_ccs_e_compat_with_miptree(&brw->screen->devinfo,
+                                           mt, render_format))
          return ISL_AUX_USAGE_CCS_E;
 
       /* Otherwise, we have to fall back to CCS_D */

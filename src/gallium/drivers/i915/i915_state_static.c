@@ -216,7 +216,7 @@ static void update_dst_buf_vars(struct i915_context *i915)
       zformat = translate_depth_format(depth_surface->format);
 
       if (is->is_i945 && tex->tiling != I915_TILE_NONE
-            && !i915->fs->info.writes_z)
+          && (i915->fs && !i915->fs->info.writes_z))
          early_z = CLASSIC_EARLY_DEPTH;
    } else
       zformat = 0;

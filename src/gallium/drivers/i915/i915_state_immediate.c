@@ -168,11 +168,13 @@ static void upload_S6(struct i915_context *i915)
 
    /* I915_NEW_BLEND
     */
-   LIS6 |= i915->blend->LIS6;
+   if (i915->blend)
+      LIS6 |= i915->blend->LIS6;
 
    /* I915_NEW_DEPTH
     */
-   LIS6 |= i915->depth_stencil->depth_LIS6;
+   if (i915->depth_stencil)
+      LIS6 |= i915->depth_stencil->depth_LIS6;
 
    set_immediate(i915, I915_IMMEDIATE_S6, LIS6);
 }

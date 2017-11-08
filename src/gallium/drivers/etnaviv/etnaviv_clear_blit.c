@@ -555,6 +555,7 @@ etna_try_rs_blit(struct pipe_context *pctx,
    }
 
    /* Set up color TS to source surface before blit, if needed */
+   bool source_ts_valid = false;
    if (src->levels[blit_info->src.level].ts_size &&
        src->levels[blit_info->src.level].ts_valid) {
       struct etna_reloc reloc;
@@ -579,6 +580,8 @@ etna_try_rs_blit(struct pipe_context *pctx,
 
       etna_set_state(ctx->stream, VIVS_TS_COLOR_CLEAR_VALUE,
                      src->levels[blit_info->src.level].clear_value);
+
+      source_ts_valid = true;
    } else {
       etna_set_state(ctx->stream, VIVS_TS_MEM_CONFIG, ts_mem_config);
    }
@@ -593,6 +596,7 @@ etna_try_rs_blit(struct pipe_context *pctx,
       .source_stride = src_lev->stride,
       .source_padded_width = src_lev->padded_width,
       .source_padded_height = src_lev->padded_height,
+      .source_ts_valid = source_ts_valid,
       .dest_format = translate_rs_format(dst_format),
       .dest_tiling = dst->layout,
       .dest = dst->bo,

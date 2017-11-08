@@ -277,7 +277,6 @@ Pre-Depends: ${misc:Pre-Depends}
 Depends:
  ${shlibs:Depends},
  ${misc:Depends}
-Recommends: libtxc-dxtn-s2tc | libtxc-dxtn-s2tc0 | libtxc-dxtn0
 Multi-Arch: same
 Description: free implementation of the OpenGL API -- DRI modules
  This version of Mesa provides GLX and DRI capabilities: it is capable of

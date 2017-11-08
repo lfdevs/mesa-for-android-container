@@ -133,6 +133,7 @@ etna_compile_rs_state(struct etna_context *ctx, struct compiled_rs_state *cs,
       /* Total number of tiles (same as for autodisable) */
       cs->RS_KICKER_INPLACE = rs->source_padded_width * rs->source_padded_height / 16;
    }
+   cs->source_ts_valid = rs->source_ts_valid;
 }
 
 void

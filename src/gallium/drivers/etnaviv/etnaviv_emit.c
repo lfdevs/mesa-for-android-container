@@ -171,6 +171,10 @@ etna_submit_rs_state(struct etna_context *ctx,
    struct etna_cmd_stream *stream = ctx->stream;
    struct etna_coalesce coalesce;
 
+   if (cs->RS_KICKER_INPLACE && !cs->source_ts_valid)
+      /* Inplace resolve is no-op if TS is not configured */
+      return;
+
    ctx->stats.rs_operations++;
 
    if (cs->RS_KICKER_INPLACE) {

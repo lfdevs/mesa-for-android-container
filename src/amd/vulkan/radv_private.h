@@ -282,6 +282,9 @@ struct radv_physical_device {
 	 * the pipeline cache defined by apps.
 	 */
 	struct disk_cache *                          disk_cache;
+
+	VkPhysicalDeviceMemoryProperties memory_properties;
+	enum radv_mem_type mem_type_indices[RADV_MEM_TYPE_COUNT];
 };
 
 struct radv_instance {

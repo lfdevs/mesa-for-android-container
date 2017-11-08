@@ -213,7 +213,8 @@ static void upload_STIPPLE(struct i915_context *i915)
 
    /* I915_NEW_RASTERIZER
     */
-   st[1] |= i915->rasterizer->st;
+   if (i915->rasterizer)
+      st[1] |= i915->rasterizer->st;
 
    /* I915_NEW_STIPPLE
     */

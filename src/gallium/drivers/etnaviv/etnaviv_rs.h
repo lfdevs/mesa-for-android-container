@@ -33,6 +33,7 @@
 struct rs_state {
    uint8_t downsample_x : 1; /* Downsample in x direction */
    uint8_t downsample_y : 1; /* Downsample in y direction */
+   uint8_t source_ts_valid : 1;
 
    uint8_t source_format; /* RS_FORMAT_XXX */
    uint8_t source_tiling; /* ETNA_LAYOUT_XXX */
@@ -61,6 +62,7 @@ struct rs_state {
 
 /* treat this as opaque structure */
 struct compiled_rs_state {
+   uint8_t source_ts_valid : 1;
    uint32_t RS_CONFIG;
    uint32_t RS_SOURCE_STRIDE;
    uint32_t RS_DEST_STRIDE;

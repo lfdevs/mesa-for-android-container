@@ -216,6 +216,23 @@ void i915_update_derived(struct i915_context *i915)
    if (I915_DBG_ON(DBG_ATOMS))
       i915_dump_dirty(i915, __FUNCTION__);
 
+   if (!i915->fs) {
+      i915->dirty &= ~(I915_NEW_FS_CONSTANTS | I915_NEW_FS);
+      i915->hardware_dirty &= ~(I915_HW_PROGRAM | I915_HW_CONSTANTS);
+   }
+
+   if (!i915->vs)
+      i915->dirty &= ~I915_NEW_VS;
+
+   if (!i915->blend)
+      i915->dirty &= ~I915_NEW_BLEND;
+
+   if (!i915->rasterizer)
+      i915->dirty &= ~I915_NEW_RASTERIZER;
+
+   if (!i915->depth_stencil)
+      i915->dirty &= ~I915_NEW_DEPTH_STENCIL;
+   
    for (i = 0; atoms[i]; i++)
       if (atoms[i]->dirty & i915->dirty)
          atoms[i]->update(i915);

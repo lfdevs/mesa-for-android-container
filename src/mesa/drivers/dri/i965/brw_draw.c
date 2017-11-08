@@ -875,7 +875,6 @@ brw_draw_prims(struct gl_context *ctx,
    struct brw_context *brw = brw_context(ctx);
    const struct gl_vertex_array **arrays = ctx->Array._DrawArrays;
    int predicate_state = brw->predicate.state;
-   int combine_op = MI_PREDICATE_COMBINEOP_SET;
    struct brw_transform_feedback_object *xfb_obj =
       (struct brw_transform_feedback_object *) gl_xfb_obj;
 
@@ -919,49 +918,35 @@ brw_draw_prims(struct gl_context *ctx,
     * to it.
     */
 
-    if (brw->draw.draw_params_count_bo &&
-        predicate_state == BRW_PREDICATE_STATE_USE_BIT) {
-      /* We need to empty the MI_PREDICATE_DATA register since it might
-       * already be set.
-       */
-
-      BEGIN_BATCH(4);
-      OUT_BATCH(MI_PREDICATE_DATA);
-      OUT_BATCH(0u);
-      OUT_BATCH(MI_PREDICATE_DATA + 4);
-      OUT_BATCH(0u);
-      ADVANCE_BATCH();
-
-      /* We need to combine the results of both predicates.*/
-      combine_op = MI_PREDICATE_COMBINEOP_AND;
-   }
-
    for (i = 0; i < nr_prims; i++) {
       /* Implementation of ARB_indirect_parameters via predicates */
       if (brw->draw.draw_params_count_bo) {
-         struct brw_bo *draw_id_bo = NULL;
-         uint32_t draw_id_offset;
-
-         intel_upload_data(brw, &prims[i].draw_id, 4, 4, &draw_id_bo,
-                           &draw_id_offset);
-
          brw_emit_pipe_control_flush(brw, PIPE_CONTROL_FLUSH_ENABLE);
 
+         /* Upload the current draw count from the draw parameters buffer to
+          * MI_PREDICATE_SRC0.
+          */
          brw_load_register_mem(brw, MI_PREDICATE_SRC0,
                                brw->draw.draw_params_count_bo,
                                brw->draw.draw_params_count_offset);
-         brw_load_register_mem(brw, MI_PREDICATE_SRC1, draw_id_bo,
-                               draw_id_offset);
+         /* Zero the top 32-bits of MI_PREDICATE_SRC0 */
+         brw_load_register_imm32(brw, MI_PREDICATE_SRC0 + 4, 0);
+         /* Upload the id of the current primitive to MI_PREDICATE_SRC1. */
+         brw_load_register_imm64(brw, MI_PREDICATE_SRC1, prims[i].draw_id);
 
          BEGIN_BATCH(1);
-         OUT_BATCH(GEN7_MI_PREDICATE |
-                   MI_PREDICATE_LOADOP_LOADINV | combine_op |
-                   MI_PREDICATE_COMPAREOP_DELTAS_EQUAL);
+         if (i == 0 && brw->predicate.state != BRW_PREDICATE_STATE_USE_BIT) {
+            OUT_BATCH(GEN7_MI_PREDICATE | MI_PREDICATE_LOADOP_LOADINV |
+                      MI_PREDICATE_COMBINEOP_SET |
+                      MI_PREDICATE_COMPAREOP_SRCS_EQUAL);
+         } else {
+            OUT_BATCH(GEN7_MI_PREDICATE |
+                      MI_PREDICATE_LOADOP_LOAD | MI_PREDICATE_COMBINEOP_XOR |
+                      MI_PREDICATE_COMPAREOP_SRCS_EQUAL);
+         }
          ADVANCE_BATCH();
 
          brw->predicate.state = BRW_PREDICATE_STATE_USE_BIT;
-
-         brw_bo_unreference(draw_id_bo);
       }
 
       brw_draw_single_prim(ctx, arrays, &prims[i], i, xfb_obj, stream,

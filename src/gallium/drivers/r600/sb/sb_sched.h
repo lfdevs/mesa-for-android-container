@@ -267,14 +267,14 @@ public:
 		live(), ucm(), alu(sh),	regmap(), cleared_interf() {}
 
 	virtual int run();
-	void run_on(container_node *n);
-	void schedule_bb(bb_node *bb);
+	bool run_on(container_node *n);
+	bool schedule_bb(bb_node *bb);
 
 	void load_index_register(value *v, unsigned idx);
 	void process_fetch(container_node *c);
 
-	void process_alu(container_node *c);
-	void schedule_alu(container_node *c);
+	bool process_alu(container_node *c);
+	bool schedule_alu(container_node *c);
 	bool prepare_alu_group();
 
 	void release_op(node *n);
