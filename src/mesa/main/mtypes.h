@@ -2865,12 +2865,11 @@ struct gl_shader_program_data
    unsigned NumUniformDataSlots;
    union gl_constant_value *UniformDataSlots;
 
-   bool cache_fallback;
-
    /* TODO: This used by Gallium drivers to skip the cache on tgsi fallback.
     * All structures (gl_program, uniform storage, etc) will get recreated
-    * even though we have already loaded them from cache. Once the i965 cache
-    * lands we should switch to using the cache_fallback support.
+    * even though we have already loaded them from cache. We should instead
+    * switch to storing the GLSL metadata and TGSI IR in a single cache item
+    * like the i965 driver does with NIR.
     */
    bool skip_cache;
    GLboolean Validated;

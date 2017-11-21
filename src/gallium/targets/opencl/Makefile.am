@@ -45,7 +45,7 @@ EXTRA_lib@OPENCL_LIBNAME@_la_DEPENDENCIES = opencl.sym
 EXTRA_DIST = mesa.icd opencl.sym
 
 if HAVE_CLOVER_ICD
-icddir = /etc/OpenCL/vendors/
+icddir = $(sysconfdir)/OpenCL/vendors/
 icd_DATA = mesa.icd
 endif
 

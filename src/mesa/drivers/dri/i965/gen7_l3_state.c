@@ -263,6 +263,8 @@ const struct brw_tracked_state gen7_l3_state = {
              BRW_NEW_CS_PROG_DATA |
              BRW_NEW_FS_PROG_DATA |
              BRW_NEW_GS_PROG_DATA |
+             BRW_NEW_TCS_PROG_DATA |
+             BRW_NEW_TES_PROG_DATA |
              BRW_NEW_VS_PROG_DATA,
    },
    .emit = emit_l3_state

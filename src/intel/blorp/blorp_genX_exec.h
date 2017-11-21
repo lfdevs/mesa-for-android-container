@@ -269,7 +269,7 @@ blorp_emit_vertex_buffers(struct blorp_batch *batch,
    vb[0].VertexBufferIndex = 0;
    vb[0].BufferPitch = 3 * sizeof(float);
 #if GEN_GEN >= 6
-   vb[0].VertexBufferMOCS = batch->blorp->mocs.vb;
+   vb[0].VertexBufferMOCS = vb[0].BufferStartingAddress.mocs;
 #endif
 #if GEN_GEN >= 7
    vb[0].AddressModifyEnable = true;
@@ -290,7 +290,7 @@ blorp_emit_vertex_buffers(struct blorp_batch *batch,
    vb[1].VertexBufferIndex = 1;
    vb[1].BufferPitch = 0;
 #if GEN_GEN >= 6
-   vb[1].VertexBufferMOCS = batch->blorp->mocs.vb;
+   vb[1].VertexBufferMOCS = vb[1].BufferStartingAddress.mocs;
 #endif
 #if GEN_GEN >= 7
    vb[1].AddressModifyEnable = true;
@@ -1235,13 +1235,11 @@ blorp_emit_surface_state(struct blorp_batch *batch,
          write_disable_mask |= ISL_CHANNEL_ALPHA_BIT;
    }
 
-   const uint32_t mocs =
-      is_render_target ? batch->blorp->mocs.rb : batch->blorp->mocs.tex;
-
    isl_surf_fill_state(batch->blorp->isl_dev, state,
                        .surf = &surf, .view = &surface->view,
                        .aux_surf = &surface->aux_surf, .aux_usage = aux_usage,
-                       .mocs = mocs, .clear_color = surface->clear_color,
+                       .mocs = surface->addr.mocs,
+                       .clear_color = surface->clear_color,
                        .write_disables = write_disable_mask);
 
    blorp_surface_reloc(batch, state_offset + isl_dev->ss.addr_offset,
@@ -1363,18 +1361,14 @@ blorp_emit_depth_stencil_config(struct blorp_batch *batch,
    if (dw == NULL)
       return;
 
-   struct isl_depth_stencil_hiz_emit_info info = {
-#if GEN_GEN >= 7
-      .mocs = 1, /* GEN7_MOCS_L3 */
-#else
-      .mocs = 0,
-#endif
-   };
+   struct isl_depth_stencil_hiz_emit_info info = { };
 
    if (params->depth.enabled) {
       info.view = &params->depth.view;
+      info.mocs = params->depth.addr.mocs;
    } else if (params->stencil.enabled) {
       info.view = &params->stencil.view;
+      info.mocs = params->stencil.addr.mocs;
    }
 
    if (params->depth.enabled) {

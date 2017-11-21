@@ -564,10 +564,8 @@ brw_postdraw_set_buffers_need_resolve(struct brw_context *brw)
          brw_render_cache_set_add_bo(brw, depth_irb->mt->bo);
    }
 
-   if (ctx->Extensions.ARB_stencil_texturing &&
-       stencil_irb && brw->stencil_write_enabled) {
+   if (stencil_irb && brw->stencil_write_enabled)
       brw_render_cache_set_add_bo(brw, stencil_irb->mt->bo);
-   }
 
    for (unsigned i = 0; i < fb->_NumColorDrawBuffers; i++) {
       struct intel_renderbuffer *irb =

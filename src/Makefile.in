@@ -603,7 +603,7 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 BUILT_SOURCES = git_sha1.h
 CLEANFILES = $(BUILT_SOURCES)
-EXTRA_DIST = vulkan/registry/vk.xml \
+EXTRA_DIST = git_sha1.h.in vulkan/registry/vk.xml \
 	vulkan/registry/vk_android_native_buffer.xml getopt hgl \
 	SConscript $(top_srcdir)/include/GL/mesa_glinterop.h
 

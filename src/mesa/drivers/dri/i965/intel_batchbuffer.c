@@ -601,8 +601,10 @@ brw_new_batch(struct brw_context *brw)
     * would otherwise be stored in the context (which for all intents and
     * purposes means everything).
     */
-   if (brw->hw_ctx == 0)
+   if (brw->hw_ctx == 0) {
       brw->ctx.NewDriverState |= BRW_NEW_CONTEXT;
+      brw_upload_invariant_state(brw);
+   }
 
    brw->ctx.NewDriverState |= BRW_NEW_BATCH;
 

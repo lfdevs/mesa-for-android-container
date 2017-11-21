@@ -1428,7 +1428,7 @@ enum brw_pixel_shader_coverage_mask_mode {
 #define MI_LOAD_REGISTER_IMM		(CMD_MI | (0x22 << 23))
 #define MI_LOAD_REGISTER_REG		(CMD_MI | (0x2A << 23))
 
-#define MI_FLUSH_DW			(CMD_MI | (0x26 << 23) | 2)
+#define MI_FLUSH_DW			(CMD_MI | (0x26 << 23))
 
 #define MI_STORE_REGISTER_MEM		(CMD_MI | (0x24 << 23))
 # define MI_STORE_REGISTER_MEM_USE_GGTT		(1 << 22)

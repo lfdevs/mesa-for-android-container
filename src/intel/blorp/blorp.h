@@ -45,12 +45,6 @@ struct blorp_context {
 
    const struct brw_compiler *compiler;
 
-   struct {
-      uint32_t tex;
-      uint32_t rb;
-      uint32_t vb;
-   } mocs;
-
    bool (*lookup_shader)(struct blorp_context *blorp,
                          const void *key, uint32_t key_size,
                          uint32_t *kernel_out, void *prog_data_out);
@@ -94,6 +88,7 @@ struct blorp_address {
    void *buffer;
    unsigned reloc_flags;
    uint32_t offset;
+   uint32_t mocs;
 };
 
 struct blorp_surf

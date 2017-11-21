@@ -99,14 +99,43 @@ brw_emit_pipe_control(struct brw_context *brw, uint32_t flags,
       if (devinfo->gen == 8)
          gen8_add_cs_stall_workaround_bits(&flags);
 
-      if (devinfo->gen == 9 &&
-          (flags & PIPE_CONTROL_VF_CACHE_INVALIDATE)) {
-         /* Hardware workaround: SKL
-          *
-          * Emit Pipe Control with all bits set to zero before emitting
-          * a Pipe Control with VF Cache Invalidate set.
-          */
-         brw_emit_pipe_control_flush(brw, 0);
+      if (flags & PIPE_CONTROL_VF_CACHE_INVALIDATE) {
+         if (devinfo->gen == 9) {
+            /* The PIPE_CONTROL "VF Cache Invalidation Enable" bit description
+             * lists several workarounds:
+             *
+             *    "Project: SKL, KBL, BXT
+             *
+             *     If the VF Cache Invalidation Enable is set to a 1 in a
+             *     PIPE_CONTROL, a separate Null PIPE_CONTROL, all bitfields
+             *     sets to 0, with the VF Cache Invalidation Enable set to 0
+             *     needs to be sent prior to the PIPE_CONTROL with VF Cache
+             *     Invalidation Enable set to a 1."
+             */
+            brw_emit_pipe_control_flush(brw, 0);
+         }
+
+         if (devinfo->gen >= 9) {
+            /* THE PIPE_CONTROL "VF Cache Invalidation Enable" docs continue:
+             *
+             *    "Project: BDW+
+             *
+             *     When VF Cache Invalidate is set “Post Sync Operation” must
+             *     be enabled to “Write Immediate Data” or “Write PS Depth
+             *     Count” or “Write Timestamp”."
+             *
+             * If there's a BO, we're already doing some kind of write.
+             * If not, add a write to the workaround BO.
+             *
+             * XXX: This causes GPU hangs on Broadwell, so restrict it to
+             *      Gen9+ for now...see this bug for more information:
+             *      https://bugs.freedesktop.org/show_bug.cgi?id=103787
+             */
+            if (!bo) {
+               flags |= PIPE_CONTROL_WRITE_IMMEDIATE;
+               bo = brw->workaround_bo;
+            }
+         }
       }
 
       BEGIN_BATCH(6);
@@ -438,11 +467,14 @@ brw_emit_mi_flush(struct brw_context *brw)
    const struct gen_device_info *devinfo = &brw->screen->devinfo;
 
    if (brw->batch.ring == BLT_RING && devinfo->gen >= 6) {
-      BEGIN_BATCH_BLT(4);
-      OUT_BATCH(MI_FLUSH_DW);
+      const unsigned n_dwords = devinfo->gen >= 8 ? 5 : 4;
+      BEGIN_BATCH_BLT(n_dwords);
+      OUT_BATCH(MI_FLUSH_DW | (n_dwords - 2));
       OUT_BATCH(0);
       OUT_BATCH(0);
       OUT_BATCH(0);
+      if (n_dwords == 5)
+         OUT_BATCH(0);
       ADVANCE_BATCH();
    } else {
       int flags = PIPE_CONTROL_NO_WRITE | PIPE_CONTROL_RENDER_TARGET_FLUSH;

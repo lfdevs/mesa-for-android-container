@@ -1333,7 +1333,7 @@ link_assign_uniform_storage(struct gl_context *ctx,
 
    union gl_constant_value *data;
    if (prog->data->UniformStorage == NULL) {
-      prog->data->UniformStorage = rzalloc_array(prog,
+      prog->data->UniformStorage = rzalloc_array(prog->data,
                                                  struct gl_uniform_storage,
                                                  prog->data->NumUniformStorage);
       data = rzalloc_array(prog->data->UniformStorage,
@@ -1400,13 +1400,6 @@ link_assign_uniform_storage(struct gl_context *ctx,
              sizeof(shader->Program->sh.SamplerTargets));
    }
 
-   /* If this is a fallback compile for a cache miss we already have the
-    * correct uniform mappings and we don't want to reinitialise uniforms so
-    * just return now.
-    */
-   if (prog->data->cache_fallback)
-      return;
-
 #ifndef NDEBUG
    for (unsigned i = 0; i < prog->data->NumUniformStorage; i++) {
       assert(prog->data->UniformStorage[i].storage != NULL ||
@@ -1431,11 +1424,9 @@ void
 link_assign_uniform_locations(struct gl_shader_program *prog,
                               struct gl_context *ctx)
 {
-   if (!prog->data->cache_fallback) {
-      ralloc_free(prog->data->UniformStorage);
-      prog->data->UniformStorage = NULL;
-      prog->data->NumUniformStorage = 0;
-   }
+   ralloc_free(prog->data->UniformStorage);
+   prog->data->UniformStorage = NULL;
+   prog->data->NumUniformStorage = 0;
 
    if (prog->UniformHash != NULL) {
       prog->UniformHash->clear();

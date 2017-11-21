@@ -896,6 +896,22 @@ spread(struct brw_reg reg, unsigned s)
    }
 }
 
+/**
+ * Reinterpret each channel of register \p reg as a vector of values of the
+ * given smaller type and take the i-th subcomponent from each.
+ */
+static inline struct brw_reg
+subscript(struct brw_reg reg, enum brw_reg_type type, unsigned i)
+{
+   if (reg.file == IMM)
+      return reg;
+
+   unsigned scale = type_sz(reg.type) / type_sz(type);
+   assert(scale >= 1 && i < scale);
+
+   return suboffset(retype(spread(reg, scale), type), i);
+}
+
 static inline struct brw_reg
 vec16(struct brw_reg reg)
 {

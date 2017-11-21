@@ -461,7 +461,7 @@ get_fast_clear_state_address(const struct anv_device *device,
 
    return (struct anv_address) {
       .bo = image->planes[plane].bo,
-      .offset = offset,
+      .offset = image->planes[plane].bo_offset + offset,
    };
 }
 
@@ -557,12 +557,13 @@ init_fast_clear_state_entry(struct anv_cmd_buffer *cmd_buffer,
    /* Other combinations of auxiliary buffers and platforms require specific
     * values in the clear value dword(s).
     */
+   struct anv_address addr =
+      get_fast_clear_state_address(cmd_buffer->device, image, aspect, level,
+                                   FAST_CLEAR_STATE_FIELD_CLEAR_COLOR);
    unsigned i = 0;
    for (; i < cmd_buffer->device->isl_dev.ss.clear_value_size; i += 4) {
       anv_batch_emit(&cmd_buffer->batch, GENX(MI_STORE_DATA_IMM), sdi) {
-         sdi.Address =
-            get_fast_clear_state_address(cmd_buffer->device, image, aspect, level,
-                                         FAST_CLEAR_STATE_FIELD_CLEAR_COLOR);
+         sdi.Address = addr;
 
          if (GEN_GEN >= 9) {
             /* MCS buffers on SKL+ can only have 1/0 clear colors. */
@@ -586,6 +587,8 @@ init_fast_clear_state_entry(struct anv_cmd_buffer *cmd_buffer,
             sdi.ImmediateData = 0;
          }
       }
+
+      addr.offset += 4;
    }
 }
 

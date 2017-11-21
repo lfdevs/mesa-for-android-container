@@ -55,19 +55,25 @@
 #include "brw_defines.h"
 #include "brw_wm.h"
 
-uint32_t tex_mocs[] = {
+uint32_t wb_mocs[] = {
    [7] = GEN7_MOCS_L3,
    [8] = BDW_MOCS_WB,
    [9] = SKL_MOCS_WB,
    [10] = CNL_MOCS_WB,
 };
 
-uint32_t rb_mocs[] = {
+uint32_t pte_mocs[] = {
    [7] = GEN7_MOCS_L3,
    [8] = BDW_MOCS_PTE,
    [9] = SKL_MOCS_PTE,
    [10] = CNL_MOCS_PTE,
 };
+
+static uint32_t
+get_tex_mocs(const struct gen_device_info *devinfo, struct brw_bo *bo)
+{
+   return (bo && bo->external ? pte_mocs : wb_mocs)[devinfo->gen];
+}
 
 static void
 get_isl_surf(struct brw_context *brw, struct intel_mipmap_tree *mt,
@@ -239,7 +245,7 @@ gen6_update_renderbuffer_surface(struct brw_context *brw,
 
    uint32_t offset;
    brw_emit_surface_state(brw, mt, mt->target, view, aux_usage,
-                          rb_mocs[devinfo->gen],
+                          pte_mocs[devinfo->gen],
                           &offset, surf_index,
                           RELOC_WRITE);
    return offset;
@@ -586,7 +592,7 @@ brw_update_texture_surface(struct gl_context *ctx,
          aux_usage = ISL_AUX_USAGE_NONE;
 
       brw_emit_surface_state(brw, mt, mt->target, view, aux_usage,
-                             tex_mocs[devinfo->gen],
+                             get_tex_mocs(devinfo, mt->bo),
                              surf_offset, surf_index,
                              0);
    }
@@ -617,7 +623,7 @@ brw_emit_buffer_surface_state(struct brw_context *brw,
                          .size = buffer_size,
                          .format = surface_format,
                          .stride = pitch,
-                         .mocs = tex_mocs[devinfo->gen]);
+                         .mocs = get_tex_mocs(devinfo, bo));
 }
 
 void
@@ -1107,7 +1113,7 @@ update_renderbuffer_read_surfaces(struct brw_context *brw)
                aux_usage = ISL_AUX_USAGE_NONE;
 
             brw_emit_surface_state(brw, irb->mt, target, view, aux_usage,
-                                   tex_mocs[devinfo->gen],
+                                   get_tex_mocs(devinfo, irb->mt->bo),
                                    surf_offset, surf_index,
                                    0);
 
@@ -1599,7 +1605,8 @@ update_image_surface(struct brw_context *brw,
                                                        view.base_array_layer,
                                                        view.array_len));
             brw_emit_surface_state(brw, mt, mt->target, view,
-                                   ISL_AUX_USAGE_NONE, tex_mocs[devinfo->gen],
+                                   ISL_AUX_USAGE_NONE,
+                                   get_tex_mocs(devinfo, mt->bo),
                                    surf_offset, surf_index,
                                    access == GL_READ_ONLY ? 0 : RELOC_WRITE);
          }

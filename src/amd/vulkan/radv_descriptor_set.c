@@ -739,8 +739,59 @@ void radv_update_descriptor_sets(
 		}
 
 	}
-	if (descriptorCopyCount)
-		radv_finishme("copy descriptors");
+
+	for (i = 0; i < descriptorCopyCount; i++) {
+		const VkCopyDescriptorSet *copyset = &pDescriptorCopies[i];
+		RADV_FROM_HANDLE(radv_descriptor_set, src_set,
+		                 copyset->srcSet);
+		RADV_FROM_HANDLE(radv_descriptor_set, dst_set,
+		                 copyset->dstSet);
+		const struct radv_descriptor_set_binding_layout *src_binding_layout =
+			src_set->layout->binding + copyset->srcBinding;
+		const struct radv_descriptor_set_binding_layout *dst_binding_layout =
+			dst_set->layout->binding + copyset->dstBinding;
+		uint32_t *src_ptr = src_set->mapped_ptr;
+		uint32_t *dst_ptr = dst_set->mapped_ptr;
+		struct radeon_winsys_bo **src_buffer_list = src_set->descriptors;
+		struct radeon_winsys_bo **dst_buffer_list = dst_set->descriptors;
+
+		src_ptr += src_binding_layout->offset / 4;
+		dst_ptr += dst_binding_layout->offset / 4;
+
+		src_ptr += src_binding_layout->size * copyset->srcArrayElement / 4;
+		dst_ptr += dst_binding_layout->size * copyset->dstArrayElement / 4;
+
+		src_buffer_list += src_binding_layout->buffer_offset;
+		src_buffer_list += copyset->srcArrayElement;
+
+		dst_buffer_list += dst_binding_layout->buffer_offset;
+		dst_buffer_list += copyset->dstArrayElement;
+
+		for (j = 0; j < copyset->descriptorCount; ++j) {
+			switch (src_binding_layout->type) {
+			case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
+			case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC: {
+				unsigned src_idx = copyset->srcArrayElement + j;
+				unsigned dst_idx = copyset->dstArrayElement + j;
+				struct radv_descriptor_range *src_range, *dst_range;
+				src_idx += src_binding_layout->dynamic_offset_offset;
+				dst_idx += dst_binding_layout->dynamic_offset_offset;
+
+				src_range = src_set->dynamic_descriptors + src_idx;
+				dst_range = dst_set->dynamic_descriptors + dst_idx;
+				*dst_range = *src_range;
+				break;
+			}
+			default:
+				memcpy(dst_ptr, src_ptr, src_binding_layout->size);
+			}
+			src_ptr += src_binding_layout->size / 4;
+			dst_ptr += dst_binding_layout->size / 4;
+			dst_buffer_list[j] = src_buffer_list[j];
+			++src_buffer_list;
+			++dst_buffer_list;
+		}
+	}
 }
 
 void radv_UpdateDescriptorSets(

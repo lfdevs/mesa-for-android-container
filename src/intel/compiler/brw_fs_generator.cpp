@@ -484,45 +484,48 @@ fs_generator::generate_mov_indirect(fs_inst *inst,
        * code, using it saves us 0 instructions and would require quite a bit
        * of case-by-case work.  It's just not worth it.
        */
-      if (devinfo->gen >= 8 || devinfo->is_haswell || type_sz(reg.type) < 8) {
-         brw_ADD(p, addr, indirect_byte_offset, brw_imm_uw(imm_byte_offset));
-      } else {
-         /* IVB reads two address register components per channel for
-          * indirectly addressed 64-bit sources, so we need to initialize
-          * adjacent address components to consecutive dwords of the source
-          * region by emitting two separate ADD instructions.  Found
-          * empirically.
-          */
-         assert(inst->exec_size <= 4);
-         brw_push_insn_state(p);
-         brw_set_default_exec_size(p, cvt(inst->exec_size) - 1);
+      brw_ADD(p, addr, indirect_byte_offset, brw_imm_uw(imm_byte_offset));
 
-         brw_ADD(p, spread(addr, 2), indirect_byte_offset,
-                 brw_imm_uw(imm_byte_offset));
-         brw_inst_set_no_dd_clear(devinfo, brw_last_inst, true);
-
-         brw_ADD(p, spread(suboffset(addr, 1), 2), indirect_byte_offset,
-                 brw_imm_uw(imm_byte_offset + 4));
-         brw_inst_set_no_dd_check(devinfo, brw_last_inst, true);
-
-         brw_pop_insn_state(p);
-      }
-
-      struct brw_reg ind_src = brw_VxH_indirect(0, 0);
-
-      brw_inst *mov = brw_MOV(p, dst, retype(ind_src, reg.type));
-
-      if (devinfo->gen == 6 && dst.file == BRW_MESSAGE_REGISTER_FILE &&
-          !inst->get_next()->is_tail_sentinel() &&
-          ((fs_inst *)inst->get_next())->mlen > 0) {
-         /* From the Sandybridge PRM:
+      if (type_sz(reg.type) > 4 &&
+          ((devinfo->gen == 7 && !devinfo->is_haswell) ||
+           devinfo->is_cherryview || gen_device_info_is_9lp(devinfo))) {
+         /* IVB has an issue (which we found empirically) where it reads two
+          * address register components per channel for indirectly addressed
+          * 64-bit sources.
           *
-          *    "[Errata: DevSNB(SNB)] If MRF register is updated by any
-          *    instruction that “indexed/indirect” source AND is followed by a
-          *    send, the instruction requires a “Switch”. This is to avoid
-          *    race condition where send may dispatch before MRF is updated."
+          * From the Cherryview PRM Vol 7. "Register Region Restrictions":
+          *
+          *    "When source or destination datatype is 64b or operation is
+          *    integer DWord multiply, indirect addressing must not be used."
+          *
+          * To work around both of these, we do two integer MOVs insead of one
+          * 64-bit MOV.  Because no double value should ever cross a register
+          * boundary, it's safe to use the immediate offset in the indirect
+          * here to handle adding 4 bytes to the offset and avoid the extra
+          * ADD to the register file.
           */
-         brw_inst_set_thread_control(devinfo, mov, BRW_THREAD_SWITCH);
+         brw_MOV(p, subscript(dst, BRW_REGISTER_TYPE_D, 0),
+                    retype(brw_VxH_indirect(0, 0), BRW_REGISTER_TYPE_D));
+         brw_MOV(p, subscript(dst, BRW_REGISTER_TYPE_D, 1),
+                    retype(brw_VxH_indirect(0, 4), BRW_REGISTER_TYPE_D));
+      } else {
+         struct brw_reg ind_src = brw_VxH_indirect(0, 0);
+
+         brw_inst *mov = brw_MOV(p, dst, retype(ind_src, reg.type));
+
+         if (devinfo->gen == 6 && dst.file == BRW_MESSAGE_REGISTER_FILE &&
+             !inst->get_next()->is_tail_sentinel() &&
+             ((fs_inst *)inst->get_next())->mlen > 0) {
+            /* From the Sandybridge PRM:
+             *
+             *    "[Errata: DevSNB(SNB)] If MRF register is updated by any
+             *    instruction that “indexed/indirect” source AND is followed
+             *    by a send, the instruction requires a “Switch”. This is to
+             *    avoid race condition where send may dispatch before MRF is
+             *    updated."
+             */
+            brw_inst_set_thread_control(devinfo, mov, BRW_THREAD_SWITCH);
+         }
       }
    }
 }

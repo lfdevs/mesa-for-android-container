@@ -521,36 +521,24 @@ SIMD_IWRAPPER_2(packus_epi32);     // See documentation for _mm256_packus_epi32 
 
 static SIMDINLINE Integer SIMDCALL permute_epi32(Integer const &a, Integer const &swiz) // return a[swiz[i]] for each 32-bit lane i (int32)
 {
-    Integer result;
-
-    // Ugly slow implementation
-    uint32_t const *pA = reinterpret_cast<uint32_t const*>(&a);
-    uint32_t const *pSwiz = reinterpret_cast<uint32_t const*>(&swiz);
-    uint32_t *pResult = reinterpret_cast<uint32_t *>(&result);
-
-    for (uint32_t i = 0; i < SIMD_WIDTH; ++i)
-    {
-        pResult[i] = pA[0xF & pSwiz[i]];
-    }
-
-    return result;
+    return castps_si(permute_ps(castsi_ps(a), swiz));
 }
 
 static SIMDINLINE Float SIMDCALL permute_ps(Float const &a, Integer const &swiz)    // return a[swiz[i]] for each 32-bit lane i (float)
 {
-    Float result;
+    const auto mask = SIMD256T::set1_epi32(7);
 
-    // Ugly slow implementation
-    float const *pA = reinterpret_cast<float const*>(&a);
-    uint32_t const *pSwiz = reinterpret_cast<uint32_t const*>(&swiz);
-    float *pResult = reinterpret_cast<float *>(&result);
+    auto lolo = SIMD256T::permute_ps(a.v8[0], SIMD256T::and_si(swiz.v8[0], mask));
+    auto lohi = SIMD256T::permute_ps(a.v8[1], SIMD256T::and_si(swiz.v8[0], mask));
 
-    for (uint32_t i = 0; i < SIMD_WIDTH; ++i)
+    auto hilo = SIMD256T::permute_ps(a.v8[0], SIMD256T::and_si(swiz.v8[1], mask));
+    auto hihi = SIMD256T::permute_ps(a.v8[1], SIMD256T::and_si(swiz.v8[1], mask));
+
+    return Float
     {
-        pResult[i] = pA[0xF & pSwiz[i]];
-    }
-
-    return result;
+        SIMD256T::blendv_ps(lolo, lohi, SIMD256T::castsi_ps(SIMD256T::cmpgt_epi32(swiz.v8[0], mask))),
+        SIMD256T::blendv_ps(hilo, hihi, SIMD256T::castsi_ps(SIMD256T::cmpgt_epi32(swiz.v8[1], mask))),
+    };
 }
 
 // All of the 512-bit permute2f128_XX intrinsics do the following:

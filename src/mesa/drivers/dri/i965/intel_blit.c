@@ -102,14 +102,16 @@ set_blitter_tiling(struct brw_context *brw,
                    uint32_t *__map)
 {
    const struct gen_device_info *devinfo = &brw->screen->devinfo;
-
+   const unsigned n_dwords = devinfo->gen >= 8 ? 5 : 4;
    assert(devinfo->gen >= 6);
 
    /* Idle the blitter before we update how tiling is interpreted. */
-   OUT_BATCH(MI_FLUSH_DW);
+   OUT_BATCH(MI_FLUSH_DW | (n_dwords - 2));
    OUT_BATCH(0);
    OUT_BATCH(0);
    OUT_BATCH(0);
+   if (n_dwords == 5)
+      OUT_BATCH(0);
 
    OUT_BATCH(MI_LOAD_REGISTER_IMM | (3 - 2));
    OUT_BATCH(BCS_SWCTRL);
@@ -121,7 +123,14 @@ set_blitter_tiling(struct brw_context *brw,
 #define SET_BLITTER_TILING(...) __map = set_blitter_tiling(__VA_ARGS__, __map)
 
 #define BEGIN_BATCH_BLT_TILED(n, dst_y_tiled, src_y_tiled)              \
-      BEGIN_BATCH_BLT(n + ((dst_y_tiled || src_y_tiled) ? 14 : 0));     \
+      unsigned set_tiling_batch_size = 0;                               \
+      if (dst_y_tiled || src_y_tiled) {                                 \
+         if (devinfo->gen >= 8)                                         \
+            set_tiling_batch_size = 16;                                 \
+         else                                                           \
+            set_tiling_batch_size = 14;                                 \
+      }                                                                 \
+      BEGIN_BATCH_BLT(n + set_tiling_batch_size);                       \
       if (dst_y_tiled || src_y_tiled)                                   \
          SET_BLITTER_TILING(brw, dst_y_tiled, src_y_tiled)
 

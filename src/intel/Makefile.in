@@ -270,34 +270,35 @@ check_PROGRAMS = $(am__EXEEXT_1) \
 	$(am__EXEEXT_3)
 TESTS = $(am__EXEEXT_1) $(check_PROGRAMS) $(am__EXEEXT_3)
 @HAVE_PLATFORM_ANDROID_TRUE@am__append_1 = $(ANDROID_CFLAGS)
-@HAVE_INTEL_VULKAN_TRUE@am__append_2 = $(top_srcdir)/include/vulkan/vk_platform.h \
+@HAVE_PLATFORM_ANDROID_TRUE@am__append_2 = $(ANDROID_LIBS)
+@HAVE_INTEL_VULKAN_TRUE@am__append_3 = $(top_srcdir)/include/vulkan/vk_platform.h \
 @HAVE_INTEL_VULKAN_TRUE@	$(top_srcdir)/include/vulkan/vulkan.h \
 @HAVE_INTEL_VULKAN_TRUE@	vulkan/tests/state_pool_test_helper.h
-@HAVE_INTEL_VULKAN_TRUE@am__append_3 = vulkan/libvulkan_intel.la
-@HAVE_INTEL_VULKAN_TRUE@am__append_4 = vulkan/libvulkan-test.la
-@HAVE_INTEL_VULKAN_TRUE@am__append_5 = $(VULKAN_PER_GEN_LIBS) \
+@HAVE_INTEL_VULKAN_TRUE@am__append_4 = vulkan/libvulkan_intel.la
+@HAVE_INTEL_VULKAN_TRUE@am__append_5 = vulkan/libvulkan-test.la
+@HAVE_INTEL_VULKAN_TRUE@am__append_6 = $(VULKAN_PER_GEN_LIBS) \
 @HAVE_INTEL_VULKAN_TRUE@	vulkan/libvulkan_common.la
-@HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_ANDROID_TRUE@am__append_6 = $(ANDROID_CPPFLAGS)
-@HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_ANDROID_TRUE@am__append_7 = $(ANDROID_CFLAGS)
-@HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_ANDROID_TRUE@am__append_8 = $(ANDROID_LIBS)
-@HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_ANDROID_TRUE@am__append_9 = $(VULKAN_ANDROID_FILES)
-@HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_X11_TRUE@am__append_10 = \
+@HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_ANDROID_TRUE@am__append_7 = $(ANDROID_CPPFLAGS)
+@HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_ANDROID_TRUE@am__append_8 = $(ANDROID_CFLAGS)
+@HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_ANDROID_TRUE@am__append_9 = $(ANDROID_LIBS)
+@HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_ANDROID_TRUE@am__append_10 = $(VULKAN_ANDROID_FILES)
+@HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_X11_TRUE@am__append_11 = \
 @HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_X11_TRUE@	$(XCB_DRI3_CFLAGS) \
 @HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_X11_TRUE@	-DVK_USE_PLATFORM_XCB_KHR \
 @HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_X11_TRUE@	-DVK_USE_PLATFORM_XLIB_KHR
 
-@HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_X11_TRUE@am__append_11 = $(VULKAN_WSI_X11_FILES)
-@HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_X11_TRUE@am__append_12 = $(XCB_DRI3_LIBS)
-@HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_WAYLAND_TRUE@am__append_13 = \
+@HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_X11_TRUE@am__append_12 = $(VULKAN_WSI_X11_FILES)
+@HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_X11_TRUE@am__append_13 = $(XCB_DRI3_LIBS)
+@HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_WAYLAND_TRUE@am__append_14 = \
 @HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_WAYLAND_TRUE@	$(WAYLAND_CLIENT_CFLAGS) \
 @HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_WAYLAND_TRUE@	-DVK_USE_PLATFORM_WAYLAND_KHR
 
-@HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_WAYLAND_TRUE@am__append_14 = $(VULKAN_WSI_WAYLAND_FILES)
-@HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_WAYLAND_TRUE@am__append_15 = $(WAYLAND_CLIENT_LIBS)
+@HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_WAYLAND_TRUE@am__append_15 = $(VULKAN_WSI_WAYLAND_FILES)
+@HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_WAYLAND_TRUE@am__append_16 = $(WAYLAND_CLIENT_LIBS)
 # The following is used for development purposes, by setting VK_ICD_FILENAMES.
-@HAVE_INTEL_VULKAN_TRUE@am__append_16 = vulkan/dev_icd.json
-@HAVE_INTEL_VULKAN_TRUE@am__append_17 = $(VULKAN_TESTS)
+@HAVE_INTEL_VULKAN_TRUE@am__append_17 = vulkan/dev_icd.json
 @HAVE_INTEL_VULKAN_TRUE@am__append_18 = $(VULKAN_TESTS)
+@HAVE_INTEL_VULKAN_TRUE@am__append_19 = $(VULKAN_TESTS)
 subdir = src/intel
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_compile_flag.m4 \
@@ -359,11 +360,10 @@ am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
 am__v_lt_1 = 
 am__DEPENDENCIES_1 =
-@HAVE_PLATFORM_ANDROID_FALSE@common_libintel_common_la_DEPENDENCIES =  \
-@HAVE_PLATFORM_ANDROID_FALSE@	$(am__DEPENDENCIES_1)
-@HAVE_PLATFORM_ANDROID_TRUE@common_libintel_common_la_DEPENDENCIES =  \
-@HAVE_PLATFORM_ANDROID_TRUE@	$(am__DEPENDENCIES_1) \
+@HAVE_PLATFORM_ANDROID_TRUE@am__DEPENDENCIES_2 =  \
 @HAVE_PLATFORM_ANDROID_TRUE@	$(am__DEPENDENCIES_1)
+common_libintel_common_la_DEPENDENCIES = $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_2)
 am__objects_2 = common/common_libintel_common_la-gen_debug.lo \
 	common/common_libintel_common_la-gen_decoder.lo \
 	common/common_libintel_common_la-gen_device_info.lo \
@@ -527,10 +527,10 @@ isl_libisl_gen9_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
 	$(isl_libisl_gen9_la_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) \
 	$(LDFLAGS) -o $@
-am__DEPENDENCIES_2 = isl/libisl-gen4.la isl/libisl-gen5.la \
+am__DEPENDENCIES_3 = isl/libisl-gen4.la isl/libisl-gen5.la \
 	isl/libisl-gen6.la isl/libisl-gen7.la isl/libisl-gen75.la \
 	isl/libisl-gen8.la isl/libisl-gen9.la isl/libisl-gen10.la
-isl_libisl_la_DEPENDENCIES = $(am__DEPENDENCIES_2)
+isl_libisl_la_DEPENDENCIES = $(am__DEPENDENCIES_3)
 am__objects_13 = isl/isl.lo isl/isl_drm.lo isl/isl_format.lo \
 	isl/isl_storage_image.lo
 am__objects_14 = isl/isl_format_layout.lo
@@ -641,10 +641,10 @@ vulkan_libanv_gen9_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(vulkan_libanv_gen9_la_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) \
 	$(LDFLAGS) -o $@
 @HAVE_INTEL_VULKAN_TRUE@am_vulkan_libanv_gen9_la_rpath =
-@HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_ANDROID_TRUE@am__DEPENDENCIES_3 = $(am__DEPENDENCIES_1)
-@HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_X11_TRUE@am__DEPENDENCIES_4 = $(am__DEPENDENCIES_1)
-@HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_WAYLAND_TRUE@am__DEPENDENCIES_5 = $(am__DEPENDENCIES_1)
-@HAVE_INTEL_VULKAN_TRUE@am__DEPENDENCIES_6 =  \
+@HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_ANDROID_TRUE@am__DEPENDENCIES_4 = $(am__DEPENDENCIES_1)
+@HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_X11_TRUE@am__DEPENDENCIES_5 = $(am__DEPENDENCIES_1)
+@HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_WAYLAND_TRUE@am__DEPENDENCIES_6 = $(am__DEPENDENCIES_1)
+@HAVE_INTEL_VULKAN_TRUE@am__DEPENDENCIES_7 =  \
 @HAVE_INTEL_VULKAN_TRUE@	vulkan/libvulkan_common.la \
 @HAVE_INTEL_VULKAN_TRUE@	$(VULKAN_PER_GEN_LIBS) \
 @HAVE_INTEL_VULKAN_TRUE@	compiler/libintel_compiler.la \
@@ -657,11 +657,11 @@ vulkan_libanv_gen9_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 @HAVE_INTEL_VULKAN_TRUE@	$(am__DEPENDENCIES_1) \
 @HAVE_INTEL_VULKAN_TRUE@	$(am__DEPENDENCIES_1) \
 @HAVE_INTEL_VULKAN_TRUE@	$(am__DEPENDENCIES_1) \
-@HAVE_INTEL_VULKAN_TRUE@	$(am__DEPENDENCIES_3) \
 @HAVE_INTEL_VULKAN_TRUE@	$(am__DEPENDENCIES_4) \
-@HAVE_INTEL_VULKAN_TRUE@	$(am__DEPENDENCIES_5)
-@HAVE_INTEL_VULKAN_TRUE@vulkan_libvulkan_test_la_DEPENDENCIES =  \
+@HAVE_INTEL_VULKAN_TRUE@	$(am__DEPENDENCIES_5) \
 @HAVE_INTEL_VULKAN_TRUE@	$(am__DEPENDENCIES_6)
+@HAVE_INTEL_VULKAN_TRUE@vulkan_libvulkan_test_la_DEPENDENCIES =  \
+@HAVE_INTEL_VULKAN_TRUE@	$(am__DEPENDENCIES_7)
 am__vulkan_libvulkan_test_la_SOURCES_DIST = vulkan/anv_gem_stubs.c
 am__objects_25 = vulkan/vulkan_libvulkan_test_la-anv_gem_stubs.lo
 @HAVE_INTEL_VULKAN_TRUE@am_vulkan_libvulkan_test_la_OBJECTS =  \
@@ -734,7 +734,7 @@ vulkan_libvulkan_common_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(LDFLAGS) -o $@
 @HAVE_INTEL_VULKAN_TRUE@am_vulkan_libvulkan_common_la_rpath =
 @HAVE_INTEL_VULKAN_TRUE@vulkan_libvulkan_intel_la_DEPENDENCIES =  \
-@HAVE_INTEL_VULKAN_TRUE@	$(am__DEPENDENCIES_6)
+@HAVE_INTEL_VULKAN_TRUE@	$(am__DEPENDENCIES_7)
 am__vulkan_libvulkan_intel_la_SOURCES_DIST = vulkan/anv_gem.c
 am__objects_35 = vulkan/vulkan_libvulkan_intel_la-anv_gem.lo
 @HAVE_INTEL_VULKAN_TRUE@am_vulkan_libvulkan_intel_la_OBJECTS =  \
@@ -766,60 +766,60 @@ am_compiler_test_eu_compact_OBJECTS =  \
 	compiler/test_eu_compact.$(OBJEXT)
 compiler_test_eu_compact_OBJECTS =  \
 	$(am_compiler_test_eu_compact_OBJECTS)
-am__DEPENDENCIES_7 = $(top_builddir)/src/gtest/libgtest.la \
+am__DEPENDENCIES_8 = $(top_builddir)/src/gtest/libgtest.la \
 	compiler/libintel_compiler.la common/libintel_common.la \
 	$(top_builddir)/src/compiler/nir/libnir.la \
 	$(top_builddir)/src/util/libmesautil.la \
 	$(top_builddir)/src/intel/isl/libisl.la $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_1)
-compiler_test_eu_compact_DEPENDENCIES = $(am__DEPENDENCIES_7)
+compiler_test_eu_compact_DEPENDENCIES = $(am__DEPENDENCIES_8)
 am_compiler_test_eu_validate_OBJECTS =  \
 	compiler/test_eu_validate.$(OBJEXT)
 compiler_test_eu_validate_OBJECTS =  \
 	$(am_compiler_test_eu_validate_OBJECTS)
-compiler_test_eu_validate_DEPENDENCIES = $(am__DEPENDENCIES_7)
+compiler_test_eu_validate_DEPENDENCIES = $(am__DEPENDENCIES_8)
 am_compiler_test_fs_cmod_propagation_OBJECTS =  \
 	compiler/test_fs_cmod_propagation.$(OBJEXT)
 compiler_test_fs_cmod_propagation_OBJECTS =  \
 	$(am_compiler_test_fs_cmod_propagation_OBJECTS)
 compiler_test_fs_cmod_propagation_DEPENDENCIES =  \
-	$(am__DEPENDENCIES_7)
+	$(am__DEPENDENCIES_8)
 am_compiler_test_fs_copy_propagation_OBJECTS =  \
 	compiler/test_fs_copy_propagation.$(OBJEXT)
 compiler_test_fs_copy_propagation_OBJECTS =  \
 	$(am_compiler_test_fs_copy_propagation_OBJECTS)
 compiler_test_fs_copy_propagation_DEPENDENCIES =  \
-	$(am__DEPENDENCIES_7)
+	$(am__DEPENDENCIES_8)
 am_compiler_test_fs_saturate_propagation_OBJECTS =  \
 	compiler/test_fs_saturate_propagation.$(OBJEXT)
 compiler_test_fs_saturate_propagation_OBJECTS =  \
 	$(am_compiler_test_fs_saturate_propagation_OBJECTS)
 compiler_test_fs_saturate_propagation_DEPENDENCIES =  \
-	$(am__DEPENDENCIES_7)
+	$(am__DEPENDENCIES_8)
 am_compiler_test_vec4_cmod_propagation_OBJECTS =  \
 	compiler/test_vec4_cmod_propagation.$(OBJEXT)
 compiler_test_vec4_cmod_propagation_OBJECTS =  \
 	$(am_compiler_test_vec4_cmod_propagation_OBJECTS)
 compiler_test_vec4_cmod_propagation_DEPENDENCIES =  \
-	$(am__DEPENDENCIES_7)
+	$(am__DEPENDENCIES_8)
 am_compiler_test_vec4_copy_propagation_OBJECTS =  \
 	compiler/test_vec4_copy_propagation.$(OBJEXT)
 compiler_test_vec4_copy_propagation_OBJECTS =  \
 	$(am_compiler_test_vec4_copy_propagation_OBJECTS)
 compiler_test_vec4_copy_propagation_DEPENDENCIES =  \
-	$(am__DEPENDENCIES_7)
+	$(am__DEPENDENCIES_8)
 am_compiler_test_vec4_register_coalesce_OBJECTS =  \
 	compiler/test_vec4_register_coalesce.$(OBJEXT)
 compiler_test_vec4_register_coalesce_OBJECTS =  \
 	$(am_compiler_test_vec4_register_coalesce_OBJECTS)
 compiler_test_vec4_register_coalesce_DEPENDENCIES =  \
-	$(am__DEPENDENCIES_7)
+	$(am__DEPENDENCIES_8)
 am_compiler_test_vf_float_conversions_OBJECTS =  \
 	compiler/test_vf_float_conversions.$(OBJEXT)
 compiler_test_vf_float_conversions_OBJECTS =  \
 	$(am_compiler_test_vf_float_conversions_OBJECTS)
 compiler_test_vf_float_conversions_DEPENDENCIES =  \
-	$(am__DEPENDENCIES_7)
+	$(am__DEPENDENCIES_8)
 isl_tests_isl_surf_get_image_offset_test_SOURCES =  \
 	isl/tests/isl_surf_get_image_offset_test.c
 isl_tests_isl_surf_get_image_offset_test_OBJECTS =  \
@@ -853,25 +853,25 @@ tools_aubinator_error_decode_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 vulkan_tests_block_pool_no_free_SOURCES =  \
 	vulkan/tests/block_pool_no_free.c
 vulkan_tests_block_pool_no_free_OBJECTS = vulkan/tests/vulkan_tests_block_pool_no_free-block_pool_no_free.$(OBJEXT)
-@HAVE_INTEL_VULKAN_TRUE@am__DEPENDENCIES_8 = vulkan/libvulkan-test.la \
+@HAVE_INTEL_VULKAN_TRUE@am__DEPENDENCIES_9 = vulkan/libvulkan-test.la \
 @HAVE_INTEL_VULKAN_TRUE@	$(am__DEPENDENCIES_1)
 @HAVE_INTEL_VULKAN_TRUE@vulkan_tests_block_pool_no_free_DEPENDENCIES =  \
-@HAVE_INTEL_VULKAN_TRUE@	$(am__DEPENDENCIES_8)
+@HAVE_INTEL_VULKAN_TRUE@	$(am__DEPENDENCIES_9)
 vulkan_tests_state_pool_SOURCES = vulkan/tests/state_pool.c
 vulkan_tests_state_pool_OBJECTS =  \
 	vulkan/tests/vulkan_tests_state_pool-state_pool.$(OBJEXT)
 @HAVE_INTEL_VULKAN_TRUE@vulkan_tests_state_pool_DEPENDENCIES =  \
-@HAVE_INTEL_VULKAN_TRUE@	$(am__DEPENDENCIES_8)
+@HAVE_INTEL_VULKAN_TRUE@	$(am__DEPENDENCIES_9)
 vulkan_tests_state_pool_free_list_only_SOURCES =  \
 	vulkan/tests/state_pool_free_list_only.c
 vulkan_tests_state_pool_free_list_only_OBJECTS = vulkan/tests/vulkan_tests_state_pool_free_list_only-state_pool_free_list_only.$(OBJEXT)
 @HAVE_INTEL_VULKAN_TRUE@vulkan_tests_state_pool_free_list_only_DEPENDENCIES =  \
-@HAVE_INTEL_VULKAN_TRUE@	$(am__DEPENDENCIES_8)
+@HAVE_INTEL_VULKAN_TRUE@	$(am__DEPENDENCIES_9)
 vulkan_tests_state_pool_no_free_SOURCES =  \
 	vulkan/tests/state_pool_no_free.c
 vulkan_tests_state_pool_no_free_OBJECTS = vulkan/tests/vulkan_tests_state_pool_no_free-state_pool_no_free.$(OBJEXT)
 @HAVE_INTEL_VULKAN_TRUE@vulkan_tests_state_pool_no_free_DEPENDENCIES =  \
-@HAVE_INTEL_VULKAN_TRUE@	$(am__DEPENDENCIES_8)
+@HAVE_INTEL_VULKAN_TRUE@	$(am__DEPENDENCIES_9)
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -1807,15 +1807,18 @@ AM_CFLAGS = \
 	$(VISIBILITY_CFLAGS) \
 	$(WNO_OVERRIDE_INIT)
 
+AM_CXXFLAGS = \
+	$(VISIBILITY_CXXFLAGS)
+
 MKDIR_GEN = $(AM_V_at)$(MKDIR_P) $(@D)
 PYTHON_GEN = $(AM_V_GEN)$(PYTHON2) $(PYTHON_FLAGS)
-lib_LTLIBRARIES = $(am__append_3)
-check_LTLIBRARIES = $(am__append_4)
-noinst_DATA = $(am__append_16)
-noinst_HEADERS = $(am__append_2)
+lib_LTLIBRARIES = $(am__append_4)
+check_LTLIBRARIES = $(am__append_5)
+noinst_DATA = $(am__append_17)
+noinst_HEADERS = $(am__append_3)
 noinst_LTLIBRARIES = blorp/libblorp.la common/libintel_common.la \
 	compiler/libintel_compiler.la $(ISL_GEN_LIBS) isl/libisl.la \
-	$(am__append_5)
+	$(am__append_6)
 BUILT_SOURCES = $(COMPILER_GENERATED_FILES) $(GENXML_GENERATED_FILES) \
 	$(ISL_GENERATED_FILES) $(VULKAN_GENERATED_FILES)
 CLEANFILES = $(VULKAN_GENERATED_FILES) vulkan/dev_icd.json \
@@ -1835,8 +1838,7 @@ blorp_libblorp_la_SOURCES = $(BLORP_FILES)
 common_libintel_common_la_CFLAGS = $(AM_CFLAGS) $(LIBDRM_CFLAGS) \
 	$(EXPAT_CFLAGS) $(am__append_1)
 common_libintel_common_la_SOURCES = $(COMMON_FILES)
-@HAVE_PLATFORM_ANDROID_TRUE@common_libintel_common_la_LIBADD = $(ANDROID_LIBS)
-common_libintel_common_la_LIBADD = $(EXPAT_LIBS)
+common_libintel_common_la_LIBADD = $(EXPAT_LIBS) $(am__append_2)
 compiler_libintel_compiler_la_CPPFLAGS = \
 	-I$(top_builddir)/src/intel/compiler \
 	-I$(top_srcdir)/src/intel/compiler \
@@ -1999,7 +2001,7 @@ vk_android_native_buffer_xml = $(top_srcdir)/src/vulkan/registry/vk_android_nati
 @HAVE_INTEL_VULKAN_TRUE@	vulkan/libanv-gen10.la
 
 @HAVE_INTEL_VULKAN_TRUE@VULKAN_CFLAGS = $(AM_CFLAGS) -msse2 \
-@HAVE_INTEL_VULKAN_TRUE@	$(am__append_7)
+@HAVE_INTEL_VULKAN_TRUE@	$(am__append_8)
 @HAVE_INTEL_VULKAN_TRUE@VULKAN_CPPFLAGS =  \
 @HAVE_INTEL_VULKAN_TRUE@	-I$(top_srcdir)/src/compiler \
 @HAVE_INTEL_VULKAN_TRUE@	-I$(top_srcdir)/src/intel/compiler \
@@ -2010,8 +2012,8 @@ vk_android_native_buffer_xml = $(top_srcdir)/src/vulkan/registry/vk_android_nati
 @HAVE_INTEL_VULKAN_TRUE@	-I$(top_builddir)/src/vulkan/util \
 @HAVE_INTEL_VULKAN_TRUE@	-I$(top_srcdir)/src/vulkan/util \
 @HAVE_INTEL_VULKAN_TRUE@	$(AM_CPPFLAGS) $(LIBDRM_CFLAGS) \
-@HAVE_INTEL_VULKAN_TRUE@	$(am__append_6) $(am__append_10) \
-@HAVE_INTEL_VULKAN_TRUE@	$(am__append_13)
+@HAVE_INTEL_VULKAN_TRUE@	$(am__append_7) $(am__append_11) \
+@HAVE_INTEL_VULKAN_TRUE@	$(am__append_14)
 @HAVE_INTEL_VULKAN_TRUE@vulkan_libanv_gen7_la_CFLAGS = $(VULKAN_CFLAGS)
 @HAVE_INTEL_VULKAN_TRUE@vulkan_libanv_gen7_la_CPPFLAGS = $(VULKAN_CPPFLAGS) -DGEN_VERSIONx10=70
 @HAVE_INTEL_VULKAN_TRUE@vulkan_libanv_gen7_la_SOURCES = $(VULKAN_GEN7_FILES)
@@ -2028,8 +2030,8 @@ vk_android_native_buffer_xml = $(top_srcdir)/src/vulkan/registry/vk_android_nati
 @HAVE_INTEL_VULKAN_TRUE@vulkan_libanv_gen10_la_CPPFLAGS = $(VULKAN_CPPFLAGS) -DGEN_VERSIONx10=100
 @HAVE_INTEL_VULKAN_TRUE@vulkan_libanv_gen10_la_SOURCES = $(VULKAN_GEN10_FILES)
 @HAVE_INTEL_VULKAN_TRUE@VULKAN_SOURCES = $(VULKAN_GENERATED_FILES) \
-@HAVE_INTEL_VULKAN_TRUE@	$(VULKAN_FILES) $(am__append_9) \
-@HAVE_INTEL_VULKAN_TRUE@	$(am__append_11) $(am__append_14)
+@HAVE_INTEL_VULKAN_TRUE@	$(VULKAN_FILES) $(am__append_10) \
+@HAVE_INTEL_VULKAN_TRUE@	$(am__append_12) $(am__append_15)
 @HAVE_INTEL_VULKAN_TRUE@VULKAN_LIB_DEPS = vulkan/libvulkan_common.la \
 @HAVE_INTEL_VULKAN_TRUE@	$(VULKAN_PER_GEN_LIBS) \
 @HAVE_INTEL_VULKAN_TRUE@	compiler/libintel_compiler.la \
@@ -2040,8 +2042,8 @@ vk_android_native_buffer_xml = $(top_srcdir)/src/vulkan/registry/vk_android_nati
 @HAVE_INTEL_VULKAN_TRUE@	$(top_builddir)/src/compiler/nir/libnir.la \
 @HAVE_INTEL_VULKAN_TRUE@	$(top_builddir)/src/util/libmesautil.la \
 @HAVE_INTEL_VULKAN_TRUE@	$(LIBDRM_LIBS) $(PTHREAD_LIBS) \
-@HAVE_INTEL_VULKAN_TRUE@	$(DLOPEN_LIBS) -lm $(am__append_8) \
-@HAVE_INTEL_VULKAN_TRUE@	$(am__append_12) $(am__append_15)
+@HAVE_INTEL_VULKAN_TRUE@	$(DLOPEN_LIBS) -lm $(am__append_9) \
+@HAVE_INTEL_VULKAN_TRUE@	$(am__append_13) $(am__append_16)
 @HAVE_INTEL_VULKAN_TRUE@vulkan_libvulkan_common_la_SOURCES = $(VULKAN_SOURCES)
 @HAVE_INTEL_VULKAN_TRUE@vulkan_libvulkan_common_la_CFLAGS = $(VULKAN_CFLAGS)
 @HAVE_INTEL_VULKAN_TRUE@vulkan_libvulkan_common_la_CPPFLAGS = $(VULKAN_CPPFLAGS)

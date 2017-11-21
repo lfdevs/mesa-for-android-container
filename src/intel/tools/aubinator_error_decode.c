@@ -357,7 +357,7 @@ static void decode(struct gen_spec *spec,
                is_simd8 = strcmp(iter.value, "true") == 0;
             } else if (strcmp(iter.name, "Dispatch Enable") == 0) {
                is_simd8 = strcmp(iter.value, "SIMD8") == 0;
-            } else if (strcmp(iter.name, "Function Enable") == 0) {
+            } else if (strcmp(iter.name, "Enable") == 0) {
                is_enabled = strcmp(iter.value, "true") == 0;
             }
          }

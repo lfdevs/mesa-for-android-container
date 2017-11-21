@@ -88,15 +88,9 @@ brw_blorp_init(struct brw_context *brw)
       brw->blorp.exec = gen5_blorp_exec;
       break;
    case 6:
-      brw->blorp.mocs.tex = 0;
-      brw->blorp.mocs.rb = 0;
-      brw->blorp.mocs.vb = 0;
       brw->blorp.exec = gen6_blorp_exec;
       break;
    case 7:
-      brw->blorp.mocs.tex = GEN7_MOCS_L3;
-      brw->blorp.mocs.rb = GEN7_MOCS_L3;
-      brw->blorp.mocs.vb = GEN7_MOCS_L3;
       if (devinfo->is_haswell) {
          brw->blorp.exec = gen75_blorp_exec;
       } else {
@@ -104,21 +98,12 @@ brw_blorp_init(struct brw_context *brw)
       }
       break;
    case 8:
-      brw->blorp.mocs.tex = BDW_MOCS_WB;
-      brw->blorp.mocs.rb = BDW_MOCS_PTE;
-      brw->blorp.mocs.vb = BDW_MOCS_WB;
       brw->blorp.exec = gen8_blorp_exec;
       break;
    case 9:
-      brw->blorp.mocs.tex = SKL_MOCS_WB;
-      brw->blorp.mocs.rb = SKL_MOCS_PTE;
-      brw->blorp.mocs.vb = SKL_MOCS_WB;
       brw->blorp.exec = gen9_blorp_exec;
       break;
    case 10:
-      brw->blorp.mocs.tex = CNL_MOCS_WB;
-      brw->blorp.mocs.rb = CNL_MOCS_PTE;
-      brw->blorp.mocs.vb = CNL_MOCS_WB;
       brw->blorp.exec = gen10_blorp_exec;
       break;
    default:
@@ -128,6 +113,20 @@ brw_blorp_init(struct brw_context *brw)
    brw->blorp.lookup_shader = brw_blorp_lookup_shader;
    brw->blorp.upload_shader = brw_blorp_upload_shader;
 }
+
+static uint32_t wb_mocs[] = {
+   [7] = GEN7_MOCS_L3,
+   [8] = BDW_MOCS_WB,
+   [9] = SKL_MOCS_WB,
+   [10] = CNL_MOCS_WB,
+};
+
+static uint32_t pte_mocs[] = {
+   [7] = GEN7_MOCS_L3,
+   [8] = BDW_MOCS_PTE,
+   [9] = SKL_MOCS_PTE,
+   [10] = CNL_MOCS_PTE,
+};
 
 static void
 blorp_surf_for_miptree(struct brw_context *brw,
@@ -159,6 +158,8 @@ blorp_surf_for_miptree(struct brw_context *brw,
       .buffer = mt->bo,
       .offset = mt->offset,
       .reloc_flags = is_render_target ? EXEC_OBJECT_WRITE : 0,
+      .mocs = (is_render_target || mt->bo->external) ? pte_mocs[devinfo->gen] :
+                                                       wb_mocs[devinfo->gen],
    };
 
    surf->aux_usage = aux_usage;
@@ -186,6 +187,7 @@ blorp_surf_for_miptree(struct brw_context *brw,
       surf->aux_surf = aux_surf;
       surf->aux_addr = (struct blorp_address) {
          .reloc_flags = is_render_target ? EXEC_OBJECT_WRITE : 0,
+         .mocs = surf->addr.mocs,
       };
 
       if (mt->mcs_buf) {

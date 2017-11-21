@@ -1,3 +1,9 @@
+mesa (17.3.0~rc5-1) experimental; urgency=medium
+
+  * New upstream release candidate.
+
+ -- Andreas Boll <andreas.boll.dev@gmail.com>  Tue, 21 Nov 2017 11:44:37 +0100
+
 mesa (17.3.0~rc3-1) experimental; urgency=medium
 
   [ Andreas Boll ]
@@ -18,6 +24,20 @@ mesa (17.3.0~rc2-1) experimental; urgency=medium
   * Update extend-diff-ignore.
 
  -- Andreas Boll <andreas.boll.dev@gmail.com>  Tue, 31 Oct 2017 14:12:08 +0100
+
+mesa (17.2.5-1) unstable; urgency=medium
+
+  [ Emilio Pozuelo Monfort ]
+  * Make mesa-va-drivers enhance libva2 rather than libva1 (Closes: #881374).
+
+  [ Timo Aaltonen ]
+  * libglx-mesa0.links.in: Add libGLX_indirect.so.0 to link against
+    libGLX_mesa so that GLX with a remote xserver works. (Closes: #881789)
+
+  [ Andreas Boll ]
+  * New upstream release.
+
+ -- Andreas Boll <andreas.boll.dev@gmail.com>  Fri, 17 Nov 2017 10:46:35 +0100
 
 mesa (17.2.4-1) unstable; urgency=medium
 

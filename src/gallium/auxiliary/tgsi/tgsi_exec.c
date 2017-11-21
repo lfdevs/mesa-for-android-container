@@ -5130,7 +5130,7 @@ exec_instruction(
       break;
 
    case TGSI_OPCODE_LDEXP:
-      exec_scalar_binary(mach, inst, micro_ldexp, TGSI_EXEC_DATA_FLOAT, TGSI_EXEC_DATA_INT);
+      exec_vector_binary(mach, inst, micro_ldexp, TGSI_EXEC_DATA_FLOAT, TGSI_EXEC_DATA_FLOAT);
       break;
 
    case TGSI_OPCODE_COS:

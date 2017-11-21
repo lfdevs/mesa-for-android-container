@@ -134,6 +134,7 @@ blorp_alloc_vertex_buffer(struct blorp_batch *batch, uint32_t size,
    *addr = (struct blorp_address) {
       .buffer = &cmd_buffer->device->dynamic_state_pool.block_pool.bo,
       .offset = vb_state.offset,
+      .mocs = cmd_buffer->device->default_mocs,
    };
 
    return vb_state.map;

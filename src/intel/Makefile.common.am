@@ -27,5 +27,5 @@ common_libintel_common_la_LIBADD = $(EXPAT_LIBS)
 
 if HAVE_PLATFORM_ANDROID
 common_libintel_common_la_CFLAGS += $(ANDROID_CFLAGS)
-common_libintel_common_la_LIBADD = $(ANDROID_LIBS)
+common_libintel_common_la_LIBADD += $(ANDROID_LIBS)
 endif

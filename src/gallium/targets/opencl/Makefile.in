@@ -613,7 +613,7 @@ nodist_EXTRA_lib@OPENCL_LIBNAME@_la_SOURCES = dummy.cpp
 lib@OPENCL_LIBNAME@_la_SOURCES = 
 EXTRA_lib@OPENCL_LIBNAME@_la_DEPENDENCIES = opencl.sym
 EXTRA_DIST = mesa.icd opencl.sym
-@HAVE_CLOVER_ICD_TRUE@icddir = /etc/OpenCL/vendors/
+@HAVE_CLOVER_ICD_TRUE@icddir = $(sysconfdir)/OpenCL/vendors/
 @HAVE_CLOVER_ICD_TRUE@icd_DATA = mesa.icd
 all: all-am
 

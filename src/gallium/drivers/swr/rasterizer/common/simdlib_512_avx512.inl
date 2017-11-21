@@ -484,17 +484,7 @@ SIMD_WRAPPER_2(unpacklo_ps);
 template<ScaleFactor ScaleT>
 static SIMDINLINE Float SIMDCALL i32gather_ps(float const* p, Integer idx) // return *(float*)(((int8*)p) + (idx * ScaleT))
 {
-    uint32_t *pOffsets = (uint32_t*)&idx;
-    Float vResult;
-    float* pResult = (float*)&vResult;
-    for (uint32_t i = 0; i < SIMD_WIDTH; ++i)
-    {
-        uint32_t offset = pOffsets[i];
-        offset = offset * static_cast<uint32_t>(ScaleT);
-        pResult[i] = *(float const*)(((uint8_t const*)p + offset));
-    }
-
-    return vResult;
+    return _mm512_i32gather_ps(idx, p, static_cast<int>(ScaleT));
 }
 
 static SIMDINLINE Float SIMDCALL load1_ps(float const *p)  // return *p    (broadcast 1 value to all elements)

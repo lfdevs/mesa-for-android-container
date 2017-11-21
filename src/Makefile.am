@@ -33,7 +33,7 @@ git_sha1.h: git_sha1.h.tmp
 
 BUILT_SOURCES = git_sha1.h
 CLEANFILES = $(BUILT_SOURCES)
-EXTRA_DIST =
+EXTRA_DIST = git_sha1.h.in
 
 SUBDIRS = . gtest util mapi/glapi/gen mapi
 

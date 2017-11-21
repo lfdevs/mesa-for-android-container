@@ -152,6 +152,16 @@ blorp_alloc_vertex_buffer(struct blorp_batch *batch, uint32_t size,
    *addr = (struct blorp_address) {
       .buffer = brw->batch.state_bo,
       .offset = offset,
+
+#if GEN_GEN == 10
+      .mocs = CNL_MOCS_WB,
+#elif GEN_GEN == 9
+      .mocs = SKL_MOCS_WB,
+#elif GEN_GEN == 8
+      .mocs = BDW_MOCS_WB,
+#elif GEN_GEN == 7
+      .mocs = GEN7_MOCS_L3,
+#endif
    };
 
    return data;

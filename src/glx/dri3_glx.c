@@ -317,9 +317,10 @@ dri3_create_context(struct glx_screen *base,
                     struct glx_context *shareList, int renderType)
 {
    unsigned int error;
+   uint32_t attribs[2] = { GLX_RENDER_TYPE, renderType };
 
    return dri3_create_context_attribs(base, config_base, shareList,
-                                      0, NULL, &error);
+                                      1, attribs, &error);
 }
 
 static void

@@ -1828,10 +1828,6 @@ static VkResult radv_alloc_sem_counts(struct radv_winsys_sem_counts *counts,
 
 		if (sem->temp_syncobj) {
 			counts->syncobj[syncobj_idx++] = sem->temp_syncobj;
-			if (reset_temp) {
-				/* after we wait on a temp import - drop it */
-				sem->temp_syncobj = 0;
-			}
 		}
 		else if (sem->syncobj)
 			counts->syncobj[syncobj_idx++] = sem->syncobj;
@@ -1850,6 +1846,21 @@ void radv_free_sem_info(struct radv_winsys_sem_info *sem_info)
 	free(sem_info->wait.sem);
 	free(sem_info->signal.syncobj);
 	free(sem_info->signal.sem);
+}
+
+
+static void radv_free_temp_syncobjs(struct radv_device *device,
+				    int num_sems,
+				    const VkSemaphore *sems)
+{
+	for (uint32_t i = 0; i < num_sems; i++) {
+		RADV_FROM_HANDLE(radv_semaphore, sem, sems[i]);
+
+		if (sem->temp_syncobj) {
+			device->ws->destroy_syncobj(device->ws, sem->temp_syncobj);
+			sem->temp_syncobj = 0;
+		}
+	}
 }
 
 VkResult radv_alloc_sem_info(struct radv_winsys_sem_info *sem_info,
@@ -1990,6 +2001,9 @@ VkResult radv_QueueSubmit(
 			}
 		}
 
+		radv_free_temp_syncobjs(queue->device,
+					pSubmits[i].waitSemaphoreCount,
+					pSubmits[i].pWaitSemaphores);
 		radv_free_sem_info(&sem_info);
 		free(cs_array);
 	}
@@ -3515,6 +3529,7 @@ VkResult radv_ImportSemaphoreFdKHR(VkDevice _device,
 	RADV_FROM_HANDLE(radv_device, device, _device);
 	RADV_FROM_HANDLE(radv_semaphore, sem, pImportSemaphoreFdInfo->semaphore);
 	uint32_t syncobj_handle = 0;
+	uint32_t *syncobj_dst = NULL;
 	assert(pImportSemaphoreFdInfo->handleType == VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT_KHR);
 
 	int ret = device->ws->import_syncobj(device->ws, pImportSemaphoreFdInfo->fd, &syncobj_handle);
@@ -3522,10 +3537,15 @@ VkResult radv_ImportSemaphoreFdKHR(VkDevice _device,
 		return VK_ERROR_INVALID_EXTERNAL_HANDLE_KHR;
 
 	if (pImportSemaphoreFdInfo->flags & VK_SEMAPHORE_IMPORT_TEMPORARY_BIT_KHR) {
-		sem->temp_syncobj = syncobj_handle;
+		syncobj_dst = &sem->temp_syncobj;
 	} else {
-		sem->syncobj = syncobj_handle;
+		syncobj_dst = &sem->syncobj;
 	}
+
+	if (*syncobj_dst)
+		device->ws->destroy_syncobj(device->ws, *syncobj_dst);
+
+	*syncobj_dst = syncobj_handle;
 	close(pImportSemaphoreFdInfo->fd);
 	return VK_SUCCESS;
 }

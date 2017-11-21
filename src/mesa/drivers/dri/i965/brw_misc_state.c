@@ -560,15 +560,6 @@ brw_upload_invariant_state(struct brw_context *brw)
    ADVANCE_BATCH();
 }
 
-const struct brw_tracked_state brw_invariant_state = {
-   .dirty = {
-      .mesa = 0,
-      .brw = BRW_NEW_BLORP |
-             BRW_NEW_CONTEXT,
-   },
-   .emit = brw_upload_invariant_state
-};
-
 /**
  * Define the base addresses which some state is referenced from.
  *

@@ -380,7 +380,7 @@ Depends:
  ${shlibs:Depends},
  ${misc:Depends},
 Enhances:
- libva1,
+ libva2,
 Provides:
  va-driver,
 Breaks: vdpau-va-driver (<< 0.7.4-5)

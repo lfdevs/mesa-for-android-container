@@ -1383,17 +1383,9 @@ AC_ARG_ENABLE([libglvnd],
 AM_CONDITIONAL(USE_LIBGLVND, test "x$enable_libglvnd" = xyes)
 
 if test "x$enable_libglvnd" = xyes ; then
-    dnl XXX: update once we can handle more than libGL/glx.
-    dnl Namely: we should error out if neither of the glvnd enabled libraries
-    dnl are built
     case "x$enable_glx" in
-    xno)
-        AC_MSG_ERROR([cannot build libglvnd without GLX])
-        ;;
     xxlib | xgallium-xlib )
         AC_MSG_ERROR([cannot build libgvnd when Xlib-GLX or Gallium-Xlib-GLX is enabled])
-        ;;
-    xdri)
         ;;
     esac
 
@@ -1403,6 +1395,10 @@ if test "x$enable_libglvnd" = xyes ; then
 
     DEFINES="${DEFINES} -DUSE_LIBGLVND=1"
     DEFAULT_GL_LIB_NAME=GLX_mesa
+
+    if test "x$enable_glx" = xno -a "x$enable_egl" = xno; then
+        AC_MSG_ERROR([cannot build libglvnd without GLX or EGL])
+    fi
 fi
 
 AC_ARG_WITH([gl-lib-name],
@@ -2160,7 +2156,9 @@ if test "x$enable_xvmc" = xyes -o \
         "x$enable_vdpau" = xyes -o \
         "x$enable_omx_bellagio" = xyes -o \
         "x$enable_va" = xyes; then
-    PKG_CHECK_MODULES([VL], [x11-xcb xcb xcb-dri2 >= $XCBDRI2_REQUIRED])
+    if echo $platforms | grep -q "x11"; then
+        PKG_CHECK_MODULES([VL], [x11-xcb xcb xcb-dri2 >= $XCBDRI2_REQUIRED])
+    fi
     need_gallium_vl_winsys=yes
 fi
 AM_CONDITIONAL(NEED_GALLIUM_VL_WINSYS, test "x$need_gallium_vl_winsys" = xyes)

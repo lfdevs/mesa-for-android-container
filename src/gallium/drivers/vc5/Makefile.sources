@@ -7,6 +7,7 @@ C_SOURCES := \
 	vc5_context.c \
 	vc5_context.h \
 	vc5_draw.c \
+	vc5_drm.h \
 	vc5_emit.c \
 	vc5_fence.c \
 	vc5_formats.c \

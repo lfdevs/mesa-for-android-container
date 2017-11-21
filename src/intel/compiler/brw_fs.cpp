@@ -1966,7 +1966,7 @@ fs_visitor::assign_constant_locations()
 
    /* For each uniform slot, a value of true indicates that the given slot and
     * the next slot must remain contiguous.  This is used to keep us from
-    * splitting arrays apart.
+    * splitting arrays and 64-bit values apart.
     */
    bool contiguous[uniforms];
    memset(contiguous, 0, sizeof(contiguous));
@@ -2003,6 +2003,9 @@ fs_visitor::assign_constant_locations()
             if (constant_nr >= 0 && constant_nr < (int) uniforms) {
                int regs_read = inst->components_read(i) *
                   type_sz(inst->src[i].type) / 4;
+               assert(regs_read <= 2);
+               if (regs_read == 2)
+                  contiguous[constant_nr] = true;
                for (int j = 0; j < regs_read; j++) {
                   is_live[constant_nr + j] = true;
                   bitsize_access[constant_nr + j] =
@@ -3480,8 +3483,14 @@ fs_visitor::lower_integer_multiplication()
              * schedule multi-component multiplications much better.
              */
 
+            bool needs_mov = false;
             fs_reg orig_dst = inst->dst;
-            if (orig_dst.is_null() || orig_dst.file == MRF) {
+            if (orig_dst.is_null() || orig_dst.file == MRF ||
+                regions_overlap(inst->dst, inst->size_written,
+                                inst->src[0], inst->size_read(0)) ||
+                regions_overlap(inst->dst, inst->size_written,
+                                inst->src[1], inst->size_read(1))) {
+               needs_mov = true;
                inst->dst = fs_reg(VGRF, alloc.allocate(dispatch_width / 8),
                                   inst->dst.type);
             }
@@ -3512,7 +3521,7 @@ fs_visitor::lower_integer_multiplication()
                      subscript(low, BRW_REGISTER_TYPE_UW, 1),
                      subscript(high, BRW_REGISTER_TYPE_UW, 0));
 
-            if (inst->conditional_mod || orig_dst.file == MRF) {
+            if (needs_mov || inst->conditional_mod) {
                set_condmod(inst->conditional_mod,
                            ibld.MOV(orig_dst, inst->dst));
             }
@@ -5021,12 +5030,10 @@ needs_src_copy(const fs_builder &lbld, const fs_inst *inst, unsigned i)
 /**
  * Extract the data that would be consumed by the channel group given by
  * lbld.group() from the i-th source region of instruction \p inst and return
- * it as result in packed form.  If any copy instructions are required they
- * will be emitted before the given \p inst in \p block.
+ * it as result in packed form.
  */
 static fs_reg
-emit_unzip(const fs_builder &lbld, bblock_t *block, fs_inst *inst,
-           unsigned i)
+emit_unzip(const fs_builder &lbld, fs_inst *inst, unsigned i)
 {
    /* Specified channel group from the source region. */
    const fs_reg src = horiz_offset(inst->src[i], lbld.group());
@@ -5041,8 +5048,7 @@ emit_unzip(const fs_builder &lbld, bblock_t *block, fs_inst *inst,
       const fs_reg tmp = lbld.vgrf(inst->src[i].type, inst->components_read(i));
 
       for (unsigned k = 0; k < inst->components_read(i); ++k)
-         cbld.at(block, inst)
-             .MOV(offset(tmp, lbld, k), offset(src, inst->exec_size, k));
+         cbld.MOV(offset(tmp, lbld, k), offset(src, inst->exec_size, k));
 
       return tmp;
 
@@ -5108,40 +5114,51 @@ needs_dst_copy(const fs_builder &lbld, const fs_inst *inst)
 /**
  * Insert data from a packed temporary into the channel group given by
  * lbld.group() of the destination region of instruction \p inst and return
- * the temporary as result.  If any copy instructions are required they will
- * be emitted around the given \p inst in \p block.
+ * the temporary as result.  Any copy instructions that are required for
+ * unzipping the previous value (in the case of partial writes) will be
+ * inserted using \p lbld_before and any copy instructions required for
+ * zipping up the destination of \p inst will be inserted using \p lbld_after.
  */
 static fs_reg
-emit_zip(const fs_builder &lbld, bblock_t *block, fs_inst *inst)
+emit_zip(const fs_builder &lbld_before, const fs_builder &lbld_after,
+         fs_inst *inst)
 {
-   /* Builder of the right width to perform the copy avoiding uninitialized
-    * data if the lowered execution size is greater than the original
-    * execution size of the instruction.
-    */
-   const fs_builder cbld = lbld.group(MIN2(lbld.dispatch_width(),
-                                           inst->exec_size), 0);
+   assert(lbld_before.dispatch_width() == lbld_after.dispatch_width());
+   assert(lbld_before.group() == lbld_after.group());
 
    /* Specified channel group from the destination region. */
-   const fs_reg dst = horiz_offset(inst->dst, lbld.group());
+   const fs_reg dst = horiz_offset(inst->dst, lbld_after.group());
    const unsigned dst_size = inst->size_written /
       inst->dst.component_size(inst->exec_size);
 
-   if (needs_dst_copy(lbld, inst)) {
-      const fs_reg tmp = lbld.vgrf(inst->dst.type, dst_size);
+   if (needs_dst_copy(lbld_after, inst)) {
+      const fs_reg tmp = lbld_after.vgrf(inst->dst.type, dst_size);
 
       if (inst->predicate) {
          /* Handle predication by copying the original contents of
           * the destination into the temporary before emitting the
           * lowered instruction.
           */
-         for (unsigned k = 0; k < dst_size; ++k)
-            cbld.at(block, inst)
-                .MOV(offset(tmp, lbld, k), offset(dst, inst->exec_size, k));
+         const fs_builder gbld_before =
+            lbld_before.group(MIN2(lbld_before.dispatch_width(),
+                                   inst->exec_size), 0);
+         for (unsigned k = 0; k < dst_size; ++k) {
+            gbld_before.MOV(offset(tmp, lbld_before, k),
+                            offset(dst, inst->exec_size, k));
+         }
       }
 
-      for (unsigned k = 0; k < dst_size; ++k)
-         cbld.at(block, inst->next)
-             .MOV(offset(dst, inst->exec_size, k), offset(tmp, lbld, k));
+      const fs_builder gbld_after =
+         lbld_after.group(MIN2(lbld_after.dispatch_width(),
+                               inst->exec_size), 0);
+      for (unsigned k = 0; k < dst_size; ++k) {
+         /* Use a builder of the right width to perform the copy avoiding
+          * uninitialized data if the lowered execution size is greater than
+          * the original execution size of the instruction.
+          */
+         gbld_after.MOV(offset(dst, inst->exec_size, k),
+                        offset(tmp, lbld_after, k));
+      }
 
       return tmp;
 
@@ -5181,6 +5198,20 @@ fs_visitor::lower_simd_width()
 
          assert(!inst->writes_accumulator && !inst->mlen);
 
+         /* Inserting the zip, unzip, and duplicated instructions in all of
+          * the right spots is somewhat tricky.  All of the unzip and any
+          * instructions from the zip which unzip the destination prior to
+          * writing need to happen before all of the per-group instructions
+          * and the zip instructions need to happen after.  In order to sort
+          * this all out, we insert the unzip instructions before \p inst,
+          * insert the per-group instructions after \p inst (i.e. before
+          * inst->next), and insert the zip instructions before the
+          * instruction after \p inst.  Since we are inserting instructions
+          * after \p inst, inst->next is a moving target and we need to save
+          * it off here so that we insert the zip instructions in the right
+          * place.
+          */
+         exec_node *const after_inst = inst->next;
          for (unsigned i = 0; i < n; i++) {
             /* Emit a copy of the original instruction with the lowered width.
              * If the EOT flag was set throw it away except for the last
@@ -5188,7 +5219,7 @@ fs_visitor::lower_simd_width()
              */
             fs_inst split_inst = *inst;
             split_inst.exec_size = lower_width;
-            split_inst.eot = inst->eot && i == n - 1;
+            split_inst.eot = inst->eot && i == 0;
 
             /* Select the correct channel enables for the i-th group, then
              * transform the sources and destination and emit the lowered
@@ -5197,13 +5228,14 @@ fs_visitor::lower_simd_width()
             const fs_builder lbld = ibld.group(lower_width, i);
 
             for (unsigned j = 0; j < inst->sources; j++)
-               split_inst.src[j] = emit_unzip(lbld, block, inst, j);
+               split_inst.src[j] = emit_unzip(lbld.at(block, inst), inst, j);
 
-            split_inst.dst = emit_zip(lbld, block, inst);
+            split_inst.dst = emit_zip(lbld.at(block, inst),
+                                      lbld.at(block, after_inst), inst);
             split_inst.size_written =
                split_inst.dst.component_size(lower_width) * dst_size;
 
-            lbld.emit(split_inst);
+            lbld.at(block, inst->next).emit(split_inst);
          }
 
          inst->remove(block);

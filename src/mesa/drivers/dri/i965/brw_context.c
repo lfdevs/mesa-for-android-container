@@ -874,6 +874,7 @@ brwCreateContext(gl_api api,
    brw->tes.base.stage = MESA_SHADER_TESS_EVAL;
    brw->gs.base.stage = MESA_SHADER_GEOMETRY;
    brw->wm.base.stage = MESA_SHADER_FRAGMENT;
+   brw->cs.base.stage = MESA_SHADER_COMPUTE;
    if (devinfo->gen >= 8) {
       brw->vtbl.emit_depth_stencil_hiz = gen8_emit_depth_stencil_hiz;
    } else if (devinfo->gen >= 7) {

@@ -5249,7 +5249,7 @@ ast_declarator_list::hir(exec_list *instructions,
                      if (var->type->fields.structure[i].type->is_array() ||
                          var->type->fields.structure[i].type->is_record())
                         _mesa_glsl_error(&loc, state,
-                                         "fragement shader input cannot have "
+                                         "fragment shader input cannot have "
                                          "a struct that contains an "
                                          "array or struct");
                   }
