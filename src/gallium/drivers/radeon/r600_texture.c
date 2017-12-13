@@ -2506,8 +2506,11 @@ void vi_dcc_clear_level(struct r600_common_context *rctx,
 		assert(rtex->resource.b.b.nr_samples <= 1);
 		clear_size = rtex->surface.dcc_size;
 	} else {
+		unsigned num_layers = util_max_layer(&rtex->resource.b.b, level) + 1;
+
 		dcc_offset += rtex->surface.u.legacy.level[level].dcc_offset;
-		clear_size = rtex->surface.u.legacy.level[level].dcc_fast_clear_size;
+		clear_size = rtex->surface.u.legacy.level[level].dcc_fast_clear_size *
+			     num_layers;
 	}
 
 	rctx->clear_buffer(&rctx->b, dcc_buffer, dcc_offset, clear_size,

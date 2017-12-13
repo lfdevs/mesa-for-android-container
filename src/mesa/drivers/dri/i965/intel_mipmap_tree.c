@@ -207,7 +207,13 @@ intel_miptree_supports_ccs(struct brw_context *brw,
    if (!brw->mesa_format_supports_render[mt->format])
       return false;
 
-   return true;
+   if (devinfo->gen >= 9) {
+      mesa_format linear_format = _mesa_get_srgb_format_linear(mt->format);
+      const enum isl_format isl_format =
+         brw_isl_format_for_mesa_format(linear_format);
+      return isl_format_supports_ccs_e(&brw->screen->devinfo, isl_format);
+   } else
+      return true;
 }
 
 static bool
@@ -250,7 +256,7 @@ intel_miptree_supports_hiz(const struct brw_context *brw,
  * our HW tends to support more linear formats than sRGB ones, we use this
  * format variant for check for CCS_E compatibility.
  */
-static bool
+MAYBE_UNUSED static bool
 format_ccs_e_compat_with_miptree(const struct gen_device_info *devinfo,
                                  const struct intel_mipmap_tree *mt,
                                  enum isl_format access_format)
@@ -284,13 +290,12 @@ intel_miptree_supports_ccs_e(struct brw_context *brw,
    if (!intel_miptree_supports_ccs(brw, mt))
       return false;
 
-   /* Many window system buffers are sRGB even if they are never rendered as
-    * sRGB.  For those, we want CCS_E for when sRGBEncode is false.  When the
-    * surface is used as sRGB, we fall back to CCS_D.
+   /* Fast clear can be also used to clear srgb surfaces by using equivalent
+    * linear format. This trick, however, can't be extended to be used with
+    * lossless compression and therefore a check is needed to see if the format
+    * really is linear.
     */
-   mesa_format linear_format = _mesa_get_srgb_format_linear(mt->format);
-   enum isl_format isl_format = brw_isl_format_for_mesa_format(linear_format);
-   return isl_format_supports_ccs_e(&brw->screen->devinfo, isl_format);
+   return _mesa_get_srgb_format_linear(mt->format) == mt->format;
 }
 
 /**
@@ -2685,27 +2690,29 @@ intel_miptree_render_aux_usage(struct brw_context *brw,
       return ISL_AUX_USAGE_MCS;
 
    case ISL_AUX_USAGE_CCS_D:
-      return mt->mcs_buf ? ISL_AUX_USAGE_CCS_D : ISL_AUX_USAGE_NONE;
+      /* If FRAMEBUFFER_SRGB is used on Gen9+ then we need to resolve any of
+       * the single-sampled color renderbuffers because the CCS buffer isn't
+       * supported for SRGB formats. This only matters if FRAMEBUFFER_SRGB is
+       * enabled because otherwise the surface state will be programmed with
+       * the linear equivalent format anyway.
+       */
+      if (isl_format_is_srgb(render_format) &&
+          _mesa_get_srgb_format_linear(mt->format) != mt->format) {
+         return ISL_AUX_USAGE_NONE;
+      } else if (!mt->mcs_buf) {
+         return ISL_AUX_USAGE_NONE;
+      } else {
+         return ISL_AUX_USAGE_CCS_D;
+      }
 
    case ISL_AUX_USAGE_CCS_E: {
-      /* If the format supports CCS_E and is compatible with the miptree,
-       * then we can use it.
+      /* Lossless compression is not supported for SRGB formats, it
+       * should be impossible to get here with such surfaces.
        */
-      if (format_ccs_e_compat_with_miptree(&brw->screen->devinfo,
-                                           mt, render_format))
-         return ISL_AUX_USAGE_CCS_E;
+      assert(!isl_format_is_srgb(render_format) ||
+             _mesa_get_srgb_format_linear(mt->format) == mt->format);
 
-      /* Otherwise, we have to fall back to CCS_D */
-
-      /* gen9 hardware technically supports non-0/1 clear colors with sRGB
-       * formats.  However, there are issues with blending where it doesn't
-       * properly apply the sRGB curve to the clear color when blending.
-       */
-      if (blend_enabled && isl_format_is_srgb(render_format) &&
-          !isl_color_value_is_zero_one(mt->fast_clear_color, render_format))
-         return ISL_AUX_USAGE_NONE;
-
-      return ISL_AUX_USAGE_CCS_D;
+      return ISL_AUX_USAGE_CCS_E;
    }
 
    default:

@@ -28,7 +28,7 @@ dynamic_state_address(struct blorp_batch *batch, uint32_t offset)
    struct brw_context *brw = batch->driver_batch;
 
    return (struct blorp_address) {
-      .buffer = brw->batch.state_bo,
+      .buffer = brw->batch.state.bo,
       .offset = offset,
    };
 }

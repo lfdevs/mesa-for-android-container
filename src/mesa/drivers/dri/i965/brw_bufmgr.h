@@ -337,6 +337,8 @@ int brw_bo_gem_export_to_prime(struct brw_bo *bo, int *prime_fd);
 struct brw_bo *brw_bo_gem_create_from_prime(struct brw_bufmgr *bufmgr,
                                             int prime_fd);
 
+uint32_t brw_bo_export_gem_handle(struct brw_bo *bo);
+
 int brw_reg_read(struct brw_bufmgr *bufmgr, uint32_t offset,
                  uint64_t *result);
 

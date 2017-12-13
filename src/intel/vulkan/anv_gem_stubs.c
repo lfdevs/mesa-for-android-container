@@ -27,11 +27,13 @@
 
 #include "anv_private.h"
 
+#ifndef HAVE_MEMFD_CREATE
 static inline int
 memfd_create(const char *name, unsigned int flags)
 {
    return syscall(SYS_memfd_create, name, flags);
 }
+#endif
 
 uint32_t
 anv_gem_create(struct anv_device *device, uint64_t size)

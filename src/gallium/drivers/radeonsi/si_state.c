@@ -4624,7 +4624,7 @@ static void si_apply_opaque_metadata(struct r600_common_screen *rscreen,
 	/* Return if DCC is enabled. The texture should be set up with it
 	 * already.
 	 */
-	if (md->size_metadata >= 11 * 4 &&
+	if (md->size_metadata >= 10 * 4 && /* at least 2(header) + 8(desc) dwords */
 	    md->metadata[0] != 0 &&
 	    md->metadata[1] == si_get_bo_metadata_word1(rscreen) &&
 	    G_008F28_COMPRESSION_EN(desc[6])) {

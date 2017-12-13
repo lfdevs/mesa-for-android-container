@@ -753,7 +753,9 @@ bool expr_handler::fold_alu_op2(alu_node& n) {
 				n.bc.src[0].abs == n.bc.src[1].abs) {
 			switch (n.bc.op) {
 			case ALU_OP2_MIN: // (MIN x, x) => (MOV x)
+			case ALU_OP2_MIN_DX10:
 			case ALU_OP2_MAX:
+			case ALU_OP2_MAX_DX10:
 				convert_to_mov(n, v0, n.bc.src[0].neg, n.bc.src[0].abs);
 				return fold_alu_op1(n);
 			case ALU_OP2_ADD:  // (ADD x, x) => (MUL x, 2)

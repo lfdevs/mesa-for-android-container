@@ -3232,6 +3232,7 @@ void evergreen_update_ps_state(struct pipe_context *ctx, struct r600_pipe_shader
 	r600_store_value(cb, /* R_028844_SQ_PGM_RESOURCES_PS */
 			 S_028844_NUM_GPRS(rshader->bc.ngpr) |
 			 S_028844_PRIME_CACHE_ON_DRAW(1) |
+			 S_028844_DX10_CLAMP(1) |
 			 S_028844_STACK_SIZE(rshader->bc.nstack));
 	/* After that, the NOP relocation packet must be emitted (shader->bo, RADEON_USAGE_READ). */
 
@@ -3252,6 +3253,7 @@ void evergreen_update_es_state(struct pipe_context *ctx, struct r600_pipe_shader
 
 	r600_store_context_reg(cb, R_028890_SQ_PGM_RESOURCES_ES,
 			       S_028890_NUM_GPRS(rshader->bc.ngpr) |
+			       S_028890_DX10_CLAMP(1) |
 			       S_028890_STACK_SIZE(rshader->bc.nstack));
 	r600_store_context_reg(cb, R_02888C_SQ_PGM_START_ES,
 			       shader->bo->gpu_address >> 8);
@@ -3314,6 +3316,7 @@ void evergreen_update_gs_state(struct pipe_context *ctx, struct r600_pipe_shader
 
 	r600_store_context_reg(cb, R_028878_SQ_PGM_RESOURCES_GS,
 			       S_028878_NUM_GPRS(rshader->bc.ngpr) |
+			       S_028878_DX10_CLAMP(1) |
 			       S_028878_STACK_SIZE(rshader->bc.nstack));
 	r600_store_context_reg(cb, R_028874_SQ_PGM_START_GS,
 			       shader->bo->gpu_address >> 8);
@@ -3354,6 +3357,7 @@ void evergreen_update_vs_state(struct pipe_context *ctx, struct r600_pipe_shader
 			       S_0286C4_VS_EXPORT_COUNT(nparams - 1));
 	r600_store_context_reg(cb, R_028860_SQ_PGM_RESOURCES_VS,
 			       S_028860_NUM_GPRS(rshader->bc.ngpr) |
+			       S_028860_DX10_CLAMP(1) |
 			       S_028860_STACK_SIZE(rshader->bc.nstack));
 	if (rshader->vs_position_window_space) {
 		r600_store_context_reg(cb, R_028818_PA_CL_VTE_CNTL,
@@ -3388,6 +3392,7 @@ void evergreen_update_hs_state(struct pipe_context *ctx, struct r600_pipe_shader
 	r600_init_command_buffer(cb, 32);
 	r600_store_context_reg(cb, R_0288BC_SQ_PGM_RESOURCES_HS,
 			       S_0288BC_NUM_GPRS(rshader->bc.ngpr) |
+			       S_0288BC_DX10_CLAMP(1) |
 			       S_0288BC_STACK_SIZE(rshader->bc.nstack));
 	r600_store_context_reg(cb, R_0288B8_SQ_PGM_START_HS,
 			       shader->bo->gpu_address >> 8);
@@ -3401,6 +3406,7 @@ void evergreen_update_ls_state(struct pipe_context *ctx, struct r600_pipe_shader
 	r600_init_command_buffer(cb, 32);
 	r600_store_context_reg(cb, R_0288D4_SQ_PGM_RESOURCES_LS,
 			       S_0288D4_NUM_GPRS(rshader->bc.ngpr) |
+			       S_0288D4_DX10_CLAMP(1) |
 			       S_0288D4_STACK_SIZE(rshader->bc.nstack));
 	r600_store_context_reg(cb, R_0288D0_SQ_PGM_START_LS,
 			       shader->bo->gpu_address >> 8);

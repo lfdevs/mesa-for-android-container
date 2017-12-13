@@ -847,7 +847,7 @@ dd_copy_draw_state(struct dd_draw_state *dst, struct dd_draw_state *src)
    }
 
    dst->num_so_targets = src->num_so_targets;
-   for (i = 0; i < ARRAY_SIZE(src->so_targets); i++)
+   for (i = 0; i < src->num_so_targets; i++)
       pipe_so_target_reference(&dst->so_targets[i], src->so_targets[i]);
    memcpy(dst->so_offsets, src->so_offsets, sizeof(src->so_offsets));
 

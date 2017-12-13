@@ -442,23 +442,26 @@ struct brw_reloc_list {
    int reloc_array_size;
 };
 
+struct brw_growing_bo {
+   struct brw_bo *bo;
+   uint32_t *map;
+   uint32_t *cpu_map;
+};
+
 struct intel_batchbuffer {
    /** Current batchbuffer being queued up. */
-   struct brw_bo *bo;
-   /** Last BO submitted to the hardware.  Used for glFinish(). */
-   struct brw_bo *last_bo;
+   struct brw_growing_bo batch;
    /** Current statebuffer being queued up. */
-   struct brw_bo *state_bo;
+   struct brw_growing_bo state;
+
+   /** Last batchbuffer submitted to the hardware.  Used for glFinish(). */
+   struct brw_bo *last_bo;
 
 #ifdef DEBUG
    uint16_t emit, total;
 #endif
    uint16_t reserved_space;
    uint32_t *map_next;
-   uint32_t *map;
-   uint32_t *batch_cpu_map;
-   uint32_t *state_cpu_map;
-   uint32_t *state_map;
    uint32_t state_used;
 
    enum brw_gpu_ring ring;

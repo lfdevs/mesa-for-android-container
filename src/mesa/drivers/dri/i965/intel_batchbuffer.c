@@ -52,15 +52,6 @@
 #define BATCH_SZ (20 * 1024)
 #define STATE_SZ (16 * 1024)
 
-/* The kernel assumes batchbuffers are smaller than 256kB. */
-#define MAX_BATCH_SIZE (256 * 1024)
-
-/* 3DSTATE_BINDING_TABLE_POINTERS has a U16 offset from Surface State Base
- * Address, which means that we can't put binding tables beyond 64kB.  This
- * effectively limits the maximum statebuffer size to 64kB.
- */
-#define MAX_STATE_SIZE (64 * 1024)
-
 static void
 intel_batchbuffer_reset(struct brw_context *brw);
 
@@ -93,11 +84,11 @@ intel_batchbuffer_init(struct brw_context *brw)
    const struct gen_device_info *devinfo = &screen->devinfo;
 
    if (!devinfo->has_llc) {
-      batch->batch_cpu_map = malloc(BATCH_SZ);
-      batch->map = batch->batch_cpu_map;
-      batch->map_next = batch->map;
-      batch->state_cpu_map = malloc(STATE_SZ);
-      batch->state_map = batch->state_cpu_map;
+      batch->batch.cpu_map = malloc(BATCH_SZ);
+      batch->batch.map = batch->batch.cpu_map;
+      batch->map_next = batch->batch.map;
+      batch->state.cpu_map = malloc(STATE_SZ);
+      batch->state.map = batch->state.cpu_map;
    }
 
    init_reloc_list(&batch->batch_relocs, 250);
@@ -180,20 +171,21 @@ intel_batchbuffer_reset(struct brw_context *brw)
       brw_bo_unreference(batch->last_bo);
       batch->last_bo = NULL;
    }
-   batch->last_bo = batch->bo;
+   batch->last_bo = batch->batch.bo;
 
-   batch->bo = brw_bo_alloc(bufmgr, "batchbuffer", BATCH_SZ, 4096);
-   if (!batch->batch_cpu_map) {
-      batch->map = brw_bo_map(brw, batch->bo, MAP_READ | MAP_WRITE);
+   batch->batch.bo = brw_bo_alloc(bufmgr, "batchbuffer", BATCH_SZ, 4096);
+   if (!batch->batch.cpu_map) {
+      batch->batch.map =
+         brw_bo_map(brw, batch->batch.bo, MAP_READ | MAP_WRITE);
    }
-   batch->map_next = batch->map;
+   batch->map_next = batch->batch.map;
 
-   batch->state_bo = brw_bo_alloc(bufmgr, "statebuffer", STATE_SZ, 4096);
-   batch->state_bo->kflags =
+   batch->state.bo = brw_bo_alloc(bufmgr, "statebuffer", STATE_SZ, 4096);
+   batch->state.bo->kflags =
       can_do_exec_capture(screen) ? EXEC_OBJECT_CAPTURE : 0;
-   if (!batch->state_cpu_map) {
-      batch->state_map =
-         brw_bo_map(brw, batch->state_bo, MAP_READ | MAP_WRITE);
+   if (!batch->state.cpu_map) {
+      batch->state.map =
+         brw_bo_map(brw, batch->state.bo, MAP_READ | MAP_WRITE);
    }
 
    /* Avoid making 0 a valid state offset - otherwise the decoder will try
@@ -201,8 +193,8 @@ intel_batchbuffer_reset(struct brw_context *brw)
     */
    batch->state_used = 1;
 
-   add_exec_bo(batch, batch->bo);
-   assert(batch->bo->index == 0);
+   add_exec_bo(batch, batch->batch.bo);
+   assert(batch->batch.bo->index == 0);
 
    batch->needs_sol_reset = false;
    batch->state_base_address_emitted = false;
@@ -251,8 +243,8 @@ intel_batchbuffer_reset_to_saved(struct brw_context *brw)
 void
 intel_batchbuffer_free(struct intel_batchbuffer *batch)
 {
-   free(batch->batch_cpu_map);
-   free(batch->state_cpu_map);
+   free(batch->batch.cpu_map);
+   free(batch->state.cpu_map);
 
    for (int i = 0; i < batch->exec_count; i++) {
       brw_bo_unreference(batch->exec_bos[i]);
@@ -263,8 +255,8 @@ intel_batchbuffer_free(struct intel_batchbuffer *batch)
    free(batch->validation_list);
 
    brw_bo_unreference(batch->last_bo);
-   brw_bo_unreference(batch->bo);
-   brw_bo_unreference(batch->state_bo);
+   brw_bo_unreference(batch->batch.bo);
+   brw_bo_unreference(batch->state.bo);
    if (batch->state_batch_sizes)
       _mesa_hash_table_destroy(batch->state_batch_sizes, NULL);
 }
@@ -302,7 +294,8 @@ grow_buffer(struct brw_context *brw,
    uint32_t *old_map = *map_ptr;
    struct brw_bo *old_bo = *bo_ptr;
 
-   struct brw_bo *new_bo = brw_bo_alloc(bufmgr, old_bo->name, new_size, 4096);
+   struct brw_bo *new_bo =
+      brw_bo_alloc(bufmgr, old_bo->name, new_size, old_bo->align);
    uint32_t *new_map;
 
    perf_debug("Growing %s - ran out of space\n", old_bo->name);
@@ -321,9 +314,12 @@ grow_buffer(struct brw_context *brw,
     * This guarantees that our relocations continue to work: values we've
     * already written into the buffer, values we're going to write into the
     * buffer, and the validation/relocation lists all will match.
+    *
+    * Also preserve kflags for EXEC_OBJECT_CAPTURE.
     */
    new_bo->gtt_offset = old_bo->gtt_offset;
    new_bo->index = old_bo->index;
+   new_bo->kflags = old_bo->kflags;
 
    /* Batch/state buffers are per-context, and if we've run out of space,
     * we must have actually used them before, so...they will be in the list.
@@ -370,17 +366,16 @@ intel_batchbuffer_require_space(struct brw_context *brw, GLuint sz,
    }
 
    const unsigned batch_used = USED_BATCH(*batch) * 4;
-   if (batch_used + sz >= BATCH_SZ) {
-      if (!batch->no_wrap) {
-         intel_batchbuffer_flush(brw);
-      } else {
-         const unsigned new_size =
-            MIN2(batch->bo->size + batch->bo->size / 2, MAX_BATCH_SIZE);
-         grow_buffer(brw, &batch->bo, &batch->map, &batch->batch_cpu_map,
-                     batch_used, new_size);
-         batch->map_next = (void *) batch->map + batch_used;
-         assert(batch_used + sz < batch->bo->size);
-      }
+   if (batch_used + sz >= BATCH_SZ && !batch->no_wrap) {
+      intel_batchbuffer_flush(brw);
+   } else if (batch_used + sz >= batch->batch.bo->size) {
+      const unsigned new_size =
+         MIN2(batch->batch.bo->size + batch->batch.bo->size / 2,
+              MAX_BATCH_SIZE);
+      grow_buffer(brw, &batch->batch.bo, &batch->batch.map,
+                  &batch->batch.cpu_map, batch_used, new_size);
+      batch->map_next = (void *) batch->batch.map + batch_used;
+      assert(batch_used + sz < batch->batch.bo->size);
    }
 
    /* The intel_batchbuffer_flush() calls above might have changed
@@ -437,16 +432,16 @@ do_batch_dump(struct brw_context *brw)
    if (batch->ring != RENDER_RING)
       return;
 
-   uint32_t *batch_data = brw_bo_map(brw, batch->bo, MAP_READ);
-   uint32_t *state = brw_bo_map(brw, batch->state_bo, MAP_READ);
+   uint32_t *batch_data = brw_bo_map(brw, batch->batch.bo, MAP_READ);
+   uint32_t *state = brw_bo_map(brw, batch->state.bo, MAP_READ);
    if (batch_data == NULL || state == NULL) {
       fprintf(stderr, "WARNING: failed to map batchbuffer/statebuffer\n");
       return;
    }
 
    uint32_t *end = batch_data + USED_BATCH(*batch);
-   uint32_t batch_gtt_offset = batch->bo->gtt_offset;
-   uint32_t state_gtt_offset = batch->state_bo->gtt_offset;
+   uint32_t batch_gtt_offset = batch->batch.bo->gtt_offset;
+   uint32_t state_gtt_offset = batch->state.bo->gtt_offset;
    int length;
 
    bool color = INTEL_DEBUG & DEBUG_COLOR;
@@ -567,8 +562,8 @@ do_batch_dump(struct brw_context *brw)
       }
    }
 
-   brw_bo_unmap(batch->bo);
-   brw_bo_unmap(batch->state_bo);
+   brw_bo_unmap(batch->batch.bo);
+   brw_bo_unmap(batch->state.bo);
 }
 #else
 static void do_batch_dump(struct brw_context *brw) { }
@@ -590,7 +585,7 @@ brw_new_batch(struct brw_context *brw)
    brw->batch.exec_count = 0;
    brw->batch.aperture_space = 0;
 
-   brw_bo_unreference(brw->batch.state_bo);
+   brw_bo_unreference(brw->batch.state.bo);
 
    /* Create a new batchbuffer and reset the associated state: */
    intel_batchbuffer_reset_and_clear_render_cache(brw);
@@ -786,18 +781,18 @@ submit_batch(struct brw_context *brw, int in_fence_fd, int *out_fence_fd)
    struct intel_batchbuffer *batch = &brw->batch;
    int ret = 0;
 
-   if (batch->batch_cpu_map) {
-      void *bo_map = brw_bo_map(brw, batch->bo, MAP_WRITE);
-      memcpy(bo_map, batch->batch_cpu_map, 4 * USED_BATCH(*batch));
+   if (batch->batch.cpu_map) {
+      void *bo_map = brw_bo_map(brw, batch->batch.bo, MAP_WRITE);
+      memcpy(bo_map, batch->batch.cpu_map, 4 * USED_BATCH(*batch));
    }
 
-   if (batch->state_cpu_map) {
-      void *bo_map = brw_bo_map(brw, batch->state_bo, MAP_WRITE);
-      memcpy(bo_map, batch->state_cpu_map, batch->state_used);
+   if (batch->state.cpu_map) {
+      void *bo_map = brw_bo_map(brw, batch->state.bo, MAP_WRITE);
+      memcpy(bo_map, batch->state.cpu_map, batch->state_used);
    }
 
-   brw_bo_unmap(batch->bo);
-   brw_bo_unmap(batch->state_bo);
+   brw_bo_unmap(batch->batch.bo);
+   brw_bo_unmap(batch->state.bo);
 
    if (!brw->screen->no_hw) {
       /* The requirement for using I915_EXEC_NO_RELOC are:
@@ -825,19 +820,19 @@ submit_batch(struct brw_context *brw, int in_fence_fd, int *out_fence_fd)
       uint32_t hw_ctx = batch->ring == RENDER_RING ? brw->hw_ctx : 0;
 
       /* Set statebuffer relocations */
-      const unsigned state_index = batch->state_bo->index;
+      const unsigned state_index = batch->state.bo->index;
       if (state_index < batch->exec_count &&
-          batch->exec_bos[state_index] == batch->state_bo) {
+          batch->exec_bos[state_index] == batch->state.bo) {
          struct drm_i915_gem_exec_object2 *entry =
             &batch->validation_list[state_index];
-         assert(entry->handle == batch->state_bo->gem_handle);
+         assert(entry->handle == batch->state.bo->gem_handle);
          entry->relocation_count = batch->state_relocs.reloc_count;
          entry->relocs_ptr = (uintptr_t) batch->state_relocs.relocs;
       }
 
       /* Set batchbuffer relocations */
       struct drm_i915_gem_exec_object2 *entry = &batch->validation_list[0];
-      assert(entry->handle == batch->bo->gem_handle);
+      assert(entry->handle == batch->batch.bo->gem_handle);
       entry->relocation_count = batch->batch_relocs.reloc_count;
       entry->relocs_ptr = (uintptr_t) batch->batch_relocs.relocs;
 
@@ -899,7 +894,7 @@ _intel_batchbuffer_flush_fence(struct brw_context *brw,
    intel_upload_finish(brw);
 
    if (brw->throttle_batch[0] == NULL) {
-      brw->throttle_batch[0] = brw->batch.bo;
+      brw->throttle_batch[0] = brw->batch.batch.bo;
       brw_bo_reference(brw->throttle_batch[0]);
    }
 
@@ -921,7 +916,7 @@ _intel_batchbuffer_flush_fence(struct brw_context *brw,
 
    if (unlikely(INTEL_DEBUG & DEBUG_SYNC)) {
       fprintf(stderr, "waiting for idle\n");
-      brw_bo_wait_rendering(brw->batch.bo);
+      brw_bo_wait_rendering(brw->batch.batch.bo);
    }
 
    /* Start a new batch buffer. */
@@ -994,7 +989,7 @@ brw_batch_reloc(struct intel_batchbuffer *batch, uint32_t batch_offset,
                 struct brw_bo *target, uint32_t target_offset,
                 unsigned int reloc_flags)
 {
-   assert(batch_offset <= batch->bo->size - sizeof(uint32_t));
+   assert(batch_offset <= batch->batch.bo->size - sizeof(uint32_t));
 
    return emit_reloc(batch, &batch->batch_relocs, batch_offset,
                      target, target_offset, reloc_flags);
@@ -1005,7 +1000,7 @@ brw_state_reloc(struct intel_batchbuffer *batch, uint32_t state_offset,
                 struct brw_bo *target, uint32_t target_offset,
                 unsigned int reloc_flags)
 {
-   assert(state_offset <= batch->state_bo->size - sizeof(uint32_t));
+   assert(state_offset <= batch->state.bo->size - sizeof(uint32_t));
 
    return emit_reloc(batch, &batch->state_relocs, state_offset,
                      target, target_offset, reloc_flags);
@@ -1045,22 +1040,20 @@ brw_state_batch(struct brw_context *brw,
 {
    struct intel_batchbuffer *batch = &brw->batch;
 
-   assert(size < batch->bo->size);
+   assert(size < batch->state.bo->size);
 
    uint32_t offset = ALIGN(batch->state_used, alignment);
 
-   if (offset + size >= STATE_SZ) {
-      if (!batch->no_wrap) {
-         intel_batchbuffer_flush(brw);
-         offset = ALIGN(batch->state_used, alignment);
-      } else {
-         const unsigned new_size =
-            MIN2(batch->state_bo->size + batch->state_bo->size / 2,
-                 MAX_STATE_SIZE);
-         grow_buffer(brw, &batch->state_bo, &batch->state_map,
-                     &batch->state_cpu_map, batch->state_used, new_size);
-         assert(offset + size < batch->state_bo->size);
-      }
+   if (offset + size >= STATE_SZ && !batch->no_wrap) {
+      intel_batchbuffer_flush(brw);
+      offset = ALIGN(batch->state_used, alignment);
+   } else if (offset + size >= batch->state.bo->size) {
+      const unsigned new_size =
+         MIN2(batch->state.bo->size + batch->state.bo->size / 2,
+              MAX_STATE_SIZE);
+      grow_buffer(brw, &batch->state.bo, &batch->state.map,
+                  &batch->state.cpu_map, batch->state_used, new_size);
+      assert(offset + size < batch->state.bo->size);
    }
 
    if (unlikely(INTEL_DEBUG & DEBUG_BATCH)) {
@@ -1072,7 +1065,7 @@ brw_state_batch(struct brw_context *brw,
    batch->state_used = offset + size;
 
    *out_offset = offset;
-   return batch->state_map + (offset >> 2);
+   return batch->state.map + (offset >> 2);
 }
 
 void

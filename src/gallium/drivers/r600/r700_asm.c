@@ -30,7 +30,8 @@ void r700_bytecode_cf_vtx_build(uint32_t *bytecode, const struct r600_bytecode_c
 	*bytecode++ = S_SQ_CF_WORD1_CF_INST(r600_isa_cf_opcode(ISA_CC_R700, cf->op)) |
 			S_SQ_CF_WORD1_BARRIER(1) |
 			S_SQ_CF_WORD1_COUNT(count) |
-			S_SQ_CF_WORD1_COUNT_3(count >> 3);
+			S_SQ_CF_WORD1_COUNT_3(count >> 3)|
+			S_SQ_CF_WORD1_END_OF_PROGRAM(cf->end_of_program);
 }
 
 int r700_bytecode_alu_build(struct r600_bytecode *bc, struct r600_bytecode_alu *alu, unsigned id)

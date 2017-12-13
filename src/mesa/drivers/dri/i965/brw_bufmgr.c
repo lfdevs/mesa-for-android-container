@@ -1177,8 +1177,8 @@ err:
    return NULL;
 }
 
-int
-brw_bo_gem_export_to_prime(struct brw_bo *bo, int *prime_fd)
+static void
+brw_bo_make_external(struct brw_bo *bo)
 {
    struct brw_bufmgr *bufmgr = bo->bufmgr;
 
@@ -1190,6 +1190,14 @@ brw_bo_gem_export_to_prime(struct brw_bo *bo, int *prime_fd)
       }
       mtx_unlock(&bufmgr->lock);
    }
+}
+
+int
+brw_bo_gem_export_to_prime(struct brw_bo *bo, int *prime_fd)
+{
+   struct brw_bufmgr *bufmgr = bo->bufmgr;
+
+   brw_bo_make_external(bo);
 
    if (drmPrimeHandleToFD(bufmgr->fd, bo->gem_handle,
                           DRM_CLOEXEC, prime_fd) != 0)
@@ -1198,6 +1206,14 @@ brw_bo_gem_export_to_prime(struct brw_bo *bo, int *prime_fd)
    bo->reusable = false;
 
    return 0;
+}
+
+uint32_t
+brw_bo_export_gem_handle(struct brw_bo *bo)
+{
+   brw_bo_make_external(bo);
+
+   return bo->gem_handle;
 }
 
 int
@@ -1213,11 +1229,8 @@ brw_bo_flink(struct brw_bo *bo, uint32_t *name)
       if (drmIoctl(bufmgr->fd, DRM_IOCTL_GEM_FLINK, &flink))
          return -errno;
 
+      brw_bo_make_external(bo);
       mtx_lock(&bufmgr->lock);
-      if (!bo->external) {
-         _mesa_hash_table_insert(bufmgr->handle_table, &bo->gem_handle, bo);
-         bo->external = true;
-      }
       if (!bo->global_name) {
          bo->global_name = flink.name;
          _mesa_hash_table_insert(bufmgr->name_table, &bo->global_name, bo);

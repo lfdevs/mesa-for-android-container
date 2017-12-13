@@ -131,11 +131,13 @@ futex_wait(uint32_t *addr, int32_t value)
    return sys_futex(addr, FUTEX_WAIT, value, NULL, NULL, 0);
 }
 
+#ifndef HAVE_MEMFD_CREATE
 static inline int
 memfd_create(const char *name, unsigned int flags)
 {
    return syscall(SYS_memfd_create, name, flags);
 }
+#endif
 
 static inline uint32_t
 ilog2_round_up(uint32_t value)

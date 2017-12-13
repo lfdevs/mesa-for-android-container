@@ -227,19 +227,28 @@ verify_parameter_modes(_mesa_glsl_parse_state *state,
             val = ((ir_swizzle *)val)->val;
          }
 
-         while (val->ir_type == ir_type_dereference_array) {
-            val = ((ir_dereference_array *)val)->array;
+         for (;;) {
+            if (val->ir_type == ir_type_dereference_array) {
+               val = ((ir_dereference_array *)val)->array;
+            } else if (val->ir_type == ir_type_dereference_record &&
+                       !state->es_shader) {
+               val = ((ir_dereference_record *)val)->record;
+            } else
+               break;
          }
 
-         if (!val->as_dereference_variable() ||
-             val->variable_referenced()->data.mode != ir_var_shader_in) {
+         ir_variable *var = NULL;
+         if (const ir_dereference_variable *deref_var = val->as_dereference_variable())
+            var = deref_var->variable_referenced();
+
+         if (!var || var->data.mode != ir_var_shader_in) {
             _mesa_glsl_error(&loc, state,
                              "parameter `%s` must be a shader input",
                              formal->name);
             return false;
          }
 
-         val->variable_referenced()->data.must_be_shader_input = 1;
+         var->data.must_be_shader_input = 1;
       }
 
       /* Verify that 'out' and 'inout' actual parameters are lvalues. */
@@ -667,8 +676,13 @@ generate_array_index(void *mem_ctx, exec_list *instructions,
       ir_variable *sub_var = NULL;
       *function_name = array->primary_expression.identifier;
 
-      match_subroutine_by_name(*function_name, actual_parameters,
-                               state, &sub_var);
+      if (!match_subroutine_by_name(*function_name, actual_parameters,
+                                    state, &sub_var)) {
+         _mesa_glsl_error(&loc, state, "Unknown subroutine `%s'",
+                          *function_name);
+         *function_name = NULL; /* indicate error condition to caller */
+         return NULL;
+      }
 
       ir_rvalue *outer_array_idx = idx->hir(instructions, state);
       return new(mem_ctx) ir_dereference_array(sub_var, outer_array_idx);

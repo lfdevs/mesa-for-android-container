@@ -60,7 +60,7 @@ blorp_emit_reloc(struct blorp_batch *batch,
    uint32_t offset;
 
    if (GEN_GEN < 6 && brw_ptr_in_state_buffer(&brw->batch, location)) {
-      offset = (char *)location - (char *)brw->batch.state_map;
+      offset = (char *)location - (char *)brw->batch.state.map;
       return brw_state_reloc(&brw->batch, offset,
                              address.buffer, address.offset + delta,
                              address.reloc_flags);
@@ -68,7 +68,7 @@ blorp_emit_reloc(struct blorp_batch *batch,
 
    assert(!brw_ptr_in_state_buffer(&brw->batch, location));
 
-   offset = (char *)location - (char *)brw->batch.map;
+   offset = (char *)location - (char *)brw->batch.batch.map;
    return brw_batch_reloc(&brw->batch, offset,
                           address.buffer, address.offset + delta,
                           address.reloc_flags);
@@ -86,7 +86,7 @@ blorp_surface_reloc(struct blorp_batch *batch, uint32_t ss_offset,
       brw_state_reloc(&brw->batch, ss_offset, bo, address.offset + delta,
                       address.reloc_flags);
 
-   void *reloc_ptr = (void *)brw->batch.state_map + ss_offset;
+   void *reloc_ptr = (void *)brw->batch.state.map + ss_offset;
 #if GEN_GEN >= 8
    *(uint64_t *)reloc_ptr = reloc_val;
 #else
@@ -150,7 +150,7 @@ blorp_alloc_vertex_buffer(struct blorp_batch *batch, uint32_t size,
    void *data = brw_state_batch(brw, size, 64, &offset);
 
    *addr = (struct blorp_address) {
-      .buffer = brw->batch.state_bo,
+      .buffer = brw->batch.state.bo,
       .offset = offset,
 
 #if GEN_GEN == 10

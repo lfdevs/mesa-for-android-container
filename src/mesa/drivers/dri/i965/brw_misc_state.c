@@ -65,15 +65,15 @@ upload_pipelined_state_pointers(struct brw_context *brw)
 
    BEGIN_BATCH(7);
    OUT_BATCH(_3DSTATE_PIPELINED_POINTERS << 16 | (7 - 2));
-   OUT_RELOC(brw->batch.state_bo, 0, brw->vs.base.state_offset);
+   OUT_RELOC(brw->batch.state.bo, 0, brw->vs.base.state_offset);
    if (brw->ff_gs.prog_active)
-      OUT_RELOC(brw->batch.state_bo, 0, brw->ff_gs.state_offset | 1);
+      OUT_RELOC(brw->batch.state.bo, 0, brw->ff_gs.state_offset | 1);
    else
       OUT_BATCH(0);
-   OUT_RELOC(brw->batch.state_bo, 0, brw->clip.state_offset | 1);
-   OUT_RELOC(brw->batch.state_bo, 0, brw->sf.state_offset);
-   OUT_RELOC(brw->batch.state_bo, 0, brw->wm.base.state_offset);
-   OUT_RELOC(brw->batch.state_bo, 0, brw->cc.state_offset);
+   OUT_RELOC(brw->batch.state.bo, 0, brw->clip.state_offset | 1);
+   OUT_RELOC(brw->batch.state.bo, 0, brw->sf.state_offset);
+   OUT_RELOC(brw->batch.state.bo, 0, brw->wm.base.state_offset);
+   OUT_RELOC(brw->batch.state.bo, 0, brw->cc.state_offset);
    ADVANCE_BATCH();
 
    brw->ctx.NewDriverState |= BRW_NEW_PSP;
@@ -629,9 +629,9 @@ brw_upload_state_base_address(struct brw_context *brw)
       OUT_BATCH(0);
       OUT_BATCH(mocs_wb << 16);
       /* Surface state base address: */
-      OUT_RELOC64(brw->batch.state_bo, 0, mocs_wb << 4 | 1);
+      OUT_RELOC64(brw->batch.state.bo, 0, mocs_wb << 4 | 1);
       /* Dynamic state base address: */
-      OUT_RELOC64(brw->batch.state_bo, 0, mocs_wb << 4 | 1);
+      OUT_RELOC64(brw->batch.state.bo, 0, mocs_wb << 4 | 1);
       /* Indirect object base address: MEDIA_OBJECT data */
       OUT_BATCH(mocs_wb << 4 | 1);
       OUT_BATCH(0);
@@ -641,7 +641,7 @@ brw_upload_state_base_address(struct brw_context *brw)
       /* General state buffer size */
       OUT_BATCH(0xfffff001);
       /* Dynamic state buffer size */
-      OUT_BATCH(ALIGN(brw->batch.state_bo->size, 4096) | 1);
+      OUT_BATCH(ALIGN(MAX_STATE_SIZE, 4096) | 1);
       /* Indirect object upper bound */
       OUT_BATCH(0xfffff001);
       /* Instruction access upper bound */
@@ -664,7 +664,7 @@ brw_upload_state_base_address(struct brw_context *brw)
 	* BINDING_TABLE_STATE
 	* SURFACE_STATE
 	*/
-       OUT_RELOC(brw->batch.state_bo, 0, 1);
+       OUT_RELOC(brw->batch.state.bo, 0, 1);
         /* Dynamic state base address:
 	 * SAMPLER_STATE
 	 * SAMPLER_BORDER_COLOR_STATE
@@ -675,7 +675,7 @@ brw_upload_state_base_address(struct brw_context *brw)
 	 * Push constants (when INSTPM: CONSTANT_BUFFER Address Offset
 	 * Disable is clear, which we rely on)
 	 */
-       OUT_RELOC(brw->batch.state_bo, 0, 1);
+       OUT_RELOC(brw->batch.state.bo, 0, 1);
 
        OUT_BATCH(1); /* Indirect object base address: MEDIA_OBJECT data */
 
@@ -696,7 +696,7 @@ brw_upload_state_base_address(struct brw_context *brw)
        BEGIN_BATCH(8);
        OUT_BATCH(CMD_STATE_BASE_ADDRESS << 16 | (8 - 2));
        OUT_BATCH(1); /* General state base address */
-       OUT_RELOC(brw->batch.state_bo, 0, 1); /* Surface state base address */
+       OUT_RELOC(brw->batch.state.bo, 0, 1); /* Surface state base address */
        OUT_BATCH(1); /* Indirect object base address */
        OUT_RELOC(brw->cache.bo, 0, 1); /* Instruction base address */
        OUT_BATCH(0xfffff001); /* General state upper bound */
@@ -707,7 +707,7 @@ brw_upload_state_base_address(struct brw_context *brw)
        BEGIN_BATCH(6);
        OUT_BATCH(CMD_STATE_BASE_ADDRESS << 16 | (6 - 2));
        OUT_BATCH(1); /* General state base address */
-       OUT_RELOC(brw->batch.state_bo, 0, 1); /* Surface state base address */
+       OUT_RELOC(brw->batch.state.bo, 0, 1); /* Surface state base address */
        OUT_BATCH(1); /* Indirect object base address */
        OUT_BATCH(1); /* General state upper bound */
        OUT_BATCH(1); /* Indirect object upper bound */

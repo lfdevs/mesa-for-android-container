@@ -5902,11 +5902,13 @@ static void si_get_vs_prolog_key(const struct tgsi_shader_info *info,
 	key->vs_prolog.num_input_sgprs = num_input_sgprs;
 	key->vs_prolog.last_input = MAX2(1, info->num_inputs) - 1;
 	key->vs_prolog.as_ls = shader_out->key.as_ls;
+	key->vs_prolog.as_es = shader_out->key.as_es;
 
 	if (shader_out->selector->type == PIPE_SHADER_TESS_CTRL) {
 		key->vs_prolog.as_ls = 1;
 		key->vs_prolog.num_merged_next_stage_vgprs = 2;
 	} else if (shader_out->selector->type == PIPE_SHADER_GEOMETRY) {
+		key->vs_prolog.as_es = 1;
 		key->vs_prolog.num_merged_next_stage_vgprs = 5;
 	}
 
@@ -6787,6 +6789,8 @@ si_get_shader_part(struct si_screen *sscreen,
 
 	switch (type) {
 	case PIPE_SHADER_VERTEX:
+		shader.key.as_ls = key->vs_prolog.as_ls;
+		shader.key.as_es = key->vs_prolog.as_es;
 		break;
 	case PIPE_SHADER_TESS_CTRL:
 		assert(!prolog);
@@ -6829,10 +6833,15 @@ out:
 static LLVMValueRef si_prolog_get_rw_buffers(struct si_shader_context *ctx)
 {
 	LLVMValueRef ptr[2], list;
+	bool is_merged_shader =
+		ctx->screen->b.chip_class >= GFX9 &&
+		(ctx->type == PIPE_SHADER_TESS_CTRL ||
+		 ctx->type == PIPE_SHADER_GEOMETRY ||
+		 ctx->shader->key.as_ls || ctx->shader->key.as_es);
 
 	/* Get the pointer to rw buffers. */
-	ptr[0] = LLVMGetParam(ctx->main_fn, SI_SGPR_RW_BUFFERS);
-	ptr[1] = LLVMGetParam(ctx->main_fn, SI_SGPR_RW_BUFFERS_HI);
+	ptr[0] = LLVMGetParam(ctx->main_fn, (is_merged_shader ? 8 : 0) + SI_SGPR_RW_BUFFERS);
+	ptr[1] = LLVMGetParam(ctx->main_fn, (is_merged_shader ? 8 : 0) + SI_SGPR_RW_BUFFERS_HI);
 	list = lp_build_gather_values(&ctx->gallivm, ptr, 2);
 	list = LLVMBuildBitCast(ctx->ac.builder, list, ctx->i64, "");
 	list = LLVMBuildIntToPtr(ctx->ac.builder, list,

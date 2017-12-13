@@ -1863,6 +1863,49 @@ set_shader_inout_layout(struct gl_shader *shader,
    shader->bound_image = state->bound_image_specified;
 }
 
+/* src can be NULL if only the symbols found in the exec_list should be
+ * copied
+ */
+void
+_mesa_glsl_copy_symbols_from_table(struct exec_list *shader_ir,
+                                   struct glsl_symbol_table *src,
+                                   struct glsl_symbol_table *dest)
+{
+   foreach_in_list (ir_instruction, ir, shader_ir) {
+      switch (ir->ir_type) {
+      case ir_type_function:
+         dest->add_function((ir_function *) ir);
+         break;
+      case ir_type_variable: {
+         ir_variable *const var = (ir_variable *) ir;
+
+         if (var->data.mode != ir_var_temporary)
+            dest->add_variable(var);
+         break;
+      }
+      default:
+         break;
+      }
+   }
+
+   if (src != NULL) {
+      /* Explicitly copy the gl_PerVertex interface definitions because these
+       * are needed to check they are the same during the interstage link.
+       * They can’t necessarily be found via the exec_list because the members
+       * might not be referenced. The GL spec still requires that they match
+       * in that case.
+       */
+      const glsl_type *iface =
+         src->get_interface("gl_PerVertex", ir_var_shader_in);
+      if (iface)
+         dest->add_interface(iface->name, iface, ir_var_shader_in);
+
+      iface = src->get_interface("gl_PerVertex", ir_var_shader_out);
+      if (iface)
+         dest->add_interface(iface->name, iface, ir_var_shader_out);
+   }
+}
+
 extern "C" {
 
 static void
@@ -1936,6 +1979,7 @@ do_late_parsing_checks(struct _mesa_glsl_parse_state *state)
 
 static void
 opt_shader_and_create_symbol_table(struct gl_context *ctx,
+                                   struct glsl_symbol_table *source_symbols,
                                    struct gl_shader *shader)
 {
    assert(shader->CompileStatus != compile_failure &&
@@ -1993,22 +2037,8 @@ opt_shader_and_create_symbol_table(struct gl_context *ctx,
     * We don't have to worry about types or interface-types here because those
     * are fly-weights that are looked up by glsl_type.
     */
-   foreach_in_list (ir_instruction, ir, shader->ir) {
-      switch (ir->ir_type) {
-      case ir_type_function:
-         shader->symbols->add_function((ir_function *) ir);
-         break;
-      case ir_type_variable: {
-         ir_variable *const var = (ir_variable *) ir;
-
-         if (var->data.mode != ir_var_temporary)
-            shader->symbols->add_variable(var);
-         break;
-      }
-      default:
-         break;
-      }
-   }
+   _mesa_glsl_copy_symbols_from_table(shader->ir, source_symbols,
+                                      shader->symbols);
 }
 
 void
@@ -2045,7 +2075,9 @@ _mesa_glsl_compile_shader(struct gl_context *ctx, struct gl_shader *shader,
          return;
 
       if (shader->CompileStatus == compiled_no_opts) {
-         opt_shader_and_create_symbol_table(ctx, shader);
+         opt_shader_and_create_symbol_table(ctx,
+                                            NULL, /* source_symbols */
+                                            shader);
          shader->CompileStatus = compile_success;
          return;
       }
@@ -2106,7 +2138,7 @@ _mesa_glsl_compile_shader(struct gl_context *ctx, struct gl_shader *shader,
       lower_subroutine(shader->ir, state);
 
       if (!ctx->Cache || force_recompile)
-         opt_shader_and_create_symbol_table(ctx, shader);
+         opt_shader_and_create_symbol_table(ctx, state->symbols, shader);
       else {
          reparent_ir(shader->ir, shader->ir);
          shader->CompileStatus = compiled_no_opts;

@@ -146,7 +146,7 @@ brw_fence_insert_locked(struct brw_context *brw, struct brw_fence *fence)
       assert(!fence->batch_bo);
       assert(!fence->signalled);
 
-      fence->batch_bo = brw->batch.bo;
+      fence->batch_bo = brw->batch.batch.bo;
       brw_bo_reference(fence->batch_bo);
 
       if (intel_batchbuffer_flush(brw) < 0) {

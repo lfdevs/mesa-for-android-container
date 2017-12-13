@@ -1625,7 +1625,8 @@ static void r600_bytecode_cf_vtx_build(uint32_t *bytecode, const struct r600_byt
 	*bytecode++ = S_SQ_CF_WORD0_ADDR(cf->addr >> 1);
 	*bytecode++ = S_SQ_CF_WORD1_CF_INST(r600_isa_cf_opcode(ISA_CC_R600, cf->op)) |
 			S_SQ_CF_WORD1_BARRIER(1) |
-			S_SQ_CF_WORD1_COUNT((cf->ndw / 4) - 1);
+			S_SQ_CF_WORD1_COUNT((cf->ndw / 4) - 1)|
+			S_SQ_CF_WORD1_END_OF_PROGRAM(cf->end_of_program);
 }
 
 /* common for r600/r700 - eg in eg_asm.c */
@@ -2088,6 +2089,8 @@ void r600_bytecode_disasm(struct r600_bytecode *bc)
 						bc->bytecode[id + 1], cfop->name);
 				fprintf(stderr, "%d @%d ", cf->ndw / 4, cf->addr);
 				fprintf(stderr, "\n");
+				if (cf->end_of_program)
+					fprintf(stderr, "EOP ");
 			} else if (cfop->flags & CF_EXP) {
 				int o = 0;
 				const char *exp_type[] = {"PIXEL", "POS  ", "PARAM"};
