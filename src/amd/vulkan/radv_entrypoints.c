@@ -189,9 +189,6 @@ static const char strings[] =
     "vkGetPhysicalDeviceXlibPresentationSupportKHR\0"
     "vkCreateXcbSurfaceKHR\0"
     "vkGetPhysicalDeviceXcbPresentationSupportKHR\0"
-    "vkCreateDebugReportCallbackEXT\0"
-    "vkDestroyDebugReportCallbackEXT\0"
-    "vkDebugReportMessageEXT\0"
     "vkCmdDrawIndirectCountAMD\0"
     "vkCmdDrawIndexedIndirectCountAMD\0"
     "vkGetPhysicalDeviceFeatures2KHR\0"
@@ -374,35 +371,32 @@ static const struct radv_entrypoint entrypoints[] = {
     [150] = { 3288, 0x34a063ab }, /* vkGetPhysicalDeviceXlibPresentationSupportKHR */
     [151] = { 3334, 0xc5e5b106 }, /* vkCreateXcbSurfaceKHR */
     [152] = { 3356, 0x41782cb9 }, /* vkGetPhysicalDeviceXcbPresentationSupportKHR */
-    [153] = { 3401, 0x987ef56 }, /* vkCreateDebugReportCallbackEXT */
-    [154] = { 3432, 0x43d4c4e2 }, /* vkDestroyDebugReportCallbackEXT */
-    [155] = { 3464, 0xa4e75334 }, /* vkDebugReportMessageEXT */
-    [156] = { 3488, 0xe5ad0a50 }, /* vkCmdDrawIndirectCountAMD */
-    [157] = { 3514, 0xc86e9287 }, /* vkCmdDrawIndexedIndirectCountAMD */
-    [158] = { 3547, 0x6a9a3636 }, /* vkGetPhysicalDeviceFeatures2KHR */
-    [159] = { 3579, 0xcd15838c }, /* vkGetPhysicalDeviceProperties2KHR */
-    [160] = { 3613, 0x9099cbbb }, /* vkGetPhysicalDeviceFormatProperties2KHR */
-    [161] = { 3653, 0x102ff7ea }, /* vkGetPhysicalDeviceImageFormatProperties2KHR */
-    [162] = { 3698, 0x5ceb2bed }, /* vkGetPhysicalDeviceQueueFamilyProperties2KHR */
-    [163] = { 3743, 0xc8c3da3d }, /* vkGetPhysicalDeviceMemoryProperties2KHR */
-    [164] = { 3783, 0x8746ed72 }, /* vkGetPhysicalDeviceSparseImageFormatProperties2KHR */
-    [165] = { 3834, 0xf17232a1 }, /* vkCmdPushDescriptorSetKHR */
-    [166] = { 3860, 0x51177c8d }, /* vkTrimCommandPoolKHR */
-    [167] = { 3881, 0xee68b389 }, /* vkGetPhysicalDeviceExternalBufferPropertiesKHR */
-    [168] = { 3928, 0x503c14c5 }, /* vkGetMemoryFdKHR */
-    [169] = { 3945, 0xb028a792 }, /* vkGetMemoryFdPropertiesKHR */
-    [170] = { 3972, 0x984c3fa7 }, /* vkGetPhysicalDeviceExternalSemaphorePropertiesKHR */
-    [171] = { 4022, 0x3e0e9884 }, /* vkGetSemaphoreFdKHR */
-    [172] = { 4042, 0x36337c05 }, /* vkImportSemaphoreFdKHR */
-    [173] = { 4065, 0x6878d3ce }, /* vkBindBufferMemory2KHR */
-    [174] = { 4088, 0xf18729ad }, /* vkBindImageMemory2KHR */
-    [175] = { 4110, 0x5189488a }, /* vkCreateDescriptorUpdateTemplateKHR */
-    [176] = { 4146, 0xaa83901e }, /* vkDestroyDescriptorUpdateTemplateKHR */
-    [177] = { 4183, 0x214ad230 }, /* vkUpdateDescriptorSetWithTemplateKHR */
-    [178] = { 4220, 0x3d528981 }, /* vkCmdPushDescriptorSetWithTemplateKHR */
-    [179] = { 4258, 0x78dbe98d }, /* vkGetBufferMemoryRequirements2KHR */
-    [180] = { 4292, 0x8de28366 }, /* vkGetImageMemoryRequirements2KHR */
-    [181] = { 4325, 0x3df40f5e }, /* vkGetImageSparseMemoryRequirements2KHR */
+    [153] = { 3401, 0xe5ad0a50 }, /* vkCmdDrawIndirectCountAMD */
+    [154] = { 3427, 0xc86e9287 }, /* vkCmdDrawIndexedIndirectCountAMD */
+    [155] = { 3460, 0x6a9a3636 }, /* vkGetPhysicalDeviceFeatures2KHR */
+    [156] = { 3492, 0xcd15838c }, /* vkGetPhysicalDeviceProperties2KHR */
+    [157] = { 3526, 0x9099cbbb }, /* vkGetPhysicalDeviceFormatProperties2KHR */
+    [158] = { 3566, 0x102ff7ea }, /* vkGetPhysicalDeviceImageFormatProperties2KHR */
+    [159] = { 3611, 0x5ceb2bed }, /* vkGetPhysicalDeviceQueueFamilyProperties2KHR */
+    [160] = { 3656, 0xc8c3da3d }, /* vkGetPhysicalDeviceMemoryProperties2KHR */
+    [161] = { 3696, 0x8746ed72 }, /* vkGetPhysicalDeviceSparseImageFormatProperties2KHR */
+    [162] = { 3747, 0xf17232a1 }, /* vkCmdPushDescriptorSetKHR */
+    [163] = { 3773, 0x51177c8d }, /* vkTrimCommandPoolKHR */
+    [164] = { 3794, 0xee68b389 }, /* vkGetPhysicalDeviceExternalBufferPropertiesKHR */
+    [165] = { 3841, 0x503c14c5 }, /* vkGetMemoryFdKHR */
+    [166] = { 3858, 0xb028a792 }, /* vkGetMemoryFdPropertiesKHR */
+    [167] = { 3885, 0x984c3fa7 }, /* vkGetPhysicalDeviceExternalSemaphorePropertiesKHR */
+    [168] = { 3935, 0x3e0e9884 }, /* vkGetSemaphoreFdKHR */
+    [169] = { 3955, 0x36337c05 }, /* vkImportSemaphoreFdKHR */
+    [170] = { 3978, 0x6878d3ce }, /* vkBindBufferMemory2KHR */
+    [171] = { 4001, 0xf18729ad }, /* vkBindImageMemory2KHR */
+    [172] = { 4023, 0x5189488a }, /* vkCreateDescriptorUpdateTemplateKHR */
+    [173] = { 4059, 0xaa83901e }, /* vkDestroyDescriptorUpdateTemplateKHR */
+    [174] = { 4096, 0x214ad230 }, /* vkUpdateDescriptorSetWithTemplateKHR */
+    [175] = { 4133, 0x3d528981 }, /* vkCmdPushDescriptorSetWithTemplateKHR */
+    [176] = { 4171, 0x78dbe98d }, /* vkGetBufferMemoryRequirements2KHR */
+    [177] = { 4205, 0x8de28366 }, /* vkGetImageMemoryRequirements2KHR */
+    [178] = { 4238, 0x3df40f5e }, /* vkGetImageSparseMemoryRequirements2KHR */
 };
 
 /* Weak aliases for all potential implementations. These will resolve to
@@ -575,9 +569,6 @@ static const struct radv_entrypoint entrypoints[] = {
 #ifdef VK_USE_PLATFORM_XCB_KHR
     VkBool32 radv_GetPhysicalDeviceXcbPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, xcb_connection_t* connection, xcb_visualid_t visual_id) __attribute__ ((weak));
 #endif // VK_USE_PLATFORM_XCB_KHR
-    VkResult radv_CreateDebugReportCallbackEXT(VkInstance instance, const VkDebugReportCallbackCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugReportCallbackEXT* pCallback) __attribute__ ((weak));
-    void radv_DestroyDebugReportCallbackEXT(VkInstance instance, VkDebugReportCallbackEXT callback, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
-    void radv_DebugReportMessageEXT(VkInstance instance, VkDebugReportFlagsEXT flags, VkDebugReportObjectTypeEXT objectType, uint64_t object, size_t location, int32_t messageCode, const char* pLayerPrefix, const char* pMessage) __attribute__ ((weak));
     void radv_CmdDrawIndirectCountAMD(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, VkBuffer countBuffer, VkDeviceSize countBufferOffset, uint32_t maxDrawCount, uint32_t stride) __attribute__ ((weak));
     void radv_CmdDrawIndexedIndirectCountAMD(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, VkBuffer countBuffer, VkDeviceSize countBufferOffset, uint32_t maxDrawCount, uint32_t stride) __attribute__ ((weak));
     void radv_GetPhysicalDeviceFeatures2KHR(VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures2KHR* pFeatures) __attribute__ ((weak));
@@ -771,9 +762,6 @@ static const struct radv_entrypoint entrypoints[] = {
 #ifdef VK_USE_PLATFORM_XCB_KHR
     .GetPhysicalDeviceXcbPresentationSupportKHR = radv_GetPhysicalDeviceXcbPresentationSupportKHR,
 #endif // VK_USE_PLATFORM_XCB_KHR
-    .CreateDebugReportCallbackEXT = radv_CreateDebugReportCallbackEXT,
-    .DestroyDebugReportCallbackEXT = radv_DestroyDebugReportCallbackEXT,
-    .DebugReportMessageEXT = radv_DebugReportMessageEXT,
     .CmdDrawIndirectCountAMD = radv_CmdDrawIndirectCountAMD,
     .CmdDrawIndexedIndirectCountAMD = radv_CmdDrawIndexedIndirectCountAMD,
     .GetPhysicalDeviceFeatures2KHR = radv_GetPhysicalDeviceFeatures2KHR,
@@ -812,12 +800,12 @@ radv_resolve_entrypoint(uint32_t index)
  * size 256 entries
  * collisions entries:
  *     0     115
- *     1     34
+ *     1     32
  *     2     12
  *     3     9
  *     4     4
  *     5     1
- *     6     4
+ *     6     3
  *     7     1
  *     8     1
  *     9+     1
@@ -829,7 +817,7 @@ static const uint16_t map[] = {
       none,
       none,
       none,
-      0x00a9,
+      0x00a6,
       0x002b,
       0x0040,
       0x0061,
@@ -839,10 +827,10 @@ static const uint16_t map[] = {
       none,
       none,
       none,
-      0x00a7,
+      0x00a4,
       none,
       none,
-      0x00a8,
+      0x00a5,
       none,
       0x0067,
       none,
@@ -855,7 +843,7 @@ static const uint16_t map[] = {
       0x004c,
       none,
       0x0069,
-      0x00b0,
+      0x00ad,
       none,
       none,
       none,
@@ -882,21 +870,21 @@ static const uint16_t map[] = {
       0x006d,
       0x0053,
       none,
-      0x00a2,
+      0x009f,
       0x004d,
       0x0090,
       0x0024,
-      0x00a3,
+      0x00a0,
       0x005e,
       0x000b,
       0x0088,
       0x0091,
       none,
-      0x00b1,
+      0x00ae,
       0x005c,
       0x0033,
       none,
-      0x009b,
+      none,
       0x0087,
       0x003f,
       0x001f,
@@ -905,11 +893,11 @@ static const uint16_t map[] = {
       0x005a,
       none,
       none,
-      0x009c,
+      0x0099,
       0x0019,
       0x0046,
       0x003a,
-      0x009a,
+      none,
       none,
       0x0034,
       none,
@@ -917,7 +905,7 @@ static const uint16_t map[] = {
       none,
       none,
       0x0020,
-      0x009e,
+      0x009b,
       0x0066,
       0x0075,
       none,
@@ -930,7 +918,7 @@ static const uint16_t map[] = {
       0x0047,
       0x000a,
       0x0023,
-      0x0099,
+      none,
       none,
       0x006b,
       none,
@@ -938,13 +926,13 @@ static const uint16_t map[] = {
       0x0028,
       none,
       0x0068,
-      0x00b5,
-      0x00a4,
+      0x00b2,
+      0x00a1,
       0x003e,
       0x0048,
       0x007b,
       0x0055,
-      0x00ac,
+      0x00a9,
       none,
       0x0045,
       0x006e,
@@ -956,7 +944,7 @@ static const uint16_t map[] = {
       none,
       0x0027,
       0x0081,
-      0x00b4,
+      0x00b1,
       0x005d,
       0x008a,
       0x0003,
@@ -966,7 +954,7 @@ static const uint16_t map[] = {
       0x0006,
       none,
       0x0093,
-      0x00a6,
+      0x00a3,
       none,
       none,
       none,
@@ -976,7 +964,7 @@ static const uint16_t map[] = {
       0x003c,
       none,
       0x0037,
-      0x00ab,
+      0x00a8,
       0x0009,
       0x0038,
       0x0011,
@@ -985,7 +973,7 @@ static const uint16_t map[] = {
       0x0016,
       none,
       0x003d,
-      0x00b3,
+      0x00b0,
       0x006a,
       0x003b,
       none,
@@ -1001,11 +989,11 @@ static const uint16_t map[] = {
       0x0004,
       0x004f,
       0x0029,
-      0x00af,
+      0x00ac,
       0x004e,
       0x0095,
       0x0031,
-      0x00a5,
+      0x00a2,
       0x001b,
       none,
       0x0073,
@@ -1017,12 +1005,12 @@ static const uint16_t map[] = {
       none,
       none,
       0x006c,
-      0x009d,
+      0x009a,
       none,
       0x0036,
       none,
       0x0050,
-      0x009f,
+      0x009c,
       0x007d,
       none,
       0x008c,
@@ -1030,7 +1018,7 @@ static const uint16_t map[] = {
       0x001a,
       0x000c,
       0x0098,
-      0x00aa,
+      0x00a7,
       0x0092,
       none,
       none,
@@ -1050,16 +1038,16 @@ static const uint16_t map[] = {
       0x001d,
       none,
       0x0076,
-      0x00a0,
+      0x009d,
       0x0064,
       0x0085,
       none,
       none,
-      0x00ae,
+      0x00ab,
       0x000f,
       0x007e,
       none,
-      0x00a1,
+      0x009e,
       0x0017,
       0x0012,
       0x0010,
@@ -1068,8 +1056,8 @@ static const uint16_t map[] = {
       0x008b,
       0x0079,
       0x0001,
-      0x00b2,
-      0x00ad,
+      0x00af,
+      0x00aa,
       0x002d,
       none,
       none,

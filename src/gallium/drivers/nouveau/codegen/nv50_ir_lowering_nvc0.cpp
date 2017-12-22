@@ -216,7 +216,7 @@ NVC0LegalizeSSA::handleShift(Instruction *lo)
       // Compute LO (all shift values)
       bld.mkOp2(op, type, (dst[0] = bld.getSSA()), src[0], shift);
       // Compute HI (shift > 32)
-      bld.mkOp2(op, type, (hi2 = bld.getSSA()), src[1],
+      bld.mkOp2(op, type, (hi2 = bld.getSSA()), src[0],
                 bld.mkOp1v(OP_NEG, TYPE_S32, bld.getSSA(), x32_minus_shift))
          ->setPredicate(CC_NOT_P, pred);
       bld.mkOp2(OP_UNION, TYPE_U32, (dst[1] = bld.getSSA()), hi1, hi2);

@@ -27,7 +27,7 @@
 #ifndef U_ENDIAN_H
 #define U_ENDIAN_H
 
-#if defined(__GLIBC__) || defined(ANDROID)
+#if defined(__GLIBC__) || defined(ANDROID) || defined(__CYGWIN__)
 #include <endian.h>
 
 #if __BYTE_ORDER == __LITTLE_ENDIAN
@@ -63,6 +63,10 @@
 #elif _BYTE_ORDER == _BIG_ENDIAN
 # define PIPE_ARCH_BIG_ENDIAN
 #endif
+
+#elif defined(_MSC_VER)
+
+#define PIPE_ARCH_LITTLE_ENDIAN
 
 #endif
 

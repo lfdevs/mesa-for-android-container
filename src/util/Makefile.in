@@ -111,7 +111,8 @@ POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
 target_triplet = @target@
-check_PROGRAMS = u_atomic_test$(EXEEXT) roundeven_test$(EXEEXT)
+check_PROGRAMS = u_atomic_test$(EXEEXT) roundeven_test$(EXEEXT) \
+	mesa-sha1_test$(EXEEXT)
 subdir = src/util
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_compile_flag.m4 \
@@ -161,6 +162,9 @@ libxmlconfig_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
 	$(libxmlconfig_la_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) $(LDFLAGS) \
 	-o $@
+mesa_sha1_test_SOURCES = mesa-sha1_test.c
+mesa_sha1_test_OBJECTS = mesa-sha1_test.$(OBJEXT)
+mesa_sha1_test_DEPENDENCIES = libmesautil.la
 roundeven_test_SOURCES = roundeven_test.c
 roundeven_test_OBJECTS = roundeven_test.$(OBJEXT)
 roundeven_test_DEPENDENCIES =
@@ -202,9 +206,9 @@ am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
 SOURCES = $(libmesautil_la_SOURCES) $(libxmlconfig_la_SOURCES) \
-	roundeven_test.c u_atomic_test.c
+	mesa-sha1_test.c roundeven_test.c u_atomic_test.c
 DIST_SOURCES = $(libmesautil_la_SOURCES) $(libxmlconfig_la_SOURCES) \
-	roundeven_test.c u_atomic_test.c
+	mesa-sha1_test.c roundeven_test.c u_atomic_test.c
 RECURSIVE_TARGETS = all-recursive check-recursive cscopelist-recursive \
 	ctags-recursive dvi-recursive html-recursive info-recursive \
 	install-data-recursive install-dvi-recursive \
@@ -886,6 +890,7 @@ libxmlconfig_la_LIBADD = $(EXPAT_LIBS) -lm
 sysconf_DATA = drirc
 u_atomic_test_LDADD = libmesautil.la
 roundeven_test_LDADD = -lm
+mesa_sha1_test_LDADD = libmesautil.la
 TESTS = $(check_PROGRAMS)
 BUILT_SOURCES = $(MESA_UTIL_GENERATED_FILES)
 CLEANFILES = $(BUILT_SOURCES)
@@ -968,6 +973,10 @@ clean-checkPROGRAMS:
 	echo " rm -f" $$list; \
 	rm -f $$list
 
+mesa-sha1_test$(EXEEXT): $(mesa_sha1_test_OBJECTS) $(mesa_sha1_test_DEPENDENCIES) $(EXTRA_mesa_sha1_test_DEPENDENCIES) 
+	@rm -f mesa-sha1_test$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(mesa_sha1_test_OBJECTS) $(mesa_sha1_test_LDADD) $(LIBS)
+
 roundeven_test$(EXEEXT): $(roundeven_test_OBJECTS) $(roundeven_test_DEPENDENCIES) $(EXTRA_roundeven_test_DEPENDENCIES) 
 	@rm -f roundeven_test$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(roundeven_test_OBJECTS) $(roundeven_test_LDADD) $(LIBS)
@@ -1005,6 +1014,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libmesautil_la-u_queue.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libmesautil_la-u_vector.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libxmlconfig_la-xmlconfig.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mesa-sha1_test.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/roundeven_test.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/u_atomic_test.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@sha1/$(DEPDIR)/libmesautil_la-sha1.Plo@am__quote@
@@ -1465,6 +1475,13 @@ u_atomic_test.log: u_atomic_test$(EXEEXT)
 roundeven_test.log: roundeven_test$(EXEEXT)
 	@p='roundeven_test$(EXEEXT)'; \
 	b='roundeven_test'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+mesa-sha1_test.log: mesa-sha1_test$(EXEEXT)
+	@p='mesa-sha1_test$(EXEEXT)'; \
+	b='mesa-sha1_test'; \
 	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \

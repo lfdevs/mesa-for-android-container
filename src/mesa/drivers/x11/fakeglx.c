@@ -2836,7 +2836,8 @@ Fake_glXCreateContextAttribs(Display *dpy, GLXFBConfig config,
          profileFlags = attrib_list[i + 1];
          break;
       default:
-         fprintf(stderr, "Bad attribute in glXCreateContextAttribs()\n");
+         _mesa_warning(NULL, "Unexpected attribute 0x%x in "
+                       "glXCreateContextAttribs()\n", attrib_list[i]);
          return 0;
       }
    }

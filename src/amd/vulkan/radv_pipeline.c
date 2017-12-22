@@ -1705,6 +1705,45 @@ radv_link_shaders(struct radv_pipeline *pipeline, nir_shader **shaders)
 	}
 }
 
+static void
+merge_tess_info(struct shader_info *tes_info,
+                const struct shader_info *tcs_info)
+{
+	/* The Vulkan 1.0.38 spec, section 21.1 Tessellator says:
+	 *
+	 *    "PointMode. Controls generation of points rather than triangles
+	 *     or lines. This functionality defaults to disabled, and is
+	 *     enabled if either shader stage includes the execution mode.
+	 *
+	 * and about Triangles, Quads, IsoLines, VertexOrderCw, VertexOrderCcw,
+	 * PointMode, SpacingEqual, SpacingFractionalEven, SpacingFractionalOdd,
+	 * and OutputVertices, it says:
+	 *
+	 *    "One mode must be set in at least one of the tessellation
+	 *     shader stages."
+	 *
+	 * So, the fields can be set in either the TCS or TES, but they must
+	 * agree if set in both.  Our backend looks at TES, so bitwise-or in
+	 * the values from the TCS.
+	 */
+	assert(tcs_info->tess.tcs_vertices_out == 0 ||
+	       tes_info->tess.tcs_vertices_out == 0 ||
+	       tcs_info->tess.tcs_vertices_out == tes_info->tess.tcs_vertices_out);
+	tes_info->tess.tcs_vertices_out |= tcs_info->tess.tcs_vertices_out;
+
+	assert(tcs_info->tess.spacing == TESS_SPACING_UNSPECIFIED ||
+	       tes_info->tess.spacing == TESS_SPACING_UNSPECIFIED ||
+	       tcs_info->tess.spacing == tes_info->tess.spacing);
+	tes_info->tess.spacing |= tcs_info->tess.spacing;
+
+	assert(tcs_info->tess.primitive_mode == 0 ||
+	       tes_info->tess.primitive_mode == 0 ||
+	       tcs_info->tess.primitive_mode == tes_info->tess.primitive_mode);
+	tes_info->tess.primitive_mode |= tcs_info->tess.primitive_mode;
+	tes_info->tess.ccw |= tcs_info->tess.ccw;
+	tes_info->tess.point_mode |= tcs_info->tess.point_mode;
+}
+
 static
 void radv_create_shaders(struct radv_pipeline *pipeline,
                          struct radv_device *device,
@@ -1782,6 +1821,7 @@ void radv_create_shaders(struct radv_pipeline *pipeline,
 
 		keys[MESA_SHADER_TESS_CTRL].tcs.tes_reads_tess_factors = !!(nir[MESA_SHADER_TESS_EVAL]->info.inputs_read & (VARYING_BIT_TESS_LEVEL_INNER | VARYING_BIT_TESS_LEVEL_OUTER));
 		nir_lower_tes_patch_vertices(nir[MESA_SHADER_TESS_EVAL], nir[MESA_SHADER_TESS_CTRL]->info.tess.tcs_vertices_out);
+		merge_tess_info(&nir[MESA_SHADER_TESS_EVAL]->info, &nir[MESA_SHADER_TESS_CTRL]->info);
 	}
 
 	radv_link_shaders(pipeline, nir);

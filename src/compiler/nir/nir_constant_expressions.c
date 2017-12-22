@@ -1936,12 +1936,12 @@ evaluate_bitfield_insert(MAYBE_UNUSED unsigned num_components, unsigned bit_size
 unsigned base = src0, insert = src1;
 int offset = src2, bits = src3;
 if (bits == 0) {
-   dst = 0;
+   dst = base;
 } else if (offset < 0 || bits < 0 || bits + offset > 32) {
    dst = 0;
 } else {
    unsigned mask = ((1ull << bits) - 1) << offset;
-   dst = (base & ~mask) | ((insert << bits) & mask);
+   dst = (base & ~mask) | ((insert << offset) & mask);
 }
 
 

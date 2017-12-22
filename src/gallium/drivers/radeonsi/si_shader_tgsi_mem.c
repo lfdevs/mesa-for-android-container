@@ -146,7 +146,7 @@ LLVMValueRef si_load_image_desc(struct si_shader_context *ctx,
 	}
 
 	rsrc = ac_build_load_to_sgpr(&ctx->ac, list, index);
-	if (dcc_off)
+	if (desc_type == AC_DESC_IMAGE && dcc_off)
 		rsrc = force_dcc_off(ctx, rsrc);
 	return rsrc;
 }

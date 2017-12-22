@@ -461,6 +461,8 @@ void container_node::collect_stats(node_stats& s) {
 				++s.alu_kill_count;
 			else if (a->is_copy_mov())
 				++s.alu_copy_mov_count;
+                       if (a->uses_ar())
+                          s.uses_ar = true;
 		} else if (n->is_fetch_inst())
 			++s.fetch_count;
 		else if (n->is_cf_inst())

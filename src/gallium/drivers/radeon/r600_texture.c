@@ -587,6 +587,7 @@ static boolean r600_texture_get_handle(struct pipe_screen* screen,
 	struct radeon_bo_metadata metadata;
 	bool update_metadata = false;
 	unsigned stride, offset, slice_size;
+	bool flush = false;
 
 	ctx = threaded_context_unwrap_sync(ctx);
 	rctx = (struct r600_common_context*)(ctx ? ctx : rscreen->aux_context);
@@ -606,7 +607,7 @@ static boolean r600_texture_get_handle(struct pipe_screen* screen,
 			assert(!res->b.is_shared);
 			r600_reallocate_texture_inplace(rctx, rtex,
 							PIPE_BIND_SHARED, false);
-			rctx->b.flush(&rctx->b, NULL, 0);
+			flush = true;
 			assert(res->b.b.bind & PIPE_BIND_SHARED);
 			assert(res->flags & RADEON_FLAG_NO_SUBALLOC);
 			assert(!(res->flags & RADEON_FLAG_NO_INTERPROCESS_SHARING));
@@ -618,14 +619,19 @@ static boolean r600_texture_get_handle(struct pipe_screen* screen,
 		 * access.
 		 */
 		if (usage & PIPE_HANDLE_USAGE_WRITE && rtex->dcc_offset) {
-			if (si_texture_disable_dcc(rctx, rtex))
+			if (si_texture_disable_dcc(rctx, rtex)) {
 				update_metadata = true;
+				/* si_texture_disable_dcc flushes the context */
+				flush = false;
+			}
 		}
 
 		if (!(usage & PIPE_HANDLE_USAGE_EXPLICIT_FLUSH) &&
 		    (rtex->cmask.size || rtex->dcc_offset)) {
 			/* Eliminate fast clear (both CMASK and DCC) */
 			r600_eliminate_fast_color_clear(rctx, rtex);
+			/* eliminate_fast_color_clear flushes the context */
+			flush = false;
 
 			/* Disable CMASK if flush_resource isn't going
 			 * to be called.
@@ -656,8 +662,11 @@ static boolean r600_texture_get_handle(struct pipe_screen* screen,
 			slice_size = rtex->surface.u.legacy.level[0].slice_size;
 		}
 	} else {
+		/* Buffer exports are for the OpenCL interop. */
 		/* Move a suballocated buffer into a non-suballocated allocation. */
-		if (rscreen->ws->buffer_is_suballocated(res->buf)) {
+		if (rscreen->ws->buffer_is_suballocated(res->buf) ||
+		    /* A DMABUF export always fails if the BO is local. */
+		    rtex->resource.flags & RADEON_FLAG_NO_INTERPROCESS_SHARING) {
 			assert(!res->b.is_shared);
 
 			/* Allocate a new buffer with PIPE_BIND_SHARED. */
@@ -674,6 +683,7 @@ static boolean r600_texture_get_handle(struct pipe_screen* screen,
 			u_box_1d(0, newb->width0, &box);
 			rctx->b.resource_copy_region(&rctx->b, newb, 0, 0, 0, 0,
 						     &res->b.b, 0, &box);
+			flush = true;
 			/* Move the new buffer storage to the old pipe_resource. */
 			si_replace_buffer_storage(&rctx->b, &res->b.b, newb);
 			pipe_resource_reference(&newb, NULL);
@@ -687,6 +697,9 @@ static boolean r600_texture_get_handle(struct pipe_screen* screen,
 		stride = 0;
 		slice_size = 0;
 	}
+
+	if (flush)
+		rctx->b.flush(&rctx->b, NULL, 0);
 
 	if (res->b.is_shared) {
 		/* USAGE_EXPLICIT_FLUSH must be cleared if at least one user

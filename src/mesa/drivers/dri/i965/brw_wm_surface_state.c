@@ -69,8 +69,8 @@ uint32_t pte_mocs[] = {
    [10] = CNL_MOCS_PTE,
 };
 
-static uint32_t
-get_tex_mocs(const struct gen_device_info *devinfo, struct brw_bo *bo)
+uint32_t
+brw_get_bo_mocs(const struct gen_device_info *devinfo, struct brw_bo *bo)
 {
    return (bo && bo->external ? pte_mocs : wb_mocs)[devinfo->gen];
 }
@@ -134,9 +134,10 @@ brw_emit_surface_state(struct brw_context *brw,
                        struct intel_mipmap_tree *mt,
                        GLenum target, struct isl_view view,
                        enum isl_aux_usage aux_usage,
-                       uint32_t mocs, uint32_t *surf_offset, int surf_index,
+                       uint32_t *surf_offset, int surf_index,
                        unsigned reloc_flags)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    uint32_t tile_x = mt->level[0].level_x;
    uint32_t tile_y = mt->level[0].level_y;
    uint32_t offset = mt->offset;
@@ -187,7 +188,8 @@ brw_emit_surface_state(struct brw_context *brw,
                                                   mt->bo, offset, reloc_flags),
                        .aux_surf = aux_surf, .aux_usage = aux_usage,
                        .aux_address = aux_offset,
-                       .mocs = mocs, .clear_color = clear_color,
+                       .mocs = brw_get_bo_mocs(devinfo, mt->bo),
+                       .clear_color = clear_color,
                        .x_offset_sa = tile_x, .y_offset_sa = tile_y);
    if (aux_surf) {
       /* On gen7 and prior, the upper 20 bits of surface state DWORD 6 are the
@@ -214,7 +216,6 @@ gen6_update_renderbuffer_surface(struct brw_context *brw,
                                  unsigned unit,
                                  uint32_t surf_index)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    struct gl_context *ctx = &brw->ctx;
    struct intel_renderbuffer *irb = intel_renderbuffer(rb);
    struct intel_mipmap_tree *mt = irb->mt;
@@ -245,7 +246,6 @@ gen6_update_renderbuffer_surface(struct brw_context *brw,
 
    uint32_t offset;
    brw_emit_surface_state(brw, mt, mt->target, view, aux_usage,
-                          pte_mocs[devinfo->gen],
                           &offset, surf_index,
                           RELOC_WRITE);
    return offset;
@@ -592,7 +592,6 @@ brw_update_texture_surface(struct gl_context *ctx,
          aux_usage = ISL_AUX_USAGE_NONE;
 
       brw_emit_surface_state(brw, mt, mt->target, view, aux_usage,
-                             get_tex_mocs(devinfo, mt->bo),
                              surf_offset, surf_index,
                              0);
    }
@@ -623,7 +622,7 @@ brw_emit_buffer_surface_state(struct brw_context *brw,
                          .size = buffer_size,
                          .format = surface_format,
                          .stride = pitch,
-                         .mocs = get_tex_mocs(devinfo, bo));
+                         .mocs = brw_get_bo_mocs(devinfo, bo));
 }
 
 void
@@ -1057,7 +1056,6 @@ const struct brw_tracked_state gen6_renderbuffer_surfaces = {
 static void
 update_renderbuffer_read_surfaces(struct brw_context *brw)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    const struct gl_context *ctx = &brw->ctx;
 
    /* BRW_NEW_FS_PROG_DATA */
@@ -1113,7 +1111,6 @@ update_renderbuffer_read_surfaces(struct brw_context *brw)
                aux_usage = ISL_AUX_USAGE_NONE;
 
             brw_emit_surface_state(brw, irb->mt, target, view, aux_usage,
-                                   get_tex_mocs(devinfo, irb->mt->bo),
                                    surf_offset, surf_index,
                                    0);
 
@@ -1557,8 +1554,6 @@ update_image_surface(struct brw_context *brw,
                      uint32_t *surf_offset,
                      struct brw_image_param *param)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
-
    if (_mesa_is_image_unit_valid(&brw->ctx, u)) {
       struct gl_texture_object *obj = u->TexObj;
       const unsigned format = get_image_format(brw, u->_ActualFormat, access);
@@ -1606,7 +1601,6 @@ update_image_surface(struct brw_context *brw,
                                                        view.array_len));
             brw_emit_surface_state(brw, mt, mt->target, view,
                                    ISL_AUX_USAGE_NONE,
-                                   get_tex_mocs(devinfo, mt->bo),
                                    surf_offset, surf_index,
                                    access == GL_READ_ONLY ? 0 : RELOC_WRITE);
          }

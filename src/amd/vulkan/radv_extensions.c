@@ -79,8 +79,6 @@ radv_instance_extension_supported(const char *name)
         return VK_USE_PLATFORM_XCB_KHR;
     if (strcmp(name, "VK_KHR_xlib_surface") == 0)
         return VK_USE_PLATFORM_XLIB_KHR;
-    if (strcmp(name, "VK_EXT_debug_report") == 0)
-        return true;
     return false;
 }
 
@@ -144,14 +142,6 @@ VkResult radv_EnumerateInstanceExtensionProperties(
             *prop = (VkExtensionProperties) {
                 .extensionName = "VK_KHR_xlib_surface",
                 .specVersion = 6,
-            };
-        }
-    }
-    if (true) {
-        vk_outarray_append(&out, prop) {
-            *prop = (VkExtensionProperties) {
-                .extensionName = "VK_EXT_debug_report",
-                .specVersion = 8,
             };
         }
     }

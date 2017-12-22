@@ -726,11 +726,12 @@ struct node_stats {
 	unsigned depart_count;
 	unsigned repeat_count;
 	unsigned if_count;
+       bool uses_ar;
 
 	node_stats() : alu_count(), alu_kill_count(), alu_copy_mov_count(),
 			cf_count(), fetch_count(), region_count(),
 			loop_count(), phi_count(), loop_phi_count(), depart_count(),
-			repeat_count(), if_count() {}
+                       repeat_count(), if_count(), uses_ar(false) {}
 
 	void dump();
 };

@@ -136,7 +136,7 @@ bool if_conversion::check_and_convert(region_node *r) {
 	);
 
 	if (s.region_count || s.fetch_count || s.alu_kill_count ||
-			s.if_count != 1 || s.repeat_count)
+                       s.if_count != 1 || s.repeat_count || s.uses_ar)
 		return false;
 
 	unsigned real_alu_count = s.alu_count - s.alu_copy_mov_count;

@@ -213,8 +213,7 @@ void CalculateProcessorTopology(CPUNumaNodes& out_nodes, uint32_t& out_numThread
     {
         for (auto &core : node.cores)
         {
-            out_numThreadsPerProcGroup = std::max((size_t)out_numThreadsPerProcGroup,
-                                                  core.threadIds.size());
+            out_numThreadsPerProcGroup += core.threadIds.size();
         }
     }
 

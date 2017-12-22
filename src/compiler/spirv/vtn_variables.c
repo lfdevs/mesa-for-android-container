@@ -518,35 +518,37 @@ vtn_pointer_to_offset(struct vtn_builder *b, struct vtn_pointer *ptr,
    *index_out = get_vulkan_resource_index(b, ptr, &type, &idx);
 
    nir_ssa_def *offset = nir_imm_int(&b->nb, 0);
-   for (; idx < ptr->chain->length; idx++) {
-      enum glsl_base_type base_type = glsl_get_base_type(type->type);
-      switch (base_type) {
-      case GLSL_TYPE_UINT:
-      case GLSL_TYPE_INT:
-      case GLSL_TYPE_UINT64:
-      case GLSL_TYPE_INT64:
-      case GLSL_TYPE_FLOAT:
-      case GLSL_TYPE_DOUBLE:
-      case GLSL_TYPE_BOOL:
-      case GLSL_TYPE_ARRAY:
-         offset = nir_iadd(&b->nb, offset,
-                           vtn_access_link_as_ssa(b, ptr->chain->link[idx],
-                                                  type->stride));
+   if (ptr->chain) {
+      for (; idx < ptr->chain->length; idx++) {
+         enum glsl_base_type base_type = glsl_get_base_type(type->type);
+         switch (base_type) {
+         case GLSL_TYPE_UINT:
+         case GLSL_TYPE_INT:
+         case GLSL_TYPE_UINT64:
+         case GLSL_TYPE_INT64:
+         case GLSL_TYPE_FLOAT:
+         case GLSL_TYPE_DOUBLE:
+         case GLSL_TYPE_BOOL:
+         case GLSL_TYPE_ARRAY:
+            offset = nir_iadd(&b->nb, offset,
+                              vtn_access_link_as_ssa(b, ptr->chain->link[idx],
+                                                   type->stride));
 
-         type = type->array_element;
-         break;
+            type = type->array_element;
+            break;
 
-      case GLSL_TYPE_STRUCT: {
-         assert(ptr->chain->link[idx].mode == vtn_access_mode_literal);
-         unsigned member = ptr->chain->link[idx].id;
-         offset = nir_iadd(&b->nb, offset,
-                           nir_imm_int(&b->nb, type->offsets[member]));
-         type = type->members[member];
-         break;
-      }
+         case GLSL_TYPE_STRUCT: {
+            assert(ptr->chain->link[idx].mode == vtn_access_mode_literal);
+            unsigned member = ptr->chain->link[idx].id;
+            offset = nir_iadd(&b->nb, offset,
+                              nir_imm_int(&b->nb, type->offsets[member]));
+            type = type->members[member];
+            break;
+         }
 
-      default:
-         unreachable("Invalid type for deref");
+         default:
+            unreachable("Invalid type for deref");
+         }
       }
    }
 

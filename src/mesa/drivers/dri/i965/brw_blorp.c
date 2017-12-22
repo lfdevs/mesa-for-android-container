@@ -114,20 +114,6 @@ brw_blorp_init(struct brw_context *brw)
    brw->blorp.upload_shader = brw_blorp_upload_shader;
 }
 
-static uint32_t wb_mocs[] = {
-   [7] = GEN7_MOCS_L3,
-   [8] = BDW_MOCS_WB,
-   [9] = SKL_MOCS_WB,
-   [10] = CNL_MOCS_WB,
-};
-
-static uint32_t pte_mocs[] = {
-   [7] = GEN7_MOCS_L3,
-   [8] = BDW_MOCS_PTE,
-   [9] = SKL_MOCS_PTE,
-   [10] = CNL_MOCS_PTE,
-};
-
 static void
 blorp_surf_for_miptree(struct brw_context *brw,
                        struct blorp_surf *surf,
@@ -158,8 +144,7 @@ blorp_surf_for_miptree(struct brw_context *brw,
       .buffer = mt->bo,
       .offset = mt->offset,
       .reloc_flags = is_render_target ? EXEC_OBJECT_WRITE : 0,
-      .mocs = (is_render_target || mt->bo->external) ? pte_mocs[devinfo->gen] :
-                                                       wb_mocs[devinfo->gen],
+      .mocs = brw_get_bo_mocs(devinfo, mt->bo),
    };
 
    surf->aux_usage = aux_usage;
