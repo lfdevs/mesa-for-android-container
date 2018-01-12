@@ -81,6 +81,8 @@ dri_fill_st_options(struct dri_screen *screen)
    options->glsl_zero_init = driQueryOptionb(optionCache, "glsl_zero_init");
    options->force_glsl_abs_sqrt =
       driQueryOptionb(optionCache, "force_glsl_abs_sqrt");
+   options->allow_glsl_cross_stage_interpolation_mismatch =
+      driQueryOptionb(optionCache, "allow_glsl_cross_stage_interpolation_mismatch");
 
    driComputeOptionsSha1(optionCache, options->config_options_sha1);
 }

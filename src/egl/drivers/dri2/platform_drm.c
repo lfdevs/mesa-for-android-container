@@ -652,6 +652,10 @@ dri2_initialize_drm(_EGLDriver *drv, _EGLDisplay *disp)
    struct gbm_device *gbm;
    const char *err;
 
+   /* Not supported yet */
+   if (disp->Options.UseFallback)
+      return EGL_FALSE;
+
    loader_set_logger(_eglLog);
 
    dri2_dpy = calloc(1, sizeof *dri2_dpy);

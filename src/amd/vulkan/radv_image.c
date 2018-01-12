@@ -127,7 +127,7 @@ radv_init_surface(struct radv_device *device,
 
 	surface->flags |= RADEON_SURF_OPTIMIZE_FOR_SPACE;
 
-	bool dcc_compatible_formats = !radv_is_colorbuffer_format_supported(pCreateInfo->format, &blendable);
+	bool dcc_compatible_formats = radv_is_colorbuffer_format_supported(pCreateInfo->format, &blendable);
 	if (pCreateInfo->flags & VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT) {
 		const struct  VkImageFormatListCreateInfoKHR *format_list =
 		          (const struct  VkImageFormatListCreateInfoKHR *)

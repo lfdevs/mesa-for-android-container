@@ -3703,6 +3703,11 @@ struct gl_constants
    GLboolean AllowGLSLBuiltinVariableRedeclaration;
 
    /**
+    * Allow GLSL interpolation qualifier mismatch across shader stages.
+    */
+   GLboolean AllowGLSLCrossStageInterpolationMismatch;
+
+   /**
     * Allow creating a higher compat profile (version 3.1+) for apps that
     * request it. Be careful when adding that driconf option because some
     * features are unimplemented and might not work correctly.

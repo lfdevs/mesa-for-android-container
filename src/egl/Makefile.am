@@ -46,7 +46,6 @@ libEGL_common_la_SOURCES = \
 	$(LIBEGL_C_FILES)
 
 libEGL_common_la_LIBADD = \
-	$(top_builddir)/src/mapi/shared-glapi/libglapi.la \
 	$(top_builddir)/src/util/libmesautil.la \
 	$(EGL_LIB_DEPS)
 
@@ -165,7 +164,9 @@ libEGL_mesa_la_SOURCES = \
 	main/egldispatchstubs.c \
 	g_egldispatchstubs.c \
 	g_egldispatchstubs.h
-libEGL_mesa_la_LIBADD = libEGL_common.la
+libEGL_mesa_la_LIBADD = \
+	libEGL_common.la \
+	$(top_builddir)/src/mapi/shared-glapi/libglapi.la
 libEGL_mesa_la_LDFLAGS = \
 	-no-undefined \
 	-version-number 0 \
@@ -177,7 +178,9 @@ else # USE_LIBGLVND
 
 lib_LTLIBRARIES = libEGL.la
 libEGL_la_SOURCES =
-libEGL_la_LIBADD = libEGL_common.la
+libEGL_la_LIBADD = \
+	libEGL_common.la \
+	$(top_builddir)/src/mapi/shared-glapi/libglapi.la
 libEGL_la_LDFLAGS = \
 	-no-undefined \
 	-version-number 1:0 \

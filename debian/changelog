@@ -1,3 +1,9 @@
+mesa (17.3.2-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Fri, 12 Jan 2018 15:11:42 +0200
+
 mesa (17.3.1-1) unstable; urgency=medium
 
   * New upstream release.

@@ -904,10 +904,6 @@ dri2_initialize(_EGLDriver *drv, _EGLDisplay *disp)
       return EGL_TRUE;
    }
 
-   /* not until swrast_dri is supported */
-   if (disp->Options.UseFallback)
-      return EGL_FALSE;
-
    switch (disp->Platform) {
 #ifdef HAVE_SURFACELESS_PLATFORM
    case _EGL_PLATFORM_SURFACELESS:

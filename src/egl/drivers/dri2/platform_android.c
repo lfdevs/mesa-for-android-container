@@ -1136,11 +1136,15 @@ static const __DRIextension *droid_image_loader_extensions[] = {
 };
 
 EGLBoolean
-dri2_initialize_android(_EGLDriver *drv, _EGLDisplay *dpy)
+dri2_initialize_android(_EGLDriver *drv, _EGLDisplay *disp)
 {
    struct dri2_egl_display *dri2_dpy;
    const char *err;
    int ret;
+
+   /* Not supported yet */
+   if (disp->Options.UseFallback)
+      return EGL_FALSE;
 
    loader_set_logger(_eglLog);
 
@@ -1156,7 +1160,7 @@ dri2_initialize_android(_EGLDriver *drv, _EGLDisplay *dpy)
       goto cleanup;
    }
 
-   dpy->DriverData = (void *) dri2_dpy;
+   disp->DriverData = (void *) dri2_dpy;
 
    dri2_dpy->fd = droid_open_device(dri2_dpy);
    if (dri2_dpy->fd < 0) {
@@ -1176,41 +1180,41 @@ dri2_initialize_android(_EGLDriver *drv, _EGLDisplay *dpy)
     * the __DRI_DRI2_LOADER extension */
    if (!dri2_dpy->is_render_node) {
       dri2_dpy->loader_extensions = droid_dri2_loader_extensions;
-      if (!dri2_load_driver(dpy)) {
+      if (!dri2_load_driver(disp)) {
          err = "DRI2: failed to load driver";
          goto cleanup;
       }
    } else {
       dri2_dpy->loader_extensions = droid_image_loader_extensions;
-      if (!dri2_load_driver_dri3(dpy)) {
+      if (!dri2_load_driver_dri3(disp)) {
          err = "DRI3: failed to load driver";
          goto cleanup;
       }
    }
 
-   if (!dri2_create_screen(dpy)) {
+   if (!dri2_create_screen(disp)) {
       err = "DRI2: failed to create screen";
       goto cleanup;
    }
 
-   if (!dri2_setup_extensions(dpy)) {
+   if (!dri2_setup_extensions(disp)) {
       err = "DRI2: failed to setup extensions";
       goto cleanup;
    }
 
-   dri2_setup_screen(dpy);
+   dri2_setup_screen(disp);
 
-   if (!droid_add_configs_for_visuals(drv, dpy)) {
+   if (!droid_add_configs_for_visuals(drv, disp)) {
       err = "DRI2: failed to add configs";
       goto cleanup;
    }
 
-   dpy->Extensions.ANDROID_framebuffer_target = EGL_TRUE;
-   dpy->Extensions.ANDROID_image_native_buffer = EGL_TRUE;
-   dpy->Extensions.ANDROID_recordable = EGL_TRUE;
-   dpy->Extensions.EXT_buffer_age = EGL_TRUE;
+   disp->Extensions.ANDROID_framebuffer_target = EGL_TRUE;
+   disp->Extensions.ANDROID_image_native_buffer = EGL_TRUE;
+   disp->Extensions.ANDROID_recordable = EGL_TRUE;
+   disp->Extensions.EXT_buffer_age = EGL_TRUE;
 #if ANDROID_API_LEVEL >= 23
-   dpy->Extensions.KHR_partial_update = EGL_TRUE;
+   disp->Extensions.KHR_partial_update = EGL_TRUE;
 #endif
 
    /* Fill vtbl last to prevent accidentally calling virtual function during
@@ -1221,6 +1225,6 @@ dri2_initialize_android(_EGLDriver *drv, _EGLDisplay *dpy)
    return EGL_TRUE;
 
 cleanup:
-   dri2_display_destroy(dpy);
+   dri2_display_destroy(disp);
    return _eglError(EGL_NOT_INITIALIZED, err);
 }

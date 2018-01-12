@@ -192,7 +192,8 @@ am__uninstall_files_from_dir = { \
 am__installdirs = "$(DESTDIR)$(libdir)" "$(DESTDIR)$(pkgconfigdir)" \
 	"$(DESTDIR)$(vendorjsondir)" "$(DESTDIR)$(egldir)"
 LTLIBRARIES = $(lib_LTLIBRARIES) $(noinst_LTLIBRARIES)
-@USE_LIBGLVND_FALSE@libEGL_la_DEPENDENCIES = libEGL_common.la
+@USE_LIBGLVND_FALSE@libEGL_la_DEPENDENCIES = libEGL_common.la \
+@USE_LIBGLVND_FALSE@	$(top_builddir)/src/mapi/shared-glapi/libglapi.la
 am_libEGL_la_OBJECTS =
 libEGL_la_OBJECTS = $(am_libEGL_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
@@ -213,7 +214,6 @@ am__DEPENDENCIES_1 =
 @HAVE_PLATFORM_ANDROID_TRUE@am__DEPENDENCIES_4 =  \
 @HAVE_PLATFORM_ANDROID_TRUE@	$(am__DEPENDENCIES_1)
 libEGL_common_la_DEPENDENCIES =  \
-	$(top_builddir)/src/mapi/shared-glapi/libglapi.la \
 	$(top_builddir)/src/util/libmesautil.la $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_2) $(am__append_5) $(am__DEPENDENCIES_3) \
 	$(am__append_9) $(am__DEPENDENCIES_4) \
@@ -262,7 +262,8 @@ am__objects_10 = $(am__objects_9)
 am_libEGL_common_la_OBJECTS = $(am__objects_1) $(am__objects_2) \
 	$(am__objects_8) $(am__objects_10)
 libEGL_common_la_OBJECTS = $(am_libEGL_common_la_OBJECTS)
-@USE_LIBGLVND_TRUE@libEGL_mesa_la_DEPENDENCIES = libEGL_common.la
+@USE_LIBGLVND_TRUE@libEGL_mesa_la_DEPENDENCIES = libEGL_common.la \
+@USE_LIBGLVND_TRUE@	$(top_builddir)/src/mapi/shared-glapi/libglapi.la
 am__libEGL_mesa_la_SOURCES_DIST = main/eglglvnd.c \
 	main/egldispatchstubs.h main/egldispatchstubs.c \
 	g_egldispatchstubs.c g_egldispatchstubs.h
@@ -879,11 +880,9 @@ noinst_LTLIBRARIES = libEGL_common.la
 libEGL_common_la_SOURCES = $(LIBEGL_C_FILES) \
 	$(dri2_backend_core_FILES) $(dri2_backend_FILES) \
 	$(dri3_backend_FILES)
-libEGL_common_la_LIBADD =  \
-	$(top_builddir)/src/mapi/shared-glapi/libglapi.la \
-	$(top_builddir)/src/util/libmesautil.la $(EGL_LIB_DEPS) \
-	$(am__append_2) $(am__append_5) $(am__append_7) \
-	$(am__append_9) $(am__append_13) \
+libEGL_common_la_LIBADD = $(top_builddir)/src/util/libmesautil.la \
+	$(EGL_LIB_DEPS) $(am__append_2) $(am__append_5) \
+	$(am__append_7) $(am__append_9) $(am__append_13) \
 	$(top_builddir)/src/loader/libloader.la \
 	$(top_builddir)/src/util/libxmlconfig.la $(DLOPEN_LIBS) \
 	$(LIBDRM_LIBS) $(CLOCK_LIB)
@@ -908,7 +907,10 @@ CLEANFILES = $(BUILT_SOURCES)
 @USE_LIBGLVND_TRUE@	g_egldispatchstubs.c \
 @USE_LIBGLVND_TRUE@	g_egldispatchstubs.h
 
-@USE_LIBGLVND_TRUE@libEGL_mesa_la_LIBADD = libEGL_common.la
+@USE_LIBGLVND_TRUE@libEGL_mesa_la_LIBADD = \
+@USE_LIBGLVND_TRUE@	libEGL_common.la \
+@USE_LIBGLVND_TRUE@	$(top_builddir)/src/mapi/shared-glapi/libglapi.la
+
 @USE_LIBGLVND_TRUE@libEGL_mesa_la_LDFLAGS = \
 @USE_LIBGLVND_TRUE@	-no-undefined \
 @USE_LIBGLVND_TRUE@	-version-number 0 \
@@ -917,7 +919,10 @@ CLEANFILES = $(BUILT_SOURCES)
 @USE_LIBGLVND_TRUE@	$(LD_NO_UNDEFINED)
 
 @USE_LIBGLVND_FALSE@libEGL_la_SOURCES = 
-@USE_LIBGLVND_FALSE@libEGL_la_LIBADD = libEGL_common.la
+@USE_LIBGLVND_FALSE@libEGL_la_LIBADD = \
+@USE_LIBGLVND_FALSE@	libEGL_common.la \
+@USE_LIBGLVND_FALSE@	$(top_builddir)/src/mapi/shared-glapi/libglapi.la
+
 @USE_LIBGLVND_FALSE@libEGL_la_LDFLAGS = \
 @USE_LIBGLVND_FALSE@	-no-undefined \
 @USE_LIBGLVND_FALSE@	-version-number 1:0 \
