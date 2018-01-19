@@ -676,7 +676,8 @@ si_write_scissors(struct radeon_winsys_cs *cs, int first,
 	int i;
 	float scale[3], translate[3], guardband_x = INFINITY, guardband_y = INFINITY;
 	const float max_range = 32767.0f;
-	assert(count);
+	if (!count)
+		return;
 
 	radeon_set_context_reg_seq(cs, R_028250_PA_SC_VPORT_SCISSOR_0_TL + first * 4 * 2, count * 2);
 	for (i = 0; i < count; i++) {
@@ -988,6 +989,11 @@ si_cs_emit_cache_flush(struct radeon_winsys_cs *cs,
 	if (chip_class >= GFX9 && flush_cb_db) {
 		unsigned cb_db_event, tc_flags;
 
+#if 0
+		/* This breaks a bunch of:
+		   dEQP-VK.renderpass.dedicated_allocation.formats.d32_sfloat_s8_uint.input*.
+		   use the big hammer always.
+		*/
 		/* Set the CB/DB flush event. */
 		switch (flush_cb_db) {
 		case RADV_CMD_FLAG_FLUSH_AND_INV_CB:
@@ -1000,7 +1006,9 @@ si_cs_emit_cache_flush(struct radeon_winsys_cs *cs,
 			/* both CB & DB */
 			cb_db_event = V_028A90_CACHE_FLUSH_AND_INV_TS_EVENT;
 		}
-
+#else
+		cb_db_event = V_028A90_CACHE_FLUSH_AND_INV_TS_EVENT;
+#endif
 		/* TC    | TC_WB         = invalidate L2 data
 		 * TC_MD | TC_WB         = invalidate L2 metadata
 		 * TC    | TC_WB | TC_MD = invalidate L2 data & metadata

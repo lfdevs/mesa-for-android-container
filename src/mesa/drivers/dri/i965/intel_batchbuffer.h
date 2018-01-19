@@ -79,19 +79,6 @@ static inline uint32_t float_as_int(float f)
 }
 
 static inline void
-intel_batchbuffer_emit_dword(struct intel_batchbuffer *batch, GLuint dword)
-{
-   *batch->map_next++ = dword;
-   assert(batch->ring != UNKNOWN_RING);
-}
-
-static inline void
-intel_batchbuffer_emit_float(struct intel_batchbuffer *batch, float f)
-{
-   intel_batchbuffer_emit_dword(batch, float_as_int(f));
-}
-
-static inline void
 intel_batchbuffer_begin(struct brw_context *brw, int n, enum brw_gpu_ring ring)
 {
    intel_batchbuffer_require_space(brw, n * 4, ring);

@@ -1151,6 +1151,15 @@ genX(CmdExecuteCommands)(
       anv_cmd_buffer_add_secondary(primary, secondary);
    }
 
+   /* The secondary may have selected a different pipeline (3D or compute) and
+    * may have changed the current L3$ configuration.  Reset our tracking
+    * variables to invalid values to ensure that we re-emit these in the case
+    * where we do any draws or compute dispatches from the primary after the
+    * secondary has returned.
+    */
+   primary->state.current_pipeline = UINT32_MAX;
+   primary->state.current_l3_config = NULL;
+
    /* Each of the secondary command buffers will use its own state base
     * address.  We need to re-emit state base address for the primary after
     * all of the secondaries are done.

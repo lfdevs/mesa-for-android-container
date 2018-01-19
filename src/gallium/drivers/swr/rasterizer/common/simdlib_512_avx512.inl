@@ -540,7 +540,7 @@ static SIMDINLINE uint32_t SIMDCALL movemask_pd(Double a)
 }
 static SIMDINLINE uint32_t SIMDCALL movemask_ps(Float a)
 {
-    __mmask16 m = _mm512_test_epi32_mask(castps_si(a), set1_epi32(0x8000000));
+    __mmask16 m = _mm512_test_epi32_mask(castps_si(a), set1_epi32(0x80000000));
     return static_cast<uint32_t>(m);
 }
 

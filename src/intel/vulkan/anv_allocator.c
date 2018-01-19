@@ -1108,8 +1108,10 @@ anv_scratch_pool_alloc(struct anv_device *device, struct anv_scratch_pool *pool,
    pthread_mutex_lock(&device->mutex);
 
    __sync_synchronize();
-   if (bo->exists)
+   if (bo->exists) {
+      pthread_mutex_unlock(&device->mutex);
       return &bo->bo;
+   }
 
    const struct anv_physical_device *physical_device =
       &device->instance->physicalDevice;

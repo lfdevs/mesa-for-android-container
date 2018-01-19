@@ -407,8 +407,8 @@ emit_resolve(struct radv_cmd_buffer *cmd_buffer,
 	cmd_buffer->state.flush_bits |= RADV_CMD_FLAG_FLUSH_AND_INV_CB;
 
 	unsigned push_constants[2] = {
-		src_offset->x,
-		src_offset->y,
+		src_offset->x - dest_offset->x,
+		src_offset->y - dest_offset->y,
 	};
 	radv_CmdPushConstants(radv_cmd_buffer_to_handle(cmd_buffer),
 			      device->meta_state.resolve_fragment.p_layout,
@@ -540,8 +540,8 @@ void radv_meta_resolve_fragment_image(struct radv_cmd_buffer *cmd_buffer,
 					       .pAttachments = (VkImageView[]) {
 					       radv_image_view_to_handle(&dest_iview),
 				       },
-				       .width = extent.width,
-				       .height = extent.height,
+				       .width = extent.width + dstOffset.x,
+				       .height = extent.height + dstOffset.y,
 				       .layers = 1
 				}, &cmd_buffer->pool->alloc, &fb);
 
@@ -603,6 +603,16 @@ radv_cmd_buffer_resolve_subpass_fs(struct radv_cmd_buffer *cmd_buffer)
 		       RADV_META_SAVE_GRAPHICS_PIPELINE |
 		       RADV_META_SAVE_CONSTANTS |
 		       RADV_META_SAVE_DESCRIPTORS);
+
+	/* Resolves happen before the end-of-subpass barriers get executed,
+	 * so we have to make the attachment shader-readable */
+	cmd_buffer->state.flush_bits |= RADV_CMD_FLAG_PS_PARTIAL_FLUSH |
+	                                RADV_CMD_FLAG_FLUSH_AND_INV_CB |
+	                                RADV_CMD_FLAG_FLUSH_AND_INV_CB_META |
+	                                RADV_CMD_FLAG_FLUSH_AND_INV_DB |
+	                                RADV_CMD_FLAG_FLUSH_AND_INV_DB_META |
+	                                RADV_CMD_FLAG_INV_GLOBAL_L2 |
+	                                RADV_CMD_FLAG_INV_VMEM_L1;
 
 	for (uint32_t i = 0; i < subpass->color_count; ++i) {
 		VkAttachmentReference src_att = subpass->color_attachments[i];

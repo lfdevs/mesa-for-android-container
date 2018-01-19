@@ -1919,11 +1919,11 @@ radv_dst_access_flush(struct radv_cmd_buffer *cmd_buffer,
 		switch ((VkAccessFlagBits)(1 << b)) {
 		case VK_ACCESS_INDIRECT_COMMAND_READ_BIT:
 		case VK_ACCESS_INDEX_READ_BIT:
-		case VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT:
 			break;
 		case VK_ACCESS_UNIFORM_READ_BIT:
 			flush_bits |= RADV_CMD_FLAG_INV_VMEM_L1 | RADV_CMD_FLAG_INV_SMEM_L1;
 			break;
+		case VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT:
 		case VK_ACCESS_SHADER_READ_BIT:
 		case VK_ACCESS_TRANSFER_READ_BIT:
 		case VK_ACCESS_INPUT_ATTACHMENT_READ_BIT:
@@ -3583,7 +3583,8 @@ void radv_CmdEndRenderPass(
 
 /*
  * For HTILE we have the following interesting clear words:
- *   0x0000030f: Uncompressed.
+ *   0x0000030f: Uncompressed for depth+stencil HTILE.
+ *   0x0000000f: Uncompressed for depth only HTILE.
  *   0xfffffff0: Clear depth to 1.0
  *   0x00000000: Clear depth to 0.0
  */
@@ -3632,7 +3633,8 @@ static void radv_handle_depth_image_transition(struct radv_cmd_buffer *cmd_buffe
 		radv_initialize_htile(cmd_buffer, image, range, 0);
 	} else if (!radv_layout_is_htile_compressed(image, src_layout, src_queue_mask) &&
 	           radv_layout_is_htile_compressed(image, dst_layout, dst_queue_mask)) {
-		radv_initialize_htile(cmd_buffer, image, range, 0xffffffff);
+		uint32_t clear_value = vk_format_is_stencil(image->vk_format) ? 0x30f : 0xf;
+		radv_initialize_htile(cmd_buffer, image, range, clear_value);
 	} else if (radv_layout_is_htile_compressed(image, src_layout, src_queue_mask) &&
 	           !radv_layout_is_htile_compressed(image, dst_layout, dst_queue_mask)) {
 		VkImageSubresourceRange local_range = *range;
@@ -3834,7 +3836,7 @@ static void write_event(struct radv_cmd_buffer *cmd_buffer,
 	si_cs_emit_write_event_eop(cs,
 				   cmd_buffer->state.predicating,
 				   cmd_buffer->device->physical_device->rad_info.chip_class,
-				   false,
+				   radv_cmd_buffer_uses_mec(cmd_buffer),
 				   V_028A90_BOTTOM_OF_PIPE_TS, 0,
 				   1, va, 2, value);
 

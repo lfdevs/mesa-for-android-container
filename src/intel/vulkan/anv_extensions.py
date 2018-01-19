@@ -29,8 +29,6 @@ import copy
 import re
 import xml.etree.cElementTree as et
 
-from mako.template import Template
-
 MAX_API_VERSION = '1.0.57'
 
 class Extension:
@@ -158,7 +156,7 @@ def _init_exts_from_xml(xml):
         ext = ext_name_map[ext_name]
         ext.type = ext_elem.attrib['type']
 
-_TEMPLATE = Template(COPYRIGHT + """
+_TEMPLATE = COPYRIGHT + """
 #include "anv_private.h"
 
 #include "vk_util.h"
@@ -256,7 +254,7 @@ VkResult anv_EnumerateDeviceExtensionProperties(
 
     return vk_outarray_status(&out);
 }
-""")
+"""
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -280,5 +278,7 @@ if __name__ == '__main__':
         'device_extensions': [e for e in EXTENSIONS if e.type == 'device'],
     }
 
+    from mako.template import Template
+
     with open(args.out, 'w') as f:
-        f.write(_TEMPLATE.render(**template_env))
+        f.write(Template(_TEMPLATE).render(**template_env))

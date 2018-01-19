@@ -270,7 +270,7 @@ static SIMDINLINE Float SIMDCALL mask_i32gather_ps(Float old, float const* p, In
 {
     __mmask16 m = 0xf;
     m = _mm512_mask_test_epi32_mask(m, _mm512_castps_si512(__conv(mask)),
-                                _mm512_set1_epi32(0x8000000));
+                                _mm512_set1_epi32(0x80000000));
     return __conv(_mm512_mask_i32gather_ps(
                     __conv(old),
                     m,

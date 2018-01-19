@@ -103,7 +103,9 @@ VkResult anv_CreateDescriptorSetLayout(
       if (binding == NULL)
          continue;
 
-      assert(binding->descriptorCount > 0);
+      if (binding->descriptorCount == 0)
+         continue;
+
 #ifndef NDEBUG
       set_layout->binding[b].type = binding->descriptorType;
 #endif

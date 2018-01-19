@@ -1356,7 +1356,8 @@ emit_3dstate_gs(struct anv_pipeline *pipeline)
 }
 
 static bool
-has_color_buffer_write_enabled(const struct anv_pipeline *pipeline)
+has_color_buffer_write_enabled(const struct anv_pipeline *pipeline,
+                               const VkPipelineColorBlendStateCreateInfo *blend)
 {
    const struct anv_shader_bin *shader_bin =
       pipeline->shaders[MESA_SHADER_FRAGMENT];
@@ -1365,10 +1366,15 @@ has_color_buffer_write_enabled(const struct anv_pipeline *pipeline)
 
    const struct anv_pipeline_bind_map *bind_map = &shader_bin->bind_map;
    for (int i = 0; i < bind_map->surface_count; i++) {
-      if (bind_map->surface_to_descriptor[i].set !=
-          ANV_DESCRIPTOR_SET_COLOR_ATTACHMENTS)
+      struct anv_pipeline_binding *binding = &bind_map->surface_to_descriptor[i];
+
+      if (binding->set != ANV_DESCRIPTOR_SET_COLOR_ATTACHMENTS)
          continue;
-      if (bind_map->surface_to_descriptor[i].index != UINT32_MAX)
+
+      const VkPipelineColorBlendAttachmentState *a =
+         &blend->pAttachments[binding->index];
+
+      if (binding->index != UINT32_MAX && a->colorWriteMask != 0)
          return true;
    }
 
@@ -1377,6 +1383,7 @@ has_color_buffer_write_enabled(const struct anv_pipeline *pipeline)
 
 static void
 emit_3dstate_wm(struct anv_pipeline *pipeline, struct anv_subpass *subpass,
+                const VkPipelineColorBlendStateCreateInfo *blend,
                 const VkPipelineMultisampleStateCreateInfo *multisample)
 {
    const struct brw_wm_prog_data *wm_prog_data = get_wm_prog_data(pipeline);
@@ -1421,7 +1428,7 @@ emit_3dstate_wm(struct anv_pipeline *pipeline, struct anv_subpass *subpass,
          if (wm.PixelShaderComputedDepthMode != PSCDEPTH_OFF ||
              wm_prog_data->has_side_effects ||
              wm.PixelShaderKillsPixel ||
-             has_color_buffer_write_enabled(pipeline))
+             has_color_buffer_write_enabled(pipeline, blend))
             wm.ThreadDispatchEnable = true;
 
          if (samples > 1) {
@@ -1545,7 +1552,8 @@ emit_3dstate_ps(struct anv_pipeline *pipeline,
 #if GEN_GEN >= 8
 static void
 emit_3dstate_ps_extra(struct anv_pipeline *pipeline,
-                      struct anv_subpass *subpass)
+                      struct anv_subpass *subpass,
+                      const VkPipelineColorBlendStateCreateInfo *blend)
 {
    const struct brw_wm_prog_data *wm_prog_data = get_wm_prog_data(pipeline);
 
@@ -1600,7 +1608,7 @@ emit_3dstate_ps_extra(struct anv_pipeline *pipeline,
        * attachments, we need to force-enable here.
        */
       if ((wm_prog_data->has_side_effects || wm_prog_data->uses_kill) &&
-          !has_color_buffer_write_enabled(pipeline))
+          !has_color_buffer_write_enabled(pipeline, blend))
          ps.PixelShaderHasUAV = true;
 
 #if GEN_GEN >= 9
@@ -1730,10 +1738,11 @@ genX(graphics_pipeline_create)(
    emit_3dstate_hs_te_ds(pipeline, pCreateInfo->pTessellationState);
    emit_3dstate_gs(pipeline);
    emit_3dstate_sbe(pipeline);
-   emit_3dstate_wm(pipeline, subpass, pCreateInfo->pMultisampleState);
+   emit_3dstate_wm(pipeline, subpass, pCreateInfo->pColorBlendState,
+                   pCreateInfo->pMultisampleState);
    emit_3dstate_ps(pipeline, pCreateInfo->pColorBlendState);
 #if GEN_GEN >= 8
-   emit_3dstate_ps_extra(pipeline, subpass);
+   emit_3dstate_ps_extra(pipeline, subpass, pCreateInfo->pColorBlendState);
    emit_3dstate_vf_topology(pipeline);
 #endif
    emit_3dstate_vf_statistics(pipeline);

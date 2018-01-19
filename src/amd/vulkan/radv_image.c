@@ -344,7 +344,7 @@ static unsigned radv_tex_dim(VkImageType image_type, VkImageViewType view_type,
 	}
 }
 
-static unsigned gfx9_border_color_swizzle(const unsigned char swizzle[4])
+static unsigned gfx9_border_color_swizzle(const enum vk_swizzle swizzle[4])
 {
 	unsigned bc_swizzle = V_008F20_BC_SWIZZLE_XYZW;
 
@@ -449,7 +449,7 @@ si_make_texture_descriptor(struct radv_device *device,
 	state[7] = 0;
 
 	if (device->physical_device->rad_info.chip_class >= GFX9) {
-		unsigned bc_swizzle = gfx9_border_color_swizzle(desc->swizzle);
+		unsigned bc_swizzle = gfx9_border_color_swizzle(swizzle);
 
 		/* Depth is the the last accessible layer on Gfx9.
 		 * The hw doesn't need to know the total number of layers.

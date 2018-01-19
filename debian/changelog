@@ -1,3 +1,11 @@
+mesa (17.3.3-1) unstable; urgency=medium
+
+  * New upstream release.
+  * Bump debhelper compat to 10.
+  * Bump standards version to 4.1.3.
+
+ -- Andreas Boll <andreas.boll.dev@gmail.com>  Fri, 19 Jan 2018 20:34:29 +0100
+
 mesa (17.3.2-1) unstable; urgency=medium
 
   * New upstream release.

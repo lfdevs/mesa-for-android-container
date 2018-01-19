@@ -487,6 +487,14 @@ radv_cmd_buffer_resolve_subpass_cs(struct radv_cmd_buffer *cmd_buffer)
 	if (!subpass->has_resolve)
 		return;
 
+	/* Resolves happen before the end-of-subpass barriers get executed,
+	 * so we have to make the attachment shader-readable */
+	cmd_buffer->state.flush_bits |= RADV_CMD_FLAG_PS_PARTIAL_FLUSH |
+	                                RADV_CMD_FLAG_FLUSH_AND_INV_CB |
+	                                RADV_CMD_FLAG_FLUSH_AND_INV_CB_META |
+	                                RADV_CMD_FLAG_INV_GLOBAL_L2 |
+	                                RADV_CMD_FLAG_INV_VMEM_L1;
+
 	for (uint32_t i = 0; i < subpass->color_count; ++i) {
 		VkAttachmentReference src_att = subpass->color_attachments[i];
 		VkAttachmentReference dest_att = subpass->resolve_attachments[i];
