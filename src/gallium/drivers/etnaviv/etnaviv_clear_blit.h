@@ -48,6 +48,12 @@ etna_copy_resource_box(struct pipe_context *pctx, struct pipe_resource *dst,
                        struct pipe_box *box);
 
 void
+etna_blit_save_state(struct etna_context *ctx);
+
+uint32_t
+etna_clear_blit_pack_rgba(enum pipe_format format, const float *rgba);
+
+void
 etna_clear_blit_init(struct pipe_context *pctx);
 
 #endif

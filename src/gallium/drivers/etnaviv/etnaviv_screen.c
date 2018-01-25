@@ -38,7 +38,7 @@
 #include "etnaviv_resource.h"
 #include "etnaviv_translate.h"
 
-#include "os/os_time.h"
+#include "util/os_time.h"
 #include "util/u_math.h"
 #include "util/u_memory.h"
 #include "util/u_string.h"
@@ -125,10 +125,8 @@ etna_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 
    switch (param) {
    /* Supported features (boolean caps). */
-   case PIPE_CAP_TWO_SIDED_STENCIL:
    case PIPE_CAP_ANISOTROPIC_FILTER:
    case PIPE_CAP_POINT_SPRITE:
-   case PIPE_CAP_TEXTURE_SHADOW_MAP:
    case PIPE_CAP_BLEND_EQUATION_SEPARATE:
    case PIPE_CAP_TGSI_FS_COORD_ORIGIN_UPPER_LEFT:
    case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_HALF_INTEGER:
@@ -138,7 +136,6 @@ etna_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_VERTEX_BUFFER_OFFSET_4BYTE_ALIGNED_ONLY:
    case PIPE_CAP_VERTEX_BUFFER_STRIDE_4BYTE_ALIGNED_ONLY:
    case PIPE_CAP_VERTEX_ELEMENT_SRC_OFFSET_4BYTE_ALIGNED_ONLY:
-   case PIPE_CAP_USER_CONSTANT_BUFFERS:
    case PIPE_CAP_TGSI_TEXCOORD:
    case PIPE_CAP_VERTEX_COLOR_UNCLAMPED:
       return 1;
@@ -266,6 +263,9 @@ etna_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_LOAD_CONSTBUF:
    case PIPE_CAP_TGSI_ANY_REG_AS_ADDRESS:
    case PIPE_CAP_TILE_RASTER_ORDER:
+   case PIPE_CAP_MAX_COMBINED_SHADER_OUTPUT_RESOURCES:
+   case PIPE_CAP_SIGNED_VERTEX_BUFFER_OFFSET:
+   case PIPE_CAP_CONTEXT_PRIORITY_MASK:
       return 0;
 
    /* Stream output. */
@@ -457,6 +457,8 @@ etna_screen_get_shader_param(struct pipe_screen *pscreen,
    case PIPE_SHADER_CAP_MAX_SHADER_IMAGES:
    case PIPE_SHADER_CAP_LOWER_IF_THRESHOLD:
    case PIPE_SHADER_CAP_TGSI_SKIP_MERGE_REGISTERS:
+   case PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTERS:
+   case PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTER_BUFFERS:
       return 0;
    }
 
@@ -482,6 +484,9 @@ gpu_supports_texure_format(struct etna_screen *screen, uint32_t fmt,
    if (fmt >= TEXTURE_FORMAT_DXT1 && fmt <= TEXTURE_FORMAT_DXT4_DXT5)
       supported = VIV_FEATURE(screen, chipFeatures, DXT_TEXTURE_COMPRESSION);
 
+   if (util_format_is_srgb(format))
+      supported = VIV_FEATURE(screen, chipMinorFeatures1, HALTI0);
+
    if (fmt & EXT_FORMAT) {
       supported = VIV_FEATURE(screen, chipMinorFeatures1, HALTI0);
 
@@ -493,6 +498,10 @@ gpu_supports_texure_format(struct etna_screen *screen, uint32_t fmt,
        */
       if (util_format_is_etc(format))
          supported = VIV_FEATURE(screen, chipMinorFeatures2, HALTI1);
+   }
+
+   if (fmt & ASTC_FORMAT) {
+      supported = screen->specs.tex_astc;
    }
 
    if (!supported)
@@ -679,6 +688,27 @@ etna_get_specs(struct etna_screen *screen)
    }
    screen->specs.num_constants = val;
 
+   /* Figure out gross GPU architecture. See rnndb/common.xml for a specific
+    * description of the differences. */
+   if (VIV_FEATURE(screen, chipMinorFeatures5, HALTI5))
+      screen->specs.halti = 5; /* New GC7000/GC8x00  */
+   else if (VIV_FEATURE(screen, chipMinorFeatures5, HALTI4))
+      screen->specs.halti = 4; /* Old GC7000/GC7400 */
+   else if (VIV_FEATURE(screen, chipMinorFeatures5, HALTI3))
+      screen->specs.halti = 3; /* None? */
+   else if (VIV_FEATURE(screen, chipMinorFeatures4, HALTI2))
+      screen->specs.halti = 2; /* GC2500/GC3000/GC5000/GC6400 */
+   else if (VIV_FEATURE(screen, chipMinorFeatures2, HALTI1))
+      screen->specs.halti = 1; /* GC900/GC4000/GC7000UL */
+   else if (VIV_FEATURE(screen, chipMinorFeatures1, HALTI0))
+      screen->specs.halti = 0; /* GC880/GC2000/GC7000TM */
+   else
+      screen->specs.halti = -1; /* GC7000nanolite / pre-GC2000 except GC880 */
+   if (screen->specs.halti >= 0)
+      DBG("etnaviv: GPU arch: HALTI%d\n", screen->specs.halti);
+   else
+      DBG("etnaviv: GPU arch: pre-HALTI\n");
+
    screen->specs.can_supertile =
       VIV_FEATURE(screen, chipMinorFeatures0, SUPER_TILED);
    screen->specs.bits_per_tile =
@@ -706,7 +736,13 @@ etna_get_specs(struct etna_screen *screen)
    screen->specs.has_halti2_instructions =
       VIV_FEATURE(screen, chipMinorFeatures4, HALTI2);
 
-   if (VIV_FEATURE(screen, chipMinorFeatures3, INSTRUCTION_CACHE)) {
+   if (screen->specs.halti >= 5) {
+      /* GC7000 - this core must load shaders from memory. */
+      screen->specs.vs_offset = 0;
+      screen->specs.ps_offset = 0;
+      screen->specs.max_instructions = 0; /* Do not program shaders manually */
+      screen->specs.has_icache = true;
+   } else if (VIV_FEATURE(screen, chipMinorFeatures3, INSTRUCTION_CACHE)) {
       /* GC3000 - this core is capable of loading shaders from
        * memory. It can also run shaders from registers, as a fallback, but
        * "max_instructions" does not have the correct value. It has place for
@@ -759,9 +795,14 @@ etna_get_specs(struct etna_screen *screen)
       screen->specs.max_vs_uniforms = 256;
       screen->specs.max_ps_uniforms = 256;
    }
-   /* unified uniform memory on GC3000 - HALTI1 feature bit is just a guess
-   */
-   if (VIV_FEATURE(screen, chipMinorFeatures2, HALTI1)) {
+
+   if (screen->specs.halti >= 5) {
+      screen->specs.has_unified_uniforms = true;
+      screen->specs.vs_uniforms_offset = VIVS_SH_HALTI5_UNIFORMS_MIRROR(0);
+      screen->specs.ps_uniforms_offset = VIVS_SH_HALTI5_UNIFORMS(screen->specs.max_vs_uniforms*4);
+   } else if (screen->specs.halti >= 1) {
+      /* unified uniform memory on GC3000 - HALTI1 feature bit is just a guess
+      */
       screen->specs.has_unified_uniforms = true;
       screen->specs.vs_uniforms_offset = VIVS_SH_UNIFORMS(0);
       /* hardcode PS uniforms to start after end of VS uniforms -
@@ -783,6 +824,10 @@ etna_get_specs(struct etna_screen *screen)
    screen->specs.single_buffer = VIV_FEATURE(screen, chipMinorFeatures4, SINGLE_BUFFER);
    if (screen->specs.single_buffer)
       DBG("etnaviv: Single buffer mode enabled with %d pixel pipes\n", screen->specs.pixel_pipes);
+
+   screen->specs.tex_astc = VIV_FEATURE(screen, chipMinorFeatures4, TEXTURE_ASTC);
+
+   screen->specs.use_blt = VIV_FEATURE(screen, chipMinorFeatures5, BLT_ENGINE);
 
    return true;
 

@@ -115,7 +115,7 @@ lp_setup_unmap_vertices(struct vbuf_render *vbr,
 
 
 static void
-lp_setup_set_primitive(struct vbuf_render *vbr, unsigned prim)
+lp_setup_set_primitive(struct vbuf_render *vbr, enum pipe_prim_type prim)
 {
    lp_setup_context(vbr)->prim = prim;
 }

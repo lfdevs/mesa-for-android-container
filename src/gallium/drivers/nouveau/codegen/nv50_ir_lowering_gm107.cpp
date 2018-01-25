@@ -95,55 +95,58 @@ GM107LegalizeSSA::visit(Instruction *i)
 bool
 GM107LoweringPass::handleManualTXD(TexInstruction *i)
 {
-   static const uint8_t qOps[4][2] =
-   {
-      { QUADOP(MOV2, ADD,  MOV2, ADD),  QUADOP(MOV2, MOV2, ADD,  ADD) }, // l0
-      { QUADOP(SUBR, MOV2, SUBR, MOV2), QUADOP(MOV2, MOV2, ADD,  ADD) }, // l1
-      { QUADOP(MOV2, ADD,  MOV2, ADD),  QUADOP(SUBR, SUBR, MOV2, MOV2) }, // l2
-      { QUADOP(SUBR, MOV2, SUBR, MOV2), QUADOP(SUBR, SUBR, MOV2, MOV2) }, // l3
-   };
+   // See NVC0LoweringPass::handleManualTXD for rationale. This function
+   // implements the same logic, but using SM50-friendly primitives.
+   static const uint8_t qOps[2] =
+      { QUADOP(MOV2, ADD,  MOV2, ADD),  QUADOP(MOV2, MOV2, ADD,  ADD) };
    Value *def[4][4];
-   Value *crd[3];
+   Value *crd[3], *arr, *shadow;
    Value *tmp;
    Instruction *tex, *add;
-   Value *zero = bld.loadImm(bld.getSSA(), 0);
+   Value *quad = bld.mkImm(SHFL_BOUND_QUAD);
    int l, c;
    const int dim = i->tex.target.getDim() + i->tex.target.isCube();
    const int array = i->tex.target.isArray();
+   const int indirect = i->tex.rIndirectSrc >= 0;
 
    i->op = OP_TEX; // no need to clone dPdx/dPdy later
 
    for (c = 0; c < dim; ++c)
       crd[c] = bld.getScratch();
+   arr = bld.getScratch();
+   shadow = bld.getScratch();
    tmp = bld.getScratch();
 
    for (l = 0; l < 4; ++l) {
       Value *src[3], *val;
-      // mov coordinates from lane l to all lanes
+      Value *lane = bld.mkImm(l);
       bld.mkOp(OP_QUADON, TYPE_NONE, NULL);
+      // Make sure lane 0 has the appropriate array/depth compare values
+      if (l != 0) {
+         if (array)
+            bld.mkOp3(OP_SHFL, TYPE_F32, arr, i->getSrc(0), lane, quad);
+         if (i->tex.target.isShadow())
+            bld.mkOp3(OP_SHFL, TYPE_F32, shadow, i->getSrc(array + dim + indirect), lane, quad);
+      }
+
+      // mov coordinates from lane l to all lanes
       for (c = 0; c < dim; ++c) {
-         bld.mkOp3(OP_SHFL, TYPE_F32, crd[c], i->getSrc(c + array),
-                   bld.mkImm(l), bld.mkImm(SHFL_BOUND_QUAD));
-         add = bld.mkOp2(OP_QUADOP, TYPE_F32, crd[c], crd[c], zero);
-         add->subOp = 0x00;
-         add->lanes = 1; /* abused for .ndv */
+         bld.mkOp3(OP_SHFL, TYPE_F32, crd[c], i->getSrc(c + array), lane, quad);
       }
 
       // add dPdx from lane l to lanes dx
       for (c = 0; c < dim; ++c) {
-         bld.mkOp3(OP_SHFL, TYPE_F32, tmp, i->dPdx[c].get(), bld.mkImm(l),
-                   bld.mkImm(SHFL_BOUND_QUAD));
+         bld.mkOp3(OP_SHFL, TYPE_F32, tmp, i->dPdx[c].get(), lane, quad);
          add = bld.mkOp2(OP_QUADOP, TYPE_F32, crd[c], tmp, crd[c]);
-         add->subOp = qOps[l][0];
+         add->subOp = qOps[0];
          add->lanes = 1; /* abused for .ndv */
       }
 
       // add dPdy from lane l to lanes dy
       for (c = 0; c < dim; ++c) {
-         bld.mkOp3(OP_SHFL, TYPE_F32, tmp, i->dPdy[c].get(), bld.mkImm(l),
-                   bld.mkImm(SHFL_BOUND_QUAD));
+         bld.mkOp3(OP_SHFL, TYPE_F32, tmp, i->dPdy[c].get(), lane, quad);
          add = bld.mkOp2(OP_QUADOP, TYPE_F32, crd[c], tmp, crd[c]);
-         add->subOp = qOps[l][1];
+         add->subOp = qOps[1];
          add->lanes = 1; /* abused for .ndv */
       }
 
@@ -164,8 +167,18 @@ GM107LoweringPass::handleManualTXD(TexInstruction *i)
 
       // texture
       bld.insert(tex = cloneForward(func, i));
+      if (l != 0) {
+         if (array)
+            tex->setSrc(0, arr);
+         if (i->tex.target.isShadow())
+            tex->setSrc(array + dim + indirect, shadow);
+      }
       for (c = 0; c < dim; ++c)
          tex->setSrc(c + array, src[c]);
+      // broadcast results from lane 0 to all lanes
+      if (l != 0)
+         for (c = 0; i->defExists(c); ++c)
+            bld.mkOp3(OP_SHFL, TYPE_F32, tex->getDef(c), tex->getDef(c), bld.mkImm(0), quad);
       bld.mkOp(OP_QUADPOP, TYPE_NONE, NULL);
 
       // save results

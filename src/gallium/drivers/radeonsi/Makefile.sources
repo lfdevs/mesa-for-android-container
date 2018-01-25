@@ -6,12 +6,15 @@ C_SOURCES := \
 	cik_sdma.c \
 	driinfo_radeonsi.h \
 	si_blit.c \
+	si_clear.c \
 	si_compute.c \
 	si_compute.h \
 	si_cp_dma.c \
 	si_debug.c \
 	si_descriptors.c \
 	si_dma.c \
+	si_fence.c \
+	si_get.c \
 	si_hw_context.c \
 	si_pipe.c \
 	si_pipe.h \
@@ -34,4 +37,5 @@ C_SOURCES := \
 	si_state_streamout.c \
 	si_state_viewport.c \
 	si_state.h \
+	si_test_dma.c \
 	si_uvd.c

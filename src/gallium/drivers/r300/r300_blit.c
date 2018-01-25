@@ -383,7 +383,7 @@ static void r300_clear(struct pipe_context* pipe,
 
         /* Reserve CS space. */
         if (!r300->rws->cs_check_space(r300->cs, dwords)) {
-            r300_flush(&r300->context, RADEON_FLUSH_ASYNC, NULL);
+            r300_flush(&r300->context, PIPE_FLUSH_ASYNC, NULL);
         }
 
         /* Emit clear packets. */

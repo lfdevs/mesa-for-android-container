@@ -46,12 +46,12 @@ struct INPUT_ELEMENT_DESC
             uint32_t            StreamIndex : 6;
             uint32_t            InstanceEnable : 1;
             uint32_t            InstanceStrideEnable : 1;
-            uint32_t            ComponentControl0 : 3;
-            uint32_t            ComponentControl1 : 3;
-            uint32_t            ComponentControl2 : 3;
-            uint32_t            ComponentControl3 : 3;
+            uint32_t            ComponentControl0 : 4;
+            uint32_t            ComponentControl1 : 4;
+            uint32_t            ComponentControl2 : 4;
+            uint32_t            ComponentControl3 : 4;
             uint32_t            ComponentPacking : 4;
-            uint32_t            _reserved : 18;
+            uint32_t            _reserved : 14;
         };
         uint64_t bits;
     };
@@ -87,7 +87,7 @@ enum ComponentControl
     Store1Fp        = 3,
     Store1Int       = 4,
     StoreVertexId   = 5,
-    StoreInstanceId = 6
+    StoreInstanceId = 6,
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -126,9 +126,9 @@ struct FETCH_COMPILE_STATE
         if (bForceSequentialAccessEnable != other.bForceSequentialAccessEnable) return false;
         if (bInstanceIDOffsetEnable != other.bInstanceIDOffsetEnable) return false;
 
-        for(uint32_t i = 0; i < numAttribs; ++i)
+        for (uint32_t i = 0; i < numAttribs; ++i)
         {
-            if((layout[i].bits != other.layout[i].bits) ||
+            if ((layout[i].bits != other.layout[i].bits) ||
                (((layout[i].InstanceEnable == 1) || (layout[i].InstanceStrideEnable == 1)) &&
                 (layout[i].InstanceAdvancementState != other.layout[i].InstanceAdvancementState))){
                 return false;

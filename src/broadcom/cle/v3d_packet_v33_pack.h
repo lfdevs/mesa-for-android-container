@@ -81,6 +81,120 @@ enum V3D33_Primitive {
         V3D_PRIM_TRIANGLE_FAN_TF             =     22,
 };
 
+enum V3D33_TMU_Filter {
+        V3D_TMU_FILTER_MIN_LIN_MIP_NONE_MAG_LIN =      0,
+        V3D_TMU_FILTER_MIN_LIN_MIP_NONE_MAG_NEAR =      1,
+        V3D_TMU_FILTER_MIN_NEAR_MIP_NONE_MAG_LIN =      2,
+        V3D_TMU_FILTER_MIN_NEAR_MIP_NONE_MAG_NEAR =      3,
+        V3D_TMU_FILTER_MIN_NEAR_MIP_NEAR_MAG_LIN =      4,
+        V3D_TMU_FILTER_MIN_NEAR_MIP_NEAR_MAG_NEAR =      5,
+        V3D_TMU_FILTER_MIN_NEAR_MIP_LIN_MAG_LIN =      6,
+        V3D_TMU_FILTER_MIN_NEAR_MIP_LIN_MAG_NEAR =      7,
+        V3D_TMU_FILTER_MIN_LIN_MIP_NEAR_MAG_LIN =      8,
+        V3D_TMU_FILTER_MIN_LIN_MIP_NEAR_MAG_NEAR =      9,
+        V3D_TMU_FILTER_MIN_LIN_MIP_LIN_MAG_LIN =     10,
+        V3D_TMU_FILTER_MIN_LIN_MIP_LIN_MAG_NEAR =     11,
+        V3D_TMU_FILTER_ANISOTROPIC_2_1       =     12,
+        V3D_TMU_FILTER_ANISOTROPIC_4_1       =     13,
+        V3D_TMU_FILTER_ANISOTROPIC_8_1       =     14,
+        V3D_TMU_FILTER_ANISOTROPIC_16_1      =     15,
+};
+
+enum V3D33_Varying_Flags_Action {
+        V3D_VARYING_FLAGS_ACTION_UNCHANGED   =      0,
+        V3D_VARYING_FLAGS_ACTION_ZEROED      =      1,
+        V3D_VARYING_FLAGS_ACTION_SET         =      2,
+};
+
+enum V3D33_Memory_Format {
+        V3D_MEMORY_FORMAT_RASTER             =      0,
+        V3D_MEMORY_FORMAT_LINEARTILE         =      1,
+        V3D_MEMORY_FORMAT_UB_LINEAR_1_UIF_BLOCK_WIDE =      2,
+        V3D_MEMORY_FORMAT_UB_LINEAR_2_UIF_BLOCKS_WIDE =      3,
+        V3D_MEMORY_FORMAT_UIF_NO_XOR         =      4,
+        V3D_MEMORY_FORMAT_UIF_XOR            =      5,
+};
+
+enum V3D33_Decimate_Mode {
+        V3D_DECIMATE_MODE_SAMPLE_0           =      0,
+        V3D_DECIMATE_MODE_4X                 =      1,
+        V3D_DECIMATE_MODE_16X                =      2,
+        V3D_DECIMATE_MODE_ALL_SAMPLES        =      3,
+};
+
+enum V3D33_Internal_Type {
+        V3D_INTERNAL_TYPE_8I                 =      0,
+        V3D_INTERNAL_TYPE_8UI                =      1,
+        V3D_INTERNAL_TYPE_8                  =      2,
+        V3D_INTERNAL_TYPE_16I                =      4,
+        V3D_INTERNAL_TYPE_16UI               =      5,
+        V3D_INTERNAL_TYPE_16F                =      6,
+        V3D_INTERNAL_TYPE_32I                =      8,
+        V3D_INTERNAL_TYPE_32UI               =      9,
+        V3D_INTERNAL_TYPE_32F                =     10,
+};
+
+enum V3D33_Internal_BPP {
+        V3D_INTERNAL_BPP_32                  =      0,
+        V3D_INTERNAL_BPP_64                  =      1,
+        V3D_INTERNAL_BPP_128                 =      2,
+};
+
+enum V3D33_Internal_Depth_Type {
+        V3D_INTERNAL_TYPE_DEPTH_32F          =      0,
+        V3D_INTERNAL_TYPE_DEPTH_24           =      1,
+        V3D_INTERNAL_TYPE_DEPTH_16           =      2,
+};
+
+enum V3D33_Output_Image_Format {
+        V3D_OUTPUT_IMAGE_FORMAT_SRGB8_ALPHA8 =      0,
+        V3D_OUTPUT_IMAGE_FORMAT_SRGB         =      1,
+        V3D_OUTPUT_IMAGE_FORMAT_RGB10_A2UI   =      2,
+        V3D_OUTPUT_IMAGE_FORMAT_RGB10_A2     =      3,
+        V3D_OUTPUT_IMAGE_FORMAT_ABGR1555     =      4,
+        V3D_OUTPUT_IMAGE_FORMAT_ALPHA_MASKED_ABGR1555 =      5,
+        V3D_OUTPUT_IMAGE_FORMAT_ABGR4444     =      6,
+        V3D_OUTPUT_IMAGE_FORMAT_BGR565       =      7,
+        V3D_OUTPUT_IMAGE_FORMAT_R11F_G11F_B10F =      8,
+        V3D_OUTPUT_IMAGE_FORMAT_RGBA32F      =      9,
+        V3D_OUTPUT_IMAGE_FORMAT_RG32F        =     10,
+        V3D_OUTPUT_IMAGE_FORMAT_R32F         =     11,
+        V3D_OUTPUT_IMAGE_FORMAT_RGBA32I      =     12,
+        V3D_OUTPUT_IMAGE_FORMAT_RG32I        =     13,
+        V3D_OUTPUT_IMAGE_FORMAT_R32I         =     14,
+        V3D_OUTPUT_IMAGE_FORMAT_RGBA32UI     =     15,
+        V3D_OUTPUT_IMAGE_FORMAT_RG32UI       =     16,
+        V3D_OUTPUT_IMAGE_FORMAT_R32UI        =     17,
+        V3D_OUTPUT_IMAGE_FORMAT_RGBA16F      =     18,
+        V3D_OUTPUT_IMAGE_FORMAT_RG16F        =     19,
+        V3D_OUTPUT_IMAGE_FORMAT_R16F         =     20,
+        V3D_OUTPUT_IMAGE_FORMAT_RGBA16I      =     21,
+        V3D_OUTPUT_IMAGE_FORMAT_RG16I        =     22,
+        V3D_OUTPUT_IMAGE_FORMAT_R16I         =     23,
+        V3D_OUTPUT_IMAGE_FORMAT_RGBA16UI     =     24,
+        V3D_OUTPUT_IMAGE_FORMAT_RG16UI       =     25,
+        V3D_OUTPUT_IMAGE_FORMAT_R16UI        =     26,
+        V3D_OUTPUT_IMAGE_FORMAT_RGBA8        =     27,
+        V3D_OUTPUT_IMAGE_FORMAT_RGB8         =     28,
+        V3D_OUTPUT_IMAGE_FORMAT_RG8          =     29,
+        V3D_OUTPUT_IMAGE_FORMAT_R8           =     30,
+        V3D_OUTPUT_IMAGE_FORMAT_RGBA8I       =     31,
+        V3D_OUTPUT_IMAGE_FORMAT_RG8I         =     32,
+        V3D_OUTPUT_IMAGE_FORMAT_R8I          =     33,
+        V3D_OUTPUT_IMAGE_FORMAT_RGBA8UI      =     34,
+        V3D_OUTPUT_IMAGE_FORMAT_RG8UI        =     35,
+        V3D_OUTPUT_IMAGE_FORMAT_R8UI         =     36,
+        V3D_OUTPUT_IMAGE_FORMAT_SRGBX8       =     37,
+        V3D_OUTPUT_IMAGE_FORMAT_RGBX8        =     38,
+};
+
+enum V3D33_Z_S_Output_Image_Format {
+        V3D_OUTPUT_IMAGE_FORMAT_ZS_DEPTH_COMPONENT32F =      0,
+        V3D_OUTPUT_IMAGE_FORMAT_ZS_DEPTH_COMPONENT24 =      1,
+        V3D_OUTPUT_IMAGE_FORMAT_ZS_DEPTH_COMPONENT16 =      2,
+        V3D_OUTPUT_IMAGE_FORMAT_ZS_DEPTH24_STENCIL8 =      3,
+};
+
 #define V3D33_HALT_opcode                      0
 #define V3D33_HALT_header                       \
    .opcode                              =      0
@@ -955,10 +1069,9 @@ V3D33_STORE_TILE_BUFFER_GENERAL_pack(__gen_user_data *data, uint8_t * restrict c
             __gen_uint(values->xor_uif, 2, 2) |
             __gen_uint(values->last_tile_of_frame, 0, 0);
 
-   __gen_emit_reloc(data, &values->address);
-   cl[ 3] = __gen_address_offset(&values->address) |
-            __gen_uint(values->padded_height_of_output_image_in_uif_blocks, 3, 15) >> 8;
+   cl[ 3] = __gen_uint(values->padded_height_of_output_image_in_uif_blocks, 3, 15) >> 8;
 
+   __gen_emit_reloc(data, &values->address);
    cl[ 4] = __gen_address_offset(&values->address) >> 8;
 
    cl[ 5] = __gen_address_offset(&values->address) >> 16;
@@ -974,7 +1087,7 @@ V3D33_STORE_TILE_BUFFER_GENERAL_unpack(const uint8_t * restrict cl,
                                        struct V3D33_STORE_TILE_BUFFER_GENERAL * restrict values)
 {
    values->opcode = __gen_unpack_uint(cl, 0, 7);
-   values->address = __gen_unpack_address(cl, 24, 55);
+   values->address = __gen_unpack_address(cl, 32, 55);
    values->padded_height_of_output_image_in_uif_blocks = __gen_unpack_uint(cl, 19, 31);
    values->xor_uif = __gen_unpack_uint(cl, 18, 18);
    values->last_tile_of_frame = __gen_unpack_uint(cl, 16, 16);
@@ -1023,11 +1136,11 @@ V3D33_LOAD_TILE_BUFFER_GENERAL_pack(__gen_user_data *data, uint8_t * restrict cl
    cl[ 3] = __gen_uint(values->padded_height_of_output_image_in_uif_blocks, 3, 15) >> 8;
 
    __gen_emit_reloc(data, &values->address);
-   cl[ 4] = __gen_address_offset(&values->address);
+   cl[ 4] = __gen_address_offset(&values->address) >> 8;
 
-   cl[ 5] = __gen_address_offset(&values->address) >> 8;
+   cl[ 5] = __gen_address_offset(&values->address) >> 16;
 
-   cl[ 6] = __gen_address_offset(&values->address) >> 16;
+   cl[ 6] = __gen_address_offset(&values->address) >> 24;
 
 }
 
@@ -1062,7 +1175,7 @@ struct V3D33_INDEXED_PRIMITIVE_LIST {
 #define INDEX_TYPE_8_BIT                         0
 #define INDEX_TYPE_16_BIT                        1
 #define INDEX_TYPE_32_BIT                        2
-   uint32_t                             mode;
+   enum V3D33_Primitive                 mode;
 };
 
 static inline void
@@ -1720,6 +1833,44 @@ V3D33_COLOUR_WRITE_MASKS_unpack(const uint8_t * restrict cl,
 #endif
 
 
+#define V3D33_OCCLUSION_QUERY_COUNTER_opcode     92
+#define V3D33_OCCLUSION_QUERY_COUNTER_header    \
+   .opcode                              =     92
+
+struct V3D33_OCCLUSION_QUERY_COUNTER {
+   uint32_t                             opcode;
+   __gen_address_type                   address;
+};
+
+static inline void
+V3D33_OCCLUSION_QUERY_COUNTER_pack(__gen_user_data *data, uint8_t * restrict cl,
+                                   const struct V3D33_OCCLUSION_QUERY_COUNTER * restrict values)
+{
+   cl[ 0] = __gen_uint(values->opcode, 0, 7);
+
+   __gen_emit_reloc(data, &values->address);
+   cl[ 1] = __gen_address_offset(&values->address);
+
+   cl[ 2] = __gen_address_offset(&values->address) >> 8;
+
+   cl[ 3] = __gen_address_offset(&values->address) >> 16;
+
+   cl[ 4] = __gen_address_offset(&values->address) >> 24;
+
+}
+
+#define V3D33_OCCLUSION_QUERY_COUNTER_length      5
+#ifdef __gen_unpack_address
+static inline void
+V3D33_OCCLUSION_QUERY_COUNTER_unpack(const uint8_t * restrict cl,
+                                     struct V3D33_OCCLUSION_QUERY_COUNTER * restrict values)
+{
+   values->opcode = __gen_unpack_uint(cl, 0, 7);
+   values->address = __gen_unpack_address(cl, 8, 39);
+}
+#endif
+
+
 #define V3D33_CONFIGURATION_BITS_opcode       96
 #define V3D33_CONFIGURATION_BITS_header         \
    .opcode                              =     96
@@ -1835,8 +1986,8 @@ V3D33_ZERO_ALL_FLAT_SHADE_FLAGS_unpack(const uint8_t * restrict cl,
 struct V3D33_FLAT_SHADE_FLAGS {
    uint32_t                             opcode;
    uint32_t                             flat_shade_flags_for_varyings_v024;
-   uint32_t                             action_for_flat_shade_flags_of_higher_numbered_varyings;
-   uint32_t                             action_for_flat_shade_flags_of_lower_numbered_varyings;
+   enum V3D33_Varying_Flags_Action      action_for_flat_shade_flags_of_higher_numbered_varyings;
+   enum V3D33_Varying_Flags_Action      action_for_flat_shade_flags_of_lower_numbered_varyings;
    uint32_t                             varying_offset_v0;
 };
 
@@ -2187,10 +2338,7 @@ struct V3D33_TILE_BINNING_MODE_CONFIGURATION_PART1 {
    uint32_t                             opcode;
    bool                                 double_buffer_in_non_ms_mode;
    bool                                 multisample_mode_4x;
-   uint32_t                             maximum_bpp_of_all_render_targets;
-#define RENDER_TARGET_MAXIMUM_32BPP              0
-#define RENDER_TARGET_MAXIMUM_64BPP              1
-#define RENDER_TARGET_MAXIMUM_128BPP             2
+   enum V3D33_Internal_BPP              maximum_bpp_of_all_render_targets;
    uint32_t                             number_of_render_targets;
    uint32_t                             height_in_tiles;
    uint32_t                             width_in_tiles;
@@ -2253,7 +2401,7 @@ V3D33_TILE_BINNING_MODE_CONFIGURATION_PART1_unpack(const uint8_t * restrict cl,
    values->number_of_render_targets = __gen_unpack_uint(cl, 64, 67);
    values->height_in_tiles = __gen_unpack_uint(cl, 52, 63);
    values->width_in_tiles = __gen_unpack_uint(cl, 40, 51);
-   values->tile_state_data_array_base_address = __gen_unpack_address(cl, 8, 39);
+   values->tile_state_data_array_base_address = __gen_unpack_address(cl, 14, 39);
    values->tile_allocation_block_size = __gen_unpack_uint(cl, 12, 13);
    values->tile_allocation_initial_block_size = __gen_unpack_uint(cl, 10, 11);
    values->auto_initialize_tile_state_data_array = __gen_unpack_uint(cl, 9, 9);
@@ -2406,70 +2554,13 @@ struct V3D33_TILE_RENDERING_MODE_CONFIGURATION_RENDER_TARGET_CONFIG {
    __gen_address_type                   address;
    uint32_t                             pad;
    bool                                 flip_y;
-   uint32_t                             memory_format;
-#define MEMORY_FORMAT_RASTER                     0
-#define MEMORY_FORMAT_LINEARTILE                 1
-#define MEMORY_FORMAT_UB_LINEAR_1_UIF_BLOCK_WIDE 2
-#define MEMORY_FORMAT_UB_LINEAR_2_UIF_BLOCKS_WIDE 3
-#define MEMORY_FORMAT_UIF_NO_XOR                 4
-#define MEMORY_FORMAT_UIF_XOR                    5
+   enum V3D33_Memory_Format             memory_format;
    bool                                 a_dithered;
    bool                                 bgr_dithered;
-   uint32_t                             output_image_format;
-#define OUTPUT_IMAGE_FORMAT_SRGB8_ALPHA8         0
-#define OUTPUT_IMAGE_FORMAT_SRGB                 1
-#define OUTPUT_IMAGE_FORMAT_RGB10_A2UI           2
-#define OUTPUT_IMAGE_FORMAT_RGB10_A2             3
-#define OUTPUT_IMAGE_FORMAT_ABGR1555             4
-#define OUTPUT_IMAGE_FORMAT_ALPHA_MASKED_ABGR1555 5
-#define OUTPUT_IMAGE_FORMAT_ABGR4444             6
-#define OUTPUT_IMAGE_FORMAT_BGR565               7
-#define OUTPUT_IMAGE_FORMAT_R11F_G11F_B10F       8
-#define OUTPUT_IMAGE_FORMAT_RGBA32F              9
-#define OUTPUT_IMAGE_FORMAT_RG32F                10
-#define OUTPUT_IMAGE_FORMAT_R32F                 11
-#define OUTPUT_IMAGE_FORMAT_RGBA32I              12
-#define OUTPUT_IMAGE_FORMAT_RG32I                13
-#define OUTPUT_IMAGE_FORMAT_R32I                 14
-#define OUTPUT_IMAGE_FORMAT_RGBA32UI             15
-#define OUTPUT_IMAGE_FORMAT_RG32UI               16
-#define OUTPUT_IMAGE_FORMAT_R32UI                17
-#define OUTPUT_IMAGE_FORMAT_RGBA16F              18
-#define OUTPUT_IMAGE_FORMAT_RG16F                19
-#define OUTPUT_IMAGE_FORMAT_R16F                 20
-#define OUTPUT_IMAGE_FORMAT_RGBA16I              21
-#define OUTPUT_IMAGE_FORMAT_RG16I                22
-#define OUTPUT_IMAGE_FORMAT_R16I                 23
-#define OUTPUT_IMAGE_FORMAT_RGBA16UI             24
-#define OUTPUT_IMAGE_FORMAT_RG16UI               25
-#define OUTPUT_IMAGE_FORMAT_R16UI                26
-#define OUTPUT_IMAGE_FORMAT_RGBA8                27
-#define OUTPUT_IMAGE_FORMAT_RGB8                 28
-#define OUTPUT_IMAGE_FORMAT_RG8                  29
-#define OUTPUT_IMAGE_FORMAT_R8                   30
-#define OUTPUT_IMAGE_FORMAT_RGBA8I               31
-#define OUTPUT_IMAGE_FORMAT_RG8I                 32
-#define OUTPUT_IMAGE_FORMAT_R8I                  33
-#define OUTPUT_IMAGE_FORMAT_RGBA8UI              34
-#define OUTPUT_IMAGE_FORMAT_RG8UI                35
-#define OUTPUT_IMAGE_FORMAT_R8UI                 36
-#define OUTPUT_IMAGE_FORMAT_SRGBX8               37
-#define OUTPUT_IMAGE_FORMAT_RGBX8                38
-   uint32_t                             decimate_mode;
-   uint32_t                             internal_type;
-#define INTERNAL_TYPE_8I                         0
-#define INTERNAL_TYPE_8UI                        1
-#define INTERNAL_TYPE_8                          2
-#define INTERNAL_TYPE_16I                        4
-#define INTERNAL_TYPE_16UI                       5
-#define INTERNAL_TYPE_16F                        6
-#define INTERNAL_TYPE_32I                        8
-#define INTERNAL_TYPE_32UI                       9
-#define INTERNAL_TYPE_32F                        10
-   uint32_t                             internal_bpp;
-#define INTERNAL_BPP_32                          0
-#define INTERNAL_BPP_64                          1
-#define INTERNAL_BPP_128                         2
+   enum V3D33_Output_Image_Format       output_image_format;
+   enum V3D33_Decimate_Mode             decimate_mode;
+   enum V3D33_Internal_Type             internal_type;
+   enum V3D33_Internal_BPP              internal_bpp;
    uint32_t                             render_target_number;
    uint32_t                             sub_id;
 };
@@ -2539,23 +2630,10 @@ struct V3D33_TILE_RENDERING_MODE_CONFIGURATION_Z_STENCIL_CONFIG {
    uint32_t                             opcode;
    __gen_address_type                   address;
    uint32_t                             padded_height_of_output_image_in_uif_blocks;
-   uint32_t                             memory_format;
-#define MEMORY_FORMAT_RASTER                     0
-#define MEMORY_FORMAT_LINEARTILE                 1
-#define MEMORY_FORMAT_UB_LINEAR_1_UIF_BLOCK_WIDE 2
-#define MEMORY_FORMAT_UB_LINEAR_2_UIF_BLOCKS_WIDE 3
-#define MEMORY_FORMAT_UIF_NO_XOR                 4
-#define MEMORY_FORMAT_UIF_XOR                    5
-   uint32_t                             output_image_format;
-#define OUTPUT_IMAGE_FORMAT_DEPTH_COMPONENT32F   0
-#define OUTPUT_IMAGE_FORMAT_DEPTH_COMPONENT24    1
-#define OUTPUT_IMAGE_FORMAT_DEPTH_COMPONENT16    2
-#define OUTPUT_IMAGE_FORMAT_DEPTH24_STENCIL8     3
+   enum V3D33_Memory_Format             memory_format;
+   enum V3D33_Z_S_Output_Image_Format   output_image_format;
    uint32_t                             decimate_mode;
-   uint32_t                             internal_type;
-#define INTERNAL_TYPE_DEPTH_32F                  0
-#define INTERNAL_TYPE_DEPTH_24                   1
-#define INTERNAL_TYPE_DEPTH_16                   2
+   enum V3D33_Internal_Depth_Type       internal_type;
    uint32_t                             internal_bpp_ignored;
    uint32_t                             z_stencil_id;
    uint32_t                             sub_id;
@@ -2599,7 +2677,7 @@ V3D33_TILE_RENDERING_MODE_CONFIGURATION_Z_STENCIL_CONFIG_unpack(const uint8_t * 
                                                                 struct V3D33_TILE_RENDERING_MODE_CONFIGURATION_Z_STENCIL_CONFIG * restrict values)
 {
    values->opcode = __gen_unpack_uint(cl, 0, 7);
-   values->address = __gen_unpack_address(cl, 40, 71);
+   values->address = __gen_unpack_address(cl, 46, 71);
    values->padded_height_of_output_image_in_uif_blocks = __gen_unpack_uint(cl, 33, 45);
    values->memory_format = __gen_unpack_uint(cl, 30, 32);
    values->output_image_format = __gen_unpack_uint(cl, 24, 29);
@@ -3036,13 +3114,17 @@ struct V3D33_GL_SHADER_STATE_RECORD {
    uint32_t                             vertex_shader_input_vpm_segment_size;
    __gen_address_type                   address_of_default_attribute_values;
    __gen_address_type                   fragment_shader_code_address;
-   bool                                 _2_way_threadable;
-   bool                                 _4_way_threadable;
+   bool                                 fragment_shader_2_way_threadable;
+   bool                                 fragment_shader_4_way_threadable;
    bool                                 propagate_nans;
    __gen_address_type                   fragment_shader_uniforms_address;
    __gen_address_type                   vertex_shader_code_address;
+   bool                                 vertex_shader_2_way_threadable;
+   bool                                 vertex_shader_4_way_threadable;
    __gen_address_type                   vertex_shader_uniforms_address;
    __gen_address_type                   coordinate_shader_code_address;
+   bool                                 coordinate_shader_2_way_threadable;
+   bool                                 coordinate_shader_4_way_threadable;
    __gen_address_type                   coordinate_shader_uniforms_address;
 };
 
@@ -3085,8 +3167,8 @@ V3D33_GL_SHADER_STATE_RECORD_pack(__gen_user_data *data, uint8_t * restrict cl,
 
    __gen_emit_reloc(data, &values->fragment_shader_code_address);
    cl[12] = __gen_address_offset(&values->fragment_shader_code_address) |
-            __gen_uint(values->_2_way_threadable, 0, 0) |
-            __gen_uint(values->_4_way_threadable, 1, 1) |
+            __gen_uint(values->fragment_shader_2_way_threadable, 0, 0) |
+            __gen_uint(values->fragment_shader_4_way_threadable, 1, 1) |
             __gen_uint(values->propagate_nans, 2, 2);
 
    cl[13] = __gen_address_offset(&values->fragment_shader_code_address) >> 8;
@@ -3105,7 +3187,9 @@ V3D33_GL_SHADER_STATE_RECORD_pack(__gen_user_data *data, uint8_t * restrict cl,
    cl[19] = __gen_address_offset(&values->fragment_shader_uniforms_address) >> 24;
 
    __gen_emit_reloc(data, &values->vertex_shader_code_address);
-   cl[20] = __gen_address_offset(&values->vertex_shader_code_address);
+   cl[20] = __gen_address_offset(&values->vertex_shader_code_address) |
+            __gen_uint(values->vertex_shader_2_way_threadable, 0, 0) |
+            __gen_uint(values->vertex_shader_4_way_threadable, 1, 1);
 
    cl[21] = __gen_address_offset(&values->vertex_shader_code_address) >> 8;
 
@@ -3123,7 +3207,9 @@ V3D33_GL_SHADER_STATE_RECORD_pack(__gen_user_data *data, uint8_t * restrict cl,
    cl[27] = __gen_address_offset(&values->vertex_shader_uniforms_address) >> 24;
 
    __gen_emit_reloc(data, &values->coordinate_shader_code_address);
-   cl[28] = __gen_address_offset(&values->coordinate_shader_code_address);
+   cl[28] = __gen_address_offset(&values->coordinate_shader_code_address) |
+            __gen_uint(values->coordinate_shader_2_way_threadable, 0, 0) |
+            __gen_uint(values->coordinate_shader_4_way_threadable, 1, 1);
 
    cl[29] = __gen_address_offset(&values->coordinate_shader_code_address) >> 8;
 
@@ -3166,13 +3252,17 @@ V3D33_GL_SHADER_STATE_RECORD_unpack(const uint8_t * restrict cl,
    values->vertex_shader_input_vpm_segment_size = __gen_unpack_uint(cl, 56, 63);
    values->address_of_default_attribute_values = __gen_unpack_address(cl, 64, 95);
    values->fragment_shader_code_address = __gen_unpack_address(cl, 99, 127);
-   values->_2_way_threadable = __gen_unpack_uint(cl, 96, 96);
-   values->_4_way_threadable = __gen_unpack_uint(cl, 97, 97);
+   values->fragment_shader_2_way_threadable = __gen_unpack_uint(cl, 96, 96);
+   values->fragment_shader_4_way_threadable = __gen_unpack_uint(cl, 97, 97);
    values->propagate_nans = __gen_unpack_uint(cl, 98, 98);
    values->fragment_shader_uniforms_address = __gen_unpack_address(cl, 128, 159);
    values->vertex_shader_code_address = __gen_unpack_address(cl, 160, 191);
+   values->vertex_shader_2_way_threadable = __gen_unpack_uint(cl, 160, 160);
+   values->vertex_shader_4_way_threadable = __gen_unpack_uint(cl, 161, 161);
    values->vertex_shader_uniforms_address = __gen_unpack_address(cl, 192, 223);
    values->coordinate_shader_code_address = __gen_unpack_address(cl, 224, 255);
+   values->coordinate_shader_2_way_threadable = __gen_unpack_uint(cl, 224, 224);
+   values->coordinate_shader_4_way_threadable = __gen_unpack_uint(cl, 225, 225);
    values->coordinate_shader_uniforms_address = __gen_unpack_address(cl, 256, 287);
 }
 #endif
@@ -3396,7 +3486,7 @@ struct V3D33_TEXTURE_UNIFORM_PARAMETER_0_CFG_MODE1 {
    bool                                 bias_supplied;
    bool                                 gather_sample_mode;
    bool                                 fetch_sample_mode;
-   bool                                 lookup_type;
+   uint32_t                             lookup_type;
 #define TEXTURE_2D                               0
 #define TEXTURE_2D_ARRAY                         1
 #define TEXTURE_3D                               2
@@ -3462,10 +3552,7 @@ V3D33_TEXTURE_UNIFORM_PARAMETER_0_CFG_MODE1_unpack(const uint8_t * restrict cl,
 
 struct V3D33_TEXTURE_UNIFORM_PARAMETER_1_CFG_MODE1 {
    __gen_address_type                   texture_state_record_base_address;
-   bool                                 return_word_3_of_texture_data;
-   bool                                 return_word_2_of_texture_data;
-   bool                                 return_word_1_of_texture_data;
-   bool                                 return_word_0_of_texture_data;
+   uint32_t                             return_words_of_texture_data;
 };
 
 static inline void
@@ -3474,10 +3561,7 @@ V3D33_TEXTURE_UNIFORM_PARAMETER_1_CFG_MODE1_pack(__gen_user_data *data, uint8_t 
 {
    __gen_emit_reloc(data, &values->texture_state_record_base_address);
    cl[ 0] = __gen_address_offset(&values->texture_state_record_base_address) |
-            __gen_uint(values->return_word_3_of_texture_data, 3, 3) |
-            __gen_uint(values->return_word_2_of_texture_data, 2, 2) |
-            __gen_uint(values->return_word_1_of_texture_data, 1, 1) |
-            __gen_uint(values->return_word_0_of_texture_data, 0, 0);
+            __gen_uint(values->return_words_of_texture_data, 0, 3);
 
    cl[ 1] = __gen_address_offset(&values->texture_state_record_base_address) >> 8;
 
@@ -3493,11 +3577,8 @@ static inline void
 V3D33_TEXTURE_UNIFORM_PARAMETER_1_CFG_MODE1_unpack(const uint8_t * restrict cl,
                                                    struct V3D33_TEXTURE_UNIFORM_PARAMETER_1_CFG_MODE1 * restrict values)
 {
-   values->texture_state_record_base_address = __gen_unpack_address(cl, 0, 31);
-   values->return_word_3_of_texture_data = __gen_unpack_uint(cl, 3, 3);
-   values->return_word_2_of_texture_data = __gen_unpack_uint(cl, 2, 2);
-   values->return_word_1_of_texture_data = __gen_unpack_uint(cl, 1, 1);
-   values->return_word_0_of_texture_data = __gen_unpack_uint(cl, 0, 0);
+   values->texture_state_record_base_address = __gen_unpack_address(cl, 4, 31);
+   values->return_words_of_texture_data = __gen_unpack_uint(cl, 0, 3);
 }
 #endif
 
@@ -3506,9 +3587,12 @@ V3D33_TEXTURE_UNIFORM_PARAMETER_1_CFG_MODE1_unpack(const uint8_t * restrict cl,
    .flip_etc_y                          =      1
 
 struct V3D33_TEXTURE_SHADER_STATE {
+   bool                                 uif_xor_disable;
    bool                                 level_0_is_strictly_uif;
    bool                                 level_0_xor_enable;
    uint32_t                             level_0_ub_pad;
+   bool                                 output_32_bit;
+   uint32_t                             sample_number;
    uint32_t                             base_level;
    float                                fixed_bias;
    float                                max_level_of_detail;
@@ -3539,8 +3623,7 @@ struct V3D33_TEXTURE_SHADER_STATE {
    uint32_t                             image_width;
    uint32_t                             array_stride_64_byte_aligned;
    __gen_address_type                   texture_base_pointer;
-   uint32_t                             minification_filter;
-   uint32_t                             magnification_filter;
+   enum V3D33_TMU_Filter                filter;
 };
 
 static inline void
@@ -3549,8 +3632,7 @@ V3D33_TEXTURE_SHADER_STATE_pack(__gen_user_data *data, uint8_t * restrict cl,
 {
    __gen_emit_reloc(data, &values->texture_base_pointer);
    cl[ 0] = __gen_address_offset(&values->texture_base_pointer) |
-            __gen_uint(values->minification_filter, 1, 3) |
-            __gen_uint(values->magnification_filter, 0, 0);
+            __gen_uint(values->filter, 0, 3);
 
    cl[ 1] = __gen_address_offset(&values->texture_base_pointer) >> 8;
 
@@ -3622,9 +3704,12 @@ V3D33_TEXTURE_SHADER_STATE_pack(__gen_user_data *data, uint8_t * restrict cl,
 
    cl[29] = __gen_sfixed(values->fixed_bias, 0, 15, 8) >> 8;
 
-   cl[30] = __gen_uint(values->base_level, 0, 3);
+   cl[30] = __gen_uint(values->output_32_bit, 6, 6) |
+            __gen_uint(values->sample_number, 4, 5) |
+            __gen_uint(values->base_level, 0, 3);
 
-   cl[31] = __gen_uint(values->level_0_is_strictly_uif, 6, 6) |
+   cl[31] = __gen_uint(values->uif_xor_disable, 7, 7) |
+            __gen_uint(values->level_0_is_strictly_uif, 6, 6) |
             __gen_uint(values->level_0_xor_enable, 4, 4) |
             __gen_uint(values->level_0_ub_pad, 0, 3);
 
@@ -3636,9 +3721,12 @@ static inline void
 V3D33_TEXTURE_SHADER_STATE_unpack(const uint8_t * restrict cl,
                                   struct V3D33_TEXTURE_SHADER_STATE * restrict values)
 {
+   values->uif_xor_disable = __gen_unpack_uint(cl, 255, 255);
    values->level_0_is_strictly_uif = __gen_unpack_uint(cl, 254, 254);
    values->level_0_xor_enable = __gen_unpack_uint(cl, 252, 252);
    values->level_0_ub_pad = __gen_unpack_uint(cl, 248, 251);
+   values->output_32_bit = __gen_unpack_uint(cl, 246, 246);
+   values->sample_number = __gen_unpack_uint(cl, 244, 245);
    values->base_level = __gen_unpack_uint(cl, 240, 243);
    values->fixed_bias = __gen_unpack_sfixed(cl, 224, 239, 8);
    values->max_level_of_detail = __gen_unpack_sfixed(cl, 208, 223, 8);
@@ -3662,9 +3750,8 @@ V3D33_TEXTURE_SHADER_STATE_unpack(const uint8_t * restrict cl,
    values->image_height = __gen_unpack_uint(cl, 72, 85);
    values->image_width = __gen_unpack_uint(cl, 58, 71);
    values->array_stride_64_byte_aligned = __gen_unpack_uint(cl, 32, 57);
-   values->texture_base_pointer = __gen_unpack_address(cl, 0, 31);
-   values->minification_filter = __gen_unpack_uint(cl, 1, 3);
-   values->magnification_filter = __gen_unpack_uint(cl, 0, 0);
+   values->texture_base_pointer = __gen_unpack_address(cl, 2, 31);
+   values->filter = __gen_unpack_uint(cl, 0, 3);
 }
 #endif
 
@@ -3728,6 +3815,25 @@ enum V3D33_Texture_Data_Formats {
         TEXTURE_DATA_FORMAT_ASTC_10X10       =     75,
         TEXTURE_DATA_FORMAT_ASTC_12X10       =     76,
         TEXTURE_DATA_FORMAT_ASTC_12X12       =     77,
+        TEXTURE_DATA_FORMAT_R8I              =     96,
+        TEXTURE_DATA_FORMAT_R8UI             =     97,
+        TEXTURE_DATA_FORMAT_RG8I             =     98,
+        TEXTURE_DATA_FORMAT_RG8UI            =     99,
+        TEXTURE_DATA_FORMAT_RGBA8I           =    100,
+        TEXTURE_DATA_FORMAT_RGBA8UI          =    101,
+        TEXTURE_DATA_FORMAT_R16I             =    102,
+        TEXTURE_DATA_FORMAT_R16UI            =    103,
+        TEXTURE_DATA_FORMAT_RG16I            =    104,
+        TEXTURE_DATA_FORMAT_RG16UI           =    105,
+        TEXTURE_DATA_FORMAT_RGBA16I          =    106,
+        TEXTURE_DATA_FORMAT_RGBA16UI         =    107,
+        TEXTURE_DATA_FORMAT_R32I             =    108,
+        TEXTURE_DATA_FORMAT_R32UI            =    109,
+        TEXTURE_DATA_FORMAT_RG32I            =    110,
+        TEXTURE_DATA_FORMAT_RG32UI           =    111,
+        TEXTURE_DATA_FORMAT_RGBA32I          =    112,
+        TEXTURE_DATA_FORMAT_RGBA32UI         =    113,
+        TEXTURE_DATA_FORMAT_RGB10_A2UI       =    114,
 };
 
 #endif /* V3D33_PACK_H */

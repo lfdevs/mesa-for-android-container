@@ -29,7 +29,7 @@
  */
 
 #include "hud/hud_private.h"
-#include "os/os_time.h"
+#include "util/os_time.h"
 #include "util/u_memory.h"
 
 struct fps_info {
@@ -38,7 +38,7 @@ struct fps_info {
 };
 
 static void
-query_fps(struct hud_graph *gr)
+query_fps(struct hud_graph *gr, struct pipe_context *pipe)
 {
    struct fps_info *info = gr->query_data;
    uint64_t now = os_time_get();
@@ -61,7 +61,7 @@ query_fps(struct hud_graph *gr)
 }
 
 static void
-free_query_data(void *p)
+free_query_data(void *p, struct pipe_context *pipe)
 {
    FREE(p);
 }

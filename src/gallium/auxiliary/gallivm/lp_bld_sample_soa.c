@@ -218,34 +218,42 @@ lp_build_sample_texel_soa(struct lp_build_sample_context *bld,
 
 
 /**
- * Helper to compute the mirror function for the PIPE_WRAP_MIRROR modes.
+ * Helper to compute the mirror function for the PIPE_WRAP_MIRROR_REPEAT mode.
+ * (Note that with pot sizes could do this much more easily post-scale
+ * with some bit arithmetic.)
  */
 static LLVMValueRef
 lp_build_coord_mirror(struct lp_build_sample_context *bld,
-                      LLVMValueRef coord)
+                      LLVMValueRef coord, boolean posOnly)
 {
    struct lp_build_context *coord_bld = &bld->coord_bld;
-   struct lp_build_context *int_coord_bld = &bld->int_coord_bld;
-   LLVMValueRef fract, flr, isOdd;
+   LLVMValueRef fract;
+   LLVMValueRef half = lp_build_const_vec(bld->gallivm, coord_bld->type, 0.5);
 
-   lp_build_ifloor_fract(coord_bld, coord, &flr, &fract);
-   /* kill off NaNs */
-   /* XXX: not safe without arch rounding, fract can be anything. */
-   fract = lp_build_max_ext(coord_bld, fract, coord_bld->zero,
-                            GALLIVM_NAN_RETURN_OTHER_SECOND_NONNAN);
+   /*
+    * We can just use 2*(x - round(0.5*x)) to do all the mirroring,
+    * it all works out. (The result is in range [-1, 1.0], negative if
+    * the coord is in the "odd" section, otherwise positive.)
+    */
 
-   /* isOdd = flr & 1 */
-   isOdd = LLVMBuildAnd(bld->gallivm->builder, flr, int_coord_bld->one, "");
+   coord = lp_build_mul(coord_bld, coord, half);
+   fract = lp_build_round(coord_bld, coord);
+   fract = lp_build_sub(coord_bld, coord, fract);
+   coord = lp_build_add(coord_bld, fract, fract);
 
-   /* make coord positive or negative depending on isOdd */
-   /* XXX slight overkill masking out sign bit is unnecessary */
-   coord = lp_build_set_sign(coord_bld, fract, isOdd);
-
-   /* convert isOdd to float */
-   isOdd = lp_build_int_to_float(coord_bld, isOdd);
-
-   /* add isOdd to coord */
-   coord = lp_build_add(coord_bld, coord, isOdd);
+   if (posOnly) {
+      /*
+       * Theoretically it's not quite 100% accurate because the spec says
+       * that ultimately a scaled coord of -x.0 should map to int coord
+       * -x + 1 with mirroring, not -x (this does not matter for bilinear
+       * filtering).
+       */
+      coord = lp_build_abs(coord_bld, coord);
+      /* kill off NaNs */
+      /* XXX: not safe without arch rounding, fract can be anything. */
+      coord = lp_build_max_ext(coord_bld, coord, coord_bld->zero,
+                               GALLIVM_NAN_RETURN_OTHER_SECOND_NONNAN);
+   }
 
    return coord;
 }
@@ -362,7 +370,13 @@ lp_build_sample_wrap_linear(struct lp_build_sample_context *bld,
          coord = lp_build_add(coord_bld, coord, offset);
       }
 
-      /* clamp to [0, length] */
+      /*
+       * clamp to [0, length]
+       *
+       * Unlike some other wrap modes, this should be correct for gather
+       * too. GL_CLAMP explicitly does this clamp on the coord prior to
+       * actual wrapping (which is per sample).
+       */
       coord = lp_build_clamp(coord_bld, coord, coord_bld->zero, length_f);
 
       coord = lp_build_sub(coord_bld, coord, half);
@@ -426,8 +440,13 @@ lp_build_sample_wrap_linear(struct lp_build_sample_context *bld,
          offset = lp_build_int_to_float(coord_bld, offset);
          coord = lp_build_add(coord_bld, coord, offset);
       }
-      /* was: clamp to [-0.5, length + 0.5], then sub 0.5 */
-      /* can skip clamp (though might not work for very large coord values) */
+      /*
+       * We don't need any clamp. Technically, for very large (pos or neg)
+       * (or infinite) values, clamp against [-length, length] would be
+       * correct, but we don't need to guarantee any specific
+       * result for such coords (the ifloor will be undefined, but for modes
+       * requiring border all resulting coords are safe).
+       */
       coord = lp_build_sub(coord_bld, coord, half);
       /* convert to int, compute lerp weight */
       lp_build_ifloor_fract(coord_bld, coord, &coord0, &weight);
@@ -440,28 +459,64 @@ lp_build_sample_wrap_linear(struct lp_build_sample_context *bld,
          offset = lp_build_div(coord_bld, offset, length_f);
          coord = lp_build_add(coord_bld, coord, offset);
       }
-      /* compute mirror function */
-      /*
-       * XXX: This looks incorrect wrt gather. Due to wrap specification,
-       * it is possible the first coord ends up larger than the second one.
-       * However, with our simplifications the coordinates will be swapped
-       * in this case. (Albeit some other api tests don't like it even
-       * with this fixed...)
-       */
-      coord = lp_build_coord_mirror(bld, coord);
+      if (!is_gather) {
+         /* compute mirror function */
+         coord = lp_build_coord_mirror(bld, coord, TRUE);
 
-      /* scale coord to length */
-      coord = lp_build_mul(coord_bld, coord, length_f);
-      coord = lp_build_sub(coord_bld, coord, half);
+         /* scale coord to length */
+         coord = lp_build_mul(coord_bld, coord, length_f);
+         coord = lp_build_sub(coord_bld, coord, half);
 
-      /* convert to int, compute lerp weight */
-      lp_build_ifloor_fract(coord_bld, coord, &coord0, &weight);
-      coord1 = lp_build_add(int_coord_bld, coord0, int_coord_bld->one);
+         /* convert to int, compute lerp weight */
+         lp_build_ifloor_fract(coord_bld, coord, &coord0, &weight);
+         coord1 = lp_build_add(int_coord_bld, coord0, int_coord_bld->one);
 
-      /* coord0 = max(coord0, 0) */
-      coord0 = lp_build_max(int_coord_bld, coord0, int_coord_bld->zero);
-      /* coord1 = min(coord1, length-1) */
-      coord1 = lp_build_min(int_coord_bld, coord1, length_minus_one);
+         /* coord0 = max(coord0, 0) */
+         coord0 = lp_build_max(int_coord_bld, coord0, int_coord_bld->zero);
+         /* coord1 = min(coord1, length-1) */
+         coord1 = lp_build_min(int_coord_bld, coord1, length_minus_one);
+      } else {
+         /*
+          * This is pretty reasonable in the end,  all what the tests care
+          * about is nasty edge cases (scaled coords x.5, so the individual
+          * coords are actually integers, which is REALLY tricky to get right
+          * due to this working differently both for negative numbers as well
+          * as for even/odd cases). But with enough magic it's not too complex
+          * after all.
+          * Maybe should try a bit arithmetic one though for POT textures...
+          */
+         LLVMValueRef isNeg;
+         /*
+          * Wrapping just once still works, even though it means we can
+          * get "wrong" sign due to performing mirror in the middle of the
+          * two coords (because this can only happen very near the odd/even
+          * edges, so both coords will actually end up as 0 or length - 1
+          * in the end).
+          * For GL4 gather with per-sample offsets we'd need to the mirroring
+          * per coord too.
+          */
+         coord = lp_build_coord_mirror(bld, coord, FALSE);
+         coord = lp_build_mul(coord_bld, coord, length_f);
+
+         /*
+          * NaNs should be safe here, we'll do away with them with
+          * the ones' complement plus min.
+          */
+         coord0 = lp_build_sub(coord_bld, coord, half);
+         coord0 = lp_build_ifloor(coord_bld, coord0);
+         coord1 = lp_build_add(int_coord_bld, coord0, int_coord_bld->one);
+         /* ones complement for neg numbers (mirror(negX) = X - 1)  */
+         isNeg = lp_build_cmp(int_coord_bld, PIPE_FUNC_LESS,
+                              coord0, int_coord_bld->zero);
+         coord0 = lp_build_xor(int_coord_bld, coord0, isNeg);
+         isNeg = lp_build_cmp(int_coord_bld, PIPE_FUNC_LESS,
+                              coord1, int_coord_bld->zero);
+         coord1 = lp_build_xor(int_coord_bld, coord1, isNeg);
+         coord0 = lp_build_min(int_coord_bld, coord0, length_minus_one);
+         coord1 = lp_build_min(int_coord_bld, coord1, length_minus_one);
+
+         weight = coord_bld->undef;
+      }
       break;
 
    case PIPE_TEX_WRAP_MIRROR_CLAMP:
@@ -473,10 +528,19 @@ lp_build_sample_wrap_linear(struct lp_build_sample_context *bld,
          offset = lp_build_int_to_float(coord_bld, offset);
          coord = lp_build_add(coord_bld, coord, offset);
       }
+      /*
+       * XXX: probably not correct for gather, albeit I'm not
+       * entirely sure as it's poorly specified. The wrapping looks
+       * correct according to the spec which is against gl 1.2.1,
+       * however negative values will be swapped - gl re-specified
+       * wrapping with newer versions (no more pre-clamp except with
+       * GL_CLAMP).
+       */
       coord = lp_build_abs(coord_bld, coord);
 
       /* clamp to [0, length] */
-      coord = lp_build_min(coord_bld, coord, length_f);
+      coord = lp_build_min_ext(coord_bld, coord, length_f,
+                               GALLIVM_NAN_RETURN_OTHER_SECOND_NONNAN);
 
       coord = lp_build_sub(coord_bld, coord, half);
 
@@ -498,35 +562,59 @@ lp_build_sample_wrap_linear(struct lp_build_sample_context *bld,
             offset = lp_build_int_to_float(coord_bld, offset);
             coord = lp_build_add(coord_bld, coord, offset);
          }
-         /*
-          * XXX: This looks incorrect wrt gather. Due to wrap specification,
-          * the first and second texel actually end up with "different order"
-          * for negative coords. For example, if the scaled coord would
-          * be -0.6, then the first coord should end up as 1
-          * (floor(-0.6 - 0.5) == -2, mirror makes that 1), the second as 0
-          * (floor(-0.6 - 0.5) + 1 == -1, mirror makes that 0).
-          * But with our simplifications the second coord will always be the
-          * larger one. The other two mirror_clamp modes have the same problem.
-          * Moreover, for coords close to zero we should end up with both
-          * coords being 0, but we will end up with coord1 being 1 instead
-          * (with bilinear filtering this is ok as the weight is 0.0) (this
-          * problem is specific to mirror_clamp_to_edge).
-          */
-         coord = lp_build_abs(coord_bld, coord);
+         if (!is_gather) {
+            coord = lp_build_abs(coord_bld, coord);
 
-         /* clamp to length max */
-         coord = lp_build_min_ext(coord_bld, coord, length_f,
-                                  GALLIVM_NAN_RETURN_OTHER_SECOND_NONNAN);
-         /* subtract 0.5 */
-         coord = lp_build_sub(coord_bld, coord, half);
-         /* clamp to [0, length - 0.5] */
-         coord = lp_build_max(coord_bld, coord, coord_bld->zero);
+            /* clamp to length max */
+            coord = lp_build_min_ext(coord_bld, coord, length_f,
+                                     GALLIVM_NAN_RETURN_OTHER_SECOND_NONNAN);
+            /* subtract 0.5 */
+            coord = lp_build_sub(coord_bld, coord, half);
+            /* clamp to [0, length - 0.5] */
+            coord = lp_build_max(coord_bld, coord, coord_bld->zero);
 
-         /* convert to int, compute lerp weight */
-         lp_build_ifloor_fract(&abs_coord_bld, coord, &coord0, &weight);
-         coord1 = lp_build_add(int_coord_bld, coord0, int_coord_bld->one);
-         /* coord1 = min(coord1, length-1) */
-         coord1 = lp_build_min(int_coord_bld, coord1, length_minus_one);
+            /* convert to int, compute lerp weight */
+            lp_build_ifloor_fract(&abs_coord_bld, coord, &coord0, &weight);
+            coord1 = lp_build_add(int_coord_bld, coord0, int_coord_bld->one);
+            /* coord1 = min(coord1, length-1) */
+            coord1 = lp_build_min(int_coord_bld, coord1, length_minus_one);
+         } else {
+            /*
+             * The non-gather path will swap coord0/1 if coord was negative,
+             * which is ok for filtering since the filter weight matches
+             * accordingly. Also, if coord is close to zero, coord0/1 will
+             * be 0 and 1, instead of 0 and 0 (again ok due to filter
+             * weight being 0.0). Both issues need to be fixed for gather.
+             */
+            LLVMValueRef isNeg;
+
+            /*
+             * Actually wanted to cheat here and use:
+             * coord1 = lp_build_iround(coord_bld, coord);
+             * but it's not good enough for some tests (even piglit
+             * textureGather is set up in a way so the coords area always
+             * .5, that is right at the crossover points).
+             * So do ordinary sub/floor, then do ones' complement
+             * for negative numbers.
+             * (Note can't just do sub|add/abs/itrunc per coord neither -
+             * because the spec demands that mirror(3.0) = 3 but
+             * mirror(-3.0) = 2.)
+             */
+            coord = lp_build_sub(coord_bld, coord, half);
+            coord0 = lp_build_ifloor(coord_bld, coord);
+            coord1 = lp_build_add(int_coord_bld, coord0, int_coord_bld->one);
+            isNeg = lp_build_cmp(int_coord_bld, PIPE_FUNC_LESS, coord0,
+                                 int_coord_bld->zero);
+            coord0 = lp_build_xor(int_coord_bld, isNeg, coord0);
+            coord0 = lp_build_min(int_coord_bld, coord0, length_minus_one);
+
+            isNeg = lp_build_cmp(int_coord_bld, PIPE_FUNC_LESS, coord1,
+                                 int_coord_bld->zero);
+            coord1 = lp_build_xor(int_coord_bld, isNeg, coord1);
+            coord1 = lp_build_min(int_coord_bld, coord1, length_minus_one);
+
+            weight = coord_bld->undef;
+         }
       }
       break;
 
@@ -540,11 +628,20 @@ lp_build_sample_wrap_linear(struct lp_build_sample_context *bld,
             offset = lp_build_int_to_float(coord_bld, offset);
             coord = lp_build_add(coord_bld, coord, offset);
          }
+         /*
+          * XXX: probably not correct for gather due to swapped
+          * order if coord is negative (same rationale as for
+          * MIRROR_CLAMP).
+          */
          coord = lp_build_abs(coord_bld, coord);
 
-         /* was: clamp to [-0.5, length + 0.5] then sub 0.5 */
-         /* skip clamp - always positive, and other side
-            only potentially matters for very large coords */
+         /*
+          * We don't need any clamp. Technically, for very large
+          * (or infinite) values, clamp against length would be
+          * correct, but we don't need to guarantee any specific
+          * result for such coords (the ifloor will be undefined, but
+          * for modes requiring border all resulting coords are safe).
+          */
          coord = lp_build_sub(coord_bld, coord, half);
 
          /* convert to int, compute lerp weight */
@@ -652,7 +749,7 @@ lp_build_sample_wrap_nearest(struct lp_build_sample_context *bld,
          coord = lp_build_add(coord_bld, coord, offset);
       }
       /* compute mirror function */
-      coord = lp_build_coord_mirror(bld, coord);
+      coord = lp_build_coord_mirror(bld, coord, TRUE);
 
       /* scale coord to length */
       assert(bld->static_sampler_state->normalized_coords);
@@ -933,20 +1030,13 @@ lp_build_sample_image_linear(struct lp_build_sample_context *bld,
    LLVMValueRef neighbors[2][2][4];
    int chan, texel_index;
    boolean seamless_cube_filter, accurate_cube_corners;
+   unsigned chan_swiz = bld->static_texture_state->swizzle_r;
 
    seamless_cube_filter = (bld->static_texture_state->target == PIPE_TEXTURE_CUBE ||
                            bld->static_texture_state->target == PIPE_TEXTURE_CUBE_ARRAY) &&
                           bld->static_sampler_state->seamless_cube_map;
-   /*
-    * XXX I don't know how this is really supposed to work with gather. From GL
-    * spec wording (not gather specific) it sounds like the 4th missing texel
-    * should be an average of the other 3, hence for gather could return this.
-    * This is however NOT how the code here works, which just fixes up the
-    * weights used for filtering instead. And of course for gather there is
-    * no filter to tweak...
-    */
-   accurate_cube_corners = ACCURATE_CUBE_CORNERS && seamless_cube_filter &&
-                           !is_gather;
+
+   accurate_cube_corners = ACCURATE_CUBE_CORNERS && seamless_cube_filter;
 
    lp_build_extract_image_sizes(bld,
                                 &bld->int_size_bld,
@@ -1033,6 +1123,17 @@ lp_build_sample_image_linear(struct lp_build_sample_context *bld,
        */
       /* should always have normalized coords, and offsets are undefined */
       assert(bld->static_sampler_state->normalized_coords);
+      /*
+       * The coords should all be between [0,1] however we can have NaNs,
+       * which will wreak havoc. In particular the y1_clamped value below
+       * can be -INT_MAX (on x86) and be propagated right through (probably
+       * other values might be bogus in the end too).
+       * So kill off the NaNs here.
+       */
+      coords[0] = lp_build_max_ext(coord_bld, coords[0], coord_bld->zero,
+                                   GALLIVM_NAN_RETURN_OTHER_SECOND_NONNAN);
+      coords[1] = lp_build_max_ext(coord_bld, coords[1], coord_bld->zero,
+                                   GALLIVM_NAN_RETURN_OTHER_SECOND_NONNAN);
       coord = lp_build_mul(coord_bld, coords[0], flt_width_vec);
       /* instead of clamp, build mask if overflowed */
       coord = lp_build_sub(coord_bld, coord, half);
@@ -1274,94 +1375,191 @@ lp_build_sample_image_linear(struct lp_build_sample_context *bld,
        * as well) here.
        */
       if (accurate_cube_corners) {
-         LLVMValueRef w00, w01, w10, w11, wx0, wy0;
-         LLVMValueRef c_weight, c00, c01, c10, c11;
-         LLVMValueRef have_corner, one_third, tmp;
+         LLVMValueRef c00, c01, c10, c11, c00f, c01f, c10f, c11f;
+         LLVMValueRef have_corner, one_third;
 
-         colorss[0] = lp_build_alloca(bld->gallivm, coord_bld->vec_type, "cs");
-         colorss[1] = lp_build_alloca(bld->gallivm, coord_bld->vec_type, "cs");
-         colorss[2] = lp_build_alloca(bld->gallivm, coord_bld->vec_type, "cs");
-         colorss[3] = lp_build_alloca(bld->gallivm, coord_bld->vec_type, "cs");
+         colorss[0] = lp_build_alloca(bld->gallivm, coord_bld->vec_type, "cs0");
+         colorss[1] = lp_build_alloca(bld->gallivm, coord_bld->vec_type, "cs1");
+         colorss[2] = lp_build_alloca(bld->gallivm, coord_bld->vec_type, "cs2");
+         colorss[3] = lp_build_alloca(bld->gallivm, coord_bld->vec_type, "cs3");
 
          have_corner = LLVMBuildLoad(builder, have_corners, "");
 
          lp_build_if(&corner_if, bld->gallivm, have_corner);
 
-         /*
-          * we can't use standard 2d lerp as we need per-element weight
-          * in case of corners, so just calculate bilinear result as
-          * w00*s00 + w01*s01 + w10*s10 + w11*s11.
-          * (This is actually less work than using 2d lerp, 7 vs. 9 instructions,
-          * however calculating the weights needs another 6, so actually probably
-          * not slower than 2d lerp only for 4 channels as weights only need
-          * to be calculated once - of course fixing the weights has additional cost.)
-          */
-         wx0 = lp_build_sub(coord_bld, coord_bld->one, s_fpart);
-         wy0 = lp_build_sub(coord_bld, coord_bld->one, t_fpart);
-         w00 = lp_build_mul(coord_bld, wx0, wy0);
-         w01 = lp_build_mul(coord_bld, s_fpart, wy0);
-         w10 = lp_build_mul(coord_bld, wx0, t_fpart);
-         w11 = lp_build_mul(coord_bld, s_fpart, t_fpart);
+         one_third = lp_build_const_vec(bld->gallivm, coord_bld->type,
+                                        1.0f/3.0f);
 
-         /* find corner weight */
+         /* find corner */
          c00 = lp_build_and(ivec_bld, fall_off[0], fall_off[2]);
-         c_weight = lp_build_select(coord_bld, c00, w00, coord_bld->zero);
+         c00f = LLVMBuildBitCast(builder, c00, coord_bld->vec_type, "");
          c01 = lp_build_and(ivec_bld, fall_off[1], fall_off[2]);
-         c_weight = lp_build_select(coord_bld, c01, w01, c_weight);
+         c01f = LLVMBuildBitCast(builder, c01, coord_bld->vec_type, "");
          c10 = lp_build_and(ivec_bld, fall_off[0], fall_off[3]);
-         c_weight = lp_build_select(coord_bld, c10, w10, c_weight);
+         c10f = LLVMBuildBitCast(builder, c10, coord_bld->vec_type, "");
          c11 = lp_build_and(ivec_bld, fall_off[1], fall_off[3]);
-         c_weight = lp_build_select(coord_bld, c11, w11, c_weight);
+         c11f = LLVMBuildBitCast(builder, c11, coord_bld->vec_type, "");
 
-         /*
-          * add 1/3 of the corner weight to each of the 3 other samples
-          * and null out corner weight
-          */
-         one_third = lp_build_const_vec(bld->gallivm, coord_bld->type, 1.0f/3.0f);
-         c_weight = lp_build_mul(coord_bld, c_weight, one_third);
-         w00 = lp_build_add(coord_bld, w00, c_weight);
-         c00 = LLVMBuildBitCast(builder, c00, coord_bld->vec_type, "");
-         w00 = lp_build_andnot(coord_bld, w00, c00);
-         w01 = lp_build_add(coord_bld, w01, c_weight);
-         c01 = LLVMBuildBitCast(builder, c01, coord_bld->vec_type, "");
-         w01 = lp_build_andnot(coord_bld, w01, c01);
-         w10 = lp_build_add(coord_bld, w10, c_weight);
-         c10 = LLVMBuildBitCast(builder, c10, coord_bld->vec_type, "");
-         w10 = lp_build_andnot(coord_bld, w10, c10);
-         w11 = lp_build_add(coord_bld, w11, c_weight);
-         c11 = LLVMBuildBitCast(builder, c11, coord_bld->vec_type, "");
-         w11 = lp_build_andnot(coord_bld, w11, c11);
+         if (!is_gather) {
+            /*
+             * we can't use standard 2d lerp as we need per-element weight
+             * in case of corners, so just calculate bilinear result as
+             * w00*s00 + w01*s01 + w10*s10 + w11*s11.
+             * (This is actually less work than using 2d lerp, 7 vs. 9
+             * instructions, however calculating the weights needs another 6,
+             * so actually probably not slower than 2d lerp only for 4 channels
+             * as weights only need to be calculated once - of course fixing
+             * the weights has additional cost.)
+             */
+            LLVMValueRef w00, w01, w10, w11, wx0, wy0, c_weight, tmp;
+            wx0 = lp_build_sub(coord_bld, coord_bld->one, s_fpart);
+            wy0 = lp_build_sub(coord_bld, coord_bld->one, t_fpart);
+            w00 = lp_build_mul(coord_bld, wx0, wy0);
+            w01 = lp_build_mul(coord_bld, s_fpart, wy0);
+            w10 = lp_build_mul(coord_bld, wx0, t_fpart);
+            w11 = lp_build_mul(coord_bld, s_fpart, t_fpart);
 
-         if (bld->static_sampler_state->compare_mode == PIPE_TEX_COMPARE_NONE) {
-            for (chan = 0; chan < 4; chan++) {
-               colors0[chan] = lp_build_mul(coord_bld, w00, neighbors[0][0][chan]);
-               tmp = lp_build_mul(coord_bld, w01, neighbors[0][1][chan]);
-               colors0[chan] = lp_build_add(coord_bld, tmp, colors0[chan]);
-               tmp = lp_build_mul(coord_bld, w10, neighbors[1][0][chan]);
-               colors0[chan] = lp_build_add(coord_bld, tmp, colors0[chan]);
-               tmp = lp_build_mul(coord_bld, w11, neighbors[1][1][chan]);
-               colors0[chan] = lp_build_add(coord_bld, tmp, colors0[chan]);
+            /* find corner weight */
+            c_weight = lp_build_select(coord_bld, c00, w00, coord_bld->zero);
+            c_weight = lp_build_select(coord_bld, c01, w01, c_weight);
+            c_weight = lp_build_select(coord_bld, c10, w10, c_weight);
+            c_weight = lp_build_select(coord_bld, c11, w11, c_weight);
+
+            /*
+             * add 1/3 of the corner weight to the weight of the 3 other
+             * samples and null out corner weight.
+             */
+            c_weight = lp_build_mul(coord_bld, c_weight, one_third);
+            w00 = lp_build_add(coord_bld, w00, c_weight);
+            w00 = lp_build_andnot(coord_bld, w00, c00f);
+            w01 = lp_build_add(coord_bld, w01, c_weight);
+            w01 = lp_build_andnot(coord_bld, w01, c01f);
+            w10 = lp_build_add(coord_bld, w10, c_weight);
+            w10 = lp_build_andnot(coord_bld, w10, c10f);
+            w11 = lp_build_add(coord_bld, w11, c_weight);
+            w11 = lp_build_andnot(coord_bld, w11, c11f);
+
+            if (bld->static_sampler_state->compare_mode ==
+                PIPE_TEX_COMPARE_NONE) {
+               for (chan = 0; chan < 4; chan++) {
+                  colors0[chan] = lp_build_mul(coord_bld, w00,
+                                               neighbors[0][0][chan]);
+                  tmp = lp_build_mul(coord_bld, w01, neighbors[0][1][chan]);
+                  colors0[chan] = lp_build_add(coord_bld, tmp, colors0[chan]);
+                  tmp = lp_build_mul(coord_bld, w10, neighbors[1][0][chan]);
+                  colors0[chan] = lp_build_add(coord_bld, tmp, colors0[chan]);
+                  tmp = lp_build_mul(coord_bld, w11, neighbors[1][1][chan]);
+                  colors0[chan] = lp_build_add(coord_bld, tmp, colors0[chan]);
+               }
+            }
+            else {
+               LLVMValueRef cmpval00, cmpval01, cmpval10, cmpval11;
+               cmpval00 = lp_build_sample_comparefunc(bld, coords[4],
+                                                      neighbors[0][0][0]);
+               cmpval01 = lp_build_sample_comparefunc(bld, coords[4],
+                                                      neighbors[0][1][0]);
+               cmpval10 = lp_build_sample_comparefunc(bld, coords[4],
+                                                      neighbors[1][0][0]);
+               cmpval11 = lp_build_sample_comparefunc(bld, coords[4],
+                                                      neighbors[1][1][0]);
+               /*
+                * inputs to interpolation are just masks so just add
+                * masked weights together
+                */
+               cmpval00 = LLVMBuildBitCast(builder, cmpval00,
+                                           coord_bld->vec_type, "");
+               cmpval01 = LLVMBuildBitCast(builder, cmpval01,
+                                           coord_bld->vec_type, "");
+               cmpval10 = LLVMBuildBitCast(builder, cmpval10,
+                                           coord_bld->vec_type, "");
+               cmpval11 = LLVMBuildBitCast(builder, cmpval11,
+                                           coord_bld->vec_type, "");
+               colors0[0] = lp_build_and(coord_bld, w00, cmpval00);
+               tmp = lp_build_and(coord_bld, w01, cmpval01);
+               colors0[0] = lp_build_add(coord_bld, tmp, colors0[0]);
+               tmp = lp_build_and(coord_bld, w10, cmpval10);
+               colors0[0] = lp_build_add(coord_bld, tmp, colors0[0]);
+               tmp = lp_build_and(coord_bld, w11, cmpval11);
+               colors0[0] = lp_build_add(coord_bld, tmp, colors0[0]);
+               colors0[1] = colors0[2] = colors0[3] = colors0[0];
             }
          }
          else {
-            LLVMValueRef cmpval00, cmpval01, cmpval10, cmpval11;
-            cmpval00 = lp_build_sample_comparefunc(bld, coords[4], neighbors[0][0][0]);
-            cmpval01 = lp_build_sample_comparefunc(bld, coords[4], neighbors[0][1][0]);
-            cmpval10 = lp_build_sample_comparefunc(bld, coords[4], neighbors[1][0][0]);
-            cmpval11 = lp_build_sample_comparefunc(bld, coords[4], neighbors[1][1][0]);
-            /* inputs to interpolation are just masks so just add masked weights together */
-            cmpval00 = LLVMBuildBitCast(builder, cmpval00, coord_bld->vec_type, "");
-            cmpval01 = LLVMBuildBitCast(builder, cmpval01, coord_bld->vec_type, "");
-            cmpval10 = LLVMBuildBitCast(builder, cmpval10, coord_bld->vec_type, "");
-            cmpval11 = LLVMBuildBitCast(builder, cmpval11, coord_bld->vec_type, "");
-            colors0[0] = lp_build_and(coord_bld, w00, cmpval00);
-            tmp = lp_build_and(coord_bld, w01, cmpval01);
-            colors0[0] = lp_build_add(coord_bld, tmp, colors0[0]);
-            tmp = lp_build_and(coord_bld, w10, cmpval10);
-            colors0[0] = lp_build_add(coord_bld, tmp, colors0[0]);
-            tmp = lp_build_and(coord_bld, w11, cmpval11);
-            colors0[0] = lp_build_add(coord_bld, tmp, colors0[0]);
-            colors0[1] = colors0[2] = colors0[3] = colors0[0];
+            /*
+             * We don't have any weights to adjust, so instead calculate
+             * the fourth texel as simply the average of the other 3.
+             * (This would work for non-gather too, however we'd have
+             * a boatload more of the select stuff due to there being
+             * 4 times as many colors as weights.)
+             */
+            LLVMValueRef col00, col01, col10, col11;
+            LLVMValueRef colc, colc0, colc1;
+            col10 = lp_build_swizzle_soa_channel(texel_bld,
+                                                 neighbors[1][0], chan_swiz);
+            col11 = lp_build_swizzle_soa_channel(texel_bld,
+                                                 neighbors[1][1], chan_swiz);
+            col01 = lp_build_swizzle_soa_channel(texel_bld,
+                                                 neighbors[0][1], chan_swiz);
+            col00 = lp_build_swizzle_soa_channel(texel_bld,
+                                                 neighbors[0][0], chan_swiz);
+
+            /*
+             * The spec says for comparison filtering, the comparison
+             * must happen before synthesizing the new value.
+             * This means all gathered values are always 0 or 1,
+             * except for the non-existing texel, which can be 0,1/3,2/3,1...
+             * Seems like we'd be allowed to just return 0 or 1 too, so we
+             * could simplify and pass down the compare mask values to the
+             * end (using int arithmetic/compare on the mask values to
+             * construct the fourth texel) and only there convert to floats
+             * but it's probably not worth it (it might be easier for the cpu
+             * but not for the code)...
+             */
+            if (bld->static_sampler_state->compare_mode !=
+                PIPE_TEX_COMPARE_NONE) {
+               LLVMValueRef cmpval00, cmpval01, cmpval10, cmpval11;
+               cmpval00 = lp_build_sample_comparefunc(bld, coords[4], col00);
+               cmpval01 = lp_build_sample_comparefunc(bld, coords[4], col01);
+               cmpval10 = lp_build_sample_comparefunc(bld, coords[4], col10);
+               cmpval11 = lp_build_sample_comparefunc(bld, coords[4], col11);
+               col00 = lp_build_select(texel_bld, cmpval00,
+                                       texel_bld->one, texel_bld->zero);
+               col01 = lp_build_select(texel_bld, cmpval01,
+                                       texel_bld->one, texel_bld->zero);
+               col10 = lp_build_select(texel_bld, cmpval10,
+                                       texel_bld->one, texel_bld->zero);
+               col11 = lp_build_select(texel_bld, cmpval11,
+                                       texel_bld->one, texel_bld->zero);
+            }
+
+            /*
+             * Null out corner color.
+             */
+            col00 = lp_build_andnot(coord_bld, col00, c00f);
+            col01 = lp_build_andnot(coord_bld, col01, c01f);
+            col10 = lp_build_andnot(coord_bld, col10, c10f);
+            col11 = lp_build_andnot(coord_bld, col11, c11f);
+
+            /*
+             * New corner texel color is all colors added / 3.
+             */
+            colc0 = lp_build_add(coord_bld, col00, col01);
+            colc1 = lp_build_add(coord_bld, col10, col11);
+            colc = lp_build_add(coord_bld, colc0, colc1);
+            colc = lp_build_mul(coord_bld, one_third, colc);
+
+            /*
+             * Replace the corner texel color with the new value.
+             */
+            col00 = lp_build_select(coord_bld, c00, colc, col00);
+            col01 = lp_build_select(coord_bld, c01, colc, col01);
+            col10 = lp_build_select(coord_bld, c10, colc, col10);
+            col11 = lp_build_select(coord_bld, c11, colc, col11);
+
+            colors0[0] = col10;
+            colors0[1] = col11;
+            colors0[2] = col01;
+            colors0[3] = col00;
          }
 
          LLVMBuildStore(builder, colors0[0], colorss[0]);
@@ -1380,7 +1578,6 @@ lp_build_sample_image_linear(struct lp_build_sample_context *bld,
              * end of sampling (much less values to swizzle), but this
              * obviously cannot work when using gather.
              */
-            unsigned chan_swiz = bld->static_texture_state->swizzle_r;
             colors0[0] = lp_build_swizzle_soa_channel(texel_bld,
                                                       neighbors[1][0],
                                                       chan_swiz);
@@ -1416,25 +1613,14 @@ lp_build_sample_image_linear(struct lp_build_sample_context *bld,
 
          if (is_gather) {
             /* more hacks for swizzling, should be X, ONE or ZERO... */
-            unsigned chan_swiz = bld->static_texture_state->swizzle_r;
-            if (chan_swiz <= PIPE_SWIZZLE_W) {
-               colors0[0] = lp_build_select(texel_bld, cmpval10,
-                                            texel_bld->one, texel_bld->zero);
-               colors0[1] = lp_build_select(texel_bld, cmpval11,
-                                            texel_bld->one, texel_bld->zero);
-               colors0[2] = lp_build_select(texel_bld, cmpval01,
-                                            texel_bld->one, texel_bld->zero);
-               colors0[3] = lp_build_select(texel_bld, cmpval00,
-                                            texel_bld->one, texel_bld->zero);
-            }
-            else if (chan_swiz == PIPE_SWIZZLE_0) {
-               colors0[0] = colors0[1] = colors0[2] = colors0[3] =
-                            texel_bld->zero;
-            }
-            else {
-               colors0[0] = colors0[1] = colors0[2] = colors0[3] =
-                            texel_bld->one;
-            }
+            colors0[0] = lp_build_select(texel_bld, cmpval10,
+                                         texel_bld->one, texel_bld->zero);
+            colors0[1] = lp_build_select(texel_bld, cmpval11,
+                                         texel_bld->one, texel_bld->zero);
+            colors0[2] = lp_build_select(texel_bld, cmpval01,
+                                         texel_bld->one, texel_bld->zero);
+            colors0[3] = lp_build_select(texel_bld, cmpval00,
+                                         texel_bld->one, texel_bld->zero);
          }
          else {
             colors0[0] = lp_build_masklerp2d(texel_bld, s_fpart, t_fpart,
@@ -1524,6 +1710,26 @@ lp_build_sample_image_linear(struct lp_build_sample_context *bld,
          /* 2D tex */
          for (chan = 0; chan < 4; chan++) {
             colors_out[chan] = colors0[chan];
+         }
+      }
+   }
+   if (is_gather) {
+      /*
+       * For gather, we can't do our usual channel swizzling done later,
+       * so do it here. It only really matters for 0/1 swizzles in case
+       * of comparison filtering, since in this case the results would be
+       * wrong, without comparison it should all work out alright but it
+       * can't hurt to do that here, since it will instantly drop all
+       * calculations above, though it's a rather stupid idea to do
+       * gather on a channel which will always return 0 or 1 in any case...
+       */
+      if (chan_swiz == PIPE_SWIZZLE_1) {
+         for (chan = 0; chan < 4; chan++) {
+            colors_out[chan] = texel_bld->one;
+         }
+      } else if (chan_swiz == PIPE_SWIZZLE_0) {
+         for (chan = 0; chan < 4; chan++) {
+            colors_out[chan] = texel_bld->zero;
          }
       }
    }

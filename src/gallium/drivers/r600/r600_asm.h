@@ -157,6 +157,12 @@ struct r600_bytecode_output {
 	unsigned			index_gpr;
 };
 
+struct r600_bytecode_rat {
+	unsigned			id;
+	unsigned			inst;
+	unsigned			index_mode;
+};
+
 struct r600_bytecode_kcache {
 	unsigned			bank;
 	unsigned			mode;
@@ -180,11 +186,14 @@ struct r600_bytecode_cf {
 	unsigned			eg_alu_extended;
 	unsigned			barrier;
 	unsigned			end_of_program;
+	unsigned                        mark;
+	unsigned                        vpm;
 	struct list_head		alu;
 	struct list_head		tex;
 	struct list_head		vtx;
 	struct list_head		gds;
 	struct r600_bytecode_output		output;
+	struct r600_bytecode_rat		rat;
 	struct r600_bytecode_alu		*curr_bs_head;
 	struct r600_bytecode_alu		*prev_bs_head;
 	struct r600_bytecode_alu		*prev2_bs_head;

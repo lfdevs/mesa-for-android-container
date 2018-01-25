@@ -90,6 +90,8 @@ vc4_job_create(struct vc4_context *vc4)
         job->draw_max_x = 0;
         job->draw_max_y = 0;
 
+        job->last_gem_handle_hindex = ~0;
+
         return job;
 }
 

@@ -112,6 +112,35 @@ fd4_draw_emit(struct fd_batch *batch, struct fd_ringbuffer *ring,
 	enum pc_di_src_sel src_sel;
 	uint32_t idx_size, idx_offset;
 
+	if (info->indirect) {
+		struct fd_resource *ind = fd_resource(info->indirect->buffer);
+
+		emit_marker(ring, 7);
+
+		if (info->index_size) {
+			struct pipe_resource *idx = info->index.resource;
+
+			OUT_PKT3(ring, CP_DRAW_INDX_INDIRECT, 4);
+			OUT_RINGP(ring, DRAW4(primtype, DI_SRC_SEL_DMA,
+					fd4_size2indextype(info->index_size), 0),
+					&batch->draw_patches);
+			OUT_RELOC(ring, fd_resource(idx)->bo, index_offset, 0, 0);
+			OUT_RING(ring, A4XX_CP_DRAW_INDX_INDIRECT_2_INDX_SIZE(
+							 idx->width0 - index_offset));
+			OUT_RELOC(ring, ind->bo, info->indirect->offset, 0, 0);
+		} else {
+			OUT_PKT3(ring, CP_DRAW_INDIRECT, 2);
+			OUT_RINGP(ring, DRAW4(primtype, DI_SRC_SEL_AUTO_INDEX, 0, 0),
+					&batch->draw_patches);
+			OUT_RELOC(ring, ind->bo, info->indirect->offset, 0, 0);
+		}
+
+		emit_marker(ring, 7);
+		fd_reset_wfi(batch);
+
+		return;
+	}
+
 	if (info->index_size) {
 		assert(!info->has_user_indices);
 

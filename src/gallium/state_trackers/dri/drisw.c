@@ -381,6 +381,7 @@ static const __DRIextension *drisw_screen_extensions[] = {
    &dri2FenceExtension.base,
    &dri2NoErrorExtension.base,
    &driSWImageExtension.base,
+   &dri2FlushControlExtension.base,
    NULL
 };
 

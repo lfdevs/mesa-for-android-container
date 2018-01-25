@@ -338,11 +338,15 @@ static Display *dispatch_GetCurrentDisplayEXT(void)
 
 static const char *dispatch_GetDriverConfig(const char *driverName)
 {
+#if defined(GLX_DIRECT_RENDERING) && !defined(GLX_USE_APPLEGL)
     /*
      * The options are constant for a given driverName, so we do not need
      * a context (and apps expect to be able to call this without one).
      */
     return glXGetDriverConfig(driverName);
+#else
+    return NULL;
+#endif
 }
 
 

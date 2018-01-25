@@ -52,11 +52,30 @@ void peephole::run_on(container_node* c) {
 		if (n->is_container())
 			run_on(static_cast<container_node*>(n));
 		else {
+			if (n->is_fetch_inst() && (n->fetch_op_flags() & FF_GDS)) {
+				fetch_node *f = static_cast<fetch_node*>(n);
+				bool has_dst = false;
 
+				for(vvec::iterator I = f->dst.begin(), E = f->dst.end(); I != E; ++I) {
+					value *v = *I;
+					if (v)
+						has_dst = true;
+				}
+				if (!has_dst)
+					if (f->bc.op >= FETCH_OP_GDS_ADD_RET && f->bc.op <= FETCH_OP_GDS_USHORT_READ_RET)
+						f->bc.set_op(f->bc.op - FETCH_OP_GDS_ADD_RET + FETCH_OP_GDS_ADD);
+			}
 			if (n->is_alu_inst()) {
 				alu_node *a = static_cast<alu_node*>(n);
 
-				if (a->bc.op_ptr->flags &
+				if (a->bc.op_ptr->flags & AF_LDS) {
+					if (!a->dst[0]) {
+						if (a->bc.op >= LDS_OP2_LDS_ADD_RET && a->bc.op <= LDS_OP3_LDS_MSKOR_RET)
+							a->bc.set_op(a->bc.op - LDS_OP2_LDS_ADD_RET + LDS_OP2_LDS_ADD);
+						if (a->bc.op == LDS_OP1_LDS_READ_RET)
+							a->src[0] = sh.get_undef_value();
+					}
+				} else if (a->bc.op_ptr->flags &
 						(AF_PRED | AF_SET | AF_CMOV | AF_KILL)) {
 					optimize_cc_op(a);
 				} else if (a->bc.op == ALU_OP1_FLT_TO_INT) {

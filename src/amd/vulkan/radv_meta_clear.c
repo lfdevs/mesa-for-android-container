@@ -614,10 +614,6 @@ emit_depthstencil_clear(struct radv_cmd_buffer *cmd_buffer,
 	const uint32_t samples_log2 = ffs(samples) - 1;
 	VkCommandBuffer cmd_buffer_h = radv_cmd_buffer_to_handle(cmd_buffer);
 
-	assert(aspects == VK_IMAGE_ASPECT_DEPTH_BIT ||
-	       aspects == VK_IMAGE_ASPECT_STENCIL_BIT ||
-	       aspects == (VK_IMAGE_ASPECT_DEPTH_BIT |
-			   VK_IMAGE_ASPECT_STENCIL_BIT));
 	assert(pass_att != VK_ATTACHMENT_UNUSED);
 
 	if (!(aspects & VK_IMAGE_ASPECT_DEPTH_BIT))
@@ -628,6 +624,7 @@ emit_depthstencil_clear(struct radv_cmd_buffer *cmd_buffer,
 			      VK_SHADER_STAGE_VERTEX_BIT, 0, 4,
 			      &clear_value.depth);
 
+	uint32_t prev_reference = cmd_buffer->state.dynamic.stencil_reference.front;
 	if (aspects & VK_IMAGE_ASPECT_STENCIL_BIT) {
 		radv_CmdSetStencilReference(cmd_buffer_h, VK_STENCIL_FACE_FRONT_BIT,
 						  clear_value.stencil);
@@ -662,6 +659,11 @@ emit_depthstencil_clear(struct radv_cmd_buffer *cmd_buffer,
 	radv_CmdSetScissor(radv_cmd_buffer_to_handle(cmd_buffer), 0, 1, &clear_rect->rect);
 
 	radv_CmdDraw(cmd_buffer_h, 3, clear_rect->layerCount, 0, clear_rect->baseArrayLayer);
+
+	if (aspects & VK_IMAGE_ASPECT_STENCIL_BIT) {
+		radv_CmdSetStencilReference(cmd_buffer_h, VK_STENCIL_FACE_FRONT_BIT,
+						  prev_reference);
+	}
 }
 
 static bool
@@ -678,7 +680,7 @@ emit_fast_htile_clear(struct radv_cmd_buffer *cmd_buffer,
 	const struct radv_image_view *iview = fb->attachments[pass_att].attachment;
 	VkClearDepthStencilValue clear_value = clear_att->clearValue.depthStencil;
 	VkImageAspectFlags aspects = clear_att->aspectMask;
-	uint32_t clear_word;
+	uint32_t clear_word, flush_bits;
 
 	if (!iview->image->surface.htile_size)
 		return false;
@@ -730,20 +732,17 @@ emit_fast_htile_clear(struct radv_cmd_buffer *cmd_buffer,
 		cmd_buffer->state.flush_bits |= RADV_CMD_FLAG_FLUSH_AND_INV_DB |
 		                                RADV_CMD_FLAG_FLUSH_AND_INV_DB_META;
 
-	radv_fill_buffer(cmd_buffer, iview->image->bo,
-	                 iview->image->offset + iview->image->htile_offset,
-	                 iview->image->surface.htile_size, clear_word);
-
+	flush_bits = radv_fill_buffer(cmd_buffer, iview->image->bo,
+				      iview->image->offset + iview->image->htile_offset,
+				      iview->image->surface.htile_size, clear_word);
 
 	radv_set_depth_clear_regs(cmd_buffer, iview->image, clear_value, aspects);
-	if (post_flush)
-		*post_flush |= RADV_CMD_FLAG_CS_PARTIAL_FLUSH |
-	                       RADV_CMD_FLAG_INV_VMEM_L1 |
-	                       RADV_CMD_FLAG_WRITEBACK_GLOBAL_L2;
-	else
-		cmd_buffer->state.flush_bits |= RADV_CMD_FLAG_CS_PARTIAL_FLUSH |
-	                                        RADV_CMD_FLAG_INV_VMEM_L1 |
-	                                        RADV_CMD_FLAG_WRITEBACK_GLOBAL_L2;
+	if (post_flush) {
+		*post_flush |= flush_bits;
+	} else {
+		cmd_buffer->state.flush_bits |= flush_bits;
+	}
+
 	return true;
 fail:
 	return false;
@@ -952,7 +951,7 @@ emit_fast_color_clear(struct radv_cmd_buffer *cmd_buffer,
 	const struct radv_framebuffer *fb = cmd_buffer->state.framebuffer;
 	const struct radv_image_view *iview = fb->attachments[pass_att].attachment;
 	VkClearColorValue clear_value = clear_att->clearValue.color;
-	uint32_t clear_color[2];
+	uint32_t clear_color[2], flush_bits;
 	bool ret;
 
 	if (!iview->image->cmask.size && !iview->image->surface.dcc_size)
@@ -1021,25 +1020,22 @@ emit_fast_color_clear(struct radv_cmd_buffer *cmd_buffer,
 					     &clear_value, &reset_value,
 					     &can_avoid_fast_clear_elim);
 
-		radv_fill_buffer(cmd_buffer, iview->image->bo,
-				 iview->image->offset + iview->image->dcc_offset,
-				 iview->image->surface.dcc_size, reset_value);
+		flush_bits = radv_fill_buffer(cmd_buffer, iview->image->bo,
+					      iview->image->offset + iview->image->dcc_offset,
+					      iview->image->surface.dcc_size, reset_value);
 		radv_set_dcc_need_cmask_elim_pred(cmd_buffer, iview->image,
 						  !can_avoid_fast_clear_elim);
 	} else {
-		radv_fill_buffer(cmd_buffer, iview->image->bo,
-				 iview->image->offset + iview->image->cmask.offset,
-				 iview->image->cmask.size, 0);
+		flush_bits = radv_fill_buffer(cmd_buffer, iview->image->bo,
+					      iview->image->offset + iview->image->cmask.offset,
+					      iview->image->cmask.size, 0);
 	}
 
-	if (post_flush)
-		*post_flush |= RADV_CMD_FLAG_CS_PARTIAL_FLUSH |
-	                       RADV_CMD_FLAG_INV_VMEM_L1 |
-	                       RADV_CMD_FLAG_WRITEBACK_GLOBAL_L2;
-	else
-		cmd_buffer->state.flush_bits |= RADV_CMD_FLAG_CS_PARTIAL_FLUSH |
-	                                        RADV_CMD_FLAG_INV_VMEM_L1 |
-	                                        RADV_CMD_FLAG_WRITEBACK_GLOBAL_L2;
+	if (post_flush) {
+		*post_flush |= flush_bits;
+	} else {
+		cmd_buffer->state.flush_bits |= flush_bits;
+	}
 
 	radv_set_color_clear_regs(cmd_buffer, iview->image, subpass_att, clear_color);
 

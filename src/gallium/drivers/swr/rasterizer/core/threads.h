@@ -55,6 +55,8 @@ struct THREAD_POOL
     uint32_t numThreads;
     uint32_t numaMask;
     THREAD_DATA *pThreadData;
+    uint32_t numReservedThreads; // Number of threads reserved for API use
+    THREAD_DATA *pApiThreadData;
 };
 
 typedef std::unordered_set<uint32_t> TileSet;
@@ -68,3 +70,5 @@ void WorkOnFifoFE(SWR_CONTEXT *pContext, uint32_t workerId, uint32_t &curDrawFE)
 bool WorkOnFifoBE(SWR_CONTEXT *pContext, uint32_t workerId, uint32_t &curDrawBE, TileSet &usedTiles, uint32_t numaNode, uint32_t numaMask);
 void WorkOnCompute(SWR_CONTEXT *pContext, uint32_t workerId, uint32_t &curDrawBE);
 int32_t CompleteDrawContext(SWR_CONTEXT* pContext, DRAW_CONTEXT* pDC);
+
+void BindApiThread(SWR_CONTEXT *pContext, uint32_t apiThreadId);

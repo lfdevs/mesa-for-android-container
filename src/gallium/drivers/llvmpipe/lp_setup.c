@@ -41,7 +41,7 @@
 #include "util/u_pack_color.h"
 #include "util/u_viewport.h"
 #include "draw/draw_pipe.h"
-#include "os/os_time.h"
+#include "util/os_time.h"
 #include "lp_context.h"
 #include "lp_memory.h"
 #include "lp_scene.h"

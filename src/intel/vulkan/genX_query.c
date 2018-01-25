@@ -322,6 +322,30 @@ emit_query_availability(struct anv_cmd_buffer *cmd_buffer,
    }
 }
 
+/**
+ * Goes through a series of consecutive query indices in the given pool
+ * setting all element values to 0 and emitting them as available.
+ */
+static void
+emit_zero_queries(struct anv_cmd_buffer *cmd_buffer,
+                  struct anv_query_pool *pool,
+                  uint32_t first_index, uint32_t num_queries)
+{
+   const uint32_t num_elements = pool->stride / sizeof(uint64_t);
+
+   for (uint32_t i = 0; i < num_queries; i++) {
+      uint32_t slot_offset = (first_index + i) * pool->stride;
+      for (uint32_t j = 1; j < num_elements; j++) {
+         anv_batch_emit(&cmd_buffer->batch, GENX(MI_STORE_DATA_IMM), sdi) {
+            sdi.Address.bo = &pool->bo;
+            sdi.Address.offset = slot_offset + j * sizeof(uint64_t);
+            sdi.ImmediateData = 0ull;
+         }
+      }
+      emit_query_availability(cmd_buffer, &pool->bo, slot_offset);
+   }
+}
+
 void genX(CmdResetQueryPool)(
     VkCommandBuffer                             commandBuffer,
     VkQueryPool                                 queryPool,
@@ -462,6 +486,21 @@ void genX(CmdEndQuery)(
    default:
       unreachable("");
    }
+
+   /* When multiview is active the spec requires that N consecutive query
+    * indices are used, where N is the number of active views in the subpass.
+    * The spec allows that we only write the results to one of the queries
+    * but we still need to manage result availability for all the query indices.
+    * Since we only emit a single query for all active views in the
+    * first index, mark the other query indices as being already available
+    * with result 0.
+    */
+   if (cmd_buffer->state.subpass && cmd_buffer->state.subpass->view_mask) {
+      const uint32_t num_queries =
+         _mesa_bitcount(cmd_buffer->state.subpass->view_mask);
+      if (num_queries > 1)
+         emit_zero_queries(cmd_buffer, pool, query + 1, num_queries - 1);
+   }
 }
 
 #define TIMESTAMP 0x2358
@@ -504,6 +543,21 @@ void genX(CmdWriteTimestamp)(
    }
 
    emit_query_availability(cmd_buffer, &pool->bo, offset);
+
+   /* When multiview is active the spec requires that N consecutive query
+    * indices are used, where N is the number of active views in the subpass.
+    * The spec allows that we only write the results to one of the queries
+    * but we still need to manage result availability for all the query indices.
+    * Since we only emit a single query for all active views in the
+    * first index, mark the other query indices as being already available
+    * with result 0.
+    */
+   if (cmd_buffer->state.subpass && cmd_buffer->state.subpass->view_mask) {
+      const uint32_t num_queries =
+         _mesa_bitcount(cmd_buffer->state.subpass->view_mask);
+      if (num_queries > 1)
+         emit_zero_queries(cmd_buffer, pool, query + 1, num_queries - 1);
+   }
 }
 
 #if GEN_GEN > 7 || GEN_IS_HASWELL

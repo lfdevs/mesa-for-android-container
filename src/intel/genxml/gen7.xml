@@ -469,8 +469,6 @@
     <field name="X Max Clip Guardband" start="288" end="319" type="float"/>
     <field name="Y Min Clip Guardband" start="320" end="351" type="float"/>
     <field name="Y Max Clip Guardband" start="352" end="383" type="float"/>
-    <group count="4" start="384" size="32">
-    </group>
   </struct>
 
   <struct name="BLEND_STATE_ENTRY" length="2">

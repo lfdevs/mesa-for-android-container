@@ -130,7 +130,7 @@ private:
    Value *loadResInfo32(Value *ptr, uint32_t off, uint16_t base);
    Value *loadResInfo64(Value *ptr, uint32_t off, uint16_t base);
    Value *loadResLength32(Value *ptr, uint32_t off, uint16_t base);
-   Value *loadSuInfo32(Value *ptr, int slot, uint32_t off);
+   Value *loadSuInfo32(Value *ptr, int slot, uint32_t off, bool bindless);
    Value *loadBufInfo64(Value *ptr, uint32_t off);
    Value *loadBufLength32(Value *ptr, uint32_t off);
    Value *loadUboInfo64(Value *ptr, uint32_t off);

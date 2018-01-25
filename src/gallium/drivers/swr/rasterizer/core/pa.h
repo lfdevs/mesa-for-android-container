@@ -77,9 +77,12 @@ struct PA_STATE
 
 #if ENABLE_AVX512_SIMD16
     bool useAlternateOffset{ false };
+#endif
+
+    bool viewportArrayActive{ false };
+    bool rtArrayActive { false };
     uint32_t numVertsPerPrim{ 0 };
 
-#endif
     PA_STATE(){}
     PA_STATE(DRAW_CONTEXT *in_pDC, uint8_t* in_pStreamBase, uint32_t in_streamSizeInVerts, uint32_t in_vertexStride, uint32_t in_numVertsPerPrim) :
         pDC(in_pDC), pStreamBase(in_pStreamBase), streamSizeInVerts(in_streamSizeInVerts), vertexStride(in_vertexStride), numVertsPerPrim(in_numVertsPerPrim) {}

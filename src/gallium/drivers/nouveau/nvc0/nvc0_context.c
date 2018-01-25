@@ -206,6 +206,16 @@ nvc0_destroy(struct pipe_context *pipe)
    nvc0_context_unreference_resources(nvc0);
    nvc0_blitctx_destroy(nvc0);
 
+   list_for_each_entry_safe(struct nvc0_resident, pos, &nvc0->tex_head, list) {
+      list_del(&pos->list);
+      free(pos);
+   }
+
+   list_for_each_entry_safe(struct nvc0_resident, pos, &nvc0->img_head, list) {
+      list_del(&pos->list);
+      free(pos);
+   }
+
    nouveau_context_destroy(&nvc0->base);
 }
 
@@ -401,6 +411,11 @@ nvc0_create(struct pipe_screen *pscreen, void *priv, unsigned ctxflags)
    nvc0_init_state_functions(nvc0);
    nvc0_init_transfer_functions(nvc0);
    nvc0_init_resource_functions(pipe);
+   if (nvc0->screen->base.class_3d >= NVE4_3D_CLASS)
+      nvc0_init_bindless_functions(pipe);
+
+   list_inithead(&nvc0->tex_head);
+   list_inithead(&nvc0->img_head);
 
    nvc0->base.invalidate_resource_storage = nvc0_invalidate_resource_storage;
 

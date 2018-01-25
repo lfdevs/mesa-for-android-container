@@ -126,6 +126,14 @@ struct GlobalKnobs
     DEFINE_KNOB(FAST_CLEAR, bool, true);
 
     //-----------------------------------------------------------
+    // KNOB_BASE_NUMA_NODE
+    //
+    // Starting NUMA node index to use when allocating compute resources.
+    // Setting this to a non-zero value will reduce the maximum # of NUMA nodes used.
+    //
+    DEFINE_KNOB(BASE_NUMA_NODE, uint32_t, 0);
+
+    //-----------------------------------------------------------
     // KNOB_MAX_NUMA_NODES
     //
     // Maximum # of NUMA-nodes per system used for worker threads
@@ -135,6 +143,14 @@ struct GlobalKnobs
     DEFINE_KNOB(MAX_NUMA_NODES, uint32_t, 0);
 
     //-----------------------------------------------------------
+    // KNOB_BASE_CORE
+    //
+    // Starting core index to use when allocating compute resources.
+    // Setting this to a non-zero value will reduce the maximum # of cores used.
+    //
+    DEFINE_KNOB(BASE_CORE, uint32_t, 0);
+
+    //-----------------------------------------------------------
     // KNOB_MAX_CORES_PER_NUMA_NODE
     //
     // Maximum # of cores per NUMA-node used for worker threads.
@@ -142,6 +158,14 @@ struct GlobalKnobs
     //   N == Use at most N cores per NUMA-node
     //
     DEFINE_KNOB(MAX_CORES_PER_NUMA_NODE, uint32_t, 0);
+
+    //-----------------------------------------------------------
+    // KNOB_BASE_THREAD
+    //
+    // Starting thread index to use when allocating compute resources.
+    // Setting this to a non-zero value will reduce the maximum # of threads used.
+    //
+    DEFINE_KNOB(BASE_THREAD, uint32_t, 0);
 
     //-----------------------------------------------------------
     // KNOB_MAX_THREADS_PER_CORE
@@ -321,8 +345,11 @@ extern GlobalKnobs g_GlobalKnobs;
 #define KNOB_DUMP_SHADER_IR              GET_KNOB(DUMP_SHADER_IR)
 #define KNOB_USE_GENERIC_STORETILE       GET_KNOB(USE_GENERIC_STORETILE)
 #define KNOB_FAST_CLEAR                  GET_KNOB(FAST_CLEAR)
+#define KNOB_BASE_NUMA_NODE              GET_KNOB(BASE_NUMA_NODE)
 #define KNOB_MAX_NUMA_NODES              GET_KNOB(MAX_NUMA_NODES)
+#define KNOB_BASE_CORE                   GET_KNOB(BASE_CORE)
 #define KNOB_MAX_CORES_PER_NUMA_NODE     GET_KNOB(MAX_CORES_PER_NUMA_NODE)
+#define KNOB_BASE_THREAD                 GET_KNOB(BASE_THREAD)
 #define KNOB_MAX_THREADS_PER_CORE        GET_KNOB(MAX_THREADS_PER_CORE)
 #define KNOB_MAX_WORKER_THREADS          GET_KNOB(MAX_WORKER_THREADS)
 #define KNOB_BUCKETS_START_FRAME         GET_KNOB(BUCKETS_START_FRAME)

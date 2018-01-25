@@ -710,7 +710,7 @@ anv_cmd_buffer_cs_push_constants(struct anv_cmd_buffer *cmd_buffer)
       for (unsigned i = 0;
            i < cs_prog_data->push.cross_thread.dwords;
            i++) {
-         assert(prog_data->param[i] != BRW_PARAM_BUILTIN_THREAD_LOCAL_ID);
+         assert(prog_data->param[i] != BRW_PARAM_BUILTIN_SUBGROUP_ID);
          u32_map[i] = anv_push_constant_value(data, prog_data->param[i]);
       }
    }
@@ -722,8 +722,8 @@ anv_cmd_buffer_cs_push_constants(struct anv_cmd_buffer *cmd_buffer)
                  cs_prog_data->push.cross_thread.regs);
          unsigned src = cs_prog_data->push.cross_thread.dwords;
          for ( ; src < prog_data->nr_params; src++, dst++) {
-            if (prog_data->param[src] == BRW_PARAM_BUILTIN_THREAD_LOCAL_ID) {
-               u32_map[dst] = t * cs_prog_data->simd_size;
+            if (prog_data->param[src] == BRW_PARAM_BUILTIN_SUBGROUP_ID) {
+               u32_map[dst] = t;
             } else {
                u32_map[dst] =
                   anv_push_constant_value(data, prog_data->param[src]);

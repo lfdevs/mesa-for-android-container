@@ -1332,7 +1332,7 @@ boolean
 svga_texture_transfer_map_upload_create(struct svga_context *svga)
 {
    svga->tex_upload = u_upload_create(&svga->pipe, TEX_UPLOAD_DEFAULT_SIZE,
-                                      0, PIPE_USAGE_STAGING);
+                                      0, PIPE_USAGE_STAGING, 0);
    return svga->tex_upload != NULL;
 }
 

@@ -18,59 +18,69 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-glsl_blob_test = executable(
+test(
   'blob_test',
-  'blob_test.c',
-  c_args : [c_vis_args, c_msvc_compat_args, no_override_init_args],
-  include_directories : [inc_common, inc_compiler],
-  link_with : [libglsl],
+  executable(
+    'blob_test',
+    'blob_test.c',
+    c_args : [c_vis_args, c_msvc_compat_args, no_override_init_args],
+    include_directories : [inc_common, inc_compiler],
+    link_with : [libglsl],
+  )
 )
 
-glsl_cache_test = executable(
+test(
   'cache_test',
-  'cache_test.c',
-  c_args : [c_vis_args, c_msvc_compat_args, no_override_init_args],
-  include_directories : [inc_common, inc_glsl],
-  link_with : [libglsl],
-  dependencies : [dep_clock, dep_thread],
+  executable(
+    'cache_test',
+    'cache_test.c',
+    c_args : [c_vis_args, c_msvc_compat_args, no_override_init_args],
+    include_directories : [inc_common, inc_glsl],
+    link_with : [libglsl],
+    dependencies : [dep_clock, dep_thread],
+  )
 )
 
-glsl_general_ir_test = executable(
+
+test(
   'general_ir_test',
-  ['array_refcount_test.cpp', 'builtin_variable_test.cpp',
-   'invalidate_locations_test.cpp', 'general_ir_test.cpp',
-   'lower_int64_test.cpp', 'opt_add_neg_to_sub_test.cpp', 'varyings_test.cpp',
-   ir_expression_operation_h],
-  cpp_args : [cpp_vis_args, cpp_msvc_compat_args],
-  include_directories : [inc_common, inc_glsl],
-  link_with : [libglsl, libglsl_standalone, libglsl_util],
-  dependencies : [dep_clock, dep_thread, idep_gtest],
+  executable(
+    'general_ir_test',
+    ['array_refcount_test.cpp', 'builtin_variable_test.cpp',
+     'invalidate_locations_test.cpp', 'general_ir_test.cpp',
+     'lower_int64_test.cpp', 'opt_add_neg_to_sub_test.cpp',
+     'varyings_test.cpp', ir_expression_operation_h],
+    cpp_args : [cpp_vis_args, cpp_msvc_compat_args],
+    include_directories : [inc_common, inc_glsl],
+    link_with : [libglsl, libglsl_standalone, libglsl_util],
+    dependencies : [dep_clock, dep_thread, idep_gtest],
+  )
 )
 
-glsl_uniform_initializer_test = executable(
+test(
   'uniform_initializer_test',
-  ['copy_constant_to_storage_tests.cpp', 'set_uniform_initializer_tests.cpp',
-   'uniform_initializer_utils.cpp', 'uniform_initializer_utils.h',
-   ir_expression_operation_h],
-  cpp_args : [cpp_vis_args, cpp_msvc_compat_args],
-  include_directories : [inc_common, inc_glsl],
-  link_with : [libglsl, libglsl_util],
-  dependencies : [dep_thread, idep_gtest],
+  executable(
+    'uniform_initializer_test',
+    ['copy_constant_to_storage_tests.cpp', 'set_uniform_initializer_tests.cpp',
+     'uniform_initializer_utils.cpp', 'uniform_initializer_utils.h',
+     ir_expression_operation_h],
+    cpp_args : [cpp_vis_args, cpp_msvc_compat_args],
+    include_directories : [inc_common, inc_glsl],
+    link_with : [libglsl, libglsl_util],
+    dependencies : [dep_thread, idep_gtest],
+  )
 )
 
-glsl_sampler_types_test = executable(
+test(
   'sampler_types_test',
-  ['sampler_types_test.cpp', ir_expression_operation_h],
-  cpp_args : [cpp_vis_args, cpp_msvc_compat_args],
-  include_directories : [inc_common, inc_glsl],
-  link_with : [libglsl, libglsl_util],
-  dependencies : [dep_thread, idep_gtest],
+  executable(
+    'sampler_types_test',
+    ['sampler_types_test.cpp', ir_expression_operation_h],
+    cpp_args : [cpp_vis_args, cpp_msvc_compat_args],
+    include_directories : [inc_common, inc_glsl],
+    link_with : [libglsl, libglsl_util],
+    dependencies : [dep_thread, idep_gtest],
+  )
 )
-
-test('blob_test', glsl_blob_test)
-test('cache_test', glsl_cache_test)
-test('general_ir_test', glsl_general_ir_test)
-test('uniform_initializer_test', glsl_uniform_initializer_test)
-test('sampler_types_test', glsl_sampler_types_test)
 
 # TODO: figure out how to get the shell based tests to work?

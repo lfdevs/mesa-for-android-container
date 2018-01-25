@@ -31,6 +31,7 @@ noinst_LTLIBRARIES = \
 	libxmlconfig.la
 
 AM_CPPFLAGS = \
+	$(PTHREAD_CFLAGS) \
 	-I$(top_srcdir)/include
 
 libmesautil_la_CPPFLAGS = \
@@ -50,6 +51,7 @@ libmesautil_la_SOURCES = \
 	$(MESA_UTIL_GENERATED_FILES)
 
 libmesautil_la_LIBADD = \
+	$(PTHREAD_LIBS) \
 	$(CLOCK_LIB) \
 	$(ZLIB_LIBS) \
 	$(LIBATOMIC_LIBS)
@@ -81,7 +83,8 @@ EXTRA_DIST = \
 	merge_driinfo.py \
 	SConscript \
 	xmlpool.h \
-	sha1/README
+	sha1/README \
+	meson.build
 
 PYTHON_GEN = $(AM_V_GEN)$(PYTHON2) $(PYTHON_FLAGS)
 

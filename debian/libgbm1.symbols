@@ -34,6 +34,3 @@ libgbm.so.1 libgbm1 #MINVER#
  gbm_surface_has_free_buffers@Base 8.1~0
  gbm_surface_lock_front_buffer@Base 8.1~0
  gbm_surface_release_buffer@Base 8.1~0
-# stupid side effect of code generation from
-# src/egl/wayland/wayland-drm/wayland-drm.xml which ought to be private.
- (arch=linux-any)wl_drm_interface@Base 0 1

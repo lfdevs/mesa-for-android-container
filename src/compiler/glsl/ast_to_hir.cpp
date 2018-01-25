@@ -1108,12 +1108,15 @@ do_comparison(void *mem_ctx, int operation, ir_rvalue *op0, ir_rvalue *op1)
 
    switch (op0->type->base_type) {
    case GLSL_TYPE_FLOAT:
+   case GLSL_TYPE_FLOAT16:
    case GLSL_TYPE_UINT:
    case GLSL_TYPE_INT:
    case GLSL_TYPE_BOOL:
    case GLSL_TYPE_DOUBLE:
    case GLSL_TYPE_UINT64:
    case GLSL_TYPE_INT64:
+   case GLSL_TYPE_UINT16:
+   case GLSL_TYPE_INT16:
       return new(mem_ctx) ir_expression(operation, op0, op1);
 
    case GLSL_TYPE_ARRAY: {
@@ -1337,8 +1340,8 @@ ast_expression::do_hir(exec_list *instructions,
       ir_binop_lshift,
       ir_binop_rshift,
       ir_binop_less,
-      ir_binop_greater,
-      ir_binop_lequal,
+      ir_binop_less,    /* This is correct.  See the ast_greater case below. */
+      ir_binop_gequal,  /* This is correct.  See the ast_lequal case below. */
       ir_binop_gequal,
       ir_binop_all_equal,
       ir_binop_any_nequal,
@@ -1487,6 +1490,15 @@ ast_expression::do_hir(exec_list *instructions,
       assert(type->is_error()
              || (type->is_boolean() && type->is_scalar()));
 
+      /* Like NIR, GLSL IR does not have opcodes for > or <=.  Instead, swap
+       * the arguments and use < or >=.
+       */
+      if (this->oper == ast_greater || this->oper == ast_lequal) {
+         ir_rvalue *const tmp = op[0];
+         op[0] = op[1];
+         op[1] = tmp;
+      }
+
       result = new(ctx) ir_expression(operations[this->oper], type,
                                       op[0], op[1]);
       error_emitted = type->is_error();
@@ -1577,7 +1589,6 @@ ast_expression::do_hir(exec_list *instructions,
 
       if (rhs_instructions.is_empty()) {
          result = new(ctx) ir_expression(ir_binop_logic_and, op[0], op[1]);
-         type = result->type;
       } else {
          ir_variable *const tmp = new(ctx) ir_variable(glsl_type::bool_type,
                                                        "and_tmp",
@@ -1599,7 +1610,6 @@ ast_expression::do_hir(exec_list *instructions,
          stmt->else_instructions.push_tail(else_assign);
 
          result = new(ctx) ir_dereference_variable(tmp);
-         type = tmp->type;
       }
       break;
    }
@@ -1613,7 +1623,6 @@ ast_expression::do_hir(exec_list *instructions,
 
       if (rhs_instructions.is_empty()) {
          result = new(ctx) ir_expression(ir_binop_logic_or, op[0], op[1]);
-         type = result->type;
       } else {
          ir_variable *const tmp = new(ctx) ir_variable(glsl_type::bool_type,
                                                        "or_tmp",
@@ -1635,7 +1644,6 @@ ast_expression::do_hir(exec_list *instructions,
          stmt->else_instructions.push_tail(else_assign);
 
          result = new(ctx) ir_dereference_variable(tmp);
-         type = tmp->type;
       }
       break;
    }
@@ -2361,7 +2369,9 @@ ast_type_specifier::glsl_type(const char **name,
 {
    const struct glsl_type *type;
 
-   if (structure)
+   if (this->type != NULL)
+      type = this->type;
+   else if (structure)
       type = structure->type;
    else
       type = state->symbols->get_type(this->type_name);
@@ -4066,30 +4076,8 @@ apply_type_qualifier_to_variable(const struct ast_type_qualifier *qual,
       }
    }
 
-   if (state->all_invariant && (state->current_function == NULL)) {
-      switch (state->stage) {
-      case MESA_SHADER_VERTEX:
-         if (var->data.mode == ir_var_shader_out)
-            var->data.invariant = true;
-         break;
-      case MESA_SHADER_TESS_CTRL:
-      case MESA_SHADER_TESS_EVAL:
-      case MESA_SHADER_GEOMETRY:
-         if ((var->data.mode == ir_var_shader_in)
-             || (var->data.mode == ir_var_shader_out))
-            var->data.invariant = true;
-         break;
-      case MESA_SHADER_FRAGMENT:
-         if (var->data.mode == ir_var_shader_in)
-            var->data.invariant = true;
-         break;
-      case MESA_SHADER_COMPUTE:
-         /* Invariance isn't meaningful in compute shaders. */
-         break;
-      default:
-         break;
-      }
-   }
+   if (state->all_invariant && var->data.mode == ir_var_shader_out)
+      var->data.invariant = true;
 
    var->data.interpolation =
       interpret_interpolation_qualifier(qual, var->type,

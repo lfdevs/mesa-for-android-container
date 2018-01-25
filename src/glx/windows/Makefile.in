@@ -113,12 +113,16 @@ CONFIG_CLEAN_FILES = windowsdriproto.pc
 CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 libwindowsdri_la_LIBADD =
-am_libwindowsdri_la_OBJECTS = xwindowsdri.lo
+am_libwindowsdri_la_OBJECTS = libwindowsdri_la-xwindowsdri.lo
 libwindowsdri_la_OBJECTS = $(am_libwindowsdri_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
 am__v_lt_1 = 
+libwindowsdri_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
+	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
+	$(libwindowsdri_la_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) $(LDFLAGS) \
+	-o $@
 libwindowsglx_la_LIBADD =
 am_libwindowsglx_la_OBJECTS = libwindowsglx_la-windowsgl.lo \
 	libwindowsglx_la-windows_drawable.lo libwindowsglx_la-wgl.lo
@@ -246,6 +250,7 @@ CLOVER_STD_OVERRIDE = @CLOVER_STD_OVERRIDE@
 CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
 CXX = @CXX@
+CXX11_CXXFLAGS = @CXX11_CXXFLAGS@
 CXXCPP = @CXXCPP@
 CXXDEPMODE = @CXXDEPMODE@
 CXXFLAGS = @CXXFLAGS@
@@ -349,7 +354,7 @@ MSVC2013_COMPAT_CFLAGS = @MSVC2013_COMPAT_CFLAGS@
 MSVC2013_COMPAT_CXXFLAGS = @MSVC2013_COMPAT_CXXFLAGS@
 NINE_MAJOR = @NINE_MAJOR@
 NINE_MINOR = @NINE_MINOR@
-NINE_TINY = @NINE_TINY@
+NINE_PATCH = @NINE_PATCH@
 NINE_VERSION = @NINE_VERSION@
 NM = @NM@
 NMEDIT = @NMEDIT@
@@ -405,7 +410,6 @@ SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
 SWR_AVX2_CXXFLAGS = @SWR_AVX2_CXXFLAGS@
 SWR_AVX_CXXFLAGS = @SWR_AVX_CXXFLAGS@
-SWR_CXX11_CXXFLAGS = @SWR_CXX11_CXXFLAGS@
 SWR_KNL_CXXFLAGS = @SWR_KNL_CXXFLAGS@
 SWR_SKX_CXXFLAGS = @SWR_SKX_CXXFLAGS@
 VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
@@ -440,7 +444,7 @@ WNO_OVERRIDE_INIT = @WNO_OVERRIDE_INIT@
 X11_INCLUDES = @X11_INCLUDES@
 XA_MAJOR = @XA_MAJOR@
 XA_MINOR = @XA_MINOR@
-XA_TINY = @XA_TINY@
+XA_PATCH = @XA_PATCH@
 XA_VERSION = @XA_VERSION@
 XCB_DRI2_CFLAGS = @XCB_DRI2_CFLAGS@
 XCB_DRI2_LIBS = @XCB_DRI2_LIBS@
@@ -507,7 +511,6 @@ pdfdir = @pdfdir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
-runstatedir = @runstatedir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
@@ -530,6 +533,9 @@ pkgconfig_DATA = windowsdriproto.pc
 
 # library for using the Windows-DRI server extension
 libwindowsdri_la_SOURCES = xwindowsdri.c xwindowsdri.h
+libwindowsdri_la_CFLAGS = \
+        $(X11_INCLUDES)
+
 
 # native rendering GL for windows
 libwindowsglx_la_SOURCES = \
@@ -551,6 +557,7 @@ libwindowsglx_la_CFLAGS = \
 	$(DEFINES) \
 	$(X11_INCLUDES)
 
+EXTRA_DIST = meson.build
 all: all-am
 
 .SUFFIXES:
@@ -599,7 +606,7 @@ clean-noinstLTLIBRARIES:
 	}
 
 libwindowsdri.la: $(libwindowsdri_la_OBJECTS) $(libwindowsdri_la_DEPENDENCIES) $(EXTRA_libwindowsdri_la_DEPENDENCIES) 
-	$(AM_V_CCLD)$(LINK)  $(libwindowsdri_la_OBJECTS) $(libwindowsdri_la_LIBADD) $(LIBS)
+	$(AM_V_CCLD)$(libwindowsdri_la_LINK)  $(libwindowsdri_la_OBJECTS) $(libwindowsdri_la_LIBADD) $(LIBS)
 
 libwindowsglx.la: $(libwindowsglx_la_OBJECTS) $(libwindowsglx_la_DEPENDENCIES) $(EXTRA_libwindowsglx_la_DEPENDENCIES) 
 	$(AM_V_CCLD)$(libwindowsglx_la_LINK)  $(libwindowsglx_la_OBJECTS) $(libwindowsglx_la_LIBADD) $(LIBS)
@@ -610,10 +617,10 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libwindowsdri_la-xwindowsdri.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libwindowsglx_la-wgl.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libwindowsglx_la-windows_drawable.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libwindowsglx_la-windowsgl.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/xwindowsdri.Plo@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	$(AM_V_CC)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.o$$||'`;\
@@ -638,6 +645,13 @@ distclean-compile:
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LTCOMPILE) -c -o $@ $<
+
+libwindowsdri_la-xwindowsdri.lo: xwindowsdri.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libwindowsdri_la_CFLAGS) $(CFLAGS) -MT libwindowsdri_la-xwindowsdri.lo -MD -MP -MF $(DEPDIR)/libwindowsdri_la-xwindowsdri.Tpo -c -o libwindowsdri_la-xwindowsdri.lo `test -f 'xwindowsdri.c' || echo '$(srcdir)/'`xwindowsdri.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libwindowsdri_la-xwindowsdri.Tpo $(DEPDIR)/libwindowsdri_la-xwindowsdri.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='xwindowsdri.c' object='libwindowsdri_la-xwindowsdri.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libwindowsdri_la_CFLAGS) $(CFLAGS) -c -o libwindowsdri_la-xwindowsdri.lo `test -f 'xwindowsdri.c' || echo '$(srcdir)/'`xwindowsdri.c
 
 libwindowsglx_la-windowsgl.lo: windowsgl.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libwindowsglx_la_CFLAGS) $(CFLAGS) -MT libwindowsglx_la-windowsgl.lo -MD -MP -MF $(DEPDIR)/libwindowsglx_la-windowsgl.Tpo -c -o libwindowsglx_la-windowsgl.lo `test -f 'windowsgl.c' || echo '$(srcdir)/'`windowsgl.c

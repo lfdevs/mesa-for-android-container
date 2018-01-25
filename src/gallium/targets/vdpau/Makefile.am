@@ -44,7 +44,8 @@ EXTRA_libvdpau_gallium_la_DEPENDENCIES = \
 	$(top_srcdir)/src/gallium/targets/dri-vdpau.dyn
 EXTRA_DIST = \
 	vdpau.sym \
-	$(top_srcdir)/src/gallium/targets/dri-vdpau.dyn
+	$(top_srcdir)/src/gallium/targets/dri-vdpau.dyn \
+	meson.build
 
 TARGET_DRIVERS =
 TARGET_CPPFLAGS =

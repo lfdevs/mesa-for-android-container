@@ -39,20 +39,18 @@ static void kill_if_fetch_args(struct lp_build_tgsi_context *bld_base,
 
 	for (i = 0; i < TGSI_NUM_CHANNELS; i++) {
 		LLVMValueRef value = lp_build_emit_fetch(bld_base, inst, 0, i);
-		conds[i] = LLVMBuildFCmp(builder, LLVMRealOLT, value,
+		conds[i] = LLVMBuildFCmp(builder, LLVMRealOGE, value,
 					ctx->ac.f32_0, "");
 	}
 
-	/* Or the conditions together */
+	/* And the conditions together */
 	for (i = TGSI_NUM_CHANNELS - 1; i > 0; i--) {
-		conds[i - 1] = LLVMBuildOr(builder, conds[i], conds[i - 1], "");
+		conds[i - 1] = LLVMBuildAnd(builder, conds[i], conds[i - 1], "");
 	}
 
 	emit_data->dst_type = ctx->voidt;
 	emit_data->arg_count = 1;
-	emit_data->args[0] = LLVMBuildSelect(builder, conds[0],
-					LLVMConstReal(ctx->f32, -1.0f),
-					ctx->ac.f32_0, "");
+	emit_data->args[0] = conds[0];
 }
 
 static void kil_emit(const struct lp_build_tgsi_action *action,
@@ -61,31 +59,29 @@ static void kil_emit(const struct lp_build_tgsi_action *action,
 {
 	struct si_shader_context *ctx = si_shader_context(bld_base);
 	LLVMBuilderRef builder = ctx->ac.builder;
+	LLVMValueRef visible;
 
-	if (ctx->postponed_kill) {
-		if (emit_data->inst->Instruction.Opcode == TGSI_OPCODE_KILL_IF) {
-			LLVMValueRef val;
+	if (emit_data->inst->Instruction.Opcode == TGSI_OPCODE_KILL_IF) {
+		visible = emit_data->args[0];
+	} else {
+		assert(emit_data->inst->Instruction.Opcode == TGSI_OPCODE_KILL);
+		visible = LLVMConstInt(ctx->i1, false, 0);
+	}
 
-			/* Take the minimum kill value. This is the same as OR
-			 * between 2 kill values. If the value is negative,
-			 * the pixel will be killed.
-			 */
-			val = LLVMBuildLoad(builder, ctx->postponed_kill, "");
-			val = lp_build_emit_llvm_binary(bld_base, TGSI_OPCODE_MIN,
-							val, emit_data->args[0]);
-			LLVMBuildStore(builder, val, ctx->postponed_kill);
-		} else {
-			LLVMBuildStore(builder,
-				       LLVMConstReal(ctx->f32, -1),
-				       ctx->postponed_kill);
+	if (ctx->shader->selector->force_correct_derivs_after_kill) {
+		/* LLVM 6.0 can kill immediately while maintaining WQM. */
+		if (HAVE_LLVM >= 0x0600) {
+			ac_build_kill_if_false(&ctx->ac,
+					       ac_build_wqm_vote(&ctx->ac, visible));
 		}
+
+		LLVMValueRef mask = LLVMBuildLoad(builder, ctx->postponed_kill, "");
+		mask = LLVMBuildAnd(builder, mask, visible, "");
+		LLVMBuildStore(builder, mask, ctx->postponed_kill);
 		return;
 	}
 
-	if (emit_data->inst->Instruction.Opcode == TGSI_OPCODE_KILL_IF)
-		ac_build_kill(&ctx->ac, emit_data->args[0]);
-	else
-		ac_build_kill(&ctx->ac, NULL);
+	ac_build_kill_if_false(&ctx->ac, visible);
 }
 
 static void emit_icmp(const struct lp_build_tgsi_action *action,
@@ -539,31 +535,8 @@ static void emit_lsb(const struct lp_build_tgsi_action *action,
 		     struct lp_build_emit_data *emit_data)
 {
 	struct si_shader_context *ctx = si_shader_context(bld_base);
-	LLVMValueRef args[2] = {
-		emit_data->args[0],
 
-		/* The value of 1 means that ffs(x=0) = undef, so LLVM won't
-		 * add special code to check for x=0. The reason is that
-		 * the LLVM behavior for x=0 is different from what we
-		 * need here. However, LLVM also assumes that ffs(x) is
-		 * in [0, 31], but GLSL expects that ffs(0) = -1, so
-		 * a conditional assignment to handle 0 is still required.
-		 */
-		LLVMConstInt(ctx->i1, 1, 0)
-	};
-
-	LLVMValueRef lsb =
-		lp_build_intrinsic(ctx->ac.builder, "llvm.cttz.i32",
-				emit_data->dst_type, args, ARRAY_SIZE(args),
-				LP_FUNC_ATTR_READNONE);
-
-	/* TODO: We need an intrinsic to skip this conditional. */
-	/* Check for zero: */
-	emit_data->output[emit_data->chan] =
-		LLVMBuildSelect(ctx->ac.builder,
-				LLVMBuildICmp(ctx->ac.builder, LLVMIntEQ, args[0],
-					      ctx->i32_0, ""),
-				LLVMConstInt(ctx->i32, -1, 0), lsb, "");
+	emit_data->output[emit_data->chan] = ac_find_lsb(&ctx->ac, emit_data->dst_type, emit_data->args[0]);
 }
 
 /* Find the last bit set. */
@@ -695,13 +668,7 @@ static void emit_fdiv(const struct lp_build_tgsi_action *action,
 	struct si_shader_context *ctx = si_shader_context(bld_base);
 
 	emit_data->output[emit_data->chan] =
-		LLVMBuildFDiv(ctx->ac.builder,
-			      emit_data->args[0], emit_data->args[1], "");
-
-	/* Use v_rcp_f32 instead of precise division. */
-	if (!LLVMIsConstant(emit_data->output[emit_data->chan]))
-		LLVMSetMetadata(emit_data->output[emit_data->chan],
-				ctx->fpmath_md_kind, ctx->fpmath_md_2p5_ulp);
+		ac_build_fdiv(&ctx->ac, emit_data->args[0], emit_data->args[1]);
 }
 
 /* 1/sqrt is translated to rsq for f32 if fp32 denormals are not enabled in

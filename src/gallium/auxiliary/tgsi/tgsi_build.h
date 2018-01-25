@@ -28,11 +28,7 @@
 #ifndef TGSI_BUILD_H
 #define TGSI_BUILD_H
 
-
-struct tgsi_token;
-struct tgsi_full_dst_register;
-struct tgsi_full_src_register;
-
+#include "tgsi/tgsi_parse.h"
 
 #if defined __cplusplus
 extern "C" {

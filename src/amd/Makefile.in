@@ -183,7 +183,6 @@ am__objects_1 = addrlib/addrlib_libamdgpu_addrlib_la-addrinterface.lo \
 	addrlib/core/addrlib_libamdgpu_addrlib_la-addrobject.lo \
 	addrlib/gfx9/addrlib_libamdgpu_addrlib_la-coord.lo \
 	addrlib/gfx9/addrlib_libamdgpu_addrlib_la-gfx9addrlib.lo \
-	addrlib/gfx9/addrlib_libamdgpu_addrlib_la-rbmap.lo \
 	addrlib/r800/addrlib_libamdgpu_addrlib_la-ciaddrlib.lo \
 	addrlib/r800/addrlib_libamdgpu_addrlib_la-egbaddrlib.lo \
 	addrlib/r800/addrlib_libamdgpu_addrlib_la-siaddrlib.lo
@@ -207,6 +206,7 @@ am__common_libamd_common_la_SOURCES_DIST = common/ac_gpu_info.c \
 	common/ac_llvm_helper.cpp common/ac_llvm_util.c \
 	common/ac_llvm_util.h common/ac_shader_abi.h \
 	common/ac_shader_info.c common/ac_shader_info.h \
+	common/ac_shader_util.c common/ac_shader_util.h \
 	common/ac_debug.c common/ac_debug.h common/sid_tables.h \
 	common/ac_nir_to_llvm.c common/ac_nir_to_llvm.h
 am__objects_2 = common/common_libamd_common_la-ac_gpu_info.lo \
@@ -215,7 +215,8 @@ am__objects_3 = common/common_libamd_common_la-ac_binary.lo \
 	common/common_libamd_common_la-ac_llvm_build.lo \
 	common/common_libamd_common_la-ac_llvm_helper.lo \
 	common/common_libamd_common_la-ac_llvm_util.lo \
-	common/common_libamd_common_la-ac_shader_info.lo
+	common/common_libamd_common_la-ac_shader_info.lo \
+	common/common_libamd_common_la-ac_shader_util.lo
 am__objects_4 = common/common_libamd_common_la-ac_debug.lo
 am__objects_5 =
 am__objects_6 = common/common_libamd_common_la-ac_nir_to_llvm.lo
@@ -339,6 +340,7 @@ CLOVER_STD_OVERRIDE = @CLOVER_STD_OVERRIDE@
 CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
 CXX = @CXX@
+CXX11_CXXFLAGS = @CXX11_CXXFLAGS@
 CXXCPP = @CXXCPP@
 CXXDEPMODE = @CXXDEPMODE@
 CXXFLAGS = @CXXFLAGS@
@@ -442,7 +444,7 @@ MSVC2013_COMPAT_CFLAGS = @MSVC2013_COMPAT_CFLAGS@
 MSVC2013_COMPAT_CXXFLAGS = @MSVC2013_COMPAT_CXXFLAGS@
 NINE_MAJOR = @NINE_MAJOR@
 NINE_MINOR = @NINE_MINOR@
-NINE_TINY = @NINE_TINY@
+NINE_PATCH = @NINE_PATCH@
 NINE_VERSION = @NINE_VERSION@
 NM = @NM@
 NMEDIT = @NMEDIT@
@@ -498,7 +500,6 @@ SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
 SWR_AVX2_CXXFLAGS = @SWR_AVX2_CXXFLAGS@
 SWR_AVX_CXXFLAGS = @SWR_AVX_CXXFLAGS@
-SWR_CXX11_CXXFLAGS = @SWR_CXX11_CXXFLAGS@
 SWR_KNL_CXXFLAGS = @SWR_KNL_CXXFLAGS@
 SWR_SKX_CXXFLAGS = @SWR_SKX_CXXFLAGS@
 VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
@@ -533,7 +534,7 @@ WNO_OVERRIDE_INIT = @WNO_OVERRIDE_INIT@
 X11_INCLUDES = @X11_INCLUDES@
 XA_MAJOR = @XA_MAJOR@
 XA_MINOR = @XA_MINOR@
-XA_TINY = @XA_TINY@
+XA_PATCH = @XA_PATCH@
 XA_VERSION = @XA_VERSION@
 XCB_DRI2_CFLAGS = @XCB_DRI2_CFLAGS@
 XCB_DRI2_LIBS = @XCB_DRI2_LIBS@
@@ -600,7 +601,6 @@ pdfdir = @pdfdir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
-runstatedir = @runstatedir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
@@ -617,13 +617,13 @@ COMMON_HEADER_FILES = \
 	common/gfx9d.h \
 	common/sid.h \
 	common/amd_family.h \
-	common/amd_kernel_code_t.h \
-	common/amdgpu_id.h
+	common/amd_kernel_code_t.h
 
 ADDRLIB_FILES = \
 	addrlib/addrinterface.cpp \
 	addrlib/addrinterface.h \
 	addrlib/addrtypes.h \
+	addrlib/amdgpu_asic_addr.h \
 	addrlib/core/addrcommon.h \
 	addrlib/core/addrelemlib.cpp \
 	addrlib/core/addrelemlib.h \
@@ -640,11 +640,8 @@ ADDRLIB_FILES = \
 	addrlib/gfx9/coord.h \
 	addrlib/gfx9/gfx9addrlib.cpp \
 	addrlib/gfx9/gfx9addrlib.h \
-	addrlib/gfx9/rbmap.cpp \
-	addrlib/gfx9/rbmap.h \
 	addrlib/inc/chip/gfx9/gfx9_gb_reg.h \
 	addrlib/inc/chip/r800/si_gb_reg.h \
-	addrlib/inc/lnx_common_defs.h \
 	addrlib/r800/chip/si_ci_vi_merged_enum.h \
 	addrlib/r800/ciaddrlib.cpp \
 	addrlib/r800/ciaddrlib.h \
@@ -664,7 +661,9 @@ AMD_COMPILER_FILES = \
 	common/ac_llvm_util.h \
 	common/ac_shader_abi.h \
 	common/ac_shader_info.c \
-	common/ac_shader_info.h
+	common/ac_shader_info.h \
+	common/ac_shader_util.c \
+	common/ac_shader_util.h
 
 AMD_NIR_FILES = \
 	common/ac_nir_to_llvm.c \
@@ -684,7 +683,6 @@ AMD_GENERATED_FILES = \
 	common/sid_tables.h
 
 noinst_LTLIBRARIES = $(ADDRLIB_LIBS) $(am__append_1)
-EXTRA_DIST = $(COMMON_HEADER_FILES) common/sid_tables.py
 ADDRLIB_LIBS = addrlib/libamdgpu_addrlib.la
 addrlib_libamdgpu_addrlib_la_CPPFLAGS = \
 	-I$(top_srcdir)/src/ \
@@ -694,11 +692,10 @@ addrlib_libamdgpu_addrlib_la_CPPFLAGS = \
 	-I$(srcdir)/addrlib/inc/chip/gfx9 \
 	-I$(srcdir)/addrlib/inc/chip/r800 \
 	-I$(srcdir)/addrlib/gfx9/chip \
-	-I$(srcdir)/addrlib/r800/chip \
-	-DBRAHMA_BUILD=1
+	-I$(srcdir)/addrlib/r800/chip
 
 addrlib_libamdgpu_addrlib_la_CXXFLAGS = \
-	$(VISIBILITY_CXXFLAGS)
+	$(VISIBILITY_CXXFLAGS) $(CXX11_CXXFLAGS)
 
 addrlib_libamdgpu_addrlib_la_SOURCES = $(ADDRLIB_FILES)
 @HAVE_GALLIUM_LLVM_TRUE@COMMON_LIBS = common/libamd_common.la
@@ -741,6 +738,14 @@ addrlib_libamdgpu_addrlib_la_SOURCES = $(ADDRLIB_FILES)
 
 common_libamd_common_la_LIBADD = $(LIBELF_LIBS)
 BUILT_SOURCES = $(AMD_GENERATED_FILES)
+EXTRA_DIST = \
+     $(COMMON_HEADER_FILES) \
+     common/sid_tables.py \
+     meson.build \
+     addrlib/meson.build \
+     common/meson.build \
+     vulkan/meson.build
+
 all: $(BUILT_SOURCES)
 	$(MAKE) $(AM_MAKEFLAGS) all-am
 
@@ -828,9 +833,6 @@ addrlib/gfx9/addrlib_libamdgpu_addrlib_la-coord.lo:  \
 addrlib/gfx9/addrlib_libamdgpu_addrlib_la-gfx9addrlib.lo:  \
 	addrlib/gfx9/$(am__dirstamp) \
 	addrlib/gfx9/$(DEPDIR)/$(am__dirstamp)
-addrlib/gfx9/addrlib_libamdgpu_addrlib_la-rbmap.lo:  \
-	addrlib/gfx9/$(am__dirstamp) \
-	addrlib/gfx9/$(DEPDIR)/$(am__dirstamp)
 addrlib/r800/$(am__dirstamp):
 	@$(MKDIR_P) addrlib/r800
 	@: > addrlib/r800/$(am__dirstamp)
@@ -869,6 +871,8 @@ common/common_libamd_common_la-ac_llvm_util.lo:  \
 	common/$(am__dirstamp) common/$(DEPDIR)/$(am__dirstamp)
 common/common_libamd_common_la-ac_shader_info.lo:  \
 	common/$(am__dirstamp) common/$(DEPDIR)/$(am__dirstamp)
+common/common_libamd_common_la-ac_shader_util.lo:  \
+	common/$(am__dirstamp) common/$(DEPDIR)/$(am__dirstamp)
 common/common_libamd_common_la-ac_debug.lo: common/$(am__dirstamp) \
 	common/$(DEPDIR)/$(am__dirstamp)
 common/common_libamd_common_la-ac_nir_to_llvm.lo:  \
@@ -901,7 +905,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@addrlib/core/$(DEPDIR)/addrlib_libamdgpu_addrlib_la-addrobject.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@addrlib/gfx9/$(DEPDIR)/addrlib_libamdgpu_addrlib_la-coord.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@addrlib/gfx9/$(DEPDIR)/addrlib_libamdgpu_addrlib_la-gfx9addrlib.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@addrlib/gfx9/$(DEPDIR)/addrlib_libamdgpu_addrlib_la-rbmap.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@addrlib/r800/$(DEPDIR)/addrlib_libamdgpu_addrlib_la-ciaddrlib.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@addrlib/r800/$(DEPDIR)/addrlib_libamdgpu_addrlib_la-egbaddrlib.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@addrlib/r800/$(DEPDIR)/addrlib_libamdgpu_addrlib_la-siaddrlib.Plo@am__quote@
@@ -913,6 +916,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@common/$(DEPDIR)/common_libamd_common_la-ac_llvm_util.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@common/$(DEPDIR)/common_libamd_common_la-ac_nir_to_llvm.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@common/$(DEPDIR)/common_libamd_common_la-ac_shader_info.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@common/$(DEPDIR)/common_libamd_common_la-ac_shader_util.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@common/$(DEPDIR)/common_libamd_common_la-ac_surface.Plo@am__quote@
 
 .c.o:
@@ -980,6 +984,13 @@ common/common_libamd_common_la-ac_shader_info.lo: common/ac_shader_info.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='common/ac_shader_info.c' object='common/common_libamd_common_la-ac_shader_info.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(common_libamd_common_la_CPPFLAGS) $(CPPFLAGS) $(common_libamd_common_la_CFLAGS) $(CFLAGS) -c -o common/common_libamd_common_la-ac_shader_info.lo `test -f 'common/ac_shader_info.c' || echo '$(srcdir)/'`common/ac_shader_info.c
+
+common/common_libamd_common_la-ac_shader_util.lo: common/ac_shader_util.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(common_libamd_common_la_CPPFLAGS) $(CPPFLAGS) $(common_libamd_common_la_CFLAGS) $(CFLAGS) -MT common/common_libamd_common_la-ac_shader_util.lo -MD -MP -MF common/$(DEPDIR)/common_libamd_common_la-ac_shader_util.Tpo -c -o common/common_libamd_common_la-ac_shader_util.lo `test -f 'common/ac_shader_util.c' || echo '$(srcdir)/'`common/ac_shader_util.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) common/$(DEPDIR)/common_libamd_common_la-ac_shader_util.Tpo common/$(DEPDIR)/common_libamd_common_la-ac_shader_util.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='common/ac_shader_util.c' object='common/common_libamd_common_la-ac_shader_util.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(common_libamd_common_la_CPPFLAGS) $(CPPFLAGS) $(common_libamd_common_la_CFLAGS) $(CFLAGS) -c -o common/common_libamd_common_la-ac_shader_util.lo `test -f 'common/ac_shader_util.c' || echo '$(srcdir)/'`common/ac_shader_util.c
 
 common/common_libamd_common_la-ac_debug.lo: common/ac_debug.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(common_libamd_common_la_CPPFLAGS) $(CPPFLAGS) $(common_libamd_common_la_CFLAGS) $(CFLAGS) -MT common/common_libamd_common_la-ac_debug.lo -MD -MP -MF common/$(DEPDIR)/common_libamd_common_la-ac_debug.Tpo -c -o common/common_libamd_common_la-ac_debug.lo `test -f 'common/ac_debug.c' || echo '$(srcdir)/'`common/ac_debug.c
@@ -1074,13 +1085,6 @@ addrlib/gfx9/addrlib_libamdgpu_addrlib_la-gfx9addrlib.lo: addrlib/gfx9/gfx9addrl
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='addrlib/gfx9/gfx9addrlib.cpp' object='addrlib/gfx9/addrlib_libamdgpu_addrlib_la-gfx9addrlib.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(addrlib_libamdgpu_addrlib_la_CPPFLAGS) $(CPPFLAGS) $(addrlib_libamdgpu_addrlib_la_CXXFLAGS) $(CXXFLAGS) -c -o addrlib/gfx9/addrlib_libamdgpu_addrlib_la-gfx9addrlib.lo `test -f 'addrlib/gfx9/gfx9addrlib.cpp' || echo '$(srcdir)/'`addrlib/gfx9/gfx9addrlib.cpp
-
-addrlib/gfx9/addrlib_libamdgpu_addrlib_la-rbmap.lo: addrlib/gfx9/rbmap.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(addrlib_libamdgpu_addrlib_la_CPPFLAGS) $(CPPFLAGS) $(addrlib_libamdgpu_addrlib_la_CXXFLAGS) $(CXXFLAGS) -MT addrlib/gfx9/addrlib_libamdgpu_addrlib_la-rbmap.lo -MD -MP -MF addrlib/gfx9/$(DEPDIR)/addrlib_libamdgpu_addrlib_la-rbmap.Tpo -c -o addrlib/gfx9/addrlib_libamdgpu_addrlib_la-rbmap.lo `test -f 'addrlib/gfx9/rbmap.cpp' || echo '$(srcdir)/'`addrlib/gfx9/rbmap.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) addrlib/gfx9/$(DEPDIR)/addrlib_libamdgpu_addrlib_la-rbmap.Tpo addrlib/gfx9/$(DEPDIR)/addrlib_libamdgpu_addrlib_la-rbmap.Plo
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='addrlib/gfx9/rbmap.cpp' object='addrlib/gfx9/addrlib_libamdgpu_addrlib_la-rbmap.lo' libtool=yes @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(addrlib_libamdgpu_addrlib_la_CPPFLAGS) $(CPPFLAGS) $(addrlib_libamdgpu_addrlib_la_CXXFLAGS) $(CXXFLAGS) -c -o addrlib/gfx9/addrlib_libamdgpu_addrlib_la-rbmap.lo `test -f 'addrlib/gfx9/rbmap.cpp' || echo '$(srcdir)/'`addrlib/gfx9/rbmap.cpp
 
 addrlib/r800/addrlib_libamdgpu_addrlib_la-ciaddrlib.lo: addrlib/r800/ciaddrlib.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(addrlib_libamdgpu_addrlib_la_CPPFLAGS) $(CPPFLAGS) $(addrlib_libamdgpu_addrlib_la_CXXFLAGS) $(CXXFLAGS) -MT addrlib/r800/addrlib_libamdgpu_addrlib_la-ciaddrlib.lo -MD -MP -MF addrlib/r800/$(DEPDIR)/addrlib_libamdgpu_addrlib_la-ciaddrlib.Tpo -c -o addrlib/r800/addrlib_libamdgpu_addrlib_la-ciaddrlib.lo `test -f 'addrlib/r800/ciaddrlib.cpp' || echo '$(srcdir)/'`addrlib/r800/ciaddrlib.cpp

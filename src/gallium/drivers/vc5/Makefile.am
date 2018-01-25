@@ -31,10 +31,26 @@ AM_CFLAGS = \
 	$(VALGRIND_CFLAGS) \
 	$()
 
-noinst_LTLIBRARIES = libvc5.la
+noinst_LTLIBRARIES = \
+	libvc5.la \
+	libvc5_v33.la \
+	libvc5_v41.la \
+	$()
+
+libvc5_v33_la_SOURCES = $(VC5_PER_VERSION_SOURCES)
+libvc5_v33_la_CFLAGS = $(AM_CFLAGS) -DV3D_VERSION=33
+
+libvc5_v41_la_SOURCES = $(VC5_PER_VERSION_SOURCES)
+libvc5_v41_la_CFLAGS = $(AM_CFLAGS) -DV3D_VERSION=41
 
 libvc5_la_SOURCES = $(C_SOURCES)
 
 libvc5_la_LDFLAGS = \
 	$(VC5_SIMULATOR_LIBS) \
 	$(NULL)
+libvc5_la_LIBADD = \
+	libvc5_v33.la \
+	libvc5_v41.la \
+	$()
+
+EXTRA_DIST = meson.build

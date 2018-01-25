@@ -127,7 +127,7 @@ brw_codegen_ff_gs_prog(struct brw_context *brw,
       }
    }
 
-   brw_compact_instructions(&c.func, 0, 0, NULL);
+   brw_compact_instructions(&c.func, 0, NULL);
 
    /* get the program
     */

@@ -48,4 +48,4 @@ libpipe_loader_dynamic_la_LIBADD = \
 	$(top_builddir)/src/loader/libloader.la \
 	$(top_builddir)/src/util/libxmlconfig.la
 
-EXTRA_DIST = SConscript
+EXTRA_DIST = SConscript meson.build

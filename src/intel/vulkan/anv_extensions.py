@@ -49,6 +49,7 @@ class Extension:
 # and dEQP-VK.api.info.device fail due to the duplicated strings.
 EXTENSIONS = [
     Extension('VK_ANDROID_native_buffer',                 5, 'ANDROID'),
+    Extension('VK_KHR_16bit_storage',                     1, False),
     Extension('VK_KHR_bind_memory2',                      1, True),
     Extension('VK_KHR_dedicated_allocation',              1, True),
     Extension('VK_KHR_descriptor_update_template',        1, True),
@@ -84,6 +85,7 @@ EXTENSIONS = [
     Extension('VK_KHR_xlib_surface',                      6, 'VK_USE_PLATFORM_XLIB_KHR'),
     Extension('VK_KHX_multiview',                         1, True),
     Extension('VK_EXT_debug_report',                      8, True),
+    Extension('VK_EXT_external_memory_dma_buf',           1, True),
 ]
 
 class VkVersion:
@@ -110,7 +112,8 @@ class VkVersion:
         return '.'.join(ver_list)
 
     def c_vk_version(self):
-        ver_list = [str(self.major), str(self.minor), str(self.patch)]
+        patch = self.patch if self.patch is not None else 0
+        ver_list = [str(self.major), str(self.minor), str(patch)]
         return 'VK_MAKE_VERSION(' + ', '.join(ver_list) + ')'
 
     def __int_ver(self):
@@ -128,157 +131,3 @@ class VkVersion:
         return self.__int_ver().__cmp__(other.__int_ver())
 
 MAX_API_VERSION = VkVersion(MAX_API_VERSION)
-
-def _init_exts_from_xml(xml):
-    """ Walk the Vulkan XML and fill out extra extension information. """
-
-    xml = et.parse(xml)
-
-    ext_name_map = {}
-    for ext in EXTENSIONS:
-        ext_name_map[ext.name] = ext
-
-    for ext_elem in xml.findall('.extensions/extension'):
-        ext_name = ext_elem.attrib['name']
-        if ext_name not in ext_name_map:
-            continue
-
-        # Workaround for VK_ANDROID_native_buffer. Its <extension> element in
-        # vk.xml lists it as supported="disabled" and provides only a stub
-        # definition.  Its <extension> element in Mesa's custom
-        # vk_android_native_buffer.xml, though, lists it as
-        # supported='android-vendor' and fully defines the extension. We want
-        # to skip the <extension> element in vk.xml.
-        if ext_elem.attrib['supported'] == 'disabled':
-            assert ext_name == 'VK_ANDROID_native_buffer'
-            continue
-
-        ext = ext_name_map[ext_name]
-        ext.type = ext_elem.attrib['type']
-
-_TEMPLATE = COPYRIGHT + """
-#include "anv_private.h"
-
-#include "vk_util.h"
-
-/* Convert the VK_USE_PLATFORM_* defines to booleans */
-%for platform in ['ANDROID', 'WAYLAND', 'XCB', 'XLIB']:
-#ifdef VK_USE_PLATFORM_${platform}_KHR
-#   undef VK_USE_PLATFORM_${platform}_KHR
-#   define VK_USE_PLATFORM_${platform}_KHR true
-#else
-#   define VK_USE_PLATFORM_${platform}_KHR false
-#endif
-%endfor
-
-/* And ANDROID too */
-#ifdef ANDROID
-#   undef ANDROID
-#   define ANDROID true
-#else
-#   define ANDROID false
-#endif
-
-#define ANV_HAS_SURFACE (VK_USE_PLATFORM_WAYLAND_KHR || \\
-                         VK_USE_PLATFORM_XCB_KHR || \\
-                         VK_USE_PLATFORM_XLIB_KHR)
-
-bool
-anv_instance_extension_supported(const char *name)
-{
-%for ext in instance_extensions:
-    if (strcmp(name, "${ext.name}") == 0)
-        return ${ext.enable};
-%endfor
-    return false;
-}
-
-VkResult anv_EnumerateInstanceExtensionProperties(
-    const char*                                 pLayerName,
-    uint32_t*                                   pPropertyCount,
-    VkExtensionProperties*                      pProperties)
-{
-    VK_OUTARRAY_MAKE(out, pProperties, pPropertyCount);
-
-%for ext in instance_extensions:
-    if (${ext.enable}) {
-        vk_outarray_append(&out, prop) {
-            *prop = (VkExtensionProperties) {
-                .extensionName = "${ext.name}",
-                .specVersion = ${ext.ext_version},
-            };
-        }
-    }
-%endfor
-
-    return vk_outarray_status(&out);
-}
-
-uint32_t
-anv_physical_device_api_version(struct anv_physical_device *dev)
-{
-    return ${MAX_API_VERSION.c_vk_version()};
-}
-
-bool
-anv_physical_device_extension_supported(struct anv_physical_device *device,
-                                        const char *name)
-{
-%for ext in device_extensions:
-    if (strcmp(name, "${ext.name}") == 0)
-        return ${ext.enable};
-%endfor
-    return false;
-}
-
-VkResult anv_EnumerateDeviceExtensionProperties(
-    VkPhysicalDevice                            physicalDevice,
-    const char*                                 pLayerName,
-    uint32_t*                                   pPropertyCount,
-    VkExtensionProperties*                      pProperties)
-{
-    ANV_FROM_HANDLE(anv_physical_device, device, physicalDevice);
-    VK_OUTARRAY_MAKE(out, pProperties, pPropertyCount);
-    (void)device;
-
-%for ext in device_extensions:
-    if (${ext.enable}) {
-        vk_outarray_append(&out, prop) {
-            *prop = (VkExtensionProperties) {
-                .extensionName = "${ext.name}",
-                .specVersion = ${ext.ext_version},
-            };
-        }
-    }
-%endfor
-
-    return vk_outarray_status(&out);
-}
-"""
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--out', help='Output C file.', required=True)
-    parser.add_argument('--xml',
-                        help='Vulkan API XML file.',
-                        required=True,
-                        action='append',
-                        dest='xml_files')
-    args = parser.parse_args()
-
-    for filename in args.xml_files:
-        _init_exts_from_xml(filename)
-
-    for ext in EXTENSIONS:
-        assert ext.type == 'instance' or ext.type == 'device'
-
-    template_env = {
-        'MAX_API_VERSION': MAX_API_VERSION,
-        'instance_extensions': [e for e in EXTENSIONS if e.type == 'instance'],
-        'device_extensions': [e for e in EXTENSIONS if e.type == 'device'],
-    }
-
-    from mako.template import Template
-
-    with open(args.out, 'w') as f:
-        f.write(Template(_TEMPLATE).render(**template_env))

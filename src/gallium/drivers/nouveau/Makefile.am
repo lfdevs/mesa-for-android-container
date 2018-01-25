@@ -50,4 +50,4 @@ nouveau_compiler_LDADD = \
 	$(top_builddir)/src/util/libmesautil.la \
 	$(GALLIUM_COMMON_LIB_DEPS)
 
-EXTRA_DIST = codegen/lib nvc0/mme
+EXTRA_DIST = codegen/lib nvc0/mme meson.build

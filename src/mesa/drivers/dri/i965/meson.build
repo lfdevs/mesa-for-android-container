@@ -1,0 +1,183 @@
+# Copyright © 2017 Intel Corporation
+
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
+files_i965 = files(
+  'brw_binding_tables.c',
+  'brw_blorp.c',
+  'brw_blorp.h',
+  'brw_bufmgr.c',
+  'brw_bufmgr.h',
+  'brw_clear.c',
+  'brw_clip.c',
+  'brw_compute.c',
+  'brw_conditional_render.c',
+  'brw_context.c',
+  'brw_context.h',
+  'brw_cs.c',
+  'brw_cs.h',
+  'brw_curbe.c',
+  'brw_defines.h',
+  'brw_disk_cache.c',
+  'brw_draw.c',
+  'brw_draw.h',
+  'brw_draw_upload.c',
+  'brw_ff_gs.c',
+  'brw_ff_gs_emit.c',
+  'brw_ff_gs.h',
+  'brw_formatquery.c',
+  'brw_gs.c',
+  'brw_gs.h',
+  'brw_gs_surface_state.c',
+  'brw_link.cpp',
+  'brw_meta_util.c',
+  'brw_meta_util.h',
+  'brw_misc_state.c',
+  'brw_multisample_state.h',
+  'brw_nir_uniforms.cpp',
+  'brw_object_purgeable.c',
+  'brw_pipe_control.c',
+  'brw_performance_query.h',
+  'brw_performance_query.c',
+  'brw_program.c',
+  'brw_program.h',
+  'brw_program_binary.c',
+  'brw_program_cache.c',
+  'brw_primitive_restart.c',
+  'brw_queryobj.c',
+  'brw_reset.c',
+  'brw_sf.c',
+  'brw_state.h',
+  'brw_state_upload.c',
+  'brw_structs.h',
+  'brw_surface_formats.c',
+  'brw_sync.c',
+  'brw_tcs.c',
+  'brw_tcs_surface_state.c',
+  'brw_tes.c',
+  'brw_tes_surface_state.c',
+  'brw_urb.c',
+  'brw_util.c',
+  'brw_util.h',
+  'brw_vs.c',
+  'brw_vs.h',
+  'brw_vs_surface_state.c',
+  'brw_wm.c',
+  'brw_wm.h',
+  'brw_wm_surface_state.c',
+  'gen4_blorp_exec.h',
+  'gen6_clip_state.c',
+  'gen6_constant_state.c',
+  'gen6_depth_state.c',
+  'gen6_multisample_state.c',
+  'gen6_queryobj.c',
+  'gen6_sampler_state.c',
+  'gen6_sol.c',
+  'gen6_urb.c',
+  'gen7_l3_state.c',
+  'gen7_misc_state.c',
+  'gen7_sol_state.c',
+  'gen7_urb.c',
+  'gen8_depth_state.c',
+  'gen8_multisample_state.c',
+  'hsw_queryobj.c',
+  'hsw_sol.c',
+  'intel_batchbuffer.c',
+  'intel_batchbuffer.h',
+  'intel_blit.c',
+  'intel_blit.h',
+  'intel_buffer_objects.c',
+  'intel_buffer_objects.h',
+  'intel_buffers.c',
+  'intel_buffers.h',
+  'intel_copy_image.c',
+  'intel_extensions.c',
+  'intel_fbo.c',
+  'intel_fbo.h',
+  'intel_image.h',
+  'intel_mipmap_tree.c',
+  'intel_mipmap_tree.h',
+  'intel_pixel_bitmap.c',
+  'intel_pixel.c',
+  'intel_pixel_copy.c',
+  'intel_pixel_draw.c',
+  'intel_pixel.h',
+  'intel_pixel_read.c',
+  'intel_screen.c',
+  'intel_screen.h',
+  'intel_state.c',
+  'intel_tex.c',
+  'intel_tex_copy.c',
+  'intel_tex.h',
+  'intel_tex_image.c',
+  'intel_tex_obj.h',
+  'intel_tex_validate.c',
+  'intel_tiled_memcpy.c',
+  'intel_tiled_memcpy.h',
+  'intel_upload.c',
+  'libdrm_macros.h',
+)
+
+i965_gen_libs = []
+foreach v : ['40', '45', '50', '60', '70', '75', '80', '90', '100']
+  i965_gen_libs += static_library(
+    'libi965_gen@0@'.format(v),
+    ['genX_blorp_exec.c', 'genX_state_upload.c', gen_xml_pack],
+    include_directories : [inc_common, inc_intel, inc_dri_common],
+    c_args : [
+      c_vis_args, no_override_init_args, '-msse2',
+      '-DGEN_VERSIONx10=@0@'.format(v),
+    ],
+    dependencies : [dep_libdrm, idep_nir_headers],
+  )
+endforeach
+
+oa_generator = generator(
+  prog_python2,
+  arguments : [
+    '@CURRENT_SOURCE_DIR@/brw_oa.py', '@INPUT@', '--chipset', '@EXTRA_ARGS@',
+    '--code', '@OUTPUT0@', '--header', '@OUTPUT1@',
+  ],
+  output : ['@BASENAME@.c', '@BASENAME@.h'],
+)
+
+i965_oa_sources = []
+foreach hw : ['hsw', 'bdw', 'chv', 'sklgt2', 'sklgt3', 'sklgt4', 'bxt',
+              'kblgt2', 'kblgt3', 'glk', 'cflgt2', 'cflgt3']
+  _xml = 'brw_oa_@0@.xml'.format(hw)
+  i965_oa_sources += oa_generator.process(_xml, extra_args : hw)
+endforeach
+
+libi965 = static_library(
+  'i965',
+  [files_i965, i965_oa_sources, ir_expression_operation_h,
+   xmlpool_options_h],
+  include_directories : [
+    inc_common, inc_intel, inc_dri_common, inc_util, inc_drm_uapi,
+  ],
+  c_args : [c_vis_args, no_override_init_args, '-msse2'],
+  cpp_args : [cpp_vis_args, '-msse2'],
+  link_with : [
+    i965_gen_libs, libintel_common, libisl, libintel_compiler, libblorp,
+  ],
+  dependencies : [dep_libdrm, dep_valgrind, idep_nir_headers],
+)
+
+dri_drivers += libi965
+dri_link += 'i965_dri.so'

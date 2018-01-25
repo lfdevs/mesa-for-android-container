@@ -400,6 +400,20 @@ enum opcode {
    SHADER_OPCODE_TYPED_SURFACE_WRITE,
    SHADER_OPCODE_TYPED_SURFACE_WRITE_LOGICAL,
 
+   SHADER_OPCODE_RND_MODE,
+
+   /**
+    * Byte scattered write/read opcodes.
+    *
+    * LOGICAL opcodes are eventually translated to the matching non-LOGICAL
+    * opcode, but instead of taking a single payload blog they expect their
+    * arguments separately as individual sources, like untyped write/read.
+    */
+   SHADER_OPCODE_BYTE_SCATTERED_READ,
+   SHADER_OPCODE_BYTE_SCATTERED_READ_LOGICAL,
+   SHADER_OPCODE_BYTE_SCATTERED_WRITE,
+   SHADER_OPCODE_BYTE_SCATTERED_WRITE_LOGICAL,
+
    SHADER_OPCODE_MEMORY_FENCE,
 
    SHADER_OPCODE_GEN4_SCRATCH_READ,
@@ -437,6 +451,8 @@ enum opcode {
     */
    SHADER_OPCODE_BROADCAST,
 
+   SHADER_OPCODE_GET_BUFFER_SIZE,
+
    VEC4_OPCODE_MOV_BYTES,
    VEC4_OPCODE_PACK_BYTES,
    VEC4_OPCODE_UNPACK_UNIFORM,
@@ -465,7 +481,6 @@ enum opcode {
    FS_OPCODE_VARYING_PULL_CONSTANT_LOAD_GEN4,
    FS_OPCODE_VARYING_PULL_CONSTANT_LOAD_GEN7,
    FS_OPCODE_VARYING_PULL_CONSTANT_LOAD_LOGICAL,
-   FS_OPCODE_GET_BUFFER_SIZE,
    FS_OPCODE_MOV_DISPATCH_TO_FLAGS,
    FS_OPCODE_DISCARD_JUMP,
    FS_OPCODE_SET_SAMPLE_ID,
@@ -481,8 +496,6 @@ enum opcode {
    VS_OPCODE_PULL_CONSTANT_LOAD,
    VS_OPCODE_PULL_CONSTANT_LOAD_GEN7,
    VS_OPCODE_SET_SIMD4X2_HEADER_GEN9,
-
-   VS_OPCODE_GET_BUFFER_SIZE,
 
    VS_OPCODE_UNPACK_FLAGS_SIMD4X2,
 
@@ -1237,5 +1250,30 @@ enum brw_message_target {
 
 /* R0 */
 # define GEN7_GS_PAYLOAD_INSTANCE_ID_SHIFT		27
+
+/* CR0.0[5:4] Floating-Point Rounding Modes
+ *  Skylake PRM, Volume 7 Part 1, "Control Register", page 756
+ */
+
+#define BRW_CR0_RND_MODE_MASK     0x30
+#define BRW_CR0_RND_MODE_SHIFT    4
+
+enum PACKED brw_rnd_mode {
+   BRW_RND_MODE_RTNE = 0,  /* Round to Nearest or Even */
+   BRW_RND_MODE_RU = 1,    /* Round Up, toward +inf */
+   BRW_RND_MODE_RD = 2,    /* Round Down, toward -inf */
+   BRW_RND_MODE_RTZ = 3,   /* Round Toward Zero */
+   BRW_RND_MODE_UNSPECIFIED,  /* Unspecified rounding mode */
+};
+
+/* MDC_DS - Data Size Message Descriptor Control Field
+ * Skylake PRM, Volume 2d, page 129
+ *
+ * Specifies the number of Bytes to be read or written per Dword used at
+ * byte_scattered read/write and byte_scaled read/write messages.
+ */
+#define GEN7_BYTE_SCATTERED_DATA_ELEMENT_BYTE     0
+#define GEN7_BYTE_SCATTERED_DATA_ELEMENT_WORD     1
+#define GEN7_BYTE_SCATTERED_DATA_ELEMENT_DWORD    2
 
 #endif /* BRW_EU_DEFINES_H */

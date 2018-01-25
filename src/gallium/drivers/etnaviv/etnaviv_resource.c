@@ -209,20 +209,28 @@ etna_resource_alloc(struct pipe_screen *pscreen, unsigned layout,
       return NULL;
    }
 
-   /* If we have the TEXTURE_HALIGN feature, we can always align to the
-    * resolve engine's width.  If not, we must not align resources used
-    * only for textures. */
-   bool rs_align = VIV_FEATURE(screen, chipMinorFeatures1, TEXTURE_HALIGN) ||
-                   !etna_resource_sampler_only(templat);
-
    /* Determine needed padding (alignment of height/width) */
    unsigned paddingX = 0, paddingY = 0;
    unsigned halign = TEXTURE_HALIGN_FOUR;
-   etna_layout_multiple(layout, screen->specs.pixel_pipes, rs_align, &paddingX,
-                        &paddingY, &halign);
-   assert(paddingX && paddingY);
+   if (!util_format_is_compressed(templat->format)) {
+      /* If we have the TEXTURE_HALIGN feature, we can always align to the
+       * resolve engine's width.  If not, we must not align resources used
+       * only for textures. If this GPU uses the BLT engine, never do RS align.
+       */
+      bool rs_align = screen->specs.use_blt ? false : (
+                         VIV_FEATURE(screen, chipMinorFeatures1, TEXTURE_HALIGN) ||
+                         !etna_resource_sampler_only(templat));
+      etna_layout_multiple(layout, screen->specs.pixel_pipes, rs_align, &paddingX,
+                           &paddingY, &halign);
+      assert(paddingX && paddingY);
+   } else {
+      /* Compressed textures are padded to their block size, but we don't have
+       * to do anything special for that. */
+      paddingX = 1;
+      paddingY = 1;
+   }
 
-   if (templat->target != PIPE_BUFFER)
+   if (!screen->specs.use_blt && templat->target != PIPE_BUFFER)
       etna_adjust_rs_align(screen->specs.pixel_pipes, NULL, &paddingY);
 
    if (templat->bind & PIPE_BIND_SCANOUT) {
@@ -231,7 +239,7 @@ etna_resource_alloc(struct pipe_screen *pscreen, unsigned layout,
       struct winsys_handle handle;
 
       /* pad scanout buffer size to be compatible with the RS */
-      if (modifier == DRM_FORMAT_MOD_LINEAR)
+      if (!screen->specs.use_blt && modifier == DRM_FORMAT_MOD_LINEAR)
          etna_adjust_rs_align(screen->specs.pixel_pipes, &paddingX, &paddingY);
 
       scanout_templat.width0 = align(scanout_templat.width0, paddingX);
@@ -514,12 +522,14 @@ etna_resource_from_handle(struct pipe_screen *pscreen,
                         VIV_FEATURE(screen, chipMinorFeatures1, TEXTURE_HALIGN),
                         &paddingX, &paddingY, &rsc->halign);
 
-   etna_adjust_rs_align(screen->specs.pixel_pipes, NULL, &paddingY);
+   if (!screen->specs.use_blt)
+      etna_adjust_rs_align(screen->specs.pixel_pipes, NULL, &paddingY);
    level->padded_width = align(level->width, paddingX);
    level->padded_height = align(level->height, paddingY);
 
    level->layer_stride = level->stride * util_format_get_nblocksy(prsc->format,
                                                                   level->padded_height);
+   level->size = level->layer_stride;
 
    /* The DDX must give us a BO which conforms to our padding size.
     * The stride of the BO must be greater or equal to our padded
@@ -621,6 +631,19 @@ etna_resource_used(struct etna_context *ctx, struct pipe_resource *prsc,
    list_delinit(&rsc->list);
    list_addtail(&rsc->list, &ctx->used_resources);
    rsc->pending_ctx = ctx;
+}
+
+bool
+etna_resource_has_valid_ts(struct etna_resource *rsc)
+{
+   if (!rsc->ts_bo)
+      return false;
+
+   for (int level = 0; level <= rsc->base.last_level; level++)
+      if (rsc->levels[level].ts_valid)
+         return true;
+
+   return false;
 }
 
 void

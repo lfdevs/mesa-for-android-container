@@ -401,6 +401,7 @@ enum sched_queue_id {
 	SQ_ALU,
 	SQ_TEX,
 	SQ_VTX,
+	SQ_GDS,
 
 	SQ_NUM
 };
@@ -580,6 +581,11 @@ struct bc_fetch {
 	unsigned mega_fetch:1;
 
 	unsigned src2_gpr:7; /* for GDS */
+	unsigned alloc_consume:1;
+	unsigned uav_id:4;
+	unsigned uav_index_mode:2;
+	unsigned bcast_first_req:1;
+
 	void set_op(unsigned op) { this->op = op; op_ptr = r600_isa_fetch(op); }
 };
 
@@ -705,6 +711,9 @@ public:
 			mask = 0x0F;
 		if (!is_cayman() && (slot_flags & AF_S))
 			mask |= 0x10;
+		/* Force LDS_IDX ops into SLOT_X */
+		if (op_ptr->opcode[0] == -1 && ((op_ptr->opcode[1] & 0xFF) == 0x11))
+			mask = 0x01;
 		return mask;
 	}
 
@@ -714,6 +723,10 @@ public:
 
 	bool is_kcache_sel(unsigned sel) {
 		return ((sel >= 128 && sel < 192) || (sel >= 256 && sel < 320));
+	}
+
+	bool is_lds_oq(unsigned sel) {
+		return (sel >= 0xdb && sel <= 0xde);
 	}
 
 	const char * get_hw_class_name();
@@ -966,6 +979,7 @@ private:
 	int build_fetch_clause(cf_node *n);
 	int build_fetch_tex(fetch_node *n);
 	int build_fetch_vtx(fetch_node *n);
+	int build_fetch_gds(fetch_node *n);
 };
 
 } // namespace r600_sb

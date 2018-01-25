@@ -1107,6 +1107,16 @@ struct __DRIdri2LoaderExtensionRec {
 #define __DRI_CTX_PRIORITY_HIGH			2
 
 /**
+ * \name Context release behaviors.
+ */
+/*@{*/
+#define __DRI_CTX_ATTRIB_RELEASE_BEHAVIOR	5
+
+#define __DRI_CTX_RELEASE_BEHAVIOR_NONE         0
+#define __DRI_CTX_RELEASE_BEHAVIOR_FLUSH        1
+/*@}*/
+
+/**
  * \name Reasons that __DRIdri2Extension::createContextAttribs might fail
  */
 /*@{*/
@@ -1216,6 +1226,7 @@ struct __DRIdri2ExtensionRec {
 #define __DRI_IMAGE_FORMAT_ARGB1555     0x100c
 #define __DRI_IMAGE_FORMAT_R16          0x100d
 #define __DRI_IMAGE_FORMAT_GR1616       0x100e
+#define __DRI_IMAGE_FORMAT_YUYV         0x100f
 
 #define __DRI_IMAGE_USE_SHARE		0x0001
 #define __DRI_IMAGE_USE_SCANOUT		0x0002
@@ -1251,7 +1262,15 @@ struct __DRIdri2ExtensionRec {
 #define __DRI_IMAGE_FOURCC_XRGB8888	0x34325258
 #define __DRI_IMAGE_FOURCC_ABGR8888	0x34324241
 #define __DRI_IMAGE_FOURCC_XBGR8888	0x34324258
-#define __DRI_IMAGE_FOURCC_SARGB8888    0x83324258
+#define __DRI_IMAGE_FOURCC_SARGB8888	0x83324258
+#define __DRI_IMAGE_FOURCC_ARGB2101010	0x30335241
+#define __DRI_IMAGE_FOURCC_XRGB2101010	0x30335258
+#define __DRI_IMAGE_FOURCC_ABGR2101010	0x30334241
+#define __DRI_IMAGE_FOURCC_XBGR2101010	0x30334258
+#define __DRI_IMAGE_FOURCC_RGBA1010102	0x30334152
+#define __DRI_IMAGE_FOURCC_RGBX1010102	0x30335852
+#define __DRI_IMAGE_FOURCC_BGRA1010102	0x30334142
+#define __DRI_IMAGE_FOURCC_BGRX1010102	0x30335842
 #define __DRI_IMAGE_FOURCC_YUV410	0x39565559
 #define __DRI_IMAGE_FOURCC_YUV411	0x31315559
 #define __DRI_IMAGE_FOURCC_YUV420	0x32315559
@@ -1714,6 +1733,21 @@ struct __DRIrobustnessExtensionRec {
 typedef struct __DRInoErrorExtensionRec {
    __DRIextension base;
 } __DRInoErrorExtension;
+
+/*
+ * Flush control driver extension.
+ *
+ * Existence of this extension means the driver can accept the
+ * \c __DRI_CTX_ATTRIB_RELEASE_BEHAVIOR attribute in
+ * \c __DRIdri2ExtensionRec::createContextAttribs.
+ */
+#define __DRI2_FLUSH_CONTROL "DRI_FlushControl"
+#define __DRI2_FLUSH_CONTROL_VERSION 1
+
+typedef struct __DRI2flushControlExtensionRec __DRI2flushControlExtension;
+struct __DRI2flushControlExtensionRec {
+   __DRIextension base;
+};
 
 /**
  * DRI config options extension.

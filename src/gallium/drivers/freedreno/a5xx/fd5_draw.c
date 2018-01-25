@@ -54,7 +54,7 @@ draw_impl(struct fd_context *ctx, struct fd_ringbuffer *ring,
 
 	OUT_PKT4(ring, REG_A5XX_VFD_INDEX_OFFSET, 2);
 	OUT_RING(ring, info->index_size ? info->index_bias : info->start); /* VFD_INDEX_OFFSET */
-	OUT_RING(ring, info->start_instance);   /* ??? UNKNOWN_2209 */
+	OUT_RING(ring, info->start_instance);   /* VFD_INSTANCE_START_OFFSET */
 
 	OUT_PKT4(ring, REG_A5XX_PC_RESTART_INDEX, 1);
 	OUT_RING(ring, info->primitive_restart ? /* PC_RESTART_INDEX */
@@ -194,7 +194,7 @@ fd5_clear_lrz(struct fd_batch *batch, struct fd_resource *zsbuf, double depth)
 	// draw
 
 	if (!batch->lrz_clear) {
-		batch->lrz_clear = fd_ringbuffer_new(batch->ctx->screen->pipe, 0x1000);
+		batch->lrz_clear = fd_ringbuffer_new(batch->ctx->pipe, 0x1000);
 		fd_ringbuffer_set_parent(batch->lrz_clear, batch->gmem);
 	}
 

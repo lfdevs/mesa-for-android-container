@@ -134,6 +134,21 @@ struct ir3_register {
 	};
 };
 
+/*
+ * Stupid/simple growable array implementation:
+ */
+#define DECLARE_ARRAY(type, name) \
+	unsigned name ## _count, name ## _sz; \
+	type * name;
+
+#define array_insert(ctx, arr, val) do { \
+		if (arr ## _count == arr ## _sz) { \
+			arr ## _sz = MAX2(2 * arr ## _sz, 16); \
+			arr = reralloc_size(ctx, arr, arr ## _sz * sizeof(arr[0])); \
+		} \
+		arr[arr ##_count++] = val; \
+	} while (0)
+
 struct ir3_instruction {
 	struct ir3_block *block;
 	opc_t opc;
@@ -226,8 +241,16 @@ struct ir3_instruction {
 			type_t type;
 			int src_offset;
 			int dst_offset;
-			int iim_val;          /* for ldgb/stgb, # of components */
+			int iim_val : 3;      /* for ldgb/stgb, # of components */
+			int d : 3;
+			bool typed : 1;
 		} cat6;
+		struct {
+			unsigned w : 1;       /* write */
+			unsigned r : 1;       /* read */
+			unsigned l : 1;       /* local */
+			unsigned g : 1;       /* global */
+		} cat7;
 		/* for meta-instructions, just used to hold extra data
 		 * before instruction scheduling, etc
 		 */
@@ -303,6 +326,40 @@ struct ir3_instruction {
 	 */
 	struct ir3_instruction *address;
 
+	/* Tracking for additional dependent instructions.  Used to handle
+	 * barriers, WAR hazards for arrays/SSBOs/etc.
+	 */
+	DECLARE_ARRAY(struct ir3_instruction *, deps);
+
+	/*
+	 * From PoV of instruction scheduling, not execution (ie. ignores global/
+	 * local distinction):
+	 *                            shared  image  atomic  SSBO  everything
+	 *   barrier()/            -   R/W     R/W    R/W     R/W       X
+	 *     groupMemoryBarrier()
+	 *   memoryBarrier()       -           R/W    R/W
+	 *     (but only images declared coherent?)
+	 *   memoryBarrierAtomic() -                  R/W
+	 *   memoryBarrierBuffer() -                          R/W
+	 *   memoryBarrierImage()  -           R/W
+	 *   memoryBarrierShared() -   R/W
+	 *
+	 * TODO I think for SSBO/image/shared, in cases where we can determine
+	 * which variable is accessed, we don't need to care about accesses to
+	 * different variables (unless declared coherent??)
+	 */
+	enum {
+		IR3_BARRIER_EVERYTHING = 1 << 0,
+		IR3_BARRIER_SHARED_R   = 1 << 1,
+		IR3_BARRIER_SHARED_W   = 1 << 2,
+		IR3_BARRIER_IMAGE_R    = 1 << 3,
+		IR3_BARRIER_IMAGE_W    = 1 << 4,
+		IR3_BARRIER_BUFFER_R   = 1 << 5,
+		IR3_BARRIER_BUFFER_W   = 1 << 6,
+		IR3_BARRIER_ARRAY_R    = 1 << 7,
+		IR3_BARRIER_ARRAY_W    = 1 << 8,
+	} barrier_class, barrier_conflict;
+
 	/* Entry in ir3_block's instruction list: */
 	struct list_head node;
 
@@ -342,21 +399,6 @@ static inline int ir3_neighbor_count(struct ir3_instruction *instr)
 
 	return num;
 }
-
-/*
- * Stupid/simple growable array implementation:
- */
-#define DECLARE_ARRAY(type, name) \
-	unsigned name ## _count, name ## _sz; \
-	type * name;
-
-#define array_insert(ctx, arr, val) do { \
-		if (arr ## _count == arr ## _sz) { \
-			arr ## _sz = MAX2(2 * arr ## _sz, 16); \
-			arr = reralloc_size(ctx, arr, arr ## _sz * sizeof(arr[0])); \
-		} \
-		arr[arr ##_count++] = val; \
-	} while (0)
 
 struct ir3 {
 	struct ir3_compiler *compiler;
@@ -409,16 +451,13 @@ struct ir3_array {
 
 	nir_register *r;
 
-	/* We track the last write and last access (read or write) to
-	 * setup dependencies on instructions that read or write the
-	 * array.  Reads can be re-ordered wrt. other reads, but should
-	 * not be re-ordered wrt. to writes.  Writes cannot be reordered
-	 * wrt. any other access to the array.
-	 *
-	 * So array reads depend on last write, and array writes depend
-	 * on the last access.
+	/* To avoid array write's from getting DCE'd, keep track of the
+	 * most recent write.  Any array access depends on the most
+	 * recent write.  This way, nothing depends on writes after the
+	 * last read.  But all the writes that happen before that have
+	 * something depending on them
 	 */
-	struct ir3_instruction *last_write, *last_access;
+	struct ir3_instruction *last_write;
 
 	/* extra stuff used in RA pass: */
 	unsigned base;      /* base vreg name */
@@ -485,6 +524,7 @@ struct ir3_instruction * ir3_instr_create(struct ir3_block *block, opc_t opc);
 struct ir3_instruction * ir3_instr_create2(struct ir3_block *block,
 		opc_t opc, int nreg);
 struct ir3_instruction * ir3_instr_clone(struct ir3_instruction *instr);
+void ir3_instr_add_dep(struct ir3_instruction *instr, struct ir3_instruction *dep);
 const char *ir3_instr_name(struct ir3_instruction *instr);
 
 struct ir3_register * ir3_reg_create(struct ir3_instruction *instr,
@@ -563,7 +603,21 @@ static inline bool is_nop(struct ir3_instruction *instr)
  */
 static inline bool is_same_type_mov(struct ir3_instruction *instr)
 {
-	struct ir3_register *dst = instr->regs[0];
+	struct ir3_register *dst;
+
+	switch (instr->opc) {
+	case OPC_MOV:
+		if (instr->cat1.src_type != instr->cat1.dst_type)
+			return false;
+		break;
+	case OPC_ABSNEG_F:
+	case OPC_ABSNEG_S:
+		break;
+	default:
+		return false;
+	}
+
+	dst = instr->regs[0];
 
 	/* mov's that write to a0.x or p0.x are special: */
 	if (dst->num == regid(REG_P0, 0))
@@ -574,15 +628,7 @@ static inline bool is_same_type_mov(struct ir3_instruction *instr)
 	if (dst->flags & (IR3_REG_RELATIV | IR3_REG_ARRAY))
 		return false;
 
-	switch (instr->opc) {
-	case OPC_MOV:
-		return instr->cat1.src_type == instr->cat1.dst_type;
-	case OPC_ABSNEG_F:
-	case OPC_ABSNEG_S:
-		return true;
-	default:
-		return false;
-	}
+	return true;
 }
 
 static inline bool is_alu(struct ir3_instruction *instr)
@@ -605,6 +651,11 @@ static inline bool is_mem(struct ir3_instruction *instr)
 	return (opc_cat(instr->opc) == 6);
 }
 
+static inline bool is_barrier(struct ir3_instruction *instr)
+{
+	return (opc_cat(instr->opc) == 7);
+}
+
 static inline bool
 is_store(struct ir3_instruction *instr)
 {
@@ -614,6 +665,7 @@ is_store(struct ir3_instruction *instr)
 	switch (instr->opc) {
 	case OPC_STG:
 	case OPC_STGB:
+	case OPC_STIB:
 	case OPC_STP:
 	case OPC_STL:
 	case OPC_STLW:
@@ -873,6 +925,8 @@ static inline unsigned ir3_cat3_absneg(opc_t opc)
 	}
 }
 
+#define MASK(n) ((1 << (n)) - 1)
+
 /* iterator for an instructions's sources (reg), also returns src #: */
 #define foreach_src_n(__srcreg, __n, __instr) \
 	if ((__instr)->regs_count) \
@@ -885,25 +939,36 @@ static inline unsigned ir3_cat3_absneg(opc_t opc)
 
 static inline unsigned __ssa_src_cnt(struct ir3_instruction *instr)
 {
+	unsigned cnt = instr->regs_count + instr->deps_count;
 	if (instr->address)
-		return instr->regs_count + 1;
-	return instr->regs_count;
+		cnt++;
+	return cnt;
 }
 
 static inline struct ir3_instruction * __ssa_src_n(struct ir3_instruction *instr, unsigned n)
 {
-	if (n == (instr->regs_count + 0))
+	if (n == (instr->regs_count + instr->deps_count))
 		return instr->address;
+	if (n >= instr->regs_count)
+		return instr->deps[n - instr->regs_count];
 	return ssa(instr->regs[n]);
+}
+
+static inline bool __is_false_dep(struct ir3_instruction *instr, unsigned n)
+{
+	if (n == (instr->regs_count + instr->deps_count))
+		return false;
+	if (n >= instr->regs_count)
+		return true;
+	return false;
 }
 
 #define __src_cnt(__instr) ((__instr)->address ? (__instr)->regs_count : (__instr)->regs_count - 1)
 
 /* iterator for an instruction's SSA sources (instr), also returns src #: */
 #define foreach_ssa_src_n(__srcinst, __n, __instr) \
-	if ((__instr)->regs_count) \
-		for (unsigned __cnt = __ssa_src_cnt(__instr), __n = 0; __n < __cnt; __n++) \
-			if ((__srcinst = __ssa_src_n(__instr, __n)))
+	for (unsigned __cnt = __ssa_src_cnt(__instr), __n = 0; __n < __cnt; __n++) \
+		if ((__srcinst = __ssa_src_n(__instr, __n)))
 
 /* iterator for an instruction's SSA sources (instr): */
 #define foreach_ssa_src(__srcinst, __instr) \
@@ -928,6 +993,7 @@ void ir3_cp(struct ir3 *ir, struct ir3_shader_variant *so);
 void ir3_group(struct ir3 *ir);
 
 /* scheduling: */
+void ir3_sched_add_deps(struct ir3 *ir);
 int ir3_sched(struct ir3 *ir);
 
 /* register assignment: */
@@ -1048,11 +1114,30 @@ ir3_##name(struct ir3_block *block,                                      \
 	return instr;                                                        \
 }
 
+#define INSTR4F(f, name)                                                 \
+static inline struct ir3_instruction *                                   \
+ir3_##name##_##f(struct ir3_block *block,                                \
+		struct ir3_instruction *a, unsigned aflags,                      \
+		struct ir3_instruction *b, unsigned bflags,                      \
+		struct ir3_instruction *c, unsigned cflags,                      \
+		struct ir3_instruction *d, unsigned dflags)                      \
+{                                                                        \
+	struct ir3_instruction *instr =                                      \
+		ir3_instr_create2(block, OPC_##name, 5);                         \
+	ir3_reg_create(instr, 0, 0);   /* dst */                             \
+	ir3_reg_create(instr, 0, IR3_REG_SSA | aflags)->instr = a;           \
+	ir3_reg_create(instr, 0, IR3_REG_SSA | bflags)->instr = b;           \
+	ir3_reg_create(instr, 0, IR3_REG_SSA | cflags)->instr = c;           \
+	ir3_reg_create(instr, 0, IR3_REG_SSA | dflags)->instr = d;           \
+	instr->flags |= IR3_INSTR_##f;                                       \
+	return instr;                                                        \
+}
+
 /* cat0 instructions: */
-INSTR0(BR);
-INSTR0(JUMP);
-INSTR1(KILL);
-INSTR0(END);
+INSTR0(BR)
+INSTR0(JUMP)
+INSTR1(KILL)
+INSTR0(END)
 
 /* cat2 instructions, most 2 src but some 1 src: */
 INSTR2(ADD_F)
@@ -1164,20 +1249,40 @@ ir3_SAM(struct ir3_block *block, opc_t opc, type_t type,
 /* cat6 instructions: */
 INSTR2(LDLV)
 INSTR2(LDG)
+INSTR2(LDL)
 INSTR3(STG)
-INSTR3(LDGB);
-INSTR4(STGB);
-INSTR4(ATOMIC_ADD);
-INSTR4(ATOMIC_SUB);
-INSTR4(ATOMIC_XCHG);
-INSTR4(ATOMIC_INC);
-INSTR4(ATOMIC_DEC);
-INSTR4(ATOMIC_CMPXCHG);
-INSTR4(ATOMIC_MIN);
-INSTR4(ATOMIC_MAX);
-INSTR4(ATOMIC_AND);
-INSTR4(ATOMIC_OR);
-INSTR4(ATOMIC_XOR);
+INSTR3(STL)
+INSTR3(LDGB)
+INSTR4(STGB)
+INSTR4(STIB)
+INSTR1(RESINFO)
+INSTR1(RESFMT)
+INSTR2(ATOMIC_ADD)
+INSTR2(ATOMIC_SUB)
+INSTR2(ATOMIC_XCHG)
+INSTR2(ATOMIC_INC)
+INSTR2(ATOMIC_DEC)
+INSTR2(ATOMIC_CMPXCHG)
+INSTR2(ATOMIC_MIN)
+INSTR2(ATOMIC_MAX)
+INSTR2(ATOMIC_AND)
+INSTR2(ATOMIC_OR)
+INSTR2(ATOMIC_XOR)
+INSTR4F(G, ATOMIC_ADD)
+INSTR4F(G, ATOMIC_SUB)
+INSTR4F(G, ATOMIC_XCHG)
+INSTR4F(G, ATOMIC_INC)
+INSTR4F(G, ATOMIC_DEC)
+INSTR4F(G, ATOMIC_CMPXCHG)
+INSTR4F(G, ATOMIC_MIN)
+INSTR4F(G, ATOMIC_MAX)
+INSTR4F(G, ATOMIC_AND)
+INSTR4F(G, ATOMIC_OR)
+INSTR4F(G, ATOMIC_XOR)
+
+/* cat7 instructions: */
+INSTR0(BAR)
+INSTR0(FENCE)
 
 /* ************************************************************************* */
 /* split this out or find some helper to use.. like main/bitset.h.. */

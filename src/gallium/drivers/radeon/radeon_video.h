@@ -25,12 +25,6 @@
  *
  **************************************************************************/
 
-/*
- * Authors:
- *      Christian König <christian.koenig@amd.com>
- *
- */
-
 #ifndef RADEON_VIDEO_H
 #define RADEON_VIDEO_H
 
@@ -39,6 +33,8 @@
 
 #define RVID_ERR(fmt, args...) \
 	fprintf(stderr, "EE %s:%d %s UVD - "fmt, __FILE__, __LINE__, __func__, ##args)
+
+#define UVD_FW_1_66_16 ((1 << 24) | (66 << 16) | (16 << 8))
 
 /* video buffer representation */
 struct rvid_buffer
@@ -69,17 +65,5 @@ void si_vid_clear_buffer(struct pipe_context *context, struct rvid_buffer* buffe
 void si_vid_join_surfaces(struct r600_common_context *rctx,
 			  struct pb_buffer** buffers[VL_NUM_COMPONENTS],
 			  struct radeon_surf *surfaces[VL_NUM_COMPONENTS]);
-
-/* returns supported codecs and other parameters */
-int si_vid_get_video_param(struct pipe_screen *screen,
-			   enum pipe_video_profile profile,
-			   enum pipe_video_entrypoint entrypoint,
-			   enum pipe_video_cap param);
-
-/* the hardware only supports NV12 */
-boolean si_vid_is_format_supported(struct pipe_screen *screen,
-				   enum pipe_format format,
-				   enum pipe_video_profile profile,
-				   enum pipe_video_entrypoint entrypoint);
 
 #endif // RADEON_VIDEO_H

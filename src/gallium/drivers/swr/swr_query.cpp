@@ -23,7 +23,7 @@
 
 #include "pipe/p_defines.h"
 #include "util/u_memory.h"
-#include "os/os_time.h"
+#include "util/os_time.h"
 #include "swr_context.h"
 #include "swr_fence.h"
 #include "swr_query.h"

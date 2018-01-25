@@ -29,7 +29,6 @@
 #ifndef ST_CB_FBO_H
 #define ST_CB_FBO_H
 
-#include "main/compiler.h"
 #include "main/fbobject.h"
 #include "main/glheader.h"
 #include "main/mtypes.h"
@@ -103,7 +102,7 @@ st_ws_framebuffer(struct gl_framebuffer *fb)
 
 
 extern struct gl_renderbuffer *
-st_new_renderbuffer_fb(enum pipe_format format, int samples, boolean sw);
+st_new_renderbuffer_fb(enum pipe_format format, unsigned samples, boolean sw);
 
 extern void
 st_update_renderbuffer_surface(struct st_context *st,

@@ -69,7 +69,7 @@ extern uint64_t INTEL_DEBUG;
 #define DEBUG_OPTIMIZER           (1ull << 25)
 #define DEBUG_ANNOTATION          (1ull << 26)
 #define DEBUG_NO8                 (1ull << 27)
-/* Hole - feel free to reuse      (1ull << 28) */
+#define DEBUG_NO_OACONFIG         (1ull << 28)
 #define DEBUG_SPILL_FS            (1ull << 29)
 #define DEBUG_SPILL_VEC4          (1ull << 30)
 #define DEBUG_CS                  (1ull << 31)
@@ -99,35 +99,6 @@ extern uint64_t INTEL_DEBUG;
 	if (unlikely(INTEL_DEBUG & FILE_DEBUG_FLAG))		\
 		dbg_printf(__VA_ARGS__);			\
 } while(0)
-
-#define perf_debug(...) do {					\
-   static GLuint msg_id = 0;                                    \
-   if (unlikely(INTEL_DEBUG & DEBUG_PERF))                      \
-      dbg_printf(__VA_ARGS__);                                  \
-   if (brw->perf_debug)                                         \
-      _mesa_gl_debug(&brw->ctx, &msg_id,                        \
-                     MESA_DEBUG_SOURCE_API,                     \
-                     MESA_DEBUG_TYPE_PERFORMANCE,               \
-                     MESA_DEBUG_SEVERITY_MEDIUM,                \
-                     __VA_ARGS__);                              \
-} while(0)
-
-#define WARN_ONCE(cond, fmt...) do {                            \
-   if (unlikely(cond)) {                                        \
-      static bool _warned = false;                              \
-      static GLuint msg_id = 0;                                 \
-      if (!_warned) {                                           \
-         fprintf(stderr, "WARNING: ");                          \
-         fprintf(stderr, fmt);                                  \
-         _warned = true;                                        \
-                                                                \
-         _mesa_gl_debug(ctx, &msg_id,                           \
-                        MESA_DEBUG_SOURCE_API,                  \
-                        MESA_DEBUG_TYPE_OTHER,                  \
-                        MESA_DEBUG_SEVERITY_HIGH, fmt);         \
-      }                                                         \
-   }                                                            \
-} while (0)
 
 extern uint64_t intel_debug_flag_for_shader_stage(gl_shader_stage stage);
 

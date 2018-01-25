@@ -12,6 +12,27 @@
 #include "v3d_packet_helpers.h"
 
 
+enum V3D21_Compare_Function {
+        V3D_COMPARE_FUNC_NEVER               =      0,
+        V3D_COMPARE_FUNC_LESS                =      1,
+        V3D_COMPARE_FUNC_EQUAL               =      2,
+        V3D_COMPARE_FUNC_LEQUAL              =      3,
+        V3D_COMPARE_FUNC_GREATER             =      4,
+        V3D_COMPARE_FUNC_NOTEQUAL            =      5,
+        V3D_COMPARE_FUNC_GEQUAL              =      6,
+        V3D_COMPARE_FUNC_ALWAYS              =      7,
+};
+
+enum V3D21_Primitive {
+        V3D_PRIM_POINTS                      =      0,
+        V3D_PRIM_LINES                       =      1,
+        V3D_PRIM_LINE_LOOP                   =      2,
+        V3D_PRIM_LINE_STRIP                  =      3,
+        V3D_PRIM_TRIANGLES                   =      4,
+        V3D_PRIM_TRIANGLE_STRIP              =      5,
+        V3D_PRIM_TRIANGLE_FAN                =      6,
+};
+
 #define V3D21_HALT_opcode                      0
 #define V3D21_HALT_header                       \
    .opcode                              =      0
@@ -626,14 +647,7 @@ struct V3D21_INDEXED_PRIMITIVE_LIST {
    uint32_t                             index_type;
 #define _8_BIT                                   0
 #define _16_BIT                                  1
-   uint32_t                             primitive_mode;
-#define POINTS                                   0
-#define LINES                                    1
-#define LINE_LOOP                                2
-#define LINE_STRIP                               3
-#define TRIANGLES                                4
-#define TRIANGLES_STRIP                          5
-#define TRIANGLES_FAN                            6
+   enum V3D21_Primitive                 primitive_mode;
 };
 
 static inline void
@@ -677,14 +691,7 @@ struct V3D21_VERTEX_ARRAY_PRIMITIVES {
    uint32_t                             opcode;
    uint32_t                             index_of_first_vertex;
    uint32_t                             length;
-   uint32_t                             primitive_mode;
-#define POINTS                                   0
-#define LINES                                    1
-#define LINE_LOOP                                2
-#define LINE_STRIP                               3
-#define TRIANGLES                                4
-#define TRIANGLES_STRIP                          5
-#define TRIANGLES_FAN                            6
+   enum V3D21_Primitive                 primitive_mode;
 };
 
 static inline void
@@ -868,10 +875,10 @@ struct V3D21_CONFIGURATION_BITS {
    bool                                 early_z_updates_enable;
    bool                                 early_z_enable;
    bool                                 z_updates_enable;
-   uint32_t                             depth_test_function;
+   enum V3D21_Compare_Function          depth_test_function;
    uint32_t                             coverage_read_mode;
    bool                                 coverage_pipe_select;
-   bool                                 rasteriser_oversample_mode;
+   uint32_t                             rasteriser_oversample_mode;
    uint32_t                             coverage_read_type;
    bool                                 antialiased_points_and_lines;
    bool                                 enable_depth_offset;

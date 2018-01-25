@@ -455,7 +455,7 @@ vec4_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
          prog_data->base.binding_table.ssbo_start + ssbo_index;
       dst_reg result_dst = get_nir_dest(instr->dest);
       vec4_instruction *inst = new(mem_ctx)
-         vec4_instruction(VS_OPCODE_GET_BUFFER_SIZE, result_dst);
+         vec4_instruction(SHADER_OPCODE_GET_BUFFER_SIZE, result_dst);
 
       inst->base_mrf = 2;
       inst->mlen = 1; /* always at least one */
@@ -804,52 +804,6 @@ vec4_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
       break;
    }
 
-   case nir_intrinsic_atomic_counter_inc:
-   case nir_intrinsic_atomic_counter_dec:
-   case nir_intrinsic_atomic_counter_read:
-   case nir_intrinsic_atomic_counter_add:
-   case nir_intrinsic_atomic_counter_min:
-   case nir_intrinsic_atomic_counter_max:
-   case nir_intrinsic_atomic_counter_and:
-   case nir_intrinsic_atomic_counter_or:
-   case nir_intrinsic_atomic_counter_xor:
-   case nir_intrinsic_atomic_counter_exchange:
-   case nir_intrinsic_atomic_counter_comp_swap: {
-      unsigned surf_index = prog_data->base.binding_table.abo_start +
-         (unsigned) instr->const_index[0];
-      const vec4_builder bld =
-         vec4_builder(this).at_end().annotate(current_annotation, base_ir);
-
-      /* Get some metadata from the image intrinsic. */
-      const nir_intrinsic_info *info = &nir_intrinsic_infos[instr->intrinsic];
-
-      /* Get the arguments of the atomic intrinsic. */
-      src_reg offset = get_nir_src(instr->src[0], nir_type_int32,
-                                   instr->num_components);
-      const src_reg surface = brw_imm_ud(surf_index);
-      const src_reg src0 = (info->num_srcs >= 2
-                           ? get_nir_src(instr->src[1]) : src_reg());
-      const src_reg src1 = (info->num_srcs >= 3
-                           ? get_nir_src(instr->src[2]) : src_reg());
-
-      src_reg tmp;
-
-      dest = get_nir_dest(instr->dest);
-
-      if (instr->intrinsic == nir_intrinsic_atomic_counter_read) {
-         tmp = emit_untyped_read(bld, surface, offset, 1, 1);
-      } else {
-         tmp = emit_untyped_atomic(bld, surface, offset,
-                                   src0, src1,
-                                   1, 1,
-                                   get_atomic_counter_op(instr->intrinsic));
-      }
-
-      bld.MOV(retype(dest, tmp.type), tmp);
-      brw_mark_surface_used(stage_prog_data, surf_index);
-      break;
-   }
-
    case nir_intrinsic_load_ubo: {
       nir_const_value *const_block_index = nir_src_as_const_value(instr->src[0]);
       src_reg surf_index;
@@ -888,7 +842,9 @@ vec4_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
       if (const_offset) {
          offset_reg = brw_imm_ud(const_offset->u32[0] & ~15);
       } else {
-         offset_reg = get_nir_src(instr->src[1], nir_type_uint32, 1);
+         offset_reg = src_reg(this, glsl_type::uint_type);
+         emit(MOV(dst_reg(offset_reg),
+                  get_nir_src(instr->src[1], nir_type_uint32, 1)));
       }
 
       src_reg packed_consts;

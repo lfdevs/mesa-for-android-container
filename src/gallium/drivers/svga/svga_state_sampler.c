@@ -391,8 +391,22 @@ update_samplers(struct svga_context *svga, unsigned dirty )
       unsigned nsamplers;
 
       for (i = 0; i < count; i++) {
+         bool fs_shadow = false;
+
+         /* _NEW_FS */
+         if (shader == PIPE_SHADER_FRAGMENT) {
+            struct svga_shader_variant *fs = svga->state.hw_draw.fs;
+            /* If the fragment shader is doing the shadow comparison
+             * for this texture unit, don't enable shadow compare in
+             * the texture sampler state.
+             */
+            if (fs && (fs->fs_shadow_compare_units & (1 << i))) {
+               fs_shadow = true;
+            }
+         }
+
          if (svga->curr.sampler[shader][i]) {
-            ids[i] = svga->curr.sampler[shader][i]->id;
+            ids[i] = svga->curr.sampler[shader][i]->id[fs_shadow];
             assert(ids[i] != SVGA3D_INVALID_ID);
          }
          else {
@@ -435,18 +449,18 @@ update_samplers(struct svga_context *svga, unsigned dirty )
       }
 
       if (svga->state.hw_draw.samplers[PIPE_SHADER_FRAGMENT][unit]
-          != sampler->id) {
+          != sampler->id[0]) {
          ret = SVGA3D_vgpu10_SetSamplers(svga->swc,
                                          1, /* count */
                                          unit, /* start */
                                          SVGA3D_SHADERTYPE_PS,
-                                         &sampler->id);
+                                         &sampler->id[0]);
          if (ret != PIPE_OK)
             return ret;
 
          /* save the polygon stipple sampler in the hw draw state */
          svga->state.hw_draw.samplers[PIPE_SHADER_FRAGMENT][unit] =
-            sampler->id;
+            sampler->id[0];
       }
    }
 
@@ -456,8 +470,8 @@ update_samplers(struct svga_context *svga, unsigned dirty )
 
 struct svga_tracked_state svga_hw_sampler = {
    "texture sampler emit",
-   (SVGA_NEW_SAMPLER |
-    SVGA_NEW_STIPPLE |
-    SVGA_NEW_TEXTURE_FLAGS),
+   (SVGA_NEW_FS |
+    SVGA_NEW_SAMPLER |
+    SVGA_NEW_STIPPLE),
    update_samplers
 };

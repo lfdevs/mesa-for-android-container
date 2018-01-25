@@ -40,8 +40,7 @@ union pointer_hack
 };
 
 void *
-tgsi_align_128bit(
-   void *unaligned )
+tgsi_align_128bit(void *unaligned)
 {
    union pointer_hack ph;
 
@@ -52,9 +51,8 @@ tgsi_align_128bit(
 }
 
 unsigned
-tgsi_util_get_src_register_swizzle(
-   const struct tgsi_src_register *reg,
-   unsigned component )
+tgsi_util_get_src_register_swizzle(const struct tgsi_src_register *reg,
+                                   unsigned component)
 {
    switch (component) {
    case TGSI_CHAN_X:
@@ -74,21 +72,19 @@ tgsi_util_get_src_register_swizzle(
 
 unsigned
 tgsi_util_get_full_src_register_swizzle(
-   const struct tgsi_full_src_register  *reg,
-   unsigned component )
+   const struct tgsi_full_src_register *reg,
+   unsigned component)
 {
-   return tgsi_util_get_src_register_swizzle(
-      &reg->Register,
-      component );
+   return tgsi_util_get_src_register_swizzle(&reg->Register, component);
 }
 
+
 void
-tgsi_util_set_src_register_swizzle(
-   struct tgsi_src_register *reg,
-   unsigned swizzle,
-   unsigned component )
+tgsi_util_set_src_register_swizzle(struct tgsi_src_register *reg,
+                                   unsigned swizzle,
+                                   unsigned component)
 {
-   switch( component ) {
+   switch (component) {
    case 0:
       reg->SwizzleX = swizzle;
       break;
@@ -102,21 +98,22 @@ tgsi_util_set_src_register_swizzle(
       reg->SwizzleW = swizzle;
       break;
    default:
-      assert( 0 );
+      assert(0);
    }
 }
 
+
 unsigned
 tgsi_util_get_full_src_register_sign_mode(
-   const struct  tgsi_full_src_register *reg,
-   unsigned component )
+   const struct tgsi_full_src_register *reg,
+   unsigned component)
 {
    unsigned sign_mode;
 
-   if( reg->Register.Absolute ) {
+   if (reg->Register.Absolute) {
       /* Consider only the post-abs negation. */
 
-      if( reg->Register.Negate ) {
+      if (reg->Register.Negate) {
          sign_mode = TGSI_UTIL_SIGN_SET;
       }
       else {
@@ -124,7 +121,7 @@ tgsi_util_get_full_src_register_sign_mode(
       }
    }
    else {
-      if( reg->Register.Negate ) {
+      if (reg->Register.Negate) {
          sign_mode = TGSI_UTIL_SIGN_TOGGLE;
       }
       else {
@@ -135,13 +132,12 @@ tgsi_util_get_full_src_register_sign_mode(
    return sign_mode;
 }
 
+
 void
-tgsi_util_set_full_src_register_sign_mode(
-   struct tgsi_full_src_register *reg,
-   unsigned sign_mode )
+tgsi_util_set_full_src_register_sign_mode(struct tgsi_full_src_register *reg,
+                                          unsigned sign_mode)
 {
-   switch (sign_mode)
-   {
+   switch (sign_mode) {
    case TGSI_UTIL_SIGN_CLEAR:
       reg->Register.Negate = 0;
       reg->Register.Absolute = 1;
@@ -163,9 +159,10 @@ tgsi_util_set_full_src_register_sign_mode(
       break;
 
    default:
-      assert( 0 );
+      assert(0);
    }
 }
+
 
 /**
  * Determine which channels of the specificed src register are effectively
@@ -452,7 +449,7 @@ tgsi_util_get_src_from_ind(const struct tgsi_ind_register *reg)
  * sample index.
  */
 int
-tgsi_util_get_texture_coord_dim(unsigned tgsi_tex)
+tgsi_util_get_texture_coord_dim(enum tgsi_texture_type tgsi_tex)
 {
    /*
     * Depending on the texture target, (src0.xyzw, src1.x) is interpreted
@@ -509,11 +506,15 @@ tgsi_util_get_texture_coord_dim(unsigned tgsi_tex)
 
 
 /**
- * Given a TGSI_TEXTURE_x target, return the src register index for the
- * shadow reference coordinate.
+ * Given a TGSI_TEXTURE_x target, return register component where the
+ * shadow reference/distance coordinate is found.  Typically, components
+ * 0 and 1 are the (s,t) texcoords and component 2 or 3 hold the shadow
+ * reference value.  But if we return 4, it means the reference value is
+ * found in the 0th component of the second coordinate argument to the
+ * TEX2 instruction.
  */
 int
-tgsi_util_get_shadow_ref_src_index(unsigned tgsi_tex)
+tgsi_util_get_shadow_ref_src_index(enum tgsi_texture_type tgsi_tex)
 {
    switch (tgsi_tex) {
    case TGSI_TEXTURE_SHADOW1D:
@@ -536,7 +537,7 @@ tgsi_util_get_shadow_ref_src_index(unsigned tgsi_tex)
 
 
 boolean
-tgsi_is_shadow_target(unsigned target)
+tgsi_is_shadow_target(enum tgsi_texture_type target)
 {
    switch (target) {
    case TGSI_TEXTURE_SHADOW1D:

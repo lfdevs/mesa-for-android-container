@@ -329,6 +329,13 @@ brw_init_driver_functions(struct brw_context *brw,
 
    if (devinfo->gen >= 6)
       functions->GetSamplePosition = gen6_get_sample_position;
+
+   /* GL_ARB_get_program_binary */
+   brw_program_binary_init(brw->screen->deviceID);
+   functions->GetProgramBinaryDriverSHA1 = brw_get_program_binary_driver_sha1;
+   functions->ProgramBinarySerializeDriverBlob = brw_program_serialize_nir;
+   functions->ProgramBinaryDeserializeDriverBlob =
+      brw_deserialize_program_binary;
 }
 
 static void
@@ -345,11 +352,10 @@ brw_initialize_context_constants(struct brw_context *brw)
       [MESA_SHADER_GEOMETRY] = devinfo->gen >= 6,
       [MESA_SHADER_FRAGMENT] = true,
       [MESA_SHADER_COMPUTE] =
-         ((ctx->API == API_OPENGL_COMPAT || ctx->API == API_OPENGL_CORE) &&
+         (_mesa_is_desktop_gl(ctx) &&
           ctx->Const.MaxComputeWorkGroupSize[0] >= 1024) ||
          (ctx->API == API_OPENGLES2 &&
-          ctx->Const.MaxComputeWorkGroupSize[0] >= 128) ||
-         _mesa_extension_override_enables.ARB_compute_shader,
+          ctx->Const.MaxComputeWorkGroupSize[0] >= 128),
    };
 
    unsigned num_stages = 0;
@@ -531,8 +537,6 @@ brw_initialize_context_constants(struct brw_context *brw)
       ctx->Const.MaxClipPlanes = 8;
 
    ctx->Const.GLSLTessLevelsAsInputs = true;
-   ctx->Const.LowerTCSPatchVerticesIn = devinfo->gen >= 8;
-   ctx->Const.LowerTESPatchVerticesIn = true;
    ctx->Const.PrimitiveRestartForPatches = true;
 
    ctx->Const.Program[MESA_SHADER_VERTEX].MaxNativeInstructions = 16 * 1024;
@@ -697,6 +701,9 @@ brw_initialize_context_constants(struct brw_context *brw)
 
    if (!(ctx->Const.ContextFlags & GL_CONTEXT_FLAG_DEBUG_BIT))
       ctx->Const.AllowMappedBuffersDuringExecution = true;
+
+   /* GL_ARB_get_program_binary */
+   ctx->Const.NumProgramBinaryFormats = 1;
 }
 
 static void
@@ -819,17 +826,17 @@ brw_process_driconf_options(struct brw_context *brw)
 
    ctx->Const.AllowGLSLCrossStageInterpolationMismatch =
       driQueryOptionb(options, "allow_glsl_cross_stage_interpolation_mismatch");
+
+   ctx->Const.dri_config_options_sha1 = ralloc_array(brw, unsigned char, 20);
+   driComputeOptionsSha1(&brw->screen->optionCache,
+                         ctx->Const.dri_config_options_sha1);
 }
 
 GLboolean
 brwCreateContext(gl_api api,
                  const struct gl_config *mesaVis,
                  __DRIcontext *driContextPriv,
-                 unsigned major_version,
-                 unsigned minor_version,
-                 uint32_t flags,
-                 bool notify_reset,
-                 unsigned priority,
+                 const struct __DriverContextConfig *ctx_config,
                  unsigned *dri_ctx_error,
                  void *sharedContextPrivate)
 {
@@ -848,10 +855,21 @@ brwCreateContext(gl_api api,
    if (screen->has_context_reset_notification)
       allowed_flags |= __DRI_CTX_FLAG_ROBUST_BUFFER_ACCESS;
 
-   if (flags & ~allowed_flags) {
+   if (ctx_config->flags & ~allowed_flags) {
       *dri_ctx_error = __DRI_CTX_ERROR_UNKNOWN_FLAG;
       return false;
    }
+
+   if (ctx_config->attribute_mask &
+       ~(__DRIVER_CONTEXT_ATTRIB_RESET_STRATEGY |
+         __DRIVER_CONTEXT_ATTRIB_PRIORITY)) {
+      *dri_ctx_error = __DRI_CTX_ERROR_UNKNOWN_ATTRIBUTE;
+      return false;
+   }
+
+   bool notify_reset =
+      ((ctx_config->attribute_mask & __DRIVER_CONTEXT_ATTRIB_RESET_STRATEGY) &&
+       ctx_config->reset_strategy != __DRI_CTX_RESET_NO_NOTIFICATION);
 
    struct brw_context *brw = rzalloc(NULL, struct brw_context);
    if (!brw) {
@@ -902,7 +920,7 @@ brwCreateContext(gl_api api,
       return false;
    }
 
-   driContextSetFlags(ctx, flags);
+   driContextSetFlags(ctx, ctx_config->flags);
 
    /* Initialize the software rasterizer and helper modules.
     *
@@ -962,19 +980,21 @@ brwCreateContext(gl_api api,
       }
 
       int hw_priority = BRW_CONTEXT_MEDIUM_PRIORITY;
-      switch (priority) {
-      case __DRI_CTX_PRIORITY_LOW:
-         hw_priority = BRW_CONTEXT_LOW_PRIORITY;
-         break;
-      case __DRI_CTX_PRIORITY_HIGH:
-         hw_priority = BRW_CONTEXT_HIGH_PRIORITY;
-         break;
+      if (ctx_config->attribute_mask & __DRIVER_CONTEXT_ATTRIB_PRIORITY) {
+         switch (ctx_config->priority) {
+         case __DRI_CTX_PRIORITY_LOW:
+            hw_priority = BRW_CONTEXT_LOW_PRIORITY;
+            break;
+         case __DRI_CTX_PRIORITY_HIGH:
+            hw_priority = BRW_CONTEXT_HIGH_PRIORITY;
+            break;
+         }
       }
       if (hw_priority != I915_CONTEXT_DEFAULT_PRIORITY &&
           brw_hw_context_set_priority(brw->bufmgr, brw->hw_ctx, hw_priority)) {
          fprintf(stderr,
 		 "Failed to set priority [%d:%d] for hardware context.\n",
-                 priority, hw_priority);
+                 ctx_config->priority, hw_priority);
          intelDestroyContext(driContextPriv);
          return false;
       }
@@ -984,6 +1004,13 @@ brwCreateContext(gl_api api,
       *dri_ctx_error = __DRI_CTX_ERROR_NO_MEMORY;
       intelDestroyContext(driContextPriv);
       return false;
+   }
+
+   if (devinfo->gen == 10) {
+      fprintf(stderr,
+              "WARNING: i965 does not fully support Gen10 yet.\n"
+              "Instability or lower performance might occur.\n");
+
    }
 
    brw_init_state(brw);
@@ -1013,12 +1040,12 @@ brwCreateContext(gl_api api,
 
    brw_draw_init( brw );
 
-   if ((flags & __DRI_CTX_FLAG_DEBUG) != 0) {
+   if ((ctx_config->flags & __DRI_CTX_FLAG_DEBUG) != 0) {
       /* Turn on some extra GL_ARB_debug_output generation. */
       brw->perf_debug = true;
    }
 
-   if ((flags & __DRI_CTX_FLAG_ROBUST_BUFFER_ACCESS) != 0) {
+   if ((ctx_config->flags & __DRI_CTX_FLAG_ROBUST_BUFFER_ACCESS) != 0) {
       ctx->Const.ContextFlags |= GL_CONTEXT_FLAG_ROBUST_ACCESS_BIT_ARB;
       ctx->Const.RobustAccess = GL_TRUE;
    }
@@ -1026,6 +1053,7 @@ brwCreateContext(gl_api api,
    if (INTEL_DEBUG & DEBUG_SHADER_TIME)
       brw_init_shader_time(brw);
 
+   _mesa_override_extensions(ctx);
    _mesa_compute_version(ctx);
 
    _mesa_initialize_dispatch_tables(ctx);
@@ -1036,6 +1064,8 @@ brwCreateContext(gl_api api,
 
    vbo_use_buffer_objects(ctx);
    vbo_always_unmap_buffers(ctx);
+
+   brw_disk_cache_init(brw);
 
    return true;
 }
@@ -1065,16 +1095,12 @@ intelDestroyContext(__DRIcontext * driContextPriv)
    brw_draw_destroy(brw);
 
    brw_bo_unreference(brw->curbe.curbe_bo);
-   if (brw->vs.base.scratch_bo)
-      brw_bo_unreference(brw->vs.base.scratch_bo);
-   if (brw->tcs.base.scratch_bo)
-      brw_bo_unreference(brw->tcs.base.scratch_bo);
-   if (brw->tes.base.scratch_bo)
-      brw_bo_unreference(brw->tes.base.scratch_bo);
-   if (brw->gs.base.scratch_bo)
-      brw_bo_unreference(brw->gs.base.scratch_bo);
-   if (brw->wm.base.scratch_bo)
-      brw_bo_unreference(brw->wm.base.scratch_bo);
+
+   brw_bo_unreference(brw->vs.base.scratch_bo);
+   brw_bo_unreference(brw->tcs.base.scratch_bo);
+   brw_bo_unreference(brw->tes.base.scratch_bo);
+   brw_bo_unreference(brw->gs.base.scratch_bo);
+   brw_bo_unreference(brw->wm.base.scratch_bo);
 
    brw_bo_unreference(brw->vs.base.push_const_bo);
    brw_bo_unreference(brw->tcs.base.push_const_bo);
@@ -1144,8 +1170,8 @@ intelUnbindContext(__DRIcontext * driContextPriv)
  *
  * Unfortunately, renderbuffer setup happens before a context is created.  So
  * in intel_screen.c we always set up sRGB, and here, if you're a GLES2/3
- * context (without an sRGB visual, though we don't have sRGB visuals exposed
- * yet), we go turn that back off before anyone finds out.
+ * context (without an sRGB visual), we go turn that back off before anyone
+ * finds out.
  */
 static void
 intel_gles3_srgb_workaround(struct brw_context *brw,
@@ -1156,15 +1182,19 @@ intel_gles3_srgb_workaround(struct brw_context *brw,
    if (_mesa_is_desktop_gl(ctx) || !fb->Visual.sRGBCapable)
       return;
 
-   /* Some day when we support the sRGB capable bit on visuals available for
-    * GLES, we'll need to respect that and not disable things here.
-    */
-   fb->Visual.sRGBCapable = false;
    for (int i = 0; i < BUFFER_COUNT; i++) {
       struct gl_renderbuffer *rb = fb->Attachment[i].Renderbuffer;
+
+      /* Check if sRGB was specifically asked for. */
+      struct intel_renderbuffer *irb = intel_get_renderbuffer(fb, i);
+      if (irb && irb->need_srgb)
+         return;
+
       if (rb)
          rb->Format = _mesa_get_srgb_format_linear(rb->Format);
    }
+   /* Disable sRGB from framebuffers that are not compatible. */
+   fb->Visual.sRGBCapable = false;
 }
 
 GLboolean
@@ -1173,20 +1203,11 @@ intelMakeCurrent(__DRIcontext * driContextPriv,
                  __DRIdrawable * driReadPriv)
 {
    struct brw_context *brw;
-   GET_CURRENT_CONTEXT(curCtx);
 
    if (driContextPriv)
       brw = (struct brw_context *) driContextPriv->driverPrivate;
    else
       brw = NULL;
-
-   /* According to the glXMakeCurrent() man page: "Pending commands to
-    * the previous context, if any, are flushed before it is released."
-    * But only flush if we're actually changing contexts.
-    */
-   if (brw_context(curCtx) && brw_context(curCtx) != brw) {
-      _mesa_flush(curCtx);
-   }
 
    if (driContextPriv) {
       struct gl_context *ctx = &brw->ctx;
@@ -1545,6 +1566,9 @@ intel_process_dri2_buffer(struct brw_context *brw,
       return;
    }
 
+   uint32_t tiling, swizzle;
+   brw_bo_get_tiling(bo, &tiling, &swizzle);
+
    struct intel_mipmap_tree *mt =
       intel_miptree_create_for_bo(brw,
                                   bo,
@@ -1554,6 +1578,7 @@ intel_process_dri2_buffer(struct brw_context *brw,
                                   drawable->h,
                                   1,
                                   buffer->pitch,
+                                  isl_tiling_from_i915_tiling(tiling),
                                   MIPTREE_CREATE_DEFAULT);
    if (!mt) {
       brw_bo_unreference(bo);

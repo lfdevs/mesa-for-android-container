@@ -103,11 +103,15 @@ etna_resource_older(struct etna_resource *a, struct etna_resource *b)
    return (int)(a->seqno - b->seqno) < 0;
 }
 
+/* returns TRUE if a resource has a TS, and it is valid for at least one level */
+bool
+etna_resource_has_valid_ts(struct etna_resource *res);
+
 /* returns TRUE if the resource needs a resolve to itself */
 static inline bool
 etna_resource_needs_flush(struct etna_resource *res)
 {
-   return res->ts_bo && ((int)(res->seqno - res->flush_seqno) > 0);
+   return etna_resource_has_valid_ts(res) && ((int)(res->seqno - res->flush_seqno) > 0);
 }
 
 /* is the resource only used on the sampler? */

@@ -34,7 +34,7 @@
 
 #include "vl/vl_video_buffer.h"
 
-#include "r600_pipe_common.h"
+#include "radeonsi/si_pipe.h"
 #include "radeon_video.h"
 #include "radeon_vce.h"
 
@@ -162,12 +162,12 @@ void si_vce_52_get_param(struct rvce_encoder *enc, struct pipe_h264_enc_picture_
 		enc->enc_pic.addrmode_arraymode_disrdo_distwoinstants = 0x00000201;
 	else
 		enc->enc_pic.addrmode_arraymode_disrdo_distwoinstants = 0x01000201;
-	enc->enc_pic.is_idr = pic->is_idr;
+	enc->enc_pic.is_idr = (pic->picture_type == PIPE_H264_ENC_PICTURE_TYPE_IDR);
 }
 
 static void create(struct rvce_encoder *enc)
 {
-	struct r600_common_screen *rscreen = (struct r600_common_screen *)enc->screen;
+	struct si_screen *sscreen = (struct si_screen *)enc->screen;
 	enc->task_info(enc, 0x00000000, 0, 0, 0);
 
 	RVCE_BEGIN(0x01000001); // create cmd
@@ -179,7 +179,7 @@ static void create(struct rvce_encoder *enc)
 	RVCE_CS(enc->base.width); // encImageWidth
 	RVCE_CS(enc->base.height); // encImageHeight
 
-	if (rscreen->chip_class < GFX9) {
+	if (sscreen->info.chip_class < GFX9) {
 		RVCE_CS(enc->luma->u.legacy.level[0].nblk_x * enc->luma->bpe); // encRefPicLumaPitch
 		RVCE_CS(enc->chroma->u.legacy.level[0].nblk_x * enc->chroma->bpe); // encRefPicChromaPitch
 		RVCE_CS(align(enc->luma->u.legacy.level[0].nblk_y, 16) / 8); // encRefYHeightInQw
@@ -200,7 +200,7 @@ static void create(struct rvce_encoder *enc)
 
 static void encode(struct rvce_encoder *enc)
 {
-	struct r600_common_screen *rscreen = (struct r600_common_screen *)enc->screen;
+	struct si_screen *sscreen = (struct si_screen *)enc->screen;
 	signed luma_offset, chroma_offset, bs_offset;
 	unsigned dep, bs_idx = enc->bs_idx++;
 	int i;
@@ -250,7 +250,7 @@ static void encode(struct rvce_encoder *enc)
 	RVCE_CS(enc->enc_pic.eo.end_of_sequence);
 	RVCE_CS(enc->enc_pic.eo.end_of_stream);
 
-	if (rscreen->chip_class < GFX9) {
+	if (sscreen->info.chip_class < GFX9) {
 		RVCE_READ(enc->handle, RADEON_DOMAIN_VRAM,
 			enc->luma->u.legacy.level[0].offset); // inputPictureLumaAddressHi/Lo
 		RVCE_READ(enc->handle, RADEON_DOMAIN_VRAM,

@@ -90,7 +90,8 @@ EXTRA_DIST= \
 	remap_helper.py \
 	static_data.py \
 	SConscript \
-	gl_API.dtd
+	gl_API.dtd \
+	meson.build
 
 ######################################################################
 
@@ -144,6 +145,7 @@ API_XML = \
 	ARB_framebuffer_object.xml \
 	ARB_get_program_binary.xml \
 	ARB_get_texture_sub_image.xml \
+	ARB_gl_spirv.xml \
 	ARB_gpu_shader_fp64.xml \
 	ARB_gpu_shader_int64.xml \
 	ARB_gpu_shader5.xml \

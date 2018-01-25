@@ -480,7 +480,7 @@ nir_load_const_instr *
 nir_load_const_instr_create(nir_shader *shader, unsigned num_components,
                             unsigned bit_size)
 {
-   nir_load_const_instr *instr = ralloc(shader, nir_load_const_instr);
+   nir_load_const_instr *instr = rzalloc(shader, nir_load_const_instr);
    instr_init(&instr->instr, nir_instr_type_load_const);
 
    nir_ssa_def_init(&instr->instr, &instr->def, num_components, bit_size, NULL);
@@ -726,10 +726,13 @@ deref_foreach_leaf_build_recur(nir_deref_var *deref, nir_deref *tail,
    assert(tail->child == NULL);
    switch (glsl_get_base_type(tail->type)) {
    case GLSL_TYPE_UINT:
+   case GLSL_TYPE_UINT16:
    case GLSL_TYPE_UINT64:
    case GLSL_TYPE_INT:
+   case GLSL_TYPE_INT16:
    case GLSL_TYPE_INT64:
    case GLSL_TYPE_FLOAT:
+   case GLSL_TYPE_FLOAT16:
    case GLSL_TYPE_DOUBLE:
    case GLSL_TYPE_BOOL:
       if (glsl_type_is_vector_or_scalar(tail->type))
@@ -874,7 +877,10 @@ nir_deref_get_const_initializer_load(nir_shader *shader, nir_deref_var *deref)
    case GLSL_TYPE_FLOAT:
    case GLSL_TYPE_INT:
    case GLSL_TYPE_UINT:
+   case GLSL_TYPE_FLOAT16:
    case GLSL_TYPE_DOUBLE:
+   case GLSL_TYPE_INT16:
+   case GLSL_TYPE_UINT16:
    case GLSL_TYPE_UINT64:
    case GLSL_TYPE_INT64:
    case GLSL_TYPE_BOOL:
@@ -1644,7 +1650,7 @@ nir_ssa_def_rewrite_uses_after(nir_ssa_def *def, nir_src new_src,
 }
 
 uint8_t
-nir_ssa_def_components_read(nir_ssa_def *def)
+nir_ssa_def_components_read(const nir_ssa_def *def)
 {
    uint8_t read_mask = 0;
    nir_foreach_use(use, def) {
@@ -1963,6 +1969,8 @@ nir_intrinsic_from_system_value(gl_system_value val)
       return nir_intrinsic_load_subgroup_le_mask;
    case SYSTEM_VALUE_SUBGROUP_LT_MASK:
       return nir_intrinsic_load_subgroup_lt_mask;
+   case SYSTEM_VALUE_LOCAL_GROUP_SIZE:
+      return nir_intrinsic_load_local_group_size;
    default:
       unreachable("system value does not directly correspond to intrinsic");
    }
@@ -2032,6 +2040,8 @@ nir_system_value_from_intrinsic(nir_intrinsic_op intrin)
       return SYSTEM_VALUE_SUBGROUP_LE_MASK;
    case nir_intrinsic_load_subgroup_lt_mask:
       return SYSTEM_VALUE_SUBGROUP_LT_MASK;
+   case nir_intrinsic_load_local_group_size:
+      return SYSTEM_VALUE_LOCAL_GROUP_SIZE;
    default:
       unreachable("intrinsic doesn't produce a system value");
    }

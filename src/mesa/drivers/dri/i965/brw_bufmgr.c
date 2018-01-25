@@ -84,7 +84,7 @@
 #define VG_DEFINED(ptr, size) VG(VALGRIND_MAKE_MEM_DEFINED(ptr, size))
 #define VG_NOACCESS(ptr, size) VG(VALGRIND_MAKE_MEM_NOACCESS(ptr, size))
 
-#define memclear(s) memset(&s, 0, sizeof(s))
+#define PAGE_SIZE 4096
 
 #define FILE_DEBUG_FLAG DEBUG_BUFMGR
 
@@ -180,32 +180,53 @@ bo_tile_pitch(struct brw_bufmgr *bufmgr, uint32_t pitch, uint32_t tiling)
    return ALIGN(pitch, tile_width);
 }
 
+/**
+ * This function finds the correct bucket fit for the input size.
+ * The function works with O(1) complexity when the requested size
+ * was queried instead of iterating the size through all the buckets.
+ */
 static struct bo_cache_bucket *
 bucket_for_size(struct brw_bufmgr *bufmgr, uint64_t size)
 {
-   int i;
+   /* Calculating the pages and rounding up to the page size. */
+   const unsigned pages = (size + PAGE_SIZE - 1) / PAGE_SIZE;
 
-   for (i = 0; i < bufmgr->num_buckets; i++) {
-      struct bo_cache_bucket *bucket = &bufmgr->cache_bucket[i];
-      if (bucket->size >= size) {
-         return bucket;
-      }
-   }
+   /* Row  Bucket sizes    clz((x-1) | 3)   Row    Column
+    *        in pages                      stride   size
+    *   0:   1  2  3  4 -> 30 30 30 30        4       1
+    *   1:   5  6  7  8 -> 29 29 29 29        4       1
+    *   2:  10 12 14 16 -> 28 28 28 28        8       2
+    *   3:  20 24 28 32 -> 27 27 27 27       16       4
+    */
+   const unsigned row = 30 - __builtin_clz((pages - 1) | 3);
+   const unsigned row_max_pages = 4 << row;
 
-   return NULL;
+   /* The '& ~2' is the special case for row 1. In row 1, max pages /
+    * 2 is 2, but the previous row maximum is zero (because there is
+    * no previous row). All row maximum sizes are power of 2, so that
+    * is the only case where that bit will be set.
+    */
+   const unsigned prev_row_max_pages = (row_max_pages / 2) & ~2;
+   int col_size_log2 = row - 1;
+   col_size_log2 += (col_size_log2 < 0);
+
+   const unsigned col = (pages - prev_row_max_pages +
+                        ((1 << col_size_log2) - 1)) >> col_size_log2;
+
+   /* Calculating the index based on the row and column. */
+   const unsigned index = (row * 4) + (col - 1);
+
+   return (index < bufmgr->num_buckets) ?
+          &bufmgr->cache_bucket[index] : NULL;
 }
 
 int
 brw_bo_busy(struct brw_bo *bo)
 {
    struct brw_bufmgr *bufmgr = bo->bufmgr;
-   struct drm_i915_gem_busy busy;
-   int ret;
+   struct drm_i915_gem_busy busy = { .handle = bo->gem_handle };
 
-   memclear(busy);
-   busy.handle = bo->gem_handle;
-
-   ret = drmIoctl(bufmgr->fd, DRM_IOCTL_I915_GEM_BUSY, &busy);
+   int ret = drmIoctl(bufmgr->fd, DRM_IOCTL_I915_GEM_BUSY, &busy);
    if (ret == 0) {
       bo->idle = !busy.busy;
       return busy.busy;
@@ -216,12 +237,12 @@ brw_bo_busy(struct brw_bo *bo)
 int
 brw_bo_madvise(struct brw_bo *bo, int state)
 {
-   struct drm_i915_gem_madvise madv;
+   struct drm_i915_gem_madvise madv = {
+      .handle = bo->gem_handle,
+      .madv = state,
+      .retained = 1,
+   };
 
-   memclear(madv);
-   madv.handle = bo->gem_handle;
-   madv.madv = state;
-   madv.retained = 1;
    drmIoctl(bo->bufmgr->fd, DRM_IOCTL_I915_GEM_MADVISE, &madv);
 
    return madv.retained;
@@ -339,8 +360,6 @@ retry:
    }
 
    if (!alloc_from_cache) {
-      struct drm_i915_gem_create create;
-
       bo = calloc(1, sizeof(*bo));
       if (!bo)
          goto err;
@@ -348,8 +367,7 @@ retry:
       bo->size = bo_size;
       bo->idle = true;
 
-      memclear(create);
-      create.size = bo_size;
+      struct drm_i915_gem_create create = { .size = bo_size };
 
       /* All new BOs we get from the kernel are zeroed, so we don't need to
        * worry about that here.
@@ -473,9 +491,6 @@ brw_bo_gem_create_from_name(struct brw_bufmgr *bufmgr,
                             const char *name, unsigned int handle)
 {
    struct brw_bo *bo;
-   int ret;
-   struct drm_gem_open open_arg;
-   struct drm_i915_gem_get_tiling get_tiling;
 
    /* At the moment most applications only have a few named bo.
     * For instance, in a DRI client only the render buffers passed
@@ -490,9 +505,8 @@ brw_bo_gem_create_from_name(struct brw_bufmgr *bufmgr,
       goto out;
    }
 
-   memclear(open_arg);
-   open_arg.name = handle;
-   ret = drmIoctl(bufmgr->fd, DRM_IOCTL_GEM_OPEN, &open_arg);
+   struct drm_gem_open open_arg = { .name = handle };
+   int ret = drmIoctl(bufmgr->fd, DRM_IOCTL_GEM_OPEN, &open_arg);
    if (ret != 0) {
       DBG("Couldn't reference %s handle 0x%08x: %s\n",
           name, handle, strerror(errno));
@@ -527,8 +541,7 @@ brw_bo_gem_create_from_name(struct brw_bufmgr *bufmgr,
    _mesa_hash_table_insert(bufmgr->handle_table, &bo->gem_handle, bo);
    _mesa_hash_table_insert(bufmgr->name_table, &bo->global_name, bo);
 
-   memclear(get_tiling);
-   get_tiling.handle = bo->gem_handle;
+   struct drm_i915_gem_get_tiling get_tiling = { .handle = bo->gem_handle };
    ret = drmIoctl(bufmgr->fd, DRM_IOCTL_I915_GEM_GET_TILING, &get_tiling);
    if (ret != 0)
       goto err_unref;
@@ -552,8 +565,6 @@ static void
 bo_free(struct brw_bo *bo)
 {
    struct brw_bufmgr *bufmgr = bo->bufmgr;
-   struct drm_gem_close close;
-   int ret;
 
    if (bo->map_cpu) {
       VG_NOACCESS(bo->map_cpu, bo->size);
@@ -581,9 +592,8 @@ bo_free(struct brw_bo *bo)
    }
 
    /* Close this object */
-   memclear(close);
-   close.handle = bo->gem_handle;
-   ret = drmIoctl(bufmgr->fd, DRM_IOCTL_GEM_CLOSE, &close);
+   struct drm_gem_close close = { .handle = bo->gem_handle };
+   int ret = drmIoctl(bufmgr->fd, DRM_IOCTL_GEM_CLOSE, &close);
    if (ret != 0) {
       DBG("DRM_IOCTL_GEM_CLOSE %d failed (%s): %s\n",
           bo->gem_handle, bo->name, strerror(errno));
@@ -712,14 +722,12 @@ brw_bo_map_cpu(struct brw_context *brw, struct brw_bo *bo, unsigned flags)
    assert(bo->cache_coherent || !(flags & MAP_WRITE));
 
    if (!bo->map_cpu) {
-      struct drm_i915_gem_mmap mmap_arg;
-      void *map;
-
       DBG("brw_bo_map_cpu: %d (%s)\n", bo->gem_handle, bo->name);
 
-      memclear(mmap_arg);
-      mmap_arg.handle = bo->gem_handle;
-      mmap_arg.size = bo->size;
+      struct drm_i915_gem_mmap mmap_arg = {
+         .handle = bo->gem_handle,
+         .size = bo->size,
+      };
       int ret = drmIoctl(bufmgr->fd, DRM_IOCTL_I915_GEM_MMAP, &mmap_arg);
       if (ret != 0) {
          ret = -errno;
@@ -727,7 +735,7 @@ brw_bo_map_cpu(struct brw_context *brw, struct brw_bo *bo, unsigned flags)
              __FILE__, __LINE__, bo->gem_handle, bo->name, strerror(errno));
          return NULL;
       }
-      map = (void *) (uintptr_t) mmap_arg.addr_ptr;
+      void *map = (void *) (uintptr_t) mmap_arg.addr_ptr;
       VG_DEFINED(map, bo->size);
 
       if (p_atomic_cmpxchg(&bo->map_cpu, NULL, map)) {
@@ -777,15 +785,13 @@ brw_bo_map_wc(struct brw_context *brw, struct brw_bo *bo, unsigned flags)
       return NULL;
 
    if (!bo->map_wc) {
-      struct drm_i915_gem_mmap mmap_arg;
-      void *map;
-
       DBG("brw_bo_map_wc: %d (%s)\n", bo->gem_handle, bo->name);
 
-      memclear(mmap_arg);
-      mmap_arg.handle = bo->gem_handle;
-      mmap_arg.size = bo->size;
-      mmap_arg.flags = I915_MMAP_WC;
+      struct drm_i915_gem_mmap mmap_arg = {
+         .handle = bo->gem_handle,
+         .size = bo->size,
+         .flags = I915_MMAP_WC,
+      };
       int ret = drmIoctl(bufmgr->fd, DRM_IOCTL_I915_GEM_MMAP, &mmap_arg);
       if (ret != 0) {
          ret = -errno;
@@ -794,7 +800,7 @@ brw_bo_map_wc(struct brw_context *brw, struct brw_bo *bo, unsigned flags)
          return NULL;
       }
 
-      map = (void *) (uintptr_t) mmap_arg.addr_ptr;
+      void *map = (void *) (uintptr_t) mmap_arg.addr_ptr;
       VG_DEFINED(map, bo->size);
 
       if (p_atomic_cmpxchg(&bo->map_wc, NULL, map)) {
@@ -843,13 +849,9 @@ brw_bo_map_gtt(struct brw_context *brw, struct brw_bo *bo, unsigned flags)
 
    /* Get a mapping of the buffer if we haven't before. */
    if (bo->map_gtt == NULL) {
-      struct drm_i915_gem_mmap_gtt mmap_arg;
-      void *map;
-
       DBG("bo_map_gtt: mmap %d (%s)\n", bo->gem_handle, bo->name);
 
-      memclear(mmap_arg);
-      mmap_arg.handle = bo->gem_handle;
+      struct drm_i915_gem_mmap_gtt mmap_arg = { .handle = bo->gem_handle };
 
       /* Get the fake offset back... */
       int ret = drmIoctl(bufmgr->fd, DRM_IOCTL_I915_GEM_MMAP_GTT, &mmap_arg);
@@ -860,8 +862,8 @@ brw_bo_map_gtt(struct brw_context *brw, struct brw_bo *bo, unsigned flags)
       }
 
       /* and mmap it. */
-      map = drm_mmap(0, bo->size, PROT_READ | PROT_WRITE,
-                     MAP_SHARED, bufmgr->fd, mmap_arg.offset);
+      void *map = drm_mmap(0, bo->size, PROT_READ | PROT_WRITE,
+                           MAP_SHARED, bufmgr->fd, mmap_arg.offset);
       if (map == MAP_FAILED) {
          DBG("%s:%d: Error mapping buffer %d (%s): %s .\n",
              __FILE__, __LINE__, bo->gem_handle, bo->name, strerror(errno));
@@ -963,15 +965,15 @@ brw_bo_subdata(struct brw_bo *bo, uint64_t offset,
                uint64_t size, const void *data)
 {
    struct brw_bufmgr *bufmgr = bo->bufmgr;
-   struct drm_i915_gem_pwrite pwrite;
-   int ret;
 
-   memclear(pwrite);
-   pwrite.handle = bo->gem_handle;
-   pwrite.offset = offset;
-   pwrite.size = size;
-   pwrite.data_ptr = (uint64_t) (uintptr_t) data;
-   ret = drmIoctl(bufmgr->fd, DRM_IOCTL_I915_GEM_PWRITE, &pwrite);
+   struct drm_i915_gem_pwrite pwrite = {
+      .handle = bo->gem_handle,
+      .offset = offset,
+      .size = size,
+      .data_ptr = (uint64_t) (uintptr_t) data,
+   };
+
+   int ret = drmIoctl(bufmgr->fd, DRM_IOCTL_I915_GEM_PWRITE, &pwrite);
    if (ret != 0) {
       ret = -errno;
       DBG("%s:%d: Error writing data to buffer %d: "
@@ -1023,18 +1025,17 @@ int
 brw_bo_wait(struct brw_bo *bo, int64_t timeout_ns)
 {
    struct brw_bufmgr *bufmgr = bo->bufmgr;
-   struct drm_i915_gem_wait wait;
-   int ret;
 
    /* If we know it's idle, don't bother with the kernel round trip */
    if (bo->idle && !bo->external)
       return 0;
 
-   memclear(wait);
-   wait.bo_handle = bo->gem_handle;
-   wait.timeout_ns = timeout_ns;
-   ret = drmIoctl(bufmgr->fd, DRM_IOCTL_I915_GEM_WAIT, &wait);
-   if (ret == -1)
+   struct drm_i915_gem_wait wait = {
+      .bo_handle = bo->gem_handle,
+      .timeout_ns = timeout_ns,
+   };
+   int ret = drmIoctl(bufmgr->fd, DRM_IOCTL_I915_GEM_WAIT, &wait);
+   if (ret != 0)
       return -errno;
 
    bo->idle = true;
@@ -1106,16 +1107,15 @@ brw_bo_get_tiling(struct brw_bo *bo, uint32_t *tiling_mode,
    return 0;
 }
 
-struct brw_bo *
-brw_bo_gem_create_from_prime(struct brw_bufmgr *bufmgr, int prime_fd)
+static struct brw_bo *
+brw_bo_gem_create_from_prime_internal(struct brw_bufmgr *bufmgr, int prime_fd,
+                                      int tiling_mode, uint32_t stride)
 {
-   int ret;
    uint32_t handle;
    struct brw_bo *bo;
-   struct drm_i915_gem_get_tiling get_tiling;
 
    mtx_lock(&bufmgr->lock);
-   ret = drmPrimeFDToHandle(bufmgr->fd, prime_fd, &handle);
+   int ret = drmPrimeFDToHandle(bufmgr->fd, prime_fd, &handle);
    if (ret) {
       DBG("create_from_prime: failed to obtain handle from fd: %s\n",
           strerror(errno));
@@ -1158,14 +1158,17 @@ brw_bo_gem_create_from_prime(struct brw_bufmgr *bufmgr, int prime_fd)
    bo->reusable = false;
    bo->external = true;
 
-   memclear(get_tiling);
-   get_tiling.handle = bo->gem_handle;
-   if (drmIoctl(bufmgr->fd, DRM_IOCTL_I915_GEM_GET_TILING, &get_tiling))
-      goto err;
+   if (tiling_mode < 0) {
+      struct drm_i915_gem_get_tiling get_tiling = { .handle = bo->gem_handle };
+      if (drmIoctl(bufmgr->fd, DRM_IOCTL_I915_GEM_GET_TILING, &get_tiling))
+         goto err;
 
-   bo->tiling_mode = get_tiling.tiling_mode;
-   bo->swizzle_mode = get_tiling.swizzle_mode;
-   /* XXX stride is unknown */
+      bo->tiling_mode = get_tiling.tiling_mode;
+      bo->swizzle_mode = get_tiling.swizzle_mode;
+      /* XXX stride is unknown */
+   } else {
+      bo_set_tiling_internal(bo, tiling_mode, stride);
+   }
 
 out:
    mtx_unlock(&bufmgr->lock);
@@ -1175,6 +1178,24 @@ err:
    bo_free(bo);
    mtx_unlock(&bufmgr->lock);
    return NULL;
+}
+
+struct brw_bo *
+brw_bo_gem_create_from_prime(struct brw_bufmgr *bufmgr, int prime_fd)
+{
+   return brw_bo_gem_create_from_prime_internal(bufmgr, prime_fd, -1, 0);
+}
+
+struct brw_bo *
+brw_bo_gem_create_from_prime_tiled(struct brw_bufmgr *bufmgr, int prime_fd,
+                                   uint32_t tiling_mode, uint32_t stride)
+{
+   assert(tiling_mode == I915_TILING_NONE ||
+          tiling_mode == I915_TILING_X ||
+          tiling_mode == I915_TILING_Y);
+
+   return brw_bo_gem_create_from_prime_internal(bufmgr, prime_fd,
+                                                tiling_mode, stride);
 }
 
 static void
@@ -1222,10 +1243,8 @@ brw_bo_flink(struct brw_bo *bo, uint32_t *name)
    struct brw_bufmgr *bufmgr = bo->bufmgr;
 
    if (!bo->global_name) {
-      struct drm_gem_flink flink;
+      struct drm_gem_flink flink = { .handle = bo->gem_handle };
 
-      memclear(flink);
-      flink.handle = bo->gem_handle;
       if (drmIoctl(bufmgr->fd, DRM_IOCTL_GEM_FLINK, &flink))
          return -errno;
 
@@ -1267,6 +1286,10 @@ add_bucket(struct brw_bufmgr *bufmgr, int size)
    list_inithead(&bufmgr->cache_bucket[i].head);
    bufmgr->cache_bucket[i].size = size;
    bufmgr->num_buckets++;
+
+   assert(bucket_for_size(bufmgr, size) == &bufmgr->cache_bucket[i]);
+   assert(bucket_for_size(bufmgr, size - 2048) == &bufmgr->cache_bucket[i]);
+   assert(bucket_for_size(bufmgr, size + 1) != &bufmgr->cache_bucket[i]);
 }
 
 static void
@@ -1299,11 +1322,8 @@ init_cache_buckets(struct brw_bufmgr *bufmgr)
 uint32_t
 brw_create_hw_context(struct brw_bufmgr *bufmgr)
 {
-   struct drm_i915_gem_context_create create;
-   int ret;
-
-   memclear(create);
-   ret = drmIoctl(bufmgr->fd, DRM_IOCTL_I915_GEM_CONTEXT_CREATE, &create);
+   struct drm_i915_gem_context_create create = { };
+   int ret = drmIoctl(bufmgr->fd, DRM_IOCTL_I915_GEM_CONTEXT_CREATE, &create);
    if (ret != 0) {
       DBG("DRM_IOCTL_I915_GEM_CONTEXT_CREATE failed: %s\n", strerror(errno));
       return 0;
@@ -1334,7 +1354,7 @@ brw_hw_context_set_priority(struct brw_bufmgr *bufmgr,
 void
 brw_destroy_hw_context(struct brw_bufmgr *bufmgr, uint32_t ctx_id)
 {
-   struct drm_i915_gem_context_destroy d = {.ctx_id = ctx_id };
+   struct drm_i915_gem_context_destroy d = { .ctx_id = ctx_id };
 
    if (ctx_id != 0 &&
        drmIoctl(bufmgr->fd, DRM_IOCTL_I915_GEM_CONTEXT_DESTROY, &d) != 0) {
@@ -1346,13 +1366,8 @@ brw_destroy_hw_context(struct brw_bufmgr *bufmgr, uint32_t ctx_id)
 int
 brw_reg_read(struct brw_bufmgr *bufmgr, uint32_t offset, uint64_t *result)
 {
-   struct drm_i915_reg_read reg_read;
-   int ret;
-
-   memclear(reg_read);
-   reg_read.offset = offset;
-
-   ret = drmIoctl(bufmgr->fd, DRM_IOCTL_I915_REG_READ, &reg_read);
+   struct drm_i915_reg_read reg_read = { .offset = offset };
+   int ret = drmIoctl(bufmgr->fd, DRM_IOCTL_I915_REG_READ, &reg_read);
 
    *result = reg_read.val;
    return ret;
@@ -1361,12 +1376,9 @@ brw_reg_read(struct brw_bufmgr *bufmgr, uint32_t offset, uint64_t *result)
 static int
 gem_param(int fd, int name)
 {
-   drm_i915_getparam_t gp;
    int v = -1; /* No param uses (yet) the sign bit, reserve it for errors */
 
-   memset(&gp, 0, sizeof(gp));
-   gp.param = name;
-   gp.value = &v;
+   struct drm_i915_getparam gp = { .param = name, .value = &v };
    if (drmIoctl(fd, DRM_IOCTL_I915_GETPARAM, &gp))
       return -1;
 

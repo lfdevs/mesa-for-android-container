@@ -61,6 +61,8 @@ enum CORE_BUCKETS
     FEClipTriangles,
     FECullZeroAreaAndBackface,
     FECullBetweenCenters,
+    FEEarlyRastEnter,
+    FEEarlyRastExit,
     FEProcessStoreTiles,
     FEProcessInvalidateTiles,
     WorkerWorkOnFifoBE,

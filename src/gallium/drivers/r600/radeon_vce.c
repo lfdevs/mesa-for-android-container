@@ -59,7 +59,7 @@
  */
 static void flush(struct rvce_encoder *enc)
 {
-	enc->ws->cs_flush(enc->cs, RADEON_FLUSH_ASYNC, NULL);
+	enc->ws->cs_flush(enc->cs, PIPE_FLUSH_ASYNC, NULL);
 	enc->task_info_idx = 0;
 	enc->bs_idx = 0;
 }

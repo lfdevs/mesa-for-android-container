@@ -121,6 +121,8 @@ SVGA3D_FIFOReserve(struct svga_winsys_context *swc,
 
    swc->last_command = cmd;
 
+   swc->num_commands++;
+
    return &header[1];
 }
 
@@ -1021,6 +1023,8 @@ SVGA3D_BeginDrawPrimitives(struct svga_winsys_context *swc,
    *ranges = rangeArray;
 
    swc->hints |= SVGA_HINT_FLAG_CAN_PRE_FLUSH;
+
+   swc->num_draw_commands++;
 
    return PIPE_OK;
 }

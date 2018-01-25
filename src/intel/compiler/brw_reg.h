@@ -597,6 +597,24 @@ brw_imm_f(float f)
    return imm;
 }
 
+/** Construct int64_t immediate register */
+static inline struct brw_reg
+brw_imm_q(int64_t q)
+{
+   struct brw_reg imm = brw_imm_reg(BRW_REGISTER_TYPE_Q);
+   imm.d64 = q;
+   return imm;
+}
+
+/** Construct int64_t immediate register */
+static inline struct brw_reg
+brw_imm_uq(uint64_t uq)
+{
+   struct brw_reg imm = brw_imm_reg(BRW_REGISTER_TYPE_UQ);
+   imm.u64 = uq;
+   return imm;
+}
+
 /** Construct integer immediate register */
 static inline struct brw_reg
 brw_imm_d(int d)
@@ -756,6 +774,12 @@ brw_address_reg(unsigned subnr)
    return brw_uw1_reg(BRW_ARCHITECTURE_REGISTER_FILE, BRW_ARF_ADDRESS, subnr);
 }
 
+static inline struct brw_reg
+brw_tdr_reg(void)
+{
+   return brw_uw1_reg(BRW_ARCHITECTURE_REGISTER_FILE, BRW_ARF_TDR, 0);
+}
+
 /* If/else instructions break in align16 mode if writemask & swizzle
  * aren't xyzw.  This goes against the convention for other scalar
  * regs:
@@ -790,6 +814,12 @@ brw_notification_reg(void)
                   BRW_HORIZONTAL_STRIDE_0,
                   BRW_SWIZZLE_XXXX,
                   WRITEMASK_X);
+}
+
+static inline struct brw_reg
+brw_cr0_reg(unsigned subnr)
+{
+   return brw_ud1_reg(BRW_ARCHITECTURE_REGISTER_FILE, BRW_ARF_CONTROL, subnr);
 }
 
 static inline struct brw_reg

@@ -19,8 +19,6 @@
  * DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
  * USE OR OTHER DEALINGS IN THE SOFTWARE.
- *
- * Authors: Marek Olšák <maraeo@gmail.com>
  */
 
 /**
@@ -30,7 +28,7 @@
 #ifndef R600_CS_H
 #define R600_CS_H
 
-#include "r600_pipe_common.h"
+#include "radeonsi/si_pipe.h"
 #include "amd/common/sid.h"
 
 /**
@@ -41,7 +39,7 @@
  * \param gtt       GTT memory size not added to the buffer list yet
  */
 static inline bool
-radeon_cs_memory_below_limit(struct r600_common_screen *screen,
+radeon_cs_memory_below_limit(struct si_screen *screen,
 			     struct radeon_winsys_cs *cs,
 			     uint64_t vram, uint64_t gtt)
 {
@@ -108,7 +106,7 @@ radeon_add_to_buffer_list_check_mem(struct r600_common_context *rctx,
 	    !radeon_cs_memory_below_limit(rctx->screen, ring->cs,
 					  rctx->vram + rbo->vram_usage,
 					  rctx->gtt + rbo->gart_usage))
-		ring->flush(rctx, RADEON_FLUSH_ASYNC, NULL);
+		ring->flush(rctx, PIPE_FLUSH_ASYNC, NULL);
 
 	return radeon_add_to_buffer_list(rctx, ring, rbo, usage, priority);
 }

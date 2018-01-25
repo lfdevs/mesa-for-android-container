@@ -1235,7 +1235,6 @@ struct pipe_surface* r300_create_surface_custom(struct pipe_context * ctx,
         surface->base.u.tex.last_layer = surf_tmpl->u.tex.last_layer;
 
         surface->buf = tex->buf;
-        surface->buf = tex->buf;
 
         /* Prefer VRAM if there are multiple domains to choose from. */
         surface->domain = tex->domain;

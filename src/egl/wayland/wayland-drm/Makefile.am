@@ -1,5 +1,4 @@
-AM_CFLAGS = -I$(top_srcdir)/src/egl/main \
-	    -I$(top_srcdir)/include \
+AM_CFLAGS = -I$(top_srcdir)/include \
 	    $(DEFINES) \
 	    $(VISIBILITY_CFLAGS) \
 	    $(WAYLAND_SERVER_CFLAGS)
@@ -11,7 +10,7 @@ libwayland_drm_la_SOURCES = \
 	wayland-drm-protocol.c
 noinst_HEADERS = wayland-drm.h
 
-EXTRA_DIST = wayland-drm.xml
+EXTRA_DIST = wayland-drm.xml meson.build
 
 BUILT_SOURCES = wayland-drm-protocol.c \
 		wayland-drm-client-protocol.h \

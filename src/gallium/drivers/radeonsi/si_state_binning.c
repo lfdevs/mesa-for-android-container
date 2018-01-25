@@ -46,9 +46,9 @@ static struct uvec2 si_find_bin_size(struct si_screen *sscreen,
 				     unsigned sum)
 {
 	unsigned log_num_rb_per_se =
-		util_logbase2_ceil(sscreen->b.info.num_render_backends /
-				   sscreen->b.info.max_se);
-	unsigned log_num_se = util_logbase2_ceil(sscreen->b.info.max_se);
+		util_logbase2_ceil(sscreen->info.num_render_backends /
+				   sscreen->info.max_se);
+	unsigned log_num_se = util_logbase2_ceil(sscreen->info.max_se);
 	unsigned i;
 
 	/* Get the chip-specific subtable. */

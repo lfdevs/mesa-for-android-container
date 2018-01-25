@@ -1333,6 +1333,8 @@ enum brw_pixel_shader_coverage_mask_mode {
 /* DW2: start address */
 /* DW3: end address. */
 
+#define _3DSTATE_3D_MODE                     0x791e
+
 #define CMD_MI_FLUSH                  0x0200
 
 # define BLT_X_SHIFT					0
@@ -1488,49 +1490,6 @@ enum brw_pixel_shader_coverage_mask_mode {
 #define MI_MATH_OPERAND_ZF   0x32
 #define MI_MATH_OPERAND_CF   0x33
 
-/** @{
- *
- * PIPE_CONTROL operation, a combination MI_FLUSH and register write with
- * additional flushing control.
- */
-#define _3DSTATE_PIPE_CONTROL		(CMD_3D | (3 << 27) | (2 << 24))
-#define PIPE_CONTROL_CS_STALL		(1 << 20)
-#define PIPE_CONTROL_GLOBAL_SNAPSHOT_COUNT_RESET	(1 << 19)
-#define PIPE_CONTROL_TLB_INVALIDATE	(1 << 18)
-#define PIPE_CONTROL_SYNC_GFDT		(1 << 17)
-#define PIPE_CONTROL_MEDIA_STATE_CLEAR	(1 << 16)
-#define PIPE_CONTROL_NO_WRITE		(0 << 14)
-#define PIPE_CONTROL_WRITE_IMMEDIATE	(1 << 14)
-#define PIPE_CONTROL_WRITE_DEPTH_COUNT	(2 << 14)
-#define PIPE_CONTROL_WRITE_TIMESTAMP	(3 << 14)
-#define PIPE_CONTROL_DEPTH_STALL	(1 << 13)
-#define PIPE_CONTROL_RENDER_TARGET_FLUSH (1 << 12)
-#define PIPE_CONTROL_INSTRUCTION_INVALIDATE (1 << 11)
-#define PIPE_CONTROL_TEXTURE_CACHE_INVALIDATE	(1 << 10) /* GM45+ only */
-#define PIPE_CONTROL_ISP_DIS		(1 << 9)
-#define PIPE_CONTROL_INTERRUPT_ENABLE	(1 << 8)
-#define PIPE_CONTROL_FLUSH_ENABLE	(1 << 7) /* Gen7+ only */
-/* GT */
-#define PIPE_CONTROL_DATA_CACHE_FLUSH   	(1 << 5)
-#define PIPE_CONTROL_VF_CACHE_INVALIDATE	(1 << 4)
-#define PIPE_CONTROL_CONST_CACHE_INVALIDATE	(1 << 3)
-#define PIPE_CONTROL_STATE_CACHE_INVALIDATE	(1 << 2)
-#define PIPE_CONTROL_STALL_AT_SCOREBOARD	(1 << 1)
-#define PIPE_CONTROL_DEPTH_CACHE_FLUSH		(1 << 0)
-#define PIPE_CONTROL_PPGTT_WRITE	(0 << 2)
-#define PIPE_CONTROL_GLOBAL_GTT_WRITE	(1 << 2)
-
-#define PIPE_CONTROL_CACHE_FLUSH_BITS \
-   (PIPE_CONTROL_DEPTH_CACHE_FLUSH | PIPE_CONTROL_DATA_CACHE_FLUSH | \
-    PIPE_CONTROL_RENDER_TARGET_FLUSH)
-
-#define PIPE_CONTROL_CACHE_INVALIDATE_BITS \
-   (PIPE_CONTROL_STATE_CACHE_INVALIDATE | PIPE_CONTROL_CONST_CACHE_INVALIDATE | \
-    PIPE_CONTROL_VF_CACHE_INVALIDATE | PIPE_CONTROL_TEXTURE_CACHE_INVALIDATE | \
-    PIPE_CONTROL_INSTRUCTION_INVALIDATE)
-
-/** @} */
-
 #define XY_SETUP_BLT_CMD		(CMD_2D | (0x01 << 22))
 
 #define XY_COLOR_BLT_CMD		(CMD_2D | (0x50 << 22))
@@ -1609,6 +1568,7 @@ enum brw_pixel_shader_coverage_mask_mode {
 #define GEN7_GPGPU_DISPATCHDIMY         0x2504
 #define GEN7_GPGPU_DISPATCHDIMZ         0x2508
 
+#define GEN7_CACHE_MODE_0               0x7000
 #define GEN7_CACHE_MODE_1               0x7004
 # define GEN9_FLOAT_BLEND_OPTIMIZATION_ENABLE (1 << 4)
 # define GEN8_HIZ_NP_PMA_FIX_ENABLE        (1 << 11)
@@ -1687,10 +1647,18 @@ enum brw_pixel_shader_coverage_mask_mode {
 # define GEN8_L3CNTLREG_ALL_ALLOC_SHIFT    25
 # define GEN8_L3CNTLREG_ALL_ALLOC_MASK     INTEL_MASK(31, 25)
 
+#define GEN10_CACHE_MODE_SS            0x0e420
+#define GEN10_FLOAT_BLEND_OPTIMIZATION_ENABLE (1 << 4)
+
 #define INSTPM                             0x20c0
 # define INSTPM_CONSTANT_BUFFER_ADDRESS_OFFSET_DISABLE (1 << 6)
 
 #define CS_DEBUG_MODE2                     0x20d8 /* Gen9+ */
 # define CSDBG2_CONSTANT_BUFFER_ADDRESS_OFFSET_DISABLE (1 << 4)
+
+#define SLICE_COMMON_ECO_CHICKEN1          0x731c /* Gen9+ */
+# define GLK_SCEC_BARRIER_MODE_GPGPU       (0 << 7)
+# define GLK_SCEC_BARRIER_MODE_3D_HULL     (1 << 7)
+# define GLK_SCEC_BARRIER_MODE_MASK        REG_MASK(1 << 7)
 
 #endif

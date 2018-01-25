@@ -190,6 +190,12 @@ fs_generator::fs_generator(const struct brw_compiler *compiler, void *log_data,
 {
    p = rzalloc(mem_ctx, struct brw_codegen);
    brw_init_codegen(devinfo, p, mem_ctx);
+
+   /* In the FS code generator, we are very careful to ensure that we always
+    * set the right execution size so we don't need the EU code to "help" us
+    * by trying to infer it.  Sometimes, it infers the wrong thing.
+    */
+   p->automatic_exec_sizes = false;
 }
 
 fs_generator::~fs_generator()
@@ -281,8 +287,6 @@ fs_generator::fire_fb_write(fs_inst *inst,
     * messages set "Render Target Index" to 0.  Using a different binding
     * table index would make it impossible to use headerless messages.
     */
-   assert(prog_data->binding_table.render_target_start == 0);
-
    const uint32_t surf_index = inst->target;
 
    bool last_render_target = inst->eot ||
@@ -323,6 +327,7 @@ fs_generator::generate_fb_write(fs_inst *inst, struct brw_reg payload)
    if (inst->header_size != 0) {
       brw_push_insn_state(p);
       brw_set_default_mask_control(p, BRW_MASK_DISABLE);
+      brw_set_default_exec_size(p, BRW_EXECUTE_1);
       brw_set_default_predicate_control(p, BRW_PREDICATE_NONE);
       brw_set_default_compression_control(p, BRW_COMPRESSION_NONE);
       brw_set_default_flag_reg(p, 0, 0);
@@ -394,7 +399,9 @@ fs_generator::generate_fb_write(fs_inst *inst, struct brw_reg payload)
       struct brw_reg v1_null_ud = vec1(retype(brw_null_reg(), BRW_REGISTER_TYPE_UD));
 
       /* Check runtime bit to detect if we have to send AA data or not */
+      brw_push_insn_state(p);
       brw_set_default_compression_control(p, BRW_COMPRESSION_NONE);
+      brw_set_default_exec_size(p, BRW_EXECUTE_1);
       brw_AND(p,
               v1_null_ud,
               retype(brw_vec1_grf(1, 6), BRW_REGISTER_TYPE_UD),
@@ -402,6 +409,7 @@ fs_generator::generate_fb_write(fs_inst *inst, struct brw_reg payload)
       brw_inst_set_cond_modifier(p->devinfo, brw_last_inst, BRW_CONDITIONAL_NZ);
 
       int jmp = brw_JMPI(p, brw_imm_ud(0), BRW_PREDICATE_NORMAL) - p->store;
+      brw_pop_insn_state(p);
       {
          /* Don't send AA data */
          fire_fb_write(inst, offset(payload, 1), implied_header, inst->mlen-1);
@@ -417,8 +425,8 @@ fs_generator::generate_fb_read(fs_inst *inst, struct brw_reg dst,
 {
    assert(inst->size_written % REG_SIZE == 0);
    struct brw_wm_prog_data *prog_data = brw_wm_prog_data(this->prog_data);
-   const unsigned surf_index =
-      prog_data->binding_table.render_target_start + inst->target;
+   /* We assume that render targets start at binding table index 0. */
+   const unsigned surf_index = inst->target;
 
    gen9_fb_READ(p, dst, payload, surf_index,
                 inst->header_size, inst->size_written / REG_SIZE,
@@ -435,6 +443,8 @@ fs_generator::generate_mov_indirect(fs_inst *inst,
 {
    assert(indirect_byte_offset.type == BRW_REGISTER_TYPE_UD);
    assert(indirect_byte_offset.file == BRW_GENERAL_REGISTER_FILE);
+   assert(!reg.abs && !reg.negate);
+   assert(reg.type == dst.type);
 
    unsigned imm_byte_offset = reg.nr * REG_SIZE + reg.subnr;
 
@@ -560,6 +570,19 @@ void
 fs_generator::generate_urb_write(fs_inst *inst, struct brw_reg payload)
 {
    brw_inst *insn;
+
+    /* WaClearTDRRegBeforeEOTForNonPS.
+     *
+     *   WA: Clear tdr register before send EOT in all non-PS shader kernels
+     *
+     *   mov(8) tdr0:ud 0x0:ud {NoMask}"
+     */
+   if (inst->eot && p->devinfo->gen == 10) {
+      brw_push_insn_state(p);
+      brw_set_default_mask_control(p, BRW_MASK_DISABLE);
+      brw_MOV(p, brw_tdr_reg(), brw_imm_uw(0));
+      brw_pop_insn_state(p);
+   }
 
    insn = brw_next_insn(p, BRW_OPCODE_SEND);
 
@@ -944,6 +967,7 @@ fs_generator::generate_tex(fs_inst *inst, struct brw_reg dst, struct brw_reg src
          /* Explicitly set up the message header by copying g0 to the MRF. */
          brw_MOV(p, header_reg, brw_vec8_grf(0, 0));
 
+         brw_set_default_exec_size(p, BRW_EXECUTE_1);
          if (inst->offset) {
             /* Set the offset bits in DWord 2. */
             brw_MOV(p, get_element_ud(header_reg, 2),
@@ -997,6 +1021,7 @@ fs_generator::generate_tex(fs_inst *inst, struct brw_reg dst, struct brw_reg src
       brw_push_insn_state(p);
       brw_set_default_mask_control(p, BRW_MASK_DISABLE);
       brw_set_default_access_mode(p, BRW_ALIGN_1);
+      brw_set_default_exec_size(p, BRW_EXECUTE_1);
 
       if (brw_regs_equal(&surface_reg, &sampler_reg)) {
          brw_MUL(p, addr, sampler_reg, brw_imm_uw(0x101));
@@ -1444,6 +1469,7 @@ fs_generator::generate_mov_dispatch_to_flags(fs_inst *inst)
 
    brw_push_insn_state(p);
    brw_set_default_mask_control(p, BRW_MASK_DISABLE);
+   brw_set_default_exec_size(p, BRW_EXECUTE_1);
    brw_MOV(p, flags, dispatch_mask);
    brw_pop_insn_state(p);
 }
@@ -1623,8 +1649,7 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width)
    int spill_count = 0, fill_count = 0;
    int loop_count = 0;
 
-   struct annotation_info annotation;
-   memset(&annotation, 0, sizeof(annotation));
+   struct disasm_info *disasm_info = disasm_initialize(devinfo, cfg);
 
    foreach_block_and_inst (block, fs_inst, inst, cfg) {
       struct brw_reg src[3], dst;
@@ -1651,7 +1676,7 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width)
       }
 
       if (unlikely(debug_flag))
-         annotate(p->devinfo, &annotation, cfg, inst, p->next_insn_offset);
+         disasm_annotate(disasm_info, inst, p->next_insn_offset);
 
       /* If the instruction writes to more than one register, it needs to be
        * explicitly marked as compressed on Gen <= 5.  On Gen >= 6 the
@@ -1941,7 +1966,7 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width)
          src[0].subnr = 4 * type_sz(src[0].type);
          brw_MOV(p, dst, stride(src[0], 8, 4, 1));
          break;
-      case FS_OPCODE_GET_BUFFER_SIZE:
+      case SHADER_OPCODE_GET_BUFFER_SIZE:
          generate_get_buffer_size(inst, dst, src[0], src[1]);
          break;
       case SHADER_OPCODE_TEX:
@@ -2059,6 +2084,18 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width)
                                    inst->mlen, src[2].ud);
          break;
 
+      case SHADER_OPCODE_BYTE_SCATTERED_READ:
+         assert(src[2].file == BRW_IMMEDIATE_VALUE);
+         brw_byte_scattered_read(p, dst, src[0], src[1],
+                                 inst->mlen, src[2].ud);
+         break;
+
+      case SHADER_OPCODE_BYTE_SCATTERED_WRITE:
+         assert(src[2].file == BRW_IMMEDIATE_VALUE);
+         brw_byte_scattered_write(p, src[0], src[1],
+                                  inst->mlen, src[2].ud);
+         break;
+
       case SHADER_OPCODE_TYPED_ATOMIC:
          assert(src[2].file == BRW_IMMEDIATE_VALUE);
          brw_typed_atomic(p, dst, src[0], src[1],
@@ -2114,7 +2151,7 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width)
           */
          if (!patch_discard_jumps_to_fb_writes()) {
             if (unlikely(debug_flag)) {
-               annotation.ann_count--;
+               disasm_info->use_tail = true;
             }
          }
          break;
@@ -2149,6 +2186,11 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width)
          brw_DIM(p, dst, retype(src[0], BRW_REGISTER_TYPE_F));
          break;
 
+      case SHADER_OPCODE_RND_MODE:
+         assert(src[0].file == BRW_IMMEDIATE_VALUE);
+         brw_rounding_mode(p, (brw_rnd_mode) src[0].d);
+         break;
+
       default:
          unreachable("Unsupported opcode");
 
@@ -2174,24 +2216,22 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width)
    }
 
    brw_set_uip_jip(p, start_offset);
-   annotation_finalize(&annotation, p->next_insn_offset);
+
+   /* end of program sentinel */
+   disasm_new_inst_group(disasm_info, p->next_insn_offset);
 
 #ifndef NDEBUG
-   bool validated = brw_validate_instructions(devinfo, p->store,
-                                              start_offset,
-                                              p->next_insn_offset,
-                                              &annotation);
+   bool validated =
 #else
    if (unlikely(debug_flag))
+#endif
       brw_validate_instructions(devinfo, p->store,
                                 start_offset,
                                 p->next_insn_offset,
-                                &annotation);
-#endif
+                                disasm_info);
 
    int before_size = p->next_insn_offset - start_offset;
-   brw_compact_instructions(p, start_offset, annotation.ann_count,
-                            annotation.ann);
+   brw_compact_instructions(p, start_offset, disasm_info);
    int after_size = p->next_insn_offset - start_offset;
 
    if (unlikely(debug_flag)) {
@@ -2202,10 +2242,9 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width)
               spill_count, fill_count, promoted_constants, before_size, after_size,
               100.0f * (before_size - after_size) / before_size);
 
-      dump_assembly(p->store, annotation.ann_count, annotation.ann,
-                    p->devinfo);
-      ralloc_free(annotation.mem_ctx);
+      dump_assembly(p->store, disasm_info);
    }
+   ralloc_free(disasm_info);
    assert(validated);
 
    compiler->shader_debug_log(log_data,

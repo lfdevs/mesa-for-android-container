@@ -78,6 +78,6 @@ extern bool
 dri2_convert_glx_attribs(unsigned num_attribs, const uint32_t *attribs,
                          unsigned *major_ver, unsigned *minor_ver,
                          uint32_t *render_type, uint32_t *flags, unsigned *api,
-                         int *reset, unsigned *error);
+                         int *reset, int *release, unsigned *error);
 
 #endif /* _DRI_COMMON_H */

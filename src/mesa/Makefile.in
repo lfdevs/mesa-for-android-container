@@ -186,22 +186,24 @@ am__libmesa_la_SOURCES_DIST = main/accum.c main/accum.h \
 	main/framebuffer.c main/framebuffer.h main/get.c main/get.h \
 	main/get_hash.h main/genmipmap.c main/genmipmap.h \
 	main/getstring.c main/glformats.c main/glformats.h \
-	main/glthread.c main/glthread.h main/glheader.h main/hash.c \
-	main/hash.h main/hint.c main/hint.h main/histogram.c \
-	main/histogram.h main/image.c main/image.h main/imports.c \
-	main/imports.h main/light.c main/light.h main/lines.c \
-	main/lines.h main/macros.h main/marshal.c main/marshal.h \
-	main/marshal_generated.c main/marshal_generated.h \
-	main/matrix.c main/matrix.h main/mipmap.c main/mipmap.h \
-	main/mm.c main/mm.h main/mtypes.h main/multisample.c \
-	main/multisample.h main/objectlabel.c main/objectlabel.h \
-	main/objectpurge.c main/objectpurge.h main/pack.c main/pack.h \
-	main/pbo.c main/pbo.h main/performance_monitor.c \
-	main/performance_monitor.h main/performance_query.c \
-	main/performance_query.h main/pipelineobj.c main/pipelineobj.h \
-	main/pixel.c main/pixel.h main/pixelstore.c main/pixelstore.h \
+	main/glspirv.c main/glspirv.h main/glthread.c main/glthread.h \
+	main/glheader.h main/hash.c main/hash.h main/hint.c \
+	main/hint.h main/histogram.c main/histogram.h main/image.c \
+	main/image.h main/imports.c main/imports.h main/light.c \
+	main/light.h main/lines.c main/lines.h main/macros.h \
+	main/marshal.c main/marshal.h main/marshal_generated.c \
+	main/marshal_generated.h main/matrix.c main/matrix.h \
+	main/mipmap.c main/mipmap.h main/mm.c main/mm.h main/mtypes.h \
+	main/multisample.c main/multisample.h main/objectlabel.c \
+	main/objectlabel.h main/objectpurge.c main/objectpurge.h \
+	main/pack.c main/pack.h main/pbo.c main/pbo.h \
+	main/performance_monitor.c main/performance_monitor.h \
+	main/performance_query.c main/performance_query.h \
+	main/pipelineobj.c main/pipelineobj.h main/pixel.c \
+	main/pixel.h main/pixelstore.c main/pixelstore.h \
 	main/pixeltransfer.c main/pixeltransfer.h main/points.c \
 	main/points.h main/polygon.c main/polygon.h \
+	main/program_binary.c main/program_binary.h \
 	main/program_resource.c main/program_resource.h \
 	main/querymatrix.c main/querymatrix.h main/queryobj.c \
 	main/queryobj.h main/rastpos.c main/rastpos.h main/readpix.c \
@@ -332,16 +334,17 @@ am__objects_2 = main/accum.lo main/api_arrayelt.lo main/api_exec.lo \
 	main/format_unpack.lo main/formatquery.lo main/formats.lo \
 	main/format_utils.lo main/framebuffer.lo main/get.lo \
 	main/genmipmap.lo main/getstring.lo main/glformats.lo \
-	main/glthread.lo main/hash.lo main/hint.lo main/histogram.lo \
-	main/image.lo main/imports.lo main/light.lo main/lines.lo \
-	main/marshal.lo main/marshal_generated.lo main/matrix.lo \
-	main/mipmap.lo main/mm.lo main/multisample.lo \
+	main/glspirv.lo main/glthread.lo main/hash.lo main/hint.lo \
+	main/histogram.lo main/image.lo main/imports.lo main/light.lo \
+	main/lines.lo main/marshal.lo main/marshal_generated.lo \
+	main/matrix.lo main/mipmap.lo main/mm.lo main/multisample.lo \
 	main/objectlabel.lo main/objectpurge.lo main/pack.lo \
 	main/pbo.lo main/performance_monitor.lo \
 	main/performance_query.lo main/pipelineobj.lo main/pixel.lo \
 	main/pixelstore.lo main/pixeltransfer.lo main/points.lo \
-	main/polygon.lo main/program_resource.lo main/querymatrix.lo \
-	main/queryobj.lo main/rastpos.lo main/readpix.lo main/remap.lo \
+	main/polygon.lo main/program_binary.lo \
+	main/program_resource.lo main/querymatrix.lo main/queryobj.lo \
+	main/rastpos.lo main/readpix.lo main/remap.lo \
 	main/renderbuffer.lo main/robustness.lo main/samplerobj.lo \
 	main/scissor.lo main/shaderapi.lo main/shaderimage.lo \
 	main/shaderobj.lo main/shader_query.lo main/shared.lo \
@@ -473,22 +476,24 @@ am__libmesagallium_la_SOURCES_DIST = main/accum.c main/accum.h \
 	main/framebuffer.c main/framebuffer.h main/get.c main/get.h \
 	main/get_hash.h main/genmipmap.c main/genmipmap.h \
 	main/getstring.c main/glformats.c main/glformats.h \
-	main/glthread.c main/glthread.h main/glheader.h main/hash.c \
-	main/hash.h main/hint.c main/hint.h main/histogram.c \
-	main/histogram.h main/image.c main/image.h main/imports.c \
-	main/imports.h main/light.c main/light.h main/lines.c \
-	main/lines.h main/macros.h main/marshal.c main/marshal.h \
-	main/marshal_generated.c main/marshal_generated.h \
-	main/matrix.c main/matrix.h main/mipmap.c main/mipmap.h \
-	main/mm.c main/mm.h main/mtypes.h main/multisample.c \
-	main/multisample.h main/objectlabel.c main/objectlabel.h \
-	main/objectpurge.c main/objectpurge.h main/pack.c main/pack.h \
-	main/pbo.c main/pbo.h main/performance_monitor.c \
-	main/performance_monitor.h main/performance_query.c \
-	main/performance_query.h main/pipelineobj.c main/pipelineobj.h \
-	main/pixel.c main/pixel.h main/pixelstore.c main/pixelstore.h \
+	main/glspirv.c main/glspirv.h main/glthread.c main/glthread.h \
+	main/glheader.h main/hash.c main/hash.h main/hint.c \
+	main/hint.h main/histogram.c main/histogram.h main/image.c \
+	main/image.h main/imports.c main/imports.h main/light.c \
+	main/light.h main/lines.c main/lines.h main/macros.h \
+	main/marshal.c main/marshal.h main/marshal_generated.c \
+	main/marshal_generated.h main/matrix.c main/matrix.h \
+	main/mipmap.c main/mipmap.h main/mm.c main/mm.h main/mtypes.h \
+	main/multisample.c main/multisample.h main/objectlabel.c \
+	main/objectlabel.h main/objectpurge.c main/objectpurge.h \
+	main/pack.c main/pack.h main/pbo.c main/pbo.h \
+	main/performance_monitor.c main/performance_monitor.h \
+	main/performance_query.c main/performance_query.h \
+	main/pipelineobj.c main/pipelineobj.h main/pixel.c \
+	main/pixel.h main/pixelstore.c main/pixelstore.h \
 	main/pixeltransfer.c main/pixeltransfer.h main/points.c \
 	main/points.h main/polygon.c main/polygon.h \
+	main/program_binary.c main/program_binary.h \
 	main/program_resource.c main/program_resource.h \
 	main/querymatrix.c main/querymatrix.h main/queryobj.c \
 	main/queryobj.h main/rastpos.c main/rastpos.h main/readpix.c \
@@ -869,6 +874,7 @@ CLOVER_STD_OVERRIDE = @CLOVER_STD_OVERRIDE@
 CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
 CXX = @CXX@
+CXX11_CXXFLAGS = @CXX11_CXXFLAGS@
 CXXCPP = @CXXCPP@
 CXXDEPMODE = @CXXDEPMODE@
 CXXFLAGS = @CXXFLAGS@
@@ -972,7 +978,7 @@ MSVC2013_COMPAT_CFLAGS = @MSVC2013_COMPAT_CFLAGS@
 MSVC2013_COMPAT_CXXFLAGS = @MSVC2013_COMPAT_CXXFLAGS@
 NINE_MAJOR = @NINE_MAJOR@
 NINE_MINOR = @NINE_MINOR@
-NINE_TINY = @NINE_TINY@
+NINE_PATCH = @NINE_PATCH@
 NINE_VERSION = @NINE_VERSION@
 NM = @NM@
 NMEDIT = @NMEDIT@
@@ -1028,7 +1034,6 @@ SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
 SWR_AVX2_CXXFLAGS = @SWR_AVX2_CXXFLAGS@
 SWR_AVX_CXXFLAGS = @SWR_AVX_CXXFLAGS@
-SWR_CXX11_CXXFLAGS = @SWR_CXX11_CXXFLAGS@
 SWR_KNL_CXXFLAGS = @SWR_KNL_CXXFLAGS@
 SWR_SKX_CXXFLAGS = @SWR_SKX_CXXFLAGS@
 VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
@@ -1063,7 +1068,7 @@ WNO_OVERRIDE_INIT = @WNO_OVERRIDE_INIT@
 X11_INCLUDES = @X11_INCLUDES@
 XA_MAJOR = @XA_MAJOR@
 XA_MINOR = @XA_MINOR@
-XA_TINY = @XA_TINY@
+XA_PATCH = @XA_PATCH@
 XA_VERSION = @XA_VERSION@
 XCB_DRI2_CFLAGS = @XCB_DRI2_CFLAGS@
 XCB_DRI2_LIBS = @XCB_DRI2_LIBS@
@@ -1130,7 +1135,6 @@ pdfdir = @pdfdir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
-runstatedir = @runstatedir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
@@ -1264,6 +1268,8 @@ MAIN_FILES = \
 	main/getstring.c \
 	main/glformats.c \
 	main/glformats.h \
+	main/glspirv.c \
+	main/glspirv.h \
 	main/glthread.c \
 	main/glthread.h \
 	main/glheader.h \
@@ -1319,6 +1325,8 @@ MAIN_FILES = \
 	main/points.h \
 	main/polygon.c \
 	main/polygon.h \
+	main/program_binary.c \
+	main/program_binary.h \
 	main/program_resource.c \
 	main/program_resource.h \
 	main/querymatrix.c \
@@ -1833,6 +1841,9 @@ INCLUDE_DIRS = \
 
 EXTRA_DIST = \
 	drivers/SConscript \
+	main/meson.build \
+	program/meson.build \
+	meson.build \
 	main/format_fallback.py \
 	main/format_info.py \
 	main/format_pack.py \
@@ -2040,6 +2051,7 @@ main/get.lo: main/$(am__dirstamp) main/$(DEPDIR)/$(am__dirstamp)
 main/genmipmap.lo: main/$(am__dirstamp) main/$(DEPDIR)/$(am__dirstamp)
 main/getstring.lo: main/$(am__dirstamp) main/$(DEPDIR)/$(am__dirstamp)
 main/glformats.lo: main/$(am__dirstamp) main/$(DEPDIR)/$(am__dirstamp)
+main/glspirv.lo: main/$(am__dirstamp) main/$(DEPDIR)/$(am__dirstamp)
 main/glthread.lo: main/$(am__dirstamp) main/$(DEPDIR)/$(am__dirstamp)
 main/hash.lo: main/$(am__dirstamp) main/$(DEPDIR)/$(am__dirstamp)
 main/hint.lo: main/$(am__dirstamp) main/$(DEPDIR)/$(am__dirstamp)
@@ -2075,6 +2087,8 @@ main/pixeltransfer.lo: main/$(am__dirstamp) \
 	main/$(DEPDIR)/$(am__dirstamp)
 main/points.lo: main/$(am__dirstamp) main/$(DEPDIR)/$(am__dirstamp)
 main/polygon.lo: main/$(am__dirstamp) main/$(DEPDIR)/$(am__dirstamp)
+main/program_binary.lo: main/$(am__dirstamp) \
+	main/$(DEPDIR)/$(am__dirstamp)
 main/program_resource.lo: main/$(am__dirstamp) \
 	main/$(DEPDIR)/$(am__dirstamp)
 main/querymatrix.lo: main/$(am__dirstamp) \
@@ -2683,6 +2697,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/get.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/getstring.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/glformats.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/glspirv.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/glthread.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/hash.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/hint.Plo@am__quote@
@@ -2711,6 +2726,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/pixeltransfer.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/points.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/polygon.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/program_binary.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/program_resource.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/querymatrix.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/queryobj.Plo@am__quote@

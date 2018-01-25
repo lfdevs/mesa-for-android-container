@@ -1063,6 +1063,9 @@ static VkResult radv_get_image_format_properties(struct radv_physical_device *ph
 	if (format_feature_flags == 0)
 		goto unsupported;
 
+	if (info->type != VK_IMAGE_TYPE_2D && vk_format_is_depth_or_stencil(info->format))
+		goto unsupported;
+
 	switch (info->type) {
 	default:
 		unreachable("bad vkimage type\n");
@@ -1182,7 +1185,8 @@ get_external_image_format_properties(const VkPhysicalDeviceImageFormatInfo2KHR *
 	switch (pImageFormatInfo->type) {
 	case VK_IMAGE_TYPE_2D:
 		flags = VK_EXTERNAL_MEMORY_FEATURE_DEDICATED_ONLY_BIT_KHR|VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT_KHR|VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT_KHR;
-		compat_flags = export_flags = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT_KHR;
+		compat_flags = export_flags = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT_KHR |
+					      VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
 		break;
 	default:
 		break;
@@ -1241,6 +1245,7 @@ VkResult radv_GetPhysicalDeviceImageFormatProperties2KHR(
 	if (external_info && external_info->handleType != 0) {
 		switch (external_info->handleType) {
 		case VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT_KHR:
+		case VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT:
 			get_external_image_format_properties(base_info, &external_props->externalMemoryProperties);
 			break;
 		default:
@@ -1309,9 +1314,11 @@ void radv_GetPhysicalDeviceExternalBufferPropertiesKHR(
 	VkExternalMemoryHandleTypeFlagsKHR compat_flags = 0;
 	switch(pExternalBufferInfo->handleType) {
 	case VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT_KHR:
+	case VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT:
 		flags = VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT_KHR |
 		        VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT_KHR;
-		compat_flags = export_flags = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT_KHR;
+		compat_flags = export_flags = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT_KHR |
+					      VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
 		break;
 	default:
 		break;

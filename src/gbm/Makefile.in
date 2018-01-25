@@ -94,8 +94,11 @@ POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
 target_triplet = @target@
-@HAVE_PLATFORM_WAYLAND_TRUE@am__append_1 = $(WAYLAND_SERVER_CFLAGS)
-@HAVE_PLATFORM_WAYLAND_TRUE@am__append_2 = $(top_builddir)/src/egl/wayland/wayland-drm/libwayland-drm.la $(WAYLAND_SERVER_LIBS)
+@HAVE_PLATFORM_WAYLAND_TRUE@am__append_1 = \
+@HAVE_PLATFORM_WAYLAND_TRUE@	$(WAYLAND_SERVER_CFLAGS) \
+@HAVE_PLATFORM_WAYLAND_TRUE@	-I$(top_srcdir)/src/egl/wayland/wayland-drm/
+
+@HAVE_PLATFORM_WAYLAND_TRUE@am__append_2 = $(WAYLAND_SERVER_LIBS)
 @HAVE_DRI2_TRUE@am__append_3 = \
 @HAVE_DRI2_TRUE@	$(gbm_dri_FILES)
 
@@ -159,7 +162,7 @@ am__installdirs = "$(DESTDIR)$(libdir)" "$(DESTDIR)$(pkgconfigdir)" \
 	"$(DESTDIR)$(includedir)"
 LTLIBRARIES = $(lib_LTLIBRARIES)
 am__DEPENDENCIES_1 =
-@HAVE_PLATFORM_WAYLAND_TRUE@am__DEPENDENCIES_2 = $(top_builddir)/src/egl/wayland/wayland-drm/libwayland-drm.la \
+@HAVE_PLATFORM_WAYLAND_TRUE@am__DEPENDENCIES_2 =  \
 @HAVE_PLATFORM_WAYLAND_TRUE@	$(am__DEPENDENCIES_1)
 @HAVE_DRI2_TRUE@am__DEPENDENCIES_3 = $(am__DEPENDENCIES_1) \
 @HAVE_DRI2_TRUE@	$(am__DEPENDENCIES_1)
@@ -451,6 +454,7 @@ CLOVER_STD_OVERRIDE = @CLOVER_STD_OVERRIDE@
 CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
 CXX = @CXX@
+CXX11_CXXFLAGS = @CXX11_CXXFLAGS@
 CXXCPP = @CXXCPP@
 CXXDEPMODE = @CXXDEPMODE@
 CXXFLAGS = @CXXFLAGS@
@@ -554,7 +558,7 @@ MSVC2013_COMPAT_CFLAGS = @MSVC2013_COMPAT_CFLAGS@
 MSVC2013_COMPAT_CXXFLAGS = @MSVC2013_COMPAT_CXXFLAGS@
 NINE_MAJOR = @NINE_MAJOR@
 NINE_MINOR = @NINE_MINOR@
-NINE_TINY = @NINE_TINY@
+NINE_PATCH = @NINE_PATCH@
 NINE_VERSION = @NINE_VERSION@
 NM = @NM@
 NMEDIT = @NMEDIT@
@@ -610,7 +614,6 @@ SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
 SWR_AVX2_CXXFLAGS = @SWR_AVX2_CXXFLAGS@
 SWR_AVX_CXXFLAGS = @SWR_AVX_CXXFLAGS@
-SWR_CXX11_CXXFLAGS = @SWR_CXX11_CXXFLAGS@
 SWR_KNL_CXXFLAGS = @SWR_KNL_CXXFLAGS@
 SWR_SKX_CXXFLAGS = @SWR_SKX_CXXFLAGS@
 VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
@@ -645,7 +648,7 @@ WNO_OVERRIDE_INIT = @WNO_OVERRIDE_INIT@
 X11_INCLUDES = @X11_INCLUDES@
 XA_MAJOR = @XA_MAJOR@
 XA_MINOR = @XA_MINOR@
-XA_TINY = @XA_TINY@
+XA_PATCH = @XA_PATCH@
 XA_VERSION = @XA_VERSION@
 XCB_DRI2_CFLAGS = @XCB_DRI2_CFLAGS@
 XCB_DRI2_LIBS = @XCB_DRI2_LIBS@
@@ -712,7 +715,6 @@ pdfdir = @pdfdir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
-runstatedir = @runstatedir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
@@ -756,7 +758,7 @@ libgbm_la_LIBADD = $(top_builddir)/src/loader/libloader.la \
 	$(top_builddir)/src/util/libxmlconfig.la $(DLOPEN_LIBS) \
 	$(am__append_2) $(am__append_5)
 TESTS = gbm-symbols-check
-EXTRA_DIST = gbm-symbols-check
+EXTRA_DIST = gbm-symbols-check meson.build
 all: all-am
 
 .SUFFIXES:

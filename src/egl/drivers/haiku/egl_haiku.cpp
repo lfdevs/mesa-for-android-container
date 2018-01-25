@@ -313,7 +313,8 @@ _eglBuiltInDriver(void)
 {
 	CALLED();
 
-	_EGLDriver* driver = calloc(1, sizeof(*driver));
+	_EGLDriver* driver;
+	driver = (_EGLDriver*) calloc(1, sizeof(*driver));
 	if (!driver) {
 		_eglError(EGL_BAD_ALLOC, "_eglBuiltInDriverHaiku");
 		return NULL;

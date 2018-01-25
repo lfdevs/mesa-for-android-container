@@ -32,7 +32,7 @@
 #include "util/u_debug.h"
 #include "util/u_memory.h"
 #include "util/simple_list.h"
-#include "os/os_time.h"
+#include "util/os_time.h"
 #include "lp_bld.h"
 #include "lp_bld_debug.h"
 #include "lp_bld_misc.h"

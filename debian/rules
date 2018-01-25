@@ -10,13 +10,19 @@ DEB_HOST_ARCH      ?= $(shell dpkg-architecture -qDEB_HOST_ARCH)
 DEB_HOST_ARCH_OS   ?= $(shell dpkg-architecture -qDEB_HOST_ARCH_OS)
 DEB_HOST_ARCH_CPU  ?= $(shell dpkg-architecture -qDEB_HOST_ARCH_CPU)
 
-ifeq (,$(filter $(DEB_HOST_ARCH), armhf))
+ifeq (,$(filter $(DEB_HOST_ARCH), armhf sh3 sh4))
 buildflags = \
 	$(shell DEB_CFLAGS_MAINT_APPEND=-Wall DEB_CXXFLAGS_MAINT_APPEND=-Wall dpkg-buildflags --export=configure)
 else
-# Workaround for a variant of LP: #725126
-buildflags = \
+  ifneq (,$(filter $(DEB_HOST_ARCH), armhf))
+  # Workaround for a variant of LP: #725126
+  buildflags = \
 	$(shell DEB_CFLAGS_MAINT_APPEND="-Wall -fno-optimize-sibling-calls" DEB_CXXFLAGS_MAINT_APPEND="-Wall -fno-optimize-sibling-calls" dpkg-buildflags --export=configure)
+  else
+  # Workaround for https://gcc.gnu.org/bugzilla/show_bug.cgi?id=83143
+  buildflags = \
+	$(shell DEB_CFLAGS_MAINT_APPEND="-Wall -O1" DEB_CXXFLAGS_MAINT_APPEND="-Wall -O1" dpkg-buildflags --export=configure)
+  endif
 endif
 
 # keep a list of files we don't install (yet), but since it's a bit
@@ -26,16 +32,20 @@ include debian/not-installed
 DRI_DRIVERS =
 GALLIUM_DRIVERS =
 VULKAN_DRIVERS =
-EGL_PLATFORMS = x11,surfaceless
 
 confflags_DRI3 = --disable-dri3
 
 # hurd doesn't do direct rendering
 ifeq ($(DEB_HOST_ARCH_OS), hurd)
+	EGL_PLATFORMS = x11
+
 	confflags_DIRECT_RENDERING = --disable-driglx-direct
 	confflags_GBM = --disable-gbm
 	DRI_DRIVERS = swrast
+	with_libva = 
 else
+	EGL_PLATFORMS = x11,surfaceless
+
   ifeq ($(DEB_HOST_ARCH_OS), linux)
 	confflags_DRI3 = --enable-dri3
 	# Gallium drivers which require kernel support, not yet ported to non-Linux
@@ -108,6 +118,7 @@ else
 	confflags_GALLIUM += --enable-va
 	confflags_GALLIUM += --enable-gallium-extra-hud
 	confflags_GALLIUM += --enable-lmsensors
+	with_libva = ,libva
 endif
 
 # Disable assembly usage on x32 otherwise Mesa defaults to x86_64 assembly
@@ -227,7 +238,7 @@ override_dh_makeshlibs:
 	dh_makeshlibs -a -- -c4
 
 %:
-	dh $@ --with quilt,libva \
+	dh $@ --with quilt$(with_libva) \
 		--builddirectory=build/
 
 # For maintainer use only, generate a tarball:

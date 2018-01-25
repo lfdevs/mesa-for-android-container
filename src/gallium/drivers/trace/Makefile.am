@@ -11,4 +11,5 @@ libtrace_la_SOURCES = $(C_SOURCES)
 
 EXTRA_DIST = SConscript \
 	README \
-	trace.xsl
+	trace.xsl \
+	meson.build

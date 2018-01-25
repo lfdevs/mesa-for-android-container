@@ -121,3 +121,130 @@ INLINE void calcBoundingBoxIntVertical(const typename SIMD_T::Integer(&vX)[3], c
     bbox.ymin = vMinY;
     bbox.ymax = vMaxY;
 }
+
+//////////////////////////////////////////////////////////////////////////
+/// @brief  Gather scissor rect data based on per-prim viewport indices.
+/// @param pScissorsInFixedPoint - array of scissor rects in 16.8 fixed point.
+/// @param pViewportIndex - array of per-primitive vewport indexes.
+/// @param scisXmin - output vector of per-prmitive scissor rect Xmin data.
+/// @param scisYmin - output vector of per-prmitive scissor rect Ymin data.
+/// @param scisXmax - output vector of per-prmitive scissor rect Xmax data.
+/// @param scisYmax - output vector of per-prmitive scissor rect Ymax data.
+//
+/// @todo:  Look at speeding this up -- weigh against corresponding costs in rasterizer.
+static void GatherScissors(const SWR_RECT *pScissorsInFixedPoint, const uint32_t *pViewportIndex,
+    simdscalari &scisXmin, simdscalari &scisYmin, simdscalari &scisXmax, simdscalari &scisYmax)
+{
+    scisXmin = _simd_set_epi32(
+        pScissorsInFixedPoint[pViewportIndex[7]].xmin,
+        pScissorsInFixedPoint[pViewportIndex[6]].xmin,
+        pScissorsInFixedPoint[pViewportIndex[5]].xmin,
+        pScissorsInFixedPoint[pViewportIndex[4]].xmin,
+        pScissorsInFixedPoint[pViewportIndex[3]].xmin,
+        pScissorsInFixedPoint[pViewportIndex[2]].xmin,
+        pScissorsInFixedPoint[pViewportIndex[1]].xmin,
+        pScissorsInFixedPoint[pViewportIndex[0]].xmin);
+    scisYmin = _simd_set_epi32(
+        pScissorsInFixedPoint[pViewportIndex[7]].ymin,
+        pScissorsInFixedPoint[pViewportIndex[6]].ymin,
+        pScissorsInFixedPoint[pViewportIndex[5]].ymin,
+        pScissorsInFixedPoint[pViewportIndex[4]].ymin,
+        pScissorsInFixedPoint[pViewportIndex[3]].ymin,
+        pScissorsInFixedPoint[pViewportIndex[2]].ymin,
+        pScissorsInFixedPoint[pViewportIndex[1]].ymin,
+        pScissorsInFixedPoint[pViewportIndex[0]].ymin);
+    scisXmax = _simd_set_epi32(
+        pScissorsInFixedPoint[pViewportIndex[7]].xmax,
+        pScissorsInFixedPoint[pViewportIndex[6]].xmax,
+        pScissorsInFixedPoint[pViewportIndex[5]].xmax,
+        pScissorsInFixedPoint[pViewportIndex[4]].xmax,
+        pScissorsInFixedPoint[pViewportIndex[3]].xmax,
+        pScissorsInFixedPoint[pViewportIndex[2]].xmax,
+        pScissorsInFixedPoint[pViewportIndex[1]].xmax,
+        pScissorsInFixedPoint[pViewportIndex[0]].xmax);
+    scisYmax = _simd_set_epi32(
+        pScissorsInFixedPoint[pViewportIndex[7]].ymax,
+        pScissorsInFixedPoint[pViewportIndex[6]].ymax,
+        pScissorsInFixedPoint[pViewportIndex[5]].ymax,
+        pScissorsInFixedPoint[pViewportIndex[4]].ymax,
+        pScissorsInFixedPoint[pViewportIndex[3]].ymax,
+        pScissorsInFixedPoint[pViewportIndex[2]].ymax,
+        pScissorsInFixedPoint[pViewportIndex[1]].ymax,
+        pScissorsInFixedPoint[pViewportIndex[0]].ymax);
+}
+
+static void GatherScissors(const SWR_RECT *pScissorsInFixedPoint, const uint32_t *pViewportIndex,
+    simd16scalari &scisXmin, simd16scalari &scisYmin, simd16scalari &scisXmax, simd16scalari &scisYmax)
+{
+    scisXmin = _simd16_set_epi32(
+        pScissorsInFixedPoint[pViewportIndex[15]].xmin,
+        pScissorsInFixedPoint[pViewportIndex[14]].xmin,
+        pScissorsInFixedPoint[pViewportIndex[13]].xmin,
+        pScissorsInFixedPoint[pViewportIndex[12]].xmin,
+        pScissorsInFixedPoint[pViewportIndex[11]].xmin,
+        pScissorsInFixedPoint[pViewportIndex[10]].xmin,
+        pScissorsInFixedPoint[pViewportIndex[9]].xmin,
+        pScissorsInFixedPoint[pViewportIndex[8]].xmin,
+        pScissorsInFixedPoint[pViewportIndex[7]].xmin,
+        pScissorsInFixedPoint[pViewportIndex[6]].xmin,
+        pScissorsInFixedPoint[pViewportIndex[5]].xmin,
+        pScissorsInFixedPoint[pViewportIndex[4]].xmin,
+        pScissorsInFixedPoint[pViewportIndex[3]].xmin,
+        pScissorsInFixedPoint[pViewportIndex[2]].xmin,
+        pScissorsInFixedPoint[pViewportIndex[1]].xmin,
+        pScissorsInFixedPoint[pViewportIndex[0]].xmin);
+
+    scisYmin = _simd16_set_epi32(
+        pScissorsInFixedPoint[pViewportIndex[15]].ymin,
+        pScissorsInFixedPoint[pViewportIndex[14]].ymin,
+        pScissorsInFixedPoint[pViewportIndex[13]].ymin,
+        pScissorsInFixedPoint[pViewportIndex[12]].ymin,
+        pScissorsInFixedPoint[pViewportIndex[11]].ymin,
+        pScissorsInFixedPoint[pViewportIndex[10]].ymin,
+        pScissorsInFixedPoint[pViewportIndex[9]].ymin,
+        pScissorsInFixedPoint[pViewportIndex[8]].ymin,
+        pScissorsInFixedPoint[pViewportIndex[7]].ymin,
+        pScissorsInFixedPoint[pViewportIndex[6]].ymin,
+        pScissorsInFixedPoint[pViewportIndex[5]].ymin,
+        pScissorsInFixedPoint[pViewportIndex[4]].ymin,
+        pScissorsInFixedPoint[pViewportIndex[3]].ymin,
+        pScissorsInFixedPoint[pViewportIndex[2]].ymin,
+        pScissorsInFixedPoint[pViewportIndex[1]].ymin,
+        pScissorsInFixedPoint[pViewportIndex[0]].ymin);
+
+    scisXmax = _simd16_set_epi32(
+        pScissorsInFixedPoint[pViewportIndex[15]].xmax,
+        pScissorsInFixedPoint[pViewportIndex[14]].xmax,
+        pScissorsInFixedPoint[pViewportIndex[13]].xmax,
+        pScissorsInFixedPoint[pViewportIndex[12]].xmax,
+        pScissorsInFixedPoint[pViewportIndex[11]].xmax,
+        pScissorsInFixedPoint[pViewportIndex[10]].xmax,
+        pScissorsInFixedPoint[pViewportIndex[9]].xmax,
+        pScissorsInFixedPoint[pViewportIndex[8]].xmax,
+        pScissorsInFixedPoint[pViewportIndex[7]].xmax,
+        pScissorsInFixedPoint[pViewportIndex[6]].xmax,
+        pScissorsInFixedPoint[pViewportIndex[5]].xmax,
+        pScissorsInFixedPoint[pViewportIndex[4]].xmax,
+        pScissorsInFixedPoint[pViewportIndex[3]].xmax,
+        pScissorsInFixedPoint[pViewportIndex[2]].xmax,
+        pScissorsInFixedPoint[pViewportIndex[1]].xmax,
+        pScissorsInFixedPoint[pViewportIndex[0]].xmax);
+
+    scisYmax = _simd16_set_epi32(
+        pScissorsInFixedPoint[pViewportIndex[15]].ymax,
+        pScissorsInFixedPoint[pViewportIndex[14]].ymax,
+        pScissorsInFixedPoint[pViewportIndex[13]].ymax,
+        pScissorsInFixedPoint[pViewportIndex[12]].ymax,
+        pScissorsInFixedPoint[pViewportIndex[11]].ymax,
+        pScissorsInFixedPoint[pViewportIndex[10]].ymax,
+        pScissorsInFixedPoint[pViewportIndex[9]].ymax,
+        pScissorsInFixedPoint[pViewportIndex[8]].ymax,
+        pScissorsInFixedPoint[pViewportIndex[7]].ymax,
+        pScissorsInFixedPoint[pViewportIndex[6]].ymax,
+        pScissorsInFixedPoint[pViewportIndex[5]].ymax,
+        pScissorsInFixedPoint[pViewportIndex[4]].ymax,
+        pScissorsInFixedPoint[pViewportIndex[3]].ymax,
+        pScissorsInFixedPoint[pViewportIndex[2]].ymax,
+        pScissorsInFixedPoint[pViewportIndex[1]].ymax,
+        pScissorsInFixedPoint[pViewportIndex[0]].ymax);
+}

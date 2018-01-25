@@ -43,11 +43,29 @@ namespace SwrJit
     INLINE static StructType *Gen_simdvertex(JitManager* pJitMgr)
     {
         LLVMContext& ctx = pJitMgr->mContext;
-        std::vector<Type*> members;
-        
-        /* attrib */ members.push_back( ArrayType::get(ArrayType::get(VectorType::get(Type::getFloatTy(ctx), 8), 4), SWR_VTX_NUM_SLOTS) );
+	(void) ctx;
 
-        return StructType::get(ctx, members, false);
+        StructType* pRetType = pJitMgr->mpCurrentModule->getTypeByName("simdvertex");
+        if (pRetType == nullptr)
+        {
+            std::vector<Type*> members;
+            
+            /* attrib */ members.push_back(ArrayType::get(ArrayType::get(VectorType::get(Type::getFloatTy(ctx), 8), 4), SWR_VTX_NUM_SLOTS));
+
+            pRetType = StructType::create(members, "simdvertex", false);
+
+            // Compute debug metadata
+            llvm::DIBuilder builder(*pJitMgr->mpCurrentModule);
+            llvm::DIFile* pFile = builder.createFile("state.h", "./rasterizer/core");
+
+            std::vector<std::pair<std::string, uint32_t>> dbgMembers;
+            dbgMembers.push_back(std::make_pair("attrib", 199));
+            
+            pJitMgr->CreateDebugStructType(pRetType, "simdvertex", pFile, 197, dbgMembers);
+
+        }
+
+        return pRetType;
     }
 
     static const uint32_t simdvertex_attrib = 0;
@@ -55,11 +73,29 @@ namespace SwrJit
     INLINE static StructType *Gen_simd16vertex(JitManager* pJitMgr)
     {
         LLVMContext& ctx = pJitMgr->mContext;
-        std::vector<Type*> members;
-        
-        /* attrib */ members.push_back( ArrayType::get(ArrayType::get(VectorType::get(Type::getFloatTy(ctx), 16), 4), SWR_VTX_NUM_SLOTS) );
+	(void) ctx;
 
-        return StructType::get(ctx, members, false);
+        StructType* pRetType = pJitMgr->mpCurrentModule->getTypeByName("simd16vertex");
+        if (pRetType == nullptr)
+        {
+            std::vector<Type*> members;
+            
+            /* attrib */ members.push_back(ArrayType::get(ArrayType::get(VectorType::get(Type::getFloatTy(ctx), 16), 4), SWR_VTX_NUM_SLOTS));
+
+            pRetType = StructType::create(members, "simd16vertex", false);
+
+            // Compute debug metadata
+            llvm::DIBuilder builder(*pJitMgr->mpCurrentModule);
+            llvm::DIFile* pFile = builder.createFile("state.h", "./rasterizer/core");
+
+            std::vector<std::pair<std::string, uint32_t>> dbgMembers;
+            dbgMembers.push_back(std::make_pair("attrib", 205));
+            
+            pJitMgr->CreateDebugStructType(pRetType, "simd16vertex", pFile, 203, dbgMembers);
+
+        }
+
+        return pRetType;
     }
 
     static const uint32_t simd16vertex_attrib = 0;
@@ -67,26 +103,70 @@ namespace SwrJit
     INLINE static StructType *Gen_SIMDVERTEX_T(JitManager* pJitMgr)
     {
         LLVMContext& ctx = pJitMgr->mContext;
-        std::vector<Type*> members;
-        
+	(void) ctx;
 
-        return StructType::get(ctx, members, false);
+        StructType* pRetType = pJitMgr->mpCurrentModule->getTypeByName("SIMDVERTEX_T");
+        if (pRetType == nullptr)
+        {
+            std::vector<Type*> members;
+            
+
+            pRetType = StructType::create(members, "SIMDVERTEX_T", false);
+
+            // Compute debug metadata
+            llvm::DIBuilder builder(*pJitMgr->mpCurrentModule);
+            llvm::DIFile* pFile = builder.createFile("state.h", "./rasterizer/core");
+
+            std::vector<std::pair<std::string, uint32_t>> dbgMembers;
+            
+            pJitMgr->CreateDebugStructType(pRetType, "SIMDVERTEX_T", pFile, 211, dbgMembers);
+
+        }
+
+        return pRetType;
     }
 
 
     INLINE static StructType *Gen_SWR_VS_CONTEXT(JitManager* pJitMgr)
     {
         LLVMContext& ctx = pJitMgr->mContext;
-        std::vector<Type*> members;
-        
-        /* pVin            */ members.push_back( PointerType::get(Gen_simdvertex(pJitMgr), 0) );
-        /* pVout           */ members.push_back( PointerType::get(Gen_simdvertex(pJitMgr), 0) );
-        /* InstanceID      */ members.push_back( Type::getInt32Ty(ctx) );
-        /* VertexID        */ members.push_back( VectorType::get(Type::getInt32Ty(ctx), pJitMgr->mVWidth) );
-        /* mask            */ members.push_back( VectorType::get(Type::getInt32Ty(ctx), pJitMgr->mVWidth) );
-        /* AlternateOffset */ members.push_back( Type::getInt32Ty(ctx) );
+	(void) ctx;
 
-        return StructType::get(ctx, members, false);
+        StructType* pRetType = pJitMgr->mpCurrentModule->getTypeByName("SWR_VS_CONTEXT");
+        if (pRetType == nullptr)
+        {
+            std::vector<Type*> members;
+            
+            /* pVin            */ members.push_back(PointerType::get(Gen_simdvertex(pJitMgr), 0));
+            /* pVout           */ members.push_back(PointerType::get(Gen_simdvertex(pJitMgr), 0));
+            /* InstanceID      */ members.push_back(Type::getInt32Ty(ctx));
+            /* VertexID        */ members.push_back(VectorType::get(Type::getInt32Ty(ctx), pJitMgr->mVWidth));
+            /* mask            */ members.push_back(VectorType::get(Type::getInt32Ty(ctx), pJitMgr->mVWidth));
+            /* AlternateOffset */ members.push_back(Type::getInt32Ty(ctx));
+            /* mask16          */ members.push_back(VectorType::get(Type::getInt32Ty(ctx), 16));
+            /* VertexID16      */ members.push_back(VectorType::get(Type::getInt32Ty(ctx), 16));
+
+            pRetType = StructType::create(members, "SWR_VS_CONTEXT", false);
+
+            // Compute debug metadata
+            llvm::DIBuilder builder(*pJitMgr->mpCurrentModule);
+            llvm::DIFile* pFile = builder.createFile("state.h", "./rasterizer/core");
+
+            std::vector<std::pair<std::string, uint32_t>> dbgMembers;
+            dbgMembers.push_back(std::make_pair("pVin", 222));
+            dbgMembers.push_back(std::make_pair("pVout", 223));
+            dbgMembers.push_back(std::make_pair("InstanceID", 225));
+            dbgMembers.push_back(std::make_pair("VertexID", 226));
+            dbgMembers.push_back(std::make_pair("mask", 227));
+            dbgMembers.push_back(std::make_pair("AlternateOffset", 229));
+            dbgMembers.push_back(std::make_pair("mask16", 231));
+            dbgMembers.push_back(std::make_pair("VertexID16", 232));
+            
+            pJitMgr->CreateDebugStructType(pRetType, "SWR_VS_CONTEXT", pFile, 220, dbgMembers);
+
+        }
+
+        return pRetType;
     }
 
     static const uint32_t SWR_VS_CONTEXT_pVin            = 0;
@@ -95,18 +175,41 @@ namespace SwrJit
     static const uint32_t SWR_VS_CONTEXT_VertexID        = 3;
     static const uint32_t SWR_VS_CONTEXT_mask            = 4;
     static const uint32_t SWR_VS_CONTEXT_AlternateOffset = 5;
+    static const uint32_t SWR_VS_CONTEXT_mask16          = 6;
+    static const uint32_t SWR_VS_CONTEXT_VertexID16      = 7;
 
     INLINE static StructType *Gen_ScalarAttrib(JitManager* pJitMgr)
     {
         LLVMContext& ctx = pJitMgr->mContext;
-        std::vector<Type*> members;
-        
-        /* x */ members.push_back( Type::getFloatTy(ctx) );
-        /* y */ members.push_back( Type::getFloatTy(ctx) );
-        /* z */ members.push_back( Type::getFloatTy(ctx) );
-        /* w */ members.push_back( Type::getFloatTy(ctx) );
+	(void) ctx;
 
-        return StructType::get(ctx, members, false);
+        StructType* pRetType = pJitMgr->mpCurrentModule->getTypeByName("ScalarAttrib");
+        if (pRetType == nullptr)
+        {
+            std::vector<Type*> members;
+            
+            /* x */ members.push_back(Type::getFloatTy(ctx));
+            /* y */ members.push_back(Type::getFloatTy(ctx));
+            /* z */ members.push_back(Type::getFloatTy(ctx));
+            /* w */ members.push_back(Type::getFloatTy(ctx));
+
+            pRetType = StructType::create(members, "ScalarAttrib", false);
+
+            // Compute debug metadata
+            llvm::DIBuilder builder(*pJitMgr->mpCurrentModule);
+            llvm::DIFile* pFile = builder.createFile("state.h", "./rasterizer/core");
+
+            std::vector<std::pair<std::string, uint32_t>> dbgMembers;
+            dbgMembers.push_back(std::make_pair("x", 244));
+            dbgMembers.push_back(std::make_pair("y", 245));
+            dbgMembers.push_back(std::make_pair("z", 246));
+            dbgMembers.push_back(std::make_pair("w", 247));
+            
+            pJitMgr->CreateDebugStructType(pRetType, "ScalarAttrib", pFile, 242, dbgMembers);
+
+        }
+
+        return pRetType;
     }
 
     static const uint32_t ScalarAttrib_x = 0;
@@ -117,11 +220,29 @@ namespace SwrJit
     INLINE static StructType *Gen_ScalarCPoint(JitManager* pJitMgr)
     {
         LLVMContext& ctx = pJitMgr->mContext;
-        std::vector<Type*> members;
-        
-        /* attrib */ members.push_back( ArrayType::get(Gen_ScalarAttrib(pJitMgr), SWR_VTX_NUM_SLOTS) );
+	(void) ctx;
 
-        return StructType::get(ctx, members, false);
+        StructType* pRetType = pJitMgr->mpCurrentModule->getTypeByName("ScalarCPoint");
+        if (pRetType == nullptr)
+        {
+            std::vector<Type*> members;
+            
+            /* attrib */ members.push_back(ArrayType::get(Gen_ScalarAttrib(pJitMgr), SWR_VTX_NUM_SLOTS));
+
+            pRetType = StructType::create(members, "ScalarCPoint", false);
+
+            // Compute debug metadata
+            llvm::DIBuilder builder(*pJitMgr->mpCurrentModule);
+            llvm::DIFile* pFile = builder.createFile("state.h", "./rasterizer/core");
+
+            std::vector<std::pair<std::string, uint32_t>> dbgMembers;
+            dbgMembers.push_back(std::make_pair("attrib", 252));
+            
+            pJitMgr->CreateDebugStructType(pRetType, "ScalarCPoint", pFile, 250, dbgMembers);
+
+        }
+
+        return pRetType;
     }
 
     static const uint32_t ScalarCPoint_attrib = 0;
@@ -129,12 +250,31 @@ namespace SwrJit
     INLINE static StructType *Gen_SWR_TESSELLATION_FACTORS(JitManager* pJitMgr)
     {
         LLVMContext& ctx = pJitMgr->mContext;
-        std::vector<Type*> members;
-        
-        /* OuterTessFactors */ members.push_back( ArrayType::get(Type::getFloatTy(ctx), SWR_NUM_OUTER_TESS_FACTORS) );
-        /* InnerTessFactors */ members.push_back( ArrayType::get(Type::getFloatTy(ctx), SWR_NUM_INNER_TESS_FACTORS) );
+	(void) ctx;
 
-        return StructType::get(ctx, members, false);
+        StructType* pRetType = pJitMgr->mpCurrentModule->getTypeByName("SWR_TESSELLATION_FACTORS");
+        if (pRetType == nullptr)
+        {
+            std::vector<Type*> members;
+            
+            /* OuterTessFactors */ members.push_back(ArrayType::get(Type::getFloatTy(ctx), SWR_NUM_OUTER_TESS_FACTORS));
+            /* InnerTessFactors */ members.push_back(ArrayType::get(Type::getFloatTy(ctx), SWR_NUM_INNER_TESS_FACTORS));
+
+            pRetType = StructType::create(members, "SWR_TESSELLATION_FACTORS", false);
+
+            // Compute debug metadata
+            llvm::DIBuilder builder(*pJitMgr->mpCurrentModule);
+            llvm::DIFile* pFile = builder.createFile("state.h", "./rasterizer/core");
+
+            std::vector<std::pair<std::string, uint32_t>> dbgMembers;
+            dbgMembers.push_back(std::make_pair("OuterTessFactors", 261));
+            dbgMembers.push_back(std::make_pair("InnerTessFactors", 262));
+            
+            pJitMgr->CreateDebugStructType(pRetType, "SWR_TESSELLATION_FACTORS", pFile, 259, dbgMembers);
+
+        }
+
+        return pRetType;
     }
 
     static const uint32_t SWR_TESSELLATION_FACTORS_OuterTessFactors = 0;
@@ -143,13 +283,33 @@ namespace SwrJit
     INLINE static StructType *Gen_ScalarPatch(JitManager* pJitMgr)
     {
         LLVMContext& ctx = pJitMgr->mContext;
-        std::vector<Type*> members;
-        
-        /* tessFactors */ members.push_back( Gen_SWR_TESSELLATION_FACTORS(pJitMgr) );
-        /* cp          */ members.push_back( ArrayType::get(Gen_ScalarCPoint(pJitMgr), MAX_NUM_VERTS_PER_PRIM) );
-        /* patchData   */ members.push_back( Gen_ScalarCPoint(pJitMgr) );
+	(void) ctx;
 
-        return StructType::get(ctx, members, false);
+        StructType* pRetType = pJitMgr->mpCurrentModule->getTypeByName("ScalarPatch");
+        if (pRetType == nullptr)
+        {
+            std::vector<Type*> members;
+            
+            /* tessFactors */ members.push_back(Gen_SWR_TESSELLATION_FACTORS(pJitMgr));
+            /* cp          */ members.push_back(ArrayType::get(Gen_ScalarCPoint(pJitMgr), MAX_NUM_VERTS_PER_PRIM));
+            /* patchData   */ members.push_back(Gen_ScalarCPoint(pJitMgr));
+
+            pRetType = StructType::create(members, "ScalarPatch", false);
+
+            // Compute debug metadata
+            llvm::DIBuilder builder(*pJitMgr->mpCurrentModule);
+            llvm::DIFile* pFile = builder.createFile("state.h", "./rasterizer/core");
+
+            std::vector<std::pair<std::string, uint32_t>> dbgMembers;
+            dbgMembers.push_back(std::make_pair("tessFactors", 268));
+            dbgMembers.push_back(std::make_pair("cp", 269));
+            dbgMembers.push_back(std::make_pair("patchData", 270));
+            
+            pJitMgr->CreateDebugStructType(pRetType, "ScalarPatch", pFile, 266, dbgMembers);
+
+        }
+
+        return pRetType;
     }
 
     static const uint32_t ScalarPatch_tessFactors = 0;
@@ -159,14 +319,35 @@ namespace SwrJit
     INLINE static StructType *Gen_SWR_HS_CONTEXT(JitManager* pJitMgr)
     {
         LLVMContext& ctx = pJitMgr->mContext;
-        std::vector<Type*> members;
-        
-        /* vert        */ members.push_back( ArrayType::get(Gen_simdvertex(pJitMgr), MAX_NUM_VERTS_PER_PRIM) );
-        /* PrimitiveID */ members.push_back( VectorType::get(Type::getInt32Ty(ctx), pJitMgr->mVWidth) );
-        /* mask        */ members.push_back( VectorType::get(Type::getInt32Ty(ctx), pJitMgr->mVWidth) );
-        /* pCPout      */ members.push_back( PointerType::get(Gen_ScalarPatch(pJitMgr), 0) );
+	(void) ctx;
 
-        return StructType::get(ctx, members, false);
+        StructType* pRetType = pJitMgr->mpCurrentModule->getTypeByName("SWR_HS_CONTEXT");
+        if (pRetType == nullptr)
+        {
+            std::vector<Type*> members;
+            
+            /* vert        */ members.push_back(ArrayType::get(Gen_simdvertex(pJitMgr), MAX_NUM_VERTS_PER_PRIM));
+            /* PrimitiveID */ members.push_back(VectorType::get(Type::getInt32Ty(ctx), pJitMgr->mVWidth));
+            /* mask        */ members.push_back(VectorType::get(Type::getInt32Ty(ctx), pJitMgr->mVWidth));
+            /* pCPout      */ members.push_back(PointerType::get(Gen_ScalarPatch(pJitMgr), 0));
+
+            pRetType = StructType::create(members, "SWR_HS_CONTEXT", false);
+
+            // Compute debug metadata
+            llvm::DIBuilder builder(*pJitMgr->mpCurrentModule);
+            llvm::DIFile* pFile = builder.createFile("state.h", "./rasterizer/core");
+
+            std::vector<std::pair<std::string, uint32_t>> dbgMembers;
+            dbgMembers.push_back(std::make_pair("vert", 279));
+            dbgMembers.push_back(std::make_pair("PrimitiveID", 280));
+            dbgMembers.push_back(std::make_pair("mask", 281));
+            dbgMembers.push_back(std::make_pair("pCPout", 282));
+            
+            pJitMgr->CreateDebugStructType(pRetType, "SWR_HS_CONTEXT", pFile, 277, dbgMembers);
+
+        }
+
+        return pRetType;
     }
 
     static const uint32_t SWR_HS_CONTEXT_vert        = 0;
@@ -177,42 +358,93 @@ namespace SwrJit
     INLINE static StructType *Gen_SWR_DS_CONTEXT(JitManager* pJitMgr)
     {
         LLVMContext& ctx = pJitMgr->mContext;
-        std::vector<Type*> members;
-        
-        /* PrimitiveID  */ members.push_back( Type::getInt32Ty(ctx) );
-        /* vectorOffset */ members.push_back( Type::getInt32Ty(ctx) );
-        /* vectorStride */ members.push_back( Type::getInt32Ty(ctx) );
-        /* pCpIn        */ members.push_back( PointerType::get(Gen_ScalarPatch(pJitMgr), 0) );
-        /* pDomainU     */ members.push_back( PointerType::get(VectorType::get(Type::getFloatTy(ctx), pJitMgr->mVWidth), 0) );
-        /* pDomainV     */ members.push_back( PointerType::get(VectorType::get(Type::getFloatTy(ctx), pJitMgr->mVWidth), 0) );
-        /* mask         */ members.push_back( VectorType::get(Type::getInt32Ty(ctx), pJitMgr->mVWidth) );
-        /* pOutputData  */ members.push_back( PointerType::get(VectorType::get(Type::getFloatTy(ctx), pJitMgr->mVWidth), 0) );
+	(void) ctx;
 
-        return StructType::get(ctx, members, false);
+        StructType* pRetType = pJitMgr->mpCurrentModule->getTypeByName("SWR_DS_CONTEXT");
+        if (pRetType == nullptr)
+        {
+            std::vector<Type*> members;
+            
+            /* PrimitiveID           */ members.push_back(Type::getInt32Ty(ctx));
+            /* vectorOffset          */ members.push_back(Type::getInt32Ty(ctx));
+            /* vectorStride          */ members.push_back(Type::getInt32Ty(ctx));
+            /* outVertexAttribOffset */ members.push_back(Type::getInt32Ty(ctx));
+            /* pCpIn                 */ members.push_back(PointerType::get(Gen_ScalarPatch(pJitMgr), 0));
+            /* pDomainU              */ members.push_back(PointerType::get(VectorType::get(Type::getFloatTy(ctx), pJitMgr->mVWidth), 0));
+            /* pDomainV              */ members.push_back(PointerType::get(VectorType::get(Type::getFloatTy(ctx), pJitMgr->mVWidth), 0));
+            /* mask                  */ members.push_back(VectorType::get(Type::getInt32Ty(ctx), pJitMgr->mVWidth));
+            /* pOutputData           */ members.push_back(PointerType::get(VectorType::get(Type::getFloatTy(ctx), pJitMgr->mVWidth), 0));
+
+            pRetType = StructType::create(members, "SWR_DS_CONTEXT", false);
+
+            // Compute debug metadata
+            llvm::DIBuilder builder(*pJitMgr->mpCurrentModule);
+            llvm::DIFile* pFile = builder.createFile("state.h", "./rasterizer/core");
+
+            std::vector<std::pair<std::string, uint32_t>> dbgMembers;
+            dbgMembers.push_back(std::make_pair("PrimitiveID", 292));
+            dbgMembers.push_back(std::make_pair("vectorOffset", 293));
+            dbgMembers.push_back(std::make_pair("vectorStride", 294));
+            dbgMembers.push_back(std::make_pair("outVertexAttribOffset", 295));
+            dbgMembers.push_back(std::make_pair("pCpIn", 296));
+            dbgMembers.push_back(std::make_pair("pDomainU", 297));
+            dbgMembers.push_back(std::make_pair("pDomainV", 298));
+            dbgMembers.push_back(std::make_pair("mask", 299));
+            dbgMembers.push_back(std::make_pair("pOutputData", 300));
+            
+            pJitMgr->CreateDebugStructType(pRetType, "SWR_DS_CONTEXT", pFile, 290, dbgMembers);
+
+        }
+
+        return pRetType;
     }
 
-    static const uint32_t SWR_DS_CONTEXT_PrimitiveID  = 0;
-    static const uint32_t SWR_DS_CONTEXT_vectorOffset = 1;
-    static const uint32_t SWR_DS_CONTEXT_vectorStride = 2;
-    static const uint32_t SWR_DS_CONTEXT_pCpIn        = 3;
-    static const uint32_t SWR_DS_CONTEXT_pDomainU     = 4;
-    static const uint32_t SWR_DS_CONTEXT_pDomainV     = 5;
-    static const uint32_t SWR_DS_CONTEXT_mask         = 6;
-    static const uint32_t SWR_DS_CONTEXT_pOutputData  = 7;
+    static const uint32_t SWR_DS_CONTEXT_PrimitiveID           = 0;
+    static const uint32_t SWR_DS_CONTEXT_vectorOffset          = 1;
+    static const uint32_t SWR_DS_CONTEXT_vectorStride          = 2;
+    static const uint32_t SWR_DS_CONTEXT_outVertexAttribOffset = 3;
+    static const uint32_t SWR_DS_CONTEXT_pCpIn                 = 4;
+    static const uint32_t SWR_DS_CONTEXT_pDomainU              = 5;
+    static const uint32_t SWR_DS_CONTEXT_pDomainV              = 6;
+    static const uint32_t SWR_DS_CONTEXT_mask                  = 7;
+    static const uint32_t SWR_DS_CONTEXT_pOutputData           = 8;
 
     INLINE static StructType *Gen_SWR_GS_CONTEXT(JitManager* pJitMgr)
     {
         LLVMContext& ctx = pJitMgr->mContext;
-        std::vector<Type*> members;
-        
-        /* pVerts          */ members.push_back( PointerType::get(ArrayType::get(VectorType::get(Type::getFloatTy(ctx), 8), 4), 0) );
-        /* inputVertStride */ members.push_back( Type::getInt32Ty(ctx) );
-        /* PrimitiveID     */ members.push_back( VectorType::get(Type::getInt32Ty(ctx), pJitMgr->mVWidth) );
-        /* InstanceID      */ members.push_back( Type::getInt32Ty(ctx) );
-        /* mask            */ members.push_back( VectorType::get(Type::getInt32Ty(ctx), pJitMgr->mVWidth) );
-        /* pStreams        */ members.push_back( ArrayType::get(PointerType::get(Type::getInt8Ty(ctx), 0), KNOB_SIMD_WIDTH) );
+	(void) ctx;
 
-        return StructType::get(ctx, members, false);
+        StructType* pRetType = pJitMgr->mpCurrentModule->getTypeByName("SWR_GS_CONTEXT");
+        if (pRetType == nullptr)
+        {
+            std::vector<Type*> members;
+            
+            /* pVerts          */ members.push_back(PointerType::get(ArrayType::get(VectorType::get(Type::getFloatTy(ctx), 8), 4), 0));
+            /* inputVertStride */ members.push_back(Type::getInt32Ty(ctx));
+            /* PrimitiveID     */ members.push_back(VectorType::get(Type::getInt32Ty(ctx), pJitMgr->mVWidth));
+            /* InstanceID      */ members.push_back(Type::getInt32Ty(ctx));
+            /* mask            */ members.push_back(VectorType::get(Type::getInt32Ty(ctx), pJitMgr->mVWidth));
+            /* pStreams        */ members.push_back(ArrayType::get(PointerType::get(Type::getInt8Ty(ctx), 0), KNOB_SIMD_WIDTH));
+
+            pRetType = StructType::create(members, "SWR_GS_CONTEXT", false);
+
+            // Compute debug metadata
+            llvm::DIBuilder builder(*pJitMgr->mpCurrentModule);
+            llvm::DIFile* pFile = builder.createFile("state.h", "./rasterizer/core");
+
+            std::vector<std::pair<std::string, uint32_t>> dbgMembers;
+            dbgMembers.push_back(std::make_pair("pVerts", 309));
+            dbgMembers.push_back(std::make_pair("inputVertStride", 310));
+            dbgMembers.push_back(std::make_pair("PrimitiveID", 311));
+            dbgMembers.push_back(std::make_pair("InstanceID", 312));
+            dbgMembers.push_back(std::make_pair("mask", 313));
+            dbgMembers.push_back(std::make_pair("pStreams", 314));
+            
+            pJitMgr->CreateDebugStructType(pRetType, "SWR_GS_CONTEXT", pFile, 307, dbgMembers);
+
+        }
+
+        return pRetType;
     }
 
     static const uint32_t SWR_GS_CONTEXT_pVerts          = 0;
@@ -225,14 +457,35 @@ namespace SwrJit
     INLINE static StructType *Gen_PixelPositions(JitManager* pJitMgr)
     {
         LLVMContext& ctx = pJitMgr->mContext;
-        std::vector<Type*> members;
-        
-        /* UL       */ members.push_back( VectorType::get(Type::getFloatTy(ctx), pJitMgr->mVWidth) );
-        /* center   */ members.push_back( VectorType::get(Type::getFloatTy(ctx), pJitMgr->mVWidth) );
-        /* sample   */ members.push_back( VectorType::get(Type::getFloatTy(ctx), pJitMgr->mVWidth) );
-        /* centroid */ members.push_back( VectorType::get(Type::getFloatTy(ctx), pJitMgr->mVWidth) );
+	(void) ctx;
 
-        return StructType::get(ctx, members, false);
+        StructType* pRetType = pJitMgr->mpCurrentModule->getTypeByName("PixelPositions");
+        if (pRetType == nullptr)
+        {
+            std::vector<Type*> members;
+            
+            /* UL       */ members.push_back(VectorType::get(Type::getFloatTy(ctx), pJitMgr->mVWidth));
+            /* center   */ members.push_back(VectorType::get(Type::getFloatTy(ctx), pJitMgr->mVWidth));
+            /* sample   */ members.push_back(VectorType::get(Type::getFloatTy(ctx), pJitMgr->mVWidth));
+            /* centroid */ members.push_back(VectorType::get(Type::getFloatTy(ctx), pJitMgr->mVWidth));
+
+            pRetType = StructType::create(members, "PixelPositions", false);
+
+            // Compute debug metadata
+            llvm::DIBuilder builder(*pJitMgr->mpCurrentModule);
+            llvm::DIFile* pFile = builder.createFile("state.h", "./rasterizer/core");
+
+            std::vector<std::pair<std::string, uint32_t>> dbgMembers;
+            dbgMembers.push_back(std::make_pair("UL", 319));
+            dbgMembers.push_back(std::make_pair("center", 320));
+            dbgMembers.push_back(std::make_pair("sample", 321));
+            dbgMembers.push_back(std::make_pair("centroid", 322));
+            
+            pJitMgr->CreateDebugStructType(pRetType, "PixelPositions", pFile, 317, dbgMembers);
+
+        }
+
+        return pRetType;
     }
 
     static const uint32_t PixelPositions_UL       = 0;
@@ -243,33 +496,73 @@ namespace SwrJit
     INLINE static StructType *Gen_SWR_PS_CONTEXT(JitManager* pJitMgr)
     {
         LLVMContext& ctx = pJitMgr->mContext;
-        std::vector<Type*> members;
-        
-        /* vX                     */ members.push_back( Gen_PixelPositions(pJitMgr) );
-        /* vY                     */ members.push_back( Gen_PixelPositions(pJitMgr) );
-        /* vZ                     */ members.push_back( VectorType::get(Type::getFloatTy(ctx), pJitMgr->mVWidth) );
-        /* activeMask             */ members.push_back( VectorType::get(Type::getInt32Ty(ctx), pJitMgr->mVWidth) );
-        /* inputMask              */ members.push_back( VectorType::get(Type::getFloatTy(ctx), pJitMgr->mVWidth) );
-        /* oMask                  */ members.push_back( VectorType::get(Type::getInt32Ty(ctx), pJitMgr->mVWidth) );
-        /* vI                     */ members.push_back( Gen_PixelPositions(pJitMgr) );
-        /* vJ                     */ members.push_back( Gen_PixelPositions(pJitMgr) );
-        /* vOneOverW              */ members.push_back( Gen_PixelPositions(pJitMgr) );
-        /* pAttribs               */ members.push_back( PointerType::get(Type::getFloatTy(ctx), 0) );
-        /* pPerspAttribs          */ members.push_back( PointerType::get(Type::getFloatTy(ctx), 0) );
-        /* pRecipW                */ members.push_back( PointerType::get(Type::getFloatTy(ctx), 0) );
-        /* I                      */ members.push_back( PointerType::get(Type::getFloatTy(ctx), 0) );
-        /* J                      */ members.push_back( PointerType::get(Type::getFloatTy(ctx), 0) );
-        /* recipDet               */ members.push_back( Type::getFloatTy(ctx) );
-        /* pSamplePosX            */ members.push_back( PointerType::get(Type::getFloatTy(ctx), 0) );
-        /* pSamplePosY            */ members.push_back( PointerType::get(Type::getFloatTy(ctx), 0) );
-        /* shaded                 */ members.push_back( ArrayType::get(ArrayType::get(VectorType::get(Type::getFloatTy(ctx), 8), 4), SWR_NUM_RENDERTARGETS) );
-        /* frontFace              */ members.push_back( Type::getInt32Ty(ctx) );
-        /* sampleIndex            */ members.push_back( Type::getInt32Ty(ctx) );
-        /* renderTargetArrayIndex */ members.push_back( Type::getInt32Ty(ctx) );
-        /* rasterizerSampleCount  */ members.push_back( Type::getInt32Ty(ctx) );
-        /* pColorBuffer           */ members.push_back( ArrayType::get(PointerType::get(Type::getInt8Ty(ctx), 0), SWR_NUM_RENDERTARGETS) );
+	(void) ctx;
 
-        return StructType::get(ctx, members, false);
+        StructType* pRetType = pJitMgr->mpCurrentModule->getTypeByName("SWR_PS_CONTEXT");
+        if (pRetType == nullptr)
+        {
+            std::vector<Type*> members;
+            
+            /* vX                     */ members.push_back(Gen_PixelPositions(pJitMgr));
+            /* vY                     */ members.push_back(Gen_PixelPositions(pJitMgr));
+            /* vZ                     */ members.push_back(VectorType::get(Type::getFloatTy(ctx), pJitMgr->mVWidth));
+            /* activeMask             */ members.push_back(VectorType::get(Type::getInt32Ty(ctx), pJitMgr->mVWidth));
+            /* inputMask              */ members.push_back(VectorType::get(Type::getFloatTy(ctx), pJitMgr->mVWidth));
+            /* oMask                  */ members.push_back(VectorType::get(Type::getInt32Ty(ctx), pJitMgr->mVWidth));
+            /* vI                     */ members.push_back(Gen_PixelPositions(pJitMgr));
+            /* vJ                     */ members.push_back(Gen_PixelPositions(pJitMgr));
+            /* vOneOverW              */ members.push_back(Gen_PixelPositions(pJitMgr));
+            /* pAttribs               */ members.push_back(PointerType::get(Type::getFloatTy(ctx), 0));
+            /* pPerspAttribs          */ members.push_back(PointerType::get(Type::getFloatTy(ctx), 0));
+            /* pRecipW                */ members.push_back(PointerType::get(Type::getFloatTy(ctx), 0));
+            /* I                      */ members.push_back(PointerType::get(Type::getFloatTy(ctx), 0));
+            /* J                      */ members.push_back(PointerType::get(Type::getFloatTy(ctx), 0));
+            /* recipDet               */ members.push_back(Type::getFloatTy(ctx));
+            /* pSamplePosX            */ members.push_back(PointerType::get(Type::getFloatTy(ctx), 0));
+            /* pSamplePosY            */ members.push_back(PointerType::get(Type::getFloatTy(ctx), 0));
+            /* shaded                 */ members.push_back(ArrayType::get(ArrayType::get(VectorType::get(Type::getFloatTy(ctx), 8), 4), SWR_NUM_RENDERTARGETS));
+            /* frontFace              */ members.push_back(Type::getInt32Ty(ctx));
+            /* sampleIndex            */ members.push_back(Type::getInt32Ty(ctx));
+            /* renderTargetArrayIndex */ members.push_back(Type::getInt32Ty(ctx));
+            /* rasterizerSampleCount  */ members.push_back(Type::getInt32Ty(ctx));
+            /* pColorBuffer           */ members.push_back(ArrayType::get(PointerType::get(Type::getInt8Ty(ctx), 0), SWR_NUM_RENDERTARGETS));
+
+            pRetType = StructType::create(members, "SWR_PS_CONTEXT", false);
+
+            // Compute debug metadata
+            llvm::DIBuilder builder(*pJitMgr->mpCurrentModule);
+            llvm::DIFile* pFile = builder.createFile("state.h", "./rasterizer/core");
+
+            std::vector<std::pair<std::string, uint32_t>> dbgMembers;
+            dbgMembers.push_back(std::make_pair("vX", 333));
+            dbgMembers.push_back(std::make_pair("vY", 334));
+            dbgMembers.push_back(std::make_pair("vZ", 335));
+            dbgMembers.push_back(std::make_pair("activeMask", 336));
+            dbgMembers.push_back(std::make_pair("inputMask", 337));
+            dbgMembers.push_back(std::make_pair("oMask", 338));
+            dbgMembers.push_back(std::make_pair("vI", 340));
+            dbgMembers.push_back(std::make_pair("vJ", 341));
+            dbgMembers.push_back(std::make_pair("vOneOverW", 342));
+            dbgMembers.push_back(std::make_pair("pAttribs", 344));
+            dbgMembers.push_back(std::make_pair("pPerspAttribs", 345));
+            dbgMembers.push_back(std::make_pair("pRecipW", 346));
+            dbgMembers.push_back(std::make_pair("I", 347));
+            dbgMembers.push_back(std::make_pair("J", 348));
+            dbgMembers.push_back(std::make_pair("recipDet", 349));
+            dbgMembers.push_back(std::make_pair("pSamplePosX", 350));
+            dbgMembers.push_back(std::make_pair("pSamplePosY", 351));
+            dbgMembers.push_back(std::make_pair("shaded", 352));
+            dbgMembers.push_back(std::make_pair("frontFace", 355));
+            dbgMembers.push_back(std::make_pair("sampleIndex", 356));
+            dbgMembers.push_back(std::make_pair("renderTargetArrayIndex", 357));
+            dbgMembers.push_back(std::make_pair("rasterizerSampleCount", 358));
+            dbgMembers.push_back(std::make_pair("pColorBuffer", 360));
+            
+            pJitMgr->CreateDebugStructType(pRetType, "SWR_PS_CONTEXT", pFile, 331, dbgMembers);
+
+        }
+
+        return pRetType;
     }
 
     static const uint32_t SWR_PS_CONTEXT_vX                     = 0;
@@ -299,16 +592,39 @@ namespace SwrJit
     INLINE static StructType *Gen_SWR_CS_CONTEXT(JitManager* pJitMgr)
     {
         LLVMContext& ctx = pJitMgr->mContext;
-        std::vector<Type*> members;
-        
-        /* tileCounter         */ members.push_back( Type::getInt32Ty(ctx) );
-        /* dispatchDims        */ members.push_back( ArrayType::get(Type::getInt32Ty(ctx), 3) );
-        /* pTGSM               */ members.push_back( PointerType::get(Type::getInt8Ty(ctx), 0) );
-        /* pSpillFillBuffer    */ members.push_back( PointerType::get(Type::getInt8Ty(ctx), 0) );
-        /* pScratchSpace       */ members.push_back( PointerType::get(Type::getInt8Ty(ctx), 0) );
-        /* scratchSpacePerSimd */ members.push_back( Type::getInt32Ty(ctx) );
+	(void) ctx;
 
-        return StructType::get(ctx, members, false);
+        StructType* pRetType = pJitMgr->mpCurrentModule->getTypeByName("SWR_CS_CONTEXT");
+        if (pRetType == nullptr)
+        {
+            std::vector<Type*> members;
+            
+            /* tileCounter         */ members.push_back(Type::getInt32Ty(ctx));
+            /* dispatchDims        */ members.push_back(ArrayType::get(Type::getInt32Ty(ctx), 3));
+            /* pTGSM               */ members.push_back(PointerType::get(Type::getInt8Ty(ctx), 0));
+            /* pSpillFillBuffer    */ members.push_back(PointerType::get(Type::getInt8Ty(ctx), 0));
+            /* pScratchSpace       */ members.push_back(PointerType::get(Type::getInt8Ty(ctx), 0));
+            /* scratchSpacePerSimd */ members.push_back(Type::getInt32Ty(ctx));
+
+            pRetType = StructType::create(members, "SWR_CS_CONTEXT", false);
+
+            // Compute debug metadata
+            llvm::DIBuilder builder(*pJitMgr->mpCurrentModule);
+            llvm::DIFile* pFile = builder.createFile("state.h", "./rasterizer/core");
+
+            std::vector<std::pair<std::string, uint32_t>> dbgMembers;
+            dbgMembers.push_back(std::make_pair("tileCounter", 389));
+            dbgMembers.push_back(std::make_pair("dispatchDims", 392));
+            dbgMembers.push_back(std::make_pair("pTGSM", 394));
+            dbgMembers.push_back(std::make_pair("pSpillFillBuffer", 396));
+            dbgMembers.push_back(std::make_pair("pScratchSpace", 398));
+            dbgMembers.push_back(std::make_pair("scratchSpacePerSimd", 401));
+            
+            pJitMgr->CreateDebugStructType(pRetType, "SWR_CS_CONTEXT", pFile, 367, dbgMembers);
+
+        }
+
+        return pRetType;
     }
 
     static const uint32_t SWR_CS_CONTEXT_tileCounter         = 0;
@@ -321,34 +637,75 @@ namespace SwrJit
     INLINE static StructType *Gen_SWR_SURFACE_STATE(JitManager* pJitMgr)
     {
         LLVMContext& ctx = pJitMgr->mContext;
-        std::vector<Type*> members;
-        
-        /* xpBaseAddress       */ members.push_back( Type::getInt64Ty(ctx) );
-        /* type                */ members.push_back( Type::getInt32Ty(ctx) );
-        /* format              */ members.push_back( Type::getInt32Ty(ctx) );
-        /* width               */ members.push_back( Type::getInt32Ty(ctx) );
-        /* height              */ members.push_back( Type::getInt32Ty(ctx) );
-        /* depth               */ members.push_back( Type::getInt32Ty(ctx) );
-        /* numSamples          */ members.push_back( Type::getInt32Ty(ctx) );
-        /* samplePattern       */ members.push_back( Type::getInt32Ty(ctx) );
-        /* pitch               */ members.push_back( Type::getInt32Ty(ctx) );
-        /* qpitch              */ members.push_back( Type::getInt32Ty(ctx) );
-        /* minLod              */ members.push_back( Type::getInt32Ty(ctx) );
-        /* maxLod              */ members.push_back( Type::getInt32Ty(ctx) );
-        /* resourceMinLod      */ members.push_back( Type::getFloatTy(ctx) );
-        /* lod                 */ members.push_back( Type::getInt32Ty(ctx) );
-        /* arrayIndex          */ members.push_back( Type::getInt32Ty(ctx) );
-        /* tileMode            */ members.push_back( Type::getInt32Ty(ctx) );
-        /* halign              */ members.push_back( Type::getInt32Ty(ctx) );
-        /* valign              */ members.push_back( Type::getInt32Ty(ctx) );
-        /* xOffset             */ members.push_back( Type::getInt32Ty(ctx) );
-        /* yOffset             */ members.push_back( Type::getInt32Ty(ctx) );
-        /* lodOffsets          */ members.push_back( ArrayType::get(ArrayType::get(Type::getInt32Ty(ctx), 15), 2) );
-        /* xpAuxBaseAddress    */ members.push_back( Type::getInt64Ty(ctx) );
-        /* auxMode             */ members.push_back( Type::getInt32Ty(ctx) );
-        /* bInterleavedSamples */ members.push_back( Type::getInt8Ty(ctx) );
+	(void) ctx;
 
-        return StructType::get(ctx, members, false);
+        StructType* pRetType = pJitMgr->mpCurrentModule->getTypeByName("SWR_SURFACE_STATE");
+        if (pRetType == nullptr)
+        {
+            std::vector<Type*> members;
+            
+            /* xpBaseAddress       */ members.push_back(Type::getInt64Ty(ctx));
+            /* type                */ members.push_back(Type::getInt32Ty(ctx));
+            /* format              */ members.push_back(Type::getInt32Ty(ctx));
+            /* width               */ members.push_back(Type::getInt32Ty(ctx));
+            /* height              */ members.push_back(Type::getInt32Ty(ctx));
+            /* depth               */ members.push_back(Type::getInt32Ty(ctx));
+            /* numSamples          */ members.push_back(Type::getInt32Ty(ctx));
+            /* samplePattern       */ members.push_back(Type::getInt32Ty(ctx));
+            /* pitch               */ members.push_back(Type::getInt32Ty(ctx));
+            /* qpitch              */ members.push_back(Type::getInt32Ty(ctx));
+            /* minLod              */ members.push_back(Type::getInt32Ty(ctx));
+            /* maxLod              */ members.push_back(Type::getInt32Ty(ctx));
+            /* resourceMinLod      */ members.push_back(Type::getFloatTy(ctx));
+            /* lod                 */ members.push_back(Type::getInt32Ty(ctx));
+            /* arrayIndex          */ members.push_back(Type::getInt32Ty(ctx));
+            /* tileMode            */ members.push_back(Type::getInt32Ty(ctx));
+            /* halign              */ members.push_back(Type::getInt32Ty(ctx));
+            /* valign              */ members.push_back(Type::getInt32Ty(ctx));
+            /* xOffset             */ members.push_back(Type::getInt32Ty(ctx));
+            /* yOffset             */ members.push_back(Type::getInt32Ty(ctx));
+            /* lodOffsets          */ members.push_back(ArrayType::get(ArrayType::get(Type::getInt32Ty(ctx), 15), 2));
+            /* xpAuxBaseAddress    */ members.push_back(Type::getInt64Ty(ctx));
+            /* auxMode             */ members.push_back(Type::getInt32Ty(ctx));
+            /* bInterleavedSamples */ members.push_back(Type::getInt8Ty(ctx));
+
+            pRetType = StructType::create(members, "SWR_SURFACE_STATE", false);
+
+            // Compute debug metadata
+            llvm::DIBuilder builder(*pJitMgr->mpCurrentModule);
+            llvm::DIFile* pFile = builder.createFile("state.h", "./rasterizer/core");
+
+            std::vector<std::pair<std::string, uint32_t>> dbgMembers;
+            dbgMembers.push_back(std::make_pair("xpBaseAddress", 521));
+            dbgMembers.push_back(std::make_pair("type", 522));
+            dbgMembers.push_back(std::make_pair("format", 523));
+            dbgMembers.push_back(std::make_pair("width", 524));
+            dbgMembers.push_back(std::make_pair("height", 525));
+            dbgMembers.push_back(std::make_pair("depth", 526));
+            dbgMembers.push_back(std::make_pair("numSamples", 527));
+            dbgMembers.push_back(std::make_pair("samplePattern", 528));
+            dbgMembers.push_back(std::make_pair("pitch", 529));
+            dbgMembers.push_back(std::make_pair("qpitch", 530));
+            dbgMembers.push_back(std::make_pair("minLod", 531));
+            dbgMembers.push_back(std::make_pair("maxLod", 532));
+            dbgMembers.push_back(std::make_pair("resourceMinLod", 533));
+            dbgMembers.push_back(std::make_pair("lod", 534));
+            dbgMembers.push_back(std::make_pair("arrayIndex", 535));
+            dbgMembers.push_back(std::make_pair("tileMode", 536));
+            dbgMembers.push_back(std::make_pair("halign", 537));
+            dbgMembers.push_back(std::make_pair("valign", 538));
+            dbgMembers.push_back(std::make_pair("xOffset", 539));
+            dbgMembers.push_back(std::make_pair("yOffset", 540));
+            dbgMembers.push_back(std::make_pair("lodOffsets", 542));
+            dbgMembers.push_back(std::make_pair("xpAuxBaseAddress", 544));
+            dbgMembers.push_back(std::make_pair("auxMode", 545));
+            dbgMembers.push_back(std::make_pair("bInterleavedSamples", 548));
+            
+            pJitMgr->CreateDebugStructType(pRetType, "SWR_SURFACE_STATE", pFile, 519, dbgMembers);
+
+        }
+
+        return pRetType;
     }
 
     static const uint32_t SWR_SURFACE_STATE_xpBaseAddress       = 0;
@@ -379,18 +736,43 @@ namespace SwrJit
     INLINE static StructType *Gen_SWR_VERTEX_BUFFER_STATE(JitManager* pJitMgr)
     {
         LLVMContext& ctx = pJitMgr->mContext;
-        std::vector<Type*> members;
-        
-        /* index               */ members.push_back( Type::getInt32Ty(ctx) );
-        /* pitch               */ members.push_back( Type::getInt32Ty(ctx) );
-        /* pData               */ members.push_back( PointerType::get(Type::getInt8Ty(ctx), 0) );
-        /* size                */ members.push_back( Type::getInt32Ty(ctx) );
-        /* numaNode            */ members.push_back( Type::getInt32Ty(ctx) );
-        /* minVertex           */ members.push_back( Type::getInt32Ty(ctx) );
-        /* maxVertex           */ members.push_back( Type::getInt32Ty(ctx) );
-        /* partialInboundsSize */ members.push_back( Type::getInt32Ty(ctx) );
+	(void) ctx;
 
-        return StructType::get(ctx, members, false);
+        StructType* pRetType = pJitMgr->mpCurrentModule->getTypeByName("SWR_VERTEX_BUFFER_STATE");
+        if (pRetType == nullptr)
+        {
+            std::vector<Type*> members;
+            
+            /* index               */ members.push_back(Type::getInt32Ty(ctx));
+            /* pitch               */ members.push_back(Type::getInt32Ty(ctx));
+            /* pData               */ members.push_back(PointerType::get(Type::getInt8Ty(ctx), 0));
+            /* size                */ members.push_back(Type::getInt32Ty(ctx));
+            /* numaNode            */ members.push_back(Type::getInt32Ty(ctx));
+            /* minVertex           */ members.push_back(Type::getInt32Ty(ctx));
+            /* maxVertex           */ members.push_back(Type::getInt32Ty(ctx));
+            /* partialInboundsSize */ members.push_back(Type::getInt32Ty(ctx));
+
+            pRetType = StructType::create(members, "SWR_VERTEX_BUFFER_STATE", false);
+
+            // Compute debug metadata
+            llvm::DIBuilder builder(*pJitMgr->mpCurrentModule);
+            llvm::DIFile* pFile = builder.createFile("state.h", "./rasterizer/core");
+
+            std::vector<std::pair<std::string, uint32_t>> dbgMembers;
+            dbgMembers.push_back(std::make_pair("index", 556));
+            dbgMembers.push_back(std::make_pair("pitch", 557));
+            dbgMembers.push_back(std::make_pair("pData", 558));
+            dbgMembers.push_back(std::make_pair("size", 559));
+            dbgMembers.push_back(std::make_pair("numaNode", 560));
+            dbgMembers.push_back(std::make_pair("minVertex", 561));
+            dbgMembers.push_back(std::make_pair("maxVertex", 562));
+            dbgMembers.push_back(std::make_pair("partialInboundsSize", 563));
+            
+            pJitMgr->CreateDebugStructType(pRetType, "SWR_VERTEX_BUFFER_STATE", pFile, 554, dbgMembers);
+
+        }
+
+        return pRetType;
     }
 
     static const uint32_t SWR_VERTEX_BUFFER_STATE_index               = 0;
@@ -405,13 +787,33 @@ namespace SwrJit
     INLINE static StructType *Gen_SWR_INDEX_BUFFER_STATE(JitManager* pJitMgr)
     {
         LLVMContext& ctx = pJitMgr->mContext;
-        std::vector<Type*> members;
-        
-        /* format   */ members.push_back( Type::getInt32Ty(ctx) );
-        /* pIndices */ members.push_back( PointerType::get(Type::getInt32Ty(ctx), 0) );
-        /* size     */ members.push_back( Type::getInt32Ty(ctx) );
+	(void) ctx;
 
-        return StructType::get(ctx, members, false);
+        StructType* pRetType = pJitMgr->mpCurrentModule->getTypeByName("SWR_INDEX_BUFFER_STATE");
+        if (pRetType == nullptr)
+        {
+            std::vector<Type*> members;
+            
+            /* format   */ members.push_back(Type::getInt32Ty(ctx));
+            /* pIndices */ members.push_back(PointerType::get(Type::getInt32Ty(ctx), 0));
+            /* size     */ members.push_back(Type::getInt32Ty(ctx));
+
+            pRetType = StructType::create(members, "SWR_INDEX_BUFFER_STATE", false);
+
+            // Compute debug metadata
+            llvm::DIBuilder builder(*pJitMgr->mpCurrentModule);
+            llvm::DIFile* pFile = builder.createFile("state.h", "./rasterizer/core");
+
+            std::vector<std::pair<std::string, uint32_t>> dbgMembers;
+            dbgMembers.push_back(std::make_pair("format", 569));
+            dbgMembers.push_back(std::make_pair("pIndices", 570));
+            dbgMembers.push_back(std::make_pair("size", 571));
+            
+            pJitMgr->CreateDebugStructType(pRetType, "SWR_INDEX_BUFFER_STATE", pFile, 566, dbgMembers);
+
+        }
+
+        return pRetType;
     }
 
     static const uint32_t SWR_INDEX_BUFFER_STATE_format   = 0;
@@ -421,21 +823,49 @@ namespace SwrJit
     INLINE static StructType *Gen_SWR_FETCH_CONTEXT(JitManager* pJitMgr)
     {
         LLVMContext& ctx = pJitMgr->mContext;
-        std::vector<Type*> members;
-        
-        /* pStreams      */ members.push_back( PointerType::get(Gen_SWR_VERTEX_BUFFER_STATE(pJitMgr), 0) );
-        /* pIndices      */ members.push_back( PointerType::get(Type::getInt32Ty(ctx), 0) );
-        /* pLastIndex    */ members.push_back( PointerType::get(Type::getInt32Ty(ctx), 0) );
-        /* CurInstance   */ members.push_back( Type::getInt32Ty(ctx) );
-        /* BaseVertex    */ members.push_back( Type::getInt32Ty(ctx) );
-        /* StartVertex   */ members.push_back( Type::getInt32Ty(ctx) );
-        /* StartInstance */ members.push_back( Type::getInt32Ty(ctx) );
-        /* VertexID      */ members.push_back( VectorType::get(Type::getInt32Ty(ctx), pJitMgr->mVWidth) );
-        /* CutMask       */ members.push_back( VectorType::get(Type::getInt32Ty(ctx), pJitMgr->mVWidth) );
-        /* VertexID2     */ members.push_back( VectorType::get(Type::getInt32Ty(ctx), pJitMgr->mVWidth) );
-        /* CutMask2      */ members.push_back( VectorType::get(Type::getInt32Ty(ctx), pJitMgr->mVWidth) );
+	(void) ctx;
 
-        return StructType::get(ctx, members, false);
+        StructType* pRetType = pJitMgr->mpCurrentModule->getTypeByName("SWR_FETCH_CONTEXT");
+        if (pRetType == nullptr)
+        {
+            std::vector<Type*> members;
+            
+            /* pStreams      */ members.push_back(PointerType::get(Gen_SWR_VERTEX_BUFFER_STATE(pJitMgr), 0));
+            /* pIndices      */ members.push_back(PointerType::get(Type::getInt32Ty(ctx), 0));
+            /* pLastIndex    */ members.push_back(PointerType::get(Type::getInt32Ty(ctx), 0));
+            /* CurInstance   */ members.push_back(Type::getInt32Ty(ctx));
+            /* BaseVertex    */ members.push_back(Type::getInt32Ty(ctx));
+            /* StartVertex   */ members.push_back(Type::getInt32Ty(ctx));
+            /* StartInstance */ members.push_back(Type::getInt32Ty(ctx));
+            /* VertexID      */ members.push_back(VectorType::get(Type::getInt32Ty(ctx), pJitMgr->mVWidth));
+            /* CutMask       */ members.push_back(VectorType::get(Type::getInt32Ty(ctx), pJitMgr->mVWidth));
+            /* VertexID2     */ members.push_back(VectorType::get(Type::getInt32Ty(ctx), pJitMgr->mVWidth));
+            /* CutMask2      */ members.push_back(VectorType::get(Type::getInt32Ty(ctx), pJitMgr->mVWidth));
+
+            pRetType = StructType::create(members, "SWR_FETCH_CONTEXT", false);
+
+            // Compute debug metadata
+            llvm::DIBuilder builder(*pJitMgr->mpCurrentModule);
+            llvm::DIFile* pFile = builder.createFile("state.h", "./rasterizer/core");
+
+            std::vector<std::pair<std::string, uint32_t>> dbgMembers;
+            dbgMembers.push_back(std::make_pair("pStreams", 583));
+            dbgMembers.push_back(std::make_pair("pIndices", 584));
+            dbgMembers.push_back(std::make_pair("pLastIndex", 585));
+            dbgMembers.push_back(std::make_pair("CurInstance", 586));
+            dbgMembers.push_back(std::make_pair("BaseVertex", 587));
+            dbgMembers.push_back(std::make_pair("StartVertex", 588));
+            dbgMembers.push_back(std::make_pair("StartInstance", 589));
+            dbgMembers.push_back(std::make_pair("VertexID", 590));
+            dbgMembers.push_back(std::make_pair("CutMask", 591));
+            dbgMembers.push_back(std::make_pair("VertexID2", 595));
+            dbgMembers.push_back(std::make_pair("CutMask2", 596));
+            
+            pJitMgr->CreateDebugStructType(pRetType, "SWR_FETCH_CONTEXT", pFile, 581, dbgMembers);
+
+        }
+
+        return pRetType;
     }
 
     static const uint32_t SWR_FETCH_CONTEXT_pStreams      = 0;
@@ -453,17 +883,41 @@ namespace SwrJit
     INLINE static StructType *Gen_SWR_STREAMOUT_BUFFER(JitManager* pJitMgr)
     {
         LLVMContext& ctx = pJitMgr->mContext;
-        std::vector<Type*> members;
-        
-        /* enable        */ members.push_back( Type::getInt8Ty(ctx) );
-        /* soWriteEnable */ members.push_back( Type::getInt8Ty(ctx) );
-        /* pBuffer       */ members.push_back( PointerType::get(Type::getInt32Ty(ctx), 0) );
-        /* bufferSize    */ members.push_back( Type::getInt32Ty(ctx) );
-        /* pitch         */ members.push_back( Type::getInt32Ty(ctx) );
-        /* streamOffset  */ members.push_back( Type::getInt32Ty(ctx) );
-        /* pWriteOffset  */ members.push_back( PointerType::get(Type::getInt32Ty(ctx), 0) );
+	(void) ctx;
 
-        return StructType::get(ctx, members, false);
+        StructType* pRetType = pJitMgr->mpCurrentModule->getTypeByName("SWR_STREAMOUT_BUFFER");
+        if (pRetType == nullptr)
+        {
+            std::vector<Type*> members;
+            
+            /* enable        */ members.push_back(Type::getInt8Ty(ctx));
+            /* soWriteEnable */ members.push_back(Type::getInt8Ty(ctx));
+            /* pBuffer       */ members.push_back(PointerType::get(Type::getInt32Ty(ctx), 0));
+            /* bufferSize    */ members.push_back(Type::getInt32Ty(ctx));
+            /* pitch         */ members.push_back(Type::getInt32Ty(ctx));
+            /* streamOffset  */ members.push_back(Type::getInt32Ty(ctx));
+            /* pWriteOffset  */ members.push_back(PointerType::get(Type::getInt32Ty(ctx), 0));
+
+            pRetType = StructType::create(members, "SWR_STREAMOUT_BUFFER", false);
+
+            // Compute debug metadata
+            llvm::DIBuilder builder(*pJitMgr->mpCurrentModule);
+            llvm::DIFile* pFile = builder.createFile("state.h", "./rasterizer/core");
+
+            std::vector<std::pair<std::string, uint32_t>> dbgMembers;
+            dbgMembers.push_back(std::make_pair("enable", 649));
+            dbgMembers.push_back(std::make_pair("soWriteEnable", 650));
+            dbgMembers.push_back(std::make_pair("pBuffer", 653));
+            dbgMembers.push_back(std::make_pair("bufferSize", 656));
+            dbgMembers.push_back(std::make_pair("pitch", 659));
+            dbgMembers.push_back(std::make_pair("streamOffset", 662));
+            dbgMembers.push_back(std::make_pair("pWriteOffset", 665));
+            
+            pJitMgr->CreateDebugStructType(pRetType, "SWR_STREAMOUT_BUFFER", pFile, 647, dbgMembers);
+
+        }
+
+        return pRetType;
     }
 
     static const uint32_t SWR_STREAMOUT_BUFFER_enable        = 0;
@@ -477,17 +931,41 @@ namespace SwrJit
     INLINE static StructType *Gen_SWR_STREAMOUT_STATE(JitManager* pJitMgr)
     {
         LLVMContext& ctx = pJitMgr->mContext;
-        std::vector<Type*> members;
-        
-        /* soEnable           */ members.push_back( Type::getInt8Ty(ctx) );
-        /* streamEnable       */ members.push_back( ArrayType::get(Type::getInt8Ty(ctx), MAX_SO_STREAMS) );
-        /* rasterizerDisable  */ members.push_back( Type::getInt8Ty(ctx) );
-        /* streamToRasterizer */ members.push_back( Type::getInt32Ty(ctx) );
-        /* streamMasks        */ members.push_back( ArrayType::get(Type::getInt32Ty(ctx), MAX_SO_STREAMS) );
-        /* streamNumEntries   */ members.push_back( ArrayType::get(Type::getInt32Ty(ctx), MAX_SO_STREAMS) );
-        /* vertexAttribOffset */ members.push_back( ArrayType::get(Type::getInt32Ty(ctx), MAX_SO_STREAMS) );
+	(void) ctx;
 
-        return StructType::get(ctx, members, false);
+        StructType* pRetType = pJitMgr->mpCurrentModule->getTypeByName("SWR_STREAMOUT_STATE");
+        if (pRetType == nullptr)
+        {
+            std::vector<Type*> members;
+            
+            /* soEnable           */ members.push_back(Type::getInt8Ty(ctx));
+            /* streamEnable       */ members.push_back(ArrayType::get(Type::getInt8Ty(ctx), MAX_SO_STREAMS));
+            /* rasterizerDisable  */ members.push_back(Type::getInt8Ty(ctx));
+            /* streamToRasterizer */ members.push_back(Type::getInt32Ty(ctx));
+            /* streamMasks        */ members.push_back(ArrayType::get(Type::getInt32Ty(ctx), MAX_SO_STREAMS));
+            /* streamNumEntries   */ members.push_back(ArrayType::get(Type::getInt32Ty(ctx), MAX_SO_STREAMS));
+            /* vertexAttribOffset */ members.push_back(ArrayType::get(Type::getInt32Ty(ctx), MAX_SO_STREAMS));
+
+            pRetType = StructType::create(members, "SWR_STREAMOUT_STATE", false);
+
+            // Compute debug metadata
+            llvm::DIBuilder builder(*pJitMgr->mpCurrentModule);
+            llvm::DIFile* pFile = builder.createFile("state.h", "./rasterizer/core");
+
+            std::vector<std::pair<std::string, uint32_t>> dbgMembers;
+            dbgMembers.push_back(std::make_pair("soEnable", 675));
+            dbgMembers.push_back(std::make_pair("streamEnable", 678));
+            dbgMembers.push_back(std::make_pair("rasterizerDisable", 681));
+            dbgMembers.push_back(std::make_pair("streamToRasterizer", 684));
+            dbgMembers.push_back(std::make_pair("streamMasks", 689));
+            dbgMembers.push_back(std::make_pair("streamNumEntries", 693));
+            dbgMembers.push_back(std::make_pair("vertexAttribOffset", 696));
+            
+            pJitMgr->CreateDebugStructType(pRetType, "SWR_STREAMOUT_STATE", pFile, 672, dbgMembers);
+
+        }
+
+        return pRetType;
     }
 
     static const uint32_t SWR_STREAMOUT_STATE_soEnable           = 0;
@@ -501,14 +979,35 @@ namespace SwrJit
     INLINE static StructType *Gen_SWR_STREAMOUT_CONTEXT(JitManager* pJitMgr)
     {
         LLVMContext& ctx = pJitMgr->mContext;
-        std::vector<Type*> members;
-        
-        /* pPrimData            */ members.push_back( PointerType::get(Type::getInt32Ty(ctx), 0) );
-        /* pBuffer              */ members.push_back( ArrayType::get(PointerType::get(Gen_SWR_STREAMOUT_BUFFER(pJitMgr), 0), MAX_SO_STREAMS) );
-        /* numPrimsWritten      */ members.push_back( Type::getInt32Ty(ctx) );
-        /* numPrimStorageNeeded */ members.push_back( Type::getInt32Ty(ctx) );
+	(void) ctx;
 
-        return StructType::get(ctx, members, false);
+        StructType* pRetType = pJitMgr->mpCurrentModule->getTypeByName("SWR_STREAMOUT_CONTEXT");
+        if (pRetType == nullptr)
+        {
+            std::vector<Type*> members;
+            
+            /* pPrimData            */ members.push_back(PointerType::get(Type::getInt32Ty(ctx), 0));
+            /* pBuffer              */ members.push_back(ArrayType::get(PointerType::get(Gen_SWR_STREAMOUT_BUFFER(pJitMgr), 0), MAX_SO_STREAMS));
+            /* numPrimsWritten      */ members.push_back(Type::getInt32Ty(ctx));
+            /* numPrimStorageNeeded */ members.push_back(Type::getInt32Ty(ctx));
+
+            pRetType = StructType::create(members, "SWR_STREAMOUT_CONTEXT", false);
+
+            // Compute debug metadata
+            llvm::DIBuilder builder(*pJitMgr->mpCurrentModule);
+            llvm::DIFile* pFile = builder.createFile("state.h", "./rasterizer/core");
+
+            std::vector<std::pair<std::string, uint32_t>> dbgMembers;
+            dbgMembers.push_back(std::make_pair("pPrimData", 704));
+            dbgMembers.push_back(std::make_pair("pBuffer", 705));
+            dbgMembers.push_back(std::make_pair("numPrimsWritten", 708));
+            dbgMembers.push_back(std::make_pair("numPrimStorageNeeded", 711));
+            
+            pJitMgr->CreateDebugStructType(pRetType, "SWR_STREAMOUT_CONTEXT", pFile, 702, dbgMembers);
+
+        }
+
+        return pRetType;
     }
 
     static const uint32_t SWR_STREAMOUT_CONTEXT_pPrimData            = 0;
@@ -519,26 +1018,59 @@ namespace SwrJit
     INLINE static StructType *Gen_SWR_GS_STATE(JitManager* pJitMgr)
     {
         LLVMContext& ctx = pJitMgr->mContext;
-        std::vector<Type*> members;
-        
-        /* gsEnable              */ members.push_back( Type::getInt8Ty(ctx) );
-        /* numInputAttribs       */ members.push_back( Type::getInt32Ty(ctx) );
-        /* inputVertStride       */ members.push_back( Type::getInt32Ty(ctx) );
-        /* outputTopology        */ members.push_back( Type::getInt32Ty(ctx) );
-        /* maxNumVerts           */ members.push_back( Type::getInt32Ty(ctx) );
-        /* instanceCount         */ members.push_back( Type::getInt32Ty(ctx) );
-        /* isSingleStream        */ members.push_back( Type::getInt8Ty(ctx) );
-        /* singleStreamID        */ members.push_back( Type::getInt32Ty(ctx) );
-        /* allocationSize        */ members.push_back( Type::getInt32Ty(ctx) );
-        /* vertexAttribOffset    */ members.push_back( Type::getInt32Ty(ctx) );
-        /* srcVertexAttribOffset */ members.push_back( Type::getInt32Ty(ctx) );
-        /* controlDataSize       */ members.push_back( Type::getInt32Ty(ctx) );
-        /* controlDataOffset     */ members.push_back( Type::getInt32Ty(ctx) );
-        /* outputVertexSize      */ members.push_back( Type::getInt32Ty(ctx) );
-        /* outputVertexOffset    */ members.push_back( Type::getInt32Ty(ctx) );
-        /* staticVertexCount     */ members.push_back( Type::getInt32Ty(ctx) );
+	(void) ctx;
 
-        return StructType::get(ctx, members, false);
+        StructType* pRetType = pJitMgr->mpCurrentModule->getTypeByName("SWR_GS_STATE");
+        if (pRetType == nullptr)
+        {
+            std::vector<Type*> members;
+            
+            /* gsEnable              */ members.push_back(Type::getInt8Ty(ctx));
+            /* numInputAttribs       */ members.push_back(Type::getInt32Ty(ctx));
+            /* inputVertStride       */ members.push_back(Type::getInt32Ty(ctx));
+            /* outputTopology        */ members.push_back(Type::getInt32Ty(ctx));
+            /* maxNumVerts           */ members.push_back(Type::getInt32Ty(ctx));
+            /* instanceCount         */ members.push_back(Type::getInt32Ty(ctx));
+            /* isSingleStream        */ members.push_back(Type::getInt8Ty(ctx));
+            /* singleStreamID        */ members.push_back(Type::getInt32Ty(ctx));
+            /* allocationSize        */ members.push_back(Type::getInt32Ty(ctx));
+            /* vertexAttribOffset    */ members.push_back(Type::getInt32Ty(ctx));
+            /* srcVertexAttribOffset */ members.push_back(Type::getInt32Ty(ctx));
+            /* controlDataSize       */ members.push_back(Type::getInt32Ty(ctx));
+            /* controlDataOffset     */ members.push_back(Type::getInt32Ty(ctx));
+            /* outputVertexSize      */ members.push_back(Type::getInt32Ty(ctx));
+            /* outputVertexOffset    */ members.push_back(Type::getInt32Ty(ctx));
+            /* staticVertexCount     */ members.push_back(Type::getInt32Ty(ctx));
+
+            pRetType = StructType::create(members, "SWR_GS_STATE", false);
+
+            // Compute debug metadata
+            llvm::DIBuilder builder(*pJitMgr->mpCurrentModule);
+            llvm::DIFile* pFile = builder.createFile("state.h", "./rasterizer/core");
+
+            std::vector<std::pair<std::string, uint32_t>> dbgMembers;
+            dbgMembers.push_back(std::make_pair("gsEnable", 719));
+            dbgMembers.push_back(std::make_pair("numInputAttribs", 723));
+            dbgMembers.push_back(std::make_pair("inputVertStride", 726));
+            dbgMembers.push_back(std::make_pair("outputTopology", 729));
+            dbgMembers.push_back(std::make_pair("maxNumVerts", 732));
+            dbgMembers.push_back(std::make_pair("instanceCount", 735));
+            dbgMembers.push_back(std::make_pair("isSingleStream", 740));
+            dbgMembers.push_back(std::make_pair("singleStreamID", 744));
+            dbgMembers.push_back(std::make_pair("allocationSize", 747));
+            dbgMembers.push_back(std::make_pair("vertexAttribOffset", 750));
+            dbgMembers.push_back(std::make_pair("srcVertexAttribOffset", 753));
+            dbgMembers.push_back(std::make_pair("controlDataSize", 757));
+            dbgMembers.push_back(std::make_pair("controlDataOffset", 760));
+            dbgMembers.push_back(std::make_pair("outputVertexSize", 763));
+            dbgMembers.push_back(std::make_pair("outputVertexOffset", 766));
+            dbgMembers.push_back(std::make_pair("staticVertexCount", 770));
+            
+            pJitMgr->CreateDebugStructType(pRetType, "SWR_GS_STATE", pFile, 717, dbgMembers);
+
+        }
+
+        return pRetType;
     }
 
     static const uint32_t SWR_GS_STATE_gsEnable              = 0;
@@ -561,44 +1093,95 @@ namespace SwrJit
     INLINE static StructType *Gen_SWR_TS_STATE(JitManager* pJitMgr)
     {
         LLVMContext& ctx = pJitMgr->mContext;
-        std::vector<Type*> members;
-        
-        /* tsEnable           */ members.push_back( Type::getInt8Ty(ctx) );
-        /* tsOutputTopology   */ members.push_back( Type::getInt32Ty(ctx) );
-        /* partitioning       */ members.push_back( Type::getInt32Ty(ctx) );
-        /* domain             */ members.push_back( Type::getInt32Ty(ctx) );
-        /* postDSTopology     */ members.push_back( Type::getInt32Ty(ctx) );
-        /* numHsInputAttribs  */ members.push_back( Type::getInt32Ty(ctx) );
-        /* numHsOutputAttribs */ members.push_back( Type::getInt32Ty(ctx) );
-        /* numDsOutputAttribs */ members.push_back( Type::getInt32Ty(ctx) );
-        /* dsAllocationSize   */ members.push_back( Type::getInt32Ty(ctx) );
-        /* vertexAttribOffset */ members.push_back( Type::getInt32Ty(ctx) );
+	(void) ctx;
 
-        return StructType::get(ctx, members, false);
+        StructType* pRetType = pJitMgr->mpCurrentModule->getTypeByName("SWR_TS_STATE");
+        if (pRetType == nullptr)
+        {
+            std::vector<Type*> members;
+            
+            /* tsEnable             */ members.push_back(Type::getInt8Ty(ctx));
+            /* tsOutputTopology     */ members.push_back(Type::getInt32Ty(ctx));
+            /* partitioning         */ members.push_back(Type::getInt32Ty(ctx));
+            /* domain               */ members.push_back(Type::getInt32Ty(ctx));
+            /* postDSTopology       */ members.push_back(Type::getInt32Ty(ctx));
+            /* numHsInputAttribs    */ members.push_back(Type::getInt32Ty(ctx));
+            /* numHsOutputAttribs   */ members.push_back(Type::getInt32Ty(ctx));
+            /* numDsOutputAttribs   */ members.push_back(Type::getInt32Ty(ctx));
+            /* dsAllocationSize     */ members.push_back(Type::getInt32Ty(ctx));
+            /* dsOutVtxAttribOffset */ members.push_back(Type::getInt32Ty(ctx));
+            /* vertexAttribOffset   */ members.push_back(Type::getInt32Ty(ctx));
+
+            pRetType = StructType::create(members, "SWR_TS_STATE", false);
+
+            // Compute debug metadata
+            llvm::DIBuilder builder(*pJitMgr->mpCurrentModule);
+            llvm::DIFile* pFile = builder.createFile("state.h", "./rasterizer/core");
+
+            std::vector<std::pair<std::string, uint32_t>> dbgMembers;
+            dbgMembers.push_back(std::make_pair("tsEnable", 816));
+            dbgMembers.push_back(std::make_pair("tsOutputTopology", 817));
+            dbgMembers.push_back(std::make_pair("partitioning", 818));
+            dbgMembers.push_back(std::make_pair("domain", 819));
+            dbgMembers.push_back(std::make_pair("postDSTopology", 821));
+            dbgMembers.push_back(std::make_pair("numHsInputAttribs", 823));
+            dbgMembers.push_back(std::make_pair("numHsOutputAttribs", 824));
+            dbgMembers.push_back(std::make_pair("numDsOutputAttribs", 825));
+            dbgMembers.push_back(std::make_pair("dsAllocationSize", 826));
+            dbgMembers.push_back(std::make_pair("dsOutVtxAttribOffset", 827));
+            dbgMembers.push_back(std::make_pair("vertexAttribOffset", 830));
+            
+            pJitMgr->CreateDebugStructType(pRetType, "SWR_TS_STATE", pFile, 814, dbgMembers);
+
+        }
+
+        return pRetType;
     }
 
-    static const uint32_t SWR_TS_STATE_tsEnable           = 0;
-    static const uint32_t SWR_TS_STATE_tsOutputTopology   = 1;
-    static const uint32_t SWR_TS_STATE_partitioning       = 2;
-    static const uint32_t SWR_TS_STATE_domain             = 3;
-    static const uint32_t SWR_TS_STATE_postDSTopology     = 4;
-    static const uint32_t SWR_TS_STATE_numHsInputAttribs  = 5;
-    static const uint32_t SWR_TS_STATE_numHsOutputAttribs = 6;
-    static const uint32_t SWR_TS_STATE_numDsOutputAttribs = 7;
-    static const uint32_t SWR_TS_STATE_dsAllocationSize   = 8;
-    static const uint32_t SWR_TS_STATE_vertexAttribOffset = 9;
+    static const uint32_t SWR_TS_STATE_tsEnable             = 0;
+    static const uint32_t SWR_TS_STATE_tsOutputTopology     = 1;
+    static const uint32_t SWR_TS_STATE_partitioning         = 2;
+    static const uint32_t SWR_TS_STATE_domain               = 3;
+    static const uint32_t SWR_TS_STATE_postDSTopology       = 4;
+    static const uint32_t SWR_TS_STATE_numHsInputAttribs    = 5;
+    static const uint32_t SWR_TS_STATE_numHsOutputAttribs   = 6;
+    static const uint32_t SWR_TS_STATE_numDsOutputAttribs   = 7;
+    static const uint32_t SWR_TS_STATE_dsAllocationSize     = 8;
+    static const uint32_t SWR_TS_STATE_dsOutVtxAttribOffset = 9;
+    static const uint32_t SWR_TS_STATE_vertexAttribOffset   = 10;
 
     INLINE static StructType *Gen_SWR_RENDER_TARGET_BLEND_STATE(JitManager* pJitMgr)
     {
         LLVMContext& ctx = pJitMgr->mContext;
-        std::vector<Type*> members;
-        
-        /* writeDisableRed   */ members.push_back( Type::getInt8Ty(ctx) );
-        /* writeDisableGreen */ members.push_back( Type::getInt8Ty(ctx) );
-        /* writeDisableBlue  */ members.push_back( Type::getInt8Ty(ctx) );
-        /* writeDisableAlpha */ members.push_back( Type::getInt8Ty(ctx) );
+	(void) ctx;
 
-        return StructType::get(ctx, members, false);
+        StructType* pRetType = pJitMgr->mpCurrentModule->getTypeByName("SWR_RENDER_TARGET_BLEND_STATE");
+        if (pRetType == nullptr)
+        {
+            std::vector<Type*> members;
+            
+            /* writeDisableRed   */ members.push_back(Type::getInt8Ty(ctx));
+            /* writeDisableGreen */ members.push_back(Type::getInt8Ty(ctx));
+            /* writeDisableBlue  */ members.push_back(Type::getInt8Ty(ctx));
+            /* writeDisableAlpha */ members.push_back(Type::getInt8Ty(ctx));
+
+            pRetType = StructType::create(members, "SWR_RENDER_TARGET_BLEND_STATE", false);
+
+            // Compute debug metadata
+            llvm::DIBuilder builder(*pJitMgr->mpCurrentModule);
+            llvm::DIFile* pFile = builder.createFile("state.h", "./rasterizer/core");
+
+            std::vector<std::pair<std::string, uint32_t>> dbgMembers;
+            dbgMembers.push_back(std::make_pair("writeDisableRed", 836));
+            dbgMembers.push_back(std::make_pair("writeDisableGreen", 837));
+            dbgMembers.push_back(std::make_pair("writeDisableBlue", 838));
+            dbgMembers.push_back(std::make_pair("writeDisableAlpha", 839));
+            
+            pJitMgr->CreateDebugStructType(pRetType, "SWR_RENDER_TARGET_BLEND_STATE", pFile, 834, dbgMembers);
+
+        }
+
+        return pRetType;
     }
 
     static const uint32_t SWR_RENDER_TARGET_BLEND_STATE_writeDisableRed   = 0;
@@ -609,15 +1192,37 @@ namespace SwrJit
     INLINE static StructType *Gen_SWR_BLEND_STATE(JitManager* pJitMgr)
     {
         LLVMContext& ctx = pJitMgr->mContext;
-        std::vector<Type*> members;
-        
-        /* constantColor      */ members.push_back( ArrayType::get(Type::getFloatTy(ctx), 4) );
-        /* alphaTestReference */ members.push_back( Type::getInt32Ty(ctx) );
-        /* sampleMask         */ members.push_back( Type::getInt32Ty(ctx) );
-        /* sampleCount        */ members.push_back( Type::getInt32Ty(ctx) );
-        /* renderTarget       */ members.push_back( ArrayType::get(Gen_SWR_RENDER_TARGET_BLEND_STATE(pJitMgr), SWR_NUM_RENDERTARGETS) );
+	(void) ctx;
 
-        return StructType::get(ctx, members, false);
+        StructType* pRetType = pJitMgr->mpCurrentModule->getTypeByName("SWR_BLEND_STATE");
+        if (pRetType == nullptr)
+        {
+            std::vector<Type*> members;
+            
+            /* constantColor      */ members.push_back(ArrayType::get(Type::getFloatTy(ctx), 4));
+            /* alphaTestReference */ members.push_back(Type::getInt32Ty(ctx));
+            /* sampleMask         */ members.push_back(Type::getInt32Ty(ctx));
+            /* sampleCount        */ members.push_back(Type::getInt32Ty(ctx));
+            /* renderTarget       */ members.push_back(ArrayType::get(Gen_SWR_RENDER_TARGET_BLEND_STATE(pJitMgr), SWR_NUM_RENDERTARGETS));
+
+            pRetType = StructType::create(members, "SWR_BLEND_STATE", false);
+
+            // Compute debug metadata
+            llvm::DIBuilder builder(*pJitMgr->mpCurrentModule);
+            llvm::DIFile* pFile = builder.createFile("state.h", "./rasterizer/core");
+
+            std::vector<std::pair<std::string, uint32_t>> dbgMembers;
+            dbgMembers.push_back(std::make_pair("constantColor", 863));
+            dbgMembers.push_back(std::make_pair("alphaTestReference", 866));
+            dbgMembers.push_back(std::make_pair("sampleMask", 867));
+            dbgMembers.push_back(std::make_pair("sampleCount", 870));
+            dbgMembers.push_back(std::make_pair("renderTarget", 872));
+            
+            pJitMgr->CreateDebugStructType(pRetType, "SWR_BLEND_STATE", pFile, 860, dbgMembers);
+
+        }
+
+        return pRetType;
     }
 
     static const uint32_t SWR_BLEND_STATE_constantColor      = 0;
@@ -629,15 +1234,37 @@ namespace SwrJit
     INLINE static StructType *Gen_SWR_FRONTEND_STATE(JitManager* pJitMgr)
     {
         LLVMContext& ctx = pJitMgr->mContext;
-        std::vector<Type*> members;
-        
-        /* vpTransformDisable */ members.push_back( Type::getInt8Ty(ctx) );
-        /* bEnableCutIndex    */ members.push_back( Type::getInt8Ty(ctx) );
-        /* triFan             */ members.push_back( Type::getInt32Ty(ctx) );
-        /* lineStripList      */ members.push_back( Type::getInt32Ty(ctx) );
-        /* triStripList       */ members.push_back( Type::getInt32Ty(ctx) );
+	(void) ctx;
 
-        return StructType::get(ctx, members, false);
+        StructType* pRetType = pJitMgr->mpCurrentModule->getTypeByName("SWR_FRONTEND_STATE");
+        if (pRetType == nullptr)
+        {
+            std::vector<Type*> members;
+            
+            /* vpTransformDisable */ members.push_back(Type::getInt8Ty(ctx));
+            /* bEnableCutIndex    */ members.push_back(Type::getInt8Ty(ctx));
+            /* triFan             */ members.push_back(Type::getInt32Ty(ctx));
+            /* lineStripList      */ members.push_back(Type::getInt32Ty(ctx));
+            /* triStripList       */ members.push_back(Type::getInt32Ty(ctx));
+
+            pRetType = StructType::create(members, "SWR_FRONTEND_STATE", false);
+
+            // Compute debug metadata
+            llvm::DIBuilder builder(*pJitMgr->mpCurrentModule);
+            llvm::DIFile* pFile = builder.createFile("state.h", "./rasterizer/core");
+
+            std::vector<std::pair<std::string, uint32_t>> dbgMembers;
+            dbgMembers.push_back(std::make_pair("vpTransformDisable", 906));
+            dbgMembers.push_back(std::make_pair("bEnableCutIndex", 907));
+            dbgMembers.push_back(std::make_pair("triFan", 912));
+            dbgMembers.push_back(std::make_pair("lineStripList", 913));
+            dbgMembers.push_back(std::make_pair("triStripList", 914));
+            
+            pJitMgr->CreateDebugStructType(pRetType, "SWR_FRONTEND_STATE", pFile, 902, dbgMembers);
+
+        }
+
+        return pRetType;
     }
 
     static const uint32_t SWR_FRONTEND_STATE_vpTransformDisable = 0;
@@ -649,16 +1276,39 @@ namespace SwrJit
     INLINE static StructType *Gen_SWR_VIEWPORT_MATRIX(JitManager* pJitMgr)
     {
         LLVMContext& ctx = pJitMgr->mContext;
-        std::vector<Type*> members;
-        
-        /* m00 */ members.push_back( Type::getFloatTy(ctx) );
-        /* m11 */ members.push_back( Type::getFloatTy(ctx) );
-        /* m22 */ members.push_back( Type::getFloatTy(ctx) );
-        /* m30 */ members.push_back( Type::getFloatTy(ctx) );
-        /* m31 */ members.push_back( Type::getFloatTy(ctx) );
-        /* m32 */ members.push_back( Type::getFloatTy(ctx) );
+	(void) ctx;
 
-        return StructType::get(ctx, members, false);
+        StructType* pRetType = pJitMgr->mpCurrentModule->getTypeByName("SWR_VIEWPORT_MATRIX");
+        if (pRetType == nullptr)
+        {
+            std::vector<Type*> members;
+            
+            /* m00 */ members.push_back(Type::getFloatTy(ctx));
+            /* m11 */ members.push_back(Type::getFloatTy(ctx));
+            /* m22 */ members.push_back(Type::getFloatTy(ctx));
+            /* m30 */ members.push_back(Type::getFloatTy(ctx));
+            /* m31 */ members.push_back(Type::getFloatTy(ctx));
+            /* m32 */ members.push_back(Type::getFloatTy(ctx));
+
+            pRetType = StructType::create(members, "SWR_VIEWPORT_MATRIX", false);
+
+            // Compute debug metadata
+            llvm::DIBuilder builder(*pJitMgr->mpCurrentModule);
+            llvm::DIFile* pFile = builder.createFile("state.h", "./rasterizer/core");
+
+            std::vector<std::pair<std::string, uint32_t>> dbgMembers;
+            dbgMembers.push_back(std::make_pair("m00", 930));
+            dbgMembers.push_back(std::make_pair("m11", 931));
+            dbgMembers.push_back(std::make_pair("m22", 932));
+            dbgMembers.push_back(std::make_pair("m30", 933));
+            dbgMembers.push_back(std::make_pair("m31", 934));
+            dbgMembers.push_back(std::make_pair("m32", 935));
+            
+            pJitMgr->CreateDebugStructType(pRetType, "SWR_VIEWPORT_MATRIX", pFile, 928, dbgMembers);
+
+        }
+
+        return pRetType;
     }
 
     static const uint32_t SWR_VIEWPORT_MATRIX_m00 = 0;
@@ -671,16 +1321,39 @@ namespace SwrJit
     INLINE static StructType *Gen_SWR_VIEWPORT_MATRICES(JitManager* pJitMgr)
     {
         LLVMContext& ctx = pJitMgr->mContext;
-        std::vector<Type*> members;
-        
-        /* m00 */ members.push_back( ArrayType::get(Type::getFloatTy(ctx), KNOB_NUM_VIEWPORTS_SCISSORS) );
-        /* m11 */ members.push_back( ArrayType::get(Type::getFloatTy(ctx), KNOB_NUM_VIEWPORTS_SCISSORS) );
-        /* m22 */ members.push_back( ArrayType::get(Type::getFloatTy(ctx), KNOB_NUM_VIEWPORTS_SCISSORS) );
-        /* m30 */ members.push_back( ArrayType::get(Type::getFloatTy(ctx), KNOB_NUM_VIEWPORTS_SCISSORS) );
-        /* m31 */ members.push_back( ArrayType::get(Type::getFloatTy(ctx), KNOB_NUM_VIEWPORTS_SCISSORS) );
-        /* m32 */ members.push_back( ArrayType::get(Type::getFloatTy(ctx), KNOB_NUM_VIEWPORTS_SCISSORS) );
+	(void) ctx;
 
-        return StructType::get(ctx, members, false);
+        StructType* pRetType = pJitMgr->mpCurrentModule->getTypeByName("SWR_VIEWPORT_MATRICES");
+        if (pRetType == nullptr)
+        {
+            std::vector<Type*> members;
+            
+            /* m00 */ members.push_back(ArrayType::get(Type::getFloatTy(ctx), KNOB_NUM_VIEWPORTS_SCISSORS));
+            /* m11 */ members.push_back(ArrayType::get(Type::getFloatTy(ctx), KNOB_NUM_VIEWPORTS_SCISSORS));
+            /* m22 */ members.push_back(ArrayType::get(Type::getFloatTy(ctx), KNOB_NUM_VIEWPORTS_SCISSORS));
+            /* m30 */ members.push_back(ArrayType::get(Type::getFloatTy(ctx), KNOB_NUM_VIEWPORTS_SCISSORS));
+            /* m31 */ members.push_back(ArrayType::get(Type::getFloatTy(ctx), KNOB_NUM_VIEWPORTS_SCISSORS));
+            /* m32 */ members.push_back(ArrayType::get(Type::getFloatTy(ctx), KNOB_NUM_VIEWPORTS_SCISSORS));
+
+            pRetType = StructType::create(members, "SWR_VIEWPORT_MATRICES", false);
+
+            // Compute debug metadata
+            llvm::DIBuilder builder(*pJitMgr->mpCurrentModule);
+            llvm::DIFile* pFile = builder.createFile("state.h", "./rasterizer/core");
+
+            std::vector<std::pair<std::string, uint32_t>> dbgMembers;
+            dbgMembers.push_back(std::make_pair("m00", 943));
+            dbgMembers.push_back(std::make_pair("m11", 944));
+            dbgMembers.push_back(std::make_pair("m22", 945));
+            dbgMembers.push_back(std::make_pair("m30", 946));
+            dbgMembers.push_back(std::make_pair("m31", 947));
+            dbgMembers.push_back(std::make_pair("m32", 948));
+            
+            pJitMgr->CreateDebugStructType(pRetType, "SWR_VIEWPORT_MATRICES", pFile, 941, dbgMembers);
+
+        }
+
+        return pRetType;
     }
 
     static const uint32_t SWR_VIEWPORT_MATRICES_m00 = 0;
@@ -693,16 +1366,39 @@ namespace SwrJit
     INLINE static StructType *Gen_SWR_VIEWPORT(JitManager* pJitMgr)
     {
         LLVMContext& ctx = pJitMgr->mContext;
-        std::vector<Type*> members;
-        
-        /* x      */ members.push_back( Type::getFloatTy(ctx) );
-        /* y      */ members.push_back( Type::getFloatTy(ctx) );
-        /* width  */ members.push_back( Type::getFloatTy(ctx) );
-        /* height */ members.push_back( Type::getFloatTy(ctx) );
-        /* minZ   */ members.push_back( Type::getFloatTy(ctx) );
-        /* maxZ   */ members.push_back( Type::getFloatTy(ctx) );
+	(void) ctx;
 
-        return StructType::get(ctx, members, false);
+        StructType* pRetType = pJitMgr->mpCurrentModule->getTypeByName("SWR_VIEWPORT");
+        if (pRetType == nullptr)
+        {
+            std::vector<Type*> members;
+            
+            /* x      */ members.push_back(Type::getFloatTy(ctx));
+            /* y      */ members.push_back(Type::getFloatTy(ctx));
+            /* width  */ members.push_back(Type::getFloatTy(ctx));
+            /* height */ members.push_back(Type::getFloatTy(ctx));
+            /* minZ   */ members.push_back(Type::getFloatTy(ctx));
+            /* maxZ   */ members.push_back(Type::getFloatTy(ctx));
+
+            pRetType = StructType::create(members, "SWR_VIEWPORT", false);
+
+            // Compute debug metadata
+            llvm::DIBuilder builder(*pJitMgr->mpCurrentModule);
+            llvm::DIFile* pFile = builder.createFile("state.h", "./rasterizer/core");
+
+            std::vector<std::pair<std::string, uint32_t>> dbgMembers;
+            dbgMembers.push_back(std::make_pair("x", 956));
+            dbgMembers.push_back(std::make_pair("y", 957));
+            dbgMembers.push_back(std::make_pair("width", 958));
+            dbgMembers.push_back(std::make_pair("height", 959));
+            dbgMembers.push_back(std::make_pair("minZ", 960));
+            dbgMembers.push_back(std::make_pair("maxZ", 961));
+            
+            pJitMgr->CreateDebugStructType(pRetType, "SWR_VIEWPORT", pFile, 954, dbgMembers);
+
+        }
+
+        return pRetType;
     }
 
     static const uint32_t SWR_VIEWPORT_x      = 0;
@@ -715,20 +1411,47 @@ namespace SwrJit
     INLINE static StructType *Gen_SWR_MULTISAMPLE_POS(JitManager* pJitMgr)
     {
         LLVMContext& ctx = pJitMgr->mContext;
-        std::vector<Type*> members;
-        
-        /* _xi                */ members.push_back( ArrayType::get(Type::getInt32Ty(ctx), SWR_MAX_NUM_MULTISAMPLES) );
-        /* _yi                */ members.push_back( ArrayType::get(Type::getInt32Ty(ctx), SWR_MAX_NUM_MULTISAMPLES) );
-        /* _x                 */ members.push_back( ArrayType::get(Type::getFloatTy(ctx), SWR_MAX_NUM_MULTISAMPLES) );
-        /* _y                 */ members.push_back( ArrayType::get(Type::getFloatTy(ctx), SWR_MAX_NUM_MULTISAMPLES) );
-        /* _vXi               */ members.push_back( ArrayType::get(VectorType::get(Type::getInt32Ty(ctx), 4), SWR_MAX_NUM_MULTISAMPLES) );
-        /* _vYi               */ members.push_back( ArrayType::get(VectorType::get(Type::getInt32Ty(ctx), 4), SWR_MAX_NUM_MULTISAMPLES) );
-        /* _vX                */ members.push_back( ArrayType::get(VectorType::get(Type::getFloatTy(ctx), pJitMgr->mVWidth), SWR_MAX_NUM_MULTISAMPLES) );
-        /* _vY                */ members.push_back( ArrayType::get(VectorType::get(Type::getFloatTy(ctx), pJitMgr->mVWidth), SWR_MAX_NUM_MULTISAMPLES) );
-        /* tileSampleOffsetsX */ members.push_back( VectorType::get(Type::getInt32Ty(ctx), 4) );
-        /* tileSampleOffsetsY */ members.push_back( VectorType::get(Type::getInt32Ty(ctx), 4) );
+	(void) ctx;
 
-        return StructType::get(ctx, members, false);
+        StructType* pRetType = pJitMgr->mpCurrentModule->getTypeByName("SWR_MULTISAMPLE_POS");
+        if (pRetType == nullptr)
+        {
+            std::vector<Type*> members;
+            
+            /* _xi                */ members.push_back(ArrayType::get(Type::getInt32Ty(ctx), SWR_MAX_NUM_MULTISAMPLES));
+            /* _yi                */ members.push_back(ArrayType::get(Type::getInt32Ty(ctx), SWR_MAX_NUM_MULTISAMPLES));
+            /* _x                 */ members.push_back(ArrayType::get(Type::getFloatTy(ctx), SWR_MAX_NUM_MULTISAMPLES));
+            /* _y                 */ members.push_back(ArrayType::get(Type::getFloatTy(ctx), SWR_MAX_NUM_MULTISAMPLES));
+            /* _vXi               */ members.push_back(ArrayType::get(VectorType::get(Type::getInt32Ty(ctx), 4), SWR_MAX_NUM_MULTISAMPLES));
+            /* _vYi               */ members.push_back(ArrayType::get(VectorType::get(Type::getInt32Ty(ctx), 4), SWR_MAX_NUM_MULTISAMPLES));
+            /* _vX                */ members.push_back(ArrayType::get(VectorType::get(Type::getFloatTy(ctx), pJitMgr->mVWidth), SWR_MAX_NUM_MULTISAMPLES));
+            /* _vY                */ members.push_back(ArrayType::get(VectorType::get(Type::getFloatTy(ctx), pJitMgr->mVWidth), SWR_MAX_NUM_MULTISAMPLES));
+            /* tileSampleOffsetsX */ members.push_back(VectorType::get(Type::getInt32Ty(ctx), 4));
+            /* tileSampleOffsetsY */ members.push_back(VectorType::get(Type::getInt32Ty(ctx), 4));
+
+            pRetType = StructType::create(members, "SWR_MULTISAMPLE_POS", false);
+
+            // Compute debug metadata
+            llvm::DIBuilder builder(*pJitMgr->mpCurrentModule);
+            llvm::DIFile* pFile = builder.createFile("state.h", "./rasterizer/core");
+
+            std::vector<std::pair<std::string, uint32_t>> dbgMembers;
+            dbgMembers.push_back(std::make_pair("_xi", 1025));
+            dbgMembers.push_back(std::make_pair("_yi", 1026));
+            dbgMembers.push_back(std::make_pair("_x", 1027));
+            dbgMembers.push_back(std::make_pair("_y", 1028));
+            dbgMembers.push_back(std::make_pair("_vXi", 1031));
+            dbgMembers.push_back(std::make_pair("_vYi", 1032));
+            dbgMembers.push_back(std::make_pair("_vX", 1033));
+            dbgMembers.push_back(std::make_pair("_vY", 1034));
+            dbgMembers.push_back(std::make_pair("tileSampleOffsetsX", 1035));
+            dbgMembers.push_back(std::make_pair("tileSampleOffsetsY", 1036));
+            
+            pJitMgr->CreateDebugStructType(pRetType, "SWR_MULTISAMPLE_POS", pFile, 996, dbgMembers);
+
+        }
+
+        return pRetType;
     }
 
     static const uint32_t SWR_MULTISAMPLE_POS__xi                = 0;
@@ -745,33 +1468,73 @@ namespace SwrJit
     INLINE static StructType *Gen_SWR_RASTSTATE(JitManager* pJitMgr)
     {
         LLVMContext& ctx = pJitMgr->mContext;
-        std::vector<Type*> members;
-        
-        /* cullMode             */ members.push_back( Type::getInt32Ty(ctx) );
-        /* fillMode             */ members.push_back( Type::getInt32Ty(ctx) );
-        /* frontWinding         */ members.push_back( Type::getInt32Ty(ctx) );
-        /* scissorEnable        */ members.push_back( Type::getInt32Ty(ctx) );
-        /* depthClipEnable      */ members.push_back( Type::getInt32Ty(ctx) );
-        /* clipHalfZ            */ members.push_back( Type::getInt32Ty(ctx) );
-        /* pointParam           */ members.push_back( Type::getInt32Ty(ctx) );
-        /* pointSpriteEnable    */ members.push_back( Type::getInt32Ty(ctx) );
-        /* pointSpriteTopOrigin */ members.push_back( Type::getInt32Ty(ctx) );
-        /* forcedSampleCount    */ members.push_back( Type::getInt32Ty(ctx) );
-        /* pixelOffset          */ members.push_back( Type::getInt32Ty(ctx) );
-        /* depthBiasPreAdjusted */ members.push_back( Type::getInt32Ty(ctx) );
-        /* conservativeRast     */ members.push_back( Type::getInt32Ty(ctx) );
-        /* pointSize            */ members.push_back( Type::getFloatTy(ctx) );
-        /* lineWidth            */ members.push_back( Type::getFloatTy(ctx) );
-        /* depthBias            */ members.push_back( Type::getFloatTy(ctx) );
-        /* slopeScaledDepthBias */ members.push_back( Type::getFloatTy(ctx) );
-        /* depthBiasClamp       */ members.push_back( Type::getFloatTy(ctx) );
-        /* depthFormat          */ members.push_back( Type::getInt32Ty(ctx) );
-        /* sampleCount          */ members.push_back( Type::getInt32Ty(ctx) );
-        /* pixelLocation        */ members.push_back( Type::getInt32Ty(ctx) );
-        /* samplePositions      */ members.push_back( ArrayType::get(Type::getInt8Ty(ctx), sizeof(SWR_MULTISAMPLE_POS)) );
-        /* bIsCenterPattern     */ members.push_back( Type::getInt32Ty(ctx) );
+	(void) ctx;
 
-        return StructType::get(ctx, members, false);
+        StructType* pRetType = pJitMgr->mpCurrentModule->getTypeByName("SWR_RASTSTATE");
+        if (pRetType == nullptr)
+        {
+            std::vector<Type*> members;
+            
+            /* cullMode             */ members.push_back(Type::getInt32Ty(ctx));
+            /* fillMode             */ members.push_back(Type::getInt32Ty(ctx));
+            /* frontWinding         */ members.push_back(Type::getInt32Ty(ctx));
+            /* scissorEnable        */ members.push_back(Type::getInt32Ty(ctx));
+            /* depthClipEnable      */ members.push_back(Type::getInt32Ty(ctx));
+            /* clipHalfZ            */ members.push_back(Type::getInt32Ty(ctx));
+            /* pointParam           */ members.push_back(Type::getInt32Ty(ctx));
+            /* pointSpriteEnable    */ members.push_back(Type::getInt32Ty(ctx));
+            /* pointSpriteTopOrigin */ members.push_back(Type::getInt32Ty(ctx));
+            /* forcedSampleCount    */ members.push_back(Type::getInt32Ty(ctx));
+            /* pixelOffset          */ members.push_back(Type::getInt32Ty(ctx));
+            /* depthBiasPreAdjusted */ members.push_back(Type::getInt32Ty(ctx));
+            /* conservativeRast     */ members.push_back(Type::getInt32Ty(ctx));
+            /* pointSize            */ members.push_back(Type::getFloatTy(ctx));
+            /* lineWidth            */ members.push_back(Type::getFloatTy(ctx));
+            /* depthBias            */ members.push_back(Type::getFloatTy(ctx));
+            /* slopeScaledDepthBias */ members.push_back(Type::getFloatTy(ctx));
+            /* depthBiasClamp       */ members.push_back(Type::getFloatTy(ctx));
+            /* depthFormat          */ members.push_back(Type::getInt32Ty(ctx));
+            /* sampleCount          */ members.push_back(Type::getInt32Ty(ctx));
+            /* pixelLocation        */ members.push_back(Type::getInt32Ty(ctx));
+            /* samplePositions      */ members.push_back(ArrayType::get(Type::getInt8Ty(ctx), sizeof(SWR_MULTISAMPLE_POS)));
+            /* bIsCenterPattern     */ members.push_back(Type::getInt32Ty(ctx));
+
+            pRetType = StructType::create(members, "SWR_RASTSTATE", false);
+
+            // Compute debug metadata
+            llvm::DIBuilder builder(*pJitMgr->mpCurrentModule);
+            llvm::DIFile* pFile = builder.createFile("state.h", "./rasterizer/core");
+
+            std::vector<std::pair<std::string, uint32_t>> dbgMembers;
+            dbgMembers.push_back(std::make_pair("cullMode", 1044));
+            dbgMembers.push_back(std::make_pair("fillMode", 1045));
+            dbgMembers.push_back(std::make_pair("frontWinding", 1046));
+            dbgMembers.push_back(std::make_pair("scissorEnable", 1047));
+            dbgMembers.push_back(std::make_pair("depthClipEnable", 1048));
+            dbgMembers.push_back(std::make_pair("clipHalfZ", 1049));
+            dbgMembers.push_back(std::make_pair("pointParam", 1050));
+            dbgMembers.push_back(std::make_pair("pointSpriteEnable", 1051));
+            dbgMembers.push_back(std::make_pair("pointSpriteTopOrigin", 1052));
+            dbgMembers.push_back(std::make_pair("forcedSampleCount", 1053));
+            dbgMembers.push_back(std::make_pair("pixelOffset", 1054));
+            dbgMembers.push_back(std::make_pair("depthBiasPreAdjusted", 1055));
+            dbgMembers.push_back(std::make_pair("conservativeRast", 1056));
+            dbgMembers.push_back(std::make_pair("pointSize", 1058));
+            dbgMembers.push_back(std::make_pair("lineWidth", 1059));
+            dbgMembers.push_back(std::make_pair("depthBias", 1061));
+            dbgMembers.push_back(std::make_pair("slopeScaledDepthBias", 1062));
+            dbgMembers.push_back(std::make_pair("depthBiasClamp", 1063));
+            dbgMembers.push_back(std::make_pair("depthFormat", 1064));
+            dbgMembers.push_back(std::make_pair("sampleCount", 1067));
+            dbgMembers.push_back(std::make_pair("pixelLocation", 1068));
+            dbgMembers.push_back(std::make_pair("samplePositions", 1069));
+            dbgMembers.push_back(std::make_pair("bIsCenterPattern", 1070));
+            
+            pJitMgr->CreateDebugStructType(pRetType, "SWR_RASTSTATE", pFile, 1042, dbgMembers);
+
+        }
+
+        return pRetType;
     }
 
     static const uint32_t SWR_RASTSTATE_cullMode             = 0;
@@ -801,13 +1564,33 @@ namespace SwrJit
     INLINE static StructType *Gen_SWR_ATTRIB_SWIZZLE(JitManager* pJitMgr)
     {
         LLVMContext& ctx = pJitMgr->mContext;
-        std::vector<Type*> members;
-        
-        /* sourceAttrib          */ members.push_back( Type::getInt16Ty(ctx) );
-        /* constantSource        */ members.push_back( Type::getInt16Ty(ctx) );
-        /* componentOverrideMask */ members.push_back( Type::getInt16Ty(ctx) );
+	(void) ctx;
 
-        return StructType::get(ctx, members, false);
+        StructType* pRetType = pJitMgr->mpCurrentModule->getTypeByName("SWR_ATTRIB_SWIZZLE");
+        if (pRetType == nullptr)
+        {
+            std::vector<Type*> members;
+            
+            /* sourceAttrib          */ members.push_back(Type::getInt16Ty(ctx));
+            /* constantSource        */ members.push_back(Type::getInt16Ty(ctx));
+            /* componentOverrideMask */ members.push_back(Type::getInt16Ty(ctx));
+
+            pRetType = StructType::create(members, "SWR_ATTRIB_SWIZZLE", false);
+
+            // Compute debug metadata
+            llvm::DIBuilder builder(*pJitMgr->mpCurrentModule);
+            llvm::DIFile* pFile = builder.createFile("state.h", "./rasterizer/core");
+
+            std::vector<std::pair<std::string, uint32_t>> dbgMembers;
+            dbgMembers.push_back(std::make_pair("sourceAttrib", 1084));
+            dbgMembers.push_back(std::make_pair("constantSource", 1085));
+            dbgMembers.push_back(std::make_pair("componentOverrideMask", 1086));
+            
+            pJitMgr->CreateDebugStructType(pRetType, "SWR_ATTRIB_SWIZZLE", pFile, 1082, dbgMembers);
+
+        }
+
+        return pRetType;
     }
 
     static const uint32_t SWR_ATTRIB_SWIZZLE_sourceAttrib          = 0;
@@ -817,22 +1600,51 @@ namespace SwrJit
     INLINE static StructType *Gen_SWR_BACKEND_STATE(JitManager* pJitMgr)
     {
         LLVMContext& ctx = pJitMgr->mContext;
-        std::vector<Type*> members;
-        
-        /* constantInterpolationMask  */ members.push_back( Type::getInt32Ty(ctx) );
-        /* pointSpriteTexCoordMask    */ members.push_back( Type::getInt32Ty(ctx) );
-        /* numAttributes              */ members.push_back( Type::getInt8Ty(ctx) );
-        /* numComponents              */ members.push_back( ArrayType::get(Type::getInt8Ty(ctx), 32) );
-        /* swizzleEnable              */ members.push_back( Type::getInt8Ty(ctx) );
-        /* swizzleMap                 */ members.push_back( ArrayType::get(Gen_SWR_ATTRIB_SWIZZLE(pJitMgr), 32) );
-        /* readRenderTargetArrayIndex */ members.push_back( Type::getInt8Ty(ctx) );
-        /* readViewportArrayIndex     */ members.push_back( Type::getInt8Ty(ctx) );
-        /* vertexAttribOffset         */ members.push_back( Type::getInt32Ty(ctx) );
-        /* cullDistanceMask           */ members.push_back( Type::getInt8Ty(ctx) );
-        /* clipDistanceMask           */ members.push_back( Type::getInt8Ty(ctx) );
-        /* vertexClipCullOffset       */ members.push_back( Type::getInt32Ty(ctx) );
+	(void) ctx;
 
-        return StructType::get(ctx, members, false);
+        StructType* pRetType = pJitMgr->mpCurrentModule->getTypeByName("SWR_BACKEND_STATE");
+        if (pRetType == nullptr)
+        {
+            std::vector<Type*> members;
+            
+            /* constantInterpolationMask  */ members.push_back(Type::getInt32Ty(ctx));
+            /* pointSpriteTexCoordMask    */ members.push_back(Type::getInt32Ty(ctx));
+            /* numAttributes              */ members.push_back(Type::getInt8Ty(ctx));
+            /* numComponents              */ members.push_back(ArrayType::get(Type::getInt8Ty(ctx), 32));
+            /* swizzleEnable              */ members.push_back(Type::getInt8Ty(ctx));
+            /* swizzleMap                 */ members.push_back(ArrayType::get(Gen_SWR_ATTRIB_SWIZZLE(pJitMgr), 32));
+            /* readRenderTargetArrayIndex */ members.push_back(Type::getInt8Ty(ctx));
+            /* readViewportArrayIndex     */ members.push_back(Type::getInt8Ty(ctx));
+            /* vertexAttribOffset         */ members.push_back(Type::getInt32Ty(ctx));
+            /* cullDistanceMask           */ members.push_back(Type::getInt8Ty(ctx));
+            /* clipDistanceMask           */ members.push_back(Type::getInt8Ty(ctx));
+            /* vertexClipCullOffset       */ members.push_back(Type::getInt32Ty(ctx));
+
+            pRetType = StructType::create(members, "SWR_BACKEND_STATE", false);
+
+            // Compute debug metadata
+            llvm::DIBuilder builder(*pJitMgr->mpCurrentModule);
+            llvm::DIFile* pFile = builder.createFile("state.h", "./rasterizer/core");
+
+            std::vector<std::pair<std::string, uint32_t>> dbgMembers;
+            dbgMembers.push_back(std::make_pair("constantInterpolationMask", 1092));
+            dbgMembers.push_back(std::make_pair("pointSpriteTexCoordMask", 1093));
+            dbgMembers.push_back(std::make_pair("numAttributes", 1095));
+            dbgMembers.push_back(std::make_pair("numComponents", 1096));
+            dbgMembers.push_back(std::make_pair("swizzleEnable", 1098));
+            dbgMembers.push_back(std::make_pair("swizzleMap", 1101));
+            dbgMembers.push_back(std::make_pair("readRenderTargetArrayIndex", 1103));
+            dbgMembers.push_back(std::make_pair("readViewportArrayIndex", 1104));
+            dbgMembers.push_back(std::make_pair("vertexAttribOffset", 1107));
+            dbgMembers.push_back(std::make_pair("cullDistanceMask", 1110));
+            dbgMembers.push_back(std::make_pair("clipDistanceMask", 1111));
+            dbgMembers.push_back(std::make_pair("vertexClipCullOffset", 1114));
+            
+            pJitMgr->CreateDebugStructType(pRetType, "SWR_BACKEND_STATE", pFile, 1090, dbgMembers);
+
+        }
+
+        return pRetType;
     }
 
     static const uint32_t SWR_BACKEND_STATE_constantInterpolationMask  = 0;
@@ -851,21 +1663,49 @@ namespace SwrJit
     INLINE static StructType *Gen_SWR_PS_STATE(JitManager* pJitMgr)
     {
         LLVMContext& ctx = pJitMgr->mContext;
-        std::vector<Type*> members;
-        
-        /* pfnPixelShader   */ members.push_back( PointerType::get(Type::getInt8Ty(ctx), 0) );
-        /* killsPixel       */ members.push_back( Type::getInt32Ty(ctx) );
-        /* inputCoverage    */ members.push_back( Type::getInt32Ty(ctx) );
-        /* writesODepth     */ members.push_back( Type::getInt32Ty(ctx) );
-        /* usesSourceDepth  */ members.push_back( Type::getInt32Ty(ctx) );
-        /* shadingRate      */ members.push_back( Type::getInt32Ty(ctx) );
-        /* posOffset        */ members.push_back( Type::getInt32Ty(ctx) );
-        /* barycentricsMask */ members.push_back( Type::getInt32Ty(ctx) );
-        /* usesUAV          */ members.push_back( Type::getInt32Ty(ctx) );
-        /* forceEarlyZ      */ members.push_back( Type::getInt32Ty(ctx) );
-        /* renderTargetMask */ members.push_back( Type::getInt8Ty(ctx) );
+	(void) ctx;
 
-        return StructType::get(ctx, members, false);
+        StructType* pRetType = pJitMgr->mpCurrentModule->getTypeByName("SWR_PS_STATE");
+        if (pRetType == nullptr)
+        {
+            std::vector<Type*> members;
+            
+            /* pfnPixelShader   */ members.push_back(PointerType::get(Type::getInt8Ty(ctx), 0));
+            /* killsPixel       */ members.push_back(Type::getInt32Ty(ctx));
+            /* inputCoverage    */ members.push_back(Type::getInt32Ty(ctx));
+            /* writesODepth     */ members.push_back(Type::getInt32Ty(ctx));
+            /* usesSourceDepth  */ members.push_back(Type::getInt32Ty(ctx));
+            /* shadingRate      */ members.push_back(Type::getInt32Ty(ctx));
+            /* posOffset        */ members.push_back(Type::getInt32Ty(ctx));
+            /* barycentricsMask */ members.push_back(Type::getInt32Ty(ctx));
+            /* usesUAV          */ members.push_back(Type::getInt32Ty(ctx));
+            /* forceEarlyZ      */ members.push_back(Type::getInt32Ty(ctx));
+            /* renderTargetMask */ members.push_back(Type::getInt8Ty(ctx));
+
+            pRetType = StructType::create(members, "SWR_PS_STATE", false);
+
+            // Compute debug metadata
+            llvm::DIBuilder builder(*pJitMgr->mpCurrentModule);
+            llvm::DIFile* pFile = builder.createFile("state.h", "./rasterizer/core");
+
+            std::vector<std::pair<std::string, uint32_t>> dbgMembers;
+            dbgMembers.push_back(std::make_pair("pfnPixelShader", 1187));
+            dbgMembers.push_back(std::make_pair("killsPixel", 1190));
+            dbgMembers.push_back(std::make_pair("inputCoverage", 1191));
+            dbgMembers.push_back(std::make_pair("writesODepth", 1192));
+            dbgMembers.push_back(std::make_pair("usesSourceDepth", 1193));
+            dbgMembers.push_back(std::make_pair("shadingRate", 1194));
+            dbgMembers.push_back(std::make_pair("posOffset", 1195));
+            dbgMembers.push_back(std::make_pair("barycentricsMask", 1196));
+            dbgMembers.push_back(std::make_pair("usesUAV", 1197));
+            dbgMembers.push_back(std::make_pair("forceEarlyZ", 1198));
+            dbgMembers.push_back(std::make_pair("renderTargetMask", 1200));
+            
+            pJitMgr->CreateDebugStructType(pRetType, "SWR_PS_STATE", pFile, 1184, dbgMembers);
+
+        }
+
+        return pRetType;
     }
 
     static const uint32_t SWR_PS_STATE_pfnPixelShader   = 0;
@@ -883,13 +1723,33 @@ namespace SwrJit
     INLINE static StructType *Gen_SWR_DEPTH_BOUNDS_STATE(JitManager* pJitMgr)
     {
         LLVMContext& ctx = pJitMgr->mContext;
-        std::vector<Type*> members;
-        
-        /* depthBoundsTestEnable   */ members.push_back( Type::getInt8Ty(ctx) );
-        /* depthBoundsTestMinValue */ members.push_back( Type::getFloatTy(ctx) );
-        /* depthBoundsTestMaxValue */ members.push_back( Type::getFloatTy(ctx) );
+	(void) ctx;
 
-        return StructType::get(ctx, members, false);
+        StructType* pRetType = pJitMgr->mpCurrentModule->getTypeByName("SWR_DEPTH_BOUNDS_STATE");
+        if (pRetType == nullptr)
+        {
+            std::vector<Type*> members;
+            
+            /* depthBoundsTestEnable   */ members.push_back(Type::getInt8Ty(ctx));
+            /* depthBoundsTestMinValue */ members.push_back(Type::getFloatTy(ctx));
+            /* depthBoundsTestMaxValue */ members.push_back(Type::getFloatTy(ctx));
+
+            pRetType = StructType::create(members, "SWR_DEPTH_BOUNDS_STATE", false);
+
+            // Compute debug metadata
+            llvm::DIBuilder builder(*pJitMgr->mpCurrentModule);
+            llvm::DIFile* pFile = builder.createFile("state.h", "./rasterizer/core");
+
+            std::vector<std::pair<std::string, uint32_t>> dbgMembers;
+            dbgMembers.push_back(std::make_pair("depthBoundsTestEnable", 1206));
+            dbgMembers.push_back(std::make_pair("depthBoundsTestMinValue", 1207));
+            dbgMembers.push_back(std::make_pair("depthBoundsTestMaxValue", 1208));
+            
+            pJitMgr->CreateDebugStructType(pRetType, "SWR_DEPTH_BOUNDS_STATE", pFile, 1204, dbgMembers);
+
+        }
+
+        return pRetType;
     }
 
     static const uint32_t SWR_DEPTH_BOUNDS_STATE_depthBoundsTestEnable   = 0;

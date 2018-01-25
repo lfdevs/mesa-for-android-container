@@ -1940,8 +1940,6 @@
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="1"/>
     <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="28"/>
     <field name="DWord Length" start="0" end="7" type="uint" default="7"/>
-    <group count="4" start="32" size="32">
-    </group>
     <field name="8x Sample7 X Offset" start="188" end="191" type="u0.4"/>
     <field name="8x Sample7 Y Offset" start="184" end="187" type="u0.4"/>
     <field name="8x Sample6 X Offset" start="180" end="183" type="u0.4"/>
@@ -3302,6 +3300,8 @@
     <field name="TSG Done" start="17" end="17" type="bool"/>
     <field name="GAFM Done" start="18" end="18" type="bool"/>
     <field name="GAM Done" start="19" end="19" type="bool"/>
+    <field name="RS Done" start="20" end="20" type="bool"/>
+    <field name="CS Done" start="21" end="21" type="bool"/>
     <field name="SDE Done" start="22" end="22" type="bool"/>
     <field name="RCCFBC CS Done" start="23" end="23" type="bool"/>
   </register>

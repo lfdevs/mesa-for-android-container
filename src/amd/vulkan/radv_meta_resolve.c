@@ -121,6 +121,21 @@ create_pipeline(struct radv_device *device,
 		goto cleanup;
 	}
 
+	VkPipelineLayoutCreateInfo pl_create_info = {
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+		.setLayoutCount = 0,
+		.pSetLayouts = NULL,
+		.pushConstantRangeCount = 0,
+		.pPushConstantRanges = NULL,
+	};
+
+	result = radv_CreatePipelineLayout(radv_device_to_handle(device),
+					   &pl_create_info,
+					   &device->meta_state.alloc,
+					   &device->meta_state.resolve.p_layout);
+	if (result != VK_SUCCESS)
+		goto cleanup;
+
 	result = radv_graphics_pipeline_create(device_h,
 					       radv_pipeline_cache_to_handle(&device->meta_state.cache),
 					       &(VkGraphicsPipelineCreateInfo) {
@@ -196,6 +211,7 @@ create_pipeline(struct radv_device *device,
 								VK_DYNAMIC_STATE_SCISSOR,
 							},
 						},
+						.layout = device->meta_state.resolve.p_layout,
 																       .renderPass = device->meta_state.resolve.pass,
 																       .subpass = 0,
 																       },
@@ -222,6 +238,8 @@ radv_device_finish_meta_resolve_state(struct radv_device *device)
 
 	radv_DestroyRenderPass(radv_device_to_handle(device),
 			       state->resolve.pass, &state->alloc);
+	radv_DestroyPipelineLayout(radv_device_to_handle(device),
+				   state->resolve.p_layout, &state->alloc);
 	radv_DestroyPipeline(radv_device_to_handle(device),
 			     state->resolve.pipeline, &state->alloc);
 }
@@ -297,10 +315,15 @@ enum radv_resolve_method {
 
 static void radv_pick_resolve_method_images(struct radv_image *src_image,
 					    struct radv_image *dest_image,
+					    VkImageLayout dest_image_layout,
+					    struct radv_cmd_buffer *cmd_buffer,
 					    enum radv_resolve_method *method)
 
 {
-	if (dest_image->surface.num_dcc_levels > 0) {
+	uint32_t queue_mask = radv_image_queue_family_mask(dest_image,
+	                                                   cmd_buffer->queue_family_index,
+	                                                   cmd_buffer->queue_family_index);
+	if (radv_layout_dcc_compressed(dest_image, dest_image_layout, queue_mask)) {
 		*method = RESOLVE_FRAGMENT;
 	} else if (dest_image->surface.micro_tile_mode != src_image->surface.micro_tile_mode) {
 		*method = RESOLVE_COMPUTE;
@@ -342,6 +365,7 @@ void radv_CmdResolveImage(
 		resolve_method = RESOLVE_COMPUTE;
 
 	radv_pick_resolve_method_images(src_image, dest_image,
+					dest_image_layout, cmd_buffer,
 					&resolve_method);
 
 	if (resolve_method == RESOLVE_FRAGMENT) {
@@ -559,7 +583,7 @@ radv_cmd_buffer_resolve_subpass(struct radv_cmd_buffer *cmd_buffer)
 		struct radv_image *dst_img = cmd_buffer->state.framebuffer->attachments[dest_att.attachment].attachment->image;
 		struct radv_image *src_img = cmd_buffer->state.framebuffer->attachments[src_att.attachment].attachment->image;
 
-		radv_pick_resolve_method_images(dst_img, src_img, &resolve_method);
+		radv_pick_resolve_method_images(dst_img, src_img, dest_att.layout, cmd_buffer, &resolve_method);
 		if (resolve_method == RESOLVE_FRAGMENT) {
 			break;
 		}

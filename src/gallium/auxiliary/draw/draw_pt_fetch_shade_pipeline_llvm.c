@@ -368,6 +368,7 @@ llvm_pipeline_generic(struct draw_pt_middle_end *middle,
    unsigned start_or_maxelt, vid_base;
    const unsigned *elts;
 
+   assert(fetch_info->count > 0);
    llvm_vert_info.count = fetch_info->count;
    llvm_vert_info.vertex_size = fpme->vertex_size;
    llvm_vert_info.stride = fpme->vertex_size;

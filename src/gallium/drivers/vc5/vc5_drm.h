@@ -77,6 +77,19 @@ struct drm_vc5_submit_cl {
 	 /** End address of the RCL (first byte after the RCL) */
 	__u32 rcl_end;
 
+	/* Offset of the tile alloc memory
+	 *
+	 * This is optional on V3D 3.3 (where the CL can set the value) but
+	 * required on V3D 4.1.
+	 */
+	__u32 qma;
+
+	 /** Size of the tile alloc memory. */
+	__u32 qms;
+
+	 /** Offset of the tile state data array. */
+	__u32 qts;
+
 	/* Pointer to a u32 array of the BOs that are referenced by the job.
 	 */
 	__u64 bo_handles;

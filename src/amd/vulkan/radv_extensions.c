@@ -65,11 +65,15 @@
 bool
 radv_instance_extension_supported(const char *name)
 {
+    if (strcmp(name, "VK_KHR_external_fence_capabilities") == 0)
+        return true;
     if (strcmp(name, "VK_KHR_external_memory_capabilities") == 0)
         return true;
     if (strcmp(name, "VK_KHR_external_semaphore_capabilities") == 0)
         return true;
     if (strcmp(name, "VK_KHR_get_physical_device_properties2") == 0)
+        return true;
+    if (strcmp(name, "VK_KHR_get_surface_capabilities2") == 0)
         return true;
     if (strcmp(name, "VK_KHR_surface") == 0)
         return RADV_HAS_SURFACE;
@@ -79,6 +83,8 @@ radv_instance_extension_supported(const char *name)
         return VK_USE_PLATFORM_XCB_KHR;
     if (strcmp(name, "VK_KHR_xlib_surface") == 0)
         return VK_USE_PLATFORM_XLIB_KHR;
+    if (strcmp(name, "VK_EXT_debug_report") == 0)
+        return true;
     return false;
 }
 
@@ -89,6 +95,14 @@ VkResult radv_EnumerateInstanceExtensionProperties(
 {
     VK_OUTARRAY_MAKE(out, pProperties, pPropertyCount);
 
+    if (true) {
+        vk_outarray_append(&out, prop) {
+            *prop = (VkExtensionProperties) {
+                .extensionName = "VK_KHR_external_fence_capabilities",
+                .specVersion = 1,
+            };
+        }
+    }
     if (true) {
         vk_outarray_append(&out, prop) {
             *prop = (VkExtensionProperties) {
@@ -109,6 +123,14 @@ VkResult radv_EnumerateInstanceExtensionProperties(
         vk_outarray_append(&out, prop) {
             *prop = (VkExtensionProperties) {
                 .extensionName = "VK_KHR_get_physical_device_properties2",
+                .specVersion = 1,
+            };
+        }
+    }
+    if (true) {
+        vk_outarray_append(&out, prop) {
+            *prop = (VkExtensionProperties) {
+                .extensionName = "VK_KHR_get_surface_capabilities2",
                 .specVersion = 1,
             };
         }
@@ -145,6 +167,14 @@ VkResult radv_EnumerateInstanceExtensionProperties(
             };
         }
     }
+    if (true) {
+        vk_outarray_append(&out, prop) {
+            *prop = (VkExtensionProperties) {
+                .extensionName = "VK_EXT_debug_report",
+                .specVersion = 9,
+            };
+        }
+    }
 
     return vk_outarray_status(&out);
 }
@@ -159,12 +189,18 @@ bool
 radv_physical_device_extension_supported(struct radv_physical_device *device,
                                         const char *name)
 {
+    if (strcmp(name, "VK_ANDROID_native_buffer") == 0)
+        return ANDROID && device->rad_info.has_syncobj_wait_for_submit;
     if (strcmp(name, "VK_KHR_bind_memory2") == 0)
         return true;
     if (strcmp(name, "VK_KHR_dedicated_allocation") == 0)
         return true;
     if (strcmp(name, "VK_KHR_descriptor_update_template") == 0)
         return true;
+    if (strcmp(name, "VK_KHR_external_fence") == 0)
+        return device->rad_info.has_syncobj_wait_for_submit;
+    if (strcmp(name, "VK_KHR_external_fence_fd") == 0)
+        return device->rad_info.has_syncobj_wait_for_submit;
     if (strcmp(name, "VK_KHR_external_memory") == 0)
         return true;
     if (strcmp(name, "VK_KHR_external_memory_fd") == 0)
@@ -199,12 +235,18 @@ radv_physical_device_extension_supported(struct radv_physical_device *device,
         return true;
     if (strcmp(name, "VK_KHX_multiview") == 0)
         return true;
+    if (strcmp(name, "VK_EXT_discard_rectangles") == 0)
+        return true;
+    if (strcmp(name, "VK_EXT_external_memory_dma_buf") == 0)
+        return true;
     if (strcmp(name, "VK_EXT_global_priority") == 0)
         return device->rad_info.has_ctx_priority;
     if (strcmp(name, "VK_AMD_draw_indirect_count") == 0)
         return true;
     if (strcmp(name, "VK_AMD_rasterization_order") == 0)
         return device->rad_info.chip_class >= VI && device->rad_info.max_se >= 2;
+    if (strcmp(name, "VK_AMD_shader_info") == 0)
+        return true;
     return false;
 }
 
@@ -218,6 +260,14 @@ VkResult radv_EnumerateDeviceExtensionProperties(
     VK_OUTARRAY_MAKE(out, pProperties, pPropertyCount);
     (void)device;
 
+    if (ANDROID && device->rad_info.has_syncobj_wait_for_submit) {
+        vk_outarray_append(&out, prop) {
+            *prop = (VkExtensionProperties) {
+                .extensionName = "VK_ANDROID_native_buffer",
+                .specVersion = 5,
+            };
+        }
+    }
     if (true) {
         vk_outarray_append(&out, prop) {
             *prop = (VkExtensionProperties) {
@@ -238,6 +288,22 @@ VkResult radv_EnumerateDeviceExtensionProperties(
         vk_outarray_append(&out, prop) {
             *prop = (VkExtensionProperties) {
                 .extensionName = "VK_KHR_descriptor_update_template",
+                .specVersion = 1,
+            };
+        }
+    }
+    if (device->rad_info.has_syncobj_wait_for_submit) {
+        vk_outarray_append(&out, prop) {
+            *prop = (VkExtensionProperties) {
+                .extensionName = "VK_KHR_external_fence",
+                .specVersion = 1,
+            };
+        }
+    }
+    if (device->rad_info.has_syncobj_wait_for_submit) {
+        vk_outarray_append(&out, prop) {
+            *prop = (VkExtensionProperties) {
+                .extensionName = "VK_KHR_external_fence_fd",
                 .specVersion = 1,
             };
         }
@@ -378,6 +444,22 @@ VkResult radv_EnumerateDeviceExtensionProperties(
             };
         }
     }
+    if (true) {
+        vk_outarray_append(&out, prop) {
+            *prop = (VkExtensionProperties) {
+                .extensionName = "VK_EXT_discard_rectangles",
+                .specVersion = 1,
+            };
+        }
+    }
+    if (true) {
+        vk_outarray_append(&out, prop) {
+            *prop = (VkExtensionProperties) {
+                .extensionName = "VK_EXT_external_memory_dma_buf",
+                .specVersion = 1,
+            };
+        }
+    }
     if (device->rad_info.has_ctx_priority) {
         vk_outarray_append(&out, prop) {
             *prop = (VkExtensionProperties) {
@@ -398,6 +480,14 @@ VkResult radv_EnumerateDeviceExtensionProperties(
         vk_outarray_append(&out, prop) {
             *prop = (VkExtensionProperties) {
                 .extensionName = "VK_AMD_rasterization_order",
+                .specVersion = 1,
+            };
+        }
+    }
+    if (true) {
+        vk_outarray_append(&out, prop) {
+            *prop = (VkExtensionProperties) {
+                .extensionName = "VK_AMD_shader_info",
                 .specVersion = 1,
             };
         }

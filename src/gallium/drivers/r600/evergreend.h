@@ -988,6 +988,12 @@
 #define   S_02880C_DUAL_EXPORT_ENABLE(x)               (((unsigned)(x) & 0x1) << 9)
 #define   G_02880C_DUAL_EXPORT_ENABLE(x)               (((x) >> 9) & 0x1)
 #define   C_02880C_DUAL_EXPORT_ENABLE                  0xFFFFFDFF
+#define   S_02880C_EXEC_ON_HIER_FAIL(x)                (((unsigned)(x) & 0x1) << 10)
+#define   G_02880C_EXEC_ON_HIER_FAIL(x)                (((x) >> 10) & 0x1)
+#define   C_02880C_EXEC_ON_HIER_FAIL                   0xFFFFFBFF
+#define   S_02880C_EXEC_ON_NOOP(x)                     (((unsigned)(x) & 0x1) << 11)
+#define   G_02880C_EXEC_ON_NOOP(x)                     (((x) >> 11) & 0x1)
+#define   C_02880C_EXEC_ON_NOOP                        0xFFFFF7FF
 #define   S_02880C_DB_SOURCE_FORMAT(x)                 (((unsigned)(x) & 0x3) << 13)
 #define   G_02880C_DB_SOURCE_FORMAT(x)                 (((x) >> 13) & 0x3)
 #define   C_02880C_DB_SOURCE_FORMAT                    0xFFFF9FFF
@@ -2692,9 +2698,13 @@
 #define ENDIAN_8IN32	2
 #define ENDIAN_8IN64	3
 
+#define CM_R_0286F8_SPI_GPR_MGMT                     0x286f8
 #define CM_R_0286FC_SPI_LDS_MGMT                     0x286fc
 #define   S_0286FC_NUM_PS_LDS(x)                     ((x) & 0xff)
 #define   S_0286FC_NUM_LS_LDS(x)                     ((x) & 0xff) << 8
+#define CM_R_028700_SPI_STACK_MGMT                   0x28700
+#define CM_R_028704_SPI_WAVE_MGMT_1                  0x28704
+#define CM_R_028708_SPI_WAVE_MGMT_2                  0x28708
 
 #define CM_R_028804_DB_EQAA                          0x00028804
 #define   S_028804_MAX_ANCHOR_SAMPLES(x)                              (((unsigned)(x) & 0x07) << 0)

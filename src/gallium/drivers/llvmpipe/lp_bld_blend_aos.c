@@ -112,22 +112,34 @@ lp_build_blend_factor_unswizzled(struct lp_build_blend_aos_context *bld,
    case PIPE_BLENDFACTOR_DST_ALPHA:
       return bld->dst;
    case PIPE_BLENDFACTOR_SRC_ALPHA_SATURATE:
-      if(alpha)
+      if (alpha)
          return bld->base.one;
       else {
          /*
           * If there's no dst alpha the complement is zero but for unclamped
-          * float inputs min can be non-zero (negative).
+          * float inputs (or snorm inputs) min can be non-zero (negative).
           */
-         if (!bld->has_dst_alpha) {
-            if (!bld->saturate)
+         if (!bld->saturate) {
+            if (!bld->has_dst_alpha) {
                bld->saturate = lp_build_min(&bld->base, src_alpha, bld->base.zero);
-         }
-         else {
-            if(!bld->inv_dst)
-               bld->inv_dst = lp_build_comp(&bld->base, bld->dst);
-            if(!bld->saturate)
+            }
+            else if (bld->base.type.norm && bld->base.type.sign) {
+               /*
+                * The complement/min totally doesn't work, since
+                * the complement is in range [0,2] but the other
+                * min input is [-1,1]. However, we can just clamp to 0
+                * before doing the complement...
+                */
+               LLVMValueRef inv_dst;
+               inv_dst = lp_build_max(&bld->base, bld->base.zero, bld->dst);
+               inv_dst = lp_build_comp(&bld->base, inv_dst);
+               bld->saturate = lp_build_min(&bld->base, src_alpha, inv_dst);
+            } else {
+               if (!bld->inv_dst) {
+                  bld->inv_dst = lp_build_comp(&bld->base, bld->dst);
+               }
                bld->saturate = lp_build_min(&bld->base, src_alpha, bld->inv_dst);
+            }
          }
          return bld->saturate;
       }
@@ -140,24 +152,24 @@ lp_build_blend_factor_unswizzled(struct lp_build_blend_aos_context *bld,
    case PIPE_BLENDFACTOR_SRC1_ALPHA:
       return src1_alpha;
    case PIPE_BLENDFACTOR_INV_SRC_COLOR:
-      if(!bld->inv_src)
+      if (!bld->inv_src)
          bld->inv_src = lp_build_comp(&bld->base, bld->src);
       return bld->inv_src;
    case PIPE_BLENDFACTOR_INV_SRC_ALPHA:
-      if(!bld->inv_src_alpha)
+      if (!bld->inv_src_alpha)
          bld->inv_src_alpha = lp_build_comp(&bld->base, src_alpha);
       return bld->inv_src_alpha;
    case PIPE_BLENDFACTOR_INV_DST_COLOR:
    case PIPE_BLENDFACTOR_INV_DST_ALPHA:
-      if(!bld->inv_dst)
+      if (!bld->inv_dst)
          bld->inv_dst = lp_build_comp(&bld->base, bld->dst);
       return bld->inv_dst;
    case PIPE_BLENDFACTOR_INV_CONST_COLOR:
-      if(!bld->inv_const)
+      if (!bld->inv_const)
          bld->inv_const = lp_build_comp(&bld->base, bld->const_);
       return bld->inv_const;
    case PIPE_BLENDFACTOR_INV_CONST_ALPHA:
-      if(!bld->inv_const_alpha)
+      if (!bld->inv_const_alpha)
          bld->inv_const_alpha = lp_build_comp(&bld->base, const_alpha);
       return bld->inv_const_alpha;
    case PIPE_BLENDFACTOR_INV_SRC1_COLOR:
@@ -331,7 +343,7 @@ lp_build_blend_aos(struct gallivm_state *gallivm,
    bld.const_alpha = const_alpha;
    bld.has_dst_alpha = FALSE;
 
-   /* Find the alpha channel if not provided seperately */
+   /* Find the alpha channel if not provided separately */
    if (!src_alpha) {
       for (i = 0; i < 4; ++i) {
          if (swizzle[i] == 3) {
@@ -349,7 +361,7 @@ lp_build_blend_aos(struct gallivm_state *gallivm,
    }
 
    if (blend->logicop_enable) {
-      if(!type.floating) {
+      if (!type.floating) {
          result = lp_build_logicop(gallivm->builder, blend->logicop_func, src, dst);
       }
       else {
@@ -361,6 +373,7 @@ lp_build_blend_aos(struct gallivm_state *gallivm,
       boolean rgb_alpha_same = (state->rgb_src_factor == state->rgb_dst_factor &&
                                 state->alpha_src_factor == state->alpha_dst_factor) ||
                                nr_channels == 1;
+      boolean alpha_only = nr_channels == 1 && alpha_swizzle == PIPE_SWIZZLE_X;
 
       src_factor = lp_build_blend_factor(&bld, state->rgb_src_factor,
                                          state->alpha_src_factor,
@@ -374,8 +387,8 @@ lp_build_blend_aos(struct gallivm_state *gallivm,
 
       result = lp_build_blend(&bld.base,
                               state->rgb_func,
-                              state->rgb_src_factor,
-                              state->rgb_dst_factor,
+                              alpha_only ? state->alpha_src_factor : state->rgb_src_factor,
+                              alpha_only ? state->alpha_dst_factor : state->rgb_dst_factor,
                               src,
                               dst,
                               src_factor,
@@ -383,8 +396,8 @@ lp_build_blend_aos(struct gallivm_state *gallivm,
                               rgb_alpha_same,
                               false);
 
-      if(state->rgb_func != state->alpha_func && nr_channels > 1 &&
-                            alpha_swizzle != PIPE_SWIZZLE_NONE) {
+      if (state->rgb_func != state->alpha_func && nr_channels > 1 &&
+          alpha_swizzle != PIPE_SWIZZLE_NONE) {
          LLVMValueRef alpha;
 
          alpha = lp_build_blend(&bld.base,

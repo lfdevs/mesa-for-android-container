@@ -76,38 +76,39 @@ gen_disasm_disassemble(struct gen_disasm *disasm, void *assembly,
    struct gen_device_info *devinfo = &disasm->devinfo;
    int end = gen_disasm_find_end(disasm, assembly, start);
 
-   /* Make a dummy annotation structure that brw_validate_instructions
+   /* Make a dummy disasm structure that brw_validate_instructions
     * can work from.
     */
-   struct annotation_info annotation_info = {
-      .ann_count = 1,
-      .ann_size = 2,
-   };
-   annotation_info.mem_ctx = ralloc_context(NULL);
-   annotation_info.ann = rzalloc_array(annotation_info.mem_ctx,
-                                       struct annotation,
-                                       annotation_info.ann_size);
-   annotation_info.ann[0].offset = start;
-   annotation_info.ann[1].offset = end;
-   brw_validate_instructions(devinfo, assembly, start, end, &annotation_info);
-   struct annotation *annotation = annotation_info.ann;
+   struct disasm_info *disasm_info = disasm_initialize(devinfo, NULL);
+   disasm_new_inst_group(disasm_info, start);
+   disasm_new_inst_group(disasm_info, end);
 
-   for (int i = 0; i < annotation_info.ann_count; i++) {
-      int start_offset = annotation[i].offset;
-      int end_offset = annotation[i + 1].offset;
+   brw_validate_instructions(devinfo, assembly, start, end, disasm_info);
 
-      brw_disassemble(devinfo, assembly, start_offset, end_offset, stdout);
+   foreach_list_typed(struct inst_group, group, link,
+                      &disasm_info->group_list) {
+      struct exec_node *next_node = exec_node_get_next(&group->link);
+      if (exec_node_is_tail_sentinel(next_node))
+         break;
 
-      if (annotation[i].error) {
-         fputs(annotation[i].error, stdout);
+      struct inst_group *next =
+         exec_node_data(struct inst_group, next_node, link);
+
+      int start_offset = group->offset;
+      int end_offset = next->offset;
+
+      brw_disassemble(devinfo, assembly, start_offset, end_offset, out);
+
+      if (group->error) {
+         fputs(group->error, out);
       }
    }
 
-   ralloc_free(annotation_info.mem_ctx);
+   ralloc_free(disasm_info);
 }
 
 struct gen_disasm *
-gen_disasm_create(int pciid)
+gen_disasm_create(const struct gen_device_info *devinfo)
 {
    struct gen_disasm *gd;
 
@@ -115,10 +116,7 @@ gen_disasm_create(int pciid)
    if (gd == NULL)
       return NULL;
 
-   if (!gen_get_device_info(pciid, &gd->devinfo)) {
-      free(gd);
-      return NULL;
-   }
+   gd->devinfo = *devinfo;
 
    brw_init_compaction_tables(&gd->devinfo);
 

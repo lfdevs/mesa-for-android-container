@@ -24,12 +24,22 @@
 #ifndef GEN_DISASM_H
 #define GEN_DISASM_H
 
+#include "intel/common/gen_device_info.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct gen_disasm;
 
-struct gen_disasm *gen_disasm_create(int pciid);
+struct gen_disasm *gen_disasm_create(const struct gen_device_info *devinfo);
 void gen_disasm_disassemble(struct gen_disasm *disasm,
                             void *assembly, int start, FILE *out);
 
 void gen_disasm_destroy(struct gen_disasm *disasm);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* GEN_DISASM_H */

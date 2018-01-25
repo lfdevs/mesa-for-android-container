@@ -3583,6 +3583,8 @@
     <field name="TSG Done" start="17" end="17" type="bool"/>
     <field name="GAFM Done" start="18" end="18" type="bool"/>
     <field name="GAM Done" start="19" end="19" type="bool"/>
+    <field name="RS Done" start="20" end="20" type="bool"/>
+    <field name="CS Done" start="21" end="21" type="bool"/>
     <field name="SDE Done" start="22" end="22" type="bool"/>
     <field name="RCCFBC CS Done" start="23" end="23" type="bool"/>
   </register>
@@ -3708,6 +3710,14 @@
     <field name="NP Early Z Fails Disable Mask" start="29" end="29" type="bool"/>
     <field name="Blend Optimization Fix Disable Mask" start="30" end="30" type="bool"/>
     <field name="Color Compression Disable Mask" start="31" end="31" type="bool"/>
+  </register>
+
+  <register name="SLICE_COMMON_ECO_CHICKEN1" length="1" num="0x731c">
+    <field name="GLK Barrier Mode" start="7" end="7" type="uint">
+      <value name="GLK_BARRIER_MODE_GPGPU" value="0"/>
+      <value name="GLK_BARRIER_MODE_3D_HULL" value="1"/>
+    </field>
+    <field name="GLK Barrier Mode Mask" start="23" end="23" type="bool"/>
   </register>
 
   <register name="GFX_ARB_ERROR_RPT" length="1" num="0x40a0">

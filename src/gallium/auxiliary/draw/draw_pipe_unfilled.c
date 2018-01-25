@@ -63,10 +63,9 @@ inject_front_face_info(struct draw_stage *stage,
                        struct prim_header *header)
 {
    struct unfilled_stage *unfilled = unfilled_stage(stage);
-   unsigned ccw = header->det < 0.0;
    boolean is_front_face = (
-      (stage->draw->rasterizer->front_ccw && ccw) ||
-      (!stage->draw->rasterizer->front_ccw && !ccw));
+      (stage->draw->rasterizer->front_ccw && header->det < 0.0f) ||
+      (!stage->draw->rasterizer->front_ccw && header->det > 0.0f));
    int slot = unfilled->face_slot;
    unsigned i;
 

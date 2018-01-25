@@ -56,15 +56,25 @@ struct r600_shader_io {
 	int			ring_offset;
 };
 
+struct r600_shader_atomic {
+	unsigned start, end;
+	unsigned buffer_id;
+	unsigned hw_idx;
+	unsigned array_id;
+};
+
 struct r600_shader {
 	unsigned		processor_type;
 	struct r600_bytecode		bc;
 	unsigned		ninput;
 	unsigned		noutput;
+	unsigned                nhwatomic;
 	unsigned		nlds;
 	unsigned		nsys_inputs;
 	struct r600_shader_io	input[64];
 	struct r600_shader_io	output[64];
+	struct r600_shader_atomic atomics[8];
+	unsigned                nhwatomic_ranges;
 	boolean			uses_kill;
 	boolean			fs_write_all;
 	boolean			two_side;
@@ -75,7 +85,9 @@ struct r600_shader {
 	/* Real number of ps color exports compiled in the bytecode */
 	unsigned		nr_ps_color_exports;
 	/* bit n is set if the shader writes gl_ClipDistance[n] */
+	unsigned		cc_dist_mask;
 	unsigned		clip_dist_write;
+	unsigned                cull_dist_write;
 	boolean			vs_position_window_space;
 	/* flag is set if the shader writes VS_OUT_MISC_VEC (e.g. for PSIZE) */
 	boolean			vs_out_misc_write;
@@ -86,7 +98,7 @@ struct r600_shader {
 	boolean			has_txq_cube_array_z_comp;
 	boolean			uses_tex_buffers;
 	boolean                 gs_prim_id_input;
-
+	boolean                 gs_tri_strip_adj_fix;
 	uint8_t			ps_conservative_z;
 
 	/* Size in bytes of a data item in the ring(s) (single vertex data).
@@ -105,26 +117,40 @@ struct r600_shader {
 	struct r600_shader_array * arrays;
 
 	boolean			uses_doubles;
+	boolean                 uses_atomics;
+	boolean			uses_images;
+	uint8_t                 atomic_base;
+	uint8_t			rat_base;
+	uint8_t                 image_size_const_offset;
 };
 
 union r600_shader_key {
 	struct {
 		unsigned	nr_cbufs:4;
+		unsigned        first_atomic_counter:4;
+		unsigned        image_size_const_offset:5;
 		unsigned	color_two_side:1;
 		unsigned	alpha_to_one:1;
 	} ps;
 	struct {
 		unsigned	prim_id_out:8;
+		unsigned        first_atomic_counter:4;
 		unsigned	as_es:1; /* export shader */
 		unsigned	as_ls:1; /* local shader */
 		unsigned	as_gs_a:1;
 	} vs;
 	struct {
+		unsigned        first_atomic_counter:4;
 		unsigned	as_es:1;
 	} tes;
 	struct {
+		unsigned        first_atomic_counter:4;
 		unsigned	prim_mode:3;
 	} tcs;
+	struct {
+		unsigned        first_atomic_counter:4;
+		unsigned        tri_strip_adj_fix:1;
+	} gs;
 };
 
 struct r600_shader_array {

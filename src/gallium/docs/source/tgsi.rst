@@ -2638,9 +2638,11 @@ logical operations.  In this context atomicity means that another
 concurrent memory access operation that affects the same memory
 location is guaranteed to be performed strictly before or after the
 entire execution of the atomic operation. The resource may be a BUFFER,
-IMAGE, or MEMORY.  In the case of an image, the offset works the same as for
-``LOAD`` and ``STORE``, specified above. These atomic operations may
-only be used with 32-bit integer image formats.
+IMAGE, HWATOMIC, or MEMORY.  In the case of an image, the offset works
+the same as for ``LOAD`` and ``STORE``, specified above. For atomic
+counters, the offset is an immediate index to the base hw atomic
+counter for this operation.
+These atomic operations may only be used with 32-bit integer image formats.
 
 .. opcode:: ATOMUADD - Atomic integer addition
 
@@ -3517,6 +3519,31 @@ accessing a misaligned address is undefined.
 Usage of the STORE opcode is only allowed if the WR (writable) flag
 is set.
 
+Hardware Atomic Register File
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Hardware atomics are declared as a 2D array with an optional array id.
+
+The first member of the dimension is the buffer resource the atomic
+is located in.
+The second member is a range into the buffer resource, either for
+one or multiple counters. If this is an array, the declaration will have
+an unique array id.
+
+Each counter is 4 bytes in size, and index and ranges are in counters not bytes.
+DCL HWATOMIC[0][0]
+DCL HWATOMIC[0][1]
+
+This declares two atomics, one at the start of the buffer and one in the
+second 4 bytes.
+
+DCL HWATOMIC[0][0]
+DCL HWATOMIC[1][0]
+DCL HWATOMIC[1][1..3], ARRAY(1)
+
+This declares 5 atomics, one in buffer 0 at 0,
+one in buffer 1 at 0, and an array of 3 atomics in
+the buffer 1, starting at 1.
 
 Properties
 ^^^^^^^^^^^^^^^^^^^^^^^^

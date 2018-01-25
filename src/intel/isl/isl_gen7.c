@@ -38,9 +38,11 @@ gen7_format_needs_valign2(const struct isl_device *dev,
     *      (0x190)
     *
     *    - VALIGN_4 is not supported for surface format R32G32B32_FLOAT.
+    *
+    * The R32G32B32_FLOAT restriction is dropped on Haswell.
     */
    return isl_format_is_yuv(format) ||
-          format == ISL_FORMAT_R32G32B32_FLOAT;
+          (format == ISL_FORMAT_R32G32B32_FLOAT && !ISL_DEV_IS_HASWELL(dev));
 }
 
 bool

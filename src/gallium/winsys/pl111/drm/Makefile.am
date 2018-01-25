@@ -32,3 +32,5 @@ AM_CFLAGS = \
 noinst_LTLIBRARIES = libpl111drm.la
 
 libpl111drm_la_SOURCES = $(C_SOURCES)
+
+EXTRA_DIST = meson.build

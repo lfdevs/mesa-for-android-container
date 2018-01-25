@@ -115,7 +115,7 @@ enum alu_op_flags
 	AF_CC_LE	= (5U << AF_CC_SHIFT),
 };
 
-/* flags for FETCH instructions (TEX/VTX) */
+/* flags for FETCH instructions (TEX/VTX/GDS) */
 enum fetch_op_flags
 {
 	FF_GDS		= (1<<0),

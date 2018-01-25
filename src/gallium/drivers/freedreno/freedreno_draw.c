@@ -27,6 +27,7 @@
  */
 
 #include "pipe/p_state.h"
+#include "util/u_draw.h"
 #include "util/u_string.h"
 #include "util/u_memory.h"
 #include "util/u_prim.h"
@@ -64,7 +65,16 @@ fd_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 	struct fd_batch *batch = ctx->batch;
 	struct pipe_framebuffer_state *pfb = &batch->framebuffer;
 	struct pipe_scissor_state *scissor = fd_context_get_scissor(ctx);
-	unsigned i, prims, buffers = 0;
+	unsigned i, prims, buffers = 0, restore_buffers = 0;
+
+	/* for debugging problems with indirect draw, it is convenient
+	 * to be able to emulate it, to determine if game is feeding us
+	 * bogus data:
+	 */
+	if (info->indirect && (fd_mesa_debug & FD_DBG_NOINDR)) {
+		util_draw_indirect(pctx, info);
+		return;
+	}
 
 	if (!info->count_from_stream_output && !info->indirect &&
 	    !info->primitive_restart &&
@@ -127,12 +137,16 @@ fd_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 	mtx_lock(&ctx->screen->lock);
 
 	if (fd_depth_enabled(ctx)) {
+		if (fd_resource(pfb->zsbuf->texture)->valid)
+			restore_buffers |= FD_BUFFER_DEPTH;
 		buffers |= FD_BUFFER_DEPTH;
 		resource_written(batch, pfb->zsbuf->texture);
 		batch->gmem_reason |= FD_GMEM_DEPTH_ENABLED;
 	}
 
 	if (fd_stencil_enabled(ctx)) {
+		if (fd_resource(pfb->zsbuf->texture)->valid)
+			restore_buffers |= FD_BUFFER_STENCIL;
 		buffers |= FD_BUFFER_STENCIL;
 		resource_written(batch, pfb->zsbuf->texture);
 		batch->gmem_reason |= FD_GMEM_STENCIL_ENABLED;
@@ -150,6 +164,10 @@ fd_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 		surf = pfb->cbufs[i]->texture;
 
 		resource_written(batch, surf);
+
+		if (fd_resource(surf)->valid)
+			restore_buffers |= PIPE_CLEAR_COLOR0 << i;
+
 		buffers |= PIPE_CLEAR_COLOR0 << i;
 
 		if (surf->nr_samples > 1)
@@ -163,7 +181,16 @@ fd_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 	 * read vs written, so just assume the worst
 	 */
 	foreach_bit(i, ctx->shaderbuf[PIPE_SHADER_FRAGMENT].enabled_mask)
-		resource_read(batch, ctx->shaderbuf[PIPE_SHADER_FRAGMENT].sb[i].buffer);
+		resource_written(batch, ctx->shaderbuf[PIPE_SHADER_FRAGMENT].sb[i].buffer);
+
+	foreach_bit(i, ctx->shaderimg[PIPE_SHADER_FRAGMENT].enabled_mask) {
+		struct pipe_image_view *img =
+			&ctx->shaderimg[PIPE_SHADER_FRAGMENT].si[i];
+		if (img->access & PIPE_IMAGE_ACCESS_WRITE)
+			resource_written(batch, img->resource);
+		else
+			resource_read(batch, img->resource);
+	}
 
 	foreach_bit(i, ctx->constbuf[PIPE_SHADER_VERTEX].enabled_mask)
 		resource_read(batch, ctx->constbuf[PIPE_SHADER_VERTEX].cb[i].buffer);
@@ -178,6 +205,10 @@ fd_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 
 	/* Mark index buffer as being read */
 	resource_read(batch, indexbuf);
+
+	/* Mark indirect draw buffer as being read */
+	if (info->indirect)
+		resource_read(batch, info->indirect->buffer);
 
 	/* Mark textures as being read */
 	foreach_bit(i, ctx->tex[PIPE_SHADER_VERTEX].valid_textures)
@@ -214,7 +245,7 @@ fd_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 	ctx->stats.prims_generated += prims;
 
 	/* any buffers that haven't been cleared yet, we need to restore: */
-	batch->restore |= buffers & (FD_BUFFER_ALL & ~batch->cleared);
+	batch->restore |= restore_buffers & (FD_BUFFER_ALL & ~batch->cleared);
 	/* and any buffers used, need to be resolved: */
 	batch->resolve |= buffers;
 
@@ -428,7 +459,7 @@ fd_launch_grid(struct pipe_context *pctx, const struct pipe_grid_info *info)
 	struct fd_batch *batch, *save_batch = NULL;
 	unsigned i;
 
-	batch = fd_batch_create(ctx);
+	batch = fd_batch_create(ctx, true);
 	fd_batch_reference(&save_batch, ctx->batch);
 	fd_batch_reference(&ctx->batch, batch);
 
@@ -440,6 +471,15 @@ fd_launch_grid(struct pipe_context *pctx, const struct pipe_grid_info *info)
 	foreach_bit(i, ctx->shaderbuf[PIPE_SHADER_COMPUTE].enabled_mask)
 		resource_read(batch, ctx->shaderbuf[PIPE_SHADER_COMPUTE].sb[i].buffer);
 
+	foreach_bit(i, ctx->shaderimg[PIPE_SHADER_COMPUTE].enabled_mask) {
+		struct pipe_image_view *img =
+			&ctx->shaderimg[PIPE_SHADER_COMPUTE].si[i];
+		if (img->access & PIPE_IMAGE_ACCESS_WRITE)
+			resource_written(batch, img->resource);
+		else
+			resource_read(batch, img->resource);
+	}
+
 	/* UBO's are read */
 	foreach_bit(i, ctx->constbuf[PIPE_SHADER_COMPUTE].enabled_mask)
 		resource_read(batch, ctx->constbuf[PIPE_SHADER_COMPUTE].cb[i].buffer);
@@ -448,11 +488,15 @@ fd_launch_grid(struct pipe_context *pctx, const struct pipe_grid_info *info)
 	foreach_bit(i, ctx->tex[PIPE_SHADER_COMPUTE].valid_textures)
 		resource_read(batch, ctx->tex[PIPE_SHADER_COMPUTE].textures[i]->texture);
 
+	if (info->indirect)
+		resource_read(batch, info->indirect);
+
 	mtx_unlock(&ctx->screen->lock);
 
+	batch->needs_flush = true;
 	ctx->launch_grid(ctx, info);
 
-	fd_gmem_flush_compute(batch);
+	fd_batch_flush(batch, false, false);
 
 	fd_batch_reference(&ctx->batch, save_batch);
 	fd_batch_reference(&save_batch, NULL);

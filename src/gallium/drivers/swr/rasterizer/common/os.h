@@ -210,7 +210,7 @@ unsigned char _BitScanReverse(unsigned int *Index, unsigned int Mask)
 }
 
 inline
-void *AlignedMalloc(unsigned int size, unsigned int alignment)
+void *AlignedMalloc(size_t size, size_t alignment)
 {
     void *ret;
     if (posix_memalign(&ret, alignment, size))
@@ -244,6 +244,7 @@ void AlignedFree(void* p)
 #define PRAGMA_WARNING_PUSH_DISABLE(...)
 #define PRAGMA_WARNING_POP()
 
+#define ZeroMemory(dst, size) memset(dst, 0, size)
 #else
 
 #error Unsupported OS/system.

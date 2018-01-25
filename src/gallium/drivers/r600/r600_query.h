@@ -55,8 +55,6 @@ enum {
 	R600_QUERY_NUM_CS_FLUSHES,
 	R600_QUERY_NUM_CB_CACHE_FLUSHES,
 	R600_QUERY_NUM_DB_CACHE_FLUSHES,
-	R600_QUERY_NUM_L2_INVALIDATES,
-	R600_QUERY_NUM_L2_WRITEBACKS,
 	R600_QUERY_NUM_RESIDENT_HANDLES,
 	R600_QUERY_TC_OFFLOADED_SLOTS,
 	R600_QUERY_TC_DIRECT_SLOTS,
@@ -193,10 +191,6 @@ struct r600_query_hw {
 	struct list_head list;
 	/* For transform feedback: which stream the query is for */
 	unsigned stream;
-
-	/* Workaround via compute shader */
-	struct r600_resource *workaround_buf;
-	unsigned workaround_offset;
 };
 
 bool r600_query_hw_init(struct r600_common_screen *rscreen,

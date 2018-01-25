@@ -35,7 +35,7 @@
 
 #include "vl/vl_mpeg12_decoder.h"
 
-#include "r600_pipe_common.h"
+#include "radeonsi/si_pipe.h"
 #include "radeon_video.h"
 #include "radeon_vcn_dec.h"
 
@@ -78,6 +78,7 @@ struct radeon_decoder {
 
 	unsigned			bs_size;
 	unsigned			cur_buffer;
+	void				*render_pic_list[16];
 };
 
 static rvcn_dec_message_avc_t get_h264_msg(struct radeon_decoder *dec,
@@ -186,7 +187,7 @@ static rvcn_dec_message_hevc_t get_h265_msg(struct radeon_decoder *dec,
 					struct pipe_h265_picture_desc *pic)
 {
 	rvcn_dec_message_hevc_t result;
-	unsigned i;
+	unsigned i, j;
 
 	memset(&result, 0, sizeof(result));
 	result.sps_info_flags = 0;
@@ -199,7 +200,7 @@ static rvcn_dec_message_hevc_t get_h265_msg(struct radeon_decoder *dec,
 	result.sps_info_flags |= pic->pps->sps->sps_temporal_mvp_enabled_flag << 6;
 	result.sps_info_flags |= pic->pps->sps->strong_intra_smoothing_enabled_flag << 7;
 	result.sps_info_flags |= pic->pps->sps->separate_colour_plane_flag << 8;
-	if (((struct r600_common_screen*)dec->screen)->family == CHIP_CARRIZO)
+	if (((struct si_screen*)dec->screen)->info.family == CHIP_CARRIZO)
 		result.sps_info_flags |= 1 << 9;
 	if (pic->UseRefPicList == true)
 		result.sps_info_flags |= 1 << 10;
@@ -273,11 +274,28 @@ static rvcn_dec_message_hevc_t get_h265_msg(struct radeon_decoder *dec,
 		result.row_height_minus1[i] = pic->pps->row_height_minus1[i];
 
 	result.num_delta_pocs_ref_rps_idx = pic->NumDeltaPocsOfRefRpsIdx;
-	result.curr_idx = pic->CurrPicOrderCntVal;
 	result.curr_poc = pic->CurrPicOrderCntVal;
 
+	for (i = 0 ; i < 16 ; i++) {
+		for (j = 0; (pic->ref[j] != NULL) && (j < 16) ; j++) {
+			if (dec->render_pic_list[i] == pic->ref[j])
+				break;
+			if (j == 15)
+				dec->render_pic_list[i] = NULL;
+			else if (pic->ref[j+1] == NULL)
+				dec->render_pic_list[i] = NULL;
+		}
+	}
+	for (i = 0 ; i < 16 ; i++) {
+		if (dec->render_pic_list[i] == NULL) {
+			dec->render_pic_list[i] = target;
+			result.curr_idx = i;
+			break;
+		}
+	}
+
 	vl_video_buffer_set_associated_data(target, &dec->base,
-					    (void *)(uintptr_t)pic->CurrPicOrderCntVal,
+					    (void *)(uintptr_t)result.curr_idx,
 					    &radeon_dec_destroy_associated_data);
 
 	for (i = 0; i < 16; ++i) {
@@ -320,7 +338,7 @@ static rvcn_dec_message_hevc_t get_h265_msg(struct radeon_decoder *dec,
 	memcpy(dec->it + 864, pic->pps->sps->ScalingList32x32, 2 * 64);
 
 	for (i = 0 ; i < 2 ; i++) {
-		for (int j = 0 ; j < 15 ; j++)
+		for (j = 0 ; j < 15 ; j++)
 			result.direct_reflist[i][j] = pic->RefPicList[i][j];
 	}
 
@@ -480,12 +498,17 @@ static rvcn_dec_message_mpeg2_vld_t get_mpeg2_msg(struct radeon_decoder *dec,
 	result.forward_ref_pic_idx = get_ref_pic_idx(dec, pic->ref[0]);
 	result.backward_ref_pic_idx = get_ref_pic_idx(dec, pic->ref[1]);
 
-	result.load_intra_quantiser_matrix = 1;
-	result.load_nonintra_quantiser_matrix = 1;
-
-	for (i = 0; i < 64; ++i) {
-		result.intra_quantiser_matrix[i] = pic->intra_matrix[zscan[i]];
-		result.nonintra_quantiser_matrix[i] = pic->non_intra_matrix[zscan[i]];
+	if(pic->intra_matrix) {
+		result.load_intra_quantiser_matrix = 1;
+		for (i = 0; i < 64; ++i) {
+			result.intra_quantiser_matrix[i] = pic->intra_matrix[zscan[i]];
+		}
+	}
+	if(pic->non_intra_matrix) {
+		result.load_nonintra_quantiser_matrix = 1;
+		for (i = 0; i < 64; ++i) {
+			result.nonintra_quantiser_matrix[i] = pic->non_intra_matrix[zscan[i]];
+		}
 	}
 
 	result.profile_and_level_indication = 0;
@@ -617,10 +640,10 @@ static struct pb_buffer *rvcn_dec_message_decode(struct radeon_decoder *dec,
 	index->size = sizeof(rvcn_dec_message_avc_t);
 	index->filled = 0;
 
-	decode->stream_type = dec->stream_type;;
+	decode->stream_type = dec->stream_type;
 	decode->decode_flags = 0x1;
-	decode->width_in_samples = dec->base.width;;
-	decode->height_in_samples = dec->base.height;;
+	decode->width_in_samples = dec->base.width;
+	decode->height_in_samples = dec->base.height;
 
 	decode->bsd_size = align(dec->bs_size, 128);
 	decode->dpb_size = dec->dpb.res->buf->size;
@@ -1158,7 +1181,7 @@ static void radeon_dec_end_frame(struct pipe_video_codec *decoder,
 			 FB_BUFFER_OFFSET + FB_BUFFER_SIZE, RADEON_USAGE_READ, RADEON_DOMAIN_GTT);
 	set_reg(dec, RDECODE_ENGINE_CNTL, 1);
 
-	flush(dec, RADEON_FLUSH_ASYNC);
+	flush(dec, PIPE_FLUSH_ASYNC);
 	next_buffer(dec);
 }
 
@@ -1236,6 +1259,8 @@ struct pipe_video_codec *radeon_create_decoder(struct pipe_context *context,
 		goto error;
 	}
 
+	for (i = 0; i < 16; i++)
+		dec->render_pic_list[i] = NULL;
 	bs_buf_size = width * height * (512 / (16 * 16));
 	for (i = 0; i < NUM_BUFFERS; ++i) {
 		unsigned msg_fb_it_size = FB_BUFFER_OFFSET + FB_BUFFER_SIZE;

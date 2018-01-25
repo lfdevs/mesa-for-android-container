@@ -79,7 +79,7 @@ _mesa_create_visual( GLboolean dbFlag,
                      GLint accumGreenBits,
                      GLint accumBlueBits,
                      GLint accumAlphaBits,
-                     GLint numSamples );
+                     GLuint numSamples );
 
 extern GLboolean
 _mesa_initialize_visual( struct gl_config *v,
@@ -95,7 +95,7 @@ _mesa_initialize_visual( struct gl_config *v,
                          GLint accumGreenBits,
                          GLint accumBlueBits,
                          GLint accumAlphaBits,
-                         GLint numSamples );
+                         GLuint numSamples );
 
 extern void
 _mesa_destroy_visual( struct gl_config *vis );
@@ -152,10 +152,6 @@ _mesa_set_context_lost_dispatch(struct gl_context *ctx);
 
 /** \name Miscellaneous */
 /*@{*/
-
-extern void
-_mesa_record_error( struct gl_context *ctx, GLenum error );
-
 
 extern void
 _mesa_flush(struct gl_context *ctx);

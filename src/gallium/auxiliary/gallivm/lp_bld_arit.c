@@ -541,38 +541,38 @@ lp_build_add(struct lp_build_context *bld,
    assert(lp_check_value(type, a));
    assert(lp_check_value(type, b));
 
-   if(a == bld->zero)
+   if (a == bld->zero)
       return b;
-   if(b == bld->zero)
+   if (b == bld->zero)
       return a;
-   if(a == bld->undef || b == bld->undef)
+   if (a == bld->undef || b == bld->undef)
       return bld->undef;
 
-   if(bld->type.norm) {
+   if (type.norm) {
       const char *intrinsic = NULL;
 
-      if(a == bld->one || b == bld->one)
+      if (!type.sign && (a == bld->one || b == bld->one))
         return bld->one;
 
       if (!type.floating && !type.fixed) {
          if (type.width * type.length == 128) {
-            if(util_cpu_caps.has_sse2) {
-              if(type.width == 8)
+            if (util_cpu_caps.has_sse2) {
+              if (type.width == 8)
                 intrinsic = type.sign ? "llvm.x86.sse2.padds.b" : "llvm.x86.sse2.paddus.b";
-              if(type.width == 16)
+              if (type.width == 16)
                 intrinsic = type.sign ? "llvm.x86.sse2.padds.w" : "llvm.x86.sse2.paddus.w";
             } else if (util_cpu_caps.has_altivec) {
-              if(type.width == 8)
+              if (type.width == 8)
                  intrinsic = type.sign ? "llvm.ppc.altivec.vaddsbs" : "llvm.ppc.altivec.vaddubs";
-              if(type.width == 16)
+              if (type.width == 16)
                  intrinsic = type.sign ? "llvm.ppc.altivec.vaddshs" : "llvm.ppc.altivec.vadduhs";
             }
          }
          if (type.width * type.length == 256) {
-            if(util_cpu_caps.has_avx2) {
-              if(type.width == 8)
+            if (util_cpu_caps.has_avx2) {
+              if (type.width == 8)
                 intrinsic = type.sign ? "llvm.x86.avx2.padds.b" : "llvm.x86.avx2.paddus.b";
-              if(type.width == 16)
+              if (type.width == 16)
                 intrinsic = type.sign ? "llvm.x86.avx2.padds.w" : "llvm.x86.avx2.paddus.w";
             }
          }
@@ -842,38 +842,38 @@ lp_build_sub(struct lp_build_context *bld,
    assert(lp_check_value(type, a));
    assert(lp_check_value(type, b));
 
-   if(b == bld->zero)
+   if (b == bld->zero)
       return a;
-   if(a == bld->undef || b == bld->undef)
+   if (a == bld->undef || b == bld->undef)
       return bld->undef;
-   if(a == b)
+   if (a == b)
       return bld->zero;
 
-   if(bld->type.norm) {
+   if (type.norm) {
       const char *intrinsic = NULL;
 
-      if(b == bld->one)
+      if (!type.sign && b == bld->one)
         return bld->zero;
 
       if (!type.floating && !type.fixed) {
          if (type.width * type.length == 128) {
             if (util_cpu_caps.has_sse2) {
-              if(type.width == 8)
+              if (type.width == 8)
                  intrinsic = type.sign ? "llvm.x86.sse2.psubs.b" : "llvm.x86.sse2.psubus.b";
-              if(type.width == 16)
+              if (type.width == 16)
                  intrinsic = type.sign ? "llvm.x86.sse2.psubs.w" : "llvm.x86.sse2.psubus.w";
             } else if (util_cpu_caps.has_altivec) {
-              if(type.width == 8)
+              if (type.width == 8)
                  intrinsic = type.sign ? "llvm.ppc.altivec.vsubsbs" : "llvm.ppc.altivec.vsububs";
-              if(type.width == 16)
+              if (type.width == 16)
                  intrinsic = type.sign ? "llvm.ppc.altivec.vsubshs" : "llvm.ppc.altivec.vsubuhs";
             }
          }
          if (type.width * type.length == 256) {
             if (util_cpu_caps.has_avx2) {
-              if(type.width == 8)
+              if (type.width == 8)
                  intrinsic = type.sign ? "llvm.x86.avx2.psubs.b" : "llvm.x86.avx2.psubus.b";
-              if(type.width == 16)
+              if (type.width == 16)
                  intrinsic = type.sign ? "llvm.x86.avx2.psubs.w" : "llvm.x86.avx2.psubus.w";
             }
          }
@@ -963,7 +963,7 @@ lp_build_sub(struct lp_build_context *bld,
  * @sa Michael Herf, The "double blend trick", May 2000, 
  *     http://www.stereopsis.com/doubleblend.html
  */
-static LLVMValueRef
+LLVMValueRef
 lp_build_mul_norm(struct gallivm_state *gallivm,
                   struct lp_type wide_type,
                   LLVMValueRef a, LLVMValueRef b)
@@ -1953,7 +1953,8 @@ arch_rounding_available(const struct lp_type type)
 {
    if ((util_cpu_caps.has_sse4_1 &&
        (type.length == 1 || type.width*type.length == 128)) ||
-       (util_cpu_caps.has_avx && type.width*type.length == 256))
+       (util_cpu_caps.has_avx && type.width*type.length == 256) ||
+       (util_cpu_caps.has_avx512f && type.width*type.length == 512))
       return TRUE;
    else if ((util_cpu_caps.has_altivec &&
             (type.width == 32 && type.length == 4)))

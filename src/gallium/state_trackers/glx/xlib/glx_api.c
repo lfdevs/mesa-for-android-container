@@ -181,7 +181,7 @@ save_glx_visual( Display *dpy, XVisualInfo *vinfo,
                  GLint depth_size, GLint stencil_size,
                  GLint accumRedSize, GLint accumGreenSize,
                  GLint accumBlueSize, GLint accumAlphaSize,
-                 GLint level, GLint numAuxBuffers, GLint num_samples )
+                 GLint level, GLint numAuxBuffers, GLuint num_samples )
 {
    GLboolean ximageFlag = GL_TRUE;
    XMesaVisual xmvis;
@@ -996,6 +996,10 @@ choose_visual( Display *dpy, int screen, const int *list, GLboolean fbConfig )
 
    (void) caveat;
 
+   if (num_samples < 0) {
+      _mesa_warning(NULL, "GLX_SAMPLES_ARB: number of samples must not be negative");
+      return NULL;
+   }
 
    /*
     * Since we're only simulating the GLX extension this function will never

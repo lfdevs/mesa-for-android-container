@@ -453,6 +453,10 @@ struct svga_winsys_context
 
    /** The more recent command issued to command buffer */
    SVGAFifo3dCmdId last_command;
+
+   /** For HUD queries */
+   uint64_t num_commands;
+   uint64_t num_draw_commands;
 };
 
 

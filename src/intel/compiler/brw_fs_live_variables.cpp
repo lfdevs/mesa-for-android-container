@@ -83,9 +83,11 @@ fs_live_variables::setup_one_write(struct block_data *bd, fs_inst *inst,
    /* The def[] bitset marks when an initialization in a block completely
     * screens off previous updates of that variable (VGRF channel).
     */
-   if (inst->dst.file == VGRF && !inst->is_partial_write()) {
-      if (!BITSET_TEST(bd->use, var))
+   if (inst->dst.file == VGRF) {
+      if (!inst->is_partial_write() && !BITSET_TEST(bd->use, var))
          BITSET_SET(bd->def, var);
+
+      BITSET_SET(bd->defout, var);
    }
 }
 
@@ -199,6 +201,28 @@ fs_live_variables::compute_live_variables()
          }
       }
    }
+
+   /* Propagate defin and defout down the CFG to calculate the union of live
+    * variables potentially defined along any possible control flow path.
+    */
+   do {
+      cont = false;
+
+      foreach_block (block, cfg) {
+         const struct block_data *bd = &block_data[block->num];
+
+	 foreach_list_typed(bblock_link, child_link, link, &block->children) {
+            struct block_data *child_bd = &block_data[child_link->block->num];
+
+	    for (int i = 0; i < bitset_words; i++) {
+               const BITSET_WORD new_def = bd->defout[i] & ~child_bd->defin[i];
+               child_bd->defin[i] |= new_def;
+               child_bd->defout[i] |= new_def;
+               cont |= new_def;
+	    }
+	 }
+      }
+   } while (cont);
 }
 
 /**
@@ -212,12 +236,12 @@ fs_live_variables::compute_start_end()
       struct block_data *bd = &block_data[block->num];
 
       for (int i = 0; i < num_vars; i++) {
-         if (BITSET_TEST(bd->livein, i)) {
+         if (BITSET_TEST(bd->livein, i) && BITSET_TEST(bd->defin, i)) {
             start[i] = MIN2(start[i], block->start_ip);
             end[i] = MAX2(end[i], block->start_ip);
          }
 
-         if (BITSET_TEST(bd->liveout, i)) {
+         if (BITSET_TEST(bd->liveout, i) && BITSET_TEST(bd->defout, i)) {
             start[i] = MIN2(start[i], block->end_ip);
             end[i] = MAX2(end[i], block->end_ip);
          }
@@ -260,6 +284,8 @@ fs_live_variables::fs_live_variables(fs_visitor *v, const cfg_t *cfg)
       block_data[i].use = rzalloc_array(mem_ctx, BITSET_WORD, bitset_words);
       block_data[i].livein = rzalloc_array(mem_ctx, BITSET_WORD, bitset_words);
       block_data[i].liveout = rzalloc_array(mem_ctx, BITSET_WORD, bitset_words);
+      block_data[i].defin = rzalloc_array(mem_ctx, BITSET_WORD, bitset_words);
+      block_data[i].defout = rzalloc_array(mem_ctx, BITSET_WORD, bitset_words);
 
       block_data[i].flag_def[0] = 0;
       block_data[i].flag_use[0] = 0;

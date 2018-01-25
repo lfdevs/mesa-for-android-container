@@ -10,6 +10,9 @@ pkgconfig_DATA = windowsdriproto.pc
 # library for using the Windows-DRI server extension
 libwindowsdri_la_SOURCES = xwindowsdri.c xwindowsdri.h
 
+libwindowsdri_la_CFLAGS = \
+        $(X11_INCLUDES)
+
 # native rendering GL for windows
 libwindowsglx_la_SOURCES = \
 	windowsgl.c \
@@ -29,3 +32,5 @@ libwindowsglx_la_CFLAGS = \
 	$(VISIBILITY_CFLAGS) \
 	$(DEFINES) \
 	$(X11_INCLUDES)
+
+EXTRA_DIST = meson.build

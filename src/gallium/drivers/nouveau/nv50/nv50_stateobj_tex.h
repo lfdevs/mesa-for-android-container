@@ -20,6 +20,7 @@ struct nv50_tic_entry {
    struct pipe_sampler_view pipe;
    int id;
    uint32_t tic[8];
+   uint32_t bindless;
 };
 
 static inline struct nv50_tic_entry *

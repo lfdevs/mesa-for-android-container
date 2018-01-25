@@ -781,6 +781,10 @@ chv__render_basic__shader_atomics__read(struct brw_context *brw,
    return tmp0;
 }
 
+static struct brw_perf_query_register_prog chv_render_basic_mux_regs[73];
+static struct brw_perf_query_register_prog chv_render_basic_b_counter_regs[5];
+static struct brw_perf_query_register_prog chv_render_basic_flex_regs[7];
+
 static struct brw_perf_query_counter chv_render_basic_query_counters[50];
 static struct brw_perf_query_info chv_render_basic_query = {
    .kind = OA_COUNTERS,
@@ -797,6 +801,12 @@ static struct brw_perf_query_info chv_render_basic_query = {
    .a_offset = 2,
    .b_offset = 38,
    .c_offset = 46,
+   .mux_regs = chv_render_basic_mux_regs,
+   .n_mux_regs = 0, /* Determined at runtime */
+   .b_counter_regs = chv_render_basic_b_counter_regs,
+   .n_b_counter_regs = 0, /* Determined at runtime */
+   .flex_regs = chv_render_basic_flex_regs,
+   .n_flex_regs = 0, /* Determined at runtime */
 };
 
 static void
@@ -810,6 +820,94 @@ register_render_basic_counter_query(struct brw_context *brw)
     * global variable which only needs to be initialized once... */
 
    if (!query->data_size) {
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009840, .val = 0x000000A0 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x59800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x59800001 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x285A0006 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x2C110014 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x2E110000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x2C310014 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x2E310000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x2B8303DF };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x3580024F };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x00580888 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1E5A0015 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x205A0014 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x045A0000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x025A0000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x02180500 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x00190555 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x021D0500 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x021F0A00 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x00380444 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x02390500 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x003A0666 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x00100111 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x06110030 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0A110031 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0E110046 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x04110000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x00110000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x00130111 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x00300444 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x08310030 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0C310031 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x10310046 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x04310000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x00310000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x00330444 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x038A0A00 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x018B0FFF };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x038B0A00 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x01855000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x03850055 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x13830021 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x15830020 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1783002F };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1983002E };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1B83002D };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1D83002C };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x05830000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x01840555 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x03840500 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x23800074 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x2580007D };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x05800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x01805000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x03800055 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x01865000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x03860055 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x01875000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x03870055 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x418000AA };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x4380000A };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x45800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x4780000A };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x49800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x4B800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x4D800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x4F800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x51800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x53800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x55800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x57800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x59800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009840, .val = 0x00000080 };
+
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002740, .val = 0x00000000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002710, .val = 0x00000000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002714, .val = 0x00800000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002720, .val = 0x00000000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002724, .val = 0x00800000 };
+
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E458, .val = 0x00005004 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E558, .val = 0x00010003 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E658, .val = 0x00012011 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E758, .val = 0x00015014 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E45C, .val = 0x00051050 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E55C, .val = 0x00053052 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E65C, .val = 0x00055054 };
+
 
       counter = &query->counters[query->n_counters++];
       counter->oa_counter_read_uint64 = chv__render_basic__gpu_core_clocks__read;
@@ -1942,6 +2040,10 @@ chv__compute_basic__eu_send_active__read(struct brw_context *brw,
    return tmp7;
 }
 
+static struct brw_perf_query_register_prog chv_compute_basic_mux_regs[43];
+static struct brw_perf_query_register_prog chv_compute_basic_b_counter_regs[4];
+static struct brw_perf_query_register_prog chv_compute_basic_flex_regs[7];
+
 static struct brw_perf_query_counter chv_compute_basic_query_counters[42];
 static struct brw_perf_query_info chv_compute_basic_query = {
    .kind = OA_COUNTERS,
@@ -1958,6 +2060,12 @@ static struct brw_perf_query_info chv_compute_basic_query = {
    .a_offset = 2,
    .b_offset = 38,
    .c_offset = 46,
+   .mux_regs = chv_compute_basic_mux_regs,
+   .n_mux_regs = 0, /* Determined at runtime */
+   .b_counter_regs = chv_compute_basic_b_counter_regs,
+   .n_b_counter_regs = 0, /* Determined at runtime */
+   .flex_regs = chv_compute_basic_flex_regs,
+   .n_flex_regs = 0, /* Determined at runtime */
 };
 
 static void
@@ -1971,6 +2079,63 @@ register_compute_basic_counter_query(struct brw_context *brw)
     * global variable which only needs to be initialized once... */
 
    if (!query->data_size) {
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009840, .val = 0x000000A0 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x59800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x59800001 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x2E5800E0 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x2E3800E0 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x3580024F };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x3D800140 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x08580042 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0C580040 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1058004C };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1458004B };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x04580000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x00580000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x00195555 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x06380042 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0A380040 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0E38004C };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1238004B };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x04380000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x00384444 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x003A5555 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x018BFFFF };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x01845555 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x17800074 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1980007D };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1B80007C };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1D8000B6 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1F8000B7 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x05800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x03800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x418000AA };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x438000AA };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x45800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x47800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x4980012A };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x4B80012A };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x4D80012A };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x4F80012A };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x518001CE };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x538001CE };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x5580000E };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x59800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009840, .val = 0x00000080 };
+
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002710, .val = 0x00000000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002714, .val = 0x00800000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002720, .val = 0x00000000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002724, .val = 0x00800000 };
+
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E458, .val = 0x00005004 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E558, .val = 0x00000003 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E658, .val = 0x00002001 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E758, .val = 0x00778008 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E45C, .val = 0x00088078 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E55C, .val = 0x00808708 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E65C, .val = 0x00A08908 };
+
 
       counter = &query->counters[query->n_counters++];
       counter->oa_counter_read_uint64 = chv__compute_basic__gpu_core_clocks__read;
@@ -3039,6 +3204,10 @@ chv__render_pipe_profile__shader_atomics__read(struct brw_context *brw,
    return tmp0;
 }
 
+static struct brw_perf_query_register_prog chv_render_pipe_profile_mux_regs[82];
+static struct brw_perf_query_register_prog chv_render_pipe_profile_b_counter_regs[20];
+static struct brw_perf_query_register_prog chv_render_pipe_profile_flex_regs[7];
+
 static struct brw_perf_query_counter chv_render_pipe_profile_query_counters[44];
 static struct brw_perf_query_info chv_render_pipe_profile_query = {
    .kind = OA_COUNTERS,
@@ -3055,6 +3224,12 @@ static struct brw_perf_query_info chv_render_pipe_profile_query = {
    .a_offset = 2,
    .b_offset = 38,
    .c_offset = 46,
+   .mux_regs = chv_render_pipe_profile_mux_regs,
+   .n_mux_regs = 0, /* Determined at runtime */
+   .b_counter_regs = chv_render_pipe_profile_b_counter_regs,
+   .n_b_counter_regs = 0, /* Determined at runtime */
+   .flex_regs = chv_render_pipe_profile_flex_regs,
+   .n_flex_regs = 0, /* Determined at runtime */
 };
 
 static void
@@ -3068,6 +3243,118 @@ register_render_pipe_profile_counter_query(struct brw_context *brw)
     * global variable which only needs to be initialized once... */
 
    if (!query->data_size) {
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009840, .val = 0x000000A0 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x59800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x59800001 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x261E0000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x281F000F };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x2817001A };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x2791001F };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x27880019 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x2D890000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x278A0007 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x298D001F };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x278E0020 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x2B8F0012 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x29900000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x00184000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x02181000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x02194000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x141E0002 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x041E0000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x001E0000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x221F0015 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x041F0000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x001F4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x021F0000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x023A8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0213C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x02164000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x24170012 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x04170000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x07910005 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x05910000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x01911500 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x03910501 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0D880002 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1D880003 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x05880000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0B890032 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1B890031 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x05890000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x01890040 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x03890040 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x098A0000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x198A0004 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x058A0000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x018A8050 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x038A2050 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x018B95A9 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x038BE5A9 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x018C1500 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x038C0501 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x178D0015 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x058D0000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x138E0004 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x218E000C };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x058E0000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x018E0500 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x038E0101 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0F8F0027 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x058F0000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x018F0000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x038F0001 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x11900013 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1F900017 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x05900000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x01900100 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x03900001 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x01845555 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x03845555 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x418000AA };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x438000AA };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x458000AA };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x478000AA };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x4980018C };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x4B80014B };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x4D800128 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x4F80012A };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x51800187 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x5380014B };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x55800149 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x5780010A };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x59800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009840, .val = 0x00000080 };
+
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002724, .val = 0xF0800000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002720, .val = 0x00000000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002714, .val = 0xF0800000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002710, .val = 0x00000000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002770, .val = 0x0007FFEA };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002774, .val = 0x00007FFC };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002778, .val = 0x0007AFFA };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000277C, .val = 0x0000F5FD };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002780, .val = 0x00079FFA };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002784, .val = 0x0000F3FB };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002788, .val = 0x0007BF7A };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000278C, .val = 0x0000F7E7 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002790, .val = 0x0007FEFA };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002794, .val = 0x0000F7CF };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002798, .val = 0x00077FFA };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000279C, .val = 0x0000EFDF };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x000027A0, .val = 0x0006FFFA };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x000027A4, .val = 0x0000CFBF };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x000027A8, .val = 0x0003FFFA };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x000027AC, .val = 0x00005F7F };
+
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E458, .val = 0x00005004 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E558, .val = 0x00015014 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E658, .val = 0x00025024 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E758, .val = 0x00035034 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E45C, .val = 0x00045044 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E55C, .val = 0x00055054 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E65C, .val = 0x00065064 };
+
 
       counter = &query->counters[query->n_counters++];
       counter->oa_counter_read_uint64 = chv__render_pipe_profile__gpu_core_clocks__read;
@@ -4164,6 +4451,10 @@ chv__hdc_and_sf__shader_atomics__read(struct brw_context *brw,
    return tmp0;
 }
 
+static struct brw_perf_query_register_prog chv_hdc_and_sf_mux_regs[98];
+static struct brw_perf_query_register_prog chv_hdc_and_sf_b_counter_regs[8];
+static struct brw_perf_query_register_prog chv_hdc_and_sf_flex_regs[7];
+
 static struct brw_perf_query_counter chv_hdc_and_sf_query_counters[42];
 static struct brw_perf_query_info chv_hdc_and_sf_query = {
    .kind = OA_COUNTERS,
@@ -4180,6 +4471,12 @@ static struct brw_perf_query_info chv_hdc_and_sf_query = {
    .a_offset = 2,
    .b_offset = 38,
    .c_offset = 46,
+   .mux_regs = chv_hdc_and_sf_mux_regs,
+   .n_mux_regs = 0, /* Determined at runtime */
+   .b_counter_regs = chv_hdc_and_sf_b_counter_regs,
+   .n_b_counter_regs = 0, /* Determined at runtime */
+   .flex_regs = chv_hdc_and_sf_flex_regs,
+   .n_flex_regs = 0, /* Determined at runtime */
 };
 
 static void
@@ -4193,6 +4490,122 @@ register_hdc_and_sf_counter_query(struct brw_context *brw)
     * global variable which only needs to be initialized once... */
 
    if (!query->data_size) {
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009840, .val = 0x000000A0 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x105C0232 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x10580232 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x10380232 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x10DC0232 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x10D80232 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x10B80232 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x118E4400 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x025C6080 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x045C004B };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x005C8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x00582080 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0258004B };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x025B4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x045B4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0C1FA000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0E1F00AA };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x04386080 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0638404B };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x02384000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x08384000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0A380000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0C380000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x00398000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0239A000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0439A000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x06392000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0CDC25C1 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0ADCC000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0AD825C1 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x18DB4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1ADB0001 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0E9F8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x109F02AA };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0EB825C1 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x18B80154 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0AB9A000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0CB9A000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0EB9A000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0D88C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0F88000F };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x038A8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x058A8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x078A8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x098A8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0B8A8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0D8A8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x258BAA05 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x278B002A };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x238B2A80 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x198C5400 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1B8C0015 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x098DC000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0B8DA000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0D8DA000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0F8DA000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x098E05C0 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x058E0000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x198F0020 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x2185AA0A };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x2385002A };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1F85AA00 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x19835000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1B830155 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x03834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x05834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x07834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x09834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0B834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0D834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x09848000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0B84C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0D84C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0F84C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x01848000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0384C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0584C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x07844000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x19808000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1B80C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1D80C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1F80C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x11808000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1380C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1580C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x17804000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x51800040 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x43800400 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x45800800 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x53800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x47800C62 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x21800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x31800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x4D800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x3F801042 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x4F800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x418014A4 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009840, .val = 0x00000080 };
+
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002740, .val = 0x00000000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002744, .val = 0x00800000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002710, .val = 0x00000000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002714, .val = 0x10800000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002720, .val = 0x00000000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002724, .val = 0x00800000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002770, .val = 0x00000002 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002774, .val = 0x0000FFF7 };
+
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E458, .val = 0x00005004 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E558, .val = 0x00010003 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E658, .val = 0x00012011 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E758, .val = 0x00015014 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E45C, .val = 0x00051050 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E55C, .val = 0x00053052 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E65C, .val = 0x00055054 };
+
 
       counter = &query->counters[query->n_counters++];
       counter->oa_counter_read_uint64 = chv__hdc_and_sf__gpu_core_clocks__read;
@@ -5221,6 +5634,10 @@ chv__l3_1__shader_atomics__read(struct brw_context *brw,
    return tmp0;
 }
 
+static struct brw_perf_query_register_prog chv_l3_1_mux_regs[91];
+static struct brw_perf_query_register_prog chv_l3_1_b_counter_regs[22];
+static struct brw_perf_query_register_prog chv_l3_1_flex_regs[7];
+
 static struct brw_perf_query_counter chv_l3_1_query_counters[39];
 static struct brw_perf_query_info chv_l3_1_query = {
    .kind = OA_COUNTERS,
@@ -5237,6 +5654,12 @@ static struct brw_perf_query_info chv_l3_1_query = {
    .a_offset = 2,
    .b_offset = 38,
    .c_offset = 46,
+   .mux_regs = chv_l3_1_mux_regs,
+   .n_mux_regs = 0, /* Determined at runtime */
+   .b_counter_regs = chv_l3_1_b_counter_regs,
+   .n_b_counter_regs = 0, /* Determined at runtime */
+   .flex_regs = chv_l3_1_flex_regs,
+   .n_flex_regs = 0, /* Determined at runtime */
 };
 
 static void
@@ -5250,6 +5673,129 @@ register_l3_1_counter_query(struct brw_context *brw)
     * global variable which only needs to be initialized once... */
 
    if (!query->data_size) {
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009840, .val = 0x000000A0 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x10BF03DA };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x14BF0001 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x12980340 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x12990340 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0CBF1187 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0EBF1205 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x00BF0500 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x02BF042B };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x04BF002C };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0CDAC000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0EDAC000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x00DA8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x02DAC000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x04DA4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x04983400 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x10980000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x06990034 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x10990000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0C9DC000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0E9DC000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x009D8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x029DC000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x049D4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x109F02A8 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0C9FA000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0E9F00BA };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0CB88000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0CB95000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0EB95000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x00B94000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x02B95000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x04B91000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x06B92000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0CBA4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0F88000F };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x03888000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x05888000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x07888000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x09888000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0B888000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0D880400 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x258B800A };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x278B002A };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x238B5500 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x198C4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1B8C0015 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x038C4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x058C4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x078C4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x098C4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0B8C4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0D8C4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0D8DA000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0F8DA000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x018D8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x038DA000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x058DA000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x078D2000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x2185800A };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x2385002A };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1F85AA00 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1B830154 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x03834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x05834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x07834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x09834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0B834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0D834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0D84C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0F84C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x01848000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0384C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0584C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x07844000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1D80C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1F80C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x11808000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1380C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1580C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x17804000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x53800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x45800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x47800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x21800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x31800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x4D800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x3F800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x4F800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x41800060 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009840, .val = 0x00000080 };
+
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002740, .val = 0x00000000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002744, .val = 0x00800000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002710, .val = 0x00000000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002714, .val = 0xF0800000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002720, .val = 0x00000000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002724, .val = 0xF0800000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002770, .val = 0x00100070 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002774, .val = 0x0000FFF1 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002778, .val = 0x00014002 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000277C, .val = 0x0000C3FF };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002780, .val = 0x00010002 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002784, .val = 0x0000C7FF };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002788, .val = 0x00004002 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000278C, .val = 0x0000D3FF };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002790, .val = 0x00100700 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002794, .val = 0x0000FF1F };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002798, .val = 0x00001402 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000279C, .val = 0x0000FC3F };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x000027A0, .val = 0x00001002 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x000027A4, .val = 0x0000FC7F };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x000027A8, .val = 0x00000402 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x000027AC, .val = 0x0000FD3F };
+
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E458, .val = 0x00005004 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E558, .val = 0x00010003 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E658, .val = 0x00012011 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E758, .val = 0x00015014 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E45C, .val = 0x00051050 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E55C, .val = 0x00053052 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E65C, .val = 0x00055054 };
+
 
       counter = &query->counters[query->n_counters++];
       counter->oa_counter_read_uint64 = chv__l3_1__gpu_core_clocks__read;
@@ -6244,6 +6790,10 @@ chv__l3_2__shader_atomics__read(struct brw_context *brw,
    return tmp0;
 }
 
+static struct brw_perf_query_register_prog chv_l3_2_mux_regs[78];
+static struct brw_perf_query_register_prog chv_l3_2_b_counter_regs[22];
+static struct brw_perf_query_register_prog chv_l3_2_flex_regs[7];
+
 static struct brw_perf_query_counter chv_l3_2_query_counters[39];
 static struct brw_perf_query_info chv_l3_2_query = {
    .kind = OA_COUNTERS,
@@ -6260,6 +6810,12 @@ static struct brw_perf_query_info chv_l3_2_query = {
    .a_offset = 2,
    .b_offset = 38,
    .c_offset = 46,
+   .mux_regs = chv_l3_2_mux_regs,
+   .n_mux_regs = 0, /* Determined at runtime */
+   .b_counter_regs = chv_l3_2_b_counter_regs,
+   .n_b_counter_regs = 0, /* Determined at runtime */
+   .flex_regs = chv_l3_2_flex_regs,
+   .n_flex_regs = 0, /* Determined at runtime */
 };
 
 static void
@@ -6273,6 +6829,116 @@ register_l3_2_counter_query(struct brw_context *brw)
     * global variable which only needs to be initialized once... */
 
    if (!query->data_size) {
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009840, .val = 0x000000A0 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x103F03DA };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x143F0001 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x12180340 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x12190340 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0C3F1187 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0E3F1205 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x003F0500 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x023F042B };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x043F002C };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0C5AC000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0E5AC000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x005A8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x025AC000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x045A4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x04183400 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x10180000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x06190034 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x10190000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0C1DC000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0E1DC000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x001D8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x021DC000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x041D4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x101F02A8 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0C1FA000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0E1F00BA };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0C388000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0C395000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0E395000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x00394000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x02395000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x04391000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x06392000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0C3A4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1B8AA800 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1D8A0002 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x038A8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x058A8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x078A8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x098A8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0B8A8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0D8A8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x258B4005 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x278B0015 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x238B2A80 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x2185800A };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x2385002A };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1F85AA00 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1B830154 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x03834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x05834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x07834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x09834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0B834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0D834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0D84C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0F84C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x01848000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0384C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0584C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x07844000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1D80C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1F80C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x11808000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1380C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1580C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x17804000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x53800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x45800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x47800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x21800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x31800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x4D800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x3F800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x4F800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x41800060 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009840, .val = 0x00000080 };
+
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002740, .val = 0x00000000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002744, .val = 0x00800000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002710, .val = 0x00000000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002714, .val = 0xF0800000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002720, .val = 0x00000000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002724, .val = 0xF0800000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002770, .val = 0x00100070 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002774, .val = 0x0000FFF1 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002778, .val = 0x00014002 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000277C, .val = 0x0000C3FF };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002780, .val = 0x00010002 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002784, .val = 0x0000C7FF };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002788, .val = 0x00004002 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000278C, .val = 0x0000D3FF };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002790, .val = 0x00100700 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002794, .val = 0x0000FF1F };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002798, .val = 0x00001402 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000279C, .val = 0x0000FC3F };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x000027A0, .val = 0x00001002 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x000027A4, .val = 0x0000FC7F };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x000027A8, .val = 0x00000402 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x000027AC, .val = 0x0000FD3F };
+
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E458, .val = 0x00005004 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E558, .val = 0x00010003 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E658, .val = 0x00012011 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E758, .val = 0x00015014 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E45C, .val = 0x00051050 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E55C, .val = 0x00053052 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E65C, .val = 0x00055054 };
+
 
       counter = &query->counters[query->n_counters++];
       counter->oa_counter_read_uint64 = chv__l3_2__gpu_core_clocks__read;
@@ -7267,6 +7933,10 @@ chv__l3_3__shader_atomics__read(struct brw_context *brw,
    return tmp0;
 }
 
+static struct brw_perf_query_register_prog chv_l3_3_mux_regs[94];
+static struct brw_perf_query_register_prog chv_l3_3_b_counter_regs[22];
+static struct brw_perf_query_register_prog chv_l3_3_flex_regs[7];
+
 static struct brw_perf_query_counter chv_l3_3_query_counters[39];
 static struct brw_perf_query_info chv_l3_3_query = {
    .kind = OA_COUNTERS,
@@ -7283,6 +7953,12 @@ static struct brw_perf_query_info chv_l3_3_query = {
    .a_offset = 2,
    .b_offset = 38,
    .c_offset = 46,
+   .mux_regs = chv_l3_3_mux_regs,
+   .n_mux_regs = 0, /* Determined at runtime */
+   .b_counter_regs = chv_l3_3_b_counter_regs,
+   .n_b_counter_regs = 0, /* Determined at runtime */
+   .flex_regs = chv_l3_3_flex_regs,
+   .n_flex_regs = 0, /* Determined at runtime */
 };
 
 static void
@@ -7296,6 +7972,132 @@ register_l3_3_counter_query(struct brw_context *brw)
     * global variable which only needs to be initialized once... */
 
    if (!query->data_size) {
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009840, .val = 0x000000A0 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x121B0340 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x103F0274 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x123F0000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x129B0340 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x10BF0274 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x12BF0000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x041B3400 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x101B0000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x045C8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0A3D4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x003F0080 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x023F0793 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x043F0014 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x04588000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x005A8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x025AC000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x045A4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0A5B4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x001D8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x021DC000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x041D4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0C1FA000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0E1F002A };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0A384000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x00394000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x02395000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x04399000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x069B0034 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x109B0000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x06DC4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0CBD4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0CBF0981 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0EBF0A0F };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x06D84000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0CDAC000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0EDAC000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0CDB4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0C9DC000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0E9DC000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x109F02A8 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0E9F0080 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0CB84000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0CB95000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0EB95000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x06B92000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0F88000F };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0D880400 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x038A8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x058A8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x078A8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x098A8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0B8A8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x258B8009 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x278B002A };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x238B2A80 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x198C4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1B8C0015 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0D8C4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0D8DA000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0F8DA000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x078D2000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x2185800A };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x2385002A };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1F85AA00 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1B830154 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x03834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x05834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x07834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x09834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0B834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0D834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0D84C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0F84C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x01848000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0384C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0584C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x07844000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1D80C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1F80C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x11808000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1380C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1580C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x17804000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x53800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x45800C00 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x47800C63 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x21800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x31800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x4D800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x3F8014A5 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x4F800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x41800045 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009840, .val = 0x00000080 };
+
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002740, .val = 0x00000000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002744, .val = 0x00800000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002710, .val = 0x00000000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002714, .val = 0xF0800000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002720, .val = 0x00000000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002724, .val = 0xF0800000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002770, .val = 0x00100070 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002774, .val = 0x0000FFF1 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002778, .val = 0x00014002 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000277C, .val = 0x0000C3FF };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002780, .val = 0x00010002 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002784, .val = 0x0000C7FF };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002788, .val = 0x00004002 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000278C, .val = 0x0000D3FF };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002790, .val = 0x00100700 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002794, .val = 0x0000FF1F };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002798, .val = 0x00001402 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000279C, .val = 0x0000FC3F };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x000027A0, .val = 0x00001002 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x000027A4, .val = 0x0000FC7F };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x000027A8, .val = 0x00000402 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x000027AC, .val = 0x0000FD3F };
+
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E458, .val = 0x00005004 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E558, .val = 0x00010003 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E658, .val = 0x00012011 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E758, .val = 0x00015014 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E45C, .val = 0x00051050 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E55C, .val = 0x00053052 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E65C, .val = 0x00055054 };
+
 
       counter = &query->counters[query->n_counters++];
       counter->oa_counter_read_uint64 = chv__l3_3__gpu_core_clocks__read;
@@ -8290,6 +9092,10 @@ chv__l3_4__shader_atomics__read(struct brw_context *brw,
    return tmp0;
 }
 
+static struct brw_perf_query_register_prog chv_l3_4_mux_regs[93];
+static struct brw_perf_query_register_prog chv_l3_4_b_counter_regs[22];
+static struct brw_perf_query_register_prog chv_l3_4_flex_regs[7];
+
 static struct brw_perf_query_counter chv_l3_4_query_counters[39];
 static struct brw_perf_query_info chv_l3_4_query = {
    .kind = OA_COUNTERS,
@@ -8306,6 +9112,12 @@ static struct brw_perf_query_info chv_l3_4_query = {
    .a_offset = 2,
    .b_offset = 38,
    .c_offset = 46,
+   .mux_regs = chv_l3_4_mux_regs,
+   .n_mux_regs = 0, /* Determined at runtime */
+   .b_counter_regs = chv_l3_4_b_counter_regs,
+   .n_b_counter_regs = 0, /* Determined at runtime */
+   .flex_regs = chv_l3_4_flex_regs,
+   .n_flex_regs = 0, /* Determined at runtime */
 };
 
 static void
@@ -8319,6 +9131,131 @@ register_l3_4_counter_query(struct brw_context *brw)
     * global variable which only needs to be initialized once... */
 
    if (!query->data_size) {
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009840, .val = 0x000000A0 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x121A0340 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x103F0017 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x123F0020 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x129A0340 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x10BF0017 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x12BF0020 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x041A3400 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x101A0000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x043B8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0A3E0010 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x003F0200 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x023F0113 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x043F0014 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x02592000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x005A8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x025AC000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x045A4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0A1C8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x001D8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x021DC000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x041D4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0A1E8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0C1FA000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0E1F001A };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x00394000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x02395000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x04391000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x069A0034 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x109A0000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x06BB4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0ABE0040 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0CBF0984 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0EBF0A02 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x02D94000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0CDAC000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0EDAC000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0C9C0400 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0C9DC000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0E9DC000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0C9E0400 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x109F02A8 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0E9F0040 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0CB95000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0EB95000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0F88000F };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0D880400 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x038A8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x058A8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x078A8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x098A8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0B8A8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x258B8009 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x278B002A };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x238B2A80 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x198C4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1B8C0015 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0D8C4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0D8DA000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0F8DA000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x078D2000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x2185800A };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x2385002A };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1F85AA00 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1B830154 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x03834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x05834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x07834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x09834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0B834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0D834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0D84C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0F84C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x01848000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0384C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0584C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x07844000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1D80C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1F80C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x11808000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1380C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1580C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x17804000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x53800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x45800800 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x47800842 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x21800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x31800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x4D800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x3F801084 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x4F800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x41800044 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009840, .val = 0x00000080 };
+
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002740, .val = 0x00000000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002744, .val = 0x00800000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002710, .val = 0x00000000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002714, .val = 0xF0800000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002720, .val = 0x00000000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002724, .val = 0xF0800000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002770, .val = 0x00100070 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002774, .val = 0x0000FFF1 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002778, .val = 0x00014002 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000277C, .val = 0x0000C3FF };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002780, .val = 0x00010002 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002784, .val = 0x0000C7FF };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002788, .val = 0x00004002 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000278C, .val = 0x0000D3FF };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002790, .val = 0x00100700 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002794, .val = 0x0000FF1F };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002798, .val = 0x00001402 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000279C, .val = 0x0000FC3F };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x000027A0, .val = 0x00001002 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x000027A4, .val = 0x0000FC7F };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x000027A8, .val = 0x00000402 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x000027AC, .val = 0x0000FD3F };
+
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E458, .val = 0x00005004 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E558, .val = 0x00010003 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E658, .val = 0x00012011 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E758, .val = 0x00015014 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E45C, .val = 0x00051050 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E55C, .val = 0x00053052 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E65C, .val = 0x00055054 };
+
 
       counter = &query->counters[query->n_counters++];
       counter->oa_counter_read_uint64 = chv__l3_4__gpu_core_clocks__read;
@@ -9409,6 +10346,10 @@ chv__rasterizer_and_pixel_backend__shader_atomics__read(struct brw_context *brw,
    return tmp0;
 }
 
+static struct brw_perf_query_register_prog chv_rasterizer_and_pixel_backend_mux_regs[114];
+static struct brw_perf_query_register_prog chv_rasterizer_and_pixel_backend_b_counter_regs[18];
+static struct brw_perf_query_register_prog chv_rasterizer_and_pixel_backend_flex_regs[7];
+
 static struct brw_perf_query_counter chv_rasterizer_and_pixel_backend_query_counters[45];
 static struct brw_perf_query_info chv_rasterizer_and_pixel_backend_query = {
    .kind = OA_COUNTERS,
@@ -9425,6 +10366,12 @@ static struct brw_perf_query_info chv_rasterizer_and_pixel_backend_query = {
    .a_offset = 2,
    .b_offset = 38,
    .c_offset = 46,
+   .mux_regs = chv_rasterizer_and_pixel_backend_mux_regs,
+   .n_mux_regs = 0, /* Determined at runtime */
+   .b_counter_regs = chv_rasterizer_and_pixel_backend_b_counter_regs,
+   .n_b_counter_regs = 0, /* Determined at runtime */
+   .flex_regs = chv_rasterizer_and_pixel_backend_flex_regs,
+   .n_flex_regs = 0, /* Determined at runtime */
 };
 
 static void
@@ -9438,6 +10385,148 @@ register_rasterizer_and_pixel_backend_counter_query(struct brw_context *brw)
     * global variable which only needs to be initialized once... */
 
    if (!query->data_size) {
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009840, .val = 0x000000A0 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x143B000E };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x043C55C0 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0A1E0280 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0C1E0408 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x10390000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x12397A1F };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x14BB000E };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x04BC5000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0A9E0296 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0C9E0008 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x10B90000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x12B97A1F };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x063B0042 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x103B0000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x083C0000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0A3E0040 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x043F8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x02594000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x045A8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0C1C0400 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x041D8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x081E02C0 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0E1E0000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0C1FA800 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0E1F0260 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x101F0014 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x003905E0 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x06390BC0 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x02390018 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x04394000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x04BB0042 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x10BB0000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x02BC05C0 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x08BC0000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0ABE0004 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x02BF8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x02D91000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x02DA8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x089C8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x029D8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x089E8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0E9E0000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0E9FA806 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x109F0142 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x08B90617 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0AB90BE0 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x02B94000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0D88F000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0F88000C };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x07888000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x09888000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x018A8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0F8A8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1B8A2800 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x038A8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x058A8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0B8A8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0D8A8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x238B52A0 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x258B6A95 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x278B0029 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x178C2000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x198C1500 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1B8C0014 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x078C4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x098C4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x098DA000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0B8DA000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0F8DA000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x038D8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x058D2000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1F85AA80 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x2185AAAA };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x2385002A };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x01834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0F834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x19835400 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1B830155 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x03834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x05834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x07834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x09834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0B834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0D834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0184C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0784C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0984C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0B84C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0D84C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0F84C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0384C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0584C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1180C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1780C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1980C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1B80C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1D80C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1F80C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1380C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1580C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x4D800444 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x3D800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x4F804000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x43801080 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x51800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x45800084 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x53800044 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x47801080 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x21800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x31800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x3F800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x41800840 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009840, .val = 0x00000080 };
+
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002740, .val = 0x00000000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002744, .val = 0x00800000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002710, .val = 0x00000000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002714, .val = 0xF0800000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002720, .val = 0x00000000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002724, .val = 0x30800000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002770, .val = 0x00006000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002774, .val = 0x0000F3FF };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002778, .val = 0x00001800 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000277C, .val = 0x0000FCFF };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002780, .val = 0x00000600 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002784, .val = 0x0000FF3F };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002788, .val = 0x00000180 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000278C, .val = 0x0000FFCF };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002790, .val = 0x00000060 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002794, .val = 0x0000FFF3 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002798, .val = 0x00000018 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000279C, .val = 0x0000FFFC };
+
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E458, .val = 0x00005004 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E558, .val = 0x00010003 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E658, .val = 0x00012011 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E758, .val = 0x00015014 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E45C, .val = 0x00051050 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E55C, .val = 0x00053052 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E65C, .val = 0x00055054 };
+
 
       counter = &query->counters[query->n_counters++];
       counter->oa_counter_read_uint64 = chv__rasterizer_and_pixel_backend__gpu_core_clocks__read;
@@ -10536,6 +11625,10 @@ chv__sampler_1__shader_atomics__read(struct brw_context *brw,
    return tmp0;
 }
 
+static struct brw_perf_query_register_prog chv_sampler_1_mux_regs[126];
+static struct brw_perf_query_register_prog chv_sampler_1_b_counter_regs[12];
+static struct brw_perf_query_register_prog chv_sampler_1_flex_regs[7];
+
 static struct brw_perf_query_counter chv_sampler_1_query_counters[41];
 static struct brw_perf_query_info chv_sampler_1_query = {
    .kind = OA_COUNTERS,
@@ -10552,6 +11645,12 @@ static struct brw_perf_query_info chv_sampler_1_query = {
    .a_offset = 2,
    .b_offset = 38,
    .c_offset = 46,
+   .mux_regs = chv_sampler_1_mux_regs,
+   .n_mux_regs = 0, /* Determined at runtime */
+   .b_counter_regs = chv_sampler_1_b_counter_regs,
+   .n_b_counter_regs = 0, /* Determined at runtime */
+   .flex_regs = chv_sampler_1_flex_regs,
+   .n_flex_regs = 0, /* Determined at runtime */
 };
 
 static void
@@ -10565,6 +11664,154 @@ register_sampler_1_counter_query(struct brw_context *brw)
     * global variable which only needs to be initialized once... */
 
    if (!query->data_size) {
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009840, .val = 0x000000A0 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x18921400 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x149500AB };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x18B21400 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x14B500AB };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x18D21400 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x14D500AB };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0CDC8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0EDC4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x02DCC000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x04DCC000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1ABD00A0 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0ABD8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0CD88000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0ED84000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x04D88000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1ADB0050 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x04DB8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x06DB8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x08DB8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0ADB4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x109F02A0 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0C9FA000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0E9F00AA };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x18B82500 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x02B88000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x04B84000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x06B84000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x08B84000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0AB84000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0CB88000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0CB98000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0EB9A000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x00B98000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x02B9A000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x04B9A000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x06B92000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1ABA0200 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x02BA8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0CBA8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x04908000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x04918000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x04927300 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x10920000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1893000A };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0A934000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0A946000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0C959000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0E950098 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x10950000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x04B04000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x04B14000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x04B20073 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x10B20000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x04B38000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x06B38000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x08B34000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x04B4C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x02B59890 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x10B50000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x06D04000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x06D14000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x06D20073 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x10D20000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x18D30020 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x02D38000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0CD34000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0AD48000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x04D42000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0ED59000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x00D59800 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x10D50000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0F88000E };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x03888000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x05888000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x07888000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x09888000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0B888000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0D880400 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x278B002A };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x238B5500 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x258B000A };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1B8C0015 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x038C4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x058C4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x078C4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x098C4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0B8C4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0D8C4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0D8D8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0F8DA000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x018D8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x038DA000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x058DA000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x078D2000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x2385002A };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1F85AA00 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x2185000A };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1B830150 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x03834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x05834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x07834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x09834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0B834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0D834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0D848000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0F84C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x01848000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0384C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0584C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x07844000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1D808000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1F80C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x11808000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1380C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1580C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x17804000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x53800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x47801021 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x21800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x31800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x4D800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x3F800C64 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x4F800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x41800C02 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009840, .val = 0x00000080 };
+
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002740, .val = 0x00000000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002744, .val = 0x00800000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002710, .val = 0x00000000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002714, .val = 0x70800000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002720, .val = 0x00000000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002724, .val = 0x00800000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002770, .val = 0x0000C000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002774, .val = 0x0000E7FF };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002778, .val = 0x00003000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000277C, .val = 0x0000F9FF };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002780, .val = 0x00000C00 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002784, .val = 0x0000FE7F };
+
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E458, .val = 0x00005004 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E558, .val = 0x00010003 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E658, .val = 0x00012011 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E758, .val = 0x00015014 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E45C, .val = 0x00051050 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E55C, .val = 0x00053052 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E65C, .val = 0x00055054 };
+
 
       counter = &query->counters[query->n_counters++];
       counter->oa_counter_read_uint64 = chv__sampler_1__gpu_core_clocks__read;
@@ -11615,6 +12862,10 @@ chv__sampler_2__shader_atomics__read(struct brw_context *brw,
    return tmp0;
 }
 
+static struct brw_perf_query_register_prog chv_sampler_2_mux_regs[114];
+static struct brw_perf_query_register_prog chv_sampler_2_b_counter_regs[12];
+static struct brw_perf_query_register_prog chv_sampler_2_flex_regs[7];
+
 static struct brw_perf_query_counter chv_sampler_2_query_counters[41];
 static struct brw_perf_query_info chv_sampler_2_query = {
    .kind = OA_COUNTERS,
@@ -11631,6 +12882,12 @@ static struct brw_perf_query_info chv_sampler_2_query = {
    .a_offset = 2,
    .b_offset = 38,
    .c_offset = 46,
+   .mux_regs = chv_sampler_2_mux_regs,
+   .n_mux_regs = 0, /* Determined at runtime */
+   .b_counter_regs = chv_sampler_2_b_counter_regs,
+   .n_b_counter_regs = 0, /* Determined at runtime */
+   .flex_regs = chv_sampler_2_flex_regs,
+   .n_flex_regs = 0, /* Determined at runtime */
 };
 
 static void
@@ -11644,6 +12901,142 @@ register_sampler_2_counter_query(struct brw_context *brw)
     * global variable which only needs to be initialized once... */
 
    if (!query->data_size) {
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009840, .val = 0x000000A0 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x18121400 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x141500AB };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x18321400 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x143500AB };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x18521400 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x145500AB };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0C5C8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0E5C4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x025CC000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x045CC000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1A3D00A0 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0A3D8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0C588000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0E584000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x04588000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1A5B0050 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x045B8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x065B8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x085B8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0A5B4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x101F02A0 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0C1FA000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0E1F00AA };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x18382500 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x02388000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x04384000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x06384000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x08384000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0A384000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0C388000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0C398000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0E39A000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x00398000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0239A000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0439A000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x06392000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1A3A0200 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x023A8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0C3A8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x04108000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x04118000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x04127300 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x10120000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1813000A };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0A134000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0A146000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0C159000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0E150098 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x10150000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x04304000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x04314000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x04320073 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x10320000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x04338000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x06338000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x08334000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0434C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x02359890 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x10350000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x06504000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x06514000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x06520073 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x10520000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x18530020 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x02538000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0C534000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0A548000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x04542000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0E559000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x00559800 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x10550000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1B8AA000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1D8A0002 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x038A8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x058A8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x078A8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x098A8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0B8A8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0D8A8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x278B0015 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x238B2A80 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x258B0005 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x2385002A };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1F85AA00 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x2185000A };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1B830150 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x03834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x05834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x07834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x09834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0B834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0D834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0D848000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0F84C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x01848000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0384C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0584C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x07844000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1D808000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1F80C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x11808000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1380C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1580C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x17804000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x53800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x47801021 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x21800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x31800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x4D800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x3F800C64 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x4F800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x41800C02 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009840, .val = 0x00000080 };
+
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002740, .val = 0x00000000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002744, .val = 0x00800000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002710, .val = 0x00000000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002714, .val = 0x70800000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002720, .val = 0x00000000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002724, .val = 0x00800000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002770, .val = 0x0000C000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002774, .val = 0x0000E7FF };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002778, .val = 0x00003000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000277C, .val = 0x0000F9FF };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002780, .val = 0x00000C00 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002784, .val = 0x0000FE7F };
+
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E458, .val = 0x00005004 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E558, .val = 0x00010003 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E658, .val = 0x00012011 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E758, .val = 0x00015014 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E45C, .val = 0x00051050 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E55C, .val = 0x00053052 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E65C, .val = 0x00055054 };
+
 
       counter = &query->counters[query->n_counters++];
       counter->oa_counter_read_uint64 = chv__sampler_2__gpu_core_clocks__read;
@@ -12790,6 +14183,10 @@ chv__tdl_1__thread_header00_ready_port1__read(struct brw_context *brw,
    return tmp4;
 }
 
+static struct brw_perf_query_register_prog chv_tdl_1_mux_regs[151];
+static struct brw_perf_query_register_prog chv_tdl_1_b_counter_regs[18];
+static struct brw_perf_query_register_prog chv_tdl_1_flex_regs[7];
+
 static struct brw_perf_query_counter chv_tdl_1_query_counters[47];
 static struct brw_perf_query_info chv_tdl_1_query = {
    .kind = OA_COUNTERS,
@@ -12806,6 +14203,12 @@ static struct brw_perf_query_info chv_tdl_1_query = {
    .a_offset = 2,
    .b_offset = 38,
    .c_offset = 46,
+   .mux_regs = chv_tdl_1_mux_regs,
+   .n_mux_regs = 0, /* Determined at runtime */
+   .b_counter_regs = chv_tdl_1_b_counter_regs,
+   .n_b_counter_regs = 0, /* Determined at runtime */
+   .flex_regs = chv_tdl_1_flex_regs,
+   .n_flex_regs = 0, /* Determined at runtime */
 };
 
 static void
@@ -12819,6 +14222,185 @@ register_tdl_1_counter_query(struct brw_context *brw)
     * global variable which only needs to be initialized once... */
 
    if (!query->data_size) {
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009840, .val = 0x000000A0 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x16154D60 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x16352E60 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x16554D60 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x16950000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x16B50000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x16D50000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x005C8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x045CC000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x065C4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x083D8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0A3D8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0458C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x025B8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x085B4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0A5B4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0C5B8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0C1FA000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0E1F00AA };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x02384000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x04388000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x06388000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x08384000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0A384000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0C384000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x00398000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0239A000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0439A000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x06392000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x043A8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x063A8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x08138000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0A138000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x06143000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0415CFC7 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x10150000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x02338000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0C338000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x04342000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x06344000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0035C700 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x063500CF };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x10350000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x04538000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x06538000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0454C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0255CFC7 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x10550000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x06DC8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x08DC4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0CDCC000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0EDCC000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1ABD00A8 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0CD8C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0ED84000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0EDB8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x18DB0800 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1ADB0254 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0E9FAA00 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x109F02AA };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0EB84000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x16B84000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x18B8156A };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x06B98000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x08B9A000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0AB9A000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0CB9A000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0EB9A000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x18BAA000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1ABA0002 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x16934000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1893000A };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0A947000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0C95C5C1 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0E9500C3 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x10950000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0EB38000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x16B30040 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x18B30020 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x06B48000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x08B41000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0AB48000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x06B5C500 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x08B500C3 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0EB5C100 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x10B50000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x16D31500 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x08D4E000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x08D5C100 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0AD5C3C5 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x10D50000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0D88F800 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0F88000F };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x038A8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x058A8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x078A8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x098A8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0B8A8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0D8A8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x258BAAA5 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x278B002A };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x238B2A80 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0F8C4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x178C2000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x198C5500 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1B8C0015 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x078D8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x098DA000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0B8DA000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0D8DA000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0F8DA000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x2185AAAA };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x2385002A };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1F85AA00 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0F834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x19835400 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1B830155 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x03834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x05834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x07834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x09834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0B834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0D834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0784C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0984C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0B84C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0D84C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0F84C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x01848000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0384C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0584C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1780C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1980C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1B80C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1D80C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1F80C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x11808000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1380C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1580C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x4F800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x43800C42 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x51800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x45800063 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x53800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x47800800 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x21800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x31800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x4D800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x3F8014A4 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x41801042 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009840, .val = 0x00000080 };
+
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002740, .val = 0x00000000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002744, .val = 0x00800000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002710, .val = 0x00000000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002714, .val = 0xF0800000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002720, .val = 0x00000000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002724, .val = 0x30800000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002770, .val = 0x00000002 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002774, .val = 0x0000FDFF };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002778, .val = 0x00000000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000277C, .val = 0x0000FE7F };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002780, .val = 0x00000002 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002784, .val = 0x0000FFBF };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002788, .val = 0x00000000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000278C, .val = 0x0000FFCF };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002790, .val = 0x00000002 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002794, .val = 0x0000FFF7 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002798, .val = 0x00000000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000279C, .val = 0x0000FFF9 };
+
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E458, .val = 0x00005004 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E558, .val = 0x00010003 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E658, .val = 0x00012011 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E758, .val = 0x00015014 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E45C, .val = 0x00051050 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E55C, .val = 0x00053052 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E65C, .val = 0x00055054 };
+
 
       counter = &query->counters[query->n_counters++];
       counter->oa_counter_read_uint64 = chv__tdl_1__gpu_core_clocks__read;
@@ -14037,6 +15619,10 @@ chv__tdl_2__non_ps_thread01_ready_for_dispatch__read(struct brw_context *brw,
    return tmp4;
 }
 
+static struct brw_perf_query_register_prog chv_tdl_2_mux_regs[155];
+static struct brw_perf_query_register_prog chv_tdl_2_b_counter_regs[18];
+static struct brw_perf_query_register_prog chv_tdl_2_flex_regs[7];
+
 static struct brw_perf_query_counter chv_tdl_2_query_counters[47];
 static struct brw_perf_query_info chv_tdl_2_query = {
    .kind = OA_COUNTERS,
@@ -14053,6 +15639,12 @@ static struct brw_perf_query_info chv_tdl_2_query = {
    .a_offset = 2,
    .b_offset = 38,
    .c_offset = 46,
+   .mux_regs = chv_tdl_2_mux_regs,
+   .n_mux_regs = 0, /* Determined at runtime */
+   .b_counter_regs = chv_tdl_2_b_counter_regs,
+   .n_b_counter_regs = 0, /* Determined at runtime */
+   .flex_regs = chv_tdl_2_flex_regs,
+   .n_flex_regs = 0, /* Determined at runtime */
 };
 
 static void
@@ -14066,6 +15658,189 @@ register_tdl_2_counter_query(struct brw_context *brw)
     * global variable which only needs to be initialized once... */
 
    if (!query->data_size) {
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009840, .val = 0x000000A0 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x16150000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x16350000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x16550000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x16952E60 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x16B54D60 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x16D52E60 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x065C8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x085CC000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0A5CC000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0C5C4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0E3D8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x183DA000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x06588000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x08588000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0A584000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0E5B4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x185B5800 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1A5B000A };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0E1FAA00 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x101F02AA };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0E384000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x16384000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x18382A55 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x06398000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0839A000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0A39A000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0C39A000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0E39A000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1A3A02A0 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0E138000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x16130500 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x06148000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x08146000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0615C100 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0815C500 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0A1500C3 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x10150000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x16335040 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x08349000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0A341000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x083500C1 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0A35C500 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0C3500C3 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x10350000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1853002A };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0A54E000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0C55C500 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0E55C1C3 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x10550000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x00DC8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x02DCC000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x04DC4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x04BD8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x06BD8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x02D8C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x02DB8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x04DB4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x06DB4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x08DB8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0C9FA000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0E9F00AA };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x02B84000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x04B84000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x06B84000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x08B84000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0AB88000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0CB88000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x00B98000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x02B9A000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x04B9A000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x06B92000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0ABA8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0CBA8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x04938000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x06938000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0494C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0295CFC7 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x10950000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x02B38000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x08B38000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x04B42000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x06B41000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x00B5C700 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x04B500CF };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x10B50000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0AD38000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0CD38000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x06D46000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x04D5C700 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x06D500CF };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x10D50000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x03888000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x05888000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x07888000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x09888000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0B888000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0D880400 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0F8A8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x198A8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1B8AAAA0 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1D8A0002 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x258B555A };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x278B0015 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x238B5500 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x038C4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x058C4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x078C4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x098C4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0B8C4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0D8C4000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x018D8000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x038DA000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x058DA000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x078D2000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x2185AAAA };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x2385002A };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1F85AA00 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0F834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x19835400 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1B830155 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x03834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x05834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x07834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x09834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0B834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0D834000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0784C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0984C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0B84C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0D84C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0F84C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x01848000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0384C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x0584C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1780C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1980C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1B80C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1D80C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1F80C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x11808000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1380C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x1580C000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x4F800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x43800882 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x51800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x45801082 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x53800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x478014A5 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x21800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x31800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x4D800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x3F800002 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x41800C62 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009840, .val = 0x00000080 };
+
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002740, .val = 0x00000000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002744, .val = 0x00800000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002710, .val = 0x00000000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002714, .val = 0xF0800000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002720, .val = 0x00000000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002724, .val = 0x30800000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002770, .val = 0x00000002 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002774, .val = 0x0000FDFF };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002778, .val = 0x00000000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000277C, .val = 0x0000FE7F };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002780, .val = 0x00000000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002784, .val = 0x0000FF9F };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002788, .val = 0x00000000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000278C, .val = 0x0000FFE7 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002790, .val = 0x00000002 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002794, .val = 0x0000FFFB };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002798, .val = 0x00000002 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000279C, .val = 0x0000FFFD };
+
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E458, .val = 0x00005004 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E558, .val = 0x00010003 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E658, .val = 0x00012011 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E758, .val = 0x00015014 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E45C, .val = 0x00051050 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E55C, .val = 0x00053052 };
+      query->flex_regs[query->n_flex_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000E65C, .val = 0x00055054 };
+
 
       counter = &query->counters[query->n_counters++];
       counter->oa_counter_read_uint64 = chv__tdl_2__gpu_core_clocks__read;
@@ -14727,6 +16502,9 @@ chv__test_oa__counter2__read(struct brw_context *brw,
    return tmp0;
 }
 
+static struct brw_perf_query_register_prog chv_test_oa_mux_regs[13];
+static struct brw_perf_query_register_prog chv_test_oa_b_counter_regs[22];
+
 static struct brw_perf_query_counter chv_test_oa_query_counters[12];
 static struct brw_perf_query_info chv_test_oa_query = {
    .kind = OA_COUNTERS,
@@ -14743,6 +16521,10 @@ static struct brw_perf_query_info chv_test_oa_query = {
    .a_offset = 2,
    .b_offset = 38,
    .c_offset = 46,
+   .mux_regs = chv_test_oa_mux_regs,
+   .n_mux_regs = 0, /* Determined at runtime */
+   .b_counter_regs = chv_test_oa_b_counter_regs,
+   .n_b_counter_regs = 0, /* Determined at runtime */
 };
 
 static void
@@ -14756,6 +16538,43 @@ register_test_oa_counter_query(struct brw_context *brw)
     * global variable which only needs to be initialized once... */
 
    if (!query->data_size) {
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009840, .val = 0x000000A0 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x59800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x59800001 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x338B0000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x258B0066 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x058B0000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x038B0000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x03844000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x47800080 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x57800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x001823A4, .val = 0x00000000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009888, .val = 0x59800000 };
+      query->mux_regs[query->n_mux_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00009840, .val = 0x00000080 };
+
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002740, .val = 0x00000000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002744, .val = 0x00800000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002714, .val = 0xF0800000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002710, .val = 0x00000000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002724, .val = 0xF0800000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002720, .val = 0x00000000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002770, .val = 0x00000004 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002774, .val = 0x00000000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002778, .val = 0x00000003 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000277C, .val = 0x00000000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002780, .val = 0x00000007 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002784, .val = 0x00000000 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002788, .val = 0x00100002 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000278C, .val = 0x0000FFF7 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002790, .val = 0x00100002 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002794, .val = 0x0000FFCF };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x00002798, .val = 0x00100082 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x0000279C, .val = 0x0000FFEF };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x000027A0, .val = 0x001000C2 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x000027A4, .val = 0x0000FFE7 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x000027A8, .val = 0x00100001 };
+      query->b_counter_regs[query->n_b_counter_regs++] = (struct brw_perf_query_register_prog) { .reg = 0x000027AC, .val = 0x0000FFE7 };
+
 
       counter = &query->counters[query->n_counters++];
       counter->oa_counter_read_uint64 = chv__test_oa__counter7__read;

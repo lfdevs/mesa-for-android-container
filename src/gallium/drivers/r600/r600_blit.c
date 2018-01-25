@@ -54,6 +54,11 @@ static void r600_blitter_begin(struct pipe_context *ctx, enum r600_blitter_op op
 {
 	struct r600_context *rctx = (struct r600_context *)ctx;
 
+	if (rctx->cmd_buf_is_compute) {
+		rctx->b.gfx.flush(rctx, PIPE_FLUSH_ASYNC, NULL);
+		rctx->cmd_buf_is_compute = false;
+	}
+
 	util_blitter_save_vertex_buffer_slot(rctx->blitter, rctx->vertex_buffer_state.vb);
 	util_blitter_save_vertex_elements(rctx->blitter, rctx->vertex_fetch_shader.cso);
 	util_blitter_save_vertex_shader(rctx->blitter, rctx->vs_shader);
@@ -291,6 +296,40 @@ void r600_decompress_depth_textures(struct r600_context *rctx,
 	}
 }
 
+void r600_decompress_depth_images(struct r600_context *rctx,
+				  struct r600_image_state *images)
+{
+	unsigned i;
+	unsigned depth_texture_mask = images->compressed_depthtex_mask;
+
+	while (depth_texture_mask) {
+		struct r600_image_view *view;
+		struct r600_texture *tex;
+
+		i = u_bit_scan(&depth_texture_mask);
+
+		view = &images->views[i];
+		assert(view);
+
+		tex = (struct r600_texture *)view->base.resource;
+		assert(tex->db_compatible);
+
+		if (r600_can_sample_zs(tex, false)) {
+			r600_blit_decompress_depth_in_place(rctx, tex,
+							    false,
+							    view->base.u.tex.level,
+							    view->base.u.tex.level,
+							    0, util_max_layer(&tex->resource.b.b, view->base.u.tex.level));
+		} else {
+			r600_blit_decompress_depth(&rctx->b.b, tex, NULL,
+						   view->base.u.tex.level,
+						   view->base.u.tex.level,
+						   0, util_max_layer(&tex->resource.b.b, view->base.u.tex.level),
+						   0, u_max_sample(&tex->resource.b.b));
+		}
+	}
+}
+
 static void r600_blit_decompress_color(struct pipe_context *ctx,
 		struct r600_texture *rtex,
 		unsigned first_level, unsigned last_level,
@@ -357,6 +396,31 @@ void r600_decompress_color_textures(struct r600_context *rctx,
 		r600_blit_decompress_color(&rctx->b.b, tex,
 					   view->u.tex.first_level, view->u.tex.last_level,
 					   0, util_max_layer(&tex->resource.b.b, view->u.tex.first_level));
+	}
+}
+
+void r600_decompress_color_images(struct r600_context *rctx,
+				  struct r600_image_state *images)
+{
+	unsigned i;
+	unsigned mask = images->compressed_colortex_mask;
+
+	while (mask) {
+		struct r600_image_view *view;
+		struct r600_texture *tex;
+
+		i = u_bit_scan(&mask);
+
+		view = &images->views[i];
+		assert(view);
+
+		tex = (struct r600_texture *)view->base.resource;
+		assert(tex->cmask.size);
+
+		r600_blit_decompress_color(&rctx->b.b, tex,
+					   view->base.u.tex.level, view->base.u.tex.level,
+					   view->base.u.tex.first_layer,
+					   view->base.u.tex.last_layer);
 	}
 }
 

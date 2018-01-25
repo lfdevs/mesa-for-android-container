@@ -175,6 +175,15 @@ get_blorp_surf_for_anv_buffer(struct anv_device *device,
 
 #define ANV_AUX_USAGE_DEFAULT ((enum isl_aux_usage)0xff)
 
+static struct blorp_address
+anv_to_blorp_address(struct anv_address addr)
+{
+   return (struct blorp_address) {
+      .buffer = addr.bo,
+      .offset = addr.offset,
+   };
+}
+
 static void
 get_blorp_surf_for_anv_image(const struct anv_device *device,
                              const struct anv_image *image,
@@ -786,7 +795,7 @@ void anv_CmdClearColorImage(
       if (pRanges[r].aspectMask == 0)
          continue;
 
-      assert(pRanges[r].aspectMask & VK_IMAGE_ASPECT_ANY_COLOR_BIT);
+      assert(pRanges[r].aspectMask & VK_IMAGE_ASPECT_ANY_COLOR_BIT_ANV);
 
       struct blorp_surf surf;
       get_blorp_surf_for_anv_image(cmd_buffer->device,
@@ -980,6 +989,7 @@ clear_color_attachment(struct anv_cmd_buffer *cmd_buffer,
    for (uint32_t r = 0; r < rectCount; ++r) {
       const VkOffset2D offset = pRects[r].rect.offset;
       const VkExtent2D extent = pRects[r].rect.extent;
+      assert(pRects[r].layerCount != VK_REMAINING_ARRAY_LAYERS);
       blorp_clear_attachments(batch, binding_table,
                               ISL_FORMAT_UNSUPPORTED, pass_att->samples,
                               pRects[r].baseArrayLayer,
@@ -1051,6 +1061,7 @@ clear_depth_stencil_attachment(struct anv_cmd_buffer *cmd_buffer,
       const VkOffset2D offset = pRects[r].rect.offset;
       const VkExtent2D extent = pRects[r].rect.extent;
       VkClearDepthStencilValue value = attachment->clearValue.depthStencil;
+      assert(pRects[r].layerCount != VK_REMAINING_ARRAY_LAYERS);
       blorp_clear_attachments(batch, binding_table,
                               depth_format, pass_att->samples,
                               pRects[r].baseArrayLayer,
@@ -1080,7 +1091,7 @@ void anv_CmdClearAttachments(
                     BLORP_BATCH_NO_EMIT_DEPTH_STENCIL);
 
    for (uint32_t a = 0; a < attachmentCount; ++a) {
-      if (pAttachments[a].aspectMask & VK_IMAGE_ASPECT_ANY_COLOR_BIT) {
+      if (pAttachments[a].aspectMask & VK_IMAGE_ASPECT_ANY_COLOR_BIT_ANV) {
          assert(pAttachments[a].aspectMask == VK_IMAGE_ASPECT_COLOR_BIT);
          clear_color_attachment(cmd_buffer, &batch,
                                 &pAttachments[a],
@@ -1673,10 +1684,10 @@ anv_gen8_hiz_op_resolve(struct anv_cmd_buffer *cmd_buffer,
 
 void
 anv_ccs_resolve(struct anv_cmd_buffer * const cmd_buffer,
-                const struct anv_state surface_state,
                 const struct anv_image * const image,
                 VkImageAspectFlagBits aspect,
-                const uint8_t level, const uint32_t layer_count,
+                const uint8_t level,
+                const uint32_t start_layer, const uint32_t layer_count,
                 const enum blorp_fast_clear_op op)
 {
    assert(cmd_buffer && image);
@@ -1685,16 +1696,9 @@ anv_ccs_resolve(struct anv_cmd_buffer * const cmd_buffer,
 
    /* The resolved subresource range must have a CCS buffer. */
    assert(level < anv_image_aux_levels(image, aspect));
-   assert(layer_count <= anv_image_aux_layers(image, aspect, level));
-   assert(image->aspects & VK_IMAGE_ASPECT_ANY_COLOR_BIT && image->samples == 1);
-
-   /* Create a binding table for this surface state. */
-   uint32_t binding_table;
-   VkResult result =
-      binding_table_for_surface_state(cmd_buffer, surface_state,
-                                      &binding_table);
-   if (result != VK_SUCCESS)
-      return;
+   assert(start_layer + layer_count <=
+          anv_image_aux_layers(image, aspect, level));
+   assert(image->aspects & VK_IMAGE_ASPECT_ANY_COLOR_BIT_ANV && image->samples == 1);
 
    struct blorp_batch batch;
    blorp_batch_init(&cmd_buffer->device->blorp, &batch, cmd_buffer,
@@ -1704,11 +1708,11 @@ anv_ccs_resolve(struct anv_cmd_buffer * const cmd_buffer,
    get_blorp_surf_for_anv_image(cmd_buffer->device, image, aspect,
                                 fast_clear_aux_usage(image, aspect),
                                 &surf);
+   surf.clear_color_addr = anv_to_blorp_address(
+      anv_image_get_clear_color_addr(cmd_buffer->device, image, aspect, level));
 
-   blorp_ccs_resolve_attachment(&batch, binding_table, &surf, level,
-                                layer_count,
-                                image->planes[plane].surface.isl.format,
-                                op);
+   blorp_ccs_resolve(&batch, &surf, level, start_layer, layer_count,
+                     image->planes[plane].surface.isl.format, op);
 
    blorp_batch_finish(&batch);
 }

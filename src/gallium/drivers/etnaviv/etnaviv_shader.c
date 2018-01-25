@@ -179,6 +179,14 @@ etna_link_shaders(struct etna_context *ctx, struct compiled_shader_state *cs,
    cs->GL_VARYING_COMPONENT_USE[0] = component_use[0];
    cs->GL_VARYING_COMPONENT_USE[1] = component_use[1];
 
+   cs->GL_HALTI5_SH_SPECIALS =
+      0x7f7f0000 | /* unknown bits, probably other PS inputs */
+      /* pointsize is last (see above) */
+      VIVS_GL_HALTI5_SH_SPECIALS_VS_PSIZE_OUT((vs->vs_pointsize_out_reg != -1) ?
+                                              cs->VS_OUTPUT_COUNT * 4 : 0x00) |
+      VIVS_GL_HALTI5_SH_SPECIALS_PS_PCOORD_IN((link.pcoord_varying_comp_ofs != -1) ?
+                                              link.pcoord_varying_comp_ofs : 0x7f);
+
    /* reference instruction memory */
    cs->vs_inst_mem_size = vs->code_size;
    cs->VS_INST_MEM = vs->code;

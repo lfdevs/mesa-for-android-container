@@ -214,12 +214,12 @@ struct PA_STATE;
 
 // function signature for pipeline stages that execute after primitive assembly
 typedef void(*PFN_PROCESS_PRIMS)(DRAW_CONTEXT *pDC, PA_STATE& pa, uint32_t workerId, simdvector prims[], 
-    uint32_t primMask, simdscalari const &primID);
+    uint32_t primMask, simdscalari const &primID, simdscalari const &viewportIdx, simdscalari const &rtIdx);
 
 #if ENABLE_AVX512_SIMD16
 // function signature for pipeline stages that execute after primitive assembly
 typedef void(SIMDCALL *PFN_PROCESS_PRIMS_SIMD16)(DRAW_CONTEXT *pDC, PA_STATE& pa, uint32_t workerId, simd16vector prims[],
-    uint32_t primMask, simd16scalari const &primID);
+    uint32_t primMask, simd16scalari const &primID, simd16scalari const &viewportIdx, simd16scalari const &rtIdx);
 
 #endif
 OSALIGNLINE(struct) API_STATE
@@ -480,6 +480,7 @@ struct SWR_CONTEXT
 
     THREAD_POOL threadPool; // Thread pool associated with this context
     SWR_THREADING_INFO threadInfo;
+    SWR_API_THREADING_INFO apiThreadInfo;
 
     uint32_t MAX_DRAWS_IN_FLIGHT;
 

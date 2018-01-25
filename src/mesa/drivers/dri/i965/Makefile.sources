@@ -14,6 +14,7 @@ i965_FILES = \
 	brw_cs.h \
 	brw_curbe.c \
 	brw_defines.h \
+	brw_disk_cache.c \
 	brw_draw.c \
 	brw_draw.h \
 	brw_draw_upload.c \
@@ -32,10 +33,12 @@ i965_FILES = \
 	brw_nir_uniforms.cpp \
 	brw_object_purgeable.c \
 	brw_pipe_control.c \
+	brw_pipe_control.h \
 	brw_performance_query.h \
 	brw_performance_query.c \
 	brw_program.c \
 	brw_program.h \
+	brw_program_binary.c \
 	brw_program_cache.c \
 	brw_primitive_restart.c \
 	brw_queryobj.c \
@@ -167,4 +170,8 @@ i965_oa_GENERATED_FILES = \
 	brw_oa_kblgt3.h \
 	brw_oa_kblgt3.c \
 	brw_oa_glk.h \
-	brw_oa_glk.c
+	brw_oa_glk.c \
+	brw_oa_cflgt2.h \
+	brw_oa_cflgt2.c \
+	brw_oa_cflgt3.h \
+	brw_oa_cflgt3.c

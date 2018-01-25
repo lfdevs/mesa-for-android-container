@@ -56,6 +56,9 @@ sb_ostream& operator << (sb_ostream &o, value &v) {
 			case SV_EXEC_MASK: o << "EM"; break;
 			case SV_VALID_MASK: o << "VM"; break;
 			case SV_GEOMETRY_EMIT: o << "GEOMETRY_EMIT"; break;
+			case SV_LDS_RW: o << "LDS_RW"; break;
+			case SV_LDS_OQA: o << "LDS_OQA"; break;
+			case SV_LDS_OQB: o << "LDS_OQB"; break;
 			default: o << "???specialreg"; break;
 		}
 		break;

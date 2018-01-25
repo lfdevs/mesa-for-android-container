@@ -7,12 +7,14 @@ C_SOURCES := \
 	r600_pipe_common.h \
 	r600_query.c \
 	r600_query.h \
-	r600_test_dma.c \
 	r600_texture.c \
 	radeon_uvd.c \
 	radeon_uvd.h \
 	radeon_vcn_dec.c \
 	radeon_vcn_dec.h \
+	radeon_vcn_enc_1_2.c \
+	radeon_vcn_enc.c \
+	radeon_vcn_enc.h \
 	radeon_vce_40_2_2.c \
 	radeon_vce_50.c \
 	radeon_vce_52.c \

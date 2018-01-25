@@ -1024,6 +1024,7 @@ public:
       bool liveOnly; // only execute on live pixels of a quad (optimization)
       bool levelZero;
       bool derivAll;
+      bool bindless;
 
       int8_t useOffsets; // 0, 1, or 4 for textureGatherOffsets
       int8_t offset[3]; // only used on nv50

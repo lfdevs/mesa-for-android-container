@@ -28,6 +28,7 @@
 #include "i915_context.h"
 #include "main/api_exec.h"
 #include "main/framebuffer.h"
+#include "main/extensions.h"
 #include "main/imports.h"
 #include "main/macros.h"
 #include "main/version.h"
@@ -289,6 +290,7 @@ i915CreateContext(int api,
    _tnl_allow_vertex_fog(ctx, 0);
    _tnl_allow_pixel_fog(ctx, 1);
 
+   _mesa_override_extensions(ctx);
    _mesa_compute_version(ctx);
 
    _mesa_initialize_dispatch_tables(ctx);

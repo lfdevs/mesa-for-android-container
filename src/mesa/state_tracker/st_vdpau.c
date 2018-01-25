@@ -31,6 +31,8 @@
  *
  */
 
+#ifdef HAVE_ST_VDPAU
+
 #include "main/texobj.h"
 #include "main/teximage.h"
 #include "main/errors.h"
@@ -47,8 +49,6 @@
 #include "st_texture.h"
 #include "st_format.h"
 #include "st_cb_flush.h"
-
-#ifdef HAVE_ST_VDPAU
 
 #include "state_tracker/vdpau_interop.h"
 #include "state_tracker/vdpau_dmabuf.h"
@@ -262,16 +262,16 @@ st_vdpau_unmap_surface(struct gl_context *ctx, GLenum target, GLenum access,
 
    _mesa_dirty_texobj(ctx, texObj);
 
+   /* NV_vdpau_interop does not specify an explicit synchronization mechanism
+    * between the GL and VDPAU contexts. Provide automatic synchronization here.
+    */
    st_flush(st, NULL, 0);
 }
-
-#endif
 
 void
 st_init_vdpau_functions(struct dd_function_table *functions)
 {
-#ifdef HAVE_ST_VDPAU
    functions->VDPAUMapSurface = st_vdpau_map_surface;
    functions->VDPAUUnmapSurface = st_vdpau_unmap_surface;
-#endif
 }
+#endif

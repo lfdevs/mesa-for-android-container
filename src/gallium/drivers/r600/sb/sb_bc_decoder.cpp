@@ -415,7 +415,10 @@ int bc_decoder::decode_fetch(unsigned & i, bc_fetch& bc) {
 		unsigned gds_op;
 		if (mem_op == 4) {
 			gds_op = (dw1 >> 9) & 0x1f;
-			fetch_opcode = FETCH_OP_GDS_ADD + gds_op;
+			if ((dw1 >> 9) & 0x20)
+				fetch_opcode = FETCH_OP_GDS_ADD_RET + gds_op;
+			else
+				fetch_opcode = FETCH_OP_GDS_ADD + gds_op;
 		} else if (mem_op == 5)
 			fetch_opcode = FETCH_OP_TF_WRITE;
 		bc.set_op(fetch_opcode);
@@ -512,6 +515,10 @@ int bc_decoder::decode_fetch_gds(unsigned & i, bc_fetch& bc) {
 	tmp = w1.get_DST_REL_MODE();
 	bc.dst_rel_global = (tmp == 2);
 	bc.src2_gpr = w1.get_SRC_GPR();
+	bc.alloc_consume = w1.get_ALLOC_CONSUME();
+	bc.uav_id = w1.get_UAV_ID();
+	bc.uav_index_mode = w1.get_UAV_INDEX_MODE();
+	bc.bcast_first_req = w1.get_BCAST_FIRST_REQ();
 
 	MEM_GDS_WORD2_EGCM w2(dw2);
 	bc.dst_sel[0] = w2.get_DST_SEL_X();

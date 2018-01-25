@@ -181,6 +181,16 @@ static void cull_tri( struct draw_stage *stage,
             /* triangle is not culled, pass to next stage */
             stage->next->tri( stage->next, header );
          }
+      } else {
+         /*
+          * With zero area, this is back facing (because the spec says
+          * it's front facing if sign is positive?).
+          * Some apis apparently do not allow us to cull zero area tris
+          * here, in case of fill mode line (which is rather lame).
+          */
+         if ((PIPE_FACE_BACK & cull_stage(stage)->cull_face) == 0) {
+            stage->next->tri( stage->next, header );
+         }
       }
    }
 }

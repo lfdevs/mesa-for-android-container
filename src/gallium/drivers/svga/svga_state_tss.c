@@ -40,7 +40,8 @@
 /**
  * Called when tearing down a context to free resources and samplers.
  */
-void svga_cleanup_tss_binding(struct svga_context *svga)
+void
+svga_cleanup_tss_binding(struct svga_context *svga)
 {
    const enum pipe_shader_type shader = PIPE_SHADER_FRAGMENT;
    unsigned i;
@@ -107,7 +108,7 @@ emit_tex_binding_unit(struct svga_context *svga,
        view->max_lod != max_lod) {
 
       svga_sampler_view_reference(&view->v, NULL);
-      pipe_resource_reference( &view->texture, texture );
+      pipe_resource_reference(&view->texture, texture);
 
       view->dirty = TRUE;
       view->min_lod = min_lod;
@@ -138,14 +139,13 @@ emit_tex_binding_unit(struct svga_context *svga,
 
 
 static enum pipe_error
-update_tss_binding(struct svga_context *svga, 
-                   unsigned dirty )
+update_tss_binding(struct svga_context *svga, unsigned dirty)
 {
    const enum pipe_shader_type shader = PIPE_SHADER_FRAGMENT;
    boolean reemit = svga->rebind.flags.texture_samplers;
    unsigned i;
-   unsigned count = MAX2( svga->curr.num_sampler_views[shader],
-                          svga->state.hw_draw.num_views );
+   unsigned count = MAX2(svga->curr.num_sampler_views[shader],
+                         svga->state.hw_draw.num_views);
 
    struct bind_queue queue;
 
@@ -153,7 +153,7 @@ update_tss_binding(struct svga_context *svga,
       return PIPE_OK;
 
    queue.bind_count = 0;
-   
+
    for (i = 0; i < count; i++) {
       emit_tex_binding_unit(svga, i,
                             svga->curr.sampler[shader][i],
@@ -181,9 +181,8 @@ update_tss_binding(struct svga_context *svga,
    if (queue.bind_count) {
       SVGA3dTextureState *ts;
 
-      if (SVGA3D_BeginSetTextureState( svga->swc,
-                                       &ts,
-                                       queue.bind_count ) != PIPE_OK)
+      if (SVGA3D_BeginSetTextureState(svga->swc, &ts,
+                                      queue.bind_count) != PIPE_OK)
          goto fail;
 
       for (i = 0; i < queue.bind_count; i++) {
@@ -210,11 +209,11 @@ update_tss_binding(struct svga_context *svga,
                                        NULL,
                                        handle,
                                        SVGA_RELOC_READ);
-         
+
          queue.bind[i].view->dirty = FALSE;
       }
 
-      SVGA_FIFOCommitAll( svga->swc );
+      SVGA_FIFOCommitAll(svga->swc);
    }
 
    svga->rebind.flags.texture_samplers = FALSE;
@@ -271,9 +270,7 @@ svga_reemit_tss_bindings(struct svga_context *svga)
    if (queue.bind_count) {
       SVGA3dTextureState *ts;
 
-      ret = SVGA3D_BeginSetTextureState(svga->swc,
-                                        &ts,
-                                        queue.bind_count);
+      ret = SVGA3D_BeginSetTextureState(svga->swc, &ts, queue.bind_count);
       if (ret != PIPE_OK) {
          return ret;
       }
@@ -312,8 +309,6 @@ struct svga_tracked_state svga_hw_tss_binding = {
 };
 
 
-/***********************************************************************
- */
 
 struct ts_queue {
    unsigned ts_count;
@@ -322,10 +317,7 @@ struct ts_queue {
 
 
 static inline void
-svga_queue_tss( struct ts_queue *q,
-                unsigned unit,
-                unsigned tss,
-                unsigned value )
+svga_queue_tss(struct ts_queue *q, unsigned unit, unsigned tss, unsigned value)
 {
    assert(q->ts_count < ARRAY_SIZE(q->ts));
    q->ts[q->ts_count].stage = unit;
@@ -340,7 +332,7 @@ do {                                                                    \
    assert(unit < ARRAY_SIZE(svga->state.hw_draw.ts));                     \
    STATIC_ASSERT(SVGA3D_TS_##token < ARRAY_SIZE(svga->state.hw_draw.ts[unit])); \
    if (svga->state.hw_draw.ts[unit][SVGA3D_TS_##token] != val) {        \
-      svga_queue_tss( queue, unit, SVGA3D_TS_##token, val );            \
+      svga_queue_tss(queue, unit, SVGA3D_TS_##token, val);             \
       svga->state.hw_draw.ts[unit][SVGA3D_TS_##token] = val;            \
    }                                                                    \
 } while (0)
@@ -351,7 +343,7 @@ do {                                                                    \
    assert(unit < ARRAY_SIZE(svga->state.hw_draw.ts));                     \
    STATIC_ASSERT(SVGA3D_TS_##token < ARRAY_SIZE(svga->state.hw_draw.ts[unit])); \
    if (svga->state.hw_draw.ts[unit][SVGA3D_TS_##token] != val) {        \
-      svga_queue_tss( queue, unit, SVGA3D_TS_##token, val );            \
+      svga_queue_tss(queue, unit, SVGA3D_TS_##token, val);              \
       svga->state.hw_draw.ts[unit][SVGA3D_TS_##token] = val;            \
    }                                                                    \
 } while (0)
@@ -388,8 +380,7 @@ emit_tss_unit(struct svga_context *svga, unsigned unit,
 }
 
 static enum pipe_error
-update_tss(struct svga_context *svga, 
-           unsigned dirty )
+update_tss(struct svga_context *svga, unsigned dirty)
 {
    const enum pipe_shader_type shader = PIPE_SHADER_FRAGMENT;
    unsigned i;
@@ -413,20 +404,16 @@ update_tss(struct svga_context *svga,
                     svga->polygon_stipple.sampler,
                     &queue);
    }
- 
+
    if (queue.ts_count) {
       SVGA3dTextureState *ts;
 
-      if (SVGA3D_BeginSetTextureState( svga->swc,
-                                       &ts,
-                                       queue.ts_count ) != PIPE_OK)
+      if (SVGA3D_BeginSetTextureState(svga->swc, &ts, queue.ts_count) != PIPE_OK)
          goto fail;
 
-      memcpy( ts,
-              queue.ts,
-              queue.ts_count * sizeof queue.ts[0]);
-      
-      SVGA_FIFOCommitAll( svga->swc );
+      memcpy(ts, queue.ts, queue.ts_count * sizeof queue.ts[0]);
+
+      SVGA_FIFOCommitAll(svga->swc);
    }
 
    return PIPE_OK;

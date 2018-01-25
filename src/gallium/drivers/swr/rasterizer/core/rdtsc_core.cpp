@@ -56,6 +56,8 @@ BUCKET_DESC gCoreBuckets[] = {
     { "FEClipTriangles", "", false, 0xffffffff },
     { "FECullZeroAreaAndBackface", "", false, 0xffffffff },
     { "FECullBetweenCenters", "", false, 0xffffffff },
+    { "FEEarlyRastEnter", "", false, 0xffffffff },
+    { "FEEarlyRastExit", "", false, 0xffffffff },
     { "FEProcessStoreTiles", "", true, 0xff39c864 },
     { "FEProcessInvalidateTiles", "", true, 0xffffffff },
     { "WorkerWorkOnFifoBE", "", false, 0xff40261c },

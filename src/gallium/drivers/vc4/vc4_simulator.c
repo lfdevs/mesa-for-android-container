@@ -619,6 +619,10 @@ vc4_simulator_get_param_ioctl(int fd, struct drm_vc4_get_param *args)
                 args->value = true;
                 return 0;
 
+        case DRM_VC4_PARAM_SUPPORTS_MADVISE:
+                errno = -EINVAL;
+                return -1;
+
         case DRM_VC4_PARAM_V3D_IDENT0:
                 args->value = 0x02000000;
                 return 0;

@@ -71,6 +71,13 @@ lp_build_sub(struct lp_build_context *bld,
              LLVMValueRef a,
              LLVMValueRef b);
 
+
+LLVMValueRef
+lp_build_mul_norm(struct gallivm_state *gallivm,
+                  struct lp_type wide_type,
+                  LLVMValueRef a,
+                  LLVMValueRef b);
+
 LLVMValueRef
 lp_build_mul(struct lp_build_context *bld,
              LLVMValueRef a,

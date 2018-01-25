@@ -29,7 +29,7 @@
  */
 
 #include "hud/hud_private.h"
-#include "os/os_time.h"
+#include "util/os_time.h"
 #include "os/os_thread.h"
 #include "util/u_memory.h"
 #include "util/u_queue.h"
@@ -144,14 +144,15 @@ struct cpu_info {
 };
 
 static void
-query_cpu_load(struct hud_graph *gr)
+query_cpu_load(struct hud_graph *gr, struct pipe_context *pipe)
 {
    struct cpu_info *info = gr->query_data;
    uint64_t now = os_time_get();
 
    if (info->last_time) {
       if (info->last_time + gr->pane->period <= now) {
-         uint64_t cpu_busy, cpu_total, cpu_load;
+         uint64_t cpu_busy, cpu_total;
+         double cpu_load;
 
          get_cpu_stats(info->cpu_index, &cpu_busy, &cpu_total);
 
@@ -173,7 +174,7 @@ query_cpu_load(struct hud_graph *gr)
 }
 
 static void
-free_query_data(void *p)
+free_query_data(void *p, struct pipe_context *pipe)
 {
    FREE(p);
 }
@@ -238,7 +239,7 @@ struct thread_info {
 };
 
 static void
-query_api_thread_busy_status(struct hud_graph *gr)
+query_api_thread_busy_status(struct hud_graph *gr, struct pipe_context *pipe)
 {
    struct thread_info *info = gr->query_data;
    int64_t now = os_time_get_nano();
@@ -258,15 +259,15 @@ query_api_thread_busy_status(struct hud_graph *gr)
                thread_now = 0;
          }
 
-         unsigned percent = (thread_now - info->last_thread_time) * 100 /
+         double percent = (thread_now - info->last_thread_time) * 100.0 /
                             (now - info->last_time);
 
          /* Check if the context changed a thread, so that we don't show
           * a random value. When a thread is changed, the new thread clock
           * is different, which can result in "percent" being very high.
           */
-         if (percent > 100)
-            percent = 0;
+         if (percent > 100.0)
+            percent = 0.0;
          hud_graph_add_value(gr, percent);
 
          info->last_thread_time = thread_now;
@@ -335,7 +336,7 @@ static unsigned get_counter(struct hud_graph *gr, enum hud_counter counter)
 }
 
 static void
-query_thread_counter(struct hud_graph *gr)
+query_thread_counter(struct hud_graph *gr, struct pipe_context *pipe)
 {
    struct counter_info *info = gr->query_data;
    int64_t now = os_time_get_nano();

@@ -958,11 +958,7 @@ static GLboolean
 intelCreateContext(gl_api api,
                    const struct gl_config * mesaVis,
                    __DRIcontext * driContextPriv,
-                   unsigned major_version,
-                   unsigned minor_version,
-                   uint32_t flags,
-                   bool notify_reset,
-                   unsigned priority,
+                   const struct __DriverContextConfig *ctx_config,
                    unsigned *error,
                    void *sharedContextPrivate)
 {
@@ -971,24 +967,28 @@ intelCreateContext(gl_api api,
    __DRIscreen *sPriv = driContextPriv->driScreenPriv;
    struct intel_screen *intelScreen = sPriv->driverPrivate;
 
-   if (flags & ~(__DRI_CTX_FLAG_DEBUG | __DRI_CTX_FLAG_NO_ERROR)) {
+   if (ctx_config->flags & ~(__DRI_CTX_FLAG_DEBUG | __DRI_CTX_FLAG_NO_ERROR)) {
       *error = __DRI_CTX_ERROR_UNKNOWN_FLAG;
       return false;
    }
 
-   if (notify_reset) {
+   if (ctx_config->attribute_mask) {
       *error = __DRI_CTX_ERROR_UNKNOWN_ATTRIBUTE;
       return false;
    }
 
    if (IS_GEN3(intelScreen->deviceID)) {
       success = i915CreateContext(api, mesaVis, driContextPriv,
-                                  major_version, minor_version, flags,
+                                  ctx_config->major_version,
+                                  ctx_config->minor_version,
+                                  ctx_config->flags,
                                   error, sharedContextPrivate);
    } else {
       intelScreen->no_vbo = true;
       success = i830CreateContext(api, mesaVis, driContextPriv,
-                                  major_version, minor_version, flags,
+                                  ctx_config->major_version,
+                                  ctx_config->minor_version,
+                                  ctx_config->flags,
                                   error, sharedContextPrivate);
    }
 

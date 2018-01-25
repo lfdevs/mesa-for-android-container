@@ -24,7 +24,8 @@
 include Makefile.sources
 
 EXTRA_DIST = \
-	r200_maos_arrays.c
+	r200_maos_arrays.c \
+	meson.build
 
 AM_CFLAGS = \
 	-DRADEON_R200 \

@@ -278,7 +278,7 @@ stw_create_context_attribs(HDC hdc, INT iLayerPlane, DHGLRC hShareContext,
    ctx->st->st_manager_private = (void *) ctx;
 
    if (ctx->st->cso_context) {
-      ctx->hud = hud_create(ctx->st->pipe, ctx->st->cso_context);
+      ctx->hud = hud_create(ctx->st->cso_context, NULL);
    }
 
    stw_lock_contexts(stw_dev);
@@ -291,7 +291,7 @@ stw_create_context_attribs(HDC hdc, INT iLayerPlane, DHGLRC hShareContext,
       if (old_ctx) {
          /* free the old context data associated with this handle */
          if (old_ctx->hud) {
-            hud_destroy(old_ctx->hud);
+            hud_destroy(old_ctx->hud, NULL);
          }
          ctx->st->destroy(old_ctx->st);
          FREE(old_ctx);
@@ -316,7 +316,7 @@ stw_create_context_attribs(HDC hdc, INT iLayerPlane, DHGLRC hShareContext,
 
 no_hglrc:
    if (ctx->hud) {
-      hud_destroy(ctx->hud);
+      hud_destroy(ctx->hud, NULL);
    }
    ctx->st->destroy(ctx->st);
 no_st_ctx:
@@ -348,7 +348,7 @@ DrvDeleteContext(DHGLRC dhglrc)
          stw_dev->stapi->make_current(stw_dev->stapi, NULL, NULL, NULL);
 
       if (ctx->hud) {
-         hud_destroy(ctx->hud);
+         hud_destroy(ctx->hud, NULL);
       }
 
       ctx->st->destroy(ctx->st);

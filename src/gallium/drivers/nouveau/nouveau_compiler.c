@@ -122,6 +122,7 @@ nouveau_codegen(int chipset, int type, struct tgsi_token tokens[],
 
    info.optLevel = debug_get_num_option("NV50_PROG_OPTIMIZE", 3);
    info.dbgFlags = debug_get_num_option("NV50_PROG_DEBUG", 0);
+   info.omitLineNum = debug_get_num_option("NV50_PROG_DEBUG_OMIT_LINENUM", 0);
 
    ret = nv50_ir_generate_code(&info);
    if (ret) {

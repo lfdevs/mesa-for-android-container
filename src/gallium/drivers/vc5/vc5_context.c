@@ -134,8 +134,13 @@ vc5_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
         pctx->flush = vc5_pipe_flush;
         pctx->invalidate_resource = vc5_invalidate_resource;
 
-        vc5_draw_init(pctx);
-        vc5_state_init(pctx);
+        if (screen->devinfo.ver >= 41) {
+                v3d41_draw_init(pctx);
+                v3d41_state_init(pctx);
+        } else {
+                v3d33_draw_init(pctx);
+                v3d33_state_init(pctx);
+        }
         vc5_program_init(pctx);
         vc5_query_init(pctx);
         vc5_resource_context_init(pctx);
@@ -162,6 +167,7 @@ vc5_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
         V3D_DEBUG |= saved_shaderdb_flag;
 
         vc5->sample_mask = (1 << VC5_MAX_SAMPLES) - 1;
+        vc5->active_queries = true;
 
         return &vc5->base;
 

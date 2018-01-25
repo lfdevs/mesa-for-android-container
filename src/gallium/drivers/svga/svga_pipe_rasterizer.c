@@ -233,7 +233,7 @@ svga_create_rasterizer_state(struct pipe_context *pipe,
          rast->need_pipeline |= SVGA_PIPELINE_FLAG_LINES;
          rast->need_pipeline_lines_str = "line stipple";
       }
-   } 
+   }
 
    if (!svga_have_vgpu10(svga) && templ->point_smooth) {
       rast->need_pipeline |= SVGA_PIPELINE_FLAG_POINTS;
@@ -277,8 +277,7 @@ svga_create_rasterizer_state(struct pipe_context *pipe,
          break;
 
       case PIPE_FACE_NONE:
-         if (fill_front != fill_back || offset_front != offset_back) 
-         {
+         if (fill_front != fill_back || offset_front != offset_back) {
             /* Always need the draw module to work out different
              * front/back fill modes:
              */
@@ -304,8 +303,7 @@ svga_create_rasterizer_state(struct pipe_context *pipe,
           (templ->flatshade ||
            templ->light_twoside ||
            offset ||
-           templ->cull_face != PIPE_FACE_NONE)) 
-      {
+           templ->cull_face != PIPE_FACE_NONE)) {
          fill = PIPE_POLYGON_MODE_FILL;
          rast->need_pipeline |= SVGA_PIPELINE_FLAG_TRIS;
          rast->need_pipeline_tris_str = "unfilled primitives with no index manipulation";
@@ -315,8 +313,7 @@ svga_create_rasterizer_state(struct pipe_context *pipe,
        * then we also need the pipeline for tris.
        */
       if (fill == PIPE_POLYGON_MODE_LINE &&
-          (rast->need_pipeline & SVGA_PIPELINE_FLAG_LINES))
-      {
+          (rast->need_pipeline & SVGA_PIPELINE_FLAG_LINES)) {
          fill = PIPE_POLYGON_MODE_FILL;
          rast->need_pipeline |= SVGA_PIPELINE_FLAG_TRIS;
          rast->need_pipeline_tris_str = "decomposing lines";
@@ -325,8 +322,7 @@ svga_create_rasterizer_state(struct pipe_context *pipe,
       /* Similarly for points:
        */
       if (fill == PIPE_POLYGON_MODE_POINT &&
-          (rast->need_pipeline & SVGA_PIPELINE_FLAG_POINTS))
-      {
+          (rast->need_pipeline & SVGA_PIPELINE_FLAG_POINTS)) {
          fill = PIPE_POLYGON_MODE_FILL;
          rast->need_pipeline |= SVGA_PIPELINE_FLAG_TRIS;
          rast->need_pipeline_tris_str = "decomposing points";

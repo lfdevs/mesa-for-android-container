@@ -26,7 +26,7 @@ from argparse import FileType
 
 '''
 '''
-def gen_llvm_type(type, name, is_pointer, is_pointer_pointer, is_array, is_array_array, array_count, array_count1, is_llvm_struct, is_llvm_enum, is_llvm_pfn, output_file):
+def gen_llvm_type(type, name, idx, is_pointer, is_pointer_pointer, is_array, is_array_array, array_count, array_count1, is_llvm_struct, is_llvm_enum, is_llvm_pfn, output_file):
 
     llvm_type = ''
 
@@ -60,6 +60,10 @@ def gen_llvm_type(type, name, is_pointer, is_pointer_pointer, is_array, is_array
             llvm_type = 'VectorType::get(Type::getFloatTy(ctx), pJitMgr->mVWidth)'
         elif type == 'simdscalari':
             llvm_type = 'VectorType::get(Type::getInt32Ty(ctx), pJitMgr->mVWidth)'
+        elif type == 'simd16scalar':
+            llvm_type = 'VectorType::get(Type::getFloatTy(ctx), 16)'
+        elif type == 'simd16scalari':
+            llvm_type = 'VectorType::get(Type::getInt32Ty(ctx), 16)'
         elif type == '__m128i':
             llvm_type = 'VectorType::get(Type::getInt32Ty(ctx), 4)'
         elif type == 'SIMD256::Float':
@@ -94,6 +98,7 @@ def gen_llvm_type(type, name, is_pointer, is_pointer_pointer, is_array, is_array
 
     return {
         'name'  : name,
+        'lineNum' : idx,
         'type'  : llvm_type,
     }
 
@@ -125,6 +130,7 @@ def gen_llvm_types(input_file, output_file):
 
                 type_entry = {
                     'name'      : struct_name,
+                    'lineNum'   : idx+1,
                     'members'   : [],
                 }
 
@@ -290,7 +296,7 @@ def gen_llvm_types(input_file, output_file):
                         if type is not None:
                             type_entry['members'].append(
                                 gen_llvm_type(
-                                    type, name, is_pointer, is_pointer_pointer, is_array, is_array_array,
+                                    type, name, idx+1, is_pointer, is_pointer_pointer, is_array, is_array_array,
                                     array_count, array_count1, is_llvm_struct, is_llvm_enum, is_llvm_pfn, output_file))
 
                     # Detect end of structure
@@ -307,7 +313,9 @@ def gen_llvm_types(input_file, output_file):
         output_file,
         cmdline=sys.argv,
         filename=os.path.basename(output_file),
-        types=types)
+        types=types,
+        input_dir=os.path.dirname(input_file.name),
+        input_file=os.path.basename(input_file.name))
 
 '''
     Function which is invoked when this script is started from a command line.

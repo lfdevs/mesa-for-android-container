@@ -34,9 +34,6 @@
 #include "main/state.h"
 
 #include "brw_context.h"
-#if GEN_GEN == 6
-#include "brw_defines.h"
-#endif
 #include "brw_draw.h"
 #include "brw_multisample_state.h"
 #include "brw_state.h"
@@ -1626,6 +1623,16 @@ genX(upload_sf)(struct brw_context *brw)
          sf.SmoothPointEnable = true;
 #endif
 
+#if GEN_GEN == 10
+      /* _NEW_BUFFERS
+       * Smooth Point Enable bit MUST not be set when NUM_MULTISAMPLES > 1.
+       */
+      const bool multisampled_fbo =
+         _mesa_geometric_samples(ctx->DrawBuffer) > 1;
+      if (multisampled_fbo)
+         sf.SmoothPointEnable = false;
+#endif
+
 #if GEN_IS_G4X || GEN_GEN >= 5
       sf.AALineDistanceMode = AALINEDISTANCE_TRUE;
 #endif
@@ -1681,7 +1688,8 @@ static const struct brw_tracked_state genX(sf_state) = {
                _NEW_POINT |
                _NEW_PROGRAM |
                (GEN_GEN >= 6 ? _NEW_MULTISAMPLE : 0) |
-               (GEN_GEN <= 7 ? _NEW_BUFFERS | _NEW_POLYGON : 0),
+               (GEN_GEN <= 7 ? _NEW_BUFFERS | _NEW_POLYGON : 0) |
+               (GEN_GEN == 10 ? _NEW_BUFFERS : 0),
       .brw   = BRW_NEW_BLORP |
                BRW_NEW_VUE_MAP_GEOM_OUT |
                (GEN_GEN <= 5 ? BRW_NEW_BATCH |
@@ -3117,9 +3125,8 @@ genX(upload_push_constant_packets)(struct brw_context *brw)
       }
 
       stage_state->push_constants_dirty = false;
+      brw->ctx.NewDriverState |= GEN_GEN >= 9 ? BRW_NEW_SURFACES : 0;
    }
-
-   brw->ctx.NewDriverState |= GEN_GEN >= 9 ? BRW_NEW_SURFACES : 0;
 }
 
 const struct brw_tracked_state genX(push_constant_packets) = {
@@ -3138,13 +3145,11 @@ genX(upload_vs_push_constants)(struct brw_context *brw)
    struct brw_stage_state *stage_state = &brw->vs.base;
 
    /* BRW_NEW_VERTEX_PROGRAM */
-   const struct brw_program *vp =
-      brw_program_const(brw->programs[MESA_SHADER_VERTEX]);
+   const struct gl_program *vp = brw->programs[MESA_SHADER_VERTEX];
    /* BRW_NEW_VS_PROG_DATA */
    const struct brw_stage_prog_data *prog_data = brw->vs.base.prog_data;
 
-   _mesa_shader_write_subroutine_indices(&brw->ctx, MESA_SHADER_VERTEX);
-   gen6_upload_push_constants(brw, &vp->program, prog_data, stage_state);
+   gen6_upload_push_constants(brw, vp, prog_data, stage_state);
 }
 
 static const struct brw_tracked_state genX(vs_push_constants) = {
@@ -3165,16 +3170,12 @@ genX(upload_gs_push_constants)(struct brw_context *brw)
    struct brw_stage_state *stage_state = &brw->gs.base;
 
    /* BRW_NEW_GEOMETRY_PROGRAM */
-   const struct brw_program *gp =
-      brw_program_const(brw->programs[MESA_SHADER_GEOMETRY]);
+   const struct gl_program *gp = brw->programs[MESA_SHADER_GEOMETRY];
 
-   if (gp) {
-      /* BRW_NEW_GS_PROG_DATA */
-      struct brw_stage_prog_data *prog_data = brw->gs.base.prog_data;
+   /* BRW_NEW_GS_PROG_DATA */
+   struct brw_stage_prog_data *prog_data = brw->gs.base.prog_data;
 
-      _mesa_shader_write_subroutine_indices(&brw->ctx, MESA_SHADER_GEOMETRY);
-      gen6_upload_push_constants(brw, &gp->program, prog_data, stage_state);
-   }
+   gen6_upload_push_constants(brw, gp, prog_data, stage_state);
 }
 
 static const struct brw_tracked_state genX(gs_push_constants) = {
@@ -3194,14 +3195,11 @@ genX(upload_wm_push_constants)(struct brw_context *brw)
 {
    struct brw_stage_state *stage_state = &brw->wm.base;
    /* BRW_NEW_FRAGMENT_PROGRAM */
-   const struct brw_program *fp =
-      brw_program_const(brw->programs[MESA_SHADER_FRAGMENT]);
+   const struct gl_program *fp = brw->programs[MESA_SHADER_FRAGMENT];
    /* BRW_NEW_FS_PROG_DATA */
    const struct brw_stage_prog_data *prog_data = brw->wm.base.prog_data;
 
-   _mesa_shader_write_subroutine_indices(&brw->ctx, MESA_SHADER_FRAGMENT);
-
-   gen6_upload_push_constants(brw, &fp->program, prog_data, stage_state);
+   gen6_upload_push_constants(brw, fp, prog_data, stage_state);
 }
 
 static const struct brw_tracked_state genX(wm_push_constants) = {
@@ -3297,7 +3295,8 @@ genX(upload_multisample_state)(struct brw_context *brw)
 
 static const struct brw_tracked_state genX(multisample_state) = {
    .dirty = {
-      .mesa = _NEW_MULTISAMPLE,
+      .mesa = _NEW_MULTISAMPLE |
+              (GEN_GEN == 10 ? _NEW_BUFFERS : 0),
       .brw = BRW_NEW_BLORP |
              BRW_NEW_CONTEXT |
              BRW_NEW_NUM_SAMPLES,
@@ -4032,15 +4031,11 @@ genX(upload_tes_push_constants)(struct brw_context *brw)
 {
    struct brw_stage_state *stage_state = &brw->tes.base;
    /* BRW_NEW_TESS_PROGRAMS */
-   const struct brw_program *tep =
-      brw_program_const(brw->programs[MESA_SHADER_TESS_EVAL]);
+   const struct gl_program *tep = brw->programs[MESA_SHADER_TESS_EVAL];
 
-   if (tep) {
-      /* BRW_NEW_TES_PROG_DATA */
-      const struct brw_stage_prog_data *prog_data = brw->tes.base.prog_data;
-      _mesa_shader_write_subroutine_indices(&brw->ctx, MESA_SHADER_TESS_EVAL);
-      gen6_upload_push_constants(brw, &tep->program, prog_data, stage_state);
-   }
+   /* BRW_NEW_TES_PROG_DATA */
+   const struct brw_stage_prog_data *prog_data = brw->tes.base.prog_data;
+   gen6_upload_push_constants(brw, tep, prog_data, stage_state);
 }
 
 static const struct brw_tracked_state genX(tes_push_constants) = {
@@ -4059,17 +4054,12 @@ genX(upload_tcs_push_constants)(struct brw_context *brw)
 {
    struct brw_stage_state *stage_state = &brw->tcs.base;
    /* BRW_NEW_TESS_PROGRAMS */
-   const struct brw_program *tcp =
-      brw_program_const(brw->programs[MESA_SHADER_TESS_CTRL]);
-   bool active = brw->programs[MESA_SHADER_TESS_EVAL];
+   const struct gl_program *tcp = brw->programs[MESA_SHADER_TESS_CTRL];
 
-   if (active) {
-      /* BRW_NEW_TCS_PROG_DATA */
-      const struct brw_stage_prog_data *prog_data = brw->tcs.base.prog_data;
+   /* BRW_NEW_TCS_PROG_DATA */
+   const struct brw_stage_prog_data *prog_data = brw->tcs.base.prog_data;
 
-      _mesa_shader_write_subroutine_indices(&brw->ctx, MESA_SHADER_TESS_CTRL);
-      gen6_upload_push_constants(brw, &tcp->program, prog_data, stage_state);
-   }
+   gen6_upload_push_constants(brw, tcp, prog_data, stage_state);
 }
 
 static const struct brw_tracked_state genX(tcs_push_constants) = {
@@ -4095,8 +4085,7 @@ genX(upload_cs_push_constants)(struct brw_context *brw)
    struct brw_stage_state *stage_state = &brw->cs.base;
 
    /* BRW_NEW_COMPUTE_PROGRAM */
-   const struct brw_program *cp =
-      (struct brw_program *) brw->programs[MESA_SHADER_COMPUTE];
+   const struct gl_program *cp = brw->programs[MESA_SHADER_COMPUTE];
 
    if (cp) {
       /* BRW_NEW_CS_PROG_DATA */
@@ -4104,8 +4093,7 @@ genX(upload_cs_push_constants)(struct brw_context *brw)
          brw_cs_prog_data(brw->cs.base.prog_data);
 
       _mesa_shader_write_subroutine_indices(&brw->ctx, MESA_SHADER_COMPUTE);
-      brw_upload_cs_push_constants(brw, &cp->program, cs_prog_data,
-                                   stage_state);
+      brw_upload_cs_push_constants(brw, cp, cs_prog_data, stage_state);
    }
 }
 
@@ -4181,30 +4169,49 @@ genX(upload_cs_state)(struct brw_context *brw)
    uint32_t *bind = brw_state_batch(brw, prog_data->binding_table.size_bytes,
                                     32, &stage_state->bind_bo_offset);
 
+   /* The MEDIA_VFE_STATE documentation for Gen8+ says:
+    *
+    * "A stalling PIPE_CONTROL is required before MEDIA_VFE_STATE unless
+    *  the only bits that are changed are scoreboard related: Scoreboard
+    *  Enable, Scoreboard Type, Scoreboard Mask, Scoreboard * Delta. For
+    *  these scoreboard related states, a MEDIA_STATE_FLUSH is sufficient."
+    *
+    * Earlier generations say "MI_FLUSH" instead of "stalling PIPE_CONTROL",
+    * but MI_FLUSH isn't really a thing, so we assume they meant PIPE_CONTROL.
+    */
+   brw_emit_pipe_control_flush(brw, PIPE_CONTROL_CS_STALL);
+
    brw_batch_emit(brw, GENX(MEDIA_VFE_STATE), vfe) {
       if (prog_data->total_scratch) {
-         uint32_t bo_offset;
+         uint32_t per_thread_scratch_value;
 
          if (GEN_GEN >= 8) {
             /* Broadwell's Per Thread Scratch Space is in the range [0, 11]
              * where 0 = 1k, 1 = 2k, 2 = 4k, ..., 11 = 2M.
              */
-            bo_offset = ffs(stage_state->per_thread_scratch) - 11;
+            per_thread_scratch_value = ffs(stage_state->per_thread_scratch) - 11;
          } else if (GEN_IS_HASWELL) {
             /* Haswell's Per Thread Scratch Space is in the range [0, 10]
              * where 0 = 2k, 1 = 4k, 2 = 8k, ..., 10 = 2M.
              */
-            bo_offset = ffs(stage_state->per_thread_scratch) - 12;
+            per_thread_scratch_value = ffs(stage_state->per_thread_scratch) - 12;
          } else {
             /* Earlier platforms use the range [0, 11] to mean [1kB, 12kB]
              * where 0 = 1kB, 1 = 2kB, 2 = 3kB, ..., 11 = 12kB.
              */
-            bo_offset = stage_state->per_thread_scratch / 1024 - 1;
+            per_thread_scratch_value = stage_state->per_thread_scratch / 1024 - 1;
          }
-         vfe.ScratchSpaceBasePointer =
-            rw_bo(stage_state->scratch_bo, bo_offset);
+         vfe.ScratchSpaceBasePointer = rw_bo(stage_state->scratch_bo, 0);
+         vfe.PerThreadScratchSpace = per_thread_scratch_value;
       }
 
+      /* If brw->screen->subslice_total is greater than one, then
+       * devinfo->max_cs_threads stores number of threads per sub-slice;
+       * thus we need to multiply by that number by subslices to get
+       * the actual maximum number of threads; the -1 is because the HW
+       * has a bias of 1 (would not make sense to say the maximum number
+       * of threads is 0).
+       */
       const uint32_t subslices = MAX2(brw->screen->subslice_total, 1);
       vfe.MaximumNumberofThreads = devinfo->max_cs_threads * subslices - 1;
       vfe.NumberofURBEntries = GEN_GEN >= 8 ? 2 : 0;
@@ -4257,7 +4264,7 @@ genX(upload_cs_state)(struct brw_context *brw)
    const struct GENX(INTERFACE_DESCRIPTOR_DATA) idd = {
       .KernelStartPointer = brw->cs.base.prog_offset,
       .SamplerStatePointer = stage_state->sampler_offset,
-      .SamplerCount = DIV_ROUND_UP(stage_state->sampler_count, 4) >> 2,
+      .SamplerCount = DIV_ROUND_UP(CLAMP(stage_state->sampler_count, 0, 16), 4),
       .BindingTablePointer = stage_state->bind_bo_offset,
       .ConstantURBEntryReadLength = cs_prog_data->push.per_thread.regs,
       .NumberofThreadsinGPGPUThreadGroup = cs_prog_data->threads,
@@ -4299,16 +4306,16 @@ static const struct brw_tracked_state genX(cs_state) = {
 static void
 genX(upload_raster)(struct brw_context *brw)
 {
-   struct gl_context *ctx = &brw->ctx;
+   const struct gl_context *ctx = &brw->ctx;
 
    /* _NEW_BUFFERS */
-   bool render_to_fbo = _mesa_is_user_fbo(ctx->DrawBuffer);
+   const bool render_to_fbo = _mesa_is_user_fbo(ctx->DrawBuffer);
 
    /* _NEW_POLYGON */
-   struct gl_polygon_attrib *polygon = &ctx->Polygon;
+   const struct gl_polygon_attrib *polygon = &ctx->Polygon;
 
    /* _NEW_POINT */
-   struct gl_point_attrib *point = &ctx->Point;
+   const struct gl_point_attrib *point = &ctx->Point;
 
    brw_batch_emit(brw, GENX(3DSTATE_RASTER), raster) {
       if (brw->polygon_front_bit == render_to_fbo)
@@ -4371,6 +4378,16 @@ genX(upload_raster)(struct brw_context *brw)
 
       /* _NEW_LINE */
       raster.AntialiasingEnable = ctx->Line.SmoothFlag;
+
+#if GEN_GEN == 10
+      /* _NEW_BUFFERS
+       * Antialiasing Enable bit MUST not be set when NUM_MULTISAMPLES > 1.
+       */
+      const bool multisampled_fbo =
+         _mesa_geometric_samples(ctx->DrawBuffer) > 1;
+      if (multisampled_fbo)
+         raster.AntialiasingEnable = false;
+#endif
 
       /* _NEW_SCISSOR */
       raster.ScissorRectangleEnable = ctx->Scissor.EnableFlags;
@@ -5481,19 +5498,14 @@ genX(init_atoms)(struct brw_context *brw)
        */
       &brw_vs_pull_constants,
       &brw_vs_ubo_surfaces,
-      &brw_vs_abo_surfaces,
       &brw_tcs_pull_constants,
       &brw_tcs_ubo_surfaces,
-      &brw_tcs_abo_surfaces,
       &brw_tes_pull_constants,
       &brw_tes_ubo_surfaces,
-      &brw_tes_abo_surfaces,
       &brw_gs_pull_constants,
       &brw_gs_ubo_surfaces,
-      &brw_gs_abo_surfaces,
       &brw_wm_pull_constants,
       &brw_wm_ubo_surfaces,
-      &brw_wm_abo_surfaces,
       &gen6_renderbuffer_surfaces,
       &brw_renderbuffer_read_surfaces,
       &brw_texture_surfaces,
@@ -5573,19 +5585,14 @@ genX(init_atoms)(struct brw_context *brw)
        */
       &brw_vs_pull_constants,
       &brw_vs_ubo_surfaces,
-      &brw_vs_abo_surfaces,
       &brw_tcs_pull_constants,
       &brw_tcs_ubo_surfaces,
-      &brw_tcs_abo_surfaces,
       &brw_tes_pull_constants,
       &brw_tes_ubo_surfaces,
-      &brw_tes_abo_surfaces,
       &brw_gs_pull_constants,
       &brw_gs_ubo_surfaces,
-      &brw_gs_abo_surfaces,
       &brw_wm_pull_constants,
       &brw_wm_ubo_surfaces,
-      &brw_wm_abo_surfaces,
       &gen6_renderbuffer_surfaces,
       &brw_renderbuffer_read_surfaces,
       &brw_texture_surfaces,
@@ -5655,7 +5662,6 @@ genX(init_atoms)(struct brw_context *brw)
       &genX(cs_push_constants),
       &genX(cs_pull_constants),
       &brw_cs_ubo_surfaces,
-      &brw_cs_abo_surfaces,
       &brw_cs_texture_surfaces,
       &brw_cs_work_groups_surface,
       &genX(cs_samplers),

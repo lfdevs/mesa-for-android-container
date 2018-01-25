@@ -927,6 +927,7 @@
              mdapi_group="3D Pipe/Output Merger"
              />
     <register_config type="NOA">
+        <register type="NOA" address="0x00009840" value="0x00000080" />
         <register type="NOA" address="0x000253A4" value="0x01600000" />
         <register type="NOA" address="0x00025440" value="0x00100000" />
         <register type="NOA" address="0x00025128" value="0x00000000" />
@@ -1681,6 +1682,7 @@
              mdapi_hw_unit_type="gpu"
              />
     <register_config type="NOA">
+        <register type="NOA" address="0x00009840" value="0x00000080" />
         <register type="NOA" address="0x000253A4" value="0x00000000" />
         <register type="NOA" address="0x0002681C" value="0x01F00800" />
         <register type="NOA" address="0x00026820" value="0x00001000" />
@@ -2003,6 +2005,7 @@
              mdapi_group="L3/Data Port"
              />
     <register_config type="NOA">
+        <register type="NOA" address="0x00009840" value="0x00000080" />
         <register type="NOA" address="0x0002681C" value="0x3EB00800" />
         <register type="NOA" address="0x00026820" value="0x00900000" />
         <register type="NOA" address="0x00025384" value="0x02AAAAAA" />
@@ -2775,6 +2778,7 @@
              mdapi_hw_unit_type="gpu"
              />
     <register_config type="NOA">
+        <register type="NOA" address="0x00009840" value="0x00000080" />
         <register type="NOA" address="0x000253A4" value="0x34300000" />
         <register type="NOA" address="0x00025440" value="0x2D800000" />
         <register type="NOA" address="0x00025444" value="0x00000008" />
@@ -3545,6 +3549,7 @@
              mdapi_hw_unit_type="gpu"
              />
     <register_config type="NOA">
+        <register type="NOA" address="0x00009840" value="0x00000080" />
         <register type="NOA" address="0x000253A4" value="0x34300000" />
         <register type="NOA" address="0x00025440" value="0x01500000" />
         <register type="NOA" address="0x00025444" value="0x00000120" />
@@ -4346,6 +4351,7 @@
              mdapi_group="3D Pipe/Output Merger"
              />
     <register_config type="NOA">
+        <register type="NOA" address="0x00009840" value="0x00000080" />
         <register type="NOA" address="0x0002EB9C" value="0x01906400" />
         <register type="NOA" address="0x0002FB9C" value="0x01906400" />
         <register type="NOA" address="0x000253A4" value="0x00000000" />

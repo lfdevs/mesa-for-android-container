@@ -30,7 +30,7 @@
  */
 
 #include "draw/draw_context.h"
-#include "os/os_time.h"
+#include "util/os_time.h"
 #include "pipe/p_defines.h"
 #include "util/u_memory.h"
 #include "sp_context.h"

@@ -25,12 +25,6 @@
  *
  **************************************************************************/
 
-/*
- * Authors:
- *      Christian König <christian.koenig@amd.com>
- *
- */
-
 #include <unistd.h>
 
 #include "util/u_memory.h"
@@ -39,11 +33,9 @@
 #include "vl/vl_defines.h"
 #include "vl/vl_video_buffer.h"
 
-#include "r600_pipe_common.h"
+#include "radeonsi/si_pipe.h"
 #include "radeon_video.h"
 #include "radeon_vce.h"
-
-#define UVD_FW_1_66_16 ((1 << 24) | (66 << 16) | (16 << 8))
 
 /* generate an stream handle */
 unsigned si_vid_alloc_stream_handle()
@@ -88,8 +80,8 @@ void si_vid_destroy_buffer(struct rvid_buffer *buffer)
 bool si_vid_resize_buffer(struct pipe_screen *screen, struct radeon_winsys_cs *cs,
 			  struct rvid_buffer *new_buf, unsigned new_size)
 {
-	struct r600_common_screen *rscreen = (struct r600_common_screen *)screen;
-	struct radeon_winsys* ws = rscreen->ws;
+	struct si_screen *sscreen = (struct si_screen *)screen;
+	struct radeon_winsys* ws = sscreen->ws;
 	unsigned bytes = MIN2(new_buf->res->buf->size, new_size);
 	struct rvid_buffer old_buf = *new_buf;
 	void *src = NULL, *dst = NULL;
@@ -219,150 +211,4 @@ void si_vid_join_surfaces(struct r600_common_context *rctx,
 	}
 
 	pb_reference(&pb, NULL);
-}
-
-int si_vid_get_video_param(struct pipe_screen *screen,
-			   enum pipe_video_profile profile,
-			   enum pipe_video_entrypoint entrypoint,
-			   enum pipe_video_cap param)
-{
-	struct r600_common_screen *rscreen = (struct r600_common_screen *)screen;
-	enum pipe_video_format codec = u_reduce_video_profile(profile);
-	struct radeon_info info;
-
-	rscreen->ws->query_info(rscreen->ws, &info);
-
-	if (entrypoint == PIPE_VIDEO_ENTRYPOINT_ENCODE) {
-		switch (param) {
-		case PIPE_VIDEO_CAP_SUPPORTED:
-			return codec == PIPE_VIDEO_FORMAT_MPEG4_AVC &&
-				si_vce_is_fw_version_supported(rscreen);
-		case PIPE_VIDEO_CAP_NPOT_TEXTURES:
-			return 1;
-		case PIPE_VIDEO_CAP_MAX_WIDTH:
-			return (rscreen->family < CHIP_TONGA) ? 2048 : 4096;
-		case PIPE_VIDEO_CAP_MAX_HEIGHT:
-			return (rscreen->family < CHIP_TONGA) ? 1152 : 2304;
-		case PIPE_VIDEO_CAP_PREFERED_FORMAT:
-			return PIPE_FORMAT_NV12;
-		case PIPE_VIDEO_CAP_PREFERS_INTERLACED:
-			return false;
-		case PIPE_VIDEO_CAP_SUPPORTS_INTERLACED:
-			return false;
-		case PIPE_VIDEO_CAP_SUPPORTS_PROGRESSIVE:
-			return true;
-		case PIPE_VIDEO_CAP_STACKED_FRAMES:
-			return (rscreen->family < CHIP_TONGA) ? 1 : 2;
-		default:
-			return 0;
-		}
-	}
-
-	switch (param) {
-	case PIPE_VIDEO_CAP_SUPPORTED:
-		switch (codec) {
-		case PIPE_VIDEO_FORMAT_MPEG12:
-			return profile != PIPE_VIDEO_PROFILE_MPEG1;
-		case PIPE_VIDEO_FORMAT_MPEG4:
-			return 1;
-		case PIPE_VIDEO_FORMAT_MPEG4_AVC:
-			if ((rscreen->family == CHIP_POLARIS10 ||
-			     rscreen->family == CHIP_POLARIS11) &&
-			    info.uvd_fw_version < UVD_FW_1_66_16 ) {
-				RVID_ERR("POLARIS10/11 firmware version need to be updated.\n");
-				return false;
-			}
-			return true;
-		case PIPE_VIDEO_FORMAT_VC1:
-			return true;
-		case PIPE_VIDEO_FORMAT_HEVC:
-			/* Carrizo only supports HEVC Main */
-			if (rscreen->family >= CHIP_STONEY)
-				return (profile == PIPE_VIDEO_PROFILE_HEVC_MAIN ||
-					profile == PIPE_VIDEO_PROFILE_HEVC_MAIN_10);
-			else if (rscreen->family >= CHIP_CARRIZO)
-				return profile == PIPE_VIDEO_PROFILE_HEVC_MAIN;
-			return false;
-		case PIPE_VIDEO_FORMAT_JPEG:
-			if (rscreen->family < CHIP_CARRIZO || rscreen->family >= CHIP_VEGA10)
-				return false;
-			if (!(rscreen->info.drm_major == 3 && rscreen->info.drm_minor >= 19)) {
-				RVID_ERR("No MJPEG support for the kernel version\n");
-				return false;
-			}
-			return true;
-		default:
-			return false;
-		}
-	case PIPE_VIDEO_CAP_NPOT_TEXTURES:
-		return 1;
-	case PIPE_VIDEO_CAP_MAX_WIDTH:
-		return (rscreen->family < CHIP_TONGA) ? 2048 : 4096;
-	case PIPE_VIDEO_CAP_MAX_HEIGHT:
-		return (rscreen->family < CHIP_TONGA) ? 1152 : 4096;
-	case PIPE_VIDEO_CAP_PREFERED_FORMAT:
-		if (profile == PIPE_VIDEO_PROFILE_HEVC_MAIN_10)
-			return PIPE_FORMAT_P016;
-		else
-			return PIPE_FORMAT_NV12;
-
-	case PIPE_VIDEO_CAP_PREFERS_INTERLACED:
-	case PIPE_VIDEO_CAP_SUPPORTS_INTERLACED: {
-		enum pipe_video_format format = u_reduce_video_profile(profile);
-
-		if (format == PIPE_VIDEO_FORMAT_HEVC)
-			return false; //The firmware doesn't support interlaced HEVC.
-		else if (format == PIPE_VIDEO_FORMAT_JPEG)
-			return false;
-		return true;
-	}
-	case PIPE_VIDEO_CAP_SUPPORTS_PROGRESSIVE:
-		return true;
-	case PIPE_VIDEO_CAP_MAX_LEVEL:
-		switch (profile) {
-		case PIPE_VIDEO_PROFILE_MPEG1:
-			return 0;
-		case PIPE_VIDEO_PROFILE_MPEG2_SIMPLE:
-		case PIPE_VIDEO_PROFILE_MPEG2_MAIN:
-			return 3;
-		case PIPE_VIDEO_PROFILE_MPEG4_SIMPLE:
-			return 3;
-		case PIPE_VIDEO_PROFILE_MPEG4_ADVANCED_SIMPLE:
-			return 5;
-		case PIPE_VIDEO_PROFILE_VC1_SIMPLE:
-			return 1;
-		case PIPE_VIDEO_PROFILE_VC1_MAIN:
-			return 2;
-		case PIPE_VIDEO_PROFILE_VC1_ADVANCED:
-			return 4;
-		case PIPE_VIDEO_PROFILE_MPEG4_AVC_BASELINE:
-		case PIPE_VIDEO_PROFILE_MPEG4_AVC_MAIN:
-		case PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH:
-			return (rscreen->family < CHIP_TONGA) ? 41 : 52;
-		case PIPE_VIDEO_PROFILE_HEVC_MAIN:
-		case PIPE_VIDEO_PROFILE_HEVC_MAIN_10:
-			return 186;
-		default:
-			return 0;
-		}
-	default:
-		return 0;
-	}
-}
-
-boolean si_vid_is_format_supported(struct pipe_screen *screen,
-				   enum pipe_format format,
-				   enum pipe_video_profile profile,
-				   enum pipe_video_entrypoint entrypoint)
-{
-	/* HEVC 10 bit decoding should use P016 instead of NV12 if possible */
-	if (profile == PIPE_VIDEO_PROFILE_HEVC_MAIN_10)
-		return (format == PIPE_FORMAT_NV12) ||
-			(format == PIPE_FORMAT_P016);
-
-	/* we can only handle this one with UVD */
-	if (profile != PIPE_VIDEO_PROFILE_UNKNOWN)
-		return format == PIPE_FORMAT_NV12;
-
-	return vl_video_buffer_is_format_supported(screen, format, profile, entrypoint);
 }

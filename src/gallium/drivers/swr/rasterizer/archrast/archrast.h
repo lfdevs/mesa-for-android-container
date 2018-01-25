@@ -29,6 +29,7 @@
 
 #include "common/os.h"
 #include "gen_ar_event.hpp"
+#include "eventmanager.h"
 
 namespace ArchRast
 {

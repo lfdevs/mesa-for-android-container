@@ -39,3 +39,5 @@ AM_CFLAGS = \
 noinst_LTLIBRARIES = libi915_dri.la
 libi915_dri_la_SOURCES = $(i915_FILES)
 libi915_dri_la_LIBADD = $(I915_LIBS)
+
+EXTRA_DIST = meson.build

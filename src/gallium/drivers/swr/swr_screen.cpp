@@ -50,7 +50,7 @@
  * Max texture sizes
  * XXX Check max texture size values against core and sampler.
  */
-#define SWR_MAX_TEXTURE_SIZE (4 * 1024 * 1024 * 1024ULL) /* 4GB */
+#define SWR_MAX_TEXTURE_SIZE (2 * 1024 * 1024 * 1024ULL) /* 2GB */
 #define SWR_MAX_TEXTURE_2D_LEVELS 14  /* 8K x 8K for now */
 #define SWR_MAX_TEXTURE_3D_LEVELS 12  /* 2K x 2K x 2K for now */
 #define SWR_MAX_TEXTURE_CUBE_LEVELS 14  /* 8K x 8K for now */
@@ -203,7 +203,6 @@ swr_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_NPOT_TEXTURES:
    case PIPE_CAP_MIXED_FRAMEBUFFER_SIZES:
    case PIPE_CAP_MIXED_COLOR_DEPTH_BITS:
-   case PIPE_CAP_TWO_SIDED_STENCIL:
    case PIPE_CAP_SM3:
    case PIPE_CAP_POINT_SPRITE:
    case PIPE_CAP_MAX_DUAL_SOURCE_RENDER_TARGETS:
@@ -211,7 +210,6 @@ swr_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_QUERY_TIME_ELAPSED:
    case PIPE_CAP_QUERY_PIPELINE_STATISTICS:
    case PIPE_CAP_TEXTURE_MIRROR_CLAMP:
-   case PIPE_CAP_TEXTURE_SHADOW_MAP:
    case PIPE_CAP_TEXTURE_SWIZZLE:
    case PIPE_CAP_BLEND_EQUATION_SEPARATE:
    case PIPE_CAP_INDEP_BLEND_ENABLE:
@@ -231,7 +229,6 @@ swr_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_MIXED_COLORBUFFER_FORMATS:
    case PIPE_CAP_QUADS_FOLLOW_PROVOKING_VERTEX_CONVENTION:
    case PIPE_CAP_USER_VERTEX_BUFFERS:
-   case PIPE_CAP_USER_CONSTANT_BUFFERS:
    case PIPE_CAP_STREAM_OUTPUT_INTERLEAVE_BUFFERS:
    case PIPE_CAP_QUERY_TIMESTAMP:
    case PIPE_CAP_TEXTURE_BUFFER_OBJECTS:
@@ -344,6 +341,9 @@ swr_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_LOAD_CONSTBUF:
    case PIPE_CAP_TGSI_ANY_REG_AS_ADDRESS:
    case PIPE_CAP_TILE_RASTER_ORDER:
+   case PIPE_CAP_MAX_COMBINED_SHADER_OUTPUT_RESOURCES:
+   case PIPE_CAP_SIGNED_VERTEX_BUFFER_OFFSET:
+   case PIPE_CAP_CONTEXT_PRIORITY_MASK:
       return 0;
 
    case PIPE_CAP_VENDOR_ID:
@@ -819,13 +819,15 @@ swr_texture_layout(struct swr_screen *screen,
          ComputeSurfaceOffset<false>(0, 0, 0, 0, 0, level, &res->swr);
    }
 
-   size_t total_size = res->swr.depth * res->swr.qpitch * res->swr.pitch *
-                       res->swr.numSamples;
+   size_t total_size = (uint64_t)res->swr.depth * res->swr.qpitch *
+                                 res->swr.pitch * res->swr.numSamples;
    if (total_size > SWR_MAX_TEXTURE_SIZE)
       return false;
 
    if (allocate) {
       res->swr.xpBaseAddress = (gfxptr_t)AlignedMalloc(total_size, 64);
+      if (!res->swr.xpBaseAddress)
+         return false;
 
       if (res->has_depth && res->has_stencil) {
          res->secondary = res->swr;
@@ -841,6 +843,10 @@ swr_texture_layout(struct swr_screen *screen,
                       res->secondary.pitch * res->secondary.numSamples;
 
          res->secondary.xpBaseAddress = (gfxptr_t) AlignedMalloc(total_size, 64);
+         if (!res->secondary.xpBaseAddress) {
+            AlignedFree((void *)res->swr.xpBaseAddress);
+            return false;
+         }
       }
    }
 
@@ -1046,6 +1052,24 @@ swr_flush_frontbuffer(struct pipe_screen *p_screen,
 }
 
 
+void
+swr_destroy_screen_internal(struct swr_screen **screen)
+{
+   struct pipe_screen *p_screen = &(*screen)->base;
+
+   swr_fence_finish(p_screen, NULL, (*screen)->flush_fence, 0);
+   swr_fence_reference(p_screen, &(*screen)->flush_fence, NULL);
+
+   JitDestroyContext((*screen)->hJitMgr);
+
+   if ((*screen)->pLibrary)
+      util_dl_close((*screen)->pLibrary);
+
+   FREE(*screen);
+   *screen = NULL;
+}
+
+
 static void
 swr_destroy_screen(struct pipe_screen *p_screen)
 {
@@ -1054,18 +1078,10 @@ swr_destroy_screen(struct pipe_screen *p_screen)
 
    fprintf(stderr, "SWR destroy screen!\n");
 
-   swr_fence_finish(p_screen, NULL, screen->flush_fence, 0);
-   swr_fence_reference(p_screen, &screen->flush_fence, NULL);
-
-   JitDestroyContext(screen->hJitMgr);
-#if USE_SIMD16_SHADERS
-   JitDestroyContext(screen->hJitMgr16);
-#endif
-
    if (winsys->destroy)
       winsys->destroy(winsys);
 
-   FREE(screen);
+   swr_destroy_screen_internal(&screen);
 }
 
 
@@ -1116,6 +1132,7 @@ struct pipe_screen *
 swr_create_screen_internal(struct sw_winsys *winsys)
 {
    struct swr_screen *screen = CALLOC_STRUCT(swr_screen);
+   memset(screen, 0, sizeof(struct swr_screen));
 
    if (!screen)
       return NULL;
@@ -1144,9 +1161,6 @@ swr_create_screen_internal(struct sw_winsys *winsys)
 
    // Pass in "" for architecture for run-time determination
    screen->hJitMgr = JitCreateContext(KNOB_SIMD_WIDTH, "", "swr");
-#if USE_SIMD16_SHADERS
-   screen->hJitMgr16 = JitCreateContext(16, "", "swr");
-#endif
 
    swr_fence_init(&screen->base);
 

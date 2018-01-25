@@ -537,6 +537,7 @@ SVGA3D_vgpu10_Draw(struct svga_winsys_context *swc,
 
    swc->hints |= SVGA_HINT_FLAG_CAN_PRE_FLUSH;
    swc->commit(swc);
+   swc->num_draw_commands++;
    return PIPE_OK;
 }
 
@@ -553,6 +554,7 @@ SVGA3D_vgpu10_DrawIndexed(struct svga_winsys_context *swc,
 
    swc->hints |= SVGA_HINT_FLAG_CAN_PRE_FLUSH;
    swc->commit(swc);
+   swc->num_draw_commands++;
    return PIPE_OK;
 }
 
@@ -570,6 +572,7 @@ SVGA3D_vgpu10_DrawInstanced(struct svga_winsys_context *swc,
 
    swc->hints |= SVGA_HINT_FLAG_CAN_PRE_FLUSH;
    swc->commit(swc);
+   swc->num_draw_commands++;
    return PIPE_OK;
 }
 
@@ -590,6 +593,7 @@ SVGA3D_vgpu10_DrawIndexedInstanced(struct svga_winsys_context *swc,
 
    swc->hints |= SVGA_HINT_FLAG_CAN_PRE_FLUSH;
    swc->commit(swc);
+   swc->num_draw_commands++;
    return PIPE_OK;
 }
 
@@ -600,6 +604,7 @@ SVGA3D_vgpu10_DrawAuto(struct svga_winsys_context *swc)
 
    swc->hints |= SVGA_HINT_FLAG_CAN_PRE_FLUSH;
    swc->commit(swc);
+   swc->num_draw_commands++;
    return PIPE_OK;
 }
 

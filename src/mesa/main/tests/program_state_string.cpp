@@ -25,7 +25,6 @@
 
 #include "GL/gl.h"
 #include "GL/glext.h"
-#include "main/compiler.h"
 
 #include "program/prog_statevars.h"
 

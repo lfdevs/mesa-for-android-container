@@ -170,6 +170,19 @@ intel_miptree_blit_compatible_formats(mesa_format src, mesa_format dst)
       return (dst == MESA_FORMAT_R8G8B8A8_UNORM ||
               dst == MESA_FORMAT_R8G8B8X8_UNORM);
 
+   /* We can also discard alpha when going from A2->X2 for 2 bit alpha,
+    * however we can't fill the alpha channel with two 1 bits when going
+    * from X2->A2, because intel_miptree_set_alpha_to_one() is not yet
+    * ready for this / can only handle 8 bit alpha.
+    */
+   if (src == MESA_FORMAT_B10G10R10A2_UNORM)
+      return (dst == MESA_FORMAT_B10G10R10A2_UNORM ||
+              dst == MESA_FORMAT_B10G10R10X2_UNORM);
+
+   if (src == MESA_FORMAT_R10G10B10A2_UNORM)
+      return (dst == MESA_FORMAT_R10G10B10A2_UNORM ||
+              dst == MESA_FORMAT_R10G10B10X2_UNORM);
+
    return false;
 }
 
@@ -322,7 +335,8 @@ intel_miptree_blit(struct brw_context *brw,
    /* The blitter doesn't support doing any format conversions.  We do also
     * support blitting ARGB8888 to XRGB8888 (trivial, the values dropped into
     * the X channel don't matter), and XRGB8888 to ARGB8888 by setting the A
-    * channel to 1.0 at the end.
+    * channel to 1.0 at the end. Also trivially ARGB2101010 to XRGB2101010,
+    * but not XRGB2101010 to ARGB2101010 yet.
     */
    if (!intel_miptree_blit_compatible_formats(src_format, dst_format)) {
       perf_debug("%s: Can't use hardware blitter from %s to %s, "
@@ -789,6 +803,10 @@ intel_miptree_set_alpha_to_one(struct brw_context *brw,
    DBG("%s dst:buf(%p)/%d %d,%d sz:%dx%d\n",
        __func__, mt->bo, pitch, x, y, width, height);
 
+   /* Note: Currently only handles 8 bit alpha channel. Extension to < 8 Bit
+    * alpha channel would be likely possible via ROP code 0xfa instead of 0xf0
+    * and writing a suitable bit-mask instead of 0xffffffff.
+    */
    BR13 = br13_for_cpp(cpp) | 0xf0 << 16;
    CMD = XY_COLOR_BLT_CMD;
    CMD |= XY_BLT_WRITE_ALPHA;

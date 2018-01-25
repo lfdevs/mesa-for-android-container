@@ -23,6 +23,7 @@
  */
 
 #include "formats.h"
+#include "util/macros.h"
 
 /**
  * For an sRGB format, return the corresponding linear color space format.

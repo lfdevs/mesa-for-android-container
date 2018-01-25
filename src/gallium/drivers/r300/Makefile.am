@@ -28,4 +28,5 @@ libr300_la_SOURCES = $(C_SOURCES)
 
 EXTRA_DIST = \
 	compiler/tests/omod_two_writers.test \
-	compiler/tests/regalloc_tex_1d_swizzle.test
+	compiler/tests/regalloc_tex_1d_swizzle.test \
+	meson.build

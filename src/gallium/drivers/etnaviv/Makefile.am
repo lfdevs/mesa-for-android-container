@@ -42,3 +42,5 @@ etnaviv_compiler_LDADD = \
 	$(top_builddir)/src/util/libmesautil.la \
 	$(GALLIUM_COMMON_LIB_DEPS) \
 	$(ETNAVIV_LIBS)
+
+EXTRA_DIST = meson.build

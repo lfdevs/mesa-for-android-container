@@ -25,12 +25,6 @@
  *
  **************************************************************************/
 
-/*
- * Authors:
- *      Christian König <christian.koenig@amd.com>
- *
- */
-
 #ifndef RADEON_VCE_H
 #define RADEON_VCE_H
 
@@ -48,7 +42,7 @@
 #define RVCE_MAX_BITSTREAM_OUTPUT_ROW_SIZE (4096 * 16 * 2.5)
 #define RVCE_MAX_AUX_BUFFER_NUM 4
 
-struct r600_common_screen;
+struct si_screen;
 
 /* driver dependent callback */
 typedef void (*rvce_get_buffer)(struct pipe_resource *resource,
@@ -428,7 +422,7 @@ struct pipe_video_codec *si_vce_create_encoder(struct pipe_context *context,
 					       struct radeon_winsys* ws,
 					       rvce_get_buffer get_buffer);
 
-bool si_vce_is_fw_version_supported(struct r600_common_screen *rscreen);
+bool si_vce_is_fw_version_supported(struct si_screen *sscreen);
 
 void si_vce_add_buffer(struct rvce_encoder *enc, struct pb_buffer *buf,
 		       enum radeon_bo_usage usage, enum radeon_bo_domain domain,

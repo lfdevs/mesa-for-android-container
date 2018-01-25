@@ -754,7 +754,7 @@ VkResult radv_CreateQueryPool(
 					       VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
 
 	if (!pool)
-		return VK_ERROR_OUT_OF_HOST_MEMORY;
+		return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
 
 
 	switch(pCreateInfo->queryType) {
@@ -780,11 +780,11 @@ VkResult radv_CreateQueryPool(
 		size += 4 * pCreateInfo->queryCount;
 
 	pool->bo = device->ws->buffer_create(device->ws, size,
-					     64, RADEON_DOMAIN_GTT, 0);
+					     64, RADEON_DOMAIN_GTT, RADEON_FLAG_NO_INTERPROCESS_SHARING);
 
 	if (!pool->bo) {
 		vk_free2(&device->alloc, pAllocator, pool);
-		return VK_ERROR_OUT_OF_DEVICE_MEMORY;
+		return vk_error(VK_ERROR_OUT_OF_DEVICE_MEMORY);
 	}
 
 	pool->ptr = device->ws->buffer_map(pool->bo);
@@ -792,7 +792,7 @@ VkResult radv_CreateQueryPool(
 	if (!pool->ptr) {
 		device->ws->buffer_destroy(pool->bo);
 		vk_free2(&device->alloc, pAllocator, pool);
-		return VK_ERROR_OUT_OF_DEVICE_MEMORY;
+		return vk_error(VK_ERROR_OUT_OF_DEVICE_MEMORY);
 	}
 	memset(pool->ptr, 0, size);
 
@@ -957,8 +957,8 @@ void radv_CmdCopyQueryPoolResults(
 	uint64_t dest_va = radv_buffer_get_va(dst_buffer->bo);
 	dest_va += dst_buffer->offset + dstOffset;
 
-	cmd_buffer->device->ws->cs_add_buffer(cmd_buffer->cs, pool->bo, 8);
-	cmd_buffer->device->ws->cs_add_buffer(cmd_buffer->cs, dst_buffer->bo, 8);
+	radv_cs_add_buffer(cmd_buffer->device->ws, cmd_buffer->cs, pool->bo, 8);
+	radv_cs_add_buffer(cmd_buffer->device->ws, cmd_buffer->cs, dst_buffer->bo, 8);
 
 	switch (pool->type) {
 	case VK_QUERY_TYPE_OCCLUSION:
@@ -1058,16 +1058,18 @@ void radv_CmdResetQueryPool(
 {
 	RADV_FROM_HANDLE(radv_cmd_buffer, cmd_buffer, commandBuffer);
 	RADV_FROM_HANDLE(radv_query_pool, pool, queryPool);
-	uint64_t va = radv_buffer_get_va(pool->bo);
+	struct radv_cmd_state *state = &cmd_buffer->state;
 
-	cmd_buffer->device->ws->cs_add_buffer(cmd_buffer->cs, pool->bo, 8);
+	state->flush_bits |= radv_fill_buffer(cmd_buffer, pool->bo,
+					      firstQuery * pool->stride,
+					      queryCount * pool->stride, 0);
 
-	si_cp_dma_clear_buffer(cmd_buffer, va + firstQuery * pool->stride,
-			       queryCount * pool->stride, 0);
 	if (pool->type == VK_QUERY_TYPE_TIMESTAMP ||
-	    pool->type == VK_QUERY_TYPE_PIPELINE_STATISTICS)
-		si_cp_dma_clear_buffer(cmd_buffer, va + pool->availability_offset + firstQuery * 4,
-		                       queryCount * 4, 0);
+	    pool->type == VK_QUERY_TYPE_PIPELINE_STATISTICS) {
+		state->flush_bits |= radv_fill_buffer(cmd_buffer, pool->bo,
+						      pool->availability_offset + firstQuery * 4,
+						      queryCount * 4, 0);
+	}
 }
 
 void radv_CmdBeginQuery(
@@ -1082,7 +1084,7 @@ void radv_CmdBeginQuery(
 	uint64_t va = radv_buffer_get_va(pool->bo);
 	va += pool->stride * query;
 
-	cmd_buffer->device->ws->cs_add_buffer(cs, pool->bo, 8);
+	radv_cs_add_buffer(cmd_buffer->device->ws, cs, pool->bo, 8);
 
 	switch (pool->type) {
 	case VK_QUERY_TYPE_OCCLUSION:
@@ -1123,7 +1125,9 @@ void radv_CmdEndQuery(
 	uint64_t avail_va = va + pool->availability_offset + 4 * query;
 	va += pool->stride * query;
 
-	cmd_buffer->device->ws->cs_add_buffer(cs, pool->bo, 8);
+	/* Do not need to add the pool BO to the list because the query must
+	 * currently be active, which means the BO is already in the list.
+	 */
 
 	switch (pool->type) {
 	case VK_QUERY_TYPE_OCCLUSION:
@@ -1175,7 +1179,7 @@ void radv_CmdWriteTimestamp(
 	uint64_t avail_va = va + pool->availability_offset + 4 * query;
 	uint64_t query_va = va + pool->stride * query;
 
-	cmd_buffer->device->ws->cs_add_buffer(cs, pool->bo, 5);
+	radv_cs_add_buffer(cmd_buffer->device->ws, cs, pool->bo, 5);
 
 	MAYBE_UNUSED unsigned cdw_max = radeon_check_space(cmd_buffer->device->ws, cs, 28);
 

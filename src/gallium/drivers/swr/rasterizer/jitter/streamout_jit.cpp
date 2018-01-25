@@ -27,14 +27,11 @@
 * Notes:
 *
 ******************************************************************************/
+#include "jit_pch.hpp"
 #include "builder.h"
 #include "jit_api.h"
 #include "streamout_jit.h"
 #include "gen_state_llvm.h"
-#include "llvm/IR/DataLayout.h"
-
-#include <sstream>
-#include <unordered_set>
 
 using namespace llvm;
 using namespace SwrJit;

@@ -59,7 +59,7 @@ __gen_uint(uint64_t v, uint32_t start, uint32_t end)
 {
    __gen_validate_value(v);
 
-#if DEBUG
+#ifndef NDEBUG
    const int width = end - start + 1;
    if (width < 64) {
       const uint64_t max = (1ull << width) - 1;
@@ -77,7 +77,7 @@ __gen_sint(int64_t v, uint32_t start, uint32_t end)
 
    __gen_validate_value(v);
 
-#if DEBUG
+#ifndef NDEBUG
    if (width < 64) {
       const int64_t max = (1ll << (width - 1)) - 1;
       const int64_t min = -(1ll << (width - 1));
@@ -94,7 +94,7 @@ static inline uint64_t
 __gen_offset(uint64_t v, uint32_t start, uint32_t end)
 {
    __gen_validate_value(v);
-#if DEBUG
+#ifndef NDEBUG
    uint64_t mask = (~0ull >> (64 - (end - start + 1))) << start;
 
    assert((v & ~mask) == 0);
@@ -117,7 +117,7 @@ __gen_sfixed(float v, uint32_t start, uint32_t end, uint32_t fract_bits)
 
    const float factor = (1 << fract_bits);
 
-#if DEBUG
+#ifndef NDEBUG
    const float max = ((1 << (end - start)) - 1) / factor;
    const float min = -(1 << (end - start)) / factor;
    assert(min <= v && v <= max);
@@ -136,7 +136,7 @@ __gen_ufixed(float v, uint32_t start, uint32_t end, uint32_t fract_bits)
 
    const float factor = (1 << fract_bits);
 
-#if DEBUG
+#ifndef NDEBUG
    const float max = ((1 << (end - start + 1)) - 1) / factor;
    const float min = 0.0f;
    assert(min <= v && v <= max);
@@ -9534,6 +9534,8 @@ struct GEN10_INSTDONE_1 {
    bool                                 TSGDone;
    bool                                 GAFMDone;
    bool                                 GAMDone;
+   bool                                 RSDone;
+   bool                                 CSDone;
    bool                                 SDEDone;
    bool                                 RCCFBCCSDone;
 };
@@ -9564,6 +9566,8 @@ GEN10_INSTDONE_1_pack(__attribute__((unused)) __gen_user_data *data,
       __gen_uint(values->TSGDone, 17, 17) |
       __gen_uint(values->GAFMDone, 18, 18) |
       __gen_uint(values->GAMDone, 19, 19) |
+      __gen_uint(values->RSDone, 20, 20) |
+      __gen_uint(values->CSDone, 21, 21) |
       __gen_uint(values->SDEDone, 22, 22) |
       __gen_uint(values->RCCFBCCSDone, 23, 23);
 }
@@ -9860,6 +9864,37 @@ GEN10_CACHE_MODE_1_pack(__attribute__((unused)) __gen_user_data *data,
       __gen_uint(values->NPEarlyZFailsDisableMask, 29, 29) |
       __gen_uint(values->BlendOptimizationFixDisableMask, 30, 30) |
       __gen_uint(values->ColorCompressionDisableMask, 31, 31);
+}
+
+#define GEN10_CACHE_MODE_SS_num           0xe420
+#define GEN10_CACHE_MODE_SS_length             1
+struct GEN10_CACHE_MODE_SS {
+   bool                                 InstructionLevel1CacheDisable;
+   bool                                 InstructionLevel1CacheandInFlightQueueDisable;
+   bool                                 FloatBlendOptimizationEnable;
+   bool                                 PerSampleBlendOptDisable;
+   bool                                 InstructionLevel1CacheDisableMask;
+   bool                                 InstructionLevel1CacheandInFlightQueueDisableMask;
+   bool                                 FloatBlendOptimizationEnableMask;
+   bool                                 PerSampleBlendOptDisableMask;
+};
+
+static inline void
+GEN10_CACHE_MODE_SS_pack(__attribute__((unused)) __gen_user_data *data,
+                         __attribute__((unused)) void * restrict dst,
+                         __attribute__((unused)) const struct GEN10_CACHE_MODE_SS * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   dw[0] =
+      __gen_uint(values->InstructionLevel1CacheDisable, 0, 0) |
+      __gen_uint(values->InstructionLevel1CacheandInFlightQueueDisable, 1, 1) |
+      __gen_uint(values->FloatBlendOptimizationEnable, 4, 4) |
+      __gen_uint(values->PerSampleBlendOptDisable, 11, 11) |
+      __gen_uint(values->InstructionLevel1CacheDisableMask, 16, 16) |
+      __gen_uint(values->InstructionLevel1CacheandInFlightQueueDisableMask, 17, 17) |
+      __gen_uint(values->FloatBlendOptimizationEnableMask, 20, 20) |
+      __gen_uint(values->PerSampleBlendOptDisableMask, 27, 27);
 }
 
 #endif /* GEN10_PACK_H */

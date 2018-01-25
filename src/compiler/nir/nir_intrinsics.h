@@ -102,7 +102,7 @@ INTRINSIC(shader_clock, 0, ARR(0), true, 2, 0, 0, xx, xx, xx, NIR_INTRINSIC_CAN_
  *
  * GLSL functions from ARB_shader_ballot.
  */
-INTRINSIC(ballot, 1, ARR(1), true, 1, 0, 0, xx, xx, xx, NIR_INTRINSIC_CAN_ELIMINATE)
+INTRINSIC(ballot, 1, ARR(1), true, 0, 0, 0, xx, xx, xx, NIR_INTRINSIC_CAN_ELIMINATE)
 INTRINSIC(read_invocation, 2, ARR(0, 1), true, 0, 0, 0, xx, xx, xx, NIR_INTRINSIC_CAN_ELIMINATE)
 INTRINSIC(read_first_invocation, 1, ARR(0), true, 0, 0, 0, xx, xx, xx, NIR_INTRINSIC_CAN_ELIMINATE)
 
@@ -210,7 +210,7 @@ INTRINSIC(image_samples, 0, ARR(0), true, 1, 1, 0, xx, xx, xx,
           NIR_INTRINSIC_CAN_ELIMINATE | NIR_INTRINSIC_CAN_REORDER)
 
 /*
- * Vulkan descriptor set intrinsic
+ * Vulkan descriptor set intrinsics
  *
  * The Vulkan API uses a different binding model from GL.  In the Vulkan
  * API, all external resources are represented by a tuple:
@@ -224,9 +224,16 @@ INTRINSIC(image_samples, 0, ARR(0), true, 1, 1, 0, xx, xx, xx,
  *
  * The intended usage is that the shader will call vulkan_surface_index to
  * get an index and then pass that as the buffer index ubo/ssbo calls.
+ *
+ * The vulkan_resource_reindex intrinsic takes a resource index in src0
+ * (the result of a vulkan_resource_index or vulkan_resource_reindex) which
+ * corresponds to the tuple (set, binding, index) and computes an index
+ * corresponding to tuple (set, binding, idx + src1).
  */
 INTRINSIC(vulkan_resource_index, 1, ARR(1), true, 1, 0, 2,
           DESC_SET, BINDING, xx,
+          NIR_INTRINSIC_CAN_ELIMINATE | NIR_INTRINSIC_CAN_REORDER)
+INTRINSIC(vulkan_resource_reindex, 2, ARR(1, 1), true, 1, 0, 0, xx, xx, xx,
           NIR_INTRINSIC_CAN_ELIMINATE | NIR_INTRINSIC_CAN_REORDER)
 
 /*
@@ -350,11 +357,13 @@ SYSTEM_VALUE(layer_id, 1, 0, xx, xx, xx)
 SYSTEM_VALUE(view_index, 1, 0, xx, xx, xx)
 SYSTEM_VALUE(subgroup_size, 1, 0, xx, xx, xx)
 SYSTEM_VALUE(subgroup_invocation, 1, 0, xx, xx, xx)
-SYSTEM_VALUE(subgroup_eq_mask, 1, 0, xx, xx, xx)
-SYSTEM_VALUE(subgroup_ge_mask, 1, 0, xx, xx, xx)
-SYSTEM_VALUE(subgroup_gt_mask, 1, 0, xx, xx, xx)
-SYSTEM_VALUE(subgroup_le_mask, 1, 0, xx, xx, xx)
-SYSTEM_VALUE(subgroup_lt_mask, 1, 0, xx, xx, xx)
+SYSTEM_VALUE(subgroup_eq_mask, 0, 0, xx, xx, xx)
+SYSTEM_VALUE(subgroup_ge_mask, 0, 0, xx, xx, xx)
+SYSTEM_VALUE(subgroup_gt_mask, 0, 0, xx, xx, xx)
+SYSTEM_VALUE(subgroup_le_mask, 0, 0, xx, xx, xx)
+SYSTEM_VALUE(subgroup_lt_mask, 0, 0, xx, xx, xx)
+SYSTEM_VALUE(subgroup_id, 1, 0, xx, xx, xx)
+SYSTEM_VALUE(local_group_size, 3, 0, xx, xx, xx)
 
 /* Blend constant color values.  Float values are clamped. */
 SYSTEM_VALUE(blend_const_color_r_float, 1, 0, xx, xx, xx)

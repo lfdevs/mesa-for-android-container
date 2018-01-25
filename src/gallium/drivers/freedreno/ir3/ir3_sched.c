@@ -157,7 +157,8 @@ distance(struct ir3_sched_ctx *ctx, struct ir3_instruction *instr,
 static unsigned
 delay_calc_srcn(struct ir3_sched_ctx *ctx,
 		struct ir3_instruction *assigner,
-		struct ir3_instruction *consumer, unsigned srcn)
+		struct ir3_instruction *consumer,
+		unsigned srcn, bool soft)
 {
 	unsigned delay = 0;
 
@@ -167,11 +168,19 @@ delay_calc_srcn(struct ir3_sched_ctx *ctx,
 			unsigned d;
 			if (src->block != assigner->block)
 				break;
-			d = delay_calc_srcn(ctx, src, consumer, srcn);
+			d = delay_calc_srcn(ctx, src, consumer, srcn, soft);
 			delay = MAX2(delay, d);
 		}
 	} else {
-		delay = ir3_delayslots(assigner, consumer, srcn);
+		if (soft) {
+			if (is_sfu(assigner)) {
+				delay = 4;
+			} else {
+				delay = ir3_delayslots(assigner, consumer, srcn);
+			}
+		} else {
+			delay = ir3_delayslots(assigner, consumer, srcn);
+		}
 		delay -= distance(ctx, assigner, delay);
 	}
 
@@ -180,7 +189,7 @@ delay_calc_srcn(struct ir3_sched_ctx *ctx,
 
 /* calculate delay for instruction (maximum of delay for all srcs): */
 static unsigned
-delay_calc(struct ir3_sched_ctx *ctx, struct ir3_instruction *instr)
+delay_calc(struct ir3_sched_ctx *ctx, struct ir3_instruction *instr, bool soft)
 {
 	unsigned delay = 0;
 	struct ir3_instruction *src;
@@ -192,7 +201,7 @@ delay_calc(struct ir3_sched_ctx *ctx, struct ir3_instruction *instr)
 			continue;
 		if (src->block != instr->block)
 			continue;
-		d = delay_calc_srcn(ctx, src, instr, i);
+		d = delay_calc_srcn(ctx, src, instr, i, soft);
 		delay = MAX2(delay, d);
 	}
 
@@ -367,7 +376,8 @@ find_instr_recursive(struct ir3_sched_ctx *ctx, struct ir3_sched_notes *notes,
 
 /* find instruction to schedule: */
 static struct ir3_instruction *
-find_eligible_instr(struct ir3_sched_ctx *ctx, struct ir3_sched_notes *notes)
+find_eligible_instr(struct ir3_sched_ctx *ctx, struct ir3_sched_notes *notes,
+		bool soft)
 {
 	struct ir3_instruction *best_instr = NULL;
 	unsigned min_delay = ~0;
@@ -386,7 +396,7 @@ find_eligible_instr(struct ir3_sched_ctx *ctx, struct ir3_sched_notes *notes)
 		if (!candidate)
 			continue;
 
-		delay = delay_calc(ctx, candidate);
+		delay = delay_calc(ctx, candidate, soft);
 		if (delay < min_delay) {
 			best_instr = candidate;
 			min_delay = delay;
@@ -522,10 +532,12 @@ sched_block(struct ir3_sched_ctx *ctx, struct ir3_block *block)
 		struct ir3_sched_notes notes = {0};
 		struct ir3_instruction *instr;
 
-		instr = find_eligible_instr(ctx, &notes);
+		instr = find_eligible_instr(ctx, &notes, true);
+		if (!instr)
+			instr = find_eligible_instr(ctx, &notes, false);
 
 		if (instr) {
-			unsigned delay = delay_calc(ctx, instr);
+			unsigned delay = delay_calc(ctx, instr, false);
 
 			/* and if we run out of instructions that can be scheduled,
 			 * then it is time for nop's:
@@ -668,4 +680,95 @@ int ir3_sched(struct ir3 *ir)
 	if (ctx.error)
 		return -1;
 	return 0;
+}
+
+/* does instruction 'prior' need to be scheduled before 'instr'? */
+static bool
+depends_on(struct ir3_instruction *instr, struct ir3_instruction *prior)
+{
+	/* TODO for dependencies that are related to a specific object, ie
+	 * a specific SSBO/image/array, we could relax this constraint to
+	 * make accesses to unrelated objects not depend on each other (at
+	 * least as long as not declared coherent)
+	 */
+	if (((instr->barrier_class & IR3_BARRIER_EVERYTHING) && prior->barrier_class) ||
+			((prior->barrier_class & IR3_BARRIER_EVERYTHING) && instr->barrier_class))
+		return true;
+	return !!(instr->barrier_class & prior->barrier_conflict);
+}
+
+static void
+add_barrier_deps(struct ir3_block *block, struct ir3_instruction *instr)
+{
+	struct list_head *prev = instr->node.prev;
+	struct list_head *next = instr->node.next;
+
+	/* add dependencies on previous instructions that must be scheduled
+	 * prior to the current instruction
+	 */
+	while (prev != &block->instr_list) {
+		struct ir3_instruction *pi =
+			LIST_ENTRY(struct ir3_instruction, prev, node);
+
+		prev = prev->prev;
+
+		if (is_meta(pi))
+			continue;
+
+		if (instr->barrier_class == pi->barrier_class) {
+			ir3_instr_add_dep(instr, pi);
+			break;
+		}
+
+		if (depends_on(instr, pi))
+			ir3_instr_add_dep(instr, pi);
+	}
+
+	/* add dependencies on this instruction to following instructions
+	 * that must be scheduled after the current instruction:
+	 */
+	while (next != &block->instr_list) {
+		struct ir3_instruction *ni =
+			LIST_ENTRY(struct ir3_instruction, next, node);
+
+		next = next->next;
+
+		if (is_meta(ni))
+			continue;
+
+		if (instr->barrier_class == ni->barrier_class) {
+			ir3_instr_add_dep(ni, instr);
+			break;
+		}
+
+		if (depends_on(ni, instr))
+			ir3_instr_add_dep(ni, instr);
+	}
+}
+
+/* before scheduling a block, we need to add any necessary false-dependencies
+ * to ensure that:
+ *
+ *  (1) barriers are scheduled in the right order wrt instructions related
+ *      to the barrier
+ *
+ *  (2) reads that come before a write actually get scheduled before the
+ *      write
+ */
+static void
+calculate_deps(struct ir3_block *block)
+{
+	list_for_each_entry (struct ir3_instruction, instr, &block->instr_list, node) {
+		if (instr->barrier_class) {
+			add_barrier_deps(block, instr);
+		}
+	}
+}
+
+void
+ir3_sched_add_deps(struct ir3 *ir)
+{
+	list_for_each_entry (struct ir3_block, block, &ir->block_list, node) {
+		calculate_deps(block);
+	}
 }

@@ -92,28 +92,6 @@ const struct brw_tracked_state brw_gs_ubo_surfaces = {
 };
 
 static void
-brw_upload_gs_abo_surfaces(struct brw_context *brw)
-{
-   /* _NEW_PROGRAM */
-   const struct gl_program *gp = brw->programs[MESA_SHADER_GEOMETRY];
-
-   if (gp) {
-      /* BRW_NEW_GS_PROG_DATA */
-      brw_upload_abo_surfaces(brw, gp, &brw->gs.base, brw->gs.base.prog_data);
-   }
-}
-
-const struct brw_tracked_state brw_gs_abo_surfaces = {
-   .dirty = {
-      .mesa = _NEW_PROGRAM,
-      .brw = BRW_NEW_ATOMIC_BUFFER |
-             BRW_NEW_BATCH |
-             BRW_NEW_GS_PROG_DATA,
-   },
-   .emit = brw_upload_gs_abo_surfaces,
-};
-
-static void
 brw_upload_gs_image_surfaces(struct brw_context *brw)
 {
    /* BRW_NEW_GEOMETRY_PROGRAM */

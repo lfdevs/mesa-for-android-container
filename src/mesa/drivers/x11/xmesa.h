@@ -85,14 +85,6 @@ extern "C" {
 #define XMESA_EXTENSIONS 2
 
 
-/*
- * Values passed to XMesaSetFXmode:
- */
-#define XMESA_FX_WINDOW       1
-#define XMESA_FX_FULLSCREEN   2
-
-
-
 typedef struct xmesa_context *XMesaContext;
 
 typedef struct xmesa_visual *XMesaVisual;
@@ -340,20 +332,6 @@ extern unsigned long XMesaDitherColor( XMesaContext xmesa,
 				       GLfloat green,
 				       GLfloat blue,
 				       GLfloat alpha );
-
-
-
-/*
- * 3Dfx Glide driver only!
- * Set 3Dfx/Glide full-screen or window rendering mode.
- * Input:  mode - either XMESA_FX_WINDOW (window rendering mode) or
- *                XMESA_FX_FULLSCREEN (full-screen rendering mode)
- * Return:  GL_TRUE if success
- *          GL_FALSE if invalid mode or if not using 3Dfx driver
- *
- * New in Mesa 2.6.
- */
-extern GLboolean XMesaSetFXmode( GLint mode );
 
 
 

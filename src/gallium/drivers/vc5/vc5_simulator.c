@@ -54,25 +54,17 @@
 #include "util/set.h"
 #include "util/u_memory.h"
 #include "util/u_mm.h"
-
-#define HW_REGISTER_RO(x) (x)
-#define HW_REGISTER_RW(x) (x)
-#include "libs/core/v3d/registers/3.3.0.0/v3d.h"
+#include "vc5_simulator_wrapper.h"
 
 #include "vc5_screen.h"
 #include "vc5_context.h"
-#define V3D_TECH_VERSION 3
-#define V3D_REVISION 3
-#define V3D_SUB_REV 0
-#define V3D_HIDDEN_REV 0
-#undef unreachable
-#include "v3d_hw_auto.h"
 
 /** Global (across GEM fds) state for the simulator */
 static struct vc5_simulator_state {
         mtx_t mutex;
 
         struct v3d_hw *v3d;
+        int ver;
 
         /* Base virtual address of the heap. */
         void *mem;
@@ -265,8 +257,10 @@ vc5_simulator_unpin_bos(int fd, struct vc5_job *job)
                 struct vc5_simulator_bo *sim_bo =
                         vc5_get_simulator_bo(file, bo->handle);
 
-                assert(*(uint32_t *)(sim_bo->vaddr +
-                                     sim_bo->size) == BO_SENTINEL);
+                if (*(uint32_t *)(sim_bo->vaddr +
+                                  sim_bo->size) != BO_SENTINEL) {
+                        fprintf(stderr, "Buffer overflow in %s\n", bo->name);
+                }
 
                 vc5_bo_map(bo);
                 memcpy(bo->map, sim_bo->vaddr, bo->size);
@@ -364,57 +358,6 @@ vc5_dump_to_file(struct vc5_exec_info *exec)
 }
 #endif
 
-#define V3D_WRITE(reg, val) v3d_hw_write_reg(sim_state.v3d, reg, val)
-#define V3D_READ(reg) v3d_hw_read_reg(sim_state.v3d, reg)
-
-static void
-vc5_flush_l3(void)
-{
-        if (!v3d_hw_has_gca(sim_state.v3d))
-                return;
-
-        uint32_t gca_ctrl = V3D_READ(V3D_GCA_CACHE_CTRL);
-
-        V3D_WRITE(V3D_GCA_CACHE_CTRL, gca_ctrl | V3D_GCA_CACHE_CTRL_FLUSH_SET);
-        V3D_WRITE(V3D_GCA_CACHE_CTRL, gca_ctrl & ~V3D_GCA_CACHE_CTRL_FLUSH_SET);
-}
-
-/* Invalidates the L2 cache.  This is a read-only cache. */
-static void
-vc5_flush_l2(void)
-{
-        V3D_WRITE(V3D_CTL_0_L2CACTL,
-                  V3D_CTL_0_L2CACTL_L2CCLR_SET |
-                  V3D_CTL_0_L2CACTL_L2CENA_SET);
-}
-
-/* Invalidates texture L2 cachelines */
-static void
-vc5_flush_l2t(void)
-{
-        V3D_WRITE(V3D_CTL_0_L2TFLSTA, 0);
-        V3D_WRITE(V3D_CTL_0_L2TFLEND, ~0);
-        V3D_WRITE(V3D_CTL_0_L2TCACTL,
-                  V3D_CTL_0_L2TCACTL_L2TFLS_SET |
-                  (0 << V3D_CTL_0_L2TCACTL_L2TFLM_LSB));
-}
-
-/* Invalidates the slice caches.  These are read-only caches. */
-static void
-vc5_flush_slices(void)
-{
-        V3D_WRITE(V3D_CTL_0_SLCACTL, ~0);
-}
-
-static void
-vc5_flush_caches(void)
-{
-        vc5_flush_l3();
-        vc5_flush_l2();
-        vc5_flush_l2t();
-        vc5_flush_slices();
-}
-
 int
 vc5_simulator_flush(struct vc5_context *vc5,
                     struct drm_vc5_submit_cl *submit, struct vc5_job *job)
@@ -452,38 +395,10 @@ vc5_simulator_flush(struct vc5_context *vc5,
 
         //vc5_dump_to_file(&exec);
 
-        /* Completely reset the GMP. */
-        v3d_hw_write_reg(sim_state.v3d, V3D_GMP_0_CFG,
-                         V3D_GMP_0_CFG_PROTENABLE_SET);
-        v3d_hw_write_reg(sim_state.v3d, V3D_GMP_0_TABLE_ADDR, file->gmp->ofs);
-        v3d_hw_write_reg(sim_state.v3d, V3D_GMP_0_CLEAR_LOAD, ~0);
-        while (v3d_hw_read_reg(sim_state.v3d, V3D_GMP_0_STATUS) &
-               V3D_GMP_0_STATUS_CFG_BUSY_SET) {
-                ;
-        }
-
-        vc5_flush_caches();
-
-        v3d_hw_write_reg(sim_state.v3d, V3D_CLE_0_CT0QBA, submit->bcl_start);
-        v3d_hw_write_reg(sim_state.v3d, V3D_CLE_0_CT0QEA, submit->bcl_end);
-
-        /* Wait for bin to complete before firing render, as it seems the
-         * simulator doesn't implement the semaphores.
-         */
-        while (v3d_hw_read_reg(sim_state.v3d, V3D_CLE_0_CT0CA) !=
-               v3d_hw_read_reg(sim_state.v3d, V3D_CLE_0_CT0EA)) {
-                v3d_hw_tick(sim_state.v3d);
-        }
-
-        v3d_hw_write_reg(sim_state.v3d, V3D_CLE_0_CT1QBA, submit->rcl_start);
-        v3d_hw_write_reg(sim_state.v3d, V3D_CLE_0_CT1QEA, submit->rcl_end);
-
-        while (v3d_hw_read_reg(sim_state.v3d, V3D_CLE_0_CT1CA) !=
-               v3d_hw_read_reg(sim_state.v3d, V3D_CLE_0_CT1EA) ||
-               v3d_hw_read_reg(sim_state.v3d, V3D_CLE_1_CT1CA) !=
-               v3d_hw_read_reg(sim_state.v3d, V3D_CLE_1_CT1EA)) {
-                v3d_hw_tick(sim_state.v3d);
-        }
+        if (sim_state.ver >= 41)
+                v3d41_simulator_flush(sim_state.v3d, submit, file->gmp->ofs);
+        else
+                v3d33_simulator_flush(sim_state.v3d, submit, file->gmp->ofs);
 
         ret = vc5_simulator_unpin_bos(fd, job);
         if (ret)
@@ -612,25 +527,10 @@ vc5_simulator_gem_close_ioctl(int fd, struct drm_gem_close *args)
 static int
 vc5_simulator_get_param_ioctl(int fd, struct drm_vc5_get_param *args)
 {
-        static const uint32_t reg_map[] = {
-                [DRM_VC5_PARAM_V3D_UIFCFG] = V3D_HUB_CTL_UIFCFG,
-                [DRM_VC5_PARAM_V3D_HUB_IDENT1] = V3D_HUB_CTL_IDENT1,
-                [DRM_VC5_PARAM_V3D_HUB_IDENT2] = V3D_HUB_CTL_IDENT2,
-                [DRM_VC5_PARAM_V3D_HUB_IDENT3] = V3D_HUB_CTL_IDENT3,
-                [DRM_VC5_PARAM_V3D_CORE0_IDENT0] = V3D_CTL_0_IDENT0,
-                [DRM_VC5_PARAM_V3D_CORE0_IDENT1] = V3D_CTL_0_IDENT1,
-                [DRM_VC5_PARAM_V3D_CORE0_IDENT2] = V3D_CTL_0_IDENT2,
-        };
-
-        if (args->param < ARRAY_SIZE(reg_map) && reg_map[args->param]) {
-                args->value = v3d_hw_read_reg(sim_state.v3d,
-                                              reg_map[args->param]);
-                return 0;
-        }
-
-        fprintf(stderr, "Unknown DRM_IOCTL_VC5_GET_PARAM(%lld)\n",
-                (long long)args->value);
-        abort();
+        if (sim_state.ver >= 41)
+                return v3d41_simulator_get_param_ioctl(sim_state.v3d, args);
+        else
+                return v3d33_simulator_get_param_ioctl(sim_state.v3d, args);
 }
 
 int
@@ -667,7 +567,7 @@ vc5_simulator_ioctl(int fd, unsigned long request, void *args)
 }
 
 static void
-vc5_simulator_init_global(void)
+vc5_simulator_init_global(const struct v3d_device_info *devinfo)
 {
         mtx_lock(&sim_state.mutex);
         if (sim_state.refcount++) {
@@ -676,7 +576,7 @@ vc5_simulator_init_global(void)
         }
 
         sim_state.v3d = v3d_hw_auto_new(NULL);
-        v3d_hw_alloc_mem(sim_state.v3d, 256 * 1024 * 1024);
+        v3d_hw_alloc_mem(sim_state.v3d, 1024 * 1024 * 1024);
         sim_state.mem_base =
                 v3d_hw_get_mem(sim_state.v3d, &sim_state.mem_size,
                                &sim_state.mem);
@@ -689,18 +589,25 @@ vc5_simulator_init_global(void)
         struct mem_block *b = u_mmAllocMem(sim_state.heap, 4096, GMP_ALIGN2, 0);
         memset(sim_state.mem + b->ofs - sim_state.mem_base, 0xd0, 4096);
 
+        sim_state.ver = v3d_hw_get_version(sim_state.v3d);
+
         mtx_unlock(&sim_state.mutex);
 
         sim_state.fd_map =
                 _mesa_hash_table_create(NULL,
                                         _mesa_hash_pointer,
                                         _mesa_key_pointer_equal);
+
+        if (sim_state.ver >= 41)
+                v3d41_simulator_init_regs(sim_state.v3d);
+        else
+                v3d33_simulator_init_regs(sim_state.v3d);
 }
 
 void
 vc5_simulator_init(struct vc5_screen *screen)
 {
-        vc5_simulator_init_global();
+        vc5_simulator_init_global(&screen->devinfo);
 
         screen->sim_file = rzalloc(screen, struct vc5_simulator_file);
         struct vc5_simulator_file *sim_file = screen->sim_file;

@@ -79,6 +79,7 @@ vc5_set_transform_feedback_outputs(struct vc5_uncompiled_shader *so,
                                 slots[slot_count] =
                                         v3d_slot_from_slot_and_component(VARYING_SLOT_POS, 0);
                                 slot_count++;
+                                buffer_offset++;
                         }
 
                         /* Set the coordinate shader up to output the
@@ -92,6 +93,7 @@ vc5_set_transform_feedback_outputs(struct vc5_uncompiled_shader *so,
                                         v3d_slot_from_slot_and_component(slot,
                                                                          output->start_component + j);
                                 slot_count++;
+                                buffer_offset++;
                         }
                 }
 
@@ -261,6 +263,8 @@ static void
 vc5_setup_shared_key(struct vc5_context *vc5, struct v3d_key *key,
                      struct vc5_texture_stateobj *texstate)
 {
+        const struct v3d_device_info *devinfo = &vc5->screen->devinfo;
+
         for (int i = 0; i < texstate->num_textures; i++) {
                 struct pipe_sampler_view *sampler = texstate->textures[i];
                 struct vc5_sampler_view *vc5_sampler = vc5_sampler_view(sampler);
@@ -271,7 +275,9 @@ vc5_setup_shared_key(struct vc5_context *vc5, struct v3d_key *key,
                         continue;
 
                 key->tex[i].return_size =
-                        vc5_get_tex_return_size(sampler->format);
+                        vc5_get_tex_return_size(devinfo,
+                                                sampler->format,
+                                                sampler_state->compare_mode);
 
                 /* For 16-bit, we set up the sampler to always return 2
                  * channels (meaning no recompiles for most statechanges),
@@ -279,12 +285,15 @@ vc5_setup_shared_key(struct vc5_context *vc5, struct v3d_key *key,
                  */
                 if (key->tex[i].return_size == 16) {
                         key->tex[i].return_channels = 2;
+                } else if (devinfo->ver > 40) {
+                        key->tex[i].return_channels = 4;
                 } else {
                         key->tex[i].return_channels =
-                                vc5_get_tex_return_channels(sampler->format);
+                                vc5_get_tex_return_channels(devinfo,
+                                                            sampler->format);
                 }
 
-                if (vc5_get_tex_return_size(sampler->format) == 32) {
+                if (key->tex[i].return_size == 32 && devinfo->ver < 40) {
                         memcpy(key->tex[i].swizzle,
                                vc5_sampler->swizzle,
                                sizeof(vc5_sampler->swizzle));
@@ -304,8 +313,12 @@ vc5_setup_shared_key(struct vc5_context *vc5, struct v3d_key *key,
                 } else if (sampler){
                         key->tex[i].compare_mode = sampler_state->compare_mode;
                         key->tex[i].compare_func = sampler_state->compare_func;
-                        key->tex[i].wrap_s = sampler_state->wrap_s;
-                        key->tex[i].wrap_t = sampler_state->wrap_t;
+                        key->tex[i].clamp_s =
+                                sampler_state->wrap_s == PIPE_TEX_WRAP_CLAMP;
+                        key->tex[i].clamp_t =
+                                sampler_state->wrap_t == PIPE_TEX_WRAP_CLAMP;
+                        key->tex[i].clamp_r =
+                                sampler_state->wrap_r == PIPE_TEX_WRAP_CLAMP;
                 }
         }
 
@@ -361,14 +374,13 @@ vc5_update_compiled_fs(struct vc5_context *vc5, uint8_t prim_mode)
          * there are means that the buffer count needs to be in the key.
          */
         key->nr_cbufs = vc5->framebuffer.nr_cbufs;
+        key->swap_color_rb = vc5->swap_color_rb;
 
         for (int i = 0; i < key->nr_cbufs; i++) {
                 struct pipe_surface *cbuf = vc5->framebuffer.cbufs[i];
                 const struct util_format_description *desc =
                         util_format_description(cbuf->format);
 
-                if (desc->swizzle[0] == PIPE_SWIZZLE_Z)
-                        key->swap_color_rb |= 1 << i;
                 if (desc->channel[0].type == UTIL_FORMAT_TYPE_FLOAT &&
                     desc->channel[0].size == 32) {
                         key->f32_color_rb |= 1 << i;
@@ -384,6 +396,7 @@ vc5_update_compiled_fs(struct vc5_context *vc5, uint8_t prim_mode)
         }
 
         key->light_twoside = vc5->rasterizer->base.light_twoside;
+        key->shade_model_flat = vc5->rasterizer->base.flatshade;
 
         struct vc5_compiled_shader *old_fs = vc5->prog.fs;
         vc5->prog.fs = vc5_get_compiled_shader(vc5, &key->base);
@@ -393,11 +406,8 @@ vc5_update_compiled_fs(struct vc5_context *vc5, uint8_t prim_mode)
         vc5->dirty |= VC5_DIRTY_COMPILED_FS;
 
         if (old_fs &&
-            (vc5->prog.fs->prog_data.fs->flat_shade_flags !=
-             old_fs->prog_data.fs->flat_shade_flags ||
-             (vc5->rasterizer->base.flatshade &&
-              vc5->prog.fs->prog_data.fs->shade_model_flags !=
-              old_fs->prog_data.fs->shade_model_flags))) {
+            vc5->prog.fs->prog_data.fs->flat_shade_flags !=
+            old_fs->prog_data.fs->flat_shade_flags) {
                 vc5->dirty |= VC5_DIRTY_FLAT_SHADE_FLAGS;
         }
 

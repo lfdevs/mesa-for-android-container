@@ -26,6 +26,7 @@
 
 #include "etnaviv_format.h"
 
+#include "hw/common_3d.xml.h"
 #include "hw/state.xml.h"
 #include "hw/state_3d.xml.h"
 
@@ -39,6 +40,7 @@ struct etna_format {
    unsigned vtx;
    unsigned tex;
    unsigned rs;
+   unsigned ts;
    boolean present;
    const unsigned char tex_swiz[4];
 };
@@ -52,6 +54,8 @@ struct etna_format {
 #define RS_FORMAT_X8B8G8R8    (RS_FORMAT_X8R8G8B8 | RS_FORMAT_RB_SWAP)
 #define RS_FORMAT_A8B8G8R8    (RS_FORMAT_A8R8G8B8 | RS_FORMAT_RB_SWAP)
 
+#define TS_SAMPLER_FORMAT_NONE      ETNA_NO_MATCH
+
 #define SWIZ(x,y,z,w) {    \
    PIPE_SWIZZLE_##x,       \
    PIPE_SWIZZLE_##y,       \
@@ -60,21 +64,23 @@ struct etna_format {
 }
 
 /* vertex + texture */
-#define VT(pipe, vtxfmt, texfmt, texswiz, rsfmt)          \
+#define VT(pipe, vtxfmt, texfmt, texswiz, rsfmt, tsfmt)          \
    [PIPE_FORMAT_##pipe] = {                               \
-      .vtx = VIVS_FE_VERTEX_ELEMENT_CONFIG_TYPE_##vtxfmt, \
+      .vtx = FE_DATA_TYPE_##vtxfmt, \
       .tex = TEXTURE_FORMAT_##texfmt,                     \
       .rs = RS_FORMAT_##rsfmt,                            \
+      .ts = TS_SAMPLER_FORMAT_##tsfmt,        \
       .present = 1,                                       \
       .tex_swiz = texswiz,                                \
    }
 
 /* texture-only */
-#define _T(pipe, fmt, swiz, rsfmt) \
+#define _T(pipe, fmt, swiz, rsfmt, tsfmt) \
    [PIPE_FORMAT_##pipe] = {        \
       .vtx = ETNA_NO_MATCH,        \
       .tex = TEXTURE_FORMAT_##fmt, \
       .rs = RS_FORMAT_##rsfmt,     \
+      .ts = TS_SAMPLER_FORMAT_##tsfmt,     \
       .present = 1,                \
       .tex_swiz = swiz,            \
    }
@@ -82,7 +88,7 @@ struct etna_format {
 /* vertex-only */
 #define V_(pipe, fmt, rsfmt)                           \
    [PIPE_FORMAT_##pipe] = {                            \
-      .vtx = VIVS_FE_VERTEX_ELEMENT_CONFIG_TYPE_##fmt, \
+      .vtx = FE_DATA_TYPE_##fmt, \
       .tex = ETNA_NO_MATCH,                            \
       .rs = RS_FORMAT_##rsfmt,                         \
       .present = 1,                                    \
@@ -90,16 +96,16 @@ struct etna_format {
 
 static struct etna_format formats[PIPE_FORMAT_COUNT] = {
    /* 8-bit */
-   VT(R8_UNORM,   UNSIGNED_BYTE, L8, SWIZ(X, 0, 0, 1), NONE),
+   VT(R8_UNORM,   UNSIGNED_BYTE, L8, SWIZ(X, 0, 0, 1), NONE, NONE),
    V_(R8_SNORM,   BYTE,          NONE),
    V_(R8_UINT,    UNSIGNED_BYTE, NONE),
    V_(R8_SINT,    BYTE,          NONE),
    V_(R8_USCALED, UNSIGNED_BYTE, NONE),
    V_(R8_SSCALED, BYTE,          NONE),
 
-   _T(A8_UNORM, A8, SWIZ(X, Y, Z, W), NONE),
-   _T(L8_UNORM, L8, SWIZ(X, Y, Z, W), NONE),
-   _T(I8_UNORM, I8, SWIZ(X, Y, Z, W), NONE),
+   _T(A8_UNORM, A8, SWIZ(X, Y, Z, W), NONE, NONE),
+   _T(L8_UNORM, L8, SWIZ(X, Y, Z, W), NONE, NONE),
+   _T(I8_UNORM, I8, SWIZ(X, Y, Z, W), NONE, NONE),
 
    /* 16-bit */
    V_(R16_UNORM,   UNSIGNED_SHORT, NONE),
@@ -110,17 +116,17 @@ static struct etna_format formats[PIPE_FORMAT_COUNT] = {
    V_(R16_SSCALED, SHORT,          NONE),
    V_(R16_FLOAT,   HALF_FLOAT,     NONE),
 
-   _T(B4G4R4A4_UNORM, A4R4G4B4, SWIZ(X, Y, Z, W), A4R4G4B4),
-   _T(B4G4R4X4_UNORM, X4R4G4B4, SWIZ(X, Y, Z, W), X4R4G4B4),
+   _T(B4G4R4A4_UNORM, A4R4G4B4, SWIZ(X, Y, Z, W), A4R4G4B4, A4R4G4B4),
+   _T(B4G4R4X4_UNORM, X4R4G4B4, SWIZ(X, Y, Z, W), X4R4G4B4, A4R4G4B4),
 
-   _T(L8A8_UNORM, A8L8, SWIZ(X, Y, Z, W), NONE),
+   _T(L8A8_UNORM, A8L8, SWIZ(X, Y, Z, W), NONE, NONE),
 
-   _T(Z16_UNORM,      D16,      SWIZ(X, Y, Z, W), A4R4G4B4),
-   _T(B5G6R5_UNORM,   R5G6B5,   SWIZ(X, Y, Z, W), R5G6B5),
-   _T(B5G5R5A1_UNORM, A1R5G5B5, SWIZ(X, Y, Z, W), A1R5G5B5),
-   _T(B5G5R5X1_UNORM, X1R5G5B5, SWIZ(X, Y, Z, W), X1R5G5B5),
+   _T(Z16_UNORM,      D16,      SWIZ(X, Y, Z, W), A4R4G4B4, D16),
+   _T(B5G6R5_UNORM,   R5G6B5,   SWIZ(X, Y, Z, W), R5G6B5, R5G6B5),
+   _T(B5G5R5A1_UNORM, A1R5G5B5, SWIZ(X, Y, Z, W), A1R5G5B5, A1R5G5B5),
+   _T(B5G5R5X1_UNORM, X1R5G5B5, SWIZ(X, Y, Z, W), X1R5G5B5, A1R5G5B5),
 
-   VT(R8G8_UNORM,   UNSIGNED_BYTE,  EXT_G8R8 | EXT_FORMAT, SWIZ(X, Y, 0, 1), NONE),
+   VT(R8G8_UNORM,   UNSIGNED_BYTE,  EXT_G8R8 | EXT_FORMAT, SWIZ(X, Y, 0, 1), NONE, NONE),
    V_(R8G8_SNORM,   BYTE,           NONE),
    V_(R8G8_UINT,    UNSIGNED_BYTE,  NONE),
    V_(R8G8_SINT,    BYTE,           NONE),
@@ -155,24 +161,26 @@ static struct etna_format formats[PIPE_FORMAT_COUNT] = {
 
    V_(A8B8G8R8_UNORM,   UNSIGNED_BYTE, NONE),
 
-   VT(R8G8B8A8_UNORM,   UNSIGNED_BYTE, A8B8G8R8, SWIZ(X, Y, Z, W), A8B8G8R8),
+   VT(R8G8B8A8_UNORM,   UNSIGNED_BYTE, A8B8G8R8, SWIZ(X, Y, Z, W), A8B8G8R8, A8R8G8B8),
    V_(R8G8B8A8_SNORM,   BYTE,          A8B8G8R8),
-   _T(R8G8B8X8_UNORM,   X8B8G8R8,      SWIZ(X, Y, Z, W), X8B8G8R8),
+   _T(R8G8B8X8_UNORM,   X8B8G8R8,      SWIZ(X, Y, Z, W), X8B8G8R8, X8R8G8B8),
    V_(R8G8B8A8_UINT,    UNSIGNED_BYTE, A8B8G8R8),
    V_(R8G8B8A8_SINT,    BYTE,          A8B8G8R8),
    V_(R8G8B8A8_USCALED, UNSIGNED_BYTE, A8B8G8R8),
    V_(R8G8B8A8_SSCALED, BYTE,          A8B8G8R8),
 
-   _T(B8G8R8A8_UNORM, A8R8G8B8, SWIZ(X, Y, Z, W), A8R8G8B8),
-   _T(B8G8R8X8_UNORM, X8R8G8B8, SWIZ(X, Y, Z, W), X8R8G8B8),
+   _T(B8G8R8A8_UNORM, A8R8G8B8, SWIZ(X, Y, Z, W), A8R8G8B8, A8R8G8B8),
+   _T(B8G8R8X8_UNORM, X8R8G8B8, SWIZ(X, Y, Z, W), X8R8G8B8, X8R8G8B8),
+   _T(B8G8R8A8_SRGB,  A8R8G8B8, SWIZ(X, Y, Z, W), A8R8G8B8, A8R8G8B8),
+   _T(B8G8R8X8_SRGB,  X8R8G8B8, SWIZ(X, Y, Z, W), X8R8G8B8, X8R8G8B8),
 
    V_(R10G10B10A2_UNORM,   UNSIGNED_INT_10_10_10_2, NONE),
    V_(R10G10B10A2_SNORM,   INT_10_10_10_2,          NONE),
    V_(R10G10B10A2_USCALED, UNSIGNED_INT_10_10_10_2, NONE),
    V_(R10G10B10A2_SSCALED, INT_10_10_10_2,          NONE),
 
-   _T(X8Z24_UNORM,       D24S8, SWIZ(X, Y, Z, W), A8R8G8B8),
-   _T(S8_UINT_Z24_UNORM, D24S8, SWIZ(X, Y, Z, W), A8R8G8B8),
+   _T(X8Z24_UNORM,       D24X8, SWIZ(X, Y, Z, W), A8R8G8B8, D24X8),
+   _T(S8_UINT_Z24_UNORM, D24X8, SWIZ(X, Y, Z, W), A8R8G8B8, D24X8),
 
    /* 48-bit */
    V_(R16G16B16_UNORM,   UNSIGNED_SHORT, NONE),
@@ -222,27 +230,60 @@ static struct etna_format formats[PIPE_FORMAT_COUNT] = {
    V_(R32G32B32A32_FIXED,   FIXED,        NONE),
 
    /* compressed */
-   _T(ETC1_RGB8, ETC1, SWIZ(X, Y, Z, W), NONE),
+   _T(ETC1_RGB8, ETC1, SWIZ(X, Y, Z, W), NONE, NONE),
 
-   _T(DXT1_RGB,  DXT1,      SWIZ(X, Y, Z, W), NONE),
-   _T(DXT1_RGBA, DXT1,      SWIZ(X, Y, Z, W), NONE),
-   _T(DXT3_RGBA, DXT2_DXT3, SWIZ(X, Y, Z, W), NONE),
-   _T(DXT5_RGBA, DXT4_DXT5, SWIZ(X, Y, Z, W), NONE),
+   _T(DXT1_RGB,  DXT1,      SWIZ(X, Y, Z, W), NONE, NONE),
+   _T(DXT1_SRGBA,DXT1,      SWIZ(X, Y, Z, W), NONE, NONE),
+   _T(DXT1_RGBA, DXT1,      SWIZ(X, Y, Z, W), NONE, NONE),
+   _T(DXT3_SRGBA,DXT2_DXT3, SWIZ(X, Y, Z, W), NONE, NONE),
+   _T(DXT3_RGBA, DXT2_DXT3, SWIZ(X, Y, Z, W), NONE, NONE),
+   _T(DXT5_SRGBA,DXT4_DXT5, SWIZ(X, Y, Z, W), NONE, NONE),
+   _T(DXT5_RGBA, DXT4_DXT5, SWIZ(X, Y, Z, W), NONE, NONE),
 
-   _T(ETC2_RGB8,       EXT_NONE | EXT_FORMAT,                          SWIZ(X, Y, Z, W), NONE), /* Extd. format NONE doubles as ETC2_RGB8 */
-   _T(ETC2_SRGB8,      EXT_NONE | EXT_FORMAT,                          SWIZ(X, Y, Z, W), NONE),
-   _T(ETC2_RGB8A1,     EXT_RGB8_PUNCHTHROUGH_ALPHA1_ETC2 | EXT_FORMAT, SWIZ(X, Y, Z, W), NONE),
-   _T(ETC2_SRGB8A1,    EXT_RGB8_PUNCHTHROUGH_ALPHA1_ETC2 | EXT_FORMAT, SWIZ(X, Y, Z, W), NONE),
-   _T(ETC2_RGBA8,      EXT_RGBA8_ETC2_EAC | EXT_FORMAT,                SWIZ(X, Y, Z, W), NONE),
-   _T(ETC2_SRGBA8,     EXT_RGBA8_ETC2_EAC | EXT_FORMAT,                SWIZ(X, Y, Z, W), NONE),
-   _T(ETC2_R11_UNORM,  EXT_R11_EAC | EXT_FORMAT,                       SWIZ(X, Y, Z, W), NONE),
-   _T(ETC2_R11_SNORM,  EXT_SIGNED_R11_EAC | EXT_FORMAT,                SWIZ(X, Y, Z, W), NONE),
-   _T(ETC2_RG11_UNORM, EXT_RG11_EAC | EXT_FORMAT,                      SWIZ(X, Y, Z, W), NONE),
-   _T(ETC2_RG11_SNORM, EXT_SIGNED_RG11_EAC | EXT_FORMAT,               SWIZ(X, Y, Z, W), NONE),
+   _T(ETC2_RGB8,       EXT_NONE | EXT_FORMAT,                          SWIZ(X, Y, Z, W), NONE, NONE), /* Extd. format NONE doubles as ETC2_RGB8 */
+   _T(ETC2_SRGB8,      EXT_NONE | EXT_FORMAT,                          SWIZ(X, Y, Z, W), NONE, NONE),
+   _T(ETC2_RGB8A1,     EXT_RGB8_PUNCHTHROUGH_ALPHA1_ETC2 | EXT_FORMAT, SWIZ(X, Y, Z, W), NONE, NONE),
+   _T(ETC2_SRGB8A1,    EXT_RGB8_PUNCHTHROUGH_ALPHA1_ETC2 | EXT_FORMAT, SWIZ(X, Y, Z, W), NONE, NONE),
+   _T(ETC2_RGBA8,      EXT_RGBA8_ETC2_EAC | EXT_FORMAT,                SWIZ(X, Y, Z, W), NONE, NONE),
+   _T(ETC2_SRGBA8,     EXT_RGBA8_ETC2_EAC | EXT_FORMAT,                SWIZ(X, Y, Z, W), NONE, NONE),
+   _T(ETC2_R11_UNORM,  EXT_R11_EAC | EXT_FORMAT,                       SWIZ(X, Y, Z, W), NONE, NONE),
+   _T(ETC2_R11_SNORM,  EXT_SIGNED_R11_EAC | EXT_FORMAT,                SWIZ(X, Y, Z, W), NONE, NONE),
+   _T(ETC2_RG11_UNORM, EXT_RG11_EAC | EXT_FORMAT,                      SWIZ(X, Y, Z, W), NONE, NONE),
+   _T(ETC2_RG11_SNORM, EXT_SIGNED_RG11_EAC | EXT_FORMAT,               SWIZ(X, Y, Z, W), NONE, NONE),
+
+   _T(ASTC_4x4,        ASTC_RGBA_4x4 | ASTC_FORMAT,                    SWIZ(X, Y, Z, W), NONE, NONE),
+   _T(ASTC_5x4,        ASTC_RGBA_5x4 | ASTC_FORMAT,                    SWIZ(X, Y, Z, W), NONE, NONE),
+   _T(ASTC_5x5,        ASTC_RGBA_5x5 | ASTC_FORMAT,                    SWIZ(X, Y, Z, W), NONE, NONE),
+   _T(ASTC_6x5,        ASTC_RGBA_6x5 | ASTC_FORMAT,                    SWIZ(X, Y, Z, W), NONE, NONE),
+   _T(ASTC_6x6,        ASTC_RGBA_6x6 | ASTC_FORMAT,                    SWIZ(X, Y, Z, W), NONE, NONE),
+   _T(ASTC_8x5,        ASTC_RGBA_8x5 | ASTC_FORMAT,                    SWIZ(X, Y, Z, W), NONE, NONE),
+   _T(ASTC_8x6,        ASTC_RGBA_8x6 | ASTC_FORMAT,                    SWIZ(X, Y, Z, W), NONE, NONE),
+   _T(ASTC_8x8,        ASTC_RGBA_8x8 | ASTC_FORMAT,                    SWIZ(X, Y, Z, W), NONE, NONE),
+   _T(ASTC_10x5,       ASTC_RGBA_10x5 | ASTC_FORMAT,                   SWIZ(X, Y, Z, W), NONE, NONE),
+   _T(ASTC_10x6,       ASTC_RGBA_10x6 | ASTC_FORMAT,                   SWIZ(X, Y, Z, W), NONE, NONE),
+   _T(ASTC_10x8,       ASTC_RGBA_10x8 | ASTC_FORMAT,                   SWIZ(X, Y, Z, W), NONE, NONE),
+   _T(ASTC_10x10,      ASTC_RGBA_10x10 | ASTC_FORMAT,                  SWIZ(X, Y, Z, W), NONE, NONE),
+   _T(ASTC_12x10,      ASTC_RGBA_12x10 | ASTC_FORMAT,                  SWIZ(X, Y, Z, W), NONE, NONE),
+   _T(ASTC_12x12,      ASTC_RGBA_12x12 | ASTC_FORMAT,                  SWIZ(X, Y, Z, W), NONE, NONE),
+
+   _T(ASTC_4x4_SRGB,   ASTC_SRGB8_ALPHA8_4x4 | ASTC_FORMAT,            SWIZ(X, Y, Z, W), NONE, NONE),
+   _T(ASTC_5x4_SRGB,   ASTC_SRGB8_ALPHA8_5x4 | ASTC_FORMAT,            SWIZ(X, Y, Z, W), NONE, NONE),
+   _T(ASTC_5x5_SRGB,   ASTC_SRGB8_ALPHA8_5x5 | ASTC_FORMAT,            SWIZ(X, Y, Z, W), NONE, NONE),
+   _T(ASTC_6x5_SRGB,   ASTC_SRGB8_ALPHA8_6x5 | ASTC_FORMAT,            SWIZ(X, Y, Z, W), NONE, NONE),
+   _T(ASTC_6x6_SRGB,   ASTC_SRGB8_ALPHA8_6x6 | ASTC_FORMAT,            SWIZ(X, Y, Z, W), NONE, NONE),
+   _T(ASTC_8x5_SRGB,   ASTC_SRGB8_ALPHA8_8x5 | ASTC_FORMAT,            SWIZ(X, Y, Z, W), NONE, NONE),
+   _T(ASTC_8x6_SRGB,   ASTC_SRGB8_ALPHA8_8x6 | ASTC_FORMAT,            SWIZ(X, Y, Z, W), NONE, NONE),
+   _T(ASTC_8x8_SRGB,   ASTC_SRGB8_ALPHA8_8x8 | ASTC_FORMAT,            SWIZ(X, Y, Z, W), NONE, NONE),
+   _T(ASTC_10x5_SRGB,  ASTC_SRGB8_ALPHA8_10x5 | ASTC_FORMAT,           SWIZ(X, Y, Z, W), NONE, NONE),
+   _T(ASTC_10x6_SRGB,  ASTC_SRGB8_ALPHA8_10x6 | ASTC_FORMAT,           SWIZ(X, Y, Z, W), NONE, NONE),
+   _T(ASTC_10x8_SRGB,  ASTC_SRGB8_ALPHA8_10x8 | ASTC_FORMAT,           SWIZ(X, Y, Z, W), NONE, NONE),
+   _T(ASTC_10x10_SRGB, ASTC_SRGB8_ALPHA8_10x10 | ASTC_FORMAT,          SWIZ(X, Y, Z, W), NONE, NONE),
+   _T(ASTC_12x10_SRGB, ASTC_SRGB8_ALPHA8_12x10 | ASTC_FORMAT,          SWIZ(X, Y, Z, W), NONE, NONE),
+   _T(ASTC_12x12_SRGB, ASTC_SRGB8_ALPHA8_12x12 | ASTC_FORMAT,          SWIZ(X, Y, Z, W), NONE, NONE),
 
    /* YUV */
-   _T(YUYV, YUY2, SWIZ(X, Y, Z, W), YUY2),
-   _T(UYVY, UYVY, SWIZ(X, Y, Z, W), NONE),
+   _T(YUYV, YUY2, SWIZ(X, Y, Z, W), YUY2, NONE),
+   _T(UYVY, UYVY, SWIZ(X, Y, Z, W), NONE, NONE),
 };
 
 uint32_t
@@ -319,4 +360,13 @@ translate_vertex_format_type(enum pipe_format fmt)
       return ETNA_NO_MATCH;
 
    return formats[fmt].vtx;
+}
+
+uint32_t
+translate_ts_sampler_format(enum pipe_format fmt)
+{
+   if (!formats[fmt].present)
+      return ETNA_NO_MATCH;
+
+   return formats[fmt].ts;
 }

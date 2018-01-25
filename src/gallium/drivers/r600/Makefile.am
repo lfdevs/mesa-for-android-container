@@ -42,4 +42,5 @@ CLEANFILES = \
 EXTRA_DIST = \
 	egd_tables.py \
 	sb/notes.markdown \
-	sb/sb_bc_fmt_def.inc
+	sb/sb_bc_fmt_def.inc \
+	meson.build

@@ -30,4 +30,4 @@ noinst_LTLIBRARIES = libwsw.la
 
 libwsw_la_SOURCES = $(C_SOURCES)
 
-EXTRA_DIST = SConscript
+EXTRA_DIST = SConscript meson.build

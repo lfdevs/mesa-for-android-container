@@ -55,6 +55,8 @@
 #endif
 
 static const int fourcc_formats[] = {
+   __DRI_IMAGE_FOURCC_ARGB2101010,
+   __DRI_IMAGE_FOURCC_XRGB2101010,
    __DRI_IMAGE_FOURCC_ARGB8888,
    __DRI_IMAGE_FOURCC_ABGR8888,
    __DRI_IMAGE_FOURCC_SARGB8888,
@@ -105,6 +107,14 @@ static int convert_fourcc(int format, int *dri_components_p)
       format = __DRI_IMAGE_FORMAT_XBGR8888;
       dri_components = __DRI_IMAGE_COMPONENTS_RGB;
       break;
+   case __DRI_IMAGE_FOURCC_ARGB2101010:
+      format = __DRI_IMAGE_FORMAT_ARGB2101010;
+      dri_components = __DRI_IMAGE_COMPONENTS_RGBA;
+      break;
+   case __DRI_IMAGE_FOURCC_XRGB2101010:
+      format = __DRI_IMAGE_FORMAT_XRGB2101010;
+      dri_components = __DRI_IMAGE_COMPONENTS_RGB;
+      break;
    case __DRI_IMAGE_FOURCC_R8:
       format = __DRI_IMAGE_FORMAT_R8;
       dri_components = __DRI_IMAGE_COMPONENTS_R;
@@ -120,6 +130,10 @@ static int convert_fourcc(int format, int *dri_components_p)
    case __DRI_IMAGE_FOURCC_GR1616:
       format = __DRI_IMAGE_FORMAT_GR1616;
       dri_components = __DRI_IMAGE_COMPONENTS_RG;
+      break;
+   case __DRI_IMAGE_FOURCC_YUYV:
+      format = __DRI_IMAGE_FORMAT_YUYV;
+      dri_components = __DRI_IMAGE_COMPONENTS_Y_XUXV;
       break;
    /*
     * For multi-planar YUV formats, we return the format of the first
@@ -166,6 +180,12 @@ static int convert_to_fourcc(int format)
    case __DRI_IMAGE_FORMAT_XBGR8888:
       format = __DRI_IMAGE_FOURCC_XBGR8888;
       break;
+   case __DRI_IMAGE_FORMAT_ARGB2101010:
+      format = __DRI_IMAGE_FOURCC_ARGB2101010;
+      break;
+   case __DRI_IMAGE_FORMAT_XRGB2101010:
+      format = __DRI_IMAGE_FOURCC_XRGB2101010;
+      break;
    case __DRI_IMAGE_FORMAT_R8:
       format = __DRI_IMAGE_FOURCC_R8;
       break;
@@ -198,6 +218,12 @@ static enum pipe_format dri2_format_to_pipe_format (int format)
    case __DRI_IMAGE_FORMAT_ABGR8888:
       pf = PIPE_FORMAT_RGBA8888_UNORM;
       break;
+   case __DRI_IMAGE_FORMAT_XRGB2101010:
+      pf = PIPE_FORMAT_B10G10R10X2_UNORM;
+      break;
+   case __DRI_IMAGE_FORMAT_ARGB2101010:
+      pf = PIPE_FORMAT_B10G10R10A2_UNORM;
+      break;
    case __DRI_IMAGE_FORMAT_R8:
       pf = PIPE_FORMAT_R8_UNORM;
       break;
@@ -209,6 +235,9 @@ static enum pipe_format dri2_format_to_pipe_format (int format)
       break;
    case __DRI_IMAGE_FORMAT_GR1616:
       pf = PIPE_FORMAT_R16G16_UNORM;
+      break;
+   case __DRI_IMAGE_FORMAT_YUYV:
+      pf = PIPE_FORMAT_YUYV;
       break;
    default:
       pf = PIPE_FORMAT_NONE;
@@ -252,6 +281,12 @@ static enum pipe_format fourcc_to_pipe_format(int fourcc)
       break;
    case __DRI_IMAGE_FOURCC_XBGR8888:
       pf = PIPE_FORMAT_RGBX8888_UNORM;
+      break;
+   case __DRI_IMAGE_FOURCC_ARGB2101010:
+      pf = PIPE_FORMAT_B10G10R10A2_UNORM;
+      break;
+   case __DRI_IMAGE_FOURCC_XRGB2101010:
+      pf = PIPE_FORMAT_B10G10R10X2_UNORM;
       break;
 
    case __DRI_IMAGE_FOURCC_NV12:
@@ -370,10 +405,14 @@ dri2_drawable_get_buffers(struct dri_drawable *drawable,
        * may occur as the stvis->color_format.
        */
       switch(format) {
+      case PIPE_FORMAT_B10G10R10A2_UNORM:
       case PIPE_FORMAT_BGRA8888_UNORM:
       case PIPE_FORMAT_RGBA8888_UNORM:
 	 depth = 32;
 	 break;
+      case PIPE_FORMAT_B10G10R10X2_UNORM:
+         depth = 30;
+         break;
       case PIPE_FORMAT_BGRX8888_UNORM:
       case PIPE_FORMAT_RGBX8888_UNORM:
 	 depth = 24;
@@ -457,6 +496,12 @@ dri_image_drawable_get_buffers(struct dri_drawable *drawable,
       case PIPE_FORMAT_RGBA8888_UNORM:
          image_format = __DRI_IMAGE_FORMAT_ABGR8888;
          break;
+      case PIPE_FORMAT_B10G10R10X2_UNORM:
+         image_format = __DRI_IMAGE_FORMAT_XRGB2101010;
+         break;
+      case PIPE_FORMAT_B10G10R10A2_UNORM:
+         image_format = __DRI_IMAGE_FORMAT_ARGB2101010;
+         break;
       default:
          image_format = __DRI_IMAGE_FORMAT_NONE;
          break;
@@ -502,6 +547,9 @@ dri2_allocate_buffer(__DRIscreen *sPriv,
    switch (format) {
       case 32:
          pf = PIPE_FORMAT_BGRA8888_UNORM;
+         break;
+      case 30:
+         pf = PIPE_FORMAT_B10G10R10X2_UNORM;
          break;
       case 24:
          pf = PIPE_FORMAT_BGRX8888_UNORM;
@@ -1696,7 +1744,7 @@ dri2_interop_export_object(__DRIcontext *_ctx,
       return MESA_GLINTEROP_INVALID_MIP_LEVEL;
 
    /* Validate the OpenGL object and get pipe_resource. */
-   mtx_lock(&ctx->Shared->Mutex);
+   simple_mtx_lock(&ctx->Shared->Mutex);
 
    if (target == GL_ARRAY_BUFFER) {
       /* Buffer objects.
@@ -1712,14 +1760,14 @@ dri2_interop_export_object(__DRIcontext *_ctx,
        *   the size of the buffer is 0."
        */
       if (!buf || buf->Size == 0) {
-         mtx_unlock(&ctx->Shared->Mutex);
+         simple_mtx_unlock(&ctx->Shared->Mutex);
          return MESA_GLINTEROP_INVALID_OBJECT;
       }
 
       res = st_buffer_object(buf)->buffer;
       if (!res) {
          /* this shouldn't happen */
-         mtx_unlock(&ctx->Shared->Mutex);
+         simple_mtx_unlock(&ctx->Shared->Mutex);
          return MESA_GLINTEROP_INVALID_OBJECT;
       }
 
@@ -1740,7 +1788,7 @@ dri2_interop_export_object(__DRIcontext *_ctx,
        *    object or if the width or height of renderbuffer is zero."
        */
       if (!rb || rb->Width == 0 || rb->Height == 0) {
-         mtx_unlock(&ctx->Shared->Mutex);
+         simple_mtx_unlock(&ctx->Shared->Mutex);
          return MESA_GLINTEROP_INVALID_OBJECT;
       }
 
@@ -1749,7 +1797,7 @@ dri2_interop_export_object(__DRIcontext *_ctx,
        *    renderbuffer object."
        */
       if (rb->NumSamples > 1) {
-         mtx_unlock(&ctx->Shared->Mutex);
+         simple_mtx_unlock(&ctx->Shared->Mutex);
          return MESA_GLINTEROP_INVALID_OPERATION;
       }
 
@@ -1759,7 +1807,7 @@ dri2_interop_export_object(__DRIcontext *_ctx,
        */
       res = st_renderbuffer(rb)->texture;
       if (!res) {
-         mtx_unlock(&ctx->Shared->Mutex);
+         simple_mtx_unlock(&ctx->Shared->Mutex);
          return MESA_GLINTEROP_OUT_OF_RESOURCES;
       }
 
@@ -1789,7 +1837,7 @@ dri2_interop_export_object(__DRIcontext *_ctx,
           obj->Target != target ||
           !obj->_BaseComplete ||
           (in->miplevel > 0 && !obj->_MipmapComplete)) {
-         mtx_unlock(&ctx->Shared->Mutex);
+         simple_mtx_unlock(&ctx->Shared->Mutex);
          return MESA_GLINTEROP_INVALID_OBJECT;
       }
 
@@ -1802,19 +1850,19 @@ dri2_interop_export_object(__DRIcontext *_ctx,
        *    specification and section 3.7.10 of the OpenGL ES 2.0."
        */
       if (in->miplevel < obj->BaseLevel || in->miplevel > obj->_MaxLevel) {
-         mtx_unlock(&ctx->Shared->Mutex);
+         simple_mtx_unlock(&ctx->Shared->Mutex);
          return MESA_GLINTEROP_INVALID_MIP_LEVEL;
       }
 
       if (!st_finalize_texture(ctx, st->pipe, obj, 0)) {
-         mtx_unlock(&ctx->Shared->Mutex);
+         simple_mtx_unlock(&ctx->Shared->Mutex);
          return MESA_GLINTEROP_OUT_OF_RESOURCES;
       }
 
       res = st_get_texobj_resource(obj);
       if (!res) {
          /* Incomplete texture buffer object? This shouldn't really occur. */
-         mtx_unlock(&ctx->Shared->Mutex);
+         simple_mtx_unlock(&ctx->Shared->Mutex);
          return MESA_GLINTEROP_INVALID_OBJECT;
       }
 
@@ -1854,7 +1902,7 @@ dri2_interop_export_object(__DRIcontext *_ctx,
 
    success = screen->resource_get_handle(screen, st->pipe, res, &whandle,
                                          usage);
-   mtx_unlock(&ctx->Shared->Mutex);
+   simple_mtx_unlock(&ctx->Shared->Mutex);
 
    if (!success)
       return MESA_GLINTEROP_OUT_OF_HOST_MEMORY;

@@ -337,16 +337,6 @@ struct dd_function_table {
                                  GLsizei width, GLsizei height, GLsizei depth,
                                  GLenum format,
                                  GLsizei imageSize, const GLvoid *data);
-
-   /**
-    * Called by glGetCompressedTexImage.
-    */
-   void (*GetCompressedTexSubImage)(struct gl_context *ctx,
-                                    struct gl_texture_image *texImage,
-                                    GLint xoffset, GLint yoffset,
-                                    GLint zoffset, GLsizei width,
-                                    GLsizei height, GLsizei depth,
-                                    GLvoid *data);
    /*@}*/
 
    /**
@@ -1125,6 +1115,23 @@ struct dd_function_table {
                                 struct gl_memory_object *memObj,
                                 GLuint64 size,
                                 int fd);
+   /*@}*/
+
+   /**
+    * \name GL_ARB_get_program_binary
+    */
+   /*@{*/
+   /**
+    * Calls to retrieve/store a binary serialized copy of the current program.
+    */
+   void (*GetProgramBinaryDriverSHA1)(struct gl_context *ctx, uint8_t *sha1);
+
+   void (*ProgramBinarySerializeDriverBlob)(struct gl_context *ctx,
+                                            struct gl_program *prog);
+
+   void (*ProgramBinaryDeserializeDriverBlob)(struct gl_context *ctx,
+                                              struct gl_shader_program *shProg,
+                                              struct gl_program *prog);
    /*@}*/
 };
 

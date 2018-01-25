@@ -266,6 +266,7 @@ void bc_finalizer::run_on(container_node* c) {
 						}
 					}
 				}
+				last_cf = c;
 			} else if (n->is_fetch_inst()) {
 				finalize_fetch(static_cast<fetch_node*>(n));
 			} else if (n->is_cf_inst()) {
@@ -293,7 +294,7 @@ void bc_finalizer::finalize_alu_group(alu_group_node* g, node *prev_node) {
 		value *d = n->dst.empty() ? NULL : n->dst[0];
 
 		if (d && d->is_special_reg()) {
-			assert((n->bc.op_ptr->flags & AF_MOVA) || d->is_geometry_emit());
+			assert((n->bc.op_ptr->flags & AF_MOVA) || d->is_geometry_emit() || d->is_lds_oq() || d->is_lds_access());
 			d = NULL;
 		}
 
@@ -427,6 +428,18 @@ bool bc_finalizer::finalize_alu_src(alu_group_node* g, alu_node* a, alu_group_no
 			src.chan = k.chan();
 			break;
 		}
+		case VLK_SPECIAL_REG:
+			if (v->select.sel() == SV_LDS_OQA) {
+				src.sel = ALU_SRC_LDS_OQ_A_POP;
+				src.chan = 0;
+			} else if (v->select.sel() == SV_LDS_OQB) {
+				src.sel = ALU_SRC_LDS_OQ_B_POP;
+				src.chan = 0;
+			} else {
+				src.sel = ALU_SRC_0;
+				src.chan = 0;
+			}
+			break;
 		case VLK_PARAM:
 		case VLK_SPECIAL_CONST:
 			src.sel = v->select.sel();
@@ -557,6 +570,8 @@ void bc_finalizer::finalize_fetch(fetch_node* f) {
 
 	if (flags & FF_VTX) {
 		src_count = 1;
+	} else if (flags & FF_GDS) {
+		src_count = 2;
 	} else if (flags & FF_USEGRAD) {
 		emit_set_grad(f);
 	} else if (flags & FF_USE_TEXTURE_OFFSETS) {
@@ -661,6 +676,11 @@ void bc_finalizer::finalize_fetch(fetch_node* f) {
 	for (unsigned i = 0; i < 4; ++i)
 		f->bc.dst_sel[i] = dst_swz[i];
 
+	if ((flags & FF_GDS) && reg == -1) {
+		f->bc.dst_sel[0] = SEL_MASK;
+		f->bc.dst_gpr = 0;
+		return ;
+	}
 	assert(reg >= 0);
 
 	if (reg >= 0)

@@ -28,7 +28,7 @@
 #include <sys/stat.h>
 
 #include "os/os_mman.h"
-#include "os/os_time.h"
+#include "util/os_time.h"
 #include "util/u_memory.h"
 #include "util/u_format.h"
 #include "util/u_hash_table.h"

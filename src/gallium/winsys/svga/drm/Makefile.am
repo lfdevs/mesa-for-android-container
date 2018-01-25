@@ -29,11 +29,8 @@ AM_CFLAGS = \
 	$(GALLIUM_WINSYS_CFLAGS) \
 	$(LIBDRM_CFLAGS)
 
-#On some systems -std= must be added to CFLAGS to be the last -std=
-CFLAGS += -std=gnu99
-
 noinst_LTLIBRARIES = libsvgadrm.la
 
 libsvgadrm_la_SOURCES = $(C_SOURCES)
 
-EXTRA_DIST = SConscript
+EXTRA_DIST = SConscript meson.build

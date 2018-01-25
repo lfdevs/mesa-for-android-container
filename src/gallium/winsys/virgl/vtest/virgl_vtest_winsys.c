@@ -24,7 +24,7 @@
 #include "util/u_memory.h"
 #include "util/u_format.h"
 #include "util/u_inlines.h"
-#include "os/os_time.h"
+#include "util/os_time.h"
 #include "state_tracker/sw_winsys.h"
 
 #include "virgl_vtest_winsys.h"

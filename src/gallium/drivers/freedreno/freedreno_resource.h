@@ -31,7 +31,7 @@
 
 #include "util/list.h"
 #include "util/u_range.h"
-#include "util/u_transfer.h"
+#include "util/u_transfer_helper.h"
 
 #include "freedreno_batch.h"
 #include "freedreno_util.h"
@@ -64,7 +64,7 @@ struct fd_resource_slice {
 struct set;
 
 struct fd_resource {
-	struct u_resource base;
+	struct pipe_resource base;
 	struct fd_bo *bo;
 	uint32_t cpp;
 	enum pipe_format internal_format;
@@ -73,6 +73,7 @@ struct fd_resource {
 	struct fd_resource_slice slices[MAX_MIP_LEVELS];
 	/* buffer range that has been initialized */
 	struct util_range valid_buffer_range;
+	bool valid;
 
 	/* reference to the resource holding stencil data for a z32_s8 texture */
 	/* TODO rename to secondary or auxiliary? */
@@ -95,6 +96,9 @@ struct fd_resource {
 	 * shadowed.
 	 */
 	uint32_t bc_batch_mask;
+
+	unsigned tile_mode : 2;
+	unsigned preferred_tile_mode : 2;
 
 	/*
 	 * LRZ
@@ -131,7 +135,8 @@ pending(struct fd_resource *rsc, bool write)
 
 struct fd_transfer {
 	struct pipe_transfer base;
-	void *staging;
+	struct pipe_resource *staging_prsc;
+	struct pipe_box staging_box;
 };
 
 static inline struct fd_transfer *
@@ -143,7 +148,7 @@ fd_transfer(struct pipe_transfer *ptrans)
 static inline struct fd_resource_slice *
 fd_resource_slice(struct fd_resource *rsc, unsigned level)
 {
-	assert(level <= rsc->base.b.last_level);
+	assert(level <= rsc->base.last_level);
 	return &rsc->slices[level];
 }
 
@@ -162,6 +167,16 @@ fd_resource_offset(struct fd_resource *rsc, unsigned level, unsigned layer)
 	return offset;
 }
 
+/* This might be a5xx specific, but higher mipmap levels are always linear: */
+static inline bool
+fd_resource_level_linear(struct pipe_resource *prsc, int level)
+{
+	unsigned w = u_minify(prsc->width0, level);
+	if (w < 16)
+		return true;
+	return false;
+}
+
 void fd_blitter_pipe_begin(struct fd_context *ctx, bool render_cond, bool discard,
 		enum fd_render_stage stage);
 void fd_blitter_pipe_end(struct fd_context *ctx);
@@ -169,6 +184,7 @@ void fd_blitter_pipe_end(struct fd_context *ctx);
 void fd_resource_screen_init(struct pipe_screen *pscreen);
 void fd_resource_context_init(struct pipe_context *pctx);
 
+uint32_t fd_setup_slices(struct fd_resource *rsc);
 void fd_resource_resize(struct pipe_resource *prsc, uint32_t sz);
 
 bool fd_render_condition_check(struct pipe_context *pctx);

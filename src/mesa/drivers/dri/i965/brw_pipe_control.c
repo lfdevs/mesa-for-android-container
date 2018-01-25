@@ -89,6 +89,26 @@ gen7_cs_stall_every_four_pipe_controls(struct brw_context *brw, uint32_t flags)
    return 0;
 }
 
+/* #1130 from gen10 workarounds page in h/w specs:
+ * "Enable Depth Stall on every Post Sync Op if Render target Cache Flush is
+ *  not enabled in same PIPE CONTROL and Enable Pixel score board stall if
+ *  Render target cache flush is enabled."
+ *
+ * Applicable to CNL B0 and C0 steppings only.
+ */
+static void
+gen10_add_rcpfe_workaround_bits(uint32_t *flags)
+{
+   if (*flags & PIPE_CONTROL_RENDER_TARGET_FLUSH) {
+      *flags = *flags | PIPE_CONTROL_STALL_AT_SCOREBOARD;
+   } else if (*flags &
+             (PIPE_CONTROL_WRITE_IMMEDIATE |
+              PIPE_CONTROL_WRITE_DEPTH_COUNT |
+              PIPE_CONTROL_WRITE_TIMESTAMP)) {
+      *flags = *flags | PIPE_CONTROL_DEPTH_STALL;
+   }
+}
+
 static void
 brw_emit_pipe_control(struct brw_context *brw, uint32_t flags,
                       struct brw_bo *bo, uint32_t offset, uint64_t imm)
@@ -137,6 +157,9 @@ brw_emit_pipe_control(struct brw_context *brw, uint32_t flags,
             }
          }
       }
+
+      if (devinfo->gen == 10)
+         gen10_add_rcpfe_workaround_bits(&flags);
 
       BEGIN_BATCH(6);
       OUT_BATCH(_3DSTATE_PIPE_CONTROL | (6 - 2));

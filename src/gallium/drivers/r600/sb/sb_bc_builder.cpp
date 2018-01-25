@@ -129,7 +129,9 @@ int bc_builder::build_fetch_clause(cf_node* n) {
 			I != E; ++I) {
 		fetch_node *f = static_cast<fetch_node*>(*I);
 
-		if (f->bc.op_ptr->flags & FF_VTX)
+		if (f->bc.op_ptr->flags & FF_GDS)
+			build_fetch_gds(f);
+		else if (f->bc.op_ptr->flags & FF_VTX)
 			build_fetch_vtx(f);
 		else
 			build_fetch_tex(f);
@@ -553,6 +555,46 @@ int bc_builder::build_fetch_tex(fetch_node* n) {
 			.SRC_SEL_Y(bc.src_sel[1])
 			.SRC_SEL_Z(bc.src_sel[2])
 			.SRC_SEL_W(bc.src_sel[3]);
+
+	bb << 0;
+	return 0;
+}
+
+int bc_builder::build_fetch_gds(fetch_node *n) {
+	const bc_fetch &bc = n->bc;
+	const fetch_op_info *fop = bc.op_ptr;
+	unsigned gds_op = (ctx.fetch_opcode(bc.op) >> 8) & 0x3f;
+	unsigned mem_op = 4;
+	assert(fop->flags && FF_GDS);
+
+	if (bc.op == FETCH_OP_TF_WRITE) {
+		mem_op = 5;
+		gds_op = 0;
+	}
+
+	bb << MEM_GDS_WORD0_EGCM()
+		.MEM_INST(2)
+		.MEM_OP(mem_op)
+		.SRC_GPR(bc.src_gpr)
+		.SRC_SEL_X(bc.src_sel[0])
+		.SRC_SEL_Y(bc.src_sel[1])
+		.SRC_SEL_Z(bc.src_sel[2]);
+
+	bb << MEM_GDS_WORD1_EGCM()
+		.DST_GPR(bc.dst_gpr)
+		.DST_REL_MODE(bc.dst_rel)
+		.GDS_OP(gds_op)
+		.SRC_GPR(bc.src2_gpr)
+		.UAV_INDEX_MODE(bc.uav_index_mode)
+		.UAV_ID(bc.uav_id)
+		.ALLOC_CONSUME(bc.alloc_consume)
+		.BCAST_FIRST_REQ(bc.bcast_first_req);
+
+	bb << MEM_GDS_WORD2_EGCM()
+		.DST_SEL_X(bc.dst_sel[0])
+		.DST_SEL_Y(bc.dst_sel[1])
+		.DST_SEL_Z(bc.dst_sel[2])
+		.DST_SEL_W(bc.dst_sel[3]);
 
 	bb << 0;
 	return 0;

@@ -78,7 +78,7 @@ struct tgsi_opcode_info
    unsigned is_branch:1;
    unsigned pre_dedent:1;
    unsigned post_indent:1;
-   enum tgsi_output_mode output_mode:3;
+   enum tgsi_output_mode output_mode:4;
    unsigned opcode:8;
 };
 
@@ -89,7 +89,7 @@ const char *
 tgsi_get_opcode_name( uint opcode );
 
 const char *
-tgsi_get_processor_name( uint processor );
+tgsi_get_processor_name(enum pipe_shader_type processor);
 
 enum tgsi_opcode_type {
    TGSI_TYPE_UNTYPED, /* for MOV */

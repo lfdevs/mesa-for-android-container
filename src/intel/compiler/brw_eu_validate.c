@@ -1257,8 +1257,8 @@ special_requirements_for_handling_double_precision_data_types(
 
 bool
 brw_validate_instructions(const struct gen_device_info *devinfo,
-                          void *assembly, int start_offset, int end_offset,
-                          struct annotation_info *annotation)
+                          const void *assembly, int start_offset, int end_offset,
+                          struct disasm_info *disasm)
 {
    bool valid = true;
 
@@ -1286,8 +1286,8 @@ brw_validate_instructions(const struct gen_device_info *devinfo,
          CHECK(special_requirements_for_handling_double_precision_data_types);
       }
 
-      if (error_msg.str && annotation) {
-         annotation_insert_error(annotation, src_offset, error_msg.str);
+      if (error_msg.str && disasm) {
+         disasm_insert_error(disasm, src_offset, error_msg.str);
       }
       valid = valid && error_msg.len == 0;
       free(error_msg.str);

@@ -35,3 +35,5 @@ else
 main_test_SOURCES +=			\
 	stubs.cpp
 endif
+
+EXTRA_DIST = meson.build

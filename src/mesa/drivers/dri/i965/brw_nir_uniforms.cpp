@@ -243,3 +243,28 @@ brw_nir_setup_arb_uniforms(void *mem_ctx, nir_shader *shader,
          stage_prog_data->param[4 * p + i] = BRW_PARAM_BUILTIN_ZERO;
    }
 }
+
+void
+brw_nir_lower_patch_vertices_in_to_uniform(nir_shader *nir)
+{
+   nir_foreach_variable_safe(var, &nir->system_values) {
+      if (var->data.location != SYSTEM_VALUE_VERTICES_IN)
+         continue;
+
+      gl_state_index tokens[STATE_LENGTH] = {
+         STATE_INTERNAL,
+         nir->info.stage == MESA_SHADER_TESS_CTRL ?
+            STATE_TCS_PATCH_VERTICES_IN : STATE_TES_PATCH_VERTICES_IN,
+      };
+      var->num_state_slots = 1;
+      var->state_slots =
+         ralloc_array(var, nir_state_slot, var->num_state_slots);
+      memcpy(var->state_slots[0].tokens, tokens, sizeof(tokens));
+      var->state_slots[0].swizzle = SWIZZLE_XXXX;
+
+      var->data.mode = nir_var_uniform;
+      var->data.location = -1;
+      exec_node_remove(&var->node);
+      exec_list_push_tail(&nir->uniforms, &var->node);
+   }
+}

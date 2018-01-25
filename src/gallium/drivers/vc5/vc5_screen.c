@@ -82,6 +82,8 @@ vc5_screen_destroy(struct pipe_screen *pscreen)
 static int
 vc5_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 {
+        struct vc5_screen *screen = vc5_screen(pscreen);
+
         switch (param) {
                 /* Supported features (boolean caps). */
         case PIPE_CAP_VERTEX_COLOR_CLAMPED:
@@ -90,29 +92,28 @@ vc5_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
         case PIPE_CAP_BUFFER_MAP_PERSISTENT_COHERENT:
         case PIPE_CAP_NPOT_TEXTURES:
         case PIPE_CAP_SHAREABLE_SHADERS:
-        case PIPE_CAP_USER_CONSTANT_BUFFERS:
-        case PIPE_CAP_TEXTURE_SHADOW_MAP:
         case PIPE_CAP_BLEND_EQUATION_SEPARATE:
-        case PIPE_CAP_TWO_SIDED_STENCIL:
         case PIPE_CAP_TEXTURE_MULTISAMPLE:
         case PIPE_CAP_TEXTURE_SWIZZLE:
         case PIPE_CAP_VERTEX_ELEMENT_INSTANCE_DIVISOR:
         case PIPE_CAP_START_INSTANCE:
         case PIPE_CAP_TGSI_INSTANCEID:
         case PIPE_CAP_SM3:
-        case PIPE_CAP_INDEP_BLEND_ENABLE: /* XXX */
         case PIPE_CAP_TEXTURE_QUERY_LOD:
         case PIPE_CAP_PRIMITIVE_RESTART:
         case PIPE_CAP_GLSL_OPTIMIZE_CONSERVATIVELY:
         case PIPE_CAP_OCCLUSION_QUERY:
         case PIPE_CAP_POINT_SPRITE:
         case PIPE_CAP_STREAM_OUTPUT_PAUSE_RESUME:
-        case PIPE_CAP_STREAM_OUTPUT_INTERLEAVE_BUFFERS:
         case PIPE_CAP_ALLOW_MAPPED_BUFFERS_DURING_EXECUTION:
         case PIPE_CAP_COMPUTE:
         case PIPE_CAP_DRAW_INDIRECT:
         case PIPE_CAP_QUADS_FOLLOW_PROVOKING_VERTEX_CONVENTION:
+        case PIPE_CAP_SIGNED_VERTEX_BUFFER_OFFSET:
                 return 1;
+
+        case PIPE_CAP_INDEP_BLEND_ENABLE:
+                return screen->devinfo.ver >= 40;
 
         case PIPE_CAP_CONSTANT_BUFFER_OFFSET_ALIGNMENT:
                 return 256;
@@ -127,8 +128,19 @@ vc5_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
                 return 1;
 
         case PIPE_CAP_TGSI_FS_COORD_ORIGIN_UPPER_LEFT:
-        case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_HALF_INTEGER:
                 return 1;
+        case PIPE_CAP_TGSI_FS_COORD_ORIGIN_LOWER_LEFT:
+                return 0;
+        case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_INTEGER:
+                if (screen->devinfo.ver >= 40)
+                        return 0;
+                else
+                        return 1;
+        case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_HALF_INTEGER:
+                if (screen->devinfo.ver >= 40)
+                        return 1;
+                else
+                        return 0;
 
         case PIPE_CAP_MIXED_FRAMEBUFFER_SIZES:
         case PIPE_CAP_MIXED_COLOR_DEPTH_BITS:
@@ -169,8 +181,6 @@ vc5_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
         case PIPE_CAP_INDEP_BLEND_FUNC:
         case PIPE_CAP_DEPTH_CLIP_DISABLE:
         case PIPE_CAP_SEAMLESS_CUBE_MAP_PER_TEXTURE:
-        case PIPE_CAP_TGSI_FS_COORD_ORIGIN_LOWER_LEFT:
-        case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_INTEGER:
         case PIPE_CAP_TGSI_CAN_COMPACT_CONSTANTS:
         case PIPE_CAP_USER_VERTEX_BUFFERS:
         case PIPE_CAP_QUERY_PIPELINE_STATISTICS:
@@ -245,6 +255,9 @@ vc5_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
         case PIPE_CAP_MEMOBJ:
         case PIPE_CAP_LOAD_CONSTBUF:
         case PIPE_CAP_TILE_RASTER_ORDER:
+        case PIPE_CAP_STREAM_OUTPUT_INTERLEAVE_BUFFERS:
+        case PIPE_CAP_MAX_COMBINED_SHADER_OUTPUT_RESOURCES:
+        case PIPE_CAP_CONTEXT_PRIORITY_MASK:
                 return 0;
 
                 /* Geometry shader output, unsupported. */
@@ -317,7 +330,7 @@ vc5_screen_get_paramf(struct pipe_screen *pscreen, enum pipe_capf param)
         case PIPE_CAPF_MAX_TEXTURE_ANISOTROPY:
                 return 0.0f;
         case PIPE_CAPF_MAX_TEXTURE_LOD_BIAS:
-                return 0.0f;
+                return 16.0f;
         case PIPE_CAPF_GUARD_BAND_LEFT:
         case PIPE_CAPF_GUARD_BAND_TOP:
         case PIPE_CAPF_GUARD_BAND_RIGHT:
@@ -355,7 +368,10 @@ vc5_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
                 else
                         return 16;
         case PIPE_SHADER_CAP_MAX_OUTPUTS:
-                return shader == PIPE_SHADER_FRAGMENT ? 4 : 8;
+                if (shader == PIPE_SHADER_FRAGMENT)
+                        return 4;
+                else
+                        return VC5_MAX_FS_INPUTS / 4;
         case PIPE_SHADER_CAP_MAX_TEMPS:
                 return 256; /* GL_MAX_PROGRAM_TEMPORARIES_ARB */
         case PIPE_SHADER_CAP_MAX_CONST_BUFFER_SIZE:
@@ -381,6 +397,8 @@ vc5_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
         case PIPE_SHADER_CAP_TGSI_FMA_SUPPORTED:
         case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
         case PIPE_SHADER_CAP_TGSI_SQRT_SUPPORTED:
+        case PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTERS:
+        case PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTER_BUFFERS:
                 return 0;
         case PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS:
         case PIPE_SHADER_CAP_MAX_SAMPLER_VIEWS:
@@ -410,6 +428,7 @@ vc5_screen_is_format_supported(struct pipe_screen *pscreen,
                                unsigned sample_count,
                                unsigned usage)
 {
+        struct vc5_screen *screen = vc5_screen(pscreen);
         unsigned retval = 0;
 
         if (sample_count > 1 && sample_count != VC5_MAX_SAMPLES)
@@ -474,12 +493,12 @@ vc5_screen_is_format_supported(struct pipe_screen *pscreen,
         }
 
         if ((usage & PIPE_BIND_RENDER_TARGET) &&
-            vc5_rt_format_supported(format)) {
+            vc5_rt_format_supported(&screen->devinfo, format)) {
                 retval |= PIPE_BIND_RENDER_TARGET;
         }
 
         if ((usage & PIPE_BIND_SAMPLER_VIEW) &&
-            vc5_tex_format_supported(format)) {
+            vc5_tex_format_supported(&screen->devinfo, format)) {
                 retval |= PIPE_BIND_SAMPLER_VIEW;
         }
 
@@ -551,7 +570,7 @@ vc5_get_device_info(struct vc5_screen *screen)
         uint32_t minor = (ident1.value >> 0) & 0xf;
         screen->devinfo.ver = major * 10 + minor;
 
-        if (screen->devinfo.ver != 33) {
+        if (screen->devinfo.ver != 33 && screen->devinfo.ver != 41) {
                 fprintf(stderr,
                         "V3D %d.%d not supported by this version of Mesa.\n",
                         screen->devinfo.ver / 10,

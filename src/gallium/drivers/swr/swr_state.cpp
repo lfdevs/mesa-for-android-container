@@ -1012,8 +1012,8 @@ swr_user_vbuf_range(const struct pipe_draw_info *info,
       *size = elems * vb->stride;
    } else if (vb->stride) {
       elems = info->max_index - info->min_index + 1;
-      *totelems = info->max_index + 1;
-      *base = info->min_index * vb->stride;
+      *totelems = (info->max_index + info->index_bias) + 1;
+      *base = (info->min_index + info->index_bias) * vb->stride;
       *size = elems * vb->stride;
    } else {
       *totelems = 1;
@@ -1204,11 +1204,6 @@ swr_update_derived(struct pipe_context *pipe,
       ctx->api.pfnSwrSetRastState(ctx->swrContext, rastState);
    }
 
-   /* Scissor */
-   if (ctx->dirty & SWR_NEW_SCISSOR) {
-      ctx->api.pfnSwrSetScissorRects(ctx->swrContext, 1, &ctx->swr_scissor);
-   }
-
    /* Viewport */
    if (ctx->dirty & (SWR_NEW_VIEWPORT | SWR_NEW_FRAMEBUFFER
                      | SWR_NEW_RASTERIZER)) {
@@ -1249,18 +1244,26 @@ swr_update_derived(struct pipe_context *pipe,
       ctx->api.pfnSwrSetViewports(ctx->swrContext, 1, vp, vpm);
    }
 
-   /* Set vertex & index buffers
-    * (using draw info if called by swr_draw_vbo)
-    * If indexed draw, revalidate since index buffer comes from
-    * pipe_draw_info.
-    */
-   if (ctx->dirty & SWR_NEW_VERTEX ||
-      (p_draw_info && p_draw_info->index_size)) {
+   /* When called from swr_clear (p_draw_info = null), render targets,
+    * rasterState and viewports (dependent on render targets) are the only
+    * necessary validation.  Defer remaining validation by setting
+    * post_update_dirty_flags and clear all dirty flags.  BackendState is
+    * still unconditionally validated below */
+   if (!p_draw_info) {
+      post_update_dirty_flags = ctx->dirty & ~(SWR_NEW_FRAMEBUFFER |
+                                               SWR_NEW_RASTERIZER |
+                                               SWR_NEW_VIEWPORT);
+      ctx->dirty = 0;
+   }
 
-      /* If being called by swr_draw_vbo, copy draw details */
-      struct pipe_draw_info info = {0};
-      if (p_draw_info)
-         info = *p_draw_info;
+   /* Scissor */
+   if (ctx->dirty & SWR_NEW_SCISSOR) {
+      ctx->api.pfnSwrSetScissorRects(ctx->swrContext, 1, &ctx->swr_scissor);
+   }
+
+   /* Set vertex & index buffers */
+   if (ctx->dirty & SWR_NEW_VERTEX) {
+      const struct pipe_draw_info &info = *p_draw_info;
 
       /* vertex buffers */
       SWR_VERTEX_BUFFER_STATE swrVertexBuffers[PIPE_MAX_ATTRIBS];
@@ -1301,7 +1304,7 @@ swr_update_derived(struct pipe_context *pipe,
             uint32_t base;
             swr_user_vbuf_range(&info, ctx->velems, vb, i, &elems, &base, &size);
             partial_inbounds = 0;
-            min_vertex_index = info.min_index;
+            min_vertex_index = info.min_index + info.index_bias;
 
             size = AlignUp(size, 4);
             /* If size of client memory copy is too large, don't copy. The

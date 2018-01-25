@@ -189,6 +189,9 @@ static const char strings[] =
     "vkGetPhysicalDeviceXlibPresentationSupportKHR\0"
     "vkCreateXcbSurfaceKHR\0"
     "vkGetPhysicalDeviceXcbPresentationSupportKHR\0"
+    "vkCreateDebugReportCallbackEXT\0"
+    "vkDestroyDebugReportCallbackEXT\0"
+    "vkDebugReportMessageEXT\0"
     "vkCmdDrawIndirectCountAMD\0"
     "vkCmdDrawIndexedIndirectCountAMD\0"
     "vkGetPhysicalDeviceFeatures2KHR\0"
@@ -206,15 +209,25 @@ static const char strings[] =
     "vkGetPhysicalDeviceExternalSemaphorePropertiesKHR\0"
     "vkGetSemaphoreFdKHR\0"
     "vkImportSemaphoreFdKHR\0"
+    "vkGetPhysicalDeviceExternalFencePropertiesKHR\0"
+    "vkGetFenceFdKHR\0"
+    "vkImportFenceFdKHR\0"
     "vkBindBufferMemory2KHR\0"
     "vkBindImageMemory2KHR\0"
     "vkCreateDescriptorUpdateTemplateKHR\0"
     "vkDestroyDescriptorUpdateTemplateKHR\0"
     "vkUpdateDescriptorSetWithTemplateKHR\0"
     "vkCmdPushDescriptorSetWithTemplateKHR\0"
+    "vkCmdSetDiscardRectangleEXT\0"
+    "vkGetPhysicalDeviceSurfaceCapabilities2KHR\0"
+    "vkGetPhysicalDeviceSurfaceFormats2KHR\0"
     "vkGetBufferMemoryRequirements2KHR\0"
     "vkGetImageMemoryRequirements2KHR\0"
     "vkGetImageSparseMemoryRequirements2KHR\0"
+    "vkGetShaderInfoAMD\0"
+    "vkGetSwapchainGrallocUsageANDROID\0"
+    "vkAcquireImageANDROID\0"
+    "vkQueueSignalReleaseImageANDROID\0"
 ;
 
 static const struct radv_entrypoint entrypoints[] = {
@@ -371,32 +384,45 @@ static const struct radv_entrypoint entrypoints[] = {
     [150] = { 3288, 0x34a063ab }, /* vkGetPhysicalDeviceXlibPresentationSupportKHR */
     [151] = { 3334, 0xc5e5b106 }, /* vkCreateXcbSurfaceKHR */
     [152] = { 3356, 0x41782cb9 }, /* vkGetPhysicalDeviceXcbPresentationSupportKHR */
-    [153] = { 3401, 0xe5ad0a50 }, /* vkCmdDrawIndirectCountAMD */
-    [154] = { 3427, 0xc86e9287 }, /* vkCmdDrawIndexedIndirectCountAMD */
-    [155] = { 3460, 0x6a9a3636 }, /* vkGetPhysicalDeviceFeatures2KHR */
-    [156] = { 3492, 0xcd15838c }, /* vkGetPhysicalDeviceProperties2KHR */
-    [157] = { 3526, 0x9099cbbb }, /* vkGetPhysicalDeviceFormatProperties2KHR */
-    [158] = { 3566, 0x102ff7ea }, /* vkGetPhysicalDeviceImageFormatProperties2KHR */
-    [159] = { 3611, 0x5ceb2bed }, /* vkGetPhysicalDeviceQueueFamilyProperties2KHR */
-    [160] = { 3656, 0xc8c3da3d }, /* vkGetPhysicalDeviceMemoryProperties2KHR */
-    [161] = { 3696, 0x8746ed72 }, /* vkGetPhysicalDeviceSparseImageFormatProperties2KHR */
-    [162] = { 3747, 0xf17232a1 }, /* vkCmdPushDescriptorSetKHR */
-    [163] = { 3773, 0x51177c8d }, /* vkTrimCommandPoolKHR */
-    [164] = { 3794, 0xee68b389 }, /* vkGetPhysicalDeviceExternalBufferPropertiesKHR */
-    [165] = { 3841, 0x503c14c5 }, /* vkGetMemoryFdKHR */
-    [166] = { 3858, 0xb028a792 }, /* vkGetMemoryFdPropertiesKHR */
-    [167] = { 3885, 0x984c3fa7 }, /* vkGetPhysicalDeviceExternalSemaphorePropertiesKHR */
-    [168] = { 3935, 0x3e0e9884 }, /* vkGetSemaphoreFdKHR */
-    [169] = { 3955, 0x36337c05 }, /* vkImportSemaphoreFdKHR */
-    [170] = { 3978, 0x6878d3ce }, /* vkBindBufferMemory2KHR */
-    [171] = { 4001, 0xf18729ad }, /* vkBindImageMemory2KHR */
-    [172] = { 4023, 0x5189488a }, /* vkCreateDescriptorUpdateTemplateKHR */
-    [173] = { 4059, 0xaa83901e }, /* vkDestroyDescriptorUpdateTemplateKHR */
-    [174] = { 4096, 0x214ad230 }, /* vkUpdateDescriptorSetWithTemplateKHR */
-    [175] = { 4133, 0x3d528981 }, /* vkCmdPushDescriptorSetWithTemplateKHR */
-    [176] = { 4171, 0x78dbe98d }, /* vkGetBufferMemoryRequirements2KHR */
-    [177] = { 4205, 0x8de28366 }, /* vkGetImageMemoryRequirements2KHR */
-    [178] = { 4238, 0x3df40f5e }, /* vkGetImageSparseMemoryRequirements2KHR */
+    [153] = { 3401, 0x987ef56 }, /* vkCreateDebugReportCallbackEXT */
+    [154] = { 3432, 0x43d4c4e2 }, /* vkDestroyDebugReportCallbackEXT */
+    [155] = { 3464, 0xa4e75334 }, /* vkDebugReportMessageEXT */
+    [156] = { 3488, 0xe5ad0a50 }, /* vkCmdDrawIndirectCountAMD */
+    [157] = { 3514, 0xc86e9287 }, /* vkCmdDrawIndexedIndirectCountAMD */
+    [158] = { 3547, 0x6a9a3636 }, /* vkGetPhysicalDeviceFeatures2KHR */
+    [159] = { 3579, 0xcd15838c }, /* vkGetPhysicalDeviceProperties2KHR */
+    [160] = { 3613, 0x9099cbbb }, /* vkGetPhysicalDeviceFormatProperties2KHR */
+    [161] = { 3653, 0x102ff7ea }, /* vkGetPhysicalDeviceImageFormatProperties2KHR */
+    [162] = { 3698, 0x5ceb2bed }, /* vkGetPhysicalDeviceQueueFamilyProperties2KHR */
+    [163] = { 3743, 0xc8c3da3d }, /* vkGetPhysicalDeviceMemoryProperties2KHR */
+    [164] = { 3783, 0x8746ed72 }, /* vkGetPhysicalDeviceSparseImageFormatProperties2KHR */
+    [165] = { 3834, 0xf17232a1 }, /* vkCmdPushDescriptorSetKHR */
+    [166] = { 3860, 0x51177c8d }, /* vkTrimCommandPoolKHR */
+    [167] = { 3881, 0xee68b389 }, /* vkGetPhysicalDeviceExternalBufferPropertiesKHR */
+    [168] = { 3928, 0x503c14c5 }, /* vkGetMemoryFdKHR */
+    [169] = { 3945, 0xb028a792 }, /* vkGetMemoryFdPropertiesKHR */
+    [170] = { 3972, 0x984c3fa7 }, /* vkGetPhysicalDeviceExternalSemaphorePropertiesKHR */
+    [171] = { 4022, 0x3e0e9884 }, /* vkGetSemaphoreFdKHR */
+    [172] = { 4042, 0x36337c05 }, /* vkImportSemaphoreFdKHR */
+    [173] = { 4065, 0x99b35492 }, /* vkGetPhysicalDeviceExternalFencePropertiesKHR */
+    [174] = { 4111, 0x69a5d6af }, /* vkGetFenceFdKHR */
+    [175] = { 4127, 0x51df0390 }, /* vkImportFenceFdKHR */
+    [176] = { 4146, 0x6878d3ce }, /* vkBindBufferMemory2KHR */
+    [177] = { 4169, 0xf18729ad }, /* vkBindImageMemory2KHR */
+    [178] = { 4191, 0x5189488a }, /* vkCreateDescriptorUpdateTemplateKHR */
+    [179] = { 4227, 0xaa83901e }, /* vkDestroyDescriptorUpdateTemplateKHR */
+    [180] = { 4264, 0x214ad230 }, /* vkUpdateDescriptorSetWithTemplateKHR */
+    [181] = { 4301, 0x3d528981 }, /* vkCmdPushDescriptorSetWithTemplateKHR */
+    [182] = { 4339, 0x64df188b }, /* vkCmdSetDiscardRectangleEXT */
+    [183] = { 4367, 0x9497e378 }, /* vkGetPhysicalDeviceSurfaceCapabilities2KHR */
+    [184] = { 4410, 0xd00b7188 }, /* vkGetPhysicalDeviceSurfaceFormats2KHR */
+    [185] = { 4448, 0x78dbe98d }, /* vkGetBufferMemoryRequirements2KHR */
+    [186] = { 4482, 0x8de28366 }, /* vkGetImageMemoryRequirements2KHR */
+    [187] = { 4515, 0x3df40f5e }, /* vkGetImageSparseMemoryRequirements2KHR */
+    [188] = { 4554, 0x5330743c }, /* vkGetShaderInfoAMD */
+    [189] = { 4573, 0x4979c9a3 }, /* vkGetSwapchainGrallocUsageANDROID */
+    [190] = { 4607, 0x6bf780dd }, /* vkAcquireImageANDROID */
+    [191] = { 4629, 0xa0313eef }, /* vkQueueSignalReleaseImageANDROID */
 };
 
 /* Weak aliases for all potential implementations. These will resolve to
@@ -569,6 +595,9 @@ static const struct radv_entrypoint entrypoints[] = {
 #ifdef VK_USE_PLATFORM_XCB_KHR
     VkBool32 radv_GetPhysicalDeviceXcbPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, xcb_connection_t* connection, xcb_visualid_t visual_id) __attribute__ ((weak));
 #endif // VK_USE_PLATFORM_XCB_KHR
+    VkResult radv_CreateDebugReportCallbackEXT(VkInstance instance, const VkDebugReportCallbackCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugReportCallbackEXT* pCallback) __attribute__ ((weak));
+    void radv_DestroyDebugReportCallbackEXT(VkInstance instance, VkDebugReportCallbackEXT callback, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
+    void radv_DebugReportMessageEXT(VkInstance instance, VkDebugReportFlagsEXT flags, VkDebugReportObjectTypeEXT objectType, uint64_t object, size_t location, int32_t messageCode, const char* pLayerPrefix, const char* pMessage) __attribute__ ((weak));
     void radv_CmdDrawIndirectCountAMD(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, VkBuffer countBuffer, VkDeviceSize countBufferOffset, uint32_t maxDrawCount, uint32_t stride) __attribute__ ((weak));
     void radv_CmdDrawIndexedIndirectCountAMD(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, VkBuffer countBuffer, VkDeviceSize countBufferOffset, uint32_t maxDrawCount, uint32_t stride) __attribute__ ((weak));
     void radv_GetPhysicalDeviceFeatures2KHR(VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures2KHR* pFeatures) __attribute__ ((weak));
@@ -586,15 +615,31 @@ static const struct radv_entrypoint entrypoints[] = {
     void radv_GetPhysicalDeviceExternalSemaphorePropertiesKHR(VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalSemaphoreInfoKHR* pExternalSemaphoreInfo, VkExternalSemaphorePropertiesKHR* pExternalSemaphoreProperties) __attribute__ ((weak));
     VkResult radv_GetSemaphoreFdKHR(VkDevice device, const VkSemaphoreGetFdInfoKHR* pGetFdInfo, int* pFd) __attribute__ ((weak));
     VkResult radv_ImportSemaphoreFdKHR(VkDevice device, const VkImportSemaphoreFdInfoKHR* pImportSemaphoreFdInfo) __attribute__ ((weak));
+    void radv_GetPhysicalDeviceExternalFencePropertiesKHR(VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalFenceInfoKHR* pExternalFenceInfo, VkExternalFencePropertiesKHR* pExternalFenceProperties) __attribute__ ((weak));
+    VkResult radv_GetFenceFdKHR(VkDevice device, const VkFenceGetFdInfoKHR* pGetFdInfo, int* pFd) __attribute__ ((weak));
+    VkResult radv_ImportFenceFdKHR(VkDevice device, const VkImportFenceFdInfoKHR* pImportFenceFdInfo) __attribute__ ((weak));
     VkResult radv_BindBufferMemory2KHR(VkDevice device, uint32_t bindInfoCount, const VkBindBufferMemoryInfoKHR* pBindInfos) __attribute__ ((weak));
     VkResult radv_BindImageMemory2KHR(VkDevice device, uint32_t bindInfoCount, const VkBindImageMemoryInfoKHR* pBindInfos) __attribute__ ((weak));
     VkResult radv_CreateDescriptorUpdateTemplateKHR(VkDevice device, const VkDescriptorUpdateTemplateCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDescriptorUpdateTemplateKHR* pDescriptorUpdateTemplate) __attribute__ ((weak));
     void radv_DestroyDescriptorUpdateTemplateKHR(VkDevice device, VkDescriptorUpdateTemplateKHR descriptorUpdateTemplate, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
     void radv_UpdateDescriptorSetWithTemplateKHR(VkDevice device, VkDescriptorSet descriptorSet, VkDescriptorUpdateTemplateKHR descriptorUpdateTemplate, const void* pData) __attribute__ ((weak));
     void radv_CmdPushDescriptorSetWithTemplateKHR(VkCommandBuffer commandBuffer, VkDescriptorUpdateTemplateKHR descriptorUpdateTemplate, VkPipelineLayout layout, uint32_t set, const void* pData) __attribute__ ((weak));
+    void radv_CmdSetDiscardRectangleEXT(VkCommandBuffer commandBuffer, uint32_t firstDiscardRectangle, uint32_t discardRectangleCount, const VkRect2D* pDiscardRectangles) __attribute__ ((weak));
+    VkResult radv_GetPhysicalDeviceSurfaceCapabilities2KHR(VkPhysicalDevice physicalDevice, const VkPhysicalDeviceSurfaceInfo2KHR* pSurfaceInfo, VkSurfaceCapabilities2KHR* pSurfaceCapabilities) __attribute__ ((weak));
+    VkResult radv_GetPhysicalDeviceSurfaceFormats2KHR(VkPhysicalDevice physicalDevice, const VkPhysicalDeviceSurfaceInfo2KHR* pSurfaceInfo, uint32_t* pSurfaceFormatCount, VkSurfaceFormat2KHR* pSurfaceFormats) __attribute__ ((weak));
     void radv_GetBufferMemoryRequirements2KHR(VkDevice device, const VkBufferMemoryRequirementsInfo2KHR* pInfo, VkMemoryRequirements2KHR* pMemoryRequirements) __attribute__ ((weak));
     void radv_GetImageMemoryRequirements2KHR(VkDevice device, const VkImageMemoryRequirementsInfo2KHR* pInfo, VkMemoryRequirements2KHR* pMemoryRequirements) __attribute__ ((weak));
     void radv_GetImageSparseMemoryRequirements2KHR(VkDevice device, const VkImageSparseMemoryRequirementsInfo2KHR* pInfo, uint32_t* pSparseMemoryRequirementCount, VkSparseImageMemoryRequirements2KHR* pSparseMemoryRequirements) __attribute__ ((weak));
+    VkResult radv_GetShaderInfoAMD(VkDevice device, VkPipeline pipeline, VkShaderStageFlagBits shaderStage, VkShaderInfoTypeAMD infoType, size_t* pInfoSize, void* pInfo) __attribute__ ((weak));
+#ifdef ANDROID
+    VkResult radv_GetSwapchainGrallocUsageANDROID(VkDevice device, VkFormat format, VkImageUsageFlags imageUsage, int* grallocUsage) __attribute__ ((weak));
+#endif // ANDROID
+#ifdef ANDROID
+    VkResult radv_AcquireImageANDROID(VkDevice device, VkImage image, int nativeFenceFd, VkSemaphore semaphore, VkFence fence) __attribute__ ((weak));
+#endif // ANDROID
+#ifdef ANDROID
+    VkResult radv_QueueSignalReleaseImageANDROID(VkQueue queue, uint32_t waitSemaphoreCount, const VkSemaphore* pWaitSemaphores, VkImage image, int* pNativeFenceFd) __attribute__ ((weak));
+#endif // ANDROID
 
   const struct radv_dispatch_table radv_layer = {
     .CreateInstance = radv_CreateInstance,
@@ -762,6 +807,9 @@ static const struct radv_entrypoint entrypoints[] = {
 #ifdef VK_USE_PLATFORM_XCB_KHR
     .GetPhysicalDeviceXcbPresentationSupportKHR = radv_GetPhysicalDeviceXcbPresentationSupportKHR,
 #endif // VK_USE_PLATFORM_XCB_KHR
+    .CreateDebugReportCallbackEXT = radv_CreateDebugReportCallbackEXT,
+    .DestroyDebugReportCallbackEXT = radv_DestroyDebugReportCallbackEXT,
+    .DebugReportMessageEXT = radv_DebugReportMessageEXT,
     .CmdDrawIndirectCountAMD = radv_CmdDrawIndirectCountAMD,
     .CmdDrawIndexedIndirectCountAMD = radv_CmdDrawIndexedIndirectCountAMD,
     .GetPhysicalDeviceFeatures2KHR = radv_GetPhysicalDeviceFeatures2KHR,
@@ -779,15 +827,31 @@ static const struct radv_entrypoint entrypoints[] = {
     .GetPhysicalDeviceExternalSemaphorePropertiesKHR = radv_GetPhysicalDeviceExternalSemaphorePropertiesKHR,
     .GetSemaphoreFdKHR = radv_GetSemaphoreFdKHR,
     .ImportSemaphoreFdKHR = radv_ImportSemaphoreFdKHR,
+    .GetPhysicalDeviceExternalFencePropertiesKHR = radv_GetPhysicalDeviceExternalFencePropertiesKHR,
+    .GetFenceFdKHR = radv_GetFenceFdKHR,
+    .ImportFenceFdKHR = radv_ImportFenceFdKHR,
     .BindBufferMemory2KHR = radv_BindBufferMemory2KHR,
     .BindImageMemory2KHR = radv_BindImageMemory2KHR,
     .CreateDescriptorUpdateTemplateKHR = radv_CreateDescriptorUpdateTemplateKHR,
     .DestroyDescriptorUpdateTemplateKHR = radv_DestroyDescriptorUpdateTemplateKHR,
     .UpdateDescriptorSetWithTemplateKHR = radv_UpdateDescriptorSetWithTemplateKHR,
     .CmdPushDescriptorSetWithTemplateKHR = radv_CmdPushDescriptorSetWithTemplateKHR,
+    .CmdSetDiscardRectangleEXT = radv_CmdSetDiscardRectangleEXT,
+    .GetPhysicalDeviceSurfaceCapabilities2KHR = radv_GetPhysicalDeviceSurfaceCapabilities2KHR,
+    .GetPhysicalDeviceSurfaceFormats2KHR = radv_GetPhysicalDeviceSurfaceFormats2KHR,
     .GetBufferMemoryRequirements2KHR = radv_GetBufferMemoryRequirements2KHR,
     .GetImageMemoryRequirements2KHR = radv_GetImageMemoryRequirements2KHR,
     .GetImageSparseMemoryRequirements2KHR = radv_GetImageSparseMemoryRequirements2KHR,
+    .GetShaderInfoAMD = radv_GetShaderInfoAMD,
+#ifdef ANDROID
+    .GetSwapchainGrallocUsageANDROID = radv_GetSwapchainGrallocUsageANDROID,
+#endif // ANDROID
+#ifdef ANDROID
+    .AcquireImageANDROID = radv_AcquireImageANDROID,
+#endif // ANDROID
+#ifdef ANDROID
+    .QueueSignalReleaseImageANDROID = radv_QueueSignalReleaseImageANDROID,
+#endif // ANDROID
   };
 
 static void * __attribute__ ((noinline))
@@ -799,14 +863,14 @@ radv_resolve_entrypoint(uint32_t index)
 /* Hash table stats:
  * size 256 entries
  * collisions entries:
- *     0     115
- *     1     32
- *     2     12
+ *     0     120
+ *     1     36
+ *     2     13
  *     3     9
  *     4     4
  *     5     1
- *     6     3
- *     7     1
+ *     6     5
+ *     7     2
  *     8     1
  *     9+     1
  */
@@ -815,9 +879,9 @@ radv_resolve_entrypoint(uint32_t index)
 static const uint16_t map[] = {
       0x0044,
       none,
-      none,
-      none,
-      0x00a6,
+      0x00bf,
+      0x00be,
+      0x00a9,
       0x002b,
       0x0040,
       0x0061,
@@ -827,26 +891,26 @@ static const uint16_t map[] = {
       none,
       none,
       none,
-      0x00a4,
+      0x00a7,
       none,
       none,
-      0x00a5,
+      0x00a8,
       none,
       0x0067,
       none,
       none,
       none,
-      none,
+      0x00ad,
       0x0052,
       0x0097,
       0x0058,
       0x004c,
       none,
       0x0069,
-      0x00ad,
+      0x00b3,
       none,
       none,
-      none,
+      0x00ae,
       0x0054,
       none,
       0x0014,
@@ -870,21 +934,21 @@ static const uint16_t map[] = {
       0x006d,
       0x0053,
       none,
-      0x009f,
+      0x00a2,
       0x004d,
       0x0090,
       0x0024,
-      0x00a0,
+      0x00a3,
       0x005e,
       0x000b,
       0x0088,
       0x0091,
       none,
-      0x00ae,
+      0x00b4,
       0x005c,
       0x0033,
       none,
-      none,
+      0x009b,
       0x0087,
       0x003f,
       0x001f,
@@ -892,12 +956,12 @@ static const uint16_t map[] = {
       0x0082,
       0x005a,
       none,
-      none,
-      0x0099,
+      0x00bc,
+      0x009c,
       0x0019,
       0x0046,
       0x003a,
-      none,
+      0x009a,
       none,
       0x0034,
       none,
@@ -905,7 +969,7 @@ static const uint16_t map[] = {
       none,
       none,
       0x0020,
-      0x009b,
+      0x009e,
       0x0066,
       0x0075,
       none,
@@ -918,7 +982,7 @@ static const uint16_t map[] = {
       0x0047,
       0x000a,
       0x0023,
-      none,
+      0x0099,
       none,
       0x006b,
       none,
@@ -926,14 +990,14 @@ static const uint16_t map[] = {
       0x0028,
       none,
       0x0068,
-      0x00b2,
-      0x00a1,
+      0x00bb,
+      0x00a4,
       0x003e,
       0x0048,
       0x007b,
       0x0055,
-      0x00a9,
-      none,
+      0x00ac,
+      0x00b7,
       0x0045,
       0x006e,
       0x0084,
@@ -944,27 +1008,27 @@ static const uint16_t map[] = {
       none,
       0x0027,
       0x0081,
-      0x00b1,
+      0x00ba,
       0x005d,
       0x008a,
       0x0003,
       0x008f,
-      none,
+      0x00b8,
       0x0063,
       0x0006,
-      none,
+      0x00b6,
       0x0093,
-      0x00a3,
+      0x00a6,
       none,
       none,
-      none,
+      0x00af,
       0x0059,
       0x0026,
       none,
       0x003c,
       none,
       0x0037,
-      0x00a8,
+      0x00ab,
       0x0009,
       0x0038,
       0x0011,
@@ -973,10 +1037,10 @@ static const uint16_t map[] = {
       0x0016,
       none,
       0x003d,
-      0x00b0,
+      0x00b9,
       0x006a,
       0x003b,
-      none,
+      0x00bd,
       0x004a,
       0x0013,
       0x0000,
@@ -989,11 +1053,11 @@ static const uint16_t map[] = {
       0x0004,
       0x004f,
       0x0029,
-      0x00ac,
+      0x00b2,
       0x004e,
       0x0095,
       0x0031,
-      0x00a2,
+      0x00a5,
       0x001b,
       none,
       0x0073,
@@ -1005,12 +1069,12 @@ static const uint16_t map[] = {
       none,
       none,
       0x006c,
-      0x009a,
+      0x009d,
       none,
       0x0036,
       none,
       0x0050,
-      0x009c,
+      0x009f,
       0x007d,
       none,
       0x008c,
@@ -1018,7 +1082,7 @@ static const uint16_t map[] = {
       0x001a,
       0x000c,
       0x0098,
-      0x00a7,
+      0x00aa,
       0x0092,
       none,
       none,
@@ -1038,16 +1102,16 @@ static const uint16_t map[] = {
       0x001d,
       none,
       0x0076,
-      0x009d,
+      0x00a0,
       0x0064,
       0x0085,
       none,
       none,
-      0x00ab,
+      0x00b1,
       0x000f,
       0x007e,
       none,
-      0x009e,
+      0x00a1,
       0x0017,
       0x0012,
       0x0010,
@@ -1056,8 +1120,8 @@ static const uint16_t map[] = {
       0x008b,
       0x0079,
       0x0001,
-      0x00af,
-      0x00aa,
+      0x00b5,
+      0x00b0,
       0x002d,
       none,
       none,

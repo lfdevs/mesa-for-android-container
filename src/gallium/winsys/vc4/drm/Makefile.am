@@ -29,3 +29,5 @@ AM_CFLAGS = \
 noinst_LTLIBRARIES = libvc4drm.la
 
 libvc4drm_la_SOURCES = $(C_SOURCES)
+
+EXTRA_DIST = meson.build

@@ -158,6 +158,11 @@ struct svga_shader_variant
    /** Is the color output just a constant value? (fragment shader only) */
    boolean constant_color_output;
 
+   /** Bitmask indicating which texture units are doing the shadow
+    * comparison test in the shader rather than the sampler state.
+    */
+   unsigned fs_shadow_compare_units;
+
    /** For FS-based polygon stipple */
    unsigned pstipple_sampler_unit;
 

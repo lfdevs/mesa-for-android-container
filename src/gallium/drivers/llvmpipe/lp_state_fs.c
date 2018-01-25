@@ -67,7 +67,7 @@
 #include "util/u_string.h"
 #include "util/simple_list.h"
 #include "util/u_dual_blend.h"
-#include "os/os_time.h"
+#include "util/os_time.h"
 #include "pipe/p_shader_tokens.h"
 #include "draw/draw_context.h"
 #include "tgsi/tgsi_dump.h"

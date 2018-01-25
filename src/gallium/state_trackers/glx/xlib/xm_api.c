@@ -1035,7 +1035,7 @@ XMesaContext XMesaCreateContext( XMesaVisual v, XMesaContext share_list,
 
    c->st->st_manager_private = (void *) c;
 
-   c->hud = hud_create(c->st->pipe, c->st->cso_context);
+   c->hud = hud_create(c->st->cso_context, NULL);
 
    return c;
 
@@ -1051,7 +1051,7 @@ PUBLIC
 void XMesaDestroyContext( XMesaContext c )
 {
    if (c->hud) {
-      hud_destroy(c->hud);
+      hud_destroy(c->hud, NULL);
    }
 
    c->st->destroy(c->st);
@@ -1357,7 +1357,7 @@ void XMesaSwapBuffers( XMesaBuffer b )
    if (xmctx && xmctx->hud) {
       struct pipe_resource *back =
          xmesa_get_framebuffer_resource(b->stfb, ST_ATTACHMENT_BACK_LEFT);
-      hud_draw(xmctx->hud, back);
+      hud_run(xmctx->hud, NULL, back);
    }
 
    if (xmctx && xmctx->xm_buffer == b) {

@@ -39,6 +39,7 @@
 #define _VK_AMD_shader_explicit_vertex_parameter_number (22)
 #define _VK_AMD_shader_fragment_mask_number (138)
 #define _VK_AMD_shader_image_load_store_lod_number (47)
+#define _VK_AMD_shader_info_number (43)
 #define _VK_AMD_shader_trinary_minmax_number (21)
 #define _VK_AMD_texture_gather_bias_lod_number (42)
 #define _VK_ANDROID_native_buffer_number (11)
@@ -51,9 +52,12 @@
 #define _VK_EXT_discard_rectangles_number (100)
 #define _VK_EXT_display_control_number (92)
 #define _VK_EXT_display_surface_counter_number (91)
+#define _VK_EXT_external_memory_dma_buf_number (126)
+#define _VK_EXT_external_memory_host_number (179)
 #define _VK_EXT_global_priority_number (175)
 #define _VK_EXT_hdr_metadata_number (106)
 #define _VK_EXT_post_depth_coverage_number (156)
+#define _VK_EXT_queue_family_foreign_number (127)
 #define _VK_EXT_sample_locations_number (144)
 #define _VK_EXT_sampler_filter_minmax_number (131)
 #define _VK_EXT_shader_stencil_export_number (141)
@@ -180,6 +184,7 @@ const char * vk_SamplerMipmapMode_to_str(VkSamplerMipmapMode input);
 const char * vk_SamplerReductionModeEXT_to_str(VkSamplerReductionModeEXT input);
 const char * vk_SamplerYcbcrModelConversionKHR_to_str(VkSamplerYcbcrModelConversionKHR input);
 const char * vk_SamplerYcbcrRangeKHR_to_str(VkSamplerYcbcrRangeKHR input);
+const char * vk_ShaderInfoTypeAMD_to_str(VkShaderInfoTypeAMD input);
 const char * vk_SharingMode_to_str(VkSharingMode input);
 const char * vk_StencilOp_to_str(VkStencilOp input);
 const char * vk_StructureType_to_str(VkStructureType input);

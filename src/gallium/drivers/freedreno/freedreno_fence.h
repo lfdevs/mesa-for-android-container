@@ -31,6 +31,8 @@
 
 #include "pipe/p_context.h"
 
+void fd_fence_populate(struct pipe_fence_handle *fence,
+		uint32_t timestamp, int fence_fd);
 void fd_fence_ref(struct pipe_screen *pscreen,
 		struct pipe_fence_handle **ptr,
 		struct pipe_fence_handle *pfence);
@@ -45,8 +47,7 @@ void fd_fence_server_sync(struct pipe_context *pctx,
 int fd_fence_get_fd(struct pipe_screen *pscreen,
 		struct pipe_fence_handle *pfence);
 
-struct fd_context;
-struct pipe_fence_handle * fd_fence_create(struct fd_context *ctx,
-		uint32_t timestamp, int fence_fd);
+struct fd_batch;
+struct pipe_fence_handle * fd_fence_create(struct fd_batch *batch);
 
 #endif /* FREEDRENO_FENCE_H_ */

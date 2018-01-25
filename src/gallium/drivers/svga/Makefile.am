@@ -30,9 +30,6 @@ AM_CFLAGS = \
 	$(GALLIUM_DRIVER_CFLAGS) \
 	$(MSVC2013_COMPAT_CFLAGS)
 
-#On some systems -std= must be added to CFLAGS to be the last -std=
-CFLAGS += -std=gnu99
-
 noinst_HEADERS = $(SVGA_H_FILES)
 noinst_LTLIBRARIES = libsvga.la
 
@@ -40,4 +37,5 @@ libsvga_la_SOURCES = $(C_SOURCES)
 
 EXTRA_DIST = SConscript \
 	include/README \
-	svgadump/svga_dump.py
+	svgadump/svga_dump.py \
+	meson.build

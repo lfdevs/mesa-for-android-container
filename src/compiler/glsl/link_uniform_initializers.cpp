@@ -81,6 +81,9 @@ copy_constant_to_storage(union gl_constant_value *storage,
       case GLSL_TYPE_SUBROUTINE:
       case GLSL_TYPE_FUNCTION:
       case GLSL_TYPE_ERROR:
+      case GLSL_TYPE_UINT16:
+      case GLSL_TYPE_INT16:
+      case GLSL_TYPE_FLOAT16:
          /* All other types should have already been filtered by other
           * paths in the caller.
           */
@@ -354,5 +357,7 @@ link_set_uniform_initializers(struct gl_shader_program *prog,
       }
    }
 
+   memcpy(prog->data->UniformDataDefaults, prog->data->UniformDataSlots,
+          sizeof(union gl_constant_value) * prog->data->NumUniformDataSlots);
    ralloc_free(mem_ctx);
 }

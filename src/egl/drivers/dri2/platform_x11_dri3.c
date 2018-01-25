@@ -269,6 +269,9 @@ dri3_create_image_khr_pixmap(_EGLDisplay *disp, _EGLContext *ctx,
    case 24:
       format = __DRI_IMAGE_FORMAT_XRGB8888;
       break;
+   case 30:
+      format = __DRI_IMAGE_FORMAT_XRGB2101010;
+      break;
    case 32:
       format = __DRI_IMAGE_FORMAT_ARGB8888;
       break;

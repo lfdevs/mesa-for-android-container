@@ -40,6 +40,7 @@
 #include "util/ralloc.h"
 #include "compiler/glsl/ir.h"
 #include "compiler/glsl/glsl_to_nir.h"
+#include "compiler/nir/nir_serialize.h"
 
 #include "brw_program.h"
 #include "brw_context.h"
@@ -87,7 +88,33 @@ brw_create_nir(struct brw_context *brw,
    }
    nir_validate_shader(nir);
 
+   /* Lower PatchVerticesIn from system value to uniform. This needs to
+    * happen before brw_preprocess_nir, since that will lower system values
+    * to intrinsics.
+    *
+    * We only do this for TES if no TCS is present, since otherwise we know
+    * the number of vertices in the patch at link time and we can lower it
+    * directly to a constant. We do this in nir_lower_patch_vertices, which
+    * needs to run after brw_nir_preprocess has turned the system values
+    * into intrinsics.
+    */
+   const bool lower_patch_vertices_in_to_uniform =
+      (stage == MESA_SHADER_TESS_CTRL && brw->screen->devinfo.gen >= 8) ||
+      (stage == MESA_SHADER_TESS_EVAL &&
+       !shader_prog->_LinkedShaders[MESA_SHADER_TESS_CTRL]);
+
+   if (lower_patch_vertices_in_to_uniform)
+      brw_nir_lower_patch_vertices_in_to_uniform(nir);
+
    nir = brw_preprocess_nir(brw->screen->compiler, nir);
+
+   if (stage == MESA_SHADER_TESS_EVAL && !lower_patch_vertices_in_to_uniform) {
+      assert(shader_prog->_LinkedShaders[MESA_SHADER_TESS_CTRL]);
+      struct gl_linked_shader *linked_tcs =
+         shader_prog->_LinkedShaders[MESA_SHADER_TESS_CTRL];
+      uint32_t patch_vertices = linked_tcs->Program->info.tess.tcs_vertices_out;
+      nir_lower_tes_patch_vertices(nir, patch_vertices);
+   }
 
    if (stage == MESA_SHADER_FRAGMENT) {
       static const struct nir_lower_wpos_ytransform_options wpos_options = {
@@ -104,7 +131,6 @@ brw_create_nir(struct brw_context *brw,
       }
    }
 
-   NIR_PASS_V(nir, nir_lower_system_values);
    NIR_PASS_V(nir, brw_nir_lower_uniforms, is_scalar);
 
    return nir;
@@ -329,19 +355,81 @@ brw_get_scratch_bo(struct brw_context *brw,
 void
 brw_alloc_stage_scratch(struct brw_context *brw,
                         struct brw_stage_state *stage_state,
-                        unsigned per_thread_size,
-                        unsigned thread_count)
+                        unsigned per_thread_size)
 {
-   if (stage_state->per_thread_scratch < per_thread_size) {
-      stage_state->per_thread_scratch = per_thread_size;
+   if (stage_state->per_thread_scratch >= per_thread_size)
+      return;
 
-      if (stage_state->scratch_bo)
-         brw_bo_unreference(stage_state->scratch_bo);
+   stage_state->per_thread_scratch = per_thread_size;
 
-      stage_state->scratch_bo =
-         brw_bo_alloc(brw->bufmgr, "shader scratch space",
-                      per_thread_size * thread_count, 4096);
+   if (stage_state->scratch_bo)
+      brw_bo_unreference(stage_state->scratch_bo);
+
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   unsigned thread_count;
+   switch(stage_state->stage) {
+   case MESA_SHADER_VERTEX:
+      thread_count = devinfo->max_vs_threads;
+      break;
+   case MESA_SHADER_TESS_CTRL:
+      thread_count = devinfo->max_tcs_threads;
+      break;
+   case MESA_SHADER_TESS_EVAL:
+      thread_count = devinfo->max_tes_threads;
+      break;
+   case MESA_SHADER_GEOMETRY:
+      thread_count = devinfo->max_gs_threads;
+      break;
+   case MESA_SHADER_FRAGMENT:
+      thread_count = devinfo->max_wm_threads;
+      break;
+   case MESA_SHADER_COMPUTE: {
+      unsigned subslices = MAX2(brw->screen->subslice_total, 1);
+
+      /* The documentation for 3DSTATE_PS "Scratch Space Base Pointer" says:
+       *
+       * "Scratch Space per slice is computed based on 4 sub-slices.  SW must
+       *  allocate scratch space enough so that each slice has 4 slices
+       *  allowed."
+       *
+       * According to the other driver team, this applies to compute shaders
+       * as well.  This is not currently documented at all.
+       *
+       * brw->screen->subslice_total is the TOTAL number of subslices
+       * and we wish to view that there are 4 subslices per slice
+       * instead of the actual number of subslices per slice.
+       */
+      if (devinfo->gen >= 9)
+         subslices = 4 * brw->screen->devinfo.num_slices;
+
+      /* WaCSScratchSize:hsw
+       *
+       * Haswell's scratch space address calculation appears to be sparse
+       * rather than tightly packed.  The Thread ID has bits indicating
+       * which subslice, EU within a subslice, and thread within an EU
+       * it is.  There's a maximum of two slices and two subslices, so these
+       * can be stored with a single bit.  Even though there are only 10 EUs
+       * per subslice, this is stored in 4 bits, so there's an effective
+       * maximum value of 16 EUs.  Similarly, although there are only 7
+       * threads per EU, this is stored in a 3 bit number, giving an effective
+       * maximum value of 8 threads per EU.
+       *
+       * This means that we need to use 16 * 8 instead of 10 * 7 for the
+       * number of threads per subslice.
+       */
+      const unsigned scratch_ids_per_subslice =
+         devinfo->is_haswell ? 16 * 8 : devinfo->max_cs_threads;
+
+      thread_count = scratch_ids_per_subslice * subslices;
+      break;
    }
+   default:
+      unreachable("Unsupported stage!");
+   }
+
+   stage_state->scratch_bo =
+      brw_bo_alloc(brw->bufmgr, "shader scratch space",
+                   per_thread_size * thread_count, 4096);
 }
 
 void brwInitFragProgFuncs( struct dd_function_table *functions )
@@ -675,10 +763,11 @@ brw_assign_common_binding_table_offsets(const struct gen_device_info *devinfo,
       stage_prog_data->binding_table.ubo_start = 0xd0d0d0d0;
    }
 
-   if (prog->info.num_ssbos) {
+   if (prog->info.num_ssbos || prog->info.num_abos) {
+      assert(prog->info.num_abos <= BRW_MAX_ABO);
       assert(prog->info.num_ssbos <= BRW_MAX_SSBO);
       stage_prog_data->binding_table.ssbo_start = next_binding_table_offset;
-      next_binding_table_offset += prog->info.num_ssbos;
+      next_binding_table_offset += prog->info.num_abos + prog->info.num_ssbos;
    } else {
       stage_prog_data->binding_table.ssbo_start = 0xd0d0d0d0;
    }
@@ -690,7 +779,7 @@ brw_assign_common_binding_table_offsets(const struct gen_device_info *devinfo,
       stage_prog_data->binding_table.shader_time_start = 0xd0d0d0d0;
    }
 
-   if (prog->nir->info.uses_texture_gather) {
+   if (prog->info.uses_texture_gather) {
       if (devinfo->gen >= 8) {
          stage_prog_data->binding_table.gather_texture_start =
             stage_prog_data->binding_table.texture_start;
@@ -700,13 +789,6 @@ brw_assign_common_binding_table_offsets(const struct gen_device_info *devinfo,
       }
    } else {
       stage_prog_data->binding_table.gather_texture_start = 0xd0d0d0d0;
-   }
-
-   if (prog->info.num_abos) {
-      stage_prog_data->binding_table.abo_start = next_binding_table_offset;
-      next_binding_table_offset += prog->info.num_abos;
-   } else {
-      stage_prog_data->binding_table.abo_start = 0xd0d0d0d0;
    }
 
    if (prog->info.num_images) {
@@ -733,4 +815,37 @@ brw_assign_common_binding_table_offsets(const struct gen_device_info *devinfo,
 
    assert(next_binding_table_offset <= BRW_MAX_SURFACES);
    return next_binding_table_offset;
+}
+
+void
+brw_program_serialize_nir(struct gl_context *ctx, struct gl_program *prog)
+{
+   struct blob writer;
+   blob_init(&writer);
+   nir_serialize(&writer, prog->nir);
+   prog->driver_cache_blob = ralloc_size(NULL, writer.size);
+   memcpy(prog->driver_cache_blob, writer.data, writer.size);
+   prog->driver_cache_blob_size = writer.size;
+   blob_finish(&writer);
+}
+
+void
+brw_program_deserialize_nir(struct gl_context *ctx, struct gl_program *prog,
+                            gl_shader_stage stage)
+{
+   if (!prog->nir) {
+      assert(prog->driver_cache_blob && prog->driver_cache_blob_size > 0);
+      const struct nir_shader_compiler_options *options =
+         ctx->Const.ShaderCompilerOptions[stage].NirOptions;
+      struct blob_reader reader;
+      blob_reader_init(&reader, prog->driver_cache_blob,
+                       prog->driver_cache_blob_size);
+      prog->nir = nir_deserialize(NULL, options, &reader);
+   }
+
+   if (prog->driver_cache_blob) {
+      ralloc_free(prog->driver_cache_blob);
+      prog->driver_cache_blob = NULL;
+      prog->driver_cache_blob_size = 0;
+   }
 }

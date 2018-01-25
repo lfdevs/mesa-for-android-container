@@ -31,14 +31,14 @@ endif
 noinst_LTLIBRARIES = libclover.la libcltgsi.la libclllvm.la
 
 libcltgsi_la_CXXFLAGS = \
-	-std=c++11 \
+	$(CXX11_CXXFLAGS) \
 	$(CLOVER_STD_OVERRIDE) \
 	$(VISIBILITY_CXXFLAGS)
 
 libcltgsi_la_SOURCES = $(TGSI_SOURCES)
 
 libclllvm_la_CXXFLAGS = \
-	-std=c++11 \
+	$(CXX11_CXXFLAGS) \
 	$(VISIBILITY_CXXFLAGS) \
 	$(LLVM_CXXFLAGS) \
 	$(CLOVER_STD_OVERRIDE) \
@@ -51,7 +51,7 @@ libclllvm_la_CXXFLAGS = \
 libclllvm_la_SOURCES = $(LLVM_SOURCES)
 
 libclover_la_CXXFLAGS = \
-	-std=c++11 \
+	$(CXX11_CXXFLAGS) \
 	$(CLOVER_STD_OVERRIDE) \
 	$(VISIBILITY_CXXFLAGS)
 
@@ -60,4 +60,4 @@ libclover_la_LIBADD = \
 
 libclover_la_SOURCES = $(CPP_SOURCES)
 
-EXTRA_DIST = Doxyfile
+EXTRA_DIST = Doxyfile meson.build

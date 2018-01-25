@@ -25,12 +25,6 @@
  *
  **************************************************************************/
 
-/*
- * Authors:
- *      Christian König <christian.koenig@amd.com>
- *
- */
-
 #include <stdio.h>
 
 #include "pipe/p_video_codec.h"
@@ -40,7 +34,7 @@
 
 #include "vl/vl_video_buffer.h"
 
-#include "r600_pipe_common.h"
+#include "radeonsi/si_pipe.h"
 #include "radeon_video.h"
 #include "radeon_vce.h"
 
@@ -59,7 +53,7 @@
  */
 static void flush(struct rvce_encoder *enc)
 {
-	enc->ws->cs_flush(enc->cs, RADEON_FLUSH_ASYNC, NULL);
+	enc->ws->cs_flush(enc->cs, PIPE_FLUSH_ASYNC, NULL);
 	enc->task_info_idx = 0;
 	enc->bs_idx = 0;
 }
@@ -225,10 +219,10 @@ struct rvce_cpb_slot *si_l1_slot(struct rvce_encoder *enc)
 void si_vce_frame_offset(struct rvce_encoder *enc, struct rvce_cpb_slot *slot,
 			 signed *luma_offset, signed *chroma_offset)
 {
-	struct r600_common_screen *rscreen = (struct r600_common_screen *)enc->screen;
+	struct si_screen *sscreen = (struct si_screen *)enc->screen;
 	unsigned pitch, vpitch, fsize;
 
-	if (rscreen->chip_class < GFX9) {
+	if (sscreen->info.chip_class < GFX9) {
 		pitch = align(enc->luma->u.legacy.level[0].nblk_x * enc->luma->bpe, 128);
 		vpitch = align(enc->luma->u.legacy.level[0].nblk_y, 16);
 	} else {
@@ -395,18 +389,18 @@ struct pipe_video_codec *si_vce_create_encoder(struct pipe_context *context,
 					       struct radeon_winsys* ws,
 					       rvce_get_buffer get_buffer)
 {
-	struct r600_common_screen *rscreen = (struct r600_common_screen *)context->screen;
+	struct si_screen *sscreen = (struct si_screen *)context->screen;
 	struct r600_common_context *rctx = (struct r600_common_context*)context;
 	struct rvce_encoder *enc;
 	struct pipe_video_buffer *tmp_buf, templat = {};
 	struct radeon_surf *tmp_surf;
 	unsigned cpb_size;
 
-	if (!rscreen->info.vce_fw_version) {
+	if (!sscreen->info.vce_fw_version) {
 		RVID_ERR("Kernel doesn't supports VCE!\n");
 		return NULL;
 
-	} else if (!si_vce_is_fw_version_supported(rscreen)) {
+	} else if (!si_vce_is_fw_version_supported(sscreen)) {
 		RVID_ERR("Unsupported VCE fw version loaded!\n");
 		return NULL;
 	}
@@ -415,20 +409,20 @@ struct pipe_video_codec *si_vce_create_encoder(struct pipe_context *context,
 	if (!enc)
 		return NULL;
 
-	if (rscreen->info.drm_major == 3)
+	if (sscreen->info.drm_major == 3)
 		enc->use_vm = true;
-	if ((rscreen->info.drm_major == 2 && rscreen->info.drm_minor >= 42) ||
-            rscreen->info.drm_major == 3)
+	if ((sscreen->info.drm_major == 2 && sscreen->info.drm_minor >= 42) ||
+            sscreen->info.drm_major == 3)
 		enc->use_vui = true;
-	if (rscreen->info.family >= CHIP_TONGA &&
-	    rscreen->info.family != CHIP_STONEY &&
-	    rscreen->info.family != CHIP_POLARIS11 &&
-	    rscreen->info.family != CHIP_POLARIS12)
+	if (sscreen->info.family >= CHIP_TONGA &&
+	    sscreen->info.family != CHIP_STONEY &&
+	    sscreen->info.family != CHIP_POLARIS11 &&
+	    sscreen->info.family != CHIP_POLARIS12)
 		enc->dual_pipe = true;
 	/* TODO enable B frame with dual instance */
-	if ((rscreen->info.family >= CHIP_TONGA) &&
+	if ((sscreen->info.family >= CHIP_TONGA) &&
 		(templ->max_references == 1) &&
-		(rscreen->info.vce_harvest_config == 0))
+		(sscreen->info.vce_harvest_config == 0))
 		enc->dual_inst = true;
 
 	enc->base = *templ;
@@ -466,7 +460,7 @@ struct pipe_video_codec *si_vce_create_encoder(struct pipe_context *context,
 
 	get_buffer(((struct vl_video_buffer *)tmp_buf)->resources[0], NULL, &tmp_surf);
 
-	cpb_size = (rscreen->chip_class < GFX9) ?
+	cpb_size = (sscreen->info.chip_class < GFX9) ?
 		align(tmp_surf->u.legacy.level[0].nblk_x * tmp_surf->bpe, 128) *
 		align(tmp_surf->u.legacy.level[0].nblk_y, 32) :
 
@@ -490,7 +484,7 @@ struct pipe_video_codec *si_vce_create_encoder(struct pipe_context *context,
 
 	reset_cpb(enc);
 
-	switch (rscreen->info.vce_fw_version) {
+	switch (sscreen->info.vce_fw_version) {
 	case FW_40_2_2:
 		si_vce_40_2_2_init(enc);
 		si_get_pic_param = si_vce_40_2_2_get_param;
@@ -512,7 +506,7 @@ struct pipe_video_codec *si_vce_create_encoder(struct pipe_context *context,
 		break;
 
 	default:
-		if ((rscreen->info.vce_fw_version & (0xff << 24)) == FW_53) {
+		if ((sscreen->info.vce_fw_version & (0xff << 24)) == FW_53) {
 			si_vce_52_init(enc);
 			si_get_pic_param = si_vce_52_get_param;
 		} else
@@ -535,9 +529,9 @@ error:
 /**
  * check if kernel has the right fw version loaded
  */
-bool si_vce_is_fw_version_supported(struct r600_common_screen *rscreen)
+bool si_vce_is_fw_version_supported(struct si_screen *sscreen)
 {
-	switch (rscreen->info.vce_fw_version) {
+	switch (sscreen->info.vce_fw_version) {
 	case FW_40_2_2:
 	case FW_50_0_1:
 	case FW_50_1_2:
@@ -548,7 +542,7 @@ bool si_vce_is_fw_version_supported(struct r600_common_screen *rscreen)
 	case FW_52_8_3:
 		return true;
 	default:
-		if ((rscreen->info.vce_fw_version & (0xff << 24)) == FW_53)
+		if ((sscreen->info.vce_fw_version & (0xff << 24)) == FW_53)
 			return true;
 		else
 			return false;

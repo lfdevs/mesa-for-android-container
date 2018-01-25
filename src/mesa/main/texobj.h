@@ -32,7 +32,6 @@
 #define TEXTOBJ_H
 
 
-#include "compiler.h"
 #include "glheader.h"
 #include "mtypes.h"
 #include "samplerobj.h"
@@ -171,6 +170,13 @@ _mesa_unlock_context_textures( struct gl_context *ctx );
 extern void
 _mesa_lock_context_textures( struct gl_context *ctx );
 
+extern void
+_mesa_delete_nameless_texture(struct gl_context *ctx,
+                              struct gl_texture_object *texObj);
+
+extern void
+_mesa_bind_texture(struct gl_context *ctx, GLenum target,
+                   struct gl_texture_object *tex_obj);
 /*@}*/
 
 /**

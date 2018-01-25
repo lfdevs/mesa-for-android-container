@@ -52,7 +52,12 @@ swr_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
       return;
    }
 
-   /* Update derived state, pass draw info to update function */
+   /* If indexed draw, force vertex validation since index buffer comes
+    * from draw info. */
+   if (info->index_size)
+      ctx->dirty |= SWR_NEW_VERTEX;
+
+   /* Update derived state, pass draw info to update function. */
    swr_update_derived(pipe, info);
 
    swr_update_draw_context(ctx);

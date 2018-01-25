@@ -65,7 +65,7 @@ void saturate_propagation_test::SetUp()
 
    v = new saturate_propagation_fs_visitor(compiler, prog_data, shader);
 
-   devinfo->gen = 4;
+   devinfo->gen = 6;
 }
 
 static fs_inst *
@@ -278,6 +278,44 @@ TEST_F(saturate_propagation_test, add_neg_mov_sat)
    EXPECT_FALSE(instruction(block0, 1)->saturate);
 }
 
+TEST_F(saturate_propagation_test, add_imm_float_neg_mov_sat)
+{
+   const fs_builder &bld = v->bld;
+   fs_reg dst0 = v->vgrf(glsl_type::float_type);
+   fs_reg dst1 = v->vgrf(glsl_type::float_type);
+   fs_reg src0 = v->vgrf(glsl_type::float_type);
+   fs_reg src1 = brw_imm_f(1.0f);
+   bld.ADD(dst0, src0, src1);
+   dst0.negate = true;
+   set_saturate(true, bld.MOV(dst1, dst0));
+
+   /* = Before =
+    *
+    * 0: add(8)        dst0  src0  1.0f
+    * 1: mov.sat(8)    dst1  -dst0
+    *
+    * = After =
+    * 0: add.sat(8)    dst0  -src0 -1.0f
+    * 1: mov(8)        dst1  dst0
+    */
+
+   v->calculate_cfg();
+   bblock_t *block0 = v->cfg->blocks[0];
+
+   EXPECT_EQ(0, block0->start_ip);
+   EXPECT_EQ(1, block0->end_ip);
+
+   EXPECT_TRUE(saturate_propagation(v));
+   EXPECT_EQ(0, block0->start_ip);
+   EXPECT_EQ(1, block0->end_ip);
+   EXPECT_EQ(BRW_OPCODE_ADD, instruction(block0, 0)->opcode);
+   EXPECT_TRUE(instruction(block0, 0)->saturate);
+   EXPECT_TRUE(instruction(block0, 0)->src[0].negate);
+   EXPECT_EQ(instruction(block0, 0)->src[1].f, -1.0f);
+   EXPECT_EQ(BRW_OPCODE_MOV, instruction(block0, 1)->opcode);
+   EXPECT_FALSE(instruction(block0, 1)->saturate);
+}
+
 TEST_F(saturate_propagation_test, mul_neg_mov_sat)
 {
    const fs_builder &bld = v->bld;
@@ -311,6 +349,92 @@ TEST_F(saturate_propagation_test, mul_neg_mov_sat)
    EXPECT_EQ(BRW_OPCODE_MUL, instruction(block0, 0)->opcode);
    EXPECT_TRUE(instruction(block0, 0)->saturate);
    EXPECT_TRUE(instruction(block0, 0)->src[0].negate);
+   EXPECT_EQ(BRW_OPCODE_MOV, instruction(block0, 1)->opcode);
+   EXPECT_FALSE(instruction(block0, 1)->saturate);
+   EXPECT_FALSE(instruction(block0, 1)->src[0].negate);
+}
+
+TEST_F(saturate_propagation_test, mad_neg_mov_sat)
+{
+   const fs_builder &bld = v->bld;
+   fs_reg dst0 = v->vgrf(glsl_type::float_type);
+   fs_reg dst1 = v->vgrf(glsl_type::float_type);
+   fs_reg src0 = v->vgrf(glsl_type::float_type);
+   fs_reg src1 = v->vgrf(glsl_type::float_type);
+   fs_reg src2 = v->vgrf(glsl_type::float_type);
+   bld.MAD(dst0, src0, src1, src2);
+   dst0.negate = true;
+   set_saturate(true, bld.MOV(dst1, dst0));
+
+   /* = Before =
+    *
+    * 0: mad(8)        dst0  src0  src1 src2
+    * 1: mov.sat(8)    dst1  -dst0
+    *
+    * = After =
+    * 0: mad.sat(8)    dst0  -src0 -src1 src2
+    * 1: mov(8)        dst1  dst0
+    */
+
+   v->calculate_cfg();
+   bblock_t *block0 = v->cfg->blocks[0];
+
+   EXPECT_EQ(0, block0->start_ip);
+   EXPECT_EQ(1, block0->end_ip);
+
+   EXPECT_TRUE(saturate_propagation(v));
+   EXPECT_EQ(0, block0->start_ip);
+   EXPECT_EQ(1, block0->end_ip);
+   EXPECT_EQ(BRW_OPCODE_MAD, instruction(block0, 0)->opcode);
+   EXPECT_TRUE(instruction(block0, 0)->saturate);
+   EXPECT_TRUE(instruction(block0, 0)->src[0].negate);
+   EXPECT_TRUE(instruction(block0, 0)->src[1].negate);
+   EXPECT_FALSE(instruction(block0, 0)->src[2].negate);
+   EXPECT_EQ(BRW_OPCODE_MOV, instruction(block0, 1)->opcode);
+   EXPECT_FALSE(instruction(block0, 1)->saturate);
+   EXPECT_FALSE(instruction(block0, 1)->src[0].negate);
+}
+
+TEST_F(saturate_propagation_test, mad_imm_float_neg_mov_sat)
+{
+   const fs_builder &bld = v->bld;
+   fs_reg dst0 = v->vgrf(glsl_type::float_type);
+   fs_reg dst1 = v->vgrf(glsl_type::float_type);
+   fs_reg src0 = brw_imm_f(1.0f);
+   fs_reg src1 = brw_imm_f(-2.0f);
+   fs_reg src2 = v->vgrf(glsl_type::float_type);
+   /* The builder for MAD tries to be helpful and not put immediates as direct
+    * sources. We want to test specifically that case.
+    */
+   fs_inst *mad = bld.MAD(dst0, src2, src2, src2);
+   mad->src[0]= src0;
+   mad->src[1] = src1;
+   dst0.negate = true;
+   set_saturate(true, bld.MOV(dst1, dst0));
+
+   /* = Before =
+    *
+    * 0: mad(8)        dst0  1.0f -2.0f src2
+    * 1: mov.sat(8)    dst1  -dst0
+    *
+    * = After =
+    * 0: mad.sat(8)    dst0  -1.0f 2.0f src2
+    * 1: mov(8)        dst1  dst0
+    */
+
+   v->calculate_cfg();
+   bblock_t *block0 = v->cfg->blocks[0];
+
+   EXPECT_EQ(0, block0->start_ip);
+   EXPECT_EQ(1, block0->end_ip);
+
+   EXPECT_TRUE(saturate_propagation(v));
+   EXPECT_EQ(0, block0->start_ip);
+   EXPECT_EQ(1, block0->end_ip);
+   EXPECT_EQ(BRW_OPCODE_MAD, instruction(block0, 0)->opcode);
+   EXPECT_TRUE(instruction(block0, 0)->saturate);
+   EXPECT_EQ(instruction(block0, 0)->src[0].f, -1.0f);
+   EXPECT_EQ(instruction(block0, 0)->src[1].f, 2.0f);
    EXPECT_EQ(BRW_OPCODE_MOV, instruction(block0, 1)->opcode);
    EXPECT_FALSE(instruction(block0, 1)->saturate);
    EXPECT_FALSE(instruction(block0, 1)->src[0].negate);

@@ -30,4 +30,4 @@ noinst_LTLIBRARIES = librbug.la
 
 librbug_la_SOURCES = $(C_SOURCES)
 
-EXTRA_DIST = SConscript README
+EXTRA_DIST = SConscript README meson.build

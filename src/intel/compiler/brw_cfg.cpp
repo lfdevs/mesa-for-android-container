@@ -98,6 +98,7 @@ ends_block(const backend_instruction *inst)
           op == BRW_OPCODE_ELSE ||
           op == BRW_OPCODE_CONTINUE ||
           op == BRW_OPCODE_BREAK ||
+          op == BRW_OPCODE_DO ||
           op == BRW_OPCODE_WHILE;
 }
 
@@ -268,13 +269,57 @@ cfg_t::cfg_t(exec_list *instructions)
          }
 
          cur->instructions.push_tail(inst);
+
+         /* Represent divergent execution of the loop as a pair of alternative
+          * edges coming out of the DO instruction: For any physical iteration
+          * of the loop a given logical thread can either start off enabled
+          * (which is represented as the "next" successor), or disabled (if it
+          * has reached a non-uniform exit of the loop during a previous
+          * iteration, which is represented as the "cur_while" successor).
+          *
+          * The disabled edge will be taken by the logical thread anytime we
+          * arrive at the DO instruction through a back-edge coming from a
+          * conditional exit of the loop where divergent control flow started.
+          *
+          * This guarantees that there is a control-flow path from any
+          * divergence point of the loop into the convergence point
+          * (immediately past the WHILE instruction) such that it overlaps the
+          * whole IP region of divergent control flow (potentially the whole
+          * loop) *and* doesn't imply the execution of any instructions part
+          * of the loop (since the corresponding execution mask bit will be
+          * disabled for a diverging thread).
+          *
+          * This way we make sure that any variables that are live throughout
+          * the region of divergence for an inactive logical thread are also
+          * considered to interfere with any other variables assigned by
+          * active logical threads within the same physical region of the
+          * program, since otherwise we would risk cross-channel data
+          * corruption.
+          */
+         next = new_block();
+         cur->add_successor(mem_ctx, next);
+         cur->add_successor(mem_ctx, cur_while);
+         set_next_block(&cur, next, ip);
 	 break;
 
       case BRW_OPCODE_CONTINUE:
          cur->instructions.push_tail(inst);
 
+         /* A conditional CONTINUE may start a region of divergent control
+          * flow until the start of the next loop iteration (*not* until the
+          * end of the loop which is why the successor is not the top-level
+          * divergence point at cur_do).  The live interval of any variable
+          * extending through a CONTINUE edge is guaranteed to overlap the
+          * whole region of divergent execution, because any variable live-out
+          * at the CONTINUE instruction will also be live-in at the top of the
+          * loop, and therefore also live-out at the bottom-most point of the
+          * loop which is reachable from the top (since a control flow path
+          * exists from a definition of the variable through this CONTINUE
+          * instruction, the top of the loop, the (reachable) bottom of the
+          * loop, the top of the loop again, into a use of the variable).
+          */
          assert(cur_do != NULL);
-	 cur->add_successor(mem_ctx, cur_do);
+         cur->add_successor(mem_ctx, cur_do->next());
 
 	 next = new_block();
 	 if (inst->predicate)
@@ -286,8 +331,18 @@ cfg_t::cfg_t(exec_list *instructions)
       case BRW_OPCODE_BREAK:
          cur->instructions.push_tail(inst);
 
-         assert(cur_while != NULL);
-	 cur->add_successor(mem_ctx, cur_while);
+         /* A conditional BREAK instruction may start a region of divergent
+          * control flow until the end of the loop if the condition is
+          * non-uniform, in which case the loop will execute additional
+          * iterations with the present channel disabled.  We model this as a
+          * control flow path from the divergence point to the convergence
+          * point that overlaps the whole IP range of the loop and skips over
+          * the execution of any other instructions part of the loop.
+          *
+          * See the DO case for additional explanation.
+          */
+         assert(cur_do != NULL);
+         cur->add_successor(mem_ctx, cur_do);
 
 	 next = new_block();
 	 if (inst->predicate)
@@ -300,10 +355,18 @@ cfg_t::cfg_t(exec_list *instructions)
          cur->instructions.push_tail(inst);
 
          assert(cur_do != NULL && cur_while != NULL);
-	 cur->add_successor(mem_ctx, cur_do);
 
-         if (inst->predicate)
-            cur->add_successor(mem_ctx, cur_while);
+         /* A conditional WHILE instruction may start a region of divergent
+          * control flow until the end of the loop, just like the BREAK
+          * instruction.  See the BREAK case for more details.  OTOH an
+          * unconditional WHILE instruction is non-divergent (just like an
+          * unconditional CONTINUE), and will necessarily lead to the
+          * execution of an additional iteration of the loop for all enabled
+          * channels, so we may skip over the divergence point at the top of
+          * the loop to keep the CFG as unambiguous as possible.
+          */
+         cur->add_successor(mem_ctx, inst->predicate ? cur_do :
+                                     cur_do->next());
 
 	 set_next_block(&cur, cur_while, ip);
 

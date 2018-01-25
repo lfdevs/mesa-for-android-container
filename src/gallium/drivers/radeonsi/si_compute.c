@@ -23,6 +23,7 @@
  */
 
 #include "tgsi/tgsi_parse.h"
+#include "util/u_async_debug.h"
 #include "util/u_memory.h"
 #include "util/u_upload_mgr.h"
 
@@ -31,6 +32,11 @@
 #include "si_pipe.h"
 #include "si_compute.h"
 #include "sid.h"
+
+#define COMPUTE_DBG(rscreen, fmt, args...) \
+	do { \
+		if ((rscreen->debug_flags & DBG(COMPUTE))) fprintf(stderr, fmt, ##args); \
+	} while (0);
 
 struct dispatch_packet {
 	uint16_t header;
@@ -84,14 +90,10 @@ static void si_create_compute_state_async(void *job, int thread_index)
 	LLVMTargetMachineRef tm;
 	struct pipe_debug_callback *debug = &program->compiler_ctx_state.debug;
 
-	if (thread_index >= 0) {
-		assert(thread_index < ARRAY_SIZE(program->screen->tm));
-		tm = program->screen->tm[thread_index];
-		if (!debug->async)
-			debug = NULL;
-	} else {
-		tm = program->compiler_ctx_state.tm;
-	}
+	assert(!debug->debug_message || debug->async);
+	assert(thread_index >= 0);
+	assert(thread_index < ARRAY_SIZE(program->screen->tm));
+	tm = program->screen->tm[thread_index];
 
 	memset(&sel, 0, sizeof(sel));
 
@@ -167,20 +169,31 @@ static void *si_create_compute_state(
 			return NULL;
 		}
 
-		program->compiler_ctx_state.tm = sctx->tm;
-		program->compiler_ctx_state.debug = sctx->b.debug;
+		program->compiler_ctx_state.debug = sctx->debug;
 		program->compiler_ctx_state.is_debug_context = sctx->is_debug;
-		p_atomic_inc(&sscreen->b.num_shaders_created);
+		p_atomic_inc(&sscreen->num_shaders_created);
 		util_queue_fence_init(&program->ready);
 
-		if ((sctx->b.debug.debug_message && !sctx->b.debug.async) ||
-		    sctx->is_debug ||
-		    si_can_dump_shader(&sscreen->b, PIPE_SHADER_COMPUTE))
-			si_create_compute_state_async(program, -1);
-		else
-			util_queue_add_job(&sscreen->shader_compiler_queue,
-					   program, &program->ready,
-					   si_create_compute_state_async, NULL);
+		struct util_async_debug_callback async_debug;
+		bool wait =
+			(sctx->debug.debug_message && !sctx->debug.async) ||
+			sctx->is_debug ||
+			si_can_dump_shader(sscreen, PIPE_SHADER_COMPUTE);
+
+		if (wait) {
+			u_async_debug_init(&async_debug);
+			program->compiler_ctx_state.debug = async_debug.base;
+		}
+
+		util_queue_add_job(&sscreen->shader_compiler_queue,
+				   program, &program->ready,
+				   si_create_compute_state_async, NULL);
+
+		if (wait) {
+			util_queue_fence_wait(&program->ready);
+			u_async_debug_drain(&async_debug, &sctx->debug);
+			u_async_debug_cleanup(&async_debug);
+		}
 	} else {
 		const struct pipe_llvm_program_header *header;
 		const char *code;
@@ -196,7 +209,7 @@ static void *si_create_compute_state(
 			si_shader_binary_read_config(&program->shader.binary,
 				     &program->shader.config, 0);
 		}
-		si_shader_dump(sctx->screen, &program->shader, &sctx->b.debug,
+		si_shader_dump(sctx->screen, &program->shader, &sctx->debug,
 			       PIPE_SHADER_COMPUTE, stderr, true);
 		if (si_shader_binary_upload(sctx->screen, &program->shader) < 0) {
 			fprintf(stderr, "LLVM failed to upload shader\n");
@@ -302,9 +315,9 @@ static void si_initialize_compute(struct si_context *sctx)
 		radeon_emit(cs, bc_va >> 8);  /* R_030E00_TA_CS_BC_BASE_ADDR */
 		radeon_emit(cs, bc_va >> 40); /* R_030E04_TA_CS_BC_BASE_ADDR_HI */
 	} else {
-		if (sctx->screen->b.info.drm_major == 3 ||
-		    (sctx->screen->b.info.drm_major == 2 &&
-		     sctx->screen->b.info.drm_minor >= 48)) {
+		if (sctx->screen->info.drm_major == 3 ||
+		    (sctx->screen->info.drm_major == 2 &&
+		     sctx->screen->info.drm_minor >= 48)) {
 			radeon_set_config_reg(cs, R_00950C_TA_CS_BC_BASE_ADDR,
 					      bc_va >> 8);
 		}
@@ -328,7 +341,7 @@ static bool si_setup_compute_scratch_buffer(struct si_context *sctx,
 		r600_resource_reference(&sctx->compute_scratch_buffer, NULL);
 
 		sctx->compute_scratch_buffer = (struct r600_resource*)
-			si_aligned_buffer_create(&sctx->screen->b.b,
+			si_aligned_buffer_create(&sctx->screen->b,
 						   R600_RESOURCE_FLAG_UNMAPPABLE,
 						   PIPE_USAGE_DEFAULT,
 						   scratch_needed, 256);
@@ -611,7 +624,7 @@ static bool si_upload_compute_input(struct si_context *sctx,
 	kernel_args_size = program->input_size + num_work_size_bytes;
 
 	u_upload_alloc(sctx->b.b.const_uploader, 0, kernel_args_size,
-		       sctx->screen->b.info.tcc_cache_line_size,
+		       sctx->screen->info.tcc_cache_line_size,
 		       &kernel_args_offset,
 		       (struct pipe_resource**)&input_buffer, &kernel_args_ptr);
 
@@ -706,13 +719,28 @@ static void si_setup_tgsi_grid(struct si_context *sctx,
 static void si_emit_dispatch_packets(struct si_context *sctx,
                                      const struct pipe_grid_info *info)
 {
+	struct si_screen *sscreen = sctx->screen;
 	struct radeon_winsys_cs *cs = sctx->b.gfx.cs;
 	bool render_cond_bit = sctx->b.render_cond && !sctx->b.render_cond_force_off;
 	unsigned waves_per_threadgroup =
 		DIV_ROUND_UP(info->block[0] * info->block[1] * info->block[2], 64);
+	unsigned compute_resource_limits =
+		S_00B854_SIMD_DEST_CNTL(waves_per_threadgroup % 4 == 0);
+
+	if (sctx->b.chip_class >= CIK) {
+		unsigned num_cu_per_se = sscreen->info.num_good_compute_units /
+					 sscreen->info.max_se;
+
+		/* Force even distribution on all SIMDs in CU if the workgroup
+		 * size is 64. This has shown some good improvements if # of CUs
+		 * per SE is not a multiple of 4.
+		 */
+		if (num_cu_per_se % 4 && waves_per_threadgroup == 1)
+			compute_resource_limits |= S_00B854_FORCE_SIMD_DIST(1);
+	}
 
 	radeon_set_sh_reg(cs, R_00B854_COMPUTE_RESOURCE_LIMITS,
-			  S_00B854_SIMD_DEST_CNTL(waves_per_threadgroup % 4 == 0));
+			  compute_resource_limits);
 
 	radeon_set_sh_reg_seq(cs, R_00B81C_COMPUTE_NUM_THREAD_X, 3);
 	radeon_emit(cs, S_00B81C_NUM_THREAD_FULL(info->block[0]));
@@ -790,11 +818,11 @@ static void si_launch_grid(
 	si_decompress_textures(sctx, 1 << PIPE_SHADER_COMPUTE);
 
 	/* Add buffer sizes for memory checking in need_cs_space. */
-	r600_context_add_resource_size(ctx, &program->shader.bo->b.b);
+	si_context_add_resource_size(ctx, &program->shader.bo->b.b);
 	/* TODO: add the scratch buffer */
 
 	if (info->indirect) {
-		r600_context_add_resource_size(ctx, info->indirect);
+		si_context_add_resource_size(ctx, info->indirect);
 
 		/* Indirect buffers use TC L2 on GFX9, but not older hw. */
 		if (sctx->b.chip_class <= VI &&

@@ -41,7 +41,8 @@
 #define ENABLE_AVX512_SIMD16    1
 #define USE_8x2_TILE_BACKEND    1
 #define USE_SIMD16_FRONTEND     1
-#define USE_SIMD16_SHADERS      0   // requires USE_SIMD16_FRONTEND
+#define USE_SIMD16_SHADERS      1   // requires USE_SIMD16_FRONTEND
+#define USE_SIMD16_VS           1   // requires USE_SIMD16_SHADERS
 
 ///////////////////////////////////////////////////////////////////////////////
 // Architecture validation
@@ -61,18 +62,10 @@
 #define KNOB_SIMD_WIDTH 8
 #define KNOB_SIMD_BYTES 32
 #elif (KNOB_ARCH == KNOB_ARCH_AVX512)
-#if 0
-// not ready to enable this globally, enabled on the side (below)
 #define KNOB_ARCH_ISA AVX512F
 #define KNOB_ARCH_STR "AVX512"
-#define KNOB_SIMD_WIDTH 16
-#define KNOB_SIMD_BYTES 64
-#else
-#define KNOB_ARCH_ISA AVX2
-#define KNOB_ARCH_STR "AVX2"
 #define KNOB_SIMD_WIDTH 8
 #define KNOB_SIMD_BYTES 32
-#endif
 #else
 #error "Unknown architecture"
 #endif
@@ -171,6 +164,16 @@
 
 // enables cut-aware primitive assembler
 #define KNOB_ENABLE_CUT_AWARE_PA               TRUE
+
+// enables early rasterization (useful for small triangles)
+#if !defined(KNOB_ENABLE_EARLY_RAST)
+#define KNOB_ENABLE_EARLY_RAST                 1
+#endif
+
+#if KNOB_ENABLE_EARLY_RAST
+#define ER_SIMD_TILE_X_SHIFT 2
+#define ER_SIMD_TILE_Y_SHIFT 2
+#endif
 
 ///////////////////////////////////////////////////////////////////////////////
 // Debug knobs

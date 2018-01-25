@@ -396,12 +396,25 @@ driDestroyConfigs(const __DRIconfig **configs)
    free(configs);
 }
 
+static struct glx_config *
+driInferDrawableConfig(struct glx_screen *psc, GLXDrawable draw)
+{
+   unsigned int fbconfig = 0;
+
+   if (__glXGetDrawableAttribute(psc->dpy, draw, GLX_FBCONFIG_ID, &fbconfig)) {
+      return glx_config_find_fbconfig(psc->configs, fbconfig);
+   }
+
+   return NULL;
+}
+
 _X_HIDDEN __GLXDRIdrawable *
 driFetchDrawable(struct glx_context *gc, GLXDrawable glxDrawable)
 {
    struct glx_display *const priv = __glXInitialize(gc->psc->dpy);
    __GLXDRIdrawable *pdraw;
    struct glx_screen *psc;
+   struct glx_config *config = gc->config;
 
    if (priv == NULL)
       return NULL;
@@ -418,8 +431,13 @@ driFetchDrawable(struct glx_context *gc, GLXDrawable glxDrawable)
       return pdraw;
    }
 
-   pdraw = psc->driScreen->createDrawable(psc, glxDrawable,
-                                          glxDrawable, gc->config);
+   if (config == NULL)
+      config = driInferDrawableConfig(gc->psc, glxDrawable);
+   if (config == NULL)
+      return NULL;
+
+   pdraw = psc->driScreen->createDrawable(psc, glxDrawable, glxDrawable,
+                                          config);
 
    if (pdraw == NULL) {
       ErrorMessageF("failed to create drawable\n");
@@ -475,7 +493,7 @@ _X_HIDDEN bool
 dri2_convert_glx_attribs(unsigned num_attribs, const uint32_t *attribs,
                          unsigned *major_ver, unsigned *minor_ver,
                          uint32_t *render_type, uint32_t *flags, unsigned *api,
-                         int *reset, unsigned *error)
+                         int *reset, int *release, unsigned *error)
 {
    unsigned i;
    bool got_profile = false;
@@ -485,6 +503,7 @@ dri2_convert_glx_attribs(unsigned num_attribs, const uint32_t *attribs,
    *minor_ver = 0;
    *render_type = GLX_RGBA_TYPE;
    *reset = __DRI_CTX_RESET_NO_NOTIFICATION;
+   *release = __DRI_CTX_RELEASE_BEHAVIOR_FLUSH;
    *flags = 0;
    *api = __DRI_API_OPENGL;
 
@@ -524,6 +543,19 @@ dri2_convert_glx_attribs(unsigned num_attribs, const uint32_t *attribs,
             break;
          case GLX_LOSE_CONTEXT_ON_RESET_ARB:
             *reset = __DRI_CTX_RESET_LOSE_CONTEXT;
+            break;
+         default:
+            *error = __DRI_CTX_ERROR_UNKNOWN_ATTRIBUTE;
+            return false;
+         }
+         break;
+      case GLX_CONTEXT_RELEASE_BEHAVIOR_ARB:
+         switch (attribs[i * 2 + 1]) {
+         case GLX_CONTEXT_RELEASE_BEHAVIOR_NONE_ARB:
+            *release = __DRI_CTX_RELEASE_BEHAVIOR_NONE;
+            break;
+         case GLX_CONTEXT_RELEASE_BEHAVIOR_FLUSH_ARB:
+            *release = __DRI_CTX_RELEASE_BEHAVIOR_FLUSH;
             break;
          default:
             *error = __DRI_CTX_ERROR_UNKNOWN_ATTRIBUTE;

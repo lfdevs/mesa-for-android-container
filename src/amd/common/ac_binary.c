@@ -19,10 +19,6 @@
  * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
- *
- * Authors: Tom Stellard <thomas.stellard@amd.com>
- *
- * Based on radeon_elf_util.c.
  */
 
 #include "ac_binary.h"
@@ -301,4 +297,17 @@ void ac_shader_binary_read_config(struct ac_shader_binary *binary,
 		/* sgprs spills aren't spilling */
 	        conf->scratch_bytes_per_wave = G_00B860_WAVESIZE(wavesize) * 256 * 4;
 	}
+}
+
+void ac_shader_binary_clean(struct ac_shader_binary *b)
+{
+	if (!b)
+		return;
+	FREE(b->code);
+	FREE(b->config);
+	FREE(b->rodata);
+	FREE(b->global_symbol_offsets);
+	FREE(b->relocs);
+	FREE(b->disasm_string);
+	FREE(b->llvm_ir_string);
 }

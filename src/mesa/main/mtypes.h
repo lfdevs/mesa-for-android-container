@@ -46,13 +46,23 @@
 #include "compiler/shader_info.h"
 #include "main/formats.h"       /* MESA_FORMAT_COUNT */
 #include "compiler/glsl/list.h"
-#include "util/bitscan.h"
+#include "util/simple_mtx.h"
 #include "util/u_dynarray.h"
 
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+
+/** Set a single bit */
+#define BITFIELD_BIT(b)      ((GLbitfield)1 << (b))
+/** Set all bits up to excluding bit b */
+#define BITFIELD_MASK(b)      \
+   ((b) == 32 ? (~(GLbitfield)0) : BITFIELD_BIT(b) - 1)
+/** Set count bits starting from bit b  */
+#define BITFIELD_RANGE(b, count) \
+   (BITFIELD_MASK((b) + (count)) & ~BITFIELD_MASK(b))
 
 
 /**
@@ -87,8 +97,8 @@ struct st_context;
 struct gl_uniform_storage;
 struct prog_instruction;
 struct gl_program_parameter_list;
+struct gl_shader_spirv_data;
 struct set;
-struct set_entry;
 struct vbo_context;
 /*@}*/
 
@@ -232,7 +242,7 @@ struct gl_config
 
    /* ARB_multisample / SGIS_multisample */
    GLint sampleBuffers;
-   GLint samples;
+   GLuint samples;
 
    /* SGIX_pbuffer / GLX 1.3 */
    GLint maxPbufferWidth;
@@ -969,7 +979,7 @@ typedef enum
  */
 struct gl_sampler_object
 {
-   mtx_t Mutex;
+   simple_mtx_t Mutex;
    GLuint Name;
    GLint RefCount;
    GLchar *Label;               /**< GL_KHR_debug */
@@ -1001,7 +1011,7 @@ struct gl_sampler_object
  */
 struct gl_texture_object
 {
-   mtx_t Mutex;      /**< for thread safety */
+   simple_mtx_t Mutex;      /**< for thread safety */
    GLint RefCount;             /**< reference count */
    GLuint Name;                /**< the user-visible texture object ID */
    GLchar *Label;               /**< GL_KHR_debug */
@@ -1391,7 +1401,7 @@ typedef enum {
  */
 struct gl_buffer_object
 {
-   mtx_t Mutex;
+   simple_mtx_t Mutex;
    GLint RefCount;
    GLuint Name;
    GLchar *Label;       /**< GL_KHR_debug */
@@ -1506,7 +1516,7 @@ struct gl_vertex_buffer_binding
    GLsizei Stride;                     /**< User-specified stride */
    GLuint InstanceDivisor;             /**< GL_ARB_instanced_arrays */
    struct gl_buffer_object *BufferObj; /**< GL_ARB_vertex_buffer_object */
-   GLbitfield64 _BoundArrays;          /**< Arrays bound to this binding point */
+   GLbitfield _BoundArrays;            /**< Arrays bound to this binding point */
 };
 
 
@@ -1543,13 +1553,13 @@ struct gl_vertex_array_object
    struct gl_vertex_buffer_binding BufferBinding[VERT_ATTRIB_MAX];
 
    /** Mask indicating which vertex arrays have vertex buffer associated. */
-   GLbitfield64 VertexAttribBufferMask;
+   GLbitfield VertexAttribBufferMask;
 
    /** Mask of VERT_BIT_* values indicating which arrays are enabled */
-   GLbitfield64 _Enabled;
+   GLbitfield _Enabled;
 
    /** Mask of VERT_BIT_* values indicating changed/dirty arrays */
-   GLbitfield64 NewArrays;
+   GLbitfield NewArrays;
 
    /** The index buffer (also known as the element array buffer in OpenGL). */
    struct gl_buffer_object *IndexBufferObj;
@@ -1779,6 +1789,9 @@ struct gl_transform_feedback_buffer
 /** Post-link transform feedback info. */
 struct gl_transform_feedback_info
 {
+   /* Was xfb enabled via the api or in shader layout qualifiers */
+   bool api_enabled;
+
    unsigned NumOutputs;
 
    /* Bitmask of active buffer indices. */
@@ -2056,6 +2069,7 @@ typedef enum
    PROGRAM_BUFFER,      /**< for shader buffers, compile-time only */
    PROGRAM_MEMORY,      /**< for shared, global and local memory */
    PROGRAM_IMAGE,       /**< for shader images, compile-time only */
+   PROGRAM_HW_ATOMIC,   /**< for hw atomic counters, compile-time only */
    PROGRAM_FILE_MAX
 } gl_register_file;
 
@@ -2078,6 +2092,10 @@ struct gl_program
    GLboolean _Used;        /**< Ever used for drawing? Used for debugging */
 
    struct nir_shader *nir;
+
+   /* Saved and restored with metadata. Freed with ralloc. */
+   void *driver_cache_blob;
+   size_t driver_cache_blob_size;
 
    bool is_arb_asm; /** Is this an ARB assembly-style program */
 
@@ -2371,10 +2389,14 @@ struct ati_fragment_shader
    GLubyte numArithInstr[2];
    GLubyte regsAssigned[2];
    GLubyte NumPasses;         /**< 1 or 2 */
+   /** Current compile stage: 0 setup pass1, 1 arith pass1, 2 setup pass2, 3 arith pass2 */
    GLubyte cur_pass;
    GLubyte last_optype;
    GLboolean interpinp1;
    GLboolean isValid;
+   /** Array of 2 bit values for each tex unit to remember whether
+    * STR or STQ swizzle was used
+    */
    GLuint swizzlerq;
    struct gl_program *Program;
 };
@@ -2524,19 +2546,6 @@ struct gl_linked_shader
    struct glsl_symbol_table *symbols;
 };
 
-static inline GLbitfield gl_external_samplers(struct gl_program *prog)
-{
-   GLbitfield external_samplers = 0;
-   GLbitfield mask = prog->SamplersUsed;
-
-   while (mask) {
-      int idx = u_bit_scan(&mask);
-      if (prog->sh.SamplerTargets[idx] == TEXTURE_EXTERNAL_INDEX)
-         external_samplers |= (1 << idx);
-   }
-
-   return external_samplers;
-}
 
 /**
  * Compile status enum. compile_skipped is used to indicate the compile
@@ -2624,6 +2633,9 @@ struct gl_shader
    GLuint TransformFeedbackBufferStride[MAX_FEEDBACK_BUFFERS];
 
    struct gl_shader_info info;
+
+   /* ARB_gl_spirv related data */
+   struct gl_shader_spirv_data *spirv_data;
 };
 
 
@@ -2865,13 +2877,17 @@ struct gl_shader_program_data
    unsigned NumUniformDataSlots;
    union gl_constant_value *UniformDataSlots;
 
-   /* TODO: This used by Gallium drivers to skip the cache on tgsi fallback.
-    * All structures (gl_program, uniform storage, etc) will get recreated
-    * even though we have already loaded them from cache. We should instead
-    * switch to storing the GLSL metadata and TGSI IR in a single cache item
-    * like the i965 driver does with NIR.
+   /* Used to hold initial uniform values for program binary restores.
+    *
+    * From the ARB_get_program_binary spec:
+    *
+    *    "A successful call to ProgramBinary will reset all uniform
+    *    variables to their initial values. The initial value is either
+    *    the value of the variable's initializer as specified in the
+    *    original shader source, or 0 if no initializer was present.
     */
-   bool skip_cache;
+   union gl_constant_value *UniformDataDefaults;
+
    GLboolean Validated;
 
    /** List of all active resources after linking. */
@@ -3208,7 +3224,7 @@ struct gl_sync_object
  */
 struct gl_shared_state
 {
-   mtx_t Mutex;		   /**< for thread safety */
+   simple_mtx_t Mutex;		   /**< for thread safety */
    GLint RefCount;			   /**< Reference count */
    struct _mesa_HashTable *DisplayList;	   /**< Display lists hash table */
    struct _mesa_HashTable *BitmapAtlas;    /**< For optimized glBitmap text */
@@ -3281,6 +3297,14 @@ struct gl_shared_state
    /** EXT_external_objects */
    struct _mesa_HashTable *MemoryObjects;
 
+   /**
+    * Some context in this share group was affected by a disjoint
+    * operation. This operation can be anything that has effects on
+    * values of timer queries in such manner that they become invalid for
+    * performance metrics. As example gpu reset, counter overflow or gpu
+    * frequency changes.
+    */
+   bool DisjointOperation;
 };
 
 
@@ -3292,7 +3316,7 @@ struct gl_shared_state
  */
 struct gl_renderbuffer
 {
-   mtx_t Mutex; /**< for thread safety */
+   simple_mtx_t Mutex; /**< for thread safety */
    GLuint ClassID;        /**< Useful for drivers */
    GLuint Name;
    GLchar *Label;         /**< GL_KHR_debug */
@@ -3370,7 +3394,7 @@ struct gl_renderbuffer_attachment
  */
 struct gl_framebuffer
 {
-   mtx_t Mutex;  /**< for thread safety */
+   simple_mtx_t Mutex;  /**< for thread safety */
    /**
     * If zero, this is a window system framebuffer.  If non-zero, this
     * is a FBO framebuffer; note that for some devices (i.e. those with
@@ -3472,8 +3496,8 @@ struct gl_framebuffer
 
    /** Computed from ColorDraw/ReadBuffer above */
    GLuint _NumColorDrawBuffers;
-   GLint _ColorDrawBufferIndexes[MAX_DRAW_BUFFERS]; /**< BUFFER_x or -1 */
-   GLint _ColorReadBufferIndex; /* -1 = None */
+   gl_buffer_index _ColorDrawBufferIndexes[MAX_DRAW_BUFFERS];
+   gl_buffer_index _ColorReadBufferIndex;
    struct gl_renderbuffer *_ColorDrawBuffers[MAX_DRAW_BUFFERS];
    struct gl_renderbuffer *_ColorReadBuffer;
 
@@ -3563,7 +3587,6 @@ struct gl_program_constants
    /* GL_ARB_shader_storage_buffer_object */
    GLuint MaxShaderStorageBlocks;
 };
-
 
 /**
  * Constants which may be overridden by device driver during context creation
@@ -3980,8 +4003,6 @@ struct gl_constants
    GLuint MaxTessPatchComponents;
    GLuint MaxTessControlTotalOutputComponents;
    bool LowerTessLevel; /**< Lower gl_TessLevel* from float[n] to vecn? */
-   bool LowerTCSPatchVerticesIn; /**< Lower gl_PatchVerticesIn to a uniform */
-   bool LowerTESPatchVerticesIn; /**< Lower gl_PatchVerticesIn to a uniform */
    bool PrimitiveRestartForPatches;
    bool LowerCsDerivedVariables;    /**< Lower gl_GlobalInvocationID and
                                      *   gl_LocalInvocationIndex based on
@@ -3998,6 +4019,9 @@ struct gl_constants
 
    /** When drivers are OK with mapped buffers during draw and other calls. */
    bool AllowMappedBuffersDuringExecution;
+
+   /** GL_ARB_get_program_binary */
+   GLuint NumProgramBinaryFormats;
 };
 
 
@@ -4047,6 +4071,7 @@ struct gl_extensions
    GLboolean ARB_enhanced_layouts;
    GLboolean ARB_explicit_attrib_location;
    GLboolean ARB_explicit_uniform_location;
+   GLboolean ARB_gl_spirv;
    GLboolean ARB_gpu_shader5;
    GLboolean ARB_gpu_shader_fp64;
    GLboolean ARB_gpu_shader_int64;
@@ -4128,6 +4153,7 @@ struct gl_extensions
    GLboolean EXT_blend_func_separate;
    GLboolean EXT_blend_minmax;
    GLboolean EXT_depth_bounds_test;
+   GLboolean EXT_disjoint_timer_query;
    GLboolean EXT_draw_buffers2;
    GLboolean EXT_framebuffer_multisample;
    GLboolean EXT_framebuffer_multisample_blit_scaled;
@@ -4229,6 +4255,12 @@ struct gl_extensions
     * while meta is in progress.
     */
    GLubyte Version;
+   /**
+    * Force-enabled, yet unrecognized, extensions.
+    * See _mesa_one_time_init_extension_overrides()
+    */
+#define MAX_UNRECOGNIZED_EXTENSIONS 16
+   const char *unrecognized_extensions[MAX_UNRECOGNIZED_EXTENSIONS];
 };
 
 
@@ -4924,7 +4956,7 @@ struct gl_context
    GLuint ErrorDebugCount;
 
    /* GL_ARB_debug_output/GL_KHR_debug */
-   mtx_t DebugMutex;
+   simple_mtx_t DebugMutex;
    struct gl_debug_state *Debug;
 
    GLenum RenderMode;        /**< either GL_RENDER, GL_SELECT, GL_FEEDBACK */
@@ -4935,7 +4967,7 @@ struct gl_context
 
    GLboolean ViewportInitialized;  /**< has viewport size been initialized? */
 
-   GLbitfield64 varying_vp_inputs;  /**< mask of VERT_BIT_* flags */
+   GLbitfield varying_vp_inputs;  /**< mask of VERT_BIT_* flags */
 
    /** \name Derived state */
    GLbitfield _ImageTransferState;/**< bitwise-or of IMAGE_*_BIT flags */

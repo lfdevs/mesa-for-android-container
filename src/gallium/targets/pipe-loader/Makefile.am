@@ -213,4 +213,4 @@ pipe_swrast_la_LIBADD += \
 
 endif
 
-EXTRA_DIST = pipe.sym
+EXTRA_DIST = pipe.sym meson.build

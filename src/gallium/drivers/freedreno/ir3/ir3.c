@@ -501,21 +501,58 @@ static int emit_cat6(struct ir3_instruction *instr, void *ptr,
 		src2 = (instr->regs_count >= 3) ? instr->regs[2] : NULL;
 	}
 
-
 	/* TODO we need a more comprehensive list about which instructions
 	 * can be encoded which way.  Or possibly use IR3_INSTR_0 flag to
 	 * indicate to use the src_off encoding even if offset is zero
 	 * (but then what to do about dst_off?)
 	 */
-	if ((instr->opc == OPC_LDGB) || is_atomic(instr->opc)) {
+	if (is_atomic(instr->opc)) {
+		instr_cat6ldgb_t *ldgb = ptr;
+
+		/* maybe these two bits both determine the instruction encoding? */
+		cat6->src_off = false;
+
+		ldgb->d = instr->cat6.d - 1;
+		ldgb->typed = instr->cat6.typed;
+		ldgb->type_size = instr->cat6.iim_val - 1;
+
+		ldgb->dst = reg(dst, info, instr->repeat, IR3_REG_R | IR3_REG_HALF);
+
+		if (ldgb->g) {
+			struct ir3_register *src3 = instr->regs[3];
+			struct ir3_register *src4 = instr->regs[4];
+
+			/* first src is src_ssbo: */
+			iassert(src1->flags & IR3_REG_IMMED);
+			ldgb->src_ssbo = src1->uim_val;
+
+			ldgb->src1 = reg(src2, info, instr->repeat, IR3_REG_IMMED);
+			ldgb->src1_im = !!(src2->flags & IR3_REG_IMMED);
+			ldgb->src2 = reg(src3, info, instr->repeat, IR3_REG_IMMED);
+			ldgb->src2_im = !!(src3->flags & IR3_REG_IMMED);
+
+			ldgb->src3 = reg(src4, info, instr->repeat, 0);
+			ldgb->pad0 = 0x1;
+			ldgb->pad3 = 0x1;
+		} else {
+			ldgb->src1 = reg(src1, info, instr->repeat, IR3_REG_IMMED);
+			ldgb->src1_im = !!(src1->flags & IR3_REG_IMMED);
+			ldgb->src2 = reg(src2, info, instr->repeat, IR3_REG_IMMED);
+			ldgb->src2_im = !!(src2->flags & IR3_REG_IMMED);
+			ldgb->pad0 = 0x1;
+			ldgb->pad3 = 0x0;
+		}
+
+		return 0;
+	} else if (instr->opc == OPC_LDGB) {
 		struct ir3_register *src3 = instr->regs[3];
 		instr_cat6ldgb_t *ldgb = ptr;
 
 		/* maybe these two bits both determine the instruction encoding? */
 		cat6->src_off = false;
 
-		ldgb->d = 4 - 1;      /* always .4d ? */
-		ldgb->typed = false;  /* TODO true for images */
+		ldgb->d = instr->cat6.d - 1;
+		ldgb->typed = instr->cat6.typed;
 		ldgb->type_size = instr->cat6.iim_val - 1;
 
 		ldgb->dst = reg(dst, info, instr->repeat, IR3_REG_R | IR3_REG_HALF);
@@ -530,18 +567,23 @@ static int emit_cat6(struct ir3_instruction *instr, void *ptr,
 		ldgb->src2 = reg(src3, info, instr->repeat, IR3_REG_IMMED);
 		ldgb->src2_im = !!(src3->flags & IR3_REG_IMMED);
 
-		if (is_atomic(instr->opc)) {
-			struct ir3_register *src4 = instr->regs[4];
-			ldgb->src3 = reg(src4, info, instr->repeat, 0);
-			ldgb->pad0 = 0x1;
-			ldgb->pad3 = 0x3;
-		} else {
-			ldgb->pad0 = 0x0;
-			ldgb->pad3 = 0x2;
-		}
+		ldgb->pad0 = 0x0;
+		ldgb->pad3 = 0x1;
 
 		return 0;
-	} else if (instr->opc == OPC_STGB) {
+	} else if (instr->opc == OPC_RESINFO) {
+		instr_cat6ldgb_t *ldgb = ptr;
+
+		ldgb->d = instr->cat6.d - 1;
+
+		ldgb->dst = reg(dst, info, instr->repeat, IR3_REG_R | IR3_REG_HALF);
+
+		/* first src is src_ssbo: */
+		iassert(src1->flags & IR3_REG_IMMED);
+		ldgb->src_ssbo = src1->uim_val;
+
+		return 0;
+	} else if ((instr->opc == OPC_STGB) || (instr->opc == OPC_STIB)) {
 		struct ir3_register *src3 = instr->regs[4];
 		instr_cat6stgb_t *stgb = ptr;
 
@@ -549,8 +591,8 @@ static int emit_cat6(struct ir3_instruction *instr, void *ptr,
 		cat6->src_off = true;
 		stgb->pad3 = 0x2;
 
-		stgb->d = 4 - 1;    /* always .4d ? */
-		stgb->typed = false;
+		stgb->d = instr->cat6.d - 1;
+		stgb->typed = instr->cat6.typed;
 		stgb->type_size = instr->cat6.iim_val - 1;
 
 		/* first src is dst_ssbo: */
@@ -565,7 +607,8 @@ static int emit_cat6(struct ir3_instruction *instr, void *ptr,
 		stgb->src3_im = !!(src3->flags & IR3_REG_IMMED);
 
 		return 0;
-	} else if (instr->cat6.src_offset || (instr->opc == OPC_LDG)) {
+	} else if (instr->cat6.src_offset || (instr->opc == OPC_LDG) ||
+			(instr->opc == OPC_LDL)) {
 		instr_cat6a_t *cat6a = ptr;
 
 		cat6->src_off = true;
@@ -590,7 +633,8 @@ static int emit_cat6(struct ir3_instruction *instr, void *ptr,
 		}
 	}
 
-	if (instr->cat6.dst_offset || (instr->opc == OPC_STG)) {
+	if (instr->cat6.dst_offset || (instr->opc == OPC_STG) ||
+			(instr->opc == OPC_STL)) {
 		instr_cat6c_t *cat6c = ptr;
 		cat6->dst_off = true;
 		cat6c->dst = reg(dst, info, instr->repeat, IR3_REG_R | IR3_REG_HALF);
@@ -604,9 +648,28 @@ static int emit_cat6(struct ir3_instruction *instr, void *ptr,
 	return 0;
 }
 
+static int emit_cat7(struct ir3_instruction *instr, void *ptr,
+		struct ir3_info *info)
+{
+	instr_cat7_t *cat7 = ptr;
+
+	cat7->ss      = !!(instr->flags & IR3_INSTR_SS);
+	cat7->w       = instr->cat7.w;
+	cat7->r       = instr->cat7.r;
+	cat7->l       = instr->cat7.l;
+	cat7->g       = instr->cat7.g;
+	cat7->opc     = instr->opc;
+	cat7->jmp_tgt = !!(instr->flags & IR3_INSTR_JP);
+	cat7->sync    = !!(instr->flags & IR3_INSTR_SY);
+	cat7->opc_cat = 7;
+
+	return 0;
+}
+
 static int (*emit[])(struct ir3_instruction *instr, void *ptr,
 		struct ir3_info *info) = {
 	emit_cat0, emit_cat1, emit_cat2, emit_cat3, emit_cat4, emit_cat5, emit_cat6,
+	emit_cat7,
 };
 
 void * ir3_assemble(struct ir3 *shader, struct ir3_info *info,
@@ -752,6 +815,12 @@ struct ir3_instruction * ir3_instr_clone(struct ir3_instruction *instr)
 	}
 
 	return new_instr;
+}
+
+/* Add a false dependency to instruction, to ensure it is scheduled first: */
+void ir3_instr_add_dep(struct ir3_instruction *instr, struct ir3_instruction *dep)
+{
+	array_insert(instr, instr->deps, dep);
 }
 
 struct ir3_register * ir3_reg_create(struct ir3_instruction *instr,

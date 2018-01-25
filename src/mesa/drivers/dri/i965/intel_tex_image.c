@@ -464,11 +464,19 @@ intelSetTexBuffer2(__DRIcontext *pDRICtx, GLint target,
    if (rb->mt->cpp == 4) {
       if (texture_format == __DRI_TEXTURE_FORMAT_RGB) {
          internal_format = GL_RGB;
-         texFormat = MESA_FORMAT_B8G8R8X8_UNORM;
+         if (rb->mt->format == MESA_FORMAT_B10G10R10X2_UNORM ||
+             rb->mt->format == MESA_FORMAT_B10G10R10A2_UNORM)
+            texFormat = MESA_FORMAT_B10G10R10X2_UNORM;
+         else
+            texFormat = MESA_FORMAT_B8G8R8X8_UNORM;
       }
       else {
          internal_format = GL_RGBA;
-         texFormat = MESA_FORMAT_B8G8R8A8_UNORM;
+         if (rb->mt->format == MESA_FORMAT_B10G10R10X2_UNORM ||
+             rb->mt->format == MESA_FORMAT_B10G10R10A2_UNORM)
+            texFormat = MESA_FORMAT_B10G10R10A2_UNORM;
+         else
+            texFormat = MESA_FORMAT_B8G8R8A8_UNORM;
       }
    } else if (rb->mt->cpp == 2) {
       internal_format = GL_RGB;
@@ -480,6 +488,7 @@ intelSetTexBuffer2(__DRIcontext *pDRICtx, GLint target,
                                     rb->Base.Base.Width,
                                     rb->Base.Base.Height,
                                     1, rb->mt->surf.row_pitch,
+                                    rb->mt->surf.tiling,
                                     MIPTREE_CREATE_DEFAULT);
    if (mt == NULL)
        return;

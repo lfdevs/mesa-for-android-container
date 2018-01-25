@@ -115,7 +115,10 @@ EXTRA_DIST = \
 	brw_oa_kblgt2.xml \
 	brw_oa_kblgt3.xml \
 	brw_oa_glk.xml \
-	brw_oa.py
+	brw_oa_cflgt2.xml \
+	brw_oa_cflgt3.xml \
+	brw_oa.py \
+	meson.build
 
 # Note: we avoid using a multi target rule here and outputting both the
 # .c and .h files in one go so we don't hit problems with parallel

@@ -83,7 +83,7 @@
          port_num, magic,                  \
          ax, bx, cx, dx, si, di)           \
 ({                                         \
-   asm volatile ("inl %%dx, %%eax;" :      \
+   __asm__ volatile ("inl %%dx, %%eax;" :  \
       "=a"(ax),                            \
       "=b"(bx),                            \
       "=c"(cx),                            \
@@ -128,7 +128,7 @@ typedef uint64_t VMW_REG;
          port_num, magic, bp,                     \
          ax, bx, cx, dx, si, di)                  \
 ({                                                \
-   asm volatile ("push %%rbp;"                    \
+   __asm__ volatile ("push %%rbp;"                \
       "movq %12, %%rbp;"                          \
       "rep outsb;"                                \
       "pop %%rbp;" :                              \
@@ -152,7 +152,7 @@ typedef uint64_t VMW_REG;
          port_num, magic, bp,                     \
          ax, bx, cx, dx, si, di)                  \
 ({                                                \
-   asm volatile ("push %%rbp;"                    \
+   __asm__ volatile ("push %%rbp;"                \
       "movq %12, %%rbp;"                          \
       "rep insb;"                                 \
       "pop %%rbp" :                               \
@@ -183,7 +183,7 @@ typedef uint32_t VMW_REG;
          port_num, magic, bp,                     \
          ax, bx, cx, dx, si, di)                  \
 ({                                                \
-   asm volatile ("push %%ebp;"                    \
+   __asm__ volatile ("push %%ebp;"                \
       "mov %12, %%ebp;"                           \
       "rep outsb;"                                \
       "pop %%ebp;" :                              \
@@ -208,7 +208,7 @@ typedef uint32_t VMW_REG;
          port_num, magic, bp,                     \
          ax, bx, cx, dx, si, di)                  \
 ({                                                \
-   asm volatile ("push %%ebp;"                    \
+   __asm__ volatile ("push %%ebp;"                \
       "mov %12, %%ebp;"                           \
       "rep insb;"                                 \
       "pop %%ebp" :                               \

@@ -214,7 +214,6 @@ osmesa_choose_line_function( struct gl_context *ctx )
    }
 
    if (ctx->RenderMode != GL_RENDER ||
-       ctx->Line.SmoothFlag ||
        ctx->Texture._MaxEnabledTexImageUnit == -1 ||
        ctx->Light.ShadeModel != GL_FLAT ||
        ctx->Line.Width != 1.0F ||
@@ -913,6 +912,7 @@ OSMesaCreateContextAttribs(const int *attribList, OSMesaContext sharelist)
          swrast->choose_line = osmesa_choose_line;
          swrast->choose_triangle = osmesa_choose_triangle;
 
+         _mesa_override_extensions(ctx);
          _mesa_compute_version(ctx);
 
          if (ctx->Version < version_major * 10 + version_minor) {
@@ -1291,7 +1291,7 @@ OSMesaPostprocess(OSMesaContext osmesa, const char *filter,
 #define GL_GLEXT_PROTOTYPES
 #include "GL/gl.h"
 #include "glapi/glapi.h"
-#include "glapi/glapitable.h"
+#include "glapitable.h"
 
 #if defined(USE_MGL_NAMESPACE)
 #define NAME(func)  mgl##func
@@ -1307,6 +1307,6 @@ OSMesaPostprocess(OSMesaContext osmesa, const char *filter,
 
 /* skip normal ones */
 #define _GLAPI_SKIP_NORMAL_ENTRY_POINTS
-#include "glapi/glapitemp.h"
+#include "glapitemp.h"
 
 #endif /* GLX_INDIRECT_RENDERING */

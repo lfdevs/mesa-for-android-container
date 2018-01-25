@@ -28,11 +28,14 @@
 
 #include <xf86drm.h>
 #include "vc5_context.h"
+/* The OQ/semaphore packets are the same across V3D versions. */
+#define V3D_VERSION 33
+#include "broadcom/cle/v3dx_pack.h"
+#include "broadcom/common/v3d_macros.h"
 #include "util/hash_table.h"
 #include "util/ralloc.h"
 #include "util/set.h"
 #include "broadcom/clif/clif_dump.h"
-#include "broadcom/cle/v3d_packet_v33_pack.h"
 
 static void
 remove_from_ht(struct hash_table *ht, void *key)
@@ -81,6 +84,7 @@ vc5_job_free(struct vc5_context *vc5, struct vc5_job *job)
         vc5_destroy_cl(&job->rcl);
         vc5_destroy_cl(&job->indirect);
         vc5_bo_unreference(&job->tile_alloc);
+        vc5_bo_unreference(&job->tile_state);
 
         ralloc_free(job);
 }
@@ -118,6 +122,7 @@ vc5_job_add_bo(struct vc5_job *job, struct vc5_bo *bo)
 
         vc5_bo_reference(bo);
         _mesa_set_add(job->bos, bo);
+        job->referenced_size += bo->size;
 
         uint32_t *bo_handles = (void *)(uintptr_t)job->submit.bo_handles;
 
@@ -367,6 +372,8 @@ vc5_clif_dump(struct vc5_context *vc5, struct vc5_job *job)
 void
 vc5_job_submit(struct vc5_context *vc5, struct vc5_job *job)
 {
+        MAYBE_UNUSED struct vc5_screen *screen = vc5->screen;
+
         if (!job->needs_flush)
                 goto done;
 
@@ -378,10 +385,23 @@ vc5_job_submit(struct vc5_context *vc5, struct vc5_job *job)
                 goto done;
         }
 
-        vc5_emit_rcl(job);
+        if (vc5->screen->devinfo.ver >= 41)
+                v3d41_emit_rcl(job);
+        else
+                v3d33_emit_rcl(job);
 
         if (cl_offset(&job->bcl) > 0) {
-                vc5_cl_ensure_space_with_branch(&job->bcl, 2);
+                vc5_cl_ensure_space_with_branch(&job->bcl,
+                                                7 +
+                                                cl_packet_length(OCCLUSION_QUERY_COUNTER));
+
+                if (job->oq_enabled) {
+                        /* Disable the OQ at the end of the CL, so that the
+                         * draw calls at the start of the CL don't inherit the
+                         * OQ counter.
+                         */
+                        cl_emit(&job->bcl, OCCLUSION_QUERY_COUNTER, counter);
+                }
 
                 /* Increment the semaphore indicating that binning is done and
                  * unblocking the render thread.  Note that this doesn't act
@@ -389,14 +409,28 @@ vc5_job_submit(struct vc5_context *vc5, struct vc5_job *job)
                  */
                 cl_emit(&job->bcl, INCREMENT_SEMAPHORE, incr);
 
-                /* The FLUSH caps all of our bin lists with a
-                 * VC5_PACKET_RETURN.
+                /* The FLUSH_ALL emits any unwritten state changes in each
+                 * tile.  We can use this to reset any state that needs to be
+                 * present at the start of the next tile, as we do with
+                 * OCCLUSION_QUERY_COUNTER above.
                  */
-                cl_emit(&job->bcl, FLUSH, flush);
+                cl_emit(&job->bcl, FLUSH_ALL_STATE, flush);
         }
 
         job->submit.bcl_end = job->bcl.bo->offset + cl_offset(&job->bcl);
         job->submit.rcl_end = job->rcl.bo->offset + cl_offset(&job->rcl);
+
+        /* On V3D 4.1, the tile alloc/state setup moved to register writes
+         * instead of binner pac`kets.
+         */
+        if (screen->devinfo.ver >= 41) {
+                vc5_job_add_bo(job, job->tile_alloc);
+                job->submit.qma = job->tile_alloc->offset;
+                job->submit.qms = job->tile_alloc->size;
+
+                vc5_job_add_bo(job, job->tile_state);
+                job->submit.qts = job->tile_state->offset;
+        }
 
         vc5_clif_dump(vc5, job);
 

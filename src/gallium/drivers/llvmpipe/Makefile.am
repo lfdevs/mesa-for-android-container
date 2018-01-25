@@ -77,4 +77,4 @@ lp_test_printf_SOURCES = lp_test_printf.c lp_test_main.c
 lp_test_printf_LDADD = $(TEST_LIBS)
 nodist_EXTRA_lp_test_printf_SOURCES = dummy.cpp
 
-EXTRA_DIST = SConscript
+EXTRA_DIST = SConscript meson.build

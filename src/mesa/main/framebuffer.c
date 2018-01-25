@@ -131,7 +131,7 @@ _mesa_initialize_window_framebuffer(struct gl_framebuffer *fb,
 
    memset(fb, 0, sizeof(struct gl_framebuffer));
 
-   mtx_init(&fb->Mutex, mtx_plain);
+   simple_mtx_init(&fb->Mutex, mtx_plain);
 
    fb->RefCount = 1;
 
@@ -184,7 +184,7 @@ _mesa_initialize_user_framebuffer(struct gl_framebuffer *fb, GLuint name)
    fb->ColorReadBuffer = GL_COLOR_ATTACHMENT0_EXT;
    fb->_ColorReadBufferIndex = BUFFER_COLOR0;
    fb->Delete = _mesa_destroy_framebuffer;
-   mtx_init(&fb->Mutex, mtx_plain);
+   simple_mtx_init(&fb->Mutex, mtx_plain);
 }
 
 
@@ -215,7 +215,7 @@ _mesa_free_framebuffer_data(struct gl_framebuffer *fb)
    assert(fb);
    assert(fb->RefCount == 0);
 
-   mtx_destroy(&fb->Mutex);
+   simple_mtx_destroy(&fb->Mutex);
 
    for (i = 0; i < BUFFER_COUNT; i++) {
       struct gl_renderbuffer_attachment *att = &fb->Attachment[i];
@@ -246,11 +246,11 @@ _mesa_reference_framebuffer_(struct gl_framebuffer **ptr,
       GLboolean deleteFlag = GL_FALSE;
       struct gl_framebuffer *oldFb = *ptr;
 
-      mtx_lock(&oldFb->Mutex);
+      simple_mtx_lock(&oldFb->Mutex);
       assert(oldFb->RefCount > 0);
       oldFb->RefCount--;
       deleteFlag = (oldFb->RefCount == 0);
-      mtx_unlock(&oldFb->Mutex);
+      simple_mtx_unlock(&oldFb->Mutex);
 
       if (deleteFlag)
          oldFb->Delete(oldFb);
@@ -259,9 +259,9 @@ _mesa_reference_framebuffer_(struct gl_framebuffer **ptr,
    }
 
    if (fb) {
-      mtx_lock(&fb->Mutex);
+      simple_mtx_lock(&fb->Mutex);
       fb->RefCount++;
-      mtx_unlock(&fb->Mutex);
+      simple_mtx_unlock(&fb->Mutex);
       *ptr = fb;
    }
 }
@@ -563,8 +563,8 @@ update_color_draw_buffers(struct gl_context *ctx, struct gl_framebuffer *fb)
    fb->_ColorDrawBuffers[0] = NULL;
 
    for (output = 0; output < fb->_NumColorDrawBuffers; output++) {
-      GLint buf = fb->_ColorDrawBufferIndexes[output];
-      if (buf >= 0) {
+      gl_buffer_index buf = fb->_ColorDrawBufferIndexes[output];
+      if (buf != BUFFER_NONE) {
          fb->_ColorDrawBuffers[output] = fb->Attachment[buf].Renderbuffer;
       }
       else {
@@ -888,6 +888,10 @@ _mesa_get_color_read_type(struct gl_context *ctx,
 
       if (format == MESA_FORMAT_B5G6R5_UNORM)
          return GL_UNSIGNED_SHORT_5_6_5;
+
+      if (format == MESA_FORMAT_B10G10R10A2_UNORM ||
+          format == MESA_FORMAT_B10G10R10X2_UNORM)
+         return GL_UNSIGNED_INT_2_10_10_10_REV;
 
       switch (data_type) {
       case GL_SIGNED_NORMALIZED:

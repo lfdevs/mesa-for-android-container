@@ -62,13 +62,31 @@ KNOBS = [
         'category'  : 'perf',
     }],
 
-    ['MAX_NUMA_NODES', {
+    ['BASE_NUMA_NODE', {
         'type'      : 'uint32_t',
         'default'   : '0',
+        'desc'      : ['Starting NUMA node index to use when allocating compute resources.',
+                       'Setting this to a non-zero value will reduce the maximum # of NUMA nodes used.'],
+        'category'  : 'perf',
+        'advanced'  : True,
+    }],
+
+    ['MAX_NUMA_NODES', {
+        'type'      : 'uint32_t',
+        'default'   : '1' if sys.platform == 'win32' else '0',
         'desc'      : ['Maximum # of NUMA-nodes per system used for worker threads',
                        '  0 == ALL NUMA-nodes in the system',
                        '  N == Use at most N NUMA-nodes for rendering'],
         'category'  : 'perf',
+    }],
+
+    ['BASE_CORE', {
+        'type'      : 'uint32_t',
+        'default'   : '0',
+        'desc'      : ['Starting core index to use when allocating compute resources.',
+                       'Setting this to a non-zero value will reduce the maximum # of cores used.'],
+        'category'  : 'perf',
+        'advanced'  : True,
     }],
 
     ['MAX_CORES_PER_NUMA_NODE', {
@@ -78,6 +96,15 @@ KNOBS = [
                        '  0 == ALL non-API thread cores per NUMA-node',
                        '  N == Use at most N cores per NUMA-node'],
         'category'  : 'perf',
+    }],
+
+    ['BASE_THREAD', {
+        'type'      : 'uint32_t',
+        'default'   : '0',
+        'desc'      : ['Starting thread index to use when allocating compute resources.',
+                       'Setting this to a non-zero value will reduce the maximum # of threads used.'],
+        'category'  : 'perf',
+        'advanced'  : True,
     }],
 
     ['MAX_THREADS_PER_CORE', {

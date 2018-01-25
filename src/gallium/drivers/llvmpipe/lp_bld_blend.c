@@ -35,6 +35,7 @@
 #include "gallivm/lp_bld_swizzle.h"
 #include "gallivm/lp_bld_flow.h"
 #include "gallivm/lp_bld_debug.h"
+#include "gallivm/lp_bld_pack.h"
 
 #include "lp_bld_blend.h"
 
@@ -65,11 +66,11 @@ lp_build_blend_func_commutative(unsigned func)
 boolean
 lp_build_blend_func_reverse(unsigned rgb_func, unsigned alpha_func)
 {
-   if(rgb_func == alpha_func)
+   if (rgb_func == alpha_func)
       return FALSE;
-   if(rgb_func == PIPE_BLEND_SUBTRACT && alpha_func == PIPE_BLEND_REVERSE_SUBTRACT)
+   if (rgb_func == PIPE_BLEND_SUBTRACT && alpha_func == PIPE_BLEND_REVERSE_SUBTRACT)
       return TRUE;
-   if(rgb_func == PIPE_BLEND_REVERSE_SUBTRACT && alpha_func == PIPE_BLEND_SUBTRACT)
+   if (rgb_func == PIPE_BLEND_REVERSE_SUBTRACT && alpha_func == PIPE_BLEND_SUBTRACT)
       return TRUE;
    return FALSE;
 }
@@ -81,7 +82,61 @@ lp_build_blend_func_reverse(unsigned rgb_func, unsigned alpha_func)
 static inline boolean
 lp_build_blend_factor_complementary(unsigned src_factor, unsigned dst_factor)
 {
+   STATIC_ASSERT((PIPE_BLENDFACTOR_ZERO ^ 0x10) == PIPE_BLENDFACTOR_ONE);
+   STATIC_ASSERT((PIPE_BLENDFACTOR_CONST_COLOR ^ 0x10) ==
+                 PIPE_BLENDFACTOR_INV_CONST_COLOR);
    return dst_factor == (src_factor ^ 0x10);
+}
+
+
+/**
+ * Whether this is a inverse blend factor
+ */
+static inline boolean
+is_inverse_factor(unsigned factor)
+{
+   STATIC_ASSERT(PIPE_BLENDFACTOR_ZERO == 0x11);
+   return factor > 0x11;
+}
+
+
+/**
+ * Calculates the (expanded to wider type) multiplication
+ * of 2 normalized numbers.
+ */
+static void
+lp_build_mul_norm_expand(struct lp_build_context *bld,
+                         LLVMValueRef a, LLVMValueRef b,
+                         LLVMValueRef *resl, LLVMValueRef *resh,
+                         boolean signedness_differs)
+{
+   const struct lp_type type = bld->type;
+   struct lp_type wide_type = lp_wider_type(type);
+   struct lp_type wide_type2 = wide_type;
+   struct lp_type type2 = type;
+   LLVMValueRef al, ah, bl, bh;
+
+   assert(lp_check_value(type, a));
+   assert(lp_check_value(type, b));
+   assert(!type.floating && !type.fixed && type.norm);
+
+   if (a == bld->zero || b == bld->zero) {
+      LLVMValueRef zero = LLVMConstNull(lp_build_vec_type(bld->gallivm, wide_type));
+      *resl = zero;
+      *resh = zero;
+      return;
+   }
+
+   if (signedness_differs) {
+      type2.sign = !type.sign;
+      wide_type2.sign = !wide_type2.sign;
+   }
+
+   lp_build_unpack2_native(bld->gallivm, type, wide_type, a, &al, &ah);
+   lp_build_unpack2_native(bld->gallivm, type2, wide_type2, b, &bl, &bh);
+
+   *resl = lp_build_mul_norm(bld->gallivm, wide_type, al, bl);
+   *resh = lp_build_mul_norm(bld->gallivm, wide_type, ah, bh);
 }
 
 
@@ -155,7 +210,7 @@ lp_build_blend(struct lp_build_context *bld,
             } else {
                return lp_build_lerp(bld, dst_factor, src, dst, 0);
             }
-         } else if(bld->type.floating && func == PIPE_BLEND_SUBTRACT) {
+         } else if (bld->type.floating && func == PIPE_BLEND_SUBTRACT) {
             result = lp_build_add(bld, src, dst);
 
             if (factor_src < factor_dst) {
@@ -165,7 +220,7 @@ lp_build_blend(struct lp_build_context *bld,
                result = lp_build_mul(bld, result, dst_factor);
                return lp_build_sub(bld, src, result);
             }
-         } else if(bld->type.floating && func == PIPE_BLEND_REVERSE_SUBTRACT) {
+         } else if (bld->type.floating && func == PIPE_BLEND_REVERSE_SUBTRACT) {
             result = lp_build_add(bld, src, dst);
 
             if (factor_src < factor_dst) {
@@ -192,9 +247,72 @@ lp_build_blend(struct lp_build_context *bld,
    if (optimise_only)
       return NULL;
 
-   src_term = lp_build_mul(bld, src, src_factor);
-   dst_term = lp_build_mul(bld, dst, dst_factor);
-   return lp_build_blend_func(bld, func, src_term, dst_term);
+   if ((bld->type.norm && bld->type.sign) &&
+       (is_inverse_factor(factor_src) || is_inverse_factor(factor_dst))) {
+      /*
+       * With snorm blending, the inverse blend factors range from [0,2]
+       * instead of [-1,1], so the ordinary signed normalized arithmetic
+       * doesn't quite work. Unpack must be unsigned, and the add/sub
+       * must be done with wider type.
+       * (Note that it's not quite obvious what the blend equation wrt to
+       * clamping should actually be based on GL spec in this case, but
+       * really the incoming src values are clamped to [-1,1] (the dst is
+       * always clamped already), and then NO further clamping occurs until
+       * the end.)
+       */
+      struct lp_build_context bldw;
+      struct lp_type wide_type = lp_wider_type(bld->type);
+      LLVMValueRef src_terml, src_termh, dst_terml, dst_termh;
+      LLVMValueRef resl, resh;
+
+      /*
+       * We don't need saturate math for the sub/add, since we have
+       * x+1 bit numbers in x*2 wide type (result is x+2 bits).
+       * (Doesn't really matter on x86 sse2 though as we use saturated
+       * intrinsics.)
+       */
+      wide_type.norm = 0;
+      lp_build_context_init(&bldw, bld->gallivm, wide_type);
+
+      /*
+       * XXX This is a bit hackish. Note that -128 really should
+       * be -1.0, the same as -127. However, we did not actually clamp
+       * things anywhere (relying on pack intrinsics instead) therefore
+       * we will get -128, and the inverted factor then 255. But the mul
+       * can overflow in this case (rather the rounding fixups for the mul,
+       * -128*255 will be positive).
+       * So we clamp the src and dst up here but only when necessary (we
+       * should do this before calculating blend factors but it's enough
+       * for avoiding overflow).
+       */
+      if (is_inverse_factor(factor_src)) {
+         src = lp_build_max(bld, src,
+                            lp_build_const_vec(bld->gallivm, bld->type, -1.0));
+      }
+      if (is_inverse_factor(factor_dst)) {
+         dst = lp_build_max(bld, dst,
+                            lp_build_const_vec(bld->gallivm, bld->type, -1.0));
+      }
+
+      lp_build_mul_norm_expand(bld, src, src_factor, &src_terml, &src_termh,
+                               is_inverse_factor(factor_src) ? TRUE : FALSE);
+      lp_build_mul_norm_expand(bld, dst, dst_factor, &dst_terml, &dst_termh,
+                               is_inverse_factor(factor_dst) ? TRUE : FALSE);
+      resl = lp_build_blend_func(&bldw, func, src_terml, dst_terml);
+      resh = lp_build_blend_func(&bldw, func, src_termh, dst_termh);
+
+      /*
+       * XXX pack2_native is not ok because the values have to be in dst
+       * range. We need native pack though for the correct order on avx2.
+       * Will break on everything not implementing clamping pack intrinsics
+       * (i.e. everything but sse2 and altivec).
+       */
+      return lp_build_pack2_native(bld->gallivm, wide_type, bld->type, resl, resh);
+   } else {
+      src_term = lp_build_mul(bld, src, src_factor);
+      dst_term = lp_build_mul(bld, dst, dst_factor);
+      return lp_build_blend_func(bld, func, src_term, dst_term);
+   }
 }
 
 void

@@ -121,7 +121,7 @@ static bool r300_end_query(struct pipe_context* pipe,
 
     if (q->type == PIPE_QUERY_GPU_FINISHED) {
         pb_reference(&q->buf, NULL);
-        r300_flush(pipe, RADEON_FLUSH_ASYNC,
+        r300_flush(pipe, PIPE_FLUSH_ASYNC,
                    (struct pipe_fence_handle**)&q->buf);
         return true;
     }

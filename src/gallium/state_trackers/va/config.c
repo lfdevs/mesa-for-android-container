@@ -308,8 +308,10 @@ vlVaDestroyConfig(VADriverContextP ctx, VAConfigID config_id)
    mtx_lock(&drv->mutex);
    config = handle_table_get(drv->htab, config_id);
 
-   if (!config)
+   if (!config) {
+      mtx_unlock(&drv->mutex);
       return VA_STATUS_ERROR_INVALID_CONFIG;
+   }
 
    FREE(config);
    handle_table_remove(drv->htab, config_id);

@@ -127,8 +127,11 @@ fd_get_driver_query_info(struct pipe_screen *pscreen,
 			{"batches", FD_QUERY_BATCH_TOTAL, {0}},
 			{"batches-sysmem", FD_QUERY_BATCH_SYSMEM, {0}},
 			{"batches-gmem", FD_QUERY_BATCH_GMEM, {0}},
+			{"batches-nondraw", FD_QUERY_BATCH_NONDRAW, {0}},
 			{"restores", FD_QUERY_BATCH_RESTORE, {0}},
 			{"prims-emitted", PIPE_QUERY_PRIMITIVES_EMITTED, {0}},
+			{"staging", FD_QUERY_STAGING_UPLOADS, {0}},
+			{"shadow", FD_QUERY_SHADOW_UPLOADS, {0}},
 	};
 
 	if (!info)

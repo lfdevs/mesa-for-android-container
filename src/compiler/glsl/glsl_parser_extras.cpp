@@ -1672,23 +1672,12 @@ ast_struct_specifier::print(void) const
 }
 
 
-ast_struct_specifier::ast_struct_specifier(void *lin_ctx, const char *identifier,
+ast_struct_specifier::ast_struct_specifier(const char *identifier,
 					   ast_declarator_list *declarator_list)
+   : name(identifier), layout(NULL), declarations(), is_declaration(true),
+     type(NULL)
 {
-   if (identifier == NULL) {
-      /* All anonymous structs have the same name. This simplifies matching of
-       * globals whose type is an unnamed struct.
-       *
-       * It also avoids a memory leak when the same shader is compiled over and
-       * over again.
-       */
-      identifier = "#anon_struct";
-   }
-   name = identifier;
    this->declarations.push_degenerate_list_at_head(&declarator_list->link);
-   is_declaration = true;
-   layout = NULL;
-   type = NULL;
 }
 
 void ast_subroutine_list::print(void) const
@@ -2237,8 +2226,7 @@ do_common_optimization(exec_list *ir, bool linked,
        options->EmitNoCont, options->EmitNoLoops);
    OPT(do_vec_index_to_swizzle, ir);
    OPT(lower_vector_insert, ir, false);
-   OPT(do_swizzle_swizzle, ir);
-   OPT(do_noop_swizzle, ir);
+   OPT(optimize_swizzles, ir);
 
    OPT(optimize_split_arrays, ir, linked);
    OPT(optimize_redundant_jumps, ir);

@@ -59,7 +59,7 @@ __gen_uint(uint64_t v, uint32_t start, uint32_t end)
 {
    __gen_validate_value(v);
 
-#if DEBUG
+#ifndef NDEBUG
    const int width = end - start + 1;
    if (width < 64) {
       const uint64_t max = (1ull << width) - 1;
@@ -77,7 +77,7 @@ __gen_sint(int64_t v, uint32_t start, uint32_t end)
 
    __gen_validate_value(v);
 
-#if DEBUG
+#ifndef NDEBUG
    if (width < 64) {
       const int64_t max = (1ll << (width - 1)) - 1;
       const int64_t min = -(1ll << (width - 1));
@@ -94,7 +94,7 @@ static inline uint64_t
 __gen_offset(uint64_t v, uint32_t start, uint32_t end)
 {
    __gen_validate_value(v);
-#if DEBUG
+#ifndef NDEBUG
    uint64_t mask = (~0ull >> (64 - (end - start + 1))) << start;
 
    assert((v & ~mask) == 0);
@@ -117,7 +117,7 @@ __gen_sfixed(float v, uint32_t start, uint32_t end, uint32_t fract_bits)
 
    const float factor = (1 << fract_bits);
 
-#if DEBUG
+#ifndef NDEBUG
    const float max = ((1 << (end - start)) - 1) / factor;
    const float min = -(1 << (end - start)) / factor;
    assert(min <= v && v <= max);
@@ -136,7 +136,7 @@ __gen_ufixed(float v, uint32_t start, uint32_t end, uint32_t fract_bits)
 
    const float factor = (1 << fract_bits);
 
-#if DEBUG
+#ifndef NDEBUG
    const float max = ((1 << (end - start + 1)) - 1) / factor;
    const float min = 0.0f;
    assert(min <= v && v <= max);
@@ -9497,6 +9497,8 @@ struct GEN9_INSTDONE_1 {
    bool                                 TSGDone;
    bool                                 GAFMDone;
    bool                                 GAMDone;
+   bool                                 RSDone;
+   bool                                 CSDone;
    bool                                 SDEDone;
    bool                                 RCCFBCCSDone;
 };
@@ -9527,6 +9529,8 @@ GEN9_INSTDONE_1_pack(__attribute__((unused)) __gen_user_data *data,
       __gen_uint(values->TSGDone, 17, 17) |
       __gen_uint(values->GAFMDone, 18, 18) |
       __gen_uint(values->GAMDone, 19, 19) |
+      __gen_uint(values->RSDone, 20, 20) |
+      __gen_uint(values->CSDone, 21, 21) |
       __gen_uint(values->SDEDone, 22, 22) |
       __gen_uint(values->RCCFBCCSDone, 23, 23);
 }
@@ -9847,6 +9851,27 @@ GEN9_CACHE_MODE_1_pack(__attribute__((unused)) __gen_user_data *data,
       __gen_uint(values->NPEarlyZFailsDisableMask, 29, 29) |
       __gen_uint(values->BlendOptimizationFixDisableMask, 30, 30) |
       __gen_uint(values->ColorCompressionDisableMask, 31, 31);
+}
+
+#define GEN9_SLICE_COMMON_ECO_CHICKEN1_num 0x731c
+#define GEN9_SLICE_COMMON_ECO_CHICKEN1_length      1
+struct GEN9_SLICE_COMMON_ECO_CHICKEN1 {
+   uint32_t                             GLKBarrierMode;
+#define GLK_BARRIER_MODE_GPGPU                   0
+#define GLK_BARRIER_MODE_3D_HULL                 1
+   bool                                 GLKBarrierModeMask;
+};
+
+static inline void
+GEN9_SLICE_COMMON_ECO_CHICKEN1_pack(__attribute__((unused)) __gen_user_data *data,
+                                    __attribute__((unused)) void * restrict dst,
+                                    __attribute__((unused)) const struct GEN9_SLICE_COMMON_ECO_CHICKEN1 * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   dw[0] =
+      __gen_uint(values->GLKBarrierMode, 7, 7) |
+      __gen_uint(values->GLKBarrierModeMask, 23, 23);
 }
 
 #define GEN9_GFX_ARB_ERROR_RPT_num        0x40a0

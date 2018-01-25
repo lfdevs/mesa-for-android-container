@@ -689,7 +689,7 @@ void Instruction::print() const
 class PrintPass : public Pass
 {
 public:
-   PrintPass() : serial(0) { }
+   PrintPass(bool omitLineNum) : serial(0), omit_serial(omitLineNum) { }
 
    virtual bool visit(Function *);
    virtual bool visit(BasicBlock *);
@@ -697,6 +697,7 @@ public:
 
 private:
    int serial;
+   bool omit_serial;
 };
 
 bool
@@ -760,7 +761,11 @@ PrintPass::visit(BasicBlock *bb)
 bool
 PrintPass::visit(Instruction *insn)
 {
-   INFO("%3i: ", serial++);
+   if (omit_serial)
+      INFO("     ");
+   else
+      INFO("%3i: ", serial);
+   serial++;
    insn->print();
    return true;
 }
@@ -768,14 +773,14 @@ PrintPass::visit(Instruction *insn)
 void
 Function::print()
 {
-   PrintPass pass;
+   PrintPass pass(prog->driver->omitLineNum);
    pass.run(this, true, false);
 }
 
 void
 Program::print()
 {
-   PrintPass pass;
+   PrintPass pass(driver->omitLineNum);
    init_colours();
    pass.run(this, true, false);
 }

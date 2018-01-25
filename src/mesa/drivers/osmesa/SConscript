@@ -7,6 +7,7 @@ env.Prepend(CPPPATH = [
     '#src/mapi',
     '#src/mesa',
     Dir('../../../mapi'), # src/mapi build path for python-generated GL API files/headers
+    Dir('../../../mapi/glapi'), # src/mapi/glapi build path
 ])
 
 env.Prepend(LIBS = [

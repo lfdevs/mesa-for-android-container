@@ -95,6 +95,7 @@ struct vc4_screen {
         bool has_control_flow;
         bool has_etc1;
         bool has_threaded_fs;
+        bool has_madvise;
         bool has_tiling_ioctl;
 
         struct vc4_simulator_file *sim_file;

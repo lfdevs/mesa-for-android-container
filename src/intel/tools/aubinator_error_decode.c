@@ -40,12 +40,13 @@
 
 #include "common/gen_decoder.h"
 #include "util/macros.h"
-#include "gen_disasm.h"
 
 #define CSI "\e["
 #define BLUE_HEADER  CSI "0;44m"
 #define GREEN_HEADER CSI "1;42m"
 #define NORMAL       CSI "0m"
+
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
 
 /* options */
 
@@ -66,45 +67,102 @@ print_register(struct gen_spec *spec, const char *name, uint32_t reg)
 {
    struct gen_group *reg_spec = gen_spec_find_register_by_name(spec, name);
 
-   if (reg_spec)
-      gen_print_group(stdout, reg_spec, 0, &reg, option_color == COLOR_ALWAYS);
+   if (reg_spec) {
+      gen_print_group(stdout, reg_spec, 0, &reg, 0,
+                      option_color == COLOR_ALWAYS);
+   }
 }
 
 struct ring_register_mapping {
-   const char *ring_name;
+   unsigned ring_class;
+   unsigned ring_instance;
    const char *register_name;
 };
 
+enum {
+   RCS,
+   BCS,
+   VCS,
+   VECS,
+};
+
 static const struct ring_register_mapping acthd_registers[] = {
-   { "blt", "BCS_ACTHD_UDW" },
-   { "bsd", "VCS_ACTHD_UDW" },
-   { "bsd2", "VCS2_ACTHD_UDW" },
-   { "render", "ACTHD_UDW" },
-   { "vebox", "VECS_ACTHD_UDW" },
+   { BCS, 0, "BCS_ACTHD_UDW" },
+   { VCS, 0, "VCS_ACTHD_UDW" },
+   { VCS, 1, "VCS2_ACTHD_UDW" },
+   { RCS, 0, "ACTHD_UDW" },
+   { VECS, 0, "VECS_ACTHD_UDW" },
 };
 
 static const struct ring_register_mapping ctl_registers[] = {
-   { "blt", "BCS_RING_BUFFER_CTL" },
-   { "bsd", "VCS_RING_BUFFER_CTL" },
-   { "bsd2", "VCS2_RING_BUFFER_CTL" },
-   { "render", "RCS_RING_BUFFER_CTL" },
-   { "vebox", "VECS_RING_BUFFER_CTL" },
+   { BCS, 0, "BCS_RING_BUFFER_CTL" },
+   { VCS, 0, "VCS_RING_BUFFER_CTL" },
+   { VCS, 1, "VCS2_RING_BUFFER_CTL" },
+   { RCS, 0, "RCS_RING_BUFFER_CTL" },
+   { VECS, 0,  "VECS_RING_BUFFER_CTL" },
 };
 
 static const struct ring_register_mapping fault_registers[] = {
-   { "blt", "BCS_FAULT_REG" },
-   { "bsd", "VCS_FAULT_REG" },
-   { "render", "RCS_FAULT_REG" },
-   { "vebox", "VECS_FAULT_REG" },
+   { BCS, 0, "BCS_FAULT_REG" },
+   { VCS, 0, "VCS_FAULT_REG" },
+   { RCS, 0, "RCS_FAULT_REG" },
+   { VECS, 0, "VECS_FAULT_REG" },
 };
+
+static int ring_name_to_class(const char *ring_name,
+                              unsigned int *class)
+{
+   static const char *class_names[] = {
+      [RCS] = "rcs",
+      [BCS] = "bcs",
+      [VCS] = "vcs",
+      [VECS] = "vecs",
+   };
+   for (size_t i = 0; i < ARRAY_SIZE(class_names); i++) {
+      if (strcmp(ring_name, class_names[i]))
+         continue;
+
+      *class = i;
+      return atoi(ring_name + strlen(class_names[i]));
+   }
+
+   static const struct {
+      const char *name;
+      unsigned int class;
+      int instance;
+   } legacy_names[] = {
+      { "render", RCS, 0 },
+      { "blt", BCS, 0 },
+      { "bsd", VCS, 0 },
+      { "bsd2", VCS, 1 },
+      { "vebox", VECS, 0 },
+   };
+   for (size_t i = 0; i < ARRAY_SIZE(legacy_names); i++) {
+      if (strcmp(ring_name, legacy_names[i].name))
+         continue;
+
+      *class = legacy_names[i].class;
+      return legacy_names[i].instance;
+   }
+
+   return -1;
+}
 
 static const char *
 register_name_from_ring(const struct ring_register_mapping *mapping,
                         unsigned nb_mapping,
                         const char *ring_name)
 {
+   unsigned int class;
+   int instance;
+
+   instance = ring_name_to_class(ring_name, &class);
+   if (instance < 0)
+      return NULL;
+
    for (unsigned i = 0; i < nb_mapping; i++) {
-      if (strcmp(mapping[i].ring_name, ring_name) == 0)
+      if (mapping[i].ring_class == class &&
+          mapping[i].ring_instance == instance)
          return mapping[i].register_name;
    }
    return NULL;
@@ -114,16 +172,35 @@ static const char *
 instdone_register_for_ring(const struct gen_device_info *devinfo,
                            const char *ring_name)
 {
-   if (strcmp(ring_name, "blt") == 0)
-      return "BCS_INSTDONE";
-   else if (strcmp(ring_name, "vebox") == 0)
-      return "VECS_INSTDONE";
-   else if (strcmp(ring_name, "bsd") == 0)
-      return "VCS_INSTDONE";
-   else if (strcmp(ring_name, "render") == 0) {
+   unsigned int class;
+   int instance;
+
+   instance = ring_name_to_class(ring_name, &class);
+   if (instance < 0)
+      return NULL;
+
+   switch (class) {
+   case RCS:
       if (devinfo->gen == 6)
          return "INSTDONE_2";
-      return "INSTDONE_1";
+      else
+         return "INSTDONE_1";
+
+   case BCS:
+      return "BCS_INSTDONE";
+
+   case VCS:
+      switch (instance) {
+      case 0:
+         return "VCS_INSTDONE";
+      case 1:
+         return "VCS2_INSTDONE";
+      default:
+         return NULL;
+      }
+
+   case VECS:
+      return "VECS_INSTDONE";
    }
 
    return NULL;
@@ -205,188 +282,19 @@ print_fault_data(struct gen_device_info *devinfo, uint32_t data1, uint32_t data0
           data1 & (1 << 4) ? "GGTT" : "PPGTT");
 }
 
-#define MAX_RINGS 10 /* I really hope this never... */
-
 #define CSI "\e["
 #define NORMAL       CSI "0m"
 
-struct program {
-   const char *type;
-   const char *command;
-   uint64_t command_offset;
-   uint64_t instruction_base_address;
-   uint64_t ksp;
+struct section {
+   uint64_t gtt_offset;
+   char *ring_name;
+   const char *buffer_name;
+   uint32_t *data;
+   int count;
 };
 
-#define MAX_NUM_PROGRAMS 4096
-static struct program programs[MAX_NUM_PROGRAMS];
-static int num_programs = 0;
-
-static void decode(struct gen_spec *spec,
-                   const char *buffer_name,
-                   const char *ring_name,
-                   uint64_t gtt_offset,
-                   uint32_t *data,
-                   int *count)
-{
-   uint32_t *p, *end = (data + *count);
-   int length;
-   struct gen_group *inst;
-   uint64_t current_instruction_base_address = 0;
-
-   for (p = data; p < end; p += length) {
-      const char *color = option_full_decode ? BLUE_HEADER : NORMAL,
-         *reset_color = NORMAL;
-      uint64_t offset = gtt_offset + 4 * (p - data);
-
-      inst = gen_spec_find_instruction(spec, p);
-      length = gen_group_get_length(inst, p);
-      assert(inst == NULL || length > 0);
-      length = MAX2(1, length);
-      if (inst == NULL) {
-         printf("unknown instruction %08x\n", p[0]);
-         continue;
-      }
-      if (option_color == COLOR_NEVER) {
-         color = "";
-         reset_color = "";
-      }
-
-      printf("%s0x%08"PRIx64":  0x%08x:  %-80s%s\n",
-             color, offset, p[0], gen_group_get_name(inst), reset_color);
-
-      gen_print_group(stdout, inst, offset, p,
-                      option_color == COLOR_ALWAYS);
-
-      if (strcmp(inst->name, "MI_BATCH_BUFFER_END") == 0)
-         break;
-
-      if (strcmp(inst->name, "STATE_BASE_ADDRESS") == 0) {
-         struct gen_field_iterator iter;
-         gen_field_iterator_init(&iter, inst, p, false);
-
-         while (gen_field_iterator_next(&iter)) {
-            if (strcmp(iter.name, "Instruction Base Address") == 0) {
-               current_instruction_base_address = strtol(iter.value, NULL, 16);
-            }
-         }
-      } else if (strcmp(inst->name,   "WM_STATE") == 0 ||
-                 strcmp(inst->name, "3DSTATE_PS") == 0 ||
-                 strcmp(inst->name, "3DSTATE_WM") == 0) {
-         struct gen_field_iterator iter;
-         gen_field_iterator_init(&iter, inst, p, false);
-         uint64_t ksp[3] = {0, 0, 0};
-         bool enabled[3] = {false, false, false};
-
-         while (gen_field_iterator_next(&iter)) {
-            if (strncmp(iter.name, "Kernel Start Pointer ",
-                        strlen("Kernel Start Pointer ")) == 0) {
-               int idx = iter.name[strlen("Kernel Start Pointer ")] - '0';
-               ksp[idx] = strtol(iter.value, NULL, 16);
-            } else if (strcmp(iter.name, "8 Pixel Dispatch Enable") == 0) {
-               enabled[0] = strcmp(iter.value, "true") == 0;
-            } else if (strcmp(iter.name, "16 Pixel Dispatch Enable") == 0) {
-               enabled[1] = strcmp(iter.value, "true") == 0;
-            } else if (strcmp(iter.name, "32 Pixel Dispatch Enable") == 0) {
-               enabled[2] = strcmp(iter.value, "true") == 0;
-            }
-         }
-
-         /* FINISHME: Broken for multi-program WM_STATE,
-          * which Mesa does not use
-          */
-         if (enabled[0] + enabled[1] + enabled[2] == 1) {
-            const char *type = enabled[0] ? "SIMD8 fragment shader" :
-                               enabled[1] ? "SIMD16 fragment shader" :
-                               enabled[2] ? "SIMD32 fragment shader" : NULL;
-
-            programs[num_programs++] = (struct program) {
-               .type = type,
-               .command = inst->name,
-               .command_offset = offset,
-               .instruction_base_address = current_instruction_base_address,
-               .ksp = ksp[0],
-            };
-         } else {
-            if (enabled[0]) /* SIMD8 */ {
-               programs[num_programs++] = (struct program) {
-                  .type = "SIMD8 fragment shader",
-                  .command = inst->name,
-                  .command_offset = offset,
-                  .instruction_base_address = current_instruction_base_address,
-                  .ksp = ksp[0], /* SIMD8 shader is specified by ksp[0] */
-               };
-            }
-            if (enabled[1]) /* SIMD16 */ {
-               programs[num_programs++] = (struct program) {
-                  .type = "SIMD16 fragment shader",
-                  .command = inst->name,
-                  .command_offset = offset,
-                  .instruction_base_address = current_instruction_base_address,
-                  .ksp = ksp[2], /* SIMD16 shader is specified by ksp[2] */
-               };
-            }
-            if (enabled[2]) /* SIMD32 */ {
-               programs[num_programs++] = (struct program) {
-                  .type = "SIMD32 fragment shader",
-                  .command = inst->name,
-                  .command_offset = offset,
-                  .instruction_base_address = current_instruction_base_address,
-                  .ksp = ksp[1], /* SIMD32 shader is specified by ksp[1] */
-               };
-            }
-         }
-      } else if (strcmp(inst->name,   "VS_STATE") == 0 ||
-                 strcmp(inst->name,   "GS_STATE") == 0 ||
-                 strcmp(inst->name,   "SF_STATE") == 0 ||
-                 strcmp(inst->name, "CLIP_STATE") == 0 ||
-                 strcmp(inst->name, "3DSTATE_DS") == 0 ||
-                 strcmp(inst->name, "3DSTATE_HS") == 0 ||
-                 strcmp(inst->name, "3DSTATE_GS") == 0 ||
-                 strcmp(inst->name, "3DSTATE_VS") == 0) {
-         struct gen_field_iterator iter;
-         gen_field_iterator_init(&iter, inst, p, false);
-         uint64_t ksp = 0;
-         bool is_simd8 = false; /* vertex shaders on Gen8+ only */
-         bool is_enabled = true;
-
-         while (gen_field_iterator_next(&iter)) {
-            if (strcmp(iter.name, "Kernel Start Pointer") == 0) {
-               ksp = strtol(iter.value, NULL, 16);
-            } else if (strcmp(iter.name, "SIMD8 Dispatch Enable") == 0) {
-               is_simd8 = strcmp(iter.value, "true") == 0;
-            } else if (strcmp(iter.name, "Dispatch Enable") == 0) {
-               is_simd8 = strcmp(iter.value, "SIMD8") == 0;
-            } else if (strcmp(iter.name, "Enable") == 0) {
-               is_enabled = strcmp(iter.value, "true") == 0;
-            }
-         }
-
-         const char *type =
-            strcmp(inst->name,   "VS_STATE") == 0 ? "vertex shader" :
-            strcmp(inst->name,   "GS_STATE") == 0 ? "geometry shader" :
-            strcmp(inst->name,   "SF_STATE") == 0 ? "strips and fans shader" :
-            strcmp(inst->name, "CLIP_STATE") == 0 ? "clip shader" :
-            strcmp(inst->name, "3DSTATE_DS") == 0 ? "tessellation control shader" :
-            strcmp(inst->name, "3DSTATE_HS") == 0 ? "tessellation evaluation shader" :
-            strcmp(inst->name, "3DSTATE_VS") == 0 ? (is_simd8 ? "SIMD8 vertex shader" : "vec4 vertex shader") :
-            strcmp(inst->name, "3DSTATE_GS") == 0 ? (is_simd8 ? "SIMD8 geometry shader" : "vec4 geometry shader") :
-            NULL;
-
-         if (is_enabled) {
-            programs[num_programs++] = (struct program) {
-               .type = type,
-               .command = inst->name,
-               .command_offset = offset,
-               .instruction_base_address = current_instruction_base_address,
-               .ksp = ksp,
-            };
-         }
-      }
-
-      assert(num_programs < MAX_NUM_PROGRAMS);
-   }
-}
+#define MAX_SECTIONS 30
+static struct section sections[MAX_SECTIONS];
 
 static int zlib_inflate(uint32_t **ptr, int len)
 {
@@ -473,142 +381,95 @@ static int ascii85_decode(const char *in, uint32_t **out, bool inflate)
    return zlib_inflate(out, len);
 }
 
+static struct gen_batch_decode_bo
+get_gen_batch_bo(void *user_data, uint64_t address)
+{
+   for (int s = 0; s < MAX_SECTIONS; s++) {
+      if (sections[s].gtt_offset <= address &&
+          address < sections[s].gtt_offset + sections[s].count) {
+         return (struct gen_batch_decode_bo) {
+            .addr = sections[s].gtt_offset,
+            .map = sections[s].data,
+            .size = sections[s].count,
+         };
+      }
+   }
+
+   return (struct gen_batch_decode_bo) { .map = NULL };
+}
+
 static void
 read_data_file(FILE *file)
 {
    struct gen_spec *spec = NULL;
-   uint32_t *data = NULL;
    long long unsigned fence;
-   int data_size = 0, count = 0, line_number = 0, matched;
+   int matched;
    char *line = NULL;
    size_t line_size;
    uint32_t offset, value;
-   uint64_t gtt_offset = 0, new_gtt_offset;
-   const char *buffer_name = "batch buffer";
    char *ring_name = NULL;
    struct gen_device_info devinfo;
-   struct gen_disasm *disasm = NULL;
+   int sect_num = 0;
 
    while (getline(&line, &line_size, file) > 0) {
       char *new_ring_name = NULL;
       char *dashes;
-      line_number++;
 
       if (sscanf(line, "%m[^ ] command stream\n", &new_ring_name) > 0) {
          free(ring_name);
          ring_name = new_ring_name;
       }
 
-      dashes = strstr(line, "---");
-      if (dashes) {
-         uint32_t lo, hi;
-         char *new_ring_name = malloc(dashes - line);
-         strncpy(new_ring_name, line, dashes - line);
-         new_ring_name[dashes - line - 1] = '\0';
-
-         printf("%s", line);
-
-         matched = sscanf(dashes, "--- gtt_offset = 0x%08x %08x\n",
-                          &hi, &lo);
-         if (matched > 0) {
-            new_gtt_offset = hi;
-            if (matched == 2) {
-               new_gtt_offset <<= 32;
-               new_gtt_offset |= lo;
-            }
-
-            decode(spec,
-                   buffer_name, ring_name,
-                   gtt_offset, data, &count);
-            gtt_offset = new_gtt_offset;
-            free(ring_name);
-            ring_name = new_ring_name;
-            buffer_name = "batch buffer";
-            continue;
-         }
-
-         matched = sscanf(dashes, "--- ringbuffer = 0x%08x %08x\n",
-                          &hi, &lo);
-         if (matched > 0) {
-            new_gtt_offset = hi;
-            if (matched == 2) {
-               new_gtt_offset <<= 32;
-               new_gtt_offset |= lo;
-            }
-
-            decode(spec,
-                   buffer_name, ring_name,
-                   gtt_offset, data, &count);
-            gtt_offset = new_gtt_offset;
-            free(ring_name);
-            ring_name = new_ring_name;
-            buffer_name = "ring buffer";
-            continue;
-         }
-
-         matched = sscanf(dashes, "--- HW Context = 0x%08x %08x\n",
-                          &hi, &lo);
-         if (matched > 0) {
-            new_gtt_offset = hi;
-            if (matched == 2) {
-               new_gtt_offset <<= 32;
-               new_gtt_offset |= lo;
-            }
-
-            decode(spec,
-                   buffer_name, ring_name,
-                   gtt_offset, data, &count);
-            gtt_offset = new_gtt_offset;
-            free(ring_name);
-            ring_name = new_ring_name;
-            buffer_name = "HW Context";
-            continue;
-         }
-
-         matched = sscanf(dashes, "--- user = 0x%08x %08x\n",
-                          &hi, &lo);
-         if (matched > 0) {
-            new_gtt_offset = hi;
-            if (matched == 2) {
-               new_gtt_offset <<= 32;
-               new_gtt_offset |= lo;
-            }
-
-            gtt_offset = new_gtt_offset;
-            free(ring_name);
-            ring_name = new_ring_name;
-            buffer_name = "user";
-            continue;
-         }
-      }
-
       if (line[0] == ':' || line[0] == '~') {
-         count = ascii85_decode(line+1, &data, line[0] == ':');
+         uint32_t *data = NULL;
+         int count = ascii85_decode(line+1, &data, line[0] == ':');
          if (count == 0) {
             fprintf(stderr, "ASCII85 decode failed.\n");
             exit(EXIT_FAILURE);
          }
+         sections[sect_num].data = data;
+         sections[sect_num].count = count;
+         sect_num++;
+         continue;
+      }
 
-         if (strcmp(buffer_name, "user") == 0) {
-            printf("Disassembly of programs in instruction buffer at "
-                   "0x%08"PRIx64":\n", gtt_offset);
-            for (int i = 0; i < num_programs; i++) {
-               if (programs[i].instruction_base_address == gtt_offset) {
-                    printf("\n%s (specified by %s at batch offset "
-                           "0x%08"PRIx64") at offset 0x%08"PRIx64"\n",
-                           programs[i].type,
-                           programs[i].command,
-                           programs[i].command_offset,
-                           programs[i].ksp);
-                    gen_disasm_disassemble(disasm, data, programs[i].ksp,
-                                           stdout);
-               }
-            }
-         } else {
-            decode(spec,
-                   buffer_name, ring_name,
-                   gtt_offset, data, &count);
+      dashes = strstr(line, "---");
+      if (dashes) {
+         const struct {
+            const char *match;
+            const char *name;
+         } buffers[] = {
+            { "ringbuffer", "ring buffer" },
+            { "gtt_offset", "batch buffer" },
+            { "hw context", "HW Context" },
+            { "hw status", "HW status" },
+            { "wa context", "WA context" },
+            { "wa batchbuffer", "WA batch" },
+            { "user", "user" },
+            { "semaphores", "semaphores", },
+            { "guc log buffer", "GuC log", },
+            { NULL, "unknown" },
+         }, *b;
+
+         free(ring_name);
+         ring_name = malloc(dashes - line);
+         strncpy(ring_name, line, dashes - line);
+         ring_name[dashes - line - 1] = '\0';
+
+         dashes += 4;
+         for (b = buffers; b->match; b++) {
+            if (strncasecmp(dashes, b->match, strlen(b->match)) == 0)
+               break;
          }
+
+         sections[sect_num].buffer_name = b->name;
+         sections[sect_num].ring_name = strdup(ring_name);
+
+         uint32_t hi, lo;
+         dashes = strchr(dashes, '=');
+         if (dashes && sscanf(dashes, "= 0x%08x %08x\n", &hi, &lo))
+            sections[sect_num].gtt_offset = ((uint64_t) hi) << 32 | lo;
+
          continue;
       }
 
@@ -617,10 +478,6 @@ read_data_file(FILE *file)
          uint32_t reg, reg2;
 
          /* display reg section is after the ringbuffers, don't mix them */
-         decode(spec,
-                buffer_name, ring_name,
-                gtt_offset, data, &count);
-
          printf("%s", line);
 
          matched = sscanf(line, "PCI ID: 0x%04x\n", &reg);
@@ -636,8 +493,6 @@ read_data_file(FILE *file)
                printf("Unable to identify devid=%x\n", reg);
                exit(EXIT_FAILURE);
             }
-
-            disasm = gen_disasm_create(reg);
 
             printf("Detected GEN%i chipset\n", devinfo.gen);
 
@@ -709,29 +564,45 @@ read_data_file(FILE *file)
 
          continue;
       }
-
-      count++;
-
-      if (count > data_size) {
-         data_size = data_size ? data_size * 2 : 1024;
-         data = realloc(data, data_size * sizeof (uint32_t));
-         if (data == NULL) {
-            fprintf(stderr, "Out of memory.\n");
-            exit(EXIT_FAILURE);
-         }
-      }
-
-      data[count-1] = value;
    }
 
-   decode(spec,
-          buffer_name, ring_name,
-          gtt_offset, data, &count);
-
-   gen_disasm_destroy(disasm);
-   free(data);
    free(line);
    free(ring_name);
+
+   enum gen_batch_decode_flags batch_flags = 0;
+   if (option_color == COLOR_ALWAYS)
+      batch_flags |= GEN_BATCH_DECODE_IN_COLOR;
+   if (option_full_decode)
+      batch_flags |= GEN_BATCH_DECODE_FULL;
+   if (option_print_offsets)
+      batch_flags |= GEN_BATCH_DECODE_OFFSETS;
+   batch_flags |= GEN_BATCH_DECODE_FLOATS;
+
+   struct gen_batch_decode_ctx batch_ctx;
+   gen_batch_decode_ctx_init(&batch_ctx, &devinfo, stdout, batch_flags,
+                             xml_path, get_gen_batch_bo, NULL);
+
+
+   for (int s = 0; s < sect_num; s++) {
+      printf("--- %s (%s) at 0x%08x %08x\n",
+             sections[s].buffer_name, sections[s].ring_name,
+             (unsigned) (sections[s].gtt_offset >> 32),
+             (unsigned) sections[s].gtt_offset);
+
+      if (strcmp(sections[s].buffer_name, "batch buffer") == 0 ||
+          strcmp(sections[s].buffer_name, "ring buffer") == 0 ||
+          strcmp(sections[s].buffer_name, "HW Context") == 0) {
+         gen_print_batch(&batch_ctx, sections[s].data, sections[s].count,
+                         sections[s].gtt_offset);
+      }
+   }
+
+   gen_batch_decode_ctx_finish(&batch_ctx);
+
+   for (int s = 0; s < sect_num; s++) {
+      free(sections[s].ring_name);
+      free(sections[s].data);
+   }
 }
 
 static void

@@ -92,6 +92,7 @@ DRI_CONF_BEGIN
 
    DRI_CONF_SECTION_MISCELLANEOUS
       DRI_CONF_GLSL_ZERO_INIT("false")
+      DRI_CONF_ALLOW_RGB10_CONFIGS("false")
    DRI_CONF_SECTION_END
 DRI_CONF_END
 };
@@ -179,6 +180,12 @@ static const struct __DRI2flushExtensionRec intelFlushExtension = {
 };
 
 static const struct intel_image_format intel_image_formats[] = {
+   { __DRI_IMAGE_FOURCC_ARGB2101010, __DRI_IMAGE_COMPONENTS_RGBA, 1,
+     { { 0, 0, 0, __DRI_IMAGE_FORMAT_ARGB2101010, 4 } } },
+
+   { __DRI_IMAGE_FOURCC_XRGB2101010, __DRI_IMAGE_COMPONENTS_RGB, 1,
+     { { 0, 0, 0, __DRI_IMAGE_FORMAT_XRGB2101010, 4 } } },
+
    { __DRI_IMAGE_FOURCC_ARGB8888, __DRI_IMAGE_COMPONENTS_RGBA, 1,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_ARGB8888, 4 } } },
 
@@ -756,6 +763,67 @@ intel_create_image(__DRIscreen *dri_screen,
                                loaderPrivate);
 }
 
+static void *
+intel_map_image(__DRIcontext *context, __DRIimage *image,
+                int x0, int y0, int width, int height,
+                unsigned int flags, int *stride, void **map_info)
+{
+   struct brw_context *brw = NULL;
+   struct brw_bo *bo = NULL;
+   void *raw_data = NULL;
+   GLuint pix_w = 1;
+   GLuint pix_h = 1;
+   GLint pix_bytes = 1;
+
+   if (!context || !image || !stride || !map_info || *map_info)
+      return NULL;
+
+   if (x0 < 0 || x0 >= image->width || width > image->width - x0)
+      return NULL;
+
+   if (y0 < 0 || y0 >= image->height || height > image->height - y0)
+      return NULL;
+
+   if (flags & MAP_INTERNAL_MASK)
+      return NULL;
+
+   brw = context->driverPrivate;
+   bo = image->bo;
+
+   assert(brw);
+   assert(bo);
+
+   /* DRI flags and GL_MAP.*_BIT flags are the same, so just pass them on. */
+   raw_data = brw_bo_map(brw, bo, flags);
+   if (!raw_data)
+      return NULL;
+
+   _mesa_get_format_block_size(image->format, &pix_w, &pix_h);
+   pix_bytes = _mesa_get_format_bytes(image->format);
+
+   assert(pix_w);
+   assert(pix_h);
+   assert(pix_bytes > 0);
+
+   raw_data += (x0 / pix_w) * pix_bytes + (y0 / pix_h) * image->pitch;
+
+   brw_bo_reference(bo);
+
+   *stride = image->pitch;
+   *map_info = bo;
+
+   return raw_data;
+}
+
+static void
+intel_unmap_image(__DRIcontext *context, __DRIimage *image, void *map_info)
+{
+   struct brw_bo *bo = map_info;
+
+   brw_bo_unmap(bo);
+   brw_bo_unreference(bo);
+}
+
 static __DRIimage *
 intel_create_image_with_modifiers(__DRIscreen *dri_screen,
                                   int width, int height, int format,
@@ -964,7 +1032,16 @@ intel_create_image_from_fds_common(__DRIscreen *dri_screen,
 
    image->planar_format = f;
 
-   image->bo = brw_bo_gem_create_from_prime(screen->bufmgr, fds[0]);
+   if (modifier != DRM_FORMAT_MOD_INVALID) {
+      const struct isl_drm_modifier_info *mod_info =
+         isl_drm_modifier_get_info(modifier);
+      uint32_t tiling = isl_tiling_to_i915_tiling(mod_info->tiling);
+      image->bo = brw_bo_gem_create_from_prime_tiled(screen->bufmgr, fds[0],
+                                                     tiling, strides[0]);
+   } else {
+      image->bo = brw_bo_gem_create_from_prime(screen->bufmgr, fds[0]);
+   }
+
    if (image->bo == NULL) {
       free(image);
       return NULL;
@@ -1306,8 +1383,8 @@ static const __DRIimageExtension intelImageExtension = {
     .createImageFromDmaBufs             = intel_create_image_from_dma_bufs,
     .blitImage                          = NULL,
     .getCapabilities                    = NULL,
-    .mapImage                           = NULL,
-    .unmapImage                         = NULL,
+    .mapImage                           = intel_map_image,
+    .unmapImage                         = intel_unmap_image,
     .createImageWithModifiers           = intel_create_image_with_modifiers,
     .createImageFromDmaBufs2            = intel_create_image_from_dma_bufs2,
     .queryDmaBufFormats                 = intel_query_dma_buf_formats,
@@ -1384,6 +1461,9 @@ brw_query_renderer_integer(__DRIscreen *dri_screen,
       if (brw_hw_context_set_priority(screen->bufmgr,
 				      0, BRW_CONTEXT_MEDIUM_PRIORITY) == 0)
          value[0] |= __DRI2_RENDERER_HAS_CONTEXT_PRIORITY_MEDIUM;
+      return 0;
+   case __DRI2_RENDERER_HAS_FRAMEBUFFER_SRGB:
+      value[0] = 1;
       return 0;
    default:
       return driQueryRendererIntegerCommon(dri_screen, param, value);
@@ -1530,7 +1610,13 @@ intelCreateBuffer(__DRIscreen *dri_screen,
       fb->Visual.samples = num_samples;
    }
 
-   if (mesaVis->redBits == 5) {
+   if (mesaVis->redBits == 10 && mesaVis->alphaBits > 0) {
+      rgbFormat = mesaVis->redMask == 0x3ff00000 ? MESA_FORMAT_B10G10R10A2_UNORM
+                                                 : MESA_FORMAT_R10G10B10A2_UNORM;
+   } else if (mesaVis->redBits == 10) {
+      rgbFormat = mesaVis->redMask == 0x3ff00000 ? MESA_FORMAT_B10G10R10X2_UNORM
+                                                 : MESA_FORMAT_R10G10B10X2_UNORM;
+   } else if (mesaVis->redBits == 5) {
       rgbFormat = mesaVis->redMask == 0x1f ? MESA_FORMAT_R5G6B5_UNORM
                                            : MESA_FORMAT_B5G6R5_UNORM;
    } else if (mesaVis->sRGBCapable) {
@@ -1545,13 +1631,18 @@ intelCreateBuffer(__DRIscreen *dri_screen,
       fb->Visual.sRGBCapable = true;
    }
 
+   /* mesaVis->sRGBCapable was set, user is asking for sRGB */
+   bool srgb_cap_set = mesaVis->redBits >= 8 && mesaVis->sRGBCapable;
+
    /* setup the hardware-based renderbuffers */
    rb = intel_create_winsys_renderbuffer(screen, rgbFormat, num_samples);
    _mesa_attach_and_own_rb(fb, BUFFER_FRONT_LEFT, &rb->Base.Base);
+   rb->need_srgb = srgb_cap_set;
 
    if (mesaVis->doubleBufferMode) {
       rb = intel_create_winsys_renderbuffer(screen, rgbFormat, num_samples);
       _mesa_attach_and_own_rb(fb, BUFFER_BACK_LEFT, &rb->Base.Base);
+      rb->need_srgb = srgb_cap_set;
    }
 
    /*
@@ -1612,6 +1703,27 @@ intelDestroyBuffer(__DRIdrawable * driDrawPriv)
     struct gl_framebuffer *fb = driDrawPriv->driverPrivate;
 
     _mesa_reference_framebuffer(&fb, NULL);
+}
+
+static void
+intel_cs_timestamp_frequency(struct intel_screen *screen)
+{
+   /* We shouldn't need to update gen_device_info.timestamp_frequency prior to
+    * gen10, PCI-id is enough to figure it out.
+    */
+   assert(screen->devinfo.gen >= 10);
+
+   int ret, freq;
+
+   ret = intel_get_param(screen, I915_PARAM_CS_TIMESTAMP_FREQUENCY,
+                         &freq);
+   if (ret < 0) {
+      _mesa_warning(NULL,
+                    "Kernel 4.15 required to read the CS timestamp frequency.\n");
+      return;
+   }
+
+   screen->devinfo.timestamp_frequency = freq;
 }
 
 static void
@@ -1912,6 +2024,12 @@ intel_screen_make_configs(__DRIscreen *dri_screen)
       MESA_FORMAT_B8G8R8A8_UNORM,
       MESA_FORMAT_B8G8R8X8_UNORM,
 
+      MESA_FORMAT_B8G8R8A8_SRGB,
+
+      /* For 10 bpc, 30 bit depth framebuffers. */
+      MESA_FORMAT_B10G10R10A2_UNORM,
+      MESA_FORMAT_B10G10R10X2_UNORM,
+
       /* The 32-bit RGBA format must not precede the 32-bit BGRA format.
        * Likewise for RGBX and BGRX.  Otherwise, the GLX client and the GLX
        * server may disagree on which format the GLXFBConfig represents,
@@ -1951,12 +2069,21 @@ intel_screen_make_configs(__DRIscreen *dri_screen)
    if (intel_loader_get_cap(dri_screen, DRI_LOADER_CAP_RGBA_ORDERING))
       num_formats = ARRAY_SIZE(formats);
    else
-      num_formats = 3;
+      num_formats = ARRAY_SIZE(formats) - 2; /* all - RGBA_ORDERING formats */
+
+   /* Shall we expose 10 bpc formats? */
+   bool allow_rgb10_configs = driQueryOptionb(&screen->optionCache,
+                                              "allow_rgb10_configs");
 
    /* Generate singlesample configs without accumulation buffer. */
    for (unsigned i = 0; i < num_formats; i++) {
       __DRIconfig **new_configs;
       int num_depth_stencil_bits = 2;
+
+      if (!allow_rgb10_configs &&
+          (formats[i] == MESA_FORMAT_B10G10R10A2_UNORM ||
+           formats[i] == MESA_FORMAT_B10G10R10X2_UNORM))
+         continue;
 
       /* Starting with DRI2 protocol version 1.1 we can request a depth/stencil
        * buffer that has a different number of bits per pixel than the color
@@ -1994,6 +2121,11 @@ intel_screen_make_configs(__DRIscreen *dri_screen)
    for (unsigned i = 0; i < num_formats; i++) {
       __DRIconfig **new_configs;
 
+      if (!allow_rgb10_configs &&
+          (formats[i] == MESA_FORMAT_B10G10R10A2_UNORM ||
+          formats[i] == MESA_FORMAT_B10G10R10X2_UNORM))
+         continue;
+
       if (formats[i] == MESA_FORMAT_B5G6R5_UNORM) {
          depth_bits[0] = 16;
          stencil_bits[0] = 0;
@@ -2026,6 +2158,11 @@ intel_screen_make_configs(__DRIscreen *dri_screen)
    for (unsigned i = 0; i < num_formats; i++) {
       if (devinfo->gen < 6)
          break;
+
+      if (!allow_rgb10_configs &&
+          (formats[i] == MESA_FORMAT_B10G10R10A2_UNORM ||
+          formats[i] == MESA_FORMAT_B10G10R10X2_UNORM))
+         continue;
 
       __DRIconfig **new_configs;
       const int num_depth_stencil_bits = 2;
@@ -2130,14 +2267,9 @@ set_max_gl_versions(struct intel_screen *screen)
 /**
  * Return the revision (generally the revid field of the PCI header) of the
  * graphics device.
- *
- * XXX: This function is useful to keep around even if it is not currently in
- * use. It is necessary for new platforms and revision specific workarounds or
- * features. Please don't remove it so that we know it at least continues to
- * build.
  */
-static __attribute__((__unused__)) int
-brw_get_revision(int fd)
+int
+intel_device_get_revision(int fd)
 {
    struct drm_i915_getparam gp;
    int revision;
@@ -2272,7 +2404,12 @@ __DRIconfig **intelInitScreen2(__DRIscreen *dri_screen)
       return NULL;
    }
    /* parse information in __driConfigOptions */
-   driParseOptionInfo(&screen->optionCache, brw_config_options.xml);
+   driOptionCache options;
+   memset(&options, 0, sizeof(options));
+
+   driParseOptionInfo(&options, brw_config_options.xml);
+   driParseConfigFiles(&screen->optionCache, &options, dri_screen->myNum, "i965");
+   driDestroyOptionCache(&options);
 
    screen->driScrnPriv = dri_screen;
    dri_screen->driverPrivate = (void *) screen;
@@ -2336,6 +2473,9 @@ __DRIconfig **intelInitScreen2(__DRIscreen *dri_screen)
 
    isl_device_init(&screen->isl_dev, &screen->devinfo,
                    screen->hw_has_swizzling);
+
+   if (devinfo->gen >= 10)
+      intel_cs_timestamp_frequency(screen);
 
    /* GENs prior to 8 do not support EU/Subslice info */
    if (devinfo->gen >= 8) {

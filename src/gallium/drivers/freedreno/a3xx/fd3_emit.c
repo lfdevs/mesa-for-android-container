@@ -209,7 +209,7 @@ emit_textures(struct fd_context *ctx, struct fd_ringbuffer *ring,
 					fd3_pipe_sampler_view(tex->textures[i]) :
 					&dummy_view;
 			struct fd_resource *rsc = fd_resource(view->base.texture);
-			if (rsc && rsc->base.b.target == PIPE_BUFFER) {
+			if (rsc && rsc->base.target == PIPE_BUFFER) {
 				OUT_RELOC(ring, rsc->bo, view->base.u.buf.offset, 0, 0);
 				j = 1;
 			} else {
@@ -308,7 +308,7 @@ fd3_emit_gmem_restore_tex(struct fd_ringbuffer *ring,
 		 */
 		if (rsc->stencil && i == 0) {
 			rsc = rsc->stencil;
-			format = fd_gmem_restore_format(rsc->base.b.format);
+			format = fd_gmem_restore_format(rsc->base.format);
 		}
 
 		/* note: PIPE_BUFFER disallowed for surfaces */

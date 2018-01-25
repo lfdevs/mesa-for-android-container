@@ -113,35 +113,105 @@ vc4_bo_remove_from_cache(struct vc4_bo_cache *cache, struct vc4_bo *bo)
         cache->bo_size -= bo->size;
 }
 
+static void vc4_bo_purgeable(struct vc4_bo *bo)
+{
+        struct drm_vc4_gem_madvise arg = {
+                .handle = bo->handle,
+                .madv = VC4_MADV_DONTNEED,
+        };
+
+	if (bo->screen->has_madvise)
+		vc4_ioctl(bo->screen->fd, DRM_IOCTL_VC4_GEM_MADVISE, &arg);
+}
+
+static bool vc4_bo_unpurgeable(struct vc4_bo *bo)
+{
+        struct drm_vc4_gem_madvise arg = {
+                .handle = bo->handle,
+                .madv = VC4_MADV_WILLNEED,
+        };
+
+	if (!bo->screen->has_madvise)
+		return true;
+
+	if (vc4_ioctl(bo->screen->fd, DRM_IOCTL_VC4_GEM_MADVISE, &arg))
+		return false;
+
+	return arg.retained;
+}
+
+static void
+vc4_bo_free(struct vc4_bo *bo)
+{
+        struct vc4_screen *screen = bo->screen;
+
+        if (bo->map) {
+                if (using_vc4_simulator && bo->name &&
+                    strcmp(bo->name, "winsys") == 0) {
+                        free(bo->map);
+                } else {
+                        munmap(bo->map, bo->size);
+                        VG(VALGRIND_FREELIKE_BLOCK(bo->map, 0));
+                }
+        }
+
+        struct drm_gem_close c;
+        memset(&c, 0, sizeof(c));
+        c.handle = bo->handle;
+        int ret = vc4_ioctl(screen->fd, DRM_IOCTL_GEM_CLOSE, &c);
+        if (ret != 0)
+                fprintf(stderr, "close object %d: %s\n", bo->handle, strerror(errno));
+
+        screen->bo_count--;
+        screen->bo_size -= bo->size;
+
+        if (dump_stats) {
+                fprintf(stderr, "Freed %s%s%dkb:\n",
+                        bo->name ? bo->name : "",
+                        bo->name ? " " : "",
+                        bo->size / 1024);
+                vc4_bo_dump_stats(screen);
+        }
+
+        free(bo);
+}
+
 static struct vc4_bo *
 vc4_bo_from_cache(struct vc4_screen *screen, uint32_t size, const char *name)
 {
         struct vc4_bo_cache *cache = &screen->bo_cache;
         uint32_t page_index = size / 4096 - 1;
+        struct vc4_bo *iter, *tmp, *bo = NULL;
 
         if (cache->size_list_size <= page_index)
                 return NULL;
 
-        struct vc4_bo *bo = NULL;
         mtx_lock(&cache->lock);
-        if (!list_empty(&cache->size_list[page_index])) {
-                bo = LIST_ENTRY(struct vc4_bo, cache->size_list[page_index].next,
-                                size_list);
-
-                /* Check that the BO has gone idle.  If not, then we want to
-                 * allocate something new instead, since we assume that the
-                 * user will proceed to CPU map it and fill it with stuff.
+	LIST_FOR_EACH_ENTRY_SAFE(iter, tmp, &cache->size_list[page_index],
+				 size_list) {
+                /* Check that the BO has gone idle.  If not, then none of the
+                 * other BOs (pushed to the list after later rendering) are
+                 * likely to be idle, either.
                  */
-                if (!vc4_bo_wait(bo, 0, NULL)) {
-                        mtx_unlock(&cache->lock);
-                        return NULL;
-                }
+                if (!vc4_bo_wait(iter, 0, NULL))
+                        break;
 
+                if (!vc4_bo_unpurgeable(iter)) {
+                        /* The BO has been purged. Free it and try to find
+                         * another one in the cache.
+                         */
+                        vc4_bo_remove_from_cache(cache, iter);
+                        vc4_bo_free(iter);
+                        continue;
+		}
+
+                bo = iter;
                 pipe_reference_init(&bo->reference, 1);
                 vc4_bo_remove_from_cache(cache, bo);
 
                 vc4_bo_label(screen, bo, "%s", name);
                 bo->name = name;
+                break;
         }
         mtx_unlock(&cache->lock);
         return bo;
@@ -221,42 +291,6 @@ vc4_bo_last_unreference(struct vc4_bo *bo)
 }
 
 static void
-vc4_bo_free(struct vc4_bo *bo)
-{
-        struct vc4_screen *screen = bo->screen;
-
-        if (bo->map) {
-                if (using_vc4_simulator && bo->name &&
-                    strcmp(bo->name, "winsys") == 0) {
-                        free(bo->map);
-                } else {
-                        munmap(bo->map, bo->size);
-                        VG(VALGRIND_FREELIKE_BLOCK(bo->map, 0));
-                }
-        }
-
-        struct drm_gem_close c;
-        memset(&c, 0, sizeof(c));
-        c.handle = bo->handle;
-        int ret = vc4_ioctl(screen->fd, DRM_IOCTL_GEM_CLOSE, &c);
-        if (ret != 0)
-                fprintf(stderr, "close object %d: %s\n", bo->handle, strerror(errno));
-
-        screen->bo_count--;
-        screen->bo_size -= bo->size;
-
-        if (dump_stats) {
-                fprintf(stderr, "Freed %s%s%dkb:\n",
-                        bo->name ? bo->name : "",
-                        bo->name ? " " : "",
-                        bo->size / 1024);
-                vc4_bo_dump_stats(screen);
-        }
-
-        free(bo);
-}
-
-static void
 free_stale_bos(struct vc4_screen *screen, time_t time)
 {
         struct vc4_bo_cache *cache = &screen->bo_cache;
@@ -325,6 +359,7 @@ vc4_bo_last_unreference_locked_timed(struct vc4_bo *bo, time_t time)
                 cache->size_list_size = page_index + 1;
         }
 
+        vc4_bo_purgeable(bo);
         bo->free_time = time;
         list_addtail(&bo->size_list, &cache->size_list[page_index]);
         list_addtail(&bo->time_list, &cache->time_list);

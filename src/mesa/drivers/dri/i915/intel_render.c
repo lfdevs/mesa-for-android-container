@@ -62,6 +62,8 @@
 #define HAVE_TRI_FANS    1
 #define HAVE_POLYGONS    1
 
+#define HAVE_QUADS       0
+#define HAVE_QUAD_STRIPS 0
 #define HAVE_ELTS        0
 
 static const uint32_t hw_prim[GL_POLYGON + 1] = {

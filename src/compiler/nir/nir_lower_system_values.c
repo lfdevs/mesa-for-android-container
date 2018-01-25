@@ -58,6 +58,7 @@ convert_block(nir_block *block, nir_builder *b)
           */
 
          nir_const_value local_size;
+         memset(&local_size, 0, sizeof(local_size));
          local_size.u32[0] = b->shader->info.cs.local_size[0];
          local_size.u32[1] = b->shader->info.cs.local_size[1];
          local_size.u32[2] = b->shader->info.cs.local_size[2];
@@ -124,7 +125,9 @@ convert_block(nir_block *block, nir_builder *b)
          nir_intrinsic_op op =
             nir_intrinsic_from_system_value(var->data.location);
          nir_intrinsic_instr *load = nir_intrinsic_instr_create(b->shader, op);
-         nir_ssa_dest_init(&load->instr, &load->dest, 1, 64, NULL);
+         nir_ssa_dest_init_for_type(&load->instr, &load->dest,
+                                    var->type, NULL);
+         load->num_components = load->dest.ssa.num_components;
          nir_builder_instr_insert(b, &load->instr);
          sysval = &load->dest.ssa;
          break;

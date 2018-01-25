@@ -197,6 +197,7 @@ protected:
                   struct brw_stage_prog_data *stage_prog_data);
 
 public:
+   virtual ~backend_shader();
 
    const struct brw_compiler *compiler;
    void *log_data; /* Passed to compiler->*_log functions */
@@ -284,8 +285,6 @@ struct brw_gs_compile
    unsigned control_data_bits_per_vertex;
    unsigned control_data_header_size_bits;
 };
-
-unsigned get_atomic_counter_op(nir_intrinsic_op op);
 
 #ifdef __cplusplus
 }

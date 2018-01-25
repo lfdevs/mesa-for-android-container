@@ -8,8 +8,8 @@ http://0x04.net/cgit/index.cgi/rules-ng-ng
 git clone git://0x04.net/rules-ng-ng
 
 The rules-ng-ng source files this header was generated from are:
-- isa.xml       (  35432 bytes, from 2017-10-05 21:20:32)
-- copyright.xml (   1597 bytes, from 2016-11-13 13:46:17)
+- isa.xml       (  37079 bytes, from 2017-10-19 09:48:25)
+- copyright.xml (   1597 bytes, from 2016-10-29 07:29:22)
 
 Copyright (C) 2012-2017 by the following authors:
 - Wladimir J. van der Laan <laanwj@gmail.com>
@@ -202,6 +202,9 @@ DEALINGS IN THE SOFTWARE.
 #define INST_TYPE_S16						0x00000005
 #define INST_TYPE_U32						0x00000006
 #define INST_TYPE_U8						0x00000007
+#define INST_ROUND_MODE_DEFAULT					0x00000000
+#define INST_ROUND_MODE_RTZ					0x00000001
+#define INST_ROUND_MODE_RTNE					0x00000002
 #define INST_COMPS_X						0x00000001
 #define INST_COMPS_Y						0x00000002
 #define INST_COMPS_Z						0x00000004
@@ -244,6 +247,10 @@ DEALINGS IN THE SOFTWARE.
 #define VIV_ISA_WORD_1_TEX_AMODE__MASK				0x00000007
 #define VIV_ISA_WORD_1_TEX_AMODE__SHIFT				0
 #define VIV_ISA_WORD_1_TEX_AMODE(x)				(((x) << VIV_ISA_WORD_1_TEX_AMODE__SHIFT) & VIV_ISA_WORD_1_TEX_AMODE__MASK)
+#define VIV_ISA_WORD_1_RMODE__MASK				0x00000003
+#define VIV_ISA_WORD_1_RMODE__SHIFT				0
+#define VIV_ISA_WORD_1_RMODE(x)					(((x) << VIV_ISA_WORD_1_RMODE__SHIFT) & VIV_ISA_WORD_1_RMODE__MASK)
+#define VIV_ISA_WORD_1_PMODE					0x00000004
 #define VIV_ISA_WORD_1_TEX_SWIZ__MASK				0x000007f8
 #define VIV_ISA_WORD_1_TEX_SWIZ__SHIFT				3
 #define VIV_ISA_WORD_1_TEX_SWIZ(x)				(((x) << VIV_ISA_WORD_1_TEX_SWIZ__SHIFT) & VIV_ISA_WORD_1_TEX_SWIZ__MASK)
@@ -293,13 +300,13 @@ DEALINGS IN THE SOFTWARE.
 #define VIV_ISA_WORD_3_SRC2_REG__MASK				0x00001ff0
 #define VIV_ISA_WORD_3_SRC2_REG__SHIFT				4
 #define VIV_ISA_WORD_3_SRC2_REG(x)				(((x) << VIV_ISA_WORD_3_SRC2_REG__SHIFT) & VIV_ISA_WORD_3_SRC2_REG__MASK)
-#define VIV_ISA_WORD_3_UNK3_13					0x00002000
+#define VIV_ISA_WORD_3_SEL_BIT0					0x00002000
 #define VIV_ISA_WORD_3_SRC2_SWIZ__MASK				0x003fc000
 #define VIV_ISA_WORD_3_SRC2_SWIZ__SHIFT				14
 #define VIV_ISA_WORD_3_SRC2_SWIZ(x)				(((x) << VIV_ISA_WORD_3_SRC2_SWIZ__SHIFT) & VIV_ISA_WORD_3_SRC2_SWIZ__MASK)
 #define VIV_ISA_WORD_3_SRC2_NEG					0x00400000
 #define VIV_ISA_WORD_3_SRC2_ABS					0x00800000
-#define VIV_ISA_WORD_3_UNK3_24					0x01000000
+#define VIV_ISA_WORD_3_SEL_BIT1					0x01000000
 #define VIV_ISA_WORD_3_SRC2_AMODE__MASK				0x0e000000
 #define VIV_ISA_WORD_3_SRC2_AMODE__SHIFT			25
 #define VIV_ISA_WORD_3_SRC2_AMODE(x)				(((x) << VIV_ISA_WORD_3_SRC2_AMODE__SHIFT) & VIV_ISA_WORD_3_SRC2_AMODE__MASK)

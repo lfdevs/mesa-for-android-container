@@ -324,7 +324,7 @@ dri2_initialize_surfaceless(_EGLDriver *drv, _EGLDisplay *disp)
    dri2_dpy->fd = -1;
    disp->DriverData = (void *) dri2_dpy;
 
-   if (!disp->Options.UseFallback) {
+   if (!disp->Options.ForceSoftware) {
       driver_loaded = surfaceless_probe_device(disp, false);
       if (!driver_loaded)
          _eglLog(_EGL_WARNING,

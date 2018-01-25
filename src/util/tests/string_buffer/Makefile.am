@@ -38,3 +38,5 @@ string_buffer_test_LDADD = \
 	$(top_builddir)/src/util/libmesautil.la \
 	$(PTHREAD_LIBS) \
 	$(DLOPEN_LIBS)
+
+EXTRA_DIST = meson.build

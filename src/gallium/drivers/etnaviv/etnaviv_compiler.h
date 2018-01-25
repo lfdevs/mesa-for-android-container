@@ -118,6 +118,7 @@ struct etna_shader_link_info {
    /* each PS input is annotated with the VS output reg */
    unsigned num_varyings;
    struct etna_varying varyings[ETNA_NUM_INPUTS];
+   int pcoord_varying_comp_ofs;
 };
 
 bool

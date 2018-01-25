@@ -32,8 +32,9 @@
 #include "vc5_context.h"
 #include "vc5_resource.h"
 #include "vc5_cl.h"
-#include "broadcom/cle/v3d_packet_v33_pack.h"
 #include "broadcom/compiler/v3d_compiler.h"
+#include "broadcom/common/v3d_macros.h"
+#include "broadcom/cle/v3dx_pack.h"
 
 /**
  * Does the initial bining command list setup for drawing to a given FBO.
@@ -55,12 +56,14 @@ vc5_start_draw(struct vc5_context *vc5)
         vc5_job_add_bo(job, job->bcl.bo);
 
         job->tile_alloc = vc5_bo_alloc(vc5->screen, 1024 * 1024, "tile alloc");
-        struct vc5_bo *tsda = vc5_bo_alloc(vc5->screen,
-                                           job->draw_tiles_y *
-                                           job->draw_tiles_x *
-                                           64,
-                                           "TSDA");
+        uint32_t tsda_per_tile_size = vc5->screen->devinfo.ver >= 40 ? 256 : 64;
+        job->tile_state = vc5_bo_alloc(vc5->screen,
+                                       job->draw_tiles_y *
+                                       job->draw_tiles_x *
+                                       tsda_per_tile_size,
+                                       "TSDA");
 
+#if V3D_VERSION < 40
         /* "Binning mode lists start with a Tile Binning Mode Configuration
          * item (120)"
          *
@@ -71,37 +74,40 @@ vc5_start_draw(struct vc5_context *vc5)
                         cl_address(job->tile_alloc, 0);
                 config.tile_allocation_memory_size = job->tile_alloc->size;
         }
+#endif
 
         cl_emit(&job->bcl, TILE_BINNING_MODE_CONFIGURATION_PART1, config) {
+#if V3D_VERSION >= 40
+                config.width_in_pixels_minus_1 = vc5->framebuffer.width - 1;
+                config.height_in_pixels_minus_1 = vc5->framebuffer.height - 1;
+                config.number_of_render_targets_minus_1 =
+                        MAX2(vc5->framebuffer.nr_cbufs, 1) - 1;
+#else /* V3D_VERSION < 40 */
                 config.tile_state_data_array_base_address =
-                        cl_address(tsda, 0);
+                        cl_address(job->tile_state, 0);
 
                 config.width_in_tiles = job->draw_tiles_x;
                 config.height_in_tiles = job->draw_tiles_y;
-
                 /* Must be >= 1 */
                 config.number_of_render_targets =
                         MAX2(vc5->framebuffer.nr_cbufs, 1);
+#endif /* V3D_VERSION < 40 */
 
                 config.multisample_mode_4x = job->msaa;
 
                 config.maximum_bpp_of_all_render_targets = job->internal_bpp;
         }
 
-        vc5_bo_unreference(&tsda);
-
         /* There's definitely nothing in the VCD cache we want. */
         cl_emit(&job->bcl, FLUSH_VCD_CACHE, bin);
+
+        /* Disable any leftover OQ state from another job. */
+        cl_emit(&job->bcl, OCCLUSION_QUERY_COUNTER, counter);
 
         /* "Binning mode lists must have a Start Tile Binning item (6) after
          *  any prefix state data before the binning list proper starts."
          */
         cl_emit(&job->bcl, START_TILE_BINNING, bin);
-
-        cl_emit(&job->bcl, PRIMITIVE_LIST_FORMAT, fmt) {
-                fmt.data_type = LIST_INDEXED;
-                fmt.primitive_type = LIST_TRIANGLES;
-        }
 
         job->needs_flush = true;
         job->draw_width = vc5->framebuffer.width;
@@ -147,10 +153,12 @@ vc5_emit_gl_shader_state(struct vc5_context *vc5,
                                    &vc5->constbuf[PIPE_SHADER_VERTEX],
                                    &vc5->verttex);
 
+        /* See GFXH-930 workaround below */
+        uint32_t num_elements_to_emit = MAX2(vtx->num_elements, 1);
         uint32_t shader_rec_offset =
                 vc5_cl_ensure_space(&job->indirect,
                                     cl_packet_length(GL_SHADER_STATE_RECORD) +
-                                    vtx->num_elements *
+                                    num_elements_to_emit *
                                     cl_packet_length(GL_SHADER_STATE_ATTRIBUTE_RECORD),
                                     32);
 
@@ -187,9 +195,9 @@ vc5_emit_gl_shader_state(struct vc5_context *vc5,
                 shader.coordinate_shader_has_separate_input_and_output_vpm_blocks = true;
                 shader.vertex_shader_has_separate_input_and_output_vpm_blocks = true;
                 shader.coordinate_shader_input_vpm_segment_size =
-                        vc5->prog.cs->prog_data.vs->vpm_input_size;
+                        MAX2(vc5->prog.cs->prog_data.vs->vpm_input_size, 1);
                 shader.vertex_shader_input_vpm_segment_size =
-                        vc5->prog.vs->prog_data.vs->vpm_input_size;
+                        MAX2(vc5->prog.vs->prog_data.vs->vpm_input_size, 1);
 
                 shader.coordinate_shader_output_vpm_segment_size =
                         vc5->prog.cs->prog_data.vs->vpm_output_size;
@@ -199,6 +207,35 @@ vc5_emit_gl_shader_state(struct vc5_context *vc5,
                 shader.coordinate_shader_uniforms_address = cs_uniforms;
                 shader.vertex_shader_uniforms_address = vs_uniforms;
                 shader.fragment_shader_uniforms_address = fs_uniforms;
+
+#if V3D_VERSION >= 41
+                shader.coordinate_shader_4_way_threadable =
+                        vc5->prog.cs->prog_data.vs->base.threads == 4;
+                shader.vertex_shader_4_way_threadable =
+                        vc5->prog.vs->prog_data.vs->base.threads == 4;
+                shader.fragment_shader_4_way_threadable =
+                        vc5->prog.fs->prog_data.fs->base.threads == 4;
+
+                shader.coordinate_shader_start_in_final_thread_section =
+                        vc5->prog.cs->prog_data.vs->base.single_seg;
+                shader.vertex_shader_start_in_final_thread_section =
+                        vc5->prog.vs->prog_data.vs->base.single_seg;
+                shader.fragment_shader_start_in_final_thread_section =
+                        vc5->prog.fs->prog_data.fs->base.single_seg;
+#else
+                shader.coordinate_shader_4_way_threadable =
+                        vc5->prog.cs->prog_data.vs->base.threads == 4;
+                shader.coordinate_shader_2_way_threadable =
+                        vc5->prog.cs->prog_data.vs->base.threads == 2;
+                shader.vertex_shader_4_way_threadable =
+                        vc5->prog.vs->prog_data.vs->base.threads == 4;
+                shader.vertex_shader_2_way_threadable =
+                        vc5->prog.vs->prog_data.vs->base.threads == 2;
+                shader.fragment_shader_4_way_threadable =
+                        vc5->prog.fs->prog_data.fs->base.threads == 4;
+                shader.fragment_shader_2_way_threadable =
+                        vc5->prog.fs->prog_data.fs->base.threads == 2;
+#endif
 
                 shader.vertex_id_read_by_coordinate_shader =
                         vc5->prog.cs->prog_data.vs->uses_vid;
@@ -219,30 +256,46 @@ vc5_emit_gl_shader_state(struct vc5_context *vc5,
                         &vertexbuf->vb[elem->vertex_buffer_index];
                 struct vc5_resource *rsc = vc5_resource(vb->buffer.resource);
 
-                struct V3D33_GL_SHADER_STATE_ATTRIBUTE_RECORD attr_unpacked = {
-                        .stride = vb->stride,
-                        .address = cl_address(rsc->bo,
-                                              vb->buffer_offset +
-                                              elem->src_offset),
-                        .number_of_values_read_by_coordinate_shader =
-                                vc5->prog.cs->prog_data.vs->vattr_sizes[i],
-                        .number_of_values_read_by_vertex_shader =
-                                vc5->prog.vs->prog_data.vs->vattr_sizes[i],
-                };
                 const uint32_t size =
                         cl_packet_length(GL_SHADER_STATE_ATTRIBUTE_RECORD);
-                uint8_t attr_packed[size];
-                V3D33_GL_SHADER_STATE_ATTRIBUTE_RECORD_pack(&job->indirect,
-                                                            attr_packed,
-                                                            &attr_unpacked);
-                for (int j = 0; j < size; j++)
-                        attr_packed[j] |= vtx->attrs[i * size + j];
-                cl_emit_prepacked(&job->indirect, &attr_packed);
+                cl_emit_with_prepacked(&job->indirect,
+                                       GL_SHADER_STATE_ATTRIBUTE_RECORD,
+                                       &vtx->attrs[i * size], attr) {
+                        attr.stride = vb->stride;
+                        attr.address = cl_address(rsc->bo,
+                                                  vb->buffer_offset +
+                                                  elem->src_offset);
+                        attr.number_of_values_read_by_coordinate_shader =
+                                vc5->prog.cs->prog_data.vs->vattr_sizes[i];
+                        attr.number_of_values_read_by_vertex_shader =
+                                vc5->prog.vs->prog_data.vs->vattr_sizes[i];
+#if V3D_VERSION >= 41
+                        attr.maximum_index = 0xffffff;
+#endif
+                }
+        }
+
+        if (vtx->num_elements == 0) {
+                /* GFXH-930: At least one attribute must be enabled and read
+                 * by CS and VS.  If we have no attributes being consumed by
+                 * the shader, set up a dummy to be loaded into the VPM.
+                 */
+                cl_emit(&job->indirect, GL_SHADER_STATE_ATTRIBUTE_RECORD, attr) {
+                        /* Valid address of data whose value will be unused. */
+                        attr.address = cl_address(job->indirect.bo, 0);
+
+                        attr.type = ATTRIBUTE_FLOAT;
+                        attr.stride = 0;
+                        attr.vec_size = 1;
+
+                        attr.number_of_values_read_by_coordinate_shader = 1;
+                        attr.number_of_values_read_by_vertex_shader = 1;
+                }
         }
 
         cl_emit(&job->bcl, GL_SHADER_STATE, state) {
                 state.address = cl_address(job->indirect.bo, shader_rec_offset);
-                state.number_of_attribute_arrays = vtx->num_elements;
+                state.number_of_attribute_arrays = num_elements_to_emit;
         }
 
         vc5_bo_unreference(&cs_uniforms.bo);
@@ -250,6 +303,27 @@ vc5_emit_gl_shader_state(struct vc5_context *vc5,
         vc5_bo_unreference(&fs_uniforms.bo);
 
         job->shader_rec_count++;
+}
+
+/**
+ * Computes the various transform feedback statistics, since they can't be
+ * recorded by CL packets.
+ */
+static void
+vc5_tf_statistics_record(struct vc5_context *vc5,
+                         const struct pipe_draw_info *info,
+                         bool prim_tf)
+{
+        if (!vc5->active_queries)
+                return;
+
+        uint32_t prims = u_prims_for_vertices(info->mode, info->count);
+        vc5->prims_generated += prims;
+
+        if (prim_tf) {
+                /* XXX: Only count if we didn't overflow. */
+                vc5->tf_prims_generated += prims;
+        }
 }
 
 static void
@@ -311,7 +385,11 @@ vc5_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
         vc5_start_draw(vc5);
         vc5_update_compiled_shaders(vc5, info->mode);
 
-        vc5_emit_state(pctx);
+#if V3D_VERSION >= 41
+        v3d41_emit_state(pctx);
+#else
+        v3d33_emit_state(pctx);
+#endif
 
         if (vc5->dirty & (VC5_DIRTY_VTXBUF |
                           VC5_DIRTY_VTXSTATE |
@@ -338,12 +416,16 @@ vc5_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
                 }
         }
 
-        /* The HW only processes transform feedback on primitives with the
-         * flag set.
-         */
         uint32_t prim_tf_enable = 0;
-        if (vc5->prog.bind_vs->num_tf_outputs)
+#if V3D_VERSION < 40
+        /* V3D 3.x: The HW only processes transform feedback on primitives
+         * with the flag set.
+         */
+        if (vc5->streamout.num_targets)
                 prim_tf_enable = (V3D_PRIM_POINTS_TF - V3D_PRIM_POINTS);
+#endif
+
+        vc5_tf_statistics_record(vc5, info, vc5->streamout.num_targets);
 
         /* Note that the primitive type fields match with OpenGL/gallium
          * definitions, up to but not including QUADS.
@@ -363,12 +445,23 @@ vc5_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
                 }
                 struct vc5_resource *rsc = vc5_resource(prsc);
 
+#if V3D_VERSION >= 40
+                cl_emit(&job->bcl, INDEX_BUFFER_SETUP, ib) {
+                        ib.address = cl_address(rsc->bo, 0);
+                        ib.size = rsc->bo->size;
+                }
+#endif
+
                 if (info->instance_count > 1) {
                         cl_emit(&job->bcl, INDEXED_INSTANCED_PRIMITIVE_LIST, prim) {
                                 prim.index_type = ffs(info->index_size) - 1;
+#if V3D_VERSION >= 40
+                                prim.index_offset = offset;
+#else /* V3D_VERSION < 40 */
                                 prim.maximum_index = (1u << 31) - 1; /* XXX */
                                 prim.address_of_indices_list =
                                         cl_address(rsc->bo, offset);
+#endif /* V3D_VERSION < 40 */
                                 prim.mode = info->mode | prim_tf_enable;
                                 prim.enable_primitive_restarts = info->primitive_restart;
 
@@ -379,9 +472,13 @@ vc5_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
                         cl_emit(&job->bcl, INDEXED_PRIMITIVE_LIST, prim) {
                                 prim.index_type = ffs(info->index_size) - 1;
                                 prim.length = info->count;
+#if V3D_VERSION >= 40
+                                prim.index_offset = offset;
+#else /* V3D_VERSION < 40 */
                                 prim.maximum_index = (1u << 31) - 1; /* XXX */
                                 prim.address_of_indices_list =
                                         cl_address(rsc->bo, offset);
+#endif /* V3D_VERSION < 40 */
                                 prim.mode = info->mode | prim_tf_enable;
                                 prim.enable_primitive_restarts = info->primitive_restart;
                         }
@@ -440,6 +537,12 @@ vc5_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
                 vc5_job_add_bo(job, rsc->bo);
         }
 
+        if (job->referenced_size > 768 * 1024 * 1024) {
+                perf_debug("Flushing job with %dkb to try to free up memory\n",
+                        job->referenced_size / 1024);
+                vc5_flush(pctx);
+        }
+
         if (V3D_DEBUG & V3D_DEBUG_ALWAYS_FLUSH)
                 vc5_flush(pctx);
 }
@@ -465,15 +568,63 @@ vc5_clear(struct pipe_context *pctx, unsigned buffers,
                 if (!(buffers & bit))
                         continue;
 
-                struct pipe_surface *cbuf = vc5->framebuffer.cbufs[i];
-                struct vc5_resource *rsc =
-                        vc5_resource(cbuf->texture);
+                struct pipe_surface *psurf = vc5->framebuffer.cbufs[i];
+                struct vc5_surface *surf = vc5_surface(psurf);
+                struct vc5_resource *rsc = vc5_resource(psurf->texture);
 
                 union util_color uc;
-                util_pack_color(color->f, cbuf->format, &uc);
+                uint32_t internal_size = 4 << surf->internal_bpp;
 
-                memcpy(job->clear_color[i], uc.ui,
-                       util_format_get_blocksize(cbuf->format));
+                static union pipe_color_union swapped_color;
+                if (vc5->swap_color_rb & (1 << i)) {
+                        swapped_color.f[0] = color->f[2];
+                        swapped_color.f[1] = color->f[1];
+                        swapped_color.f[2] = color->f[0];
+                        swapped_color.f[3] = color->f[3];
+                        color = &swapped_color;
+                }
+
+                switch (surf->internal_type) {
+                case V3D_INTERNAL_TYPE_8:
+                        if (surf->format == PIPE_FORMAT_B4G4R4A4_UNORM ||
+                            surf->format == PIPE_FORMAT_B4G4R4A4_UNORM) {
+                                /* Our actual hardware layout is ABGR4444, but
+                                 * we apply a swizzle when texturing to flip
+                                 * things back around.
+                                 */
+                                util_pack_color(color->f, PIPE_FORMAT_A8R8G8B8_UNORM,
+                                                &uc);
+                        } else {
+                                util_pack_color(color->f, PIPE_FORMAT_R8G8B8A8_UNORM,
+                                                &uc);
+                        }
+                        memcpy(job->clear_color[i], uc.ui, internal_size);
+                        break;
+                case V3D_INTERNAL_TYPE_8I:
+                case V3D_INTERNAL_TYPE_8UI:
+                        job->clear_color[i][0] = ((uc.ui[0] & 0xff) |
+                                                  (uc.ui[1] & 0xff) << 8 |
+                                                  (uc.ui[2] & 0xff) << 16 |
+                                                  (uc.ui[3] & 0xff) << 24);
+                        break;
+                case V3D_INTERNAL_TYPE_16F:
+                        util_pack_color(color->f, PIPE_FORMAT_R16G16B16A16_FLOAT,
+                                        &uc);
+                        memcpy(job->clear_color[i], uc.ui, internal_size);
+                        break;
+                case V3D_INTERNAL_TYPE_16I:
+                case V3D_INTERNAL_TYPE_16UI:
+                        job->clear_color[i][0] = ((uc.ui[0] & 0xffff) |
+                                                  uc.ui[1] << 16);
+                        job->clear_color[i][1] = ((uc.ui[2] & 0xffff) |
+                                                  uc.ui[3] << 16);
+                        break;
+                case V3D_INTERNAL_TYPE_32F:
+                case V3D_INTERNAL_TYPE_32I:
+                case V3D_INTERNAL_TYPE_32UI:
+                        memcpy(job->clear_color[i], color->ui, internal_size);
+                        break;
+                }
 
                 rsc->initialized_buffers |= bit;
         }
@@ -520,7 +671,7 @@ vc5_clear_depth_stencil(struct pipe_context *pctx, struct pipe_surface *ps,
 }
 
 void
-vc5_draw_init(struct pipe_context *pctx)
+v3dX(draw_init)(struct pipe_context *pctx)
 {
         pctx->draw_vbo = vc5_draw_vbo;
         pctx->clear = vc5_clear;

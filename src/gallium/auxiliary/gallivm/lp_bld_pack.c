@@ -129,6 +129,31 @@ lp_build_const_unpack_shuffle_half(struct gallivm_state *gallivm,
 }
 
 /**
+ * Similar to lp_build_const_unpack_shuffle_half, but for AVX512
+ * See comment above lp_build_interleave2_half for more details.
+ */
+static LLVMValueRef
+lp_build_const_unpack_shuffle_16wide(struct gallivm_state *gallivm,
+                                     unsigned lo_hi)
+{
+   LLVMValueRef elems[LP_MAX_VECTOR_LENGTH];
+   unsigned i, j;
+
+   assert(lo_hi < 2);
+
+   // for the following lo_hi setting, convert 0 -> f to:
+   // 0: 0 16 4 20  8 24 12 28 1 17 5 21  9 25 13 29
+   // 1: 2 18 6 22 10 26 14 30 3 19 7 23 11 27 15 31
+   for (i = 0; i < 16; i++) {
+      j = ((i&0x06)<<1) + ((i&1)<<4) + (i>>3) + (lo_hi<<1);
+
+      elems[i] = lp_build_const_int32(gallivm, j);
+   }
+
+   return LLVMConstVector(elems, 16);
+}
+
+/**
  * Build shuffle vectors that match PACKxx (SSE) instructions or
  * VPERM (Altivec).
  */
@@ -325,8 +350,8 @@ lp_build_interleave2(struct gallivm_state *gallivm,
 }
 
 /**
- * Interleave vector elements but with 256 bit,
- * treats it as interleave with 2 concatenated 128 bit vectors.
+ * Interleave vector elements but with 256 (or 512) bit,
+ * treats it as interleave with 2 concatenated 128 (or 256) bit vectors.
  *
  * This differs to lp_build_interleave2 as that function would do the following (for lo):
  * a0 b0 a1 b1 a2 b2 a3 b3, and this does not compile into an AVX unpack instruction.
@@ -343,6 +368,14 @@ lp_build_interleave2(struct gallivm_state *gallivm,
  *
  * And interleave-hi would result in:
  *   a2 b2 a3 b3 a6 b6 a7 b7
+ *
+ * For 512 bits, the following are true:
+ *
+ * Interleave-lo would result in (capital letters denote hex indices):
+ *   a0 b0 a1 b1 a4 b4 a5 b5 a8 b8 a9 b9 aC bC aD bD
+ *
+ * Interleave-hi would result in:
+ *   a2 b2 a3 b3 a6 b6 a7 b7 aA bA aB bB aE bE aF bF
  */
 LLVMValueRef
 lp_build_interleave2_half(struct gallivm_state *gallivm,
@@ -353,6 +386,9 @@ lp_build_interleave2_half(struct gallivm_state *gallivm,
 {
    if (type.length * type.width == 256) {
       LLVMValueRef shuffle = lp_build_const_unpack_shuffle_half(gallivm, type.length, lo_hi);
+      return LLVMBuildShuffleVector(gallivm->builder, a, b, shuffle, "");
+   } else if ((type.length == 16) && (type.width == 32)) {
+      LLVMValueRef shuffle = lp_build_const_unpack_shuffle_16wide(gallivm, lo_hi);
       return LLVMBuildShuffleVector(gallivm->builder, a, b, shuffle, "");
    } else {
       return lp_build_interleave2(gallivm, type, a, b, lo_hi);

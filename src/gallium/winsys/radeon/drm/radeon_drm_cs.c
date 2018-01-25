@@ -24,15 +24,6 @@
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
  */
-/*
- * Authors:
- *      Marek Olšák <maraeo@gmail.com>
- *
- * Based on work from libdrm_radeon by:
- *      Aapo Tahkola <aet@rasterburn.org>
- *      Nicolai Haehnle <prefect_@gmx.net>
- *      Jérôme Glisse <glisse@freedesktop.org>
- */
 
 /*
     This file replaces libdrm's radeon_cs_gem with our own implemention.
@@ -65,7 +56,7 @@
 #include "radeon_drm_cs.h"
 
 #include "util/u_memory.h"
-#include "os/os_time.h"
+#include "util/os_time.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -347,6 +338,14 @@ static unsigned radeon_drm_cs_add_buffer(struct radeon_winsys_cs *rcs,
     struct radeon_drm_cs *cs = radeon_drm_cs(rcs);
     struct radeon_bo *bo = (struct radeon_bo*)buf;
     enum radeon_bo_domain added_domains;
+
+    /* If VRAM is just stolen system memory, allow both VRAM and
+     * GTT, whichever has free space. If a buffer is evicted from
+     * VRAM to GTT, it will stay there.
+     */
+    if (!cs->ws->info.has_dedicated_vram)
+        domains |= RADEON_DOMAIN_GTT;
+
     enum radeon_bo_domain rd = usage & RADEON_USAGE_READ ? domains : 0;
     enum radeon_bo_domain wd = usage & RADEON_USAGE_WRITE ? domains : 0;
     struct drm_radeon_cs_reloc *reloc;
@@ -408,7 +407,7 @@ static bool radeon_drm_cs_validate(struct radeon_winsys_cs *rcs)
 
         /* Flush if there are any relocs. Clean up otherwise. */
         if (cs->csc->num_relocs) {
-            cs->flush_cs(cs->flush_data, RADEON_FLUSH_ASYNC, NULL);
+            cs->flush_cs(cs->flush_data, PIPE_FLUSH_ASYNC, NULL);
         } else {
             radeon_cs_context_cleanup(cs->csc);
             cs->base.used_vram = 0;
@@ -664,7 +663,7 @@ static int radeon_drm_cs_flush(struct radeon_winsys_cs *rcs,
                 cs->cst->flags[0] |= RADEON_CS_USE_VM;
                 cs->cst->cs.num_chunks = 3;
             }
-            if (flags & RADEON_FLUSH_END_OF_FRAME) {
+            if (flags & PIPE_FLUSH_END_OF_FRAME) {
                 cs->cst->flags[0] |= RADEON_CS_END_OF_FRAME;
                 cs->cst->cs.num_chunks = 3;
             }
@@ -678,7 +677,7 @@ static int radeon_drm_cs_flush(struct radeon_winsys_cs *rcs,
         if (util_queue_is_initialized(&cs->ws->cs_queue)) {
             util_queue_add_job(&cs->ws->cs_queue, cs, &cs->flush_completed,
                                radeon_drm_cs_emit_ioctl_oneshot, NULL);
-            if (!(flags & RADEON_FLUSH_ASYNC))
+            if (!(flags & PIPE_FLUSH_ASYNC))
                 radeon_drm_cs_sync_flush(rcs);
         } else {
             radeon_drm_cs_emit_ioctl_oneshot(cs, 0);
@@ -795,6 +794,24 @@ radeon_drm_cs_get_next_fence(struct radeon_winsys_cs *rcs)
    return fence;
 }
 
+static void
+radeon_drm_cs_add_fence_dependency(struct radeon_winsys_cs *cs,
+                                   struct pipe_fence_handle *fence)
+{
+   /* TODO: Handle the following unlikely multi-threaded scenario:
+    *
+    *  Thread 1 / Context 1                   Thread 2 / Context 2
+    *  --------------------                   --------------------
+    *  f = cs_get_next_fence()
+    *                                         cs_add_fence_dependency(f)
+    *                                         cs_flush()
+    *  cs_flush()
+    *
+    * We currently assume that this does not happen because we don't support
+    * asynchronous flushes on Radeon.
+    */
+}
+
 void radeon_drm_cs_init_functions(struct radeon_drm_winsys *ws)
 {
     ws->base.ctx_create = radeon_drm_ctx_create;
@@ -810,6 +827,7 @@ void radeon_drm_cs_init_functions(struct radeon_drm_winsys *ws)
     ws->base.cs_get_next_fence = radeon_drm_cs_get_next_fence;
     ws->base.cs_is_buffer_referenced = radeon_bo_is_referenced;
     ws->base.cs_sync_flush = radeon_drm_cs_sync_flush;
+    ws->base.cs_add_fence_dependency = radeon_drm_cs_add_fence_dependency;
     ws->base.fence_wait = radeon_fence_wait;
     ws->base.fence_reference = radeon_fence_reference;
 }

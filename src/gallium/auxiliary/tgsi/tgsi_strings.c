@@ -58,6 +58,7 @@ static const char *tgsi_file_names[] =
    "BUFFER",
    "MEMORY",
    "CONSTBUF",
+   "HWATOMIC",
 };
 
 const char *tgsi_semantic_names[TGSI_SEMANTIC_COUNT] =

@@ -447,7 +447,8 @@ _eglUnlinkResource(_EGLResource *res, _EGLResourceType type)
 
 #ifdef HAVE_X11_PLATFORM
 static EGLBoolean
-_eglParseX11DisplayAttribList(_EGLDisplay *display, const EGLint *attrib_list)
+_eglParseX11DisplayAttribList(_EGLDisplay *display,
+                              const EGLAttrib *attrib_list)
 {
    int i;
 
@@ -456,8 +457,8 @@ _eglParseX11DisplayAttribList(_EGLDisplay *display, const EGLint *attrib_list)
    }
 
    for (i = 0; attrib_list[i] != EGL_NONE; i += 2) {
-      EGLint attrib = attrib_list[i];
-      EGLint value = attrib_list[i + 1];
+      EGLAttrib attrib = attrib_list[i];
+      EGLAttrib value = attrib_list[i + 1];
 
       /* EGL_EXT_platform_x11 recognizes exactly one attribute,
        * EGL_PLATFORM_X11_SCREEN_EXT, which is optional.
@@ -473,7 +474,7 @@ _eglParseX11DisplayAttribList(_EGLDisplay *display, const EGLint *attrib_list)
 
 _EGLDisplay*
 _eglGetX11Display(Display *native_display,
-                  const EGLint *attrib_list)
+                  const EGLAttrib *attrib_list)
 {
    _EGLDisplay *display = _eglFindDisplay(_EGL_PLATFORM_X11,
                                           native_display);
@@ -494,7 +495,7 @@ _eglGetX11Display(Display *native_display,
 #ifdef HAVE_DRM_PLATFORM
 _EGLDisplay*
 _eglGetGbmDisplay(struct gbm_device *native_display,
-                  const EGLint *attrib_list)
+                  const EGLAttrib *attrib_list)
 {
    /* EGL_MESA_platform_gbm recognizes no attributes. */
    if (attrib_list != NULL && attrib_list[0] != EGL_NONE) {
@@ -509,7 +510,7 @@ _eglGetGbmDisplay(struct gbm_device *native_display,
 #ifdef HAVE_WAYLAND_PLATFORM
 _EGLDisplay*
 _eglGetWaylandDisplay(struct wl_display *native_display,
-                      const EGLint *attrib_list)
+                      const EGLAttrib *attrib_list)
 {
    /* EGL_EXT_platform_wayland recognizes no attributes. */
    if (attrib_list != NULL && attrib_list[0] != EGL_NONE) {
@@ -524,7 +525,7 @@ _eglGetWaylandDisplay(struct wl_display *native_display,
 #ifdef HAVE_SURFACELESS_PLATFORM
 _EGLDisplay*
 _eglGetSurfacelessDisplay(void *native_display,
-                          const EGLint *attrib_list)
+                          const EGLAttrib *attrib_list)
 {
    /* This platform has no native display. */
    if (native_display != NULL) {

@@ -68,9 +68,6 @@ enum vc5_tiling_mode {
 struct vc5_transfer {
         struct pipe_transfer base;
         void *map;
-
-        struct pipe_resource *ss_resource;
-        struct pipe_box ss_box;
 };
 
 struct vc5_resource_slice {
@@ -83,7 +80,9 @@ struct vc5_resource_slice {
 struct vc5_surface {
         struct pipe_surface base;
         uint32_t offset;
+        uint32_t separate_stencil_offset;
         enum vc5_tiling_mode tiling;
+        enum vc5_tiling_mode separate_stencil_tiling;
         /**
          * Output image format for TILE_RENDERING_MODE_CONFIGURATION
          */
@@ -100,6 +99,9 @@ struct vc5_surface {
          * TILE_RENDERING_MODE_CONFIGURATION.
          */
         uint8_t internal_bpp;
+
+        uint32_t padded_height_of_output_image_in_uif_blocks;
+        uint32_t separate_stencil_padded_height_of_output_image_in_uif_blocks;
 };
 
 struct vc5_resource {
@@ -109,8 +111,6 @@ struct vc5_resource {
         uint32_t cube_map_stride;
         int cpp;
         bool tiled;
-        /** One of V3D_TEXTURE_DATA_FORMAT_* */
-        uint8_t tex_format;
 
         /**
          * Number of times the resource has been written to.
@@ -130,6 +130,11 @@ struct vc5_resource {
          * buffer) may get marked.
          */
         uint32_t initialized_buffers;
+
+        enum pipe_format internal_format;
+
+        /* Resource storing the S8 part of a Z32F_S8 resource, or NULL. */
+        struct vc5_resource *separate_stencil;
 };
 
 static inline struct vc5_resource *

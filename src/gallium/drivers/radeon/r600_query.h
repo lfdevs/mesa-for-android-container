@@ -19,10 +19,6 @@
  * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
- *
- * Authors:
- *  Nicolai Hähnle <nicolai.haehnle@amd.com>
- *
  */
 
 #ifndef R600_QUERY_H
@@ -35,7 +31,7 @@ struct pipe_query;
 struct pipe_resource;
 
 struct r600_common_context;
-struct r600_common_screen;
+struct si_screen;
 struct r600_query;
 struct r600_query_hw;
 struct r600_resource;
@@ -122,7 +118,7 @@ enum {
 };
 
 struct r600_query_ops {
-	void (*destroy)(struct r600_common_screen *, struct r600_query *);
+	void (*destroy)(struct si_screen *, struct r600_query *);
 	bool (*begin)(struct r600_common_context *, struct r600_query *);
 	bool (*end)(struct r600_common_context *, struct r600_query *);
 	bool (*get_result)(struct r600_common_context *,
@@ -152,7 +148,7 @@ enum {
 };
 
 struct r600_query_hw_ops {
-	bool (*prepare_buffer)(struct r600_common_screen *,
+	bool (*prepare_buffer)(struct si_screen *,
 			       struct r600_query_hw *,
 			       struct r600_resource *);
 	void (*emit_start)(struct r600_common_context *,
@@ -162,7 +158,7 @@ struct r600_query_hw_ops {
 			  struct r600_query_hw *,
 			  struct r600_resource *buffer, uint64_t va);
 	void (*clear_result)(struct r600_query_hw *, union pipe_query_result *);
-	void (*add_result)(struct r600_common_screen *screen,
+	void (*add_result)(struct si_screen *screen,
 			   struct r600_query_hw *, void *buffer,
 			   union pipe_query_result *result);
 };
@@ -201,9 +197,9 @@ struct r600_query_hw {
 	unsigned workaround_offset;
 };
 
-bool si_query_hw_init(struct r600_common_screen *rscreen,
+bool si_query_hw_init(struct si_screen *sscreen,
 		      struct r600_query_hw *query);
-void si_query_hw_destroy(struct r600_common_screen *rscreen,
+void si_query_hw_destroy(struct si_screen *sscreen,
 			 struct r600_query *rquery);
 bool si_query_hw_begin(struct r600_common_context *rctx,
 		       struct r600_query *rquery);
@@ -292,7 +288,7 @@ struct r600_perfcounters {
 			  unsigned count, unsigned *selectors,
 			  struct r600_resource *buffer, uint64_t va);
 
-	void (*cleanup)(struct r600_common_screen *);
+	void (*cleanup)(struct si_screen *);
 
 	bool separate_se;
 	bool separate_instance;
@@ -302,15 +298,15 @@ struct pipe_query *si_create_batch_query(struct pipe_context *ctx,
 					 unsigned num_queries,
 					 unsigned *query_types);
 
-int si_get_perfcounter_info(struct r600_common_screen *,
+int si_get_perfcounter_info(struct si_screen *,
 			    unsigned index,
 			    struct pipe_driver_query_info *info);
-int si_get_perfcounter_group_info(struct r600_common_screen *,
+int si_get_perfcounter_group_info(struct si_screen *,
 				  unsigned index,
 				  struct pipe_driver_query_group_info *info);
 
 bool si_perfcounters_init(struct r600_perfcounters *, unsigned num_blocks);
-void si_perfcounters_add_block(struct r600_common_screen *,
+void si_perfcounters_add_block(struct si_screen *,
 			       struct r600_perfcounters *,
 			       const char *name, unsigned flags,
 			       unsigned counters, unsigned selectors,

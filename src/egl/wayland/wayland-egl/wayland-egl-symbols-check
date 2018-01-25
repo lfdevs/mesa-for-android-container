@@ -1,6 +1,14 @@
 #!/bin/sh
+set -eu
 
-FUNCS=$(nm -D --defined-only ${1-.libs/libwayland-egl.so} | grep -o "T .*" | cut -c 3- | while read func; do
+LIB=${1-.libs/libwayland-egl.so}
+
+if ! [ -f "$LIB" ]
+then
+  exit 1
+fi
+
+FUNCS=$(nm -D --defined-only $LIB | grep -o "T .*" | cut -c 3- | while read func; do
 ( grep -q "^$func$" || echo $func )  <<EOF
 wl_egl_window_resize
 wl_egl_window_create

@@ -57,6 +57,7 @@ mesa_dri_drivers_la_LDFLAGS = \
 	-module \
 	-no-undefined \
 	-avoid-version \
+	-Wl,--build-id=sha1 \
 	$(BSYMBOLIC) \
 	$(GC_SECTIONS) \
 	$(LD_NO_UNDEFINED)
@@ -70,6 +71,8 @@ mesa_dri_drivers_la_LIBADD = \
         $(MEGADRIVERS_DEPS) \
         $(DRI_LIB_DEPS) \
         $()
+
+EXTRA_DIST = meson.build
 
 if NEED_MEGADRIVER
 dri_LTLIBRARIES = mesa_dri_drivers.la

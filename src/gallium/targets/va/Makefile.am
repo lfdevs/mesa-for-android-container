@@ -39,7 +39,7 @@ gallium_drv_video_la_LIBADD += \
 endif
 
 EXTRA_gallium_drv_video_la_DEPENDENCIES = va.sym
-EXTRA_DIST = va.sym
+EXTRA_DIST = va.sym meson.build
 
 if HAVE_GALLIUM_STATIC_TARGETS
 

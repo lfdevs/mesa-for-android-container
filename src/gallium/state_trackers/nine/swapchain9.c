@@ -606,7 +606,7 @@ handle_draw_cursor_and_hud( struct NineSwapChain9 *This, struct pipe_resource *r
     if (device->hud && resource) {
         /* Implicit use of context pipe */
         (void)NineDevice9_GetPipe(This->base.device);
-        hud_draw(device->hud, resource); /* XXX: no offset */
+        hud_run(device->hud, NULL, resource); /* XXX: no offset */
         /* HUD doesn't clobber stipple */
         nine_state_restore_non_cso(device);
     }

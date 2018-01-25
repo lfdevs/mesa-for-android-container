@@ -35,6 +35,7 @@ AM_DISTCHECK_CONFIGURE_FLAGS = \
 	--enable-glx-tls \
 	--enable-nine \
 	--enable-opencl \
+	--enable-opencl-icd \
 	--enable-opengl \
 	--enable-va \
 	--enable-vdpau \
@@ -58,7 +59,12 @@ EXTRA_DIST = \
 	scons \
 	SConstruct \
 	build-support/conftest.dyn \
-	build-support/conftest.map
+	build-support/conftest.map \
+	meson.build \
+	meson_options.txt \
+	bin/meson.build \
+	include/meson.build \
+	bin/install_megadrivers.py
 
 noinst_HEADERS = \
 	include/c99_alloca.h \

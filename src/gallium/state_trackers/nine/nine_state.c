@@ -382,9 +382,6 @@ prepare_vs_constants_userbuf_swvp(struct NineDevice9 *device)
             cb.user_buffer = dst;
         }
 
-        /* Do not erase the buffer field.
-         * It is either NULL (user_cbufs), or a resource.
-         * u_upload_data will do the proper refcount */
         context->pipe_data.cb0_swvp.buffer_offset = cb.buffer_offset;
         context->pipe_data.cb0_swvp.buffer_size = cb.buffer_size;
         context->pipe_data.cb0_swvp.user_buffer = cb.user_buffer;
@@ -421,52 +418,6 @@ prepare_vs_constants_userbuf_swvp(struct NineDevice9 *device)
         context->pipe_data.cb3_swvp.buffer_size = cb.buffer_size;
         context->pipe_data.cb3_swvp.user_buffer = cb.user_buffer;
         context->changed.vs_const_b = 0;
-    }
-
-    if (!device->driver_caps.user_cbufs) {
-        struct pipe_constant_buffer *cb = &(context->pipe_data.cb0_swvp);
-        u_upload_data(device->context.pipe->const_uploader,
-                      0,
-                      cb->buffer_size,
-                      device->constbuf_alignment,
-                      cb->user_buffer,
-                      &(cb->buffer_offset),
-                      &(cb->buffer));
-        u_upload_unmap(device->context.pipe->const_uploader);
-        cb->user_buffer = NULL;
-
-        cb = &(context->pipe_data.cb1_swvp);
-        u_upload_data(device->context.pipe->const_uploader,
-                      0,
-                      cb->buffer_size,
-                      device->constbuf_alignment,
-                      cb->user_buffer,
-                      &(cb->buffer_offset),
-                      &(cb->buffer));
-        u_upload_unmap(device->context.pipe->const_uploader);
-        cb->user_buffer = NULL;
-
-        cb = &(context->pipe_data.cb2_swvp);
-        u_upload_data(device->context.pipe->const_uploader,
-                      0,
-                      cb->buffer_size,
-                      device->constbuf_alignment,
-                      cb->user_buffer,
-                      &(cb->buffer_offset),
-                      &(cb->buffer));
-        u_upload_unmap(device->context.pipe->const_uploader);
-        cb->user_buffer = NULL;
-
-        cb = &(context->pipe_data.cb3_swvp);
-        u_upload_data(device->context.pipe->const_uploader,
-                      0,
-                      cb->buffer_size,
-                      device->constbuf_alignment,
-                      cb->user_buffer,
-                      &(cb->buffer_offset),
-                      &(cb->buffer));
-        u_upload_unmap(device->context.pipe->const_uploader);
-        cb->user_buffer = NULL;
     }
 
     context->changed.group &= ~NINE_STATE_VS_CONST;
@@ -522,20 +473,7 @@ prepare_vs_constants_userbuf(struct NineDevice9 *device)
         cb.user_buffer = dst;
     }
 
-    if (!device->driver_caps.user_cbufs) {
-        context->pipe_data.cb_vs.buffer_size = cb.buffer_size;
-        u_upload_data(device->context.pipe->const_uploader,
-                      0,
-                      cb.buffer_size,
-                      device->constbuf_alignment,
-                      cb.user_buffer,
-                      &context->pipe_data.cb_vs.buffer_offset,
-                      &context->pipe_data.cb_vs.buffer);
-        u_upload_unmap(device->context.pipe->const_uploader);
-        context->pipe_data.cb_vs.user_buffer = NULL;
-    } else
-        context->pipe_data.cb_vs = cb;
-
+    context->pipe_data.cb_vs = cb;
     context->changed.vs_const_f = 0;
 
     context->changed.group &= ~NINE_STATE_VS_CONST;
@@ -593,20 +531,7 @@ prepare_ps_constants_userbuf(struct NineDevice9 *device)
     if (!cb.buffer_size)
         return;
 
-    if (!device->driver_caps.user_cbufs) {
-        context->pipe_data.cb_ps.buffer_size = cb.buffer_size;
-        u_upload_data(device->context.pipe->const_uploader,
-                      0,
-                      cb.buffer_size,
-                      device->constbuf_alignment,
-                      cb.user_buffer,
-                      &context->pipe_data.cb_ps.buffer_offset,
-                      &context->pipe_data.cb_ps.buffer);
-        u_upload_unmap(device->context.pipe->const_uploader);
-        context->pipe_data.cb_ps.user_buffer = NULL;
-    } else
-        context->pipe_data.cb_ps = cb;
-
+    context->pipe_data.cb_ps = cb;
     context->changed.ps_const_f = 0;
 
     context->changed.group &= ~NINE_STATE_PS_CONST;
@@ -3348,34 +3273,12 @@ update_vs_constants_sw(struct NineDevice9 *device)
         }
 
         buf = cb.user_buffer;
-        if (!device->driver_caps.user_sw_cbufs) {
-            u_upload_data(device->pipe_sw->const_uploader,
-                          0,
-                          cb.buffer_size,
-                          16,
-                          cb.user_buffer,
-                          &(cb.buffer_offset),
-                          &(cb.buffer));
-            u_upload_unmap(device->pipe_sw->const_uploader);
-            cb.user_buffer = NULL;
-        }
 
         pipe_sw->set_constant_buffer(pipe_sw, PIPE_SHADER_VERTEX, 0, &cb);
         if (cb.buffer)
             pipe_resource_reference(&cb.buffer, NULL);
 
         cb.user_buffer = (char *)buf + 4096 * sizeof(float[4]);
-        if (!device->driver_caps.user_sw_cbufs) {
-            u_upload_data(device->pipe_sw->const_uploader,
-                          0,
-                          cb.buffer_size,
-                          16,
-                          cb.user_buffer,
-                          &(cb.buffer_offset),
-                          &(cb.buffer));
-            u_upload_unmap(device->pipe_sw->const_uploader);
-            cb.user_buffer = NULL;
-        }
 
         pipe_sw->set_constant_buffer(pipe_sw, PIPE_SHADER_VERTEX, 1, &cb);
         if (cb.buffer)
@@ -3390,18 +3293,6 @@ update_vs_constants_sw(struct NineDevice9 *device)
         cb.buffer_size = 2048 * sizeof(float[4]);
         cb.user_buffer = state->vs_const_i;
 
-        if (!device->driver_caps.user_sw_cbufs) {
-            u_upload_data(device->pipe_sw->const_uploader,
-                          0,
-                          cb.buffer_size,
-                          16,
-                          cb.user_buffer,
-                          &(cb.buffer_offset),
-                          &(cb.buffer));
-            u_upload_unmap(device->pipe_sw->const_uploader);
-            cb.user_buffer = NULL;
-        }
-
         pipe_sw->set_constant_buffer(pipe_sw, PIPE_SHADER_VERTEX, 2, &cb);
         if (cb.buffer)
             pipe_resource_reference(&cb.buffer, NULL);
@@ -3414,18 +3305,6 @@ update_vs_constants_sw(struct NineDevice9 *device)
         cb.buffer_offset = 0;
         cb.buffer_size = 512 * sizeof(float[4]);
         cb.user_buffer = state->vs_const_b;
-
-        if (!device->driver_caps.user_sw_cbufs) {
-            u_upload_data(device->pipe_sw->const_uploader,
-                          0,
-                          cb.buffer_size,
-                          16,
-                          cb.user_buffer,
-                          &(cb.buffer_offset),
-                          &(cb.buffer));
-            u_upload_unmap(device->pipe_sw->const_uploader);
-            cb.user_buffer = NULL;
-        }
 
         pipe_sw->set_constant_buffer(pipe_sw, PIPE_SHADER_VERTEX, 3, &cb);
         if (cb.buffer)

@@ -31,7 +31,7 @@
 #include "pipe/p_defines.h"
 #include "pipe/p_state.h"
 
-#include "os/os_time.h"
+#include "util/os_time.h"
 
 #include "util/u_blitter.h"
 #include "util/list.h"
@@ -73,6 +73,7 @@ enum svga_hud {
    SVGA_QUERY_NUM_SURFACE_VIEWS,
    SVGA_QUERY_NUM_GENERATE_MIPMAP,
    SVGA_QUERY_NUM_FAILED_ALLOCATIONS,
+   SVGA_QUERY_NUM_COMMANDS_PER_DRAW,
 
 /*SVGA_QUERY_MAX has to be last because it is size of an array*/
    SVGA_QUERY_MAX
@@ -211,7 +212,7 @@ struct svga_sampler_state {
    unsigned view_min_lod;
    unsigned view_max_lod;
 
-   SVGA3dSamplerId id;
+   SVGA3dSamplerId id[2];
 };
 
 

@@ -352,6 +352,7 @@ compute_version(const struct gl_extensions *extensions,
                          extensions->ARB_transform_feedback_instanced);
    const bool ver_4_3 = (ver_4_2 &&
                          consts->GLSLVersion >= 430 &&
+                         consts->Program[MESA_SHADER_VERTEX].MaxUniformBlocks >= 14 &&
                          extensions->ARB_ES3_compatibility &&
                          extensions->ARB_arrays_of_arrays &&
                          extensions->ARB_compute_shader &&
@@ -515,7 +516,6 @@ compute_version_es2(const struct gl_extensions *extensions,
                          extensions->ARB_texture_float &&
                          extensions->ARB_texture_rg &&
                          extensions->ARB_depth_buffer_float &&
-                         extensions->EXT_draw_buffers2 &&
                          /* extensions->ARB_framebuffer_object && */
                          extensions->EXT_framebuffer_sRGB &&
                          extensions->EXT_packed_float &&
@@ -545,6 +545,7 @@ compute_version_es2(const struct gl_extensions *extensions,
                          extensions->ARB_gpu_shader5 &&
                          extensions->EXT_shader_integer_mix);
    const bool ver_3_2 = (ver_3_1 &&
+                         extensions->EXT_draw_buffers2 &&
                          extensions->KHR_blend_equation_advanced &&
                          extensions->KHR_robustness &&
                          extensions->KHR_texture_compression_astc_ldr &&

@@ -423,13 +423,7 @@ ImmediateValue::isNegative() const
 bool
 ImmediateValue::isPow2() const
 {
-   switch (reg.type) {
-   case TYPE_U8:
-   case TYPE_U16:
-   case TYPE_U32: return util_is_power_of_two(reg.data.u32);
-   default:
-      return false;
-   }
+   return util_is_power_of_two(reg.data.u32);
 }
 
 void

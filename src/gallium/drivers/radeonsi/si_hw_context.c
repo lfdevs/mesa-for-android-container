@@ -19,13 +19,12 @@
  * DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
  * USE OR OTHER DEALINGS IN THE SOFTWARE.
- *
- * Authors:
- *      Jerome Glisse
  */
 
 #include "si_pipe.h"
 #include "radeon/r600_cs.h"
+
+#include "util/os_time.h"
 
 void si_destroy_saved_cs(struct si_saved_cs *scs)
 {
@@ -54,7 +53,7 @@ void si_need_cs_space(struct si_context *ctx)
 						   ctx->b.vram, ctx->b.gtt))) {
 		ctx->b.gtt = 0;
 		ctx->b.vram = 0;
-		ctx->b.gfx.flush(ctx, RADEON_FLUSH_ASYNC, NULL);
+		ctx->b.gfx.flush(ctx, PIPE_FLUSH_ASYNC, NULL);
 		return;
 	}
 	ctx->b.gtt = 0;
@@ -64,7 +63,7 @@ void si_need_cs_space(struct si_context *ctx)
 	 * and just flush if there is not enough space left.
 	 */
 	if (!ctx->b.ws->cs_check_space(cs, 2048))
-		ctx->b.gfx.flush(ctx, RADEON_FLUSH_ASYNC, NULL);
+		ctx->b.gfx.flush(ctx, PIPE_FLUSH_ASYNC, NULL);
 }
 
 void si_context_gfx_flush(void *context, unsigned flags,
@@ -83,8 +82,8 @@ void si_context_gfx_flush(void *context, unsigned flags,
 	if (si_check_device_reset(&ctx->b))
 		return;
 
-	if (ctx->screen->b.debug_flags & DBG(CHECK_VM))
-		flags &= ~RADEON_FLUSH_ASYNC;
+	if (ctx->screen->debug_flags & DBG(CHECK_VM))
+		flags &= ~PIPE_FLUSH_ASYNC;
 
 	/* If the state tracker is flushing the GFX IB, r600_flush_from_st is
 	 * responsible for flushing the DMA IB and merging the fences from both.
@@ -98,7 +97,8 @@ void si_context_gfx_flush(void *context, unsigned flags,
 
 	ctx->gfx_flush_in_progress = true;
 
-	si_preflush_suspend_features(&ctx->b);
+	if (!LIST_IS_EMPTY(&ctx->b.active_queries))
+		si_suspend_queries(&ctx->b);
 
 	ctx->streamout.suspended = false;
 	if (ctx->streamout.begin_emitted) {
@@ -123,16 +123,20 @@ void si_context_gfx_flush(void *context, unsigned flags,
 		/* Save the IB for debug contexts. */
 		si_save_cs(ws, cs, &ctx->current_saved_cs->gfx, true);
 		ctx->current_saved_cs->flushed = true;
+		ctx->current_saved_cs->time_flush = os_time_get_nano();
 	}
 
 	/* Flush the CS. */
 	ws->cs_flush(cs, flags, &ctx->b.last_gfx_fence);
 	if (fence)
 		ws->fence_reference(fence, ctx->b.last_gfx_fence);
+
+	/* This must be after cs_flush returns, since the context's API
+	 * thread can concurrently read this value in si_fence_finish. */
 	ctx->b.num_gfx_cs_flushes++;
 
 	/* Check VM faults if needed. */
-	if (ctx->screen->b.debug_flags & DBG(CHECK_VM)) {
+	if (ctx->screen->debug_flags & DBG(CHECK_VM)) {
 		/* Use conservative timeout 800ms, after which we won't wait any
 		 * longer and assume the GPU is hung.
 		 */
@@ -188,7 +192,7 @@ void si_begin_new_cs(struct si_context *ctx)
 		ctx->b.flags |= SI_CONTEXT_INV_SMEM_L1 |
 				SI_CONTEXT_INV_ICACHE;
 
-	ctx->b.flags |= R600_CONTEXT_START_PIPELINE_STATS;
+	ctx->b.flags |= SI_CONTEXT_START_PIPELINE_STATS;
 
 	/* set all valid group as dirty so they get reemited on
 	 * next draw command
@@ -262,8 +266,8 @@ void si_begin_new_cs(struct si_context *ctx)
 
 	si_mark_atom_dirty(ctx, &ctx->scratch_state);
 	if (ctx->scratch_buffer) {
-		r600_context_add_resource_size(&ctx->b.b,
-					       &ctx->scratch_buffer->b.b);
+		si_context_add_resource_size(&ctx->b.b,
+					     &ctx->scratch_buffer->b.b);
 	}
 
 	if (ctx->streamout.suspended) {
@@ -271,7 +275,8 @@ void si_begin_new_cs(struct si_context *ctx)
 		si_streamout_buffers_dirty(ctx);
 	}
 
-	si_postflush_resume_features(&ctx->b);
+	if (!LIST_IS_EMPTY(&ctx->b.active_queries))
+		si_resume_queries(&ctx->b);
 
 	assert(!ctx->b.gfx.cs->prev_dw);
 	ctx->b.initial_gfx_cs_size = ctx->b.gfx.cs->current.cdw;

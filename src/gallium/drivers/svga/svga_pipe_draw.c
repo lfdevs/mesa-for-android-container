@@ -29,7 +29,6 @@
 #include "util/u_inlines.h"
 #include "util/u_prim.h"
 #include "util/u_prim_restart.h"
-#include "util/u_time.h"
 #include "util/u_upload_mgr.h"
 #include "indices/u_indices.h"
 

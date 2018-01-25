@@ -73,7 +73,10 @@ radv_meta_save(struct radv_meta_saved_state *state,
 	}
 
 	if (state->flags & RADV_META_SAVE_DESCRIPTORS) {
-		state->old_descriptor_set0 = cmd_buffer->state.descriptors[0];
+		if (cmd_buffer->state.valid_descriptors & (1 << 0))
+			state->old_descriptor_set0 = cmd_buffer->descriptors[0];
+		else
+			state->old_descriptor_set0 = NULL;
 	}
 
 	if (state->flags & RADV_META_SAVE_CONSTANTS) {
@@ -124,8 +127,7 @@ radv_meta_restore(const struct radv_meta_saved_state *state,
 	}
 
 	if (state->flags & RADV_META_SAVE_DESCRIPTORS) {
-		cmd_buffer->state.descriptors[0] = state->old_descriptor_set0;
-		cmd_buffer->state.descriptors_dirty |= (1 << 0);
+		radv_set_descriptor_set(cmd_buffer, state->old_descriptor_set0, 0);
 	}
 
 	if (state->flags & RADV_META_SAVE_CONSTANTS) {
@@ -145,7 +147,7 @@ radv_meta_restore(const struct radv_meta_saved_state *state,
 		cmd_buffer->state.attachments = state->attachments;
 		cmd_buffer->state.render_area = state->render_area;
 		if (state->subpass)
-			radv_emit_framebuffer_state(cmd_buffer);
+			cmd_buffer->state.dirty |= RADV_CMD_DIRTY_FRAMEBUFFER;
 	}
 }
 
@@ -377,9 +379,9 @@ fail_resolve_fragment:
 fail_resolve_compute:
 	radv_device_finish_meta_fast_clear_flush_state(device);
 fail_fast_clear:
-	radv_device_finish_meta_buffer_state(device);
-fail_query:
 	radv_device_finish_meta_query_state(device);
+fail_query:
+	radv_device_finish_meta_buffer_state(device);
 fail_buffer:
 	radv_device_finish_meta_depth_decomp_state(device);
 fail_depth_decomp:

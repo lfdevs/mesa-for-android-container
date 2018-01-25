@@ -85,7 +85,7 @@ os_malloc_aligned(size_t size, size_t alignment)
 
 
 /**
- * Free memory returned by align_malloc().
+ * Free memory returned by os_malloc_aligned().
  */
 static inline void
 os_free_aligned(void *ptr)

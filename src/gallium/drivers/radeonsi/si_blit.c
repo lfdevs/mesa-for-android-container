@@ -27,17 +27,7 @@
 #include "util/u_log.h"
 #include "util/u_surface.h"
 
-enum si_blitter_op /* bitmask */
-{
-	SI_SAVE_TEXTURES      = 1,
-	SI_SAVE_FRAMEBUFFER   = 2,
-	SI_SAVE_FRAGMENT_STATE = 4,
-	SI_DISABLE_RENDER_COND = 8,
-
-	SI_CLEAR         = SI_SAVE_FRAGMENT_STATE,
-
-	SI_CLEAR_SURFACE = SI_SAVE_FRAMEBUFFER | SI_SAVE_FRAGMENT_STATE,
-
+enum {
 	SI_COPY          = SI_SAVE_FRAMEBUFFER | SI_SAVE_TEXTURES |
 			   SI_SAVE_FRAGMENT_STATE | SI_DISABLE_RENDER_COND,
 
@@ -50,7 +40,7 @@ enum si_blitter_op /* bitmask */
 	SI_COLOR_RESOLVE = SI_SAVE_FRAMEBUFFER | SI_SAVE_FRAGMENT_STATE
 };
 
-static void si_blitter_begin(struct pipe_context *ctx, enum si_blitter_op op)
+void si_blitter_begin(struct pipe_context *ctx, enum si_blitter_op op)
 {
 	struct si_context *sctx = (struct si_context *)ctx;
 
@@ -87,7 +77,7 @@ static void si_blitter_begin(struct pipe_context *ctx, enum si_blitter_op op)
 		sctx->b.render_cond_force_off = true;
 }
 
-static void si_blitter_end(struct pipe_context *ctx)
+void si_blitter_end(struct pipe_context *ctx)
 {
 	struct si_context *sctx = (struct si_context *)ctx;
 
@@ -325,7 +315,7 @@ si_decompress_depth(struct si_context *sctx,
 		levels_z = level_mask & tex->dirty_level_mask;
 
 		if (levels_z) {
-			if (r600_can_sample_zs(tex, false))
+			if (si_can_sample_zs(tex, false))
 				inplace_planes |= PIPE_MASK_Z;
 			else
 				copy_planes |= PIPE_MASK_Z;
@@ -335,7 +325,7 @@ si_decompress_depth(struct si_context *sctx,
 		levels_s = level_mask & tex->stencil_dirty_level_mask;
 
 		if (levels_s) {
-			if (r600_can_sample_zs(tex, true))
+			if (si_can_sample_zs(tex, true))
 				inplace_planes |= PIPE_MASK_S;
 			else
 				copy_planes |= PIPE_MASK_S;
@@ -384,7 +374,7 @@ si_decompress_depth(struct si_context *sctx,
 	}
 
 	if (inplace_planes) {
-		bool has_htile = r600_htile_enabled(tex, first_level);
+		bool has_htile = si_htile_enabled(tex, first_level);
 		bool tc_compat_htile = vi_tc_compat_htile_enabled(tex, first_level);
 
 		/* Don't decompress if there is no HTILE or when HTILE is
@@ -782,7 +772,7 @@ void si_decompress_textures(struct si_context *sctx, unsigned shader_mask)
 		return;
 
 	/* Update the compressed_colortex_mask if necessary. */
-	compressed_colortex_counter = p_atomic_read(&sctx->screen->b.compressed_colortex_counter);
+	compressed_colortex_counter = p_atomic_read(&sctx->screen->compressed_colortex_counter);
 	if (compressed_colortex_counter != sctx->b.last_compressed_colortex_counter) {
 		sctx->b.last_compressed_colortex_counter = compressed_colortex_counter;
 		si_update_needs_color_decompress_masks(sctx);
@@ -817,155 +807,6 @@ void si_decompress_textures(struct si_context *sctx, unsigned shader_mask)
 	}
 
 	si_check_render_feedback(sctx);
-}
-
-static void si_clear(struct pipe_context *ctx, unsigned buffers,
-		     const union pipe_color_union *color,
-		     double depth, unsigned stencil)
-{
-	struct si_context *sctx = (struct si_context *)ctx;
-	struct pipe_framebuffer_state *fb = &sctx->framebuffer.state;
-	struct pipe_surface *zsbuf = fb->zsbuf;
-	struct r600_texture *zstex =
-		zsbuf ? (struct r600_texture*)zsbuf->texture : NULL;
-
-	if (buffers & PIPE_CLEAR_COLOR) {
-		si_do_fast_color_clear(&sctx->b, fb,
-					      &sctx->framebuffer.atom, &buffers,
-					      &sctx->framebuffer.dirty_cbufs,
-					      color);
-		if (!buffers)
-			return; /* all buffers have been fast cleared */
-	}
-
-	if (buffers & PIPE_CLEAR_COLOR) {
-		int i;
-
-		/* These buffers cannot use fast clear, make sure to disable expansion. */
-		for (i = 0; i < fb->nr_cbufs; i++) {
-			struct r600_texture *tex;
-
-			/* If not clearing this buffer, skip. */
-			if (!(buffers & (PIPE_CLEAR_COLOR0 << i)))
-				continue;
-
-			if (!fb->cbufs[i])
-				continue;
-
-			tex = (struct r600_texture *)fb->cbufs[i]->texture;
-			if (tex->fmask.size == 0)
-				tex->dirty_level_mask &= ~(1 << fb->cbufs[i]->u.tex.level);
-		}
-	}
-
-	if (zstex &&
-	    r600_htile_enabled(zstex, zsbuf->u.tex.level) &&
-	    zsbuf->u.tex.first_layer == 0 &&
-	    zsbuf->u.tex.last_layer == util_max_layer(&zstex->resource.b.b, 0)) {
-		/* TC-compatible HTILE only supports depth clears to 0 or 1. */
-		if (buffers & PIPE_CLEAR_DEPTH &&
-		    (!zstex->tc_compatible_htile ||
-		     depth == 0 || depth == 1)) {
-			/* Need to disable EXPCLEAR temporarily if clearing
-			 * to a new value. */
-			if (!zstex->depth_cleared || zstex->depth_clear_value != depth) {
-				sctx->db_depth_disable_expclear = true;
-			}
-
-			zstex->depth_clear_value = depth;
-			sctx->framebuffer.dirty_zsbuf = true;
-			si_mark_atom_dirty(sctx, &sctx->framebuffer.atom); /* updates DB_DEPTH_CLEAR */
-			sctx->db_depth_clear = true;
-			si_mark_atom_dirty(sctx, &sctx->db_render_state);
-		}
-
-		/* TC-compatible HTILE only supports stencil clears to 0. */
-		if (buffers & PIPE_CLEAR_STENCIL &&
-		    (!zstex->tc_compatible_htile || stencil == 0)) {
-			stencil &= 0xff;
-
-			/* Need to disable EXPCLEAR temporarily if clearing
-			 * to a new value. */
-			if (!zstex->stencil_cleared || zstex->stencil_clear_value != stencil) {
-				sctx->db_stencil_disable_expclear = true;
-			}
-
-			zstex->stencil_clear_value = stencil;
-			sctx->framebuffer.dirty_zsbuf = true;
-			si_mark_atom_dirty(sctx, &sctx->framebuffer.atom); /* updates DB_STENCIL_CLEAR */
-			sctx->db_stencil_clear = true;
-			si_mark_atom_dirty(sctx, &sctx->db_render_state);
-		}
-
-		/* TODO: Find out what's wrong here. Fast depth clear leads to
-		 * corruption in ARK: Survival Evolved, but that may just be
-		 * a coincidence and the root cause is elsewhere.
-		 *
-		 * The corruption can be fixed by putting the DB flush before
-		 * or after the depth clear. (surprisingly)
-		 *
-		 * https://bugs.freedesktop.org/show_bug.cgi?id=102955 (apitrace)
-		 *
-		 * This hack decreases back-to-back ClearDepth performance.
-		 */
-		if (sctx->screen->clear_db_cache_before_clear) {
-			sctx->b.flags |= SI_CONTEXT_FLUSH_AND_INV_DB;
-		}
-	}
-
-	si_blitter_begin(ctx, SI_CLEAR);
-	util_blitter_clear(sctx->blitter, fb->width, fb->height,
-			   util_framebuffer_get_num_layers(fb),
-			   buffers, color, depth, stencil);
-	si_blitter_end(ctx);
-
-	if (sctx->db_depth_clear) {
-		sctx->db_depth_clear = false;
-		sctx->db_depth_disable_expclear = false;
-		zstex->depth_cleared = true;
-		si_mark_atom_dirty(sctx, &sctx->db_render_state);
-	}
-
-	if (sctx->db_stencil_clear) {
-		sctx->db_stencil_clear = false;
-		sctx->db_stencil_disable_expclear = false;
-		zstex->stencil_cleared = true;
-		si_mark_atom_dirty(sctx, &sctx->db_render_state);
-	}
-}
-
-static void si_clear_render_target(struct pipe_context *ctx,
-				   struct pipe_surface *dst,
-				   const union pipe_color_union *color,
-				   unsigned dstx, unsigned dsty,
-				   unsigned width, unsigned height,
-				   bool render_condition_enabled)
-{
-	struct si_context *sctx = (struct si_context *)ctx;
-
-	si_blitter_begin(ctx, SI_CLEAR_SURFACE |
-			 (render_condition_enabled ? 0 : SI_DISABLE_RENDER_COND));
-	util_blitter_clear_render_target(sctx->blitter, dst, color,
-					 dstx, dsty, width, height);
-	si_blitter_end(ctx);
-}
-
-static void si_clear_depth_stencil(struct pipe_context *ctx,
-				   struct pipe_surface *dst,
-				   unsigned clear_flags,
-				   double depth,
-				   unsigned stencil,
-				   unsigned dstx, unsigned dsty,
-				   unsigned width, unsigned height,
-				   bool render_condition_enabled)
-{
-	struct si_context *sctx = (struct si_context *)ctx;
-
-	si_blitter_begin(ctx, SI_CLEAR_SURFACE |
-			 (render_condition_enabled ? 0 : SI_DISABLE_RENDER_COND));
-	util_blitter_clear_depth_stencil(sctx->blitter, dst, clear_flags, depth, stencil,
-					 dstx, dsty, width, height);
-	si_blitter_end(ctx);
 }
 
 /* Helper for decompressing a portion of a color or depth resource before
@@ -1300,7 +1141,7 @@ static bool do_hardware_msaa_resolve(struct pipe_context *ctx,
 			    info->dst.resource->last_level != 0)
 				goto resolve_to_temp;
 
-			vi_dcc_clear_level(&sctx->b, dst, info->dst.level,
+			vi_dcc_clear_level(sctx, dst, info->dst.level,
 					   0xFFFFFFFF);
 			dst->dirty_level_mask &= ~(1 << info->dst.level);
 		}
@@ -1399,7 +1240,7 @@ static void si_blit(struct pipe_context *ctx,
 				  info->src.box.z,
 				  info->src.box.z + info->src.box.depth - 1);
 
-	if (sctx->screen->b.debug_flags & DBG(FORCE_DMA) &&
+	if (sctx->screen->debug_flags & DBG(FORCE_DMA) &&
 	    util_try_blit_via_copy_region(ctx, info))
 		return;
 
@@ -1482,72 +1323,8 @@ static void si_decompress_dcc(struct pipe_context *ctx,
 				 true);
 }
 
-static void si_pipe_clear_buffer(struct pipe_context *ctx,
-				 struct pipe_resource *dst,
-				 unsigned offset, unsigned size,
-				 const void *clear_value_ptr,
-				 int clear_value_size)
-{
-	struct si_context *sctx = (struct si_context*)ctx;
-	uint32_t dword_value;
-	unsigned i;
-
-	assert(offset % clear_value_size == 0);
-	assert(size % clear_value_size == 0);
-
-	if (clear_value_size > 4) {
-		const uint32_t *u32 = clear_value_ptr;
-		bool clear_dword_duplicated = true;
-
-		/* See if we can lower large fills to dword fills. */
-		for (i = 1; i < clear_value_size / 4; i++)
-			if (u32[0] != u32[i]) {
-				clear_dword_duplicated = false;
-				break;
-			}
-
-		if (!clear_dword_duplicated) {
-			/* Use transform feedback for 64-bit, 96-bit, and
-			 * 128-bit fills.
-			 */
-			union pipe_color_union clear_value;
-
-			memcpy(&clear_value, clear_value_ptr, clear_value_size);
-			si_blitter_begin(ctx, SI_DISABLE_RENDER_COND);
-			util_blitter_clear_buffer(sctx->blitter, dst, offset,
-						  size, clear_value_size / 4,
-						  &clear_value);
-			si_blitter_end(ctx);
-			return;
-		}
-	}
-
-	/* Expand the clear value to a dword. */
-	switch (clear_value_size) {
-	case 1:
-		dword_value = *(uint8_t*)clear_value_ptr;
-		dword_value |= (dword_value << 8) |
-			       (dword_value << 16) |
-			       (dword_value << 24);
-		break;
-	case 2:
-		dword_value = *(uint16_t*)clear_value_ptr;
-		dword_value |= dword_value << 16;
-		break;
-	default:
-		dword_value = *(uint32_t*)clear_value_ptr;
-	}
-
-	sctx->b.clear_buffer(ctx, dst, offset, size, dword_value,
-			     R600_COHERENCY_SHADER);
-}
-
 void si_init_blit_functions(struct si_context *sctx)
 {
-	sctx->b.b.clear = si_clear;
-	sctx->b.b.clear_buffer = si_pipe_clear_buffer;
-	sctx->b.b.clear_render_target = si_clear_render_target;
-	sctx->b.b.clear_depth_stencil = si_clear_depth_stencil;
 	sctx->b.b.resource_copy_region = si_resource_copy_region;
 	sctx->b.b.blit = si_blit;
 	sctx->b.b.flush_resource = si_flush_resource;

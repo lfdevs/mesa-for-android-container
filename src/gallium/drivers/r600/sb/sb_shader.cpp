@@ -91,6 +91,7 @@ cf_node* shader::create_clause(node_subtype nst) {
 	case NST_ALU_CLAUSE: n->bc.set_op(CF_OP_ALU); break;
 	case NST_TEX_CLAUSE: n->bc.set_op(CF_OP_TEX); break;
 	case NST_VTX_CLAUSE: n->bc.set_op(CF_OP_VTX); break;
+	case NST_GDS_CLAUSE: n->bc.set_op(CF_OP_GDS); break;
 	default: assert(!"invalid clause type"); break;
 	}
 
@@ -597,6 +598,8 @@ sched_queue_id shader::get_queue_id(node* n) {
 			fetch_node *f = static_cast<fetch_node*>(n);
 			if (ctx.is_r600() && (f->bc.op_ptr->flags & FF_VTX))
 				return SQ_VTX;
+			if (f->bc.op_ptr->flags & FF_GDS)
+				return SQ_GDS;
 			return SQ_TEX;
 		}
 		case NST_CF_INST:

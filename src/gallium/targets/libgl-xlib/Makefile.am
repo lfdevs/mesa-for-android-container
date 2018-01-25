@@ -20,10 +20,6 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-GL_MAJOR = 1
-GL_MINOR = 5
-GL_TINY = $(MESA_MAJOR)$(MESA_MINOR)0$(MESA_TINY)
-
 if HAVE_SHARED_GLAPI
 SHARED_GLAPI_LIB = $(top_builddir)/src/mapi/shared-glapi/libglapi.la
 endif
@@ -51,7 +47,7 @@ nodist_EXTRA_lib@GL_LIB@_la_SOURCES = dummy.cpp
 lib@GL_LIB@_la_SOURCES = xlib.c
 lib@GL_LIB@_la_LDFLAGS = \
 	-no-undefined \
-	-version-number $(GL_MAJOR):$(GL_MINOR):$(GL_TINY) \
+	-version-number 1:5:0 \
 	$(BSYMBOLIC) \
 	$(GC_SECTIONS) \
 	$(LD_NO_UNDEFINED)
@@ -87,6 +83,6 @@ AM_CPPFLAGS += -DGALLIUM_SWR
 endif
 
 EXTRA_lib@GL_LIB@_la_DEPENDENCIES = libgl-xlib.sym
-EXTRA_DIST = SConscript libgl-xlib.sym
+EXTRA_DIST = SConscript libgl-xlib.sym meson.build
 
 include $(top_srcdir)/install-gallium-links.mk

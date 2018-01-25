@@ -39,7 +39,7 @@ libomx_mesa_la_LIBADD += \
 endif
 
 EXTRA_libomx_mesa_la_DEPENDENCIES = omx.sym
-EXTRA_DIST = omx.sym
+EXTRA_DIST = omx.sym meson.build
 
 if HAVE_GALLIUM_STATIC_TARGETS
 

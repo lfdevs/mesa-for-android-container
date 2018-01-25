@@ -35,6 +35,59 @@
 
 #include "vk_util.h"
 
+#if GEN_GEN == 10
+/**
+ * From Gen10 Workarounds page in h/w specs:
+ * WaSampleOffsetIZ:
+ *    "Prior to the 3DSTATE_SAMPLE_PATTERN driver must ensure there are no
+ *     markers in the pipeline by programming a PIPE_CONTROL with stall."
+ */
+static void
+gen10_emit_wa_cs_stall_flush(struct anv_batch *batch)
+{
+
+   anv_batch_emit(batch, GENX(PIPE_CONTROL), pc) {
+      pc.CommandStreamerStallEnable = true;
+      pc.StallAtPixelScoreboard = true;
+   }
+}
+
+/**
+ * From Gen10 Workarounds page in h/w specs:
+ * WaSampleOffsetIZ:_cs_stall_flush
+ *    "When 3DSTATE_SAMPLE_PATTERN is programmed, driver must then issue an
+ *     MI_LOAD_REGISTER_IMM command to an offset between 0x7000 and 0x7FFF(SVL)
+ *     after the command to ensure the state has been delivered prior to any
+ *     command causing a marker in the pipeline."
+ */
+static void
+gen10_emit_wa_lri_to_cache_mode_zero(struct anv_batch *batch)
+{
+   /* Before changing the value of CACHE_MODE_0 register, GFX pipeline must
+    * be idle; i.e., full flush is required.
+    */
+   anv_batch_emit(batch, GENX(PIPE_CONTROL), pc) {
+      pc.DepthCacheFlushEnable = true;
+      pc.DCFlushEnable = true;
+      pc.RenderTargetCacheFlushEnable = true;
+      pc.InstructionCacheInvalidateEnable = true;
+      pc.StateCacheInvalidationEnable = true;
+      pc.TextureCacheInvalidationEnable = true;
+      pc.VFCacheInvalidationEnable = true;
+      pc.ConstantCacheInvalidationEnable =true;
+   }
+
+   /* Write to CACHE_MODE_0 (0x7000) */
+   uint32_t cache_mode_0 = 0;
+   anv_pack_struct(&cache_mode_0, GENX(CACHE_MODE_0));
+
+   anv_batch_emit(batch, GENX(MI_LOAD_REGISTER_IMM), lri) {
+      lri.RegisterOffset = GENX(CACHE_MODE_0_num);
+      lri.DataDWord      = cache_mode_0;
+   }
+}
+#endif
+
 VkResult
 genX(init_device_state)(struct anv_device *device)
 {
@@ -68,6 +121,18 @@ genX(init_device_state)(struct anv_device *device)
    }
 #endif
 
+#if GEN_GEN == 10
+   uint32_t cache_mode_ss;
+   anv_pack_struct(&cache_mode_ss, GENX(CACHE_MODE_SS),
+                   .FloatBlendOptimizationEnable = true,
+                   .FloatBlendOptimizationEnableMask = true);
+
+   anv_batch_emit(&batch, GENX(MI_LOAD_REGISTER_IMM), lri) {
+      lri.RegisterOffset = GENX(CACHE_MODE_SS_num);
+      lri.DataDWord      = cache_mode_ss;
+   }
+#endif
+
    anv_batch_emit(&batch, GENX(3DSTATE_AA_LINE_PARAMETERS), aa);
 
    anv_batch_emit(&batch, GENX(3DSTATE_DRAWING_RECTANGLE), rect) {
@@ -82,6 +147,10 @@ genX(init_device_state)(struct anv_device *device)
 #if GEN_GEN >= 8
    anv_batch_emit(&batch, GENX(3DSTATE_WM_CHROMAKEY), ck);
 
+#if GEN_GEN == 10
+   gen10_emit_wa_cs_stall_flush(&batch);
+#endif
+
    /* See the Vulkan 1.0 spec Table 24.1 "Standard sample locations" and
     * VkPhysicalDeviceFeatures::standardSampleLocations.
     */
@@ -94,6 +163,10 @@ genX(init_device_state)(struct anv_device *device)
       GEN_SAMPLE_POS_16X(sp._16xSample);
 #endif
    }
+#endif
+
+#if GEN_GEN == 10
+   gen10_emit_wa_lri_to_cache_mode_zero(&batch);
 #endif
 
    anv_batch_emit(&batch, GENX(MI_BATCH_BUFFER_END), bbe);

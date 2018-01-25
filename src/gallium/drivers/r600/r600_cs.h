@@ -108,7 +108,7 @@ radeon_add_to_buffer_list_check_mem(struct r600_common_context *rctx,
 	    !radeon_cs_memory_below_limit(rctx->screen, ring->cs,
 					  rctx->vram + rbo->vram_usage,
 					  rctx->gtt + rbo->gart_usage))
-		ring->flush(rctx, RADEON_FLUSH_ASYNC, NULL);
+		ring->flush(rctx, PIPE_FLUSH_ASYNC, NULL);
 
 	return radeon_add_to_buffer_list(rctx, ring, rbo, usage, priority);
 }

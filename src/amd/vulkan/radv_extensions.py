@@ -50,9 +50,13 @@ class Extension:
 # the those extension strings, then tests dEQP-VK.api.info.instance.extensions
 # and dEQP-VK.api.info.device fail due to the duplicated strings.
 EXTENSIONS = [
+    Extension('VK_ANDROID_native_buffer',                 5, 'ANDROID && device->rad_info.has_syncobj_wait_for_submit'),
     Extension('VK_KHR_bind_memory2',                      1, True),
     Extension('VK_KHR_dedicated_allocation',              1, True),
     Extension('VK_KHR_descriptor_update_template',        1, True),
+    Extension('VK_KHR_external_fence',                    1, 'device->rad_info.has_syncobj_wait_for_submit'),
+    Extension('VK_KHR_external_fence_capabilities',       1, True),
+    Extension('VK_KHR_external_fence_fd',                 1, 'device->rad_info.has_syncobj_wait_for_submit'),
     Extension('VK_KHR_external_memory',                   1, True),
     Extension('VK_KHR_external_memory_capabilities',      1, True),
     Extension('VK_KHR_external_memory_fd',                1, True),
@@ -61,6 +65,7 @@ EXTENSIONS = [
     Extension('VK_KHR_external_semaphore_fd',             1, 'device->rad_info.has_syncobj'),
     Extension('VK_KHR_get_memory_requirements2',          1, True),
     Extension('VK_KHR_get_physical_device_properties2',   1, True),
+    Extension('VK_KHR_get_surface_capabilities2',         1, True),
     Extension('VK_KHR_image_format_list',                 1, True),
     Extension('VK_KHR_incremental_present',               1, True),
     Extension('VK_KHR_maintenance1',                      1, True),
@@ -77,9 +82,13 @@ EXTENSIONS = [
     Extension('VK_KHR_xcb_surface',                       6, 'VK_USE_PLATFORM_XCB_KHR'),
     Extension('VK_KHR_xlib_surface',                      6, 'VK_USE_PLATFORM_XLIB_KHR'),
     Extension('VK_KHX_multiview',                         1, True),
+    Extension('VK_EXT_debug_report',                      9, True),
+    Extension('VK_EXT_discard_rectangles',                1, True),
+    Extension('VK_EXT_external_memory_dma_buf',           1, True),
     Extension('VK_EXT_global_priority',                   1, 'device->rad_info.has_ctx_priority'),
     Extension('VK_AMD_draw_indirect_count',               1, True),
     Extension('VK_AMD_rasterization_order',               1, 'device->rad_info.chip_class >= VI && device->rad_info.max_se >= 2'),
+    Extension('VK_AMD_shader_info',                       1, True),
 ]
 
 class VkVersion:

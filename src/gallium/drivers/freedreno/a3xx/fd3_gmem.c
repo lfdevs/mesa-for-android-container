@@ -78,7 +78,7 @@ emit_mrt(struct fd_ringbuffer *ring, unsigned nr_bufs,
 			 */
 			if (rsc->stencil) {
 				rsc = rsc->stencil;
-				pformat = rsc->base.b.format;
+				pformat = rsc->base.format;
 				if (bases)
 					bases++;
 			}
@@ -324,7 +324,7 @@ emit_gmem2mem_surf(struct fd_batch *batch,
 	enum pipe_format format = psurf->format;
 	if (stencil) {
 		rsc = rsc->stencil;
-		format = rsc->base.b.format;
+		format = rsc->base.format;
 	}
 	struct fd_resource_slice *slice = fd_resource_slice(rsc, psurf->u.tex.level);
 	uint32_t offset = fd_resource_offset(rsc, psurf->u.tex.level,
@@ -778,7 +778,7 @@ update_vsc_pipe(struct fd_batch *batch)
 	OUT_RELOCW(ring, fd3_ctx->vsc_size_mem, 0, 0, 0); /* VSC_SIZE_ADDRESS */
 
 	for (i = 0; i < 8; i++) {
-		struct fd_vsc_pipe *pipe = &ctx->pipe[i];
+		struct fd_vsc_pipe *pipe = &ctx->vsc_pipe[i];
 
 		if (!pipe->bo) {
 			pipe->bo = fd_bo_new(ctx->dev, 0x40000,
@@ -1011,7 +1011,7 @@ fd3_emit_tile_renderprep(struct fd_batch *batch, struct fd_tile *tile)
 	}
 
 	if (use_hw_binning(batch)) {
-		struct fd_vsc_pipe *pipe = &ctx->pipe[tile->p];
+		struct fd_vsc_pipe *pipe = &ctx->vsc_pipe[tile->p];
 
 		assert(pipe->w * pipe->h);
 

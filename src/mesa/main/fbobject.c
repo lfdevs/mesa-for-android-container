@@ -89,9 +89,9 @@ delete_dummy_framebuffer(struct gl_framebuffer *fb)
 void
 _mesa_init_fbobjects(struct gl_context *ctx)
 {
-   mtx_init(&DummyFramebuffer.Mutex, mtx_plain);
-   mtx_init(&DummyRenderbuffer.Mutex, mtx_plain);
-   mtx_init(&IncompleteFramebuffer.Mutex, mtx_plain);
+   simple_mtx_init(&DummyFramebuffer.Mutex, mtx_plain);
+   simple_mtx_init(&DummyRenderbuffer.Mutex, mtx_plain);
+   simple_mtx_init(&IncompleteFramebuffer.Mutex, mtx_plain);
    DummyFramebuffer.Delete = delete_dummy_framebuffer;
    DummyRenderbuffer.Delete = delete_dummy_renderbuffer;
    IncompleteFramebuffer.Delete = delete_dummy_framebuffer;
@@ -558,7 +558,7 @@ _mesa_FramebufferRenderbuffer_sw(struct gl_context *ctx,
 {
    struct gl_renderbuffer_attachment *att;
 
-   mtx_lock(&fb->Mutex);
+   simple_mtx_lock(&fb->Mutex);
 
    att = get_attachment(ctx, fb, attachment, NULL);
    assert(att);
@@ -584,7 +584,7 @@ _mesa_FramebufferRenderbuffer_sw(struct gl_context *ctx,
 
    invalidate_framebuffer(fb);
 
-   mtx_unlock(&fb->Mutex);
+   simple_mtx_unlock(&fb->Mutex);
 }
 
 
@@ -793,7 +793,7 @@ test_attachment_completeness(const struct gl_context *ctx, GLenum format,
    /* Look for reasons why the attachment might be incomplete */
    if (att->Type == GL_TEXTURE) {
       const struct gl_texture_object *texObj = att->Texture;
-      struct gl_texture_image *texImage;
+      const struct gl_texture_image *texImage;
       GLenum baseFormat;
 
       if (!texObj) {
@@ -1804,7 +1804,7 @@ _mesa_CreateRenderbuffers(GLsizei n, GLuint *renderbuffers)
  * \return the base internal format, or 0 if internalFormat is illegal
  */
 GLenum
-_mesa_base_fbo_format(struct gl_context *ctx, GLenum internalFormat)
+_mesa_base_fbo_format(const struct gl_context *ctx, GLenum internalFormat)
 {
    /*
     * Notes: some formats such as alpha, luminance, etc. were added
@@ -3189,8 +3189,7 @@ check_layer(struct gl_context *ctx, GLenum target, GLint layer,
     *     and layer is negative."
     */
    if (layer < 0) {
-      _mesa_error(ctx, GL_INVALID_VALUE,
-                  "%s(layer %u < 0)", caller, layer);
+      _mesa_error(ctx, GL_INVALID_VALUE, "%s(layer %d < 0)", caller, layer);
       return false;
    }
 
@@ -3296,7 +3295,7 @@ _mesa_framebuffer_texture(struct gl_context *ctx, struct gl_framebuffer *fb,
 {
    FLUSH_VERTICES(ctx, _NEW_BUFFERS);
 
-   mtx_lock(&fb->Mutex);
+   simple_mtx_lock(&fb->Mutex);
    if (texObj) {
       if (attachment == GL_DEPTH_ATTACHMENT &&
           texObj == fb->Attachment[BUFFER_STENCIL].Texture &&
@@ -3355,7 +3354,7 @@ _mesa_framebuffer_texture(struct gl_context *ctx, struct gl_framebuffer *fb,
 
    invalidate_framebuffer(fb);
 
-   mtx_unlock(&fb->Mutex);
+   simple_mtx_unlock(&fb->Mutex);
 }
 
 

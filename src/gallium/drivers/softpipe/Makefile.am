@@ -31,4 +31,4 @@ noinst_LTLIBRARIES = libsoftpipe.la
 
 libsoftpipe_la_SOURCES = $(C_SOURCES)
 
-EXTRA_DIST = SConscript
+EXTRA_DIST = SConscript meson.build

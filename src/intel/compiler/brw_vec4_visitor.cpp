@@ -584,8 +584,11 @@ type_size_xvec4(const struct glsl_type *type, bool as_vec4)
    case GLSL_TYPE_UINT:
    case GLSL_TYPE_INT:
    case GLSL_TYPE_FLOAT:
+   case GLSL_TYPE_FLOAT16:
    case GLSL_TYPE_BOOL:
    case GLSL_TYPE_DOUBLE:
+   case GLSL_TYPE_UINT16:
+   case GLSL_TYPE_INT16:
    case GLSL_TYPE_UINT64:
    case GLSL_TYPE_INT64:
       if (type->is_matrix()) {
@@ -1881,10 +1884,6 @@ vec4_visitor::vec4_visitor(const struct brw_compiler *compiler,
    this->max_grf = devinfo->gen >= 7 ? GEN7_MRF_HACK_START : BRW_MAX_GRF;
 
    this->uniforms = 0;
-}
-
-vec4_visitor::~vec4_visitor()
-{
 }
 
 

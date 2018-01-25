@@ -19,11 +19,6 @@
  * DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
  * USE OR OTHER DEALINGS IN THE SOFTWARE.
- *
- * Authors:
- *	Tom Stellard <thomas.stellard@amd.com>
- *	Michel Dänzer <michel.daenzer@amd.com>
- *      Christian König <christian.koenig@amd.com>
  */
 
 /* The compiler middle-end architecture: Explaining (non-)monolithic shaders
@@ -341,12 +336,15 @@ struct si_shader_selector {
 	/* PIPE_SHADER_[VERTEX|FRAGMENT|...] */
 	unsigned	type;
 	bool		vs_needs_prolog;
+	bool		force_correct_derivs_after_kill;
 	unsigned	pa_cl_vs_out_cntl;
 	ubyte		clipdist_mask;
 	ubyte		culldist_mask;
 
-	/* GS parameters. */
+	/* ES parameters. */
 	unsigned	esgs_itemsize;
+
+	/* GS parameters. */
 	unsigned	gs_input_verts_per_prim;
 	unsigned	gs_output_prim;
 	unsigned	gs_max_out_vertices;
@@ -595,7 +593,7 @@ struct si_shader {
 	struct r600_resource		*bo;
 	struct r600_resource		*scratch_bo;
 	struct si_shader_key		key;
-	struct util_queue_fence		optimized_ready;
+	struct util_queue_fence		ready;
 	bool				compilation_failed;
 	bool				is_monolithic;
 	bool				is_optimized;
@@ -649,13 +647,14 @@ void si_shader_apply_scratch_relocs(struct si_shader *shader,
 void si_shader_binary_read_config(struct ac_shader_binary *binary,
 				  struct si_shader_config *conf,
 				  unsigned symbol_offset);
-unsigned si_get_spi_shader_z_format(bool writes_z, bool writes_stencil,
-				    bool writes_samplemask);
 const char *si_get_shader_name(const struct si_shader *shader, unsigned processor);
 
 /* si_shader_nir.c */
 void si_nir_scan_shader(const struct nir_shader *nir,
 			struct tgsi_shader_info *info);
+void si_nir_scan_tess_ctrl(const struct nir_shader *nir,
+			   const struct tgsi_shader_info *info,
+			   struct tgsi_tessctrl_info *out);
 void si_lower_nir(struct si_shader_selector *sel);
 
 /* Inline helpers. */

@@ -67,6 +67,7 @@ legalize_block(struct ir3_legalize_ctx *ctx, struct ir3_block *block)
 {
 	struct ir3_instruction *last_input = NULL;
 	struct ir3_instruction *last_rel = NULL;
+	struct ir3_instruction *last_n = NULL;
 	struct list_head instr_list;
 	regmask_t needs_ss_war;       /* write after read */
 	regmask_t needs_ss;
@@ -94,6 +95,9 @@ legalize_block(struct ir3_legalize_ctx *ctx, struct ir3_block *block)
 			assert(inloc->flags & IR3_REG_IMMED);
 			ctx->max_bary = MAX2(ctx->max_bary, inloc->iim_val);
 		}
+
+		if (last_n && is_barrier(last_n))
+			n->flags |= IR3_INSTR_SS | IR3_INSTR_SY;
 
 		/* NOTE: consider dst register too.. it could happen that
 		 * texture sample instruction (for example) writes some
@@ -183,23 +187,31 @@ legalize_block(struct ir3_legalize_ctx *ctx, struct ir3_block *block)
 			 */
 			ctx->has_samp = true;
 			regmask_set(&needs_sy, n->regs[0]);
+		} else if (n->opc == OPC_RESINFO) {
+			regmask_set(&needs_ss, n->regs[0]);
+			ir3_NOP(block)->flags |= IR3_INSTR_SS;
 		} else if (is_load(n)) {
 			/* seems like ldlv needs (ss) bit instead??  which is odd but
 			 * makes a bunch of flat-varying tests start working on a4xx.
 			 */
-			if (n->opc == OPC_LDLV)
+			if ((n->opc == OPC_LDLV) || (n->opc == OPC_LDL))
 				regmask_set(&needs_ss, n->regs[0]);
 			else
 				regmask_set(&needs_sy, n->regs[0]);
+		} else if (is_atomic(n->opc)) {
+			if (n->flags & IR3_INSTR_G)
+				regmask_set(&needs_sy, n->regs[0]);
+			else
+				regmask_set(&needs_ss, n->regs[0]);
 		}
 
-		if ((n->opc == OPC_LDGB) || (n->opc == OPC_STGB) || is_atomic(n->opc))
+		if (is_ssbo(n->opc) || (is_atomic(n->opc) && (n->flags & IR3_INSTR_G)))
 			ctx->has_ssbo = true;
 
 		/* both tex/sfu appear to not always immediately consume
 		 * their src register(s):
 		 */
-		if (is_tex(n) || is_sfu(n) || is_load(n)) {
+		if (is_tex(n) || is_sfu(n) || is_mem(n)) {
 			foreach_src(reg, n) {
 				if (reg_gpr(reg))
 					regmask_set(&needs_ss_war, reg);
@@ -208,6 +220,8 @@ legalize_block(struct ir3_legalize_ctx *ctx, struct ir3_block *block)
 
 		if (is_input(n))
 			last_input = n;
+
+		last_n = n;
 	}
 
 	if (last_input) {

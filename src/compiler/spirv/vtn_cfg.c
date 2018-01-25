@@ -24,13 +24,28 @@
 #include "vtn_private.h"
 #include "nir/nir_vla.h"
 
+static struct vtn_pointer *
+vtn_pointer_for_image_or_sampler_variable(struct vtn_builder *b,
+                                          struct vtn_variable *var)
+{
+   assert(var->type->base_type == vtn_base_type_image ||
+          var->type->base_type == vtn_base_type_sampler);
+
+   struct vtn_type *ptr_type = rzalloc(b, struct vtn_type);
+   ptr_type->base_type = vtn_base_type_pointer;
+   ptr_type->storage_class = SpvStorageClassUniformConstant;
+   ptr_type->deref = var->type;
+
+   return vtn_pointer_for_variable(b, var, ptr_type);
+}
+
 static bool
 vtn_cfg_handle_prepass_instruction(struct vtn_builder *b, SpvOp opcode,
                                    const uint32_t *w, unsigned count)
 {
    switch (opcode) {
    case SpvOpFunction: {
-      assert(b->func == NULL);
+      vtn_assert(b->func == NULL);
       b->func = rzalloc(b, struct vtn_function);
 
       list_inithead(&b->func->body);
@@ -44,24 +59,38 @@ vtn_cfg_handle_prepass_instruction(struct vtn_builder *b, SpvOp opcode,
       const struct vtn_type *func_type =
          vtn_value(b, w[4], vtn_value_type_type)->type;
 
-      assert(func_type->return_type->type == result_type);
+      vtn_assert(func_type->return_type->type == result_type);
 
       nir_function *func =
          nir_function_create(b->shader, ralloc_strdup(b->shader, val->name));
 
       func->num_params = func_type->length;
       func->params = ralloc_array(b->shader, nir_parameter, func->num_params);
-      for (unsigned i = 0; i < func->num_params; i++) {
+      unsigned np = 0;
+      for (unsigned i = 0; i < func_type->length; i++) {
          if (func_type->params[i]->base_type == vtn_base_type_pointer &&
              func_type->params[i]->type == NULL) {
-            func->params[i].type = func_type->params[i]->deref->type;
+            func->params[np].type = func_type->params[i]->deref->type;
+            func->params[np].param_type = nir_parameter_inout;
+            np++;
+         } else if (func_type->params[i]->base_type ==
+                    vtn_base_type_sampled_image) {
+            /* Sampled images are actually two parameters */
+            func->params = reralloc(b->shader, func->params,
+                                    nir_parameter, func->num_params++);
+            func->params[np].type = func_type->params[i]->type;
+            func->params[np].param_type = nir_parameter_in;
+            np++;
+            func->params[np].type = glsl_bare_sampler_type();
+            func->params[np].param_type = nir_parameter_in;
+            np++;
          } else {
-            func->params[i].type = func_type->params[i]->type;
+            func->params[np].type = func_type->params[i]->type;
+            func->params[np].param_type = nir_parameter_in;
+            np++;
          }
-
-         /* TODO: We could do something smarter here. */
-         func->params[i].param_type = nir_parameter_inout;
       }
+      assert(np == func->num_params);
 
       func->return_type = func_type->return_type->type;
 
@@ -80,7 +109,7 @@ vtn_cfg_handle_prepass_instruction(struct vtn_builder *b, SpvOp opcode,
    case SpvOpFunctionParameter: {
       struct vtn_type *type = vtn_value(b, w[1], vtn_value_type_type)->type;
 
-      assert(b->func_param_idx < b->func->impl->num_params);
+      vtn_assert(b->func_param_idx < b->func->impl->num_params);
       nir_variable *param = b->func->impl->params[b->func_param_idx++];
 
       if (type->base_type == vtn_base_type_pointer && type->type == NULL) {
@@ -88,7 +117,7 @@ vtn_cfg_handle_prepass_instruction(struct vtn_builder *b, SpvOp opcode,
          vtn_var->type = type->deref;
          vtn_var->var = param;
 
-         assert(vtn_var->type->type == param->type);
+         vtn_assert(vtn_var->type->type == param->type);
 
          struct vtn_type *without_array = vtn_var->type;
          while(glsl_type_is_array(without_array->type))
@@ -111,6 +140,53 @@ vtn_cfg_handle_prepass_instruction(struct vtn_builder *b, SpvOp opcode,
          param->name = ralloc_strdup(param, val->name);
 
          val->pointer = vtn_pointer_for_variable(b, vtn_var, type);
+      } else if (type->base_type == vtn_base_type_image ||
+                 type->base_type == vtn_base_type_sampler ||
+                 type->base_type == vtn_base_type_sampled_image) {
+         struct vtn_variable *vtn_var = rzalloc(b, struct vtn_variable);
+         vtn_var->type = type;
+         vtn_var->var = param;
+         param->interface_type = param->type;
+
+         if (type->base_type == vtn_base_type_sampled_image) {
+            /* Sampled images are actually two parameters.  The first is the
+             * image and the second is the sampler.
+             */
+            struct vtn_value *val =
+               vtn_push_value(b, w[2], vtn_value_type_sampled_image);
+
+            /* Name the parameter so it shows up nicely in NIR */
+            param->name = ralloc_strdup(param, val->name);
+
+            /* Adjust the type of the image variable to the image type */
+            vtn_var->type = type->image;
+
+            /* Now get the sampler parameter and set up its variable */
+            param = b->func->impl->params[b->func_param_idx++];
+            struct vtn_variable *sampler_var = rzalloc(b, struct vtn_variable);
+            sampler_var->type = rzalloc(b, struct vtn_type);
+            sampler_var->type->base_type = vtn_base_type_sampler;
+            sampler_var->type->type = glsl_bare_sampler_type();
+            sampler_var->var = param;
+            param->interface_type = param->type;
+            param->name = ralloc_strdup(param, val->name);
+
+            val->sampled_image = ralloc(b, struct vtn_sampled_image);
+            val->sampled_image->type = type;
+            val->sampled_image->image =
+               vtn_pointer_for_image_or_sampler_variable(b, vtn_var);
+            val->sampled_image->sampler =
+               vtn_pointer_for_image_or_sampler_variable(b, sampler_var);
+         } else {
+            struct vtn_value *val =
+               vtn_push_value(b, w[2], vtn_value_type_pointer);
+
+            /* Name the parameter so it shows up nicely in NIR */
+            param->name = ralloc_strdup(param, val->name);
+
+            val->pointer =
+               vtn_pointer_for_image_or_sampler_variable(b, vtn_var);
+         }
       } else {
          /* We're a regular SSA value. */
          struct vtn_ssa_value *param_ssa =
@@ -124,7 +200,7 @@ vtn_cfg_handle_prepass_instruction(struct vtn_builder *b, SpvOp opcode,
    }
 
    case SpvOpLabel: {
-      assert(b->block == NULL);
+      vtn_assert(b->block == NULL);
       b->block = rzalloc(b, struct vtn_block);
       b->block->node.type = vtn_cf_node_type_block;
       b->block->label = w;
@@ -143,7 +219,7 @@ vtn_cfg_handle_prepass_instruction(struct vtn_builder *b, SpvOp opcode,
 
    case SpvOpSelectionMerge:
    case SpvOpLoopMerge:
-      assert(b->block && b->block->merge == NULL);
+      vtn_assert(b->block && b->block->merge == NULL);
       b->block->merge = w;
       break;
 
@@ -154,7 +230,7 @@ vtn_cfg_handle_prepass_instruction(struct vtn_builder *b, SpvOp opcode,
    case SpvOpReturn:
    case SpvOpReturnValue:
    case SpvOpUnreachable:
-      assert(b->block && b->block->branch == NULL);
+      vtn_assert(b->block && b->block->branch == NULL);
       b->block->branch = w;
       b->block = NULL;
       break;
@@ -170,7 +246,7 @@ vtn_cfg_handle_prepass_instruction(struct vtn_builder *b, SpvOp opcode,
 static void
 vtn_add_case(struct vtn_builder *b, struct vtn_switch *swtch,
              struct vtn_block *break_block,
-             uint32_t block_id, uint32_t val, bool is_default)
+             uint32_t block_id, uint64_t val, bool is_default)
 {
    struct vtn_block *case_block =
       vtn_value(b, block_id, vtn_value_type_block)->block;
@@ -197,7 +273,7 @@ vtn_add_case(struct vtn_builder *b, struct vtn_switch *swtch,
    if (is_default) {
       case_block->switch_case->is_default = true;
    } else {
-      util_dynarray_append(&case_block->switch_case->values, uint32_t, val);
+      util_dynarray_append(&case_block->switch_case->values, uint64_t, val);
    }
 }
 
@@ -231,14 +307,15 @@ vtn_order_case(struct vtn_switch *swtch, struct vtn_case *cse)
 }
 
 static enum vtn_branch_type
-vtn_get_branch_type(struct vtn_block *block,
+vtn_get_branch_type(struct vtn_builder *b,
+                    struct vtn_block *block,
                     struct vtn_case *swcase, struct vtn_block *switch_break,
                     struct vtn_block *loop_break, struct vtn_block *loop_cont)
 {
    if (block->switch_case) {
       /* This branch is actually a fallthrough */
-      assert(swcase->fallthrough == NULL ||
-             swcase->fallthrough == block->switch_case);
+      vtn_assert(swcase->fallthrough == NULL ||
+                 swcase->fallthrough == block->switch_case);
       swcase->fallthrough = block->switch_case;
       return vtn_branch_type_switch_fallthrough;
    } else if (block == loop_break) {
@@ -301,7 +378,7 @@ vtn_cfg_walk_blocks(struct vtn_builder *b, struct list_head *cf_list,
          continue;
       }
 
-      assert(block->node.link.next == NULL);
+      vtn_assert(block->node.link.next == NULL);
       list_addtail(&block->node.link, cf_list);
 
       switch (*block->branch & SpvOpCodeMask) {
@@ -309,7 +386,7 @@ vtn_cfg_walk_blocks(struct vtn_builder *b, struct list_head *cf_list,
          struct vtn_block *branch_block =
             vtn_value(b, block->branch[1], vtn_value_type_block)->block;
 
-         block->branch_type = vtn_get_branch_type(branch_block,
+         block->branch_type = vtn_get_branch_type(b, branch_block,
                                                   switch_case, switch_break,
                                                   loop_break, loop_cont);
 
@@ -349,10 +426,10 @@ vtn_cfg_walk_blocks(struct vtn_builder *b, struct list_head *cf_list,
             if_stmt->control = block->merge[2];
          }
 
-         if_stmt->then_type = vtn_get_branch_type(then_block,
+         if_stmt->then_type = vtn_get_branch_type(b, then_block,
                                                   switch_case, switch_break,
                                                   loop_break, loop_cont);
-         if_stmt->else_type = vtn_get_branch_type(else_block,
+         if_stmt->else_type = vtn_get_branch_type(b, else_block,
                                                   switch_case, switch_break,
                                                   loop_break, loop_cont);
 
@@ -367,7 +444,7 @@ vtn_cfg_walk_blocks(struct vtn_builder *b, struct list_head *cf_list,
          } else if (if_stmt->then_type == vtn_branch_type_none &&
                     if_stmt->else_type == vtn_branch_type_none) {
             /* Neither side of the if is something we can short-circuit. */
-            assert((*block->merge & SpvOpCodeMask) == SpvOpSelectionMerge);
+            vtn_assert((*block->merge & SpvOpCodeMask) == SpvOpSelectionMerge);
             struct vtn_block *merge_block =
                vtn_value(b, block->merge[1], vtn_value_type_block)->block;
 
@@ -379,7 +456,7 @@ vtn_cfg_walk_blocks(struct vtn_builder *b, struct list_head *cf_list,
                                 loop_break, loop_cont, merge_block);
 
             enum vtn_branch_type merge_type =
-               vtn_get_branch_type(merge_block, switch_case, switch_break,
+               vtn_get_branch_type(b, merge_block, switch_case, switch_break,
                                    loop_break, loop_cont);
             if (merge_type == vtn_branch_type_none) {
                block = merge_block;
@@ -404,11 +481,11 @@ vtn_cfg_walk_blocks(struct vtn_builder *b, struct list_head *cf_list,
             }
             continue;
          }
-         unreachable("Should have returned or continued");
+         vtn_fail("Should have returned or continued");
       }
 
       case SpvOpSwitch: {
-         assert((*block->merge & SpvOpCodeMask) == SpvOpSelectionMerge);
+         vtn_assert((*block->merge & SpvOpCodeMask) == SpvOpSelectionMerge);
          struct vtn_block *break_block =
             vtn_value(b, block->merge[1], vtn_value_type_block)->block;
 
@@ -424,16 +501,43 @@ vtn_cfg_walk_blocks(struct vtn_builder *b, struct list_head *cf_list,
          const uint32_t *branch_end =
             block->branch + (block->branch[0] >> SpvWordCountShift);
 
-         vtn_add_case(b, swtch, break_block, block->branch[2], 0, true);
-         for (const uint32_t *w = block->branch + 3; w < branch_end; w += 2)
-            vtn_add_case(b, swtch, break_block, w[1], w[0], false);
+         struct vtn_value *cond_val = vtn_untyped_value(b, block->branch[1]);
+         vtn_fail_if(!cond_val->type ||
+                     cond_val->type->base_type != vtn_base_type_scalar,
+                     "Selector of OpSelect must have a type of OpTypeInt");
+
+         nir_alu_type cond_type =
+            nir_get_nir_type_for_glsl_type(cond_val->type->type);
+         vtn_fail_if(nir_alu_type_get_base_type(cond_type) != nir_type_int &&
+                     nir_alu_type_get_base_type(cond_type) != nir_type_uint,
+                     "Selector of OpSelect must have a type of OpTypeInt");
+
+         bool is_default = true;
+         const uint bitsize = nir_alu_type_get_type_size(cond_type);
+         for (const uint32_t *w = block->branch + 2; w < branch_end;) {
+            uint64_t literal = 0;
+            if (!is_default) {
+               if (bitsize <= 32) {
+                  literal = *(w++);
+               } else {
+                  assert(bitsize == 64);
+                  literal = vtn_u64_literal(w);
+                  w += 2;
+               }
+            }
+
+            uint32_t block_id = *(w++);
+
+            vtn_add_case(b, swtch, break_block, block_id, literal, is_default);
+            is_default = false;
+         }
 
          /* Now, we go through and walk the blocks.  While we walk through
           * the blocks, we also gather the much-needed fall-through
           * information.
           */
          list_for_each_entry(struct vtn_case, cse, &swtch->cases, link) {
-            assert(cse->start_block != break_block);
+            vtn_assert(cse->start_block != break_block);
             vtn_cfg_walk_blocks(b, &cse->body, cse->start_block, cse,
                                 break_block, loop_break, loop_cont, NULL);
          }
@@ -441,20 +545,27 @@ vtn_cfg_walk_blocks(struct vtn_builder *b, struct list_head *cf_list,
          /* Finally, we walk over all of the cases one more time and put
           * them in fall-through order.
           */
-         for (const uint32_t *w = block->branch + 2; w < branch_end; w += 2) {
+         for (const uint32_t *w = block->branch + 2; w < branch_end;) {
             struct vtn_block *case_block =
                vtn_value(b, *w, vtn_value_type_block)->block;
+
+            if (bitsize <= 32) {
+               w += 2;
+            } else {
+               assert(bitsize == 64);
+               w += 3;
+            }
 
             if (case_block == break_block)
                continue;
 
-            assert(case_block->switch_case);
+            vtn_assert(case_block->switch_case);
 
             vtn_order_case(swtch, case_block->switch_case);
          }
 
          enum vtn_branch_type branch_type =
-            vtn_get_branch_type(break_block, switch_case, NULL,
+            vtn_get_branch_type(b, break_block, switch_case, NULL,
                                 loop_break, loop_cont);
 
          if (branch_type != vtn_branch_type_none) {
@@ -462,7 +573,7 @@ vtn_cfg_walk_blocks(struct vtn_builder *b, struct list_head *cf_list,
              * for the containing loop.  In this case, we need to bail and let
              * the loop parsing code handle the continue properly.
              */
-            assert(branch_type == vtn_branch_type_loop_continue);
+            vtn_assert(branch_type == vtn_branch_type_loop_continue);
             return;
          }
 
@@ -474,7 +585,7 @@ vtn_cfg_walk_blocks(struct vtn_builder *b, struct list_head *cf_list,
          return;
 
       default:
-         unreachable("Unhandled opcode");
+         vtn_fail("Unhandled opcode");
       }
    }
 }
@@ -532,7 +643,7 @@ vtn_handle_phi_second_pass(struct vtn_builder *b, SpvOp opcode,
       return true;
 
    struct hash_entry *phi_entry = _mesa_hash_table_search(b->phi_table, w);
-   assert(phi_entry);
+   vtn_assert(phi_entry);
    nir_variable *phi_var = phi_entry->data;
 
    for (unsigned i = 3; i < count; i += 2) {
@@ -576,7 +687,7 @@ vtn_emit_branch(struct vtn_builder *b, enum vtn_branch_type branch_type,
       break;
    }
    default:
-      unreachable("Invalid branch type");
+      vtn_fail("Invalid branch type");
    }
 }
 
@@ -606,7 +717,7 @@ vtn_emit_cf_list(struct vtn_builder *b, struct list_head *cf_list,
          if ((*block->branch & SpvOpCodeMask) == SpvOpReturnValue) {
             struct vtn_ssa_value *src = vtn_ssa_value(b, block->branch[1]);
             vtn_local_store(b, src,
-                            nir_deref_var_create(b, b->impl->return_var));
+                            nir_deref_var_create(b, b->nb.impl->return_var));
          }
 
          if (block->branch_type != vtn_branch_type_none) {
@@ -718,9 +829,9 @@ vtn_emit_cf_list(struct vtn_builder *b, struct list_head *cf_list,
             }
 
             nir_ssa_def *cond = NULL;
-            util_dynarray_foreach(&cse->values, uint32_t, val) {
-               nir_ssa_def *is_val =
-                  nir_ieq(&b->nb, sel, nir_imm_int(&b->nb, *val));
+            util_dynarray_foreach(&cse->values, uint64_t, val) {
+               nir_ssa_def *imm = nir_imm_intN_t(&b->nb, *val, sel->bit_size);
+               nir_ssa_def *is_val = nir_ieq(&b->nb, sel, imm);
 
                cond = cond ? nir_ior(&b->nb, cond, is_val) : is_val;
             }
@@ -728,7 +839,7 @@ vtn_emit_cf_list(struct vtn_builder *b, struct list_head *cf_list,
             any = any ? nir_ior(&b->nb, any, cond) : cond;
             conditions[i++] = cond;
          }
-         assert(i == num_cases);
+         vtn_assert(i == num_cases);
 
          /* Now we can walk the list of cases and actually emit code */
          i = 0;
@@ -736,7 +847,7 @@ vtn_emit_cf_list(struct vtn_builder *b, struct list_head *cf_list,
             /* Figure out the condition */
             nir_ssa_def *cond = conditions[i++];
             if (cse->is_default) {
-               assert(cond == NULL);
+               vtn_assert(cond == NULL);
                cond = nir_inot(&b->nb, any);
             }
             /* Take fallthrough into account */
@@ -751,13 +862,13 @@ vtn_emit_cf_list(struct vtn_builder *b, struct list_head *cf_list,
 
             nir_pop_if(&b->nb, case_if);
          }
-         assert(i == num_cases);
+         vtn_assert(i == num_cases);
 
          break;
       }
 
       default:
-         unreachable("Invalid CF node type");
+         vtn_fail("Invalid CF node type");
       }
    }
 }
@@ -783,4 +894,6 @@ vtn_function_emit(struct vtn_builder *b, struct vtn_function *func,
     */
    if (b->has_loop_continue)
       nir_repair_ssa_impl(func->impl);
+
+   func->emitted = true;
 }

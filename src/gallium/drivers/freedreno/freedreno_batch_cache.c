@@ -134,11 +134,12 @@ fd_bc_flush(struct fd_batch_cache *cache, struct fd_context *ctx)
 
 	hash_table_foreach(cache->ht, entry) {
 		struct fd_batch *batch = NULL;
+		/* hold a reference since we can drop screen->lock: */
 		fd_batch_reference_locked(&batch, (struct fd_batch *)entry->data);
 		if (batch->ctx == ctx) {
 			mtx_unlock(&ctx->screen->lock);
 			fd_batch_reference(&last_batch, batch);
-			fd_batch_flush(batch, false);
+			fd_batch_flush(batch, false, false);
 			mtx_lock(&ctx->screen->lock);
 		}
 		fd_batch_reference_locked(&batch, NULL);
@@ -150,6 +151,30 @@ fd_bc_flush(struct fd_batch_cache *cache, struct fd_context *ctx)
 		fd_batch_sync(last_batch);
 		fd_batch_reference(&last_batch, NULL);
 	}
+}
+
+/* deferred flush doesn't actually flush, but it marks every other
+ * batch associated with the context as dependent on the current
+ * batch.  So when the current batch gets flushed, all other batches
+ * that came before also get flushed.
+ */
+void
+fd_bc_flush_deferred(struct fd_batch_cache *cache, struct fd_context *ctx)
+{
+	struct fd_batch *current_batch = ctx->batch;
+	struct hash_entry *entry;
+
+	mtx_lock(&ctx->screen->lock);
+
+	hash_table_foreach(cache->ht, entry) {
+		struct fd_batch *batch = entry->data;
+		if (batch == current_batch)
+			continue;
+		if (batch->ctx == ctx)
+			fd_batch_add_dep(current_batch, batch);
+	}
+
+	mtx_unlock(&ctx->screen->lock);
 }
 
 void
@@ -204,7 +229,7 @@ fd_bc_invalidate_batch(struct fd_batch *batch, bool destroy)
 void
 fd_bc_invalidate_resource(struct fd_resource *rsc, bool destroy)
 {
-	struct fd_screen *screen = fd_screen(rsc->base.b.screen);
+	struct fd_screen *screen = fd_screen(rsc->base.screen);
 	struct fd_batch *batch;
 
 	mtx_lock(&screen->lock);
@@ -265,7 +290,7 @@ fd_bc_alloc_batch(struct fd_batch_cache *cache, struct fd_context *ctx)
 		 */
 		mtx_unlock(&ctx->screen->lock);
 		DBG("%p: too many batches!  flush forced!", flush_batch);
-		fd_batch_flush(flush_batch, true);
+		fd_batch_flush(flush_batch, true, false);
 		mtx_lock(&ctx->screen->lock);
 
 		/* While the resources get cleaned up automatically, the flush_batch
@@ -291,7 +316,7 @@ fd_bc_alloc_batch(struct fd_batch_cache *cache, struct fd_context *ctx)
 
 	idx--;              /* bit zero returns 1 for ffs() */
 
-	batch = fd_batch_create(ctx);
+	batch = fd_batch_create(ctx, false);
 	if (!batch)
 		goto out;
 

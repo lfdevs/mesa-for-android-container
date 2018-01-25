@@ -126,7 +126,7 @@ CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 libvulkan_util_la_LIBADD =
 am__dirstamp = $(am__leading_dot)dirstamp
-am__objects_1 = util/vk_util.lo
+am__objects_1 = util/vk_debug_report.lo util/vk_util.lo
 am__objects_2 = util/vk_enum_to_str.lo
 am__objects_3 = $(am__objects_1) $(am__objects_2)
 am_libvulkan_util_la_OBJECTS = $(am__objects_3)
@@ -136,12 +136,12 @@ am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
 am__v_lt_1 = 
 libvulkan_wsi_la_LIBADD =
-am__libvulkan_wsi_la_SOURCES_DIST = wsi/wsi_common.h \
-	wsi/wsi_common_queue.h wsi/wsi_common_x11.c \
-	wsi/wsi_common_x11.h wsi/wsi_common_wayland.c \
-	wsi/wsi_common_wayland.h wsi/wayland-drm-protocol.c \
-	wsi/wayland-drm-client-protocol.h
-am__objects_4 =
+am__libvulkan_wsi_la_SOURCES_DIST = wsi/wsi_common.c wsi/wsi_common.h \
+	wsi/wsi_common_private.h wsi/wsi_common_queue.h \
+	wsi/wsi_common_x11.c wsi/wsi_common_x11.h \
+	wsi/wsi_common_wayland.c wsi/wsi_common_wayland.h \
+	wsi/wayland-drm-protocol.c wsi/wayland-drm-client-protocol.h
+am__objects_4 = wsi/wsi_common.lo
 am__objects_5 = wsi/wsi_common_x11.lo
 @HAVE_PLATFORM_X11_TRUE@am__objects_6 = $(am__objects_5)
 am__objects_7 = wsi/wsi_common_wayland.lo
@@ -240,6 +240,7 @@ CLOVER_STD_OVERRIDE = @CLOVER_STD_OVERRIDE@
 CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
 CXX = @CXX@
+CXX11_CXXFLAGS = @CXX11_CXXFLAGS@
 CXXCPP = @CXXCPP@
 CXXDEPMODE = @CXXDEPMODE@
 CXXFLAGS = @CXXFLAGS@
@@ -343,7 +344,7 @@ MSVC2013_COMPAT_CFLAGS = @MSVC2013_COMPAT_CFLAGS@
 MSVC2013_COMPAT_CXXFLAGS = @MSVC2013_COMPAT_CXXFLAGS@
 NINE_MAJOR = @NINE_MAJOR@
 NINE_MINOR = @NINE_MINOR@
-NINE_TINY = @NINE_TINY@
+NINE_PATCH = @NINE_PATCH@
 NINE_VERSION = @NINE_VERSION@
 NM = @NM@
 NMEDIT = @NMEDIT@
@@ -399,7 +400,6 @@ SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
 SWR_AVX2_CXXFLAGS = @SWR_AVX2_CXXFLAGS@
 SWR_AVX_CXXFLAGS = @SWR_AVX_CXXFLAGS@
-SWR_CXX11_CXXFLAGS = @SWR_CXX11_CXXFLAGS@
 SWR_KNL_CXXFLAGS = @SWR_KNL_CXXFLAGS@
 SWR_SKX_CXXFLAGS = @SWR_SKX_CXXFLAGS@
 VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
@@ -434,7 +434,7 @@ WNO_OVERRIDE_INIT = @WNO_OVERRIDE_INIT@
 X11_INCLUDES = @X11_INCLUDES@
 XA_MAJOR = @XA_MAJOR@
 XA_MINOR = @XA_MINOR@
-XA_TINY = @XA_TINY@
+XA_PATCH = @XA_PATCH@
 XA_VERSION = @XA_VERSION@
 XCB_DRI2_CFLAGS = @XCB_DRI2_CFLAGS@
 XCB_DRI2_LIBS = @XCB_DRI2_LIBS@
@@ -501,7 +501,6 @@ pdfdir = @pdfdir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
-runstatedir = @runstatedir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
@@ -515,7 +514,9 @@ top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 VULKAN_WSI_FILES := \
+	wsi/wsi_common.c \
 	wsi/wsi_common.h \
+	wsi/wsi_common_private.h \
 	wsi/wsi_common_queue.h
 
 VULKAN_WSI_WAYLAND_FILES := \
@@ -532,6 +533,8 @@ VULKAN_WSI_X11_FILES := \
 
 VULKAN_UTIL_FILES := \
 	util/vk_alloc.h \
+	util/vk_debug_report.c \
+	util/vk_debug_report.h \
 	util/vk_util.c \
 	util/vk_util.h
 
@@ -547,7 +550,10 @@ MKDIR_GEN = $(AM_V_at)$(MKDIR_P) $(@D)
 PYTHON_GEN = $(AM_V_GEN)$(PYTHON2) $(PYTHON_FLAGS)
 EXTRA_DIST = \
 	$(top_srcdir)/include/vulkan/vk_android_native_buffer.h \
-	util/gen_enum_to_str.py
+	util/gen_enum_to_str.py \
+	util/meson.build \
+	wsi/meson.build \
+	meson.build
 
 VULKAN_UTIL_SOURCES = \
 	$(VULKAN_UTIL_FILES) \
@@ -622,6 +628,8 @@ util/$(am__dirstamp):
 util/$(DEPDIR)/$(am__dirstamp):
 	@$(MKDIR_P) util/$(DEPDIR)
 	@: > util/$(DEPDIR)/$(am__dirstamp)
+util/vk_debug_report.lo: util/$(am__dirstamp) \
+	util/$(DEPDIR)/$(am__dirstamp)
 util/vk_util.lo: util/$(am__dirstamp) util/$(DEPDIR)/$(am__dirstamp)
 util/vk_enum_to_str.lo: util/$(am__dirstamp) \
 	util/$(DEPDIR)/$(am__dirstamp)
@@ -634,6 +642,7 @@ wsi/$(am__dirstamp):
 wsi/$(DEPDIR)/$(am__dirstamp):
 	@$(MKDIR_P) wsi/$(DEPDIR)
 	@: > wsi/$(DEPDIR)/$(am__dirstamp)
+wsi/wsi_common.lo: wsi/$(am__dirstamp) wsi/$(DEPDIR)/$(am__dirstamp)
 wsi/wsi_common_x11.lo: wsi/$(am__dirstamp) \
 	wsi/$(DEPDIR)/$(am__dirstamp)
 wsi/wsi_common_wayland.lo: wsi/$(am__dirstamp) \
@@ -654,9 +663,11 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
+@AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/vk_debug_report.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/vk_enum_to_str.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/vk_util.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@wsi/$(DEPDIR)/wayland-drm-protocol.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@wsi/$(DEPDIR)/wsi_common.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@wsi/$(DEPDIR)/wsi_common_wayland.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@wsi/$(DEPDIR)/wsi_common_x11.Plo@am__quote@
 

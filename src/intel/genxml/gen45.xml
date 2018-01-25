@@ -1162,7 +1162,7 @@
 
   <instruction name="PIPELINE_SELECT" bias="1" length="1">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
-    <field name="Command SubType" start="27" end="28" type="uint" default="0"/>
+    <field name="Command SubType" start="27" end="28" type="uint" default="1"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="1"/>
     <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="4"/>
     <field name="Pipeline Selection" start="0" end="1" type="uint">

@@ -79,7 +79,7 @@ brw_compile_clip(const struct brw_compiler *compiler,
       unreachable("not reached");
    }
 
-   brw_compact_instructions(&c.func, 0, 0, NULL);
+   brw_compact_instructions(&c.func, 0, NULL);
 
    *prog_data = c.prog_data;
 

@@ -753,7 +753,7 @@ NineAdapter9_GetDeviceCaps( struct NineAdapter9 *This,
         D3DSTENCILCAPS_INVERT |
         D3DSTENCILCAPS_INCR |
         D3DSTENCILCAPS_DECR |
-        D3DPIPECAP(TWO_SIDED_STENCIL, D3DSTENCILCAPS_TWOSIDED);
+        D3DSTENCILCAPS_TWOSIDED;
 
     pCaps->FVFCaps =
         8 | /* 8 textures max */

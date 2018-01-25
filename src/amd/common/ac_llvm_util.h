@@ -57,7 +57,18 @@ enum ac_func_attr {
 enum ac_target_machine_options {
 	AC_TM_SUPPORTS_SPILL = (1 << 0),
 	AC_TM_SISCHED = (1 << 1),
+	AC_TM_FORCE_ENABLE_XNACK = (1 << 2),
+	AC_TM_FORCE_DISABLE_XNACK = (1 << 3),
+	AC_TM_PROMOTE_ALLOCA_TO_SCRATCH = (1 << 4),
 };
+
+enum ac_float_mode {
+	AC_FLOAT_MODE_DEFAULT,
+	AC_FLOAT_MODE_NO_SIGNED_ZEROS_FP_MATH,
+	AC_FLOAT_MODE_UNSAFE_FP_MATH,
+};
+
+const char *ac_get_llvm_processor_name(enum radeon_family family);
 LLVMTargetMachineRef ac_create_target_machine(enum radeon_family family, enum ac_target_machine_options tm_options);
 
 LLVMTargetRef ac_get_llvm_target(const char *triple);
@@ -72,9 +83,30 @@ void ac_dump_module(LLVMModuleRef module);
 LLVMValueRef ac_llvm_get_called_value(LLVMValueRef call);
 bool ac_llvm_is_function(LLVMValueRef v);
 
+LLVMBuilderRef ac_create_builder(LLVMContextRef ctx,
+				 enum ac_float_mode float_mode);
+
 void
 ac_llvm_add_target_dep_function_attr(LLVMValueRef F,
 				     const char *name, int value);
+
+static inline unsigned
+ac_get_load_intr_attribs(bool can_speculate)
+{
+	/* READNONE means writes can't affect it, while READONLY means that
+	 * writes can affect it. */
+	return can_speculate && HAVE_LLVM >= 0x0400 ?
+				 AC_FUNC_ATTR_READNONE :
+				 AC_FUNC_ATTR_READONLY;
+}
+
+static inline unsigned
+ac_get_store_intr_attribs(bool writeonly_memory)
+{
+	return writeonly_memory && HAVE_LLVM >= 0x0400 ?
+				  AC_FUNC_ATTR_INACCESSIBLE_MEM_ONLY :
+				  AC_FUNC_ATTR_WRITEONLY;
+}
 
 #ifdef __cplusplus
 }

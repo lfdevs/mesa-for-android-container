@@ -25,17 +25,12 @@
  *
  **************************************************************************/
 
-/*
- * Authors:
- *      Christian König <christian.koenig@amd.com>
- *
- */
-
 #include "si_pipe.h"
 #include "radeon/radeon_video.h"
 #include "radeon/radeon_uvd.h"
 #include "radeon/radeon_vce.h"
 #include "radeon/radeon_vcn_dec.h"
+#include "radeon/radeon_vcn_enc.h"
 
 /**
  * creates an video buffer with an UVD compatible memory layout
@@ -117,7 +112,7 @@ static struct pb_buffer* si_uvd_set_dtb(struct ruvd_msg *msg, struct vl_video_bu
 	struct si_screen *sscreen = (struct si_screen*)buf->base.context->screen;
 	struct r600_texture *luma = (struct r600_texture *)buf->resources[0];
 	struct r600_texture *chroma = (struct r600_texture *)buf->resources[1];
-	enum ruvd_surface_type type =  (sscreen->b.chip_class >= GFX9) ?
+	enum ruvd_surface_type type =  (sscreen->info.chip_class >= GFX9) ?
 					RUVD_SURFACE_TYPE_GFX9 :
 					RUVD_SURFACE_TYPE_LEGACY;
 
@@ -152,7 +147,8 @@ struct pipe_video_codec *si_uvd_create_decoder(struct pipe_context *context,
 	bool vcn = (ctx->b.family == CHIP_RAVEN) ? true : false;
 
 	if (templ->entrypoint == PIPE_VIDEO_ENTRYPOINT_ENCODE)
-		return si_vce_create_encoder(context, templ, ctx->b.ws, si_vce_get_buffer);
+		return (vcn) ? radeon_create_encoder(context, templ, ctx->b.ws, si_vce_get_buffer) :
+               si_vce_create_encoder(context, templ, ctx->b.ws, si_vce_get_buffer);
 
 	return (vcn) ? 	radeon_create_decoder(context, templ) :
 		si_common_uvd_create_decoder(context, templ, si_uvd_set_dtb);

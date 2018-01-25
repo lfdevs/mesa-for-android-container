@@ -112,12 +112,11 @@ brw_codegen_gs_prog(struct brw_context *brw,
       start_time = get_time();
    }
 
-   unsigned program_size;
    char *error_str;
    const unsigned *program =
       brw_compile_gs(brw->screen->compiler, brw, mem_ctx, key,
                      &prog_data, gp->program.nir, &gp->program,
-                     st_index, &program_size, &error_str);
+                     st_index, &error_str);
    if (program == NULL) {
       ralloc_strcat(&gp->program.sh.data->InfoLog, error_str);
       _mesa_problem(NULL, "Failed to compile geometry shader: %s\n", error_str);
@@ -139,15 +138,14 @@ brw_codegen_gs_prog(struct brw_context *brw,
 
    /* Scratch space is used for register spilling */
    brw_alloc_stage_scratch(brw, stage_state,
-                           prog_data.base.base.total_scratch,
-                           devinfo->max_gs_threads);
+                           prog_data.base.base.total_scratch);
 
    /* The param and pull_param arrays will be freed by the shader cache. */
    ralloc_steal(NULL, prog_data.base.base.param);
    ralloc_steal(NULL, prog_data.base.base.pull_param);
    brw_upload_cache(&brw->cache, BRW_CACHE_GS_PROG,
                     key, sizeof(*key),
-                    program, program_size,
+                    program, prog_data.base.base.program_size,
                     &prog_data, sizeof(prog_data),
                     &stage_state->prog_offset, &brw->gs.base.prog_data);
    ralloc_free(mem_ctx);
@@ -194,14 +192,20 @@ brw_upload_gs_prog(struct brw_context *brw)
 
    brw_gs_populate_key(brw, &key);
 
-   if (!brw_search_cache(&brw->cache, BRW_CACHE_GS_PROG,
-                         &key, sizeof(key),
-                         &stage_state->prog_offset,
-                         &brw->gs.base.prog_data)) {
-      bool success = brw_codegen_gs_prog(brw, gp, &key);
-      assert(success);
-      (void)success;
-   }
+   if (brw_search_cache(&brw->cache, BRW_CACHE_GS_PROG,
+                        &key, sizeof(key),
+                        &stage_state->prog_offset,
+                        &brw->gs.base.prog_data))
+      return;
+
+   if (brw_disk_cache_upload_program(brw, MESA_SHADER_GEOMETRY))
+      return;
+
+   gp = (struct brw_program *) brw->programs[MESA_SHADER_GEOMETRY];
+   gp->id = key.program_string_id;
+
+   MAYBE_UNUSED bool success = brw_codegen_gs_prog(brw, gp, &key);
+   assert(success);
 }
 
 bool

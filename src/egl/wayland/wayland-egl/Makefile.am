@@ -17,7 +17,7 @@ libwayland_egl_la_LDFLAGS = \
 TESTS = wayland-egl-symbols-check \
         wayland-egl-abi-check
 
-EXTRA_DIST = wayland-egl-symbols-check
+EXTRA_DIST = wayland-egl-symbols-check meson.build
 
 check_PROGRAMS = wayland-egl-abi-check
 

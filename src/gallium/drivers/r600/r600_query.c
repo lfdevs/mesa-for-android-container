@@ -27,7 +27,7 @@
 #include "r600_cs.h"
 #include "util/u_memory.h"
 #include "util/u_upload_mgr.h"
-#include "os/os_time.h"
+#include "util/os_time.h"
 #include "tgsi/tgsi_text.h"
 
 #define R600_MAX_STREAMS 4
@@ -140,12 +140,6 @@ static bool r600_query_sw_begin(struct r600_common_context *rctx,
 		break;
 	case R600_QUERY_NUM_DB_CACHE_FLUSHES:
 		query->begin_result = rctx->num_db_cache_flushes;
-		break;
-	case R600_QUERY_NUM_L2_INVALIDATES:
-		query->begin_result = rctx->num_L2_invalidates;
-		break;
-	case R600_QUERY_NUM_L2_WRITEBACKS:
-		query->begin_result = rctx->num_L2_writebacks;
 		break;
 	case R600_QUERY_NUM_RESIDENT_HANDLES:
 		query->begin_result = rctx->num_resident_handles;
@@ -298,12 +292,6 @@ static bool r600_query_sw_end(struct r600_common_context *rctx,
 		break;
 	case R600_QUERY_NUM_DB_CACHE_FLUSHES:
 		query->end_result = rctx->num_db_cache_flushes;
-		break;
-	case R600_QUERY_NUM_L2_INVALIDATES:
-		query->end_result = rctx->num_L2_invalidates;
-		break;
-	case R600_QUERY_NUM_L2_WRITEBACKS:
-		query->end_result = rctx->num_L2_writebacks;
 		break;
 	case R600_QUERY_NUM_RESIDENT_HANDLES:
 		query->end_result = rctx->num_resident_handles;
@@ -506,7 +494,6 @@ void r600_query_hw_destroy(struct r600_common_screen *rscreen,
 	}
 
 	r600_resource_reference(&query->buffer.buf, NULL);
-	r600_resource_reference(&query->workaround_buf, NULL);
 	FREE(rquery);
 }
 
@@ -932,23 +919,19 @@ static void r600_emit_query_predication(struct r600_common_context *ctx,
 	flag_wait = ctx->render_cond_mode == PIPE_RENDER_COND_WAIT ||
 		    ctx->render_cond_mode == PIPE_RENDER_COND_BY_REGION_WAIT;
 
-	if (query->workaround_buf) {
-		op = PRED_OP(PREDICATION_OP_BOOL64);
-	} else {
-		switch (query->b.type) {
-		case PIPE_QUERY_OCCLUSION_COUNTER:
-		case PIPE_QUERY_OCCLUSION_PREDICATE:
-			op = PRED_OP(PREDICATION_OP_ZPASS);
-			break;
-		case PIPE_QUERY_SO_OVERFLOW_PREDICATE:
-		case PIPE_QUERY_SO_OVERFLOW_ANY_PREDICATE:
-			op = PRED_OP(PREDICATION_OP_PRIMCOUNT);
-			invert = !invert;
-			break;
-		default:
-			assert(0);
-			return;
-		}
+	switch (query->b.type) {
+	case PIPE_QUERY_OCCLUSION_COUNTER:
+	case PIPE_QUERY_OCCLUSION_PREDICATE:
+		op = PRED_OP(PREDICATION_OP_ZPASS);
+		break;
+	case PIPE_QUERY_SO_OVERFLOW_PREDICATE:
+	case PIPE_QUERY_SO_OVERFLOW_ANY_PREDICATE:
+		op = PRED_OP(PREDICATION_OP_PRIMCOUNT);
+		invert = !invert;
+		break;
+	default:
+		assert(0);
+		return;
 	}
 
 	/* if true then invert, see GL_ARB_conditional_render_inverted */
@@ -956,19 +939,6 @@ static void r600_emit_query_predication(struct r600_common_context *ctx,
 		op |= PREDICATION_DRAW_NOT_VISIBLE; /* Draw if not visible or overflow */
 	else
 		op |= PREDICATION_DRAW_VISIBLE; /* Draw if visible or no overflow */
-
-	/* Use the value written by compute shader as a workaround. Note that
-	 * the wait flag does not apply in this predication mode.
-	 *
-	 * The shader outputs the result value to L2. Workarounds only affect VI
-	 * and later, where the CP reads data from L2, so we don't need an
-	 * additional flush.
-	 */
-	if (query->workaround_buf) {
-		uint64_t va = query->workaround_buf->gpu_address + query->workaround_offset;
-		emit_set_predicate(ctx, query->workaround_buf, va, op);
-		return;
-	}
 
 	op |= flag_wait ? PREDICATION_HINT_WAIT : PREDICATION_HINT_NOWAIT_DRAW;
 
@@ -1066,8 +1036,6 @@ bool r600_query_hw_begin(struct r600_common_context *rctx,
 
 	if (!(query->flags & R600_QUERY_HW_FLAG_BEGIN_RESUMES))
 		r600_query_hw_reset_buffers(rctx, query);
-
-	r600_resource_reference(&query->workaround_buf, NULL);
 
 	r600_query_hw_emit_start(rctx, query);
 	if (!query->buffer.buf)
@@ -1850,12 +1818,31 @@ void r600_query_fix_enabled_rb_mask(struct r600_common_screen *rscreen)
 	struct r600_resource *buffer;
 	uint32_t *results;
 	unsigned i, mask = 0;
-	unsigned max_rbs = ctx->screen->info.num_render_backends;
+	unsigned max_rbs;
+	
+	if (ctx->family == CHIP_JUNIPER) {
+		/*
+		 * Fix for predication lockups - the chip can only ever have
+		 * 4 RBs, however it looks like the predication logic assumes
+		 * there's 8, trying to read results from query buffers never
+		 * written to. By increasing this number we'll write the
+		 * status bit for these as per the normal disabled rb logic.
+		 */
+		ctx->screen->info.num_render_backends = 8;
+	}
+	max_rbs = ctx->screen->info.num_render_backends;
 
 	assert(rscreen->chip_class <= CAYMAN);
 
-	/* if backend_map query is supported by the kernel */
-	if (rscreen->info.r600_gb_backend_map_valid) {
+	/*
+	 * if backend_map query is supported by the kernel.
+	 * Note the kernel drm driver for a long time never filled in the
+	 * associated data on eg/cm, only on r600/r700, hence ignore the valid
+	 * bit there if the map is zero.
+	 * (Albeit some chips with just one active rb can have a valid 0 map.)
+	 */ 
+	if (rscreen->info.r600_gb_backend_map_valid &&
+	    (ctx->chip_class < EVERGREEN || rscreen->info.r600_gb_backend_map != 0)) {
 		unsigned num_tile_pipes = rscreen->info.num_tile_pipes;
 		unsigned backend_map = rscreen->info.r600_gb_backend_map;
 		unsigned item_width, item_mask;
@@ -1915,8 +1902,13 @@ void r600_query_fix_enabled_rb_mask(struct r600_common_screen *rscreen)
 
 	r600_resource_reference(&buffer, NULL);
 
-	if (mask)
+	if (mask) {
+		if (rscreen->debug_flags & DBG_INFO &&
+		    mask != rscreen->info.enabled_rb_mask) {
+			printf("enabled_rb_mask (fixed) = 0x%x\n", mask);
+		}
 		rscreen->info.enabled_rb_mask = mask;
+	}
 }
 
 #define XFULL(name_, query_type_, type_, result_type_, group_id_) \
@@ -1952,8 +1944,6 @@ static struct pipe_driver_query_info r600_driver_query_list[] = {
 	X("num-cs-flushes",		NUM_CS_FLUSHES,		UINT64, AVERAGE),
 	X("num-CB-cache-flushes",	NUM_CB_CACHE_FLUSHES,	UINT64, AVERAGE),
 	X("num-DB-cache-flushes",	NUM_DB_CACHE_FLUSHES,	UINT64, AVERAGE),
-	X("num-L2-invalidates",		NUM_L2_INVALIDATES,	UINT64, AVERAGE),
-	X("num-L2-writebacks",		NUM_L2_WRITEBACKS,	UINT64, AVERAGE),
 	X("num-resident-handles",	NUM_RESIDENT_HANDLES,	UINT64, AVERAGE),
 	X("tc-offloaded-slots",		TC_OFFLOADED_SLOTS,     UINT64, AVERAGE),
 	X("tc-direct-slots",		TC_DIRECT_SLOTS,	UINT64, AVERAGE),

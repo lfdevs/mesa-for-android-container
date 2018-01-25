@@ -123,12 +123,12 @@ CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 libfreedreno_la_LIBADD =
 am__objects_1 = freedreno_batch.lo freedreno_batch_cache.lo \
-	freedreno_context.lo freedreno_draw.lo freedreno_fence.lo \
-	freedreno_gmem.lo freedreno_program.lo freedreno_query.lo \
-	freedreno_query_acc.lo freedreno_query_hw.lo \
-	freedreno_query_sw.lo freedreno_resource.lo \
-	freedreno_screen.lo freedreno_state.lo freedreno_surface.lo \
-	freedreno_texture.lo freedreno_util.lo
+	freedreno_blitter.lo freedreno_context.lo freedreno_draw.lo \
+	freedreno_fence.lo freedreno_gmem.lo freedreno_program.lo \
+	freedreno_query.lo freedreno_query_acc.lo \
+	freedreno_query_hw.lo freedreno_query_sw.lo \
+	freedreno_resource.lo freedreno_screen.lo freedreno_state.lo \
+	freedreno_surface.lo freedreno_texture.lo freedreno_util.lo
 am__dirstamp = $(am__leading_dot)dirstamp
 am__objects_2 = a2xx/disasm-a2xx.lo a2xx/fd2_blend.lo \
 	a2xx/fd2_compiler.lo a2xx/fd2_context.lo a2xx/fd2_draw.lo \
@@ -143,16 +143,18 @@ am__objects_4 = a4xx/fd4_blend.lo a4xx/fd4_context.lo a4xx/fd4_draw.lo \
 	a4xx/fd4_emit.lo a4xx/fd4_format.lo a4xx/fd4_gmem.lo \
 	a4xx/fd4_program.lo a4xx/fd4_query.lo a4xx/fd4_rasterizer.lo \
 	a4xx/fd4_screen.lo a4xx/fd4_texture.lo a4xx/fd4_zsa.lo
-am__objects_5 = a5xx/fd5_blend.lo a5xx/fd5_compute.lo \
-	a5xx/fd5_context.lo a5xx/fd5_draw.lo a5xx/fd5_emit.lo \
-	a5xx/fd5_format.lo a5xx/fd5_gmem.lo a5xx/fd5_program.lo \
-	a5xx/fd5_query.lo a5xx/fd5_rasterizer.lo a5xx/fd5_screen.lo \
+am__objects_5 = a5xx/fd5_blend.lo a5xx/fd5_blitter.lo \
+	a5xx/fd5_compute.lo a5xx/fd5_context.lo a5xx/fd5_draw.lo \
+	a5xx/fd5_emit.lo a5xx/fd5_format.lo a5xx/fd5_gmem.lo \
+	a5xx/fd5_image.lo a5xx/fd5_program.lo a5xx/fd5_query.lo \
+	a5xx/fd5_rasterizer.lo a5xx/fd5_resource.lo a5xx/fd5_screen.lo \
 	a5xx/fd5_texture.lo a5xx/fd5_zsa.lo
 am__objects_6 = ir3/disasm-a3xx.lo ir3/ir3.lo ir3/ir3_compiler_nir.lo \
 	ir3/ir3_compiler.lo ir3/ir3_cp.lo ir3/ir3_depth.lo \
 	ir3/ir3_group.lo ir3/ir3_legalize.lo ir3/ir3_nir.lo \
-	ir3/ir3_nir_lower_if_else.lo ir3/ir3_print.lo ir3/ir3_ra.lo \
-	ir3/ir3_sched.lo ir3/ir3_shader.lo
+	ir3/ir3_nir_lower_if_else.lo ir3/ir3_nir_lower_tg4_to_tex.lo \
+	ir3/ir3_print.lo ir3/ir3_ra.lo ir3/ir3_sched.lo \
+	ir3/ir3_shader.lo
 am__objects_7 = ir3/ir3_nir_trig.lo
 am_libfreedreno_la_OBJECTS = $(am__objects_1) $(am__objects_2) \
 	$(am__objects_3) $(am__objects_4) $(am__objects_5) \
@@ -285,6 +287,7 @@ CLOVER_STD_OVERRIDE = @CLOVER_STD_OVERRIDE@
 CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
 CXX = @CXX@
+CXX11_CXXFLAGS = @CXX11_CXXFLAGS@
 CXXCPP = @CXXCPP@
 CXXDEPMODE = @CXXDEPMODE@
 CXXFLAGS = @CXXFLAGS@
@@ -388,7 +391,7 @@ MSVC2013_COMPAT_CFLAGS = @MSVC2013_COMPAT_CFLAGS@
 MSVC2013_COMPAT_CXXFLAGS = @MSVC2013_COMPAT_CXXFLAGS@
 NINE_MAJOR = @NINE_MAJOR@
 NINE_MINOR = @NINE_MINOR@
-NINE_TINY = @NINE_TINY@
+NINE_PATCH = @NINE_PATCH@
 NINE_VERSION = @NINE_VERSION@
 NM = @NM@
 NMEDIT = @NMEDIT@
@@ -444,7 +447,6 @@ SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
 SWR_AVX2_CXXFLAGS = @SWR_AVX2_CXXFLAGS@
 SWR_AVX_CXXFLAGS = @SWR_AVX_CXXFLAGS@
-SWR_CXX11_CXXFLAGS = @SWR_CXX11_CXXFLAGS@
 SWR_KNL_CXXFLAGS = @SWR_KNL_CXXFLAGS@
 SWR_SKX_CXXFLAGS = @SWR_SKX_CXXFLAGS@
 VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
@@ -479,7 +481,7 @@ WNO_OVERRIDE_INIT = @WNO_OVERRIDE_INIT@
 X11_INCLUDES = @X11_INCLUDES@
 XA_MAJOR = @XA_MAJOR@
 XA_MINOR = @XA_MINOR@
-XA_TINY = @XA_TINY@
+XA_PATCH = @XA_PATCH@
 XA_VERSION = @XA_VERSION@
 XCB_DRI2_CFLAGS = @XCB_DRI2_CFLAGS@
 XCB_DRI2_LIBS = @XCB_DRI2_LIBS@
@@ -546,7 +548,6 @@ pdfdir = @pdfdir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
-runstatedir = @runstatedir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
@@ -567,6 +568,8 @@ C_SOURCES := \
 	freedreno_batch.h \
 	freedreno_batch_cache.c \
 	freedreno_batch_cache.h \
+	freedreno_blitter.c \
+	freedreno_blitter.h \
 	freedreno_context.c \
 	freedreno_context.h \
 	freedreno_draw.c \
@@ -687,6 +690,8 @@ a5xx_SOURCES := \
 	a5xx/a5xx.xml.h \
 	a5xx/fd5_blend.c \
 	a5xx/fd5_blend.h \
+	a5xx/fd5_blitter.c \
+	a5xx/fd5_blitter.h \
 	a5xx/fd5_compute.c \
 	a5xx/fd5_compute.h \
 	a5xx/fd5_context.c \
@@ -699,12 +704,16 @@ a5xx_SOURCES := \
 	a5xx/fd5_format.h \
 	a5xx/fd5_gmem.c \
 	a5xx/fd5_gmem.h \
+	a5xx/fd5_image.c \
+	a5xx/fd5_image.h \
 	a5xx/fd5_program.c \
 	a5xx/fd5_program.h \
 	a5xx/fd5_query.c \
 	a5xx/fd5_query.h \
 	a5xx/fd5_rasterizer.c \
 	a5xx/fd5_rasterizer.h \
+	a5xx/fd5_resource.c \
+	a5xx/fd5_resource.h \
 	a5xx/fd5_screen.c \
 	a5xx/fd5_screen.h \
 	a5xx/fd5_texture.c \
@@ -727,6 +736,7 @@ ir3_SOURCES := \
 	ir3/ir3_nir.c \
 	ir3/ir3_nir.h \
 	ir3/ir3_nir_lower_if_else.c \
+	ir3/ir3_nir_lower_tg4_to_tex.c \
 	ir3/ir3_print.c \
 	ir3/ir3_ra.c \
 	ir3/ir3_sched.c \
@@ -820,7 +830,7 @@ libfreedreno_la_SOURCES = \
 
 BUILT_SOURCES := $(ir3_GENERATED_FILES)
 CLEANFILES := $(BUILT_SOURCES)
-EXTRA_DIST = ir3/ir3_nir_trig.py
+EXTRA_DIST = ir3/ir3_nir_trig.py meson.build
 
 # XXX: Required due to the C++ sources in libnir
 nodist_EXTRA_ir3_compiler_SOURCES = dummy.cpp
@@ -965,6 +975,8 @@ a5xx/$(DEPDIR)/$(am__dirstamp):
 	@$(MKDIR_P) a5xx/$(DEPDIR)
 	@: > a5xx/$(DEPDIR)/$(am__dirstamp)
 a5xx/fd5_blend.lo: a5xx/$(am__dirstamp) a5xx/$(DEPDIR)/$(am__dirstamp)
+a5xx/fd5_blitter.lo: a5xx/$(am__dirstamp) \
+	a5xx/$(DEPDIR)/$(am__dirstamp)
 a5xx/fd5_compute.lo: a5xx/$(am__dirstamp) \
 	a5xx/$(DEPDIR)/$(am__dirstamp)
 a5xx/fd5_context.lo: a5xx/$(am__dirstamp) \
@@ -974,10 +986,13 @@ a5xx/fd5_emit.lo: a5xx/$(am__dirstamp) a5xx/$(DEPDIR)/$(am__dirstamp)
 a5xx/fd5_format.lo: a5xx/$(am__dirstamp) \
 	a5xx/$(DEPDIR)/$(am__dirstamp)
 a5xx/fd5_gmem.lo: a5xx/$(am__dirstamp) a5xx/$(DEPDIR)/$(am__dirstamp)
+a5xx/fd5_image.lo: a5xx/$(am__dirstamp) a5xx/$(DEPDIR)/$(am__dirstamp)
 a5xx/fd5_program.lo: a5xx/$(am__dirstamp) \
 	a5xx/$(DEPDIR)/$(am__dirstamp)
 a5xx/fd5_query.lo: a5xx/$(am__dirstamp) a5xx/$(DEPDIR)/$(am__dirstamp)
 a5xx/fd5_rasterizer.lo: a5xx/$(am__dirstamp) \
+	a5xx/$(DEPDIR)/$(am__dirstamp)
+a5xx/fd5_resource.lo: a5xx/$(am__dirstamp) \
 	a5xx/$(DEPDIR)/$(am__dirstamp)
 a5xx/fd5_screen.lo: a5xx/$(am__dirstamp) \
 	a5xx/$(DEPDIR)/$(am__dirstamp)
@@ -1001,6 +1016,8 @@ ir3/ir3_group.lo: ir3/$(am__dirstamp) ir3/$(DEPDIR)/$(am__dirstamp)
 ir3/ir3_legalize.lo: ir3/$(am__dirstamp) ir3/$(DEPDIR)/$(am__dirstamp)
 ir3/ir3_nir.lo: ir3/$(am__dirstamp) ir3/$(DEPDIR)/$(am__dirstamp)
 ir3/ir3_nir_lower_if_else.lo: ir3/$(am__dirstamp) \
+	ir3/$(DEPDIR)/$(am__dirstamp)
+ir3/ir3_nir_lower_tg4_to_tex.lo: ir3/$(am__dirstamp) \
 	ir3/$(DEPDIR)/$(am__dirstamp)
 ir3/ir3_print.lo: ir3/$(am__dirstamp) ir3/$(DEPDIR)/$(am__dirstamp)
 ir3/ir3_ra.lo: ir3/$(am__dirstamp) ir3/$(DEPDIR)/$(am__dirstamp)
@@ -1045,6 +1062,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dummy.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/freedreno_batch.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/freedreno_batch_cache.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/freedreno_blitter.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/freedreno_context.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/freedreno_draw.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/freedreno_fence.Plo@am__quote@
@@ -1099,15 +1117,18 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@a4xx/$(DEPDIR)/fd4_texture.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@a4xx/$(DEPDIR)/fd4_zsa.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@a5xx/$(DEPDIR)/fd5_blend.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@a5xx/$(DEPDIR)/fd5_blitter.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@a5xx/$(DEPDIR)/fd5_compute.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@a5xx/$(DEPDIR)/fd5_context.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@a5xx/$(DEPDIR)/fd5_draw.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@a5xx/$(DEPDIR)/fd5_emit.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@a5xx/$(DEPDIR)/fd5_format.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@a5xx/$(DEPDIR)/fd5_gmem.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@a5xx/$(DEPDIR)/fd5_image.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@a5xx/$(DEPDIR)/fd5_program.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@a5xx/$(DEPDIR)/fd5_query.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@a5xx/$(DEPDIR)/fd5_rasterizer.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@a5xx/$(DEPDIR)/fd5_resource.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@a5xx/$(DEPDIR)/fd5_screen.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@a5xx/$(DEPDIR)/fd5_texture.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@a5xx/$(DEPDIR)/fd5_zsa.Plo@am__quote@
@@ -1122,6 +1143,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3_legalize.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3_nir.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3_nir_lower_if_else.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3_nir_lower_tg4_to_tex.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3_nir_trig.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3_print.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3_ra.Plo@am__quote@
@@ -1408,7 +1430,7 @@ uninstall-am:
 
 ir3/ir3_nir_trig.c: ir3/ir3_nir_trig.py $(top_srcdir)/src/compiler/nir/nir_algebraic.py
 	$(MKDIR_GEN)
-	$(AM_V_GEN) PYTHONPATH=$(top_srcdir)/src/compiler/nir $(PYTHON2) $(PYTHON_FLAGS) $(srcdir)/ir3/ir3_nir_trig.py > $@ || ($(RM) $@; false)
+	$(AM_V_GEN) $(PYTHON2) $(PYTHON_FLAGS) $(srcdir)/ir3/ir3_nir_trig.py -p $(top_srcdir)/src/compiler/nir > $@ || ($(RM) $@; false)
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

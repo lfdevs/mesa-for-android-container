@@ -27,6 +27,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/mman.h>
+#include <drm_fourcc.h>
 
 #include "anv_private.h"
 #include "util/debug.h"
@@ -34,14 +35,11 @@
 
 #include "vk_format_info.h"
 
-/**
- * Exactly one bit must be set in \a aspect.
- */
 static isl_surf_usage_flags_t
 choose_isl_surf_usage(VkImageCreateFlags vk_create_flags,
                       VkImageUsageFlags vk_usage,
                       isl_surf_usage_flags_t isl_extra_usage,
-                      VkImageAspectFlags aspect)
+                      VkImageAspectFlagBits aspect)
 {
    isl_surf_usage_flags_t isl_usage = isl_extra_usage;
 
@@ -93,11 +91,37 @@ choose_isl_surf_usage(VkImageCreateFlags vk_create_flags,
    return isl_usage;
 }
 
-/**
- * Exactly one bit must be set in \a aspect.
- */
+static isl_tiling_flags_t
+choose_isl_tiling_flags(const struct anv_image_create_info *anv_info,
+                        const struct isl_drm_modifier_info *isl_mod_info)
+{
+   const VkImageCreateInfo *base_info = anv_info->vk_info;
+   isl_tiling_flags_t flags = 0;
+
+   switch (base_info->tiling) {
+   default:
+      unreachable("bad VkImageTiling");
+   case VK_IMAGE_TILING_OPTIMAL:
+      flags = ISL_TILING_ANY_MASK;
+      break;
+   case VK_IMAGE_TILING_LINEAR:
+      flags = ISL_TILING_LINEAR_BIT;
+      break;
+   }
+
+   if (anv_info->isl_tiling_flags)
+      flags &= anv_info->isl_tiling_flags;
+
+   if (isl_mod_info)
+      flags &= 1 << isl_mod_info->tiling;
+
+   assert(flags);
+
+   return flags;
+}
+
 static struct anv_surface *
-get_surface(struct anv_image *image, VkImageAspectFlags aspect)
+get_surface(struct anv_image *image, VkImageAspectFlagBits aspect)
 {
    uint32_t plane = anv_image_aspect_to_plane(image->aspects, aspect);
    return &image->planes[plane].surface;
@@ -209,7 +233,7 @@ add_fast_clear_state_buffer(struct anv_image *image,
 {
    assert(image && device);
    assert(image->planes[plane].aux_surface.isl.size > 0 &&
-          image->aspects & VK_IMAGE_ASPECT_ANY_COLOR_BIT);
+          image->aspects & VK_IMAGE_ASPECT_ANY_COLOR_BIT_ANV);
 
    /* The offset to the buffer of clear values must be dword-aligned for GPU
     * memcpy operations. It is located immediately after the auxiliary surface.
@@ -253,14 +277,13 @@ add_fast_clear_state_buffer(struct anv_image *image,
 /**
  * Initialize the anv_image::*_surface selected by \a aspect. Then update the
  * image's memory requirements (that is, the image's size and alignment).
- *
- * Exactly one bit must be set in \a aspect.
  */
 static VkResult
 make_surface(const struct anv_device *dev,
              struct anv_image *image,
              const struct anv_image_create_info *anv_info,
-             VkImageAspectFlags aspect)
+             isl_tiling_flags_t tiling_flags,
+             VkImageAspectFlagBits aspect)
 {
    const VkImageCreateInfo *vk_info = anv_info->vk_info;
    bool ok UNUSED;
@@ -270,18 +293,6 @@ make_surface(const struct anv_device *dev,
       [VK_IMAGE_TYPE_2D] = ISL_SURF_DIM_2D,
       [VK_IMAGE_TYPE_3D] = ISL_SURF_DIM_3D,
    };
-
-   /* Translate the Vulkan tiling to an equivalent ISL tiling, then filter the
-    * result with an optionally provided ISL tiling argument.
-    */
-   isl_tiling_flags_t tiling_flags =
-      (vk_info->tiling == VK_IMAGE_TILING_LINEAR) ?
-      ISL_TILING_LINEAR_BIT : ISL_TILING_ANY_MASK;
-
-   if (anv_info->isl_tiling_flags)
-      tiling_flags &= anv_info->isl_tiling_flags;
-
-   assert(tiling_flags);
 
    image->extent = anv_sanitize_image_extent(vk_info->imageType,
                                              vk_info->extent);
@@ -324,10 +335,8 @@ make_surface(const struct anv_device *dev,
       .usage = usage,
       .tiling_flags = tiling_flags);
 
-   /* isl_surf_init() will fail only if provided invalid input. Invalid input
-    * is illegal in Vulkan.
-    */
-   assert(ok);
+   if (!ok)
+      return VK_ERROR_OUT_OF_DEVICE_MEMORY;
 
    image->planes[plane].aux_usage = ISL_AUX_USAGE_NONE;
 
@@ -394,7 +403,7 @@ make_surface(const struct anv_device *dev,
          add_surface(image, &image->planes[plane].aux_surface, plane);
          image->planes[plane].aux_usage = ISL_AUX_USAGE_HIZ;
       }
-   } else if ((aspect & VK_IMAGE_ASPECT_ANY_COLOR_BIT) && vk_info->samples == 1) {
+   } else if ((aspect & VK_IMAGE_ASPECT_ANY_COLOR_BIT_ANV) && vk_info->samples == 1) {
       /* TODO: Disallow compression with :
        *
        *     1) non multiplanar images (We appear to hit a sampler bug with
@@ -451,7 +460,7 @@ make_surface(const struct anv_device *dev,
             }
          }
       }
-   } else if ((aspect & VK_IMAGE_ASPECT_ANY_COLOR_BIT) && vk_info->samples > 1) {
+   } else if ((aspect & VK_IMAGE_ASPECT_ANY_COLOR_BIT_ANV) && vk_info->samples > 1) {
       assert(!(vk_info->usage & VK_IMAGE_USAGE_STORAGE_BIT));
       assert(image->planes[plane].aux_surface.isl.size == 0);
       ok = isl_surf_get_mcs_surf(&dev->isl_dev,
@@ -486,6 +495,19 @@ make_surface(const struct anv_device *dev,
    return VK_SUCCESS;
 }
 
+static const struct isl_drm_modifier_info *
+get_legacy_scanout_drm_format_mod(VkImageTiling tiling)
+{
+   switch (tiling) {
+   case VK_IMAGE_TILING_OPTIMAL:
+      return isl_drm_modifier_get_info(I915_FORMAT_MOD_X_TILED);
+   case VK_IMAGE_TILING_LINEAR:
+      return isl_drm_modifier_get_info(DRM_FORMAT_MOD_LINEAR);
+   default:
+      unreachable("bad VkImageTiling");
+   }
+}
+
 VkResult
 anv_image_create(VkDevice _device,
                  const struct anv_image_create_info *create_info,
@@ -494,10 +516,16 @@ anv_image_create(VkDevice _device,
 {
    ANV_FROM_HANDLE(anv_device, device, _device);
    const VkImageCreateInfo *pCreateInfo = create_info->vk_info;
+   const struct isl_drm_modifier_info *isl_mod_info = NULL;
    struct anv_image *image = NULL;
    VkResult r;
 
    assert(pCreateInfo->sType == VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO);
+
+   const struct wsi_image_create_info *wsi_info =
+      vk_find_struct_const(pCreateInfo->pNext, WSI_IMAGE_CREATE_INFO_MESA);
+   if (wsi_info && wsi_info->scanout)
+      isl_mod_info = get_legacy_scanout_drm_format_mod(pCreateInfo->tiling);
 
    anv_assert(pCreateInfo->mipLevels > 0);
    anv_assert(pCreateInfo->arrayLayers > 0);
@@ -522,15 +550,21 @@ anv_image_create(VkDevice _device,
    image->usage = pCreateInfo->usage;
    image->tiling = pCreateInfo->tiling;
    image->disjoint = pCreateInfo->flags & VK_IMAGE_CREATE_DISJOINT_BIT_KHR;
+   image->drm_format_mod = isl_mod_info ? isl_mod_info->modifier :
+                                          DRM_FORMAT_MOD_INVALID;
 
    const struct anv_format *format = anv_get_format(image->vk_format);
    assert(format != NULL);
+
+   const isl_tiling_flags_t isl_tiling_flags =
+      choose_isl_tiling_flags(create_info, isl_mod_info);
 
    image->n_planes = format->n_planes;
 
    uint32_t b;
    for_each_bit(b, image->aspects) {
-      r = make_surface(device, image, create_info, (1 << b));
+      r = make_surface(device, image, create_info, isl_tiling_flags,
+                       (1 << b));
       if (r != VK_SUCCESS)
          goto fail;
    }
@@ -667,12 +701,18 @@ VkResult anv_BindImageMemory2KHR(
    return VK_SUCCESS;
 }
 
-static void
-anv_surface_get_subresource_layout(struct anv_image *image,
-                                   struct anv_surface *surface,
-                                   const VkImageSubresource *subresource,
-                                   VkSubresourceLayout *layout)
+void anv_GetImageSubresourceLayout(
+    VkDevice                                    device,
+    VkImage                                     _image,
+    const VkImageSubresource*                   subresource,
+    VkSubresourceLayout*                        layout)
 {
+   ANV_FROM_HANDLE(anv_image, image, _image);
+   const struct anv_surface *surface =
+      get_surface(image, subresource->aspectMask);
+
+   assert(__builtin_popcount(subresource->aspectMask) == 1);
+
    /* If we are on a non-zero mip level or array slice, we need to
     * calculate a real offset.
     */
@@ -684,22 +724,6 @@ anv_surface_get_subresource_layout(struct anv_image *image,
    layout->depthPitch = isl_surf_get_array_pitch(&surface->isl);
    layout->arrayPitch = isl_surf_get_array_pitch(&surface->isl);
    layout->size = surface->isl.size;
-}
-
-void anv_GetImageSubresourceLayout(
-    VkDevice                                    device,
-    VkImage                                     _image,
-    const VkImageSubresource*                   pSubresource,
-    VkSubresourceLayout*                        pLayout)
-{
-   ANV_FROM_HANDLE(anv_image, image, _image);
-
-   assert(__builtin_popcount(pSubresource->aspectMask) == 1);
-
-   anv_surface_get_subresource_layout(image,
-                                      get_surface(image,
-                                                  pSubresource->aspectMask),
-                                      pSubresource, pLayout);
 }
 
 /**
@@ -751,7 +775,7 @@ anv_layout_to_aux_usage(const struct gen_device_info * const devinfo,
    /* The following switch currently only handles depth stencil aspects.
     * TODO: Handle the color aspect.
     */
-   if (image->aspects & VK_IMAGE_ASPECT_ANY_COLOR_BIT)
+   if (image->aspects & VK_IMAGE_ASPECT_ANY_COLOR_BIT_ANV)
       return image->planes[plane].aux_usage;
 
    switch (layout) {
@@ -786,7 +810,7 @@ anv_layout_to_aux_usage(const struct gen_device_info * const devinfo,
 
    /* Sampling Layouts */
    case VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL:
-      assert((image->aspects & VK_IMAGE_ASPECT_ANY_COLOR_BIT) == 0);
+      assert((image->aspects & VK_IMAGE_ASPECT_ANY_COLOR_BIT_ANV) == 0);
       /* Fall-through */
    case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
    case VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL_KHR:
@@ -1034,7 +1058,7 @@ anv_image_fill_surface_state(struct anv_device *device,
 static VkImageAspectFlags
 remap_aspect_flags(VkImageAspectFlags view_aspects)
 {
-   if (view_aspects & VK_IMAGE_ASPECT_ANY_COLOR_BIT) {
+   if (view_aspects & VK_IMAGE_ASPECT_ANY_COLOR_BIT_ANV) {
       if (_mesa_bitcount(view_aspects) == 1)
          return VK_IMAGE_ASPECT_COLOR_BIT;
 
@@ -1394,15 +1418,15 @@ anv_image_get_surface_for_aspect_mask(const struct anv_image *image,
       }
       break;
    case VK_IMAGE_ASPECT_PLANE_0_BIT_KHR:
-      assert((image->aspects & ~VK_IMAGE_ASPECT_ANY_COLOR_BIT) == 0);
+      assert((image->aspects & ~VK_IMAGE_ASPECT_ANY_COLOR_BIT_ANV) == 0);
       sanitized_mask = VK_IMAGE_ASPECT_PLANE_0_BIT_KHR;
       break;
    case VK_IMAGE_ASPECT_PLANE_1_BIT_KHR:
-      assert((image->aspects & ~VK_IMAGE_ASPECT_ANY_COLOR_BIT) == 0);
+      assert((image->aspects & ~VK_IMAGE_ASPECT_ANY_COLOR_BIT_ANV) == 0);
       sanitized_mask = VK_IMAGE_ASPECT_PLANE_1_BIT_KHR;
       break;
    case VK_IMAGE_ASPECT_PLANE_2_BIT_KHR:
-      assert((image->aspects & ~VK_IMAGE_ASPECT_ANY_COLOR_BIT) == 0);
+      assert((image->aspects & ~VK_IMAGE_ASPECT_ANY_COLOR_BIT_ANV) == 0);
       sanitized_mask = VK_IMAGE_ASPECT_PLANE_2_BIT_KHR;
       break;
    default:

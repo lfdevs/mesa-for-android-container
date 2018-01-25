@@ -75,7 +75,7 @@ void _radeon_debug_add_indent(void)
 	if (radeon->debug.indent_depth < length - 1) {
 		radeon->debug.indent[radeon->debug.indent_depth] = '\t';
 		++radeon->debug.indent_depth;
-	};
+	}
 }
 
 void _radeon_debug_remove_indent(void)

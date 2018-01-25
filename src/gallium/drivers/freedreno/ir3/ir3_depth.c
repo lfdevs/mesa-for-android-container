@@ -55,6 +55,10 @@
 int ir3_delayslots(struct ir3_instruction *assigner,
 		struct ir3_instruction *consumer, unsigned n)
 {
+	/* don't count false-dependencies: */
+	if (__is_false_dep(consumer, n))
+		return 0;
+
 	/* worst case is cat1-3 (alu) -> cat4/5 needing 6 cycles, normal
 	 * alu -> alu needs 3 cycles, cat4 -> alu and texture fetch
 	 * handled with sync bits

@@ -78,6 +78,12 @@ struct fd_shaderbuf_stateobj {
 	uint32_t dirty_mask;
 };
 
+struct fd_shaderimg_stateobj {
+	struct pipe_image_view si[PIPE_MAX_SHADER_IMAGES];
+	uint32_t enabled_mask;
+	uint32_t dirty_mask;
+};
+
 struct fd_vertexbuf_stateobj {
 	struct pipe_vertex_buffer vb[PIPE_MAX_ATTRIBS];
 	unsigned count;
@@ -149,6 +155,7 @@ enum fd_dirty_shader_state {
 	FD_DIRTY_SHADER_CONST = BIT(1),
 	FD_DIRTY_SHADER_TEX   = BIT(2),
 	FD_DIRTY_SHADER_SSBO  = BIT(3),
+	FD_DIRTY_SHADER_IMAGE = BIT(4),
 };
 
 struct fd_context {
@@ -156,6 +163,7 @@ struct fd_context {
 
 	struct fd_device *dev;
 	struct fd_screen *screen;
+	struct fd_pipe *pipe;
 
 	struct util_queue flush_queue;
 
@@ -207,7 +215,8 @@ struct fd_context {
 		uint64_t prims_emitted;
 		uint64_t prims_generated;
 		uint64_t draw_calls;
-		uint64_t batch_total, batch_sysmem, batch_gmem, batch_restore;
+		uint64_t batch_total, batch_sysmem, batch_gmem, batch_nondraw, batch_restore;
+		uint64_t staging_uploads, shadow_uploads;
 	} stats;
 
 	/* Current batch.. the rule here is that you can deref ctx->batch
@@ -217,8 +226,6 @@ struct fd_context {
 	 * you care about is not necessarily the same as ctx->batch.
 	 */
 	struct fd_batch *batch;
-
-	struct pipe_fence_handle *last_fence;
 
 	/* Are we in process of shadowing a resource? Used to detect recursion
 	 * in transfer_map, and skip unneeded synchronization.
@@ -246,7 +253,7 @@ struct fd_context {
 	 * means we'd always have to recalc tiles ever batch)
 	 */
 	struct fd_gmem_stateobj gmem;
-	struct fd_vsc_pipe      pipe[16];
+	struct fd_vsc_pipe      vsc_pipe[16];
 	struct fd_tile          tile[512];
 
 	/* which state objects need to be re-emit'd: */
@@ -273,6 +280,7 @@ struct fd_context {
 	struct pipe_viewport_state viewport;
 	struct fd_constbuf_stateobj constbuf[PIPE_SHADER_TYPES];
 	struct fd_shaderbuf_stateobj shaderbuf[PIPE_SHADER_TYPES];
+	struct fd_shaderimg_stateobj shaderimg[PIPE_SHADER_TYPES];
 	struct fd_streamout_stateobj streamout;
 	struct pipe_clip_state ucp;
 
@@ -296,7 +304,7 @@ struct fd_context {
 
 	/* draw: */
 	bool (*draw_vbo)(struct fd_context *ctx, const struct pipe_draw_info *info,
-                         unsigned index_offset);
+			unsigned index_offset);
 	bool (*clear)(struct fd_context *ctx, unsigned buffers,
 			const union pipe_color_union *color, double depth, unsigned stencil);
 
@@ -320,6 +328,14 @@ struct fd_context {
 	void (*query_prepare_tile)(struct fd_batch *batch, uint32_t n,
 			struct fd_ringbuffer *ring);
 	void (*query_set_stage)(struct fd_batch *batch, enum fd_render_stage stage);
+
+	/* blitter: */
+	void (*blit)(struct fd_context *ctx, const struct pipe_blit_info *info);
+
+	/* simple gpu "memcpy": */
+	void (*mem_to_mem)(struct fd_ringbuffer *ring, struct pipe_resource *dst,
+			unsigned dst_off, struct pipe_resource *src, unsigned src_off,
+			unsigned sizedwords);
 
 	/*
 	 * Common pre-cooked VBO state (used for a3xx and later):
@@ -432,7 +448,7 @@ void fd_context_cleanup_common_vbos(struct fd_context *ctx);
 
 struct pipe_context * fd_context_init(struct fd_context *ctx,
 		struct pipe_screen *pscreen, const uint8_t *primtypes,
-		void *priv);
+		void *priv, unsigned flags);
 
 void fd_context_destroy(struct pipe_context *pctx);
 

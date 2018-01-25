@@ -44,6 +44,7 @@ struct u_vbuf;
 struct cso_context *cso_create_context(struct pipe_context *pipe,
                                        unsigned u_vbuf_flags);
 void cso_destroy_context( struct cso_context *cso );
+struct pipe_context *cso_get_pipe_context(struct cso_context *cso);
 
 
 enum pipe_error cso_set_blend( struct cso_context *cso,

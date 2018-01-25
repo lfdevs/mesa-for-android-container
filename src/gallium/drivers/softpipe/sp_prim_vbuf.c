@@ -60,7 +60,7 @@ struct softpipe_vbuf_render
    struct softpipe_context *softpipe;
    struct setup_context *setup;
 
-   uint prim;
+   enum pipe_prim_type prim;
    uint vertex_size;
    uint nr_vertices;
    uint vertex_buffer_size;
@@ -133,7 +133,7 @@ sp_vbuf_unmap_vertices(struct vbuf_render *vbr,
 
 
 static void
-sp_vbuf_set_primitive(struct vbuf_render *vbr, unsigned prim)
+sp_vbuf_set_primitive(struct vbuf_render *vbr, enum pipe_prim_type prim)
 {
    struct softpipe_vbuf_render *cvbr = softpipe_vbuf_render(vbr);
    struct setup_context *setup_ctx = cvbr->setup;

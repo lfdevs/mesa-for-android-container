@@ -185,10 +185,10 @@ cl_address(struct vc5_bo *bo, uint32_t offset)
 uint32_t vc5_cl_ensure_space(struct vc5_cl *cl, uint32_t size, uint32_t align);
 void vc5_cl_ensure_space_with_branch(struct vc5_cl *cl, uint32_t size);
 
-#define cl_packet_header(packet) V3D33_ ## packet ## _header
-#define cl_packet_length(packet) V3D33_ ## packet ## _length
-#define cl_packet_pack(packet)   V3D33_ ## packet ## _pack
-#define cl_packet_struct(packet) V3D33_ ## packet
+#define cl_packet_header(packet) V3DX(packet ## _header)
+#define cl_packet_length(packet) V3DX(packet ## _length)
+#define cl_packet_pack(packet)   V3DX(packet ## _pack)
+#define cl_packet_struct(packet) V3DX(packet)
 
 static inline void *
 cl_get_emit_space(struct vc5_cl_out **cl, size_t size)
@@ -221,8 +221,23 @@ cl_get_emit_space(struct vc5_cl_out **cl, size_t size)
         ({                                                       \
                 struct vc5_cl_out *cl_out = cl_start(cl);        \
                 cl_packet_pack(packet)(cl, (uint8_t *)cl_out, &name); \
-                VG(VALGRIND_CHECK_MEM_IS_DEFINED(cl_out,         \
-                                                 cl_packet_length(packet))); \
+                cl_advance(&cl_out, cl_packet_length(packet));   \
+                cl_end(cl, cl_out);                              \
+                _loop_terminate = NULL;                          \
+        }))                                                      \
+
+#define cl_emit_with_prepacked(cl, packet, prepacked, name)      \
+        for (struct cl_packet_struct(packet) name = {            \
+                cl_packet_header(packet)                         \
+        },                                                       \
+        *_loop_terminate = &name;                                \
+        __builtin_expect(_loop_terminate != NULL, 1);            \
+        ({                                                       \
+                struct vc5_cl_out *cl_out = cl_start(cl);        \
+                uint8_t packed[cl_packet_length(packet)];         \
+                cl_packet_pack(packet)(cl, packed, &name);       \
+                for (int _i = 0; _i < cl_packet_length(packet); _i++) \
+                        ((uint8_t *)cl_out)[_i] = packed[_i] | (prepacked)[_i]; \
                 cl_advance(&cl_out, cl_packet_length(packet));   \
                 cl_end(cl, cl_out);                              \
                 _loop_terminate = NULL;                          \
@@ -232,6 +247,19 @@ cl_get_emit_space(struct vc5_cl_out **cl, size_t size)
         memcpy((cl)->next, packet, sizeof(*packet));             \
         cl_advance(&(cl)->next, sizeof(*packet));                \
 } while (0)
+
+#define v3dx_pack(packed, packet, name)                          \
+        for (struct cl_packet_struct(packet) name = {            \
+                cl_packet_header(packet)                         \
+        },                                                       \
+        *_loop_terminate = &name;                                \
+        __builtin_expect(_loop_terminate != NULL, 1);            \
+        ({                                                       \
+                cl_packet_pack(packet)(NULL, (uint8_t *)packed, &name); \
+                VG(VALGRIND_CHECK_MEM_IS_DEFINED((uint8_t *)packed, \
+                                                 cl_packet_length(packet))); \
+                _loop_terminate = NULL;                          \
+        }))                                                      \
 
 /**
  * Helper function called by the XML-generated pack functions for filling in

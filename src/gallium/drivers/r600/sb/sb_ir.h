@@ -42,7 +42,10 @@ enum special_regs {
 	SV_EXEC_MASK,
 	SV_AR_INDEX,
 	SV_VALID_MASK,
-	SV_GEOMETRY_EMIT
+	SV_GEOMETRY_EMIT,
+	SV_LDS_RW,
+	SV_LDS_OQA,
+	SV_LDS_OQB,
 };
 
 class node;
@@ -495,6 +498,12 @@ public:
 	bool is_geometry_emit() {
 		return is_special_reg() && select == sel_chan(SV_GEOMETRY_EMIT, 0);
 	}
+	bool is_lds_access() {
+		return is_special_reg() && select == sel_chan(SV_LDS_RW, 0);
+	}
+	bool is_lds_oq() {
+		return is_special_reg() && (select == sel_chan(SV_LDS_OQA, 0) || select == sel_chan(SV_LDS_OQB, 0));
+	}
 
 	node* any_def() {
 		assert(!(def && adef));
@@ -663,6 +672,7 @@ enum node_subtype {
 	NST_FETCH_INST,
 	NST_TEX_CLAUSE,
 	NST_VTX_CLAUSE,
+	NST_GDS_CLAUSE,
 
 	NST_BB,
 
@@ -787,7 +797,7 @@ public:
 	bool is_alu_clause() { return subtype == NST_ALU_CLAUSE; }
 
 	bool is_fetch_clause() {
-		return subtype == NST_TEX_CLAUSE || subtype == NST_VTX_CLAUSE;
+		return subtype == NST_TEX_CLAUSE || subtype == NST_VTX_CLAUSE || subtype == NST_GDS_CLAUSE;
 	}
 
 	bool is_copy() { return subtype == NST_COPY; }
@@ -832,6 +842,22 @@ public:
 		return vec_uses_ar(dst) || vec_uses_ar(src);
 	}
 
+	bool vec_uses_lds_oq(vvec &vv) {
+		for (vvec::iterator I = vv.begin(), E = vv.end(); I != E; ++I) {
+			value *v = *I;
+			if (v && v->is_lds_oq())
+				return true;
+		}
+		return false;
+	}
+
+	bool consumes_lds_oq() {
+		return vec_uses_lds_oq(src);
+	}
+
+	bool produces_lds_oq() {
+		return vec_uses_lds_oq(dst);
+	}
 
 	region_node* get_parent_region();
 

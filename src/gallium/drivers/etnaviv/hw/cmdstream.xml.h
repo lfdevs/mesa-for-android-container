@@ -8,9 +8,9 @@ http://0x04.net/cgit/index.cgi/rules-ng-ng
 git clone git://0x04.net/rules-ng-ng
 
 The rules-ng-ng source files this header was generated from are:
-- cmdstream.xml (  16595 bytes, from 2017-10-05 21:20:32)
-- copyright.xml (   1597 bytes, from 2016-11-13 13:46:17)
-- common.xml    (  26135 bytes, from 2017-10-05 21:20:32)
+- cmdstream.xml (  16929 bytes, from 2017-10-13 12:22:46)
+- copyright.xml (   1597 bytes, from 2016-10-29 07:29:22)
+- common.xml    (  26187 bytes, from 2017-10-31 19:05:01)
 
 Copyright (C) 2012-2017 by the following authors:
 - Wladimir J. van der Laan <laanwj@gmail.com>
@@ -53,6 +53,7 @@ DEALINGS IN THE SOFTWARE.
 #define FE_OPCODE_DRAW_INSTANCED				0x0000000c
 #define FE_OPCODE_CHIP_SELECT					0x0000000d
 #define FE_OPCODE_WAIT_FENCE					0x0000000f
+#define FE_OPCODE_DRAW_INDIRECT					0x00000010
 #define FE_OPCODE_SNAP_PAGES					0x00000013
 #define PRIMITIVE_TYPE_POINTS					0x00000001
 #define PRIMITIVE_TYPE_LINES					0x00000002
@@ -285,6 +286,19 @@ DEALINGS IN THE SOFTWARE.
 #define VIV_FE_WAIT_FENCE_HEADER_WAITCOUNT(x)			(((x) << VIV_FE_WAIT_FENCE_HEADER_WAITCOUNT__SHIFT) & VIV_FE_WAIT_FENCE_HEADER_WAITCOUNT__MASK)
 
 #define VIV_FE_WAIT_FENCE_ADDRESS				0x00000004
+
+#define VIV_FE_DRAW_INDIRECT					0x00000000
+
+#define VIV_FE_DRAW_INDIRECT_HEADER				0x00000000
+#define VIV_FE_DRAW_INDIRECT_HEADER_OP__MASK			0xf8000000
+#define VIV_FE_DRAW_INDIRECT_HEADER_OP__SHIFT			27
+#define VIV_FE_DRAW_INDIRECT_HEADER_OP_DRAW_INDIRECT		0x80000000
+#define VIV_FE_DRAW_INDIRECT_HEADER_UNK8			0x00000100
+#define VIV_FE_DRAW_INDIRECT_HEADER_TYPE__MASK			0x0000000f
+#define VIV_FE_DRAW_INDIRECT_HEADER_TYPE__SHIFT			0
+#define VIV_FE_DRAW_INDIRECT_HEADER_TYPE(x)			(((x) << VIV_FE_DRAW_INDIRECT_HEADER_TYPE__SHIFT) & VIV_FE_DRAW_INDIRECT_HEADER_TYPE__MASK)
+
+#define VIV_FE_DRAW_INDIRECT_ADDRESS				0x00000004
 
 #define VIV_FE_SNAP_PAGES					0x00000000
 

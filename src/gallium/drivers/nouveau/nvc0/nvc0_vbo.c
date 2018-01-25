@@ -972,6 +972,16 @@ nvc0_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
       BCTX_REFN(nvc0->bufctx_3d, 3D_IDX, buf, RD);
    }
 
+   list_for_each_entry(struct nvc0_resident, resident, &nvc0->tex_head, list) {
+      nvc0_add_resident(nvc0->bufctx_3d, NVC0_BIND_3D_BINDLESS, resident->buf,
+                        resident->flags);
+   }
+
+   list_for_each_entry(struct nvc0_resident, resident, &nvc0->img_head, list) {
+      nvc0_add_resident(nvc0->bufctx_3d, NVC0_BIND_3D_BINDLESS, resident->buf,
+                        resident->flags);
+   }
+
    nvc0_state_validate_3d(nvc0, ~0);
 
    if (nvc0->vertprog->vp.need_draw_parameters && !info->indirect) {
@@ -1083,4 +1093,5 @@ cleanup:
    nouveau_pushbuf_bufctx(push, NULL);
 
    nouveau_bufctx_reset(nvc0->bufctx_3d, NVC0_BIND_3D_IDX);
+   nouveau_bufctx_reset(nvc0->bufctx_3d, NVC0_BIND_3D_BINDLESS);
 }

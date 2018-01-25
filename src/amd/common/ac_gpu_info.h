@@ -81,7 +81,8 @@ struct radeon_info {
 	uint32_t                    drm_patchlevel;
 	bool                        has_userptr;
 	bool                        has_syncobj;
-	bool                        has_sync_file;
+	bool                        has_syncobj_wait_for_submit;
+	bool                        has_fence_to_handle;
 	bool                        has_ctx_priority;
 
 	/* Shader cores. */
@@ -115,6 +116,7 @@ bool ac_query_gpu_info(int fd, amdgpu_device_handle dev,
 void ac_compute_driver_uuid(char *uuid, size_t size);
 
 void ac_compute_device_uuid(struct radeon_info *info, char *uuid, size_t size);
+void ac_print_gpu_info(struct radeon_info *info);
 
 #ifdef __cplusplus
 }

@@ -3637,6 +3637,8 @@
     <field name="TSG Done" start="17" end="17" type="bool"/>
     <field name="GAFM Done" start="18" end="18" type="bool"/>
     <field name="GAM Done" start="19" end="19" type="bool"/>
+    <field name="RS Done" start="20" end="20" type="bool"/>
+    <field name="CS Done" start="21" end="21" type="bool"/>
     <field name="SDE Done" start="22" end="22" type="bool"/>
     <field name="RCCFBC CS Done" start="23" end="23" type="bool"/>
   </register>
@@ -3750,6 +3752,18 @@
     <field name="NP Early Z Fails Disable Mask" start="29" end="29" type="bool"/>
     <field name="Blend Optimization Fix Disable Mask" start="30" end="30" type="bool"/>
     <field name="Color Compression Disable Mask" start="31" end="31" type="bool"/>
+  </register>
+
+  <register name="CACHE_MODE_SS" length="1" num="0x0e420">
+    <field name="Instruction Level 1 Cache Disable" start="0" end="0" type="bool"/>
+    <field name="Instruction Level 1 Cache and In-Flight Queue Disable " start="1" end="1" type="bool"/>
+    <field name="Float Blend Optimization Enable" start="4" end="4" type="bool"/>
+    <field name="Per Sample Blend Opt Disable"  start="11" end="11" type="bool"/>
+
+    <field name="Instruction Level 1 Cache Disable Mask" start="16" end="16" type="bool"/>
+    <field name="Instruction Level 1 Cache and In-Flight Queue Disable Mask" start="17" end="17" type="bool"/>
+    <field name="Float Blend Optimization Enable Mask" start="20" end="20" type="bool"/>
+    <field name="Per Sample Blend Opt Disable Mask"  start="27" end="27" type="bool"/>
   </register>
 
 </genxml>

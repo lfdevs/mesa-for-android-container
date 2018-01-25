@@ -31,7 +31,7 @@
 #include "util/simple_list.h"
 #include "os/os_thread.h"
 #include "os/os_mman.h"
-#include "os/os_time.h"
+#include "util/os_time.h"
 
 #include "state_tracker/drm_driver.h"
 
@@ -490,7 +490,7 @@ static void *radeon_bo_map(struct pb_buffer *buf,
                  *
                  * Only check whether the buffer is being used for write. */
                 if (cs && radeon_bo_is_referenced_by_cs_for_write(cs, bo)) {
-                    cs->flush_cs(cs->flush_data, RADEON_FLUSH_ASYNC, NULL);
+                    cs->flush_cs(cs->flush_data, PIPE_FLUSH_ASYNC, NULL);
                     return NULL;
                 }
 
@@ -500,7 +500,7 @@ static void *radeon_bo_map(struct pb_buffer *buf,
                 }
             } else {
                 if (cs && radeon_bo_is_referenced_by_cs(cs, bo)) {
-                    cs->flush_cs(cs->flush_data, RADEON_FLUSH_ASYNC, NULL);
+                    cs->flush_cs(cs->flush_data, PIPE_FLUSH_ASYNC, NULL);
                     return NULL;
                 }
 
@@ -608,6 +608,13 @@ static struct radeon_bo *radeon_create_bo(struct radeon_drm_winsys *rws,
     args.alignment = alignment;
     args.initial_domain = initial_domains;
     args.flags = 0;
+
+    /* If VRAM is just stolen system memory, allow both VRAM and
+     * GTT, whichever has free space. If a buffer is evicted from
+     * VRAM to GTT, it will stay there.
+     */
+    if (!rws->info.has_dedicated_vram)
+        args.initial_domain |= RADEON_DOMAIN_GTT;
 
     if (flags & RADEON_FLAG_GTT_WC)
         args.flags |= RADEON_GEM_GTT_WC;

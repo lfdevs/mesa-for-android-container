@@ -131,8 +131,8 @@ etna_update_blend(struct etna_context *ctx)
     * - The color mask is 1111
     * - No blending is used
     */
-   bool full_overwrite = (rt0->colormask == 0xf) &&
-                         blend->fo_allowed;
+   bool full_overwrite = ((rt0->colormask == 0xf) && blend->fo_allowed) ||
+                         !pfb->cbufs[0];
    blend->PE_COLOR_FORMAT =
             VIVS_PE_COLOR_FORMAT_COMPONENTS(colormask) |
             COND(full_overwrite, VIVS_PE_COLOR_FORMAT_OVERWRITE);

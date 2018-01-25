@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<metrics version="1491574821" merge_md5="">
+<metrics version="1508421692" merge_md5="">
   <set name="Render Metrics Basic Gen8"
        mdapi_supported_apis="OGL OCL IO BB"
        underscore_name="render_basic"
@@ -726,6 +726,7 @@
                      availability="$SliceMask 0x01 AND"
                      priority="0"
                      >
+        <register type="NOA" address="0x00009840" value="0x000000A0" />
         <register type="NOA" address="0x00009888" value="0x143F000F" />
         <register type="NOA" address="0x00009888" value="0x14110014" />
         <register type="NOA" address="0x00009888" value="0x14310014" />
@@ -831,11 +832,13 @@
         <register type="NOA" address="0x00009888" value="0x31800000" />
         <register type="NOA" address="0x00009888" value="0x3F800CA5" />
         <register type="NOA" address="0x00009888" value="0x41800003" />
+        <register type="NOA" address="0x00009840" value="0x00000080" />
     </register_config>
     <register_config type="NOA"
                      availability="$SliceMask 0x02 AND"
                      priority="1"
                      >
+        <register type="NOA" address="0x00009840" value="0x000000A0" />
         <register type="NOA" address="0x00009888" value="0x143F000F" />
         <register type="NOA" address="0x00009888" value="0x14BF000F" />
         <register type="NOA" address="0x00009888" value="0x14910014" />
@@ -946,6 +949,7 @@
         <register type="NOA" address="0x00009888" value="0x31800000" />
         <register type="NOA" address="0x00009888" value="0x3F801421" />
         <register type="NOA" address="0x00009888" value="0x41800845" />
+        <register type="NOA" address="0x00009840" value="0x00000080" />
     </register_config>
     <register_config type="OA">
         <register type="OA" address="0x00002710" value="0x00000000" />
@@ -1502,6 +1506,7 @@
                      availability="$SliceMask 0x01 AND"
                      priority="0"
                      >
+        <register type="NOA" address="0x00009840" value="0x000000A0" />
         <register type="NOA" address="0x00009888" value="0x105C00E0" />
         <register type="NOA" address="0x00009888" value="0x105800E0" />
         <register type="NOA" address="0x00009888" value="0x103800E0" />
@@ -1585,11 +1590,13 @@
         <register type="NOA" address="0x00009888" value="0x31800000" />
         <register type="NOA" address="0x00009888" value="0x3F801062" />
         <register type="NOA" address="0x00009888" value="0x41801084" />
+        <register type="NOA" address="0x00009840" value="0x00000080" />
     </register_config>
     <register_config type="NOA"
                      availability="$SliceMask 0x02 AND"
                      priority="2"
                      >
+        <register type="NOA" address="0x00009840" value="0x000000A0" />
         <register type="NOA" address="0x00009888" value="0x10DC00E0" />
         <register type="NOA" address="0x00009888" value="0x10D800E0" />
         <register type="NOA" address="0x00009888" value="0x10B800E0" />
@@ -1685,6 +1692,7 @@
         <register type="NOA" address="0x00009888" value="0x31800000" />
         <register type="NOA" address="0x00009888" value="0x3F800062" />
         <register type="NOA" address="0x00009888" value="0x41800000" />
+        <register type="NOA" address="0x00009840" value="0x00000080" />
     </register_config>
     <register_config type="OA">
         <register type="OA" address="0x00002710" value="0x00000000" />
@@ -2313,6 +2321,7 @@
              mdapi_group="L3/Data Port/Atomics"
              />
     <register_config type="NOA">
+        <register type="NOA" address="0x00009840" value="0x000000A0" />
         <register type="NOA" address="0x00009888" value="0x0A1E0000" />
         <register type="NOA" address="0x00009888" value="0x0C1F000F" />
         <register type="NOA" address="0x00009888" value="0x10176800" />
@@ -2422,6 +2431,7 @@
         <register type="NOA" address="0x00009888" value="0x31800000" />
         <register type="NOA" address="0x00009888" value="0x3F800422" />
         <register type="NOA" address="0x00009888" value="0x41800021" />
+        <register type="NOA" address="0x00009840" value="0x00000080" />
     </register_config>
     <register_config type="OA">
         <register type="OA" address="0x00002724" value="0xF0800000" />
@@ -3018,6 +3028,7 @@
              mdapi_group="L3/Data Port/Atomics"
              />
     <register_config type="NOA">
+        <register type="NOA" address="0x00009840" value="0x000000A0" />
         <register type="NOA" address="0x00009888" value="0x198B0343" />
         <register type="NOA" address="0x00009888" value="0x13845800" />
         <register type="NOA" address="0x00009888" value="0x15840018" />
@@ -3066,6 +3077,7 @@
         <register type="NOA" address="0x00009888" value="0x31800000" />
         <register type="NOA" address="0x00009888" value="0x3F800084" />
         <register type="NOA" address="0x00009888" value="0x41800000" />
+        <register type="NOA" address="0x00009840" value="0x00000080" />
     </register_config>
     <register_config type="OA">
         <register type="OA" address="0x00002724" value="0xF0800000" />
@@ -3656,6 +3668,7 @@
              mdapi_group="L3/Data Port/Atomics"
              />
     <register_config type="NOA">
+        <register type="NOA" address="0x00009840" value="0x000000A0" />
         <register type="NOA" address="0x00009888" value="0x198B0343" />
         <register type="NOA" address="0x00009888" value="0x13845400" />
         <register type="NOA" address="0x00009888" value="0x3580001A" />
@@ -3703,6 +3716,7 @@
         <register type="NOA" address="0x00009888" value="0x31800000" />
         <register type="NOA" address="0x00009888" value="0x3F800084" />
         <register type="NOA" address="0x00009888" value="0x41800000" />
+        <register type="NOA" address="0x00009840" value="0x00000080" />
     </register_config>
     <register_config type="OA">
         <register type="OA" address="0x00002724" value="0xF0800000" />
@@ -4262,6 +4276,7 @@
                      availability="$SubsliceMask 0x01 AND"
                      priority="0"
                      >
+        <register type="NOA" address="0x00009840" value="0x000000A0" />
         <register type="NOA" address="0x00009888" value="0x143D0160" />
         <register type="NOA" address="0x00009888" value="0x163D2800" />
         <register type="NOA" address="0x00009888" value="0x183D0120" />
@@ -4374,11 +4389,13 @@
         <register type="NOA" address="0x00009888" value="0x31800000" />
         <register type="NOA" address="0x00009888" value="0x3F800421" />
         <register type="NOA" address="0x00009888" value="0x41800000" />
+        <register type="NOA" address="0x00009840" value="0x00000080" />
     </register_config>
     <register_config type="NOA"
                      availability="$SubsliceMask 0x02 AND"
                      priority="2"
                      >
+        <register type="NOA" address="0x00009840" value="0x000000A0" />
         <register type="NOA" address="0x00009888" value="0x105C00E0" />
         <register type="NOA" address="0x00009888" value="0x145B0160" />
         <register type="NOA" address="0x00009888" value="0x165B2800" />
@@ -4474,11 +4491,13 @@
         <register type="NOA" address="0x00009888" value="0x31800000" />
         <register type="NOA" address="0x00009888" value="0x3F800421" />
         <register type="NOA" address="0x00009888" value="0x41800000" />
+        <register type="NOA" address="0x00009840" value="0x00000080" />
     </register_config>
     <register_config type="NOA"
                      availability="$SubsliceMask 0x04 AND"
                      priority="4"
                      >
+        <register type="NOA" address="0x00009840" value="0x000000A0" />
         <register type="NOA" address="0x00009888" value="0x103800E0" />
         <register type="NOA" address="0x00009888" value="0x143A0160" />
         <register type="NOA" address="0x00009888" value="0x163A2800" />
@@ -4566,11 +4585,13 @@
         <register type="NOA" address="0x00009888" value="0x31800000" />
         <register type="NOA" address="0x00009888" value="0x3F800421" />
         <register type="NOA" address="0x00009888" value="0x41800000" />
+        <register type="NOA" address="0x00009840" value="0x00000080" />
     </register_config>
     <register_config type="NOA"
                      availability="$SubsliceMask 0x08 AND"
                      priority="1"
                      >
+        <register type="NOA" address="0x00009840" value="0x000000A0" />
         <register type="NOA" address="0x00009888" value="0x14BD0160" />
         <register type="NOA" address="0x00009888" value="0x16BD2800" />
         <register type="NOA" address="0x00009888" value="0x18BD0120" />
@@ -4699,11 +4720,13 @@
         <register type="NOA" address="0x00009888" value="0x31800000" />
         <register type="NOA" address="0x00009888" value="0x3F800421" />
         <register type="NOA" address="0x00009888" value="0x41800000" />
+        <register type="NOA" address="0x00009840" value="0x00000080" />
     </register_config>
     <register_config type="NOA"
                      availability="$SubsliceMask 0x10 AND"
                      priority="3"
                      >
+        <register type="NOA" address="0x00009840" value="0x000000A0" />
         <register type="NOA" address="0x00009888" value="0x10DC00E0" />
         <register type="NOA" address="0x00009888" value="0x14DB0160" />
         <register type="NOA" address="0x00009888" value="0x16DB2800" />
@@ -4815,11 +4838,13 @@
         <register type="NOA" address="0x00009888" value="0x31800000" />
         <register type="NOA" address="0x00009888" value="0x3F800421" />
         <register type="NOA" address="0x00009888" value="0x41800000" />
+        <register type="NOA" address="0x00009840" value="0x00000080" />
     </register_config>
     <register_config type="NOA"
                      availability="$SubsliceMask 0x20 AND"
                      priority="5"
                      >
+        <register type="NOA" address="0x00009840" value="0x000000A0" />
         <register type="NOA" address="0x00009888" value="0x10B800E0" />
         <register type="NOA" address="0x00009888" value="0x14BA0160" />
         <register type="NOA" address="0x00009888" value="0x16BA2800" />
@@ -4923,6 +4948,7 @@
         <register type="NOA" address="0x00009888" value="0x31800000" />
         <register type="NOA" address="0x00009888" value="0x3F800421" />
         <register type="NOA" address="0x00009888" value="0x41800000" />
+        <register type="NOA" address="0x00009840" value="0x00000080" />
     </register_config>
     <register_config type="OA">
         <register type="OA" address="0x00002724" value="0xF0800000" />
@@ -5756,6 +5782,7 @@
              mdapi_hw_unit_type="gpu"
              />
     <register_config type="NOA">
+        <register type="NOA" address="0x00009840" value="0x000000A0" />
         <register type="NOA" address="0x00009888" value="0x143F00B3" />
         <register type="NOA" address="0x00009888" value="0x14BF00B3" />
         <register type="NOA" address="0x00009888" value="0x138303C0" />
@@ -5861,6 +5888,7 @@
         <register type="NOA" address="0x00009888" value="0x31800000" />
         <register type="NOA" address="0x00009888" value="0x3F800800" />
         <register type="NOA" address="0x00009888" value="0x418014A2" />
+        <register type="NOA" address="0x00009840" value="0x00000080" />
     </register_config>
     <register_config type="OA">
         <register type="OA" address="0x00002710" value="0x00000000" />
@@ -6366,6 +6394,7 @@
                      availability="$SubsliceMask 0x01 AND"
                      priority="0"
                      >
+        <register type="NOA" address="0x00009840" value="0x000000A0" />
         <register type="NOA" address="0x00009888" value="0x103D0005" />
         <register type="NOA" address="0x00009888" value="0x163D240B" />
         <register type="NOA" address="0x00009888" value="0x1058022F" />
@@ -6478,6 +6507,7 @@
         <register type="NOA" address="0x00009888" value="0x31800000" />
         <register type="NOA" address="0x00009888" value="0x3F800421" />
         <register type="NOA" address="0x00009888" value="0x41800041" />
+        <register type="NOA" address="0x00009840" value="0x00000080" />
     </register_config>
     <register_config type="OA">
         <register type="OA" address="0x00002724" value="0xF0800000" />
@@ -7033,6 +7063,7 @@
                      availability="$SubsliceMask 0x01 AND"
                      priority="0"
                      >
+        <register type="NOA" address="0x00009840" value="0x000000A0" />
         <register type="NOA" address="0x00009888" value="0x103D0005" />
         <register type="NOA" address="0x00009888" value="0x143D0120" />
         <register type="NOA" address="0x00009888" value="0x163D2400" />
@@ -7141,6 +7172,7 @@
         <register type="NOA" address="0x00009888" value="0x47800420" />
         <register type="NOA" address="0x00009888" value="0x3F800421" />
         <register type="NOA" address="0x00009888" value="0x41800041" />
+        <register type="NOA" address="0x00009840" value="0x00000080" />
     </register_config>
     <register_config type="OA">
         <register type="OA" address="0x00002724" value="0xF0800000" />
@@ -7761,6 +7793,7 @@
              mdapi_group="L3/Data Port/Atomics"
              />
     <register_config type="NOA">
+        <register type="NOA" address="0x00009840" value="0x000000A0" />
         <register type="NOA" address="0x00009888" value="0x105C0232" />
         <register type="NOA" address="0x00009888" value="0x10580232" />
         <register type="NOA" address="0x00009888" value="0x10380232" />
@@ -7857,6 +7890,7 @@
         <register type="NOA" address="0x00009888" value="0x3F801042" />
         <register type="NOA" address="0x00009888" value="0x4F800000" />
         <register type="NOA" address="0x00009888" value="0x418014A4" />
+        <register type="NOA" address="0x00009840" value="0x00000080" />
     </register_config>
     <register_config type="OA">
         <register type="OA" address="0x00002740" value="0x00000000" />
@@ -8417,6 +8451,7 @@
              mdapi_group="L3/Data Port/Atomics"
              />
     <register_config type="NOA">
+        <register type="NOA" address="0x00009840" value="0x000000A0" />
         <register type="NOA" address="0x00009888" value="0x10BF03DA" />
         <register type="NOA" address="0x00009888" value="0x14BF0001" />
         <register type="NOA" address="0x00009888" value="0x12980340" />
@@ -8506,6 +8541,7 @@
         <register type="NOA" address="0x00009888" value="0x3F800000" />
         <register type="NOA" address="0x00009888" value="0x4F800000" />
         <register type="NOA" address="0x00009888" value="0x41800060" />
+        <register type="NOA" address="0x00009840" value="0x00000080" />
     </register_config>
     <register_config type="OA">
         <register type="OA" address="0x00002740" value="0x00000000" />
@@ -9080,6 +9116,7 @@
              mdapi_group="L3/Data Port/Atomics"
              />
     <register_config type="NOA">
+        <register type="NOA" address="0x00009840" value="0x000000A0" />
         <register type="NOA" address="0x00009888" value="0x103F03DA" />
         <register type="NOA" address="0x00009888" value="0x143F0001" />
         <register type="NOA" address="0x00009888" value="0x12180340" />
@@ -9156,6 +9193,7 @@
         <register type="NOA" address="0x00009888" value="0x3F800000" />
         <register type="NOA" address="0x00009888" value="0x4F800000" />
         <register type="NOA" address="0x00009888" value="0x41800060" />
+        <register type="NOA" address="0x00009840" value="0x00000080" />
     </register_config>
     <register_config type="OA">
         <register type="OA" address="0x00002740" value="0x00000000" />
@@ -9730,6 +9768,7 @@
              mdapi_group="L3/Data Port/Atomics"
              />
     <register_config type="NOA">
+        <register type="NOA" address="0x00009840" value="0x000000A0" />
         <register type="NOA" address="0x00009888" value="0x121B0340" />
         <register type="NOA" address="0x00009888" value="0x103F0274" />
         <register type="NOA" address="0x00009888" value="0x123F0000" />
@@ -9822,6 +9861,7 @@
         <register type="NOA" address="0x00009888" value="0x3F8014A5" />
         <register type="NOA" address="0x00009888" value="0x4F800000" />
         <register type="NOA" address="0x00009888" value="0x41800045" />
+        <register type="NOA" address="0x00009840" value="0x00000080" />
     </register_config>
     <register_config type="OA">
         <register type="OA" address="0x00002740" value="0x00000000" />
@@ -10396,6 +10436,7 @@
              mdapi_group="L3/Data Port/Atomics"
              />
     <register_config type="NOA">
+        <register type="NOA" address="0x00009840" value="0x000000A0" />
         <register type="NOA" address="0x00009888" value="0x121A0340" />
         <register type="NOA" address="0x00009888" value="0x103F0017" />
         <register type="NOA" address="0x00009888" value="0x123F0020" />
@@ -10487,6 +10528,7 @@
         <register type="NOA" address="0x00009888" value="0x3F801084" />
         <register type="NOA" address="0x00009888" value="0x4F800000" />
         <register type="NOA" address="0x00009888" value="0x41800044" />
+        <register type="NOA" address="0x00009840" value="0x00000080" />
     </register_config>
     <register_config type="OA">
         <register type="OA" address="0x00002740" value="0x00000000" />
@@ -11151,6 +11193,7 @@
              mdapi_group="L3/Data Port/Atomics"
              />
     <register_config type="NOA">
+        <register type="NOA" address="0x00009840" value="0x000000A0" />
         <register type="NOA" address="0x00009888" value="0x143B000E" />
         <register type="NOA" address="0x00009888" value="0x043C55C0" />
         <register type="NOA" address="0x00009888" value="0x0A1E0280" />
@@ -11263,6 +11306,7 @@
         <register type="NOA" address="0x00009888" value="0x31800000" />
         <register type="NOA" address="0x00009888" value="0x3F800000" />
         <register type="NOA" address="0x00009888" value="0x41800840" />
+        <register type="NOA" address="0x00009840" value="0x00000080" />
     </register_config>
     <register_config type="OA">
         <register type="OA" address="0x00002740" value="0x00000000" />
@@ -11863,6 +11907,7 @@
              mdapi_group="L3/Data Port/Atomics"
              />
     <register_config type="NOA">
+        <register type="NOA" address="0x00009840" value="0x000000A0" />
         <register type="NOA" address="0x00009888" value="0x18921400" />
         <register type="NOA" address="0x00009888" value="0x149500AB" />
         <register type="NOA" address="0x00009888" value="0x18B21400" />
@@ -11987,6 +12032,7 @@
         <register type="NOA" address="0x00009888" value="0x3F800C64" />
         <register type="NOA" address="0x00009888" value="0x4F800000" />
         <register type="NOA" address="0x00009888" value="0x41800C02" />
+        <register type="NOA" address="0x00009840" value="0x00000080" />
     </register_config>
     <register_config type="OA">
         <register type="OA" address="0x00002740" value="0x00000000" />
@@ -12581,6 +12627,7 @@
              mdapi_group="L3/Data Port/Atomics"
              />
     <register_config type="NOA">
+        <register type="NOA" address="0x00009840" value="0x000000A0" />
         <register type="NOA" address="0x00009888" value="0x18121400" />
         <register type="NOA" address="0x00009888" value="0x141500AB" />
         <register type="NOA" address="0x00009888" value="0x18321400" />
@@ -12693,6 +12740,7 @@
         <register type="NOA" address="0x00009888" value="0x3F800C64" />
         <register type="NOA" address="0x00009888" value="0x4F800000" />
         <register type="NOA" address="0x00009888" value="0x41800C02" />
+        <register type="NOA" address="0x00009840" value="0x00000080" />
     </register_config>
     <register_config type="OA">
         <register type="OA" address="0x00002740" value="0x00000000" />
@@ -12848,7 +12896,7 @@
              mdapi_hw_unit_type="gpu"
              mdapi_group="EU Array/Vertex Shader"
              />
-    <counter name="PS Thread Ready For Dispatch on Slice1 Subslice1 Thread Dispatcher"
+    <counter name="PS Thread Ready For Dispatch on Slice1 Subslice1"
              description="The percentage of time in which PS thread is ready for dispatch on slice1 subslice1 thread dispatcher"
              data_type="float"
              max_equation="100"
@@ -12876,7 +12924,7 @@
              mdapi_hw_unit_type="gpu"
              mdapi_group="EU Array/Fragment Shader"
              />
-    <counter name="Non-PS Thread Ready For Dispatch on Slice1 Subslice2 Thread Dispatcher"
+    <counter name="NonPS Thread Ready For Dispatch on Slice1 Subslice2"
              description="The percentage of time in which non-PS thread is ready for dispatch on slice1 subslice2 thread dispatcher"
              data_type="float"
              max_equation="100"
@@ -12930,7 +12978,7 @@
              mdapi_hw_unit_type="gpu"
              mdapi_group="3D Pipe/Output Merger"
              />
-    <counter name="Non-PS Thread Ready For Dispatch on Slice1 Subslice0 Thread Dispatcher"
+    <counter name="NonPS Thread Ready For Dispatch on Slice1 Subslice0"
              description="The percentage of time in which non-PS thread is ready for dispatch on slice1 subslice0 thread dispatcher"
              data_type="float"
              max_equation="100"
@@ -12945,7 +12993,7 @@
              mdapi_group="GPU/Thread Dispatcher"
              mdapi_hw_unit_type="subslice"
              />
-    <counter name="Thread Header Ready on Slice0 Subslice1 Thread Dispatcher Port 0"
+    <counter name="Thread Header Ready on Slice0 Subslice1 Port 0"
              description="The percentage of time in which thread header is ready on slice0 subslice1 thread dispatcher port 0"
              data_type="float"
              max_equation="100"
@@ -12960,7 +13008,7 @@
              mdapi_group="GPU/Thread Dispatcher"
              mdapi_hw_unit_type="subslice"
              />
-    <counter name="Thread Header Ready on Slice0 Subslice1 Thread Dispatcher Port 1"
+    <counter name="Thread Header Ready on Slice0 Subslice1 Port 1"
              description="The percentage of time in which thread header is ready on slice0 subslice1 thread dispatcher port 1"
              data_type="float"
              max_equation="100"
@@ -13098,7 +13146,7 @@
              mdapi_group="GPU"
              mdapi_hw_unit_type="gpu"
              />
-    <counter name="Thread Header Ready on Slice0 Subslice2 Thread Dispatcher Port 1"
+    <counter name="Thread Header Ready on Slice0 Subslice2 Port 1"
              description="The percentage of time in which thread header is ready on slice0 subslice2 thread dispatcher port 1"
              data_type="float"
              max_equation="100"
@@ -13113,7 +13161,7 @@
              mdapi_group="GPU/Thread Dispatcher"
              mdapi_hw_unit_type="subslice"
              />
-    <counter name="Thread Header Ready on Slice0 Subslice2 Thread Dispatcher Port 0"
+    <counter name="Thread Header Ready on Slice0 Subslice2 Port 0"
              description="The percentage of time in which thread header is ready on slice0 subslice2 thread dispatcher port 0"
              data_type="float"
              max_equation="100"
@@ -13221,7 +13269,7 @@
              mdapi_hw_unit_type="gpu"
              mdapi_group="3D Pipe/Rasterizer/Early Depth Test"
              />
-    <counter name="PS Thread Ready For Dispatch on Slice1 Subslice2 Thread Dispatcher"
+    <counter name="PS Thread Ready For Dispatch on Slice1 Subslice2"
              description="The percentage of time in which PS thread is ready for dispatch on slice1 subslice2 thread dispatcher"
              data_type="float"
              max_equation="100"
@@ -13236,7 +13284,7 @@
              mdapi_group="GPU/Thread Dispatcher"
              mdapi_hw_unit_type="subslice"
              />
-    <counter name="PS Thread Ready For Dispatch on Slice1 Subslice0 Thread Dispatcher"
+    <counter name="PS Thread Ready For Dispatch on Slice1 Subslice0"
              description="The percentage of time in which PS thread is ready for dispatch on slice1 subslice0 thread dispatcher"
              data_type="float"
              max_equation="100"
@@ -13251,7 +13299,7 @@
              mdapi_group="GPU/Thread Dispatcher"
              mdapi_hw_unit_type="subslice"
              />
-    <counter name="Non-PS Thread Ready For Dispatch on Slice1 Subslice1 Thread Dispatcher"
+    <counter name="NonPS Thread Ready For Dispatch on Slice1 Subslice1"
              description="The percentage of time in which non-PS thread is ready for dispatch on slice1 subslice1 thread dispatcher"
              data_type="float"
              max_equation="100"
@@ -13333,7 +13381,7 @@
              mdapi_hw_unit_type="gpu"
              mdapi_group="3D Pipe/Fragment Shader"
              />
-    <counter name="Thread Header Ready on Slice0 Subslice0 Thread Dispatcher Port 0"
+    <counter name="Thread Header Ready on Slice0 Subslice0 Port 0"
              description="The percentage of time in which thread header is ready on slice0 subslice0 thread dispatcher port 0"
              data_type="float"
              max_equation="100"
@@ -13361,7 +13409,7 @@
              mdapi_hw_unit_type="gpu"
              mdapi_group="L3/Data Port/Atomics"
              />
-    <counter name="Thread Header Ready on Slice0 Subslice0 Thread Dispatcher Port 1"
+    <counter name="Thread Header Ready on Slice0 Subslice0 Port 1"
              description="The percentage of time in which thread header is ready on slice0 subslice0 thread dispatcher port 1"
              data_type="float"
              max_equation="100"
@@ -13377,6 +13425,7 @@
              mdapi_hw_unit_type="subslice"
              />
     <register_config type="NOA">
+        <register type="NOA" address="0x00009840" value="0x000000A0" />
         <register type="NOA" address="0x00009888" value="0x16154D60" />
         <register type="NOA" address="0x00009888" value="0x16352E60" />
         <register type="NOA" address="0x00009888" value="0x16554D60" />
@@ -13526,6 +13575,7 @@
         <register type="NOA" address="0x00009888" value="0x4D800000" />
         <register type="NOA" address="0x00009888" value="0x3F8014A4" />
         <register type="NOA" address="0x00009888" value="0x41801042" />
+        <register type="NOA" address="0x00009840" value="0x00000080" />
     </register_config>
     <register_config type="OA">
         <register type="OA" address="0x00002740" value="0x00000000" />
@@ -13606,7 +13656,7 @@
              mdapi_group="EU Array/Pipes"
              mdapi_hw_unit_type="gpu"
              />
-    <counter name="Thread Header Ready on Slice1 Subslice1 Thread Dispatcher Port 1"
+    <counter name="Thread Header Ready on Slice1 Subslice1 Port 1"
              description="The percentage of time in which thread header is ready on slice1 subslice1 thread dispatcher port 1"
              data_type="float"
              max_equation="100"
@@ -13715,7 +13765,7 @@
              mdapi_hw_unit_type="gpu"
              mdapi_group="EU Array/Fragment Shader"
              />
-    <counter name="Non-PS Thread Ready For Dispatch on Slice0 Subslice2 Thread Dispatcher"
+    <counter name="NonPS Thread Ready For Dispatch on Slice0 Subslice2"
              description="The percentage of time in which non-PS thread is ready for dispatch on slice0 subslice2 thread dispatcher"
              data_type="float"
              max_equation="100"
@@ -13809,7 +13859,7 @@
              mdapi_hw_unit_type="gpu"
              mdapi_group="Sampler/Sampler Cache"
              />
-    <counter name="Non-PS Thread Ready For Dispatch on Slice0 Subslice0 Thread Dispatcher"
+    <counter name="NonPS Thread Ready For Dispatch on Slice0 Subslice0"
              description="The percentage of time in which non-PS thread is ready for dispatch on slice0 subslice0 thread dispatcher"
              data_type="float"
              max_equation="100"
@@ -13851,7 +13901,7 @@
              mdapi_group="L3/Data Port/SLM"
              mdapi_hw_unit_type="gpu"
              />
-    <counter name="Thread Header Ready on Slice1 Subslice1 Thread Dispatcher Port 0"
+    <counter name="Thread Header Ready on Slice1 Subslice1 Port 0"
              description="The percentage of time in which thread header is ready on slice1 subslice1 thread dispatcher port 0"
              data_type="float"
              max_equation="100"
@@ -13922,7 +13972,7 @@
              mdapi_group="GPU"
              mdapi_hw_unit_type="gpu"
              />
-    <counter name="Thread Header Ready on Slice1 Subslice2 Thread Dispatcher Port 0"
+    <counter name="Thread Header Ready on Slice1 Subslice2 Port 0"
              description="The percentage of time in which thread header is ready on slice1 subslice2 thread dispatcher port 0"
              data_type="float"
              max_equation="100"
@@ -13937,7 +13987,7 @@
              mdapi_group="GPU/Thread Dispatcher"
              mdapi_hw_unit_type="subslice"
              />
-    <counter name="PS Thread Ready For Dispatch on Slice0 Subslice0 Thread Dispatcher"
+    <counter name="PS Thread Ready For Dispatch on Slice0 Subslice0"
              description="The percentage of time in which PS thread is ready for dispatch on slice0 subslice0 thread dispatcher"
              data_type="float"
              max_equation="100"
@@ -14005,7 +14055,7 @@
              mdapi_hw_unit_type="gpu"
              mdapi_group="3D Pipe/Output Merger"
              />
-    <counter name="Thread Header Ready on Slice1 Subslice0 Thread Dispatcher Port 1"
+    <counter name="Thread Header Ready on Slice1 Subslice0 Port 1"
              description="The percentage of time in which thread header is ready on slice1 subslice0 thread dispatcher port 1"
              data_type="float"
              max_equation="100"
@@ -14060,7 +14110,7 @@
              mdapi_hw_unit_type="gpu"
              mdapi_group="3D Pipe/Rasterizer/Early Depth Test"
              />
-    <counter name="PS Thread Ready For Dispatch on Slice0 Subslice1 Thread Dispatcher"
+    <counter name="PS Thread Ready For Dispatch on Slice0 Subslice1"
              description="The percentage of time in which PS thread is ready for dispatch on slice0 subslice1 thread dispatcher"
              data_type="float"
              max_equation="100"
@@ -14075,7 +14125,7 @@
              mdapi_group="GPU/Thread Dispatcher"
              mdapi_hw_unit_type="subslice"
              />
-    <counter name="Thread Header Ready on Slice1 Subslice2 Thread Dispatcher Port 1"
+    <counter name="Thread Header Ready on Slice1 Subslice2 Port 1"
              description="The percentage of time in which thread header is ready on slice1 subslice2 thread dispatcher port 1"
              data_type="float"
              max_equation="100"
@@ -14116,7 +14166,7 @@
              mdapi_hw_unit_type="gpu"
              mdapi_group="EU Array/Hull Shader"
              />
-    <counter name="PS Thread Ready For Dispatch on Slice0 Subslice2 Thread Dispatcher"
+    <counter name="PS Thread Ready For Dispatch on Slice0 Subslice2"
              description="The percentage of time in which PS thread is ready for dispatch on slice0 subslice2 thread dispatcher"
              data_type="float"
              max_equation="100"
@@ -14172,7 +14222,7 @@
              mdapi_hw_unit_type="gpu"
              mdapi_group="3D Pipe/Fragment Shader"
              />
-    <counter name="Thread Header Ready on Slice1 Subslice0 Thread Dispatcher Port 0"
+    <counter name="Thread Header Ready on Slice1 Subslice0 Port 0"
              description="The percentage of time in which thread header is ready on slice1 subslice0 thread dispatcher port 0"
              data_type="float"
              max_equation="100"
@@ -14200,7 +14250,7 @@
              mdapi_hw_unit_type="gpu"
              mdapi_group="L3/Data Port/Atomics"
              />
-    <counter name="Non-PS Thread Ready For Dispatch on Slice0 Subslice1 Thread Dispatcher"
+    <counter name="NonPS Thread Ready For Dispatch on Slice0 Subslice1"
              description="The percentage of time in which non-PS thread is ready for dispatch on slice0 subslice1 thread dispatcher"
              data_type="float"
              max_equation="100"
@@ -14216,6 +14266,7 @@
              mdapi_hw_unit_type="subslice"
              />
     <register_config type="NOA">
+        <register type="NOA" address="0x00009840" value="0x000000A0" />
         <register type="NOA" address="0x00009888" value="0x16150000" />
         <register type="NOA" address="0x00009888" value="0x16350000" />
         <register type="NOA" address="0x00009888" value="0x16550000" />
@@ -14369,6 +14420,7 @@
         <register type="NOA" address="0x00009888" value="0x4D800000" />
         <register type="NOA" address="0x00009888" value="0x3F800002" />
         <register type="NOA" address="0x00009888" value="0x41800C62" />
+        <register type="NOA" address="0x00009840" value="0x00000080" />
     </register_config>
     <register_config type="OA">
         <register type="OA" address="0x00002740" value="0x00000000" />
@@ -14477,6 +14529,7 @@
              mdapi_hw_unit_type="gpu"
              />
     <register_config type="NOA">
+        <register type="NOA" address="0x00009840" value="0x000000A0" />
         <register type="NOA" address="0x00009888" value="0x161503E0" />
         <register type="NOA" address="0x00009888" value="0x163503E0" />
         <register type="NOA" address="0x00009888" value="0x165503E0" />
@@ -14568,6 +14621,7 @@
         <register type="NOA" address="0x00009888" value="0x4F800000" />
         <register type="NOA" address="0x00009888" value="0x41801482" />
         <register type="NOA" address="0x00009888" value="0x31800000" />
+        <register type="NOA" address="0x00009840" value="0x00000080" />
     </register_config>
     <register_config type="OA">
         <register type="OA" address="0x00002740" value="0x00000000" />
@@ -14639,7 +14693,7 @@
     <counter name="GPU Time Elapsed"
              description="Time elapsed on the GPU during the measurement."
              data_type="uint64"
-             equation="GPU_TIME 0 READ 1000000000 UMUL $GpuTimestampFrequency UDIV 1000000000 UMUL $GpuTimestampFrequency UDIV"
+             equation="GPU_TIME 0 READ 1000000000 UMUL $GpuTimestampFrequency UDIV"
              underscore_name="gpu_time"
              units="ns"
              symbol_name="GpuTime"
@@ -14653,7 +14707,7 @@
              description="Average GPU Core Frequency in the measurement."
              data_type="uint64"
              max_equation="$GpuMaxFrequency"
-             equation="$GpuCoreClocks 1000000000 UMUL  GPU_TIME 0 READ 1000000000 UMUL $GpuTimestampFrequency UDIV UDIV"
+             equation="$GpuCoreClocks 1000000000 UMUL $GpuTime UDIV"
              underscore_name="avg_gpu_core_frequency"
              units="hz"
              symbol_name="AvgGpuCoreFrequency"
@@ -14733,6 +14787,7 @@
              mdapi_hw_unit_type="gpu"
              />
     <register_config type="NOA">
+        <register type="NOA" address="0x00009840" value="0x000000A0" />
         <register type="NOA" address="0x00009888" value="0x14100812" />
         <register type="NOA" address="0x00009888" value="0x14125800" />
         <register type="NOA" address="0x00009888" value="0x161200C0" />
@@ -14818,6 +14873,7 @@
         <register type="NOA" address="0x00009888" value="0x47800002" />
         <register type="NOA" address="0x00009888" value="0x21800000" />
         <register type="NOA" address="0x00009888" value="0x31800000" />
+        <register type="NOA" address="0x00009840" value="0x00000080" />
     </register_config>
     <register_config type="OA">
         <register type="OA" address="0x00002740" value="0x00000000" />
@@ -14841,6 +14897,189 @@
     <register_config type="FLEX">
         <register type="FLEX" address="0x0000E458" value="0x00005004" />
         <register type="FLEX" address="0x0000E558" value="0x00008003" />
+    </register_config>
+  </set>
+
+  <set name="Gpu Rings Busyness"
+       mdapi_supported_apis="OGL OCL MEDIA IO BB"
+       underscore_name="gpu_busyness"
+       hw_config_guid="0a9eb7be-feee-4275-a139-6d9cedf0fdb0"
+       chipset="BDW"
+       symbol_name="GpuBusyness"
+       >
+    <counter name="GPU Core Clocks"
+             description="The total number of GPU core clocks elapsed during the measurement."
+             data_type="uint64"
+             equation="GPU_CLOCK 0 READ"
+             underscore_name="gpu_core_clocks"
+             units="cycles"
+             symbol_name="GpuCoreClocks"
+             semantic_type="event"
+             mdapi_supported_apis=""
+             mdapi_usage_flags="Tier1 Frame Batch Draw"
+             mdapi_hw_unit_type="gpu"
+             mdapi_group="GPU"
+             />
+    <counter name="Vebox Ring Busy"
+             description="The percentage of time when vebox command streamer was busy."
+             data_type="float"
+             max_equation="100"
+             equation="C 5 READ 100 UMUL $GpuCoreClocks FDIV"
+             underscore_name="vebox_busy"
+             units="percent"
+             symbol_name="VeboxBusy"
+             semantic_type="duration"
+             mdapi_supported_apis=""
+             mdapi_usage_flags="System Frame Batch"
+             mdapi_group="GPU"
+             mdapi_hw_unit_type="gpu"
+             />
+    <counter name="GPU Time Elapsed"
+             description="Time elapsed on the GPU during the measurement."
+             data_type="uint64"
+             equation="GPU_TIME 0 READ 1000000000 UMUL $GpuTimestampFrequency UDIV"
+             underscore_name="gpu_time"
+             units="ns"
+             symbol_name="GpuTime"
+             semantic_type="duration"
+             mdapi_supported_apis=""
+             mdapi_usage_flags="Tier1 Overview System Frame Batch Draw"
+             mdapi_hw_unit_type="gpu"
+             mdapi_group="GPU"
+             />
+    <counter name="AVG GPU Core Frequency"
+             description="Average GPU Core Frequency in the measurement."
+             data_type="uint64"
+             max_equation="$GpuMaxFrequency"
+             equation="$GpuCoreClocks 1000000000 UMUL $GpuTime UDIV"
+             underscore_name="avg_gpu_core_frequency"
+             units="hz"
+             symbol_name="AvgGpuCoreFrequency"
+             semantic_type="event"
+             mdapi_supported_apis=""
+             mdapi_usage_flags="Tier1 Overview System Frame Batch Draw"
+             mdapi_group="GPU"
+             mdapi_hw_unit_type="gpu"
+             />
+    <counter name="Render Ring Busy"
+             description="The percentage of time when render command streamer was busy."
+             data_type="float"
+             max_equation="100"
+             equation="C 7 READ 100 UMUL $GpuCoreClocks FDIV"
+             underscore_name="render_busy"
+             units="percent"
+             symbol_name="RenderBusy"
+             semantic_type="duration"
+             mdapi_supported_apis=""
+             mdapi_usage_flags="System Frame Batch"
+             mdapi_group="GPU"
+             mdapi_hw_unit_type="gpu"
+             />
+    <counter name="Vdbox0 Ring Busy"
+             description="The percentage of time when Vdbox0 command streamer was busy."
+             data_type="float"
+             max_equation="100"
+             equation="C 6 READ 100 UMUL $GpuCoreClocks FDIV"
+             underscore_name="vdbox0_busy"
+             units="percent"
+             symbol_name="Vdbox0Busy"
+             semantic_type="duration"
+             mdapi_supported_apis=""
+             mdapi_usage_flags="System Frame Batch"
+             mdapi_group="GPU"
+             mdapi_hw_unit_type="gpu"
+             />
+    <counter name="Blitter Ring Busy"
+             description="The percentage of time when blitter command streamer was busy."
+             data_type="float"
+             max_equation="100"
+             equation="C 4 READ 100 UMUL $GpuCoreClocks FDIV"
+             underscore_name="blitter_busy"
+             units="percent"
+             symbol_name="BlitterBusy"
+             semantic_type="duration"
+             mdapi_supported_apis=""
+             mdapi_usage_flags="System Frame Batch"
+             mdapi_group="GPU"
+             mdapi_hw_unit_type="gpu"
+             />
+    <counter name="AnyRingBusy"
+             description="The percentage of time when any command streamer was busy."
+             data_type="float"
+             max_equation="100"
+             equation="B 0 READ 100 UMUL $GpuCoreClocks FDIV"
+             underscore_name="any_ring_busy"
+             units="percent"
+             symbol_name="AnyRingBusy"
+             semantic_type="duration"
+             mdapi_supported_apis=""
+             mdapi_usage_flags="Frame Batch Draw"
+             mdapi_group="GPU"
+             mdapi_hw_unit_type="gpu"
+             />
+    <counter name="Vdbox1 Ring Busy"
+             description="The percentage of time when Vdbox1 command streamer was busy."
+             data_type="float"
+             max_equation="100"
+             equation="C 3 READ 100 UMUL $GpuCoreClocks FDIV"
+             underscore_name="vdbox1_busy"
+             units="percent"
+             symbol_name="Vdbox1Busy"
+             semantic_type="duration"
+             mdapi_supported_apis=""
+             mdapi_usage_flags="System Frame Batch"
+             mdapi_group="GPU"
+             mdapi_hw_unit_type="gpu"
+             />
+    <register_config type="NOA">
+        <register type="NOA" address="0x00009840" value="0x000000A0" />
+        <register type="NOA" address="0x00009888" value="0x1AF00100" />
+        <register type="NOA" address="0x00009888" value="0x118B0000" />
+        <register type="NOA" address="0x00009888" value="0x11850008" />
+        <register type="NOA" address="0x00009888" value="0x17830100" />
+        <register type="NOA" address="0x00009888" value="0x1A700100" />
+        <register type="NOA" address="0x00009888" value="0x1D940040" />
+        <register type="NOA" address="0x00009888" value="0x02F00085" />
+        <register type="NOA" address="0x00009888" value="0x10F00000" />
+        <register type="NOA" address="0x00009888" value="0x24F00000" />
+        <register type="NOA" address="0x00009888" value="0x078B0003" />
+        <register type="NOA" address="0x00009888" value="0x238B0400" />
+        <register type="NOA" address="0x00009888" value="0x258B0000" />
+        <register type="NOA" address="0x00009888" value="0x058C8000" />
+        <register type="NOA" address="0x00009888" value="0x038D2000" />
+        <register type="NOA" address="0x00009888" value="0x03850500" />
+        <register type="NOA" address="0x00009888" value="0x1F858800" />
+        <register type="NOA" address="0x00009888" value="0x2185000A" />
+        <register type="NOA" address="0x00009888" value="0x05834055" />
+        <register type="NOA" address="0x00009888" value="0x11830000" />
+        <register type="NOA" address="0x00009888" value="0x09830000" />
+        <register type="NOA" address="0x00009888" value="0x0B838000" />
+        <register type="NOA" address="0x00009888" value="0x0D834000" />
+        <register type="NOA" address="0x00009888" value="0x03844000" />
+        <register type="NOA" address="0x00009888" value="0x0584C000" />
+        <register type="NOA" address="0x00009888" value="0x07844000" />
+        <register type="NOA" address="0x00009888" value="0x1380C000" />
+        <register type="NOA" address="0x00009888" value="0x1580C000" />
+        <register type="NOA" address="0x00009888" value="0x17804000" />
+        <register type="NOA" address="0x00009888" value="0x04708500" />
+        <register type="NOA" address="0x00009888" value="0x10700000" />
+        <register type="NOA" address="0x00009888" value="0x24700000" />
+        <register type="NOA" address="0x00009888" value="0x21800000" />
+        <register type="NOA" address="0x00009888" value="0x4D801000" />
+        <register type="NOA" address="0x00009888" value="0x3F800000" />
+        <register type="NOA" address="0x00009888" value="0x4F800004" />
+        <register type="NOA" address="0x00009888" value="0x418014A0" />
+        <register type="NOA" address="0x00009888" value="0x31800000" />
+        <register type="NOA" address="0x00009840" value="0x00000080" />
+    </register_config>
+    <register_config type="OA">
+        <register type="OA" address="0x00002740" value="0x00000000" />
+        <register type="OA" address="0x00002710" value="0x00000000" />
+        <register type="OA" address="0x00002714" value="0x10800000" />
+        <register type="OA" address="0x00002720" value="0x00000000" />
+        <register type="OA" address="0x00002724" value="0x00800000" />
+        <register type="OA" address="0x00002770" value="0x0007C000" />
+        <register type="OA" address="0x00002774" value="0x000007FF" />
     </register_config>
   </set>
 
@@ -15009,6 +15248,7 @@
              mdapi_group="GPU"
              />
     <register_config type="NOA">
+        <register type="NOA" address="0x00009840" value="0x000000A0" />
         <register type="NOA" address="0x00009888" value="0x198B0000" />
         <register type="NOA" address="0x00009888" value="0x078B0066" />
         <register type="NOA" address="0x00009888" value="0x118B0000" />
@@ -15021,6 +15261,7 @@
         <register type="NOA" address="0x00009888" value="0x4F800000" />
         <register type="NOA" address="0x00009888" value="0x41800000" />
         <register type="NOA" address="0x00009888" value="0x31800000" />
+        <register type="NOA" address="0x00009840" value="0x00000080" />
     </register_config>
     <register_config type="OA">
         <register type="OA" address="0x00002740" value="0x00000000" />

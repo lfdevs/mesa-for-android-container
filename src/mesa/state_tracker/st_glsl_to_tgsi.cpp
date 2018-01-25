@@ -152,6 +152,13 @@ find_array_type(struct inout_decl *decls, unsigned count, unsigned array_id)
    return GLSL_TYPE_ERROR;
 }
 
+struct hwatomic_decl {
+   unsigned location;
+   unsigned binding;
+   unsigned size;
+   unsigned array_id;
+};
+
 struct glsl_to_tgsi_visitor : public ir_visitor {
 public:
    glsl_to_tgsi_visitor();
@@ -176,17 +183,19 @@ public:
    unsigned num_outputs;
    unsigned num_output_arrays;
 
+   struct hwatomic_decl atomic_info[PIPE_MAX_HW_ATOMIC_BUFFERS];
+   unsigned num_atomics;
+   unsigned num_atomic_arrays;
    int num_address_regs;
    uint32_t samplers_used;
    glsl_base_type sampler_types[PIPE_MAX_SAMPLERS];
-   int sampler_targets[PIPE_MAX_SAMPLERS];   /**< One of TGSI_TEXTURE_* */
+   enum tgsi_texture_type sampler_targets[PIPE_MAX_SAMPLERS];
    int images_used;
    int image_targets[PIPE_MAX_SHADER_IMAGES];
-   unsigned image_formats[PIPE_MAX_SHADER_IMAGES];
+   enum pipe_format image_formats[PIPE_MAX_SHADER_IMAGES];
    bool indirect_addr_consts;
    int wpos_transform_const;
 
-   int glsl_version;
    bool native_integers;
    bool have_sqrt;
    bool have_fma;
@@ -1332,9 +1341,32 @@ glsl_to_tgsi_visitor::visit_expression(ir_expression* ir, st_src_reg *op)
    st_dst_reg result_dst;
 
    int vector_elements = ir->operands[0]->type->vector_elements;
-   if (ir->operands[1]) {
+   if (ir->operands[1] &&
+       ir->operation != ir_binop_interpolate_at_offset &&
+       ir->operation != ir_binop_interpolate_at_sample) {
+      st_src_reg *swz_op = NULL;
+      if (vector_elements > ir->operands[1]->type->vector_elements) {
+         assert(ir->operands[1]->type->vector_elements == 1);
+         swz_op = &op[1];
+      } else if (vector_elements < ir->operands[1]->type->vector_elements) {
+         assert(ir->operands[0]->type->vector_elements == 1);
+         swz_op = &op[0];
+      }
+      if (swz_op) {
+         uint16_t swizzle_x = GET_SWZ(swz_op->swizzle, 0);
+         swz_op->swizzle = MAKE_SWIZZLE4(swizzle_x, swizzle_x,
+                                         swizzle_x, swizzle_x);
+      }
       vector_elements = MAX2(vector_elements,
                              ir->operands[1]->type->vector_elements);
+   }
+   if (ir->operands[2] &&
+       ir->operands[2]->type->vector_elements != vector_elements) {
+      /* This can happen with ir_triop_lrp, i.e. glsl mix */
+      assert(ir->operands[2]->type->vector_elements == 1);
+      uint16_t swizzle_x = GET_SWZ(op[2].swizzle, 0);
+      op[2].swizzle = MAKE_SWIZZLE4(swizzle_x, swizzle_x,
+                                    swizzle_x, swizzle_x);
    }
 
    this->result.file = PROGRAM_UNDEFINED;
@@ -1499,12 +1531,6 @@ glsl_to_tgsi_visitor::visit_expression(ir_expression* ir, st_src_reg *op)
 
    case ir_binop_less:
       emit_asm(ir, TGSI_OPCODE_SLT, result_dst, op[0], op[1]);
-      break;
-   case ir_binop_greater:
-      emit_asm(ir, TGSI_OPCODE_SLT, result_dst, op[1], op[0]);
-      break;
-   case ir_binop_lequal:
-      emit_asm(ir, TGSI_OPCODE_SGE, result_dst, op[1], op[0]);
       break;
    case ir_binop_gequal:
       emit_asm(ir, TGSI_OPCODE_SGE, result_dst, op[0], op[1]);
@@ -2125,10 +2151,10 @@ glsl_to_tgsi_visitor::visit_expression(ir_expression* ir, st_src_reg *op)
 
    case ir_unop_get_buffer_size: {
       ir_constant *const_offset = ir->operands[0]->as_constant();
+      int buf_base = ctx->st->has_hw_atomics ? 0 : ctx->Const.Program[shader->Stage].MaxAtomicBuffers;
       st_src_reg buffer(
             PROGRAM_BUFFER,
-            ctx->Const.Program[shader->Stage].MaxAtomicBuffers +
-            (const_offset ? const_offset->value.u[0] : 0),
+            buf_base + (const_offset ? const_offset->value.u[0] : 0),
             GLSL_TYPE_UINT);
       if (!const_offset) {
          buffer.reladdr = ralloc(mem_ctx, st_src_reg);
@@ -2808,10 +2834,6 @@ glsl_to_tgsi_visitor::process_move_condition(ir_rvalue *ir)
       /*      a is -  0  +            -  0  +
        * (a <  0)  T  F  F  ( a < 0)  T  F  F
        * (0 <  a)  F  F  T  (-a < 0)  F  F  T
-       * (a <= 0)  T  T  F  (-a < 0)  F  F  T  (swap order of other operands)
-       * (0 <= a)  F  T  T  ( a < 0)  T  F  F  (swap order of other operands)
-       * (a >  0)  F  F  T  (-a < 0)  F  F  T
-       * (0 >  a)  T  F  F  ( a < 0)  T  F  F
        * (a >= 0)  F  T  T  ( a < 0)  T  F  F  (swap order of other operands)
        * (0 >= a)  T  T  F  (-a < 0)  F  F  T  (swap order of other operands)
        *
@@ -2823,16 +2845,6 @@ glsl_to_tgsi_visitor::process_move_condition(ir_rvalue *ir)
          case ir_binop_less:
             switch_order = false;
             negate = zero_on_left;
-            break;
-
-         case ir_binop_greater:
-            switch_order = false;
-            negate = !zero_on_left;
-            break;
-
-         case ir_binop_lequal:
-            switch_order = true;
-            negate = !zero_on_left;
             break;
 
          case ir_binop_gequal:
@@ -3227,24 +3239,66 @@ glsl_to_tgsi_visitor::visit_atomic_counter_intrinsic(ir_call *ir)
    exec_node *param = ir->actual_parameters.get_head();
    ir_dereference *deref = static_cast<ir_dereference *>(param);
    ir_variable *location = deref->variable_referenced();
-
-   st_src_reg buffer(
-         PROGRAM_BUFFER, location->data.binding, GLSL_TYPE_ATOMIC_UINT);
-
+   bool has_hw_atomics = st_context(ctx)->has_hw_atomics;
    /* Calculate the surface offset */
    st_src_reg offset;
    unsigned array_size = 0, base = 0;
    uint16_t index = 0;
+   st_src_reg resource;
 
    get_deref_offsets(deref, &array_size, &base, &index, &offset, false);
 
-   if (offset.file != PROGRAM_UNDEFINED) {
-      emit_asm(ir, TGSI_OPCODE_MUL, st_dst_reg(offset),
-               offset, st_src_reg_for_int(ATOMIC_COUNTER_SIZE));
-      emit_asm(ir, TGSI_OPCODE_ADD, st_dst_reg(offset),
-               offset, st_src_reg_for_int(location->data.offset + index * ATOMIC_COUNTER_SIZE));
+   if (has_hw_atomics) {
+      variable_storage *entry = find_variable_storage(location);
+      st_src_reg buffer(PROGRAM_HW_ATOMIC, 0, GLSL_TYPE_ATOMIC_UINT, location->data.binding);
+
+      if (!entry) {
+         entry = new(mem_ctx) variable_storage(location, PROGRAM_HW_ATOMIC,
+                                               num_atomics);
+         _mesa_hash_table_insert(this->variables, location, entry);
+
+         atomic_info[num_atomics].location = location->data.location;
+         atomic_info[num_atomics].binding = location->data.binding;
+         atomic_info[num_atomics].size = location->type->arrays_of_arrays_size();
+         if (atomic_info[num_atomics].size == 0)
+            atomic_info[num_atomics].size = 1;
+         atomic_info[num_atomics].array_id = 0;
+         num_atomics++;
+      }
+
+      if (offset.file != PROGRAM_UNDEFINED) {
+         if (atomic_info[entry->index].array_id == 0) {
+            num_atomic_arrays++;
+            atomic_info[entry->index].array_id = num_atomic_arrays;
+         }
+         buffer.array_id = atomic_info[entry->index].array_id;
+      }
+
+      buffer.index = index;
+      buffer.index += location->data.offset / ATOMIC_COUNTER_SIZE;
+      buffer.has_index2 = true;
+
+      if (offset.file != PROGRAM_UNDEFINED) {
+         buffer.reladdr = ralloc(mem_ctx, st_src_reg);
+         *buffer.reladdr = offset;
+         emit_arl(ir, sampler_reladdr, offset);
+      }
+      offset = st_src_reg_for_int(0);
+
+      resource = buffer;
    } else {
-      offset = st_src_reg_for_int(location->data.offset + index * ATOMIC_COUNTER_SIZE);
+      st_src_reg buffer(PROGRAM_BUFFER, location->data.binding,
+                        GLSL_TYPE_ATOMIC_UINT);
+
+      if (offset.file != PROGRAM_UNDEFINED) {
+         emit_asm(ir, TGSI_OPCODE_MUL, st_dst_reg(offset),
+                  offset, st_src_reg_for_int(ATOMIC_COUNTER_SIZE));
+         emit_asm(ir, TGSI_OPCODE_ADD, st_dst_reg(offset),
+                  offset, st_src_reg_for_int(location->data.offset + index * ATOMIC_COUNTER_SIZE));
+      } else {
+         offset = st_src_reg_for_int(location->data.offset + index * ATOMIC_COUNTER_SIZE);
+      }
+      resource = buffer;
    }
 
    ir->return_deref->accept(this);
@@ -3307,7 +3361,7 @@ glsl_to_tgsi_visitor::visit_atomic_counter_intrinsic(ir_call *ir)
       inst = emit_asm(ir, opcode, dst, offset, data, data2);
    }
 
-   inst->resource = buffer;
+   inst->resource = resource;
 }
 
 void
@@ -3321,11 +3375,10 @@ glsl_to_tgsi_visitor::visit_ssbo_intrinsic(ir_call *ir)
    ir_rvalue *offset = ((ir_instruction *)param)->as_rvalue();
 
    ir_constant *const_block = block->as_constant();
-
+   int buf_base = st_context(ctx)->has_hw_atomics ? 0 : ctx->Const.Program[shader->Stage].MaxAtomicBuffers;
    st_src_reg buffer(
          PROGRAM_BUFFER,
-         ctx->Const.Program[shader->Stage].MaxAtomicBuffers +
-         (const_block ? const_block->value.u[0] : 0),
+         buf_base + (const_block ? const_block->value.u[0] : 0),
          GLSL_TYPE_UINT);
 
    if (!const_block) {
@@ -4409,13 +4462,14 @@ glsl_to_tgsi_visitor::glsl_to_tgsi_visitor()
    num_outputs = 0;
    num_input_arrays = 0;
    num_output_arrays = 0;
+   num_atomics = 0;
+   num_atomic_arrays = 0;
    num_immediates = 0;
    num_address_regs = 0;
    samplers_used = 0;
    images_used = 0;
    indirect_addr_consts = false;
    wpos_transform_const = -1;
-   glsl_version = 0;
    native_integers = false;
    mem_ctx = ralloc_context(NULL);
    ctx = NULL;
@@ -4610,8 +4664,7 @@ glsl_to_tgsi_visitor::simplify_cmp(void)
 }
 
 static void
-rename_temp_handle_src(struct rename_reg_pair *renames,
-                           struct st_src_reg *src)
+rename_temp_handle_src(struct rename_reg_pair *renames, st_src_reg *src)
 {
    if (src && src->file == PROGRAM_TEMPORARY) {
       int old_idx = src->index;
@@ -5327,6 +5380,7 @@ struct st_translate {
    struct ureg_src buffers[PIPE_MAX_SHADER_BUFFERS];
    struct ureg_src images[PIPE_MAX_SHADER_IMAGES];
    struct ureg_src systemValues[SYSTEM_VALUE_MAX];
+   struct ureg_src hw_atomics[PIPE_MAX_HW_ATOMIC_BUFFERS];
    struct ureg_src shared_memory;
    unsigned *array_sizes;
    struct inout_decl *input_decls;
@@ -5668,6 +5722,11 @@ translate_src(struct st_translate *t, const st_src_reg *src_reg)
       src = t->systemValues[src_reg->index];
       break;
 
+   case PROGRAM_HW_ATOMIC:
+      src = ureg_src_array_register(TGSI_FILE_HW_ATOMIC, src_reg->index,
+                                    src_reg->array_id);
+      break;
+
    default:
       assert(!"unknown src register file");
       return ureg_src_undef();
@@ -5823,6 +5882,8 @@ compile_tgsi_instruction(struct st_translate *t,
          src[0] = t->shared_memory;
       } else if (inst->resource.file == PROGRAM_BUFFER) {
          src[0] = t->buffers[inst->resource.index];
+      } else if (inst->resource.file == PROGRAM_HW_ATOMIC) {
+         src[0] = translate_src(t, &inst->resource);
       } else if (inst->resource.file == PROGRAM_CONSTANT) {
          assert(inst->resource.has_index2);
          src[0] = ureg_src_register(TGSI_FILE_CONSTBUF, inst->resource.index);
@@ -6191,6 +6252,16 @@ st_translate_program(
    assert(numInputs <= ARRAY_SIZE(t->inputs));
    assert(numOutputs <= ARRAY_SIZE(t->outputs));
 
+   ASSERT_BITFIELD_SIZE(st_src_reg, type, GLSL_TYPE_ERROR);
+   ASSERT_BITFIELD_SIZE(st_dst_reg, type, GLSL_TYPE_ERROR);
+   ASSERT_BITFIELD_SIZE(glsl_to_tgsi_instruction, tex_type, GLSL_TYPE_ERROR);
+   ASSERT_BITFIELD_SIZE(glsl_to_tgsi_instruction, image_format, PIPE_FORMAT_COUNT);
+   ASSERT_BITFIELD_SIZE(glsl_to_tgsi_instruction, tex_target,
+                        (gl_texture_index) (NUM_TEXTURE_TARGETS - 1));
+   ASSERT_BITFIELD_SIZE(glsl_to_tgsi_instruction, image_format,
+                        (enum pipe_format) (PIPE_FORMAT_COUNT - 1));
+   ASSERT_BITFIELD_SIZE(glsl_to_tgsi_instruction, op, TGSI_OPCODE_LAST - 1);
+
    t = CALLOC_STRUCT(st_translate);
    if (!t) {
       ret = PIPE_ERROR_OUT_OF_MEMORY;
@@ -6511,7 +6582,8 @@ st_translate_program(
    /* texture samplers */
    for (i = 0; i < frag_const->MaxTextureImageUnits; i++) {
       if (program->samplers_used & (1u << i)) {
-         unsigned type = st_translate_texture_type(program->sampler_types[i]);
+         enum tgsi_return_type type =
+            st_translate_texture_type(program->sampler_types[i]);
 
          t->samplers[i] = ureg_DECL_sampler(ureg, i);
 
@@ -6524,15 +6596,28 @@ st_translate_program(
    {
       struct gl_program *prog = program->prog;
 
-      for (i = 0; i < prog->info.num_abos; i++) {
-         unsigned index = prog->sh.AtomicBuffers[i]->Binding;
-         assert(index < frag_const->MaxAtomicBuffers);
-         t->buffers[index] = ureg_DECL_buffer(ureg, index, true);
+      if (!st_context(ctx)->has_hw_atomics) {
+	 for (i = 0; i < prog->info.num_abos; i++) {
+            unsigned index = prog->sh.AtomicBuffers[i]->Binding;
+            assert(index < frag_const->MaxAtomicBuffers);
+            t->buffers[index] = ureg_DECL_buffer(ureg, index, true);
+         }
+      } else {
+         for (i = 0; i < program->num_atomics; i++) {
+            struct hwatomic_decl *ainfo = &program->atomic_info[i];
+            gl_uniform_storage *uni_storage = &prog->sh.data->UniformStorage[ainfo->location];
+            int base = uni_storage->offset / ATOMIC_COUNTER_SIZE;
+            ureg_DECL_hw_atomic(ureg, base, base + ainfo->size - 1, ainfo->binding,
+                                ainfo->array_id);
+         }
       }
 
       assert(prog->info.num_ssbos <= frag_const->MaxShaderStorageBlocks);
       for (i = 0; i < prog->info.num_ssbos; i++) {
-         unsigned index = frag_const->MaxAtomicBuffers + i;
+         unsigned index = i;
+         if (!st_context(ctx)->has_hw_atomics)
+            index += frag_const->MaxAtomicBuffers;
+
          t->buffers[index] = ureg_DECL_buffer(ureg, index, false);
       }
    }
@@ -6615,7 +6700,6 @@ get_mesa_program_tgsi(struct gl_context *ctx,
    v->shader_program = shader_program;
    v->shader = shader;
    v->options = options;
-   v->glsl_version = ctx->Const.GLSLVersion;
    v->native_integers = ctx->Const.NativeIntegers;
 
    v->have_sqrt = pscreen->get_shader_param(pscreen, ptarget,
@@ -6841,6 +6925,7 @@ st_link_shader(struct gl_context *ctx, struct gl_shader_program *prog)
    struct pipe_screen *pscreen = ctx->st->pipe->screen;
    assert(prog->data->LinkStatus);
 
+   bool use_nir = false;
    for (unsigned i = 0; i < MESA_SHADER_STAGES; i++) {
       if (prog->_LinkedShaders[i] == NULL)
          continue;
@@ -6859,6 +6944,12 @@ st_link_shader(struct gl_context *ctx, struct gl_shader_program *prog)
                                                   PIPE_SHADER_CAP_TGSI_LDEXP_SUPPORTED);
       unsigned if_threshold = pscreen->get_shader_param(pscreen, ptarget,
                                                         PIPE_SHADER_CAP_LOWER_IF_THRESHOLD);
+
+      enum pipe_shader_ir preferred_ir = (enum pipe_shader_ir)
+         pscreen->get_shader_param(pscreen, ptarget,
+                                   PIPE_SHADER_CAP_PREFERRED_IR);
+      if (preferred_ir == PIPE_SHADER_IR_NIR)
+         use_nir = true;
 
       /* If there are forms of indirect addressing that the driver
        * cannot handle, perform the lowering pass.
@@ -6963,34 +7054,19 @@ st_link_shader(struct gl_context *ctx, struct gl_shader_program *prog)
 
    build_program_resource_list(ctx, prog);
 
+   if (use_nir)
+      return st_link_nir(ctx, prog);
+
    for (unsigned i = 0; i < MESA_SHADER_STAGES; i++) {
       struct gl_linked_shader *shader = prog->_LinkedShaders[i];
       if (shader == NULL)
          continue;
 
-      enum pipe_shader_type ptarget =
-         pipe_shader_type_from_mesa(shader->Stage);
-      enum pipe_shader_ir preferred_ir = (enum pipe_shader_ir)
-         pscreen->get_shader_param(pscreen, ptarget,
-                                   PIPE_SHADER_CAP_PREFERRED_IR);
-
-      struct gl_program *linked_prog = NULL;
-      if (preferred_ir == PIPE_SHADER_IR_NIR) {
-         /* TODO only for GLSL VS/FS/CS for now: */
-         switch (shader->Stage) {
-         case MESA_SHADER_VERTEX:
-         case MESA_SHADER_FRAGMENT:
-         case MESA_SHADER_COMPUTE:
-            linked_prog = st_nir_get_mesa_program(ctx, prog, shader);
-         default:
-            break;
-         }
-      } else {
-         linked_prog = get_mesa_program_tgsi(ctx, prog, shader);
-      }
+      struct gl_program *linked_prog =
+         get_mesa_program_tgsi(ctx, prog, shader);
+      st_set_prog_affected_state_flags(linked_prog);
 
       if (linked_prog) {
-         st_set_prog_affected_state_flags(linked_prog);
          if (!ctx->Driver.ProgramStringNotify(ctx,
                                               _mesa_shader_stage_to_program(i),
                                               linked_prog)) {

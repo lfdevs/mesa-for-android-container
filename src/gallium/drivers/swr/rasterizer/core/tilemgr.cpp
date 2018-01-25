@@ -100,7 +100,7 @@ HOTTILE* HotTileMgr::GetHotTile(SWR_CONTEXT* pContext, DRAW_CONTEXT* pDC, uint32
         {
             uint32_t size = numSamples * mHotTileSize[attachment];
             uint32_t numaNode = ((x ^ y) & pContext->threadPool.numaMask);
-            hotTile.pBuffer = (uint8_t*)AllocHotTileMem(size, 64, numaNode);
+            hotTile.pBuffer = (uint8_t*)AllocHotTileMem(size, 64, numaNode + pContext->threadInfo.BASE_NUMA_NODE);
             hotTile.state = HOTTILE_INVALID;
             hotTile.numSamples = numSamples;
             hotTile.renderTargetArrayIndex = renderTargetArrayIndex;
@@ -124,7 +124,7 @@ HOTTILE* HotTileMgr::GetHotTile(SWR_CONTEXT* pContext, DRAW_CONTEXT* pDC, uint32
 
             uint32_t size = numSamples * mHotTileSize[attachment];
             uint32_t numaNode = ((x ^ y) & pContext->threadPool.numaMask);
-            hotTile.pBuffer = (uint8_t*)AllocHotTileMem(size, 64, numaNode);
+            hotTile.pBuffer = (uint8_t*)AllocHotTileMem(size, 64, numaNode + pContext->threadInfo.BASE_NUMA_NODE);
             hotTile.state = HOTTILE_INVALID;
             hotTile.numSamples = numSamples;
         }

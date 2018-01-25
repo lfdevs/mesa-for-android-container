@@ -19825,6 +19825,17 @@ _mesa_marshal_VertexAttrib2fARB(GLuint index, GLfloat x, GLfloat y)
 }
 
 
+/* SpecializeShaderARB: marshalled synchronously */
+static void GLAPIENTRY
+_mesa_marshal_SpecializeShaderARB(GLuint shader, const GLchar * pEntryPoint, GLuint numSpecializationConstants, const GLuint * pConstantIndex, const GLuint * pConstantValue)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   _mesa_glthread_finish(ctx);
+   debug_print_sync("SpecializeShaderARB");
+   CALL_SpecializeShaderARB(ctx->CurrentServerDispatch, (shader, pEntryPoint, numSpecializationConstants, pConstantIndex, pConstantValue));
+}
+
+
 /* BeginPerfMonitorAMD: marshalled asynchronously */
 struct marshal_cmd_BeginPerfMonitorAMD
 {
@@ -44525,6 +44536,7 @@ _mesa_create_marshal_table(const struct gl_context *ctx)
    SET_EvalCoord2fv(table, _mesa_marshal_EvalCoord2fv);
    SET_TextureStorage3DEXT(table, _mesa_marshal_TextureStorage3DEXT);
    SET_VertexAttrib2fARB(table, _mesa_marshal_VertexAttrib2fARB);
+   SET_SpecializeShaderARB(table, _mesa_marshal_SpecializeShaderARB);
    SET_BeginPerfMonitorAMD(table, _mesa_marshal_BeginPerfMonitorAMD);
    SET_WindowPos2fv(table, _mesa_marshal_WindowPos2fv);
    SET_TexImage3D(table, _mesa_marshal_TexImage3D);

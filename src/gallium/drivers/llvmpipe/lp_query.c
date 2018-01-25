@@ -33,7 +33,7 @@
 #include "draw/draw_context.h"
 #include "pipe/p_defines.h"
 #include "util/u_memory.h"
-#include "os/os_time.h"
+#include "util/os_time.h"
 #include "lp_context.h"
 #include "lp_flush.h"
 #include "lp_fence.h"

@@ -45,31 +45,30 @@ struct rs_queue {
 };
 
 
-#define EMIT_RS(svga, value, token, fail)                       \
+#define EMIT_RS(svga, value, token)                       \
 do {                                                            \
    STATIC_ASSERT(SVGA3D_RS_##token < ARRAY_SIZE(svga->state.hw_draw.rs)); \
    if (svga->state.hw_draw.rs[SVGA3D_RS_##token] != value) {    \
-      svga_queue_rs( &queue, SVGA3D_RS_##token, value );        \
+      svga_queue_rs(&queue, SVGA3D_RS_##token, value);          \
       svga->state.hw_draw.rs[SVGA3D_RS_##token] = value;        \
    }                                                            \
 } while (0)
 
-#define EMIT_RS_FLOAT(svga, fvalue, token, fail)                \
+#define EMIT_RS_FLOAT(svga, fvalue, token)                \
 do {                                                            \
    unsigned value = fui(fvalue);                                \
    STATIC_ASSERT(SVGA3D_RS_##token < ARRAY_SIZE(svga->state.hw_draw.rs)); \
    if (svga->state.hw_draw.rs[SVGA3D_RS_##token] != value) {    \
-      svga_queue_rs( &queue, SVGA3D_RS_##token, value );        \
+      svga_queue_rs(&queue, SVGA3D_RS_##token, value);          \
       svga->state.hw_draw.rs[SVGA3D_RS_##token] = value;        \
    }                                                            \
 } while (0)
 
 
 static inline void
-svga_queue_rs( struct rs_queue *q,
-               unsigned rss,
-               unsigned value )
+svga_queue_rs(struct rs_queue *q, unsigned rss, unsigned value)
 {
+   assert(q->rs_count < ARRAY_SIZE(q->rs));
    q->rs[q->rs_count].state = rss;
    q->rs[q->rs_count].uintValue = value;
    q->rs_count++;
@@ -92,21 +91,21 @@ emit_rss_vgpu9(struct svga_context *svga, unsigned dirty)
    if (dirty & (SVGA_NEW_BLEND | SVGA_NEW_BLEND_COLOR)) {
       const struct svga_blend_state *curr = svga->curr.blend;
 
-      EMIT_RS( svga, curr->rt[0].writemask, COLORWRITEENABLE, fail );
-      EMIT_RS( svga, curr->rt[0].blend_enable, BLENDENABLE, fail );
+      EMIT_RS(svga, curr->rt[0].writemask, COLORWRITEENABLE);
+      EMIT_RS(svga, curr->rt[0].blend_enable, BLENDENABLE);
 
       if (curr->rt[0].blend_enable) {
-         EMIT_RS( svga, curr->rt[0].srcblend, SRCBLEND, fail );
-         EMIT_RS( svga, curr->rt[0].dstblend, DSTBLEND, fail );
-         EMIT_RS( svga, curr->rt[0].blendeq, BLENDEQUATION, fail );
+         EMIT_RS(svga, curr->rt[0].srcblend, SRCBLEND);
+         EMIT_RS(svga, curr->rt[0].dstblend, DSTBLEND);
+         EMIT_RS(svga, curr->rt[0].blendeq, BLENDEQUATION);
 
-         EMIT_RS( svga, curr->rt[0].separate_alpha_blend_enable, 
-                  SEPARATEALPHABLENDENABLE, fail );
+         EMIT_RS(svga, curr->rt[0].separate_alpha_blend_enable,
+                  SEPARATEALPHABLENDENABLE);
 
          if (curr->rt[0].separate_alpha_blend_enable) {
-            EMIT_RS( svga, curr->rt[0].srcblend_alpha, SRCBLENDALPHA, fail );
-            EMIT_RS( svga, curr->rt[0].dstblend_alpha, DSTBLENDALPHA, fail );
-            EMIT_RS( svga, curr->rt[0].blendeq_alpha, BLENDEQUATIONALPHA, fail );
+            EMIT_RS(svga, curr->rt[0].srcblend_alpha, SRCBLENDALPHA);
+            EMIT_RS(svga, curr->rt[0].dstblend_alpha, DSTBLENDALPHA);
+            EMIT_RS(svga, curr->rt[0].blendeq_alpha, BLENDEQUATIONALPHA);
          }
       }
    }
@@ -120,37 +119,34 @@ emit_rss_vgpu9(struct svga_context *svga, unsigned dirty)
 
       color = (a << 24) | (r << 16) | (g << 8) | b;
 
-      EMIT_RS( svga, color, BLENDCOLOR, fail );
+      EMIT_RS(svga, color, BLENDCOLOR);
    }
 
    if (dirty & (SVGA_NEW_DEPTH_STENCIL_ALPHA | SVGA_NEW_RAST)) {
-      const struct svga_depth_stencil_state *curr = svga->curr.depth; 
-      const struct svga_rasterizer_state *rast = svga->curr.rast; 
+      const struct svga_depth_stencil_state *curr = svga->curr.depth;
+      const struct svga_rasterizer_state *rast = svga->curr.rast;
 
-      if (!curr->stencil[0].enabled) 
-      {
+      if (!curr->stencil[0].enabled) {
          /* Stencil disabled
           */
-         EMIT_RS( svga, FALSE, STENCILENABLE, fail );
-         EMIT_RS( svga, FALSE, STENCILENABLE2SIDED, fail );
+         EMIT_RS(svga, FALSE, STENCILENABLE);
+         EMIT_RS(svga, FALSE, STENCILENABLE2SIDED);
       }
-      else if (curr->stencil[0].enabled && !curr->stencil[1].enabled)
-      {
+      else if (curr->stencil[0].enabled && !curr->stencil[1].enabled) {
          /* Regular stencil
           */
-         EMIT_RS( svga, TRUE, STENCILENABLE, fail );
-         EMIT_RS( svga, FALSE, STENCILENABLE2SIDED, fail );
+         EMIT_RS(svga, TRUE, STENCILENABLE);
+         EMIT_RS(svga, FALSE, STENCILENABLE2SIDED);
 
-         EMIT_RS( svga, curr->stencil[0].func,  STENCILFUNC, fail );
-         EMIT_RS( svga, curr->stencil[0].fail,  STENCILFAIL, fail );
-         EMIT_RS( svga, curr->stencil[0].zfail, STENCILZFAIL, fail );
-         EMIT_RS( svga, curr->stencil[0].pass,  STENCILPASS, fail );
+         EMIT_RS(svga, curr->stencil[0].func,  STENCILFUNC);
+         EMIT_RS(svga, curr->stencil[0].fail,  STENCILFAIL);
+         EMIT_RS(svga, curr->stencil[0].zfail, STENCILZFAIL);
+         EMIT_RS(svga, curr->stencil[0].pass,  STENCILPASS);
 
-         EMIT_RS( svga, curr->stencil_mask, STENCILMASK, fail );
-         EMIT_RS( svga, curr->stencil_writemask, STENCILWRITEMASK, fail );
+         EMIT_RS(svga, curr->stencil_mask, STENCILMASK);
+         EMIT_RS(svga, curr->stencil_writemask, STENCILWRITEMASK);
       }
-      else 
-      {
+      else {
          int cw, ccw;
 
          /* Hardware frontwinding is always CW, so if ours is also CW,
@@ -168,49 +164,48 @@ emit_rss_vgpu9(struct svga_context *svga, unsigned dirty)
 
          /* Twoside stencil
           */
-         EMIT_RS( svga, TRUE, STENCILENABLE, fail );
-         EMIT_RS( svga, TRUE, STENCILENABLE2SIDED, fail );
+         EMIT_RS(svga, TRUE, STENCILENABLE);
+         EMIT_RS(svga, TRUE, STENCILENABLE2SIDED);
 
-         EMIT_RS( svga, curr->stencil[cw].func,  STENCILFUNC, fail );
-         EMIT_RS( svga, curr->stencil[cw].fail,  STENCILFAIL, fail );
-         EMIT_RS( svga, curr->stencil[cw].zfail, STENCILZFAIL, fail );
-         EMIT_RS( svga, curr->stencil[cw].pass,  STENCILPASS, fail );
+         EMIT_RS(svga, curr->stencil[cw].func,  STENCILFUNC);
+         EMIT_RS(svga, curr->stencil[cw].fail,  STENCILFAIL);
+         EMIT_RS(svga, curr->stencil[cw].zfail, STENCILZFAIL);
+         EMIT_RS(svga, curr->stencil[cw].pass,  STENCILPASS);
 
-         EMIT_RS( svga, curr->stencil[ccw].func,  CCWSTENCILFUNC, fail );
-         EMIT_RS( svga, curr->stencil[ccw].fail,  CCWSTENCILFAIL, fail );
-         EMIT_RS( svga, curr->stencil[ccw].zfail, CCWSTENCILZFAIL, fail );
-         EMIT_RS( svga, curr->stencil[ccw].pass,  CCWSTENCILPASS, fail );
+         EMIT_RS(svga, curr->stencil[ccw].func,  CCWSTENCILFUNC);
+         EMIT_RS(svga, curr->stencil[ccw].fail,  CCWSTENCILFAIL);
+         EMIT_RS(svga, curr->stencil[ccw].zfail, CCWSTENCILZFAIL);
+         EMIT_RS(svga, curr->stencil[ccw].pass,  CCWSTENCILPASS);
 
-         EMIT_RS( svga, curr->stencil_mask, STENCILMASK, fail );
-         EMIT_RS( svga, curr->stencil_writemask, STENCILWRITEMASK, fail );
+         EMIT_RS(svga, curr->stencil_mask, STENCILMASK);
+         EMIT_RS(svga, curr->stencil_writemask, STENCILWRITEMASK);
       }
 
-      EMIT_RS( svga, curr->zenable, ZENABLE, fail );
+      EMIT_RS(svga, curr->zenable, ZENABLE);
       if (curr->zenable) {
-         EMIT_RS( svga, curr->zfunc, ZFUNC, fail );
-         EMIT_RS( svga, curr->zwriteenable, ZWRITEENABLE, fail );
+         EMIT_RS(svga, curr->zfunc, ZFUNC);
+         EMIT_RS(svga, curr->zwriteenable, ZWRITEENABLE);
       }
 
-      EMIT_RS( svga, curr->alphatestenable, ALPHATESTENABLE, fail );
+      EMIT_RS(svga, curr->alphatestenable, ALPHATESTENABLE);
       if (curr->alphatestenable) {
-         EMIT_RS( svga, curr->alphafunc, ALPHAFUNC, fail );
-         EMIT_RS_FLOAT( svga, curr->alpharef, ALPHAREF, fail );
+         EMIT_RS(svga, curr->alphafunc, ALPHAFUNC);
+         EMIT_RS_FLOAT(svga, curr->alpharef, ALPHAREF);
       }
    }
 
    if (dirty & SVGA_NEW_STENCIL_REF) {
-      EMIT_RS( svga, svga->curr.stencil_ref.ref_value[0], STENCILREF, fail );
+      EMIT_RS(svga, svga->curr.stencil_ref.ref_value[0], STENCILREF);
    }
 
-   if (dirty & (SVGA_NEW_RAST | SVGA_NEW_NEED_PIPELINE))
-   {
-      const struct svga_rasterizer_state *curr = svga->curr.rast; 
+   if (dirty & (SVGA_NEW_RAST | SVGA_NEW_NEED_PIPELINE)) {
+      const struct svga_rasterizer_state *curr = svga->curr.rast;
       unsigned cullmode = curr->cullmode;
 
       /* Shademode: still need to rearrange index list to move
        * flat-shading PV first vertex.
        */
-      EMIT_RS( svga, curr->shademode, SHADEMODE, fail );
+      EMIT_RS(svga, curr->shademode, SHADEMODE);
 
       /* Don't do culling while the software pipeline is active.  It
        * does it for us, and additionally introduces potentially
@@ -221,27 +216,28 @@ emit_rss_vgpu9(struct svga_context *svga, unsigned dirty)
 
       point_size_min = util_get_min_point_size(&curr->templ);
 
-      EMIT_RS( svga, cullmode, CULLMODE, fail );
-      EMIT_RS( svga, curr->scissortestenable, SCISSORTESTENABLE, fail );
-      EMIT_RS( svga, curr->multisampleantialias, MULTISAMPLEANTIALIAS, fail );
-      EMIT_RS( svga, curr->lastpixel, LASTPIXEL, fail );
-      EMIT_RS_FLOAT( svga, curr->pointsize, POINTSIZE, fail );
-      EMIT_RS_FLOAT( svga, point_size_min, POINTSIZEMIN, fail );
-      EMIT_RS_FLOAT( svga, screen->maxPointSize, POINTSIZEMAX, fail );
-      EMIT_RS( svga, curr->pointsprite, POINTSPRITEENABLE, fail);
+      EMIT_RS(svga, cullmode, CULLMODE);
+      EMIT_RS(svga, curr->scissortestenable, SCISSORTESTENABLE);
+      EMIT_RS(svga, curr->multisampleantialias, MULTISAMPLEANTIALIAS);
+      EMIT_RS(svga, curr->lastpixel, LASTPIXEL);
+      EMIT_RS_FLOAT(svga, curr->pointsize, POINTSIZE);
+      EMIT_RS_FLOAT(svga, point_size_min, POINTSIZEMIN);
+      EMIT_RS_FLOAT(svga, screen->maxPointSize, POINTSIZEMAX);
+      EMIT_RS(svga, curr->pointsprite, POINTSPRITEENABLE);
 
       /* Emit line state, when the device understands it */
       if (screen->haveLineStipple)
-         EMIT_RS( svga, curr->linepattern, LINEPATTERN, fail );
+         EMIT_RS(svga, curr->linepattern, LINEPATTERN);
       if (screen->haveLineSmooth)
-         EMIT_RS( svga, curr->antialiasedlineenable, ANTIALIASEDLINEENABLE, fail );
+         EMIT_RS(svga, curr->antialiasedlineenable, ANTIALIASEDLINEENABLE);
       if (screen->maxLineWidth > 1.0F)
-         EMIT_RS_FLOAT( svga, curr->linewidth, LINEWIDTH, fail );
+         EMIT_RS_FLOAT(svga, curr->linewidth, LINEWIDTH);
    }
 
-   if (dirty & (SVGA_NEW_RAST | SVGA_NEW_FRAME_BUFFER | SVGA_NEW_NEED_PIPELINE))
-   {
-      const struct svga_rasterizer_state *curr = svga->curr.rast; 
+   if (dirty & (SVGA_NEW_RAST |
+                SVGA_NEW_FRAME_BUFFER |
+                SVGA_NEW_NEED_PIPELINE)) {
+      const struct svga_rasterizer_state *curr = svga->curr.rast;
       float slope = 0.0;
       float bias  = 0.0;
 
@@ -256,8 +252,8 @@ emit_rss_vgpu9(struct svga_context *svga, unsigned dirty)
          bias  = svga->curr.depthscale * curr->depthbias;
       }
 
-      EMIT_RS_FLOAT( svga, slope, SLOPESCALEDEPTHBIAS, fail );
-      EMIT_RS_FLOAT( svga, bias, DEPTHBIAS, fail );
+      EMIT_RS_FLOAT(svga, slope, SLOPESCALEDEPTHBIAS);
+      EMIT_RS_FLOAT(svga, bias, DEPTHBIAS);
    }
 
    if (dirty & SVGA_NEW_FRAME_BUFFER) {
@@ -267,42 +263,38 @@ emit_rss_vgpu9(struct svga_context *svga, unsigned dirty)
           util_format_is_srgb(svga->curr.framebuffer.cbufs[0]->format)) {
          gamma = 2.2f;
       }
-      EMIT_RS_FLOAT(svga, gamma, OUTPUTGAMMA, fail);
+      EMIT_RS_FLOAT(svga, gamma, OUTPUTGAMMA);
    }
 
    if (dirty & SVGA_NEW_RAST) {
       /* bitmask of the enabled clip planes */
       unsigned enabled = svga->curr.rast->templ.clip_plane_enable;
-      EMIT_RS( svga, enabled, CLIPPLANEENABLE, fail );
+      EMIT_RS(svga, enabled, CLIPPLANEENABLE);
    }
 
    if (queue.rs_count) {
       SVGA3dRenderState *rs;
 
-      if (SVGA3D_BeginSetRenderState( svga->swc,
-                                      &rs,
-                                      queue.rs_count ) != PIPE_OK)
-         goto fail;
+      if (SVGA3D_BeginSetRenderState(svga->swc, &rs, queue.rs_count)
+          != PIPE_OK) {
+         /* XXX: need to poison cached hardware state on failure to ensure
+          * dirty state gets re-emitted.  Fix this by re-instating partial
+          * FIFOCommit command and only updating cached hw state once the
+          * initial allocation has succeeded.
+          */
+         memset(svga->state.hw_draw.rs, 0xcd, sizeof(svga->state.hw_draw.rs));
 
-      memcpy( rs,
-              queue.rs,
-              queue.rs_count * sizeof queue.rs[0]);
+         return PIPE_ERROR_OUT_OF_MEMORY;
+      }
 
-      SVGA_FIFOCommitAll( svga->swc );
+      memcpy(rs, queue.rs, queue.rs_count * sizeof queue.rs[0]);
+
+      SVGA_FIFOCommitAll(svga->swc);
    }
 
    return PIPE_OK;
-
-fail:
-   /* XXX: need to poison cached hardware state on failure to ensure
-    * dirty state gets re-emitted.  Fix this by re-instating partial
-    * FIFOCommit command and only updating cached hw state once the
-    * initial allocation has succeeded.
-    */
-   memset(svga->state.hw_draw.rs, 0xcd, sizeof(svga->state.hw_draw.rs));
-
-   return PIPE_ERROR_OUT_OF_MEMORY;
 }
+
 
 /** Returns a non-culling rasterizer state object to be used with
  *  point sprite.
@@ -487,7 +479,7 @@ emit_rss(struct svga_context *svga, unsigned dirty)
 }
 
 
-struct svga_tracked_state svga_hw_rss = 
+struct svga_tracked_state svga_hw_rss =
 {
    "hw rss state",
 

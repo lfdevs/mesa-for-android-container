@@ -26,7 +26,8 @@ include Makefile.sources
 EXTRA_DIST = \
 	nouveau_render_t.c \
 	nouveau_swtnl_t.c \
-	nouveau_vbo_t.c
+	nouveau_vbo_t.c \
+	meson.build
 
 AM_CFLAGS = \
 	-I$(top_srcdir)/include \

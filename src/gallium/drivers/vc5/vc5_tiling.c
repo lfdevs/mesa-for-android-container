@@ -32,42 +32,6 @@
 #include "vc5_context.h"
 #include "vc5_tiling.h"
 
-struct mb_layout {
-        /** Height, in pixels, of a macroblock (2x2 utiles, a UIF block). */
-        uint32_t height;
-        /** Width, in pixels, of a macroblock (2x2 utiles, a UIF block). */
-        uint32_t width;
-        uint32_t tile_row_stride;
-};
-
-enum {
-        MB_LAYOUT_8BPP,
-        MB_LAYOUT_16BPP,
-        MB_LAYOUT_32BPP,
-        MB_LAYOUT_64BPP,
-        MB_LAYOUT_128BPP,
-};
-
-static const struct mb_layout mb_layouts[] = {
-        [MB_LAYOUT_8BPP] = { .height = 16, .width = 16, .tile_row_stride = 8 },
-        [MB_LAYOUT_16BPP] = { .height = 8, .width = 16, .tile_row_stride = 8 },
-        [MB_LAYOUT_32BPP] = { .height = 8, .width = 8, .tile_row_stride = 4 },
-        [MB_LAYOUT_64BPP] = { .height = 4, .width = 8, .tile_row_stride = 4 },
-        [MB_LAYOUT_128BPP] = { .height = 4, .width = 4, .tile_row_stride = 2 },
-};
-
-static const struct mb_layout *
-get_mb_layout(int cpp)
-{
-        const struct mb_layout *layout = &mb_layouts[ffs(cpp) - 1];
-
-        /* Sanity check the table.  XXX: We should de-duplicate.  */
-        assert(layout->width == vc5_utile_width(cpp) * 2);
-        assert(layout->tile_row_stride == vc5_utile_width(cpp));
-
-        return layout;
-}
-
 /** Return the width in pixels of a 64-byte microtile. */
 uint32_t
 vc5_utile_width(int cpp)
@@ -192,9 +156,10 @@ vc5_get_ublinear_1_column_pixel_offset(uint32_t cpp, uint32_t image_h,
 static inline uint32_t
 vc5_get_uif_pixel_offset(uint32_t cpp, uint32_t image_h, uint32_t x, uint32_t y)
 {
-        const struct mb_layout *layout = get_mb_layout(cpp);
-        uint32_t mb_width = layout->width;
-        uint32_t mb_height = layout->height;
+        uint32_t utile_w = vc5_utile_width(cpp);
+        uint32_t utile_h = vc5_utile_height(cpp);
+        uint32_t mb_width = utile_w * 2;
+        uint32_t mb_height = utile_h * 2;
         uint32_t log2_mb_width = ffs(mb_width) - 1;
         uint32_t log2_mb_height = ffs(mb_height) - 1;
 
@@ -210,23 +175,20 @@ vc5_get_uif_pixel_offset(uint32_t cpp, uint32_t image_h, uint32_t x, uint32_t y)
 
         uint32_t mb_base_addr = mb_id * 256;
 
-        bool top = mb_pixel_y < mb_height / 2;
-        bool left = mb_pixel_x < mb_width / 2;
+        bool top = mb_pixel_y < utile_h;
+        bool left = mb_pixel_x < utile_w;
 
         /* Docs have this in pixels, we do bytes here. */
         uint32_t mb_tile_offset = (!top * 128 + !left * 64);
 
-        uint32_t mb_tile_y = mb_pixel_y & ~(mb_height / 2);
-        uint32_t mb_tile_x = mb_pixel_x & ~(mb_width / 2);
-        uint32_t mb_tile_pixel_id = (mb_tile_y *
-                                     layout->tile_row_stride +
-                                     mb_tile_x);
-
-        uint32_t mb_tile_addr = mb_tile_pixel_id * cpp;
+        uint32_t utile_x = mb_pixel_x & (utile_w - 1);
+        uint32_t utile_y = mb_pixel_y & (utile_h - 1);
 
         uint32_t mb_pixel_address = (mb_base_addr +
                                      mb_tile_offset +
-                                     mb_tile_addr);
+                                     vc5_get_utile_pixel_offset(cpp,
+                                                                utile_x,
+                                                                utile_y));
 
         return mb_pixel_address;
 }

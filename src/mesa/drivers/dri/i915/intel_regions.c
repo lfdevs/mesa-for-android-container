@@ -182,7 +182,7 @@ intel_region_alloc_for_handle(struct intel_screen *screen,
    int ret;
    uint32_t bit_6_swizzle, tiling;
 
-   buffer = intel_bo_gem_create_from_name(screen->bufmgr, name, handle);
+   buffer = drm_intel_bo_gem_create_from_name(screen->bufmgr, name, handle);
    if (buffer == NULL)
       return NULL;
    ret = drm_intel_bo_get_tiling(buffer, &tiling, &bit_6_swizzle);

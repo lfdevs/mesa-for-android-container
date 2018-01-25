@@ -41,7 +41,7 @@ ${func['decl']}
 {
 %if isX86:
     Function *pFunc = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::${func['intrin']});
-    return CALL(pFunc, std::initializer_list<Value*>{${func['args']}});
+    return CALL(pFunc, std::initializer_list<Value*>{${func['args']}}, name);
 %else:
     return IRB()->${func['intrin']}(${func['args']});
 %endif

@@ -102,9 +102,7 @@ void r200EmitArrays( struct gl_context *ctx, GLubyte *vimap_rev )
 	    }
 	    break;
 	 case 1:
-	    assert(attrib == VERT_ATTRIB_WEIGHT);
-	    emitsize = (VB->AttribPtr[attrib]->size);
-	    vfmt0 |= emitsize << R200_VTX_WEIGHT_COUNT_SHIFT;
+            unreachable("r200: vertex weight attrib unsupported");
 	    break;
 	 case 2:
 	    assert(attrib == VERT_ATTRIB_NORMAL);

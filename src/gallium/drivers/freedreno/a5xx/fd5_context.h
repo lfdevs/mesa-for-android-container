@@ -42,10 +42,6 @@ struct fd5_context {
 
 	/* This only needs to be 4 * num_of_pipes bytes (ie. 32 bytes).  We
 	 * could combine it with another allocation.
-	 *
-	 * (upper area used as scratch bo.. see fd5_query)
-	 *
-	 * XXX remove if unneeded after binning r/e..
 	 */
 	struct fd_bo *vsc_size_mem;
 
@@ -96,5 +92,17 @@ fd5_context(struct fd_context *ctx)
 
 struct pipe_context *
 fd5_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags);
+
+/* helper for places where we need to stall CP to wait for previous draws: */
+static inline void
+fd5_emit_flush(struct fd_context *ctx, struct fd_ringbuffer *ring)
+{
+	OUT_PKT7(ring, CP_EVENT_WRITE, 4);
+	OUT_RING(ring, CACHE_FLUSH_TS);
+	OUT_RELOCW(ring, fd5_context(ctx)->blit_mem, 0, 0, 0);  /* ADDR_LO/HI */
+	OUT_RING(ring, 0x00000000);
+
+	OUT_WFI5(ring);
+}
 
 #endif /* FD5_CONTEXT_H_ */

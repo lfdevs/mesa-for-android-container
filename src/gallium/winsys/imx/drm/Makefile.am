@@ -31,3 +31,5 @@ AM_CFLAGS = \
 noinst_LTLIBRARIES = libimxdrm.la
 
 libimxdrm_la_SOURCES = $(C_SOURCES)
+
+EXTRA_DIST = meson.build

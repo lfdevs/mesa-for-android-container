@@ -133,8 +133,6 @@ enum ir_expression_operation {
    ir_binop_borrow,
    ir_binop_mod,
    ir_binop_less,
-   ir_binop_greater,
-   ir_binop_lequal,
    ir_binop_gequal,
    ir_binop_equal,
    ir_binop_nequal,

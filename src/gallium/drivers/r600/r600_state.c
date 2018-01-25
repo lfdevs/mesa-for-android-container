@@ -817,7 +817,7 @@ static void r600_init_color_surface(struct r600_context *rctx,
 	unsigned offset;
 	const struct util_format_description *desc;
 	int i;
-	bool blend_bypass = 0, blend_clamp = 1, do_endian_swap = FALSE;
+	bool blend_bypass = 0, blend_clamp = 0, do_endian_swap = FALSE;
 
 	if (rtex->db_compatible && !r600_can_sample_zs(rtex, false)) {
 		r600_init_flushed_depth_texture(&rctx->b.b, surf->base.texture, NULL);
@@ -869,6 +869,8 @@ static void r600_init_color_surface(struct r600_context *rctx,
 			ntype = V_0280A0_NUMBER_UNORM;
 		else if (desc->channel[i].pure_integer)
 			ntype = V_0280A0_NUMBER_UINT;
+	} else if (desc->channel[i].type == UTIL_FORMAT_TYPE_FLOAT) {
+		ntype = V_0280A0_NUMBER_FLOAT;
 	}
 
 	if (R600_BIG_ENDIAN)
@@ -882,6 +884,11 @@ static void r600_init_color_surface(struct r600_context *rctx,
 	assert(swap != ~0);
 
 	endian = r600_colorformat_endian_swap(format, do_endian_swap);
+
+	/* blend clamp should be set for all NORM/SRGB types */
+	if (ntype == V_0280A0_NUMBER_UNORM || ntype == V_0280A0_NUMBER_SNORM ||
+	    ntype == V_0280A0_NUMBER_SRGB)
+		blend_clamp = 1;
 
 	/* set blend bypass according to docs if SINT/UINT or
 	   8/24 COLOR variants */
@@ -898,6 +905,7 @@ static void r600_init_color_surface(struct r600_context *rctx,
 		S_0280A0_COMP_SWAP(swap) |
 		S_0280A0_BLEND_BYPASS(blend_bypass) |
 		S_0280A0_BLEND_CLAMP(blend_clamp) |
+		S_0280A0_SIMPLE_FLOAT(1) |
 		S_0280A0_NUMBER_TYPE(ntype) |
 		S_0280A0_ENDIAN(endian);
 
@@ -916,6 +924,7 @@ static void r600_init_color_surface(struct r600_context *rctx,
 		     ntype != V_0280A0_NUMBER_UINT &&
 		     ntype != V_0280A0_NUMBER_SINT) &&
 		    G_0280A0_BLEND_CLAMP(color_info) &&
+		    /* XXX this condition is always true since BLEND_FLOAT32 is never set (bug?). */
 		    !G_0280A0_BLEND_FLOAT32(color_info)) {
 			color_info |= S_0280A0_SOURCE_FORMAT(V_0280A0_EXPORT_NORM);
 			surf->export_16bpc = true;
@@ -1703,14 +1712,14 @@ static void r600_emit_constant_buffers(struct r600_context *rctx,
 		offset = cb->buffer_offset;
 
 		if (!gs_ring_buffer) {
+			assert(buffer_index < R600_MAX_HW_CONST_BUFFERS);
 			radeon_set_context_reg(cs, reg_alu_constbuf_size + buffer_index * 4,
 					       DIV_ROUND_UP(cb->buffer_size, 256));
 			radeon_set_context_reg(cs, reg_alu_const_cache + buffer_index * 4, offset >> 8);
+			radeon_emit(cs, PKT3(PKT3_NOP, 0, 0));
+			radeon_emit(cs, radeon_add_to_buffer_list(&rctx->b, &rctx->b.gfx, rbuffer,
+								  RADEON_USAGE_READ, RADEON_PRIO_CONST_BUFFER));
 		}
-
-		radeon_emit(cs, PKT3(PKT3_NOP, 0, 0));
-		radeon_emit(cs, radeon_add_to_buffer_list(&rctx->b, &rctx->b.gfx, rbuffer,
-						      RADEON_USAGE_READ, RADEON_PRIO_CONST_BUFFER));
 
 		radeon_emit(cs, PKT3(PKT3_SET_RESOURCE, 7, 0));
 		radeon_emit(cs, (buffer_id_base + buffer_index) * 7);
@@ -2872,7 +2881,7 @@ static boolean r600_dma_copy_tile(struct r600_context *rctx,
 		z = src_z;
 		base = rsrc->surface.u.legacy.level[src_level].offset;
 		addr = rdst->surface.u.legacy.level[dst_level].offset;
-		addr += rdst->surface.u.legacy.level[dst_level].slice_size * dst_z;
+		addr += (uint64_t)rdst->surface.u.legacy.level[dst_level].slice_size_dw * 4 * dst_z;
 		addr += dst_y * pitch + dst_x * bpp;
 	} else {
 		/* L2T */
@@ -2891,7 +2900,7 @@ static boolean r600_dma_copy_tile(struct r600_context *rctx,
 		z = dst_z;
 		base = rdst->surface.u.legacy.level[dst_level].offset;
 		addr = rsrc->surface.u.legacy.level[src_level].offset;
-		addr += rsrc->surface.u.legacy.level[src_level].slice_size * src_z;
+		addr += (uint64_t)rsrc->surface.u.legacy.level[src_level].slice_size_dw * 4 * src_z;
 		addr += src_y * pitch + src_x * bpp;
 	}
 	/* check that we are in dw/base alignment constraint */
@@ -2996,10 +3005,10 @@ static void r600_dma_copy(struct pipe_context *ctx,
 		 *   dst_pitch == src_pitch
 		 */
 		src_offset= rsrc->surface.u.legacy.level[src_level].offset;
-		src_offset += rsrc->surface.u.legacy.level[src_level].slice_size * src_box->z;
+		src_offset += (uint64_t)rsrc->surface.u.legacy.level[src_level].slice_size_dw * 4 * src_box->z;
 		src_offset += src_y * src_pitch + src_x * bpp;
 		dst_offset = rdst->surface.u.legacy.level[dst_level].offset;
-		dst_offset += rdst->surface.u.legacy.level[dst_level].slice_size * dst_z;
+		dst_offset += (uint64_t)rdst->surface.u.legacy.level[dst_level].slice_size_dw * 4 * dst_z;
 		dst_offset += dst_y * dst_pitch + dst_x * bpp;
 		size = src_box->height * src_pitch;
 		/* must be dw aligned */

@@ -316,6 +316,13 @@ struct ureg_src
 ureg_DECL_constant( struct ureg_program *,
                     unsigned index );
 
+void
+ureg_DECL_hw_atomic(struct ureg_program *ureg,
+                    unsigned first,
+                    unsigned last,
+                    unsigned buffer_id,
+                    unsigned array_id);
+
 struct ureg_dst
 ureg_DECL_temporary( struct ureg_program * );
 

@@ -181,6 +181,9 @@ struct svga_shader_emitter_v10
 
       unsigned fragcoord_input_index;  /**< real fragment position input reg */
       unsigned fragcoord_tmp_index;    /**< 1/w modified position temp reg */
+
+      /** Which texture units are doing shadow comparison in the FS code */
+      unsigned shadow_compare_units;
    } fs;
 
    /* For geometry shaders only */
@@ -4779,16 +4782,12 @@ emit_tex_compare_refcoord(struct svga_shader_emitter_v10 *emit,
                           const struct tgsi_full_src_register *coord)
 {
    struct tgsi_full_src_register coord_src_ref;
-   unsigned component;
+   int component;
 
    assert(tgsi_is_shadow_target(target));
 
-   assert(target != TGSI_TEXTURE_SHADOWCUBE_ARRAY); /* XXX not implemented */
-   if (target == TGSI_TEXTURE_SHADOW2D_ARRAY ||
-       target == TGSI_TEXTURE_SHADOWCUBE)
-      component = TGSI_SWIZZLE_W;
-   else
-      component = TGSI_SWIZZLE_Z;
+   component = tgsi_util_get_shadow_ref_src_index(target) % 4;
+   assert(component >= 0);
 
    coord_src_ref = scalar_src(coord, component);
 
@@ -4851,6 +4850,8 @@ begin_tex_swizzle(struct svga_shader_emitter_v10 *emit,
    }
    swz->inst_dst = &inst->Dst[0];
    swz->coord_src = &inst->Src[0];
+
+   emit->fs.shadow_compare_units |= shadow_compare << unit;
 }
 
 
@@ -4890,30 +4891,14 @@ end_tex_swizzle(struct svga_shader_emitter_v10 *emit,
 
       assert(emit->unit == PIPE_SHADER_FRAGMENT);
 
-      switch (swz->texture_target) {
-      case TGSI_TEXTURE_SHADOW2D:
-      case TGSI_TEXTURE_SHADOWRECT:
-      case TGSI_TEXTURE_SHADOW1D_ARRAY:
-         coord_src = scalar_src(swz->coord_src, TGSI_SWIZZLE_Z);
-         break;
-      case TGSI_TEXTURE_SHADOW1D:
-         coord_src = scalar_src(swz->coord_src, TGSI_SWIZZLE_Y);
-         break;
-      case TGSI_TEXTURE_SHADOWCUBE:
-      case TGSI_TEXTURE_SHADOW2D_ARRAY:
-         coord_src = scalar_src(swz->coord_src, TGSI_SWIZZLE_W);
-         break;
-      default:
-         assert(!"Unexpected texture target in end_tex_swizzle()");
-         coord_src = scalar_src(swz->coord_src, TGSI_SWIZZLE_Z);
-      }
+      int component =
+         tgsi_util_get_shadow_ref_src_index(swz->texture_target) % 4;
+      assert(component >= 0);
+      coord_src = scalar_src(swz->coord_src, component);
 
       /* COMPARE tmp, coord, texel */
-      /* XXX it would seem that the texel and coord arguments should
-       * be transposed here, but piglit tests indicate otherwise.
-       */
       emit_comparison(emit, compare_func,
-                      &swz->tmp_dst, &texel_src, &coord_src);
+                      &swz->tmp_dst, &coord_src, &texel_src);
 
       /* AND dest, tmp, {1.0} */
       begin_emit_instruction(emit);
@@ -5043,7 +5028,7 @@ is_valid_tex_instruction(struct svga_shader_emitter_v10 *emit,
                          const struct tgsi_full_instruction *inst)
 {
    const unsigned unit = inst->Src[1].Register.Index;
-   const unsigned target = inst->Texture.Texture;
+   const enum tgsi_texture_type target = inst->Texture.Texture;
    boolean valid = TRUE;
 
    if (tgsi_is_shadow_target(target) &&
@@ -5075,7 +5060,7 @@ emit_tex(struct svga_shader_emitter_v10 *emit,
          const struct tgsi_full_instruction *inst)
 {
    const uint unit = inst->Src[1].Register.Index;
-   unsigned target = inst->Texture.Texture;
+   const enum tgsi_texture_type target = inst->Texture.Texture;
    unsigned opcode;
    struct tgsi_full_src_register coord;
    int offsets[3];
@@ -5125,7 +5110,7 @@ emit_txp(struct svga_shader_emitter_v10 *emit,
          const struct tgsi_full_instruction *inst)
 {
    const uint unit = inst->Src[1].Register.Index;
-   unsigned target = inst->Texture.Texture;
+   const enum tgsi_texture_type target = inst->Texture.Texture;
    unsigned opcode;
    int offsets[3];
    unsigned tmp = get_temp_index(emit);
@@ -5187,7 +5172,7 @@ emit_txd(struct svga_shader_emitter_v10 *emit,
          const struct tgsi_full_instruction *inst)
 {
    const uint unit = inst->Src[3].Register.Index;
-   unsigned target = inst->Texture.Texture;
+   const enum tgsi_texture_type target = inst->Texture.Texture;
    int offsets[3];
    struct tgsi_full_src_register coord;
    struct tex_swizzle_info swz_info;
@@ -5277,7 +5262,7 @@ static boolean
 emit_txl_txb(struct svga_shader_emitter_v10 *emit,
              const struct tgsi_full_instruction *inst)
 {
-   unsigned target = inst->Texture.Texture;
+   const enum tgsi_texture_type target = inst->Texture.Texture;
    unsigned opcode, unit;
    int offsets[3];
    struct tgsi_full_src_register coord, lod_bias;
@@ -6678,6 +6663,8 @@ svga_tgsi_vgpu10_translate(struct svga_context *svga,
     *  for any of the varyings.
     */
    variant->uses_flat_interp = emit->uses_flat_interp;
+
+   variant->fs_shadow_compare_units = emit->fs.shadow_compare_units;
 
    if (tokens != shader->tokens) {
       tgsi_free_tokens(tokens);

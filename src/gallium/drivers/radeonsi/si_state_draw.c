@@ -19,9 +19,6 @@
  * DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
  * USE OR OTHER DEALINGS IN THE SOFTWARE.
- *
- * Authors:
- *      Christian König <christian.koenig@amd.com>
  */
 
 #include "si_pipe.h"
@@ -35,6 +32,9 @@
 #include "util/u_prim.h"
 
 #include "ac_debug.h"
+
+/* special primitive types */
+#define SI_PRIM_RECTANGLE_LIST	PIPE_PRIM_MAX
 
 static unsigned si_conv_pipe_prim(unsigned mode)
 {
@@ -54,7 +54,7 @@ static unsigned si_conv_pipe_prim(unsigned mode)
 		[PIPE_PRIM_TRIANGLES_ADJACENCY]		= V_008958_DI_PT_TRILIST_ADJ,
 		[PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY]	= V_008958_DI_PT_TRISTRIP_ADJ,
 		[PIPE_PRIM_PATCHES]			= V_008958_DI_PT_PATCH,
-		[R600_PRIM_RECTANGLE_LIST]		= V_008958_DI_PT_RECTLIST
+		[SI_PRIM_RECTANGLE_LIST]		= V_008958_DI_PT_RECTLIST
         };
 	assert(mode < ARRAY_SIZE(prim_conv));
 	return prim_conv[mode];
@@ -78,7 +78,7 @@ static unsigned si_conv_prim_to_gs_out(unsigned mode)
 		[PIPE_PRIM_TRIANGLES_ADJACENCY]		= V_028A6C_OUTPRIM_TYPE_TRISTRIP,
 		[PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY]	= V_028A6C_OUTPRIM_TYPE_TRISTRIP,
 		[PIPE_PRIM_PATCHES]			= V_028A6C_OUTPRIM_TYPE_POINTLIST,
-		[R600_PRIM_RECTANGLE_LIST]		= V_028A6C_OUTPRIM_TYPE_TRISTRIP
+		[SI_PRIM_RECTANGLE_LIST]		= V_028A6C_OUTPRIM_TYPE_TRISTRIP
 	};
 	assert(mode < ARRAY_SIZE(prim_conv));
 
@@ -314,7 +314,7 @@ static unsigned si_num_prims_for_vertices(const struct pipe_draw_info *info)
 	switch (info->mode) {
 	case PIPE_PRIM_PATCHES:
 		return info->count / info->vertices_per_patch;
-	case R600_PRIM_RECTANGLE_LIST:
+	case SI_PRIM_RECTANGLE_LIST:
 		return info->count / 3;
 	default:
 		return u_prims_for_vertices(info->mode, info->count);
@@ -341,24 +341,24 @@ si_get_init_multi_vgt_param(struct si_screen *sscreen,
 			ia_switch_on_eoi = true;
 
 		/* Bug with tessellation and GS on Bonaire and older 2 SE chips. */
-		if ((sscreen->b.family == CHIP_TAHITI ||
-		     sscreen->b.family == CHIP_PITCAIRN ||
-		     sscreen->b.family == CHIP_BONAIRE) &&
+		if ((sscreen->info.family == CHIP_TAHITI ||
+		     sscreen->info.family == CHIP_PITCAIRN ||
+		     sscreen->info.family == CHIP_BONAIRE) &&
 		    key->u.uses_gs)
 			partial_vs_wave = true;
 
 		/* Needed for 028B6C_DISTRIBUTION_MODE != 0 */
 		if (sscreen->has_distributed_tess) {
 			if (key->u.uses_gs) {
-				if (sscreen->b.chip_class <= VI)
+				if (sscreen->info.chip_class <= VI)
 					partial_es_wave = true;
 
 				/* GPU hang workaround. */
-				if (sscreen->b.family == CHIP_TONGA ||
-				    sscreen->b.family == CHIP_FIJI ||
-				    sscreen->b.family == CHIP_POLARIS10 ||
-				    sscreen->b.family == CHIP_POLARIS11 ||
-				    sscreen->b.family == CHIP_POLARIS12)
+				if (sscreen->info.family == CHIP_TONGA ||
+				    sscreen->info.family == CHIP_FIJI ||
+				    sscreen->info.family == CHIP_POLARIS10 ||
+				    sscreen->info.family == CHIP_POLARIS11 ||
+				    sscreen->info.family == CHIP_POLARIS12)
 					partial_vs_wave = true;
 			} else {
 				partial_vs_wave = true;
@@ -368,12 +368,12 @@ si_get_init_multi_vgt_param(struct si_screen *sscreen,
 
 	/* This is a hardware requirement. */
 	if (key->u.line_stipple_enabled ||
-	    (sscreen->b.debug_flags & DBG(SWITCH_ON_EOP))) {
+	    (sscreen->debug_flags & DBG(SWITCH_ON_EOP))) {
 		ia_switch_on_eop = true;
 		wd_switch_on_eop = true;
 	}
 
-	if (sscreen->b.chip_class >= CIK) {
+	if (sscreen->info.chip_class >= CIK) {
 		/* WD_SWITCH_ON_EOP has no effect on GPUs with less than
 		 * 4 shader engines. Set 1 to pass the assertion below.
 		 * The other cases are hardware requirements.
@@ -381,13 +381,13 @@ si_get_init_multi_vgt_param(struct si_screen *sscreen,
 		 * Polaris supports primitive restart with WD_SWITCH_ON_EOP=0
 		 * for points, line strips, and tri strips.
 		 */
-		if (sscreen->b.info.max_se < 4 ||
+		if (sscreen->info.max_se < 4 ||
 		    key->u.prim == PIPE_PRIM_POLYGON ||
 		    key->u.prim == PIPE_PRIM_LINE_LOOP ||
 		    key->u.prim == PIPE_PRIM_TRIANGLE_FAN ||
 		    key->u.prim == PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY ||
 		    (key->u.primitive_restart &&
-		     (sscreen->b.family < CHIP_POLARIS10 ||
+		     (sscreen->info.family < CHIP_POLARIS10 ||
 		      (key->u.prim != PIPE_PRIM_POINTS &&
 		       key->u.prim != PIPE_PRIM_LINE_STRIP &&
 		       key->u.prim != PIPE_PRIM_TRIANGLE_STRIP))) ||
@@ -397,7 +397,7 @@ si_get_init_multi_vgt_param(struct si_screen *sscreen,
 		/* Hawaii hangs if instancing is enabled and WD_SWITCH_ON_EOP is 0.
 		 * We don't know that for indirect drawing, so treat it as
 		 * always problematic. */
-		if (sscreen->b.family == CHIP_HAWAII &&
+		if (sscreen->info.family == CHIP_HAWAII &&
 		    key->u.uses_instancing)
 			wd_switch_on_eop = true;
 
@@ -406,24 +406,24 @@ si_get_init_multi_vgt_param(struct si_screen *sscreen,
 		 * Assume indirect draws always use small instances.
 		 * This is needed for good VS wave utilization.
 		 */
-		if (sscreen->b.chip_class <= VI &&
-		    sscreen->b.info.max_se == 4 &&
+		if (sscreen->info.chip_class <= VI &&
+		    sscreen->info.max_se == 4 &&
 		    key->u.multi_instances_smaller_than_primgroup)
 			wd_switch_on_eop = true;
 
 		/* Required on CIK and later. */
-		if (sscreen->b.info.max_se > 2 && !wd_switch_on_eop)
+		if (sscreen->info.max_se > 2 && !wd_switch_on_eop)
 			ia_switch_on_eoi = true;
 
 		/* Required by Hawaii and, for some special cases, by VI. */
 		if (ia_switch_on_eoi &&
-		    (sscreen->b.family == CHIP_HAWAII ||
-		     (sscreen->b.chip_class == VI &&
+		    (sscreen->info.family == CHIP_HAWAII ||
+		     (sscreen->info.chip_class == VI &&
 		      (key->u.uses_gs || max_primgroup_in_wave != 2))))
 			partial_vs_wave = true;
 
 		/* Instancing bug on Bonaire. */
-		if (sscreen->b.family == CHIP_BONAIRE && ia_switch_on_eoi &&
+		if (sscreen->info.family == CHIP_BONAIRE && ia_switch_on_eoi &&
 		    key->u.uses_instancing)
 			partial_vs_wave = true;
 
@@ -432,24 +432,24 @@ si_get_init_multi_vgt_param(struct si_screen *sscreen,
 	}
 
 	/* If SWITCH_ON_EOI is set, PARTIAL_ES_WAVE must be set too. */
-	if (sscreen->b.chip_class <= VI && ia_switch_on_eoi)
+	if (sscreen->info.chip_class <= VI && ia_switch_on_eoi)
 		partial_es_wave = true;
 
 	return S_028AA8_SWITCH_ON_EOP(ia_switch_on_eop) |
 		S_028AA8_SWITCH_ON_EOI(ia_switch_on_eoi) |
 		S_028AA8_PARTIAL_VS_WAVE_ON(partial_vs_wave) |
 		S_028AA8_PARTIAL_ES_WAVE_ON(partial_es_wave) |
-		S_028AA8_WD_SWITCH_ON_EOP(sscreen->b.chip_class >= CIK ? wd_switch_on_eop : 0) |
+		S_028AA8_WD_SWITCH_ON_EOP(sscreen->info.chip_class >= CIK ? wd_switch_on_eop : 0) |
 		/* The following field was moved to VGT_SHADER_STAGES_EN in GFX9. */
-		S_028AA8_MAX_PRIMGRP_IN_WAVE(sscreen->b.chip_class == VI ?
+		S_028AA8_MAX_PRIMGRP_IN_WAVE(sscreen->info.chip_class == VI ?
 					     max_primgroup_in_wave : 0) |
-		S_030960_EN_INST_OPT_BASIC(sscreen->b.chip_class >= GFX9) |
-		S_030960_EN_INST_OPT_ADV(sscreen->b.chip_class >= GFX9);
+		S_030960_EN_INST_OPT_BASIC(sscreen->info.chip_class >= GFX9) |
+		S_030960_EN_INST_OPT_ADV(sscreen->info.chip_class >= GFX9);
 }
 
 void si_init_ia_multi_vgt_param_table(struct si_context *sctx)
 {
-	for (int prim = 0; prim <= R600_PRIM_RECTANGLE_LIST; prim++)
+	for (int prim = 0; prim <= SI_PRIM_RECTANGLE_LIST; prim++)
 	for (int uses_instancing = 0; uses_instancing < 2; uses_instancing++)
 	for (int multi_instances = 0; multi_instances < 2; multi_instances++)
 	for (int primitive_restart = 0; primitive_restart < 2; primitive_restart++)
@@ -910,7 +910,7 @@ void si_emit_cache_flush(struct si_context *sctx)
 			if (rctx->chip_class == VI)
 				si_gfx_write_event_eop(rctx, V_028A90_FLUSH_AND_INV_CB_DATA_TS,
 							 0, EOP_DATA_SEL_DISCARD, NULL,
-							 0, 0, R600_NOT_QUERY);
+							 0, 0, SI_NOT_QUERY);
 		}
 		if (rctx->flags & SI_CONTEXT_FLUSH_AND_INV_DB)
 			cp_coher_cntl |= S_0085F0_DB_ACTION_ENA(1) |
@@ -1026,7 +1026,7 @@ void si_emit_cache_flush(struct si_context *sctx)
 		si_gfx_write_event_eop(rctx, cb_db_event, tc_flags,
 					 EOP_DATA_SEL_VALUE_32BIT,
 					 sctx->wait_mem_scratch, va,
-					 sctx->wait_mem_number, R600_NOT_QUERY);
+					 sctx->wait_mem_number, SI_NOT_QUERY);
 		si_gfx_wait_fence(rctx, va, sctx->wait_mem_number, 0xffffffff);
 	}
 
@@ -1092,11 +1092,11 @@ void si_emit_cache_flush(struct si_context *sctx)
 	if (cp_coher_cntl)
 		si_emit_surface_sync(rctx, cp_coher_cntl);
 
-	if (rctx->flags & R600_CONTEXT_START_PIPELINE_STATS) {
+	if (rctx->flags & SI_CONTEXT_START_PIPELINE_STATS) {
 		radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 0, 0));
 		radeon_emit(cs, EVENT_TYPE(V_028A90_PIPELINESTAT_START) |
 			        EVENT_INDEX(0));
-	} else if (rctx->flags & R600_CONTEXT_STOP_PIPELINE_STATS) {
+	} else if (rctx->flags & SI_CONTEXT_STOP_PIPELINE_STATS) {
 		radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 0, 0));
 		radeon_emit(cs, EVENT_TYPE(V_028A90_PIPELINESTAT_STOP) |
 			        EVENT_INDEX(0));
@@ -1285,7 +1285,7 @@ void si_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info *info)
 	}
 
 	if (sctx->tes_shader.cso &&
-	    (sctx->b.family == CHIP_VEGA10 || sctx->b.family == CHIP_RAVEN)) {
+	    sctx->screen->has_ls_vgpr_init_bug) {
 		/* Determine whether the LS VGPR fix should be applied.
 		 *
 		 * It is only required when num input CPs > num output CPs,
@@ -1361,7 +1361,7 @@ void si_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info *info)
 			indexbuf = NULL;
 			u_upload_data(ctx->stream_uploader, start_offset,
 				      info->count * index_size,
-				      sctx->screen->b.info.tcc_cache_line_size,
+				      sctx->screen->info.tcc_cache_line_size,
 				      (char*)info->index.user + start_offset,
 				      &index_offset, &indexbuf);
 			if (!indexbuf)
@@ -1382,7 +1382,7 @@ void si_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info *info)
 		struct pipe_draw_indirect_info *indirect = info->indirect;
 
 		/* Add the buffer size for memory checking in need_cs_space. */
-		r600_context_add_resource_size(ctx, indirect->buffer);
+		si_context_add_resource_size(ctx, indirect->buffer);
 
 		/* Indirect buffers use TC L2 on GFX9, but not older hw. */
 		if (sctx->b.chip_class <= VI) {
@@ -1408,11 +1408,11 @@ void si_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info *info)
 	if (!si_upload_vertex_buffer_descriptors(sctx))
 		return;
 
-	/* GFX9 scissor bug workaround. This must be done before VPORT scissor
-	 * registers are changed. There is also a more efficient but more
-	 * involved alternative workaround.
+	/* Vega10/Raven scissor bug workaround. This must be done before VPORT
+	 * scissor registers are changed. There is also a more efficient but
+	 * more involved alternative workaround.
 	 */
-	if (sctx->b.chip_class == GFX9 &&
+	if ((sctx->b.family == CHIP_VEGA10 || sctx->b.family == CHIP_RAVEN) &&
 	    si_is_atom_dirty(sctx, &sctx->scissors.atom)) {
 		sctx->b.flags |= SI_CONTEXT_PS_PARTIAL_FLUSH;
 		si_emit_cache_flush(sctx);
@@ -1433,7 +1433,7 @@ void si_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info *info)
 		struct r600_atom *shader_pointers = &sctx->shader_pointers.atom;
 		unsigned masked_atoms = 1u << shader_pointers->id;
 
-		if (unlikely(sctx->b.flags & R600_CONTEXT_FLUSH_FOR_RENDER_COND))
+		if (unlikely(sctx->b.flags & SI_CONTEXT_FLUSH_FOR_RENDER_COND))
 			masked_atoms |= 1u << sctx->b.render_cond_atom.id;
 
 		/* Emit all states except shader pointers and render condition. */
@@ -1539,7 +1539,7 @@ void si_draw_rectangle(struct blitter_context *blitter,
 	pipe->bind_vs_state(pipe, si_get_blit_vs(sctx, type, num_instances));
 
 	struct pipe_draw_info info = {};
-	info.mode = R600_PRIM_RECTANGLE_LIST;
+	info.mode = SI_PRIM_RECTANGLE_LIST;
 	info.count = 3;
 	info.instance_count = num_instances;
 

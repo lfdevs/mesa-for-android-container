@@ -360,8 +360,20 @@ st_release_cp_variants(struct st_context *st, struct st_compute_program *stcp)
    *variants = NULL;
 
    if (stcp->tgsi.prog) {
-      ureg_free_tokens(stcp->tgsi.prog);
-      stcp->tgsi.prog = NULL;
+      switch (stcp->tgsi.ir_type) {
+      case PIPE_SHADER_IR_TGSI:
+         ureg_free_tokens(stcp->tgsi.prog);
+         stcp->tgsi.prog = NULL;
+         break;
+      case PIPE_SHADER_IR_NIR:
+         /* pipe driver took ownership of prog */
+         break;
+      case PIPE_SHADER_IR_LLVM:
+      case PIPE_SHADER_IR_NATIVE:
+         /* ??? */
+         stcp->tgsi.prog = NULL;
+         break;
+      }
    }
 }
 
@@ -447,12 +459,6 @@ st_translate_vertex_program(struct st_context *st,
    }
 
    if (stvp->shader_program) {
-      nir_shader *nir = st_glsl_to_nir(st, &stvp->Base, stvp->shader_program,
-                                       MESA_SHADER_VERTEX);
-
-      stvp->tgsi.type = PIPE_SHADER_IR_NIR;
-      stvp->tgsi.ir.nir = nir;
-
       struct gl_program *prog = stvp->shader_program->last_vert_prog;
       if (prog) {
          st_translate_stream_output_info2(prog->sh.LinkedTransformFeedback,
@@ -528,13 +534,12 @@ st_translate_vertex_program(struct st_context *st,
       return false;
    }
 
-   unsigned num_tokens;
-   stvp->tgsi.tokens = ureg_get_tokens(ureg, &num_tokens);
+   stvp->tgsi.tokens = ureg_get_tokens(ureg, &stvp->num_tgsi_tokens);
    ureg_destroy(ureg);
 
    if (stvp->glsl_to_tgsi) {
       stvp->glsl_to_tgsi = NULL;
-      st_store_tgsi_in_disk_cache(st, &stvp->Base, NULL, num_tokens);
+      st_store_tgsi_in_disk_cache(st, &stvp->Base);
    }
 
    return stvp->tgsi.tokens != NULL;
@@ -562,7 +567,8 @@ st_create_vp_variant(struct st_context *st,
          vpv->num_inputs++;
       }
 
-      st_finalize_nir(st, &stvp->Base, vpv->tgsi.ir.nir);
+      st_finalize_nir(st, &stvp->Base, stvp->shader_program,
+                      vpv->tgsi.ir.nir);
 
       vpv->driver_shader = pipe->create_vs_state(pipe, &vpv->tgsi);
       /* driver takes ownership of IR: */
@@ -894,15 +900,9 @@ st_translate_fragment_program(struct st_context *st,
       }
    }
 
-   if (stfp->shader_program) {
-      nir_shader *nir = st_glsl_to_nir(st, &stfp->Base, stfp->shader_program,
-                                       MESA_SHADER_FRAGMENT);
-
-      stfp->tgsi.type = PIPE_SHADER_IR_NIR;
-      stfp->tgsi.ir.nir = nir;
-
+   /* We have already compiler to NIR so just return */
+   if (stfp->shader_program)
       return true;
-   }
 
    ureg = ureg_create_with_screen(PIPE_SHADER_FRAGMENT, st->pipe->screen);
    if (ureg == NULL)
@@ -991,13 +991,12 @@ st_translate_fragment_program(struct st_context *st,
                                 fs_output_semantic_name,
                                 fs_output_semantic_index);
 
-   unsigned num_tokens;
-   stfp->tgsi.tokens = ureg_get_tokens(ureg, &num_tokens);
+   stfp->tgsi.tokens = ureg_get_tokens(ureg, &stfp->num_tgsi_tokens);
    ureg_destroy(ureg);
 
    if (stfp->glsl_to_tgsi) {
       stfp->glsl_to_tgsi = NULL;
-      st_store_tgsi_in_disk_cache(st, &stfp->Base, NULL, num_tokens);
+      st_store_tgsi_in_disk_cache(st, &stfp->Base);
    }
 
    return stfp->tgsi.tokens != NULL;
@@ -1088,7 +1087,7 @@ st_create_fp_variant(struct st_context *st,
          NIR_PASS_V(tgsi.ir.nir, nir_lower_tex, &options);
       }
 
-      st_finalize_nir(st, &stfp->Base, tgsi.ir.nir);
+      st_finalize_nir(st, &stfp->Base, stfp->shader_program, tgsi.ir.nir);
 
       if (unlikely(key->external.lower_nv12 || key->external.lower_iyuv)) {
          /* This pass needs to happen *after* nir_lower_sampler */
@@ -1317,79 +1316,19 @@ st_translate_program_common(struct st_context *st,
     * Convert Mesa program inputs to TGSI input register semantics.
     */
    for (attr = 0; attr < VARYING_SLOT_MAX; attr++) {
-      if ((prog->info.inputs_read & BITFIELD64_BIT(attr)) != 0) {
-         const GLuint slot = num_inputs++;
+      if ((prog->info.inputs_read & BITFIELD64_BIT(attr)) == 0)
+         continue;
 
-         inputMapping[attr] = slot;
-         inputSlotToAttr[slot] = attr;
+      unsigned slot = num_inputs++;
 
-         switch (attr) {
-         case VARYING_SLOT_PRIMITIVE_ID:
-            assert(tgsi_processor == PIPE_SHADER_GEOMETRY);
-            input_semantic_name[slot] = TGSI_SEMANTIC_PRIMID;
-            input_semantic_index[slot] = 0;
-            break;
-         case VARYING_SLOT_POS:
-            input_semantic_name[slot] = TGSI_SEMANTIC_POSITION;
-            input_semantic_index[slot] = 0;
-            break;
-         case VARYING_SLOT_COL0:
-            input_semantic_name[slot] = TGSI_SEMANTIC_COLOR;
-            input_semantic_index[slot] = 0;
-            break;
-         case VARYING_SLOT_COL1:
-            input_semantic_name[slot] = TGSI_SEMANTIC_COLOR;
-            input_semantic_index[slot] = 1;
-            break;
-         case VARYING_SLOT_FOGC:
-            input_semantic_name[slot] = TGSI_SEMANTIC_FOG;
-            input_semantic_index[slot] = 0;
-            break;
-         case VARYING_SLOT_CLIP_VERTEX:
-            input_semantic_name[slot] = TGSI_SEMANTIC_CLIPVERTEX;
-            input_semantic_index[slot] = 0;
-            break;
-         case VARYING_SLOT_CLIP_DIST0:
-            input_semantic_name[slot] = TGSI_SEMANTIC_CLIPDIST;
-            input_semantic_index[slot] = 0;
-            break;
-         case VARYING_SLOT_CLIP_DIST1:
-            input_semantic_name[slot] = TGSI_SEMANTIC_CLIPDIST;
-            input_semantic_index[slot] = 1;
-            break;
-         case VARYING_SLOT_CULL_DIST0:
-         case VARYING_SLOT_CULL_DIST1:
-            /* these should have been lowered by GLSL */
-            assert(0);
-            break;
-         case VARYING_SLOT_PSIZ:
-            input_semantic_name[slot] = TGSI_SEMANTIC_PSIZE;
-            input_semantic_index[slot] = 0;
-            break;
-         case VARYING_SLOT_TEX0:
-         case VARYING_SLOT_TEX1:
-         case VARYING_SLOT_TEX2:
-         case VARYING_SLOT_TEX3:
-         case VARYING_SLOT_TEX4:
-         case VARYING_SLOT_TEX5:
-         case VARYING_SLOT_TEX6:
-         case VARYING_SLOT_TEX7:
-            if (st->needs_texcoord_semantic) {
-               input_semantic_name[slot] = TGSI_SEMANTIC_TEXCOORD;
-               input_semantic_index[slot] = attr - VARYING_SLOT_TEX0;
-               break;
-            }
-            /* fall through */
-         case VARYING_SLOT_VAR0:
-         default:
-            assert(attr >= VARYING_SLOT_VAR0 ||
-                   (attr >= VARYING_SLOT_TEX0 && attr <= VARYING_SLOT_TEX7));
-            input_semantic_name[slot] = TGSI_SEMANTIC_GENERIC;
-            input_semantic_index[slot] =
-               st_get_generic_varying_index(st, attr);
-            break;
-         }
-      }
+      inputMapping[attr] = slot;
+      inputSlotToAttr[slot] = attr;
+
+      unsigned semantic_name, semantic_index;
+      tgsi_get_gl_varying_semantic(attr, st->needs_texcoord_semantic,
+                                   &semantic_name, &semantic_index);
+      input_semantic_name[slot] = semantic_name;
+      input_semantic_index[slot] = semantic_index;
    }
 
    /* Also add patch inputs. */
@@ -1421,97 +1360,11 @@ st_translate_program_common(struct st_context *st,
 
          outputMapping[attr] = slot;
 
-         switch (attr) {
-         case VARYING_SLOT_POS:
-            assert(slot == 0);
-            output_semantic_name[slot] = TGSI_SEMANTIC_POSITION;
-            output_semantic_index[slot] = 0;
-            break;
-         case VARYING_SLOT_COL0:
-            output_semantic_name[slot] = TGSI_SEMANTIC_COLOR;
-            output_semantic_index[slot] = 0;
-            break;
-         case VARYING_SLOT_COL1:
-            output_semantic_name[slot] = TGSI_SEMANTIC_COLOR;
-            output_semantic_index[slot] = 1;
-            break;
-         case VARYING_SLOT_BFC0:
-            output_semantic_name[slot] = TGSI_SEMANTIC_BCOLOR;
-            output_semantic_index[slot] = 0;
-            break;
-         case VARYING_SLOT_BFC1:
-            output_semantic_name[slot] = TGSI_SEMANTIC_BCOLOR;
-            output_semantic_index[slot] = 1;
-            break;
-         case VARYING_SLOT_FOGC:
-            output_semantic_name[slot] = TGSI_SEMANTIC_FOG;
-            output_semantic_index[slot] = 0;
-            break;
-         case VARYING_SLOT_PSIZ:
-            output_semantic_name[slot] = TGSI_SEMANTIC_PSIZE;
-            output_semantic_index[slot] = 0;
-            break;
-         case VARYING_SLOT_CLIP_VERTEX:
-            output_semantic_name[slot] = TGSI_SEMANTIC_CLIPVERTEX;
-            output_semantic_index[slot] = 0;
-            break;
-         case VARYING_SLOT_CLIP_DIST0:
-            output_semantic_name[slot] = TGSI_SEMANTIC_CLIPDIST;
-            output_semantic_index[slot] = 0;
-            break;
-         case VARYING_SLOT_CLIP_DIST1:
-            output_semantic_name[slot] = TGSI_SEMANTIC_CLIPDIST;
-            output_semantic_index[slot] = 1;
-            break;
-         case VARYING_SLOT_CULL_DIST0:
-         case VARYING_SLOT_CULL_DIST1:
-            /* these should have been lowered by GLSL */
-            assert(0);
-            break;
-         case VARYING_SLOT_LAYER:
-            output_semantic_name[slot] = TGSI_SEMANTIC_LAYER;
-            output_semantic_index[slot] = 0;
-            break;
-         case VARYING_SLOT_PRIMITIVE_ID:
-            output_semantic_name[slot] = TGSI_SEMANTIC_PRIMID;
-            output_semantic_index[slot] = 0;
-            break;
-         case VARYING_SLOT_VIEWPORT:
-            output_semantic_name[slot] = TGSI_SEMANTIC_VIEWPORT_INDEX;
-            output_semantic_index[slot] = 0;
-            break;
-         case VARYING_SLOT_TESS_LEVEL_OUTER:
-            output_semantic_name[slot] = TGSI_SEMANTIC_TESSOUTER;
-            output_semantic_index[slot] = 0;
-            break;
-         case VARYING_SLOT_TESS_LEVEL_INNER:
-            output_semantic_name[slot] = TGSI_SEMANTIC_TESSINNER;
-            output_semantic_index[slot] = 0;
-            break;
-         case VARYING_SLOT_TEX0:
-         case VARYING_SLOT_TEX1:
-         case VARYING_SLOT_TEX2:
-         case VARYING_SLOT_TEX3:
-         case VARYING_SLOT_TEX4:
-         case VARYING_SLOT_TEX5:
-         case VARYING_SLOT_TEX6:
-         case VARYING_SLOT_TEX7:
-            if (st->needs_texcoord_semantic) {
-               output_semantic_name[slot] = TGSI_SEMANTIC_TEXCOORD;
-               output_semantic_index[slot] = attr - VARYING_SLOT_TEX0;
-               break;
-            }
-            /* fall through */
-         case VARYING_SLOT_VAR0:
-         default:
-            assert(slot < ARRAY_SIZE(output_semantic_name));
-            assert(attr >= VARYING_SLOT_VAR0 ||
-                   (attr >= VARYING_SLOT_TEX0 && attr <= VARYING_SLOT_TEX7));
-            output_semantic_name[slot] = TGSI_SEMANTIC_GENERIC;
-            output_semantic_index[slot] =
-               st_get_generic_varying_index(st, attr);
-            break;
-         }
+         unsigned semantic_name, semantic_index;
+         tgsi_get_gl_varying_semantic(attr, st->needs_texcoord_semantic,
+                                      &semantic_name, &semantic_index);
+         output_semantic_name[slot] = semantic_name;
+         output_semantic_index[slot] = semantic_index;
       }
    }
 
@@ -1545,15 +1398,21 @@ st_translate_program_common(struct st_context *st,
                         output_semantic_name,
                         output_semantic_index);
 
-   unsigned num_tokens;
-   out_state->tokens = ureg_get_tokens(ureg, &num_tokens);
+   if (tgsi_processor == PIPE_SHADER_COMPUTE) {
+      struct st_compute_program *stcp = (struct st_compute_program *) prog;
+      out_state->tokens = ureg_get_tokens(ureg, &stcp->num_tgsi_tokens);
+      stcp->tgsi.prog = out_state->tokens;
+   } else {
+      struct st_common_program *stcp = (struct st_common_program *) prog;
+      out_state->tokens = ureg_get_tokens(ureg, &stcp->num_tgsi_tokens);
+   }
    ureg_destroy(ureg);
 
    st_translate_stream_output_info(glsl_to_tgsi,
                                    outputMapping,
                                    &out_state->stream_output);
 
-   st_store_tgsi_in_disk_cache(st, prog, out_state, num_tokens);
+   st_store_tgsi_in_disk_cache(st, prog);
 
    if ((ST_DEBUG & DEBUG_TGSI) && (ST_DEBUG & DEBUG_MESA)) {
       _mesa_print_program(prog);
@@ -1566,6 +1425,40 @@ st_translate_program_common(struct st_context *st,
    }
 }
 
+/**
+ * Update stream-output info for GS/TCS/TES.  Normally this is done in
+ * st_translate_program_common() but that is not called for glsl_to_nir
+ * case.
+ */
+static void
+st_translate_program_stream_output(struct gl_program *prog,
+                                   struct pipe_stream_output_info *stream_output)
+{
+   if (!prog->sh.LinkedTransformFeedback)
+      return;
+
+   ubyte outputMapping[VARYING_SLOT_TESS_MAX];
+   GLuint attr;
+   uint num_outputs = 0;
+
+   memset(outputMapping, 0, sizeof(outputMapping));
+
+   /*
+    * Determine number of outputs, the (default) output register
+    * mapping and the semantic information for each output.
+    */
+   for (attr = 0; attr < VARYING_SLOT_MAX; attr++) {
+      if (prog->info.outputs_written & BITFIELD64_BIT(attr)) {
+         GLuint slot = num_outputs++;
+
+         outputMapping[attr] = slot;
+      }
+   }
+
+   st_translate_stream_output_info2(prog->sh.LinkedTransformFeedback,
+                                    outputMapping,
+                                    stream_output);
+}
 
 /**
  * Translate a geometry program to create a new variant.
@@ -1575,6 +1468,12 @@ st_translate_geometry_program(struct st_context *st,
                               struct st_common_program *stgp)
 {
    struct ureg_program *ureg;
+
+   /* We have already compiled to NIR so just return */
+   if (stgp->shader_program) {
+      st_translate_program_stream_output(&stgp->Base, &stgp->tgsi.stream_output);
+      return true;
+   }
 
    ureg = ureg_create_with_screen(PIPE_SHADER_GEOMETRY, st->pipe->screen);
    if (ureg == NULL)
@@ -1604,18 +1503,17 @@ st_translate_geometry_program(struct st_context *st,
 struct st_basic_variant *
 st_get_basic_variant(struct st_context *st,
                      unsigned pipe_shader,
-                     struct pipe_shader_state *tgsi,
-                     struct st_basic_variant **variants)
+                     struct st_common_program *prog)
 {
    struct pipe_context *pipe = st->pipe;
    struct st_basic_variant *v;
    struct st_basic_variant_key key;
-
+   struct pipe_shader_state tgsi = {0};
    memset(&key, 0, sizeof(key));
    key.st = st->has_shareable_shaders ? NULL : st;
 
    /* Search for existing variant */
-   for (v = *variants; v; v = v->next) {
+   for (v = prog->variants; v; v = v->next) {
       if (memcmp(&v->key, &key, sizeof(key)) == 0) {
          break;
       }
@@ -1625,16 +1523,25 @@ st_get_basic_variant(struct st_context *st,
       /* create new */
       v = CALLOC_STRUCT(st_basic_variant);
       if (v) {
+
+	 if (prog->tgsi.type == PIPE_SHADER_IR_NIR) {
+	    tgsi.type = PIPE_SHADER_IR_NIR;
+	    tgsi.ir.nir = nir_shader_clone(NULL, prog->tgsi.ir.nir);
+	    st_finalize_nir(st, &prog->Base, prog->shader_program,
+                            tgsi.ir.nir);
+            tgsi.stream_output = prog->tgsi.stream_output;
+	 } else
+	    tgsi = prog->tgsi;
          /* fill in new variant */
          switch (pipe_shader) {
          case PIPE_SHADER_TESS_CTRL:
-            v->driver_shader = pipe->create_tcs_state(pipe, tgsi);
+            v->driver_shader = pipe->create_tcs_state(pipe, &tgsi);
             break;
          case PIPE_SHADER_TESS_EVAL:
-            v->driver_shader = pipe->create_tes_state(pipe, tgsi);
+            v->driver_shader = pipe->create_tes_state(pipe, &tgsi);
             break;
          case PIPE_SHADER_GEOMETRY:
-            v->driver_shader = pipe->create_gs_state(pipe, tgsi);
+            v->driver_shader = pipe->create_gs_state(pipe, &tgsi);
             break;
          default:
             assert(!"unhandled shader type");
@@ -1645,8 +1552,8 @@ st_get_basic_variant(struct st_context *st,
          v->key = key;
 
          /* insert into list */
-         v->next = *variants;
-         *variants = v;
+         v->next = prog->variants;
+         prog->variants = v;
       }
    }
 
@@ -1662,6 +1569,10 @@ st_translate_tessctrl_program(struct st_context *st,
                               struct st_common_program *sttcp)
 {
    struct ureg_program *ureg;
+
+   /* We have already compiled to NIR so just return */
+   if (sttcp->shader_program)
+      return true;
 
    ureg = ureg_create_with_screen(PIPE_SHADER_TESS_CTRL, st->pipe->screen);
    if (ureg == NULL)
@@ -1687,6 +1598,12 @@ st_translate_tesseval_program(struct st_context *st,
                               struct st_common_program *sttep)
 {
    struct ureg_program *ureg;
+
+   /* We have already compiled to NIR so just return */
+   if (sttep->shader_program) {
+      st_translate_program_stream_output(&sttep->Base, &sttep->tgsi.stream_output);
+      return true;
+   }
 
    ureg = ureg_create_with_screen(PIPE_SHADER_TESS_EVAL, st->pipe->screen);
    if (ureg == NULL)
@@ -1732,14 +1649,9 @@ st_translate_compute_program(struct st_context *st,
    struct pipe_shader_state prog;
 
    if (stcp->shader_program) {
-      nir_shader *nir = st_glsl_to_nir(st, &stcp->Base, stcp->shader_program,
-                                       MESA_SHADER_COMPUTE);
-
       /* no compute variants: */
-      st_finalize_nir(st, &stcp->Base, nir);
-
-      stcp->tgsi.ir_type = PIPE_SHADER_IR_NIR;
-      stcp->tgsi.prog = nir;
+      st_finalize_nir(st, &stcp->Base, stcp->shader_program,
+                      (struct nir_shader *) stcp->tgsi.prog);
 
       return true;
    }
@@ -1752,7 +1664,6 @@ st_translate_compute_program(struct st_context *st,
                                PIPE_SHADER_COMPUTE, &prog);
 
    stcp->tgsi.ir_type = PIPE_SHADER_IR_TGSI;
-   stcp->tgsi.prog = prog.tokens;
    stcp->tgsi.req_local_mem = stcp->Base.info.cs.shared_size;
    stcp->tgsi.req_private_mem = 0;
    stcp->tgsi.req_input_mem = 0;
@@ -1790,7 +1701,10 @@ st_get_cp_variant(struct st_context *st,
       v = CALLOC_STRUCT(st_basic_variant);
       if (v) {
          /* fill in new variant */
-         v->driver_shader = pipe->create_compute_state(pipe, tgsi);
+         struct pipe_compute_state cs = *tgsi;
+         if (tgsi->ir_type == PIPE_SHADER_IR_NIR)
+            cs.prog = nir_shader_clone(NULL, tgsi->prog);
+         v->driver_shader = pipe->create_compute_state(pipe, &cs);
          v->key = key;
 
          /* insert into list */
@@ -2004,19 +1918,19 @@ st_precompile_shader_variant(struct st_context *st,
 
    case GL_TESS_CONTROL_PROGRAM_NV: {
       struct st_common_program *p = st_common_program(prog);
-      st_get_basic_variant(st, PIPE_SHADER_TESS_CTRL, &p->tgsi, &p->variants);
+      st_get_basic_variant(st, PIPE_SHADER_TESS_CTRL, p);
       break;
    }
 
    case GL_TESS_EVALUATION_PROGRAM_NV: {
       struct st_common_program *p = st_common_program(prog);
-      st_get_basic_variant(st, PIPE_SHADER_TESS_EVAL, &p->tgsi, &p->variants);
+      st_get_basic_variant(st, PIPE_SHADER_TESS_EVAL, p);
       break;
    }
 
    case GL_GEOMETRY_PROGRAM_NV: {
       struct st_common_program *p = st_common_program(prog);
-      st_get_basic_variant(st, PIPE_SHADER_GEOMETRY, &p->tgsi, &p->variants);
+      st_get_basic_variant(st, PIPE_SHADER_GEOMETRY, p);
       break;
    }
 

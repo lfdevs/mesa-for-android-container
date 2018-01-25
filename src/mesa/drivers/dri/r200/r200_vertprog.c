@@ -498,11 +498,6 @@ static GLboolean r200_translate_vertex_program(struct gl_context *ctx, struct r2
       free_inputs &= ~(1 << 0);
       array_count++;
    }
-   if (mesa_vp->info.inputs_read & VERT_BIT_WEIGHT) {
-      vp->inputs[VERT_ATTRIB_WEIGHT] = 12;
-      vp->inputmap_rev[1] = VERT_ATTRIB_WEIGHT;
-      array_count++;
-   }
    if (mesa_vp->info.inputs_read & VERT_BIT_NORMAL) {
       vp->inputs[VERT_ATTRIB_NORMAL] = 1;
       vp->inputmap_rev[2] = VERT_ATTRIB_NORMAL;

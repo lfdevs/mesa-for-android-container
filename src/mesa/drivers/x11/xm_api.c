@@ -957,6 +957,7 @@ XMesaContext XMesaCreateContext( XMesaVisual v, XMesaContext share_list )
 
    _mesa_meta_init(mesaCtx);
 
+   _mesa_override_extensions(mesaCtx);
    _mesa_compute_version(mesaCtx);
 
     /* Exec table initialization requires the version to be computed */
@@ -1309,14 +1310,6 @@ Display *XMesaGetCurrentDisplay(void)
    GET_CURRENT_CONTEXT(ctx);
    XMesaContext xmctx = XMESA_CONTEXT(ctx);
    return xmctx ? xmctx->display : NULL;
-}
-
-
-
-GLboolean XMesaSetFXmode( GLint mode )
-{
-   (void) mode;
-   return GL_FALSE;
 }
 
 

@@ -71,7 +71,7 @@ isl_tiling_from_i915_tiling(uint32_t tiling)
    unreachable("Invalid i915 tiling");
 }
 
-struct isl_drm_modifier_info modifier_info[] = {
+static const struct isl_drm_modifier_info modifier_info[] = {
    {
       .modifier = DRM_FORMAT_MOD_NONE,
       .name = "DRM_FORMAT_MOD_NONE",

@@ -30,7 +30,6 @@
  */
 
 #include <stdio.h>
-#include "main/compiler.h"
 #include "main/macros.h"
 #include "main/mtypes.h"
 #include "main/shaderapi.h"
@@ -507,7 +506,10 @@ storage_type_size(const struct glsl_type *type, bool bindless)
    switch (type->base_type) {
    case GLSL_TYPE_UINT:
    case GLSL_TYPE_INT:
+   case GLSL_TYPE_UINT16:
+   case GLSL_TYPE_INT16:
    case GLSL_TYPE_FLOAT:
+   case GLSL_TYPE_FLOAT16:
    case GLSL_TYPE_BOOL:
       if (type->is_matrix()) {
 	 return type->matrix_columns;
@@ -1135,22 +1137,6 @@ ir_to_mesa_visitor::visit(ir_expression *ir)
    case ir_binop_less:
       emit(ir, OPCODE_SLT, result_dst, op[0], op[1]);
       break;
-   case ir_binop_greater:
-      /* Negating the operands (as opposed to switching the order of the
-       * operands) produces the correct result when both are +/-Inf.
-       */
-      op[0].negate = ~op[0].negate;
-      op[1].negate = ~op[1].negate;
-      emit(ir, OPCODE_SLT, result_dst, op[0], op[1]);
-      break;
-   case ir_binop_lequal:
-      /* Negating the operands (as opposed to switching the order of the
-       * operands) produces the correct result when both are +/-Inf.
-       */
-      op[0].negate = ~op[0].negate;
-      op[1].negate = ~op[1].negate;
-      emit(ir, OPCODE_SGE, result_dst, op[0], op[1]);
-      break;
    case ir_binop_gequal:
       emit(ir, OPCODE_SGE, result_dst, op[0], op[1]);
       break;
@@ -1758,10 +1744,6 @@ ir_to_mesa_visitor::process_move_condition(ir_rvalue *ir)
       /*      a is -  0  +            -  0  +
        * (a <  0)  T  F  F  ( a < 0)  T  F  F
        * (0 <  a)  F  F  T  (-a < 0)  F  F  T
-       * (a <= 0)  T  T  F  (-a < 0)  F  F  T  (swap order of other operands)
-       * (0 <= a)  F  T  T  ( a < 0)  T  F  F  (swap order of other operands)
-       * (a >  0)  F  F  T  (-a < 0)  F  F  T
-       * (0 >  a)  T  F  F  ( a < 0)  T  F  F
        * (a >= 0)  F  T  T  ( a < 0)  T  F  F  (swap order of other operands)
        * (0 >= a)  T  T  F  (-a < 0)  F  F  T  (swap order of other operands)
        *
@@ -1773,16 +1755,6 @@ ir_to_mesa_visitor::process_move_condition(ir_rvalue *ir)
 	 case ir_binop_less:
 	    switch_order = false;
 	    negate = zero_on_left;
-	    break;
-
-	 case ir_binop_greater:
-	    switch_order = false;
-	    negate = !zero_on_left;
-	    break;
-
-	 case ir_binop_lequal:
-	    switch_order = true;
-	    negate = !zero_on_left;
 	    break;
 
 	 case ir_binop_gequal:
@@ -2461,12 +2433,25 @@ add_uniform_to_shader::visit_field(const glsl_type *type, const char *name,
    if (type->contains_opaque() && !var->data.bindless)
       return;
 
+   /* Add the uniform to the param list */
    assert(_mesa_lookup_parameter_index(params, name) < 0);
+   int index = _mesa_lookup_parameter_index(params, name);
 
-   unsigned size = storage_type_size(type, var->data.bindless) * 4;
+   unsigned num_params = type->arrays_of_arrays_size();
+   num_params = MAX2(num_params, 1);
+   num_params *= type->without_array()->matrix_columns;
 
-   int index = _mesa_add_parameter(params, PROGRAM_UNIFORM, name, size,
-                                   type->gl_type, NULL, NULL);
+   bool is_dual_slot = type->without_array()->is_dual_slot();
+   if (is_dual_slot)
+      num_params *= 2;
+
+   _mesa_reserve_parameter_storage(params, num_params);
+   index = params->NumParameters;
+   for (unsigned i = 0; i < num_params; i++) {
+      unsigned comps = 4;
+      _mesa_add_parameter(params, PROGRAM_UNIFORM, name, comps,
+                          type->gl_type, NULL, NULL);
+   }
 
    /* The first part of the uniform that's processed determines the base
     * location of the whole uniform (for structures).
@@ -2548,6 +2533,7 @@ _mesa_associate_uniform_storage(struct gl_context *ctx,
                dmul *= 2;
             /* fallthrough */
          case GLSL_TYPE_UINT:
+         case GLSL_TYPE_UINT16:
             assert(ctx->Const.NativeIntegers);
             format = uniform_native;
             columns = 1;
@@ -2557,6 +2543,7 @@ _mesa_associate_uniform_storage(struct gl_context *ctx,
                dmul *= 2;
             /* fallthrough */
          case GLSL_TYPE_INT:
+         case GLSL_TYPE_INT16:
             format =
                (ctx->Const.NativeIntegers) ? uniform_native : uniform_int_float;
             columns = 1;
@@ -2566,6 +2553,7 @@ _mesa_associate_uniform_storage(struct gl_context *ctx,
                dmul *= 2;
             /* fallthrough */
          case GLSL_TYPE_FLOAT:
+         case GLSL_TYPE_FLOAT16:
             format = uniform_native;
             columns = storage->type->matrix_columns;
             break;
@@ -2978,7 +2966,7 @@ get_mesa_program(struct gl_context *ctx,
       prog->info.fs.depth_layout = shader_program->FragDepthLayout;
    }
 
-   _mesa_optimize_program(ctx, prog, prog);
+   _mesa_optimize_program(prog, prog);
 
    /* This has to be done last.  Any operation that can cause
     * prog->ParameterValues to get reallocated (e.g., anything that adds a
@@ -3094,6 +3082,7 @@ void
 _mesa_glsl_link_shader(struct gl_context *ctx, struct gl_shader_program *prog)
 {
    unsigned int i;
+   bool spirv;
 
    _mesa_clear_shader_program_data(ctx, prog);
 
@@ -3103,7 +3092,21 @@ _mesa_glsl_link_shader(struct gl_context *ctx, struct gl_shader_program *prog)
 
    for (i = 0; i < prog->NumShaders; i++) {
       if (!prog->Shaders[i]->CompileStatus) {
-	 linker_error(prog, "linking with uncompiled shader");
+	 linker_error(prog, "linking with uncompiled/unspecialized shader");
+      }
+
+      if (!i) {
+         spirv = (prog->Shaders[i]->spirv_data != NULL);
+      } else if (spirv && !prog->Shaders[i]->spirv_data) {
+         /* The GL_ARB_gl_spirv spec adds a new bullet point to the list of
+          * reasons LinkProgram can fail:
+          *
+          *    "All the shader objects attached to <program> do not have the
+          *     same value for the SPIR_V_BINARY_ARB state."
+          */
+         linker_error(prog,
+                      "not all attached shaders have the same "
+                      "SPIR_V_BINARY_ARB state");
       }
    }
 
@@ -3111,15 +3114,17 @@ _mesa_glsl_link_shader(struct gl_context *ctx, struct gl_shader_program *prog)
       link_shaders(ctx, prog);
    }
 
-   if (prog->data->LinkStatus) {
-      /* Reset sampler validated to true, validation happens via the
-       * LinkShader call below.
-       */
+   /* If LinkStatus is linking_success, then reset sampler validated to true.
+    * Validation happens via the LinkShader call below. If LinkStatus is
+    * linking_skipped, then SamplersValidated will have been restored from the
+    * shader cache.
+    */
+   if (prog->data->LinkStatus == linking_success) {
       prog->SamplersValidated = GL_TRUE;
+   }
 
-      if (!ctx->Driver.LinkShader(ctx, prog)) {
-         prog->data->LinkStatus = linking_failure;
-      }
+   if (prog->data->LinkStatus && !ctx->Driver.LinkShader(ctx, prog)) {
+      prog->data->LinkStatus = linking_failure;
    }
 
    /* Return early if we are loading the shader from on-disk cache */

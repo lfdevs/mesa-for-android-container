@@ -564,30 +564,33 @@ dd_context_set_stream_output_targets(struct pipe_context *_pipe,
    pipe->set_stream_output_targets(pipe, num_targets, tgs, offsets);
 }
 
+void
+dd_thread_join(struct dd_context *dctx)
+{
+   mtx_lock(&dctx->mutex);
+   dctx->kill_thread = true;
+   cnd_signal(&dctx->cond);
+   mtx_unlock(&dctx->mutex);
+   thrd_join(dctx->thread, NULL);
+}
+
 static void
 dd_context_destroy(struct pipe_context *_pipe)
 {
    struct dd_context *dctx = dd_context(_pipe);
    struct pipe_context *pipe = dctx->pipe;
 
-   if (dctx->thread) {
-      mtx_lock(&dctx->mutex);
-      dctx->kill_thread = 1;
-      mtx_unlock(&dctx->mutex);
-      thrd_join(dctx->thread, NULL);
-      mtx_destroy(&dctx->mutex);
-      assert(!dctx->records);
-   }
+   dd_thread_join(dctx);
+   mtx_destroy(&dctx->mutex);
+   cnd_destroy(&dctx->cond);
 
-   if (dctx->fence) {
-      pipe->transfer_unmap(pipe, dctx->fence_transfer);
-      pipe_resource_reference(&dctx->fence, NULL);
-   }
+   assert(list_empty(&dctx->records));
+   assert(!dctx->record_pending);
 
    if (pipe->set_log_context) {
       pipe->set_log_context(pipe, NULL);
 
-      if (dd_screen(dctx->base.screen)->mode == DD_DUMP_ALL_CALLS) {
+      if (dd_screen(dctx->base.screen)->dump_mode == DD_DUMP_ALL_CALLS) {
          FILE *f = dd_get_file_stream(dd_screen(dctx->base.screen), 0);
          if (f) {
             fprintf(f, "Remainder of driver log:\n\n");
@@ -601,66 +604,6 @@ dd_context_destroy(struct pipe_context *_pipe)
 
    pipe->destroy(pipe);
    FREE(dctx);
-}
-
-
-/********************************************************************
- * transfer
- */
-
-static void *
-dd_context_transfer_map(struct pipe_context *_pipe,
-                        struct pipe_resource *resource, unsigned level,
-                        unsigned usage, const struct pipe_box *box,
-                        struct pipe_transfer **transfer)
-{
-   struct pipe_context *pipe = dd_context(_pipe)->pipe;
-
-   return pipe->transfer_map(pipe, resource, level, usage, box, transfer);
-}
-
-static void
-dd_context_transfer_flush_region(struct pipe_context *_pipe,
-                                 struct pipe_transfer *transfer,
-                                 const struct pipe_box *box)
-{
-   struct pipe_context *pipe = dd_context(_pipe)->pipe;
-
-   pipe->transfer_flush_region(pipe, transfer, box);
-}
-
-static void
-dd_context_transfer_unmap(struct pipe_context *_pipe,
-                          struct pipe_transfer *transfer)
-{
-   struct pipe_context *pipe = dd_context(_pipe)->pipe;
-
-   pipe->transfer_unmap(pipe, transfer);
-}
-
-static void
-dd_context_buffer_subdata(struct pipe_context *_pipe,
-                          struct pipe_resource *resource,
-                          unsigned usage, unsigned offset,
-                          unsigned size, const void *data)
-{
-   struct pipe_context *pipe = dd_context(_pipe)->pipe;
-
-   pipe->buffer_subdata(pipe, resource, usage, offset, size, data);
-}
-
-static void
-dd_context_texture_subdata(struct pipe_context *_pipe,
-                           struct pipe_resource *resource,
-                           unsigned level, unsigned usage,
-                           const struct pipe_box *box,
-                           const void *data, unsigned stride,
-                           unsigned layer_stride)
-{
-   struct pipe_context *pipe = dd_context(_pipe)->pipe;
-
-   pipe->texture_subdata(pipe, resource, level, usage, box, data,
-                         stride, layer_stride);
 }
 
 
@@ -888,11 +831,6 @@ dd_context_create(struct dd_screen *dscreen, struct pipe_context *pipe)
    CTX_INIT(sampler_view_destroy);
    CTX_INIT(create_surface);
    CTX_INIT(surface_destroy);
-   CTX_INIT(transfer_map);
-   CTX_INIT(transfer_flush_region);
-   CTX_INIT(transfer_unmap);
-   CTX_INIT(buffer_subdata);
-   CTX_INIT(texture_subdata);
    CTX_INIT(texture_barrier);
    CTX_INIT(memory_barrier);
    CTX_INIT(resource_commit);
@@ -921,39 +859,19 @@ dd_context_create(struct dd_screen *dscreen, struct pipe_context *pipe)
 
    dctx->draw_state.sample_mask = ~0;
 
-   if (dscreen->mode == DD_DETECT_HANGS_PIPELINED) {
-      dctx->fence = pipe_buffer_create(dscreen->screen, PIPE_BIND_CUSTOM,
-                                            PIPE_USAGE_STAGING, 4);
-      if (!dctx->fence)
-         goto fail;
-
-      dctx->mapped_fence = pipe_buffer_map(pipe, dctx->fence,
-                                           PIPE_TRANSFER_READ_WRITE |
-                                           PIPE_TRANSFER_PERSISTENT |
-                                           PIPE_TRANSFER_COHERENT,
-                                           &dctx->fence_transfer);
-      if (!dctx->mapped_fence)
-         goto fail;
-
-      *dctx->mapped_fence = 0;
-
-      (void) mtx_init(&dctx->mutex, mtx_plain);
-      dctx->thread = u_thread_create(dd_thread_pipelined_hang_detect, dctx);
-      if (!dctx->thread) {
-         mtx_destroy(&dctx->mutex);
-         goto fail;
-      }
+   list_inithead(&dctx->records);
+   (void) mtx_init(&dctx->mutex, mtx_plain);
+   (void) cnd_init(&dctx->cond);
+   dctx->thread = u_thread_create(dd_thread_main, dctx);
+   if (!dctx->thread) {
+      mtx_destroy(&dctx->mutex);
+      goto fail;
    }
 
    return &dctx->base;
 
 fail:
-   if (dctx) {
-      if (dctx->mapped_fence)
-         pipe_transfer_unmap(pipe, dctx->fence_transfer);
-      pipe_resource_reference(&dctx->fence, NULL);
-      FREE(dctx);
-   }
+   FREE(dctx);
    pipe->destroy(pipe);
    return NULL;
 }

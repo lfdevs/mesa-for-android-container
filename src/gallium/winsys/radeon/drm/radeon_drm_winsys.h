@@ -23,10 +23,7 @@
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
  */
-/*
- * Authors:
- *      Corbin Simpson <MostAwesomeDude@gmail.com>
- */
+
 #ifndef RADEON_DRM_WINSYS_H
 #define RADEON_DRM_WINSYS_H
 

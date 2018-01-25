@@ -219,7 +219,7 @@ constant_copy(ir_constant *ir, void *mem_ctx)
    if (ir == NULL)
       return NULL;
 
-   nir_constant *ret = ralloc(mem_ctx, nir_constant);
+   nir_constant *ret = rzalloc(mem_ctx, nir_constant);
 
    const unsigned rows = ir->type->vector_elements;
    const unsigned cols = ir->type->matrix_columns;
@@ -311,7 +311,7 @@ nir_visitor::visit(ir_variable *ir)
    if (ir->data.mode == ir_var_shader_shared)
       return;
 
-   nir_variable *var = ralloc(shader, nir_variable);
+   nir_variable *var = rzalloc(shader, nir_variable);
    var->type = ir->type;
    var->name = ralloc_strdup(var, ir->name);
 
@@ -322,6 +322,7 @@ nir_visitor::visit(ir_variable *ir)
    var->data.patch = ir->data.patch;
    var->data.invariant = ir->data.invariant;
    var->data.location = ir->data.location;
+   var->data.stream = ir->data.stream;
    var->data.compact = false;
 
    switch(ir->data.mode) {
@@ -1165,6 +1166,7 @@ nir_visitor::visit(ir_call *ir)
       case nir_intrinsic_ballot: {
          nir_ssa_dest_init(&instr->instr, &instr->dest,
                            ir->return_deref->type->vector_elements, 64, NULL);
+         instr->num_components = ir->return_deref->type->vector_elements;
 
          ir_rvalue *value = (ir_rvalue *) ir->actual_parameters.get_head();
          instr->src[0] = nir_src_for_ssa(evaluate_rvalue(value));
@@ -1376,13 +1378,15 @@ nir_visitor::evaluate_rvalue(ir_rvalue* ir)
 static bool
 type_is_float(glsl_base_type type)
 {
-   return type == GLSL_TYPE_FLOAT || type == GLSL_TYPE_DOUBLE;
+   return type == GLSL_TYPE_FLOAT || type == GLSL_TYPE_DOUBLE ||
+      type == GLSL_TYPE_FLOAT16;
 }
 
 static bool
 type_is_signed(glsl_base_type type)
 {
-   return type == GLSL_TYPE_INT || type == GLSL_TYPE_INT64;
+   return type == GLSL_TYPE_INT || type == GLSL_TYPE_INT64 ||
+      type == GLSL_TYPE_INT16;
 }
 
 void
@@ -1571,7 +1575,8 @@ nir_visitor::visit(ir_expression *ir)
    case ir_unop_u642i64: {
       nir_alu_type src_type = nir_get_nir_type_for_glsl_base_type(types[0]);
       nir_alu_type dst_type = nir_get_nir_type_for_glsl_base_type(out_type);
-      result = nir_build_alu(&b, nir_type_conversion_op(src_type, dst_type),
+      result = nir_build_alu(&b, nir_type_conversion_op(src_type, dst_type,
+                                 nir_rounding_mode_undef),
                                  srcs[0], NULL, NULL, NULL);
       /* b2i and b2f don't have fixed bit-size versions so the builder will
        * just assume 32 and we have to fix it up here.
@@ -1635,11 +1640,15 @@ nir_visitor::visit(ir_expression *ir)
    case ir_unop_unpack_half_2x16:
       result = nir_unpack_half_2x16(&b, srcs[0]);
       break;
+   case ir_unop_pack_sampler_2x32:
+   case ir_unop_pack_image_2x32:
    case ir_unop_pack_double_2x32:
    case ir_unop_pack_int_2x32:
    case ir_unop_pack_uint_2x32:
       result = nir_pack_64_2x32(&b, srcs[0]);
       break;
+   case ir_unop_unpack_sampler_2x32:
+   case ir_unop_unpack_image_2x32:
    case ir_unop_unpack_double_2x32:
    case ir_unop_unpack_int_2x32:
    case ir_unop_unpack_uint_2x32:
@@ -1797,30 +1806,6 @@ nir_visitor::visit(ir_expression *ir)
             result = nir_ult(&b, srcs[0], srcs[1]);
       } else {
          result = nir_slt(&b, srcs[0], srcs[1]);
-      }
-      break;
-   case ir_binop_greater:
-      if (supports_ints) {
-         if (type_is_float(types[0]))
-            result = nir_flt(&b, srcs[1], srcs[0]);
-         else if (type_is_signed(types[0]))
-            result = nir_ilt(&b, srcs[1], srcs[0]);
-         else
-            result = nir_ult(&b, srcs[1], srcs[0]);
-      } else {
-         result = nir_slt(&b, srcs[1], srcs[0]);
-      }
-      break;
-   case ir_binop_lequal:
-      if (supports_ints) {
-         if (type_is_float(types[0]))
-            result = nir_fge(&b, srcs[1], srcs[0]);
-         else if (type_is_signed(types[0]))
-            result = nir_ige(&b, srcs[1], srcs[0]);
-         else
-            result = nir_uge(&b, srcs[1], srcs[0]);
-      } else {
-         result = nir_slt(&b, srcs[1], srcs[0]);
       }
       break;
    case ir_binop_gequal:

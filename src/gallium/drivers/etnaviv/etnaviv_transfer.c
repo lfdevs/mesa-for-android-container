@@ -40,6 +40,8 @@
 #include "util/u_surface.h"
 #include "util/u_transfer.h"
 
+#include "hw/common_3d.xml.h"
+
 #include <drm_fourcc.h>
 
 /* Compute offset into a 1D/2D/3D buffer of a certain box.
@@ -212,27 +214,29 @@ etna_transfer_map(struct pipe_context *pctx, struct pipe_resource *prsc,
          return NULL;
       }
 
-      /* Need to align the transfer region to satisfy RS restrictions, as we
-       * really want to hit the RS blit path here.
-       */
-      unsigned w_align, h_align;
+      if (!ctx->specs.use_blt) {
+         /* Need to align the transfer region to satisfy RS restrictions, as we
+          * really want to hit the RS blit path here.
+          */
+         unsigned w_align, h_align;
 
-      if (rsc->layout & ETNA_LAYOUT_BIT_SUPER) {
-         w_align = h_align = 64;
-      } else {
-         w_align = ETNA_RS_WIDTH_MASK + 1;
-         h_align = ETNA_RS_HEIGHT_MASK + 1;
+         if (rsc->layout & ETNA_LAYOUT_BIT_SUPER) {
+            w_align = h_align = 64;
+         } else {
+            w_align = ETNA_RS_WIDTH_MASK + 1;
+            h_align = ETNA_RS_HEIGHT_MASK + 1;
+         }
+         h_align *= ctx->screen->specs.pixel_pipes;
+
+         ptrans->box.width += ptrans->box.x & (w_align - 1);
+         ptrans->box.x = ptrans->box.x & ~(w_align - 1);
+         ptrans->box.width = align(ptrans->box.width, (ETNA_RS_WIDTH_MASK + 1));
+         ptrans->box.height += ptrans->box.y & (h_align - 1);
+         ptrans->box.y = ptrans->box.y & ~(h_align - 1);
+         ptrans->box.height = align(ptrans->box.height,
+                                    (ETNA_RS_HEIGHT_MASK + 1) *
+                                     ctx->screen->specs.pixel_pipes);
       }
-      h_align *= ctx->screen->specs.pixel_pipes;
-
-      ptrans->box.width += ptrans->box.x & (w_align - 1);
-      ptrans->box.x = ptrans->box.x & ~(w_align - 1);
-      ptrans->box.width = align(ptrans->box.width, (ETNA_RS_WIDTH_MASK + 1));
-      ptrans->box.height += ptrans->box.y & (h_align - 1);
-      ptrans->box.y = ptrans->box.y & ~(h_align - 1);
-      ptrans->box.height = align(ptrans->box.height,
-                                 (ETNA_RS_HEIGHT_MASK + 1) *
-                                  ctx->screen->specs.pixel_pipes);
 
       if (!(usage & PIPE_TRANSFER_DISCARD_WHOLE_RESOURCE))
          etna_copy_resource_box(pctx, trans->rsc, prsc, level, &ptrans->box);
@@ -242,18 +246,6 @@ etna_transfer_map(struct pipe_context *pctx, struct pipe_resource *prsc,
    }
 
    struct etna_resource_level *res_level = &rsc->levels[level];
-
-   /*
-    * Always flush if we have the temporary resource and have a copy to this
-    * outstanding. Otherwise infer flush requirement from resource access and
-    * current GPU usage (reads must wait for GPU writes, writes must have
-    * exclusive access to the buffer).
-    */
-   if ((trans->rsc && (etna_resource(trans->rsc)->status & ETNA_PENDING_WRITE)) ||
-       (!trans->rsc &&
-        (((usage & PIPE_TRANSFER_READ) && (rsc->status & ETNA_PENDING_WRITE)) ||
-        ((usage & PIPE_TRANSFER_WRITE) && rsc->status))))
-      pctx->flush(pctx, NULL, 0);
 
    /* XXX we don't handle PIPE_TRANSFER_FLUSH_EXPLICIT; this flag can be ignored
     * when mapping in-place,
@@ -311,6 +303,18 @@ etna_transfer_map(struct pipe_context *pctx, struct pipe_resource *prsc,
     */
    if (trans->rsc || !(usage & PIPE_TRANSFER_UNSYNCHRONIZED)) {
       uint32_t prep_flags = 0;
+
+      /*
+       * Always flush if we have the temporary resource and have a copy to this
+       * outstanding. Otherwise infer flush requirement from resource access and
+       * current GPU usage (reads must wait for GPU writes, writes must have
+       * exclusive access to the buffer).
+       */
+      if ((trans->rsc && (etna_resource(trans->rsc)->status & ETNA_PENDING_WRITE)) ||
+          (!trans->rsc &&
+           (((usage & PIPE_TRANSFER_READ) && (rsc->status & ETNA_PENDING_WRITE)) ||
+           ((usage & PIPE_TRANSFER_WRITE) && rsc->status))))
+         pctx->flush(pctx, NULL, 0);
 
       if (usage & PIPE_TRANSFER_READ)
          prep_flags |= DRM_ETNA_PREP_READ;

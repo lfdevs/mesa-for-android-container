@@ -74,6 +74,8 @@ bool expr_handler::equal(value *l, value *r) {
 
 	assert(l != r);
 
+	if (l->is_lds_access() || r->is_lds_access())
+		return false;
 	if (l->gvalue() == r->gvalue())
 		return true;
 
@@ -383,8 +385,14 @@ bool expr_handler::fold_alu_op1(alu_node& n) {
 	if (n.src.empty())
 		return false;
 
+	/* don't fold LDS instructions */
+	if (n.bc.op_ptr->flags & AF_LDS)
+		return false;
+
 	value* v0 = n.src[0]->gvalue();
 
+	if (v0->is_lds_oq() || v0->is_lds_access())
+		return false;
 	assert(v0 && n.dst[0]);
 
 	if (!v0->is_const()) {
@@ -942,6 +950,9 @@ bool expr_handler::fold_alu_op3(alu_node& n) {
 	value* v1 = n.src[1]->gvalue();
 	value* v2 = n.src[2]->gvalue();
 
+	/* LDS instructions look like op3 with no dst - don't fold. */
+	if (!n.dst[0])
+		return false;
 	assert(v0 && v1 && v2 && n.dst[0]);
 
 	bool isc0 = v0->is_const();

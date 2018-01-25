@@ -24,12 +24,6 @@
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
  */
-/*
- * Authors:
- *      Corbin Simpson <MostAwesomeDude@gmail.com>
- *      Joakim Sindholt <opensource@zhasha.com>
- *      Marek Olšák <maraeo@gmail.com>
- */
 
 #include "radeon_drm_bo.h"
 #include "radeon_drm_cs.h"
@@ -188,7 +182,7 @@ static bool do_winsys_init(struct radeon_drm_winsys *ws)
 #include "pci_ids/r600_pci_ids.h"
 #undef CHIPSET
 
-#define CHIPSET(pci_id, name, cfamily) case pci_id: ws->info.family = CHIP_##cfamily; ws->gen = DRV_SI; break;
+#define CHIPSET(pci_id, cfamily) case pci_id: ws->info.family = CHIP_##cfamily; ws->gen = DRV_SI; break;
 #include "pci_ids/radeonsi_pci_ids.h"
 #undef CHIPSET
 
@@ -375,12 +369,6 @@ static bool do_winsys_init(struct radeon_drm_winsys *ws)
                          &ws->info.max_shader_clock);
     ws->info.max_shader_clock /= 1000;
 
-    /* Default value. */
-    ws->info.enabled_rb_mask = u_bit_consecutive(0, ws->info.num_render_backends);
-    /* This fails on non-GCN or older kernels: */
-    radeon_get_drm_value(ws->fd, RADEON_INFO_SI_BACKEND_ENABLED_MASK, NULL,
-                         &ws->info.enabled_rb_mask);
-
     ws->num_cpus = sysconf(_SC_NPROCESSORS_ONLN);
 
     /* Generation-specific queries. */
@@ -438,6 +426,16 @@ static bool do_winsys_init(struct radeon_drm_winsys *ws)
         if (radeon_get_drm_value(ws->fd, RADEON_INFO_BACKEND_MAP, NULL,
                                   &ws->info.r600_gb_backend_map))
             ws->info.r600_gb_backend_map_valid = true;
+
+        /* Default value. */
+        ws->info.enabled_rb_mask = u_bit_consecutive(0, ws->info.num_render_backends);
+        /*
+         * This fails (silently) on non-GCN or older kernels, overwriting the
+         * default enabled_rb_mask with the result of the last query.
+        */
+        if (ws->gen >= DRV_SI)
+            radeon_get_drm_value(ws->fd, RADEON_INFO_SI_BACKEND_ENABLED_MASK, NULL,
+                                 &ws->info.enabled_rb_mask);
 
         ws->info.has_virtual_memory = false;
         if (ws->info.drm_minor >= 13) {

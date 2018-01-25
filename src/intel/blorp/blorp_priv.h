@@ -56,6 +56,7 @@ struct brw_blorp_surface_info
    enum isl_aux_usage aux_usage;
 
    union isl_color_value clear_color;
+   struct blorp_address clear_color_addr;
 
    struct isl_view view;
 
@@ -342,14 +343,12 @@ blorp_compile_fs(struct blorp_context *blorp, void *mem_ctx,
                  struct nir_shader *nir,
                  struct brw_wm_prog_key *wm_key,
                  bool use_repclear,
-                 struct brw_wm_prog_data *wm_prog_data,
-                 unsigned *program_size);
+                 struct brw_wm_prog_data *wm_prog_data);
 
 const unsigned *
 blorp_compile_vs(struct blorp_context *blorp, void *mem_ctx,
                  struct nir_shader *nir,
-                 struct brw_vs_prog_data *vs_prog_data,
-                 unsigned *program_size);
+                 struct brw_vs_prog_data *vs_prog_data);
 
 bool
 blorp_ensure_sf_program(struct blorp_context *blorp,

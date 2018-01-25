@@ -82,11 +82,13 @@ struct nv50_ir_prog_info
 
    uint8_t optLevel; /* optimization level (0 to 3) */
    uint8_t dbgFlags;
+   bool omitLineNum; /* only used for printing the prog when dbgFlags is set */
 
    struct {
       int16_t maxGPR;     /* may be -1 if none used */
       int16_t maxOutput;
       uint32_t tlsSpace;  /* required local memory per thread */
+      uint32_t smemSize;  /* required shared memory per block */
       uint32_t *code;
       uint32_t codeSize;
       uint32_t instructions;
@@ -178,6 +180,7 @@ struct nv50_ir_prog_info
       uint16_t texBindBase;      /* base address for tex handles (nve4) */
       uint16_t fbtexBindBase;    /* base address for fbtex handle (nve4) */
       uint16_t suInfoBase;       /* base address for surface info (nve4) */
+      uint16_t bindlessBase;     /* base address for bindless image info (nve4) */
       uint16_t bufInfoBase;      /* base address for buffer info */
       uint16_t sampleInfoBase;   /* base address for sample positions */
       uint8_t msInfoCBSlot;      /* cX[] used for multisample info */

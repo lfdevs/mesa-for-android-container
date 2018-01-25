@@ -1543,10 +1543,11 @@ vec4_instruction_scheduler::choose_instruction_to_schedule()
 int
 fs_instruction_scheduler::issue_time(backend_instruction *inst)
 {
+   const unsigned overhead = v->bank_conflict_cycles((fs_inst *)inst);
    if (is_compressed((fs_inst *)inst))
-      return 4;
+      return 4 + overhead;
    else
-      return 2;
+      return 2 + overhead;
 }
 
 int

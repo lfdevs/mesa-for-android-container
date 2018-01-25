@@ -144,13 +144,13 @@ svga_context_create(struct pipe_screen *screen, void *priv, unsigned flags)
    svga->pipe.stream_uploader = u_upload_create(&svga->pipe, 1024 * 1024,
                                                 PIPE_BIND_VERTEX_BUFFER |
                                                 PIPE_BIND_INDEX_BUFFER,
-                                                PIPE_USAGE_STREAM);
+                                                PIPE_USAGE_STREAM, 0);
    if (!svga->pipe.stream_uploader)
       goto cleanup;
 
    svga->pipe.const_uploader = u_upload_create(&svga->pipe, 128 * 1024,
                                                PIPE_BIND_CONSTANT_BUFFER,
-                                               PIPE_USAGE_STREAM);
+                                               PIPE_USAGE_STREAM, 0);
    if (!svga->pipe.const_uploader)
       goto cleanup;
 
@@ -231,7 +231,7 @@ svga_context_create(struct pipe_screen *screen, void *priv, unsigned flags)
    svga->const0_upload = u_upload_create(&svga->pipe,
                                          CONST0_UPLOAD_DEFAULT_SIZE,
                                          PIPE_BIND_CONSTANT_BUFFER,
-                                         PIPE_USAGE_STREAM);
+                                         PIPE_USAGE_STREAM, 0);
    if (!svga->const0_upload)
       goto cleanup;
 
@@ -327,6 +327,7 @@ cleanup:
    util_bitmask_destroy(svga->stream_output_id_bm);
    util_bitmask_destroy(svga->query_id_bm);
    FREE(svga);
+   svga = NULL;
 
 done:
    SVGA_STATS_TIME_POP(svgascreen->sws);

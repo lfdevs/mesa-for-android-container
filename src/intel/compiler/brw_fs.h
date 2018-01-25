@@ -99,9 +99,9 @@ public:
    bool run_tcs_single_patch();
    bool run_tes();
    bool run_gs();
-   bool run_cs();
+   bool run_cs(unsigned min_dispatch_width);
    void optimize();
-   void allocate_registers(bool allow_spilling);
+   void allocate_registers(unsigned min_dispatch_width, bool allow_spilling);
    void setup_fs_payload_gen4();
    void setup_fs_payload_gen6();
    void setup_vs_payload();
@@ -145,11 +145,14 @@ public:
                                    exec_list *acp);
    bool opt_drop_redundant_mov_to_flags();
    bool opt_register_renaming();
+   bool opt_bank_conflicts();
+   unsigned bank_conflict_cycles(const fs_inst *inst) const;
    bool register_coalesce();
    bool compute_to_mrf();
    bool eliminate_find_live_channel();
    bool dead_code_eliminate();
    bool remove_duplicate_mrf_writes();
+   bool remove_extra_rounding_modes();
 
    bool opt_sampler_eot();
    bool virtual_grf_interferes(int a, int b);
@@ -274,7 +277,7 @@ public:
 
    struct brw_reg interp_reg(int location, int channel);
 
-   int implied_mrf_writes(fs_inst *inst);
+   int implied_mrf_writes(fs_inst *inst) const;
 
    virtual void dump_instructions();
    virtual void dump_instructions(const char *name);
@@ -315,6 +318,7 @@ public:
     */
    int *push_constant_loc;
 
+   fs_reg subgroup_id;
    fs_reg frag_depth;
    fs_reg frag_stencil;
    fs_reg sample_mask;
@@ -364,7 +368,6 @@ public:
    bool spilled_any_registers;
 
    const unsigned dispatch_width; /**< 8, 16 or 32 */
-   unsigned min_dispatch_width;
    unsigned max_dispatch_width;
 
    int shader_time_index;
@@ -493,10 +496,20 @@ void shuffle_32bit_load_result_to_64bit_data(const brw::fs_builder &bld,
                                              const fs_reg &src,
                                              uint32_t components);
 
-void shuffle_64bit_data_for_32bit_write(const brw::fs_builder &bld,
+fs_reg shuffle_64bit_data_for_32bit_write(const brw::fs_builder &bld,
+                                          const fs_reg &src,
+                                          uint32_t components);
+
+void shuffle_32bit_load_result_to_16bit_data(const brw::fs_builder &bld,
+                                             const fs_reg &dst,
+                                             const fs_reg &src,
+                                             uint32_t components);
+
+void shuffle_16bit_data_for_32bit_write(const brw::fs_builder &bld,
                                         const fs_reg &dst,
                                         const fs_reg &src,
                                         uint32_t components);
+
 fs_reg setup_imm_df(const brw::fs_builder &bld,
                     double v);
 

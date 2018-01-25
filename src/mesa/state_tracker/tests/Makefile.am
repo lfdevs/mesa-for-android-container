@@ -5,7 +5,7 @@ AM_CFLAGS = \
 
 AM_CXXFLAGS = \
 	$(GALLIUM_DRIVER_CXXFLAGS) \
-	-std=c++11
+	$(CXX11_CXXFLAGS)
 
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/gtest/include \
@@ -15,8 +15,10 @@ AM_CPPFLAGS = \
 	-I$(top_builddir)/src/compiler/glsl \
 	$(DEFINES)
 
+if HAVE_STD_CXX11
 TESTS = st-renumerate-test
 check_PROGRAMS = st-renumerate-test
+endif
 
 st_renumerate_test_SOURCES =			\
 	test_glsl_to_tgsi_lifetime.cpp

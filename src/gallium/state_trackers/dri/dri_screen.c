@@ -108,6 +108,8 @@ static const __DRIconfig **
 dri_fill_in_modes(struct dri_screen *screen)
 {
    static const mesa_format mesa_formats[] = {
+      MESA_FORMAT_B10G10R10A2_UNORM,
+      MESA_FORMAT_B10G10R10X2_UNORM,
       MESA_FORMAT_B8G8R8A8_UNORM,
       MESA_FORMAT_B8G8R8X8_UNORM,
       MESA_FORMAT_B8G8R8A8_SRGB,
@@ -136,6 +138,8 @@ dri_fill_in_modes(struct dri_screen *screen)
       MESA_FORMAT_R8G8B8X8_UNORM,
    };
    static const enum pipe_format pipe_formats[] = {
+      PIPE_FORMAT_B10G10R10A2_UNORM,
+      PIPE_FORMAT_B10G10R10X2_UNORM,
       PIPE_FORMAT_BGRA8888_UNORM,
       PIPE_FORMAT_BGRX8888_UNORM,
       PIPE_FORMAT_BGRA8888_SRGB,
@@ -154,6 +158,7 @@ dri_fill_in_modes(struct dri_screen *screen)
    struct pipe_screen *p_screen = screen->base.screen;
    boolean pf_z16, pf_x8z24, pf_z24x8, pf_s8z24, pf_z24s8, pf_z32;
    boolean mixed_color_depth;
+   boolean allow_rgb10;
 
    static const GLenum back_buffer_modes[] = {
       __DRI_ATTRIB_SWAP_NONE, __DRI_ATTRIB_SWAP_UNDEFINED,
@@ -169,6 +174,8 @@ dri_fill_in_modes(struct dri_screen *screen)
       stencil_bits_array[0] = 0;
       depth_buffer_factor = 1;
    }
+
+   allow_rgb10 = driQueryOptionb(&screen->dev->option_cache, "allow_rgb10_configs");
 
    msaa_samples_max = (screen->st_api->feature_mask & ST_API_FEATURE_MS_VISUALS_MASK)
       ? MSAA_VISUAL_MAX_SAMPLES : 1;
@@ -221,13 +228,18 @@ dri_fill_in_modes(struct dri_screen *screen)
    if (dri_loader_get_cap(screen, DRI_LOADER_CAP_RGBA_ORDERING))
       num_formats = ARRAY_SIZE(mesa_formats);
    else
-      num_formats = 5;
+      num_formats = ARRAY_SIZE(mesa_formats) - 2; /* all - RGBA_ORDERING formats */
 
    /* Add configs. */
    for (format = 0; format < num_formats; format++) {
       __DRIconfig **new_configs = NULL;
       unsigned num_msaa_modes = 0; /* includes a single-sample mode */
       uint8_t msaa_modes[MSAA_VISUAL_MAX_SAMPLES];
+
+      if (!allow_rgb10 &&
+          (mesa_formats[format] == MESA_FORMAT_B10G10R10A2_UNORM ||
+           mesa_formats[format] == MESA_FORMAT_B10G10R10X2_UNORM))
+         continue;
 
       if (!p_screen->is_format_supported(p_screen, pipe_formats[format],
                                          PIPE_TEXTURE_2D, 0,
@@ -289,6 +301,15 @@ dri_fill_st_visual(struct st_visual *stvis, struct dri_screen *screen,
 
    /* Deduce the color format. */
    switch (mode->redMask) {
+   case 0x3FF00000:
+      if (mode->alphaMask) {
+         assert(mode->alphaMask == 0xC0000000);
+         stvis->color_format = PIPE_FORMAT_B10G10R10A2_UNORM;
+      } else {
+         stvis->color_format = PIPE_FORMAT_B10G10R10X2_UNORM;
+      }
+      break;
+
    case 0x00FF0000:
       if (mode->alphaMask) {
          assert(mode->alphaMask == 0xFF000000);

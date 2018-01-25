@@ -40,3 +40,5 @@ AM_CPPFLAGS = \
 noinst_LTLIBRARIES = libvdpautracker.la
 
 libvdpautracker_la_SOURCES = $(C_SOURCES)
+
+EXTRA_DIST = meson.build

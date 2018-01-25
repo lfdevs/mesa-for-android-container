@@ -96,7 +96,7 @@ described in the same section.
 
 <p>
 Nomination happens in the mesa-stable@ mailing list. However,
-maintainer is resposible of checking for forgotten candidates in the
+maintainer is responsible of checking for forgotten candidates in the
 master branch. This is achieved by a combination of ad-hoc scripts and
 a casual search for terms such as regression, fix, broken and similar.
 </p>
@@ -272,6 +272,11 @@ It is followed by a brief period (normally 24 or 48 hours) before the actual
 release is made.
 </p>
 
+<p>
+Be aware to add a note to warn about a final release in a series, if
+that is the case.
+</p>
+
 <h2>Terminology used</h2>
 
 <ul><li>Nominated</ul>
@@ -310,6 +315,10 @@ The candidate for the Mesa X.Y.Z is now available. Currently we have:
  - NUMBER queued
  - NUMBER nominated (outstanding)
  - and NUMBER rejected patches
+
+[If applicable:
+Note: this is the final anticipated release in the SERIES series. Users are
+encouraged to migrate to the NEXT_SERIES series in order to obtain future fixes.]
 
 BRIEF SUMMARY OF CHANGES
 
@@ -374,6 +383,9 @@ Queued (NUMBER)
 
 AUTHOR (NUMBER):
       COMMIT SUMMARY
+[If applicable:
+Squashed with
+      COMMIT SUMMARY]
 
 For example:
 
@@ -382,16 +394,21 @@ Jonas Pfeil (1):
 Squashed with
       ralloc: don't leave out the alignment factor
 
+
 Rejected (NUMBER)
 =================
-
-Rejected (11)
-=============
 
 AUTHOR (NUMBER):
       SHA     COMMIT SUMMARY
 
 Reason: ...
+
+For example:
+
+Emil Velikov (1)
+      a39ad18 configure.ac: honour LLVM_LIBDIR when linking against LLVM
+
+Reason: The patch was reverted shortly after it was merged.
 </pre>
 
 
@@ -457,9 +474,9 @@ Here is one solution that I've been using.
 	cd .. &amp;&amp; rm -rf mesa-$__version
 
 	# Test the automake binaries
-	tar -xaf mesa-$__version.tar.xz &amp;&amp; cd mesa-$__version
 	# Restore LLVM_CONFIG, if applicable:
 	# export LLVM_CONFIG=`echo $save_LLVM_CONFIG`; unset save_LLVM_CONFIG
+	tar -xaf mesa-$__version.tar.xz &amp;&amp; cd mesa-$__version
 	./configure \
 		--with-dri-drivers=i965,swrast \
 		--with-gallium-drivers=swrast \
@@ -471,6 +488,10 @@ Here is one solution that I've been using.
 		--enable-egl \
 		--with-platforms=x11,drm,wayland,surfaceless
 	make &amp;&amp; DESTDIR=`pwd`/test make install
+
+	# Drop LLVM_CONFIG, if applicable:
+	# unset LLVM_CONFIG
+
 	__glxinfo_cmd='glxinfo 2>&amp;1 | egrep -o "Mesa.*|Gallium.*|.*dri\.so"'
 	__glxgears_cmd='glxgears 2>&amp;1 | grep -v "configuration file"'
 	__es2info_cmd='es2_info 2>&amp;1 | egrep "GL_VERSION|GL_RENDERER|.*dri\.so"'
@@ -500,8 +521,10 @@ Here is one solution that I've been using.
 	unset LIBGL_DRIVERS_PATH
 	unset LIBGL_DEBUG
 	unset LIBGL_ALWAYS_SOFTWARE
+	unset GALLIUM_DRIVER
 	export VK_ICD_FILENAMES=`pwd`/src/intel/vulkan/dev_icd.json
 	steam steam://rungameid/570  -vconsole -vulkan
+	unset VK_ICD_FILENAMES
 </pre>
 
 <h3>Update version in file VERSION</h3>
@@ -580,7 +603,8 @@ Something like the following steps will do the trick:
 
 <p>
 Also, edit docs/relnotes.html to add a link to the new release notes,
-edit docs/index.html to add a news entry, and remove the version from
+edit docs/index.html to add a news entry and a note in case of the
+last release in a series, and remove the version from
 docs/release-calendar.html. Then commit and push:
 </p>
 
@@ -594,6 +618,11 @@ docs/release-calendar.html. Then commit and push:
 
 <p>
 Use the generated template during the releasing process.
+</p>
+
+<p>
+Again, pay attention to add a note to warn about a final release in a
+series, if that is the case.
 </p>
 
 

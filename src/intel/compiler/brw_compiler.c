@@ -57,8 +57,6 @@ static const struct nir_shader_compiler_options scalar_nir_options = {
    .lower_unpack_snorm_4x8 = true,
    .lower_unpack_unorm_2x16 = true,
    .lower_unpack_unorm_4x8 = true,
-   .lower_subgroup_masks = true,
-   .max_subgroup_size = 32,
    .max_unroll_iterations = 32,
 };
 
@@ -80,7 +78,6 @@ static const struct nir_shader_compiler_options vector_nir_options = {
    .lower_unpack_unorm_2x16 = true,
    .lower_extract_byte = true,
    .lower_extract_word = true,
-   .lower_vote_trivial = true,
    .max_unroll_iterations = 32,
 };
 
@@ -99,7 +96,6 @@ static const struct nir_shader_compiler_options vector_nir_options_gen6 = {
    .lower_unpack_unorm_2x16 = true,
    .lower_extract_byte = true,
    .lower_extract_word = true,
-   .lower_vote_trivial = true,
    .max_unroll_iterations = 32,
 };
 
@@ -167,4 +163,40 @@ brw_compiler_create(void *mem_ctx, const struct gen_device_info *devinfo)
       compiler->glsl_compiler_options[MESA_SHADER_GEOMETRY].EmitNoIndirectInput = false;
 
    return compiler;
+}
+
+unsigned
+brw_prog_data_size(gl_shader_stage stage)
+{
+   STATIC_ASSERT(MESA_SHADER_VERTEX == 0);
+   STATIC_ASSERT(MESA_SHADER_TESS_CTRL == 1);
+   STATIC_ASSERT(MESA_SHADER_TESS_EVAL == 2);
+   STATIC_ASSERT(MESA_SHADER_GEOMETRY == 3);
+   STATIC_ASSERT(MESA_SHADER_FRAGMENT == 4);
+   STATIC_ASSERT(MESA_SHADER_COMPUTE == 5);
+   static const size_t stage_sizes[] = {
+      sizeof(struct brw_vs_prog_data),
+      sizeof(struct brw_tcs_prog_data),
+      sizeof(struct brw_tes_prog_data),
+      sizeof(struct brw_gs_prog_data),
+      sizeof(struct brw_wm_prog_data),
+      sizeof(struct brw_cs_prog_data),
+   };
+   assert((int)stage >= 0 && stage < ARRAY_SIZE(stage_sizes));
+   return stage_sizes[stage];
+}
+
+unsigned
+brw_prog_key_size(gl_shader_stage stage)
+{
+   static const size_t stage_sizes[] = {
+      sizeof(struct brw_vs_prog_key),
+      sizeof(struct brw_tcs_prog_key),
+      sizeof(struct brw_tes_prog_key),
+      sizeof(struct brw_gs_prog_key),
+      sizeof(struct brw_wm_prog_key),
+      sizeof(struct brw_cs_prog_key),
+   };
+   assert((int)stage >= 0 && stage < ARRAY_SIZE(stage_sizes));
+   return stage_sizes[stage];
 }

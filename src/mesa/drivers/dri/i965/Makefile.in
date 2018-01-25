@@ -140,18 +140,18 @@ libi965_dri_la_DEPENDENCIES =  \
 am__objects_1 = brw_binding_tables.lo brw_blorp.lo brw_bufmgr.lo \
 	brw_clear.lo brw_clip.lo brw_compute.lo \
 	brw_conditional_render.lo brw_context.lo brw_cs.lo \
-	brw_curbe.lo brw_draw.lo brw_draw_upload.lo brw_ff_gs.lo \
-	brw_ff_gs_emit.lo brw_formatquery.lo brw_gs.lo \
+	brw_curbe.lo brw_disk_cache.lo brw_draw.lo brw_draw_upload.lo \
+	brw_ff_gs.lo brw_ff_gs_emit.lo brw_formatquery.lo brw_gs.lo \
 	brw_gs_surface_state.lo brw_link.lo brw_meta_util.lo \
 	brw_misc_state.lo brw_nir_uniforms.lo brw_object_purgeable.lo \
 	brw_pipe_control.lo brw_performance_query.lo brw_program.lo \
-	brw_program_cache.lo brw_primitive_restart.lo brw_queryobj.lo \
-	brw_reset.lo brw_sf.lo brw_state_upload.lo \
-	brw_surface_formats.lo brw_sync.lo brw_tcs.lo \
-	brw_tcs_surface_state.lo brw_tes.lo brw_tes_surface_state.lo \
-	brw_urb.lo brw_util.lo brw_vs.lo brw_vs_surface_state.lo \
-	brw_wm.lo brw_wm_surface_state.lo gen6_clip_state.lo \
-	gen6_constant_state.lo gen6_depth_state.lo \
+	brw_program_binary.lo brw_program_cache.lo \
+	brw_primitive_restart.lo brw_queryobj.lo brw_reset.lo \
+	brw_sf.lo brw_state_upload.lo brw_surface_formats.lo \
+	brw_sync.lo brw_tcs.lo brw_tcs_surface_state.lo brw_tes.lo \
+	brw_tes_surface_state.lo brw_urb.lo brw_util.lo brw_vs.lo \
+	brw_vs_surface_state.lo brw_wm.lo brw_wm_surface_state.lo \
+	gen6_clip_state.lo gen6_constant_state.lo gen6_depth_state.lo \
 	gen6_multisample_state.lo gen6_queryobj.lo \
 	gen6_sampler_state.lo gen6_sol.lo gen6_urb.lo gen7_l3_state.lo \
 	gen7_misc_state.lo gen7_sol_state.lo gen7_urb.lo \
@@ -166,7 +166,8 @@ am__objects_1 = brw_binding_tables.lo brw_blorp.lo brw_bufmgr.lo \
 	intel_upload.lo
 am__objects_2 = brw_oa_hsw.lo brw_oa_bdw.lo brw_oa_chv.lo \
 	brw_oa_sklgt2.lo brw_oa_sklgt3.lo brw_oa_sklgt4.lo \
-	brw_oa_bxt.lo brw_oa_kblgt2.lo brw_oa_kblgt3.lo brw_oa_glk.lo
+	brw_oa_bxt.lo brw_oa_kblgt2.lo brw_oa_kblgt3.lo brw_oa_glk.lo \
+	brw_oa_cflgt2.lo brw_oa_cflgt3.lo
 am_libi965_dri_la_OBJECTS = $(am__objects_1) $(am__objects_2)
 libi965_dri_la_OBJECTS = $(am_libi965_dri_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
@@ -368,6 +369,7 @@ CLOVER_STD_OVERRIDE = @CLOVER_STD_OVERRIDE@
 CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
 CXX = @CXX@
+CXX11_CXXFLAGS = @CXX11_CXXFLAGS@
 CXXCPP = @CXXCPP@
 CXXDEPMODE = @CXXDEPMODE@
 CXXFLAGS = @CXXFLAGS@
@@ -471,7 +473,7 @@ MSVC2013_COMPAT_CFLAGS = @MSVC2013_COMPAT_CFLAGS@
 MSVC2013_COMPAT_CXXFLAGS = @MSVC2013_COMPAT_CXXFLAGS@
 NINE_MAJOR = @NINE_MAJOR@
 NINE_MINOR = @NINE_MINOR@
-NINE_TINY = @NINE_TINY@
+NINE_PATCH = @NINE_PATCH@
 NINE_VERSION = @NINE_VERSION@
 NM = @NM@
 NMEDIT = @NMEDIT@
@@ -527,7 +529,6 @@ SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
 SWR_AVX2_CXXFLAGS = @SWR_AVX2_CXXFLAGS@
 SWR_AVX_CXXFLAGS = @SWR_AVX_CXXFLAGS@
-SWR_CXX11_CXXFLAGS = @SWR_CXX11_CXXFLAGS@
 SWR_KNL_CXXFLAGS = @SWR_KNL_CXXFLAGS@
 SWR_SKX_CXXFLAGS = @SWR_SKX_CXXFLAGS@
 VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
@@ -562,7 +563,7 @@ WNO_OVERRIDE_INIT = @WNO_OVERRIDE_INIT@
 X11_INCLUDES = @X11_INCLUDES@
 XA_MAJOR = @XA_MAJOR@
 XA_MINOR = @XA_MINOR@
-XA_TINY = @XA_TINY@
+XA_PATCH = @XA_PATCH@
 XA_VERSION = @XA_VERSION@
 XCB_DRI2_CFLAGS = @XCB_DRI2_CFLAGS@
 XCB_DRI2_LIBS = @XCB_DRI2_LIBS@
@@ -629,7 +630,6 @@ pdfdir = @pdfdir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
-runstatedir = @runstatedir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
@@ -658,6 +658,7 @@ i965_FILES = \
 	brw_cs.h \
 	brw_curbe.c \
 	brw_defines.h \
+	brw_disk_cache.c \
 	brw_draw.c \
 	brw_draw.h \
 	brw_draw_upload.c \
@@ -676,10 +677,12 @@ i965_FILES = \
 	brw_nir_uniforms.cpp \
 	brw_object_purgeable.c \
 	brw_pipe_control.c \
+	brw_pipe_control.h \
 	brw_performance_query.h \
 	brw_performance_query.c \
 	brw_program.c \
 	brw_program.h \
+	brw_program_binary.c \
 	brw_program_cache.c \
 	brw_primitive_restart.c \
 	brw_queryobj.c \
@@ -811,7 +814,11 @@ i965_oa_GENERATED_FILES = \
 	brw_oa_kblgt3.h \
 	brw_oa_kblgt3.c \
 	brw_oa_glk.h \
-	brw_oa_glk.c
+	brw_oa_glk.c \
+	brw_oa_cflgt2.h \
+	brw_oa_cflgt2.c \
+	brw_oa_cflgt3.h \
+	brw_oa_cflgt3.c
 
 AM_CFLAGS = \
 	-I$(top_srcdir)/include \
@@ -895,7 +902,10 @@ EXTRA_DIST = \
 	brw_oa_kblgt2.xml \
 	brw_oa_kblgt3.xml \
 	brw_oa_glk.xml \
-	brw_oa.py
+	brw_oa_cflgt2.xml \
+	brw_oa_cflgt3.xml \
+	brw_oa.py \
+	meson.build
 
 all: $(BUILT_SOURCES)
 	$(MAKE) $(AM_MAKEFLAGS) all-am
@@ -990,6 +1000,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_context.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_cs.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_curbe.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_disk_cache.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_draw.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_draw_upload.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_ff_gs.Plo@am__quote@
@@ -1003,6 +1014,8 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_nir_uniforms.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_oa_bdw.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_oa_bxt.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_oa_cflgt2.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_oa_cflgt3.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_oa_chv.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_oa_glk.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_oa_hsw.Plo@am__quote@
@@ -1016,6 +1029,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_pipe_control.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_primitive_restart.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_program.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_program_binary.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_program_cache.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_queryobj.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_reset.Plo@am__quote@

@@ -2,7 +2,7 @@
 #include "nir.h"
 
 nir_op
-nir_type_conversion_op(nir_alu_type src, nir_alu_type dst)
+nir_type_conversion_op(nir_alu_type src, nir_alu_type dst, nir_rounding_mode rnd)
 {
    nir_alu_type src_base = (nir_alu_type) nir_alu_type_get_base_type(src);
    nir_alu_type dst_base = (nir_alu_type) nir_alu_type_get_base_type(dst);
@@ -27,18 +27,28 @@ nir_type_conversion_op(nir_alu_type src, nir_alu_type dst)
             case nir_type_uint:
 
                switch (dst_bit_size) {
+                  case 16:
+                     assert(rnd == nir_rounding_mode_undef);
+                     return nir_op_i2i16;
                   case 32:
+                     assert(rnd == nir_rounding_mode_undef);
                      return nir_op_i2i32;
                   case 64:
+                     assert(rnd == nir_rounding_mode_undef);
                      return nir_op_i2i64;
                   default:
                      unreachable("Invalid nir alu bit size");
                }
             case nir_type_float:
                switch (dst_bit_size) {
+                  case 16:
+                     assert(rnd == nir_rounding_mode_undef);
+                     return nir_op_i2f16;
                   case 32:
+                     assert(rnd == nir_rounding_mode_undef);
                      return nir_op_i2f32;
                   case 64:
+                     assert(rnd == nir_rounding_mode_undef);
                      return nir_op_i2f64;
                   default:
                      unreachable("Invalid nir alu bit size");
@@ -54,18 +64,28 @@ nir_type_conversion_op(nir_alu_type src, nir_alu_type dst)
             case nir_type_uint:
 
                switch (dst_bit_size) {
+                  case 16:
+                     assert(rnd == nir_rounding_mode_undef);
+                     return nir_op_u2u16;
                   case 32:
+                     assert(rnd == nir_rounding_mode_undef);
                      return nir_op_u2u32;
                   case 64:
+                     assert(rnd == nir_rounding_mode_undef);
                      return nir_op_u2u64;
                   default:
                      unreachable("Invalid nir alu bit size");
                }
             case nir_type_float:
                switch (dst_bit_size) {
+                  case 16:
+                     assert(rnd == nir_rounding_mode_undef);
+                     return nir_op_u2f16;
                   case 32:
+                     assert(rnd == nir_rounding_mode_undef);
                      return nir_op_u2f32;
                   case 64:
+                     assert(rnd == nir_rounding_mode_undef);
                      return nir_op_u2f64;
                   default:
                      unreachable("Invalid nir alu bit size");
@@ -79,27 +99,50 @@ nir_type_conversion_op(nir_alu_type src, nir_alu_type dst)
          switch (dst_base) {
             case nir_type_int:
                switch (dst_bit_size) {
+                  case 16:
+                     assert(rnd == nir_rounding_mode_undef);
+                     return nir_op_f2i16;
                   case 32:
+                     assert(rnd == nir_rounding_mode_undef);
                      return nir_op_f2i32;
                   case 64:
+                     assert(rnd == nir_rounding_mode_undef);
                      return nir_op_f2i64;
                   default:
                      unreachable("Invalid nir alu bit size");
                }
             case nir_type_uint:
                switch (dst_bit_size) {
+                  case 16:
+                     assert(rnd == nir_rounding_mode_undef);
+                     return nir_op_f2u16;
                   case 32:
+                     assert(rnd == nir_rounding_mode_undef);
                      return nir_op_f2u32;
                   case 64:
+                     assert(rnd == nir_rounding_mode_undef);
                      return nir_op_f2u64;
                   default:
                      unreachable("Invalid nir alu bit size");
                }
             case nir_type_float:
                switch (dst_bit_size) {
+                  case 16:
+                     switch(rnd) {
+                        case nir_rounding_mode_rtne:
+                           return nir_op_f2f16_rtne;
+                        case nir_rounding_mode_rtz:
+                           return nir_op_f2f16_rtz;
+                        case nir_rounding_mode_undef:
+                           return nir_op_f2f16_undef;
+                        default:
+                           unreachable("Invalid 16-bit nir rounding mode");
+                     }
                   case 32:
+                     assert(rnd == nir_rounding_mode_undef);
                      return nir_op_f2f32;
                   case 64:
+                     assert(rnd == nir_rounding_mode_undef);
                      return nir_op_f2f64;
                   default:
                      unreachable("Invalid nir alu bit size");
@@ -476,7 +519,35 @@ const nir_op_info nir_op_infos[nir_num_opcodes] = {
       0
 },
 {
-   .name = "f2f16",
+   .name = "f2f16_rtne",
+   .num_inputs = 1,
+   .output_size = 0,
+   .output_type = nir_type_float16,
+   .input_sizes = {
+      0
+   },
+   .input_types = {
+      nir_type_float
+   },
+   .algebraic_properties =
+      0
+},
+{
+   .name = "f2f16_rtz",
+   .num_inputs = 1,
+   .output_size = 0,
+   .output_type = nir_type_float16,
+   .input_sizes = {
+      0
+   },
+   .input_types = {
+      nir_type_float
+   },
+   .algebraic_properties =
+      0
+},
+{
+   .name = "f2f16_undef",
    .num_inputs = 1,
    .output_size = 0,
    .output_type = nir_type_float16,

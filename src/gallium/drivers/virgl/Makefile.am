@@ -30,3 +30,5 @@ AM_CPPFLAGS = \
 noinst_LTLIBRARIES = libvirgl.la
 
 libvirgl_la_SOURCES = $(C_SOURCES)
+
+EXTRA_DIST = meson.build

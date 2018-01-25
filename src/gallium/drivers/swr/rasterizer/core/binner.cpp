@@ -45,7 +45,8 @@ void BinPostSetupLinesImpl(
     typename SIMD_T::Float recipW[],
     uint32_t primMask,
     typename SIMD_T::Integer const &primID,
-    typename SIMD_T::Integer const &viewportIdx);
+    typename SIMD_T::Integer const &viewportIdx,
+    typename SIMD_T::Integer const &rtIdx);
 
 template <typename SIMD_T, uint32_t SIMD_WIDTH>
 void BinPostSetupPointsImpl(
@@ -55,7 +56,8 @@ void BinPostSetupPointsImpl(
     typename SIMD_T::Vec4 prim[],
     uint32_t primMask,
     typename SIMD_T::Integer const &primID,
-    typename SIMD_T::Integer const &viewportIdx);
+    typename SIMD_T::Integer const &viewportIdx,
+    typename SIMD_T::Integer const &rtIdx);
 
 //////////////////////////////////////////////////////////////////////////
 /// @brief Processes attributes for the backend based on linkage mask and
@@ -212,133 +214,6 @@ INLINE void ProcessAttributes(
     }
 }
 
-//////////////////////////////////////////////////////////////////////////
-/// @brief  Gather scissor rect data based on per-prim viewport indices.
-/// @param pScissorsInFixedPoint - array of scissor rects in 16.8 fixed point.
-/// @param pViewportIndex - array of per-primitive vewport indexes.
-/// @param scisXmin - output vector of per-prmitive scissor rect Xmin data.
-/// @param scisYmin - output vector of per-prmitive scissor rect Ymin data.
-/// @param scisXmax - output vector of per-prmitive scissor rect Xmax data.
-/// @param scisYmax - output vector of per-prmitive scissor rect Ymax data.
-//
-/// @todo:  Look at speeding this up -- weigh against corresponding costs in rasterizer.
-static void GatherScissors(const SWR_RECT *pScissorsInFixedPoint, const uint32_t *pViewportIndex,
-    simdscalari &scisXmin, simdscalari &scisYmin, simdscalari &scisXmax, simdscalari &scisYmax)
-{
-    scisXmin = _simd_set_epi32(
-        pScissorsInFixedPoint[pViewportIndex[0]].xmin,
-        pScissorsInFixedPoint[pViewportIndex[1]].xmin,
-        pScissorsInFixedPoint[pViewportIndex[2]].xmin,
-        pScissorsInFixedPoint[pViewportIndex[3]].xmin,
-        pScissorsInFixedPoint[pViewportIndex[4]].xmin,
-        pScissorsInFixedPoint[pViewportIndex[5]].xmin,
-        pScissorsInFixedPoint[pViewportIndex[6]].xmin,
-        pScissorsInFixedPoint[pViewportIndex[7]].xmin);
-    scisYmin = _simd_set_epi32(
-        pScissorsInFixedPoint[pViewportIndex[0]].ymin,
-        pScissorsInFixedPoint[pViewportIndex[1]].ymin,
-        pScissorsInFixedPoint[pViewportIndex[2]].ymin,
-        pScissorsInFixedPoint[pViewportIndex[3]].ymin,
-        pScissorsInFixedPoint[pViewportIndex[4]].ymin,
-        pScissorsInFixedPoint[pViewportIndex[5]].ymin,
-        pScissorsInFixedPoint[pViewportIndex[6]].ymin,
-        pScissorsInFixedPoint[pViewportIndex[7]].ymin);
-    scisXmax = _simd_set_epi32(
-        pScissorsInFixedPoint[pViewportIndex[0]].xmax,
-        pScissorsInFixedPoint[pViewportIndex[1]].xmax,
-        pScissorsInFixedPoint[pViewportIndex[2]].xmax,
-        pScissorsInFixedPoint[pViewportIndex[3]].xmax,
-        pScissorsInFixedPoint[pViewportIndex[4]].xmax,
-        pScissorsInFixedPoint[pViewportIndex[5]].xmax,
-        pScissorsInFixedPoint[pViewportIndex[6]].xmax,
-        pScissorsInFixedPoint[pViewportIndex[7]].xmax);
-    scisYmax = _simd_set_epi32(
-        pScissorsInFixedPoint[pViewportIndex[0]].ymax,
-        pScissorsInFixedPoint[pViewportIndex[1]].ymax,
-        pScissorsInFixedPoint[pViewportIndex[2]].ymax,
-        pScissorsInFixedPoint[pViewportIndex[3]].ymax,
-        pScissorsInFixedPoint[pViewportIndex[4]].ymax,
-        pScissorsInFixedPoint[pViewportIndex[5]].ymax,
-        pScissorsInFixedPoint[pViewportIndex[6]].ymax,
-        pScissorsInFixedPoint[pViewportIndex[7]].ymax);
-}
-
-static void GatherScissors(const SWR_RECT *pScissorsInFixedPoint, const uint32_t *pViewportIndex,
-    simd16scalari &scisXmin, simd16scalari &scisYmin, simd16scalari &scisXmax, simd16scalari &scisYmax)
-{
-    scisXmin = _simd16_set_epi32(
-        pScissorsInFixedPoint[pViewportIndex[0]].xmin,
-        pScissorsInFixedPoint[pViewportIndex[1]].xmin,
-        pScissorsInFixedPoint[pViewportIndex[2]].xmin,
-        pScissorsInFixedPoint[pViewportIndex[3]].xmin,
-        pScissorsInFixedPoint[pViewportIndex[4]].xmin,
-        pScissorsInFixedPoint[pViewportIndex[5]].xmin,
-        pScissorsInFixedPoint[pViewportIndex[6]].xmin,
-        pScissorsInFixedPoint[pViewportIndex[7]].xmin,
-        pScissorsInFixedPoint[pViewportIndex[8]].xmin,
-        pScissorsInFixedPoint[pViewportIndex[9]].xmin,
-        pScissorsInFixedPoint[pViewportIndex[10]].xmin,
-        pScissorsInFixedPoint[pViewportIndex[11]].xmin,
-        pScissorsInFixedPoint[pViewportIndex[12]].xmin,
-        pScissorsInFixedPoint[pViewportIndex[13]].xmin,
-        pScissorsInFixedPoint[pViewportIndex[14]].xmin,
-        pScissorsInFixedPoint[pViewportIndex[15]].xmin);
-
-    scisYmin = _simd16_set_epi32(
-        pScissorsInFixedPoint[pViewportIndex[0]].ymin,
-        pScissorsInFixedPoint[pViewportIndex[1]].ymin,
-        pScissorsInFixedPoint[pViewportIndex[2]].ymin,
-        pScissorsInFixedPoint[pViewportIndex[3]].ymin,
-        pScissorsInFixedPoint[pViewportIndex[4]].ymin,
-        pScissorsInFixedPoint[pViewportIndex[5]].ymin,
-        pScissorsInFixedPoint[pViewportIndex[6]].ymin,
-        pScissorsInFixedPoint[pViewportIndex[7]].ymin,
-        pScissorsInFixedPoint[pViewportIndex[8]].ymin,
-        pScissorsInFixedPoint[pViewportIndex[9]].ymin,
-        pScissorsInFixedPoint[pViewportIndex[10]].ymin,
-        pScissorsInFixedPoint[pViewportIndex[11]].ymin,
-        pScissorsInFixedPoint[pViewportIndex[12]].ymin,
-        pScissorsInFixedPoint[pViewportIndex[13]].ymin,
-        pScissorsInFixedPoint[pViewportIndex[14]].ymin,
-        pScissorsInFixedPoint[pViewportIndex[15]].ymin);
-
-    scisXmax = _simd16_set_epi32(
-        pScissorsInFixedPoint[pViewportIndex[0]].xmax,
-        pScissorsInFixedPoint[pViewportIndex[1]].xmax,
-        pScissorsInFixedPoint[pViewportIndex[2]].xmax,
-        pScissorsInFixedPoint[pViewportIndex[3]].xmax,
-        pScissorsInFixedPoint[pViewportIndex[4]].xmax,
-        pScissorsInFixedPoint[pViewportIndex[5]].xmax,
-        pScissorsInFixedPoint[pViewportIndex[6]].xmax,
-        pScissorsInFixedPoint[pViewportIndex[7]].xmax,
-        pScissorsInFixedPoint[pViewportIndex[8]].xmax,
-        pScissorsInFixedPoint[pViewportIndex[9]].xmax,
-        pScissorsInFixedPoint[pViewportIndex[10]].xmax,
-        pScissorsInFixedPoint[pViewportIndex[11]].xmax,
-        pScissorsInFixedPoint[pViewportIndex[12]].xmax,
-        pScissorsInFixedPoint[pViewportIndex[13]].xmax,
-        pScissorsInFixedPoint[pViewportIndex[14]].xmax,
-        pScissorsInFixedPoint[pViewportIndex[15]].xmax);
-
-    scisYmax = _simd16_set_epi32(
-        pScissorsInFixedPoint[pViewportIndex[0]].ymax,
-        pScissorsInFixedPoint[pViewportIndex[1]].ymax,
-        pScissorsInFixedPoint[pViewportIndex[2]].ymax,
-        pScissorsInFixedPoint[pViewportIndex[3]].ymax,
-        pScissorsInFixedPoint[pViewportIndex[4]].ymax,
-        pScissorsInFixedPoint[pViewportIndex[5]].ymax,
-        pScissorsInFixedPoint[pViewportIndex[6]].ymax,
-        pScissorsInFixedPoint[pViewportIndex[7]].ymax,
-        pScissorsInFixedPoint[pViewportIndex[8]].ymax,
-        pScissorsInFixedPoint[pViewportIndex[9]].ymax,
-        pScissorsInFixedPoint[pViewportIndex[10]].ymax,
-        pScissorsInFixedPoint[pViewportIndex[11]].ymax,
-        pScissorsInFixedPoint[pViewportIndex[12]].ymax,
-        pScissorsInFixedPoint[pViewportIndex[13]].ymax,
-        pScissorsInFixedPoint[pViewportIndex[14]].ymax,
-        pScissorsInFixedPoint[pViewportIndex[15]].ymax);
-}
-
 typedef void(*PFN_PROCESS_ATTRIBUTES)(DRAW_CONTEXT*, PA_STATE&, uint32_t, uint32_t, float*);
 
 struct ProcessAttributesChooser
@@ -417,6 +292,341 @@ void TransposeVertices(simd4scalar(&dst)[16], const simd16scalar &src0, const si
     vTranspose4x16(reinterpret_cast<simd16scalar(&)[4]>(dst), src0, src1, src2, _simd16_setzero_ps());
 }
 
+
+#if KNOB_ENABLE_EARLY_RAST
+
+#define ER_SIMD_TILE_X_DIM (1 << ER_SIMD_TILE_X_SHIFT)
+#define ER_SIMD_TILE_Y_DIM (1 << ER_SIMD_TILE_Y_SHIFT)
+
+
+template<typename SIMD_T>
+struct EarlyRastHelper
+{
+};
+
+template<>
+struct EarlyRastHelper<SIMD256>
+{
+    static SIMD256::Integer InitShiftCntrl()
+    {
+        return SIMD256::set_epi32(24, 25, 26, 27, 28, 29, 30, 31);
+    }
+};
+
+#if USE_SIMD16_FRONTEND
+template<>
+struct EarlyRastHelper<SIMD512>
+{
+    static SIMD512::Integer InitShiftCntrl()
+    {
+        return SIMD512::set_epi32(16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31);
+    }
+};
+
+#endif
+//////////////////////////////////////////////////////////////////////////
+/// @brief Early Rasterizer (ER); triangles that fit small (e.g. 4x4) tile
+///        (ER tile) can be rasterized as early as in binner to check if
+///        they cover any  pixels. If not - the triangles can be
+///        culled in binner.
+///
+/// @param er_bbox - coordinates of ER tile for each triangle
+/// @param vAi - A coefficients of triangle edges
+/// @param vBi - B coefficients of triangle edges
+/// @param vXi - X coordinates of triangle vertices
+/// @param vYi - Y coordinates of triangle vertices
+/// @param frontWindingTris - mask indicating CCW/CW triangles
+/// @param triMask - mask for valid SIMD lanes (triangles)
+/// @param oneTileMask - defines triangles for ER to work on
+///                      (tris that fit into ER tile)
+template <typename SIMD_T, uint32_t SIMD_WIDTH, typename CT>
+uint32_t SIMDCALL EarlyRasterizer(
+        SIMDBBOX_T<SIMD_T> &er_bbox,
+        typename SIMD_T::Integer (&vAi)[3],
+        typename SIMD_T::Integer (&vBi)[3],
+        typename SIMD_T::Integer (&vXi)[3],
+        typename SIMD_T::Integer (&vYi)[3],
+        uint32_t cwTrisMask,
+        uint32_t triMask,
+        uint32_t oneTileMask)
+{
+    // step to pixel center of top-left pixel of the triangle bbox
+    typename SIMD_T::Integer vTopLeftX = SIMD_T::template slli_epi32<ER_SIMD_TILE_X_SHIFT + FIXED_POINT_SHIFT>(er_bbox.xmin);
+    vTopLeftX = SIMD_T::add_epi32(vTopLeftX, SIMD_T::set1_epi32(FIXED_POINT_SCALE / 2));
+
+    typename SIMD_T::Integer vTopLeftY = SIMD_T::template slli_epi32<ER_SIMD_TILE_Y_SHIFT + FIXED_POINT_SHIFT>(er_bbox.ymin);
+    vTopLeftY = SIMD_T::add_epi32(vTopLeftY, SIMD_T::set1_epi32(FIXED_POINT_SCALE / 2));
+
+    // negate A and B for CW tris
+    typename SIMD_T::Integer vNegA0 = SIMD_T::mullo_epi32(vAi[0], SIMD_T::set1_epi32(-1));
+    typename SIMD_T::Integer vNegA1 = SIMD_T::mullo_epi32(vAi[1], SIMD_T::set1_epi32(-1));
+    typename SIMD_T::Integer vNegA2 = SIMD_T::mullo_epi32(vAi[2], SIMD_T::set1_epi32(-1));
+    typename SIMD_T::Integer vNegB0 = SIMD_T::mullo_epi32(vBi[0], SIMD_T::set1_epi32(-1));
+    typename SIMD_T::Integer vNegB1 = SIMD_T::mullo_epi32(vBi[1], SIMD_T::set1_epi32(-1));
+    typename SIMD_T::Integer vNegB2 = SIMD_T::mullo_epi32(vBi[2], SIMD_T::set1_epi32(-1));
+
+    RDTSC_EVENT(FEEarlyRastEnter, _mm_popcnt_u32(oneTileMask & triMask), 0);
+
+    typename SIMD_T::Integer vShiftCntrl = EarlyRastHelper <SIMD_T>::InitShiftCntrl();
+    typename SIMD_T::Integer vCwTris = SIMD_T::set1_epi32(cwTrisMask);
+    typename SIMD_T::Integer vMask = SIMD_T::sllv_epi32(vCwTris, vShiftCntrl);
+
+    vAi[0] = SIMD_T::castps_si(SIMD_T::blendv_ps(SIMD_T::castsi_ps(vAi[0]), SIMD_T::castsi_ps(vNegA0), SIMD_T::castsi_ps(vMask)));
+    vAi[1] = SIMD_T::castps_si(SIMD_T::blendv_ps(SIMD_T::castsi_ps(vAi[1]), SIMD_T::castsi_ps(vNegA1), SIMD_T::castsi_ps(vMask)));
+    vAi[2] = SIMD_T::castps_si(SIMD_T::blendv_ps(SIMD_T::castsi_ps(vAi[2]), SIMD_T::castsi_ps(vNegA2), SIMD_T::castsi_ps(vMask)));
+    vBi[0] = SIMD_T::castps_si(SIMD_T::blendv_ps(SIMD_T::castsi_ps(vBi[0]), SIMD_T::castsi_ps(vNegB0), SIMD_T::castsi_ps(vMask)));
+    vBi[1] = SIMD_T::castps_si(SIMD_T::blendv_ps(SIMD_T::castsi_ps(vBi[1]), SIMD_T::castsi_ps(vNegB1), SIMD_T::castsi_ps(vMask)));
+    vBi[2] = SIMD_T::castps_si(SIMD_T::blendv_ps(SIMD_T::castsi_ps(vBi[2]), SIMD_T::castsi_ps(vNegB2), SIMD_T::castsi_ps(vMask)));
+
+    // evaluate edge equations at top-left pixel
+    typename SIMD_T::Integer vDeltaX0 = SIMD_T::sub_epi32(vTopLeftX, vXi[0]);
+    typename SIMD_T::Integer vDeltaX1 = SIMD_T::sub_epi32(vTopLeftX, vXi[1]);
+    typename SIMD_T::Integer vDeltaX2 = SIMD_T::sub_epi32(vTopLeftX, vXi[2]);
+
+    typename SIMD_T::Integer vDeltaY0 = SIMD_T::sub_epi32(vTopLeftY, vYi[0]);
+    typename SIMD_T::Integer vDeltaY1 = SIMD_T::sub_epi32(vTopLeftY, vYi[1]);
+    typename SIMD_T::Integer vDeltaY2 = SIMD_T::sub_epi32(vTopLeftY, vYi[2]);
+
+    typename SIMD_T::Integer vAX0 = SIMD_T::mullo_epi32(vAi[0], vDeltaX0);
+    typename SIMD_T::Integer vAX1 = SIMD_T::mullo_epi32(vAi[1], vDeltaX1);
+    typename SIMD_T::Integer vAX2 = SIMD_T::mullo_epi32(vAi[2], vDeltaX2);
+
+    typename SIMD_T::Integer vBY0 = SIMD_T::mullo_epi32(vBi[0], vDeltaY0);
+    typename SIMD_T::Integer vBY1 = SIMD_T::mullo_epi32(vBi[1], vDeltaY1);
+    typename SIMD_T::Integer vBY2 = SIMD_T::mullo_epi32(vBi[2], vDeltaY2);
+
+    typename SIMD_T::Integer vEdge0 = SIMD_T::add_epi32(vAX0, vBY0);
+    typename SIMD_T::Integer vEdge1 = SIMD_T::add_epi32(vAX1, vBY1);
+    typename SIMD_T::Integer vEdge2 = SIMD_T::add_epi32(vAX2, vBY2);
+
+    vEdge0 = SIMD_T::template srai_epi32<FIXED_POINT_SHIFT>(vEdge0);
+    vEdge1 = SIMD_T::template srai_epi32<FIXED_POINT_SHIFT>(vEdge1);
+    vEdge2 = SIMD_T::template srai_epi32<FIXED_POINT_SHIFT>(vEdge2);
+
+    // top left rule
+    typename SIMD_T::Integer vEdgeAdjust0 = SIMD_T::sub_epi32(vEdge0, SIMD_T::set1_epi32(1));
+    typename SIMD_T::Integer vEdgeAdjust1 = SIMD_T::sub_epi32(vEdge1, SIMD_T::set1_epi32(1));
+    typename SIMD_T::Integer vEdgeAdjust2 = SIMD_T::sub_epi32(vEdge2, SIMD_T::set1_epi32(1));
+
+    // vA < 0
+    vEdge0 = SIMD_T::castps_si(SIMD_T::blendv_ps(SIMD_T::castsi_ps(vEdge0), SIMD_T::castsi_ps(vEdgeAdjust0), SIMD_T::castsi_ps(vAi[0])));
+    vEdge1 = SIMD_T::castps_si(SIMD_T::blendv_ps(SIMD_T::castsi_ps(vEdge1), SIMD_T::castsi_ps(vEdgeAdjust1), SIMD_T::castsi_ps(vAi[1])));
+    vEdge2 = SIMD_T::castps_si(SIMD_T::blendv_ps(SIMD_T::castsi_ps(vEdge2), SIMD_T::castsi_ps(vEdgeAdjust2), SIMD_T::castsi_ps(vAi[2])));
+
+    // vA == 0 && vB < 0
+    typename SIMD_T::Integer vCmp0 = SIMD_T::cmpeq_epi32(vAi[0], SIMD_T::setzero_si());
+    typename SIMD_T::Integer vCmp1 = SIMD_T::cmpeq_epi32(vAi[1], SIMD_T::setzero_si());
+    typename SIMD_T::Integer vCmp2 = SIMD_T::cmpeq_epi32(vAi[2], SIMD_T::setzero_si());
+
+    vCmp0 = SIMD_T::and_si(vCmp0, vBi[0]);
+    vCmp1 = SIMD_T::and_si(vCmp1, vBi[1]);
+    vCmp2 = SIMD_T::and_si(vCmp2, vBi[2]);
+
+    vEdge0 = SIMD_T::castps_si(SIMD_T::blendv_ps(SIMD_T::castsi_ps(vEdge0), SIMD_T::castsi_ps(vEdgeAdjust0), SIMD_T::castsi_ps(vCmp0)));
+    vEdge1 = SIMD_T::castps_si(SIMD_T::blendv_ps(SIMD_T::castsi_ps(vEdge1), SIMD_T::castsi_ps(vEdgeAdjust1), SIMD_T::castsi_ps(vCmp1)));
+    vEdge2 = SIMD_T::castps_si(SIMD_T::blendv_ps(SIMD_T::castsi_ps(vEdge2), SIMD_T::castsi_ps(vEdgeAdjust2), SIMD_T::castsi_ps(vCmp2)));
+
+
+#if ER_SIMD_TILE_X_DIM == 4 && ER_SIMD_TILE_Y_DIM == 4
+    // Go down
+    // coverage pixel 0
+    typename SIMD_T::Integer vMask0 = SIMD_T::and_si(vEdge0, vEdge1);
+    vMask0 = SIMD_T::and_si(vMask0, vEdge2);
+
+    // coverage pixel 1
+    typename SIMD_T::Integer vEdge0N = SIMD_T::add_epi32(vEdge0, vBi[0]);
+    typename SIMD_T::Integer vEdge1N = SIMD_T::add_epi32(vEdge1, vBi[1]);
+    typename SIMD_T::Integer vEdge2N = SIMD_T::add_epi32(vEdge2, vBi[2]);
+    typename SIMD_T::Integer vMask1 = SIMD_T::and_si(vEdge0N, vEdge1N);
+    vMask1 = SIMD_T::and_si(vMask1, vEdge2N);
+
+    // coverage pixel 2
+    vEdge0N = SIMD_T::add_epi32(vEdge0N, vBi[0]);
+    vEdge1N = SIMD_T::add_epi32(vEdge1N, vBi[1]);
+    vEdge2N = SIMD_T::add_epi32(vEdge2N, vBi[2]);
+    typename SIMD_T::Integer vMask2 = SIMD_T::and_si(vEdge0N, vEdge1N);
+    vMask2 = SIMD_T::and_si(vMask2, vEdge2N);
+
+    // coverage pixel 3
+    vEdge0N = SIMD_T::add_epi32(vEdge0N, vBi[0]);
+    vEdge1N = SIMD_T::add_epi32(vEdge1N, vBi[1]);
+    vEdge2N = SIMD_T::add_epi32(vEdge2N, vBi[2]);
+    typename SIMD_T::Integer vMask3 = SIMD_T::and_si(vEdge0N, vEdge1N);
+    vMask3 = SIMD_T::and_si(vMask3, vEdge2N);
+
+    // One step to the right and then up
+
+    // coverage pixel 4
+    vEdge0N = SIMD_T::add_epi32(vEdge0N, vAi[0]);
+    vEdge1N = SIMD_T::add_epi32(vEdge1N, vAi[1]);
+    vEdge2N = SIMD_T::add_epi32(vEdge2N, vAi[2]);
+    typename SIMD_T::Integer vMask4 = SIMD_T::and_si(vEdge0N, vEdge1N);
+    vMask4 = SIMD_T::and_si(vMask4, vEdge2N);
+
+    // coverage pixel 5
+    vEdge0N = SIMD_T::sub_epi32(vEdge0N, vBi[0]);
+    vEdge1N = SIMD_T::sub_epi32(vEdge1N, vBi[1]);
+    vEdge2N = SIMD_T::sub_epi32(vEdge2N, vBi[2]);
+    typename SIMD_T::Integer vMask5 = SIMD_T::and_si(vEdge0N, vEdge1N);
+    vMask5 = SIMD_T::and_si(vMask5, vEdge2N);
+
+    // coverage pixel 6
+    vEdge0N = SIMD_T::sub_epi32(vEdge0N, vBi[0]);
+    vEdge1N = SIMD_T::sub_epi32(vEdge1N, vBi[1]);
+    vEdge2N = SIMD_T::sub_epi32(vEdge2N, vBi[2]);
+    typename SIMD_T::Integer vMask6 = SIMD_T::and_si(vEdge0N, vEdge1N);
+    vMask6 = SIMD_T::and_si(vMask6, vEdge2N);
+
+    // coverage pixel 7
+    vEdge0N = SIMD_T::sub_epi32(vEdge0N, vBi[0]);
+    vEdge1N = SIMD_T::sub_epi32(vEdge1N, vBi[1]);
+    vEdge2N = SIMD_T::sub_epi32(vEdge2N, vBi[2]);
+    typename SIMD_T::Integer vMask7 = SIMD_T::and_si(vEdge0N, vEdge1N);
+    vMask7 = SIMD_T::and_si(vMask7, vEdge2N);
+
+    typename SIMD_T::Integer vLit1 = SIMD_T::or_si(vMask0, vMask1);
+    vLit1 = SIMD_T::or_si(vLit1, vMask2);
+    vLit1 = SIMD_T::or_si(vLit1, vMask3);
+    vLit1 = SIMD_T::or_si(vLit1, vMask4);
+    vLit1 = SIMD_T::or_si(vLit1, vMask5);
+    vLit1 = SIMD_T::or_si(vLit1, vMask6);
+    vLit1 = SIMD_T::or_si(vLit1, vMask7);
+
+    // Step to the right and go down again
+
+    // coverage pixel 0
+    vEdge0N = SIMD_T::add_epi32(vEdge0N, vAi[0]);
+    vEdge1N = SIMD_T::add_epi32(vEdge1N, vAi[1]);
+    vEdge2N = SIMD_T::add_epi32(vEdge2N, vAi[2]);
+    vMask0 = SIMD_T::and_si(vEdge0N, vEdge1N);
+    vMask0 = SIMD_T::and_si(vMask0, vEdge2N);
+
+    // coverage pixel 1
+    vEdge0N = SIMD_T::add_epi32(vEdge0N, vBi[0]);
+    vEdge1N = SIMD_T::add_epi32(vEdge1N, vBi[1]);
+    vEdge2N = SIMD_T::add_epi32(vEdge2N, vBi[2]);
+    vMask1 = SIMD_T::and_si(vEdge0N, vEdge1N);
+    vMask1 = SIMD_T::and_si(vMask1, vEdge2N);
+
+    // coverage pixel 2
+    vEdge0N = SIMD_T::add_epi32(vEdge0N, vBi[0]);
+    vEdge1N = SIMD_T::add_epi32(vEdge1N, vBi[1]);
+    vEdge2N = SIMD_T::add_epi32(vEdge2N, vBi[2]);
+    vMask2 = SIMD_T::and_si(vEdge0N, vEdge1N);
+    vMask2 = SIMD_T::and_si(vMask2, vEdge2N);
+
+    // coverage pixel 3
+    vEdge0N = SIMD_T::add_epi32(vEdge0N, vBi[0]);
+    vEdge1N = SIMD_T::add_epi32(vEdge1N, vBi[1]);
+    vEdge2N = SIMD_T::add_epi32(vEdge2N, vBi[2]);
+    vMask3 = SIMD_T::and_si(vEdge0N, vEdge1N);
+    vMask3 = SIMD_T::and_si(vMask3, vEdge2N);
+
+    // And for the last time - to the right and up
+
+    // coverage pixel 4
+    vEdge0N = SIMD_T::add_epi32(vEdge0N, vAi[0]);
+    vEdge1N = SIMD_T::add_epi32(vEdge1N, vAi[1]);
+    vEdge2N = SIMD_T::add_epi32(vEdge2N, vAi[2]);
+    vMask4 = SIMD_T::and_si(vEdge0N, vEdge1N);
+    vMask4 = SIMD_T::and_si(vMask4, vEdge2N);
+
+    // coverage pixel 5
+    vEdge0N = SIMD_T::sub_epi32(vEdge0N, vBi[0]);
+    vEdge1N = SIMD_T::sub_epi32(vEdge1N, vBi[1]);
+    vEdge2N = SIMD_T::sub_epi32(vEdge2N, vBi[2]);
+    vMask5 = SIMD_T::and_si(vEdge0N, vEdge1N);
+    vMask5 = SIMD_T::and_si(vMask5, vEdge2N);
+
+    // coverage pixel 6
+    vEdge0N = SIMD_T::sub_epi32(vEdge0N, vBi[0]);
+    vEdge1N = SIMD_T::sub_epi32(vEdge1N, vBi[1]);
+    vEdge2N = SIMD_T::sub_epi32(vEdge2N, vBi[2]);
+    vMask6 = SIMD_T::and_si(vEdge0N, vEdge1N);
+    vMask6 = SIMD_T::and_si(vMask6, vEdge2N);
+
+    // coverage pixel 7
+    vEdge0N = SIMD_T::sub_epi32(vEdge0N, vBi[0]);
+    vEdge1N = SIMD_T::sub_epi32(vEdge1N, vBi[1]);
+    vEdge2N = SIMD_T::sub_epi32(vEdge2N, vBi[2]);
+    vMask7 = SIMD_T::and_si(vEdge0N, vEdge1N);
+    vMask7 = SIMD_T::and_si(vMask7, vEdge2N);
+
+    typename SIMD_T::Integer vLit2 = SIMD_T::or_si(vMask0, vMask1);
+    vLit2 = SIMD_T::or_si(vLit2, vMask2);
+    vLit2 = SIMD_T::or_si(vLit2, vMask3);
+    vLit2 = SIMD_T::or_si(vLit2, vMask4);
+    vLit2 = SIMD_T::or_si(vLit2, vMask5);
+    vLit2 = SIMD_T::or_si(vLit2, vMask6);
+    vLit2 = SIMD_T::or_si(vLit2, vMask7);
+
+    typename SIMD_T::Integer vLit = SIMD_T::or_si(vLit1, vLit2);
+
+#else
+    // Generic algorithm sweeping in row by row order
+    typename SIMD_T::Integer vRowMask[ER_SIMD_TILE_Y_DIM];
+
+    typename SIMD_T::Integer vEdge0N = vEdge0;
+    typename SIMD_T::Integer vEdge1N = vEdge1;
+    typename SIMD_T::Integer vEdge2N = vEdge2;
+
+    for (uint32_t row = 0; row < ER_SIMD_TILE_Y_DIM; row++)
+    {
+        // Store edge values at the beginning of the row
+        typename SIMD_T::Integer vRowEdge0 = vEdge0N;
+        typename SIMD_T::Integer vRowEdge1 = vEdge1N;
+        typename SIMD_T::Integer vRowEdge2 = vEdge2N;
+
+        typename SIMD_T::Integer vColMask[ER_SIMD_TILE_X_DIM];
+
+        for (uint32_t col = 0; col < ER_SIMD_TILE_X_DIM; col++)
+        {
+            vColMask[col] = SIMD_T::and_si(vEdge0N, vEdge1N);
+            vColMask[col] = SIMD_T::and_si(vColMask[col], vEdge2N);
+
+            vEdge0N = SIMD_T::add_epi32(vEdge0N, vAi[0]);
+            vEdge1N = SIMD_T::add_epi32(vEdge1N, vAi[1]);
+            vEdge2N = SIMD_T::add_epi32(vEdge2N, vAi[2]);
+        }
+        vRowMask[row] = vColMask[0];
+        for (uint32_t col = 1; col < ER_SIMD_TILE_X_DIM; col++)
+        {
+            vRowMask[row] = SIMD_T::or_si(vRowMask[row], vColMask[col]);
+        }
+        // Restore values and go to the next row
+        vEdge0N = vRowEdge0;
+        vEdge1N = vRowEdge1;
+        vEdge2N = vRowEdge2;
+
+        vEdge0N = SIMD_T::add_epi32(vEdge0N, vBi[0]);
+        vEdge1N = SIMD_T::add_epi32(vEdge1N, vBi[1]);
+        vEdge2N = SIMD_T::add_epi32(vEdge2N, vBi[2]);
+    }
+
+    // compress all masks
+    typename SIMD_T::Integer vLit = vRowMask[0];
+    for (uint32_t row = 1; row < ER_SIMD_TILE_Y_DIM; row++)
+    {
+        vLit = SIMD_T::or_si(vLit, vRowMask[row]);
+    }
+
+#endif
+    // Check which triangles has any pixel lit
+    uint32_t maskLit = SIMD_T::movemask_ps(SIMD_T::castsi_ps(vLit));
+    uint32_t maskUnlit = ~maskLit & oneTileMask;
+
+    uint32_t oldTriMask = triMask;
+    triMask &= ~maskUnlit;
+
+    if (triMask ^ oldTriMask)
+    {
+        RDTSC_EVENT(FEEarlyRastExit, _mm_popcnt_u32(triMask & oneTileMask), 0);
+    }
+    return triMask;
+}
+
+#endif // Early rasterizer
+
 //////////////////////////////////////////////////////////////////////////
 /// @brief Bin triangle primitives to macro tiles. Performs setup, clipping
 ///        culling, viewport transform, etc.
@@ -434,9 +644,12 @@ void SIMDCALL BinTrianglesImpl(
     uint32_t workerId,
     typename SIMD_T::Vec4 tri[3],
     uint32_t triMask,
-    typename SIMD_T::Integer const &primID)
+    typename SIMD_T::Integer const &primID,
+    typename SIMD_T::Integer const &viewportIdx,
+    typename SIMD_T::Integer const &rtIdx)
 {
     SWR_CONTEXT *pContext = pDC->pContext;
+    const uint32_t *aRTAI = reinterpret_cast<const uint32_t *>(&rtIdx);
 
     AR_BEGIN(FEBinTriangles, pDC->drawId);
 
@@ -449,27 +662,6 @@ void SIMDCALL BinTrianglesImpl(
     typename SIMD_T::Float vRecipW0 = SIMD_T::set1_ps(1.0f);
     typename SIMD_T::Float vRecipW1 = SIMD_T::set1_ps(1.0f);
     typename SIMD_T::Float vRecipW2 = SIMD_T::set1_ps(1.0f);
-
-    typename SIMD_T::Integer viewportIdx = SIMD_T::setzero_si();
-    typename SIMD_T::Vec4 vpiAttrib[3];
-    typename SIMD_T::Integer vpai = SIMD_T::setzero_si();
-
-    if (state.backendState.readViewportArrayIndex)
-    {
-        pa.Assemble(VERTEX_SGV_SLOT, vpiAttrib);
-
-        vpai = SIMD_T::castps_si(vpiAttrib[0][VERTEX_SGV_VAI_COMP]);
-    }
-
-
-    if (state.backendState.readViewportArrayIndex) // VPAIOffsets are guaranteed 0-15 -- no OOB issues if they are offsets from 0 
-    {
-        // OOB indices => forced to zero.
-        vpai = SIMD_T::max_epi32(vpai, SIMD_T::setzero_si());
-        typename SIMD_T::Integer vNumViewports = SIMD_T::set1_epi32(KNOB_NUM_VIEWPORTS_SCISSORS);
-        typename SIMD_T::Integer vClearMask = SIMD_T::cmplt_epi32(vpai, vNumViewports);
-        viewportIdx = SIMD_T::and_si(vClearMask, vpai);
-    }
 
     if (feState.vpTransformDisable)
     {
@@ -498,7 +690,7 @@ void SIMDCALL BinTrianglesImpl(
         tri[2].v[2] = SIMD_T::mul_ps(tri[2].v[2], vRecipW2);
 
         // Viewport transform to screen space coords
-        if (state.backendState.readViewportArrayIndex)
+        if (pa.viewportArrayActive)
         {
             viewportTransform<3>(tri, state.vpMatrices, viewportIdx);
         }
@@ -691,8 +883,8 @@ void SIMDCALL BinTrianglesImpl(
     /// @todo:  Look at speeding this up -- weigh against corresponding costs in rasterizer.
     {
         typename SIMD_T::Integer scisXmin, scisYmin, scisXmax, scisYmax;
+        if (pa.viewportArrayActive)
 
-        if (state.backendState.readViewportArrayIndex)
         {
             GatherScissors(&state.scissorsInFixedPoint[0], pViewportIndex, scisXmin, scisYmin, scisXmax, scisYmax);
         }
@@ -735,6 +927,45 @@ void SIMDCALL BinTrianglesImpl(
         triMask = triMask & ~maskOutsideScissor;
     }
 
+#if KNOB_ENABLE_EARLY_RAST
+    if (rastState.sampleCount == SWR_MULTISAMPLE_1X && !CT::IsConservativeT::value)
+    {
+        // Try early rasterization - culling small triangles which do not cover any pixels
+
+        // convert to ER tiles
+        SIMDBBOX_T<SIMD_T> er_bbox;
+
+        er_bbox.xmin = SIMD_T::template srai_epi32<ER_SIMD_TILE_X_SHIFT + FIXED_POINT_SHIFT>(bbox.xmin);
+        er_bbox.xmax = SIMD_T::template srai_epi32<ER_SIMD_TILE_X_SHIFT + FIXED_POINT_SHIFT>(bbox.xmax);
+        er_bbox.ymin = SIMD_T::template srai_epi32<ER_SIMD_TILE_Y_SHIFT + FIXED_POINT_SHIFT>(bbox.ymin);
+        er_bbox.ymax = SIMD_T::template srai_epi32<ER_SIMD_TILE_Y_SHIFT + FIXED_POINT_SHIFT>(bbox.ymax);
+
+        typename SIMD_T::Integer vTileX = SIMD_T::cmpeq_epi32(er_bbox.xmin, er_bbox.xmax);
+        typename SIMD_T::Integer vTileY = SIMD_T::cmpeq_epi32(er_bbox.ymin, er_bbox.ymax);
+
+        // Take only triangles that fit into ER tile
+        uint32_t oneTileMask = triMask & SIMD_T::movemask_ps(SIMD_T::castsi_ps(SIMD_T::and_si(vTileX, vTileY)));
+
+        if (oneTileMask)
+        {
+            // determine CW tris (det > 0)
+            uint32_t maskCwLo = SIMD_T::movemask_pd(SIMD_T::castsi_pd(SIMD_T::cmpgt_epi64(vDet[0], SIMD_T::setzero_si())));
+            uint32_t maskCwHi = SIMD_T::movemask_pd(SIMD_T::castsi_pd(SIMD_T::cmpgt_epi64(vDet[1], SIMD_T::setzero_si())));
+            uint32_t cwTrisMask = maskCwLo | (maskCwHi << (SIMD_WIDTH / 2));
+
+            // Try early rasterization
+            triMask = EarlyRasterizer<SIMD_T, SIMD_WIDTH, CT>(er_bbox, vAi, vBi, vXi, vYi, cwTrisMask, triMask, oneTileMask);
+
+            if (!triMask)
+            {
+                AR_END(FEBinTriangles, 1);
+                return;
+            }
+        }
+
+    }
+#endif
+
 endBinTriangles:
 
 
@@ -751,21 +982,21 @@ endBinTriangles:
         recipW[0] = vRecipW0;
         recipW[1] = vRecipW1;
 
-        BinPostSetupLinesImpl<SIMD_T, SIMD_WIDTH>(pDC, pa, workerId, line, recipW, triMask, primID, viewportIdx);
+        BinPostSetupLinesImpl<SIMD_T, SIMD_WIDTH>(pDC, pa, workerId, line, recipW, triMask, primID, viewportIdx, rtIdx);
 
         line[0] = tri[1];
         line[1] = tri[2];
         recipW[0] = vRecipW1;
         recipW[1] = vRecipW2;
 
-        BinPostSetupLinesImpl<SIMD_T, SIMD_WIDTH>(pDC, pa, workerId, line, recipW, triMask, primID, viewportIdx);
+        BinPostSetupLinesImpl<SIMD_T, SIMD_WIDTH>(pDC, pa, workerId, line, recipW, triMask, primID, viewportIdx, rtIdx);
 
         line[0] = tri[2];
         line[1] = tri[0];
         recipW[0] = vRecipW2;
         recipW[1] = vRecipW0;
 
-        BinPostSetupLinesImpl<SIMD_T, SIMD_WIDTH>(pDC, pa, workerId, line, recipW, triMask, primID, viewportIdx);
+        BinPostSetupLinesImpl<SIMD_T, SIMD_WIDTH>(pDC, pa, workerId, line, recipW, triMask, primID, viewportIdx, rtIdx);
 
         AR_END(FEBinTriangles, 1);
         return;
@@ -773,9 +1004,9 @@ endBinTriangles:
     else if (rastState.fillMode == SWR_FILLMODE_POINT)
     {
         // Bin 3 points
-        BinPostSetupPointsImpl<SIMD_T, SIMD_WIDTH>(pDC, pa, workerId, &tri[0], triMask, primID, viewportIdx);
-        BinPostSetupPointsImpl<SIMD_T, SIMD_WIDTH>(pDC, pa, workerId, &tri[1], triMask, primID, viewportIdx);
-        BinPostSetupPointsImpl<SIMD_T, SIMD_WIDTH>(pDC, pa, workerId, &tri[2], triMask, primID, viewportIdx);
+        BinPostSetupPointsImpl<SIMD_T, SIMD_WIDTH>(pDC, pa, workerId, &tri[0], triMask, primID, viewportIdx, rtIdx);
+        BinPostSetupPointsImpl<SIMD_T, SIMD_WIDTH>(pDC, pa, workerId, &tri[1], triMask, primID, viewportIdx, rtIdx);
+        BinPostSetupPointsImpl<SIMD_T, SIMD_WIDTH>(pDC, pa, workerId, &tri[2], triMask, primID, viewportIdx, rtIdx);
 
         AR_END(FEBinTriangles, 1);
         return;
@@ -796,31 +1027,15 @@ endBinTriangles:
 
     // transpose verts needed for backend
     /// @todo modify BE to take non-transformed verts
-    simd4scalar vHorizX[SIMD_WIDTH];
-    simd4scalar vHorizY[SIMD_WIDTH];
-    simd4scalar vHorizZ[SIMD_WIDTH];
-    simd4scalar vHorizW[SIMD_WIDTH];
+    OSALIGNSIMD16(simd4scalar) vHorizX[SIMD_WIDTH];
+    OSALIGNSIMD16(simd4scalar) vHorizY[SIMD_WIDTH];
+    OSALIGNSIMD16(simd4scalar) vHorizZ[SIMD_WIDTH];
+    OSALIGNSIMD16(simd4scalar) vHorizW[SIMD_WIDTH];
 
     TransposeVertices(vHorizX, tri[0].x, tri[1].x, tri[2].x);
     TransposeVertices(vHorizY, tri[0].y, tri[1].y, tri[2].y);
     TransposeVertices(vHorizZ, tri[0].z, tri[1].z, tri[2].z);
     TransposeVertices(vHorizW, vRecipW0, vRecipW1, vRecipW2);
-
-    // store render target array index
-    OSALIGNSIMD16(uint32_t) aRTAI[SIMD_WIDTH];
-    if (state.backendState.readRenderTargetArrayIndex)
-    {
-        typename SIMD_T::Vec4 vRtai[3];
-        pa.Assemble(VERTEX_SGV_SLOT, vRtai);
-        typename SIMD_T::Integer vRtaii;
-        vRtaii = SIMD_T::castps_si(vRtai[0][VERTEX_SGV_RTAI_COMP]);
-        SIMD_T::store_si(reinterpret_cast<typename SIMD_T::Integer *>(aRTAI), vRtaii);
-    }
-    else
-    {
-        SIMD_T::store_si(reinterpret_cast<typename SIMD_T::Integer *>(aRTAI), SIMD_T::setzero_si());
-    }
-
 
     // scan remaining valid triangles and bin each separately
     while (_BitScanForward(&triIndex, triMask))
@@ -909,9 +1124,11 @@ void BinTriangles(
     uint32_t workerId,
     simdvector tri[3],
     uint32_t triMask,
-    simdscalari const &primID)
+    simdscalari const &primID,
+    simdscalari const &viewportIdx,
+    simdscalari const &rtIdx)
 {
-    BinTrianglesImpl<SIMD256, KNOB_SIMD_WIDTH, CT>(pDC, pa, workerId, tri, triMask, primID);
+    BinTrianglesImpl<SIMD256, KNOB_SIMD_WIDTH, CT>(pDC, pa, workerId, tri, triMask, primID, viewportIdx, rtIdx);
 }
 
 #if USE_SIMD16_FRONTEND
@@ -922,9 +1139,11 @@ void SIMDCALL BinTriangles_simd16(
     uint32_t workerId,
     simd16vector tri[3],
     uint32_t triMask,
-    simd16scalari const &primID)
+    simd16scalari const &primID,
+    simd16scalari const &viewportIdx,
+    simd16scalari const &rtIdx)
 {
-    BinTrianglesImpl<SIMD512, KNOB_SIMD16_WIDTH, CT>(pDC, pa, workerId, tri, triMask, primID);
+    BinTrianglesImpl<SIMD512, KNOB_SIMD16_WIDTH, CT>(pDC, pa, workerId, tri, triMask, primID, viewportIdx, rtIdx);
 }
 
 #endif
@@ -973,7 +1192,8 @@ void BinPostSetupPointsImpl(
     typename SIMD_T::Vec4 prim[],
     uint32_t primMask,
     typename SIMD_T::Integer const &primID,
-    typename SIMD_T::Integer const &viewportIdx)
+    typename SIMD_T::Integer const &viewportIdx,
+    typename SIMD_T::Integer const &rtIdx)
 {
     SWR_CONTEXT *pContext = pDC->pContext;
 
@@ -1041,19 +1261,8 @@ void BinPostSetupPointsImpl(
         SIMD_T::store_ps(reinterpret_cast<float *>(aZ), primVerts.z);
 
         // store render target array index
-        OSALIGNSIMD16(uint32_t) aRTAI[SIMD_WIDTH];
-        if (state.backendState.readRenderTargetArrayIndex)
-        {
-            typename SIMD_T::Vec4 vRtai;
-            pa.Assemble(VERTEX_SGV_SLOT, &vRtai);
-            typename SIMD_T::Integer vRtaii = SIMD_T::castps_si(vRtai[VERTEX_SGV_RTAI_COMP]);
-            SIMD_T::store_si(reinterpret_cast<typename SIMD_T::Integer *>(aRTAI), vRtaii);
-        }
-        else
-        {
-            SIMD_T::store_si(reinterpret_cast<typename SIMD_T::Integer *>(aRTAI), SIMD_T::setzero_si());
-        }
-
+        const uint32_t *aRTAI = reinterpret_cast<const uint32_t *>(&rtIdx);
+        
         uint32_t *pPrimID = (uint32_t *)&primID;
         DWORD primIndex = 0;
 
@@ -1149,7 +1358,7 @@ void BinPostSetupPointsImpl(
         {
             typename SIMD_T::Integer scisXmin, scisYmin, scisXmax, scisYmax;
 
-            if (state.backendState.readViewportArrayIndex)
+            if (pa.viewportArrayActive)
             {
                 GatherScissors(&state.scissorsInFixedPoint[0], pViewportIndex, scisXmin, scisYmin, scisXmax, scisYmax);
             }
@@ -1188,18 +1397,7 @@ void BinPostSetupPointsImpl(
         SIMD_T::store_si(reinterpret_cast<typename SIMD_T::Integer *>(aMTBottom), bbox.ymax);
 
         // store render target array index
-        OSALIGNSIMD16(uint32_t) aRTAI[SIMD_WIDTH];
-        if (state.backendState.readRenderTargetArrayIndex)
-        {
-            typename SIMD_T::Vec4 vRtai[2];
-            pa.Assemble(VERTEX_SGV_SLOT, vRtai);
-            typename SIMD_T::Integer vRtaii = SIMD_T::castps_si(vRtai[0][VERTEX_SGV_RTAI_COMP]);
-            SIMD_T::store_si(reinterpret_cast<typename SIMD_T::Integer *>(aRTAI), vRtaii);
-        }
-        else
-        {
-            SIMD_T::store_si(reinterpret_cast<typename SIMD_T::Integer *>(aRTAI), SIMD_T::setzero_si());
-        }
+        const uint32_t *aRTAI = reinterpret_cast<const uint32_t *>(&rtIdx);
 
         OSALIGNSIMD16(float) aPointSize[SIMD_WIDTH];
         SIMD_T::store_ps(reinterpret_cast<float *>(aPointSize), vPointSize);
@@ -1299,33 +1497,13 @@ void BinPointsImpl(
     uint32_t workerId,
     typename SIMD_T::Vec4 prim[3],
     uint32_t primMask,
-    typename SIMD_T::Integer const &primID)
+    typename SIMD_T::Integer const &primID,
+    typename SIMD_T::Integer const &viewportIdx,
+    typename SIMD_T::Integer const &rtIdx)
 {
     const API_STATE& state = GetApiState(pDC);
     const SWR_FRONTEND_STATE& feState = state.frontendState;
     const SWR_RASTSTATE& rastState = state.rastState;
-
-    // Read back viewport index if required
-    typename SIMD_T::Integer viewportIdx = SIMD_T::setzero_si();
-    typename SIMD_T::Vec4 vpiAttrib[1];
-    typename SIMD_T::Integer vpai = SIMD_T::setzero_si();
-
-    if (state.backendState.readViewportArrayIndex)
-    {
-        pa.Assemble(VERTEX_SGV_SLOT, vpiAttrib);
-
-        vpai = SIMD_T::castps_si(vpiAttrib[0][VERTEX_SGV_VAI_COMP]);
-    }
-
-
-    if (state.backendState.readViewportArrayIndex) // VPAIOffsets are guaranteed 0-15 -- no OOB issues if they are offsets from 0 
-    {
-        // OOB indices => forced to zero.
-        vpai = SIMD_T::max_epi32(vpai, SIMD_T::setzero_si());
-        typename SIMD_T::Integer vNumViewports = SIMD_T::set1_epi32(KNOB_NUM_VIEWPORTS_SCISSORS);
-        typename SIMD_T::Integer vClearMask = SIMD_T::cmplt_epi32(vpai, vNumViewports);
-        viewportIdx = SIMD_T::and_si(vClearMask, vpai);
-    }
 
     if (!feState.vpTransformDisable)
     {
@@ -1337,7 +1515,7 @@ void BinPointsImpl(
         prim[0].z = SIMD_T::mul_ps(prim[0].z, vRecipW0);
 
         // viewport transform to screen coords
-        if (state.backendState.readViewportArrayIndex)
+        if (pa.viewportArrayActive)
         {
             viewportTransform<1>(prim, state.vpMatrices, viewportIdx);
         }
@@ -1359,7 +1537,8 @@ void BinPointsImpl(
         prim,
         primMask,
         primID,
-        viewportIdx);
+        viewportIdx,
+        rtIdx);
 }
 
 void BinPoints(
@@ -1368,7 +1547,9 @@ void BinPoints(
     uint32_t workerId,
     simdvector prim[3],
     uint32_t primMask,
-    simdscalari const &primID)
+    simdscalari const &primID,
+    simdscalari const &viewportIdx,
+    simdscalari const &rtIdx)
 {
     BinPointsImpl<SIMD256, KNOB_SIMD_WIDTH>(
         pDC,
@@ -1376,7 +1557,9 @@ void BinPoints(
         workerId,
         prim,
         primMask,
-        primID);
+        primID,
+        viewportIdx,
+        rtIdx);
 }
 
 #if USE_SIMD16_FRONTEND
@@ -1386,7 +1569,9 @@ void SIMDCALL BinPoints_simd16(
     uint32_t workerId,
     simd16vector prim[3],
     uint32_t primMask,
-    simd16scalari const &primID)
+    simd16scalari const &primID,
+    simd16scalari const &viewportIdx,
+    simd16scalari const & rtIdx)
 {
     BinPointsImpl<SIMD512, KNOB_SIMD16_WIDTH>(
         pDC,
@@ -1394,7 +1579,9 @@ void SIMDCALL BinPoints_simd16(
         workerId,
         prim,
         primMask,
-        primID);
+        primID,
+        viewportIdx,
+        rtIdx);
 }
 
 #endif
@@ -1415,9 +1602,11 @@ void BinPostSetupLinesImpl(
     typename SIMD_T::Float recipW[],
     uint32_t primMask,
     typename SIMD_T::Integer const &primID,
-    typename SIMD_T::Integer const &viewportIdx)
+    typename SIMD_T::Integer const &viewportIdx,
+    typename SIMD_T::Integer const &rtIdx)
 {
     SWR_CONTEXT *pContext = pDC->pContext;
+    const uint32_t *aRTAI = reinterpret_cast<const uint32_t *>(&rtIdx);
 
     AR_BEGIN(FEBinLines, pDC->drawId);
 
@@ -1481,7 +1670,7 @@ void BinPostSetupLinesImpl(
     {
         typename SIMD_T::Integer scisXmin, scisYmin, scisXmax, scisYmax;
 
-        if (state.backendState.readViewportArrayIndex)
+        if (pa.viewportArrayActive)
         {
             GatherScissors(&state.scissorsInFixedPoint[0], pViewportIndex, scisXmin, scisYmin, scisXmax, scisYmax);
         }
@@ -1510,10 +1699,10 @@ void BinPostSetupLinesImpl(
 
     // transpose verts needed for backend
     /// @todo modify BE to take non-transformed verts
-    simd4scalar vHorizX[SIMD_WIDTH];
-    simd4scalar vHorizY[SIMD_WIDTH];
-    simd4scalar vHorizZ[SIMD_WIDTH];
-    simd4scalar vHorizW[SIMD_WIDTH];
+    OSALIGNSIMD16(simd4scalar) vHorizX[SIMD_WIDTH];
+    OSALIGNSIMD16(simd4scalar) vHorizY[SIMD_WIDTH];
+    OSALIGNSIMD16(simd4scalar) vHorizZ[SIMD_WIDTH];
+    OSALIGNSIMD16(simd4scalar) vHorizW[SIMD_WIDTH];
 
     if (!primMask)
     {
@@ -1537,20 +1726,6 @@ void BinPostSetupLinesImpl(
     TransposeVertices(vHorizY, prim[0].y, prim[1].y, SIMD_T::setzero_ps());
     TransposeVertices(vHorizZ, prim[0].z, prim[1].z, SIMD_T::setzero_ps());
     TransposeVertices(vHorizW, vRecipW0,  vRecipW1,  SIMD_T::setzero_ps());
-
-    // store render target array index
-    OSALIGNSIMD16(uint32_t) aRTAI[SIMD_WIDTH];
-    if (state.backendState.readRenderTargetArrayIndex)
-    {
-        typename SIMD_T::Vec4 vRtai[2];
-        pa.Assemble(VERTEX_SGV_SLOT, vRtai);
-        typename SIMD_T::Integer vRtaii = SIMD_T::castps_si(vRtai[0][VERTEX_SGV_RTAI_COMP]);
-        SIMD_T::store_si(reinterpret_cast<typename SIMD_T::Integer *>(aRTAI), vRtaii);
-    }
-    else
-    {
-        SIMD_T::store_si(reinterpret_cast<typename SIMD_T::Integer *>(aRTAI), SIMD_T::setzero_si());
-    }
 
     // scan remaining valid prims and bin each separately
     DWORD primIndex;
@@ -1632,34 +1807,15 @@ void SIMDCALL BinLinesImpl(
     uint32_t workerId,
     typename SIMD_T::Vec4 prim[3],
     uint32_t primMask,
-    typename SIMD_T::Integer const &primID)
+    typename SIMD_T::Integer const &primID,
+    typename SIMD_T::Integer const &viewportIdx,
+    typename SIMD_T::Integer const & rtIdx)
 {
     const API_STATE& state = GetApiState(pDC);
     const SWR_RASTSTATE& rastState = state.rastState;
     const SWR_FRONTEND_STATE& feState = state.frontendState;
 
     typename SIMD_T::Float vRecipW[2] = { SIMD_T::set1_ps(1.0f), SIMD_T::set1_ps(1.0f) };
-
-    typename SIMD_T::Integer viewportIdx = SIMD_T::setzero_si();
-    typename SIMD_T::Vec4 vpiAttrib[2];
-    typename SIMD_T::Integer vpai = SIMD_T::setzero_si();
-
-    if (state.backendState.readViewportArrayIndex)
-    {
-        pa.Assemble(VERTEX_SGV_SLOT, vpiAttrib);
-
-        vpai = SIMD_T::castps_si(vpiAttrib[0][VERTEX_SGV_VAI_COMP]);
-    }
-
-
-    if (state.backendState.readViewportArrayIndex) // VPAIOffsets are guaranteed 0-15 -- no OOB issues if they are offsets from 0 
-    {
-        // OOB indices => forced to zero.
-        vpai = SIMD_T::max_epi32(vpai, SIMD_T::setzero_si());
-        typename SIMD_T::Integer vNumViewports = SIMD_T::set1_epi32(KNOB_NUM_VIEWPORTS_SCISSORS);
-        typename SIMD_T::Integer vClearMask = SIMD_T::cmplt_epi32(vpai, vNumViewports);
-        viewportIdx = SIMD_T::and_si(vClearMask, vpai);
-    }
 
     if (!feState.vpTransformDisable)
     {
@@ -1677,7 +1833,7 @@ void SIMDCALL BinLinesImpl(
         prim[1].v[2] = SIMD_T::mul_ps(prim[1].v[2], vRecipW[1]);
 
         // viewport transform to screen coords
-        if (state.backendState.readViewportArrayIndex)
+        if (pa.viewportArrayActive)
         {
             viewportTransform<2>(prim, state.vpMatrices, viewportIdx);
         }
@@ -1704,7 +1860,8 @@ void SIMDCALL BinLinesImpl(
         vRecipW,
         primMask,
         primID,
-        viewportIdx);
+        viewportIdx,
+        rtIdx);
 }
 
 void BinLines(
@@ -1713,9 +1870,11 @@ void BinLines(
     uint32_t workerId,
     simdvector prim[],
     uint32_t primMask,
-    simdscalari const &primID)
+    simdscalari const &primID,
+    simdscalari const &viewportIdx,
+    simdscalari const &rtIdx)
 {
-    BinLinesImpl<SIMD256, KNOB_SIMD_WIDTH>(pDC, pa, workerId, prim, primMask, primID);
+    BinLinesImpl<SIMD256, KNOB_SIMD_WIDTH>(pDC, pa, workerId, prim, primMask, primID, viewportIdx, rtIdx);
 }
 
 #if USE_SIMD16_FRONTEND
@@ -1725,9 +1884,11 @@ void SIMDCALL BinLines_simd16(
     uint32_t workerId,
     simd16vector prim[3],
     uint32_t primMask,
-    simd16scalari const &primID)
+    simd16scalari const &primID,
+    simd16scalari const &viewportIdx,
+    simd16scalari const &rtIdx)
 {
-    BinLinesImpl<SIMD512, KNOB_SIMD16_WIDTH>(pDC, pa, workerId, prim, primMask, primID);
+    BinLinesImpl<SIMD512, KNOB_SIMD16_WIDTH>(pDC, pa, workerId, prim, primMask, primID, viewportIdx, rtIdx);
 }
 
 #endif

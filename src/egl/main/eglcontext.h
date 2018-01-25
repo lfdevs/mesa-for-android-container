@@ -64,6 +64,7 @@ struct _egl_context
    EGLint ResetNotificationStrategy;
    EGLint ContextPriority;
    EGLBoolean NoError;
+   EGLint ReleaseBehavior;
 
    /* The real render buffer when a window surface is bound */
    EGLint WindowRenderBuffer;

@@ -247,7 +247,8 @@ dri2_create_context_attribs(struct glx_screen *base,
    uint32_t flags;
    unsigned api;
    int reset;
-   uint32_t ctx_attribs[2 * 5];
+   int release;
+   uint32_t ctx_attribs[2 * 6];
    unsigned num_ctx_attribs = 0;
 
    if (psc->dri2->base.version < 3) {
@@ -259,7 +260,7 @@ dri2_create_context_attribs(struct glx_screen *base,
     */
    if (!dri2_convert_glx_attribs(num_attribs, attribs,
                                  &major_ver, &minor_ver, &renderType, &flags,
-                                 &api, &reset, error))
+                                 &api, &reset, &release, error))
       goto error_exit;
 
    /* Check the renderType value */
@@ -277,7 +278,7 @@ dri2_create_context_attribs(struct glx_screen *base,
       goto error_exit;
    }
 
-   if (!glx_context_init(&pcp->base, &psc->base, &config->base))
+   if (!glx_context_init(&pcp->base, &psc->base, config_base))
       goto error_exit;
 
    ctx_attribs[num_ctx_attribs++] = __DRI_CTX_ATTRIB_MAJOR_VERSION;
@@ -292,6 +293,11 @@ dri2_create_context_attribs(struct glx_screen *base,
    if (reset != __DRI_CTX_RESET_NO_NOTIFICATION) {
       ctx_attribs[num_ctx_attribs++] = __DRI_CTX_ATTRIB_RESET_STRATEGY;
       ctx_attribs[num_ctx_attribs++] = reset;
+   }
+
+   if (release != __DRI_CTX_RELEASE_BEHAVIOR_FLUSH) {
+      ctx_attribs[num_ctx_attribs++] = __DRI_CTX_ATTRIB_RELEASE_BEHAVIOR;
+      ctx_attribs[num_ctx_attribs++] = release;
    }
 
    if (flags != 0) {
@@ -311,7 +317,7 @@ dri2_create_context_attribs(struct glx_screen *base,
    pcp->driContext =
       (*psc->dri2->createContextAttribs) (psc->driScreen,
 					  api,
-					  config->driConfig,
+					  config ? config->driConfig : NULL,
 					  shared,
 					  num_ctx_attribs / 2,
 					  ctx_attribs,
@@ -1170,6 +1176,14 @@ dri2BindExtensions(struct dri2_screen *psc, struct glx_display * priv,
 
       if (strcmp(extensions[i]->name, __DRI2_INTEROP) == 0)
 	 psc->interop = (__DRI2interopExtension*)extensions[i];
+
+      /* DRI2 version 3 is also required because
+       * GLX_ARB_control_flush_control requires GLX_ARB_create_context.
+       */
+      if (psc->dri2->base.version >= 3
+          && strcmp(extensions[i]->name, __DRI2_FLUSH_CONTROL) == 0)
+         __glXEnableDirectExtension(&psc->base,
+                                    "GLX_ARB_context_flush_control");
    }
 }
 

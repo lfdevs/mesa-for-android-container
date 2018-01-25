@@ -48,14 +48,15 @@
 /* XXX this should go away, needed for 'struct winsys_handle' */
 #include "state_tracker/drm_driver.h"
 
+/**
+ * Go through the entire state and see if the resource is bound
+ * anywhere. If it is, mark the relevant state as dirty. This is
+ * called on realloc_bo to ensure the neccessary state is re-
+ * emitted so the GPU looks at the new backing bo.
+ */
 static void
-fd_invalidate_resource(struct fd_context *ctx, struct pipe_resource *prsc)
+rebind_resource(struct fd_context *ctx, struct pipe_resource *prsc)
 {
-	/* Go through the entire state and see if the resource is bound
-	 * anywhere. If it is, mark the relevant state as dirty. This is called on
-	 * realloc_bo.
-	 */
-
 	/* VBOs */
 	for (unsigned i = 0; i < ctx->vtx.vertexbuf.count && !(ctx->dirty & FD_DIRTY_VTXBUF); i++) {
 		if (ctx->vtx.vertexbuf.vb[i].buffer.resource == prsc)
@@ -97,7 +98,7 @@ fd_invalidate_resource(struct fd_context *ctx, struct pipe_resource *prsc)
 static void
 realloc_bo(struct fd_resource *rsc, uint32_t size)
 {
-	struct fd_screen *screen = fd_screen(rsc->base.b.screen);
+	struct fd_screen *screen = fd_screen(rsc->base.screen);
 	uint32_t flags = DRM_FREEDRENO_GEM_CACHE_WCOMBINE |
 			DRM_FREEDRENO_GEM_TYPE_KMEM; /* TODO */
 
@@ -117,10 +118,10 @@ static void
 do_blit(struct fd_context *ctx, const struct pipe_blit_info *blit, bool fallback)
 {
 	/* TODO size threshold too?? */
-	if ((blit->src.resource->target != PIPE_BUFFER) && !fallback) {
+	if (!fallback) {
 		/* do blit on gpu: */
 		fd_blitter_pipe_begin(ctx, false, true, FD_STAGE_BLIT);
-		util_blitter_blit(ctx->blitter, blit);
+		ctx->blit(ctx, blit);
 		fd_blitter_pipe_end(ctx);
 	} else {
 		/* do blit on cpu: */
@@ -133,10 +134,10 @@ do_blit(struct fd_context *ctx, const struct pipe_blit_info *blit, bool fallback
 
 static bool
 fd_try_shadow_resource(struct fd_context *ctx, struct fd_resource *rsc,
-		unsigned level, unsigned usage, const struct pipe_box *box)
+		unsigned level, const struct pipe_box *box)
 {
 	struct pipe_context *pctx = &ctx->base;
-	struct pipe_resource *prsc = &rsc->base.b;
+	struct pipe_resource *prsc = &rsc->base;
 	bool fallback = false;
 
 	if (prsc->next)
@@ -150,19 +151,9 @@ fd_try_shadow_resource(struct fd_context *ctx, struct fd_resource *rsc,
 			PIPE_BIND_RENDER_TARGET))
 		fallback = true;
 
-	/* these cases should be handled elsewhere.. just for future
-	 * reference in case this gets split into a more generic(ish)
-	 * helper.
-	 */
-	debug_assert(!(usage & PIPE_TRANSFER_READ));
-	debug_assert(!(usage & PIPE_TRANSFER_DISCARD_WHOLE_RESOURCE));
-
-	/* if we do a gpu blit to clone the whole resource, we'll just
-	 * end up stalling on that.. so only allow if we can discard
-	 * current range (and blit, possibly cpu or gpu, the rest)
-	 */
-	if (!(usage & PIPE_TRANSFER_DISCARD_RANGE))
-		return false;
+	/* do shadowing back-blits on the cpu for buffers: */
+	if (prsc->target == PIPE_BUFFER)
+		fallback = true;
 
 	bool whole_level = util_texrange_covers_whole_level(prsc, level,
 		box->x, box->y, box->z, box->width, box->height, box->depth);
@@ -197,8 +188,8 @@ fd_try_shadow_resource(struct fd_context *ctx, struct fd_resource *rsc,
 	 */
 	struct fd_resource *shadow = fd_resource(pshadow);
 
-	DBG("shadow: %p (%d) -> %p (%d)\n", rsc, rsc->base.b.reference.count,
-			shadow, shadow->base.b.reference.count);
+	DBG("shadow: %p (%d) -> %p (%d)\n", rsc, rsc->base.reference.count,
+			shadow, shadow->base.reference.count);
 
 	/* TODO valid_buffer_range?? */
 	swap(rsc->bo,        shadow->bo);
@@ -287,6 +278,68 @@ fd_try_shadow_resource(struct fd_context *ctx, struct fd_resource *rsc,
 	return true;
 }
 
+static struct fd_resource *
+fd_alloc_staging(struct fd_context *ctx, struct fd_resource *rsc,
+		unsigned level, const struct pipe_box *box)
+{
+	struct pipe_context *pctx = &ctx->base;
+	struct pipe_resource tmpl = rsc->base;
+
+	tmpl.width0  = box->width;
+	tmpl.height0 = box->height;
+	tmpl.depth0  = box->depth;
+	tmpl.array_size = 1;
+	tmpl.last_level = 0;
+	tmpl.bind |= PIPE_BIND_LINEAR;
+
+	struct pipe_resource *pstaging =
+		pctx->screen->resource_create(pctx->screen, &tmpl);
+	if (!pstaging)
+		return NULL;
+
+	return fd_resource(pstaging);
+}
+
+static void
+fd_blit_from_staging(struct fd_context *ctx, struct fd_transfer *trans)
+{
+	struct pipe_resource *dst = trans->base.resource;
+	struct pipe_blit_info blit = {0};
+
+	blit.dst.resource = dst;
+	blit.dst.format   = dst->format;
+	blit.dst.level    = trans->base.level;
+	blit.dst.box      = trans->base.box;
+	blit.src.resource = trans->staging_prsc;
+	blit.src.format   = trans->staging_prsc->format;
+	blit.src.level    = 0;
+	blit.src.box      = trans->staging_box;
+	blit.mask = util_format_get_mask(trans->staging_prsc->format);
+	blit.filter = PIPE_TEX_FILTER_NEAREST;
+
+	do_blit(ctx, &blit, false);
+}
+
+static void
+fd_blit_to_staging(struct fd_context *ctx, struct fd_transfer *trans)
+{
+	struct pipe_resource *src = trans->base.resource;
+	struct pipe_blit_info blit = {0};
+
+	blit.src.resource = src;
+	blit.src.format   = src->format;
+	blit.src.level    = trans->base.level;
+	blit.src.box      = trans->base.box;
+	blit.dst.resource = trans->staging_prsc;
+	blit.dst.format   = trans->staging_prsc->format;
+	blit.dst.level    = 0;
+	blit.dst.box      = trans->staging_box;
+	blit.mask = util_format_get_mask(trans->staging_prsc->format);
+	blit.filter = PIPE_TEX_FILTER_NEAREST;
+
+	do_blit(ctx, &blit, false);
+}
+
 static unsigned
 fd_resource_layer_offset(struct fd_resource *rsc,
 						 struct fd_resource_slice *slice,
@@ -298,114 +351,61 @@ fd_resource_layer_offset(struct fd_resource *rsc,
 		return layer * slice->size0;
 }
 
-static void
-fd_resource_flush_z32s8(struct fd_transfer *trans, const struct pipe_box *box)
-{
-	struct fd_resource *rsc = fd_resource(trans->base.resource);
-	struct fd_resource_slice *slice = fd_resource_slice(rsc, trans->base.level);
-	struct fd_resource_slice *sslice = fd_resource_slice(rsc->stencil, trans->base.level);
-	enum pipe_format format = trans->base.resource->format;
-
-	float *depth = fd_bo_map(rsc->bo) + slice->offset +
-		fd_resource_layer_offset(rsc, slice, trans->base.box.z) +
-		(trans->base.box.y + box->y) * slice->pitch * 4 + (trans->base.box.x + box->x) * 4;
-	uint8_t *stencil = fd_bo_map(rsc->stencil->bo) + sslice->offset +
-		fd_resource_layer_offset(rsc->stencil, sslice, trans->base.box.z) +
-		(trans->base.box.y + box->y) * sslice->pitch + trans->base.box.x + box->x;
-
-	if (format != PIPE_FORMAT_X32_S8X24_UINT)
-		util_format_z32_float_s8x24_uint_unpack_z_float(
-				depth, slice->pitch * 4,
-				trans->staging, trans->base.stride,
-				box->width, box->height);
-
-	util_format_z32_float_s8x24_uint_unpack_s_8uint(
-			stencil, sslice->pitch,
-			trans->staging, trans->base.stride,
-			box->width, box->height);
-}
-
-static void
-fd_resource_flush_rgtc(struct fd_transfer *trans, const struct pipe_box *box)
-{
-	struct fd_resource *rsc = fd_resource(trans->base.resource);
-	struct fd_resource_slice *slice = fd_resource_slice(rsc, trans->base.level);
-	enum pipe_format format = trans->base.resource->format;
-
-	uint8_t *data = fd_bo_map(rsc->bo) + slice->offset +
-		fd_resource_layer_offset(rsc, slice, trans->base.box.z) +
-		((trans->base.box.y + box->y) * slice->pitch +
-		 trans->base.box.x + box->x) * rsc->cpp;
-
-	uint8_t *source = trans->staging +
-		util_format_get_nblocksy(format, box->y) * trans->base.stride +
-		util_format_get_stride(format, box->x);
-
-	switch (format) {
-	case PIPE_FORMAT_RGTC1_UNORM:
-	case PIPE_FORMAT_RGTC1_SNORM:
-	case PIPE_FORMAT_LATC1_UNORM:
-	case PIPE_FORMAT_LATC1_SNORM:
-		util_format_rgtc1_unorm_unpack_rgba_8unorm(
-				data, slice->pitch * rsc->cpp,
-				source, trans->base.stride,
-				box->width, box->height);
-		break;
-	case PIPE_FORMAT_RGTC2_UNORM:
-	case PIPE_FORMAT_RGTC2_SNORM:
-	case PIPE_FORMAT_LATC2_UNORM:
-	case PIPE_FORMAT_LATC2_SNORM:
-		util_format_rgtc2_unorm_unpack_rgba_8unorm(
-				data, slice->pitch * rsc->cpp,
-				source, trans->base.stride,
-				box->width, box->height);
-		break;
-	default:
-		assert(!"Unexpected format\n");
-		break;
-	}
-}
-
-static void
-fd_resource_flush(struct fd_transfer *trans, const struct pipe_box *box)
-{
-	enum pipe_format format = trans->base.resource->format;
-
-	switch (format) {
-	case PIPE_FORMAT_Z32_FLOAT_S8X24_UINT:
-	case PIPE_FORMAT_X32_S8X24_UINT:
-		fd_resource_flush_z32s8(trans, box);
-		break;
-	case PIPE_FORMAT_RGTC1_UNORM:
-	case PIPE_FORMAT_RGTC1_SNORM:
-	case PIPE_FORMAT_RGTC2_UNORM:
-	case PIPE_FORMAT_RGTC2_SNORM:
-	case PIPE_FORMAT_LATC1_UNORM:
-	case PIPE_FORMAT_LATC1_SNORM:
-	case PIPE_FORMAT_LATC2_UNORM:
-	case PIPE_FORMAT_LATC2_SNORM:
-		fd_resource_flush_rgtc(trans, box);
-		break;
-	default:
-		assert(!"Unexpected staging transfer type");
-		break;
-	}
-}
-
 static void fd_resource_transfer_flush_region(struct pipe_context *pctx,
 		struct pipe_transfer *ptrans,
 		const struct pipe_box *box)
 {
 	struct fd_resource *rsc = fd_resource(ptrans->resource);
-	struct fd_transfer *trans = fd_transfer(ptrans);
 
 	if (ptrans->resource->target == PIPE_BUFFER)
 		util_range_add(&rsc->valid_buffer_range,
 					   ptrans->box.x + box->x,
 					   ptrans->box.x + box->x + box->width);
+}
 
-	if (trans->staging)
-		fd_resource_flush(trans, box);
+static void
+flush_resource(struct fd_context *ctx, struct fd_resource *rsc, unsigned usage)
+{
+	struct fd_batch *write_batch = NULL;
+
+	fd_batch_reference(&write_batch, rsc->write_batch);
+
+	if (usage & PIPE_TRANSFER_WRITE) {
+		struct fd_batch *batch, *batches[32] = {0};
+		uint32_t batch_mask;
+
+		/* This is a bit awkward, probably a fd_batch_flush_locked()
+		 * would make things simpler.. but we need to hold the lock
+		 * to iterate the batches which reference this resource.  So
+		 * we must first grab references under a lock, then flush.
+		 */
+		mtx_lock(&ctx->screen->lock);
+		batch_mask = rsc->batch_mask;
+		foreach_batch(batch, &ctx->screen->batch_cache, batch_mask)
+			fd_batch_reference(&batches[batch->idx], batch);
+		mtx_unlock(&ctx->screen->lock);
+
+		foreach_batch(batch, &ctx->screen->batch_cache, batch_mask)
+			fd_batch_flush(batch, false, false);
+
+		foreach_batch(batch, &ctx->screen->batch_cache, batch_mask) {
+			fd_batch_sync(batch);
+			fd_batch_reference(&batches[batch->idx], NULL);
+		}
+		assert(rsc->batch_mask == 0);
+	} else if (write_batch) {
+		fd_batch_flush(write_batch, true, false);
+	}
+
+	fd_batch_reference(&write_batch, NULL);
+
+	assert(!rsc->write_batch);
+}
+
+static void
+fd_flush_resource(struct pipe_context *pctx, struct pipe_resource *prsc)
+{
+	flush_resource(fd_context(pctx), fd_resource(prsc), PIPE_TRANSFER_READ);
 }
 
 static void
@@ -416,16 +416,14 @@ fd_resource_transfer_unmap(struct pipe_context *pctx,
 	struct fd_resource *rsc = fd_resource(ptrans->resource);
 	struct fd_transfer *trans = fd_transfer(ptrans);
 
-	if (trans->staging && !(ptrans->usage & PIPE_TRANSFER_FLUSH_EXPLICIT)) {
-		struct pipe_box box;
-		u_box_2d(0, 0, ptrans->box.width, ptrans->box.height, &box);
-		fd_resource_flush(trans, &box);
+	if (trans->staging_prsc) {
+		if (ptrans->usage & PIPE_TRANSFER_WRITE)
+			fd_blit_from_staging(ctx, trans);
+		pipe_resource_reference(&trans->staging_prsc, NULL);
 	}
 
 	if (!(ptrans->usage & PIPE_TRANSFER_UNSYNCHRONIZED)) {
 		fd_bo_cpu_fini(rsc->bo);
-		if (rsc->stencil)
-			fd_bo_cpu_fini(rsc->stencil->bo);
 	}
 
 	util_range_add(&rsc->valid_buffer_range,
@@ -434,8 +432,6 @@ fd_resource_transfer_unmap(struct pipe_context *pctx,
 
 	pipe_resource_reference(&ptrans->resource, NULL);
 	slab_free(&ctx->transfer_pool, ptrans);
-
-	free(trans->staging);
 }
 
 static void *
@@ -474,6 +470,44 @@ fd_resource_transfer_map(struct pipe_context *pctx,
 	ptrans->stride = util_format_get_nblocksx(format, slice->pitch) * rsc->cpp;
 	ptrans->layer_stride = rsc->layer_first ? rsc->layer_size : slice->size0;
 
+	/* we always need a staging texture for tiled buffers:
+	 *
+	 * TODO we might sometimes want to *also* shadow the resource to avoid
+	 * splitting a batch.. for ex, mid-frame texture uploads to a tiled
+	 * texture.
+	 */
+	if (rsc->tile_mode) {
+		struct fd_resource *staging_rsc;
+
+		staging_rsc = fd_alloc_staging(ctx, rsc, level, box);
+		if (staging_rsc) {
+			// TODO for PIPE_TRANSFER_READ, need to do untiling blit..
+			trans->staging_prsc = &staging_rsc->base;
+			trans->base.stride = util_format_get_nblocksx(format,
+				staging_rsc->slices[0].pitch) * staging_rsc->cpp;
+			trans->base.layer_stride = staging_rsc->layer_first ?
+				staging_rsc->layer_size : staging_rsc->slices[0].size0;
+			trans->staging_box = *box;
+			trans->staging_box.x = 0;
+			trans->staging_box.y = 0;
+			trans->staging_box.z = 0;
+
+			if (usage & PIPE_TRANSFER_READ) {
+				fd_blit_to_staging(ctx, trans);
+				fd_bo_cpu_prep(rsc->bo, ctx->pipe, DRM_FREEDRENO_PREP_READ);
+			}
+
+			buf = fd_bo_map(staging_rsc->bo);
+			offset = 0;
+
+			*pptrans = ptrans;
+
+			ctx->stats.staging_uploads++;
+
+			return buf;
+		}
+	}
+
 	if (ctx->in_shadow && !(usage & PIPE_TRANSFER_READ))
 		usage |= PIPE_TRANSFER_UNSYNCHRONIZED;
 
@@ -485,9 +519,7 @@ fd_resource_transfer_map(struct pipe_context *pctx,
 
 	if (usage & PIPE_TRANSFER_DISCARD_WHOLE_RESOURCE) {
 		realloc_bo(rsc, fd_bo_size(rsc->bo));
-		if (rsc->stencil)
-			realloc_bo(rsc->stencil, fd_bo_size(rsc->stencil->bo));
-		fd_invalidate_resource(ctx, prsc);
+		rebind_resource(ctx, prsc);
 	} else if ((usage & PIPE_TRANSFER_WRITE) &&
 			   prsc->target == PIPE_BUFFER &&
 			   !util_ranges_intersect(&rsc->valid_buffer_range,
@@ -512,7 +544,7 @@ fd_resource_transfer_map(struct pipe_context *pctx,
 		 */
 		bool needs_flush = pending(rsc, !!(usage & PIPE_TRANSFER_WRITE));
 		bool busy = needs_flush || (0 != fd_bo_cpu_prep(rsc->bo,
-				ctx->screen->pipe, op | DRM_FREEDRENO_PREP_NOSYNC));
+				ctx->pipe, op | DRM_FREEDRENO_PREP_NOSYNC));
 
 		/* if we need to flush/stall, see if we can make a shadow buffer
 		 * to avoid this:
@@ -521,29 +553,56 @@ fd_resource_transfer_map(struct pipe_context *pctx,
 		 * ie. we only *don't* want to go down this path if the blit
 		 * will trigger a flush!
 		 */
-		if (ctx->screen->reorder && busy && !(usage & PIPE_TRANSFER_READ)) {
-			if (fd_try_shadow_resource(ctx, rsc, level, usage, box)) {
+		if (ctx->screen->reorder && busy && !(usage & PIPE_TRANSFER_READ) &&
+				(usage & PIPE_TRANSFER_DISCARD_RANGE)) {
+			/* try shadowing only if it avoids a flush, otherwise staging would
+			 * be better:
+			 */
+			if (needs_flush && fd_try_shadow_resource(ctx, rsc, level, box)) {
 				needs_flush = busy = false;
-				fd_invalidate_resource(ctx, prsc);
+				rebind_resource(ctx, prsc);
+				ctx->stats.shadow_uploads++;
+			} else {
+				struct fd_resource *staging_rsc;
+
+				if (needs_flush) {
+					flush_resource(ctx, rsc, usage);
+					needs_flush = false;
+				}
+
+				/* in this case, we don't need to shadow the whole resource,
+				 * since any draw that references the previous contents has
+				 * already had rendering flushed for all tiles.  So we can
+				 * use a staging buffer to do the upload.
+				 */
+				staging_rsc = fd_alloc_staging(ctx, rsc, level, box);
+				if (staging_rsc) {
+					trans->staging_prsc = &staging_rsc->base;
+					trans->base.stride = util_format_get_nblocksx(format,
+						staging_rsc->slices[0].pitch) * staging_rsc->cpp;
+					trans->base.layer_stride = staging_rsc->layer_first ?
+						staging_rsc->layer_size : staging_rsc->slices[0].size0;
+					trans->staging_box = *box;
+					trans->staging_box.x = 0;
+					trans->staging_box.y = 0;
+					trans->staging_box.z = 0;
+					buf = fd_bo_map(staging_rsc->bo);
+					offset = 0;
+
+					*pptrans = ptrans;
+
+					fd_batch_reference(&write_batch, NULL);
+
+					ctx->stats.staging_uploads++;
+
+					return buf;
+				}
 			}
 		}
 
 		if (needs_flush) {
-			if (usage & PIPE_TRANSFER_WRITE) {
-				struct fd_batch *batch, *last_batch = NULL;
-				foreach_batch(batch, &ctx->screen->batch_cache, rsc->batch_mask) {
-					fd_batch_reference(&last_batch, batch);
-					fd_batch_flush(batch, false);
-				}
-				if (last_batch) {
-					fd_batch_sync(last_batch);
-					fd_batch_reference(&last_batch, NULL);
-				}
-				assert(rsc->batch_mask == 0);
-			} else {
-				fd_batch_flush(write_batch, true);
-			}
-			assert(!rsc->write_batch);
+			flush_resource(ctx, rsc, usage);
+			needs_flush = false;
 		}
 
 		fd_batch_reference(&write_batch, NULL);
@@ -553,111 +612,20 @@ fd_resource_transfer_map(struct pipe_context *pctx,
 		 * completed.
 		 */
 		if (busy) {
-			ret = fd_bo_cpu_prep(rsc->bo, ctx->screen->pipe, op);
+			ret = fd_bo_cpu_prep(rsc->bo, ctx->pipe, op);
 			if (ret)
 				goto fail;
 		}
 	}
 
 	buf = fd_bo_map(rsc->bo);
-	if (!buf)
-		goto fail;
-
 	offset = slice->offset +
 		box->y / util_format_get_blockheight(format) * ptrans->stride +
 		box->x / util_format_get_blockwidth(format) * rsc->cpp +
 		fd_resource_layer_offset(rsc, slice, box->z);
 
-	if (prsc->format == PIPE_FORMAT_Z32_FLOAT_S8X24_UINT ||
-		prsc->format == PIPE_FORMAT_X32_S8X24_UINT) {
-		assert(trans->base.box.depth == 1);
-
-		trans->base.stride = trans->base.box.width * rsc->cpp * 2;
-		trans->staging = malloc(trans->base.stride * trans->base.box.height);
-		if (!trans->staging)
-			goto fail;
-
-		/* if we're not discarding the whole range (or resource), we must copy
-		 * the real data in.
-		 */
-		if (!(usage & (PIPE_TRANSFER_DISCARD_WHOLE_RESOURCE |
-					   PIPE_TRANSFER_DISCARD_RANGE))) {
-			struct fd_resource_slice *sslice =
-				fd_resource_slice(rsc->stencil, level);
-			void *sbuf = fd_bo_map(rsc->stencil->bo);
-			if (!sbuf)
-				goto fail;
-
-			float *depth = (float *)(buf + slice->offset +
-				fd_resource_layer_offset(rsc, slice, box->z) +
-				box->y * slice->pitch * 4 + box->x * 4);
-			uint8_t *stencil = sbuf + sslice->offset +
-				fd_resource_layer_offset(rsc->stencil, sslice, box->z) +
-				box->y * sslice->pitch + box->x;
-
-			if (format != PIPE_FORMAT_X32_S8X24_UINT)
-				util_format_z32_float_s8x24_uint_pack_z_float(
-						trans->staging, trans->base.stride,
-						depth, slice->pitch * 4,
-						box->width, box->height);
-
-			util_format_z32_float_s8x24_uint_pack_s_8uint(
-					trans->staging, trans->base.stride,
-					stencil, sslice->pitch,
-					box->width, box->height);
-		}
-
-		buf = trans->staging;
-		offset = 0;
-	} else if (rsc->internal_format != format &&
-			   util_format_description(format)->layout == UTIL_FORMAT_LAYOUT_RGTC) {
-		assert(trans->base.box.depth == 1);
-
-		trans->base.stride = util_format_get_stride(
-				format, trans->base.box.width);
-		trans->staging = malloc(
-				util_format_get_2d_size(format, trans->base.stride,
-										trans->base.box.height));
-		if (!trans->staging)
-			goto fail;
-
-		/* if we're not discarding the whole range (or resource), we must copy
-		 * the real data in.
-		 */
-		if (!(usage & (PIPE_TRANSFER_DISCARD_WHOLE_RESOURCE |
-					   PIPE_TRANSFER_DISCARD_RANGE))) {
-			uint8_t *rgba8 = (uint8_t *)buf + slice->offset +
-				fd_resource_layer_offset(rsc, slice, box->z) +
-				box->y * slice->pitch * rsc->cpp + box->x * rsc->cpp;
-
-			switch (format) {
-			case PIPE_FORMAT_RGTC1_UNORM:
-			case PIPE_FORMAT_RGTC1_SNORM:
-			case PIPE_FORMAT_LATC1_UNORM:
-			case PIPE_FORMAT_LATC1_SNORM:
-				util_format_rgtc1_unorm_pack_rgba_8unorm(
-					trans->staging, trans->base.stride,
-					rgba8, slice->pitch * rsc->cpp,
-					box->width, box->height);
-				break;
-			case PIPE_FORMAT_RGTC2_UNORM:
-			case PIPE_FORMAT_RGTC2_SNORM:
-			case PIPE_FORMAT_LATC2_UNORM:
-			case PIPE_FORMAT_LATC2_SNORM:
-				util_format_rgtc2_unorm_pack_rgba_8unorm(
-					trans->staging, trans->base.stride,
-					rgba8, slice->pitch * rsc->cpp,
-					box->width, box->height);
-				break;
-			default:
-				assert(!"Unexpected format");
-				break;
-			}
-		}
-
-		buf = trans->staging;
-		offset = 0;
-	}
+	if (usage & PIPE_TRANSFER_WRITE)
+		rsc->valid = true;
 
 	*pptrans = ptrans;
 
@@ -682,8 +650,10 @@ fd_resource_destroy(struct pipe_screen *pscreen,
 
 static boolean
 fd_resource_get_handle(struct pipe_screen *pscreen,
+		struct pipe_context *pctx,
 		struct pipe_resource *prsc,
-		struct winsys_handle *handle)
+		struct winsys_handle *handle,
+		unsigned usage)
 {
 	struct fd_resource *rsc = fd_resource(prsc);
 
@@ -691,19 +661,10 @@ fd_resource_get_handle(struct pipe_screen *pscreen,
 			rsc->slices[0].pitch * rsc->cpp, handle);
 }
 
-
-static const struct u_resource_vtbl fd_resource_vtbl = {
-		.resource_get_handle      = fd_resource_get_handle,
-		.resource_destroy         = fd_resource_destroy,
-		.transfer_map             = fd_resource_transfer_map,
-		.transfer_flush_region    = fd_resource_transfer_flush_region,
-		.transfer_unmap           = fd_resource_transfer_unmap,
-};
-
 static uint32_t
 setup_slices(struct fd_resource *rsc, uint32_t alignment, enum pipe_format format)
 {
-	struct pipe_resource *prsc = &rsc->base.b;
+	struct pipe_resource *prsc = &rsc->base;
 	struct fd_screen *screen = fd_screen(prsc->screen);
 	enum util_format_layout layout = util_format_description(format)->layout;
 	uint32_t pitchalign = screen->gmem_alignw;
@@ -715,9 +676,6 @@ setup_slices(struct fd_resource *rsc, uint32_t alignment, enum pipe_format forma
 	 * layer (since in fact the layer contains the slices)
 	 */
 	uint32_t layers_in_level = rsc->layer_first ? 1 : prsc->array_size;
-
-	if (is_a5xx(screen) && (rsc->base.b.target >= PIPE_TEXTURE_2D))
-		height = align(height, screen->gmem_alignh);
 
 	for (level = 0; level <= prsc->last_level; level++) {
 		struct fd_resource_slice *slice = fd_resource_slice(rsc, level);
@@ -756,12 +714,12 @@ setup_slices(struct fd_resource *rsc, uint32_t alignment, enum pipe_format forma
 }
 
 static uint32_t
-slice_alignment(struct pipe_screen *pscreen, const struct pipe_resource *tmpl)
+slice_alignment(enum pipe_texture_target target)
 {
 	/* on a3xx, 2d array and 3d textures seem to want their
 	 * layers aligned to page boundaries:
 	 */
-	switch (tmpl->target) {
+	switch (target) {
 	case PIPE_TEXTURE_3D:
 	case PIPE_TEXTURE_1D_ARRAY:
 	case PIPE_TEXTURE_2D_ARRAY:
@@ -769,6 +727,36 @@ slice_alignment(struct pipe_screen *pscreen, const struct pipe_resource *tmpl)
 	default:
 		return 1;
 	}
+}
+
+/* cross generation texture layout to plug in to screen->setup_slices()..
+ * replace with generation specific one as-needed.
+ *
+ * TODO for a4xx probably can extract out the a4xx specific logic int
+ * a small fd4_setup_slices() wrapper that sets up layer_first, and then
+ * calls this.
+ */
+uint32_t
+fd_setup_slices(struct fd_resource *rsc)
+{
+	uint32_t alignment;
+
+	alignment = slice_alignment(rsc->base.target);
+
+	struct fd_screen *screen = fd_screen(rsc->base.screen);
+	if (is_a4xx(screen)) {
+		switch (rsc->base.target) {
+		case PIPE_TEXTURE_3D:
+			rsc->layer_first = false;
+			break;
+		default:
+			rsc->layer_first = true;
+			alignment = 1;
+			break;
+		}
+	}
+
+	return setup_slices(rsc, alignment, rsc->base.format);
 }
 
 /* special case to resize query buf after allocated.. */
@@ -782,7 +770,7 @@ fd_resource_resize(struct pipe_resource *prsc, uint32_t sz)
 	debug_assert(prsc->bind == PIPE_BIND_QUERY_BUFFER);
 
 	prsc->width0 = sz;
-	realloc_bo(rsc, setup_slices(rsc, 1, prsc->format));
+	realloc_bo(rsc, fd_screen(prsc->screen)->setup_slices(rsc));
 }
 
 // TODO common helper?
@@ -813,9 +801,9 @@ fd_resource_create(struct pipe_screen *pscreen,
 {
 	struct fd_screen *screen = fd_screen(pscreen);
 	struct fd_resource *rsc = CALLOC_STRUCT(fd_resource);
-	struct pipe_resource *prsc = &rsc->base.b;
+	struct pipe_resource *prsc = &rsc->base;
 	enum pipe_format format = tmpl->format;
-	uint32_t size, alignment;
+	uint32_t size;
 
 	DBG("%p: target=%d, format=%s, %ux%ux%u, array_size=%u, last_level=%u, "
 			"nr_samples=%u, usage=%u, bind=%x, flags=%x", prsc,
@@ -829,19 +817,24 @@ fd_resource_create(struct pipe_screen *pscreen,
 
 	*prsc = *tmpl;
 
+#define LINEAR \
+	(PIPE_BIND_SCANOUT | \
+	 PIPE_BIND_LINEAR  | \
+	 PIPE_BIND_DISPLAY_TARGET)
+
+	if (screen->tile_mode &&
+			(tmpl->target != PIPE_BUFFER) &&
+			(tmpl->bind & PIPE_BIND_SAMPLER_VIEW) &&
+			!(tmpl->bind & LINEAR)) {
+		rsc->tile_mode = screen->tile_mode(tmpl);
+	}
+
 	pipe_reference_init(&prsc->reference, 1);
 
 	prsc->screen = pscreen;
 
 	util_range_init(&rsc->valid_buffer_range);
 
-	rsc->base.vtbl = &fd_resource_vtbl;
-
-	if (format == PIPE_FORMAT_Z32_FLOAT_S8X24_UINT)
-		format = PIPE_FORMAT_Z32_FLOAT;
-	else if (screen->gpu_id < 400 &&
-			 util_format_description(format)->layout == UTIL_FORMAT_LAYOUT_RGTC)
-		format = PIPE_FORMAT_R8G8B8A8_UNORM;
 	rsc->internal_format = format;
 	rsc->cpp = util_format_get_blocksize(format);
 
@@ -863,20 +856,7 @@ fd_resource_create(struct pipe_screen *pscreen,
 		rsc->lrz = fd_bo_new(screen->dev, size, flags);
 	}
 
-	alignment = slice_alignment(pscreen, tmpl);
-	if (is_a4xx(screen) || is_a5xx(screen)) {
-		switch (tmpl->target) {
-		case PIPE_TEXTURE_3D:
-			rsc->layer_first = false;
-			break;
-		default:
-			rsc->layer_first = true;
-			alignment = 1;
-			break;
-		}
-	}
-
-	size = setup_slices(rsc, alignment, format);
+	size = screen->setup_slices(rsc);
 
 	/* special case for hw-query buffer, which we need to allocate before we
 	 * know the size:
@@ -896,19 +876,6 @@ fd_resource_create(struct pipe_screen *pscreen,
 	if (!rsc->bo)
 		goto fail;
 
-	/* There is no native Z32F_S8 sampling or rendering format, so this must
-	 * be emulated via two separate textures. The depth texture still keeps
-	 * its Z32F_S8 format though, and we also keep a reference to a separate
-	 * S8 texture.
-	 */
-	if (tmpl->format == PIPE_FORMAT_Z32_FLOAT_S8X24_UINT) {
-		struct pipe_resource stencil = *tmpl;
-		stencil.format = PIPE_FORMAT_S8_UINT;
-		rsc->stencil = fd_resource(fd_resource_create(pscreen, &stencil));
-		if (!rsc->stencil)
-			goto fail;
-	}
-
 	return prsc;
 fail:
 	fd_resource_destroy(pscreen, prsc);
@@ -927,7 +894,7 @@ fd_resource_from_handle(struct pipe_screen *pscreen,
 {
 	struct fd_resource *rsc = CALLOC_STRUCT(fd_resource);
 	struct fd_resource_slice *slice = &rsc->slices[0];
-	struct pipe_resource *prsc = &rsc->base.b;
+	struct pipe_resource *prsc = &rsc->base;
 	uint32_t pitchalign = fd_screen(pscreen)->gmem_alignw;
 
 	DBG("target=%d, format=%s, %ux%ux%u, array_size=%u, last_level=%u, "
@@ -952,7 +919,7 @@ fd_resource_from_handle(struct pipe_screen *pscreen,
 	if (!rsc->bo)
 		goto fail;
 
-	rsc->base.vtbl = &fd_resource_vtbl;
+	rsc->internal_format = tmpl->format;
 	rsc->cpp = util_format_get_blocksize(tmpl->format);
 	slice->pitch = handle->stride / rsc->cpp;
 	slice->offset = handle->offset;
@@ -1098,7 +1065,7 @@ fd_blit(struct pipe_context *pctx, const struct pipe_blit_info *blit_info)
 	}
 
 	fd_blitter_pipe_begin(ctx, info.render_condition_enable, discard, FD_STAGE_BLIT);
-	util_blitter_blit(ctx->blitter, &info);
+	ctx->blit(ctx, &info);
 	fd_blitter_pipe_end(ctx);
 }
 
@@ -1148,31 +1115,90 @@ fd_blitter_pipe_end(struct fd_context *ctx)
 }
 
 static void
-fd_flush_resource(struct pipe_context *pctx, struct pipe_resource *prsc)
+fd_invalidate_resource(struct pipe_context *pctx, struct pipe_resource *prsc)
 {
 	struct fd_resource *rsc = fd_resource(prsc);
 
-	if (rsc->write_batch)
-		fd_batch_flush(rsc->write_batch, true);
+	/*
+	 * TODO I guess we could track that the resource is invalidated and
+	 * use that as a hint to realloc rather than stall in _transfer_map(),
+	 * even in the non-DISCARD_WHOLE_RESOURCE case?
+	 */
 
-	assert(!rsc->write_batch);
+	if (rsc->write_batch) {
+		struct fd_batch *batch = rsc->write_batch;
+		struct pipe_framebuffer_state *pfb = &batch->framebuffer;
+
+		if (pfb->zsbuf && pfb->zsbuf->texture == prsc)
+			batch->resolve &= ~(FD_BUFFER_DEPTH | FD_BUFFER_STENCIL);
+
+		for (unsigned i = 0; i < pfb->nr_cbufs; i++) {
+			if (pfb->cbufs[i] && pfb->cbufs[i]->texture == prsc) {
+				batch->resolve &= ~(PIPE_CLEAR_COLOR0 << i);
+			}
+		}
+	}
+
+	rsc->valid = false;
 }
+
+static enum pipe_format
+fd_resource_get_internal_format(struct pipe_resource *prsc)
+{
+	return fd_resource(prsc)->internal_format;
+}
+
+static void
+fd_resource_set_stencil(struct pipe_resource *prsc,
+		struct pipe_resource *stencil)
+{
+	fd_resource(prsc)->stencil = fd_resource(stencil);
+}
+
+static struct pipe_resource *
+fd_resource_get_stencil(struct pipe_resource *prsc)
+{
+	struct fd_resource *rsc = fd_resource(prsc);
+	if (rsc->stencil)
+		return &rsc->stencil->base;
+	return NULL;
+}
+
+static const struct u_transfer_vtbl transfer_vtbl = {
+		.resource_create          = fd_resource_create,
+		.resource_destroy         = fd_resource_destroy,
+		.transfer_map             = fd_resource_transfer_map,
+		.transfer_flush_region    = fd_resource_transfer_flush_region,
+		.transfer_unmap           = fd_resource_transfer_unmap,
+		.get_internal_format      = fd_resource_get_internal_format,
+		.set_stencil              = fd_resource_set_stencil,
+		.get_stencil              = fd_resource_get_stencil,
+};
 
 void
 fd_resource_screen_init(struct pipe_screen *pscreen)
 {
-	pscreen->resource_create = fd_resource_create;
+	struct fd_screen *screen = fd_screen(pscreen);
+	bool fake_rgtc = screen->gpu_id < 400;
+
+	pscreen->resource_create = u_transfer_helper_resource_create;
 	pscreen->resource_from_handle = fd_resource_from_handle;
-	pscreen->resource_get_handle = u_resource_get_handle_vtbl;
-	pscreen->resource_destroy = u_resource_destroy_vtbl;
+	pscreen->resource_get_handle = fd_resource_get_handle;
+	pscreen->resource_destroy = u_transfer_helper_resource_destroy;
+
+	pscreen->transfer_helper = u_transfer_helper_create(&transfer_vtbl,
+			true, fake_rgtc, true);
+
+	if (!screen->setup_slices)
+		screen->setup_slices = fd_setup_slices;
 }
 
 void
 fd_resource_context_init(struct pipe_context *pctx)
 {
-	pctx->transfer_map = u_transfer_map_vtbl;
-	pctx->transfer_flush_region = u_transfer_flush_region_vtbl;
-	pctx->transfer_unmap = u_transfer_unmap_vtbl;
+	pctx->transfer_map = u_transfer_helper_transfer_map;
+	pctx->transfer_flush_region = u_transfer_helper_transfer_flush_region;
+	pctx->transfer_unmap = u_transfer_helper_transfer_unmap;
 	pctx->buffer_subdata = u_default_buffer_subdata;
 	pctx->texture_subdata = u_default_texture_subdata;
 	pctx->create_surface = fd_create_surface;
@@ -1180,4 +1206,5 @@ fd_resource_context_init(struct pipe_context *pctx)
 	pctx->resource_copy_region = fd_resource_copy_region;
 	pctx->blit = fd_blit;
 	pctx->flush_resource = fd_flush_resource;
+	pctx->invalidate_resource = fd_invalidate_resource;
 }

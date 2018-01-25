@@ -25,10 +25,6 @@
  * of the Software.
  */
 
-/* Contact:
- *     Marek Olšák <maraeo@gmail.com>
- */
-
 #include "amdgpu_winsys.h"
 #include "util/u_format.h"
 

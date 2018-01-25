@@ -33,7 +33,6 @@
 struct attr_wa_state {
    nir_builder builder;
    bool impl_progress;
-   bool use_legacy_snorm_formula;
    const uint8_t *wa_flags;
 };
 
@@ -88,12 +87,15 @@ apply_attr_wa_block(nir_block *block, struct attr_wa_state *state)
          /* ES 3.0 has different rules for converting signed normalized
           * fixed-point numbers than desktop GL.
           */
-         if ((wa_flags & BRW_ATTRIB_WA_SIGN) &&
-             !state->use_legacy_snorm_formula) {
+         if (wa_flags & BRW_ATTRIB_WA_SIGN) {
             /* According to equation 2.2 of the ES 3.0 specification,
              * signed normalization conversion is done by:
              *
              * f = c / (2^(b-1)-1)
+             *
+             * OpenGL 4.2+ uses this equation as well.  Since most contexts
+             * promote to the new higher version, and this is what Haswell+
+             * hardware does anyway, we just always use this formula.
              */
             nir_ssa_def *es3_normalize_factor =
                nir_imm_vec4(b, 1.0f / ((1 << 9) - 1), 1.0f / ((1 << 9) - 1),
@@ -102,31 +104,16 @@ apply_attr_wa_block(nir_block *block, struct attr_wa_state *state)
                            nir_fmul(b, nir_i2f32(b, val), es3_normalize_factor),
                            nir_imm_float(b, -1.0f));
          } else {
-            /* The following equations are from the OpenGL 3.2 specification:
+            /* The following equation is from the OpenGL 3.2 specification:
              *
              * 2.1 unsigned normalization
              * f = c/(2^n-1)
-             *
-             * 2.2 signed normalization
-             * f = (2c+1)/(2^n-1)
-             *
-             * Both of these share a common divisor, which we handle by
-             * multiplying by 1 / (2^b - 1) for b = <10, 10, 10, 2>.
              */
             nir_ssa_def *normalize_factor =
                nir_imm_vec4(b, 1.0f / ((1 << 10) - 1), 1.0f / ((1 << 10) - 1),
                                1.0f / ((1 << 10) - 1), 1.0f / ((1 << 2)  - 1));
 
-            if (wa_flags & BRW_ATTRIB_WA_SIGN) {
-               /* For signed normalization, the numerator is 2c+1. */
-               nir_ssa_def *two = nir_imm_float(b, 2.0f);
-               nir_ssa_def *one = nir_imm_float(b, 1.0f);
-               val = nir_fadd(b, nir_fmul(b, nir_i2f32(b, val), two), one);
-            } else {
-               /* For unsigned normalization, the numerator is just c. */
-               val = nir_u2f32(b, val);
-            }
-            val = nir_fmul(b, val, normalize_factor);
+            val = nir_fmul(b, nir_u2f32(b, val), normalize_factor);
          }
       }
 
@@ -145,12 +132,10 @@ apply_attr_wa_block(nir_block *block, struct attr_wa_state *state)
 
 bool
 brw_nir_apply_attribute_workarounds(nir_shader *shader,
-                                    bool use_legacy_snorm_formula,
                                     const uint8_t *attrib_wa_flags)
 {
    bool progress = false;
    struct attr_wa_state state = {
-      .use_legacy_snorm_formula = use_legacy_snorm_formula,
       .wa_flags = attrib_wa_flags,
    };
 

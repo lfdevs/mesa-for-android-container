@@ -178,9 +178,11 @@ intelInitExtensions(struct gl_context *ctx)
       ctx->Extensions.ARB_pipeline_statistics_query = true;
       ctx->Extensions.ARB_sample_shading = true;
       ctx->Extensions.ARB_shading_language_420pack = true;
-      ctx->Extensions.ARB_texture_buffer_object = true;
-      ctx->Extensions.ARB_texture_buffer_object_rgb32 = true;
-      ctx->Extensions.ARB_texture_buffer_range = true;
+      if (ctx->API != API_OPENGL_COMPAT) {
+         ctx->Extensions.ARB_texture_buffer_object = true;
+         ctx->Extensions.ARB_texture_buffer_object_rgb32 = true;
+         ctx->Extensions.ARB_texture_buffer_range = true;
+      }
       ctx->Extensions.ARB_texture_cube_map_array = true;
       ctx->Extensions.ARB_texture_gather = true;
       ctx->Extensions.ARB_texture_multisample = true;
@@ -195,6 +197,8 @@ intelInitExtensions(struct gl_context *ctx)
       ctx->Extensions.OES_sample_variables = true;
 
       ctx->Extensions.ARB_timer_query = brw->screen->hw_has_timestamp;
+      ctx->Extensions.EXT_disjoint_timer_query =
+         ctx->Extensions.ARB_timer_query;
 
       /* Only enable this in core profile because other parts of Mesa behave
        * slightly differently when the extension is enabled.

@@ -42,7 +42,6 @@
 #include "pipe/p_defines.h"
 #include "util/u_memory.h"
 #include "util/list.h"
-#include "util/u_time.h"
 
 #include "pb_buffer.h"
 #include "pb_bufmgr.h"

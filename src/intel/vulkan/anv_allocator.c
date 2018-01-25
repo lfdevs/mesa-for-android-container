@@ -21,20 +21,17 @@
  * IN THE SOFTWARE.
  */
 
-#include <stdint.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <limits.h>
 #include <assert.h>
-#include <linux/futex.h>
 #include <linux/memfd.h>
-#include <sys/time.h>
 #include <sys/mman.h>
-#include <sys/syscall.h>
 
 #include "anv_private.h"
 
 #include "util/hash_table.h"
+#include "util/simple_mtx.h"
 
 #ifdef HAVE_VALGRIND
 #define VG_NOACCESS_READ(__ptr) ({                       \
@@ -111,25 +108,6 @@ struct anv_mmap_cleanup {
 };
 
 #define ANV_MMAP_CLEANUP_INIT ((struct anv_mmap_cleanup){0})
-
-static inline long
-sys_futex(void *addr1, int op, int val1,
-          struct timespec *timeout, void *addr2, int val3)
-{
-   return syscall(SYS_futex, addr1, op, val1, timeout, addr2, val3);
-}
-
-static inline int
-futex_wake(uint32_t *addr, int count)
-{
-   return sys_futex(addr, FUTEX_WAKE, count, NULL, NULL, 0);
-}
-
-static inline int
-futex_wait(uint32_t *addr, int32_t value)
-{
-   return sys_futex(addr, FUTEX_WAIT, value, NULL, NULL, 0);
-}
 
 #ifndef HAVE_MEMFD_CREATE
 static inline int
@@ -265,11 +243,13 @@ anv_block_pool_expand_range(struct anv_block_pool *pool,
 VkResult
 anv_block_pool_init(struct anv_block_pool *pool,
                     struct anv_device *device,
-                    uint32_t initial_size)
+                    uint32_t initial_size,
+                    uint64_t bo_flags)
 {
    VkResult result;
 
    pool->device = device;
+   pool->bo_flags = bo_flags;
    anv_bo_init(&pool->bo, 0, 0);
 
    pool->fd = memfd_create("block pool", MFD_CLOEXEC);
@@ -422,6 +402,7 @@ anv_block_pool_expand_range(struct anv_block_pool *pool,
     * hard work for us.
     */
    anv_bo_init(&pool->bo, gem_handle, size);
+   pool->bo.flags = pool->bo_flags;
    pool->bo.map = map;
 
    return VK_SUCCESS;
@@ -539,8 +520,7 @@ anv_block_pool_grow(struct anv_block_pool *pool, struct anv_block_state *state)
 
    result = anv_block_pool_expand_range(pool, center_bo_offset, size);
 
-   if (pool->device->instance->physicalDevice.has_exec_async)
-      pool->bo.flags |= EXEC_OBJECT_ASYNC;
+   pool->bo.flags = pool->bo_flags;
 
 done:
    pthread_mutex_unlock(&pool->device->mutex);
@@ -589,7 +569,7 @@ anv_block_pool_alloc_new(struct anv_block_pool *pool,
             futex_wake(&pool_state->end, INT_MAX);
          return state.next;
       } else {
-         futex_wait(&pool_state->end, state.end);
+         futex_wait(&pool_state->end, state.end, NULL);
          continue;
       }
    }
@@ -630,10 +610,12 @@ anv_block_pool_alloc_back(struct anv_block_pool *pool,
 VkResult
 anv_state_pool_init(struct anv_state_pool *pool,
                     struct anv_device *device,
-                    uint32_t block_size)
+                    uint32_t block_size,
+                    uint64_t bo_flags)
 {
    VkResult result = anv_block_pool_init(&pool->block_pool, device,
-                                         block_size * 16);
+                                         block_size * 16,
+                                         bo_flags);
    if (result != VK_SUCCESS)
       return result;
 
@@ -686,7 +668,7 @@ anv_fixed_size_state_pool_alloc_new(struct anv_fixed_size_state_pool *pool,
          futex_wake(&pool->block.end, INT_MAX);
       return offset;
    } else {
-      futex_wait(&pool->block.end, block.end);
+      futex_wait(&pool->block.end, block.end, NULL);
       goto restart;
    }
 }
@@ -975,9 +957,11 @@ struct bo_pool_bo_link {
 };
 
 void
-anv_bo_pool_init(struct anv_bo_pool *pool, struct anv_device *device)
+anv_bo_pool_init(struct anv_bo_pool *pool, struct anv_device *device,
+                 uint64_t bo_flags)
 {
    pool->device = device;
+   pool->bo_flags = bo_flags;
    memset(pool->free_list, 0, sizeof(pool->free_list));
 
    VG(VALGRIND_CREATE_MEMPOOL(pool, 0, false));
@@ -1029,11 +1013,7 @@ anv_bo_pool_alloc(struct anv_bo_pool *pool, struct anv_bo *bo, uint32_t size)
    if (result != VK_SUCCESS)
       return result;
 
-   if (pool->device->instance->physicalDevice.supports_48bit_addresses)
-      new_bo.flags |= EXEC_OBJECT_SUPPORTS_48B_ADDRESS;
-
-   if (pool->device->instance->physicalDevice.has_exec_async)
-      new_bo.flags |= EXEC_OBJECT_ASYNC;
+   new_bo.flags = pool->bo_flags;
 
    assert(new_bo.size == pow2_size);
 

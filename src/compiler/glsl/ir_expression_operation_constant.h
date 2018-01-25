@@ -1301,60 +1301,6 @@
       }
       break;
 
-   case ir_binop_greater:
-      for (unsigned c = 0; c < op[0]->type->components(); c++) {
-         switch (op[0]->type->base_type) {
-         case GLSL_TYPE_UINT:
-            data.b[c] = op[0]->value.u[c] > op[1]->value.u[c];
-            break;
-         case GLSL_TYPE_INT:
-            data.b[c] = op[0]->value.i[c] > op[1]->value.i[c];
-            break;
-         case GLSL_TYPE_FLOAT:
-            data.b[c] = op[0]->value.f[c] > op[1]->value.f[c];
-            break;
-         case GLSL_TYPE_DOUBLE:
-            data.b[c] = op[0]->value.d[c] > op[1]->value.d[c];
-            break;
-         case GLSL_TYPE_UINT64:
-            data.b[c] = op[0]->value.u64[c] > op[1]->value.u64[c];
-            break;
-         case GLSL_TYPE_INT64:
-            data.b[c] = op[0]->value.i64[c] > op[1]->value.i64[c];
-            break;
-         default:
-            unreachable("invalid type");
-         }
-      }
-      break;
-
-   case ir_binop_lequal:
-      for (unsigned c = 0; c < op[0]->type->components(); c++) {
-         switch (op[0]->type->base_type) {
-         case GLSL_TYPE_UINT:
-            data.b[c] = op[0]->value.u[c] <= op[1]->value.u[c];
-            break;
-         case GLSL_TYPE_INT:
-            data.b[c] = op[0]->value.i[c] <= op[1]->value.i[c];
-            break;
-         case GLSL_TYPE_FLOAT:
-            data.b[c] = op[0]->value.f[c] <= op[1]->value.f[c];
-            break;
-         case GLSL_TYPE_DOUBLE:
-            data.b[c] = op[0]->value.d[c] <= op[1]->value.d[c];
-            break;
-         case GLSL_TYPE_UINT64:
-            data.b[c] = op[0]->value.u64[c] <= op[1]->value.u64[c];
-            break;
-         case GLSL_TYPE_INT64:
-            data.b[c] = op[0]->value.i64[c] <= op[1]->value.i64[c];
-            break;
-         default:
-            unreachable("invalid type");
-         }
-      }
-      break;
-
    case ir_binop_gequal:
       for (unsigned c = 0; c < op[0]->type->components(); c++) {
          switch (op[0]->type->base_type) {

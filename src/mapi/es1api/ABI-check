@@ -1,4 +1,5 @@
 #!/bin/sh
+set -eu
 
 # Print defined gl.* functions not in GL ES 1.1 or in
 # (FIXME, none of these should be part of the ABI)
@@ -8,7 +9,24 @@
 # or in extensions that are part of the ES 1.1 extension pack.
 # (see http://www.khronos.org/registry/gles/specs/1.1/opengles_spec_1_1_extension_pack.pdf)
 
-FUNCS=$(nm -D --defined-only ${1-.libs/libGLESv1_CM.so.1} | grep -o 'T gl.*' | cut -c 3- | while read func; do
+case "$(uname)" in
+Darwin)
+  LIB=${1-es1api/.libs/libGLESv1_CM.dylib}
+  ;;
+CYGWIN*)
+  LIB=${1-es1api/.libs/cygGLESv1_CM-1.dll}
+  ;;
+*)
+  LIB=${1-es1api/.libs/libGLESv1_CM.so.1}
+  ;;
+esac
+
+if ! [ -f "$LIB" ]
+then
+  exit 1
+fi
+
+FUNCS=$(nm -D --defined-only $LIB | grep -o 'T gl.*' | cut -c 3- | while read func; do
 ( grep -q "^$func$" || echo $func )  <<EOF
 glActiveTexture
 glAlphaFunc

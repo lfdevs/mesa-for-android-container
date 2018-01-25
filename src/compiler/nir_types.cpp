@@ -39,6 +39,8 @@ glsl_get_array_element(const glsl_type* type)
 {
    if (type->is_matrix())
       return type->column_type();
+   else if (type->is_vector())
+      return type->get_scalar_type();
    return type->fields.array;
 }
 
@@ -272,6 +274,12 @@ glsl_double_type(void)
 }
 
 const glsl_type *
+glsl_float16_t_type(void)
+{
+   return glsl_type::float16_t_type;
+}
+
+const glsl_type *
 glsl_vec_type(unsigned n)
 {
    return glsl_type::vec(n);
@@ -287,6 +295,12 @@ const glsl_type *
 glsl_vec4_type(void)
 {
    return glsl_type::vec4_type;
+}
+
+const glsl_type *
+glsl_uvec4_type(void)
+{
+   return glsl_type::uvec4_type;
 }
 
 const glsl_type *
@@ -311,6 +325,18 @@ const glsl_type *
 glsl_uint64_t_type(void)
 {
    return glsl_type::uint64_t_type;
+}
+
+const glsl_type *
+glsl_int16_t_type(void)
+{
+   return glsl_type::int16_t_type;
+}
+
+const glsl_type *
+glsl_uint16_t_type(void)
+{
+   return glsl_type::uint16_t_type;
 }
 
 const glsl_type *

@@ -24,7 +24,10 @@
 #include "util/u_math.h"
 #include "util/ralloc.h"
 #include "vc5_context.h"
-#include "broadcom/cle/v3d_packet_v33_pack.h"
+/* The branching packets are the same across V3D versions. */
+#define V3D_VERSION 33
+#include "broadcom/common/v3d_macros.h"
+#include "broadcom/cle/v3dx_pack.h"
 
 void
 vc5_init_cl(struct vc5_job *job, struct vc5_cl *cl)

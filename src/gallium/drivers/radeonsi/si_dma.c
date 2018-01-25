@@ -19,9 +19,6 @@
  * DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
  * USE OR OTHER DEALINGS IN THE SOFTWARE.
- *
- * Authors:
- *      Jerome Glisse
  */
 
 #include "sid.h"
@@ -142,7 +139,7 @@ static void si_dma_copy_tile(struct si_context *ctx,
 	struct r600_texture *rtiled = detile ? rsrc : rdst;
 	unsigned linear_lvl = detile ? dst_level : src_level;
 	unsigned tiled_lvl = detile ? src_level : dst_level;
-	struct radeon_info *info = &ctx->screen->b.info;
+	struct radeon_info *info = &ctx->screen->info;
 	unsigned index = rtiled->surface.u.legacy.tiling_index[tiled_lvl];
 	unsigned tile_mode = info->si_tile_mode_array[index];
 	unsigned array_mode, lbpp, pitch_tile_max, slice_tile_max, size;
@@ -178,7 +175,7 @@ static void si_dma_copy_tile(struct si_context *ctx,
 	height = rtiled->surface.u.legacy.level[tiled_lvl].nblk_y;
 	base = rtiled->surface.u.legacy.level[tiled_lvl].offset;
 	addr = rlinear->surface.u.legacy.level[linear_lvl].offset;
-	addr += rlinear->surface.u.legacy.level[linear_lvl].slice_size * linear_z;
+	addr += (uint64_t)rlinear->surface.u.legacy.level[linear_lvl].slice_size_dw * 4 * linear_z;
 	addr += linear_y * pitch + linear_x * bpp;
 	bank_h = G_009910_BANK_HEIGHT(tile_mode);
 	bank_w = G_009910_BANK_WIDTH(tile_mode);
@@ -304,13 +301,13 @@ static void si_dma_copy(struct pipe_context *ctx,
 		 *   dst_pitch == src_pitch
 		 */
 		src_offset= rsrc->surface.u.legacy.level[src_level].offset;
-		src_offset += rsrc->surface.u.legacy.level[src_level].slice_size * src_box->z;
+		src_offset += (uint64_t)rsrc->surface.u.legacy.level[src_level].slice_size_dw * 4 * src_box->z;
 		src_offset += src_y * src_pitch + src_x * bpp;
 		dst_offset = rdst->surface.u.legacy.level[dst_level].offset;
-		dst_offset += rdst->surface.u.legacy.level[dst_level].slice_size * dst_z;
+		dst_offset += (uint64_t)rdst->surface.u.legacy.level[dst_level].slice_size_dw * 4 * dst_z;
 		dst_offset += dst_y * dst_pitch + dst_x * bpp;
 		si_dma_copy_buffer(sctx, dst, src, dst_offset, src_offset,
-				   rsrc->surface.u.legacy.level[src_level].slice_size);
+				   (uint64_t)rsrc->surface.u.legacy.level[src_level].slice_size_dw * 4);
 	} else {
 		si_dma_copy_tile(sctx, dst, dst_level, dst_x, dst_y, dst_z,
 				 src, src_level, src_x, src_y, src_box->z,

@@ -51,4 +51,4 @@ if HAVE_DRI2
 libdri_la_SOURCES += $(dri2_SOURCES)
 endif
 
-EXTRA_DIST = SConscript
+EXTRA_DIST = SConscript meson.build

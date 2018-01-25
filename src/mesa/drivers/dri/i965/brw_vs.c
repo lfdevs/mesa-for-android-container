@@ -159,7 +159,6 @@ brw_codegen_vs_prog(struct brw_context *brw,
 {
    const struct brw_compiler *compiler = brw->screen->compiler;
    const struct gen_device_info *devinfo = &brw->screen->devinfo;
-   GLuint program_size;
    const GLuint *program;
    struct brw_vs_prog_data prog_data;
    struct brw_stage_prog_data *stage_prog_data = &prog_data.base.base;
@@ -222,8 +221,7 @@ brw_codegen_vs_prog(struct brw_context *brw,
    char *error_str;
    program = brw_compile_vs(compiler, brw, mem_ctx, key, &prog_data,
                             vp->program.nir,
-                            !_mesa_is_gles3(&brw->ctx),
-                            st_index, &program_size, &error_str);
+                            st_index, &error_str);
    if (program == NULL) {
       if (!vp->program.is_arb_asm) {
          vp->program.sh.data->LinkStatus = linking_failure;
@@ -249,17 +247,16 @@ brw_codegen_vs_prog(struct brw_context *brw,
 
    /* Scratch space is used for register spilling */
    brw_alloc_stage_scratch(brw, &brw->vs.base,
-                           prog_data.base.base.total_scratch,
-                           devinfo->max_vs_threads);
+                           prog_data.base.base.total_scratch);
 
    /* The param and pull_param arrays will be freed by the shader cache. */
    ralloc_steal(NULL, prog_data.base.base.param);
    ralloc_steal(NULL, prog_data.base.base.pull_param);
    brw_upload_cache(&brw->cache, BRW_CACHE_VS_PROG,
-		    key, sizeof(struct brw_vs_prog_key),
-		    program, program_size,
-		    &prog_data, sizeof(prog_data),
-		    &brw->vs.base.prog_offset, &brw->vs.base.prog_data);
+                    key, sizeof(struct brw_vs_prog_key),
+                    program, prog_data.base.base.program_size,
+                    &prog_data, sizeof(prog_data),
+                    &brw->vs.base.prog_offset, &brw->vs.base.prog_data);
    ralloc_free(mem_ctx);
 
    return true;
@@ -344,13 +341,19 @@ brw_upload_vs_prog(struct brw_context *brw)
 
    brw_vs_populate_key(brw, &key);
 
-   if (!brw_search_cache(&brw->cache, BRW_CACHE_VS_PROG,
-			 &key, sizeof(key),
-			 &brw->vs.base.prog_offset, &brw->vs.base.prog_data)) {
-      bool success = brw_codegen_vs_prog(brw, vp, &key);
-      (void) success;
-      assert(success);
-   }
+   if (brw_search_cache(&brw->cache, BRW_CACHE_VS_PROG,
+                        &key, sizeof(key),
+                        &brw->vs.base.prog_offset, &brw->vs.base.prog_data))
+      return;
+
+   if (brw_disk_cache_upload_program(brw, MESA_SHADER_VERTEX))
+      return;
+
+   vp = (struct brw_program *) brw->programs[MESA_SHADER_VERTEX];
+   vp->id = key.program_string_id;
+
+   MAYBE_UNUSED bool success = brw_codegen_vs_prog(brw, vp, &key);
+   assert(success);
 }
 
 bool

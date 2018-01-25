@@ -19,9 +19,6 @@
  * DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
  * USE OR OTHER DEALINGS IN THE SOFTWARE.
- *
- * Authors:
- *      Marek Olšák <marek.olsak@amd.com>
  */
 
 /* Resource binding slots and sampler states (each described with 8 or
@@ -202,6 +199,18 @@ si_descriptors_begin_new_cs(struct si_context *sctx, struct si_descriptors *desc
 
 /* SAMPLER VIEWS */
 
+static inline enum radeon_bo_priority
+si_get_sampler_view_priority(struct r600_resource *res)
+{
+	if (res->b.b.target == PIPE_BUFFER)
+		return RADEON_PRIO_SAMPLER_BUFFER;
+
+	if (res->b.b.nr_samples > 1)
+		return RADEON_PRIO_SAMPLER_TEXTURE_MSAA;
+
+	return RADEON_PRIO_SAMPLER_TEXTURE;
+}
+
 static unsigned
 si_sampler_and_image_descriptors_idx(unsigned shader)
 {
@@ -240,12 +249,12 @@ static void si_sampler_view_add_buffer(struct si_context *sctx,
 	if (resource->target != PIPE_BUFFER) {
 		struct r600_texture *tex = (struct r600_texture*)resource;
 
-		if (tex->is_depth && !r600_can_sample_zs(tex, is_stencil_sampler))
+		if (tex->is_depth && !si_can_sample_zs(tex, is_stencil_sampler))
 			resource = &tex->flushed_depth_texture->resource.b.b;
 	}
 
 	rres = (struct r600_resource*)resource;
-	priority = r600_get_sampler_view_priority(rres);
+	priority = si_get_sampler_view_priority(rres);
 
 	radeon_add_to_buffer_list_check_mem(&sctx->b, &sctx->b.gfx,
 					    rres, usage, priority,
@@ -309,14 +318,14 @@ void si_set_mutable_tex_desc_fields(struct si_screen *sscreen,
 {
 	uint64_t va, meta_va = 0;
 
-	if (tex->is_depth && !r600_can_sample_zs(tex, is_stencil)) {
+	if (tex->is_depth && !si_can_sample_zs(tex, is_stencil)) {
 		tex = tex->flushed_depth_texture;
 		is_stencil = false;
 	}
 
 	va = tex->resource.gpu_address;
 
-	if (sscreen->b.chip_class >= GFX9) {
+	if (sscreen->info.chip_class >= GFX9) {
 		/* Only stencil_offset needs to be added here. */
 		if (is_stencil)
 			va += tex->surface.u.gfx9.stencil_offset;
@@ -333,11 +342,11 @@ void si_set_mutable_tex_desc_fields(struct si_screen *sscreen,
 	/* Only macrotiled modes can set tile swizzle.
 	 * GFX9 doesn't use (legacy) base_level_info.
 	 */
-	if (sscreen->b.chip_class >= GFX9 ||
+	if (sscreen->info.chip_class >= GFX9 ||
 	    base_level_info->mode == RADEON_SURF_MODE_2D)
 		state[0] |= tex->surface.tile_swizzle;
 
-	if (sscreen->b.chip_class >= VI) {
+	if (sscreen->info.chip_class >= VI) {
 		state[6] &= C_008F28_COMPRESSION_EN;
 		state[7] = 0;
 
@@ -345,7 +354,7 @@ void si_set_mutable_tex_desc_fields(struct si_screen *sscreen,
 			meta_va = (!tex->dcc_separate_buffer ? tex->resource.gpu_address : 0) +
 				  tex->dcc_offset;
 
-			if (sscreen->b.chip_class == VI) {
+			if (sscreen->info.chip_class == VI) {
 				meta_va += base_level_info->dcc_offset;
 				assert(base_level_info->mode == RADEON_SURF_MODE_2D);
 			}
@@ -361,7 +370,7 @@ void si_set_mutable_tex_desc_fields(struct si_screen *sscreen,
 		}
 	}
 
-	if (sscreen->b.chip_class >= GFX9) {
+	if (sscreen->info.chip_class >= GFX9) {
 		state[3] &= C_008F1C_SW_MODE;
 		state[4] &= C_008F20_PITCH_GFX9;
 
@@ -691,6 +700,16 @@ static void si_set_shader_image_desc(struct si_context *ctx,
 		unsigned level = view->u.tex.level;
 		unsigned width, height, depth, hw_level;
 		bool uses_dcc = vi_dcc_enabled(tex, level);
+		unsigned access = view->access;
+
+		/* Clear the write flag when writes can't occur.
+		 * Note that DCC_DECOMPRESS for MSAA doesn't work in some cases,
+		 * so we don't wanna trigger it.
+		 */
+		if (tex->is_depth || tex->resource.b.b.nr_samples >= 2) {
+			assert(!"Z/S and MSAA image stores are not supported");
+			access &= ~PIPE_IMAGE_ACCESS_WRITE;
+		}
 
 		assert(!tex->is_depth);
 		assert(tex->fmask.size == 0);
@@ -998,7 +1017,6 @@ bool si_upload_vertex_buffer_descriptors(struct si_context *sctx)
 	unsigned i, count;
 	unsigned desc_list_byte_size;
 	unsigned first_vb_use_mask;
-	uint64_t va;
 	uint32_t *ptr;
 
 	if (!sctx->vertex_buffers_dirty || !velems)
@@ -1038,7 +1056,6 @@ bool si_upload_vertex_buffer_descriptors(struct si_context *sctx)
 	for (i = 0; i < count; i++) {
 		struct pipe_vertex_buffer *vb;
 		struct r600_resource *rbuffer;
-		unsigned offset;
 		unsigned vbo_index = velems->vertex_buffer_index[i];
 		uint32_t *desc = &ptr[i*4];
 
@@ -1049,23 +1066,22 @@ bool si_upload_vertex_buffer_descriptors(struct si_context *sctx)
 			continue;
 		}
 
-		offset = vb->buffer_offset + velems->src_offset[i];
-		va = rbuffer->gpu_address + offset;
+		int offset = (int)vb->buffer_offset + (int)velems->src_offset[i];
+		int64_t va = (int64_t)rbuffer->gpu_address + offset;
+		assert(va > 0);
 
-		/* Fill in T# buffer resource description */
+		int64_t num_records = (int64_t)rbuffer->b.b.width0 - offset;
+		if (sctx->b.chip_class != VI && vb->stride) {
+			/* Round up by rounding down and adding 1 */
+			num_records = (num_records - velems->format_size[i]) /
+				      vb->stride + 1;
+		}
+		assert(num_records >= 0 && num_records <= UINT_MAX);
+
 		desc[0] = va;
 		desc[1] = S_008F04_BASE_ADDRESS_HI(va >> 32) |
 			  S_008F04_STRIDE(vb->stride);
-
-		if (sctx->b.chip_class != VI && vb->stride) {
-			/* Round up by rounding down and adding 1 */
-			desc[2] = (vb->buffer.resource->width0 - offset -
-				   velems->format_size[i]) /
-				  vb->stride + 1;
-		} else {
-			desc[2] = vb->buffer.resource->width0 - offset;
-		}
-
+		desc[2] = num_records;
 		desc[3] = velems->rsrc_word3[i];
 
 		if (first_vb_use_mask & (1 << i)) {
@@ -1721,7 +1737,7 @@ static void si_invalidate_buffer(struct pipe_context *ctx, struct pipe_resource 
 	uint64_t old_va = rbuffer->gpu_address;
 
 	/* Reallocate the buffer in the same pipe_resource. */
-	si_alloc_resource(&sctx->screen->b, rbuffer);
+	si_alloc_resource(sctx->screen, rbuffer);
 
 	si_rebind_buffer(ctx, buf, old_va);
 }

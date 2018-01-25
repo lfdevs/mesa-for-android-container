@@ -69,6 +69,7 @@ static const struct debug_control debug_control[] = {
    { "optimizer",   DEBUG_OPTIMIZER },
    { "ann",         DEBUG_ANNOTATION },
    { "no8",         DEBUG_NO8 },
+   { "no-oaconfig", DEBUG_NO_OACONFIG },
    { "spill_fs",    DEBUG_SPILL_FS },
    { "spill_vec4",  DEBUG_SPILL_VEC4 },
    { "cs",          DEBUG_CS },

@@ -94,7 +94,7 @@ fd4_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
 	fd4_prog_init(pctx);
 	fd4_emit_init(pctx);
 
-	pctx = fd_context_init(&fd4_ctx->base, pscreen, primtypes, priv);
+	pctx = fd_context_init(&fd4_ctx->base, pscreen, primtypes, priv, flags);
 	if (!pctx)
 		return NULL;
 
@@ -114,7 +114,7 @@ fd4_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
 	fd4_query_context_init(pctx);
 
 	fd4_ctx->border_color_uploader = u_upload_create(pctx, 4096, 0,
-                                                         PIPE_USAGE_STREAM);
+                                                         PIPE_USAGE_STREAM, 0);
 
 	return pctx;
 }

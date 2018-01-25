@@ -36,8 +36,11 @@
 
 #include "util/bitset.h"
 #include "brw_fs.h"
+#include "brw_fs_live_variables.h"
 #include "brw_cfg.h"
 #include "brw_eu.h"
+
+using namespace brw;
 
 namespace { /* avoid conflict with opt_copy_propagation_elements */
 struct acp_entry : public exec_node {
@@ -77,12 +80,19 @@ struct block_data {
     * course of this block.
     */
    BITSET_WORD *kill;
+
+   /**
+    * Which entries in the fs_copy_prop_dataflow acp table are guaranteed to
+    * have a fully uninitialized destination at the end of this block.
+    */
+   BITSET_WORD *undef;
 };
 
 class fs_copy_prop_dataflow
 {
 public:
    fs_copy_prop_dataflow(void *mem_ctx, cfg_t *cfg,
+                         const fs_live_variables *live,
                          exec_list *out_acp[ACP_HASH_SIZE]);
 
    void setup_initial_values();
@@ -92,6 +102,7 @@ public:
 
    void *mem_ctx;
    cfg_t *cfg;
+   const fs_live_variables *live;
 
    acp_entry **acp;
    int num_acp;
@@ -102,8 +113,9 @@ public:
 } /* anonymous namespace */
 
 fs_copy_prop_dataflow::fs_copy_prop_dataflow(void *mem_ctx, cfg_t *cfg,
+                                             const fs_live_variables *live,
                                              exec_list *out_acp[ACP_HASH_SIZE])
-   : mem_ctx(mem_ctx), cfg(cfg)
+   : mem_ctx(mem_ctx), cfg(cfg), live(live)
 {
    bd = rzalloc_array(mem_ctx, struct block_data, cfg->num_blocks);
 
@@ -124,6 +136,7 @@ fs_copy_prop_dataflow::fs_copy_prop_dataflow(void *mem_ctx, cfg_t *cfg,
       bd[block->num].liveout = rzalloc_array(bd, BITSET_WORD, bitset_words);
       bd[block->num].copy = rzalloc_array(bd, BITSET_WORD, bitset_words);
       bd[block->num].kill = rzalloc_array(bd, BITSET_WORD, bitset_words);
+      bd[block->num].undef = rzalloc_array(bd, BITSET_WORD, bitset_words);
 
       for (int i = 0; i < ACP_HASH_SIZE; i++) {
          foreach_in_list(acp_entry, entry, &out_acp[block->num][i]) {
@@ -173,8 +186,7 @@ fs_copy_prop_dataflow::setup_initial_values()
 
    /* Populate the initial values for the livein and liveout sets.  For the
     * block at the start of the program, livein = 0 and liveout = copy.
-    * For the others, set liveout to 0 (the empty set) and livein to ~0
-    * (the universal set).
+    * For the others, set liveout and livein to ~0 (the universal set).
     */
    foreach_block (block, cfg) {
       if (block->parents.is_empty()) {
@@ -184,8 +196,20 @@ fs_copy_prop_dataflow::setup_initial_values()
          }
       } else {
          for (int i = 0; i < bitset_words; i++) {
-            bd[block->num].liveout[i] = 0u;
+            bd[block->num].liveout[i] = ~0u;
             bd[block->num].livein[i] = ~0u;
+         }
+      }
+   }
+
+   /* Initialize the undef set. */
+   foreach_block (block, cfg) {
+      for (int i = 0; i < num_acp; i++) {
+         BITSET_SET(bd[block->num].undef, i);
+         for (unsigned off = 0; off < acp[i]->size_written; off += REG_SIZE) {
+            if (BITSET_TEST(live->block_data[block->num].defout,
+                            live->var_from_reg(byte_offset(acp[i]->dst, off))))
+               BITSET_CLEAR(bd[block->num].undef, i);
          }
       }
    }
@@ -203,40 +227,45 @@ fs_copy_prop_dataflow::run()
    do {
       progress = false;
 
-      /* Update liveout for all blocks. */
       foreach_block (block, cfg) {
          if (block->parents.is_empty())
             continue;
 
          for (int i = 0; i < bitset_words; i++) {
             const BITSET_WORD old_liveout = bd[block->num].liveout[i];
+            BITSET_WORD livein_from_any_block = 0;
 
+            /* Update livein for this block.  If a copy is live out of all
+             * parent blocks, it's live coming in to this block.
+             */
+            bd[block->num].livein[i] = ~0u;
+            foreach_list_typed(bblock_link, parent_link, link, &block->parents) {
+               bblock_t *parent = parent_link->block;
+               /* Consider ACP entries with a known-undefined destination to
+                * be available from the parent.  This is valid because we're
+                * free to set the undefined variable equal to the source of
+                * the ACP entry without breaking the application's
+                * expectations, since the variable is undefined.
+                */
+               bd[block->num].livein[i] &= (bd[parent->num].liveout[i] |
+                                            bd[parent->num].undef[i]);
+               livein_from_any_block |= bd[parent->num].liveout[i];
+            }
+
+            /* Limit to the set of ACP entries that can possibly be available
+             * at the start of the block, since propagating from a variable
+             * which is guaranteed to be undefined (rather than potentially
+             * undefined for some dynamic control-flow paths) doesn't seem
+             * particularly useful.
+             */
+            bd[block->num].livein[i] &= livein_from_any_block;
+
+            /* Update liveout for this block. */
             bd[block->num].liveout[i] =
                bd[block->num].copy[i] | (bd[block->num].livein[i] &
                                          ~bd[block->num].kill[i]);
 
             if (old_liveout != bd[block->num].liveout[i])
-               progress = true;
-         }
-      }
-
-      /* Update livein for all blocks.  If a copy is live out of all parent
-       * blocks, it's live coming in to this block.
-       */
-      foreach_block (block, cfg) {
-         if (block->parents.is_empty())
-            continue;
-
-         for (int i = 0; i < bitset_words; i++) {
-            const BITSET_WORD old_livein = bd[block->num].livein[i];
-
-            bd[block->num].livein[i] = ~0u;
-            foreach_list_typed(bblock_link, parent_link, link, &block->parents) {
-               bblock_t *parent = parent_link->block;
-               bd[block->num].livein[i] &= bd[parent->num].liveout[i];
-            }
-
-            if (old_livein != bd[block->num].livein[i])
                progress = true;
          }
       }
@@ -655,6 +684,8 @@ fs_visitor::try_constant_propagate(fs_inst *inst, acp_entry *entry)
       case SHADER_OPCODE_TYPED_ATOMIC:
       case SHADER_OPCODE_TYPED_SURFACE_READ:
       case SHADER_OPCODE_TYPED_SURFACE_WRITE:
+      case SHADER_OPCODE_BYTE_SCATTERED_WRITE:
+      case SHADER_OPCODE_BYTE_SCATTERED_READ:
          /* We only propagate into the surface argument of the
           * instruction. Everything else goes through LOAD_PAYLOAD.
           */
@@ -694,6 +725,8 @@ fs_visitor::try_constant_propagate(fs_inst *inst, acp_entry *entry)
       case SHADER_OPCODE_TYPED_ATOMIC_LOGICAL:
       case SHADER_OPCODE_TYPED_SURFACE_READ_LOGICAL:
       case SHADER_OPCODE_TYPED_SURFACE_WRITE_LOGICAL:
+      case SHADER_OPCODE_BYTE_SCATTERED_WRITE_LOGICAL:
+      case SHADER_OPCODE_BYTE_SCATTERED_READ_LOGICAL:
          inst->src[i] = val;
          progress = true;
          break;
@@ -830,6 +863,8 @@ fs_visitor::opt_copy_propagation()
    for (int i = 0; i < cfg->num_blocks; i++)
       out_acp[i] = new exec_list [ACP_HASH_SIZE];
 
+   calculate_live_intervals();
+
    /* First, walk through each block doing local copy propagation and getting
     * the set of copies available at the end of the block.
     */
@@ -839,7 +874,7 @@ fs_visitor::opt_copy_propagation()
    }
 
    /* Do dataflow analysis for those available copies. */
-   fs_copy_prop_dataflow dataflow(copy_prop_ctx, cfg, out_acp);
+   fs_copy_prop_dataflow dataflow(copy_prop_ctx, cfg, live_intervals, out_acp);
 
    /* Next, re-run local copy propagation, this time with the set of copies
     * provided by the dataflow analysis available at the start of a block.

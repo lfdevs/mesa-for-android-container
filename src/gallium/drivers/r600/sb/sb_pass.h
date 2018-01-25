@@ -223,6 +223,7 @@ class gcm : public pass {
 	sched_queue ready;
 	sched_queue ready_above;
 
+	unsigned outstanding_lds_oq;
 	container_node pending;
 
 	struct op_info {
@@ -263,7 +264,8 @@ public:
 
 	gcm(shader &sh) : pass(sh),
 		bu_ready(), bu_ready_next(), bu_ready_early(),
-		ready(), op_map(), uses(), nuc_stk(1), ucs_level(),
+		ready(), outstanding_lds_oq(),
+		op_map(), uses(), nuc_stk(1), ucs_level(),
 		bu_bb(), pending_defs(), pending_nodes(), cur_sq(),
 		live(), live_count(), pending_exec_mask_update() {}
 
@@ -632,7 +634,11 @@ class ssa_rename : public vpass {
 	typedef sb_map<value*, unsigned> def_map;
 
 	def_map def_count;
+	def_map lds_oq_count;
+	def_map lds_rw_count;
 	std::stack<def_map> rename_stack;
+	std::stack<def_map> rename_lds_oq_stack;
+	std::stack<def_map> rename_lds_rw_stack;
 
 	typedef std::map<uint32_t, value*> val_map;
 	val_map values;

@@ -20,9 +20,6 @@
  * DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
  * USE OR OTHER DEALINGS IN THE SOFTWARE.
- *
- * Authors:
- *      Jerome Glisse
  */
 
 #include "sid.h"
@@ -120,7 +117,7 @@ static unsigned encode_tile_info(struct si_context *sctx,
 				 struct r600_texture *tex, unsigned level,
 				 bool set_bpp)
 {
-	struct radeon_info *info = &sctx->screen->b.info;
+	struct radeon_info *info = &sctx->screen->info;
 	unsigned tile_index = tex->surface.u.legacy.tiling_index[level];
 	unsigned macro_tile_index = tex->surface.u.legacy.macro_tile_index;
 	unsigned tile_mode = info->si_tile_mode_array[tile_index];
@@ -146,7 +143,7 @@ static bool cik_sdma_copy_texture(struct si_context *sctx,
 				  unsigned src_level,
 				  const struct pipe_box *src_box)
 {
-	struct radeon_info *info = &sctx->screen->b.info;
+	struct radeon_info *info = &sctx->screen->info;
 	struct r600_texture *rsrc = (struct r600_texture*)src;
 	struct r600_texture *rdst = (struct r600_texture*)dst;
 	unsigned bpp = rdst->surface.bpe;
@@ -168,8 +165,8 @@ static bool cik_sdma_copy_texture(struct si_context *sctx,
 					    rsrc->surface.tile_swizzle : 0;
 	unsigned dst_pitch = rdst->surface.u.legacy.level[dst_level].nblk_x;
 	unsigned src_pitch = rsrc->surface.u.legacy.level[src_level].nblk_x;
-	uint64_t dst_slice_pitch = rdst->surface.u.legacy.level[dst_level].slice_size / bpp;
-	uint64_t src_slice_pitch = rsrc->surface.u.legacy.level[src_level].slice_size / bpp;
+	uint64_t dst_slice_pitch = ((uint64_t)rdst->surface.u.legacy.level[dst_level].slice_size_dw * 4) / bpp;
+	uint64_t src_slice_pitch = ((uint64_t)rsrc->surface.u.legacy.level[src_level].slice_size_dw * 4) / bpp;
 	unsigned dst_width = minify_as_blocks(rdst->resource.b.b.width0,
 					      dst_level, rdst->surface.blk_w);
 	unsigned src_width = minify_as_blocks(rsrc->resource.b.b.width0,

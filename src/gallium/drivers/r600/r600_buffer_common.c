@@ -66,7 +66,7 @@ void *r600_buffer_map_sync_with_rings(struct r600_common_context *ctx,
 	    ctx->ws->cs_is_buffer_referenced(ctx->gfx.cs,
 					     resource->buf, rusage)) {
 		if (usage & PIPE_TRANSFER_DONTBLOCK) {
-			ctx->gfx.flush(ctx, RADEON_FLUSH_ASYNC, NULL);
+			ctx->gfx.flush(ctx, PIPE_FLUSH_ASYNC, NULL);
 			return NULL;
 		} else {
 			ctx->gfx.flush(ctx, 0, NULL);
@@ -77,7 +77,7 @@ void *r600_buffer_map_sync_with_rings(struct r600_common_context *ctx,
 	    ctx->ws->cs_is_buffer_referenced(ctx->dma.cs,
 					     resource->buf, rusage)) {
 		if (usage & PIPE_TRANSFER_DONTBLOCK) {
-			ctx->dma.flush(ctx, RADEON_FLUSH_ASYNC, NULL);
+			ctx->dma.flush(ctx, PIPE_FLUSH_ASYNC, NULL);
 			return NULL;
 		} else {
 			ctx->dma.flush(ctx, 0, NULL);
@@ -176,20 +176,6 @@ void r600_init_resource_fields(struct r600_common_screen *rscreen,
 	     !(res->b.b.bind & PIPE_BIND_SCANOUT)))
 		res->flags |= RADEON_FLAG_NO_INTERPROCESS_SHARING;
 
-	/* If VRAM is just stolen system memory, allow both VRAM and
-	 * GTT, whichever has free space. If a buffer is evicted from
-	 * VRAM to GTT, it will stay there.
-	 *
-	 * DRM 3.6.0 has good BO move throttling, so we can allow VRAM-only
-	 * placements even with a low amount of stolen VRAM.
-	 */
-	if (!rscreen->info.has_dedicated_vram &&
-	    (rscreen->info.drm_major < 3 || rscreen->info.drm_minor < 6) &&
-	    res->domains == RADEON_DOMAIN_VRAM) {
-		res->domains = RADEON_DOMAIN_VRAM_GTT;
-		res->flags &= ~RADEON_FLAG_NO_CPU_ACCESS; /* disallowed with VRAM_GTT */
-	}
-
 	if (rscreen->debug_flags & DBG_NO_WC)
 		res->flags &= ~RADEON_FLAG_GTT_WC;
 
@@ -251,6 +237,7 @@ static void r600_buffer_destroy(struct pipe_screen *screen,
 
 	threaded_resource_deinit(buf);
 	util_range_destroy(&rbuffer->valid_buffer_range);
+	pipe_resource_reference((struct pipe_resource**)&rbuffer->immed_buffer, NULL);
 	pb_reference(&rbuffer->buf, NULL);
 	FREE(rbuffer);
 }
@@ -606,6 +593,7 @@ r600_alloc_buffer_struct(struct pipe_screen *screen,
 
 	rbuffer->buf = NULL;
 	rbuffer->bind_history = 0;
+	rbuffer->immed_buffer = NULL;
 	util_range_init(&rbuffer->valid_buffer_range);
 	return rbuffer;
 }

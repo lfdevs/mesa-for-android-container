@@ -1500,13 +1500,13 @@ vk_QueueGlobalPriorityEXT_to_str(VkQueueGlobalPriorityEXT input)
 {
     switch(input) {
         case 128:
-            return "VK_QUEUE_GLOBAL_PRIORITY_LOW";
+            return "VK_QUEUE_GLOBAL_PRIORITY_LOW_EXT";
         case 256:
-            return "VK_QUEUE_GLOBAL_PRIORITY_MEDIUM";
+            return "VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_EXT";
         case 512:
-            return "VK_QUEUE_GLOBAL_PRIORITY_HIGH";
+            return "VK_QUEUE_GLOBAL_PRIORITY_HIGH_EXT";
         case 1024:
-            return "VK_QUEUE_GLOBAL_PRIORITY_REALTIME";
+            return "VK_QUEUE_GLOBAL_PRIORITY_REALTIME_EXT";
     default:
         unreachable("Undefined enum value.");
     }
@@ -1664,6 +1664,21 @@ vk_SamplerYcbcrRangeKHR_to_str(VkSamplerYcbcrRangeKHR input)
             return "VK_SAMPLER_YCBCR_RANGE_ITU_FULL_KHR";
         case 1:
             return "VK_SAMPLER_YCBCR_RANGE_ITU_NARROW_KHR";
+    default:
+        unreachable("Undefined enum value.");
+    }
+}
+
+const char *
+vk_ShaderInfoTypeAMD_to_str(VkShaderInfoTypeAMD input)
+{
+    switch(input) {
+        case 0:
+            return "VK_SHADER_INFO_TYPE_STATISTICS_AMD";
+        case 1:
+            return "VK_SHADER_INFO_TYPE_BINARY_AMD";
+        case 2:
+            return "VK_SHADER_INFO_TYPE_DISASSEMBLY_AMD";
     default:
         unreachable("Undefined enum value.");
     }
@@ -2118,6 +2133,12 @@ vk_StructureType_to_str(VkStructureType input)
             return "VK_STRUCTURE_TYPE_SHADER_MODULE_VALIDATION_CACHE_CREATE_INFO_EXT";
         case 1000174000:
             return "VK_STRUCTURE_TYPE_DEVICE_QUEUE_GLOBAL_PRIORITY_CREATE_INFO_EXT";
+        case 1000178000:
+            return "VK_STRUCTURE_TYPE_IMPORT_MEMORY_HOST_POINTER_INFO_EXT";
+        case 1000178001:
+            return "VK_STRUCTURE_TYPE_MEMORY_HOST_POINTER_PROPERTIES_EXT";
+        case 1000178002:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_MEMORY_HOST_PROPERTIES_EXT";
     default:
         unreachable("Undefined enum value.");
     }

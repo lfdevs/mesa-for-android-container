@@ -64,7 +64,10 @@ objects. They all follow simple, one-method binding calls, e.g.
 * ``set_stencil_ref`` sets the stencil front and back reference values
   which are used as comparison values in stencil test.
 * ``set_blend_color``
-* ``set_sample_mask``
+* ``set_sample_mask``  sets the per-context multisample sample mask.  Note
+  that this takes effect even if multisampling is not explicitly enabled if
+  the frambuffer surface(s) are multisampled.  Also, this mask is AND-ed
+  with the optional fragment shader sample mask output (when emitted).
 * ``set_min_samples`` sets the minimum number of samples that must be run.
 * ``set_clip_state``
 * ``set_polygon_stipple``
@@ -144,6 +147,14 @@ to the array index which is used for sampling.
 
 * ``sampler_view_destroy`` destroys a sampler view and releases its reference
   to associated texture.
+
+Hardware Atomic buffers
+^^^^^^^^^^^^^^^^^^^^^^^
+
+Buffers containing hw atomics are required to support the feature
+on some drivers.
+
+Drivers that require this need to fill the ``set_hw_atomic_buffers`` method.
 
 Shader Resources
 ^^^^^^^^^^^^^^^^
@@ -520,6 +531,29 @@ to return a valid fence. If fence_finish is called with the returned fence
 and the context is still unflushed, and the ctx parameter of fence_finish is
 equal to the context where the fence was created, fence_finish will flush
 the context.
+
+PIPE_FLUSH_ASYNC: The flush is allowed to be asynchronous. Unlike
+``PIPE_FLUSH_DEFERRED``, the driver must still ensure that the returned fence
+will finish in finite time. However, subsequent operations in other contexts of
+the same screen are no longer guaranteed to happen after the flush. Drivers
+which use this flag must implement pipe_context::fence_server_sync.
+
+PIPE_FLUSH_HINT_FINISH: Hints to the driver that the caller will immediately
+wait for the returned fence.
+
+Additional flags may be set together with ``PIPE_FLUSH_DEFERRED`` for even
+finer-grained fences. Note that as a general rule, GPU caches may not have been
+flushed yet when these fences are signaled. Drivers are free to ignore these
+flags and create normal fences instead. At most one of the following flags can
+be specified:
+
+PIPE_FLUSH_TOP_OF_PIPE: The fence should be signaled as soon as the next
+command is ready to start executing at the top of the pipeline, before any of
+its data is actually read (including indirect draw parameters).
+
+PIPE_FLUSH_BOTTOM_OF_PIPE: The fence should be signaled as soon as the previous
+command has finished executing on the GPU entirely (but data written by the
+command may still be in caches and inaccessible to the CPU).
 
 
 ``flush_resource``

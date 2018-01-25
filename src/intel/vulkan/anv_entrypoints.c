@@ -636,218 +636,218 @@ static const struct anv_entrypoint entrypoints[] = {
 #ifdef ANDROID
     VkResult anv_QueueSignalReleaseImageANDROID(VkQueue queue, uint32_t waitSemaphoreCount, const VkSemaphore* pWaitSemaphores, VkImage image, int* pNativeFenceFd) __attribute__ ((weak));
 #endif // ANDROID
-    VkResult anv_CreateDmaBufImageINTEL(VkDevice device, const VkDmaBufImageCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator,VkDeviceMemory* pMem,VkImage* pImage) __attribute__ ((weak));
+    VkResult anv_CreateDmaBufImageINTEL(VkDevice device, const VkDmaBufImageCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDeviceMemory* pMem, VkImage* pImage) __attribute__ ((weak));
 
-  const struct anv_dispatch_table anv_layer = {
-    .CreateInstance = anv_CreateInstance,
-    .DestroyInstance = anv_DestroyInstance,
-    .EnumeratePhysicalDevices = anv_EnumeratePhysicalDevices,
-    .GetDeviceProcAddr = anv_GetDeviceProcAddr,
-    .GetInstanceProcAddr = anv_GetInstanceProcAddr,
-    .GetPhysicalDeviceProperties = anv_GetPhysicalDeviceProperties,
-    .GetPhysicalDeviceQueueFamilyProperties = anv_GetPhysicalDeviceQueueFamilyProperties,
-    .GetPhysicalDeviceMemoryProperties = anv_GetPhysicalDeviceMemoryProperties,
-    .GetPhysicalDeviceFeatures = anv_GetPhysicalDeviceFeatures,
-    .GetPhysicalDeviceFormatProperties = anv_GetPhysicalDeviceFormatProperties,
-    .GetPhysicalDeviceImageFormatProperties = anv_GetPhysicalDeviceImageFormatProperties,
-    .CreateDevice = anv_CreateDevice,
-    .DestroyDevice = anv_DestroyDevice,
-    .EnumerateInstanceLayerProperties = anv_EnumerateInstanceLayerProperties,
-    .EnumerateInstanceExtensionProperties = anv_EnumerateInstanceExtensionProperties,
-    .EnumerateDeviceLayerProperties = anv_EnumerateDeviceLayerProperties,
-    .EnumerateDeviceExtensionProperties = anv_EnumerateDeviceExtensionProperties,
-    .GetDeviceQueue = anv_GetDeviceQueue,
-    .QueueSubmit = anv_QueueSubmit,
-    .QueueWaitIdle = anv_QueueWaitIdle,
-    .DeviceWaitIdle = anv_DeviceWaitIdle,
-    .AllocateMemory = anv_AllocateMemory,
-    .FreeMemory = anv_FreeMemory,
-    .MapMemory = anv_MapMemory,
-    .UnmapMemory = anv_UnmapMemory,
-    .FlushMappedMemoryRanges = anv_FlushMappedMemoryRanges,
-    .InvalidateMappedMemoryRanges = anv_InvalidateMappedMemoryRanges,
-    .GetDeviceMemoryCommitment = anv_GetDeviceMemoryCommitment,
-    .GetBufferMemoryRequirements = anv_GetBufferMemoryRequirements,
-    .BindBufferMemory = anv_BindBufferMemory,
-    .GetImageMemoryRequirements = anv_GetImageMemoryRequirements,
-    .BindImageMemory = anv_BindImageMemory,
-    .GetImageSparseMemoryRequirements = anv_GetImageSparseMemoryRequirements,
-    .GetPhysicalDeviceSparseImageFormatProperties = anv_GetPhysicalDeviceSparseImageFormatProperties,
-    .QueueBindSparse = anv_QueueBindSparse,
-    .CreateFence = anv_CreateFence,
-    .DestroyFence = anv_DestroyFence,
-    .ResetFences = anv_ResetFences,
-    .GetFenceStatus = anv_GetFenceStatus,
-    .WaitForFences = anv_WaitForFences,
-    .CreateSemaphore = anv_CreateSemaphore,
-    .DestroySemaphore = anv_DestroySemaphore,
-    .CreateEvent = anv_CreateEvent,
-    .DestroyEvent = anv_DestroyEvent,
-    .GetEventStatus = anv_GetEventStatus,
-    .SetEvent = anv_SetEvent,
-    .ResetEvent = anv_ResetEvent,
-    .CreateQueryPool = anv_CreateQueryPool,
-    .DestroyQueryPool = anv_DestroyQueryPool,
-    .GetQueryPoolResults = anv_GetQueryPoolResults,
-    .CreateBuffer = anv_CreateBuffer,
-    .DestroyBuffer = anv_DestroyBuffer,
-    .CreateBufferView = anv_CreateBufferView,
-    .DestroyBufferView = anv_DestroyBufferView,
-    .CreateImage = anv_CreateImage,
-    .DestroyImage = anv_DestroyImage,
-    .GetImageSubresourceLayout = anv_GetImageSubresourceLayout,
-    .CreateImageView = anv_CreateImageView,
-    .DestroyImageView = anv_DestroyImageView,
-    .CreateShaderModule = anv_CreateShaderModule,
-    .DestroyShaderModule = anv_DestroyShaderModule,
-    .CreatePipelineCache = anv_CreatePipelineCache,
-    .DestroyPipelineCache = anv_DestroyPipelineCache,
-    .GetPipelineCacheData = anv_GetPipelineCacheData,
-    .MergePipelineCaches = anv_MergePipelineCaches,
-    .CreateGraphicsPipelines = anv_CreateGraphicsPipelines,
-    .CreateComputePipelines = anv_CreateComputePipelines,
-    .DestroyPipeline = anv_DestroyPipeline,
-    .CreatePipelineLayout = anv_CreatePipelineLayout,
-    .DestroyPipelineLayout = anv_DestroyPipelineLayout,
-    .CreateSampler = anv_CreateSampler,
-    .DestroySampler = anv_DestroySampler,
-    .CreateDescriptorSetLayout = anv_CreateDescriptorSetLayout,
-    .DestroyDescriptorSetLayout = anv_DestroyDescriptorSetLayout,
-    .CreateDescriptorPool = anv_CreateDescriptorPool,
-    .DestroyDescriptorPool = anv_DestroyDescriptorPool,
-    .ResetDescriptorPool = anv_ResetDescriptorPool,
-    .AllocateDescriptorSets = anv_AllocateDescriptorSets,
-    .FreeDescriptorSets = anv_FreeDescriptorSets,
-    .UpdateDescriptorSets = anv_UpdateDescriptorSets,
-    .CreateFramebuffer = anv_CreateFramebuffer,
-    .DestroyFramebuffer = anv_DestroyFramebuffer,
-    .CreateRenderPass = anv_CreateRenderPass,
-    .DestroyRenderPass = anv_DestroyRenderPass,
-    .GetRenderAreaGranularity = anv_GetRenderAreaGranularity,
-    .CreateCommandPool = anv_CreateCommandPool,
-    .DestroyCommandPool = anv_DestroyCommandPool,
-    .ResetCommandPool = anv_ResetCommandPool,
-    .AllocateCommandBuffers = anv_AllocateCommandBuffers,
-    .FreeCommandBuffers = anv_FreeCommandBuffers,
-    .BeginCommandBuffer = anv_BeginCommandBuffer,
-    .EndCommandBuffer = anv_EndCommandBuffer,
-    .ResetCommandBuffer = anv_ResetCommandBuffer,
-    .CmdBindPipeline = anv_CmdBindPipeline,
-    .CmdSetViewport = anv_CmdSetViewport,
-    .CmdSetScissor = anv_CmdSetScissor,
-    .CmdSetLineWidth = anv_CmdSetLineWidth,
-    .CmdSetDepthBias = anv_CmdSetDepthBias,
-    .CmdSetBlendConstants = anv_CmdSetBlendConstants,
-    .CmdSetDepthBounds = anv_CmdSetDepthBounds,
-    .CmdSetStencilCompareMask = anv_CmdSetStencilCompareMask,
-    .CmdSetStencilWriteMask = anv_CmdSetStencilWriteMask,
-    .CmdSetStencilReference = anv_CmdSetStencilReference,
-    .CmdBindDescriptorSets = anv_CmdBindDescriptorSets,
-    .CmdBindIndexBuffer = anv_CmdBindIndexBuffer,
-    .CmdBindVertexBuffers = anv_CmdBindVertexBuffers,
-    .CmdDraw = anv_CmdDraw,
-    .CmdDrawIndexed = anv_CmdDrawIndexed,
-    .CmdDrawIndirect = anv_CmdDrawIndirect,
-    .CmdDrawIndexedIndirect = anv_CmdDrawIndexedIndirect,
-    .CmdDispatch = anv_CmdDispatch,
-    .CmdDispatchIndirect = anv_CmdDispatchIndirect,
-    .CmdCopyBuffer = anv_CmdCopyBuffer,
-    .CmdCopyImage = anv_CmdCopyImage,
-    .CmdBlitImage = anv_CmdBlitImage,
-    .CmdCopyBufferToImage = anv_CmdCopyBufferToImage,
-    .CmdCopyImageToBuffer = anv_CmdCopyImageToBuffer,
-    .CmdUpdateBuffer = anv_CmdUpdateBuffer,
-    .CmdFillBuffer = anv_CmdFillBuffer,
-    .CmdClearColorImage = anv_CmdClearColorImage,
-    .CmdClearDepthStencilImage = anv_CmdClearDepthStencilImage,
-    .CmdClearAttachments = anv_CmdClearAttachments,
-    .CmdResolveImage = anv_CmdResolveImage,
-    .CmdSetEvent = anv_CmdSetEvent,
-    .CmdResetEvent = anv_CmdResetEvent,
-    .CmdWaitEvents = anv_CmdWaitEvents,
-    .CmdPipelineBarrier = anv_CmdPipelineBarrier,
-    .CmdBeginQuery = anv_CmdBeginQuery,
-    .CmdEndQuery = anv_CmdEndQuery,
-    .CmdResetQueryPool = anv_CmdResetQueryPool,
-    .CmdWriteTimestamp = anv_CmdWriteTimestamp,
-    .CmdCopyQueryPoolResults = anv_CmdCopyQueryPoolResults,
-    .CmdPushConstants = anv_CmdPushConstants,
-    .CmdBeginRenderPass = anv_CmdBeginRenderPass,
-    .CmdNextSubpass = anv_CmdNextSubpass,
-    .CmdEndRenderPass = anv_CmdEndRenderPass,
-    .CmdExecuteCommands = anv_CmdExecuteCommands,
-    .DestroySurfaceKHR = anv_DestroySurfaceKHR,
-    .GetPhysicalDeviceSurfaceSupportKHR = anv_GetPhysicalDeviceSurfaceSupportKHR,
-    .GetPhysicalDeviceSurfaceCapabilitiesKHR = anv_GetPhysicalDeviceSurfaceCapabilitiesKHR,
-    .GetPhysicalDeviceSurfaceFormatsKHR = anv_GetPhysicalDeviceSurfaceFormatsKHR,
-    .GetPhysicalDeviceSurfacePresentModesKHR = anv_GetPhysicalDeviceSurfacePresentModesKHR,
-    .CreateSwapchainKHR = anv_CreateSwapchainKHR,
-    .DestroySwapchainKHR = anv_DestroySwapchainKHR,
-    .GetSwapchainImagesKHR = anv_GetSwapchainImagesKHR,
-    .AcquireNextImageKHR = anv_AcquireNextImageKHR,
-    .QueuePresentKHR = anv_QueuePresentKHR,
+  const struct anv_dispatch_table anv_dispatch_table = {
+    .vkCreateInstance = anv_CreateInstance,
+    .vkDestroyInstance = anv_DestroyInstance,
+    .vkEnumeratePhysicalDevices = anv_EnumeratePhysicalDevices,
+    .vkGetDeviceProcAddr = anv_GetDeviceProcAddr,
+    .vkGetInstanceProcAddr = anv_GetInstanceProcAddr,
+    .vkGetPhysicalDeviceProperties = anv_GetPhysicalDeviceProperties,
+    .vkGetPhysicalDeviceQueueFamilyProperties = anv_GetPhysicalDeviceQueueFamilyProperties,
+    .vkGetPhysicalDeviceMemoryProperties = anv_GetPhysicalDeviceMemoryProperties,
+    .vkGetPhysicalDeviceFeatures = anv_GetPhysicalDeviceFeatures,
+    .vkGetPhysicalDeviceFormatProperties = anv_GetPhysicalDeviceFormatProperties,
+    .vkGetPhysicalDeviceImageFormatProperties = anv_GetPhysicalDeviceImageFormatProperties,
+    .vkCreateDevice = anv_CreateDevice,
+    .vkDestroyDevice = anv_DestroyDevice,
+    .vkEnumerateInstanceLayerProperties = anv_EnumerateInstanceLayerProperties,
+    .vkEnumerateInstanceExtensionProperties = anv_EnumerateInstanceExtensionProperties,
+    .vkEnumerateDeviceLayerProperties = anv_EnumerateDeviceLayerProperties,
+    .vkEnumerateDeviceExtensionProperties = anv_EnumerateDeviceExtensionProperties,
+    .vkGetDeviceQueue = anv_GetDeviceQueue,
+    .vkQueueSubmit = anv_QueueSubmit,
+    .vkQueueWaitIdle = anv_QueueWaitIdle,
+    .vkDeviceWaitIdle = anv_DeviceWaitIdle,
+    .vkAllocateMemory = anv_AllocateMemory,
+    .vkFreeMemory = anv_FreeMemory,
+    .vkMapMemory = anv_MapMemory,
+    .vkUnmapMemory = anv_UnmapMemory,
+    .vkFlushMappedMemoryRanges = anv_FlushMappedMemoryRanges,
+    .vkInvalidateMappedMemoryRanges = anv_InvalidateMappedMemoryRanges,
+    .vkGetDeviceMemoryCommitment = anv_GetDeviceMemoryCommitment,
+    .vkGetBufferMemoryRequirements = anv_GetBufferMemoryRequirements,
+    .vkBindBufferMemory = anv_BindBufferMemory,
+    .vkGetImageMemoryRequirements = anv_GetImageMemoryRequirements,
+    .vkBindImageMemory = anv_BindImageMemory,
+    .vkGetImageSparseMemoryRequirements = anv_GetImageSparseMemoryRequirements,
+    .vkGetPhysicalDeviceSparseImageFormatProperties = anv_GetPhysicalDeviceSparseImageFormatProperties,
+    .vkQueueBindSparse = anv_QueueBindSparse,
+    .vkCreateFence = anv_CreateFence,
+    .vkDestroyFence = anv_DestroyFence,
+    .vkResetFences = anv_ResetFences,
+    .vkGetFenceStatus = anv_GetFenceStatus,
+    .vkWaitForFences = anv_WaitForFences,
+    .vkCreateSemaphore = anv_CreateSemaphore,
+    .vkDestroySemaphore = anv_DestroySemaphore,
+    .vkCreateEvent = anv_CreateEvent,
+    .vkDestroyEvent = anv_DestroyEvent,
+    .vkGetEventStatus = anv_GetEventStatus,
+    .vkSetEvent = anv_SetEvent,
+    .vkResetEvent = anv_ResetEvent,
+    .vkCreateQueryPool = anv_CreateQueryPool,
+    .vkDestroyQueryPool = anv_DestroyQueryPool,
+    .vkGetQueryPoolResults = anv_GetQueryPoolResults,
+    .vkCreateBuffer = anv_CreateBuffer,
+    .vkDestroyBuffer = anv_DestroyBuffer,
+    .vkCreateBufferView = anv_CreateBufferView,
+    .vkDestroyBufferView = anv_DestroyBufferView,
+    .vkCreateImage = anv_CreateImage,
+    .vkDestroyImage = anv_DestroyImage,
+    .vkGetImageSubresourceLayout = anv_GetImageSubresourceLayout,
+    .vkCreateImageView = anv_CreateImageView,
+    .vkDestroyImageView = anv_DestroyImageView,
+    .vkCreateShaderModule = anv_CreateShaderModule,
+    .vkDestroyShaderModule = anv_DestroyShaderModule,
+    .vkCreatePipelineCache = anv_CreatePipelineCache,
+    .vkDestroyPipelineCache = anv_DestroyPipelineCache,
+    .vkGetPipelineCacheData = anv_GetPipelineCacheData,
+    .vkMergePipelineCaches = anv_MergePipelineCaches,
+    .vkCreateGraphicsPipelines = anv_CreateGraphicsPipelines,
+    .vkCreateComputePipelines = anv_CreateComputePipelines,
+    .vkDestroyPipeline = anv_DestroyPipeline,
+    .vkCreatePipelineLayout = anv_CreatePipelineLayout,
+    .vkDestroyPipelineLayout = anv_DestroyPipelineLayout,
+    .vkCreateSampler = anv_CreateSampler,
+    .vkDestroySampler = anv_DestroySampler,
+    .vkCreateDescriptorSetLayout = anv_CreateDescriptorSetLayout,
+    .vkDestroyDescriptorSetLayout = anv_DestroyDescriptorSetLayout,
+    .vkCreateDescriptorPool = anv_CreateDescriptorPool,
+    .vkDestroyDescriptorPool = anv_DestroyDescriptorPool,
+    .vkResetDescriptorPool = anv_ResetDescriptorPool,
+    .vkAllocateDescriptorSets = anv_AllocateDescriptorSets,
+    .vkFreeDescriptorSets = anv_FreeDescriptorSets,
+    .vkUpdateDescriptorSets = anv_UpdateDescriptorSets,
+    .vkCreateFramebuffer = anv_CreateFramebuffer,
+    .vkDestroyFramebuffer = anv_DestroyFramebuffer,
+    .vkCreateRenderPass = anv_CreateRenderPass,
+    .vkDestroyRenderPass = anv_DestroyRenderPass,
+    .vkGetRenderAreaGranularity = anv_GetRenderAreaGranularity,
+    .vkCreateCommandPool = anv_CreateCommandPool,
+    .vkDestroyCommandPool = anv_DestroyCommandPool,
+    .vkResetCommandPool = anv_ResetCommandPool,
+    .vkAllocateCommandBuffers = anv_AllocateCommandBuffers,
+    .vkFreeCommandBuffers = anv_FreeCommandBuffers,
+    .vkBeginCommandBuffer = anv_BeginCommandBuffer,
+    .vkEndCommandBuffer = anv_EndCommandBuffer,
+    .vkResetCommandBuffer = anv_ResetCommandBuffer,
+    .vkCmdBindPipeline = anv_CmdBindPipeline,
+    .vkCmdSetViewport = anv_CmdSetViewport,
+    .vkCmdSetScissor = anv_CmdSetScissor,
+    .vkCmdSetLineWidth = anv_CmdSetLineWidth,
+    .vkCmdSetDepthBias = anv_CmdSetDepthBias,
+    .vkCmdSetBlendConstants = anv_CmdSetBlendConstants,
+    .vkCmdSetDepthBounds = anv_CmdSetDepthBounds,
+    .vkCmdSetStencilCompareMask = anv_CmdSetStencilCompareMask,
+    .vkCmdSetStencilWriteMask = anv_CmdSetStencilWriteMask,
+    .vkCmdSetStencilReference = anv_CmdSetStencilReference,
+    .vkCmdBindDescriptorSets = anv_CmdBindDescriptorSets,
+    .vkCmdBindIndexBuffer = anv_CmdBindIndexBuffer,
+    .vkCmdBindVertexBuffers = anv_CmdBindVertexBuffers,
+    .vkCmdDraw = anv_CmdDraw,
+    .vkCmdDrawIndexed = anv_CmdDrawIndexed,
+    .vkCmdDrawIndirect = anv_CmdDrawIndirect,
+    .vkCmdDrawIndexedIndirect = anv_CmdDrawIndexedIndirect,
+    .vkCmdDispatch = anv_CmdDispatch,
+    .vkCmdDispatchIndirect = anv_CmdDispatchIndirect,
+    .vkCmdCopyBuffer = anv_CmdCopyBuffer,
+    .vkCmdCopyImage = anv_CmdCopyImage,
+    .vkCmdBlitImage = anv_CmdBlitImage,
+    .vkCmdCopyBufferToImage = anv_CmdCopyBufferToImage,
+    .vkCmdCopyImageToBuffer = anv_CmdCopyImageToBuffer,
+    .vkCmdUpdateBuffer = anv_CmdUpdateBuffer,
+    .vkCmdFillBuffer = anv_CmdFillBuffer,
+    .vkCmdClearColorImage = anv_CmdClearColorImage,
+    .vkCmdClearDepthStencilImage = anv_CmdClearDepthStencilImage,
+    .vkCmdClearAttachments = anv_CmdClearAttachments,
+    .vkCmdResolveImage = anv_CmdResolveImage,
+    .vkCmdSetEvent = anv_CmdSetEvent,
+    .vkCmdResetEvent = anv_CmdResetEvent,
+    .vkCmdWaitEvents = anv_CmdWaitEvents,
+    .vkCmdPipelineBarrier = anv_CmdPipelineBarrier,
+    .vkCmdBeginQuery = anv_CmdBeginQuery,
+    .vkCmdEndQuery = anv_CmdEndQuery,
+    .vkCmdResetQueryPool = anv_CmdResetQueryPool,
+    .vkCmdWriteTimestamp = anv_CmdWriteTimestamp,
+    .vkCmdCopyQueryPoolResults = anv_CmdCopyQueryPoolResults,
+    .vkCmdPushConstants = anv_CmdPushConstants,
+    .vkCmdBeginRenderPass = anv_CmdBeginRenderPass,
+    .vkCmdNextSubpass = anv_CmdNextSubpass,
+    .vkCmdEndRenderPass = anv_CmdEndRenderPass,
+    .vkCmdExecuteCommands = anv_CmdExecuteCommands,
+    .vkDestroySurfaceKHR = anv_DestroySurfaceKHR,
+    .vkGetPhysicalDeviceSurfaceSupportKHR = anv_GetPhysicalDeviceSurfaceSupportKHR,
+    .vkGetPhysicalDeviceSurfaceCapabilitiesKHR = anv_GetPhysicalDeviceSurfaceCapabilitiesKHR,
+    .vkGetPhysicalDeviceSurfaceFormatsKHR = anv_GetPhysicalDeviceSurfaceFormatsKHR,
+    .vkGetPhysicalDeviceSurfacePresentModesKHR = anv_GetPhysicalDeviceSurfacePresentModesKHR,
+    .vkCreateSwapchainKHR = anv_CreateSwapchainKHR,
+    .vkDestroySwapchainKHR = anv_DestroySwapchainKHR,
+    .vkGetSwapchainImagesKHR = anv_GetSwapchainImagesKHR,
+    .vkAcquireNextImageKHR = anv_AcquireNextImageKHR,
+    .vkQueuePresentKHR = anv_QueuePresentKHR,
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
-    .CreateWaylandSurfaceKHR = anv_CreateWaylandSurfaceKHR,
+    .vkCreateWaylandSurfaceKHR = anv_CreateWaylandSurfaceKHR,
 #endif // VK_USE_PLATFORM_WAYLAND_KHR
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
-    .GetPhysicalDeviceWaylandPresentationSupportKHR = anv_GetPhysicalDeviceWaylandPresentationSupportKHR,
+    .vkGetPhysicalDeviceWaylandPresentationSupportKHR = anv_GetPhysicalDeviceWaylandPresentationSupportKHR,
 #endif // VK_USE_PLATFORM_WAYLAND_KHR
 #ifdef VK_USE_PLATFORM_XLIB_KHR
-    .CreateXlibSurfaceKHR = anv_CreateXlibSurfaceKHR,
+    .vkCreateXlibSurfaceKHR = anv_CreateXlibSurfaceKHR,
 #endif // VK_USE_PLATFORM_XLIB_KHR
 #ifdef VK_USE_PLATFORM_XLIB_KHR
-    .GetPhysicalDeviceXlibPresentationSupportKHR = anv_GetPhysicalDeviceXlibPresentationSupportKHR,
+    .vkGetPhysicalDeviceXlibPresentationSupportKHR = anv_GetPhysicalDeviceXlibPresentationSupportKHR,
 #endif // VK_USE_PLATFORM_XLIB_KHR
 #ifdef VK_USE_PLATFORM_XCB_KHR
-    .CreateXcbSurfaceKHR = anv_CreateXcbSurfaceKHR,
+    .vkCreateXcbSurfaceKHR = anv_CreateXcbSurfaceKHR,
 #endif // VK_USE_PLATFORM_XCB_KHR
 #ifdef VK_USE_PLATFORM_XCB_KHR
-    .GetPhysicalDeviceXcbPresentationSupportKHR = anv_GetPhysicalDeviceXcbPresentationSupportKHR,
+    .vkGetPhysicalDeviceXcbPresentationSupportKHR = anv_GetPhysicalDeviceXcbPresentationSupportKHR,
 #endif // VK_USE_PLATFORM_XCB_KHR
-    .CreateDebugReportCallbackEXT = anv_CreateDebugReportCallbackEXT,
-    .DestroyDebugReportCallbackEXT = anv_DestroyDebugReportCallbackEXT,
-    .DebugReportMessageEXT = anv_DebugReportMessageEXT,
-    .GetPhysicalDeviceFeatures2KHR = anv_GetPhysicalDeviceFeatures2KHR,
-    .GetPhysicalDeviceProperties2KHR = anv_GetPhysicalDeviceProperties2KHR,
-    .GetPhysicalDeviceFormatProperties2KHR = anv_GetPhysicalDeviceFormatProperties2KHR,
-    .GetPhysicalDeviceImageFormatProperties2KHR = anv_GetPhysicalDeviceImageFormatProperties2KHR,
-    .GetPhysicalDeviceQueueFamilyProperties2KHR = anv_GetPhysicalDeviceQueueFamilyProperties2KHR,
-    .GetPhysicalDeviceMemoryProperties2KHR = anv_GetPhysicalDeviceMemoryProperties2KHR,
-    .GetPhysicalDeviceSparseImageFormatProperties2KHR = anv_GetPhysicalDeviceSparseImageFormatProperties2KHR,
-    .CmdPushDescriptorSetKHR = anv_CmdPushDescriptorSetKHR,
-    .TrimCommandPoolKHR = anv_TrimCommandPoolKHR,
-    .GetPhysicalDeviceExternalBufferPropertiesKHR = anv_GetPhysicalDeviceExternalBufferPropertiesKHR,
-    .GetMemoryFdKHR = anv_GetMemoryFdKHR,
-    .GetMemoryFdPropertiesKHR = anv_GetMemoryFdPropertiesKHR,
-    .GetPhysicalDeviceExternalSemaphorePropertiesKHR = anv_GetPhysicalDeviceExternalSemaphorePropertiesKHR,
-    .GetSemaphoreFdKHR = anv_GetSemaphoreFdKHR,
-    .ImportSemaphoreFdKHR = anv_ImportSemaphoreFdKHR,
-    .GetPhysicalDeviceExternalFencePropertiesKHR = anv_GetPhysicalDeviceExternalFencePropertiesKHR,
-    .GetFenceFdKHR = anv_GetFenceFdKHR,
-    .ImportFenceFdKHR = anv_ImportFenceFdKHR,
-    .BindBufferMemory2KHR = anv_BindBufferMemory2KHR,
-    .BindImageMemory2KHR = anv_BindImageMemory2KHR,
-    .CreateDescriptorUpdateTemplateKHR = anv_CreateDescriptorUpdateTemplateKHR,
-    .DestroyDescriptorUpdateTemplateKHR = anv_DestroyDescriptorUpdateTemplateKHR,
-    .UpdateDescriptorSetWithTemplateKHR = anv_UpdateDescriptorSetWithTemplateKHR,
-    .CmdPushDescriptorSetWithTemplateKHR = anv_CmdPushDescriptorSetWithTemplateKHR,
-    .GetPhysicalDeviceSurfaceCapabilities2KHR = anv_GetPhysicalDeviceSurfaceCapabilities2KHR,
-    .GetPhysicalDeviceSurfaceFormats2KHR = anv_GetPhysicalDeviceSurfaceFormats2KHR,
-    .GetBufferMemoryRequirements2KHR = anv_GetBufferMemoryRequirements2KHR,
-    .GetImageMemoryRequirements2KHR = anv_GetImageMemoryRequirements2KHR,
-    .GetImageSparseMemoryRequirements2KHR = anv_GetImageSparseMemoryRequirements2KHR,
-    .CreateSamplerYcbcrConversionKHR = anv_CreateSamplerYcbcrConversionKHR,
-    .DestroySamplerYcbcrConversionKHR = anv_DestroySamplerYcbcrConversionKHR,
+    .vkCreateDebugReportCallbackEXT = anv_CreateDebugReportCallbackEXT,
+    .vkDestroyDebugReportCallbackEXT = anv_DestroyDebugReportCallbackEXT,
+    .vkDebugReportMessageEXT = anv_DebugReportMessageEXT,
+    .vkGetPhysicalDeviceFeatures2KHR = anv_GetPhysicalDeviceFeatures2KHR,
+    .vkGetPhysicalDeviceProperties2KHR = anv_GetPhysicalDeviceProperties2KHR,
+    .vkGetPhysicalDeviceFormatProperties2KHR = anv_GetPhysicalDeviceFormatProperties2KHR,
+    .vkGetPhysicalDeviceImageFormatProperties2KHR = anv_GetPhysicalDeviceImageFormatProperties2KHR,
+    .vkGetPhysicalDeviceQueueFamilyProperties2KHR = anv_GetPhysicalDeviceQueueFamilyProperties2KHR,
+    .vkGetPhysicalDeviceMemoryProperties2KHR = anv_GetPhysicalDeviceMemoryProperties2KHR,
+    .vkGetPhysicalDeviceSparseImageFormatProperties2KHR = anv_GetPhysicalDeviceSparseImageFormatProperties2KHR,
+    .vkCmdPushDescriptorSetKHR = anv_CmdPushDescriptorSetKHR,
+    .vkTrimCommandPoolKHR = anv_TrimCommandPoolKHR,
+    .vkGetPhysicalDeviceExternalBufferPropertiesKHR = anv_GetPhysicalDeviceExternalBufferPropertiesKHR,
+    .vkGetMemoryFdKHR = anv_GetMemoryFdKHR,
+    .vkGetMemoryFdPropertiesKHR = anv_GetMemoryFdPropertiesKHR,
+    .vkGetPhysicalDeviceExternalSemaphorePropertiesKHR = anv_GetPhysicalDeviceExternalSemaphorePropertiesKHR,
+    .vkGetSemaphoreFdKHR = anv_GetSemaphoreFdKHR,
+    .vkImportSemaphoreFdKHR = anv_ImportSemaphoreFdKHR,
+    .vkGetPhysicalDeviceExternalFencePropertiesKHR = anv_GetPhysicalDeviceExternalFencePropertiesKHR,
+    .vkGetFenceFdKHR = anv_GetFenceFdKHR,
+    .vkImportFenceFdKHR = anv_ImportFenceFdKHR,
+    .vkBindBufferMemory2KHR = anv_BindBufferMemory2KHR,
+    .vkBindImageMemory2KHR = anv_BindImageMemory2KHR,
+    .vkCreateDescriptorUpdateTemplateKHR = anv_CreateDescriptorUpdateTemplateKHR,
+    .vkDestroyDescriptorUpdateTemplateKHR = anv_DestroyDescriptorUpdateTemplateKHR,
+    .vkUpdateDescriptorSetWithTemplateKHR = anv_UpdateDescriptorSetWithTemplateKHR,
+    .vkCmdPushDescriptorSetWithTemplateKHR = anv_CmdPushDescriptorSetWithTemplateKHR,
+    .vkGetPhysicalDeviceSurfaceCapabilities2KHR = anv_GetPhysicalDeviceSurfaceCapabilities2KHR,
+    .vkGetPhysicalDeviceSurfaceFormats2KHR = anv_GetPhysicalDeviceSurfaceFormats2KHR,
+    .vkGetBufferMemoryRequirements2KHR = anv_GetBufferMemoryRequirements2KHR,
+    .vkGetImageMemoryRequirements2KHR = anv_GetImageMemoryRequirements2KHR,
+    .vkGetImageSparseMemoryRequirements2KHR = anv_GetImageSparseMemoryRequirements2KHR,
+    .vkCreateSamplerYcbcrConversionKHR = anv_CreateSamplerYcbcrConversionKHR,
+    .vkDestroySamplerYcbcrConversionKHR = anv_DestroySamplerYcbcrConversionKHR,
 #ifdef ANDROID
-    .GetSwapchainGrallocUsageANDROID = anv_GetSwapchainGrallocUsageANDROID,
+    .vkGetSwapchainGrallocUsageANDROID = anv_GetSwapchainGrallocUsageANDROID,
 #endif // ANDROID
 #ifdef ANDROID
-    .AcquireImageANDROID = anv_AcquireImageANDROID,
+    .vkAcquireImageANDROID = anv_AcquireImageANDROID,
 #endif // ANDROID
 #ifdef ANDROID
-    .QueueSignalReleaseImageANDROID = anv_QueueSignalReleaseImageANDROID,
+    .vkQueueSignalReleaseImageANDROID = anv_QueueSignalReleaseImageANDROID,
 #endif // ANDROID
-    .CreateDmaBufImageINTEL = anv_CreateDmaBufImageINTEL,
+    .vkCreateDmaBufImageINTEL = anv_CreateDmaBufImageINTEL,
   };
     VkResult gen7_CreateInstance(const VkInstanceCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkInstance* pInstance) __attribute__ ((weak));
     void gen7_DestroyInstance(VkInstance instance, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
@@ -1057,218 +1057,218 @@ static const struct anv_entrypoint entrypoints[] = {
 #ifdef ANDROID
     VkResult gen7_QueueSignalReleaseImageANDROID(VkQueue queue, uint32_t waitSemaphoreCount, const VkSemaphore* pWaitSemaphores, VkImage image, int* pNativeFenceFd) __attribute__ ((weak));
 #endif // ANDROID
-    VkResult gen7_CreateDmaBufImageINTEL(VkDevice device, const VkDmaBufImageCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator,VkDeviceMemory* pMem,VkImage* pImage) __attribute__ ((weak));
+    VkResult gen7_CreateDmaBufImageINTEL(VkDevice device, const VkDmaBufImageCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDeviceMemory* pMem, VkImage* pImage) __attribute__ ((weak));
 
-  const struct anv_dispatch_table gen7_layer = {
-    .CreateInstance = gen7_CreateInstance,
-    .DestroyInstance = gen7_DestroyInstance,
-    .EnumeratePhysicalDevices = gen7_EnumeratePhysicalDevices,
-    .GetDeviceProcAddr = gen7_GetDeviceProcAddr,
-    .GetInstanceProcAddr = gen7_GetInstanceProcAddr,
-    .GetPhysicalDeviceProperties = gen7_GetPhysicalDeviceProperties,
-    .GetPhysicalDeviceQueueFamilyProperties = gen7_GetPhysicalDeviceQueueFamilyProperties,
-    .GetPhysicalDeviceMemoryProperties = gen7_GetPhysicalDeviceMemoryProperties,
-    .GetPhysicalDeviceFeatures = gen7_GetPhysicalDeviceFeatures,
-    .GetPhysicalDeviceFormatProperties = gen7_GetPhysicalDeviceFormatProperties,
-    .GetPhysicalDeviceImageFormatProperties = gen7_GetPhysicalDeviceImageFormatProperties,
-    .CreateDevice = gen7_CreateDevice,
-    .DestroyDevice = gen7_DestroyDevice,
-    .EnumerateInstanceLayerProperties = gen7_EnumerateInstanceLayerProperties,
-    .EnumerateInstanceExtensionProperties = gen7_EnumerateInstanceExtensionProperties,
-    .EnumerateDeviceLayerProperties = gen7_EnumerateDeviceLayerProperties,
-    .EnumerateDeviceExtensionProperties = gen7_EnumerateDeviceExtensionProperties,
-    .GetDeviceQueue = gen7_GetDeviceQueue,
-    .QueueSubmit = gen7_QueueSubmit,
-    .QueueWaitIdle = gen7_QueueWaitIdle,
-    .DeviceWaitIdle = gen7_DeviceWaitIdle,
-    .AllocateMemory = gen7_AllocateMemory,
-    .FreeMemory = gen7_FreeMemory,
-    .MapMemory = gen7_MapMemory,
-    .UnmapMemory = gen7_UnmapMemory,
-    .FlushMappedMemoryRanges = gen7_FlushMappedMemoryRanges,
-    .InvalidateMappedMemoryRanges = gen7_InvalidateMappedMemoryRanges,
-    .GetDeviceMemoryCommitment = gen7_GetDeviceMemoryCommitment,
-    .GetBufferMemoryRequirements = gen7_GetBufferMemoryRequirements,
-    .BindBufferMemory = gen7_BindBufferMemory,
-    .GetImageMemoryRequirements = gen7_GetImageMemoryRequirements,
-    .BindImageMemory = gen7_BindImageMemory,
-    .GetImageSparseMemoryRequirements = gen7_GetImageSparseMemoryRequirements,
-    .GetPhysicalDeviceSparseImageFormatProperties = gen7_GetPhysicalDeviceSparseImageFormatProperties,
-    .QueueBindSparse = gen7_QueueBindSparse,
-    .CreateFence = gen7_CreateFence,
-    .DestroyFence = gen7_DestroyFence,
-    .ResetFences = gen7_ResetFences,
-    .GetFenceStatus = gen7_GetFenceStatus,
-    .WaitForFences = gen7_WaitForFences,
-    .CreateSemaphore = gen7_CreateSemaphore,
-    .DestroySemaphore = gen7_DestroySemaphore,
-    .CreateEvent = gen7_CreateEvent,
-    .DestroyEvent = gen7_DestroyEvent,
-    .GetEventStatus = gen7_GetEventStatus,
-    .SetEvent = gen7_SetEvent,
-    .ResetEvent = gen7_ResetEvent,
-    .CreateQueryPool = gen7_CreateQueryPool,
-    .DestroyQueryPool = gen7_DestroyQueryPool,
-    .GetQueryPoolResults = gen7_GetQueryPoolResults,
-    .CreateBuffer = gen7_CreateBuffer,
-    .DestroyBuffer = gen7_DestroyBuffer,
-    .CreateBufferView = gen7_CreateBufferView,
-    .DestroyBufferView = gen7_DestroyBufferView,
-    .CreateImage = gen7_CreateImage,
-    .DestroyImage = gen7_DestroyImage,
-    .GetImageSubresourceLayout = gen7_GetImageSubresourceLayout,
-    .CreateImageView = gen7_CreateImageView,
-    .DestroyImageView = gen7_DestroyImageView,
-    .CreateShaderModule = gen7_CreateShaderModule,
-    .DestroyShaderModule = gen7_DestroyShaderModule,
-    .CreatePipelineCache = gen7_CreatePipelineCache,
-    .DestroyPipelineCache = gen7_DestroyPipelineCache,
-    .GetPipelineCacheData = gen7_GetPipelineCacheData,
-    .MergePipelineCaches = gen7_MergePipelineCaches,
-    .CreateGraphicsPipelines = gen7_CreateGraphicsPipelines,
-    .CreateComputePipelines = gen7_CreateComputePipelines,
-    .DestroyPipeline = gen7_DestroyPipeline,
-    .CreatePipelineLayout = gen7_CreatePipelineLayout,
-    .DestroyPipelineLayout = gen7_DestroyPipelineLayout,
-    .CreateSampler = gen7_CreateSampler,
-    .DestroySampler = gen7_DestroySampler,
-    .CreateDescriptorSetLayout = gen7_CreateDescriptorSetLayout,
-    .DestroyDescriptorSetLayout = gen7_DestroyDescriptorSetLayout,
-    .CreateDescriptorPool = gen7_CreateDescriptorPool,
-    .DestroyDescriptorPool = gen7_DestroyDescriptorPool,
-    .ResetDescriptorPool = gen7_ResetDescriptorPool,
-    .AllocateDescriptorSets = gen7_AllocateDescriptorSets,
-    .FreeDescriptorSets = gen7_FreeDescriptorSets,
-    .UpdateDescriptorSets = gen7_UpdateDescriptorSets,
-    .CreateFramebuffer = gen7_CreateFramebuffer,
-    .DestroyFramebuffer = gen7_DestroyFramebuffer,
-    .CreateRenderPass = gen7_CreateRenderPass,
-    .DestroyRenderPass = gen7_DestroyRenderPass,
-    .GetRenderAreaGranularity = gen7_GetRenderAreaGranularity,
-    .CreateCommandPool = gen7_CreateCommandPool,
-    .DestroyCommandPool = gen7_DestroyCommandPool,
-    .ResetCommandPool = gen7_ResetCommandPool,
-    .AllocateCommandBuffers = gen7_AllocateCommandBuffers,
-    .FreeCommandBuffers = gen7_FreeCommandBuffers,
-    .BeginCommandBuffer = gen7_BeginCommandBuffer,
-    .EndCommandBuffer = gen7_EndCommandBuffer,
-    .ResetCommandBuffer = gen7_ResetCommandBuffer,
-    .CmdBindPipeline = gen7_CmdBindPipeline,
-    .CmdSetViewport = gen7_CmdSetViewport,
-    .CmdSetScissor = gen7_CmdSetScissor,
-    .CmdSetLineWidth = gen7_CmdSetLineWidth,
-    .CmdSetDepthBias = gen7_CmdSetDepthBias,
-    .CmdSetBlendConstants = gen7_CmdSetBlendConstants,
-    .CmdSetDepthBounds = gen7_CmdSetDepthBounds,
-    .CmdSetStencilCompareMask = gen7_CmdSetStencilCompareMask,
-    .CmdSetStencilWriteMask = gen7_CmdSetStencilWriteMask,
-    .CmdSetStencilReference = gen7_CmdSetStencilReference,
-    .CmdBindDescriptorSets = gen7_CmdBindDescriptorSets,
-    .CmdBindIndexBuffer = gen7_CmdBindIndexBuffer,
-    .CmdBindVertexBuffers = gen7_CmdBindVertexBuffers,
-    .CmdDraw = gen7_CmdDraw,
-    .CmdDrawIndexed = gen7_CmdDrawIndexed,
-    .CmdDrawIndirect = gen7_CmdDrawIndirect,
-    .CmdDrawIndexedIndirect = gen7_CmdDrawIndexedIndirect,
-    .CmdDispatch = gen7_CmdDispatch,
-    .CmdDispatchIndirect = gen7_CmdDispatchIndirect,
-    .CmdCopyBuffer = gen7_CmdCopyBuffer,
-    .CmdCopyImage = gen7_CmdCopyImage,
-    .CmdBlitImage = gen7_CmdBlitImage,
-    .CmdCopyBufferToImage = gen7_CmdCopyBufferToImage,
-    .CmdCopyImageToBuffer = gen7_CmdCopyImageToBuffer,
-    .CmdUpdateBuffer = gen7_CmdUpdateBuffer,
-    .CmdFillBuffer = gen7_CmdFillBuffer,
-    .CmdClearColorImage = gen7_CmdClearColorImage,
-    .CmdClearDepthStencilImage = gen7_CmdClearDepthStencilImage,
-    .CmdClearAttachments = gen7_CmdClearAttachments,
-    .CmdResolveImage = gen7_CmdResolveImage,
-    .CmdSetEvent = gen7_CmdSetEvent,
-    .CmdResetEvent = gen7_CmdResetEvent,
-    .CmdWaitEvents = gen7_CmdWaitEvents,
-    .CmdPipelineBarrier = gen7_CmdPipelineBarrier,
-    .CmdBeginQuery = gen7_CmdBeginQuery,
-    .CmdEndQuery = gen7_CmdEndQuery,
-    .CmdResetQueryPool = gen7_CmdResetQueryPool,
-    .CmdWriteTimestamp = gen7_CmdWriteTimestamp,
-    .CmdCopyQueryPoolResults = gen7_CmdCopyQueryPoolResults,
-    .CmdPushConstants = gen7_CmdPushConstants,
-    .CmdBeginRenderPass = gen7_CmdBeginRenderPass,
-    .CmdNextSubpass = gen7_CmdNextSubpass,
-    .CmdEndRenderPass = gen7_CmdEndRenderPass,
-    .CmdExecuteCommands = gen7_CmdExecuteCommands,
-    .DestroySurfaceKHR = gen7_DestroySurfaceKHR,
-    .GetPhysicalDeviceSurfaceSupportKHR = gen7_GetPhysicalDeviceSurfaceSupportKHR,
-    .GetPhysicalDeviceSurfaceCapabilitiesKHR = gen7_GetPhysicalDeviceSurfaceCapabilitiesKHR,
-    .GetPhysicalDeviceSurfaceFormatsKHR = gen7_GetPhysicalDeviceSurfaceFormatsKHR,
-    .GetPhysicalDeviceSurfacePresentModesKHR = gen7_GetPhysicalDeviceSurfacePresentModesKHR,
-    .CreateSwapchainKHR = gen7_CreateSwapchainKHR,
-    .DestroySwapchainKHR = gen7_DestroySwapchainKHR,
-    .GetSwapchainImagesKHR = gen7_GetSwapchainImagesKHR,
-    .AcquireNextImageKHR = gen7_AcquireNextImageKHR,
-    .QueuePresentKHR = gen7_QueuePresentKHR,
+  const struct anv_dispatch_table gen7_dispatch_table = {
+    .vkCreateInstance = gen7_CreateInstance,
+    .vkDestroyInstance = gen7_DestroyInstance,
+    .vkEnumeratePhysicalDevices = gen7_EnumeratePhysicalDevices,
+    .vkGetDeviceProcAddr = gen7_GetDeviceProcAddr,
+    .vkGetInstanceProcAddr = gen7_GetInstanceProcAddr,
+    .vkGetPhysicalDeviceProperties = gen7_GetPhysicalDeviceProperties,
+    .vkGetPhysicalDeviceQueueFamilyProperties = gen7_GetPhysicalDeviceQueueFamilyProperties,
+    .vkGetPhysicalDeviceMemoryProperties = gen7_GetPhysicalDeviceMemoryProperties,
+    .vkGetPhysicalDeviceFeatures = gen7_GetPhysicalDeviceFeatures,
+    .vkGetPhysicalDeviceFormatProperties = gen7_GetPhysicalDeviceFormatProperties,
+    .vkGetPhysicalDeviceImageFormatProperties = gen7_GetPhysicalDeviceImageFormatProperties,
+    .vkCreateDevice = gen7_CreateDevice,
+    .vkDestroyDevice = gen7_DestroyDevice,
+    .vkEnumerateInstanceLayerProperties = gen7_EnumerateInstanceLayerProperties,
+    .vkEnumerateInstanceExtensionProperties = gen7_EnumerateInstanceExtensionProperties,
+    .vkEnumerateDeviceLayerProperties = gen7_EnumerateDeviceLayerProperties,
+    .vkEnumerateDeviceExtensionProperties = gen7_EnumerateDeviceExtensionProperties,
+    .vkGetDeviceQueue = gen7_GetDeviceQueue,
+    .vkQueueSubmit = gen7_QueueSubmit,
+    .vkQueueWaitIdle = gen7_QueueWaitIdle,
+    .vkDeviceWaitIdle = gen7_DeviceWaitIdle,
+    .vkAllocateMemory = gen7_AllocateMemory,
+    .vkFreeMemory = gen7_FreeMemory,
+    .vkMapMemory = gen7_MapMemory,
+    .vkUnmapMemory = gen7_UnmapMemory,
+    .vkFlushMappedMemoryRanges = gen7_FlushMappedMemoryRanges,
+    .vkInvalidateMappedMemoryRanges = gen7_InvalidateMappedMemoryRanges,
+    .vkGetDeviceMemoryCommitment = gen7_GetDeviceMemoryCommitment,
+    .vkGetBufferMemoryRequirements = gen7_GetBufferMemoryRequirements,
+    .vkBindBufferMemory = gen7_BindBufferMemory,
+    .vkGetImageMemoryRequirements = gen7_GetImageMemoryRequirements,
+    .vkBindImageMemory = gen7_BindImageMemory,
+    .vkGetImageSparseMemoryRequirements = gen7_GetImageSparseMemoryRequirements,
+    .vkGetPhysicalDeviceSparseImageFormatProperties = gen7_GetPhysicalDeviceSparseImageFormatProperties,
+    .vkQueueBindSparse = gen7_QueueBindSparse,
+    .vkCreateFence = gen7_CreateFence,
+    .vkDestroyFence = gen7_DestroyFence,
+    .vkResetFences = gen7_ResetFences,
+    .vkGetFenceStatus = gen7_GetFenceStatus,
+    .vkWaitForFences = gen7_WaitForFences,
+    .vkCreateSemaphore = gen7_CreateSemaphore,
+    .vkDestroySemaphore = gen7_DestroySemaphore,
+    .vkCreateEvent = gen7_CreateEvent,
+    .vkDestroyEvent = gen7_DestroyEvent,
+    .vkGetEventStatus = gen7_GetEventStatus,
+    .vkSetEvent = gen7_SetEvent,
+    .vkResetEvent = gen7_ResetEvent,
+    .vkCreateQueryPool = gen7_CreateQueryPool,
+    .vkDestroyQueryPool = gen7_DestroyQueryPool,
+    .vkGetQueryPoolResults = gen7_GetQueryPoolResults,
+    .vkCreateBuffer = gen7_CreateBuffer,
+    .vkDestroyBuffer = gen7_DestroyBuffer,
+    .vkCreateBufferView = gen7_CreateBufferView,
+    .vkDestroyBufferView = gen7_DestroyBufferView,
+    .vkCreateImage = gen7_CreateImage,
+    .vkDestroyImage = gen7_DestroyImage,
+    .vkGetImageSubresourceLayout = gen7_GetImageSubresourceLayout,
+    .vkCreateImageView = gen7_CreateImageView,
+    .vkDestroyImageView = gen7_DestroyImageView,
+    .vkCreateShaderModule = gen7_CreateShaderModule,
+    .vkDestroyShaderModule = gen7_DestroyShaderModule,
+    .vkCreatePipelineCache = gen7_CreatePipelineCache,
+    .vkDestroyPipelineCache = gen7_DestroyPipelineCache,
+    .vkGetPipelineCacheData = gen7_GetPipelineCacheData,
+    .vkMergePipelineCaches = gen7_MergePipelineCaches,
+    .vkCreateGraphicsPipelines = gen7_CreateGraphicsPipelines,
+    .vkCreateComputePipelines = gen7_CreateComputePipelines,
+    .vkDestroyPipeline = gen7_DestroyPipeline,
+    .vkCreatePipelineLayout = gen7_CreatePipelineLayout,
+    .vkDestroyPipelineLayout = gen7_DestroyPipelineLayout,
+    .vkCreateSampler = gen7_CreateSampler,
+    .vkDestroySampler = gen7_DestroySampler,
+    .vkCreateDescriptorSetLayout = gen7_CreateDescriptorSetLayout,
+    .vkDestroyDescriptorSetLayout = gen7_DestroyDescriptorSetLayout,
+    .vkCreateDescriptorPool = gen7_CreateDescriptorPool,
+    .vkDestroyDescriptorPool = gen7_DestroyDescriptorPool,
+    .vkResetDescriptorPool = gen7_ResetDescriptorPool,
+    .vkAllocateDescriptorSets = gen7_AllocateDescriptorSets,
+    .vkFreeDescriptorSets = gen7_FreeDescriptorSets,
+    .vkUpdateDescriptorSets = gen7_UpdateDescriptorSets,
+    .vkCreateFramebuffer = gen7_CreateFramebuffer,
+    .vkDestroyFramebuffer = gen7_DestroyFramebuffer,
+    .vkCreateRenderPass = gen7_CreateRenderPass,
+    .vkDestroyRenderPass = gen7_DestroyRenderPass,
+    .vkGetRenderAreaGranularity = gen7_GetRenderAreaGranularity,
+    .vkCreateCommandPool = gen7_CreateCommandPool,
+    .vkDestroyCommandPool = gen7_DestroyCommandPool,
+    .vkResetCommandPool = gen7_ResetCommandPool,
+    .vkAllocateCommandBuffers = gen7_AllocateCommandBuffers,
+    .vkFreeCommandBuffers = gen7_FreeCommandBuffers,
+    .vkBeginCommandBuffer = gen7_BeginCommandBuffer,
+    .vkEndCommandBuffer = gen7_EndCommandBuffer,
+    .vkResetCommandBuffer = gen7_ResetCommandBuffer,
+    .vkCmdBindPipeline = gen7_CmdBindPipeline,
+    .vkCmdSetViewport = gen7_CmdSetViewport,
+    .vkCmdSetScissor = gen7_CmdSetScissor,
+    .vkCmdSetLineWidth = gen7_CmdSetLineWidth,
+    .vkCmdSetDepthBias = gen7_CmdSetDepthBias,
+    .vkCmdSetBlendConstants = gen7_CmdSetBlendConstants,
+    .vkCmdSetDepthBounds = gen7_CmdSetDepthBounds,
+    .vkCmdSetStencilCompareMask = gen7_CmdSetStencilCompareMask,
+    .vkCmdSetStencilWriteMask = gen7_CmdSetStencilWriteMask,
+    .vkCmdSetStencilReference = gen7_CmdSetStencilReference,
+    .vkCmdBindDescriptorSets = gen7_CmdBindDescriptorSets,
+    .vkCmdBindIndexBuffer = gen7_CmdBindIndexBuffer,
+    .vkCmdBindVertexBuffers = gen7_CmdBindVertexBuffers,
+    .vkCmdDraw = gen7_CmdDraw,
+    .vkCmdDrawIndexed = gen7_CmdDrawIndexed,
+    .vkCmdDrawIndirect = gen7_CmdDrawIndirect,
+    .vkCmdDrawIndexedIndirect = gen7_CmdDrawIndexedIndirect,
+    .vkCmdDispatch = gen7_CmdDispatch,
+    .vkCmdDispatchIndirect = gen7_CmdDispatchIndirect,
+    .vkCmdCopyBuffer = gen7_CmdCopyBuffer,
+    .vkCmdCopyImage = gen7_CmdCopyImage,
+    .vkCmdBlitImage = gen7_CmdBlitImage,
+    .vkCmdCopyBufferToImage = gen7_CmdCopyBufferToImage,
+    .vkCmdCopyImageToBuffer = gen7_CmdCopyImageToBuffer,
+    .vkCmdUpdateBuffer = gen7_CmdUpdateBuffer,
+    .vkCmdFillBuffer = gen7_CmdFillBuffer,
+    .vkCmdClearColorImage = gen7_CmdClearColorImage,
+    .vkCmdClearDepthStencilImage = gen7_CmdClearDepthStencilImage,
+    .vkCmdClearAttachments = gen7_CmdClearAttachments,
+    .vkCmdResolveImage = gen7_CmdResolveImage,
+    .vkCmdSetEvent = gen7_CmdSetEvent,
+    .vkCmdResetEvent = gen7_CmdResetEvent,
+    .vkCmdWaitEvents = gen7_CmdWaitEvents,
+    .vkCmdPipelineBarrier = gen7_CmdPipelineBarrier,
+    .vkCmdBeginQuery = gen7_CmdBeginQuery,
+    .vkCmdEndQuery = gen7_CmdEndQuery,
+    .vkCmdResetQueryPool = gen7_CmdResetQueryPool,
+    .vkCmdWriteTimestamp = gen7_CmdWriteTimestamp,
+    .vkCmdCopyQueryPoolResults = gen7_CmdCopyQueryPoolResults,
+    .vkCmdPushConstants = gen7_CmdPushConstants,
+    .vkCmdBeginRenderPass = gen7_CmdBeginRenderPass,
+    .vkCmdNextSubpass = gen7_CmdNextSubpass,
+    .vkCmdEndRenderPass = gen7_CmdEndRenderPass,
+    .vkCmdExecuteCommands = gen7_CmdExecuteCommands,
+    .vkDestroySurfaceKHR = gen7_DestroySurfaceKHR,
+    .vkGetPhysicalDeviceSurfaceSupportKHR = gen7_GetPhysicalDeviceSurfaceSupportKHR,
+    .vkGetPhysicalDeviceSurfaceCapabilitiesKHR = gen7_GetPhysicalDeviceSurfaceCapabilitiesKHR,
+    .vkGetPhysicalDeviceSurfaceFormatsKHR = gen7_GetPhysicalDeviceSurfaceFormatsKHR,
+    .vkGetPhysicalDeviceSurfacePresentModesKHR = gen7_GetPhysicalDeviceSurfacePresentModesKHR,
+    .vkCreateSwapchainKHR = gen7_CreateSwapchainKHR,
+    .vkDestroySwapchainKHR = gen7_DestroySwapchainKHR,
+    .vkGetSwapchainImagesKHR = gen7_GetSwapchainImagesKHR,
+    .vkAcquireNextImageKHR = gen7_AcquireNextImageKHR,
+    .vkQueuePresentKHR = gen7_QueuePresentKHR,
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
-    .CreateWaylandSurfaceKHR = gen7_CreateWaylandSurfaceKHR,
+    .vkCreateWaylandSurfaceKHR = gen7_CreateWaylandSurfaceKHR,
 #endif // VK_USE_PLATFORM_WAYLAND_KHR
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
-    .GetPhysicalDeviceWaylandPresentationSupportKHR = gen7_GetPhysicalDeviceWaylandPresentationSupportKHR,
+    .vkGetPhysicalDeviceWaylandPresentationSupportKHR = gen7_GetPhysicalDeviceWaylandPresentationSupportKHR,
 #endif // VK_USE_PLATFORM_WAYLAND_KHR
 #ifdef VK_USE_PLATFORM_XLIB_KHR
-    .CreateXlibSurfaceKHR = gen7_CreateXlibSurfaceKHR,
+    .vkCreateXlibSurfaceKHR = gen7_CreateXlibSurfaceKHR,
 #endif // VK_USE_PLATFORM_XLIB_KHR
 #ifdef VK_USE_PLATFORM_XLIB_KHR
-    .GetPhysicalDeviceXlibPresentationSupportKHR = gen7_GetPhysicalDeviceXlibPresentationSupportKHR,
+    .vkGetPhysicalDeviceXlibPresentationSupportKHR = gen7_GetPhysicalDeviceXlibPresentationSupportKHR,
 #endif // VK_USE_PLATFORM_XLIB_KHR
 #ifdef VK_USE_PLATFORM_XCB_KHR
-    .CreateXcbSurfaceKHR = gen7_CreateXcbSurfaceKHR,
+    .vkCreateXcbSurfaceKHR = gen7_CreateXcbSurfaceKHR,
 #endif // VK_USE_PLATFORM_XCB_KHR
 #ifdef VK_USE_PLATFORM_XCB_KHR
-    .GetPhysicalDeviceXcbPresentationSupportKHR = gen7_GetPhysicalDeviceXcbPresentationSupportKHR,
+    .vkGetPhysicalDeviceXcbPresentationSupportKHR = gen7_GetPhysicalDeviceXcbPresentationSupportKHR,
 #endif // VK_USE_PLATFORM_XCB_KHR
-    .CreateDebugReportCallbackEXT = gen7_CreateDebugReportCallbackEXT,
-    .DestroyDebugReportCallbackEXT = gen7_DestroyDebugReportCallbackEXT,
-    .DebugReportMessageEXT = gen7_DebugReportMessageEXT,
-    .GetPhysicalDeviceFeatures2KHR = gen7_GetPhysicalDeviceFeatures2KHR,
-    .GetPhysicalDeviceProperties2KHR = gen7_GetPhysicalDeviceProperties2KHR,
-    .GetPhysicalDeviceFormatProperties2KHR = gen7_GetPhysicalDeviceFormatProperties2KHR,
-    .GetPhysicalDeviceImageFormatProperties2KHR = gen7_GetPhysicalDeviceImageFormatProperties2KHR,
-    .GetPhysicalDeviceQueueFamilyProperties2KHR = gen7_GetPhysicalDeviceQueueFamilyProperties2KHR,
-    .GetPhysicalDeviceMemoryProperties2KHR = gen7_GetPhysicalDeviceMemoryProperties2KHR,
-    .GetPhysicalDeviceSparseImageFormatProperties2KHR = gen7_GetPhysicalDeviceSparseImageFormatProperties2KHR,
-    .CmdPushDescriptorSetKHR = gen7_CmdPushDescriptorSetKHR,
-    .TrimCommandPoolKHR = gen7_TrimCommandPoolKHR,
-    .GetPhysicalDeviceExternalBufferPropertiesKHR = gen7_GetPhysicalDeviceExternalBufferPropertiesKHR,
-    .GetMemoryFdKHR = gen7_GetMemoryFdKHR,
-    .GetMemoryFdPropertiesKHR = gen7_GetMemoryFdPropertiesKHR,
-    .GetPhysicalDeviceExternalSemaphorePropertiesKHR = gen7_GetPhysicalDeviceExternalSemaphorePropertiesKHR,
-    .GetSemaphoreFdKHR = gen7_GetSemaphoreFdKHR,
-    .ImportSemaphoreFdKHR = gen7_ImportSemaphoreFdKHR,
-    .GetPhysicalDeviceExternalFencePropertiesKHR = gen7_GetPhysicalDeviceExternalFencePropertiesKHR,
-    .GetFenceFdKHR = gen7_GetFenceFdKHR,
-    .ImportFenceFdKHR = gen7_ImportFenceFdKHR,
-    .BindBufferMemory2KHR = gen7_BindBufferMemory2KHR,
-    .BindImageMemory2KHR = gen7_BindImageMemory2KHR,
-    .CreateDescriptorUpdateTemplateKHR = gen7_CreateDescriptorUpdateTemplateKHR,
-    .DestroyDescriptorUpdateTemplateKHR = gen7_DestroyDescriptorUpdateTemplateKHR,
-    .UpdateDescriptorSetWithTemplateKHR = gen7_UpdateDescriptorSetWithTemplateKHR,
-    .CmdPushDescriptorSetWithTemplateKHR = gen7_CmdPushDescriptorSetWithTemplateKHR,
-    .GetPhysicalDeviceSurfaceCapabilities2KHR = gen7_GetPhysicalDeviceSurfaceCapabilities2KHR,
-    .GetPhysicalDeviceSurfaceFormats2KHR = gen7_GetPhysicalDeviceSurfaceFormats2KHR,
-    .GetBufferMemoryRequirements2KHR = gen7_GetBufferMemoryRequirements2KHR,
-    .GetImageMemoryRequirements2KHR = gen7_GetImageMemoryRequirements2KHR,
-    .GetImageSparseMemoryRequirements2KHR = gen7_GetImageSparseMemoryRequirements2KHR,
-    .CreateSamplerYcbcrConversionKHR = gen7_CreateSamplerYcbcrConversionKHR,
-    .DestroySamplerYcbcrConversionKHR = gen7_DestroySamplerYcbcrConversionKHR,
+    .vkCreateDebugReportCallbackEXT = gen7_CreateDebugReportCallbackEXT,
+    .vkDestroyDebugReportCallbackEXT = gen7_DestroyDebugReportCallbackEXT,
+    .vkDebugReportMessageEXT = gen7_DebugReportMessageEXT,
+    .vkGetPhysicalDeviceFeatures2KHR = gen7_GetPhysicalDeviceFeatures2KHR,
+    .vkGetPhysicalDeviceProperties2KHR = gen7_GetPhysicalDeviceProperties2KHR,
+    .vkGetPhysicalDeviceFormatProperties2KHR = gen7_GetPhysicalDeviceFormatProperties2KHR,
+    .vkGetPhysicalDeviceImageFormatProperties2KHR = gen7_GetPhysicalDeviceImageFormatProperties2KHR,
+    .vkGetPhysicalDeviceQueueFamilyProperties2KHR = gen7_GetPhysicalDeviceQueueFamilyProperties2KHR,
+    .vkGetPhysicalDeviceMemoryProperties2KHR = gen7_GetPhysicalDeviceMemoryProperties2KHR,
+    .vkGetPhysicalDeviceSparseImageFormatProperties2KHR = gen7_GetPhysicalDeviceSparseImageFormatProperties2KHR,
+    .vkCmdPushDescriptorSetKHR = gen7_CmdPushDescriptorSetKHR,
+    .vkTrimCommandPoolKHR = gen7_TrimCommandPoolKHR,
+    .vkGetPhysicalDeviceExternalBufferPropertiesKHR = gen7_GetPhysicalDeviceExternalBufferPropertiesKHR,
+    .vkGetMemoryFdKHR = gen7_GetMemoryFdKHR,
+    .vkGetMemoryFdPropertiesKHR = gen7_GetMemoryFdPropertiesKHR,
+    .vkGetPhysicalDeviceExternalSemaphorePropertiesKHR = gen7_GetPhysicalDeviceExternalSemaphorePropertiesKHR,
+    .vkGetSemaphoreFdKHR = gen7_GetSemaphoreFdKHR,
+    .vkImportSemaphoreFdKHR = gen7_ImportSemaphoreFdKHR,
+    .vkGetPhysicalDeviceExternalFencePropertiesKHR = gen7_GetPhysicalDeviceExternalFencePropertiesKHR,
+    .vkGetFenceFdKHR = gen7_GetFenceFdKHR,
+    .vkImportFenceFdKHR = gen7_ImportFenceFdKHR,
+    .vkBindBufferMemory2KHR = gen7_BindBufferMemory2KHR,
+    .vkBindImageMemory2KHR = gen7_BindImageMemory2KHR,
+    .vkCreateDescriptorUpdateTemplateKHR = gen7_CreateDescriptorUpdateTemplateKHR,
+    .vkDestroyDescriptorUpdateTemplateKHR = gen7_DestroyDescriptorUpdateTemplateKHR,
+    .vkUpdateDescriptorSetWithTemplateKHR = gen7_UpdateDescriptorSetWithTemplateKHR,
+    .vkCmdPushDescriptorSetWithTemplateKHR = gen7_CmdPushDescriptorSetWithTemplateKHR,
+    .vkGetPhysicalDeviceSurfaceCapabilities2KHR = gen7_GetPhysicalDeviceSurfaceCapabilities2KHR,
+    .vkGetPhysicalDeviceSurfaceFormats2KHR = gen7_GetPhysicalDeviceSurfaceFormats2KHR,
+    .vkGetBufferMemoryRequirements2KHR = gen7_GetBufferMemoryRequirements2KHR,
+    .vkGetImageMemoryRequirements2KHR = gen7_GetImageMemoryRequirements2KHR,
+    .vkGetImageSparseMemoryRequirements2KHR = gen7_GetImageSparseMemoryRequirements2KHR,
+    .vkCreateSamplerYcbcrConversionKHR = gen7_CreateSamplerYcbcrConversionKHR,
+    .vkDestroySamplerYcbcrConversionKHR = gen7_DestroySamplerYcbcrConversionKHR,
 #ifdef ANDROID
-    .GetSwapchainGrallocUsageANDROID = gen7_GetSwapchainGrallocUsageANDROID,
+    .vkGetSwapchainGrallocUsageANDROID = gen7_GetSwapchainGrallocUsageANDROID,
 #endif // ANDROID
 #ifdef ANDROID
-    .AcquireImageANDROID = gen7_AcquireImageANDROID,
+    .vkAcquireImageANDROID = gen7_AcquireImageANDROID,
 #endif // ANDROID
 #ifdef ANDROID
-    .QueueSignalReleaseImageANDROID = gen7_QueueSignalReleaseImageANDROID,
+    .vkQueueSignalReleaseImageANDROID = gen7_QueueSignalReleaseImageANDROID,
 #endif // ANDROID
-    .CreateDmaBufImageINTEL = gen7_CreateDmaBufImageINTEL,
+    .vkCreateDmaBufImageINTEL = gen7_CreateDmaBufImageINTEL,
   };
     VkResult gen75_CreateInstance(const VkInstanceCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkInstance* pInstance) __attribute__ ((weak));
     void gen75_DestroyInstance(VkInstance instance, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
@@ -1478,218 +1478,218 @@ static const struct anv_entrypoint entrypoints[] = {
 #ifdef ANDROID
     VkResult gen75_QueueSignalReleaseImageANDROID(VkQueue queue, uint32_t waitSemaphoreCount, const VkSemaphore* pWaitSemaphores, VkImage image, int* pNativeFenceFd) __attribute__ ((weak));
 #endif // ANDROID
-    VkResult gen75_CreateDmaBufImageINTEL(VkDevice device, const VkDmaBufImageCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator,VkDeviceMemory* pMem,VkImage* pImage) __attribute__ ((weak));
+    VkResult gen75_CreateDmaBufImageINTEL(VkDevice device, const VkDmaBufImageCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDeviceMemory* pMem, VkImage* pImage) __attribute__ ((weak));
 
-  const struct anv_dispatch_table gen75_layer = {
-    .CreateInstance = gen75_CreateInstance,
-    .DestroyInstance = gen75_DestroyInstance,
-    .EnumeratePhysicalDevices = gen75_EnumeratePhysicalDevices,
-    .GetDeviceProcAddr = gen75_GetDeviceProcAddr,
-    .GetInstanceProcAddr = gen75_GetInstanceProcAddr,
-    .GetPhysicalDeviceProperties = gen75_GetPhysicalDeviceProperties,
-    .GetPhysicalDeviceQueueFamilyProperties = gen75_GetPhysicalDeviceQueueFamilyProperties,
-    .GetPhysicalDeviceMemoryProperties = gen75_GetPhysicalDeviceMemoryProperties,
-    .GetPhysicalDeviceFeatures = gen75_GetPhysicalDeviceFeatures,
-    .GetPhysicalDeviceFormatProperties = gen75_GetPhysicalDeviceFormatProperties,
-    .GetPhysicalDeviceImageFormatProperties = gen75_GetPhysicalDeviceImageFormatProperties,
-    .CreateDevice = gen75_CreateDevice,
-    .DestroyDevice = gen75_DestroyDevice,
-    .EnumerateInstanceLayerProperties = gen75_EnumerateInstanceLayerProperties,
-    .EnumerateInstanceExtensionProperties = gen75_EnumerateInstanceExtensionProperties,
-    .EnumerateDeviceLayerProperties = gen75_EnumerateDeviceLayerProperties,
-    .EnumerateDeviceExtensionProperties = gen75_EnumerateDeviceExtensionProperties,
-    .GetDeviceQueue = gen75_GetDeviceQueue,
-    .QueueSubmit = gen75_QueueSubmit,
-    .QueueWaitIdle = gen75_QueueWaitIdle,
-    .DeviceWaitIdle = gen75_DeviceWaitIdle,
-    .AllocateMemory = gen75_AllocateMemory,
-    .FreeMemory = gen75_FreeMemory,
-    .MapMemory = gen75_MapMemory,
-    .UnmapMemory = gen75_UnmapMemory,
-    .FlushMappedMemoryRanges = gen75_FlushMappedMemoryRanges,
-    .InvalidateMappedMemoryRanges = gen75_InvalidateMappedMemoryRanges,
-    .GetDeviceMemoryCommitment = gen75_GetDeviceMemoryCommitment,
-    .GetBufferMemoryRequirements = gen75_GetBufferMemoryRequirements,
-    .BindBufferMemory = gen75_BindBufferMemory,
-    .GetImageMemoryRequirements = gen75_GetImageMemoryRequirements,
-    .BindImageMemory = gen75_BindImageMemory,
-    .GetImageSparseMemoryRequirements = gen75_GetImageSparseMemoryRequirements,
-    .GetPhysicalDeviceSparseImageFormatProperties = gen75_GetPhysicalDeviceSparseImageFormatProperties,
-    .QueueBindSparse = gen75_QueueBindSparse,
-    .CreateFence = gen75_CreateFence,
-    .DestroyFence = gen75_DestroyFence,
-    .ResetFences = gen75_ResetFences,
-    .GetFenceStatus = gen75_GetFenceStatus,
-    .WaitForFences = gen75_WaitForFences,
-    .CreateSemaphore = gen75_CreateSemaphore,
-    .DestroySemaphore = gen75_DestroySemaphore,
-    .CreateEvent = gen75_CreateEvent,
-    .DestroyEvent = gen75_DestroyEvent,
-    .GetEventStatus = gen75_GetEventStatus,
-    .SetEvent = gen75_SetEvent,
-    .ResetEvent = gen75_ResetEvent,
-    .CreateQueryPool = gen75_CreateQueryPool,
-    .DestroyQueryPool = gen75_DestroyQueryPool,
-    .GetQueryPoolResults = gen75_GetQueryPoolResults,
-    .CreateBuffer = gen75_CreateBuffer,
-    .DestroyBuffer = gen75_DestroyBuffer,
-    .CreateBufferView = gen75_CreateBufferView,
-    .DestroyBufferView = gen75_DestroyBufferView,
-    .CreateImage = gen75_CreateImage,
-    .DestroyImage = gen75_DestroyImage,
-    .GetImageSubresourceLayout = gen75_GetImageSubresourceLayout,
-    .CreateImageView = gen75_CreateImageView,
-    .DestroyImageView = gen75_DestroyImageView,
-    .CreateShaderModule = gen75_CreateShaderModule,
-    .DestroyShaderModule = gen75_DestroyShaderModule,
-    .CreatePipelineCache = gen75_CreatePipelineCache,
-    .DestroyPipelineCache = gen75_DestroyPipelineCache,
-    .GetPipelineCacheData = gen75_GetPipelineCacheData,
-    .MergePipelineCaches = gen75_MergePipelineCaches,
-    .CreateGraphicsPipelines = gen75_CreateGraphicsPipelines,
-    .CreateComputePipelines = gen75_CreateComputePipelines,
-    .DestroyPipeline = gen75_DestroyPipeline,
-    .CreatePipelineLayout = gen75_CreatePipelineLayout,
-    .DestroyPipelineLayout = gen75_DestroyPipelineLayout,
-    .CreateSampler = gen75_CreateSampler,
-    .DestroySampler = gen75_DestroySampler,
-    .CreateDescriptorSetLayout = gen75_CreateDescriptorSetLayout,
-    .DestroyDescriptorSetLayout = gen75_DestroyDescriptorSetLayout,
-    .CreateDescriptorPool = gen75_CreateDescriptorPool,
-    .DestroyDescriptorPool = gen75_DestroyDescriptorPool,
-    .ResetDescriptorPool = gen75_ResetDescriptorPool,
-    .AllocateDescriptorSets = gen75_AllocateDescriptorSets,
-    .FreeDescriptorSets = gen75_FreeDescriptorSets,
-    .UpdateDescriptorSets = gen75_UpdateDescriptorSets,
-    .CreateFramebuffer = gen75_CreateFramebuffer,
-    .DestroyFramebuffer = gen75_DestroyFramebuffer,
-    .CreateRenderPass = gen75_CreateRenderPass,
-    .DestroyRenderPass = gen75_DestroyRenderPass,
-    .GetRenderAreaGranularity = gen75_GetRenderAreaGranularity,
-    .CreateCommandPool = gen75_CreateCommandPool,
-    .DestroyCommandPool = gen75_DestroyCommandPool,
-    .ResetCommandPool = gen75_ResetCommandPool,
-    .AllocateCommandBuffers = gen75_AllocateCommandBuffers,
-    .FreeCommandBuffers = gen75_FreeCommandBuffers,
-    .BeginCommandBuffer = gen75_BeginCommandBuffer,
-    .EndCommandBuffer = gen75_EndCommandBuffer,
-    .ResetCommandBuffer = gen75_ResetCommandBuffer,
-    .CmdBindPipeline = gen75_CmdBindPipeline,
-    .CmdSetViewport = gen75_CmdSetViewport,
-    .CmdSetScissor = gen75_CmdSetScissor,
-    .CmdSetLineWidth = gen75_CmdSetLineWidth,
-    .CmdSetDepthBias = gen75_CmdSetDepthBias,
-    .CmdSetBlendConstants = gen75_CmdSetBlendConstants,
-    .CmdSetDepthBounds = gen75_CmdSetDepthBounds,
-    .CmdSetStencilCompareMask = gen75_CmdSetStencilCompareMask,
-    .CmdSetStencilWriteMask = gen75_CmdSetStencilWriteMask,
-    .CmdSetStencilReference = gen75_CmdSetStencilReference,
-    .CmdBindDescriptorSets = gen75_CmdBindDescriptorSets,
-    .CmdBindIndexBuffer = gen75_CmdBindIndexBuffer,
-    .CmdBindVertexBuffers = gen75_CmdBindVertexBuffers,
-    .CmdDraw = gen75_CmdDraw,
-    .CmdDrawIndexed = gen75_CmdDrawIndexed,
-    .CmdDrawIndirect = gen75_CmdDrawIndirect,
-    .CmdDrawIndexedIndirect = gen75_CmdDrawIndexedIndirect,
-    .CmdDispatch = gen75_CmdDispatch,
-    .CmdDispatchIndirect = gen75_CmdDispatchIndirect,
-    .CmdCopyBuffer = gen75_CmdCopyBuffer,
-    .CmdCopyImage = gen75_CmdCopyImage,
-    .CmdBlitImage = gen75_CmdBlitImage,
-    .CmdCopyBufferToImage = gen75_CmdCopyBufferToImage,
-    .CmdCopyImageToBuffer = gen75_CmdCopyImageToBuffer,
-    .CmdUpdateBuffer = gen75_CmdUpdateBuffer,
-    .CmdFillBuffer = gen75_CmdFillBuffer,
-    .CmdClearColorImage = gen75_CmdClearColorImage,
-    .CmdClearDepthStencilImage = gen75_CmdClearDepthStencilImage,
-    .CmdClearAttachments = gen75_CmdClearAttachments,
-    .CmdResolveImage = gen75_CmdResolveImage,
-    .CmdSetEvent = gen75_CmdSetEvent,
-    .CmdResetEvent = gen75_CmdResetEvent,
-    .CmdWaitEvents = gen75_CmdWaitEvents,
-    .CmdPipelineBarrier = gen75_CmdPipelineBarrier,
-    .CmdBeginQuery = gen75_CmdBeginQuery,
-    .CmdEndQuery = gen75_CmdEndQuery,
-    .CmdResetQueryPool = gen75_CmdResetQueryPool,
-    .CmdWriteTimestamp = gen75_CmdWriteTimestamp,
-    .CmdCopyQueryPoolResults = gen75_CmdCopyQueryPoolResults,
-    .CmdPushConstants = gen75_CmdPushConstants,
-    .CmdBeginRenderPass = gen75_CmdBeginRenderPass,
-    .CmdNextSubpass = gen75_CmdNextSubpass,
-    .CmdEndRenderPass = gen75_CmdEndRenderPass,
-    .CmdExecuteCommands = gen75_CmdExecuteCommands,
-    .DestroySurfaceKHR = gen75_DestroySurfaceKHR,
-    .GetPhysicalDeviceSurfaceSupportKHR = gen75_GetPhysicalDeviceSurfaceSupportKHR,
-    .GetPhysicalDeviceSurfaceCapabilitiesKHR = gen75_GetPhysicalDeviceSurfaceCapabilitiesKHR,
-    .GetPhysicalDeviceSurfaceFormatsKHR = gen75_GetPhysicalDeviceSurfaceFormatsKHR,
-    .GetPhysicalDeviceSurfacePresentModesKHR = gen75_GetPhysicalDeviceSurfacePresentModesKHR,
-    .CreateSwapchainKHR = gen75_CreateSwapchainKHR,
-    .DestroySwapchainKHR = gen75_DestroySwapchainKHR,
-    .GetSwapchainImagesKHR = gen75_GetSwapchainImagesKHR,
-    .AcquireNextImageKHR = gen75_AcquireNextImageKHR,
-    .QueuePresentKHR = gen75_QueuePresentKHR,
+  const struct anv_dispatch_table gen75_dispatch_table = {
+    .vkCreateInstance = gen75_CreateInstance,
+    .vkDestroyInstance = gen75_DestroyInstance,
+    .vkEnumeratePhysicalDevices = gen75_EnumeratePhysicalDevices,
+    .vkGetDeviceProcAddr = gen75_GetDeviceProcAddr,
+    .vkGetInstanceProcAddr = gen75_GetInstanceProcAddr,
+    .vkGetPhysicalDeviceProperties = gen75_GetPhysicalDeviceProperties,
+    .vkGetPhysicalDeviceQueueFamilyProperties = gen75_GetPhysicalDeviceQueueFamilyProperties,
+    .vkGetPhysicalDeviceMemoryProperties = gen75_GetPhysicalDeviceMemoryProperties,
+    .vkGetPhysicalDeviceFeatures = gen75_GetPhysicalDeviceFeatures,
+    .vkGetPhysicalDeviceFormatProperties = gen75_GetPhysicalDeviceFormatProperties,
+    .vkGetPhysicalDeviceImageFormatProperties = gen75_GetPhysicalDeviceImageFormatProperties,
+    .vkCreateDevice = gen75_CreateDevice,
+    .vkDestroyDevice = gen75_DestroyDevice,
+    .vkEnumerateInstanceLayerProperties = gen75_EnumerateInstanceLayerProperties,
+    .vkEnumerateInstanceExtensionProperties = gen75_EnumerateInstanceExtensionProperties,
+    .vkEnumerateDeviceLayerProperties = gen75_EnumerateDeviceLayerProperties,
+    .vkEnumerateDeviceExtensionProperties = gen75_EnumerateDeviceExtensionProperties,
+    .vkGetDeviceQueue = gen75_GetDeviceQueue,
+    .vkQueueSubmit = gen75_QueueSubmit,
+    .vkQueueWaitIdle = gen75_QueueWaitIdle,
+    .vkDeviceWaitIdle = gen75_DeviceWaitIdle,
+    .vkAllocateMemory = gen75_AllocateMemory,
+    .vkFreeMemory = gen75_FreeMemory,
+    .vkMapMemory = gen75_MapMemory,
+    .vkUnmapMemory = gen75_UnmapMemory,
+    .vkFlushMappedMemoryRanges = gen75_FlushMappedMemoryRanges,
+    .vkInvalidateMappedMemoryRanges = gen75_InvalidateMappedMemoryRanges,
+    .vkGetDeviceMemoryCommitment = gen75_GetDeviceMemoryCommitment,
+    .vkGetBufferMemoryRequirements = gen75_GetBufferMemoryRequirements,
+    .vkBindBufferMemory = gen75_BindBufferMemory,
+    .vkGetImageMemoryRequirements = gen75_GetImageMemoryRequirements,
+    .vkBindImageMemory = gen75_BindImageMemory,
+    .vkGetImageSparseMemoryRequirements = gen75_GetImageSparseMemoryRequirements,
+    .vkGetPhysicalDeviceSparseImageFormatProperties = gen75_GetPhysicalDeviceSparseImageFormatProperties,
+    .vkQueueBindSparse = gen75_QueueBindSparse,
+    .vkCreateFence = gen75_CreateFence,
+    .vkDestroyFence = gen75_DestroyFence,
+    .vkResetFences = gen75_ResetFences,
+    .vkGetFenceStatus = gen75_GetFenceStatus,
+    .vkWaitForFences = gen75_WaitForFences,
+    .vkCreateSemaphore = gen75_CreateSemaphore,
+    .vkDestroySemaphore = gen75_DestroySemaphore,
+    .vkCreateEvent = gen75_CreateEvent,
+    .vkDestroyEvent = gen75_DestroyEvent,
+    .vkGetEventStatus = gen75_GetEventStatus,
+    .vkSetEvent = gen75_SetEvent,
+    .vkResetEvent = gen75_ResetEvent,
+    .vkCreateQueryPool = gen75_CreateQueryPool,
+    .vkDestroyQueryPool = gen75_DestroyQueryPool,
+    .vkGetQueryPoolResults = gen75_GetQueryPoolResults,
+    .vkCreateBuffer = gen75_CreateBuffer,
+    .vkDestroyBuffer = gen75_DestroyBuffer,
+    .vkCreateBufferView = gen75_CreateBufferView,
+    .vkDestroyBufferView = gen75_DestroyBufferView,
+    .vkCreateImage = gen75_CreateImage,
+    .vkDestroyImage = gen75_DestroyImage,
+    .vkGetImageSubresourceLayout = gen75_GetImageSubresourceLayout,
+    .vkCreateImageView = gen75_CreateImageView,
+    .vkDestroyImageView = gen75_DestroyImageView,
+    .vkCreateShaderModule = gen75_CreateShaderModule,
+    .vkDestroyShaderModule = gen75_DestroyShaderModule,
+    .vkCreatePipelineCache = gen75_CreatePipelineCache,
+    .vkDestroyPipelineCache = gen75_DestroyPipelineCache,
+    .vkGetPipelineCacheData = gen75_GetPipelineCacheData,
+    .vkMergePipelineCaches = gen75_MergePipelineCaches,
+    .vkCreateGraphicsPipelines = gen75_CreateGraphicsPipelines,
+    .vkCreateComputePipelines = gen75_CreateComputePipelines,
+    .vkDestroyPipeline = gen75_DestroyPipeline,
+    .vkCreatePipelineLayout = gen75_CreatePipelineLayout,
+    .vkDestroyPipelineLayout = gen75_DestroyPipelineLayout,
+    .vkCreateSampler = gen75_CreateSampler,
+    .vkDestroySampler = gen75_DestroySampler,
+    .vkCreateDescriptorSetLayout = gen75_CreateDescriptorSetLayout,
+    .vkDestroyDescriptorSetLayout = gen75_DestroyDescriptorSetLayout,
+    .vkCreateDescriptorPool = gen75_CreateDescriptorPool,
+    .vkDestroyDescriptorPool = gen75_DestroyDescriptorPool,
+    .vkResetDescriptorPool = gen75_ResetDescriptorPool,
+    .vkAllocateDescriptorSets = gen75_AllocateDescriptorSets,
+    .vkFreeDescriptorSets = gen75_FreeDescriptorSets,
+    .vkUpdateDescriptorSets = gen75_UpdateDescriptorSets,
+    .vkCreateFramebuffer = gen75_CreateFramebuffer,
+    .vkDestroyFramebuffer = gen75_DestroyFramebuffer,
+    .vkCreateRenderPass = gen75_CreateRenderPass,
+    .vkDestroyRenderPass = gen75_DestroyRenderPass,
+    .vkGetRenderAreaGranularity = gen75_GetRenderAreaGranularity,
+    .vkCreateCommandPool = gen75_CreateCommandPool,
+    .vkDestroyCommandPool = gen75_DestroyCommandPool,
+    .vkResetCommandPool = gen75_ResetCommandPool,
+    .vkAllocateCommandBuffers = gen75_AllocateCommandBuffers,
+    .vkFreeCommandBuffers = gen75_FreeCommandBuffers,
+    .vkBeginCommandBuffer = gen75_BeginCommandBuffer,
+    .vkEndCommandBuffer = gen75_EndCommandBuffer,
+    .vkResetCommandBuffer = gen75_ResetCommandBuffer,
+    .vkCmdBindPipeline = gen75_CmdBindPipeline,
+    .vkCmdSetViewport = gen75_CmdSetViewport,
+    .vkCmdSetScissor = gen75_CmdSetScissor,
+    .vkCmdSetLineWidth = gen75_CmdSetLineWidth,
+    .vkCmdSetDepthBias = gen75_CmdSetDepthBias,
+    .vkCmdSetBlendConstants = gen75_CmdSetBlendConstants,
+    .vkCmdSetDepthBounds = gen75_CmdSetDepthBounds,
+    .vkCmdSetStencilCompareMask = gen75_CmdSetStencilCompareMask,
+    .vkCmdSetStencilWriteMask = gen75_CmdSetStencilWriteMask,
+    .vkCmdSetStencilReference = gen75_CmdSetStencilReference,
+    .vkCmdBindDescriptorSets = gen75_CmdBindDescriptorSets,
+    .vkCmdBindIndexBuffer = gen75_CmdBindIndexBuffer,
+    .vkCmdBindVertexBuffers = gen75_CmdBindVertexBuffers,
+    .vkCmdDraw = gen75_CmdDraw,
+    .vkCmdDrawIndexed = gen75_CmdDrawIndexed,
+    .vkCmdDrawIndirect = gen75_CmdDrawIndirect,
+    .vkCmdDrawIndexedIndirect = gen75_CmdDrawIndexedIndirect,
+    .vkCmdDispatch = gen75_CmdDispatch,
+    .vkCmdDispatchIndirect = gen75_CmdDispatchIndirect,
+    .vkCmdCopyBuffer = gen75_CmdCopyBuffer,
+    .vkCmdCopyImage = gen75_CmdCopyImage,
+    .vkCmdBlitImage = gen75_CmdBlitImage,
+    .vkCmdCopyBufferToImage = gen75_CmdCopyBufferToImage,
+    .vkCmdCopyImageToBuffer = gen75_CmdCopyImageToBuffer,
+    .vkCmdUpdateBuffer = gen75_CmdUpdateBuffer,
+    .vkCmdFillBuffer = gen75_CmdFillBuffer,
+    .vkCmdClearColorImage = gen75_CmdClearColorImage,
+    .vkCmdClearDepthStencilImage = gen75_CmdClearDepthStencilImage,
+    .vkCmdClearAttachments = gen75_CmdClearAttachments,
+    .vkCmdResolveImage = gen75_CmdResolveImage,
+    .vkCmdSetEvent = gen75_CmdSetEvent,
+    .vkCmdResetEvent = gen75_CmdResetEvent,
+    .vkCmdWaitEvents = gen75_CmdWaitEvents,
+    .vkCmdPipelineBarrier = gen75_CmdPipelineBarrier,
+    .vkCmdBeginQuery = gen75_CmdBeginQuery,
+    .vkCmdEndQuery = gen75_CmdEndQuery,
+    .vkCmdResetQueryPool = gen75_CmdResetQueryPool,
+    .vkCmdWriteTimestamp = gen75_CmdWriteTimestamp,
+    .vkCmdCopyQueryPoolResults = gen75_CmdCopyQueryPoolResults,
+    .vkCmdPushConstants = gen75_CmdPushConstants,
+    .vkCmdBeginRenderPass = gen75_CmdBeginRenderPass,
+    .vkCmdNextSubpass = gen75_CmdNextSubpass,
+    .vkCmdEndRenderPass = gen75_CmdEndRenderPass,
+    .vkCmdExecuteCommands = gen75_CmdExecuteCommands,
+    .vkDestroySurfaceKHR = gen75_DestroySurfaceKHR,
+    .vkGetPhysicalDeviceSurfaceSupportKHR = gen75_GetPhysicalDeviceSurfaceSupportKHR,
+    .vkGetPhysicalDeviceSurfaceCapabilitiesKHR = gen75_GetPhysicalDeviceSurfaceCapabilitiesKHR,
+    .vkGetPhysicalDeviceSurfaceFormatsKHR = gen75_GetPhysicalDeviceSurfaceFormatsKHR,
+    .vkGetPhysicalDeviceSurfacePresentModesKHR = gen75_GetPhysicalDeviceSurfacePresentModesKHR,
+    .vkCreateSwapchainKHR = gen75_CreateSwapchainKHR,
+    .vkDestroySwapchainKHR = gen75_DestroySwapchainKHR,
+    .vkGetSwapchainImagesKHR = gen75_GetSwapchainImagesKHR,
+    .vkAcquireNextImageKHR = gen75_AcquireNextImageKHR,
+    .vkQueuePresentKHR = gen75_QueuePresentKHR,
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
-    .CreateWaylandSurfaceKHR = gen75_CreateWaylandSurfaceKHR,
+    .vkCreateWaylandSurfaceKHR = gen75_CreateWaylandSurfaceKHR,
 #endif // VK_USE_PLATFORM_WAYLAND_KHR
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
-    .GetPhysicalDeviceWaylandPresentationSupportKHR = gen75_GetPhysicalDeviceWaylandPresentationSupportKHR,
+    .vkGetPhysicalDeviceWaylandPresentationSupportKHR = gen75_GetPhysicalDeviceWaylandPresentationSupportKHR,
 #endif // VK_USE_PLATFORM_WAYLAND_KHR
 #ifdef VK_USE_PLATFORM_XLIB_KHR
-    .CreateXlibSurfaceKHR = gen75_CreateXlibSurfaceKHR,
+    .vkCreateXlibSurfaceKHR = gen75_CreateXlibSurfaceKHR,
 #endif // VK_USE_PLATFORM_XLIB_KHR
 #ifdef VK_USE_PLATFORM_XLIB_KHR
-    .GetPhysicalDeviceXlibPresentationSupportKHR = gen75_GetPhysicalDeviceXlibPresentationSupportKHR,
+    .vkGetPhysicalDeviceXlibPresentationSupportKHR = gen75_GetPhysicalDeviceXlibPresentationSupportKHR,
 #endif // VK_USE_PLATFORM_XLIB_KHR
 #ifdef VK_USE_PLATFORM_XCB_KHR
-    .CreateXcbSurfaceKHR = gen75_CreateXcbSurfaceKHR,
+    .vkCreateXcbSurfaceKHR = gen75_CreateXcbSurfaceKHR,
 #endif // VK_USE_PLATFORM_XCB_KHR
 #ifdef VK_USE_PLATFORM_XCB_KHR
-    .GetPhysicalDeviceXcbPresentationSupportKHR = gen75_GetPhysicalDeviceXcbPresentationSupportKHR,
+    .vkGetPhysicalDeviceXcbPresentationSupportKHR = gen75_GetPhysicalDeviceXcbPresentationSupportKHR,
 #endif // VK_USE_PLATFORM_XCB_KHR
-    .CreateDebugReportCallbackEXT = gen75_CreateDebugReportCallbackEXT,
-    .DestroyDebugReportCallbackEXT = gen75_DestroyDebugReportCallbackEXT,
-    .DebugReportMessageEXT = gen75_DebugReportMessageEXT,
-    .GetPhysicalDeviceFeatures2KHR = gen75_GetPhysicalDeviceFeatures2KHR,
-    .GetPhysicalDeviceProperties2KHR = gen75_GetPhysicalDeviceProperties2KHR,
-    .GetPhysicalDeviceFormatProperties2KHR = gen75_GetPhysicalDeviceFormatProperties2KHR,
-    .GetPhysicalDeviceImageFormatProperties2KHR = gen75_GetPhysicalDeviceImageFormatProperties2KHR,
-    .GetPhysicalDeviceQueueFamilyProperties2KHR = gen75_GetPhysicalDeviceQueueFamilyProperties2KHR,
-    .GetPhysicalDeviceMemoryProperties2KHR = gen75_GetPhysicalDeviceMemoryProperties2KHR,
-    .GetPhysicalDeviceSparseImageFormatProperties2KHR = gen75_GetPhysicalDeviceSparseImageFormatProperties2KHR,
-    .CmdPushDescriptorSetKHR = gen75_CmdPushDescriptorSetKHR,
-    .TrimCommandPoolKHR = gen75_TrimCommandPoolKHR,
-    .GetPhysicalDeviceExternalBufferPropertiesKHR = gen75_GetPhysicalDeviceExternalBufferPropertiesKHR,
-    .GetMemoryFdKHR = gen75_GetMemoryFdKHR,
-    .GetMemoryFdPropertiesKHR = gen75_GetMemoryFdPropertiesKHR,
-    .GetPhysicalDeviceExternalSemaphorePropertiesKHR = gen75_GetPhysicalDeviceExternalSemaphorePropertiesKHR,
-    .GetSemaphoreFdKHR = gen75_GetSemaphoreFdKHR,
-    .ImportSemaphoreFdKHR = gen75_ImportSemaphoreFdKHR,
-    .GetPhysicalDeviceExternalFencePropertiesKHR = gen75_GetPhysicalDeviceExternalFencePropertiesKHR,
-    .GetFenceFdKHR = gen75_GetFenceFdKHR,
-    .ImportFenceFdKHR = gen75_ImportFenceFdKHR,
-    .BindBufferMemory2KHR = gen75_BindBufferMemory2KHR,
-    .BindImageMemory2KHR = gen75_BindImageMemory2KHR,
-    .CreateDescriptorUpdateTemplateKHR = gen75_CreateDescriptorUpdateTemplateKHR,
-    .DestroyDescriptorUpdateTemplateKHR = gen75_DestroyDescriptorUpdateTemplateKHR,
-    .UpdateDescriptorSetWithTemplateKHR = gen75_UpdateDescriptorSetWithTemplateKHR,
-    .CmdPushDescriptorSetWithTemplateKHR = gen75_CmdPushDescriptorSetWithTemplateKHR,
-    .GetPhysicalDeviceSurfaceCapabilities2KHR = gen75_GetPhysicalDeviceSurfaceCapabilities2KHR,
-    .GetPhysicalDeviceSurfaceFormats2KHR = gen75_GetPhysicalDeviceSurfaceFormats2KHR,
-    .GetBufferMemoryRequirements2KHR = gen75_GetBufferMemoryRequirements2KHR,
-    .GetImageMemoryRequirements2KHR = gen75_GetImageMemoryRequirements2KHR,
-    .GetImageSparseMemoryRequirements2KHR = gen75_GetImageSparseMemoryRequirements2KHR,
-    .CreateSamplerYcbcrConversionKHR = gen75_CreateSamplerYcbcrConversionKHR,
-    .DestroySamplerYcbcrConversionKHR = gen75_DestroySamplerYcbcrConversionKHR,
+    .vkCreateDebugReportCallbackEXT = gen75_CreateDebugReportCallbackEXT,
+    .vkDestroyDebugReportCallbackEXT = gen75_DestroyDebugReportCallbackEXT,
+    .vkDebugReportMessageEXT = gen75_DebugReportMessageEXT,
+    .vkGetPhysicalDeviceFeatures2KHR = gen75_GetPhysicalDeviceFeatures2KHR,
+    .vkGetPhysicalDeviceProperties2KHR = gen75_GetPhysicalDeviceProperties2KHR,
+    .vkGetPhysicalDeviceFormatProperties2KHR = gen75_GetPhysicalDeviceFormatProperties2KHR,
+    .vkGetPhysicalDeviceImageFormatProperties2KHR = gen75_GetPhysicalDeviceImageFormatProperties2KHR,
+    .vkGetPhysicalDeviceQueueFamilyProperties2KHR = gen75_GetPhysicalDeviceQueueFamilyProperties2KHR,
+    .vkGetPhysicalDeviceMemoryProperties2KHR = gen75_GetPhysicalDeviceMemoryProperties2KHR,
+    .vkGetPhysicalDeviceSparseImageFormatProperties2KHR = gen75_GetPhysicalDeviceSparseImageFormatProperties2KHR,
+    .vkCmdPushDescriptorSetKHR = gen75_CmdPushDescriptorSetKHR,
+    .vkTrimCommandPoolKHR = gen75_TrimCommandPoolKHR,
+    .vkGetPhysicalDeviceExternalBufferPropertiesKHR = gen75_GetPhysicalDeviceExternalBufferPropertiesKHR,
+    .vkGetMemoryFdKHR = gen75_GetMemoryFdKHR,
+    .vkGetMemoryFdPropertiesKHR = gen75_GetMemoryFdPropertiesKHR,
+    .vkGetPhysicalDeviceExternalSemaphorePropertiesKHR = gen75_GetPhysicalDeviceExternalSemaphorePropertiesKHR,
+    .vkGetSemaphoreFdKHR = gen75_GetSemaphoreFdKHR,
+    .vkImportSemaphoreFdKHR = gen75_ImportSemaphoreFdKHR,
+    .vkGetPhysicalDeviceExternalFencePropertiesKHR = gen75_GetPhysicalDeviceExternalFencePropertiesKHR,
+    .vkGetFenceFdKHR = gen75_GetFenceFdKHR,
+    .vkImportFenceFdKHR = gen75_ImportFenceFdKHR,
+    .vkBindBufferMemory2KHR = gen75_BindBufferMemory2KHR,
+    .vkBindImageMemory2KHR = gen75_BindImageMemory2KHR,
+    .vkCreateDescriptorUpdateTemplateKHR = gen75_CreateDescriptorUpdateTemplateKHR,
+    .vkDestroyDescriptorUpdateTemplateKHR = gen75_DestroyDescriptorUpdateTemplateKHR,
+    .vkUpdateDescriptorSetWithTemplateKHR = gen75_UpdateDescriptorSetWithTemplateKHR,
+    .vkCmdPushDescriptorSetWithTemplateKHR = gen75_CmdPushDescriptorSetWithTemplateKHR,
+    .vkGetPhysicalDeviceSurfaceCapabilities2KHR = gen75_GetPhysicalDeviceSurfaceCapabilities2KHR,
+    .vkGetPhysicalDeviceSurfaceFormats2KHR = gen75_GetPhysicalDeviceSurfaceFormats2KHR,
+    .vkGetBufferMemoryRequirements2KHR = gen75_GetBufferMemoryRequirements2KHR,
+    .vkGetImageMemoryRequirements2KHR = gen75_GetImageMemoryRequirements2KHR,
+    .vkGetImageSparseMemoryRequirements2KHR = gen75_GetImageSparseMemoryRequirements2KHR,
+    .vkCreateSamplerYcbcrConversionKHR = gen75_CreateSamplerYcbcrConversionKHR,
+    .vkDestroySamplerYcbcrConversionKHR = gen75_DestroySamplerYcbcrConversionKHR,
 #ifdef ANDROID
-    .GetSwapchainGrallocUsageANDROID = gen75_GetSwapchainGrallocUsageANDROID,
+    .vkGetSwapchainGrallocUsageANDROID = gen75_GetSwapchainGrallocUsageANDROID,
 #endif // ANDROID
 #ifdef ANDROID
-    .AcquireImageANDROID = gen75_AcquireImageANDROID,
+    .vkAcquireImageANDROID = gen75_AcquireImageANDROID,
 #endif // ANDROID
 #ifdef ANDROID
-    .QueueSignalReleaseImageANDROID = gen75_QueueSignalReleaseImageANDROID,
+    .vkQueueSignalReleaseImageANDROID = gen75_QueueSignalReleaseImageANDROID,
 #endif // ANDROID
-    .CreateDmaBufImageINTEL = gen75_CreateDmaBufImageINTEL,
+    .vkCreateDmaBufImageINTEL = gen75_CreateDmaBufImageINTEL,
   };
     VkResult gen8_CreateInstance(const VkInstanceCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkInstance* pInstance) __attribute__ ((weak));
     void gen8_DestroyInstance(VkInstance instance, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
@@ -1899,218 +1899,218 @@ static const struct anv_entrypoint entrypoints[] = {
 #ifdef ANDROID
     VkResult gen8_QueueSignalReleaseImageANDROID(VkQueue queue, uint32_t waitSemaphoreCount, const VkSemaphore* pWaitSemaphores, VkImage image, int* pNativeFenceFd) __attribute__ ((weak));
 #endif // ANDROID
-    VkResult gen8_CreateDmaBufImageINTEL(VkDevice device, const VkDmaBufImageCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator,VkDeviceMemory* pMem,VkImage* pImage) __attribute__ ((weak));
+    VkResult gen8_CreateDmaBufImageINTEL(VkDevice device, const VkDmaBufImageCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDeviceMemory* pMem, VkImage* pImage) __attribute__ ((weak));
 
-  const struct anv_dispatch_table gen8_layer = {
-    .CreateInstance = gen8_CreateInstance,
-    .DestroyInstance = gen8_DestroyInstance,
-    .EnumeratePhysicalDevices = gen8_EnumeratePhysicalDevices,
-    .GetDeviceProcAddr = gen8_GetDeviceProcAddr,
-    .GetInstanceProcAddr = gen8_GetInstanceProcAddr,
-    .GetPhysicalDeviceProperties = gen8_GetPhysicalDeviceProperties,
-    .GetPhysicalDeviceQueueFamilyProperties = gen8_GetPhysicalDeviceQueueFamilyProperties,
-    .GetPhysicalDeviceMemoryProperties = gen8_GetPhysicalDeviceMemoryProperties,
-    .GetPhysicalDeviceFeatures = gen8_GetPhysicalDeviceFeatures,
-    .GetPhysicalDeviceFormatProperties = gen8_GetPhysicalDeviceFormatProperties,
-    .GetPhysicalDeviceImageFormatProperties = gen8_GetPhysicalDeviceImageFormatProperties,
-    .CreateDevice = gen8_CreateDevice,
-    .DestroyDevice = gen8_DestroyDevice,
-    .EnumerateInstanceLayerProperties = gen8_EnumerateInstanceLayerProperties,
-    .EnumerateInstanceExtensionProperties = gen8_EnumerateInstanceExtensionProperties,
-    .EnumerateDeviceLayerProperties = gen8_EnumerateDeviceLayerProperties,
-    .EnumerateDeviceExtensionProperties = gen8_EnumerateDeviceExtensionProperties,
-    .GetDeviceQueue = gen8_GetDeviceQueue,
-    .QueueSubmit = gen8_QueueSubmit,
-    .QueueWaitIdle = gen8_QueueWaitIdle,
-    .DeviceWaitIdle = gen8_DeviceWaitIdle,
-    .AllocateMemory = gen8_AllocateMemory,
-    .FreeMemory = gen8_FreeMemory,
-    .MapMemory = gen8_MapMemory,
-    .UnmapMemory = gen8_UnmapMemory,
-    .FlushMappedMemoryRanges = gen8_FlushMappedMemoryRanges,
-    .InvalidateMappedMemoryRanges = gen8_InvalidateMappedMemoryRanges,
-    .GetDeviceMemoryCommitment = gen8_GetDeviceMemoryCommitment,
-    .GetBufferMemoryRequirements = gen8_GetBufferMemoryRequirements,
-    .BindBufferMemory = gen8_BindBufferMemory,
-    .GetImageMemoryRequirements = gen8_GetImageMemoryRequirements,
-    .BindImageMemory = gen8_BindImageMemory,
-    .GetImageSparseMemoryRequirements = gen8_GetImageSparseMemoryRequirements,
-    .GetPhysicalDeviceSparseImageFormatProperties = gen8_GetPhysicalDeviceSparseImageFormatProperties,
-    .QueueBindSparse = gen8_QueueBindSparse,
-    .CreateFence = gen8_CreateFence,
-    .DestroyFence = gen8_DestroyFence,
-    .ResetFences = gen8_ResetFences,
-    .GetFenceStatus = gen8_GetFenceStatus,
-    .WaitForFences = gen8_WaitForFences,
-    .CreateSemaphore = gen8_CreateSemaphore,
-    .DestroySemaphore = gen8_DestroySemaphore,
-    .CreateEvent = gen8_CreateEvent,
-    .DestroyEvent = gen8_DestroyEvent,
-    .GetEventStatus = gen8_GetEventStatus,
-    .SetEvent = gen8_SetEvent,
-    .ResetEvent = gen8_ResetEvent,
-    .CreateQueryPool = gen8_CreateQueryPool,
-    .DestroyQueryPool = gen8_DestroyQueryPool,
-    .GetQueryPoolResults = gen8_GetQueryPoolResults,
-    .CreateBuffer = gen8_CreateBuffer,
-    .DestroyBuffer = gen8_DestroyBuffer,
-    .CreateBufferView = gen8_CreateBufferView,
-    .DestroyBufferView = gen8_DestroyBufferView,
-    .CreateImage = gen8_CreateImage,
-    .DestroyImage = gen8_DestroyImage,
-    .GetImageSubresourceLayout = gen8_GetImageSubresourceLayout,
-    .CreateImageView = gen8_CreateImageView,
-    .DestroyImageView = gen8_DestroyImageView,
-    .CreateShaderModule = gen8_CreateShaderModule,
-    .DestroyShaderModule = gen8_DestroyShaderModule,
-    .CreatePipelineCache = gen8_CreatePipelineCache,
-    .DestroyPipelineCache = gen8_DestroyPipelineCache,
-    .GetPipelineCacheData = gen8_GetPipelineCacheData,
-    .MergePipelineCaches = gen8_MergePipelineCaches,
-    .CreateGraphicsPipelines = gen8_CreateGraphicsPipelines,
-    .CreateComputePipelines = gen8_CreateComputePipelines,
-    .DestroyPipeline = gen8_DestroyPipeline,
-    .CreatePipelineLayout = gen8_CreatePipelineLayout,
-    .DestroyPipelineLayout = gen8_DestroyPipelineLayout,
-    .CreateSampler = gen8_CreateSampler,
-    .DestroySampler = gen8_DestroySampler,
-    .CreateDescriptorSetLayout = gen8_CreateDescriptorSetLayout,
-    .DestroyDescriptorSetLayout = gen8_DestroyDescriptorSetLayout,
-    .CreateDescriptorPool = gen8_CreateDescriptorPool,
-    .DestroyDescriptorPool = gen8_DestroyDescriptorPool,
-    .ResetDescriptorPool = gen8_ResetDescriptorPool,
-    .AllocateDescriptorSets = gen8_AllocateDescriptorSets,
-    .FreeDescriptorSets = gen8_FreeDescriptorSets,
-    .UpdateDescriptorSets = gen8_UpdateDescriptorSets,
-    .CreateFramebuffer = gen8_CreateFramebuffer,
-    .DestroyFramebuffer = gen8_DestroyFramebuffer,
-    .CreateRenderPass = gen8_CreateRenderPass,
-    .DestroyRenderPass = gen8_DestroyRenderPass,
-    .GetRenderAreaGranularity = gen8_GetRenderAreaGranularity,
-    .CreateCommandPool = gen8_CreateCommandPool,
-    .DestroyCommandPool = gen8_DestroyCommandPool,
-    .ResetCommandPool = gen8_ResetCommandPool,
-    .AllocateCommandBuffers = gen8_AllocateCommandBuffers,
-    .FreeCommandBuffers = gen8_FreeCommandBuffers,
-    .BeginCommandBuffer = gen8_BeginCommandBuffer,
-    .EndCommandBuffer = gen8_EndCommandBuffer,
-    .ResetCommandBuffer = gen8_ResetCommandBuffer,
-    .CmdBindPipeline = gen8_CmdBindPipeline,
-    .CmdSetViewport = gen8_CmdSetViewport,
-    .CmdSetScissor = gen8_CmdSetScissor,
-    .CmdSetLineWidth = gen8_CmdSetLineWidth,
-    .CmdSetDepthBias = gen8_CmdSetDepthBias,
-    .CmdSetBlendConstants = gen8_CmdSetBlendConstants,
-    .CmdSetDepthBounds = gen8_CmdSetDepthBounds,
-    .CmdSetStencilCompareMask = gen8_CmdSetStencilCompareMask,
-    .CmdSetStencilWriteMask = gen8_CmdSetStencilWriteMask,
-    .CmdSetStencilReference = gen8_CmdSetStencilReference,
-    .CmdBindDescriptorSets = gen8_CmdBindDescriptorSets,
-    .CmdBindIndexBuffer = gen8_CmdBindIndexBuffer,
-    .CmdBindVertexBuffers = gen8_CmdBindVertexBuffers,
-    .CmdDraw = gen8_CmdDraw,
-    .CmdDrawIndexed = gen8_CmdDrawIndexed,
-    .CmdDrawIndirect = gen8_CmdDrawIndirect,
-    .CmdDrawIndexedIndirect = gen8_CmdDrawIndexedIndirect,
-    .CmdDispatch = gen8_CmdDispatch,
-    .CmdDispatchIndirect = gen8_CmdDispatchIndirect,
-    .CmdCopyBuffer = gen8_CmdCopyBuffer,
-    .CmdCopyImage = gen8_CmdCopyImage,
-    .CmdBlitImage = gen8_CmdBlitImage,
-    .CmdCopyBufferToImage = gen8_CmdCopyBufferToImage,
-    .CmdCopyImageToBuffer = gen8_CmdCopyImageToBuffer,
-    .CmdUpdateBuffer = gen8_CmdUpdateBuffer,
-    .CmdFillBuffer = gen8_CmdFillBuffer,
-    .CmdClearColorImage = gen8_CmdClearColorImage,
-    .CmdClearDepthStencilImage = gen8_CmdClearDepthStencilImage,
-    .CmdClearAttachments = gen8_CmdClearAttachments,
-    .CmdResolveImage = gen8_CmdResolveImage,
-    .CmdSetEvent = gen8_CmdSetEvent,
-    .CmdResetEvent = gen8_CmdResetEvent,
-    .CmdWaitEvents = gen8_CmdWaitEvents,
-    .CmdPipelineBarrier = gen8_CmdPipelineBarrier,
-    .CmdBeginQuery = gen8_CmdBeginQuery,
-    .CmdEndQuery = gen8_CmdEndQuery,
-    .CmdResetQueryPool = gen8_CmdResetQueryPool,
-    .CmdWriteTimestamp = gen8_CmdWriteTimestamp,
-    .CmdCopyQueryPoolResults = gen8_CmdCopyQueryPoolResults,
-    .CmdPushConstants = gen8_CmdPushConstants,
-    .CmdBeginRenderPass = gen8_CmdBeginRenderPass,
-    .CmdNextSubpass = gen8_CmdNextSubpass,
-    .CmdEndRenderPass = gen8_CmdEndRenderPass,
-    .CmdExecuteCommands = gen8_CmdExecuteCommands,
-    .DestroySurfaceKHR = gen8_DestroySurfaceKHR,
-    .GetPhysicalDeviceSurfaceSupportKHR = gen8_GetPhysicalDeviceSurfaceSupportKHR,
-    .GetPhysicalDeviceSurfaceCapabilitiesKHR = gen8_GetPhysicalDeviceSurfaceCapabilitiesKHR,
-    .GetPhysicalDeviceSurfaceFormatsKHR = gen8_GetPhysicalDeviceSurfaceFormatsKHR,
-    .GetPhysicalDeviceSurfacePresentModesKHR = gen8_GetPhysicalDeviceSurfacePresentModesKHR,
-    .CreateSwapchainKHR = gen8_CreateSwapchainKHR,
-    .DestroySwapchainKHR = gen8_DestroySwapchainKHR,
-    .GetSwapchainImagesKHR = gen8_GetSwapchainImagesKHR,
-    .AcquireNextImageKHR = gen8_AcquireNextImageKHR,
-    .QueuePresentKHR = gen8_QueuePresentKHR,
+  const struct anv_dispatch_table gen8_dispatch_table = {
+    .vkCreateInstance = gen8_CreateInstance,
+    .vkDestroyInstance = gen8_DestroyInstance,
+    .vkEnumeratePhysicalDevices = gen8_EnumeratePhysicalDevices,
+    .vkGetDeviceProcAddr = gen8_GetDeviceProcAddr,
+    .vkGetInstanceProcAddr = gen8_GetInstanceProcAddr,
+    .vkGetPhysicalDeviceProperties = gen8_GetPhysicalDeviceProperties,
+    .vkGetPhysicalDeviceQueueFamilyProperties = gen8_GetPhysicalDeviceQueueFamilyProperties,
+    .vkGetPhysicalDeviceMemoryProperties = gen8_GetPhysicalDeviceMemoryProperties,
+    .vkGetPhysicalDeviceFeatures = gen8_GetPhysicalDeviceFeatures,
+    .vkGetPhysicalDeviceFormatProperties = gen8_GetPhysicalDeviceFormatProperties,
+    .vkGetPhysicalDeviceImageFormatProperties = gen8_GetPhysicalDeviceImageFormatProperties,
+    .vkCreateDevice = gen8_CreateDevice,
+    .vkDestroyDevice = gen8_DestroyDevice,
+    .vkEnumerateInstanceLayerProperties = gen8_EnumerateInstanceLayerProperties,
+    .vkEnumerateInstanceExtensionProperties = gen8_EnumerateInstanceExtensionProperties,
+    .vkEnumerateDeviceLayerProperties = gen8_EnumerateDeviceLayerProperties,
+    .vkEnumerateDeviceExtensionProperties = gen8_EnumerateDeviceExtensionProperties,
+    .vkGetDeviceQueue = gen8_GetDeviceQueue,
+    .vkQueueSubmit = gen8_QueueSubmit,
+    .vkQueueWaitIdle = gen8_QueueWaitIdle,
+    .vkDeviceWaitIdle = gen8_DeviceWaitIdle,
+    .vkAllocateMemory = gen8_AllocateMemory,
+    .vkFreeMemory = gen8_FreeMemory,
+    .vkMapMemory = gen8_MapMemory,
+    .vkUnmapMemory = gen8_UnmapMemory,
+    .vkFlushMappedMemoryRanges = gen8_FlushMappedMemoryRanges,
+    .vkInvalidateMappedMemoryRanges = gen8_InvalidateMappedMemoryRanges,
+    .vkGetDeviceMemoryCommitment = gen8_GetDeviceMemoryCommitment,
+    .vkGetBufferMemoryRequirements = gen8_GetBufferMemoryRequirements,
+    .vkBindBufferMemory = gen8_BindBufferMemory,
+    .vkGetImageMemoryRequirements = gen8_GetImageMemoryRequirements,
+    .vkBindImageMemory = gen8_BindImageMemory,
+    .vkGetImageSparseMemoryRequirements = gen8_GetImageSparseMemoryRequirements,
+    .vkGetPhysicalDeviceSparseImageFormatProperties = gen8_GetPhysicalDeviceSparseImageFormatProperties,
+    .vkQueueBindSparse = gen8_QueueBindSparse,
+    .vkCreateFence = gen8_CreateFence,
+    .vkDestroyFence = gen8_DestroyFence,
+    .vkResetFences = gen8_ResetFences,
+    .vkGetFenceStatus = gen8_GetFenceStatus,
+    .vkWaitForFences = gen8_WaitForFences,
+    .vkCreateSemaphore = gen8_CreateSemaphore,
+    .vkDestroySemaphore = gen8_DestroySemaphore,
+    .vkCreateEvent = gen8_CreateEvent,
+    .vkDestroyEvent = gen8_DestroyEvent,
+    .vkGetEventStatus = gen8_GetEventStatus,
+    .vkSetEvent = gen8_SetEvent,
+    .vkResetEvent = gen8_ResetEvent,
+    .vkCreateQueryPool = gen8_CreateQueryPool,
+    .vkDestroyQueryPool = gen8_DestroyQueryPool,
+    .vkGetQueryPoolResults = gen8_GetQueryPoolResults,
+    .vkCreateBuffer = gen8_CreateBuffer,
+    .vkDestroyBuffer = gen8_DestroyBuffer,
+    .vkCreateBufferView = gen8_CreateBufferView,
+    .vkDestroyBufferView = gen8_DestroyBufferView,
+    .vkCreateImage = gen8_CreateImage,
+    .vkDestroyImage = gen8_DestroyImage,
+    .vkGetImageSubresourceLayout = gen8_GetImageSubresourceLayout,
+    .vkCreateImageView = gen8_CreateImageView,
+    .vkDestroyImageView = gen8_DestroyImageView,
+    .vkCreateShaderModule = gen8_CreateShaderModule,
+    .vkDestroyShaderModule = gen8_DestroyShaderModule,
+    .vkCreatePipelineCache = gen8_CreatePipelineCache,
+    .vkDestroyPipelineCache = gen8_DestroyPipelineCache,
+    .vkGetPipelineCacheData = gen8_GetPipelineCacheData,
+    .vkMergePipelineCaches = gen8_MergePipelineCaches,
+    .vkCreateGraphicsPipelines = gen8_CreateGraphicsPipelines,
+    .vkCreateComputePipelines = gen8_CreateComputePipelines,
+    .vkDestroyPipeline = gen8_DestroyPipeline,
+    .vkCreatePipelineLayout = gen8_CreatePipelineLayout,
+    .vkDestroyPipelineLayout = gen8_DestroyPipelineLayout,
+    .vkCreateSampler = gen8_CreateSampler,
+    .vkDestroySampler = gen8_DestroySampler,
+    .vkCreateDescriptorSetLayout = gen8_CreateDescriptorSetLayout,
+    .vkDestroyDescriptorSetLayout = gen8_DestroyDescriptorSetLayout,
+    .vkCreateDescriptorPool = gen8_CreateDescriptorPool,
+    .vkDestroyDescriptorPool = gen8_DestroyDescriptorPool,
+    .vkResetDescriptorPool = gen8_ResetDescriptorPool,
+    .vkAllocateDescriptorSets = gen8_AllocateDescriptorSets,
+    .vkFreeDescriptorSets = gen8_FreeDescriptorSets,
+    .vkUpdateDescriptorSets = gen8_UpdateDescriptorSets,
+    .vkCreateFramebuffer = gen8_CreateFramebuffer,
+    .vkDestroyFramebuffer = gen8_DestroyFramebuffer,
+    .vkCreateRenderPass = gen8_CreateRenderPass,
+    .vkDestroyRenderPass = gen8_DestroyRenderPass,
+    .vkGetRenderAreaGranularity = gen8_GetRenderAreaGranularity,
+    .vkCreateCommandPool = gen8_CreateCommandPool,
+    .vkDestroyCommandPool = gen8_DestroyCommandPool,
+    .vkResetCommandPool = gen8_ResetCommandPool,
+    .vkAllocateCommandBuffers = gen8_AllocateCommandBuffers,
+    .vkFreeCommandBuffers = gen8_FreeCommandBuffers,
+    .vkBeginCommandBuffer = gen8_BeginCommandBuffer,
+    .vkEndCommandBuffer = gen8_EndCommandBuffer,
+    .vkResetCommandBuffer = gen8_ResetCommandBuffer,
+    .vkCmdBindPipeline = gen8_CmdBindPipeline,
+    .vkCmdSetViewport = gen8_CmdSetViewport,
+    .vkCmdSetScissor = gen8_CmdSetScissor,
+    .vkCmdSetLineWidth = gen8_CmdSetLineWidth,
+    .vkCmdSetDepthBias = gen8_CmdSetDepthBias,
+    .vkCmdSetBlendConstants = gen8_CmdSetBlendConstants,
+    .vkCmdSetDepthBounds = gen8_CmdSetDepthBounds,
+    .vkCmdSetStencilCompareMask = gen8_CmdSetStencilCompareMask,
+    .vkCmdSetStencilWriteMask = gen8_CmdSetStencilWriteMask,
+    .vkCmdSetStencilReference = gen8_CmdSetStencilReference,
+    .vkCmdBindDescriptorSets = gen8_CmdBindDescriptorSets,
+    .vkCmdBindIndexBuffer = gen8_CmdBindIndexBuffer,
+    .vkCmdBindVertexBuffers = gen8_CmdBindVertexBuffers,
+    .vkCmdDraw = gen8_CmdDraw,
+    .vkCmdDrawIndexed = gen8_CmdDrawIndexed,
+    .vkCmdDrawIndirect = gen8_CmdDrawIndirect,
+    .vkCmdDrawIndexedIndirect = gen8_CmdDrawIndexedIndirect,
+    .vkCmdDispatch = gen8_CmdDispatch,
+    .vkCmdDispatchIndirect = gen8_CmdDispatchIndirect,
+    .vkCmdCopyBuffer = gen8_CmdCopyBuffer,
+    .vkCmdCopyImage = gen8_CmdCopyImage,
+    .vkCmdBlitImage = gen8_CmdBlitImage,
+    .vkCmdCopyBufferToImage = gen8_CmdCopyBufferToImage,
+    .vkCmdCopyImageToBuffer = gen8_CmdCopyImageToBuffer,
+    .vkCmdUpdateBuffer = gen8_CmdUpdateBuffer,
+    .vkCmdFillBuffer = gen8_CmdFillBuffer,
+    .vkCmdClearColorImage = gen8_CmdClearColorImage,
+    .vkCmdClearDepthStencilImage = gen8_CmdClearDepthStencilImage,
+    .vkCmdClearAttachments = gen8_CmdClearAttachments,
+    .vkCmdResolveImage = gen8_CmdResolveImage,
+    .vkCmdSetEvent = gen8_CmdSetEvent,
+    .vkCmdResetEvent = gen8_CmdResetEvent,
+    .vkCmdWaitEvents = gen8_CmdWaitEvents,
+    .vkCmdPipelineBarrier = gen8_CmdPipelineBarrier,
+    .vkCmdBeginQuery = gen8_CmdBeginQuery,
+    .vkCmdEndQuery = gen8_CmdEndQuery,
+    .vkCmdResetQueryPool = gen8_CmdResetQueryPool,
+    .vkCmdWriteTimestamp = gen8_CmdWriteTimestamp,
+    .vkCmdCopyQueryPoolResults = gen8_CmdCopyQueryPoolResults,
+    .vkCmdPushConstants = gen8_CmdPushConstants,
+    .vkCmdBeginRenderPass = gen8_CmdBeginRenderPass,
+    .vkCmdNextSubpass = gen8_CmdNextSubpass,
+    .vkCmdEndRenderPass = gen8_CmdEndRenderPass,
+    .vkCmdExecuteCommands = gen8_CmdExecuteCommands,
+    .vkDestroySurfaceKHR = gen8_DestroySurfaceKHR,
+    .vkGetPhysicalDeviceSurfaceSupportKHR = gen8_GetPhysicalDeviceSurfaceSupportKHR,
+    .vkGetPhysicalDeviceSurfaceCapabilitiesKHR = gen8_GetPhysicalDeviceSurfaceCapabilitiesKHR,
+    .vkGetPhysicalDeviceSurfaceFormatsKHR = gen8_GetPhysicalDeviceSurfaceFormatsKHR,
+    .vkGetPhysicalDeviceSurfacePresentModesKHR = gen8_GetPhysicalDeviceSurfacePresentModesKHR,
+    .vkCreateSwapchainKHR = gen8_CreateSwapchainKHR,
+    .vkDestroySwapchainKHR = gen8_DestroySwapchainKHR,
+    .vkGetSwapchainImagesKHR = gen8_GetSwapchainImagesKHR,
+    .vkAcquireNextImageKHR = gen8_AcquireNextImageKHR,
+    .vkQueuePresentKHR = gen8_QueuePresentKHR,
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
-    .CreateWaylandSurfaceKHR = gen8_CreateWaylandSurfaceKHR,
+    .vkCreateWaylandSurfaceKHR = gen8_CreateWaylandSurfaceKHR,
 #endif // VK_USE_PLATFORM_WAYLAND_KHR
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
-    .GetPhysicalDeviceWaylandPresentationSupportKHR = gen8_GetPhysicalDeviceWaylandPresentationSupportKHR,
+    .vkGetPhysicalDeviceWaylandPresentationSupportKHR = gen8_GetPhysicalDeviceWaylandPresentationSupportKHR,
 #endif // VK_USE_PLATFORM_WAYLAND_KHR
 #ifdef VK_USE_PLATFORM_XLIB_KHR
-    .CreateXlibSurfaceKHR = gen8_CreateXlibSurfaceKHR,
+    .vkCreateXlibSurfaceKHR = gen8_CreateXlibSurfaceKHR,
 #endif // VK_USE_PLATFORM_XLIB_KHR
 #ifdef VK_USE_PLATFORM_XLIB_KHR
-    .GetPhysicalDeviceXlibPresentationSupportKHR = gen8_GetPhysicalDeviceXlibPresentationSupportKHR,
+    .vkGetPhysicalDeviceXlibPresentationSupportKHR = gen8_GetPhysicalDeviceXlibPresentationSupportKHR,
 #endif // VK_USE_PLATFORM_XLIB_KHR
 #ifdef VK_USE_PLATFORM_XCB_KHR
-    .CreateXcbSurfaceKHR = gen8_CreateXcbSurfaceKHR,
+    .vkCreateXcbSurfaceKHR = gen8_CreateXcbSurfaceKHR,
 #endif // VK_USE_PLATFORM_XCB_KHR
 #ifdef VK_USE_PLATFORM_XCB_KHR
-    .GetPhysicalDeviceXcbPresentationSupportKHR = gen8_GetPhysicalDeviceXcbPresentationSupportKHR,
+    .vkGetPhysicalDeviceXcbPresentationSupportKHR = gen8_GetPhysicalDeviceXcbPresentationSupportKHR,
 #endif // VK_USE_PLATFORM_XCB_KHR
-    .CreateDebugReportCallbackEXT = gen8_CreateDebugReportCallbackEXT,
-    .DestroyDebugReportCallbackEXT = gen8_DestroyDebugReportCallbackEXT,
-    .DebugReportMessageEXT = gen8_DebugReportMessageEXT,
-    .GetPhysicalDeviceFeatures2KHR = gen8_GetPhysicalDeviceFeatures2KHR,
-    .GetPhysicalDeviceProperties2KHR = gen8_GetPhysicalDeviceProperties2KHR,
-    .GetPhysicalDeviceFormatProperties2KHR = gen8_GetPhysicalDeviceFormatProperties2KHR,
-    .GetPhysicalDeviceImageFormatProperties2KHR = gen8_GetPhysicalDeviceImageFormatProperties2KHR,
-    .GetPhysicalDeviceQueueFamilyProperties2KHR = gen8_GetPhysicalDeviceQueueFamilyProperties2KHR,
-    .GetPhysicalDeviceMemoryProperties2KHR = gen8_GetPhysicalDeviceMemoryProperties2KHR,
-    .GetPhysicalDeviceSparseImageFormatProperties2KHR = gen8_GetPhysicalDeviceSparseImageFormatProperties2KHR,
-    .CmdPushDescriptorSetKHR = gen8_CmdPushDescriptorSetKHR,
-    .TrimCommandPoolKHR = gen8_TrimCommandPoolKHR,
-    .GetPhysicalDeviceExternalBufferPropertiesKHR = gen8_GetPhysicalDeviceExternalBufferPropertiesKHR,
-    .GetMemoryFdKHR = gen8_GetMemoryFdKHR,
-    .GetMemoryFdPropertiesKHR = gen8_GetMemoryFdPropertiesKHR,
-    .GetPhysicalDeviceExternalSemaphorePropertiesKHR = gen8_GetPhysicalDeviceExternalSemaphorePropertiesKHR,
-    .GetSemaphoreFdKHR = gen8_GetSemaphoreFdKHR,
-    .ImportSemaphoreFdKHR = gen8_ImportSemaphoreFdKHR,
-    .GetPhysicalDeviceExternalFencePropertiesKHR = gen8_GetPhysicalDeviceExternalFencePropertiesKHR,
-    .GetFenceFdKHR = gen8_GetFenceFdKHR,
-    .ImportFenceFdKHR = gen8_ImportFenceFdKHR,
-    .BindBufferMemory2KHR = gen8_BindBufferMemory2KHR,
-    .BindImageMemory2KHR = gen8_BindImageMemory2KHR,
-    .CreateDescriptorUpdateTemplateKHR = gen8_CreateDescriptorUpdateTemplateKHR,
-    .DestroyDescriptorUpdateTemplateKHR = gen8_DestroyDescriptorUpdateTemplateKHR,
-    .UpdateDescriptorSetWithTemplateKHR = gen8_UpdateDescriptorSetWithTemplateKHR,
-    .CmdPushDescriptorSetWithTemplateKHR = gen8_CmdPushDescriptorSetWithTemplateKHR,
-    .GetPhysicalDeviceSurfaceCapabilities2KHR = gen8_GetPhysicalDeviceSurfaceCapabilities2KHR,
-    .GetPhysicalDeviceSurfaceFormats2KHR = gen8_GetPhysicalDeviceSurfaceFormats2KHR,
-    .GetBufferMemoryRequirements2KHR = gen8_GetBufferMemoryRequirements2KHR,
-    .GetImageMemoryRequirements2KHR = gen8_GetImageMemoryRequirements2KHR,
-    .GetImageSparseMemoryRequirements2KHR = gen8_GetImageSparseMemoryRequirements2KHR,
-    .CreateSamplerYcbcrConversionKHR = gen8_CreateSamplerYcbcrConversionKHR,
-    .DestroySamplerYcbcrConversionKHR = gen8_DestroySamplerYcbcrConversionKHR,
+    .vkCreateDebugReportCallbackEXT = gen8_CreateDebugReportCallbackEXT,
+    .vkDestroyDebugReportCallbackEXT = gen8_DestroyDebugReportCallbackEXT,
+    .vkDebugReportMessageEXT = gen8_DebugReportMessageEXT,
+    .vkGetPhysicalDeviceFeatures2KHR = gen8_GetPhysicalDeviceFeatures2KHR,
+    .vkGetPhysicalDeviceProperties2KHR = gen8_GetPhysicalDeviceProperties2KHR,
+    .vkGetPhysicalDeviceFormatProperties2KHR = gen8_GetPhysicalDeviceFormatProperties2KHR,
+    .vkGetPhysicalDeviceImageFormatProperties2KHR = gen8_GetPhysicalDeviceImageFormatProperties2KHR,
+    .vkGetPhysicalDeviceQueueFamilyProperties2KHR = gen8_GetPhysicalDeviceQueueFamilyProperties2KHR,
+    .vkGetPhysicalDeviceMemoryProperties2KHR = gen8_GetPhysicalDeviceMemoryProperties2KHR,
+    .vkGetPhysicalDeviceSparseImageFormatProperties2KHR = gen8_GetPhysicalDeviceSparseImageFormatProperties2KHR,
+    .vkCmdPushDescriptorSetKHR = gen8_CmdPushDescriptorSetKHR,
+    .vkTrimCommandPoolKHR = gen8_TrimCommandPoolKHR,
+    .vkGetPhysicalDeviceExternalBufferPropertiesKHR = gen8_GetPhysicalDeviceExternalBufferPropertiesKHR,
+    .vkGetMemoryFdKHR = gen8_GetMemoryFdKHR,
+    .vkGetMemoryFdPropertiesKHR = gen8_GetMemoryFdPropertiesKHR,
+    .vkGetPhysicalDeviceExternalSemaphorePropertiesKHR = gen8_GetPhysicalDeviceExternalSemaphorePropertiesKHR,
+    .vkGetSemaphoreFdKHR = gen8_GetSemaphoreFdKHR,
+    .vkImportSemaphoreFdKHR = gen8_ImportSemaphoreFdKHR,
+    .vkGetPhysicalDeviceExternalFencePropertiesKHR = gen8_GetPhysicalDeviceExternalFencePropertiesKHR,
+    .vkGetFenceFdKHR = gen8_GetFenceFdKHR,
+    .vkImportFenceFdKHR = gen8_ImportFenceFdKHR,
+    .vkBindBufferMemory2KHR = gen8_BindBufferMemory2KHR,
+    .vkBindImageMemory2KHR = gen8_BindImageMemory2KHR,
+    .vkCreateDescriptorUpdateTemplateKHR = gen8_CreateDescriptorUpdateTemplateKHR,
+    .vkDestroyDescriptorUpdateTemplateKHR = gen8_DestroyDescriptorUpdateTemplateKHR,
+    .vkUpdateDescriptorSetWithTemplateKHR = gen8_UpdateDescriptorSetWithTemplateKHR,
+    .vkCmdPushDescriptorSetWithTemplateKHR = gen8_CmdPushDescriptorSetWithTemplateKHR,
+    .vkGetPhysicalDeviceSurfaceCapabilities2KHR = gen8_GetPhysicalDeviceSurfaceCapabilities2KHR,
+    .vkGetPhysicalDeviceSurfaceFormats2KHR = gen8_GetPhysicalDeviceSurfaceFormats2KHR,
+    .vkGetBufferMemoryRequirements2KHR = gen8_GetBufferMemoryRequirements2KHR,
+    .vkGetImageMemoryRequirements2KHR = gen8_GetImageMemoryRequirements2KHR,
+    .vkGetImageSparseMemoryRequirements2KHR = gen8_GetImageSparseMemoryRequirements2KHR,
+    .vkCreateSamplerYcbcrConversionKHR = gen8_CreateSamplerYcbcrConversionKHR,
+    .vkDestroySamplerYcbcrConversionKHR = gen8_DestroySamplerYcbcrConversionKHR,
 #ifdef ANDROID
-    .GetSwapchainGrallocUsageANDROID = gen8_GetSwapchainGrallocUsageANDROID,
+    .vkGetSwapchainGrallocUsageANDROID = gen8_GetSwapchainGrallocUsageANDROID,
 #endif // ANDROID
 #ifdef ANDROID
-    .AcquireImageANDROID = gen8_AcquireImageANDROID,
+    .vkAcquireImageANDROID = gen8_AcquireImageANDROID,
 #endif // ANDROID
 #ifdef ANDROID
-    .QueueSignalReleaseImageANDROID = gen8_QueueSignalReleaseImageANDROID,
+    .vkQueueSignalReleaseImageANDROID = gen8_QueueSignalReleaseImageANDROID,
 #endif // ANDROID
-    .CreateDmaBufImageINTEL = gen8_CreateDmaBufImageINTEL,
+    .vkCreateDmaBufImageINTEL = gen8_CreateDmaBufImageINTEL,
   };
     VkResult gen9_CreateInstance(const VkInstanceCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkInstance* pInstance) __attribute__ ((weak));
     void gen9_DestroyInstance(VkInstance instance, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
@@ -2320,218 +2320,218 @@ static const struct anv_entrypoint entrypoints[] = {
 #ifdef ANDROID
     VkResult gen9_QueueSignalReleaseImageANDROID(VkQueue queue, uint32_t waitSemaphoreCount, const VkSemaphore* pWaitSemaphores, VkImage image, int* pNativeFenceFd) __attribute__ ((weak));
 #endif // ANDROID
-    VkResult gen9_CreateDmaBufImageINTEL(VkDevice device, const VkDmaBufImageCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator,VkDeviceMemory* pMem,VkImage* pImage) __attribute__ ((weak));
+    VkResult gen9_CreateDmaBufImageINTEL(VkDevice device, const VkDmaBufImageCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDeviceMemory* pMem, VkImage* pImage) __attribute__ ((weak));
 
-  const struct anv_dispatch_table gen9_layer = {
-    .CreateInstance = gen9_CreateInstance,
-    .DestroyInstance = gen9_DestroyInstance,
-    .EnumeratePhysicalDevices = gen9_EnumeratePhysicalDevices,
-    .GetDeviceProcAddr = gen9_GetDeviceProcAddr,
-    .GetInstanceProcAddr = gen9_GetInstanceProcAddr,
-    .GetPhysicalDeviceProperties = gen9_GetPhysicalDeviceProperties,
-    .GetPhysicalDeviceQueueFamilyProperties = gen9_GetPhysicalDeviceQueueFamilyProperties,
-    .GetPhysicalDeviceMemoryProperties = gen9_GetPhysicalDeviceMemoryProperties,
-    .GetPhysicalDeviceFeatures = gen9_GetPhysicalDeviceFeatures,
-    .GetPhysicalDeviceFormatProperties = gen9_GetPhysicalDeviceFormatProperties,
-    .GetPhysicalDeviceImageFormatProperties = gen9_GetPhysicalDeviceImageFormatProperties,
-    .CreateDevice = gen9_CreateDevice,
-    .DestroyDevice = gen9_DestroyDevice,
-    .EnumerateInstanceLayerProperties = gen9_EnumerateInstanceLayerProperties,
-    .EnumerateInstanceExtensionProperties = gen9_EnumerateInstanceExtensionProperties,
-    .EnumerateDeviceLayerProperties = gen9_EnumerateDeviceLayerProperties,
-    .EnumerateDeviceExtensionProperties = gen9_EnumerateDeviceExtensionProperties,
-    .GetDeviceQueue = gen9_GetDeviceQueue,
-    .QueueSubmit = gen9_QueueSubmit,
-    .QueueWaitIdle = gen9_QueueWaitIdle,
-    .DeviceWaitIdle = gen9_DeviceWaitIdle,
-    .AllocateMemory = gen9_AllocateMemory,
-    .FreeMemory = gen9_FreeMemory,
-    .MapMemory = gen9_MapMemory,
-    .UnmapMemory = gen9_UnmapMemory,
-    .FlushMappedMemoryRanges = gen9_FlushMappedMemoryRanges,
-    .InvalidateMappedMemoryRanges = gen9_InvalidateMappedMemoryRanges,
-    .GetDeviceMemoryCommitment = gen9_GetDeviceMemoryCommitment,
-    .GetBufferMemoryRequirements = gen9_GetBufferMemoryRequirements,
-    .BindBufferMemory = gen9_BindBufferMemory,
-    .GetImageMemoryRequirements = gen9_GetImageMemoryRequirements,
-    .BindImageMemory = gen9_BindImageMemory,
-    .GetImageSparseMemoryRequirements = gen9_GetImageSparseMemoryRequirements,
-    .GetPhysicalDeviceSparseImageFormatProperties = gen9_GetPhysicalDeviceSparseImageFormatProperties,
-    .QueueBindSparse = gen9_QueueBindSparse,
-    .CreateFence = gen9_CreateFence,
-    .DestroyFence = gen9_DestroyFence,
-    .ResetFences = gen9_ResetFences,
-    .GetFenceStatus = gen9_GetFenceStatus,
-    .WaitForFences = gen9_WaitForFences,
-    .CreateSemaphore = gen9_CreateSemaphore,
-    .DestroySemaphore = gen9_DestroySemaphore,
-    .CreateEvent = gen9_CreateEvent,
-    .DestroyEvent = gen9_DestroyEvent,
-    .GetEventStatus = gen9_GetEventStatus,
-    .SetEvent = gen9_SetEvent,
-    .ResetEvent = gen9_ResetEvent,
-    .CreateQueryPool = gen9_CreateQueryPool,
-    .DestroyQueryPool = gen9_DestroyQueryPool,
-    .GetQueryPoolResults = gen9_GetQueryPoolResults,
-    .CreateBuffer = gen9_CreateBuffer,
-    .DestroyBuffer = gen9_DestroyBuffer,
-    .CreateBufferView = gen9_CreateBufferView,
-    .DestroyBufferView = gen9_DestroyBufferView,
-    .CreateImage = gen9_CreateImage,
-    .DestroyImage = gen9_DestroyImage,
-    .GetImageSubresourceLayout = gen9_GetImageSubresourceLayout,
-    .CreateImageView = gen9_CreateImageView,
-    .DestroyImageView = gen9_DestroyImageView,
-    .CreateShaderModule = gen9_CreateShaderModule,
-    .DestroyShaderModule = gen9_DestroyShaderModule,
-    .CreatePipelineCache = gen9_CreatePipelineCache,
-    .DestroyPipelineCache = gen9_DestroyPipelineCache,
-    .GetPipelineCacheData = gen9_GetPipelineCacheData,
-    .MergePipelineCaches = gen9_MergePipelineCaches,
-    .CreateGraphicsPipelines = gen9_CreateGraphicsPipelines,
-    .CreateComputePipelines = gen9_CreateComputePipelines,
-    .DestroyPipeline = gen9_DestroyPipeline,
-    .CreatePipelineLayout = gen9_CreatePipelineLayout,
-    .DestroyPipelineLayout = gen9_DestroyPipelineLayout,
-    .CreateSampler = gen9_CreateSampler,
-    .DestroySampler = gen9_DestroySampler,
-    .CreateDescriptorSetLayout = gen9_CreateDescriptorSetLayout,
-    .DestroyDescriptorSetLayout = gen9_DestroyDescriptorSetLayout,
-    .CreateDescriptorPool = gen9_CreateDescriptorPool,
-    .DestroyDescriptorPool = gen9_DestroyDescriptorPool,
-    .ResetDescriptorPool = gen9_ResetDescriptorPool,
-    .AllocateDescriptorSets = gen9_AllocateDescriptorSets,
-    .FreeDescriptorSets = gen9_FreeDescriptorSets,
-    .UpdateDescriptorSets = gen9_UpdateDescriptorSets,
-    .CreateFramebuffer = gen9_CreateFramebuffer,
-    .DestroyFramebuffer = gen9_DestroyFramebuffer,
-    .CreateRenderPass = gen9_CreateRenderPass,
-    .DestroyRenderPass = gen9_DestroyRenderPass,
-    .GetRenderAreaGranularity = gen9_GetRenderAreaGranularity,
-    .CreateCommandPool = gen9_CreateCommandPool,
-    .DestroyCommandPool = gen9_DestroyCommandPool,
-    .ResetCommandPool = gen9_ResetCommandPool,
-    .AllocateCommandBuffers = gen9_AllocateCommandBuffers,
-    .FreeCommandBuffers = gen9_FreeCommandBuffers,
-    .BeginCommandBuffer = gen9_BeginCommandBuffer,
-    .EndCommandBuffer = gen9_EndCommandBuffer,
-    .ResetCommandBuffer = gen9_ResetCommandBuffer,
-    .CmdBindPipeline = gen9_CmdBindPipeline,
-    .CmdSetViewport = gen9_CmdSetViewport,
-    .CmdSetScissor = gen9_CmdSetScissor,
-    .CmdSetLineWidth = gen9_CmdSetLineWidth,
-    .CmdSetDepthBias = gen9_CmdSetDepthBias,
-    .CmdSetBlendConstants = gen9_CmdSetBlendConstants,
-    .CmdSetDepthBounds = gen9_CmdSetDepthBounds,
-    .CmdSetStencilCompareMask = gen9_CmdSetStencilCompareMask,
-    .CmdSetStencilWriteMask = gen9_CmdSetStencilWriteMask,
-    .CmdSetStencilReference = gen9_CmdSetStencilReference,
-    .CmdBindDescriptorSets = gen9_CmdBindDescriptorSets,
-    .CmdBindIndexBuffer = gen9_CmdBindIndexBuffer,
-    .CmdBindVertexBuffers = gen9_CmdBindVertexBuffers,
-    .CmdDraw = gen9_CmdDraw,
-    .CmdDrawIndexed = gen9_CmdDrawIndexed,
-    .CmdDrawIndirect = gen9_CmdDrawIndirect,
-    .CmdDrawIndexedIndirect = gen9_CmdDrawIndexedIndirect,
-    .CmdDispatch = gen9_CmdDispatch,
-    .CmdDispatchIndirect = gen9_CmdDispatchIndirect,
-    .CmdCopyBuffer = gen9_CmdCopyBuffer,
-    .CmdCopyImage = gen9_CmdCopyImage,
-    .CmdBlitImage = gen9_CmdBlitImage,
-    .CmdCopyBufferToImage = gen9_CmdCopyBufferToImage,
-    .CmdCopyImageToBuffer = gen9_CmdCopyImageToBuffer,
-    .CmdUpdateBuffer = gen9_CmdUpdateBuffer,
-    .CmdFillBuffer = gen9_CmdFillBuffer,
-    .CmdClearColorImage = gen9_CmdClearColorImage,
-    .CmdClearDepthStencilImage = gen9_CmdClearDepthStencilImage,
-    .CmdClearAttachments = gen9_CmdClearAttachments,
-    .CmdResolveImage = gen9_CmdResolveImage,
-    .CmdSetEvent = gen9_CmdSetEvent,
-    .CmdResetEvent = gen9_CmdResetEvent,
-    .CmdWaitEvents = gen9_CmdWaitEvents,
-    .CmdPipelineBarrier = gen9_CmdPipelineBarrier,
-    .CmdBeginQuery = gen9_CmdBeginQuery,
-    .CmdEndQuery = gen9_CmdEndQuery,
-    .CmdResetQueryPool = gen9_CmdResetQueryPool,
-    .CmdWriteTimestamp = gen9_CmdWriteTimestamp,
-    .CmdCopyQueryPoolResults = gen9_CmdCopyQueryPoolResults,
-    .CmdPushConstants = gen9_CmdPushConstants,
-    .CmdBeginRenderPass = gen9_CmdBeginRenderPass,
-    .CmdNextSubpass = gen9_CmdNextSubpass,
-    .CmdEndRenderPass = gen9_CmdEndRenderPass,
-    .CmdExecuteCommands = gen9_CmdExecuteCommands,
-    .DestroySurfaceKHR = gen9_DestroySurfaceKHR,
-    .GetPhysicalDeviceSurfaceSupportKHR = gen9_GetPhysicalDeviceSurfaceSupportKHR,
-    .GetPhysicalDeviceSurfaceCapabilitiesKHR = gen9_GetPhysicalDeviceSurfaceCapabilitiesKHR,
-    .GetPhysicalDeviceSurfaceFormatsKHR = gen9_GetPhysicalDeviceSurfaceFormatsKHR,
-    .GetPhysicalDeviceSurfacePresentModesKHR = gen9_GetPhysicalDeviceSurfacePresentModesKHR,
-    .CreateSwapchainKHR = gen9_CreateSwapchainKHR,
-    .DestroySwapchainKHR = gen9_DestroySwapchainKHR,
-    .GetSwapchainImagesKHR = gen9_GetSwapchainImagesKHR,
-    .AcquireNextImageKHR = gen9_AcquireNextImageKHR,
-    .QueuePresentKHR = gen9_QueuePresentKHR,
+  const struct anv_dispatch_table gen9_dispatch_table = {
+    .vkCreateInstance = gen9_CreateInstance,
+    .vkDestroyInstance = gen9_DestroyInstance,
+    .vkEnumeratePhysicalDevices = gen9_EnumeratePhysicalDevices,
+    .vkGetDeviceProcAddr = gen9_GetDeviceProcAddr,
+    .vkGetInstanceProcAddr = gen9_GetInstanceProcAddr,
+    .vkGetPhysicalDeviceProperties = gen9_GetPhysicalDeviceProperties,
+    .vkGetPhysicalDeviceQueueFamilyProperties = gen9_GetPhysicalDeviceQueueFamilyProperties,
+    .vkGetPhysicalDeviceMemoryProperties = gen9_GetPhysicalDeviceMemoryProperties,
+    .vkGetPhysicalDeviceFeatures = gen9_GetPhysicalDeviceFeatures,
+    .vkGetPhysicalDeviceFormatProperties = gen9_GetPhysicalDeviceFormatProperties,
+    .vkGetPhysicalDeviceImageFormatProperties = gen9_GetPhysicalDeviceImageFormatProperties,
+    .vkCreateDevice = gen9_CreateDevice,
+    .vkDestroyDevice = gen9_DestroyDevice,
+    .vkEnumerateInstanceLayerProperties = gen9_EnumerateInstanceLayerProperties,
+    .vkEnumerateInstanceExtensionProperties = gen9_EnumerateInstanceExtensionProperties,
+    .vkEnumerateDeviceLayerProperties = gen9_EnumerateDeviceLayerProperties,
+    .vkEnumerateDeviceExtensionProperties = gen9_EnumerateDeviceExtensionProperties,
+    .vkGetDeviceQueue = gen9_GetDeviceQueue,
+    .vkQueueSubmit = gen9_QueueSubmit,
+    .vkQueueWaitIdle = gen9_QueueWaitIdle,
+    .vkDeviceWaitIdle = gen9_DeviceWaitIdle,
+    .vkAllocateMemory = gen9_AllocateMemory,
+    .vkFreeMemory = gen9_FreeMemory,
+    .vkMapMemory = gen9_MapMemory,
+    .vkUnmapMemory = gen9_UnmapMemory,
+    .vkFlushMappedMemoryRanges = gen9_FlushMappedMemoryRanges,
+    .vkInvalidateMappedMemoryRanges = gen9_InvalidateMappedMemoryRanges,
+    .vkGetDeviceMemoryCommitment = gen9_GetDeviceMemoryCommitment,
+    .vkGetBufferMemoryRequirements = gen9_GetBufferMemoryRequirements,
+    .vkBindBufferMemory = gen9_BindBufferMemory,
+    .vkGetImageMemoryRequirements = gen9_GetImageMemoryRequirements,
+    .vkBindImageMemory = gen9_BindImageMemory,
+    .vkGetImageSparseMemoryRequirements = gen9_GetImageSparseMemoryRequirements,
+    .vkGetPhysicalDeviceSparseImageFormatProperties = gen9_GetPhysicalDeviceSparseImageFormatProperties,
+    .vkQueueBindSparse = gen9_QueueBindSparse,
+    .vkCreateFence = gen9_CreateFence,
+    .vkDestroyFence = gen9_DestroyFence,
+    .vkResetFences = gen9_ResetFences,
+    .vkGetFenceStatus = gen9_GetFenceStatus,
+    .vkWaitForFences = gen9_WaitForFences,
+    .vkCreateSemaphore = gen9_CreateSemaphore,
+    .vkDestroySemaphore = gen9_DestroySemaphore,
+    .vkCreateEvent = gen9_CreateEvent,
+    .vkDestroyEvent = gen9_DestroyEvent,
+    .vkGetEventStatus = gen9_GetEventStatus,
+    .vkSetEvent = gen9_SetEvent,
+    .vkResetEvent = gen9_ResetEvent,
+    .vkCreateQueryPool = gen9_CreateQueryPool,
+    .vkDestroyQueryPool = gen9_DestroyQueryPool,
+    .vkGetQueryPoolResults = gen9_GetQueryPoolResults,
+    .vkCreateBuffer = gen9_CreateBuffer,
+    .vkDestroyBuffer = gen9_DestroyBuffer,
+    .vkCreateBufferView = gen9_CreateBufferView,
+    .vkDestroyBufferView = gen9_DestroyBufferView,
+    .vkCreateImage = gen9_CreateImage,
+    .vkDestroyImage = gen9_DestroyImage,
+    .vkGetImageSubresourceLayout = gen9_GetImageSubresourceLayout,
+    .vkCreateImageView = gen9_CreateImageView,
+    .vkDestroyImageView = gen9_DestroyImageView,
+    .vkCreateShaderModule = gen9_CreateShaderModule,
+    .vkDestroyShaderModule = gen9_DestroyShaderModule,
+    .vkCreatePipelineCache = gen9_CreatePipelineCache,
+    .vkDestroyPipelineCache = gen9_DestroyPipelineCache,
+    .vkGetPipelineCacheData = gen9_GetPipelineCacheData,
+    .vkMergePipelineCaches = gen9_MergePipelineCaches,
+    .vkCreateGraphicsPipelines = gen9_CreateGraphicsPipelines,
+    .vkCreateComputePipelines = gen9_CreateComputePipelines,
+    .vkDestroyPipeline = gen9_DestroyPipeline,
+    .vkCreatePipelineLayout = gen9_CreatePipelineLayout,
+    .vkDestroyPipelineLayout = gen9_DestroyPipelineLayout,
+    .vkCreateSampler = gen9_CreateSampler,
+    .vkDestroySampler = gen9_DestroySampler,
+    .vkCreateDescriptorSetLayout = gen9_CreateDescriptorSetLayout,
+    .vkDestroyDescriptorSetLayout = gen9_DestroyDescriptorSetLayout,
+    .vkCreateDescriptorPool = gen9_CreateDescriptorPool,
+    .vkDestroyDescriptorPool = gen9_DestroyDescriptorPool,
+    .vkResetDescriptorPool = gen9_ResetDescriptorPool,
+    .vkAllocateDescriptorSets = gen9_AllocateDescriptorSets,
+    .vkFreeDescriptorSets = gen9_FreeDescriptorSets,
+    .vkUpdateDescriptorSets = gen9_UpdateDescriptorSets,
+    .vkCreateFramebuffer = gen9_CreateFramebuffer,
+    .vkDestroyFramebuffer = gen9_DestroyFramebuffer,
+    .vkCreateRenderPass = gen9_CreateRenderPass,
+    .vkDestroyRenderPass = gen9_DestroyRenderPass,
+    .vkGetRenderAreaGranularity = gen9_GetRenderAreaGranularity,
+    .vkCreateCommandPool = gen9_CreateCommandPool,
+    .vkDestroyCommandPool = gen9_DestroyCommandPool,
+    .vkResetCommandPool = gen9_ResetCommandPool,
+    .vkAllocateCommandBuffers = gen9_AllocateCommandBuffers,
+    .vkFreeCommandBuffers = gen9_FreeCommandBuffers,
+    .vkBeginCommandBuffer = gen9_BeginCommandBuffer,
+    .vkEndCommandBuffer = gen9_EndCommandBuffer,
+    .vkResetCommandBuffer = gen9_ResetCommandBuffer,
+    .vkCmdBindPipeline = gen9_CmdBindPipeline,
+    .vkCmdSetViewport = gen9_CmdSetViewport,
+    .vkCmdSetScissor = gen9_CmdSetScissor,
+    .vkCmdSetLineWidth = gen9_CmdSetLineWidth,
+    .vkCmdSetDepthBias = gen9_CmdSetDepthBias,
+    .vkCmdSetBlendConstants = gen9_CmdSetBlendConstants,
+    .vkCmdSetDepthBounds = gen9_CmdSetDepthBounds,
+    .vkCmdSetStencilCompareMask = gen9_CmdSetStencilCompareMask,
+    .vkCmdSetStencilWriteMask = gen9_CmdSetStencilWriteMask,
+    .vkCmdSetStencilReference = gen9_CmdSetStencilReference,
+    .vkCmdBindDescriptorSets = gen9_CmdBindDescriptorSets,
+    .vkCmdBindIndexBuffer = gen9_CmdBindIndexBuffer,
+    .vkCmdBindVertexBuffers = gen9_CmdBindVertexBuffers,
+    .vkCmdDraw = gen9_CmdDraw,
+    .vkCmdDrawIndexed = gen9_CmdDrawIndexed,
+    .vkCmdDrawIndirect = gen9_CmdDrawIndirect,
+    .vkCmdDrawIndexedIndirect = gen9_CmdDrawIndexedIndirect,
+    .vkCmdDispatch = gen9_CmdDispatch,
+    .vkCmdDispatchIndirect = gen9_CmdDispatchIndirect,
+    .vkCmdCopyBuffer = gen9_CmdCopyBuffer,
+    .vkCmdCopyImage = gen9_CmdCopyImage,
+    .vkCmdBlitImage = gen9_CmdBlitImage,
+    .vkCmdCopyBufferToImage = gen9_CmdCopyBufferToImage,
+    .vkCmdCopyImageToBuffer = gen9_CmdCopyImageToBuffer,
+    .vkCmdUpdateBuffer = gen9_CmdUpdateBuffer,
+    .vkCmdFillBuffer = gen9_CmdFillBuffer,
+    .vkCmdClearColorImage = gen9_CmdClearColorImage,
+    .vkCmdClearDepthStencilImage = gen9_CmdClearDepthStencilImage,
+    .vkCmdClearAttachments = gen9_CmdClearAttachments,
+    .vkCmdResolveImage = gen9_CmdResolveImage,
+    .vkCmdSetEvent = gen9_CmdSetEvent,
+    .vkCmdResetEvent = gen9_CmdResetEvent,
+    .vkCmdWaitEvents = gen9_CmdWaitEvents,
+    .vkCmdPipelineBarrier = gen9_CmdPipelineBarrier,
+    .vkCmdBeginQuery = gen9_CmdBeginQuery,
+    .vkCmdEndQuery = gen9_CmdEndQuery,
+    .vkCmdResetQueryPool = gen9_CmdResetQueryPool,
+    .vkCmdWriteTimestamp = gen9_CmdWriteTimestamp,
+    .vkCmdCopyQueryPoolResults = gen9_CmdCopyQueryPoolResults,
+    .vkCmdPushConstants = gen9_CmdPushConstants,
+    .vkCmdBeginRenderPass = gen9_CmdBeginRenderPass,
+    .vkCmdNextSubpass = gen9_CmdNextSubpass,
+    .vkCmdEndRenderPass = gen9_CmdEndRenderPass,
+    .vkCmdExecuteCommands = gen9_CmdExecuteCommands,
+    .vkDestroySurfaceKHR = gen9_DestroySurfaceKHR,
+    .vkGetPhysicalDeviceSurfaceSupportKHR = gen9_GetPhysicalDeviceSurfaceSupportKHR,
+    .vkGetPhysicalDeviceSurfaceCapabilitiesKHR = gen9_GetPhysicalDeviceSurfaceCapabilitiesKHR,
+    .vkGetPhysicalDeviceSurfaceFormatsKHR = gen9_GetPhysicalDeviceSurfaceFormatsKHR,
+    .vkGetPhysicalDeviceSurfacePresentModesKHR = gen9_GetPhysicalDeviceSurfacePresentModesKHR,
+    .vkCreateSwapchainKHR = gen9_CreateSwapchainKHR,
+    .vkDestroySwapchainKHR = gen9_DestroySwapchainKHR,
+    .vkGetSwapchainImagesKHR = gen9_GetSwapchainImagesKHR,
+    .vkAcquireNextImageKHR = gen9_AcquireNextImageKHR,
+    .vkQueuePresentKHR = gen9_QueuePresentKHR,
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
-    .CreateWaylandSurfaceKHR = gen9_CreateWaylandSurfaceKHR,
+    .vkCreateWaylandSurfaceKHR = gen9_CreateWaylandSurfaceKHR,
 #endif // VK_USE_PLATFORM_WAYLAND_KHR
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
-    .GetPhysicalDeviceWaylandPresentationSupportKHR = gen9_GetPhysicalDeviceWaylandPresentationSupportKHR,
+    .vkGetPhysicalDeviceWaylandPresentationSupportKHR = gen9_GetPhysicalDeviceWaylandPresentationSupportKHR,
 #endif // VK_USE_PLATFORM_WAYLAND_KHR
 #ifdef VK_USE_PLATFORM_XLIB_KHR
-    .CreateXlibSurfaceKHR = gen9_CreateXlibSurfaceKHR,
+    .vkCreateXlibSurfaceKHR = gen9_CreateXlibSurfaceKHR,
 #endif // VK_USE_PLATFORM_XLIB_KHR
 #ifdef VK_USE_PLATFORM_XLIB_KHR
-    .GetPhysicalDeviceXlibPresentationSupportKHR = gen9_GetPhysicalDeviceXlibPresentationSupportKHR,
+    .vkGetPhysicalDeviceXlibPresentationSupportKHR = gen9_GetPhysicalDeviceXlibPresentationSupportKHR,
 #endif // VK_USE_PLATFORM_XLIB_KHR
 #ifdef VK_USE_PLATFORM_XCB_KHR
-    .CreateXcbSurfaceKHR = gen9_CreateXcbSurfaceKHR,
+    .vkCreateXcbSurfaceKHR = gen9_CreateXcbSurfaceKHR,
 #endif // VK_USE_PLATFORM_XCB_KHR
 #ifdef VK_USE_PLATFORM_XCB_KHR
-    .GetPhysicalDeviceXcbPresentationSupportKHR = gen9_GetPhysicalDeviceXcbPresentationSupportKHR,
+    .vkGetPhysicalDeviceXcbPresentationSupportKHR = gen9_GetPhysicalDeviceXcbPresentationSupportKHR,
 #endif // VK_USE_PLATFORM_XCB_KHR
-    .CreateDebugReportCallbackEXT = gen9_CreateDebugReportCallbackEXT,
-    .DestroyDebugReportCallbackEXT = gen9_DestroyDebugReportCallbackEXT,
-    .DebugReportMessageEXT = gen9_DebugReportMessageEXT,
-    .GetPhysicalDeviceFeatures2KHR = gen9_GetPhysicalDeviceFeatures2KHR,
-    .GetPhysicalDeviceProperties2KHR = gen9_GetPhysicalDeviceProperties2KHR,
-    .GetPhysicalDeviceFormatProperties2KHR = gen9_GetPhysicalDeviceFormatProperties2KHR,
-    .GetPhysicalDeviceImageFormatProperties2KHR = gen9_GetPhysicalDeviceImageFormatProperties2KHR,
-    .GetPhysicalDeviceQueueFamilyProperties2KHR = gen9_GetPhysicalDeviceQueueFamilyProperties2KHR,
-    .GetPhysicalDeviceMemoryProperties2KHR = gen9_GetPhysicalDeviceMemoryProperties2KHR,
-    .GetPhysicalDeviceSparseImageFormatProperties2KHR = gen9_GetPhysicalDeviceSparseImageFormatProperties2KHR,
-    .CmdPushDescriptorSetKHR = gen9_CmdPushDescriptorSetKHR,
-    .TrimCommandPoolKHR = gen9_TrimCommandPoolKHR,
-    .GetPhysicalDeviceExternalBufferPropertiesKHR = gen9_GetPhysicalDeviceExternalBufferPropertiesKHR,
-    .GetMemoryFdKHR = gen9_GetMemoryFdKHR,
-    .GetMemoryFdPropertiesKHR = gen9_GetMemoryFdPropertiesKHR,
-    .GetPhysicalDeviceExternalSemaphorePropertiesKHR = gen9_GetPhysicalDeviceExternalSemaphorePropertiesKHR,
-    .GetSemaphoreFdKHR = gen9_GetSemaphoreFdKHR,
-    .ImportSemaphoreFdKHR = gen9_ImportSemaphoreFdKHR,
-    .GetPhysicalDeviceExternalFencePropertiesKHR = gen9_GetPhysicalDeviceExternalFencePropertiesKHR,
-    .GetFenceFdKHR = gen9_GetFenceFdKHR,
-    .ImportFenceFdKHR = gen9_ImportFenceFdKHR,
-    .BindBufferMemory2KHR = gen9_BindBufferMemory2KHR,
-    .BindImageMemory2KHR = gen9_BindImageMemory2KHR,
-    .CreateDescriptorUpdateTemplateKHR = gen9_CreateDescriptorUpdateTemplateKHR,
-    .DestroyDescriptorUpdateTemplateKHR = gen9_DestroyDescriptorUpdateTemplateKHR,
-    .UpdateDescriptorSetWithTemplateKHR = gen9_UpdateDescriptorSetWithTemplateKHR,
-    .CmdPushDescriptorSetWithTemplateKHR = gen9_CmdPushDescriptorSetWithTemplateKHR,
-    .GetPhysicalDeviceSurfaceCapabilities2KHR = gen9_GetPhysicalDeviceSurfaceCapabilities2KHR,
-    .GetPhysicalDeviceSurfaceFormats2KHR = gen9_GetPhysicalDeviceSurfaceFormats2KHR,
-    .GetBufferMemoryRequirements2KHR = gen9_GetBufferMemoryRequirements2KHR,
-    .GetImageMemoryRequirements2KHR = gen9_GetImageMemoryRequirements2KHR,
-    .GetImageSparseMemoryRequirements2KHR = gen9_GetImageSparseMemoryRequirements2KHR,
-    .CreateSamplerYcbcrConversionKHR = gen9_CreateSamplerYcbcrConversionKHR,
-    .DestroySamplerYcbcrConversionKHR = gen9_DestroySamplerYcbcrConversionKHR,
+    .vkCreateDebugReportCallbackEXT = gen9_CreateDebugReportCallbackEXT,
+    .vkDestroyDebugReportCallbackEXT = gen9_DestroyDebugReportCallbackEXT,
+    .vkDebugReportMessageEXT = gen9_DebugReportMessageEXT,
+    .vkGetPhysicalDeviceFeatures2KHR = gen9_GetPhysicalDeviceFeatures2KHR,
+    .vkGetPhysicalDeviceProperties2KHR = gen9_GetPhysicalDeviceProperties2KHR,
+    .vkGetPhysicalDeviceFormatProperties2KHR = gen9_GetPhysicalDeviceFormatProperties2KHR,
+    .vkGetPhysicalDeviceImageFormatProperties2KHR = gen9_GetPhysicalDeviceImageFormatProperties2KHR,
+    .vkGetPhysicalDeviceQueueFamilyProperties2KHR = gen9_GetPhysicalDeviceQueueFamilyProperties2KHR,
+    .vkGetPhysicalDeviceMemoryProperties2KHR = gen9_GetPhysicalDeviceMemoryProperties2KHR,
+    .vkGetPhysicalDeviceSparseImageFormatProperties2KHR = gen9_GetPhysicalDeviceSparseImageFormatProperties2KHR,
+    .vkCmdPushDescriptorSetKHR = gen9_CmdPushDescriptorSetKHR,
+    .vkTrimCommandPoolKHR = gen9_TrimCommandPoolKHR,
+    .vkGetPhysicalDeviceExternalBufferPropertiesKHR = gen9_GetPhysicalDeviceExternalBufferPropertiesKHR,
+    .vkGetMemoryFdKHR = gen9_GetMemoryFdKHR,
+    .vkGetMemoryFdPropertiesKHR = gen9_GetMemoryFdPropertiesKHR,
+    .vkGetPhysicalDeviceExternalSemaphorePropertiesKHR = gen9_GetPhysicalDeviceExternalSemaphorePropertiesKHR,
+    .vkGetSemaphoreFdKHR = gen9_GetSemaphoreFdKHR,
+    .vkImportSemaphoreFdKHR = gen9_ImportSemaphoreFdKHR,
+    .vkGetPhysicalDeviceExternalFencePropertiesKHR = gen9_GetPhysicalDeviceExternalFencePropertiesKHR,
+    .vkGetFenceFdKHR = gen9_GetFenceFdKHR,
+    .vkImportFenceFdKHR = gen9_ImportFenceFdKHR,
+    .vkBindBufferMemory2KHR = gen9_BindBufferMemory2KHR,
+    .vkBindImageMemory2KHR = gen9_BindImageMemory2KHR,
+    .vkCreateDescriptorUpdateTemplateKHR = gen9_CreateDescriptorUpdateTemplateKHR,
+    .vkDestroyDescriptorUpdateTemplateKHR = gen9_DestroyDescriptorUpdateTemplateKHR,
+    .vkUpdateDescriptorSetWithTemplateKHR = gen9_UpdateDescriptorSetWithTemplateKHR,
+    .vkCmdPushDescriptorSetWithTemplateKHR = gen9_CmdPushDescriptorSetWithTemplateKHR,
+    .vkGetPhysicalDeviceSurfaceCapabilities2KHR = gen9_GetPhysicalDeviceSurfaceCapabilities2KHR,
+    .vkGetPhysicalDeviceSurfaceFormats2KHR = gen9_GetPhysicalDeviceSurfaceFormats2KHR,
+    .vkGetBufferMemoryRequirements2KHR = gen9_GetBufferMemoryRequirements2KHR,
+    .vkGetImageMemoryRequirements2KHR = gen9_GetImageMemoryRequirements2KHR,
+    .vkGetImageSparseMemoryRequirements2KHR = gen9_GetImageSparseMemoryRequirements2KHR,
+    .vkCreateSamplerYcbcrConversionKHR = gen9_CreateSamplerYcbcrConversionKHR,
+    .vkDestroySamplerYcbcrConversionKHR = gen9_DestroySamplerYcbcrConversionKHR,
 #ifdef ANDROID
-    .GetSwapchainGrallocUsageANDROID = gen9_GetSwapchainGrallocUsageANDROID,
+    .vkGetSwapchainGrallocUsageANDROID = gen9_GetSwapchainGrallocUsageANDROID,
 #endif // ANDROID
 #ifdef ANDROID
-    .AcquireImageANDROID = gen9_AcquireImageANDROID,
+    .vkAcquireImageANDROID = gen9_AcquireImageANDROID,
 #endif // ANDROID
 #ifdef ANDROID
-    .QueueSignalReleaseImageANDROID = gen9_QueueSignalReleaseImageANDROID,
+    .vkQueueSignalReleaseImageANDROID = gen9_QueueSignalReleaseImageANDROID,
 #endif // ANDROID
-    .CreateDmaBufImageINTEL = gen9_CreateDmaBufImageINTEL,
+    .vkCreateDmaBufImageINTEL = gen9_CreateDmaBufImageINTEL,
   };
     VkResult gen10_CreateInstance(const VkInstanceCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkInstance* pInstance) __attribute__ ((weak));
     void gen10_DestroyInstance(VkInstance instance, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
@@ -2741,243 +2741,1665 @@ static const struct anv_entrypoint entrypoints[] = {
 #ifdef ANDROID
     VkResult gen10_QueueSignalReleaseImageANDROID(VkQueue queue, uint32_t waitSemaphoreCount, const VkSemaphore* pWaitSemaphores, VkImage image, int* pNativeFenceFd) __attribute__ ((weak));
 #endif // ANDROID
-    VkResult gen10_CreateDmaBufImageINTEL(VkDevice device, const VkDmaBufImageCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator,VkDeviceMemory* pMem,VkImage* pImage) __attribute__ ((weak));
+    VkResult gen10_CreateDmaBufImageINTEL(VkDevice device, const VkDmaBufImageCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDeviceMemory* pMem, VkImage* pImage) __attribute__ ((weak));
 
-  const struct anv_dispatch_table gen10_layer = {
-    .CreateInstance = gen10_CreateInstance,
-    .DestroyInstance = gen10_DestroyInstance,
-    .EnumeratePhysicalDevices = gen10_EnumeratePhysicalDevices,
-    .GetDeviceProcAddr = gen10_GetDeviceProcAddr,
-    .GetInstanceProcAddr = gen10_GetInstanceProcAddr,
-    .GetPhysicalDeviceProperties = gen10_GetPhysicalDeviceProperties,
-    .GetPhysicalDeviceQueueFamilyProperties = gen10_GetPhysicalDeviceQueueFamilyProperties,
-    .GetPhysicalDeviceMemoryProperties = gen10_GetPhysicalDeviceMemoryProperties,
-    .GetPhysicalDeviceFeatures = gen10_GetPhysicalDeviceFeatures,
-    .GetPhysicalDeviceFormatProperties = gen10_GetPhysicalDeviceFormatProperties,
-    .GetPhysicalDeviceImageFormatProperties = gen10_GetPhysicalDeviceImageFormatProperties,
-    .CreateDevice = gen10_CreateDevice,
-    .DestroyDevice = gen10_DestroyDevice,
-    .EnumerateInstanceLayerProperties = gen10_EnumerateInstanceLayerProperties,
-    .EnumerateInstanceExtensionProperties = gen10_EnumerateInstanceExtensionProperties,
-    .EnumerateDeviceLayerProperties = gen10_EnumerateDeviceLayerProperties,
-    .EnumerateDeviceExtensionProperties = gen10_EnumerateDeviceExtensionProperties,
-    .GetDeviceQueue = gen10_GetDeviceQueue,
-    .QueueSubmit = gen10_QueueSubmit,
-    .QueueWaitIdle = gen10_QueueWaitIdle,
-    .DeviceWaitIdle = gen10_DeviceWaitIdle,
-    .AllocateMemory = gen10_AllocateMemory,
-    .FreeMemory = gen10_FreeMemory,
-    .MapMemory = gen10_MapMemory,
-    .UnmapMemory = gen10_UnmapMemory,
-    .FlushMappedMemoryRanges = gen10_FlushMappedMemoryRanges,
-    .InvalidateMappedMemoryRanges = gen10_InvalidateMappedMemoryRanges,
-    .GetDeviceMemoryCommitment = gen10_GetDeviceMemoryCommitment,
-    .GetBufferMemoryRequirements = gen10_GetBufferMemoryRequirements,
-    .BindBufferMemory = gen10_BindBufferMemory,
-    .GetImageMemoryRequirements = gen10_GetImageMemoryRequirements,
-    .BindImageMemory = gen10_BindImageMemory,
-    .GetImageSparseMemoryRequirements = gen10_GetImageSparseMemoryRequirements,
-    .GetPhysicalDeviceSparseImageFormatProperties = gen10_GetPhysicalDeviceSparseImageFormatProperties,
-    .QueueBindSparse = gen10_QueueBindSparse,
-    .CreateFence = gen10_CreateFence,
-    .DestroyFence = gen10_DestroyFence,
-    .ResetFences = gen10_ResetFences,
-    .GetFenceStatus = gen10_GetFenceStatus,
-    .WaitForFences = gen10_WaitForFences,
-    .CreateSemaphore = gen10_CreateSemaphore,
-    .DestroySemaphore = gen10_DestroySemaphore,
-    .CreateEvent = gen10_CreateEvent,
-    .DestroyEvent = gen10_DestroyEvent,
-    .GetEventStatus = gen10_GetEventStatus,
-    .SetEvent = gen10_SetEvent,
-    .ResetEvent = gen10_ResetEvent,
-    .CreateQueryPool = gen10_CreateQueryPool,
-    .DestroyQueryPool = gen10_DestroyQueryPool,
-    .GetQueryPoolResults = gen10_GetQueryPoolResults,
-    .CreateBuffer = gen10_CreateBuffer,
-    .DestroyBuffer = gen10_DestroyBuffer,
-    .CreateBufferView = gen10_CreateBufferView,
-    .DestroyBufferView = gen10_DestroyBufferView,
-    .CreateImage = gen10_CreateImage,
-    .DestroyImage = gen10_DestroyImage,
-    .GetImageSubresourceLayout = gen10_GetImageSubresourceLayout,
-    .CreateImageView = gen10_CreateImageView,
-    .DestroyImageView = gen10_DestroyImageView,
-    .CreateShaderModule = gen10_CreateShaderModule,
-    .DestroyShaderModule = gen10_DestroyShaderModule,
-    .CreatePipelineCache = gen10_CreatePipelineCache,
-    .DestroyPipelineCache = gen10_DestroyPipelineCache,
-    .GetPipelineCacheData = gen10_GetPipelineCacheData,
-    .MergePipelineCaches = gen10_MergePipelineCaches,
-    .CreateGraphicsPipelines = gen10_CreateGraphicsPipelines,
-    .CreateComputePipelines = gen10_CreateComputePipelines,
-    .DestroyPipeline = gen10_DestroyPipeline,
-    .CreatePipelineLayout = gen10_CreatePipelineLayout,
-    .DestroyPipelineLayout = gen10_DestroyPipelineLayout,
-    .CreateSampler = gen10_CreateSampler,
-    .DestroySampler = gen10_DestroySampler,
-    .CreateDescriptorSetLayout = gen10_CreateDescriptorSetLayout,
-    .DestroyDescriptorSetLayout = gen10_DestroyDescriptorSetLayout,
-    .CreateDescriptorPool = gen10_CreateDescriptorPool,
-    .DestroyDescriptorPool = gen10_DestroyDescriptorPool,
-    .ResetDescriptorPool = gen10_ResetDescriptorPool,
-    .AllocateDescriptorSets = gen10_AllocateDescriptorSets,
-    .FreeDescriptorSets = gen10_FreeDescriptorSets,
-    .UpdateDescriptorSets = gen10_UpdateDescriptorSets,
-    .CreateFramebuffer = gen10_CreateFramebuffer,
-    .DestroyFramebuffer = gen10_DestroyFramebuffer,
-    .CreateRenderPass = gen10_CreateRenderPass,
-    .DestroyRenderPass = gen10_DestroyRenderPass,
-    .GetRenderAreaGranularity = gen10_GetRenderAreaGranularity,
-    .CreateCommandPool = gen10_CreateCommandPool,
-    .DestroyCommandPool = gen10_DestroyCommandPool,
-    .ResetCommandPool = gen10_ResetCommandPool,
-    .AllocateCommandBuffers = gen10_AllocateCommandBuffers,
-    .FreeCommandBuffers = gen10_FreeCommandBuffers,
-    .BeginCommandBuffer = gen10_BeginCommandBuffer,
-    .EndCommandBuffer = gen10_EndCommandBuffer,
-    .ResetCommandBuffer = gen10_ResetCommandBuffer,
-    .CmdBindPipeline = gen10_CmdBindPipeline,
-    .CmdSetViewport = gen10_CmdSetViewport,
-    .CmdSetScissor = gen10_CmdSetScissor,
-    .CmdSetLineWidth = gen10_CmdSetLineWidth,
-    .CmdSetDepthBias = gen10_CmdSetDepthBias,
-    .CmdSetBlendConstants = gen10_CmdSetBlendConstants,
-    .CmdSetDepthBounds = gen10_CmdSetDepthBounds,
-    .CmdSetStencilCompareMask = gen10_CmdSetStencilCompareMask,
-    .CmdSetStencilWriteMask = gen10_CmdSetStencilWriteMask,
-    .CmdSetStencilReference = gen10_CmdSetStencilReference,
-    .CmdBindDescriptorSets = gen10_CmdBindDescriptorSets,
-    .CmdBindIndexBuffer = gen10_CmdBindIndexBuffer,
-    .CmdBindVertexBuffers = gen10_CmdBindVertexBuffers,
-    .CmdDraw = gen10_CmdDraw,
-    .CmdDrawIndexed = gen10_CmdDrawIndexed,
-    .CmdDrawIndirect = gen10_CmdDrawIndirect,
-    .CmdDrawIndexedIndirect = gen10_CmdDrawIndexedIndirect,
-    .CmdDispatch = gen10_CmdDispatch,
-    .CmdDispatchIndirect = gen10_CmdDispatchIndirect,
-    .CmdCopyBuffer = gen10_CmdCopyBuffer,
-    .CmdCopyImage = gen10_CmdCopyImage,
-    .CmdBlitImage = gen10_CmdBlitImage,
-    .CmdCopyBufferToImage = gen10_CmdCopyBufferToImage,
-    .CmdCopyImageToBuffer = gen10_CmdCopyImageToBuffer,
-    .CmdUpdateBuffer = gen10_CmdUpdateBuffer,
-    .CmdFillBuffer = gen10_CmdFillBuffer,
-    .CmdClearColorImage = gen10_CmdClearColorImage,
-    .CmdClearDepthStencilImage = gen10_CmdClearDepthStencilImage,
-    .CmdClearAttachments = gen10_CmdClearAttachments,
-    .CmdResolveImage = gen10_CmdResolveImage,
-    .CmdSetEvent = gen10_CmdSetEvent,
-    .CmdResetEvent = gen10_CmdResetEvent,
-    .CmdWaitEvents = gen10_CmdWaitEvents,
-    .CmdPipelineBarrier = gen10_CmdPipelineBarrier,
-    .CmdBeginQuery = gen10_CmdBeginQuery,
-    .CmdEndQuery = gen10_CmdEndQuery,
-    .CmdResetQueryPool = gen10_CmdResetQueryPool,
-    .CmdWriteTimestamp = gen10_CmdWriteTimestamp,
-    .CmdCopyQueryPoolResults = gen10_CmdCopyQueryPoolResults,
-    .CmdPushConstants = gen10_CmdPushConstants,
-    .CmdBeginRenderPass = gen10_CmdBeginRenderPass,
-    .CmdNextSubpass = gen10_CmdNextSubpass,
-    .CmdEndRenderPass = gen10_CmdEndRenderPass,
-    .CmdExecuteCommands = gen10_CmdExecuteCommands,
-    .DestroySurfaceKHR = gen10_DestroySurfaceKHR,
-    .GetPhysicalDeviceSurfaceSupportKHR = gen10_GetPhysicalDeviceSurfaceSupportKHR,
-    .GetPhysicalDeviceSurfaceCapabilitiesKHR = gen10_GetPhysicalDeviceSurfaceCapabilitiesKHR,
-    .GetPhysicalDeviceSurfaceFormatsKHR = gen10_GetPhysicalDeviceSurfaceFormatsKHR,
-    .GetPhysicalDeviceSurfacePresentModesKHR = gen10_GetPhysicalDeviceSurfacePresentModesKHR,
-    .CreateSwapchainKHR = gen10_CreateSwapchainKHR,
-    .DestroySwapchainKHR = gen10_DestroySwapchainKHR,
-    .GetSwapchainImagesKHR = gen10_GetSwapchainImagesKHR,
-    .AcquireNextImageKHR = gen10_AcquireNextImageKHR,
-    .QueuePresentKHR = gen10_QueuePresentKHR,
+  const struct anv_dispatch_table gen10_dispatch_table = {
+    .vkCreateInstance = gen10_CreateInstance,
+    .vkDestroyInstance = gen10_DestroyInstance,
+    .vkEnumeratePhysicalDevices = gen10_EnumeratePhysicalDevices,
+    .vkGetDeviceProcAddr = gen10_GetDeviceProcAddr,
+    .vkGetInstanceProcAddr = gen10_GetInstanceProcAddr,
+    .vkGetPhysicalDeviceProperties = gen10_GetPhysicalDeviceProperties,
+    .vkGetPhysicalDeviceQueueFamilyProperties = gen10_GetPhysicalDeviceQueueFamilyProperties,
+    .vkGetPhysicalDeviceMemoryProperties = gen10_GetPhysicalDeviceMemoryProperties,
+    .vkGetPhysicalDeviceFeatures = gen10_GetPhysicalDeviceFeatures,
+    .vkGetPhysicalDeviceFormatProperties = gen10_GetPhysicalDeviceFormatProperties,
+    .vkGetPhysicalDeviceImageFormatProperties = gen10_GetPhysicalDeviceImageFormatProperties,
+    .vkCreateDevice = gen10_CreateDevice,
+    .vkDestroyDevice = gen10_DestroyDevice,
+    .vkEnumerateInstanceLayerProperties = gen10_EnumerateInstanceLayerProperties,
+    .vkEnumerateInstanceExtensionProperties = gen10_EnumerateInstanceExtensionProperties,
+    .vkEnumerateDeviceLayerProperties = gen10_EnumerateDeviceLayerProperties,
+    .vkEnumerateDeviceExtensionProperties = gen10_EnumerateDeviceExtensionProperties,
+    .vkGetDeviceQueue = gen10_GetDeviceQueue,
+    .vkQueueSubmit = gen10_QueueSubmit,
+    .vkQueueWaitIdle = gen10_QueueWaitIdle,
+    .vkDeviceWaitIdle = gen10_DeviceWaitIdle,
+    .vkAllocateMemory = gen10_AllocateMemory,
+    .vkFreeMemory = gen10_FreeMemory,
+    .vkMapMemory = gen10_MapMemory,
+    .vkUnmapMemory = gen10_UnmapMemory,
+    .vkFlushMappedMemoryRanges = gen10_FlushMappedMemoryRanges,
+    .vkInvalidateMappedMemoryRanges = gen10_InvalidateMappedMemoryRanges,
+    .vkGetDeviceMemoryCommitment = gen10_GetDeviceMemoryCommitment,
+    .vkGetBufferMemoryRequirements = gen10_GetBufferMemoryRequirements,
+    .vkBindBufferMemory = gen10_BindBufferMemory,
+    .vkGetImageMemoryRequirements = gen10_GetImageMemoryRequirements,
+    .vkBindImageMemory = gen10_BindImageMemory,
+    .vkGetImageSparseMemoryRequirements = gen10_GetImageSparseMemoryRequirements,
+    .vkGetPhysicalDeviceSparseImageFormatProperties = gen10_GetPhysicalDeviceSparseImageFormatProperties,
+    .vkQueueBindSparse = gen10_QueueBindSparse,
+    .vkCreateFence = gen10_CreateFence,
+    .vkDestroyFence = gen10_DestroyFence,
+    .vkResetFences = gen10_ResetFences,
+    .vkGetFenceStatus = gen10_GetFenceStatus,
+    .vkWaitForFences = gen10_WaitForFences,
+    .vkCreateSemaphore = gen10_CreateSemaphore,
+    .vkDestroySemaphore = gen10_DestroySemaphore,
+    .vkCreateEvent = gen10_CreateEvent,
+    .vkDestroyEvent = gen10_DestroyEvent,
+    .vkGetEventStatus = gen10_GetEventStatus,
+    .vkSetEvent = gen10_SetEvent,
+    .vkResetEvent = gen10_ResetEvent,
+    .vkCreateQueryPool = gen10_CreateQueryPool,
+    .vkDestroyQueryPool = gen10_DestroyQueryPool,
+    .vkGetQueryPoolResults = gen10_GetQueryPoolResults,
+    .vkCreateBuffer = gen10_CreateBuffer,
+    .vkDestroyBuffer = gen10_DestroyBuffer,
+    .vkCreateBufferView = gen10_CreateBufferView,
+    .vkDestroyBufferView = gen10_DestroyBufferView,
+    .vkCreateImage = gen10_CreateImage,
+    .vkDestroyImage = gen10_DestroyImage,
+    .vkGetImageSubresourceLayout = gen10_GetImageSubresourceLayout,
+    .vkCreateImageView = gen10_CreateImageView,
+    .vkDestroyImageView = gen10_DestroyImageView,
+    .vkCreateShaderModule = gen10_CreateShaderModule,
+    .vkDestroyShaderModule = gen10_DestroyShaderModule,
+    .vkCreatePipelineCache = gen10_CreatePipelineCache,
+    .vkDestroyPipelineCache = gen10_DestroyPipelineCache,
+    .vkGetPipelineCacheData = gen10_GetPipelineCacheData,
+    .vkMergePipelineCaches = gen10_MergePipelineCaches,
+    .vkCreateGraphicsPipelines = gen10_CreateGraphicsPipelines,
+    .vkCreateComputePipelines = gen10_CreateComputePipelines,
+    .vkDestroyPipeline = gen10_DestroyPipeline,
+    .vkCreatePipelineLayout = gen10_CreatePipelineLayout,
+    .vkDestroyPipelineLayout = gen10_DestroyPipelineLayout,
+    .vkCreateSampler = gen10_CreateSampler,
+    .vkDestroySampler = gen10_DestroySampler,
+    .vkCreateDescriptorSetLayout = gen10_CreateDescriptorSetLayout,
+    .vkDestroyDescriptorSetLayout = gen10_DestroyDescriptorSetLayout,
+    .vkCreateDescriptorPool = gen10_CreateDescriptorPool,
+    .vkDestroyDescriptorPool = gen10_DestroyDescriptorPool,
+    .vkResetDescriptorPool = gen10_ResetDescriptorPool,
+    .vkAllocateDescriptorSets = gen10_AllocateDescriptorSets,
+    .vkFreeDescriptorSets = gen10_FreeDescriptorSets,
+    .vkUpdateDescriptorSets = gen10_UpdateDescriptorSets,
+    .vkCreateFramebuffer = gen10_CreateFramebuffer,
+    .vkDestroyFramebuffer = gen10_DestroyFramebuffer,
+    .vkCreateRenderPass = gen10_CreateRenderPass,
+    .vkDestroyRenderPass = gen10_DestroyRenderPass,
+    .vkGetRenderAreaGranularity = gen10_GetRenderAreaGranularity,
+    .vkCreateCommandPool = gen10_CreateCommandPool,
+    .vkDestroyCommandPool = gen10_DestroyCommandPool,
+    .vkResetCommandPool = gen10_ResetCommandPool,
+    .vkAllocateCommandBuffers = gen10_AllocateCommandBuffers,
+    .vkFreeCommandBuffers = gen10_FreeCommandBuffers,
+    .vkBeginCommandBuffer = gen10_BeginCommandBuffer,
+    .vkEndCommandBuffer = gen10_EndCommandBuffer,
+    .vkResetCommandBuffer = gen10_ResetCommandBuffer,
+    .vkCmdBindPipeline = gen10_CmdBindPipeline,
+    .vkCmdSetViewport = gen10_CmdSetViewport,
+    .vkCmdSetScissor = gen10_CmdSetScissor,
+    .vkCmdSetLineWidth = gen10_CmdSetLineWidth,
+    .vkCmdSetDepthBias = gen10_CmdSetDepthBias,
+    .vkCmdSetBlendConstants = gen10_CmdSetBlendConstants,
+    .vkCmdSetDepthBounds = gen10_CmdSetDepthBounds,
+    .vkCmdSetStencilCompareMask = gen10_CmdSetStencilCompareMask,
+    .vkCmdSetStencilWriteMask = gen10_CmdSetStencilWriteMask,
+    .vkCmdSetStencilReference = gen10_CmdSetStencilReference,
+    .vkCmdBindDescriptorSets = gen10_CmdBindDescriptorSets,
+    .vkCmdBindIndexBuffer = gen10_CmdBindIndexBuffer,
+    .vkCmdBindVertexBuffers = gen10_CmdBindVertexBuffers,
+    .vkCmdDraw = gen10_CmdDraw,
+    .vkCmdDrawIndexed = gen10_CmdDrawIndexed,
+    .vkCmdDrawIndirect = gen10_CmdDrawIndirect,
+    .vkCmdDrawIndexedIndirect = gen10_CmdDrawIndexedIndirect,
+    .vkCmdDispatch = gen10_CmdDispatch,
+    .vkCmdDispatchIndirect = gen10_CmdDispatchIndirect,
+    .vkCmdCopyBuffer = gen10_CmdCopyBuffer,
+    .vkCmdCopyImage = gen10_CmdCopyImage,
+    .vkCmdBlitImage = gen10_CmdBlitImage,
+    .vkCmdCopyBufferToImage = gen10_CmdCopyBufferToImage,
+    .vkCmdCopyImageToBuffer = gen10_CmdCopyImageToBuffer,
+    .vkCmdUpdateBuffer = gen10_CmdUpdateBuffer,
+    .vkCmdFillBuffer = gen10_CmdFillBuffer,
+    .vkCmdClearColorImage = gen10_CmdClearColorImage,
+    .vkCmdClearDepthStencilImage = gen10_CmdClearDepthStencilImage,
+    .vkCmdClearAttachments = gen10_CmdClearAttachments,
+    .vkCmdResolveImage = gen10_CmdResolveImage,
+    .vkCmdSetEvent = gen10_CmdSetEvent,
+    .vkCmdResetEvent = gen10_CmdResetEvent,
+    .vkCmdWaitEvents = gen10_CmdWaitEvents,
+    .vkCmdPipelineBarrier = gen10_CmdPipelineBarrier,
+    .vkCmdBeginQuery = gen10_CmdBeginQuery,
+    .vkCmdEndQuery = gen10_CmdEndQuery,
+    .vkCmdResetQueryPool = gen10_CmdResetQueryPool,
+    .vkCmdWriteTimestamp = gen10_CmdWriteTimestamp,
+    .vkCmdCopyQueryPoolResults = gen10_CmdCopyQueryPoolResults,
+    .vkCmdPushConstants = gen10_CmdPushConstants,
+    .vkCmdBeginRenderPass = gen10_CmdBeginRenderPass,
+    .vkCmdNextSubpass = gen10_CmdNextSubpass,
+    .vkCmdEndRenderPass = gen10_CmdEndRenderPass,
+    .vkCmdExecuteCommands = gen10_CmdExecuteCommands,
+    .vkDestroySurfaceKHR = gen10_DestroySurfaceKHR,
+    .vkGetPhysicalDeviceSurfaceSupportKHR = gen10_GetPhysicalDeviceSurfaceSupportKHR,
+    .vkGetPhysicalDeviceSurfaceCapabilitiesKHR = gen10_GetPhysicalDeviceSurfaceCapabilitiesKHR,
+    .vkGetPhysicalDeviceSurfaceFormatsKHR = gen10_GetPhysicalDeviceSurfaceFormatsKHR,
+    .vkGetPhysicalDeviceSurfacePresentModesKHR = gen10_GetPhysicalDeviceSurfacePresentModesKHR,
+    .vkCreateSwapchainKHR = gen10_CreateSwapchainKHR,
+    .vkDestroySwapchainKHR = gen10_DestroySwapchainKHR,
+    .vkGetSwapchainImagesKHR = gen10_GetSwapchainImagesKHR,
+    .vkAcquireNextImageKHR = gen10_AcquireNextImageKHR,
+    .vkQueuePresentKHR = gen10_QueuePresentKHR,
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
-    .CreateWaylandSurfaceKHR = gen10_CreateWaylandSurfaceKHR,
+    .vkCreateWaylandSurfaceKHR = gen10_CreateWaylandSurfaceKHR,
 #endif // VK_USE_PLATFORM_WAYLAND_KHR
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
-    .GetPhysicalDeviceWaylandPresentationSupportKHR = gen10_GetPhysicalDeviceWaylandPresentationSupportKHR,
+    .vkGetPhysicalDeviceWaylandPresentationSupportKHR = gen10_GetPhysicalDeviceWaylandPresentationSupportKHR,
 #endif // VK_USE_PLATFORM_WAYLAND_KHR
 #ifdef VK_USE_PLATFORM_XLIB_KHR
-    .CreateXlibSurfaceKHR = gen10_CreateXlibSurfaceKHR,
+    .vkCreateXlibSurfaceKHR = gen10_CreateXlibSurfaceKHR,
 #endif // VK_USE_PLATFORM_XLIB_KHR
 #ifdef VK_USE_PLATFORM_XLIB_KHR
-    .GetPhysicalDeviceXlibPresentationSupportKHR = gen10_GetPhysicalDeviceXlibPresentationSupportKHR,
+    .vkGetPhysicalDeviceXlibPresentationSupportKHR = gen10_GetPhysicalDeviceXlibPresentationSupportKHR,
 #endif // VK_USE_PLATFORM_XLIB_KHR
 #ifdef VK_USE_PLATFORM_XCB_KHR
-    .CreateXcbSurfaceKHR = gen10_CreateXcbSurfaceKHR,
+    .vkCreateXcbSurfaceKHR = gen10_CreateXcbSurfaceKHR,
 #endif // VK_USE_PLATFORM_XCB_KHR
 #ifdef VK_USE_PLATFORM_XCB_KHR
-    .GetPhysicalDeviceXcbPresentationSupportKHR = gen10_GetPhysicalDeviceXcbPresentationSupportKHR,
+    .vkGetPhysicalDeviceXcbPresentationSupportKHR = gen10_GetPhysicalDeviceXcbPresentationSupportKHR,
 #endif // VK_USE_PLATFORM_XCB_KHR
-    .CreateDebugReportCallbackEXT = gen10_CreateDebugReportCallbackEXT,
-    .DestroyDebugReportCallbackEXT = gen10_DestroyDebugReportCallbackEXT,
-    .DebugReportMessageEXT = gen10_DebugReportMessageEXT,
-    .GetPhysicalDeviceFeatures2KHR = gen10_GetPhysicalDeviceFeatures2KHR,
-    .GetPhysicalDeviceProperties2KHR = gen10_GetPhysicalDeviceProperties2KHR,
-    .GetPhysicalDeviceFormatProperties2KHR = gen10_GetPhysicalDeviceFormatProperties2KHR,
-    .GetPhysicalDeviceImageFormatProperties2KHR = gen10_GetPhysicalDeviceImageFormatProperties2KHR,
-    .GetPhysicalDeviceQueueFamilyProperties2KHR = gen10_GetPhysicalDeviceQueueFamilyProperties2KHR,
-    .GetPhysicalDeviceMemoryProperties2KHR = gen10_GetPhysicalDeviceMemoryProperties2KHR,
-    .GetPhysicalDeviceSparseImageFormatProperties2KHR = gen10_GetPhysicalDeviceSparseImageFormatProperties2KHR,
-    .CmdPushDescriptorSetKHR = gen10_CmdPushDescriptorSetKHR,
-    .TrimCommandPoolKHR = gen10_TrimCommandPoolKHR,
-    .GetPhysicalDeviceExternalBufferPropertiesKHR = gen10_GetPhysicalDeviceExternalBufferPropertiesKHR,
-    .GetMemoryFdKHR = gen10_GetMemoryFdKHR,
-    .GetMemoryFdPropertiesKHR = gen10_GetMemoryFdPropertiesKHR,
-    .GetPhysicalDeviceExternalSemaphorePropertiesKHR = gen10_GetPhysicalDeviceExternalSemaphorePropertiesKHR,
-    .GetSemaphoreFdKHR = gen10_GetSemaphoreFdKHR,
-    .ImportSemaphoreFdKHR = gen10_ImportSemaphoreFdKHR,
-    .GetPhysicalDeviceExternalFencePropertiesKHR = gen10_GetPhysicalDeviceExternalFencePropertiesKHR,
-    .GetFenceFdKHR = gen10_GetFenceFdKHR,
-    .ImportFenceFdKHR = gen10_ImportFenceFdKHR,
-    .BindBufferMemory2KHR = gen10_BindBufferMemory2KHR,
-    .BindImageMemory2KHR = gen10_BindImageMemory2KHR,
-    .CreateDescriptorUpdateTemplateKHR = gen10_CreateDescriptorUpdateTemplateKHR,
-    .DestroyDescriptorUpdateTemplateKHR = gen10_DestroyDescriptorUpdateTemplateKHR,
-    .UpdateDescriptorSetWithTemplateKHR = gen10_UpdateDescriptorSetWithTemplateKHR,
-    .CmdPushDescriptorSetWithTemplateKHR = gen10_CmdPushDescriptorSetWithTemplateKHR,
-    .GetPhysicalDeviceSurfaceCapabilities2KHR = gen10_GetPhysicalDeviceSurfaceCapabilities2KHR,
-    .GetPhysicalDeviceSurfaceFormats2KHR = gen10_GetPhysicalDeviceSurfaceFormats2KHR,
-    .GetBufferMemoryRequirements2KHR = gen10_GetBufferMemoryRequirements2KHR,
-    .GetImageMemoryRequirements2KHR = gen10_GetImageMemoryRequirements2KHR,
-    .GetImageSparseMemoryRequirements2KHR = gen10_GetImageSparseMemoryRequirements2KHR,
-    .CreateSamplerYcbcrConversionKHR = gen10_CreateSamplerYcbcrConversionKHR,
-    .DestroySamplerYcbcrConversionKHR = gen10_DestroySamplerYcbcrConversionKHR,
+    .vkCreateDebugReportCallbackEXT = gen10_CreateDebugReportCallbackEXT,
+    .vkDestroyDebugReportCallbackEXT = gen10_DestroyDebugReportCallbackEXT,
+    .vkDebugReportMessageEXT = gen10_DebugReportMessageEXT,
+    .vkGetPhysicalDeviceFeatures2KHR = gen10_GetPhysicalDeviceFeatures2KHR,
+    .vkGetPhysicalDeviceProperties2KHR = gen10_GetPhysicalDeviceProperties2KHR,
+    .vkGetPhysicalDeviceFormatProperties2KHR = gen10_GetPhysicalDeviceFormatProperties2KHR,
+    .vkGetPhysicalDeviceImageFormatProperties2KHR = gen10_GetPhysicalDeviceImageFormatProperties2KHR,
+    .vkGetPhysicalDeviceQueueFamilyProperties2KHR = gen10_GetPhysicalDeviceQueueFamilyProperties2KHR,
+    .vkGetPhysicalDeviceMemoryProperties2KHR = gen10_GetPhysicalDeviceMemoryProperties2KHR,
+    .vkGetPhysicalDeviceSparseImageFormatProperties2KHR = gen10_GetPhysicalDeviceSparseImageFormatProperties2KHR,
+    .vkCmdPushDescriptorSetKHR = gen10_CmdPushDescriptorSetKHR,
+    .vkTrimCommandPoolKHR = gen10_TrimCommandPoolKHR,
+    .vkGetPhysicalDeviceExternalBufferPropertiesKHR = gen10_GetPhysicalDeviceExternalBufferPropertiesKHR,
+    .vkGetMemoryFdKHR = gen10_GetMemoryFdKHR,
+    .vkGetMemoryFdPropertiesKHR = gen10_GetMemoryFdPropertiesKHR,
+    .vkGetPhysicalDeviceExternalSemaphorePropertiesKHR = gen10_GetPhysicalDeviceExternalSemaphorePropertiesKHR,
+    .vkGetSemaphoreFdKHR = gen10_GetSemaphoreFdKHR,
+    .vkImportSemaphoreFdKHR = gen10_ImportSemaphoreFdKHR,
+    .vkGetPhysicalDeviceExternalFencePropertiesKHR = gen10_GetPhysicalDeviceExternalFencePropertiesKHR,
+    .vkGetFenceFdKHR = gen10_GetFenceFdKHR,
+    .vkImportFenceFdKHR = gen10_ImportFenceFdKHR,
+    .vkBindBufferMemory2KHR = gen10_BindBufferMemory2KHR,
+    .vkBindImageMemory2KHR = gen10_BindImageMemory2KHR,
+    .vkCreateDescriptorUpdateTemplateKHR = gen10_CreateDescriptorUpdateTemplateKHR,
+    .vkDestroyDescriptorUpdateTemplateKHR = gen10_DestroyDescriptorUpdateTemplateKHR,
+    .vkUpdateDescriptorSetWithTemplateKHR = gen10_UpdateDescriptorSetWithTemplateKHR,
+    .vkCmdPushDescriptorSetWithTemplateKHR = gen10_CmdPushDescriptorSetWithTemplateKHR,
+    .vkGetPhysicalDeviceSurfaceCapabilities2KHR = gen10_GetPhysicalDeviceSurfaceCapabilities2KHR,
+    .vkGetPhysicalDeviceSurfaceFormats2KHR = gen10_GetPhysicalDeviceSurfaceFormats2KHR,
+    .vkGetBufferMemoryRequirements2KHR = gen10_GetBufferMemoryRequirements2KHR,
+    .vkGetImageMemoryRequirements2KHR = gen10_GetImageMemoryRequirements2KHR,
+    .vkGetImageSparseMemoryRequirements2KHR = gen10_GetImageSparseMemoryRequirements2KHR,
+    .vkCreateSamplerYcbcrConversionKHR = gen10_CreateSamplerYcbcrConversionKHR,
+    .vkDestroySamplerYcbcrConversionKHR = gen10_DestroySamplerYcbcrConversionKHR,
 #ifdef ANDROID
-    .GetSwapchainGrallocUsageANDROID = gen10_GetSwapchainGrallocUsageANDROID,
+    .vkGetSwapchainGrallocUsageANDROID = gen10_GetSwapchainGrallocUsageANDROID,
 #endif // ANDROID
 #ifdef ANDROID
-    .AcquireImageANDROID = gen10_AcquireImageANDROID,
+    .vkAcquireImageANDROID = gen10_AcquireImageANDROID,
 #endif // ANDROID
 #ifdef ANDROID
-    .QueueSignalReleaseImageANDROID = gen10_QueueSignalReleaseImageANDROID,
+    .vkQueueSignalReleaseImageANDROID = gen10_QueueSignalReleaseImageANDROID,
 #endif // ANDROID
-    .CreateDmaBufImageINTEL = gen10_CreateDmaBufImageINTEL,
+    .vkCreateDmaBufImageINTEL = gen10_CreateDmaBufImageINTEL,
   };
+
+
+/** Trampoline entrypoints for all device functions */
+
+              static PFN_vkVoidFunction
+  anv_tramp_GetDeviceProcAddr(VkDevice device, const char* pName)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkGetDeviceProcAddr(device, pName);
+  }
+                                  static void
+  anv_tramp_DestroyDevice(VkDevice device, const VkAllocationCallbacks* pAllocator)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkDestroyDevice(device, pAllocator);
+  }
+                  static void
+  anv_tramp_GetDeviceQueue(VkDevice device, uint32_t queueFamilyIndex, uint32_t queueIndex, VkQueue* pQueue)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkGetDeviceQueue(device, queueFamilyIndex, queueIndex, pQueue);
+  }
+          static VkResult
+  anv_tramp_DeviceWaitIdle(VkDevice device)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkDeviceWaitIdle(device);
+  }
+  static VkResult
+  anv_tramp_AllocateMemory(VkDevice device, const VkMemoryAllocateInfo* pAllocateInfo, const VkAllocationCallbacks* pAllocator, VkDeviceMemory* pMemory)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkAllocateMemory(device, pAllocateInfo, pAllocator, pMemory);
+  }
+  static void
+  anv_tramp_FreeMemory(VkDevice device, VkDeviceMemory memory, const VkAllocationCallbacks* pAllocator)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkFreeMemory(device, memory, pAllocator);
+  }
+  static VkResult
+  anv_tramp_MapMemory(VkDevice device, VkDeviceMemory memory, VkDeviceSize offset, VkDeviceSize size, VkMemoryMapFlags flags, void** ppData)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkMapMemory(device, memory, offset, size, flags, ppData);
+  }
+  static void
+  anv_tramp_UnmapMemory(VkDevice device, VkDeviceMemory memory)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkUnmapMemory(device, memory);
+  }
+  static VkResult
+  anv_tramp_FlushMappedMemoryRanges(VkDevice device, uint32_t memoryRangeCount, const VkMappedMemoryRange* pMemoryRanges)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkFlushMappedMemoryRanges(device, memoryRangeCount, pMemoryRanges);
+  }
+  static VkResult
+  anv_tramp_InvalidateMappedMemoryRanges(VkDevice device, uint32_t memoryRangeCount, const VkMappedMemoryRange* pMemoryRanges)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkInvalidateMappedMemoryRanges(device, memoryRangeCount, pMemoryRanges);
+  }
+  static void
+  anv_tramp_GetDeviceMemoryCommitment(VkDevice device, VkDeviceMemory memory, VkDeviceSize* pCommittedMemoryInBytes)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkGetDeviceMemoryCommitment(device, memory, pCommittedMemoryInBytes);
+  }
+  static void
+  anv_tramp_GetBufferMemoryRequirements(VkDevice device, VkBuffer buffer, VkMemoryRequirements* pMemoryRequirements)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkGetBufferMemoryRequirements(device, buffer, pMemoryRequirements);
+  }
+  static VkResult
+  anv_tramp_BindBufferMemory(VkDevice device, VkBuffer buffer, VkDeviceMemory memory, VkDeviceSize memoryOffset)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkBindBufferMemory(device, buffer, memory, memoryOffset);
+  }
+  static void
+  anv_tramp_GetImageMemoryRequirements(VkDevice device, VkImage image, VkMemoryRequirements* pMemoryRequirements)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkGetImageMemoryRequirements(device, image, pMemoryRequirements);
+  }
+  static VkResult
+  anv_tramp_BindImageMemory(VkDevice device, VkImage image, VkDeviceMemory memory, VkDeviceSize memoryOffset)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkBindImageMemory(device, image, memory, memoryOffset);
+  }
+  static void
+  anv_tramp_GetImageSparseMemoryRequirements(VkDevice device, VkImage image, uint32_t* pSparseMemoryRequirementCount, VkSparseImageMemoryRequirements* pSparseMemoryRequirements)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkGetImageSparseMemoryRequirements(device, image, pSparseMemoryRequirementCount, pSparseMemoryRequirements);
+  }
+          static VkResult
+  anv_tramp_CreateFence(VkDevice device, const VkFenceCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkFence* pFence)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkCreateFence(device, pCreateInfo, pAllocator, pFence);
+  }
+  static void
+  anv_tramp_DestroyFence(VkDevice device, VkFence fence, const VkAllocationCallbacks* pAllocator)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkDestroyFence(device, fence, pAllocator);
+  }
+  static VkResult
+  anv_tramp_ResetFences(VkDevice device, uint32_t fenceCount, const VkFence* pFences)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkResetFences(device, fenceCount, pFences);
+  }
+  static VkResult
+  anv_tramp_GetFenceStatus(VkDevice device, VkFence fence)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkGetFenceStatus(device, fence);
+  }
+  static VkResult
+  anv_tramp_WaitForFences(VkDevice device, uint32_t fenceCount, const VkFence* pFences, VkBool32 waitAll, uint64_t timeout)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkWaitForFences(device, fenceCount, pFences, waitAll, timeout);
+  }
+  static VkResult
+  anv_tramp_CreateSemaphore(VkDevice device, const VkSemaphoreCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSemaphore* pSemaphore)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkCreateSemaphore(device, pCreateInfo, pAllocator, pSemaphore);
+  }
+  static void
+  anv_tramp_DestroySemaphore(VkDevice device, VkSemaphore semaphore, const VkAllocationCallbacks* pAllocator)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkDestroySemaphore(device, semaphore, pAllocator);
+  }
+  static VkResult
+  anv_tramp_CreateEvent(VkDevice device, const VkEventCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkEvent* pEvent)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkCreateEvent(device, pCreateInfo, pAllocator, pEvent);
+  }
+  static void
+  anv_tramp_DestroyEvent(VkDevice device, VkEvent event, const VkAllocationCallbacks* pAllocator)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkDestroyEvent(device, event, pAllocator);
+  }
+  static VkResult
+  anv_tramp_GetEventStatus(VkDevice device, VkEvent event)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkGetEventStatus(device, event);
+  }
+  static VkResult
+  anv_tramp_SetEvent(VkDevice device, VkEvent event)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkSetEvent(device, event);
+  }
+  static VkResult
+  anv_tramp_ResetEvent(VkDevice device, VkEvent event)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkResetEvent(device, event);
+  }
+  static VkResult
+  anv_tramp_CreateQueryPool(VkDevice device, const VkQueryPoolCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkQueryPool* pQueryPool)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkCreateQueryPool(device, pCreateInfo, pAllocator, pQueryPool);
+  }
+  static void
+  anv_tramp_DestroyQueryPool(VkDevice device, VkQueryPool queryPool, const VkAllocationCallbacks* pAllocator)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkDestroyQueryPool(device, queryPool, pAllocator);
+  }
+  static VkResult
+  anv_tramp_GetQueryPoolResults(VkDevice device, VkQueryPool queryPool, uint32_t firstQuery, uint32_t queryCount, size_t dataSize, void* pData, VkDeviceSize stride, VkQueryResultFlags flags)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkGetQueryPoolResults(device, queryPool, firstQuery, queryCount, dataSize, pData, stride, flags);
+  }
+  static VkResult
+  anv_tramp_CreateBuffer(VkDevice device, const VkBufferCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkBuffer* pBuffer)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkCreateBuffer(device, pCreateInfo, pAllocator, pBuffer);
+  }
+  static void
+  anv_tramp_DestroyBuffer(VkDevice device, VkBuffer buffer, const VkAllocationCallbacks* pAllocator)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkDestroyBuffer(device, buffer, pAllocator);
+  }
+  static VkResult
+  anv_tramp_CreateBufferView(VkDevice device, const VkBufferViewCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkBufferView* pView)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkCreateBufferView(device, pCreateInfo, pAllocator, pView);
+  }
+  static void
+  anv_tramp_DestroyBufferView(VkDevice device, VkBufferView bufferView, const VkAllocationCallbacks* pAllocator)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkDestroyBufferView(device, bufferView, pAllocator);
+  }
+  static VkResult
+  anv_tramp_CreateImage(VkDevice device, const VkImageCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkImage* pImage)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkCreateImage(device, pCreateInfo, pAllocator, pImage);
+  }
+  static void
+  anv_tramp_DestroyImage(VkDevice device, VkImage image, const VkAllocationCallbacks* pAllocator)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkDestroyImage(device, image, pAllocator);
+  }
+  static void
+  anv_tramp_GetImageSubresourceLayout(VkDevice device, VkImage image, const VkImageSubresource* pSubresource, VkSubresourceLayout* pLayout)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkGetImageSubresourceLayout(device, image, pSubresource, pLayout);
+  }
+  static VkResult
+  anv_tramp_CreateImageView(VkDevice device, const VkImageViewCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkImageView* pView)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkCreateImageView(device, pCreateInfo, pAllocator, pView);
+  }
+  static void
+  anv_tramp_DestroyImageView(VkDevice device, VkImageView imageView, const VkAllocationCallbacks* pAllocator)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkDestroyImageView(device, imageView, pAllocator);
+  }
+  static VkResult
+  anv_tramp_CreateShaderModule(VkDevice device, const VkShaderModuleCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkShaderModule* pShaderModule)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkCreateShaderModule(device, pCreateInfo, pAllocator, pShaderModule);
+  }
+  static void
+  anv_tramp_DestroyShaderModule(VkDevice device, VkShaderModule shaderModule, const VkAllocationCallbacks* pAllocator)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkDestroyShaderModule(device, shaderModule, pAllocator);
+  }
+  static VkResult
+  anv_tramp_CreatePipelineCache(VkDevice device, const VkPipelineCacheCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkPipelineCache* pPipelineCache)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkCreatePipelineCache(device, pCreateInfo, pAllocator, pPipelineCache);
+  }
+  static void
+  anv_tramp_DestroyPipelineCache(VkDevice device, VkPipelineCache pipelineCache, const VkAllocationCallbacks* pAllocator)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkDestroyPipelineCache(device, pipelineCache, pAllocator);
+  }
+  static VkResult
+  anv_tramp_GetPipelineCacheData(VkDevice device, VkPipelineCache pipelineCache, size_t* pDataSize, void* pData)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkGetPipelineCacheData(device, pipelineCache, pDataSize, pData);
+  }
+  static VkResult
+  anv_tramp_MergePipelineCaches(VkDevice device, VkPipelineCache dstCache, uint32_t srcCacheCount, const VkPipelineCache* pSrcCaches)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkMergePipelineCaches(device, dstCache, srcCacheCount, pSrcCaches);
+  }
+  static VkResult
+  anv_tramp_CreateGraphicsPipelines(VkDevice device, VkPipelineCache pipelineCache, uint32_t createInfoCount, const VkGraphicsPipelineCreateInfo* pCreateInfos, const VkAllocationCallbacks* pAllocator, VkPipeline* pPipelines)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkCreateGraphicsPipelines(device, pipelineCache, createInfoCount, pCreateInfos, pAllocator, pPipelines);
+  }
+  static VkResult
+  anv_tramp_CreateComputePipelines(VkDevice device, VkPipelineCache pipelineCache, uint32_t createInfoCount, const VkComputePipelineCreateInfo* pCreateInfos, const VkAllocationCallbacks* pAllocator, VkPipeline* pPipelines)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkCreateComputePipelines(device, pipelineCache, createInfoCount, pCreateInfos, pAllocator, pPipelines);
+  }
+  static void
+  anv_tramp_DestroyPipeline(VkDevice device, VkPipeline pipeline, const VkAllocationCallbacks* pAllocator)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkDestroyPipeline(device, pipeline, pAllocator);
+  }
+  static VkResult
+  anv_tramp_CreatePipelineLayout(VkDevice device, const VkPipelineLayoutCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkPipelineLayout* pPipelineLayout)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkCreatePipelineLayout(device, pCreateInfo, pAllocator, pPipelineLayout);
+  }
+  static void
+  anv_tramp_DestroyPipelineLayout(VkDevice device, VkPipelineLayout pipelineLayout, const VkAllocationCallbacks* pAllocator)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkDestroyPipelineLayout(device, pipelineLayout, pAllocator);
+  }
+  static VkResult
+  anv_tramp_CreateSampler(VkDevice device, const VkSamplerCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSampler* pSampler)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkCreateSampler(device, pCreateInfo, pAllocator, pSampler);
+  }
+  static void
+  anv_tramp_DestroySampler(VkDevice device, VkSampler sampler, const VkAllocationCallbacks* pAllocator)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkDestroySampler(device, sampler, pAllocator);
+  }
+  static VkResult
+  anv_tramp_CreateDescriptorSetLayout(VkDevice device, const VkDescriptorSetLayoutCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDescriptorSetLayout* pSetLayout)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkCreateDescriptorSetLayout(device, pCreateInfo, pAllocator, pSetLayout);
+  }
+  static void
+  anv_tramp_DestroyDescriptorSetLayout(VkDevice device, VkDescriptorSetLayout descriptorSetLayout, const VkAllocationCallbacks* pAllocator)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkDestroyDescriptorSetLayout(device, descriptorSetLayout, pAllocator);
+  }
+  static VkResult
+  anv_tramp_CreateDescriptorPool(VkDevice device, const VkDescriptorPoolCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDescriptorPool* pDescriptorPool)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkCreateDescriptorPool(device, pCreateInfo, pAllocator, pDescriptorPool);
+  }
+  static void
+  anv_tramp_DestroyDescriptorPool(VkDevice device, VkDescriptorPool descriptorPool, const VkAllocationCallbacks* pAllocator)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkDestroyDescriptorPool(device, descriptorPool, pAllocator);
+  }
+  static VkResult
+  anv_tramp_ResetDescriptorPool(VkDevice device, VkDescriptorPool descriptorPool, VkDescriptorPoolResetFlags flags)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkResetDescriptorPool(device, descriptorPool, flags);
+  }
+  static VkResult
+  anv_tramp_AllocateDescriptorSets(VkDevice device, const VkDescriptorSetAllocateInfo* pAllocateInfo, VkDescriptorSet* pDescriptorSets)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkAllocateDescriptorSets(device, pAllocateInfo, pDescriptorSets);
+  }
+  static VkResult
+  anv_tramp_FreeDescriptorSets(VkDevice device, VkDescriptorPool descriptorPool, uint32_t descriptorSetCount, const VkDescriptorSet* pDescriptorSets)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkFreeDescriptorSets(device, descriptorPool, descriptorSetCount, pDescriptorSets);
+  }
+  static void
+  anv_tramp_UpdateDescriptorSets(VkDevice device, uint32_t descriptorWriteCount, const VkWriteDescriptorSet* pDescriptorWrites, uint32_t descriptorCopyCount, const VkCopyDescriptorSet* pDescriptorCopies)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkUpdateDescriptorSets(device, descriptorWriteCount, pDescriptorWrites, descriptorCopyCount, pDescriptorCopies);
+  }
+  static VkResult
+  anv_tramp_CreateFramebuffer(VkDevice device, const VkFramebufferCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkFramebuffer* pFramebuffer)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkCreateFramebuffer(device, pCreateInfo, pAllocator, pFramebuffer);
+  }
+  static void
+  anv_tramp_DestroyFramebuffer(VkDevice device, VkFramebuffer framebuffer, const VkAllocationCallbacks* pAllocator)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkDestroyFramebuffer(device, framebuffer, pAllocator);
+  }
+  static VkResult
+  anv_tramp_CreateRenderPass(VkDevice device, const VkRenderPassCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkRenderPass* pRenderPass)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkCreateRenderPass(device, pCreateInfo, pAllocator, pRenderPass);
+  }
+  static void
+  anv_tramp_DestroyRenderPass(VkDevice device, VkRenderPass renderPass, const VkAllocationCallbacks* pAllocator)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkDestroyRenderPass(device, renderPass, pAllocator);
+  }
+  static void
+  anv_tramp_GetRenderAreaGranularity(VkDevice device, VkRenderPass renderPass, VkExtent2D* pGranularity)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkGetRenderAreaGranularity(device, renderPass, pGranularity);
+  }
+  static VkResult
+  anv_tramp_CreateCommandPool(VkDevice device, const VkCommandPoolCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkCommandPool* pCommandPool)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkCreateCommandPool(device, pCreateInfo, pAllocator, pCommandPool);
+  }
+  static void
+  anv_tramp_DestroyCommandPool(VkDevice device, VkCommandPool commandPool, const VkAllocationCallbacks* pAllocator)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkDestroyCommandPool(device, commandPool, pAllocator);
+  }
+  static VkResult
+  anv_tramp_ResetCommandPool(VkDevice device, VkCommandPool commandPool, VkCommandPoolResetFlags flags)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkResetCommandPool(device, commandPool, flags);
+  }
+  static VkResult
+  anv_tramp_AllocateCommandBuffers(VkDevice device, const VkCommandBufferAllocateInfo* pAllocateInfo, VkCommandBuffer* pCommandBuffers)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkAllocateCommandBuffers(device, pAllocateInfo, pCommandBuffers);
+  }
+  static void
+  anv_tramp_FreeCommandBuffers(VkDevice device, VkCommandPool commandPool, uint32_t commandBufferCount, const VkCommandBuffer* pCommandBuffers)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkFreeCommandBuffers(device, commandPool, commandBufferCount, pCommandBuffers);
+  }
+  static VkResult
+  anv_tramp_BeginCommandBuffer(VkCommandBuffer commandBuffer, const VkCommandBufferBeginInfo* pBeginInfo)
+  {
+      ANV_FROM_HANDLE(anv_cmd_buffer, anv_cmd_buffer, commandBuffer);
+      return anv_cmd_buffer->device->dispatch.vkBeginCommandBuffer(commandBuffer, pBeginInfo);
+  }
+  static VkResult
+  anv_tramp_EndCommandBuffer(VkCommandBuffer commandBuffer)
+  {
+      ANV_FROM_HANDLE(anv_cmd_buffer, anv_cmd_buffer, commandBuffer);
+      return anv_cmd_buffer->device->dispatch.vkEndCommandBuffer(commandBuffer);
+  }
+  static VkResult
+  anv_tramp_ResetCommandBuffer(VkCommandBuffer commandBuffer, VkCommandBufferResetFlags flags)
+  {
+      ANV_FROM_HANDLE(anv_cmd_buffer, anv_cmd_buffer, commandBuffer);
+      return anv_cmd_buffer->device->dispatch.vkResetCommandBuffer(commandBuffer, flags);
+  }
+  static void
+  anv_tramp_CmdBindPipeline(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipeline pipeline)
+  {
+      ANV_FROM_HANDLE(anv_cmd_buffer, anv_cmd_buffer, commandBuffer);
+      return anv_cmd_buffer->device->dispatch.vkCmdBindPipeline(commandBuffer, pipelineBindPoint, pipeline);
+  }
+  static void
+  anv_tramp_CmdSetViewport(VkCommandBuffer commandBuffer, uint32_t firstViewport, uint32_t viewportCount, const VkViewport* pViewports)
+  {
+      ANV_FROM_HANDLE(anv_cmd_buffer, anv_cmd_buffer, commandBuffer);
+      return anv_cmd_buffer->device->dispatch.vkCmdSetViewport(commandBuffer, firstViewport, viewportCount, pViewports);
+  }
+  static void
+  anv_tramp_CmdSetScissor(VkCommandBuffer commandBuffer, uint32_t firstScissor, uint32_t scissorCount, const VkRect2D* pScissors)
+  {
+      ANV_FROM_HANDLE(anv_cmd_buffer, anv_cmd_buffer, commandBuffer);
+      return anv_cmd_buffer->device->dispatch.vkCmdSetScissor(commandBuffer, firstScissor, scissorCount, pScissors);
+  }
+  static void
+  anv_tramp_CmdSetLineWidth(VkCommandBuffer commandBuffer, float lineWidth)
+  {
+      ANV_FROM_HANDLE(anv_cmd_buffer, anv_cmd_buffer, commandBuffer);
+      return anv_cmd_buffer->device->dispatch.vkCmdSetLineWidth(commandBuffer, lineWidth);
+  }
+  static void
+  anv_tramp_CmdSetDepthBias(VkCommandBuffer commandBuffer, float depthBiasConstantFactor, float depthBiasClamp, float depthBiasSlopeFactor)
+  {
+      ANV_FROM_HANDLE(anv_cmd_buffer, anv_cmd_buffer, commandBuffer);
+      return anv_cmd_buffer->device->dispatch.vkCmdSetDepthBias(commandBuffer, depthBiasConstantFactor, depthBiasClamp, depthBiasSlopeFactor);
+  }
+  static void
+  anv_tramp_CmdSetBlendConstants(VkCommandBuffer commandBuffer, const float blendConstants[4])
+  {
+      ANV_FROM_HANDLE(anv_cmd_buffer, anv_cmd_buffer, commandBuffer);
+      return anv_cmd_buffer->device->dispatch.vkCmdSetBlendConstants(commandBuffer, blendConstants);
+  }
+  static void
+  anv_tramp_CmdSetDepthBounds(VkCommandBuffer commandBuffer, float minDepthBounds, float maxDepthBounds)
+  {
+      ANV_FROM_HANDLE(anv_cmd_buffer, anv_cmd_buffer, commandBuffer);
+      return anv_cmd_buffer->device->dispatch.vkCmdSetDepthBounds(commandBuffer, minDepthBounds, maxDepthBounds);
+  }
+  static void
+  anv_tramp_CmdSetStencilCompareMask(VkCommandBuffer commandBuffer, VkStencilFaceFlags faceMask, uint32_t compareMask)
+  {
+      ANV_FROM_HANDLE(anv_cmd_buffer, anv_cmd_buffer, commandBuffer);
+      return anv_cmd_buffer->device->dispatch.vkCmdSetStencilCompareMask(commandBuffer, faceMask, compareMask);
+  }
+  static void
+  anv_tramp_CmdSetStencilWriteMask(VkCommandBuffer commandBuffer, VkStencilFaceFlags faceMask, uint32_t writeMask)
+  {
+      ANV_FROM_HANDLE(anv_cmd_buffer, anv_cmd_buffer, commandBuffer);
+      return anv_cmd_buffer->device->dispatch.vkCmdSetStencilWriteMask(commandBuffer, faceMask, writeMask);
+  }
+  static void
+  anv_tramp_CmdSetStencilReference(VkCommandBuffer commandBuffer, VkStencilFaceFlags faceMask, uint32_t reference)
+  {
+      ANV_FROM_HANDLE(anv_cmd_buffer, anv_cmd_buffer, commandBuffer);
+      return anv_cmd_buffer->device->dispatch.vkCmdSetStencilReference(commandBuffer, faceMask, reference);
+  }
+  static void
+  anv_tramp_CmdBindDescriptorSets(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipelineLayout layout, uint32_t firstSet, uint32_t descriptorSetCount, const VkDescriptorSet* pDescriptorSets, uint32_t dynamicOffsetCount, const uint32_t* pDynamicOffsets)
+  {
+      ANV_FROM_HANDLE(anv_cmd_buffer, anv_cmd_buffer, commandBuffer);
+      return anv_cmd_buffer->device->dispatch.vkCmdBindDescriptorSets(commandBuffer, pipelineBindPoint, layout, firstSet, descriptorSetCount, pDescriptorSets, dynamicOffsetCount, pDynamicOffsets);
+  }
+  static void
+  anv_tramp_CmdBindIndexBuffer(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, VkIndexType indexType)
+  {
+      ANV_FROM_HANDLE(anv_cmd_buffer, anv_cmd_buffer, commandBuffer);
+      return anv_cmd_buffer->device->dispatch.vkCmdBindIndexBuffer(commandBuffer, buffer, offset, indexType);
+  }
+  static void
+  anv_tramp_CmdBindVertexBuffers(VkCommandBuffer commandBuffer, uint32_t firstBinding, uint32_t bindingCount, const VkBuffer* pBuffers, const VkDeviceSize* pOffsets)
+  {
+      ANV_FROM_HANDLE(anv_cmd_buffer, anv_cmd_buffer, commandBuffer);
+      return anv_cmd_buffer->device->dispatch.vkCmdBindVertexBuffers(commandBuffer, firstBinding, bindingCount, pBuffers, pOffsets);
+  }
+  static void
+  anv_tramp_CmdDraw(VkCommandBuffer commandBuffer, uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance)
+  {
+      ANV_FROM_HANDLE(anv_cmd_buffer, anv_cmd_buffer, commandBuffer);
+      return anv_cmd_buffer->device->dispatch.vkCmdDraw(commandBuffer, vertexCount, instanceCount, firstVertex, firstInstance);
+  }
+  static void
+  anv_tramp_CmdDrawIndexed(VkCommandBuffer commandBuffer, uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance)
+  {
+      ANV_FROM_HANDLE(anv_cmd_buffer, anv_cmd_buffer, commandBuffer);
+      return anv_cmd_buffer->device->dispatch.vkCmdDrawIndexed(commandBuffer, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
+  }
+  static void
+  anv_tramp_CmdDrawIndirect(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, uint32_t drawCount, uint32_t stride)
+  {
+      ANV_FROM_HANDLE(anv_cmd_buffer, anv_cmd_buffer, commandBuffer);
+      return anv_cmd_buffer->device->dispatch.vkCmdDrawIndirect(commandBuffer, buffer, offset, drawCount, stride);
+  }
+  static void
+  anv_tramp_CmdDrawIndexedIndirect(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, uint32_t drawCount, uint32_t stride)
+  {
+      ANV_FROM_HANDLE(anv_cmd_buffer, anv_cmd_buffer, commandBuffer);
+      return anv_cmd_buffer->device->dispatch.vkCmdDrawIndexedIndirect(commandBuffer, buffer, offset, drawCount, stride);
+  }
+  static void
+  anv_tramp_CmdDispatch(VkCommandBuffer commandBuffer, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ)
+  {
+      ANV_FROM_HANDLE(anv_cmd_buffer, anv_cmd_buffer, commandBuffer);
+      return anv_cmd_buffer->device->dispatch.vkCmdDispatch(commandBuffer, groupCountX, groupCountY, groupCountZ);
+  }
+  static void
+  anv_tramp_CmdDispatchIndirect(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset)
+  {
+      ANV_FROM_HANDLE(anv_cmd_buffer, anv_cmd_buffer, commandBuffer);
+      return anv_cmd_buffer->device->dispatch.vkCmdDispatchIndirect(commandBuffer, buffer, offset);
+  }
+  static void
+  anv_tramp_CmdCopyBuffer(VkCommandBuffer commandBuffer, VkBuffer srcBuffer, VkBuffer dstBuffer, uint32_t regionCount, const VkBufferCopy* pRegions)
+  {
+      ANV_FROM_HANDLE(anv_cmd_buffer, anv_cmd_buffer, commandBuffer);
+      return anv_cmd_buffer->device->dispatch.vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, regionCount, pRegions);
+  }
+  static void
+  anv_tramp_CmdCopyImage(VkCommandBuffer commandBuffer, VkImage srcImage, VkImageLayout srcImageLayout, VkImage dstImage, VkImageLayout dstImageLayout, uint32_t regionCount, const VkImageCopy* pRegions)
+  {
+      ANV_FROM_HANDLE(anv_cmd_buffer, anv_cmd_buffer, commandBuffer);
+      return anv_cmd_buffer->device->dispatch.vkCmdCopyImage(commandBuffer, srcImage, srcImageLayout, dstImage, dstImageLayout, regionCount, pRegions);
+  }
+  static void
+  anv_tramp_CmdBlitImage(VkCommandBuffer commandBuffer, VkImage srcImage, VkImageLayout srcImageLayout, VkImage dstImage, VkImageLayout dstImageLayout, uint32_t regionCount, const VkImageBlit* pRegions, VkFilter filter)
+  {
+      ANV_FROM_HANDLE(anv_cmd_buffer, anv_cmd_buffer, commandBuffer);
+      return anv_cmd_buffer->device->dispatch.vkCmdBlitImage(commandBuffer, srcImage, srcImageLayout, dstImage, dstImageLayout, regionCount, pRegions, filter);
+  }
+  static void
+  anv_tramp_CmdCopyBufferToImage(VkCommandBuffer commandBuffer, VkBuffer srcBuffer, VkImage dstImage, VkImageLayout dstImageLayout, uint32_t regionCount, const VkBufferImageCopy* pRegions)
+  {
+      ANV_FROM_HANDLE(anv_cmd_buffer, anv_cmd_buffer, commandBuffer);
+      return anv_cmd_buffer->device->dispatch.vkCmdCopyBufferToImage(commandBuffer, srcBuffer, dstImage, dstImageLayout, regionCount, pRegions);
+  }
+  static void
+  anv_tramp_CmdCopyImageToBuffer(VkCommandBuffer commandBuffer, VkImage srcImage, VkImageLayout srcImageLayout, VkBuffer dstBuffer, uint32_t regionCount, const VkBufferImageCopy* pRegions)
+  {
+      ANV_FROM_HANDLE(anv_cmd_buffer, anv_cmd_buffer, commandBuffer);
+      return anv_cmd_buffer->device->dispatch.vkCmdCopyImageToBuffer(commandBuffer, srcImage, srcImageLayout, dstBuffer, regionCount, pRegions);
+  }
+  static void
+  anv_tramp_CmdUpdateBuffer(VkCommandBuffer commandBuffer, VkBuffer dstBuffer, VkDeviceSize dstOffset, VkDeviceSize dataSize, const void* pData)
+  {
+      ANV_FROM_HANDLE(anv_cmd_buffer, anv_cmd_buffer, commandBuffer);
+      return anv_cmd_buffer->device->dispatch.vkCmdUpdateBuffer(commandBuffer, dstBuffer, dstOffset, dataSize, pData);
+  }
+  static void
+  anv_tramp_CmdFillBuffer(VkCommandBuffer commandBuffer, VkBuffer dstBuffer, VkDeviceSize dstOffset, VkDeviceSize size, uint32_t data)
+  {
+      ANV_FROM_HANDLE(anv_cmd_buffer, anv_cmd_buffer, commandBuffer);
+      return anv_cmd_buffer->device->dispatch.vkCmdFillBuffer(commandBuffer, dstBuffer, dstOffset, size, data);
+  }
+  static void
+  anv_tramp_CmdClearColorImage(VkCommandBuffer commandBuffer, VkImage image, VkImageLayout imageLayout, const VkClearColorValue* pColor, uint32_t rangeCount, const VkImageSubresourceRange* pRanges)
+  {
+      ANV_FROM_HANDLE(anv_cmd_buffer, anv_cmd_buffer, commandBuffer);
+      return anv_cmd_buffer->device->dispatch.vkCmdClearColorImage(commandBuffer, image, imageLayout, pColor, rangeCount, pRanges);
+  }
+  static void
+  anv_tramp_CmdClearDepthStencilImage(VkCommandBuffer commandBuffer, VkImage image, VkImageLayout imageLayout, const VkClearDepthStencilValue* pDepthStencil, uint32_t rangeCount, const VkImageSubresourceRange* pRanges)
+  {
+      ANV_FROM_HANDLE(anv_cmd_buffer, anv_cmd_buffer, commandBuffer);
+      return anv_cmd_buffer->device->dispatch.vkCmdClearDepthStencilImage(commandBuffer, image, imageLayout, pDepthStencil, rangeCount, pRanges);
+  }
+  static void
+  anv_tramp_CmdClearAttachments(VkCommandBuffer commandBuffer, uint32_t attachmentCount, const VkClearAttachment* pAttachments, uint32_t rectCount, const VkClearRect* pRects)
+  {
+      ANV_FROM_HANDLE(anv_cmd_buffer, anv_cmd_buffer, commandBuffer);
+      return anv_cmd_buffer->device->dispatch.vkCmdClearAttachments(commandBuffer, attachmentCount, pAttachments, rectCount, pRects);
+  }
+  static void
+  anv_tramp_CmdResolveImage(VkCommandBuffer commandBuffer, VkImage srcImage, VkImageLayout srcImageLayout, VkImage dstImage, VkImageLayout dstImageLayout, uint32_t regionCount, const VkImageResolve* pRegions)
+  {
+      ANV_FROM_HANDLE(anv_cmd_buffer, anv_cmd_buffer, commandBuffer);
+      return anv_cmd_buffer->device->dispatch.vkCmdResolveImage(commandBuffer, srcImage, srcImageLayout, dstImage, dstImageLayout, regionCount, pRegions);
+  }
+  static void
+  anv_tramp_CmdSetEvent(VkCommandBuffer commandBuffer, VkEvent event, VkPipelineStageFlags stageMask)
+  {
+      ANV_FROM_HANDLE(anv_cmd_buffer, anv_cmd_buffer, commandBuffer);
+      return anv_cmd_buffer->device->dispatch.vkCmdSetEvent(commandBuffer, event, stageMask);
+  }
+  static void
+  anv_tramp_CmdResetEvent(VkCommandBuffer commandBuffer, VkEvent event, VkPipelineStageFlags stageMask)
+  {
+      ANV_FROM_HANDLE(anv_cmd_buffer, anv_cmd_buffer, commandBuffer);
+      return anv_cmd_buffer->device->dispatch.vkCmdResetEvent(commandBuffer, event, stageMask);
+  }
+  static void
+  anv_tramp_CmdWaitEvents(VkCommandBuffer commandBuffer, uint32_t eventCount, const VkEvent* pEvents, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask, uint32_t memoryBarrierCount, const VkMemoryBarrier* pMemoryBarriers, uint32_t bufferMemoryBarrierCount, const VkBufferMemoryBarrier* pBufferMemoryBarriers, uint32_t imageMemoryBarrierCount, const VkImageMemoryBarrier* pImageMemoryBarriers)
+  {
+      ANV_FROM_HANDLE(anv_cmd_buffer, anv_cmd_buffer, commandBuffer);
+      return anv_cmd_buffer->device->dispatch.vkCmdWaitEvents(commandBuffer, eventCount, pEvents, srcStageMask, dstStageMask, memoryBarrierCount, pMemoryBarriers, bufferMemoryBarrierCount, pBufferMemoryBarriers, imageMemoryBarrierCount, pImageMemoryBarriers);
+  }
+  static void
+  anv_tramp_CmdPipelineBarrier(VkCommandBuffer commandBuffer, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask, VkDependencyFlags dependencyFlags, uint32_t memoryBarrierCount, const VkMemoryBarrier* pMemoryBarriers, uint32_t bufferMemoryBarrierCount, const VkBufferMemoryBarrier* pBufferMemoryBarriers, uint32_t imageMemoryBarrierCount, const VkImageMemoryBarrier* pImageMemoryBarriers)
+  {
+      ANV_FROM_HANDLE(anv_cmd_buffer, anv_cmd_buffer, commandBuffer);
+      return anv_cmd_buffer->device->dispatch.vkCmdPipelineBarrier(commandBuffer, srcStageMask, dstStageMask, dependencyFlags, memoryBarrierCount, pMemoryBarriers, bufferMemoryBarrierCount, pBufferMemoryBarriers, imageMemoryBarrierCount, pImageMemoryBarriers);
+  }
+  static void
+  anv_tramp_CmdBeginQuery(VkCommandBuffer commandBuffer, VkQueryPool queryPool, uint32_t query, VkQueryControlFlags flags)
+  {
+      ANV_FROM_HANDLE(anv_cmd_buffer, anv_cmd_buffer, commandBuffer);
+      return anv_cmd_buffer->device->dispatch.vkCmdBeginQuery(commandBuffer, queryPool, query, flags);
+  }
+  static void
+  anv_tramp_CmdEndQuery(VkCommandBuffer commandBuffer, VkQueryPool queryPool, uint32_t query)
+  {
+      ANV_FROM_HANDLE(anv_cmd_buffer, anv_cmd_buffer, commandBuffer);
+      return anv_cmd_buffer->device->dispatch.vkCmdEndQuery(commandBuffer, queryPool, query);
+  }
+  static void
+  anv_tramp_CmdResetQueryPool(VkCommandBuffer commandBuffer, VkQueryPool queryPool, uint32_t firstQuery, uint32_t queryCount)
+  {
+      ANV_FROM_HANDLE(anv_cmd_buffer, anv_cmd_buffer, commandBuffer);
+      return anv_cmd_buffer->device->dispatch.vkCmdResetQueryPool(commandBuffer, queryPool, firstQuery, queryCount);
+  }
+  static void
+  anv_tramp_CmdWriteTimestamp(VkCommandBuffer commandBuffer, VkPipelineStageFlagBits pipelineStage, VkQueryPool queryPool, uint32_t query)
+  {
+      ANV_FROM_HANDLE(anv_cmd_buffer, anv_cmd_buffer, commandBuffer);
+      return anv_cmd_buffer->device->dispatch.vkCmdWriteTimestamp(commandBuffer, pipelineStage, queryPool, query);
+  }
+  static void
+  anv_tramp_CmdCopyQueryPoolResults(VkCommandBuffer commandBuffer, VkQueryPool queryPool, uint32_t firstQuery, uint32_t queryCount, VkBuffer dstBuffer, VkDeviceSize dstOffset, VkDeviceSize stride, VkQueryResultFlags flags)
+  {
+      ANV_FROM_HANDLE(anv_cmd_buffer, anv_cmd_buffer, commandBuffer);
+      return anv_cmd_buffer->device->dispatch.vkCmdCopyQueryPoolResults(commandBuffer, queryPool, firstQuery, queryCount, dstBuffer, dstOffset, stride, flags);
+  }
+  static void
+  anv_tramp_CmdPushConstants(VkCommandBuffer commandBuffer, VkPipelineLayout layout, VkShaderStageFlags stageFlags, uint32_t offset, uint32_t size, const void* pValues)
+  {
+      ANV_FROM_HANDLE(anv_cmd_buffer, anv_cmd_buffer, commandBuffer);
+      return anv_cmd_buffer->device->dispatch.vkCmdPushConstants(commandBuffer, layout, stageFlags, offset, size, pValues);
+  }
+  static void
+  anv_tramp_CmdBeginRenderPass(VkCommandBuffer commandBuffer, const VkRenderPassBeginInfo* pRenderPassBegin, VkSubpassContents contents)
+  {
+      ANV_FROM_HANDLE(anv_cmd_buffer, anv_cmd_buffer, commandBuffer);
+      return anv_cmd_buffer->device->dispatch.vkCmdBeginRenderPass(commandBuffer, pRenderPassBegin, contents);
+  }
+  static void
+  anv_tramp_CmdNextSubpass(VkCommandBuffer commandBuffer, VkSubpassContents contents)
+  {
+      ANV_FROM_HANDLE(anv_cmd_buffer, anv_cmd_buffer, commandBuffer);
+      return anv_cmd_buffer->device->dispatch.vkCmdNextSubpass(commandBuffer, contents);
+  }
+  static void
+  anv_tramp_CmdEndRenderPass(VkCommandBuffer commandBuffer)
+  {
+      ANV_FROM_HANDLE(anv_cmd_buffer, anv_cmd_buffer, commandBuffer);
+      return anv_cmd_buffer->device->dispatch.vkCmdEndRenderPass(commandBuffer);
+  }
+  static void
+  anv_tramp_CmdExecuteCommands(VkCommandBuffer commandBuffer, uint32_t commandBufferCount, const VkCommandBuffer* pCommandBuffers)
+  {
+      ANV_FROM_HANDLE(anv_cmd_buffer, anv_cmd_buffer, commandBuffer);
+      return anv_cmd_buffer->device->dispatch.vkCmdExecuteCommands(commandBuffer, commandBufferCount, pCommandBuffers);
+  }
+                      static VkResult
+  anv_tramp_CreateSwapchainKHR(VkDevice device, const VkSwapchainCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSwapchainKHR* pSwapchain)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkCreateSwapchainKHR(device, pCreateInfo, pAllocator, pSwapchain);
+  }
+  static void
+  anv_tramp_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain, const VkAllocationCallbacks* pAllocator)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkDestroySwapchainKHR(device, swapchain, pAllocator);
+  }
+  static VkResult
+  anv_tramp_GetSwapchainImagesKHR(VkDevice device, VkSwapchainKHR swapchain, uint32_t* pSwapchainImageCount, VkImage* pSwapchainImages)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkGetSwapchainImagesKHR(device, swapchain, pSwapchainImageCount, pSwapchainImages);
+  }
+  static VkResult
+  anv_tramp_AcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapchain, uint64_t timeout, VkSemaphore semaphore, VkFence fence, uint32_t* pImageIndex)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkAcquireNextImageKHR(device, swapchain, timeout, semaphore, fence, pImageIndex);
+  }
+                                                                      static void
+  anv_tramp_CmdPushDescriptorSetKHR(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipelineLayout layout, uint32_t set, uint32_t descriptorWriteCount, const VkWriteDescriptorSet* pDescriptorWrites)
+  {
+      ANV_FROM_HANDLE(anv_cmd_buffer, anv_cmd_buffer, commandBuffer);
+      return anv_cmd_buffer->device->dispatch.vkCmdPushDescriptorSetKHR(commandBuffer, pipelineBindPoint, layout, set, descriptorWriteCount, pDescriptorWrites);
+  }
+  static void
+  anv_tramp_TrimCommandPoolKHR(VkDevice device, VkCommandPool commandPool, VkCommandPoolTrimFlagsKHR flags)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkTrimCommandPoolKHR(device, commandPool, flags);
+  }
+      static VkResult
+  anv_tramp_GetMemoryFdKHR(VkDevice device, const VkMemoryGetFdInfoKHR* pGetFdInfo, int* pFd)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkGetMemoryFdKHR(device, pGetFdInfo, pFd);
+  }
+  static VkResult
+  anv_tramp_GetMemoryFdPropertiesKHR(VkDevice device, VkExternalMemoryHandleTypeFlagBitsKHR handleType, int fd, VkMemoryFdPropertiesKHR* pMemoryFdProperties)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkGetMemoryFdPropertiesKHR(device, handleType, fd, pMemoryFdProperties);
+  }
+      static VkResult
+  anv_tramp_GetSemaphoreFdKHR(VkDevice device, const VkSemaphoreGetFdInfoKHR* pGetFdInfo, int* pFd)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkGetSemaphoreFdKHR(device, pGetFdInfo, pFd);
+  }
+  static VkResult
+  anv_tramp_ImportSemaphoreFdKHR(VkDevice device, const VkImportSemaphoreFdInfoKHR* pImportSemaphoreFdInfo)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkImportSemaphoreFdKHR(device, pImportSemaphoreFdInfo);
+  }
+      static VkResult
+  anv_tramp_GetFenceFdKHR(VkDevice device, const VkFenceGetFdInfoKHR* pGetFdInfo, int* pFd)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkGetFenceFdKHR(device, pGetFdInfo, pFd);
+  }
+  static VkResult
+  anv_tramp_ImportFenceFdKHR(VkDevice device, const VkImportFenceFdInfoKHR* pImportFenceFdInfo)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkImportFenceFdKHR(device, pImportFenceFdInfo);
+  }
+  static VkResult
+  anv_tramp_BindBufferMemory2KHR(VkDevice device, uint32_t bindInfoCount, const VkBindBufferMemoryInfoKHR* pBindInfos)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkBindBufferMemory2KHR(device, bindInfoCount, pBindInfos);
+  }
+  static VkResult
+  anv_tramp_BindImageMemory2KHR(VkDevice device, uint32_t bindInfoCount, const VkBindImageMemoryInfoKHR* pBindInfos)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkBindImageMemory2KHR(device, bindInfoCount, pBindInfos);
+  }
+  static VkResult
+  anv_tramp_CreateDescriptorUpdateTemplateKHR(VkDevice device, const VkDescriptorUpdateTemplateCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDescriptorUpdateTemplateKHR* pDescriptorUpdateTemplate)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkCreateDescriptorUpdateTemplateKHR(device, pCreateInfo, pAllocator, pDescriptorUpdateTemplate);
+  }
+  static void
+  anv_tramp_DestroyDescriptorUpdateTemplateKHR(VkDevice device, VkDescriptorUpdateTemplateKHR descriptorUpdateTemplate, const VkAllocationCallbacks* pAllocator)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkDestroyDescriptorUpdateTemplateKHR(device, descriptorUpdateTemplate, pAllocator);
+  }
+  static void
+  anv_tramp_UpdateDescriptorSetWithTemplateKHR(VkDevice device, VkDescriptorSet descriptorSet, VkDescriptorUpdateTemplateKHR descriptorUpdateTemplate, const void* pData)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkUpdateDescriptorSetWithTemplateKHR(device, descriptorSet, descriptorUpdateTemplate, pData);
+  }
+  static void
+  anv_tramp_CmdPushDescriptorSetWithTemplateKHR(VkCommandBuffer commandBuffer, VkDescriptorUpdateTemplateKHR descriptorUpdateTemplate, VkPipelineLayout layout, uint32_t set, const void* pData)
+  {
+      ANV_FROM_HANDLE(anv_cmd_buffer, anv_cmd_buffer, commandBuffer);
+      return anv_cmd_buffer->device->dispatch.vkCmdPushDescriptorSetWithTemplateKHR(commandBuffer, descriptorUpdateTemplate, layout, set, pData);
+  }
+          static void
+  anv_tramp_GetBufferMemoryRequirements2KHR(VkDevice device, const VkBufferMemoryRequirementsInfo2KHR* pInfo, VkMemoryRequirements2KHR* pMemoryRequirements)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkGetBufferMemoryRequirements2KHR(device, pInfo, pMemoryRequirements);
+  }
+  static void
+  anv_tramp_GetImageMemoryRequirements2KHR(VkDevice device, const VkImageMemoryRequirementsInfo2KHR* pInfo, VkMemoryRequirements2KHR* pMemoryRequirements)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkGetImageMemoryRequirements2KHR(device, pInfo, pMemoryRequirements);
+  }
+  static void
+  anv_tramp_GetImageSparseMemoryRequirements2KHR(VkDevice device, const VkImageSparseMemoryRequirementsInfo2KHR* pInfo, uint32_t* pSparseMemoryRequirementCount, VkSparseImageMemoryRequirements2KHR* pSparseMemoryRequirements)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkGetImageSparseMemoryRequirements2KHR(device, pInfo, pSparseMemoryRequirementCount, pSparseMemoryRequirements);
+  }
+  static VkResult
+  anv_tramp_CreateSamplerYcbcrConversionKHR(VkDevice device, const VkSamplerYcbcrConversionCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSamplerYcbcrConversionKHR* pYcbcrConversion)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkCreateSamplerYcbcrConversionKHR(device, pCreateInfo, pAllocator, pYcbcrConversion);
+  }
+  static void
+  anv_tramp_DestroySamplerYcbcrConversionKHR(VkDevice device, VkSamplerYcbcrConversionKHR ycbcrConversion, const VkAllocationCallbacks* pAllocator)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkDestroySamplerYcbcrConversionKHR(device, ycbcrConversion, pAllocator);
+  }
+#ifdef ANDROID
+  static VkResult
+  anv_tramp_GetSwapchainGrallocUsageANDROID(VkDevice device, VkFormat format, VkImageUsageFlags imageUsage, int* grallocUsage)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkGetSwapchainGrallocUsageANDROID(device, format, imageUsage, grallocUsage);
+  }
+#endif // ANDROID
+#ifdef ANDROID
+  static VkResult
+  anv_tramp_AcquireImageANDROID(VkDevice device, VkImage image, int nativeFenceFd, VkSemaphore semaphore, VkFence fence)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkAcquireImageANDROID(device, image, nativeFenceFd, semaphore, fence);
+  }
+#endif // ANDROID
+      static VkResult
+  anv_tramp_CreateDmaBufImageINTEL(VkDevice device, const VkDmaBufImageCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDeviceMemory* pMem, VkImage* pImage)
+  {
+      ANV_FROM_HANDLE(anv_device, anv_device, device);
+      return anv_device->dispatch.vkCreateDmaBufImageINTEL(device, pCreateInfo, pAllocator, pMem, pImage);
+  }
+
+const struct anv_dispatch_table anv_tramp_dispatch_table = {
+                .vkGetDeviceProcAddr = anv_tramp_GetDeviceProcAddr,
+                                    .vkDestroyDevice = anv_tramp_DestroyDevice,
+                    .vkGetDeviceQueue = anv_tramp_GetDeviceQueue,
+            .vkDeviceWaitIdle = anv_tramp_DeviceWaitIdle,
+    .vkAllocateMemory = anv_tramp_AllocateMemory,
+    .vkFreeMemory = anv_tramp_FreeMemory,
+    .vkMapMemory = anv_tramp_MapMemory,
+    .vkUnmapMemory = anv_tramp_UnmapMemory,
+    .vkFlushMappedMemoryRanges = anv_tramp_FlushMappedMemoryRanges,
+    .vkInvalidateMappedMemoryRanges = anv_tramp_InvalidateMappedMemoryRanges,
+    .vkGetDeviceMemoryCommitment = anv_tramp_GetDeviceMemoryCommitment,
+    .vkGetBufferMemoryRequirements = anv_tramp_GetBufferMemoryRequirements,
+    .vkBindBufferMemory = anv_tramp_BindBufferMemory,
+    .vkGetImageMemoryRequirements = anv_tramp_GetImageMemoryRequirements,
+    .vkBindImageMemory = anv_tramp_BindImageMemory,
+    .vkGetImageSparseMemoryRequirements = anv_tramp_GetImageSparseMemoryRequirements,
+            .vkCreateFence = anv_tramp_CreateFence,
+    .vkDestroyFence = anv_tramp_DestroyFence,
+    .vkResetFences = anv_tramp_ResetFences,
+    .vkGetFenceStatus = anv_tramp_GetFenceStatus,
+    .vkWaitForFences = anv_tramp_WaitForFences,
+    .vkCreateSemaphore = anv_tramp_CreateSemaphore,
+    .vkDestroySemaphore = anv_tramp_DestroySemaphore,
+    .vkCreateEvent = anv_tramp_CreateEvent,
+    .vkDestroyEvent = anv_tramp_DestroyEvent,
+    .vkGetEventStatus = anv_tramp_GetEventStatus,
+    .vkSetEvent = anv_tramp_SetEvent,
+    .vkResetEvent = anv_tramp_ResetEvent,
+    .vkCreateQueryPool = anv_tramp_CreateQueryPool,
+    .vkDestroyQueryPool = anv_tramp_DestroyQueryPool,
+    .vkGetQueryPoolResults = anv_tramp_GetQueryPoolResults,
+    .vkCreateBuffer = anv_tramp_CreateBuffer,
+    .vkDestroyBuffer = anv_tramp_DestroyBuffer,
+    .vkCreateBufferView = anv_tramp_CreateBufferView,
+    .vkDestroyBufferView = anv_tramp_DestroyBufferView,
+    .vkCreateImage = anv_tramp_CreateImage,
+    .vkDestroyImage = anv_tramp_DestroyImage,
+    .vkGetImageSubresourceLayout = anv_tramp_GetImageSubresourceLayout,
+    .vkCreateImageView = anv_tramp_CreateImageView,
+    .vkDestroyImageView = anv_tramp_DestroyImageView,
+    .vkCreateShaderModule = anv_tramp_CreateShaderModule,
+    .vkDestroyShaderModule = anv_tramp_DestroyShaderModule,
+    .vkCreatePipelineCache = anv_tramp_CreatePipelineCache,
+    .vkDestroyPipelineCache = anv_tramp_DestroyPipelineCache,
+    .vkGetPipelineCacheData = anv_tramp_GetPipelineCacheData,
+    .vkMergePipelineCaches = anv_tramp_MergePipelineCaches,
+    .vkCreateGraphicsPipelines = anv_tramp_CreateGraphicsPipelines,
+    .vkCreateComputePipelines = anv_tramp_CreateComputePipelines,
+    .vkDestroyPipeline = anv_tramp_DestroyPipeline,
+    .vkCreatePipelineLayout = anv_tramp_CreatePipelineLayout,
+    .vkDestroyPipelineLayout = anv_tramp_DestroyPipelineLayout,
+    .vkCreateSampler = anv_tramp_CreateSampler,
+    .vkDestroySampler = anv_tramp_DestroySampler,
+    .vkCreateDescriptorSetLayout = anv_tramp_CreateDescriptorSetLayout,
+    .vkDestroyDescriptorSetLayout = anv_tramp_DestroyDescriptorSetLayout,
+    .vkCreateDescriptorPool = anv_tramp_CreateDescriptorPool,
+    .vkDestroyDescriptorPool = anv_tramp_DestroyDescriptorPool,
+    .vkResetDescriptorPool = anv_tramp_ResetDescriptorPool,
+    .vkAllocateDescriptorSets = anv_tramp_AllocateDescriptorSets,
+    .vkFreeDescriptorSets = anv_tramp_FreeDescriptorSets,
+    .vkUpdateDescriptorSets = anv_tramp_UpdateDescriptorSets,
+    .vkCreateFramebuffer = anv_tramp_CreateFramebuffer,
+    .vkDestroyFramebuffer = anv_tramp_DestroyFramebuffer,
+    .vkCreateRenderPass = anv_tramp_CreateRenderPass,
+    .vkDestroyRenderPass = anv_tramp_DestroyRenderPass,
+    .vkGetRenderAreaGranularity = anv_tramp_GetRenderAreaGranularity,
+    .vkCreateCommandPool = anv_tramp_CreateCommandPool,
+    .vkDestroyCommandPool = anv_tramp_DestroyCommandPool,
+    .vkResetCommandPool = anv_tramp_ResetCommandPool,
+    .vkAllocateCommandBuffers = anv_tramp_AllocateCommandBuffers,
+    .vkFreeCommandBuffers = anv_tramp_FreeCommandBuffers,
+    .vkBeginCommandBuffer = anv_tramp_BeginCommandBuffer,
+    .vkEndCommandBuffer = anv_tramp_EndCommandBuffer,
+    .vkResetCommandBuffer = anv_tramp_ResetCommandBuffer,
+    .vkCmdBindPipeline = anv_tramp_CmdBindPipeline,
+    .vkCmdSetViewport = anv_tramp_CmdSetViewport,
+    .vkCmdSetScissor = anv_tramp_CmdSetScissor,
+    .vkCmdSetLineWidth = anv_tramp_CmdSetLineWidth,
+    .vkCmdSetDepthBias = anv_tramp_CmdSetDepthBias,
+    .vkCmdSetBlendConstants = anv_tramp_CmdSetBlendConstants,
+    .vkCmdSetDepthBounds = anv_tramp_CmdSetDepthBounds,
+    .vkCmdSetStencilCompareMask = anv_tramp_CmdSetStencilCompareMask,
+    .vkCmdSetStencilWriteMask = anv_tramp_CmdSetStencilWriteMask,
+    .vkCmdSetStencilReference = anv_tramp_CmdSetStencilReference,
+    .vkCmdBindDescriptorSets = anv_tramp_CmdBindDescriptorSets,
+    .vkCmdBindIndexBuffer = anv_tramp_CmdBindIndexBuffer,
+    .vkCmdBindVertexBuffers = anv_tramp_CmdBindVertexBuffers,
+    .vkCmdDraw = anv_tramp_CmdDraw,
+    .vkCmdDrawIndexed = anv_tramp_CmdDrawIndexed,
+    .vkCmdDrawIndirect = anv_tramp_CmdDrawIndirect,
+    .vkCmdDrawIndexedIndirect = anv_tramp_CmdDrawIndexedIndirect,
+    .vkCmdDispatch = anv_tramp_CmdDispatch,
+    .vkCmdDispatchIndirect = anv_tramp_CmdDispatchIndirect,
+    .vkCmdCopyBuffer = anv_tramp_CmdCopyBuffer,
+    .vkCmdCopyImage = anv_tramp_CmdCopyImage,
+    .vkCmdBlitImage = anv_tramp_CmdBlitImage,
+    .vkCmdCopyBufferToImage = anv_tramp_CmdCopyBufferToImage,
+    .vkCmdCopyImageToBuffer = anv_tramp_CmdCopyImageToBuffer,
+    .vkCmdUpdateBuffer = anv_tramp_CmdUpdateBuffer,
+    .vkCmdFillBuffer = anv_tramp_CmdFillBuffer,
+    .vkCmdClearColorImage = anv_tramp_CmdClearColorImage,
+    .vkCmdClearDepthStencilImage = anv_tramp_CmdClearDepthStencilImage,
+    .vkCmdClearAttachments = anv_tramp_CmdClearAttachments,
+    .vkCmdResolveImage = anv_tramp_CmdResolveImage,
+    .vkCmdSetEvent = anv_tramp_CmdSetEvent,
+    .vkCmdResetEvent = anv_tramp_CmdResetEvent,
+    .vkCmdWaitEvents = anv_tramp_CmdWaitEvents,
+    .vkCmdPipelineBarrier = anv_tramp_CmdPipelineBarrier,
+    .vkCmdBeginQuery = anv_tramp_CmdBeginQuery,
+    .vkCmdEndQuery = anv_tramp_CmdEndQuery,
+    .vkCmdResetQueryPool = anv_tramp_CmdResetQueryPool,
+    .vkCmdWriteTimestamp = anv_tramp_CmdWriteTimestamp,
+    .vkCmdCopyQueryPoolResults = anv_tramp_CmdCopyQueryPoolResults,
+    .vkCmdPushConstants = anv_tramp_CmdPushConstants,
+    .vkCmdBeginRenderPass = anv_tramp_CmdBeginRenderPass,
+    .vkCmdNextSubpass = anv_tramp_CmdNextSubpass,
+    .vkCmdEndRenderPass = anv_tramp_CmdEndRenderPass,
+    .vkCmdExecuteCommands = anv_tramp_CmdExecuteCommands,
+                        .vkCreateSwapchainKHR = anv_tramp_CreateSwapchainKHR,
+    .vkDestroySwapchainKHR = anv_tramp_DestroySwapchainKHR,
+    .vkGetSwapchainImagesKHR = anv_tramp_GetSwapchainImagesKHR,
+    .vkAcquireNextImageKHR = anv_tramp_AcquireNextImageKHR,
+                                                                        .vkCmdPushDescriptorSetKHR = anv_tramp_CmdPushDescriptorSetKHR,
+    .vkTrimCommandPoolKHR = anv_tramp_TrimCommandPoolKHR,
+        .vkGetMemoryFdKHR = anv_tramp_GetMemoryFdKHR,
+    .vkGetMemoryFdPropertiesKHR = anv_tramp_GetMemoryFdPropertiesKHR,
+        .vkGetSemaphoreFdKHR = anv_tramp_GetSemaphoreFdKHR,
+    .vkImportSemaphoreFdKHR = anv_tramp_ImportSemaphoreFdKHR,
+        .vkGetFenceFdKHR = anv_tramp_GetFenceFdKHR,
+    .vkImportFenceFdKHR = anv_tramp_ImportFenceFdKHR,
+    .vkBindBufferMemory2KHR = anv_tramp_BindBufferMemory2KHR,
+    .vkBindImageMemory2KHR = anv_tramp_BindImageMemory2KHR,
+    .vkCreateDescriptorUpdateTemplateKHR = anv_tramp_CreateDescriptorUpdateTemplateKHR,
+    .vkDestroyDescriptorUpdateTemplateKHR = anv_tramp_DestroyDescriptorUpdateTemplateKHR,
+    .vkUpdateDescriptorSetWithTemplateKHR = anv_tramp_UpdateDescriptorSetWithTemplateKHR,
+    .vkCmdPushDescriptorSetWithTemplateKHR = anv_tramp_CmdPushDescriptorSetWithTemplateKHR,
+            .vkGetBufferMemoryRequirements2KHR = anv_tramp_GetBufferMemoryRequirements2KHR,
+    .vkGetImageMemoryRequirements2KHR = anv_tramp_GetImageMemoryRequirements2KHR,
+    .vkGetImageSparseMemoryRequirements2KHR = anv_tramp_GetImageSparseMemoryRequirements2KHR,
+    .vkCreateSamplerYcbcrConversionKHR = anv_tramp_CreateSamplerYcbcrConversionKHR,
+    .vkDestroySamplerYcbcrConversionKHR = anv_tramp_DestroySamplerYcbcrConversionKHR,
+#ifdef ANDROID
+    .vkGetSwapchainGrallocUsageANDROID = anv_tramp_GetSwapchainGrallocUsageANDROID,
+#endif // ANDROID
+#ifdef ANDROID
+    .vkAcquireImageANDROID = anv_tramp_AcquireImageANDROID,
+#endif // ANDROID
+        .vkCreateDmaBufImageINTEL = anv_tramp_CreateDmaBufImageINTEL,
+};
+
+
+/** Return true if the core version or extension in which the given entrypoint
+ * is defined is enabled.
+ *
+ * If device is NULL, all device extensions are considered enabled.
+ */
+bool
+anv_entrypoint_is_enabled(int index, uint32_t core_version,
+                          const struct anv_instance_extension_table *instance,
+                          const struct anv_device_extension_table *device)
+{
+   switch (index) {
+   case 0:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 1:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 2:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 3:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 4:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 5:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 6:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 7:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 8:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 9:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 10:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 11:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 12:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 13:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 14:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 15:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 16:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 17:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 18:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 19:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 20:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 21:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 22:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 23:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 24:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 25:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 26:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 27:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 28:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 29:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 30:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 31:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 32:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 33:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 34:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 35:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 36:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 37:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 38:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 39:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 40:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 41:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 42:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 43:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 44:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 45:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 46:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 47:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 48:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 49:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 50:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 51:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 52:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 53:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 54:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 55:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 56:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 57:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 58:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 59:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 60:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 61:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 62:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 63:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 64:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 65:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 66:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 67:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 68:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 69:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 70:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 71:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 72:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 73:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 74:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 75:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 76:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 77:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 78:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 79:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 80:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 81:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 82:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 83:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 84:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 85:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 86:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 87:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 88:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 89:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 90:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 91:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 92:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 93:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 94:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 95:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 96:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 97:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 98:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 99:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 100:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 101:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 102:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 103:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 104:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 105:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 106:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 107:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 108:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 109:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 110:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 111:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 112:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 113:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 114:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 115:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 116:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 117:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 118:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 119:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 120:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 121:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 122:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 123:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 124:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 125:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 126:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 127:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 128:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 129:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 130:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 131:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 132:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 133:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 134:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 135:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 136:
+      return VK_MAKE_VERSION(1, 0, 0) <= core_version;
+   case 137:
+      return instance->KHR_surface;
+   case 138:
+      return instance->KHR_surface;
+   case 139:
+      return instance->KHR_surface;
+   case 140:
+      return instance->KHR_surface;
+   case 141:
+      return instance->KHR_surface;
+   case 142:
+      return !device || device->KHR_swapchain;
+   case 143:
+      return !device || device->KHR_swapchain;
+   case 144:
+      return !device || device->KHR_swapchain;
+   case 145:
+      return !device || device->KHR_swapchain;
+   case 146:
+      return !device || device->KHR_swapchain;
+   case 147:
+      return instance->KHR_wayland_surface;
+   case 148:
+      return instance->KHR_wayland_surface;
+   case 149:
+      return instance->KHR_xlib_surface;
+   case 150:
+      return instance->KHR_xlib_surface;
+   case 151:
+      return instance->KHR_xcb_surface;
+   case 152:
+      return instance->KHR_xcb_surface;
+   case 153:
+      return instance->EXT_debug_report;
+   case 154:
+      return instance->EXT_debug_report;
+   case 155:
+      return instance->EXT_debug_report;
+   case 156:
+      return instance->KHR_get_physical_device_properties2;
+   case 157:
+      return instance->KHR_get_physical_device_properties2;
+   case 158:
+      return instance->KHR_get_physical_device_properties2;
+   case 159:
+      return instance->KHR_get_physical_device_properties2;
+   case 160:
+      return instance->KHR_get_physical_device_properties2;
+   case 161:
+      return instance->KHR_get_physical_device_properties2;
+   case 162:
+      return instance->KHR_get_physical_device_properties2;
+   case 163:
+      return !device || device->KHR_push_descriptor;
+   case 164:
+      return !device || device->KHR_maintenance1;
+   case 165:
+      return instance->KHR_external_memory_capabilities;
+   case 166:
+      return !device || device->KHR_external_memory_fd;
+   case 167:
+      return !device || device->KHR_external_memory_fd;
+   case 168:
+      return instance->KHR_external_semaphore_capabilities;
+   case 169:
+      return !device || device->KHR_external_semaphore_fd;
+   case 170:
+      return !device || device->KHR_external_semaphore_fd;
+   case 171:
+      return instance->KHR_external_fence_capabilities;
+   case 172:
+      return !device || device->KHR_external_fence_fd;
+   case 173:
+      return !device || device->KHR_external_fence_fd;
+   case 174:
+      return !device || device->KHR_bind_memory2;
+   case 175:
+      return !device || device->KHR_bind_memory2;
+   case 176:
+      return !device || device->KHR_descriptor_update_template;
+   case 177:
+      return !device || device->KHR_descriptor_update_template;
+   case 178:
+      return !device || device->KHR_descriptor_update_template;
+   case 179:
+      return !device || device->KHR_descriptor_update_template;
+   case 180:
+      return instance->KHR_get_surface_capabilities2;
+   case 181:
+      return instance->KHR_get_surface_capabilities2;
+   case 182:
+      return !device || device->KHR_get_memory_requirements2;
+   case 183:
+      return !device || device->KHR_get_memory_requirements2;
+   case 184:
+      return !device || device->KHR_get_memory_requirements2;
+   case 185:
+      return !device || device->KHR_sampler_ycbcr_conversion;
+   case 186:
+      return !device || device->KHR_sampler_ycbcr_conversion;
+   case 187:
+      return !device || device->ANDROID_native_buffer;
+   case 188:
+      return !device || device->ANDROID_native_buffer;
+   case 189:
+      return !device || device->ANDROID_native_buffer;
+   case 190:
+      return true;
+   default:
+      return false;
+   }
+}
 
 static void * __attribute__ ((noinline))
 anv_resolve_entrypoint(const struct gen_device_info *devinfo, uint32_t index)
 {
    if (devinfo == NULL) {
-      return anv_layer.entrypoints[index];
+      return anv_dispatch_table.entrypoints[index];
    }
 
    const struct anv_dispatch_table *genX_table;
    switch (devinfo->gen) {
    case 10:
-      genX_table = &gen10_layer;
+      genX_table = &gen10_dispatch_table;
       break;
    case 9:
-      genX_table = &gen9_layer;
+      genX_table = &gen9_dispatch_table;
       break;
    case 8:
-      genX_table = &gen8_layer;
+      genX_table = &gen8_dispatch_table;
       break;
    case 7:
       if (devinfo->is_haswell)
-         genX_table = &gen75_layer;
+         genX_table = &gen75_dispatch_table;
       else
-         genX_table = &gen7_layer;
+         genX_table = &gen7_dispatch_table;
       break;
    default:
       unreachable("unsupported gen\n");
@@ -2986,7 +4408,7 @@ anv_resolve_entrypoint(const struct gen_device_info *devinfo, uint32_t index)
    if (genX_table->entrypoints[index])
       return genX_table->entrypoints[index];
    else
-      return anv_layer.entrypoints[index];
+      return anv_dispatch_table.entrypoints[index];
 }
 
 /* Hash table stats:
@@ -3264,8 +4686,8 @@ static const uint16_t map[] = {
       0x0039,
 };
 
-void *
-anv_lookup_entrypoint(const struct gen_device_info *devinfo, const char *name)
+int
+anv_get_entrypoint_index(const char *name)
 {
    static const uint32_t prime_factor = 5024183;
    static const uint32_t prime_step = 19;
@@ -3281,13 +4703,22 @@ anv_lookup_entrypoint(const struct gen_device_info *devinfo, const char *name)
    do {
       i = map[h & 255];
       if (i == none)
-         return NULL;
+         return -1;
       e = &entrypoints[i];
       h += prime_step;
    } while (e->hash != hash);
 
    if (strcmp(name, strings + e->name) != 0)
-      return NULL;
+      return -1;
 
-   return anv_resolve_entrypoint(devinfo, i);
+   return i;
+}
+
+void *
+anv_lookup_entrypoint(const struct gen_device_info *devinfo, const char *name)
+{
+   int idx = anv_get_entrypoint_index(name);
+   if (idx < 0)
+      return NULL;
+   return anv_resolve_entrypoint(devinfo, idx);
 }

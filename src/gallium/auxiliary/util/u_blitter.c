@@ -550,7 +550,7 @@ void util_blitter_unset_running_flag(struct blitter_context *blitter)
    blitter->pipe->set_active_query_state(blitter->pipe, true);
 }
 
-static void blitter_check_saved_vertex_states(struct blitter_context_priv *ctx)
+static void blitter_check_saved_vertex_states(MAYBE_UNUSED struct blitter_context_priv *ctx)
 {
    assert(ctx->base.saved_vs != INVALID_PTR);
    assert(!ctx->has_geometry_shader || ctx->base.saved_gs != INVALID_PTR);
@@ -616,7 +616,7 @@ void util_blitter_restore_vertex_states(struct blitter_context *blitter)
    ctx->base.saved_rs_state = INVALID_PTR;
 }
 
-static void blitter_check_saved_fragment_states(struct blitter_context_priv *ctx)
+static void blitter_check_saved_fragment_states(MAYBE_UNUSED struct blitter_context_priv *ctx)
 {
    assert(ctx->base.saved_fs != INVALID_PTR);
    assert(ctx->base.saved_dsa_state != INVALID_PTR);
@@ -655,7 +655,7 @@ void util_blitter_restore_fragment_states(struct blitter_context *blitter)
       pipe->set_viewport_states(pipe, 0, 1, &ctx->base.saved_viewport);
 }
 
-static void blitter_check_saved_fb_state(struct blitter_context_priv *ctx)
+static void blitter_check_saved_fb_state(MAYBE_UNUSED struct blitter_context_priv *ctx)
 {
    assert(ctx->base.saved_fb_state.nr_cbufs != ~0u);
 }
@@ -691,7 +691,7 @@ void util_blitter_restore_fb_state(struct blitter_context *blitter)
    util_unreference_framebuffer_state(&ctx->base.saved_fb_state);
 }
 
-static void blitter_check_saved_textures(struct blitter_context_priv *ctx)
+static void blitter_check_saved_textures(MAYBE_UNUSED struct blitter_context_priv *ctx)
 {
    assert(ctx->base.saved_num_sampler_states != ~0u);
    assert(ctx->base.saved_num_sampler_views != ~0u);
@@ -1488,7 +1488,7 @@ void util_blitter_default_src_texture(struct blitter_context *blitter,
    src_templ->u.tex.first_layer = 0;
    src_templ->u.tex.last_layer =
       src->target == PIPE_TEXTURE_3D ? u_minify(src->depth0, srclevel) - 1
-                                     : src->array_size - 1;
+                                     : (unsigned)(src->array_size - 1);
    src_templ->swizzle_r = PIPE_SWIZZLE_X;
    src_templ->swizzle_g = PIPE_SWIZZLE_Y;
    src_templ->swizzle_b = PIPE_SWIZZLE_Z;
@@ -1567,7 +1567,7 @@ bool util_blitter_is_copy_supported(struct blitter_context *blitter,
 }
 
 bool util_blitter_is_blit_supported(struct blitter_context *blitter,
-				    const struct pipe_blit_info *info)
+                                    const struct pipe_blit_info *info)
 {
    return is_blit_generic_supported(blitter,
                                     info->dst.resource, info->dst.format,
@@ -1976,7 +1976,7 @@ void util_blitter_blit_generic(struct blitter_context *blitter,
 
 void
 util_blitter_blit(struct blitter_context *blitter,
-		  const struct pipe_blit_info *info)
+                  const struct pipe_blit_info *info)
 {
    struct pipe_resource *dst = info->dst.resource;
    struct pipe_resource *src = info->src.resource;
@@ -2008,7 +2008,7 @@ util_blitter_blit(struct blitter_context *blitter,
 }
 
 void util_blitter_generate_mipmap(struct blitter_context *blitter,
-				  struct pipe_resource *tex,
+                                  struct pipe_resource *tex,
                                   enum pipe_format format,
                                   unsigned base_level, unsigned last_level,
                                   unsigned first_layer, unsigned last_layer)
@@ -2077,8 +2077,8 @@ void util_blitter_generate_mipmap(struct blitter_context *blitter,
       srcbox.height = u_minify(tex->height0, src_level);
 
       if (target == PIPE_TEXTURE_3D) {
-         dstbox.depth = util_max_layer(tex, dst_level) + 1;
-         srcbox.depth = util_max_layer(tex, src_level) + 1;
+         dstbox.depth = util_num_layers(tex, dst_level);
+         srcbox.depth = util_num_layers(tex, src_level);
       } else {
          dstbox.z = srcbox.z = first_layer;
          dstbox.depth = srcbox.depth = last_layer - first_layer + 1;
@@ -2256,10 +2256,10 @@ void util_blitter_clear_depth_stencil(struct blitter_context *blitter,
 
 /* draw a rectangle across a region using a custom dsa stage - for r600g */
 void util_blitter_custom_depth_stencil(struct blitter_context *blitter,
-				       struct pipe_surface *zsurf,
-				       struct pipe_surface *cbsurf,
-				       unsigned sample_mask,
-				       void *dsa_stage, float depth)
+                                       struct pipe_surface *zsurf,
+                                       struct pipe_surface *cbsurf,
+                                       unsigned sample_mask,
+                                       void *dsa_stage, float depth)
 {
    struct blitter_context_priv *ctx = (struct blitter_context_priv*)blitter;
    struct pipe_context *pipe = ctx->base.pipe;
@@ -2290,11 +2290,11 @@ void util_blitter_custom_depth_stencil(struct blitter_context *blitter,
    fb_state.height = zsurf->height;
    fb_state.nr_cbufs = 1;
    if (cbsurf) {
-	   fb_state.cbufs[0] = cbsurf;
-	   fb_state.nr_cbufs = 1;
+      fb_state.cbufs[0] = cbsurf;
+      fb_state.nr_cbufs = 1;
    } else {
-	   fb_state.cbufs[0] = NULL;
-	   fb_state.nr_cbufs = 0;
+      fb_state.cbufs[0] = NULL;
+      fb_state.nr_cbufs = 0;
    }
    fb_state.zsbuf = zsurf;
    pipe->set_framebuffer_state(pipe, &fb_state);
@@ -2452,13 +2452,13 @@ out:
 
 /* probably radeon specific */
 void util_blitter_custom_resolve_color(struct blitter_context *blitter,
-				       struct pipe_resource *dst,
-				       unsigned dst_level,
-				       unsigned dst_layer,
-				       struct pipe_resource *src,
-				       unsigned src_layer,
-				       unsigned sample_mask,
-				       void *custom_blend,
+                                       struct pipe_resource *dst,
+                                       unsigned dst_level,
+                                       unsigned dst_layer,
+                                       struct pipe_resource *src,
+                                       unsigned src_layer,
+                                       unsigned sample_mask,
+                                       void *custom_blend,
                                        enum pipe_format format)
 {
    struct blitter_context_priv *ctx = (struct blitter_context_priv*)blitter;

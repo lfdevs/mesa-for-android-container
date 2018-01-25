@@ -2550,12 +2550,14 @@ bool
 etna_link_shader(struct etna_shader_link_info *info,
                  const struct etna_shader_variant *vs, const struct etna_shader_variant *fs)
 {
+   int comp_ofs = 0;
    /* For each fragment input we need to find the associated vertex shader
     * output, which can be found by matching on semantic name and index. A
     * binary search could be used because the vs outputs are sorted by their
     * semantic index and grouped by semantic type by fill_in_vs_outputs.
     */
    assert(fs->infile.num_reg < ETNA_NUM_INPUTS);
+   info->pcoord_varying_comp_ofs = -1;
 
    for (int idx = 0; idx < fs->infile.num_reg; ++idx) {
       const struct etna_shader_inout *fsio = &fs->infile.reg[idx];
@@ -2582,14 +2584,21 @@ etna_link_shader(struct etna_shader_link_info *info,
       varying->use[3] = VARYING_COMPONENT_USE_USED;
 
 
-      /* point coord is position output from VS, so has no dedicated reg */
-      if (fsio->semantic.Name == TGSI_SEMANTIC_PCOORD)
-         continue;
+      /* point coord is an input to the PS without matching VS output,
+       * so it gets a varying slot without being assigned a VS register.
+       */
+      if (fsio->semantic.Name == TGSI_SEMANTIC_PCOORD) {
+         info->pcoord_varying_comp_ofs = comp_ofs;
+      } else {
+         if (vsio == NULL) { /* not found -- link error */
+            BUG("Semantic %d value %d not found in vertex shader outputs\n", fsio->semantic.Name, fsio->semantic.Index);
+            return true;
+         }
 
-      if (vsio == NULL)
-         return true; /* not found -- link error */
+         varying->reg = vsio->reg;
+      }
 
-      varying->reg = vsio->reg;
+      comp_ofs += varying->num_components;
    }
 
    assert(info->num_varyings == fs->infile.num_reg);

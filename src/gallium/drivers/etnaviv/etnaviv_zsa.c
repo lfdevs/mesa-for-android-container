@@ -98,7 +98,8 @@ etna_zsa_state_create(struct pipe_context *pctx,
                                                         : PIPE_FUNC_ALWAYS) |
       COND(so->depth.writemask, VIVS_PE_DEPTH_CONFIG_WRITE_ENABLE) |
       COND(early_z, VIVS_PE_DEPTH_CONFIG_EARLY_Z) |
-      COND(disable_zs, VIVS_PE_DEPTH_CONFIG_DISABLE_ZS);
+      /* this bit changed meaning with HALTI5: */
+      COND(disable_zs && ctx->specs.halti < 5, VIVS_PE_DEPTH_CONFIG_DISABLE_ZS);
    cs->PE_ALPHA_OP =
       COND(so->alpha.enabled, VIVS_PE_ALPHA_OP_ALPHA_TEST) |
       VIVS_PE_ALPHA_OP_ALPHA_FUNC(so->alpha.func) |

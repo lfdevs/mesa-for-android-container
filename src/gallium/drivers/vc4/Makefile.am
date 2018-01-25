@@ -54,4 +54,4 @@ endif
 
 libvc4_la_LDFLAGS = $(SIM_LDFLAGS)
 
-EXTRA_DIST = kernel/README
+EXTRA_DIST = kernel/README meson.build

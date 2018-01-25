@@ -35,39 +35,47 @@
 
 #include "c99_alloca.h"
 #include "os/os_process.h"
+#include "util/u_atomic.h"
 #include "util/u_debug.h"
 
 /* name of the directory in home */
 #define DD_DIR "ddebug_dumps"
 
-static inline FILE *
-dd_get_debug_file(bool verbose)
+static inline void
+dd_get_debug_filename_and_mkdir(char *buf, size_t buflen, bool verbose)
 {
    static unsigned index;
-   char proc_name[128], dir[256], name[512];
-   FILE *f;
+   char proc_name[128], dir[256];
 
    if (!os_get_process_name(proc_name, sizeof(proc_name))) {
       fprintf(stderr, "dd: can't get the process name\n");
-      return NULL;
+      strcpy(proc_name, "unknown");
    }
 
    snprintf(dir, sizeof(dir), "%s/"DD_DIR, debug_get_option("HOME", "."));
 
-   if (mkdir(dir, 0774) && errno != EEXIST) {
+   if (mkdir(dir, 0774) && errno != EEXIST)
       fprintf(stderr, "dd: can't create a directory (%i)\n", errno);
-      return NULL;
-   }
 
-   snprintf(name, sizeof(name), "%s/%s_%u_%08u", dir, proc_name, getpid(), index++);
+   snprintf(buf, buflen, "%s/%s_%u_%08u", dir, proc_name, getpid(),
+            p_atomic_inc_return(&index) - 1);
+
+   if (verbose)
+      fprintf(stderr, "dd: dumping to file %s\n", buf);
+}
+
+static inline FILE *
+dd_get_debug_file(bool verbose)
+{
+   char name[512];
+   FILE *f;
+
+   dd_get_debug_filename_and_mkdir(name, sizeof(name), verbose);
    f = fopen(name, "w");
    if (!f) {
       fprintf(stderr, "dd: can't open file %s\n", name);
       return NULL;
    }
-
-   if (verbose)
-      fprintf(stderr, "dd: dumping to file %s\n", name);
 
    return f;
 }

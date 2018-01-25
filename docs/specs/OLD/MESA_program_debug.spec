@@ -12,7 +12,7 @@ Contact
 
 Status
 
-    XXX - Not complete yet!!!
+    Obsolete.
 
 Version
 

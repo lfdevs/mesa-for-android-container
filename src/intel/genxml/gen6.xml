@@ -416,8 +416,6 @@
     <field name="Viewport Matrix Element m30" start="96" end="127" type="float"/>
     <field name="Viewport Matrix Element m31" start="128" end="159" type="float"/>
     <field name="Viewport Matrix Element m32" start="160" end="191" type="float"/>
-    <group count="2" start="192" size="32">
-    </group>
   </struct>
 
   <struct name="BLEND_STATE_ENTRY" length="2">

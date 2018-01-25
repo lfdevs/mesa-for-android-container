@@ -38,6 +38,8 @@ COMPILER_FILES = \
 	compiler/brw_dead_control_flow.cpp \
 	compiler/brw_dead_control_flow.h \
 	compiler/brw_disasm.c \
+	compiler/brw_disasm_info.c \
+	compiler/brw_disasm_info.h \
 	compiler/brw_eu.c \
 	compiler/brw_eu_compact.c \
 	compiler/brw_eu_defines.h \
@@ -46,6 +48,7 @@ COMPILER_FILES = \
 	compiler/brw_eu_util.c \
 	compiler/brw_eu_validate.c \
 	compiler/brw_fs_builder.h \
+	compiler/brw_fs_bank_conflicts.cpp \
 	compiler/brw_fs_cmod_propagation.cpp \
 	compiler/brw_fs_combine_constants.cpp \
 	compiler/brw_fs_copy_propagation.cpp \
@@ -115,9 +118,7 @@ COMPILER_FILES = \
 	compiler/brw_vue_map.c \
 	compiler/brw_wm_iz.cpp \
 	compiler/gen6_gs_visitor.cpp \
-	compiler/gen6_gs_visitor.h \
-	compiler/intel_asm_annotation.c \
-	compiler/intel_asm_annotation.h
+	compiler/gen6_gs_visitor.h
 
 COMPILER_GENERATED_FILES = \
 	compiler/brw_nir_trig_workarounds.c
@@ -208,7 +209,6 @@ VULKAN_FILES := \
 	vulkan/anv_batch_chain.c \
 	vulkan/anv_blorp.c \
 	vulkan/anv_cmd_buffer.c \
-	vulkan/anv_debug_report.c \
 	vulkan/anv_descriptor_set.c \
 	vulkan/anv_device.c \
 	vulkan/anv_dump.c \
@@ -249,7 +249,8 @@ VULKAN_GEM_STUB_FILES := \
 VULKAN_GENERATED_FILES := \
 	vulkan/anv_entrypoints.c \
 	vulkan/anv_entrypoints.h \
-	vulkan/anv_extensions.c
+	vulkan/anv_extensions.c \
+	vulkan/anv_extensions.h
 
 VULKAN_GENX_FILES := \
 	vulkan/genX_blorp_exec.c \

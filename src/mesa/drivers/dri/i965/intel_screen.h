@@ -136,6 +136,9 @@ double get_time(void);
 const int*
 intel_supported_msaa_modes(const struct intel_screen  *screen);
 
+int
+intel_device_get_revision(int fd);
+
 static inline bool
 can_do_pipelined_register_writes(const struct intel_screen *screen)
 {

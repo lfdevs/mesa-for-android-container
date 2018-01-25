@@ -194,10 +194,19 @@ static bool valid_flags(struct ir3_instruction *instr, unsigned n,
 			if (is_store(instr) && (n == 1))
 				return false;
 
+			if ((instr->opc == OPC_LDL) && (n != 1))
+				return false;
+
+			if ((instr->opc == OPC_STL) && (n != 2))
+				return false;
+
 			/* disallow CP into anything but the SSBO slot argument for
 			 * atomics:
 			 */
 			if (is_atomic(instr->opc) && (n != 0))
+				return false;
+
+			if (is_atomic(instr->opc) && !(instr->flags & IR3_INSTR_G))
 				return false;
 		}
 

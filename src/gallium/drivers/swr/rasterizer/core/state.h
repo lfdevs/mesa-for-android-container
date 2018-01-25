@@ -227,6 +227,10 @@ struct SWR_VS_CONTEXT
     simdscalari mask;           // IN: Active mask for shader
 #if USE_SIMD16_FRONTEND
     uint32_t AlternateOffset;   // IN: amount to offset for interleaving even/odd simd8 in simd16vertex output
+#if USE_SIMD16_VS
+    simd16scalari mask16;	// IN: Active mask for shader (16-wide)
+    simd16scalari VertexID16;	// IN: Vertex ID (16-wide)
+#endif
 #endif
 };
 
@@ -288,6 +292,7 @@ struct SWR_DS_CONTEXT
     uint32_t        PrimitiveID;    // IN: (SCALAR) PrimitiveID for the patch associated with the DS invocation
     uint32_t        vectorOffset;   // IN: (SCALAR) vector index offset into SIMD data.
     uint32_t        vectorStride;   // IN: (SCALAR) stride (in vectors) of output data per attribute-component
+    uint32_t        outVertexAttribOffset; // IN: (SCALAR) Offset to the attributes as processed by the next shader stage.
     ScalarPatch*    pCpIn;          // IN: (SCALAR) Control patch
     simdscalar*     pDomainU;       // IN: (SIMD) Domain Point U coords
     simdscalar*     pDomainV;       // IN: (SIMD) Domain Point V coords
@@ -819,6 +824,7 @@ struct SWR_TS_STATE
     uint32_t                numHsOutputAttribs;
     uint32_t                numDsOutputAttribs;
     uint32_t                dsAllocationSize;
+    uint32_t                dsOutVtxAttribOffset;
 
     // Offset to the start of the attributes of the input vertices, in simdvector units
     uint32_t                vertexAttribOffset;
@@ -871,9 +877,9 @@ static_assert(sizeof(SWR_BLEND_STATE) == 36, "Invalid SWR_BLEND_STATE size");
 /// FUNCTION POINTERS FOR SHADERS
 
 #if USE_SIMD16_SHADERS
-typedef void(__cdecl *PFN_FETCH_FUNC)(SWR_FETCH_CONTEXT& fetchInfo, simd16vertex& out);
+typedef void(__cdecl *PFN_FETCH_FUNC)(HANDLE hPrivateData, SWR_FETCH_CONTEXT& fetchInfo, simd16vertex& out);
 #else
-typedef void(__cdecl *PFN_FETCH_FUNC)(SWR_FETCH_CONTEXT& fetchInfo, simdvertex& out);
+typedef void(__cdecl *PFN_FETCH_FUNC)(HANDLE hPrivateData, SWR_FETCH_CONTEXT& fetchInfo, simdvertex& out);
 #endif
 typedef void(__cdecl *PFN_VERTEX_FUNC)(HANDLE hPrivateData, SWR_VS_CONTEXT* pVsContext);
 typedef void(__cdecl *PFN_HS_FUNC)(HANDLE hPrivateData, SWR_HS_CONTEXT* pHsContext);

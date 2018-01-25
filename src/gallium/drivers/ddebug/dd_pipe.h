@@ -33,11 +33,14 @@
 #include "pipe/p_screen.h"
 #include "dd_util.h"
 #include "os/os_thread.h"
+#include "util/list.h"
 #include "util/u_log.h"
+#include "util/u_queue.h"
 
-enum dd_mode {
-   DD_DETECT_HANGS,
-   DD_DETECT_HANGS_PIPELINED,
+struct dd_context;
+
+enum dd_dump_mode {
+   DD_DUMP_ONLY_HANGS,
    DD_DUMP_ALL_CALLS,
    DD_DUMP_APITRACE_CALL,
 };
@@ -47,8 +50,9 @@ struct dd_screen
    struct pipe_screen base;
    struct pipe_screen *screen;
    unsigned timeout_ms;
-   enum dd_mode mode;
-   bool no_flush;
+   enum dd_dump_mode dump_mode;
+   bool flush_always;
+   bool transfers;
    bool verbose;
    unsigned skip_count;
    unsigned apitrace_dump_call;
@@ -68,6 +72,11 @@ enum call_type
    CALL_CLEAR_DEPTH_STENCIL,
    CALL_GENERATE_MIPMAP,
    CALL_GET_QUERY_RESULT_RESOURCE,
+   CALL_TRANSFER_MAP,
+   CALL_TRANSFER_FLUSH_REGION,
+   CALL_TRANSFER_UNMAP,
+   CALL_BUFFER_SUBDATA,
+   CALL_TEXTURE_SUBDATA,
 };
 
 struct call_resource_copy_region
@@ -121,6 +130,41 @@ struct call_get_query_result_resource {
    unsigned offset;
 };
 
+struct call_transfer_map {
+   struct pipe_transfer *transfer_ptr;
+   struct pipe_transfer transfer;
+   void *ptr;
+};
+
+struct call_transfer_flush_region {
+   struct pipe_transfer *transfer_ptr;
+   struct pipe_transfer transfer;
+   struct pipe_box box;
+};
+
+struct call_transfer_unmap {
+   struct pipe_transfer *transfer_ptr;
+   struct pipe_transfer transfer;
+};
+
+struct call_buffer_subdata {
+   struct pipe_resource *resource;
+   unsigned usage;
+   unsigned offset;
+   unsigned size;
+   const void *data;
+};
+
+struct call_texture_subdata {
+   struct pipe_resource *resource;
+   unsigned level;
+   unsigned usage;
+   struct pipe_box box;
+   const void *data;
+   unsigned stride;
+   unsigned layer_stride;
+};
+
 struct dd_call
 {
    enum call_type type;
@@ -135,6 +179,11 @@ struct dd_call
       struct call_clear_buffer clear_buffer;
       struct call_generate_mipmap generate_mipmap;
       struct call_get_query_result_resource get_query_result_resource;
+      struct call_transfer_map transfer_map;
+      struct call_transfer_flush_region transfer_flush_region;
+      struct call_transfer_unmap transfer_unmap;
+      struct call_buffer_subdata buffer_subdata;
+      struct call_texture_subdata texture_subdata;
    } info;
 };
 
@@ -218,13 +267,21 @@ struct dd_draw_state_copy
 };
 
 struct dd_draw_record {
-   struct dd_draw_record *next;
+   struct list_head list;
+   struct dd_context *dctx;
 
-   int64_t timestamp;
-   uint32_t sequence_no;
+   int64_t time_before;
+   int64_t time_after;
+   unsigned draw_call;
+
+   struct pipe_fence_handle *prev_bottom_of_pipe;
+   struct pipe_fence_handle *top_of_pipe;
+   struct pipe_fence_handle *bottom_of_pipe;
 
    struct dd_call call;
    struct dd_draw_state_copy draw_state;
+
+   struct util_queue_fence driver_finished;
    struct u_log_page *log_page;
 };
 
@@ -252,17 +309,16 @@ struct dd_context
     *
     * An independent, separate thread loops over the list of records and checks
     * their fences. Records with signalled fences are freed. On fence timeout,
-    * the thread dumps the record of the oldest unsignalled fence.
+    * the thread dumps the records of in-flight draws.
     */
    thrd_t thread;
    mtx_t mutex;
-   int kill_thread;
-   struct pipe_resource *fence;
-   struct pipe_transfer *fence_transfer;
-   uint32_t *mapped_fence;
-   uint32_t sequence_no;
-   struct dd_draw_record *records;
-   int max_log_buffer_size;
+   cnd_t cond;
+   struct dd_draw_record *record_pending; /* currently inside the driver */
+   struct list_head records; /* oldest record first */
+   unsigned num_records;
+   bool kill_thread;
+   bool api_stalled;
 };
 
 
@@ -271,8 +327,11 @@ dd_context_create(struct dd_screen *dscreen, struct pipe_context *pipe);
 
 void
 dd_init_draw_functions(struct dd_context *dctx);
+
+void
+dd_thread_join(struct dd_context *dctx);
 int
-dd_thread_pipelined_hang_detect(void *input);
+dd_thread_main(void *input);
 
 FILE *
 dd_get_file_stream(struct dd_screen *dscreen, unsigned apitrace_call_number);

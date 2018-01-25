@@ -452,11 +452,8 @@ R100_CONTEXT(struct gl_context *ctx)
 extern GLboolean r100CreateContext( gl_api api,
 				    const struct gl_config *glVisual,
 				    __DRIcontext *driContextPriv,
-				    unsigned major_version,
-				    unsigned minor_version,
-				    uint32_t flags,
-                                    bool notify_reset,
-                                    unsigned priority,
+				    const struct __DriverContextConfig *
+				       ctx_config,
 				    unsigned *error,
 				    void *sharedContextPrivate);
 

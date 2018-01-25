@@ -19,9 +19,6 @@
  * DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
  * USE OR OTHER DEALINGS IN THE SOFTWARE.
- *
- * Authors:
- *      Jerome Glisse
  */
 #ifndef SI_PIPE_H
 #define SI_PIPE_H
@@ -37,6 +34,10 @@
 #define SI_BIG_ENDIAN 0
 #endif
 
+#define ATI_VENDOR_ID 0x1002
+
+#define SI_NOT_QUERY		0xffffffff
+
 /* The base vertex and primitive restart can be any number, but we must pick
  * one which will mean "unknown" for the purpose of state tracking and
  * the number shouldn't be a commonly-used one. */
@@ -47,30 +48,34 @@
 /* Alignment for optimal CP DMA performance. */
 #define SI_CPDMA_ALIGNMENT	32
 
+/* Pipeline & streamout query controls. */
+#define SI_CONTEXT_START_PIPELINE_STATS	(1 << 0)
+#define SI_CONTEXT_STOP_PIPELINE_STATS	(1 << 1)
+#define SI_CONTEXT_FLUSH_FOR_RENDER_COND (1 << 2)
 /* Instruction cache. */
-#define SI_CONTEXT_INV_ICACHE		(R600_CONTEXT_PRIVATE_FLAG << 0)
+#define SI_CONTEXT_INV_ICACHE		(1 << 3)
 /* SMEM L1, other names: KCACHE, constant cache, DCACHE, data cache */
-#define SI_CONTEXT_INV_SMEM_L1		(R600_CONTEXT_PRIVATE_FLAG << 1)
+#define SI_CONTEXT_INV_SMEM_L1		(1 << 4)
 /* VMEM L1 can optionally be bypassed (GLC=1). Other names: TC L1 */
-#define SI_CONTEXT_INV_VMEM_L1		(R600_CONTEXT_PRIVATE_FLAG << 2)
+#define SI_CONTEXT_INV_VMEM_L1		(1 << 5)
 /* Used by everything except CB/DB, can be bypassed (SLC=1). Other names: TC L2 */
-#define SI_CONTEXT_INV_GLOBAL_L2	(R600_CONTEXT_PRIVATE_FLAG << 3)
+#define SI_CONTEXT_INV_GLOBAL_L2	(1 << 6)
 /* Write dirty L2 lines back to memory (shader and CP DMA stores), but don't
  * invalidate L2. SI-CIK can't do it, so they will do complete invalidation. */
-#define SI_CONTEXT_WRITEBACK_GLOBAL_L2	(R600_CONTEXT_PRIVATE_FLAG << 4)
+#define SI_CONTEXT_WRITEBACK_GLOBAL_L2	(1 << 7)
 /* Writeback & invalidate the L2 metadata cache. It can only be coupled with
  * a CB or DB flush. */
-#define SI_CONTEXT_INV_L2_METADATA	(R600_CONTEXT_PRIVATE_FLAG << 5)
+#define SI_CONTEXT_INV_L2_METADATA	(1 << 8)
 /* Framebuffer caches. */
-#define SI_CONTEXT_FLUSH_AND_INV_DB	(R600_CONTEXT_PRIVATE_FLAG << 6)
-#define SI_CONTEXT_FLUSH_AND_INV_DB_META (R600_CONTEXT_PRIVATE_FLAG << 7)
-#define SI_CONTEXT_FLUSH_AND_INV_CB	(R600_CONTEXT_PRIVATE_FLAG << 8)
+#define SI_CONTEXT_FLUSH_AND_INV_DB	(1 << 9)
+#define SI_CONTEXT_FLUSH_AND_INV_DB_META (1 << 10)
+#define SI_CONTEXT_FLUSH_AND_INV_CB	(1 << 11)
 /* Engine synchronization. */
-#define SI_CONTEXT_VS_PARTIAL_FLUSH	(R600_CONTEXT_PRIVATE_FLAG << 9)
-#define SI_CONTEXT_PS_PARTIAL_FLUSH	(R600_CONTEXT_PRIVATE_FLAG << 10)
-#define SI_CONTEXT_CS_PARTIAL_FLUSH	(R600_CONTEXT_PRIVATE_FLAG << 11)
-#define SI_CONTEXT_VGT_FLUSH		(R600_CONTEXT_PRIVATE_FLAG << 12)
-#define SI_CONTEXT_VGT_STREAMOUT_SYNC	(R600_CONTEXT_PRIVATE_FLAG << 13)
+#define SI_CONTEXT_VS_PARTIAL_FLUSH	(1 << 12)
+#define SI_CONTEXT_PS_PARTIAL_FLUSH	(1 << 13)
+#define SI_CONTEXT_CS_PARTIAL_FLUSH	(1 << 14)
+#define SI_CONTEXT_VGT_FLUSH		(1 << 15)
+#define SI_CONTEXT_VGT_STREAMOUT_SYNC	(1 << 16)
 
 #define SI_PREFETCH_VBO_DESCRIPTORS	(1 << 0)
 #define SI_PREFETCH_LS			(1 << 1)
@@ -89,7 +94,14 @@ struct hash_table;
 struct u_suballocator;
 
 struct si_screen {
-	struct r600_common_screen	b;
+	struct pipe_screen		b;
+	struct radeon_winsys		*ws;
+	struct disk_cache		*disk_shader_cache;
+
+	struct radeon_info		info;
+	uint64_t			debug_flags;
+	char				renderer_string[100];
+
 	unsigned			gs_table_depth;
 	unsigned			tess_offchip_block_dw_size;
 	bool				has_clear_state;
@@ -100,6 +112,7 @@ struct si_screen {
 	bool				commutative_blend_add;
 	bool				clear_db_cache_before_clear;
 	bool				has_msaa_sample_loc_bug;
+	bool				has_ls_vgpr_init_bug;
 	bool				dpbb_allowed;
 	bool				dfsm_allowed;
 	bool				llvm_has_working_vgpr_indexing;
@@ -107,6 +120,66 @@ struct si_screen {
 	/* Whether shaders are monolithic (1-part) or separate (3-part). */
 	bool				use_monolithic_shaders;
 	bool				record_llvm_ir;
+	bool				has_rbplus;     /* if RB+ registers exist */
+	bool				rbplus_allowed; /* if RB+ is allowed */
+	bool				dcc_msaa_allowed;
+	bool				cpdma_prefetch_writes_memory;
+
+	struct slab_parent_pool		pool_transfers;
+
+	/* Texture filter settings. */
+	int				force_aniso; /* -1 = disabled */
+
+	/* Auxiliary context. Mainly used to initialize resources.
+	 * It must be locked prior to using and flushed before unlocking. */
+	struct pipe_context		*aux_context;
+	mtx_t				aux_context_lock;
+
+	/* This must be in the screen, because UE4 uses one context for
+	 * compilation and another one for rendering.
+	 */
+	unsigned			num_compilations;
+	/* Along with ST_DEBUG=precompile, this should show if applications
+	 * are loading shaders on demand. This is a monotonic counter.
+	 */
+	unsigned			num_shaders_created;
+	unsigned			num_shader_cache_hits;
+
+	/* GPU load thread. */
+	mtx_t				gpu_load_mutex;
+	thrd_t				gpu_load_thread;
+	union r600_mmio_counters	mmio_counters;
+	volatile unsigned		gpu_load_stop_thread; /* bool */
+
+	/* Performance counters. */
+	struct r600_perfcounters	*perfcounters;
+
+	/* If pipe_screen wants to recompute and re-emit the framebuffer,
+	 * sampler, and image states of all contexts, it should atomically
+	 * increment this.
+	 *
+	 * Each context will compare this with its own last known value of
+	 * the counter before drawing and re-emit the states accordingly.
+	 */
+	unsigned			dirty_tex_counter;
+
+	/* Atomically increment this counter when an existing texture's
+	 * metadata is enabled or disabled in a way that requires changing
+	 * contexts' compressed texture binding masks.
+	 */
+	unsigned			compressed_colortex_counter;
+
+	struct {
+		/* Context flags to set so that all writes from earlier jobs
+		 * in the CP are seen by L2 clients.
+		 */
+		unsigned cp_to_L2;
+
+		/* Context flags to set so that all writes from earlier jobs
+		 * that end in L2 are seen by CP.
+		 */
+		unsigned L2_to_cp;
+	} barrier_flags;
 
 	mtx_t			shader_parts_mutex;
 	struct si_shader_part		*vs_prologs;
@@ -347,6 +420,7 @@ struct si_saved_cs {
 
 	unsigned		gfx_last_dw;
 	bool			flushed;
+	int64_t			time_flush;
 };
 
 struct si_context {
@@ -363,6 +437,7 @@ struct si_context {
 	void				*vs_blit_color_layered;
 	void				*vs_blit_texcoord;
 	struct si_screen		*screen;
+	struct pipe_debug_callback	debug;
 	LLVMTargetMachineRef		tm; /* only non-threaded compilation */
 	struct si_shader_ctx_state	fixed_func_tcs_shader;
 	struct r600_resource		*wait_mem_scratch;
@@ -558,6 +633,16 @@ struct si_context {
 void cik_init_sdma_functions(struct si_context *sctx);
 
 /* si_blit.c */
+enum si_blitter_op /* bitmask */
+{
+	SI_SAVE_TEXTURES      = 1,
+	SI_SAVE_FRAMEBUFFER   = 2,
+	SI_SAVE_FRAGMENT_STATE = 4,
+	SI_DISABLE_RENDER_COND = 8,
+};
+
+void si_blitter_begin(struct pipe_context *ctx, enum si_blitter_op op);
+void si_blitter_end(struct pipe_context *ctx);
 void si_init_blit_functions(struct si_context *sctx);
 void si_decompress_textures(struct si_context *sctx, unsigned shader_mask);
 void si_resource_copy_region(struct pipe_context *ctx,
@@ -567,6 +652,12 @@ void si_resource_copy_region(struct pipe_context *ctx,
 			     struct pipe_resource *src,
 			     unsigned src_level,
 			     const struct pipe_box *src_box);
+
+/* si_clear.c */
+void vi_dcc_clear_level(struct si_context *sctx,
+			struct r600_texture *rtex,
+			unsigned level, unsigned clear_value);
+void si_init_clear_functions(struct si_context *sctx);
 
 /* si_cp_dma.c */
 #define SI_CPDMA_SKIP_CHECK_CS_SPACE	(1 << 0) /* don't call need_cs_space */
@@ -580,6 +671,15 @@ void si_resource_copy_region(struct pipe_context *ctx,
 			   SI_CPDMA_SKIP_GFX_SYNC | \
 			   SI_CPDMA_SKIP_BO_LIST_UPDATE)
 
+enum r600_coherency {
+	R600_COHERENCY_NONE, /* no cache flushes needed */
+	R600_COHERENCY_SHADER,
+	R600_COHERENCY_CB_META,
+};
+
+void si_clear_buffer(struct pipe_context *ctx, struct pipe_resource *dst,
+		     uint64_t offset, uint64_t size, unsigned value,
+		     enum r600_coherency coher);
 void si_copy_buffer(struct si_context *sctx,
 		    struct pipe_resource *dst, struct pipe_resource *src,
 		    uint64_t dst_offset, uint64_t src_offset, unsigned size,
@@ -602,6 +702,16 @@ bool si_replace_shader(unsigned num, struct ac_shader_binary *binary);
 /* si_dma.c */
 void si_init_dma_functions(struct si_context *sctx);
 
+/* si_fence.c */
+void si_init_fence_functions(struct si_context *ctx);
+void si_init_screen_fence_functions(struct si_screen *screen);
+struct pipe_fence_handle *si_create_fence(struct pipe_context *ctx,
+					  struct tc_unflushed_batch_token *tc_token);
+
+/* si_get.c */
+const char *si_get_family_name(const struct si_screen *sscreen);
+void si_init_screen_get_functions(struct si_screen *sscreen);
+
 /* si_hw_context.c */
 void si_destroy_saved_cs(struct si_saved_cs *scs);
 void si_context_gfx_flush(void *context, unsigned flags,
@@ -614,6 +724,9 @@ void si_init_compute_functions(struct si_context *sctx);
 
 /* si_perfcounters.c */
 void si_init_perfcounters(struct si_screen *screen);
+
+/* si_test_dma.c */
+void si_test_dma(struct si_screen *sscreen);
 
 /* si_uvd.c */
 struct pipe_video_codec *si_uvd_create_decoder(struct pipe_context *context,
@@ -630,6 +743,19 @@ void si_init_viewport_functions(struct si_context *ctx);
 /*
  * common helpers
  */
+
+static inline void
+si_context_add_resource_size(struct pipe_context *ctx, struct pipe_resource *r)
+{
+	struct r600_common_context *rctx = (struct r600_common_context *)ctx;
+	struct r600_resource *res = (struct r600_resource *)r;
+
+	if (res) {
+		/* Add memory usage for need_gfx_cs_space */
+		rctx->vram += res->vram_usage;
+		rctx->gtt += res->gart_usage;
+	}
+}
 
 static inline void
 si_invalidate_draw_sh_constants(struct si_context *sctx)
@@ -691,6 +817,19 @@ static inline struct si_shader* si_get_vs_state(struct si_context *sctx)
 	return vs->current ? vs->current : NULL;
 }
 
+static inline bool si_can_dump_shader(struct si_screen *sscreen,
+				      unsigned processor)
+{
+	return sscreen->debug_flags & (1 << processor);
+}
+
+static inline bool si_extra_shader_checks(struct si_screen *sscreen,
+					  unsigned processor)
+{
+	return (sscreen->debug_flags & DBG(CHECK_IR)) ||
+	       si_can_dump_shader(sscreen, processor);
+}
+
 static inline bool si_get_strmout_en(struct si_context *sctx)
 {
 	return sctx->streamout.streamout_enabled ||
@@ -708,7 +847,7 @@ si_optimal_tcc_alignment(struct si_context *sctx, unsigned upload_size)
 	 * If the upload size is greater, align it to the cache line size.
 	 */
 	alignment = util_next_power_of_two(upload_size);
-	tcc_cache_line_size = sctx->screen->b.info.tcc_cache_line_size;
+	tcc_cache_line_size = sctx->screen->info.tcc_cache_line_size;
 	return MIN2(alignment, tcc_cache_line_size);
 }
 
@@ -763,6 +902,26 @@ si_make_DB_shader_coherent(struct si_context *sctx, unsigned num_samples,
 		/* SI-CI-VI */
 		sctx->b.flags |= SI_CONTEXT_INV_GLOBAL_L2;
 	}
+}
+
+static inline bool
+si_can_sample_zs(struct r600_texture *tex, bool stencil_sampler)
+{
+	return (stencil_sampler && tex->can_sample_s) ||
+	       (!stencil_sampler && tex->can_sample_z);
+}
+
+static inline bool
+si_htile_enabled(struct r600_texture *tex, unsigned level)
+{
+	return tex->htile_offset && level == 0;
+}
+
+static inline bool
+vi_tc_compat_htile_enabled(struct r600_texture *tex, unsigned level)
+{
+	assert(!tex->tc_compatible_htile || tex->htile_offset);
+	return tex->tc_compatible_htile && level == 0;
 }
 
 #endif

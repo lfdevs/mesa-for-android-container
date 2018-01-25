@@ -28,6 +28,10 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /**
  * Intel hardware information and quirks
  */
@@ -197,5 +201,9 @@ struct gen_device_info
 
 bool gen_get_device_info(int devid, struct gen_device_info *devinfo);
 const char *gen_get_device_name(int devid);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* GEN_DEVICE_INFO_H */

@@ -149,9 +149,12 @@ int bc_parser::parse_decls() {
 		}
 	}
 
-	if (sh->target == TARGET_VS || sh->target == TARGET_ES || sh->target == TARGET_HS)
+	if (sh->target == TARGET_VS || sh->target == TARGET_ES || sh->target == TARGET_HS || sh->target == TARGET_LS)
 		sh->add_input(0, 1, 0x0F);
 	else if (sh->target == TARGET_GS) {
+		sh->add_input(0, 1, 0x0F);
+		sh->add_input(1, 1, 0x0F);
+	} else if (sh->target == TARGET_COMPUTE) {
 		sh->add_input(0, 1, 0x0F);
 		sh->add_input(1, 1, 0x0F);
 	}
@@ -381,7 +384,40 @@ int bc_parser::prepare_alu_group(cf_node* cf, alu_group_node *g) {
 
 		unsigned flags = n->bc.op_ptr->flags;
 
-		if (flags & AF_PRED) {
+		if (flags & AF_LDS) {
+			bool need_rw = false, need_oqa = false, need_oqb = false;
+			int ndst = 0, ncount = 0;
+
+			/* all non-read operations have side effects */
+			if (n->bc.op != LDS_OP2_LDS_READ2_RET &&
+			    n->bc.op != LDS_OP1_LDS_READ_REL_RET &&
+			    n->bc.op != LDS_OP1_LDS_READ_RET) {
+				n->flags |= NF_DONT_KILL;
+				ndst++;
+				need_rw = true;
+			}
+
+			if (n->bc.op >= LDS_OP2_LDS_ADD_RET && n->bc.op <= LDS_OP1_LDS_USHORT_READ_RET) {
+				need_oqa = true;
+				ndst++;
+			}
+
+			if (n->bc.op == LDS_OP2_LDS_READ2_RET || n->bc.op == LDS_OP1_LDS_READ_REL_RET) {
+				need_oqb = true;
+				ndst++;
+			}
+
+			n->dst.resize(ndst);
+			if (need_oqa)
+				n->dst[ncount++] = sh->get_special_value(SV_LDS_OQA);
+			if (need_oqb)
+				n->dst[ncount++] = sh->get_special_value(SV_LDS_OQB);
+			if (need_rw)
+				n->dst[ncount++] = sh->get_special_value(SV_LDS_RW);
+
+			n->flags |= NF_DONT_MOVE | NF_DONT_HOIST;
+
+		} else if (flags & AF_PRED) {
 			n->dst.resize(3);
 			if (n->bc.update_pred)
 				n->dst[1] = sh->get_special_value(SV_ALU_PRED);
@@ -414,7 +450,7 @@ int bc_parser::prepare_alu_group(cf_node* cf, alu_group_node *g) {
 
 			n->flags |= NF_DONT_HOIST;
 
-		} else if (n->bc.op_ptr->src_count == 3 || n->bc.write_mask) {
+		} else if ((n->bc.op_ptr->src_count == 3 || n->bc.write_mask) && !(flags & AF_LDS)) {
 			assert(!n->bc.dst_rel || n->bc.index_mode == INDEX_AR_X);
 
 			value *v = sh->get_gpr_value(false, n->bc.dst_gpr, n->bc.dst_chan,
@@ -484,6 +520,21 @@ int bc_parser::prepare_alu_group(cf_node* cf, alu_group_node *g) {
 				// param index as equal instructions and leave only one of them
 				n->src[s] = sh->get_special_ro_value(sel_chan(src.sel,
 				                                              n->bc.slot));
+			} else if (ctx.is_lds_oq(src.sel)) {
+				switch (src.sel) {
+				case ALU_SRC_LDS_OQ_A:
+				case ALU_SRC_LDS_OQ_B:
+					assert(!"Unsupported LDS queue access in SB");
+					break;
+				case ALU_SRC_LDS_OQ_A_POP:
+					n->src[s] = sh->get_special_value(SV_LDS_OQA);
+					break;
+				case ALU_SRC_LDS_OQ_B_POP:
+					n->src[s] = sh->get_special_value(SV_LDS_OQB);
+					break;
+				}
+				n->flags |= NF_DONT_HOIST | NF_DONT_MOVE;
+
 			} else {
 				switch (src.sel) {
 				case ALU_SRC_0:
@@ -566,7 +617,10 @@ int bc_parser::decode_fetch_clause(cf_node* cf) {
 	int r;
 	unsigned i = cf->bc.addr << 1, cnt = cf->bc.count + 1;
 
-	cf->subtype = NST_TEX_CLAUSE;
+	if (cf->bc.op_ptr->flags && FF_GDS)
+		cf->subtype = NST_GDS_CLAUSE;
+	else
+		cf->subtype = NST_TEX_CLAUSE;
 
 	while (cnt--) {
 		fetch_node *n = sh->create_fetch();
@@ -592,10 +646,14 @@ int bc_parser::prepare_fetch_clause(cf_node *cf) {
 		unsigned flags = n->bc.op_ptr->flags;
 
 		unsigned vtx = flags & FF_VTX;
-		unsigned num_src = vtx ? ctx.vtx_src_num : 4;
+		unsigned gds = flags & FF_GDS;
+		unsigned num_src = gds ? 2 : vtx ? ctx.vtx_src_num : 4;
 
 		n->dst.resize(4);
 
+		if (gds) {
+			n->flags |= NF_DONT_HOIST | NF_DONT_MOVE | NF_DONT_KILL;
+		}
 		if (flags & (FF_SETGRAD | FF_USEGRAD | FF_GETGRAD)) {
 			sh->uses_gradients = true;
 		}

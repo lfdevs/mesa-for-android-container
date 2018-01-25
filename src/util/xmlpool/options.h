@@ -881,6 +881,17 @@ DRI_CONF_OPT_BEGIN_B(glsl_zero_init, def) \
         DRI_CONF_DESC(sv,"Force uninitialized variables to default to zero") \
 DRI_CONF_OPT_END
 
+#define DRI_CONF_ALLOW_RGB10_CONFIGS(def) \
+DRI_CONF_OPT_BEGIN_B(allow_rgb10_configs, def) \
+DRI_CONF_DESC(en,"Allow exposure of visuals and fbconfigs with rgb10a2 formats") \
+DRI_CONF_DESC(ca,"Allow exposure of visuals and fbconfigs with rgb10a2 formats") \
+DRI_CONF_DESC(de,"Allow exposure of visuals and fbconfigs with rgb10a2 formats") \
+DRI_CONF_DESC(es,"Allow exposure of visuals and fbconfigs with rgb10a2 formats") \
+DRI_CONF_DESC(nl,"Allow exposure of visuals and fbconfigs with rgb10a2 formats") \
+DRI_CONF_DESC(fr,"Allow exposure of visuals and fbconfigs with rgb10a2 formats") \
+DRI_CONF_DESC(sv,"Allow exposure of visuals and fbconfigs with rgb10a2 formats") \
+DRI_CONF_OPT_END
+
 /**
  * \brief Initialization configuration options
  */

@@ -336,6 +336,10 @@ void brw_destroy_hw_context(struct brw_bufmgr *bufmgr, uint32_t ctx_id);
 int brw_bo_gem_export_to_prime(struct brw_bo *bo, int *prime_fd);
 struct brw_bo *brw_bo_gem_create_from_prime(struct brw_bufmgr *bufmgr,
                                             int prime_fd);
+struct brw_bo *brw_bo_gem_create_from_prime_tiled(struct brw_bufmgr *bufmgr,
+                                                  int prime_fd,
+                                                  uint32_t tiling_mode,
+                                                  uint32_t stride);
 
 uint32_t brw_bo_export_gem_handle(struct brw_bo *bo);
 

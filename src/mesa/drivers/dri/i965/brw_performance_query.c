@@ -81,6 +81,8 @@
 #include "brw_oa_kblgt2.h"
 #include "brw_oa_kblgt3.h"
 #include "brw_oa_glk.h"
+#include "brw_oa_cflgt2.h"
+#include "brw_oa_cflgt3.h"
 #include "intel_batchbuffer.h"
 
 #define FILE_DEBUG_FLAG DEBUG_PERFMON
@@ -1730,6 +1732,18 @@ read_file_uint64(const char *file, uint64_t *val)
 }
 
 static void
+register_oa_config(struct brw_context *brw,
+                   const struct brw_perf_query_info *query,
+                   uint64_t config_id)
+{
+   struct brw_perf_query_info *registred_query = append_query_info(brw);
+   *registred_query = *query;
+   registred_query->oa_metrics_set_id = config_id;
+   DBG("metric set registred: id = %" PRIu64", guid = %s\n",
+       registred_query->oa_metrics_set_id, query->guid);
+}
+
+static void
 enumerate_sysfs_metrics(struct brw_context *brw, const char *sysfs_dev_dir)
 {
    char buf[256];
@@ -1761,7 +1775,6 @@ enumerate_sysfs_metrics(struct brw_context *brw, const char *sysfs_dev_dir)
       entry = _mesa_hash_table_search(brw->perfquery.oa_metrics_table,
                                       metric_entry->d_name);
       if (entry) {
-         struct brw_perf_query_info *query;
          uint64_t id;
 
          len = snprintf(buf, sizeof(buf), "%s/metrics/%s/id",
@@ -1776,12 +1789,7 @@ enumerate_sysfs_metrics(struct brw_context *brw, const char *sysfs_dev_dir)
             continue;
          }
 
-         query = append_query_info(brw);
-         *query = *(struct brw_perf_query_info *)entry->data;
-         query->oa_metrics_set_id = id;
-
-         DBG("metric set known by mesa: id = %" PRIu64"\n",
-             query->oa_metrics_set_id);
+         register_oa_config(brw, (const struct brw_perf_query_info *)entry->data, id);
       } else
          DBG("metric set not known by mesa (skipping)\n");
    }
@@ -1808,10 +1816,95 @@ read_sysfs_drm_device_file_uint64(struct brw_context *brw,
 }
 
 static bool
+kernel_has_dynamic_config_support(struct brw_context *brw,
+                                  const char *sysfs_dev_dir)
+{
+   __DRIscreen *screen = brw->screen->driScrnPriv;
+   struct hash_entry *entry;
+
+   hash_table_foreach(brw->perfquery.oa_metrics_table, entry) {
+      struct brw_perf_query_info *query = entry->data;
+      char config_path[256];
+      uint64_t config_id;
+
+      snprintf(config_path, sizeof(config_path),
+               "%s/metrics/%s/id", sysfs_dev_dir, query->guid);
+
+      /* Look for the test config, which we know we can't replace. */
+      if (read_file_uint64(config_path, &config_id) && config_id == 1) {
+         uint32_t mux_regs[] = { 0x9888 /* NOA_WRITE */, 0x0 };
+         struct drm_i915_perf_oa_config config;
+
+         memset(&config, 0, sizeof(config));
+
+         memcpy(config.uuid, query->guid, sizeof(config.uuid));
+
+         config.n_mux_regs = 1;
+         config.mux_regs_ptr = (uintptr_t) mux_regs;
+
+         if (ioctl(screen->fd, DRM_IOCTL_I915_PERF_REMOVE_CONFIG, &config_id) < 0 &&
+             errno == ENOENT)
+            return true;
+
+         break;
+      }
+   }
+
+   return false;
+}
+
+static void
+init_oa_configs(struct brw_context *brw, const char *sysfs_dev_dir)
+{
+   __DRIscreen *screen = brw->screen->driScrnPriv;
+   struct hash_entry *entry;
+
+   hash_table_foreach(brw->perfquery.oa_metrics_table, entry) {
+      const struct brw_perf_query_info *query = entry->data;
+      struct drm_i915_perf_oa_config config;
+      char config_path[256];
+      uint64_t config_id;
+      int ret;
+
+      snprintf(config_path, sizeof(config_path),
+               "%s/metrics/%s/id", sysfs_dev_dir, query->guid);
+
+      /* Don't recreate already loaded configs. */
+      if (read_file_uint64(config_path, &config_id)) {
+         register_oa_config(brw, query, config_id);
+         continue;
+      }
+
+      memset(&config, 0, sizeof(config));
+
+      memcpy(config.uuid, query->guid, sizeof(config.uuid));
+
+      config.n_mux_regs = query->n_mux_regs;
+      config.mux_regs_ptr = (uintptr_t) query->mux_regs;
+
+      config.n_boolean_regs = query->n_b_counter_regs;
+      config.boolean_regs_ptr = (uintptr_t) query->b_counter_regs;
+
+      config.n_flex_regs = query->n_flex_regs;
+      config.flex_regs_ptr = (uintptr_t) query->flex_regs;
+
+      ret = ioctl(screen->fd, DRM_IOCTL_I915_PERF_ADD_CONFIG, &config);
+      if (ret < 0) {
+         DBG("Failed to load \"%s\" (%s) metrics set in kernel: %s\n",
+             query->name, query->guid, strerror(errno));
+         continue;
+      }
+
+      register_oa_config(brw, query, config_id);
+   }
+}
+
+static bool
 init_oa_sys_vars(struct brw_context *brw, const char *sysfs_dev_dir)
 {
    const struct gen_device_info *devinfo = &brw->screen->devinfo;
    uint64_t min_freq_mhz = 0, max_freq_mhz = 0;
+   __DRIscreen *screen = brw->screen->driScrnPriv;
 
    if (!read_sysfs_drm_device_file_uint64(brw, sysfs_dev_dir,
                                           "gt_min_freq_mhz",
@@ -1826,6 +1919,8 @@ init_oa_sys_vars(struct brw_context *brw, const char *sysfs_dev_dir)
    brw->perfquery.sys_vars.gt_min_freq = min_freq_mhz * 1000000;
    brw->perfquery.sys_vars.gt_max_freq = max_freq_mhz * 1000000;
    brw->perfquery.sys_vars.timestamp_frequency = devinfo->timestamp_frequency;
+
+   brw->perfquery.sys_vars.revision = intel_device_get_revision(screen->fd);
    brw->perfquery.sys_vars.n_eu_slices = devinfo->num_slices;
    /* Assuming uniform distribution of subslices per slices. */
    brw->perfquery.sys_vars.n_eu_sub_slices = devinfo->num_subslices[0];
@@ -1848,7 +1943,6 @@ init_oa_sys_vars(struct brw_context *brw, const char *sysfs_dev_dir)
       } else
          unreachable("not reached");
    } else {
-      __DRIscreen *screen = brw->screen->driScrnPriv;
       drm_i915_getparam_t gp;
       int ret;
       int slice_mask = 0;
@@ -1998,6 +2092,13 @@ get_register_queries_function(const struct gen_device_info *devinfo)
    }
    if (devinfo->is_geminilake)
       return brw_oa_register_queries_glk;
+   if (devinfo->is_coffeelake) {
+      if (devinfo->gt == 2)
+         return brw_oa_register_queries_cflgt2;
+      if (devinfo->gt == 3)
+         return brw_oa_register_queries_cflgt3;
+   }
+
    return NULL;
 }
 
@@ -2052,7 +2153,11 @@ brw_init_perf_query_info(struct gl_context *ctx)
        */
       oa_register(brw);
 
-      enumerate_sysfs_metrics(brw, sysfs_dev_dir);
+      if (likely((INTEL_DEBUG & DEBUG_NO_OACONFIG) == 0) &&
+          kernel_has_dynamic_config_support(brw, sysfs_dev_dir))
+         init_oa_configs(brw, sysfs_dev_dir);
+      else
+         enumerate_sysfs_metrics(brw, sysfs_dev_dir);
    }
 
    brw->perfquery.unaccumulated =

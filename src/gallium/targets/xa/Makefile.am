@@ -44,7 +44,7 @@ libxatracker_la_LIBADD = \
 
 libxatracker_la_LDFLAGS = \
 	-no-undefined \
-	-version-number $(XA_MAJOR):$(XA_MINOR):$(XA_TINY) \
+	-version-number $(XA_MAJOR):$(XA_MINOR):$(XA_PATCH) \
 	$(GC_SECTIONS) \
 	$(LD_NO_UNDEFINED)
 
@@ -54,7 +54,7 @@ libxatracker_la_LDFLAGS += \
 endif
 
 EXTRA_libxatracker_la_DEPENDENCIES = xa.sym
-EXTRA_DIST = xa.sym
+EXTRA_DIST = xa.sym meson.build
 
 if HAVE_GALLIUM_STATIC_TARGETS
 

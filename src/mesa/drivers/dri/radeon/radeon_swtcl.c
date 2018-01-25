@@ -209,7 +209,7 @@ static void radeonSetVertexFormat( struct gl_context *ctx )
 	       break;
 	    default:
 	       continue;
-	    };
+	    }
 	 }
       }
    }

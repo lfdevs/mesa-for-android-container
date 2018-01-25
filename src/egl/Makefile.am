@@ -204,8 +204,13 @@ egl_HEADERS = \
 	$(top_srcdir)/include/EGL/eglmesaext.h \
 	$(top_srcdir)/include/EGL/eglplatform.h
 
-TESTS = egl-symbols-check \
-	egl-entrypoint-check
+TESTS = egl-entrypoint-check
+
+if USE_LIBGLVND
+#TODO: glvnd symbol check
+else
+TESTS += egl-symbols-check
+endif
 
 EXTRA_DIST = \
 	$(TESTS) \
@@ -214,4 +219,5 @@ EXTRA_DIST = \
 	main/egl.def \
 	main/README.txt \
 	$(GLVND_GEN_DEPS) \
-	main/50_mesa.json
+	main/50_mesa.json \
+	meson.build

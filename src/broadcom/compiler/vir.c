@@ -21,6 +21,7 @@
  * IN THE SOFTWARE.
  */
 
+#include "broadcom/common/v3d_device_info.h"
 #include "v3d_compiler.h"
 
 int
@@ -91,6 +92,10 @@ vir_has_side_effects(struct v3d_compile *c, struct qinst *inst)
                 case V3D_QPU_A_SETREVF:
                 case V3D_QPU_A_SETMSF:
                 case V3D_QPU_A_VPMSETUP:
+                case V3D_QPU_A_STVPMV:
+                case V3D_QPU_A_STVPMD:
+                case V3D_QPU_A_STVPMP:
+                case V3D_QPU_A_VPMWT:
                         return true;
                 default:
                         break;
@@ -104,8 +109,12 @@ vir_has_side_effects(struct v3d_compile *c, struct qinst *inst)
                 }
         }
 
-        if (inst->qpu.sig.ldtmu)
+        if (inst->qpu.sig.ldtmu ||
+            inst->qpu.sig.ldvary ||
+            inst->qpu.sig.wrtmuc ||
+            inst->qpu.sig.thrsw) {
                 return true;
+        }
 
         return false;
 }
@@ -198,11 +207,10 @@ vir_depends_on_flags(struct qinst *inst)
 }
 
 bool
-vir_writes_r3(struct qinst *inst)
+vir_writes_r3(const struct v3d_device_info *devinfo, struct qinst *inst)
 {
         for (int i = 0; i < vir_get_nsrc(inst); i++) {
                 switch (inst->src[i].file) {
-                case QFILE_VARY:
                 case QFILE_VPM:
                         return true;
                 default:
@@ -210,11 +218,18 @@ vir_writes_r3(struct qinst *inst)
                 }
         }
 
+        if (devinfo->ver < 41 && (inst->qpu.sig.ldvary ||
+                                  inst->qpu.sig.ldtlb ||
+                                  inst->qpu.sig.ldtlbu ||
+                                  inst->qpu.sig.ldvpm)) {
+                return true;
+        }
+
         return false;
 }
 
 bool
-vir_writes_r4(struct qinst *inst)
+vir_writes_r4(const struct v3d_device_info *devinfo, struct qinst *inst)
 {
         switch (inst->dst.file) {
         case QFILE_MAGIC:
@@ -231,7 +246,7 @@ vir_writes_r4(struct qinst *inst)
                 break;
         }
 
-        if (inst->qpu.sig.ldtmu)
+        if (devinfo->ver < 41 && inst->qpu.sig.ldtmu)
                 return true;
 
         return false;
@@ -404,10 +419,6 @@ static void
 vir_emit(struct v3d_compile *c, struct qinst *inst)
 {
         list_addtail(&inst->link, &c->cur_block->instructions);
-
-        if (inst->dst.file == QFILE_MAGIC &&
-            inst->dst.index == V3D_QPU_WADDR_VPM)
-                c->num_vpm_writes++;
 }
 
 /* Updates inst to write to a new temporary, emits it, and notes the def. */
@@ -520,6 +531,7 @@ vir_compile_init(const struct v3d_compiler *compiler,
         c->key = key;
         c->program_id = program_id;
         c->variant_id = variant_id;
+        c->threads = 4;
 
         s = nir_shader_clone(c, s);
         c->s = s;
@@ -541,6 +553,7 @@ static void
 v3d_lower_nir(struct v3d_compile *c)
 {
         struct nir_lower_tex_options tex_options = {
+                .lower_txd = true,
                 .lower_rect = false, /* XXX */
                 .lower_txp = ~0,
                 /* Apply swizzles to all samplers. */
@@ -553,6 +566,13 @@ v3d_lower_nir(struct v3d_compile *c)
         for (int i = 0; i < ARRAY_SIZE(c->key->tex); i++) {
                 for (int j = 0; j < 4; j++)
                         tex_options.swizzles[i][j] = c->key->tex[i].swizzle[j];
+
+                if (c->key->tex[i].clamp_s)
+                        tex_options.saturate_s |= 1 << i;
+                if (c->key->tex[i].clamp_t)
+                        tex_options.saturate_t |= 1 << i;
+                if (c->key->tex[i].clamp_r)
+                        tex_options.saturate_r |= 1 << i;
         }
 
         NIR_PASS_V(c->s, nir_lower_tex, &tex_options);
@@ -562,6 +582,7 @@ static void
 v3d_lower_nir_late(struct v3d_compile *c)
 {
         NIR_PASS_V(c->s, v3d_nir_lower_io, c);
+        NIR_PASS_V(c->s, v3d_nir_lower_txf_ms, c);
         NIR_PASS_V(c->s, nir_lower_idiv);
 }
 
@@ -620,6 +641,9 @@ static void
 v3d_set_prog_data(struct v3d_compile *c,
                   struct v3d_prog_data *prog_data)
 {
+        prog_data->threads = c->threads;
+        prog_data->single_seg = !c->last_thrsw;
+
         v3d_set_prog_data_uniforms(c, prog_data);
         v3d_set_prog_data_ubo(c, prog_data);
 }
@@ -705,10 +729,12 @@ v3d_set_fs_prog_data_inputs(struct v3d_compile *c,
         memcpy(prog_data->input_slots, c->input_slots,
                c->num_inputs * sizeof(*c->input_slots));
 
-        memcpy(prog_data->flat_shade_flags, c->flat_shade_flags,
-               sizeof(c->flat_shade_flags));
-        memcpy(prog_data->shade_model_flags, c->shade_model_flags,
-               sizeof(c->shade_model_flags));
+        STATIC_ASSERT(ARRAY_SIZE(prog_data->flat_shade_flags) >
+                      (V3D_MAX_FS_INPUTS - 1) / 24);
+        for (int i = 0; i < V3D_MAX_FS_INPUTS; i++) {
+                if (BITSET_TEST(c->flat_shade_flags, i))
+                        prog_data->flat_shade_flags[i / 24] |= 1 << (i % 24);
+        }
 }
 
 uint64_t *v3d_compile_fs(const struct v3d_compiler *compiler,

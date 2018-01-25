@@ -24,11 +24,7 @@
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
  */
-/*
- * Authors:
- *      Jérôme Glisse <glisse@freedesktop.org>
- *      Marek Olšák <maraeo@gmail.com>
- */
+
 #ifndef RADEON_DRM_BO_H
 #define RADEON_DRM_BO_H
 

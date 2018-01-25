@@ -147,9 +147,10 @@ si_write_harvested_raster_configs(struct radv_physical_device *physical_device,
 
 		/* GRBM_GFX_INDEX has a different offset on SI and CI+ */
 		if (physical_device->rad_info.chip_class < CIK)
-			radeon_set_config_reg(cs, GRBM_GFX_INDEX,
-					      SE_INDEX(se) | SH_BROADCAST_WRITES |
-					      INSTANCE_BROADCAST_WRITES);
+			radeon_set_config_reg(cs, R_00802C_GRBM_GFX_INDEX,
+					      S_00802C_SE_INDEX(se) |
+					      S_00802C_SH_BROADCAST_WRITES(1) |
+					      S_00802C_INSTANCE_BROADCAST_WRITES(1));
 		else
 			radeon_set_uconfig_reg(cs, R_030800_GRBM_GFX_INDEX,
 					       S_030800_SE_INDEX(se) | S_030800_SH_BROADCAST_WRITES(1) |
@@ -161,9 +162,10 @@ si_write_harvested_raster_configs(struct radv_physical_device *physical_device,
 
 	/* GRBM_GFX_INDEX has a different offset on SI and CI+ */
 	if (physical_device->rad_info.chip_class < CIK)
-		radeon_set_config_reg(cs, GRBM_GFX_INDEX,
-				      SE_BROADCAST_WRITES | SH_BROADCAST_WRITES |
-				      INSTANCE_BROADCAST_WRITES);
+		radeon_set_config_reg(cs, R_00802C_GRBM_GFX_INDEX,
+				      S_00802C_SE_BROADCAST_WRITES(1) |
+				      S_00802C_SH_BROADCAST_WRITES(1) |
+				      S_00802C_INSTANCE_BROADCAST_WRITES(1));
 	else
 		radeon_set_uconfig_reg(cs, R_030800_GRBM_GFX_INDEX,
 				       S_030800_SE_BROADCAST_WRITES(1) | S_030800_SH_BROADCAST_WRITES(1) |
@@ -516,12 +518,6 @@ si_emit_config(struct radv_physical_device *physical_device,
 			assert(0);
 		}
 
-		radeon_set_context_reg(cs, R_028060_DB_DFSM_CONTROL,
-				       S_028060_PUNCHOUT_MODE(V_028060_FORCE_OFF));
-		/* TODO: Enable the binner: */
-		radeon_set_context_reg(cs, R_028C44_PA_SC_BINNER_CNTL_0,
-				       S_028C44_BINNING_MODE(V_028C44_DISABLE_BINNING_USE_LEGACY_SC) |
-				       S_028C44_DISABLE_START_OF_PRIM(1));
 		radeon_set_context_reg(cs, R_028C48_PA_SC_BINNER_CNTL_1,
 				       S_028C48_MAX_ALLOC_COUNT(MIN2(128, pc_lines / (4 * num_se))) |
 				       S_028C48_MAX_PRIM_PER_BATCH(1023));
@@ -571,7 +567,9 @@ cik_create_gfx_config(struct radv_device *device)
 	device->gfx_init = device->ws->buffer_create(device->ws,
 						     cs->cdw * 4, 4096,
 						     RADEON_DOMAIN_GTT,
-						     RADEON_FLAG_CPU_ACCESS);
+						     RADEON_FLAG_CPU_ACCESS|
+						     RADEON_FLAG_NO_INTERPROCESS_SHARING |
+						     RADEON_FLAG_READ_ONLY);
 	if (!device->gfx_init)
 		goto fail;
 
@@ -1009,24 +1007,27 @@ si_cs_emit_cache_flush(struct radeon_winsys_cs *cs,
 #else
 		cb_db_event = V_028A90_CACHE_FLUSH_AND_INV_TS_EVENT;
 #endif
-		/* TC    | TC_WB         = invalidate L2 data
-		 * TC_MD | TC_WB         = invalidate L2 metadata
-		 * TC    | TC_WB | TC_MD = invalidate L2 data & metadata
+		/* These are the only allowed combinations. If you need to
+		 * do multiple operations at once, do them separately.
+		 * All operations that invalidate L2 also seem to invalidate
+		 * metadata. Volatile (VOL) and WC flushes are not listed here.
 		 *
-		 * The metadata cache must always be invalidated for coherency
-		 * between CB/DB and shaders. (metadata = HTILE, CMASK, DCC)
-		 *
-		 * TC must be invalidated on GFX9 only if the CB/DB surface is
-		 * not pipe-aligned. If the surface is RB-aligned, it might not
-		 * strictly be pipe-aligned since RB alignment takes precendence.
+		 * TC    | TC_WB         = writeback & invalidate L2 & L1
+		 * TC    | TC_WB | TC_NC = writeback & invalidate L2 for MTYPE == NC
+		 *         TC_WB | TC_NC = writeback L2 for MTYPE == NC
+		 * TC            | TC_NC = invalidate L2 for MTYPE == NC
+		 * TC    | TC_MD         = writeback & invalidate L2 metadata (DCC, etc.)
+		 * TCL1                  = invalidate L1
 		 */
-		tc_flags = EVENT_TC_WB_ACTION_ENA |
-			   EVENT_TC_MD_ACTION_ENA;
+		tc_flags = EVENT_TC_ACTION_ENA |
+		           EVENT_TC_MD_ACTION_ENA;
 
 		/* Ideally flush TC together with CB/DB. */
 		if (flush_bits & RADV_CMD_FLAG_INV_GLOBAL_L2) {
-			tc_flags |= EVENT_TC_ACTION_ENA |
-				    EVENT_TCL1_ACTION_ENA;
+			/* Writeback and invalidate everything in L2 & L1. */
+			tc_flags = EVENT_TC_ACTION_ENA |
+			           EVENT_TC_WB_ACTION_ENA;
+
 
 			/* Clear the flags. */
 		        flush_bits &= ~(RADV_CMD_FLAG_INV_GLOBAL_L2 |
@@ -1133,7 +1134,9 @@ si_emit_cache_flush(struct radv_cmd_buffer *cmd_buffer)
 	                       cmd_buffer->state.flush_bits);
 
 
-	radv_cmd_buffer_trace_emit(cmd_buffer);
+	if (unlikely(cmd_buffer->device->trace_bo))
+		radv_cmd_buffer_trace_emit(cmd_buffer);
+
 	cmd_buffer->state.flush_bits = 0;
 }
 
@@ -1257,7 +1260,8 @@ static void si_emit_cp_dma(struct radv_cmd_buffer *cmd_buffer,
 		radeon_emit(cs, 0);
 	}
 
-	radv_cmd_buffer_trace_emit(cmd_buffer);
+	if (unlikely(cmd_buffer->device->trace_bo))
+		radv_cmd_buffer_trace_emit(cmd_buffer);
 }
 
 void si_cp_dma_prefetch(struct radv_cmd_buffer *cmd_buffer, uint64_t va,

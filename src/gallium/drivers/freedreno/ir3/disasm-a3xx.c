@@ -520,7 +520,9 @@ static void print_instr_cat6(instr_t *instr)
 
 	switch (_OPC(6, cat6->opc)) {
 	case OPC_PREFETCH:
+		break;
 	case OPC_RESINFO:
+		printf(".%dd", cat6->ldgb.d + 1);
 		break;
 	case OPC_LDGB:
 		printf(".%s", cat6->ldgb.typed ? "typed" : "untyped");
@@ -529,6 +531,7 @@ static void print_instr_cat6(instr_t *instr)
 		printf(".%d", cat6->ldgb.type_size + 1);
 		break;
 	case OPC_STGB:
+	case OPC_STIB:
 		printf(".%s", cat6->stgb.typed ? "typed" : "untyped");
 		printf(".%dd", cat6->stgb.d + 1);
 		printf(".%s", type[cat6->type]);
@@ -546,8 +549,11 @@ static void print_instr_cat6(instr_t *instr)
 	case OPC_ATOMIC_OR:
 	case OPC_ATOMIC_XOR:
 		ss = cat6->g ? 'g' : 'l';
-		printf(".%c", ss);
+		printf(".%s", cat6->ldgb.typed ? "typed" : "untyped");
+		printf(".%dd", cat6->ldgb.d + 1);
 		printf(".%s", type[cat6->type]);
+		printf(".%d", cat6->ldgb.type_size + 1);
+		printf(".%c", ss);
 		break;
 	default:
 		dst.im = cat6->g && !cat6->dst_off;
@@ -601,7 +607,7 @@ static void print_instr_cat6(instr_t *instr)
 		break;
 	}
 
-	if (_OPC(6, cat6->opc) == OPC_STGB) {
+	if ((_OPC(6, cat6->opc) == OPC_STGB) || (_OPC(6, cat6->opc) == OPC_STIB)) {
 		struct reginfo src3;
 
 		memset(&src3, 0, sizeof(src3));
@@ -626,7 +632,65 @@ static void print_instr_cat6(instr_t *instr)
 		return;
 	}
 
-	if ((_OPC(6, cat6->opc) == OPC_LDGB) || is_atomic(_OPC(6, cat6->opc))) {
+	if (is_atomic(_OPC(6, cat6->opc))) {
+
+		src1.reg = (reg_t)(cat6->ldgb.src1);
+		src1.im  = cat6->ldgb.src1_im;
+		src2.reg = (reg_t)(cat6->ldgb.src2);
+		src2.im  = cat6->ldgb.src2_im;
+		dst.reg  = (reg_t)(cat6->ldgb.dst);
+
+		print_src(&dst);
+		printf(", ");
+		if (ss == 'g') {
+			struct reginfo src3;
+			memset(&src3, 0, sizeof(src3));
+
+			src3.reg = (reg_t)(cat6->ldgb.src3);
+			src3.full = true;
+
+			/* For images, the ".typed" variant is used and src2 is
+			 * the ivecN coordinates, ie ivec2 for 2d.
+			 *
+			 * For SSBOs, the ".untyped" variant is used and src2 is
+			 * a simple dword offset..  src3 appears to be
+			 * uvec2(offset * 4, 0).  Not sure the point of that.
+			 */
+
+			printf("g[%u], ", cat6->ldgb.src_ssbo);
+			print_src(&src1);  /* value */
+			printf(", ");
+			print_src(&src2);  /* offset/coords */
+			printf(", ");
+			print_src(&src3);  /* 64b byte offset.. */
+
+			if (debug & PRINT_VERBOSE) {
+				printf(" (pad0=%x, pad3=%x, mustbe0=%x)", cat6->ldgb.pad0,
+						cat6->ldgb.pad3, cat6->ldgb.mustbe0);
+			}
+		} else { /* ss == 'l' */
+			printf("l[");
+			print_src(&src1);  /* simple byte offset */
+			printf("], ");
+			print_src(&src2);  /* value */
+
+			if (debug & PRINT_VERBOSE) {
+				printf(" (src3=%x, pad0=%x, pad3=%x, mustbe0=%x)",
+						cat6->ldgb.src3, cat6->ldgb.pad0,
+						cat6->ldgb.pad3, cat6->ldgb.mustbe0);
+			}
+		}
+
+		return;
+	} else if (_OPC(6, cat6->opc) == OPC_RESINFO) {
+		dst.reg  = (reg_t)(cat6->ldgb.dst);
+
+		print_src(&dst);
+		printf(", ");
+		printf("g[%u]", cat6->ldgb.src_ssbo);
+
+		return;
+	} else if (_OPC(6, cat6->opc) == OPC_LDGB) {
 
 		src1.reg = (reg_t)(cat6->ldgb.src1);
 		src1.im  = cat6->ldgb.src1_im;
@@ -640,16 +704,6 @@ static void print_instr_cat6(instr_t *instr)
 		print_src(&src1);
 		printf(", ");
 		print_src(&src2);
-
-		if (is_atomic(_OPC(6, cat6->opc))) {
-			struct reginfo src3;
-			memset(&src3, 0, sizeof(src3));
-			src3.reg = (reg_t)(cat6->ldgb.src3);
-			src3.full = true;
-
-			printf(", ");
-			print_src(&src3);
-		}
 
 		if (debug & PRINT_VERBOSE)
 			printf(" (pad0=%x, pad3=%x, mustbe0=%x)", cat6->ldgb.pad0, cat6->ldgb.pad3, cat6->ldgb.mustbe0);
@@ -711,6 +765,23 @@ static void print_instr_cat6(instr_t *instr)
 		printf(", ");
 		print_src(&src2);
 		break;
+	}
+}
+
+static void print_instr_cat7(instr_t *instr)
+{
+	instr_cat7_t *cat7 = &instr->cat7;
+
+	if (cat7->g)
+		printf(".g");
+	if (cat7->l)
+		printf(".l");
+
+	if (_OPC(7, cat7->opc) == OPC_FENCE) {
+		if (cat7->r)
+			printf(".r");
+		if (cat7->w)
+			printf(".w");
 	}
 }
 
@@ -879,6 +950,8 @@ static const struct opc_info {
 	OPC(6, OPC_LDC,          ldc),
 	OPC(6, OPC_LDLV,         ldlv),
 
+	OPC(7, OPC_BAR,          bar),
+	OPC(7, OPC_FENCE,        fence),
 
 #undef OPC
 };
@@ -909,7 +982,7 @@ static void print_instr(uint32_t *dwords, int level, int n)
 
 	if (instr->sync)
 		printf("(sy)");
-	if (instr->ss && (instr->opc_cat <= 4))
+	if (instr->ss && ((instr->opc_cat <= 4) || (instr->opc_cat == 7)))
 		printf("(ss)");
 	if (instr->jmp_tgt)
 		printf("(jp)");

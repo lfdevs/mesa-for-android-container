@@ -6,6 +6,8 @@ C_SOURCES := \
 	freedreno_batch.h \
 	freedreno_batch_cache.c \
 	freedreno_batch_cache.h \
+	freedreno_blitter.c \
+	freedreno_blitter.h \
 	freedreno_context.c \
 	freedreno_context.h \
 	freedreno_draw.c \
@@ -126,6 +128,8 @@ a5xx_SOURCES := \
 	a5xx/a5xx.xml.h \
 	a5xx/fd5_blend.c \
 	a5xx/fd5_blend.h \
+	a5xx/fd5_blitter.c \
+	a5xx/fd5_blitter.h \
 	a5xx/fd5_compute.c \
 	a5xx/fd5_compute.h \
 	a5xx/fd5_context.c \
@@ -138,12 +142,16 @@ a5xx_SOURCES := \
 	a5xx/fd5_format.h \
 	a5xx/fd5_gmem.c \
 	a5xx/fd5_gmem.h \
+	a5xx/fd5_image.c \
+	a5xx/fd5_image.h \
 	a5xx/fd5_program.c \
 	a5xx/fd5_program.h \
 	a5xx/fd5_query.c \
 	a5xx/fd5_query.h \
 	a5xx/fd5_rasterizer.c \
 	a5xx/fd5_rasterizer.h \
+	a5xx/fd5_resource.c \
+	a5xx/fd5_resource.h \
 	a5xx/fd5_screen.c \
 	a5xx/fd5_screen.h \
 	a5xx/fd5_texture.c \
@@ -166,6 +174,7 @@ ir3_SOURCES := \
 	ir3/ir3_nir.c \
 	ir3/ir3_nir.h \
 	ir3/ir3_nir_lower_if_else.c \
+	ir3/ir3_nir_lower_tg4_to_tex.c \
 	ir3/ir3_print.c \
 	ir3/ir3_ra.c \
 	ir3/ir3_sched.c \

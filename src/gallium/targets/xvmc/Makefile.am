@@ -35,7 +35,7 @@ libXvMCgallium_la_LIBADD = \
 	$(GALLIUM_COMMON_LIB_DEPS)
 
 EXTRA_libXvMCgallium_la_DEPENDENCIES = xvmc.sym
-EXTRA_DIST = xvmc.sym
+EXTRA_DIST = xvmc.sym meson.build
 
 TARGET_DRIVERS =
 TARGET_CPPFLAGS =

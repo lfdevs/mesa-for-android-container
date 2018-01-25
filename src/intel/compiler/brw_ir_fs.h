@@ -465,9 +465,6 @@ get_exec_type(const fs_inst *inst)
    if (exec_type == BRW_REGISTER_TYPE_B)
       exec_type = inst->dst.type;
 
-   /* TODO: We need to handle half-float conversions. */
-   assert(exec_type != BRW_REGISTER_TYPE_HF ||
-          inst->dst.type == BRW_REGISTER_TYPE_HF);
    assert(exec_type != BRW_REGISTER_TYPE_B);
 
    return exec_type;

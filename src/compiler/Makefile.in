@@ -258,11 +258,11 @@ am__objects_3 = glsl/ast_array_index.lo glsl/ast_expr.lo \
 	glsl/opt_dead_code_local.lo glsl/opt_dead_functions.lo \
 	glsl/opt_flatten_nested_if_blocks.lo glsl/opt_flip_matrices.lo \
 	glsl/opt_function_inlining.lo glsl/opt_if_simplification.lo \
-	glsl/opt_minmax.lo glsl/opt_noop_swizzle.lo \
-	glsl/opt_rebalance_tree.lo glsl/opt_redundant_jumps.lo \
-	glsl/opt_structure_splitting.lo glsl/opt_swizzle_swizzle.lo \
-	glsl/opt_tree_grafting.lo glsl/opt_vectorize.lo \
-	glsl/propagate_invariance.lo glsl/s_expression.lo \
+	glsl/opt_minmax.lo glsl/opt_rebalance_tree.lo \
+	glsl/opt_redundant_jumps.lo glsl/opt_structure_splitting.lo \
+	glsl/opt_swizzle.lo glsl/opt_tree_grafting.lo \
+	glsl/opt_vectorize.lo glsl/propagate_invariance.lo \
+	glsl/s_expression.lo glsl/serialize.lo \
 	glsl/string_to_uint_map.lo
 am__objects_4 = glsl/shader_cache.lo
 am_glsl_libglsl_la_OBJECTS = $(am__objects_2) $(am__objects_3) \
@@ -299,14 +299,14 @@ am__objects_7 = nir/nir.lo nir/nir_clone.lo nir/nir_control_flow.lo \
 	nir/nir_lower_load_const_to_scalar.lo \
 	nir/nir_lower_locals_to_regs.lo nir/nir_lower_idiv.lo \
 	nir/nir_lower_indirect_derefs.lo nir/nir_lower_int64.lo \
-	nir/nir_lower_io.lo nir/nir_lower_io_to_temporaries.lo \
+	nir/nir_lower_io.lo nir/nir_lower_io_arrays_to_elements.lo \
+	nir/nir_lower_io_to_temporaries.lo \
 	nir/nir_lower_io_to_scalar.lo nir/nir_lower_io_types.lo \
 	nir/nir_lower_passthrough_edgeflags.lo \
 	nir/nir_lower_patch_vertices.lo \
-	nir/nir_lower_phis_to_scalar.lo \
-	nir/nir_lower_read_invocation_to_scalar.lo \
-	nir/nir_lower_regs_to_ssa.lo nir/nir_lower_returns.lo \
-	nir/nir_lower_samplers.lo nir/nir_lower_samplers_as_deref.lo \
+	nir/nir_lower_phis_to_scalar.lo nir/nir_lower_regs_to_ssa.lo \
+	nir/nir_lower_returns.lo nir/nir_lower_samplers.lo \
+	nir/nir_lower_samplers_as_deref.lo nir/nir_lower_subgroups.lo \
 	nir/nir_lower_system_values.lo nir/nir_lower_tex.lo \
 	nir/nir_lower_to_source_mods.lo \
 	nir/nir_lower_two_sided_color.lo \
@@ -326,11 +326,12 @@ am__objects_7 = nir/nir.lo nir/nir_clone.lo nir/nir_control_flow.lo \
 	nir/nir_opt_undef.lo nir/nir_phi_builder.lo nir/nir_print.lo \
 	nir/nir_propagate_invariant.lo \
 	nir/nir_remove_dead_variables.lo nir/nir_repair_ssa.lo \
-	nir/nir_search.lo nir/nir_split_var_copies.lo nir/nir_sweep.lo \
+	nir/nir_search.lo nir/nir_serialize.lo \
+	nir/nir_split_var_copies.lo nir/nir_sweep.lo \
 	nir/nir_to_lcssa.lo nir/nir_validate.lo nir/nir_worklist.lo
 am__objects_8 = spirv/spirv_to_nir.lo spirv/vtn_alu.lo \
 	spirv/vtn_cfg.lo spirv/vtn_glsl450.lo spirv/vtn_variables.lo
-am__objects_9 = spirv/spirv_info.lo
+am__objects_9 = spirv/spirv_info.lo spirv/vtn_gather_types.lo
 am__objects_10 = nir/nir_constant_expressions.lo nir/nir_opcodes.lo \
 	nir/nir_opt_algebraic.lo
 am_nir_libnir_la_OBJECTS = $(am__objects_7) $(am__objects_8) \
@@ -733,6 +734,7 @@ CLOVER_STD_OVERRIDE = @CLOVER_STD_OVERRIDE@
 CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
 CXX = @CXX@
+CXX11_CXXFLAGS = @CXX11_CXXFLAGS@
 CXXCPP = @CXXCPP@
 CXXDEPMODE = @CXXDEPMODE@
 CXXFLAGS = @CXXFLAGS@
@@ -836,7 +838,7 @@ MSVC2013_COMPAT_CFLAGS = @MSVC2013_COMPAT_CFLAGS@
 MSVC2013_COMPAT_CXXFLAGS = @MSVC2013_COMPAT_CXXFLAGS@
 NINE_MAJOR = @NINE_MAJOR@
 NINE_MINOR = @NINE_MINOR@
-NINE_TINY = @NINE_TINY@
+NINE_PATCH = @NINE_PATCH@
 NINE_VERSION = @NINE_VERSION@
 NM = @NM@
 NMEDIT = @NMEDIT@
@@ -892,7 +894,6 @@ SSE41_CFLAGS = @SSE41_CFLAGS@
 STRIP = @STRIP@
 SWR_AVX2_CXXFLAGS = @SWR_AVX2_CXXFLAGS@
 SWR_AVX_CXXFLAGS = @SWR_AVX_CXXFLAGS@
-SWR_CXX11_CXXFLAGS = @SWR_CXX11_CXXFLAGS@
 SWR_KNL_CXXFLAGS = @SWR_KNL_CXXFLAGS@
 SWR_SKX_CXXFLAGS = @SWR_SKX_CXXFLAGS@
 VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
@@ -927,7 +928,7 @@ WNO_OVERRIDE_INIT = @WNO_OVERRIDE_INIT@
 X11_INCLUDES = @X11_INCLUDES@
 XA_MAJOR = @XA_MAJOR@
 XA_MINOR = @XA_MINOR@
-XA_TINY = @XA_TINY@
+XA_PATCH = @XA_PATCH@
 XA_VERSION = @XA_VERSION@
 XCB_DRI2_CFLAGS = @XCB_DRI2_CFLAGS@
 XCB_DRI2_LIBS = @XCB_DRI2_LIBS@
@@ -994,7 +995,6 @@ pdfdir = @pdfdir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
-runstatedir = @runstatedir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
@@ -1139,17 +1139,18 @@ LIBGLSL_FILES = \
 	glsl/opt_function_inlining.cpp \
 	glsl/opt_if_simplification.cpp \
 	glsl/opt_minmax.cpp \
-	glsl/opt_noop_swizzle.cpp \
 	glsl/opt_rebalance_tree.cpp \
 	glsl/opt_redundant_jumps.cpp \
 	glsl/opt_structure_splitting.cpp \
-	glsl/opt_swizzle_swizzle.cpp \
+	glsl/opt_swizzle.cpp \
 	glsl/opt_tree_grafting.cpp \
 	glsl/opt_vectorize.cpp \
 	glsl/program.h \
 	glsl/propagate_invariance.cpp \
 	glsl/s_expression.cpp \
 	glsl/s_expression.h \
+	glsl/serialize.cpp \
+	glsl/serialize.h \
 	glsl/string_to_uint_map.cpp \
 	glsl/string_to_uint_map.h
 
@@ -1237,17 +1238,18 @@ NIR_FILES = \
 	nir/nir_lower_indirect_derefs.c \
 	nir/nir_lower_int64.c \
 	nir/nir_lower_io.c \
+	nir/nir_lower_io_arrays_to_elements.c \
 	nir/nir_lower_io_to_temporaries.c \
 	nir/nir_lower_io_to_scalar.c \
 	nir/nir_lower_io_types.c \
 	nir/nir_lower_passthrough_edgeflags.c \
 	nir/nir_lower_patch_vertices.c \
 	nir/nir_lower_phis_to_scalar.c \
-	nir/nir_lower_read_invocation_to_scalar.c \
 	nir/nir_lower_regs_to_ssa.c \
 	nir/nir_lower_returns.c \
 	nir/nir_lower_samplers.c \
 	nir/nir_lower_samplers_as_deref.c \
+	nir/nir_lower_subgroups.c \
 	nir/nir_lower_system_values.c \
 	nir/nir_lower_tex.c \
 	nir/nir_lower_to_source_mods.c \
@@ -1287,6 +1289,8 @@ NIR_FILES = \
 	nir/nir_search.c \
 	nir/nir_search.h \
 	nir/nir_search_helpers.h \
+	nir/nir_serialize.c \
+	nir/nir_serialize.h \
 	nir/nir_split_var_copies.c \
 	nir/nir_sweep.c \
 	nir/nir_to_lcssa.c \
@@ -1296,7 +1300,8 @@ NIR_FILES = \
 	nir/nir_worklist.h
 
 SPIRV_GENERATED_FILES = \
-	spirv/spirv_info.c
+	spirv/spirv_info.c \
+	spirv/vtn_gather_types.c
 
 SPIRV_FILES = \
 	spirv/GLSL.std.450.h \
@@ -1359,16 +1364,17 @@ CLEANFILES = glsl/glcpp/glcpp-parse.h glsl/glsl_parser.h \
 	glsl/ir_expression_operation_strings.h \
 	glsl/glcpp/glcpp-parse.c glsl/glcpp/glcpp-lex.c \
 	$(NIR_GENERATED_FILES) $(SPIRV_GENERATED_FILES)
-EXTRA_DIST = SConscript glsl/tests glsl/glcpp/tests glsl/README \
-	glsl/TODO glsl/glcpp/README glsl/glsl_lexer.ll \
-	glsl/glsl_parser.yy glsl/ir_expression_operation.py \
-	glsl/glcpp/glcpp-lex.l glsl/glcpp/glcpp-parse.y \
-	SConscript.glsl nir/nir_algebraic.py \
+EXTRA_DIST = SConscript glsl/glcpp/meson.build glsl/tests/meson.build \
+	glsl/meson.build nir/meson.build meson.build glsl/tests \
+	glsl/glcpp/tests glsl/README glsl/TODO glsl/glcpp/README \
+	glsl/glsl_lexer.ll glsl/glsl_parser.yy \
+	glsl/ir_expression_operation.py glsl/glcpp/glcpp-lex.l \
+	glsl/glcpp/glcpp-parse.y SConscript.glsl nir/nir_algebraic.py \
 	nir/nir_builder_opcodes_h.py nir/nir_constant_expressions.py \
 	nir/nir_opcodes.py nir/nir_opcodes_c.py nir/nir_opcodes_h.py \
 	nir/nir_opt_algebraic.py nir/tests nir/README \
 	spirv/spirv_info_c.py spirv/spirv.core.grammar.json \
-	SConscript.nir
+	spirv/vtn_gather_types_c.py SConscript.nir
 MKDIR_GEN = $(AM_V_at)$(MKDIR_P) $(@D)
 PYTHON_GEN = $(AM_V_GEN)$(PYTHON2) $(PYTHON_FLAGS)
 TESTS_ENVIRONMENT = \
@@ -1812,15 +1818,13 @@ glsl/opt_if_simplification.lo: glsl/$(am__dirstamp) \
 	glsl/$(DEPDIR)/$(am__dirstamp)
 glsl/opt_minmax.lo: glsl/$(am__dirstamp) \
 	glsl/$(DEPDIR)/$(am__dirstamp)
-glsl/opt_noop_swizzle.lo: glsl/$(am__dirstamp) \
-	glsl/$(DEPDIR)/$(am__dirstamp)
 glsl/opt_rebalance_tree.lo: glsl/$(am__dirstamp) \
 	glsl/$(DEPDIR)/$(am__dirstamp)
 glsl/opt_redundant_jumps.lo: glsl/$(am__dirstamp) \
 	glsl/$(DEPDIR)/$(am__dirstamp)
 glsl/opt_structure_splitting.lo: glsl/$(am__dirstamp) \
 	glsl/$(DEPDIR)/$(am__dirstamp)
-glsl/opt_swizzle_swizzle.lo: glsl/$(am__dirstamp) \
+glsl/opt_swizzle.lo: glsl/$(am__dirstamp) \
 	glsl/$(DEPDIR)/$(am__dirstamp)
 glsl/opt_tree_grafting.lo: glsl/$(am__dirstamp) \
 	glsl/$(DEPDIR)/$(am__dirstamp)
@@ -1830,6 +1834,7 @@ glsl/propagate_invariance.lo: glsl/$(am__dirstamp) \
 	glsl/$(DEPDIR)/$(am__dirstamp)
 glsl/s_expression.lo: glsl/$(am__dirstamp) \
 	glsl/$(DEPDIR)/$(am__dirstamp)
+glsl/serialize.lo: glsl/$(am__dirstamp) glsl/$(DEPDIR)/$(am__dirstamp)
 glsl/string_to_uint_map.lo: glsl/$(am__dirstamp) \
 	glsl/$(DEPDIR)/$(am__dirstamp)
 glsl/shader_cache.lo: glsl/$(am__dirstamp) \
@@ -1916,6 +1921,8 @@ nir/nir_lower_indirect_derefs.lo: nir/$(am__dirstamp) \
 nir/nir_lower_int64.lo: nir/$(am__dirstamp) \
 	nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_lower_io.lo: nir/$(am__dirstamp) nir/$(DEPDIR)/$(am__dirstamp)
+nir/nir_lower_io_arrays_to_elements.lo: nir/$(am__dirstamp) \
+	nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_lower_io_to_temporaries.lo: nir/$(am__dirstamp) \
 	nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_lower_io_to_scalar.lo: nir/$(am__dirstamp) \
@@ -1928,8 +1935,6 @@ nir/nir_lower_patch_vertices.lo: nir/$(am__dirstamp) \
 	nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_lower_phis_to_scalar.lo: nir/$(am__dirstamp) \
 	nir/$(DEPDIR)/$(am__dirstamp)
-nir/nir_lower_read_invocation_to_scalar.lo: nir/$(am__dirstamp) \
-	nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_lower_regs_to_ssa.lo: nir/$(am__dirstamp) \
 	nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_lower_returns.lo: nir/$(am__dirstamp) \
@@ -1937,6 +1942,8 @@ nir/nir_lower_returns.lo: nir/$(am__dirstamp) \
 nir/nir_lower_samplers.lo: nir/$(am__dirstamp) \
 	nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_lower_samplers_as_deref.lo: nir/$(am__dirstamp) \
+	nir/$(DEPDIR)/$(am__dirstamp)
+nir/nir_lower_subgroups.lo: nir/$(am__dirstamp) \
 	nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_lower_system_values.lo: nir/$(am__dirstamp) \
 	nir/$(DEPDIR)/$(am__dirstamp)
@@ -2003,6 +2010,8 @@ nir/nir_remove_dead_variables.lo: nir/$(am__dirstamp) \
 nir/nir_repair_ssa.lo: nir/$(am__dirstamp) \
 	nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_search.lo: nir/$(am__dirstamp) nir/$(DEPDIR)/$(am__dirstamp)
+nir/nir_serialize.lo: nir/$(am__dirstamp) \
+	nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_split_var_copies.lo: nir/$(am__dirstamp) \
 	nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_sweep.lo: nir/$(am__dirstamp) nir/$(DEPDIR)/$(am__dirstamp)
@@ -2026,6 +2035,8 @@ spirv/vtn_glsl450.lo: spirv/$(am__dirstamp) \
 spirv/vtn_variables.lo: spirv/$(am__dirstamp) \
 	spirv/$(DEPDIR)/$(am__dirstamp)
 spirv/spirv_info.lo: spirv/$(am__dirstamp) \
+	spirv/$(DEPDIR)/$(am__dirstamp)
+spirv/vtn_gather_types.lo: spirv/$(am__dirstamp) \
 	spirv/$(DEPDIR)/$(am__dirstamp)
 nir/nir_constant_expressions.lo: nir/$(am__dirstamp) \
 	nir/$(DEPDIR)/$(am__dirstamp)
@@ -2267,15 +2278,15 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@glsl/$(DEPDIR)/opt_function_inlining.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@glsl/$(DEPDIR)/opt_if_simplification.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@glsl/$(DEPDIR)/opt_minmax.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@glsl/$(DEPDIR)/opt_noop_swizzle.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@glsl/$(DEPDIR)/opt_rebalance_tree.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@glsl/$(DEPDIR)/opt_redundant_jumps.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@glsl/$(DEPDIR)/opt_structure_splitting.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@glsl/$(DEPDIR)/opt_swizzle_swizzle.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@glsl/$(DEPDIR)/opt_swizzle.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@glsl/$(DEPDIR)/opt_tree_grafting.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@glsl/$(DEPDIR)/opt_vectorize.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@glsl/$(DEPDIR)/propagate_invariance.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@glsl/$(DEPDIR)/s_expression.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@glsl/$(DEPDIR)/serialize.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@glsl/$(DEPDIR)/shader_cache.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@glsl/$(DEPDIR)/standalone.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@glsl/$(DEPDIR)/standalone_scaffolding.Plo@am__quote@
@@ -2331,6 +2342,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_indirect_derefs.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_int64.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_io.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_io_arrays_to_elements.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_io_to_scalar.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_io_to_temporaries.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_io_types.Plo@am__quote@
@@ -2339,11 +2351,11 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_passthrough_edgeflags.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_patch_vertices.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_phis_to_scalar.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_read_invocation_to_scalar.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_regs_to_ssa.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_returns.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_samplers.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_samplers_as_deref.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_subgroups.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_system_values.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_tex.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_to_source_mods.Plo@am__quote@
@@ -2382,6 +2394,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_remove_dead_variables.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_repair_ssa.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_search.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_serialize.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_split_var_copies.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_sweep.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_to_lcssa.Plo@am__quote@
@@ -2393,6 +2406,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@spirv/$(DEPDIR)/spirv_to_nir.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@spirv/$(DEPDIR)/vtn_alu.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@spirv/$(DEPDIR)/vtn_cfg.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@spirv/$(DEPDIR)/vtn_gather_types.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@spirv/$(DEPDIR)/vtn_glsl450.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@spirv/$(DEPDIR)/vtn_variables.Plo@am__quote@
 
@@ -3033,6 +3047,10 @@ nir/nir_opt_algebraic.c: nir/nir_opt_algebraic.py nir/nir_algebraic.py
 spirv/spirv_info.c: spirv/spirv_info_c.py spirv/spirv.core.grammar.json
 	$(MKDIR_GEN)
 	$(PYTHON_GEN) $(srcdir)/spirv/spirv_info_c.py $(srcdir)/spirv/spirv.core.grammar.json $@ || ($(RM) $@; false)
+
+spirv/vtn_gather_types.c: spirv/vtn_gather_types_c.py spirv/spirv.core.grammar.json
+	$(MKDIR_GEN)
+	$(PYTHON_GEN) $(srcdir)/spirv/vtn_gather_types_c.py $(srcdir)/spirv/spirv.core.grammar.json $@ || ($(RM) $@; false)
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

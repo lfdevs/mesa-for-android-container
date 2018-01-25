@@ -100,9 +100,8 @@ brw_nir_link_shaders(const struct brw_compiler *compiler,
                      nir_shader **producer, nir_shader **consumer);
 
 bool brw_nir_lower_cs_intrinsics(nir_shader *nir,
-                                 struct brw_cs_prog_data *prog_data);
+                                 unsigned dispatch_width);
 void brw_nir_lower_vs_inputs(nir_shader *nir,
-                             bool use_legacy_snorm_formula,
                              const uint8_t *vs_attrib_wa_flags);
 void brw_nir_lower_vue_inputs(nir_shader *nir,
                               const struct brw_vue_map *vue_map);
@@ -121,7 +120,6 @@ nir_shader *brw_postprocess_nir(nir_shader *nir,
                                 bool is_scalar);
 
 bool brw_nir_apply_attribute_workarounds(nir_shader *nir,
-                                         bool use_legacy_snorm_formula,
                                          const uint8_t *attrib_wa_flags);
 
 bool brw_nir_apply_trig_workarounds(nir_shader *nir);
@@ -146,6 +144,8 @@ void brw_nir_setup_glsl_uniforms(void *mem_ctx, nir_shader *shader,
 void brw_nir_setup_arb_uniforms(void *mem_ctx, nir_shader *shader,
                                 struct gl_program *prog,
                                 struct brw_stage_prog_data *stage_prog_data);
+
+void brw_nir_lower_patch_vertices_in_to_uniform(nir_shader *nir);
 
 void brw_nir_analyze_ubo_ranges(const struct brw_compiler *compiler,
                                 nir_shader *nir,

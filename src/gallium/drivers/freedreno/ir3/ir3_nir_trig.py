@@ -20,13 +20,30 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 # IN THE SOFTWARE.
 
-import nir_algebraic
+import argparse
+import sys
 
 trig_workarounds = [
    (('fsin', 'x'), ('fsin', ('fsub', ('fmul', 6.283185, ('ffract', ('fadd', ('fmul', 0.159155, 'x'), 0.5))), 3.141593))),
    (('fcos', 'x'), ('fcos', ('fsub', ('fmul', 6.283185, ('ffract', ('fadd', ('fmul', 0.159155, 'x'), 0.5))), 3.141593))),
 ]
 
-print '#include "ir3_nir.h"'
-print nir_algebraic.AlgebraicPass("ir3_nir_apply_trig_workarounds",
-                                  trig_workarounds).render()
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-p', '--import-path', required=True)
+    args = parser.parse_args()
+    sys.path.insert(0, args.import_path)
+    run()
+
+
+def run():
+    import nir_algebraic  # pylint: disable=import-error
+
+    print '#include "ir3_nir.h"'
+    print nir_algebraic.AlgebraicPass("ir3_nir_apply_trig_workarounds",
+                                      trig_workarounds).render()
+
+
+if __name__ == '__main__':
+    main()

@@ -86,7 +86,8 @@ EXTRA_DIST = \
 	osmesa.sym \
 	osmesa.def \
 	osmesa.mingw.def \
-	SConscript
+	SConscript \
+	meson.build
 
 include $(top_srcdir)/install-gallium-links.mk
 

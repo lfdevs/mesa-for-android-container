@@ -10,4 +10,4 @@ noinst_LTLIBRARIES = libninetracker.la
 
 libninetracker_la_SOURCES = $(C_SOURCES)
 
-EXTRA_DIST = README
+EXTRA_DIST = README meson.build

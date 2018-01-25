@@ -110,8 +110,7 @@ struct nouveau_context {
 GLboolean
 nouveau_context_create(gl_api api,
 		       const struct gl_config *visual, __DRIcontext *dri_ctx,
-		       unsigned major_version, unsigned minor_version,
-		       uint32_t flags, bool notify_reset, unsigned priority,
+		       const struct __DriverContextConfig *ctx_config,
 		       unsigned *error, void *share_ctx);
 
 GLboolean

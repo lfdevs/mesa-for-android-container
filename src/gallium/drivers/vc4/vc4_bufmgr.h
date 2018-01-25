@@ -39,6 +39,14 @@ struct vc4_bo {
         uint32_t handle;
         uint32_t size;
 
+        /* This will be read/written by multiple threads without a lock -- you
+         * should take a snapshot and use it to see if you happen to be in the
+         * CL's handles at this position, to make most lookups O(1).  It's
+         * volatile to make sure that the compiler doesn't emit multiple loads
+         * from the address, which would make the lookup racy.
+         */
+        volatile uint32_t last_hindex;
+
         /** Entry in the linked list of buffers freed, by age. */
         struct list_head time_list;
         /** Entry in the per-page-count linked list of buffers freed (by age). */

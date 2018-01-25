@@ -55,6 +55,18 @@ struct block_data {
    /** Which defs reach the exit point of the block. */
    BITSET_WORD *liveout;
 
+   /**
+    * Variables such that the entry point of the block may be reached from any
+    * of their definitions.
+    */
+   BITSET_WORD *defin;
+
+   /**
+    * Variables such that the exit point of the block may be reached from any
+    * of their definitions.
+    */
+   BITSET_WORD *defout;
+
    BITSET_WORD flag_def[1];
    BITSET_WORD flag_use[1];
    BITSET_WORD flag_livein[1];

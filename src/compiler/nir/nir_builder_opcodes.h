@@ -151,9 +151,19 @@ nir_f2b(nir_builder *build, nir_ssa_def *src0)
    return nir_build_alu(build, nir_op_f2b, src0, NULL, NULL, NULL);
 }
 static inline nir_ssa_def *
-nir_f2f16(nir_builder *build, nir_ssa_def *src0)
+nir_f2f16_rtne(nir_builder *build, nir_ssa_def *src0)
 {
-   return nir_build_alu(build, nir_op_f2f16, src0, NULL, NULL, NULL);
+   return nir_build_alu(build, nir_op_f2f16_rtne, src0, NULL, NULL, NULL);
+}
+static inline nir_ssa_def *
+nir_f2f16_rtz(nir_builder *build, nir_ssa_def *src0)
+{
+   return nir_build_alu(build, nir_op_f2f16_rtz, src0, NULL, NULL, NULL);
+}
+static inline nir_ssa_def *
+nir_f2f16_undef(nir_builder *build, nir_ssa_def *src0)
+{
+   return nir_build_alu(build, nir_op_f2f16_undef, src0, NULL, NULL, NULL);
 }
 static inline nir_ssa_def *
 nir_f2f32(nir_builder *build, nir_ssa_def *src0)

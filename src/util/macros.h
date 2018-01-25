@@ -171,6 +171,16 @@ do {                       \
 #define ATTRIBUTE_RETURNS_NONNULL
 #endif
 
+#ifndef NORETURN
+#  ifdef _MSC_VER
+#    define NORETURN __declspec(noreturn)
+#  elif defined HAVE_FUNC_ATTRIBUTE_NORETURN
+#    define NORETURN __attribute__((__noreturn__))
+#  else
+#    define NORETURN
+#  endif
+#endif
+
 #ifdef __cplusplus
 /**
  * Macro function that evaluates to true if T is a trivially
@@ -240,6 +250,23 @@ do {                       \
 #else
 #define ATTRIBUTE_NOINLINE
 #endif
+
+
+/**
+ * Check that STRUCT::FIELD can hold MAXVAL.  We use a lot of bitfields
+ * in Mesa/gallium.  We have to be sure they're of sufficient size to
+ * hold the largest expected value.
+ * Note that with MSVC, enums are signed and enum bitfields need one extra
+ * high bit (always zero) to ensure the max value is handled correctly.
+ * This macro will detect that with MSVC, but not GCC.
+ */
+#define ASSERT_BITFIELD_SIZE(STRUCT, FIELD, MAXVAL) \
+   do { \
+      MAYBE_UNUSED STRUCT s;                \
+      s.FIELD = (MAXVAL); \
+      assert((int) s.FIELD == (MAXVAL) && "Insufficient bitfield size!"); \
+   } while (0)
+
 
 /** Compute ceiling of integer quotient of A divided by B. */
 #define DIV_ROUND_UP( A, B )  ( (A) % (B) == 0 ? (A)/(B) : (A)/(B)+1 )

@@ -132,6 +132,8 @@ bool ssa_prepare::visit(depart_node& n, bool enter) {
 
 int ssa_rename::init() {
 	rename_stack.push(def_map());
+	rename_lds_oq_stack.push(def_map());
+	rename_lds_rw_stack.push(def_map());
 	return 0;
 }
 
@@ -287,8 +289,16 @@ void ssa_rename::pop() {
 value* ssa_rename::rename_use(node *n, value* v) {
 	if (v->version)
 		return v;
+	unsigned index;
+	if (v->is_lds_access()) {
+		index = get_index(rename_lds_rw_stack.top(), v);
+	} else if (v->is_lds_oq()) {
+		index = new_index(lds_oq_count, v);
+		set_index(rename_lds_oq_stack.top(), v, index);
+	} else {
+		index = get_index(rename_stack.top(), v);
+	}
 
-	unsigned index = get_index(rename_stack.top(), v);
 	v = sh.get_value_version(v, index);
 
 	// if (alu) instruction is predicated and source arg comes from psi node
@@ -313,8 +323,15 @@ value* ssa_rename::rename_use(node *n, value* v) {
 }
 
 value* ssa_rename::rename_def(node *n, value* v) {
-	unsigned index = new_index(def_count, v);
-	set_index(rename_stack.top(), v, index);
+	unsigned index;
+
+	if (v->is_lds_access()) {
+		index = new_index(lds_rw_count, v);
+		set_index(rename_lds_rw_stack.top(), v, index);
+	} else {
+		index = new_index(def_count, v);
+		set_index(rename_stack.top(), v, index);
+	}
 	value *r = sh.get_value_version(v, index);
 	return r;
 }

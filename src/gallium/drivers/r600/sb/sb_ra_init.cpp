@@ -745,6 +745,8 @@ void ra_split::split_vector_inst(node* n) {
 	no_src_swizzle |= n->is_fetch_op(FETCH_OP_VFETCH) ||
 			n->is_fetch_op(FETCH_OP_SEMFETCH);
 
+	no_src_swizzle |= n->is_fetch_inst() && (n->fetch_op_flags() & FF_GDS);
+
 	if (!n->src.empty() && !call_fs) {
 
 		// we may have more than one source vector -

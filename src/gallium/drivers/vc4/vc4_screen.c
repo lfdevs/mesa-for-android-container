@@ -64,7 +64,7 @@ static const struct debug_named_value debug_options[] = {
           "Flush after each draw call" },
         { "always_sync", VC4_DEBUG_ALWAYS_SYNC,
           "Wait for finish after each flush" },
-#if USE_VC4_SIMULATOR
+#ifdef USE_VC4_SIMULATOR
         { "dump", VC4_DEBUG_DUMP,
           "Write a GPU command stream trace file" },
 #endif
@@ -105,7 +105,7 @@ vc4_screen_destroy(struct pipe_screen *pscreen)
         slab_destroy_parent(&screen->transfer_pool);
         free(screen->ro);
 
-#if USE_VC4_SIMULATOR
+#ifdef USE_VC4_SIMULATOR
         vc4_simulator_destroy(screen);
 #endif
 
@@ -140,10 +140,7 @@ vc4_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
         case PIPE_CAP_BUFFER_MAP_PERSISTENT_COHERENT:
         case PIPE_CAP_NPOT_TEXTURES:
         case PIPE_CAP_SHAREABLE_SHADERS:
-        case PIPE_CAP_USER_CONSTANT_BUFFERS:
-        case PIPE_CAP_TEXTURE_SHADOW_MAP:
         case PIPE_CAP_BLEND_EQUATION_SEPARATE:
-        case PIPE_CAP_TWO_SIDED_STENCIL:
         case PIPE_CAP_TEXTURE_MULTISAMPLE:
         case PIPE_CAP_TEXTURE_SWIZZLE:
         case PIPE_CAP_GLSL_OPTIMIZE_CONSERVATIVELY:
@@ -278,14 +275,17 @@ vc4_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
         case PIPE_CAP_SPARSE_BUFFER_PAGE_SIZE:
         case PIPE_CAP_TGSI_BALLOT:
         case PIPE_CAP_TGSI_TES_LAYER_VIEWPORT:
-	case PIPE_CAP_CAN_BIND_CONST_BUFFER_AS_VERTEX:
+        case PIPE_CAP_CAN_BIND_CONST_BUFFER_AS_VERTEX:
         case PIPE_CAP_POST_DEPTH_COVERAGE:
         case PIPE_CAP_BINDLESS_TEXTURE:
         case PIPE_CAP_NIR_SAMPLERS_AS_DEREF:
         case PIPE_CAP_QUERY_SO_OVERFLOW:
-	case PIPE_CAP_MEMOBJ:
+        case PIPE_CAP_MEMOBJ:
         case PIPE_CAP_LOAD_CONSTBUF:
-	case PIPE_CAP_TGSI_ANY_REG_AS_ADDRESS:
+        case PIPE_CAP_TGSI_ANY_REG_AS_ADDRESS:
+        case PIPE_CAP_MAX_COMBINED_SHADER_OUTPUT_RESOURCES:
+        case PIPE_CAP_SIGNED_VERTEX_BUFFER_OFFSET:
+        case PIPE_CAP_CONTEXT_PRIORITY_MASK:
                 return 0;
 
                 /* Stream output. */
@@ -443,12 +443,14 @@ vc4_screen_get_shader_param(struct pipe_screen *pscreen,
                 return PIPE_SHADER_IR_NIR;
         case PIPE_SHADER_CAP_SUPPORTED_IRS:
                 return 0;
-	case PIPE_SHADER_CAP_MAX_UNROLL_ITERATIONS_HINT:
-		return 32;
+        case PIPE_SHADER_CAP_MAX_UNROLL_ITERATIONS_HINT:
+                return 32;
         case PIPE_SHADER_CAP_MAX_SHADER_BUFFERS:
         case PIPE_SHADER_CAP_MAX_SHADER_IMAGES:
-	case PIPE_SHADER_CAP_LOWER_IF_THRESHOLD:
+        case PIPE_SHADER_CAP_LOWER_IF_THRESHOLD:
         case PIPE_SHADER_CAP_TGSI_SKIP_MERGE_REGISTERS:
+        case PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTERS:
+        case PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTER_BUFFERS:
                 return 0;
         default:
                 fprintf(stderr, "unknown shader param %d\n", param);
@@ -690,6 +692,8 @@ vc4_screen_create(int fd, struct renderonly *ro)
                 vc4_has_feature(screen, DRM_VC4_PARAM_SUPPORTS_ETC1);
         screen->has_threaded_fs =
                 vc4_has_feature(screen, DRM_VC4_PARAM_SUPPORTS_THREADED_FS);
+        screen->has_madvise =
+                vc4_has_feature(screen, DRM_VC4_PARAM_SUPPORTS_MADVISE);
 
         if (!vc4_get_chip_info(screen))
                 goto fail;
@@ -704,7 +708,7 @@ vc4_screen_create(int fd, struct renderonly *ro)
         if (vc4_debug & VC4_DEBUG_SHADERDB)
                 vc4_debug |= VC4_DEBUG_NORAST;
 
-#if USE_VC4_SIMULATOR
+#ifdef USE_VC4_SIMULATOR
         vc4_simulator_init(screen);
 #endif
 

@@ -118,6 +118,8 @@ MAIN_FILES = \
 	main/getstring.c \
 	main/glformats.c \
 	main/glformats.h \
+	main/glspirv.c \
+	main/glspirv.h \
 	main/glthread.c \
 	main/glthread.h \
 	main/glheader.h \
@@ -173,6 +175,8 @@ MAIN_FILES = \
 	main/points.h \
 	main/polygon.c \
 	main/polygon.h \
+	main/program_binary.c \
+	main/program_binary.h \
 	main/program_resource.c \
 	main/program_resource.h \
 	main/querymatrix.c \

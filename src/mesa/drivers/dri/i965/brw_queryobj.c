@@ -480,9 +480,6 @@ brw_emit_query_begin(struct brw_context *brw)
    struct gl_context *ctx = &brw->ctx;
    struct brw_query_object *query = brw->query.obj;
 
-   if (brw->hw_ctx)
-      return;
-
    /* Skip if we're not doing any queries, or we've already recorded the
     * initial query value for this batchbuffer.
     */
@@ -506,9 +503,6 @@ void
 brw_emit_query_end(struct brw_context *brw)
 {
    struct brw_query_object *query = brw->query.obj;
-
-   if (brw->hw_ctx)
-      return;
 
    if (!brw->query.begin_emitted)
       return;

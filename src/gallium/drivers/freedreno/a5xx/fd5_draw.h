@@ -31,6 +31,8 @@
 
 #include "freedreno_draw.h"
 
+#include "fd5_context.h"
+
 /* some bits in common w/ a4xx: */
 #include "a4xx/fd4_draw.h"
 
@@ -87,6 +89,37 @@ fd5_draw_emit(struct fd_batch *batch, struct fd_ringbuffer *ring,
 	enum a4xx_index_size idx_type;
 	enum pc_di_src_sel src_sel;
 	uint32_t idx_size, idx_offset;
+
+	if (info->indirect) {
+		struct fd_resource *ind = fd_resource(info->indirect->buffer);
+
+		emit_marker5(ring, 7);
+
+		if (info->index_size) {
+			struct pipe_resource *idx = info->index.resource;
+			unsigned max_indicies = (idx->width0 - info->indirect->offset) /
+					info->index_size;
+
+			OUT_PKT7(ring, CP_DRAW_INDX_INDIRECT, 6);
+			OUT_RINGP(ring, DRAW4(primtype, DI_SRC_SEL_DMA,
+					fd4_size2indextype(info->index_size), 0),
+					&batch->draw_patches);
+			OUT_RELOC(ring, fd_resource(idx)->bo,
+					index_offset, 0, 0);
+			OUT_RING(ring, A5XX_CP_DRAW_INDX_INDIRECT_3_MAX_INDICES(max_indicies));
+			OUT_RELOC(ring, ind->bo, info->indirect->offset, 0, 0);
+		} else {
+			OUT_PKT7(ring, CP_DRAW_INDIRECT, 3);
+			OUT_RINGP(ring, DRAW4(primtype, DI_SRC_SEL_AUTO_INDEX, 0, 0),
+					&batch->draw_patches);
+			OUT_RELOC(ring, ind->bo, info->indirect->offset, 0, 0);
+		}
+
+		emit_marker5(ring, 7);
+		fd_reset_wfi(batch);
+
+		return;
+	}
 
 	if (info->index_size) {
 		assert(!info->has_user_indices);

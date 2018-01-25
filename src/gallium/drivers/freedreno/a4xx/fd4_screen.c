@@ -75,6 +75,11 @@ fd4_screen_is_format_supported(struct pipe_screen *pscreen,
 				PIPE_BIND_SHARED);
 	}
 
+	/* For ARB_framebuffer_no_attachments: */
+	if ((usage & PIPE_BIND_RENDER_TARGET) && (format == PIPE_FORMAT_NONE)) {
+		retval |= usage & PIPE_BIND_RENDER_TARGET;
+	}
+
 	if ((usage & PIPE_BIND_DEPTH_STENCIL) &&
 			(fd4_pipe2depth(format) != (enum a4xx_depth_format)~0) &&
 			(fd4_pipe2tex(format) != (enum a4xx_tex_fmt)~0)) {

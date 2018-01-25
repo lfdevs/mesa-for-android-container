@@ -84,7 +84,7 @@ def const_bool(value):
 
 def gt_zero(var_name):
     """Create Construct the expression var_name > 0"""
-    return ['expression', 'bool', '>', ['var_ref', var_name], const_float(0)]
+    return ['expression', 'bool', '<', const_float(0), ['var_ref', var_name]]
 
 
 # The following functions can be used to build complex control flow

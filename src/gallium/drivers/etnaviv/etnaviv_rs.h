@@ -83,8 +83,8 @@ void
 etna_compile_rs_state(struct etna_context *ctx, struct compiled_rs_state *cs,
                       const struct rs_state *rs);
 
-/* modify the clear bits value in the compiled RS state */
+/* Context initialization for RS clear_blit functions. */
 void
-etna_modify_rs_clearbits(struct compiled_rs_state *cs, uint32_t clear_bits);
+etna_clear_blit_rs_init(struct pipe_context *pctx);
 
 #endif

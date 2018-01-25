@@ -55,7 +55,13 @@ dri2_query_renderer_integer(__DRIscreen *_screen, int param,
                                                   PIPE_TEXTURE_2D, 0,
                                                   PIPE_BIND_RENDER_TARGET);
       return 0;
-
+   case __DRI2_RENDERER_HAS_CONTEXT_PRIORITY:
+      value[0] =
+         screen->base.screen->get_param(screen->base.screen,
+                                        PIPE_CAP_CONTEXT_PRIORITY_MASK);
+      if (!value[0])
+         return -1;
+      return 0;
    default:
       return driQueryRendererIntegerCommon(_screen, param, value);
    }

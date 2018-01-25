@@ -39,6 +39,7 @@
 #include "prog_cache.h"
 #include "prog_parameter.h"
 #include "prog_instruction.h"
+#include "util/bitscan.h"
 #include "util/ralloc.h"
 #include "util/u_atomic.h"
 
@@ -277,6 +278,10 @@ _mesa_delete_program(struct gl_context *ctx, struct gl_program *prog)
 
    if (prog->sh.BindlessImages) {
       ralloc_free(prog->sh.BindlessImages);
+   }
+
+   if (prog->driver_cache_blob) {
+      ralloc_free(prog->driver_cache_blob);
    }
 
    ralloc_free(prog);
@@ -542,4 +547,20 @@ _mesa_get_min_invocations_per_fragment(struct gl_context *ctx,
          return 1;
    }
    return 1;
+}
+
+
+GLbitfield
+gl_external_samplers(const struct gl_program *prog)
+{
+   GLbitfield external_samplers = 0;
+   GLbitfield mask = prog->SamplersUsed;
+
+   while (mask) {
+      int idx = u_bit_scan(&mask);
+      if (prog->sh.SamplerTargets[idx] == TEXTURE_EXTERNAL_INDEX)
+         external_samplers |= (1 << idx);
+   }
+
+   return external_samplers;
 }

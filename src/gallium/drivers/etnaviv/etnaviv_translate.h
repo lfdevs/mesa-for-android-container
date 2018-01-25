@@ -33,6 +33,7 @@
 #include "etnaviv_tiling.h"
 #include "etnaviv_util.h"
 #include "hw/cmdstream.xml.h"
+#include "hw/common_3d.xml.h"
 #include "hw/state.xml.h"
 #include "hw/state_3d.xml.h"
 
@@ -283,19 +284,19 @@ translate_msaa_format(enum pipe_format fmt)
    /* Note: Pipe format convention is LSB to MSB, VIVS is MSB to LSB */
    switch (fmt) {
    case PIPE_FORMAT_B4G4R4X4_UNORM:
-      return VIVS_TS_MEM_CONFIG_MSAA_FORMAT_A4R4G4B4;
+      return COLOR_COMPRESSION_FORMAT_A4R4G4B4;
    case PIPE_FORMAT_B4G4R4A4_UNORM:
-      return VIVS_TS_MEM_CONFIG_MSAA_FORMAT_A4R4G4B4;
+      return COLOR_COMPRESSION_FORMAT_A4R4G4B4;
    case PIPE_FORMAT_B5G5R5X1_UNORM:
-      return VIVS_TS_MEM_CONFIG_MSAA_FORMAT_A1R5G5B5;
+      return COLOR_COMPRESSION_FORMAT_A1R5G5B5;
    case PIPE_FORMAT_B5G5R5A1_UNORM:
-      return VIVS_TS_MEM_CONFIG_MSAA_FORMAT_A1R5G5B5;
+      return COLOR_COMPRESSION_FORMAT_A1R5G5B5;
    case PIPE_FORMAT_B5G6R5_UNORM:
-      return VIVS_TS_MEM_CONFIG_MSAA_FORMAT_R5G6B5;
+      return COLOR_COMPRESSION_FORMAT_R5G6B5;
    case PIPE_FORMAT_B8G8R8X8_UNORM:
-      return VIVS_TS_MEM_CONFIG_MSAA_FORMAT_X8R8G8B8;
+      return COLOR_COMPRESSION_FORMAT_X8R8G8B8;
    case PIPE_FORMAT_B8G8R8A8_UNORM:
-      return VIVS_TS_MEM_CONFIG_MSAA_FORMAT_A8R8G8B8;
+      return COLOR_COMPRESSION_FORMAT_A8R8G8B8;
    /* MSAA with YUYV not supported */
    default:
       return ETNA_NO_MATCH;

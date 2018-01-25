@@ -309,8 +309,6 @@ static const int extra_GLSL_130_es3[] = {
 };
 
 static const int extra_texture_buffer_object[] = {
-   EXTRA_API_GL_CORE,
-   EXTRA_VERSION_31,
    EXT(ARB_texture_buffer_object),
    EXTRA_END
 };
@@ -577,6 +575,13 @@ static const int extra_EXT_shader_framebuffer_fetch[] = {
 
 static const int extra_EXT_provoking_vertex_32[] = {
    EXTRA_EXT_PROVOKING_VERTEX_32,
+   EXTRA_END
+};
+
+static const int extra_EXT_disjoint_timer_query[] = {
+   EXTRA_API_ES2,
+   EXTRA_API_ES3,
+   EXT(EXT_disjoint_timer_query),
    EXTRA_END
 };
 
@@ -1151,6 +1156,25 @@ find_custom_value(struct gl_context *ctx, const struct value_desc *d, union valu
             v->value_int_4[2] = info.avail_staging_memory;
             v->value_int_4[3] = info.avail_staging_memory;
          }
+      }
+      break;
+
+   /* GL_ARB_get_program_binary */
+   case GL_PROGRAM_BINARY_FORMATS:
+      assert(ctx->Const.NumProgramBinaryFormats <= 1);
+      v->value_int_n.n = MIN2(ctx->Const.NumProgramBinaryFormats, 1);
+      if (ctx->Const.NumProgramBinaryFormats > 0) {
+         v->value_int_n.ints[0] = GL_PROGRAM_BINARY_FORMAT_MESA;
+      }
+      break;
+   /* GL_EXT_disjoint_timer_query */
+   case GL_GPU_DISJOINT_EXT:
+      {
+         simple_mtx_lock(&ctx->Shared->Mutex);
+         v->value_int = ctx->Shared->DisjointOperation;
+         /* Reset state as expected by the spec. */
+         ctx->Shared->DisjointOperation = false;
+         simple_mtx_unlock(&ctx->Shared->Mutex);
       }
       break;
    }

@@ -379,8 +379,8 @@ emit_3dstate_sbe(struct anv_pipeline *pipeline)
          /* We have to subtract two slots to accout for the URB entry output
           * read offset in the VS and GS stages.
           */
-         assert(slot >= 2);
          const int source_attr = slot - 2 * urb_entry_read_offset;
+         assert(source_attr >= 0 && source_attr < 32);
          max_source_attr = MAX2(max_source_attr, source_attr);
          swiz.Attribute[input_index].SourceAttribute = source_attr;
       }
@@ -1109,22 +1109,6 @@ get_scratch_space(const struct anv_shader_bin *bin)
    return ffs(bin->prog_data->total_scratch / 2048);
 }
 
-static uint32_t
-get_urb_output_offset()
-{
-   /* Skip the VUE header and position slots */
-   return 1;
-}
-
-UNUSED static uint32_t
-get_urb_output_length(const struct anv_shader_bin *bin)
-{
-   const struct brw_vue_prog_data *prog_data =
-      (const struct brw_vue_prog_data *)bin->prog_data;
-
-   return (prog_data->vue_map.num_slots + 1) / 2 - get_urb_output_offset();
-}
-
 static void
 emit_3dstate_vs(struct anv_pipeline *pipeline)
 {
@@ -1161,9 +1145,6 @@ emit_3dstate_vs(struct anv_pipeline *pipeline)
          vs_prog_data->base.base.dispatch_grf_start_reg;
 
 #if GEN_GEN >= 8
-      vs.VertexURBEntryOutputReadOffset = get_urb_output_offset();
-      vs.VertexURBEntryOutputLength     = get_urb_output_length(vs_bin);
-
       vs.UserClipDistanceClipTestEnableBitmask =
          vs_prog_data->base.clip_distance_mask;
       vs.UserClipDistanceCullTestEnableBitmask =
@@ -1264,10 +1245,6 @@ emit_3dstate_hs_te_ds(struct anv_pipeline *pipeline,
          tes_prog_data->base.base.dispatch_grf_start_reg;
 
 #if GEN_GEN >= 8
-      ds.VertexURBEntryOutputReadOffset = 1;
-      ds.VertexURBEntryOutputLength =
-         (tes_prog_data->base.vue_map.num_slots + 1) / 2 - 1;
-
       ds.DispatchMode =
          tes_prog_data->base.dispatch_mode == DISPATCH_MODE_SIMD8 ?
             DISPATCH_MODE_SIMD8_SINGLE_PATCH :
@@ -1340,9 +1317,6 @@ emit_3dstate_gs(struct anv_pipeline *pipeline)
          gs_prog_data->base.base.dispatch_grf_start_reg;
 
 #if GEN_GEN >= 8
-      gs.VertexURBEntryOutputReadOffset = get_urb_output_offset();
-      gs.VertexURBEntryOutputLength     = get_urb_output_length(gs_bin);
-
       gs.UserClipDistanceClipTestEnableBitmask =
          gs_prog_data->base.clip_distance_mask;
       gs.UserClipDistanceCullTestEnableBitmask =
@@ -1513,7 +1487,8 @@ emit_3dstate_ps(struct anv_pipeline *pipeline,
       ps.VectorMaskEnable           = true;
       ps.SamplerCount               = get_sampler_count(fs_bin);
       ps.BindingTableEntryCount     = get_binding_table_entry_count(fs_bin);
-      ps.PushConstantEnable         = wm_prog_data->base.nr_params > 0;
+      ps.PushConstantEnable         = wm_prog_data->base.nr_params > 0 ||
+                                      wm_prog_data->base.ubo_ranges[0].length;
       ps.PositionXYOffsetSelect     = wm_prog_data->uses_pos_offset ?
                                       POSOFFSET_SAMPLE: POSOFFSET_NONE;
 #if GEN_GEN < 8

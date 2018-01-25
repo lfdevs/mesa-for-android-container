@@ -37,8 +37,7 @@ public:
                    struct brw_vs_prog_data *vs_prog_data,
                    const nir_shader *shader,
                    void *mem_ctx,
-                   int shader_time_index,
-                   bool use_legacy_snorm_formula);
+                   int shader_time_index);
 
 protected:
    virtual void setup_payload();
@@ -55,8 +54,6 @@ private:
 
    const struct brw_vs_prog_key *const key;
    struct brw_vs_prog_data * const vs_prog_data;
-
-   bool use_legacy_snorm_formula;
 };
 
 } /* namespace brw */

@@ -33,7 +33,7 @@
 #include "util/u_memory.h"
 #include "util/simple_list.h"
 #include "util/u_network.h"
-#include "os/os_time.h"
+#include "util/os_time.h"
 
 #include "tgsi/tgsi_parse.h"
 
@@ -221,7 +221,7 @@ rbug_texture_info(struct rbug_rbug *tr_rbug, struct rbug_header *header, uint32_
    }
 
    t = tr_tex->resource;
-   num_layers = util_max_layer(t, 0) + 1;
+   num_layers = util_num_layers(t, 0);
 
    rbug_send_texture_info_reply(tr_rbug->con, serial,
                                t->target, t->format,

@@ -211,7 +211,6 @@ remap_patch_urb_offsets(nir_block *block, nir_builder *b,
 
 void
 brw_nir_lower_vs_inputs(nir_shader *nir,
-                        bool use_legacy_snorm_formula,
                         const uint8_t *vs_attrib_wa_flags)
 {
    /* Start with the location of the variable's base. */
@@ -230,8 +229,7 @@ brw_nir_lower_vs_inputs(nir_shader *nir,
 
    add_const_offset_to_base(nir, nir_var_shader_in);
 
-   brw_nir_apply_attribute_workarounds(nir, use_legacy_snorm_formula,
-                                       vs_attrib_wa_flags);
+   brw_nir_apply_attribute_workarounds(nir, vs_attrib_wa_flags);
 
    /* The last step is to remap VERT_ATTRIB_* to actual registers */
 
@@ -631,7 +629,6 @@ brw_preprocess_nir(const struct brw_compiler *compiler, nir_shader *nir)
 
    OPT(nir_lower_tex, &tex_options);
    OPT(nir_normalize_cubemap_coords);
-   OPT(nir_lower_read_invocation_to_scalar);
 
    OPT(nir_lower_global_vars_to_local);
 
@@ -645,6 +642,18 @@ brw_preprocess_nir(const struct brw_compiler *compiler, nir_shader *nir)
 
    /* Lower a bunch of stuff */
    OPT(nir_lower_var_copies);
+
+   OPT(nir_lower_system_values);
+
+   const nir_lower_subgroups_options subgroups_options = {
+      .subgroup_size = nir->info.stage == MESA_SHADER_COMPUTE ? 32 :
+                       nir->info.stage == MESA_SHADER_FRAGMENT ? 16 : 8,
+      .ballot_bit_size = 32,
+      .lower_to_scalar = true,
+      .lower_subgroup_masks = true,
+      .lower_vote_trivial = !is_scalar,
+   };
+   OPT(nir_lower_subgroups, &subgroups_options);
 
    OPT(nir_lower_clip_cull_distance_arrays);
 
@@ -832,12 +841,18 @@ brw_type_for_nir_type(const struct gen_device_info *devinfo, nir_alu_type type)
    case nir_type_float:
    case nir_type_float32:
       return BRW_REGISTER_TYPE_F;
+   case nir_type_float16:
+      return BRW_REGISTER_TYPE_HF;
    case nir_type_float64:
       return BRW_REGISTER_TYPE_DF;
    case nir_type_int64:
       return devinfo->gen < 8 ? BRW_REGISTER_TYPE_DF : BRW_REGISTER_TYPE_Q;
    case nir_type_uint64:
       return devinfo->gen < 8 ? BRW_REGISTER_TYPE_DF : BRW_REGISTER_TYPE_UQ;
+   case nir_type_int16:
+      return BRW_REGISTER_TYPE_W;
+   case nir_type_uint16:
+      return BRW_REGISTER_TYPE_UW;
    default:
       unreachable("unknown type");
    }
@@ -856,6 +871,9 @@ brw_glsl_base_type_for_nir_type(nir_alu_type type)
    case nir_type_float32:
       return GLSL_TYPE_FLOAT;
 
+   case nir_type_float16:
+      return GLSL_TYPE_FLOAT16;
+
    case nir_type_float64:
       return GLSL_TYPE_DOUBLE;
 
@@ -866,6 +884,12 @@ brw_glsl_base_type_for_nir_type(nir_alu_type type)
    case nir_type_uint:
    case nir_type_uint32:
       return GLSL_TYPE_UINT;
+
+   case nir_type_int16:
+      return GLSL_TYPE_INT16;
+
+   case nir_type_uint16:
+      return GLSL_TYPE_UINT16;
 
    default:
       unreachable("bad type");

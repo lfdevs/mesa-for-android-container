@@ -159,21 +159,6 @@ cl_aligned_f(struct vc4_cl_out **cl, float f)
         cl_aligned_u32(cl, fui(f));
 }
 
-static inline void
-cl_start_reloc(struct vc4_cl *cl, struct vc4_cl_out **out, uint32_t n)
-{
-        assert(n == 1 || n == 2);
-        assert(cl->reloc_count == 0);
-#ifndef NDEBUG
-        cl->reloc_count = n;
-#endif
-
-        cl_u8(out, VC4_PACKET_GEM_HANDLES);
-        cl->reloc_next = *out;
-        cl_u32(out, 0); /* Space where hindex will be written. */
-        cl_u32(out, 0); /* Space where hindex will be written. */
-}
-
 static inline struct vc4_cl_out *
 cl_start_shader_reloc(struct vc4_cl *cl, uint32_t n)
 {

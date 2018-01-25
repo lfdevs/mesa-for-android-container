@@ -113,25 +113,20 @@ static bool
 validate(struct brw_codegen *p)
 {
    const bool print = getenv("TEST_DEBUG");
-   struct annotation_info annotation;
-   memset(&annotation, 0, sizeof(annotation));
+   struct disasm_info *disasm = disasm_initialize(p->devinfo, NULL);
 
    if (print) {
-      annotation.mem_ctx = ralloc_context(NULL);
-      annotation.ann_count = 1;
-      annotation.ann_size = 2;
-      annotation.ann = rzalloc_array(annotation.mem_ctx, struct annotation,
-                                     annotation.ann_size);
-      annotation.ann[annotation.ann_count].offset = p->next_insn_offset;
+      disasm_new_inst_group(disasm, 0);
+      disasm_new_inst_group(disasm, p->next_insn_offset);
    }
 
    bool ret = brw_validate_instructions(p->devinfo, p->store, 0,
-                                        p->next_insn_offset, &annotation);
+                                        p->next_insn_offset, disasm);
 
    if (print) {
-      dump_assembly(p->store, annotation.ann_count, annotation.ann, p->devinfo);
-      ralloc_free(annotation.mem_ctx);
+      dump_assembly(p->store, disasm);
    }
+   ralloc_free(disasm);
 
    return ret;
 }

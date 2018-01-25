@@ -27,6 +27,7 @@
 * Notes:
 * 
 ******************************************************************************/
+#include "jit_pch.hpp"
 #include "builder.h"
 #include "common/rdtsc_buckets.h"
 
@@ -196,9 +197,19 @@ namespace SwrJit
         return ConstantVector::getSplat(mVWidth, cast<ConstantInt>(C(i)));
     }
 
+    Value *Builder::VIMMED1_16(int i)
+    {
+        return ConstantVector::getSplat(mVWidth16, cast<ConstantInt>(C(i)));
+    }
+
     Value *Builder::VIMMED1(uint32_t i)
     {
         return ConstantVector::getSplat(mVWidth, cast<ConstantInt>(C(i)));
+    }
+
+    Value *Builder::VIMMED1_16(uint32_t i)
+    {
+        return ConstantVector::getSplat(mVWidth16, cast<ConstantInt>(C(i)));
     }
 
     Value *Builder::VIMMED1(float i)
@@ -206,9 +217,19 @@ namespace SwrJit
         return ConstantVector::getSplat(mVWidth, cast<ConstantFP>(C(i)));
     }
 
+    Value *Builder::VIMMED1_16(float i)
+    {
+        return ConstantVector::getSplat(mVWidth16, cast<ConstantFP>(C(i)));
+    }
+
     Value *Builder::VIMMED1(bool i)
     {
         return ConstantVector::getSplat(mVWidth, cast<ConstantInt>(C(i)));
+    }
+
+    Value *Builder::VIMMED1_16(bool i)
+    {
+        return ConstantVector::getSplat(mVWidth16, cast<ConstantInt>(C(i)));
     }
 
     Value *Builder::VUNDEF_IPTR()
@@ -216,14 +237,19 @@ namespace SwrJit
         return UndefValue::get(VectorType::get(mInt32PtrTy,mVWidth));
     }
 
+    Value *Builder::VUNDEF(Type* t)
+    {
+        return UndefValue::get(VectorType::get(t, mVWidth));
+    }
+
     Value *Builder::VUNDEF_I()
     {
         return UndefValue::get(VectorType::get(mInt32Ty, mVWidth));
     }
 
-    Value *Builder::VUNDEF(Type *ty, uint32_t size)
+    Value *Builder::VUNDEF_I_16()
     {
-        return UndefValue::get(VectorType::get(ty, size));
+        return UndefValue::get(VectorType::get(mInt32Ty, mVWidth16));
     }
 
     Value *Builder::VUNDEF_F()
@@ -231,12 +257,17 @@ namespace SwrJit
         return UndefValue::get(VectorType::get(mFP32Ty, mVWidth));
     }
 
-    Value *Builder::VUNDEF(Type* t)
+    Value *Builder::VUNDEF_F_16()
     {
-        return UndefValue::get(VectorType::get(t, mVWidth));
+        return UndefValue::get(VectorType::get(mFP32Ty, mVWidth16));
     }
 
-    Value *Builder::VBROADCAST(Value *src)
+    Value *Builder::VUNDEF(Type *ty, uint32_t size)
+    {
+        return UndefValue::get(VectorType::get(ty, size));
+    }
+
+    Value *Builder::VBROADCAST(Value *src, const llvm::Twine& name)
     {
         // check if src is already a vector
         if (src->getType()->isVectorTy())
@@ -244,7 +275,18 @@ namespace SwrJit
             return src;
         }
 
-        return VECTOR_SPLAT(mVWidth, src);
+        return VECTOR_SPLAT(mVWidth, src, name);
+    }
+
+    Value *Builder::VBROADCAST_16(Value *src)
+    {
+        // check if src is already a vector
+        if (src->getType()->isVectorTy())
+        {
+            return src;
+        }
+
+        return VECTOR_SPLAT(mVWidth16, src);
     }
 
     uint32_t Builder::IMMED(Value* v)
@@ -325,12 +367,12 @@ namespace SwrJit
         return STORE(val, GEPA(basePtr, valIndices));
     }
 
-    CallInst *Builder::CALL(Value *Callee, const std::initializer_list<Value*> &argsList)
+    CallInst *Builder::CALL(Value *Callee, const std::initializer_list<Value*> &argsList, const llvm::Twine& name)
     {
         std::vector<Value*> args;
         for (auto arg : argsList)
             args.push_back(arg);
-        return CALLA(Callee, args);
+        return CALLA(Callee, args, name);
     }
 
     CallInst *Builder::CALL(Value *Callee, Value* arg)
@@ -364,9 +406,9 @@ namespace SwrJit
         return CALL(func);
     }
 
-    Value *Builder::VRCP(Value *va)
+    Value *Builder::VRCP(Value *va, const llvm::Twine& name)
     {
-        return FDIV(VIMMED1(1.0f), va);  // 1 / a
+        return FDIV(VIMMED1(1.0f), va, name);  // 1 / a
     }
 
     Value *Builder::VPLANEPS(Value* vA, Value* vB, Value* vC, Value* &vX, Value* &vY)
@@ -547,16 +589,17 @@ namespace SwrJit
     /// @param vIndices - SIMD wide value of VB byte offsets
     /// @param vMask - SIMD wide mask that controls whether to access memory or the src values
     /// @param scale - value to scale indices by
-    Value *Builder::GATHERPS(Value* vSrc, Value* pBase, Value* vIndices, Value* vMask, Value* scale)
+    Value *Builder::GATHERPS(Value *vSrc, Value *pBase, Value *vIndices, Value *vMask, uint8_t scale)
     {
-        Value* vGather;
+        Value *vGather;
 
         // use avx2 gather instruction if available
         if(JM()->mArch.AVX2())
         {
             // force mask to <N x float>, required by vgather
-            vMask = BITCAST(vMask, mSimdFP32Ty);
-            vGather = VGATHERPS(vSrc,pBase,vIndices,vMask,scale);
+            Value *mask = BITCAST(VMASK(vMask), mSimdFP32Ty);
+
+            vGather = VGATHERPS(vSrc, pBase, vIndices, mask, C(scale));
         }
         else
         {
@@ -567,9 +610,8 @@ namespace SwrJit
             STORE(vSrc, vSrcPtr);
 
             vGather = VUNDEF_F();
-            Value *vScaleVec = VBROADCAST(Z_EXT(scale,mInt32Ty));
+            Value *vScaleVec = VIMMED1((uint32_t)scale);
             Value *vOffsets = MUL(vIndices,vScaleVec);
-            Value *mask = MASK(vMask);
             for(uint32_t i = 0; i < mVWidth; ++i)
             {
                 // single component byte index
@@ -579,13 +621,46 @@ namespace SwrJit
                 loadAddress = BITCAST(loadAddress,PointerType::get(mFP32Ty,0));
                 // pointer to the value to load if we're masking off a component
                 Value *maskLoadAddress = GEP(vSrcPtr,{C(0), C(i)});
-                Value *selMask = VEXTRACT(mask,C(i));
+                Value *selMask = VEXTRACT(vMask,C(i));
                 // switch in a safe address to load if we're trying to access a vertex 
                 Value *validAddress = SELECT(selMask, loadAddress, maskLoadAddress);
                 Value *val = LOAD(validAddress);
                 vGather = VINSERT(vGather,val,C(i));
             }
+
             STACKRESTORE(pStack);
+        }
+
+        return vGather;
+    }
+
+    Value *Builder::GATHERPS_16(Value *vSrc, Value *pBase, Value *vIndices, Value *vMask, uint8_t scale)
+    {
+        Value *vGather = VUNDEF_F_16();
+
+        // use AVX512F gather instruction if available
+        if (JM()->mArch.AVX512F())
+        {
+            // force mask to <N-bit Integer>, required by vgather2
+            Value *mask = BITCAST(vMask, mInt16Ty);
+
+            vGather = VGATHERPS_16(vSrc, pBase, vIndices, mask, C((uint32_t)scale));
+        }
+        else
+        {
+            Value *src0 = EXTRACT_16(vSrc, 0);
+            Value *src1 = EXTRACT_16(vSrc, 1);
+
+            Value *indices0 = EXTRACT_16(vIndices, 0);
+            Value *indices1 = EXTRACT_16(vIndices, 1);
+
+            Value *mask0 = EXTRACT_16(vMask, 0);
+            Value *mask1 = EXTRACT_16(vMask, 1);
+
+            Value *gather0 = GATHERPS(src0, pBase, indices0, mask0, scale);
+            Value *gather1 = GATHERPS(src1, pBase, indices1, mask1, scale);
+
+            vGather = JOIN_16(gather0, gather1);
         }
 
         return vGather;
@@ -599,14 +674,14 @@ namespace SwrJit
     /// @param vIndices - SIMD wide value of VB byte offsets
     /// @param vMask - SIMD wide mask that controls whether to access memory or the src values
     /// @param scale - value to scale indices by
-    Value *Builder::GATHERDD(Value* vSrc, Value* pBase, Value* vIndices, Value* vMask, Value* scale)
+    Value *Builder::GATHERDD(Value* vSrc, Value* pBase, Value* vIndices, Value* vMask, uint8_t scale)
     {
         Value* vGather;
 
         // use avx2 gather instruction if available
         if(JM()->mArch.AVX2())
         {
-            vGather = VGATHERDD(vSrc, pBase, vIndices, vMask, scale);
+            vGather = VGATHERDD(vSrc, pBase, vIndices, VMASK(vMask), C(scale));
         }
         else
         {
@@ -617,9 +692,8 @@ namespace SwrJit
             STORE(vSrc, vSrcPtr);
 
             vGather = VUNDEF_I();
-            Value *vScaleVec = VBROADCAST(Z_EXT(scale, mInt32Ty));
+            Value *vScaleVec = VIMMED1((uint32_t)scale);
             Value *vOffsets = MUL(vIndices, vScaleVec);
-            Value *mask = MASK(vMask);
             for(uint32_t i = 0; i < mVWidth; ++i)
             {
                 // single component byte index
@@ -629,7 +703,7 @@ namespace SwrJit
                 loadAddress = BITCAST(loadAddress, PointerType::get(mInt32Ty, 0));
                 // pointer to the value to load if we're masking off a component
                 Value *maskLoadAddress = GEP(vSrcPtr, {C(0), C(i)});
-                Value *selMask = VEXTRACT(mask, C(i));
+                Value *selMask = VEXTRACT(vMask, C(i));
                 // switch in a safe address to load if we're trying to access a vertex 
                 Value *validAddress = SELECT(selMask, loadAddress, maskLoadAddress);
                 Value *val = LOAD(validAddress, C(0));
@@ -638,6 +712,39 @@ namespace SwrJit
 
             STACKRESTORE(pStack);
         }
+
+        return vGather;
+    }
+
+    Value *Builder::GATHERDD_16(Value *vSrc, Value *pBase, Value *vIndices, Value *vMask, uint8_t scale)
+    {
+        Value *vGather = VUNDEF_I_16();
+
+        // use AVX512F gather instruction if available
+        if (JM()->mArch.AVX512F())
+        {
+            // force mask to <N-bit Integer>, required by vgather2
+            Value *mask = BITCAST(vMask, mInt16Ty);
+
+            vGather = VGATHERDD_16(vSrc, pBase, vIndices, mask, C((uint32_t)scale));
+        }
+        else
+        {
+            Value *src0 = EXTRACT_16(vSrc, 0);
+            Value *src1 = EXTRACT_16(vSrc, 1);
+
+            Value *indices0 = EXTRACT_16(vIndices, 0);
+            Value *indices1 = EXTRACT_16(vIndices, 1);
+
+            Value *mask0 = EXTRACT_16(vMask, 0);
+            Value *mask1 = EXTRACT_16(vMask, 1);
+
+            Value *gather0 = GATHERDD(src0, pBase, indices0, mask0, scale);
+            Value *gather1 = GATHERDD(src1, pBase, indices1, mask1, scale);
+
+            vGather = JOIN_16(gather0, gather1);
+        }
+
         return vGather;
     }
 
@@ -649,14 +756,15 @@ namespace SwrJit
     /// @param vIndices - SIMD wide value of VB byte offsets
     /// @param vMask - SIMD wide mask that controls whether to access memory or the src values
     /// @param scale - value to scale indices by
-    Value *Builder::GATHERPD(Value* vSrc, Value* pBase, Value* vIndices, Value* vMask, Value* scale)
+    Value *Builder::GATHERPD(Value* vSrc, Value* pBase, Value* vIndices, Value* vMask, uint8_t scale)
     {
         Value* vGather;
 
         // use avx2 gather instruction if available
         if(JM()->mArch.AVX2())
         {
-            vGather = VGATHERPD(vSrc, pBase, vIndices, vMask, scale);
+            vMask = BITCAST(S_EXT(vMask, VectorType::get(mInt64Ty, mVWidth/2)), VectorType::get(mDoubleTy, mVWidth/2));
+            vGather = VGATHERPD(vSrc, pBase, vIndices, vMask, C(scale));
         }
         else
         {
@@ -667,9 +775,8 @@ namespace SwrJit
             STORE(vSrc, vSrcPtr);
 
             vGather = UndefValue::get(VectorType::get(mDoubleTy, 4));
-            Value *vScaleVec = VECTOR_SPLAT(4, Z_EXT(scale,mInt32Ty));
+            Value *vScaleVec = VECTOR_SPLAT(4, C((uint32_t)scale));
             Value *vOffsets = MUL(vIndices,vScaleVec);
-            Value *mask = MASK(vMask);
             for(uint32_t i = 0; i < mVWidth/2; ++i)
             {
                 // single component byte index
@@ -679,7 +786,7 @@ namespace SwrJit
                 loadAddress = BITCAST(loadAddress,PointerType::get(mDoubleTy,0));
                 // pointer to the value to load if we're masking off a component
                 Value *maskLoadAddress = GEP(vSrcPtr,{C(0), C(i)});
-                Value *selMask = VEXTRACT(mask,C(i));
+                Value *selMask = VEXTRACT(vMask,C(i));
                 // switch in a safe address to load if we're trying to access a vertex
                 Value *validAddress = SELECT(selMask, loadAddress, maskLoadAddress);
                 Value *val = LOAD(validAddress);
@@ -690,19 +797,47 @@ namespace SwrJit
         return vGather;
     }
 
+    Value *Builder::EXTRACT_16(Value *x, uint32_t imm)
+    {
+        if (imm == 0)
+        {
+            return VSHUFFLE(x, UndefValue::get(x->getType()), { 0, 1, 2, 3, 4, 5, 6, 7 });
+        }
+        else
+        {
+            return VSHUFFLE(x, UndefValue::get(x->getType()), { 8, 9, 10, 11, 12, 13, 14, 15 });
+        }
+    }
+
+    Value *Builder::JOIN_16(Value *a, Value *b)
+    {
+        return VSHUFFLE(a, b, { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 });
+    }
+
     //////////////////////////////////////////////////////////////////////////
     /// @brief convert x86 <N x float> mask to llvm <N x i1> mask
-    Value* Builder::MASK(Value* vmask)
+    Value *Builder::MASK(Value *vmask)
     {
-        Value* src = BITCAST(vmask, mSimdInt32Ty);
+        Value *src = BITCAST(vmask, mSimdInt32Ty);
         return ICMP_SLT(src, VIMMED1(0));
+    }
+
+    Value *Builder::MASK_16(Value *vmask)
+    {
+        Value *src = BITCAST(vmask, mSimd16Int32Ty);
+        return ICMP_SLT(src, VIMMED1_16(0));
     }
 
     //////////////////////////////////////////////////////////////////////////
     /// @brief convert llvm <N x i1> mask to x86 <N x i32> mask
-    Value* Builder::VMASK(Value* mask)
+    Value *Builder::VMASK(Value *mask)
     {
         return S_EXT(mask, mSimdInt32Ty);
+    }
+
+    Value *Builder::VMASK_16(Value *mask)
+    {
+        return S_EXT(mask, mSimd16Int32Ty);
     }
 
     //////////////////////////////////////////////////////////////////////////
@@ -855,11 +990,11 @@ namespace SwrJit
     /// @brief Generate a VCVTPH2PS operation (float16->float32 conversion)
     /// in LLVM IR.  If not supported on the underlying platform, emulate it
     /// @param a - 128bit SIMD lane(8x16bit) of float16 in int16 format.
-    Value *Builder::CVTPH2PS(Value* a)
+    Value *Builder::CVTPH2PS(Value* a, const llvm::Twine& name)
     {
         if (JM()->mArch.F16C())
         {
-            return VCVTPH2PS(a);
+            return VCVTPH2PS(a, name);
         }
         else
         {
@@ -879,6 +1014,7 @@ namespace SwrJit
                 pResult = VINSERT(pResult, pConv, C(i));
             }
 
+            pResult->setName(name);
             return pResult;
         }
     }
@@ -934,37 +1070,29 @@ namespace SwrJit
         const SWR_FORMAT_INFO &info = GetFormatInfo(format);
         if(info.type[0] == SWR_TYPE_FLOAT && info.bpc[0] == 32)
         {
-            // ensure our mask is the correct type
-            mask = BITCAST(mask, mSimdFP32Ty);
             GATHER4PS(info, pSrcBase, byteOffsets, mask, vGatherComponents, bPackedOutput);
         }
         else
         {
-            // ensure our mask is the correct type
-            mask = BITCAST(mask, mSimdInt32Ty);
             GATHER4DD(info, pSrcBase, byteOffsets, mask, vGatherComponents, bPackedOutput);
         }
     }
 
     void Builder::GATHER4PS(const SWR_FORMAT_INFO &info, Value* pSrcBase, Value* byteOffsets, 
-                            Value* mask, Value* vGatherComponents[], bool bPackedOutput)
+                            Value* vMask, Value* vGatherComponents[], bool bPackedOutput)
     {
         switch(info.bpp / info.numComps)
         {
             case 16: 
             {
                     Value* vGatherResult[2];
-                    Value *vMask;
 
                     // TODO: vGatherMaskedVal
                     Value* vGatherMaskedVal = VIMMED1((float)0);
 
                     // always have at least one component out of x or y to fetch
 
-                    // save mask as it is zero'd out after each gather
-                    vMask = mask;
-
-                    vGatherResult[0] = GATHERPS(vGatherMaskedVal, pSrcBase, byteOffsets, vMask, C((char)1));
+                    vGatherResult[0] = GATHERPS(vGatherMaskedVal, pSrcBase, byteOffsets, vMask);
                     // e.g. result of first 8x32bit integer gather for 16bit components
                     // 256i - 0    1    2    3    4    5    6    7
                     //        xyxy xyxy xyxy xyxy xyxy xyxy xyxy xyxy
@@ -975,9 +1103,8 @@ namespace SwrJit
                     {
                         // offset base to the next components(zw) in the vertex to gather
                         pSrcBase = GEP(pSrcBase, C((char)4));
-                        vMask = mask;
 
-                        vGatherResult[1] =  GATHERPS(vGatherMaskedVal, pSrcBase, byteOffsets, vMask, C((char)1));
+                        vGatherResult[1] =  GATHERPS(vGatherMaskedVal, pSrcBase, byteOffsets, vMask);
                         // e.g. result of second 8x32bit integer gather for 16bit components
                         // 256i - 0    1    2    3    4    5    6    7
                         //        zwzw zwzw zwzw zwzw zwzw zwzw zwzw zwzw 
@@ -1004,11 +1131,8 @@ namespace SwrJit
                 {
                     uint32_t swizzleIndex = info.swizzle[i];
 
-                    // save mask as it is zero'd out after each gather
-                    Value *vMask = mask;
-
                     // Gather a SIMD of components
-                    vGatherComponents[swizzleIndex] = GATHERPS(vGatherComponents[swizzleIndex], pSrcBase, byteOffsets, vMask, C((char)1));
+                    vGatherComponents[swizzleIndex] = GATHERPS(vGatherComponents[swizzleIndex], pSrcBase, byteOffsets, vMask);
 
                     // offset base to the next component to gather
                     pSrcBase = GEP(pSrcBase, C((char)4));
@@ -1022,14 +1146,14 @@ namespace SwrJit
     }
 
     void Builder::GATHER4DD(const SWR_FORMAT_INFO &info, Value* pSrcBase, Value* byteOffsets,
-                            Value* mask, Value* vGatherComponents[], bool bPackedOutput)
+                            Value* vMask, Value* vGatherComponents[], bool bPackedOutput)
     {
         switch (info.bpp / info.numComps)
         {
             case 8:
             {
                 Value* vGatherMaskedVal = VIMMED1((int32_t)0);
-                Value* vGatherResult = GATHERDD(vGatherMaskedVal, pSrcBase, byteOffsets, mask, C((char)1));
+                Value* vGatherResult = GATHERDD(vGatherMaskedVal, pSrcBase, byteOffsets, vMask);
                 // e.g. result of an 8x32bit integer gather for 8bit components
                 // 256i - 0    1    2    3    4    5    6    7
                 //        xyzw xyzw xyzw xyzw xyzw xyzw xyzw xyzw 
@@ -1040,17 +1164,13 @@ namespace SwrJit
             case 16:
             {
                 Value* vGatherResult[2];
-                Value *vMask;
 
                 // TODO: vGatherMaskedVal
                 Value* vGatherMaskedVal = VIMMED1((int32_t)0);
 
                 // always have at least one component out of x or y to fetch
 
-                // save mask as it is zero'd out after each gather
-                vMask = mask;
-
-                vGatherResult[0] = GATHERDD(vGatherMaskedVal, pSrcBase, byteOffsets, vMask, C((char)1));
+                vGatherResult[0] = GATHERDD(vGatherMaskedVal, pSrcBase, byteOffsets, vMask);
                 // e.g. result of first 8x32bit integer gather for 16bit components
                 // 256i - 0    1    2    3    4    5    6    7
                 //        xyxy xyxy xyxy xyxy xyxy xyxy xyxy xyxy
@@ -1061,9 +1181,8 @@ namespace SwrJit
                 {
                     // offset base to the next components(zw) in the vertex to gather
                     pSrcBase = GEP(pSrcBase, C((char)4));
-                    vMask = mask;
 
-                    vGatherResult[1] = GATHERDD(vGatherMaskedVal, pSrcBase, byteOffsets, vMask, C((char)1));
+                    vGatherResult[1] = GATHERDD(vGatherMaskedVal, pSrcBase, byteOffsets, vMask);
                     // e.g. result of second 8x32bit integer gather for 16bit components
                     // 256i - 0    1    2    3    4    5    6    7
                     //        zwzw zwzw zwzw zwzw zwzw zwzw zwzw zwzw 
@@ -1091,11 +1210,8 @@ namespace SwrJit
                 {
                     uint32_t swizzleIndex = info.swizzle[i];
 
-                    // save mask as it is zero'd out after each gather
-                    Value *vMask = mask;
-
                     // Gather a SIMD of components
-                    vGatherComponents[swizzleIndex] = GATHERDD(vGatherComponents[swizzleIndex], pSrcBase, byteOffsets, vMask, C((char)1));
+                    vGatherComponents[swizzleIndex] = GATHERDD(vGatherComponents[swizzleIndex], pSrcBase, byteOffsets, vMask);
 
                     // offset base to the next component to gather
                     pSrcBase = GEP(pSrcBase, C((char)4));
@@ -1369,7 +1485,7 @@ namespace SwrJit
         Function* pfnCttz = Intrinsic::getDeclaration(mpJitMgr->mpCurrentModule, Intrinsic::cttz, { mInt32Ty });
     
         // Setup loop basic block
-        BasicBlock* pLoop = BasicBlock::Create(mpJitMgr->mContext, "Scatter Loop", pFunc);
+        BasicBlock* pLoop = BasicBlock::Create(mpJitMgr->mContext, "Scatter_Loop", pFunc);
 
         // compute first set bit
         Value* pIndex = CALL(pfnCttz, { pMask, C(false) });
@@ -1429,13 +1545,13 @@ namespace SwrJit
         return result;
     }
 
-    Value *Builder::ICLAMP(Value* src, Value* low, Value* high)
+    Value *Builder::ICLAMP(Value* src, Value* low, Value* high, const llvm::Twine& name)
     {
         Value *lowCmp = ICMP_SLT(src, low);
         Value *ret = SELECT(lowCmp, low, src);
 
         Value *highCmp = ICMP_SGT(ret, high);
-        ret = SELECT(highCmp, high, ret);
+        ret = SELECT(highCmp, high, ret, name);
 
         return ret;
     }

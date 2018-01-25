@@ -43,3 +43,5 @@ TESTS = \
 	$()
 
 check_PROGRAMS = $(TESTS)
+
+EXTRA_DIST = meson.build

@@ -23,7 +23,7 @@
 #include "nouveau_screen.h"
 #include "nouveau_winsys.h"
 #include "nouveau_fence.h"
-#include "os/os_time.h"
+#include "util/os_time.h"
 
 #ifdef PIPE_OS_UNIX
 #include <sched.h>

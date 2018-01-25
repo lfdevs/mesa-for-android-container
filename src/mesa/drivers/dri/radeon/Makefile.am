@@ -25,7 +25,8 @@ include Makefile.sources
 
 EXTRA_DIST = \
 	radeon_maos_verts.c \
-	radeon_maos_arrays.c
+	radeon_maos_arrays.c \
+	meson.build
 
 AM_CFLAGS = \
 	-DRADEON_R100 \

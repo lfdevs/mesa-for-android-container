@@ -15,7 +15,7 @@ AM_CPPFLAGS = \
 
 TESTS = glx-test dispatch-index-check
 check_PROGRAMS = glx-test
-EXTRA_DIST = dispatch-index-check
+EXTRA_DIST = dispatch-index-check meson.build
 
 glx_test_SOURCES =			\
 	clientinfo_unittest.cpp		\

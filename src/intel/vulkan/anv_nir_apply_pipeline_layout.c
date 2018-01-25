@@ -116,15 +116,43 @@ lower_res_index_intrinsic(nir_intrinsic_instr *intrin,
    uint32_t array_size =
       state->layout->set[set].layout->binding[binding].array_size;
 
-   nir_ssa_def *block_index = nir_ssa_for_src(b, intrin->src[0], 1);
+   nir_const_value *const_array_index = nir_src_as_const_value(intrin->src[0]);
 
-   if (state->add_bounds_checks)
-      block_index = nir_umin(b, block_index, nir_imm_int(b, array_size - 1));
+   nir_ssa_def *block_index;
+   if (const_array_index) {
+      unsigned array_index = const_array_index->u32[0];
+      array_index = MIN2(array_index, array_size - 1);
+      block_index = nir_imm_int(b, surface_index + array_index);
+   } else {
+      block_index = nir_ssa_for_src(b, intrin->src[0], 1);
 
-   block_index = nir_iadd(b, nir_imm_int(b, surface_index), block_index);
+      if (state->add_bounds_checks)
+         block_index = nir_umin(b, block_index, nir_imm_int(b, array_size - 1));
+
+      block_index = nir_iadd(b, nir_imm_int(b, surface_index), block_index);
+   }
 
    assert(intrin->dest.is_ssa);
    nir_ssa_def_rewrite_uses(&intrin->dest.ssa, nir_src_for_ssa(block_index));
+   nir_instr_remove(&intrin->instr);
+}
+
+static void
+lower_res_reindex_intrinsic(nir_intrinsic_instr *intrin,
+                            struct apply_pipeline_layout_state *state)
+{
+   nir_builder *b = &state->builder;
+
+   /* For us, the resource indices are just indices into the binding table and
+    * array elements are sequential.  A resource_reindex just turns into an
+    * add of the two indices.
+    */
+   assert(intrin->src[0].is_ssa && intrin->src[0].is_ssa);
+   nir_ssa_def *new_index = nir_iadd(b, intrin->src[0].ssa,
+                                        intrin->src[1].ssa);
+
+   assert(intrin->dest.is_ssa);
+   nir_ssa_def_rewrite_uses(&intrin->dest.ssa, nir_src_for_ssa(new_index));
    nir_instr_remove(&intrin->instr);
 }
 
@@ -265,8 +293,15 @@ apply_pipeline_layout_block(nir_block *block,
       switch (instr->type) {
       case nir_instr_type_intrinsic: {
          nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
-         if (intrin->intrinsic == nir_intrinsic_vulkan_resource_index) {
+         switch (intrin->intrinsic) {
+         case nir_intrinsic_vulkan_resource_index:
             lower_res_index_intrinsic(intrin, state);
+            break;
+         case nir_intrinsic_vulkan_resource_reindex:
+            lower_res_reindex_intrinsic(intrin, state);
+            break;
+         default:
+            break;
          }
          break;
       }

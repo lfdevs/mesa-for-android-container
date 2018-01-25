@@ -49,12 +49,6 @@ emit_mrt(struct fd_ringbuffer *ring, unsigned nr_bufs,
 	enum a5xx_tile_mode tile_mode;
 	unsigned i;
 
-	if (gmem) {
-		tile_mode = TILE5_2;
-	} else {
-		tile_mode = TILE5_LINEAR;
-	}
-
 	for (i = 0; i < A5XX_MAX_RENDER_TARGETS; i++) {
 		enum a5xx_color_fmt format = 0;
 		enum a3xx_color_swap swap = WZYX;
@@ -65,6 +59,12 @@ emit_mrt(struct fd_ringbuffer *ring, unsigned nr_bufs,
 		uint32_t size = 0;
 		uint32_t base = 0;
 		uint32_t offset = 0;
+
+		if (gmem) {
+			tile_mode = TILE5_2;
+		} else {
+			tile_mode = TILE5_LINEAR;
+		}
 
 		if ((i < nr_bufs) && bufs[i]) {
 			struct pipe_surface *psurf = bufs[i];
@@ -91,6 +91,9 @@ emit_mrt(struct fd_ringbuffer *ring, unsigned nr_bufs,
 			} else {
 				stride = slice->pitch * rsc->cpp;
 				size = slice->size0;
+
+				if (!fd_resource_level_linear(psurf->texture, psurf->u.tex.level))
+					tile_mode = rsc->tile_mode;
 			}
 		}
 
@@ -275,7 +278,7 @@ update_vsc_pipe(struct fd_batch *batch)
 
 	OUT_PKT4(ring, REG_A5XX_VSC_PIPE_CONFIG_REG(0), 16);
 	for (i = 0; i < 16; i++) {
-		struct fd_vsc_pipe *pipe = &ctx->pipe[i];
+		struct fd_vsc_pipe *pipe = &ctx->vsc_pipe[i];
 		OUT_RING(ring, A5XX_VSC_PIPE_CONFIG_REG_X(pipe->x) |
 				A5XX_VSC_PIPE_CONFIG_REG_Y(pipe->y) |
 				A5XX_VSC_PIPE_CONFIG_REG_W(pipe->w) |
@@ -284,7 +287,7 @@ update_vsc_pipe(struct fd_batch *batch)
 
 	OUT_PKT4(ring, REG_A5XX_VSC_PIPE_DATA_ADDRESS_LO(0), 32);
 	for (i = 0; i < 16; i++) {
-		struct fd_vsc_pipe *pipe = &ctx->pipe[i];
+		struct fd_vsc_pipe *pipe = &ctx->vsc_pipe[i];
 		if (!pipe->bo) {
 			pipe->bo = fd_bo_new(ctx->dev, 0x20000,
 					DRM_FREEDRENO_GEM_TYPE_KMEM);
@@ -294,7 +297,7 @@ update_vsc_pipe(struct fd_batch *batch)
 
 	OUT_PKT4(ring, REG_A5XX_VSC_PIPE_DATA_LENGTH_REG(0), 16);
 	for (i = 0; i < 16; i++) {
-		struct fd_vsc_pipe *pipe = &ctx->pipe[i];
+		struct fd_vsc_pipe *pipe = &ctx->vsc_pipe[i];
 		OUT_RING(ring, fd_bo_size(pipe->bo) - 32); /* VSC_PIPE_DATA_LENGTH[i] */
 	}
 }
@@ -434,7 +437,7 @@ fd5_emit_tile_prep(struct fd_batch *batch, struct fd_tile *tile)
 			A5XX_RB_RESOLVE_CNTL_2_Y(y2));
 
 	if (use_hw_binning(batch)) {
-		struct fd_vsc_pipe *pipe = &ctx->pipe[tile->p];
+		struct fd_vsc_pipe *pipe = &ctx->vsc_pipe[tile->p];
 
 		OUT_PKT7(ring, CP_WAIT_FOR_ME, 0);
 
@@ -472,6 +475,30 @@ emit_mem2gmem_surf(struct fd_batch *batch, uint32_t base,
 	uint32_t stride, size;
 
 	debug_assert(psurf->u.tex.first_layer == psurf->u.tex.last_layer);
+
+	if (buf == BLIT_S)
+		rsc = rsc->stencil;
+
+	if ((buf == BLIT_ZS) || (buf == BLIT_S)) {
+		// XXX hack import via BLIT_MRT0 instead of BLIT_ZS, since I don't
+		// know otherwise how to go from linear in sysmem to tiled in gmem.
+		// possibly we want to flip this around gmem2mem and keep depth
+		// tiled in sysmem (and fixup sampler state to assume tiled).. this
+		// might be required for doing depth/stencil in bypass mode?
+		struct fd_resource_slice *slice = fd_resource_slice(rsc, 0);
+		enum a5xx_color_fmt format =
+			fd5_pipe2color(fd_gmem_restore_format(rsc->base.format));
+
+		OUT_PKT4(ring, REG_A5XX_RB_MRT_BUF_INFO(0), 5);
+		OUT_RING(ring, A5XX_RB_MRT_BUF_INFO_COLOR_FORMAT(format) |
+				A5XX_RB_MRT_BUF_INFO_COLOR_TILE_MODE(rsc->tile_mode) |
+				A5XX_RB_MRT_BUF_INFO_COLOR_SWAP(WZYX));
+		OUT_RING(ring, A5XX_RB_MRT_PITCH(slice->pitch * rsc->cpp));
+		OUT_RING(ring, A5XX_RB_MRT_ARRAY_PITCH(slice->size0));
+		OUT_RELOC(ring, rsc->bo, 0, 0, 0);  /* BASE_LO/HI */
+
+		buf = BLIT_MRT0;
+	}
 
 	stride = gmem->bin_w * rsc->cpp;
 	size = stride * gmem->bin_h;
@@ -529,27 +556,11 @@ fd5_emit_tile_mem2gmem(struct fd_batch *batch, struct fd_tile *tile)
 
 	if (fd_gmem_needs_restore(batch, tile, FD_BUFFER_DEPTH | FD_BUFFER_STENCIL)) {
 		struct fd_resource *rsc = fd_resource(pfb->zsbuf->texture);
-		// XXX BLIT_ZS vs BLIT_Z32 .. need some more cmdstream traces
-		// with z32_x24s8..
 
-		// XXX hack import via BLIT_MRT0 instead of BLIT_ZS, since I don't
-		// know otherwise how to go from linear in sysmem to tiled in gmem.
-		// possibly we want to flip this around gmem2mem and keep depth
-		// tiled in sysmem (and fixup sampler state to assume tiled).. this
-		// might be required for doing depth/stencil in bypass mode?
-		struct fd_resource_slice *slice = fd_resource_slice(rsc, 0);
-		enum a5xx_color_fmt format =
-			fd5_pipe2color(fd_gmem_restore_format(pfb->zsbuf->format));
-
-		OUT_PKT4(ring, REG_A5XX_RB_MRT_BUF_INFO(0), 5);
-		OUT_RING(ring, A5XX_RB_MRT_BUF_INFO_COLOR_FORMAT(format) |
-				A5XX_RB_MRT_BUF_INFO_COLOR_TILE_MODE(TILE5_LINEAR) |
-				A5XX_RB_MRT_BUF_INFO_COLOR_SWAP(WZYX));
-		OUT_RING(ring, A5XX_RB_MRT_PITCH(slice->pitch * rsc->cpp));
-		OUT_RING(ring, A5XX_RB_MRT_ARRAY_PITCH(slice->size0));
-		OUT_RELOCW(ring, rsc->bo, 0, 0, 0);  /* BASE_LO/HI */
-
-		emit_mem2gmem_surf(batch, ctx->gmem.zsbuf_base[0], pfb->zsbuf, BLIT_MRT0);
+		if (!rsc->stencil || fd_gmem_needs_restore(batch, tile, FD_BUFFER_DEPTH))
+			emit_mem2gmem_surf(batch, gmem->zsbuf_base[0], pfb->zsbuf, BLIT_ZS);
+		if (rsc->stencil && fd_gmem_needs_restore(batch, tile, FD_BUFFER_STENCIL))
+			emit_mem2gmem_surf(batch, gmem->zsbuf_base[1], pfb->zsbuf, BLIT_S);
 	}
 }
 
@@ -598,7 +609,11 @@ emit_gmem2mem_surf(struct fd_batch *batch, uint32_t base,
 	struct fd_ringbuffer *ring = batch->gmem;
 	struct fd_resource *rsc = fd_resource(psurf->texture);
 	struct fd_resource_slice *slice;
+	bool tiled;
 	uint32_t offset;
+
+	if (buf == BLIT_S)
+		rsc = rsc->stencil;
 
 	slice = fd_resource_slice(rsc, psurf->u.tex.level);
 	offset = fd_resource_offset(rsc, psurf->u.tex.level,
@@ -612,8 +627,12 @@ emit_gmem2mem_surf(struct fd_batch *batch, uint32_t base,
 	OUT_RING(ring, 0x00000000);   /* RB_BLIT_FLAG_DST_PITCH */
 	OUT_RING(ring, 0x00000000);   /* RB_BLIT_FLAG_DST_ARRAY_PITCH */
 
+	tiled = rsc->tile_mode &&
+		!fd_resource_level_linear(psurf->texture, psurf->u.tex.level);
+
 	OUT_PKT4(ring, REG_A5XX_RB_RESOLVE_CNTL_3, 5);
-	OUT_RING(ring, 0x00000004);   /* XXX RB_RESOLVE_CNTL_3 */
+	OUT_RING(ring, 0x00000004 |   /* XXX RB_RESOLVE_CNTL_3 */
+			COND(tiled, A5XX_RB_RESOLVE_CNTL_3_TILED));
 	OUT_RELOCW(ring, rsc->bo, offset, 0, 0);     /* RB_BLIT_DST_LO/HI */
 	OUT_RING(ring, A5XX_RB_BLIT_DST_PITCH(slice->pitch * rsc->cpp));
 	OUT_RING(ring, A5XX_RB_BLIT_DST_ARRAY_PITCH(slice->size0));
@@ -633,12 +652,11 @@ fd5_emit_tile_gmem2mem(struct fd_batch *batch, struct fd_tile *tile)
 
 	if (batch->resolve & (FD_BUFFER_DEPTH | FD_BUFFER_STENCIL)) {
 		struct fd_resource *rsc = fd_resource(pfb->zsbuf->texture);
-		// XXX BLIT_ZS vs BLIT_Z32 .. need some more cmdstream traces
-		// with z32_x24s8..
+
 		if (!rsc->stencil || (batch->resolve & FD_BUFFER_DEPTH))
 			emit_gmem2mem_surf(batch, gmem->zsbuf_base[0], pfb->zsbuf, BLIT_ZS);
 		if (rsc->stencil && (batch->resolve & FD_BUFFER_STENCIL))
-			emit_gmem2mem_surf(batch, gmem->zsbuf_base[1], pfb->zsbuf, BLIT_ZS);
+			emit_gmem2mem_surf(batch, gmem->zsbuf_base[1], pfb->zsbuf, BLIT_S);
 	}
 
 	if (batch->resolve & FD_BUFFER_COLOR) {

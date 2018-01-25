@@ -62,7 +62,15 @@ check_PROGRAMS =
 TESTS =
 BUILT_SOURCES =
 CLEANFILES =
-EXTRA_DIST =
+EXTRA_DIST = \
+	blorp/meson.build \
+	common/meson.build \
+	compiler/meson.build \
+	genxml/meson.build \
+	isl/meson.build \
+	tools/meson.build \
+	vulkan/meson.build \
+	meson.build
 
 include Makefile.blorp.am
 include Makefile.common.am

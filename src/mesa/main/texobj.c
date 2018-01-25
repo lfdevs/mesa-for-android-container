@@ -274,7 +274,7 @@ _mesa_initialize_texture_object( struct gl_context *ctx,
 
    memset(obj, 0, sizeof(*obj));
    /* init the non-zero fields */
-   mtx_init(&obj->Mutex, mtx_plain);
+   simple_mtx_init(&obj->Mutex, mtx_plain);
    obj->RefCount = 1;
    obj->Name = name;
    obj->Target = target;
@@ -411,7 +411,7 @@ _mesa_delete_texture_object(struct gl_context *ctx,
    _mesa_reference_buffer_object(ctx, &texObj->BufferObject, NULL);
 
    /* destroy the mutex -- it may have allocated memory (eg on bsd) */
-   mtx_destroy(&texObj->Mutex);
+   simple_mtx_destroy(&texObj->Mutex);
 
    free(texObj->Label);
 
@@ -554,12 +554,12 @@ _mesa_reference_texobj_(struct gl_texture_object **ptr,
       assert(valid_texture_object(oldTex));
       (void) valid_texture_object; /* silence warning in release builds */
 
-      mtx_lock(&oldTex->Mutex);
+      simple_mtx_lock(&oldTex->Mutex);
       assert(oldTex->RefCount > 0);
       oldTex->RefCount--;
 
       deleteFlag = (oldTex->RefCount == 0);
-      mtx_unlock(&oldTex->Mutex);
+      simple_mtx_unlock(&oldTex->Mutex);
 
       if (deleteFlag) {
          /* Passing in the context drastically changes the driver code for
@@ -579,12 +579,12 @@ _mesa_reference_texobj_(struct gl_texture_object **ptr,
    if (tex) {
       /* reference new texture */
       assert(valid_texture_object(tex));
-      mtx_lock(&tex->Mutex);
+      simple_mtx_lock(&tex->Mutex);
       assert(tex->RefCount > 0);
 
       tex->RefCount++;
       *ptr = tex;
-      mtx_unlock(&tex->Mutex);
+      simple_mtx_unlock(&tex->Mutex);
    }
 }
 
@@ -1051,6 +1051,11 @@ _mesa_get_fallback_texture(struct gl_context *ctx, gl_texture_index tex)
       assert(texObj->_MipmapComplete);
 
       ctx->Shared->FallbackTex[tex] = texObj;
+
+      /* Complete the driver's operation in case another context will also
+       * use the same fallback texture. */
+      if (ctx->Driver.Finish)
+         ctx->Driver.Finish(ctx);
    }
    return ctx->Shared->FallbackTex[tex];
 }
@@ -1506,6 +1511,47 @@ delete_textures(struct gl_context *ctx, GLsizei n, const GLuint *textures)
    }
 }
 
+/**
+ * This deletes a texObj without altering the hash table.
+ */
+void
+_mesa_delete_nameless_texture(struct gl_context *ctx,
+                              struct gl_texture_object *texObj)
+{
+   if (!texObj)
+      return;
+
+   FLUSH_VERTICES(ctx, 0);
+
+   _mesa_lock_texture(ctx, texObj);
+   {
+      /* Check if texture is bound to any framebuffer objects.
+       * If so, unbind.
+       * See section 4.4.2.3 of GL_EXT_framebuffer_object.
+       */
+      unbind_texobj_from_fbo(ctx, texObj);
+
+      /* Check if this texture is currently bound to any texture units.
+       * If so, unbind it.
+       */
+      unbind_texobj_from_texunits(ctx, texObj);
+
+      /* Check if this texture is currently bound to any shader
+       * image unit.  If so, unbind it.
+       * See section 3.9.X of GL_ARB_shader_image_load_store.
+       */
+      unbind_texobj_from_image_units(ctx, texObj);
+   }
+   _mesa_unlock_texture(ctx, texObj);
+
+   ctx->NewState |= _NEW_TEXTURE_OBJECT;
+
+   /* Unreference the texobj.  If refcount hits zero, the texture
+    * will be deleted.
+    */
+   _mesa_reference_texobj(&texObj, NULL);
+}
+
 
 void GLAPIENTRY
 _mesa_DeleteTextures_no_error(GLsizei n, const GLuint *textures)
@@ -1615,10 +1661,10 @@ bind_texture_object(struct gl_context *ctx, unsigned unit,
     */
    if (targetIndex != TEXTURE_EXTERNAL_INDEX) {
       bool early_out;
-      mtx_lock(&ctx->Shared->Mutex);
+      simple_mtx_lock(&ctx->Shared->Mutex);
       early_out = ((ctx->Shared->RefCount == 1)
                    && (texObj == texUnit->CurrentTex[targetIndex]));
-      mtx_unlock(&ctx->Shared->Mutex);
+      simple_mtx_unlock(&ctx->Shared->Mutex);
       if (early_out) {
          return;
       }
@@ -1646,6 +1692,29 @@ bind_texture_object(struct gl_context *ctx, unsigned unit,
    }
 }
 
+/**
+ * Light-weight bind texture for internal users
+ *
+ * This is really just \c finish_texture_init plus \c bind_texture_object.
+ * This is intended to be used by internal Mesa functions that use
+ * \c _mesa_CreateTexture and need to bind textures (e.g., meta).
+ */
+void
+_mesa_bind_texture(struct gl_context *ctx, GLenum target,
+                   struct gl_texture_object *tex_obj)
+{
+   const GLint targetIndex = _mesa_tex_target_to_index(ctx, target);
+
+   assert(targetIndex >= 0 && targetIndex < NUM_TEXTURE_TARGETS);
+
+   if (tex_obj->Target == 0)
+      finish_texture_init(ctx, target, tex_obj, targetIndex);
+
+   assert(tex_obj->Target == target);
+   assert(tex_obj->TargetIndex == targetIndex);
+
+   bind_texture_object(ctx, ctx->Texture.CurrentUnit, tex_obj);
+}
 
 /**
  * Implement glBindTexture().  Do error checking, look-up or create a new
@@ -1717,7 +1786,6 @@ bind_texture(struct gl_context *ctx, GLenum target, GLuint texName,
 
    bind_texture_object(ctx, ctx->Texture.CurrentUnit, newTexObj);
 }
-
 
 void GLAPIENTRY
 _mesa_BindTexture_no_error(GLenum target, GLuint texName)

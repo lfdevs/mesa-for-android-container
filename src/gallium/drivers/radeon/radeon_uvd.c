@@ -25,12 +25,6 @@
  *
  **************************************************************************/
 
-/*
- * Authors:
- *	Christian König <christian.koenig@amd.com>
- *
- */
-
 #include <sys/types.h>
 #include <assert.h>
 #include <errno.h>
@@ -45,7 +39,7 @@
 #include "vl/vl_defines.h"
 #include "vl/vl_mpeg12_decoder.h"
 
-#include "r600_pipe_common.h"
+#include "radeonsi/si_pipe.h"
 #include "radeon_video.h"
 #include "radeon_uvd.h"
 
@@ -97,6 +91,8 @@ struct ruvd_decoder {
 		unsigned		cmd;
 		unsigned		cntl;
 	} reg;
+
+	void				*render_pic_list[16];
 };
 
 /* flush IB to the hardware */
@@ -335,7 +331,7 @@ static unsigned calc_ctx_size_h265_main10(struct ruvd_decoder *dec, struct pipe_
 
 static unsigned get_db_pitch_alignment(struct ruvd_decoder *dec)
 {
-	if (((struct r600_common_screen*)dec->screen)->family < CHIP_VEGA10)
+	if (((struct si_screen*)dec->screen)->info.family < CHIP_VEGA10)
 		return 16;
 	else
 		return 32;
@@ -400,7 +396,7 @@ static unsigned calc_dpb_size(struct ruvd_decoder *dec)
 			max_references = MAX2(MIN2(NUM_H264_REFS, num_dpb_buffer), max_references);
 			dpb_size = image_size * max_references;
 			if ((dec->stream_type != RUVD_CODEC_H264_PERF) ||
-			    (((struct r600_common_screen*)dec->screen)->family < CHIP_POLARIS10)) {
+			    (((struct si_screen*)dec->screen)->info.family < CHIP_POLARIS10)) {
 				dpb_size += max_references * align(width_in_mb * height_in_mb  * 192, alignment);
 				dpb_size += align(width_in_mb * height_in_mb * 32, alignment);
 			}
@@ -410,7 +406,7 @@ static unsigned calc_dpb_size(struct ruvd_decoder *dec)
 			// reference picture buffer
 			dpb_size = image_size * max_references;
 			if ((dec->stream_type != RUVD_CODEC_H264_PERF) ||
-			    (((struct r600_common_screen*)dec->screen)->family < CHIP_POLARIS10)) {
+			    (((struct si_screen*)dec->screen)->info.family < CHIP_POLARIS10)) {
 				// macroblock context buffer
 				dpb_size += width_in_mb * height_in_mb * max_references * 192;
 				// IT surface buffer
@@ -596,7 +592,7 @@ static struct ruvd_h265 get_h265_msg(struct ruvd_decoder *dec, struct pipe_video
 				     struct pipe_h265_picture_desc *pic)
 {
 	struct ruvd_h265 result;
-	unsigned i;
+	unsigned i, j;
 
 	memset(&result, 0, sizeof(result));
 
@@ -610,7 +606,7 @@ static struct ruvd_h265 get_h265_msg(struct ruvd_decoder *dec, struct pipe_video
 	result.sps_info_flags |= pic->pps->sps->sps_temporal_mvp_enabled_flag << 6;
 	result.sps_info_flags |= pic->pps->sps->strong_intra_smoothing_enabled_flag << 7;
 	result.sps_info_flags |= pic->pps->sps->separate_colour_plane_flag << 8;
-	if (((struct r600_common_screen*)dec->screen)->family == CHIP_CARRIZO)
+	if (((struct si_screen*)dec->screen)->info.family == CHIP_CARRIZO)
 		result.sps_info_flags |= 1 << 9;
 	if (pic->UseRefPicList == true)
 		result.sps_info_flags |= 1 << 10;
@@ -676,11 +672,28 @@ static struct ruvd_h265 get_h265_msg(struct ruvd_decoder *dec, struct pipe_video
 		result.row_height_minus1[i] = pic->pps->row_height_minus1[i];
 
 	result.num_delta_pocs_ref_rps_idx = pic->NumDeltaPocsOfRefRpsIdx;
-	result.curr_idx = pic->CurrPicOrderCntVal;
 	result.curr_poc = pic->CurrPicOrderCntVal;
 
+	for (i = 0 ; i < 16 ; i++) {
+		for (j = 0; (pic->ref[j] != NULL) && (j < 16) ; j++) {
+			if (dec->render_pic_list[i] == pic->ref[j])
+				break;
+			if (j == 15)
+				dec->render_pic_list[i] = NULL;
+			else if (pic->ref[j+1] == NULL)
+				dec->render_pic_list[i] = NULL;
+		}
+	}
+	for (i = 0 ; i < 16 ; i++) {
+		if (dec->render_pic_list[i] == NULL) {
+			dec->render_pic_list[i] = target;
+			result.curr_idx = i;
+			break;
+		}
+	}
+
 	vl_video_buffer_set_associated_data(target, &dec->base,
-					    (void *)(uintptr_t)pic->CurrPicOrderCntVal,
+					    (void *)(uintptr_t)result.curr_idx,
 					    &ruvd_destroy_associated_data);
 
 	for (i = 0; i < 16; ++i) {
@@ -723,7 +736,7 @@ static struct ruvd_h265 get_h265_msg(struct ruvd_decoder *dec, struct pipe_video
 	memcpy(dec->it + 864, pic->pps->sps->ScalingList32x32, 2 * 64);
 
 	for (i = 0 ; i < 2 ; i++) {
-		for (int j = 0 ; j < 15 ; j++)
+		for (j = 0 ; j < 15 ; j++)
 			result.direct_reflist[i][j] = pic->RefPicList[i][j];
 	}
 
@@ -858,12 +871,17 @@ static struct ruvd_mpeg2 get_mpeg2_msg(struct ruvd_decoder *dec,
 	for (i = 0; i < 2; ++i)
 		result.ref_pic_idx[i] = get_ref_pic_idx(dec, pic->ref[i]);
 
-	result.load_intra_quantiser_matrix = 1;
-	result.load_nonintra_quantiser_matrix = 1;
-
-	for (i = 0; i < 64; ++i) {
-		result.intra_quantiser_matrix[i] = pic->intra_matrix[zscan[i]];
-		result.nonintra_quantiser_matrix[i] = pic->non_intra_matrix[zscan[i]];
+	if(pic->intra_matrix) {
+		result.load_intra_quantiser_matrix = 1;
+		for (i = 0; i < 64; ++i) {
+			result.intra_quantiser_matrix[i] = pic->intra_matrix[zscan[i]];
+		}
+	}
+	if(pic->non_intra_matrix) {
+		result.load_nonintra_quantiser_matrix = 1;
+		for (i = 0; i < 64; ++i) {
+			result.nonintra_quantiser_matrix[i] = pic->non_intra_matrix[zscan[i]];
+		}
 	}
 
 	result.profile_and_level_indication = 0;
@@ -1251,11 +1269,11 @@ static void ruvd_end_frame(struct pipe_video_codec *decoder,
 	dec->msg->body.decode.db_pitch = align(dec->base.width, get_db_pitch_alignment(dec));
 
 	if (dec->stream_type == RUVD_CODEC_H264_PERF &&
-	    ((struct r600_common_screen*)dec->screen)->family >= CHIP_POLARIS10)
+	    ((struct si_screen*)dec->screen)->info.family >= CHIP_POLARIS10)
 		dec->msg->body.decode.dpb_reserved = dec->ctx.res->buf->size;
 
 	dt = dec->set_dtb(dec->msg, (struct vl_video_buffer *)target);
-	if (((struct r600_common_screen*)dec->screen)->family >= CHIP_STONEY)
+	if (((struct si_screen*)dec->screen)->info.family >= CHIP_STONEY)
 		dec->msg->body.decode.dt_wa_chroma_top_offset = dec->msg->body.decode.dt_pitch / 2;
 
 	switch (u_reduce_video_profile(picture->profile)) {
@@ -1327,7 +1345,7 @@ static void ruvd_end_frame(struct pipe_video_codec *decoder,
 			 FB_BUFFER_OFFSET + dec->fb_size, RADEON_USAGE_READ, RADEON_DOMAIN_GTT);
 	set_reg(dec, dec->reg.cntl, 1);
 
-	flush(dec, RADEON_FLUSH_ASYNC);
+	flush(dec, PIPE_FLUSH_ASYNC);
 	next_buffer(dec);
 }
 
@@ -1350,11 +1368,8 @@ struct pipe_video_codec *si_common_uvd_create_decoder(struct pipe_context *conte
 	unsigned dpb_size;
 	unsigned width = templ->width, height = templ->height;
 	unsigned bs_buf_size;
-	struct radeon_info info;
 	struct ruvd_decoder *dec;
 	int r, i;
-
-	ws->query_info(ws, &info);
 
 	switch(u_reduce_video_profile(templ->profile)) {
 	case PIPE_VIDEO_FORMAT_MPEG12:
@@ -1381,7 +1396,7 @@ struct pipe_video_codec *si_common_uvd_create_decoder(struct pipe_context *conte
 	if (!dec)
 		return NULL;
 
-	if (info.drm_major < 3)
+	if (rctx->screen->info.drm_major < 3)
 		dec->use_legacy = true;
 
 	dec->base = *templ;
@@ -1396,7 +1411,7 @@ struct pipe_video_codec *si_common_uvd_create_decoder(struct pipe_context *conte
 	dec->base.end_frame = ruvd_end_frame;
 	dec->base.flush = ruvd_flush;
 
-	dec->stream_type = profile2stream_type(dec, info.family);
+	dec->stream_type = profile2stream_type(dec, rctx->family);
 	dec->set_dtb = set_dtb;
 	dec->stream_handle = si_vid_alloc_stream_handle();
 	dec->screen = context->screen;
@@ -1407,7 +1422,9 @@ struct pipe_video_codec *si_common_uvd_create_decoder(struct pipe_context *conte
 		goto error;
 	}
 
-	dec->fb_size = (info.family == CHIP_TONGA) ? FB_BUFFER_SIZE_TONGA :
+	for (i = 0; i < 16; i++)
+		 dec->render_pic_list[i] = NULL;
+	dec->fb_size = (rctx->family == CHIP_TONGA) ? FB_BUFFER_SIZE_TONGA :
 			FB_BUFFER_SIZE;
 	bs_buf_size = width * height * (512 / (16 * 16));
 	for (i = 0; i < NUM_BUFFERS; ++i) {
@@ -1440,7 +1457,7 @@ struct pipe_video_codec *si_common_uvd_create_decoder(struct pipe_context *conte
 		si_vid_clear_buffer(context, &dec->dpb);
 	}
 
-	if (dec->stream_type == RUVD_CODEC_H264_PERF && info.family >= CHIP_POLARIS10) {
+	if (dec->stream_type == RUVD_CODEC_H264_PERF && rctx->family >= CHIP_POLARIS10) {
 		unsigned ctx_size = calc_ctx_size_h264_perf(dec);
 		if (!si_vid_create_buffer(dec->screen, &dec->ctx, ctx_size, PIPE_USAGE_DEFAULT)) {
 			RVID_ERR("Can't allocated context buffer.\n");
@@ -1449,7 +1466,7 @@ struct pipe_video_codec *si_common_uvd_create_decoder(struct pipe_context *conte
 		si_vid_clear_buffer(context, &dec->ctx);
 	}
 
-	if (info.family >= CHIP_POLARIS10 && info.drm_minor >= 3) {
+	if (rctx->family >= CHIP_POLARIS10 && rctx->screen->info.drm_minor >= 3) {
 		if (!si_vid_create_buffer(dec->screen, &dec->sessionctx,
 					UVD_SESSION_CONTEXT_SIZE,
 					PIPE_USAGE_DEFAULT)) {
@@ -1459,7 +1476,7 @@ struct pipe_video_codec *si_common_uvd_create_decoder(struct pipe_context *conte
 		si_vid_clear_buffer(context, &dec->sessionctx);
 	}
 
-	if (info.family >= CHIP_VEGA10) {
+	if (rctx->family >= CHIP_VEGA10) {
 		dec->reg.data0 = RUVD_GPCOM_VCPU_DATA0_SOC15;
 		dec->reg.data1 = RUVD_GPCOM_VCPU_DATA1_SOC15;
 		dec->reg.cmd = RUVD_GPCOM_VCPU_CMD_SOC15;
@@ -1513,7 +1530,7 @@ static unsigned texture_offset(struct radeon_surf *surface, unsigned layer,
 	default:
 	case RUVD_SURFACE_TYPE_LEGACY:
 		return surface->u.legacy.level[0].offset +
-			layer * surface->u.legacy.level[0].slice_size;
+			layer * (uint64_t)surface->u.legacy.level[0].slice_size_dw * 4;
 		break;
 	case RUVD_SURFACE_TYPE_GFX9:
 		return surface->u.gfx9.surf_offset +

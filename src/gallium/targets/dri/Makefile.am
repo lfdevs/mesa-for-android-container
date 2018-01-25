@@ -62,6 +62,7 @@ EXTRA_gallium_dri_la_DEPENDENCIES = \
 	$(top_srcdir)/src/gallium/targets/dri-vdpau.dyn
 EXTRA_DIST = \
 	SConscript \
+	meson.build \
 	dri.sym \
 	$(top_srcdir)/src/gallium/targets/dri-vdpau.dyn
 

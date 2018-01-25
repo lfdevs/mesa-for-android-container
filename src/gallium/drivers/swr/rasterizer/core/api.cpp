@@ -95,15 +95,31 @@ HANDLE SwrCreateContext(
         pContext->dsRing[dc].pArena = new CachingArena(pContext->cachingArenaAllocator);
     }
 
-    pContext->threadInfo.MAX_WORKER_THREADS        = KNOB_MAX_WORKER_THREADS;
-    pContext->threadInfo.MAX_NUMA_NODES            = KNOB_MAX_NUMA_NODES;
-    pContext->threadInfo.MAX_CORES_PER_NUMA_NODE   = KNOB_MAX_CORES_PER_NUMA_NODE;
-    pContext->threadInfo.MAX_THREADS_PER_CORE      = KNOB_MAX_THREADS_PER_CORE;
-    pContext->threadInfo.SINGLE_THREADED           = KNOB_SINGLE_THREADED;
-
     if (pCreateInfo->pThreadInfo)
     {
         pContext->threadInfo = *pCreateInfo->pThreadInfo;
+    }
+    else
+    {
+        pContext->threadInfo.MAX_WORKER_THREADS         = KNOB_MAX_WORKER_THREADS;
+        pContext->threadInfo.BASE_NUMA_NODE             = KNOB_BASE_NUMA_NODE;
+        pContext->threadInfo.BASE_CORE                  = KNOB_BASE_CORE;
+        pContext->threadInfo.BASE_THREAD                = KNOB_BASE_THREAD;
+        pContext->threadInfo.MAX_NUMA_NODES             = KNOB_MAX_NUMA_NODES;
+        pContext->threadInfo.MAX_CORES_PER_NUMA_NODE    = KNOB_MAX_CORES_PER_NUMA_NODE;
+        pContext->threadInfo.MAX_THREADS_PER_CORE       = KNOB_MAX_THREADS_PER_CORE;
+        pContext->threadInfo.SINGLE_THREADED            = KNOB_SINGLE_THREADED;
+    }
+
+    if (pCreateInfo->pApiThreadInfo)
+    {
+        pContext->apiThreadInfo = *pCreateInfo->pApiThreadInfo;
+    }
+    else
+    {
+        pContext->apiThreadInfo.bindAPIThread0          = true;
+        pContext->apiThreadInfo.numAPIReservedThreads   = 1;
+        pContext->apiThreadInfo.numAPIThreadsPerCore    = 1;
     }
 
     memset(&pContext->WaitLock, 0, sizeof(pContext->WaitLock));
@@ -112,6 +128,11 @@ HANDLE SwrCreateContext(
     new (&pContext->FifosNotEmpty) std::condition_variable();
 
     CreateThreadPool(pContext, &pContext->threadPool);
+
+    if (pContext->apiThreadInfo.bindAPIThread0)
+    {
+        BindApiThread(pContext, 0);
+    }
 
     pContext->ppScratch = new uint8_t*[pContext->NumWorkerThreads];
     pContext->pStats = (SWR_STATS*)AlignedMalloc(sizeof(SWR_STATS) * pContext->NumWorkerThreads, 64);
@@ -142,6 +163,11 @@ HANDLE SwrCreateContext(
         pContext->pArContext[i] = ArchRast::CreateThreadContext(ArchRast::AR_THREAD::WORKER);
 #endif
     }
+
+#if defined(KNOB_ENABLE_AR)
+    // cache the API thread event manager, for use with sim layer
+    pCreateInfo->hArEventManager = pContext->pArContext[pContext->NumWorkerThreads + 1];
+#endif
 
     // State setup AFTER context is fully initialized
     SetupDefaultState(pContext);
@@ -400,6 +426,12 @@ void SwrDestroyContext(HANDLE hContext)
 
     pContext->~SWR_CONTEXT();
     AlignedFree(GetContext(hContext));
+}
+
+void SwrBindApiThread(HANDLE hContext, uint32_t apiThreadId)
+{
+    SWR_CONTEXT *pContext = GetContext(hContext);
+    BindApiThread(pContext, apiThreadId);
 }
 
 void SWR_API SwrSaveState(
@@ -1683,6 +1715,7 @@ void SwrGetInterface(SWR_INTERFACE &out_funcs)
 {
     out_funcs.pfnSwrCreateContext = SwrCreateContext;
     out_funcs.pfnSwrDestroyContext = SwrDestroyContext;
+    out_funcs.pfnSwrBindApiThread = SwrBindApiThread;
     out_funcs.pfnSwrSaveState = SwrSaveState;
     out_funcs.pfnSwrRestoreState = SwrRestoreState;
     out_funcs.pfnSwrSync = SwrSync;

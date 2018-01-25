@@ -7,3 +7,5 @@ AM_CFLAGS = \
 noinst_LTLIBRARIES = libddebug.la
 
 libddebug_la_SOURCES = $(C_SOURCES)
+
+EXTRA_DIST = meson.build

@@ -107,7 +107,7 @@ private version is maintained in the 1.0 branch of the member gitlab server.
         <type category="define">// Vulkan 1.0 version number
 #define <name>VK_API_VERSION_1_0</name> <type>VK_MAKE_VERSION</type>(1, 0, 0)// Patch version should always be set to 0</type>
         <type category="define">// Version of this file
-#define <name>VK_HEADER_VERSION</name> 63</type>
+#define <name>VK_HEADER_VERSION</name> 66</type>
 
         <type category="define">
 #define <name>VK_DEFINE_HANDLE</name>(object) typedef struct object##_T* object;</type>
@@ -386,6 +386,7 @@ private version is maintained in the 1.0 branch of the member gitlab server.
         <type name="VkPointClippingBehaviorKHR" category="enum"/>
         <type name="VkCoverageModulationModeNV" category="enum"/>
         <type name="VkValidationCacheHeaderVersionEXT" category="enum"/>
+        <type name="VkShaderInfoTypeAMD" category="enum"/>
         <type name="VkQueueGlobalPriorityEXT" category="enum"/>
 
             <comment>WSI extensions</comment>
@@ -1251,7 +1252,7 @@ private version is maintained in the 1.0 branch of the member gitlab server.
             <member><type>VkBool32</type>               <name>shaderInt64</name><comment>64-bit integers in shaders</comment></member>
             <member><type>VkBool32</type>               <name>shaderInt16</name><comment>16-bit integers in shaders</comment></member>
             <member><type>VkBool32</type>               <name>shaderResourceResidency</name><comment>shader can use texture operations that return resource residency information (requires sparseNonResident support)</comment></member>
-            <member><type>VkBool32</type>               <name>shaderResourceMinLod</name><comment>shader can use texture operations that specify minimum resource level of detail</comment></member>
+            <member><type>VkBool32</type>               <name>shaderResourceMinLod</name><comment>shader can use texture operations that specify minimum resource LOD</comment></member>
             <member><type>VkBool32</type>               <name>sparseBinding</name><comment>Sparse resources support: Resource memory can be managed at opaque page level rather than object level</comment></member>
             <member><type>VkBool32</type>               <name>sparseResidencyBuffer</name><comment>Sparse resources support: GPU can access partially resident buffers </comment></member>
             <member><type>VkBool32</type>               <name>sparseResidencyImage2D</name><comment>Sparse resources support: GPU can access partially resident 2D (non-MSAA non-depth/stencil) images </comment></member>
@@ -1341,7 +1342,7 @@ private version is maintained in the 1.0 branch of the member gitlab server.
             <member><type>uint32_t</type>               <name>mipmapPrecisionBits</name><comment>number bits of precision for selecting mipmap weights</comment></member>
             <member><type>uint32_t</type>               <name>maxDrawIndexedIndexValue</name><comment>max index value for indexed draw calls (for 32-bit indices)</comment></member>
             <member><type>uint32_t</type>               <name>maxDrawIndirectCount</name><comment>max draw count for indirect draw calls</comment></member>
-            <member><type>float</type>                  <name>maxSamplerLodBias</name><comment>max absolute sampler level of detail bias</comment></member>
+            <member><type>float</type>                  <name>maxSamplerLodBias</name><comment>max absolute sampler LOD bias</comment></member>
             <member><type>float</type>                  <name>maxSamplerAnisotropy</name><comment>max degree of sampler anisotropy</comment></member>
             <member><type>uint32_t</type>               <name>maxViewports</name><comment>max number of active viewports</comment></member>
             <member><type>uint32_t</type>               <name>maxViewportDimensions</name>[2]<comment>max viewport dimensions (x,y)</comment></member>
@@ -2624,10 +2625,42 @@ private version is maintained in the 1.0 branch of the member gitlab server.
             <member><type>int</type> <name>format</name></member>
             <member><type>int</type> <name>usage</name></member>
         </type>
+        <type category="struct" name="VkShaderResourceUsageAMD" returnedonly="true">
+            <member><type>uint32_t</type> <name>numUsedVgprs</name></member>
+            <member><type>uint32_t</type> <name>numUsedSgprs</name></member>
+            <member><type>uint32_t</type> <name>ldsSizePerLocalWorkGroup</name></member>
+            <member><type>size_t</type> <name>ldsUsageSizeInBytes</name></member>
+            <member><type>size_t</type> <name>scratchMemUsageInBytes</name></member>
+        </type>
+        <type category="struct" name="VkShaderStatisticsInfoAMD" returnedonly="true">
+            <member><type>VkShaderStageFlags</type> <name>shaderStageMask</name></member>
+            <member><type>VkShaderResourceUsageAMD</type> <name>resourceUsage</name></member>
+            <member><type>uint32_t</type> <name>numPhysicalVgprs</name></member>
+            <member><type>uint32_t</type> <name>numPhysicalSgprs</name></member>
+            <member><type>uint32_t</type> <name>numAvailableVgprs</name></member>
+            <member><type>uint32_t</type> <name>numAvailableSgprs</name></member>
+            <member><type>uint32_t</type> <name>computeWorkGroupSize</name>[3]</member>
+        </type>
         <type category="struct" name="VkDeviceQueueGlobalPriorityCreateInfoEXT" structextends="VkDeviceQueueCreateInfo">
             <member values="VK_STRUCTURE_TYPE_DEVICE_QUEUE_GLOBAL_PRIORITY_CREATE_INFO_EXT"><type>VkStructureType</type> <name>sType</name></member>
             <member>const <type>void</type>*                    <name>pNext</name></member>             <!-- Pointer to next structure -->
             <member><type>VkQueueGlobalPriorityEXT</type>       <name>globalPriority</name></member>
+        </type>
+        <type category="struct" name="VkImportMemoryHostPointerInfoEXT" structextends="VkMemoryAllocateInfo">
+            <member values="VK_STRUCTURE_TYPE_IMPORT_MEMORY_HOST_POINTER_INFO_EXT"><type>VkStructureType</type> <name>sType</name></member>
+            <member>const <type>void</type>* <name>pNext</name></member>
+            <member><type>VkExternalMemoryHandleTypeFlagBitsKHR</type> <name>handleType</name></member>
+            <member optional="false"><type>void</type>* <name>pHostPointer</name></member>
+        </type>
+        <type category="struct" name="VkMemoryHostPointerPropertiesEXT">
+            <member values="VK_STRUCTURE_TYPE_MEMORY_HOST_POINTER_PROPERTIES_EXT"><type>VkStructureType</type> <name>sType</name></member>
+            <member><type>void</type>* <name>pNext</name></member>
+            <member><type>uint32_t</type> <name>memoryTypeBits</name></member>
+        </type>
+        <type category="struct" name="VkPhysicalDeviceExternalMemoryHostPropertiesEXT" structextends="VkPhysicalDeviceProperties2KHR">
+            <member values="VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_HOST_PROPERTIES_EXT"><type>VkStructureType</type> <name>sType</name></member>
+            <member><type>void</type>* <name>pNext</name></member>
+            <member><type>VkDeviceSize</type> <name>minImportedHostPointerAlignment</name></member>
         </type>
     </types>
 
@@ -2650,6 +2683,7 @@ private version is maintained in the 1.0 branch of the member gitlab server.
         <enum value="0"     name="VK_FALSE"/>
         <enum value="(~0U)" name="VK_QUEUE_FAMILY_IGNORED"/>
         <enum value="(~0U-1)" name="VK_QUEUE_FAMILY_EXTERNAL_KHR"/>
+        <enum value="(~0U-2)" name="VK_QUEUE_FAMILY_FOREIGN_EXT"/>
         <enum value="(~0U)" name="VK_SUBPASS_EXTERNAL"/>
         <enum value="32"    name="VK_MAX_DEVICE_GROUP_SIZE_KHX"/>
     </enums>
@@ -3655,11 +3689,16 @@ private version is maintained in the 1.0 branch of the member gitlab server.
     <enums name="VkValidationCacheHeaderVersionEXT" type="enum">
         <enum value="1"     name="VK_VALIDATION_CACHE_HEADER_VERSION_ONE_EXT"/>
     </enums>
+    <enums name="VkShaderInfoTypeAMD" type="enum">
+        <enum value="0" name="VK_SHADER_INFO_TYPE_STATISTICS_AMD"/>
+        <enum value="1" name="VK_SHADER_INFO_TYPE_BINARY_AMD"/>
+        <enum value="2" name="VK_SHADER_INFO_TYPE_DISASSEMBLY_AMD"/>
+    </enums>
     <enums name="VkQueueGlobalPriorityEXT" type="enum">
-        <enum value="128"     name="VK_QUEUE_GLOBAL_PRIORITY_LOW"/>
-        <enum value="256"     name="VK_QUEUE_GLOBAL_PRIORITY_MEDIUM"/>
-        <enum value="512"     name="VK_QUEUE_GLOBAL_PRIORITY_HIGH"/>
-        <enum value="1024"    name="VK_QUEUE_GLOBAL_PRIORITY_REALTIME"/>
+        <enum value="128"     name="VK_QUEUE_GLOBAL_PRIORITY_LOW_EXT"/>
+        <enum value="256"     name="VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_EXT"/>
+        <enum value="512"     name="VK_QUEUE_GLOBAL_PRIORITY_HIGH_EXT"/>
+        <enum value="1024"    name="VK_QUEUE_GLOBAL_PRIORITY_REALTIME_EXT"/>
     </enums>
 
     <commands comment="Vulkan command definitions">
@@ -5403,6 +5442,22 @@ private version is maintained in the 1.0 branch of the member gitlab server.
             <param><type>VkImage</type> <name>image</name></param>
             <param><type>int</type>* <name>pNativeFenceFd</name></param>
         </command>
+        <command successcodes="VK_SUCCESS,VK_INCOMPLETE" errorcodes="VK_ERROR_FEATURE_NOT_PRESENT,VK_ERROR_OUT_OF_HOST_MEMORY">
+            <proto><type>VkResult</type> <name>vkGetShaderInfoAMD</name></proto>
+            <param><type>VkDevice</type> <name>device</name></param>
+            <param><type>VkPipeline</type> <name>pipeline</name></param>
+            <param><type>VkShaderStageFlagBits</type> <name>shaderStage</name></param>
+            <param><type>VkShaderInfoTypeAMD</type> <name>infoType</name></param>
+            <param optional="false,true"><type>size_t</type>* <name>pInfoSize</name></param>
+            <param optional="true" len="pInfoSize"><type>void</type>* <name>pInfo</name></param>
+        </command>
+        <command successcodes="VK_SUCCESS" errorcodes="VK_ERROR_INVALID_EXTERNAL_HANDLE_KHR">
+            <proto><type>VkResult</type> <name>vkGetMemoryHostPointerPropertiesEXT</name></proto>
+            <param><type>VkDevice</type> <name>device</name></param>
+            <param><type>VkExternalMemoryHandleTypeFlagBitsKHR</type> <name>handleType</name></param>
+            <param optional="false">const <type>void</type>* <name>pHostPointer</name></param>
+            <param><type>VkMemoryHostPointerPropertiesEXT</type>* <name>pMemoryHostPointerProperties</name></param>
+        </command>
     </commands>
 
     <feature api="vulkan" name="VK_VERSION_1_0" number="1.0" comment="Vulkan core API interface definitions">
@@ -5778,7 +5833,7 @@ private version is maintained in the 1.0 branch of the member gitlab server.
         </extension>
         <extension name="VK_EXT_debug_report" number="12" type="instance" author="GOOGLE" contact="Courtney Goeltzenleuchter @courtney" supported="vulkan">
             <require>
-                <enum value="8"                                         name="VK_EXT_DEBUG_REPORT_SPEC_VERSION"/>
+                <enum value="9"                                         name="VK_EXT_DEBUG_REPORT_SPEC_VERSION"/>
                 <enum value="&quot;VK_EXT_debug_report&quot;"           name="VK_EXT_DEBUG_REPORT_EXTENSION_NAME"/>
                 <enum offset="0" extends="VkStructureType"              name="VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT"/>
                 <enum offset="1" dir="-" extends="VkResult"             name="VK_ERROR_VALIDATION_FAILED_EXT"/>
@@ -6001,10 +6056,14 @@ private version is maintained in the 1.0 branch of the member gitlab server.
                 <type name="VkTextureLODGatherFormatPropertiesAMD"/>
             </require>
         </extension>
-        <extension name="VK_AMD_extension_43" number="43" author="AMD" contact="Daniel Rakos @aqnuep" supported="disabled">
+        <extension name="VK_AMD_shader_info" number="43" author="AMD" contact="Jaakko Konttinen @jaakko" supported="vulkan" type="device">
             <require>
-                <enum value="0"                                         name="VK_AMD_EXTENSION_43_SPEC_VERSION"/>
-                <enum value="&quot;VK_AMD_extension_43&quot;"           name="VK_AMD_EXTENSION_43_EXTENSION_NAME"/>
+                <enum value="1"                                         name="VK_AMD_SHADER_INFO_SPEC_VERSION"/>
+                <enum value="&quot;VK_AMD_shader_info&quot;"            name="VK_AMD_SHADER_INFO_EXTENSION_NAME"/>
+                <type name="VkShaderInfoTypeAMD"/>
+                <type name="VkShaderResourceUsageAMD"/>
+                <type name="VkShaderStatisticsInfoAMD"/>
+                <command name="vkGetShaderInfoAMD"/>
             </require>
         </extension>
         <extension name="VK_AMD_extension_44" number="44" author="AMD" contact="Daniel Rakos @aqnuep" supported="disabled">
@@ -6905,16 +6964,18 @@ private version is maintained in the 1.0 branch of the member gitlab server.
                 <enum value="&quot;VK_MVK_moltenvk&quot;"               name="VK_MVK_MOLTENVK_EXTENSION_NAME"/>
             </require>
         </extension>
-        <extension name="VK_MESA_extension_126" number="126" author="MESA" contact="Chad Versace @chadversary" supported="disabled">
+        <extension name="VK_EXT_external_memory_dma_buf" number="126" type="device" requires="VK_KHR_external_memory_fd" author="EXT" contact="Chad Versace @chadversary" supported="vulkan">
             <require>
-                <enum value="0"                                         name="VK_MESA_EXTENSION_126_SPEC_VERSION"/>
-                <enum value="&quot;VK_MESA_extension_126&quot;"         name="VK_MESA_EXTENSION_126_EXTENSION_NAME"/>
+                <enum value="1"                                                  name="VK_EXT_EXTERNAL_MEMORY_DMA_BUF_SPEC_VERSION"/>
+                <enum value="&quot;VK_EXT_external_memory_dma_buf&quot;"         name="VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME"/>
+                <enum bitpos="9" extends="VkExternalMemoryHandleTypeFlagBitsKHR" name="VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT"/>
             </require>
         </extension>
-        <extension name="VK_MESA_extension_127" number="127" author="MESA" contact="Chad Versace @chadversary" supported="disabled">
+        <extension name="VK_EXT_queue_family_foreign" number="127" type="device" author="EXT" requires="VK_KHR_external_memory" contact="Chad Versace @chadversary" supported="vulkan">
             <require>
-                <enum value="0"                                         name="VK_MESA_EXTENSION_127_SPEC_VERSION"/>
-                <enum value="&quot;VK_MESA_extension_127&quot;"         name="VK_MESA_EXTENSION_127_EXTENSION_NAME"/>
+                <enum value="1"                                         name="VK_EXT_QUEUE_FAMILY_FOREIGN_SPEC_VERSION"/>
+                <enum value="&quot;VK_EXT_queue_family_foreign&quot;"   name="VK_EXT_QUEUE_FAMILY_FOREIGN_EXTENSION_NAME"/>
+                <enum                                                   name="VK_QUEUE_FAMILY_FOREIGN_EXT"/>
             </require>
         </extension>
         <extension name="VK_KHR_dedicated_allocation" number="128" type="device" author="KHR" requires="VK_KHR_get_memory_requirements2" contact="James Jones @cubanismo" supported="vulkan">
@@ -7359,40 +7420,40 @@ private version is maintained in the 1.0 branch of the member gitlab server.
                 <enum value="&quot;VK_EXT_extension_170&quot;"           name="VK_EXT_EXTENSION_170_EXTENSION_NAME"/>
             </require>
         </extension>
-      <extension name="VK_QCOM_extension_171" number="171" author="QCOM" contact="Bill Licea-Kane @billl" supported="disabled">
+        <extension name="VK_QCOM_extension_171" number="171" author="QCOM" contact="Bill Licea-Kane @billl" supported="disabled">
             <require>
                 <enum value="0"                                          name="VK_QCOM_extension_171_SPEC_VERSION"/>
                 <enum value="&quot;VK_QCOM_extension_171&quot;"          name="VK_QCOM_extension_171_EXTENSION_NAME"/>
             </require>
-      </extension>
-      <extension name="VK_QCOM_extension_172" number="172" author="QCOM" contact="Bill Licea-Kane @billl" supported="disabled">
+        </extension>
+        <extension name="VK_QCOM_extension_172" number="172" author="QCOM" contact="Bill Licea-Kane @billl" supported="disabled">
             <require>
                 <enum value="0"                                          name="VK_QCOM_extension_172_SPEC_VERSION"/>
                 <enum value="&quot;VK_QCOM_extension_172&quot;"          name="VK_QCOM_extension_172_EXTENSION_NAME"/>
             </require>
-      </extension>
-      <extension name="VK_QCOM_extension_173" number="173" author="QCOM" contact="Bill Licea-Kane @billl" supported="disabled">
+        </extension>
+        <extension name="VK_QCOM_extension_173" number="173" author="QCOM" contact="Bill Licea-Kane @billl" supported="disabled">
             <require>
                 <enum value="0"                                          name="VK_QCOM_extension_173_SPEC_VERSION"/>
                 <enum value="&quot;VK_QCOM_extension_173&quot;"          name="VK_QCOM_extension_173_EXTENSION_NAME"/>
             </require>
-      </extension>
-      <extension name="VK_QCOM_extension_174" number="174" author="QCOM" contact="Bill Licea-Kane @billl" supported="disabled">
+        </extension>
+        <extension name="VK_QCOM_extension_174" number="174" author="QCOM" contact="Bill Licea-Kane @billl" supported="disabled">
             <require>
                 <enum value="0"                                          name="VK_QCOM_extension_174_SPEC_VERSION"/>
                 <enum value="&quot;VK_QCOM_extension_174&quot;"          name="VK_QCOM_extension_174_EXTENSION_NAME"/>
             </require>
-      </extension>
-      <extension name="VK_EXT_global_priority" number="175" type="device" author="EXT" contact="Andres Rodriguez @lostgoat" supported="vulkan">
-        <require>
-          <enum value="1"                                                name="VK_EXT_GLOBAL_PRIORITY_SPEC_VERSION"/>
-          <enum value="&quot;VK_EXT_global_priority&quot;"               name="VK_EXT_GLOBAL_PRIORITY_EXTENSION_NAME"/>
-          <enum offset="0" extends="VkStructureType"                     name="VK_STRUCTURE_TYPE_DEVICE_QUEUE_GLOBAL_PRIORITY_CREATE_INFO_EXT"/>
-          <enum offset="1" dir="-" extends="VkResult"                    name="VK_ERROR_NOT_PERMITTED_EXT"/>
-          <type name="VkDeviceQueueGlobalPriorityCreateInfoEXT"/>
-          <type name="VkQueueGlobalPriorityEXT"/>
-        </require>
-      </extension>
+        </extension>
+        <extension name="VK_EXT_global_priority" number="175" type="device" author="EXT" contact="Andres Rodriguez @lostgoat" supported="vulkan">
+            <require>
+                <enum value="2"                                                name="VK_EXT_GLOBAL_PRIORITY_SPEC_VERSION"/>
+                <enum value="&quot;VK_EXT_global_priority&quot;"               name="VK_EXT_GLOBAL_PRIORITY_EXTENSION_NAME"/>
+                <enum offset="0" extends="VkStructureType"                     name="VK_STRUCTURE_TYPE_DEVICE_QUEUE_GLOBAL_PRIORITY_CREATE_INFO_EXT"/>
+                <enum offset="1" dir="-" extends="VkResult"                    name="VK_ERROR_NOT_PERMITTED_EXT"/>
+                <type name="VkDeviceQueueGlobalPriorityCreateInfoEXT"/>
+                <type name="VkQueueGlobalPriorityEXT"/>
+            </require>
+        </extension>
         <extension name="VK_EXT_extension_176" number="176" author="EXT" contact="Neil Henning @neil_henning" supported="disabled">
             <require>
                 <enum value="0"                                          name="VK_KHR_EXTENSION_176_SPEC_VERSION"/>
@@ -7405,10 +7466,97 @@ private version is maintained in the 1.0 branch of the member gitlab server.
                 <enum value="&quot;VK_KHR_extension_177&quot;"           name="VK_KHR_EXTENSION_177_EXTENSION_NAME"/>
             </require>
         </extension>
-       <extension name="VK_EXT_extension_178" number="178" author="EXT" contact="Alexander Galazin @debater" supported="disabled">
+        <extension name="VK_EXT_extension_178" number="178" author="EXT" contact="Alexander Galazin @debater" supported="disabled">
             <require>
                 <enum value="0"                                          name="VK_KHR_EXTENSION_178_SPEC_VERSION"/>
                 <enum value="&quot;VK_KHR_extension_178&quot;"           name="VK_KHR_EXTENSION_178_EXTENSION_NAME"/>
+            </require>
+        </extension>
+        <extension name="VK_EXT_external_memory_host" number="179" type="device" author="EXT" requires="VK_KHR_external_memory" contact="Daniel Rakos @aqnuep" supported="vulkan">
+            <require>
+                <enum value="1"                                         name="VK_EXT_EXTERNAL_MEMORY_HOST_SPEC_VERSION"/>
+                <enum value="&quot;VK_EXT_external_memory_host&quot;"   name="VK_EXT_EXTERNAL_MEMORY_HOST_EXTENSION_NAME"/>
+                <enum offset="0" extends="VkStructureType"              name="VK_STRUCTURE_TYPE_IMPORT_MEMORY_HOST_POINTER_INFO_EXT"/>
+                <enum offset="1" extends="VkStructureType"              name="VK_STRUCTURE_TYPE_MEMORY_HOST_POINTER_PROPERTIES_EXT"/>
+                <enum offset="2" extends="VkStructureType"              name="VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_MEMORY_HOST_PROPERTIES_EXT"/>
+                <enum bitpos="7" extends="VkExternalMemoryHandleTypeFlagBitsKHR" name="VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT"/>
+                <enum bitpos="8" extends="VkExternalMemoryHandleTypeFlagBitsKHR" name="VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_MAPPED_FOREIGN_MEMORY_BIT_EXT"/>
+                <type name="VkImportMemoryHostPointerInfoEXT"/>
+                <type name="VkMemoryHostPointerPropertiesEXT"/>
+                <type name="VkPhysicalDeviceExternalMemoryHostPropertiesEXT"/>
+                <command name="vkGetMemoryHostPointerPropertiesEXT"/>
+            </require>
+        </extension>
+        <extension name="VK_AMD_extension_180" number="180" author="AMD" contact="Daniel Rakos @aqnuep" supported="disabled">
+            <require>
+                <enum value="0"                                          name="VK_KHR_EXTENSION_180_SPEC_VERSION"/>
+                <enum value="&quot;VK_AMD_extension_180&quot;"           name="VK_KHR_EXTENSION_180_EXTENSION_NAME"/>
+            </require>
+        </extension>
+        <extension name="VK_AMD_extension_181" number="181" author="AMD" contact="Daniel Rakos @aqnuep" supported="disabled">
+            <require>
+                <enum value="0"                                          name="VK_KHR_EXTENSION_181_SPEC_VERSION"/>
+                <enum value="&quot;VK_AMD_extension_181&quot;"           name="VK_KHR_EXTENSION_181_EXTENSION_NAME"/>
+            </require>
+        </extension>
+        <extension name="VK_AMD_extension_182" number="182" author="AMD" contact="Daniel Rakos @aqnuep" supported="disabled">
+            <require>
+                <enum value="0"                                          name="VK_KHR_EXTENSION_182_SPEC_VERSION"/>
+                <enum value="&quot;VK_AMD_extension_182&quot;"           name="VK_KHR_EXTENSION_182_EXTENSION_NAME"/>
+            </require>
+        </extension>
+        <extension name="VK_AMD_extension_183" number="183" author="AMD" contact="Daniel Rakos @aqnuep" supported="disabled">
+            <require>
+                <enum value="0"                                          name="VK_KHR_EXTENSION_183_SPEC_VERSION"/>
+                <enum value="&quot;VK_AMD_extension_183&quot;"           name="VK_KHR_EXTENSION_183_EXTENSION_NAME"/>
+            </require>
+        </extension>
+        <extension name="VK_AMD_extension_184" number="184" author="AMD" contact="Daniel Rakos @aqnuep" supported="disabled">
+            <require>
+                <enum value="0"                                          name="VK_KHR_EXTENSION_184_SPEC_VERSION"/>
+                <enum value="&quot;VK_AMD_extension_184&quot;"           name="VK_KHR_EXTENSION_184_EXTENSION_NAME"/>
+            </require>
+        </extension>
+        <extension name="VK_AMD_extension_185" number="185" author="AMD" contact="Daniel Rakos @aqnuep" supported="disabled">
+            <require>
+                <enum value="0"                                          name="VK_KHR_EXTENSION_185_SPEC_VERSION"/>
+                <enum value="&quot;VK_AMD_extension_185&quot;"           name="VK_KHR_EXTENSION_185_EXTENSION_NAME"/>
+            </require>
+        </extension>
+        <extension name="VK_AMD_extension_186" number="186" author="AMD" contact="Daniel Rakos @aqnuep" supported="disabled">
+            <require>
+                <enum value="0"                                          name="VK_KHR_EXTENSION_186_SPEC_VERSION"/>
+                <enum value="&quot;VK_AMD_extension_186&quot;"           name="VK_KHR_EXTENSION_186_EXTENSION_NAME"/>
+            </require>
+        </extension>
+        <extension name="VK_AMD_extension_187" number="187" author="AMD" contact="Daniel Rakos @aqnuep" supported="disabled">
+            <require>
+                <enum value="0"                                          name="VK_KHR_EXTENSION_187_SPEC_VERSION"/>
+                <enum value="&quot;VK_AMD_extension_187&quot;"           name="VK_KHR_EXTENSION_187_EXTENSION_NAME"/>
+            </require>
+        </extension>
+        <extension name="VK_AMD_extension_188" number="188" author="AMD" contact="Daniel Rakos @aqnuep" supported="disabled">
+            <require>
+                <enum value="0"                                          name="VK_KHR_EXTENSION_188_SPEC_VERSION"/>
+                <enum value="&quot;VK_AMD_extension_188&quot;"           name="VK_KHR_EXTENSION_188_EXTENSION_NAME"/>
+            </require>
+        </extension>
+        <extension name="VK_AMD_extension_189" number="189" author="AMD" contact="Daniel Rakos @aqnuep" supported="disabled">
+            <require>
+                <enum value="0"                                          name="VK_KHR_EXTENSION_189_SPEC_VERSION"/>
+                <enum value="&quot;VK_AMD_extension_189&quot;"           name="VK_KHR_EXTENSION_189_EXTENSION_NAME"/>
+            </require>
+        </extension>
+        <extension name="VK_AMD_extension_190" number="190" author="AMD" contact="Daniel Rakos @aqnuep" supported="disabled">
+            <require>
+                <enum value="0"                                          name="VK_KHR_EXTENSION_190_SPEC_VERSION"/>
+                <enum value="&quot;VK_AMD_extension_190&quot;"           name="VK_KHR_EXTENSION_190_EXTENSION_NAME"/>
+            </require>
+        </extension>
+        <extension name="VK_NV_extension_191" number="191" author="NV" contact="Vikram Kushwaha @vkushwaha" supported="disabled">
+            <require>
+                <enum value="0"                                         name="VK_NV_EXTENSION_191_SPEC_VERSION"/>
+                <enum value="&quot;VK_NV_extension_191&quot;"           name="VK_NV_EXTENSION_191_EXTENSION_NAME"/>
             </require>
         </extension>
     </extensions>

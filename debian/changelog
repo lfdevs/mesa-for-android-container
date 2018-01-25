@@ -1,3 +1,13 @@
+mesa (18.0.0~rc2-1) experimental; urgency=medium
+
+  * New upstream release.
+  * libgbm1.symbols: Updated.
+  * rules: Use -O1 for sh3 & sh4, thanks John Paul Adrian Glaubitz!
+    (Closes: #887444)
+  * rules: Fix hurd FTBFS, thanks Samuel Thibault! (Closes: #888047)
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 25 Jan 2018 13:42:14 +0200
+
 mesa (17.3.3-1) unstable; urgency=medium
 
   * New upstream release.

@@ -243,6 +243,9 @@ struct vc4_job {
          */
         uint32_t bo_space;
 
+        /* Last BO hindex referenced from VC4_PACKET_GEM_HANDLES. */
+        uint32_t last_gem_handle_hindex;
+
         /** @{ Surfaces to submit rendering for. */
         struct pipe_surface *color_read;
         struct pipe_surface *color_write;
