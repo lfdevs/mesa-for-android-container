@@ -73,6 +73,7 @@
 #include "tnl/t_pipeline.h"
 #include "util/ralloc.h"
 #include "util/debug.h"
+#include "util/disk_cache.h"
 #include "isl/isl.h"
 
 /***************************************
@@ -1129,6 +1130,8 @@ intelDestroyContext(__DRIcontext * driContextPriv)
 
    driDestroyOptionCache(&brw->optionCache);
 
+   disk_cache_destroy(brw->ctx.Cache);
+
    /* free the Mesa context */
    _mesa_free_context_data(&brw->ctx);
 
@@ -1282,6 +1285,21 @@ intel_resolve_for_dri2_flush(struct brw_context *brw,
          intel_miptree_prepare_external(brw, rb->mt);
       } else {
          intel_renderbuffer_downsample(brw, rb);
+
+         /* Call prepare_external on the single-sample miptree to do any
+          * needed resolves prior to handing it off to the window system.
+          * This is needed in the case that rb->singlesample_mt is Y-tiled
+          * with CCS_E enabled but without I915_FORMAT_MOD_Y_TILED_CCS_E.  In
+          * this case, the MSAA resolve above will write compressed data into
+          * rb->singlesample_mt.
+          *
+          * TODO: Some day, if we decide to care about the tiny performance
+          * hit we're taking by doing the MSAA resolve and then a CCS resolve,
+          * we could detect this case and just allocate the single-sampled
+          * miptree without aux.  However, that would be a lot of plumbing and
+          * this is a rather exotic case so it's not really worth it.
+          */
+         intel_miptree_prepare_external(brw, rb->singlesample_mt);
       }
    }
 }

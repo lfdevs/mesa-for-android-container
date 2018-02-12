@@ -298,11 +298,21 @@ static int r600_init_surface(struct si_screen *sscreen,
 		return r;
 	}
 
+	unsigned pitch = pitch_in_bytes_override / bpe;
+
 	if (sscreen->info.chip_class >= GFX9) {
-		assert(!pitch_in_bytes_override ||
-		       pitch_in_bytes_override == surface->u.gfx9.surf_pitch * bpe);
+		if (pitch) {
+			surface->u.gfx9.surf_pitch = pitch;
+			surface->u.gfx9.surf_slice_size =
+				(uint64_t)pitch * surface->u.gfx9.surf_height * bpe;
+		}
 		surface->u.gfx9.surf_offset = offset;
 	} else {
+		if (pitch) {
+			surface->u.legacy.level[0].nblk_x = pitch;
+			surface->u.legacy.level[0].slice_size_dw =
+				((uint64_t)pitch * surface->u.legacy.level[0].nblk_y * bpe) / 4;
+		}
 		if (offset) {
 			for (i = 0; i < ARRAY_SIZE(surface->u.legacy.level); ++i)
 				surface->u.legacy.level[i].offset += offset;

@@ -376,6 +376,7 @@ INSTALL_SCRIPT = @INSTALL_SCRIPT@
 INSTALL_STRIP_PROGRAM = @INSTALL_STRIP_PROGRAM@
 LD = @LD@
 LDFLAGS = @LDFLAGS@
+LD_BUILD_ID = @LD_BUILD_ID@
 LD_NO_UNDEFINED = @LD_NO_UNDEFINED@
 LEX = @LEX@
 LEXLIB = @LEXLIB@
@@ -603,7 +604,7 @@ mesa_dri_drivers_la_LDFLAGS = \
 	-module \
 	-no-undefined \
 	-avoid-version \
-	-Wl,--build-id=sha1 \
+	$(LD_BUILD_ID) \
 	$(BSYMBOLIC) \
 	$(GC_SECTIONS) \
 	$(LD_NO_UNDEFINED)

@@ -74,7 +74,8 @@ struct vbo_save_vertex_list {
    GLuint current_size;
 
    GLuint buffer_offset;        /**< in bytes */
-   GLuint vertex_count;
+   GLuint start_vertex;         /**< first vertex used by any primitive */
+   GLuint vertex_count;         /**< number of vertices in this list */
    GLuint wrap_count;		/* number of copied vertices at start */
    GLboolean dangling_attr_ref;	/* current attr implicitly referenced
                                    outside the list */

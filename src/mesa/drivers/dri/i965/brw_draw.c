@@ -341,6 +341,7 @@ brw_merge_inputs(struct brw_context *brw,
  */
 static bool
 intel_disable_rb_aux_buffer(struct brw_context *brw,
+                            bool *draw_aux_buffer_disabled,
                             struct intel_mipmap_tree *tex_mt,
                             unsigned min_level, unsigned num_levels,
                             const char *usage)
@@ -360,7 +361,7 @@ intel_disable_rb_aux_buffer(struct brw_context *brw,
       if (irb && irb->mt->bo == tex_mt->bo &&
           irb->mt_level >= min_level &&
           irb->mt_level < min_level + num_levels) {
-         found = brw->draw_aux_buffer_disabled[i] = true;
+         found = draw_aux_buffer_disabled[i] = true;
       }
    }
 
@@ -393,13 +394,11 @@ mark_textures_used_for_txf(BITSET_WORD *used_for_txf,
  * enabled depth texture, and flush the render cache for any dirty textures.
  */
 void
-brw_predraw_resolve_inputs(struct brw_context *brw, bool rendering)
+brw_predraw_resolve_inputs(struct brw_context *brw, bool rendering,
+                           bool *draw_aux_buffer_disabled)
 {
    struct gl_context *ctx = &brw->ctx;
    struct intel_texture_object *tex_obj;
-
-   memset(brw->draw_aux_buffer_disabled, 0,
-          sizeof(brw->draw_aux_buffer_disabled));
 
    BITSET_DECLARE(used_for_txf, MAX_COMBINED_TEXTURE_IMAGE_UNITS);
    memset(used_for_txf, 0, sizeof(used_for_txf));
@@ -441,7 +440,8 @@ brw_predraw_resolve_inputs(struct brw_context *brw, bool rendering)
       }
 
       const bool disable_aux = rendering &&
-         intel_disable_rb_aux_buffer(brw, tex_obj->mt, min_level, num_levels,
+         intel_disable_rb_aux_buffer(brw, draw_aux_buffer_disabled,
+                                     tex_obj->mt, min_level, num_levels,
                                      "for sampling");
 
       intel_miptree_prepare_texture(brw, tex_obj->mt, view_format,
@@ -482,8 +482,11 @@ brw_predraw_resolve_inputs(struct brw_context *brw, bool rendering)
             tex_obj = intel_texture_object(u->TexObj);
 
             if (tex_obj && tex_obj->mt) {
-               intel_disable_rb_aux_buffer(brw, tex_obj->mt, 0, ~0,
-                                           "as a shader image");
+               if (rendering) {
+                  intel_disable_rb_aux_buffer(brw, draw_aux_buffer_disabled,
+                                              tex_obj->mt, 0, ~0,
+                                              "as a shader image");
+               }
 
                intel_miptree_prepare_image(brw, tex_obj->mt);
 
@@ -495,7 +498,8 @@ brw_predraw_resolve_inputs(struct brw_context *brw, bool rendering)
 }
 
 static void
-brw_predraw_resolve_framebuffer(struct brw_context *brw)
+brw_predraw_resolve_framebuffer(struct brw_context *brw,
+                                bool *draw_aux_buffer_disabled)
 {
    struct gl_context *ctx = &brw->ctx;
    struct intel_renderbuffer *depth_irb;
@@ -547,11 +551,16 @@ brw_predraw_resolve_framebuffer(struct brw_context *brw)
       bool blend_enabled = ctx->Color.BlendEnabled & (1 << i);
       enum isl_aux_usage aux_usage =
          intel_miptree_render_aux_usage(brw, irb->mt, isl_format,
-                                        blend_enabled);
+                                        blend_enabled,
+                                        draw_aux_buffer_disabled[i]);
+      if (brw->draw_aux_usage[i] != aux_usage) {
+         brw->ctx.NewDriverState |= BRW_NEW_AUX_STATE;
+         brw->draw_aux_usage[i] = aux_usage;
+      }
 
       intel_miptree_prepare_render(brw, irb->mt, irb->mt_level,
                                    irb->mt_layer, irb->layer_count,
-                                   isl_format, blend_enabled);
+                                   aux_usage);
 
       brw_cache_flush_for_render(brw, irb->mt->bo,
                                  isl_format, aux_usage);
@@ -620,16 +629,13 @@ brw_postdraw_set_buffers_need_resolve(struct brw_context *brw)
       mesa_format mesa_format =
          _mesa_get_render_format(ctx, intel_rb_format(irb));
       enum isl_format isl_format = brw_isl_format_for_mesa_format(mesa_format);
-      bool blend_enabled = ctx->Color.BlendEnabled & (1 << i);
-      enum isl_aux_usage aux_usage =
-         intel_miptree_render_aux_usage(brw, irb->mt, isl_format,
-                                        blend_enabled);
+      enum isl_aux_usage aux_usage = brw->draw_aux_usage[i];
 
       brw_render_cache_add_bo(brw, irb->mt->bo, isl_format, aux_usage);
 
       intel_miptree_finish_render(brw, irb->mt, irb->mt_level,
                                   irb->mt_layer, irb->layer_count,
-                                  isl_format, blend_enabled);
+                                  aux_usage);
    }
 }
 
@@ -732,8 +738,9 @@ brw_prepare_drawing(struct gl_context *ctx,
     * and finalizing textures but before setting up any hardware state for
     * this draw call.
     */
-   brw_predraw_resolve_inputs(brw, true);
-   brw_predraw_resolve_framebuffer(brw);
+   bool draw_aux_buffer_disabled[MAX_DRAW_BUFFERS] = { };
+   brw_predraw_resolve_inputs(brw, true, draw_aux_buffer_disabled);
+   brw_predraw_resolve_framebuffer(brw, draw_aux_buffer_disabled);
 
    /* Bind all inputs, derive varying and size information:
     */

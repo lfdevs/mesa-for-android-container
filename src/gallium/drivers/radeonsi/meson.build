@@ -77,7 +77,7 @@ libradeonsi = static_library(
   ],
   c_args : [c_vis_args],
   cpp_args : [cpp_vis_args],
-  dependencies : [dep_llvm, idep_nir_headers],
+  dependencies : [dep_llvm, dep_libdrm_radeon, idep_nir_headers],
 )
 
 driver_radeonsi = declare_dependency(

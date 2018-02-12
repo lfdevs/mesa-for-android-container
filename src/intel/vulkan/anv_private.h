@@ -313,10 +313,10 @@ VkResult __vk_errorf(struct anv_instance *instance, const void *object,
 #ifdef DEBUG
 #define vk_error(error) __vk_errorf(NULL, NULL,\
                                     VK_DEBUG_REPORT_OBJECT_TYPE_UNKNOWN_EXT,\
-                                    error, __FILE__, __LINE__, NULL);
+                                    error, __FILE__, __LINE__, NULL)
 #define vk_errorf(instance, obj, error, format, ...)\
     __vk_errorf(instance, obj, REPORT_OBJECT_TYPE(obj), error,\
-                __FILE__, __LINE__, format, ## __VA_ARGS__);
+                __FILE__, __LINE__, format, ## __VA_ARGS__)
 #else
 #define vk_error(error) error
 #define vk_errorf(instance, obj, error, format, ...) error
@@ -1306,6 +1306,8 @@ struct anv_descriptor_template_entry {
 };
 
 struct anv_descriptor_update_template {
+    VkPipelineBindPoint bind_point;
+
    /* The descriptor set this template corresponds to. This value is only
     * valid if the template was created with the templateType
     * VK_DESCRIPTOR_UPDATE_TEMPLATE_TYPE_DESCRIPTOR_SET_KHR.
@@ -1663,38 +1665,83 @@ struct anv_attachment_state {
    bool                                         clear_color_is_zero;
 };
 
+/** State tracking for particular pipeline bind point
+ *
+ * This struct is the base struct for anv_cmd_graphics_state and
+ * anv_cmd_compute_state.  These are used to track state which is bound to a
+ * particular type of pipeline.  Generic state that applies per-stage such as
+ * binding table offsets and push constants is tracked generically with a
+ * per-stage array in anv_cmd_state.
+ */
+struct anv_cmd_pipeline_state {
+   struct anv_pipeline *pipeline;
+
+   struct anv_descriptor_set *descriptors[MAX_SETS];
+   uint32_t dynamic_offsets[MAX_DYNAMIC_BUFFERS];
+
+   struct anv_push_descriptor_set *push_descriptors[MAX_SETS];
+};
+
+/** State tracking for graphics pipeline
+ *
+ * This has anv_cmd_pipeline_state as a base struct to track things which get
+ * bound to a graphics pipeline.  Along with general pipeline bind point state
+ * which is in the anv_cmd_pipeline_state base struct, it also contains other
+ * state which is graphics-specific.
+ */
+struct anv_cmd_graphics_state {
+   struct anv_cmd_pipeline_state base;
+
+   anv_cmd_dirty_mask_t dirty;
+   uint32_t vb_dirty;
+
+   struct anv_dynamic_state dynamic;
+
+   struct {
+      struct anv_buffer *index_buffer;
+      uint32_t index_type; /**< 3DSTATE_INDEX_BUFFER.IndexFormat */
+      uint32_t index_offset;
+   } gen7;
+};
+
+/** State tracking for compute pipeline
+ *
+ * This has anv_cmd_pipeline_state as a base struct to track things which get
+ * bound to a compute pipeline.  Along with general pipeline bind point state
+ * which is in the anv_cmd_pipeline_state base struct, it also contains other
+ * state which is compute-specific.
+ */
+struct anv_cmd_compute_state {
+   struct anv_cmd_pipeline_state base;
+
+   bool pipeline_dirty;
+
+   struct anv_address num_workgroups;
+};
+
 /** State required while building cmd buffer */
 struct anv_cmd_state {
    /* PIPELINE_SELECT.PipelineSelection */
    uint32_t                                     current_pipeline;
    const struct gen_l3_config *                 current_l3_config;
-   uint32_t                                     vb_dirty;
-   anv_cmd_dirty_mask_t                         dirty;
-   anv_cmd_dirty_mask_t                         compute_dirty;
+
+   struct anv_cmd_graphics_state                gfx;
+   struct anv_cmd_compute_state                 compute;
+
    enum anv_pipe_bits                           pending_pipe_bits;
-   uint32_t                                     num_workgroups_offset;
-   struct anv_bo                                *num_workgroups_bo;
    VkShaderStageFlags                           descriptors_dirty;
    VkShaderStageFlags                           push_constants_dirty;
-   uint32_t                                     scratch_size;
-   struct anv_pipeline *                        pipeline;
-   struct anv_pipeline *                        compute_pipeline;
+
    struct anv_framebuffer *                     framebuffer;
    struct anv_render_pass *                     pass;
    struct anv_subpass *                         subpass;
    VkRect2D                                     render_area;
    uint32_t                                     restart_index;
    struct anv_vertex_binding                    vertex_bindings[MAX_VBS];
-   struct anv_descriptor_set *                  descriptors[MAX_SETS];
-   uint32_t                                     dynamic_offsets[MAX_DYNAMIC_BUFFERS];
    VkShaderStageFlags                           push_constant_stages;
    struct anv_push_constants *                  push_constants[MESA_SHADER_STAGES];
    struct anv_state                             binding_tables[MESA_SHADER_STAGES];
    struct anv_state                             samplers[MESA_SHADER_STAGES];
-   struct anv_dynamic_state                     dynamic;
-   bool                                         need_query_wa;
-
-   struct anv_push_descriptor_set *             push_descriptors[MAX_SETS];
 
    /**
     * Whether or not the gen8 PMA fix is enabled.  We ensure that, at the top
@@ -1728,12 +1775,6 @@ struct anv_cmd_state {
     * is one of the states in render_pass_states.
     */
    struct anv_state                             null_surface_state;
-
-   struct {
-      struct anv_buffer *                       index_buffer;
-      uint32_t                                  index_type; /**< 3DSTATE_INDEX_BUFFER.IndexFormat */
-      uint32_t                                  index_offset;
-   } gen7;
 };
 
 struct anv_cmd_pool {

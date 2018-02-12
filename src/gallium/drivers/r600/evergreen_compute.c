@@ -766,7 +766,7 @@ static void compute_emit_cs(struct r600_context *rctx,
 	} else {
 		uint32_t rat_mask;
 
-		rat_mask = ((1ULL << (((unsigned)rctx->cb_misc_state.nr_image_rats + rctx->cb_misc_state.nr_buffer_rats) * 4)) - 1);
+		rat_mask = evergreen_construct_rat_mask(rctx, &rctx->cb_misc_state, 0);
 		radeon_compute_set_context_reg(cs, R_028238_CB_TARGET_MASK,
 					       rat_mask);
 	}

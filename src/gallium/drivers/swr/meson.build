@@ -1,4 +1,4 @@
-# Copyright © 2017 Intel Corporation
+# Copyright © 2017-2018 Intel Corporation
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -149,7 +149,22 @@ files_swr_arch = files(
 swr_context_files = files('swr_context.h')
 swr_state_files = files('rasterizer/core/state.h')
 swr_event_proto_files = files('rasterizer/archrast/events.proto')
+swr_gen_backend_files = files('rasterizer/codegen/templates/gen_backend.cpp')
+swr_gen_rasterizer_files = files('rasterizer/codegen/templates/gen_rasterizer.cpp')
+swr_gen_header_init_files = files('rasterizer/codegen/templates/gen_header_init.hpp')
+
+swr_gen_llvm_ir_macros_py = files('rasterizer/codegen/gen_llvm_ir_macros.py')
+swr_gen_backends_py = files('rasterizer/codegen/gen_backends.py')
+
+swr_gen_builder_depends = files(
+    'rasterizer/codegen/templates/gen_builder.hpp',
+    'rasterizer/codegen/gen_common.py'
+    )
+
+
+subdir('rasterizer/jitter')
 subdir('rasterizer/codegen')
+subdir('rasterizer/core/backends')
 
 swr_incs = include_directories(
   'rasterizer/codegen', 'rasterizer/core', 'rasterizer/jitter',
@@ -178,7 +193,7 @@ if with_swr_arches.contains('avx')
   swr_arch_defines += '-DHAVE_SWR_AVX'
   swr_arch_libs += shared_library(
     'swrAVX',
-    files_swr_common,
+    [files_swr_common, files_swr_arch],
     cpp_args : [swr_cpp_args, swr_avx_args, '-DKNOB_ARCH=KNOB_ARCH_AVX'],
     link_args : [ld_args_gc_sections],
     include_directories : [swr_incs],
@@ -210,7 +225,7 @@ if with_swr_arches.contains('avx2')
   swr_arch_defines += '-DHAVE_SWR_AVX2'
   swr_arch_libs += shared_library(
     'swrAVX2',
-    files_swr_common,
+    [files_swr_common, files_swr_arch],
     cpp_args : [swr_cpp_args, swr_avx2_args, '-DKNOB_ARCH=KNOB_ARCH_AVX2'],
     link_args : [ld_args_gc_sections],
     include_directories : [swr_incs],
@@ -234,7 +249,7 @@ if with_swr_arches.contains('knl')
   swr_arch_defines += '-DHAVE_SWR_KNL'
   swr_arch_libs += shared_library(
     'swrKNL',
-    files_swr_common,
+    [files_swr_common, files_swr_arch],
     cpp_args : [
       swr_cpp_args, swr_knl_args, '-DKNOB_ARCH=KNOB_ARCH_AVX512',
       '-DKNOB_ARCH_KNIGHTS',
@@ -261,7 +276,7 @@ if with_swr_arches.contains('skx')
   swr_arch_defines += '-DHAVE_SWR_SKX'
   swr_arch_libs += shared_library(
     'swrSKX',
-    files_swr_common,
+    [files_swr_common, files_swr_arch],
     cpp_args : [swr_cpp_args, swr_skx_args, '-DKNOB_ARCH=KNOB_ARCH_AVX512'],
     link_args : [ld_args_gc_sections],
     include_directories : [swr_incs],

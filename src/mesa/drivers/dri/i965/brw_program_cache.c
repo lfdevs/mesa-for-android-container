@@ -460,6 +460,7 @@ brw_program_cache_check_size(struct brw_context *brw)
       perf_debug("Exceeded state cache size limit.  Clearing the set "
                  "of compiled programs, which will trigger recompiles\n");
       brw_clear_cache(brw, &brw->cache);
+      brw_cache_new_bo(&brw->cache, brw->cache.bo->size);
    }
 }
 

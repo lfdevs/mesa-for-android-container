@@ -249,9 +249,15 @@ DIType* JitManager::GetDebugType(Type* pTy)
     switch (id)
     {
     case Type::VoidTyID: return builder.createUnspecifiedType("void"); break;
+#if LLVM_VERSION_MAJOR >= 4
     case Type::HalfTyID: return builder.createBasicType("float16", 16, dwarf::DW_ATE_float); break;
     case Type::FloatTyID: return builder.createBasicType("float", 32, dwarf::DW_ATE_float); break;
     case Type::DoubleTyID: return builder.createBasicType("double", 64, dwarf::DW_ATE_float); break;
+#else      
+    case Type::HalfTyID: return builder.createBasicType("float16", 16, 0, dwarf::DW_ATE_float); break;
+    case Type::FloatTyID: return builder.createBasicType("float", 32, 0, dwarf::DW_ATE_float); break;
+    case Type::DoubleTyID: return builder.createBasicType("double", 64, 0, dwarf::DW_ATE_float); break;
+#endif      
     case Type::IntegerTyID: return GetDebugIntegerType(pTy); break;
     case Type::StructTyID: return GetDebugStructType(pTy); break;
     case Type::ArrayTyID: return GetDebugArrayType(pTy); break;
@@ -288,11 +294,19 @@ DIType* JitManager::GetDebugIntegerType(Type* pTy)
     IntegerType* pIntTy = cast<IntegerType>(pTy);
     switch (pIntTy->getBitWidth())
     {
+#if LLVM_VERSION_MAJOR >= 4
     case 1: return builder.createBasicType("int1", 1, dwarf::DW_ATE_unsigned); break;
     case 8: return builder.createBasicType("int8", 8, dwarf::DW_ATE_signed); break;
     case 16: return builder.createBasicType("int16", 16, dwarf::DW_ATE_signed); break;
     case 32: return builder.createBasicType("int", 32, dwarf::DW_ATE_signed); break;
     case 64: return builder.createBasicType("int64", 64, dwarf::DW_ATE_signed); break;
+#else      
+    case 1: return builder.createBasicType("int1", 1, 0, dwarf::DW_ATE_unsigned); break;
+    case 8: return builder.createBasicType("int8", 8, 0, dwarf::DW_ATE_signed); break;
+    case 16: return builder.createBasicType("int16", 16, 0, dwarf::DW_ATE_signed); break;
+    case 32: return builder.createBasicType("int", 32, 0, dwarf::DW_ATE_signed); break;
+    case 64: return builder.createBasicType("int64", 64, 0, dwarf::DW_ATE_signed); break;
+#endif      
     default: SWR_ASSERT(false, "Unimplemented integer bit width");
     }
     return nullptr;

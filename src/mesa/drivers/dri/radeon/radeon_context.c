@@ -330,12 +330,6 @@ r100CreateContext( gl_api api,
 
    rmesa->radeon.do_usleeps = (fthrottle_mode == DRI_CONF_FTHROTTLE_USLEEPS);
 
-
-#if DO_DEBUG
-   RADEON_DEBUG = parse_debug_string( getenv( "RADEON_DEBUG" ),
-                                      debug_control );
-#endif
-
    tcl_mode = driQueryOptioni(&rmesa->radeon.optionCache, "tcl_mode");
    if (driQueryOptionb(&rmesa->radeon.optionCache, "no_rast")) {
       fprintf(stderr, "disabling 3D acceleration\n");

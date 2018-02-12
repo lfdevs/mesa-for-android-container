@@ -234,7 +234,7 @@ radv_physical_device_extension_supported(struct radv_physical_device *device,
     if (strcmp(name, "VK_KHR_variable_pointers") == 0)
         return true;
     if (strcmp(name, "VK_KHX_multiview") == 0)
-        return true;
+        return false;
     if (strcmp(name, "VK_EXT_discard_rectangles") == 0)
         return true;
     if (strcmp(name, "VK_EXT_external_memory_dma_buf") == 0)
@@ -436,7 +436,7 @@ VkResult radv_EnumerateDeviceExtensionProperties(
             };
         }
     }
-    if (true) {
+    if (false) {
         vk_outarray_append(&out, prop) {
             *prop = (VkExtensionProperties) {
                 .extensionName = "VK_KHX_multiview",

@@ -229,11 +229,6 @@ gen6_update_renderbuffer_surface(struct brw_context *brw,
    }
    enum isl_format isl_format = brw->mesa_to_isl_render_format[rb_format];
 
-   enum isl_aux_usage aux_usage =
-      brw->draw_aux_buffer_disabled[unit] ? ISL_AUX_USAGE_NONE :
-      intel_miptree_render_aux_usage(brw, mt, isl_format,
-                                     ctx->Color.BlendEnabled & (1 << unit));
-
    struct isl_view view = {
       .format = isl_format,
       .base_level = irb->mt_level - irb->mt->first_level,
@@ -245,7 +240,8 @@ gen6_update_renderbuffer_surface(struct brw_context *brw,
    };
 
    uint32_t offset;
-   brw_emit_surface_state(brw, mt, mt->target, view, aux_usage,
+   brw_emit_surface_state(brw, mt, mt->target, view,
+                          brw->draw_aux_usage[unit],
                           &offset, surf_index,
                           RELOC_WRITE);
    return offset;
@@ -441,25 +437,7 @@ swizzle_to_scs(GLenum swizzle, bool need_green_to_blue)
    return (need_green_to_blue && scs == HSW_SCS_GREEN) ? HSW_SCS_BLUE : scs;
 }
 
-static bool
-brw_aux_surface_disabled(const struct brw_context *brw,
-                         const struct intel_mipmap_tree *mt)
-{
-   const struct gl_framebuffer *fb = brw->ctx.DrawBuffer;
-
-   for (unsigned i = 0; i < fb->_NumColorDrawBuffers; i++) {
-      const struct intel_renderbuffer *irb =
-         intel_renderbuffer(fb->_ColorDrawBuffers[i]);
-
-      if (irb && irb->mt == mt)
-         return brw->draw_aux_buffer_disabled[i];
-   }
-
-   return false;
-}
-
-static void
-brw_update_texture_surface(struct gl_context *ctx,
+static void brw_update_texture_surface(struct gl_context *ctx,
                            unsigned unit,
                            uint32_t *surf_offset,
                            bool for_gather,
@@ -587,9 +565,6 @@ brw_update_texture_surface(struct gl_context *ctx,
 
       enum isl_aux_usage aux_usage =
          intel_miptree_texture_aux_usage(brw, mt, format);
-
-      if (brw_aux_surface_disabled(brw, mt))
-         aux_usage = ISL_AUX_USAGE_NONE;
 
       brw_emit_surface_state(brw, mt, mt->target, view, aux_usage,
                              surf_offset, surf_index,
@@ -1069,7 +1044,7 @@ update_renderbuffer_read_surfaces(struct brw_context *brw)
 
             enum isl_aux_usage aux_usage =
                intel_miptree_texture_aux_usage(brw, irb->mt, format);
-            if (brw->draw_aux_buffer_disabled[i])
+            if (brw->draw_aux_usage[i] == ISL_AUX_USAGE_NONE)
                aux_usage = ISL_AUX_USAGE_NONE;
 
             brw_emit_surface_state(brw, irb->mt, target, view, aux_usage,

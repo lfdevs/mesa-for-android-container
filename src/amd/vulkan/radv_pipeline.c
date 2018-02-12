@@ -798,6 +798,18 @@ radv_pipeline_init_raster_state(struct radv_pipeline *pipeline,
 
 }
 
+static uint8_t radv_pipeline_get_ps_iter_samples(const VkPipelineMultisampleStateCreateInfo *vkms)
+{
+	uint32_t num_samples = vkms->rasterizationSamples;
+	uint32_t ps_iter_samples = 1;
+
+	if (vkms->sampleShadingEnable) {
+		ps_iter_samples = ceil(vkms->minSampleShading * num_samples);
+		ps_iter_samples = util_next_power_of_two(ps_iter_samples);
+	}
+	return ps_iter_samples;
+}
+
 static void
 radv_pipeline_init_multisample_state(struct radv_pipeline *pipeline,
 				     const VkGraphicsPipelineCreateInfo *pCreateInfo)
@@ -813,9 +825,9 @@ radv_pipeline_init_multisample_state(struct radv_pipeline *pipeline,
 	else
 		ms->num_samples = 1;
 
-	if (vkms && vkms->sampleShadingEnable) {
-		ps_iter_samples = ceil(vkms->minSampleShading * ms->num_samples);
-	} else if (pipeline->shaders[MESA_SHADER_FRAGMENT]->info.info.ps.force_persample) {
+	if (vkms)
+		ps_iter_samples = radv_pipeline_get_ps_iter_samples(vkms);
+	if (vkms && !vkms->sampleShadingEnable && pipeline->shaders[MESA_SHADER_FRAGMENT]->info.info.ps.force_persample) {
 		ps_iter_samples = ms->num_samples;
 	}
 
@@ -838,7 +850,7 @@ radv_pipeline_init_multisample_state(struct radv_pipeline *pipeline,
 
 	if (ms->num_samples > 1) {
 		unsigned log_samples = util_logbase2(ms->num_samples);
-		unsigned log_ps_iter_samples = util_logbase2(util_next_power_of_two(ps_iter_samples));
+		unsigned log_ps_iter_samples = util_logbase2(ps_iter_samples);
 		ms->pa_sc_mode_cntl_0 |= S_028A48_MSAA_ENABLE(1);
 		ms->pa_sc_line_cntl |= S_028BDC_EXPAND_LINE_WIDTH(1); /* CM_R_028BDC_PA_SC_LINE_CNTL */
 		ms->db_eqaa |= S_028804_MAX_ANCHOR_SAMPLES(log_samples) |
@@ -849,6 +861,8 @@ radv_pipeline_init_multisample_state(struct radv_pipeline *pipeline,
 			S_028BE0_MAX_SAMPLE_DIST(radv_cayman_get_maxdist(log_samples)) |
 			S_028BE0_MSAA_EXPOSED_SAMPLES(log_samples); /* CM_R_028BE0_PA_SC_AA_CONFIG */
 		ms->pa_sc_mode_cntl_1 |= S_028A4C_PS_ITER_SAMPLE(ps_iter_samples > 1);
+		if (ps_iter_samples > 1)
+			pipeline->graphics.spi_baryc_cntl |= S_0286E0_POS_FLOAT_LOCATION(2);
 	}
 
 	const struct VkPipelineRasterizationStateRasterizationOrderAMD *raster_order =
@@ -1745,8 +1759,13 @@ radv_generate_graphics_pipeline_key(struct radv_pipeline *pipeline,
 
 
 	if (pCreateInfo->pMultisampleState &&
-	    pCreateInfo->pMultisampleState->rasterizationSamples > 1)
+	    pCreateInfo->pMultisampleState->rasterizationSamples > 1) {
+		uint32_t num_samples = pCreateInfo->pMultisampleState->rasterizationSamples;
+		uint32_t ps_iter_samples = radv_pipeline_get_ps_iter_samples(pCreateInfo->pMultisampleState);
 		key.multisample = true;
+		key.log2_num_samples = util_logbase2(num_samples);
+		key.log2_ps_iter_samples = util_logbase2(ps_iter_samples);
+	}
 
 	key.col_format = pipeline->graphics.blend.spi_shader_col_format;
 	if (pipeline->device->physical_device->rad_info.chip_class < VI)
@@ -1784,6 +1803,8 @@ radv_fill_shader_keys(struct ac_shader_variant_key *keys,
 	keys[MESA_SHADER_FRAGMENT].fs.col_format = key->col_format;
 	keys[MESA_SHADER_FRAGMENT].fs.is_int8 = key->is_int8;
 	keys[MESA_SHADER_FRAGMENT].fs.is_int10 = key->is_int10;
+	keys[MESA_SHADER_FRAGMENT].fs.log2_ps_iter_samples = key->log2_ps_iter_samples;
+	keys[MESA_SHADER_FRAGMENT].fs.log2_num_samples = key->log2_num_samples;
 }
 
 static void
@@ -2430,6 +2451,7 @@ radv_pipeline_init(struct radv_pipeline *pipeline,
 	                    radv_generate_graphics_pipeline_key(pipeline, pCreateInfo, has_view_index),
 	                    pStages);
 
+	pipeline->graphics.spi_baryc_cntl = S_0286E0_FRONT_FACE_ALL_BITS(1);
 	radv_pipeline_init_depth_stencil_state(pipeline, pCreateInfo, extra);
 	radv_pipeline_init_raster_state(pipeline, pCreateInfo);
 	radv_pipeline_init_multisample_state(pipeline, pCreateInfo);

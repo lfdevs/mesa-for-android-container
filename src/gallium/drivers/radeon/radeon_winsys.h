@@ -611,6 +611,11 @@ struct radeon_winsys {
 				  struct pipe_fence_handle *fence);
 
     /**
+     * Return a sync file FD that is already signalled.
+     */
+    int (*export_signalled_sync_file)(struct radeon_winsys *ws);
+
+    /**
      * Initialize surface
      *
      * \param ws        The winsys this function is called from.

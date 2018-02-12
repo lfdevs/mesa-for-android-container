@@ -114,6 +114,27 @@ static int amdgpu_fence_export_sync_file(struct radeon_winsys *rws,
    return fd;
 }
 
+static int amdgpu_export_signalled_sync_file(struct radeon_winsys *rws)
+{
+   struct amdgpu_winsys *ws = amdgpu_winsys(rws);
+   uint32_t syncobj;
+   int fd = -1;
+
+   int r = amdgpu_cs_create_syncobj2(ws->dev, DRM_SYNCOBJ_CREATE_SIGNALED,
+                                     &syncobj);
+   if (r) {
+      return -1;
+   }
+
+   r = amdgpu_cs_syncobj_export_sync_file(ws->dev, syncobj, &fd);
+   if (r) {
+      fd = -1;
+   }
+
+   amdgpu_cs_destroy_syncobj(ws->dev, syncobj);
+   return fd;
+}
+
 static void amdgpu_fence_submitted(struct pipe_fence_handle *fence,
                                    uint64_t seq_no,
                                    uint64_t *user_fence_cpu_address)
@@ -649,11 +670,10 @@ static bool amdgpu_ib_new_buffer(struct amdgpu_winsys *ws, struct amdgpu_ib *ib,
                                ws->info.gart_page_size,
                                RADEON_DOMAIN_GTT,
                                RADEON_FLAG_NO_INTERPROCESS_SHARING |
-                               RADEON_FLAG_READ_ONLY |
                                (ring_type == RING_GFX ||
                                 ring_type == RING_COMPUTE ||
                                 ring_type == RING_DMA ?
-                                   RADEON_FLAG_GTT_WC : 0));
+                                   RADEON_FLAG_READ_ONLY | RADEON_FLAG_GTT_WC : 0));
    if (!pb)
       return false;
 
@@ -1560,4 +1580,5 @@ void amdgpu_cs_init_functions(struct amdgpu_winsys *ws)
    ws->base.fence_reference = amdgpu_fence_reference;
    ws->base.fence_import_sync_file = amdgpu_fence_import_sync_file;
    ws->base.fence_export_sync_file = amdgpu_fence_export_sync_file;
+   ws->base.export_signalled_sync_file = amdgpu_export_signalled_sync_file;
 }

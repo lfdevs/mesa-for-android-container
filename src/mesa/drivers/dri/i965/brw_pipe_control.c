@@ -317,6 +317,53 @@ gen7_emit_vs_workaround_flush(struct brw_context *brw)
                                brw->workaround_bo, 0, 0);
 }
 
+/**
+ * From the PRM, Volume 2a:
+ *
+ *    "Indirect State Pointers Disable
+ *
+ *    At the completion of the post-sync operation associated with this pipe
+ *    control packet, the indirect state pointers in the hardware are
+ *    considered invalid; the indirect pointers are not saved in the context.
+ *    If any new indirect state commands are executed in the command stream
+ *    while the pipe control is pending, the new indirect state commands are
+ *    preserved.
+ *
+ *    [DevIVB+]: Using Invalidate State Pointer (ISP) only inhibits context
+ *    restoring of Push Constant (3DSTATE_CONSTANT_*) commands. Push Constant
+ *    commands are only considered as Indirect State Pointers. Once ISP is
+ *    issued in a context, SW must initialize by programming push constant
+ *    commands for all the shaders (at least to zero length) before attempting
+ *    any rendering operation for the same context."
+ *
+ * 3DSTATE_CONSTANT_* packets are restored during a context restore,
+ * even though they point to a BO that has been already unreferenced at
+ * the end of the previous batch buffer. This has been fine so far since
+ * we are protected by these scratch page (every address not covered by
+ * a BO should be pointing to the scratch page). But on CNL, it is
+ * causing a GPU hang during context restore at the 3DSTATE_CONSTANT_*
+ * instruction.
+ *
+ * The flag "Indirect State Pointers Disable" in PIPE_CONTROL tells the
+ * hardware to ignore previous 3DSTATE_CONSTANT_* packets during a
+ * context restore, so the mentioned hang doesn't happen. However,
+ * software must program push constant commands for all stages prior to
+ * rendering anything, so we flag them as dirty.
+ */
+void
+gen10_emit_isp_disable(struct brw_context *brw)
+{
+   brw_emit_pipe_control(brw,
+                         PIPE_CONTROL_ISP_DIS |
+                         PIPE_CONTROL_CS_STALL,
+                         NULL, 0, 0);
+
+   brw->vs.base.push_constants_dirty = true;
+   brw->tcs.base.push_constants_dirty = true;
+   brw->tes.base.push_constants_dirty = true;
+   brw->gs.base.push_constants_dirty = true;
+   brw->wm.base.push_constants_dirty = true;
+}
 
 /**
  * Emit a PIPE_CONTROL command for gen7 with the CS Stall bit set.

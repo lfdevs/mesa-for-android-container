@@ -893,6 +893,8 @@ VkResult anv_CreateDescriptorUpdateTemplateKHR(
    if (template == NULL)
       return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
 
+   template->bind_point = pCreateInfo->pipelineBindPoint;
+
    if (pCreateInfo->templateType == VK_DESCRIPTOR_UPDATE_TEMPLATE_TYPE_DESCRIPTOR_SET_KHR)
       template->set = pCreateInfo->set;
 

@@ -43,6 +43,7 @@
 #ifdef GLX_USE_APPLEGL
 #include "apple/apple_glx_context.h"
 #include "apple/apple_glx.h"
+#include "util/debug.h"
 #else
 #include <sys/time.h>
 #ifdef XF86VIDMODE

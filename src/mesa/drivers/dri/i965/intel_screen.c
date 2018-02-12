@@ -1776,8 +1776,8 @@ intel_init_bufmgr(struct intel_screen *screen)
       return false;
    }
 
-   if (!intel_get_boolean(screen, I915_PARAM_HAS_WAIT_TIMEOUT)) {
-      fprintf(stderr, "[%s: %u] Kernel 3.6 required.\n", __func__, __LINE__);
+   if (!intel_get_boolean(screen, I915_PARAM_HAS_EXEC_NO_RELOC)) {
+      fprintf(stderr, "[%s: %u] Kernel 3.9 required.\n", __func__, __LINE__);
       return false;
    }
 

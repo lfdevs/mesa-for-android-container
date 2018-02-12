@@ -32,6 +32,7 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <GL/gl.h>
+#include <util/debug.h>
 
 /* <rdar://problem/6953344> */
 #define glTexImage1D glTexImage1D_OSX

@@ -705,6 +705,8 @@ void __indirect_glFramebufferTextureLayer(void) { }
 }
 /*@}*/
 
+#ifndef GLX_USE_APPLEGL
+
 class IndirectAPI : public ::testing::Test {
 public:
    virtual void SetUp();
@@ -1518,3 +1520,5 @@ TEST_F(IndirectAPI, EXT_texture_array)
 {
    EXPECT_EQ((_glapi_proc) __indirect_glFramebufferTextureLayer, table[_glapi_get_proc_offset("glFramebufferTextureLayerEXT")]);
 }
+
+#endif

@@ -438,7 +438,7 @@ radv_cmd_buffer_after_draw(struct radv_cmd_buffer *cmd_buffer)
 		flags = RADV_CMD_FLAG_PS_PARTIAL_FLUSH |
 			RADV_CMD_FLAG_CS_PARTIAL_FLUSH;
 
-		si_cs_emit_cache_flush(cmd_buffer->cs, false,
+		si_cs_emit_cache_flush(cmd_buffer->cs,
 				       cmd_buffer->device->physical_device->rad_info.chip_class,
 				       NULL, 0,
 				       radv_cmd_buffer_uses_mec(cmd_buffer),
@@ -990,7 +990,6 @@ radv_emit_fragment_shader(struct radv_cmd_buffer *cmd_buffer,
 {
 	struct radv_shader_variant *ps;
 	uint64_t va;
-	unsigned spi_baryc_cntl = S_0286E0_FRONT_FACE_ALL_BITS(1);
 	struct radv_blend_state *blend = &pipeline->graphics.blend;
 	assert (pipeline->shaders[MESA_SHADER_FRAGMENT]);
 
@@ -1012,13 +1011,10 @@ radv_emit_fragment_shader(struct radv_cmd_buffer *cmd_buffer,
 	radeon_set_context_reg(cmd_buffer->cs, R_0286D0_SPI_PS_INPUT_ADDR,
 			       ps->config.spi_ps_input_addr);
 
-	if (ps->info.info.ps.force_persample)
-		spi_baryc_cntl |= S_0286E0_POS_FLOAT_LOCATION(2);
-
 	radeon_set_context_reg(cmd_buffer->cs, R_0286D8_SPI_PS_IN_CONTROL,
 			       S_0286D8_NUM_INTERP(ps->info.fs.num_interp));
 
-	radeon_set_context_reg(cmd_buffer->cs, R_0286E0_SPI_BARYC_CNTL, spi_baryc_cntl);
+	radeon_set_context_reg(cmd_buffer->cs, R_0286E0_SPI_BARYC_CNTL, pipeline->graphics.spi_baryc_cntl);
 
 	radeon_set_context_reg(cmd_buffer->cs, R_028710_SPI_SHADER_Z_FORMAT,
 			       pipeline->graphics.shader_z_format);

@@ -1998,13 +1998,31 @@ static void evergreen_emit_polygon_offset(struct r600_context *rctx, struct r600
 			       pa_su_poly_offset_db_fmt_cntl);
 }
 
+uint32_t evergreen_construct_rat_mask(struct r600_context *rctx, struct r600_cb_misc_state *a,
+				      unsigned nr_cbufs)
+{
+	unsigned base_mask = 0;
+	unsigned dirty_mask = a->image_rat_enabled_mask;
+	while (dirty_mask) {
+		unsigned idx = u_bit_scan(&dirty_mask);
+		base_mask |= (0xf << (idx * 4));
+	}
+	unsigned offset = util_last_bit(a->image_rat_enabled_mask);
+	dirty_mask = a->buffer_rat_enabled_mask;
+	while (dirty_mask) {
+		unsigned idx = u_bit_scan(&dirty_mask);
+		base_mask |= (0xf << (idx + offset) * 4);
+	}
+	return base_mask << (nr_cbufs * 4);
+}
+
 static void evergreen_emit_cb_misc_state(struct r600_context *rctx, struct r600_atom *atom)
 {
 	struct radeon_winsys_cs *cs = rctx->b.gfx.cs;
 	struct r600_cb_misc_state *a = (struct r600_cb_misc_state*)atom;
 	unsigned fb_colormask = (1ULL << ((unsigned)a->nr_cbufs * 4)) - 1;
 	unsigned ps_colormask = (1ULL << ((unsigned)a->nr_ps_color_outputs * 4)) - 1;
-	unsigned rat_colormask = ((1ULL << ((unsigned)(a->nr_image_rats + a->nr_buffer_rats) * 4)) - 1) << (a->nr_cbufs * 4);
+	unsigned rat_colormask = evergreen_construct_rat_mask(rctx, a, a->nr_cbufs);
 	radeon_set_context_reg_seq(cs, R_028238_CB_TARGET_MASK, 2);
 	radeon_emit(cs, (a->blend_colormask & fb_colormask) | rat_colormask); /* R_028238_CB_TARGET_MASK */
 	/* This must match the used export instructions exactly.
@@ -4032,8 +4050,9 @@ static void evergreen_set_shader_buffers(struct pipe_context *ctx,
 	if (old_mask != istate->enabled_mask)
 		r600_mark_atom_dirty(rctx, &rctx->framebuffer.atom);
 
-	if (rctx->cb_misc_state.nr_buffer_rats != util_bitcount(istate->enabled_mask)) {
-		rctx->cb_misc_state.nr_buffer_rats = util_bitcount(istate->enabled_mask);
+	/* construct the target mask */
+	if (rctx->cb_misc_state.buffer_rat_enabled_mask != istate->enabled_mask) {
+		rctx->cb_misc_state.buffer_rat_enabled_mask = istate->enabled_mask;
 		r600_mark_atom_dirty(rctx, &rctx->cb_misc_state.atom);
 	}
 
@@ -4208,8 +4227,8 @@ static void evergreen_set_shader_images(struct pipe_context *ctx,
 	if (old_mask != istate->enabled_mask)
 		r600_mark_atom_dirty(rctx, &rctx->framebuffer.atom);
 
-	if (rctx->cb_misc_state.nr_image_rats != util_bitcount(istate->enabled_mask)) {
-		rctx->cb_misc_state.nr_image_rats = util_bitcount(istate->enabled_mask);
+	if (rctx->cb_misc_state.image_rat_enabled_mask != istate->enabled_mask) {
+		rctx->cb_misc_state.image_rat_enabled_mask = istate->enabled_mask;
 		r600_mark_atom_dirty(rctx, &rctx->cb_misc_state.atom);
 	}
 

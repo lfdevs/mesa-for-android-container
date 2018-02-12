@@ -558,6 +558,9 @@ compile_vertex_list(struct gl_context *ctx)
       for (unsigned i = 0; i < save->prim_count; i++) {
          save->prims[i].start += start_offset;
       }
+      node->start_vertex = start_offset;
+   } else {
+      node->start_vertex = 0;
    }
 
    /* Reset our structures for the next run of vertices:

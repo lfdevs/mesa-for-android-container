@@ -721,7 +721,7 @@ libmesa_gallium = static_library(
   cpp_args : [cpp_vis_args, cpp_msvc_compat_args],
   include_directories : [inc_common, include_directories('main')],
   link_with : [libglsl, libmesa_sse41],
-  dependencies : idep_nir_headers,
+  dependencies : [idep_nir_headers, dep_vdpau],
   build_by_default : false,
 )
 

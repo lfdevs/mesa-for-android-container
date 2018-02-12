@@ -764,6 +764,10 @@ brw_finish_batch(struct brw_context *brw)
          brw_emit_pipe_control_flush(brw, PIPE_CONTROL_RENDER_TARGET_FLUSH |
                                           PIPE_CONTROL_CS_STALL);
       }
+
+      /* Do not restore push constant packets during context restore. */
+      if (devinfo->gen == 10)
+         gen10_emit_isp_disable(brw);
    }
 
    /* Emit MI_BATCH_BUFFER_END to finish our batch.  Note that execbuf2

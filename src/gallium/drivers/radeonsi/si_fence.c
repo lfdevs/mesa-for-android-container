@@ -356,6 +356,8 @@ static int si_fence_get_fd(struct pipe_screen *screen,
 
 	/* If we don't have FDs at this point, it means we don't have fences
 	 * either. */
+	if (sdma_fd == -1 && gfx_fd == -1)
+		return ws->export_signalled_sync_file(ws);
 	if (sdma_fd == -1)
 		return gfx_fd;
 	if (gfx_fd == -1)

@@ -409,20 +409,6 @@ void genX(CmdBeginQuery)(
    ANV_FROM_HANDLE(anv_cmd_buffer, cmd_buffer, commandBuffer);
    ANV_FROM_HANDLE(anv_query_pool, pool, queryPool);
 
-   /* Workaround: When meta uses the pipeline with the VS disabled, it seems
-    * that the pipelining of the depth write breaks. What we see is that
-    * samples from the render pass clear leaks into the first query
-    * immediately after the clear. Doing a pipecontrol with a post-sync
-    * operation and DepthStallEnable seems to work around the issue.
-    */
-   if (cmd_buffer->state.need_query_wa) {
-      cmd_buffer->state.need_query_wa = false;
-      anv_batch_emit(&cmd_buffer->batch, GENX(PIPE_CONTROL), pc) {
-         pc.DepthCacheFlushEnable   = true;
-         pc.DepthStallEnable        = true;
-      }
-   }
-
    switch (pool->type) {
    case VK_QUERY_TYPE_OCCLUSION:
       emit_ps_depth_count(cmd_buffer, &pool->bo, query * pool->stride + 8);

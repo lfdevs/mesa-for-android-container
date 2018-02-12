@@ -218,7 +218,7 @@ genX(blorp_exec)(struct blorp_batch *batch,
 
    blorp_exec(batch, params);
 
-   cmd_buffer->state.vb_dirty = ~0;
-   cmd_buffer->state.dirty = ~0;
+   cmd_buffer->state.gfx.vb_dirty = ~0;
+   cmd_buffer->state.gfx.dirty = ~0;
    cmd_buffer->state.push_constants_dirty = ~0;
 }

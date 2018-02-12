@@ -152,7 +152,7 @@ anv_physical_device_get_supported_extensions(const struct anv_physical_device *d
       .KHR_storage_buffer_storage_class = true,
       .KHR_swapchain = ANV_HAS_SURFACE,
       .KHR_variable_pointers = true,
-      .KHX_multiview = true,
+      .KHX_multiview = false,
       .EXT_external_memory_dma_buf = true,
    };
 }

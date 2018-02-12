@@ -177,7 +177,7 @@ brw_dispatch_compute_common(struct gl_context *ctx)
 
    brw_validate_textures(brw);
 
-   brw_predraw_resolve_inputs(brw, false);
+   brw_predraw_resolve_inputs(brw, false, NULL);
 
    /* Flush the batch if the batch/state buffers are nearly full.  We can
     * grow them if needed, but this is not free, so we'd like to avoid it.

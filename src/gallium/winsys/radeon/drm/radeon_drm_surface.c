@@ -215,6 +215,9 @@ static void surf_drm_to_winsys(struct radeon_drm_winsys *ws,
     }
 
     set_micro_tile_mode(surf_ws, &ws->info);
+    surf_ws->is_displayable = surf_ws->is_linear ||
+			      surf_ws->micro_tile_mode == RADEON_MICRO_MODE_DISPLAY ||
+			      surf_ws->micro_tile_mode == RADEON_MICRO_MODE_ROTATED;
 }
 
 static int radeon_winsys_surface_init(struct radeon_winsys *rws,

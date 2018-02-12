@@ -757,8 +757,8 @@ st_init_driver_functions(struct pipe_screen *screen,
    functions->UpdateState = st_invalidate_state;
    functions->QueryMemoryInfo = st_query_memory_info;
    functions->SetBackgroundContext = st_set_background_context;
-   functions->GetDriverUuid = st_get_device_uuid;
-   functions->GetDeviceUuid = st_get_driver_uuid;
+   functions->GetDriverUuid = st_get_driver_uuid;
+   functions->GetDeviceUuid = st_get_device_uuid;
 
    /* GL_ARB_get_program_binary */
    functions->GetProgramBinaryDriverSHA1 = st_get_program_binary_driver_sha1;

@@ -1290,15 +1290,11 @@ struct brw_context
 
    struct brw_fast_clear_state *fast_clear_state;
 
-   /* Array of flags telling if auxiliary buffer is disabled for corresponding
-    * renderbuffer. If draw_aux_buffer_disabled[i] is set then use of
-    * auxiliary buffer for gl_framebuffer::_ColorDrawBuffers[i] is
-    * disabled.
-    * This is needed in case the same underlying buffer is also configured
-    * to be sampled but with a format that the sampling engine can't treat
-    * compressed or fast cleared.
+   /* Array of aux usages to use for drawing.  Aux usage for render targets is
+    * a bit more complex than simply calling a single function so we need some
+    * way of passing it form brw_draw.c to surface state setup.
     */
-   bool draw_aux_buffer_disabled[MAX_DRAW_BUFFERS];
+   enum isl_aux_usage draw_aux_usage[MAX_DRAW_BUFFERS];
 
    __DRIcontext *driContext;
    struct intel_screen *screen;
@@ -1324,7 +1320,8 @@ void intel_update_renderbuffers(__DRIcontext *context,
                                 __DRIdrawable *drawable);
 void intel_prepare_render(struct brw_context *brw);
 
-void brw_predraw_resolve_inputs(struct brw_context *brw, bool rendering);
+void brw_predraw_resolve_inputs(struct brw_context *brw, bool rendering,
+                                bool *draw_aux_buffer_disabled);
 
 void intel_resolve_for_dri2_flush(struct brw_context *brw,
                                   __DRIdrawable *drawable);

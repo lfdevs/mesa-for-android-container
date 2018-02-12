@@ -76,7 +76,6 @@ virgl_tgsi_transform_instruction(struct tgsi_transform_context *ctx,
    for (unsigned i = 0; i < inst->Instruction.NumSrcRegs; i++) {
       if (inst->Src[i].Register.File == TGSI_FILE_CONSTANT &&
           inst->Src[i].Register.Dimension &&
-          !inst->Src[i].Register.Indirect &&
           inst->Src[i].Dimension.Index == 0)
          inst->Src[i].Register.Dimension = 0;
    }

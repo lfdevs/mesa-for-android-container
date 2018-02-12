@@ -272,5 +272,5 @@ genX(cmd_buffer_so_memcpy)(struct anv_cmd_buffer *cmd_buffer,
       prim.BaseVertexLocation       = 0;
    }
 
-   cmd_buffer->state.dirty |= ANV_CMD_DIRTY_PIPELINE;
+   cmd_buffer->state.gfx.dirty |= ANV_CMD_DIRTY_PIPELINE;
 }

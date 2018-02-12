@@ -665,6 +665,7 @@ public:
 			return false;
 
 		switch (hw_chip) {
+		case HW_CHIP_HEMLOCK:
 		case HW_CHIP_CYPRESS:
 		case HW_CHIP_JUNIPER:
 			return false;

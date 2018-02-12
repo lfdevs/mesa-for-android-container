@@ -2096,15 +2096,6 @@ fs_visitor::assign_constant_locations()
    if (subgroup_id_index >= 0)
       max_push_components--; /* Save a slot for the thread ID */
 
-   /* FIXME: We currently have some GPU hangs that happen apparently when using
-    * push constants. Since we have no solution for such hangs yet, just
-    * go ahead and use pull constants for now.
-    */
-   if (devinfo->gen == 10 && compiler->supports_pull_constants) {
-      compiler->shader_perf_log(log_data, "Disabling push constants.");
-      max_push_components = 0;
-   }
-
    /* We push small arrays, but no bigger than 16 floats.  This is big enough
     * for a vec4 but hopefully not large enough to push out other stuff.  We
     * should probably use a better heuristic at some point.
@@ -3640,13 +3631,18 @@ fs_visitor::lower_integer_multiplication()
                 regions_overlap(inst->dst, inst->size_written,
                                 inst->src[1], inst->size_read(1))) {
                needs_mov = true;
-               low.nr = alloc.allocate(regs_written(inst));
-               low.offset = low.offset % REG_SIZE;
+               /* Get a new VGRF but keep the same stride as inst->dst */
+               low = fs_reg(VGRF, alloc.allocate(regs_written(inst)),
+                            inst->dst.type);
+               low.stride = inst->dst.stride;
+               low.offset = inst->dst.offset % REG_SIZE;
             }
 
-            fs_reg high = inst->dst;
-            high.nr = alloc.allocate(regs_written(inst));
-            high.offset = high.offset % REG_SIZE;
+            /* Get a new VGRF but keep the same stride as inst->dst */
+            fs_reg high(VGRF, alloc.allocate(regs_written(inst)),
+                        inst->dst.type);
+            high.stride = inst->dst.stride;
+            high.offset = inst->dst.offset % REG_SIZE;
 
             if (devinfo->gen >= 7) {
                if (inst->src[1].file == IMM) {

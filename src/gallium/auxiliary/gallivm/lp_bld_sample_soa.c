@@ -857,7 +857,7 @@ lp_build_sample_image_nearest(struct lp_build_sample_context *bld,
                               LLVMValueRef img_stride_vec,
                               LLVMValueRef data_ptr,
                               LLVMValueRef mipoffsets,
-                              LLVMValueRef *coords,
+                              const LLVMValueRef *coords,
                               const LLVMValueRef *offsets,
                               LLVMValueRef colors_out[4])
 {
@@ -1004,7 +1004,7 @@ lp_build_sample_image_linear(struct lp_build_sample_context *bld,
                              LLVMValueRef img_stride_vec,
                              LLVMValueRef data_ptr,
                              LLVMValueRef mipoffsets,
-                             LLVMValueRef *coords,
+                             const LLVMValueRef *coords,
                              const LLVMValueRef *offsets,
                              LLVMValueRef colors_out[4])
 {
@@ -1106,7 +1106,7 @@ lp_build_sample_image_linear(struct lp_build_sample_context *bld,
       struct lp_build_if_state edge_if;
       LLVMTypeRef int1t;
       LLVMValueRef new_faces[4], new_xcoords[4][2], new_ycoords[4][2];
-      LLVMValueRef coord, have_edge, have_corner;
+      LLVMValueRef coord0, coord1, have_edge, have_corner;
       LLVMValueRef fall_off_ym_notxm, fall_off_ym_notxp, fall_off_x, fall_off_y;
       LLVMValueRef fall_off_yp_notxm, fall_off_yp_notxp;
       LLVMValueRef x0, x1, y0, y1, y0_clamped, y1_clamped;
@@ -1130,20 +1130,20 @@ lp_build_sample_image_linear(struct lp_build_sample_context *bld,
        * other values might be bogus in the end too).
        * So kill off the NaNs here.
        */
-      coords[0] = lp_build_max_ext(coord_bld, coords[0], coord_bld->zero,
-                                   GALLIVM_NAN_RETURN_OTHER_SECOND_NONNAN);
-      coords[1] = lp_build_max_ext(coord_bld, coords[1], coord_bld->zero,
-                                   GALLIVM_NAN_RETURN_OTHER_SECOND_NONNAN);
-      coord = lp_build_mul(coord_bld, coords[0], flt_width_vec);
+      coord0 = lp_build_max_ext(coord_bld, coords[0], coord_bld->zero,
+                                GALLIVM_NAN_RETURN_OTHER_SECOND_NONNAN);
+      coord0 = lp_build_mul(coord_bld, coord0, flt_width_vec);
       /* instead of clamp, build mask if overflowed */
-      coord = lp_build_sub(coord_bld, coord, half);
+      coord0 = lp_build_sub(coord_bld, coord0, half);
       /* convert to int, compute lerp weight */
       /* not ideal with AVX (and no AVX2) */
-      lp_build_ifloor_fract(coord_bld, coord, &x0, &s_fpart);
+      lp_build_ifloor_fract(coord_bld, coord0, &x0, &s_fpart);
       x1 = lp_build_add(ivec_bld, x0, ivec_bld->one);
-      coord = lp_build_mul(coord_bld, coords[1], flt_height_vec);
-      coord = lp_build_sub(coord_bld, coord, half);
-      lp_build_ifloor_fract(coord_bld, coord, &y0, &t_fpart);
+      coord1 = lp_build_max_ext(coord_bld, coords[1], coord_bld->zero,
+                                GALLIVM_NAN_RETURN_OTHER_SECOND_NONNAN);
+      coord1 = lp_build_mul(coord_bld, coord1, flt_height_vec);
+      coord1 = lp_build_sub(coord_bld, coord1, half);
+      lp_build_ifloor_fract(coord_bld, coord1, &y0, &t_fpart);
       y1 = lp_build_add(ivec_bld, y0, ivec_bld->one);
 
       fall_off[0] = lp_build_cmp(ivec_bld, PIPE_FUNC_LESS, x0, ivec_bld->zero);
@@ -1747,7 +1747,7 @@ lp_build_sample_mipmap(struct lp_build_sample_context *bld,
                        unsigned img_filter,
                        unsigned mip_filter,
                        boolean is_gather,
-                       LLVMValueRef *coords,
+                       const LLVMValueRef *coords,
                        const LLVMValueRef *offsets,
                        LLVMValueRef ilevel0,
                        LLVMValueRef ilevel1,
@@ -1820,6 +1820,7 @@ lp_build_sample_mipmap(struct lp_build_sample_context *bld,
                                       PIPE_FUNC_GREATER,
                                       lod_fpart, bld->lodf_bld.zero);
          need_lerp = lp_build_any_true_range(&bld->lodi_bld, bld->num_lods, need_lerp);
+         lp_build_name(need_lerp, "need_lerp");
       }
 
       lp_build_if(&if_ctx, bld->gallivm, need_lerp);
@@ -1888,7 +1889,7 @@ static void
 lp_build_sample_mipmap_both(struct lp_build_sample_context *bld,
                             LLVMValueRef linear_mask,
                             unsigned mip_filter,
-                            LLVMValueRef *coords,
+                            const LLVMValueRef *coords,
                             const LLVMValueRef *offsets,
                             LLVMValueRef ilevel0,
                             LLVMValueRef ilevel1,
@@ -1945,6 +1946,7 @@ lp_build_sample_mipmap_both(struct lp_build_sample_context *bld,
        * should be able to merge the branches in this case.
        */
       need_lerp = lp_build_any_true_range(&bld->lodi_bld, bld->num_lods, lod_positive);
+      lp_build_name(need_lerp, "need_lerp");
 
       lp_build_if(&if_ctx, bld->gallivm, need_lerp);
       {
@@ -2422,7 +2424,7 @@ static void
 lp_build_sample_general(struct lp_build_sample_context *bld,
                         unsigned sampler_unit,
                         boolean is_gather,
-                        LLVMValueRef *coords,
+                        const LLVMValueRef *coords,
                         const LLVMValueRef *offsets,
                         LLVMValueRef lod_positive,
                         LLVMValueRef lod_fpart,
@@ -2483,7 +2485,8 @@ lp_build_sample_general(struct lp_build_sample_context *bld,
          struct lp_build_if_state if_ctx;
 
          lod_positive = LLVMBuildTrunc(builder, lod_positive,
-                                       LLVMInt1TypeInContext(bld->gallivm->context), "");
+                                       LLVMInt1TypeInContext(bld->gallivm->context),
+                                       "lod_pos");
 
          lp_build_if(&if_ctx, bld->gallivm, lod_positive);
          {
@@ -2519,6 +2522,7 @@ lp_build_sample_general(struct lp_build_sample_context *bld,
          }
          need_linear = lp_build_any_true_range(&bld->lodi_bld, bld->num_lods,
                                                linear_mask);
+         lp_build_name(need_linear, "need_linear");
 
          if (bld->num_lods != bld->coord_type.length) {
             linear_mask = lp_build_unpack_broadcast_aos_scalars(bld->gallivm,

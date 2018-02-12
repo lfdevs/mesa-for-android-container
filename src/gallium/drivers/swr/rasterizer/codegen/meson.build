@@ -1,4 +1,4 @@
-# Copyright © 2017 Intel Corporation
+# Copyright © 2017-2018 Intel Corporation
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -40,40 +40,6 @@ gen_knobs_h = custom_target(
   ),
 )
 
-gen_builder_hpp = custom_target(
-  'gen_builder.hpp',
-  input : [
-    'gen_llvm_ir_macros.py',
-    join_paths(
-      dep_llvm.get_configtool_variable('includedir'), 'llvm', 'IR',
-      'IRBuilder.h'
-    )
-  ],
-  output : 'gen_builder.hpp',
-  command : [
-    prog_python2, '@INPUT0@', '--input', '@INPUT1@', '--output', '@OUTPUT@',
-    '--gen_h', '--output-dir', meson.current_build_dir()
-  ],
-  depend_files : files(
-    'templates/gen_builder.hpp',
-    'gen_common.py',
-  ),
-  build_by_default : true,
-)
-
-gen_builder_x86_hpp = custom_target(
-  'gen_builder_x86.hpp',
-  input : 'gen_llvm_ir_macros.py',
-  output : 'gen_builder_x86.hpp',
-  command : [
-    prog_python2, '@INPUT0@', '--gen_x86_h', '--output', '@OUTPUT@',
-    '--output-dir', meson.current_build_dir()
-  ],
-  depend_files : files(
-    'templates/gen_builder.hpp',
-    'gen_common.py',
-  ),
-)
 
 # The generators above this are needed individually, while the below generators
 # are all inputs to the same lib, so they don't need unique names.
@@ -114,45 +80,3 @@ foreach x : [['gen_ar_event.hpp', '--gen_event_hpp'],
   )
 endforeach
 
-files_swr_common += custom_target(
-  'gen_backend_pixel',
-  input : 'gen_backends.py',
-  output : [
-    'gen_BackendPixelRate0.cpp', 'gen_BackendPixelRate1.cpp',
-    'gen_BackendPixelRate2.cpp', 'gen_BackendPixelRate3.cpp',
-    'gen_BackendPixelRate.hpp',
-  ],
-  command : [
-    prog_python2, '@INPUT@',
-    '--outdir', meson.current_build_dir(),
-    '--dim', '5', '2', '3', '2', '2', '2',
-    '--numfiles', '4',
-    '--cpp', '--hpp',
-  ],
-  depend_files : files(
-    'templates/gen_backend.cpp',
-    'templates/gen_header_init.hpp',
-  ),
-)
-
-files_swr_common += custom_target(
-  'gen_backend_raster',
-  input : 'gen_backends.py',
-  output : [
-    'gen_rasterizer0.cpp', 'gen_rasterizer1.cpp',
-    'gen_rasterizer2.cpp', 'gen_rasterizer3.cpp',
-    'gen_rasterizer.hpp',
-  ],
-  command : [
-    prog_python2, '@INPUT@',
-    '--outdir', meson.current_build_dir(),
-    '--rast',
-    '--dim', '5', '2', '2', '3', '5', '2',
-    '--numfiles', '4',
-    '--cpp', '--hpp',
-  ],
-  depend_files : files(
-    'templates/gen_rasterizer.cpp',
-    'templates/gen_header_init.hpp',
-  ),
-)

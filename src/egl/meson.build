@@ -160,7 +160,7 @@ libegl = shared_library(
   c_args : [
     c_vis_args,
     c_args_for_egl,
-    '-DDEFAULT_DRIVER_DIR="@0@"'.format(dri_driver_dir),
+    '-DDEFAULT_DRIVER_DIR="@0@"'.format(dri_search_path),
     '-D_EGL_BUILT_IN_DRIVER_DRI2',
     '-D_EGL_NATIVE_PLATFORM=_EGL_PLATFORM_@0@'.format(egl_native_platform.to_upper()),
   ],

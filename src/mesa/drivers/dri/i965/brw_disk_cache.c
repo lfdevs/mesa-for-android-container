@@ -185,6 +185,7 @@ read_and_upload(struct brw_context *brw, struct disk_cache *cache,
       }
 
       disk_cache_remove(cache, binary_sha1);
+      ralloc_free(prog_data);
       free(buffer);
       return false;
    }
@@ -236,6 +237,7 @@ read_and_upload(struct brw_context *brw, struct disk_cache *cache,
 
    prog->program_written_to_cache = true;
 
+   ralloc_free(prog_data);
    free(buffer);
 
    return true;

@@ -4049,6 +4049,30 @@ static LLVMValueRef load_sample_pos(struct ac_nir_context *ctx)
 	return ac_build_gather_values(&ctx->ac, values, 2);
 }
 
+static LLVMValueRef load_sample_mask_in(struct ac_nir_context *ctx)
+{
+	uint8_t log2_ps_iter_samples = ctx->nctx->shader_info->info.ps.force_persample ? ctx->nctx->options->key.fs.log2_num_samples : ctx->nctx->options->key.fs.log2_ps_iter_samples;
+
+	/* The bit pattern matches that used by fixed function fragment
+	 * processing. */
+	static const uint16_t ps_iter_masks[] = {
+		0xffff, /* not used */
+		0x5555,
+		0x1111,
+		0x0101,
+		0x0001,
+	};
+	assert(log2_ps_iter_samples < ARRAY_SIZE(ps_iter_masks));
+
+	uint32_t ps_iter_mask = ps_iter_masks[log2_ps_iter_samples];
+
+	LLVMValueRef result, sample_id;
+	sample_id = unpack_param(&ctx->ac, ctx->abi->ancillary, 8, 4);
+	sample_id = LLVMBuildShl(ctx->ac.builder, LLVMConstInt(ctx->ac.i32, ps_iter_mask, false), sample_id, "");
+	result = LLVMBuildAnd(ctx->ac.builder, sample_id, ctx->abi->sample_coverage, "");
+	return result;
+}
+
 static LLVMValueRef visit_interp(struct nir_to_llvm_context *ctx,
 				 const nir_intrinsic_instr *instr)
 {
@@ -4353,7 +4377,10 @@ static void visit_intrinsic(struct ac_nir_context *ctx,
 		result = load_sample_pos(ctx);
 		break;
 	case nir_intrinsic_load_sample_mask_in:
-		result = ctx->abi->sample_coverage;
+		if (ctx->nctx)
+			result = load_sample_mask_in(ctx);
+		else
+			result = ctx->abi->sample_coverage;
 		break;
 	case nir_intrinsic_load_frag_coord: {
 		LLVMValueRef values[4] = {
@@ -4532,8 +4559,14 @@ static LLVMValueRef radv_load_ssbo(struct ac_shader_abi *abi,
 static LLVMValueRef radv_load_ubo(struct ac_shader_abi *abi, LLVMValueRef buffer_ptr)
 {
 	struct nir_to_llvm_context *ctx = nir_to_llvm_context_from_abi(abi);
+	LLVMValueRef result;
 
-	return LLVMBuildLoad(ctx->builder, buffer_ptr, "");
+	LLVMSetMetadata(buffer_ptr, ctx->ac.uniform_md_kind, ctx->ac.empty_md);
+
+	result = LLVMBuildLoad(ctx->builder, buffer_ptr, "");
+	LLVMSetMetadata(result, ctx->ac.invariant_load_md_kind, ctx->ac.empty_md);
+
+	return result;
 }
 
 static LLVMValueRef radv_get_sampler_desc(struct ac_shader_abi *abi,

@@ -41,7 +41,6 @@
 #include "main/glheader.h"
 #include "glapi.h"
 #include "glapitable.h"
-#include "main/dispatch.h"
 
 #include "apple_glx.h"
 #include "apple_xgl_api.h"
@@ -61,12 +60,11 @@ static void _apple_glapi_create_table(void) {
     assert(__applegl_api);
     memcpy(__applegl_api, __ogl_framework_api, sizeof(struct _glapi_table));
 
-    SET_ReadPixels(__applegl_api, __applegl_glReadPixels);
-    SET_CopyPixels(__applegl_api, __applegl_glCopyPixels);
-    SET_CopyColorTable(__applegl_api, __applegl_glCopyColorTable);
-    SET_DrawBuffer(__applegl_api, __applegl_glDrawBuffer);
-    SET_DrawBuffers(__applegl_api, __applegl_glDrawBuffers);
-    SET_Viewport(__applegl_api, __applegl_glViewport);
+    _glapi_table_patch(__applegl_api, "ReadPixels", __applegl_glReadPixels);
+    _glapi_table_patch(__applegl_api, "CopyPixels", __applegl_glCopyPixels);
+    _glapi_table_patch(__applegl_api, "CopyColorTable", __applegl_glCopyColorTable);
+    _glapi_table_patch(__applegl_api, "DrawBuffers", __applegl_glDrawBuffer);
+    _glapi_table_patch(__applegl_api, "Viewport", __applegl_glViewport);
 }
 
 void apple_glapi_set_dispatch(void) {

@@ -208,7 +208,24 @@ void bc_finalizer::finalize_if(region_node* r) {
 		r->push_front(if_jump);
 		r->push_back(if_pop);
 
+		/* the depart/repeat 1 is actually part of the "else" code.
+		 * if it's a depart for an outer loop region it will want to
+		 * insert a LOOP_BREAK or LOOP_CONTINUE in here, so we need
+		 * to emit the else clause.
+		 */
 		bool has_else = n_if->next;
+
+		if (repdep1->is_depart()) {
+			depart_node *dep1 = static_cast<depart_node*>(repdep1);
+			if (dep1->target != r && dep1->target->is_loop())
+				has_else = true;
+		}
+
+		if (repdep1->is_repeat()) {
+			repeat_node *rep1 = static_cast<repeat_node*>(repdep1);
+			if (rep1->target != r && rep1->target->is_loop())
+				has_else = true;
+		}
 
 		if (has_else) {
 			cf_node *nelse = sh.create_cf(CF_OP_ELSE);

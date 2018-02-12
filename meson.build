@@ -57,6 +57,10 @@ dri_drivers_path = get_option('dri-drivers-path')
 if dri_drivers_path == ''
   dri_drivers_path = join_paths(get_option('libdir'), 'dri')
 endif
+dri_search_path = get_option('dri-search-path')
+if dri_search_path == ''
+  dri_search_path = join_paths(get_option('prefix'), dri_drivers_path)
+endif
 
 with_gles1 = get_option('gles1')
 with_gles2 = get_option('gles2')
@@ -202,18 +206,20 @@ if with_dri_i915 or with_gallium_i915
   dep_libdrm_intel = dependency('libdrm_intel', version : '>= 2.4.75')
 endif
 
+system_has_kms_drm = ['openbsd', 'netbsd', 'freebsd', 'dragonfly', 'linux'].contains(host_machine.system())
+
 if host_machine.system() == 'darwin'
   with_dri_platform = 'apple'
 elif ['windows', 'cygwin'].contains(host_machine.system())
   with_dri_platform = 'windows'
-elif host_machine.system() == 'linux'
-  # FIXME: This should include BSD and possibly other systems
+elif system_has_kms_drm
   with_dri_platform = 'drm'
 else
   # FIXME: haiku doesn't use dri, and xlib doesn't use dri, probably should
   # assert here that one of those cases has been met.
   # FIXME: GNU (hurd) ends up here as well, but meson doesn't officially
   # support Hurd at time of writing (2017/11)
+  # FIXME: illumos ends up here as well
   with_dri_platform = 'none'
 endif
 
@@ -225,7 +231,7 @@ with_platform_surfaceless = false
 egl_native_platform = ''
 _platforms = get_option('platforms')
 if _platforms == 'auto'
-  if ['linux'].contains(host_machine.system())
+  if system_has_kms_drm
     _platforms = 'x11,wayland,drm,surfaceless'
   else
     error('Unknown OS, no platforms enabled. Patches gladly accepted to fix this.')
@@ -272,10 +278,10 @@ endif
 
 with_gbm = get_option('gbm')
 if with_gbm == 'auto' and with_dri  # TODO: or gallium
-  with_gbm = host_machine.system() == 'linux'
+  with_gbm = system_has_kms_drm
 elif with_gbm == 'true'
-  if not ['linux', 'bsd'].contains(host_machine.system())
-    error('GBM only supports unix-like platforms')
+  if not system_has_kms_drm
+    error('GBM only supports DRM/KMS platforms')
   endif
   with_gbm = true
 else
@@ -351,7 +357,7 @@ endif
 with_dri2 = (with_dri or with_any_vk) and with_dri_platform == 'drm'
 with_dri3 = get_option('dri3')
 if with_dri3 == 'auto'
-  if host_machine.system() == 'linux' and with_dri2
+  if system_has_kms_drm and with_dri2
     with_dri3 = true
   else
     with_dri3 = false
@@ -371,10 +377,12 @@ if with_dri or with_gallium
   endif
 endif
 
+prog_pkgconfig = find_program('pkg-config')
+
 dep_vdpau = []
 _vdpau = get_option('gallium-vdpau')
 if _vdpau == 'auto'
-  if not ['linux', 'bsd'].contains(host_machine.system())
+  if not system_has_kms_drm
     with_gallium_vdpau = false
   elif not with_platform_x11
     with_gallium_vdpau = false
@@ -386,8 +394,8 @@ if _vdpau == 'auto'
     with_gallium_vdpau = dep_vdpau.found()
   endif
 elif _vdpau == 'true'
-  if not ['linux', 'bsd'].contains(host_machine.system())
-    error('VDPAU state tracker can only be build on unix-like OSes.')
+  if not system_has_kms_drm
+    error('VDPAU state tracker can only be build on DRM/KMS OSes.')
   elif not with_platform_x11
     error('VDPAU state tracker requires X11 support.')
     with_gallium_vdpau = false
@@ -402,7 +410,7 @@ else
 endif
 if with_gallium_vdpau
   dep_vdpau = declare_dependency(
-    compile_args : dep_vdpau.get_pkgconfig_variable('cflags').split()
+    compile_args : run_command(prog_pkgconfig, ['vdpau', '--cflags']).stdout().split()
   )
 endif
 
@@ -417,7 +425,7 @@ endif
 dep_xvmc = []
 _xvmc = get_option('gallium-xvmc')
 if _xvmc == 'auto'
-  if not ['linux', 'bsd'].contains(host_machine.system())
+  if not system_has_kms_drm
     with_gallium_xvmc = false
   elif not with_platform_x11
     with_gallium_xvmc = false
@@ -428,8 +436,8 @@ if _xvmc == 'auto'
     with_gallium_xvmc = dep_xvmc.found()
   endif
 elif _xvmc == 'true'
-  if not ['linux', 'bsd'].contains(host_machine.system())
-    error('XVMC state tracker can only be build on unix-like OSes.')
+  if not system_has_kms_drm
+    error('XVMC state tracker can only be build on DRM/KMS OSes.')
   elif not with_platform_x11
     error('XVMC state tracker requires X11 support.')
     with_gallium_xvmc = false
@@ -443,7 +451,7 @@ else
 endif
 if with_gallium_xvmc
   dep_xvmc = declare_dependency(
-    compile_args : dep_xvmc.get_pkgconfig_variable('cflags').split()
+    compile_args : run_command(prog_pkgconfig, ['xvmc', '--cflags']).stdout().split()
   )
 endif
 
@@ -455,7 +463,7 @@ endif
 dep_omx = []
 _omx = get_option('gallium-omx')
 if _omx == 'auto'
-  if not ['linux', 'bsd'].contains(host_machine.system())
+  if not system_has_kms_drm
     with_gallium_omx = false
   elif not with_platform_x11
     with_gallium_omx = false
@@ -466,8 +474,8 @@ if _omx == 'auto'
     with_gallium_omx = dep_omx.found()
   endif
 elif _omx == 'true'
-  if not ['linux', 'bsd'].contains(host_machine.system())
-    error('OMX state tracker can only be built on unix-like OSes.')
+  if not system_has_kms_drm
+    error('OMX state tracker can only be built on DRM/KMS OSes.')
   elif not (with_platform_x11 or with_platform_drm)
     error('OMX state tracker requires X11 or drm platform support.')
     with_gallium_omx = false
@@ -506,14 +514,14 @@ if with_gallium_omx
 endif
 if with_gallium_omx
   dep_omx = declare_dependency(
-    compile_args : dep_omx.get_pkgconfig_variable('cflags').split()
+    compile_args : run_command(prog_pkgconfig, ['libomxil-bellagio', '--cflags']).stdout().split()
   )
 endif
 
 dep_va = []
 _va = get_option('gallium-va')
 if _va == 'auto'
-  if not ['linux', 'bsd'].contains(host_machine.system())
+  if not system_has_kms_drm
     with_gallium_va = false
   elif not with_platform_x11
     with_gallium_va = false
@@ -524,8 +532,8 @@ if _va == 'auto'
     with_gallium_va = dep_va.found()
   endif
 elif _va == 'true'
-  if not ['linux', 'bsd'].contains(host_machine.system())
-    error('VA state tracker can only be built on unix-like OSes.')
+  if not system_has_kms_drm
+    error('VA state tracker can only be built on DRM/KMS OSes.')
   elif not (with_platform_x11 or with_platform_drm)
     error('VA state tracker requires X11 or drm or wayland platform support.')
     with_gallium_va = false
@@ -539,7 +547,7 @@ else
 endif
 if with_gallium_va
   dep_va = declare_dependency(
-    compile_args : dep_va.get_pkgconfig_variable('cflags').split()
+    compile_args : run_command(prog_pkgconfig, ['libva', '--cflags']).stdout().split()
   )
 endif
 
@@ -550,7 +558,7 @@ endif
 
 _xa = get_option('gallium-xa')
 if _xa == 'auto'
-  if not ['linux', 'bsd'].contains(host_machine.system())
+  if not system_has_kms_drm
     with_gallium_xa = false
   elif not (with_gallium_nouveau or with_gallium_freedreno or with_gallium_i915
             or with_gallium_svga)
@@ -559,8 +567,8 @@ if _xa == 'auto'
     with_gallium_xa = true
   endif
 elif _xa == 'true'
-  if not ['linux', 'bsd'].contains(host_machine.system())
-    error('XA state tracker can only be built on unix-like OSes.')
+  if not system_has_kms_drm
+    error('XA state tracker can only be built on DRM/KMS OSes.')
   elif not (with_gallium_nouveau or with_gallium_freedreno or with_gallium_i915
             or with_gallium_svga)
     error('XA state tracker requires at least one of the following gallium drivers: nouveau, freedreno, i915, svga.')
@@ -692,14 +700,14 @@ if cc.compiles('struct __attribute__((packed)) foo { int bar; };',
 endif
 if cc.compiles('int *foo(void) __attribute__((returns_nonnull));',
                name : '__attribute__((returns_nonnull))')
-  pre_args += '-DHAVE_FUNC_ATTRIBUTE_NONNULL'
+  pre_args += '-DHAVE_FUNC_ATTRIBUTE_RETURNS_NONNULL'
 endif
 if cc.compiles('''int foo_def(void) __attribute__((visibility("default")));
                   int foo_hid(void) __attribute__((visibility("hidden")));
                   int foo_int(void) __attribute__((visibility("internal")));
                   int foo_pro(void) __attribute__((visibility("protected")));''',
                name : '__attribute__((visibility(...)))')
-  pre_args += '-DHAVE_FUNC_ATTRIBUTE_VISBILITY'
+  pre_args += '-DHAVE_FUNC_ATTRIBUTE_VISIBILITY'
 endif
 if cc.compiles('int foo(void) { return 0; } int bar(void) __attribute__((alias("foo")));',
                name : '__attribute__((alias(...)))')
@@ -772,7 +780,7 @@ foreach a : ['-Werror=pointer-arith', '-Werror=vla']
 endforeach
 
 if host_machine.cpu_family().startswith('x86')
-  pre_args += '-DHAVE_SSE41'
+  pre_args += '-DUSE_SSE41'
   with_sse41 = true
   sse41_args = ['-msse4.1']
 
@@ -820,23 +828,23 @@ with_asm_arch = ''
 if with_asm
   # TODO: SPARC and PPC
   if host_machine.cpu_family() == 'x86'
-    if ['linux', 'bsd'].contains(host_machine.system()) # FIXME: hurd?
+    if system_has_kms_drm
       with_asm_arch = 'x86'
       pre_args += ['-DUSE_X86_ASM', '-DUSE_MMX_ASM', '-DUSE_3DNOW_ASM',
                    '-DUSE_SSE_ASM']
     endif
   elif host_machine.cpu_family() == 'x86_64'
-    if host_machine.system() == 'linux'
+    if system_has_kms_drm
       with_asm_arch = 'x86_64'
       pre_args += ['-DUSE_X86_64_ASM']
     endif
   elif host_machine.cpu_family() == 'arm'
-    if host_machine.system() == 'linux'
+    if system_has_kms_drm
       with_asm_arch = 'arm'
       pre_args += ['-DUSE_ARM_ASM']
     endif
   elif host_machine.cpu_family() == 'aarch64'
-    if host_machine.system() == 'linux'
+    if system_has_kms_drm
       with_asm_arch = 'aarch64'
       pre_args += ['-DUSE_AARCH64_ASM']
     endif
@@ -1002,15 +1010,23 @@ if with_gallium_opencl
   # TODO: optional modules
 endif
 
+if with_amd_vk
+  _llvm_version = '>= 4.0.0'
+elif with_gallium_opencl or with_gallium_swr or with_gallium_r600 or with_gallium_radeonsi
+  _llvm_version = '>= 3.9.0'
+else
+  _llvm_version = '>= 3.3.0'
+endif
+
 _llvm = get_option('llvm')
 if _llvm == 'auto'
   dep_llvm = dependency(
-    'llvm', version : '>= 3.9.0', modules : llvm_modules,
+    'llvm', version : _llvm_version, modules : llvm_modules,
     required : with_amd_vk or with_gallium_radeonsi or with_gallium_swr or with_gallium_opencl,
   )
   with_llvm = dep_llvm.found()
 elif _llvm == 'true'
-  dep_llvm = dependency('llvm', version : '>= 3.9.0', modules : llvm_modules)
+  dep_llvm = dependency('llvm', version : _llvm_version, modules : llvm_modules)
   with_llvm = true
 else
   dep_llvm = []
@@ -1018,11 +1034,15 @@ else
 endif
 if with_llvm
   _llvm_version = dep_llvm.version().split('.')
-  # Development versions of LLVM have an 'svn' suffix, we don't want that for
-  # our version checks.
+  # Development versions of LLVM have an 'svn' or 'git' suffix, we don't want
+  # that for our version checks.
+  # svn suffixes are stripped by meson as of 0.43, and git suffixes are
+  # strippped as of 0.44, but we support older meson versions.
   _llvm_patch = _llvm_version[2]
   if _llvm_patch.endswith('svn')
     _llvm_patch = _llvm_patch.split('s')[0]
+  elif _llvm_patch.contains('git')
+    _llvm_patch = _llvm_patch.split('g')[0]
   endif
   pre_args += [
     '-DHAVE_LLVM=0x0@0@@1@@2@'.format(_llvm_version[0], _llvm_version[1], _llvm_patch),
@@ -1211,8 +1231,10 @@ inc_include = include_directories('include')
 
 gl_priv_reqs = [
   'x11', 'xext', 'xdamage >= 1.1', 'xfixes', 'x11-xcb', 'xcb',
-  'xcb-glx >= 1.8.1', 'libdrm >= 2.4.75',
-]
+  'xcb-glx >= 1.8.1']
+if dep_libdrm.found()
+  gl_priv_reqs += 'libdrm >= 2.4.75'
+endif
 if dep_xxf86vm != [] and dep_xxf86vm.found()
   gl_priv_reqs += 'xxf86vm'
 endif
