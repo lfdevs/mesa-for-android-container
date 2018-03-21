@@ -351,8 +351,8 @@ can_blit_via_surface_copy(struct svga_context *svga,
 
       if (blit_info->src.resource->format != blit_info->src.format ||
           blit_info->dst.resource->format != blit_info->dst.format ||
-          !util_is_format_compatible(src_desc, dst_desc));
-      return FALSE;
+          !util_is_format_compatible(src_desc, dst_desc))
+         return false;
    }
 
    if (svga->render_condition && blit_info->render_condition_enable)

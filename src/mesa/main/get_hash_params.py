@@ -538,6 +538,9 @@ descriptor=[
 
   # GL_ARB_texture_cube_map_array
   [ "TEXTURE_BINDING_CUBE_MAP_ARRAY_ARB", "LOC_CUSTOM, TYPE_INT, TEXTURE_CUBE_ARRAY_INDEX, extra_ARB_texture_cube_map_array_OES_texture_cube_map_array" ],
+
+  # GL_NUM_SHADING_LANGUAGE_VERSIONS
+  [ "NUM_SHADING_LANGUAGE_VERSIONS", "LOC_CUSTOM, TYPE_INT, 0, extra_version_43" ],
 ]},
 
 # Enums in OpenGL Core profile and ES 3.0

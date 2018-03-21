@@ -88,8 +88,15 @@ isl_lower_storage_image_format(const struct gen_device_info *devinfo,
    case ISL_FORMAT_R32G32B32A32_FLOAT:
    case ISL_FORMAT_R32_UINT:
    case ISL_FORMAT_R32_SINT:
-   case ISL_FORMAT_R32_FLOAT:
       return format;
+
+   /* The Skylake PRM's "Surface Formats" section says:
+    *
+    *   "The surface format for the typed atomic integer operations must
+    *    be R32_UINT or R32_SINT."
+    */
+   case ISL_FORMAT_R32_FLOAT:
+      return ISL_FORMAT_R32_UINT;
 
    /* From HSW to BDW the only 64bpp format supported for typed access is
     * RGBA_UINT16.  IVB falls back to untyped.

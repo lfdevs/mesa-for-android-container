@@ -1058,17 +1058,23 @@ void radv_CmdResetQueryPool(
 {
 	RADV_FROM_HANDLE(radv_cmd_buffer, cmd_buffer, commandBuffer);
 	RADV_FROM_HANDLE(radv_query_pool, pool, queryPool);
-	struct radv_cmd_state *state = &cmd_buffer->state;
+	uint32_t flush_bits = 0;
 
-	state->flush_bits |= radv_fill_buffer(cmd_buffer, pool->bo,
-					      firstQuery * pool->stride,
-					      queryCount * pool->stride, 0);
+	flush_bits |= radv_fill_buffer(cmd_buffer, pool->bo,
+				       firstQuery * pool->stride,
+				       queryCount * pool->stride, 0);
 
 	if (pool->type == VK_QUERY_TYPE_TIMESTAMP ||
 	    pool->type == VK_QUERY_TYPE_PIPELINE_STATISTICS) {
-		state->flush_bits |= radv_fill_buffer(cmd_buffer, pool->bo,
-						      pool->availability_offset + firstQuery * 4,
-						      queryCount * 4, 0);
+		flush_bits |= radv_fill_buffer(cmd_buffer, pool->bo,
+					       pool->availability_offset + firstQuery * 4,
+					       queryCount * 4, 0);
+	}
+
+	if (flush_bits) {
+		/* Only need to flush caches for the compute shader path. */
+		cmd_buffer->pending_reset_query = true;
+		cmd_buffer->state.flush_bits |= flush_bits;
 	}
 }
 
@@ -1085,6 +1091,14 @@ void radv_CmdBeginQuery(
 	va += pool->stride * query;
 
 	radv_cs_add_buffer(cmd_buffer->device->ws, cs, pool->bo, 8);
+
+	if (cmd_buffer->pending_reset_query) {
+		/* Make sure to flush caches if the query pool has been
+		 * previously resetted using the compute shader path.
+		 */
+		si_emit_cache_flush(cmd_buffer);
+		cmd_buffer->pending_reset_query = false;
+	}
 
 	switch (pool->type) {
 	case VK_QUERY_TYPE_OCCLUSION:

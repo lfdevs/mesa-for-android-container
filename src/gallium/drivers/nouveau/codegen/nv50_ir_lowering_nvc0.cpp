@@ -745,7 +745,7 @@ NVC0LegalizePostRA::visit(BasicBlock *bb)
       } else
       if (i->op == OP_LOAD && i->subOp == NV50_IR_SUBOP_LDC_IS) {
          int offset = i->src(0).get()->reg.data.offset;
-         if (abs(offset) > 0x10000)
+         if (abs(offset) >= 0x10000)
             i->src(0).get()->reg.fileIndex += offset >> 16;
          i->src(0).get()->reg.data.offset = (int)(short)offset;
       } else {

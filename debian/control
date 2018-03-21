@@ -40,11 +40,11 @@ Build-Depends:
  python-mako,
  flex,
  bison,
- llvm-5.0-dev (>= 1:4.0~) [amd64 arm64 armel armhf i386 kfreebsd-amd64 kfreebsd-i386 mips mips64el mipsel powerpc ppc64 sparc64 ppc64el],
+ llvm-6.0-dev (>= 1:6.0~) [amd64 arm64 armel armhf i386 kfreebsd-amd64 kfreebsd-i386 mips mips64el mipsel powerpc ppc64 sparc64 ppc64el],
  libelf-dev [amd64 arm64 armel armhf i386 kfreebsd-amd64 kfreebsd-i386 mips mips64el mipsel powerpc ppc64 sparc64 ppc64el],
  libwayland-dev (>= 1.11.0) [linux-any],
- libclang-5.0-dev (>= 1:4.0~) [amd64 arm64 armel armhf i386 kfreebsd-amd64 kfreebsd-i386 mips mips64el mipsel powerpc ppc64 sparc64 ppc64el],
- libclc-dev (>= 0.2.0+git20170330-3) [amd64 arm64 armel armhf i386 kfreebsd-amd64 kfreebsd-i386 mips mips64el mipsel powerpc ppc64 sparc64 ppc64el],
+ libclang-6.0-dev (>= 1:6.0~) [amd64 arm64 armel armhf i386 kfreebsd-amd64 kfreebsd-i386 mips mips64el mipsel powerpc ppc64 sparc64 ppc64el],
+ libclc-dev (>= 0.2.0+git20180312-1~) [amd64 arm64 armel armhf i386 kfreebsd-amd64 kfreebsd-i386 mips mips64el mipsel powerpc ppc64 sparc64 ppc64el],
  wayland-protocols (>= 1.9),
  zlib1g-dev,
  libglvnd-core-dev,
@@ -144,7 +144,6 @@ Section: libdevel
 Architecture: any
 Depends:
  libglvnd-dev,
- libwayland-egl1-mesa (= ${binary:Version}) [linux-any],
  libdrm-dev (>= 2.4.85) [!hurd-any],
  x11proto-dri2-dev (>= 2.6),
  x11proto-gl-dev (>= 1.4.14),
@@ -173,19 +172,16 @@ Description: free implementation of the EGL API -- development files
  against the EGL library.
 
 Package: libwayland-egl1-mesa
-Section: libs
+Section: oldlibs
 Architecture: linux-any
 Depends:
- ${shlibs:Depends},
  ${misc:Depends},
  libegl1,
-Provides: libwayland-egl1
-Conflicts: libwayland-egl1
-Replaces: libwayland-egl1
+ libwayland-egl1,
 Pre-Depends: ${misc:Pre-Depends}
 Multi-Arch: same
-Description: implementation of the Wayland EGL platform -- runtime
- This package contains the mesa implementation of the Wayland EGL platform
+Description: transitional dummy package
+ This is a transitional dummy package, it can be safely removed.
 
 Package: libgles2-mesa
 Section: oldlibs
@@ -431,8 +427,8 @@ Section: libs
 Architecture: amd64 arm64 armel armhf i386 kfreebsd-amd64 kfreebsd-i386 mips mips64el mipsel powerpc ppc64 sparc64 ppc64el
 Pre-Depends: ${misc:Pre-Depends}
 Depends:
- libclc-r600 (>= 0.2.0+git20170330-3),
- libclc-amdgcn (>= 0.2.0+git20170330-3),
+ libclc-r600 (>= 0.2.0+git20180312-1~),
+ libclc-amdgcn (>= 0.2.0+git20180312-1~),
  ocl-icd-libopencl1 | libopencl1,
  ${shlibs:Depends},
  ${misc:Depends},

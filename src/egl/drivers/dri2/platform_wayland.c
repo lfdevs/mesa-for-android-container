@@ -1274,8 +1274,8 @@ dri2_wl_add_configs_for_visuals(_EGLDriver *drv, _EGLDisplay *disp)
    } visuals[] = {
       { "XRGB2101010", HAS_XRGB2101010, { 0x3ff00000, 0xffc00, 0x3ff, 0 } },
       { "ARGB2101010", HAS_ARGB2101010, { 0x3ff00000, 0xffc00, 0x3ff, 0xc0000000 } },
-      { "XRGB8888", HAS_XRGB8888, { 0xff0000, 0xff00, 0x00ff, 0xff000000 } },
-      { "ARGB8888", HAS_ARGB8888, { 0xff0000, 0xff00, 0x00ff, 0 } },
+      { "XRGB8888", HAS_XRGB8888, { 0xff0000, 0xff00, 0x00ff, 0 } },
+      { "ARGB8888", HAS_ARGB8888, { 0xff0000, 0xff00, 0x00ff, 0xff000000 } },
       { "RGB565",   HAS_RGB565,   { 0x00f800, 0x07e0, 0x001f, 0 } },
    };
    unsigned int format_count[ARRAY_SIZE(visuals)] = { 0 };

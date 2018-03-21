@@ -359,7 +359,7 @@ struct xmesa_buffer {
 extern const char *
 xmesa_get_name(void);
 
-extern void
+extern int
 xmesa_init(Display *dpy);
 
 extern XMesaBuffer

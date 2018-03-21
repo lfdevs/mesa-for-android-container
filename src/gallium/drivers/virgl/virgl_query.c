@@ -37,6 +37,39 @@ struct virgl_query {
    unsigned result_size;
    unsigned result_gotten_sent;
 };
+#define VIRGL_QUERY_OCCLUSION_COUNTER     0
+#define VIRGL_QUERY_OCCLUSION_PREDICATE   1
+#define VIRGL_QUERY_TIMESTAMP             2
+#define VIRGL_QUERY_TIMESTAMP_DISJOINT    3
+#define VIRGL_QUERY_TIME_ELAPSED          4
+#define VIRGL_QUERY_PRIMITIVES_GENERATED  5
+#define VIRGL_QUERY_PRIMITIVES_EMITTED    6
+#define VIRGL_QUERY_SO_STATISTICS         7
+#define VIRGL_QUERY_SO_OVERFLOW_PREDICATE 8
+#define VIRGL_QUERY_GPU_FINISHED          9
+#define VIRGL_QUERY_PIPELINE_STATISTICS  10
+
+static const int pquery_map[] =
+{
+   VIRGL_QUERY_OCCLUSION_COUNTER,
+   VIRGL_QUERY_OCCLUSION_PREDICATE,
+   -1,
+   VIRGL_QUERY_TIMESTAMP,
+   VIRGL_QUERY_TIMESTAMP_DISJOINT,
+   VIRGL_QUERY_TIME_ELAPSED,
+   VIRGL_QUERY_PRIMITIVES_GENERATED,
+   VIRGL_QUERY_PRIMITIVES_EMITTED,
+   VIRGL_QUERY_SO_STATISTICS,
+   VIRGL_QUERY_SO_OVERFLOW_PREDICATE,
+   -1,
+   VIRGL_QUERY_GPU_FINISHED,
+   VIRGL_QUERY_PIPELINE_STATISTICS,
+};
+
+static int pipe_to_virgl_query(enum pipe_query_type ptype)
+{
+   return pquery_map[ptype];
+}
 
 static inline struct virgl_query *virgl_query(struct pipe_query *q)
 {
@@ -75,11 +108,11 @@ static struct pipe_query *virgl_create_query(struct pipe_context *ctx,
    }
 
    handle = virgl_object_assign_handle();
-   query->type = query_type;
+   query->type = pipe_to_virgl_query(query_type);
    query->index = index;
    query->handle = handle;
    query->buf->clean = FALSE;
-   virgl_encoder_create_query(vctx, handle, query_type, index, query->buf, 0);
+   virgl_encoder_create_query(vctx, handle, query->type, index, query->buf, 0);
 
    return (struct pipe_query *)query;
 }

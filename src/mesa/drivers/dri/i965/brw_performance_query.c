@@ -1720,7 +1720,8 @@ read_file_uint64(const char *file, uint64_t *val)
     fd = open(file, 0);
     if (fd < 0)
 	return false;
-    n = read(fd, buf, sizeof (buf) - 1);
+    while ((n = read(fd, buf, sizeof (buf) - 1)) < 0 &&
+           errno == EINTR);
     close(fd);
     if (n < 0)
 	return false;
@@ -1842,7 +1843,7 @@ kernel_has_dynamic_config_support(struct brw_context *brw,
          config.n_mux_regs = 1;
          config.mux_regs_ptr = (uintptr_t) mux_regs;
 
-         if (ioctl(screen->fd, DRM_IOCTL_I915_PERF_REMOVE_CONFIG, &config_id) < 0 &&
+         if (drmIoctl(screen->fd, DRM_IOCTL_I915_PERF_REMOVE_CONFIG, &config_id) < 0 &&
              errno == ENOENT)
             return true;
 
@@ -1888,7 +1889,7 @@ init_oa_configs(struct brw_context *brw, const char *sysfs_dev_dir)
       config.n_flex_regs = query->n_flex_regs;
       config.flex_regs_ptr = (uintptr_t) query->flex_regs;
 
-      ret = ioctl(screen->fd, DRM_IOCTL_I915_PERF_ADD_CONFIG, &config);
+      ret = drmIoctl(screen->fd, DRM_IOCTL_I915_PERF_ADD_CONFIG, &config);
       if (ret < 0) {
          DBG("Failed to load \"%s\" (%s) metrics set in kernel: %s\n",
              query->name, query->guid, strerror(errno));

@@ -774,10 +774,11 @@ static void amdgpu_set_ib_size(struct amdgpu_ib *ib)
    }
 }
 
-static void amdgpu_ib_finalize(struct amdgpu_ib *ib)
+static void amdgpu_ib_finalize(struct amdgpu_winsys *ws, struct amdgpu_ib *ib)
 {
    amdgpu_set_ib_size(ib);
    ib->used_ib_space += ib->base.current.cdw * 4;
+   ib->used_ib_space = align(ib->used_ib_space, ws->info.ib_start_alignment);
    ib->max_ib_size = MAX2(ib->max_ib_size, ib->base.prev_dw + ib->base.current.cdw);
 }
 
@@ -1476,7 +1477,7 @@ static int amdgpu_cs_flush(struct radeon_winsys_cs *rcs,
       struct amdgpu_cs_context *cur = cs->csc;
 
       /* Set IB sizes. */
-      amdgpu_ib_finalize(&cs->main);
+      amdgpu_ib_finalize(ws, &cs->main);
 
       /* Create a fence. */
       amdgpu_fence_reference(&cur->fence, NULL);

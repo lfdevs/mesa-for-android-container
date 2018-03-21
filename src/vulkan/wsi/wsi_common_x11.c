@@ -899,8 +899,10 @@ x11_manage_fifo_queues(void *state)
       while (chain->last_present_msc < target_msc) {
          xcb_generic_event_t *event =
             xcb_wait_for_special_event(chain->conn, chain->special_event);
-         if (!event)
+         if (!event) {
+            result = VK_ERROR_OUT_OF_DATE_KHR;
             goto fail;
+         }
 
          result = x11_handle_dri3_present_event(chain, (void *)event);
          free(event);

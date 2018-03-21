@@ -1,4 +1,4 @@
-# Copyright © 2017 Intel Corporation
+# Copyright © 2017-2018 Intel Corporation
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -39,15 +39,13 @@ libomx_gallium = shared_library(
   include_directories : [
     inc_common, inc_util, inc_gallium_winsys, inc_gallium_drivers,
   ],
+  link_whole : [libomx_st],
   link_with : [
-    libomx_st, libgalliumvlwinsys, libgalliumvl, libgallium, libmesa_util,
-    libpipe_loader_static, libws_null, libwsw,
+    libgalliumvlwinsys, libgalliumvl, libgallium, libmesa_util,
+    libpipe_loader_static, libws_null, libwsw, libswdri, libswkmsdri,
   ],
   link_depends : omx_link_depends,
-  dependencies : [
-    dep_xcb, dep_x11_xcb, dep_xcb_dri2, dep_xcb_dri3, dep_libdrm, dep_thread,
-    driver_r600, driver_radeonsi, driver_nouveau,
-  ],
+  dependencies : [dep_thread, driver_r600, driver_radeonsi, driver_nouveau],
   install : true,
   install_dir : omx_drivers_path,
 )

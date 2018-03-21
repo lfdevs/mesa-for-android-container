@@ -366,7 +366,7 @@ static SIMDINLINE Float blend_ps(Float a, Float b) // return ImmT ? b : a  (floa
 }
 
 template <int ImmT>
-static SIMDINLINE Float blend_epi32(Integer a, Integer b) // return ImmT ? b : a  (int32)
+static SIMDINLINE Integer blend_epi32(Integer a, Integer b) // return ImmT ? b : a  (int32)
 {
     return _mm512_mask_blend_epi32(__mmask16(ImmT), a, b);
 }

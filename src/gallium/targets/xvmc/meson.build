@@ -1,4 +1,4 @@
-# Copyright © 2017 Intel Corporation
+# Copyright © 2017-2018 Intel Corporation
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -40,14 +40,12 @@ libxvmc_gallium = shared_library(
   include_directories : [
     inc_common, inc_util, inc_gallium_winsys, inc_gallium_drivers,
   ],
+  link_whole : [libxvmc_st],
   link_with : [
-    libxvmc_st, libgalliumvlwinsys, libgalliumvl, libgallium, libmesa_util,
-    libpipe_loader_static, libws_null, libwsw,
+    libgalliumvlwinsys, libgalliumvl, libgallium, libmesa_util,
+    libpipe_loader_static, libws_null, libwsw, libswdri, libswkmsdri,
   ],
-  dependencies : [
-    dep_xcb, dep_x11_xcb, dep_xcb_dri2, dep_xcb_dri3, dep_libdrm, dep_thread,
-    driver_r600, driver_nouveau,
-  ],
+  dependencies : [dep_thread, driver_r600, driver_nouveau],
   link_depends : xvmc_link_depends,
 )
 

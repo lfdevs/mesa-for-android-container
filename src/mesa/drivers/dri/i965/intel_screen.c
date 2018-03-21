@@ -748,6 +748,7 @@ intel_create_image_common(__DRIscreen *dri_screen,
    if (aux_surf.size) {
       image->aux_offset = surf.size;
       image->aux_pitch = aux_surf.row_pitch;
+      image->aux_size = aux_surf.size;
    }
 
    return image;
@@ -1135,6 +1136,8 @@ intel_create_image_from_fds_common(__DRIscreen *dri_screen,
          return NULL;
       }
 
+      image->aux_size = aux_surf.size;
+
       const int end = image->aux_offset + aux_surf.size;
       if (size < end)
          size = end;
@@ -1310,42 +1313,47 @@ intel_query_dma_buf_modifiers(__DRIscreen *_screen, int fourcc, int max,
 static __DRIimage *
 intel_from_planar(__DRIimage *parent, int plane, void *loaderPrivate)
 {
-    int width, height, offset, stride, dri_format, index;
-    const struct intel_image_format *f;
+    int width, height, offset, stride, size, dri_format;
     __DRIimage *image;
 
-    if (parent == NULL) {
+    if (parent == NULL)
        return NULL;
-    } else if (parent->planar_format == NULL) {
-       const bool is_aux =
-          isl_drm_modifier_has_aux(parent->modifier) && plane == 1;
-       if (!is_aux)
-          return NULL;
 
-       width = parent->width;
-       height = parent->height;
+    width = parent->width;
+    height = parent->height;
+
+    const struct intel_image_format *f = parent->planar_format;
+
+    if (f && plane < f->nplanes) {
+       /* Use the planar format definition. */
+       width >>= f->planes[plane].width_shift;
+       height >>= f->planes[plane].height_shift;
+       dri_format = f->planes[plane].dri_format;
+       int index = f->planes[plane].buffer_index;
+       offset = parent->offsets[index];
+       stride = parent->strides[index];
+       size = height * stride;
+    } else if (plane == 0) {
+       /* The only plane of a non-planar image: copy the parent definition
+        * directly. */
+       dri_format = parent->dri_format;
+       offset = parent->offset;
+       stride = parent->pitch;
+       size = height * stride;
+    } else if (plane == 1 && parent->modifier != DRM_FORMAT_MOD_INVALID &&
+               isl_drm_modifier_has_aux(parent->modifier)) {
+       /* Auxiliary plane */
        dri_format = parent->dri_format;
        offset = parent->aux_offset;
        stride = parent->aux_pitch;
+       size = parent->aux_size;
     } else {
-       /* Planar formats don't support aux buffers/images */
-       assert(!isl_drm_modifier_has_aux(parent->modifier));
-       f = parent->planar_format;
+       return NULL;
+    }
 
-       if (plane >= f->nplanes)
-          return NULL;
-
-       width = parent->width >> f->planes[plane].width_shift;
-       height = parent->height >> f->planes[plane].height_shift;
-       dri_format = f->planes[plane].dri_format;
-       index = f->planes[plane].buffer_index;
-       offset = parent->offsets[index];
-       stride = parent->strides[index];
-
-       if (offset + height * stride > parent->bo->size) {
-          _mesa_warning(NULL, "intel_create_sub_image: subimage out of bounds");
-          return NULL;
-       }
+    if (offset + size > parent->bo->size) {
+       _mesa_warning(NULL, "intel_from_planar: subimage out of bounds");
+       return NULL;
     }
 
     image = intel_allocate_image(parent->screen, dri_format, loaderPrivate);

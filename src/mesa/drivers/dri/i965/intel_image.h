@@ -98,6 +98,9 @@ struct __DRIimageRec {
    /** Pitch of the auxiliary compression surface. */
    uint32_t aux_pitch;
 
+   /** Total size in bytes of the auxiliary compression surface. */
+   uint32_t aux_size;
+
    /**
     * Provided by EGL_EXT_image_dma_buf_import.
     * \{

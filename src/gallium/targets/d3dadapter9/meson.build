@@ -1,4 +1,5 @@
 # Copyright © 2017 Dylan Baker
+# Copyright © 2018 Intel Corporation
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -31,18 +32,10 @@ gallium_nine_c_args = [
 ]
 gallium_nine_ld_args = []
 gallium_nine_link_depends = []
-gallium_nine_link_with = []
 
 if with_ld_version_script
   gallium_nine_ld_args += ['-Wl,--version-script', join_paths(meson.current_source_dir(), 'd3dadapter9.sym')]
   gallium_nine_link_depends += files('d3dadapter9.sym')
-endif
-
-if with_dri
-  gallium_nine_link_with += libswdri
-endif
-if with_gallium_drisw_kms
-  gallium_nine_link_with += libswkmsdri
 endif
 
 libgallium_nine = shared_library(
@@ -60,8 +53,8 @@ libgallium_nine = shared_library(
   link_depends : gallium_nine_link_depends,
   link_with : [
     libgalliumvl_stub, libgallium, libnine_st, libmesa_util, libddebug,
-    librbug, libtrace, libpipe_loader_static, libws_null, libwsw,
-    gallium_nine_link_with,
+    librbug, libtrace, libpipe_loader_static, libws_null, libwsw, libswdri,
+    libswkmsdri,
   ],
   dependencies : [
     dep_selinux, dep_expat, dep_libdrm, dep_llvm,
@@ -79,4 +72,5 @@ pkg.generate(
   description : 'Native D3D driver modules',
   version : '.'.join(nine_version),
   requires_private : 'libdrm >= 2.4.75',
+  variables : ['moduledir=${prefix}/@0@'.format(d3d_drivers_path)],
 )

@@ -1053,6 +1053,11 @@ r600_choose_tiling(struct r600_common_screen *rscreen,
 		if (templ->bind & PIPE_BIND_LINEAR)
 			return RADEON_SURF_MODE_LINEAR_ALIGNED;
 
+		/* 1D textures should be linear - fixes image operations on 1d */
+		if (templ->target == PIPE_TEXTURE_1D ||
+		    templ->target == PIPE_TEXTURE_1D_ARRAY)
+                       return RADEON_SURF_MODE_LINEAR_ALIGNED;
+
 		/* Textures likely to be mapped often. */
 		if (templ->usage == PIPE_USAGE_STAGING ||
 		    templ->usage == PIPE_USAGE_STREAM)

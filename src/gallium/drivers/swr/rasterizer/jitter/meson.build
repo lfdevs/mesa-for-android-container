@@ -1,5 +1,4 @@
-# Copyright © 2017 Dylan Baker
-# Copyright © 2018 Intel Corporation
+# Copyright © 2017-2018 Intel Corporation
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -19,9 +18,33 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-libswdri = static_library(
-  'swdri',
-  files('dri_sw_winsys.c', 'dri_sw_winsys.h'),
-  c_args : c_vis_args,
-  include_directories : [inc_gallium, inc_include, inc_src, inc_gallium_aux],
+
+gen_builder_hpp = custom_target(
+  'gen_builder.hpp',
+  input : [
+    swr_gen_llvm_ir_macros_py,
+    join_paths(
+      dep_llvm.get_configtool_variable('includedir'), 'llvm', 'IR',
+      'IRBuilder.h'
+    )
+  ],
+  output : 'gen_builder.hpp',
+  command : [
+    prog_python2, '@INPUT0@', '--input', '@INPUT1@', '--output', '@OUTPUT@',
+    '--gen_h', '--output-dir', '@OUTDIR@'
+  ],
+  depend_files : swr_gen_builder_depends,
+  build_by_default : true,
 )
+
+gen_builder_x86_hpp = custom_target(
+  'gen_builder_x86.hpp',
+  input : '../codegen/gen_llvm_ir_macros.py',
+  output : 'gen_builder_x86.hpp',
+  command : [
+    prog_python2, '@INPUT0@', '--gen_x86_h', '--output', '@OUTPUT@',
+    '--output-dir', '@OUTDIR@'
+  ],
+  depend_files : swr_gen_builder_depends,
+)
+

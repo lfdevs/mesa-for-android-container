@@ -75,6 +75,17 @@ egl_dri3_get_dri_context(struct loader_dri3_drawable *draw)
    return dri2_ctx->dri_context;
 }
 
+static __DRIscreen *
+egl_dri3_get_dri_screen(void)
+{
+   _EGLContext *ctx = _eglGetCurrentContext();
+   struct dri2_egl_context *dri2_ctx;
+   if (!ctx)
+      return NULL;
+   dri2_ctx = dri2_egl_context(ctx);
+   return dri2_egl_display(dri2_ctx->base.Resource.Display)->dri_screen;
+}
+
 static void
 egl_dri3_flush_drawable(struct loader_dri3_drawable *draw, unsigned flags)
 {
@@ -88,6 +99,7 @@ static const struct loader_dri3_vtable egl_dri3_vtable = {
    .set_drawable_size = egl_dri3_set_drawable_size,
    .in_current_context = egl_dri3_in_current_context,
    .get_dri_context = egl_dri3_get_dri_context,
+   .get_dri_screen = egl_dri3_get_dri_screen,
    .flush_drawable = egl_dri3_flush_drawable,
    .show_fps = NULL,
 };

@@ -1724,6 +1724,21 @@ void ProcessDraw(
 
             if (i < endVertex)
             {
+                if (!IsIndexedT::value)
+                {
+                    fetchInfo_lo.pLastIndex = fetchInfo_lo.pIndices;
+                    uint32_t offset;
+                    offset = std::min(endVertex-i, (uint32_t) KNOB_SIMD16_WIDTH);
+#if USE_SIMD16_SHADERS
+                    fetchInfo_lo.pLastIndex += offset;
+#else
+                    fetchInfo_lo.pLastIndex += std::min(offset, (uint32_t) KNOB_SIMD_WIDTH);
+                    uint32_t offset2 = std::min(offset, (uint32_t) KNOB_SIMD16_WIDTH)-KNOB_SIMD_WIDTH;
+                    assert(offset >= 0);
+                    fetchInfo_hi.pLastIndex = fetchInfo_hi.pIndices;
+                    fetchInfo_hi.pLastIndex += offset2;
+#endif
+                }
                 // 1. Execute FS/VS for a single SIMD.
                 AR_BEGIN(FEFetchShader, pDC->drawId);
 #if USE_SIMD16_SHADERS

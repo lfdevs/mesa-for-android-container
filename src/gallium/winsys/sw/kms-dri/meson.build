@@ -1,4 +1,4 @@
-# Copyright © 2017 Intel Corporation
+# Copyright © 2017-2018 Intel Corporation
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -25,5 +25,4 @@ libswkmsdri = static_library(
   c_args : c_vis_args,
   include_directories : [inc_gallium, inc_include, inc_src, inc_gallium_aux],
   dependencies : dep_libdrm,
-  build_by_default : false,
 )

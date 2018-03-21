@@ -3275,7 +3275,9 @@ brw_memory_fence(struct brw_codegen *p,
                  struct brw_reg dst)
 {
    const struct gen_device_info *devinfo = p->devinfo;
-   const bool commit_enable = devinfo->gen == 7 && !devinfo->is_haswell;
+   const bool commit_enable =
+      devinfo->gen >= 10 || /* HSD ES # 1404612949 */
+      (devinfo->gen == 7 && !devinfo->is_haswell);
    struct brw_inst *insn;
 
    brw_push_insn_state(p);

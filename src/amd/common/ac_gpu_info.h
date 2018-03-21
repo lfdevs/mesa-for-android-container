@@ -61,6 +61,7 @@ struct radeon_info {
 	bool                        has_virtual_memory;
 	bool                        gfx_ib_pad_with_type2;
 	bool                        has_hw_decode;
+	unsigned                    ib_start_alignment;
 	uint32_t                    num_sdma_rings;
 	uint32_t                    num_compute_rings;
 	uint32_t                    uvd_fw_version;

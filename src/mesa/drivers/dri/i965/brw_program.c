@@ -402,23 +402,33 @@ brw_alloc_stage_scratch(struct brw_context *brw,
       if (devinfo->gen >= 9)
          subslices = 4 * brw->screen->devinfo.num_slices;
 
-      /* WaCSScratchSize:hsw
-       *
-       * Haswell's scratch space address calculation appears to be sparse
-       * rather than tightly packed.  The Thread ID has bits indicating
-       * which subslice, EU within a subslice, and thread within an EU
-       * it is.  There's a maximum of two slices and two subslices, so these
-       * can be stored with a single bit.  Even though there are only 10 EUs
-       * per subslice, this is stored in 4 bits, so there's an effective
-       * maximum value of 16 EUs.  Similarly, although there are only 7
-       * threads per EU, this is stored in a 3 bit number, giving an effective
-       * maximum value of 8 threads per EU.
-       *
-       * This means that we need to use 16 * 8 instead of 10 * 7 for the
-       * number of threads per subslice.
-       */
-      const unsigned scratch_ids_per_subslice =
-         devinfo->is_haswell ? 16 * 8 : devinfo->max_cs_threads;
+      unsigned scratch_ids_per_subslice;
+      if (devinfo->is_haswell) {
+         /* WaCSScratchSize:hsw
+          *
+          * Haswell's scratch space address calculation appears to be sparse
+          * rather than tightly packed. The Thread ID has bits indicating
+          * which subslice, EU within a subslice, and thread within an EU it
+          * is. There's a maximum of two slices and two subslices, so these
+          * can be stored with a single bit. Even though there are only 10 EUs
+          * per subslice, this is stored in 4 bits, so there's an effective
+          * maximum value of 16 EUs. Similarly, although there are only 7
+          * threads per EU, this is stored in a 3 bit number, giving an
+          * effective maximum value of 8 threads per EU.
+          *
+          * This means that we need to use 16 * 8 instead of 10 * 7 for the
+          * number of threads per subslice.
+          */
+         scratch_ids_per_subslice = 16 * 8;
+      } else if (devinfo->is_cherryview) {
+         /* Cherryview devices have either 6 or 8 EUs per subslice, and each
+          * EU has 7 threads. The 6 EU devices appear to calculate thread IDs
+          * as if it had 8 EUs.
+          */
+         scratch_ids_per_subslice = 8 * 7;
+      } else {
+         scratch_ids_per_subslice = devinfo->max_cs_threads;
+      }
 
       thread_count = scratch_ids_per_subslice * subslices;
       break;

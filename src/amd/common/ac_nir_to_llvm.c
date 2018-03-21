@@ -1346,7 +1346,8 @@ static LLVMValueRef emit_bcsel(struct ac_llvm_context *ctx,
 {
 	LLVMValueRef v = LLVMBuildICmp(ctx->builder, LLVMIntNE, src0,
 				       ctx->i32_0, "");
-	return LLVMBuildSelect(ctx->builder, v, src1, src2, "");
+	return LLVMBuildSelect(ctx->builder, v, ac_to_integer(ctx, src1),
+			       ac_to_integer(ctx, src2), "");
 }
 
 static LLVMValueRef emit_minmax_int(struct ac_llvm_context *ctx,
@@ -1822,16 +1823,16 @@ static void visit_alu(struct ac_nir_context *ctx, const nir_alu_instr *instr)
 		result = emit_int_cmp(&ctx->ac, LLVMIntUGE, src[0], src[1]);
 		break;
 	case nir_op_feq:
-		result = emit_float_cmp(&ctx->ac, LLVMRealUEQ, src[0], src[1]);
+		result = emit_float_cmp(&ctx->ac, LLVMRealOEQ, src[0], src[1]);
 		break;
 	case nir_op_fne:
 		result = emit_float_cmp(&ctx->ac, LLVMRealUNE, src[0], src[1]);
 		break;
 	case nir_op_flt:
-		result = emit_float_cmp(&ctx->ac, LLVMRealULT, src[0], src[1]);
+		result = emit_float_cmp(&ctx->ac, LLVMRealOLT, src[0], src[1]);
 		break;
 	case nir_op_fge:
-		result = emit_float_cmp(&ctx->ac, LLVMRealUGE, src[0], src[1]);
+		result = emit_float_cmp(&ctx->ac, LLVMRealOGE, src[0], src[1]);
 		break;
 	case nir_op_fabs:
 		result = emit_intrin_1f_param(&ctx->ac, "llvm.fabs",
@@ -2845,13 +2846,14 @@ static LLVMValueRef get_tcs_tes_buffer_address_params(struct nir_to_llvm_context
 
 static void
 mark_tess_output(struct nir_to_llvm_context *ctx,
-		 bool is_patch, uint32_t param)
+		 bool is_patch, uint32_t param, int num_slots)
 
 {
+	uint64_t slot_mask = (1ull << num_slots) - 1;
 	if (is_patch) {
-		ctx->tess_patch_outputs_written |= (1ull << param);
+		ctx->tess_patch_outputs_written |= (slot_mask << param);
 	} else
-		ctx->tess_outputs_written |= (1ull << param);
+		ctx->tess_outputs_written |= (slot_mask<< param);
 }
 
 static LLVMValueRef
@@ -2879,7 +2881,7 @@ get_dw_address(struct nir_to_llvm_context *ctx,
 						    LLVMConstInt(ctx->ac.i32, 4, false), ""), "");
 	else if (const_index && !compact_const_index)
 		dw_addr = LLVMBuildAdd(ctx->builder, dw_addr,
-				       LLVMConstInt(ctx->ac.i32, const_index, false), "");
+				       LLVMConstInt(ctx->ac.i32, const_index * 4, false), "");
 
 	dw_addr = LLVMBuildAdd(ctx->builder, dw_addr,
 			       LLVMConstInt(ctx->ac.i32, param * 4, false), "");
@@ -2935,18 +2937,19 @@ load_tcs_varyings(struct ac_shader_abi *abi,
 
 static void
 store_tcs_output(struct ac_shader_abi *abi,
+		 const nir_variable *var,
 		 LLVMValueRef vertex_index,
 		 LLVMValueRef param_index,
 		 unsigned const_index,
-		 unsigned location,
-		 unsigned driver_location,
 		 LLVMValueRef src,
-		 unsigned component,
-		 bool is_patch,
-		 bool is_compact,
 		 unsigned writemask)
 {
 	struct nir_to_llvm_context *ctx = nir_to_llvm_context_from_abi(abi);
+	const unsigned location = var->data.location;
+	const unsigned component = var->data.location_frac;
+	const bool is_patch = var->data.patch;
+	const bool is_compact = var->data.compact;
+	const unsigned count = glsl_count_attribute_slots(var->type, false);
 	LLVMValueRef dw_addr;
 	LLVMValueRef stride = NULL;
 	LLVMValueRef buf_addr = NULL;
@@ -2975,7 +2978,10 @@ store_tcs_output(struct ac_shader_abi *abi,
 		dw_addr = get_tcs_out_current_patch_data_offset(ctx);
 	}
 
-	mark_tess_output(ctx, is_patch, param);
+	if (param_index)
+		mark_tess_output(ctx, is_patch, param, count);
+	else
+		mark_tess_output(ctx, is_patch, param, 1);
 
 	dw_addr = get_dw_address(ctx, dw_addr, param, const_index, is_compact, vertex_index, stride,
 				 param_index);
@@ -3306,19 +3312,15 @@ visit_store_var(struct ac_nir_context *ctx,
 			LLVMValueRef vertex_index = NULL;
 			LLVMValueRef indir_index = NULL;
 			unsigned const_index = 0;
-			const unsigned location = instr->variables[0]->var->data.location;
-			const unsigned driver_location = instr->variables[0]->var->data.driver_location;
-			const unsigned comp = instr->variables[0]->var->data.location_frac;
 			const bool is_patch = instr->variables[0]->var->data.patch;
-			const bool is_compact = instr->variables[0]->var->data.compact;
 
 			get_deref_offset(ctx, instr->variables[0],
 					 false, NULL, is_patch ? NULL : &vertex_index,
 					 &const_index, &indir_index);
 
-			ctx->abi->store_tcs_outputs(ctx->abi, vertex_index, indir_index,
-						    const_index, location, driver_location,
-						    src, comp, is_patch, is_compact, writemask);
+			ctx->abi->store_tcs_outputs(ctx->abi, instr->variables[0]->var,
+						    vertex_index, indir_index,
+						    const_index, src, writemask);
 			return;
 		}
 
@@ -5002,7 +5004,7 @@ static void visit_tex(struct ac_nir_context *ctx, nir_tex_instr *instr)
 			/* This seems like a bit of a hack - but it passes Vulkan CTS with it */
 			if (instr->sampler_dim != GLSL_SAMPLER_DIM_3D &&
 			    instr->sampler_dim != GLSL_SAMPLER_DIM_CUBE &&
-			    instr->op != nir_texop_txf) {
+			    instr->op != nir_texop_txf && instr->op != nir_texop_txf_ms) {
 				coords[2] = apply_round_slice(&ctx->ac, coords[2]);
 			}
 			address[count++] = coords[2];
@@ -6170,7 +6172,7 @@ handle_es_outputs_post(struct nir_to_llvm_context *ctx,
 	}
 
 	for (unsigned i = 0; i < RADEON_LLVM_MAX_OUTPUTS; ++i) {
-		LLVMValueRef dw_addr;
+		LLVMValueRef dw_addr = NULL;
 		LLVMValueRef *out_ptr = &ctx->nir->outputs[i * 4];
 		int param_index;
 		int length = 4;
@@ -6226,9 +6228,9 @@ handle_ls_outputs_post(struct nir_to_llvm_context *ctx)
 		if (i == VARYING_SLOT_CLIP_DIST0)
 			length = ctx->num_output_clips + ctx->num_output_culls;
 		int param = shader_io_get_unique_index(i);
-		mark_tess_output(ctx, false, param);
+		mark_tess_output(ctx, false, param, 1);
 		if (length > 4)
-			mark_tess_output(ctx, false, param + 1);
+			mark_tess_output(ctx, false, param + 1, 1);
 		LLVMValueRef dw_addr = LLVMBuildAdd(ctx->builder, base_dw_addr,
 						    LLVMConstInt(ctx->ac.i32, param * 4, false),
 						    "");
@@ -6371,8 +6373,8 @@ write_tess_factors(struct nir_to_llvm_context *ctx)
 	tess_inner_index = shader_io_get_unique_index(VARYING_SLOT_TESS_LEVEL_INNER);
 	tess_outer_index = shader_io_get_unique_index(VARYING_SLOT_TESS_LEVEL_OUTER);
 
-	mark_tess_output(ctx, true, tess_inner_index);
-	mark_tess_output(ctx, true, tess_outer_index);
+	mark_tess_output(ctx, true, tess_inner_index, 1);
+	mark_tess_output(ctx, true, tess_outer_index, 1);
 	lds_base = get_tcs_out_current_patch_data_offset(ctx);
 	lds_inner = LLVMBuildAdd(ctx->builder, lds_base,
 				 LLVMConstInt(ctx->ac.i32, tess_inner_index * 4, false), "");

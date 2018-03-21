@@ -1,5 +1,4 @@
-# Copyright © 2017 Dylan Baker
-# Copyright © 2018 Intel Corporation
+# Copyright © 2017-2018 Intel Corporation
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -19,9 +18,40 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-libswdri = static_library(
-  'swdri',
-  files('dri_sw_winsys.c', 'dri_sw_winsys.h'),
-  c_args : c_vis_args,
-  include_directories : [inc_gallium, inc_include, inc_src, inc_gallium_aux],
+
+files_swr_common += custom_target(
+  'gen_backend_pixel',
+  input : swr_gen_backends_py,
+  output : [
+    'gen_BackendPixelRate0.cpp', 'gen_BackendPixelRate1.cpp',
+    'gen_BackendPixelRate2.cpp', 'gen_BackendPixelRate3.cpp',
+    'gen_BackendPixelRate.hpp',
+  ],
+  command : [
+    prog_python2, '@INPUT@',
+    '--outdir', '@OUTDIR@',
+    '--dim', '5', '2', '3', '2', '2', '2',
+    '--numfiles', '4',
+    '--cpp', '--hpp',
+  ],
+  depend_files : [ swr_gen_backend_files, swr_gen_header_init_files ],
+)
+
+files_swr_common += custom_target(
+  'gen_backend_raster',
+  input : swr_gen_backends_py,
+  output : [
+    'gen_rasterizer0.cpp', 'gen_rasterizer1.cpp',
+    'gen_rasterizer2.cpp', 'gen_rasterizer3.cpp',
+    'gen_rasterizer.hpp',
+  ],
+  command : [
+    prog_python2, '@INPUT@',
+    '--outdir', '@OUTDIR@',
+    '--rast',
+    '--dim', '5', '2', '2', '3', '5', '2',
+    '--numfiles', '4',
+    '--cpp', '--hpp',
+  ],
+  depend_files : [ swr_gen_rasterizer_files, swr_gen_header_init_files ],
 )

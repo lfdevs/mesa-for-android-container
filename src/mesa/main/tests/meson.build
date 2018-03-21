@@ -30,7 +30,7 @@ if with_shared_glapi
   )
   link_main_test += libglapi
 else
-  files_main_test += files('stub.cpp')
+  files_main_test += files('stubs.cpp')
 endif
 
 test(

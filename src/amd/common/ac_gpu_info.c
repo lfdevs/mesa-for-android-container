@@ -98,7 +98,9 @@ bool ac_query_gpu_info(int fd, amdgpu_device_handle dev,
 {
 	struct amdgpu_buffer_size_alignments alignment_info = {};
 	struct amdgpu_heap_info vram, vram_vis, gtt;
-	struct drm_amdgpu_info_hw_ip dma = {}, compute = {}, uvd = {}, vce = {}, vcn_dec = {}, vcn_enc = {};
+	struct drm_amdgpu_info_hw_ip dma = {}, compute = {}, uvd = {};
+	struct drm_amdgpu_info_hw_ip vce = {}, vcn_dec = {};
+	struct drm_amdgpu_info_hw_ip vcn_enc = {}, gfx = {};
 	uint32_t vce_version = 0, vce_feature = 0, uvd_version = 0, uvd_feature = 0;
 	int r, i, j;
 	drmDevicePtr devinfo;
@@ -151,6 +153,12 @@ bool ac_query_gpu_info(int fd, amdgpu_device_handle dev,
 	r = amdgpu_query_hw_ip_info(dev, AMDGPU_HW_IP_DMA, 0, &dma);
 	if (r) {
 		fprintf(stderr, "amdgpu: amdgpu_query_hw_ip_info(dma) failed.\n");
+		return false;
+	}
+
+	r = amdgpu_query_hw_ip_info(dev, AMDGPU_HW_IP_GFX, 0, &gfx);
+	if (r) {
+		fprintf(stderr, "amdgpu: amdgpu_query_hw_ip_info(gfx) failed.\n");
 		return false;
 	}
 
@@ -323,6 +331,16 @@ bool ac_query_gpu_info(int fd, amdgpu_device_handle dev,
 
 	if (info->chip_class == SI)
 		info->gfx_ib_pad_with_type2 = TRUE;
+
+	unsigned ib_align = 0;
+	ib_align = MAX2(ib_align, gfx.ib_start_alignment);
+	ib_align = MAX2(ib_align, compute.ib_start_alignment);
+	ib_align = MAX2(ib_align, dma.ib_start_alignment);
+	ib_align = MAX2(ib_align, uvd.ib_start_alignment);
+	ib_align = MAX2(ib_align, vce.ib_start_alignment);
+	ib_align = MAX2(ib_align, vcn_dec.ib_start_alignment);
+	ib_align = MAX2(ib_align, vcn_enc.ib_start_alignment);
+	info->ib_start_alignment = ib_align;
 
 	return true;
 }

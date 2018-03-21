@@ -99,11 +99,11 @@ else
 	GALLIUM_DRIVERS += radeonsi
 	confflags_GALLIUM += --enable-llvm
 	confflags_GALLIUM += --enable-opencl --enable-opencl-icd
-	confflags_GALLIUM += ac_cv_path_LLVM_CONFIG=llvm-config-5.0
+	confflags_GALLIUM += ac_cv_path_LLVM_CONFIG=llvm-config-6.0
 	GALLIUM_DRIVERS += swrast
   else
 	DRI_DRIVERS += swrast
-	confflags_GALLIUM += --disable-gallium-llvm
+	confflags_GALLIUM += --disable-llvm
   endif
 
   # radv needs LLVM and the Vulkan loader, so only build on the subset of
@@ -200,6 +200,10 @@ override_dh_install:
 	# these are not needed
 	rm -f debian/tmp/usr/lib/*/libEGL_mesa.so
 	rm -f debian/tmp/usr/lib/*/libGLX_mesa.so
+
+	# Drop libwayland-egl which is provided by src:wayland now
+	rm -f debian/tmp/usr/lib/*/libwayland-egl.so*
+	rm -f debian/tmp/usr/lib/*/pkgconfig/wayland-egl.pc
 
 	# Copy the hardlinked *_dri.so correctly.
 	install -m755 -d debian/libgl1-mesa-dri/usr/lib/${DEB_HOST_MULTIARCH}/dri/

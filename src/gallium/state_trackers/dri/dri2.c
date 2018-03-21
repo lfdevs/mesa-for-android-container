@@ -1841,32 +1841,17 @@ dri2_interop_export_object(__DRIcontext *_ctx,
          return MESA_GLINTEROP_INVALID_OBJECT;
       }
 
-      /* From OpenCL 2.0 SDK, clCreateFromGLTexture:
-       *   "CL_INVALID_MIP_LEVEL if miplevel is less than the value of
-       *    levelbase (for OpenGL implementations) or zero (for OpenGL ES
-       *    implementations); or greater than the value of q (for both OpenGL
-       *    and OpenGL ES). levelbase and q are defined for the texture in
-       *    section 3.8.10 (Texture Completeness) of the OpenGL 2.1
-       *    specification and section 3.7.10 of the OpenGL ES 2.0."
-       */
-      if (in->miplevel < obj->BaseLevel || in->miplevel > obj->_MaxLevel) {
-         simple_mtx_unlock(&ctx->Shared->Mutex);
-         return MESA_GLINTEROP_INVALID_MIP_LEVEL;
-      }
-
-      if (!st_finalize_texture(ctx, st->pipe, obj, 0)) {
-         simple_mtx_unlock(&ctx->Shared->Mutex);
-         return MESA_GLINTEROP_OUT_OF_RESOURCES;
-      }
-
-      res = st_get_texobj_resource(obj);
-      if (!res) {
-         /* Incomplete texture buffer object? This shouldn't really occur. */
-         simple_mtx_unlock(&ctx->Shared->Mutex);
-         return MESA_GLINTEROP_INVALID_OBJECT;
-      }
-
       if (target == GL_TEXTURE_BUFFER) {
+         struct st_buffer_object *stBuf =
+            st_buffer_object(obj->BufferObject);
+
+         if (!stBuf || !stBuf->buffer) {
+            /* this shouldn't happen */
+            simple_mtx_unlock(&ctx->Shared->Mutex);
+            return MESA_GLINTEROP_INVALID_OBJECT;
+         }
+         res = stBuf->buffer;
+
          out->internal_format = obj->BufferObjectFormat;
          out->buf_offset = obj->BufferOffset;
          out->buf_size = obj->BufferSize == -1 ? obj->BufferObject->Size :
@@ -1874,6 +1859,31 @@ dri2_interop_export_object(__DRIcontext *_ctx,
 
          obj->BufferObject->UsageHistory |= USAGE_DISABLE_MINMAX_CACHE;
       } else {
+         /* From OpenCL 2.0 SDK, clCreateFromGLTexture:
+          *   "CL_INVALID_MIP_LEVEL if miplevel is less than the value of
+          *    levelbase (for OpenGL implementations) or zero (for OpenGL ES
+          *    implementations); or greater than the value of q (for both OpenGL
+          *    and OpenGL ES). levelbase and q are defined for the texture in
+          *    section 3.8.10 (Texture Completeness) of the OpenGL 2.1
+          *    specification and section 3.7.10 of the OpenGL ES 2.0."
+          */
+         if (in->miplevel < obj->BaseLevel || in->miplevel > obj->_MaxLevel) {
+            simple_mtx_unlock(&ctx->Shared->Mutex);
+            return MESA_GLINTEROP_INVALID_MIP_LEVEL;
+         }
+
+         if (!st_finalize_texture(ctx, st->pipe, obj, 0)) {
+            simple_mtx_unlock(&ctx->Shared->Mutex);
+            return MESA_GLINTEROP_OUT_OF_RESOURCES;
+         }
+
+         res = st_get_texobj_resource(obj);
+         if (!res) {
+            /* Incomplete texture buffer object? This shouldn't really occur. */
+            simple_mtx_unlock(&ctx->Shared->Mutex);
+            return MESA_GLINTEROP_INVALID_OBJECT;
+         }
+
          out->internal_format = obj->Image[0][0]->InternalFormat;
          out->view_minlevel = obj->MinLevel;
          out->view_numlevels = obj->NumLevels;

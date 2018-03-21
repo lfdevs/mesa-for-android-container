@@ -567,7 +567,7 @@ int bc_parser::prepare_alu_group(cf_node* cf, alu_group_node *g) {
 			n->src.push_back(get_cf_index_value(1));
 		}
 
-		if ((n->bc.dst_gpr == CM_V_SQ_MOVA_DST_CF_IDX0 || n->bc.dst_gpr == CM_V_SQ_MOVA_DST_CF_IDX1) &&
+		if ((flags & AF_MOVA) && (n->bc.dst_gpr == CM_V_SQ_MOVA_DST_CF_IDX0 || n->bc.dst_gpr == CM_V_SQ_MOVA_DST_CF_IDX1) &&
 		    ctx.is_cayman())
 			// Move CF_IDX value into tex instruction operands, scheduler will later re-emit setting of CF_IDX
 			save_set_cf_index(n->src[0], n->bc.dst_gpr == CM_V_SQ_MOVA_DST_CF_IDX1);

@@ -269,6 +269,26 @@ isl_tiling_get_info(enum isl_tiling tiling,
 }
 
 bool
+isl_color_value_is_zero(union isl_color_value value,
+                        enum isl_format format)
+{
+   const struct isl_format_layout *fmtl = isl_format_get_layout(format);
+
+#define RETURN_FALSE_IF_NOT_0(c, i) \
+   if (fmtl->channels.c.bits && value.u32[i] != 0) \
+      return false
+
+   RETURN_FALSE_IF_NOT_0(r, 0);
+   RETURN_FALSE_IF_NOT_0(g, 1);
+   RETURN_FALSE_IF_NOT_0(b, 2);
+   RETURN_FALSE_IF_NOT_0(a, 3);
+
+#undef RETURN_FALSE_IF_NOT_0
+
+   return true;
+}
+
+bool
 isl_color_value_is_zero_one(union isl_color_value value,
                             enum isl_format format)
 {

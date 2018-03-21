@@ -525,6 +525,7 @@ static bool do_winsys_init(struct radeon_drm_winsys *ws)
 				     (ws->info.family == CHIP_HAWAII &&
 				      ws->accel_working2 < 3);
     ws->info.tcc_cache_line_size = 64; /* TC L2 line size on GCN */
+    ws->info.ib_start_alignment = 4096;
 
     ws->check_vm = strstr(debug_get_option("R600_DEBUG", ""), "check_vm") != NULL;
 

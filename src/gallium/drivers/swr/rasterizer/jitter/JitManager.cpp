@@ -47,7 +47,7 @@
 #define JITTER_OUTPUT_DIR SWR_OUTPUT_DIR "\\Jitter"
 #endif // _WIN32
 
-#if defined(__APPLE) || defined(FORCE_LINUX) || defined(__linux__) || defined(__gnu_linux__)
+#if defined(__APPLE__) || defined(FORCE_LINUX) || defined(__linux__) || defined(__gnu_linux__)
 #include <pwd.h>
 #include <sys/stat.h>
 #endif
@@ -584,7 +584,7 @@ static inline uint32_t ComputeModuleCRC(const llvm::Module* M)
 /// constructor
 JitCache::JitCache()
 {
-#if defined(__APPLE) || defined(FORCE_LINUX) || defined(__linux__) || defined(__gnu_linux__)
+#if defined(__APPLE__) || defined(FORCE_LINUX) || defined(__linux__) || defined(__gnu_linux__)
     if (strncmp(KNOB_JIT_CACHE_DIR.c_str(), "~/", 2) == 0) {
         char *homedir;
         if (!(homedir = getenv("HOME"))) {

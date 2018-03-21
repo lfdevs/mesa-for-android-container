@@ -87,6 +87,8 @@ get_isl_surf(struct brw_context *brw, struct intel_mipmap_tree *mt,
    const enum isl_dim_layout dim_layout =
       get_isl_dim_layout(devinfo, mt->surf.tiling, target);
 
+   surf->dim = get_isl_surf_dim(target);
+
    if (surf->dim_layout == dim_layout)
       return;
 
@@ -182,7 +184,7 @@ brw_emit_surface_state(struct brw_context *brw,
                                  brw->isl_dev.ss.align,
                                  surf_offset);
 
-   isl_surf_fill_state(&brw->isl_dev, state, .surf = &mt->surf, .view = &view,
+   isl_surf_fill_state(&brw->isl_dev, state, .surf = &surf, .view = &view,
                        .address = brw_state_reloc(&brw->batch,
                                                   *surf_offset + brw->isl_dev.ss.addr_offset,
                                                   mt->bo, offset, reloc_flags),

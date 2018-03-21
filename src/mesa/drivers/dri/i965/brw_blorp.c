@@ -424,12 +424,27 @@ brw_blorp_copy_miptrees(struct brw_context *brw,
    blorp_surf_for_miptree(brw, &dst_surf, dst_mt, dst_aux_usage, true,
                           &dst_level, dst_layer, 1, &tmp_surfs[1]);
 
+   /* The hardware seems to have issues with having a two different format
+    * views of the same texture in the sampler cache at the same time.  It's
+    * unclear exactly what the issue is but it hurts glCopyImageSubData
+    * particularly badly because it does a lot of format reinterprets.  We
+    * badly need better understanding of the issue and a better fix but this
+    * works for now and fixes CTS tests.
+    *
+    * TODO: Remove this hack!
+    */
+   brw_emit_pipe_control_flush(brw, PIPE_CONTROL_CS_STALL |
+                                    PIPE_CONTROL_TEXTURE_CACHE_INVALIDATE);
+
    struct blorp_batch batch;
    blorp_batch_init(&brw->blorp, &batch, brw, 0);
    blorp_copy(&batch, &src_surf, src_level, src_layer,
               &dst_surf, dst_level, dst_layer,
               src_x, src_y, dst_x, dst_y, src_width, src_height);
    blorp_batch_finish(&batch);
+
+   brw_emit_pipe_control_flush(brw, PIPE_CONTROL_CS_STALL |
+                                    PIPE_CONTROL_TEXTURE_CACHE_INVALIDATE);
 
    intel_miptree_finish_write(brw, dst_mt, dst_level, dst_layer, 1,
                               dst_aux_usage);

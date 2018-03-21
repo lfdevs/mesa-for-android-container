@@ -1399,7 +1399,7 @@ brw_store_data_imm64(struct brw_context *brw, struct brw_bo *bo,
    BEGIN_BATCH(5);
    OUT_BATCH(MI_STORE_DATA_IMM | (5 - 2));
    if (devinfo->gen >= 8)
-      OUT_RELOC64(bo, 0, offset);
+      OUT_RELOC64(bo, RELOC_WRITE, offset);
    else {
       OUT_BATCH(0); /* MBZ */
       OUT_RELOC(bo, RELOC_WRITE, offset);

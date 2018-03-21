@@ -142,6 +142,7 @@ enum value_extra {
    EXTRA_VERSION_31,
    EXTRA_VERSION_32,
    EXTRA_VERSION_40,
+   EXTRA_VERSION_43,
    EXTRA_API_GL,
    EXTRA_API_GL_CORE,
    EXTRA_API_ES2,
@@ -518,6 +519,7 @@ extra_NV_primitive_restart[] = {
 static const int extra_version_30[] = { EXTRA_VERSION_30, EXTRA_END };
 static const int extra_version_31[] = { EXTRA_VERSION_31, EXTRA_END };
 static const int extra_version_32[] = { EXTRA_VERSION_32, EXTRA_END };
+static const int extra_version_43[] = { EXTRA_VERSION_43, EXTRA_END };
 
 static const int extra_gl30_es3[] = {
     EXTRA_VERSION_30,
@@ -1080,6 +1082,10 @@ find_custom_value(struct gl_context *ctx, const struct value_desc *d, union valu
          v->value_int = 0;
       }
       break;
+   /* GL 4.3 */
+   case GL_NUM_SHADING_LANGUAGE_VERSIONS:
+      v->value_int = _mesa_get_shading_language_version(ctx, -1, NULL);
+      break;
    /* GL_ARB_draw_indirect */
    case GL_DRAW_INDIRECT_BUFFER_BINDING:
       v->value_int = ctx->DrawIndirectBuffer->Name;
@@ -1218,6 +1224,16 @@ check_extra(struct gl_context *ctx, const char *func, const struct value_desc *d
       case EXTRA_VERSION_32:
          api_check = GL_TRUE;
          if (version >= 32)
+            api_found = GL_TRUE;
+         break;
+      case EXTRA_VERSION_40:
+         api_check = GL_TRUE;
+         if (version >= 40)
+            api_found = GL_TRUE;
+         break;
+      case EXTRA_VERSION_43:
+         api_check = TRUE;
+         if (_mesa_is_desktop_gl(ctx) && version >= 43)
             api_found = GL_TRUE;
          break;
       case EXTRA_NEW_FRAG_CLAMP:

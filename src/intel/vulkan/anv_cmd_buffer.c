@@ -119,6 +119,7 @@ anv_cmd_state_init(struct anv_cmd_buffer *cmd_buffer)
 
    memset(state, 0, sizeof(*state));
 
+   state->current_pipeline = UINT32_MAX;
    state->restart_index = UINT32_MAX;
    state->gfx.dynamic = default_dynamic_state;
 }
@@ -292,7 +293,6 @@ VkResult
 anv_cmd_buffer_reset(struct anv_cmd_buffer *cmd_buffer)
 {
    cmd_buffer->usage_flags = 0;
-   cmd_buffer->state.current_pipeline = UINT32_MAX;
    anv_cmd_buffer_reset_batch_bo_chain(cmd_buffer);
    anv_cmd_state_reset(cmd_buffer);
 

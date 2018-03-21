@@ -1,5 +1,0 @@
-libwayland-egl.so.1 libwayland-egl1-mesa #MINVER# | libwayland-egl1
- wl_egl_window_create@Base 10.0.2
- wl_egl_window_destroy@Base 10.0.2
- wl_egl_window_get_attached_size@Base 10.0.2
- wl_egl_window_resize@Base 10.0.2

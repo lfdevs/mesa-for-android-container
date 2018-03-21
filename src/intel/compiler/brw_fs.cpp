@@ -4196,17 +4196,15 @@ lower_sampler_logical_send_gen7(const fs_builder &bld, fs_inst *inst, opcode op,
        op == SHADER_OPCODE_SAMPLEINFO ||
        is_high_sampler(devinfo, sampler)) {
       /* For general texture offsets (no txf workaround), we need a header to
-       * put them in.  Note that we're only reserving space for it in the
-       * message payload as it will be initialized implicitly by the
-       * generator.
+       * put them in.
        *
        * TG4 needs to place its channel select in the header, for interaction
        * with ARB_texture_swizzle.  The sampler index is only 4-bits, so for
        * larger sampler numbers we need to offset the Sampler State Pointer in
        * the header.
        */
+      fs_reg header = retype(sources[0], BRW_REGISTER_TYPE_UD);
       header_size = 1;
-      sources[0] = fs_reg();
       length++;
 
       /* If we're requesting fewer than four channels worth of response,
@@ -4217,6 +4215,40 @@ lower_sampler_logical_send_gen7(const fs_builder &bld, fs_inst *inst, opcode op,
          assert(regs_written(inst) % reg_width == 0);
          unsigned mask = ~((1 << (regs_written(inst) / reg_width)) - 1) & 0xf;
          inst->offset |= mask << 12;
+      }
+
+      /* Build the actual header */
+      const fs_builder ubld = bld.exec_all().group(8, 0);
+      const fs_builder ubld1 = ubld.group(1, 0);
+      ubld.MOV(header, retype(brw_vec8_grf(0, 0), BRW_REGISTER_TYPE_UD));
+      if (inst->offset) {
+         ubld1.MOV(component(header, 2), brw_imm_ud(inst->offset));
+      } else if (bld.shader->stage != MESA_SHADER_VERTEX &&
+                 bld.shader->stage != MESA_SHADER_FRAGMENT) {
+         /* The vertex and fragment stages have g0.2 set to 0, so
+          * header0.2 is 0 when g0 is copied. Other stages may not, so we
+          * must set it to 0 to avoid setting undesirable bits in the
+          * message.
+          */
+         ubld1.MOV(component(header, 2), brw_imm_ud(0));
+      }
+
+      if (is_high_sampler(devinfo, sampler)) {
+         if (sampler.file == BRW_IMMEDIATE_VALUE) {
+            assert(sampler.ud >= 16);
+            const int sampler_state_size = 16; /* 16 bytes */
+
+            ubld1.ADD(component(header, 3),
+                      retype(brw_vec1_grf(0, 3), BRW_REGISTER_TYPE_UD),
+                      brw_imm_ud(16 * (sampler.ud / 16) * sampler_state_size));
+         } else {
+            fs_reg tmp = ubld1.vgrf(BRW_REGISTER_TYPE_UD);
+            ubld1.AND(tmp, sampler, brw_imm_ud(0x0f0));
+            ubld1.SHL(tmp, tmp, brw_imm_ud(4));
+            ubld1.ADD(component(header, 3),
+                      retype(brw_vec1_grf(0, 3), BRW_REGISTER_TYPE_UD),
+                      tmp);
+         }
       }
    }
 
@@ -7005,7 +7037,7 @@ brw_compile_cs(const struct brw_compiler *compiler, void *log_data,
    fs_visitor *v8 = NULL, *v16 = NULL, *v32 = NULL;
    cfg_t *cfg = NULL;
    const char *fail_msg = NULL;
-   unsigned promoted_constants;
+   unsigned promoted_constants = 0;
 
    /* Now the main event: Visit the shader IR and generate our CS IR for it.
     */

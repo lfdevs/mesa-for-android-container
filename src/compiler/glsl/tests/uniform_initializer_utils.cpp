@@ -110,6 +110,9 @@ generate_data_element(void *mem_ctx, const glsl_type *type,
       case GLSL_TYPE_INTERFACE:
       case GLSL_TYPE_SUBROUTINE:
       case GLSL_TYPE_FUNCTION:
+      case GLSL_TYPE_FLOAT16:
+      case GLSL_TYPE_UINT16:
+      case GLSL_TYPE_INT16:
 	 ASSERT_TRUE(false);
 	 break;
       }
@@ -150,6 +153,9 @@ generate_data_element(void *mem_ctx, const glsl_type *type,
       case GLSL_TYPE_INTERFACE:
       case GLSL_TYPE_SUBROUTINE:
       case GLSL_TYPE_FUNCTION:
+      case GLSL_TYPE_FLOAT16:
+      case GLSL_TYPE_UINT16:
+      case GLSL_TYPE_INT16:
 	 ASSERT_TRUE(false);
 	 break;
       }
@@ -196,6 +202,22 @@ generate_array_data(void *mem_ctx, enum glsl_base_type base_type,
    }
 
    val = new(mem_ctx) ir_constant(array_type, &values_for_array);
+}
+
+static uint64_t
+uint64_storage(union gl_constant_value *storage)
+{
+   uint64_t val;
+   memcpy(&val, &storage->i, sizeof(uint64_t));
+   return val;
+}
+
+static uint64_t
+double_storage(union gl_constant_value *storage)
+{
+   double val;
+   memcpy(&val, &storage->i, sizeof(double));
+   return val;
 }
 
 /**
@@ -246,13 +268,13 @@ verify_data(gl_constant_value *storage, unsigned storage_array_size,
 	    EXPECT_EQ(val->value.b[i] ? boolean_true : 0, storage[i].i);
 	    break;
 	 case GLSL_TYPE_DOUBLE:
-	    EXPECT_EQ(val->value.d[i], *(double *)&storage[i*2].i);
+	    EXPECT_EQ(val->value.d[i], double_storage(&storage[i*2]));
 	    break;
 	 case GLSL_TYPE_UINT64:
-	    EXPECT_EQ(val->value.u64[i], *(uint64_t *)&storage[i*2].i);
+            EXPECT_EQ(val->value.u64[i], uint64_storage(&storage[i*2]));
 	    break;
 	 case GLSL_TYPE_INT64:
-	    EXPECT_EQ(val->value.i64[i], *(int64_t *)&storage[i*2].i);
+	    EXPECT_EQ(val->value.i64[i], uint64_storage(&storage[i*2]));
 	    break;
          case GLSL_TYPE_ATOMIC_UINT:
 	 case GLSL_TYPE_STRUCT:
@@ -262,6 +284,9 @@ verify_data(gl_constant_value *storage, unsigned storage_array_size,
 	 case GLSL_TYPE_INTERFACE:
 	 case GLSL_TYPE_SUBROUTINE:
          case GLSL_TYPE_FUNCTION:
+         case GLSL_TYPE_FLOAT16:
+         case GLSL_TYPE_UINT16:
+         case GLSL_TYPE_INT16:
 	    ASSERT_TRUE(false);
 	    break;
 	 }

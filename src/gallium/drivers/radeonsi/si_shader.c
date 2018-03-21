@@ -1451,19 +1451,18 @@ static void store_output_tcs(struct lp_build_tgsi_context *bld_base,
 }
 
 static void si_nir_store_output_tcs(struct ac_shader_abi *abi,
+				    const struct nir_variable *var,
 				    LLVMValueRef vertex_index,
 				    LLVMValueRef param_index,
 				    unsigned const_index,
-				    unsigned location,
-				    unsigned driver_location,
 				    LLVMValueRef src,
-				    unsigned component,
-				    bool is_patch,
-				    bool is_compact,
 				    unsigned writemask)
 {
 	struct si_shader_context *ctx = si_shader_context_from_abi(abi);
 	struct tgsi_shader_info *info = &ctx->shader->selector->info;
+	const unsigned component = var->data.location_frac;
+	const bool is_patch = var->data.patch;
+	unsigned driver_location = var->data.driver_location;
 	LLVMValueRef dw_addr, stride;
 	LLVMValueRef buffer, base, addr;
 	LLVMValueRef values[4];

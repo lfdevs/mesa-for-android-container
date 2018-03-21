@@ -1,3 +1,17 @@
+mesa (18.0.0~rc5-1) experimental; urgency=medium
+
+  [ Andreas Boll ]
+  * New upstream release candidate.
+
+  [ Fabio Pedretti ]
+  * rules: Rename --disable-gallium-llvm to --disable-llvm
+
+  [ Timo Aaltonen ]
+  * control, rules: Switch to llvm 6.0, bump libclc to match.
+  * Drop libwayland-egl-mesa, which is now provided by src:wayland.
+
+ -- Andreas Boll <andreas.boll.dev@gmail.com>  Wed, 21 Mar 2018 20:05:23 +0100
+
 mesa (18.0.0~rc4-1) experimental; urgency=medium
 
   * New upstream release candidate.
@@ -13,6 +27,33 @@ mesa (18.0.0~rc2-1) experimental; urgency=medium
   * rules: Fix hurd FTBFS, thanks Samuel Thibault! (Closes: #888047)
 
  -- Timo Aaltonen <tjaalton@debian.org>  Thu, 25 Jan 2018 13:42:14 +0200
+
+mesa (17.3.7-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Andreas Boll <andreas.boll.dev@gmail.com>  Wed, 21 Mar 2018 18:26:10 +0100
+
+mesa (17.3.6-1) unstable; urgency=medium
+
+  * New upstream release.
+    - Fixes GPU hangs in the i965 driver (Closes: #890866).
+
+ -- Andreas Boll <andreas.boll.dev@gmail.com>  Tue, 27 Feb 2018 09:41:37 +0100
+
+mesa (17.3.5-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Andreas Boll <andreas.boll.dev@gmail.com>  Tue, 20 Feb 2018 12:16:33 +0100
+
+mesa (17.3.4-1) unstable; urgency=medium
+
+  * New upstream release.
+    - winsys/radeon: Compute is_displayable in surf_drm_to_winsys
+    (Closes: #888633).
+
+ -- Andreas Boll <andreas.boll.dev@gmail.com>  Fri, 16 Feb 2018 11:56:39 +0100
 
 mesa (17.3.3-1) unstable; urgency=medium
 

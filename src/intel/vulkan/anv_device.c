@@ -312,11 +312,8 @@ anv_physical_device_init(struct anv_physical_device *device,
       intel_logw("Ivy Bridge Vulkan support is incomplete");
    } else if (device->info.gen == 7 && device->info.is_baytrail) {
       intel_logw("Bay Trail Vulkan support is incomplete");
-   } else if (device->info.gen >= 8 && device->info.gen <= 9) {
-      /* Broadwell, Cherryview, Skylake, Broxton, Kabylake, Coffelake is as
-       * fully supported as anything */
-   } else if (device->info.gen == 10) {
-      intel_logw("Cannonlake Vulkan support is alpha");
+   } else if (device->info.gen >= 8 && device->info.gen <= 10) {
+      /* Gen8-10 fully supported */
    } else {
       result = vk_errorf(device->instance, device,
                          VK_ERROR_INCOMPATIBLE_DRIVER,
@@ -1331,7 +1328,7 @@ VkResult anv_CreateDevice(
 
    assert(pCreateInfo->sType == VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO);
 
-   struct anv_device_extension_table enabled_extensions;
+   struct anv_device_extension_table enabled_extensions = { };
    for (uint32_t i = 0; i < pCreateInfo->enabledExtensionCount; i++) {
       int idx;
       for (idx = 0; idx < ANV_DEVICE_EXTENSION_COUNT; idx++) {

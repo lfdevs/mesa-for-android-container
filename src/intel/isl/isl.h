@@ -1668,6 +1668,9 @@ isl_extent4d(uint32_t width, uint32_t height, uint32_t depth,
    return e;
 }
 
+bool isl_color_value_is_zero(union isl_color_value value,
+                             enum isl_format format);
+
 bool isl_color_value_is_zero_one(union isl_color_value value,
                                  enum isl_format format);
 

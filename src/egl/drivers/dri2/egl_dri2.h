@@ -44,7 +44,7 @@
 
 #ifdef HAVE_WAYLAND_PLATFORM
 #include <wayland-client.h>
-#include "wayland-egl-backend.h"
+#include "wayland/wayland-egl/wayland-egl-backend.h"
 /* forward declarations of protocol elements */
 struct zwp_linux_dmabuf_v1;
 #endif

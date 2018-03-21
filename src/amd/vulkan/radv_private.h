@@ -86,7 +86,9 @@ typedef uint32_t xcb_window_t;
 #define MAX_DISCARD_RECTANGLES 4
 #define MAX_PUSH_CONSTANTS_SIZE 128
 #define MAX_PUSH_DESCRIPTORS 32
-#define MAX_DYNAMIC_BUFFERS 16
+#define MAX_DYNAMIC_UNIFORM_BUFFERS 16
+#define MAX_DYNAMIC_STORAGE_BUFFERS 8
+#define MAX_DYNAMIC_BUFFERS (MAX_DYNAMIC_UNIFORM_BUFFERS + MAX_DYNAMIC_STORAGE_BUFFERS)
 #define MAX_SAMPLES_LOG2 4
 #define NUM_META_FS_KEYS 13
 #define RADV_MAX_DRM_DEVICES 8
@@ -987,6 +989,11 @@ struct radv_cmd_buffer {
 	uint32_t gfx9_fence_offset;
 	struct radeon_winsys_bo *gfx9_fence_bo;
 	uint32_t gfx9_fence_idx;
+
+	/**
+	 * Whether a query pool has been resetted and we have to flush caches.
+	 */
+	bool pending_reset_query;
 };
 
 struct radv_image;

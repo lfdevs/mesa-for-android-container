@@ -8752,7 +8752,7 @@ evaluate_idiv(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
                const int8_t src1 =
                   _src[1].i8[_i];
 
-            int8_t dst = src0 / src1;
+            int8_t dst = src1 == 0 ? 0 : (src0 / src1);
 
             _dst_val.i8[_i] = dst;
       }
@@ -8770,7 +8770,7 @@ evaluate_idiv(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
                const int16_t src1 =
                   _src[1].i16[_i];
 
-            int16_t dst = src0 / src1;
+            int16_t dst = src1 == 0 ? 0 : (src0 / src1);
 
             _dst_val.i16[_i] = dst;
       }
@@ -8788,7 +8788,7 @@ evaluate_idiv(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
                const int32_t src1 =
                   _src[1].i32[_i];
 
-            int32_t dst = src0 / src1;
+            int32_t dst = src1 == 0 ? 0 : (src0 / src1);
 
             _dst_val.i32[_i] = dst;
       }
@@ -8806,7 +8806,7 @@ evaluate_idiv(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
                const int64_t src1 =
                   _src[1].i64[_i];
 
-            int64_t dst = src0 / src1;
+            int64_t dst = src1 == 0 ? 0 : (src0 / src1);
 
             _dst_val.i64[_i] = dst;
       }
@@ -11644,7 +11644,7 @@ evaluate_udiv(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
                const uint8_t src1 =
                   _src[1].u8[_i];
 
-            uint8_t dst = src0 / src1;
+            uint8_t dst = src1 == 0 ? 0 : (src0 / src1);
 
             _dst_val.u8[_i] = dst;
       }
@@ -11662,7 +11662,7 @@ evaluate_udiv(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
                const uint16_t src1 =
                   _src[1].u16[_i];
 
-            uint16_t dst = src0 / src1;
+            uint16_t dst = src1 == 0 ? 0 : (src0 / src1);
 
             _dst_val.u16[_i] = dst;
       }
@@ -11680,7 +11680,7 @@ evaluate_udiv(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
                const uint32_t src1 =
                   _src[1].u32[_i];
 
-            uint32_t dst = src0 / src1;
+            uint32_t dst = src1 == 0 ? 0 : (src0 / src1);
 
             _dst_val.u32[_i] = dst;
       }
@@ -11698,7 +11698,7 @@ evaluate_udiv(MAYBE_UNUSED unsigned num_components, unsigned bit_size,
                const uint64_t src1 =
                   _src[1].u64[_i];
 
-            uint64_t dst = src0 / src1;
+            uint64_t dst = src1 == 0 ? 0 : (src0 / src1);
 
             _dst_val.u64[_i] = dst;
       }
