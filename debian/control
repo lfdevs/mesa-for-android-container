@@ -2,7 +2,7 @@ Source: mesa
 Section: graphics
 Priority: optional
 Maintainer: Debian X Strike Force <debian-x@lists.debian.org>
-Uploaders: Andreas Boll <andreas.boll.dev@gmail.com>
+Uploaders: Andreas Boll <aboll@debian.org>
 Standards-Version: 4.1.3
 Build-Depends:
  debhelper (>= 10),
