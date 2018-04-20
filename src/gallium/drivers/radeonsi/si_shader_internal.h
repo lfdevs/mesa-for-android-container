@@ -43,12 +43,8 @@ struct ac_shader_binary;
 #define RADEON_LLVM_MAX_INPUTS 32 * 4
 #define RADEON_LLVM_MAX_OUTPUTS 32 * 4
 
-#define RADEON_LLVM_INITIAL_CF_DEPTH 4
-
 #define RADEON_LLVM_MAX_SYSTEM_VALUES 11
 #define RADEON_LLVM_MAX_ADDRS 16
-
-struct si_llvm_flow;
 
 struct si_shader_context {
 	struct lp_build_tgsi_context bld_base;
@@ -97,10 +93,6 @@ struct si_shader_context {
 
 	LLVMValueRef *imms;
 	unsigned imms_num;
-
-	struct si_llvm_flow *flow;
-	unsigned flow_depth;
-	unsigned flow_depth_max;
 
 	struct lp_build_if_state merged_wrap_if_state;
 

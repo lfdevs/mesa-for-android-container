@@ -159,6 +159,7 @@ public:
    void opt_set_dependency_control();
    void opt_schedule_instructions();
    void convert_to_hw_regs();
+   void fixup_3src_null_dest();
 
    bool is_supported_64bit_region(vec4_instruction *inst, unsigned arg);
    bool lower_simd_width();

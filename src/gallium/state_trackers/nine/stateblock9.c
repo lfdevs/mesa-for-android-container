@@ -454,7 +454,7 @@ nine_state_copy_common_all(struct NineDevice9 *device,
 
     /* Textures */
     if (1) {
-        for (i = 0; i < device->caps.MaxSimultaneousTextures; i++)
+        for (i = 0; i < NINE_MAX_SAMPLERS; i++)
             NineStateBlock9_BindTexture(device, apply, &dst->texture[i], src->texture[i]);
     }
 

@@ -89,7 +89,13 @@ static struct VADriverVTable vtable =
    &vlVaQuerySurfaceAttributes,
    &vlVaAcquireBufferHandle,
    &vlVaReleaseBufferHandle,
-#if 0
+#if VA_CHECK_VERSION(1, 1, 0)
+   NULL, /* vaCreateMFContext */
+   NULL, /* vaMFAddContext */
+   NULL, /* vaMFReleaseContext */
+   NULL, /* vaMFSubmit */
+   NULL, /* vaCreateBuffer2 */
+   NULL, /* vaQueryProcessingRate */
    &vlVaExportSurfaceHandle,
 #endif
 };

@@ -1,3 +1,16 @@
+mesa (18.0.1-1) experimental; urgency=medium
+
+  [ Timo Aaltonen ]
+  * New upstream release.
+
+  [ Andreas Boll ]
+  * Update Vcs-* URLs to point at salsa.debian.org (Closes: #896146).
+    Thanks, Stuart Young!
+  * Bump debhelper compat to 11.
+  * Bump standards version to 4.1.4.
+
+ -- Andreas Boll <aboll@debian.org>  Fri, 20 Apr 2018 13:29:30 +0200
+
 mesa (18.0.0-1) experimental; urgency=medium
 
   * New upstream release.
@@ -34,6 +47,18 @@ mesa (18.0.0~rc2-1) experimental; urgency=medium
   * rules: Fix hurd FTBFS, thanks Samuel Thibault! (Closes: #888047)
 
  -- Timo Aaltonen <tjaalton@debian.org>  Thu, 25 Jan 2018 13:42:14 +0200
+
+mesa (17.3.9-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Andreas Boll <aboll@debian.org>  Thu, 19 Apr 2018 11:18:35 +0200
+
+mesa (17.3.8-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Andreas Boll <aboll@debian.org>  Fri, 06 Apr 2018 10:24:44 +0200
 
 mesa (17.3.7-1) unstable; urgency=medium
 

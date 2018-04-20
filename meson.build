@@ -838,8 +838,8 @@ elif cc.has_header_symbol('sys/mkdev.h', 'major')
   pre_args += '-DMAJOR_IN_MKDEV'
 endif
 
-foreach h : ['xlocale.h', 'sys/sysctl.h', 'linux/futex.h']
-  if cc.has_header(h)
+foreach h : ['xlocale.h', 'sys/sysctl.h', 'linux/futex.h', 'endian.h']
+  if cc.compiles('#include <@0@>'.format(h), name : '@0@ works'.format(h))
     pre_args += '-DHAVE_@0@'.format(h.to_upper().underscorify())
   endif
 endforeach
@@ -1027,7 +1027,7 @@ if with_llvm
     _llvm_patch = _llvm_patch.split('g')[0]
   endif
   pre_args += [
-    '-DHAVE_LLVM=0x0@0@@1@@2@'.format(_llvm_version[0], _llvm_version[1], _llvm_patch),
+    '-DHAVE_LLVM=0x0@0@0@1@'.format(_llvm_version[0], _llvm_version[1]),
     '-DMESA_LLVM_VERSION_PATCH=@0@'.format(_llvm_patch),
   ]
 elif with_amd_vk or with_gallium_radeonsi or with_gallium_swr

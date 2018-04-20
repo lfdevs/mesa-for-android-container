@@ -386,8 +386,6 @@ gbm_surface_create_with_modifiers(struct gbm_device *gbm,
                                   uint32_t format,
                                   const uint64_t *modifiers,
                                   const unsigned int count);
-int
-gbm_surface_needs_lock_front_buffer(struct gbm_surface *surface);
 
 struct gbm_bo *
 gbm_surface_lock_front_buffer(struct gbm_surface *surface);

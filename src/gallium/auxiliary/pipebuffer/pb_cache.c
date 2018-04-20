@@ -167,7 +167,7 @@ pb_cache_reclaim_buffer(struct pb_cache *mgr, pb_size size,
       cur_entry = LIST_ENTRY(struct pb_cache_entry, cur, head);
 
       if (!entry && (ret = pb_cache_is_buffer_compat(cur_entry, size,
-                                                     alignment, usage) > 0))
+                                                     alignment, usage)) > 0)
          entry = cur_entry;
       else if (os_time_timeout(cur_entry->start, cur_entry->end, now))
          destroy_buffer_locked(cur_entry);

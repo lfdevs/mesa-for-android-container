@@ -923,7 +923,7 @@ vlVaQueryVideoProcPipelineCaps(VADriverContextP ctx, VAContextID context,
    return VA_STATUS_SUCCESS;
 }
 
-#if 0
+#if VA_CHECK_VERSION(1, 1, 0)
 VAStatus
 vlVaExportSurfaceHandle(VADriverContextP ctx,
                         VASurfaceID surface_id,

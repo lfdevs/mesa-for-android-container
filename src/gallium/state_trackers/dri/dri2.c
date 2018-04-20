@@ -770,6 +770,7 @@ dri2_allocate_textures(struct dri_context *ctx,
          whandle.handle = buf->name;
          whandle.stride = buf->pitch;
          whandle.offset = 0;
+         whandle.modifier = DRM_FORMAT_MOD_INVALID;
          if (screen->can_share_buffer)
             whandle.type = DRM_API_HANDLE_TYPE_SHARED;
          else

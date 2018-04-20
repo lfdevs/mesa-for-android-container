@@ -73,6 +73,16 @@ setup_slices(struct fd_resource *rsc, uint32_t alignment, enum pipe_format forma
 			aligned_height = align(aligned_height, heightalign);
 		} else {
 			pitchalign = 64;
+
+			/* The blits used for mem<->gmem work at a granularity of
+			 * 32x32, which can cause faults due to over-fetch on the
+			 * last level.  The simple solution is to over-allocate a
+			 * bit the last level to ensure any over-fetch is harmless.
+			 * The pitch is already sufficiently aligned, but height
+			 * may not be:
+			 */
+			if ((level == prsc->last_level) && (prsc->target != PIPE_BUFFER))
+				aligned_height = align(aligned_height, 32);
 		}
 
 		if (layout == UTIL_FORMAT_LAYOUT_ASTC)

@@ -1,6 +1,6 @@
-#line 1 "program/lex.yy.c"
+#line 2 "program/lex.yy.c"
 
-#line 3 "program/lex.yy.c"
+#line 4 "program/lex.yy.c"
 
 #define  YY_INT_ALIGNED short int
 
@@ -1253,8 +1253,8 @@ static keyword. Declare them here to avoid a compiler warning. */
 int yyget_column  (yyscan_t yyscanner);
 void yyset_column (int  column_no , yyscan_t yyscanner);
 
-#line 1256 "program/lex.yy.c"
 #line 1257 "program/lex.yy.c"
+#line 1258 "program/lex.yy.c"
 
 #define INITIAL 0
 
@@ -1541,7 +1541,7 @@ YY_DECL
 #line 167 "./program/program_lexer.l"
 
 
-#line 1544 "program/lex.yy.c"
+#line 1545 "program/lex.yy.c"
 
 	while ( /*CONSTCOND*/1 )		/* loops until end-of-file is reached */
 		{
@@ -2476,7 +2476,7 @@ YY_RULE_SETUP
 #line 470 "./program/program_lexer.l"
 ECHO;
 	YY_BREAK
-#line 2479 "program/lex.yy.c"
+#line 2480 "program/lex.yy.c"
 case YY_STATE_EOF(INITIAL):
 	yyterminate();
 

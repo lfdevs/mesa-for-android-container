@@ -458,19 +458,21 @@ static void config_extension(struct rvce_encoder *enc)
 	RVCE_END();
 }
 
-static void destroy(struct rvce_encoder *enc)
-{
-	enc->task_info(enc, 0x00000001, 0, 0, 0);
-
-	RVCE_BEGIN(0x02000001); // destroy
-	RVCE_END();
-}
-
 static void feedback(struct rvce_encoder *enc)
 {
 	RVCE_BEGIN(0x05000005); // feedback buffer
 	RVCE_WRITE(enc->fb->res->buf, enc->fb->res->domains, 0x0); // feedbackRingAddressHi/Lo
 	RVCE_CS(enc->enc_pic.fb.feedback_ring_size);
+	RVCE_END();
+}
+
+static void destroy(struct rvce_encoder *enc)
+{
+	enc->task_info(enc, 0x00000001, 0, 0, 0);
+
+	feedback(enc);
+
+	RVCE_BEGIN(0x02000001); // destroy
 	RVCE_END();
 }
 

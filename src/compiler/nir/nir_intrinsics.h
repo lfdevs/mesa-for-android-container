@@ -445,7 +445,7 @@ LOAD(ssbo, 2, 0, xx, xx, xx, NIR_INTRINSIC_CAN_ELIMINATE)
 /* src[] = { offset }. const_index[] = { base, component } */
 LOAD(output, 1, 2, BASE, COMPONENT, xx, NIR_INTRINSIC_CAN_ELIMINATE)
 /* src[] = { vertex, offset }. const_index[] = { base, component } */
-LOAD(per_vertex_output, 2, 1, BASE, COMPONENT, xx, NIR_INTRINSIC_CAN_ELIMINATE)
+LOAD(per_vertex_output, 2, 2, BASE, COMPONENT, xx, NIR_INTRINSIC_CAN_ELIMINATE)
 /* src[] = { offset }. const_index[] = { base } */
 LOAD(shared, 1, 1, BASE, xx, xx, NIR_INTRINSIC_CAN_ELIMINATE)
 /* src[] = { offset }. const_index[] = { base, range } */

@@ -41,14 +41,6 @@
 #include <llvm-c/Transforms/IPO.h>
 #include <llvm-c/Transforms/Scalar.h>
 
-/* Data for if/else/endif and bgnloop/endloop control flow structures.
- */
-struct si_llvm_flow {
-	/* Loop exit or next part of if/else/endif. */
-	LLVMBasicBlockRef next_block;
-	LLVMBasicBlockRef loop_entry_block;
-};
-
 enum si_llvm_calling_convention {
 	RADEON_LLVM_AMDGPU_VS = 87,
 	RADEON_LLVM_AMDGPU_GS = 88,
@@ -222,45 +214,6 @@ LLVMValueRef si_llvm_bound_index(struct si_shader_context *ctx,
 	}
 
 	return index;
-}
-
-static struct si_llvm_flow *
-get_current_flow(struct si_shader_context *ctx)
-{
-	if (ctx->flow_depth > 0)
-		return &ctx->flow[ctx->flow_depth - 1];
-	return NULL;
-}
-
-static struct si_llvm_flow *
-get_innermost_loop(struct si_shader_context *ctx)
-{
-	for (unsigned i = ctx->flow_depth; i > 0; --i) {
-		if (ctx->flow[i - 1].loop_entry_block)
-			return &ctx->flow[i - 1];
-	}
-	return NULL;
-}
-
-static struct si_llvm_flow *
-push_flow(struct si_shader_context *ctx)
-{
-	struct si_llvm_flow *flow;
-
-	if (ctx->flow_depth >= ctx->flow_depth_max) {
-		unsigned new_max = MAX2(ctx->flow_depth << 1, RADEON_LLVM_INITIAL_CF_DEPTH);
-		ctx->flow = REALLOC(ctx->flow,
-				    ctx->flow_depth_max * sizeof(*ctx->flow),
-				    new_max * sizeof(*ctx->flow));
-		ctx->flow_depth_max = new_max;
-	}
-
-	flow = &ctx->flow[ctx->flow_depth];
-	ctx->flow_depth++;
-
-	flow->next_block = NULL;
-	flow->loop_entry_block = NULL;
-	return flow;
 }
 
 static LLVMValueRef emit_swizzle(struct lp_build_tgsi_context *bld_base,
@@ -954,42 +907,13 @@ void si_llvm_emit_store(struct lp_build_tgsi_context *bld_base,
 	}
 }
 
-static void set_basicblock_name(LLVMBasicBlockRef bb, const char *base, int pc)
+static int get_line(int pc)
 {
-	char buf[32];
 	/* Subtract 1 so that the number shown is that of the corresponding
 	 * opcode in the TGSI dump, e.g. an if block has the same suffix as
 	 * the instruction number of the corresponding TGSI IF.
 	 */
-	snprintf(buf, sizeof(buf), "%s%d", base, pc - 1);
-	LLVMSetValueName(LLVMBasicBlockAsValue(bb), buf);
-}
-
-/* Append a basic block at the level of the parent flow.
- */
-static LLVMBasicBlockRef append_basic_block(struct si_shader_context *ctx,
-					    const char *name)
-{
-	assert(ctx->flow_depth >= 1);
-
-	if (ctx->flow_depth >= 2) {
-		struct si_llvm_flow *flow = &ctx->flow[ctx->flow_depth - 2];
-
-		return LLVMInsertBasicBlockInContext(ctx->ac.context,
-						     flow->next_block, name);
-	}
-
-	return LLVMAppendBasicBlockInContext(ctx->ac.context, ctx->main_fn, name);
-}
-
-/* Emit a branch to the given default target for the current block if
- * applicable -- that is, if the current block does not already contain a
- * branch from a break or continue.
- */
-static void emit_default_branch(LLVMBuilderRef builder, LLVMBasicBlockRef target)
-{
-	if (!LLVMGetBasicBlockTerminator(LLVMGetInsertBlock(builder)))
-		 LLVMBuildBr(builder, target);
+	return pc - 1;
 }
 
 static void bgnloop_emit(const struct lp_build_tgsi_action *action,
@@ -997,12 +921,7 @@ static void bgnloop_emit(const struct lp_build_tgsi_action *action,
 			 struct lp_build_emit_data *emit_data)
 {
 	struct si_shader_context *ctx = si_shader_context(bld_base);
-	struct si_llvm_flow *flow = push_flow(ctx);
-	flow->loop_entry_block = append_basic_block(ctx, "LOOP");
-	flow->next_block = append_basic_block(ctx, "ENDLOOP");
-	set_basicblock_name(flow->loop_entry_block, "loop", bld_base->pc);
-	LLVMBuildBr(ctx->ac.builder, flow->loop_entry_block);
-	LLVMPositionBuilderAtEnd(ctx->ac.builder, flow->loop_entry_block);
+	ac_build_bgnloop(&ctx->ac, get_line(bld_base->pc));
 }
 
 static void brk_emit(const struct lp_build_tgsi_action *action,
@@ -1010,9 +929,7 @@ static void brk_emit(const struct lp_build_tgsi_action *action,
 		     struct lp_build_emit_data *emit_data)
 {
 	struct si_shader_context *ctx = si_shader_context(bld_base);
-	struct si_llvm_flow *flow = get_innermost_loop(ctx);
-
-	LLVMBuildBr(ctx->ac.builder, flow->next_block);
+	ac_build_break(&ctx->ac);
 }
 
 static void cont_emit(const struct lp_build_tgsi_action *action,
@@ -1020,9 +937,7 @@ static void cont_emit(const struct lp_build_tgsi_action *action,
 		      struct lp_build_emit_data *emit_data)
 {
 	struct si_shader_context *ctx = si_shader_context(bld_base);
-	struct si_llvm_flow *flow = get_innermost_loop(ctx);
-
-	LLVMBuildBr(ctx->ac.builder, flow->loop_entry_block);
+	ac_build_continue(&ctx->ac);
 }
 
 static void else_emit(const struct lp_build_tgsi_action *action,
@@ -1030,18 +945,7 @@ static void else_emit(const struct lp_build_tgsi_action *action,
 		      struct lp_build_emit_data *emit_data)
 {
 	struct si_shader_context *ctx = si_shader_context(bld_base);
-	struct si_llvm_flow *current_branch = get_current_flow(ctx);
-	LLVMBasicBlockRef endif_block;
-
-	assert(!current_branch->loop_entry_block);
-
-	endif_block = append_basic_block(ctx, "ENDIF");
-	emit_default_branch(ctx->ac.builder, endif_block);
-
-	LLVMPositionBuilderAtEnd(ctx->ac.builder, current_branch->next_block);
-	set_basicblock_name(current_branch->next_block, "else", bld_base->pc);
-
-	current_branch->next_block = endif_block;
+	ac_build_else(&ctx->ac, get_line(bld_base->pc));
 }
 
 static void endif_emit(const struct lp_build_tgsi_action *action,
@@ -1049,15 +953,7 @@ static void endif_emit(const struct lp_build_tgsi_action *action,
 		       struct lp_build_emit_data *emit_data)
 {
 	struct si_shader_context *ctx = si_shader_context(bld_base);
-	struct si_llvm_flow *current_branch = get_current_flow(ctx);
-
-	assert(!current_branch->loop_entry_block);
-
-	emit_default_branch(ctx->ac.builder, current_branch->next_block);
-	LLVMPositionBuilderAtEnd(ctx->ac.builder, current_branch->next_block);
-	set_basicblock_name(current_branch->next_block, "endif", bld_base->pc);
-
-	ctx->flow_depth--;
+	ac_build_endif(&ctx->ac, get_line(bld_base->pc));
 }
 
 static void endloop_emit(const struct lp_build_tgsi_action *action,
@@ -1065,31 +961,7 @@ static void endloop_emit(const struct lp_build_tgsi_action *action,
 			 struct lp_build_emit_data *emit_data)
 {
 	struct si_shader_context *ctx = si_shader_context(bld_base);
-	struct si_llvm_flow *current_loop = get_current_flow(ctx);
-
-	assert(current_loop->loop_entry_block);
-
-	emit_default_branch(ctx->ac.builder, current_loop->loop_entry_block);
-
-	LLVMPositionBuilderAtEnd(ctx->ac.builder, current_loop->next_block);
-	set_basicblock_name(current_loop->next_block, "endloop", bld_base->pc);
-	ctx->flow_depth--;
-}
-
-static void if_cond_emit(const struct lp_build_tgsi_action *action,
-			 struct lp_build_tgsi_context *bld_base,
-			 struct lp_build_emit_data *emit_data,
-			 LLVMValueRef cond)
-{
-	struct si_shader_context *ctx = si_shader_context(bld_base);
-	struct si_llvm_flow *flow = push_flow(ctx);
-	LLVMBasicBlockRef if_block;
-
-	if_block = append_basic_block(ctx, "IF");
-	flow->next_block = append_basic_block(ctx, "ELSE");
-	set_basicblock_name(if_block, "if", bld_base->pc);
-	LLVMBuildCondBr(ctx->ac.builder, cond, if_block, flow->next_block);
-	LLVMPositionBuilderAtEnd(ctx->ac.builder, if_block);
+	ac_build_endloop(&ctx->ac, get_line(bld_base->pc));
 }
 
 static void if_emit(const struct lp_build_tgsi_action *action,
@@ -1097,13 +969,7 @@ static void if_emit(const struct lp_build_tgsi_action *action,
 		    struct lp_build_emit_data *emit_data)
 {
 	struct si_shader_context *ctx = si_shader_context(bld_base);
-	LLVMValueRef cond;
-
-	cond = LLVMBuildFCmp(ctx->ac.builder, LLVMRealUNE,
-			emit_data->args[0],
-			ctx->ac.f32_0, "");
-
-	if_cond_emit(action, bld_base, emit_data, cond);
+	ac_build_if(&ctx->ac, emit_data->args[0], get_line(bld_base->pc));
 }
 
 static void uif_emit(const struct lp_build_tgsi_action *action,
@@ -1111,12 +977,7 @@ static void uif_emit(const struct lp_build_tgsi_action *action,
 		     struct lp_build_emit_data *emit_data)
 {
 	struct si_shader_context *ctx = si_shader_context(bld_base);
-	LLVMValueRef cond;
-
-	cond = LLVMBuildICmp(ctx->ac.builder, LLVMIntNE,
-	        ac_to_integer(&ctx->ac, emit_data->args[0]), ctx->i32_0, "");
-
-	if_cond_emit(action, bld_base, emit_data, cond);
+	ac_build_uif(&ctx->ac, emit_data->args[0], get_line(bld_base->pc));
 }
 
 static void emit_immediate(struct lp_build_tgsi_context *bld_base,
@@ -1413,7 +1274,5 @@ void si_llvm_dispose(struct si_shader_context *ctx)
 	FREE(ctx->imms);
 	ctx->imms = NULL;
 	ctx->imms_num = 0;
-	FREE(ctx->flow);
-	ctx->flow = NULL;
-	ctx->flow_depth_max = 0;
+	ac_llvm_context_dispose(&ctx->ac);
 }

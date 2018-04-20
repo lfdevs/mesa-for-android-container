@@ -247,7 +247,6 @@ static void rvce_destroy(struct pipe_video_codec *encoder)
 		enc->fb = &fb;
 		enc->session(enc);
 		enc->destroy(enc);
-		enc->feedback(enc);
 		flush(enc);
 		si_vid_destroy_buffer(&fb);
 	}

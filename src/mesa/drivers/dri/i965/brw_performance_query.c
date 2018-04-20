@@ -1896,7 +1896,7 @@ init_oa_configs(struct brw_context *brw, const char *sysfs_dev_dir)
          continue;
       }
 
-      register_oa_config(brw, query, config_id);
+      register_oa_config(brw, query, ret);
    }
 }
 

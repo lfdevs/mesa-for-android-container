@@ -1325,13 +1325,15 @@ anv_pipeline_init(struct anv_pipeline *pipeline,
    }
 
    if (modules[MESA_SHADER_TESS_EVAL]) {
-      anv_pipeline_compile_tcs_tes(pipeline, cache, pCreateInfo,
-                                   modules[MESA_SHADER_TESS_CTRL],
-                                   pStages[MESA_SHADER_TESS_CTRL]->pName,
-                                   pStages[MESA_SHADER_TESS_CTRL]->pSpecializationInfo,
-                                   modules[MESA_SHADER_TESS_EVAL],
-                                   pStages[MESA_SHADER_TESS_EVAL]->pName,
-                                   pStages[MESA_SHADER_TESS_EVAL]->pSpecializationInfo);
+      result = anv_pipeline_compile_tcs_tes(pipeline, cache, pCreateInfo,
+                                            modules[MESA_SHADER_TESS_CTRL],
+                                            pStages[MESA_SHADER_TESS_CTRL]->pName,
+                                            pStages[MESA_SHADER_TESS_CTRL]->pSpecializationInfo,
+                                            modules[MESA_SHADER_TESS_EVAL],
+                                            pStages[MESA_SHADER_TESS_EVAL]->pName,
+                                            pStages[MESA_SHADER_TESS_EVAL]->pSpecializationInfo);
+      if (result != VK_SUCCESS)
+         goto compile_fail;
    }
 
    if (modules[MESA_SHADER_GEOMETRY]) {

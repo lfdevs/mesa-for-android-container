@@ -384,10 +384,16 @@ intel_image_format_lookup(int fourcc)
    return NULL;
 }
 
-static boolean intel_lookup_fourcc(int dri_format, int *fourcc)
+static boolean
+intel_image_get_fourcc(__DRIimage *image, int *fourcc)
 {
+   if (image->planar_format) {
+      *fourcc = image->planar_format->fourcc;
+      return true;
+   }
+
    for (unsigned i = 0; i < ARRAY_SIZE(intel_image_formats); i++) {
-      if (intel_image_formats[i].planes[0].dri_format == dri_format) {
+      if (intel_image_formats[i].planes[0].dri_format == image->dri_format) {
          *fourcc = intel_image_formats[i].fourcc;
          return true;
       }
@@ -574,6 +580,7 @@ intel_create_image_from_texture(__DRIcontext *context, int target,
    intel_setup_image_from_mipmap_tree(brw, image, iobj->mt, level, zoffset);
    image->dri_format = driGLFormatToImageFormat(image->format);
    image->has_depthstencil = iobj->mt->stencil_mt? true : false;
+   image->planar_format = iobj->planar_format;
    if (image->dri_format == MESA_FORMAT_NONE) {
       *error = __DRI_IMAGE_ERROR_BAD_PARAMETER;
       free(image);
@@ -865,7 +872,7 @@ intel_query_image(__DRIimage *image, int attrib, int *value)
    case __DRI_IMAGE_ATTRIB_FD:
       return !brw_bo_gem_export_to_prime(image->bo, value);
    case __DRI_IMAGE_ATTRIB_FOURCC:
-      return intel_lookup_fourcc(image->dri_format, value);
+      return intel_image_get_fourcc(image, value);
    case __DRI_IMAGE_ATTRIB_NUM_PLANES:
       if (isl_drm_modifier_has_aux(image->modifier)) {
          assert(!image->planar_format || image->planar_format->nplanes == 1);

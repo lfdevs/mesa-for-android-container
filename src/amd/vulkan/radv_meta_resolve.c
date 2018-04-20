@@ -621,7 +621,7 @@ radv_cmd_buffer_resolve_subpass(struct radv_cmd_buffer *cmd_buffer)
 		struct radv_image *dst_img = cmd_buffer->state.framebuffer->attachments[dest_att.attachment].attachment->image;
 		struct radv_image *src_img = cmd_buffer->state.framebuffer->attachments[src_att.attachment].attachment->image;
 
-		radv_pick_resolve_method_images(dst_img, src_img, dest_att.layout, cmd_buffer, &resolve_method);
+		radv_pick_resolve_method_images(src_img, dst_img, dest_att.layout, cmd_buffer, &resolve_method);
 		if (resolve_method == RESOLVE_FRAGMENT) {
 			break;
 		}

@@ -421,6 +421,8 @@ static void destroy(struct rvce_encoder *enc)
 {
 	enc->task_info(enc, 0x00000001, 0, 0, 0);
 
+	feedback(enc);
+
 	RVCE_BEGIN(0x02000001); // destroy
 	RVCE_END();
 }

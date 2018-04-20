@@ -30,6 +30,7 @@ if with_ld_version_script
   xa_link_depends += files('xa.sym')
 endif
 
+_xa_version = '.'.join(xa_version)
 
 libxatracker = shared_library(
   'xatracker',
@@ -49,12 +50,13 @@ libxatracker = shared_library(
   dependencies : [
     dep_thread, driver_nouveau, driver_i915, driver_svga, driver_freedreno,
   ],
+  version : _xa_version,
   install : true,
 )
 
 pkg.generate(
   name : 'xatracker',
   description : 'Xorg gallium3D acceleration library',
-  version : '.'.join(xa_version),
+  version : _xa_version,
   libraries : libxatracker,
 )

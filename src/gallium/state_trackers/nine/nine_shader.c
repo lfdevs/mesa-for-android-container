@@ -1079,7 +1079,7 @@ tx_src_param(struct shader_translator *tx, const struct sm1_src_param *param)
         case D3DSMO_FACE:
            if (ureg_src_is_undef(tx->regs.vFace)) {
                if (tx->face_is_sysval_integer) {
-                   tmp = tx_scratch(tx);
+                   tmp = ureg_DECL_temporary(ureg);
                    tx->regs.vFace =
                        ureg_DECL_system_value(ureg, TGSI_SEMANTIC_FACE, 0);
 
