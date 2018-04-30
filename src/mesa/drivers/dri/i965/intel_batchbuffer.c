@@ -339,8 +339,11 @@ grow_buffer(struct brw_context *brw,
       /* We can't safely use realloc, as it may move the existing buffer,
        * breaking existing pointers the caller may still be using.  Just
        * malloc a new copy and memcpy it like the normal BO path.
+       *
+       * Use bo->size rather than new_size because the bufmgr may have
+       * rounded up the size, and we want the shadow size to match.
        */
-      grow->map = malloc(new_size);
+      grow->map = malloc(new_bo->size);
    } else {
       grow->map = brw_bo_map(brw, new_bo, MAP_READ | MAP_WRITE);
    }

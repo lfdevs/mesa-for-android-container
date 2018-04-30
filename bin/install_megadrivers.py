@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # encoding=utf-8
-# Copyright © 2017 Intel Corporation
+# Copyright © 2017-2018 Intel Corporation
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -35,7 +35,11 @@ def main():
     parser.add_argument('drivers', nargs='+')
     args = parser.parse_args()
 
-    to = os.path.join(os.environ.get('MESON_INSTALL_DESTDIR_PREFIX'), args.libdir)
+    if os.path.isabs(args.libdir):
+        to = os.path.join(os.environ.get('DESTDIR', '/'), args.libdir[1:])
+    else:
+        to = os.path.join(os.environ['MESON_INSTALL_DESTDIR_PREFIX'], args.libdir)
+
     master = os.path.join(to, os.path.basename(args.megadriver))
 
     if not os.path.exists(to):

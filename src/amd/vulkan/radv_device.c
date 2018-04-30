@@ -141,7 +141,7 @@ radv_physical_device_init_mem_types(struct radv_physical_device *device)
 		gart_index = device->memory_properties.memoryHeapCount++;
 		device->memory_properties.memoryHeaps[gart_index] = (VkMemoryHeap) {
 			.size = device->rad_info.gart_size,
-			.flags = 0,
+			.flags = device->rad_info.has_dedicated_vram ? 0 : VK_MEMORY_HEAP_DEVICE_LOCAL_BIT,
 		};
 	}
 
@@ -158,7 +158,8 @@ radv_physical_device_init_mem_types(struct radv_physical_device *device)
 		device->mem_type_indices[type_count] = RADV_MEM_TYPE_GTT_WRITE_COMBINE;
 		device->memory_properties.memoryTypes[type_count++] = (VkMemoryType) {
 			.propertyFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-			VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+			VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
+			(device->rad_info.has_dedicated_vram ? 0 : VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
 			.heapIndex = gart_index,
 		};
 	}
@@ -176,7 +177,8 @@ radv_physical_device_init_mem_types(struct radv_physical_device *device)
 		device->memory_properties.memoryTypes[type_count++] = (VkMemoryType) {
 			.propertyFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
 			VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
-			VK_MEMORY_PROPERTY_HOST_CACHED_BIT,
+			VK_MEMORY_PROPERTY_HOST_CACHED_BIT |
+			(device->rad_info.has_dedicated_vram ? 0 : VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
 			.heapIndex = gart_index,
 		};
 	}

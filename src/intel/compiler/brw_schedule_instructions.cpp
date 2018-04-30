@@ -1267,6 +1267,9 @@ vec4_instruction_scheduler::calculate_deps()
          }
       }
 
+      if (inst->reads_g0_implicitly())
+         add_dep(last_fixed_grf_write, n);
+
       if (!inst->is_send_from_grf()) {
          for (int i = 0; i < inst->mlen; i++) {
             /* It looks like the MRF regs are released in the send

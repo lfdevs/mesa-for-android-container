@@ -302,7 +302,7 @@ texture_format_needs_swiz(enum pipe_format fmt)
    bool swiz = false;
 
    if (formats[fmt].present)
-      swiz = !memcmp(def, formats[fmt].tex_swiz, sizeof(formats[fmt].tex_swiz));
+      swiz = !!memcmp(def, formats[fmt].tex_swiz, sizeof(formats[fmt].tex_swiz));
 
    return swiz;
 }

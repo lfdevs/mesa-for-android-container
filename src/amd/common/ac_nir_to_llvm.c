@@ -3617,6 +3617,25 @@ static LLVMValueRef get_image_coords(struct ac_nir_context *ctx,
 	return res;
 }
 
+static LLVMValueRef get_image_buffer_descriptor(struct ac_nir_context *ctx,
+                                                const nir_intrinsic_instr *instr, bool write)
+{
+	LLVMValueRef rsrc = get_sampler_desc(ctx, instr->variables[0], AC_DESC_BUFFER, NULL, true, write);
+	if (ctx->abi->gfx9_stride_size_workaround) {
+		LLVMValueRef elem_count = LLVMBuildExtractElement(ctx->ac.builder, rsrc, LLVMConstInt(ctx->ac.i32, 2, 0), "");
+		LLVMValueRef stride = LLVMBuildExtractElement(ctx->ac.builder, rsrc, LLVMConstInt(ctx->ac.i32, 1, 0), "");
+		stride = LLVMBuildLShr(ctx->ac.builder, stride, LLVMConstInt(ctx->ac.i32, 16, 0), "");
+
+		LLVMValueRef new_elem_count = LLVMBuildSelect(ctx->ac.builder,
+		                                              LLVMBuildICmp(ctx->ac.builder, LLVMIntUGT, elem_count, stride, ""),
+		                                              elem_count, stride, "");
+
+		rsrc = LLVMBuildInsertElement(ctx->ac.builder, rsrc, new_elem_count,
+		                              LLVMConstInt(ctx->ac.i32, 2, 0), "");
+	}
+	return rsrc;
+}
+
 static LLVMValueRef visit_image_load(struct ac_nir_context *ctx,
 				     const nir_intrinsic_instr *instr)
 {
@@ -3631,7 +3650,7 @@ static LLVMValueRef visit_image_load(struct ac_nir_context *ctx,
 
 	type = glsl_without_array(type);
 	if (glsl_get_sampler_dim(type) == GLSL_SAMPLER_DIM_BUF) {
-		params[0] = get_sampler_desc(ctx, instr->variables[0], AC_DESC_BUFFER, NULL, true, false);
+		params[0] = get_image_buffer_descriptor(ctx, instr, false);
 		params[1] = LLVMBuildExtractElement(ctx->ac.builder, get_src(ctx, instr->src[0]),
 						    ctx->ac.i32_0, ""); /* vindex */
 		params[2] = ctx->ac.i32_0; /* voffset */
@@ -3693,20 +3712,7 @@ static void visit_image_store(struct ac_nir_context *ctx,
 		glc = ctx->ac.i1true;
 
 	if (glsl_get_sampler_dim(type) == GLSL_SAMPLER_DIM_BUF) {
-		LLVMValueRef rsrc = get_sampler_desc(ctx, instr->variables[0], AC_DESC_BUFFER, NULL, true, true);
-
-		if (ctx->abi->gfx9_stride_size_workaround) {
-			LLVMValueRef elem_count = LLVMBuildExtractElement(ctx->ac.builder, rsrc, LLVMConstInt(ctx->ac.i32, 2, 0), "");
-			LLVMValueRef stride = LLVMBuildExtractElement(ctx->ac.builder, rsrc, LLVMConstInt(ctx->ac.i32, 1, 0), "");
-			stride = LLVMBuildLShr(ctx->ac.builder, stride, LLVMConstInt(ctx->ac.i32, 16, 0), "");
-
-			LLVMValueRef new_elem_count = LLVMBuildSelect(ctx->ac.builder,
-			                                              LLVMBuildICmp(ctx->ac.builder, LLVMIntUGT, elem_count, stride, ""),
-			                                              elem_count, stride, "");
-
-			rsrc = LLVMBuildInsertElement(ctx->ac.builder, rsrc, new_elem_count,
-			                              LLVMConstInt(ctx->ac.i32, 2, 0), "");
-		}
+		LLVMValueRef rsrc = get_image_buffer_descriptor(ctx, instr, true);
 
 		params[0] = ac_to_float(&ctx->ac, get_src(ctx, instr->src[2])); /* data */
 		params[1] = rsrc;
@@ -3801,8 +3807,7 @@ static LLVMValueRef visit_image_atomic(struct ac_nir_context *ctx,
 	params[param_count++] = get_src(ctx, instr->src[2]);
 
 	if (glsl_get_sampler_dim(type) == GLSL_SAMPLER_DIM_BUF) {
-		params[param_count++] = get_sampler_desc(ctx, instr->variables[0], AC_DESC_BUFFER,
-							 NULL, true, true);
+		params[param_count++] = get_image_buffer_descriptor(ctx, instr, true);
 		params[param_count++] = LLVMBuildExtractElement(ctx->ac.builder, get_src(ctx, instr->src[0]),
 								ctx->ac.i32_0, ""); /* vindex */
 		params[param_count++] = ctx->ac.i32_0; /* voffset */

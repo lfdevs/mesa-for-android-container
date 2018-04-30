@@ -2106,7 +2106,7 @@ svga_is_format_supported(struct pipe_screen *screen,
 
    if (!ss->sws->have_vgpu10 &&
        util_format_is_srgb(format) &&
-       (bindings & PIPE_BIND_DISPLAY_TARGET)) {
+       (bindings & (PIPE_BIND_DISPLAY_TARGET | PIPE_BIND_RENDER_TARGET))) {
        /* We only support sRGB rendering with vgpu10 */
       return FALSE;
    }

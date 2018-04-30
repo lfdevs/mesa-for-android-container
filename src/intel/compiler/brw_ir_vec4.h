@@ -332,6 +332,31 @@ public:
                                   opcode != BRW_OPCODE_IF &&
                                   opcode != BRW_OPCODE_WHILE));
    }
+
+   bool reads_g0_implicitly() const
+   {
+      switch (opcode) {
+      case SHADER_OPCODE_TEX:
+      case SHADER_OPCODE_TXL:
+      case SHADER_OPCODE_TXD:
+      case SHADER_OPCODE_TXF:
+      case SHADER_OPCODE_TXF_CMS_W:
+      case SHADER_OPCODE_TXF_CMS:
+      case SHADER_OPCODE_TXF_MCS:
+      case SHADER_OPCODE_TXS:
+      case SHADER_OPCODE_TG4:
+      case SHADER_OPCODE_TG4_OFFSET:
+      case SHADER_OPCODE_SAMPLEINFO:
+      case VS_OPCODE_PULL_CONSTANT_LOAD:
+      case GS_OPCODE_SET_PRIMITIVE_ID:
+      case GS_OPCODE_GET_INSTANCE_ID:
+      case SHADER_OPCODE_GEN4_SCRATCH_READ:
+      case SHADER_OPCODE_GEN4_SCRATCH_WRITE:
+         return true;
+      default:
+         return false;
+      }
+   }
 };
 
 /**

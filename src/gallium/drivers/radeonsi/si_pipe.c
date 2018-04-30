@@ -26,6 +26,7 @@
 #include "si_shader_internal.h"
 #include "sid.h"
 
+#include "radeon/r600_cs.h"
 #include "radeon/radeon_uvd.h"
 #include "util/hash_table.h"
 #include "util/u_log.h"
@@ -333,9 +334,6 @@ static struct pipe_context *si_create_context(struct pipe_screen *screen,
 
 	sctx->sample_mask.sample_mask = 0xffff;
 
-	/* these must be last */
-	si_begin_new_cs(sctx);
-
 	if (sctx->b.chip_class >= GFX9) {
 		sctx->wait_mem_scratch = (struct r600_resource*)
 			pipe_buffer_create(screen, 0, PIPE_USAGE_DEFAULT, 4);
@@ -351,6 +349,9 @@ static struct pipe_context *si_create_context(struct pipe_screen *screen,
 		radeon_emit(cs, sctx->wait_mem_scratch->gpu_address);
 		radeon_emit(cs, sctx->wait_mem_scratch->gpu_address >> 32);
 		radeon_emit(cs, sctx->wait_mem_number);
+		radeon_add_to_buffer_list(&sctx->b, &sctx->b.gfx,
+					  sctx->wait_mem_scratch,
+					  RADEON_USAGE_WRITE, RADEON_PRIO_FENCE);
 	}
 
 	/* CIK cannot unbind a constant buffer (S_BUFFER_LOAD doesn't skip loads
@@ -423,6 +424,8 @@ static struct pipe_context *si_create_context(struct pipe_screen *screen,
 	util_dynarray_init(&sctx->resident_img_needs_color_decompress, NULL);
 	util_dynarray_init(&sctx->resident_tex_needs_depth_decompress, NULL);
 
+	/* this must be last */
+	si_begin_new_cs(sctx);
 	return &sctx->b.b;
 fail:
 	fprintf(stderr, "radeonsi: Failed to create a context.\n");

@@ -2282,6 +2282,10 @@ anv_image_aspect_get_planes(VkImageAspectFlags aspect_mask)
    if (aspect_mask & VK_IMAGE_ASPECT_PLANE_2_BIT_KHR)
       planes++;
 
+   if ((aspect_mask & VK_IMAGE_ASPECT_DEPTH_BIT) != 0 &&
+       (aspect_mask & VK_IMAGE_ASPECT_STENCIL_BIT) != 0)
+      planes++;
+
    return planes;
 }
 

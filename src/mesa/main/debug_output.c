@@ -502,6 +502,28 @@ debug_clear_group(struct gl_debug_state *debug)
 }
 
 /**
+ * Delete the oldest debug messages out of the log.
+ */
+static void
+debug_delete_messages(struct gl_debug_state *debug, int count)
+{
+   struct gl_debug_log *log = &debug->Log;
+
+   if (count > log->NumMessages)
+      count = log->NumMessages;
+
+   while (count--) {
+      struct gl_debug_message *msg = &log->Messages[log->NextMessage];
+
+      debug_message_clear(msg);
+
+      log->NumMessages--;
+      log->NextMessage++;
+      log->NextMessage %= MAX_DEBUG_LOGGED_MESSAGES;
+   }
+}
+
+/**
  * Loop through debug group stack tearing down states for
  * filtering debug messages.  Then free debug output state.
  */
@@ -514,6 +536,7 @@ debug_destroy(struct gl_debug_state *debug)
    }
 
    debug_clear_group(debug);
+   debug_delete_messages(debug, debug->Log.NumMessages);
    free(debug);
 }
 
@@ -646,28 +669,6 @@ debug_fetch_message(const struct gl_debug_state *debug)
    const struct gl_debug_log *log = &debug->Log;
 
    return (log->NumMessages) ? &log->Messages[log->NextMessage] : NULL;
-}
-
-/**
- * Delete the oldest debug messages out of the log.
- */
-static void
-debug_delete_messages(struct gl_debug_state *debug, int count)
-{
-   struct gl_debug_log *log = &debug->Log;
-
-   if (count > log->NumMessages)
-      count = log->NumMessages;
-
-   while (count--) {
-      struct gl_debug_message *msg = &log->Messages[log->NextMessage];
-
-      debug_message_clear(msg);
-
-      log->NumMessages--;
-      log->NextMessage++;
-      log->NextMessage %= MAX_DEBUG_LOGGED_MESSAGES;
-   }
 }
 
 static struct gl_debug_message *
