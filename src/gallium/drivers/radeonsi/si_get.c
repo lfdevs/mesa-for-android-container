@@ -470,12 +470,19 @@ static int si_get_shader_param(struct pipe_screen* pscreen,
 
 	case PIPE_SHADER_CAP_INDIRECT_INPUT_ADDR:
 		/* TODO: Indirect indexing of GS inputs is unimplemented. */
-		return shader != PIPE_SHADER_GEOMETRY &&
-		       (sscreen->llvm_has_working_vgpr_indexing ||
-			/* TCS and TES load inputs directly from LDS or
-			 * offchip memory, so indirect indexing is trivial. */
-			shader == PIPE_SHADER_TESS_CTRL ||
-			shader == PIPE_SHADER_TESS_EVAL);
+		if (shader == PIPE_SHADER_GEOMETRY)
+			return 0;
+
+		if (shader == PIPE_SHADER_VERTEX &&
+		    !sscreen->llvm_has_working_vgpr_indexing)
+			return 0;
+
+		/* TCS and TES load inputs directly from LDS or offchip
+		 * memory, so indirect indexing is always supported.
+		 * PS has to support indirect indexing, because we can't
+		 * lower that to TEMPs for INTERP instructions.
+		 */
+		return 1;
 
 	case PIPE_SHADER_CAP_INDIRECT_OUTPUT_ADDR:
 		return sscreen->llvm_has_working_vgpr_indexing ||

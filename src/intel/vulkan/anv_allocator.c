@@ -508,12 +508,12 @@ anv_block_pool_grow(struct anv_block_pool *pool, struct anv_block_state *state)
       assert(center_bo_offset >= back_used);
 
       /* Make sure we don't shrink the back end of the pool */
-      if (center_bo_offset < pool->back_state.end)
-         center_bo_offset = pool->back_state.end;
+      if (center_bo_offset < back_required)
+         center_bo_offset = back_required;
 
       /* Make sure that we don't shrink the front end of the pool */
-      if (size - center_bo_offset < pool->state.end)
-         center_bo_offset = size - pool->state.end;
+      if (size - center_bo_offset < front_required)
+         center_bo_offset = size - front_required;
    }
 
    assert(center_bo_offset % PAGE_SIZE == 0);

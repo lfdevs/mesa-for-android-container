@@ -159,7 +159,7 @@ Depends:
  libxcb-sync-dev,
  libxshmfence-dev,
  libx11-xcb-dev,
- libwayland-dev (>= 1.11.0) [linux-any],
+ libwayland-dev (>= 1.15.0) [linux-any],
  ${misc:Depends},
 Multi-Arch: same
 Description: free implementation of the EGL API -- development files

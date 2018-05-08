@@ -1,3 +1,17 @@
+mesa (18.0.3-1) unstable; urgency=medium
+
+  [ Andreas Boll ]
+  * New upstream release.
+
+  [ Nicolas Braud-Santoni ]
+  * Add debian/gbp.conf.
+
+  [ Timo Aaltonen ]
+  * control: libegl1-mesa-dev should pull the new libwayland-dev, update
+    dependency.
+
+ -- Andreas Boll <aboll@debian.org>  Tue, 08 May 2018 10:42:07 +0200
+
 mesa (18.0.2-2) unstable; urgency=medium
 
   * Upload to unstable.

@@ -554,15 +554,15 @@ static rvcn_dec_message_mpeg4_asp_vld_t get_mpeg4_msg(struct radeon_decoder *dec
 
 	result.vop_time_increment_resolution = pic->vop_time_increment_resolution;
 
-	result.short_video_header |= pic->short_video_header << 0;
-	result.interlaced |= pic->interlaced << 2;
-        result.load_intra_quant_mat |= 1 << 3;
-	result.load_nonintra_quant_mat |= 1 << 4;
-	result.quarter_sample |= pic->quarter_sample << 5;
-	result.complexity_estimation_disable |= 1 << 6;
-	result.resync_marker_disable |= pic->resync_marker_disable << 7;
-	result.newpred_enable |= 0 << 10; //
-	result.reduced_resolution_vop_enable |= 0 << 11;
+	result.short_video_header = pic->short_video_header;
+	result.interlaced = pic->interlaced;
+	result.load_intra_quant_mat = 1;
+	result.load_nonintra_quant_mat = 1;
+	result.quarter_sample = pic->quarter_sample;
+	result.complexity_estimation_disable = 1;
+	result.resync_marker_disable = pic->resync_marker_disable;
+	result.newpred_enable = 0;
+	result.reduced_resolution_vop_enable = 0;
 
 	result.quant_type = pic->quant_type;
 

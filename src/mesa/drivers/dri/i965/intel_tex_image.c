@@ -871,7 +871,7 @@ intelCompressedTexSubImage(struct gl_context *ctx, GLuint dims,
                         !_mesa_is_srgb_format(gl_format);
    struct brw_context *brw = (struct brw_context*) ctx;
    const struct gen_device_info *devinfo = &brw->screen->devinfo;
-   if (devinfo->gen == 9 && is_linear_astc)
+   if (devinfo->gen == 9 && !gen_device_info_is_9lp(devinfo) && is_linear_astc)
       flush_astc_denorms(ctx, dims, texImage,
                          xoffset, yoffset, zoffset,
                          width, height, depth);
