@@ -39,8 +39,20 @@ struct radv_pipeline_layout;
 struct ac_llvm_context;
 struct ac_shader_abi;
 
+enum {
+	RADV_ALPHA_ADJUST_NONE = 0,
+	RADV_ALPHA_ADJUST_SNORM = 1,
+	RADV_ALPHA_ADJUST_SINT = 2,
+	RADV_ALPHA_ADJUST_SSCALED = 3,
+};
+
 struct ac_vs_variant_key {
 	uint32_t instance_rate_inputs;
+
+	/* For 2_10_10_10 formats the alpha is handled as unsigned by pre-vega HW.
+	 * so we may need to fix it up. */
+	uint64_t alpha_adjust;
+
 	uint32_t as_es:1;
 	uint32_t as_ls:1;
 	uint32_t export_prim_id:1;

@@ -647,7 +647,7 @@ static inline struct brw_reg
 brw_imm_w(int16_t w)
 {
    struct brw_reg imm = brw_imm_reg(BRW_REGISTER_TYPE_W);
-   imm.d = w | (w << 16);
+   imm.ud = (uint16_t)w | (uint32_t)(uint16_t)w << 16;
    return imm;
 }
 

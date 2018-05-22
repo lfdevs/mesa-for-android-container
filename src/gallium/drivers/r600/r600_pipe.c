@@ -65,7 +65,7 @@ static const struct debug_named_value r600_debug_options[] = {
 static void r600_destroy_context(struct pipe_context *context)
 {
 	struct r600_context *rctx = (struct r600_context *)context;
-	unsigned sh;
+	unsigned sh, i;
 
 	r600_isa_destroy(rctx->isa);
 
@@ -100,6 +100,10 @@ static void r600_destroy_context(struct pipe_context *context)
 		rctx->b.b.delete_blend_state(&rctx->b.b, rctx->custom_blend_fastclear);
 	}
 	util_unreference_framebuffer_state(&rctx->framebuffer.state);
+
+	for (sh = 0; sh < PIPE_SHADER_TYPES; ++sh)
+		for (i = 0; i < PIPE_MAX_CONSTANT_BUFFERS; ++i)
+			rctx->b.b.set_constant_buffer(context, sh, i, NULL);
 
 	if (rctx->blitter) {
 		util_blitter_destroy(rctx->blitter);

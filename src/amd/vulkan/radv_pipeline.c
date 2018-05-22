@@ -142,6 +142,47 @@ radv_pipeline_scratch_init(struct radv_device *device,
 	return VK_SUCCESS;
 }
 
+static uint32_t si_translate_blend_logic_op(VkLogicOp op)
+{
+	switch (op) {
+	case VK_LOGIC_OP_CLEAR:
+		return V_028808_ROP3_CLEAR;
+	case VK_LOGIC_OP_AND:
+		return V_028808_ROP3_AND;
+	case VK_LOGIC_OP_AND_REVERSE:
+		return V_028808_ROP3_AND_REVERSE;
+	case VK_LOGIC_OP_COPY:
+		return V_028808_ROP3_COPY;
+	case VK_LOGIC_OP_AND_INVERTED:
+		return V_028808_ROP3_AND_INVERTED;
+	case VK_LOGIC_OP_NO_OP:
+		return V_028808_ROP3_NO_OP;
+	case VK_LOGIC_OP_XOR:
+		return V_028808_ROP3_XOR;
+	case VK_LOGIC_OP_OR:
+		return V_028808_ROP3_OR;
+	case VK_LOGIC_OP_NOR:
+		return V_028808_ROP3_NOR;
+	case VK_LOGIC_OP_EQUIVALENT:
+		return V_028808_ROP3_EQUIVALENT;
+	case VK_LOGIC_OP_INVERT:
+		return V_028808_ROP3_INVERT;
+	case VK_LOGIC_OP_OR_REVERSE:
+		return V_028808_ROP3_OR_REVERSE;
+	case VK_LOGIC_OP_COPY_INVERTED:
+		return V_028808_ROP3_COPY_INVERTED;
+	case VK_LOGIC_OP_OR_INVERTED:
+		return V_028808_ROP3_OR_INVERTED;
+	case VK_LOGIC_OP_NAND:
+		return V_028808_ROP3_NAND;
+	case VK_LOGIC_OP_SET:
+		return V_028808_ROP3_SET;
+	default:
+		unreachable("Unhandled logic op");
+	}
+}
+
+
 static uint32_t si_translate_blend_function(VkBlendOp op)
 {
 	switch (op) {
@@ -532,9 +573,9 @@ radv_pipeline_init_blend_state(struct radv_pipeline *pipeline,
 	}
 	blend->cb_color_control = 0;
 	if (vkblend->logicOpEnable)
-		blend->cb_color_control |= S_028808_ROP3(vkblend->logicOp | (vkblend->logicOp << 4));
+		blend->cb_color_control |= S_028808_ROP3(si_translate_blend_logic_op(vkblend->logicOp));
 	else
-		blend->cb_color_control |= S_028808_ROP3(0xcc);
+		blend->cb_color_control |= S_028808_ROP3(V_028808_ROP3_COPY);
 
 	blend->db_alpha_to_mask = S_028B70_ALPHA_TO_MASK_OFFSET0(2) |
 		S_028B70_ALPHA_TO_MASK_OFFSET1(2) |
@@ -1755,10 +1796,34 @@ radv_generate_graphics_pipeline_key(struct radv_pipeline *pipeline,
 	}
 
 	for (unsigned i = 0; i < input_state->vertexAttributeDescriptionCount; ++i) {
-		unsigned binding;
-		binding = input_state->pVertexAttributeDescriptions[i].binding;
+		unsigned location = input_state->pVertexAttributeDescriptions[i].location;
+		unsigned binding = input_state->pVertexAttributeDescriptions[i].binding;
 		if (binding_input_rate & (1u << binding))
 			key.instance_rate_inputs |= 1u << input_state->pVertexAttributeDescriptions[i].location;
+
+		if (pipeline->device->physical_device->rad_info.chip_class <= VI &&
+		    pipeline->device->physical_device->rad_info.family != CHIP_STONEY) {
+			VkFormat format = input_state->pVertexAttributeDescriptions[i].format;
+			uint64_t adjust;
+			switch(format) {
+			case VK_FORMAT_A2R10G10B10_SNORM_PACK32:
+			case VK_FORMAT_A2B10G10R10_SNORM_PACK32:
+				adjust = RADV_ALPHA_ADJUST_SNORM;
+				break;
+			case VK_FORMAT_A2R10G10B10_SSCALED_PACK32:
+			case VK_FORMAT_A2B10G10R10_SSCALED_PACK32:
+				adjust = RADV_ALPHA_ADJUST_SSCALED;
+				break;
+			case VK_FORMAT_A2R10G10B10_SINT_PACK32:
+			case VK_FORMAT_A2B10G10R10_SINT_PACK32:
+				adjust = RADV_ALPHA_ADJUST_SINT;
+				break;
+			default:
+				adjust = 0;
+				break;
+			}
+			key.vertex_alpha_adjust |= adjust << (2 * location);
+		}
 	}
 
 	if (pCreateInfo->pTessellationState)
@@ -1787,6 +1852,7 @@ radv_fill_shader_keys(struct ac_shader_variant_key *keys,
                       nir_shader **nir)
 {
 	keys[MESA_SHADER_VERTEX].vs.instance_rate_inputs = key->instance_rate_inputs;
+	keys[MESA_SHADER_VERTEX].vs.alpha_adjust = key->vertex_alpha_adjust;
 
 	if (nir[MESA_SHADER_TESS_CTRL]) {
 		keys[MESA_SHADER_VERTEX].vs.as_ls = true;

@@ -220,8 +220,13 @@ static bool amdgpu_winsys_unref(struct radeon_winsys *rws)
    simple_mtx_lock(&dev_tab_mutex);
 
    destroy = pipe_reference(&ws->reference, NULL);
-   if (destroy && dev_tab)
+   if (destroy && dev_tab) {
       util_hash_table_remove(dev_tab, ws->dev);
+      if (util_hash_table_count(dev_tab) == 0) {
+         util_hash_table_destroy(dev_tab);
+         dev_tab = NULL;
+      }
+   }
 
    simple_mtx_unlock(&dev_tab_mutex);
    return destroy;

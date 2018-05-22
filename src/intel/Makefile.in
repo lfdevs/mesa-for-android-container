@@ -4886,10 +4886,12 @@ vulkan/anv_extensions.h: vulkan/anv_extensions_gen.py \
 		--out-h $@
 
 vulkan/dev_icd.json : vulkan/anv_extensions.py vulkan/anv_icd.py
+	$(MKDIR_GEN)
 	$(AM_V_GEN)$(PYTHON2) $(srcdir)/vulkan/anv_icd.py \
 		--lib-path="${abs_top_builddir}/${LIB_DIR}" --out $@
 
 vulkan/intel_icd.@host_cpu@.json : vulkan/anv_extensions.py vulkan/anv_icd.py
+	$(MKDIR_GEN)
 	$(AM_V_GEN)$(PYTHON2) $(srcdir)/vulkan/anv_icd.py \
 		--lib-path="${libdir}" --out $@
 

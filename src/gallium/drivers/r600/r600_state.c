@@ -1724,7 +1724,7 @@ static void r600_emit_constant_buffers(struct r600_context *rctx,
 		radeon_emit(cs, PKT3(PKT3_SET_RESOURCE, 7, 0));
 		radeon_emit(cs, (buffer_id_base + buffer_index) * 7);
 		radeon_emit(cs, offset); /* RESOURCEi_WORD0 */
-		radeon_emit(cs, rbuffer->b.b.width0 - offset - 1); /* RESOURCEi_WORD1 */
+		radeon_emit(cs, cb->buffer_size - 1); /* RESOURCEi_WORD1 */
 		radeon_emit(cs, /* RESOURCEi_WORD2 */
 			    S_038008_ENDIAN_SWAP(gs_ring_buffer ? ENDIAN_NONE : r600_endian_swap(32)) |
 			    S_038008_STRIDE(gs_ring_buffer ? 4 : 16));

@@ -349,10 +349,18 @@ gen7_emit_vs_workaround_flush(struct brw_context *brw)
  * context restore, so the mentioned hang doesn't happen. However,
  * software must program push constant commands for all stages prior to
  * rendering anything, so we flag them as dirty.
+ *
+ * Finally, we also make sure to stall at pixel scoreboard to make sure the
+ * constants have been loaded into the EUs prior to disable the push constants
+ * so that it doesn't hang a previous 3DPRIMITIVE.
  */
 void
 gen10_emit_isp_disable(struct brw_context *brw)
 {
+   brw_emit_pipe_control(brw,
+                         PIPE_CONTROL_STALL_AT_SCOREBOARD |
+                         PIPE_CONTROL_CS_STALL,
+                         NULL, 0, 0);
    brw_emit_pipe_control(brw,
                          PIPE_CONTROL_ISP_DIS |
                          PIPE_CONTROL_CS_STALL,

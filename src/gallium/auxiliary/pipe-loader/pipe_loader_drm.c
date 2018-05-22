@@ -202,6 +202,7 @@ pipe_loader_drm_probe_fd(struct pipe_loader_device **dev, int fd)
    if (ddev->lib)
       util_dl_close(ddev->lib);
 #endif
+   FREE(ddev->base.driver_name);
    FREE(ddev);
    return false;
 }

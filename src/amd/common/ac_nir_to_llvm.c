@@ -5335,6 +5335,48 @@ static void visit_cf_list(struct ac_nir_context *ctx,
 	}
 }
 
+/* For 2_10_10_10 formats the alpha is handled as unsigned by pre-vega HW.
+ * so we may need to fix it up. */
+static LLVMValueRef
+adjust_vertex_fetch_alpha(struct nir_to_llvm_context *ctx,
+                          unsigned adjustment,
+                          LLVMValueRef alpha)
+{
+	if (adjustment == RADV_ALPHA_ADJUST_NONE)
+		return alpha;
+
+	LLVMValueRef c30 = LLVMConstInt(ctx->ac.i32, 30, 0);
+
+	if (adjustment == RADV_ALPHA_ADJUST_SSCALED)
+		alpha = LLVMBuildFPToUI(ctx->ac.builder, alpha, ctx->ac.i32, "");
+	else
+		alpha = ac_to_integer(&ctx->ac, alpha);
+
+	/* For the integer-like cases, do a natural sign extension.
+	 *
+	 * For the SNORM case, the values are 0.0, 0.333, 0.666, 1.0
+	 * and happen to contain 0, 1, 2, 3 as the two LSBs of the
+	 * exponent.
+	 */
+	alpha = LLVMBuildShl(ctx->ac.builder, alpha,
+	                     adjustment == RADV_ALPHA_ADJUST_SNORM ?
+	                     LLVMConstInt(ctx->ac.i32, 7, 0) : c30, "");
+	alpha = LLVMBuildAShr(ctx->ac.builder, alpha, c30, "");
+
+	/* Convert back to the right type. */
+	if (adjustment == RADV_ALPHA_ADJUST_SNORM) {
+		LLVMValueRef clamp;
+		LLVMValueRef neg_one = LLVMConstReal(ctx->ac.f32, -1.0);
+		alpha = LLVMBuildSIToFP(ctx->ac.builder, alpha, ctx->ac.f32, "");
+		clamp = LLVMBuildFCmp(ctx->ac.builder, LLVMRealULT, alpha, neg_one, "");
+		alpha = LLVMBuildSelect(ctx->ac.builder, clamp, neg_one, alpha, "");
+	} else if (adjustment == RADV_ALPHA_ADJUST_SSCALED) {
+		alpha = LLVMBuildSIToFP(ctx->ac.builder, alpha, ctx->ac.f32, "");
+	}
+
+	return alpha;
+}
+
 static void
 handle_vs_input_decl(struct nir_to_llvm_context *ctx,
 		     struct nir_variable *variable)
@@ -5344,14 +5386,15 @@ handle_vs_input_decl(struct nir_to_llvm_context *ctx,
 	LLVMValueRef t_list;
 	LLVMValueRef input;
 	LLVMValueRef buffer_index;
-	int index = variable->data.location - VERT_ATTRIB_GENERIC0;
-	int idx = variable->data.location;
 	unsigned attrib_count = glsl_count_attribute_slots(variable->type, true);
 
-	variable->data.driver_location = idx * 4;
+	variable->data.driver_location = variable->data.location * 4;
 
-	for (unsigned i = 0; i < attrib_count; ++i, ++idx) {
-		if (ctx->options->key.vs.instance_rate_inputs & (1u << (index + i))) {
+	for (unsigned i = 0; i < attrib_count; ++i) {
+		LLVMValueRef output[4];
+		unsigned attrib_index = variable->data.location + i - VERT_ATTRIB_GENERIC0;
+
+		if (ctx->options->key.vs.instance_rate_inputs & (1u << attrib_index)) {
 			buffer_index = LLVMBuildAdd(ctx->builder, ctx->abi.instance_id,
 			                            ctx->abi.start_instance, "");
 			if (ctx->options->key.vs.as_ls) {
@@ -5364,7 +5407,7 @@ handle_vs_input_decl(struct nir_to_llvm_context *ctx,
 		} else
 			buffer_index = LLVMBuildAdd(ctx->builder, ctx->abi.vertex_id,
 			                            ctx->abi.base_vertex, "");
-		t_offset = LLVMConstInt(ctx->ac.i32, index + i, false);
+		t_offset = LLVMConstInt(ctx->ac.i32, attrib_index, false);
 
 		t_list = ac_build_load_to_sgpr(&ctx->ac, t_list_ptr, t_offset);
 
@@ -5375,9 +5418,15 @@ handle_vs_input_decl(struct nir_to_llvm_context *ctx,
 
 		for (unsigned chan = 0; chan < 4; chan++) {
 			LLVMValueRef llvm_chan = LLVMConstInt(ctx->ac.i32, chan, false);
-			ctx->inputs[radeon_llvm_reg_index_soa(idx, chan)] =
-				ac_to_integer(&ctx->ac, LLVMBuildExtractElement(ctx->builder,
-							input, llvm_chan, ""));
+			output[chan] = LLVMBuildExtractElement(ctx->builder, input, llvm_chan, "");
+		}
+
+		unsigned alpha_adjust = (ctx->options->key.vs.alpha_adjust >> (attrib_index * 2)) & 3;
+		output[3] = adjust_vertex_fetch_alpha(ctx, alpha_adjust, output[3]);
+
+		for (unsigned chan = 0; chan < 4; chan++) {
+			ctx->inputs[radeon_llvm_reg_index_soa(variable->data.location + i, chan)] =
+				ac_to_integer(&ctx->ac, output[chan]);
 		}
 	}
 }

@@ -716,8 +716,13 @@ static bool radeon_winsys_unref(struct radeon_winsys *ws)
     mtx_lock(&fd_tab_mutex);
 
     destroy = pipe_reference(&rws->reference, NULL);
-    if (destroy && fd_tab)
+    if (destroy && fd_tab) {
         util_hash_table_remove(fd_tab, intptr_to_pointer(rws->fd));
+        if (util_hash_table_count(fd_tab) == 0) {
+           util_hash_table_destroy(fd_tab);
+           fd_tab = NULL;
+        }
+    }
 
     mtx_unlock(&fd_tab_mutex);
     return destroy;

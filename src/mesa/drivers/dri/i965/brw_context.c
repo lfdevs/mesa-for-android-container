@@ -1077,7 +1077,6 @@ intelDestroyContext(__DRIcontext * driContextPriv)
    struct brw_context *brw =
       (struct brw_context *) driContextPriv->driverPrivate;
    struct gl_context *ctx = &brw->ctx;
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
 
    _mesa_meta_free(&brw->ctx);
 
@@ -1089,8 +1088,7 @@ intelDestroyContext(__DRIcontext * driContextPriv)
       brw_destroy_shader_time(brw);
    }
 
-   if (devinfo->gen >= 6)
-      blorp_finish(&brw->blorp);
+   blorp_finish(&brw->blorp);
 
    brw_destroy_state(brw);
    brw_draw_destroy(brw);

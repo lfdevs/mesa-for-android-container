@@ -2202,7 +2202,7 @@ static void evergreen_emit_constant_buffers(struct r600_context *rctx,
 		radeon_emit(cs, PKT3(PKT3_SET_RESOURCE, 8, 0) | pkt_flags);
 		radeon_emit(cs, (buffer_id_base + buffer_index) * 8);
 		radeon_emit(cs, va); /* RESOURCEi_WORD0 */
-		radeon_emit(cs, rbuffer->b.b.width0 - cb->buffer_offset - 1); /* RESOURCEi_WORD1 */
+		radeon_emit(cs, cb->buffer_size -1); /* RESOURCEi_WORD1 */
 		radeon_emit(cs, /* RESOURCEi_WORD2 */
 			    S_030008_ENDIAN_SWAP(gs_ring_buffer ? ENDIAN_NONE : r600_endian_swap(32)) |
 			    S_030008_STRIDE(gs_ring_buffer ? 4 : 16) |

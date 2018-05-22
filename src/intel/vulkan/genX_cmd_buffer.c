@@ -1048,10 +1048,18 @@ genX(BeginCommandBuffer)(
  * context restore, so the mentioned hang doesn't happen. However,
  * software must program push constant commands for all stages prior to
  * rendering anything. So we flag them dirty in BeginCommandBuffer.
+ *
+ * Finally, we also make sure to stall at pixel scoreboard to make sure the
+ * constants have been loaded into the EUs prior to disable the push constants
+ * so that it doesn't hang a previous 3DPRIMITIVE.
  */
 static void
 emit_isp_disable(struct anv_cmd_buffer *cmd_buffer)
 {
+   anv_batch_emit(&cmd_buffer->batch, GENX(PIPE_CONTROL), pc) {
+         pc.StallAtPixelScoreboard = true;
+         pc.CommandStreamerStallEnable = true;
+   }
    anv_batch_emit(&cmd_buffer->batch, GENX(PIPE_CONTROL), pc) {
          pc.IndirectStatePointersDisable = true;
          pc.CommandStreamerStallEnable = true;
