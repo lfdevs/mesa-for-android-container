@@ -20,7 +20,7 @@
 
 opencl_link_args = []
 opencl_link_deps = []
-opencl_version = '1.0'
+opencl_version = '1'
 
 if with_ld_version_script
   opencl_link_args += [
@@ -55,7 +55,7 @@ libopencl = shared_library(
     cpp.find_library('clangLex', dirs : llvm_libdir),
     cpp.find_library('clangBasic', dirs : llvm_libdir),
   ],
-  version : opencl_version,
+  version : '@0@.0.0'.format(opencl_version),
   install : true,
 )
 

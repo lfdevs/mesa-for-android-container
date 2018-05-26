@@ -31,6 +31,7 @@
 
 #include <pthread.h>
 #include "main/imports.h"
+#include "main/glspirv.h"
 #include "program/prog_parameter.h"
 #include "program/prog_print.h"
 #include "program/prog_to_nir.h"
@@ -74,9 +75,14 @@ brw_create_nir(struct brw_context *brw,
       ctx->Const.ShaderCompilerOptions[stage].NirOptions;
    nir_shader *nir;
 
-   /* First, lower the GLSL IR or Mesa IR to NIR */
+   /* First, lower the GLSL/Mesa IR or SPIR-V to NIR */
    if (shader_prog) {
-      nir = glsl_to_nir(shader_prog, stage, options);
+      if (shader_prog->_LinkedShaders[stage]->spirv_data)
+         nir = _mesa_spirv_to_nir(ctx, shader_prog, stage, options);
+      else
+         nir = glsl_to_nir(shader_prog, stage, options);
+      assert (nir);
+
       nir_remove_dead_variables(nir, nir_var_shader_in | nir_var_shader_out);
       nir_lower_returns(nir);
       nir_validate_shader(nir);
@@ -127,7 +133,7 @@ brw_create_nir(struct brw_context *brw,
       NIR_PASS(progress, nir, nir_lower_wpos_ytransform, &wpos_options);
       if (progress) {
          _mesa_add_state_reference(prog->Parameters,
-                                   (gl_state_index *) wpos_options.state_tokens);
+                                   wpos_options.state_tokens);
       }
    }
 
@@ -277,10 +283,8 @@ brw_memory_barrier(struct gl_context *ctx, GLbitfield barriers)
 {
    struct brw_context *brw = brw_context(ctx);
    const struct gen_device_info *devinfo = &brw->screen->devinfo;
-   unsigned bits = (PIPE_CONTROL_DATA_CACHE_FLUSH |
-                    PIPE_CONTROL_NO_WRITE |
-                    PIPE_CONTROL_CS_STALL);
-   assert(devinfo->gen >= 7 && devinfo->gen <= 10);
+   unsigned bits = PIPE_CONTROL_DATA_CACHE_FLUSH | PIPE_CONTROL_CS_STALL;
+   assert(devinfo->gen >= 7 && devinfo->gen <= 11);
 
    if (barriers & (GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT |
                    GL_ELEMENT_ARRAY_BARRIER_BIT |
@@ -313,12 +317,12 @@ brw_memory_barrier(struct gl_context *ctx, GLbitfield barriers)
 }
 
 static void
-brw_blend_barrier(struct gl_context *ctx)
+brw_framebuffer_fetch_barrier(struct gl_context *ctx)
 {
    struct brw_context *brw = brw_context(ctx);
    const struct gen_device_info *devinfo = &brw->screen->devinfo;
 
-   if (!ctx->Extensions.MESA_shader_framebuffer_fetch) {
+   if (!ctx->Extensions.EXT_shader_framebuffer_fetch) {
       if (devinfo->gen >= 6) {
          brw_emit_pipe_control_flush(brw,
                                      PIPE_CONTROL_RENDER_TARGET_FLUSH |
@@ -344,7 +348,7 @@ brw_get_scratch_bo(struct brw_context *brw,
    }
 
    if (!old_bo) {
-      *scratch_bo = brw_bo_alloc(brw->bufmgr, "scratch bo", size, 4096);
+      *scratch_bo = brw_bo_alloc(brw->bufmgr, "scratch bo", size);
    }
 }
 
@@ -439,7 +443,7 @@ brw_alloc_stage_scratch(struct brw_context *brw,
 
    stage_state->scratch_bo =
       brw_bo_alloc(brw->bufmgr, "shader scratch space",
-                   per_thread_size * thread_count, 4096);
+                   per_thread_size * thread_count);
 }
 
 void brwInitFragProgFuncs( struct dd_function_table *functions )
@@ -453,7 +457,7 @@ void brwInitFragProgFuncs( struct dd_function_table *functions )
    functions->LinkShader = brw_link_shader;
 
    functions->MemoryBarrier = brw_memory_barrier;
-   functions->BlendBarrier = brw_blend_barrier;
+   functions->FramebufferFetchBarrier = brw_framebuffer_fetch_barrier;
 }
 
 struct shader_times {
@@ -468,7 +472,7 @@ brw_init_shader_time(struct brw_context *brw)
    const int max_entries = 2048;
    brw->shader_time.bo =
       brw_bo_alloc(brw->bufmgr, "shader time",
-                   max_entries * BRW_SHADER_TIME_STRIDE * 3, 4096);
+                   max_entries * BRW_SHADER_TIME_STRIDE * 3);
    brw->shader_time.names = rzalloc_array(brw, const char *, max_entries);
    brw->shader_time.ids = rzalloc_array(brw, int, max_entries);
    brw->shader_time.types = rzalloc_array(brw, enum shader_time_shader_type,

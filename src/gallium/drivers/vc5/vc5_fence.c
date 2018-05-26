@@ -36,12 +36,12 @@
 
 #include "util/u_inlines.h"
 
-#include "vc5_screen.h"
+#include "vc5_context.h"
 #include "vc5_bufmgr.h"
 
 struct vc5_fence {
         struct pipe_reference reference;
-        uint64_t seqno;
+        uint32_t sync;
 };
 
 static void
@@ -49,11 +49,13 @@ vc5_fence_reference(struct pipe_screen *pscreen,
                     struct pipe_fence_handle **pp,
                     struct pipe_fence_handle *pf)
 {
+        struct vc5_screen *screen = vc5_screen(pscreen);
         struct vc5_fence **p = (struct vc5_fence **)pp;
         struct vc5_fence *f = (struct vc5_fence *)pf;
         struct vc5_fence *old = *p;
 
         if (pipe_reference(&(*p)->reference, &f->reference)) {
+                drmSyncobjDestroy(screen->fd, old->sync);
                 free(old);
         }
         *p = f;
@@ -68,19 +70,28 @@ vc5_fence_finish(struct pipe_screen *pscreen,
         struct vc5_screen *screen = vc5_screen(pscreen);
         struct vc5_fence *f = (struct vc5_fence *)pf;
 
-        return vc5_wait_seqno(screen, f->seqno, timeout_ns, "fence wait");
+        return drmSyncobjWait(screen->fd, &f->sync, 1, timeout_ns, 0, NULL);
 }
 
 struct vc5_fence *
-vc5_fence_create(struct vc5_screen *screen, uint64_t seqno)
+vc5_fence_create(struct vc5_context *vc5)
 {
         struct vc5_fence *f = calloc(1, sizeof(*f));
-
         if (!f)
                 return NULL;
 
+        uint32_t new_sync;
+        /* Make a new sync object for the context. */
+        int ret = drmSyncobjCreate(vc5->fd, DRM_SYNCOBJ_CREATE_SIGNALED,
+                                   &new_sync);
+        if (ret) {
+                free(f);
+                return NULL;
+        }
+
         pipe_reference_init(&f->reference, 1);
-        f->seqno = seqno;
+        f->sync = vc5->out_sync;
+        vc5->out_sync = new_sync;
 
         return f;
 }

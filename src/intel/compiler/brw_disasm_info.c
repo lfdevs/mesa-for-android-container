@@ -123,8 +123,8 @@ disasm_annotate(struct disasm_info *disasm,
    struct inst_group *group;
    if (!disasm->use_tail) {
       group = disasm_new_inst_group(disasm, offset);
-      disasm->use_tail = false;
    } else {
+      disasm->use_tail = false;
       group = exec_node_data(struct inst_group,
                              exec_list_get_tail_raw(&disasm->group_list), link);
    }

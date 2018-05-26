@@ -39,6 +39,8 @@
 #include <GL/glxproto.h>
 
 #include "xm_api.h"
+#include "main/imports.h"
+#include "main/errors.h"
 
 /* An "Atrribs/Attribs" typo was fixed in glxproto.h in Nov 2014.
  * This is in case we don't have the updated header.
@@ -2645,39 +2647,6 @@ glXAssociateDMPbufferSGIX(Display *dpy, GLXPbufferSGIX pbuffer,
    return False;
 }
 #endif
-
-
-/*** GLX_SGIX_swap_group ***/
-
-PUBLIC void
-glXJoinSwapGroupSGIX(Display *dpy, GLXDrawable drawable, GLXDrawable member)
-{
-   (void) dpy;
-   (void) drawable;
-   (void) member;
-}
-
-
-
-/*** GLX_SGIX_swap_barrier ***/
-
-PUBLIC void
-glXBindSwapBarrierSGIX(Display *dpy, GLXDrawable drawable, int barrier)
-{
-   (void) dpy;
-   (void) drawable;
-   (void) barrier;
-}
-
-PUBLIC Bool
-glXQueryMaxSwapBarriersSGIX(Display *dpy, int screen, int *max)
-{
-   (void) dpy;
-   (void) screen;
-   (void) max;
-   return False;
-}
-
 
 
 /*** GLX_SUN_get_transparent_index ***/

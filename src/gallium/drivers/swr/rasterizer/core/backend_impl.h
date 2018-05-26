@@ -1,5 +1,5 @@
 /****************************************************************************
-* Copyright (C) 2014-2015 Intel Corporation.   All Rights Reserved.
+* Copyright (C) 2014-2018 Intel Corporation.   All Rights Reserved.
 *
 * Permission is hereby granted, free of charge, to any person obtaining a
 * copy of this software and associated documentation files (the "Software"),
@@ -569,7 +569,6 @@ struct PixelRateZTestLoop
     uint32_t operator()(simdscalar& activeLanes, SWR_PS_CONTEXT& psContext, 
                         const CORE_BUCKETS BEDepthBucket, uint32_t currentSimdIn8x8 = 0)
     {
-        SWR_CONTEXT *pContext = pDC->pContext;
 
         uint32_t statCount = 0;
         simdscalar anyDepthSamplePassed = _simd_setzero_ps();
@@ -600,7 +599,7 @@ struct PixelRateZTestLoop
                 vCoverageMask[sample] = _simd_and_ps(vCoverageMask[sample], _simd_vmask_ps(CalcDepthBoundsAcceptMask(z, minz, maxz)));
             }
 
-            AR_BEGIN(BEBarycentric, pDC->drawId);
+            RDTSC_BEGIN(BEBarycentric, pDC->drawId);
 
             // calculate per sample positions
             psContext.vX.sample = _simd_add_ps(psContext.vX.UL, samplePos.vX(sample));
@@ -622,7 +621,7 @@ struct PixelRateZTestLoop
                 vZ[sample] = state.pfnQuantizeDepth(vZ[sample]);
             }
 
-            AR_END(BEBarycentric, 0);
+            RDTSC_END(BEBarycentric, 0);
 
             ///@todo: perspective correct vs non-perspective correct clipping?
             // if clip distances are enabled, we need to interpolate for each sample
@@ -635,13 +634,13 @@ struct PixelRateZTestLoop
 
             // ZTest for this sample
             ///@todo Need to uncomment out this bucket.
-            //AR_BEGIN(BEDepthBucket, pDC->drawId);
+            //RDTSC_BEGIN(BEDepthBucket, pDC->drawId);
             depthPassMask[sample] = vCoverageMask[sample];
             stencilPassMask[sample] = vCoverageMask[sample];
             depthPassMask[sample] = DepthStencilTest(&state, work.triFlags.frontFacing, work.triFlags.viewportIndex,
                                                      vZ[sample], pDepthSample, vCoverageMask[sample], 
                                                      pStencilSample, &stencilPassMask[sample]);
-            //AR_END(BEDepthBucket, 0);
+            //RDTSC_END(BEDepthBucket, 0);
 
             // early-exit if no pixels passed depth or earlyZ is forced on
             if(psState.forceEarlyZ || !_simd_movemask_ps(depthPassMask[sample]))
@@ -710,8 +709,8 @@ static INLINE void CalcSampleBarycentrics(const BarycentricCoeffs& coeffs, SWR_P
 }
 
 // Merge Output to 4x2 SIMD Tile Format
-INLINE void OutputMerger4x2(SWR_PS_CONTEXT &psContext, uint8_t* (&pColorBase)[SWR_NUM_RENDERTARGETS], uint32_t sample, const SWR_BLEND_STATE *pBlendState,
-    const PFN_BLEND_JIT_FUNC (&pfnBlendFunc)[SWR_NUM_RENDERTARGETS], simdscalar &coverageMask, simdscalar const &depthPassMask, uint32_t renderTargetMask)
+INLINE void OutputMerger4x2(DRAW_CONTEXT *pDC, SWR_PS_CONTEXT &psContext, uint8_t* (&pColorBase)[SWR_NUM_RENDERTARGETS], uint32_t sample, const SWR_BLEND_STATE *pBlendState,
+    const PFN_BLEND_JIT_FUNC (&pfnBlendFunc)[SWR_NUM_RENDERTARGETS], simdscalar &coverageMask, simdscalar const &depthPassMask, uint32_t renderTargetMask, uint32_t workerId)
 {
     // type safety guaranteed from template instantiation in BEChooser<>::GetFunc
     const uint32_t rasterTileColorOffset = RasterTileColorOffset(sample);
@@ -725,26 +724,31 @@ INLINE void OutputMerger4x2(SWR_PS_CONTEXT &psContext, uint8_t* (&pColorBase)[SW
 
         const SWR_RENDER_TARGET_BLEND_STATE *pRTBlend = &pBlendState->renderTarget[rt];
 
+        SWR_BLEND_CONTEXT blendContext = { 0 };
         {
             // pfnBlendFunc may not update all channels.  Initialize with PS output.
             /// TODO: move this into the blend JIT.
             blendOut = psContext.shaded[rt];
 
+            blendContext.pBlendState = pBlendState;
+            blendContext.src = &psContext.shaded[rt];
+            blendContext.src1 = &psContext.shaded[1];
+            blendContext.src0alpha = reinterpret_cast<simdvector *>(&psContext.shaded[0].w);
+            blendContext.sampleNum = sample;
+            blendContext.pDst = (simdvector *) &pColorSample;
+            blendContext.result = &blendOut;
+            blendContext.oMask = &psContext.oMask;
+            blendContext.pMask = reinterpret_cast<simdscalari *>(&coverageMask);
+
             // Blend outputs and update coverage mask for alpha test
             if(pfnBlendFunc[rt] != nullptr)
             {
-                pfnBlendFunc[rt](
-                    pBlendState,
-                    psContext.shaded[rt],
-                    psContext.shaded[1],
-                    psContext.shaded[0].w,
-                    sample,
-                    pColorSample,
-                    blendOut,
-                    &psContext.oMask,
-                    (simdscalari*)&coverageMask);
+                pfnBlendFunc[rt](&blendContext);
             }
         }
+
+        // Track alpha events
+        AR_EVENT(AlphaInfoEvent(pDC->drawId, blendContext.isAlphaTested, blendContext.isAlphaBlended));
 
         // final write mask 
         simdscalari outputMask = _simd_castps_si(_simd_and_ps(coverageMask, depthPassMask));
@@ -776,8 +780,8 @@ INLINE void OutputMerger4x2(SWR_PS_CONTEXT &psContext, uint8_t* (&pColorBase)[SW
 
 #if USE_8x2_TILE_BACKEND
 // Merge Output to 8x2 SIMD16 Tile Format
-INLINE void OutputMerger8x2(SWR_PS_CONTEXT &psContext, uint8_t* (&pColorBase)[SWR_NUM_RENDERTARGETS], uint32_t sample, const SWR_BLEND_STATE *pBlendState,
-    const PFN_BLEND_JIT_FUNC(&pfnBlendFunc)[SWR_NUM_RENDERTARGETS], simdscalar &coverageMask, simdscalar const &depthPassMask, uint32_t renderTargetMask, bool useAlternateOffset)
+INLINE void OutputMerger8x2(DRAW_CONTEXT *pDC, SWR_PS_CONTEXT &psContext, uint8_t* (&pColorBase)[SWR_NUM_RENDERTARGETS], uint32_t sample, const SWR_BLEND_STATE *pBlendState,
+    const PFN_BLEND_JIT_FUNC(&pfnBlendFunc)[SWR_NUM_RENDERTARGETS], simdscalar &coverageMask, simdscalar const &depthPassMask, uint32_t renderTargetMask, bool useAlternateOffset, uint32_t workerId)
 {
     // type safety guaranteed from template instantiation in BEChooser<>::GetFunc
     uint32_t rasterTileColorOffset = RasterTileColorOffset(sample);
@@ -812,26 +816,31 @@ INLINE void OutputMerger8x2(SWR_PS_CONTEXT &psContext, uint8_t* (&pColorBase)[SW
             pColorSample = nullptr;
         }
 
+        SWR_BLEND_CONTEXT blendContext = { 0 };
         {
             // pfnBlendFunc may not update all channels.  Initialize with PS output.
             /// TODO: move this into the blend JIT.
             blendOut = psContext.shaded[rt];
 
+            blendContext.pBlendState    = pBlendState;
+            blendContext.src            = &psContext.shaded[rt];
+            blendContext.src1           = &psContext.shaded[1];
+            blendContext.src0alpha      = reinterpret_cast<simdvector *>(&psContext.shaded[0].w);
+            blendContext.sampleNum      = sample;
+            blendContext.pDst           = &blendSrc;
+            blendContext.result         = &blendOut;
+            blendContext.oMask          = &psContext.oMask;
+            blendContext.pMask          = reinterpret_cast<simdscalari *>(&coverageMask);
+
             // Blend outputs and update coverage mask for alpha test
             if(pfnBlendFunc[rt] != nullptr)
             {
-                pfnBlendFunc[rt](
-                    pBlendState,
-                    psContext.shaded[rt],
-                    psContext.shaded[1],
-                    psContext.shaded[0].w,
-                    sample,
-                    reinterpret_cast<uint8_t *>(&blendSrc),
-                    blendOut,
-                    &psContext.oMask,
-                    reinterpret_cast<simdscalari *>(&coverageMask));
+                pfnBlendFunc[rt](&blendContext);
             }
         }
+
+        // Track alpha events
+        AR_EVENT(AlphaInfoEvent(pDC->drawId, blendContext.isAlphaTested, blendContext.isAlphaBlended));
 
         // final write mask 
         simdscalari outputMask = _simd_castps_si(_simd_and_ps(coverageMask, depthPassMask));
@@ -867,15 +876,16 @@ void BackendPixelRate(DRAW_CONTEXT *pDC, uint32_t workerId, uint32_t x, uint32_t
     ///@todo: Need to move locals off stack to prevent __chkstk's from being generated for the backend
 
 
-    SWR_CONTEXT *pContext = pDC->pContext;
-
-    AR_BEGIN(BEPixelRateBackend, pDC->drawId);
-    AR_BEGIN(BESetup, pDC->drawId);
+    RDTSC_BEGIN(BEPixelRateBackend, pDC->drawId);
+    RDTSC_BEGIN(BESetup, pDC->drawId);
 
     const API_STATE &state = GetApiState(pDC);
 
     BarycentricCoeffs coeffs;
     SetupBarycentricCoeffs(&coeffs, work);
+
+    SWR_CONTEXT *pContext = pDC->pContext;
+    void* pWorkerData = pContext->threadPool.pThreadData[workerId].pWorkerPrivateData;
 
     SWR_PS_CONTEXT psContext;
     const SWR_MULTISAMPLE_POS& samplePos = state.rastState.samplePositions;
@@ -884,7 +894,7 @@ void BackendPixelRate(DRAW_CONTEXT *pDC, uint32_t workerId, uint32_t x, uint32_t
     uint8_t *pDepthBuffer, *pStencilBuffer;
     SetupRenderBuffers(psContext.pColorBuffer, &pDepthBuffer, &pStencilBuffer, state.colorHottileEnable, renderBuffers);
 
-    AR_END(BESetup, 0);
+    RDTSC_END(BESetup, 0);
 
     PixelRateZTestLoop<T> PixelRateZTest(pDC, workerId, work, coeffs, state, pDepthBuffer, pStencilBuffer, state.backendState.clipDistanceMask);
 
@@ -916,13 +926,13 @@ void BackendPixelRate(DRAW_CONTEXT *pDC, uint32_t workerId, uint32_t x, uint32_t
                 generateInputCoverage<T, T::InputCoverage>(pCoverageMask, psContext.inputMask, state.blendState.sampleMask);
             }
 
-            AR_BEGIN(BEBarycentric, pDC->drawId);
+            RDTSC_BEGIN(BEBarycentric, pDC->drawId);
 
             CalcPixelBarycentrics(coeffs, psContext);
 
             CalcCentroid<T, false>(&psContext, samplePos, coeffs, work.coverageMask, state.blendState.sampleMask);
 
-            AR_END(BEBarycentric, 0);
+            RDTSC_END(BEBarycentric, 0);
 
             if(T::bForcedSampleCount)
             {
@@ -944,11 +954,11 @@ void BackendPixelRate(DRAW_CONTEXT *pDC, uint32_t workerId, uint32_t x, uint32_t
 
             if(state.psState.usesSourceDepth)
             {
-                AR_BEGIN(BEBarycentric, pDC->drawId);
+                RDTSC_BEGIN(BEBarycentric, pDC->drawId);
                 // interpolate and quantize z
                 psContext.vZ = vplaneps(coeffs.vZa, coeffs.vZb, coeffs.vZc, psContext.vI.center, psContext.vJ.center);
                 psContext.vZ = state.pfnQuantizeDepth(psContext.vZ);
-                AR_END(BEBarycentric, 0);
+                RDTSC_END(BEBarycentric, 0);
             }
 
             // pixels that are currently active
@@ -956,10 +966,14 @@ void BackendPixelRate(DRAW_CONTEXT *pDC, uint32_t workerId, uint32_t x, uint32_t
             psContext.oMask = T::MultisampleT::FullSampleMask();
 
             // execute pixel shader
-            AR_BEGIN(BEPixelShader, pDC->drawId);
-            state.psState.pfnPixelShader(GetPrivateState(pDC), &psContext);
+            RDTSC_BEGIN(BEPixelShader, pDC->drawId);
+            state.psState.pfnPixelShader(GetPrivateState(pDC), pWorkerData, &psContext);
             UPDATE_STAT_BE(PsInvocations, _mm_popcnt_u32(_simd_movemask_ps(activeLanes)));
-            AR_END(BEPixelShader, 0);
+            RDTSC_END(BEPixelShader, 0);
+
+            // update stats
+            UPDATE_STAT_BE(PsInvocations, _mm_popcnt_u32(_simd_movemask_ps(activeLanes)));
+            AR_EVENT(PSStats(psContext.stats.numInstExecuted));
 
             // update active lanes to remove any discarded or oMask'd pixels
             activeLanes = _simd_castsi_ps(_simd_and_si(psContext.activeMask, _simd_cmpgt_epi32(psContext.oMask, _simd_setzero_si())));
@@ -980,7 +994,7 @@ void BackendPixelRate(DRAW_CONTEXT *pDC, uint32_t workerId, uint32_t x, uint32_t
             // loop over all samples, broadcasting the results of the PS to all passing pixels
             for(uint32_t sample = 0; sample < GetNumOMSamples<T>(state.blendState.sampleCount); sample++)
             {
-                AR_BEGIN(BEOutputMerger, pDC->drawId);
+                RDTSC_BEGIN(BEOutputMerger, pDC->drawId);
                 // center pattern does a single coverage/depth/stencil test, standard pattern tests all samples
                 uint32_t coverageSampleNum = (T::bIsCenterPattern) ? 0 : sample;
                 simdscalar coverageMask, depthMask;
@@ -995,16 +1009,16 @@ void BackendPixelRate(DRAW_CONTEXT *pDC, uint32_t workerId, uint32_t x, uint32_t
                     if(!_simd_movemask_ps(depthMask))
                     {
                         // stencil should already have been written in early/lateZ tests
-                        AR_END(BEOutputMerger, 0);
+                        RDTSC_END(BEOutputMerger, 0);
                         continue;
                     }
                 }
                 
                 // broadcast the results of the PS to all passing pixels
 #if USE_8x2_TILE_BACKEND
-                OutputMerger8x2(psContext, psContext.pColorBuffer, sample, &state.blendState,state.pfnBlendFunc, coverageMask, depthMask, state.psState.renderTargetMask, useAlternateOffset);
+                OutputMerger8x2(pDC, psContext, psContext.pColorBuffer, sample, &state.blendState,state.pfnBlendFunc, coverageMask, depthMask, state.psState.renderTargetMask, useAlternateOffset, workerId);
 #else // USE_8x2_TILE_BACKEND
-                OutputMerger4x2(psContext, psContext.pColorBuffer, sample, &state.blendState, state.pfnBlendFunc, coverageMask, depthMask, state.psState.renderTargetMask);
+                OutputMerger4x2(pDC, psContext, psContext.pColorBuffer, sample, &state.blendState, state.pfnBlendFunc, coverageMask, depthMask, state.psState.renderTargetMask, workerId);
 #endif // USE_8x2_TILE_BACKEND
 
                 if(!state.psState.forceEarlyZ && !T::bForcedSampleCount)
@@ -1015,10 +1029,10 @@ void BackendPixelRate(DRAW_CONTEXT *pDC, uint32_t workerId, uint32_t x, uint32_t
                     DepthStencilWrite(&state.vp[work.triFlags.viewportIndex], &state.depthStencilState, work.triFlags.frontFacing, PixelRateZTest.vZ[coverageSampleNum],
                                       pDepthSample, depthMask, coverageMask, pStencilSample, PixelRateZTest.stencilPassMask[coverageSampleNum]);
                 }
-                AR_END(BEOutputMerger, 0);
+                RDTSC_END(BEOutputMerger, 0);
             }
 Endtile:
-            AR_BEGIN(BEEndTile, pDC->drawId);
+            RDTSC_BEGIN(BEEndTile, pDC->drawId);
 
             for(uint32_t sample = 0; sample < T::MultisampleT::numCoverageSamples; sample++)
             {
@@ -1054,7 +1068,7 @@ Endtile:
             pDepthBuffer += (KNOB_SIMD_WIDTH * FormatTraits<KNOB_DEPTH_HOT_TILE_FORMAT>::bpp) / 8;
             pStencilBuffer += (KNOB_SIMD_WIDTH * FormatTraits<KNOB_STENCIL_HOT_TILE_FORMAT>::bpp) / 8;
 
-            AR_END(BEEndTile, 0);
+            RDTSC_END(BEEndTile, 0);
 
             psContext.vX.UL     = _simd_add_ps(psContext.vX.UL,     dx);
             psContext.vX.center = _simd_add_ps(psContext.vX.center, dx);
@@ -1064,7 +1078,7 @@ Endtile:
         psContext.vY.center = _simd_add_ps(psContext.vY.center, dy);
     }
 
-    AR_END(BEPixelRateBackend, 0);
+    RDTSC_END(BEPixelRateBackend, 0);
 }
 
 template<uint32_t sampleCountT = SWR_MULTISAMPLE_1X, uint32_t isCenter = 0,

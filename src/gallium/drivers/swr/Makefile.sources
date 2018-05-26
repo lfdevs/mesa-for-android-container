@@ -140,6 +140,10 @@ JITTER_CXX_SOURCES := \
 	rasterizer/jitter/builder.cpp \
 	rasterizer/jitter/builder.h \
 	rasterizer/jitter/builder_math.h \
+	rasterizer/jitter/builder_mem.cpp \
+	rasterizer/jitter/builder_mem.h \
+	rasterizer/jitter/builder_gfx_mem.cpp \
+	rasterizer/jitter/builder_gfx_mem.h \
 	rasterizer/jitter/builder_misc.cpp \
 	rasterizer/jitter/builder_misc.h \
 	rasterizer/jitter/fetch_jit.cpp \
@@ -149,7 +153,10 @@ JITTER_CXX_SOURCES := \
 	rasterizer/jitter/JitManager.cpp \
 	rasterizer/jitter/JitManager.h \
 	rasterizer/jitter/streamout_jit.cpp \
-	rasterizer/jitter/streamout_jit.h
+	rasterizer/jitter/streamout_jit.h \
+	rasterizer/jitter/shader_lib/DebugOutput.cpp \
+	rasterizer/jitter/functionpasses/passes.h \
+	rasterizer/jitter/functionpasses/lower_x86.cpp
 
 MEMORY_CXX_SOURCES := \
 	rasterizer/memory/ClearTile.cpp \

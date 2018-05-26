@@ -53,13 +53,13 @@
 #include "ir_uniform.h"
 #include "linker.h"
 #include "link_varyings.h"
-#include "main/core.h"
 #include "nir.h"
 #include "program.h"
 #include "serialize.h"
 #include "shader_cache.h"
 #include "util/mesa-sha1.h"
 #include "string_to_uint_map.h"
+#include "main/mtypes.h"
 
 extern "C" {
 #include "main/enums.h"
@@ -160,6 +160,12 @@ shader_cache_read_program_metadata(struct gl_context *ctx,
    prog->FragDataBindings->iterate(create_binding_str, &buf);
    ralloc_strcat(&buf, "fbi: ");
    prog->FragDataIndexBindings->iterate(create_binding_str, &buf);
+   ralloc_asprintf_append(&buf, "tf: %d ", prog->TransformFeedback.BufferMode);
+   for (unsigned int i = 0; i < prog->TransformFeedback.NumVarying; i++) {
+      ralloc_asprintf_append(&buf, "%s:%d ",
+                             prog->TransformFeedback.VaryingNames[i],
+                             prog->TransformFeedback.BufferStride[i]);
+   }
 
    /* SSO has an effect on the linked program so include this when generating
     * the sha also.
@@ -248,7 +254,7 @@ shader_cache_read_program_metadata(struct gl_context *ctx,
    }
 
    /* This is used to flag a shader retrieved from cache */
-   prog->data->LinkStatus = linking_skipped;
+   prog->data->LinkStatus = LINKING_SKIPPED;
 
    /* Since the program load was successful, CompileStatus of all shaders at
     * this point should normally be compile_skipped. However because of how
@@ -258,7 +264,7 @@ shader_cache_read_program_metadata(struct gl_context *ctx,
     */
    char sha1_buf[41];
    for (unsigned i = 0; i < prog->NumShaders; i++) {
-      if (prog->Shaders[i]->CompileStatus == compiled_no_opts) {
+      if (prog->Shaders[i]->CompileStatus == COMPILED_NO_OPTS) {
          disk_cache_put_key(cache, prog->Shaders[i]->sha1);
          if (ctx->_Shader->Flags & GLSL_CACHE_INFO) {
             _mesa_sha1_format(sha1_buf, prog->Shaders[i]->sha1);

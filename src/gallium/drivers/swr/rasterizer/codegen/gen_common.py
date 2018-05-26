@@ -1,4 +1,4 @@
-# Copyright (C) 2014-2016 Intel Corporation.   All Rights Reserved.
+# Copyright (C) 2014-2018 Intel Corporation.   All Rights Reserved.
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
 # copy of this software and associated documentation files (the "Software"),
@@ -25,9 +25,128 @@ import os
 import errno
 import sys
 import argparse
+import tempfile
+import filecmp
+import shutil
 from mako.template import Template
 from mako.exceptions import RichTraceback
 
+#==============================================================================
+def MakeTmpDir(suffix=''):
+    '''
+        Create temporary directory for use in codegen scripts.
+    '''
+    return tempfile.mkdtemp(suffix)
+
+#==============================================================================
+def MakeDir(dir_path):
+    '''
+        Create a directory if it doesn't exist
+
+        returns 0 on success, non-zero on failure
+    '''
+    dir_path = os.path.abspath(dir_path)
+
+    if not os.path.exists(dir_path):
+        try:
+            os.makedirs(dir_path)
+        except OSError as err:
+            if err.errno != errno.EEXIST:
+                return 1
+    else:
+        if not os.path.isdir(dir_path):
+            return 1
+
+    return 0
+
+#==============================================================================
+def DeleteDirTree(dir_path):
+    '''
+        Delete directory tree.
+
+        returns 0 on success, non-zero on failure
+    '''
+    rval = 0
+    try:
+        shutil.rmtree(dir_path, False)
+    except:
+        rval = 1
+    return rval
+
+#==============================================================================
+def CopyFileIfDifferent(src, dst, verbose = False):
+    '''
+        Copy <src> file to <dst> file if the <dst>
+        file either doesn't contain the file or the file
+        contents are different.
+
+        returns 0 on success, non-zero on failure
+    '''
+
+    assert os.path.isfile(src)
+    assert (False == os.path.exists(dst) or os.path.isfile(dst))
+
+    need_copy = not os.path.exists(dst)
+    if not need_copy:
+        need_copy = not filecmp.cmp(src, dst)
+
+    if need_copy:
+        try:
+            shutil.copy2(src, dst)
+        except:
+            print('ERROR: Could not copy %s to %s' % (src, dst), file=sys.stderr)
+            return 1
+
+        if verbose:
+            print(src, '-->', dst)
+
+    return 0
+
+#==============================================================================
+def CopyDirFilesIfDifferent(src, dst, recurse = True, verbose = False, orig_dst = None):
+    '''
+        Copy files <src> directory to <dst> directory if the <dst>
+        directory either doesn't contain the file or the file
+        contents are different.
+
+        Optionally recurses into subdirectories
+
+        returns 0 on success, non-zero on failure
+    '''
+
+    assert os.path.isdir(src)
+    assert os.path.isdir(dst)
+
+    src = os.path.abspath(src)
+    dst = os.path.abspath(dst)
+
+    if not orig_dst:
+        orig_dst = dst
+
+    for f in os.listdir(src):
+        src_path = os.path.join(src, f)
+        dst_path = os.path.join(dst, f)
+
+        # prevent recursion
+        if src_path == orig_dst:
+            continue
+
+        if os.path.isdir(src_path):
+            if recurse:
+                if MakeDir(dst_path):
+                    print('ERROR: Could not create directory:', dst_path, file=sys.stderr)
+                    return 1
+
+                if verbose:
+                    print('mkdir', dst_path)
+                rval = CopyDirFilesIfDifferent(src_path, dst_path, recurse, verbose, orig_dst)
+        else:
+            rval = CopyFileIfDifferent(src_path, dst_path, verbose)
+
+        if rval:
+            return rval
+
+    return 0
 
 #==============================================================================
 class MakoTemplateWriter:
@@ -57,20 +176,18 @@ class MakoTemplateWriter:
                 print('File %s, line %s, in %s' % (filename, lineno, function))
                 print(line, '\n')
             print('%s: %s' % (str(traceback.error.__class__.__name__), traceback.error))
+            raise
 
     @staticmethod
     def to_file(template_filename, output_filename, **kwargs):
         '''
             Write template data to a file
         '''
-        if not os.path.exists(os.path.dirname(output_filename)):
-            try:
-                os.makedirs(os.path.dirname(output_filename))
-            except OSError as err:
-                if err.errno != errno.EEXIST:
-                    raise
+        if MakeDir(os.path.dirname(output_filename)):
+            return 1
         with open(output_filename, 'w') as outfile:
             print(MakoTemplateWriter.to_string(template_filename, **kwargs), file=outfile)
+        return 0
 
 
 #==============================================================================

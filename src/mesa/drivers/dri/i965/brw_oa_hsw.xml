@@ -1669,7 +1669,7 @@
              />
     <counter name="VS EU Stall"
              description="The percentage of time in which vertex shaders were stalled on the EUs."
-             data_type="uint64"
+             data_type="float"
              max_equation="100"
              equation="A 3 READ $EuCoresTotalCount UDIV 100 UMUL $GpuCoreClocks FDIV"
              underscore_name="vs_eu_stall"

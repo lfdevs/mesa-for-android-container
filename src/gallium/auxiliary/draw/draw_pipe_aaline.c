@@ -1,6 +1,6 @@
 /**************************************************************************
  *
- * Copyright 2007 VMware, Inc.
+ * Copyright 2007-2018 VMware, Inc.
  * All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -26,7 +26,7 @@
  **************************************************************************/
 
 /**
- * AA line stage:  AA lines are converted to texture mapped triangles.
+ * AA line stage:  AA lines are converted triangles (with extra generic)
  *
  * Authors:  Brian Paul
  */
@@ -40,7 +40,6 @@
 #include "util/u_format.h"
 #include "util/u_math.h"
 #include "util/u_memory.h"
-#include "util/u_sampler.h"
 
 #include "tgsi/tgsi_transform.h"
 #include "tgsi/tgsi_dump.h"
@@ -55,19 +54,6 @@
 
 
 /**
- * Size for the alpha texture used for antialiasing
- */
-#define TEXTURE_SIZE_LOG2  5   /* 32 x 32 */
-
-/**
- * Max texture level for the alpha texture used for antialiasing
- *
- * Don't use the 1x1 and 2x2 mipmap levels.
- */
-#define MAX_TEXTURE_LEVEL  (TEXTURE_SIZE_LOG2 - 2)
-
-
-/**
  * Subclass of pipe_shader_state to carry extra fragment shader info.
  */
 struct aaline_fragment_shader
@@ -75,8 +61,7 @@ struct aaline_fragment_shader
    struct pipe_shader_state state;
    void *driver_fs;
    void *aaline_fs;
-   uint sampler_unit;
-   int generic_attrib;  /**< texcoord/generic used for texture */
+   int generic_attrib;  /**< generic used for distance */
 };
 
 
@@ -89,26 +74,16 @@ struct aaline_stage
 
    float half_line_width;
 
-   /** For AA lines, this is the vertex attrib slot for the new texcoords */
-   uint tex_slot;
+   /** For AA lines, this is the vertex attrib slot for new generic */
+   uint coord_slot;
    /** position, not necessarily output zero */
    uint pos_slot;
-
-   void *sampler_cso;
-   struct pipe_resource *texture;
-   struct pipe_sampler_view *sampler_view;
-   uint num_samplers;
-   uint num_sampler_views;
 
 
    /*
     * Currently bound state
     */
    struct aaline_fragment_shader *fs;
-   struct {
-      void *sampler[PIPE_MAX_SAMPLERS];
-      struct pipe_sampler_view *sampler_views[PIPE_MAX_SHADER_SAMPLER_VIEWS];
-   } state;
 
    /*
     * Driver interface/override functions
@@ -117,15 +92,6 @@ struct aaline_stage
                                     const struct pipe_shader_state *);
    void (*driver_bind_fs_state)(struct pipe_context *, void *);
    void (*driver_delete_fs_state)(struct pipe_context *, void *);
-
-   void (*driver_bind_sampler_states)(struct pipe_context *,
-                                      enum pipe_shader_type, unsigned,
-                                      unsigned, void **);
-
-   void (*driver_set_sampler_views)(struct pipe_context *,
-                                    enum pipe_shader_type shader,
-                                    unsigned start, unsigned count,
-                                    struct pipe_sampler_view **);
 };
 
 
@@ -136,40 +102,26 @@ struct aaline_stage
  */
 struct aa_transform_context {
    struct tgsi_transform_context base;
-   uint tempsUsed;  /**< bitmask */
+   uint64_t tempsUsed;  /**< bitmask */
    int colorOutput; /**< which output is the primary color */
-   uint samplersUsed;  /**< bitfield of samplers used */
-   bool hasSview;
-   int freeSampler;  /** an available sampler for the pstipple */
    int maxInput, maxGeneric;  /**< max input index found */
-   int colorTemp, texTemp;  /**< temp registers */
+   int colorTemp, aaTemp;  /**< temp registers */
 };
-
 
 /**
  * TGSI declaration transform callback.
- * Look for a free sampler, a free input attrib, and two free temp regs.
+ * Look for a free input attrib, and two free temp regs.
  */
 static void
 aa_transform_decl(struct tgsi_transform_context *ctx,
                   struct tgsi_full_declaration *decl)
 {
-   struct aa_transform_context *aactx = (struct aa_transform_context *) ctx;
+   struct aa_transform_context *aactx = (struct aa_transform_context *)ctx;
 
    if (decl->Declaration.File == TGSI_FILE_OUTPUT &&
        decl->Semantic.Name == TGSI_SEMANTIC_COLOR &&
        decl->Semantic.Index == 0) {
       aactx->colorOutput = decl->Range.First;
-   }
-   else if (decl->Declaration.File == TGSI_FILE_SAMPLER) {
-      uint i;
-      for (i = decl->Range.First;
-           i <= decl->Range.Last; i++) {
-         aactx->samplersUsed |= 1u << i;
-      }
-   }
-   else if (decl->Declaration.File == TGSI_FILE_SAMPLER_VIEW) {
-      aactx->hasSview = true;
    }
    else if (decl->Declaration.File == TGSI_FILE_INPUT) {
       if ((int) decl->Range.Last > aactx->maxInput)
@@ -183,7 +135,10 @@ aa_transform_decl(struct tgsi_transform_context *ctx,
       uint i;
       for (i = decl->Range.First;
            i <= decl->Range.Last; i++) {
-         aactx->tempsUsed |= (1 << i);
+         /*
+          * XXX this bitfield doesn't really cut it...
+          */
+         aactx->tempsUsed |= UINT64_C(1) << i;
       }
    }
 
@@ -192,12 +147,12 @@ aa_transform_decl(struct tgsi_transform_context *ctx,
 
 
 /**
- * Find the lowest zero bit in the given word, or -1 if bitfield is all ones.
+ * Find the lowest zero bit, or -1 if bitfield is all ones.
  */
 static int
-free_bit(uint bitfield)
+free_bit(uint64_t bitfield)
 {
-   return ffs(~bitfield) - 1;
+   return ffsll(~bitfield) - 1;
 }
 
 
@@ -208,51 +163,22 @@ static void
 aa_transform_prolog(struct tgsi_transform_context *ctx)
 {
    struct aa_transform_context *aactx = (struct aa_transform_context *) ctx;
-   uint i;
-
-   STATIC_ASSERT(sizeof(aactx->samplersUsed) * 8 >= PIPE_MAX_SAMPLERS);
-
-   /* find free sampler */
-   aactx->freeSampler = free_bit(aactx->samplersUsed);
-   if (aactx->freeSampler < 0 || aactx->freeSampler >= PIPE_MAX_SAMPLERS)
-      aactx->freeSampler = PIPE_MAX_SAMPLERS - 1;
+   uint64_t usedTemps = aactx->tempsUsed;
 
    /* find two free temp regs */
-   for (i = 0; i < 32; i++) {
-      if ((aactx->tempsUsed & (1 << i)) == 0) {
-      /* found a free temp */
-      if (aactx->colorTemp < 0)
-         aactx->colorTemp  = i;
-      else if (aactx->texTemp < 0)
-         aactx->texTemp  = i;
-      else
-         break;
-      }
-   }
+   aactx->colorTemp = free_bit(usedTemps);
+   usedTemps |= UINT64_C(1) << aactx->colorTemp;
+   aactx->aaTemp = free_bit(usedTemps);
    assert(aactx->colorTemp >= 0);
-   assert(aactx->texTemp >= 0);
+   assert(aactx->aaTemp >= 0);
 
    /* declare new generic input/texcoord */
    tgsi_transform_input_decl(ctx, aactx->maxInput + 1,
                              TGSI_SEMANTIC_GENERIC, aactx->maxGeneric + 1,
                              TGSI_INTERPOLATE_LINEAR);
 
-   /* declare new sampler */
-   tgsi_transform_sampler_decl(ctx, aactx->freeSampler);
-
-   /* if the src shader has SVIEW decl's for each SAMP decl, we
-    * need to continue the trend and ensure there is a matching
-    * SVIEW for the new SAMP we just created
-    */
-   if (aactx->hasSview) {
-      tgsi_transform_sampler_view_decl(ctx,
-                                       aactx->freeSampler,
-                                       TGSI_TEXTURE_2D,
-                                       TGSI_RETURN_TYPE_FLOAT);
-   }
-
    /* declare new temp regs */
-   tgsi_transform_temp_decl(ctx, aactx->texTemp);
+   tgsi_transform_temp_decl(ctx, aactx->aaTemp);
    tgsi_transform_temp_decl(ctx, aactx->colorTemp);
 }
 
@@ -266,13 +192,35 @@ aa_transform_epilog(struct tgsi_transform_context *ctx)
    struct aa_transform_context *aactx = (struct aa_transform_context *) ctx;
 
    if (aactx->colorOutput != -1) {
-      /* insert texture sampling code for antialiasing. */
+      struct tgsi_full_instruction inst;
+      /* insert distance-based coverage code for antialiasing. */
 
-      /* TEX texTemp, input_coord, sampler, 2D */
-      tgsi_transform_tex_inst(ctx,
-                              TGSI_FILE_TEMPORARY, aactx->texTemp,
-                              TGSI_FILE_INPUT, aactx->maxInput + 1,
-                              TGSI_TEXTURE_2D, aactx->freeSampler);
+      /* saturate(linewidth - fabs(interpx), linelength - fabs(interpz) */
+      inst = tgsi_default_full_instruction();
+      inst.Instruction.Saturate = true;
+      inst.Instruction.Opcode = TGSI_OPCODE_ADD;
+      inst.Instruction.NumDstRegs = 1;
+      tgsi_transform_dst_reg(&inst.Dst[0], TGSI_FILE_TEMPORARY,
+                             aactx->aaTemp, TGSI_WRITEMASK_XZ);
+      inst.Instruction.NumSrcRegs = 2;
+      tgsi_transform_src_reg(&inst.Src[1], TGSI_FILE_INPUT, aactx->maxInput + 1,
+                             TGSI_SWIZZLE_X, TGSI_SWIZZLE_X,
+                             TGSI_SWIZZLE_Z, TGSI_SWIZZLE_Z);
+      tgsi_transform_src_reg(&inst.Src[0], TGSI_FILE_INPUT, aactx->maxInput + 1,
+                             TGSI_SWIZZLE_Y, TGSI_SWIZZLE_Y,
+                             TGSI_SWIZZLE_W, TGSI_SWIZZLE_W);
+      inst.Src[1].Register.Absolute = true;
+      inst.Src[1].Register.Negate = true;
+      ctx->emit_instruction(ctx, &inst);
+
+      /* MUL width / height alpha */
+      tgsi_transform_op2_swz_inst(ctx, TGSI_OPCODE_MUL,
+                                  TGSI_FILE_TEMPORARY, aactx->aaTemp,
+                                  TGSI_WRITEMASK_W,
+                                  TGSI_FILE_TEMPORARY, aactx->aaTemp,
+                                  TGSI_SWIZZLE_X,
+                                  TGSI_FILE_TEMPORARY, aactx->aaTemp,
+                                  TGSI_SWIZZLE_Z, false);
 
       /* MOV rgb */
       tgsi_transform_op1_inst(ctx, TGSI_OPCODE_MOV,
@@ -285,7 +233,7 @@ aa_transform_epilog(struct tgsi_transform_context *ctx)
                               TGSI_FILE_OUTPUT, aactx->colorOutput,
                               TGSI_WRITEMASK_W,
                               TGSI_FILE_TEMPORARY, aactx->colorTemp,
-                              TGSI_FILE_TEMPORARY, aactx->texTemp, false);
+                              TGSI_FILE_TEMPORARY, aactx->aaTemp, false);
    }
 }
 
@@ -319,7 +267,7 @@ aa_transform_inst(struct tgsi_transform_context *ctx,
 
 /**
  * Generate the frag shader we'll use for drawing AA lines.
- * This will be the user's shader plus some texture/modulate instructions.
+ * This will be the user's shader plus some arithmetic instructions.
  */
 static boolean
 generate_aaline_fs(struct aaline_stage *aaline)
@@ -340,7 +288,7 @@ generate_aaline_fs(struct aaline_stage *aaline)
    transform.maxInput = -1;
    transform.maxGeneric = -1;
    transform.colorTemp = -1;
-   transform.texTemp = -1;
+   transform.aaTemp = -1;
    transform.base.prolog = aa_transform_prolog;
    transform.base.epilog = aa_transform_epilog;
    transform.base.transform_instruction = aa_transform_inst;
@@ -357,8 +305,6 @@ generate_aaline_fs(struct aaline_stage *aaline)
    tgsi_dump(aaline_fs.tokens, 0);
 #endif
 
-   aaline->fs->sampler_unit = transform.freeSampler;
-
    aaline->fs->aaline_fs = aaline->driver_create_fs_state(pipe, &aaline_fs);
    if (aaline->fs->aaline_fs == NULL)
       goto fail;
@@ -370,125 +316,6 @@ generate_aaline_fs(struct aaline_stage *aaline)
 fail:
    FREE((void *)aaline_fs.tokens);
    return FALSE;
-}
-
-
-/**
- * Create the texture map we'll use for antialiasing the lines.
- */
-static boolean
-aaline_create_texture(struct aaline_stage *aaline)
-{
-   struct pipe_context *pipe = aaline->stage.draw->pipe;
-   struct pipe_screen *screen = pipe->screen;
-   struct pipe_resource texTemp;
-   struct pipe_sampler_view viewTempl;
-   uint level;
-
-   memset(&texTemp, 0, sizeof(texTemp));
-   texTemp.target = PIPE_TEXTURE_2D;
-   texTemp.format = PIPE_FORMAT_A8_UNORM; /* XXX verify supported by driver! */
-   texTemp.last_level = MAX_TEXTURE_LEVEL;
-   texTemp.width0 = 1 << TEXTURE_SIZE_LOG2;
-   texTemp.height0 = 1 << TEXTURE_SIZE_LOG2;
-   texTemp.depth0 = 1;
-   texTemp.array_size = 1;
-   texTemp.bind = PIPE_BIND_SAMPLER_VIEW;
-
-   aaline->texture = screen->resource_create(screen, &texTemp);
-   if (!aaline->texture)
-      return FALSE;
-
-   u_sampler_view_default_template(&viewTempl,
-                                   aaline->texture,
-                                   aaline->texture->format);
-   aaline->sampler_view = pipe->create_sampler_view(pipe,
-                                                    aaline->texture,
-                                                    &viewTempl);
-   if (!aaline->sampler_view) {
-      return FALSE;
-   }
-
-   /* Fill in mipmap images.
-    * Basically each level is solid opaque, except for the outermost
-    * texels which are zero.  Special case the 1x1 and 2x2 levels
-    * (though, those levels shouldn't be used - see the max_lod setting).
-    */
-   for (level = 0; level <= MAX_TEXTURE_LEVEL; level++) {
-      struct pipe_transfer *transfer;
-      struct pipe_box box;
-      const uint size = u_minify(aaline->texture->width0, level);
-      ubyte *data;
-      uint i, j;
-
-      assert(aaline->texture->width0 == aaline->texture->height0);
-
-      u_box_origin_2d(size, size, &box);
-
-      /* This texture is new, no need to flush.
-       */
-      data = pipe->transfer_map(pipe,
-                                aaline->texture,
-                                level,
-                                PIPE_TRANSFER_WRITE,
-                                &box, &transfer);
-
-      if (!data)
-         return FALSE;
-
-      for (i = 0; i < size; i++) {
-         for (j = 0; j < size; j++) {
-            ubyte d;
-            if (size == 1) {
-               d = 255;
-            }
-            else if (size == 2) {
-               d = 200; /* tuneable */
-            }
-            else if (i == 0 || j == 0 || i == size - 1 || j == size - 1) {
-               d = 35;  /* edge texel */
-            }
-            else {
-               d = 255;
-            }
-            data[i * transfer->stride + j] = d;
-         }
-      }
-
-      /* unmap */
-      pipe->transfer_unmap(pipe, transfer);
-   }
-   return TRUE;
-}
-
-
-/**
- * Create the sampler CSO that'll be used for antialiasing.
- * By using a mipmapped texture, we don't have to generate a different
- * texture image for each line size.
- */
-static boolean
-aaline_create_sampler(struct aaline_stage *aaline)
-{
-   struct pipe_sampler_state sampler;
-   struct pipe_context *pipe = aaline->stage.draw->pipe;
-
-   memset(&sampler, 0, sizeof(sampler));
-   sampler.wrap_s = PIPE_TEX_WRAP_CLAMP_TO_EDGE;
-   sampler.wrap_t = PIPE_TEX_WRAP_CLAMP_TO_EDGE;
-   sampler.wrap_r = PIPE_TEX_WRAP_CLAMP_TO_EDGE;
-   sampler.min_mip_filter = PIPE_TEX_MIPFILTER_LINEAR;
-   sampler.min_img_filter = PIPE_TEX_FILTER_LINEAR;
-   sampler.mag_img_filter = PIPE_TEX_FILTER_LINEAR;
-   sampler.normalized_coords = 1;
-   sampler.min_lod = 0.0f;
-   sampler.max_lod = MAX_TEXTURE_LEVEL;
-
-   aaline->sampler_cso = pipe->create_sampler_state(pipe, &sampler);
-   if (aaline->sampler_cso == NULL)
-      return FALSE;
-
-   return TRUE;
 }
 
 
@@ -532,111 +359,104 @@ aaline_line(struct draw_stage *stage, struct prim_header *header)
    const float half_width = aaline->half_line_width;
    struct prim_header tri;
    struct vertex_header *v[8];
-   uint texPos = aaline->tex_slot;
+   uint coordPos = aaline->coord_slot;
    uint posPos = aaline->pos_slot;
    float *pos, *tex;
    float dx = header->v[1]->data[posPos][0] - header->v[0]->data[posPos][0];
    float dy = header->v[1]->data[posPos][1] - header->v[0]->data[posPos][1];
-   double a = atan2(dy, dx);
-   float c_a = (float) cos(a), s_a = (float) sin(a);
+   float a = atan2f(dy, dx);
+   float c_a = cosf(a), s_a = sinf(a);
+   float half_length;
+   float t_l, t_w;
    uint i;
 
-   /* XXX the ends of lines aren't quite perfect yet, but probably passable */
-   dx = 0.5F * half_width;
-   dy = half_width;
+   half_length = 0.5f * sqrtf(dx * dx + dy * dy);
+
+   if (half_length < 0.5f) {
+      /*
+       * The logic we use for "normal" sized segments is incorrect
+       * for very short segments (basically because we only have
+       * one value to interpolate, not a distance to each endpoint).
+       * Therefore, we calculate half_length differently, so that for
+       * original line length (near) 0, we get alpha 0 - otherwise
+       * max alpha would still be 0.5. This also prevents us from
+       * artifacts due to degenerated lines (the endpoints being
+       * identical, which would still receive anywhere from alpha
+       * 0-0.5 otherwise) (at least the pstipple stage may generate
+       * such lines due to float inaccuracies if line length is very
+       * close to a integer).
+       * Might not be fully accurate neither (because the "strength" of
+       * the line is going to be determined by how close to the pixel
+       * center those 1 or 2 fragments are) but it's probably the best
+       * we can do.
+       */
+      half_length = 2.0f * half_length;
+   } else {
+      half_length = half_length + 0.5f;
+   }
+
+   t_w = half_width;
+   t_l = 0.5f;
 
    /* allocate/dup new verts */
-   for (i = 0; i < 8; i++) {
-      v[i] = dup_vert(stage, header->v[i/4], i);
+   for (i = 0; i < 4; i++) {
+      v[i] = dup_vert(stage, header->v[i/2], i);
    }
 
    /*
     * Quad strip for line from v0 to v1 (*=endpoints):
     *
-    *  1   3                     5   7
-    *  +---+---------------------+---+
+    *  1                             3
+    *  +-----------------------------+
     *  |                             |
     *  | *v0                     v1* |
     *  |                             |
-    *  +---+---------------------+---+
-    *  0   2                     4   6
+    *  +-----------------------------+
+    *  0                             2
+    */
+
+   /*
+    * We increase line length by 0.5 pixels (at each endpoint),
+    * and calculate the tri endpoints by moving them half-width
+    * distance away perpendicular to the line.
+    * XXX: since we change line endpoints (by 0.5 pixel), should
+    * actually re-interpolate all other values?
     */
 
    /* new verts */
    pos = v[0]->data[posPos];
-   pos[0] += (-dx * c_a -  dy * s_a);
-   pos[1] += (-dx * s_a +  dy * c_a);
+   pos[0] += (-t_l * c_a -  t_w * s_a);
+   pos[1] += (-t_l * s_a +  t_w * c_a);
 
    pos = v[1]->data[posPos];
-   pos[0] += (-dx * c_a - -dy * s_a);
-   pos[1] += (-dx * s_a + -dy * c_a);
+   pos[0] += (-t_l * c_a - -t_w * s_a);
+   pos[1] += (-t_l * s_a + -t_w * c_a);
 
    pos = v[2]->data[posPos];
-   pos[0] += (dx * c_a -  dy * s_a);
-   pos[1] += (dx * s_a +  dy * c_a);
+   pos[0] += (t_l * c_a -  t_w * s_a);
+   pos[1] += (t_l * s_a +  t_w * c_a);
 
    pos = v[3]->data[posPos];
-   pos[0] += (dx * c_a - -dy * s_a);
-   pos[1] += (dx * s_a + -dy * c_a);
-
-   pos = v[4]->data[posPos];
-   pos[0] += (-dx * c_a -  dy * s_a);
-   pos[1] += (-dx * s_a +  dy * c_a);
-
-   pos = v[5]->data[posPos];
-   pos[0] += (-dx * c_a - -dy * s_a);
-   pos[1] += (-dx * s_a + -dy * c_a);
-
-   pos = v[6]->data[posPos];
-   pos[0] += (dx * c_a -  dy * s_a);
-   pos[1] += (dx * s_a +  dy * c_a);
-
-   pos = v[7]->data[posPos];
-   pos[0] += (dx * c_a - -dy * s_a);
-   pos[1] += (dx * s_a + -dy * c_a);
+   pos[0] += (t_l * c_a - -t_w * s_a);
+   pos[1] += (t_l * s_a + -t_w * c_a);
 
    /* new texcoords */
-   tex = v[0]->data[texPos];
-   ASSIGN_4V(tex, 0, 0, 0, 1);
+   tex = v[0]->data[coordPos];
+   ASSIGN_4V(tex, -half_width, half_width, -half_length, half_length);
 
-   tex = v[1]->data[texPos];
-   ASSIGN_4V(tex, 0, 1, 0, 1);
+   tex = v[1]->data[coordPos];
+   ASSIGN_4V(tex, half_width, half_width, -half_length, half_length);
 
-   tex = v[2]->data[texPos];
-   ASSIGN_4V(tex, .5, 0, 0, 1);
+   tex = v[2]->data[coordPos];
+   ASSIGN_4V(tex, -half_width, half_width, half_length, half_length);
 
-   tex = v[3]->data[texPos];
-   ASSIGN_4V(tex, .5, 1, 0, 1);
+   tex = v[3]->data[coordPos];
+   ASSIGN_4V(tex, half_width, half_width, half_length, half_length);
 
-   tex = v[4]->data[texPos];
-   ASSIGN_4V(tex, .5, 0, 0, 1);
-
-   tex = v[5]->data[texPos];
-   ASSIGN_4V(tex, .5, 1, 0, 1);
-
-   tex = v[6]->data[texPos];
-   ASSIGN_4V(tex, 1, 0, 0, 1);
-
-   tex = v[7]->data[texPos];
-   ASSIGN_4V(tex, 1, 1, 0, 1);
-
-   /* emit 6 tris for the quad strip */
    tri.v[0] = v[2];  tri.v[1] = v[1];  tri.v[2] = v[0];
    stage->next->tri(stage->next, &tri);
 
    tri.v[0] = v[3];  tri.v[1] = v[1];  tri.v[2] = v[2];
-   stage->next->tri(stage->next, &tri);
-
-   tri.v[0] = v[4];  tri.v[1] = v[3];  tri.v[2] = v[2];
-   stage->next->tri(stage->next, &tri);
-
-   tri.v[0] = v[5];  tri.v[1] = v[3];  tri.v[2] = v[4];
-   stage->next->tri(stage->next, &tri);
-
-   tri.v[0] = v[6];  tri.v[1] = v[5];  tri.v[2] = v[4];
-   stage->next->tri(stage->next, &tri);
-
-   tri.v[0] = v[7];  tri.v[1] = v[5];  tri.v[2] = v[6];
    stage->next->tri(stage->next, &tri);
 }
 
@@ -648,19 +468,23 @@ aaline_first_line(struct draw_stage *stage, struct prim_header *header)
    struct draw_context *draw = stage->draw;
    struct pipe_context *pipe = draw->pipe;
    const struct pipe_rasterizer_state *rast = draw->rasterizer;
-   uint num_samplers;
-   uint num_sampler_views;
    void *r;
 
    assert(draw->rasterizer->line_smooth);
 
-   if (draw->rasterizer->line_width <= 2.2)
-      aaline->half_line_width = 1.1f;
+   if (draw->rasterizer->line_width <= 1.0)
+      aaline->half_line_width = 1.0;
    else
-      aaline->half_line_width = 0.5f * draw->rasterizer->line_width;
+      aaline->half_line_width = 0.5f * draw->rasterizer->line_width + 0.5f;
+
+   if (!draw->rasterizer->half_pixel_center)
+      /*
+       * The tex coords probably would need adjustments?
+       */
+      debug_printf("aa lines without half pixel center may be wrong\n");
 
    /*
-    * Bind (generate) our fragprog, sampler and texture
+    * Bind (generate) our fragprog
     */
    if (!bind_aaline_fragment_shader(aaline)) {
       stage->line = draw_pipe_passthrough_line;
@@ -670,22 +494,7 @@ aaline_first_line(struct draw_stage *stage, struct prim_header *header)
 
    draw_aaline_prepare_outputs(draw, draw->pipeline.aaline);
 
-   /* how many samplers? */
-   /* we'll use sampler/texture[aaline->sampler_unit] for the alpha texture */
-   num_samplers = MAX2(aaline->num_samplers, aaline->fs->sampler_unit + 1);
-   num_sampler_views = MAX2(num_samplers, aaline->num_sampler_views);
-
-   aaline->state.sampler[aaline->fs->sampler_unit] = aaline->sampler_cso;
-   pipe_sampler_view_reference(&aaline->state.sampler_views[aaline->fs->sampler_unit],
-                               aaline->sampler_view);
-
    draw->suspend_flushing = TRUE;
-
-   aaline->driver_bind_sampler_states(pipe, PIPE_SHADER_FRAGMENT, 0,
-                                      num_samplers, aaline->state.sampler);
-
-   aaline->driver_set_sampler_views(pipe, PIPE_SHADER_FRAGMENT, 0,
-                                    num_sampler_views, aaline->state.sampler_views);
 
    /* Disable triangle culling, stippling, unfilled mode etc. */
    r = draw_get_rasterizer_no_cull(draw, rast->scissor, rast->flatshade);
@@ -709,17 +518,9 @@ aaline_flush(struct draw_stage *stage, unsigned flags)
    stage->line = aaline_first_line;
    stage->next->flush(stage->next, flags);
 
-   /* restore original frag shader, texture, sampler state */
+   /* restore original frag shader */
    draw->suspend_flushing = TRUE;
    aaline->driver_bind_fs_state(pipe, aaline->fs ? aaline->fs->driver_fs : NULL);
-
-   aaline->driver_bind_sampler_states(pipe, PIPE_SHADER_FRAGMENT, 0,
-                                      aaline->num_samplers,
-                                      aaline->state.sampler);
-
-   aaline->driver_set_sampler_views(pipe, PIPE_SHADER_FRAGMENT, 0,
-                                    aaline->num_samplers,
-                                    aaline->state.sampler_views);
 
    /* restore original rasterizer state */
    if (draw->rast_handle) {
@@ -744,21 +545,6 @@ aaline_destroy(struct draw_stage *stage)
 {
    struct aaline_stage *aaline = aaline_stage(stage);
    struct pipe_context *pipe = stage->draw->pipe;
-   uint i;
-
-   for (i = 0; i < PIPE_MAX_SHADER_SAMPLER_VIEWS; i++) {
-      pipe_sampler_view_reference(&aaline->state.sampler_views[i], NULL);
-   }
-
-   if (aaline->sampler_cso)
-      pipe->delete_sampler_state(pipe, aaline->sampler_cso);
-
-   if (aaline->texture)
-      pipe_resource_reference(&aaline->texture, NULL);
-
-   if (aaline->sampler_view) {
-      pipe_sampler_view_reference(&aaline->sampler_view, NULL);
-   }
 
    draw_free_temp_verts(stage);
 
@@ -766,9 +552,6 @@ aaline_destroy(struct draw_stage *stage)
    pipe->create_fs_state = aaline->driver_create_fs_state;
    pipe->bind_fs_state = aaline->driver_bind_fs_state;
    pipe->delete_fs_state = aaline->driver_delete_fs_state;
-
-   pipe->bind_sampler_states = aaline->driver_bind_sampler_states;
-   pipe->set_sampler_views = aaline->driver_set_sampler_views;
 
    FREE(stage);
 }
@@ -884,57 +667,6 @@ aaline_delete_fs_state(struct pipe_context *pipe, void *fs)
 }
 
 
-static void
-aaline_bind_sampler_states(struct pipe_context *pipe,
-                           enum pipe_shader_type shader,
-                           unsigned start, unsigned num, void **sampler)
-{
-   struct aaline_stage *aaline = aaline_stage_from_pipe(pipe);
-
-   assert(start == 0);
-
-   if (!aaline) {
-      return;
-   }
-
-   if (shader == PIPE_SHADER_FRAGMENT) {
-      /* save current */
-      memcpy(aaline->state.sampler, sampler, num * sizeof(void *));
-      aaline->num_samplers = num;
-   }
-
-   /* pass-through */
-   aaline->driver_bind_sampler_states(pipe, shader, start, num, sampler);
-}
-
-
-static void
-aaline_set_sampler_views(struct pipe_context *pipe,
-                         enum pipe_shader_type shader,
-                         unsigned start, unsigned num,
-                         struct pipe_sampler_view **views)
-{
-   struct aaline_stage *aaline = aaline_stage_from_pipe(pipe);
-   uint i;
-
-   if (!aaline) {
-      return;
-   }
-
-   if (shader == PIPE_SHADER_FRAGMENT) {
-      /* save current */
-      for (i = 0; i < num; i++) {
-         pipe_sampler_view_reference(&aaline->state.sampler_views[start + i],
-                                     views[i]);
-      }
-      aaline->num_sampler_views = num;
-   }
-
-   /* pass-through */
-   aaline->driver_set_sampler_views(pipe, shader, start, num, views);
-}
-
-
 void
 draw_aaline_prepare_outputs(struct draw_context *draw,
                             struct draw_stage *stage)
@@ -949,7 +681,7 @@ draw_aaline_prepare_outputs(struct draw_context *draw,
       return;
 
    /* allocate the extra post-transformed vertex attribute */
-   aaline->tex_slot = draw_alloc_extra_vertex_attrib(draw,
+   aaline->coord_slot = draw_alloc_extra_vertex_attrib(draw,
                                                      TGSI_SEMANTIC_GENERIC,
                                                      aaline->fs->generic_attrib);
 }
@@ -978,23 +710,10 @@ draw_install_aaline_stage(struct draw_context *draw, struct pipe_context *pipe)
    aaline->driver_bind_fs_state = pipe->bind_fs_state;
    aaline->driver_delete_fs_state = pipe->delete_fs_state;
 
-   aaline->driver_bind_sampler_states = pipe->bind_sampler_states;
-   aaline->driver_set_sampler_views = pipe->set_sampler_views;
-
-   /* create special texture, sampler state */
-   if (!aaline_create_texture(aaline))
-      goto fail;
-
-   if (!aaline_create_sampler(aaline))
-      goto fail;
-
    /* override the driver's functions */
    pipe->create_fs_state = aaline_create_fs_state;
    pipe->bind_fs_state = aaline_bind_fs_state;
    pipe->delete_fs_state = aaline_delete_fs_state;
-
-   pipe->bind_sampler_states = aaline_bind_sampler_states;
-   pipe->set_sampler_views = aaline_set_sampler_views;
 
    /* Install once everything is known to be OK:
     */

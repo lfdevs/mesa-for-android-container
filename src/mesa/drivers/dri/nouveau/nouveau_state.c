@@ -115,7 +115,7 @@ nouveau_read_buffer(struct gl_context *ctx, GLenum buffer)
 }
 
 static void
-nouveau_draw_buffers(struct gl_context *ctx, GLsizei n, const GLenum *buffers)
+nouveau_draw_buffer(struct gl_context *ctx, GLenum buffer)
 {
 	nouveau_validate_framebuffer(ctx);
 	context_dirty(ctx, FRAMEBUFFER);
@@ -298,7 +298,7 @@ nouveau_line_width(struct gl_context *ctx, GLfloat width)
 }
 
 static void
-nouveau_logic_opcode(struct gl_context *ctx, GLenum opcode)
+nouveau_logic_opcode(struct gl_context *ctx, UNUSED enum gl_logicop_mode opcode)
 {
 	context_dirty(ctx, LOGIC_OPCODE);
 }
@@ -519,7 +519,7 @@ nouveau_state_init(struct gl_context *ctx)
 	ctx->Driver.DepthFunc = nouveau_depth_func;
 	ctx->Driver.DepthMask = nouveau_depth_mask;
 	ctx->Driver.ReadBuffer = nouveau_read_buffer;
-	ctx->Driver.DrawBuffers = nouveau_draw_buffers;
+	ctx->Driver.DrawBuffer = nouveau_draw_buffer;
 	ctx->Driver.Enable = nouveau_enable;
 	ctx->Driver.Fogfv = nouveau_fog;
 	ctx->Driver.Lightfv = nouveau_light;

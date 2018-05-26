@@ -323,7 +323,7 @@ etna_set_framebuffer_state(struct pipe_context *pctx,
     * one per color buffer / depth buffer. To keep the logic simple always use
     * single buffer when this feature is available.
     */
-   cs->PE_LOGIC_OP = VIVS_PE_LOGIC_OP_SINGLE_BUFFER(ctx->specs.single_buffer ? 2 : 0);
+   cs->PE_LOGIC_OP = VIVS_PE_LOGIC_OP_SINGLE_BUFFER(ctx->specs.single_buffer ? 3 : 0);
 
    ctx->framebuffer_s = *sv; /* keep copy of original structure */
    ctx->dirty |= ETNA_DIRTY_FRAMEBUFFER | ETNA_DIRTY_DERIVE_TS;

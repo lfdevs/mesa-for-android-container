@@ -99,20 +99,23 @@ struct brw_bo *intel_bufferobj_buffer(struct brw_context *brw,
                                       uint32_t size,
                                       bool write);
 
-void intel_upload_data(struct brw_context *brw,
-                       const void *data,
+void brw_upload_data(struct brw_uploader *upload,
+                     const void *data,
+                     uint32_t size,
+                     uint32_t alignment,
+                     struct brw_bo **out_bo,
+                     uint32_t *out_offset);
+
+void *brw_upload_space(struct brw_uploader *upload,
                        uint32_t size,
                        uint32_t alignment,
                        struct brw_bo **out_bo,
                        uint32_t *out_offset);
 
-void *intel_upload_space(struct brw_context *brw,
-                         uint32_t size,
-                         uint32_t alignment,
-                         struct brw_bo **out_bo,
-                         uint32_t *out_offset);
-
-void intel_upload_finish(struct brw_context *brw);
+void brw_upload_finish(struct brw_uploader *upload);
+void brw_upload_init(struct brw_uploader *upload,
+                     struct brw_bufmgr *bufmgr,
+                     unsigned default_size);
 
 /* Hook the bufferobject implementation into mesa:
  */

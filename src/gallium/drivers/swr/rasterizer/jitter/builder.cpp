@@ -39,12 +39,11 @@ namespace SwrJit
     /// @brief Contructor for Builder.
     /// @param pJitMgr - JitManager which contains modules, function passes, etc.
     Builder::Builder(JitManager *pJitMgr)
-        : mpJitMgr(pJitMgr)
+        : mpJitMgr(pJitMgr),
+          mpPrivateContext(nullptr)
     {
-        SWR_ASSERT(pJitMgr->mVWidth == 8);
-
         mVWidth = pJitMgr->mVWidth;
-        mVWidth16 = pJitMgr->mVWidth * 2;
+        mVWidth16 = 16;
 
         mpIRBuilder = &pJitMgr->mBuilder;
 
@@ -64,16 +63,10 @@ namespace SwrJit
         mInt32PtrTy = PointerType::get(mInt32Ty, 0);
         mInt64Ty    = Type::getInt64Ty(pJitMgr->mContext);
 
-        // Built in types: simd8
+        mSimd4FP64Ty = VectorType::get(mDoubleTy, 4);
 
-        mSimdInt1Ty     = VectorType::get(mInt1Ty,  mVWidth);
-        mSimdInt16Ty    = VectorType::get(mInt16Ty, mVWidth);
-        mSimdInt32Ty    = VectorType::get(mInt32Ty, mVWidth);
-        mSimdInt64Ty    = VectorType::get(mInt64Ty, mVWidth);
-        mSimdFP16Ty     = VectorType::get(mFP16Ty,  mVWidth);
-        mSimdFP32Ty     = VectorType::get(mFP32Ty,  mVWidth);
-        mSimdVectorTy   = ArrayType::get(mSimdFP32Ty, 4);
-        mSimdVectorTRTy = ArrayType::get(mSimdFP32Ty, 5);
+        // Built in types: target simd
+        SetTargetWidth(pJitMgr->mVWidth);
 
         // Built in types: simd16
 
@@ -85,6 +78,8 @@ namespace SwrJit
         mSimd16FP32Ty       = VectorType::get(mFP32Ty,  mVWidth16);
         mSimd16VectorTy     = ArrayType::get(mSimd16FP32Ty, 4);
         mSimd16VectorTRTy   = ArrayType::get(mSimd16FP32Ty, 5);
+
+        mSimd32Int8Ty       = VectorType::get(mInt8Ty, 32);
 
         if (sizeof(uint32_t*) == 4)
         {
@@ -100,5 +95,37 @@ namespace SwrJit
             mSimdIntPtrTy = mSimdInt64Ty;
             mSimd16IntPtrTy = mSimd16Int64Ty;
         }
+    }
+
+    void Builder::SetTargetWidth(uint32_t width)
+    {
+        mVWidth = width;
+
+        mSimdInt1Ty = VectorType::get(mInt1Ty, mVWidth);
+        mSimdInt16Ty = VectorType::get(mInt16Ty, mVWidth);
+        mSimdInt32Ty = VectorType::get(mInt32Ty, mVWidth);
+        mSimdInt64Ty = VectorType::get(mInt64Ty, mVWidth);
+        mSimdFP16Ty = VectorType::get(mFP16Ty, mVWidth);
+        mSimdFP32Ty = VectorType::get(mFP32Ty, mVWidth);
+        mSimdVectorTy = ArrayType::get(mSimdFP32Ty, 4);
+        mSimdVectorIntTy = ArrayType::get(mSimdInt32Ty, 4);
+        mSimdVectorTRTy = ArrayType::get(mSimdFP32Ty, 5);
+    }
+
+    /// @brief Mark this alloca as temporary to avoid hoisting later on
+    void Builder::SetTempAlloca(Value* inst)
+    {
+        AllocaInst* pAlloca = dyn_cast<AllocaInst>(inst);
+        SWR_ASSERT(pAlloca, "Unexpected non-alloca instruction");
+        MDNode* N = MDNode::get(JM()->mContext, MDString::get(JM()->mContext, "is_temp_alloca"));
+        pAlloca->setMetadata("is_temp_alloca", N);
+    }
+
+    bool Builder::IsTempAlloca(Value* inst)
+    {
+        AllocaInst* pAlloca = dyn_cast<AllocaInst>(inst);
+        SWR_ASSERT(pAlloca, "Unexpected non-alloca instruction");
+
+        return (pAlloca->getMetadata("is_temp_alloca") != nullptr);
     }
 }

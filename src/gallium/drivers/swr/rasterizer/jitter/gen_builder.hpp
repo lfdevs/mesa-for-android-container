@@ -29,7 +29,7 @@
 // Generation Command Line:
 //  ./rasterizer/codegen/gen_llvm_ir_macros.py
 //    --input
-//    /usr/lib/llvm-3.9/include/llvm/IR/IRBuilder.h
+//    /home/dylan/llvm-install/include/llvm/IR/IRBuilder.h
 //    --output
 //    rasterizer/jitter
 //    --gen_h
@@ -40,7 +40,6 @@
 //============================================================================
 // Auto-generated Builder IR Wrappers
 //============================================================================
-
 GlobalVariable* GLOBAL_STRING(StringRef Str, const Twine &Name = "", unsigned AddressSpace = 0)
 {
     return IRB()->CreateGlobalString(Str, Name, AddressSpace);
@@ -86,9 +85,9 @@ CallInst* LIFETIME_END(Value *Ptr, ConstantInt *Size = nullptr)
     return IRB()->CreateLifetimeEnd(Ptr, Size);
 }
 
-CallInst* MASKED_LOAD(Value *Ptr, unsigned Align, Value *Mask, Value *PassThru = nullptr, const Twine &Name = "")
+CallInst* INVARIANT_START(Value *Ptr, ConstantInt *Size = nullptr)
 {
-    return IRB()->CreateMaskedLoad(Ptr, Align, Mask, PassThru, Name);
+    return IRB()->CreateInvariantStart(Ptr, Size);
 }
 
 CallInst* MASKED_STORE(Value *Val, Value *Ptr, unsigned Align, Value *Mask)
@@ -174,6 +173,11 @@ BranchInst* BR(BasicBlock *Dest)
 BranchInst* COND_BR(Value *Cond, BasicBlock *True, BasicBlock *False, MDNode *BranchWeights = nullptr, MDNode *Unpredictable = nullptr)
 {
     return IRB()->CreateCondBr(Cond, True, False, BranchWeights, Unpredictable);
+}
+
+BranchInst* COND_BR(Value *Cond, BasicBlock *True, BasicBlock *False, Instruction *MDSrc)
+{
+    return IRB()->CreateCondBr(Cond, True, False, MDSrc);
 }
 
 SwitchInst* SWITCH(Value *V, BasicBlock *Dest, unsigned NumCases = 10, MDNode *BranchWeights = nullptr, MDNode *Unpredictable = nullptr)
@@ -456,26 +460,6 @@ AllocaInst* ALLOCA(Type *Ty, Value *ArraySize = nullptr, const Twine &Name = "")
     return IRB()->CreateAlloca(Ty, ArraySize, Name);
 }
 
-LoadInst* LOAD(Value *Ptr, const char *Name)
-{
-    return IRB()->CreateLoad(Ptr, Name);
-}
-
-LoadInst* LOAD(Value *Ptr, const Twine &Name = "")
-{
-    return IRB()->CreateLoad(Ptr, Name);
-}
-
-LoadInst* LOAD(Type *Ty, Value *Ptr, const Twine &Name = "")
-{
-    return IRB()->CreateLoad(Ty, Ptr, Name);
-}
-
-LoadInst* LOAD(Value *Ptr, bool isVolatile, const Twine &Name = "")
-{
-    return IRB()->CreateLoad(Ptr, isVolatile, Name);
-}
-
 StoreInst* STORE(Value *Val, Value *Ptr, bool isVolatile = false)
 {
     return IRB()->CreateStore(Val, Ptr, isVolatile);
@@ -501,16 +485,6 @@ StoreInst* ALIGNED_STORE(Value *Val, Value *Ptr, unsigned Align, bool isVolatile
     return IRB()->CreateAlignedStore(Val, Ptr, Align, isVolatile);
 }
 
-Value* GEPA(Value *Ptr, ArrayRef<Value *> IdxList, const Twine &Name = "")
-{
-    return IRB()->CreateGEP(Ptr, IdxList, Name);
-}
-
-Value* GEPA(Type *Ty, Value *Ptr, ArrayRef<Value *> IdxList, const Twine &Name = "")
-{
-    return IRB()->CreateGEP(Ty, Ptr, IdxList, Name);
-}
-
 Value* IN_BOUNDS_GEP(Value *Ptr, ArrayRef<Value *> IdxList, const Twine &Name = "")
 {
     return IRB()->CreateInBoundsGEP(Ptr, IdxList, Name);
@@ -519,16 +493,6 @@ Value* IN_BOUNDS_GEP(Value *Ptr, ArrayRef<Value *> IdxList, const Twine &Name = 
 Value* IN_BOUNDS_GEP(Type *Ty, Value *Ptr, ArrayRef<Value *> IdxList, const Twine &Name = "")
 {
     return IRB()->CreateInBoundsGEP(Ty, Ptr, IdxList, Name);
-}
-
-Value* GEP(Value *Ptr, Value *Idx, const Twine &Name = "")
-{
-    return IRB()->CreateGEP(Ptr, Idx, Name);
-}
-
-Value* GEP(Type *Ty, Value *Ptr, Value *Idx, const Twine &Name = "")
-{
-    return IRB()->CreateGEP(Ty, Ptr, Idx, Name);
 }
 
 Value* IN_BOUNDS_GEP(Type *Ty, Value *Ptr, Value *Idx, const Twine &Name = "")
@@ -851,7 +815,7 @@ CallInst* CALLA(Value *Callee, ArrayRef<Value *> Args = None, const Twine &Name 
     return IRB()->CreateCall(Callee, Args, Name, FPMathTag);
 }
 
-CallInst* CALLA(llvm::FunctionType *FTy, Value *Callee, ArrayRef<Value *> Args, const Twine &Name = "", MDNode *FPMathTag = nullptr)
+CallInst* CALLA(FunctionType *FTy, Value *Callee, ArrayRef<Value *> Args, const Twine &Name = "", MDNode *FPMathTag = nullptr)
 {
     return IRB()->CreateCall(FTy, Callee, Args, Name, FPMathTag);
 }

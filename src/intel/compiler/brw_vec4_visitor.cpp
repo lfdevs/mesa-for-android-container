@@ -589,6 +589,8 @@ type_size_xvec4(const struct glsl_type *type, bool as_vec4)
    case GLSL_TYPE_DOUBLE:
    case GLSL_TYPE_UINT16:
    case GLSL_TYPE_INT16:
+   case GLSL_TYPE_UINT8:
+   case GLSL_TYPE_INT8:
    case GLSL_TYPE_UINT64:
    case GLSL_TYPE_INT64:
       if (type->is_matrix()) {
@@ -735,7 +737,7 @@ vec4_instruction *
 vec4_visitor::emit_lrp(const dst_reg &dst,
                        const src_reg &x, const src_reg &y, const src_reg &a)
 {
-   if (devinfo->gen >= 6) {
+   if (devinfo->gen >= 6 && devinfo->gen <= 10) {
       /* Note that the instruction's argument order is reversed from GLSL
        * and the IR.
        */

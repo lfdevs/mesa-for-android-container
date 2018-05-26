@@ -248,6 +248,9 @@ handle_memtrace_reg_write(uint32_t *p)
    int engine;
    static int render_elsp_writes = 0;
    static int blitter_elsp_writes = 0;
+   static int render_elsq0 = 0;
+   static int blitter_elsq0 = 0;
+   uint8_t *pphwsp;
 
    if (offset == 0x2230) {
       render_elsp_writes++;
@@ -255,18 +258,29 @@ handle_memtrace_reg_write(uint32_t *p)
    } else if (offset == 0x22230) {
       blitter_elsp_writes++;
       engine = GEN_ENGINE_BLITTER;
+   } else if (offset == 0x2510) {
+      render_elsq0 = value;
+   } else if (offset == 0x22510) {
+      blitter_elsq0 = value;
+   } else if (offset == 0x2550 || offset == 0x22550) {
+      /* nothing */;
    } else {
       return;
    }
 
-   if (render_elsp_writes > 3)
-      render_elsp_writes = 0;
-   else if (blitter_elsp_writes > 3)
-      blitter_elsp_writes = 0;
-   else
+   if (render_elsp_writes > 3 || blitter_elsp_writes > 3) {
+      render_elsp_writes = blitter_elsp_writes = 0;
+      pphwsp = (uint8_t*)gtt + (value & 0xfffff000);
+   } else if (offset == 0x2550) {
+      engine = GEN_ENGINE_RENDER;
+      pphwsp = (uint8_t*)gtt + (render_elsq0 & 0xfffff000);
+   } else if (offset == 0x22550) {
+      engine = GEN_ENGINE_BLITTER;
+      pphwsp = (uint8_t*)gtt + (blitter_elsq0 & 0xfffff000);
+   } else {
       return;
+   }
 
-   uint8_t *pphwsp = (uint8_t*)gtt + (value & 0xfffff000);
    const uint32_t pphwsp_size = 4096;
    uint32_t *context = (uint32_t*)(pphwsp + pphwsp_size);
    uint32_t ring_buffer_head = context[5];
@@ -534,7 +548,7 @@ print_help(const char *progname, FILE *file)
            "Decode aub file contents from either FILE or the standard input.\n\n"
            "A valid --gen option must be provided.\n\n"
            "      --help          display this help and exit\n"
-           "      --gen=platform  decode for given platform (ivb, byt, hsw, bdw, chv, skl, kbl, bxt or cnl)\n"
+           "      --gen=platform  decode for given platform (3 letter platform name)\n"
            "      --headers       decode only command headers\n"
            "      --color[=WHEN]  colorize the output; WHEN can be 'auto' (default\n"
            "                        if omitted), 'always', or 'never'\n"
@@ -549,22 +563,6 @@ int main(int argc, char *argv[])
    struct aub_file *file;
    int c, i;
    bool help = false, pager = true;
-   const struct {
-      const char *name;
-      int pci_id;
-   } gens[] = {
-      { "ilk", 0x0046 }, /* Intel(R) Ironlake Mobile */
-      { "snb", 0x0126 }, /* Intel(R) Sandybridge Mobile GT2 */
-      { "ivb", 0x0166 }, /* Intel(R) Ivybridge Mobile GT2 */
-      { "hsw", 0x0416 }, /* Intel(R) Haswell Mobile GT2 */
-      { "byt", 0x0155 }, /* Intel(R) Bay Trail */
-      { "bdw", 0x1616 }, /* Intel(R) HD Graphics 5500 (Broadwell GT2) */
-      { "chv", 0x22B3 }, /* Intel(R) HD Graphics (Cherryview) */
-      { "skl", 0x1912 }, /* Intel(R) HD Graphics 530 (Skylake GT2) */
-      { "kbl", 0x591D }, /* Intel(R) Kabylake GT2 */
-      { "bxt", 0x0A84 },  /* Intel(R) HD Graphics (Broxton) */
-      { "cnl", 0x5A52 },  /* Intel(R) HD Graphics (Cannonlake) */
-   };
    const struct option aubinator_opts[] = {
       { "help",       no_argument,       (int *) &help,                 true },
       { "no-pager",   no_argument,       (int *) &pager,                false },
@@ -581,19 +579,17 @@ int main(int argc, char *argv[])
    i = 0;
    while ((c = getopt_long(argc, argv, "", aubinator_opts, &i)) != -1) {
       switch (c) {
-      case 'g':
-         for (i = 0; i < ARRAY_SIZE(gens); i++) {
-            if (!strcmp(optarg, gens[i].name)) {
-               pci_id = gens[i].pci_id;
-               break;
-            }
-         }
-         if (i == ARRAY_SIZE(gens)) {
+      case 'g': {
+         const int id = gen_device_name_to_pci_device_id(optarg);
+         if (id < 0) {
             fprintf(stderr, "can't parse gen: '%s', expected ivb, byt, hsw, "
                                    "bdw, chv, skl, kbl or bxt\n", optarg);
             exit(EXIT_FAILURE);
+         } else {
+            pci_id = id;
          }
          break;
+      }
       case 'c':
          if (optarg == NULL || strcmp(optarg, "always") == 0)
             option_color = COLOR_ALWAYS;

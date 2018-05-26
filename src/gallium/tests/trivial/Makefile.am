@@ -19,5 +19,7 @@ tri_SOURCES = tri.c
 
 quad_tex_SOURCES = quad-tex.c
 
+EXTRA_DIST = meson.build
+
 clean-local:
 	-rm -f result.bmp

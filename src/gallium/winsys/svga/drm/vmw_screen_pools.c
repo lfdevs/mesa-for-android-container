@@ -150,7 +150,7 @@ vmw_mob_pools_init(struct vmw_winsys_screen *vws)
    vws->pools.mob_shader_slab_fenced =
       simple_fenced_bufmgr_create(vws->pools.mob_shader_slab,
 				  vws->fence_ops);
-   if(!vws->pools.mob_fenced)
+   if(!vws->pools.mob_shader_slab_fenced)
       goto out_no_mob_shader_slab_fenced;
 
    return TRUE;

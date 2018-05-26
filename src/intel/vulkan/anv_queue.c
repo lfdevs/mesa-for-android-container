@@ -39,7 +39,7 @@ anv_device_execbuf(struct anv_device *device,
                    struct drm_i915_gem_execbuffer2 *execbuf,
                    struct anv_bo **execbuf_bos)
 {
-   int ret = anv_gem_execbuffer(device, execbuf);
+   int ret = device->no_hw ? 0 : anv_gem_execbuffer(device, execbuf);
    if (ret != 0) {
       /* We don't know the real error. */
       device->lost = true;
@@ -682,7 +682,7 @@ VkResult anv_WaitForFences(
    }
 }
 
-void anv_GetPhysicalDeviceExternalFencePropertiesKHR(
+void anv_GetPhysicalDeviceExternalFenceProperties(
     VkPhysicalDevice                            physicalDevice,
     const VkPhysicalDeviceExternalFenceInfoKHR* pExternalFenceInfo,
     VkExternalFencePropertiesKHR*               pExternalFenceProperties)
@@ -690,18 +690,18 @@ void anv_GetPhysicalDeviceExternalFencePropertiesKHR(
    ANV_FROM_HANDLE(anv_physical_device, device, physicalDevice);
 
    switch (pExternalFenceInfo->handleType) {
-   case VK_EXTERNAL_FENCE_HANDLE_TYPE_OPAQUE_FD_BIT_KHR:
-   case VK_EXTERNAL_FENCE_HANDLE_TYPE_SYNC_FD_BIT_KHR:
+   case VK_EXTERNAL_FENCE_HANDLE_TYPE_OPAQUE_FD_BIT:
+   case VK_EXTERNAL_FENCE_HANDLE_TYPE_SYNC_FD_BIT:
       if (device->has_syncobj_wait) {
          pExternalFenceProperties->exportFromImportedHandleTypes =
-            VK_EXTERNAL_FENCE_HANDLE_TYPE_OPAQUE_FD_BIT_KHR |
-            VK_EXTERNAL_FENCE_HANDLE_TYPE_SYNC_FD_BIT_KHR;
+            VK_EXTERNAL_FENCE_HANDLE_TYPE_OPAQUE_FD_BIT |
+            VK_EXTERNAL_FENCE_HANDLE_TYPE_SYNC_FD_BIT;
          pExternalFenceProperties->compatibleHandleTypes =
-            VK_EXTERNAL_FENCE_HANDLE_TYPE_OPAQUE_FD_BIT_KHR |
-            VK_EXTERNAL_FENCE_HANDLE_TYPE_SYNC_FD_BIT_KHR;
+            VK_EXTERNAL_FENCE_HANDLE_TYPE_OPAQUE_FD_BIT |
+            VK_EXTERNAL_FENCE_HANDLE_TYPE_SYNC_FD_BIT;
          pExternalFenceProperties->externalFenceFeatures =
-            VK_EXTERNAL_FENCE_FEATURE_EXPORTABLE_BIT_KHR |
-            VK_EXTERNAL_FENCE_FEATURE_IMPORTABLE_BIT_KHR;
+            VK_EXTERNAL_FENCE_FEATURE_EXPORTABLE_BIT |
+            VK_EXTERNAL_FENCE_FEATURE_IMPORTABLE_BIT;
          return;
       }
       break;
@@ -731,16 +731,16 @@ VkResult anv_ImportFenceFdKHR(
    };
 
    switch (pImportFenceFdInfo->handleType) {
-   case VK_EXTERNAL_FENCE_HANDLE_TYPE_OPAQUE_FD_BIT_KHR:
+   case VK_EXTERNAL_FENCE_HANDLE_TYPE_OPAQUE_FD_BIT:
       new_impl.type = ANV_FENCE_TYPE_SYNCOBJ;
 
       new_impl.syncobj = anv_gem_syncobj_fd_to_handle(device, fd);
       if (!new_impl.syncobj)
-         return vk_error(VK_ERROR_INVALID_EXTERNAL_HANDLE_KHR);
+         return vk_error(VK_ERROR_INVALID_EXTERNAL_HANDLE);
 
       break;
 
-   case VK_EXTERNAL_FENCE_HANDLE_TYPE_SYNC_FD_BIT_KHR:
+   case VK_EXTERNAL_FENCE_HANDLE_TYPE_SYNC_FD_BIT:
       /* Sync files are a bit tricky.  Because we want to continue using the
        * syncobj implementation of WaitForFences, we don't use the sync file
        * directly but instead import it into a syncobj.
@@ -754,13 +754,13 @@ VkResult anv_ImportFenceFdKHR(
       if (anv_gem_syncobj_import_sync_file(device, new_impl.syncobj, fd)) {
          anv_gem_syncobj_destroy(device, new_impl.syncobj);
          return vk_errorf(device->instance, NULL,
-                          VK_ERROR_INVALID_EXTERNAL_HANDLE_KHR,
+                          VK_ERROR_INVALID_EXTERNAL_HANDLE,
                           "syncobj sync file import failed: %m");
       }
       break;
 
    default:
-      return vk_error(VK_ERROR_INVALID_EXTERNAL_HANDLE_KHR);
+      return vk_error(VK_ERROR_INVALID_EXTERNAL_HANDLE);
    }
 
    /* From the Vulkan 1.0.53 spec:
@@ -774,7 +774,7 @@ VkResult anv_ImportFenceFdKHR(
     */
    close(fd);
 
-   if (pImportFenceFdInfo->flags & VK_FENCE_IMPORT_TEMPORARY_BIT_KHR) {
+   if (pImportFenceFdInfo->flags & VK_FENCE_IMPORT_TEMPORARY_BIT) {
       anv_fence_impl_cleanup(device, &fence->temporary);
       fence->temporary = new_impl;
    } else {
@@ -801,7 +801,7 @@ VkResult anv_GetFenceFdKHR(
 
    assert(impl->type == ANV_FENCE_TYPE_SYNCOBJ);
    switch (pGetFdInfo->handleType) {
-   case VK_EXTERNAL_FENCE_HANDLE_TYPE_OPAQUE_FD_BIT_KHR: {
+   case VK_EXTERNAL_FENCE_HANDLE_TYPE_OPAQUE_FD_BIT: {
       int fd = anv_gem_syncobj_handle_to_fd(device, impl->syncobj);
       if (fd < 0)
          return vk_error(VK_ERROR_TOO_MANY_OBJECTS);
@@ -810,7 +810,7 @@ VkResult anv_GetFenceFdKHR(
       break;
    }
 
-   case VK_EXTERNAL_FENCE_HANDLE_TYPE_SYNC_FD_BIT_KHR: {
+   case VK_EXTERNAL_FENCE_HANDLE_TYPE_SYNC_FD_BIT: {
       int fd = anv_gem_syncobj_export_sync_file(device, impl->syncobj);
       if (fd < 0)
          return vk_error(VK_ERROR_TOO_MANY_OBJECTS);
@@ -855,7 +855,7 @@ VkResult anv_CreateSemaphore(
       return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
 
    const VkExportSemaphoreCreateInfoKHR *export =
-      vk_find_struct_const(pCreateInfo->pNext, EXPORT_SEMAPHORE_CREATE_INFO_KHR);
+      vk_find_struct_const(pCreateInfo->pNext, EXPORT_SEMAPHORE_CREATE_INFO);
     VkExternalSemaphoreHandleTypeFlagsKHR handleTypes =
       export ? export->handleTypes : 0;
 
@@ -865,8 +865,8 @@ VkResult anv_CreateSemaphore(
        * queue, a dummy no-op semaphore is a perfectly valid implementation.
        */
       semaphore->permanent.type = ANV_SEMAPHORE_TYPE_DUMMY;
-   } else if (handleTypes & VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT_KHR) {
-      assert(handleTypes == VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT_KHR);
+   } else if (handleTypes & VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT) {
+      assert(handleTypes == VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT);
       if (device->instance->physicalDevice.has_syncobj) {
          semaphore->permanent.type = ANV_SEMAPHORE_TYPE_DRM_SYNCOBJ;
          semaphore->permanent.syncobj = anv_gem_syncobj_create(device, 0);
@@ -888,15 +888,15 @@ VkResult anv_CreateSemaphore(
           */
          assert(!(semaphore->permanent.bo->flags & EXEC_OBJECT_ASYNC));
       }
-   } else if (handleTypes & VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT_KHR) {
-      assert(handleTypes == VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT_KHR);
+   } else if (handleTypes & VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT) {
+      assert(handleTypes == VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT);
 
       semaphore->permanent.type = ANV_SEMAPHORE_TYPE_SYNC_FILE;
       semaphore->permanent.fd = -1;
    } else {
       assert(!"Unknown handle type");
       vk_free2(&device->alloc, pAllocator, semaphore);
-      return vk_error(VK_ERROR_INVALID_EXTERNAL_HANDLE_KHR);
+      return vk_error(VK_ERROR_INVALID_EXTERNAL_HANDLE);
    }
 
    semaphore->temporary.type = ANV_SEMAPHORE_TYPE_NONE;
@@ -960,7 +960,7 @@ void anv_DestroySemaphore(
    vk_free2(&device->alloc, pAllocator, semaphore);
 }
 
-void anv_GetPhysicalDeviceExternalSemaphorePropertiesKHR(
+void anv_GetPhysicalDeviceExternalSemaphoreProperties(
     VkPhysicalDevice                            physicalDevice,
     const VkPhysicalDeviceExternalSemaphoreInfoKHR* pExternalSemaphoreInfo,
     VkExternalSemaphorePropertiesKHR*           pExternalSemaphoreProperties)
@@ -968,24 +968,24 @@ void anv_GetPhysicalDeviceExternalSemaphorePropertiesKHR(
    ANV_FROM_HANDLE(anv_physical_device, device, physicalDevice);
 
    switch (pExternalSemaphoreInfo->handleType) {
-   case VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT_KHR:
+   case VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT:
       pExternalSemaphoreProperties->exportFromImportedHandleTypes =
-         VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT_KHR;
+         VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT;
       pExternalSemaphoreProperties->compatibleHandleTypes =
-         VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT_KHR;
+         VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT;
       pExternalSemaphoreProperties->externalSemaphoreFeatures =
-         VK_EXTERNAL_SEMAPHORE_FEATURE_EXPORTABLE_BIT_KHR |
-         VK_EXTERNAL_SEMAPHORE_FEATURE_IMPORTABLE_BIT_KHR;
+         VK_EXTERNAL_SEMAPHORE_FEATURE_EXPORTABLE_BIT |
+         VK_EXTERNAL_SEMAPHORE_FEATURE_IMPORTABLE_BIT;
       return;
 
-   case VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT_KHR:
+   case VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT:
       if (device->has_exec_fence) {
          pExternalSemaphoreProperties->exportFromImportedHandleTypes = 0;
          pExternalSemaphoreProperties->compatibleHandleTypes =
-            VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT_KHR;
+            VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT;
          pExternalSemaphoreProperties->externalSemaphoreFeatures =
-            VK_EXTERNAL_SEMAPHORE_FEATURE_EXPORTABLE_BIT_KHR |
-            VK_EXTERNAL_SEMAPHORE_FEATURE_IMPORTABLE_BIT_KHR;
+            VK_EXTERNAL_SEMAPHORE_FEATURE_EXPORTABLE_BIT |
+            VK_EXTERNAL_SEMAPHORE_FEATURE_IMPORTABLE_BIT;
          return;
       }
       break;
@@ -1012,13 +1012,13 @@ VkResult anv_ImportSemaphoreFdKHR(
    };
 
    switch (pImportSemaphoreFdInfo->handleType) {
-   case VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT_KHR:
+   case VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT:
       if (device->instance->physicalDevice.has_syncobj) {
          new_impl.type = ANV_SEMAPHORE_TYPE_DRM_SYNCOBJ;
 
          new_impl.syncobj = anv_gem_syncobj_fd_to_handle(device, fd);
          if (!new_impl.syncobj)
-            return vk_error(VK_ERROR_INVALID_EXTERNAL_HANDLE_KHR);
+            return vk_error(VK_ERROR_INVALID_EXTERNAL_HANDLE);
       } else {
          new_impl.type = ANV_SEMAPHORE_TYPE_BO;
 
@@ -1050,7 +1050,7 @@ VkResult anv_ImportSemaphoreFdKHR(
       close(fd);
       break;
 
-   case VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT_KHR:
+   case VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT:
       new_impl = (struct anv_semaphore_impl) {
          .type = ANV_SEMAPHORE_TYPE_SYNC_FILE,
          .fd = fd,
@@ -1058,10 +1058,10 @@ VkResult anv_ImportSemaphoreFdKHR(
       break;
 
    default:
-      return vk_error(VK_ERROR_INVALID_EXTERNAL_HANDLE_KHR);
+      return vk_error(VK_ERROR_INVALID_EXTERNAL_HANDLE);
    }
 
-   if (pImportSemaphoreFdInfo->flags & VK_SEMAPHORE_IMPORT_TEMPORARY_BIT_KHR) {
+   if (pImportSemaphoreFdInfo->flags & VK_SEMAPHORE_IMPORT_TEMPORARY_BIT) {
       anv_semaphore_impl_cleanup(device, &semaphore->temporary);
       semaphore->temporary = new_impl;
    } else {
@@ -1131,7 +1131,7 @@ VkResult anv_GetSemaphoreFdKHR(
       break;
 
    default:
-      return vk_error(VK_ERROR_INVALID_EXTERNAL_HANDLE_KHR);
+      return vk_error(VK_ERROR_INVALID_EXTERNAL_HANDLE);
    }
 
    /* From the Vulkan 1.0.53 spec:

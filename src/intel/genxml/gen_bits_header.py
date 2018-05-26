@@ -67,7 +67,7 @@ from operator import itemgetter
 
 #include <stdint.h>
 
-#include "common/gen_device_info.h"
+#include "dev/gen_device_info.h"
 #include "util/macros.h"
 
 <%def name="emit_per_gen_prop_func(item, prop)">
@@ -80,6 +80,7 @@ static inline uint32_t ATTRIBUTE_PURE
 ${item.token_name}_${prop}(const struct gen_device_info *devinfo)
 {
    switch (devinfo->gen) {
+   case 11: return ${item.get_prop(prop, 11)};
    case 10: return ${item.get_prop(prop, 10)};
    case 9: return ${item.get_prop(prop, 9)};
    case 8: return ${item.get_prop(prop, 8)};

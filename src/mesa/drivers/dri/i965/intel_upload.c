@@ -29,33 +29,23 @@
  */
 
 #include "main/imports.h"
-#include "main/mtypes.h"
 #include "main/macros.h"
-#include "main/bufferobj.h"
-
+#include "brw_bufmgr.h"
 #include "brw_context.h"
-#include "intel_blit.h"
 #include "intel_buffer_objects.h"
-#include "intel_batchbuffer.h"
-#include "intel_fbo.h"
-#include "intel_mipmap_tree.h"
-
-#include "brw_context.h"
-
-#define INTEL_UPLOAD_SIZE (64*1024)
 
 void
-intel_upload_finish(struct brw_context *brw)
+brw_upload_finish(struct brw_uploader *upload)
 {
-   assert((brw->upload.bo == NULL) == (brw->upload.map == NULL));
-   if (!brw->upload.bo)
+   assert((upload->bo == NULL) == (upload->map == NULL));
+   if (!upload->bo)
       return;
 
-   brw_bo_unmap(brw->upload.bo);
-   brw_bo_unreference(brw->upload.bo);
-   brw->upload.bo = NULL;
-   brw->upload.map = NULL;
-   brw->upload.next_offset = 0;
+   brw_bo_unmap(upload->bo);
+   brw_bo_unreference(upload->bo);
+   upload->bo = NULL;
+   upload->map = NULL;
+   upload->next_offset = 0;
 }
 
 /**
@@ -64,16 +54,13 @@ intel_upload_finish(struct brw_context *brw)
  * In most cases, streamed data (for GPU state structures, for example) is
  * uploaded through brw_state_batch(), since that interface allows relocations
  * from the streamed space returned to other BOs.  However, that interface has
- * the restriction that the amount of space allocated has to be "small" (see
- * estimated_max_prim_size in brw_draw.c).
+ * the restriction that the amount of space allocated has to be "small".
  *
  * This interface, on the other hand, is able to handle arbitrary sized
  * allocation requests, though it will batch small allocations into the same
  * BO for efficiency and reduced memory footprint.
  *
- * \note The returned pointer is valid only until intel_upload_finish(), which
- * will happen at batch flush or the next
- * intel_upload_space()/intel_upload_data().
+ * \note The returned pointer is valid only until brw_upload_finish().
  *
  * \param out_bo Pointer to a BO, which must point to a valid BO or NULL on
  * entry, and will have a reference to the new BO containing the state on
@@ -82,37 +69,39 @@ intel_upload_finish(struct brw_context *brw)
  * \param out_offset Offset within the buffer object that the data will land.
  */
 void *
-intel_upload_space(struct brw_context *brw,
-                   uint32_t size,
-                   uint32_t alignment,
-                   struct brw_bo **out_bo,
-                   uint32_t *out_offset)
+brw_upload_space(struct brw_uploader *upload,
+                 uint32_t size,
+                 uint32_t alignment,
+                 struct brw_bo **out_bo,
+                 uint32_t *out_offset)
 {
    uint32_t offset;
 
-   offset = ALIGN_NPOT(brw->upload.next_offset, alignment);
-   if (brw->upload.bo && offset + size > brw->upload.bo->size) {
-      intel_upload_finish(brw);
+   offset = ALIGN_NPOT(upload->next_offset, alignment);
+   if (upload->bo && offset + size > upload->bo->size) {
+      brw_upload_finish(upload);
       offset = 0;
    }
 
-   assert((brw->upload.bo == NULL) == (brw->upload.map == NULL));
-   if (!brw->upload.bo) {
-      brw->upload.bo = brw_bo_alloc(brw->bufmgr, "streamed data",
-                                    MAX2(INTEL_UPLOAD_SIZE, size), 4096);
-      brw->upload.map = brw_bo_map(brw, brw->upload.bo, MAP_READ | MAP_WRITE);
+   assert((upload->bo == NULL) == (upload->map == NULL));
+   if (!upload->bo) {
+      upload->bo = brw_bo_alloc(upload->bufmgr, "streamed data",
+                                MAX2(upload->default_size, size));
+      upload->map = brw_bo_map(NULL, upload->bo,
+                               MAP_READ | MAP_WRITE |
+                               MAP_PERSISTENT | MAP_ASYNC);
    }
 
-   brw->upload.next_offset = offset + size;
+   upload->next_offset = offset + size;
 
    *out_offset = offset;
-   if (*out_bo != brw->upload.bo) {
+   if (*out_bo != upload->bo) {
       brw_bo_unreference(*out_bo);
-      *out_bo = brw->upload.bo;
-      brw_bo_reference(brw->upload.bo);
+      *out_bo = upload->bo;
+      brw_bo_reference(upload->bo);
    }
 
-   return brw->upload.map + offset;
+   return upload->map + offset;
 }
 
 /**
@@ -121,13 +110,25 @@ intel_upload_space(struct brw_context *brw,
  * References to this memory should not be retained across batch flushes.
  */
 void
-intel_upload_data(struct brw_context *brw,
-                  const void *data,
-                  uint32_t size,
-                  uint32_t alignment,
-                  struct brw_bo **out_bo,
-                  uint32_t *out_offset)
+brw_upload_data(struct brw_uploader *upload,
+                const void *data,
+                uint32_t size,
+                uint32_t alignment,
+                struct brw_bo **out_bo,
+                uint32_t *out_offset)
 {
-   void *dst = intel_upload_space(brw, size, alignment, out_bo, out_offset);
+   void *dst = brw_upload_space(upload, size, alignment, out_bo, out_offset);
    memcpy(dst, data, size);
+}
+
+void
+brw_upload_init(struct brw_uploader *upload,
+                struct brw_bufmgr *bufmgr,
+                unsigned default_size)
+{
+   upload->bufmgr = bufmgr;
+   upload->bo = NULL;
+   upload->map = NULL;
+   upload->next_offset = 0;
+   upload->default_size = default_size;
 }

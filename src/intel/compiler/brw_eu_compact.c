@@ -637,6 +637,41 @@ static const uint16_t gen8_src_index_table[32] = {
    0b010110001000
 };
 
+static const uint32_t gen11_datatype_table[32] = {
+   0b001000000000000000001,
+   0b001000000000001000000,
+   0b001000000000001000001,
+   0b001000000000011000001,
+   0b001000000000101100101,
+   0b001000000101111100101,
+   0b001000000100101000001,
+   0b001000000100101000101,
+   0b001000000100101100101,
+   0b001000001000001000001,
+   0b001000011000001000000,
+   0b001000011000001000001,
+   0b001000101000101000101,
+   0b001000111000101000100,
+   0b001000111000101000101,
+   0b001100100100101100101,
+   0b001100101100100100101,
+   0b001100101100101100100,
+   0b001100101100101100101,
+   0b001100111100101100100,
+   0b000000000010000001100,
+   0b001000000000001100101,
+   0b001000000000101000101,
+   0b001000001000001000000,
+   0b001000101000101000100,
+   0b001000111000100000100,
+   0b001001001001000001001,
+   0b001101111100101100101,
+   0b001100111100101100101,
+   0b001001111001101001100,
+   0b001001001001001001000,
+   0b001001011001001001000,
+};
+
 /* This is actually the control index table for Cherryview (26 bits), but the
  * only difference from Broadwell (24 bits) is that it has two extra 0-bits at
  * the start.
@@ -1450,8 +1485,15 @@ brw_init_compaction_tables(const struct gen_device_info *devinfo)
    assert(gen8_datatype_table[ARRAY_SIZE(gen8_datatype_table) - 1] != 0);
    assert(gen8_subreg_table[ARRAY_SIZE(gen8_subreg_table) - 1] != 0);
    assert(gen8_src_index_table[ARRAY_SIZE(gen8_src_index_table) - 1] != 0);
+   assert(gen11_datatype_table[ARRAY_SIZE(gen11_datatype_table) - 1] != 0);
 
    switch (devinfo->gen) {
+   case 11:
+      control_index_table = gen8_control_index_table;
+      datatype_table = gen11_datatype_table;
+      subreg_table = gen8_subreg_table;
+      src_index_table = gen8_src_index_table;
+      break;
    case 10:
    case 9:
    case 8:

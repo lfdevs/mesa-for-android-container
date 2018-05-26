@@ -620,6 +620,7 @@ vc4_simulator_get_param_ioctl(int fd, struct drm_vc4_get_param *args)
                 return 0;
 
         case DRM_VC4_PARAM_SUPPORTS_MADVISE:
+        case DRM_VC4_PARAM_SUPPORTS_PERFMON:
                 errno = -EINVAL;
                 return -1;
 

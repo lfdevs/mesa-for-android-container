@@ -57,8 +57,8 @@ struct intel_texture_object
    bool needs_validate;
 
    /* Mesa format for the validated texture object. For non-views this
-    * will always be the same as mt->format. For views, it may differ
-    * since the mt is shared across views with differing formats.
+    * will always be the same as texObj->Image[0][0].TexFormat. For views, it
+    * may differ since the mt is shared across views with differing formats.
     */
    mesa_format _Format;
 

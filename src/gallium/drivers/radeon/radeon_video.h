@@ -62,7 +62,7 @@ void si_vid_clear_buffer(struct pipe_context *context, struct rvid_buffer* buffe
 
 /* join surfaces into the same buffer with identical tiling params
    sumup their sizes and replace the backend buffers with a single bo */
-void si_vid_join_surfaces(struct r600_common_context *rctx,
+void si_vid_join_surfaces(struct si_context *sctx,
 			  struct pb_buffer** buffers[VL_NUM_COMPONENTS],
 			  struct radeon_surf *surfaces[VL_NUM_COMPONENTS]);
 

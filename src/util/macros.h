@@ -137,8 +137,9 @@ do {                       \
 #endif
 
 /* Forced function inlining */
+/* Note: Clang also sets __GNUC__ (see other cases below) */
 #ifndef ALWAYS_INLINE
-#  if defined(__GNUC__) || defined(__clang__)
+#  if defined(__GNUC__)
 #    define ALWAYS_INLINE inline __attribute__((always_inline))
 #  elif defined(_MSC_VER)
 #    define ALWAYS_INLINE __forceinline
@@ -283,5 +284,15 @@ do {                       \
 /** Minimum and maximum of three values: */
 #define MIN3( A, B, C ) ((A) < (B) ? MIN2(A, C) : MIN2(B, C))
 #define MAX3( A, B, C ) ((A) > (B) ? MAX2(A, C) : MAX2(B, C))
+
+/**
+ * Macro for declaring an explicit conversion operator.  Defaults to an
+ * implicit conversion if C++11 is not supported.
+ */
+#if __cplusplus >= 201103L
+#define EXPLICIT_CONVERSION explicit
+#elif defined(__cplusplus)
+#define EXPLICIT_CONVERSION
+#endif
 
 #endif /* UTIL_MACROS_H */

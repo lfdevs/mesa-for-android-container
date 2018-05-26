@@ -82,7 +82,7 @@ typedef struct __DRI2flushExtensionRec	__DRI2flushExtension;
 typedef struct __DRI2throttleExtensionRec	__DRI2throttleExtension;
 typedef struct __DRI2fenceExtensionRec          __DRI2fenceExtension;
 typedef struct __DRI2interopExtensionRec	__DRI2interopExtension;
-
+typedef struct __DRI2blobExtensionRec           __DRI2blobExtension;
 
 typedef struct __DRIimageLoaderExtensionRec     __DRIimageLoaderExtension;
 typedef struct __DRIimageDriverExtensionRec     __DRIimageDriverExtension;
@@ -336,6 +336,30 @@ struct __DRI2throttleExtensionRec {
 		    enum __DRI2throttleReason reason);
 };
 
+/**
+ * Extension for EGL_ANDROID_blob_cache
+ */
+
+#define __DRI2_BLOB "DRI2_Blob"
+#define __DRI2_BLOB_VERSION 1
+
+typedef void
+(*__DRIblobCacheSet) (const void *key, signed long keySize,
+                      const void *value, signed long valueSize);
+
+typedef signed long
+(*__DRIblobCacheGet) (const void *key, signed long keySize,
+                      void *value, signed long valueSize);
+
+struct __DRI2blobExtensionRec {
+   __DRIextension base;
+
+   /**
+    * Set cache functions for setting and getting cache entries.
+    */
+   void (*set_cache_funcs) (__DRIscreen *screen,
+                            __DRIblobCacheSet set, __DRIblobCacheGet get);
+};
 
 /**
  * Extension for fences / synchronization objects.
@@ -1227,6 +1251,8 @@ struct __DRIdri2ExtensionRec {
 #define __DRI_IMAGE_FORMAT_R16          0x100d
 #define __DRI_IMAGE_FORMAT_GR1616       0x100e
 #define __DRI_IMAGE_FORMAT_YUYV         0x100f
+#define __DRI_IMAGE_FORMAT_XBGR2101010  0x1010
+#define __DRI_IMAGE_FORMAT_ABGR2101010  0x1011
 
 #define __DRI_IMAGE_USE_SHARE		0x0001
 #define __DRI_IMAGE_USE_SCANOUT		0x0002

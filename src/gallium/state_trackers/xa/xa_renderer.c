@@ -393,9 +393,10 @@ renderer_set_constants(struct xa_context *r,
 	&r->fs_const_buffer;
 
     pipe_resource_reference(cbuf, NULL);
-    *cbuf = pipe_buffer_create(r->pipe->screen,
-			       PIPE_BIND_CONSTANT_BUFFER, PIPE_USAGE_DEFAULT,
-			       param_bytes);
+    *cbuf = pipe_buffer_create_const0(r->pipe->screen,
+                                      PIPE_BIND_CONSTANT_BUFFER,
+                                      PIPE_USAGE_DEFAULT,
+                                      param_bytes);
 
     if (*cbuf) {
 	pipe_buffer_write(r->pipe, *cbuf, 0, param_bytes, params);

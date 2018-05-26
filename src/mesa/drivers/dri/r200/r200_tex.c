@@ -297,7 +297,8 @@ static void r200TexEnv( struct gl_context *ctx, GLenum target,
 {
    r200ContextPtr rmesa = R200_CONTEXT(ctx);
    GLuint unit = ctx->Texture.CurrentUnit;
-   struct gl_texture_unit *texUnit = &ctx->Texture.Unit[unit];
+   struct gl_fixedfunc_texture_unit *texUnit =
+      &ctx->Texture.FixedFuncUnit[unit];
 
    radeon_print(RADEON_TEXTURE | RADEON_STATE, RADEON_VERBOSE, "%s( %s )\n",
 	       __func__, _mesa_enum_to_string( pname ) );

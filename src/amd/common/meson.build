@@ -36,8 +36,6 @@ amd_common_files = files(
   'ac_llvm_util.c',
   'ac_llvm_util.h',
   'ac_shader_abi.h',
-  'ac_shader_info.c',
-  'ac_shader_info.h',
   'ac_shader_util.c',
   'ac_shader_util.h',
   'ac_nir_to_llvm.c',

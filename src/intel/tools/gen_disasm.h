@@ -24,7 +24,7 @@
 #ifndef GEN_DISASM_H
 #define GEN_DISASM_H
 
-#include "intel/common/gen_device_info.h"
+#include "intel/dev/gen_device_info.h"
 
 #ifdef __cplusplus
 extern "C" {

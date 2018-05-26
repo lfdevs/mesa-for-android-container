@@ -37,6 +37,8 @@ tools_aubinator_CFLAGS = \
 tools_aubinator_LDADD = \
 	common/libintel_common.la \
 	compiler/libintel_compiler.la \
+	dev/libintel_dev.la \
+	isl/libisl.la \
 	$(top_builddir)/src/util/libmesautil.la \
 	$(PER_GEN_LIBS) \
 	$(PTHREAD_LIBS) \
@@ -54,6 +56,8 @@ tools_aubinator_error_decode_SOURCES = \
 tools_aubinator_error_decode_LDADD = \
 	common/libintel_common.la \
 	compiler/libintel_compiler.la \
+	dev/libintel_dev.la \
+	isl/libisl.la \
 	$(top_builddir)/src/util/libmesautil.la \
 	$(PTHREAD_LIBS) \
 	$(ZLIB_LIBS)

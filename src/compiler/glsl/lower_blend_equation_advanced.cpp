@@ -29,6 +29,7 @@
 #include "program/prog_statevars.h"
 #include "util/bitscan.h"
 #include "builtin_functions.h"
+#include "main/mtypes.h"
 
 using namespace ir_builder;
 
@@ -462,7 +463,7 @@ get_main(gl_linked_shader *sh)
 }
 
 bool
-lower_blend_equation_advanced(struct gl_linked_shader *sh)
+lower_blend_equation_advanced(struct gl_linked_shader *sh, bool coherent)
 {
    if (sh->Program->sh.fs.BlendSupport == 0)
       return false;
@@ -480,6 +481,7 @@ lower_blend_equation_advanced(struct gl_linked_shader *sh)
    fb->data.location = FRAG_RESULT_DATA0;
    fb->data.read_only = 1;
    fb->data.fb_fetch_output = 1;
+   fb->data.memory_coherent = coherent;
    fb->data.how_declared = ir_var_hidden;
 
    ir_variable *mode = new(mem_ctx) ir_variable(glsl_type::uint_type,

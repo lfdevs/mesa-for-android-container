@@ -363,6 +363,7 @@ struct vc4_fs_key {
         uint8_t alpha_test_func;
         uint8_t logicop_func;
         uint32_t point_sprite_mask;
+        uint32_t ubo_1_size;
 
         struct pipe_rt_blend_state blend;
 };

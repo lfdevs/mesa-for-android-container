@@ -176,7 +176,7 @@ intel_alloc_texture_storage(struct gl_context *ctx,
    intel_texobj->needs_validate = false;
    intel_texobj->validated_first_level = 0;
    intel_texobj->validated_last_level = levels - 1;
-   intel_texobj->_Format = intel_texobj->mt->format;
+   intel_texobj->_Format = first_image->TexFormat;
 
    return true;
 }

@@ -29,6 +29,7 @@
 
 
 #include "glheader.h"
+#include "arrayobj.h"
 #include "blend.h"
 #include "clip.h"
 #include "context.h"
@@ -38,7 +39,9 @@
 #include "light.h"
 #include "mtypes.h"
 #include "enums.h"
+#include "state.h"
 #include "texstate.h"
+#include "varray.h"
 
 
 
@@ -57,55 +60,56 @@ update_derived_primitive_restart_state(struct gl_context *ctx)
       || ctx->Array.PrimitiveRestartFixedIndex;
 }
 
+
+/**
+ * Helper to enable/disable VAO client-side state.
+ */
+static void
+vao_state(struct gl_context *ctx, gl_vert_attrib attr, GLboolean state)
+{
+   if (state)
+      _mesa_enable_vertex_array_attrib(ctx, ctx->Array.VAO, attr, true);
+   else
+      _mesa_disable_vertex_array_attrib(ctx, ctx->Array.VAO, attr, true);
+}
+
+
 /**
  * Helper to enable/disable client-side state.
  */
 static void
 client_state(struct gl_context *ctx, GLenum cap, GLboolean state)
 {
-   struct gl_vertex_array_object *vao = ctx->Array.VAO;
-   GLbitfield flag;
-   GLboolean *var;
-
    switch (cap) {
       case GL_VERTEX_ARRAY:
-         var = &vao->VertexAttrib[VERT_ATTRIB_POS].Enabled;
-         flag = VERT_BIT_POS;
+         vao_state(ctx, VERT_ATTRIB_POS, state);
          break;
       case GL_NORMAL_ARRAY:
-         var = &vao->VertexAttrib[VERT_ATTRIB_NORMAL].Enabled;
-         flag = VERT_BIT_NORMAL;
+         vao_state(ctx, VERT_ATTRIB_NORMAL, state);
          break;
       case GL_COLOR_ARRAY:
-         var = &vao->VertexAttrib[VERT_ATTRIB_COLOR0].Enabled;
-         flag = VERT_BIT_COLOR0;
+         vao_state(ctx, VERT_ATTRIB_COLOR0, state);
          break;
       case GL_INDEX_ARRAY:
-         var = &vao->VertexAttrib[VERT_ATTRIB_COLOR_INDEX].Enabled;
-         flag = VERT_BIT_COLOR_INDEX;
+         vao_state(ctx, VERT_ATTRIB_COLOR_INDEX, state);
          break;
       case GL_TEXTURE_COORD_ARRAY:
-         var = &vao->VertexAttrib[VERT_ATTRIB_TEX(ctx->Array.ActiveTexture)].Enabled;
-         flag = VERT_BIT_TEX(ctx->Array.ActiveTexture);
+         vao_state(ctx, VERT_ATTRIB_TEX(ctx->Array.ActiveTexture), state);
          break;
       case GL_EDGE_FLAG_ARRAY:
-         var = &vao->VertexAttrib[VERT_ATTRIB_EDGEFLAG].Enabled;
-         flag = VERT_BIT_EDGEFLAG;
+         vao_state(ctx, VERT_ATTRIB_EDGEFLAG, state);
          break;
       case GL_FOG_COORDINATE_ARRAY_EXT:
-         var = &vao->VertexAttrib[VERT_ATTRIB_FOG].Enabled;
-         flag = VERT_BIT_FOG;
+         vao_state(ctx, VERT_ATTRIB_FOG, state);
          break;
       case GL_SECONDARY_COLOR_ARRAY_EXT:
-         var = &vao->VertexAttrib[VERT_ATTRIB_COLOR1].Enabled;
-         flag = VERT_BIT_COLOR1;
+         vao_state(ctx, VERT_ATTRIB_COLOR1, state);
          break;
 
       case GL_POINT_SIZE_ARRAY_OES:
-         var = &vao->VertexAttrib[VERT_ATTRIB_POINT_SIZE].Enabled;
-         flag = VERT_BIT_POINT_SIZE;
          FLUSH_VERTICES(ctx, _NEW_PROGRAM);
          ctx->VertexProgram.PointSizeEnabled = state;
+         vao_state(ctx, VERT_ATTRIB_POINT_SIZE, state);
          break;
 
       /* GL_NV_primitive_restart */
@@ -123,20 +127,6 @@ client_state(struct gl_context *ctx, GLenum cap, GLboolean state)
       default:
          goto invalid_enum_error;
    }
-
-   if (*var == state)
-      return;
-
-   FLUSH_VERTICES(ctx, _NEW_ARRAY);
-
-   *var = state;
-
-   if (state)
-      vao->_Enabled |= flag;
-   else
-      vao->_Enabled &= ~flag;
-
-   vao->NewArrays |= flag;
 
    if (ctx->Driver.Enable) {
       ctx->Driver.Enable( ctx, cap, state );
@@ -197,7 +187,7 @@ _mesa_DisableClientState( GLenum cap )
  * Note that we'll set GL_INVALID_OPERATION and return NULL if the active
  * texture unit is higher than the number of supported coordinate units.
  */
-static struct gl_texture_unit *
+static struct gl_fixedfunc_texture_unit *
 get_texcoord_unit(struct gl_context *ctx)
 {
    if (ctx->Texture.CurrentUnit >= ctx->Const.MaxTextureCoordUnits) {
@@ -205,7 +195,7 @@ get_texcoord_unit(struct gl_context *ctx)
       return NULL;
    }
    else {
-      return &ctx->Texture.Unit[ctx->Texture.CurrentUnit];
+      return &ctx->Texture.FixedFuncUnit[ctx->Texture.CurrentUnit];
    }
 }
 
@@ -218,7 +208,11 @@ get_texcoord_unit(struct gl_context *ctx)
 static GLboolean
 enable_texture(struct gl_context *ctx, GLboolean state, GLbitfield texBit)
 {
-   struct gl_texture_unit *texUnit = _mesa_get_current_tex_unit(ctx);
+   struct gl_fixedfunc_texture_unit *texUnit =
+      _mesa_get_current_fixedfunc_tex_unit(ctx);
+   if (!texUnit)
+      return GL_FALSE;
+
    const GLbitfield newenabled = state
       ? (texUnit->Enabled | texBit) : (texUnit->Enabled & ~texBit);
 
@@ -324,7 +318,8 @@ _mesa_set_enable(struct gl_context *ctx, GLenum cap, GLboolean state)
             GLbitfield newEnabled =
                state * ((1 << ctx->Const.MaxDrawBuffers) - 1);
             if (newEnabled != ctx->Color.BlendEnabled) {
-               _mesa_flush_vertices_for_blend_state(ctx);
+               _mesa_flush_vertices_for_blend_adv(ctx, newEnabled,
+                                               ctx->Color._AdvancedBlendMode);
                ctx->Color.BlendEnabled = newEnabled;
             }
          }
@@ -758,7 +753,7 @@ _mesa_set_enable(struct gl_context *ctx, GLenum cap, GLboolean state)
       case GL_TEXTURE_GEN_R:
       case GL_TEXTURE_GEN_Q:
          {
-            struct gl_texture_unit *texUnit = get_texcoord_unit(ctx);
+            struct gl_fixedfunc_texture_unit *texUnit = get_texcoord_unit(ctx);
 
             if (ctx->API != API_OPENGL_COMPAT)
                goto invalid_enum_error;
@@ -779,7 +774,7 @@ _mesa_set_enable(struct gl_context *ctx, GLenum cap, GLboolean state)
       case GL_TEXTURE_GEN_STR_OES:
          /* disable S, T, and R at the same time */
          {
-            struct gl_texture_unit *texUnit = get_texcoord_unit(ctx);
+            struct gl_fixedfunc_texture_unit *texUnit = get_texcoord_unit(ctx);
 
             if (ctx->API != API_OPENGLES)
                goto invalid_enum_error;
@@ -925,6 +920,7 @@ _mesa_set_enable(struct gl_context *ctx, GLenum cap, GLboolean state)
             return;
          FLUSH_VERTICES(ctx, _NEW_PROGRAM);
          ctx->VertexProgram.Enabled = state;
+         _mesa_update_vertex_processing_mode(ctx);
          break;
       case GL_VERTEX_PROGRAM_POINT_SIZE_ARB:
          /* This was added with ARB_vertex_program, but it is also used with
@@ -1193,11 +1189,16 @@ _mesa_set_enablei(struct gl_context *ctx, GLenum cap,
          return;
       }
       if (((ctx->Color.BlendEnabled >> index) & 1) != state) {
-         _mesa_flush_vertices_for_blend_state(ctx);
+         GLbitfield enabled = ctx->Color.BlendEnabled;
+
          if (state)
-            ctx->Color.BlendEnabled |= (1 << index);
+            enabled |= (1 << index);
          else
-            ctx->Color.BlendEnabled &= ~(1 << index);
+            enabled &= ~(1 << index);
+
+         _mesa_flush_vertices_for_blend_adv(ctx, enabled,
+                                            ctx->Color._AdvancedBlendMode);
+         ctx->Color.BlendEnabled = enabled;
       }
       break;
    case GL_SCISSOR_TEST:
@@ -1293,8 +1294,12 @@ _mesa_IsEnabledi( GLenum cap, GLuint index )
 static GLboolean
 is_texture_enabled(struct gl_context *ctx, GLbitfield bit)
 {
-   const struct gl_texture_unit *const texUnit =
-       &ctx->Texture.Unit[ctx->Texture.CurrentUnit];
+   const struct gl_fixedfunc_texture_unit *const texUnit =
+      _mesa_get_current_fixedfunc_tex_unit(ctx);
+
+   if (!texUnit)
+      return GL_FALSE;
+
    return (texUnit->Enabled & bit) ? GL_TRUE : GL_FALSE;
 }
 
@@ -1511,7 +1516,8 @@ _mesa_IsEnabled( GLenum cap )
       case GL_TEXTURE_GEN_R:
       case GL_TEXTURE_GEN_Q:
          {
-            const struct gl_texture_unit *texUnit = get_texcoord_unit(ctx);
+            const struct gl_fixedfunc_texture_unit *texUnit =
+               get_texcoord_unit(ctx);
 
             if (ctx->API != API_OPENGL_COMPAT)
                goto invalid_enum_error;
@@ -1524,7 +1530,8 @@ _mesa_IsEnabled( GLenum cap )
          return GL_FALSE;
       case GL_TEXTURE_GEN_STR_OES:
          {
-            const struct gl_texture_unit *texUnit = get_texcoord_unit(ctx);
+            const struct gl_fixedfunc_texture_unit *texUnit =
+               get_texcoord_unit(ctx);
 
             if (ctx->API != API_OPENGLES)
                goto invalid_enum_error;

@@ -48,13 +48,14 @@ pkg.generate(
   description : 'Mesa OpenGL ES 2.0 library',
   version : meson.project_version(),
   libraries : libgles2,
-  libraries_private : '-lm -ldl -lpthread -pthread',
+  libraries_private : gl_priv_libs,
 )
 
 if with_tests
   test(
     'es2-ABI-check',
     find_program('ABI-check'),
+    env : env_test,
     args : libgles2
   )
 endif

@@ -476,6 +476,8 @@ st_translate_atifs_program(
       }
 
       for (i = 0; i < program->Parameters->NumParameters; i++) {
+         unsigned pvo = program->Parameters->ParameterValueOffset[i];
+
          switch (program->Parameters->Parameters[i].Type) {
          case PROGRAM_STATE_VAR:
          case PROGRAM_UNIFORM:
@@ -484,7 +486,7 @@ st_translate_atifs_program(
          case PROGRAM_CONSTANT:
             t->constants[i] =
                ureg_DECL_immediate(ureg,
-                                   (const float*)program->Parameters->ParameterValues[i],
+                                   (const float*)program->Parameters->ParameterValues + pvo,
                                    4);
             break;
          default:
@@ -544,9 +546,9 @@ st_init_atifs_prog(struct gl_context *ctx, struct gl_program *prog)
 
    unsigned pass, i, r, optype, arg;
 
-   static const gl_state_index fog_params_state[STATE_LENGTH] =
+   static const gl_state_index16 fog_params_state[STATE_LENGTH] =
       {STATE_INTERNAL, STATE_FOG_PARAMS_OPTIMIZED, 0, 0, 0};
-   static const gl_state_index fog_color[STATE_LENGTH] =
+   static const gl_state_index16 fog_color[STATE_LENGTH] =
       {STATE_FOG_COLOR, 0, 0, 0, 0};
 
    prog->info.inputs_read = 0;
@@ -601,7 +603,7 @@ st_init_atifs_prog(struct gl_context *ctx, struct gl_program *prog)
    /* we always have the ATI_fs constants, and the fog params */
    for (i = 0; i < MAX_NUM_FRAGMENT_CONSTANTS_ATI; i++) {
       _mesa_add_parameter(prog->Parameters, PROGRAM_UNIFORM,
-                          NULL, 4, GL_FLOAT, NULL, NULL);
+                          NULL, 4, GL_FLOAT, NULL, NULL, true);
    }
    _mesa_add_state_reference(prog->Parameters, fog_params_state);
    _mesa_add_state_reference(prog->Parameters, fog_color);

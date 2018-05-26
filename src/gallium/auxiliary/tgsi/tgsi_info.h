@@ -79,14 +79,14 @@ struct tgsi_opcode_info
    unsigned pre_dedent:1;
    unsigned post_indent:1;
    enum tgsi_output_mode output_mode:4;
-   unsigned opcode:8;
+   enum tgsi_opcode opcode:10;
 };
 
 const struct tgsi_opcode_info *
-tgsi_get_opcode_info( uint opcode );
+tgsi_get_opcode_info(enum tgsi_opcode opcode);
 
 const char *
-tgsi_get_opcode_name( uint opcode );
+tgsi_get_opcode_name(enum tgsi_opcode opcode);
 
 const char *
 tgsi_get_processor_name(enum pipe_shader_type processor);
@@ -111,10 +111,10 @@ static inline bool tgsi_type_is_64bit(enum tgsi_opcode_type type)
 }
 
 enum tgsi_opcode_type
-tgsi_opcode_infer_src_type( uint opcode, uint src_idx );
+tgsi_opcode_infer_src_type(enum tgsi_opcode opcode, uint src_idx);
 
 enum tgsi_opcode_type
-tgsi_opcode_infer_dst_type( uint opcode, uint dst_idx );
+tgsi_opcode_infer_dst_type(enum tgsi_opcode opcode, uint dst_idx);
 
 #if defined __cplusplus
 }

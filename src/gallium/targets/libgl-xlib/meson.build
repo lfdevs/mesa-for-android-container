@@ -24,8 +24,6 @@
 
 gallium_xlib_c_args = [
   '-DGALLIUM_SOFTPIPE',
-  '-DGALLIUM_RBUG',
-  '-DGALLIUME_TRACE',
 ]
 gallium_xlib_ld_args = []
 gallium_xlib_link_with = []
@@ -50,7 +48,7 @@ libgl = shared_library(
   link_args : [ld_args_bsymbolic, ld_args_gc_sections, gallium_xlib_ld_args],
   link_depends : gallium_xlib_link_depends,
   link_with : [
-    libxlib, libws_xlib, libtrace, librbug, libglapi_static,
+    libxlib, libws_xlib, libglapi_static,
     libgallium, libmesa_util, libmesa_gallium, gallium_xlib_link_with,
   ],
   dependencies : [dep_thread, dep_clock, dep_unwind, driver_swrast, driver_swr],

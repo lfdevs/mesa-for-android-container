@@ -6,14 +6,17 @@
 
 #define NVC0_RESOURCE_FLAG_VIDEO (NOUVEAU_RESOURCE_FLAG_DRV_PRIV << 0)
 
+#define NVC0_TILE_MODE_X(m) (((m) >> 0) & 0xf)
+#define NVC0_TILE_MODE_Y(m) (((m) >> 4) & 0xf)
+#define NVC0_TILE_MODE_Z(m) (((m) >> 8) & 0xf)
 
-#define NVC0_TILE_SHIFT_X(m) ((((m) >> 0) & 0xf) + 6)
-#define NVC0_TILE_SHIFT_Y(m) ((((m) >> 4) & 0xf) + 3)
-#define NVC0_TILE_SHIFT_Z(m) ((((m) >> 8) & 0xf) + 0)
+#define NVC0_TILE_SHIFT_X(m) (NVC0_TILE_MODE_X(m) + 6)
+#define NVC0_TILE_SHIFT_Y(m) (NVC0_TILE_MODE_Y(m) + 3)
+#define NVC0_TILE_SHIFT_Z(m) (NVC0_TILE_MODE_Z(m) + 0)
 
-#define NVC0_TILE_SIZE_X(m) (64 << (((m) >> 0) & 0xf))
-#define NVC0_TILE_SIZE_Y(m) ( 8 << (((m) >> 4) & 0xf))
-#define NVC0_TILE_SIZE_Z(m) ( 1 << (((m) >> 8) & 0xf))
+#define NVC0_TILE_SIZE_X(m) (64 << NVC0_TILE_MODE_X(m))
+#define NVC0_TILE_SIZE_Y(m) ( 8 << NVC0_TILE_MODE_Y(m))
+#define NVC0_TILE_SIZE_Z(m) ( 1 << NVC0_TILE_MODE_Z(m))
 
 /* it's ok to mask only in the end because max value is 3 * 5 */
 
@@ -32,7 +35,8 @@ nvc0_screen_init_resource_functions(struct pipe_screen *pscreen);
  */
 struct pipe_resource *
 nvc0_miptree_create(struct pipe_screen *pscreen,
-                    const struct pipe_resource *tmp);
+                    const struct pipe_resource *tmp,
+                    const uint64_t *modifiers, unsigned int count);
 
 const struct u_resource_vtbl nvc0_miptree_vtbl;
 

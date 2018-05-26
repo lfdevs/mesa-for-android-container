@@ -133,6 +133,7 @@ LTLIBRARIES = $(noinst_LTLIBRARIES)
 am__DEPENDENCIES_1 =
 libi965_dri_la_DEPENDENCIES =  \
 	$(top_builddir)/src/intel/common/libintel_common.la \
+	$(top_builddir)/src/intel/dev/libintel_dev.la \
 	$(top_builddir)/src/intel/isl/libisl.la \
 	$(top_builddir)/src/intel/compiler/libintel_compiler.la \
 	$(top_builddir)/src/intel/blorp/libblorp.la \
@@ -141,9 +142,10 @@ am__objects_1 = brw_binding_tables.lo brw_blorp.lo brw_bufmgr.lo \
 	brw_clear.lo brw_clip.lo brw_compute.lo \
 	brw_conditional_render.lo brw_context.lo brw_cs.lo \
 	brw_curbe.lo brw_disk_cache.lo brw_draw.lo brw_draw_upload.lo \
-	brw_ff_gs.lo brw_ff_gs_emit.lo brw_formatquery.lo brw_gs.lo \
-	brw_gs_surface_state.lo brw_link.lo brw_meta_util.lo \
-	brw_misc_state.lo brw_nir_uniforms.lo brw_object_purgeable.lo \
+	brw_ff_gs.lo brw_ff_gs_emit.lo brw_formatquery.lo \
+	brw_generate_mipmap.lo brw_gs.lo brw_gs_surface_state.lo \
+	brw_link.lo brw_meta_util.lo brw_misc_state.lo \
+	brw_nir_uniforms.lo brw_object_purgeable.lo \
 	brw_pipe_control.lo brw_performance_query.lo brw_program.lo \
 	brw_program_binary.lo brw_program_cache.lo \
 	brw_primitive_restart.lo brw_queryobj.lo brw_reset.lo \
@@ -164,10 +166,7 @@ am__objects_1 = brw_binding_tables.lo brw_blorp.lo brw_bufmgr.lo \
 	intel_state.lo intel_tex.lo intel_tex_copy.lo \
 	intel_tex_image.lo intel_tex_validate.lo intel_tiled_memcpy.lo \
 	intel_upload.lo
-am__objects_2 = brw_oa_hsw.lo brw_oa_bdw.lo brw_oa_chv.lo \
-	brw_oa_sklgt2.lo brw_oa_sklgt3.lo brw_oa_sklgt4.lo \
-	brw_oa_bxt.lo brw_oa_kblgt2.lo brw_oa_kblgt3.lo brw_oa_glk.lo \
-	brw_oa_cflgt2.lo brw_oa_cflgt3.lo
+am__objects_2 = brw_oa_metrics.lo
 am_libi965_dri_la_OBJECTS = $(am__objects_1) $(am__objects_2)
 libi965_dri_la_OBJECTS = $(am_libi965_dri_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
@@ -183,73 +182,82 @@ libi965_gen10_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
 	$(libi965_gen10_la_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) $(LDFLAGS) \
 	-o $@
+libi965_gen11_la_LIBADD =
+am__objects_4 = libi965_gen11_la-genX_blorp_exec.lo \
+	libi965_gen11_la-genX_state_upload.lo
+am_libi965_gen11_la_OBJECTS = $(am__objects_4)
+libi965_gen11_la_OBJECTS = $(am_libi965_gen11_la_OBJECTS)
+libi965_gen11_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
+	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
+	$(libi965_gen11_la_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) $(LDFLAGS) \
+	-o $@
 libi965_gen4_la_LIBADD =
-am__objects_4 = libi965_gen4_la-genX_blorp_exec.lo \
+am__objects_5 = libi965_gen4_la-genX_blorp_exec.lo \
 	libi965_gen4_la-genX_state_upload.lo
-am_libi965_gen4_la_OBJECTS = $(am__objects_4)
+am_libi965_gen4_la_OBJECTS = $(am__objects_5)
 libi965_gen4_la_OBJECTS = $(am_libi965_gen4_la_OBJECTS)
 libi965_gen4_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
 	$(libi965_gen4_la_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) $(LDFLAGS) \
 	-o $@
 libi965_gen45_la_LIBADD =
-am__objects_5 = libi965_gen45_la-genX_blorp_exec.lo \
+am__objects_6 = libi965_gen45_la-genX_blorp_exec.lo \
 	libi965_gen45_la-genX_state_upload.lo
-am_libi965_gen45_la_OBJECTS = $(am__objects_5)
+am_libi965_gen45_la_OBJECTS = $(am__objects_6)
 libi965_gen45_la_OBJECTS = $(am_libi965_gen45_la_OBJECTS)
 libi965_gen45_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
 	$(libi965_gen45_la_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) $(LDFLAGS) \
 	-o $@
 libi965_gen5_la_LIBADD =
-am__objects_6 = libi965_gen5_la-genX_blorp_exec.lo \
+am__objects_7 = libi965_gen5_la-genX_blorp_exec.lo \
 	libi965_gen5_la-genX_state_upload.lo
-am_libi965_gen5_la_OBJECTS = $(am__objects_6)
+am_libi965_gen5_la_OBJECTS = $(am__objects_7)
 libi965_gen5_la_OBJECTS = $(am_libi965_gen5_la_OBJECTS)
 libi965_gen5_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
 	$(libi965_gen5_la_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) $(LDFLAGS) \
 	-o $@
 libi965_gen6_la_LIBADD =
-am__objects_7 = libi965_gen6_la-genX_blorp_exec.lo \
+am__objects_8 = libi965_gen6_la-genX_blorp_exec.lo \
 	libi965_gen6_la-genX_state_upload.lo
-am_libi965_gen6_la_OBJECTS = $(am__objects_7)
+am_libi965_gen6_la_OBJECTS = $(am__objects_8)
 libi965_gen6_la_OBJECTS = $(am_libi965_gen6_la_OBJECTS)
 libi965_gen6_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
 	$(libi965_gen6_la_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) $(LDFLAGS) \
 	-o $@
 libi965_gen7_la_LIBADD =
-am__objects_8 = libi965_gen7_la-genX_blorp_exec.lo \
+am__objects_9 = libi965_gen7_la-genX_blorp_exec.lo \
 	libi965_gen7_la-genX_state_upload.lo
-am_libi965_gen7_la_OBJECTS = $(am__objects_8)
+am_libi965_gen7_la_OBJECTS = $(am__objects_9)
 libi965_gen7_la_OBJECTS = $(am_libi965_gen7_la_OBJECTS)
 libi965_gen7_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
 	$(libi965_gen7_la_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) $(LDFLAGS) \
 	-o $@
 libi965_gen75_la_LIBADD =
-am__objects_9 = libi965_gen75_la-genX_blorp_exec.lo \
+am__objects_10 = libi965_gen75_la-genX_blorp_exec.lo \
 	libi965_gen75_la-genX_state_upload.lo
-am_libi965_gen75_la_OBJECTS = $(am__objects_9)
+am_libi965_gen75_la_OBJECTS = $(am__objects_10)
 libi965_gen75_la_OBJECTS = $(am_libi965_gen75_la_OBJECTS)
 libi965_gen75_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
 	$(libi965_gen75_la_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) $(LDFLAGS) \
 	-o $@
 libi965_gen8_la_LIBADD =
-am__objects_10 = libi965_gen8_la-genX_blorp_exec.lo \
+am__objects_11 = libi965_gen8_la-genX_blorp_exec.lo \
 	libi965_gen8_la-genX_state_upload.lo
-am_libi965_gen8_la_OBJECTS = $(am__objects_10)
+am_libi965_gen8_la_OBJECTS = $(am__objects_11)
 libi965_gen8_la_OBJECTS = $(am_libi965_gen8_la_OBJECTS)
 libi965_gen8_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
 	$(libi965_gen8_la_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) $(LDFLAGS) \
 	-o $@
 libi965_gen9_la_LIBADD =
-am__objects_11 = libi965_gen9_la-genX_blorp_exec.lo \
+am__objects_12 = libi965_gen9_la-genX_blorp_exec.lo \
 	libi965_gen9_la-genX_state_upload.lo
-am_libi965_gen9_la_OBJECTS = $(am__objects_11)
+am_libi965_gen9_la_OBJECTS = $(am__objects_12)
 libi965_gen9_la_OBJECTS = $(am_libi965_gen9_la_OBJECTS)
 libi965_gen9_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
@@ -308,15 +316,17 @@ am__v_CXXLD_ = $(am__v_CXXLD_@AM_DEFAULT_V@)
 am__v_CXXLD_0 = @echo "  CXXLD   " $@;
 am__v_CXXLD_1 = 
 SOURCES = $(libi965_dri_la_SOURCES) $(libi965_gen10_la_SOURCES) \
-	$(libi965_gen4_la_SOURCES) $(libi965_gen45_la_SOURCES) \
-	$(libi965_gen5_la_SOURCES) $(libi965_gen6_la_SOURCES) \
-	$(libi965_gen7_la_SOURCES) $(libi965_gen75_la_SOURCES) \
-	$(libi965_gen8_la_SOURCES) $(libi965_gen9_la_SOURCES)
+	$(libi965_gen11_la_SOURCES) $(libi965_gen4_la_SOURCES) \
+	$(libi965_gen45_la_SOURCES) $(libi965_gen5_la_SOURCES) \
+	$(libi965_gen6_la_SOURCES) $(libi965_gen7_la_SOURCES) \
+	$(libi965_gen75_la_SOURCES) $(libi965_gen8_la_SOURCES) \
+	$(libi965_gen9_la_SOURCES)
 DIST_SOURCES = $(libi965_dri_la_SOURCES) $(libi965_gen10_la_SOURCES) \
-	$(libi965_gen4_la_SOURCES) $(libi965_gen45_la_SOURCES) \
-	$(libi965_gen5_la_SOURCES) $(libi965_gen6_la_SOURCES) \
-	$(libi965_gen7_la_SOURCES) $(libi965_gen75_la_SOURCES) \
-	$(libi965_gen8_la_SOURCES) $(libi965_gen9_la_SOURCES)
+	$(libi965_gen11_la_SOURCES) $(libi965_gen4_la_SOURCES) \
+	$(libi965_gen45_la_SOURCES) $(libi965_gen5_la_SOURCES) \
+	$(libi965_gen6_la_SOURCES) $(libi965_gen7_la_SOURCES) \
+	$(libi965_gen75_la_SOURCES) $(libi965_gen8_la_SOURCES) \
+	$(libi965_gen9_la_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -487,6 +497,9 @@ OBJEXT = @OBJEXT@
 OMX_BELLAGIO_CFLAGS = @OMX_BELLAGIO_CFLAGS@
 OMX_BELLAGIO_LIBS = @OMX_BELLAGIO_LIBS@
 OMX_BELLAGIO_LIB_INSTALL_DIR = @OMX_BELLAGIO_LIB_INSTALL_DIR@
+OMX_TIZONIA_CFLAGS = @OMX_TIZONIA_CFLAGS@
+OMX_TIZONIA_LIBS = @OMX_TIZONIA_LIBS@
+OMX_TIZONIA_LIB_INSTALL_DIR = @OMX_TIZONIA_LIB_INSTALL_DIR@
 OPENCL_LIBNAME = @OPENCL_LIBNAME@
 OPENCL_VERSION = @OPENCL_VERSION@
 OSMESA_LIB = @OSMESA_LIB@
@@ -554,7 +567,9 @@ VL_LIBS = @VL_LIBS@
 VULKAN_ICD_INSTALL_DIR = @VULKAN_ICD_INSTALL_DIR@
 WAYLAND_CLIENT_CFLAGS = @WAYLAND_CLIENT_CFLAGS@
 WAYLAND_CLIENT_LIBS = @WAYLAND_CLIENT_LIBS@
+WAYLAND_PROTOCOLS_CFLAGS = @WAYLAND_PROTOCOLS_CFLAGS@
 WAYLAND_PROTOCOLS_DATADIR = @WAYLAND_PROTOCOLS_DATADIR@
+WAYLAND_PROTOCOLS_LIBS = @WAYLAND_PROTOCOLS_LIBS@
 WAYLAND_SCANNER = @WAYLAND_SCANNER@
 WAYLAND_SCANNER_CFLAGS = @WAYLAND_SCANNER_CFLAGS@
 WAYLAND_SCANNER_LIBS = @WAYLAND_SCANNER_LIBS@
@@ -570,6 +585,8 @@ XCB_DRI2_CFLAGS = @XCB_DRI2_CFLAGS@
 XCB_DRI2_LIBS = @XCB_DRI2_LIBS@
 XCB_DRI3_CFLAGS = @XCB_DRI3_CFLAGS@
 XCB_DRI3_LIBS = @XCB_DRI3_LIBS@
+XCB_DRI3_MODIFIERS_CFLAGS = @XCB_DRI3_MODIFIERS_CFLAGS@
+XCB_DRI3_MODIFIERS_LIBS = @XCB_DRI3_MODIFIERS_LIBS@
 XF86VIDMODE_CFLAGS = @XF86VIDMODE_CFLAGS@
 XF86VIDMODE_LIBS = @XF86VIDMODE_LIBS@
 XLIBGL_CFLAGS = @XLIBGL_CFLAGS@
@@ -631,7 +648,6 @@ pdfdir = @pdfdir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
-runstatedir = @runstatedir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
@@ -668,6 +684,7 @@ i965_FILES = \
 	brw_ff_gs_emit.c \
 	brw_ff_gs.h \
 	brw_formatquery.c \
+	brw_generate_mipmap.c \
 	brw_gs.c \
 	brw_gs.h \
 	brw_gs_surface_state.c \
@@ -796,31 +813,28 @@ i965_gen10_FILES = \
 	genX_blorp_exec.c \
 	genX_state_upload.c
 
+i965_gen11_FILES = \
+	genX_blorp_exec.c \
+	genX_state_upload.c
+
 i965_oa_GENERATED_FILES = \
-	brw_oa_hsw.h \
-	brw_oa_hsw.c \
-	brw_oa_bdw.h \
-	brw_oa_bdw.c \
-	brw_oa_chv.h \
-	brw_oa_chv.c \
-	brw_oa_sklgt2.h \
-	brw_oa_sklgt2.c \
-	brw_oa_sklgt3.h \
-	brw_oa_sklgt3.c \
-	brw_oa_sklgt4.h \
-	brw_oa_sklgt4.c \
-	brw_oa_bxt.h \
-	brw_oa_bxt.c \
-	brw_oa_kblgt2.h \
-	brw_oa_kblgt2.c \
-	brw_oa_kblgt3.h \
-	brw_oa_kblgt3.c \
-	brw_oa_glk.h \
-	brw_oa_glk.c \
-	brw_oa_cflgt2.h \
-	brw_oa_cflgt2.c \
-	brw_oa_cflgt3.h \
-	brw_oa_cflgt3.c
+	brw_oa_metrics.c \
+	brw_oa_metrics.h
+
+i965_oa_xml_FILES = \
+	brw_oa_hsw.xml \
+	brw_oa_bdw.xml \
+	brw_oa_chv.xml \
+	brw_oa_sklgt2.xml \
+	brw_oa_sklgt3.xml \
+	brw_oa_sklgt4.xml \
+	brw_oa_bxt.xml \
+	brw_oa_kblgt2.xml \
+	brw_oa_kblgt3.xml \
+	brw_oa_glk.xml \
+	brw_oa_cflgt2.xml \
+	brw_oa_cflgt3.xml \
+	brw_oa_cnl.xml
 
 AM_CFLAGS = \
 	-I$(top_srcdir)/include \
@@ -855,7 +869,8 @@ I965_PERGEN_LIBS = \
 	libi965_gen75.la \
 	libi965_gen8.la \
 	libi965_gen9.la \
-	libi965_gen10.la
+	libi965_gen10.la \
+	libi965_gen11.la
 
 libi965_gen4_la_SOURCES = $(i965_gen4_FILES)
 libi965_gen4_la_CFLAGS = $(AM_CFLAGS) -DGEN_VERSIONx10=40
@@ -875,6 +890,8 @@ libi965_gen9_la_SOURCES = $(i965_gen9_FILES)
 libi965_gen9_la_CFLAGS = $(AM_CFLAGS) -DGEN_VERSIONx10=90
 libi965_gen10_la_SOURCES = $(i965_gen10_FILES)
 libi965_gen10_la_CFLAGS = $(AM_CFLAGS) -DGEN_VERSIONx10=100
+libi965_gen11_la_SOURCES = $(i965_gen11_FILES)
+libi965_gen11_la_CFLAGS = $(AM_CFLAGS) -DGEN_VERSIONx10=110
 noinst_LTLIBRARIES = \
 	libi965_dri.la \
 	$(I965_PERGEN_LIBS)
@@ -885,6 +902,7 @@ libi965_dri_la_SOURCES = \
 
 libi965_dri_la_LIBADD = \
 	$(top_builddir)/src/intel/common/libintel_common.la \
+	$(top_builddir)/src/intel/dev/libintel_dev.la \
 	$(top_builddir)/src/intel/isl/libisl.la \
 	$(top_builddir)/src/intel/compiler/libintel_compiler.la \
 	$(top_builddir)/src/intel/blorp/libblorp.la \
@@ -894,19 +912,8 @@ libi965_dri_la_LIBADD = \
 BUILT_SOURCES = $(i965_oa_GENERATED_FILES)
 CLEANFILES = $(BUILT_SOURCES)
 EXTRA_DIST = \
-	brw_oa_hsw.xml \
-	brw_oa_bdw.xml \
-	brw_oa_chv.xml \
-	brw_oa_sklgt2.xml \
-	brw_oa_sklgt3.xml \
-	brw_oa_sklgt4.xml \
-	brw_oa_bxt.xml \
-	brw_oa_kblgt2.xml \
-	brw_oa_kblgt3.xml \
-	brw_oa_glk.xml \
-	brw_oa_cflgt2.xml \
-	brw_oa_cflgt3.xml \
 	brw_oa.py \
+	$(i965_oa_xml_FILES) \
 	meson.build
 
 all: $(BUILT_SOURCES)
@@ -962,6 +969,9 @@ libi965_dri.la: $(libi965_dri_la_OBJECTS) $(libi965_dri_la_DEPENDENCIES) $(EXTRA
 libi965_gen10.la: $(libi965_gen10_la_OBJECTS) $(libi965_gen10_la_DEPENDENCIES) $(EXTRA_libi965_gen10_la_DEPENDENCIES) 
 	$(AM_V_CCLD)$(libi965_gen10_la_LINK)  $(libi965_gen10_la_OBJECTS) $(libi965_gen10_la_LIBADD) $(LIBS)
 
+libi965_gen11.la: $(libi965_gen11_la_OBJECTS) $(libi965_gen11_la_DEPENDENCIES) $(EXTRA_libi965_gen11_la_DEPENDENCIES) 
+	$(AM_V_CCLD)$(libi965_gen11_la_LINK)  $(libi965_gen11_la_OBJECTS) $(libi965_gen11_la_LIBADD) $(LIBS)
+
 libi965_gen4.la: $(libi965_gen4_la_OBJECTS) $(libi965_gen4_la_DEPENDENCIES) $(EXTRA_libi965_gen4_la_DEPENDENCIES) 
 	$(AM_V_CCLD)$(libi965_gen4_la_LINK)  $(libi965_gen4_la_OBJECTS) $(libi965_gen4_la_LIBADD) $(LIBS)
 
@@ -1008,24 +1018,14 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_ff_gs.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_ff_gs_emit.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_formatquery.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_generate_mipmap.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_gs.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_gs_surface_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_link.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_meta_util.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_misc_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_nir_uniforms.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_oa_bdw.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_oa_bxt.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_oa_cflgt2.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_oa_cflgt3.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_oa_chv.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_oa_glk.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_oa_hsw.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_oa_kblgt2.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_oa_kblgt3.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_oa_sklgt2.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_oa_sklgt3.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_oa_sklgt4.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_oa_metrics.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_object_purgeable.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_performance_query.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_pipe_control.Plo@am__quote@
@@ -1088,6 +1088,8 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/intel_upload.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libi965_gen10_la-genX_blorp_exec.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libi965_gen10_la-genX_state_upload.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libi965_gen11_la-genX_blorp_exec.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libi965_gen11_la-genX_state_upload.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libi965_gen45_la-genX_blorp_exec.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libi965_gen45_la-genX_state_upload.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libi965_gen4_la-genX_blorp_exec.Plo@am__quote@
@@ -1142,6 +1144,20 @@ libi965_gen10_la-genX_state_upload.lo: genX_state_upload.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='genX_state_upload.c' object='libi965_gen10_la-genX_state_upload.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libi965_gen10_la_CFLAGS) $(CFLAGS) -c -o libi965_gen10_la-genX_state_upload.lo `test -f 'genX_state_upload.c' || echo '$(srcdir)/'`genX_state_upload.c
+
+libi965_gen11_la-genX_blorp_exec.lo: genX_blorp_exec.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libi965_gen11_la_CFLAGS) $(CFLAGS) -MT libi965_gen11_la-genX_blorp_exec.lo -MD -MP -MF $(DEPDIR)/libi965_gen11_la-genX_blorp_exec.Tpo -c -o libi965_gen11_la-genX_blorp_exec.lo `test -f 'genX_blorp_exec.c' || echo '$(srcdir)/'`genX_blorp_exec.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libi965_gen11_la-genX_blorp_exec.Tpo $(DEPDIR)/libi965_gen11_la-genX_blorp_exec.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='genX_blorp_exec.c' object='libi965_gen11_la-genX_blorp_exec.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libi965_gen11_la_CFLAGS) $(CFLAGS) -c -o libi965_gen11_la-genX_blorp_exec.lo `test -f 'genX_blorp_exec.c' || echo '$(srcdir)/'`genX_blorp_exec.c
+
+libi965_gen11_la-genX_state_upload.lo: genX_state_upload.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libi965_gen11_la_CFLAGS) $(CFLAGS) -MT libi965_gen11_la-genX_state_upload.lo -MD -MP -MF $(DEPDIR)/libi965_gen11_la-genX_state_upload.Tpo -c -o libi965_gen11_la-genX_state_upload.lo `test -f 'genX_state_upload.c' || echo '$(srcdir)/'`genX_state_upload.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libi965_gen11_la-genX_state_upload.Tpo $(DEPDIR)/libi965_gen11_la-genX_state_upload.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='genX_state_upload.c' object='libi965_gen11_la-genX_state_upload.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libi965_gen11_la_CFLAGS) $(CFLAGS) -c -o libi965_gen11_la-genX_state_upload.lo `test -f 'genX_state_upload.c' || echo '$(srcdir)/'`genX_state_upload.c
 
 libi965_gen4_la-genX_blorp_exec.lo: genX_blorp_exec.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libi965_gen4_la_CFLAGS) $(CFLAGS) -MT libi965_gen4_la-genX_blorp_exec.lo -MD -MP -MF $(DEPDIR)/libi965_gen4_la-genX_blorp_exec.Tpo -c -o libi965_gen4_la-genX_blorp_exec.lo `test -f 'genX_blorp_exec.c' || echo '$(srcdir)/'`genX_blorp_exec.c
@@ -1495,14 +1511,13 @@ uninstall-am:
 .PRECIOUS: Makefile
 
 
-# Note: we avoid using a multi target rule here and outputting both the
-# .c and .h files in one go so we don't hit problems with parallel
-# make and multiple invocations of the same script trying to write
-# to the same files.
-brw_oa_%.h: brw_oa.py brw_oa_%.xml Makefile.am
-	$(PYTHON2) $(PYTHON_FLAGS) $(srcdir)/brw_oa.py --header=$(builddir)/brw_oa_$(*).h --chipset=$(*) $(srcdir)/brw_oa_$(*).xml
-brw_oa_%.c: brw_oa.py brw_oa_%.xml Makefile.am
-	$(PYTHON2) $(PYTHON_FLAGS) $(srcdir)/brw_oa.py --code=$(builddir)/brw_oa_$(*).c --chipset=$(*) $(srcdir)/brw_oa_$(*).xml
+brw_oa_metrics.c: brw_oa.py $(i965_oa_xml_FILES)
+	$(PYTHON2) $(PYTHON_FLAGS) $(srcdir)/brw_oa.py \
+	--code=$(builddir)/brw_oa_metrics.c \
+	--header=$(builddir)/brw_oa_metrics.h \
+	$(i965_oa_xml_FILES:%=$(srcdir)/%)
+
+brw_oa_metrics.h: brw_oa_metrics.c
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

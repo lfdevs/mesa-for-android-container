@@ -469,7 +469,7 @@ static void *virgl_shader_encoder(struct pipe_context *ctx,
    struct tgsi_token *new_tokens;
    int ret;
 
-   new_tokens = virgl_tgsi_transform(shader->tokens);
+   new_tokens = virgl_tgsi_transform(vctx, shader->tokens);
    if (!new_tokens)
       return NULL;
 

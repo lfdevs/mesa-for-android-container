@@ -159,7 +159,7 @@ handle_op_uint(const struct pipe_shader_buffer *bview,
                bool just_read,
                unsigned char *data_ptr,
                uint qi,
-               unsigned opcode,
+               enum tgsi_opcode opcode,
                unsigned writemask,
                float rgba[TGSI_NUM_CHANNELS][TGSI_QUAD_SIZE],
                float rgba2[TGSI_NUM_CHANNELS][TGSI_QUAD_SIZE])
@@ -281,7 +281,7 @@ handle_op_uint(const struct pipe_shader_buffer *bview,
 static void
 sp_tgsi_op(const struct tgsi_buffer *buffer,
            const struct tgsi_buffer_params *params,
-           unsigned opcode,
+           enum tgsi_opcode opcode,
            const int s[TGSI_QUAD_SIZE],
            float rgba[TGSI_NUM_CHANNELS][TGSI_QUAD_SIZE],
            float rgba2[TGSI_NUM_CHANNELS][TGSI_QUAD_SIZE])

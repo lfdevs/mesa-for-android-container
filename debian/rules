@@ -56,9 +56,9 @@ else
 		GALLIUM_DRIVERS += freedreno
 	endif
 
-	# vc4 kernel support is only available on armhf and arm64
+	# tegra and vc4 kernel support are only available on armhf and arm64
 	ifneq (,$(filter $(DEB_HOST_ARCH), armhf arm64))
-		GALLIUM_DRIVERS += vc4
+		GALLIUM_DRIVERS += tegra vc4
 	endif
 
 	# etnaviv kernel support is currently only available on armhf
@@ -159,7 +159,10 @@ override_dh_clean:
 	rm -rf $$(find -name Makefile.in)
 	rm -rf bin/install-sh bin/ltmain.sh
 	for file in debian/*.in; do rm -f $${file%%.in}; done
+	rm -f src/amd/vulkan/*.pyc
 	rm -f src/compiler/nir/*.pyc
+	rm -f src/egl/generate/*.pyc
+	rm -f src/intel/vulkan/*.pyc
 	rm -f src/mapi/glapi/gen/*.pyc
 	rm -f src/mesa/main/*.pyc
 	rm -f src/gallium/auxiliary/util/*.pyc

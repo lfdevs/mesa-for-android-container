@@ -40,6 +40,17 @@ struct vc5_bo;
 #define VC5_MAX_DRAW_BUFFERS 4
 #define VC5_MAX_ATTRIBUTES 16
 
+/* These are tunable parameters in the HW design, but all the V3D
+ * implementations agree.
+ */
+#define VC5_UIFCFG_BANKS 8
+#define VC5_UIFCFG_PAGE_SIZE 4096
+#define VC5_UIFCFG_XOR_VALUE (1 << 4)
+#define VC5_PAGE_CACHE_SIZE (VC5_UIFCFG_PAGE_SIZE * VC5_UIFCFG_BANKS)
+#define VC5_UBLOCK_SIZE 64
+#define VC5_UIFBLOCK_SIZE (4 * VC5_UBLOCK_SIZE)
+#define VC5_UIFBLOCK_ROW_SIZE (4 * VC5_UIFBLOCK_SIZE)
+
 struct vc5_simulator_file;
 
 struct vc5_screen {
@@ -49,13 +60,6 @@ struct vc5_screen {
         struct v3d_device_info devinfo;
 
         const char *name;
-
-        /** The last seqno we've completed a wait for.
-         *
-         * This lets us slightly optimize our waits by skipping wait syscalls
-         * if we know the job's already done.
-         */
-        uint64_t finished_seqno;
 
         struct slab_parent_pool transfer_pool;
 
@@ -93,8 +97,5 @@ struct pipe_screen *vc5_screen_create(int fd);
 
 void
 vc5_fence_init(struct vc5_screen *screen);
-
-struct vc5_fence *
-vc5_fence_create(struct vc5_screen *screen, uint64_t seqno);
 
 #endif /* VC5_SCREEN_H */

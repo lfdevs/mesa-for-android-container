@@ -38,6 +38,7 @@
 
 #include <stdint.h>
 
+#include "errors.h"
 #include "format_unpack.h"
 #include "format_utils.h"
 #include "macros.h"

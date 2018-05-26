@@ -38,6 +38,7 @@ brw_query_samples_for_format(struct gl_context *ctx, GLenum target,
    (void) internalFormat;
 
    switch (devinfo->gen) {
+   case 11:
    case 10:
    case 9:
       samples[0] = 16;

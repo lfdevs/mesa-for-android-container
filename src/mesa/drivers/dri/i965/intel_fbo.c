@@ -849,7 +849,8 @@ intel_blit_framebuffer_with_blitter(struct gl_context *ctx,
                                  dst_irb->mt,
                                  dst_irb->mt_level, dst_irb->mt_layer,
                                  dstX0, dstY0, dst_rb->Name == 0,
-                                 dstX1 - dstX0, dstY1 - dstY0, GL_COPY)) {
+                                 dstX1 - dstX0, dstY1 - dstY0,
+                                 COLOR_LOGICOP_COPY)) {
             perf_debug("glBlitFramebuffer(): unknown blit failure.  "
                        "Falling back to software rendering.\n");
             return mask;

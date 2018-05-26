@@ -91,9 +91,7 @@ extern struct svga_tracked_state svga_update_swtnl_vdecl;
 enum pipe_error svga_update_state( struct svga_context *svga,
                                    unsigned level );
 
-void svga_update_state_retry( struct svga_context *svga,
-                              unsigned level );
-
+bool svga_update_state_retry(struct svga_context *svga, unsigned level);
 
 enum pipe_error svga_emit_initial_state( struct svga_context *svga );
 

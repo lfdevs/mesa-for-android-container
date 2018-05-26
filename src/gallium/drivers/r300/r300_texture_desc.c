@@ -270,15 +270,15 @@ static void r300_setup_miptree(struct r300_screen *screen,
 static void r300_setup_flags(struct r300_resource *tex)
 {
     tex->tex.uses_stride_addressing =
-        !util_is_power_of_two(tex->b.b.width0) ||
+        !util_is_power_of_two_or_zero(tex->b.b.width0) ||
         (tex->tex.stride_in_bytes_override &&
          r300_stride_to_width(tex->b.b.format,
                          tex->tex.stride_in_bytes_override) != tex->b.b.width0);
 
     tex->tex.is_npot =
         tex->tex.uses_stride_addressing ||
-        !util_is_power_of_two(tex->b.b.height0) ||
-        !util_is_power_of_two(tex->b.b.depth0);
+        !util_is_power_of_two_or_zero(tex->b.b.height0) ||
+        !util_is_power_of_two_or_zero(tex->b.b.depth0);
 }
 
 static void r300_setup_cbzb_flags(struct r300_screen *rscreen,

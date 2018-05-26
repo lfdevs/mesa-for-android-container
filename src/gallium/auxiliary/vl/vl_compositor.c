@@ -1437,7 +1437,7 @@ vl_compositor_init_state(struct vl_compositor_state *s, struct pipe_context *pip
     * Const buffer contains the color conversion matrix and bias vectors
     */
    /* XXX: Create with IMMUTABLE/STATIC... although it does change every once in a long while... */
-   s->csc_matrix = pipe_buffer_create
+   s->csc_matrix = pipe_buffer_create_const0
    (
       pipe->screen,
       PIPE_BIND_CONSTANT_BUFFER,

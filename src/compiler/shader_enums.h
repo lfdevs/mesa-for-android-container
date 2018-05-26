@@ -48,6 +48,14 @@ typedef enum
    MESA_SHADER_COMPUTE = 5,
 } gl_shader_stage;
 
+/**
+ * Number of STATE_* values we need to address any GL state.
+ * Used to dimension arrays.
+ */
+#define STATE_LENGTH 5
+
+typedef short gl_state_index16; /* see enum gl_state_index */
+
 const char *gl_shader_stage_name(gl_shader_stage stage);
 
 /**
@@ -124,6 +132,11 @@ const char *gl_vert_attrib_name(gl_vert_attrib attrib);
  * VERT_ATTRIB_GENERIC
  *   include the OpenGL 2.0+ GLSL generic shader attributes.
  *   These alias the generic GL_ARB_vertex_shader attributes.
+ * VERT_ATTRIB_MAT
+ *   include the generic shader attributes used to alias
+ *   varying material values for the TNL shader programs.
+ *   They are located at the end of the generic attribute
+ *   block not to overlap with the generic 0 attribute.
  */
 #define VERT_ATTRIB_FF(i)           (VERT_ATTRIB_POS + (i))
 #define VERT_ATTRIB_FF_MAX          VERT_ATTRIB_GENERIC0
@@ -133,6 +146,12 @@ const char *gl_vert_attrib_name(gl_vert_attrib attrib);
 
 #define VERT_ATTRIB_GENERIC(i)      (VERT_ATTRIB_GENERIC0 + (i))
 #define VERT_ATTRIB_GENERIC_MAX     MAX_VERTEX_GENERIC_ATTRIBS
+
+#define VERT_ATTRIB_MAT0            \
+   (VERT_ATTRIB_GENERIC_MAX - VERT_ATTRIB_MAT_MAX)
+#define VERT_ATTRIB_MAT(i)          \
+   VERT_ATTRIB_GENERIC((i) + VERT_ATTRIB_MAT0)
+#define VERT_ATTRIB_MAT_MAX         MAT_ATTRIB_MAX
 
 /**
  * Bitflags for vertex attributes.
@@ -169,6 +188,10 @@ const char *gl_vert_attrib_name(gl_vert_attrib attrib);
 #define VERT_BIT_GENERIC(i)      VERT_BIT(VERT_ATTRIB_GENERIC(i))
 #define VERT_BIT_GENERIC_ALL     \
    BITFIELD_RANGE(VERT_ATTRIB_GENERIC(0), VERT_ATTRIB_GENERIC_MAX)
+
+#define VERT_BIT_MAT(i)	         VERT_BIT(VERT_ATTRIB_MAT(i))
+#define VERT_BIT_MAT_ALL         \
+   BITFIELD_RANGE(VERT_ATTRIB_MAT(0), VERT_ATTRIB_MAT_MAX)
 /*@}*/
 
 #define MAX_VARYING 32 /**< number of float[4] vectors */
@@ -374,6 +397,14 @@ typedef enum
    SYSTEM_VALUE_SUBGROUP_LT_MASK,
    /*@}*/
 
+   /**
+    * Builtin variables added by VK_KHR_subgroups
+    */
+   /*@{*/
+   SYSTEM_VALUE_NUM_SUBGROUPS,
+   SYSTEM_VALUE_SUBGROUP_ID,
+   /*@}*/
+
    /*@}*/
 
    /**
@@ -473,6 +504,20 @@ typedef enum
    SYSTEM_VALUE_BASE_VERTEX,
 
    /**
+    * Depending on the type of the draw call (indexed or non-indexed),
+    * is the value of \c basevertex passed to \c glDrawElementsBaseVertex and
+    * similar, or is the value of \c first passed to \c glDrawArrays and
+    * similar.
+    *
+    * \note
+    * It can be used to calculate the \c SYSTEM_VALUE_VERTEX_ID as
+    * \c SYSTEM_VALUE_VERTEX_ID_ZERO_BASE plus \c SYSTEM_VALUE_FIRST_VERTEX.
+    *
+    * \sa SYSTEM_VALUE_VERTEX_ID_ZERO_BASE, SYSTEM_VALUE_VERTEX_ID
+    */
+   SYSTEM_VALUE_FIRST_VERTEX,
+
+   /**
     * Value of \c baseinstance passed to instanced draw entry points
     *
     * \sa SYSTEM_VALUE_INSTANCE_ID
@@ -534,6 +579,9 @@ typedef enum
    SYSTEM_VALUE_NUM_WORK_GROUPS,
    SYSTEM_VALUE_LOCAL_GROUP_SIZE,
    /*@}*/
+
+   /** Required for VK_KHR_device_group */
+   SYSTEM_VALUE_DEVICE_INDEX,
 
    /** Required for VK_KHX_multiview */
    SYSTEM_VALUE_VIEW_INDEX,

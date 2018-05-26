@@ -1102,7 +1102,6 @@ dri2BindExtensions(struct dri2_screen *psc, struct glx_display * priv,
 
    extensions = psc->core->getExtensions(psc->driScreen);
 
-   __glXEnableDirectExtension(&psc->base, "GLX_SGI_video_sync");
    __glXEnableDirectExtension(&psc->base, "GLX_SGI_swap_control");
    __glXEnableDirectExtension(&psc->base, "GLX_MESA_swap_control");
    __glXEnableDirectExtension(&psc->base, "GLX_SGI_make_current_read");
@@ -1207,6 +1206,7 @@ dri2CreateScreen(int screen, struct glx_display * priv)
    char *driverName = NULL, *loader_driverName, *deviceName, *tmp;
    drm_magic_t magic;
    int i;
+   unsigned char disable;
 
    psc = calloc(1, sizeof *psc);
    if (psc == NULL)
@@ -1325,8 +1325,6 @@ dri2CreateScreen(int screen, struct glx_display * priv)
    psp->getBufferAge = NULL;
 
    if (pdp->driMinor >= 2) {
-      unsigned char disable;
-
       psp->getDrawableMSC = dri2DrawableGetMSC;
       psp->waitForMSC = dri2WaitForMSC;
       psp->waitForSBC = dri2WaitForSBC;
@@ -1337,6 +1335,11 @@ dri2CreateScreen(int screen, struct glx_display * priv)
                                     &disable) || !disable)
          __glXEnableDirectExtension(&psc->base, "GLX_OML_sync_control");
    }
+
+   if (psc->config->configQueryb(psc->driScreen,
+                                 "glx_disable_sgi_video_sync",
+                                 &disable) || !disable)
+      __glXEnableDirectExtension(&psc->base, "GLX_SGI_video_sync");
 
    /* DRI2 supports SubBuffer through DRI2CopyRegion, so it's always
     * available.*/

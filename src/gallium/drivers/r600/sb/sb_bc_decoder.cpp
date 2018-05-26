@@ -413,7 +413,9 @@ int bc_decoder::decode_fetch(unsigned & i, bc_fetch& bc) {
 	if (fetch_opcode == 2) { // MEM_INST_MEM
 		unsigned mem_op = (dw0 >> 8) & 0x7;
 		unsigned gds_op;
-		if (mem_op == 4) {
+		if (mem_op == 0 || mem_op == 2) {
+			fetch_opcode = mem_op == 0 ? FETCH_OP_READ_SCRATCH : FETCH_OP_READ_MEM;
+		} else if (mem_op == 4) {
 			gds_op = (dw1 >> 9) & 0x1f;
 			if ((dw1 >> 9) & 0x20)
 				fetch_opcode = FETCH_OP_GDS_ADD_RET + gds_op;
@@ -424,6 +426,9 @@ int bc_decoder::decode_fetch(unsigned & i, bc_fetch& bc) {
 		bc.set_op(fetch_opcode);
 	} else
 		bc.set_op(r600_isa_fetch_by_opcode(ctx.isa, fetch_opcode));
+
+	if (bc.op_ptr->flags & FF_MEM)
+		return decode_fetch_mem(i, bc);
 
 	if (bc.op_ptr->flags & FF_GDS)
 		return decode_fetch_gds(i, bc);
@@ -525,6 +530,48 @@ int bc_decoder::decode_fetch_gds(unsigned & i, bc_fetch& bc) {
 	bc.dst_sel[1] = w2.get_DST_SEL_Y();
 	bc.dst_sel[2] = w2.get_DST_SEL_Z();
 	bc.dst_sel[3] = w2.get_DST_SEL_W();
+	return r;
+}
+
+int bc_decoder::decode_fetch_mem(unsigned & i, bc_fetch& bc) {
+	int r = 0;
+	uint32_t dw0 = dw[i];
+	uint32_t dw1 = dw[i+1];
+	uint32_t dw2 = dw[i+2];
+
+	i += 4; // MEM instructions align to 4 words boundaries
+	assert(i < ndw);
+
+	MEM_RD_WORD0_R7EGCM w0(dw0);
+	bc.elem_size = w0.get_ELEM_SIZE();
+	bc.fetch_whole_quad = w0.get_FETCH_WHOLE_QUAD();
+	bc.uncached = w0.get_UNCACHED();
+	bc.indexed = w0.get_INDEXED();
+	bc.src_sel[1] = w0.get_SRC_SEL_Y();
+	bc.src_gpr = w0.get_SRC_GPR();
+	bc.src_rel = w0.get_SRC_REL();
+	bc.src_sel[0] = w0.get_SRC_SEL_X();
+	bc.burst_count = w0.get_BURST_COUNT();
+	bc.lds_req = w0.get_LDS_REQ();
+	bc.coalesced_read = w0.get_COALESCED_READ();
+
+	MEM_RD_WORD1_R7EGCM w1(dw1);
+	bc.dst_gpr = w1.get_DST_GPR();
+	bc.dst_rel = w1.get_DST_REL();
+	bc.dst_sel[0] = w1.get_DST_SEL_X();
+	bc.dst_sel[1] = w1.get_DST_SEL_Y();
+	bc.dst_sel[2] = w1.get_DST_SEL_Z();
+	bc.dst_sel[3] = w1.get_DST_SEL_W();
+	bc.data_format = w1.get_DATA_FORMAT();
+	bc.num_format_all = w1.get_NUM_FORMAT_ALL();
+	bc.format_comp_all = w1.get_FORMAT_COMP_ALL();
+	bc.srf_mode_all = w1.get_SRF_MODE_ALL();
+
+	MEM_RD_WORD2_R7EGCM w2(dw2);
+	bc.array_base = w2.get_ARRAY_BASE();
+	bc.endian_swap = w2.get_ENDIAN_SWAP();
+	bc.array_size = w2.get_ARR_SIZE();
+
 	return r;
 }
 

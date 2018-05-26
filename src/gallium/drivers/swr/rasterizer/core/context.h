@@ -1,5 +1,5 @@
 /****************************************************************************
-* Copyright (C) 2014-2016 Intel Corporation.   All Rights Reserved.
+* Copyright (C) 2014-2018 Intel Corporation.   All Rights Reserved.
 *
 * Permission is hereby granted, free of charge, to any person obtaining a
 * copy of this software and associated documentation files (the "Software"),
@@ -176,7 +176,7 @@ struct DRAW_WORK
     };
     union
     {
-        const int32_t* pIB;        // DrawIndexed: App supplied indices
+        gfxptr_t   xpIB;              // DrawIndexed: App supplied int32 indices 
         uint32_t   startVertex;    // Draw: Starting vertex in VB to render from.
     };
     int32_t    baseVertex;
@@ -227,8 +227,9 @@ OSALIGNLINE(struct) API_STATE
     // Vertex Buffers
     SWR_VERTEX_BUFFER_STATE vertexBuffers[KNOB_NUM_STREAMS];
 
-    // Index Buffer
-    SWR_INDEX_BUFFER_STATE  indexBuffer;
+    // GS - Geometry Shader State
+    SWR_GS_STATE            gsState;
+    PFN_GS_FUNC             pfnGsFunc;
 
     // FS - Fetch Shader State
     PFN_FETCH_FUNC          pfnFetchFunc;
@@ -236,9 +237,8 @@ OSALIGNLINE(struct) API_STATE
     // VS - Vertex Shader State
     PFN_VERTEX_FUNC         pfnVertexFunc;
 
-    // GS - Geometry Shader State
-    PFN_GS_FUNC             pfnGsFunc;
-    SWR_GS_STATE            gsState;
+    // Index Buffer
+    SWR_INDEX_BUFFER_STATE  indexBuffer;
 
     // CS - Compute Shader
     PFN_CS_FUNC             pfnCsFunc;
@@ -265,8 +265,6 @@ OSALIGNLINE(struct) API_STATE
     // Number of attributes used by the frontend (vs, so, gs)
     uint32_t                feNumAttributes;
 
-    PRIMITIVE_TOPOLOGY      topology;
-    bool                    forceFront;
 
     // RS - Rasterizer State
     SWR_RASTSTATE           rastState;
@@ -282,8 +280,12 @@ OSALIGNLINE(struct) API_STATE
     SWR_RECT                scissorsInFixedPoint[KNOB_NUM_VIEWPORTS_SCISSORS];
     bool                    scissorsTileAligned;
 
+    bool                    forceFront;
+    PRIMITIVE_TOPOLOGY      topology;
+
+
     // Backend state
-    SWR_BACKEND_STATE       backendState;
+    OSALIGNLINE(SWR_BACKEND_STATE) backendState;
 
     SWR_DEPTH_BOUNDS_STATE  depthBoundsState;
 
@@ -400,8 +402,6 @@ struct DRAW_CONTEXT
         DispatchQueue*  pDispatch;      // Queue for thread groups. (isCompute)
     };
     DRAW_STATE*     pState;             // Read-only state. Core should not update this outside of API thread.
-    DRAW_DYNAMIC_STATE dynState;
-
     CachingArena*   pArena;
 
     uint32_t        drawId;
@@ -412,11 +412,13 @@ struct DRAW_CONTEXT
 
     FE_WORK         FeWork;
 
+    SYNC_DESC       retireCallback; // Call this func when this DC is retired.
+
+    DRAW_DYNAMIC_STATE dynState;
+
     volatile OSALIGNLINE(bool)       doneFE;         // Is FE work done for this draw?
     volatile OSALIGNLINE(uint32_t)   FeLock;
     volatile OSALIGNLINE(uint32_t)   threadsDone;
-
-    SYNC_DESC       retireCallback; // Call this func when this DC is retired.
 };
 
 static_assert((sizeof(DRAW_CONTEXT) & 63) == 0, "Invalid size for DRAW_CONTEXT");
@@ -481,6 +483,7 @@ struct SWR_CONTEXT
     THREAD_POOL threadPool; // Thread pool associated with this context
     SWR_THREADING_INFO threadInfo;
     SWR_API_THREADING_INFO apiThreadInfo;
+    SWR_WORKER_PRIVATE_STATE workerPrivateState;
 
     uint32_t MAX_DRAWS_IN_FLIGHT;
 
@@ -523,33 +526,28 @@ struct SWR_CONTEXT
 #define UPDATE_STAT_FE(name, count) if (GetApiState(pDC).enableStatsFE) { pDC->dynState.statsFE.name += count; }
 
 // ArchRast instrumentation framework
-#define AR_WORKER_CTX  pContext->pArContext[workerId]
-#define AR_API_CTX     pContext->pArContext[pContext->NumWorkerThreads]
+#define AR_WORKER_CTX  pDC->pContext->pArContext[workerId]
+#define AR_API_CTX     pDC->pContext->pArContext[pContext->NumWorkerThreads]
+
+#ifdef KNOB_ENABLE_RDTSC
+#define RDTSC_BEGIN(type, drawid) RDTSC_START(type)
+#define RDTSC_END(type, count)   RDTSC_STOP(type, count, 0)
+#else
+#define RDTSC_BEGIN(type, count)
+#define RDTSC_END(type, count)
+#endif
 
 #ifdef KNOB_ENABLE_AR
-    #define _AR_BEGIN(ctx, type, id)    ArchRast::Dispatch(ctx, ArchRast::Start(ArchRast::type, id))
-    #define _AR_END(ctx, type, count)   ArchRast::Dispatch(ctx, ArchRast::End(ArchRast::type, count))
     #define _AR_EVENT(ctx, event)       ArchRast::Dispatch(ctx, ArchRast::event)
     #define _AR_FLUSH(ctx, id)          ArchRast::FlushDraw(ctx, id)
 #else
-    #ifdef KNOB_ENABLE_RDTSC
-        #define _AR_BEGIN(ctx, type, id) (void)ctx; RDTSC_START(type)
-        #define _AR_END(ctx, type, id)   RDTSC_STOP(type, id, 0)
-    #else
-        #define _AR_BEGIN(ctx, type, id) (void)ctx
-        #define _AR_END(ctx, type, id)
-    #endif
     #define _AR_EVENT(ctx, event)
     #define _AR_FLUSH(ctx, id)
 #endif
 
 // Use these macros for api thread.
-#define AR_API_BEGIN(type, id) _AR_BEGIN(AR_API_CTX, type, id)
-#define AR_API_END(type, count) _AR_END(AR_API_CTX, type, count)
 #define AR_API_EVENT(event) _AR_EVENT(AR_API_CTX, event)
 
 // Use these macros for worker threads.
-#define AR_BEGIN(type, id) _AR_BEGIN(AR_WORKER_CTX, type, id)
-#define AR_END(type, count) _AR_END(AR_WORKER_CTX, type, count)
 #define AR_EVENT(event) _AR_EVENT(AR_WORKER_CTX, event)
 #define AR_FLUSH(id) _AR_FLUSH(AR_WORKER_CTX, id)

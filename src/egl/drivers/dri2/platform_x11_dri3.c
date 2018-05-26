@@ -39,6 +39,23 @@
 #include "loader.h"
 #include "loader_dri3_helper.h"
 
+static uint32_t
+dri3_format_for_depth(uint32_t depth)
+{
+   switch (depth) {
+   case 16:
+      return __DRI_IMAGE_FORMAT_RGB565;
+   case 24:
+      return __DRI_IMAGE_FORMAT_XRGB8888;
+   case 30:
+      return __DRI_IMAGE_FORMAT_XRGB2101010;
+   case 32:
+      return __DRI_IMAGE_FORMAT_ARGB8888;
+   default:
+      return __DRI_IMAGE_FORMAT_NONE;
+   }
+}
+
 static struct dri3_egl_surface *
 loader_drawable_to_egl_surface(struct loader_dri3_drawable *draw) {
    size_t offset = offsetof(struct dri3_egl_surface, loader_drawable);
@@ -168,7 +185,9 @@ dri3_create_surface(_EGLDriver *drv, _EGLDisplay *disp, EGLint type,
 
    if (loader_dri3_drawable_init(dri2_dpy->conn, drawable,
                                  dri2_dpy->dri_screen,
-                                 dri2_dpy->is_different_gpu, dri_config,
+                                 dri2_dpy->is_different_gpu,
+                                 dri2_dpy->multibuffers_available,
+                                 dri_config,
                                  &dri2_dpy->loader_dri3_ext,
                                  &egl_dri3_vtable,
                                  &dri3_surf->loader_drawable)) {
@@ -274,20 +293,8 @@ dri3_create_image_khr_pixmap(_EGLDisplay *disp, _EGLContext *ctx,
       return NULL;
    }
 
-   switch (bp_reply->depth) {
-   case 16:
-      format = __DRI_IMAGE_FORMAT_RGB565;
-      break;
-   case 24:
-      format = __DRI_IMAGE_FORMAT_XRGB8888;
-      break;
-   case 30:
-      format = __DRI_IMAGE_FORMAT_XRGB2101010;
-      break;
-   case 32:
-      format = __DRI_IMAGE_FORMAT_ARGB8888;
-      break;
-   default:
+   format = dri3_format_for_depth(bp_reply->depth);
+   if (format == __DRI_IMAGE_FORMAT_NONE) {
       _eglError(EGL_BAD_PARAMETER,
                 "dri3_create_image_khr: unsupported pixmap depth");
       free(bp_reply);
@@ -297,6 +304,7 @@ dri3_create_image_khr_pixmap(_EGLDisplay *disp, _EGLContext *ctx,
    dri2_img = malloc(sizeof *dri2_img);
    if (!dri2_img) {
       _eglError(EGL_BAD_ALLOC, "dri3_create_image_khr");
+      free(bp_reply);
       return EGL_NO_IMAGE_KHR;
    }
 
@@ -314,13 +322,80 @@ dri3_create_image_khr_pixmap(_EGLDisplay *disp, _EGLContext *ctx,
    return &dri2_img->base;
 }
 
+#ifdef HAVE_DRI3_MODIFIERS
+static _EGLImage *
+dri3_create_image_khr_pixmap_from_buffers(_EGLDisplay *disp, _EGLContext *ctx,
+                                          EGLClientBuffer buffer,
+                                          const EGLint *attr_list)
+{
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
+   struct dri2_egl_image *dri2_img;
+   xcb_dri3_buffers_from_pixmap_cookie_t bp_cookie;
+   xcb_dri3_buffers_from_pixmap_reply_t  *bp_reply;
+   xcb_drawable_t drawable;
+   unsigned int format;
+
+   drawable = (xcb_drawable_t) (uintptr_t) buffer;
+   bp_cookie = xcb_dri3_buffers_from_pixmap(dri2_dpy->conn, drawable);
+   bp_reply = xcb_dri3_buffers_from_pixmap_reply(dri2_dpy->conn,
+                                                 bp_cookie, NULL);
+
+   if (!bp_reply) {
+      _eglError(EGL_BAD_ATTRIBUTE, "dri3_create_image_khr");
+      return EGL_NO_IMAGE_KHR;
+   }
+
+   format = dri3_format_for_depth(bp_reply->depth);
+   if (format == __DRI_IMAGE_FORMAT_NONE) {
+      _eglError(EGL_BAD_PARAMETER,
+                "dri3_create_image_khr: unsupported pixmap depth");
+      free(bp_reply);
+      return EGL_NO_IMAGE_KHR;
+   }
+
+   dri2_img = malloc(sizeof *dri2_img);
+   if (!dri2_img) {
+      _eglError(EGL_BAD_ALLOC, "dri3_create_image_khr");
+      free(bp_reply);
+      return EGL_NO_IMAGE_KHR;
+   }
+
+   _eglInitImage(&dri2_img->base, disp);
+
+   dri2_img->dri_image = loader_dri3_create_image_from_buffers(dri2_dpy->conn,
+                                                               bp_reply,
+                                                               format,
+                                                               dri2_dpy->dri_screen,
+                                                               dri2_dpy->image,
+                                                               dri2_img);
+   free(bp_reply);
+
+   if (!dri2_img->dri_image) {
+      _eglError(EGL_BAD_ATTRIBUTE, "dri3_create_image_khr");
+      free(dri2_img);
+      return EGL_NO_IMAGE_KHR;
+   }
+
+   return &dri2_img->base;
+}
+#endif
+
 static _EGLImage *
 dri3_create_image_khr(_EGLDriver *drv, _EGLDisplay *disp,
                       _EGLContext *ctx, EGLenum target,
                       EGLClientBuffer buffer, const EGLint *attr_list)
 {
+#ifdef HAVE_DRI3_MODIFIERS
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
+#endif
+
    switch (target) {
    case EGL_NATIVE_PIXMAP_KHR:
+#ifdef HAVE_DRI3_MODIFIERS
+      if (dri2_dpy->multibuffers_available)
+         return dri3_create_image_khr_pixmap_from_buffers(disp, ctx, buffer,
+                                                          attr_list);
+#endif
       return dri3_create_image_khr_pixmap(disp, ctx, buffer, attr_list);
    default:
       return dri2_create_image_khr(drv, disp, ctx, target, buffer, attr_list);
@@ -445,6 +520,18 @@ struct dri2_egl_display_vtbl dri3_x11_display_vtbl = {
    .close_screen_notify = dri3_close_screen_notify,
 };
 
+/* Only request versions of these protocols which we actually support. */
+#define DRI3_SUPPORTED_MAJOR 1
+#define PRESENT_SUPPORTED_MAJOR 1
+
+#ifdef HAVE_DRI3_MODIFIERS
+#define DRI3_SUPPORTED_MINOR 2
+#define PRESENT_SUPPORTED_MINOR 2
+#else
+#define PRESENT_SUPPORTED_MINOR 0
+#define DRI3_SUPPORTED_MINOR 0
+#endif
+
 EGLBoolean
 dri3_x11_connect(struct dri2_egl_display *dri2_dpy)
 {
@@ -467,12 +554,12 @@ dri3_x11_connect(struct dri2_egl_display *dri2_dpy)
       return EGL_FALSE;
 
    dri3_query_cookie = xcb_dri3_query_version(dri2_dpy->conn,
-                                              XCB_DRI3_MAJOR_VERSION,
-                                              XCB_DRI3_MINOR_VERSION);
+                                              DRI3_SUPPORTED_MAJOR,
+                                              DRI3_SUPPORTED_MINOR);
 
    present_query_cookie = xcb_present_query_version(dri2_dpy->conn,
-                                                    XCB_PRESENT_MAJOR_VERSION,
-                                                    XCB_PRESENT_MINOR_VERSION);
+                                                    PRESENT_SUPPORTED_MAJOR,
+                                                    PRESENT_SUPPORTED_MINOR);
 
    dri3_query =
       xcb_dri3_query_version_reply(dri2_dpy->conn, dri3_query_cookie, &error);
@@ -482,6 +569,9 @@ dri3_x11_connect(struct dri2_egl_display *dri2_dpy)
       free(error);
       return EGL_FALSE;
    }
+
+   dri2_dpy->dri3_major_version = dri3_query->major_version;
+   dri2_dpy->dri3_minor_version = dri3_query->minor_version;
    free(dri3_query);
 
    present_query =
@@ -493,6 +583,9 @@ dri3_x11_connect(struct dri2_egl_display *dri2_dpy)
       free(error);
       return EGL_FALSE;
    }
+
+   dri2_dpy->present_major_version = present_query->major_version;
+   dri2_dpy->present_minor_version = present_query->minor_version;
    free(present_query);
 
    dri2_dpy->fd = loader_dri3_open(dri2_dpy->conn, dri2_dpy->screen->root, 0);

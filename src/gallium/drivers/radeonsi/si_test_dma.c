@@ -1,5 +1,6 @@
 /*
  * Copyright 2016 Advanced Micro Devices, Inc.
+ * All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -139,8 +140,22 @@ static const char *array_mode_to_string(struct si_screen *sscreen,
 					struct radeon_surf *surf)
 {
 	if (sscreen->info.chip_class >= GFX9) {
-		/* TODO */
-		return "       UNKNOWN";
+		switch (surf->u.gfx9.surf.swizzle_mode) {
+		case 0:
+			return "  LINEAR";
+		case 21:
+			return " 4KB_S_X";
+		case 22:
+			return " 4KB_D_X";
+		case 25:
+			return "64KB_S_X";
+		case 26:
+			return "64KB_D_X";
+		default:
+			printf("Unhandled swizzle mode = %u\n",
+			       surf->u.gfx9.surf.swizzle_mode);
+			return " UNKNOWN";
+		}
 	} else {
 		switch (surf->u.legacy.level[0].mode) {
 		case RADEON_SURF_MODE_LINEAR_ALIGNED:
@@ -292,7 +307,7 @@ void si_test_dma(struct si_screen *sscreen)
 		set_random_pixels(ctx, src, &src_cpu);
 
 		/* clear dst pixels */
-		si_clear_buffer(ctx, dst, 0, rdst->surface.surf_size, 0, true);
+		si_clear_buffer(sctx, dst, 0, rdst->surface.surf_size, 0, true);
 		memset(dst_cpu.ptr, 0, dst_cpu.layer_stride * tdst.array_size);
 
 		/* preparation */
@@ -305,8 +320,8 @@ void si_test_dma(struct si_screen *sscreen)
 			int width, height, depth;
 			int srcx, srcy, srcz, dstx, dsty, dstz;
 			struct pipe_box box;
-			unsigned old_num_draw_calls = sctx->b.num_draw_calls;
-			unsigned old_num_dma_calls = sctx->b.num_dma_calls;
+			unsigned old_num_draw_calls = sctx->num_draw_calls;
+			unsigned old_num_dma_calls = sctx->num_dma_calls;
 
 			if (!do_partial_copies) {
 				/* copy whole src to dst */
@@ -361,11 +376,11 @@ void si_test_dma(struct si_screen *sscreen)
 
 			/* GPU copy */
 			u_box_3d(srcx, srcy, srcz, width, height, depth, &box);
-			sctx->b.dma_copy(ctx, dst, 0, dstx, dsty, dstz, src, 0, &box);
+			sctx->dma_copy(ctx, dst, 0, dstx, dsty, dstz, src, 0, &box);
 
 			/* See which engine was used. */
-			gfx_blits += sctx->b.num_draw_calls > old_num_draw_calls;
-			dma_blits += sctx->b.num_dma_calls > old_num_dma_calls;
+			gfx_blits += sctx->num_draw_calls > old_num_draw_calls;
+			dma_blits += sctx->num_dma_calls > old_num_dma_calls;
 
 			/* CPU copy */
 			util_copy_box(dst_cpu.ptr, tdst.format, dst_cpu.stride,

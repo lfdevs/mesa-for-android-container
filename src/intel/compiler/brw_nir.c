@@ -239,6 +239,7 @@ brw_nir_lower_vs_inputs(nir_shader *nir,
    const bool has_sgvs =
       nir->info.system_values_read &
       (BITFIELD64_BIT(SYSTEM_VALUE_BASE_VERTEX) |
+       BITFIELD64_BIT(SYSTEM_VALUE_FIRST_VERTEX) |
        BITFIELD64_BIT(SYSTEM_VALUE_BASE_INSTANCE) |
        BITFIELD64_BIT(SYSTEM_VALUE_VERTEX_ID_ZERO_BASE) |
        BITFIELD64_BIT(SYSTEM_VALUE_INSTANCE_ID));
@@ -261,6 +262,7 @@ brw_nir_lower_vs_inputs(nir_shader *nir,
 
             switch (intrin->intrinsic) {
             case nir_intrinsic_load_base_vertex:
+            case nir_intrinsic_load_first_vertex:
             case nir_intrinsic_load_base_instance:
             case nir_intrinsic_load_vertex_id_zero_base:
             case nir_intrinsic_load_instance_id:
@@ -278,6 +280,7 @@ brw_nir_lower_vs_inputs(nir_shader *nir,
                nir_intrinsic_set_base(load, num_inputs);
                switch (intrin->intrinsic) {
                case nir_intrinsic_load_base_vertex:
+               case nir_intrinsic_load_first_vertex:
                   nir_intrinsic_set_component(load, 0);
                   break;
                case nir_intrinsic_load_base_instance:
@@ -503,14 +506,6 @@ brw_nir_lower_fs_outputs(nir_shader *nir)
    nir_lower_io(nir, nir_var_shader_out, type_size_dvec4, 0);
 }
 
-void
-brw_nir_lower_cs_shared(nir_shader *nir)
-{
-   nir_assign_var_locations(&nir->shared, &nir->num_shared,
-                            type_size_scalar_bytes);
-   nir_lower_io(nir, nir_var_shared, type_size_scalar_bytes, 0);
-}
-
 #define OPT(pass, ...) ({                                  \
    bool this_progress = false;                             \
    NIR_PASS(this_progress, nir, pass, ##__VA_ARGS__);      \
@@ -634,6 +629,18 @@ brw_preprocess_nir(const struct brw_compiler *compiler, nir_shader *nir)
 
    OPT(nir_split_var_copies);
 
+   /* Run opt_algebraic before int64 lowering so we can hopefully get rid
+    * of some int64 instructions.
+    */
+   OPT(nir_opt_algebraic);
+
+   /* Lower int64 instructions before nir_optimize so that loop unrolling
+    * sees their actual cost.
+    */
+   nir_lower_int64(nir, nir_lower_imul64 |
+                        nir_lower_isign64 |
+                        nir_lower_divmod64);
+
    nir = brw_nir_optimize(nir, compiler, is_scalar);
 
    if (is_scalar) {
@@ -646,12 +653,12 @@ brw_preprocess_nir(const struct brw_compiler *compiler, nir_shader *nir)
    OPT(nir_lower_system_values);
 
    const nir_lower_subgroups_options subgroups_options = {
-      .subgroup_size = nir->info.stage == MESA_SHADER_COMPUTE ? 32 :
-                       nir->info.stage == MESA_SHADER_FRAGMENT ? 16 : 8,
+      .subgroup_size = BRW_SUBGROUP_SIZE,
       .ballot_bit_size = 32,
       .lower_to_scalar = true,
       .lower_subgroup_masks = true,
       .lower_vote_trivial = !is_scalar,
+      .lower_shuffle = true,
    };
    OPT(nir_lower_subgroups, &subgroups_options);
 
@@ -660,10 +667,6 @@ brw_preprocess_nir(const struct brw_compiler *compiler, nir_shader *nir)
    nir_variable_mode indirect_mask =
       brw_nir_no_indirect_mask(compiler, nir->info.stage);
    nir_lower_indirect_derefs(nir, indirect_mask);
-
-   nir_lower_int64(nir, nir_lower_imul64 |
-                        nir_lower_isign64 |
-                        nir_lower_divmod64);
 
    /* Get rid of split copies */
    nir = brw_nir_optimize(nir, compiler, is_scalar);

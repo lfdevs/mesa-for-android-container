@@ -30,6 +30,8 @@
 *  ./rasterizer/codegen/gen_archrast.py
 *    --proto
 *    ./rasterizer/archrast/events.proto
+*    --proto_private
+*    ./rasterizer/archrast/events_private.proto
 *    --output
 *    rasterizer/archrast/gen_ar_event.cpp
 *    --gen_event_cpp
@@ -41,16 +43,6 @@
 
 using namespace ArchRast;
 
-void Start::Accept(EventHandler* pHandler) const
-{
-    pHandler->Handle(*this);
-}
-
-void End::Accept(EventHandler* pHandler) const
-{
-    pHandler->Handle(*this);
-}
-
 void ThreadStartApiEvent::Accept(EventHandler* pHandler) const
 {
     pHandler->Handle(*this);
@@ -61,12 +53,7 @@ void ThreadStartWorkerEvent::Accept(EventHandler* pHandler) const
     pHandler->Handle(*this);
 }
 
-void DrawInstancedEvent::Accept(EventHandler* pHandler) const
-{
-    pHandler->Handle(*this);
-}
-
-void DrawIndexedInstancedEvent::Accept(EventHandler* pHandler) const
+void DrawInfoEvent::Accept(EventHandler* pHandler) const
 {
     pHandler->Handle(*this);
 }
@@ -77,16 +64,6 @@ void DispatchEvent::Accept(EventHandler* pHandler) const
 }
 
 void FrameEndEvent::Accept(EventHandler* pHandler) const
-{
-    pHandler->Handle(*this);
-}
-
-void DrawInstancedSplitEvent::Accept(EventHandler* pHandler) const
-{
-    pHandler->Handle(*this);
-}
-
-void DrawIndexedInstancedSplitEvent::Accept(EventHandler* pHandler) const
 {
     pHandler->Handle(*this);
 }
@@ -117,6 +94,176 @@ void FrontendStatsEvent::Accept(EventHandler* pHandler) const
 }
 
 void BackendStatsEvent::Accept(EventHandler* pHandler) const
+{
+    pHandler->Handle(*this);
+}
+
+void EarlyZSingleSample::Accept(EventHandler* pHandler) const
+{
+    pHandler->Handle(*this);
+}
+
+void LateZSingleSample::Accept(EventHandler* pHandler) const
+{
+    pHandler->Handle(*this);
+}
+
+void EarlyStencilSingleSample::Accept(EventHandler* pHandler) const
+{
+    pHandler->Handle(*this);
+}
+
+void LateStencilSingleSample::Accept(EventHandler* pHandler) const
+{
+    pHandler->Handle(*this);
+}
+
+void EarlyZSampleRate::Accept(EventHandler* pHandler) const
+{
+    pHandler->Handle(*this);
+}
+
+void LateZSampleRate::Accept(EventHandler* pHandler) const
+{
+    pHandler->Handle(*this);
+}
+
+void EarlyStencilSampleRate::Accept(EventHandler* pHandler) const
+{
+    pHandler->Handle(*this);
+}
+
+void LateStencilSampleRate::Accept(EventHandler* pHandler) const
+{
+    pHandler->Handle(*this);
+}
+
+void EarlyZ::Accept(EventHandler* pHandler) const
+{
+    pHandler->Handle(*this);
+}
+
+void LateZ::Accept(EventHandler* pHandler) const
+{
+    pHandler->Handle(*this);
+}
+
+void EarlyStencil::Accept(EventHandler* pHandler) const
+{
+    pHandler->Handle(*this);
+}
+
+void LateStencil::Accept(EventHandler* pHandler) const
+{
+    pHandler->Handle(*this);
+}
+
+void EarlyZNullPS::Accept(EventHandler* pHandler) const
+{
+    pHandler->Handle(*this);
+}
+
+void EarlyStencilNullPS::Accept(EventHandler* pHandler) const
+{
+    pHandler->Handle(*this);
+}
+
+void EarlyZPixelRate::Accept(EventHandler* pHandler) const
+{
+    pHandler->Handle(*this);
+}
+
+void LateZPixelRate::Accept(EventHandler* pHandler) const
+{
+    pHandler->Handle(*this);
+}
+
+void EarlyOmZ::Accept(EventHandler* pHandler) const
+{
+    pHandler->Handle(*this);
+}
+
+void EarlyOmStencil::Accept(EventHandler* pHandler) const
+{
+    pHandler->Handle(*this);
+}
+
+void LateOmZ::Accept(EventHandler* pHandler) const
+{
+    pHandler->Handle(*this);
+}
+
+void LateOmStencil::Accept(EventHandler* pHandler) const
+{
+    pHandler->Handle(*this);
+}
+
+void GSInputPrims::Accept(EventHandler* pHandler) const
+{
+    pHandler->Handle(*this);
+}
+
+void GSPrimsGen::Accept(EventHandler* pHandler) const
+{
+    pHandler->Handle(*this);
+}
+
+void GSVertsInput::Accept(EventHandler* pHandler) const
+{
+    pHandler->Handle(*this);
+}
+
+void TessPrims::Accept(EventHandler* pHandler) const
+{
+    pHandler->Handle(*this);
+}
+
+void RasterTiles::Accept(EventHandler* pHandler) const
+{
+    pHandler->Handle(*this);
+}
+
+void ClipperEvent::Accept(EventHandler* pHandler) const
+{
+    pHandler->Handle(*this);
+}
+
+void CullEvent::Accept(EventHandler* pHandler) const
+{
+    pHandler->Handle(*this);
+}
+
+void AlphaEvent::Accept(EventHandler* pHandler) const
+{
+    pHandler->Handle(*this);
+}
+
+void VSInfo::Accept(EventHandler* pHandler) const
+{
+    pHandler->Handle(*this);
+}
+
+void HSInfo::Accept(EventHandler* pHandler) const
+{
+    pHandler->Handle(*this);
+}
+
+void DSInfo::Accept(EventHandler* pHandler) const
+{
+    pHandler->Handle(*this);
+}
+
+void GSInfo::Accept(EventHandler* pHandler) const
+{
+    pHandler->Handle(*this);
+}
+
+void PSInfo::Accept(EventHandler* pHandler) const
+{
+    pHandler->Handle(*this);
+}
+
+void CSInfo::Accept(EventHandler* pHandler) const
 {
     pHandler->Handle(*this);
 }
@@ -171,82 +318,12 @@ void FrontendDrawEndEvent::Accept(EventHandler* pHandler) const
     pHandler->Handle(*this);
 }
 
-void EarlyZSingleSample::Accept(EventHandler* pHandler) const
+void TessPrimCount::Accept(EventHandler* pHandler) const
 {
     pHandler->Handle(*this);
 }
 
-void LateZSingleSample::Accept(EventHandler* pHandler) const
-{
-    pHandler->Handle(*this);
-}
-
-void EarlyStencilSingleSample::Accept(EventHandler* pHandler) const
-{
-    pHandler->Handle(*this);
-}
-
-void LateStencilSingleSample::Accept(EventHandler* pHandler) const
-{
-    pHandler->Handle(*this);
-}
-
-void EarlyZSampleRate::Accept(EventHandler* pHandler) const
-{
-    pHandler->Handle(*this);
-}
-
-void LateZSampleRate::Accept(EventHandler* pHandler) const
-{
-    pHandler->Handle(*this);
-}
-
-void EarlyStencilSampleRate::Accept(EventHandler* pHandler) const
-{
-    pHandler->Handle(*this);
-}
-
-void LateStencilSampleRate::Accept(EventHandler* pHandler) const
-{
-    pHandler->Handle(*this);
-}
-
-void EarlyZNullPS::Accept(EventHandler* pHandler) const
-{
-    pHandler->Handle(*this);
-}
-
-void EarlyStencilNullPS::Accept(EventHandler* pHandler) const
-{
-    pHandler->Handle(*this);
-}
-
-void EarlyZPixelRate::Accept(EventHandler* pHandler) const
-{
-    pHandler->Handle(*this);
-}
-
-void LateZPixelRate::Accept(EventHandler* pHandler) const
-{
-    pHandler->Handle(*this);
-}
-
-void EarlyOmZ::Accept(EventHandler* pHandler) const
-{
-    pHandler->Handle(*this);
-}
-
-void EarlyOmStencil::Accept(EventHandler* pHandler) const
-{
-    pHandler->Handle(*this);
-}
-
-void LateOmZ::Accept(EventHandler* pHandler) const
-{
-    pHandler->Handle(*this);
-}
-
-void LateOmStencil::Accept(EventHandler* pHandler) const
+void RasterTileCount::Accept(EventHandler* pHandler) const
 {
     pHandler->Handle(*this);
 }
@@ -256,47 +333,57 @@ void GSPrimInfo::Accept(EventHandler* pHandler) const
     pHandler->Handle(*this);
 }
 
-void GSInputPrims::Accept(EventHandler* pHandler) const
+void ClipInfoEvent::Accept(EventHandler* pHandler) const
 {
     pHandler->Handle(*this);
 }
 
-void GSPrimsGen::Accept(EventHandler* pHandler) const
+void CullInfoEvent::Accept(EventHandler* pHandler) const
 {
     pHandler->Handle(*this);
 }
 
-void GSVertsInput::Accept(EventHandler* pHandler) const
+void AlphaInfoEvent::Accept(EventHandler* pHandler) const
 {
     pHandler->Handle(*this);
 }
 
-void ClipVertexCount::Accept(EventHandler* pHandler) const
+void DrawInstancedEvent::Accept(EventHandler* pHandler) const
 {
     pHandler->Handle(*this);
 }
 
-void FlushVertClip::Accept(EventHandler* pHandler) const
+void DrawIndexedInstancedEvent::Accept(EventHandler* pHandler) const
 {
     pHandler->Handle(*this);
 }
 
-void VertsClipped::Accept(EventHandler* pHandler) const
+void VSStats::Accept(EventHandler* pHandler) const
 {
     pHandler->Handle(*this);
 }
 
-void TessPrimCount::Accept(EventHandler* pHandler) const
+void HSStats::Accept(EventHandler* pHandler) const
 {
     pHandler->Handle(*this);
 }
 
-void TessPrimFlush::Accept(EventHandler* pHandler) const
+void DSStats::Accept(EventHandler* pHandler) const
 {
     pHandler->Handle(*this);
 }
 
-void TessPrims::Accept(EventHandler* pHandler) const
+void GSStats::Accept(EventHandler* pHandler) const
+{
+    pHandler->Handle(*this);
+}
+
+void PSStats::Accept(EventHandler* pHandler) const
+{
+    pHandler->Handle(*this);
+}
+
+void CSStats::Accept(EventHandler* pHandler) const
 {
     pHandler->Handle(*this);
 }

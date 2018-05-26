@@ -51,7 +51,7 @@ static const struct tgsi_opcode_info opcode_info[TGSI_OPCODE_LAST] =
 #undef OPCODE_GAP
 
 const struct tgsi_opcode_info *
-tgsi_get_opcode_info( uint opcode )
+tgsi_get_opcode_info(enum tgsi_opcode opcode)
 {
    static boolean firsttime = 1;
 
@@ -85,7 +85,7 @@ static const char * const opcode_names[TGSI_OPCODE_LAST] =
 #undef OPCODE_GAP
 
 const char *
-tgsi_get_opcode_name( uint opcode )
+tgsi_get_opcode_name(enum tgsi_opcode opcode)
 {
    if (opcode >= ARRAY_SIZE(opcode_names))
       return "UNK_OOB";
@@ -120,7 +120,7 @@ tgsi_get_processor_name(enum pipe_shader_type processor)
  * MOV and UCMP is special so return VOID
  */
 static inline enum tgsi_opcode_type
-tgsi_opcode_infer_type( uint opcode )
+tgsi_opcode_infer_type(enum tgsi_opcode opcode)
 {
    switch (opcode) {
    case TGSI_OPCODE_MOV:
@@ -246,7 +246,7 @@ tgsi_opcode_infer_type( uint opcode )
  * infer the source type of a TGSI opcode.
  */
 enum tgsi_opcode_type
-tgsi_opcode_infer_src_type(uint opcode, uint src_idx)
+tgsi_opcode_infer_src_type(enum tgsi_opcode opcode, uint src_idx)
 {
    if (src_idx == 1 &&
        (opcode == TGSI_OPCODE_DLDEXP || opcode == TGSI_OPCODE_LDEXP))
@@ -317,7 +317,7 @@ tgsi_opcode_infer_src_type(uint opcode, uint src_idx)
  * infer the destination type of a TGSI opcode.
  */
 enum tgsi_opcode_type
-tgsi_opcode_infer_dst_type( uint opcode, uint dst_idx )
+tgsi_opcode_infer_dst_type(enum tgsi_opcode opcode, uint dst_idx)
 {
    if (dst_idx == 1 && opcode == TGSI_OPCODE_DFRACEXP)
       return TGSI_TYPE_SIGNED;

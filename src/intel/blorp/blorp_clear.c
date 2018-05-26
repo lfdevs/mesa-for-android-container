@@ -322,7 +322,7 @@ blorp_fast_clear(struct blorp_batch *batch,
    params.y1 = y1;
 
    memset(&params.wm_inputs.clear_color, 0xff, 4*sizeof(float));
-   params.fast_clear_op = BLORP_FAST_CLEAR_OP_CLEAR;
+   params.fast_clear_op = ISL_AUX_OP_FAST_CLEAR;
 
    get_fast_clear_rect(batch->blorp->isl_dev, surf->aux_surf,
                        &params.x0, &params.y0, &params.x1, &params.y1);
@@ -612,6 +612,59 @@ blorp_can_hiz_clear_depth(uint8_t gen, enum isl_format format,
    return true;
 }
 
+void
+blorp_hiz_clear_depth_stencil(struct blorp_batch *batch,
+                              const struct blorp_surf *depth,
+                              const struct blorp_surf *stencil,
+                              uint32_t level,
+                              uint32_t start_layer, uint32_t num_layers,
+                              uint32_t x0, uint32_t y0,
+                              uint32_t x1, uint32_t y1,
+                              bool clear_depth, float depth_value,
+                              bool clear_stencil, uint8_t stencil_value)
+{
+   struct blorp_params params;
+   blorp_params_init(&params);
+
+   /* This requires WM_HZ_OP which only exists on gen8+ */
+   assert(ISL_DEV_GEN(batch->blorp->isl_dev) >= 8);
+
+   params.hiz_op = ISL_AUX_OP_FAST_CLEAR;
+   params.num_layers = 1;
+
+   params.x0 = x0;
+   params.y0 = y0;
+   params.x1 = x1;
+   params.y1 = y1;
+
+   for (uint32_t l = 0; l < num_layers; l++) {
+      const uint32_t layer = start_layer + l;
+      if (clear_stencil) {
+         brw_blorp_surface_info_init(batch->blorp, &params.stencil, stencil,
+                                     level, layer,
+                                     ISL_FORMAT_UNSUPPORTED, true);
+         params.stencil_mask = 0xff;
+         params.stencil_ref = stencil_value;
+         params.num_samples = params.stencil.surf.samples;
+      }
+
+      if (clear_depth) {
+         /* If we're clearing depth, we must have HiZ */
+         assert(depth && depth->aux_usage == ISL_AUX_USAGE_HIZ);
+
+         brw_blorp_surface_info_init(batch->blorp, &params.depth, depth,
+                                     level, layer,
+                                     ISL_FORMAT_UNSUPPORTED, true);
+         params.depth.clear_color.f32[0] = depth_value;
+         params.depth_format =
+            isl_format_get_depth_format(depth->surf->format, false);
+         params.num_samples = params.depth.surf.samples;
+      }
+
+      batch->blorp->exec(batch, &params);
+   }
+}
+
 /* Given a depth stencil attachment, this function performs a fast depth clear
  * on a depth portion and a regular clear on the stencil portion. When
  * performing a fast depth clear on the depth portion, the HiZ buffer is simply
@@ -630,7 +683,7 @@ blorp_gen8_hiz_clear_attachments(struct blorp_batch *batch,
    struct blorp_params params;
    blorp_params_init(&params);
    params.num_layers = 1;
-   params.hiz_op = BLORP_HIZ_OP_DEPTH_CLEAR;
+   params.hiz_op = ISL_AUX_OP_FAST_CLEAR;
    params.x0 = x0;
    params.y0 = y0;
    params.x1 = x1;
@@ -720,7 +773,7 @@ blorp_ccs_resolve(struct blorp_batch *batch,
                   struct blorp_surf *surf, uint32_t level,
                   uint32_t start_layer, uint32_t num_layers,
                   enum isl_format format,
-                  enum blorp_fast_clear_op resolve_op)
+                  enum isl_aux_op resolve_op)
 {
    struct blorp_params params;
 
@@ -759,11 +812,11 @@ blorp_ccs_resolve(struct blorp_batch *batch,
    params.y1 = ALIGN(params.y1, y_scaledown) / y_scaledown;
 
    if (batch->blorp->isl_dev->info->gen >= 9) {
-      assert(resolve_op == BLORP_FAST_CLEAR_OP_RESOLVE_FULL ||
-             resolve_op == BLORP_FAST_CLEAR_OP_RESOLVE_PARTIAL);
+      assert(resolve_op == ISL_AUX_OP_FULL_RESOLVE ||
+             resolve_op == ISL_AUX_OP_PARTIAL_RESOLVE);
    } else {
       /* Broadwell and earlier do not have a partial resolve */
-      assert(resolve_op == BLORP_FAST_CLEAR_OP_RESOLVE_FULL);
+      assert(resolve_op == ISL_AUX_OP_FULL_RESOLVE);
    }
    params.fast_clear_op = resolve_op;
    params.num_layers = num_layers;
@@ -780,9 +833,18 @@ blorp_ccs_resolve(struct blorp_batch *batch,
    batch->blorp->exec(batch, &params);
 }
 
+static nir_ssa_def *
+blorp_nir_bit(nir_builder *b, nir_ssa_def *src, unsigned bit)
+{
+   return nir_iand(b, nir_ushr(b, src, nir_imm_int(b, bit)),
+                      nir_imm_int(b, 1));
+}
+
 struct blorp_mcs_partial_resolve_key
 {
    enum blorp_shader_type shader_type;
+   bool indirect_clear_color;
+   bool int_format;
    uint32_t num_samples;
 };
 
@@ -792,6 +854,8 @@ blorp_params_get_mcs_partial_resolve_kernel(struct blorp_context *blorp,
 {
    const struct blorp_mcs_partial_resolve_key blorp_key = {
       .shader_type = BLORP_SHADER_TYPE_MCS_PARTIAL_RESOLVE,
+      .indirect_clear_color = params->dst.clear_color_addr.buffer != NULL,
+      .int_format = isl_format_has_int_channel(params->dst.view.format),
       .num_samples = params->num_samples,
    };
 
@@ -826,7 +890,18 @@ blorp_params_get_mcs_partial_resolve_kernel(struct blorp_context *blorp,
    discard->src[0] = nir_src_for_ssa(nir_inot(&b, is_clear));
    nir_builder_instr_insert(&b, &discard->instr);
 
-   nir_copy_var(&b, frag_color, v_color);
+   nir_ssa_def *clear_color = nir_load_var(&b, v_color);
+   if (blorp_key.indirect_clear_color && blorp->isl_dev->info->gen <= 8) {
+      /* Gen7-8 clear colors are stored as single 0/1 bits */
+      clear_color = nir_vec4(&b, blorp_nir_bit(&b, clear_color, 31),
+                                 blorp_nir_bit(&b, clear_color, 30),
+                                 blorp_nir_bit(&b, clear_color, 29),
+                                 blorp_nir_bit(&b, clear_color, 28));
+
+      if (!blorp_key.int_format)
+         clear_color = nir_i2f32(&b, clear_color);
+   }
+   nir_store_var(&b, frag_color, clear_color, 0xf);
 
    struct brw_wm_prog_key wm_key;
    brw_blorp_init_wm_prog_key(&wm_key);
@@ -872,11 +947,165 @@ blorp_mcs_partial_resolve(struct blorp_batch *batch,
 
    params.num_samples = params.dst.surf.samples;
    params.num_layers = num_layers;
+   params.dst_clear_color_as_input = surf->clear_color_addr.buffer != NULL;
 
    memcpy(&params.wm_inputs.clear_color,
           surf->clear_color.f32, sizeof(float) * 4);
 
    if (!blorp_params_get_mcs_partial_resolve_kernel(batch->blorp, &params))
+      return;
+
+   batch->blorp->exec(batch, &params);
+}
+
+/** Clear a CCS to the "uncompressed" state
+ *
+ * This pass is the CCS equivalent of a "HiZ resolve".  It sets the CCS values
+ * for a given layer/level of a surface to 0x0 which is the "uncompressed"
+ * state which tells the sampler to go look at the main surface.
+ */
+void
+blorp_ccs_ambiguate(struct blorp_batch *batch,
+                    struct blorp_surf *surf,
+                    uint32_t level, uint32_t layer)
+{
+   struct blorp_params params;
+   blorp_params_init(&params);
+
+   assert(ISL_DEV_GEN(batch->blorp->isl_dev) >= 7);
+
+   const struct isl_format_layout *aux_fmtl =
+      isl_format_get_layout(surf->aux_surf->format);
+   assert(aux_fmtl->txc == ISL_TXC_CCS);
+
+   params.dst = (struct brw_blorp_surface_info) {
+      .enabled = true,
+      .addr = surf->aux_addr,
+      .view = {
+         .usage = ISL_SURF_USAGE_RENDER_TARGET_BIT,
+         .format = ISL_FORMAT_R32G32B32A32_UINT,
+         .base_level = 0,
+         .base_array_layer = 0,
+         .levels = 1,
+         .array_len = 1,
+         .swizzle = ISL_SWIZZLE_IDENTITY,
+      },
+   };
+
+   uint32_t z = 0;
+   if (surf->surf->dim == ISL_SURF_DIM_3D) {
+      z = layer;
+      layer = 0;
+   }
+
+   uint32_t offset_B, x_offset_el, y_offset_el;
+   isl_surf_get_image_offset_el(surf->aux_surf, level, layer, z,
+                                &x_offset_el, &y_offset_el);
+   isl_tiling_get_intratile_offset_el(surf->aux_surf->tiling, aux_fmtl->bpb,
+                                      surf->aux_surf->row_pitch,
+                                      x_offset_el, y_offset_el,
+                                      &offset_B, &x_offset_el, &y_offset_el);
+   params.dst.addr.offset += offset_B;
+
+   const uint32_t width_px =
+      minify(surf->aux_surf->logical_level0_px.width, level);
+   const uint32_t height_px =
+      minify(surf->aux_surf->logical_level0_px.height, level);
+   const uint32_t width_el = DIV_ROUND_UP(width_px, aux_fmtl->bw);
+   const uint32_t height_el = DIV_ROUND_UP(height_px, aux_fmtl->bh);
+
+   struct isl_tile_info ccs_tile_info;
+   isl_surf_get_tile_info(surf->aux_surf, &ccs_tile_info);
+
+   /* We're going to map it as a regular RGBA32_UINT surface.  We need to
+    * downscale a good deal.  We start by computing the area on the CCS to
+    * clear in units of Y-tiled cache lines.
+    */
+   uint32_t x_offset_cl, y_offset_cl, width_cl, height_cl;
+   if (ISL_DEV_GEN(batch->blorp->isl_dev) >= 8) {
+      /* From the Sky Lake PRM Vol. 12 in the section on planes:
+       *
+       *    "The Color Control Surface (CCS) contains the compression status
+       *    of the cache-line pairs. The compression state of the cache-line
+       *    pair is specified by 2 bits in the CCS.  Each CCS cache-line
+       *    represents an area on the main surface of 16x16 sets of 128 byte
+       *    Y-tiled cache-line-pairs. CCS is always Y tiled."
+       *
+       * Each 2-bit surface element in the CCS corresponds to a single
+       * cache-line pair in the main surface.  This means that 16x16 el block
+       * in the CCS maps to a Y-tiled cache line.  Fortunately, CCS layouts
+       * are calculated with a very large alignment so we can round up to a
+       * whole cache line without worrying about overdraw.
+       */
+
+      /* On Broadwell and above, a CCS tile is the same as a Y tile when
+       * viewed at the cache-line granularity.  Fortunately, the horizontal
+       * and vertical alignment requirements of the CCS are such that we can
+       * align to an entire cache line without worrying about crossing over
+       * from one LOD to another.
+       */
+      const uint32_t x_el_per_cl = ccs_tile_info.logical_extent_el.w / 8;
+      const uint32_t y_el_per_cl = ccs_tile_info.logical_extent_el.h / 8;
+      assert(surf->aux_surf->image_alignment_el.w % x_el_per_cl == 0);
+      assert(surf->aux_surf->image_alignment_el.h % y_el_per_cl == 0);
+
+      assert(x_offset_el % x_el_per_cl == 0);
+      assert(y_offset_el % y_el_per_cl == 0);
+      x_offset_cl = x_offset_el / x_el_per_cl;
+      y_offset_cl = y_offset_el / y_el_per_cl;
+      width_cl = DIV_ROUND_UP(width_el, x_el_per_cl);
+      height_cl = DIV_ROUND_UP(height_el, y_el_per_cl);
+   } else {
+      /* On gen7, the CCS tiling is not so nice.  However, there we are
+       * guaranteed that we only have a single level and slice so we don't
+       * have to worry about it and can just align to a whole tile.
+       */
+      assert(surf->aux_surf->logical_level0_px.depth == 1);
+      assert(surf->aux_surf->logical_level0_px.array_len == 1);
+      assert(x_offset_el == 0 && y_offset_el == 0);
+      const uint32_t width_tl =
+         DIV_ROUND_UP(width_el, ccs_tile_info.logical_extent_el.w);
+      const uint32_t height_tl =
+         DIV_ROUND_UP(height_el, ccs_tile_info.logical_extent_el.h);
+      x_offset_cl = 0;
+      y_offset_cl = 0;
+      width_cl = width_tl * 8;
+      height_cl = height_tl * 8;
+   }
+
+   /* We're going to use a RGBA32 format so as to write data as quickly as
+    * possible.  A y-tiled cache line will then be 1x4 px.
+    */
+   const uint32_t x_offset_rgba_px = x_offset_cl;
+   const uint32_t y_offset_rgba_px = y_offset_cl * 4;
+   const uint32_t width_rgba_px = width_cl;
+   const uint32_t height_rgba_px = height_cl * 4;
+
+   MAYBE_UNUSED bool ok =
+      isl_surf_init(batch->blorp->isl_dev, &params.dst.surf,
+                    .dim = ISL_SURF_DIM_2D,
+                    .format = ISL_FORMAT_R32G32B32A32_UINT,
+                    .width = width_rgba_px + x_offset_rgba_px,
+                    .height = height_rgba_px + y_offset_rgba_px,
+                    .depth = 1,
+                    .levels = 1,
+                    .array_len = 1,
+                    .samples = 1,
+                    .row_pitch = surf->aux_surf->row_pitch,
+                    .usage = ISL_SURF_USAGE_RENDER_TARGET_BIT,
+                    .tiling_flags = ISL_TILING_Y0_BIT);
+   assert(ok);
+
+   params.x0 = x_offset_rgba_px;
+   params.y0 = y_offset_rgba_px;
+   params.x1 = x_offset_rgba_px + width_rgba_px;
+   params.y1 = y_offset_rgba_px + height_rgba_px;
+
+   /* A CCS value of 0 means "uncompressed." */
+   memset(&params.wm_inputs.clear_color, 0,
+          sizeof(params.wm_inputs.clear_color));
+
+   if (!blorp_params_get_clear_kernel(batch->blorp, &params, true))
       return;
 
    batch->blorp->exec(batch, &params);

@@ -164,6 +164,7 @@ vc5_set_active_query_state(struct pipe_context *pctx, boolean enable)
 
         vc5->active_queries = enable;
         vc5->dirty |= VC5_DIRTY_OQ;
+        vc5->dirty |= VC5_DIRTY_STREAMOUT;
 }
 
 void

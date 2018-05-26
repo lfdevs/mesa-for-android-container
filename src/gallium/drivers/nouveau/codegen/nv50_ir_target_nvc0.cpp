@@ -143,7 +143,9 @@ static const struct opProperties _initProps[] =
    // saturate only:
    { OP_LINTERP, 0x0, 0x0, 0x0, 0x8, 0x0, 0x0 },
    { OP_PINTERP, 0x0, 0x0, 0x0, 0x8, 0x0, 0x0 },
-   // nve4 ops:
+};
+
+static const struct opProperties _initPropsNVE4[] = {
    { OP_SULDB,   0x0, 0x0, 0x0, 0x0, 0x2, 0x0 },
    { OP_SUSTB,   0x0, 0x0, 0x0, 0x0, 0x2, 0x0 },
    { OP_SUSTP,   0x0, 0x0, 0x0, 0x0, 0x2, 0x0 },
@@ -151,6 +153,39 @@ static const struct opProperties _initProps[] =
    { OP_SUBFM,   0x0, 0x0, 0x0, 0x0, 0x6, 0x2 },
    { OP_SUEAU,   0x0, 0x0, 0x0, 0x0, 0x6, 0x2 }
 };
+
+static const struct opProperties _initPropsGM107[] = {
+   { OP_SULDB,   0x0, 0x0, 0x0, 0x0, 0x0, 0x2 },
+   { OP_SULDP,   0x0, 0x0, 0x0, 0x0, 0x0, 0x2 },
+   { OP_SUSTB,   0x0, 0x0, 0x0, 0x0, 0x0, 0x4 },
+   { OP_SUSTP,   0x0, 0x0, 0x0, 0x0, 0x0, 0x4 },
+   { OP_SUREDB,  0x0, 0x0, 0x0, 0x0, 0x0, 0x4 },
+   { OP_SUREDP,  0x0, 0x0, 0x0, 0x0, 0x0, 0x4 },
+};
+
+void TargetNVC0::initProps(const struct opProperties *props, int size)
+{
+   for (int i = 0; i < size; ++i) {
+      const struct opProperties *prop = &props[i];
+
+      for (int s = 0; s < 3; ++s) {
+         if (prop->mNeg & (1 << s))
+            opInfo[prop->op].srcMods[s] |= NV50_IR_MOD_NEG;
+         if (prop->mAbs & (1 << s))
+            opInfo[prop->op].srcMods[s] |= NV50_IR_MOD_ABS;
+         if (prop->mNot & (1 << s))
+            opInfo[prop->op].srcMods[s] |= NV50_IR_MOD_NOT;
+         if (prop->fConst & (1 << s))
+            opInfo[prop->op].srcFiles[s] |= 1 << (int)FILE_MEMORY_CONST;
+         if (prop->fImmd & (1 << s))
+            opInfo[prop->op].srcFiles[s] |= 1 << (int)FILE_IMMEDIATE;
+         if (prop->fImmd & 8)
+            opInfo[prop->op].immdBits = 0xffffffff;
+      }
+      if (prop->mSat & 8)
+         opInfo[prop->op].dstMods = NV50_IR_MOD_SAT;
+   }
+}
 
 void TargetNVC0::initOpInfo()
 {
@@ -216,26 +251,11 @@ void TargetNVC0::initOpInfo()
    for (i = 0; i < sizeof(noPred) / sizeof(noPred[0]); ++i)
       opInfo[noPred[i]].predicate = 0;
 
-   for (i = 0; i < sizeof(_initProps) / sizeof(_initProps[0]); ++i) {
-      const struct opProperties *prop = &_initProps[i];
-
-      for (int s = 0; s < 3; ++s) {
-         if (prop->mNeg & (1 << s))
-            opInfo[prop->op].srcMods[s] |= NV50_IR_MOD_NEG;
-         if (prop->mAbs & (1 << s))
-            opInfo[prop->op].srcMods[s] |= NV50_IR_MOD_ABS;
-         if (prop->mNot & (1 << s))
-            opInfo[prop->op].srcMods[s] |= NV50_IR_MOD_NOT;
-         if (prop->fConst & (1 << s))
-            opInfo[prop->op].srcFiles[s] |= 1 << (int)FILE_MEMORY_CONST;
-         if (prop->fImmd & (1 << s))
-            opInfo[prop->op].srcFiles[s] |= 1 << (int)FILE_IMMEDIATE;
-         if (prop->fImmd & 8)
-            opInfo[prop->op].immdBits = 0xffffffff;
-      }
-      if (prop->mSat & 8)
-         opInfo[prop->op].dstMods = NV50_IR_MOD_SAT;
-   }
+   initProps(_initProps, ARRAY_SIZE(_initProps));
+   if (chipset >= NVISA_GM107_CHIPSET)
+      initProps(_initPropsGM107, ARRAY_SIZE(_initPropsGM107));
+   else if (chipset >= NVISA_GK104_CHIPSET)
+      initProps(_initPropsNVE4, ARRAY_SIZE(_initPropsNVE4));
 }
 
 unsigned int

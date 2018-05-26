@@ -16,7 +16,6 @@ TARGET_RADEON_WINSYS = \
 	$(top_builddir)/src/gallium/winsys/amdgpu/drm/libamdgpuwinsys.la
 
 TARGET_RADEON_COMMON = \
-	$(top_builddir)/src/gallium/drivers/radeon/libradeon.la \
 	$(top_builddir)/src/amd/common/libamd_common.la
 
 endif

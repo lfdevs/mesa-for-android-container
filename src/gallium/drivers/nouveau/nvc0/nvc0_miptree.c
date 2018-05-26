@@ -20,8 +20,11 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
+#include <drm_fourcc.h>
+
 #include "pipe/p_state.h"
 #include "pipe/p_defines.h"
+#include "state_tracker/drm_driver.h"
 #include "util/u_inlines.h"
 #include "util/u_format.h"
 
@@ -233,9 +236,79 @@ nvc0_miptree_init_layout_tiled(struct nv50_miptree *mt)
    }
 }
 
+static uint64_t nvc0_miptree_get_modifier(struct nv50_miptree *mt)
+{
+   union nouveau_bo_config *config = &mt->base.bo->config;
+   uint64_t modifier;
+
+   if (mt->layout_3d)
+      return DRM_FORMAT_MOD_INVALID;
+
+   switch (config->nvc0.memtype) {
+   case 0x00:
+      modifier = DRM_FORMAT_MOD_LINEAR;
+      break;
+
+   case 0xfe:
+      switch (NVC0_TILE_MODE_Y(config->nvc0.tile_mode)) {
+      case 0:
+         modifier = DRM_FORMAT_MOD_NVIDIA_16BX2_BLOCK_ONE_GOB;
+         break;
+
+      case 1:
+         modifier = DRM_FORMAT_MOD_NVIDIA_16BX2_BLOCK_TWO_GOB;
+         break;
+
+      case 2:
+         modifier = DRM_FORMAT_MOD_NVIDIA_16BX2_BLOCK_FOUR_GOB;
+         break;
+
+      case 3:
+         modifier = DRM_FORMAT_MOD_NVIDIA_16BX2_BLOCK_EIGHT_GOB;
+         break;
+
+      case 4:
+         modifier = DRM_FORMAT_MOD_NVIDIA_16BX2_BLOCK_SIXTEEN_GOB;
+         break;
+
+      case 5:
+         modifier = DRM_FORMAT_MOD_NVIDIA_16BX2_BLOCK_THIRTYTWO_GOB;
+         break;
+
+      default:
+         modifier = DRM_FORMAT_MOD_INVALID;
+         break;
+      }
+      break;
+
+   default:
+      modifier = DRM_FORMAT_MOD_INVALID;
+      break;
+   }
+
+   return modifier;
+}
+
+static boolean
+nvc0_miptree_get_handle(struct pipe_screen *pscreen,
+                        struct pipe_resource *pt,
+                        struct winsys_handle *whandle)
+{
+   struct nv50_miptree *mt = nv50_miptree(pt);
+   boolean ret;
+
+   ret = nv50_miptree_get_handle(pscreen, pt, whandle);
+   if (!ret)
+      return ret;
+
+   whandle->modifier = nvc0_miptree_get_modifier(mt);
+
+   return true;
+}
+
 const struct u_resource_vtbl nvc0_miptree_vtbl =
 {
-   nv50_miptree_get_handle,         /* get_handle */
+   nvc0_miptree_get_handle,         /* get_handle */
    nv50_miptree_destroy,            /* resource_destroy */
    nvc0_miptree_transfer_map,       /* transfer_map */
    u_default_transfer_flush_region, /* transfer_flush_region */
@@ -244,7 +317,8 @@ const struct u_resource_vtbl nvc0_miptree_vtbl =
 
 struct pipe_resource *
 nvc0_miptree_create(struct pipe_screen *pscreen,
-                    const struct pipe_resource *templ)
+                    const struct pipe_resource *templ,
+                    const uint64_t *modifiers, unsigned int count)
 {
    struct nouveau_device *dev = nouveau_screen(pscreen)->device;
    struct nouveau_drm *drm = nouveau_screen(pscreen)->drm;
@@ -276,6 +350,9 @@ nvc0_miptree_create(struct pipe_screen *pscreen,
          break;
       }
    }
+
+   if (count == 1 && modifiers[0] == DRM_FORMAT_MOD_LINEAR)
+      pt->flags |= NOUVEAU_RESOURCE_FLAG_LINEAR;
 
    if (pt->bind & PIPE_BIND_LINEAR)
       pt->flags |= NOUVEAU_RESOURCE_FLAG_LINEAR;

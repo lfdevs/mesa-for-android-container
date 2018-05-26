@@ -39,8 +39,8 @@ static boolean emit_vs_postamble( struct svga_shader_emitter *emit );
 static boolean emit_ps_postamble( struct svga_shader_emitter *emit );
 
 
-static unsigned
-translate_opcode(uint opcode)
+static SVGA3dShaderOpCodeType
+translate_opcode(enum tgsi_opcode opcode)
 {
    switch (opcode) {
    case TGSI_OPCODE_ADD:        return SVGA3DOP_ADD;
@@ -60,8 +60,8 @@ translate_opcode(uint opcode)
 }
 
 
-static unsigned
-translate_file(unsigned file)
+static SVGA3dShaderRegType
+translate_file(enum tgsi_file_type file)
 {
    switch (file) {
    case TGSI_FILE_TEMPORARY: return SVGA3DREG_TEMP;
@@ -1435,7 +1435,7 @@ same_register(struct src_register r1, struct src_register r2)
  */
 static boolean
 emit_conditional(struct svga_shader_emitter *emit,
-                 unsigned compare_func,
+                 enum pipe_compare_func compare_func,
                  SVGA3dShaderDestToken dst,
                  struct src_register src0,
                  struct src_register src1,
@@ -1516,7 +1516,7 @@ emit_conditional(struct svga_shader_emitter *emit,
  */
 static boolean
 emit_select(struct svga_shader_emitter *emit,
-            unsigned compare_func,
+            enum pipe_compare_func compare_func,
             SVGA3dShaderDestToken dst,
             struct src_register src0,
             struct src_register src1 )
@@ -1968,7 +1968,7 @@ emit_brk(struct svga_shader_emitter *emit,
  */
 static boolean
 emit_scalar_op1(struct svga_shader_emitter *emit,
-                unsigned opcode,
+                SVGA3dShaderOpCodeType opcode,
                 const struct tgsi_full_instruction *insn)
 {
    SVGA3dShaderInstToken inst;
@@ -1990,7 +1990,7 @@ emit_scalar_op1(struct svga_shader_emitter *emit,
  */
 static boolean
 emit_simple_instruction(struct svga_shader_emitter *emit,
-                        unsigned opcode,
+                        SVGA3dShaderOpCodeType opcode,
                         const struct tgsi_full_instruction *insn)
 {
    const struct tgsi_full_src_register *src = insn->Src;
@@ -2070,7 +2070,7 @@ emit_deriv(struct svga_shader_emitter *emit,
       return TRUE;
    }
    else {
-      unsigned opcode;
+      SVGA3dShaderOpCodeType opcode;
       const struct tgsi_full_src_register *reg = &insn->Src[0];
       SVGA3dShaderInstToken inst;
       SVGA3dShaderDestToken dst;
@@ -2923,7 +2923,8 @@ svga_emit_instruction(struct svga_shader_emitter *emit,
 
    default:
       {
-         unsigned opcode = translate_opcode(insn->Instruction.Opcode);
+         SVGA3dShaderOpCodeType opcode =
+            translate_opcode(insn->Instruction.Opcode);
 
          if (opcode == SVGA3DOP_LAST_INST)
             return FALSE;

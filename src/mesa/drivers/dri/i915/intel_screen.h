@@ -117,7 +117,6 @@ struct intel_screen
 #define intel_check_front_buffer_rendering  old_intel_check_front_buffer_rendering
 #define intelInitBufferFuncs                old_intelInitBufferFuncs
 #define intelClearWithBlit                  old_intelClearWithBlit
-#define intelEmitCopyBlit                   old_intelEmitCopyBlit
 #define intelEmitImmediateColorExpandBlit   old_intelEmitImmediateColorExpandBlit
 #define intel_emit_linear_blit              old_intel_emit_linear_blit
 #define intel_miptree_blit                  old_intel_miptree_blit
@@ -139,7 +138,6 @@ struct intel_screen
 #define get_time                            old_get_time
 #define intel_translate_blend_factor        old_intel_translate_blend_factor
 #define intel_translate_compare_func        old_intel_translate_compare_func
-#define intel_translate_logic_op            old_intel_translate_logic_op
 #define intel_translate_shadow_compare_func old_intel_translate_shadow_compare_func
 #define intel_translate_stencil_op          old_intel_translate_stencil_op
 #define intel_init_syncobj_functions        old_intel_init_syncobj_functions

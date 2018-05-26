@@ -1088,6 +1088,7 @@ static void r600_set_framebuffer_state(struct pipe_context *ctx,
 	struct r600_surface *surf;
 	struct r600_texture *rtex;
 	unsigned i;
+	uint32_t target_mask = 0;
 
 	/* Flush TC when changing the framebuffer state, because the only
 	 * client not using TC that can change textures is the framebuffer.
@@ -1127,6 +1128,8 @@ static void r600_set_framebuffer_state(struct pipe_context *ctx,
 
 		rtex = (struct r600_texture*)surf->base.texture;
 		r600_context_add_resource_size(ctx, state->cbufs[i]->texture);
+
+		target_mask |= (0xf << (i * 4));
 
 		if (!surf->color_initialized || force_cmask_fmask) {
 			r600_init_color_surface(rctx, surf, force_cmask_fmask);
@@ -1187,7 +1190,9 @@ static void r600_set_framebuffer_state(struct pipe_context *ctx,
 		r600_mark_atom_dirty(rctx, &rctx->db_misc_state.atom);
 	}
 
-	if (rctx->cb_misc_state.nr_cbufs != state->nr_cbufs) {
+	if (rctx->cb_misc_state.nr_cbufs != state->nr_cbufs ||
+	    rctx->cb_misc_state.bound_cbufs_target_mask != target_mask) {
+		rctx->cb_misc_state.bound_cbufs_target_mask = target_mask;
 		rctx->cb_misc_state.nr_cbufs = state->nr_cbufs;
 		r600_mark_atom_dirty(rctx, &rctx->cb_misc_state.atom);
 	}
@@ -1525,8 +1530,8 @@ static void r600_emit_cb_misc_state(struct r600_context *rctx, struct r600_atom 
 		}
 		radeon_set_context_reg(cs, R_028808_CB_COLOR_CONTROL, a->cb_color_control);
 	} else {
-		unsigned fb_colormask = (1ULL << ((unsigned)a->nr_cbufs * 4)) - 1;
-		unsigned ps_colormask = (1ULL << ((unsigned)a->nr_ps_color_outputs * 4)) - 1;
+		unsigned fb_colormask = a->bound_cbufs_target_mask;
+		unsigned ps_colormask = a->ps_color_export_mask;
 		unsigned multiwrite = a->multiwrite && a->nr_cbufs > 1;
 
 		radeon_set_context_reg_seq(cs, R_028238_CB_TARGET_MASK, 2);
@@ -2520,6 +2525,7 @@ void r600_update_ps_state(struct pipe_context *ctx, struct r600_pipe_shader *sha
 	}
 
 	shader->nr_ps_color_outputs = num_cout;
+	shader->ps_color_export_mask = rshader->ps_color_export_mask;
 
 	spi_ps_in_control_0 = S_0286CC_NUM_INTERP(rshader->ninput) |
 				S_0286CC_PERSP_GRADIENT_ENA(1)|

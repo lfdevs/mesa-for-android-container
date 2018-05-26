@@ -87,10 +87,10 @@ nv10_emit_color_mask(struct gl_context *ctx, int emit)
 	struct nouveau_pushbuf *push = context_push(ctx);
 
 	BEGIN_NV04(push, NV10_3D(COLOR_MASK), 1);
-	PUSH_DATA (push, ((ctx->Color.ColorMask[0][3] ? 1 << 24 : 0) |
-			(ctx->Color.ColorMask[0][0] ? 1 << 16 : 0) |
-			(ctx->Color.ColorMask[0][1] ? 1 << 8 : 0) |
-			(ctx->Color.ColorMask[0][2] ? 1 << 0 : 0)));
+	PUSH_DATA (push, ((GET_COLORMASK_BIT(ctx->Color.ColorMask, 0, 3) ? 1 << 24 : 0) |
+			(GET_COLORMASK_BIT(ctx->Color.ColorMask, 0, 0) ? 1 << 16 : 0) |
+			(GET_COLORMASK_BIT(ctx->Color.ColorMask, 0, 1) ? 1 << 8 : 0) |
+			(GET_COLORMASK_BIT(ctx->Color.ColorMask, 0, 2) ? 1 << 0 : 0)));
 }
 
 void
@@ -126,7 +126,7 @@ nv10_emit_logic_opcode(struct gl_context *ctx, int emit)
 
 	BEGIN_NV04(push, NV11_3D(COLOR_LOGIC_OP_ENABLE), 2);
 	PUSH_DATAb(push, ctx->Color.ColorLogicOpEnabled);
-	PUSH_DATA (push, nvgl_logicop_func(ctx->Color.LogicOp));
+	PUSH_DATA (push, ctx->Color.LogicOp);
 }
 
 void

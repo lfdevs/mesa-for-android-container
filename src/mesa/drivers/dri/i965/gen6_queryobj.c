@@ -329,7 +329,7 @@ gen6_begin_query(struct gl_context *ctx, struct gl_query_object *q)
 
    /* Since we're starting a new query, we need to throw away old results. */
    brw_bo_unreference(query->bo);
-   query->bo = brw_bo_alloc(brw->bufmgr, "query results", 4096, 4096);
+   query->bo = brw_bo_alloc(brw->bufmgr, "query results", 4096);
 
    /* For ARB_query_buffer_object: The result is not available */
    set_query_availability(brw, query, false);

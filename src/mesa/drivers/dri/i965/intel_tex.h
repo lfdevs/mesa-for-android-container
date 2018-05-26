@@ -43,6 +43,8 @@ void intelSetTexBuffer(__DRIcontext *pDRICtx,
 		       GLint target, __DRIdrawable *pDraw);
 void intelSetTexBuffer2(__DRIcontext *pDRICtx,
 			GLint target, GLint format, __DRIdrawable *pDraw);
+void intelReleaseTexBuffer(__DRIcontext *pDRICtx, GLint target,
+                           __DRIdrawable *dPriv);
 
 struct intel_mipmap_tree *
 intel_miptree_create_for_teximage(struct brw_context *brw,
@@ -50,6 +52,7 @@ intel_miptree_create_for_teximage(struct brw_context *brw,
 				  struct intel_texture_image *intelImage,
                                   enum intel_miptree_create_flags flags);
 
-void intel_finalize_mipmap_tree(struct brw_context *brw, GLuint unit);
+void intel_finalize_mipmap_tree(struct brw_context *brw,
+                                struct gl_texture_object *tex_obj);
 
 #endif

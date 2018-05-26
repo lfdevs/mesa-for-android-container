@@ -1,5 +1,5 @@
 # Copyright © 2017 Dylan Baker
-# Copyright © 2017 Intel Corporation
+# Copyright © 2017-2018 Intel Corporation
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -24,10 +24,6 @@ inc_gallium_winsys = include_directories('winsys')
 
 subdir('auxiliary')
 subdir('auxiliary/pipe-loader')
-subdir('drivers/ddebug')
-subdir('drivers/noop')
-subdir('drivers/trace')
-subdir('drivers/rbug')
 subdir('winsys/sw/null')
 if with_dri
   subdir('winsys/sw/dri')
@@ -40,6 +36,9 @@ else
   libswkmsdri = []
 endif
 subdir('winsys/sw/wrapper')
+if with_platform_haiku
+  subdir('winsys/sw/hgl')
+endif
 if with_gallium_swr
   if meson.version().version_compare('< 0.44.0')
     error('SWR requires meson 0.44.0 or greater.')
@@ -71,7 +70,6 @@ else
 endif
 if with_gallium_radeonsi
   subdir('winsys/amdgpu/drm')
-  subdir('drivers/radeon')
   subdir('drivers/radeonsi')
 else
   driver_radeonsi = declare_dependency()
@@ -116,6 +114,12 @@ if with_gallium_imx
 else
   driver_imx = declare_dependency()
 endif
+if with_gallium_tegra
+  subdir('winsys/tegra/drm')
+  subdir('drivers/tegra')
+else
+  driver_tegra = declare_dependency()
+endif
 if with_gallium_i915
   subdir('winsys/i915/drm')
   subdir('drivers/i915')
@@ -134,24 +138,6 @@ if with_gallium_virgl
   subdir('drivers/virgl')
 else
   driver_virgl = declare_dependency()
-endif
-if with_gallium_vdpau
-  subdir('state_trackers/vdpau')
-endif
-if with_gallium_xvmc
-  subdir('state_trackers/xvmc')
-endif
-if with_gallium_omx
-  subdir('state_trackers/omx_bellagio')
-endif
-if with_gallium_va
-  subdir('state_trackers/va')
-endif
-if with_gallium_xa
-  subdir('state_trackers/xa')
-endif
-if with_gallium_st_nine
-  subdir('state_trackers/nine')
 endif
 if with_gallium_opencl
   # TODO: this isn't really clover specific, but ATM clover is the only
@@ -178,21 +164,37 @@ if with_glx == 'gallium-xlib'
   subdir('targets/libgl-xlib')
 endif
 if with_gallium_vdpau
+  subdir('state_trackers/vdpau')
   subdir('targets/vdpau')
 endif
 if with_gallium_xvmc
+  subdir('state_trackers/xvmc')
   subdir('targets/xvmc')
 endif
-if with_gallium_omx
-  subdir('targets/omx-bellagio')
+if with_gallium_omx != 'disabled'
+  subdir('state_trackers/omx')
+  subdir('targets/omx')
 endif
 if with_gallium_va
+  subdir('state_trackers/va')
   subdir('targets/va')
 endif
 if with_gallium_xa
+  subdir('state_trackers/xa')
   subdir('targets/xa')
 endif
+if with_platform_haiku
+  subdir('state_trackers/hgl')
+  subdir('targets/haiku-softpipe')
+endif
 if with_gallium_st_nine
+  subdir('state_trackers/nine')
   subdir('targets/d3dadapter9')
 endif
-# TODO: tests
+if with_tests
+  subdir('targets/graw-null')
+  if with_glx == 'gallium-xlib'
+    subdir('targets/graw-xlib')
+  endif
+  subdir('tests')
+endif

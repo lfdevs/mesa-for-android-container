@@ -32,13 +32,21 @@ nir_libnir_la_SOURCES =					\
 	$(SPIRV_GENERATED_FILES) 			\
 	$(NIR_GENERATED_FILES)
 
-nir/nir_builder_opcodes.h: nir/nir_opcodes.py nir/nir_builder_opcodes_h.py
+nir/nir_builder_opcodes.h: nir/nir_opcodes.py nir/nir_builder_opcodes_h.py nir/nir_intrinsics.py
 	$(MKDIR_GEN)
 	$(PYTHON_GEN) $(srcdir)/nir/nir_builder_opcodes_h.py > $@ || ($(RM) $@; false)
 
 nir/nir_constant_expressions.c: nir/nir_opcodes.py nir/nir_constant_expressions.py
 	$(MKDIR_GEN)
 	$(PYTHON_GEN) $(srcdir)/nir/nir_constant_expressions.py > $@ || ($(RM) $@; false)
+
+nir/nir_intrinsics.h: nir/nir_intrinsics.py nir/nir_intrinsics_h.py
+	$(MKDIR_GEN)
+	$(PYTHON_GEN) $(srcdir)/nir/nir_intrinsics_h.py --outdir nir || ($(RM) $@; false)
+
+nir/nir_intrinsics.c: nir/nir_intrinsics.py nir/nir_intrinsics_c.py
+	$(MKDIR_GEN)
+	$(PYTHON_GEN) $(srcdir)/nir/nir_intrinsics_c.py --outdir nir || ($(RM) $@; false)
 
 nir/nir_opcodes.h: nir/nir_opcodes.py nir/nir_opcodes_h.py
 	$(MKDIR_GEN)
@@ -51,33 +59,6 @@ nir/nir_opcodes.c: nir/nir_opcodes.py nir/nir_opcodes_c.py
 nir/nir_opt_algebraic.c: nir/nir_opt_algebraic.py nir/nir_algebraic.py
 	$(MKDIR_GEN)
 	$(PYTHON_GEN) $(srcdir)/nir/nir_opt_algebraic.py > $@ || ($(RM) $@; false)
-
-spirv/spirv_info.c: spirv/spirv_info_c.py spirv/spirv.core.grammar.json
-	$(MKDIR_GEN)
-	$(PYTHON_GEN) $(srcdir)/spirv/spirv_info_c.py $(srcdir)/spirv/spirv.core.grammar.json $@ || ($(RM) $@; false)
-
-spirv/vtn_gather_types.c: spirv/vtn_gather_types_c.py spirv/spirv.core.grammar.json
-	$(MKDIR_GEN)
-	$(PYTHON_GEN) $(srcdir)/spirv/vtn_gather_types_c.py $(srcdir)/spirv/spirv.core.grammar.json $@ || ($(RM) $@; false)
-
-noinst_PROGRAMS += spirv2nir
-
-spirv2nir_SOURCES = \
-	spirv/spirv2nir.c
-
-spirv2nir_CPPFLAGS =					\
-	$(AM_CPPFLAGS)					\
-	-I$(top_builddir)/src/compiler/nir		\
-	-I$(top_srcdir)/src/compiler/nir		\
-	-I$(top_srcdir)/src/compiler/spirv
-
-spirv2nir_LDADD =					\
-	nir/libnir.la					\
-	$(top_builddir)/src/util/libmesautil.la		\
-	-lm						\
-	$(PTHREAD_LIBS)
-
-nodist_EXTRA_spirv2nir_SOURCES = dummy.cpp
 
 check_PROGRAMS += nir/tests/control_flow_tests
 
@@ -101,24 +82,23 @@ TESTS += nir/tests/control_flow_tests
 
 
 BUILT_SOURCES += \
-	$(NIR_GENERATED_FILES) \
-	$(SPIRV_GENERATED_FILES)
+	$(NIR_GENERATED_FILES)
 
 CLEANFILES += \
-	$(NIR_GENERATED_FILES) \
-	$(SPIRV_GENERATED_FILES)
+	$(NIR_GENERATED_FILES)
 
 EXTRA_DIST += \
 	nir/nir_algebraic.py				\
 	nir/nir_builder_opcodes_h.py			\
 	nir/nir_constant_expressions.py			\
+	nir/nir_intrinsics.py				\
+	nir/nir_intrinsics_c.py				\
+	nir/nir_intrinsics_h.py				\
 	nir/nir_opcodes.py				\
 	nir/nir_opcodes_c.py				\
 	nir/nir_opcodes_h.py				\
 	nir/nir_opt_algebraic.py			\
 	nir/tests \
 	nir/README \
-	spirv/spirv_info_c.py				\
-	spirv/spirv.core.grammar.json			\
-	spirv/vtn_gather_types_c.py			\
-	SConscript.nir
+	SConscript.nir \
+	SConscript.spirv

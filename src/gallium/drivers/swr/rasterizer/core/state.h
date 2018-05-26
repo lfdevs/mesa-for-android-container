@@ -1,5 +1,5 @@
 /****************************************************************************
-* Copyright (C) 2014-2015 Intel Corporation.   All Rights Reserved.
+* Copyright (C) 2014-2018 Intel Corporation.   All Rights Reserved.
 *
 * Permission is hereby granted, free of charge, to any person obtaining a
 * copy of this software and associated documentation files (the "Software"),
@@ -214,6 +214,15 @@ struct SIMDVERTEX_T
 };
 
 //////////////////////////////////////////////////////////////////////////
+/// SWR_SHADER_STATS
+/// @brief Structure passed to shader for stats collection.
+/////////////////////////////////////////////////////////////////////////
+struct SWR_SHADER_STATS
+{
+    uint32_t numInstExecuted; // This is roughly the API instructions executed and not x86.
+};
+
+//////////////////////////////////////////////////////////////////////////
 /// SWR_VS_CONTEXT
 /// @brief Input to vertex shader
 /////////////////////////////////////////////////////////////////////////
@@ -225,13 +234,13 @@ struct SWR_VS_CONTEXT
     uint32_t InstanceID;        // IN: Instance ID, constant across all verts of the SIMD
     simdscalari VertexID;       // IN: Vertex ID
     simdscalari mask;           // IN: Active mask for shader
-#if USE_SIMD16_FRONTEND
+
+    // SIMD16 Frontend fields.
     uint32_t AlternateOffset;   // IN: amount to offset for interleaving even/odd simd8 in simd16vertex output
-#if USE_SIMD16_VS
-    simd16scalari mask16;	// IN: Active mask for shader (16-wide)
-    simd16scalari VertexID16;	// IN: Vertex ID (16-wide)
-#endif
-#endif
+    simd16scalari mask16;       // IN: Active mask for shader (16-wide)
+    simd16scalari VertexID16;   // IN: Vertex ID (16-wide)
+
+    SWR_SHADER_STATS stats;     // OUT: shader statistics used for archrast.
 };
 
 /////////////////////////////////////////////////////////////////////////
@@ -281,6 +290,7 @@ struct SWR_HS_CONTEXT
     simdscalari mask;           // IN: Active mask for shader
     ScalarPatch* pCPout;        // OUT: Output control point patch
                                 // SIMD-sized-array of SCALAR patches
+    SWR_SHADER_STATS stats;     // OUT: shader statistics used for archrast.
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -298,6 +308,7 @@ struct SWR_DS_CONTEXT
     simdscalar*     pDomainV;       // IN: (SIMD) Domain Point V coords
     simdscalari     mask;           // IN: Active mask for shader
     simdscalar*     pOutputData;    // OUT: (SIMD) Vertex Attributes (2D array of vectors, one row per attribute-component)
+    SWR_SHADER_STATS stats;         // OUT: shader statistics used for archrast.
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -312,6 +323,7 @@ struct SWR_GS_CONTEXT
     uint32_t InstanceID;                // IN: input instance ID
     simdscalari mask;                   // IN: Active mask for shader
     uint8_t* pStreams[KNOB_SIMD_WIDTH]; // OUT: output stream (contains vertices for all output streams)
+    SWR_SHADER_STATS stats;             // OUT: shader statistics used for archrast.
 };
 
 struct PixelPositions
@@ -358,6 +370,8 @@ struct SWR_PS_CONTEXT
     uint32_t rasterizerSampleCount;     // IN: sample count used by the rasterizer
 
     uint8_t* pColorBuffer[SWR_NUM_RENDERTARGETS]; // IN: Pointers to render target hottiles
+
+    SWR_SHADER_STATS stats;             // OUT: shader statistics used for archrast.
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -391,14 +405,13 @@ struct SWR_CS_CONTEXT
     // Dispatch dimensions used by shader to compute system values from the tile counter.
     uint32_t dispatchDims[3];
 
-    uint8_t* pTGSM;  // Thread Group Shared Memory pointer.
-
-    uint8_t* pSpillFillBuffer;  // Spill/fill buffer for barrier support
-
-    uint8_t* pScratchSpace;     // Pointer to scratch space buffer used by the shader, shader is responsible
-                                // for subdividing scratch space per instance/simd
-
+    uint8_t* pTGSM;               // Thread Group Shared Memory pointer.
+    uint8_t* pSpillFillBuffer;    // Spill/fill buffer for barrier support
+    uint8_t* pScratchSpace;       // Pointer to scratch space buffer used by the shader, shader is responsible
+                                  // for subdividing scratch space per instance/simd
     uint32_t scratchSpacePerSimd; // Scratch space per work item x SIMD_WIDTH
+
+    SWR_SHADER_STATS stats;       // OUT: shader statistics used for archrast.
 };
 
 // enums
@@ -513,6 +526,11 @@ enum SWR_AUX_MODE
     AUX_MODE_DEPTH,
 };
 
+struct SWR_LOD_OFFSETS
+{
+    uint32_t offsets[2][15];
+};
+
 //////////////////////////////////////////////////////////////////////////
 /// SWR_SURFACE_STATE
 //////////////////////////////////////////////////////////////////////////
@@ -553,11 +571,10 @@ struct SWR_SURFACE_STATE
 // in the fetch shader jit
 struct SWR_VERTEX_BUFFER_STATE
 {
+    gfxptr_t xpData;
     uint32_t index;
     uint32_t pitch;
-    const uint8_t *pData;
     uint32_t size;
-    uint32_t numaNode;
     uint32_t minVertex;             // min vertex (for bounds checking)
     uint32_t maxVertex;             // size / pitch.  precalculated value used by fetch shader for OOB checks
     uint32_t partialInboundsSize;   // size % pitch.  precalculated value used by fetch shader for partially OOB vertices
@@ -565,9 +582,9 @@ struct SWR_VERTEX_BUFFER_STATE
 
 struct SWR_INDEX_BUFFER_STATE
 {
+    gfxptr_t xpIndices;
     // Format type for indices (e.g. UINT16, UINT32, etc.)
     SWR_FORMAT format; // @llvm_enum
-    const void *pIndices;
     uint32_t size;
 };
 
@@ -581,8 +598,8 @@ struct SWR_INDEX_BUFFER_STATE
 struct SWR_FETCH_CONTEXT
 {
     const SWR_VERTEX_BUFFER_STATE* pStreams;    // IN: array of bound vertex buffers
-    const int32_t* pIndices;                    // IN: pointer to index buffer for indexed draws
-    const int32_t* pLastIndex;                  // IN: pointer to end of index buffer, used for bounds checking
+    gfxptr_t xpIndices;                          // IN: pointer to int32 index buffer for indexed draws
+    gfxptr_t xpLastIndex;                        // IN: pointer to end of index buffer, used for bounds checking
     uint32_t CurInstance;                       // IN: current instance
     uint32_t BaseVertex;                        // IN: base vertex
     uint32_t StartVertex;                       // IN: start vertex
@@ -646,11 +663,14 @@ OSALIGNLINE(struct) SWR_STATS_FE
 
 struct SWR_STREAMOUT_BUFFER
 {
-    bool enable;
-    bool soWriteEnable;
-
     // Pointers to streamout buffers.
     uint32_t* pBuffer;
+
+    // Offset to the SO write offset. If not null then we update offset here.
+    uint32_t* pWriteOffset;
+
+    bool enable;
+    bool soWriteEnable;
 
     // Size of buffer in dwords.
     uint32_t bufferSize;
@@ -660,10 +680,6 @@ struct SWR_STREAMOUT_BUFFER
 
     // Offset into buffer in dwords. SOS will increment this offset.
     uint32_t streamOffset;
-
-    // Offset to the SO write offset. If not null then we update offset here.
-    uint32_t* pWriteOffset;
-
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -718,6 +734,11 @@ struct SWR_GS_STATE
 {
     bool gsEnable;
 
+    // If true, geometry shader emits a single stream, with separate cut buffer.
+    // If false, geometry shader emits vertices for multiple streams to the stream buffer, with a separate StreamID buffer
+    // to map vertices to streams
+    bool isSingleStream;
+
     // Number of input attributes per vertex. Used by the frontend to
     // optimize assembling primitives for GS
     uint32_t numInputAttribs;
@@ -730,14 +751,9 @@ struct SWR_GS_STATE
 
     // Maximum number of verts that can be emitted by a single instance of the GS
     uint32_t maxNumVerts;
-    
+
     // Instance count
     uint32_t instanceCount;
-
-    // If true, geometry shader emits a single stream, with separate cut buffer.
-    // If false, geometry shader emits vertices for multiple streams to the stream buffer, with a separate StreamID buffer
-    // to map vertices to streams
-    bool isSingleStream;
 
     // When single stream is enabled, singleStreamID dictates which stream is being output.
     // field ignored if isSingleStream is false
@@ -768,7 +784,11 @@ struct SWR_GS_STATE
     // Set this to non-zero to indicate that the shader outputs a static number of verts. If zero, shader is
     // expected to store the final vertex count in the first dword of the gs output stream.
     uint32_t staticVertexCount;
+
+    uint32_t pad;
 };
+static_assert(sizeof(SWR_GS_STATE) == 64,
+    "Adjust padding to keep size (or remove this assert)");
 
 
 //////////////////////////////////////////////////////////////////////////
@@ -814,6 +834,7 @@ enum SWR_TS_DOMAIN
 struct SWR_TS_STATE
 {
     bool                    tsEnable;
+
     SWR_TS_OUTPUT_TOPOLOGY  tsOutputTopology;   // @llvm_enum
     SWR_TS_PARTITIONING     partitioning;       // @llvm_enum
     SWR_TS_DOMAIN           domain;             // @llvm_enum
@@ -850,11 +871,9 @@ enum SWR_MULTISAMPLE_COUNT
     SWR_MULTISAMPLE_TYPE_COUNT
 };
 
-INLINE uint32_t GetNumSamples(SWR_MULTISAMPLE_COUNT sampleCount) // @llvm_func_start
+static INLINE uint32_t GetNumSamples(/* SWR_SAMPLE_COUNT */ int sampleCountEnum) // @llvm_func_start
 {
-    static const uint32_t sampleCountLUT[SWR_MULTISAMPLE_TYPE_COUNT] {1, 2, 4, 8, 16};
-    assert(sampleCount < SWR_MULTISAMPLE_TYPE_COUNT);
-    return sampleCountLUT[sampleCount];
+    return uint32_t(1) << sampleCountEnum;
 } // @llvm_func_end
 
 struct SWR_BLEND_STATE
@@ -863,35 +882,48 @@ struct SWR_BLEND_STATE
     float constantColor[4];
 
     // alpha test reference value in unorm8 or float32
-    uint32_t alphaTestReference; 
+    uint32_t alphaTestReference;
     uint32_t sampleMask;
     // all RT's have the same sample count
     ///@todo move this to Output Merger state when we refactor
-    SWR_MULTISAMPLE_COUNT sampleCount;  // @llvm_enum 
+    SWR_MULTISAMPLE_COUNT sampleCount;  // @llvm_enum
 
     SWR_RENDER_TARGET_BLEND_STATE renderTarget[SWR_NUM_RENDERTARGETS];
 };
 static_assert(sizeof(SWR_BLEND_STATE) == 36, "Invalid SWR_BLEND_STATE size");
 
+struct SWR_BLEND_CONTEXT
+{
+    const SWR_BLEND_STATE*  pBlendState;
+    simdvector*             src;
+    simdvector*             src1;
+    simdvector*             src0alpha;
+    uint32_t                sampleNum;
+    simdvector*             pDst;
+    simdvector*             result;
+    simdscalari*            oMask;
+    simdscalari*            pMask;
+    uint32_t                isAlphaTested;
+    uint32_t                isAlphaBlended;
+};
+
 //////////////////////////////////////////////////////////////////////////
 /// FUNCTION POINTERS FOR SHADERS
 
 #if USE_SIMD16_SHADERS
-typedef void(__cdecl *PFN_FETCH_FUNC)(HANDLE hPrivateData, SWR_FETCH_CONTEXT& fetchInfo, simd16vertex& out);
+typedef void(__cdecl *PFN_FETCH_FUNC)(HANDLE hPrivateData, HANDLE hWorkerPrivateData, SWR_FETCH_CONTEXT& fetchInfo, simd16vertex& out);
 #else
-typedef void(__cdecl *PFN_FETCH_FUNC)(HANDLE hPrivateData, SWR_FETCH_CONTEXT& fetchInfo, simdvertex& out);
+typedef void(__cdecl *PFN_FETCH_FUNC)(HANDLE hPrivateData, HANDLE hWorkerPrivateData, SWR_FETCH_CONTEXT& fetchInfo, simdvertex& out);
 #endif
-typedef void(__cdecl *PFN_VERTEX_FUNC)(HANDLE hPrivateData, SWR_VS_CONTEXT* pVsContext);
-typedef void(__cdecl *PFN_HS_FUNC)(HANDLE hPrivateData, SWR_HS_CONTEXT* pHsContext);
-typedef void(__cdecl *PFN_DS_FUNC)(HANDLE hPrivateData, SWR_DS_CONTEXT* pDsContext);
-typedef void(__cdecl *PFN_GS_FUNC)(HANDLE hPrivateData, SWR_GS_CONTEXT* pGsContext);
-typedef void(__cdecl *PFN_CS_FUNC)(HANDLE hPrivateData, SWR_CS_CONTEXT* pCsContext);
+typedef void(__cdecl *PFN_VERTEX_FUNC)(HANDLE hPrivateData, HANDLE hWorkerPrivateData, SWR_VS_CONTEXT* pVsContext);
+typedef void(__cdecl *PFN_HS_FUNC)(HANDLE hPrivateData, HANDLE hWorkerPrivateData, SWR_HS_CONTEXT* pHsContext);
+typedef void(__cdecl *PFN_DS_FUNC)(HANDLE hPrivateData, HANDLE hWorkerPrivateData, SWR_DS_CONTEXT* pDsContext);
+typedef void(__cdecl *PFN_GS_FUNC)(HANDLE hPrivateData, HANDLE hWorkerPrivateData, SWR_GS_CONTEXT* pGsContext);
+typedef void(__cdecl *PFN_CS_FUNC)(HANDLE hPrivateData, HANDLE hWorkerPrivateData, SWR_CS_CONTEXT* pCsContext);
 typedef void(__cdecl *PFN_SO_FUNC)(SWR_STREAMOUT_CONTEXT& soContext);
-typedef void(__cdecl *PFN_PIXEL_KERNEL)(HANDLE hPrivateData, SWR_PS_CONTEXT *pContext);
-typedef void(__cdecl *PFN_CPIXEL_KERNEL)(HANDLE hPrivateData, SWR_PS_CONTEXT *pContext);
-typedef void(__cdecl *PFN_BLEND_JIT_FUNC)(const SWR_BLEND_STATE*, 
-    simdvector& vSrc, simdvector& vSrc1, simdscalar& vSrc0Alpha, uint32_t sample, 
-    uint8_t* pDst, simdvector& vResult, simdscalari* vOMask, simdscalari* vCoverageMask);
+typedef void(__cdecl *PFN_PIXEL_KERNEL)(HANDLE hPrivateData, HANDLE hWorkerPrivateData, SWR_PS_CONTEXT *pContext);
+typedef void(__cdecl *PFN_CPIXEL_KERNEL)(HANDLE hPrivateData, HANDLE hWorkerPrivateData, SWR_PS_CONTEXT *pContext);
+typedef void(__cdecl *PFN_BLEND_JIT_FUNC)(SWR_BLEND_CONTEXT*);
 typedef simdscalar(*PFN_QUANTIZE_DEPTH)(simdscalar const &);
 
 
@@ -917,7 +949,7 @@ struct SWR_FRONTEND_STATE
     } provokingVertex;
     uint32_t topologyProvokingVertex; // provoking vertex for the draw topology
 
-    // Size of a vertex in simdvector units. Should be sized to the 
+    // Size of a vertex in simdvector units. Should be sized to the
     // maximum of the input/output of the vertex shader.
     uint32_t vsVertexSize;
 };
@@ -1013,7 +1045,7 @@ public:
     INLINE const simdscalar& vY(uint32_t sampleNum) const { return _vY[sampleNum]; }; // @llvm_func
     INLINE const __m128i& TileSampleOffsetsX() const { return tileSampleOffsetsX; }; // @llvm_func
     INLINE const __m128i& TileSampleOffsetsY() const { return tileSampleOffsetsY; }; // @llvm_func
-    
+
     INLINE void PrecalcSampleData(int numSamples); //@llvm_func
 
 private:
@@ -1081,7 +1113,7 @@ enum SWR_CONSTANT_SOURCE
 
 struct SWR_ATTRIB_SWIZZLE
 {
-    uint16_t sourceAttrib : 5;          // source attribute 
+    uint16_t sourceAttrib : 5;          // source attribute
     uint16_t constantSource : 2;        // constant source to apply
     uint16_t componentOverrideMask : 4; // override component with constant source
 };
@@ -1092,27 +1124,33 @@ struct SWR_BACKEND_STATE
     uint32_t constantInterpolationMask;     // bitmask indicating which attributes have constant interpolation
     uint32_t pointSpriteTexCoordMask;       // bitmask indicating the attribute(s) which should be interpreted as tex coordinates
 
+    bool swizzleEnable;                 // when enabled, core will parse the swizzle map when
+                                        // setting up attributes for the backend, otherwise
+                                        // all attributes up to numAttributes will be sent
     uint8_t numAttributes;                  // total number of attributes to send to backend (up to 32)
     uint8_t numComponents[32];              // number of components to setup per attribute, this reduces some calculations for unneeded components
 
-    bool swizzleEnable;                 // when enabled, core will parse the swizzle map when 
-                                        // setting up attributes for the backend, otherwise
-                                        // all attributes up to numAttributes will be sent
-    SWR_ATTRIB_SWIZZLE swizzleMap[32];
-
     bool readRenderTargetArrayIndex;    // Forward render target array index from last FE stage to the backend
     bool readViewportArrayIndex;        // Read viewport array index from last FE stage during binning
-    
-	// Offset to the start of the attributes of the input vertices, in simdvector units
-    uint32_t vertexAttribOffset;
 
     // User clip/cull distance enables
     uint8_t cullDistanceMask;
     uint8_t clipDistanceMask;
 
+    // padding to ensure swizzleMap starts 64B offset from start of the struct
+    // and that the next fields are dword aligned.
+    uint8_t pad[10];
+
+        // Offset to the start of the attributes of the input vertices, in simdvector units
+    uint32_t vertexAttribOffset;
+
     // Offset to clip/cull attrib section of the vertex, in simdvector units
     uint32_t vertexClipCullOffset;
+
+    SWR_ATTRIB_SWIZZLE swizzleMap[32];
 };
+static_assert(sizeof(SWR_BACKEND_STATE) == 128,
+    "Adjust padding to keep size (or remove this assert)");
 
 
 union SWR_DEPTH_STENCIL_STATE
@@ -1167,8 +1205,8 @@ enum SWR_INPUT_COVERAGE
 
 enum SWR_PS_POSITION_OFFSET
 {
-    SWR_PS_POSITION_SAMPLE_NONE, 
-    SWR_PS_POSITION_SAMPLE_OFFSET, 
+    SWR_PS_POSITION_SAMPLE_NONE,
+    SWR_PS_POSITION_SAMPLE_OFFSET,
     SWR_PS_POSITION_CENTROID_OFFSET,
     SWR_PS_POSITION_OFFSET_COUNT,
 };
@@ -1194,7 +1232,7 @@ struct SWR_PS_STATE
     uint32_t shadingRate            : 2;    // shading per pixel / sample / coarse pixel
     uint32_t posOffset              : 2;    // type of offset (none, sample, centroid) to add to pixel position
     uint32_t barycentricsMask       : 3;    // which type(s) of barycentric coords does the PS interpolate attributes with
-    uint32_t usesUAV                : 1;    // pixel shader accesses UAV 
+    uint32_t usesUAV                : 1;    // pixel shader accesses UAV
     uint32_t forceEarlyZ            : 1;    // force execution of early depth/stencil test
 
     uint8_t renderTargetMask;               // Mask of render targets written

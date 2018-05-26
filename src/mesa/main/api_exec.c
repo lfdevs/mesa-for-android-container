@@ -714,6 +714,7 @@ _mesa_initialize_exec_table(struct gl_context *ctx)
       SET_DeleteShader(exec, _mesa_DeleteShader);
       SET_EndPerfQueryINTEL(exec, _mesa_EndPerfQueryINTEL);
       SET_EndQuery(exec, _mesa_EndQuery);
+      SET_FramebufferFetchBarrierEXT(exec, _mesa_FramebufferFetchBarrierEXT);
       SET_GenQueries(exec, _mesa_GenQueries);
       SET_GetActiveAttrib(exec, _mesa_GetActiveAttrib);
       SET_GetActiveUniform(exec, _mesa_GetActiveUniform);
@@ -1540,6 +1541,9 @@ _mesa_initialize_exec_table(struct gl_context *ctx)
       SET_TexGeniv(exec, _mesa_TexGeniv);
       SET_Translatef(exec, _mesa_Translatef);
    }
+   if (ctx->API == API_OPENGL_COMPAT || ctx->API == API_OPENGL_CORE) {
+      SET_GetVertexAttribLui64vARB(exec, _mesa_GetVertexAttribLui64vARB);
+   }
    if (ctx->API == API_OPENGL_COMPAT || ctx->API == API_OPENGL_CORE || (ctx->API == API_OPENGLES2 && ctx->Version >= 31)) {
       SET_FramebufferParameteri(exec, _mesa_FramebufferParameteri);
       SET_TexBuffer(exec, _mesa_TexBuffer);
@@ -1590,7 +1594,6 @@ _mesa_initialize_exec_table(struct gl_context *ctx)
       SET_GetVertexArrayIndexediv(exec, _mesa_GetVertexArrayIndexediv);
       SET_GetVertexArrayiv(exec, _mesa_GetVertexArrayiv);
       SET_GetVertexAttribLdv(exec, _mesa_GetVertexAttribLdv);
-      SET_GetVertexAttribLui64vARB(exec, _mesa_GetVertexAttribLui64vARB);
       SET_GetnUniformi64vARB(exec, _mesa_GetnUniformi64vARB);
       SET_GetnUniformui64vARB(exec, _mesa_GetnUniformui64vARB);
       SET_InvalidateNamedFramebufferData(exec, _mesa_InvalidateNamedFramebufferData);

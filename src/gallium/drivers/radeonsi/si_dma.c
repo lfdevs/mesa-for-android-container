@@ -1,5 +1,7 @@
 /*
  * Copyright 2010 Jerome Glisse <glisse@freedesktop.org>
+ * Copyright 2018 Advanced Micro Devices, Inc.
+ * All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -33,7 +35,7 @@ static void si_dma_copy_buffer(struct si_context *ctx,
 				uint64_t src_offset,
 				uint64_t size)
 {
-	struct radeon_winsys_cs *cs = ctx->b.dma.cs;
+	struct radeon_winsys_cs *cs = ctx->dma_cs;
 	unsigned i, ncopy, count, max_size, sub_cmd, shift;
 	struct r600_resource *rdst = (struct r600_resource*)dst;
 	struct r600_resource *rsrc = (struct r600_resource*)src;
@@ -59,7 +61,7 @@ static void si_dma_copy_buffer(struct si_context *ctx,
 	}
 
 	ncopy = DIV_ROUND_UP(size, max_size);
-	si_need_dma_space(&ctx->b, ncopy * 5, rdst, rsrc);
+	si_need_dma_space(ctx, ncopy * 5, rdst, rsrc);
 
 	for (i = 0; i < ncopy; i++) {
 		count = MIN2(size, max_size);
@@ -75,20 +77,19 @@ static void si_dma_copy_buffer(struct si_context *ctx,
 	}
 }
 
-static void si_dma_clear_buffer(struct pipe_context *ctx,
+static void si_dma_clear_buffer(struct si_context *sctx,
 				struct pipe_resource *dst,
 				uint64_t offset,
 				uint64_t size,
 				unsigned clear_value)
 {
-	struct si_context *sctx = (struct si_context *)ctx;
-	struct radeon_winsys_cs *cs = sctx->b.dma.cs;
+	struct radeon_winsys_cs *cs = sctx->dma_cs;
 	unsigned i, ncopy, csize;
 	struct r600_resource *rdst = r600_resource(dst);
 
 	if (!cs || offset % 4 != 0 || size % 4 != 0 ||
 	    dst->flags & PIPE_RESOURCE_FLAG_SPARSE) {
-		ctx->clear_buffer(ctx, dst, offset, size, &clear_value, 4);
+		sctx->b.clear_buffer(&sctx->b, dst, offset, size, &clear_value, 4);
 		return;
 	}
 
@@ -101,7 +102,7 @@ static void si_dma_clear_buffer(struct pipe_context *ctx,
 
 	/* the same maximum size as for copying */
 	ncopy = DIV_ROUND_UP(size, SI_DMA_COPY_MAX_DWORD_ALIGNED_SIZE);
-	si_need_dma_space(&sctx->b, ncopy * 4, rdst, NULL);
+	si_need_dma_space(sctx, ncopy * 4, rdst, NULL);
 
 	for (i = 0; i < ncopy; i++) {
 		csize = MIN2(size, SI_DMA_COPY_MAX_DWORD_ALIGNED_SIZE);
@@ -130,7 +131,7 @@ static void si_dma_copy_tile(struct si_context *ctx,
 			     unsigned pitch,
 			     unsigned bpp)
 {
-	struct radeon_winsys_cs *cs = ctx->b.dma.cs;
+	struct radeon_winsys_cs *cs = ctx->dma_cs;
 	struct r600_texture *rsrc = (struct r600_texture*)src;
 	struct r600_texture *rdst = (struct r600_texture*)dst;
 	unsigned dst_mode = rdst->surface.u.legacy.level[dst_level].mode;
@@ -190,7 +191,7 @@ static void si_dma_copy_tile(struct si_context *ctx,
 	mt = G_009910_MICRO_TILE_MODE(tile_mode);
 	size = copy_height * pitch;
 	ncopy = DIV_ROUND_UP(size, SI_DMA_COPY_MAX_DWORD_ALIGNED_SIZE);
-	si_need_dma_space(&ctx->b, ncopy * 9, &rdst->resource, &rsrc->resource);
+	si_need_dma_space(ctx, ncopy * 9, &rdst->resource, &rsrc->resource);
 
 	for (i = 0; i < ncopy; i++) {
 		cheight = copy_height;
@@ -231,7 +232,7 @@ static void si_dma_copy(struct pipe_context *ctx,
 	unsigned src_x, src_y;
 	unsigned dst_x = dstx, dst_y = dsty, dst_z = dstz;
 
-	if (sctx->b.dma.cs == NULL ||
+	if (sctx->dma_cs == NULL ||
 	    src->flags & PIPE_RESOURCE_FLAG_SPARSE ||
 	    dst->flags & PIPE_RESOURCE_FLAG_SPARSE) {
 		goto fallback;
@@ -258,8 +259,8 @@ static void si_dma_copy(struct pipe_context *ctx,
 	goto fallback;
 
 	if (src_box->depth > 1 ||
-	    !si_prepare_for_dma_blit(&sctx->b, rdst, dst_level, dstx, dsty,
-					dstz, rsrc, src_level, src_box))
+	    !si_prepare_for_dma_blit(sctx, rdst, dst_level, dstx, dsty,
+				     dstz, rsrc, src_level, src_box))
 		goto fallback;
 
 	src_x = util_format_get_nblocksx(src->format, src_box->x);
@@ -323,6 +324,6 @@ fallback:
 
 void si_init_dma_functions(struct si_context *sctx)
 {
-	sctx->b.dma_copy = si_dma_copy;
-	sctx->b.dma_clear_buffer = si_dma_clear_buffer;
+	sctx->dma_copy = si_dma_copy;
+	sctx->dma_clear_buffer = si_dma_clear_buffer;
 }

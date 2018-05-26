@@ -124,6 +124,7 @@
 #define		SURFACE_BASE_UPDATE_COLOR_NUM(x) (((1 << x) - 1) << 1)
 #define		SURFACE_BASE_UPDATE_STRMOUT(x) (0x200 << (x))
 
+#define EVENT_TYPE_CS_PARTIAL_FLUSH            0x07 /* eg+ */
 #define EVENT_TYPE_PS_PARTIAL_FLUSH            0x10
 #define EVENT_TYPE_CACHE_FLUSH_AND_INV_TS_EVENT 0x14
 #define EVENT_TYPE_ZPASS_DONE                  0x15

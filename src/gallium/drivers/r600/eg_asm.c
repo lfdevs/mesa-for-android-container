@@ -112,7 +112,8 @@ int eg_bytecode_cf_build(struct r600_bytecode *bc, struct r600_bytecode_cf *cf)
 			                S_SQ_CF_ALLOC_EXPORT_WORD1_VALID_PIXEL_MODE(cf->vpm) |
 					S_SQ_CF_ALLOC_EXPORT_WORD1_CF_INST(opcode) |
 					S_SQ_CF_ALLOC_EXPORT_WORD1_BUF_COMP_MASK(cf->output.comp_mask) |
-					S_SQ_CF_ALLOC_EXPORT_WORD1_BUF_ARRAY_SIZE(cf->output.array_size);
+					S_SQ_CF_ALLOC_EXPORT_WORD1_BUF_ARRAY_SIZE(cf->output.array_size) |
+					S_SQ_CF_ALLOC_EXPORT_WORD1_MARK(cf->output.mark);
 			if (bc->chip_class == EVERGREEN) /* no EOP on cayman */
 				bc->bytecode[id] |= S_SQ_CF_ALLOC_EXPORT_WORD1_END_OF_PROGRAM(cf->end_of_program);
 			id++;
@@ -137,6 +138,7 @@ int eg_bytecode_cf_build(struct r600_bytecode *bc, struct r600_bytecode_cf *cf)
 			/* other instructions */
 			bc->bytecode[id++] = S_SQ_CF_WORD0_ADDR(cf->cf_addr >> 1);
 			bc->bytecode[id] = S_SQ_CF_WORD1_CF_INST(opcode) |
+					S_SQ_CF_WORD1_VALID_PIXEL_MODE(cf->vpm) |
 					S_SQ_CF_WORD1_BARRIER(1) |
 					S_SQ_CF_WORD1_COND(cf->cond) |
 					S_SQ_CF_WORD1_POP_COUNT(cf->pop_count) |

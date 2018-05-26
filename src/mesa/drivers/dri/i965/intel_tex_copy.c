@@ -88,7 +88,7 @@ intel_copy_texsubimage(struct brw_context *brw,
                              x, y, irb->Base.Base.Name == 0,
                              intelImage->mt, dst_level, dst_slice,
                              dstx, dsty, false,
-                             width, height, GL_COPY);
+                             width, height, COLOR_LOGICOP_COPY);
 }
 
 

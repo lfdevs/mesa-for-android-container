@@ -149,7 +149,7 @@ etna_compile_rs_state(struct etna_context *ctx, struct compiled_rs_state *cs,
          !rs->swap_rb && !rs->flip &&
          !rs->clear_mode && rs->source_padded_width) {
       /* Total number of tiles (same as for autodisable) */
-      cs->RS_KICKER_INPLACE = rs->source_padded_width * rs->source_padded_height / 16;
+      cs->RS_KICKER_INPLACE = rs->tile_count;
    }
    cs->source_ts_valid = rs->source_ts_valid;
 }
@@ -725,7 +725,8 @@ etna_try_rs_blit(struct pipe_context *pctx,
       .dither = {0xffffffff, 0xffffffff}, // XXX dither when going from 24 to 16 bit?
       .clear_mode = VIVS_RS_CLEAR_CONTROL_MODE_DISABLED,
       .width = width,
-      .height = height
+      .height = height,
+      .tile_count = src_lev->layer_stride / 64
    });
 
    etna_submit_rs_state(ctx, &copy_to_screen);
@@ -800,7 +801,7 @@ etna_blit_rs(struct pipe_context *pctx, const struct pipe_blit_info *blit_info)
 void
 etna_clear_blit_rs_init(struct pipe_context *pctx)
 {
-   DBG("etnaviv: Using RS blit engine\n");
+   DBG("etnaviv: Using RS blit engine");
    pctx->clear = etna_clear_rs;
    pctx->blit = etna_blit_rs;
 }

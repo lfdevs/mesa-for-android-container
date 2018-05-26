@@ -147,68 +147,6 @@ check_directories_created(const char *cache_dir)
    expect_true(sub_dirs_created, "create sub dirs");
 }
 
-#define CACHE_TEST_TMP "./cache-test-tmp"
-
-static void
-test_disk_cache_create(void)
-{
-   struct disk_cache *cache;
-   int err;
-
-   /* Before doing anything else, ensure that with
-    * MESA_GLSL_CACHE_DISABLE set to true, that disk_cache_create returns NULL.
-    */
-   setenv("MESA_GLSL_CACHE_DISABLE", "true", 1);
-   cache = disk_cache_create("test", "make_check", 0);
-   expect_null(cache, "disk_cache_create with MESA_GLSL_CACHE_DISABLE set");
-
-   unsetenv("MESA_GLSL_CACHE_DISABLE");
-
-   /* For the first real disk_cache_create() clear these environment
-    * variables to test creation of cache in home directory.
-    */
-   unsetenv("MESA_GLSL_CACHE_DIR");
-   unsetenv("XDG_CACHE_HOME");
-
-   cache = disk_cache_create("test", "make_check", 0);
-   expect_non_null(cache, "disk_cache_create with no environment variables");
-
-   disk_cache_destroy(cache);
-
-   /* Test with XDG_CACHE_HOME set */
-   setenv("XDG_CACHE_HOME", CACHE_TEST_TMP "/xdg-cache-home", 1);
-   cache = disk_cache_create("test", "make_check", 0);
-   expect_null(cache, "disk_cache_create with XDG_CACHE_HOME set with"
-               "a non-existing parent directory");
-
-   mkdir(CACHE_TEST_TMP, 0755);
-   cache = disk_cache_create("test", "make_check", 0);
-   expect_non_null(cache, "disk_cache_create with XDG_CACHE_HOME set");
-
-   check_directories_created(CACHE_TEST_TMP "/xdg-cache-home/"
-                             CACHE_DIR_NAME);
-
-   disk_cache_destroy(cache);
-
-   /* Test with MESA_GLSL_CACHE_DIR set */
-   err = rmrf_local(CACHE_TEST_TMP);
-   expect_equal(err, 0, "Removing " CACHE_TEST_TMP);
-
-   setenv("MESA_GLSL_CACHE_DIR", CACHE_TEST_TMP "/mesa-glsl-cache-dir", 1);
-   cache = disk_cache_create("test", "make_check", 0);
-   expect_null(cache, "disk_cache_create with MESA_GLSL_CACHE_DIR set with"
-               "a non-existing parent directory");
-
-   mkdir(CACHE_TEST_TMP, 0755);
-   cache = disk_cache_create("test", "make_check", 0);
-   expect_non_null(cache, "disk_cache_create with MESA_GLSL_CACHE_DIR set");
-
-   check_directories_created(CACHE_TEST_TMP "/mesa-glsl-cache-dir/"
-                             CACHE_DIR_NAME);
-
-   disk_cache_destroy(cache);
-}
-
 static bool
 does_cache_contain(struct disk_cache *cache, const cache_key key)
 {
@@ -242,6 +180,84 @@ wait_until_file_written(struct disk_cache *cache, const cache_key key)
 
       nanosleep(&req, &rem);
    }
+}
+
+static void *
+cache_exists(struct disk_cache *cache)
+{
+   uint8_t dummy_key[20];
+   char data[] = "some test data";
+
+   if (!cache)
+      return NULL;
+
+   disk_cache_put(cache, dummy_key, data, sizeof(data), NULL);
+   wait_until_file_written(cache, dummy_key);
+   return disk_cache_get(cache, dummy_key, NULL);
+}
+
+#define CACHE_TEST_TMP "./cache-test-tmp"
+
+static void
+test_disk_cache_create(void)
+{
+   struct disk_cache *cache;
+   int err;
+
+   /* Before doing anything else, ensure that with
+    * MESA_GLSL_CACHE_DISABLE set to true, that disk_cache_create returns NULL.
+    */
+   setenv("MESA_GLSL_CACHE_DISABLE", "true", 1);
+   cache = disk_cache_create("test", "make_check", 0);
+   expect_null(cache, "disk_cache_create with MESA_GLSL_CACHE_DISABLE set");
+
+   unsetenv("MESA_GLSL_CACHE_DISABLE");
+
+   /* For the first real disk_cache_create() clear these environment
+    * variables to test creation of cache in home directory.
+    */
+   unsetenv("MESA_GLSL_CACHE_DIR");
+   unsetenv("XDG_CACHE_HOME");
+
+   cache = disk_cache_create("test", "make_check", 0);
+   expect_non_null(cache, "disk_cache_create with no environment variables");
+
+   disk_cache_destroy(cache);
+
+   /* Test with XDG_CACHE_HOME set */
+   setenv("XDG_CACHE_HOME", CACHE_TEST_TMP "/xdg-cache-home", 1);
+   cache = disk_cache_create("test", "make_check", 0);
+   expect_null(cache_exists(cache), "disk_cache_create with XDG_CACHE_HOME set "
+               "with a non-existing parent directory");
+
+   mkdir(CACHE_TEST_TMP, 0755);
+   cache = disk_cache_create("test", "make_check", 0);
+   expect_non_null(cache_exists(cache), "disk_cache_create with XDG_CACHE_HOME "
+                   "set");
+
+   check_directories_created(CACHE_TEST_TMP "/xdg-cache-home/"
+                             CACHE_DIR_NAME);
+
+   disk_cache_destroy(cache);
+
+   /* Test with MESA_GLSL_CACHE_DIR set */
+   err = rmrf_local(CACHE_TEST_TMP);
+   expect_equal(err, 0, "Removing " CACHE_TEST_TMP);
+
+   setenv("MESA_GLSL_CACHE_DIR", CACHE_TEST_TMP "/mesa-glsl-cache-dir", 1);
+   cache = disk_cache_create("test", "make_check", 0);
+   expect_null(cache_exists(cache), "disk_cache_create with MESA_GLSL_CACHE_DIR"
+               " set with a non-existing parent directory");
+
+   mkdir(CACHE_TEST_TMP, 0755);
+   cache = disk_cache_create("test", "make_check", 0);
+   expect_non_null(cache_exists(cache), "disk_cache_create with "
+                   "MESA_GLSL_CACHE_DIR set");
+
+   check_directories_created(CACHE_TEST_TMP "/mesa-glsl-cache-dir/"
+                             CACHE_DIR_NAME);
+
+   disk_cache_destroy(cache);
 }
 
 static void

@@ -46,6 +46,7 @@ enum special_regs {
 	SV_LDS_RW,
 	SV_LDS_OQA,
 	SV_LDS_OQB,
+	SV_SCRATCH
 };
 
 class node;
@@ -517,6 +518,9 @@ public:
 			v = v->gvn_source;
 		return v;
 	}
+	bool is_scratch() {
+		return is_special_reg() && select == sel_chan(SV_SCRATCH, 0);
+	}
 
 	bool is_float_0_or_1() {
 		value *v = gvalue();
@@ -611,6 +615,12 @@ public:
 			return gpr.chan();
 		}
 	}
+
+	/* Check whether copy-propagation of src into this would create an access
+	 * conflict with relative addressing, i.e. an operation that tries to access
+	 * array elements with different address register values.
+	 */
+	bool no_reladdr_conflict_with(value *src);
 
 	val_set interferences;
 	unsigned uid;

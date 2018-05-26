@@ -1,5 +1,5 @@
 /****************************************************************************
-* Copyright (C) 2014-2016 Intel Corporation.   All Rights Reserved.
+* Copyright (C) 2014-2018 Intel Corporation.   All Rights Reserved.
 *
 * Permission is hereby granted, free of charge, to any person obtaining a
 * copy of this software and associated documentation files (the "Software"),
@@ -115,7 +115,8 @@ struct SWR_RECT
 /// @param x - destination x coordinate
 /// @param y - destination y coordinate
 /// @param pDstHotTile - pointer to the hot tile surface
-typedef void(SWR_API *PFN_LOAD_TILE)(HANDLE hPrivateContext, SWR_FORMAT dstFormat,
+typedef void(SWR_API *PFN_LOAD_TILE)(HANDLE hPrivateContext, HANDLE hWorkerPrivateData,
+    SWR_FORMAT dstFormat,
     SWR_RENDERTARGET_ATTACHMENT renderTargetIndex,
     uint32_t x, uint32_t y, uint32_t renderTargetArrayIndex, uint8_t *pDstHotTile);
 
@@ -127,7 +128,8 @@ typedef void(SWR_API *PFN_LOAD_TILE)(HANDLE hPrivateContext, SWR_FORMAT dstForma
 /// @param x - destination x coordinate
 /// @param y - destination y coordinate
 /// @param pSrcHotTile - pointer to the hot tile surface
-typedef void(SWR_API *PFN_STORE_TILE)(HANDLE hPrivateContext, SWR_FORMAT srcFormat,
+typedef void(SWR_API *PFN_STORE_TILE)(HANDLE hPrivateContext, HANDLE hWorkerPrivateData,
+    SWR_FORMAT srcFormat,
     SWR_RENDERTARGET_ATTACHMENT renderTargetIndex,
     uint32_t x, uint32_t y, uint32_t renderTargetArrayIndex, uint8_t *pSrcHotTile);
 
@@ -139,7 +141,7 @@ typedef void(SWR_API *PFN_STORE_TILE)(HANDLE hPrivateContext, SWR_FORMAT srcForm
 /// @param y - destination y coordinate
 /// @param renderTargetArrayIndex - render target array offset from arrayIndex
 /// @param pClearColor - pointer to the hot tile's clear value
-typedef void(SWR_API *PFN_CLEAR_TILE)(HANDLE hPrivateContext,
+typedef void(SWR_API *PFN_CLEAR_TILE)(HANDLE hPrivateContext, HANDLE hWorkerPrivateData,
     SWR_RENDERTARGET_ATTACHMENT rtIndex,
     uint32_t x, uint32_t y, uint32_t renderTargetArrayIndex, const float* pClearColor);
 
@@ -208,6 +210,21 @@ struct SWR_API_THREADING_INFO
                                     // Independent of KNOB_MAX_THREADS_PER_CORE.
 };
 
+//////////////////////////////////////////////////////////////////////////
+/// SWR_WORKER_PRIVATE_STATE
+/// Data used to allocate per-worker thread private data.  A pointer
+/// to this data will be passed in to each shader function.
+/////////////////////////////////////////////////////////////////////////
+struct SWR_WORKER_PRIVATE_STATE
+{
+    typedef void (SWR_API *PFN_WORKER_DATA)(HANDLE hWorkerPrivateData, uint32_t iWorkerNum);
+
+    size_t              perWorkerPrivateStateSize;  ///< Amount of data to allocate per-worker
+    PFN_WORKER_DATA     pfnInitWorkerData;          ///< Init function for worker data.  If null
+                                                    ///< worker data will be initialized to 0.
+    PFN_WORKER_DATA     pfnFinishWorkerData;        ///< Finish / destroy function for worker data.
+                                                    ///< Can be null.
+};
 
 //////////////////////////////////////////////////////////////////////////
 /// SWR_CREATECONTEXT_INFO
@@ -216,7 +233,10 @@ struct SWR_CREATECONTEXT_INFO
 {
     // External functions (e.g. sampler) need per draw context state.
     // Use SwrGetPrivateContextState() to access private state.
-    uint32_t privateStateSize;
+    size_t                      privateStateSize;
+
+    // Optional per-worker state, can be NULL for no worker-private data
+    SWR_WORKER_PRIVATE_STATE*   pWorkerPrivateState;
 
     // Callback functions
     PFN_LOAD_TILE               pfnLoadTile;
@@ -229,23 +249,23 @@ struct SWR_CREATECONTEXT_INFO
 
     // Pointer to rdtsc buckets mgr returned to the caller.
     // Only populated when KNOB_ENABLE_RDTSC is set
-    BucketManager* pBucketMgr;
+    BucketManager*              pBucketMgr;
 
     // Output: size required memory passed to for SwrSaveState / SwrRestoreState
-    size_t  contextSaveSize;
+    size_t                      contextSaveSize;
 
     // ArchRast event manager.
-    HANDLE  hArEventManager;
+    HANDLE                      hArEventManager;
 
     // Input (optional): Threading info that overrides any set KNOB values.
-    SWR_THREADING_INFO* pThreadInfo;
+    SWR_THREADING_INFO*         pThreadInfo;
 
-    // Input (optional}: Info for reserving API threads
-    SWR_API_THREADING_INFO* pApiThreadInfo;
+    // Input (optional): Info for reserving API threads
+    SWR_API_THREADING_INFO*     pApiThreadInfo;
 
     // Input: if set to non-zero value, overrides KNOB value for maximum
     // number of draws in flight
-    uint32_t MAX_DRAWS_IN_FLIGHT;
+    uint32_t                    MAX_DRAWS_IN_FLIGHT;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -714,6 +734,7 @@ SWR_FUNC(void, SwrInit);
 /// @param x, y - Coordinates to raster tile.
 /// @param pDstHotTile - Pointer to Hot Tile
 SWR_FUNC(void, SwrLoadHotTile,
+    HANDLE hWorkerPrivateData,
     const SWR_SURFACE_STATE *pSrcSurface,
     SWR_FORMAT dstFormat,
     SWR_RENDERTARGET_ATTACHMENT renderTargetIndex,
@@ -728,6 +749,7 @@ SWR_FUNC(void, SwrLoadHotTile,
 /// @param x, y - Coordinates to raster tile.
 /// @param pSrcHotTile - Pointer to Hot Tile
 SWR_FUNC(void, SwrStoreHotTileToSurface,
+    HANDLE hWorkerPrivateData,
     SWR_SURFACE_STATE *pDstSurface,
     SWR_FORMAT srcFormat,
     SWR_RENDERTARGET_ATTACHMENT renderTargetIndex,
@@ -741,6 +763,7 @@ SWR_FUNC(void, SwrStoreHotTileToSurface,
 /// @param x, y - Coordinates to raster tile.
 /// @param pClearColor - Pointer to clear color
 SWR_FUNC(void, SwrStoreHotTileClear,
+         HANDLE hWorkerPrivateData,
          SWR_SURFACE_STATE *pDstSurface,
          SWR_RENDERTARGET_ATTACHMENT renderTargetIndex,
          uint32_t x,

@@ -127,7 +127,7 @@ anv_nir_lower_input_attachments(nir_shader *shader)
 
             nir_intrinsic_instr *load = nir_instr_as_intrinsic(instr);
 
-            if (load->intrinsic != nir_intrinsic_image_load)
+            if (load->intrinsic != nir_intrinsic_image_var_load)
                continue;
 
             try_lower_input_load(function->impl, load);

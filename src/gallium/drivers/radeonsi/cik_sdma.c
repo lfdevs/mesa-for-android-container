@@ -1,6 +1,7 @@
 /*
  * Copyright 2010 Jerome Glisse <glisse@freedesktop.org>
- * Copyright 2014,2015 Advanced Micro Devices, Inc.
+ * Copyright 2015 Advanced Micro Devices, Inc.
+ * All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -32,7 +33,7 @@ static void cik_sdma_copy_buffer(struct si_context *ctx,
 				 uint64_t src_offset,
 				 uint64_t size)
 {
-	struct radeon_winsys_cs *cs = ctx->b.dma.cs;
+	struct radeon_winsys_cs *cs = ctx->dma_cs;
 	unsigned i, ncopy, csize;
 	struct r600_resource *rdst = r600_resource(dst);
 	struct r600_resource *rsrc = r600_resource(src);
@@ -47,14 +48,14 @@ static void cik_sdma_copy_buffer(struct si_context *ctx,
 	src_offset += rsrc->gpu_address;
 
 	ncopy = DIV_ROUND_UP(size, CIK_SDMA_COPY_MAX_SIZE);
-	si_need_dma_space(&ctx->b, ncopy * 7, rdst, rsrc);
+	si_need_dma_space(ctx, ncopy * 7, rdst, rsrc);
 
 	for (i = 0; i < ncopy; i++) {
 		csize = MIN2(size, CIK_SDMA_COPY_MAX_SIZE);
 		radeon_emit(cs, CIK_SDMA_PACKET(CIK_SDMA_OPCODE_COPY,
 						CIK_SDMA_COPY_SUB_OPCODE_LINEAR,
 						0));
-		radeon_emit(cs, ctx->b.chip_class >= GFX9 ? csize - 1 : csize);
+		radeon_emit(cs, ctx->chip_class >= GFX9 ? csize - 1 : csize);
 		radeon_emit(cs, 0); /* src/dst endian swap */
 		radeon_emit(cs, src_offset);
 		radeon_emit(cs, src_offset >> 32);
@@ -66,20 +67,19 @@ static void cik_sdma_copy_buffer(struct si_context *ctx,
 	}
 }
 
-static void cik_sdma_clear_buffer(struct pipe_context *ctx,
+static void cik_sdma_clear_buffer(struct si_context *sctx,
 				  struct pipe_resource *dst,
 				  uint64_t offset,
 				  uint64_t size,
 				  unsigned clear_value)
 {
-	struct si_context *sctx = (struct si_context *)ctx;
-	struct radeon_winsys_cs *cs = sctx->b.dma.cs;
+	struct radeon_winsys_cs *cs = sctx->dma_cs;
 	unsigned i, ncopy, csize;
 	struct r600_resource *rdst = r600_resource(dst);
 
 	if (!cs || offset % 4 != 0 || size % 4 != 0 ||
 	    dst->flags & PIPE_RESOURCE_FLAG_SPARSE) {
-		ctx->clear_buffer(ctx, dst, offset, size, &clear_value, 4);
+		sctx->b.clear_buffer(&sctx->b, dst, offset, size, &clear_value, 4);
 		return;
 	}
 
@@ -92,7 +92,7 @@ static void cik_sdma_clear_buffer(struct pipe_context *ctx,
 
 	/* the same maximum size as for copying */
 	ncopy = DIV_ROUND_UP(size, CIK_SDMA_COPY_MAX_SIZE);
-	si_need_dma_space(&sctx->b, ncopy * 5, rdst, NULL);
+	si_need_dma_space(sctx, ncopy * 5, rdst, NULL);
 
 	for (i = 0; i < ncopy; i++) {
 		csize = MIN2(size, CIK_SDMA_COPY_MAX_SIZE);
@@ -101,7 +101,7 @@ static void cik_sdma_clear_buffer(struct pipe_context *ctx,
 		radeon_emit(cs, offset);
 		radeon_emit(cs, offset >> 32);
 		radeon_emit(cs, clear_value);
-		radeon_emit(cs, sctx->b.chip_class >= GFX9 ? csize - 1 : csize);
+		radeon_emit(cs, sctx->chip_class >= GFX9 ? csize - 1 : csize);
 		offset += csize;
 		size -= csize;
 	}
@@ -191,8 +191,8 @@ static bool cik_sdma_copy_texture(struct si_context *sctx,
 	       src_slice_pitch * bpp * (srcz + src_box->depth) <=
 	       rsrc->resource.buf->size);
 
-	if (!si_prepare_for_dma_blit(&sctx->b, rdst, dst_level, dstx, dsty,
-					dstz, rsrc, src_level, src_box))
+	if (!si_prepare_for_dma_blit(sctx, rdst, dst_level, dstx, dsty,
+				     dstz, rsrc, src_level, src_box))
 		return false;
 
 	dstx /= rdst->surface.blk_w;
@@ -221,18 +221,18 @@ static bool cik_sdma_copy_texture(struct si_context *sctx,
 	    copy_height <= (1 << 14) &&
 	    copy_depth <= (1 << 11) &&
 	    /* HW limitation - CIK: */
-	    (sctx->b.chip_class != CIK ||
+	    (sctx->chip_class != CIK ||
 	     (copy_width < (1 << 14) &&
 	      copy_height < (1 << 14) &&
 	      copy_depth < (1 << 11))) &&
 	    /* HW limitation - some CIK parts: */
-	    ((sctx->b.family != CHIP_BONAIRE &&
-	      sctx->b.family != CHIP_KAVERI) ||
+	    ((sctx->family != CHIP_BONAIRE &&
+	      sctx->family != CHIP_KAVERI) ||
 	     (srcx + copy_width != (1 << 14) &&
 	      srcy + copy_height != (1 << 14)))) {
-		struct radeon_winsys_cs *cs = sctx->b.dma.cs;
+		struct radeon_winsys_cs *cs = sctx->dma_cs;
 
-		si_need_dma_space(&sctx->b, 13, &rdst->resource, &rsrc->resource);
+		si_need_dma_space(sctx, 13, &rdst->resource, &rsrc->resource);
 
 		radeon_emit(cs, CIK_SDMA_PACKET(CIK_SDMA_OPCODE_COPY,
 						CIK_SDMA_COPY_SUB_OPCODE_LINEAR_SUB_WINDOW, 0) |
@@ -247,7 +247,7 @@ static bool cik_sdma_copy_texture(struct si_context *sctx,
 		radeon_emit(cs, dstx | (dsty << 16));
 		radeon_emit(cs, dstz | ((dst_pitch - 1) << 16));
 		radeon_emit(cs, dst_slice_pitch - 1);
-		if (sctx->b.chip_class == CIK) {
+		if (sctx->chip_class == CIK) {
 			radeon_emit(cs, copy_width | (copy_height << 16));
 			radeon_emit(cs, copy_depth);
 		} else {
@@ -298,22 +298,22 @@ static bool cik_sdma_copy_texture(struct si_context *sctx,
 			copy_width_aligned = align(copy_width, xalign);
 
 		/* HW limitations. */
-		if ((sctx->b.family == CHIP_BONAIRE ||
-		     sctx->b.family == CHIP_KAVERI) &&
+		if ((sctx->family == CHIP_BONAIRE ||
+		     sctx->family == CHIP_KAVERI) &&
 		    linear_pitch - 1 == 0x3fff &&
 		    bpp == 16)
 			return false;
 
-		if (sctx->b.chip_class == CIK &&
+		if (sctx->chip_class == CIK &&
 		    (copy_width_aligned == (1 << 14) ||
 		     copy_height == (1 << 14) ||
 		     copy_depth == (1 << 11)))
 			return false;
 
-		if ((sctx->b.family == CHIP_BONAIRE ||
-		     sctx->b.family == CHIP_KAVERI ||
-		     sctx->b.family == CHIP_KABINI ||
-		     sctx->b.family == CHIP_MULLINS) &&
+		if ((sctx->family == CHIP_BONAIRE ||
+		     sctx->family == CHIP_KAVERI ||
+		     sctx->family == CHIP_KABINI ||
+		     sctx->family == CHIP_MULLINS) &&
 		    (tiled_x + copy_width == (1 << 14) ||
 		     tiled_y + copy_height == (1 << 14)))
 			return false;
@@ -392,10 +392,10 @@ static bool cik_sdma_copy_texture(struct si_context *sctx,
 		    copy_width_aligned <= (1 << 14) &&
 		    copy_height <= (1 << 14) &&
 		    copy_depth <= (1 << 11)) {
-			struct radeon_winsys_cs *cs = sctx->b.dma.cs;
+			struct radeon_winsys_cs *cs = sctx->dma_cs;
 			uint32_t direction = linear == rdst ? 1u << 31 : 0;
 
-			si_need_dma_space(&sctx->b, 14, &rdst->resource, &rsrc->resource);
+			si_need_dma_space(sctx, 14, &rdst->resource, &rsrc->resource);
 
 			radeon_emit(cs, CIK_SDMA_PACKET(CIK_SDMA_OPCODE_COPY,
 							CIK_SDMA_COPY_SUB_OPCODE_TILED_SUB_WINDOW, 0) |
@@ -411,7 +411,7 @@ static bool cik_sdma_copy_texture(struct si_context *sctx,
 			radeon_emit(cs, linear_x | (linear_y << 16));
 			radeon_emit(cs, linear_z | ((linear_pitch - 1) << 16));
 			radeon_emit(cs, linear_slice_pitch - 1);
-			if (sctx->b.chip_class == CIK) {
+			if (sctx->chip_class == CIK) {
 				radeon_emit(cs, copy_width_aligned | (copy_height << 16));
 				radeon_emit(cs, copy_depth);
 			} else {
@@ -436,7 +436,7 @@ static bool cik_sdma_copy_texture(struct si_context *sctx,
 	    srcy % 8 == 0 &&
 	    /* this can either be equal, or display->rotated (VI+ only) */
 	    (src_micro_mode == dst_micro_mode ||
-	     (sctx->b.chip_class >= VI &&
+	     (sctx->chip_class >= VI &&
 	      src_micro_mode == V_009910_ADDR_SURF_DISPLAY_MICRO_TILING &&
 	      dst_micro_mode == V_009910_ADDR_SURF_ROTATED_MICRO_TILING))) {
 		assert(src_pitch % 8 == 0);
@@ -475,21 +475,21 @@ static bool cik_sdma_copy_texture(struct si_context *sctx,
 		    copy_width_aligned % 8 == 0 &&
 		    copy_height_aligned % 8 == 0 &&
 		    /* HW limitation - CIK: */
-		    (sctx->b.chip_class != CIK ||
+		    (sctx->chip_class != CIK ||
 		     (copy_width_aligned < (1 << 14) &&
 		      copy_height_aligned < (1 << 14) &&
 		      copy_depth < (1 << 11))) &&
 		    /* HW limitation - some CIK parts: */
-		    ((sctx->b.family != CHIP_BONAIRE &&
-		      sctx->b.family != CHIP_KAVERI &&
-		      sctx->b.family != CHIP_KABINI &&
-		      sctx->b.family != CHIP_MULLINS) ||
+		    ((sctx->family != CHIP_BONAIRE &&
+		      sctx->family != CHIP_KAVERI &&
+		      sctx->family != CHIP_KABINI &&
+		      sctx->family != CHIP_MULLINS) ||
 		     (srcx + copy_width_aligned != (1 << 14) &&
 		      srcy + copy_height_aligned != (1 << 14) &&
 		      dstx + copy_width != (1 << 14)))) {
-			struct radeon_winsys_cs *cs = sctx->b.dma.cs;
+			struct radeon_winsys_cs *cs = sctx->dma_cs;
 
-			si_need_dma_space(&sctx->b, 15, &rdst->resource, &rsrc->resource);
+			si_need_dma_space(sctx, 15, &rdst->resource, &rsrc->resource);
 
 			radeon_emit(cs, CIK_SDMA_PACKET(CIK_SDMA_OPCODE_COPY,
 							CIK_SDMA_COPY_SUB_OPCODE_T2T_SUB_WINDOW, 0));
@@ -505,7 +505,7 @@ static bool cik_sdma_copy_texture(struct si_context *sctx,
 			radeon_emit(cs, dstz | (dst_pitch_tile_max << 16));
 			radeon_emit(cs, dst_slice_tile_max);
 			radeon_emit(cs, encode_tile_info(sctx, rdst, dst_level, false));
-			if (sctx->b.chip_class == CIK) {
+			if (sctx->chip_class == CIK) {
 				radeon_emit(cs, copy_width_aligned |
 						(copy_height_aligned << 16));
 				radeon_emit(cs, copy_depth);
@@ -531,7 +531,7 @@ static void cik_sdma_copy(struct pipe_context *ctx,
 {
 	struct si_context *sctx = (struct si_context *)ctx;
 
-	if (!sctx->b.dma.cs ||
+	if (!sctx->dma_cs ||
 	    src->flags & PIPE_RESOURCE_FLAG_SPARSE ||
 	    dst->flags & PIPE_RESOURCE_FLAG_SPARSE)
 		goto fallback;
@@ -541,7 +541,7 @@ static void cik_sdma_copy(struct pipe_context *ctx,
 		return;
 	}
 
-	if ((sctx->b.chip_class == CIK || sctx->b.chip_class == VI) &&
+	if ((sctx->chip_class == CIK || sctx->chip_class == VI) &&
 	    cik_sdma_copy_texture(sctx, dst, dst_level, dstx, dsty, dstz,
 				  src, src_level, src_box))
 		return;
@@ -553,6 +553,6 @@ fallback:
 
 void cik_init_sdma_functions(struct si_context *sctx)
 {
-	sctx->b.dma_copy = cik_sdma_copy;
-	sctx->b.dma_clear_buffer = cik_sdma_clear_buffer;
+	sctx->dma_copy = cik_sdma_copy;
+	sctx->dma_clear_buffer = cik_sdma_clear_buffer;
 }

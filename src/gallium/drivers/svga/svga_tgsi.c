@@ -168,7 +168,8 @@ svga_shader_emit_header(struct svga_shader_emitter *emit)
 struct svga_shader_variant *
 svga_tgsi_vgpu9_translate(struct svga_context *svga,
                           const struct svga_shader *shader,
-                          const struct svga_compile_key *key, unsigned unit)
+                          const struct svga_compile_key *key,
+                          enum pipe_shader_type unit)
 {
    struct svga_shader_variant *variant = NULL;
    struct svga_shader_emitter emit;

@@ -183,6 +183,17 @@ fd2_pipe2surface(enum pipe_format format)
 	case PIPE_FORMAT_R32G32B32A32_FLOAT:
 		return FMT_32_32_32_32_FLOAT;
 
+	/* Compressed textures. */
+	case PIPE_FORMAT_ETC1_RGB8:
+		return FMT_ETC1_RGB;
+	case PIPE_FORMAT_DXT1_RGB:
+	case PIPE_FORMAT_DXT1_RGBA:
+		return FMT_DXT1;
+	case PIPE_FORMAT_DXT3_RGBA:
+		return FMT_DXT2_3;
+	case PIPE_FORMAT_DXT5_RGBA:
+		return FMT_DXT4_5;
+
 	/* YUV buffers. */
 	case PIPE_FORMAT_UYVY:
 		return FMT_Cr_Y1_Cb_Y0;
@@ -309,14 +320,14 @@ fd2_tex_swiz(enum pipe_format format, unsigned swizzle_r, unsigned swizzle_g,
 {
 	const struct util_format_description *desc =
 			util_format_description(format);
-	uint8_t swiz[] = {
-			swizzle_r, swizzle_g, swizzle_b, swizzle_a,
-			PIPE_SWIZZLE_0, PIPE_SWIZZLE_1,
-			PIPE_SWIZZLE_1, PIPE_SWIZZLE_1,
-	};
+	unsigned char swiz[4] = {
+		swizzle_r, swizzle_g, swizzle_b, swizzle_a,
+	}, rswiz[4];
 
-	return A2XX_SQ_TEX_3_SWIZ_X(tex_swiz(swiz[desc->swizzle[0]])) |
-			A2XX_SQ_TEX_3_SWIZ_Y(tex_swiz(swiz[desc->swizzle[1]])) |
-			A2XX_SQ_TEX_3_SWIZ_Z(tex_swiz(swiz[desc->swizzle[2]])) |
-			A2XX_SQ_TEX_3_SWIZ_W(tex_swiz(swiz[desc->swizzle[3]]));
+	util_format_compose_swizzles(desc->swizzle, swiz, rswiz);
+
+	return A2XX_SQ_TEX_3_SWIZ_X(tex_swiz(rswiz[0])) |
+			A2XX_SQ_TEX_3_SWIZ_Y(tex_swiz(rswiz[1])) |
+			A2XX_SQ_TEX_3_SWIZ_Z(tex_swiz(rswiz[2])) |
+			A2XX_SQ_TEX_3_SWIZ_W(tex_swiz(rswiz[3]));
 }

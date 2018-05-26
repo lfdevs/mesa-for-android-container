@@ -2683,39 +2683,6 @@ Fake_glXAssociateDMPbufferSGIX(Display *dpy, GLXPbufferSGIX pbuffer, DMparams *p
 #endif
 
 
-/*** GLX_SGIX_swap_group ***/
-
-static void
-Fake_glXJoinSwapGroupSGIX(Display *dpy, GLXDrawable drawable, GLXDrawable member)
-{
-   (void) dpy;
-   (void) drawable;
-   (void) member;
-}
-
-
-
-/*** GLX_SGIX_swap_barrier ***/
-
-static void
-Fake_glXBindSwapBarrierSGIX(Display *dpy, GLXDrawable drawable, int barrier)
-{
-   (void) dpy;
-   (void) drawable;
-   (void) barrier;
-}
-
-static Bool
-Fake_glXQueryMaxSwapBarriersSGIX(Display *dpy, int screen, int *max)
-{
-   (void) dpy;
-   (void) screen;
-   (void) max;
-   return False;
-}
-
-
-
 /*** GLX_SUN_get_transparent_index ***/
 
 static Status
@@ -2955,13 +2922,6 @@ _mesa_GetGLXDispatchTable(void)
 #if defined(_DM_BUFFER_H_)
    glx.AssociateDMPbufferSGIX = NULL;
 #endif
-
-   /*** GLX_SGIX_swap_group ***/
-   glx.JoinSwapGroupSGIX = Fake_glXJoinSwapGroupSGIX;
-
-   /*** GLX_SGIX_swap_barrier ***/
-   glx.BindSwapBarrierSGIX = Fake_glXBindSwapBarrierSGIX;
-   glx.QueryMaxSwapBarriersSGIX = Fake_glXQueryMaxSwapBarriersSGIX;
 
    /*** GLX_SUN_get_transparent_index ***/
    glx.GetTransparentIndexSUN = Fake_glXGetTransparentIndexSUN;

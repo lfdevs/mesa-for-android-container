@@ -189,7 +189,7 @@ emit_instruction(struct svga_shader_emitter *emit,
 
 /** Generate a SVGA3dShaderInstToken for the given SVGA3D shader opcode */
 static inline SVGA3dShaderInstToken
-inst_token(unsigned opcode)
+inst_token(SVGA3dShaderOpCodeType opcode)
 {
    SVGA3dShaderInstToken inst;
 
@@ -205,7 +205,7 @@ inst_token(unsigned opcode)
  * with the predication flag set.
  */
 static inline SVGA3dShaderInstToken
-inst_token_predicated(unsigned opcode)
+inst_token_predicated(SVGA3dShaderOpCodeType opcode)
 {
    SVGA3dShaderInstToken inst;
 
@@ -222,7 +222,7 @@ inst_token_predicated(unsigned opcode)
  * using the given comparison operator (one of SVGA3DOPCOMP_xx).
  */
 static inline SVGA3dShaderInstToken
-inst_token_setp(unsigned operator)
+inst_token_setp(SVGA3dShaderOpCodeCompFnType operator)
 {
    SVGA3dShaderInstToken inst;
 
@@ -240,7 +240,7 @@ inst_token_setp(unsigned operator)
  * temp registers AND constants (see emit_def_const()).
  */
 static inline SVGA3dShaderDestToken
-dst_register(unsigned file, int number)
+dst_register(SVGA3dShaderRegType file, int number)
 {
    SVGA3dShaderDestToken dest;
 
@@ -278,7 +278,7 @@ writemask(SVGA3dShaderDestToken dest, unsigned mask)
 
 /** Create a SVGA3dShaderSrcToken given a register file and number */
 static inline SVGA3dShaderSrcToken
-src_token(unsigned file, int number)
+src_token(SVGA3dShaderRegType file, int number)
 {
    SVGA3dShaderSrcToken src;
 
@@ -302,7 +302,7 @@ src_token(unsigned file, int number)
 
 /** Create a src_register given a register file and register number */
 static inline struct src_register
-src_register(unsigned file, int number)
+src_register(SVGA3dShaderRegType file, int number)
 {
    struct src_register src;
 

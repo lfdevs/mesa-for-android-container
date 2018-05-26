@@ -2,7 +2,7 @@
 
 include $(top_srcdir)/src/gallium/Automake.inc
 
-EXTRA_DIST = SConscript
+EXTRA_DIST = SConscript meson.build
 
 AM_CFLAGS = \
 	$(GALLIUM_CFLAGS)
@@ -14,7 +14,6 @@ AM_CPPFLAGS = \
 LDADD = \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
 	$(top_builddir)/src/util/libmesautil.la \
-	$(top_builddir)/src/gallium/drivers/trace/libtrace.la \
 	$(top_builddir)/src/gallium/winsys/sw/null/libws_null.la \
 	$(top_builddir)/src/gallium/drivers/softpipe/libsoftpipe.la \
 	$(GALLIUM_COMMON_LIB_DEPS)

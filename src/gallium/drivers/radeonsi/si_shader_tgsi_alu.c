@@ -1,5 +1,6 @@
 /*
  * Copyright 2016 Advanced Micro Devices, Inc.
+ * All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -53,20 +54,10 @@ static void kill_if_fetch_args(struct lp_build_tgsi_context *bld_base,
 	emit_data->args[0] = conds[0];
 }
 
-static void kil_emit(const struct lp_build_tgsi_action *action,
-		     struct lp_build_tgsi_context *bld_base,
-		     struct lp_build_emit_data *emit_data)
+void si_llvm_emit_kill(struct ac_shader_abi *abi, LLVMValueRef visible)
 {
-	struct si_shader_context *ctx = si_shader_context(bld_base);
+	struct si_shader_context *ctx = si_shader_context_from_abi(abi);
 	LLVMBuilderRef builder = ctx->ac.builder;
-	LLVMValueRef visible;
-
-	if (emit_data->inst->Instruction.Opcode == TGSI_OPCODE_KILL_IF) {
-		visible = emit_data->args[0];
-	} else {
-		assert(emit_data->inst->Instruction.Opcode == TGSI_OPCODE_KILL);
-		visible = LLVMConstInt(ctx->i1, false, 0);
-	}
 
 	if (ctx->shader->selector->force_correct_derivs_after_kill) {
 		/* LLVM 6.0 can kill immediately while maintaining WQM. */
@@ -82,6 +73,23 @@ static void kil_emit(const struct lp_build_tgsi_action *action,
 	}
 
 	ac_build_kill_if_false(&ctx->ac, visible);
+}
+
+static void kil_emit(const struct lp_build_tgsi_action *action,
+		     struct lp_build_tgsi_context *bld_base,
+		     struct lp_build_emit_data *emit_data)
+{
+	struct si_shader_context *ctx = si_shader_context(bld_base);
+	LLVMValueRef visible;
+
+	if (emit_data->inst->Instruction.Opcode == TGSI_OPCODE_KILL_IF) {
+		visible = emit_data->args[0];
+	} else {
+		assert(emit_data->inst->Instruction.Opcode == TGSI_OPCODE_KILL);
+		visible = LLVMConstInt(ctx->i1, false, 0);
+	}
+
+	si_llvm_emit_kill(&ctx->abi, visible);
 }
 
 static void emit_icmp(const struct lp_build_tgsi_action *action,
@@ -348,30 +356,17 @@ static void emit_ssg(const struct lp_build_tgsi_action *action,
 		     struct lp_build_emit_data *emit_data)
 {
 	struct si_shader_context *ctx = si_shader_context(bld_base);
-	LLVMBuilderRef builder = ctx->ac.builder;
 
-	LLVMValueRef cmp, val;
+	LLVMValueRef  val;
 
 	if (emit_data->inst->Instruction.Opcode == TGSI_OPCODE_I64SSG) {
-		cmp = LLVMBuildICmp(builder, LLVMIntSGT, emit_data->args[0], bld_base->int64_bld.zero, "");
-		val = LLVMBuildSelect(builder, cmp, bld_base->int64_bld.one, emit_data->args[0], "");
-		cmp = LLVMBuildICmp(builder, LLVMIntSGE, val, bld_base->int64_bld.zero, "");
-		val = LLVMBuildSelect(builder, cmp, val, LLVMConstInt(ctx->i64, -1, true), "");
+		val = ac_build_isign(&ctx->ac, emit_data->args[0], 64);
 	} else if (emit_data->inst->Instruction.Opcode == TGSI_OPCODE_ISSG) {
-		cmp = LLVMBuildICmp(builder, LLVMIntSGT, emit_data->args[0], ctx->i32_0, "");
-		val = LLVMBuildSelect(builder, cmp, ctx->i32_1, emit_data->args[0], "");
-		cmp = LLVMBuildICmp(builder, LLVMIntSGE, val, ctx->i32_0, "");
-		val = LLVMBuildSelect(builder, cmp, val, LLVMConstInt(ctx->i32, -1, true), "");
+		val = ac_build_isign(&ctx->ac, emit_data->args[0], 32);
 	} else if (emit_data->inst->Instruction.Opcode == TGSI_OPCODE_DSSG) {
-		cmp = LLVMBuildFCmp(builder, LLVMRealOGT, emit_data->args[0], bld_base->dbl_bld.zero, "");
-		val = LLVMBuildSelect(builder, cmp, bld_base->dbl_bld.one, emit_data->args[0], "");
-		cmp = LLVMBuildFCmp(builder, LLVMRealOGE, val, bld_base->dbl_bld.zero, "");
-		val = LLVMBuildSelect(builder, cmp, val, LLVMConstReal(bld_base->dbl_bld.elem_type, -1), "");
-	} else { // float SSG
-		cmp = LLVMBuildFCmp(builder, LLVMRealOGT, emit_data->args[0], ctx->ac.f32_0, "");
-		val = LLVMBuildSelect(builder, cmp, ctx->ac.f32_1, emit_data->args[0], "");
-		cmp = LLVMBuildFCmp(builder, LLVMRealOGE, val, ctx->ac.f32_0, "");
-		val = LLVMBuildSelect(builder, cmp, val, LLVMConstReal(ctx->f32, -1), "");
+		val = ac_build_fsign(&ctx->ac, emit_data->args[0], 64);
+	} else {
+		val = ac_build_fsign(&ctx->ac, emit_data->args[0], 32);
 	}
 
 	emit_data->output[emit_data->chan] = val;
@@ -400,22 +395,19 @@ static void emit_frac(const struct lp_build_tgsi_action *action,
 		      struct lp_build_emit_data *emit_data)
 {
 	struct si_shader_context *ctx = si_shader_context(bld_base);
-	char *intr;
+	unsigned bitsize;
 
 	if (emit_data->info->opcode == TGSI_OPCODE_FRC)
-		intr = "llvm.floor.f32";
+		bitsize = 32;
 	else if (emit_data->info->opcode == TGSI_OPCODE_DFRAC)
-		intr = "llvm.floor.f64";
+		bitsize = 64;
 	else {
 		assert(0);
 		return;
 	}
 
-	LLVMValueRef floor = lp_build_intrinsic(ctx->ac.builder, intr, emit_data->dst_type,
-						&emit_data->args[0], 1,
-						LP_FUNC_ATTR_READNONE);
-	emit_data->output[emit_data->chan] = LLVMBuildFSub(ctx->ac.builder,
-			emit_data->args[0], floor, "");
+	emit_data->output[emit_data->chan] =
+		ac_build_fract(&ctx->ac, emit_data->args[0], bitsize);
 }
 
 static void emit_f2i(const struct lp_build_tgsi_action *action,

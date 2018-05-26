@@ -86,7 +86,6 @@ setup_l3_config(struct brw_context *brw, const struct gen_l3_config *cfg)
     */
    brw_emit_pipe_control_flush(brw,
                                PIPE_CONTROL_DATA_CACHE_FLUSH |
-                               PIPE_CONTROL_NO_WRITE |
                                PIPE_CONTROL_CS_STALL);
 
    /* ...followed by a second pipelined PIPE_CONTROL that initiates
@@ -107,15 +106,13 @@ setup_l3_config(struct brw_context *brw, const struct gen_l3_config *cfg)
                                PIPE_CONTROL_TEXTURE_CACHE_INVALIDATE |
                                PIPE_CONTROL_CONST_CACHE_INVALIDATE |
                                PIPE_CONTROL_INSTRUCTION_INVALIDATE |
-                               PIPE_CONTROL_STATE_CACHE_INVALIDATE |
-                               PIPE_CONTROL_NO_WRITE);
+                               PIPE_CONTROL_STATE_CACHE_INVALIDATE);
 
    /* Now send a third stalling flush to make sure that invalidation is
     * complete when the L3 configuration registers are modified.
     */
    brw_emit_pipe_control_flush(brw,
                                PIPE_CONTROL_DATA_CACHE_FLUSH |
-                               PIPE_CONTROL_NO_WRITE |
                                PIPE_CONTROL_CS_STALL);
 
    if (devinfo->gen >= 8) {

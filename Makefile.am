@@ -45,7 +45,7 @@ AM_DISTCHECK_CONFIGURE_FLAGS = \
 	--enable-libunwind \
 	--with-platforms=x11,wayland,drm,surfaceless \
 	--with-dri-drivers=i915,i965,nouveau,radeon,r200,swrast \
-	--with-gallium-drivers=i915,nouveau,r300,pl111,r600,radeonsi,freedreno,svga,swrast,vc4,virgl,swr,etnaviv,imx \
+	--with-gallium-drivers=i915,nouveau,r300,pl111,r600,radeonsi,freedreno,svga,swrast,vc4,tegra,virgl,swr,etnaviv,imx \
 	--with-vulkan-drivers=intel,radeon
 
 ACLOCAL_AMFLAGS = -I m4
@@ -76,12 +76,14 @@ noinst_HEADERS = \
 	include/drm-uapi/drm_fourcc.h \
 	include/drm-uapi/drm_mode.h \
 	include/drm-uapi/i915_drm.h \
+	include/drm-uapi/tegra_drm.h \
 	include/drm-uapi/vc4_drm.h \
 	include/D3D9 \
 	include/GL/wglext.h \
 	include/HaikuGL \
 	include/no_extern_c.h \
-	include/pci_ids
+	include/pci_ids \
+	include/vulkan
 
 # We list some directories in EXTRA_DIST, but don't actually want to include
 # the .gitignore files in the tarball.

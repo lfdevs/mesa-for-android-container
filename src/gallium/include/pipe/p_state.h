@@ -64,7 +64,7 @@ extern "C" {
 #define PIPE_MAX_SAMPLERS         32
 #define PIPE_MAX_SHADER_INPUTS    80 /* 32 GENERIC + 32 PATCH + 16 others */
 #define PIPE_MAX_SHADER_OUTPUTS   80 /* 32 GENERIC + 32 PATCH + 16 others */
-#define PIPE_MAX_SHADER_SAMPLER_VIEWS 32
+#define PIPE_MAX_SHADER_SAMPLER_VIEWS 128
 #define PIPE_MAX_SHADER_BUFFERS   32
 #define PIPE_MAX_SHADER_IMAGES    32
 #define PIPE_MAX_TEXTURE_LEVELS   16
@@ -267,7 +267,6 @@ struct pipe_shader_state
    /* TODO move tokens into union. */
    const struct tgsi_token *tokens;
    union {
-      void *llvm;
       void *native;
       void *nir;
    } ir;
@@ -782,8 +781,9 @@ struct pipe_blit_info
 struct pipe_grid_info
 {
    /**
-    * For drivers that use PIPE_SHADER_IR_LLVM as their prefered IR, this value
-    * will be the index of the kernel in the opencl.kernels metadata list.
+    * For drivers that use PIPE_SHADER_IR_NATIVE as their prefered IR, this
+    * value will be the index of the kernel in the opencl.kernels metadata
+    * list.
     */
    uint32_t pc;
 

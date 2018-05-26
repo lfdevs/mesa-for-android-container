@@ -451,6 +451,33 @@ enum opcode {
     */
    SHADER_OPCODE_BROADCAST,
 
+   /* Pick the channel from its first source register given by the index
+    * specified as second source.
+    *
+    * This is similar to the BROADCAST instruction except that it takes a
+    * dynamic index and potentially puts a different value in each output
+    * channel.
+    */
+   SHADER_OPCODE_SHUFFLE,
+
+   /* Select between src0 and src1 based on channel enables.
+    *
+    * This instruction copies src0 into the enabled channels of the
+    * destination and copies src1 into the disabled channels.
+    */
+   SHADER_OPCODE_SEL_EXEC,
+
+   /* This turns into an align16 mov from src0 to dst with a swizzle
+    * provided as an immediate in src1.
+    */
+   SHADER_OPCODE_QUAD_SWIZZLE,
+
+   /* Take every Nth element in src0 and broadcast it to the group of N
+    * channels in which it lives in the destination.  The offset within the
+    * cluster is given by src1 and the cluster size is given by src2.
+    */
+   SHADER_OPCODE_CLUSTER_BROADCAST,
+
    SHADER_OPCODE_GET_BUFFER_SIZE,
 
    VEC4_OPCODE_MOV_BYTES,

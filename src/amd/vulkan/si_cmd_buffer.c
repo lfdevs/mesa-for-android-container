@@ -279,6 +279,10 @@ si_set_raster_config(struct radv_physical_device *physical_device,
 		raster_config = 0x16000012;
 		raster_config_1 = 0x00000000;
 		break;
+	case CHIP_VEGAM:
+		raster_config = 0x3a00161a;
+		raster_config_1 = 0x0000002e;
+		break;
 	case CHIP_TONGA:
 		raster_config = 0x16000012;
 		raster_config_1 = 0x0000002a;
@@ -509,6 +513,7 @@ si_emit_config(struct radv_physical_device *physical_device,
 
 		switch (physical_device->rad_info.family) {
 		case CHIP_VEGA10:
+		case CHIP_VEGA12:
 			pc_lines = 4096;
 			break;
 		case CHIP_RAVEN:
@@ -536,6 +541,21 @@ si_emit_config(struct radv_physical_device *physical_device,
 	if (!physical_device->has_clear_state) {
 		radeon_set_context_reg(cs, R_028004_DB_COUNT_CONTROL,
 				       S_028004_ZPASS_INCREMENT_DISABLE(1));
+	}
+
+	/* Enable the Polaris small primitive filter control.
+	 * XXX: There is possibly an issue when MSAA is off (see RadeonSI
+	 * has_msaa_sample_loc_bug). But this doesn't seem to regress anything,
+	 * and AMDVLK doesn't have a workaround as well.
+	 */
+	if (physical_device->rad_info.family >= CHIP_POLARIS10) {
+		unsigned small_prim_filter_cntl =
+			S_028830_SMALL_PRIM_FILTER_ENABLE(1) |
+			/* Workaround for a hw line bug. */
+			S_028830_LINE_FILTER_DISABLE(physical_device->rad_info.family <= CHIP_POLARIS12);
+
+		radeon_set_context_reg(cs, R_028830_PA_SU_SMALL_PRIM_FILTER_CNTL,
+				       small_prim_filter_cntl);
 	}
 
 	si_emit_compute(physical_device, cs);
@@ -741,21 +761,21 @@ si_get_ia_multi_vgt_param(struct radv_cmd_buffer *cmd_buffer,
 	bool ia_switch_on_eop = false;
 	bool ia_switch_on_eoi = false;
 	bool partial_vs_wave = false;
-	bool partial_es_wave = cmd_buffer->state.pipeline->graphics.partial_es_wave;
+	bool partial_es_wave = cmd_buffer->state.pipeline->graphics.ia_multi_vgt_param.partial_es_wave;
 	bool multi_instances_smaller_than_primgroup;
 
 	multi_instances_smaller_than_primgroup = indirect_draw;
 	if (!multi_instances_smaller_than_primgroup && instanced_draw) {
 		uint32_t num_prims = radv_prims_for_vertices(&cmd_buffer->state.pipeline->graphics.prim_vertex_count, draw_vertex_count);
-		if (num_prims < cmd_buffer->state.pipeline->graphics.primgroup_size)
+		if (num_prims < cmd_buffer->state.pipeline->graphics.ia_multi_vgt_param.primgroup_size)
 			multi_instances_smaller_than_primgroup = true;
 	}
 
-	ia_switch_on_eoi = cmd_buffer->state.pipeline->graphics.ia_switch_on_eoi;
-	partial_vs_wave = cmd_buffer->state.pipeline->graphics.partial_vs_wave;
+	ia_switch_on_eoi = cmd_buffer->state.pipeline->graphics.ia_multi_vgt_param.ia_switch_on_eoi;
+	partial_vs_wave = cmd_buffer->state.pipeline->graphics.ia_multi_vgt_param.partial_vs_wave;
 
 	if (chip_class >= CIK) {
-		wd_switch_on_eop = cmd_buffer->state.pipeline->graphics.wd_switch_on_eop;
+		wd_switch_on_eop = cmd_buffer->state.pipeline->graphics.ia_multi_vgt_param.wd_switch_on_eop;
 
 		/* Hawaii hangs if instancing is enabled and WD_SWITCH_ON_EOP is 0.
 		 * We don't know that for indirect drawing, so treat it as
@@ -815,7 +835,7 @@ si_get_ia_multi_vgt_param(struct radv_cmd_buffer *cmd_buffer,
 		}
 	}
 
-	return cmd_buffer->state.pipeline->graphics.base_ia_multi_vgt_param |
+	return cmd_buffer->state.pipeline->graphics.ia_multi_vgt_param.base |
 		S_028AA8_SWITCH_ON_EOP(ia_switch_on_eop) |
 		S_028AA8_SWITCH_ON_EOI(ia_switch_on_eoi) |
 		S_028AA8_PARTIAL_VS_WAVE_ON(partial_vs_wave) |

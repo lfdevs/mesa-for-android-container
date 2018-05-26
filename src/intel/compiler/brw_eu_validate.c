@@ -277,6 +277,7 @@ static enum brw_reg_type
 execution_type_for_type(enum brw_reg_type type)
 {
    switch (type) {
+   case BRW_REGISTER_TYPE_NF:
    case BRW_REGISTER_TYPE_DF:
    case BRW_REGISTER_TYPE_F:
    case BRW_REGISTER_TYPE_HF:

@@ -56,6 +56,7 @@ struct rs_state {
    uint32_t clear_bits;
    uint32_t clear_mode; /* VIVS_RS_CLEAR_CONTROL_MODE_XXX */
    uint32_t clear_value[4];
+   uint32_t tile_count;
    uint8_t aa;
    uint8_t endian_mode; /* ENDIAN_MODE_XXX */
 };

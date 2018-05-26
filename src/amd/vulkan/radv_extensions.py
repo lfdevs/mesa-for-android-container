@@ -31,7 +31,7 @@ import xml.etree.cElementTree as et
 
 from mako.template import Template
 
-MAX_API_VERSION = '1.0.57'
+MAX_API_VERSION = '1.1.70'
 
 class Extension:
     def __init__(self, name, ext_version, enable):
@@ -54,6 +54,8 @@ EXTENSIONS = [
     Extension('VK_KHR_bind_memory2',                      1, True),
     Extension('VK_KHR_dedicated_allocation',              1, True),
     Extension('VK_KHR_descriptor_update_template',        1, True),
+    Extension('VK_KHR_device_group',                      1, True),
+    Extension('VK_KHR_device_group_creation',             1, True),
     Extension('VK_KHR_external_fence',                    1, 'device->rad_info.has_syncobj_wait_for_submit'),
     Extension('VK_KHR_external_fence_capabilities',       1, True),
     Extension('VK_KHR_external_fence_fd',                 1, 'device->rad_info.has_syncobj_wait_for_submit'),
@@ -65,11 +67,12 @@ EXTENSIONS = [
     Extension('VK_KHR_external_semaphore_fd',             1, 'device->rad_info.has_syncobj'),
     Extension('VK_KHR_get_memory_requirements2',          1, True),
     Extension('VK_KHR_get_physical_device_properties2',   1, True),
-    Extension('VK_KHR_get_surface_capabilities2',         1, True),
+    Extension('VK_KHR_get_surface_capabilities2',         1, 'RADV_HAS_SURFACE'),
     Extension('VK_KHR_image_format_list',                 1, True),
-    Extension('VK_KHR_incremental_present',               1, True),
+    Extension('VK_KHR_incremental_present',               1, 'RADV_HAS_SURFACE'),
     Extension('VK_KHR_maintenance1',                      1, True),
     Extension('VK_KHR_maintenance2',                      1, True),
+    Extension('VK_KHR_maintenance3',                      1, True),
     Extension('VK_KHR_push_descriptor',                   1, True),
     Extension('VK_KHR_relaxed_block_layout',              1, True),
     Extension('VK_KHR_sampler_mirror_clamp_to_edge',      1, True),
@@ -81,14 +84,23 @@ EXTENSIONS = [
     Extension('VK_KHR_wayland_surface',                   6, 'VK_USE_PLATFORM_WAYLAND_KHR'),
     Extension('VK_KHR_xcb_surface',                       6, 'VK_USE_PLATFORM_XCB_KHR'),
     Extension('VK_KHR_xlib_surface',                      6, 'VK_USE_PLATFORM_XLIB_KHR'),
-    Extension('VK_KHX_multiview',                         1, False),
+    Extension('VK_KHR_multiview',                         1, True),
     Extension('VK_EXT_debug_report',                      9, True),
+    Extension('VK_EXT_depth_range_unrestricted',          1, True),
+    Extension('VK_EXT_descriptor_indexing',               2, True),
     Extension('VK_EXT_discard_rectangles',                1, True),
     Extension('VK_EXT_external_memory_dma_buf',           1, True),
+    Extension('VK_EXT_external_memory_host',              1, 'device->rad_info.has_userptr'),
     Extension('VK_EXT_global_priority',                   1, 'device->rad_info.has_ctx_priority'),
+    Extension('VK_EXT_sampler_filter_minmax',             1, 'device->rad_info.chip_class >= CIK'),
+    Extension('VK_EXT_shader_viewport_index_layer',       1, True),
+    Extension('VK_EXT_vertex_attribute_divisor',          1, True),
     Extension('VK_AMD_draw_indirect_count',               1, True),
-    Extension('VK_AMD_rasterization_order',               1, 'device->rad_info.chip_class >= VI && device->rad_info.max_se >= 2'),
+    Extension('VK_AMD_gcn_shader',                        1, True),
+    Extension('VK_AMD_rasterization_order',               1, 'device->has_out_of_order_rast'),
+    Extension('VK_AMD_shader_core_properties',            1, True),
     Extension('VK_AMD_shader_info',                       1, True),
+    Extension('VK_AMD_shader_trinary_minmax',             1, True),
 ]
 
 class VkVersion:
@@ -115,7 +127,8 @@ class VkVersion:
         return '.'.join(ver_list)
 
     def c_vk_version(self):
-        ver_list = [str(self.major), str(self.minor), str(self.patch)]
+        patch = self.patch if self.patch is not None else 0
+        ver_list = [str(self.major), str(self.minor), str(patch)]
         return 'VK_MAKE_VERSION(' + ', '.join(ver_list) + ')'
 
     def __int_ver(self):
@@ -148,20 +161,53 @@ def _init_exts_from_xml(xml):
         if ext_name not in ext_name_map:
             continue
 
-        # Workaround for VK_ANDROID_native_buffer. Its <extension> element in
-        # vk.xml lists it as supported="disabled" and provides only a stub
-        # definition.  Its <extension> element in Mesa's custom
-        # vk_android_native_buffer.xml, though, lists it as
-        # supported='android-vendor' and fully defines the extension. We want
-        # to skip the <extension> element in vk.xml.
-        if ext_elem.attrib['supported'] == 'disabled':
-            assert ext_name == 'VK_ANDROID_native_buffer'
-            continue
-
         ext = ext_name_map[ext_name]
         ext.type = ext_elem.attrib['type']
 
-_TEMPLATE = Template(COPYRIGHT + """
+_TEMPLATE_H = Template(COPYRIGHT + """
+#ifndef RADV_EXTENSIONS_H
+#define RADV_EXTENSIONS_H
+
+enum {
+   RADV_INSTANCE_EXTENSION_COUNT = ${len(instance_extensions)},
+   RADV_DEVICE_EXTENSION_COUNT = ${len(device_extensions)},
+};
+
+struct radv_instance_extension_table {
+   union {
+      bool extensions[RADV_INSTANCE_EXTENSION_COUNT];
+      struct {
+%for ext in instance_extensions:
+        bool ${ext.name[3:]};
+%endfor
+      };
+   };
+};
+
+struct radv_device_extension_table {
+   union {
+      bool extensions[RADV_DEVICE_EXTENSION_COUNT];
+      struct {
+%for ext in device_extensions:
+        bool ${ext.name[3:]};
+%endfor
+      };
+   };
+};
+
+const VkExtensionProperties radv_instance_extensions[RADV_INSTANCE_EXTENSION_COUNT];
+const VkExtensionProperties radv_device_extensions[RADV_DEVICE_EXTENSION_COUNT];
+const struct radv_instance_extension_table radv_supported_instance_extensions;
+
+
+struct radv_physical_device;
+
+void radv_fill_device_extension_table(const struct radv_physical_device *device,
+                                      struct radv_device_extension_table* table);
+#endif
+""")
+
+_TEMPLATE_C = Template(COPYRIGHT + """
 #include "radv_private.h"
 
 #include "vk_util.h"
@@ -188,82 +234,52 @@ _TEMPLATE = Template(COPYRIGHT + """
                          VK_USE_PLATFORM_XCB_KHR || \\
                          VK_USE_PLATFORM_XLIB_KHR)
 
-bool
-radv_instance_extension_supported(const char *name)
-{
+const VkExtensionProperties radv_instance_extensions[RADV_INSTANCE_EXTENSION_COUNT] = {
 %for ext in instance_extensions:
-    if (strcmp(name, "${ext.name}") == 0)
-        return ${ext.enable};
+   {"${ext.name}", ${ext.ext_version}},
 %endfor
-    return false;
+};
+
+const VkExtensionProperties radv_device_extensions[RADV_DEVICE_EXTENSION_COUNT] = {
+%for ext in device_extensions:
+   {"${ext.name}", ${ext.ext_version}},
+%endfor
+};
+
+const struct radv_instance_extension_table radv_supported_instance_extensions = {
+%for ext in instance_extensions:
+   .${ext.name[3:]} = ${ext.enable},
+%endfor
+};
+
+void radv_fill_device_extension_table(const struct radv_physical_device *device,
+                                      struct radv_device_extension_table* table)
+{
+%for ext in device_extensions:
+   table->${ext.name[3:]} = ${ext.enable};
+%endfor
 }
 
-VkResult radv_EnumerateInstanceExtensionProperties(
-    const char*                                 pLayerName,
-    uint32_t*                                   pPropertyCount,
-    VkExtensionProperties*                      pProperties)
+VkResult radv_EnumerateInstanceVersion(
+    uint32_t*                                   pApiVersion)
 {
-    VK_OUTARRAY_MAKE(out, pProperties, pPropertyCount);
-
-%for ext in instance_extensions:
-    if (${ext.enable}) {
-        vk_outarray_append(&out, prop) {
-            *prop = (VkExtensionProperties) {
-                .extensionName = "${ext.name}",
-                .specVersion = ${ext.ext_version},
-            };
-        }
-    }
-%endfor
-
-    return vk_outarray_status(&out);
+    *pApiVersion = ${MAX_API_VERSION.c_vk_version()};
+    return VK_SUCCESS;
 }
 
 uint32_t
 radv_physical_device_api_version(struct radv_physical_device *dev)
 {
-    return ${MAX_API_VERSION.c_vk_version()};
-}
-
-bool
-radv_physical_device_extension_supported(struct radv_physical_device *device,
-                                        const char *name)
-{
-%for ext in device_extensions:
-    if (strcmp(name, "${ext.name}") == 0)
-        return ${ext.enable};
-%endfor
-    return false;
-}
-
-VkResult radv_EnumerateDeviceExtensionProperties(
-    VkPhysicalDevice                            physicalDevice,
-    const char*                                 pLayerName,
-    uint32_t*                                   pPropertyCount,
-    VkExtensionProperties*                      pProperties)
-{
-    RADV_FROM_HANDLE(radv_physical_device, device, physicalDevice);
-    VK_OUTARRAY_MAKE(out, pProperties, pPropertyCount);
-    (void)device;
-
-%for ext in device_extensions:
-    if (${ext.enable}) {
-        vk_outarray_append(&out, prop) {
-            *prop = (VkExtensionProperties) {
-                .extensionName = "${ext.name}",
-                .specVersion = ${ext.ext_version},
-            };
-        }
-    }
-%endfor
-
-    return vk_outarray_status(&out);
+    if (!ANDROID && dev->rad_info.has_syncobj_wait_for_submit)
+        return VK_MAKE_VERSION(1, 1, 70);
+    return VK_MAKE_VERSION(1, 0, 68);
 }
 """)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--out', help='Output C file.', required=True)
+    parser.add_argument('--out-c', help='Output C file.', required=True)
+    parser.add_argument('--out-h', help='Output H file.', required=True)
     parser.add_argument('--xml',
                         help='Vulkan API XML file.',
                         required=True,
@@ -283,5 +299,7 @@ if __name__ == '__main__':
         'device_extensions': [e for e in EXTENSIONS if e.type == 'device'],
     }
 
-    with open(args.out, 'w') as f:
-        f.write(_TEMPLATE.render(**template_env))
+    with open(args.out_c, 'w') as f:
+        f.write(_TEMPLATE_C.render(**template_env))
+    with open(args.out_h, 'w') as f:
+        f.write(_TEMPLATE_H.render(**template_env))

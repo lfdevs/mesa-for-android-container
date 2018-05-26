@@ -32,13 +32,12 @@ namespace clover {
    namespace llvm {
       module compile_program(const std::string &source,
                              const header_map &headers,
-                             const std::string &target,
+                             const device &device,
                              const std::string &opts,
                              std::string &r_log);
 
       module link_program(const std::vector<module> &modules,
-                          enum pipe_shader_ir ir,
-                          const std::string &target,
+                          const device &device,
                           const std::string &opts,
                           std::string &r_log);
    }

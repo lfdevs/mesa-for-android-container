@@ -193,7 +193,7 @@ is_texture_source(int s)
 }
 
 static inline struct gl_texgen *
-get_texgen_coord(struct gl_texture_unit *u, int i)
+get_texgen_coord(struct gl_fixedfunc_texture_unit *u, int i)
 {
 	return ((struct gl_texgen *[])
 		{ &u->GenS, &u->GenT, &u->GenR, &u->GenQ }) [i];

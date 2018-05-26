@@ -214,6 +214,9 @@ unop("fquantize2f16", tfloat, "(fabs(src0) < ldexpf(1.0, -14)) ? copysignf(0.0f,
 unop("fsin", tfloat, "bit_size == 64 ? sin(src0) : sinf(src0)")
 unop("fcos", tfloat, "bit_size == 64 ? cos(src0) : cosf(src0)")
 
+# dfrexp
+unop_convert("frexp_exp", tint32, tfloat64, "frexp(src0, &dst);")
+unop_convert("frexp_sig", tfloat64, tfloat64, "int n; dst = frexp(src0, &n);")
 
 # Partial derivatives.
 
@@ -305,17 +308,17 @@ dst = 0;
 for (unsigned bit = 0; bit < 32; bit++)
    dst |= ((src0 >> bit) & 1) << (31 - bit);
 """)
-unop("bit_count", tuint32, """
+unop_convert("bit_count", tuint32, tuint, """
 dst = 0;
-for (unsigned bit = 0; bit < 32; bit++) {
+for (unsigned bit = 0; bit < bit_size; bit++) {
    if ((src0 >> bit) & 1)
       dst++;
 }
 """)
 
-unop_convert("ufind_msb", tint32, tuint32, """
+unop_convert("ufind_msb", tint32, tuint, """
 dst = -1;
-for (int bit = 31; bit >= 0; bit--) {
+for (int bit = bit_size - 1; bit >= 0; bit--) {
    if ((src0 >> bit) & 1) {
       dst = bit;
       break;
@@ -337,9 +340,9 @@ for (int bit = 31; bit >= 0; bit--) {
 }
 """)
 
-unop("find_lsb", tint32, """
+unop_convert("find_lsb", tint32, tint, """
 dst = -1;
-for (unsigned bit = 0; bit < 32; bit++) {
+for (unsigned bit = 0; bit < bit_size; bit++) {
    if ((src0 >> bit) & 1) {
       dst = bit;
       break;
@@ -351,6 +354,34 @@ for (unsigned bit = 0; bit < 32; bit++) {
 for i in xrange(1, 5):
    for j in xrange(1, 5):
       unop_horiz("fnoise{0}_{1}".format(i, j), i, tfloat, j, tfloat, "0.0f")
+
+
+# AMD_gcn_shader extended instructions
+unop_horiz("cube_face_coord", 2, tfloat32, 3, tfloat32, """
+dst.x = dst.y = 0.0;
+float absX = fabs(src0.x);
+float absY = fabs(src0.y);
+float absZ = fabs(src0.z);
+if (src0.x >= 0 && absX >= absY && absX >= absZ) { dst.x = -src0.y; dst.y = -src0.z; }
+if (src0.x < 0 && absX >= absY && absX >= absZ) { dst.x = -src0.y; dst.y = src0.z; }
+if (src0.y >= 0 && absY >= absX && absY >= absZ) { dst.x = src0.z; dst.y = src0.x; }
+if (src0.y < 0 && absY >= absX && absY >= absZ) { dst.x = -src0.z; dst.y = src0.x; }
+if (src0.z >= 0 && absZ >= absX && absZ >= absY) { dst.x = -src0.y; dst.y = src0.x; }
+if (src0.z < 0 && absZ >= absX && absZ >= absY) { dst.x = -src0.y; dst.y = -src0.x; }
+""")
+
+unop_horiz("cube_face_index", 1, tfloat32, 3, tfloat32, """
+float absX = fabs(src0.x);
+float absY = fabs(src0.y);
+float absZ = fabs(src0.z);
+if (src0.x >= 0 && absX >= absY && absX >= absZ) dst.x = 0;
+if (src0.x < 0 && absX >= absY && absX >= absZ) dst.x = 1;
+if (src0.y >= 0 && absY >= absX && absY >= absZ) dst.x = 2;
+if (src0.y < 0 && absY >= absX && absY >= absZ) dst.x = 3;
+if (src0.z >= 0 && absZ >= absX && absZ >= absY) dst.x = 4;
+if (src0.z < 0 && absZ >= absX && absZ >= absY) dst.x = 5;
+""")
+
 
 def binop_convert(name, out_type, in_type, alg_props, const_expr):
    opcode(name, 0, out_type, [0, 0], [in_type, in_type], alg_props, const_expr)
@@ -630,6 +661,20 @@ triop("flrp", tfloat, "src0 * (1 - src2) + src1 * src2")
 
 
 triop("fcsel", tfloat32, "(src0 != 0.0f) ? src1 : src2")
+
+# 3 way min/max/med
+triop("fmin3", tfloat, "fminf(src0, fminf(src1, src2))")
+triop("imin3", tint, "MIN2(src0, MIN2(src1, src2))")
+triop("umin3", tuint, "MIN2(src0, MIN2(src1, src2))")
+
+triop("fmax3", tfloat, "fmaxf(src0, fmaxf(src1, src2))")
+triop("imax3", tint, "MAX2(src0, MAX2(src1, src2))")
+triop("umax3", tuint, "MAX2(src0, MAX2(src1, src2))")
+
+triop("fmed3", tfloat, "fmaxf(fminf(fmaxf(src0, src1), src2), fminf(src0, src1))")
+triop("imed3", tint, "MAX2(MIN2(MAX2(src0, src1), src2), MIN2(src0, src1))")
+triop("umed3", tuint, "MAX2(MIN2(MAX2(src0, src1), src2), MIN2(src0, src1))")
+
 opcode("bcsel", 0, tuint, [0, 0, 0],
       [tbool, tuint, tuint], "", "src0 ? src1 : src2")
 

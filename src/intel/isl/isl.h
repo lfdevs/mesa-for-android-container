@@ -661,31 +661,8 @@ enum isl_aux_usage {
  *
  * Drawing with or without aux enabled may implicitly cause the surface to
  * transition between these states.  There are also four types of auxiliary
- * compression operations which cause an explicit transition:
- *
- *    1) Fast Clear:  This operation writes the magic "clear" value to the
- *       auxiliary surface.  This operation will safely transition any slice
- *       of a surface from any state to the clear state so long as the entire
- *       slice is fast cleared at once.  A fast clear that only covers part of
- *       a slice of a surface is called a partial fast clear.
- *
- *    2) Full Resolve:  This operation combines the auxiliary surface data
- *       with the primary surface data and writes the result to the primary.
- *       For HiZ, the docs call this a depth resolve.  For CCS, the hardware
- *       full resolve operation does both a full resolve and an ambiguate so
- *       it actually takes you all the way to the pass-through state.
- *
- *    3) Partial Resolve:  This operation considers blocks which are in the
- *       "clear" state and writes the clear value directly into the primary or
- *       auxiliary surface.  Once this operation completes, the surface is
- *       still compressed but no longer references the clear color.  This
- *       operation is only available for CCS.
- *
- *    4) Ambiguate:  This operation throws away the current auxiliary data and
- *       replaces it with the magic pass-through value.  If an ambiguate
- *       operation is performed when the primary surface does not contain 100%
- *       of the data, data will be lost.  This operation is only implemented
- *       in hardware for depth where it is called a HiZ resolve.
+ * compression operations which cause an explicit transition which are
+ * described by the isl_aux_op enum below.
  *
  * Not all operations are valid or useful in all states.  The diagram below
  * contains a complete description of the states and all valid and useful
@@ -785,6 +762,53 @@ enum isl_aux_state {
    ISL_AUX_STATE_RESOLVED,
    ISL_AUX_STATE_PASS_THROUGH,
    ISL_AUX_STATE_AUX_INVALID,
+};
+
+/**
+ * Enum which describes explicit aux transition operations.
+ */
+enum isl_aux_op {
+   ISL_AUX_OP_NONE,
+
+   /** Fast Clear
+    *
+    * This operation writes the magic "clear" value to the auxiliary surface.
+    * This operation will safely transition any slice of a surface from any
+    * state to the clear state so long as the entire slice is fast cleared at
+    * once.  A fast clear that only covers part of a slice of a surface is
+    * called a partial fast clear.
+    */
+   ISL_AUX_OP_FAST_CLEAR,
+
+   /** Full Resolve
+    *
+    * This operation combines the auxiliary surface data with the primary
+    * surface data and writes the result to the primary.  For HiZ, the docs
+    * call this a depth resolve.  For CCS, the hardware full resolve operation
+    * does both a full resolve and an ambiguate so it actually takes you all
+    * the way to the pass-through state.
+    */
+   ISL_AUX_OP_FULL_RESOLVE,
+
+   /** Partial Resolve
+    *
+    * This operation considers blocks which are in the "clear" state and
+    * writes the clear value directly into the primary or auxiliary surface.
+    * Once this operation completes, the surface is still compressed but no
+    * longer references the clear color.  This operation is only available
+    * for CCS_E.
+    */
+   ISL_AUX_OP_PARTIAL_RESOLVE,
+
+   /** Ambiguate
+    *
+    * This operation throws away the current auxiliary data and replaces it
+    * with the magic pass-through value.  If an ambiguate operation is
+    * performed when the primary surface does not contain 100% of the data,
+    * data will be lost.  This operation is only implemented in hardware for
+    * depth where it is called a HiZ resolve.
+    */
+   ISL_AUX_OP_AMBIGUATE,
 };
 
 /* TODO(chadv): Explain */
@@ -939,6 +963,12 @@ struct isl_device {
       uint8_t aux_addr_offset;
 
       /* Rounded up to the nearest dword to simplify GPU memcpy operations. */
+
+      /* size of the state buffer used to store the clear color + extra
+       * additional space used by the hardware */
+      uint8_t clear_color_state_size;
+      uint8_t clear_color_state_offset;
+      /* size of the clear color itself - used to copy it to/from a BO */
       uint8_t clear_value_size;
       uint8_t clear_value_offset;
    } ss;
@@ -1278,6 +1308,15 @@ struct isl_surf_fill_state_info {
    union isl_color_value clear_color;
 
    /**
+    * Send only the clear value address
+    *
+    * If set, we only pass the clear address to the GPU and it will fetch it
+    * from wherever it is.
+    */
+   bool use_clear_address;
+   uint64_t clear_address;
+
+   /**
     * Surface write disables for gen4-5
     */
    isl_channel_mask_t write_disables;
@@ -1385,6 +1424,8 @@ isl_format_get_layout(enum isl_format fmt)
 {
    return &isl_format_layouts[fmt];
 }
+
+bool isl_format_is_valid(enum isl_format);
 
 static inline const char * ATTRIBUTE_CONST
 isl_format_get_name(enum isl_format fmt)
@@ -1565,10 +1606,25 @@ isl_drm_modifier_has_aux(uint64_t modifier)
 
 /** Returns the default isl_aux_state for the given modifier.
  *
- * All modified images are required to be kept out of the AUX_INVALID state
- * but they may or may not actually be compressed and may or may not have
- * clear color.  This function returns the worst case aux_state that we need
- * to assume when getting a surface from another process or API.
+ * If we have a modifier which supports compression, then the auxiliary data
+ * could be in state other than ISL_AUX_STATE_AUX_INVALID.  In particular, it
+ * can be in any of the following:
+ *
+ *  - ISL_AUX_STATE_CLEAR
+ *  - ISL_AUX_STATE_PARTIAL_CLEAR
+ *  - ISL_AUX_STATE_COMPRESSED_CLEAR
+ *  - ISL_AUX_STATE_COMPRESSED_NO_CLEAR
+ *  - ISL_AUX_STATE_RESOLVED
+ *  - ISL_AUX_STATE_PASS_THROUGH
+ *
+ * If the modifier does not support fast-clears, then we are guaranteed
+ * that the surface is at least partially resolved and the first three not
+ * possible.  We return ISL_AUX_STATE_COMPRESSED_CLEAR if the modifier
+ * supports fast clears and ISL_AUX_STATE_COMPRESSED_NO_CLEAR if it does not
+ * because they are the least common denominator of the set of possible aux
+ * states and will yield a valid interpretation of the aux data.
+ *
+ * For modifiers with no aux support, ISL_AUX_STATE_AUX_INVALID is returned.
  */
 static inline enum isl_aux_state
 isl_drm_modifier_get_default_aux_state(uint64_t modifier)
@@ -1579,6 +1635,7 @@ isl_drm_modifier_get_default_aux_state(uint64_t modifier)
    if (!mod_info || mod_info->aux_usage == ISL_AUX_USAGE_NONE)
       return ISL_AUX_STATE_AUX_INVALID;
 
+   assert(mod_info->aux_usage == ISL_AUX_USAGE_CCS_E);
    return mod_info->supports_clear_color ? ISL_AUX_STATE_COMPRESSED_CLEAR :
                                            ISL_AUX_STATE_COMPRESSED_NO_CLEAR;
 }

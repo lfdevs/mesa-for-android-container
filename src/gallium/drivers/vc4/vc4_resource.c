@@ -22,6 +22,7 @@
  * IN THE SOFTWARE.
  */
 
+#include "pipe/p_defines.h"
 #include "util/u_blit.h"
 #include "util/u_memory.h"
 #include "util/u_format.h"
@@ -35,10 +36,6 @@
 #include "vc4_context.h"
 #include "vc4_resource.h"
 #include "vc4_tiling.h"
-
-#ifndef DRM_FORMAT_MOD_INVALID
-#define DRM_FORMAT_MOD_INVALID ((1ULL << 56) - 1)
-#endif
 
 static bool
 vc4_resource_bo_alloc(struct vc4_resource *rsc)
@@ -564,8 +561,10 @@ get_resource_texture_format(struct pipe_resource *prsc)
                 if (prsc->nr_samples > 1) {
                         return ~0;
                 } else {
-                        assert(format == VC4_TEXTURE_TYPE_RGBA8888);
-                        return VC4_TEXTURE_TYPE_RGBA32R;
+                        if (format == VC4_TEXTURE_TYPE_RGBA8888)
+                                return VC4_TEXTURE_TYPE_RGBA32R;
+                        else
+                                return ~0;
                 }
         }
 
@@ -708,13 +707,6 @@ vc4_resource_from_handle(struct pipe_screen *pscreen,
         if (!rsc)
                 return NULL;
 
-        if (whandle->offset != 0) {
-                fprintf(stderr,
-                        "Attempt to import unsupported winsys offset %u\n",
-                        whandle->offset);
-                return NULL;
-        }
-
         switch (whandle->type) {
         case DRM_API_HANDLE_TYPE_SHARED:
                 rsc->bo = vc4_bo_open_name(screen,
@@ -766,6 +758,28 @@ vc4_resource_from_handle(struct pipe_screen *pscreen,
         rsc->vc4_format = get_resource_texture_format(prsc);
         vc4_setup_slices(rsc, "import");
 
+        if (whandle->offset != 0) {
+                if (rsc->tiled) {
+                        fprintf(stderr,
+                                "Attempt to import unsupported "
+                                "winsys offset %u\n",
+                                whandle->offset);
+                        goto fail;
+                }
+
+                rsc->slices[0].offset += whandle->offset;
+
+                if (rsc->slices[0].offset + rsc->slices[0].size >
+                    rsc->bo->size) {
+                        fprintf(stderr, "Attempt to import "
+                                "with overflowing offset (%d + %d > %d)\n",
+                                whandle->offset,
+                                rsc->slices[0].size,
+                                rsc->bo->size);
+                        goto fail;
+                }
+        }
+
         if (screen->ro) {
                 /* Make sure that renderonly has a handle to our buffer in the
                  * display's fd, so that a later renderonly_get_handle()
@@ -779,7 +793,7 @@ vc4_resource_from_handle(struct pipe_screen *pscreen,
                         goto fail;
         }
 
-        if (whandle->stride != slice->stride) {
+        if (rsc->tiled && whandle->stride != slice->stride) {
                 static bool warned = false;
                 if (!warned) {
                         warned = true;
@@ -792,6 +806,8 @@ vc4_resource_from_handle(struct pipe_screen *pscreen,
                                 slice->stride);
                 }
                 goto fail;
+        } else if (!rsc->tiled) {
+                slice->stride = whandle->stride;
         }
 
         return prsc;

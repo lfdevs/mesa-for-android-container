@@ -980,7 +980,7 @@ update_textures_and_samplers(struct NineDevice9 *device)
             context->changed.sampler[s] = ~0;
         }
 
-        context->bound_samplers_mask_vs |= (1 << s);
+        context->bound_samplers_mask_vs |= (1 << i);
     }
 
     cso_set_sampler_views(context->cso, PIPE_SHADER_VERTEX, num_textures, view);

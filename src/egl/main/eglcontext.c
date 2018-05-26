@@ -594,7 +594,6 @@ _eglInitContext(_EGLContext *ctx, _EGLDisplay *dpy, _EGLConfig *conf,
    ctx->ClientMajorVersion = 1; /* the default, per EGL spec */
    ctx->ClientMinorVersion = 0;
    ctx->Flags = 0;
-   ctx->Profile = EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT_KHR;
    ctx->ResetNotificationStrategy = EGL_NO_RESET_NOTIFICATION_KHR;
    ctx->ContextPriority = EGL_CONTEXT_PRIORITY_MEDIUM_IMG;
    ctx->ReleaseBehavior = EGL_CONTEXT_RELEASE_BEHAVIOR_FLUSH_KHR;

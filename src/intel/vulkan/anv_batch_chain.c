@@ -1375,8 +1375,7 @@ setup_execbuf_for_cmd_buffer(struct anv_execbuf *execbuf,
       .num_cliprects = 0,
       .DR1 = 0,
       .DR4 = 0,
-      .flags = I915_EXEC_HANDLE_LUT | I915_EXEC_RENDER |
-               I915_EXEC_CONSTANTS_REL_GENERAL,
+      .flags = I915_EXEC_HANDLE_LUT | I915_EXEC_RENDER,
       .rsvd1 = cmd_buffer->device->context_id,
       .rsvd2 = 0,
    };
@@ -1481,7 +1480,7 @@ anv_cmd_buffer_execbuf(struct anv_device *device,
          } else {
             int merge = anv_gem_sync_file_merge(device, in_fence, impl->fd);
             if (merge == -1)
-               return vk_error(VK_ERROR_INVALID_EXTERNAL_HANDLE_KHR);
+               return vk_error(VK_ERROR_INVALID_EXTERNAL_HANDLE);
 
             close(impl->fd);
             close(in_fence);

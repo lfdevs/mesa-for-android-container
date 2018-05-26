@@ -68,7 +68,7 @@ void brw_clip_tri_alloc_regs( struct brw_clip_compile *c,
       i += c->nr_regs;
    }
 
-   if (c->vue_map.num_slots % 2) {
+   if (c->vue_map.num_slots % 2 && nr_verts > 0) {
       /* The VUE has an odd number of slots so the last register is only half
        * used.  Fill the second half with zero.
        */

@@ -1,5 +1,5 @@
 /****************************************************************************
-* Copyright (C) 2014-2015 Intel Corporation.   All Rights Reserved.
+* Copyright (C) 2014-2018 Intel Corporation.   All Rights Reserved.
 *
 * Permission is hereby granted, free of charge, to any person obtaining a
 * copy of this software and associated documentation files (the "Software"),
@@ -305,7 +305,7 @@ public:
 
     void InitializeHotTiles(SWR_CONTEXT* pContext, DRAW_CONTEXT* pDC, uint32_t workerId, uint32_t macroID);
 
-    HOTTILE *GetHotTile(SWR_CONTEXT* pContext, DRAW_CONTEXT* pDC, uint32_t macroID, SWR_RENDERTARGET_ATTACHMENT attachment, bool create, uint32_t numSamples = 1,
+    HOTTILE *GetHotTile(SWR_CONTEXT* pContext, DRAW_CONTEXT* pDC, HANDLE hWorkerData, uint32_t macroID, SWR_RENDERTARGET_ATTACHMENT attachment, bool create, uint32_t numSamples = 1,
         uint32_t renderTargetArrayIndex = 0);
 
     HOTTILE *GetHotTileNoLoad(SWR_CONTEXT* pContext, DRAW_CONTEXT* pDC, uint32_t macroID, SWR_RENDERTARGET_ATTACHMENT attachment, bool create, uint32_t numSamples = 1);

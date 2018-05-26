@@ -255,6 +255,56 @@ brw_regs_equal(const struct brw_reg *a, const struct brw_reg *b)
    return a->bits == b->bits && (df ? a->u64 == b->u64 : a->ud == b->ud);
 }
 
+static inline bool
+brw_regs_negative_equal(const struct brw_reg *a, const struct brw_reg *b)
+{
+   if (a->file == IMM) {
+      if (a->bits != b->bits)
+         return false;
+
+      switch ((enum brw_reg_type) a->type) {
+      case BRW_REGISTER_TYPE_UQ:
+      case BRW_REGISTER_TYPE_Q:
+         return a->d64 == -b->d64;
+      case BRW_REGISTER_TYPE_DF:
+         return a->df == -b->df;
+      case BRW_REGISTER_TYPE_UD:
+      case BRW_REGISTER_TYPE_D:
+         return a->d == -b->d;
+      case BRW_REGISTER_TYPE_F:
+         return a->f == -b->f;
+      case BRW_REGISTER_TYPE_VF:
+         /* It is tempting to treat 0 as a negation of 0 (and -0 as a negation
+          * of -0).  There are occasions where 0 or -0 is used and the exact
+          * bit pattern is desired.  At the very least, changing this to allow
+          * 0 as a negation of 0 causes some fp64 tests to fail on IVB.
+          */
+         return a->ud == (b->ud ^ 0x80808080);
+      case BRW_REGISTER_TYPE_UW:
+      case BRW_REGISTER_TYPE_W:
+      case BRW_REGISTER_TYPE_UV:
+      case BRW_REGISTER_TYPE_V:
+      case BRW_REGISTER_TYPE_HF:
+         /* FINISHME: Implement support for these types once there is
+          * something in the compiler that can generate them.  Until then,
+          * they cannot be tested.
+          */
+         return false;
+      case BRW_REGISTER_TYPE_UB:
+      case BRW_REGISTER_TYPE_B:
+      case BRW_REGISTER_TYPE_NF:
+      default:
+         unreachable("not reached");
+      }
+   } else {
+      struct brw_reg tmp = *a;
+
+      tmp.negate = !tmp.negate;
+
+      return brw_regs_equal(&tmp, b);
+   }
+}
+
 struct brw_indirect {
    unsigned addr_subnr:4;
    int addr_offset:10;
@@ -590,6 +640,14 @@ brw_imm_df(double df)
 }
 
 static inline struct brw_reg
+brw_imm_u64(uint64_t u64)
+{
+   struct brw_reg imm = brw_imm_reg(BRW_REGISTER_TYPE_UQ);
+   imm.u64 = u64;
+   return imm;
+}
+
+static inline struct brw_reg
 brw_imm_f(float f)
 {
    struct brw_reg imm = brw_imm_reg(BRW_REGISTER_TYPE_F);
@@ -840,6 +898,13 @@ brw_flag_reg(int reg, int subreg)
 {
    return brw_uw1_reg(BRW_ARCHITECTURE_REGISTER_FILE,
                       BRW_ARF_FLAG + reg, subreg);
+}
+
+static inline struct brw_reg
+brw_flag_subreg(unsigned subreg)
+{
+   return brw_uw1_reg(BRW_ARCHITECTURE_REGISTER_FILE,
+                      BRW_ARF_FLAG + subreg / 2, subreg % 2);
 }
 
 /**

@@ -36,6 +36,7 @@
  */
 
 
+#include "main/errors.h"
 #include "main/imports.h"
 #include "main/image.h"
 #include "main/bufferobj.h"
@@ -145,6 +146,10 @@ st_draw_vbo(struct gl_context *ctx,
    unsigned i;
    unsigned start = 0;
 
+   /* The initial pushdown of the inputs array into the drivers */
+   _mesa_set_drawing_arrays(ctx, st->draw_arrays.inputs);
+   _vbo_update_inputs(ctx, &st->draw_arrays);
+
    prepare_draw(st, ctx);
 
    if (st->vertex_array_out_of_memory)
@@ -173,6 +178,13 @@ st_draw_vbo(struct gl_context *ctx,
          /* indices are in a real VBO */
          info.has_user_indices = false;
          info.index.resource = st_buffer_object(bufobj)->buffer;
+
+         /* Return if the bound element array buffer doesn't have any backing
+          * storage. (nothing to do)
+          */
+         if (!info.index.resource)
+            return;
+
          start = pointer_to_offset(ib->ptr) / info.index_size;
       } else {
          /* indices are in user space memory */
@@ -235,13 +247,17 @@ st_indirect_draw_vbo(struct gl_context *ctx,
                      GLsizeiptr indirect_offset,
                      unsigned draw_count,
                      unsigned stride,
-                     struct gl_buffer_object *indirect_params,
-                     GLsizeiptr indirect_params_offset,
+                     struct gl_buffer_object *indirect_draw_count,
+                     GLsizeiptr indirect_draw_count_offset,
                      const struct _mesa_index_buffer *ib)
 {
    struct st_context *st = st_context(ctx);
    struct pipe_draw_info info;
    struct pipe_draw_indirect_info indirect;
+
+   /* The initial pushdown of the inputs array into the drivers */
+   _mesa_set_drawing_arrays(ctx, st->draw_arrays.inputs);
+   _vbo_update_inputs(ctx, &st->draw_arrays);
 
    assert(stride);
    prepare_draw(st, ctx);
@@ -283,7 +299,7 @@ st_indirect_draw_vbo(struct gl_context *ctx,
    if (!st->has_multi_draw_indirect) {
       int i;
 
-      assert(!indirect_params);
+      assert(!indirect_draw_count);
       indirect.draw_count = 1;
       for (i = 0; i < draw_count; i++) {
          info.drawid = i;
@@ -293,9 +309,10 @@ st_indirect_draw_vbo(struct gl_context *ctx,
    } else {
       indirect.draw_count = draw_count;
       indirect.stride = stride;
-      if (indirect_params) {
-         indirect.indirect_draw_count = st_buffer_object(indirect_params)->buffer;
-         indirect.indirect_draw_count_offset = indirect_params_offset;
+      if (indirect_draw_count) {
+         indirect.indirect_draw_count =
+            st_buffer_object(indirect_draw_count)->buffer;
+         indirect.indirect_draw_count_offset = indirect_draw_count_offset;
       }
       cso_draw_vbo(st->cso_context, &info);
    }
@@ -303,12 +320,10 @@ st_indirect_draw_vbo(struct gl_context *ctx,
 
 
 void
-st_init_draw(struct st_context *st)
+st_init_draw_functions(struct dd_function_table *functions)
 {
-   struct gl_context *ctx = st->ctx;
-
-   vbo_set_draw_func(ctx, st_draw_vbo);
-   vbo_set_indirect_draw_func(ctx, st_indirect_draw_vbo);
+   functions->Draw = st_draw_vbo;
+   functions->DrawIndirect = st_indirect_draw_vbo;
 }
 
 

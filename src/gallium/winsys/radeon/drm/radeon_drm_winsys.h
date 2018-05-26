@@ -45,6 +45,13 @@ enum radeon_generation {
 #define RADEON_SLAB_MIN_SIZE_LOG2 9
 #define RADEON_SLAB_MAX_SIZE_LOG2 14
 
+struct radeon_vm_heap {
+    mtx_t mutex;
+    uint64_t start;
+    uint64_t end;
+    struct list_head holes;
+};
+
 struct radeon_drm_winsys {
     struct radeon_winsys base;
     struct pipe_reference reference;
@@ -76,11 +83,11 @@ struct radeon_drm_winsys {
     /* List of buffer virtual memory ranges. Protectded by bo_handles_mutex. */
     struct util_hash_table *bo_vas;
     mtx_t bo_handles_mutex;
-    mtx_t bo_va_mutex;
     mtx_t bo_fence_lock;
 
-    uint64_t va_offset;
-    struct list_head va_holes;
+    struct radeon_vm_heap vm32;
+    struct radeon_vm_heap vm64;
+
     bool check_vm;
 
     struct radeon_surface_manager *surf_man;

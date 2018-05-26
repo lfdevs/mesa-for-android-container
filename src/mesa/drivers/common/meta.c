@@ -137,7 +137,7 @@ meta_compile_shader_with_debug(struct gl_context *ctx, gl_shader_stage stage,
 
    sh = _mesa_new_shader(name, stage);
    sh->Source = strdup(source);
-   sh->CompileStatus = compile_failure;
+   sh->CompileStatus = COMPILE_FAILURE;
    _mesa_compile_shader(ctx, sh);
 
    if (!sh->CompileStatus) {
@@ -348,18 +348,18 @@ _mesa_meta_setup_vertex_objects(struct gl_context *ctx,
                                    GL_FALSE, GL_FALSE,
                                    offsetof(struct vertex, x));
          _mesa_bind_vertex_buffer(ctx, array_obj, VERT_ATTRIB_GENERIC(0),
-                                  *buf_obj, 0, sizeof(struct vertex));
+                                  *buf_obj, 0, sizeof(struct vertex), true);
          _mesa_enable_vertex_array_attrib(ctx, array_obj,
-                                          VERT_ATTRIB_GENERIC(0));
+                                          VERT_ATTRIB_GENERIC(0), true);
          if (texcoord_size > 0) {
             _mesa_update_array_format(ctx, array_obj, VERT_ATTRIB_GENERIC(1),
                                       texcoord_size, GL_FLOAT, GL_RGBA,
                                       GL_FALSE, GL_FALSE, GL_FALSE,
                                       offsetof(struct vertex, tex));
             _mesa_bind_vertex_buffer(ctx, array_obj, VERT_ATTRIB_GENERIC(1),
-                                     *buf_obj, 0, sizeof(struct vertex));
+                                     *buf_obj, 0, sizeof(struct vertex), true);
             _mesa_enable_vertex_array_attrib(ctx, array_obj,
-                                             VERT_ATTRIB_GENERIC(1));
+                                             VERT_ATTRIB_GENERIC(1), true);
          }
       } else {
          _mesa_update_array_format(ctx, array_obj, VERT_ATTRIB_POS,
@@ -367,8 +367,9 @@ _mesa_meta_setup_vertex_objects(struct gl_context *ctx,
                                    GL_FALSE, GL_FALSE,
                                    offsetof(struct vertex, x));
          _mesa_bind_vertex_buffer(ctx, array_obj, VERT_ATTRIB_POS,
-                                  *buf_obj, 0, sizeof(struct vertex));
-         _mesa_enable_vertex_array_attrib(ctx, array_obj, VERT_ATTRIB_POS);
+                                  *buf_obj, 0, sizeof(struct vertex), true);
+         _mesa_enable_vertex_array_attrib(ctx, array_obj,
+                                          VERT_ATTRIB_POS, true);
 
          if (texcoord_size > 0) {
             _mesa_update_array_format(ctx, array_obj, VERT_ATTRIB_TEX(0),
@@ -376,8 +377,9 @@ _mesa_meta_setup_vertex_objects(struct gl_context *ctx,
                                       GL_FALSE, GL_FALSE,
                                       offsetof(struct vertex, tex));
             _mesa_bind_vertex_buffer(ctx, array_obj, VERT_ATTRIB_TEX(0),
-                                     *buf_obj, 0, sizeof(struct vertex));
-            _mesa_enable_vertex_array_attrib(ctx, array_obj, VERT_ATTRIB_TEX(0));
+                                     *buf_obj, 0, sizeof(struct vertex), true);
+            _mesa_enable_vertex_array_attrib(ctx, array_obj,
+                                             VERT_ATTRIB_TEX(0), true);
          }
 
          if (color_size > 0) {
@@ -386,8 +388,9 @@ _mesa_meta_setup_vertex_objects(struct gl_context *ctx,
                                       GL_FALSE, GL_FALSE,
                                       offsetof(struct vertex, r));
             _mesa_bind_vertex_buffer(ctx, array_obj, VERT_ATTRIB_COLOR0,
-                                     *buf_obj, 0, sizeof(struct vertex));
-            _mesa_enable_vertex_array_attrib(ctx, array_obj, VERT_ATTRIB_COLOR0);
+                                     *buf_obj, 0, sizeof(struct vertex), true);
+            _mesa_enable_vertex_array_attrib(ctx, array_obj,
+                                             VERT_ATTRIB_COLOR0, true);
          }
       }
    } else {
@@ -515,10 +518,8 @@ _mesa_meta_begin(struct gl_context *ctx, GLbitfield state)
       _mesa_set_enable(ctx, GL_DITHER, GL_TRUE);
    }
 
-   if (state & MESA_META_COLOR_MASK) {
-      memcpy(save->ColorMask, ctx->Color.ColorMask,
-             sizeof(ctx->Color.ColorMask));
-   }
+   if (state & MESA_META_COLOR_MASK)
+      save->ColorMask = ctx->Color.ColorMask;
 
    if (state & MESA_META_DEPTH_TEST) {
       save->Depth = ctx->Depth; /* struct copy */
@@ -633,14 +634,14 @@ _mesa_meta_begin(struct gl_context *ctx, GLbitfield state)
       GLuint u, tgt;
 
       save->ActiveUnit = ctx->Texture.CurrentUnit;
-      save->EnvMode = ctx->Texture.Unit[0].EnvMode;
+      save->EnvMode = ctx->Texture.FixedFuncUnit[0].EnvMode;
 
       /* Disable all texture units */
       for (u = 0; u < ctx->Const.MaxTextureUnits; u++) {
-         save->TexEnabled[u] = ctx->Texture.Unit[u].Enabled;
-         save->TexGenEnabled[u] = ctx->Texture.Unit[u].TexGenEnabled;
-         if (ctx->Texture.Unit[u].Enabled ||
-             ctx->Texture.Unit[u].TexGenEnabled) {
+         save->TexEnabled[u] = ctx->Texture.FixedFuncUnit[u].Enabled;
+         save->TexGenEnabled[u] = ctx->Texture.FixedFuncUnit[u].TexGenEnabled;
+         if (ctx->Texture.FixedFuncUnit[u].Enabled ||
+             ctx->Texture.FixedFuncUnit[u].TexGenEnabled) {
             _mesa_ActiveTexture(GL_TEXTURE0 + u);
             _mesa_set_enable(ctx, GL_TEXTURE_2D, GL_FALSE);
             if (ctx->Extensions.ARB_texture_cube_map)
@@ -880,17 +881,20 @@ _mesa_meta_end(struct gl_context *ctx)
    if (state & MESA_META_COLOR_MASK) {
       GLuint i;
       for (i = 0; i < ctx->Const.MaxDrawBuffers; i++) {
-         if (!TEST_EQ_4V(ctx->Color.ColorMask[i], save->ColorMask[i])) {
+         if (GET_COLORMASK(ctx->Color.ColorMask, i) !=
+             GET_COLORMASK(save->ColorMask, i)) {
             if (i == 0) {
-               _mesa_ColorMask(save->ColorMask[i][0], save->ColorMask[i][1],
-                               save->ColorMask[i][2], save->ColorMask[i][3]);
+               _mesa_ColorMask(GET_COLORMASK_BIT(save->ColorMask, i, 0),
+                               GET_COLORMASK_BIT(save->ColorMask, i, 1),
+                               GET_COLORMASK_BIT(save->ColorMask, i, 2),
+                               GET_COLORMASK_BIT(save->ColorMask, i, 3));
             }
             else {
                _mesa_ColorMaski(i,
-                                      save->ColorMask[i][0],
-                                      save->ColorMask[i][1],
-                                      save->ColorMask[i][2],
-                                      save->ColorMask[i][3]);
+                                GET_COLORMASK_BIT(save->ColorMask, i, 0),
+                                GET_COLORMASK_BIT(save->ColorMask, i, 1),
+                                GET_COLORMASK_BIT(save->ColorMask, i, 2),
+                                GET_COLORMASK_BIT(save->ColorMask, i, 3));
             }
          }
       }
@@ -1011,6 +1015,8 @@ _mesa_meta_end(struct gl_context *ctx)
 
          _mesa_reference_pipeline_object(ctx, &save->Pipeline, NULL);
       }
+
+      _mesa_update_vertex_processing_mode(ctx);
    }
 
    if (state & MESA_META_STENCIL_TEST) {
@@ -1064,14 +1070,14 @@ _mesa_meta_end(struct gl_context *ctx)
 
       /* Restore fixed function texture enables, texgen */
       for (u = 0; u < ctx->Const.MaxTextureUnits; u++) {
-         if (ctx->Texture.Unit[u].Enabled != save->TexEnabled[u]) {
+         if (ctx->Texture.FixedFuncUnit[u].Enabled != save->TexEnabled[u]) {
             FLUSH_VERTICES(ctx, _NEW_TEXTURE);
-            ctx->Texture.Unit[u].Enabled = save->TexEnabled[u];
+            ctx->Texture.FixedFuncUnit[u].Enabled = save->TexEnabled[u];
          }
 
-         if (ctx->Texture.Unit[u].TexGenEnabled != save->TexGenEnabled[u]) {
+         if (ctx->Texture.FixedFuncUnit[u].TexGenEnabled != save->TexGenEnabled[u]) {
             FLUSH_VERTICES(ctx, _NEW_TEXTURE);
-            ctx->Texture.Unit[u].TexGenEnabled = save->TexGenEnabled[u];
+            ctx->Texture.FixedFuncUnit[u].TexGenEnabled = save->TexGenEnabled[u];
          }
       }
 
@@ -1631,18 +1637,6 @@ _mesa_meta_drawbuffers_from_bitfield(GLbitfield bits)
 }
 
 /**
- * Return if all of the color channels are masked.
- */
-static inline GLboolean
-is_color_disabled(struct gl_context *ctx, int i)
-{
-   return !ctx->Color.ColorMask[i][0] &&
-          !ctx->Color.ColorMask[i][1] &&
-          !ctx->Color.ColorMask[i][2] &&
-          !ctx->Color.ColorMask[i][3];
-}
-
-/**
  * Given a bitfield of BUFFER_BIT_x draw buffers, call glDrawBuffers to
  * set GL to only draw to those buffers.  Also, update color masks to
  * reflect the new draw buffer ordering.
@@ -1666,7 +1660,8 @@ _mesa_meta_drawbuffers_and_colormask(struct gl_context *ctx, GLbitfield mask)
       gl_buffer_index b = ctx->DrawBuffer->_ColorDrawBufferIndexes[i];
       int colormask_idx = ctx->Extensions.EXT_draw_buffers2 ? i : 0;
 
-      if (b < 0 || !(mask & (1 << b)) || is_color_disabled(ctx, colormask_idx))
+      if (b < 0 || !(mask & (1 << b)) ||
+          GET_COLORMASK(ctx->Color.ColorMask, colormask_idx) == 0)
          continue;
 
       switch (b) {
@@ -1689,7 +1684,8 @@ _mesa_meta_drawbuffers_and_colormask(struct gl_context *ctx, GLbitfield mask)
       }
 
       for (int k = 0; k < 4; k++)
-         colormask[num_bufs][k] = ctx->Color.ColorMask[colormask_idx][k];
+         colormask[num_bufs][k] = GET_COLORMASK_BIT(ctx->Color.ColorMask,
+                                                    colormask_idx, k);
 
       num_bufs++;
    }
@@ -3351,8 +3347,9 @@ _mesa_meta_DrawTex(struct gl_context *ctx, GLfloat x, GLfloat y, GLfloat z,
                                 GL_FALSE, GL_FALSE,
                                 offsetof(struct vertex, x));
       _mesa_bind_vertex_buffer(ctx, array_obj, VERT_ATTRIB_POS,
-                               drawtex->buf_obj, 0, sizeof(struct vertex));
-      _mesa_enable_vertex_array_attrib(ctx, array_obj, VERT_ATTRIB_POS);
+                               drawtex->buf_obj, 0,
+                               sizeof(struct vertex), true);
+      _mesa_enable_vertex_array_attrib(ctx, array_obj, VERT_ATTRIB_POS, true);
 
 
       for (i = 0; i < ctx->Const.MaxTextureUnits; i++) {
@@ -3362,8 +3359,10 @@ _mesa_meta_DrawTex(struct gl_context *ctx, GLfloat x, GLfloat y, GLfloat z,
                                    GL_FALSE, GL_FALSE,
                                    offsetof(struct vertex, st[i]));
          _mesa_bind_vertex_buffer(ctx, array_obj, VERT_ATTRIB_TEX(i),
-                                  drawtex->buf_obj, 0, sizeof(struct vertex));
-         _mesa_enable_vertex_array_attrib(ctx, array_obj, VERT_ATTRIB_TEX(i));
+                                  drawtex->buf_obj, 0,
+                                  sizeof(struct vertex), true);
+         _mesa_enable_vertex_array_attrib(ctx, array_obj,
+                                          VERT_ATTRIB_TEX(i), true);
       }
    }
    else {

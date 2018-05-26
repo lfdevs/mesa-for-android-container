@@ -268,11 +268,14 @@ public:
 };
 
 // Ranged integer argument for TemplateArgUnroller
-template <uint32_t TMin, uint32_t TMax>
-struct IntArg
+template <typename T, T TMin, T TMax>
+struct RangedArg
 {
-    uint32_t val;
+    T val;
 };
+
+template <uint32_t TMin, uint32_t TMax>
+using IntArg = RangedArg<uint32_t, TMin, TMax>;
 
 // Recursive template used to auto-nest conditionals.  Converts dynamic boolean function
 // arguments to static template arguments.
@@ -307,49 +310,49 @@ struct TemplateArgUnroller
     }
 
     //-----------------------------------------
-    // Integer value (within specified range)
+    // Ranged value (within specified range)
     //-----------------------------------------
 
     // Last Arg Terminator
-    template <uint32_t TMin, uint32_t TMax>
-    static typename TermT::FuncType GetFunc(IntArg<TMin, TMax> iArg)
+    template <typename T, T TMin, T TMax>
+    static typename TermT::FuncType GetFunc(RangedArg<T, TMin, TMax> iArg)
     {
         if (iArg.val == TMax)
         {
-            return TermT::template GetFunc<ArgsB..., std::integral_constant<uint32_t, TMax>>();
+            return TermT::template GetFunc<ArgsB..., std::integral_constant<T, TMax>>();
         }
         if (TMax > TMin)
         {
-            return TemplateArgUnroller<TermT, ArgsB...>::GetFunc(IntArg<TMin, TMax-1>{iArg.val});
+            return TemplateArgUnroller<TermT, ArgsB...>::GetFunc(RangedArg<T, TMin, (T)(int(TMax)-1)>{iArg.val});
         }
         SWR_ASSUME(false); return nullptr;
     }
-    template <uint32_t TVal>
-    static typename TermT::FuncType GetFunc(IntArg<TVal, TVal> iArg)
+    template <typename T, T TVal>
+    static typename TermT::FuncType GetFunc(RangedArg<T, TVal, TVal> iArg)
     {
         SWR_ASSERT(iArg.val == TVal);
-        return TermT::template GetFunc<ArgsB..., std::integral_constant<uint32_t, TVal>>();
+        return TermT::template GetFunc<ArgsB..., std::integral_constant<T, TVal>>();
     }
 
     // Recursively parse args
-    template <uint32_t TMin, uint32_t TMax, typename... TArgsT>
-    static typename TermT::FuncType GetFunc(IntArg<TMin, TMax> iArg, TArgsT... remainingArgs)
+    template <typename T, T TMin, T TMax, typename... TArgsT>
+    static typename TermT::FuncType GetFunc(RangedArg<T, TMin, TMax> iArg, TArgsT... remainingArgs)
     {
         if (iArg.val == TMax)
         {
-            return TemplateArgUnroller<TermT, ArgsB..., std::integral_constant<uint32_t, TMax>>::GetFunc(remainingArgs...);
+            return TemplateArgUnroller<TermT, ArgsB..., std::integral_constant<T, TMax>>::GetFunc(remainingArgs...);
         }
         if (TMax > TMin)
         {
-            return TemplateArgUnroller<TermT, ArgsB...>::GetFunc(IntArg<TMin, TMax - 1>{iArg.val}, remainingArgs...);
+            return TemplateArgUnroller<TermT, ArgsB...>::GetFunc(RangedArg<T, TMin, (T)(int(TMax) - 1)>{iArg.val}, remainingArgs...);
         }
         SWR_ASSUME(false); return nullptr;
     }
-    template <uint32_t TVal, typename... TArgsT>
-    static typename TermT::FuncType GetFunc(IntArg<TVal, TVal> iArg, TArgsT... remainingArgs)
+    template <typename T, T TVal, typename... TArgsT>
+    static typename TermT::FuncType GetFunc(RangedArg<T, TVal, TVal> iArg, TArgsT... remainingArgs)
     {
         SWR_ASSERT(iArg.val == TVal);
-        return TemplateArgUnroller<TermT, ArgsB..., std::integral_constant<uint32_t, TVal>>::GetFunc(remainingArgs...);
+        return TemplateArgUnroller<TermT, ArgsB..., std::integral_constant<T, TVal>>::GetFunc(remainingArgs...);
     }
 };
 

@@ -308,6 +308,7 @@ v3dX(emit_state)(struct pipe_context *pctx)
 {
         struct vc5_context *vc5 = vc5_context(pctx);
         struct vc5_job *job = vc5->job;
+        bool rasterizer_discard = vc5->rasterizer->base.rasterizer_discard;
 
         if (vc5->dirty & (VC5_DIRTY_SCISSOR | VC5_DIRTY_VIEWPORT |
                           VC5_DIRTY_RASTERIZER)) {
@@ -344,6 +345,18 @@ v3dX(emit_state)(struct pipe_context *pctx)
                         clip.clip_window_bottom_pixel_coordinate = miny;
                         clip.clip_window_width_in_pixels = maxx - minx;
                         clip.clip_window_height_in_pixels = maxy - miny;
+
+#if V3D_VERSION < 41
+                        /* The HW won't entirely clip out when scissor w/h is
+                         * 0.  Just treat it the same as rasterizer discard.
+                         */
+                        if (clip.clip_window_width_in_pixels == 0 ||
+                            clip.clip_window_height_in_pixels == 0) {
+                                rasterizer_discard = true;
+                                clip.clip_window_width_in_pixels = 1;
+                                clip.clip_window_height_in_pixels = 1;
+                        }
+#endif
                 }
 
                 job->draw_min_x = MIN2(job->draw_min_x, minx);
@@ -358,11 +371,11 @@ v3dX(emit_state)(struct pipe_context *pctx)
                           VC5_DIRTY_COMPILED_FS)) {
                 cl_emit(&job->bcl, CONFIGURATION_BITS, config) {
                         config.enable_forward_facing_primitive =
-                                !vc5->rasterizer->base.rasterizer_discard &&
+                                !rasterizer_discard &&
                                 !(vc5->rasterizer->base.cull_face &
                                   PIPE_FACE_FRONT);
                         config.enable_reverse_facing_primitive =
-                                !vc5->rasterizer->base.rasterizer_discard &&
+                                !rasterizer_discard &&
                                 !(vc5->rasterizer->base.cull_face &
                                   PIPE_FACE_BACK);
                         /* This seems backwards, but it's what gets the
@@ -382,13 +395,16 @@ v3dX(emit_state)(struct pipe_context *pctx)
 
                         config.blend_enable = vc5->blend->rt[0].blend_enable;
 
-                        config.early_z_updates_enable = true;
+                        /* Note: EZ state may update based on the compiled FS,
+                         * along with ZSA
+                         */
+                        config.early_z_updates_enable =
+                                (job->ez_state != VC5_EZ_DISABLED);
                         if (vc5->zsa->base.depth.enabled) {
                                 config.z_updates_enable =
                                         vc5->zsa->base.depth.writemask;
                                 config.early_z_enable =
-                                        (vc5->zsa->early_z_enable &&
-                                         !vc5->prog.fs->prog_data.fs->writes_z);
+                                        config.early_z_updates_enable;
                                 config.depth_test_function =
                                         vc5->zsa->base.depth.func;
                         } else {
@@ -487,7 +503,11 @@ v3dX(emit_state)(struct pipe_context *pctx)
                 }
         }
 
-        if (vc5->dirty & VC5_DIRTY_BLEND_COLOR) {
+        /* GFXH-1431: On V3D 3.x, writing BLEND_CONFIG resets the constant
+         * color.
+         */
+        if (vc5->dirty & VC5_DIRTY_BLEND_COLOR ||
+            (V3D_VERSION < 41 && (vc5->dirty & VC5_DIRTY_BLEND))) {
                 cl_emit(&job->bcl, BLEND_CONSTANT_COLOUR, colour) {
                         colour.red_f16 = (vc5->swap_color_rb ?
                                           vc5->blend_color.hf[2] :
@@ -569,17 +589,29 @@ v3dX(emit_state)(struct pipe_context *pctx)
                 }
         }
 
-        if (vc5->dirty & VC5_DIRTY_STREAMOUT) {
+        /* Set up the transform feedback data specs (which VPM entries to
+         * output to which buffers).
+         */
+        if (vc5->dirty & (VC5_DIRTY_STREAMOUT |
+                          VC5_DIRTY_RASTERIZER |
+                          VC5_DIRTY_PRIM_MODE)) {
                 struct vc5_streamout_stateobj *so = &vc5->streamout;
 
                 if (so->num_targets) {
+                        bool psiz_per_vertex = (vc5->prim_mode == PIPE_PRIM_POINTS &&
+                                                vc5->rasterizer->base.point_size_per_vertex);
+                        uint16_t *tf_specs = (psiz_per_vertex ?
+                                              vc5->prog.bind_vs->tf_specs_psiz :
+                                              vc5->prog.bind_vs->tf_specs);
+
 #if V3D_VERSION >= 40
+                        job->tf_enabled = (vc5->prog.bind_vs->num_tf_specs != 0 &&
+                                           vc5->active_queries);
+
                         cl_emit(&job->bcl, TRANSFORM_FEEDBACK_SPECS, tfe) {
                                 tfe.number_of_16_bit_output_data_specs_following =
                                         vc5->prog.bind_vs->num_tf_specs;
-                                tfe.enable =
-                                        (vc5->prog.bind_vs->num_tf_specs != 0 &&
-                                         vc5->active_queries);
+                                tfe.enable = job->tf_enabled;
                         };
 #else /* V3D_VERSION < 40 */
                         cl_emit(&job->bcl, TRANSFORM_FEEDBACK_ENABLE, tfe) {
@@ -590,38 +622,53 @@ v3dX(emit_state)(struct pipe_context *pctx)
                         };
 #endif /* V3D_VERSION < 40 */
                         for (int i = 0; i < vc5->prog.bind_vs->num_tf_specs; i++) {
-                                cl_emit_prepacked(&job->bcl,
-                                                  &vc5->prog.bind_vs->tf_specs[i]);
+                                cl_emit_prepacked(&job->bcl, &tf_specs[i]);
                         }
+                } else if (job->tf_enabled) {
+#if V3D_VERSION >= 40
+                        cl_emit(&job->bcl, TRANSFORM_FEEDBACK_SPECS, tfe) {
+                                tfe.enable = false;
+                        };
+                        job->tf_enabled = false;
+#endif /* V3D_VERSION >= 40 */
+                }
+        }
 
-                        for (int i = 0; i < so->num_targets; i++) {
-                                const struct pipe_stream_output_target *target =
-                                        so->targets[i];
-                                struct vc5_resource *rsc =
-                                        vc5_resource(target->buffer);
+        /* Set up the trasnform feedback buffers. */
+        if (vc5->dirty & VC5_DIRTY_STREAMOUT) {
+                struct vc5_streamout_stateobj *so = &vc5->streamout;
+                for (int i = 0; i < so->num_targets; i++) {
+                        const struct pipe_stream_output_target *target =
+                                so->targets[i];
+                        struct vc5_resource *rsc = target ?
+                                vc5_resource(target->buffer) : NULL;
 
 #if V3D_VERSION >= 40
-                                cl_emit(&job->bcl, TRANSFORM_FEEDBACK_BUFFER, output) {
-                                        output.buffer_address =
-                                                cl_address(rsc->bo,
-                                                           target->buffer_offset);
-                                        output.buffer_size_in_32_bit_words =
-                                                target->buffer_size >> 2;
-                                        output.buffer_number = i;
-                                }
+                        if (!target)
+                                continue;
+
+                        cl_emit(&job->bcl, TRANSFORM_FEEDBACK_BUFFER, output) {
+                                output.buffer_address =
+                                        cl_address(rsc->bo,
+                                                   target->buffer_offset);
+                                output.buffer_size_in_32_bit_words =
+                                        target->buffer_size >> 2;
+                                output.buffer_number = i;
+                        }
 #else /* V3D_VERSION < 40 */
-                                cl_emit(&job->bcl, TRANSFORM_FEEDBACK_OUTPUT_ADDRESS, output) {
+                        cl_emit(&job->bcl, TRANSFORM_FEEDBACK_OUTPUT_ADDRESS, output) {
+                                if (target) {
                                         output.address =
                                                 cl_address(rsc->bo,
                                                            target->buffer_offset);
-                                };
+                                }
+                        };
 #endif /* V3D_VERSION < 40 */
+                        if (target) {
                                 vc5_job_add_write_resource(vc5->job,
                                                            target->buffer);
-                                /* XXX: buffer_size? */
                         }
-                } else {
-                        /* XXX? */
+                        /* XXX: buffer_size? */
                 }
         }
 

@@ -619,7 +619,7 @@ anv_state_pool_init(struct anv_state_pool *pool,
    if (result != VK_SUCCESS)
       return result;
 
-   assert(util_is_power_of_two(block_size));
+   assert(util_is_power_of_two_or_zero(block_size));
    pool->block_size = block_size;
    pool->back_alloc_free_list = ANV_FREE_LIST_EMPTY;
    for (unsigned i = 0; i < ANV_STATE_BUCKETS; i++) {
@@ -814,7 +814,7 @@ done:
 static void
 anv_state_pool_free_no_vg(struct anv_state_pool *pool, struct anv_state state)
 {
-   assert(util_is_power_of_two(state.alloc_size));
+   assert(util_is_power_of_two_or_zero(state.alloc_size));
    unsigned bucket = anv_state_pool_get_bucket(state.alloc_size);
 
    if (state.offset < 0) {
@@ -1041,7 +1041,7 @@ anv_bo_pool_free(struct anv_bo_pool *pool, const struct anv_bo *bo_in)
    struct bo_pool_bo_link *link = bo.map;
    VG_NOACCESS_WRITE(&link->bo, bo);
 
-   assert(util_is_power_of_two(bo.size));
+   assert(util_is_power_of_two_or_zero(bo.size));
    const unsigned size_log2 = ilog2_round_up(bo.size);
    const unsigned bucket = size_log2 - 12;
    assert(bucket < ARRAY_SIZE(pool->free_list));

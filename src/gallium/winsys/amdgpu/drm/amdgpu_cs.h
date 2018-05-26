@@ -104,6 +104,10 @@ struct amdgpu_cs_context {
    unsigned                    num_fence_dependencies;
    unsigned                    max_fence_dependencies;
 
+   struct pipe_fence_handle    **syncobj_to_signal;
+   unsigned                    num_syncobj_to_signal;
+   unsigned                    max_syncobj_to_signal;
+
    struct pipe_fence_handle    *fence;
 
    /* the error returned from cs_flush for non-async submissions */

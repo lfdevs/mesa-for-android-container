@@ -448,10 +448,10 @@ typedef enum {
            SVGADX_DXFMT_MULTISAMPLE_8 )
 
 typedef union {
-   Bool   b;
+   SVGA3dBool b;
    uint32 u;
-   int32  i;
-   float  f;
+   int32 i;
+   float f;
 } SVGA3dDevCapResult;
 
 #endif /* _SVGA3D_DEVCAPS_H_ */

@@ -54,6 +54,7 @@ etna_query(struct pipe_query *pq)
 }
 
 #define ETNA_SW_QUERY_BASE       (PIPE_QUERY_DRIVER_SPECIFIC + 0)
+#define ETNA_PM_QUERY_BASE       (PIPE_QUERY_DRIVER_SPECIFIC + 32)
 
 void
 etna_query_screen_init(struct pipe_screen *pscreen);

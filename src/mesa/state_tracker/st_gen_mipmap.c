@@ -26,6 +26,7 @@
  **************************************************************************/
 
 
+#include "main/errors.h"
 #include "main/imports.h"
 #include "main/mipmap.h"
 #include "main/teximage.h"
@@ -42,32 +43,6 @@
 #include "st_gen_mipmap.h"
 #include "st_cb_bitmap.h"
 #include "st_cb_texture.h"
-
-
-/**
- * Compute the expected number of mipmap levels in the texture given
- * the width/height/depth of the base image and the GL_TEXTURE_BASE_LEVEL/
- * GL_TEXTURE_MAX_LEVEL settings.  This will tell us how many mipmap
- * levels should be generated.
- */
-static GLuint
-compute_num_levels(struct gl_context *ctx,
-                   struct gl_texture_object *texObj,
-                   GLenum target)
-{
-   const struct gl_texture_image *baseImage;
-   GLuint numLevels;
-
-   baseImage = _mesa_get_tex_image(ctx, texObj, target, texObj->BaseLevel);
-
-   numLevels = texObj->BaseLevel + baseImage->MaxNumLevels;
-   numLevels = MIN2(numLevels, (GLuint) texObj->MaxLevel + 1);
-   if (texObj->Immutable)
-      numLevels = MIN2(numLevels, texObj->NumLevels);
-   assert(numLevels >= 1);
-
-   return numLevels;
-}
 
 
 /**
@@ -92,7 +67,7 @@ st_generate_mipmap(struct gl_context *ctx, GLenum target,
    assert(pt->nr_samples < 2);
 
    /* find expected last mipmap level to generate*/
-   lastLevel = compute_num_levels(ctx, texObj, target) - 1;
+   lastLevel = _mesa_compute_num_levels(ctx, texObj, target) - 1;
 
    if (lastLevel == 0)
       return;

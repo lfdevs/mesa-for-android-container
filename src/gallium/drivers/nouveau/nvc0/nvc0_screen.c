@@ -88,7 +88,7 @@ nvc0_screen_is_format_supported(struct pipe_screen *pscreen,
                  PIPE_BIND_SHARED);
 
    if (bindings & PIPE_BIND_SHADER_IMAGE) {
-      if (sample_count > 1 &&
+      if (sample_count > 0 &&
           nouveau_screen(pscreen)->class_3d >= GM107_3D_CLASS) {
          /* MS images are currently unsupported on Maxwell because they have to
           * be handled explicitly. */
@@ -254,6 +254,7 @@ nvc0_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_COMPUTE:
    case PIPE_CAP_CAN_BIND_CONST_BUFFER_AS_VERTEX:
    case PIPE_CAP_ALLOW_MAPPED_BUFFERS_DURING_EXECUTION:
+   case PIPE_CAP_QUERY_SO_OVERFLOW:
       return 1;
    case PIPE_CAP_PREFER_BLIT_BASED_TEXTURE_TRANSFER:
       return nouveau_screen(pscreen)->vram_domain & NOUVEAU_BO_VRAM ? 1 : 0;
@@ -266,9 +267,8 @@ nvc0_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       return class_3d >= GM200_3D_CLASS;
    case PIPE_CAP_SEAMLESS_CUBE_MAP_PER_TEXTURE:
    case PIPE_CAP_TGSI_BALLOT:
-      return class_3d >= NVE4_3D_CLASS;
    case PIPE_CAP_BINDLESS_TEXTURE:
-      return class_3d >= NVE4_3D_CLASS && class_3d < GM107_3D_CLASS;
+      return class_3d >= NVE4_3D_CLASS;
 
    /* unsupported caps */
    case PIPE_CAP_TGSI_FS_COORD_ORIGIN_LOWER_LEFT:
@@ -299,7 +299,6 @@ nvc0_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_INT64_DIVMOD:
    case PIPE_CAP_SPARSE_BUFFER_PAGE_SIZE:
    case PIPE_CAP_NIR_SAMPLERS_AS_DEREF:
-   case PIPE_CAP_QUERY_SO_OVERFLOW:
    case PIPE_CAP_MEMOBJ:
    case PIPE_CAP_LOAD_CONSTBUF:
    case PIPE_CAP_TGSI_ANY_REG_AS_ADDRESS:
@@ -307,6 +306,9 @@ nvc0_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_MAX_COMBINED_SHADER_OUTPUT_RESOURCES:
    case PIPE_CAP_SIGNED_VERTEX_BUFFER_OFFSET:
    case PIPE_CAP_CONTEXT_PRIORITY_MASK:
+   case PIPE_CAP_FENCE_SIGNAL:
+   case PIPE_CAP_CONSTBUF0_FLAGS:
+   case PIPE_CAP_PACKED_UNIFORMS:
       return 0;
 
    case PIPE_CAP_VENDOR_ID:
@@ -448,12 +450,6 @@ nvc0_screen_get_paramf(struct pipe_screen *pscreen, enum pipe_capf param)
       return 16.0f;
    case PIPE_CAPF_MAX_TEXTURE_LOD_BIAS:
       return 15.0f;
-   case PIPE_CAPF_GUARD_BAND_LEFT:
-   case PIPE_CAPF_GUARD_BAND_TOP:
-      return 0.0f;
-   case PIPE_CAPF_GUARD_BAND_RIGHT:
-   case PIPE_CAPF_GUARD_BAND_BOTTOM:
-      return 0.0f; /* that or infinity */
    }
 
    NOUVEAU_ERR("unknown PIPE_CAPF %d\n", param);

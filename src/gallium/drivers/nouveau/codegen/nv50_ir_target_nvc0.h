@@ -31,10 +31,14 @@ namespace nv50_ir {
 
 #define NVC0_BUILTIN_COUNT 4
 
+struct opProperties;
+
 class TargetNVC0 : public Target
 {
 public:
    TargetNVC0(unsigned int chipset);
+
+   void initProps(const struct opProperties *props, int size);
 
    virtual CodeEmitter *getCodeEmitter(Program::Type);
 

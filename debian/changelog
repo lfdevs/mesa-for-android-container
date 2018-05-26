@@ -1,3 +1,18 @@
+mesa (18.1.0-1) experimental; urgency=medium
+
+  [ Timo Aaltonen ]
+  * New upstream release candidate.
+  * signing-key.asc: Add the key from Dylan Baker.
+  * rules: Update clean target.
+
+  [ Andreas Boll ]
+  * New upstream release.
+  * signing-key.asc: Remove old key from Juan A. Suarez Romero.
+  * Enable support for tegra on armhf and arm64. Thanks, Fabio Pedretti!
+  * Bump libdrm-dev dependency to 2.4.91.
+
+ -- Andreas Boll <aboll@debian.org>  Sat, 26 May 2018 10:34:44 +0200
+
 mesa (18.0.4-1) unstable; urgency=medium
 
   * New upstream release.

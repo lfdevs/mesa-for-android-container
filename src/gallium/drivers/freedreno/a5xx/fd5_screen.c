@@ -67,13 +67,15 @@ fd5_screen_is_format_supported(struct pipe_screen *pscreen,
 	if ((usage & (PIPE_BIND_RENDER_TARGET |
 				PIPE_BIND_DISPLAY_TARGET |
 				PIPE_BIND_SCANOUT |
-				PIPE_BIND_SHARED)) &&
+				PIPE_BIND_SHARED |
+				PIPE_BIND_COMPUTE_RESOURCE)) &&
 			(fd5_pipe2color(format) != (enum a5xx_color_fmt)~0) &&
 			(fd5_pipe2tex(format) != (enum a5xx_tex_fmt)~0)) {
 		retval |= usage & (PIPE_BIND_RENDER_TARGET |
 				PIPE_BIND_DISPLAY_TARGET |
 				PIPE_BIND_SCANOUT |
-				PIPE_BIND_SHARED);
+				PIPE_BIND_SHARED |
+				PIPE_BIND_COMPUTE_RESOURCE);
 	}
 
 	/* For ARB_framebuffer_no_attachments: */

@@ -41,6 +41,7 @@ static void print_instr_name(struct ir3_instruction *instr)
 	printf("%04u:", instr->serialno);
 #endif
 	printf("%04u:", instr->name);
+	printf("%04u:", instr->ip);
 	printf("%03u: ", instr->depth);
 
 	if (instr->flags & IR3_INSTR_SY)
@@ -49,20 +50,13 @@ static void print_instr_name(struct ir3_instruction *instr)
 		printf("(ss)");
 
 	if (is_meta(instr)) {
-		switch(instr->opc) {
-		case OPC_META_PHI:
-			printf("&#934;");
-			break;
-		default:
-			/* shouldn't hit here.. just for debugging: */
-			switch (instr->opc) {
-			case OPC_META_INPUT:  printf("_meta:in");   break;
-			case OPC_META_FO:     printf("_meta:fo");   break;
-			case OPC_META_FI:     printf("_meta:fi");   break;
+		switch (instr->opc) {
+		case OPC_META_INPUT:  printf("_meta:in");   break;
+		case OPC_META_FO:     printf("_meta:fo");   break;
+		case OPC_META_FI:     printf("_meta:fi");   break;
 
-			default: printf("_meta:%d", instr->opc); break;
-			}
-			break;
+		/* shouldn't hit here.. just for debugging: */
+		default: printf("_meta:%d", instr->opc);    break;
 		}
 	} else if (instr->opc == OPC_MOV) {
 		static const char *type[] = {
@@ -196,6 +190,17 @@ print_instr(struct ir3_instruction *instr, int lvl)
 		printf(", target=block%u", block_id(instr->cat0.target));
 	}
 
+	if (instr->deps_count) {
+		printf(", false-deps:");
+		for (unsigned i = 0; i < instr->deps_count; i++) {
+			if (i > 0)
+				printf(", ");
+			printf("_[");
+			print_instr_name(instr->deps[i]);
+			printf("]");
+		}
+	}
+
 	printf("\n");
 }
 
@@ -208,9 +213,28 @@ static void
 print_block(struct ir3_block *block, int lvl)
 {
 	tab(lvl); printf("block%u {\n", block_id(block));
+
+	if (block->predecessors_count > 0) {
+		tab(lvl+1);
+		printf("pred: ");
+		for (unsigned i = 0; i < block->predecessors_count; i++) {
+			if (i)
+				printf(", ");
+			printf("block%u", block_id(block->predecessors[i]));
+		}
+		printf("\n");
+	}
+
 	list_for_each_entry (struct ir3_instruction, instr, &block->instr_list, node) {
 		print_instr(instr, lvl+1);
 	}
+
+	tab(lvl+1); printf("/* keeps:\n");
+	for (unsigned i = 0; i < block->keeps_count; i++) {
+		print_instr(block->keeps[i], lvl+2);
+	}
+	tab(lvl+1); printf(" */\n");
+
 	if (block->successors[1]) {
 		/* leading into if/else: */
 		tab(lvl+1);

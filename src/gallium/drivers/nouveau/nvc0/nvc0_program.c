@@ -134,10 +134,20 @@ nvc0_fp_assign_output_slots(struct nv50_ir_prog_info *info)
    unsigned count = info->prop.fp.numColourResults * 4;
    unsigned i, c;
 
+   /* Compute the relative position of each color output, since skipped MRT
+    * positions will not have registers allocated to them.
+    */
+   unsigned colors[8] = {0};
+   for (i = 0; i < info->numOutputs; ++i)
+      if (info->out[i].sn == TGSI_SEMANTIC_COLOR)
+         colors[info->out[i].si] = 1;
+   for (i = 0, c = 0; i < 8; i++)
+      if (colors[i])
+         colors[i] = c++;
    for (i = 0; i < info->numOutputs; ++i)
       if (info->out[i].sn == TGSI_SEMANTIC_COLOR)
          for (c = 0; c < 4; ++c)
-            info->out[i].slot[c] = info->out[i].si * 4 + c;
+            info->out[i].slot[c] = colors[info->out[i].si] * 4 + c;
 
    if (info->io.sampleMask < PIPE_MAX_SHADER_OUTPUTS)
       info->out[info->io.sampleMask].slot[0] = count++;
@@ -474,7 +484,7 @@ nvc0_fp_gen_header(struct nvc0_program *fp, struct nv50_ir_prog_info *info)
 
    for (i = 0; i < info->numOutputs; ++i) {
       if (info->out[i].sn == TGSI_SEMANTIC_COLOR)
-         fp->hdr[18] |= 0xf << info->out[i].slot[0];
+         fp->hdr[18] |= 0xf << (4 * info->out[i].si);
    }
 
    /* There are no "regular" attachments, but the shader still needs to be

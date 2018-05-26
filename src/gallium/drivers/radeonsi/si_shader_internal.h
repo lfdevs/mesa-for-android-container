@@ -1,5 +1,6 @@
 /*
  * Copyright 2016 Advanced Micro Devices, Inc.
+ * All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -154,15 +155,15 @@ struct si_shader_context {
 	/* Layout of TCS outputs / TES inputs:
 	 *   [0:12] = stride between output patches in DW, num_outputs * num_vertices * 4
 	 *            max = 32*32*4 + 32*4
-	 *   [26:31] = gl_PatchVerticesIn, max = 32
+	 *   [13:18] = gl_PatchVerticesIn, max = 32
+	 *   [19:31] = high 13 bits of the 32-bit address of tessellation ring buffers
 	 */
 	int param_tcs_out_lds_layout;
-	int param_tcs_offchip_addr_base64k;
-	int param_tcs_factor_addr_base64k;
 	int param_tcs_offchip_offset;
 	int param_tcs_factor_offset;
 
 	/* API TES */
+	int param_tes_offchip_addr;
 	int param_tes_u;
 	int param_tes_v;
 	int param_tes_rel_patch_id;
@@ -176,20 +177,14 @@ struct si_shader_context {
 	int param_gs_vtx23_offset; /* in dwords (GFX9) */
 	int param_gs_vtx45_offset; /* in dwords (GFX9) */
 	/* CS */
-	int param_grid_size;
 	int param_block_size;
-	int param_block_id[3];
-	int param_thread_id;
 
 	LLVMTargetMachineRef tm;
-
-	unsigned range_md_kind;
-	unsigned fpmath_md_kind;
-	LLVMValueRef fpmath_md_2p5_ulp;
 
 	/* Preloaded descriptors. */
 	LLVMValueRef esgs_ring;
 	LLVMValueRef gsvs_ring[4];
+	LLVMValueRef tess_offchip_ring;
 
 	LLVMValueRef invoc0_tess_factors[6]; /* outer[4], inner[2] */
 	LLVMValueRef gs_next_vertex[4];
@@ -224,8 +219,6 @@ si_shader_context_from_abi(struct ac_shader_abi *abi)
 	struct si_shader_context *ctx = NULL;
 	return container_of(abi, ctx, abi);
 }
-
-void si_llvm_add_attribute(LLVMValueRef F, const char *name, int value);
 
 unsigned si_llvm_compile(LLVMModuleRef M, struct ac_shader_binary *binary,
 			 LLVMTargetMachineRef tm,
@@ -266,7 +259,10 @@ LLVMValueRef si_llvm_emit_fetch(struct lp_build_tgsi_context *bld_base,
 				enum tgsi_opcode_type type,
 				unsigned swizzle);
 
+void si_llvm_emit_kill(struct ac_shader_abi *abi, LLVMValueRef visible);
+
 LLVMValueRef si_nir_load_input_tes(struct ac_shader_abi *abi,
+				   LLVMTypeRef type,
 				   LLVMValueRef vertex_index,
 				   LLVMValueRef param_index,
 				   unsigned const_index,
@@ -283,6 +279,10 @@ LLVMValueRef si_llvm_load_input_gs(struct ac_shader_abi *abi,
 				   unsigned vtx_offset_param,
 				   LLVMTypeRef type,
 				   unsigned swizzle);
+
+LLVMValueRef si_nir_lookup_interp_param(struct ac_shader_abi *abi,
+					enum glsl_interp_mode interp,
+					unsigned location);
 
 void si_llvm_emit_store(struct lp_build_tgsi_context *bld_base,
 			const struct tgsi_full_instruction *inst,
@@ -301,8 +301,7 @@ LLVMValueRef si_get_indirect_index(struct si_shader_context *ctx,
 LLVMValueRef si_get_bounded_indirect_index(struct si_shader_context *ctx,
 					   const struct tgsi_ind_register *ind,
 					   int rel_index, unsigned num);
-
-LLVMTypeRef si_const_array(LLVMTypeRef elem_type, int num_elements);
+LLVMValueRef si_get_sample_id(struct si_shader_context *ctx);
 
 void si_shader_context_init_alu(struct lp_build_tgsi_context *bld_base);
 void si_shader_context_init_mem(struct si_shader_context *ctx);
@@ -317,8 +316,9 @@ LLVMValueRef si_load_image_desc(struct si_shader_context *ctx,
 void si_load_system_value(struct si_shader_context *ctx,
 			  unsigned index,
 			  const struct tgsi_full_declaration *decl);
-void si_declare_compute_memory(struct si_shader_context *ctx,
-			       const struct tgsi_full_declaration *decl);
+void si_declare_compute_memory(struct si_shader_context *ctx);
+void si_tgsi_declare_compute_memory(struct si_shader_context *ctx,
+				    const struct tgsi_full_declaration *decl);
 
 void si_llvm_load_input_vs(
 	struct si_shader_context *ctx,
@@ -331,13 +331,8 @@ void si_llvm_load_input_fs(
 
 bool si_nir_build_llvm(struct si_shader_context *ctx, struct nir_shader *nir);
 
-LLVMValueRef si_nir_load_input_gs(struct ac_shader_abi *abi,
-				  unsigned location,
-				  unsigned driver_location,
-				  unsigned component,
-				  unsigned num_components,
-				  unsigned vertex_index,
-				  unsigned const_index,
-				  LLVMTypeRef type);
+LLVMValueRef si_unpack_param(struct si_shader_context *ctx,
+			     unsigned param, unsigned rshift,
+			     unsigned bitwidth);
 
 #endif

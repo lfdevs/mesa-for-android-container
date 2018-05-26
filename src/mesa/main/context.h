@@ -49,6 +49,7 @@
 #define CONTEXT_H
 
 
+#include "errors.h"
 #include "imports.h"
 #include "extensions.h"
 #include "mtypes.h"
@@ -206,7 +207,7 @@ _mesa_inside_dlist_begin_end(const struct gl_context *ctx)
 #define FLUSH_VERTICES(ctx, newstate)				\
 do {								\
    if (MESA_VERBOSE & VERBOSE_STATE)				\
-      _mesa_debug(ctx, "FLUSH_VERTICES in %s\n", MESA_FUNCTION);\
+      _mesa_debug(ctx, "FLUSH_VERTICES in %s\n", __func__);	\
    if (ctx->Driver.NeedFlush & FLUSH_STORED_VERTICES)		\
       vbo_exec_FlushVertices(ctx, FLUSH_STORED_VERTICES);	\
    ctx->NewState |= newstate;					\
@@ -225,7 +226,7 @@ do {								\
 #define FLUSH_CURRENT(ctx, newstate)				\
 do {								\
    if (MESA_VERBOSE & VERBOSE_STATE)				\
-      _mesa_debug(ctx, "FLUSH_CURRENT in %s\n", MESA_FUNCTION);	\
+      _mesa_debug(ctx, "FLUSH_CURRENT in %s\n", __func__);	\
    if (ctx->Driver.NeedFlush & FLUSH_UPDATE_CURRENT)		\
       vbo_exec_FlushVertices(ctx, FLUSH_UPDATE_CURRENT);	\
    ctx->NewState |= newstate;					\

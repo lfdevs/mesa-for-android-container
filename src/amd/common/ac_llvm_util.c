@@ -24,10 +24,12 @@
  */
 /* based on pieces from si_pipe.c and radeon_llvm_emit.c */
 #include "ac_llvm_util.h"
+#include "ac_llvm_build.h"
 #include "util/bitscan.h"
 #include <llvm-c/Core.h>
 #include <llvm-c/Support.h>
 #include "c11/threads.h"
+#include "util/u_math.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -46,12 +48,11 @@ static void ac_init_llvm_target()
 	/* Workaround for bug in llvm 4.0 that causes image intrinsics
 	 * to disappear.
 	 * https://reviews.llvm.org/D26348
+	 *
+	 * "mesa" is the prefix for error messages.
 	 */
-	if (HAVE_LLVM >= 0x0400) {
-		/* "mesa" is the prefix for error messages */
-		const char *argv[2] = { "mesa", "-simplifycfg-sink-common=false" };
-		LLVMParseCommandLineOptions(2, argv, NULL);
-	}
+	const char *argv[2] = { "mesa", "-simplifycfg-sink-common=false" };
+	LLVMParseCommandLineOptions(2, argv, NULL);
 }
 
 static once_flag ac_init_llvm_target_once_flag = ONCE_FLAG_INIT;
@@ -111,8 +112,10 @@ const char *ac_get_llvm_processor_name(enum radeon_family family)
 		return "polaris10";
 	case CHIP_POLARIS11:
 	case CHIP_POLARIS12:
+	case CHIP_VEGAM:
 		return "polaris11";
 	case CHIP_VEGA10:
+	case CHIP_VEGA12:
 	case CHIP_RAVEN:
 		return "gfx900";
 	default:
@@ -146,31 +149,10 @@ LLVMTargetMachineRef ac_create_target_machine(enum radeon_family family, enum ac
 	return tm;
 }
 
-
-#if HAVE_LLVM < 0x0400
-static LLVMAttribute ac_attr_to_llvm_attr(enum ac_func_attr attr)
-{
-   switch (attr) {
-   case AC_FUNC_ATTR_ALWAYSINLINE: return LLVMAlwaysInlineAttribute;
-   case AC_FUNC_ATTR_BYVAL: return LLVMByValAttribute;
-   case AC_FUNC_ATTR_INREG: return LLVMInRegAttribute;
-   case AC_FUNC_ATTR_NOALIAS: return LLVMNoAliasAttribute;
-   case AC_FUNC_ATTR_NOUNWIND: return LLVMNoUnwindAttribute;
-   case AC_FUNC_ATTR_READNONE: return LLVMReadNoneAttribute;
-   case AC_FUNC_ATTR_READONLY: return LLVMReadOnlyAttribute;
-   default:
-	   fprintf(stderr, "Unhandled function attribute: %x\n", attr);
-	   return 0;
-   }
-}
-
-#else
-
 static const char *attr_to_str(enum ac_func_attr attr)
 {
    switch (attr) {
    case AC_FUNC_ATTR_ALWAYSINLINE: return "alwaysinline";
-   case AC_FUNC_ATTR_BYVAL: return "byval";
    case AC_FUNC_ATTR_INREG: return "inreg";
    case AC_FUNC_ATTR_NOALIAS: return "noalias";
    case AC_FUNC_ATTR_NOUNWIND: return "nounwind";
@@ -185,20 +167,10 @@ static const char *attr_to_str(enum ac_func_attr attr)
    }
 }
 
-#endif
-
 void
 ac_add_function_attr(LLVMContextRef ctx, LLVMValueRef function,
                      int attr_idx, enum ac_func_attr attr)
 {
-#if HAVE_LLVM < 0x0400
-   LLVMAttribute llvm_attr = ac_attr_to_llvm_attr(attr);
-   if (attr_idx == -1) {
-      LLVMAddFunctionAttr(function, llvm_attr);
-   } else {
-      LLVMAddAttribute(LLVMGetParam(function, attr_idx - 1), llvm_attr);
-   }
-#else
    const char *attr_name = attr_to_str(attr);
    unsigned kind_id = LLVMGetEnumAttributeKindForName(attr_name,
                                                       strlen(attr_name));
@@ -208,7 +180,6 @@ ac_add_function_attr(LLVMContextRef ctx, LLVMValueRef function,
       LLVMAddAttributeAtIndex(function, attr_idx, llvm_attr);
    else
       LLVMAddCallSiteAttribute(function, attr_idx, llvm_attr);
-#endif
 }
 
 void ac_add_func_attributes(LLVMContextRef ctx, LLVMValueRef function,
@@ -233,10 +204,39 @@ ac_dump_module(LLVMModuleRef module)
 
 void
 ac_llvm_add_target_dep_function_attr(LLVMValueRef F,
-				     const char *name, int value)
+				     const char *name, unsigned value)
 {
 	char str[16];
 
-	snprintf(str, sizeof(str), "%i", value);
+	snprintf(str, sizeof(str), "0x%x", value);
 	LLVMAddTargetDependentFunctionAttr(F, name, str);
+}
+
+unsigned
+ac_count_scratch_private_memory(LLVMValueRef function)
+{
+	unsigned private_mem_vgprs = 0;
+
+	/* Process all LLVM instructions. */
+	LLVMBasicBlockRef bb = LLVMGetFirstBasicBlock(function);
+	while (bb) {
+		LLVMValueRef next = LLVMGetFirstInstruction(bb);
+
+		while (next) {
+			LLVMValueRef inst = next;
+			next = LLVMGetNextInstruction(next);
+
+			if (LLVMGetInstructionOpcode(inst) != LLVMAlloca)
+				continue;
+
+			LLVMTypeRef type = LLVMGetElementType(LLVMTypeOf(inst));
+			/* No idea why LLVM aligns allocas to 4 elements. */
+			unsigned alignment = LLVMGetAlignment(inst);
+			unsigned dw_size = align(ac_get_type_size(type) / 4, alignment);
+			private_mem_vgprs += dw_size;
+		}
+		bb = LLVMGetNextBasicBlock(bb);
+	}
+
+	return private_mem_vgprs;
 }

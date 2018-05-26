@@ -620,8 +620,12 @@ static void virgl_drm_add_res(struct virgl_drm_winsys *qdws,
    unsigned hash = res->res_handle & (sizeof(cbuf->is_handle_added)-1);
 
    if (cbuf->cres > cbuf->nres) {
-      fprintf(stderr,"failure to add relocation\n");
-      return;
+      cbuf->nres += 256;
+      cbuf->res_bo = realloc(cbuf->res_bo, cbuf->nres * sizeof(struct virgl_hw_buf*));
+      if (!cbuf->res_bo) {
+          fprintf(stderr,"failure to add relocation %d, %d\n", cbuf->cres, cbuf->nres);
+          return;
+      }
    }
 
    cbuf->res_bo[cbuf->cres] = NULL;
@@ -704,13 +708,31 @@ static int virgl_drm_get_caps(struct virgl_winsys *vws,
 {
    struct virgl_drm_winsys *vdws = virgl_drm_winsys(vws);
    struct drm_virtgpu_get_caps args;
+   int ret;
+
+   virgl_ws_fill_new_caps_defaults(caps);
 
    memset(&args, 0, sizeof(args));
-
-   args.cap_set_id = 1;
+   if (vdws->has_capset_query_fix) {
+      /* if we have the query fix - try and get cap set id 2 first */
+      args.cap_set_id = 2;
+      args.size = sizeof(union virgl_caps);
+   } else {
+      args.cap_set_id = 1;
+      args.size = sizeof(struct virgl_caps_v1);
+   }
    args.addr = (unsigned long)&caps->caps;
-   args.size = sizeof(union virgl_caps);
-   return drmIoctl(vdws->fd, DRM_IOCTL_VIRTGPU_GET_CAPS, &args);
+
+   ret = drmIoctl(vdws->fd, DRM_IOCTL_VIRTGPU_GET_CAPS, &args);
+   if (ret == -1 && errno == EINVAL) {
+      /* Fallback to v1 */
+      args.cap_set_id = 1;
+      args.size = sizeof(struct virgl_caps_v1);
+      ret = drmIoctl(vdws->fd, DRM_IOCTL_VIRTGPU_GET_CAPS, &args);
+      if (ret == -1)
+          return ret;
+   }
+   return ret;
 }
 
 #define PTR_TO_UINT(x) ((unsigned)((intptr_t)(x)))
@@ -777,6 +799,8 @@ static struct virgl_winsys *
 virgl_drm_winsys_create(int drmFD)
 {
    struct virgl_drm_winsys *qdws;
+   int ret;
+   struct drm_virtgpu_getparam getparam = {0};
 
    qdws = CALLOC_STRUCT(virgl_drm_winsys);
    if (!qdws)
@@ -811,6 +835,16 @@ virgl_drm_winsys_create(int drmFD)
    qdws->base.fence_reference = virgl_fence_reference;
 
    qdws->base.get_caps = virgl_drm_get_caps;
+
+   uint32_t value;
+   getparam.param = VIRTGPU_PARAM_CAPSET_QUERY_FIX;
+   getparam.value = (uint64_t)(uintptr_t)&value;
+   ret = drmIoctl(qdws->fd, DRM_IOCTL_VIRTGPU_GETPARAM, &getparam);
+   if (ret == 0) {
+      if (value == 1)
+         qdws->has_capset_query_fix = true;
+   }
+
    return &qdws->base;
 
 }

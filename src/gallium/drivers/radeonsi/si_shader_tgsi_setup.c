@@ -1,5 +1,6 @@
 /*
  * Copyright 2016 Advanced Micro Devices, Inc.
+ * All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -40,6 +41,9 @@
 #include <stdio.h>
 #include <llvm-c/Transforms/IPO.h>
 #include <llvm-c/Transforms/Scalar.h>
+#if HAVE_LLVM >= 0x0700
+#include <llvm-c/Transforms/Utils.h>
+#endif
 
 enum si_llvm_calling_convention {
 	RADEON_LLVM_AMDGPU_VS = 87,
@@ -48,14 +52,6 @@ enum si_llvm_calling_convention {
 	RADEON_LLVM_AMDGPU_CS = 90,
 	RADEON_LLVM_AMDGPU_HS = 93,
 };
-
-void si_llvm_add_attribute(LLVMValueRef F, const char *name, int value)
-{
-	char str[16];
-
-	snprintf(str, sizeof(str), "%i", value);
-	LLVMAddTargetDependentFunctionAttr(F, name, str);
-}
 
 struct si_llvm_diagnostics {
 	struct pipe_debug_callback *debug;
@@ -200,7 +196,7 @@ LLVMValueRef si_llvm_bound_index(struct si_shader_context *ctx,
 	LLVMValueRef c_max = LLVMConstInt(ctx->i32, num - 1, 0);
 	LLVMValueRef cc;
 
-	if (util_is_power_of_two(num)) {
+	if (util_is_power_of_two_or_zero(num)) {
 		index = LLVMBuildAnd(builder, index, c_max, "");
 	} else {
 		/* In theory, this MAX pattern should result in code that is
@@ -656,7 +652,7 @@ static void emit_declaration(struct lp_build_tgsi_context *bld_base,
 
 	case TGSI_FILE_TEMPORARY:
 	{
-		char name[16] = "";
+		char name[18] = "";
 		LLVMValueRef array_alloca = NULL;
 		unsigned decl_size;
 		unsigned writemask = decl->Declaration.UsageMask;
@@ -804,7 +800,7 @@ static void emit_declaration(struct lp_build_tgsi_context *bld_base,
 	}
 
 	case TGSI_FILE_MEMORY:
-		si_declare_compute_memory(ctx, decl);
+		si_tgsi_declare_compute_memory(ctx, decl);
 		break;
 
 	default:
@@ -1055,13 +1051,6 @@ void si_llvm_context_init(struct si_shader_context *ctx,
 	bld_base->emit_declaration = emit_declaration;
 	bld_base->emit_immediate = emit_immediate;
 
-	/* metadata allowing 2.5 ULP */
-	ctx->fpmath_md_kind = LLVMGetMDKindIDInContext(ctx->ac.context,
-						       "fpmath", 6);
-	LLVMValueRef arg = LLVMConstReal(ctx->ac.f32, 2.5);
-	ctx->fpmath_md_2p5_ulp = LLVMMDNodeInContext(ctx->ac.context,
-						     &arg, 1);
-
 	bld_base->op_actions[TGSI_OPCODE_BGNLOOP].emit = bgnloop_emit;
 	bld_base->op_actions[TGSI_OPCODE_BRK].emit = brk_emit;
 	bld_base->op_actions[TGSI_OPCODE_CONT].emit = cont_emit;
@@ -1121,7 +1110,16 @@ void si_llvm_context_set_tgsi(struct si_shader_context *ctx,
 	ctx->temps = NULL;
 	ctx->temps_count = 0;
 
-	if (!info || !tokens)
+	if (!info)
+		return;
+
+	ctx->num_const_buffers = util_last_bit(info->const_buffers_declared);
+	ctx->num_shader_buffers = util_last_bit(info->shader_buffers_declared);
+
+	ctx->num_samplers = util_last_bit(info->samplers_declared);
+	ctx->num_images = util_last_bit(info->images_declared);
+
+	if (!tokens)
 		return;
 
 	if (info->array_max[TGSI_FILE_TEMPORARY] > 0) {
@@ -1149,11 +1147,6 @@ void si_llvm_context_set_tgsi(struct si_shader_context *ctx,
 	ctx->bld_base.emit_fetch_funcs[TGSI_FILE_TEMPORARY] = si_llvm_emit_fetch;
 	ctx->bld_base.emit_fetch_funcs[TGSI_FILE_OUTPUT] = si_llvm_emit_fetch;
 	ctx->bld_base.emit_fetch_funcs[TGSI_FILE_SYSTEM_VALUE] = fetch_system_value;
-
-	ctx->num_const_buffers = util_last_bit(info->const_buffers_declared);
-	ctx->num_shader_buffers = util_last_bit(info->shader_buffers_declared);
-	ctx->num_samplers = util_last_bit(info->samplers_declared);
-	ctx->num_images = util_last_bit(info->images_declared);
 }
 
 void si_llvm_create_func(struct si_shader_context *ctx,
@@ -1246,10 +1239,8 @@ void si_llvm_optimize_module(struct si_shader_context *ctx)
 	LLVMAddLICMPass(gallivm->passmgr);
 	LLVMAddAggressiveDCEPass(gallivm->passmgr);
 	LLVMAddCFGSimplificationPass(gallivm->passmgr);
-#if HAVE_LLVM >= 0x0400
 	/* This is recommended by the instruction combining pass. */
 	LLVMAddEarlyCSEMemSSAPass(gallivm->passmgr);
-#endif
 	LLVMAddInstructionCombiningPass(gallivm->passmgr);
 
 	/* Run the pass */

@@ -406,10 +406,119 @@ namespace brw {
          const dst_reg chan_index = vgrf(BRW_REGISTER_TYPE_UD);
          const dst_reg dst = vgrf(src.type);
 
-         ubld.emit(SHADER_OPCODE_FIND_LIVE_CHANNEL, chan_index);
+         ubld.emit(SHADER_OPCODE_FIND_LIVE_CHANNEL, chan_index)->flag_subreg = 2;
          ubld.emit(SHADER_OPCODE_BROADCAST, dst, src, component(chan_index, 0));
 
          return src_reg(component(dst, 0));
+      }
+
+      void
+      emit_scan(enum opcode opcode, const dst_reg &tmp,
+                unsigned cluster_size, brw_conditional_mod mod) const
+      {
+         assert(dispatch_width() >= 8);
+
+         /* The instruction splitting code isn't advanced enough to split
+          * these so we need to handle that ourselves.
+          */
+         if (dispatch_width() * type_sz(tmp.type) > 2 * REG_SIZE) {
+            const unsigned half_width = dispatch_width() / 2;
+            const fs_builder ubld = exec_all().group(half_width, 0);
+            dst_reg left = tmp;
+            dst_reg right = horiz_offset(tmp, half_width);
+            ubld.emit_scan(opcode, left, cluster_size, mod);
+            ubld.emit_scan(opcode, right, cluster_size, mod);
+            if (cluster_size > half_width) {
+               src_reg left_comp = component(left, half_width - 1);
+               set_condmod(mod, ubld.emit(opcode, right, left_comp, right));
+            }
+            return;
+         }
+
+         if (cluster_size > 1) {
+            const fs_builder ubld = exec_all().group(dispatch_width() / 2, 0);
+            dst_reg left = horiz_stride(tmp, 2);
+            dst_reg right = horiz_stride(horiz_offset(tmp, 1), 2);
+
+            /* From the Cherryview PRM Vol. 7, "Register Region Restrictiosn":
+             *
+             *    "When source or destination datatype is 64b or operation is
+             *    integer DWord multiply, regioning in Align1 must follow
+             *    these rules:
+             *
+             *    [...]
+             *
+             *    3. Source and Destination offset must be the same, except
+             *       the case of scalar source."
+             *
+             * In order to work around this, we create a temporary register
+             * and shift left over to match right.  If we have a 64-bit type,
+             * we have to use two integer MOVs instead of a 64-bit MOV.
+             */
+            if (need_matching_subreg_offset(opcode, tmp.type)) {
+               dst_reg tmp2 = vgrf(tmp.type);
+               dst_reg new_left = horiz_stride(horiz_offset(tmp2, 1), 2);
+               if (type_sz(tmp.type) > 4) {
+                  ubld.MOV(subscript(new_left, BRW_REGISTER_TYPE_D, 0),
+                           subscript(left, BRW_REGISTER_TYPE_D, 0));
+                  ubld.MOV(subscript(new_left, BRW_REGISTER_TYPE_D, 1),
+                           subscript(left, BRW_REGISTER_TYPE_D, 1));
+               } else {
+                  ubld.MOV(new_left, left);
+               }
+               left = new_left;
+            }
+            set_condmod(mod, ubld.emit(opcode, right, left, right));
+         }
+
+         if (cluster_size > 2) {
+            if (type_sz(tmp.type) <= 4 &&
+                !need_matching_subreg_offset(opcode, tmp.type)) {
+               const fs_builder ubld =
+                  exec_all().group(dispatch_width() / 4, 0);
+               src_reg left = horiz_stride(horiz_offset(tmp, 1), 4);
+
+               dst_reg right = horiz_stride(horiz_offset(tmp, 2), 4);
+               set_condmod(mod, ubld.emit(opcode, right, left, right));
+
+               right = horiz_stride(horiz_offset(tmp, 3), 4);
+               set_condmod(mod, ubld.emit(opcode, right, left, right));
+            } else {
+               /* For 64-bit types, we have to do things differently because
+                * the code above would land us with destination strides that
+                * the hardware can't handle.  Fortunately, we'll only be
+                * 8-wide in that case and it's the same number of
+                * instructions.
+                */
+               const fs_builder ubld = exec_all().group(2, 0);
+
+               for (unsigned i = 0; i < dispatch_width(); i += 4) {
+                  src_reg left = component(tmp, i + 1);
+                  dst_reg right = horiz_offset(tmp, i + 2);
+                  set_condmod(mod, ubld.emit(opcode, right, left, right));
+               }
+            }
+         }
+
+         if (cluster_size > 4) {
+            const fs_builder ubld = exec_all().group(4, 0);
+            src_reg left = component(tmp, 3);
+            dst_reg right = horiz_offset(tmp, 4);
+            set_condmod(mod, ubld.emit(opcode, right, left, right));
+
+            if (dispatch_width() > 8) {
+               left = component(tmp, 8 + 3);
+               right = horiz_offset(tmp, 8 + 4);
+               set_condmod(mod, ubld.emit(opcode, right, left, right));
+            }
+         }
+
+         if (cluster_size > 8 && dispatch_width() > 8) {
+            const fs_builder ubld = exec_all().group(8, 0);
+            src_reg left = component(tmp, 7);
+            dst_reg right = horiz_offset(tmp, 8);
+            set_condmod(mod, ubld.emit(opcode, right, left, right));
+         }
       }
 
       /**
@@ -458,7 +567,6 @@ namespace brw {
       ALU1(BFREV)
       ALU1(CBIT)
       ALU2(CMPN)
-      ALU3(CSEL)
       ALU1(DIM)
       ALU2(DP2)
       ALU2(DP3)
@@ -534,13 +642,34 @@ namespace brw {
       }
 
       /**
+       * CSEL: dst = src2 <op> 0.0f ? src0 : src1
+       */
+      instruction *
+      CSEL(const dst_reg &dst, const src_reg &src0, const src_reg &src1,
+           const src_reg &src2, brw_conditional_mod condition) const
+      {
+         /* CSEL only operates on floats, so we can't do integer </<=/>=/>
+          * comparisons.  Zero/non-zero (== and !=) comparisons almost work.
+          * 0x80000000 fails because it is -0.0, and -0.0 == 0.0.
+          */
+         assert(src2.type == BRW_REGISTER_TYPE_F);
+
+         return set_condmod(condition,
+                            emit(BRW_OPCODE_CSEL,
+                                 retype(dst, BRW_REGISTER_TYPE_F),
+                                 retype(src0, BRW_REGISTER_TYPE_F),
+                                 retype(src1, BRW_REGISTER_TYPE_F),
+                                 src2));
+      }
+
+      /**
        * Emit a linear interpolation instruction.
        */
       instruction *
       LRP(const dst_reg &dst, const src_reg &x, const src_reg &y,
           const src_reg &a) const
       {
-         if (shader->devinfo->gen >= 6) {
+         if (shader->devinfo->gen >= 6 && shader->devinfo->gen <= 10) {
             /* The LRP instruction actually does op1 * op0 + op2 * (1 - op0), so
              * we need to reorder the operands.
              */
@@ -642,6 +771,38 @@ namespace brw {
          } else {
             return src;
          }
+      }
+
+
+      /* From the Cherryview PRM Vol. 7, "Register Region Restrictiosn":
+       *
+       *    "When source or destination datatype is 64b or operation is
+       *    integer DWord multiply, regioning in Align1 must follow
+       *    these rules:
+       *
+       *    [...]
+       *
+       *    3. Source and Destination offset must be the same, except
+       *       the case of scalar source."
+       *
+       * This helper just detects when we're in this case.
+       */
+      bool
+      need_matching_subreg_offset(enum opcode opcode,
+                                  enum brw_reg_type type) const
+      {
+         if (!shader->devinfo->is_cherryview &&
+             !gen_device_info_is_9lp(shader->devinfo))
+            return false;
+
+         if (type_sz(type > 4))
+            return true;
+
+         if (opcode == BRW_OPCODE_MUL &&
+             !brw_reg_type_is_floating_point(type))
+            return true;
+
+         return false;
       }
 
       bblock_t *block;

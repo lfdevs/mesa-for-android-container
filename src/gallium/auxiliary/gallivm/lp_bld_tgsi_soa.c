@@ -368,7 +368,8 @@ static void lp_exec_break(struct lp_exec_mask *mask,
                                       exec_mask, "break_full");
    }
    else {
-      unsigned opcode = bld_base->instructions[bld_base->pc + 1].Instruction.Opcode;
+      enum tgsi_opcode opcode =
+         bld_base->instructions[bld_base->pc + 1].Instruction.Opcode;
       boolean break_always = (opcode == TGSI_OPCODE_ENDSWITCH ||
                               opcode == TGSI_OPCODE_CASE);
 
@@ -630,7 +631,7 @@ static boolean default_analyse_is_last(struct lp_exec_mask *mask,
    }
 
    while (pc != ~0u && pc < bld_base->num_instructions) {
-      unsigned opcode = bld_base->instructions[pc].Instruction.Opcode;
+      enum tgsi_opcode opcode = bld_base->instructions[pc].Instruction.Opcode;
       switch (opcode) {
       case TGSI_OPCODE_CASE:
          if (curr_switch_stack == ctx->switch_stack_size) {
@@ -648,6 +649,8 @@ static boolean default_analyse_is_last(struct lp_exec_mask *mask,
          }
          curr_switch_stack--;
          break;
+      default:
+         ; /* nothing */
       }
       pc++;
    }
@@ -700,7 +703,8 @@ static void lp_exec_default(struct lp_exec_mask *mask,
        * which just gets rid of all case statements appearing together with
        * default (or could do switch analysis at switch start time instead).
        */
-      unsigned opcode = bld_base->instructions[bld_base->pc - 1].Instruction.Opcode;
+      enum tgsi_opcode opcode =
+         bld_base->instructions[bld_base->pc - 1].Instruction.Opcode;
       boolean ft_into = (opcode != TGSI_OPCODE_BRK &&
                          opcode != TGSI_OPCODE_SWITCH);
       /*
@@ -2610,7 +2614,7 @@ near_end_of_shader(struct lp_build_tgsi_soa_context *bld,
    unsigned i;
 
    for (i = 0; i < 5; i++) {
-      unsigned opcode;
+      enum tgsi_opcode opcode;
 
       if (pc + i >= bld->bld_base.info->num_instructions)
          return TRUE;
@@ -3780,7 +3784,7 @@ lp_build_tgsi_soa(struct gallivm_state *gallivm,
                   LLVMValueRef (*outputs)[TGSI_NUM_CHANNELS],
                   LLVMValueRef context_ptr,
                   LLVMValueRef thread_data_ptr,
-                  struct lp_build_sampler_soa *sampler,
+                  const struct lp_build_sampler_soa *sampler,
                   const struct tgsi_shader_info *info,
                   const struct lp_build_tgsi_gs_iface *gs_iface)
 {

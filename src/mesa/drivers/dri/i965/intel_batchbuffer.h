@@ -53,6 +53,8 @@ bool brw_batch_references(struct intel_batchbuffer *batch, struct brw_bo *bo);
 
 #define RELOC_WRITE EXEC_OBJECT_WRITE
 #define RELOC_NEEDS_GGTT EXEC_OBJECT_NEEDS_GTT
+/* Inverted meaning, but using the same bit...emit_reloc will flip it. */
+#define RELOC_32BIT EXEC_OBJECT_SUPPORTS_48B_ADDRESS
 uint64_t brw_batch_reloc(struct intel_batchbuffer *batch,
                          uint32_t batch_offset,
                          struct brw_bo *target,

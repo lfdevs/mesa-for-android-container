@@ -138,6 +138,7 @@ typedef SIMD512                             SIMD16;
 #define _simd16_cmpeq_epi8                  SIMD16::cmpeq_epi8
 #define _simd16_cmpgt_epi8                  SIMD16::cmpgt_epi8
 
+#define _simd16_permute_ps_i(a, i)          SIMD16::permute_ps<i>(a)
 #define _simd16_permute_ps                  SIMD16::permute_ps
 #define _simd16_permute_epi32               SIMD16::permute_epi32
 #define _simd16_sllv_epi32                  SIMD16::sllv_epi32

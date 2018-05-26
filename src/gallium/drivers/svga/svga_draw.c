@@ -511,8 +511,7 @@ static enum pipe_error
 draw_vgpu10(struct svga_hwtnl *hwtnl,
             const SVGA3dPrimitiveRange *range,
             unsigned vcount,
-            unsigned min_index,
-            unsigned max_index, struct pipe_resource *ib,
+            struct pipe_resource *ib,
             unsigned start_instance, unsigned instance_count)
 {
    struct svga_context *svga = hwtnl->svga;
@@ -1024,11 +1023,11 @@ svga_hwtnl_prim(struct svga_hwtnl *hwtnl,
 
    if (svga_have_vgpu10(hwtnl->svga)) {
       /* draw immediately */
-      ret = draw_vgpu10(hwtnl, range, vcount, min_index, max_index, ib,
+      ret = draw_vgpu10(hwtnl, range, vcount, ib,
                         start_instance, instance_count);
       if (ret != PIPE_OK) {
          svga_context_flush(hwtnl->svga, NULL);
-         ret = draw_vgpu10(hwtnl, range, vcount, min_index, max_index, ib,
+         ret = draw_vgpu10(hwtnl, range, vcount, ib,
                            start_instance, instance_count);
          assert(ret == PIPE_OK);
       }

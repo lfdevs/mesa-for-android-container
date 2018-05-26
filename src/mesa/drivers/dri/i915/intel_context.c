@@ -380,6 +380,7 @@ void
 intelInitDriverFunctions(struct dd_function_table *functions)
 {
    _mesa_init_driver_functions(functions);
+   _tnl_init_driver_draw_function(functions);
 
    functions->Flush = intel_glFlush;
    functions->Finish = intelFinish;

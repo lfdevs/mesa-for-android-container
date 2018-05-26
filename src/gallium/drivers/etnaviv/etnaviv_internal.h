@@ -87,7 +87,7 @@ struct etna_specs {
    /* has BLT engine instead of RS */
    unsigned use_blt : 1;
    /* can use any kind of wrapping mode on npot textures */
-   unsigned npot_tex_any_wrap;
+   unsigned npot_tex_any_wrap : 1;
    /* number of bits per TS tile */
    unsigned bits_per_tile;
    /* clear value for TS (dependent on bits_per_tile) */

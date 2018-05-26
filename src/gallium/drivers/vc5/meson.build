@@ -44,6 +44,7 @@ files_libvc5 = files(
 
 files_per_version = files(
   'v3dx_format_table.c',
+  'v3dx_job.c',
   'v3dx_simulator.c',
   'vc5_draw.c',
   'vc5_emit.c',

@@ -65,13 +65,14 @@ static inline void svga_generate_vdecl_semantics( unsigned idx,
 struct svga_shader_variant *
 svga_tgsi_vgpu9_translate(struct svga_context *svga,
                           const struct svga_shader *shader,
-                          const struct svga_compile_key *key, unsigned unit);
+                          const struct svga_compile_key *key,
+                          enum pipe_shader_type unit);
 
 struct svga_shader_variant *
 svga_tgsi_vgpu10_translate(struct svga_context *svga,
                            const struct svga_shader *shader,
                            const struct svga_compile_key *key,
-                           unsigned unit);
+                           enum pipe_shader_type unit);
 
 boolean svga_shader_verify(const uint32_t *tokens, unsigned nr_tokens);
 

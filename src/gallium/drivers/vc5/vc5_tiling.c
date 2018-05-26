@@ -154,7 +154,8 @@ vc5_get_ublinear_1_column_pixel_offset(uint32_t cpp, uint32_t image_h,
  * 4x4 groups, and those 4x4 groups are then stored in raster order.
  */
 static inline uint32_t
-vc5_get_uif_pixel_offset(uint32_t cpp, uint32_t image_h, uint32_t x, uint32_t y)
+vc5_get_uif_pixel_offset(uint32_t cpp, uint32_t image_h, uint32_t x, uint32_t y,
+                         bool do_xor)
 {
         uint32_t utile_w = vc5_utile_width(cpp);
         uint32_t utile_h = vc5_utile_height(cpp);
@@ -169,6 +170,9 @@ vc5_get_uif_pixel_offset(uint32_t cpp, uint32_t image_h, uint32_t x, uint32_t y)
         /* X, y within the macroblock */
         uint32_t mb_pixel_x = x - (mb_x << log2_mb_width);
         uint32_t mb_pixel_y = y - (mb_y << log2_mb_height);
+
+        if (do_xor && (mb_x / 4) & 1)
+                mb_y ^= 0x10;
 
         uint32_t mb_h = align(image_h, 1 << log2_mb_height) >> log2_mb_height;
         uint32_t mb_id = ((mb_x / 4) * ((mb_h - 1) * 4)) + mb_x + mb_y * 4;
@@ -191,6 +195,20 @@ vc5_get_uif_pixel_offset(uint32_t cpp, uint32_t image_h, uint32_t x, uint32_t y)
                                                                 utile_y));
 
         return mb_pixel_address;
+}
+
+static inline uint32_t
+vc5_get_uif_xor_pixel_offset(uint32_t cpp, uint32_t image_h,
+                             uint32_t x, uint32_t y)
+{
+        return vc5_get_uif_pixel_offset(cpp, image_h, x, y, true);
+}
+
+static inline uint32_t
+vc5_get_uif_no_xor_pixel_offset(uint32_t cpp, uint32_t image_h,
+                                uint32_t x, uint32_t y)
+{
+        return vc5_get_uif_pixel_offset(cpp, image_h, x, y, false);
 }
 
 static inline void
@@ -289,11 +307,18 @@ vc5_move_tiled_image(void *gpu, uint32_t gpu_stride,
                      bool is_load)
 {
         switch (tiling_format) {
+        case VC5_TILING_UIF_XOR:
+                vc5_move_pixels_general(gpu, gpu_stride,
+                                        cpu, cpu_stride,
+                                        cpp, image_h, box,
+                                        vc5_get_uif_xor_pixel_offset,
+                                        is_load);
+                break;
         case VC5_TILING_UIF_NO_XOR:
                 vc5_move_pixels_general(gpu, gpu_stride,
                                         cpu, cpu_stride,
                                         cpp, image_h, box,
-                                        vc5_get_uif_pixel_offset,
+                                        vc5_get_uif_no_xor_pixel_offset,
                                         is_load);
                 break;
         case VC5_TILING_UBLINEAR_2_COLUMN:

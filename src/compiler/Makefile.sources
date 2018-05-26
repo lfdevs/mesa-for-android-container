@@ -182,6 +182,8 @@ LIBGLCPP_GENERATED_FILES = \
 NIR_GENERATED_FILES = \
 	nir/nir_builder_opcodes.h \
 	nir/nir_constant_expressions.c \
+	nir/nir_intrinsics.c \
+	nir/nir_intrinsics.h \
 	nir/nir_opcodes.c \
 	nir/nir_opcodes.h \
 	nir/nir_opt_algebraic.c
@@ -202,8 +204,6 @@ NIR_FILES = \
 	nir/nir_inline_functions.c \
 	nir/nir_instr_set.c \
 	nir/nir_instr_set.h \
-	nir/nir_intrinsics.c \
-	nir/nir_intrinsics.h \
 	nir/nir_linking_helpers.c \
 	nir/nir_liveness.c \
 	nir/nir_loop_analyze.c \
@@ -244,7 +244,6 @@ NIR_FILES = \
 	nir/nir_lower_tex.c \
 	nir/nir_lower_to_source_mods.c \
 	nir/nir_lower_two_sided_color.c \
-	nir/nir_lower_uniforms_to_ubo.c \
 	nir/nir_lower_vars_to_ssa.c \
 	nir/nir_lower_var_copies.c \
 	nir/nir_lower_vec_to_movs.c \
@@ -266,8 +265,10 @@ NIR_FILES = \
 	nir/nir_opt_intrinsics.c \
 	nir/nir_opt_loop_unroll.c \
 	nir/nir_opt_move_comparisons.c \
+	nir/nir_opt_move_load_ubo.c \
 	nir/nir_opt_peephole_select.c \
 	nir/nir_opt_remove_phis.c \
+	nir/nir_opt_shrink_load.c \
 	nir/nir_opt_trivial_continues.c \
 	nir/nir_opt_undef.c \
 	nir/nir_phi_builder.c \
@@ -294,13 +295,17 @@ SPIRV_GENERATED_FILES = \
 	spirv/vtn_gather_types.c
 
 SPIRV_FILES = \
+	spirv/GLSL.ext.AMD.h \
 	spirv/GLSL.std.450.h \
+	spirv/gl_spirv.c \
 	spirv/nir_spirv.h \
 	spirv/spirv.h \
 	spirv/spirv_info.h \
 	spirv/spirv_to_nir.c \
 	spirv/vtn_alu.c \
+	spirv/vtn_amd.c \
 	spirv/vtn_cfg.c \
 	spirv/vtn_glsl450.c \
 	spirv/vtn_private.h \
+	spirv/vtn_subgroup.c \
 	spirv/vtn_variables.c

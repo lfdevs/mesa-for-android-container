@@ -157,6 +157,9 @@ void bc_dump::dump(cf_node& n) {
 
 		s << "  ES:" << n.bc.elem_size;
 
+		if (n.bc.mark)
+			s << " MARK";
+
 	} else {
 
 		if (n.bc.op_ptr->flags & CF_CLAUSE) {
@@ -329,6 +332,27 @@ static void print_src(sb_ostream &s, bc_alu &alu, unsigned idx)
 			break;
 		case ALU_SRC_0:
 			s << "0";
+			break;
+		case ALU_SRC_TIME_LO:
+			s << "TIME_LO";
+			break;
+		case ALU_SRC_TIME_HI:
+			s << "TIME_HI";
+			break;
+		case ALU_SRC_MASK_LO:
+			s << "MASK_LO";
+			break;
+		case ALU_SRC_MASK_HI:
+			s << "MASK_HI";
+			break;
+		case ALU_SRC_HW_WAVE_ID:
+			s << "HW_WAVE_ID";
+			break;
+		case ALU_SRC_SIMD_ID:
+			s << "SIMD_ID";
+			break;
+		case ALU_SRC_SE_ID:
+			s << "SE_ID";
 			break;
 		default:
 			s << "??IMM_" <<  sel;
@@ -523,6 +547,18 @@ void bc_dump::dump(fetch_node& n) {
 			s << " RIM:SQ_CF_INDEX_" << (n.bc.resource_index_mode - V_SQ_CF_INDEX_0);
 		if (ctx.is_egcm() && n.bc.sampler_index_mode)
 			s << " SID:SQ_CF_INDEX_" << (n.bc.sampler_index_mode - V_SQ_CF_INDEX_0);
+	}
+
+	if (n.bc.op_ptr->flags & FF_MEM) {
+		s << ", ELEM_SIZE:" << n.bc.elem_size;
+		if (n.bc.uncached)
+			s << ", UNCACHED";
+		if (n.bc.indexed)
+			s << ", INDEXED";
+		if (n.bc.burst_count)
+			s << ", BURST_COUNT:" << n.bc.burst_count;
+		s << ", ARRAY_BASE:" << n.bc.array_base;
+		s << ", ARRAY_SIZE:" << n.bc.array_size;
 	}
 
 	sblog << s.str() << "\n";

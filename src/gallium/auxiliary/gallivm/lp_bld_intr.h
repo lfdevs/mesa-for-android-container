@@ -48,7 +48,6 @@
 
 enum lp_func_attr {
    LP_FUNC_ATTR_ALWAYSINLINE = (1 << 0),
-   LP_FUNC_ATTR_BYVAL        = (1 << 1),
    LP_FUNC_ATTR_INREG        = (1 << 2),
    LP_FUNC_ATTR_NOALIAS      = (1 << 3),
    LP_FUNC_ATTR_NOUNWIND     = (1 << 4),

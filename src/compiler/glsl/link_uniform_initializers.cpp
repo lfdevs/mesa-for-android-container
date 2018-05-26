@@ -21,11 +21,11 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-#include "main/core.h"
 #include "ir.h"
 #include "linker.h"
 #include "ir_uniform.h"
 #include "string_to_uint_map.h"
+#include "main/mtypes.h"
 
 /* These functions are put in a "private" namespace instead of being marked
  * static so that the unit tests can access them.  See
@@ -83,6 +83,8 @@ copy_constant_to_storage(union gl_constant_value *storage,
       case GLSL_TYPE_ERROR:
       case GLSL_TYPE_UINT16:
       case GLSL_TYPE_INT16:
+      case GLSL_TYPE_UINT8:
+      case GLSL_TYPE_INT8:
       case GLSL_TYPE_FLOAT16:
          /* All other types should have already been filtered by other
           * paths in the caller.
@@ -180,26 +182,6 @@ set_opaque_binding(void *mem_ctx, gl_shader_program *prog,
          }
       }
    }
-}
-
-static void
-set_block_binding(gl_shader_program *prog, const char *block_name,
-                  unsigned mode, int binding)
-{
-   unsigned num_blocks = mode == ir_var_uniform ?
-      prog->data->NumUniformBlocks :
-      prog->data->NumShaderStorageBlocks;
-   struct gl_uniform_block *blks = mode == ir_var_uniform ?
-      prog->data->UniformBlocks : prog->data->ShaderStorageBlocks;
-
-   for (unsigned i = 0; i < num_blocks; i++) {
-      if (!strcmp(blks[i].Name, block_name)) {
-         blks[i].Binding = binding;
-         return;
-      }
-   }
-
-   unreachable("Failed to initialize block binding");
 }
 
 void
@@ -307,43 +289,9 @@ link_set_uniform_initializers(struct gl_shader_program *prog,
                linker::set_opaque_binding(mem_ctx, prog, var, var->type,
                                           var->name, &binding);
             } else if (var->is_in_buffer_block()) {
-               const glsl_type *const iface_type = var->get_interface_type();
-
-               /* If the variable is an array and it is an interface instance,
-                * we need to set the binding for each array element.  Just
-                * checking that the variable is an array is not sufficient.
-                * The variable could be an array element of a uniform block
-                * that lacks an instance name.  For example:
-                *
-                *     uniform U {
-                *         float f[4];
-                *     };
-                *
-                * In this case "f" would pass is_in_buffer_block (above) and
-                * type->is_array(), but it will fail is_interface_instance().
+               /* This case is handled by link_uniform_blocks (at
+                * process_block_array_leaf)
                 */
-               if (var->is_interface_instance() && var->type->is_array()) {
-                  for (unsigned i = 0; i < var->type->length; i++) {
-                     const char *name =
-                        ralloc_asprintf(mem_ctx, "%s[%u]", iface_type->name, i);
-
-                     /* Section 4.4.3 (Uniform Block Layout Qualifiers) of the
-                      * GLSL 4.20 spec says:
-                      *
-                      *     "If the binding identifier is used with a uniform
-                      *     block instanced as an array then the first element
-                      *     of the array takes the specified block binding and
-                      *     each subsequent element takes the next consecutive
-                      *     uniform block binding point."
-                      */
-                     linker::set_block_binding(prog, name, var->data.mode,
-                                               var->data.binding + i);
-                  }
-               } else {
-                  linker::set_block_binding(prog, iface_type->name,
-                                            var->data.mode,
-                                            var->data.binding);
-               }
             } else if (type->contains_atomic()) {
                /* we don't actually need to do anything. */
             } else {

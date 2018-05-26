@@ -28,7 +28,7 @@
 
 #include "stdbool.h"
 
-#define ANV_INSTANCE_EXTENSION_COUNT 10
+#define ANV_INSTANCE_EXTENSION_COUNT 11
 
 extern const VkExtensionProperties anv_instance_extensions[];
 
@@ -36,6 +36,7 @@ struct anv_instance_extension_table {
    union {
       bool extensions[ANV_INSTANCE_EXTENSION_COUNT];
       struct {
+         bool KHR_device_group_creation;
          bool KHR_external_fence_capabilities;
          bool KHR_external_memory_capabilities;
          bool KHR_external_semaphore_capabilities;
@@ -53,7 +54,7 @@ struct anv_instance_extension_table {
 extern const struct anv_instance_extension_table anv_instance_extensions_supported;
 
 
-#define ANV_DEVICE_EXTENSION_COUNT 26
+#define ANV_DEVICE_EXTENSION_COUNT 29
 
 extern const VkExtensionProperties anv_device_extensions[];
 
@@ -66,6 +67,7 @@ struct anv_device_extension_table {
         bool KHR_bind_memory2;
         bool KHR_dedicated_allocation;
         bool KHR_descriptor_update_template;
+        bool KHR_device_group;
         bool KHR_external_fence;
         bool KHR_external_fence_fd;
         bool KHR_external_memory;
@@ -77,6 +79,7 @@ struct anv_device_extension_table {
         bool KHR_incremental_present;
         bool KHR_maintenance1;
         bool KHR_maintenance2;
+        bool KHR_maintenance3;
         bool KHR_push_descriptor;
         bool KHR_relaxed_block_layout;
         bool KHR_sampler_mirror_clamp_to_edge;
@@ -85,8 +88,9 @@ struct anv_device_extension_table {
         bool KHR_storage_buffer_storage_class;
         bool KHR_swapchain;
         bool KHR_variable_pointers;
-        bool KHX_multiview;
+        bool KHR_multiview;
         bool EXT_external_memory_dma_buf;
+        bool EXT_global_priority;
       };
    };
 };

@@ -62,7 +62,17 @@
 
 #define ANV_HAS_SURFACE (VK_USE_PLATFORM_WAYLAND_KHR ||                          VK_USE_PLATFORM_XCB_KHR ||                          VK_USE_PLATFORM_XLIB_KHR)
 
+static const uint32_t MAX_API_VERSION = VK_MAKE_VERSION(1, 1, 0);
+
+VkResult anv_EnumerateInstanceVersion(
+    uint32_t*                                   pApiVersion)
+{
+    *pApiVersion = MAX_API_VERSION;
+    return VK_SUCCESS;
+}
+
 const VkExtensionProperties anv_instance_extensions[ANV_INSTANCE_EXTENSION_COUNT] = {
+   {"VK_KHR_device_group_creation", 1},
    {"VK_KHR_external_fence_capabilities", 1},
    {"VK_KHR_external_memory_capabilities", 1},
    {"VK_KHR_external_semaphore_capabilities", 1},
@@ -76,6 +86,7 @@ const VkExtensionProperties anv_instance_extensions[ANV_INSTANCE_EXTENSION_COUNT
 };
 
 const struct anv_instance_extension_table anv_instance_extensions_supported = {
+   .KHR_device_group_creation = true,
    .KHR_external_fence_capabilities = true,
    .KHR_external_memory_capabilities = true,
    .KHR_external_semaphore_capabilities = true,
@@ -89,9 +100,23 @@ const struct anv_instance_extension_table anv_instance_extensions_supported = {
 };
 
 uint32_t
-anv_physical_device_api_version(struct anv_physical_device *dev)
+anv_physical_device_api_version(struct anv_physical_device *device)
 {
-    return VK_MAKE_VERSION(1, 0, 57);
+    uint32_t version = 0;
+
+    uint32_t override = vk_get_version_override();
+    if (override)
+        return MIN2(override, MAX_API_VERSION);
+
+    if (!(true))
+        return version;
+    version = VK_MAKE_VERSION(1, 0, 57);
+
+    if (!(device->has_syncobj_wait))
+        return version;
+    version = VK_MAKE_VERSION(1, 1, 0);
+
+    return version;
 }
 
 const VkExtensionProperties anv_device_extensions[ANV_DEVICE_EXTENSION_COUNT] = {
@@ -100,6 +125,7 @@ const VkExtensionProperties anv_device_extensions[ANV_DEVICE_EXTENSION_COUNT] = 
    {"VK_KHR_bind_memory2", 1},
    {"VK_KHR_dedicated_allocation", 1},
    {"VK_KHR_descriptor_update_template", 1},
+   {"VK_KHR_device_group", 1},
    {"VK_KHR_external_fence", 1},
    {"VK_KHR_external_fence_fd", 1},
    {"VK_KHR_external_memory", 1},
@@ -111,6 +137,7 @@ const VkExtensionProperties anv_device_extensions[ANV_DEVICE_EXTENSION_COUNT] = 
    {"VK_KHR_incremental_present", 1},
    {"VK_KHR_maintenance1", 1},
    {"VK_KHR_maintenance2", 1},
+   {"VK_KHR_maintenance3", 1},
    {"VK_KHR_push_descriptor", 1},
    {"VK_KHR_relaxed_block_layout", 1},
    {"VK_KHR_sampler_mirror_clamp_to_edge", 1},
@@ -119,8 +146,9 @@ const VkExtensionProperties anv_device_extensions[ANV_DEVICE_EXTENSION_COUNT] = 
    {"VK_KHR_storage_buffer_storage_class", 1},
    {"VK_KHR_swapchain", 68},
    {"VK_KHR_variable_pointers", 1},
-   {"VK_KHX_multiview", 1},
+   {"VK_KHR_multiview", 1},
    {"VK_EXT_external_memory_dma_buf", 1},
+   {"VK_EXT_global_priority", 1},
 };
 
 void
@@ -129,10 +157,11 @@ anv_physical_device_get_supported_extensions(const struct anv_physical_device *d
 {
    *extensions = (struct anv_device_extension_table) {
       .ANDROID_native_buffer = ANDROID,
-      .KHR_16bit_storage = false,
+      .KHR_16bit_storage = device->info.gen >= 8,
       .KHR_bind_memory2 = true,
       .KHR_dedicated_allocation = true,
       .KHR_descriptor_update_template = true,
+      .KHR_device_group = true,
       .KHR_external_fence = device->has_syncobj_wait,
       .KHR_external_fence_fd = device->has_syncobj_wait,
       .KHR_external_memory = true,
@@ -141,9 +170,10 @@ anv_physical_device_get_supported_extensions(const struct anv_physical_device *d
       .KHR_external_semaphore_fd = true,
       .KHR_get_memory_requirements2 = true,
       .KHR_image_format_list = true,
-      .KHR_incremental_present = true,
+      .KHR_incremental_present = ANV_HAS_SURFACE,
       .KHR_maintenance1 = true,
       .KHR_maintenance2 = true,
+      .KHR_maintenance3 = true,
       .KHR_push_descriptor = true,
       .KHR_relaxed_block_layout = true,
       .KHR_sampler_mirror_clamp_to_edge = true,
@@ -152,7 +182,8 @@ anv_physical_device_get_supported_extensions(const struct anv_physical_device *d
       .KHR_storage_buffer_storage_class = true,
       .KHR_swapchain = ANV_HAS_SURFACE,
       .KHR_variable_pointers = true,
-      .KHX_multiview = false,
+      .KHR_multiview = true,
       .EXT_external_memory_dma_buf = true,
+      .EXT_global_priority = device->has_context_priority,
    };
 }

@@ -34,6 +34,7 @@ struct brw_bo;
  * additional flushing control.
  */
 #define _3DSTATE_PIPE_CONTROL		(CMD_3D | (3 << 27) | (2 << 24))
+#define PIPE_CONTROL_LRI_WRITE_IMMEDIATE (1 << 23) /* Gen7+ */
 #define PIPE_CONTROL_CS_STALL		(1 << 20)
 #define PIPE_CONTROL_GLOBAL_SNAPSHOT_COUNT_RESET	(1 << 19)
 #define PIPE_CONTROL_TLB_INVALIDATE	(1 << 18)

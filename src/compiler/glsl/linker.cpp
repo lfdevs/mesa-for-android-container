@@ -66,7 +66,6 @@
 
 #include <ctype.h>
 #include "util/strndup.h"
-#include "main/core.h"
 #include "glsl_symbol_table.h"
 #include "glsl_parser_extras.h"
 #include "ir.h"
@@ -84,8 +83,10 @@
 #include "builtin_functions.h"
 #include "shader_cache.h"
 
+#include "main/imports.h"
 #include "main/shaderobj.h"
 #include "main/enums.h"
+#include "main/mtypes.h"
 
 
 namespace {
@@ -456,7 +457,7 @@ linker_error(gl_shader_program *prog, const char *fmt, ...)
    ralloc_vasprintf_append(&prog->data->InfoLog, fmt, ap);
    va_end(ap);
 
-   prog->data->LinkStatus = linking_failure;
+   prog->data->LinkStatus = LINKING_FAILURE;
 }
 
 
@@ -2284,7 +2285,7 @@ link_intrastage_shaders(void *mem_ctx,
                              _mesa_shader_stage_to_program(shader_list[0]->Stage),
                              prog->Name, false);
    if (!gl_prog) {
-      prog->data->LinkStatus = linking_failure;
+      prog->data->LinkStatus = LINKING_FAILURE;
       _mesa_delete_linked_shader(ctx, linked);
       return NULL;
    }
@@ -4200,7 +4201,7 @@ get_array_size(struct gl_uniform_storage *uni, const glsl_struct_field *field,
 
 static int
 get_array_stride(struct gl_context *ctx, struct gl_uniform_storage *uni,
-                 const glsl_type *interface, const glsl_struct_field *field,
+                 const glsl_type *iface, const glsl_struct_field *field,
                  char *interface_name, char *var_name)
 {
    /* The ARB_program_interface_query spec says:
@@ -4226,7 +4227,7 @@ get_array_stride(struct gl_context *ctx, struct gl_uniform_storage *uni,
          return 0;
 
       if (GLSL_INTERFACE_PACKING_STD140 ==
-          interface->
+          iface->
              get_internal_ifc_packing(ctx->Const.UseSTD430AsDefaultPacking)) {
          if (array_type->is_record() || array_type->is_array())
             return glsl_align(array_type->std140_size(row_major), 16);
@@ -4280,17 +4281,17 @@ calculate_array_size_and_stride(struct gl_context *ctx,
              var->data.mode != ir_var_shader_storage)
             continue;
 
-         const glsl_type *interface = var->get_interface_type();
+         const glsl_type *iface = var->get_interface_type();
 
-         if (strcmp(interface_name, interface->name) != 0)
+         if (strcmp(interface_name, iface->name) != 0)
             continue;
 
-         for (unsigned i = 0; i < interface->length; i++) {
-            const glsl_struct_field *field = &interface->fields.structure[i];
+         for (unsigned i = 0; i < iface->length; i++) {
+            const glsl_struct_field *field = &iface->fields.structure[i];
             if (strcmp(field->name, var_name) != 0)
                continue;
 
-            array_stride = get_array_stride(ctx, uni, interface, field,
+            array_stride = get_array_stride(ctx, uni, iface, field,
                                             interface_name, var_name);
             array_size = get_array_size(uni, field, interface_name, var_name);
             goto write_top_level_array_size_and_stride;
@@ -4750,7 +4751,7 @@ linker_optimisation_loop(struct gl_context *ctx, exec_list *ir,
 void
 link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
 {
-   prog->data->LinkStatus = linking_success; /* All error paths will set this to false */
+   prog->data->LinkStatus = LINKING_SUCCESS; /* All error paths will set this to false */
    prog->data->Validated = false;
 
    /* Section 7.3 (Program Objects) of the OpenGL 4.5 Core Profile spec says:
@@ -4773,16 +4774,7 @@ link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
    }
 
 #ifdef ENABLE_SHADER_CACHE
-   /* If transform feedback used on the program then compile all shaders. */
-   bool skip_cache = false;
-   if (prog->TransformFeedback.NumVarying > 0) {
-      for (unsigned i = 0; i < prog->NumShaders; i++) {
-         _mesa_glsl_compile_shader(ctx, prog->Shaders[i], false, false, true);
-      }
-      skip_cache = true;
-   }
-
-   if (!skip_cache && shader_cache_read_program_metadata(ctx, prog))
+   if (shader_cache_read_program_metadata(ctx, prog))
       return;
 #endif
 

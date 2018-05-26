@@ -10,7 +10,7 @@ The code currently uses tcp and ip4v for connections.
 
 Information about driver integration can be found in:
 
-src/gallium/drivers/rbug/README
+src/gallium/auxiliary/driver_rbug/README
 
 for information about applications look in:
 

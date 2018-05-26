@@ -810,7 +810,8 @@ emit_gs_consts(struct svga_context *svga, unsigned dirty)
 struct svga_tracked_state svga_hw_gs_constants =
 {
    "hw gs params",
-   (SVGA_NEW_GS_CONST_BUFFER |
+   (SVGA_NEW_PRESCALE |
+    SVGA_NEW_GS_CONST_BUFFER |
     SVGA_NEW_RAST |
     SVGA_NEW_GS_VARIANT),
    emit_gs_consts

@@ -42,6 +42,7 @@ files_i965 = files(
   'brw_ff_gs_emit.c',
   'brw_ff_gs.h',
   'brw_formatquery.c',
+  'brw_generate_mipmap.c',
   'brw_gs.c',
   'brw_gs.h',
   'brw_gs_surface_state.c',
@@ -135,7 +136,7 @@ files_i965 = files(
 )
 
 i965_gen_libs = []
-foreach v : ['40', '45', '50', '60', '70', '75', '80', '90', '100']
+foreach v : ['40', '45', '50', '60', '70', '75', '80', '90', '100', '110']
   i965_gen_libs += static_library(
     'libi965_gen@0@'.format(v),
     ['genX_blorp_exec.c', 'genX_state_upload.c', gen_xml_pack],
@@ -148,20 +149,32 @@ foreach v : ['40', '45', '50', '60', '70', '75', '80', '90', '100']
   )
 endforeach
 
-i965_oa_sources = []
-foreach hw : ['hsw', 'bdw', 'chv', 'sklgt2', 'sklgt3', 'sklgt4', 'bxt',
-              'kblgt2', 'kblgt3', 'glk', 'cflgt2', 'cflgt3']
-  _name = 'brw_oa_@0@'.format(hw)
-  i965_oa_sources += custom_target(
-    _name,
-    input : ['brw_oa.py', '@0@.xml'.format(_name)],
-    output : ['@0@.c'.format(_name), '@0@.h'.format(_name)],
-    command : [
-      prog_python2, '@INPUT0@', '--chipset', hw, '--code', '@OUTPUT0@',
-      '--header', '@OUTPUT1@', '@INPUT1@',
-    ],
-  )
+
+i965_hw_metrics = [
+  'hsw',
+  'bdw', 'chv',
+  'sklgt2', 'sklgt3', 'sklgt4',
+  'kblgt2', 'kblgt3',
+  'cflgt2', 'cflgt3',
+  'bxt', 'glk',
+  'cnl',
+]
+
+i965_hw_metrics_xml_files = []
+foreach hw : i965_hw_metrics
+  i965_hw_metrics_xml_files += 'brw_oa_@0@.xml'.format(hw)
 endforeach
+
+i965_oa_sources = custom_target(
+  'i965-oa-sources',
+  input : i965_hw_metrics_xml_files,
+  output : [ 'brw_oa_metrics.c', 'brw_oa_metrics.h' ],
+  command : [
+    prog_python2, files('brw_oa.py'),
+    '--code', '@OUTPUT0@', '--header', '@OUTPUT1@',
+    '@INPUT@',
+  ],
+)
 
 libi965 = static_library(
   'i965',
@@ -173,7 +186,8 @@ libi965 = static_library(
   c_args : [c_vis_args, no_override_init_args, '-msse2'],
   cpp_args : [cpp_vis_args, '-msse2'],
   link_with : [
-    i965_gen_libs, libintel_common, libisl, libintel_compiler, libblorp,
+    i965_gen_libs, libintel_common, libintel_dev, libisl, libintel_compiler,
+    libblorp,
   ],
   dependencies : [dep_libdrm, dep_valgrind, idep_nir_headers],
 )

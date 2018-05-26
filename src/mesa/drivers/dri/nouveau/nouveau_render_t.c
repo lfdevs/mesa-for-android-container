@@ -188,7 +188,7 @@ static void
 TAG(emit_material)(struct gl_context *ctx, struct nouveau_array *a,
 		   const void *v)
 {
-	int attr = a->attr - VERT_ATTRIB_GENERIC0;
+	int attr = a->attr - VERT_ATTRIB_MAT(0);
 	int state = ((int []) {
 			NOUVEAU_STATE_MATERIAL_FRONT_AMBIENT,
 			NOUVEAU_STATE_MATERIAL_BACK_AMBIENT,

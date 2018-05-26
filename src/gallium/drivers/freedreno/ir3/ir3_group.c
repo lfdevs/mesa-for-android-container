@@ -133,8 +133,12 @@ restart:
 			conflict = conflicts(instr->cp.left, left) ||
 				conflicts(instr->cp.right, right);
 
-			/* RA can't yet deal very well w/ group'd phi's: */
-			if (instr->opc == OPC_META_PHI)
+			/* Mixing array elements and higher register classes
+			 * (ie. groups) doesn't really work out in RA.  See:
+			 *
+			 * https://trello.com/c/DqeDkeVf/156-bug-with-stk-70frag
+			 */
+			if (instr->regs[0]->flags & IR3_REG_ARRAY)
 				conflict = true;
 
 			/* we also can't have an instr twice in the group: */

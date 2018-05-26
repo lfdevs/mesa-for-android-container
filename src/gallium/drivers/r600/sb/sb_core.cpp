@@ -191,7 +191,7 @@ int r600_sb_bytecode_process(struct r600_context *rctx,
 
 	// if conversion breaks the dependency tracking between CF_EMIT ops when it removes
 	// the phi nodes for SV_GEOMETRY_EMIT. Just disable it for GS
-	if (sh->target != TARGET_GS && sh->target != TARGET_HS)
+	if ((sh->target != TARGET_GS && sh->target != TARGET_HS) || pshader->needs_scratch_space)
 		SB_RUN_PASS(if_conversion,		1);
 
 	// if_conversion breaks info about uses, but next pass (peephole)

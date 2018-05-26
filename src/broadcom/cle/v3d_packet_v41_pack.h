@@ -3458,7 +3458,7 @@ struct V3D41_GL_SHADER_STATE_RECORD {
    bool                                 vertex_shader_has_separate_input_and_output_vpm_blocks;
    bool                                 fragment_shader_uses_real_pixel_centre_w_in_addition_to_centroid_w2;
    bool                                 enable_sample_rate_shading;
-   bool                                 any_shader_reads_hardwrae_written_primitive_id;
+   bool                                 any_shader_reads_hardware_written_primitive_id;
    bool                                 insert_primitive_id_as_first_varying_to_fragment_shader;
    bool                                 turn_off_scoreboard;
    bool                                 do_scoreboard_wait_on_first_thread_switch;
@@ -3507,7 +3507,7 @@ V3D41_GL_SHADER_STATE_RECORD_pack(__gen_user_data *data, uint8_t * restrict cl,
             __gen_uint(values->vertex_shader_has_separate_input_and_output_vpm_blocks, 3, 3) |
             __gen_uint(values->fragment_shader_uses_real_pixel_centre_w_in_addition_to_centroid_w2, 4, 4) |
             __gen_uint(values->enable_sample_rate_shading, 5, 5) |
-            __gen_uint(values->any_shader_reads_hardwrae_written_primitive_id, 6, 6) |
+            __gen_uint(values->any_shader_reads_hardware_written_primitive_id, 6, 6) |
             __gen_uint(values->insert_primitive_id_as_first_varying_to_fragment_shader, 7, 7);
 
    cl[ 2] = __gen_uint(values->turn_off_scoreboard, 0, 0) |
@@ -3620,7 +3620,7 @@ V3D41_GL_SHADER_STATE_RECORD_unpack(const uint8_t * restrict cl,
    values->vertex_shader_has_separate_input_and_output_vpm_blocks = __gen_unpack_uint(cl, 11, 11);
    values->fragment_shader_uses_real_pixel_centre_w_in_addition_to_centroid_w2 = __gen_unpack_uint(cl, 12, 12);
    values->enable_sample_rate_shading = __gen_unpack_uint(cl, 13, 13);
-   values->any_shader_reads_hardwrae_written_primitive_id = __gen_unpack_uint(cl, 14, 14);
+   values->any_shader_reads_hardware_written_primitive_id = __gen_unpack_uint(cl, 14, 14);
    values->insert_primitive_id_as_first_varying_to_fragment_shader = __gen_unpack_uint(cl, 15, 15);
    values->turn_off_scoreboard = __gen_unpack_uint(cl, 16, 16);
    values->do_scoreboard_wait_on_first_thread_switch = __gen_unpack_uint(cl, 17, 17);

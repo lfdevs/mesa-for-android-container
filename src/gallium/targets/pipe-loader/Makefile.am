@@ -31,9 +31,7 @@ AM_CPPFLAGS = \
 	-I$(top_builddir)/src/util \
 	$(GALLIUM_PIPE_LOADER_DEFINES) \
 	$(LIBDRM_CFLAGS) \
-	$(VISIBILITY_CFLAGS) \
-	-DGALLIUM_RBUG \
-	-DGALLIUM_TRACE
+	$(VISIBILITY_CFLAGS)
 
 pipedir = $(libdir)/gallium-pipe
 pipe_LTLIBRARIES =
@@ -57,8 +55,6 @@ PIPE_LIBS += \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
 	$(top_builddir)/src/compiler/nir/libnir.la \
 	$(top_builddir)/src/util/libmesautil.la \
-	$(top_builddir)/src/gallium/drivers/rbug/librbug.la \
-	$(top_builddir)/src/gallium/drivers/trace/libtrace.la \
 	$(GALLIUM_COMMON_LIB_DEPS)
 
 AM_LDFLAGS = \
@@ -143,7 +139,6 @@ pipe_radeonsi_la_LIBADD = \
 	$(PIPE_LIBS) \
 	$(top_builddir)/src/gallium/winsys/radeon/drm/libradeonwinsys.la \
 	$(top_builddir)/src/gallium/winsys/amdgpu/drm/libamdgpuwinsys.la \
-	$(top_builddir)/src/gallium/drivers/radeon/libradeon.la \
 	$(top_builddir)/src/gallium/drivers/radeonsi/libradeonsi.la \
 	$(top_builddir)/src/amd/common/libamd_common.la \
 	$(top_builddir)/src/util/libxmlconfig.la \

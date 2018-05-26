@@ -33,8 +33,7 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/gallium/drivers \
 	-I$(top_srcdir)/src/gallium/winsys \
 	-I$(top_srcdir)/src/gallium/auxiliary \
-	-DGALLIUM_SOFTPIPE \
-	-DGALLIUM_TRACE
+	-DGALLIUM_SOFTPIPE
 
 lib_LTLIBRARIES = lib@OSMESA_LIB@.la
 
@@ -60,7 +59,6 @@ lib@OSMESA_LIB@_la_LIBADD = \
 	$(top_builddir)/src/mesa/libmesagallium.la \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
 	$(top_builddir)/src/gallium/winsys/sw/null/libws_null.la \
-	$(top_builddir)/src/gallium/drivers/trace/libtrace.la \
 	$(top_builddir)/src/gallium/drivers/softpipe/libsoftpipe.la \
 	$(top_builddir)/src/gallium/state_trackers/osmesa/libosmesa.la \
 	$(top_builddir)/src/mapi/glapi/libglapi.la \

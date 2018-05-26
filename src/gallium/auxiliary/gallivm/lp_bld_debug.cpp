@@ -60,7 +60,7 @@
 extern "C" boolean
 lp_check_alignment(const void *ptr, unsigned alignment)
 {
-   assert(util_is_power_of_two(alignment));
+   assert(util_is_power_of_two_or_zero(alignment));
    return ((uintptr_t)ptr & (alignment - 1)) == 0;
 }
 

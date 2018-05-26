@@ -59,6 +59,9 @@ static bool is_eligible_mov(struct ir3_instruction *instr, bool allow_flags)
 		if (src->flags & IR3_REG_RELATIV)
 			return false;
 
+		if (src->flags & IR3_REG_ARRAY)
+			return false;
+
 		if (!allow_flags)
 			if (src->flags & (IR3_REG_FABS | IR3_REG_FNEG |
 					IR3_REG_SABS | IR3_REG_SNEG | IR3_REG_BNOT))
@@ -67,13 +70,7 @@ static bool is_eligible_mov(struct ir3_instruction *instr, bool allow_flags)
 		/* TODO: remove this hack: */
 		if (src_instr->opc == OPC_META_FO)
 			return false;
-		/* TODO: we currently don't handle left/right neighbors
-		 * very well when inserting parallel-copies into phi..
-		 * to avoid problems don't eliminate a mov coming out
-		 * of phi..
-		 */
-		if (src_instr->opc == OPC_META_PHI)
-			return false;
+
 		return true;
 	}
 	return false;
@@ -315,6 +312,26 @@ lower_immed(struct ir3_cp_ctx *ctx, struct ir3_register *reg, unsigned new_flags
 	return reg;
 }
 
+static void
+unuse(struct ir3_instruction *instr)
+{
+	debug_assert(instr->use_count > 0);
+
+	if (--instr->use_count == 0) {
+		struct ir3_block *block = instr->block;
+
+		instr->barrier_class = 0;
+		instr->barrier_conflict = 0;
+
+		/* we don't want to remove anything in keeps (which could
+		 * be things like array store's)
+		 */
+		for (unsigned i = 0; i < block->keeps_count; i++) {
+			debug_assert(block->keeps[i] != instr);
+		}
+	}
+}
+
 /**
  * Handle cp for a given src register.  This additionally handles
  * the cases of collapsing immedate/const (which replace the src
@@ -327,12 +344,6 @@ reg_cp(struct ir3_cp_ctx *ctx, struct ir3_instruction *instr,
 		struct ir3_register *reg, unsigned n)
 {
 	struct ir3_instruction *src = ssa(reg);
-
-	/* don't propagate copies into a PHI, since we don't know if the
-	 * src block executed:
-	 */
-	if (instr->opc == OPC_META_PHI)
-		return;
 
 	if (is_eligible_mov(src, true)) {
 		/* simple case, no immed/const/relativ, only mov's w/ ssa src: */
@@ -348,11 +359,14 @@ reg_cp(struct ir3_cp_ctx *ctx, struct ir3_instruction *instr,
 			}
 			reg->flags = new_flags;
 			reg->instr = ssa(src_reg);
+
+			instr->barrier_class |= src->barrier_class;
+			instr->barrier_conflict |= src->barrier_conflict;
+
+			unuse(src);
+			reg->instr->use_count++;
 		}
 
-		src = ssa(reg);      /* could be null for IR3_REG_ARRAY case */
-		if (!src)
-			return;
 	} else if (is_same_type_mov(src) &&
 			/* cannot collapse const/immed/etc into meta instrs: */
 			!is_meta(instr)) {
@@ -379,12 +393,13 @@ reg_cp(struct ir3_cp_ctx *ctx, struct ir3_instruction *instr,
 			 */
 			if ((n == 1) && is_mad(instr->opc) &&
 					!(instr->regs[0 + 1]->flags & (IR3_REG_CONST | IR3_REG_RELATIV)) &&
-					valid_flags(instr, 0, new_flags)) {
+					valid_flags(instr, 0, new_flags & ~IR3_REG_IMMED)) {
 				/* swap src[0] and src[1]: */
 				struct ir3_register *tmp;
 				tmp = instr->regs[0 + 1];
 				instr->regs[0 + 1] = instr->regs[1 + 1];
 				instr->regs[1 + 1] = tmp;
+
 				n = 0;
 			} else {
 				return;
@@ -449,7 +464,8 @@ reg_cp(struct ir3_cp_ctx *ctx, struct ir3_instruction *instr,
 
 			debug_assert((opc_cat(instr->opc) == 1) ||
 					(opc_cat(instr->opc) == 6) ||
-					ir3_cat2_int(instr->opc));
+					ir3_cat2_int(instr->opc) ||
+					(is_mad(instr->opc) && (n == 0)));
 
 			if (new_flags & IR3_REG_SABS)
 				iim_val = abs(iim_val);
@@ -566,6 +582,9 @@ instr_cp(struct ir3_cp_ctx *ctx, struct ir3_instruction *instr)
 			instr->address = cond->address;
 			instr->regs[1] = cond->regs[1];
 			instr->regs[2] = cond->regs[2];
+			instr->barrier_class |= cond->barrier_class;
+			instr->barrier_conflict |= cond->barrier_conflict;
+			unuse(cond);
 			break;
 		default:
 			break;
@@ -580,6 +599,27 @@ ir3_cp(struct ir3 *ir, struct ir3_shader_variant *so)
 			.shader = ir,
 			.so = so,
 	};
+
+	/* This is a bit annoying, and probably wouldn't be necessary if we
+	 * tracked a reverse link from producing instruction to consumer.
+	 * But we need to know when we've eliminated the last consumer of
+	 * a mov, so we need to do a pass to first count consumers of a
+	 * mov.
+	 */
+	list_for_each_entry (struct ir3_block, block, &ir->block_list, node) {
+		list_for_each_entry (struct ir3_instruction, instr, &block->instr_list, node) {
+			struct ir3_instruction *src;
+
+			/* by the way, we don't account for false-dep's, so the CP
+			 * pass should always happen before false-dep's are inserted
+			 */
+			debug_assert(instr->deps_count == 0);
+
+			foreach_ssa_src(src, instr) {
+				src->use_count++;
+			}
+		}
+	}
 
 	ir3_clear_mark(ir);
 

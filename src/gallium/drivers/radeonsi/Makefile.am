@@ -29,11 +29,20 @@ AM_CFLAGS = \
 	-I$(top_builddir)/src/compiler/nir \
 	-I$(top_srcdir)/src/amd/common \
 	$(RADEON_CFLAGS) \
-	$(LLVM_CFLAGS)
+	$(LLVM_CFLAGS) \
+	-Wstrict-overflow=0
+# ^^ disable warnings about overflows (os_time_timeout)
 
 noinst_LTLIBRARIES = libradeonsi.la
 
 libradeonsi_la_SOURCES = $(C_SOURCES)
+
+libradeonsi_la_LIBADD = \
+	$(CLOCK_LIB) \
+	$(LLVM_LIBS)
+
+libradeonsi_la_LDFLAGS = \
+	$(LLVM_LDFLAGS)
 
 GEN_DRIINFO_INPUTS = \
 	$(top_srcdir)/src/gallium/auxiliary/pipe-loader/driinfo_gallium.h \

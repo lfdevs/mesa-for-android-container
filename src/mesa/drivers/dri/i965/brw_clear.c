@@ -108,6 +108,7 @@ brw_fast_clear_depth(struct gl_context *ctx)
    struct intel_mipmap_tree *mt = depth_irb->mt;
    struct gl_renderbuffer_attachment *depth_att = &fb->Attachment[BUFFER_DEPTH];
    const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   bool same_clear_value = true;
 
    if (devinfo->gen < 6)
       return false;
@@ -206,13 +207,14 @@ brw_fast_clear_depth(struct gl_context *ctx)
              * value so this shouldn't happen often.
              */
             intel_hiz_exec(brw, mt, level, layer, 1,
-                           BLORP_HIZ_OP_DEPTH_RESOLVE);
+                           ISL_AUX_OP_FULL_RESOLVE);
             intel_miptree_set_aux_state(brw, mt, level, layer, 1,
                                         ISL_AUX_STATE_RESOLVED);
          }
       }
 
-      intel_miptree_set_depth_clear_value(ctx, mt, clear_value);
+      intel_miptree_set_depth_clear_value(brw, mt, clear_value);
+      same_clear_value = false;
    }
 
    bool need_clear = false;
@@ -232,6 +234,26 @@ brw_fast_clear_depth(struct gl_context *ctx)
        * state then simply updating the miptree fast clear value is sufficient
        * to change their clear value.
        */
+      if (devinfo->gen >= 10 && !same_clear_value) {
+         /* Before gen10, it was enough to just update the clear value in the
+          * miptree. But on gen10+, we let blorp update the clear value state
+          * buffer when doing a fast clear. Since we are skipping the fast
+          * clear here, we need to update the clear color ourselves.
+          */
+         uint32_t clear_offset = mt->hiz_buf->clear_color_offset;
+         union isl_color_value clear_color = { .f32 = { clear_value, } };
+
+         /* We can't update the clear color while the hardware is still using
+          * the previous one for a resolve or sampling from it. So make sure
+          * that there's no pending commands at this point.
+          */
+         brw_emit_pipe_control_flush(brw, PIPE_CONTROL_CS_STALL);
+         for (int i = 0; i < 4; i++) {
+            brw_store_data_imm32(brw, mt->hiz_buf->clear_color_bo,
+                                 clear_offset + i * 4, clear_color.u32[i]);
+         }
+         brw_emit_pipe_control_flush(brw, PIPE_CONTROL_STATE_CACHE_INVALIDATE);
+      }
       return true;
    }
 
@@ -243,7 +265,7 @@ brw_fast_clear_depth(struct gl_context *ctx)
       if (aux_state != ISL_AUX_STATE_CLEAR) {
          intel_hiz_exec(brw, mt, depth_irb->mt_level,
                         depth_irb->mt_layer + a, 1,
-                        BLORP_HIZ_OP_DEPTH_CLEAR);
+                        ISL_AUX_OP_FAST_CLEAR);
       }
    }
 

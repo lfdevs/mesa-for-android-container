@@ -50,11 +50,12 @@ struct pb_cache
    /* The cache is divided into buckets for minimizing cache misses.
     * The driver controls which buffer goes into which bucket.
     */
-   struct list_head buckets[4];
+   struct list_head *buckets;
 
    mtx_t mutex;
    uint64_t cache_size;
    uint64_t max_cache_size;
+   unsigned num_heaps;
    unsigned usecs;
    unsigned num_buffers;
    unsigned bypass_usage;
@@ -71,7 +72,8 @@ struct pb_buffer *pb_cache_reclaim_buffer(struct pb_cache *mgr, pb_size size,
 void pb_cache_release_all_buffers(struct pb_cache *mgr);
 void pb_cache_init_entry(struct pb_cache *mgr, struct pb_cache_entry *entry,
                          struct pb_buffer *buf, unsigned bucket_index);
-void pb_cache_init(struct pb_cache *mgr, uint usecs, float size_factor,
+void pb_cache_init(struct pb_cache *mgr, uint num_heaps,
+                   uint usecs, float size_factor,
                    unsigned bypass_usage, uint64_t maximum_cache_size,
                    void (*destroy_buffer)(struct pb_buffer *buf),
                    bool (*can_reclaim)(struct pb_buffer *buf));

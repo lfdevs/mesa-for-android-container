@@ -294,7 +294,7 @@ intel_texsubimage_tiled_memcpy(struct gl_context * ctx,
       xoffset * cpp, (xoffset + width) * cpp,
       yoffset, yoffset + height,
       map,
-      pixels - (ptrdiff_t) yoffset * src_pitch - (ptrdiff_t) xoffset * cpp,
+      pixels,
       image->mt->surf.row_pitch, src_pitch,
       brw->has_swizzling,
       image->mt->surf.tiling,
@@ -405,6 +405,7 @@ static void
 intel_set_texture_image_mt(struct brw_context *brw,
                            struct gl_texture_image *image,
                            GLenum internal_format,
+                           mesa_format format,
                            struct intel_mipmap_tree *mt)
 
 {
@@ -415,7 +416,7 @@ intel_set_texture_image_mt(struct brw_context *brw,
    _mesa_init_teximage_fields(&brw->ctx, image,
                               mt->surf.logical_level0_px.width,
                               mt->surf.logical_level0_px.height, 1,
-                              0, internal_format, mt->format);
+                              0, internal_format, format);
 
    brw->ctx.Driver.FreeTextureImageBuffer(&brw->ctx, image);
 
@@ -442,7 +443,6 @@ intelSetTexBuffer2(__DRIcontext *pDRICtx, GLint target,
    struct gl_texture_object *texObj;
    struct gl_texture_image *texImage;
    mesa_format texFormat = MESA_FORMAT_NONE;
-   struct intel_mipmap_tree *mt;
    GLenum internal_format = 0;
 
    texObj = _mesa_get_current_tex_object(ctx, target);
@@ -461,44 +461,100 @@ intelSetTexBuffer2(__DRIcontext *pDRICtx, GLint target,
    if (!rb || !rb->mt)
       return;
 
+   /* Neither the EGL and GLX texture_from_pixmap specs say anything about
+    * sRGB.  They are both from a time where sRGB was considered an extra
+    * encoding step you did as part of rendering/blending and not a format.
+    * Even though we have concept of sRGB visuals, X has classically assumed
+    * that your data is just bits and sRGB rendering is entirely a client-side
+    * rendering construct.  The assumption is that the result of BindTexImage
+    * is a texture with a linear format even if it was rendered with sRGB
+    * encoding enabled.
+    */
+   texFormat = _mesa_get_srgb_format_linear(intel_rb_format(rb));
+
    if (rb->mt->cpp == 4) {
-      if (texture_format == __DRI_TEXTURE_FORMAT_RGB) {
+      /* The extra texture_format parameter indicates whether the alpha
+       * channel should be respected or ignored.  If we set internal_format to
+       * GL_RGB, the texture handling code is smart enough to swap the format
+       * or apply a swizzle if the underlying format is RGBA so we don't need
+       * to stomp it to RGBX or anything like that.
+       */
+      if (texture_format == __DRI_TEXTURE_FORMAT_RGB)
          internal_format = GL_RGB;
-         if (rb->mt->format == MESA_FORMAT_B10G10R10X2_UNORM ||
-             rb->mt->format == MESA_FORMAT_B10G10R10A2_UNORM)
-            texFormat = MESA_FORMAT_B10G10R10X2_UNORM;
-         else
-            texFormat = MESA_FORMAT_B8G8R8X8_UNORM;
-      }
-      else {
+      else
          internal_format = GL_RGBA;
-         if (rb->mt->format == MESA_FORMAT_B10G10R10X2_UNORM ||
-             rb->mt->format == MESA_FORMAT_B10G10R10A2_UNORM)
-            texFormat = MESA_FORMAT_B10G10R10A2_UNORM;
-         else
-            texFormat = MESA_FORMAT_B8G8R8A8_UNORM;
-      }
    } else if (rb->mt->cpp == 2) {
       internal_format = GL_RGB;
-      texFormat = MESA_FORMAT_B5G6R5_UNORM;
    }
 
-   intel_miptree_make_shareable(brw, rb->mt);
-   mt = intel_miptree_create_for_bo(brw, rb->mt->bo, texFormat, 0,
-                                    rb->Base.Base.Width,
-                                    rb->Base.Base.Height,
-                                    1, rb->mt->surf.row_pitch,
-                                    rb->mt->surf.tiling,
-                                    MIPTREE_CREATE_DEFAULT);
-   if (mt == NULL)
-       return;
-   mt->target = target;
+   intel_miptree_finish_external(brw, rb->mt);
 
    _mesa_lock_texture(&brw->ctx, texObj);
    texImage = _mesa_get_tex_image(ctx, texObj, target, 0);
-   intel_set_texture_image_mt(brw, texImage, internal_format, mt);
-   intel_miptree_release(&mt);
+   intel_set_texture_image_mt(brw, texImage, internal_format,
+                              texFormat, rb->mt);
    _mesa_unlock_texture(&brw->ctx, texObj);
+}
+
+void
+intelReleaseTexBuffer(__DRIcontext *pDRICtx, GLint target,
+                      __DRIdrawable *dPriv)
+{
+   struct brw_context *brw = pDRICtx->driverPrivate;
+   struct gl_context *ctx = &brw->ctx;
+   struct gl_texture_object *tex_obj;
+   struct intel_texture_object *intel_tex;
+
+   tex_obj = _mesa_get_current_tex_object(ctx, target);
+   if (!tex_obj)
+      return;
+
+   _mesa_lock_texture(&brw->ctx, tex_obj);
+
+   intel_tex = intel_texture_object(tex_obj);
+   if (!intel_tex->mt) {
+      _mesa_unlock_texture(&brw->ctx, tex_obj);
+      return;
+   }
+
+   /* The intel_miptree_prepare_external below as well as the finish_external
+    * above in intelSetTexBuffer2 *should* do nothing.  The BindTexImage call
+    * from both GLX and EGL has TexImage2D and not TexSubImage2D semantics so
+    * the texture is not immutable.  This means that the user cannot create a
+    * texture view of the image with a different format.  Since the only three
+    * formats available when using BindTexImage are all UNORM, we can never
+    * end up with an sRGB format being used for texturing and so we shouldn't
+    * get any format-related resolves when texturing from it.
+    *
+    * While very unlikely, it is possible that the client could use the bound
+    * texture with GL_ARB_image_load_store.  In that case, we'll do a resolve
+    * but that's not actually a problem as it just means that we lose
+    * compression on this texture until the next time it's used as a render
+    * target.
+    *
+    * The only other way we could end up with an unexpected aux usage would be
+    * if we rendered to the image from the same context as we have it bound as
+    * a texture between BindTexImage and ReleaseTexImage.  However, the spec
+    * clearly calls this case out and says you shouldn't do that.  It doesn't
+    * explicitly prevent binding the texture to a framebuffer but it says the
+    * results of trying to render to it while bound are undefined.
+    *
+    * Just to keep everything safe and sane, we do a prepare_external but it
+    * should be a no-op in almost all cases.  On the off chance that someone
+    * ever triggers this, we should at least warn them.
+    */
+   if (intel_tex->mt->mcs_buf &&
+       intel_miptree_get_aux_state(intel_tex->mt, 0, 0) !=
+       isl_drm_modifier_get_default_aux_state(intel_tex->mt->drm_modifier)) {
+      _mesa_warning(ctx, "Aux state changed between BindTexImage and "
+                         "ReleaseTexImage.  Most likely someone tried to draw "
+                         "to the pixmap bound in BindTexImage or used it with "
+                         "image_load_store.");
+   }
+
+   intel_miptree_prepare_external(brw, intel_tex->mt);
+
+   _mesa_unlock_texture(&brw->ctx, tex_obj);
 }
 
 static GLboolean
@@ -590,7 +646,7 @@ intel_image_target_texture_2d(struct gl_context *ctx, GLenum target,
    const GLenum internal_format =
       image->internal_format != 0 ?
       image->internal_format : _mesa_get_format_base_format(mt->format);
-   intel_set_texture_image_mt(brw, texImage, internal_format, mt);
+   intel_set_texture_image_mt(brw, texImage, internal_format, mt->format, mt);
    intel_miptree_release(&mt);
 }
 
@@ -743,7 +799,7 @@ intel_gettexsubimage_tiled_memcpy(struct gl_context *ctx,
    tiled_to_linear(
       xoffset * cpp, (xoffset + width) * cpp,
       yoffset, yoffset + height,
-      pixels - (ptrdiff_t) yoffset * dst_pitch - (ptrdiff_t) xoffset * cpp,
+      pixels,
       map,
       dst_pitch, image->mt->surf.row_pitch,
       brw->has_swizzling,

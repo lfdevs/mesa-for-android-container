@@ -24,6 +24,7 @@ include Makefile.sources
 include $(top_srcdir)/src/gallium/Automake.inc
 
 AM_CPPFLAGS = \
+	-I$(top_srcdir)/include/drm-uapi \
 	$(GALLIUM_DRIVER_CFLAGS) \
 	$(LIBDRM_CFLAGS) \
 	$(NOUVEAU_CFLAGS)

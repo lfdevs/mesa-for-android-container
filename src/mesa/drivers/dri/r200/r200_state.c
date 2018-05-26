@@ -688,10 +688,10 @@ static void r200ColorMask( struct gl_context *ctx,
    if (!rrb)
      return;
    mask = radeonPackColor( rrb->cpp,
-			   ctx->Color.ColorMask[0][RCOMP],
-			   ctx->Color.ColorMask[0][GCOMP],
-			   ctx->Color.ColorMask[0][BCOMP],
-			   ctx->Color.ColorMask[0][ACOMP] );
+			   GET_COLORMASK_BIT(ctx->Color.ColorMask, 0, 0),
+			   GET_COLORMASK_BIT(ctx->Color.ColorMask, 0, 1),
+			   GET_COLORMASK_BIT(ctx->Color.ColorMask, 0, 2),
+			   GET_COLORMASK_BIT(ctx->Color.ColorMask, 0, 3) );
 
 
    if (!(r && g && b && a))
@@ -1626,35 +1626,14 @@ static void r200RenderMode( struct gl_context *ctx, GLenum mode )
    FALLBACK( rmesa, R200_FALLBACK_RENDER_MODE, (mode != GL_RENDER) );
 }
 
-
-static GLuint r200_rop_tab[] = {
-   R200_ROP_CLEAR,
-   R200_ROP_AND,
-   R200_ROP_AND_REVERSE,
-   R200_ROP_COPY,
-   R200_ROP_AND_INVERTED,
-   R200_ROP_NOOP,
-   R200_ROP_XOR,
-   R200_ROP_OR,
-   R200_ROP_NOR,
-   R200_ROP_EQUIV,
-   R200_ROP_INVERT,
-   R200_ROP_OR_REVERSE,
-   R200_ROP_COPY_INVERTED,
-   R200_ROP_OR_INVERTED,
-   R200_ROP_NAND,
-   R200_ROP_SET,
-};
-
-static void r200LogicOpCode( struct gl_context *ctx, GLenum opcode )
+static void r200LogicOpCode(struct gl_context *ctx, enum gl_logicop_mode opcode)
 {
    r200ContextPtr rmesa = R200_CONTEXT(ctx);
-   GLuint rop = (GLuint)opcode - GL_CLEAR;
 
-   assert( rop < 16 );
+   assert((unsigned) opcode <= 15);
 
    R200_STATECHANGE( rmesa, msk );
-   rmesa->hw.msk.cmd[MSK_RB3D_ROPCNTL] = r200_rop_tab[rop];
+   rmesa->hw.msk.cmd[MSK_RB3D_ROPCNTL] = opcode;
 }
 
 /* =============================================================

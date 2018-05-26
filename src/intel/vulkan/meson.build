@@ -18,37 +18,39 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+anv_extensions_py = files('anv_extensions.py')
+
 anv_entrypoints = custom_target(
   'anv_entrypoints.[ch]',
-  input : ['anv_entrypoints_gen.py', vk_api_xml, vk_android_native_buffer_xml],
+  input : ['anv_entrypoints_gen.py', vk_api_xml],
   output : ['anv_entrypoints.h', 'anv_entrypoints.c'],
   command : [
-    prog_python2, '@INPUT0@', '--xml', '@INPUT1@', '--xml', '@INPUT2@',
+    prog_python2, '@INPUT0@', '--xml', '@INPUT1@',
     '--outdir', meson.current_build_dir(),
   ],
-  depend_files : files('anv_extensions.py'),
+  depend_files : anv_extensions_py,
 )
 
 anv_extensions_c = custom_target(
   'anv_extensions.c',
-  input : ['anv_extensions_gen.py', vk_api_xml, vk_android_native_buffer_xml],
+  input : ['anv_extensions_gen.py', vk_api_xml],
   output : 'anv_extensions.c',
   command : [
-    prog_python2, '@INPUT0@', '--xml', '@INPUT1@', '--xml', '@INPUT2@',
+    prog_python2, '@INPUT0@', '--xml', '@INPUT1@',
     '--out-c', '@OUTPUT@',
   ],
-  depend_files : files('anv_extensions.py'),
+  depend_files : anv_extensions_py,
 )
 
 anv_extensions_h = custom_target(
   'anv_extensions.h',
-  input : ['anv_extensions_gen.py', vk_api_xml, vk_android_native_buffer_xml],
+  input : ['anv_extensions_gen.py', vk_api_xml],
   output : 'anv_extensions.h',
   command : [
-    prog_python2, '@INPUT0@', '--xml', '@INPUT1@', '--xml', '@INPUT2@',
+    prog_python2, '@INPUT0@', '--xml', '@INPUT1@',
     '--out-h', '@OUTPUT@',
   ],
-  depend_files : files('anv_extensions.py'),
+  depend_files : anv_extensions_py,
 )
 
 intel_icd = custom_target(
@@ -60,7 +62,7 @@ intel_icd = custom_target(
     '--lib-path', join_paths(get_option('prefix'), get_option('libdir')),
     '--out', '@OUTPUT@',
   ],
-  depend_files : files('anv_extensions.py'),
+  depend_files : anv_extensions_py,
   build_by_default : true,
   install_dir : with_vulkan_icd_dir,
   install : true,
@@ -99,7 +101,7 @@ anv_gen_files = files(
 )
 foreach g : [['70', ['gen7_cmd_buffer.c']], ['75', ['gen7_cmd_buffer.c']],
              ['80', ['gen8_cmd_buffer.c']], ['90', ['gen8_cmd_buffer.c']],
-             ['100', ['gen8_cmd_buffer.c']]]
+             ['100', ['gen8_cmd_buffer.c']], ['110', ['gen8_cmd_buffer.c']]]
   _gen = g[0]
   libanv_gen_libs += static_library(
     'libanv_gen@0@'.format(_gen),
@@ -129,6 +131,7 @@ libanv_files = files(
   'anv_image.c',
   'anv_intel.c',
   'anv_nir.h',
+  'anv_nir_add_base_work_group_id.c',
   'anv_nir_apply_pipeline_layout.c',
   'anv_nir_lower_input_attachments.c',
   'anv_nir_lower_multiview.c',
@@ -190,8 +193,8 @@ libvulkan_intel = shared_library(
   ],
   link_whole : [libanv_common, libanv_gen_libs],
   link_with : [
-    libintel_compiler, libintel_common, libisl, libblorp, libvulkan_util,
-    libvulkan_wsi, libmesa_util,
+    libintel_compiler, libintel_common, libintel_dev, libisl, libblorp,
+    libvulkan_util, libvulkan_wsi, libmesa_util,
   ],
   dependencies : [
     dep_thread, dep_dl, dep_m, anv_deps, idep_nir,
@@ -211,8 +214,8 @@ if with_tests
     ],
     link_whole : libanv_common,
     link_with : [
-      libanv_gen_libs, libintel_compiler, libintel_common, libisl, libblorp,
-      libvulkan_util, libvulkan_wsi, libmesa_util,
+      libanv_gen_libs, libintel_compiler, libintel_common, libintel_dev,
+      libisl, libblorp, libvulkan_util, libvulkan_wsi, libmesa_util,
     ],
     dependencies : [
       dep_thread, dep_dl, dep_m, anv_deps, idep_nir,

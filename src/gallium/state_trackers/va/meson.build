@@ -25,8 +25,8 @@ libva_st = static_library(
   files(
     'buffer.c', 'config.c', 'context.c', 'display.c', 'image.c', 'picture.c',
     'picture_mpeg12.c', 'picture_mpeg4.c', 'picture_h264.c', 'picture_hevc.c',
-    'picture_vc1.c', 'picture_mjpeg.c', 'postproc.c', 'subpicture.c',
-    'surface.c',
+    'picture_vc1.c', 'picture_mjpeg.c', 'picture_vp9.c','postproc.c',
+    'subpicture.c', 'surface.c', 'picture_h264_enc.c', 'picture_hevc_enc.c',
   ),
   c_args : [
     c_vis_args,

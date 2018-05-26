@@ -38,7 +38,7 @@ template <typename SIMD_T>
 struct SwrPixelOffsets
 {
 public:
-    INLINE static typename SIMD_T::Float GetOffset(uint32_t loc)
+    INLINE static Float<SIMD_T> GetOffset(uint32_t loc)
     {
         SWR_ASSERT(loc <= 1);
 
@@ -50,7 +50,7 @@ public:
 /// @brief Convert the X,Y coords of a triangle to the requested Fixed 
 /// Point precision from FP32.
 template <typename SIMD_T, typename PT = FixedPointTraits<Fixed_16_8>>
-INLINE typename SIMD_T::Integer fpToFixedPointVertical(const typename SIMD_T::Float &vIn)
+INLINE Integer<SIMD_T> fpToFixedPointVertical(const Float<SIMD_T> &vIn)
 {
     return SIMD_T::cvtps_epi32(SIMD_T::mul_ps(vIn, SIMD_T::set1_ps(PT::ScaleT::value)));
 }
@@ -62,7 +62,7 @@ INLINE typename SIMD_T::Integer fpToFixedPointVertical(const typename SIMD_T::Fl
 /// @param vXi: fixed point X coords of tri verts
 /// @param vYi: fixed point Y coords of tri verts
 template <typename SIMD_T>
-INLINE static void FPToFixedPoint(const typename SIMD_T::Vec4 *const tri, typename SIMD_T::Integer(&vXi)[3], typename SIMD_T::Integer(&vYi)[3])
+INLINE static void FPToFixedPoint(const Vec4<SIMD_T> *const tri, Integer<SIMD_T>(&vXi)[3], Integer<SIMD_T>(&vYi)[3])
 {
     vXi[0] = fpToFixedPointVertical<SIMD_T>(tri[0].x);
     vYi[0] = fpToFixedPointVertical<SIMD_T>(tri[0].y);
@@ -81,24 +81,24 @@ INLINE static void FPToFixedPoint(const typename SIMD_T::Vec4 *const tri, typena
 /// *Note*: expects vX, vY to be in the correct precision for the type 
 /// of rasterization. This avoids unnecessary FP->fixed conversions.
 template <typename SIMD_T, typename CT>
-INLINE void calcBoundingBoxIntVertical(const typename SIMD_T::Integer(&vX)[3], const typename SIMD_T::Integer(&vY)[3], SIMDBBOX_T<SIMD_T> &bbox)
+INLINE void calcBoundingBoxIntVertical(const Integer<SIMD_T>(&vX)[3], const Integer<SIMD_T>(&vY)[3], SIMDBBOX_T<SIMD_T> &bbox)
 {
-    typename SIMD_T::Integer vMinX = vX[0];
+    Integer<SIMD_T> vMinX = vX[0];
 
     vMinX = SIMD_T::min_epi32(vMinX, vX[1]);
     vMinX = SIMD_T::min_epi32(vMinX, vX[2]);
 
-    typename SIMD_T::Integer vMaxX = vX[0];
+    Integer<SIMD_T> vMaxX = vX[0];
 
     vMaxX = SIMD_T::max_epi32(vMaxX, vX[1]);
     vMaxX = SIMD_T::max_epi32(vMaxX, vX[2]);
 
-    typename SIMD_T::Integer vMinY = vY[0];
+    Integer<SIMD_T> vMinY = vY[0];
 
     vMinY = SIMD_T::min_epi32(vMinY, vY[1]);
     vMinY = SIMD_T::min_epi32(vMinY, vY[2]);
 
-    typename SIMD_T::Integer vMaxY = vY[0];
+    Integer<SIMD_T> vMaxY = vY[0];
 
     vMaxY = SIMD_T::max_epi32(vMaxY, vY[1]);
     vMaxY = SIMD_T::max_epi32(vMaxY, vY[2]);
@@ -108,7 +108,7 @@ INLINE void calcBoundingBoxIntVertical(const typename SIMD_T::Integer(&vX)[3], c
         /// Bounding box needs to be expanded by 1/512 before snapping to 16.8 for conservative rasterization
         /// expand bbox by 1/256; coverage will be correctly handled in the rasterizer.
 
-        const typename SIMD_T::Integer value = SIMD_T::set1_epi32(CT::BoundingBoxOffsetT::value);
+        const Integer<SIMD_T> value = SIMD_T::set1_epi32(CT::BoundingBoxOffsetT::value);
 
         vMinX = SIMD_T::sub_epi32(vMinX, value);
         vMaxX = SIMD_T::add_epi32(vMaxX, value);

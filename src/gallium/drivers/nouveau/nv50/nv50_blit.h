@@ -85,7 +85,8 @@ static inline unsigned
 nv50_blit_get_filter(const struct pipe_blit_info *info)
 {
    if (info->dst.resource->nr_samples < info->src.resource->nr_samples)
-      return util_format_is_depth_or_stencil(info->src.format) ? 0 : 1;
+      return (util_format_is_depth_or_stencil(info->src.format) ||
+              util_format_is_pure_integer(info->src.format)) ? 0 : 1;
 
    if (info->filter != PIPE_TEX_FILTER_LINEAR)
       return 0;

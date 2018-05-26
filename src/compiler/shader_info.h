@@ -36,6 +36,7 @@ struct spirv_supported_capabilities {
    bool float64;
    bool image_ms_array;
    bool tessellation;
+   bool device_group;
    bool draw_parameters;
    bool image_read_without_format;
    bool image_write_without_format;
@@ -43,6 +44,17 @@ struct spirv_supported_capabilities {
    bool multiview;
    bool variable_pointers;
    bool storage_16bit;
+   bool shader_viewport_index_layer;
+   bool subgroup_arithmetic;
+   bool subgroup_ballot;
+   bool subgroup_basic;
+   bool subgroup_quad;
+   bool subgroup_shuffle;
+   bool subgroup_vote;
+   bool gcn_shader;
+   bool trinary_minmax;
+   bool descriptor_array_dynamic_indexing;
+   bool runtime_descriptor_array;
 };
 
 typedef struct shader_info {
@@ -53,6 +65,11 @@ typedef struct shader_info {
 
    /** The shader stage, such as MESA_SHADER_VERTEX. */
    gl_shader_stage stage;
+
+   /** The shader stage in a non SSO linked program that follows this stage,
+     * such as MESA_SHADER_FRAGMENT.
+     */
+   gl_shader_stage next_stage;
 
    /* Number of textures used by this shader */
    unsigned num_textures;
@@ -67,8 +84,6 @@ typedef struct shader_info {
 
    /* Which inputs are actually read */
    uint64_t inputs_read;
-   /* Which inputs are actually read and are double */
-   uint64_t double_inputs_read;
    /* Which outputs are actually written */
    uint64_t outputs_written;
    /* Which outputs are actually read */
@@ -109,6 +124,14 @@ typedef struct shader_info {
    bool has_transform_feedback_varyings;
 
    union {
+      struct {
+         /* Which inputs are doubles */
+         uint64_t double_inputs;
+
+         /* Which inputs are actually read and are double */
+         uint64_t double_inputs_read;
+      } vs;
+
       struct {
          /** The number of vertices recieves per input primitive */
          unsigned vertices_in;
@@ -152,6 +175,8 @@ typedef struct shader_info {
          bool inner_coverage;
 
          bool post_depth_coverage;
+
+         bool pixel_center_integer;
 
          /** gl_FragDepth layout for ARB_conservative_depth. */
          enum gl_frag_depth_layout depth_layout;

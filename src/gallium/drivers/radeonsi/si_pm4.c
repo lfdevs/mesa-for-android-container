@@ -1,5 +1,6 @@
 /*
  * Copyright 2012 Advanced Micro Devices, Inc.
+ * All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -21,7 +22,6 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#include "radeon/r600_cs.h"
 #include "util/u_memory.h"
 #include "si_pipe.h"
 #include "sid.h"
@@ -68,7 +68,7 @@ void si_pm4_set_reg(struct si_pm4_state *state, unsigned reg, uint32_t val)
 		reg -= CIK_UCONFIG_REG_OFFSET;
 
 	} else {
-		R600_ERR("Invalid register offset %08x!\n", reg);
+		PRINT_ERR("Invalid register offset %08x!\n", reg);
 		return;
 	}
 
@@ -123,10 +123,10 @@ void si_pm4_free_state(struct si_context *sctx,
 
 void si_pm4_emit(struct si_context *sctx, struct si_pm4_state *state)
 {
-	struct radeon_winsys_cs *cs = sctx->b.gfx.cs;
+	struct radeon_winsys_cs *cs = sctx->gfx_cs;
 
 	for (int i = 0; i < state->nbo; ++i) {
-		radeon_add_to_buffer_list(&sctx->b, &sctx->b.gfx, state->bo[i],
+		radeon_add_to_buffer_list(sctx, sctx->gfx_cs, state->bo[i],
 				      state->bo_usage[i], state->bo_priority[i]);
 	}
 
@@ -135,7 +135,7 @@ void si_pm4_emit(struct si_context *sctx, struct si_pm4_state *state)
 	} else {
 		struct r600_resource *ib = state->indirect_buffer;
 
-		radeon_add_to_buffer_list(&sctx->b, &sctx->b.gfx, ib,
+		radeon_add_to_buffer_list(sctx, sctx->gfx_cs, ib,
 					  RADEON_USAGE_READ,
                                           RADEON_PRIO_IB2);
 
@@ -155,11 +155,11 @@ void si_pm4_reset_emitted(struct si_context *sctx)
 void si_pm4_upload_indirect_buffer(struct si_context *sctx,
 				   struct si_pm4_state *state)
 {
-	struct pipe_screen *screen = sctx->b.b.screen;
+	struct pipe_screen *screen = sctx->b.screen;
 	unsigned aligned_ndw = align(state->ndw, 8);
 
 	/* only supported on CIK and later */
-	if (sctx->b.chip_class < CIK)
+	if (sctx->chip_class < CIK)
 		return;
 
 	assert(state->ndw);
@@ -183,6 +183,6 @@ void si_pm4_upload_indirect_buffer(struct si_context *sctx,
 			state->pm4[i] = 0xffff1000; /* type3 nop packet */
 	}
 
-	pipe_buffer_write(&sctx->b.b, &state->indirect_buffer->b.b,
+	pipe_buffer_write(&sctx->b, &state->indirect_buffer->b.b,
 			  0, aligned_ndw *4, state->pm4);
 }

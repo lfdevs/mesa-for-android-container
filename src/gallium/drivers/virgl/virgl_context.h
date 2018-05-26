@@ -109,6 +109,6 @@ void virgl_transfer_inline_write(struct pipe_context *ctx,
                                 unsigned stride,
                                 unsigned layer_stride);
 
-struct tgsi_token *virgl_tgsi_transform(const struct tgsi_token *tokens_in);
+struct tgsi_token *virgl_tgsi_transform(struct virgl_context *vctx, const struct tgsi_token *tokens_in);
 
 #endif

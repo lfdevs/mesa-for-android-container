@@ -38,6 +38,8 @@
 
 #include <stdint.h>
 
+#include "config.h"
+#include "errors.h"
 #include "format_pack.h"
 #include "format_utils.h"
 #include "macros.h"

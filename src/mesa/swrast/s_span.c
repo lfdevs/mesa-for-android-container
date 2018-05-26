@@ -32,6 +32,7 @@
  */
 
 #include "c99_math.h"
+#include "main/errors.h"
 #include "main/glheader.h"
 #include "main/format_pack.h"
 #include "main/format_unpack.h"
@@ -1133,7 +1134,6 @@ void
 _swrast_write_rgba_span( struct gl_context *ctx, SWspan *span)
 {
    const SWcontext *swrast = SWRAST_CONTEXT(ctx);
-   const GLuint *colorMask = (GLuint *) ctx->Color.ColorMask;
    const GLbitfield origInterpMask = span->interpMask;
    const GLbitfield origArrayMask = span->arrayMask;
    const GLbitfield64 origArrayAttribs = span->arrayAttribs;
@@ -1251,7 +1251,8 @@ _swrast_write_rgba_span( struct gl_context *ctx, SWspan *span)
    /* We had to wait until now to check for glColorMask(0,0,0,0) because of
     * the occlusion test.
     */
-   if (fb->_NumColorDrawBuffers == 1 && colorMask[0] == 0x0) {
+   if (fb->_NumColorDrawBuffers == 1 &&
+       !GET_COLORMASK(ctx->Color.ColorMask, 0)) {
       /* no colors to write */
       goto end;
    }
@@ -1368,7 +1369,7 @@ _swrast_write_rgba_span( struct gl_context *ctx, SWspan *span)
                _swrast_blend_span(ctx, rb, span);
             }
 
-            if (colorMask[buf] != 0xffffffff) {
+            if (GET_COLORMASK(ctx->Color.ColorMask, buf) != 0xf) {
                _swrast_mask_rgba_span(ctx, rb, span, buf);
             }
 

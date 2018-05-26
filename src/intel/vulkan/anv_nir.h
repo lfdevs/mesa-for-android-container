@@ -38,12 +38,16 @@ void anv_nir_lower_push_constants(nir_shader *shader);
 bool anv_nir_lower_multiview(nir_shader *shader, uint32_t view_mask);
 
 bool anv_nir_lower_ycbcr_textures(nir_shader *shader,
-                                  struct anv_pipeline *pipeline);
+                                  struct anv_pipeline_layout *layout);
 
 void anv_nir_apply_pipeline_layout(struct anv_pipeline *pipeline,
+                                   struct anv_pipeline_layout *layout,
                                    nir_shader *shader,
                                    struct brw_stage_prog_data *prog_data,
                                    struct anv_pipeline_bind_map *map);
+
+bool anv_nir_add_base_work_group_id(nir_shader *shader,
+                                    struct brw_cs_prog_data *prog_data);
 
 #ifdef __cplusplus
 }

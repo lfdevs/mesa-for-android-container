@@ -23,6 +23,7 @@
 
 #include "common/os.h"
 #include <vector>
+#include <array>
 #include <sstream>
 
 #if defined(_WIN32)
@@ -150,4 +151,161 @@ void SWR_API CreateDirectoryPath(const std::string& path)
         }
     }
 #endif // Unix
+}
+
+/// Execute Command (block until finished)
+/// @returns process exit value
+int SWR_API  ExecCmd(
+    const std::string&  cmd,            ///< (In) Command line string
+    const char*         pOptEnvStrings, ///< (Optional In) Environment block for new process
+    std::string*        pOptStdOut,     ///< (Optional Out) Standard Output text
+    std::string*        pOptStdErr,     ///< (Optional Out) Standard Error text
+    const std::string*  pOptStdIn)      ///< (Optional In) Standard Input text
+{
+    int rvalue = -1;
+
+#if defined(_WIN32)
+    struct WinPipe
+    {
+        HANDLE hRead;
+        HANDLE hWrite;
+    };
+    std::array<WinPipe, 3> hPipes = {};
+
+    SECURITY_ATTRIBUTES saAttr = { sizeof(SECURITY_ATTRIBUTES) };
+    saAttr.bInheritHandle = TRUE;   //Pipe handles are inherited by child process.
+    saAttr.lpSecurityDescriptor = NULL;
+
+    {
+        bool bFail = false;
+        for (WinPipe& p : hPipes)
+        {
+            if (!CreatePipe(&p.hRead, &p.hWrite, &saAttr, 0))
+            {
+                bFail = true;
+            }
+        }
+
+        if (bFail)
+        {
+            for (WinPipe& p : hPipes)
+            {
+                CloseHandle(p.hRead);
+                CloseHandle(p.hWrite);
+            }
+            return rvalue;
+        }
+    }
+
+    STARTUPINFOA StartupInfo{};
+    StartupInfo.cb = sizeof(STARTUPINFOA);
+    StartupInfo.dwFlags = STARTF_USESTDHANDLES;
+    StartupInfo.dwFlags |= STARTF_USESHOWWINDOW;
+    StartupInfo.wShowWindow = SW_HIDE;
+    if (pOptStdIn)
+    {
+        StartupInfo.hStdInput = hPipes[0].hRead;
+    }
+    StartupInfo.hStdOutput = hPipes[1].hWrite;
+    StartupInfo.hStdError = hPipes[2].hWrite;
+    PROCESS_INFORMATION procInfo{};
+
+    // CreateProcess can modify the string
+    std::string local_cmd = cmd;
+
+    BOOL ProcessValue = CreateProcessA(
+        NULL,
+        (LPSTR)local_cmd.c_str(),
+        NULL,
+        NULL,
+        TRUE,
+        0,
+        (LPVOID)pOptEnvStrings,
+        NULL,
+        &StartupInfo,
+        &procInfo);
+
+    if (ProcessValue && procInfo.hProcess)
+    {
+        auto ReadFromPipe = [](HANDLE hPipe, std::string* pOutStr)
+        {
+            char buf[1024];
+            DWORD dwRead = 0;
+            DWORD dwAvail = 0;
+            while (true)
+            {
+                if (!::PeekNamedPipe(hPipe, NULL, 0, NULL, &dwAvail, NULL))
+                {
+                    break;
+                }
+
+                if (!dwAvail) // no data available, return
+                {
+                    break;
+                }
+
+                if (!::ReadFile(hPipe, buf, std::min<size_t>(sizeof(buf) - 1, size_t(dwAvail)), &dwRead, NULL) || !dwRead)
+                {
+                    // error, the child process might ended
+                    break;
+                }
+
+                buf[dwRead] = 0;
+                if (pOutStr)
+                {
+                    (*pOutStr) += buf;
+                }
+            }
+        };
+        bool bProcessEnded = false;
+        size_t bytesWritten = 0;
+        do
+        {
+            if (pOptStdIn && (pOptStdIn->size() > bytesWritten))
+            {
+                DWORD bytesToWrite = static_cast<DWORD>(pOptStdIn->size()) - bytesWritten;
+                if (!::WriteFile(
+                    hPipes[0].hWrite,
+                    pOptStdIn->data() + bytesWritten,
+                    bytesToWrite, &bytesToWrite, nullptr))
+                {
+                    // Failed to write to pipe
+                    break;
+                }
+                bytesWritten += bytesToWrite;
+            }
+
+            // Give some timeslice (50ms), so we won't waste 100% cpu.
+            bProcessEnded = (WaitForSingleObject(procInfo.hProcess, 50) == WAIT_OBJECT_0);
+
+            ReadFromPipe(hPipes[1].hRead, pOptStdOut);
+            ReadFromPipe(hPipes[2].hRead, pOptStdErr);
+        }
+        while (!bProcessEnded);
+
+        DWORD exitVal = 0;
+        if (!GetExitCodeProcess(procInfo.hProcess, &exitVal))
+        {
+            exitVal = 1;
+        }
+
+        CloseHandle(procInfo.hProcess);
+        CloseHandle(procInfo.hThread);
+
+        rvalue = exitVal;
+    }
+
+    for (WinPipe& p : hPipes)
+    {
+        CloseHandle(p.hRead);
+        CloseHandle(p.hWrite);
+    }
+
+#else
+
+    // Non-Windows implementation
+
+#endif
+
+    return rvalue;
 }

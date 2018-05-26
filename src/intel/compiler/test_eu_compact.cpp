@@ -149,13 +149,13 @@ test_fuzz_compact_instruction(struct brw_codegen *p, brw_inst src)
 
       for (int bit1 = 0; bit1 < 128; bit1++) {
          brw_inst instr = src;
-	 uint32_t *bits = (uint32_t *)&instr;
+	 uint64_t *bits = instr.data;
 
          if (skip_bit(p->devinfo, &src, bit1))
 	    continue;
 
-	 bits[bit0 / 32] ^= (1 << (bit0 & 31));
-	 bits[bit1 / 32] ^= (1 << (bit1 & 31));
+	 bits[bit0 / 64] ^= (1ull << (bit0 & 63));
+	 bits[bit1 / 64] ^= (1ull << (bit1 & 63));
 
          clear_pad_bits(p->devinfo, &instr);
 

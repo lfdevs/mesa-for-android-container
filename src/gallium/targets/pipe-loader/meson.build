@@ -1,4 +1,4 @@
-# Copyright © 2017 Intel Corporation
+# Copyright © 2017-2018 Intel Corporation
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -20,20 +20,21 @@
 
 pipe_loader_link_args = [ld_args_gc_sections]
 pipe_loader_link_deps = []
-pipe_loader_link_with = [libgallium, libnir, libmesa_util, librbug, libtrace]
-pipe_loader_comp_args = ['-DGALLIUM_RBUG', '-DGALLIUM_TRACE']
+pipe_loader_link_with = [libgallium, libnir, libmesa_util]
+pipe_loader_comp_args = []
 pipe_loader_incs = [
   inc_include, inc_src, inc_util, inc_gallium, inc_gallium_drivers,
   inc_gallium_winsys, inc_gallium_aux,
 ]
 
-if (with_gallium_va or with_gallium_vdpau or with_gallium_omx or
+if (with_gallium_va or with_gallium_vdpau or with_gallium_omx != 'disabled' or
     with_gallium_xvmc or with_dri)
   pipe_loader_link_with += libgalliumvl
 else
   pipe_loader_link_with += libgalliumvl_stubs
 endif
-if with_gallium_va or with_gallium_vdpau or with_gallium_omx or with_gallium_xvmc
+if (with_gallium_va or with_gallium_vdpau or with_gallium_omx != 'disabled' or
+    with_gallium_xvmc)
   pipe_loader_link_with += libgalliumvlwinsys
 endif
 

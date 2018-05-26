@@ -22,6 +22,7 @@ i965_FILES = \
 	brw_ff_gs_emit.c \
 	brw_ff_gs.h \
 	brw_formatquery.c \
+	brw_generate_mipmap.c \
 	brw_gs.c \
 	brw_gs.h \
 	brw_gs_surface_state.c \
@@ -150,28 +151,25 @@ i965_gen10_FILES = \
 	genX_blorp_exec.c \
 	genX_state_upload.c
 
+i965_gen11_FILES = \
+	genX_blorp_exec.c \
+	genX_state_upload.c
+
 i965_oa_GENERATED_FILES = \
-	brw_oa_hsw.h \
-	brw_oa_hsw.c \
-	brw_oa_bdw.h \
-	brw_oa_bdw.c \
-	brw_oa_chv.h \
-	brw_oa_chv.c \
-	brw_oa_sklgt2.h \
-	brw_oa_sklgt2.c \
-	brw_oa_sklgt3.h \
-	brw_oa_sklgt3.c \
-	brw_oa_sklgt4.h \
-	brw_oa_sklgt4.c \
-	brw_oa_bxt.h \
-	brw_oa_bxt.c \
-	brw_oa_kblgt2.h \
-	brw_oa_kblgt2.c \
-	brw_oa_kblgt3.h \
-	brw_oa_kblgt3.c \
-	brw_oa_glk.h \
-	brw_oa_glk.c \
-	brw_oa_cflgt2.h \
-	brw_oa_cflgt2.c \
-	brw_oa_cflgt3.h \
-	brw_oa_cflgt3.c
+	brw_oa_metrics.c \
+	brw_oa_metrics.h
+
+i965_oa_xml_FILES = \
+	brw_oa_hsw.xml \
+	brw_oa_bdw.xml \
+	brw_oa_chv.xml \
+	brw_oa_sklgt2.xml \
+	brw_oa_sklgt3.xml \
+	brw_oa_sklgt4.xml \
+	brw_oa_bxt.xml \
+	brw_oa_kblgt2.xml \
+	brw_oa_kblgt3.xml \
+	brw_oa_glk.xml \
+	brw_oa_cflgt2.xml \
+	brw_oa_cflgt3.xml \
+	brw_oa_cnl.xml

@@ -30,6 +30,7 @@
 
 #include "util/u_hash_table.h"
 #include "util/u_memory.h"
+#include "util/u_string.h"
 #include "util/ralloc.h"
 
 #include "vc4_context.h"
@@ -47,6 +48,13 @@ static bool dump_stats = false;
 
 static void
 vc4_bo_cache_free_all(struct vc4_bo_cache *cache);
+
+void
+vc4_bo_debug_describe(char* buf, const struct vc4_bo *ptr)
+{
+   util_sprintf(buf, "vc4_bo<%s,%u,%u>", ptr->name ? ptr->name : "?",
+                ptr->handle, ptr->size);
+}
 
 void
 vc4_bo_label(struct vc4_screen *screen, struct vc4_bo *bo, const char *fmt, ...)
@@ -389,7 +397,7 @@ vc4_bo_open_handle(struct vc4_screen *screen,
 
         bo = util_hash_table_get(screen->bo_handles, (void*)(uintptr_t)handle);
         if (bo) {
-                pipe_reference(NULL, &bo->reference);
+                vc4_bo_reference(bo);
                 goto done;
         }
 

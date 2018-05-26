@@ -45,6 +45,7 @@ struct gen_device_info;
  */
 enum PACKED brw_reg_type {
    /** Floating-point types: @{ */
+   BRW_REGISTER_TYPE_NF,
    BRW_REGISTER_TYPE_DF,
    BRW_REGISTER_TYPE_F,
    BRW_REGISTER_TYPE_HF,
@@ -71,6 +72,7 @@ static inline bool
 brw_reg_type_is_floating_point(enum brw_reg_type type)
 {
    switch (type) {
+   case BRW_REGISTER_TYPE_NF:
    case BRW_REGISTER_TYPE_DF:
    case BRW_REGISTER_TYPE_F:
    case BRW_REGISTER_TYPE_HF:

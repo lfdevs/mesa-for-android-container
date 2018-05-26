@@ -156,9 +156,9 @@ libvc5_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) \
 	$(CXXFLAGS) $(libvc5_la_LDFLAGS) $(LDFLAGS) -o $@
 libvc5_v33_la_LIBADD =
 am__objects_2 = libvc5_v33_la-v3dx_format_table.lo \
-	libvc5_v33_la-v3dx_simulator.lo libvc5_v33_la-vc5_draw.lo \
-	libvc5_v33_la-vc5_emit.lo libvc5_v33_la-vc5_rcl.lo \
-	libvc5_v33_la-vc5_state.lo
+	libvc5_v33_la-v3dx_job.lo libvc5_v33_la-v3dx_simulator.lo \
+	libvc5_v33_la-vc5_draw.lo libvc5_v33_la-vc5_emit.lo \
+	libvc5_v33_la-vc5_rcl.lo libvc5_v33_la-vc5_state.lo
 am_libvc5_v33_la_OBJECTS = $(am__objects_2)
 libvc5_v33_la_OBJECTS = $(am_libvc5_v33_la_OBJECTS)
 libvc5_v33_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
@@ -166,9 +166,9 @@ libvc5_v33_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
 	$(CFLAGS) $(AM_LDFLAGS) $(LDFLAGS) -o $@
 libvc5_v41_la_LIBADD =
 am__objects_3 = libvc5_v41_la-v3dx_format_table.lo \
-	libvc5_v41_la-v3dx_simulator.lo libvc5_v41_la-vc5_draw.lo \
-	libvc5_v41_la-vc5_emit.lo libvc5_v41_la-vc5_rcl.lo \
-	libvc5_v41_la-vc5_state.lo
+	libvc5_v41_la-v3dx_job.lo libvc5_v41_la-v3dx_simulator.lo \
+	libvc5_v41_la-vc5_draw.lo libvc5_v41_la-vc5_emit.lo \
+	libvc5_v41_la-vc5_rcl.lo libvc5_v41_la-vc5_state.lo
 am_libvc5_v41_la_OBJECTS = $(am__objects_3)
 libvc5_v41_la_OBJECTS = $(am_libvc5_v41_la_OBJECTS)
 libvc5_v41_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
@@ -401,6 +401,9 @@ OBJEXT = @OBJEXT@
 OMX_BELLAGIO_CFLAGS = @OMX_BELLAGIO_CFLAGS@
 OMX_BELLAGIO_LIBS = @OMX_BELLAGIO_LIBS@
 OMX_BELLAGIO_LIB_INSTALL_DIR = @OMX_BELLAGIO_LIB_INSTALL_DIR@
+OMX_TIZONIA_CFLAGS = @OMX_TIZONIA_CFLAGS@
+OMX_TIZONIA_LIBS = @OMX_TIZONIA_LIBS@
+OMX_TIZONIA_LIB_INSTALL_DIR = @OMX_TIZONIA_LIB_INSTALL_DIR@
 OPENCL_LIBNAME = @OPENCL_LIBNAME@
 OPENCL_VERSION = @OPENCL_VERSION@
 OSMESA_LIB = @OSMESA_LIB@
@@ -468,7 +471,9 @@ VL_LIBS = @VL_LIBS@
 VULKAN_ICD_INSTALL_DIR = @VULKAN_ICD_INSTALL_DIR@
 WAYLAND_CLIENT_CFLAGS = @WAYLAND_CLIENT_CFLAGS@
 WAYLAND_CLIENT_LIBS = @WAYLAND_CLIENT_LIBS@
+WAYLAND_PROTOCOLS_CFLAGS = @WAYLAND_PROTOCOLS_CFLAGS@
 WAYLAND_PROTOCOLS_DATADIR = @WAYLAND_PROTOCOLS_DATADIR@
+WAYLAND_PROTOCOLS_LIBS = @WAYLAND_PROTOCOLS_LIBS@
 WAYLAND_SCANNER = @WAYLAND_SCANNER@
 WAYLAND_SCANNER_CFLAGS = @WAYLAND_SCANNER_CFLAGS@
 WAYLAND_SCANNER_LIBS = @WAYLAND_SCANNER_LIBS@
@@ -484,6 +489,8 @@ XCB_DRI2_CFLAGS = @XCB_DRI2_CFLAGS@
 XCB_DRI2_LIBS = @XCB_DRI2_LIBS@
 XCB_DRI3_CFLAGS = @XCB_DRI3_CFLAGS@
 XCB_DRI3_LIBS = @XCB_DRI3_LIBS@
+XCB_DRI3_MODIFIERS_CFLAGS = @XCB_DRI3_MODIFIERS_CFLAGS@
+XCB_DRI3_MODIFIERS_LIBS = @XCB_DRI3_MODIFIERS_LIBS@
 XF86VIDMODE_CFLAGS = @XF86VIDMODE_CFLAGS@
 XF86VIDMODE_LIBS = @XF86VIDMODE_LIBS@
 XLIBGL_CFLAGS = @XLIBGL_CFLAGS@
@@ -545,7 +552,6 @@ pdfdir = @pdfdir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
-runstatedir = @runstatedir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
@@ -588,6 +594,7 @@ C_SOURCES := \
 VC5_PER_VERSION_SOURCES = \
 	v3dx_context.h \
 	v3dx_format_table.c \
+	v3dx_job.c \
 	v3dx_simulator.c \
 	vc5_draw.c \
 	vc5_emit.c \
@@ -750,12 +757,14 @@ distclean-compile:
 	-rm -f *.tab.c
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libvc5_v33_la-v3dx_format_table.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libvc5_v33_la-v3dx_job.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libvc5_v33_la-v3dx_simulator.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libvc5_v33_la-vc5_draw.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libvc5_v33_la-vc5_emit.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libvc5_v33_la-vc5_rcl.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libvc5_v33_la-vc5_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libvc5_v41_la-v3dx_format_table.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libvc5_v41_la-v3dx_job.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libvc5_v41_la-v3dx_simulator.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libvc5_v41_la-vc5_draw.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libvc5_v41_la-vc5_emit.Plo@am__quote@
@@ -808,6 +817,13 @@ libvc5_v33_la-v3dx_format_table.lo: v3dx_format_table.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libvc5_v33_la_CFLAGS) $(CFLAGS) -c -o libvc5_v33_la-v3dx_format_table.lo `test -f 'v3dx_format_table.c' || echo '$(srcdir)/'`v3dx_format_table.c
 
+libvc5_v33_la-v3dx_job.lo: v3dx_job.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libvc5_v33_la_CFLAGS) $(CFLAGS) -MT libvc5_v33_la-v3dx_job.lo -MD -MP -MF $(DEPDIR)/libvc5_v33_la-v3dx_job.Tpo -c -o libvc5_v33_la-v3dx_job.lo `test -f 'v3dx_job.c' || echo '$(srcdir)/'`v3dx_job.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libvc5_v33_la-v3dx_job.Tpo $(DEPDIR)/libvc5_v33_la-v3dx_job.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='v3dx_job.c' object='libvc5_v33_la-v3dx_job.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libvc5_v33_la_CFLAGS) $(CFLAGS) -c -o libvc5_v33_la-v3dx_job.lo `test -f 'v3dx_job.c' || echo '$(srcdir)/'`v3dx_job.c
+
 libvc5_v33_la-v3dx_simulator.lo: v3dx_simulator.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libvc5_v33_la_CFLAGS) $(CFLAGS) -MT libvc5_v33_la-v3dx_simulator.lo -MD -MP -MF $(DEPDIR)/libvc5_v33_la-v3dx_simulator.Tpo -c -o libvc5_v33_la-v3dx_simulator.lo `test -f 'v3dx_simulator.c' || echo '$(srcdir)/'`v3dx_simulator.c
 @am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libvc5_v33_la-v3dx_simulator.Tpo $(DEPDIR)/libvc5_v33_la-v3dx_simulator.Plo
@@ -849,6 +865,13 @@ libvc5_v41_la-v3dx_format_table.lo: v3dx_format_table.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='v3dx_format_table.c' object='libvc5_v41_la-v3dx_format_table.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libvc5_v41_la_CFLAGS) $(CFLAGS) -c -o libvc5_v41_la-v3dx_format_table.lo `test -f 'v3dx_format_table.c' || echo '$(srcdir)/'`v3dx_format_table.c
+
+libvc5_v41_la-v3dx_job.lo: v3dx_job.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libvc5_v41_la_CFLAGS) $(CFLAGS) -MT libvc5_v41_la-v3dx_job.lo -MD -MP -MF $(DEPDIR)/libvc5_v41_la-v3dx_job.Tpo -c -o libvc5_v41_la-v3dx_job.lo `test -f 'v3dx_job.c' || echo '$(srcdir)/'`v3dx_job.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libvc5_v41_la-v3dx_job.Tpo $(DEPDIR)/libvc5_v41_la-v3dx_job.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='v3dx_job.c' object='libvc5_v41_la-v3dx_job.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libvc5_v41_la_CFLAGS) $(CFLAGS) -c -o libvc5_v41_la-v3dx_job.lo `test -f 'v3dx_job.c' || echo '$(srcdir)/'`v3dx_job.c
 
 libvc5_v41_la-v3dx_simulator.lo: v3dx_simulator.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libvc5_v41_la_CFLAGS) $(CFLAGS) -MT libvc5_v41_la-v3dx_simulator.lo -MD -MP -MF $(DEPDIR)/libvc5_v41_la-v3dx_simulator.Tpo -c -o libvc5_v41_la-v3dx_simulator.lo `test -f 'v3dx_simulator.c' || echo '$(srcdir)/'`v3dx_simulator.c

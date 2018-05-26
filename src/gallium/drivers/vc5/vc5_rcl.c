@@ -34,43 +34,51 @@
 
 #define PIPE_FIRST_COLOR_BUFFER_BIT (ffs(PIPE_CLEAR_COLOR0) - 1)
 
+/* The HW queues up the load until the tile coordinates show up, but can only
+ * track one at a time.  If we need to do more than one load, then we need to
+ * flush out the previous load by emitting the tile coordinates and doing a
+ * dummy store.
+ */
 static void
-load_general(struct vc5_cl *cl, struct pipe_surface *psurf, int buffer)
+flush_last_load(struct vc5_cl *cl)
+{
+        if (V3D_VERSION >= 40)
+                return;
+
+        cl_emit(cl, TILE_COORDINATES_IMPLICIT, coords);
+        cl_emit(cl, STORE_TILE_BUFFER_GENERAL, store) {
+                store.buffer_to_store = NONE;
+        }
+}
+
+static void
+load_general(struct vc5_cl *cl, struct pipe_surface *psurf, int buffer,
+             uint32_t pipe_bit, uint32_t *loads_pending)
 {
         struct vc5_surface *surf = vc5_surface(psurf);
-        struct vc5_resource *rsc = vc5_resource(psurf->texture);
+        bool separate_stencil = surf->separate_stencil && buffer == STENCIL;
+        if (separate_stencil) {
+                psurf = surf->separate_stencil;
+                surf = vc5_surface(psurf);
+        }
 
-        struct vc5_resource *separate_stencil = NULL;
-        if (rsc->separate_stencil && buffer == STENCIL)
-                separate_stencil = rsc->separate_stencil;
+        struct vc5_resource *rsc = vc5_resource(psurf->texture);
 
         cl_emit(cl, LOAD_TILE_BUFFER_GENERAL, load) {
                 load.buffer_to_load = buffer;
-                if (separate_stencil) {
-                        load.address = cl_address(separate_stencil->bo,
-                                                  surf->separate_stencil_offset);
-                } else {
-                        load.address = cl_address(rsc->bo, surf->offset);
-                }
+                load.address = cl_address(rsc->bo, surf->offset);
 
 #if V3D_VERSION >= 40
-                if (separate_stencil) {
+                load.memory_format = surf->tiling;
+                if (separate_stencil)
                         load.input_image_format = V3D_OUTPUT_IMAGE_FORMAT_S8;
-                        load.memory_format = surf->separate_stencil_tiling;
-                }  else {
+                else
                         load.input_image_format = surf->format;
-                        load.memory_format = surf->tiling;
-                }
 
                 if (surf->tiling == VC5_TILING_UIF_NO_XOR ||
                     surf->tiling == VC5_TILING_UIF_XOR) {
-                        if (separate_stencil) {
-                                load.height_in_ub_or_stride =
-                                        surf->separate_stencil_padded_height_of_output_image_in_uif_blocks;
-                        } else {
-                                load.height_in_ub_or_stride =
-                                        surf->padded_height_of_output_image_in_uif_blocks;
-                        }
+                        load.height_in_ub_or_stride =
+                                surf->padded_height_of_output_image_in_uif_blocks;
                 } else if (surf->tiling == VC5_TILING_RASTER) {
                         struct vc5_resource_slice *slice =
                                 &rsc->slices[psurf->u.tex.level];
@@ -79,37 +87,43 @@ load_general(struct vc5_cl *cl, struct pipe_surface *psurf, int buffer)
 
                 /* XXX: MSAA */
 #else /* V3D_VERSION < 40 */
+                /* Can't do raw ZSTENCIL loads -- need to load/store them to
+                 * separate buffers for Z and stencil.
+                 */
+                assert(buffer != ZSTENCIL);
                 load.raw_mode = true;
                 load.padded_height_of_output_image_in_uif_blocks =
                         surf->padded_height_of_output_image_in_uif_blocks;
 #endif /* V3D_VERSION < 40 */
         }
+
+        *loads_pending &= ~pipe_bit;
+        if (*loads_pending)
+                flush_last_load(cl);
 }
 
 static void
 store_general(struct vc5_job *job,
               struct vc5_cl *cl, struct pipe_surface *psurf, int buffer,
-              int pipe_bit, bool last_store, bool general_color_clear)
+              int pipe_bit, uint32_t *stores_pending, bool general_color_clear)
 {
         struct vc5_surface *surf = vc5_surface(psurf);
+        bool separate_stencil = surf->separate_stencil && buffer == STENCIL;
+        if (separate_stencil) {
+                psurf = surf->separate_stencil;
+                surf = vc5_surface(psurf);
+        }
+
+        *stores_pending &= ~pipe_bit;
+        bool last_store = !(*stores_pending);
+
         struct vc5_resource *rsc = vc5_resource(psurf->texture);
 
-        struct vc5_resource *separate_stencil = NULL;
-        if (rsc->separate_stencil && buffer == STENCIL) {
-                separate_stencil = rsc->separate_stencil;
-                separate_stencil->writes++;
-        } else {
-                rsc->writes++;
-        }
+        rsc->writes++;
 
         cl_emit(cl, STORE_TILE_BUFFER_GENERAL, store) {
                 store.buffer_to_store = buffer;
-                if (separate_stencil) {
-                        store.address = cl_address(separate_stencil->bo,
-                                                   surf->separate_stencil_offset);
-                } else {
-                        store.address = cl_address(rsc->bo, surf->offset);
-                }
+                store.address = cl_address(rsc->bo, surf->offset);
 
 #if V3D_VERSION >= 40
                 store.clear_buffer_being_stored =
@@ -117,29 +131,27 @@ store_general(struct vc5_job *job,
                          (general_color_clear ||
                           !(pipe_bit & PIPE_CLEAR_COLOR_BUFFERS)));
 
-                if (separate_stencil) {
+                if (separate_stencil)
                         store.output_image_format = V3D_OUTPUT_IMAGE_FORMAT_S8;
-                        store.memory_format = surf->separate_stencil_tiling;
-                }  else {
+                else
                         store.output_image_format = surf->format;
-                        store.memory_format = surf->tiling;
-                }
+
+                store.memory_format = surf->tiling;
 
                 if (surf->tiling == VC5_TILING_UIF_NO_XOR ||
                     surf->tiling == VC5_TILING_UIF_XOR) {
-                        if (separate_stencil) {
-                                store.height_in_ub_or_stride =
-                                        surf->separate_stencil_padded_height_of_output_image_in_uif_blocks;
-                        } else {
-                                store.height_in_ub_or_stride =
-                                        surf->padded_height_of_output_image_in_uif_blocks;
-                        }
+                        store.height_in_ub_or_stride =
+                                surf->padded_height_of_output_image_in_uif_blocks;
                 } else if (surf->tiling == VC5_TILING_RASTER) {
                         struct vc5_resource_slice *slice =
                                 &rsc->slices[psurf->u.tex.level];
                         store.height_in_ub_or_stride = slice->stride;
                 }
 #else /* V3D_VERSION < 40 */
+                /* Can't do raw ZSTENCIL stores -- need to load/store them to
+                 * separate buffers for Z and stencil.
+                 */
+                assert(buffer != ZSTENCIL);
                 store.raw_mode = true;
                 if (!last_store) {
                         store.disable_colour_buffers_clear_on_write = true;
@@ -159,6 +171,11 @@ store_general(struct vc5_job *job,
                         surf->padded_height_of_output_image_in_uif_blocks;
 #endif /* V3D_VERSION < 40 */
         }
+
+        /* There must be a TILE_COORDINATES_IMPLICIT between each store. */
+        if (V3D_VERSION < 40 && !last_store) {
+                cl_emit(cl, TILE_COORDINATES_IMPLICIT, coords);
+        }
 }
 
 static int
@@ -176,31 +193,14 @@ zs_buffer_from_pipe_bits(int pipe_clear_bits)
         }
 }
 
-/* The HW queues up the load until the tile coordinates show up, but can only
- * track one at a time.  If we need to do more than one load, then we need to
- * flush out the previous load by emitting the tile coordinates and doing a
- * dummy store.
- */
-static void
-flush_last_load(struct vc5_cl *cl)
-{
-        if (V3D_VERSION >= 40)
-                return;
-
-        cl_emit(cl, TILE_COORDINATES_IMPLICIT, coords);
-        cl_emit(cl, STORE_TILE_BUFFER_GENERAL, store) {
-                store.buffer_to_store = NONE;
-        }
-}
-
 static void
 vc5_rcl_emit_loads(struct vc5_job *job, struct vc5_cl *cl)
 {
-        uint32_t read_but_not_cleared = job->resolve & ~job->cleared;
+        uint32_t loads_pending = job->resolve & ~job->cleared;
 
         for (int i = 0; i < VC5_MAX_DRAW_BUFFERS; i++) {
                 uint32_t bit = PIPE_CLEAR_COLOR0 << i;
-                if (!(read_but_not_cleared & bit))
+                if (!(loads_pending & bit))
                         continue;
 
                 struct pipe_surface *psurf = job->cbufs[i];
@@ -209,41 +209,37 @@ vc5_rcl_emit_loads(struct vc5_job *job, struct vc5_cl *cl)
                         continue;
                 }
 
-                load_general(cl, psurf, RENDER_TARGET_0 + i);
-                read_but_not_cleared &= ~bit;
-
-                if (read_but_not_cleared)
-                        flush_last_load(cl);
+                load_general(cl, psurf, RENDER_TARGET_0 + i,
+                             bit, &loads_pending);
         }
 
-        if (read_but_not_cleared & PIPE_CLEAR_DEPTHSTENCIL &&
+        if ((loads_pending & PIPE_CLEAR_DEPTHSTENCIL) &&
             (V3D_VERSION >= 40 ||
              (job->zsbuf && job->zsbuf->texture->nr_samples > 1))) {
                 load_general(cl, job->zsbuf,
-                             zs_buffer_from_pipe_bits(read_but_not_cleared));
-                read_but_not_cleared &= ~PIPE_CLEAR_DEPTHSTENCIL;
-                if (read_but_not_cleared)
-                        cl_emit(cl, TILE_COORDINATES_IMPLICIT, coords);
+                             zs_buffer_from_pipe_bits(loads_pending),
+                             PIPE_CLEAR_DEPTHSTENCIL,
+                             &loads_pending);
         }
 
 #if V3D_VERSION < 40
         /* The initial reload will be queued until we get the
          * tile coordinates.
          */
-        if (read_but_not_cleared) {
+        if (loads_pending) {
                 cl_emit(cl, RELOAD_TILE_COLOUR_BUFFER, load) {
                         load.disable_colour_buffer_load =
-                                (~read_but_not_cleared &
+                                (~loads_pending &
                                  PIPE_CLEAR_COLOR_BUFFERS) >>
                                 PIPE_FIRST_COLOR_BUFFER_BIT;
                         load.enable_z_load =
-                                read_but_not_cleared & PIPE_CLEAR_DEPTH;
+                                loads_pending & PIPE_CLEAR_DEPTH;
                         load.enable_stencil_load =
-                                read_but_not_cleared & PIPE_CLEAR_STENCIL;
+                                loads_pending & PIPE_CLEAR_STENCIL;
                 }
         }
 #else /* V3D_VERSION >= 40 */
-        assert(!read_but_not_cleared);
+        assert(!loads_pending);
         cl_emit(cl, END_OF_LOADS, end);
 #endif
 }
@@ -295,40 +291,33 @@ vc5_rcl_emit_stores(struct vc5_job *job, struct vc5_cl *cl)
                         continue;
                 }
 
-                stores_pending &= ~bit;
                 store_general(job, cl, psurf, RENDER_TARGET_0 + i, bit,
-                              !stores_pending, general_color_clear);
-                if (V3D_VERSION < 40 && stores_pending)
-                        cl_emit(cl, TILE_COORDINATES_IMPLICIT, coords);
+                              &stores_pending, general_color_clear);
         }
 
         if (job->resolve & PIPE_CLEAR_DEPTHSTENCIL && job->zsbuf &&
             !(V3D_VERSION < 40 && job->zsbuf->texture->nr_samples <= 1)) {
-                stores_pending &= ~PIPE_CLEAR_DEPTHSTENCIL;
-
                 struct vc5_resource *rsc = vc5_resource(job->zsbuf->texture);
                 if (rsc->separate_stencil) {
                         if (job->resolve & PIPE_CLEAR_DEPTH) {
                                 store_general(job, cl, job->zsbuf, Z,
                                               PIPE_CLEAR_DEPTH,
-                                              !stores_pending,
+                                              &stores_pending,
                                               general_color_clear);
                         }
+
                         if (job->resolve & PIPE_CLEAR_STENCIL) {
                                 store_general(job, cl, job->zsbuf, STENCIL,
                                               PIPE_CLEAR_STENCIL,
-                                              !stores_pending,
+                                              &stores_pending,
                                               general_color_clear);
                         }
                 } else {
                         store_general(job, cl, job->zsbuf,
                                       zs_buffer_from_pipe_bits(job->resolve),
                                       job->resolve & PIPE_CLEAR_DEPTHSTENCIL,
-                                      !stores_pending, general_color_clear);
+                                      &stores_pending, general_color_clear);
                 }
-
-                if (V3D_VERSION < 40 && stores_pending)
-                        cl_emit(cl, TILE_COORDINATES_IMPLICIT, coords);
         }
 
         if (stores_pending) {
@@ -433,7 +422,37 @@ v3d_setup_render_target(struct vc5_job *job, int cbuf,
         *rt_type = surf->internal_type;
         *rt_clamp = V3D_RENDER_TARGET_CLAMP_NONE;
 }
-#endif /* V3D_VERSION >= 40 */
+
+#else /* V3D_VERSION < 40 */
+
+static void
+v3d_emit_z_stencil_config(struct vc5_job *job, struct vc5_surface *surf,
+                          struct vc5_resource *rsc, bool is_separate_stencil)
+{
+        cl_emit(&job->rcl, TILE_RENDERING_MODE_CONFIGURATION_Z_STENCIL_CONFIG, zs) {
+                zs.address = cl_address(rsc->bo, surf->offset);
+
+                if (!is_separate_stencil) {
+                        zs.internal_type = surf->internal_type;
+                        zs.output_image_format = surf->format;
+                } else {
+                        zs.z_stencil_id = 1; /* Separate stencil */
+                }
+
+                zs.padded_height_of_output_image_in_uif_blocks =
+                        surf->padded_height_of_output_image_in_uif_blocks;
+
+                assert(surf->tiling != VC5_TILING_RASTER);
+                zs.memory_format = surf->tiling;
+        }
+
+        if (job->resolve & (is_separate_stencil ?
+                            PIPE_CLEAR_STENCIL :
+                            PIPE_CLEAR_DEPTHSTENCIL)) {
+                rsc->writes++;
+        }
+}
+#endif /* V3D_VERSION < 40 */
 
 #define div_round_up(a, b) (((a) + (b) - 1) / b)
 
@@ -472,7 +491,21 @@ v3dX(emit_rcl)(struct vc5_job *job)
 
                 /* XXX: Early D/S clear */
 
-                config.early_z_disable = !job->uses_early_z;
+                switch (job->first_ez_state) {
+                case VC5_EZ_UNDECIDED:
+                case VC5_EZ_LT_LE:
+                        config.early_z_disable = false;
+                        config.early_z_test_and_update_direction =
+                                EARLY_Z_DIRECTION_LT_LE;
+                        break;
+                case VC5_EZ_GT_GE:
+                        config.early_z_disable = false;
+                        config.early_z_test_and_update_direction =
+                                EARLY_Z_DIRECTION_GT_GE;
+                        break;
+                case VC5_EZ_DISABLED:
+                        config.early_z_disable = true;
+                }
 
                 config.image_width_pixels = job->draw_width;
                 config.image_height_pixels = job->draw_height;
@@ -584,41 +617,16 @@ v3dX(emit_rcl)(struct vc5_job *job)
                 struct vc5_surface *surf = vc5_surface(psurf);
                 struct vc5_resource *rsc = vc5_resource(psurf->texture);
 
-                cl_emit(&job->rcl, TILE_RENDERING_MODE_CONFIGURATION_Z_STENCIL_CONFIG, zs) {
-                        zs.address = cl_address(rsc->bo, surf->offset);
-
-                        zs.internal_type = surf->internal_type;
-                        zs.output_image_format = surf->format;
-                        zs.padded_height_of_output_image_in_uif_blocks =
-                                surf->padded_height_of_output_image_in_uif_blocks;
-
-                        assert(surf->tiling != VC5_TILING_RASTER);
-                        zs.memory_format = surf->tiling;
-                }
-
-                if (job->resolve & PIPE_CLEAR_DEPTHSTENCIL)
-                        rsc->writes++;
+                v3d_emit_z_stencil_config(job, surf, rsc, false);
 
                 /* Emit the separate stencil packet if we have a resource for
                  * it.  The HW will only load/store this buffer if the
                  * Z/Stencil config doesn't have stencil in its format.
                  */
-                if (rsc->separate_stencil) {
-                        cl_emit(&job->rcl,
-                                TILE_RENDERING_MODE_CONFIGURATION_Z_STENCIL_CONFIG,
-                                zs) {
-                                zs.address =
-                                        cl_address(rsc->separate_stencil->bo,
-                                                   surf->separate_stencil_offset);
-
-                                zs.z_stencil_id = 1; /* Separate stencil */
-
-                                zs.padded_height_of_output_image_in_uif_blocks =
-                                        surf->separate_stencil_padded_height_of_output_image_in_uif_blocks;
-
-                                assert(surf->tiling != VC5_TILING_RASTER);
-                                zs.memory_format = surf->separate_stencil_tiling;
-                        }
+                if (surf->separate_stencil) {
+                        v3d_emit_z_stencil_config(job,
+                                                  vc5_surface(surf->separate_stencil),
+                                                  rsc->separate_stencil, true);
                 }
         }
 #endif /* V3D_VERSION < 40 */
@@ -712,8 +720,13 @@ v3dX(emit_rcl)(struct vc5_job *job)
         uint32_t supertile_h_in_pixels = job->tile_height * supertile_h;
         uint32_t min_x_supertile = job->draw_min_x / supertile_w_in_pixels;
         uint32_t min_y_supertile = job->draw_min_y / supertile_h_in_pixels;
-        uint32_t max_x_supertile = (job->draw_max_x - 1) / supertile_w_in_pixels;
-        uint32_t max_y_supertile = (job->draw_max_y - 1) / supertile_h_in_pixels;
+
+        uint32_t max_x_supertile = 0;
+        uint32_t max_y_supertile = 0;
+        if (job->draw_max_x != 0 && job->draw_max_y != 0) {
+                max_x_supertile = (job->draw_max_x - 1) / supertile_w_in_pixels;
+                max_y_supertile = (job->draw_max_y - 1) / supertile_h_in_pixels;
+        }
 
         for (int y = min_y_supertile; y <= max_y_supertile; y++) {
                 for (int x = min_x_supertile; x <= max_x_supertile; x++) {

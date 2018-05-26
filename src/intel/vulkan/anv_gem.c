@@ -30,6 +30,7 @@
 #include <fcntl.h>
 
 #include "anv_private.h"
+#include "common/gen_defines.h"
 
 static int
 anv_ioctl(int fd, unsigned long request, void *arg)
@@ -302,6 +303,13 @@ close_and_return:
    return swizzled;
 }
 
+bool
+anv_gem_has_context_priority(int fd)
+{
+   return !anv_gem_set_context_param(fd, 0, I915_CONTEXT_PARAM_PRIORITY,
+                                     GEN_CONTEXT_MEDIUM_PRIORITY);
+}
+
 int
 anv_gem_create_context(struct anv_device *device)
 {
@@ -322,6 +330,21 @@ anv_gem_destroy_context(struct anv_device *device, int context)
    };
 
    return anv_ioctl(device->fd, DRM_IOCTL_I915_GEM_CONTEXT_DESTROY, &destroy);
+}
+
+int
+anv_gem_set_context_param(int fd, int context, uint32_t param, uint64_t value)
+{
+   struct drm_i915_gem_context_param p = {
+      .ctx_id = context,
+      .param = param,
+      .value = value,
+   };
+   int err = 0;
+
+   if (anv_ioctl(fd, DRM_IOCTL_I915_GEM_CONTEXT_SETPARAM, &p))
+      err = -errno;
+   return err;
 }
 
 int

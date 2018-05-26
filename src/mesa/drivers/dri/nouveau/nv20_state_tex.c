@@ -39,7 +39,8 @@ nv20_emit_tex_gen(struct gl_context *ctx, int emit)
 	const int i = emit - NOUVEAU_STATE_TEX_GEN0;
 	struct nouveau_context *nctx = to_nouveau_context(ctx);
 	struct nouveau_pushbuf *push = context_push(ctx);
-	struct gl_texture_unit *unit = &ctx->Texture.Unit[i];
+	struct gl_fixedfunc_texture_unit *unit =
+           &ctx->Texture.FixedFuncUnit[i];
 	int j;
 
 	for (j = 0; j < 4; j++) {

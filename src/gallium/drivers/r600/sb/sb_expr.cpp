@@ -412,7 +412,8 @@ bool expr_handler::fold_alu_op1(alu_node& n) {
 				n.bc.op == ALU_OP1_MOVA_GPR_INT)
 				&& n.bc.clamp == 0 && n.bc.omod == 0
 				&& n.bc.src[0].abs == 0 && n.bc.src[0].neg == 0 &&
-				n.src.size() == 1 /* RIM/SIM can be appended as additional values */) {
+				n.src.size() == 1 /* RIM/SIM can be appended as additional values */
+				&& n.dst[0]->no_reladdr_conflict_with(v0)) {
 			assign_source(n.dst[0], v0);
 			return true;
 		}
@@ -1027,9 +1028,17 @@ bool expr_handler::fold_alu_op3(alu_node& n) {
 				es1 = 1;
 			}
 
-			if (es0 != -1) {
-				value *va0 = es0 == 0 ? v1 : v0;
-				value *va1 = es1 == 0 ? mv1 : mv0;
+			value *va0 = es0 == 0 ? v1 : v0;
+			value *va1 = es1 == 0 ? mv1 : mv0;
+
+			/* Don't fold if no equal multipliers were found.
+			 * Also don#t fold if the operands of the to be created ADD are both
+			 * relatively accessed with different AR values because that would
+			 * create impossible code.
+			 */
+			if (es0 != -1 &&
+			    (!va0->is_rel() || !va1->is_rel() ||
+			     (va0->rel == va1->rel))) {
 
 				alu_node *add = sh.create_alu();
 				add->bc.set_op(ALU_OP2_ADD);

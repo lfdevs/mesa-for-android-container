@@ -34,17 +34,42 @@
 
 namespace SwrJit
 {
+    ///@todo Move this to better place
+    enum SHADER_STATS_COUNTER_TYPE
+    {
+        STATS_INST_EXECUTED = 0,
+        STATS_SAMPLE_EXECUTED = 1,
+        STATS_SAMPLE_L_EXECUTED = 2,
+        STATS_SAMPLE_B_EXECUTED = 3,
+        STATS_SAMPLE_C_EXECUTED = 4,
+        STATS_SAMPLE_C_LZ_EXECUTED = 5,
+        STATS_SAMPLE_C_D_EXECUTED = 6,
+        STATS_LOD_EXECUTED = 7,
+        STATS_GATHER4_EXECUTED = 8,
+        STATS_GATHER4_C_EXECUTED = 9,
+        STATS_GATHER4_C_PO_EXECUTED = 10,
+        STATS_GATHER4_C_PO_C_EXECUTED = 11,
+        STATS_LOAD_RAW_UAV = 12,
+        STATS_LOAD_RAW_RESOURCE = 13,
+        STATS_STORE_RAW_UAV = 14,
+        STATS_STORE_TGSM = 15,
+        STATS_DISCARD = 16,
+        STATS_BARRIER = 17,
+    };
+
     using namespace llvm;
     struct Builder
     {
         Builder(JitManager *pJitMgr);
+        virtual ~Builder() {}
+
         IRBuilder<> *IRB() { return mpIRBuilder; };
         JitManager *JM() { return mpJitMgr; }
 
         JitManager *mpJitMgr;
         IRBuilder<> *mpIRBuilder;
 
-        uint32_t             mVWidth;   // vector width simd8
+        uint32_t             mVWidth;   // vector width target simd
         uint32_t             mVWidth16; // vector width simd16
 
         // Built in types: scalar
@@ -64,7 +89,9 @@ namespace SwrJit
         Type*                mInt16PtrTy;
         Type*                mInt32PtrTy;
 
-        // Built in types: simd8
+        Type*                mSimd4FP64Ty;
+
+        // Built in types: target SIMD
 
         Type*                mSimdFP16Ty;
         Type*                mSimdFP32Ty;
@@ -75,6 +102,7 @@ namespace SwrJit
         Type*                mSimdIntPtrTy;
         Type*                mSimdVectorTy;
         Type*                mSimdVectorTRTy;
+        Type*                mSimdVectorIntTy;
 
         // Built in types: simd16
 
@@ -88,9 +116,31 @@ namespace SwrJit
         Type*                mSimd16VectorTy;
         Type*                mSimd16VectorTRTy;
 
+        Type*                mSimd32Int8Ty;
+
+        void SetTargetWidth(uint32_t width);
+        void SetTempAlloca(Value* inst);
+        bool IsTempAlloca(Value* inst);
+
 #include "gen_builder.hpp"
-#include "gen_builder_x86.hpp"
+#include "gen_builder_meta.hpp"
+#include "gen_builder_intrin.hpp"
 #include "builder_misc.h"
 #include "builder_math.h"
+#include "builder_mem.h"
+
+    protected:
+
+        void SetPrivateContext(Value* pPrivateContext) 
+        { 
+            mpPrivateContext = pPrivateContext; 
+            NotifyPrivateContextSet();
+        }
+        virtual void NotifyPrivateContextSet() {}
+        inline Value* GetPrivateContext() { return mpPrivateContext; }
+
+    private: 
+        Value* mpPrivateContext;
+
     };
 }

@@ -287,6 +287,40 @@ result_type_args_for_opcode(SpvOp opcode)
    case SpvOpGetKernelMaxNumSubgroups: return (struct type_args){ 1, 0 };
    case SpvOpTypeNamedBarrier: return (struct type_args){ 0, -1 };
    case SpvOpNamedBarrierInitialize: return (struct type_args){ 1, 0 };
+   case SpvOpGroupNonUniformElect: return (struct type_args){ 1, 0 };
+   case SpvOpGroupNonUniformAll: return (struct type_args){ 1, 0 };
+   case SpvOpGroupNonUniformAny: return (struct type_args){ 1, 0 };
+   case SpvOpGroupNonUniformAllEqual: return (struct type_args){ 1, 0 };
+   case SpvOpGroupNonUniformBroadcast: return (struct type_args){ 1, 0 };
+   case SpvOpGroupNonUniformBroadcastFirst: return (struct type_args){ 1, 0 };
+   case SpvOpGroupNonUniformBallot: return (struct type_args){ 1, 0 };
+   case SpvOpGroupNonUniformInverseBallot: return (struct type_args){ 1, 0 };
+   case SpvOpGroupNonUniformBallotBitExtract: return (struct type_args){ 1, 0 };
+   case SpvOpGroupNonUniformBallotBitCount: return (struct type_args){ 1, 0 };
+   case SpvOpGroupNonUniformBallotFindLSB: return (struct type_args){ 1, 0 };
+   case SpvOpGroupNonUniformBallotFindMSB: return (struct type_args){ 1, 0 };
+   case SpvOpGroupNonUniformShuffle: return (struct type_args){ 1, 0 };
+   case SpvOpGroupNonUniformShuffleXor: return (struct type_args){ 1, 0 };
+   case SpvOpGroupNonUniformShuffleUp: return (struct type_args){ 1, 0 };
+   case SpvOpGroupNonUniformShuffleDown: return (struct type_args){ 1, 0 };
+   case SpvOpGroupNonUniformIAdd: return (struct type_args){ 1, 0 };
+   case SpvOpGroupNonUniformFAdd: return (struct type_args){ 1, 0 };
+   case SpvOpGroupNonUniformIMul: return (struct type_args){ 1, 0 };
+   case SpvOpGroupNonUniformFMul: return (struct type_args){ 1, 0 };
+   case SpvOpGroupNonUniformSMin: return (struct type_args){ 1, 0 };
+   case SpvOpGroupNonUniformUMin: return (struct type_args){ 1, 0 };
+   case SpvOpGroupNonUniformFMin: return (struct type_args){ 1, 0 };
+   case SpvOpGroupNonUniformSMax: return (struct type_args){ 1, 0 };
+   case SpvOpGroupNonUniformUMax: return (struct type_args){ 1, 0 };
+   case SpvOpGroupNonUniformFMax: return (struct type_args){ 1, 0 };
+   case SpvOpGroupNonUniformBitwiseAnd: return (struct type_args){ 1, 0 };
+   case SpvOpGroupNonUniformBitwiseOr: return (struct type_args){ 1, 0 };
+   case SpvOpGroupNonUniformBitwiseXor: return (struct type_args){ 1, 0 };
+   case SpvOpGroupNonUniformLogicalAnd: return (struct type_args){ 1, 0 };
+   case SpvOpGroupNonUniformLogicalOr: return (struct type_args){ 1, 0 };
+   case SpvOpGroupNonUniformLogicalXor: return (struct type_args){ 1, 0 };
+   case SpvOpGroupNonUniformQuadBroadcast: return (struct type_args){ 1, 0 };
+   case SpvOpGroupNonUniformQuadSwap: return (struct type_args){ 1, 0 };
    case SpvOpSubgroupBallotKHR: return (struct type_args){ 1, 0 };
    case SpvOpSubgroupFirstInvocationKHR: return (struct type_args){ 1, 0 };
    case SpvOpSubgroupAllKHR: return (struct type_args){ 1, 0 };
@@ -309,6 +343,7 @@ result_type_args_for_opcode(SpvOp opcode)
    case SpvOpSubgroupShuffleXorINTEL: return (struct type_args){ 1, 0 };
    case SpvOpSubgroupBlockReadINTEL: return (struct type_args){ 1, 0 };
    case SpvOpSubgroupImageBlockReadINTEL: return (struct type_args){ 1, 0 };
+   case SpvOpGroupNonUniformPartitionNV: return (struct type_args){ 1, 0 };
    default: return (struct type_args){ -1, -1 };
    }
 }

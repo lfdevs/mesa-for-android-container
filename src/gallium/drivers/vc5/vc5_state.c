@@ -31,6 +31,7 @@
 #include "util/u_helpers.h"
 
 #include "vc5_context.h"
+#include "vc5_tiling.h"
 #include "broadcom/common/v3d_macros.h"
 #include "broadcom/cle/v3dx_pack.h"
 
@@ -157,19 +158,35 @@ vc5_create_depth_stencil_alpha_state(struct pipe_context *pctx,
         so->base = *cso;
 
         if (cso->depth.enabled) {
-                /* We only handle early Z in the < direction because otherwise
-                 * we'd have to runtime guess which direction to set in the
-                 * render config.
+                switch (cso->depth.func) {
+                case PIPE_FUNC_LESS:
+                case PIPE_FUNC_LEQUAL:
+                        so->ez_state = VC5_EZ_LT_LE;
+                        break;
+                case PIPE_FUNC_GREATER:
+                case PIPE_FUNC_GEQUAL:
+                        so->ez_state = VC5_EZ_GT_GE;
+                        break;
+                case PIPE_FUNC_NEVER:
+                case PIPE_FUNC_EQUAL:
+                        so->ez_state = VC5_EZ_UNDECIDED;
+                        break;
+                default:
+                        so->ez_state = VC5_EZ_DISABLED;
+                        break;
+                }
+
+                /* If stencil is enabled and it's not a no-op, then it would
+                 * break EZ updates.
                  */
-                so->early_z_enable =
-                        ((cso->depth.func == PIPE_FUNC_LESS ||
-                          cso->depth.func == PIPE_FUNC_LEQUAL) &&
-                         (!cso->stencil[0].enabled ||
-                          (cso->stencil[0].zfail_op == PIPE_STENCIL_OP_KEEP &&
-                           cso->stencil[0].func == PIPE_FUNC_ALWAYS &&
-                           (!cso->stencil[1].enabled ||
-                            (cso->stencil[1].zfail_op == PIPE_STENCIL_OP_KEEP &&
-                             cso->stencil[1].func == PIPE_FUNC_ALWAYS)))));
+                if (cso->stencil[0].enabled &&
+                    (cso->stencil[0].zfail_op != PIPE_STENCIL_OP_KEEP ||
+                     cso->stencil[0].func != PIPE_FUNC_ALWAYS ||
+                     (cso->stencil[1].enabled &&
+                      (cso->stencil[1].zfail_op != PIPE_STENCIL_OP_KEEP &&
+                       cso->stencil[1].func != PIPE_FUNC_ALWAYS)))) {
+                        so->ez_state = VC5_EZ_DISABLED;
+                }
         }
 
         const struct pipe_stencil_state *front = &cso->stencil[0];
@@ -318,7 +335,8 @@ vc5_vertex_state_create(struct pipe_context *pctx, unsigned num_elements,
 
                         attr.normalized_int_type = desc->channel[0].normalized;
                         attr.read_as_int_uint = desc->channel[0].pure_integer;
-                        attr.instance_divisor = elem->instance_divisor;
+                        attr.instance_divisor = MIN2(elem->instance_divisor,
+                                                     0xffff);
 
                         switch (desc->channel[0].type) {
                         case UTIL_FORMAT_TYPE_FLOAT:
@@ -443,6 +461,9 @@ vc5_set_framebuffer_state(struct pipe_context *pctx,
         vc5->blend_dst_alpha_one = 0;
         for (int i = 0; i < vc5->framebuffer.nr_cbufs; i++) {
                 struct pipe_surface *cbuf = vc5->framebuffer.cbufs[i];
+                if (!cbuf)
+                        continue;
+
                 const struct util_format_description *desc =
                         util_format_description(cbuf->format);
 
@@ -534,11 +555,16 @@ vc5_create_sampler_state(struct pipe_context *pctx,
                 sampler.mag_filter_nearest =
                         cso->mag_img_filter == PIPE_TEX_FILTER_NEAREST;
                 sampler.mip_filter_nearest =
-                        cso->min_mip_filter == PIPE_TEX_MIPFILTER_NEAREST;
+                        cso->min_mip_filter != PIPE_TEX_MIPFILTER_LINEAR;
 
                 sampler.min_level_of_detail = MIN2(MAX2(0, cso->min_lod),
                                                    15);
                 sampler.max_level_of_detail = MIN2(cso->max_lod, 15);
+
+                if (cso->min_mip_filter == PIPE_TEX_MIPFILTER_NONE) {
+                        sampler.min_level_of_detail = 0;
+                        sampler.max_level_of_detail = 0;
+                }
 
                 if (cso->max_anisotropy) {
                         sampler.anisotropy_enable = true;
@@ -769,9 +795,6 @@ vc5_create_sampler_view(struct pipe_context *pctx, struct pipe_resource *prsc,
                                                               cso->format);
                 }
 
-                tex.uif_xor_disable = (rsc->slices[0].tiling ==
-                                       VC5_TILING_UIF_NO_XOR);
-
                 /* Since other platform devices may produce UIF images even
                  * when they're not big enough for V3D to assume they're UIF,
                  * we force images with level 0 as UIF to be always treated
@@ -783,6 +806,9 @@ vc5_create_sampler_view(struct pipe_context *pctx, struct pipe_resource *prsc,
                                                VC5_TILING_UIF_NO_XOR);
                 tex.level_0_xor_enable = (rsc->slices[0].tiling ==
                                           VC5_TILING_UIF_XOR);
+
+                if (tex.level_0_is_strictly_uif)
+                        tex.level_0_ub_pad = rsc->slices[0].ub_pad;
 
 #if V3D_VERSION >= 40
                 if (tex.uif_xor_disable ||

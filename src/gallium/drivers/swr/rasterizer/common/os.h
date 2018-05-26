@@ -280,4 +280,13 @@ typedef MEGABYTE    GIGABYTE[1024];
 void SWR_API SetCurrentThreadName(const char* pThreadName);
 void SWR_API CreateDirectoryPath(const std::string& path);
 
+/// Execute Command (block until finished)
+/// @returns process exit value
+int SWR_API  ExecCmd(
+    const std::string&  cmd,                        ///< (In) Command line string
+    const char*         pOptEnvStrings = nullptr,   ///< (Optional In) Environment block for new process
+    std::string*        pOptStdOut = nullptr,       ///< (Optional Out) Standard Output text
+    std::string*        pOptStdErr = nullptr,       ///< (Optional Out) Standard Error text
+    const std::string*  pOptStdIn = nullptr);       ///< (Optional In) Standard Input text
+
 #endif//__SWR_OS_H__

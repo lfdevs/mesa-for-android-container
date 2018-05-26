@@ -50,6 +50,7 @@ struct stipple_stage {
    float counter;
    uint pattern;
    uint factor;
+   bool smooth;
 };
 
 
@@ -133,15 +134,21 @@ stipple_line(struct draw_stage *stage, struct prim_header *header)
    float y0 = pos0[1];
    float y1 = pos1[1];
 
-   float dx = x0 > x1 ? x0 - x1 : x1 - x0;
-   float dy = y0 > y1 ? y0 - y1 : y1 - y0;
-
-   float length = MAX2(dx, dy);
+   float length;
    int i;
+
+   if (stipple->smooth) {
+      float dx = x1 - x0;
+      float dy = y1 - y0;
+      length = sqrtf(dx*dx + dy*dy);
+   } else {
+      float dx = x0 > x1 ? x0 - x1 : x1 - x0;
+      float dy = y0 > y1 ? y0 - y1 : y1 - y0;
+      length = MAX2(dx, dy);
+   }
 
    if (header->flags & DRAW_PIPE_RESET_STIPPLE)
       stipple->counter = 0;
-
 
    /* XXX ToDo: instead of iterating pixel-by-pixel, use a look-up table.
     */
@@ -205,6 +212,7 @@ stipple_first_line(struct draw_stage *stage,
 
    stipple->pattern = draw->rasterizer->line_stipple_pattern;
    stipple->factor = draw->rasterizer->line_stipple_factor + 1;
+   stipple->smooth = draw->rasterizer->line_smooth;
 
    stage->line = stipple_line;
    stage->line(stage, header);

@@ -1,5 +1,6 @@
 /*
  * Copyright 2015 Advanced Micro Devices, Inc.
+ * All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -26,16 +27,75 @@
 #include "sid.h"
 #include "gfx9d.h"
 #include "sid_tables.h"
-#include "ddebug/dd_util.h"
+#include "driver_ddebug/dd_util.h"
 #include "util/u_dump.h"
 #include "util/u_log.h"
 #include "util/u_memory.h"
+#include "util/u_string.h"
 #include "ac_debug.h"
 
 static void si_dump_bo_list(struct si_context *sctx,
 			    const struct radeon_saved_cs *saved, FILE *f);
 
 DEBUG_GET_ONCE_OPTION(replace_shaders, "RADEON_REPLACE_SHADERS", NULL)
+
+/**
+ * Store a linearized copy of all chunks of \p cs together with the buffer
+ * list in \p saved.
+ */
+void si_save_cs(struct radeon_winsys *ws, struct radeon_winsys_cs *cs,
+		struct radeon_saved_cs *saved, bool get_buffer_list)
+{
+	uint32_t *buf;
+	unsigned i;
+
+	/* Save the IB chunks. */
+	saved->num_dw = cs->prev_dw + cs->current.cdw;
+	saved->ib = MALLOC(4 * saved->num_dw);
+	if (!saved->ib)
+		goto oom;
+
+	buf = saved->ib;
+	for (i = 0; i < cs->num_prev; ++i) {
+		memcpy(buf, cs->prev[i].buf, cs->prev[i].cdw * 4);
+		buf += cs->prev[i].cdw;
+	}
+	memcpy(buf, cs->current.buf, cs->current.cdw * 4);
+
+	if (!get_buffer_list)
+		return;
+
+	/* Save the buffer list. */
+	saved->bo_count = ws->cs_get_buffer_list(cs, NULL);
+	saved->bo_list = CALLOC(saved->bo_count,
+				sizeof(saved->bo_list[0]));
+	if (!saved->bo_list) {
+		FREE(saved->ib);
+		goto oom;
+	}
+	ws->cs_get_buffer_list(cs, saved->bo_list);
+
+	return;
+
+oom:
+	fprintf(stderr, "%s: out of memory\n", __func__);
+	memset(saved, 0, sizeof(*saved));
+}
+
+void si_clear_saved_cs(struct radeon_saved_cs *saved)
+{
+	FREE(saved->ib);
+	FREE(saved->bo_list);
+
+	memset(saved, 0, sizeof(*saved));
+}
+
+void si_destroy_saved_cs(struct si_saved_cs *scs)
+{
+	si_clear_saved_cs(&scs->gfx);
+	r600_resource_reference(&scs->trace_buf, NULL);
+	free(scs);
+}
 
 static void si_dump_shader(struct si_screen *sscreen,
 			   enum pipe_shader_type processor,
@@ -225,11 +285,11 @@ file_error:
 static void si_dump_mmapped_reg(struct si_context *sctx, FILE *f,
 				unsigned offset)
 {
-	struct radeon_winsys *ws = sctx->b.ws;
+	struct radeon_winsys *ws = sctx->ws;
 	uint32_t value;
 
 	if (ws->read_registers(ws, offset, 1, &value))
-		ac_dump_reg(f, sctx->b.chip_class, offset, value, ~0);
+		ac_dump_reg(f, sctx->chip_class, offset, value, ~0);
 }
 
 static void si_dump_debug_registers(struct si_context *sctx, FILE *f)
@@ -255,7 +315,7 @@ static void si_dump_debug_registers(struct si_context *sctx, FILE *f)
 	si_dump_mmapped_reg(sctx, f, R_00803C_GRBM_STATUS_SE3);
 	si_dump_mmapped_reg(sctx, f, R_00D034_SDMA0_STATUS_REG);
 	si_dump_mmapped_reg(sctx, f, R_00D834_SDMA1_STATUS_REG);
-	if (sctx->b.chip_class <= VI) {
+	if (sctx->chip_class <= VI) {
 		si_dump_mmapped_reg(sctx, f, R_000E50_SRBM_STATUS);
 		si_dump_mmapped_reg(sctx, f, R_000E4C_SRBM_STATUS2);
 		si_dump_mmapped_reg(sctx, f, R_000E54_SRBM_STATUS3);
@@ -340,7 +400,7 @@ static void si_log_chunk_type_cs_print(void *data, FILE *f)
 	 * waited for the context, so this buffer should be idle.
 	 * If the GPU is hung, there is no point in waiting for it.
 	 */
-	uint32_t *map = ctx->b.ws->buffer_map(scs->trace_buf->buf,
+	uint32_t *map = ctx->ws->buffer_map(scs->trace_buf->buf,
 					      NULL,
 					      PIPE_TRANSFER_UNSYNCHRONIZED |
 					      PIPE_TRANSFER_READ);
@@ -351,25 +411,25 @@ static void si_log_chunk_type_cs_print(void *data, FILE *f)
 		if (chunk->gfx_begin == 0) {
 			if (ctx->init_config)
 				ac_parse_ib(f, ctx->init_config->pm4, ctx->init_config->ndw,
-					    NULL, 0, "IB2: Init config", ctx->b.chip_class,
+					    NULL, 0, "IB2: Init config", ctx->chip_class,
 					    NULL, NULL);
 
 			if (ctx->init_config_gs_rings)
 				ac_parse_ib(f, ctx->init_config_gs_rings->pm4,
 					    ctx->init_config_gs_rings->ndw,
-					    NULL, 0, "IB2: Init GS rings", ctx->b.chip_class,
+					    NULL, 0, "IB2: Init GS rings", ctx->chip_class,
 					    NULL, NULL);
 		}
 
 		if (scs->flushed) {
 			ac_parse_ib(f, scs->gfx.ib + chunk->gfx_begin,
 				    chunk->gfx_end - chunk->gfx_begin,
-				    &last_trace_id, map ? 1 : 0, "IB", ctx->b.chip_class,
+				    &last_trace_id, map ? 1 : 0, "IB", ctx->chip_class,
 				    NULL, NULL);
 		} else {
-			si_parse_current_ib(f, ctx->b.gfx.cs, chunk->gfx_begin,
+			si_parse_current_ib(f, ctx->gfx_cs, chunk->gfx_begin,
 					    chunk->gfx_end, &last_trace_id, map ? 1 : 0,
-					    "IB", ctx->b.chip_class);
+					    "IB", ctx->chip_class);
 		}
 	}
 
@@ -392,7 +452,7 @@ static void si_log_cs(struct si_context *ctx, struct u_log_context *log,
 	assert(ctx->current_saved_cs);
 
 	struct si_saved_cs *scs = ctx->current_saved_cs;
-	unsigned gfx_cur = ctx->b.gfx.cs->prev_dw + ctx->b.gfx.cs->current.cdw;
+	unsigned gfx_cur = ctx->gfx_cs->prev_dw + ctx->gfx_cs->current.cdw;
 
 	if (!dump_bo_list &&
 	    gfx_cur == scs->gfx_last_dw)
@@ -419,10 +479,10 @@ void si_auto_log_cs(void *data, struct u_log_context *log)
 
 void si_log_hw_flush(struct si_context *sctx)
 {
-	if (!sctx->b.log)
+	if (!sctx->log)
 		return;
 
-	si_log_cs(sctx, sctx->b.log, true);
+	si_log_cs(sctx, sctx->log, true);
 }
 
 static const char *priority_to_string(enum radeon_bo_priority priority)
@@ -494,7 +554,7 @@ static void si_dump_bo_list(struct si_context *sctx,
 
 	for (i = 0; i < saved->bo_count; i++) {
 		/* Note: Buffer sizes are expected to be aligned to 4k by the winsys. */
-		const unsigned page_size = sctx->b.screen->info.gart_page_size;
+		const unsigned page_size = sctx->screen->info.gart_page_size;
 		uint64_t va = saved->bo_list[i].vm_address;
 		uint64_t size = saved->bo_list[i].bo_size;
 		bool hit = false;
@@ -540,14 +600,14 @@ static void si_dump_framebuffer(struct si_context *sctx, struct u_log_context *l
 
 		rtex = (struct r600_texture*)state->cbufs[i]->texture;
 		u_log_printf(log, COLOR_YELLOW "Color buffer %i:" COLOR_RESET "\n", i);
-		si_print_texture_info(sctx->b.screen, rtex, log);
+		si_print_texture_info(sctx->screen, rtex, log);
 		u_log_printf(log, "\n");
 	}
 
 	if (state->zsbuf) {
 		rtex = (struct r600_texture*)state->zsbuf->texture;
 		u_log_printf(log, COLOR_YELLOW "Depth-stencil buffer:" COLOR_RESET "\n");
-		si_print_texture_info(sctx->b.screen, rtex, log);
+		si_print_texture_info(sctx->screen, rtex, log);
 		u_log_printf(log, "\n");
 	}
 }
@@ -740,10 +800,20 @@ static void si_dump_descriptors(struct si_context *sctx,
 		enabled_images = sctx->images[processor].enabled_mask;
 	}
 
-	if (processor == PIPE_SHADER_VERTEX) {
+	if (processor == PIPE_SHADER_VERTEX &&
+	    sctx->vb_descriptors_buffer &&
+	    sctx->vb_descriptors_gpu_list &&
+	    sctx->vertex_elements) {
 		assert(info); /* only CS may not have an info struct */
+		struct si_descriptors desc = {};
 
-		si_dump_descriptor_list(sctx->screen, &sctx->vertex_buffers, name,
+		desc.buffer = sctx->vb_descriptors_buffer;
+		desc.list = sctx->vb_descriptors_gpu_list;
+		desc.gpu_list = sctx->vb_descriptors_gpu_list;
+		desc.element_dw_size = 4;
+		desc.num_active_slots = sctx->vertex_elements->desc_list_byte_size / 16;
+
+		si_dump_descriptor_list(sctx->screen, &desc, name,
 					" - Vertex buffer", 4, info->num_inputs,
 					si_identity, log);
 	}
@@ -790,42 +860,40 @@ static void si_dump_compute_descriptors(struct si_context *sctx,
 }
 
 struct si_shader_inst {
-	char text[160];  /* one disasm line */
-	unsigned offset; /* instruction offset */
+	const char *text; /* start of disassembly for this instruction */
+	unsigned textlen;
 	unsigned size;   /* instruction size = 4 or 8 */
+	uint64_t addr; /* instruction address */
 };
 
-/* Split a disassembly string into lines and add them to the array pointed
- * to by "instructions". */
+/**
+ * Split a disassembly string into instructions and add them to the array
+ * pointed to by \p instructions.
+ *
+ * Labels are considered to be part of the following instruction.
+ */
 static void si_add_split_disasm(const char *disasm,
-				uint64_t start_addr,
+				uint64_t *addr,
 				unsigned *num,
 				struct si_shader_inst *instructions)
 {
-	struct si_shader_inst *last_inst = *num ? &instructions[*num - 1] : NULL;
-	char *next;
+	const char *semicolon;
 
-	while ((next = strchr(disasm, '\n'))) {
-		struct si_shader_inst *inst = &instructions[*num];
-		unsigned len = next - disasm;
+	while ((semicolon = strchr(disasm, ';'))) {
+		struct si_shader_inst *inst = &instructions[(*num)++];
+		const char *end = util_strchrnul(semicolon, '\n');
 
-		assert(len < ARRAY_SIZE(inst->text));
-		memcpy(inst->text, disasm, len);
-		inst->text[len] = 0;
-		inst->offset = last_inst ? last_inst->offset + last_inst->size : 0;
+		inst->text = disasm;
+		inst->textlen = end - disasm;
 
-		const char *semicolon = strchr(disasm, ';');
-		assert(semicolon);
+		inst->addr = *addr;
 		/* More than 16 chars after ";" means the instruction is 8 bytes long. */
-		inst->size = next - semicolon > 16 ? 8 : 4;
+		inst->size = end - semicolon > 16 ? 8 : 4;
+		*addr += inst->size;
 
-		snprintf(inst->text + len, ARRAY_SIZE(inst->text) - len,
-			" [PC=0x%"PRIx64", off=%u, size=%u]",
-			start_addr + inst->offset, inst->offset, inst->size);
-
-		last_inst = inst;
-		(*num)++;
-		disasm = next + 1;
+		if (!(*end))
+			break;
+		disasm = end + 1;
 	}
 }
 
@@ -861,26 +929,27 @@ static void si_print_annotated_shader(struct si_shader *shader,
 	 * Buffer size / 4 is the upper bound of the instruction count.
 	 */
 	unsigned num_inst = 0;
+	uint64_t inst_addr = start_addr;
 	struct si_shader_inst *instructions =
 		calloc(shader->bo->b.b.width0 / 4, sizeof(struct si_shader_inst));
 
 	if (shader->prolog) {
 		si_add_split_disasm(shader->prolog->binary.disasm_string,
-				    start_addr, &num_inst, instructions);
+				    &inst_addr, &num_inst, instructions);
 	}
 	if (shader->previous_stage) {
 		si_add_split_disasm(shader->previous_stage->binary.disasm_string,
-				    start_addr, &num_inst, instructions);
+				    &inst_addr, &num_inst, instructions);
 	}
 	if (shader->prolog2) {
 		si_add_split_disasm(shader->prolog2->binary.disasm_string,
-				    start_addr, &num_inst, instructions);
+				    &inst_addr, &num_inst, instructions);
 	}
 	si_add_split_disasm(shader->binary.disasm_string,
-			    start_addr, &num_inst, instructions);
+			    &inst_addr, &num_inst, instructions);
 	if (shader->epilog) {
 		si_add_split_disasm(shader->epilog->binary.disasm_string,
-				    start_addr, &num_inst, instructions);
+				    &inst_addr, &num_inst, instructions);
 	}
 
 	fprintf(f, COLOR_YELLOW "%s - annotated disassembly:" COLOR_RESET "\n",
@@ -890,10 +959,11 @@ static void si_print_annotated_shader(struct si_shader *shader,
 	for (i = 0; i < num_inst; i++) {
 		struct si_shader_inst *inst = &instructions[i];
 
-		fprintf(f, "%s\n", inst->text);
+		fprintf(f, "%.*s [PC=0x%"PRIx64", size=%u]\n",
+			inst->textlen, inst->text, inst->addr, inst->size);
 
 		/* Print which waves execute the instruction right now. */
-		while (num_waves && start_addr + inst->offset == waves->pc) {
+		while (num_waves && inst->addr == waves->pc) {
 			fprintf(f,
 				"          " COLOR_GREEN "^ SE%u SH%u CU%u "
 				"SIMD%u WAVE%u  EXEC=%016"PRIx64 "  ",
@@ -975,15 +1045,15 @@ static void si_dump_debug_state(struct pipe_context *ctx, FILE *f,
 {
 	struct si_context *sctx = (struct si_context*)ctx;
 
-	if (sctx->b.log)
-		u_log_flush(sctx->b.log);
+	if (sctx->log)
+		u_log_flush(sctx->log);
 
 	if (flags & PIPE_DUMP_DEVICE_STATUS_REGISTERS) {
 		si_dump_debug_registers(sctx, f);
 
 		si_dump_annotated_shaders(sctx, f);
-		si_dump_command("Active waves (raw data)", "umr -wa | column -t", f);
-		si_dump_command("Wave information", "umr -O bits -wa", f);
+		si_dump_command("Active waves (raw data)", "umr -O halt_waves -wa | column -t", f);
+		si_dump_command("Wave information", "umr -O halt_waves,bits -wa", f);
 	}
 }
 
@@ -1040,16 +1110,15 @@ static void si_dump_dma(struct si_context *sctx,
 	fprintf(f, "SDMA Dump Done.\n");
 }
 
-void si_check_vm_faults(struct r600_common_context *ctx,
+void si_check_vm_faults(struct si_context *sctx,
 			struct radeon_saved_cs *saved, enum ring_type ring)
 {
-	struct si_context *sctx = (struct si_context *)ctx;
-	struct pipe_screen *screen = sctx->b.b.screen;
+	struct pipe_screen *screen = sctx->b.screen;
 	FILE *f;
 	uint64_t addr;
 	char cmd_line[4096];
 
-	if (!ac_vm_fault_occured(sctx->b.chip_class,
+	if (!ac_vm_fault_occured(sctx->chip_class,
 				 &sctx->dmesg_timestamp, &addr))
 		return;
 
@@ -1098,13 +1167,12 @@ void si_check_vm_faults(struct r600_common_context *ctx,
 
 void si_init_debug_functions(struct si_context *sctx)
 {
-	sctx->b.b.dump_debug_state = si_dump_debug_state;
-	sctx->b.check_vm_faults = si_check_vm_faults;
+	sctx->b.dump_debug_state = si_dump_debug_state;
 
 	/* Set the initial dmesg timestamp for this context, so that
 	 * only new messages will be checked for VM faults.
 	 */
 	if (sctx->screen->debug_flags & DBG(CHECK_VM))
-		ac_vm_fault_occured(sctx->b.chip_class,
+		ac_vm_fault_occured(sctx->chip_class,
 				    &sctx->dmesg_timestamp, NULL);
 }

@@ -40,6 +40,17 @@
 struct gbm_dri_surface;
 struct gbm_dri_bo;
 
+struct gbm_dri_visual {
+   uint32_t gbm_format;
+   int dri_image_format;
+   struct {
+      uint32_t red;
+      uint32_t green;
+      uint32_t blue;
+      uint32_t alpha;
+   } rgba_masks;
+};
+
 struct gbm_dri_device {
    struct gbm_device base;
 
@@ -97,6 +108,9 @@ struct gbm_dri_device {
                             void          *loaderPrivate);
 
    struct wl_drm *wl_drm;
+
+   const struct gbm_dri_visual *visual_table;
+   int num_visuals;
 };
 
 struct gbm_dri_bo {

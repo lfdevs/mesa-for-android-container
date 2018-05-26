@@ -26,6 +26,8 @@
  * 
  **************************************************************************/
 
+#include "compiler/nir/nir.h"
+
 #include "main/imports.h"
 #include "main/context.h"
 #include "main/macros.h"
@@ -34,6 +36,7 @@
 #include "pipe/p_context.h"
 #include "pipe/p_defines.h"
 #include "pipe/p_screen.h"
+#include "tgsi/tgsi_from_mesa.h"
 #include "util/u_math.h"
 
 #include "st_context.h"
@@ -157,41 +160,25 @@ void st_init_limits(struct pipe_screen *screen,
    for (sh = 0; sh < PIPE_SHADER_TYPES; ++sh) {
       struct gl_shader_compiler_options *options;
       struct gl_program_constants *pc;
+      const nir_shader_compiler_options *nir_options = NULL;
 
-      switch (sh) {
-      case PIPE_SHADER_FRAGMENT:
-         pc = &c->Program[MESA_SHADER_FRAGMENT];
-         options = &c->ShaderCompilerOptions[MESA_SHADER_FRAGMENT];
-         break;
-      case PIPE_SHADER_VERTEX:
-         pc = &c->Program[MESA_SHADER_VERTEX];
-         options = &c->ShaderCompilerOptions[MESA_SHADER_VERTEX];
-         break;
-      case PIPE_SHADER_GEOMETRY:
-         pc = &c->Program[MESA_SHADER_GEOMETRY];
-         options = &c->ShaderCompilerOptions[MESA_SHADER_GEOMETRY];
-         break;
-      case PIPE_SHADER_TESS_CTRL:
-         pc = &c->Program[MESA_SHADER_TESS_CTRL];
-         options = &c->ShaderCompilerOptions[MESA_SHADER_TESS_CTRL];
-         break;
-      case PIPE_SHADER_TESS_EVAL:
-         pc = &c->Program[MESA_SHADER_TESS_EVAL];
-         options = &c->ShaderCompilerOptions[MESA_SHADER_TESS_EVAL];
-         break;
-      case PIPE_SHADER_COMPUTE:
-         pc = &c->Program[MESA_SHADER_COMPUTE];
-         options = &c->ShaderCompilerOptions[MESA_SHADER_COMPUTE];
+      if (screen->get_compiler_options) {
+         nir_options = (const nir_shader_compiler_options *)
+            screen->get_compiler_options(screen, PIPE_SHADER_IR_NIR, sh);
+      }
 
+      const gl_shader_stage stage = tgsi_processor_to_shader_stage(sh);
+      pc = &c->Program[stage];
+      options = &c->ShaderCompilerOptions[stage];
+      c->ShaderCompilerOptions[stage].NirOptions = nir_options;
+
+      if (sh == PIPE_SHADER_COMPUTE) {
          if (!screen->get_param(screen, PIPE_CAP_COMPUTE))
             continue;
          supported_irs =
             screen->get_shader_param(screen, sh, PIPE_SHADER_CAP_SUPPORTED_IRS);
          if (!(supported_irs & (1 << PIPE_SHADER_IR_TGSI)))
             continue;
-         break;
-      default:
-         assert(0);
       }
 
       pc->MaxTextureImageUnits =
@@ -678,6 +665,8 @@ void st_init_extensions(struct pipe_screen *screen,
       { o(EXT_draw_buffers2),                PIPE_CAP_INDEP_BLEND_ENABLE               },
       { o(EXT_memory_object),                PIPE_CAP_MEMOBJ                           },
       { o(EXT_memory_object_fd),             PIPE_CAP_MEMOBJ                           },
+      { o(EXT_semaphore),                    PIPE_CAP_FENCE_SIGNAL                     },
+      { o(EXT_semaphore_fd),                 PIPE_CAP_FENCE_SIGNAL                     },
       { o(EXT_texture_array),                PIPE_CAP_MAX_TEXTURE_ARRAY_LAYERS         },
       { o(EXT_texture_filter_anisotropic),   PIPE_CAP_ANISOTROPIC_FILTER               },
       { o(EXT_texture_mirror_clamp),         PIPE_CAP_TEXTURE_MIRROR_CLAMP             },
@@ -722,7 +711,8 @@ void st_init_extensions(struct pipe_screen *screen,
 
       { { o(EXT_framebuffer_sRGB) },
         { PIPE_FORMAT_A8B8G8R8_SRGB,
-          PIPE_FORMAT_B8G8R8A8_SRGB },
+          PIPE_FORMAT_B8G8R8A8_SRGB,
+          PIPE_FORMAT_R8G8B8A8_SRGB },
          GL_TRUE }, /* at least one format must be supported */
 
       { { o(EXT_packed_float) },

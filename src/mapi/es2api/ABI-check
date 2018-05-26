@@ -23,7 +23,7 @@ then
   exit 1
 fi
 
-FUNCS=$(nm -D --defined-only $LIB | grep -o 'T gl.*' | cut -c 3- | while read func; do
+FUNCS=$($NM -D --defined-only $LIB | grep -o 'T gl.*' | cut -c 3- | while read func; do
 ( grep -q "^$func$" || echo $func )  <<EOF
 glActiveShaderProgram
 glActiveTexture

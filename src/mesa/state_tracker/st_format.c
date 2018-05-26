@@ -84,6 +84,8 @@ st_mesa_format_to_pipe_format(const struct st_context *st,
       return PIPE_FORMAT_A1B5G5R5_UNORM;
    case MESA_FORMAT_B4G4R4A4_UNORM:
       return PIPE_FORMAT_B4G4R4A4_UNORM;
+   case MESA_FORMAT_A4B4G4R4_UNORM:
+      return PIPE_FORMAT_A4B4G4R4_UNORM;
    case MESA_FORMAT_B5G6R5_UNORM:
       return PIPE_FORMAT_B5G6R5_UNORM;
    case MESA_FORMAT_B2G3R3_UNORM:
@@ -567,6 +569,8 @@ st_pipe_format_to_mesa_format(enum pipe_format format)
       return MESA_FORMAT_A1B5G5R5_UNORM;
    case PIPE_FORMAT_B4G4R4A4_UNORM:
       return MESA_FORMAT_B4G4R4A4_UNORM;
+   case PIPE_FORMAT_A4B4G4R4_UNORM:
+      return MESA_FORMAT_A4B4G4R4_UNORM;
    case PIPE_FORMAT_B5G6R5_UNORM:
       return MESA_FORMAT_B5G6R5_UNORM;
    case PIPE_FORMAT_B2G3R3_UNORM:
@@ -1155,7 +1159,8 @@ static const struct format_mapping format_map[] = {
    },
    {
       { GL_RGBA4, GL_RGBA2, 0 },
-      { PIPE_FORMAT_B4G4R4A4_UNORM, DEFAULT_RGBA_FORMATS }
+      { PIPE_FORMAT_B4G4R4A4_UNORM, PIPE_FORMAT_A4B4G4R4_UNORM,
+        DEFAULT_RGBA_FORMATS }
    },
    {
       { GL_RGB5_A1, 0 },
@@ -1170,6 +1175,7 @@ static const struct format_mapping format_map[] = {
    {
       { GL_RGB4 },
       { PIPE_FORMAT_B4G4R4X4_UNORM, PIPE_FORMAT_B4G4R4A4_UNORM,
+        PIPE_FORMAT_A4B4G4R4_UNORM,
         DEFAULT_RGB_FORMATS }
    },
    {
@@ -2128,8 +2134,9 @@ st_choose_format(struct st_context *st, GLenum internalFormat,
    pf = find_exact_format(internalFormat, format, type);
    if (pf != PIPE_FORMAT_NONE &&
        screen->is_format_supported(screen, pf,
-                                   target, sample_count, bindings))
-      return pf;
+                                   target, sample_count, bindings)) {
+      goto success;
+   }
 
    /* search table for internalFormat */
    for (i = 0; i < ARRAY_SIZE(format_map); i++) {
@@ -2139,15 +2146,27 @@ st_choose_format(struct st_context *st, GLenum internalFormat,
             /* Found the desired internal format.  Find first pipe format
              * which is supported by the driver.
              */
-            return find_supported_format(screen, mapping->pipeFormats,
-                                         target, sample_count, bindings,
-                                         allow_dxt);
+            pf = find_supported_format(screen, mapping->pipeFormats,
+                                       target, sample_count, bindings,
+                                       allow_dxt);
+            goto success;
          }
       }
    }
 
    _mesa_problem(NULL, "unhandled format!\n");
    return PIPE_FORMAT_NONE;
+
+success:
+   if (0) {
+      debug_printf("%s(fmt=%s, type=%s, intFmt=%s) = %s\n",
+                   __FUNCTION__,
+                   _mesa_enum_to_string(format),
+                   _mesa_enum_to_string(type),
+                   _mesa_enum_to_string(internalFormat),
+                   util_format_name(pf));
+   }
+   return pf;
 }
 
 
@@ -2526,6 +2545,8 @@ st_translate_color(const union gl_color_union *colorIn,
          out[0] = out[1] = out[2] = in[0];
          out[3] = in[3];
          break;
+      /* Stencil border is tricky on some hw. Help drivers a little here. */
+      case GL_STENCIL_INDEX:
       case GL_INTENSITY:
          out[0] = out[1] = out[2] = out[3] = in[0];
          break;

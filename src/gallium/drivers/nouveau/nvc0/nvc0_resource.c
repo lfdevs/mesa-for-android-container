@@ -1,3 +1,4 @@
+#include <drm_fourcc.h>
 
 #include "pipe/p_context.h"
 #include "nvc0/nvc0_resource.h"
@@ -8,12 +9,66 @@ static struct pipe_resource *
 nvc0_resource_create(struct pipe_screen *screen,
                      const struct pipe_resource *templ)
 {
+   const uint64_t modifier = DRM_FORMAT_MOD_INVALID;
+
    switch (templ->target) {
    case PIPE_BUFFER:
       return nouveau_buffer_create(screen, templ);
    default:
-      return nvc0_miptree_create(screen, templ);
+      return nvc0_miptree_create(screen, templ, &modifier, 1);
    }
+}
+
+static struct pipe_resource *
+nvc0_resource_create_with_modifiers(struct pipe_screen *screen,
+                                    const struct pipe_resource *templ,
+                                    const uint64_t *modifiers, int count)
+{
+   switch (templ->target) {
+   case PIPE_BUFFER:
+      return nouveau_buffer_create(screen, templ);
+   default:
+      return nvc0_miptree_create(screen, templ, modifiers, count);
+   }
+}
+
+static void
+nvc0_query_dmabuf_modifiers(struct pipe_screen *screen,
+                            enum pipe_format format, int max,
+                            uint64_t *modifiers, unsigned int *external_only,
+                            int *count)
+{
+   static const uint64_t supported_modifiers[] = {
+      DRM_FORMAT_MOD_LINEAR,
+      DRM_FORMAT_MOD_NVIDIA_16BX2_BLOCK_ONE_GOB,
+      DRM_FORMAT_MOD_NVIDIA_16BX2_BLOCK_TWO_GOB,
+      DRM_FORMAT_MOD_NVIDIA_16BX2_BLOCK_FOUR_GOB,
+      DRM_FORMAT_MOD_NVIDIA_16BX2_BLOCK_EIGHT_GOB,
+      DRM_FORMAT_MOD_NVIDIA_16BX2_BLOCK_SIXTEEN_GOB,
+      DRM_FORMAT_MOD_NVIDIA_16BX2_BLOCK_THIRTYTWO_GOB,
+   };
+   int i, num = 0;
+
+   if (max > ARRAY_SIZE(supported_modifiers))
+      max = ARRAY_SIZE(supported_modifiers);
+
+   if (!max) {
+      max = ARRAY_SIZE(supported_modifiers);
+      external_only = NULL;
+      modifiers = NULL;
+   }
+
+   for (i = 0; i < max; i++) {
+      if (modifiers)
+         modifiers[num] = supported_modifiers[i];
+
+      if (external_only)
+         external_only[num] = 0;
+
+      num++;
+   }
+
+   *count = num;
 }
 
 static struct pipe_resource *
@@ -60,6 +115,8 @@ void
 nvc0_screen_init_resource_functions(struct pipe_screen *pscreen)
 {
    pscreen->resource_create = nvc0_resource_create;
+   pscreen->resource_create_with_modifiers = nvc0_resource_create_with_modifiers;
+   pscreen->query_dmabuf_modifiers = nvc0_query_dmabuf_modifiers;
    pscreen->resource_from_handle = nvc0_resource_from_handle;
    pscreen->resource_get_handle = u_resource_get_handle_vtbl;
    pscreen->resource_destroy = u_resource_destroy_vtbl;

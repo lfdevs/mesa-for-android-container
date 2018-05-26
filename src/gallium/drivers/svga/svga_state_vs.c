@@ -105,6 +105,9 @@ get_compiled_dummy_vertex_shader(struct svga_context *svga,
    FREE((void *) vs->base.tokens);
    vs->base.tokens = dummy;
 
+   tgsi_scan_shader(vs->base.tokens, &vs->base.info);
+   vs->generic_outputs = svga_get_generic_outputs_mask(&vs->base.info);
+
    variant = translate_vertex_program(svga, vs, key);
    return variant;
 }
@@ -224,16 +227,15 @@ svga_reemit_vs_bindings(struct svga_context *svga)
    if (!svga_need_to_rebind_resources(svga)) {
       ret =  svga->swc->resource_rebind(svga->swc, NULL, gbshader,
                                         SVGA_RELOC_READ);
-      goto out;
+   }
+   else {
+      if (svga_have_vgpu10(svga))
+         ret = SVGA3D_vgpu10_SetShader(svga->swc, SVGA3D_SHADERTYPE_VS,
+                                       gbshader, shaderId);
+      else
+         ret = SVGA3D_SetGBShader(svga->swc, SVGA3D_SHADERTYPE_VS, gbshader);
    }
 
-   if (svga_have_vgpu10(svga))
-      ret = SVGA3D_vgpu10_SetShader(svga->swc, SVGA3D_SHADERTYPE_VS,
-                                    gbshader, shaderId);
-   else
-      ret = SVGA3D_SetGBShader(svga->swc, SVGA3D_SHADERTYPE_VS, gbshader);
-
- out:
    if (ret != PIPE_OK)
       return ret;
 

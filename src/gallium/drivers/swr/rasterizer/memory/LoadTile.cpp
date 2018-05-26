@@ -54,6 +54,7 @@ static std::mutex sBucketMutex;
 /// @param x, y - Coordinates to raster tile.
 /// @param pDstHotTile - Pointer to Hot Tile
 void SwrLoadHotTile(
+    HANDLE hWorkerPrivateData,
     const SWR_SURFACE_STATE *pSrcSurface,
     SWR_FORMAT dstFormat,
     SWR_RENDERTARGET_ATTACHMENT renderTargetIndex,

@@ -232,6 +232,11 @@ struct virgl_caps_bool_set1 {
         unsigned poly_stipple:1; /* not in GL 3.1 core profile */
         unsigned mirror_clamp:1;
         unsigned texture_query_lod:1;
+        unsigned has_fp64:1;
+        unsigned has_tessellation_shaders:1;
+        unsigned has_indirect_draw:1;
+        unsigned has_sample_shading:1;
+        unsigned has_cull:1;
 };
 
 /* endless expansion capabilites - current gallium has 252 formats */
@@ -259,9 +264,34 @@ struct virgl_caps_v1 {
         uint32_t max_texture_gather_components;
 };
 
+struct virgl_caps_v2 {
+        struct virgl_caps_v1 v1;
+        float min_aliased_point_size;
+        float max_aliased_point_size;
+        float min_smooth_point_size;
+        float max_smooth_point_size;
+        float min_aliased_line_width;
+        float max_aliased_line_width;
+        float min_smooth_line_width;
+        float max_smooth_line_width;
+        float max_texture_lod_bias;
+        uint32_t max_geom_output_vertices;
+        uint32_t max_geom_total_output_components;
+        uint32_t max_vertex_outputs;
+        uint32_t max_vertex_attribs;
+        uint32_t max_shader_patch_varyings;
+        int32_t min_texel_offset;
+        int32_t max_texel_offset;
+        int32_t min_texture_gather_offset;
+        int32_t max_texture_gather_offset;
+        uint32_t texture_buffer_offset_alignment;
+        uint32_t uniform_buffer_offset_alignment;
+};
+
 union virgl_caps {
         uint32_t max_version;
         struct virgl_caps_v1 v1;
+        struct virgl_caps_v2 v2;
 };
 
 enum virgl_errors {

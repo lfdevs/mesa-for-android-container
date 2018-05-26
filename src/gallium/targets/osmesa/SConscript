@@ -15,14 +15,14 @@ env.Prepend(LIBS = [
     compiler,
     mesa,
     gallium,
-    trace,
     glsl,
     nir,
+    spirv,
     mesautil,
     softpipe
 ])
 
-env.Append(CPPDEFINES = ['GALLIUM_TRACE', 'GALLIUM_SOFTPIPE'])
+env.Append(CPPDEFINES = ['GALLIUM_SOFTPIPE'])
 
 sources = ['target.c']
 
@@ -39,6 +39,9 @@ if env['platform'] == 'windows':
         sources += ['osmesa.mingw.def']
     else:
         sources += ['osmesa.def']
+    # Link with winsock2 library
+    env.Append(LIBS = ['ws2_32'])
+
 
 gallium_osmesa = env.SharedLibrary(
     target ='osmesa',

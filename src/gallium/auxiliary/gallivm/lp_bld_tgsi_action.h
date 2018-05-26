@@ -50,7 +50,7 @@ struct lp_build_emit_data {
     * args[0] = s0.x;
     * args[1] = s1.x;
     */
-   LLVMValueRef args[12];
+   LLVMValueRef args[20];
 
    /**
     * Number of arguments in the args array.

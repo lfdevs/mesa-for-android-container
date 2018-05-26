@@ -1,4 +1,6 @@
-EXTRA_DIST = RELEASE_NOTES
+EXTRA_DIST = \
+	RELEASE_NOTES \
+	meson.build
 
 noinst_LTLIBRARIES = libappleglx.la
 

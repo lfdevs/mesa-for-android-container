@@ -262,8 +262,8 @@ do_blit_bitmap( struct gl_context *ctx,
 	 int h = MIN2(DY, height - py);
 	 int w = MIN2(DX, width - px);
 	 GLuint sz = ALIGN(ALIGN(w,8) * h, 64)/8;
-	 GLenum logic_op = ctx->Color.ColorLogicOpEnabled ?
-	    ctx->Color.LogicOp : GL_COPY;
+         const enum gl_logicop_mode logic_op = ctx->Color.ColorLogicOpEnabled ?
+            ctx->Color._LogicOp : COLOR_LOGICOP_COPY;
 
 	 assert(sz <= sizeof(stipple));
 	 memset(stipple, 0, sz);

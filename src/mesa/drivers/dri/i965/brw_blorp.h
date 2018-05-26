@@ -99,7 +99,7 @@ void
 brw_blorp_resolve_color(struct brw_context *brw,
                         struct intel_mipmap_tree *mt,
                         unsigned level, unsigned layer,
-                        enum blorp_fast_clear_op resolve_op);
+                        enum isl_aux_op resolve_op);
 
 void
 brw_blorp_mcs_partial_resolve(struct brw_context *brw,
@@ -109,7 +109,7 @@ brw_blorp_mcs_partial_resolve(struct brw_context *brw,
 void
 intel_hiz_exec(struct brw_context *brw, struct intel_mipmap_tree *mt,
                unsigned int level, unsigned int start_layer,
-               unsigned int num_layers, enum blorp_hiz_op op);
+               unsigned int num_layers, enum isl_aux_op op);
 
 void gen4_blorp_exec(struct blorp_batch *batch,
                      const struct blorp_params *params);
@@ -128,6 +128,8 @@ void gen8_blorp_exec(struct blorp_batch *batch,
 void gen9_blorp_exec(struct blorp_batch *batch,
                      const struct blorp_params *params);
 void gen10_blorp_exec(struct blorp_batch *batch,
+                      const struct blorp_params *params);
+void gen11_blorp_exec(struct blorp_batch *batch,
                       const struct blorp_params *params);
 
 #ifdef __cplusplus

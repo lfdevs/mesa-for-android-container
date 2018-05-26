@@ -655,22 +655,22 @@ bool PaTriList2(PA_STATE_OPT& pa, uint32_t slot, simdvector verts[])
         simdvector& v0 = verts[0];
         v0[i] = _simd_blend_ps(a[i], b[i], 0x92);
         v0[i] = _simd_blend_ps(v0[i], c[i], 0x24);
-        v0[i] = _mm256_permute_ps(v0[i], 0x6C);
-        s = _mm256_permute2f128_ps(v0[i], v0[i], 0x21);
+        v0[i] = _simd_permute_ps_i(v0[i], 0x6C);
+        s = _simd_permute2f128_ps(v0[i], v0[i], 0x21);
         v0[i] = _simd_blend_ps(v0[i], s, 0x44);
 
         simdvector& v1 = verts[1];
         v1[i] = _simd_blend_ps(a[i], b[i], 0x24);
         v1[i] = _simd_blend_ps(v1[i], c[i], 0x49);
-        v1[i] = _mm256_permute_ps(v1[i], 0xB1);
-        s = _mm256_permute2f128_ps(v1[i], v1[i], 0x21);
+        v1[i] = _simd_permute_ps_i(v1[i], 0xB1);
+        s = _simd_permute2f128_ps(v1[i], v1[i], 0x21);
         v1[i] = _simd_blend_ps(v1[i], s, 0x66);
 
         simdvector& v2 = verts[2];
         v2[i] = _simd_blend_ps(a[i], b[i], 0x49);
         v2[i] = _simd_blend_ps(v2[i], c[i], 0x92);
-        v2[i] = _mm256_permute_ps(v2[i], 0xC6);
-        s = _mm256_permute2f128_ps(v2[i], v2[i], 0x21);
+        v2[i] = _simd_permute_ps_i(v2[i], 0xC6);
+        s = _simd_permute2f128_ps(v2[i], v2[i], 0x21);
         v2[i] = _simd_blend_ps(v2[i], s, 0x22);
     }
 
@@ -755,9 +755,15 @@ bool PaTriList1_simd16(PA_STATE_OPT& pa, uint32_t slot, simd16vector verts[])
 
 bool PaTriList2_simd16(PA_STATE_OPT& pa, uint32_t slot, simd16vector verts[])
 {
+#if KNOB_ARCH == KNOB_ARCH_AVX
+    simd16scalar perm0 = _simd16_setzero_ps();
+    simd16scalar perm1 = _simd16_setzero_ps();
+    simd16scalar perm2 = _simd16_setzero_ps();
+#elif KNOB_ARCH >= KNOB_ARCH_AVX2
     const simd16scalari perm0 = _simd16_set_epi32(13, 10, 7, 4, 1, 14, 11,  8, 5, 2, 15, 12,  9, 6, 3, 0);
     const simd16scalari perm1 = _simd16_set_epi32(14, 11, 8, 5, 2, 15, 12,  9, 6, 3,  0, 13, 10, 7, 4, 1);
     const simd16scalari perm2 = _simd16_set_epi32(15, 12, 9, 6, 3,  0, 13, 10, 7, 4,  1, 14, 11, 8, 5, 2);
+#endif
 
     const simd16vector &a = PaGetSimdVector_simd16(pa, 0, slot);
     const simd16vector &b = PaGetSimdVector_simd16(pa, 1, slot);
@@ -769,7 +775,7 @@ bool PaTriList2_simd16(PA_STATE_OPT& pa, uint32_t slot, simd16vector verts[])
 
     //  v0 -> a0 a3 a6 a9 aC aF b2 b5 b8 bB bE c1 c4 c7 cA cD
     //  v1 -> a1 a4 a7 aA aD b0 b3 b6 b9 bC bF c2 c5 c8 cB cE
-    //  v2 -> a2 a5 b8 aB aE b1 b4 b7 bA bD c0 c3 c6 c9 cC cF
+    //  v2 -> a2 a5 a8 aB aE b1 b4 b7 bA bD c0 c3 c6 c9 cC cF
 
     // for simd16 x, y, z, and w
     for (int i = 0; i < 4; i += 1)
@@ -778,9 +784,29 @@ bool PaTriList2_simd16(PA_STATE_OPT& pa, uint32_t slot, simd16vector verts[])
         simd16scalar temp1 = _simd16_blend_ps(_simd16_blend_ps(a[i], b[i], 0x9249), c[i], 0x4924);
         simd16scalar temp2 = _simd16_blend_ps(_simd16_blend_ps(a[i], b[i], 0x2492), c[i], 0x9249);
 
+#if KNOB_ARCH == KNOB_ARCH_AVX
+        temp0 = _simd16_permute_ps_i(temp0, 0x6C);          // (0, 3, 2, 1) => 00 11 01 10 => 0x6C
+        perm0 = _simd16_permute2f128_ps(temp0, temp0, 0xB1);// (1, 0, 3, 2) => 01 00 11 10 => 0xB1
+        temp0 = _simd16_blend_ps(temp0, perm0, 0x4444);     // 0010 0010 0010 0010
+        perm0 = _simd16_permute2f128_ps(temp0, temp0, 0x4E);// (2, 3, 0, 1) => 10 11 00 01 => 0x4E
+        v0[i] = _simd16_blend_ps(temp0, perm0, 0x3838);     // 0001 1100 0001 1100
+
+        temp1 = _simd16_permute_ps_i(temp1, 0xB1);          // (1, 0, 3, 2) => 01 00 11 10 => 0xB1
+        perm1 = _simd16_permute2f128_ps(temp1, temp1, 0xB1);// (1, 0, 3, 2) => 01 00 11 10 => 0xB1
+        temp1 = _simd16_blend_ps(temp1, perm1, 0x6666);     // 0010 0010 0010 0010
+        perm1 = _simd16_permute2f128_ps(temp1, temp1, 0x4E);// (2, 3, 0, 1) => 10 11 00 01 => 0x4E
+        v1[i] = _simd16_blend_ps(temp1, perm1, 0x1818);     // 0001 1000 0001 1000
+
+        temp2 = _simd16_permute_ps_i(temp2, 0xC6);          // (2, 1, 0, 3) => 01 10 00 11 => 0xC6
+        perm2 = _simd16_permute2f128_ps(temp2, temp2, 0xB1);// (1, 0, 3, 2) => 01 00 11 10 => 0xB1
+        temp2 = _simd16_blend_ps(temp2, perm2, 0x2222);     // 0100 0100 0100 0100
+        perm2 = _simd16_permute2f128_ps(temp2, temp2, 0x4E);// (2, 3, 0, 1) => 10 11 00 01 => 0x4E
+        v2[i] = _simd16_blend_ps(temp2, perm2, 0x1C1C);     // 0011 1000 0011 1000
+#elif KNOB_ARCH >= KNOB_ARCH_AVX2
         v0[i] = _simd16_permute_ps(temp0, perm0);
         v1[i] = _simd16_permute_ps(temp1, perm1);
         v2[i] = _simd16_permute_ps(temp2, perm2);
+#endif
     }
 
     SetNextPaState_simd16(pa, PaTriList0_simd16, PaTriList0, PaTriListSingle0, 0, PA_STATE_OPT::SIMD_WIDTH, true);
@@ -802,7 +828,7 @@ void PaTriListSingle0(PA_STATE_OPT& pa, uint32_t slot, uint32_t primIndex, simd4
 
     //  v0 -> a0 a3 a6 a9 aC aF b2 b5 b8 bB bE c1 c4 c7 cA cD
     //  v1 -> a1 a4 a7 aA aD b0 b3 b6 b9 bC bF c2 c5 c8 cB cE
-    //  v2 -> a2 a5 b8 aB aE b1 b4 b7 bA bD c0 c3 c6 c9 cC cF
+    //  v2 -> a2 a5 a8 aB aE b1 b4 b7 bA bD c0 c3 c6 c9 cC cF
 
     switch (primIndex)
     {

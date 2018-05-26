@@ -341,6 +341,7 @@ static int instr_emit_fetch(struct ir2_instruction *instr,
 		tex->use_comp_lod = 1;
 		tex->use_reg_lod = !instr->fetch.is_cube;
 		tex->sample_location = SAMPLE_CENTER;
+		tex->tx_coord_denorm = instr->fetch.is_rect;
 
 		if (instr->pred != IR2_PRED_NONE) {
 			tex->pred_select = 1;

@@ -28,6 +28,7 @@ C_SOURCES := \
 VC5_PER_VERSION_SOURCES = \
 	v3dx_context.h \
 	v3dx_format_table.c \
+	v3dx_job.c \
 	v3dx_simulator.c \
 	vc5_draw.c \
 	vc5_emit.c \

@@ -67,8 +67,8 @@ struct combiner_state {
 
 	/* GL state */
 	GLenum mode;
-	GLenum *source;
-	GLenum *operand;
+	GLenum16 *source;
+	GLenum16 *operand;
 	GLuint logscale;
 
 	/* Derived HW state */
@@ -80,7 +80,7 @@ struct combiner_state {
  * context. */
 #define INIT_COMBINER(chan, ctx, rc, i) do {			\
 		struct gl_tex_env_combine_state *c =		\
-			ctx->Texture.Unit[i]._CurrentCombine;	\
+			ctx->Texture.FixedFuncUnit[i]._CurrentCombine;	\
 		(rc)->ctx = ctx;				\
 		(rc)->unit = i;					\
 		(rc)->premodulate = c->_NumArgs##chan == 4;	\
@@ -332,7 +332,7 @@ nv10_get_general_combiner(struct gl_context *ctx, int i,
 	}
 
 	*k = pack_rgba_f(MESA_FORMAT_B8G8R8A8_UNORM,
-			 ctx->Texture.Unit[i].EnvColor);
+			 ctx->Texture.FixedFuncUnit[i].EnvColor);
 	*a_in = rc_a.in;
 	*a_out = rc_a.out;
 	*c_in = rc_c.in;

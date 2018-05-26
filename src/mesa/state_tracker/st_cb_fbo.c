@@ -47,6 +47,7 @@
 #include "pipe/p_screen.h"
 #include "st_atom.h"
 #include "st_context.h"
+#include "st_cb_bufferobjects.h"
 #include "st_cb_fbo.h"
 #include "st_cb_flush.h"
 #include "st_cb_texture.h"
@@ -287,8 +288,10 @@ st_new_renderbuffer_fb(enum pipe_format format, unsigned samples, boolean sw)
 
    switch (format) {
    case PIPE_FORMAT_B10G10R10A2_UNORM:
+   case PIPE_FORMAT_R10G10B10A2_UNORM:
       strb->Base.InternalFormat = GL_RGB10_A2;
       break;
+   case PIPE_FORMAT_R10G10B10X2_UNORM:
    case PIPE_FORMAT_B10G10R10X2_UNORM:
       strb->Base.InternalFormat = GL_RGB10;
       break;
@@ -506,13 +509,9 @@ st_render_texture(struct gl_context *ctx,
                   struct gl_renderbuffer_attachment *att)
 {
    struct st_context *st = st_context(ctx);
-   struct pipe_context *pipe = st->pipe;
    struct gl_renderbuffer *rb = att->Renderbuffer;
    struct st_renderbuffer *strb = st_renderbuffer(rb);
    struct pipe_resource *pt;
-
-   if (!st_finalize_texture(ctx, pipe, att->Texture, att->CubeMapFace))
-      return;
 
    pt = get_teximage_resource(att->Texture,
                               att->CubeMapFace,
@@ -715,13 +714,12 @@ st_validate_framebuffer(struct gl_context *ctx, struct gl_framebuffer *fb)
  * created FBOs.
  */
 static void
-st_DrawBuffers(struct gl_context *ctx, GLsizei count, const GLenum *buffers)
+st_DrawBuffer(struct gl_context *ctx, GLenum buffer)
 {
    struct st_context *st = st_context(ctx);
    struct gl_framebuffer *fb = ctx->DrawBuffer;
 
-   (void) count;
-   (void) buffers;
+   (void) buffer;
 
    if (_mesa_is_winsys_fbo(fb)) {
       GLuint i;
@@ -738,7 +736,7 @@ st_DrawBuffers(struct gl_context *ctx, GLsizei count, const GLenum *buffers)
 
 
 /**
- * Called via glReadBuffer.  As with st_DrawBuffers, we use this function
+ * Called via glReadBuffer.  As with st_DrawBuffer, we use this function
  * to check if we need to allocate a renderbuffer on demand.
  */
 static void
@@ -780,7 +778,6 @@ st_MapRenderbuffer(struct gl_context *ctx,
    struct st_renderbuffer *strb = st_renderbuffer(rb);
    struct pipe_context *pipe = st->pipe;
    const GLboolean invert = rb->Name == 0;
-   unsigned usage;
    GLuint y2;
    GLubyte *map;
 
@@ -800,13 +797,13 @@ st_MapRenderbuffer(struct gl_context *ctx,
       return;
    }
 
-   usage = 0x0;
-   if (mode & GL_MAP_READ_BIT)
-      usage |= PIPE_TRANSFER_READ;
-   if (mode & GL_MAP_WRITE_BIT)
-      usage |= PIPE_TRANSFER_WRITE;
-   if (mode & GL_MAP_INVALIDATE_RANGE_BIT)
-      usage |= PIPE_TRANSFER_DISCARD_RANGE;
+   /* Check for unexpected flags */
+   assert((mode & ~(GL_MAP_READ_BIT |
+                    GL_MAP_WRITE_BIT |
+                    GL_MAP_INVALIDATE_RANGE_BIT)) == 0);
+
+   const enum pipe_transfer_usage transfer_flags =
+      st_access_flags_to_transfer_flags(mode, false);
 
    /* Note: y=0=bottom of buffer while y2=0=top of buffer.
     * 'invert' will be true for window-system buffers and false for
@@ -821,7 +818,7 @@ st_MapRenderbuffer(struct gl_context *ctx,
                             strb->texture,
                             strb->surface->u.tex.level,
                             strb->surface->u.tex.first_layer,
-                            usage, x, y2, w, h, &strb->transfer);
+                            transfer_flags, x, y2, w, h, &strb->transfer);
    if (map) {
       if (invert) {
          *rowStrideOut = -(int) strb->transfer->stride;
@@ -871,7 +868,7 @@ st_init_fbo_functions(struct dd_function_table *functions)
    functions->FinishRenderTexture = st_finish_render_texture;
    functions->ValidateFramebuffer = st_validate_framebuffer;
 
-   functions->DrawBuffers = st_DrawBuffers;
+   functions->DrawBuffer = st_DrawBuffer;
    functions->ReadBuffer = st_ReadBuffer;
 
    functions->MapRenderbuffer = st_MapRenderbuffer;

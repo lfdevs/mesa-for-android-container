@@ -85,10 +85,12 @@ static void svga_flush( struct pipe_context *pipe,
 static void
 svga_create_fence_fd(struct pipe_context *pipe,
                      struct pipe_fence_handle **fence,
-                     int fd)
+                     int fd,
+                     enum pipe_fd_type type)
 {
    struct svga_winsys_screen *sws = svga_winsys_screen(pipe->screen);
 
+   assert(type == PIPE_FD_TYPE_NATIVE_SYNC);
    sws->fence_create_fd(sws, fence, fd);
 }
 

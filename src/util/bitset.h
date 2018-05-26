@@ -31,7 +31,7 @@
 #ifndef BITSET_H
 #define BITSET_H
 
-#include "util/u_math.h"
+#include "util/bitscan.h"
 
 /****************************************************************************
  * generic bitset implementation
@@ -131,5 +131,122 @@ __bitset_next_set(unsigned i, BITSET_WORD *tmp,
 #define BITSET_FOREACH_SET(__i, __tmp, __set, __size) \
    for (__tmp = *(__set), __i = 0; \
         (__i = __bitset_next_set(__i, &__tmp, __set, __size)) < __size;)
+
+#ifdef __cplusplus
+
+/**
+ * Simple C++ wrapper of a bitset type of static size, with value semantics
+ * and basic bitwise arithmetic operators.  The operators defined below are
+ * expected to have the same semantics as the same operator applied to other
+ * fundamental integer types.  T is the name of the struct to instantiate
+ * it as, and N is the number of bits in the bitset.
+ */
+#define DECLARE_BITSET_T(T, N) struct T {                       \
+      EXPLICIT_CONVERSION                                       \
+      operator bool() const                                     \
+      {                                                         \
+         for (unsigned i = 0; i < BITSET_WORDS(N); i++)         \
+            if (words[i])                                       \
+               return true;                                     \
+         return false;                                          \
+      }                                                         \
+                                                                \
+      T &                                                       \
+      operator=(int x)                                          \
+      {                                                         \
+         const T c = {{ (BITSET_WORD)x }};                      \
+         return *this = c;                                      \
+      }                                                         \
+                                                                \
+      friend bool                                               \
+      operator==(const T &b, const T &c)                        \
+      {                                                         \
+         return BITSET_EQUAL(b.words, c.words);                 \
+      }                                                         \
+                                                                \
+      friend bool                                               \
+      operator!=(const T &b, const T &c)                        \
+      {                                                         \
+         return !(b == c);                                      \
+      }                                                         \
+                                                                \
+      friend bool                                               \
+      operator==(const T &b, int x)                             \
+      {                                                         \
+         const T c = {{ (BITSET_WORD)x }};                      \
+         return b == c;                                         \
+      }                                                         \
+                                                                \
+      friend bool                                               \
+      operator!=(const T &b, int x)                             \
+      {                                                         \
+         return !(b == x);                                      \
+      }                                                         \
+                                                                \
+      friend T                                                  \
+      operator~(const T &b)                                     \
+      {                                                         \
+         T c;                                                   \
+         for (unsigned i = 0; i < BITSET_WORDS(N); i++)         \
+            c.words[i] = ~b.words[i];                           \
+         return c;                                              \
+      }                                                         \
+                                                                \
+      T &                                                       \
+      operator|=(const T &b)                                    \
+      {                                                         \
+         for (unsigned i = 0; i < BITSET_WORDS(N); i++)         \
+            words[i] |= b.words[i];                             \
+         return *this;                                          \
+      }                                                         \
+                                                                \
+      friend T                                                  \
+      operator|(const T &b, const T &c)                         \
+      {                                                         \
+         T d = b;                                               \
+         d |= c;                                                \
+         return d;                                              \
+      }                                                         \
+                                                                \
+      T &                                                       \
+      operator&=(const T &b)                                    \
+      {                                                         \
+         for (unsigned i = 0; i < BITSET_WORDS(N); i++)         \
+            words[i] &= b.words[i];                             \
+         return *this;                                          \
+      }                                                         \
+                                                                \
+      friend T                                                  \
+      operator&(const T &b, const T &c)                         \
+      {                                                         \
+         T d = b;                                               \
+         d &= c;                                                \
+         return d;                                              \
+      }                                                         \
+                                                                \
+      bool                                                      \
+      test(unsigned i) const                                    \
+      {                                                         \
+         return BITSET_TEST(words, i);                          \
+      }                                                         \
+                                                                \
+      T &                                                       \
+      set(unsigned i)                                           \
+      {                                                         \
+         BITSET_SET(words, i);                                  \
+         return *this;                                          \
+      }                                                         \
+                                                                \
+      T &                                                       \
+      clear(unsigned i)                                         \
+      {                                                         \
+         BITSET_CLEAR(words, i);                                \
+         return *this;                                          \
+      }                                                         \
+                                                                \
+      BITSET_WORD words[BITSET_WORDS(N)];                       \
+   }
+
+#endif
 
 #endif

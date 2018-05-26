@@ -198,7 +198,8 @@ static enum radeon_bo_domain radeon_bo_get_initial_domain(
     return get_valid_domain(args.value);
 }
 
-static uint64_t radeon_bomgr_find_va(struct radeon_drm_winsys *rws,
+static uint64_t radeon_bomgr_find_va(const struct radeon_info *info,
+                                     struct radeon_vm_heap *heap,
                                      uint64_t size, uint64_t alignment)
 {
     struct radeon_bo_va_hole *hole, *n;
@@ -207,11 +208,11 @@ static uint64_t radeon_bomgr_find_va(struct radeon_drm_winsys *rws,
     /* All VM address space holes will implicitly start aligned to the
      * size alignment, so we don't need to sanitize the alignment here
      */
-    size = align(size, rws->info.gart_page_size);
+    size = align(size, info->gart_page_size);
 
-    mtx_lock(&rws->bo_va_mutex);
+    mtx_lock(&heap->mutex);
     /* first look for a hole */
-    LIST_FOR_EACH_ENTRY_SAFE(hole, n, &rws->va_holes, list) {
+    LIST_FOR_EACH_ENTRY_SAFE(hole, n, &heap->holes, list) {
         offset = hole->offset;
         waste = offset % alignment;
         waste = waste ? alignment - waste : 0;
@@ -223,7 +224,7 @@ static uint64_t radeon_bomgr_find_va(struct radeon_drm_winsys *rws,
             offset = hole->offset;
             list_del(&hole->list);
             FREE(hole);
-            mtx_unlock(&rws->bo_va_mutex);
+            mtx_unlock(&heap->mutex);
             return offset;
         }
         if ((hole->size - waste) > size) {
@@ -235,46 +236,69 @@ static uint64_t radeon_bomgr_find_va(struct radeon_drm_winsys *rws,
             }
             hole->size -= (size + waste);
             hole->offset += size + waste;
-            mtx_unlock(&rws->bo_va_mutex);
+            mtx_unlock(&heap->mutex);
             return offset;
         }
         if ((hole->size - waste) == size) {
             hole->size = waste;
-            mtx_unlock(&rws->bo_va_mutex);
+            mtx_unlock(&heap->mutex);
             return offset;
         }
     }
 
-    offset = rws->va_offset;
+    offset = heap->start;
     waste = offset % alignment;
     waste = waste ? alignment - waste : 0;
+
+    if (offset + waste + size > heap->end) {
+        mtx_unlock(&heap->mutex);
+        return 0;
+    }
+
     if (waste) {
         n = CALLOC_STRUCT(radeon_bo_va_hole);
         n->size = waste;
         n->offset = offset;
-        list_add(&n->list, &rws->va_holes);
+        list_add(&n->list, &heap->holes);
     }
     offset += waste;
-    rws->va_offset += size + waste;
-    mtx_unlock(&rws->bo_va_mutex);
+    heap->start += size + waste;
+    mtx_unlock(&heap->mutex);
     return offset;
 }
 
-static void radeon_bomgr_free_va(struct radeon_drm_winsys *rws,
+static uint64_t radeon_bomgr_find_va64(struct radeon_drm_winsys *ws,
+                                       uint64_t size, uint64_t alignment)
+{
+    uint64_t va = 0;
+
+    /* Try to allocate from the 64-bit address space first.
+     * If it doesn't exist (start = 0) or if it doesn't have enough space,
+     * fall back to the 32-bit address space.
+     */
+    if (ws->vm64.start)
+        va = radeon_bomgr_find_va(&ws->info, &ws->vm64, size, alignment);
+    if (!va)
+        va = radeon_bomgr_find_va(&ws->info, &ws->vm32, size, alignment);
+    return va;
+}
+
+static void radeon_bomgr_free_va(const struct radeon_info *info,
+                                 struct radeon_vm_heap *heap,
                                  uint64_t va, uint64_t size)
 {
     struct radeon_bo_va_hole *hole = NULL;
 
-    size = align(size, rws->info.gart_page_size);
+    size = align(size, info->gart_page_size);
 
-    mtx_lock(&rws->bo_va_mutex);
-    if ((va + size) == rws->va_offset) {
-        rws->va_offset = va;
+    mtx_lock(&heap->mutex);
+    if ((va + size) == heap->start) {
+        heap->start = va;
         /* Delete uppermost hole if it reaches the new top */
-        if (!LIST_IS_EMPTY(&rws->va_holes)) {
-            hole = container_of(rws->va_holes.next, hole, list);
+        if (!LIST_IS_EMPTY(&heap->holes)) {
+            hole = container_of(heap->holes.next, hole, list);
             if ((hole->offset + hole->size) == va) {
-                rws->va_offset = hole->offset;
+                heap->start = hole->offset;
                 list_del(&hole->list);
                 FREE(hole);
             }
@@ -282,20 +306,20 @@ static void radeon_bomgr_free_va(struct radeon_drm_winsys *rws,
     } else {
         struct radeon_bo_va_hole *next;
 
-        hole = container_of(&rws->va_holes, hole, list);
-        LIST_FOR_EACH_ENTRY(next, &rws->va_holes, list) {
+        hole = container_of(&heap->holes, hole, list);
+        LIST_FOR_EACH_ENTRY(next, &heap->holes, list) {
 	    if (next->offset < va)
 	        break;
             hole = next;
         }
 
-        if (&hole->list != &rws->va_holes) {
+        if (&hole->list != &heap->holes) {
             /* Grow upper hole if it's adjacent */
             if (hole->offset == (va + size)) {
                 hole->offset = va;
                 hole->size += size;
                 /* Merge lower hole if it's adjacent */
-                if (next != hole && &next->list != &rws->va_holes &&
+                if (next != hole && &next->list != &heap->holes &&
                     (next->offset + next->size) == va) {
                     next->size += hole->size;
                     list_del(&hole->list);
@@ -306,7 +330,7 @@ static void radeon_bomgr_free_va(struct radeon_drm_winsys *rws,
         }
 
         /* Grow lower hole if it's adjacent */
-        if (next != hole && &next->list != &rws->va_holes &&
+        if (next != hole && &next->list != &heap->holes &&
             (next->offset + next->size) == va) {
             next->size += size;
             goto out;
@@ -323,7 +347,7 @@ static void radeon_bomgr_free_va(struct radeon_drm_winsys *rws,
         }
     }
 out:
-    mtx_unlock(&rws->bo_va_mutex);
+    mtx_unlock(&heap->mutex);
 }
 
 void radeon_bo_destroy(struct pb_buffer *_buf)
@@ -347,7 +371,7 @@ void radeon_bo_destroy(struct pb_buffer *_buf)
     if (bo->u.real.ptr)
         os_munmap(bo->u.real.ptr, bo->base.size);
 
-    if (rws->info.has_virtual_memory) {
+    if (rws->info.r600_has_virtual_memory) {
         if (rws->va_unmap_working) {
             struct drm_radeon_gem_va va;
 
@@ -368,7 +392,9 @@ void radeon_bo_destroy(struct pb_buffer *_buf)
             }
 	}
 
-	radeon_bomgr_free_va(rws, bo->va, bo->base.size);
+	radeon_bomgr_free_va(&rws->info,
+                             bo->va < rws->vm32.end ? &rws->vm32 : &rws->vm64,
+                             bo->va, bo->base.size);
     }
 
     /* Close object. */
@@ -490,7 +516,8 @@ static void *radeon_bo_map(struct pb_buffer *buf,
                  *
                  * Only check whether the buffer is being used for write. */
                 if (cs && radeon_bo_is_referenced_by_cs_for_write(cs, bo)) {
-                    cs->flush_cs(cs->flush_data, PIPE_FLUSH_ASYNC, NULL);
+                    cs->flush_cs(cs->flush_data,
+				 RADEON_FLUSH_ASYNC_START_NEXT_GFX_IB_NOW, NULL);
                     return NULL;
                 }
 
@@ -500,7 +527,8 @@ static void *radeon_bo_map(struct pb_buffer *buf,
                 }
             } else {
                 if (cs && radeon_bo_is_referenced_by_cs(cs, bo)) {
-                    cs->flush_cs(cs->flush_data, PIPE_FLUSH_ASYNC, NULL);
+                    cs->flush_cs(cs->flush_data,
+				 RADEON_FLUSH_ASYNC_START_NEXT_GFX_IB_NOW, NULL);
                     return NULL;
                 }
 
@@ -521,7 +549,8 @@ static void *radeon_bo_map(struct pb_buffer *buf,
                  *
                  * Only check whether the buffer is being used for write. */
                 if (cs && radeon_bo_is_referenced_by_cs_for_write(cs, bo)) {
-                    cs->flush_cs(cs->flush_data, 0, NULL);
+                    cs->flush_cs(cs->flush_data,
+				 RADEON_FLUSH_START_NEXT_GFX_IB_NOW, NULL);
                 }
                 radeon_bo_wait((struct pb_buffer*)bo, PIPE_TIMEOUT_INFINITE,
                                RADEON_USAGE_WRITE);
@@ -529,7 +558,8 @@ static void *radeon_bo_map(struct pb_buffer *buf,
                 /* Mapping for write. */
                 if (cs) {
                     if (radeon_bo_is_referenced_by_cs(cs, bo)) {
-                        cs->flush_cs(cs->flush_data, 0, NULL);
+                        cs->flush_cs(cs->flush_data,
+				     RADEON_FLUSH_START_NEXT_GFX_IB_NOW, NULL);
                     } else {
                         /* Try to avoid busy-waiting in radeon_bo_wait. */
                         if (p_atomic_read(&bo->num_active_ioctls))
@@ -589,10 +619,9 @@ static const struct pb_vtbl radeon_bo_vtbl = {
 
 static struct radeon_bo *radeon_create_bo(struct radeon_drm_winsys *rws,
                                           unsigned size, unsigned alignment,
-                                          unsigned usage,
                                           unsigned initial_domains,
                                           unsigned flags,
-                                          unsigned pb_cache_bucket)
+                                          int heap)
 {
     struct radeon_bo *bo;
     struct drm_radeon_gem_create args;
@@ -639,7 +668,7 @@ static struct radeon_bo *radeon_create_bo(struct radeon_drm_winsys *rws,
 
     pipe_reference_init(&bo->base.reference, 1);
     bo->base.alignment = alignment;
-    bo->base.usage = usage;
+    bo->base.usage = 0;
     bo->base.size = size;
     bo->base.vtbl = &radeon_bo_vtbl;
     bo->rws = rws;
@@ -648,15 +677,25 @@ static struct radeon_bo *radeon_create_bo(struct radeon_drm_winsys *rws,
     bo->initial_domain = initial_domains;
     bo->hash = __sync_fetch_and_add(&rws->next_bo_hash, 1);
     (void) mtx_init(&bo->u.real.map_mutex, mtx_plain);
-    pb_cache_init_entry(&rws->bo_cache, &bo->u.real.cache_entry, &bo->base,
-                        pb_cache_bucket);
 
-    if (rws->info.has_virtual_memory) {
+    if (heap >= 0) {
+        pb_cache_init_entry(&rws->bo_cache, &bo->u.real.cache_entry, &bo->base,
+                            heap);
+    }
+
+    if (rws->info.r600_has_virtual_memory) {
         struct drm_radeon_gem_va va;
         unsigned va_gap_size;
 
         va_gap_size = rws->check_vm ? MAX2(4 * alignment, 64 * 1024) : 0;
-        bo->va = radeon_bomgr_find_va(rws, size + va_gap_size, alignment);
+
+        if (flags & RADEON_FLAG_32BIT) {
+            bo->va = radeon_bomgr_find_va(&rws->info, &rws->vm32,
+                                          size + va_gap_size, alignment);
+            assert(bo->va + size < rws->vm32.end);
+        } else {
+            bo->va = radeon_bomgr_find_va64(rws, size + va_gap_size, alignment);
+        }
 
         va.handle = bo->handle;
         va.vm_id = 0;
@@ -921,7 +960,7 @@ radeon_winsys_bo_create(struct radeon_winsys *rws,
 {
     struct radeon_drm_winsys *ws = radeon_drm_winsys(rws);
     struct radeon_bo *bo;
-    unsigned usage = 0, pb_cache_bucket = 0;
+    int heap = -1;
 
     assert(!(flags & RADEON_FLAG_SPARSE)); /* not supported */
 
@@ -939,7 +978,7 @@ radeon_winsys_bo_create(struct radeon_winsys *rws,
     /* Sub-allocate small buffers from slabs. */
     if (!(flags & RADEON_FLAG_NO_SUBALLOC) &&
         size <= (1 << RADEON_SLAB_MAX_SIZE_LOG2) &&
-        ws->info.has_virtual_memory &&
+        ws->info.r600_has_virtual_memory &&
         alignment <= MAX2(1 << RADEON_SLAB_MIN_SIZE_LOG2, util_next_power_of_two(size))) {
         struct pb_slab_entry *entry;
         int heap = radeon_get_heap_index(domain, flags);
@@ -980,28 +1019,22 @@ no_slab:
 
     /* Shared resources don't use cached heaps. */
     if (use_reusable_pool) {
-        int heap = radeon_get_heap_index(domain, flags);
+        heap = radeon_get_heap_index(domain, flags);
         assert(heap >= 0 && heap < RADEON_MAX_CACHED_HEAPS);
-        usage = 1 << heap; /* Only set one usage bit for each heap. */
-
-        pb_cache_bucket = radeon_get_pb_cache_bucket_index(heap);
-        assert(pb_cache_bucket < ARRAY_SIZE(ws->bo_cache.buckets));
 
         bo = radeon_bo(pb_cache_reclaim_buffer(&ws->bo_cache, size, alignment,
-                                               usage, pb_cache_bucket));
+                                               0, heap));
         if (bo)
             return &bo->base;
     }
 
-    bo = radeon_create_bo(ws, size, alignment, usage, domain, flags,
-                          pb_cache_bucket);
+    bo = radeon_create_bo(ws, size, alignment, domain, flags, heap);
     if (!bo) {
         /* Clear the cache and try again. */
-        if (ws->info.has_virtual_memory)
+        if (ws->info.r600_has_virtual_memory)
             pb_slabs_reclaim(&ws->bo_slabs);
         pb_cache_release_all_buffers(&ws->bo_cache);
-        bo = radeon_create_bo(ws, size, alignment, usage, domain, flags,
-                              pb_cache_bucket);
+        bo = radeon_create_bo(ws, size, alignment, domain, flags, heap);
         if (!bo)
             return NULL;
     }
@@ -1060,10 +1093,10 @@ static struct pb_buffer *radeon_winsys_bo_from_ptr(struct radeon_winsys *rws,
 
     mtx_unlock(&ws->bo_handles_mutex);
 
-    if (ws->info.has_virtual_memory) {
+    if (ws->info.r600_has_virtual_memory) {
         struct drm_radeon_gem_va va;
 
-        bo->va = radeon_bomgr_find_va(ws, bo->base.size, 1 << 20);
+        bo->va = radeon_bomgr_find_va64(ws, bo->base.size, 1 << 20);
 
         va.handle = bo->handle;
         va.operation = RADEON_VA_MAP;
@@ -1203,10 +1236,10 @@ done:
     if (offset)
         *offset = whandle->offset;
 
-    if (ws->info.has_virtual_memory && !bo->va) {
+    if (ws->info.r600_has_virtual_memory && !bo->va) {
         struct drm_radeon_gem_va va;
 
-        bo->va = radeon_bomgr_find_va(ws, bo->base.size, 1 << 20);
+        bo->va = radeon_bomgr_find_va64(ws, bo->base.size, 1 << 20);
 
         va.handle = bo->handle;
         va.operation = RADEON_VA_MAP;

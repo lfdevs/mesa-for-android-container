@@ -158,7 +158,7 @@ print_ubo_entry(FILE *file,
    struct ubo_block_info *info = get_block_info(state, entry->range.block);
 
    fprintf(file,
-           "block %2d, start %2d, length %2d, bits = %zx, "
+           "block %2d, start %2d, length %2d, bits = %"PRIx64", "
            "benefit %2d, cost %2d, score = %2d\n",
            entry->range.block, entry->range.start, entry->range.length,
            info->offsets, entry->benefit, entry->range.length, score(entry));

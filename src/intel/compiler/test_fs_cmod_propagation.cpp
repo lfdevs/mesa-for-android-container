@@ -554,3 +554,338 @@ TEST_F(cmod_propagation_test, andz_one)
    EXPECT_EQ(BRW_OPCODE_AND, instruction(block0, 1)->opcode);
    EXPECT_EQ(BRW_CONDITIONAL_EQ, instruction(block0, 1)->conditional_mod);
 }
+
+TEST_F(cmod_propagation_test, add_not_merge_with_compare)
+{
+   const fs_builder &bld = v->bld;
+   fs_reg dest = v->vgrf(glsl_type::float_type);
+   fs_reg src0 = v->vgrf(glsl_type::float_type);
+   fs_reg src1 = v->vgrf(glsl_type::float_type);
+   bld.ADD(dest, src0, src1);
+   bld.CMP(bld.null_reg_f(), src0, src1, BRW_CONDITIONAL_L);
+
+   /* The addition and the implicit subtraction in the compare do not compute
+    * related values.
+    *
+    * = Before =
+    * 0: add(8)          dest:F  src0:F  src1:F
+    * 1: cmp.l.f0(8)     null:F  src0:F  src1:F
+    *
+    * = After =
+    * (no changes)
+    */
+   v->calculate_cfg();
+   bblock_t *block0 = v->cfg->blocks[0];
+
+   EXPECT_EQ(0, block0->start_ip);
+   EXPECT_EQ(1, block0->end_ip);
+
+   EXPECT_FALSE(cmod_propagation(v));
+   EXPECT_EQ(0, block0->start_ip);
+   EXPECT_EQ(1, block0->end_ip);
+   EXPECT_EQ(BRW_OPCODE_ADD, instruction(block0, 0)->opcode);
+   EXPECT_EQ(BRW_CONDITIONAL_NONE, instruction(block0, 0)->conditional_mod);
+   EXPECT_EQ(BRW_OPCODE_CMP, instruction(block0, 1)->opcode);
+   EXPECT_EQ(BRW_CONDITIONAL_L, instruction(block0, 1)->conditional_mod);
+}
+
+TEST_F(cmod_propagation_test, subtract_merge_with_compare)
+{
+   const fs_builder &bld = v->bld;
+   fs_reg dest = v->vgrf(glsl_type::float_type);
+   fs_reg src0 = v->vgrf(glsl_type::float_type);
+   fs_reg src1 = v->vgrf(glsl_type::float_type);
+   bld.ADD(dest, src0, negate(src1));
+   bld.CMP(bld.null_reg_f(), src0, src1, BRW_CONDITIONAL_L);
+
+   /* = Before =
+    * 0: add(8)          dest:F  src0:F  -src1:F
+    * 1: cmp.l.f0(8)     null:F  src0:F  src1:F
+    *
+    * = After =
+    * 0: add.l.f0(8)     dest:F  src0:F  -src1:F
+    */
+   v->calculate_cfg();
+   bblock_t *block0 = v->cfg->blocks[0];
+
+   EXPECT_EQ(0, block0->start_ip);
+   EXPECT_EQ(1, block0->end_ip);
+
+   EXPECT_TRUE(cmod_propagation(v));
+   EXPECT_EQ(0, block0->start_ip);
+   EXPECT_EQ(0, block0->end_ip);
+   EXPECT_EQ(BRW_OPCODE_ADD, instruction(block0, 0)->opcode);
+   EXPECT_EQ(BRW_CONDITIONAL_L, instruction(block0, 0)->conditional_mod);
+}
+
+TEST_F(cmod_propagation_test, subtract_immediate_merge_with_compare)
+{
+   const fs_builder &bld = v->bld;
+   fs_reg dest = v->vgrf(glsl_type::float_type);
+   fs_reg src0 = v->vgrf(glsl_type::float_type);
+   fs_reg one(brw_imm_f(1.0f));
+   fs_reg negative_one(brw_imm_f(-1.0f));
+
+   bld.ADD(dest, src0, negative_one);
+   bld.CMP(bld.null_reg_f(), src0, one, BRW_CONDITIONAL_NZ);
+
+   /* = Before =
+    * 0: add(8)          dest:F  src0:F  -1.0f
+    * 1: cmp.nz.f0(8)    null:F  src0:F  1.0f
+    *
+    * = After =
+    * 0: add.nz.f0(8)    dest:F  src0:F  -1.0f
+    */
+   v->calculate_cfg();
+   bblock_t *block0 = v->cfg->blocks[0];
+
+   EXPECT_EQ(0, block0->start_ip);
+   EXPECT_EQ(1, block0->end_ip);
+
+   EXPECT_TRUE(cmod_propagation(v));
+   EXPECT_EQ(0, block0->start_ip);
+   EXPECT_EQ(0, block0->end_ip);
+   EXPECT_EQ(BRW_OPCODE_ADD, instruction(block0, 0)->opcode);
+   EXPECT_EQ(BRW_CONDITIONAL_NZ, instruction(block0, 0)->conditional_mod);
+}
+
+TEST_F(cmod_propagation_test, subtract_merge_with_compare_intervening_add)
+{
+   const fs_builder &bld = v->bld;
+   fs_reg dest0 = v->vgrf(glsl_type::float_type);
+   fs_reg dest1 = v->vgrf(glsl_type::float_type);
+   fs_reg src0 = v->vgrf(glsl_type::float_type);
+   fs_reg src1 = v->vgrf(glsl_type::float_type);
+   bld.ADD(dest0, src0, negate(src1));
+   bld.ADD(dest1, src0, src1);
+   bld.CMP(bld.null_reg_f(), src0, src1, BRW_CONDITIONAL_L);
+
+   /* = Before =
+    * 0: add(8)          dest0:F src0:F  -src1:F
+    * 1: add(8)          dest1:F src0:F  src1:F
+    * 2: cmp.l.f0(8)     null:F  src0:F  src1:F
+    *
+    * = After =
+    * 0: add.l.f0(8)     dest0:F src0:F  -src1:F
+    * 1: add(8)          dest1:F src0:F  src1:F
+    */
+   v->calculate_cfg();
+   bblock_t *block0 = v->cfg->blocks[0];
+
+   EXPECT_EQ(0, block0->start_ip);
+   EXPECT_EQ(2, block0->end_ip);
+
+   EXPECT_TRUE(cmod_propagation(v));
+   EXPECT_EQ(0, block0->start_ip);
+   EXPECT_EQ(1, block0->end_ip);
+   EXPECT_EQ(BRW_OPCODE_ADD, instruction(block0, 0)->opcode);
+   EXPECT_EQ(BRW_CONDITIONAL_L, instruction(block0, 0)->conditional_mod);
+   EXPECT_EQ(BRW_OPCODE_ADD, instruction(block0, 1)->opcode);
+   EXPECT_EQ(BRW_CONDITIONAL_NONE, instruction(block0, 1)->conditional_mod);
+}
+
+TEST_F(cmod_propagation_test, subtract_not_merge_with_compare_intervening_partial_write)
+{
+   const fs_builder &bld = v->bld;
+   fs_reg dest0 = v->vgrf(glsl_type::float_type);
+   fs_reg dest1 = v->vgrf(glsl_type::float_type);
+   fs_reg src0 = v->vgrf(glsl_type::float_type);
+   fs_reg src1 = v->vgrf(glsl_type::float_type);
+   bld.ADD(dest0, src0, negate(src1));
+   set_predicate(BRW_PREDICATE_NORMAL, bld.ADD(dest1, src0, negate(src1)));
+   bld.CMP(bld.null_reg_f(), src0, src1, BRW_CONDITIONAL_L);
+
+   /* = Before =
+    * 0: add(8)          dest0:F src0:F  -src1:F
+    * 1: (+f0) add(8)    dest1:F src0:F  -src1:F
+    * 2: cmp.l.f0(8)     null:F  src0:F  src1:F
+    *
+    * = After =
+    * (no changes)
+    */
+   v->calculate_cfg();
+   bblock_t *block0 = v->cfg->blocks[0];
+
+   EXPECT_EQ(0, block0->start_ip);
+   EXPECT_EQ(2, block0->end_ip);
+
+   EXPECT_FALSE(cmod_propagation(v));
+   EXPECT_EQ(0, block0->start_ip);
+   EXPECT_EQ(2, block0->end_ip);
+   EXPECT_EQ(BRW_OPCODE_ADD, instruction(block0, 0)->opcode);
+   EXPECT_EQ(BRW_CONDITIONAL_NONE, instruction(block0, 0)->conditional_mod);
+   EXPECT_EQ(BRW_OPCODE_ADD, instruction(block0, 1)->opcode);
+   EXPECT_EQ(BRW_CONDITIONAL_NONE, instruction(block0, 1)->conditional_mod);
+   EXPECT_EQ(BRW_OPCODE_CMP, instruction(block0, 2)->opcode);
+   EXPECT_EQ(BRW_CONDITIONAL_L, instruction(block0, 2)->conditional_mod);
+}
+
+TEST_F(cmod_propagation_test, subtract_not_merge_with_compare_intervening_add)
+{
+   const fs_builder &bld = v->bld;
+   fs_reg dest0 = v->vgrf(glsl_type::float_type);
+   fs_reg dest1 = v->vgrf(glsl_type::float_type);
+   fs_reg src0 = v->vgrf(glsl_type::float_type);
+   fs_reg src1 = v->vgrf(glsl_type::float_type);
+   bld.ADD(dest0, src0, negate(src1));
+   set_condmod(BRW_CONDITIONAL_EQ, bld.ADD(dest1, src0, src1));
+   bld.CMP(bld.null_reg_f(), src0, src1, BRW_CONDITIONAL_L);
+
+   /* = Before =
+    * 0: add(8)          dest0:F src0:F  -src1:F
+    * 1: add.z.f0(8)     dest1:F src0:F  src1:F
+    * 2: cmp.l.f0(8)     null:F  src0:F  src1:F
+    *
+    * = After =
+    * (no changes)
+    */
+   v->calculate_cfg();
+   bblock_t *block0 = v->cfg->blocks[0];
+
+   EXPECT_EQ(0, block0->start_ip);
+   EXPECT_EQ(2, block0->end_ip);
+
+   EXPECT_FALSE(cmod_propagation(v));
+   EXPECT_EQ(0, block0->start_ip);
+   EXPECT_EQ(2, block0->end_ip);
+   EXPECT_EQ(BRW_OPCODE_ADD, instruction(block0, 0)->opcode);
+   EXPECT_EQ(BRW_CONDITIONAL_NONE, instruction(block0, 0)->conditional_mod);
+   EXPECT_EQ(BRW_OPCODE_ADD, instruction(block0, 1)->opcode);
+   EXPECT_EQ(BRW_CONDITIONAL_EQ, instruction(block0, 1)->conditional_mod);
+   EXPECT_EQ(BRW_OPCODE_CMP, instruction(block0, 2)->opcode);
+   EXPECT_EQ(BRW_CONDITIONAL_L, instruction(block0, 2)->conditional_mod);
+}
+
+TEST_F(cmod_propagation_test, add_merge_with_compare)
+{
+   const fs_builder &bld = v->bld;
+   fs_reg dest = v->vgrf(glsl_type::float_type);
+   fs_reg src0 = v->vgrf(glsl_type::float_type);
+   fs_reg src1 = v->vgrf(glsl_type::float_type);
+   bld.ADD(dest, src0, src1);
+   bld.CMP(bld.null_reg_f(), src0, negate(src1), BRW_CONDITIONAL_L);
+
+   /* = Before =
+    * 0: add(8)          dest:F  src0:F  src1:F
+    * 1: cmp.l.f0(8)     null:F  src0:F  -src1:F
+    *
+    * = After =
+    * 0: add.l.f0(8)     dest:F  src0:F  src1:F
+    */
+   v->calculate_cfg();
+   bblock_t *block0 = v->cfg->blocks[0];
+
+   EXPECT_EQ(0, block0->start_ip);
+   EXPECT_EQ(1, block0->end_ip);
+
+   EXPECT_TRUE(cmod_propagation(v));
+   EXPECT_EQ(0, block0->start_ip);
+   EXPECT_EQ(0, block0->end_ip);
+   EXPECT_EQ(BRW_OPCODE_ADD, instruction(block0, 0)->opcode);
+   EXPECT_EQ(BRW_CONDITIONAL_L, instruction(block0, 0)->conditional_mod);
+}
+
+TEST_F(cmod_propagation_test, negative_subtract_merge_with_compare)
+{
+   const fs_builder &bld = v->bld;
+   fs_reg dest = v->vgrf(glsl_type::float_type);
+   fs_reg src0 = v->vgrf(glsl_type::float_type);
+   fs_reg src1 = v->vgrf(glsl_type::float_type);
+   bld.ADD(dest, src1, negate(src0));
+   bld.CMP(bld.null_reg_f(), src0, src1, BRW_CONDITIONAL_L);
+
+   /* The result of the subtract is the negatiion of the result of the
+    * implicit subtract in the compare, so the condition must change.
+    *
+    * = Before =
+    * 0: add(8)          dest:F  src1:F  -src0:F
+    * 1: cmp.l.f0(8)     null:F  src0:F  src1:F
+    *
+    * = After =
+    * 0: add.g.f0(8)     dest:F  src0:F  -src1:F
+    */
+   v->calculate_cfg();
+   bblock_t *block0 = v->cfg->blocks[0];
+
+   EXPECT_EQ(0, block0->start_ip);
+   EXPECT_EQ(1, block0->end_ip);
+
+   EXPECT_TRUE(cmod_propagation(v));
+   EXPECT_EQ(0, block0->start_ip);
+   EXPECT_EQ(0, block0->end_ip);
+   EXPECT_EQ(BRW_OPCODE_ADD, instruction(block0, 0)->opcode);
+   EXPECT_EQ(BRW_CONDITIONAL_G, instruction(block0, 0)->conditional_mod);
+}
+
+TEST_F(cmod_propagation_test, subtract_delete_compare)
+{
+   const fs_builder &bld = v->bld;
+   fs_reg dest = v->vgrf(glsl_type::float_type);
+   fs_reg dest1 = v->vgrf(glsl_type::float_type);
+   fs_reg src0 = v->vgrf(glsl_type::float_type);
+   fs_reg src1 = v->vgrf(glsl_type::float_type);
+   fs_reg src2 = v->vgrf(glsl_type::float_type);
+
+   set_condmod(BRW_CONDITIONAL_L, bld.ADD(dest, src0, negate(src1)));
+   set_predicate(BRW_PREDICATE_NORMAL, bld.MOV(dest1, src2));
+   bld.CMP(bld.null_reg_f(), src0, src1, BRW_CONDITIONAL_L);
+
+   /* = Before =
+    * 0: add.l.f0(8)     dest0:F src0:F  -src1:F
+    * 1: (+f0) mov(0)    dest1:F src2:F
+    * 2: cmp.l.f0(8)     null:F  src0:F  src1:F
+    *
+    * = After =
+    * 0: add.l.f0(8)     dest:F  src0:F  -src1:F
+    * 1: (+f0) mov(0)    dest1:F src2:F
+    */
+   v->calculate_cfg();
+   bblock_t *block0 = v->cfg->blocks[0];
+
+   EXPECT_EQ(0, block0->start_ip);
+   EXPECT_EQ(2, block0->end_ip);
+
+   EXPECT_TRUE(cmod_propagation(v));
+   EXPECT_EQ(0, block0->start_ip);
+   EXPECT_EQ(1, block0->end_ip);
+   EXPECT_EQ(BRW_OPCODE_ADD, instruction(block0, 0)->opcode);
+   EXPECT_EQ(BRW_CONDITIONAL_L, instruction(block0, 0)->conditional_mod);
+   EXPECT_EQ(BRW_OPCODE_MOV, instruction(block0, 1)->opcode);
+   EXPECT_EQ(BRW_PREDICATE_NORMAL, instruction(block0, 1)->predicate);
+}
+
+TEST_F(cmod_propagation_test, subtract_delete_compare_derp)
+{
+   const fs_builder &bld = v->bld;
+   fs_reg dest0 = v->vgrf(glsl_type::float_type);
+   fs_reg dest1 = v->vgrf(glsl_type::float_type);
+   fs_reg src0 = v->vgrf(glsl_type::float_type);
+   fs_reg src1 = v->vgrf(glsl_type::float_type);
+
+   set_condmod(BRW_CONDITIONAL_L, bld.ADD(dest0, src0, negate(src1)));
+   set_predicate(BRW_PREDICATE_NORMAL, bld.ADD(dest1, negate(src0), src1));
+   bld.CMP(bld.null_reg_f(), src0, src1, BRW_CONDITIONAL_L);
+
+   /* = Before =
+    * 0: add.l.f0(8)     dest0:F src0:F  -src1:F
+    * 1: (+f0) add(0)    dest1:F -src0:F src1:F
+    * 2: cmp.l.f0(8)     null:F  src0:F  src1:F
+    *
+    * = After =
+    * 0: add.l.f0(8)     dest0:F src0:F  -src1:F
+    * 1: (+f0) add(0)    dest1:F -src0:F src1:F
+    */
+   v->calculate_cfg();
+   bblock_t *block0 = v->cfg->blocks[0];
+
+   EXPECT_EQ(0, block0->start_ip);
+   EXPECT_EQ(2, block0->end_ip);
+
+   EXPECT_TRUE(cmod_propagation(v));
+   EXPECT_EQ(0, block0->start_ip);
+   EXPECT_EQ(1, block0->end_ip);
+   EXPECT_EQ(BRW_OPCODE_ADD, instruction(block0, 0)->opcode);
+   EXPECT_EQ(BRW_CONDITIONAL_L, instruction(block0, 0)->conditional_mod);
+   EXPECT_EQ(BRW_OPCODE_ADD, instruction(block0, 1)->opcode);
+   EXPECT_EQ(BRW_PREDICATE_NORMAL, instruction(block0, 1)->predicate);
+}

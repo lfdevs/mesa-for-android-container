@@ -40,6 +40,9 @@
 
 #include <llvm-c/Analysis.h>
 #include <llvm-c/Transforms/Scalar.h>
+#if HAVE_LLVM >= 0x0700
+#include <llvm-c/Transforms/Utils.h>
+#endif
 #include <llvm-c/BitWriter.h>
 
 

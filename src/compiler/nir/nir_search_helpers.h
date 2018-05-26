@@ -28,12 +28,7 @@
 #define _NIR_SEARCH_HELPERS_
 
 #include "nir.h"
-
-static inline bool
-__is_power_of_two(unsigned int x)
-{
-   return ((x != 0) && !(x & (x - 1)));
-}
+#include "util/bitscan.h"
 
 static inline bool
 is_pos_power_of_two(nir_alu_instr *instr, unsigned src, unsigned num_components,
@@ -50,11 +45,11 @@ is_pos_power_of_two(nir_alu_instr *instr, unsigned src, unsigned num_components,
       case nir_type_int:
          if (val->i32[swizzle[i]] < 0)
             return false;
-         if (!__is_power_of_two(val->i32[swizzle[i]]))
+         if (!util_is_power_of_two_nonzero(val->i32[swizzle[i]]))
             return false;
          break;
       case nir_type_uint:
-         if (!__is_power_of_two(val->u32[swizzle[i]]))
+         if (!util_is_power_of_two_nonzero(val->u32[swizzle[i]]))
             return false;
          break;
       default:
@@ -80,7 +75,7 @@ is_neg_power_of_two(nir_alu_instr *instr, unsigned src, unsigned num_components,
       case nir_type_int:
          if (val->i32[swizzle[i]] > 0)
             return false;
-         if (!__is_power_of_two(abs(val->i32[swizzle[i]])))
+         if (!util_is_power_of_two_nonzero(abs(val->i32[swizzle[i]])))
             return false;
          break;
       default:
@@ -168,21 +163,6 @@ static inline bool
 is_not_used_by_if(nir_alu_instr *instr)
 {
    return list_empty(&instr->dest.dest.ssa.if_uses);
-}
-
-static inline bool
-is_not_used_by_conditional(nir_alu_instr *instr)
-{
-   if (!is_not_used_by_if(instr))
-      return false;
-
-   nir_foreach_use(use, &instr->dest.dest.ssa) {
-      if (use->parent_instr->type == nir_instr_type_alu &&
-          nir_instr_as_alu(use->parent_instr)->op == nir_op_bcsel)
-         return false;
-   }
-
-   return true;
 }
 
 #endif /* _NIR_SEARCH_ */

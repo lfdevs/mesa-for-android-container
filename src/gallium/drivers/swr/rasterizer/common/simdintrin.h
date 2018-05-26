@@ -106,6 +106,7 @@ typedef SIMD256                             SIMD;
 #define _simd_cmpgt_epi16                   SIMD::cmpgt_epi16
 #define _simd_cmpeq_epi16                   SIMD::cmpeq_epi16
 #define _simd_movemask_epi8                 SIMD::movemask_epi8
+#define _simd_permute_ps_i(a, i)            SIMD::permute_ps<i>(a)
 #define _simd_permute_ps                    SIMD::permute_ps
 #define _simd_permute_epi32                 SIMD::permute_epi32
 #define _simd_srlv_epi32                    SIMD::srlv_epi32

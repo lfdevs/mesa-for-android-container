@@ -352,7 +352,7 @@ void radeonEmitArrays( struct gl_context *ctx, GLuint inputs )
 	    req |= RADEON_Q_BIT(unit);
 	    vtx |= RADEON_Q_BIT(unit);
 	 }
-	 if ( (ctx->Texture.Unit[unit].TexGenEnabled & (R_BIT | Q_BIT)) )
+	 if ( (ctx->Texture.FixedFuncUnit[unit].TexGenEnabled & (R_BIT | Q_BIT)) )
 	    vtx |= RADEON_Q_BIT(unit);
 	 else if ((VB->AttribPtr[_TNL_ATTRIB_TEX0 + unit]->size >= 3) &&
 	          (!ctx->Texture.Unit[unit]._Current ||

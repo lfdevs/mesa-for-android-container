@@ -232,7 +232,7 @@ brw_codegen_tcs_prog(struct brw_context *brw, struct brw_program *tcp,
                       &error_str);
    if (program == NULL) {
       if (tep) {
-         tep->program.sh.data->LinkStatus = linking_failure;
+         tep->program.sh.data->LinkStatus = LINKING_FAILURE;
          ralloc_strcat(&tep->program.sh.data->InfoLog, error_str);
       }
 

@@ -40,6 +40,7 @@ pkg.generate(
 if with_tests
   test('wayland-egl-symbols-check',
     find_program('wayland-egl-symbols-check'),
+    env : env_test,
     args : libwayland_egl
   )
   test(

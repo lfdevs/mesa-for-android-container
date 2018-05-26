@@ -25,6 +25,7 @@
 #include "core/platform.hpp"
 #include "pipe/p_screen.h"
 #include "pipe/p_state.h"
+#include "util/u_debug.h"
 
 using namespace clover;
 
@@ -243,8 +244,15 @@ device::vendor_name() const {
 
 enum pipe_shader_ir
 device::ir_format() const {
-   return (enum pipe_shader_ir) pipe->get_shader_param(
-      pipe, PIPE_SHADER_COMPUTE, PIPE_SHADER_CAP_PREFERRED_IR);
+   int supported_irs =
+      pipe->get_shader_param(pipe, PIPE_SHADER_COMPUTE,
+                             PIPE_SHADER_CAP_SUPPORTED_IRS);
+
+   if (supported_irs & (1 << PIPE_SHADER_IR_NATIVE)) {
+      return PIPE_SHADER_IR_NATIVE;
+   }
+
+   return PIPE_SHADER_IR_TGSI;
 }
 
 std::string
@@ -261,10 +269,14 @@ device::endianness() const {
 
 std::string
 device::device_version() const {
-    return "1.1";
+   static const std::string device_version =
+         debug_get_option("CLOVER_DEVICE_VERSION_OVERRIDE", "1.1");
+   return device_version;
 }
 
 std::string
 device::device_clc_version() const {
-    return "1.1";
+   static const std::string device_clc_version =
+         debug_get_option("CLOVER_DEVICE_CLC_VERSION_OVERRIDE", "1.1");
+   return device_clc_version;
 }

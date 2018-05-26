@@ -105,7 +105,7 @@ swr_is_format_supported(struct pipe_screen *_screen,
       return FALSE;
 
    if ((sample_count > screen->msaa_max_count)
-      || !util_is_power_of_two(sample_count))
+      || !util_is_power_of_two_or_zero(sample_count))
       return FALSE;
 
    if (bind & PIPE_BIND_DISPLAY_TARGET) {
@@ -344,6 +344,9 @@ swr_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_MAX_COMBINED_SHADER_OUTPUT_RESOURCES:
    case PIPE_CAP_SIGNED_VERTEX_BUFFER_OFFSET:
    case PIPE_CAP_CONTEXT_PRIORITY_MASK:
+   case PIPE_CAP_FENCE_SIGNAL:
+   case PIPE_CAP_CONSTBUF0_FLAGS:
+   case PIPE_CAP_PACKED_UNIFORMS:
       return 0;
 
    case PIPE_CAP_VENDOR_ID:
@@ -397,11 +400,6 @@ swr_get_paramf(struct pipe_screen *screen, enum pipe_capf param)
       return 0.0;
    case PIPE_CAPF_MAX_TEXTURE_LOD_BIAS:
       return 16.0; /* arbitrary */
-   case PIPE_CAPF_GUARD_BAND_LEFT:
-   case PIPE_CAPF_GUARD_BAND_TOP:
-   case PIPE_CAPF_GUARD_BAND_RIGHT:
-   case PIPE_CAPF_GUARD_BAND_BOTTOM:
-      return 0.0;
    }
    /* should only get here on unhandled cases */
    debug_printf("Unexpected PIPE_CAPF %d query\n", param);
@@ -1105,7 +1103,7 @@ swr_validate_env_options(struct swr_screen *screen)
    int msaa_max_count = debug_get_num_option("SWR_MSAA_MAX_COUNT", 1);
    if (msaa_max_count != 1) {
       if ((msaa_max_count < 1) || (msaa_max_count > SWR_MAX_NUM_MULTISAMPLES)
-            || !util_is_power_of_two(msaa_max_count)) {
+            || !util_is_power_of_two_or_zero(msaa_max_count)) {
          fprintf(stderr, "SWR_MSAA_MAX_COUNT invalid: %d\n", msaa_max_count);
          fprintf(stderr, "must be power of 2 between 1 and %d" \
                          " (or 1 to disable msaa)\n",

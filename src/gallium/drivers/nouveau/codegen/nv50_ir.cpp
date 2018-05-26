@@ -423,7 +423,7 @@ ImmediateValue::isNegative() const
 bool
 ImmediateValue::isPow2() const
 {
-   return util_is_power_of_two(reg.data.u32);
+   return util_is_power_of_two_or_zero(reg.data.u32);
 }
 
 void

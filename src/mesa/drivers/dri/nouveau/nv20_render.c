@@ -82,34 +82,34 @@ static struct nouveau_attr_info nv20_vertex_attrs[VERT_ATTRIB_MAX] = {
 		.imm_method = NV20_3D_VERTEX_TX3_4F_S,
 		.imm_fields = 4,
 	},
-	[VERT_ATTRIB_GENERIC0] = {
+	[VERT_ATTRIB_MAT(0)] = {
 		.emit = nv20_emit_material,
 	},
-	[VERT_ATTRIB_GENERIC1] = {
+	[VERT_ATTRIB_MAT(1)] = {
 		.emit = nv20_emit_material,
 	},
-	[VERT_ATTRIB_GENERIC2] = {
+	[VERT_ATTRIB_MAT(2)] = {
 		.emit = nv20_emit_material,
 	},
-	[VERT_ATTRIB_GENERIC3] = {
+	[VERT_ATTRIB_MAT(3)] = {
 		.emit = nv20_emit_material,
 	},
-	[VERT_ATTRIB_GENERIC4] = {
+	[VERT_ATTRIB_MAT(4)] = {
 		.emit = nv20_emit_material,
 	},
-	[VERT_ATTRIB_GENERIC5] = {
+	[VERT_ATTRIB_MAT(5)] = {
 		.emit = nv20_emit_material,
 	},
-	[VERT_ATTRIB_GENERIC6] = {
+	[VERT_ATTRIB_MAT(6)] = {
 		.emit = nv20_emit_material,
 	},
-	[VERT_ATTRIB_GENERIC7] = {
+	[VERT_ATTRIB_MAT(7)] = {
 		.emit = nv20_emit_material,
 	},
-	[VERT_ATTRIB_GENERIC8] = {
+	[VERT_ATTRIB_MAT(8)] = {
 		.emit = nv20_emit_material,
 	},
-	[VERT_ATTRIB_GENERIC9] = {
+	[VERT_ATTRIB_MAT(9)] = {
 		.emit = nv20_emit_material,
 	},
 };

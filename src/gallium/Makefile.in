@@ -93,17 +93,17 @@ target_triplet = @target@
 @HAVE_GALLIUM_NOUVEAU_TRUE@am__append_3 = drivers/nouveau winsys/nouveau/drm
 @HAVE_GALLIUM_SVGA_TRUE@am__append_4 = drivers/svga winsys/svga/drm
 @HAVE_GALLIUM_R300_TRUE@am__append_5 = drivers/r300
-@HAVE_GALLIUM_RADEON_COMMON_TRUE@am__append_6 = drivers/radeon
-@HAVE_GALLIUM_R600_TRUE@am__append_7 = drivers/r600
-@HAVE_GALLIUM_RADEONSI_TRUE@am__append_8 = drivers/radeonsi \
+@HAVE_GALLIUM_R600_TRUE@am__append_6 = drivers/r600
+@HAVE_GALLIUM_RADEONSI_TRUE@am__append_7 = drivers/radeonsi \
 @HAVE_GALLIUM_RADEONSI_TRUE@	winsys/amdgpu/drm
-@NEED_RADEON_DRM_WINSYS_TRUE@am__append_9 = winsys/radeon/drm
-@HAVE_GALLIUM_ETNAVIV_TRUE@am__append_10 = drivers/etnaviv winsys/etnaviv/drm
-@HAVE_GALLIUM_IMX_TRUE@am__append_11 = drivers/imx winsys/imx/drm
-@HAVE_GALLIUM_PL111_TRUE@am__append_12 = drivers/pl111 winsys/pl111/drm
-@HAVE_GALLIUM_SOFTPIPE_TRUE@am__append_13 = drivers/softpipe
-@HAVE_GALLIUM_LLVMPIPE_TRUE@@HAVE_GALLIUM_SOFTPIPE_TRUE@am__append_14 = drivers/llvmpipe
-@HAVE_GALLIUM_SWR_TRUE@am__append_15 = drivers/swr
+@NEED_RADEON_DRM_WINSYS_TRUE@am__append_8 = winsys/radeon/drm
+@HAVE_GALLIUM_ETNAVIV_TRUE@am__append_9 = drivers/etnaviv winsys/etnaviv/drm
+@HAVE_GALLIUM_IMX_TRUE@am__append_10 = drivers/imx winsys/imx/drm
+@HAVE_GALLIUM_PL111_TRUE@am__append_11 = drivers/pl111 winsys/pl111/drm
+@HAVE_GALLIUM_SOFTPIPE_TRUE@am__append_12 = drivers/softpipe
+@HAVE_GALLIUM_LLVMPIPE_TRUE@@HAVE_GALLIUM_SOFTPIPE_TRUE@am__append_13 = drivers/llvmpipe
+@HAVE_GALLIUM_SWR_TRUE@am__append_14 = drivers/swr
+@HAVE_GALLIUM_TEGRA_TRUE@am__append_15 = drivers/tegra winsys/tegra/drm
 @HAVE_GALLIUM_VC4_TRUE@am__append_16 = drivers/vc4 winsys/vc4/drm
 @HAVE_GALLIUM_VC5_TRUE@am__append_17 = drivers/vc5 winsys/vc5/drm
 @HAVE_GALLIUM_VIRGL_TRUE@am__append_18 = drivers/virgl winsys/virgl/drm winsys/virgl/vtest
@@ -114,14 +114,15 @@ target_triplet = @target@
 @HAVE_CLOVER_TRUE@	state_trackers/clover targets/opencl
 @HAVE_DRICOMMON_TRUE@am__append_23 = state_trackers/dri targets/dri
 @HAVE_GALLIUM_XLIB_GLX_TRUE@am__append_24 = state_trackers/glx/xlib targets/libgl-xlib
-@HAVE_ST_OMX_BELLAGIO_TRUE@am__append_25 = state_trackers/omx_bellagio targets/omx-bellagio
-@HAVE_GALLIUM_OSMESA_TRUE@am__append_26 = state_trackers/osmesa targets/osmesa
-@HAVE_ST_VA_TRUE@am__append_27 = state_trackers/va targets/va
-@HAVE_ST_VDPAU_TRUE@am__append_28 = state_trackers/vdpau targets/vdpau
-@HAVE_ST_XA_TRUE@am__append_29 = state_trackers/xa targets/xa
-@HAVE_ST_XVMC_TRUE@am__append_30 = state_trackers/xvmc targets/xvmc
-@HAVE_ST_NINE_TRUE@am__append_31 = state_trackers/nine targets/d3dadapter9
-@HAVE_GALLIUM_TESTS_TRUE@am__append_32 = \
+@HAVE_ST_OMX_BELLAGIO_TRUE@am__append_25 = state_trackers/omx targets/omx
+@HAVE_ST_OMX_TIZONIA_TRUE@am__append_26 = state_trackers/omx targets/omx
+@HAVE_GALLIUM_OSMESA_TRUE@am__append_27 = state_trackers/osmesa targets/osmesa
+@HAVE_ST_VA_TRUE@am__append_28 = state_trackers/va targets/va
+@HAVE_ST_VDPAU_TRUE@am__append_29 = state_trackers/vdpau targets/vdpau
+@HAVE_ST_XA_TRUE@am__append_30 = state_trackers/xa targets/xa
+@HAVE_ST_XVMC_TRUE@am__append_31 = state_trackers/xvmc targets/xvmc
+@HAVE_ST_NINE_TRUE@am__append_32 = state_trackers/nine targets/d3dadapter9
+@HAVE_GALLIUM_TESTS_TRUE@am__append_33 = \
 @HAVE_GALLIUM_TESTS_TRUE@	tests/trivial \
 @HAVE_GALLIUM_TESTS_TRUE@	tests/unit
 
@@ -198,24 +199,23 @@ am__define_uniq_tagged_files = \
   done | $(am__uniquify_input)`
 ETAGS = etags
 CTAGS = ctags
-DIST_SUBDIRS = auxiliary auxiliary/pipe-loader drivers/ddebug \
-	drivers/noop drivers/trace drivers/rbug drivers/freedreno \
+DIST_SUBDIRS = auxiliary auxiliary/pipe-loader drivers/freedreno \
 	winsys/freedreno/drm drivers/i915 winsys/i915/drm \
 	drivers/nouveau winsys/nouveau/drm drivers/svga \
-	winsys/svga/drm drivers/r300 drivers/radeon drivers/r600 \
-	drivers/radeonsi winsys/amdgpu/drm winsys/radeon/drm \
-	drivers/etnaviv winsys/etnaviv/drm drivers/imx winsys/imx/drm \
-	drivers/pl111 winsys/pl111/drm drivers/softpipe \
-	drivers/llvmpipe drivers/swr drivers/vc4 winsys/vc4/drm \
+	winsys/svga/drm drivers/r300 drivers/r600 drivers/radeonsi \
+	winsys/amdgpu/drm winsys/radeon/drm drivers/etnaviv \
+	winsys/etnaviv/drm drivers/imx winsys/imx/drm drivers/pl111 \
+	winsys/pl111/drm drivers/softpipe drivers/llvmpipe drivers/swr \
+	drivers/tegra winsys/tegra/drm drivers/vc4 winsys/vc4/drm \
 	drivers/vc5 winsys/vc5/drm drivers/virgl winsys/virgl/drm \
 	winsys/virgl/vtest winsys/sw/null winsys/sw/xlib winsys/sw/dri \
 	winsys/sw/kms-dri winsys/sw/wrapper targets/pipe-loader \
 	state_trackers/clover targets/opencl state_trackers/dri \
 	targets/dri state_trackers/glx/xlib targets/libgl-xlib \
-	state_trackers/omx_bellagio targets/omx-bellagio \
-	state_trackers/osmesa targets/osmesa state_trackers/va \
-	targets/va state_trackers/vdpau targets/vdpau \
-	state_trackers/xa targets/xa state_trackers/xvmc targets/xvmc \
+	state_trackers/omx targets/omx state_trackers/osmesa \
+	targets/osmesa state_trackers/va targets/va \
+	state_trackers/vdpau targets/vdpau state_trackers/xa \
+	targets/xa state_trackers/xvmc targets/xvmc \
 	state_trackers/nine targets/d3dadapter9 tests/trivial \
 	tests/unit
 am__DIST_COMMON = $(srcdir)/Makefile.in
@@ -388,6 +388,9 @@ OBJEXT = @OBJEXT@
 OMX_BELLAGIO_CFLAGS = @OMX_BELLAGIO_CFLAGS@
 OMX_BELLAGIO_LIBS = @OMX_BELLAGIO_LIBS@
 OMX_BELLAGIO_LIB_INSTALL_DIR = @OMX_BELLAGIO_LIB_INSTALL_DIR@
+OMX_TIZONIA_CFLAGS = @OMX_TIZONIA_CFLAGS@
+OMX_TIZONIA_LIBS = @OMX_TIZONIA_LIBS@
+OMX_TIZONIA_LIB_INSTALL_DIR = @OMX_TIZONIA_LIB_INSTALL_DIR@
 OPENCL_LIBNAME = @OPENCL_LIBNAME@
 OPENCL_VERSION = @OPENCL_VERSION@
 OSMESA_LIB = @OSMESA_LIB@
@@ -455,7 +458,9 @@ VL_LIBS = @VL_LIBS@
 VULKAN_ICD_INSTALL_DIR = @VULKAN_ICD_INSTALL_DIR@
 WAYLAND_CLIENT_CFLAGS = @WAYLAND_CLIENT_CFLAGS@
 WAYLAND_CLIENT_LIBS = @WAYLAND_CLIENT_LIBS@
+WAYLAND_PROTOCOLS_CFLAGS = @WAYLAND_PROTOCOLS_CFLAGS@
 WAYLAND_PROTOCOLS_DATADIR = @WAYLAND_PROTOCOLS_DATADIR@
+WAYLAND_PROTOCOLS_LIBS = @WAYLAND_PROTOCOLS_LIBS@
 WAYLAND_SCANNER = @WAYLAND_SCANNER@
 WAYLAND_SCANNER_CFLAGS = @WAYLAND_SCANNER_CFLAGS@
 WAYLAND_SCANNER_LIBS = @WAYLAND_SCANNER_LIBS@
@@ -471,6 +476,8 @@ XCB_DRI2_CFLAGS = @XCB_DRI2_CFLAGS@
 XCB_DRI2_LIBS = @XCB_DRI2_LIBS@
 XCB_DRI3_CFLAGS = @XCB_DRI3_CFLAGS@
 XCB_DRI3_LIBS = @XCB_DRI3_LIBS@
+XCB_DRI3_MODIFIERS_CFLAGS = @XCB_DRI3_MODIFIERS_CFLAGS@
+XCB_DRI3_MODIFIERS_LIBS = @XCB_DRI3_MODIFIERS_LIBS@
 XF86VIDMODE_CFLAGS = @XF86VIDMODE_CFLAGS@
 XF86VIDMODE_LIBS = @XF86VIDMODE_LIBS@
 XLIBGL_CFLAGS = @XLIBGL_CFLAGS@
@@ -532,7 +539,6 @@ pdfdir = @pdfdir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
-runstatedir = @runstatedir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
@@ -545,24 +551,25 @@ target_vendor = @target_vendor@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-SUBDIRS = auxiliary auxiliary/pipe-loader drivers/ddebug drivers/noop \
-	drivers/trace drivers/rbug $(am__append_1) $(am__append_2) \
-	$(am__append_3) $(am__append_4) $(am__append_5) \
-	$(am__append_6) $(am__append_7) $(am__append_8) \
-	$(am__append_9) $(am__append_10) $(am__append_11) \
-	$(am__append_12) $(am__append_13) $(am__append_14) \
-	$(am__append_15) $(am__append_16) $(am__append_17) \
-	$(am__append_18) winsys/sw/null $(am__append_19) \
-	$(am__append_20) $(am__append_21) winsys/sw/wrapper \
-	$(am__append_22) $(am__append_23) $(am__append_24) \
-	$(am__append_25) $(am__append_26) $(am__append_27) \
-	$(am__append_28) $(am__append_29) $(am__append_30) \
-	$(am__append_31) $(am__append_32)
+SUBDIRS = auxiliary auxiliary/pipe-loader $(am__append_1) \
+	$(am__append_2) $(am__append_3) $(am__append_4) \
+	$(am__append_5) $(am__append_6) $(am__append_7) \
+	$(am__append_8) $(am__append_9) $(am__append_10) \
+	$(am__append_11) $(am__append_12) $(am__append_13) \
+	$(am__append_14) $(am__append_15) $(am__append_16) \
+	$(am__append_17) $(am__append_18) winsys/sw/null \
+	$(am__append_19) $(am__append_20) $(am__append_21) \
+	winsys/sw/wrapper $(am__append_22) $(am__append_23) \
+	$(am__append_24) $(am__append_25) $(am__append_26) \
+	$(am__append_27) $(am__append_28) $(am__append_29) \
+	$(am__append_30) $(am__append_31) $(am__append_32) \
+	$(am__append_33)
 EXTRA_DIST = docs README.portability SConscript winsys/sw/gdi \
 	winsys/sw/hgl include state_trackers/README state_trackers/wgl \
 	targets/libgl-gdi targets/graw-gdi targets/graw-null \
 	targets/graw-xlib state_trackers/hgl targets/haiku-softpipe \
-	tools tests/graw tests/python meson.build
+	tools tests/graw tests/python meson.build tests/meson.build \
+	tests/graw/meson.build
 all: all-recursive
 
 .SUFFIXES:

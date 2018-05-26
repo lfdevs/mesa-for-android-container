@@ -158,7 +158,8 @@ etna_create_sampler_view_state(struct pipe_context *pctx, struct pipe_resource *
    /* Workaround for npot textures -- it appears that only CLAMP_TO_EDGE is
     * supported when the appropriate capability is not set. */
    if (!ctx->specs.npot_tex_any_wrap &&
-       (!util_is_power_of_two(res->base.width0) || !util_is_power_of_two(res->base.height0))) {
+       (!util_is_power_of_two_or_zero(res->base.width0) ||
+        !util_is_power_of_two_or_zero(res->base.height0))) {
       sv->TE_SAMPLER_CONFIG0_MASK = ~(VIVS_TE_SAMPLER_CONFIG0_UWRAP__MASK |
                                       VIVS_TE_SAMPLER_CONFIG0_VWRAP__MASK);
       sv->TE_SAMPLER_CONFIG0 |=
@@ -319,7 +320,7 @@ void
 etna_texture_state_init(struct pipe_context *pctx)
 {
    struct etna_context *ctx = etna_context(pctx);
-   DBG("etnaviv: Using state-based texturing\n");
+   DBG("etnaviv: Using state-based texturing");
    ctx->base.create_sampler_state = etna_create_sampler_state_state;
    ctx->base.delete_sampler_state = etna_delete_sampler_state_state;
    ctx->base.create_sampler_view = etna_create_sampler_view_state;

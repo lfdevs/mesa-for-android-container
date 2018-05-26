@@ -1,5 +1,6 @@
 /*
  * Copyright 2017 Advanced Micro Devices, Inc.
+ * All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -33,7 +34,10 @@
 struct si_compute {
 	struct pipe_reference reference;
 	struct si_screen *screen;
-	struct tgsi_token *tokens;
+	union {
+		struct tgsi_token *tgsi;
+		struct nir_shader *nir;
+	} ir;
 	struct util_queue_fence ready;
 	struct si_compiler_ctx_state compiler_ctx_state;
 

@@ -106,7 +106,7 @@ brw_codegen_tes_prog(struct brw_context *brw,
       brw_compile_tes(compiler, brw, mem_ctx, key, &input_vue_map, &prog_data,
                       nir, &tep->program, st_index, &error_str);
    if (program == NULL) {
-      tep->program.sh.data->LinkStatus = linking_failure;
+      tep->program.sh.data->LinkStatus = LINKING_FAILURE;
       ralloc_strcat(&tep->program.sh.data->InfoLog, error_str);
 
       _mesa_problem(NULL, "Failed to compile tessellation evaluation shader: "

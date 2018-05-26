@@ -54,20 +54,18 @@ destroy_buffer_locked(struct pb_cache_entry *entry)
  * Free as many cache buffers from the list head as possible.
  */
 static void
-release_expired_buffers_locked(struct list_head *cache)
+release_expired_buffers_locked(struct list_head *cache,
+                               int64_t current_time)
 {
    struct list_head *curr, *next;
    struct pb_cache_entry *entry;
-   int64_t now;
-
-   now = os_time_get();
 
    curr = cache->next;
    next = curr->next;
    while (curr != cache) {
       entry = LIST_ENTRY(struct pb_cache_entry, curr, head);
 
-      if (!os_time_timeout(entry->start, entry->end, now))
+      if (!os_time_timeout(entry->start, entry->end, current_time))
          break;
 
       destroy_buffer_locked(entry);
@@ -92,8 +90,10 @@ pb_cache_add_buffer(struct pb_cache_entry *entry)
    mtx_lock(&mgr->mutex);
    assert(!pipe_is_referenced(&buf->reference));
 
-   for (i = 0; i < ARRAY_SIZE(mgr->buckets); i++)
-      release_expired_buffers_locked(&mgr->buckets[i]);
+   int64_t current_time = os_time_get();
+
+   for (i = 0; i < mgr->num_heaps; i++)
+      release_expired_buffers_locked(&mgr->buckets[i], current_time);
 
    /* Directly release any buffer that exceeds the limit. */
    if (mgr->cache_size + buf->size > mgr->max_cache_size) {
@@ -153,6 +153,8 @@ pb_cache_reclaim_buffer(struct pb_cache *mgr, pb_size size,
    struct list_head *cur, *next;
    int64_t now;
    int ret = 0;
+
+   assert(bucket_index < mgr->num_heaps);
    struct list_head *cache = &mgr->buckets[bucket_index];
 
    mtx_lock(&mgr->mutex);
@@ -229,7 +231,7 @@ pb_cache_release_all_buffers(struct pb_cache *mgr)
    unsigned i;
 
    mtx_lock(&mgr->mutex);
-   for (i = 0; i < ARRAY_SIZE(mgr->buckets); i++) {
+   for (i = 0; i < mgr->num_heaps; i++) {
       struct list_head *cache = &mgr->buckets[i];
 
       curr = cache->next;
@@ -248,6 +250,8 @@ void
 pb_cache_init_entry(struct pb_cache *mgr, struct pb_cache_entry *entry,
                     struct pb_buffer *buf, unsigned bucket_index)
 {
+   assert(bucket_index < mgr->num_heaps);
+
    memset(entry, 0, sizeof(*entry));
    entry->buffer = buf;
    entry->mgr = mgr;
@@ -258,6 +262,9 @@ pb_cache_init_entry(struct pb_cache *mgr, struct pb_cache_entry *entry,
  * Initialize a caching buffer manager.
  *
  * @param mgr     The cache buffer manager
+ * @param num_heaps  Number of separate caches/buckets indexed by bucket_index
+ *                   for faster buffer matching (alternative to slower
+ *                   "usage"-based matching).
  * @param usecs   Unused buffers may be released from the cache after this
  *                time
  * @param size_factor  Declare buffers that are size_factor times bigger than
@@ -270,19 +277,25 @@ pb_cache_init_entry(struct pb_cache *mgr, struct pb_cache_entry *entry,
  * @param can_reclaim     Whether a buffer can be reclaimed (e.g. is not busy)
  */
 void
-pb_cache_init(struct pb_cache *mgr, uint usecs, float size_factor,
+pb_cache_init(struct pb_cache *mgr, uint num_heaps,
+              uint usecs, float size_factor,
               unsigned bypass_usage, uint64_t maximum_cache_size,
               void (*destroy_buffer)(struct pb_buffer *buf),
               bool (*can_reclaim)(struct pb_buffer *buf))
 {
    unsigned i;
 
-   for (i = 0; i < ARRAY_SIZE(mgr->buckets); i++)
+   mgr->buckets = CALLOC(num_heaps, sizeof(struct list_head));
+   if (!mgr->buckets)
+      return;
+
+   for (i = 0; i < num_heaps; i++)
       LIST_INITHEAD(&mgr->buckets[i]);
 
    (void) mtx_init(&mgr->mutex, mtx_plain);
    mgr->cache_size = 0;
    mgr->max_cache_size = maximum_cache_size;
+   mgr->num_heaps = num_heaps;
    mgr->usecs = usecs;
    mgr->num_buffers = 0;
    mgr->bypass_usage = bypass_usage;
@@ -299,4 +312,6 @@ pb_cache_deinit(struct pb_cache *mgr)
 {
    pb_cache_release_all_buffers(mgr);
    mtx_destroy(&mgr->mutex);
+   FREE(mgr->buckets);
+   mgr->buckets = NULL;
 }

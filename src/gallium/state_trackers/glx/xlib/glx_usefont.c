@@ -29,10 +29,11 @@
  * Fake implementation of glXUseXFont().
  */
 
-
+#include <stdlib.h>
+#include <string.h>
 #include <stdio.h>
-#include "main/core.h"
 #include <GL/glx.h>
+#include "main/errors.h"
 
 
 /* Some debugging info.  */

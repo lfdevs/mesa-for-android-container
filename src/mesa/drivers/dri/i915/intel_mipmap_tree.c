@@ -620,7 +620,7 @@ intel_miptree_copy_slice(struct intel_context *intel,
    if (!intel_miptree_blit(intel,
                            src_mt, level, slice, 0, 0, false,
                            dst_mt, level, slice, 0, 0, false,
-                           width, height, GL_COPY)) {
+                           width, height, COLOR_LOGICOP_COPY)) {
       perf_debug("miptree validate blit for %s failed\n",
                  _mesa_get_format_name(format));
 
@@ -757,7 +757,7 @@ intel_miptree_map_blit(struct intel_context *intel,
                            map->x, map->y, false,
                            map->mt, 0, 0,
                            0, 0, false,
-                           map->w, map->h, GL_COPY)) {
+                           map->w, map->h, COLOR_LOGICOP_COPY)) {
       fprintf(stderr, "Failed to blit\n");
       goto fail;
    }
@@ -795,7 +795,7 @@ intel_miptree_unmap_blit(struct intel_context *intel,
                                    0, 0, false,
                                    mt, level, slice,
                                    map->x, map->y, false,
-                                   map->w, map->h, GL_COPY);
+                                   map->w, map->h, COLOR_LOGICOP_COPY);
       WARN_ONCE(!ok, "Failed to blit from linear temporary mapping");
    }
 

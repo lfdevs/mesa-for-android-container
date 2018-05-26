@@ -222,9 +222,7 @@ static const GLuint byte_types_scale[5] = {
 };
 
 static GLuint
-double_types(struct brw_context *brw,
-             int size,
-             GLboolean doubles)
+double_types(int size, GLboolean doubles)
 {
    /* From the BDW PRM, Volume 2d, page 588 (VERTEX_ELEMENT_STATE):
     * "When SourceElementFormat is set to one of the *64*_PASSTHRU formats,
@@ -249,21 +247,21 @@ double_types(struct brw_context *brw,
  */
 unsigned
 brw_get_vertex_surface_type(struct brw_context *brw,
-                            const struct gl_vertex_array *glarray)
+                            const struct gl_array_attributes *glattrib)
 {
-   int size = glarray->Size;
+   int size = glattrib->Size;
    const struct gen_device_info *devinfo = &brw->screen->devinfo;
    const bool is_ivybridge_or_older =
       devinfo->gen <= 7 && !devinfo->is_baytrail && !devinfo->is_haswell;
 
    if (unlikely(INTEL_DEBUG & DEBUG_VERTS))
       fprintf(stderr, "type %s size %d normalized %d\n",
-              _mesa_enum_to_string(glarray->Type),
-              glarray->Size, glarray->Normalized);
+              _mesa_enum_to_string(glattrib->Type),
+              glattrib->Size, glattrib->Normalized);
 
-   if (glarray->Integer) {
-      assert(glarray->Format == GL_RGBA); /* sanity check */
-      switch (glarray->Type) {
+   if (glattrib->Integer) {
+      assert(glattrib->Format == GL_RGBA); /* sanity check */
+      switch (glattrib->Type) {
       case GL_INT: return int_types_direct[size];
       case GL_SHORT:
          if (is_ivybridge_or_older && size == 3)
@@ -288,11 +286,11 @@ brw_get_vertex_surface_type(struct brw_context *brw,
             return ubyte_types_direct[size];
       default: unreachable("not reached");
       }
-   } else if (glarray->Type == GL_UNSIGNED_INT_10F_11F_11F_REV) {
+   } else if (glattrib->Type == GL_UNSIGNED_INT_10F_11F_11F_REV) {
       return ISL_FORMAT_R11G11B10_FLOAT;
-   } else if (glarray->Normalized) {
-      switch (glarray->Type) {
-      case GL_DOUBLE: return double_types(brw, size, glarray->Doubles);
+   } else if (glattrib->Normalized) {
+      switch (glattrib->Type) {
+      case GL_DOUBLE: return double_types(size, glattrib->Doubles);
       case GL_FLOAT: return float_types[size];
       case GL_HALF_FLOAT:
       case GL_HALF_FLOAT_OES:
@@ -306,7 +304,7 @@ brw_get_vertex_surface_type(struct brw_context *brw,
       case GL_UNSIGNED_INT: return uint_types_norm[size];
       case GL_UNSIGNED_SHORT: return ushort_types_norm[size];
       case GL_UNSIGNED_BYTE:
-         if (glarray->Format == GL_BGRA) {
+         if (glattrib->Format == GL_BGRA) {
             /* See GL_EXT_vertex_array_bgra */
             assert(size == 4);
             return ISL_FORMAT_B8G8R8A8_UNORM;
@@ -330,7 +328,7 @@ brw_get_vertex_surface_type(struct brw_context *brw,
       case GL_INT_2_10_10_10_REV:
          assert(size == 4);
          if (devinfo->gen >= 8 || devinfo->is_haswell) {
-            return glarray->Format == GL_BGRA
+            return glattrib->Format == GL_BGRA
                ? ISL_FORMAT_B10G10R10A2_SNORM
                : ISL_FORMAT_R10G10B10A2_SNORM;
          }
@@ -338,7 +336,7 @@ brw_get_vertex_surface_type(struct brw_context *brw,
       case GL_UNSIGNED_INT_2_10_10_10_REV:
          assert(size == 4);
          if (devinfo->gen >= 8 || devinfo->is_haswell) {
-            return glarray->Format == GL_BGRA
+            return glattrib->Format == GL_BGRA
                ? ISL_FORMAT_B10G10R10A2_UNORM
                : ISL_FORMAT_R10G10B10A2_UNORM;
          }
@@ -352,26 +350,26 @@ brw_get_vertex_surface_type(struct brw_context *brw,
        * like to use here, so upload everything as UINT and fix
        * it in the shader
        */
-      if (glarray->Type == GL_INT_2_10_10_10_REV) {
+      if (glattrib->Type == GL_INT_2_10_10_10_REV) {
          assert(size == 4);
          if (devinfo->gen >= 8 || devinfo->is_haswell) {
-            return glarray->Format == GL_BGRA
+            return glattrib->Format == GL_BGRA
                ? ISL_FORMAT_B10G10R10A2_SSCALED
                : ISL_FORMAT_R10G10B10A2_SSCALED;
          }
          return ISL_FORMAT_R10G10B10A2_UINT;
-      } else if (glarray->Type == GL_UNSIGNED_INT_2_10_10_10_REV) {
+      } else if (glattrib->Type == GL_UNSIGNED_INT_2_10_10_10_REV) {
          assert(size == 4);
          if (devinfo->gen >= 8 || devinfo->is_haswell) {
-            return glarray->Format == GL_BGRA
+            return glattrib->Format == GL_BGRA
                ? ISL_FORMAT_B10G10R10A2_USCALED
                : ISL_FORMAT_R10G10B10A2_USCALED;
          }
          return ISL_FORMAT_R10G10B10A2_UINT;
       }
-      assert(glarray->Format == GL_RGBA); /* sanity check */
-      switch (glarray->Type) {
-      case GL_DOUBLE: return double_types(brw, size, glarray->Doubles);
+      assert(glattrib->Format == GL_RGBA); /* sanity check */
+      switch (glattrib->Type) {
+      case GL_DOUBLE: return double_types(size, glattrib->Doubles);
       case GL_FLOAT: return float_types[size];
       case GL_HALF_FLOAT:
       case GL_HALF_FLOAT_OES:
@@ -405,28 +403,29 @@ copy_array_to_vbo_array(struct brw_context *brw,
 			struct brw_vertex_buffer *buffer,
 			GLuint dst_stride)
 {
-   const int src_stride = element->glarray->StrideB;
+   const struct gl_vertex_array *glarray = element->glarray;
+   const struct gl_vertex_buffer_binding *glbinding = glarray->BufferBinding;
+   const struct gl_array_attributes *glattrib = glarray->VertexAttrib;
+   const int src_stride = glbinding->Stride;
 
    /* If the source stride is zero, we just want to upload the current
     * attribute once and set the buffer's stride to 0.  There's no need
     * to replicate it out.
     */
    if (src_stride == 0) {
-      intel_upload_data(brw, element->glarray->Ptr,
-                        element->glarray->_ElementSize,
-                        element->glarray->_ElementSize,
-			&buffer->bo, &buffer->offset);
+      brw_upload_data(&brw->upload, glattrib->Ptr, glattrib->_ElementSize,
+                      glattrib->_ElementSize, &buffer->bo, &buffer->offset);
 
       buffer->stride = 0;
-      buffer->size = element->glarray->_ElementSize;
+      buffer->size = glattrib->_ElementSize;
       return;
    }
 
-   const unsigned char *src = element->glarray->Ptr + min * src_stride;
+   const unsigned char *src = glattrib->Ptr + min * src_stride;
    int count = max - min + 1;
    GLuint size = count * dst_stride;
-   uint8_t *dst = intel_upload_space(brw, size, dst_stride,
-                                     &buffer->bo, &buffer->offset);
+   uint8_t *dst = brw_upload_space(&brw->upload, size, dst_stride,
+                                   &buffer->bo, &buffer->offset);
 
    /* The GL 4.5 spec says:
     *      "If any enabled array’s buffer binding is zero when DrawArrays or
@@ -514,28 +513,30 @@ brw_prepare_vertices(struct brw_context *brw)
    for (i = j = 0; i < brw->vb.nr_enabled; i++) {
       struct brw_vertex_element *input = brw->vb.enabled[i];
       const struct gl_vertex_array *glarray = input->glarray;
+      const struct gl_vertex_buffer_binding *glbinding = glarray->BufferBinding;
+      const struct gl_array_attributes *glattrib = glarray->VertexAttrib;
 
-      if (_mesa_is_bufferobj(glarray->BufferObj)) {
+      if (_mesa_is_bufferobj(glbinding->BufferObj)) {
 	 struct intel_buffer_object *intel_buffer =
-	    intel_buffer_object(glarray->BufferObj);
+	    intel_buffer_object(glbinding->BufferObj);
 
-         const uint32_t offset = (uintptr_t)glarray->Ptr;
+         const uint32_t offset = glbinding->Offset + glattrib->RelativeOffset;
 
          /* Start with the worst case */
          uint32_t start = 0;
          uint32_t range = intel_buffer->Base.Size;
-         if (glarray->InstanceDivisor) {
+         if (glbinding->InstanceDivisor) {
             if (brw->num_instances) {
-               start = offset + glarray->StrideB * brw->baseinstance;
-               range = (glarray->StrideB * ((brw->num_instances - 1) /
-                                            glarray->InstanceDivisor) +
-                        glarray->_ElementSize);
+               start = offset + glbinding->Stride * brw->baseinstance;
+               range = (glbinding->Stride * ((brw->num_instances - 1) /
+                                            glbinding->InstanceDivisor) +
+                        glattrib->_ElementSize);
             }
          } else {
             if (brw->vb.index_bounds_valid) {
-               start = offset + min_index * glarray->StrideB;
-               range = (glarray->StrideB * (max_index - min_index) +
-                        glarray->_ElementSize);
+               start = offset + min_index * glbinding->Stride;
+               range = (glbinding->Stride * (max_index - min_index) +
+                        glattrib->_ElementSize);
             }
          }
 
@@ -546,13 +547,16 @@ brw_prepare_vertices(struct brw_context *brw)
 	 unsigned k;
 	 for (k = 0; k < i; k++) {
 	    const struct gl_vertex_array *other = brw->vb.enabled[k]->glarray;
-	    if (glarray->BufferObj == other->BufferObj &&
-		glarray->StrideB == other->StrideB &&
-		glarray->InstanceDivisor == other->InstanceDivisor &&
-		(uintptr_t)(glarray->Ptr - other->Ptr) < glarray->StrideB)
+            const struct gl_vertex_buffer_binding *obind = other->BufferBinding;
+            const struct gl_array_attributes *oattrib = other->VertexAttrib;
+            const uint32_t ooffset = obind->Offset + oattrib->RelativeOffset;
+	    if (glbinding->BufferObj == obind->BufferObj &&
+		glbinding->Stride == obind->Stride &&
+		glbinding->InstanceDivisor == obind->InstanceDivisor &&
+                (offset - ooffset) < glbinding->Stride)
 	    {
 	       input->buffer = brw->vb.enabled[k]->buffer;
-	       input->offset = glarray->Ptr - other->Ptr;
+               input->offset = offset - ooffset;
 
                buffer_range_start[input->buffer] =
                   MIN2(buffer_range_start[input->buffer], start);
@@ -566,9 +570,9 @@ brw_prepare_vertices(struct brw_context *brw)
 
 	    /* Named buffer object: Just reference its contents directly. */
 	    buffer->offset = offset;
-	    buffer->stride = glarray->StrideB;
-	    buffer->step_rate = glarray->InstanceDivisor;
-            buffer->size = glarray->BufferObj->Size - offset;
+            buffer->stride = glbinding->Stride;
+            buffer->step_rate = glbinding->InstanceDivisor;
+            buffer->size = glbinding->BufferObj->Size - offset;
 
             enabled_buffer[j] = intel_buffer;
             buffer_range_start[j] = start;
@@ -582,13 +586,13 @@ brw_prepare_vertices(struct brw_context *brw)
 	  * when we've decided if we're doing interleaved or not.
 	  */
 	 if (nr_uploads == 0) {
-	    interleaved = glarray->StrideB;
-	    ptr = glarray->Ptr;
+            interleaved = glbinding->Stride;
+            ptr = glattrib->Ptr;
 	 }
-	 else if (interleaved != glarray->StrideB ||
-                  glarray->InstanceDivisor != 0 ||
-                  glarray->Ptr < ptr ||
-                  (uintptr_t)(glarray->Ptr - ptr) + glarray->_ElementSize > interleaved)
+	 else if (interleaved != glbinding->Stride ||
+                  glbinding->InstanceDivisor != 0 ||
+                  glattrib->Ptr < ptr ||
+                  (uintptr_t)(glattrib->Ptr - ptr) + glattrib->_ElementSize > interleaved)
 	 {
             /* If our stride is different from the first attribute's stride,
              * or if we are using an instance divisor or if the first
@@ -654,9 +658,10 @@ brw_prepare_vertices(struct brw_context *brw)
          buffer->step_rate = 0;
 
 	 for (i = 0; i < nr_uploads; i++) {
+            const struct gl_vertex_array *glarray = upload[i]->glarray;
+            const struct gl_array_attributes *glattrib = glarray->VertexAttrib;
 	    /* Then, just point upload[i] at upload[0]'s buffer. */
-	    upload[i]->offset =
-	       ((const unsigned char *)upload[i]->glarray->Ptr - ptr);
+            upload[i]->offset = ((const unsigned char *)glattrib->Ptr - ptr);
 	    upload[i]->buffer = j;
 	 }
 	 j++;
@@ -667,22 +672,25 @@ brw_prepare_vertices(struct brw_context *brw)
    /* Upload non-interleaved arrays */
    for (i = 0; i < nr_uploads; i++) {
       struct brw_vertex_buffer *buffer = &brw->vb.buffers[j];
-      if (upload[i]->glarray->InstanceDivisor == 0) {
+      const struct gl_vertex_array *glarray = upload[i]->glarray;
+      const struct gl_vertex_buffer_binding *glbinding = glarray->BufferBinding;
+      const struct gl_array_attributes *glattrib = glarray->VertexAttrib;
+      if (glbinding->InstanceDivisor == 0) {
          copy_array_to_vbo_array(brw, upload[i], min_index, max_index,
-                                 buffer, upload[i]->glarray->_ElementSize);
+                                 buffer, glattrib->_ElementSize);
       } else {
          /* This is an instanced attribute, since its InstanceDivisor
           * is not zero. Therefore, its data will be stepped after the
           * instanced draw has been run InstanceDivisor times.
           */
          uint32_t instanced_attr_max_index =
-            (brw->num_instances - 1) / upload[i]->glarray->InstanceDivisor;
+            (brw->num_instances - 1) / glbinding->InstanceDivisor;
          copy_array_to_vbo_array(brw, upload[i], 0, instanced_attr_max_index,
-                                 buffer, upload[i]->glarray->_ElementSize);
+                                 buffer, glattrib->_ElementSize);
       }
       buffer->offset -= delta * buffer->stride;
       buffer->size += delta * buffer->stride;
-      buffer->step_rate = upload[i]->glarray->InstanceDivisor;
+      buffer->step_rate = glbinding->InstanceDivisor;
       upload[i]->buffer = j++;
       upload[i]->offset = 0;
    }
@@ -696,18 +704,23 @@ brw_prepare_shader_draw_parameters(struct brw_context *brw)
    const struct brw_vs_prog_data *vs_prog_data =
       brw_vs_prog_data(brw->vs.base.prog_data);
 
-   /* For non-indirect draws, upload gl_BaseVertex. */
-   if ((vs_prog_data->uses_basevertex || vs_prog_data->uses_baseinstance) &&
+   const bool uses_firstvertex =
+      vs_prog_data->uses_basevertex || vs_prog_data->uses_firstvertex;
+
+   /* For non-indirect draws, upload the shader draw parameters */
+   if ((uses_firstvertex || vs_prog_data->uses_baseinstance) &&
        brw->draw.draw_params_bo == NULL) {
-      intel_upload_data(brw, &brw->draw.params, sizeof(brw->draw.params), 4,
-			&brw->draw.draw_params_bo,
-                        &brw->draw.draw_params_offset);
+      brw_upload_data(&brw->upload,
+                      &brw->draw.params, sizeof(brw->draw.params), 4,
+                      &brw->draw.draw_params_bo,
+                      &brw->draw.draw_params_offset);
    }
 
    if (vs_prog_data->uses_drawid) {
-      intel_upload_data(brw, &brw->draw.gl_drawid, sizeof(brw->draw.gl_drawid), 4,
-                        &brw->draw.draw_id_bo,
-                        &brw->draw.draw_id_offset);
+      brw_upload_data(&brw->upload,
+                      &brw->draw.gl_drawid, sizeof(brw->draw.gl_drawid), 4,
+                      &brw->draw.draw_id_bo,
+                      &brw->draw.draw_id_offset);
    }
 }
 
@@ -734,8 +747,8 @@ brw_upload_indices(struct brw_context *brw)
    if (!_mesa_is_bufferobj(bufferobj)) {
       /* Get new bufferobj, offset:
        */
-      intel_upload_data(brw, index_buffer->ptr, ib_size, ib_type_size,
-			&brw->ib.bo, &offset);
+      brw_upload_data(&brw->upload, index_buffer->ptr, ib_size, ib_type_size,
+                      &brw->ib.bo, &offset);
       brw->ib.size = brw->ib.bo->size;
    } else {
       offset = (GLuint) (unsigned long) index_buffer->ptr;

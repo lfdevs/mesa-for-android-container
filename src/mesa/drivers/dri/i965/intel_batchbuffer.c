@@ -55,6 +55,28 @@
 static void
 intel_batchbuffer_reset(struct brw_context *brw);
 
+UNUSED static void
+dump_validation_list(struct intel_batchbuffer *batch)
+{
+   fprintf(stderr, "Validation list (length %d):\n", batch->exec_count);
+
+   for (int i = 0; i < batch->exec_count; i++) {
+      uint64_t flags = batch->validation_list[i].flags;
+      assert(batch->validation_list[i].handle ==
+             batch->exec_bos[i]->gem_handle);
+      fprintf(stderr, "[%2d]: %2d %-14s %p %s%-7s @ 0x%016llx%s (%"PRIu64"B)\n",
+              i,
+              batch->validation_list[i].handle,
+              batch->exec_bos[i]->name,
+              batch->exec_bos[i],
+              (flags & EXEC_OBJECT_SUPPORTS_48B_ADDRESS) ? "(48b" : "(32b",
+              (flags & EXEC_OBJECT_WRITE) ? " write)" : ")",
+              batch->validation_list[i].offset,
+              (flags & EXEC_OBJECT_PINNED) ? " (pinned)" : "",
+              batch->exec_bos[i]->size);
+   }
+}
+
 static bool
 uint_key_compare(const void *a, const void *b)
 {
@@ -148,7 +170,6 @@ add_exec_bo(struct intel_batchbuffer *batch, struct brw_bo *bo)
    batch->validation_list[batch->exec_count] =
       (struct drm_i915_gem_exec_object2) {
          .handle = bo->gem_handle,
-         .alignment = bo->align,
          .offset = bo->gtt_offset,
          .flags = bo->kflags,
       };
@@ -169,7 +190,7 @@ recreate_growing_buffer(struct brw_context *brw,
    struct intel_batchbuffer *batch = &brw->batch;
    struct brw_bufmgr *bufmgr = screen->bufmgr;
 
-   grow->bo = brw_bo_alloc(bufmgr, name, size, 4096);
+   grow->bo = brw_bo_alloc(bufmgr, name, size);
    grow->bo->kflags = can_do_exec_capture(screen) ? EXEC_OBJECT_CAPTURE : 0;
    grow->partial_bo = NULL;
    grow->partial_bo_map = NULL;
@@ -330,7 +351,7 @@ grow_buffer(struct brw_context *brw,
       finish_growing_bos(grow);
    }
 
-   struct brw_bo *new_bo = brw_bo_alloc(bufmgr, bo->name, new_size, bo->align);
+   struct brw_bo *new_bo = brw_bo_alloc(bufmgr, bo->name, new_size);
 
    /* Copy existing data to the new larger buffer */
    grow->partial_bo_map = grow->map;
@@ -742,9 +763,10 @@ brw_finish_batch(struct brw_context *brw)
    if (brw->batch.ring == RENDER_RING) {
       /* Work around L3 state leaks into contexts set MI_RESTORE_INHIBIT which
        * assume that the L3 cache is configured according to the hardware
-       * defaults.
+       * defaults.  On Kernel 4.16+, we no longer need to do this.
        */
-      if (devinfo->gen >= 7)
+      if (devinfo->gen >= 7 &&
+          !(brw->screen->kernel_features & KERNEL_ALLOWS_CONTEXT_ISOLATION))
          gen7_restore_default_l3_config(brw);
 
       if (devinfo->is_haswell) {
@@ -769,7 +791,7 @@ brw_finish_batch(struct brw_context *brw)
       }
 
       /* Do not restore push constant packets during context restore. */
-      if (devinfo->gen == 10)
+      if (devinfo->gen >= 7)
          gen10_emit_isp_disable(brw);
    }
 
@@ -807,9 +829,6 @@ throttle(struct brw_context *brw)
    if (brw->need_swap_throttle && brw->throttle_batch[0]) {
       if (brw->throttle_batch[1]) {
          if (!brw->disable_throttling) {
-            /* Pass NULL rather than brw so we avoid perf_debug warnings;
-             * stalling is common and expected here...
-             */
             brw_bo_wait_rendering(brw->throttle_batch[1]);
          }
          brw_bo_unreference(brw->throttle_batch[1]);
@@ -1000,7 +1019,7 @@ _intel_batchbuffer_flush_fence(struct brw_context *brw,
    assert(!brw->batch.no_wrap);
 
    brw_finish_batch(brw);
-   intel_upload_finish(brw);
+   brw_upload_finish(&brw->upload);
 
    finish_growing_bos(&brw->batch.batch);
    finish_growing_bos(&brw->batch.state);
@@ -1077,6 +1096,21 @@ emit_reloc(struct intel_batchbuffer *batch,
 
    unsigned int index = add_exec_bo(batch, target);
    struct drm_i915_gem_exec_object2 *entry = &batch->validation_list[index];
+
+   if (reloc_flags & RELOC_32BIT) {
+      /* Restrict this buffer to the low 32 bits of the address space.
+       *
+       * Altering the validation list flags restricts it for this batch,
+       * but we also alter the BO's kflags to restrict it permanently
+       * (until the BO is destroyed and put back in the cache).  Buffers
+       * may stay bound across batches, and we want keep it constrained.
+       */
+      target->kflags &= ~EXEC_OBJECT_SUPPORTS_48B_ADDRESS;
+      entry->flags &= ~EXEC_OBJECT_SUPPORTS_48B_ADDRESS;
+
+      /* RELOC_32BIT is not an EXEC_OBJECT_* flag, so get rid of it. */
+      reloc_flags &= ~RELOC_32BIT;
+   }
 
    if (reloc_flags)
       entry->flags |= reloc_flags & batch->valid_reloc_flags;

@@ -134,7 +134,12 @@ static const struct drm_driver_descriptor driver_descriptors[] = {
         .driver_name = "imx-drm",
         .create_screen = pipe_imx_drm_create_screen,
         .configuration = pipe_default_configuration_query,
-    }
+    },
+    {
+        .driver_name = "tegra",
+        .create_screen = pipe_tegra_create_screen,
+        .configuration = pipe_default_configuration_query,
+    },
 };
 #endif
 

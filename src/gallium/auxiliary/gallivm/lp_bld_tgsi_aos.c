@@ -862,7 +862,7 @@ lp_build_tgsi_aos(struct gallivm_state *gallivm,
                   LLVMValueRef consts_ptr,
                   const LLVMValueRef *inputs,
                   LLVMValueRef *outputs,
-                  struct lp_build_sampler_aos *sampler,
+                  const struct lp_build_sampler_aos *sampler,
                   const struct tgsi_shader_info *info)
 {
    struct lp_build_tgsi_aos_context bld;

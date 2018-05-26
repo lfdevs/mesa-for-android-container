@@ -228,6 +228,19 @@ nir_imm_double(nir_builder *build, double x)
 }
 
 static inline nir_ssa_def *
+nir_imm_floatN_t(nir_builder *build, double x, unsigned bit_size)
+{
+   switch (bit_size) {
+   case 32:
+      return nir_imm_float(build, x);
+   case 64:
+      return nir_imm_double(build, x);
+   }
+
+   unreachable("unknown float immediate bit size");
+}
+
+static inline nir_ssa_def *
 nir_imm_vec4(nir_builder *build, float x, float y, float z, float w)
 {
    nir_const_value v;
@@ -526,6 +539,12 @@ nir_ssa_for_alu_src(nir_builder *build, nir_alu_instr *instr, unsigned srcn)
 }
 
 static inline nir_ssa_def *
+nir_load_reg(nir_builder *build, nir_register *reg)
+{
+   return nir_ssa_for_src(build, nir_src_for_reg(reg), reg->num_components);
+}
+
+static inline nir_ssa_def *
 nir_load_var(nir_builder *build, nir_variable *var)
 {
    const unsigned num_components = glsl_get_vector_elements(var->type);
@@ -610,32 +629,7 @@ nir_copy_var(nir_builder *build, nir_variable *dest, nir_variable *src)
    nir_builder_instr_insert(build, &copy->instr);
 }
 
-/* Generic builder for system values. */
-static inline nir_ssa_def *
-nir_load_system_value(nir_builder *build, nir_intrinsic_op op, int index)
-{
-   nir_intrinsic_instr *load = nir_intrinsic_instr_create(build->shader, op);
-   load->num_components = nir_intrinsic_infos[op].dest_components;
-   load->const_index[0] = index;
-   nir_ssa_dest_init(&load->instr, &load->dest,
-                     nir_intrinsic_infos[op].dest_components, 32, NULL);
-   nir_builder_instr_insert(build, &load->instr);
-   return &load->dest.ssa;
-}
-
-/* Generate custom builders for system values. */
-#define INTRINSIC(name, num_srcs, src_components, has_dest, dest_components, \
-                  num_variables, num_indices, idx0, idx1, idx2, flags)
-#define LAST_INTRINSIC(name)
-
-#define DEFINE_SYSTEM_VALUE(name)                                        \
-   static inline nir_ssa_def *                                           \
-   nir_load_##name(nir_builder *build)                                   \
-   {                                                                     \
-      return nir_load_system_value(build, nir_intrinsic_load_##name, 0); \
-   }
-
-#include "nir_intrinsics.h"
+#include "nir_builder_opcodes.h"
 
 static inline nir_ssa_def *
 nir_load_barycentric(nir_builder *build, nir_intrinsic_op op,

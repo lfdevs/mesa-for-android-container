@@ -15,6 +15,8 @@ env.Prepend(LIBS = [
     glapi,
     compiler,
     mesa,
+    spirv,
+    nir,
     glsl,
 ])
 

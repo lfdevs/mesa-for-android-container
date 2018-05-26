@@ -100,7 +100,7 @@ get_variable(lower_builtin_state *state, nir_deref_var *deref,
              const struct gl_builtin_uniform_element *element)
 {
    nir_shader *shader = state->shader;
-   int tokens[STATE_LENGTH];
+   gl_state_index16 tokens[STATE_LENGTH];
 
    memcpy(tokens, element->tokens, sizeof(tokens));
 
@@ -126,7 +126,7 @@ get_variable(lower_builtin_state *state, nir_deref_var *deref,
       }
    }
 
-   char *name = _mesa_program_state_string((gl_state_index *)tokens);
+   char *name = _mesa_program_state_string(tokens);
 
    nir_foreach_variable(var, &shader->uniforms) {
       if (strcmp(var->name, name) == 0) {
@@ -216,7 +216,7 @@ lower_builtin_block(lower_builtin_state *state, nir_block *block)
        * to remove'd var.  And we have to remove the original uniform
        * var since we don't want it to get uniform space allocated.
        */
-      exec_node_remove(&intrin->instr.node);
+      nir_instr_remove(&intrin->instr);
    }
 
    return true;

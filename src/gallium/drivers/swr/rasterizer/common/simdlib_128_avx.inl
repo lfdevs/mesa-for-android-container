@@ -174,6 +174,7 @@ SIMD_IWRAPPER_2_(xor_si, _mm_xor_si128);        // return a ^ b       (int)
 // Shift operations
 //-----------------------------------------------------------------------
 SIMD_IWRAPPER_1I(slli_epi32);               // return a << ImmT
+SIMD_IWRAPPER_1I(slli_epi64);               // return a << ImmT
 
 static SIMDINLINE Integer SIMDCALL sllv_epi32(Integer vA, Integer vB) // return a << b      (uint32)
 {
@@ -204,6 +205,11 @@ static SIMDINLINE Integer SIMDCALL sllv_epi32(Integer vA, Integer vB) // return 
 SIMD_IWRAPPER_1I(srai_epi32);               // return a >> ImmT   (int32)
 SIMD_IWRAPPER_1I(srli_epi32);               // return a >> ImmT   (uint32)
 SIMD_IWRAPPER_1I_(srli_si, _mm_srli_si128); // return a >> (ImmT*8) (uint)
+
+static SIMDINLINE Integer SIMDCALL srl_epi64(Integer a, Integer n)
+{
+    return _mm_srl_epi64(a, n);
+}
 
 template<int ImmT>                              // same as srli_si, but with Float cast to int
 static SIMDINLINE Float SIMDCALL srlisi_ps(Float a)
@@ -270,6 +276,16 @@ static SIMDINLINE Float SIMDCALL castsi_ps(Integer a)   // return *(Float*)(&a)
 static SIMDINLINE Float SIMDCALL cvtepi32_ps(Integer a) // return (float)a    (int32 --> float)
 {
     return _mm_cvtepi32_ps(a);
+}
+
+static SIMDINLINE int32_t SIMDCALL cvtsi128_si32(Integer a) // return a.v[0]
+{
+    return _mm_cvtsi128_si32(a);
+}
+
+static SIMDINLINE Integer SIMDCALL cvtsi32_si128(int32_t n) // return a[0] = n, a[1]...a[3] = 0
+{
+    return _mm_cvtsi32_si128(n);
 }
 
 SIMD_IWRAPPER_1(cvtepu8_epi16);     // return (int16)a    (uint8 --> int16)

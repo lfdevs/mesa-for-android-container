@@ -401,9 +401,9 @@ nv30_miptree_create(struct pipe_screen *pscreen,
 
    if ((pt->target == PIPE_TEXTURE_RECT) ||
        (pt->bind & PIPE_BIND_SCANOUT) ||
-       !util_is_power_of_two(pt->width0) ||
-       !util_is_power_of_two(pt->height0) ||
-       !util_is_power_of_two(pt->depth0) ||
+       !util_is_power_of_two_or_zero(pt->width0) ||
+       !util_is_power_of_two_or_zero(pt->height0) ||
+       !util_is_power_of_two_or_zero(pt->depth0) ||
        util_format_is_compressed(pt->format) ||
        util_format_is_float(pt->format) || mt->ms_mode) {
       mt->uniform_pitch = util_format_get_nblocksx(pt->format, w) * blocksz;

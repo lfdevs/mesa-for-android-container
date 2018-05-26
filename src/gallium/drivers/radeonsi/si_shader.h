@@ -1,5 +1,6 @@
 /*
  * Copyright 2012 Advanced Micro Devices, Inc.
+ * All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -136,6 +137,7 @@
 #include "util/u_queue.h"
 
 #include "ac_binary.h"
+#include "ac_llvm_build.h"
 #include "si_state.h"
 
 struct nir_shader;
@@ -150,19 +152,25 @@ struct nir_shader;
 /* SGPR user data indices */
 enum {
 	SI_SGPR_RW_BUFFERS,  /* rings (& stream-out, VS only) */
+#if !HAVE_32BIT_POINTERS
 	SI_SGPR_RW_BUFFERS_HI,
+#endif
 	SI_SGPR_BINDLESS_SAMPLERS_AND_IMAGES,
+#if !HAVE_32BIT_POINTERS
 	SI_SGPR_BINDLESS_SAMPLERS_AND_IMAGES_HI,
+#endif
 	SI_SGPR_CONST_AND_SHADER_BUFFERS, /* or just a constant buffer 0 pointer */
+#if !HAVE_32BIT_POINTERS
 	SI_SGPR_CONST_AND_SHADER_BUFFERS_HI,
+#endif
 	SI_SGPR_SAMPLERS_AND_IMAGES,
+#if !HAVE_32BIT_POINTERS
 	SI_SGPR_SAMPLERS_AND_IMAGES_HI,
+#endif
 	SI_NUM_RESOURCE_SGPRS,
 
 	/* all VS variants */
-	SI_SGPR_VERTEX_BUFFERS	= SI_NUM_RESOURCE_SGPRS,
-	SI_SGPR_VERTEX_BUFFERS_HI,
-	SI_SGPR_BASE_VERTEX,
+	SI_SGPR_BASE_VERTEX = SI_NUM_RESOURCE_SGPRS,
 	SI_SGPR_START_INSTANCE,
 	SI_SGPR_DRAWID,
 	SI_SGPR_VS_STATE_BITS,
@@ -172,7 +180,7 @@ enum {
 
 	/* TES */
 	SI_SGPR_TES_OFFCHIP_LAYOUT = SI_NUM_RESOURCE_SGPRS,
-	SI_SGPR_TES_OFFCHIP_ADDR_BASE64K,
+	SI_SGPR_TES_OFFCHIP_ADDR,
 	SI_TES_NUM_USER_SGPR,
 
 	/* GFX6-8: TCS only */
@@ -180,33 +188,39 @@ enum {
 	GFX6_SGPR_TCS_OUT_OFFSETS,
 	GFX6_SGPR_TCS_OUT_LAYOUT,
 	GFX6_SGPR_TCS_IN_LAYOUT,
-	GFX6_SGPR_TCS_OFFCHIP_ADDR_BASE64K,
-	GFX6_SGPR_TCS_FACTOR_ADDR_BASE64K,
 	GFX6_TCS_NUM_USER_SGPR,
 
+	/* GFX9: Merged shaders. */
+#if HAVE_32BIT_POINTERS
+	/* 2ND_CONST_AND_SHADER_BUFFERS is set in USER_DATA_ADDR_LO (SGPR0). */
+	/* 2ND_SAMPLERS_AND_IMAGES is set in USER_DATA_ADDR_HI (SGPR1). */
+	GFX9_MERGED_NUM_USER_SGPR = SI_VS_NUM_USER_SGPR,
+#else
+	/* 2ND_CONST_AND_SHADER_BUFFERS is set in USER_DATA_ADDR_LO/HI (SGPR[0:1]). */
+	GFX9_SGPR_2ND_SAMPLERS_AND_IMAGES = SI_VS_NUM_USER_SGPR,
+	GFX9_SGPR_2ND_SAMPLERS_AND_IMAGES_HI,
+	GFX9_MERGED_NUM_USER_SGPR,
+#endif
+
 	/* GFX9: Merged LS-HS (VS-TCS) only. */
-	GFX9_SGPR_TCS_OFFCHIP_LAYOUT = SI_VS_NUM_USER_SGPR,
+	GFX9_SGPR_TCS_OFFCHIP_LAYOUT = GFX9_MERGED_NUM_USER_SGPR,
 	GFX9_SGPR_TCS_OUT_OFFSETS,
 	GFX9_SGPR_TCS_OUT_LAYOUT,
-	GFX9_SGPR_TCS_OFFCHIP_ADDR_BASE64K,
-	GFX9_SGPR_TCS_FACTOR_ADDR_BASE64K,
-	GFX9_SGPR_unused_to_align_the_next_pointer,
-	GFX9_SGPR_TCS_CONST_AND_SHADER_BUFFERS,
-	GFX9_SGPR_TCS_CONST_AND_SHADER_BUFFERS_HI,
-	GFX9_SGPR_TCS_SAMPLERS_AND_IMAGES,
-	GFX9_SGPR_TCS_SAMPLERS_AND_IMAGES_HI,
+#if !HAVE_32BIT_POINTERS
+	GFX9_SGPR_align_for_vb_pointer,
+#endif
 	GFX9_TCS_NUM_USER_SGPR,
-
-	/* GFX9: Merged ES-GS (VS-GS or TES-GS). */
-	GFX9_SGPR_GS_CONST_AND_SHADER_BUFFERS = SI_VS_NUM_USER_SGPR,
-	GFX9_SGPR_GS_CONST_AND_SHADER_BUFFERS_HI,
-	GFX9_SGPR_GS_SAMPLERS_AND_IMAGES,
-	GFX9_SGPR_GS_SAMPLERS_AND_IMAGES_HI,
-	GFX9_GS_NUM_USER_SGPR,
 
 	/* GS limits */
 	GFX6_GS_NUM_USER_SGPR = SI_NUM_RESOURCE_SGPRS,
-	SI_GSCOPY_NUM_USER_SGPR = SI_SGPR_RW_BUFFERS_HI + 1,
+#if HAVE_32BIT_POINTERS
+	GFX9_VSGS_NUM_USER_SGPR = SI_VS_NUM_USER_SGPR,
+	GFX9_TESGS_NUM_USER_SGPR = SI_TES_NUM_USER_SGPR,
+#else
+	GFX9_VSGS_NUM_USER_SGPR = GFX9_MERGED_NUM_USER_SGPR,
+	GFX9_TESGS_NUM_USER_SGPR = GFX9_MERGED_NUM_USER_SGPR,
+#endif
+	SI_GSCOPY_NUM_USER_SGPR = SI_SGPR_RW_BUFFERS + (HAVE_32BIT_POINTERS ? 1 : 2),
 
 	/* PS only */
 	SI_SGPR_ALPHA_REF	= SI_NUM_RESOURCE_SGPRS,
@@ -418,6 +432,7 @@ struct si_tcs_epilog_bits {
 
 struct si_gs_prolog_bits {
 	unsigned	tri_strip_adj_fix:1;
+	unsigned	gfx9_prev_is_vs:1;
 };
 
 /* Common PS bits between the shader key and the prolog key. */
@@ -527,6 +542,9 @@ struct si_shader_key {
 			unsigned	vs_export_prim_id:1;
 			struct {
 				unsigned interpolate_at_sample_force_center:1;
+				unsigned fbfetch_msaa;
+				unsigned fbfetch_is_1D;
+				unsigned fbfetch_layered;
 			} ps;
 		} u;
 	} mono;
@@ -557,6 +575,7 @@ struct si_shader_config {
 	unsigned			spilled_vgprs;
 	unsigned			private_mem_vgprs;
 	unsigned			lds_size;
+	unsigned			max_simd_waves;
 	unsigned			spi_ps_input_ena;
 	unsigned			spi_ps_input_addr;
 	unsigned			float_mode;
@@ -640,6 +659,8 @@ int si_shader_binary_upload(struct si_screen *sscreen, struct si_shader *shader)
 void si_shader_dump(struct si_screen *sscreen, const struct si_shader *shader,
 		    struct pipe_debug_callback *debug, unsigned processor,
 		    FILE *f, bool check_debug_option);
+void si_shader_dump_stats_for_shader_db(const struct si_shader *shader,
+					struct pipe_debug_callback *debug);
 void si_multiwave_lds_size_workaround(struct si_screen *sscreen,
 				      unsigned *lds_size);
 void si_shader_apply_scratch_relocs(struct si_shader *shader,

@@ -1,5 +1,5 @@
 /****************************************************************************
-* Copyright (C) 2017 Intel Corporation.   All Rights Reserved.
+* Copyright (C) 2017-2018 Intel Corporation.   All Rights Reserved.
 *
 * Permission is hereby granted, free of charge, to any person obtaining a
 * copy of this software and associated documentation files (the "Software"),
@@ -67,6 +67,9 @@ using PassManager = llvm::legacy::PassManager;
 #include "llvm/Support/DynamicLibrary.h"
 #include "llvm/Transforms/IPO.h"
 #include "llvm/Transforms/Scalar.h"
+#if LLVM_VERSION_MAJOR >= 7
+#include "llvm/Transforms/Utils.h"
+#endif
 #include "llvm/Support/Host.h"
 #include "llvm/Support/DynamicLibrary.h"
 
@@ -105,15 +108,27 @@ using PassManager = llvm::legacy::PassManager;
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Config/llvm-config.h"
 
-#if LLVM_VERSION_MAJOR < 4
-#include "llvm/Bitcode/ReaderWriter.h"
-#else
 #include "llvm/Bitcode/BitcodeWriter.h"
 #include "llvm/Bitcode/BitcodeReader.h"
-#endif
 
 #if LLVM_USE_INTEL_JITEVENTS
 #include "llvm/ExecutionEngine/JITEventListener.h"
+#endif
+
+#if LLVM_VERSION_MAJOR >= 5
+static const auto Sync_CrossThread = llvm::SyncScope::System;
+static const auto Attrib_FunctionIndex = llvm::AttributeList::FunctionIndex;
+static inline llvm::AttributeSet GetFuncAttribSet(llvm::LLVMContext& ctx, const llvm::AttrBuilder &b)
+{
+    return llvm::AttributeSet::get(ctx, b);
+}
+#else
+static const auto Sync_CrossThread = llvm::SynchronizationScope::CrossThread;
+static const auto Attrib_FunctionIndex = llvm::AttributeSet::FunctionIndex;
+static inline llvm::AttributeSet GetFuncAttribSet(llvm::LLVMContext& ctx, const llvm::AttrBuilder &b)
+{
+    return llvm::AttributeSet::get(ctx, Attrib_FunctionIndex, b);
+}
 #endif
 
 #pragma pop_macro("DEBUG")

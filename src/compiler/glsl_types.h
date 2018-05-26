@@ -30,6 +30,11 @@
 
 #include "shader_enums.h"
 #include "blob.h"
+#include "c11/threads.h"
+
+#ifdef __cplusplus
+#include "main/config.h"
+#endif
 
 struct glsl_type;
 
@@ -63,6 +68,8 @@ enum glsl_base_type {
    GLSL_TYPE_FLOAT,
    GLSL_TYPE_FLOAT16,
    GLSL_TYPE_DOUBLE,
+   GLSL_TYPE_UINT8,
+   GLSL_TYPE_INT8,
    GLSL_TYPE_UINT16,
    GLSL_TYPE_INT16,
    GLSL_TYPE_UINT64,
@@ -144,7 +151,7 @@ enum {
 #ifdef __cplusplus
 #include "GL/gl.h"
 #include "util/ralloc.h"
-#include "main/mtypes.h" /* for gl_texture_index, C++'s enum rules are broken */
+#include "main/menums.h" /* for gl_texture_index, C++'s enum rules are broken */
 
 struct glsl_type {
    GLenum gl_type;
@@ -221,6 +228,7 @@ public:
     * Convenience accessors for vector types (shorter than get_instance()).
     * @{
     */
+   static const glsl_type *vec(unsigned components, const glsl_type *const ts[]);
    static const glsl_type *vec(unsigned components);
    static const glsl_type *f16vec(unsigned components);
    static const glsl_type *dvec(unsigned components);
@@ -231,6 +239,8 @@ public:
    static const glsl_type *u64vec(unsigned components);
    static const glsl_type *i16vec(unsigned components);
    static const glsl_type *u16vec(unsigned components);
+   static const glsl_type *i8vec(unsigned components);
+   static const glsl_type *u8vec(unsigned components);
    /**@}*/
 
    /**

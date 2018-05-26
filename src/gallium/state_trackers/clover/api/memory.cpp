@@ -57,8 +57,13 @@ namespace {
                                       parent.flags() & host_access_flags) |
                                      (parent.flags() & host_ptr_flags));
 
-         if (~flags & parent.flags() &
-             ((dev_access_flags & ~CL_MEM_READ_WRITE) | host_access_flags))
+         if (~flags & parent.flags() & (dev_access_flags & ~CL_MEM_READ_WRITE))
+            throw error(CL_INVALID_VALUE);
+
+         // Check if new host access flags cause a mismatch between
+         // host-read/write-only.
+         if (!(flags & CL_MEM_HOST_NO_ACCESS) &&
+             (~flags & parent.flags() & host_access_flags))
             throw error(CL_INVALID_VALUE);
 
          return flags;

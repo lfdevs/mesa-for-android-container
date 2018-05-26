@@ -54,7 +54,7 @@
 #endif
 #include "common/gen_clflush.h"
 #include "common/gen_debug.h"
-#include "common/gen_device_info.h"
+#include "dev/gen_device_info.h"
 #include "libdrm_macros.h"
 #include "main/macros.h"
 #include "util/macros.h"
@@ -119,6 +119,7 @@ struct brw_bufmgr {
    bool has_llc:1;
    bool has_mmap_wc:1;
    bool bo_reuse:1;
+   bool supports_48b_addresses:1;
 };
 
 static int bo_set_tiling_internal(struct brw_bo *bo, uint32_t tiling_mode,
@@ -268,7 +269,7 @@ bo_alloc_internal(struct brw_bufmgr *bufmgr,
                   uint64_t size,
                   unsigned flags,
                   uint32_t tiling_mode,
-                  uint32_t stride, uint64_t alignment)
+                  uint32_t stride)
 {
    struct brw_bo *bo;
    unsigned int page_size = getpagesize();
@@ -319,9 +320,7 @@ retry:
          bo = LIST_ENTRY(struct brw_bo, bucket->head.prev, head);
          list_del(&bo->head);
          alloc_from_cache = true;
-         bo->align = alignment;
       } else {
-         assert(alignment == 0);
          /* For non-render-target BOs (where we're probably
           * going to map it first thing in order to fill it
           * with data), check if the last BO in the cache is
@@ -381,7 +380,6 @@ retry:
       bo->gem_handle = create.handle;
 
       bo->bufmgr = bufmgr;
-      bo->align = alignment;
 
       bo->tiling_mode = I915_TILING_NONE;
       bo->swizzle_mode = I915_BIT_6_SWIZZLE_NONE;
@@ -409,6 +407,8 @@ retry:
    bo->reusable = true;
    bo->cache_coherent = bufmgr->has_llc;
    bo->index = -1;
+   if (bufmgr->supports_48b_addresses)
+      bo->kflags = EXEC_OBJECT_SUPPORTS_48B_ADDRESS;
 
    mtx_unlock(&bufmgr->lock);
 
@@ -426,9 +426,9 @@ err:
 
 struct brw_bo *
 brw_bo_alloc(struct brw_bufmgr *bufmgr,
-             const char *name, uint64_t size, uint64_t alignment)
+             const char *name, uint64_t size)
 {
-   return bo_alloc_internal(bufmgr, name, size, 0, I915_TILING_NONE, 0, 0);
+   return bo_alloc_internal(bufmgr, name, size, 0, I915_TILING_NONE, 0);
 }
 
 struct brw_bo *
@@ -436,7 +436,7 @@ brw_bo_alloc_tiled(struct brw_bufmgr *bufmgr, const char *name,
                    uint64_t size, uint32_t tiling_mode, uint32_t pitch,
                    unsigned flags)
 {
-   return bo_alloc_internal(bufmgr, name, size, flags, tiling_mode, pitch, 0);
+   return bo_alloc_internal(bufmgr, name, size, flags, tiling_mode, pitch);
 }
 
 struct brw_bo *
@@ -477,7 +477,7 @@ brw_bo_alloc_tiled_2d(struct brw_bufmgr *bufmgr, const char *name,
    if (tiling == I915_TILING_NONE)
       stride = 0;
 
-   return bo_alloc_internal(bufmgr, name, size, flags, tiling, stride, 0);
+   return bo_alloc_internal(bufmgr, name, size, flags, tiling, stride);
 }
 
 /**
@@ -1385,6 +1385,24 @@ gem_param(int fd, int name)
    return v;
 }
 
+static bool
+gem_supports_48b_addresses(int fd)
+{
+   struct drm_i915_gem_exec_object2 obj = {
+      .flags = EXEC_OBJECT_SUPPORTS_48B_ADDRESS,
+   };
+
+   struct drm_i915_gem_execbuffer2 execbuf = {
+      .buffers_ptr = (uintptr_t)&obj,
+      .buffer_count = 1,
+      .rsvd1 = 0xffffffu,
+   };
+
+   int ret = drmIoctl(fd, DRM_IOCTL_I915_GEM_EXECBUFFER2, &execbuf);
+
+   return ret == -1 && errno == ENOENT;
+}
+
 /**
  * Initializes the GEM buffer manager, which uses the kernel to allocate, map,
  * and manage map buffer objections.
@@ -1418,6 +1436,8 @@ brw_bufmgr_init(struct gen_device_info *devinfo, int fd)
 
    bufmgr->has_llc = devinfo->has_llc;
    bufmgr->has_mmap_wc = gem_param(fd, I915_PARAM_MMAP_VERSION) > 0;
+   bufmgr->supports_48b_addresses =
+      devinfo->gen >= 8 && gem_supports_48b_addresses(fd);
 
    init_cache_buckets(bufmgr);
 

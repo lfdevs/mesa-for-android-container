@@ -1,4 +1,4 @@
-# Copyright © 2017 Intel Corporation
+# Copyright © 2017-2018 Intel Corporation
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -29,6 +29,10 @@ project(
   default_options : ['buildtype=debugoptimized', 'c_std=c99', 'cpp_std=c++11']
 )
 
+null_dep = dependency('', required : false)
+
+system_has_kms_drm = ['openbsd', 'netbsd', 'freebsd', 'dragonfly', 'linux'].contains(host_machine.system())
+
 # Arguments for the preprocessor, put these in a separate array from the C and
 # C++ (cpp in meson terminology) arguments since they need to be added to the
 # default arguments for both C and C++.
@@ -48,6 +52,10 @@ with_libunwind = get_option('libunwind')
 with_asm = get_option('asm')
 with_osmesa = get_option('osmesa')
 with_swr_arches = get_option('swr-arches').split(',')
+with_tools = get_option('tools').split(',')
+if with_tools.contains('all')
+  with_tools = ['freedreno', 'glsl', 'intel', 'nir', 'nouveau']
+endif
 if get_option('texture-float')
   pre_args += '-DTEXTURE_FLOAT_ENABLED'
   message('WARNING: Floating-point texture enabled. Please consult docs/patents.txt and your lawyer before building mesa.')
@@ -83,6 +91,8 @@ if (with_gles1 or with_gles2) and not with_opengl
   error('building OpenGL ES without OpenGL is not supported.')
 endif
 
+system_has_kms_drm = ['openbsd', 'netbsd', 'freebsd', 'dragonfly', 'linux'].contains(host_machine.system())
+
 with_dri = false
 with_dri_i915 = false
 with_dri_i965 = false
@@ -92,13 +102,18 @@ with_dri_nouveau = false
 with_dri_swrast = false
 _drivers = get_option('dri-drivers')
 if _drivers == 'auto'
-  # TODO: PPC, Sparc
-  if not ['darwin', 'windows'].contains(host_machine.system())
+  if system_has_kms_drm
+    # TODO: PPC, Sparc
     if ['x86', 'x86_64'].contains(host_machine.cpu_family())
       _drivers = 'i915,i965,r100,r200,nouveau'
+    elif ['arm', 'aarch64'].contains(host_machine.cpu_family())
+      _drivers = ''
     else
       error('Unknown architecture. Please pass -Ddri-drivers to set driver options. Patches gladly accepted to fix this.')
     endif
+  elif ['darwin', 'windows', 'cygwin', 'haiku'].contains(host_machine.system())
+    # only swrast would make sense here, but gallium swrast is a much better default
+    _drivers = ''
   else
     error('Unknown OS. Please pass -Ddri-drivers to set driver options. Patches gladly accepted to fix this.')
   endif
@@ -126,21 +141,24 @@ with_gallium_vc4 = false
 with_gallium_vc5 = false
 with_gallium_etnaviv = false
 with_gallium_imx = false
+with_gallium_tegra = false
 with_gallium_i915 = false
 with_gallium_svga = false
 with_gallium_virgl = false
 with_gallium_swr = false
 _drivers = get_option('gallium-drivers')
 if _drivers == 'auto'
-  if not ['darwin', 'windows'].contains(host_machine.system())
+  if system_has_kms_drm
     # TODO: PPC, Sparc
     if ['x86', 'x86_64'].contains(host_machine.cpu_family())
       _drivers = 'r300,r600,radeonsi,nouveau,virgl,svga,swrast'
     elif ['arm', 'aarch64'].contains(host_machine.cpu_family())
-      _drivers = 'pl111,vc4,vc5,freedreno,etnaviv,imx,virgl,svga,swrast'
+      _drivers = 'pl111,vc4,vc5,freedreno,etnaviv,imx,nouveau,tegra,virgl,swrast'
     else
       error('Unknown architecture. Please pass -Dgallium-drivers to set driver options. Patches gladly accepted to fix this.')
     endif
+  elif ['darwin', 'windows', 'cygwin', 'haiku'].contains(host_machine.system())
+    _drivers = 'swrast'
   else
     error('Unknown OS. Please pass -Dgallium-drivers to set driver options. Patches gladly accepted to fix this.')
   endif
@@ -158,11 +176,19 @@ if _drivers != ''
   with_gallium_vc5 = _split.contains('vc5')
   with_gallium_etnaviv = _split.contains('etnaviv')
   with_gallium_imx = _split.contains('imx')
+  with_gallium_tegra = _split.contains('tegra')
   with_gallium_i915 = _split.contains('i915')
   with_gallium_svga = _split.contains('svga')
   with_gallium_virgl = _split.contains('virgl')
   with_gallium_swr = _split.contains('swr')
   with_gallium = true
+  if system_has_kms_drm
+    _glx = get_option('glx')
+    _egl = get_option('egl')
+    if _glx == 'dri' or _egl == 'true' or (_glx == 'disabled' and _egl != 'false')
+      with_dri = true
+    endif
+  endif
 endif
 
 with_intel_vk = false
@@ -170,15 +196,17 @@ with_amd_vk = false
 with_any_vk = false
 _vulkan_drivers = get_option('vulkan-drivers')
 if _vulkan_drivers == 'auto'
-  if not ['darwin', 'windows'].contains(host_machine.system())
+  if system_has_kms_drm
     if host_machine.cpu_family().startswith('x86')
       _vulkan_drivers = 'amd,intel'
     else
       error('Unknown architecture. Please pass -Dvulkan-drivers to set driver options. Patches gladly accepted to fix this.')
     endif
-  else
+  elif ['darwin', 'windows', 'cygwin', 'haiku'].contains(host_machine.system())
     # No vulkan driver supports windows or macOS currently
     _vulkan_drivers = ''
+  else
+    error('Unknown OS. Please pass -Dvulkan-drivers to set driver options. Patches gladly accepted to fix this.')
   endif
 endif
 if _vulkan_drivers != ''
@@ -200,13 +228,9 @@ endif
 if with_gallium_pl111 and not with_gallium_vc4
   error('pl111 driver requires vc4 driver')
 endif
-
-dep_libdrm_intel = []
-if with_dri_i915 or with_gallium_i915
-  dep_libdrm_intel = dependency('libdrm_intel', version : '>= 2.4.75')
+if with_gallium_tegra and not with_gallium_nouveau
+  error('tegra driver requires nouveau driver')
 endif
-
-system_has_kms_drm = ['openbsd', 'netbsd', 'freebsd', 'dragonfly', 'linux'].contains(host_machine.system())
 
 if host_machine.system() == 'darwin'
   with_dri_platform = 'apple'
@@ -233,8 +257,12 @@ _platforms = get_option('platforms')
 if _platforms == 'auto'
   if system_has_kms_drm
     _platforms = 'x11,wayland,drm,surfaceless'
+  elif ['darwin', 'windows', 'cygwin'].contains(host_machine.system())
+    _platforms = 'x11,surfaceless'
+  elif ['haiku'].contains(host_machine.system())
+    _platforms = 'haiku'
   else
-    error('Unknown OS, no platforms enabled. Patches gladly accepted to fix this.')
+    error('Unknown OS. Please pass -Dplatforms to set platforms. Patches gladly accepted to fix this.')
   endif
 endif
 if _platforms != ''
@@ -243,6 +271,7 @@ if _platforms != ''
   with_platform_x11 = _split.contains('x11')
   with_platform_wayland = _split.contains('wayland')
   with_platform_drm = _split.contains('drm')
+  with_platform_haiku = _split.contains('haiku')
   with_platform_surfaceless = _split.contains('surfaceless')
   egl_native_platform = _split[0]
 endif
@@ -251,9 +280,12 @@ with_glx = get_option('glx')
 if with_glx == 'auto'
   if with_dri
     with_glx = 'dri'
+  elif with_platform_haiku
+    with_glx = 'disabled'
   elif with_gallium
     # Even when building just gallium drivers the user probably wants dri
     with_glx = 'dri'
+    with_dri = true
   elif with_platform_x11 and with_any_opengl and not with_any_vk
     # The automatic behavior should not be to turn on xlib based glx when
     # building only vulkan drivers
@@ -261,11 +293,6 @@ if with_glx == 'auto'
   else
     with_glx = 'disabled'
   endif
-endif
-if with_glx == 'dri'
-   if with_gallium
-      with_dri = true
-   endif
 endif
 
 if not (with_dri or with_gallium or with_glx == 'xlib' or with_glx == 'gallium-xlib')
@@ -276,16 +303,14 @@ if not (with_dri or with_gallium or with_glx == 'xlib' or with_glx == 'gallium-x
   with_shared_glapi = false
 endif
 
-with_gbm = get_option('gbm')
-if with_gbm == 'auto' and with_dri  # TODO: or gallium
-  with_gbm = system_has_kms_drm
-elif with_gbm == 'true'
-  if not system_has_kms_drm
-    error('GBM only supports DRM/KMS platforms')
-  endif
-  with_gbm = true
+_gbm = get_option('gbm')
+if _gbm == 'auto'
+  with_gbm = system_has_kms_drm and with_dri
 else
-  with_gbm = false
+  with_gbm = _gbm == 'true'
+endif
+if with_gbm and not system_has_kms_drm
+  error('GBM only supports DRM/KMS platforms')
 endif
 
 _egl = get_option('egl')
@@ -298,6 +323,8 @@ elif _egl == 'true'
     error('EGL requires shared-glapi')
   elif egl_native_platform == ''
     error('No platforms specified, consider -Dplatforms=drm,x11 at least')
+  elif not ['disabled', 'dri'].contains(with_glx)
+    error('EGL requires dri, but a GLX is being built without dri')
   endif
   with_egl = true
 else
@@ -355,24 +382,18 @@ if with_vulkan_icd_dir == ''
 endif
 
 with_dri2 = (with_dri or with_any_vk) and with_dri_platform == 'drm'
-with_dri3 = get_option('dri3')
-if with_dri3 == 'auto'
-  if system_has_kms_drm and with_dri2
-    with_dri3 = true
-  else
-    with_dri3 = false
- endif
-elif with_dri3 == 'true'
-  with_dri3 = true
+_dri3 = get_option('dri3')
+if _dri3 == 'auto'
+  with_dri3 = system_has_kms_drm and with_dri2
 else
-  with_dri3 = false
+  with_dri3 = _dri3 == 'true'
 endif
 
 if with_any_vk and (with_platform_x11 and not with_dri3)
   error('Vulkan drivers require dri3 for X11 support')
 endif
 if with_dri or with_gallium
-  if with_glx == 'disabled' and not with_egl
+  if with_glx == 'disabled' and not with_egl and not with_platform_haiku
     error('building dri or gallium drivers require at least one window system')
   endif
 endif
@@ -403,7 +424,7 @@ elif _vdpau == 'auto'
   _vdpau = 'true'
 endif
 with_gallium_vdpau = _vdpau == 'true'
-dep_vdpau = []
+dep_vdpau = null_dep
 if with_gallium_vdpau
   dep_vdpau = dependency('vdpau', version : '>= 1.1')
   dep_vdpau = declare_dependency(
@@ -442,7 +463,7 @@ elif _xvmc == 'auto'
   _xvmc = 'true'
 endif
 with_gallium_xvmc = _xvmc == 'true'
-dep_xvmc = []
+dep_xvmc = null_dep
 if with_gallium_xvmc
   dep_xvmc = dependency('xvmc', version : '>= 1.0.6')
 endif
@@ -454,34 +475,67 @@ endif
 
 _omx = get_option('gallium-omx')
 if not system_has_kms_drm
-  if _omx == 'true'
-    error('OMX state tracker can only be built on unix-like OSes.')
+  if ['auto', 'disabled'].contains(_omx)
+    _omx = 'disabled'
   else
-    _omx = 'false'
+    error('OMX state tracker can only be built on unix-like OSes.')
   endif
 elif not (with_platform_x11 or with_platform_drm)
-  if _omx == 'true'
-    error('OMX state tracker requires X11 or drm platform support.')
+  if ['auto', 'disabled'].contains(_omx)
+    _omx = 'disabled'
   else
-    _omx = 'false'
+    error('OMX state tracker requires X11 or drm platform support.')
   endif
 elif not (with_gallium_r600 or with_gallium_radeonsi or with_gallium_nouveau)
-  if _omx == 'true'
-    error('OMX state tracker requires at least one of the following gallium drivers: r600, radeonsi, nouveau.')
+  if ['auto', 'disabled'].contains(_omx)
+    _omx = 'disabled'
   else
-    _omx = 'false'
+    error('OMX state tracker requires at least one of the following gallium drivers: r600, radeonsi, nouveau.')
   endif
-elif _omx == 'auto'
-  _omx = 'true'
 endif
-with_gallium_omx = _omx == 'true'
-dep_omx = []
-if with_gallium_omx
-  dep_omx = dependency('libomxil-bellagio')
+with_gallium_omx = _omx
+dep_omx = null_dep
+dep_omx_other = []
+if ['auto', 'bellagio'].contains(_omx)
+  dep_omx = dependency(
+    'libomxil-bellagio', required : _omx == 'bellagio'
+  )
+  if dep_omx.found()
+    with_gallium_omx = 'bellagio'
+  endif
+endif
+if ['auto', 'tizonia'].contains(_omx)
+  if with_dri and with_egl
+    dep_omx = dependency(
+      'libtizonia', version : '>= 0.10.0',
+      required : _omx == 'tizonia',
+    )
+    dep_omx_other = [
+      dependency('libtizplatform', required : _omx == 'tizonia'),
+      dependency('tizilheaders', required : _omx == 'tizonia'),
+    ]
+    if dep_omx.found() and dep_omx_other[0].found() and dep_omx_other[1].found()
+      with_gallium_omx = 'tizonia'
+    endif
+  elif _omx == 'tizonia'
+    error('OMX-Tizonia state tracker requires dri and egl')
+  endif
+endif
+if _omx == 'auto'
+  with_gallium_omx = 'disabled'
+else
+  with_gallium_omx = _omx
 endif
 
+pre_args += [
+  '-DENABLE_ST_OMX_BELLAGIO=' + (with_gallium_omx == 'bellagio' ? '1' : '0'),
+  '-DENABLE_ST_OMX_TIZONIA=' + (with_gallium_omx == 'tizonia' ? '1' : '0'),
+]
+
+
 omx_drivers_path = get_option('omx-libs-path')
-if with_gallium_omx
+
+if with_gallium_omx != 'disabled'
   # Figure out where to put the omx driver.
   # FIXME: this could all be vastly simplified by adding a 'defined_variable'
   # argument to meson's get_pkgconfig_variable method.
@@ -528,9 +582,9 @@ elif _va == 'auto'
   _va = 'true'
 endif
 with_gallium_va = _va == 'true'
-dep_va = []
+dep_va = null_dep
 if with_gallium_va
-  dep_va = dependency('libva', version : '>= 0.38.0')
+  dep_va = dependency('libva', version : '>= 0.39.0')
   dep_va_headers = declare_dependency(
     compile_args : run_command(prog_pkgconfig, ['libva', '--cflags']).stdout().split()
   )
@@ -587,14 +641,14 @@ if _opencl != 'disabled'
   with_gallium_opencl = true
   with_opencl_icd = _opencl == 'icd'
 else
-  dep_clc = []
+  dep_clc = null_dep
   with_gallium_opencl = false
   with_gallium_icd = false
 endif
 
 gl_pkgconfig_c_flags = []
 if with_platform_x11
-  if with_any_vk or (with_glx == 'dri' and with_dri_platform == 'drm')
+  if with_any_vk or with_egl or (with_glx == 'dri' and with_dri_platform == 'drm')
     pre_args += '-DHAVE_X11_PLATFORM'
   endif
   if with_glx == 'xlib' or with_glx == 'gallium-xlib'
@@ -606,6 +660,8 @@ if with_platform_x11
     endif
     if with_dri_platform == 'drm'
       pre_args += '-DGLX_USE_DRM'
+    elif with_dri_platform == 'apple'
+      pre_args += '-DGLX_USE_APPLEGL'
     elif with_dri_platform == 'windows'
       pre_args += '-DGLX_USE_WINDOWSGL'
     endif
@@ -630,6 +686,9 @@ if with_platform_android
     dependency('sync'),
   ]
   pre_args += '-DHAVE_ANDROID_PLATFORM'
+endif
+if with_platform_haiku
+  pre_args += '-DHAVE_HAIKU_PLATFORM'
 endif
 
 prog_python2 = find_program('python2')
@@ -775,9 +834,26 @@ else
 endif
 
 # Check for GCC style atomics
+dep_atomic = null_dep
+
 if cc.compiles('int main() { int n; return __atomic_load_n(&n, __ATOMIC_ACQUIRE); }',
                name : 'GCC atomic builtins')
   pre_args += '-DUSE_GCC_ATOMIC_BUILTINS'
+
+  # Not all atomic calls can be turned into lock-free instructions, in which
+  # GCC will make calls into the libatomic library. Check whether we need to
+  # link with -latomic.
+  #
+  # This can happen for 64-bit atomic operations on 32-bit architectures such
+  # as ARM.
+  if not cc.links('''#include <stdint.h>
+                     int main() {
+                       uint64_t n;
+                       return (int)__atomic_load_n(&n, __ATOMIC_ACQUIRE);
+                     }''',
+                  name : 'GCC atomic builtins required -latomic')
+    dep_atomic = cc.find_library('atomic')
+  endif
 endif
 if not cc.links('''#include <stdint.h>
                    uint64_t v;
@@ -839,7 +915,7 @@ elif cc.has_header_symbol('sys/mkdev.h', 'major')
 endif
 
 foreach h : ['xlocale.h', 'sys/sysctl.h', 'linux/futex.h', 'endian.h']
-  if cc.compiles('#include <@0@>'.format(h), name : '@0@ works'.format(h))
+  if cc.compiles('#include <@0@>'.format(h), name : '@0@'.format(h))
     pre_args += '-DHAVE_@0@'.format(h.to_upper().underscorify())
   endif
 endforeach
@@ -896,10 +972,14 @@ if cc.links('int main() { return 0; }',
             name : 'dynamic-list')
   with_ld_dynamic_list = true
 endif
+ld_args_build_id = []
+if build_machine.system() != 'darwin'
+   ld_args_build_id += '-Wl,--build-id=sha1'
+endif
 
 # check for dl support
 if cc.has_function('dlopen')
-  dep_dl = []
+  dep_dl = null_dep
 else
   dep_dl = cc.find_library('dl')
 endif
@@ -918,19 +998,9 @@ endif
 
 # Determine whether or not the rt library is needed for time functions
 if cc.has_function('clock_gettime')
-  dep_clock = []
+  dep_clock = null_dep
 else
   dep_clock = cc.find_library('rt')
-endif
-
-with_gallium_drisw_kms = false
-dep_libdrm = dependency('libdrm', version : '>= 2.4.75',
-                        required : with_dri2 or with_dri3)
-if dep_libdrm.found()
-  pre_args += '-DHAVE_LIBDRM'
-  if with_dri_platform == 'drm' and with_dri
-    with_gallium_drisw_kms = true
-  endif
 endif
 
 # TODO: some of these may be conditional
@@ -946,35 +1016,71 @@ if with_amd_vk or with_gallium_radeonsi or with_gallium_r600 or with_gallium_ope
     dep_elf = cc.find_library('elf')
   endif
 else
-  dep_elf = []
+  dep_elf = null_dep
 endif
 dep_expat = dependency('expat')
 # this only exists on linux so either this is linux and it will be found, or
 # its not linux and and wont
 dep_m = cc.find_library('m', required : false)
 
-dep_libdrm_amdgpu = []
-dep_libdrm_radeon = []
-dep_libdrm_nouveau = []
-dep_libdrm_etnaviv = []
-dep_libdrm_freedreno = []
-if with_amd_vk or with_gallium_radeonsi
-  dep_libdrm_amdgpu = dependency(
-    'libdrm_amdgpu', version : ['>= 2.4.89', '!= 2.4.90']
-  )
-endif
-if (with_gallium_radeonsi or with_dri_r100 or with_dri_r200 or
-    with_gallium_r300 or with_gallium_r600)
-  dep_libdrm_radeon = dependency('libdrm_radeon', version : '>= 2.4.71')
-endif
-if with_gallium_nouveau or with_dri_nouveau
-  dep_libdrm_nouveau = dependency('libdrm_nouveau', version : '>= 2.4.66')
-endif
-if with_gallium_etnaviv
-  dep_libdrm_etnaviv = dependency('libdrm_etnaviv', version : '>= 2.4.82')
-endif
-if with_gallium_freedreno
-  dep_libdrm_freedreno = dependency('libdrm_freedreno', version : '>= 2.4.89')
+# Check for libdrm. various drivers have different libdrm version requirements,
+# but we always want to use the same version for all libdrm modules. That means
+# even if driver foo requires 2.4.0 and driver bar requires 2.4.3, if foo and
+# bar are both on use 2.4.3 for both of them
+dep_libdrm_amdgpu = null_dep
+dep_libdrm_radeon = null_dep
+dep_libdrm_nouveau = null_dep
+dep_libdrm_etnaviv = null_dep
+dep_libdrm_freedreno = null_dep
+dep_libdrm_intel = null_dep
+
+_drm_amdgpu_ver = '2.4.91'
+_drm_radeon_ver = '2.4.71'
+_drm_nouveau_ver = '2.4.66'
+_drm_etnaviv_ver = '2.4.89'
+_drm_freedreno_ver = '2.4.91'
+_drm_intel_ver = '2.4.75'
+_drm_ver = '2.4.75'
+
+_libdrm_checks = [
+  ['intel', with_dri_i915 or with_gallium_i915],
+  ['amdgpu', with_amd_vk or with_gallium_radeonsi],
+  ['radeon', (with_gallium_radeonsi or with_dri_r100 or with_dri_r200 or
+              with_gallium_r300 or with_gallium_r600)],
+  ['nouveau', (with_gallium_nouveau or with_dri_nouveau)],
+  ['etnaviv', with_gallium_etnaviv],
+  ['freedreno', with_gallium_freedreno],
+]
+
+# Loop over the enables versions and get the highest libdrm requirement for all
+# active drivers.
+foreach d : _libdrm_checks
+  ver = get_variable('_drm_@0@_ver'.format(d[0]))
+  if d[1] and ver.version_compare('>' + _drm_ver)
+    _drm_ver = ver
+  endif
+endforeach
+
+# Then get each libdrm module
+foreach d : _libdrm_checks
+  if d[1]
+    set_variable(
+      'dep_libdrm_' + d[0],
+      dependency('libdrm_' + d[0], version : '>=' + _drm_ver)
+    )
+  endif
+endforeach
+
+with_gallium_drisw_kms = false
+dep_libdrm = dependency(
+  'libdrm', version : '>=' + _drm_ver,
+  required : with_dri2 or with_dri3
+)
+if dep_libdrm.found()
+  pre_args += '-DHAVE_LIBDRM'
+  if with_dri_platform == 'drm' and with_dri
+    with_gallium_drisw_kms = true
+  endif
 endif
 
 llvm_modules = ['bitwriter', 'engine', 'mcdisassembler', 'mcjit']
@@ -992,9 +1098,9 @@ if with_gallium_opencl
   # TODO: optional modules
 endif
 
-if with_amd_vk
+if with_amd_vk or with_gallium_radeonsi or with_gallium_swr
   _llvm_version = '>= 4.0.0'
-elif with_gallium_opencl or with_gallium_swr or with_gallium_r600 or with_gallium_radeonsi
+elif with_gallium_opencl or with_gallium_r600
   _llvm_version = '>= 3.9.0'
 else
   _llvm_version = '>= 3.3.0'
@@ -1011,7 +1117,7 @@ elif _llvm == 'true'
   dep_llvm = dependency('llvm', version : _llvm_version, modules : llvm_modules)
   with_llvm = true
 else
-  dep_llvm = []
+  dep_llvm = null_dep
   with_llvm = false
 endif
 if with_llvm
@@ -1020,7 +1126,14 @@ if with_llvm
   # that for our version checks.
   # svn suffixes are stripped by meson as of 0.43, and git suffixes are
   # strippped as of 0.44, but we support older meson versions.
-  _llvm_patch = _llvm_version[2]
+
+  # 3 digits versions in LLVM only started from 3.4.1 on
+  if dep_llvm.version().version_compare('>= 3.4.1')
+    _llvm_patch = _llvm_version[2]
+  else
+    _llvm_patch = '0'
+  endif
+
   if _llvm_patch.endswith('svn')
     _llvm_patch = _llvm_patch.split('s')[0]
   elif _llvm_patch.contains('git')
@@ -1031,10 +1144,10 @@ if with_llvm
     '-DMESA_LLVM_VERSION_PATCH=@0@'.format(_llvm_patch),
   ]
 elif with_amd_vk or with_gallium_radeonsi or with_gallium_swr
-  error('The following drivers requires LLVM: Radv, RadeonSI, SWR. One of these is enabled, but LLVM is disabled.')
+  error('The following drivers require LLVM: Radv, RadeonSI, SWR. One of these is enabled, but LLVM is disabled.')
 endif
 
-dep_glvnd = []
+dep_glvnd = null_dep
 if with_glvnd
   dep_glvnd = dependency('libglvnd', version : '>= 0.2.0')
   pre_args += '-DUSE_LIBGLVND=1'
@@ -1046,7 +1159,7 @@ if with_valgrind != 'false'
     pre_args += '-DHAVE_VALGRIND'
   endif
 else
-  dep_valgrind = []
+  dep_valgrind = null_dep
 endif
 
 # pthread stubs. Lets not and say we didn't
@@ -1054,7 +1167,7 @@ endif
 prog_bison = find_program('bison', required : with_any_opengl)
 prog_flex = find_program('flex', required : with_any_opengl)
 
-dep_selinux = []
+dep_selinux = null_dep
 if get_option('selinux')
   dep_selinux = dependency('libselinux')
   pre_args += '-DMESA_SELINUX'
@@ -1068,7 +1181,7 @@ if with_libunwind != 'false'
     pre_args += '-DHAVE_LIBUNWIND'
   endif
 else
-  dep_unwind = []
+  dep_unwind = null_dep
 endif
 
 # TODO: gallium-hud
@@ -1107,29 +1220,29 @@ if with_platform_wayland
   pre_args += ['-DHAVE_WAYLAND_PLATFORM', '-DWL_HIDE_DEPRECATED']
 else
   prog_wl_scanner = []
-  dep_wl_protocols = []
-  dep_wayland_client = []
-  dep_wayland_server = []
+  dep_wl_protocols = null_dep
+  dep_wayland_client = null_dep
+  dep_wayland_server = null_dep
   wayland_dmabuf_xml = ''
 endif
 
-dep_x11 = []
-dep_xext = []
-dep_xdamage = []
-dep_xfixes = []
-dep_x11_xcb = []
-dep_xcb = []
-dep_xcb_glx = []
-dep_xcb_dri2 = []
-dep_xcb_dri3 = []
-dep_dri2proto = []
-dep_glproto = []
-dep_xxf86vm = []
-dep_xcb_dri3 = []
-dep_xcb_present = []
-dep_xcb_sync = []
-dep_xcb_xfixes = []
-dep_xshmfence = []
+dep_x11 = null_dep
+dep_xext = null_dep
+dep_xdamage = null_dep
+dep_xfixes = null_dep
+dep_x11_xcb = null_dep
+dep_xcb = null_dep
+dep_xcb_glx = null_dep
+dep_xcb_dri2 = null_dep
+dep_xcb_dri3 = null_dep
+dep_dri2proto = null_dep
+dep_glproto = null_dep
+dep_xxf86vm = null_dep
+dep_xcb_dri3 = null_dep
+dep_xcb_present = null_dep
+dep_xcb_sync = null_dep
+dep_xcb_xfixes = null_dep
+dep_xshmfence = null_dep
 if with_platform_x11
   if with_glx == 'xlib' or with_glx == 'gallium-xlib'
     dep_x11 = dependency('x11')
@@ -1144,18 +1257,23 @@ if with_platform_x11
     dep_xxf86vm = dependency('xxf86vm', required : false)
   endif
   if (with_any_vk or with_glx == 'dri' or
-       (with_gallium_vdpau or with_gallium_xvmc or with_gallium_omx or
-        with_gallium_xa))
+       (with_gallium_vdpau or with_gallium_xvmc or with_gallium_va or
+        with_gallium_omx != 'disabled'))
     dep_xcb = dependency('xcb')
     dep_x11_xcb = dependency('x11-xcb')
   endif
-  if with_any_vk or (with_glx == 'dri' and with_dri_platform == 'drm')
+  if with_any_vk or with_egl or (with_glx == 'dri' and with_dri_platform == 'drm')
     dep_xcb_dri2 = dependency('xcb-dri2', version : '>= 1.8')
 
     if with_dri3
       pre_args += '-DHAVE_DRI3'
       dep_xcb_dri3 = dependency('xcb-dri3')
       dep_xcb_present = dependency('xcb-present')
+      # until xcb-dri3 has been around long enough to make a hard-dependency:
+      if (dep_xcb_dri3.version().version_compare('>= 1.13') and
+          dep_xcb_present.version().version_compare('>= 1.13'))
+        pre_args += '-DHAVE_DRI3_MODIFIERS'
+      endif
       dep_xcb_sync = dependency('xcb-sync')
       dep_xshmfence = dependency('xshmfence', version : '>= 1.1')
     endif
@@ -1166,7 +1284,9 @@ if with_platform_x11
     endif
     dep_glproto = dependency('glproto', version : '>= 1.4.14')
   endif
-  if with_egl
+  if (with_egl or (
+      with_gallium_vdpau or with_gallium_xvmc or with_gallium_xa or
+      with_gallium_omx != 'disabled'))
     dep_xcb_xfixes = dependency('xcb-xfixes')
   endif
 endif
@@ -1182,10 +1302,8 @@ if _sensors != 'false'
     pre_args += '-DHAVE_LIBSENSORS=1'
   endif
 else
-  dep_lmsensors = []
+  dep_lmsensors = null_dep
 endif
-
-# TODO: gallium tests
 
 # TODO: various libdirs
 
@@ -1217,7 +1335,7 @@ gl_priv_reqs = [
 if dep_libdrm.found()
   gl_priv_reqs += 'libdrm >= 2.4.75'
 endif
-if dep_xxf86vm != [] and dep_xxf86vm.found()
+if dep_xxf86vm.found()
   gl_priv_reqs += 'xxf86vm'
 endif
 if with_dri_platform == 'drm'
@@ -1231,11 +1349,14 @@ endif
 if dep_m.found()
   gl_priv_libs += '-lm'
 endif
-if dep_dl != [] and dep_dl.found()
+if dep_dl.found()
   gl_priv_libs += '-ldl'
 endif
 
 pkg = import('pkgconfig')
+
+env_test = environment()
+env_test.set('NM', find_program('nm').path())
 
 subdir('include')
 subdir('bin')

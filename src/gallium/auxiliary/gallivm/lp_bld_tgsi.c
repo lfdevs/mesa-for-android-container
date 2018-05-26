@@ -198,7 +198,7 @@ void lp_build_fetch_args(
  *    - map dst x,z to src xy;
  *    - map dst y,w to src zw;
  */
-static int get_src_chan_idx(unsigned opcode,
+static int get_src_chan_idx(enum tgsi_opcode opcode,
                             int dst_chan_index)
 {
    enum tgsi_opcode_type dtype = tgsi_opcode_infer_dst_type(opcode, 0);
@@ -232,10 +232,10 @@ lp_build_tgsi_inst_llvm(
    struct lp_build_tgsi_context * bld_base,
    const struct tgsi_full_instruction * inst)
 {
-   unsigned tgsi_opcode = inst->Instruction.Opcode;
-   const struct tgsi_opcode_info * info = tgsi_get_opcode_info(tgsi_opcode);
+   enum tgsi_opcode opcode = inst->Instruction.Opcode;
+   const struct tgsi_opcode_info * info = tgsi_get_opcode_info(opcode);
    const struct lp_build_tgsi_action * action =
-                                         &bld_base->op_actions[tgsi_opcode];
+                                         &bld_base->op_actions[opcode];
    struct lp_build_emit_data emit_data;
    unsigned chan_index;
    LLVMValueRef val;

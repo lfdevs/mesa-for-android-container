@@ -41,6 +41,7 @@
 #include "texcompress.h"
 #include "texcompress_etc.h"
 #include "texstore.h"
+#include "config.h"
 #include "macros.h"
 #include "format_unpack.h"
 #include "util/format_srgb.h"
@@ -105,7 +106,7 @@ static const int etc2_modifier_tables_non_opaque[8][4] = {
 #undef UINT8_TYPE
 
 GLboolean
-_mesa_texstore_etc1_rgb8(TEXSTORE_PARAMS)
+_mesa_texstore_etc1_rgb8(UNUSED_TEXSTORE_PARAMS)
 {
    /* GL_ETC1_RGB8_OES is only valid in glCompressedTexImage2D */
    assert(0);
@@ -1097,7 +1098,7 @@ etc2_unpack_srgb8_punchthrough_alpha1(uint8_t *dst_row,
 /* ETC2 texture formats are valid in glCompressedTexImage2D and
  * glCompressedTexSubImage2D functions */
 GLboolean
-_mesa_texstore_etc2_rgb8(TEXSTORE_PARAMS)
+_mesa_texstore_etc2_rgb8(UNUSED_TEXSTORE_PARAMS)
 {
    assert(0);
 
@@ -1105,7 +1106,7 @@ _mesa_texstore_etc2_rgb8(TEXSTORE_PARAMS)
 }
 
 GLboolean
-_mesa_texstore_etc2_srgb8(TEXSTORE_PARAMS)
+_mesa_texstore_etc2_srgb8(UNUSED_TEXSTORE_PARAMS)
 {
    assert(0);
 
@@ -1113,7 +1114,7 @@ _mesa_texstore_etc2_srgb8(TEXSTORE_PARAMS)
 }
 
 GLboolean
-_mesa_texstore_etc2_rgba8_eac(TEXSTORE_PARAMS)
+_mesa_texstore_etc2_rgba8_eac(UNUSED_TEXSTORE_PARAMS)
 {
    assert(0);
 
@@ -1121,7 +1122,7 @@ _mesa_texstore_etc2_rgba8_eac(TEXSTORE_PARAMS)
 }
 
 GLboolean
-_mesa_texstore_etc2_srgb8_alpha8_eac(TEXSTORE_PARAMS)
+_mesa_texstore_etc2_srgb8_alpha8_eac(UNUSED_TEXSTORE_PARAMS)
 {
    assert(0);
 
@@ -1129,7 +1130,7 @@ _mesa_texstore_etc2_srgb8_alpha8_eac(TEXSTORE_PARAMS)
 }
 
 GLboolean
-_mesa_texstore_etc2_r11_eac(TEXSTORE_PARAMS)
+_mesa_texstore_etc2_r11_eac(UNUSED_TEXSTORE_PARAMS)
 {
    assert(0);
 
@@ -1137,7 +1138,7 @@ _mesa_texstore_etc2_r11_eac(TEXSTORE_PARAMS)
 }
 
 GLboolean
-_mesa_texstore_etc2_signed_r11_eac(TEXSTORE_PARAMS)
+_mesa_texstore_etc2_signed_r11_eac(UNUSED_TEXSTORE_PARAMS)
 {
    assert(0);
 
@@ -1145,7 +1146,7 @@ _mesa_texstore_etc2_signed_r11_eac(TEXSTORE_PARAMS)
 }
 
 GLboolean
-_mesa_texstore_etc2_rg11_eac(TEXSTORE_PARAMS)
+_mesa_texstore_etc2_rg11_eac(UNUSED_TEXSTORE_PARAMS)
 {
    assert(0);
 
@@ -1153,7 +1154,7 @@ _mesa_texstore_etc2_rg11_eac(TEXSTORE_PARAMS)
 }
 
 GLboolean
-_mesa_texstore_etc2_signed_rg11_eac(TEXSTORE_PARAMS)
+_mesa_texstore_etc2_signed_rg11_eac(UNUSED_TEXSTORE_PARAMS)
 {
    assert(0);
 
@@ -1161,7 +1162,7 @@ _mesa_texstore_etc2_signed_rg11_eac(TEXSTORE_PARAMS)
 }
 
 GLboolean
-_mesa_texstore_etc2_rgb8_punchthrough_alpha1(TEXSTORE_PARAMS)
+_mesa_texstore_etc2_rgb8_punchthrough_alpha1(UNUSED_TEXSTORE_PARAMS)
 {
    assert(0);
 
@@ -1169,7 +1170,7 @@ _mesa_texstore_etc2_rgb8_punchthrough_alpha1(TEXSTORE_PARAMS)
 }
 
 GLboolean
-_mesa_texstore_etc2_srgb8_punchthrough_alpha1(TEXSTORE_PARAMS)
+_mesa_texstore_etc2_srgb8_punchthrough_alpha1(UNUSED_TEXSTORE_PARAMS)
 {
    assert(0);
 

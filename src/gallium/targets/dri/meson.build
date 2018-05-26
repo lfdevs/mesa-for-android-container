@@ -23,12 +23,7 @@
 # Static targets are always enabled in autotools (unless you modify
 # configure.ac)
 
-gallium_dri_c_args = [
-  '-DGALLIUM_DDEBUG',
-  '-DGALLIUM_NOOP',
-  '-DGALLIUM_RBUG',
-  '-DGALLIUME_TRACE',
-]
+gallium_dri_c_args = []
 gallium_dri_ld_args = []
 gallium_dri_link_depends = []
 gallium_dri_drivers = []
@@ -44,7 +39,7 @@ endif
 
 libgallium_dri = shared_library(
   'gallium_dri',
-  files('target.c'),
+  [files('target.c'), xmlpool_options_h],
   include_directories : [
     inc_common, inc_util, inc_dri_common, inc_gallium_drivers,
     inc_gallium_winsys, include_directories('../../state_trackers/dri'),
@@ -55,14 +50,15 @@ libgallium_dri = shared_library(
   link_depends : gallium_dri_link_depends,
   link_with : [
     libmesa_gallium, libdricommon, libmegadriver_stub, libdri, libgalliumvl,
-    libgallium, libddebug, libnoop, librbug, libtrace, libglapi,
-    libpipe_loader_static, libws_null, libwsw, libswdri, libswkmsdri,
+    libgallium, libglapi, libpipe_loader_static, libws_null, libwsw, libswdri,
+    libswkmsdri,
   ],
   dependencies : [
     dep_selinux, dep_expat, dep_libdrm, dep_llvm, dep_thread,
     driver_swrast, driver_r300, driver_r600, driver_radeonsi, driver_nouveau,
     driver_pl111, driver_vc4, driver_vc5, driver_freedreno, driver_etnaviv,
-    driver_imx, driver_i915, driver_svga, driver_virgl, driver_swr,
+    driver_imx, driver_tegra, driver_i915, driver_svga, driver_virgl,
+    driver_swr,
   ],
 )
 
@@ -76,6 +72,7 @@ foreach d : [[with_gallium_pl111, 'pl111_dri.so'],
              [with_gallium_vc5, 'vc5_dri.so'],
              [with_gallium_etnaviv, 'etnaviv_dri.so'],
              [with_gallium_imx, 'imx-drm_dri.so'],
+             [with_gallium_tegra, 'tegra_dri.so'],
              [with_gallium_i915, 'i915_dri.so'],
              [with_gallium_r300, 'r300_dri.so'],
              [with_gallium_r600, 'r600_dri.so'],

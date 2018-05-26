@@ -73,18 +73,13 @@ struct vc4_bo *vc4_bo_open_dmabuf(struct vc4_screen *screen, int fd,
 bool vc4_bo_flink(struct vc4_bo *bo, uint32_t *name);
 int vc4_bo_get_dmabuf(struct vc4_bo *bo);
 
-static inline void
-vc4_bo_set_reference(struct vc4_bo **old_bo, struct vc4_bo *new_bo)
-{
-        if (pipe_reference(&(*old_bo)->reference, &new_bo->reference))
-                vc4_bo_last_unreference(*old_bo);
-        *old_bo = new_bo;
-}
-
+void vc4_bo_debug_describe(char* buf, const struct vc4_bo *ptr);
 static inline struct vc4_bo *
 vc4_bo_reference(struct vc4_bo *bo)
 {
-        pipe_reference(NULL, &bo->reference);
+        pipe_reference_described(NULL, &bo->reference,
+                                 (debug_reference_descriptor)
+                                 vc4_bo_debug_describe);
         return bo;
 }
 
@@ -97,13 +92,18 @@ vc4_bo_unreference(struct vc4_bo **bo)
 
         if ((*bo)->private) {
                 /* Avoid the mutex for private BOs */
-                if (pipe_reference(&(*bo)->reference, NULL))
+                if (pipe_reference_described(&(*bo)->reference, NULL,
+                                             (debug_reference_descriptor)
+                                             vc4_bo_debug_describe)) {
                         vc4_bo_last_unreference(*bo);
+                }
         } else {
                 screen = (*bo)->screen;
                 mtx_lock(&screen->bo_handles_mutex);
 
-                if (pipe_reference(&(*bo)->reference, NULL)) {
+                if (pipe_reference_described(&(*bo)->reference, NULL,
+                                             (debug_reference_descriptor)
+                                             vc4_bo_debug_describe)) {
                         util_hash_table_remove(screen->bo_handles,
                                                (void *)(uintptr_t)(*bo)->handle);
                         vc4_bo_last_unreference(*bo);
@@ -121,8 +121,11 @@ vc4_bo_unreference_locked_timed(struct vc4_bo **bo, time_t time)
         if (!*bo)
                 return;
 
-        if (pipe_reference(&(*bo)->reference, NULL))
+        if (pipe_reference_described(&(*bo)->reference, NULL,
+                                     (debug_reference_descriptor)
+                                     vc4_bo_debug_describe)) {
                 vc4_bo_last_unreference_locked_timed(*bo, time);
+        }
         *bo = NULL;
 }
 

@@ -46,7 +46,7 @@
 #include "main/stencil.h"
 #include "main/state.h"
 
-#include "vbo/vbo_context.h"
+#include "vbo/vbo.h"
 
 #include "drivers/common/driverfuncs.h"
 #include "drivers/common/meta.h"
@@ -76,6 +76,9 @@
 #include "util/disk_cache.h"
 #include "isl/isl.h"
 
+#include "common/gen_defines.h"
+
+#include "compiler/spirv/nir_spirv.h"
 /***************************************
  * Mesa's Driver Functions
  ***************************************/
@@ -281,6 +284,7 @@ brw_init_driver_functions(struct brw_context *brw,
    functions->GetString = intel_get_string;
    functions->UpdateState = intel_update_state;
 
+   brw_init_draw_functions(functions);
    intelInitTextureFuncs(functions);
    intelInitTextureImageFuncs(functions);
    intelInitTextureCopyImageFuncs(functions);
@@ -302,6 +306,8 @@ brw_init_driver_functions(struct brw_context *brw,
       gen4_init_queryobj_functions(functions);
    brw_init_compute_functions(functions);
    brw_init_conditional_render_functions(functions);
+
+   functions->GenerateMipmap = brw_generate_mipmap;
 
    functions->QueryInternalFormat = brw_query_internal_format;
 
@@ -337,6 +343,26 @@ brw_init_driver_functions(struct brw_context *brw,
    functions->ProgramBinarySerializeDriverBlob = brw_program_serialize_nir;
    functions->ProgramBinaryDeserializeDriverBlob =
       brw_deserialize_program_binary;
+}
+
+static void
+brw_initialize_spirv_supported_capabilities(struct brw_context *brw)
+{
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   struct gl_context *ctx = &brw->ctx;
+
+   /* The following SPIR-V capabilities are only supported on gen7+. In theory
+    * you should enable the extension only on gen7+, but just in case let's
+    * assert it.
+    */
+   assert(devinfo->gen >= 7);
+
+   ctx->Const.SpirVCapabilities.float64 = devinfo->gen >= 8;
+   ctx->Const.SpirVCapabilities.int64 = devinfo->gen >= 8;
+   ctx->Const.SpirVCapabilities.tessellation = true;
+   ctx->Const.SpirVCapabilities.draw_parameters = true;
+   ctx->Const.SpirVCapabilities.image_write_without_format = true;
+   ctx->Const.SpirVCapabilities.variable_pointers = true;
 }
 
 static void
@@ -591,7 +617,6 @@ brw_initialize_context_constants(struct brw_context *brw)
       ctx->Const.QuadsFollowProvokingVertexConvention = false;
 
    ctx->Const.NativeIntegers = true;
-   ctx->Const.VertexID_is_zero_based = true;
 
    /* Regarding the CMP instruction, the Ivybridge PRM says:
     *
@@ -704,14 +729,7 @@ brw_initialize_context_constants(struct brw_context *brw)
       ctx->Const.AllowMappedBuffersDuringExecution = true;
 
    /* GL_ARB_get_program_binary */
-   /* The QT framework has a bug in their shader program cache, which is built
-    * on GL_ARB_get_program_binary. In an effort to allow them to fix the bug
-    * we don't enable more than 1 binary format for compatibility profiles.
-    * This is only being done on the 18.0 release branch.
-    */
-   if (ctx->API != API_OPENGL_COMPAT) {
-      ctx->Const.NumProgramBinaryFormats = 1;
-   }
+   ctx->Const.NumProgramBinaryFormats = 1;
 }
 
 static void
@@ -987,14 +1005,14 @@ brwCreateContext(gl_api api,
          return false;
       }
 
-      int hw_priority = BRW_CONTEXT_MEDIUM_PRIORITY;
+      int hw_priority = GEN_CONTEXT_MEDIUM_PRIORITY;
       if (ctx_config->attribute_mask & __DRIVER_CONTEXT_ATTRIB_PRIORITY) {
          switch (ctx_config->priority) {
          case __DRI_CTX_PRIORITY_LOW:
-            hw_priority = BRW_CONTEXT_LOW_PRIORITY;
+            hw_priority = GEN_CONTEXT_LOW_PRIORITY;
             break;
          case __DRI_CTX_PRIORITY_HIGH:
-            hw_priority = BRW_CONTEXT_HIGH_PRIORITY;
+            hw_priority = GEN_CONTEXT_HIGH_PRIORITY;
             break;
          }
       }
@@ -1013,6 +1031,15 @@ brwCreateContext(gl_api api,
       intelDestroyContext(driContextPriv);
       return false;
    }
+
+   if (devinfo->gen == 11) {
+      fprintf(stderr,
+              "WARNING: i965 does not fully support Gen11 yet.\n"
+              "Instability or lower performance might occur.\n");
+
+   }
+
+   brw_upload_init(&brw->upload, brw->bufmgr, 65536);
 
    brw_init_state(brw);
 
@@ -1057,6 +1084,10 @@ brwCreateContext(gl_api api,
    _mesa_override_extensions(ctx);
    _mesa_compute_version(ctx);
 
+   /* GL_ARB_gl_spirv */
+   if (ctx->Extensions.ARB_gl_spirv)
+      brw_initialize_spirv_supported_capabilities(brw);
+
    _mesa_initialize_dispatch_tables(ctx);
    _mesa_initialize_vbo_vtxfmt(ctx);
 
@@ -1066,7 +1097,7 @@ brwCreateContext(gl_api api,
    vbo_use_buffer_objects(ctx);
    vbo_always_unmap_buffers(ctx);
 
-   brw_disk_cache_init(brw);
+   brw->ctx.Cache = brw->screen->disk_cache;
 
    return true;
 }
@@ -1127,8 +1158,6 @@ intelDestroyContext(__DRIcontext * driContextPriv)
    brw->throttle_batch[0] = NULL;
 
    driDestroyOptionCache(&brw->optionCache);
-
-   disk_cache_destroy(brw->ctx.Cache);
 
    /* free the Mesa context */
    _mesa_free_context_data(&brw->ctx);

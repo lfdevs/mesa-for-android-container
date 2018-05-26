@@ -65,7 +65,7 @@ VkResult anv_CreateRenderPass(
    anv_multialloc_add(&ma, &attachments, pCreateInfo->attachmentCount);
    anv_multialloc_add(&ma, &subpass_flushes, pCreateInfo->subpassCount + 1);
 
-   VkAttachmentReference *subpass_attachments;
+   struct anv_subpass_attachment *subpass_attachments;
    uint32_t subpass_attachment_count = 0;
    for (uint32_t i = 0; i < pCreateInfo->subpassCount; i++) {
       subpass_attachment_count +=
@@ -117,7 +117,11 @@ VkResult anv_CreateRenderPass(
 
          for (uint32_t j = 0; j < desc->inputAttachmentCount; j++) {
             uint32_t a = desc->pInputAttachments[j].attachment;
-            subpass->input_attachments[j] = desc->pInputAttachments[j];
+            subpass->input_attachments[j] = (struct anv_subpass_attachment) {
+               .usage =       VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
+               .attachment =  desc->pInputAttachments[j].attachment,
+               .layout =      desc->pInputAttachments[j].layout,
+            };
             if (a != VK_ATTACHMENT_UNUSED) {
                has_input = true;
                pass->attachments[a].usage |= VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
@@ -138,7 +142,11 @@ VkResult anv_CreateRenderPass(
 
          for (uint32_t j = 0; j < desc->colorAttachmentCount; j++) {
             uint32_t a = desc->pColorAttachments[j].attachment;
-            subpass->color_attachments[j] = desc->pColorAttachments[j];
+            subpass->color_attachments[j] = (struct anv_subpass_attachment) {
+               .usage =       VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+               .attachment =  desc->pColorAttachments[j].attachment,
+               .layout =      desc->pColorAttachments[j].layout,
+            };
             if (a != VK_ATTACHMENT_UNUSED) {
                has_color = true;
                pass->attachments[a].usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
@@ -157,7 +165,11 @@ VkResult anv_CreateRenderPass(
 
          for (uint32_t j = 0; j < desc->colorAttachmentCount; j++) {
             uint32_t a = desc->pResolveAttachments[j].attachment;
-            subpass->resolve_attachments[j] = desc->pResolveAttachments[j];
+            subpass->resolve_attachments[j] = (struct anv_subpass_attachment) {
+               .usage =       VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+               .attachment =  desc->pResolveAttachments[j].attachment,
+               .layout =      desc->pResolveAttachments[j].layout,
+            };
             if (a != VK_ATTACHMENT_UNUSED) {
                subpass->has_resolve = true;
                uint32_t color_att = desc->pColorAttachments[j].attachment;
@@ -174,8 +186,12 @@ VkResult anv_CreateRenderPass(
 
       if (desc->pDepthStencilAttachment) {
          uint32_t a = desc->pDepthStencilAttachment->attachment;
-         *subpass_attachments++ = subpass->depth_stencil_attachment =
-            *desc->pDepthStencilAttachment;
+         subpass->depth_stencil_attachment = (struct anv_subpass_attachment) {
+            .usage =       VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+            .attachment =  desc->pDepthStencilAttachment->attachment,
+            .layout =      desc->pDepthStencilAttachment->layout,
+         };
+         *subpass_attachments++ = subpass->depth_stencil_attachment;
          if (a != VK_ATTACHMENT_UNUSED) {
             has_depth = true;
             pass->attachments[a].usage |=
@@ -186,8 +202,11 @@ VkResult anv_CreateRenderPass(
                                       *desc->pDepthStencilAttachment);
          }
       } else {
-         subpass->depth_stencil_attachment.attachment = VK_ATTACHMENT_UNUSED;
-         subpass->depth_stencil_attachment.layout = VK_IMAGE_LAYOUT_UNDEFINED;
+         subpass->depth_stencil_attachment = (struct anv_subpass_attachment) {
+            .usage =       VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+            .attachment =  VK_ATTACHMENT_UNUSED,
+            .layout =   VK_IMAGE_LAYOUT_UNDEFINED,
+         };
       }
    }
 
@@ -274,8 +293,8 @@ VkResult anv_CreateRenderPass(
 
    vk_foreach_struct(ext, pCreateInfo->pNext) {
       switch (ext->sType) {
-      case VK_STRUCTURE_TYPE_RENDER_PASS_MULTIVIEW_CREATE_INFO_KHX: {
-         VkRenderPassMultiviewCreateInfoKHX *mv = (void *)ext;
+      case VK_STRUCTURE_TYPE_RENDER_PASS_MULTIVIEW_CREATE_INFO_KHR: {
+         VkRenderPassMultiviewCreateInfoKHR *mv = (void *)ext;
 
          for (uint32_t i = 0; i < mv->subpassCount; i++) {
             pass->subpasses[i].view_mask = mv->pViewMasks[i];

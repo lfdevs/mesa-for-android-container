@@ -27,7 +27,7 @@
 #ifndef __NOUVEAU_RENDER_H__
 #define __NOUVEAU_RENDER_H__
 
-#include "vbo/vbo_context.h"
+#include "vbo/vbo.h"
 #include "nouveau_array.h"
 
 typedef void (*dispatch_t)(struct gl_context *, unsigned int, int, unsigned int);

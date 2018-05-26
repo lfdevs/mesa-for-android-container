@@ -571,3 +571,12 @@ struct SIMDBase : Traits::IsaImpl
 using SIMD128 = SIMDBase<SIMDImpl::SIMD128Impl::Traits>;
 using SIMD256 = SIMDBase<SIMDImpl::SIMD256Impl::Traits>;
 using SIMD512 = SIMDBase<SIMDImpl::SIMD512Impl::Traits>;
+
+template <typename SIMD_T> using CompareType    = typename SIMD_T::CompareType;
+template <typename SIMD_T> using ScaleFactor    = typename SIMD_T::ScaleFactor;
+template <typename SIMD_T> using RoundMode      = typename SIMD_T::RoundMode;
+template <typename SIMD_T> using Float          = typename SIMD_T::Float;
+template <typename SIMD_T> using Double         = typename SIMD_T::Double;
+template <typename SIMD_T> using Integer        = typename SIMD_T::Integer;
+template <typename SIMD_T> using Vec4           = typename SIMD_T::Vec4;
+template <typename SIMD_T> using Mask           = typename SIMD_T::Mask;

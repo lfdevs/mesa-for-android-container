@@ -47,6 +47,7 @@
 #include "compiler/glsl/standalone.h"
 #include "compiler/glsl/glsl_to_nir.h"
 #include "compiler/nir_types.h"
+#include "compiler/spirv/nir_spirv.h"
 
 static void dump_info(struct ir3_shader_variant *so, const char *str)
 {
@@ -194,9 +195,50 @@ read_file(const char *filename, void **ptr, size_t *size)
 	return 0;
 }
 
+static void debug_func(void *priv, enum nir_spirv_debug_level level,
+		size_t spirv_offset, const char *message)
+{
+//	printf("%s\n", message);
+}
+
+static nir_shader *
+load_spirv(const char *filename, const char *entry, gl_shader_stage stage)
+{
+	const struct spirv_to_nir_options spirv_options = {
+		/* these caps are just make-believe */
+		.caps = {
+			.draw_parameters = true,
+			.float64 = true,
+			.image_read_without_format = true,
+			.image_write_without_format = true,
+			.int64 = true,
+			.variable_pointers = true,
+		},
+		.lower_workgroup_access_to_offsets = true,
+		.debug = {
+			.func = debug_func,
+		}
+	};
+	nir_function *entry_point;
+	void *buf;
+	size_t size;
+
+	read_file(filename, &buf, &size);
+
+	entry_point = spirv_to_nir(buf, size / 4,
+			NULL, 0, /* spec_entries */
+			stage, entry,
+			&spirv_options,
+			ir3_get_compiler_options(compiler));
+
+	nir_print_shader(entry_point->shader, stdout);
+
+	return entry_point->shader;
+}
+
 static void print_usage(void)
 {
-	printf("Usage: ir3_compiler [OPTIONS]... <file.tgsi | (file.vert | file.frag)*>\n");
+	printf("Usage: ir3_compiler [OPTIONS]... <file.tgsi | file.spv entry_point | (file.vert | file.frag)*>\n");
 	printf("    --verbose         - verbose compiler/debug messages\n");
 	printf("    --binning-pass    - generate binning pass shader (VERT)\n");
 	printf("    --color-two-side  - emulate two-sided color (FRAG)\n");
@@ -223,7 +265,9 @@ int main(int argc, char **argv)
 	/* TODO cmdline option to target different gpus: */
 	unsigned gpu_id = 320;
 	const char *info;
+	const char *entry;
 	void *ptr;
+	bool from_spirv = false;
 	size_t size;
 
 	memset(&s, 0, sizeof(s));
@@ -341,9 +385,20 @@ int main(int argc, char **argv)
 			if (num_files != 0)
 				errx(1, "in TGSI mode, only a single file may be specified");
 			s.from_tgsi = true;
+		} else if (strcmp(ext, ".spv") == 0) {
+			if (num_files != 0)
+				errx(1, "in SPIR-V mode, only a single file may be specified");
+			stage = MESA_SHADER_COMPUTE;
+			from_spirv = true;
+			filenames[num_files++] = filename;
+			n++;
+			if (n == argc)
+				errx(1, "in SPIR-V mode, an entry point must be specified");
+			entry = argv[n];
+			n++;
 		} else if (strcmp(ext, ".frag") == 0) {
-			if (s.from_tgsi)
-				errx(1, "cannot mix GLSL and TGSI");
+			if (s.from_tgsi || from_spirv)
+				errx(1, "cannot mix GLSL/TGSI/SPIRV");
 			if (num_files >= ARRAY_SIZE(filenames))
 				errx(1, "too many GLSL files");
 			stage = MESA_SHADER_FRAGMENT;
@@ -386,6 +441,16 @@ int main(int argc, char **argv)
 			tgsi_dump(toks, 0);
 
 		nir = ir3_tgsi_to_nir(toks);
+		NIR_PASS_V(nir, nir_lower_global_vars_to_local);
+	} else if (from_spirv) {
+		nir = load_spirv(filenames[0], entry, stage);
+
+		NIR_PASS_V(nir, nir_lower_io, nir_var_all, ir3_glsl_type_size,
+				(nir_lower_io_options)0);
+
+		/* TODO do this somewhere else */
+		nir_lower_int64(nir, ~0);
+		nir_lower_system_values(nir);
 	} else if (num_files > 0) {
 		nir = load_glsl(num_files, filenames, stage);
 	} else {

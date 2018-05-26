@@ -141,7 +141,7 @@ void cayman_init_msaa(struct pipe_context *ctx)
 		cayman_get_sample_position(ctx, 16, i, rctx->sample_locations_16x[i]);
 }
 
-void cayman_emit_msaa_sample_locs(struct radeon_winsys_cs *cs, int nr_samples)
+static void cayman_emit_msaa_sample_locs(struct radeon_winsys_cs *cs, int nr_samples)
 {
 	switch (nr_samples) {
 	default:
@@ -202,9 +202,8 @@ void cayman_emit_msaa_sample_locs(struct radeon_winsys_cs *cs, int nr_samples)
 	}
 }
 
-void cayman_emit_msaa_config(struct radeon_winsys_cs *cs, int nr_samples,
-			     int ps_iter_samples, int overrast_samples,
-			     unsigned sc_mode_cntl_1)
+void cayman_emit_msaa_state(struct radeon_winsys_cs *cs, int nr_samples,
+			    int ps_iter_samples, int overrast_samples)
 {
 	int setup_samples = nr_samples > 1 ? nr_samples :
 			    overrast_samples > 1 ? overrast_samples : 0;
@@ -216,6 +215,13 @@ void cayman_emit_msaa_config(struct radeon_winsys_cs *cs, int nr_samples,
 	 *       endcaps.
 	 */
 	unsigned sc_line_cntl = S_028BDC_DX10_DIAMOND_TEST_ENA(1);
+	unsigned sc_mode_cntl_1 =
+		EG_S_028A4C_FORCE_EOV_CNTDWN_ENABLE(1) |
+		EG_S_028A4C_FORCE_EOV_REZ_ENABLE(1);
+
+	if (nr_samples > 1) {
+		cayman_emit_msaa_sample_locs(cs, nr_samples);
+	}
 
 	if (setup_samples > 1) {
 		/* indexed by log2(nr_samples) */

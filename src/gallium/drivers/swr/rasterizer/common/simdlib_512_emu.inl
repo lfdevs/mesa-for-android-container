@@ -426,7 +426,7 @@ static SIMDINLINE bool SIMDCALL testz_ps(Float const &a, Float const &b)  // ret
                   SIMD256T::testz_ps(a.v8[1], b.v8[1]));
 }
 
-static SIMDINLINE int SIMDCALL testz_si(Integer const &a, Integer const &b)  // return all_lanes_zero(a & b) ? 1 : 0 (int)
+static SIMDINLINE bool SIMDCALL testz_si(Integer const &a, Integer const &b)  // return all_lanes_zero(a & b) ? 1 : 0 (int)
 {
     return  0 != (SIMD256T::testz_si(a.v8[0], b.v8[0]) &
                   SIMD256T::testz_si(a.v8[1], b.v8[1]));
@@ -519,6 +519,16 @@ SIMD_IWRAPPER_2(packs_epi32);      // See documentation for _mm256_packs_epi32 a
 SIMD_IWRAPPER_2(packus_epi16);     // See documentation for _mm256_packus_epi16 and _mm512_packus_epi16
 SIMD_IWRAPPER_2(packus_epi32);     // See documentation for _mm256_packus_epi32 and _mm512_packus_epi32
 
+template<int ImmT>
+static SIMDINLINE Float SIMDCALL permute_ps(Float const &a)
+{
+    return Float
+    {
+        SIMD256T::template permute_ps<ImmT>(a.v8[0]),
+        SIMD256T::template permute_ps<ImmT>(a.v8[1]),
+    };
+}
+
 static SIMDINLINE Integer SIMDCALL permute_epi32(Integer const &a, Integer const &swiz) // return a[swiz[i]] for each 32-bit lane i (int32)
 {
     return castps_si(permute_ps(castsi_ps(a), swiz));
@@ -587,10 +597,10 @@ template <int shuf>
 static SIMDINLINE Integer SIMDCALL permute2f128_si(Integer const &a, Integer const &b)
 {
     return Integer
-	{
+    {
         SIMD256T::template permute2f128_si<((shuf & 0x03) << 0) | ((shuf & 0x0C) << 2)>(a.v8[0], a.v8[1]),
         SIMD256T::template permute2f128_si<((shuf & 0x30) >> 4) | ((shuf & 0xC0) >> 2)>(b.v8[0], b.v8[1]),
-	};
+    };
 }
 
 SIMD_IWRAPPER_2I_1(shuffle_epi32);

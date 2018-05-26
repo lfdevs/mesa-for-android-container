@@ -263,6 +263,9 @@ dri_set_tex_buffer2(__DRIcontext *pDRICtx, GLint target,
          case PIPE_FORMAT_B10G10R10A2_UNORM:
             internal_format = PIPE_FORMAT_B10G10R10X2_UNORM;
             break;
+         case PIPE_FORMAT_R10G10B10A2_UNORM:
+            internal_format = PIPE_FORMAT_R10G10B10X2_UNORM;
+            break;
          case PIPE_FORMAT_BGRA8888_UNORM:
             internal_format = PIPE_FORMAT_BGRX8888_UNORM;
             break;

@@ -36,6 +36,8 @@
 #include <stdbool.h>
 #include "main/macros.h"
 #include "main/mtypes.h"
+#include "main/errors.h"
+#include "vbo/vbo.h"
 #include "brw_structs.h"
 #include "brw_pipe_control.h"
 #include "compiler/brw_compiler.h"
@@ -718,6 +720,14 @@ struct brw_perf_query_info
    uint32_t n_b_counter_regs;
 };
 
+struct brw_uploader {
+   struct brw_bufmgr *bufmgr;
+   struct brw_bo *bo;
+   void *map;
+   uint32_t next_offset;
+   unsigned default_size;
+};
+
 /**
  * brw_context is derived from gl_context.
  */
@@ -786,11 +796,7 @@ struct brw_context
 
    struct intel_batchbuffer batch;
 
-   struct {
-      struct brw_bo *bo;
-      void *map;
-      uint32_t next_offset;
-   } upload;
+   struct brw_uploader upload;
 
    /**
     * Set if rendering has occurred to the drawable's front buffer.
@@ -881,8 +887,12 @@ struct brw_context
 
    struct {
       struct {
-         /** The value of gl_BaseVertex for the current _mesa_prim. */
-         int gl_basevertex;
+         /**
+          * Either the value of gl_BaseVertex for indexed draw calls or the
+          * value of the argument <first> for non-indexed draw calls for the
+          * current _mesa_prim.
+          */
+         int firstvertex;
 
          /** The value of gl_BaseInstance for the current _mesa_prim. */
          int gl_baseinstance;
@@ -950,6 +960,9 @@ struct brw_context
        * These bitfields indicate which workarounds are needed.
        */
       uint8_t attrib_wa_flags[VERT_ATTRIB_MAX];
+
+      /* For the initial pushdown, keep the list of vbo inputs. */
+      struct vbo_inputs draw_arrays;
    } vb;
 
    struct {
@@ -1184,6 +1197,9 @@ struct brw_context
        * kernel at runtime
        */
       struct hash_table *oa_metrics_table;
+
+      /* Location of the device's sysfs entry. */
+      char sysfs_dev_dir[256];
 
       struct brw_perf_query_info *queries;
       int n_queries;
@@ -1452,7 +1468,7 @@ gl_clip_plane *brw_select_clip_planes(struct gl_context *ctx);
 
 /* brw_draw_upload.c */
 unsigned brw_get_vertex_surface_type(struct brw_context *brw,
-                                     const struct gl_vertex_array *glarray);
+                                     const struct gl_array_attributes *glattr);
 
 static inline unsigned
 brw_get_index_type(unsigned index_size)
@@ -1499,7 +1515,6 @@ extern void intelInitExtensions(struct gl_context *ctx);
 extern int intel_translate_shadow_compare_func(GLenum func);
 extern int intel_translate_compare_func(GLenum func);
 extern int intel_translate_stencil_op(GLenum op);
-extern int intel_translate_logic_op(GLenum opcode);
 
 /* brw_sync.c */
 void brw_init_syncobj_functions(struct dd_function_table *functions);
@@ -1575,6 +1590,10 @@ brw_blorp_copytexsubimage(struct brw_context *brw,
                           int srcX0, int srcY0,
                           int dstX0, int dstY0,
                           int width, int height);
+
+/* brw_generate_mipmap.c */
+void brw_generate_mipmap(struct gl_context *ctx, GLenum target,
+                         struct gl_texture_object *tex_obj);
 
 void
 gen6_get_sample_position(struct gl_context *ctx,

@@ -110,6 +110,9 @@ tgsi_transform_shader(const struct tgsi_token *tokens_in,
 {
    uint procType;
    boolean first_instruction = TRUE;
+   boolean epilog_emitted = FALSE;
+   int cond_stack = 0;
+   int call_stack = 0;
 
    /* input shader */
    struct tgsi_parse_context parse;
@@ -166,22 +169,66 @@ tgsi_transform_shader(const struct tgsi_token *tokens_in,
          {
             struct tgsi_full_instruction *fullinst
                = &parse.FullToken.FullInstruction;
+            enum tgsi_opcode opcode = fullinst->Instruction.Opcode;
 
             if (first_instruction && ctx->prolog) {
                ctx->prolog(ctx);
             }
 
-            /* XXX Note: we may also want to look for a main/top-level
-             * TGSI_OPCODE_RET instruction in the future.
+            /*
+             * XXX Note: we handle the case of ret in main.
+             * However, the output redirections done by transform
+             * have their limits with control flow and will generally
+             * not work correctly. e.g.
+             * if (cond) {
+             *    oColor = x;
+             *    ret;
+             * }
+             * oColor = y;
+             * end;
+             * If the color output is redirected to a temp and modified
+             * by a transform, this will not work (the oColor assignment
+             * in the conditional will never make it to the actual output).
              */
-            if (fullinst->Instruction.Opcode == TGSI_OPCODE_END
-                && ctx->epilog) {
-               /* Emit caller's epilog */
-               ctx->epilog(ctx);
-               /* Emit END */
+            if ((opcode == TGSI_OPCODE_END || opcode == TGSI_OPCODE_RET) &&
+                 call_stack == 0 && ctx->epilog && !epilog_emitted) {
+               if (opcode == TGSI_OPCODE_RET && cond_stack != 0) {
+                  assert(!"transform ignoring RET in main");
+               } else {
+                  assert(cond_stack == 0);
+                  /* Emit caller's epilog */
+                  ctx->epilog(ctx);
+                  epilog_emitted = TRUE;
+               }
+               /* Emit END (or RET) */
                ctx->emit_instruction(ctx, fullinst);
             }
             else {
+               switch (opcode) {
+               case TGSI_OPCODE_IF:
+               case TGSI_OPCODE_UIF:
+               case TGSI_OPCODE_SWITCH:
+               case TGSI_OPCODE_BGNLOOP:
+                  cond_stack++;
+                  break;
+               case TGSI_OPCODE_CAL:
+                  call_stack++;
+                  break;
+               case TGSI_OPCODE_ENDIF:
+               case TGSI_OPCODE_ENDSWITCH:
+               case TGSI_OPCODE_ENDLOOP:
+                  assert(cond_stack > 0);
+                  cond_stack--;
+                  break;
+               case TGSI_OPCODE_ENDSUB:
+                  assert(call_stack > 0);
+                  call_stack--;
+                  break;
+               case TGSI_OPCODE_BGNSUB:
+               case TGSI_OPCODE_RET:
+               default:
+                  break;
+               }
                if (ctx->transform_instruction)
                   ctx->transform_instruction(ctx, fullinst);
                else
@@ -231,6 +278,7 @@ tgsi_transform_shader(const struct tgsi_token *tokens_in,
          assert( 0 );
       }
    }
+   assert(call_stack == 0);
 
    tgsi_parse_free (&parse);
 

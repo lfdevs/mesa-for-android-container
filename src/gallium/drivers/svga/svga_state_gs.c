@@ -153,13 +153,12 @@ svga_reemit_gs_bindings(struct svga_context *svga)
    if (!svga_need_to_rebind_resources(svga)) {
       ret =  svga->swc->resource_rebind(svga->swc, NULL, gbshader,
                                         SVGA_RELOC_READ);
-      goto out;
+   }
+   else {
+      ret = SVGA3D_vgpu10_SetShader(svga->swc, SVGA3D_SHADERTYPE_GS,
+                                    gbshader, shaderId);
    }
 
-   ret = SVGA3D_vgpu10_SetShader(svga->swc, SVGA3D_SHADERTYPE_GS,
-                                 gbshader, shaderId);
-
- out:
    if (ret != PIPE_OK)
       return ret;
 

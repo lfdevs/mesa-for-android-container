@@ -21,80 +21,12 @@
 #
 # Provides definitions for events.
 
-enum GroupType
+enum AR_DRAW_TYPE
 {
-    APIClearRenderTarget,
-    APIDraw,
-    APIDrawWakeAllThreads,
-    APIDrawIndexed,
-    APIDispatch,
-    APIStoreTiles,
-    APIGetDrawContext,
-    APISync,
-    APIWaitForIdle,
-    FEProcessDraw,
-    FEProcessDrawIndexed,
-    FEFetchShader,
-    FEVertexShader,
-    FEHullShader,
-    FETessellation,
-    FEDomainShader,
-    FEGeometryShader,
-    FEStreamout,
-    FEPAAssemble,
-    FEBinPoints,
-    FEBinLines,
-    FEBinTriangles,
-    FETriangleSetup,
-    FEViewportCull,
-    FEGuardbandClip,
-    FEClipPoints,
-    FEClipLines,
-    FEClipTriangles,
-    FECullZeroAreaAndBackface,
-    FECullBetweenCenters,
-    FEProcessStoreTiles,
-    FEProcessInvalidateTiles,
-    WorkerWorkOnFifoBE,
-    WorkerFoundWork,
-    BELoadTiles,
-    BEDispatch,
-    BEClear,
-    BERasterizeLine,
-    BERasterizeTriangle,
-    BETriangleSetup,
-    BEStepSetup,
-    BECullZeroArea,
-    BEEmptyTriangle,
-    BETrivialAccept,
-    BETrivialReject,
-    BERasterizePartial,
-    BEPixelBackend,
-    BESetup,
-    BEBarycentric,
-    BEEarlyDepthTest,
-    BEPixelShader,
-    BESingleSampleBackend,
-    BEPixelRateBackend,
-    BESampleRateBackend,
-    BENullBackend,
-    BELateDepthTest,
-    BEOutputMerger,
-    BEStoreTiles,
-    BEEndTile,
-    WorkerWaitForThreadEvent,
-};
-
-event Start
-{
-    GroupType type;
-    uint32_t id;
-};
-
-event End
-{
-    GroupType type;
-    uint32_t count;
+    Instanced = 0,
+    IndexedInstanced = 1,
+    InstancedSplit = 2,
+    IndexedInstancedSplit = 3
 };
 
 event ThreadStartApiEvent
@@ -105,25 +37,22 @@ event ThreadStartWorkerEvent
 {
 };
 
-event DrawInstancedEvent
+event DrawInfoEvent
 {
     uint32_t drawId;
+    AR_DRAW_TYPE type;
     uint32_t topology;
     uint32_t numVertices;
-    int32_t  startVertex;
-    uint32_t numInstances;
-    uint32_t startInstance;
-};
-
-event DrawIndexedInstancedEvent
-{
-    uint32_t drawId;
-    uint32_t topology;
     uint32_t numIndices;
     int32_t  indexOffset;
     int32_t  baseVertex;
     uint32_t numInstances;
     uint32_t startInstance;
+    uint32_t tsEnable;
+    uint32_t gsEnable;
+    uint32_t soEnable;
+    uint32_t soTopology;
+    uint32_t splitId; // Split draw count or id.
 };
 
 event DispatchEvent
@@ -138,18 +67,6 @@ event FrameEndEvent
 {
     uint32_t frameId;
     uint32_t nextDrawId;
-};
-
-///@brief API Stat: Split draw event for DrawInstanced. In certain cases, Rasty can split draws up into smaller draws.
-event DrawInstancedSplitEvent
-{
-    uint32_t drawId;
-};
-
-///@brief API Stat: Split draw event for DrawIndexedInstanced.
-event DrawIndexedInstancedSplitEvent
-{
-    uint32_t drawId;
 };
 
 ///@brief API Stat: Synchonization event.
@@ -207,72 +124,6 @@ event BackendStatsEvent
 
 };
 
-event EarlyDepthStencilInfoSingleSample
-{
-    uint64_t depthPassMask;
-    uint64_t stencilPassMask;
-    uint64_t coverageMask;
-};
-
-event EarlyDepthStencilInfoSampleRate
-{
-    uint64_t depthPassMask;
-    uint64_t stencilPassMask;
-    uint64_t coverageMask;
-};
-
-event EarlyDepthStencilInfoNullPS
-{
-    uint64_t depthPassMask;
-    uint64_t stencilPassMask;
-    uint64_t coverageMask;
-};
-
-event LateDepthStencilInfoSingleSample
-{
-    uint64_t depthPassMask;
-    uint64_t stencilPassMask;
-    uint64_t coverageMask;
-};
-
-event LateDepthStencilInfoSampleRate
-{
-    uint64_t depthPassMask;
-    uint64_t stencilPassMask;
-    uint64_t coverageMask;
-};
-
-event LateDepthStencilInfoNullPS
-{
-    uint64_t depthPassMask;
-    uint64_t stencilPassMask;
-    uint64_t coverageMask;
-};
-
-event EarlyDepthInfoPixelRate
-{
-    uint64_t depthPassCount;
-    uint64_t activeLanes;
-};
-
-
-event LateDepthInfoPixelRate
-{
-    uint64_t depthPassCount;
-    uint64_t activeLanes;
-};
-
-
-event BackendDrawEndEvent
-{
-    uint32_t drawId;
-};
-
-event FrontendDrawEndEvent
-{
-    uint32_t drawId;
-};
-
 event EarlyZSingleSample
 {
     uint32_t drawId;
@@ -323,6 +174,38 @@ event EarlyStencilSampleRate
 };
 
 event LateStencilSampleRate
+{
+    uint32_t drawId; 
+    uint64_t passCount;
+    uint64_t failCount;
+};
+
+// Total Early-Z counts, SingleSample and SampleRate
+event EarlyZ
+{
+    uint32_t drawId;
+    uint64_t passCount;
+    uint64_t failCount;
+};	
+
+// Total LateZ counts, SingleSample and SampleRate
+event LateZ
+{
+    uint32_t drawId;
+    uint64_t passCount;
+    uint64_t failCount;
+};
+
+// Total EarlyStencil counts, SingleSample and SampleRate
+event EarlyStencil
+{
+    uint32_t drawId; 
+    uint64_t passCount;
+    uint64_t failCount;
+};
+
+// Total LateStencil counts, SingleSample and SampleRate
+event LateStencil
 {
     uint32_t drawId; 
     uint64_t passCount;
@@ -386,13 +269,6 @@ event LateOmStencil
     uint64_t failCount;
 };
 
-event GSPrimInfo
-{
-    uint64_t inputPrimCount;
-    uint64_t primGeneratedCount;
-    uint64_t vertsInput;
-};
-
 event GSInputPrims
 {
     uint32_t drawId;
@@ -411,37 +287,72 @@ event GSVertsInput
     uint64_t vertsInput;
 };
 
-event ClipVertexCount
-{
-    uint64_t vertsPerPrim;
-    uint64_t primMask;
-};
-
-//REMOVE AND REPLACE
-event FlushVertClip
-{
-    uint32_t drawId;
-};
-
-event VertsClipped
-{
-    uint32_t drawId;
-    uint64_t clipCount;
-};
-
-event TessPrimCount
-{
-    uint64_t primCount;
-};
-
-//REMOVE AND REPLACE
-event TessPrimFlush
-{
-    uint32_t drawId;
-};
-
 event TessPrims
 {
     uint32_t drawId;
     uint64_t primCount;
+};
+
+event RasterTiles
+{
+    uint32_t drawId;
+    uint32_t rastTileCount;
+};
+
+event ClipperEvent
+{
+    uint32_t drawId;
+    uint32_t trivialRejectCount;
+    uint32_t trivialAcceptCount;
+    uint32_t mustClipCount;
+};
+
+event CullEvent
+{
+    uint32_t drawId;
+    uint64_t backfacePrimCount;
+    uint64_t degeneratePrimCount;
+};
+
+event AlphaEvent
+{
+    uint32_t drawId;
+    uint32_t alphaTestCount;
+    uint32_t alphaBlendCount;
+};
+
+event VSInfo
+{
+    uint32_t drawId;
+    uint32_t numInstExecuted;
+};
+
+event HSInfo
+{
+    uint32_t drawId;
+    uint32_t numInstExecuted;
+};
+
+event DSInfo
+{
+    uint32_t drawId;
+    uint32_t numInstExecuted;
+};
+
+event GSInfo
+{
+    uint32_t drawId;
+    uint32_t numInstExecuted;
+};
+
+event PSInfo
+{
+    uint32_t drawId;
+    uint32_t numInstExecuted;
+};
+
+event CSInfo
+{
+    uint32_t drawId;
+    uint32_t numInstExecuted;
 };

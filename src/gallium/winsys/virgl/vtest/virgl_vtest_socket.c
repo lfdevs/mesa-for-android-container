@@ -142,7 +142,7 @@ int virgl_vtest_send_get_caps(struct virgl_vtest_winsys *vws,
    if (ret <= 0)
       return 0;
 
-   ret = virgl_block_read(vws->sock_fd, &caps->caps, sizeof(union virgl_caps));
+   ret = virgl_block_read(vws->sock_fd, &caps->caps, sizeof(struct virgl_caps_v1));
 
    return 0;
 }

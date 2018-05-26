@@ -268,7 +268,8 @@ static GLuint make_state_key( struct gl_context *ctx,  struct state_key *key )
       i = u_bit_scan(&mask);
       const struct gl_texture_unit *texUnit = &ctx->Texture.Unit[i];
       const struct gl_texture_object *texObj = texUnit->_Current;
-      const struct gl_tex_env_combine_packed *comb = &texUnit->_CurrentCombinePacked;
+      const struct gl_tex_env_combine_packed *comb =
+         &ctx->Texture.FixedFuncUnit[i]._CurrentCombinePacked;
 
       if (!texObj)
          continue;
@@ -1116,7 +1117,7 @@ create_new_program(struct gl_context *ctx, struct state_key *key)
 
    reparent_ir(p.shader->ir, p.shader->ir);
 
-   p.shader->CompileStatus = compile_success;
+   p.shader->CompileStatus = COMPILE_SUCCESS;
    p.shader->Version = state->language_version;
    p.shader_program->Shaders =
       (gl_shader **)malloc(sizeof(*p.shader_program->Shaders));

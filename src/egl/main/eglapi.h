@@ -209,6 +209,10 @@ struct _egl_api
                                           EGLuint64KHR *modifiers,
                                           EGLBoolean *external_only,
                                           EGLint *num_modifiers);
+
+   void (*SetBlobCacheFuncsANDROID) (_EGLDriver *drv, _EGLDisplay *dpy,
+                                     EGLSetBlobFuncANDROID set,
+                                     EGLGetBlobFuncANDROID get);
 };
 
 #ifdef __cplusplus

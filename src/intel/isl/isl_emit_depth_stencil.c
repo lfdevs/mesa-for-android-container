@@ -27,7 +27,9 @@
 #define __gen_user_data void
 
 static uint64_t
-__gen_combine_address(void *data, void *loc, uint64_t addr, uint32_t delta)
+__gen_combine_address(__attribute__((unused)) void *data,
+                      __attribute__((unused)) void *loc, uint64_t addr,
+                      uint32_t delta)
 {
    return addr + delta;
 }

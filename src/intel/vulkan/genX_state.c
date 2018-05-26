@@ -121,7 +121,7 @@ genX(init_device_state)(struct anv_device *device)
    }
 #endif
 
-#if GEN_GEN == 10
+#if GEN_GEN == 10 || GEN_GEN == 11
    uint32_t cache_mode_ss;
    anv_pack_struct(&cache_mode_ss, GENX(CACHE_MODE_SS),
                    .FloatBlendOptimizationEnable = true,
@@ -253,9 +253,9 @@ VkResult genX(CreateSampler)(
 
    vk_foreach_struct(ext, pCreateInfo->pNext) {
       switch (ext->sType) {
-      case VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_INFO_KHR: {
-         VkSamplerYcbcrConversionInfoKHR *pSamplerConversion =
-            (VkSamplerYcbcrConversionInfoKHR *) ext;
+      case VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_INFO: {
+         VkSamplerYcbcrConversionInfo *pSamplerConversion =
+            (VkSamplerYcbcrConversionInfo *) ext;
          ANV_FROM_HANDLE(anv_ycbcr_conversion, conversion,
                          pSamplerConversion->conversion);
 

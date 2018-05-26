@@ -254,11 +254,11 @@ VkResult anv_GetSwapchainGrallocUsageANDROID(
    };
 
    /* Check that requested format and usage are supported. */
-   result = anv_GetPhysicalDeviceImageFormatProperties2KHR(phys_dev_h,
+   result = anv_GetPhysicalDeviceImageFormatProperties2(phys_dev_h,
                &image_format_info, &image_format_props);
    if (result != VK_SUCCESS) {
       return vk_errorf(device->instance, device, result,
-                       "anv_GetPhysicalDeviceImageFormatProperties2KHR failed "
+                       "anv_GetPhysicalDeviceImageFormatProperties2 failed "
                        "inside %s", __func__);
    }
 

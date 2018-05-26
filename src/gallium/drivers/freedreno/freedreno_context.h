@@ -110,6 +110,12 @@ struct fd_streamout_stateobj {
 	unsigned offsets[PIPE_MAX_SO_BUFFERS];
 };
 
+#define MAX_GLOBAL_BUFFERS 16
+struct fd_global_bindings_stateobj {
+	struct pipe_resource *buf[MAX_GLOBAL_BUFFERS];
+	uint32_t enabled_mask;
+};
+
 /* group together the vertex and vertexbuf state.. for ease of passing
  * around, and because various internal operations (gmem<->mem, etc)
  * need their own vertex state:
@@ -282,6 +288,7 @@ struct fd_context {
 	struct fd_shaderbuf_stateobj shaderbuf[PIPE_SHADER_TYPES];
 	struct fd_shaderimg_stateobj shaderimg[PIPE_SHADER_TYPES];
 	struct fd_streamout_stateobj streamout;
+	struct fd_global_bindings_stateobj global_bindings;
 	struct pipe_clip_state ucp;
 
 	struct pipe_query *cond_query;

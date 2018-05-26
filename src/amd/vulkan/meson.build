@@ -31,10 +31,11 @@ radv_entrypoints = custom_target(
 
 radv_extensions_c = custom_target(
   'radv_extensions.c',
-  input : ['radv_extensions.py', vk_api_xml, vk_android_native_buffer_xml],
-  output : ['radv_extensions.c'],
+  input : ['radv_extensions.py', vk_api_xml],
+  output : ['radv_extensions.c', 'radv_extensions.h'],
   command : [
-    prog_python2, '@INPUT0@', '--xml', '@INPUT1@', '--xml', '@INPUT2@', '--out', '@OUTPUT@',
+    prog_python2, '@INPUT0@', '--xml', '@INPUT1@', '--out-c', '@OUTPUT0@',
+    '--out-h', '@OUTPUT1@'
   ],
 )
 
@@ -79,6 +80,7 @@ libradv_files = files(
   'radv_meta_resolve.c',
   'radv_meta_resolve_cs.c',
   'radv_meta_resolve_fs.c',
+  'radv_nir_to_llvm.c',
   'radv_pass.c',
   'radv_pipeline.c',
   'radv_pipeline_cache.c',
@@ -86,6 +88,7 @@ libradv_files = files(
   'radv_radeon_winsys.h',
   'radv_shader.c',
   'radv_shader.h',
+  'radv_shader_info.c',
   'radv_query.c',
   'radv_util.c',
   'radv_util.h',
@@ -133,18 +136,30 @@ libvulkan_radeon = shared_library(
   install : true,
 )
 
-radv_data = configuration_data()
-radv_data.set('install_libdir', join_paths(get_option('prefix'), get_option('libdir')))
-radv_data.set('libvulkan_radeon_path', libvulkan_radeon.full_path())
-
-configure_file(
-  configuration : radv_data,
-  input : 'radeon_icd.json.in',
+radeon_icd = custom_target(
+  'radeon_icd',
+  input : 'radv_icd.py',
   output : 'radeon_icd.@0@.json'.format(host_machine.cpu()),
+  command : [
+    prog_python2, '@INPUT@',
+    '--lib-path', join_paths(get_option('prefix'), get_option('libdir')),
+    '--out', '@OUTPUT@',
+  ],
+  depend_files : files('radv_extensions.py'),
+  build_by_default : true,
   install_dir : with_vulkan_icd_dir,
+  install : true,
 )
-configure_file(
-  configuration : radv_data,
-  input : 'dev_icd.json.in',
-  output : 'dev_icd.json'
+
+radv_dev_icd = custom_target(
+  'radv_dev_icd',
+  input : 'radv_icd.py',
+  output : 'dev_icd.json',
+  command : [
+    prog_python2, '@INPUT@', '--lib-path', meson.current_build_dir(),
+    '--out', '@OUTPUT@'
+  ],
+  depend_files : files('radv_extensions.py'),
+  build_by_default : true,
+  install : false,
 )

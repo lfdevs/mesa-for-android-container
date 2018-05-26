@@ -273,7 +273,19 @@ vc4_write_uniforms(struct vc4_context *vc4, struct vc4_compiled_shader *shader,
                         break;
 
                 case QUNIFORM_UBO_ADDR:
-                        cl_aligned_reloc(job, &job->uniforms, &uniforms, ubo, 0);
+                        if (uinfo->data[i] == 0) {
+                                cl_aligned_reloc(job, &job->uniforms,
+                                                 &uniforms, ubo, 0);
+                        } else {
+                                struct pipe_constant_buffer *c =
+                                        &cb->cb[uinfo->data[i]];
+                                struct vc4_resource *rsc =
+                                        vc4_resource(c->buffer);
+
+                                cl_aligned_reloc(job, &job->uniforms,
+                                                 &uniforms,
+                                                 rsc->bo, c->buffer_offset);
+                        }
                         break;
 
                 case QUNIFORM_TEXTURE_MSAA_ADDR:

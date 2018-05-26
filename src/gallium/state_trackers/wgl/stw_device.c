@@ -135,7 +135,7 @@ stw_init(const struct stw_winsys *stw_winsys)
    stw_pixelformat_init();
 
    /* env var override for WGL_EXT_swap_control, useful for testing/debugging */
-   const char *s = os_get_option("SVGA_SWAP_INTERVAL");
+   const char *s = os_get_option("WGL_SWAP_INTERVAL");
    if (s) {
       stw_dev->swap_interval = atoi(s);
    }

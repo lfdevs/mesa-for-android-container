@@ -1,5 +1,5 @@
 /****************************************************************************
-* Copyright (C) 2014-2016 Intel Corporation.   All Rights Reserved.
+* Copyright (C) 2014-2018 Intel Corporation.   All Rights Reserved.
 *
 * Permission is hereby granted, free of charge, to any person obtaining a
 * copy of this software and associated documentation files (the "Software"),
@@ -36,7 +36,13 @@
 #include <unistd.h>
 #endif
 
+#ifdef __APPLE__
+#include <sys/types.h>
+#include <sys/sysctl.h>
+#endif
+
 #include "common/os.h"
+#include "core/api.h"
 #include "context.h"
 #include "frontend.h"
 #include "backend.h"
@@ -219,6 +225,56 @@ void CalculateProcessorTopology(CPUNumaNodes& out_nodes, uint32_t& out_numThread
 
 #elif defined(__APPLE__)
 
+    auto numProcessors = 0;
+    auto numCores = 0;
+    auto numPhysicalIds = 0;
+
+    int value;
+    size_t size = sizeof(value);
+
+    int result = sysctlbyname("hw.packages", &value, &size, NULL, 0);
+    SWR_ASSERT(result == 0);
+    numPhysicalIds = value;
+
+    result = sysctlbyname("hw.logicalcpu", &value, &size, NULL, 0);
+    SWR_ASSERT(result == 0);
+    numProcessors = value;
+
+    result = sysctlbyname("hw.physicalcpu", &value, &size, NULL, 0);
+    SWR_ASSERT(result == 0);
+    numCores = value;
+
+    out_nodes.resize(numPhysicalIds);
+
+    for (auto physId = 0; physId < numPhysicalIds; ++physId)
+    {
+        auto &numaNode = out_nodes[physId];
+        auto procId = 0;
+
+        numaNode.cores.resize(numCores);
+
+        while (procId < numProcessors)
+        {
+            for (auto coreId = 0; coreId < numaNode.cores.size(); ++coreId, ++procId)
+            {
+                auto &core = numaNode.cores[coreId];
+
+                core.procGroup = coreId;
+                core.threadIds.push_back(procId);
+            }
+        }
+    }
+
+    out_numThreadsPerProcGroup = 0;
+
+    for (auto &node : out_nodes)
+    {
+        for (auto &core : node.cores)
+        {
+            out_numThreadsPerProcGroup += core.threadIds.size();
+        }
+    }
+
 #else
 
 #error Unsupported platform
@@ -252,7 +308,6 @@ void CalculateProcessorTopology(CPUNumaNodes& out_nodes, uint32_t& out_numThread
         }
     }
 }
-
 
 void bindThread(SWR_CONTEXT* pContext, uint32_t threadId, uint32_t procGroupId = 0, bool bindProcGroup=false)
 {
@@ -541,7 +596,7 @@ bool WorkOnFifoBE(
             {
                 BE_WORK *pWork;
 
-                AR_BEGIN(WorkerFoundWork, pDC->drawId);
+                RDTSC_BEGIN(WorkerFoundWork, pDC->drawId);
 
                 uint32_t numWorkItems = tile->getNumQueued();
                 SWR_ASSERT(numWorkItems);
@@ -562,7 +617,7 @@ bool WorkOnFifoBE(
                     pWork->pfnWork(pDC, workerId, tileID, &pWork->desc);
                     tile->dequeue();
                 }
-                AR_END(WorkerFoundWork, numWorkItems);
+                RDTSC_END(WorkerFoundWork, numWorkItems);
 
                 _ReadWriteBarrier();
 
@@ -849,9 +904,9 @@ DWORD workerThreadMain(LPVOID pData)
 
         if (IsBEThread)
         {
-            AR_BEGIN(WorkerWorkOnFifoBE, 0);
+            RDTSC_BEGIN(WorkerWorkOnFifoBE, 0);
             bShutdown |= WorkOnFifoBE(pContext, workerId, curDrawBE, lockedTiles, numaNode, numaMask);
-            AR_END(WorkerWorkOnFifoBE, 0);
+            RDTSC_END(WorkerWorkOnFifoBE, 0);
 
             WorkOnCompute(pContext, workerId, curDrawBE);
         }
@@ -1074,7 +1129,8 @@ void CreateThreadPool(SWR_CONTEXT* pContext, THREAD_POOL* pPool)
 
     if (pContext->threadInfo.SINGLE_THREADED)
     {
-        return;
+        numAPIReservedThreads = 0;
+        numThreads = 1;
     }
 
     if (numAPIReservedThreads)
@@ -1085,6 +1141,10 @@ void CreateThreadPool(SWR_CONTEXT* pContext, THREAD_POOL* pPool)
         {
             numAPIReservedThreads = 0;
         }
+        else
+        {
+            memset(pPool->pApiThreadData, 0, sizeof(THREAD_DATA) * numAPIReservedThreads);
+        }
     }
     pPool->numReservedThreads = numAPIReservedThreads;
 
@@ -1093,8 +1153,37 @@ void CreateThreadPool(SWR_CONTEXT* pContext, THREAD_POOL* pPool)
 
     pPool->pThreadData = new (std::nothrow) THREAD_DATA[pPool->numThreads];
     SWR_ASSERT(pPool->pThreadData);
+    memset(pPool->pThreadData, 0, sizeof(THREAD_DATA) * pPool->numThreads);
     pPool->numaMask = 0;
 
+    // Allocate worker private data
+    pPool->pWorkerPrivateDataArray = nullptr;
+    if (pContext->workerPrivateState.perWorkerPrivateStateSize)
+    {
+        size_t perWorkerSize = AlignUpPow2(pContext->workerPrivateState.perWorkerPrivateStateSize, 64);
+        size_t totalSize = perWorkerSize * pPool->numThreads;
+        if (totalSize)
+        {
+            pPool->pWorkerPrivateDataArray = AlignedMalloc(totalSize, 64);
+            SWR_ASSERT(pPool->pWorkerPrivateDataArray);
+
+            void* pWorkerData = pPool->pWorkerPrivateDataArray;
+            for (uint32_t i = 0; i < pPool->numThreads; ++i)
+            {
+                pPool->pThreadData[i].pWorkerPrivateData = pWorkerData;
+                if (pContext->workerPrivateState.pfnInitWorkerData)
+                {
+                    pContext->workerPrivateState.pfnInitWorkerData(pWorkerData, i);
+                }
+                pWorkerData = PtrAdd(pWorkerData, perWorkerSize);
+            }
+        }
+    }
+
+    if (pContext->threadInfo.SINGLE_THREADED)
+    {
+        return;
+    }
 
     pPool->pThreads = new (std::nothrow) THREAD_PTR[pPool->numThreads];
     SWR_ASSERT(pPool->pThreads);
@@ -1239,13 +1328,13 @@ void StartThreadPool(SWR_CONTEXT* pContext, THREAD_POOL* pPool)
 /// @param pPool - pointer to thread pool object.
 void DestroyThreadPool(SWR_CONTEXT *pContext, THREAD_POOL *pPool)
 {
-    if (!pContext->threadInfo.SINGLE_THREADED)
-    {
-        // Wait for all threads to finish
-        SwrWaitForIdle(pContext);
+    // Wait for all threads to finish
+    SwrWaitForIdle(pContext);
 
-        // Wait for threads to finish and destroy them
-        for (uint32_t t = 0; t < pPool->numThreads; ++t)
+    // Wait for threads to finish and destroy them
+    for (uint32_t t = 0; t < pPool->numThreads; ++t)
+    {
+        if (!pContext->threadInfo.SINGLE_THREADED)
         {
             // Detach from thread.  Cannot join() due to possibility (in Windows) of code
             // in some DLLMain(THREAD_DETATCH case) blocking the thread until after this returns.
@@ -1253,10 +1342,17 @@ void DestroyThreadPool(SWR_CONTEXT *pContext, THREAD_POOL *pPool)
             delete(pPool->pThreads[t]);
         }
 
-        delete[] pPool->pThreads;
-
-        // Clean up data used by threads
-        delete[] pPool->pThreadData;
-        delete[] pPool->pApiThreadData;
+        if (pContext->workerPrivateState.pfnFinishWorkerData)
+        {
+            pContext->workerPrivateState.pfnFinishWorkerData(pPool->pThreadData[t].pWorkerPrivateData, t);
+        }
     }
+
+    delete[] pPool->pThreads;
+
+    // Clean up data used by threads
+    delete[] pPool->pThreadData;
+    delete[] pPool->pApiThreadData;
+
+    AlignedFree(pPool->pWorkerPrivateDataArray);
 }

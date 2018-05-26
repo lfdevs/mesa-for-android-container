@@ -18,7 +18,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-inc_gbm = include_directories('.', 'backends/dri')
+inc_gbm = include_directories('.', 'main', 'backends/dri')
 
 files_gbm = files(
   'main/backend.c',
@@ -74,6 +74,7 @@ if with_tests
   test(
     'gbm-symbols-check',
     find_program('gbm-symbols-check'),
+    env : env_test,
     args : libgbm
   )
 endif

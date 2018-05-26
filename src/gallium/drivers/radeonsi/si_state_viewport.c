@@ -1,5 +1,6 @@
 /*
  * Copyright 2012 Advanced Micro Devices, Inc.
+ * All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -21,9 +22,7 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#include "si_pipe.h"
-#include "sid.h"
-#include "radeon/r600_cs.h"
+#include "si_build_pm4.h"
 #include "util/u_viewport.h"
 #include "tgsi/tgsi_scan.h"
 
@@ -135,12 +134,12 @@ static void si_emit_one_scissor(struct si_context *ctx,
 }
 
 /* the range is [-MAX, MAX] */
-#define GET_MAX_VIEWPORT_RANGE(rctx) (32768)
+#define SI_MAX_VIEWPORT_RANGE 32768
 
 static void si_emit_guardband(struct si_context *ctx,
 			      struct si_signed_scissor *vp_as_scissor)
 {
-	struct radeon_winsys_cs *cs = ctx->b.gfx.cs;
+	struct radeon_winsys_cs *cs = ctx->gfx_cs;
 	struct pipe_viewport_state vp;
 	float left, top, right, bottom, max_range, guardband_x, guardband_y;
 	float discard_x, discard_y;
@@ -166,7 +165,7 @@ static void si_emit_guardband(struct si_context *ctx,
 	 *
 	 * Use a limit one pixel smaller to allow for some precision error.
 	 */
-	max_range = GET_MAX_VIEWPORT_RANGE(ctx) - 1;
+	max_range = SI_MAX_VIEWPORT_RANGE - 1;
 	left   = (-max_range - vp.translate[0]) / vp.scale[0];
 	right  = ( max_range - vp.translate[0]) / vp.scale[0];
 	top    = (-max_range - vp.translate[1]) / vp.scale[1];
@@ -211,10 +210,9 @@ static void si_emit_guardband(struct si_context *ctx,
 	radeon_emit(cs, fui(discard_x));   /* R_028BF4_PA_CL_GB_HORZ_DISC_ADJ */
 }
 
-static void si_emit_scissors(struct r600_common_context *rctx, struct r600_atom *atom)
+static void si_emit_scissors(struct si_context *ctx, struct r600_atom *atom)
 {
-	struct si_context *ctx = (struct si_context *)rctx;
-	struct radeon_winsys_cs *cs = ctx->b.gfx.cs;
+	struct radeon_winsys_cs *cs = ctx->gfx_cs;
 	struct pipe_scissor_state *states = ctx->scissors.states;
 	unsigned mask = ctx->scissors.dirty_mask;
 	bool scissor_enabled = false;
@@ -288,7 +286,7 @@ static void si_set_viewport_states(struct pipe_context *pctx,
 static void si_emit_one_viewport(struct si_context *ctx,
 				 struct pipe_viewport_state *state)
 {
-	struct radeon_winsys_cs *cs = ctx->b.gfx.cs;
+	struct radeon_winsys_cs *cs = ctx->gfx_cs;
 
 	radeon_emit(cs, fui(state->scale[0]));
 	radeon_emit(cs, fui(state->translate[0]));
@@ -300,7 +298,7 @@ static void si_emit_one_viewport(struct si_context *ctx,
 
 static void si_emit_viewports(struct si_context *ctx)
 {
-	struct radeon_winsys_cs *cs = ctx->b.gfx.cs;
+	struct radeon_winsys_cs *cs = ctx->gfx_cs;
 	struct pipe_viewport_state *states = ctx->viewports.states;
 	unsigned mask = ctx->viewports.dirty_mask;
 
@@ -342,7 +340,7 @@ si_viewport_zmin_zmax(const struct pipe_viewport_state *vp, bool halfz,
 
 static void si_emit_depth_ranges(struct si_context *ctx)
 {
-	struct radeon_winsys_cs *cs = ctx->b.gfx.cs;
+	struct radeon_winsys_cs *cs = ctx->gfx_cs;
 	struct pipe_viewport_state *states = ctx->viewports.states;
 	unsigned mask = ctx->viewports.depth_range_dirty_mask;
 	bool clip_halfz = false;
@@ -384,10 +382,9 @@ static void si_emit_depth_ranges(struct si_context *ctx)
 	ctx->viewports.depth_range_dirty_mask = 0;
 }
 
-static void si_emit_viewport_states(struct r600_common_context *rctx,
+static void si_emit_viewport_states(struct si_context *ctx,
 				    struct r600_atom *atom)
 {
-	struct si_context *ctx = (struct si_context *)rctx;
 	si_emit_viewports(ctx);
 	si_emit_depth_ranges(ctx);
 }
@@ -440,6 +437,6 @@ void si_init_viewport_functions(struct si_context *ctx)
 	ctx->scissors.atom.emit = si_emit_scissors;
 	ctx->viewports.atom.emit = si_emit_viewport_states;
 
-	ctx->b.b.set_scissor_states = si_set_scissor_states;
-	ctx->b.b.set_viewport_states = si_set_viewport_states;
+	ctx->b.set_scissor_states = si_set_scissor_states;
+	ctx->b.set_viewport_states = si_set_viewport_states;
 }

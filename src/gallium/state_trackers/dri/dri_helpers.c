@@ -119,7 +119,7 @@ dri2_create_fence_fd(__DRIcontext *_ctx, int fd)
       stapi->flush(stapi, ST_FLUSH_FENCE_FD, &fence->pipe_fence);
    } else {
       /* importing a foreign fence fd: */
-      ctx->create_fence_fd(ctx, &fence->pipe_fence, fd);
+      ctx->create_fence_fd(ctx, &fence->pipe_fence, fd, PIPE_FD_TYPE_NATIVE_SYNC);
    }
    if (!fence->pipe_fence) {
       FREE(fence);

@@ -181,7 +181,11 @@ VA_DRIVER_INIT_FUNC(VADriverContextP ctx)
    ctx->max_image_formats = VL_VA_MAX_IMAGE_FORMATS;
    ctx->max_subpic_formats = 1;
    ctx->max_display_attributes = 1;
-   ctx->str_vendor = "mesa gallium vaapi";
+
+   snprintf(drv->vendor_string, sizeof(drv->vendor_string),
+            "Mesa Gallium driver " PACKAGE_VERSION " for %s",
+            drv->vscreen->pscreen->get_name(drv->vscreen->pscreen));
+   ctx->str_vendor = drv->vendor_string;
 
    return VA_STATUS_SUCCESS;
 
@@ -269,17 +273,23 @@ vlVaCreateContext(VADriverContextP ctx, VAConfigID config_id, int picture_width,
 
      case PIPE_VIDEO_FORMAT_HEVC:
          context->templat.max_references = num_render_targets;
-         context->desc.h265.pps = CALLOC_STRUCT(pipe_h265_pps);
-         if (!context->desc.h265.pps) {
-            FREE(context);
-            return VA_STATUS_ERROR_ALLOCATION_FAILED;
+         if (config->entrypoint != PIPE_VIDEO_ENTRYPOINT_ENCODE) {
+            context->desc.h265.pps = CALLOC_STRUCT(pipe_h265_pps);
+            if (!context->desc.h265.pps) {
+               FREE(context);
+               return VA_STATUS_ERROR_ALLOCATION_FAILED;
+            }
+            context->desc.h265.pps->sps = CALLOC_STRUCT(pipe_h265_sps);
+            if (!context->desc.h265.pps->sps) {
+               FREE(context->desc.h265.pps);
+               FREE(context);
+               return VA_STATUS_ERROR_ALLOCATION_FAILED;
+            }
          }
-         context->desc.h265.pps->sps = CALLOC_STRUCT(pipe_h265_sps);
-         if (!context->desc.h265.pps->sps) {
-            FREE(context->desc.h265.pps);
-            FREE(context);
-            return VA_STATUS_ERROR_ALLOCATION_FAILED;
-         }
+         break;
+
+      case PIPE_VIDEO_FORMAT_VP9:
+         context->templat.max_references = num_render_targets;
          break;
 
       default:
@@ -290,8 +300,18 @@ vlVaCreateContext(VADriverContextP ctx, VAConfigID config_id, int picture_width,
    context->desc.base.profile = config->profile;
    context->desc.base.entry_point = config->entrypoint;
    if (config->entrypoint == PIPE_VIDEO_ENTRYPOINT_ENCODE) {
-      context->desc.h264enc.rate_ctrl.rate_ctrl_method = config->rc;
-      context->desc.h264enc.frame_idx = util_hash_table_create(handle_hash, handle_compare);
+      switch (u_reduce_video_profile(context->templat.profile)) {
+      case PIPE_VIDEO_FORMAT_MPEG4_AVC:
+         context->desc.h264enc.rate_ctrl.rate_ctrl_method = config->rc;
+         context->desc.h264enc.frame_idx = util_hash_table_create(handle_hash, handle_compare);
+         break;
+      case PIPE_VIDEO_FORMAT_HEVC:
+         context->desc.h265enc.rc.rate_ctrl_method = config->rc;
+         context->desc.h265enc.frame_idx = util_hash_table_create(handle_hash, handle_compare);
+         break;
+      default:
+         break;
+      }
    }
 
    mtx_lock(&drv->mutex);
@@ -320,8 +340,16 @@ vlVaDestroyContext(VADriverContextP ctx, VAContextID context_id)
 
    if (context->decoder) {
       if (context->desc.base.entry_point == PIPE_VIDEO_ENTRYPOINT_ENCODE) {
-         if (context->desc.h264enc.frame_idx)
-            util_hash_table_destroy (context->desc.h264enc.frame_idx);
+         if (u_reduce_video_profile(context->decoder->profile) ==
+             PIPE_VIDEO_FORMAT_MPEG4_AVC) {
+            if (context->desc.h264enc.frame_idx)
+               util_hash_table_destroy (context->desc.h264enc.frame_idx);
+         }
+         if (u_reduce_video_profile(context->decoder->profile) ==
+             PIPE_VIDEO_FORMAT_HEVC) {
+            if (context->desc.h265enc.frame_idx)
+               util_hash_table_destroy (context->desc.h265enc.frame_idx);
+         }
       } else {
          if (u_reduce_video_profile(context->decoder->profile) ==
                PIPE_VIDEO_FORMAT_MPEG4_AVC) {

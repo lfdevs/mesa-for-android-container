@@ -32,17 +32,18 @@
 #include "nv04_driver.h"
 
 static GLboolean
-texunit_needs_combiners(struct gl_texture_unit *u)
+texunit_needs_combiners(struct gl_texture_unit *u,
+                        struct gl_fixedfunc_texture_unit *f)
 {
 	struct gl_texture_object *t = u->_Current;
 	struct gl_texture_image *ti = t->Image[0][t->BaseLevel];
 
 	return ti->TexFormat == MESA_FORMAT_A_UNORM8 ||
 		ti->TexFormat == MESA_FORMAT_L_UNORM8 ||
-		u->EnvMode == GL_COMBINE ||
-		u->EnvMode == GL_COMBINE4_NV ||
-		u->EnvMode == GL_BLEND ||
-		u->EnvMode == GL_ADD;
+		f->EnvMode == GL_COMBINE ||
+		f->EnvMode == GL_COMBINE4_NV ||
+		f->EnvMode == GL_BLEND ||
+		f->EnvMode == GL_ADD;
 }
 
 struct nouveau_object *
@@ -54,13 +55,11 @@ nv04_context_engine(struct gl_context *ctx)
 	struct nouveau_object *fahrenheit;
 
 	if ((ctx->Texture.Unit[0]._Current &&
-	     texunit_needs_combiners(&ctx->Texture.Unit[0])) ||
+	     texunit_needs_combiners(&ctx->Texture.Unit[0],
+                                     &ctx->Texture.FixedFuncUnit[0])) ||
 	    ctx->Texture.Unit[1]._Current ||
 	    ctx->Stencil.Enabled ||
-	    !(ctx->Color.ColorMask[0][RCOMP] &&
-	      ctx->Color.ColorMask[0][GCOMP] &&
-	      ctx->Color.ColorMask[0][BCOMP] &&
-	      ctx->Color.ColorMask[0][ACOMP]))
+	    GET_COLORMASK(ctx->Color.ColorMask, 0) != 0xf)
 		fahrenheit = hw->eng3dm;
 	else
 		fahrenheit = hw->eng3d;

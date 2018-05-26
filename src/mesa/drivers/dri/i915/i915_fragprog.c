@@ -184,11 +184,12 @@ src_vector(struct i915_fragment_program *p,
        */
    case PROGRAM_CONSTANT:
    case PROGRAM_STATE_VAR:
-   case PROGRAM_UNIFORM:
-      src = i915_emit_param4fv(p,
-	 &program->Parameters->ParameterValues[source->Index][0].f);
+   case PROGRAM_UNIFORM: {
+      struct gl_program_parameter_list *params = program->Parameters;
+      unsigned offset = params->ParameterValueOffset[source->Index];
+      src = i915_emit_param4fv(p, &params->ParameterValues[offset].f);
       break;
-
+   }
    default:
       i915_program_error(p, "Bad source->File: %d", source->File);
       return 0;

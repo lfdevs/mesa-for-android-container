@@ -39880,6 +39880,37 @@ fallback_to_sync:
 }
 
 
+/* FramebufferFetchBarrierEXT: marshalled asynchronously */
+struct marshal_cmd_FramebufferFetchBarrierEXT
+{
+   struct marshal_cmd_base cmd_base;
+};
+static inline void
+_mesa_unmarshal_FramebufferFetchBarrierEXT(struct gl_context *ctx, const struct marshal_cmd_FramebufferFetchBarrierEXT *cmd)
+{
+   CALL_FramebufferFetchBarrierEXT(ctx->CurrentServerDispatch, ());
+}
+static void GLAPIENTRY
+_mesa_marshal_FramebufferFetchBarrierEXT(void)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   size_t cmd_size = sizeof(struct marshal_cmd_FramebufferFetchBarrierEXT);
+   struct marshal_cmd_FramebufferFetchBarrierEXT *cmd;
+   debug_print_marshal("FramebufferFetchBarrierEXT");
+   if (cmd_size <= MARSHAL_MAX_CMD_SIZE) {
+      cmd = _mesa_glthread_allocate_command(ctx, DISPATCH_CMD_FramebufferFetchBarrierEXT, cmd_size);
+      (void) cmd;
+
+      _mesa_post_marshal_hook(ctx);
+      return;
+   }
+
+   _mesa_glthread_finish(ctx);
+   debug_print_sync_fallback("FramebufferFetchBarrierEXT");
+   CALL_FramebufferFetchBarrierEXT(ctx->CurrentServerDispatch, ());
+}
+
+
 /* LockArraysEXT: marshalled asynchronously */
 struct marshal_cmd_LockArraysEXT
 {
@@ -43813,6 +43844,10 @@ _mesa_unmarshal_dispatch_cmd(struct gl_context *ctx, const void *cmd)
       debug_print_unmarshal("ProgramUniformMatrix3dv");
       _mesa_unmarshal_ProgramUniformMatrix3dv(ctx, (const struct marshal_cmd_ProgramUniformMatrix3dv *) cmd);
       break;
+   case DISPATCH_CMD_FramebufferFetchBarrierEXT:
+      debug_print_unmarshal("FramebufferFetchBarrierEXT");
+      _mesa_unmarshal_FramebufferFetchBarrierEXT(ctx, (const struct marshal_cmd_FramebufferFetchBarrierEXT *) cmd);
+      break;
    case DISPATCH_CMD_LockArraysEXT:
       debug_print_unmarshal("LockArraysEXT");
       _mesa_unmarshal_LockArraysEXT(ctx, (const struct marshal_cmd_LockArraysEXT *) cmd);
@@ -45220,6 +45255,7 @@ _mesa_create_marshal_table(const struct gl_context *ctx)
    SET_TexCoord4f(table, _mesa_marshal_TexCoord4f);
    SET_GetBooleanv(table, _mesa_marshal_GetBooleanv);
    SET_ProgramUniformMatrix3dv(table, _mesa_marshal_ProgramUniformMatrix3dv);
+   SET_FramebufferFetchBarrierEXT(table, _mesa_marshal_FramebufferFetchBarrierEXT);
    SET_LockArraysEXT(table, _mesa_marshal_LockArraysEXT);
    SET_GetActiveUniformBlockiv(table, _mesa_marshal_GetActiveUniformBlockiv);
    SET_GetPerfMonitorCountersAMD(table, _mesa_marshal_GetPerfMonitorCountersAMD);

@@ -1,4 +1,4 @@
-# Copyright (C) 2017 Intel Corporation.   All Rights Reserved.
+# Copyright (C) 2017-2018 Intel Corporation.   All Rights Reserved.
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
 # copy of this software and associated documentation files (the 'Software'),
@@ -26,7 +26,7 @@ from __future__ import print_function
 import itertools
 import os
 import sys
-from gen_common import ArgumentParser, MakoTemplateWriter
+from gen_common import *
 
 
 def main(args=sys.argv[1:]):
@@ -100,46 +100,67 @@ def main(args=sys.argv[1:]):
     linesPerFile = (len(output_list) + numFiles - 1) // numFiles
     chunkedList = [output_list[x:x+linesPerFile] for x in range(0, len(output_list), linesPerFile)]
 
+    tmp_output_dir = MakeTmpDir('_codegen')
+
+    if not os.path.exists(args.outdir):
+        try:
+            os.makedirs(args.outdir)
+        except OSError as err:
+            if err.errno != errno.EEXIST:
+                print('ERROR: Could not create directory:', args.outdir, file=sys.stderr)
+                return 1
+
+    rval = 0
+
     # generate .cpp files
-    if args.cpp:
-        baseCppName = os.path.join(args.outdir, backend.outFileName)
-        templateCpp = os.path.join(thisDir, 'templates', backend.template)
+    try:
+        if args.cpp:
+            baseCppName = os.path.join(tmp_output_dir, backend.outFileName)
+            templateCpp = os.path.join(thisDir, 'templates', backend.template)
 
-        for fileNum in range(numFiles):
-            filename = baseCppName % str(fileNum)
+            for fileNum in range(numFiles):
+                filename = baseCppName % str(fileNum)
+                MakoTemplateWriter.to_file(
+                    templateCpp,
+                    baseCppName % str(fileNum),
+                    cmdline=sys.argv,
+                    fileNum=fileNum,
+                    funcList=chunkedList[fileNum])
+
+        if args.hpp:
+            baseHppName = os.path.join(tmp_output_dir, backend.outHeaderName)
+            templateHpp = os.path.join(thisDir, 'templates', backend.hpp_template)
+
             MakoTemplateWriter.to_file(
-                templateCpp,
-                baseCppName % str(fileNum),
+                templateHpp,
+                baseHppName,
                 cmdline=sys.argv,
-                fileNum=fileNum,
-                funcList=chunkedList[fileNum])
+                numFiles=numFiles,
+                filename=backend.outHeaderName,
+                tableName=backend.tableName)
 
-    if args.hpp:
-        baseHppName = os.path.join(args.outdir, backend.outHeaderName)
-        templateHpp = os.path.join(thisDir, 'templates', backend.hpp_template)
+        # generate gen_backend.cmake file
+        if args.cmake:
+            templateCmake = os.path.join(thisDir, 'templates', 'gen_backend.cmake')
+            cmakeFile = os.path.join(tmp_output_dir, backend.cmakeFileName)
 
-        MakoTemplateWriter.to_file(
-            templateHpp,
-            baseHppName,
-            cmdline=sys.argv,
-            numFiles=numFiles,
-            filename=backend.outHeaderName,
-            tableName=backend.tableName)
+            MakoTemplateWriter.to_file(
+                templateCmake,
+                cmakeFile,
+                cmdline=sys.argv,
+                srcVar=backend.cmakeSrcVar,
+                numFiles=numFiles,
+                baseCppName='${RASTY_GEN_SRC_DIR}/backends/' + os.path.basename(baseCppName))
 
-    # generate gen_backend.cmake file
-    if args.cmake:
-        templateCmake = os.path.join(thisDir, 'templates', 'gen_backend.cmake')
-        cmakeFile = os.path.join(args.outdir, backend.cmakeFileName)
+        rval = CopyDirFilesIfDifferent(tmp_output_dir, args.outdir)
 
-        MakoTemplateWriter.to_file(
-            templateCmake,
-            cmakeFile,
-            cmdline=sys.argv,
-            srcVar=backend.cmakeSrcVar,
-            numFiles=numFiles,
-            baseCppName='${RASTY_GEN_SRC_DIR}/backends/' + os.path.basename(baseCppName))
+    except:
+        rval = 1
 
-    return 0
+    finally:
+        DeleteDirTree(tmp_output_dir)
+
+    return rval
 
 if __name__ == '__main__':
     sys.exit(main())

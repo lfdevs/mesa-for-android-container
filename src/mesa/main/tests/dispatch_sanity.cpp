@@ -1023,6 +1023,9 @@ const struct function common_desktop_functions_possible[] = {
    /* GL_ARB_gl_spirv */
    { "glSpecializeShaderARB", 45, -1 },
 
+   /* GL_EXT_shader_framebuffer_fetch_non_coherent */
+   { "glFramebufferFetchBarrierEXT", 20, -1 },
+
    { NULL, 0, -1 }
 };
 
@@ -2445,6 +2448,9 @@ const struct function gles2_functions_possible[] = {
    { "glGetQueryObjecti64vEXT", 20, -1 },
    { "glGetQueryObjectui64vEXT", 20, -1 },
    { "glQueryCounterEXT", 20, -1 },
+
+   /* GL_EXT_shader_framebuffer_fetch_non_coherent */
+   { "glFramebufferFetchBarrierEXT", 20, -1 },
 
    { NULL, 0, -1 }
 };

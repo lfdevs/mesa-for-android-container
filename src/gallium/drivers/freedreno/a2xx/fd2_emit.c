@@ -125,8 +125,9 @@ emit_texture(struct fd_ringbuffer *ring, struct fd_context *ctx,
 {
 	unsigned const_idx = fd2_get_const_idx(ctx, tex, samp_id);
 	static const struct fd2_sampler_stateobj dummy_sampler = {};
+	static const struct fd2_pipe_sampler_view dummy_view = {};
 	const struct fd2_sampler_stateobj *sampler;
-	struct fd2_pipe_sampler_view *view;
+	const struct fd2_pipe_sampler_view *view;
 
 	if (emitted & (1 << const_idx))
 		return 0;
@@ -134,13 +135,19 @@ emit_texture(struct fd_ringbuffer *ring, struct fd_context *ctx,
 	sampler = tex->samplers[samp_id] ?
 			fd2_sampler_stateobj(tex->samplers[samp_id]) :
 			&dummy_sampler;
-	view = fd2_pipe_sampler_view(tex->textures[samp_id]);
+	view = tex->textures[samp_id] ?
+			fd2_pipe_sampler_view(tex->textures[samp_id]) :
+			&dummy_view;
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 7);
 	OUT_RING(ring, 0x00010000 + (0x6 * const_idx));
 
 	OUT_RING(ring, sampler->tex0 | view->tex0);
-	OUT_RELOC(ring, fd_resource(view->base.texture)->bo, 0, view->fmt, 0);
+	if (view->base.texture)
+		OUT_RELOC(ring, fd_resource(view->base.texture)->bo, 0, view->fmt, 0);
+	else
+		OUT_RING(ring, 0);
+
 	OUT_RING(ring, view->tex2);
 	OUT_RING(ring, sampler->tex3 | view->tex3);
 	OUT_RING(ring, sampler->tex4);

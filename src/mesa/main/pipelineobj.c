@@ -34,13 +34,13 @@
 #include <stdbool.h>
 #include "main/glheader.h"
 #include "main/context.h"
-#include "main/dispatch.h"
 #include "main/enums.h"
 #include "main/hash.h"
 #include "main/mtypes.h"
 #include "main/pipelineobj.h"
 #include "main/shaderapi.h"
 #include "main/shaderobj.h"
+#include "main/state.h"
 #include "main/transformfeedback.h"
 #include "main/uniforms.h"
 #include "compiler/glsl/glsl_parser_extras.h"
@@ -532,6 +532,8 @@ _mesa_bind_pipeline(struct gl_context *ctx,
             _mesa_program_init_subroutine_defaults(ctx, prog);
          }
       }
+
+      _mesa_update_vertex_processing_mode(ctx);
    }
 }
 

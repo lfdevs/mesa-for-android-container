@@ -256,7 +256,7 @@ svga_reemit_tss_bindings(struct svga_context *svga)
    }
 
    /* Polygon stipple */
-   if (svga->curr.rast->templ.poly_stipple_enable) {
+   if (svga->curr.rast && svga->curr.rast->templ.poly_stipple_enable) {
       const unsigned unit = svga->state.hw_draw.fs->pstipple_sampler_unit;
       struct svga_hw_view_state *view = &svga->state.hw_draw.views[unit];
 

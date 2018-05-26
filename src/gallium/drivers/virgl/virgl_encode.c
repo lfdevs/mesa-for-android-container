@@ -180,7 +180,8 @@ int virgl_encode_rasterizer_state(struct virgl_context *ctx,
       VIRGL_OBJ_RS_S0_LINE_STIPPLE_ENABLE(state->line_stipple_enable) |
       VIRGL_OBJ_RS_S0_LINE_LAST_PIXEL(state->line_last_pixel) |
       VIRGL_OBJ_RS_S0_HALF_PIXEL_CENTER(state->half_pixel_center) |
-      VIRGL_OBJ_RS_S0_BOTTOM_EDGE_RULE(state->bottom_edge_rule);
+      VIRGL_OBJ_RS_S0_BOTTOM_EDGE_RULE(state->bottom_edge_rule) |
+      VIRGL_OBJ_RS_S0_FORCE_PERSAMPLE_INTERP(state->force_persample_interp);
 
    virgl_encoder_write_dword(ctx->cbuf, tmp); /* S0 */
    virgl_encoder_write_dword(ctx->cbuf, fui(state->point_size)); /* S1 */
@@ -417,7 +418,10 @@ int virgl_encoder_set_index_buffer(struct virgl_context *ctx,
 int virgl_encoder_draw_vbo(struct virgl_context *ctx,
                           const struct pipe_draw_info *info)
 {
-   virgl_encoder_write_cmd_dword(ctx, VIRGL_CMD0(VIRGL_CCMD_DRAW_VBO, 0, VIRGL_DRAW_VBO_SIZE));
+   uint32_t length = VIRGL_DRAW_VBO_SIZE;
+   if (info->indirect)
+      length = VIRGL_DRAW_VBO_SIZE_INDIRECT;
+   virgl_encoder_write_cmd_dword(ctx, VIRGL_CMD0(VIRGL_CCMD_DRAW_VBO, 0, length));
    virgl_encoder_write_dword(ctx->cbuf, info->start);
    virgl_encoder_write_dword(ctx->cbuf, info->count);
    virgl_encoder_write_dword(ctx->cbuf, info->mode);
@@ -433,6 +437,16 @@ int virgl_encoder_draw_vbo(struct virgl_context *ctx,
       virgl_encoder_write_dword(ctx->cbuf, info->count_from_stream_output->buffer_size);
    else
       virgl_encoder_write_dword(ctx->cbuf, 0);
+   if (length == VIRGL_DRAW_VBO_SIZE_INDIRECT) {
+      virgl_encoder_write_dword(ctx->cbuf, 0); /* vertices per patch */
+      virgl_encoder_write_dword(ctx->cbuf, 0); /* drawid */
+      virgl_encoder_write_res(ctx, virgl_resource(info->indirect->buffer));
+      virgl_encoder_write_dword(ctx->cbuf, info->indirect->offset);
+      virgl_encoder_write_dword(ctx->cbuf, 0); /* indirect stride */
+      virgl_encoder_write_dword(ctx->cbuf, 0); /* indirect draw count */
+      virgl_encoder_write_dword(ctx->cbuf, 0); /* indirect draw count offset */
+      virgl_encoder_write_dword(ctx->cbuf, 0); /* indirect draw count handle */
+   }
    return 0;
 }
 
@@ -552,7 +566,8 @@ int virgl_encode_sampler_state(struct virgl_context *ctx,
       VIRGL_OBJ_SAMPLE_STATE_S0_MIN_MIP_FILTER(state->min_mip_filter) |
       VIRGL_OBJ_SAMPLE_STATE_S0_MAG_IMG_FILTER(state->mag_img_filter) |
       VIRGL_OBJ_SAMPLE_STATE_S0_COMPARE_MODE(state->compare_mode) |
-      VIRGL_OBJ_SAMPLE_STATE_S0_COMPARE_FUNC(state->compare_func);
+      VIRGL_OBJ_SAMPLE_STATE_S0_COMPARE_FUNC(state->compare_func) |
+      VIRGL_OBJ_SAMPLE_STATE_S0_SEAMLESS_CUBE_MAP(state->seamless_cube_map);
 
    virgl_encoder_write_dword(ctx->cbuf, tmp);
    virgl_encoder_write_dword(ctx->cbuf, fui(state->lod_bias));

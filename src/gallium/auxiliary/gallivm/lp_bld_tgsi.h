@@ -201,7 +201,7 @@ struct lp_build_sampler_soa
 struct lp_build_sampler_aos
 {
    LLVMValueRef
-   (*emit_fetch_texel)( struct lp_build_sampler_aos *sampler,
+   (*emit_fetch_texel)( const struct lp_build_sampler_aos *sampler,
                         struct lp_build_context *bld,
                         unsigned target, /* TGSI_TEXTURE_* */
                         unsigned unit,
@@ -228,7 +228,7 @@ lp_build_tgsi_soa(struct gallivm_state *gallivm,
                   LLVMValueRef (*outputs)[4],
                   LLVMValueRef context_ptr,
                   LLVMValueRef thread_data_ptr,
-                  struct lp_build_sampler_soa *sampler,
+                  const struct lp_build_sampler_soa *sampler,
                   const struct tgsi_shader_info *info,
                   const struct lp_build_tgsi_gs_iface *gs_iface);
 
@@ -241,7 +241,7 @@ lp_build_tgsi_aos(struct gallivm_state *gallivm,
                   LLVMValueRef consts_ptr,
                   const LLVMValueRef *inputs,
                   LLVMValueRef *outputs,
-                  struct lp_build_sampler_aos *sampler,
+                  const struct lp_build_sampler_aos *sampler,
                   const struct tgsi_shader_info *info);
 
 
@@ -545,7 +545,7 @@ struct lp_build_tgsi_aos_context
    const LLVMValueRef *inputs;
    LLVMValueRef *outputs;
 
-   struct lp_build_sampler_aos *sampler;
+   const struct lp_build_sampler_aos *sampler;
 
    struct tgsi_declaration_sampler_view sv[PIPE_MAX_SHADER_SAMPLER_VIEWS];
 

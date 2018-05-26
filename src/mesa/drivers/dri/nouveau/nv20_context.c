@@ -55,13 +55,13 @@ nv20_clear(struct gl_context *ctx, GLbitfield buffers)
 		struct nouveau_surface *s = &to_nouveau_renderbuffer(
 			fb->_ColorDrawBuffers[0])->surface;
 
-		if (ctx->Color.ColorMask[0][RCOMP])
+		if (GET_COLORMASK_BIT(ctx->Color.ColorMask, 0, 0))
 			clear |= NV20_3D_CLEAR_BUFFERS_COLOR_R;
-		if (ctx->Color.ColorMask[0][GCOMP])
+		if (GET_COLORMASK_BIT(ctx->Color.ColorMask, 0, 1))
 			clear |= NV20_3D_CLEAR_BUFFERS_COLOR_G;
-		if (ctx->Color.ColorMask[0][BCOMP])
+		if (GET_COLORMASK_BIT(ctx->Color.ColorMask, 0, 2))
 			clear |= NV20_3D_CLEAR_BUFFERS_COLOR_B;
-		if (ctx->Color.ColorMask[0][ACOMP])
+		if (GET_COLORMASK_BIT(ctx->Color.ColorMask, 0, 3))
 			clear |= NV20_3D_CLEAR_BUFFERS_COLOR_A;
 
 		BEGIN_NV04(push, NV20_3D(CLEAR_VALUE), 1);

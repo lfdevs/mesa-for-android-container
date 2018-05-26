@@ -412,6 +412,14 @@ The integer capabilities:
   priorities, this returns a bitmask of PIPE_CONTEXT_PRIORITY_x for the
   supported priority levels.  A driver that does not support prioritized
   contexts can return 0.
+* ``PIPE_CAP_FENCE_SIGNAL``: True if the driver supports signaling semaphores
+  using fence_server_signal().
+* ``PIPE_CAP_CONSTBUF0_FLAGS``: The bits of pipe_resource::flags that must be
+  set when binding that buffer as constant buffer 0. If the buffer doesn't have
+  those bits set, pipe_context::set_constant_buffer(.., 0, ..) is ignored
+  by the driver, and the driver can throw assertion failures.
+* ``PIPE_CAP_PACKED_UNIFORMS``: True if the driver supports packed uniforms
+  as opposed to padding to vec4s.
 
 
 .. _pipe_capf:
@@ -429,10 +437,6 @@ The floating-point capabilities are:
   applied to anisotropically filtered textures.
 * ``PIPE_CAPF_MAX_TEXTURE_LOD_BIAS``: The maximum :term:`LOD` bias that may be applied
   to filtered textures.
-* ``PIPE_CAPF_GUARD_BAND_LEFT``,
-  ``PIPE_CAPF_GUARD_BAND_TOP``,
-  ``PIPE_CAPF_GUARD_BAND_RIGHT``,
-  ``PIPE_CAPF_GUARD_BAND_BOTTOM``: TODO
 
 
 .. _pipe_shader_cap:
@@ -529,8 +533,8 @@ pipe_screen::get_compute_param.
 
 * ``PIPE_COMPUTE_CAP_IR_TARGET``: A description of the target of the form
   ``processor-arch-manufacturer-os`` that will be passed on to the compiler.
-  This CAP is only relevant for drivers that specify PIPE_SHADER_IR_LLVM
-  or PIPE_SHADER_IR_NATIVE for their preferred IR.
+  This CAP is only relevant for drivers that specify PIPE_SHADER_IR_NATIVE for
+  their preferred IR.
   Value type: null-terminated string. Shader IR type dependent.
 * ``PIPE_COMPUTE_CAP_GRID_DIMENSION``: Number of supported dimensions
   for grid and block coordinates.  Value type: ``uint64_t``. Shader IR type dependent.

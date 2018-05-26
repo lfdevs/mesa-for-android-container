@@ -163,7 +163,7 @@ try_pbo_upload(struct gl_context *ctx,
                            0, 0, false,
                            intelImage->mt, image->Level, image->Face,
                            0, 0, false,
-                           image->Width, image->Height, GL_COPY)) {
+                           image->Width, image->Height, COLOR_LOGICOP_COPY)) {
       DBG("%s: blit failed\n", __func__);
       intel_miptree_release(&pbo_mt);
       return false;

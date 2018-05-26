@@ -33,6 +33,11 @@
 #include <stdlib.h>
 #include "glsl_symbol_table.h"
 
+/* THIS is a macro defined somewhere deep in the Windows MSVC header files.
+ * Undefine it here to avoid collision with the lexer's THIS token.
+ */
+#undef THIS
+
 struct gl_context;
 
 struct glsl_switch_state {
@@ -317,8 +322,7 @@ struct _mesa_glsl_parse_state {
    bool has_framebuffer_fetch() const
    {
       return EXT_shader_framebuffer_fetch_enable ||
-             MESA_shader_framebuffer_fetch_enable ||
-             MESA_shader_framebuffer_fetch_non_coherent_enable;
+             EXT_shader_framebuffer_fetch_non_coherent_enable;
    }
 
    bool has_texture_cube_map_array() const
@@ -609,6 +613,8 @@ struct _mesa_glsl_parse_state {
    bool ARB_arrays_of_arrays_warn;
    bool ARB_bindless_texture_enable;
    bool ARB_bindless_texture_warn;
+   bool ARB_compatibility_enable;
+   bool ARB_compatibility_warn;
    bool ARB_compute_shader_enable;
    bool ARB_compute_shader_warn;
    bool ARB_compute_variable_group_size_enable;
@@ -711,6 +717,8 @@ struct _mesa_glsl_parse_state {
     */
    bool OES_EGL_image_external_enable;
    bool OES_EGL_image_external_warn;
+   bool OES_EGL_image_external_essl3_enable;
+   bool OES_EGL_image_external_essl3_warn;
    bool OES_geometry_point_size_enable;
    bool OES_geometry_point_size_warn;
    bool OES_geometry_shader_enable;
@@ -778,6 +786,8 @@ struct _mesa_glsl_parse_state {
    bool EXT_separate_shader_objects_warn;
    bool EXT_shader_framebuffer_fetch_enable;
    bool EXT_shader_framebuffer_fetch_warn;
+   bool EXT_shader_framebuffer_fetch_non_coherent_enable;
+   bool EXT_shader_framebuffer_fetch_non_coherent_warn;
    bool EXT_shader_integer_mix_enable;
    bool EXT_shader_integer_mix_warn;
    bool EXT_shader_io_blocks_enable;
@@ -796,10 +806,6 @@ struct _mesa_glsl_parse_state {
    bool EXT_texture_cube_map_array_warn;
    bool INTEL_conservative_rasterization_enable;
    bool INTEL_conservative_rasterization_warn;
-   bool MESA_shader_framebuffer_fetch_enable;
-   bool MESA_shader_framebuffer_fetch_warn;
-   bool MESA_shader_framebuffer_fetch_non_coherent_enable;
-   bool MESA_shader_framebuffer_fetch_non_coherent_warn;
    bool MESA_shader_integer_functions_enable;
    bool MESA_shader_integer_functions_warn;
    bool NV_image_formats_enable;

@@ -119,6 +119,7 @@ nouveau_context_init(struct gl_context *ctx, gl_api api,
 
 	/* Initialize the function pointers. */
 	_mesa_init_driver_functions(&functions);
+	_tnl_init_driver_draw_function(&functions);
 	nouveau_driver_functions_init(&functions);
 	nouveau_bufferobj_functions_init(&functions);
 	nouveau_texture_functions_init(&functions);
@@ -202,8 +203,7 @@ nouveau_context_deinit(struct gl_context *ctx)
 	if (TNL_CONTEXT(ctx))
 		_tnl_DestroyContext(ctx);
 
-	if (vbo_context(ctx))
-		_vbo_DestroyContext(ctx);
+	_vbo_DestroyContext(ctx);
 
 	if (SWRAST_CONTEXT(ctx))
 		_swrast_DestroyContext(ctx);

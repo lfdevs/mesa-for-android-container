@@ -23,37 +23,30 @@
 # rules must be outside of any AM_CONDITIONALs. Otherwise they will be commented
 # out and we'll fail at `make dist'
 vulkan_api_xml = $(top_srcdir)/src/vulkan/registry/vk.xml
-vk_android_native_buffer_xml = $(top_srcdir)/src/vulkan/registry/vk_android_native_buffer.xml
 
 vulkan/anv_entrypoints.c: vulkan/anv_entrypoints_gen.py \
 			  vulkan/anv_extensions.py \
-			  $(vulkan_api_xml) \
-			  $(vk_android_native_buffer_xml)
+			  $(vulkan_api_xml)
 	$(MKDIR_GEN)
 	$(AM_V_GEN)$(PYTHON2) $(srcdir)/vulkan/anv_entrypoints_gen.py \
 		--xml $(vulkan_api_xml) \
-		--xml $(vk_android_native_buffer_xml) \
 		--outdir $(builddir)/vulkan
 vulkan/anv_entrypoints.h: vulkan/anv_entrypoints.c
 
 vulkan/anv_extensions.c: vulkan/anv_extensions_gen.py \
 			 vulkan/anv_extensions.py \
-			 $(vulkan_api_xml) \
-			 $(vk_android_native_buffer_xml)
+			 $(vulkan_api_xml)
 	$(MKDIR_GEN)
 	$(AM_V_GEN)$(PYTHON2) $(srcdir)/vulkan/anv_extensions_gen.py \
 		--xml $(vulkan_api_xml) \
-		--xml $(vk_android_native_buffer_xml) \
 		--out-c $@
 
 vulkan/anv_extensions.h: vulkan/anv_extensions_gen.py \
 			 vulkan/anv_extensions.py \
-			 $(vulkan_api_xml) \
-			 $(vk_android_native_buffer_xml)
+			 $(vulkan_api_xml)
 	$(MKDIR_GEN)
 	$(AM_V_GEN)$(PYTHON2) $(srcdir)/vulkan/anv_extensions_gen.py \
 		--xml $(vulkan_api_xml) \
-		--xml $(vk_android_native_buffer_xml) \
 		--out-h $@
 
 BUILT_SOURCES += $(VULKAN_GENERATED_FILES)
@@ -86,6 +79,10 @@ vulkan_includedir = $(includedir)/vulkan
 
 noinst_HEADERS += \
 	$(top_srcdir)/include/vulkan/vk_platform.h \
+	$(top_srcdir)/include/vulkan/vulkan_core.h \
+	$(top_srcdir)/include/vulkan/vulkan_wayland.h \
+	$(top_srcdir)/include/vulkan/vulkan_xcb.h \
+	$(top_srcdir)/include/vulkan/vulkan_xlib.h \
 	$(top_srcdir)/include/vulkan/vulkan.h
 
 vulkan_include_HEADERS = \
@@ -100,7 +97,8 @@ VULKAN_PER_GEN_LIBS = \
 	vulkan/libanv-gen75.la \
 	vulkan/libanv-gen8.la \
 	vulkan/libanv-gen9.la \
-	vulkan/libanv-gen10.la
+	vulkan/libanv-gen10.la \
+	vulkan/libanv-gen11.la
 
 noinst_LTLIBRARIES += $(VULKAN_PER_GEN_LIBS)
 
@@ -140,6 +138,10 @@ vulkan_libanv_gen10_la_CFLAGS = $(VULKAN_CFLAGS)
 vulkan_libanv_gen10_la_CPPFLAGS = $(VULKAN_CPPFLAGS) -DGEN_VERSIONx10=100
 vulkan_libanv_gen10_la_SOURCES = $(VULKAN_GEN10_FILES)
 
+vulkan_libanv_gen11_la_CFLAGS = $(VULKAN_CFLAGS)
+vulkan_libanv_gen11_la_CPPFLAGS = $(VULKAN_CPPFLAGS) -DGEN_VERSIONx10=110
+vulkan_libanv_gen11_la_SOURCES = $(VULKAN_GEN11_FILES)
+
 VULKAN_SOURCES = \
 	$(VULKAN_GENERATED_FILES) \
 	$(VULKAN_FILES)
@@ -149,6 +151,7 @@ VULKAN_LIB_DEPS = \
 	$(VULKAN_PER_GEN_LIBS) \
 	compiler/libintel_compiler.la \
 	common/libintel_common.la \
+	dev/libintel_dev.la \
 	isl/libisl.la \
 	blorp/libblorp.la \
 	$(top_builddir)/src/vulkan/libvulkan_util.la \

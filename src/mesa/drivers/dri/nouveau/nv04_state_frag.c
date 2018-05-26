@@ -49,8 +49,8 @@ struct combiner_state {
 
 	/* GL state */
 	GLenum mode;
-	GLenum *source;
-	GLenum *operand;
+	GLenum16 *source;
+	GLenum16 *operand;
 	GLuint logscale;
 
 	/* Derived HW state */
@@ -64,7 +64,7 @@ struct combiner_state {
  * context. */
 #define INIT_COMBINER(chan, ctx, rc, i) do {			\
 		struct gl_tex_env_combine_state *c =		\
-			ctx->Texture.Unit[i]._CurrentCombine;	\
+			ctx->Texture.FixedFuncUnit[i]._CurrentCombine;	\
 		(rc)->ctx = ctx;				\
 		(rc)->unit = i;					\
 		(rc)->alpha = __INIT_COMBINER_ALPHA_##chan;	\
@@ -287,7 +287,7 @@ nv04_emit_tex_env(struct gl_context *ctx, int emit)
 	/* calculate non-multitex state */
 	nv04->blend &= ~NV04_TEXTURED_TRIANGLE_BLEND_TEXTURE_MAP__MASK;
 	if (ctx->Texture._MaxEnabledTexImageUnit != -1)
-		nv04->blend |= get_texenv_mode(ctx->Texture.Unit[0].EnvMode);
+		nv04->blend |= get_texenv_mode(ctx->Texture.FixedFuncUnit[0].EnvMode);
 	else
 		nv04->blend |= get_texenv_mode(GL_MODULATE);
 
@@ -295,5 +295,5 @@ nv04_emit_tex_env(struct gl_context *ctx, int emit)
 	nv04->alpha[i] = rc_a.hw;
 	nv04->color[i] = rc_c.hw;
 	nv04->factor   = pack_rgba_f(MESA_FORMAT_B8G8R8A8_UNORM,
-				     ctx->Texture.Unit[0].EnvColor);
+				     ctx->Texture.FixedFuncUnit[0].EnvColor);
 }

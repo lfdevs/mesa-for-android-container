@@ -55,6 +55,7 @@ void brw_draw_prims(struct gl_context *ctx,
                      unsigned stream,
 		     struct gl_buffer_object *indirect );
 
+void brw_init_draw_functions(struct dd_function_table *functions);
 void brw_draw_init( struct brw_context *brw );
 void brw_draw_destroy( struct brw_context *brw );
 

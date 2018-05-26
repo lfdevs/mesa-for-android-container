@@ -26,7 +26,7 @@
 
 #include <stdio.h>
 
-#include "gen_device_info.h"
+#include "dev/gen_device_info.h"
 
 /**
  * Chunk of L3 cache reserved for some specific purpose.

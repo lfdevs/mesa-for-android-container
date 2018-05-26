@@ -136,7 +136,6 @@ private:
    Value *loadUboInfo64(Value *ptr, uint32_t off);
    Value *loadUboLength32(Value *ptr, uint32_t off);
    Value *loadMsInfo32(Value *ptr, uint32_t off);
-   Value *loadTexHandle(Value *ptr, unsigned int slot);
 
    void adjustCoordinatesMS(TexInstruction *);
    void processSurfaceCoordsGM107(TexInstruction *);
@@ -145,6 +144,8 @@ private:
    void convertSurfaceFormat(TexInstruction *);
 
 protected:
+   Value *loadTexHandle(Value *ptr, unsigned int slot);
+
    BuildUtil bld;
 
 private:

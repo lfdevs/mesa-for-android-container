@@ -48,6 +48,10 @@
 #define RENCODE_IB_PARAM_FEEDBACK_BUFFER			0x00000010
 #define RENCODE_IB_PARAM_DIRECT_OUTPUT_NALU			0x00000020
 
+#define RENCODE_HEVC_IB_PARAM_SLICE_CONTROL			0x00100001
+#define RENCODE_HEVC_IB_PARAM_SPEC_MISC 			0x00100002
+#define RENCODE_HEVC_IB_PARAM_DEBLOCKING_FILTER 		0x00100003
+
 #define RENCODE_H264_IB_PARAM_SLICE_CONTROL			0x00200001
 #define RENCODE_H264_IB_PARAM_SPEC_MISC 			0x00200002
 #define RENCODE_H264_IB_PARAM_ENCODE_PARAMS			0x00200003
@@ -67,6 +71,7 @@
 #define RENCODE_IF_MINOR_VERSION_MASK				0x0000FFFF
 #define RENCODE_IF_MINOR_VERSION_SHIFT				0
 
+#define RENCODE_ENCODE_STANDARD_HEVC				0
 #define RENCODE_ENCODE_STANDARD_H264				1
 
 #define RENCODE_PREENCODE_MODE_NONE 				0x00000000
@@ -76,6 +81,9 @@
 
 #define RENCODE_H264_SLICE_CONTROL_MODE_FIXED_MBS       	0x00000000
 #define RENCODE_H264_SLICE_CONTROL_MODE_FIXED_BITS      	0x00000001
+
+#define RENCODE_HEVC_SLICE_CONTROL_MODE_FIXED_CTBS       	0x00000000
+#define RENCODE_HEVC_SLICE_CONTROL_MODE_FIXED_BITS      	0x00000001
 
 #define RENCODE_RATE_CONTROL_METHOD_NONE        		0x00000000
 #define RENCODE_RATE_CONTROL_METHOD_LATENCY_CONSTRAINED_VBR  	0x00000001
@@ -94,6 +102,11 @@
 
 #define RENCODE_HEADER_INSTRUCTION_END  			0x00000000
 #define RENCODE_HEADER_INSTRUCTION_COPY 			0x00000001
+
+#define RENCODE_HEVC_HEADER_INSTRUCTION_DEPENDENT_SLICE_END	0x00010000
+#define RENCODE_HEVC_HEADER_INSTRUCTION_FIRST_SLICE		0x00010001
+#define RENCODE_HEVC_HEADER_INSTRUCTION_SLICE_SEGMENT		0x00010002
+#define RENCODE_HEVC_HEADER_INSTRUCTION_SLICE_QP_DELTA		0x00010003
 
 #define RENCODE_H264_HEADER_INSTRUCTION_FIRST_MB		0x00020000
 #define RENCODE_H264_HEADER_INSTRUCTION_SLICE_QP_DELTA 	0x00020001
@@ -181,6 +194,25 @@ typedef struct rvcn_enc_h264_slice_control_s
     };
 } rvcn_enc_h264_slice_control_t;
 
+typedef struct rvcn_enc_hevc_slice_control_s
+{
+    uint32_t	slice_control_mode;
+    union
+    {
+        struct
+        {
+            uint32_t	num_ctbs_per_slice;
+            uint32_t	num_ctbs_per_slice_segment;
+        } fixed_ctbs_per_slice;
+
+        struct
+        {
+            uint32_t	num_bits_per_slice;
+            uint32_t	num_bits_per_slice_segment;
+        } fixed_bits_per_slice;
+    };
+} rvcn_enc_hevc_slice_control_t;
+
 typedef struct rvcn_enc_h264_spec_misc_s
 {
     uint32_t	constrained_intra_pred_flag;
@@ -191,6 +223,17 @@ typedef struct rvcn_enc_h264_spec_misc_s
     uint32_t	profile_idc;
     uint32_t	level_idc;
 } rvcn_enc_h264_spec_misc_t;
+
+typedef struct rvcn_enc_hevc_spec_misc_s
+{
+    uint32_t	log2_min_luma_coding_block_size_minus3;
+    uint32_t	amp_disabled;
+    uint32_t	strong_intra_smoothing_enabled;
+    uint32_t	constrained_intra_pred_flag;
+    uint32_t	cabac_init_flag;
+    uint32_t	half_pel_enabled;
+    uint32_t	quarter_pel_enabled;
+} rvcn_enc_hevc_spec_misc_t;
 
 typedef struct rvcn_enc_rate_ctl_session_init_s
 {
@@ -276,6 +319,16 @@ typedef struct rvcn_enc_h264_deblocking_filter_s
     int32_t 	cr_qp_offset;
 } rvcn_enc_h264_deblocking_filter_t;
 
+typedef struct rvcn_enc_hevc_deblocking_filter_s
+{
+    uint32_t	loop_filter_across_slices_enabled;
+    int32_t 	deblocking_filter_disabled;
+    int32_t 	beta_offset_div2;
+    int32_t 	tc_offset_div2;
+    int32_t 	cb_qp_offset;
+    int32_t 	cr_qp_offset;
+} rvcn_enc_hevc_deblocking_filter_t;
+
 typedef struct rvcn_enc_intra_refresh_s
 {
     uint32_t	intra_refresh_mode;
@@ -331,7 +384,7 @@ struct pipe_video_codec *radeon_create_encoder(struct pipe_context *context,
 		struct radeon_winsys* ws,
 		radeon_enc_get_buffer get_buffer);
 
-struct radeon_enc_h264_enc_pic {
+struct radeon_enc_pic {
 	enum	pipe_h264_enc_picture_type picture_type;
 
 	unsigned	frame_num;
@@ -343,21 +396,45 @@ struct radeon_enc_h264_enc_pic {
 	unsigned	crop_right;
 	unsigned	crop_top;
 	unsigned	crop_bottom;
+	unsigned	general_tier_flag;
+	unsigned	general_profile_idc;
+	unsigned	general_level_idc;
+	unsigned	max_poc;
+	unsigned	log2_max_poc;
+	unsigned	chroma_format_idc;
+	unsigned	pic_width_in_luma_samples;
+	unsigned	pic_height_in_luma_samples;
+	unsigned	log2_diff_max_min_luma_coding_block_size;
+	unsigned	log2_min_transform_block_size_minus2;
+	unsigned	log2_diff_max_min_transform_block_size;
+	unsigned	max_transform_hierarchy_depth_inter;
+	unsigned	max_transform_hierarchy_depth_intra;
+	unsigned	log2_parallel_merge_level_minus2;
+	unsigned	bit_depth_luma_minus8;
+	unsigned	bit_depth_chroma_minus8;
+	unsigned	nal_unit_type;
+	unsigned	max_num_merge_cand;
 
 	bool	not_referenced;
 	bool	is_idr;
 	bool	is_even_frame;
+	bool	sample_adaptive_offset_enabled_flag;
+	bool	pcm_enabled_flag;
+	bool	sps_temporal_mvp_enabled_flag;
 
 	rvcn_enc_task_info_t	task_info;
 	rvcn_enc_session_init_t	session_init;
 	rvcn_enc_layer_control_t	layer_ctrl;
 	rvcn_enc_layer_select_t	layer_sel;
 	rvcn_enc_h264_slice_control_t	slice_ctrl;
+	rvcn_enc_hevc_slice_control_t	hevc_slice_ctrl;
 	rvcn_enc_h264_spec_misc_t	spec_misc;
+	rvcn_enc_hevc_spec_misc_t	hevc_spec_misc;
 	rvcn_enc_rate_ctl_session_init_t	rc_session_init;
 	rvcn_enc_rate_ctl_layer_init_t	rc_layer_init;
 	rvcn_enc_h264_encode_params_t	h264_enc_params;
 	rvcn_enc_h264_deblocking_filter_t	h264_deblock;
+	rvcn_enc_hevc_deblocking_filter_t	hevc_deblock;
 	rvcn_enc_rate_ctl_per_picture_t	rc_per_pic;
 	rvcn_enc_quality_params_t	quality_params;
 	rvcn_enc_encode_context_buffer_t	ctx_buf;
@@ -370,7 +447,7 @@ struct radeon_enc_h264_enc_pic {
 struct radeon_encoder {
 	struct pipe_video_codec		base;
 
-	void (*begin)(struct radeon_encoder *enc, struct pipe_h264_enc_picture_desc *pic);
+	void (*begin)(struct radeon_encoder *enc, struct pipe_picture_desc *pic);
 	void (*encode)(struct radeon_encoder *enc);
 	void (*destroy)(struct radeon_encoder *enc);
 
@@ -394,7 +471,7 @@ struct radeon_encoder {
 	struct rvid_buffer		*si;
 	struct rvid_buffer		*fb;
 	struct rvid_buffer		cpb;
-	struct radeon_enc_h264_enc_pic	enc_pic;
+	struct radeon_enc_pic	enc_pic;
 
 	unsigned			alignment;
 	unsigned			shifter;

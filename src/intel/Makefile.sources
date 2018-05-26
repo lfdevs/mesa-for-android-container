@@ -13,8 +13,7 @@ COMMON_FILES = \
 	common/gen_debug.h \
 	common/gen_decoder.c \
 	common/gen_decoder.h \
-	common/gen_device_info.c \
-	common/gen_device_info.h \
+	common/gen_defines.h \
 	common/gen_l3_config.c \
 	common/gen_l3_config.h \
 	common/gen_urb_config.c \
@@ -123,6 +122,10 @@ COMPILER_FILES = \
 COMPILER_GENERATED_FILES = \
 	compiler/brw_nir_trig_workarounds.c
 
+DEV_FILES = \
+	dev/gen_device_info.c \
+	dev/gen_device_info.h
+
 GENXML_XML_FILES = \
 	genxml/gen4.xml \
 	genxml/gen45.xml \
@@ -132,7 +135,8 @@ GENXML_XML_FILES = \
 	genxml/gen75.xml \
 	genxml/gen8.xml \
 	genxml/gen9.xml \
-	genxml/gen10.xml
+	genxml/gen10.xml \
+	genxml/gen11.xml
 
 GENXML_GENERATED_PACK_FILES = \
 	genxml/gen4_pack.h \
@@ -143,7 +147,8 @@ GENXML_GENERATED_PACK_FILES = \
 	genxml/gen75_pack.h \
 	genxml/gen8_pack.h \
 	genxml/gen9_pack.h \
-	genxml/gen10_pack.h
+	genxml/gen10_pack.h \
+	genxml/gen11_pack.h
 
 GENXML_GENERATED_FILES = \
 	$(GENXML_GENERATED_PACK_FILES) \
@@ -201,6 +206,10 @@ ISL_GEN10_FILES = \
 	isl/isl_emit_depth_stencil.c \
 	isl/isl_surface_state.c
 
+ISL_GEN11_FILES = \
+	isl/isl_emit_depth_stencil.c \
+	isl/isl_surface_state.c
+
 ISL_GENERATED_FILES = \
 	isl/isl_format_layout.c
 
@@ -217,6 +226,7 @@ VULKAN_FILES := \
 	vulkan/anv_image.c \
 	vulkan/anv_intel.c \
 	vulkan/anv_nir.h \
+	vulkan/anv_nir_add_base_work_group_id.c \
 	vulkan/anv_nir_apply_pipeline_layout.c \
 	vulkan/anv_nir_lower_input_attachments.c \
 	vulkan/anv_nir_lower_multiview.c \
@@ -277,5 +287,9 @@ VULKAN_GEN9_FILES := \
 	$(VULKAN_GENX_FILES)
 
 VULKAN_GEN10_FILES := \
+	vulkan/gen8_cmd_buffer.c \
+	$(VULKAN_GENX_FILES)
+
+VULKAN_GEN11_FILES := \
 	vulkan/gen8_cmd_buffer.c \
 	$(VULKAN_GENX_FILES)

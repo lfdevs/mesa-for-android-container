@@ -27,6 +27,7 @@
  *    Keith Whitwell <keithw@vmware.com>
  */
 
+#include "main/errors.h"
 #include "main/glheader.h"
 #include "main/imports.h"
 #include "main/api_arrayelt.h"

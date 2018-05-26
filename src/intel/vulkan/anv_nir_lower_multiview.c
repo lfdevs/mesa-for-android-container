@@ -72,7 +72,8 @@ build_view_index(struct lower_multiview_state *state)
       b->cursor = nir_before_block(nir_start_block(b->impl));
 
       assert(state->view_mask != 0);
-      if (0 && _mesa_bitcount(state->view_mask) == 1) {
+      if (_mesa_bitcount(state->view_mask) == 1) {
+         /* Set the view index directly. */
          state->view_index = nir_imm_int(b, ffs(state->view_mask) - 1);
       } else if (state->builder.shader->info.stage == MESA_SHADER_VERTEX) {
          /* We only support 16 viewports */
@@ -86,7 +87,7 @@ build_view_index(struct lower_multiview_state *state)
             nir_umod(b, nir_load_instance_id(b),
                         nir_imm_int(b, _mesa_bitcount(state->view_mask)));
 
-         if (0 && util_is_power_of_two(state->view_mask + 1)) {
+         if (util_is_power_of_two_or_zero(state->view_mask + 1)) {
             /* If we have a full view mask, then compacted is what we want */
             state->view_index = compacted;
          } else {
@@ -210,11 +211,15 @@ anv_nir_lower_multiview(nir_shader *shader, uint32_t view_mask)
       assert(view_index->parent_instr->block == nir_start_block(entrypoint));
       b->cursor = nir_after_instr(view_index->parent_instr);
 
-      nir_variable *view_index_out =
-         nir_variable_create(shader, nir_var_shader_out,
-                             glsl_int_type(), "view index");
-      view_index_out->data.location = VARYING_SLOT_VIEW_INDEX;
-      nir_store_var(b, view_index_out, view_index, 0x1);
+      /* Unless there is only one possible view index (that would be set
+       * directly), pass it to the next stage. */
+      if (_mesa_bitcount(state.view_mask) != 1) {
+         nir_variable *view_index_out =
+            nir_variable_create(shader, nir_var_shader_out,
+                                glsl_int_type(), "view index");
+         view_index_out->data.location = VARYING_SLOT_VIEW_INDEX;
+         nir_store_var(b, view_index_out, view_index, 0x1);
+      }
 
       nir_variable *layer_id_out =
          nir_variable_create(shader, nir_var_shader_out,

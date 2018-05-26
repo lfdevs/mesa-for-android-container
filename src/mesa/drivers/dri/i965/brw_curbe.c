@@ -214,8 +214,8 @@ brw_upload_constant_buffer(struct brw_context *brw)
       goto emit;
    }
 
-   buf = intel_upload_space(brw, bufsz, 64,
-                            &brw->curbe.curbe_bo, &brw->curbe.curbe_offset);
+   buf = brw_upload_space(&brw->upload, bufsz, 64,
+                          &brw->curbe.curbe_bo, &brw->curbe.curbe_offset);
 
    STATIC_ASSERT(sizeof(gl_constant_value) == sizeof(float));
 

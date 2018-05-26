@@ -47,35 +47,62 @@ struct ir3_legalize_ctx {
 	int max_bary;
 };
 
+struct ir3_legalize_state {
+	regmask_t needs_ss;
+	regmask_t needs_ss_war;       /* write after read */
+	regmask_t needs_sy;
+};
+
+struct ir3_legalize_block_data {
+	bool valid;
+	struct ir3_legalize_state state;
+};
+
 /* We want to evaluate each block from the position of any other
- * predecessor block, in order that the flags set are the union
- * of all possible program paths.  For stopping condition, we
- * want to stop when the pair of <pred-block, current-block> has
- * been visited already.
+ * predecessor block, in order that the flags set are the union of
+ * all possible program paths.
  *
- * XXX is that completely true?  We could have different needs_xyz
- * flags set depending on path leading to pred-block.. we could
- * do *most* of this based on chasing src instructions ptrs (and
- * following all phi srcs).. except the write-after-read hazzard.
+ * To do this, we need to know the output state (needs_ss/ss_war/sy)
+ * of all predecessor blocks.  The tricky thing is loops, which mean
+ * that we can't simply recursively process each predecessor block
+ * before legalizing the current block.
  *
- * For now we just set ss/sy flag on first instruction on block,
- * and handle everything within the block as before.
+ * How we handle that is by looping over all the blocks until the
+ * results converge.  If the output state of a given block changes
+ * in a given pass, this means that all successor blocks are not
+ * yet fully legalized.
  */
 
-static void
+static bool
 legalize_block(struct ir3_legalize_ctx *ctx, struct ir3_block *block)
 {
+	struct ir3_legalize_block_data *bd = block->data;
+
+	if (bd->valid)
+		return false;
+
 	struct ir3_instruction *last_input = NULL;
 	struct ir3_instruction *last_rel = NULL;
 	struct ir3_instruction *last_n = NULL;
 	struct list_head instr_list;
-	regmask_t needs_ss_war;       /* write after read */
-	regmask_t needs_ss;
-	regmask_t needs_sy;
+	struct ir3_legalize_state prev_state = bd->state;
+	struct ir3_legalize_state *state = &bd->state;
 
-	regmask_init(&needs_ss_war);
-	regmask_init(&needs_ss);
-	regmask_init(&needs_sy);
+	/* our input state is the OR of all predecessor blocks' state: */
+	for (unsigned i = 0; i < block->predecessors_count; i++) {
+		struct ir3_legalize_block_data *pbd = block->predecessors[i]->data;
+		struct ir3_legalize_state *pstate = &pbd->state;
+
+		/* Our input (ss)/(sy) state is based on OR'ing the output
+		 * state of all our predecessor blocks
+		 */
+		regmask_or(&state->needs_ss,
+				&state->needs_ss, &pstate->needs_ss);
+		regmask_or(&state->needs_ss_war,
+				&state->needs_ss_war, &pstate->needs_ss_war);
+		regmask_or(&state->needs_sy,
+				&state->needs_sy, &pstate->needs_sy);
+	}
 
 	/* remove all the instructions from the list, we'll be adding
 	 * them back in as we go
@@ -86,6 +113,8 @@ legalize_block(struct ir3_legalize_ctx *ctx, struct ir3_block *block)
 	list_for_each_entry_safe (struct ir3_instruction, n, &instr_list, node) {
 		struct ir3_register *reg;
 		unsigned i;
+
+		n->flags &= ~(IR3_INSTR_SS | IR3_INSTR_SY);
 
 		if (is_meta(n))
 			continue;
@@ -114,14 +143,15 @@ legalize_block(struct ir3_legalize_ctx *ctx, struct ir3_block *block)
 				 * instr consuming sfu result.. need to make
 				 * some tests for both this and (sy)..
 				 */
-				if (regmask_get(&needs_ss, reg)) {
+				if (regmask_get(&state->needs_ss, reg)) {
 					n->flags |= IR3_INSTR_SS;
-					regmask_init(&needs_ss);
+					regmask_init(&state->needs_ss_war);
+					regmask_init(&state->needs_ss);
 				}
 
-				if (regmask_get(&needs_sy, reg)) {
+				if (regmask_get(&state->needs_sy, reg)) {
 					n->flags |= IR3_INSTR_SY;
-					regmask_init(&needs_sy);
+					regmask_init(&state->needs_sy);
 				}
 			}
 
@@ -135,9 +165,10 @@ legalize_block(struct ir3_legalize_ctx *ctx, struct ir3_block *block)
 
 		if (n->regs_count > 0) {
 			reg = n->regs[0];
-			if (regmask_get(&needs_ss_war, reg)) {
+			if (regmask_get(&state->needs_ss_war, reg)) {
 				n->flags |= IR3_INSTR_SS;
-				regmask_init(&needs_ss_war); // ??? I assume?
+				regmask_init(&state->needs_ss_war);
+				regmask_init(&state->needs_ss);
 			}
 
 			if (last_rel && (reg->num == regid(REG_A0, 0))) {
@@ -175,7 +206,7 @@ legalize_block(struct ir3_legalize_ctx *ctx, struct ir3_block *block)
 		list_addtail(&n->node, &block->instr_list);
 
 		if (is_sfu(n))
-			regmask_set(&needs_ss, n->regs[0]);
+			regmask_set(&state->needs_ss, n->regs[0]);
 
 		if (is_tex(n)) {
 			/* this ends up being the # of samp instructions.. but that
@@ -186,23 +217,23 @@ legalize_block(struct ir3_legalize_ctx *ctx, struct ir3_block *block)
 			 * result is not used.
 			 */
 			ctx->has_samp = true;
-			regmask_set(&needs_sy, n->regs[0]);
+			regmask_set(&state->needs_sy, n->regs[0]);
 		} else if (n->opc == OPC_RESINFO) {
-			regmask_set(&needs_ss, n->regs[0]);
+			regmask_set(&state->needs_ss, n->regs[0]);
 			ir3_NOP(block)->flags |= IR3_INSTR_SS;
 		} else if (is_load(n)) {
 			/* seems like ldlv needs (ss) bit instead??  which is odd but
 			 * makes a bunch of flat-varying tests start working on a4xx.
 			 */
 			if ((n->opc == OPC_LDLV) || (n->opc == OPC_LDL))
-				regmask_set(&needs_ss, n->regs[0]);
+				regmask_set(&state->needs_ss, n->regs[0]);
 			else
-				regmask_set(&needs_sy, n->regs[0]);
+				regmask_set(&state->needs_sy, n->regs[0]);
 		} else if (is_atomic(n->opc)) {
 			if (n->flags & IR3_INSTR_G)
-				regmask_set(&needs_sy, n->regs[0]);
+				regmask_set(&state->needs_sy, n->regs[0]);
 			else
-				regmask_set(&needs_ss, n->regs[0]);
+				regmask_set(&state->needs_ss, n->regs[0]);
 		}
 
 		if (is_ssbo(n->opc) || (is_atomic(n->opc) && (n->flags & IR3_INSTR_G)))
@@ -214,7 +245,7 @@ legalize_block(struct ir3_legalize_ctx *ctx, struct ir3_block *block)
 		if (is_tex(n) || is_sfu(n) || is_mem(n)) {
 			foreach_src(reg, n) {
 				if (reg_gpr(reg))
-					regmask_set(&needs_ss_war, reg);
+					regmask_set(&state->needs_ss_war, reg);
 			}
 		}
 
@@ -251,8 +282,21 @@ legalize_block(struct ir3_legalize_ctx *ctx, struct ir3_block *block)
 	if (last_rel)
 		last_rel->flags |= IR3_INSTR_UL;
 
-	list_first_entry(&block->instr_list, struct ir3_instruction, node)
-		->flags |= IR3_INSTR_SS | IR3_INSTR_SY;
+	bd->valid = true;
+
+	if (memcmp(&prev_state, state, sizeof(*state))) {
+		/* our output state changed, this invalidates all of our
+		 * successors:
+		 */
+		for (unsigned i = 0; i < ARRAY_SIZE(block->successors); i++) {
+			if (!block->successors[i])
+				break;
+			struct ir3_legalize_block_data *pbd = block->successors[i]->data;
+			pbd->valid = false;
+		}
+	}
+
+	return true;
 }
 
 /* NOTE: branch instructions are always the last instruction(s)
@@ -333,7 +377,22 @@ resolve_jump(struct ir3_instruction *instr)
 	target = list_first_entry(&tblock->instr_list,
 				struct ir3_instruction, node);
 
-	if ((!target) || (target->ip == (instr->ip + 1))) {
+	/* TODO maybe a less fragile way to do this.  But we are expecting
+	 * a pattern from sched_block() that looks like:
+	 *
+	 *   br !p0.x, #else-block
+	 *   br p0.x, #if-block
+	 *
+	 * if the first branch target is +2, or if 2nd branch target is +1
+	 * then we can just drop the jump.
+	 */
+	unsigned next_block;
+	if (instr->cat0.inv == true)
+		next_block = 2;
+	else
+		next_block = 1;
+
+	if ((!target) || (target->ip == (instr->ip + next_block))) {
 		list_delinit(&instr->node);
 		return true;
 	} else {
@@ -408,21 +467,33 @@ mark_convergence_points(struct ir3 *ir)
 void
 ir3_legalize(struct ir3 *ir, bool *has_samp, bool *has_ssbo, int *max_bary)
 {
-	struct ir3_legalize_ctx ctx = {
-			.max_bary = -1,
-	};
+	struct ir3_legalize_ctx *ctx = rzalloc(ir, struct ir3_legalize_ctx);
+	bool progress;
 
+	ctx->max_bary = -1;
+
+	/* allocate per-block data: */
 	list_for_each_entry (struct ir3_block, block, &ir->block_list, node) {
-		legalize_block(&ctx, block);
+		block->data = rzalloc(ctx, struct ir3_legalize_block_data);
 	}
 
-	*has_samp = ctx.has_samp;
-	*has_ssbo = ctx.has_ssbo;
-	*max_bary = ctx.max_bary;
+	/* process each block: */
+	do {
+		progress = false;
+		list_for_each_entry (struct ir3_block, block, &ir->block_list, node) {
+			progress |= legalize_block(ctx, block);
+		}
+	} while (progress);
+
+	*has_samp = ctx->has_samp;
+	*has_ssbo = ctx->has_ssbo;
+	*max_bary = ctx->max_bary;
 
 	do {
 		ir3_count_instructions(ir);
 	} while(resolve_jumps(ir));
 
 	mark_convergence_points(ir);
+
+	ralloc_free(ctx);
 }

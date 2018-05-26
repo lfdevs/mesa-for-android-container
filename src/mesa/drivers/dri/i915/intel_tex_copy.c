@@ -70,7 +70,7 @@ intel_copy_texsubimage(struct intel_context *intel,
                            intelImage->mt, intelImage->base.Base.Level,
                            intelImage->base.Base.Face + slice,
                            dstx, dsty, false,
-                           width, height, GL_COPY)) {
+                           width, height, COLOR_LOGICOP_COPY)) {
       return false;
    }
 

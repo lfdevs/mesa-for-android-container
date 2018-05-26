@@ -59,6 +59,7 @@ static std::vector<int32_t> sBuckets(NUM_SWR_FORMATS, -1);
 /// @param x, y - Coordinates to raster tile.
 /// @param pSrcHotTile - Pointer to Hot Tile
 void SwrStoreHotTileToSurface(
+    HANDLE hWorkerPrivateData,
     SWR_SURFACE_STATE *pDstSurface,
     SWR_FORMAT srcFormat,
     SWR_RENDERTARGET_ATTACHMENT renderTargetIndex,

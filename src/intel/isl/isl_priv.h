@@ -27,7 +27,7 @@
 #include <assert.h>
 #include <strings.h>
 
-#include "common/gen_device_info.h"
+#include "dev/gen_device_info.h"
 #include "util/macros.h"
 
 #include "isl.h"
@@ -188,6 +188,9 @@ isl_extent3d_el_to_sa(enum isl_format fmt, struct isl_extent3d extent_el)
 #  include "isl_genX_priv.h"
 #  undef genX
 #  define genX(x) gen10_##x
+#  include "isl_genX_priv.h"
+#  undef genX
+#  define genX(x) gen11_##x
 #  include "isl_genX_priv.h"
 #  undef genX
 #endif

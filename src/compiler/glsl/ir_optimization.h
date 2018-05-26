@@ -30,6 +30,9 @@
 #ifndef GLSL_IR_OPTIMIZATION_H
 #define GLSL_IR_OPTIMIZATION_H
 
+struct gl_linked_shader;
+struct gl_shader_program;
+
 /* Operations for lower_instructions() */
 #define SUB_TO_ADD_NEG     0x01
 #define FDIV_TO_MUL_RCP    0x02
@@ -166,7 +169,7 @@ bool lower_tess_level(gl_linked_shader *shader);
 
 bool lower_vertex_id(gl_linked_shader *shader);
 bool lower_cs_derived(gl_linked_shader *shader);
-bool lower_blend_equation_advanced(gl_linked_shader *shader);
+bool lower_blend_equation_advanced(gl_linked_shader *shader, bool coherent);
 
 bool lower_subroutine(exec_list *instructions, struct _mesa_glsl_parse_state *state);
 void propagate_invariance(exec_list *instructions);

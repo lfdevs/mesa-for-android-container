@@ -26,26 +26,22 @@ import textwrap
 
 import xml.etree.cElementTree as et
 
-max_values = {}
-read_funcs = {}
+hashed_funcs = {}
 
 c_file = None
 _c_indent = 0
 
 def c(*args):
-    if c_file:
-        code = ' '.join(map(str,args))
-        for line in code.splitlines():
-            text = ''.rjust(_c_indent) + line
-            c_file.write(text.rstrip() + "\n")
+    code = ' '.join(map(str,args))
+    for line in code.splitlines():
+        text = ''.rjust(_c_indent) + line
+        c_file.write(text.rstrip() + "\n")
 
 # indented, but no trailing newline...
 def c_line_start(code):
-    if c_file:
-        c_file.write(''.rjust(_c_indent) + code)
+    c_file.write(''.rjust(_c_indent) + code)
 def c_raw(code):
-    if c_file:
-        c_file.write(code)
+    c_file.write(code)
 
 def c_indent(n):
     global _c_indent
@@ -58,11 +54,10 @@ header_file = None
 _h_indent = 0
 
 def h(*args):
-    if header_file:
-        code = ' '.join(map(str,args))
-        for line in code.splitlines():
-            text = ''.rjust(_h_indent) + line
-            header_file.write(text.rstrip() + "\n")
+    code = ' '.join(map(str,args))
+    for line in code.splitlines():
+        text = ''.rjust(_h_indent) + line
+        header_file.write(text.rstrip() + "\n")
 
 def h_indent(n):
     global _c_indent
@@ -125,6 +120,18 @@ def emit_umin(tmp_id, args):
     c("uint64_t tmp{0} = MIN({1}, {2});".format(tmp_id, args[1], args[0]))
     return tmp_id + 1
 
+def emit_lshft(tmp_id, args):
+    c("uint64_t tmp{0} = {1} << {2};".format(tmp_id, args[1], args[0]))
+    return tmp_id + 1
+
+def emit_rshft(tmp_id, args):
+    c("uint64_t tmp{0} = {1} >> {2};".format(tmp_id, args[1], args[0]))
+    return tmp_id + 1
+
+def emit_and(tmp_id, args):
+    c("uint64_t tmp{0} = {1} & {2};".format(tmp_id, args[1], args[0]))
+    return tmp_id + 1
+
 ops = {}
 #             (n operands, emitter)
 ops["FADD"] = (2, emit_fadd)
@@ -138,6 +145,9 @@ ops["UDIV"] = (2, emit_udiv)
 ops["UMUL"] = (2, emit_umul)
 ops["USUB"] = (2, emit_usub)
 ops["UMIN"] = (2, emit_umin)
+ops["<<"]   = (2, emit_lshft)
+ops[">>"]   = (2, emit_rshft)
+ops["AND"]  = (2, emit_and)
 
 def brkt(subexp):
     if " " in subexp:
@@ -177,7 +187,7 @@ hw_vars["$GpuMinFrequency"] = "brw->perfquery.sys_vars.gt_min_freq"
 hw_vars["$GpuMaxFrequency"] = "brw->perfquery.sys_vars.gt_max_freq"
 hw_vars["$SkuRevisionId"] = "brw->perfquery.sys_vars.revision"
 
-def output_rpn_equation_code(set, counter, equation, counter_vars):
+def output_rpn_equation_code(set, counter, equation):
     c("/* RPN equation: " + equation + " */")
     tokens = equation.split()
     stack = []
@@ -195,11 +205,11 @@ def output_rpn_equation_code(set, counter, equation, counter_vars):
                 if operand[0] == "$":
                     if operand in hw_vars:
                         operand = hw_vars[operand]
-                    elif operand in counter_vars:
-                        reference = counter_vars[operand]
-                        operand = read_funcs[operand[1:]] + "(brw, query, accumulator)"
+                    elif operand in set.counter_vars:
+                        reference = set.counter_vars[operand]
+                        operand = set.read_funcs[operand[1:]] + "(brw, query, accumulator)"
                     else:
-                        raise Exception("Failed to resolve variable " + operand + " in equation " + equation + " for " + set.get('name') + " :: " + counter.get('name'));
+                        raise Exception("Failed to resolve variable " + operand + " in equation " + equation + " for " + set.name + " :: " + counter.get('name'));
                 args.append(operand)
 
             tmp_id = callback(tmp_id, args)
@@ -208,7 +218,7 @@ def output_rpn_equation_code(set, counter, equation, counter_vars):
             stack.append(tmp)
 
     if len(stack) != 1:
-        raise Exception("Spurious empty rpn code for " + set.get('name') + " :: " +
+        raise Exception("Spurious empty rpn code for " + set.name + " :: " +
                 counter.get('name') + ".\nThis is probably due to some unhandled RPN function, in the equation \"" +
                 equation + "\"")
 
@@ -216,8 +226,8 @@ def output_rpn_equation_code(set, counter, equation, counter_vars):
 
     if value in hw_vars:
         value = hw_vars[value]
-    if value in counter_vars:
-        value = read_funcs[value[1:]] + "(brw, query, accumulator)"
+    if value in set.counter_vars:
+        value = set.read_funcs[value[1:]] + "(brw, query, accumulator)"
 
     c("\nreturn " + value + ";")
 
@@ -237,7 +247,7 @@ def splice_rpn_expression(set, counter, expression):
                     if operand in hw_vars:
                         operand = hw_vars[operand]
                     else:
-                        raise Exception("Failed to resolve variable " + operand + " in expression " + expression + " for " + set.get('name') + " :: " + counter.get('name'));
+                        raise Exception("Failed to resolve variable " + operand + " in expression " + expression + " for " + set.name + " :: " + counter.get('name'));
                 args.append(operand)
 
             subexp = callback(args)
@@ -245,73 +255,73 @@ def splice_rpn_expression(set, counter, expression):
             stack.append(subexp)
 
     if len(stack) != 1:
-        raise Exception("Spurious empty rpn expression for " + set.get('name') + " :: " +
+        raise Exception("Spurious empty rpn expression for " + set.name + " :: " +
                 counter.get('name') + ".\nThis is probably due to some unhandled RPN operation, in the expression \"" +
                 expression + "\"")
 
     return stack[-1]
 
-def output_counter_read(set, counter, counter_vars):
+def output_counter_read(gen, set, counter):
     c("\n")
-    c("/* {0} :: {1} */".format(set.get('name'), counter.get('name')))
-    ret_type = counter.get('data_type')
-    if ret_type == "uint64":
-        ret_type = "uint64_t"
+    c("/* {0} :: {1} */".format(set.name, counter.get('name')))
 
-    c("static " + ret_type)
-    read_sym = "{0}__{1}__{2}__read".format(set.get('chipset').lower(), set.get('underscore_name'), counter.get('underscore_name'))
-    c(read_sym + "(struct brw_context *brw,\n")
-    c_indent(len(read_sym) + 1)
-    c("const struct brw_perf_query_info *query,\n")
-    c("uint64_t *accumulator)\n")
-    c_outdent(len(read_sym) + 1)
+    if counter.read_hash in hashed_funcs:
+        c("#define %s \\" % counter.read_sym)
+        c_indent(3)
+        c("%s" % hashed_funcs[counter.read_hash])
+        c_outdent(3)
+    else:
+        ret_type = counter.get('data_type')
+        if ret_type == "uint64":
+            ret_type = "uint64_t"
 
-    c("{")
-    c_indent(3)
+        read_eq = counter.get('equation')
 
-    output_rpn_equation_code(set, counter, counter.get('equation'), counter_vars)
+        c("static " + ret_type)
+        c(counter.read_sym + "(MAYBE_UNUSED struct brw_context *brw,\n")
+        c_indent(len(counter.read_sym) + 1)
+        c("const struct brw_perf_query_info *query,\n")
+        c("uint64_t *accumulator)\n")
+        c_outdent(len(counter.read_sym) + 1)
 
-    c_outdent(3)
-    c("}")
+        c("{")
+        c_indent(3)
+        output_rpn_equation_code(set, counter, read_eq)
+        c_outdent(3)
+        c("}")
 
-    return read_sym
+        hashed_funcs[counter.read_hash] = counter.read_sym
 
-def output_counter_max(set, counter, counter_vars):
+
+def output_counter_max(gen, set, counter):
     max_eq = counter.get('max_equation')
 
-    if not max_eq:
-        return "0; /* undefined */"
-
-    try:
-        val = float(max_eq)
-        return max_eq + ";"
-    except ValueError:
-        pass
-
-    # We can only report constant maximum values via INTEL_performance_query
-    for token in max_eq.split():
-        if token[0] == '$' and token not in hw_vars:
-            return "0; /* unsupported (varies over time) */"
+    if not counter.has_max_func():
+        return
 
     c("\n")
-    c("/* {0} :: {1} */".format(set.get('name'), counter.get('name')))
-    ret_type = counter.get('data_type')
-    if ret_type == "uint64":
-        ret_type = "uint64_t"
+    c("/* {0} :: {1} */".format(set.name, counter.get('name')))
 
-    c("static " + ret_type)
-    max_sym = "{0}__{1}__{2}__max".format(set.get('chipset').lower(), set.get('underscore_name'), counter.get('underscore_name'))
-    c(max_sym + "(struct brw_context *brw)\n")
+    if counter.max_hash in hashed_funcs:
+        c("#define %s \\" % counter.max_sym())
+        c_indent(3)
+        c("%s" % hashed_funcs[counter.max_hash])
+        c_outdent(3)
+    else:
+        ret_type = counter.get('data_type')
+        if ret_type == "uint64":
+            ret_type = "uint64_t"
 
-    c("{")
-    c_indent(3)
+        c("static " + ret_type)
+        c(counter.max_sym() + "(struct brw_context *brw)\n")
+        c("{")
+        c_indent(3)
+        output_rpn_equation_code(set, counter, max_eq)
+        c_outdent(3)
+        c("}")
 
-    output_rpn_equation_code(set, counter, max_eq, counter_vars)
+        hashed_funcs[counter.max_hash] = counter.max_sym()
 
-    c_outdent(3)
-    c("}")
-
-    return max_sym + "(brw);"
 
 c_type_sizes = { "uint32_t": 4, "uint64_t": 8, "float": 4, "double": 8, "bool": 4 }
 def sizeof(c_type):
@@ -362,12 +372,12 @@ def output_counter_report(set, counter, current_offset):
         c_indent(3)
 
     c("counter = &query->counters[query->n_counters++];\n")
-    c("counter->oa_counter_read_" + data_type + " = " + read_funcs[counter.get('symbol_name')] + ";\n")
+    c("counter->oa_counter_read_" + data_type + " = " + set.read_funcs[counter.get('symbol_name')] + ";\n")
     c("counter->name = \"" + counter.get('name') + "\";\n")
     c("counter->desc = \"" + counter.get('description') + "\";\n")
     c("counter->type = GL_PERFQUERY_COUNTER_" + semantic_type_uc + "_INTEL;\n")
     c("counter->data_type = GL_PERFQUERY_COUNTER_DATA_" + data_type_uc + "_INTEL;\n")
-    c("counter->raw_max = " + max_values[counter.get('symbol_name')] + "\n")
+    c("counter->raw_max = " + set.max_values[counter.get('symbol_name')] + ";\n")
 
     current_offset = pot_align(current_offset, sizeof(c_type))
     c("counter->offset = " + str(current_offset) + ";\n")
@@ -419,29 +429,156 @@ def generate_register_configs(set):
         c("\n")
 
 
+# Wraps a <counter> element from the brw_oa_*.xml files.
+class Counter:
+    def __init__(self, set, xml):
+        self.xml = xml
+        self.set = set
+        self.read_hash = None
+        self.max_hash = None
+
+        self.read_sym = "{0}__{1}__{2}__read".format(self.set.gen.chipset,
+                                                     self.set.underscore_name,
+                                                     self.xml.get('underscore_name'))
+
+    def get(self, prop):
+        return self.xml.get(prop)
+
+    # Compute the hash of a counter's equation by expanding (including all the
+    # sub-equations it depends on)
+    def compute_hashes(self):
+        if self.read_hash is not None:
+            return
+
+        def replace_token(token):
+            if token[0] != "$":
+                return token
+            if token not in self.set.counter_vars:
+                return token
+            self.set.counter_vars[token].compute_hashes()
+            return self.set.counter_vars[token].read_hash
+
+        read_eq = self.xml.get('equation')
+        self.read_hash = ' '.join(map(replace_token, read_eq.split()))
+
+        max_eq = self.xml.get('max_equation')
+        if max_eq:
+            self.max_hash = ' '.join(map(replace_token, max_eq.split()))
+
+    def has_max_func(self):
+        max_eq = self.xml.get('max_equation')
+        if not max_eq:
+            return False
+
+        try:
+            val = float(max_eq)
+            return False
+        except ValueError:
+            pass
+
+        for token in max_eq.split():
+            if token[0] == '$' and token not in hw_vars:
+                return False
+        return True
+
+    def max_sym(self):
+        assert self.has_max_func()
+        return "{0}__{1}__{2}__max".format(self.set.gen.chipset,
+                                           self.set.underscore_name,
+                                           self.xml.get('underscore_name'))
+
+    def max_value(self):
+        max_eq = self.xml.get('max_equation')
+        if not max_eq:
+            return "0 /* undefined */"
+
+        try:
+            return "{0}".format(float(max_eq))
+        except ValueError:
+            pass
+
+        for token in max_eq.split():
+            if token[0] == '$' and token not in hw_vars:
+                return "0 /* unsupported (varies over time) */"
+
+        return "{0}__{1}__{2}__max(brw)".format(self.set.gen.chipset,
+                                                self.set.underscore_name,
+                                                self.xml.get('underscore_name'))
+
+# Wraps a <set> element from the brw_oa_*.xml files.
+class Set:
+    def __init__(self, gen, xml):
+        self.gen = gen
+        self.xml = xml
+
+        self.counter_vars = {}
+        self.max_values = {}
+        self.read_funcs = {}
+
+        xml_counters = self.xml.findall("counter")
+        self.counters = []
+        for xml_counter in xml_counters:
+            counter = Counter(self, xml_counter)
+            self.counters.append(counter)
+            self.counter_vars["$" + counter.get('symbol_name')] = counter
+            self.read_funcs[counter.get('symbol_name')] = counter.read_sym
+            self.max_values[counter.get('symbol_name')] = counter.max_value()
+
+        for counter in self.counters:
+            counter.compute_hashes()
+
+    @property
+    def hw_config_guid(self):
+        return self.xml.get('hw_config_guid')
+
+    @property
+    def name(self):
+        return self.xml.get('name')
+
+    @property
+    def symbol_name(self):
+        return self.xml.get('symbol_name')
+
+    @property
+    def underscore_name(self):
+        return self.xml.get('underscore_name')
+
+    def findall(self, path):
+        return self.xml.findall(path)
+
+    def find(self, path):
+        return self.xml.find(path)
+
+
+# Wraps an entire brw_oa_*.xml file.
+class Gen:
+    def __init__(self, filename):
+        self.filename = filename
+        self.xml = et.parse(self.filename)
+        self.chipset = self.xml.find('.//set').get('chipset').lower()
+        self.sets = []
+
+        for xml_set in self.xml.findall(".//set"):
+            self.sets.append(Set(self, xml_set))
+
+
 def main():
     global c_file
     global header_file
-    global max_values
-    global read_funcs
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("xml", help="XML description of metrics")
-    parser.add_argument("--header", help="Header file to write")
-    parser.add_argument("--code", help="C file to write")
-    parser.add_argument("--chipset", help="Chipset to generate code for", required=True)
+    parser.add_argument("--header", help="Header file to write", required=True)
+    parser.add_argument("--code", help="C file to write", required=True)
+    parser.add_argument("xml_files", nargs='+', help="List of xml metrics files to process")
 
     args = parser.parse_args()
 
-    chipset = args.chipset.lower()
+    header_file = open(args.header, 'w')
+    c_file = open(args.code, 'w')
 
-    if args.header:
-        header_file = open(args.header, 'w')
-
-    if args.code:
-        c_file = open(args.code, 'w')
-
-    tree = et.parse(args.xml)
+    gens = []
+    for xml_file in args.xml_files:
+        gens.append(Gen(xml_file))
 
 
     copyright = textwrap.dedent("""\
@@ -488,7 +625,7 @@ def main():
 
         """))
 
-    c("#include \"brw_oa_" + chipset + ".h\"")
+    c("#include \"" + os.path.basename(args.header) + "\"")
 
     c(textwrap.dedent("""\
         #include "brw_context.h"
@@ -498,114 +635,114 @@ def main():
         #define MIN(a, b) ((a < b) ? (a) : (b))
         #define MAX(a, b) ((a > b) ? (a) : (b))
 
+
         """))
 
-    for set in tree.findall(".//set"):
-        max_values = {}
-        read_funcs = {}
-        counter_vars = {}
-        counters = set.findall("counter")
+    # Print out all equation functions.
+    for gen in gens:
+        for set in gen.sets:
+            for counter in set.counters:
+                output_counter_read(gen, set, counter)
+                output_counter_max(gen, set, counter)
 
-        assert set.get('chipset').lower() == chipset
+    # Print out all metric sets registration functions for each set in each
+    # generation.
+    for gen in gens:
+        for set in gen.sets:
+            counters = set.counters
 
-        for counter in counters:
-            empty_vars = {}
-            read_funcs[counter.get('symbol_name')] = output_counter_read(set, counter, counter_vars)
-            max_values[counter.get('symbol_name')] = output_counter_max(set, counter, empty_vars)
-            counter_vars["$" + counter.get('symbol_name')] = counter
+            c("\n")
+            register_lengths = compute_register_lengths(set);
+            for reg_type, reg_length in register_lengths.iteritems():
+                c("static struct brw_perf_query_register_prog {0}_{1}_{2}[{3}];".format(gen.chipset,
+                                                                                        set.underscore_name,
+                                                                                        reg_type, reg_length))
 
-        c("\n")
-        register_lengths = compute_register_lengths(set);
-        for reg_type, reg_length in register_lengths.iteritems():
-            c("static struct brw_perf_query_register_prog {0}_{1}_{2}[{3}];".format(chipset,
-                                                                                    set.get('underscore_name'),
-                                                                                    reg_type, reg_length))
+            c("\nstatic struct brw_perf_query_counter {0}_{1}_query_counters[{2}];\n".format(gen.chipset, set.underscore_name, len(counters)))
+            c("static struct brw_perf_query_info " + gen.chipset + "_" + set.underscore_name + "_query = {\n")
+            c_indent(3)
 
-        c("\nstatic struct brw_perf_query_counter {0}_{1}_query_counters[{2}];\n".format(chipset, set.get('underscore_name'), len(counters)))
-        c("static struct brw_perf_query_info " + chipset + "_" + set.get('underscore_name') + "_query = {\n")
-        c_indent(3)
+            c(".kind = OA_COUNTERS,\n")
+            c(".name = \"" + set.name + "\",\n")
+            c(".guid = \"" + set.hw_config_guid + "\",\n")
 
-        c(".kind = OA_COUNTERS,\n")
-        c(".name = \"" + set.get('name') + "\",\n")
-        c(".guid = \"" + set.get('hw_config_guid') + "\",\n")
+            c(".counters = {0}_{1}_query_counters,".format(gen.chipset, set.underscore_name))
+            c(".n_counters = 0,")
+            c(".oa_metrics_set_id = 0, /* determined at runtime, via sysfs */")
 
-        c(".counters = {0}_{1}_query_counters,".format(chipset, set.get('underscore_name')))
-        c(".n_counters = 0,")
-        c(".oa_metrics_set_id = 0, /* determined at runtime, via sysfs */")
+            if gen.chipset == "hsw":
+                c(textwrap.dedent("""\
+                    .oa_format = I915_OA_FORMAT_A45_B8_C8,
 
-        if chipset == "hsw":
-            c(textwrap.dedent("""\
-                .oa_format = I915_OA_FORMAT_A45_B8_C8,
-
-                /* Accumulation buffer offsets... */
-                .gpu_time_offset = 0,
-                .a_offset = 1,
-                .b_offset = 46,
-                .c_offset = 54,
+                    /* Accumulation buffer offsets... */
+                    .gpu_time_offset = 0,
+                    .a_offset = 1,
+                    .b_offset = 46,
+                    .c_offset = 54,
                 """))
-        else:
-            c(textwrap.dedent("""\
-                .oa_format = I915_OA_FORMAT_A32u40_A4u32_B8_C8,
+            else:
+                c(textwrap.dedent("""\
+                    .oa_format = I915_OA_FORMAT_A32u40_A4u32_B8_C8,
 
-                /* Accumulation buffer offsets... */
-                .gpu_time_offset = 0,
-                .gpu_clock_offset = 1,
-                .a_offset = 2,
-                .b_offset = 38,
-                .c_offset = 46,
+                    /* Accumulation buffer offsets... */
+                    .gpu_time_offset = 0,
+                    .gpu_clock_offset = 1,
+                    .a_offset = 2,
+                    .b_offset = 38,
+                    .c_offset = 46,
                 """))
 
-        for reg_type, reg_length in register_lengths.iteritems():
-            c(".{0} = {1}_{2}_{3},".format(reg_type, chipset, set.get('underscore_name'), reg_type))
-            c(".n_{0} = 0, /* Determined at runtime */".format(reg_type))
+            for reg_type, reg_length in register_lengths.iteritems():
+                c(".{0} = {1}_{2}_{3},".format(reg_type, gen.chipset, set.underscore_name, reg_type))
+                c(".n_{0} = 0, /* Determined at runtime */".format(reg_type))
 
-        c_outdent(3)
-        c("};\n")
+            c_outdent(3)
+            c("};\n")
 
-        c("\nstatic void\n")
-        c("register_" + set.get('underscore_name') + "_counter_query(struct brw_context *brw)\n")
-        c("{\n")
+            c("\nstatic void\n")
+            c("{0}_register_{1}_counter_query(struct brw_context *brw)\n".format(gen.chipset, set.underscore_name))
+            c("{\n")
+            c_indent(3)
+
+            c("static struct brw_perf_query_info *query = &" + gen.chipset + "_" + set.underscore_name + "_query;\n")
+            c("struct brw_perf_query_counter *counter;\n")
+
+            c("\n")
+            c("/* Note: we're assuming there can't be any variation in the definition ")
+            c(" * of a query between contexts so it's ok to describe a query within a ")
+            c(" * global variable which only needs to be initialized once... */")
+            c("\nif (!query->data_size) {")
+            c_indent(3)
+
+            generate_register_configs(set)
+
+            offset = 0
+            for counter in counters:
+                offset = output_counter_report(set, counter, offset)
+
+
+            c("\nquery->data_size = counter->offset + counter->size;\n")
+
+            c_outdent(3)
+            c("}");
+
+            c("\n_mesa_hash_table_insert(brw->perfquery.oa_metrics_table, query->guid, query);")
+
+            c_outdent(3)
+            c("}\n")
+
+        h("void brw_oa_register_queries_" + gen.chipset + "(struct brw_context *brw);\n")
+
+        c("\nvoid")
+        c("brw_oa_register_queries_" + gen.chipset + "(struct brw_context *brw)")
+        c("{")
         c_indent(3)
 
-        c("static struct brw_perf_query_info *query = &" + chipset + "_" + set.get('underscore_name') + "_query;\n")
-        c("struct brw_perf_query_counter *counter;\n")
-
-        c("\n")
-        c("/* Note: we're assuming there can't be any variation in the definition ")
-        c(" * of a query between contexts so it's ok to describe a query within a ")
-        c(" * global variable which only needs to be initialized once... */")
-        c("\nif (!query->data_size) {")
-        c_indent(3)
-
-        generate_register_configs(set)
-
-        offset = 0
-        for counter in counters:
-            offset = output_counter_report(set, counter, offset)
-
-
-        c("\nquery->data_size = counter->offset + counter->size;\n")
+        for set in gen.sets:
+            c("{0}_register_{1}_counter_query(brw);".format(gen.chipset, set.underscore_name))
 
         c_outdent(3)
-        c("}");
-
-        c("\n_mesa_hash_table_insert(brw->perfquery.oa_metrics_table, query->guid, query);")
-
-        c_outdent(3)
-        c("}\n")
-
-    h("void brw_oa_register_queries_" + chipset + "(struct brw_context *brw);\n")
-
-    c("\nvoid")
-    c("brw_oa_register_queries_" + chipset + "(struct brw_context *brw)")
-    c("{")
-    c_indent(3)
-
-    for set in tree.findall(".//set"):
-        c("register_" + set.get('underscore_name') + "_counter_query(brw);")
-
-    c_outdent(3)
-    c("}")
+        c("}")
 
 
 if __name__ == '__main__':

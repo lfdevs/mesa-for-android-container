@@ -32,7 +32,7 @@
 static PFN_vkVoidFunction
 radv_wsi_proc_addr(VkPhysicalDevice physicalDevice, const char *pName)
 {
-	return radv_lookup_entrypoint(pName);
+	return radv_lookup_entrypoint_unchecked(pName);
 }
 
 VkResult
@@ -233,4 +233,27 @@ VkResult radv_QueuePresentKHR(
 					_queue,
 					queue->queue_family_index,
 					pPresentInfo);
+}
+
+
+VkResult radv_GetDeviceGroupPresentCapabilitiesKHR(
+    VkDevice                                    device,
+    VkDeviceGroupPresentCapabilitiesKHR*        pCapabilities)
+{
+   memset(pCapabilities->presentMask, 0,
+          sizeof(pCapabilities->presentMask));
+   pCapabilities->presentMask[0] = 0x1;
+   pCapabilities->modes = VK_DEVICE_GROUP_PRESENT_MODE_LOCAL_BIT_KHR;
+
+   return VK_SUCCESS;
+}
+
+VkResult radv_GetDeviceGroupSurfacePresentModesKHR(
+    VkDevice                                    device,
+    VkSurfaceKHR                                surface,
+    VkDeviceGroupPresentModeFlagsKHR*           pModes)
+{
+   *pModes = VK_DEVICE_GROUP_PRESENT_MODE_LOCAL_BIT_KHR;
+
+   return VK_SUCCESS;
 }

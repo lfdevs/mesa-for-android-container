@@ -68,9 +68,16 @@ void ir3_destroy(struct ir3 *shader)
 
 #define iassert(cond) do { \
 	if (!(cond)) { \
-		assert(cond); \
+		debug_assert(cond); \
 		return -1; \
 	} } while (0)
+
+#define iassert_type(reg, full) do { \
+	if ((full)) { \
+		iassert(!((reg)->flags & IR3_REG_HALF)); \
+	} else { \
+		iassert((reg)->flags & IR3_REG_HALF); \
+	} } while (0);
 
 static uint32_t reg(struct ir3_register *reg, struct ir3_info *info,
 		uint32_t repeat, uint32_t valid_flags)
@@ -142,11 +149,6 @@ static int emit_cat0(struct ir3_instruction *instr, void *ptr,
 	return 0;
 }
 
-static uint32_t type_flags(type_t type)
-{
-	return (type_size(type) == 32) ? 0 : IR3_REG_HALF;
-}
-
 static int emit_cat1(struct ir3_instruction *instr, void *ptr,
 		struct ir3_info *info)
 {
@@ -155,9 +157,9 @@ static int emit_cat1(struct ir3_instruction *instr, void *ptr,
 	instr_cat1_t *cat1 = ptr;
 
 	iassert(instr->regs_count == 2);
-	iassert(!((dst->flags ^ type_flags(instr->cat1.dst_type)) & IR3_REG_HALF));
-	iassert((src->flags & IR3_REG_IMMED) ||
-			!((src->flags ^ type_flags(instr->cat1.src_type)) & IR3_REG_HALF));
+	iassert_type(dst, type_size(instr->cat1.dst_type) == 32);
+	if (!(src->flags & IR3_REG_IMMED))
+		iassert_type(src, type_size(instr->cat1.src_type) == 32);
 
 	if (src->flags & IR3_REG_IMMED) {
 		cat1->iim_val = src->iim_val;
@@ -258,6 +260,7 @@ static int emit_cat2(struct ir3_instruction *instr, void *ptr,
 	cat2->dst      = reg(dst, info, instr->repeat,
 			IR3_REG_R | IR3_REG_EI | IR3_REG_HALF);
 	cat2->repeat   = instr->repeat;
+	cat2->sat      = !!(instr->flags & IR3_INSTR_SAT);
 	cat2->ss       = !!(instr->flags & IR3_INSTR_SS);
 	cat2->ul       = !!(instr->flags & IR3_INSTR_UL);
 	cat2->dst_half = !!((src1->flags ^ dst->flags) & IR3_REG_HALF);
@@ -354,6 +357,7 @@ static int emit_cat3(struct ir3_instruction *instr, void *ptr,
 
 	cat3->dst      = reg(dst, info, instr->repeat, IR3_REG_R | IR3_REG_HALF);
 	cat3->repeat   = instr->repeat;
+	cat3->sat      = !!(instr->flags & IR3_INSTR_SAT);
 	cat3->ss       = !!(instr->flags & IR3_INSTR_SS);
 	cat3->ul       = !!(instr->flags & IR3_INSTR_UL);
 	cat3->dst_half = !!((src_flags ^ dst->flags) & IR3_REG_HALF);
@@ -401,6 +405,7 @@ static int emit_cat4(struct ir3_instruction *instr, void *ptr,
 
 	cat4->dst      = reg(dst, info, instr->repeat, IR3_REG_R | IR3_REG_HALF);
 	cat4->repeat   = instr->repeat;
+	cat4->sat      = !!(instr->flags & IR3_INSTR_SAT);
 	cat4->ss       = !!(instr->flags & IR3_INSTR_SS);
 	cat4->ul       = !!(instr->flags & IR3_INSTR_UL);
 	cat4->dst_half = !!((src->flags ^ dst->flags) & IR3_REG_HALF);
@@ -422,7 +427,7 @@ static int emit_cat5(struct ir3_instruction *instr, void *ptr,
 	struct ir3_register *src3 = instr->regs[3];
 	instr_cat5_t *cat5 = ptr;
 
-	iassert(!((dst->flags ^ type_flags(instr->cat5.type)) & IR3_REG_HALF));
+	iassert_type(dst, type_size(instr->cat5.type) == 32)
 
 	assume(src1 || !src2);
 	assume(src2 || !src3);
@@ -474,6 +479,7 @@ static int emit_cat6(struct ir3_instruction *instr, void *ptr,
 {
 	struct ir3_register *dst, *src1, *src2;
 	instr_cat6_t *cat6 = ptr;
+	bool type_full = type_size(instr->cat6.type) == 32;
 
 	cat6->type     = instr->cat6.type;
 	cat6->opc      = instr->opc;
@@ -481,6 +487,36 @@ static int emit_cat6(struct ir3_instruction *instr, void *ptr,
 	cat6->sync     = !!(instr->flags & IR3_INSTR_SY);
 	cat6->g        = !!(instr->flags & IR3_INSTR_G);
 	cat6->opc_cat  = 6;
+
+	switch (instr->opc) {
+	case OPC_RESINFO:
+	case OPC_RESFMT:
+		iassert_type(instr->regs[0], type_full); /* dst */
+		iassert_type(instr->regs[1], type_full); /* src1 */
+		break;
+	case OPC_L2G:
+	case OPC_G2L:
+		iassert_type(instr->regs[0], true);      /* dst */
+		iassert_type(instr->regs[1], true);      /* src1 */
+		break;
+	case OPC_STG:
+	case OPC_STL:
+	case OPC_STP:
+	case OPC_STI:
+	case OPC_STLW:
+	case OPC_STIB:
+		/* no dst, so regs[0] is dummy */
+		iassert_type(instr->regs[1], true);      /* dst */
+		iassert_type(instr->regs[2], type_full); /* src1 */
+		iassert_type(instr->regs[3], true);      /* src2 */
+		break;
+	default:
+		iassert_type(instr->regs[0], type_full); /* dst */
+		iassert_type(instr->regs[1], true);      /* src1 */
+		if (instr->regs_count > 2)
+			iassert_type(instr->regs[2], true);  /* src1 */
+		break;
+	}
 
 	/* the "dst" for a store instruction is (from the perspective
 	 * of data flow in the shader, ie. register use/def, etc) in
@@ -625,7 +661,7 @@ static int emit_cat6(struct ir3_instruction *instr, void *ptr,
 
 		cat6->src_off = false;
 
-		cat6b->src1 = reg(src1, info, instr->repeat, IR3_REG_IMMED);
+		cat6b->src1 = reg(src1, info, instr->repeat, IR3_REG_IMMED | IR3_REG_HALF);
 		cat6b->src1_im = !!(src1->flags & IR3_REG_IMMED);
 		if (src2) {
 			cat6b->src2 = reg(src2, info, instr->repeat, IR3_REG_IMMED);
@@ -683,6 +719,7 @@ void * ir3_assemble(struct ir3 *shader, struct ir3_info *info,
 	info->max_const     = -1;
 	info->instrs_count  = 0;
 	info->sizedwords    = 0;
+	info->ss = info->sy = 0;
 
 	list_for_each_entry (struct ir3_block, block, &shader->block_list, node) {
 		list_for_each_entry (struct ir3_instruction, instr, &block->instr_list, node) {
@@ -709,6 +746,12 @@ void * ir3_assemble(struct ir3 *shader, struct ir3_info *info,
 				goto fail;
 			info->instrs_count += 1 + instr->repeat;
 			dwords += 2;
+
+			if (instr->flags & IR3_INSTR_SS)
+				info->ss++;
+
+			if (instr->flags & IR3_INSTR_SY)
+				info->sy++;
 		}
 	}
 
@@ -735,8 +778,7 @@ static void insert_instr(struct ir3_block *block,
 {
 	struct ir3 *shader = block->shader;
 #ifdef DEBUG
-	static uint32_t serialno = 0;
-	instr->serialno = ++serialno;
+	instr->serialno = ++shader->instr_count;
 #endif
 	list_addtail(&instr->node, &block->instr_list);
 
@@ -748,8 +790,7 @@ struct ir3_block * ir3_block_create(struct ir3 *shader)
 {
 	struct ir3_block *block = ir3_alloc(shader, sizeof(*block));
 #ifdef DEBUG
-	static uint32_t serialno = 0;
-	block->serialno = ++serialno;
+	block->serialno = ++shader->block_count;
 #endif
 	block->shader = shader;
 	list_inithead(&block->node);

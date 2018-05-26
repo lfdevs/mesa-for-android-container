@@ -792,6 +792,9 @@ enum pipe_cap
    PIPE_CAP_MAX_COMBINED_SHADER_OUTPUT_RESOURCES,
    PIPE_CAP_SIGNED_VERTEX_BUFFER_OFFSET,
    PIPE_CAP_CONTEXT_PRIORITY_MASK,
+   PIPE_CAP_FENCE_SIGNAL,
+   PIPE_CAP_CONSTBUF0_FLAGS,
+   PIPE_CAP_PACKED_UNIFORMS,
 };
 
 /**
@@ -831,10 +834,6 @@ enum pipe_capf
    PIPE_CAPF_MAX_POINT_WIDTH_AA,
    PIPE_CAPF_MAX_TEXTURE_ANISOTROPY,
    PIPE_CAPF_MAX_TEXTURE_LOD_BIAS,
-   PIPE_CAPF_GUARD_BAND_LEFT,
-   PIPE_CAPF_GUARD_BAND_TOP,
-   PIPE_CAPF_GUARD_BAND_RIGHT,
-   PIPE_CAPF_GUARD_BAND_BOTTOM
 };
 
 /** Shader caps not specific to any single stage */
@@ -893,7 +892,6 @@ enum pipe_shader_cap
 enum pipe_shader_ir
 {
    PIPE_SHADER_IR_TGSI = 0,
-   PIPE_SHADER_IR_LLVM,
    PIPE_SHADER_IR_NATIVE,
    PIPE_SHADER_IR_NIR,
 };
@@ -1082,6 +1080,12 @@ struct pipe_driver_query_group_info
    const char *name;
    unsigned max_active_queries;
    unsigned num_queries;
+};
+
+enum pipe_fd_type
+{
+   PIPE_FD_TYPE_NATIVE_SYNC,
+   PIPE_FD_TYPE_SYNCOBJ,
 };
 
 enum pipe_debug_type

@@ -153,6 +153,16 @@ home directory.
 <li>MESA_NO_MINMAX_CACHE - when set, the minmax index cache is globally disabled.
 <li>MESA_SHADER_CAPTURE_PATH - see <a href="shading.html#capture">Capturing Shaders</a></li>
 <li>MESA_SHADER_DUMP_PATH and MESA_SHADER_READ_PATH - see <a href="shading.html#replacement">Experimenting with Shader Replacements</a></li>
+<li>MESA_VK_VERSION_OVERRIDE - changes the Vulkan physical device version
+    as returned in VkPhysicalDeviceProperties::apiVersion.
+  <ul>
+    <li>The format should be MAJOR.MINOR[.PATCH]</li>
+    <li>This will not let you force a version higher than the driver's
+        instance versionas advertised by vkEnumerateInstanceVersion</li>
+    <li>This can be very useful for debugging but some features may not be
+        implemented correctly. (For developers only)</li>
+  </ul>
+</li>
 </ul>
 
 
@@ -259,7 +269,7 @@ Mesa EGL supports different sets of environment variables.  See the
     Especially useful to toggle hud at specific points of application and
     disable for unencumbered viewing the rest of the time. For example, set
     GALLIUM_HUD_VISIBLE to false and GALLIUM_HUD_TOGGLE_SIGNAL to 10 (SIGUSR1).
-    Use kill -10 <pid> to toggle the hud as desired.
+    Use kill -10 &lt;pid&gt; to toggle the hud as desired.
 <li>GALLIUM_HUD_DUMP_DIR - specifies a directory for writing the displayed
     hud values into files.
 <li>GALLIUM_DRIVER - useful in combination with LIBGL_ALWAYS_SOFTWARE=true for
@@ -331,6 +341,12 @@ such as the OpenGL program's name and command line arguments.
 <li>See the driver code for other, lesser-used variables.
 </ul>
 
+<h3>WGL environment variables</h3>
+<ul>
+<li>WGL_SWAP_INTERVAL - to set a swap interval, equivalent to calling
+wglSwapIntervalEXT() in an application.  If this environment variable
+is set, application calls to wglSwapIntervalEXT() will have no effect.
+</ul>
 
 <h3>VA-API state tracker environment variables</h3>
 <ul>

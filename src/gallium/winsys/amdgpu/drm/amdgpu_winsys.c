@@ -290,7 +290,8 @@ amdgpu_winsys_create(int fd, const struct pipe_screen_config *config,
       goto fail_alloc;
 
    /* Create managers. */
-   pb_cache_init(&ws->bo_cache, 500000, ws->check_vm ? 1.0f : 2.0f, 0,
+   pb_cache_init(&ws->bo_cache, RADEON_MAX_CACHED_HEAPS,
+                 500000, ws->check_vm ? 1.0f : 2.0f, 0,
                  (ws->info.vram_size + ws->info.gart_size) / 8,
                  amdgpu_bo_destroy, amdgpu_bo_can_reclaim);
 

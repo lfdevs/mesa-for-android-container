@@ -208,7 +208,9 @@ texture_base_format(const struct gl_texture_object *t)
 static GLboolean radeonUpdateTextureEnv( struct gl_context *ctx, int unit )
 {
    r100ContextPtr rmesa = R100_CONTEXT(ctx);
-   const struct gl_texture_unit *texUnit = &ctx->Texture.Unit[unit];
+   const struct gl_texture_unit *rtexUnit = &ctx->Texture.Unit[unit];
+   const struct gl_fixedfunc_texture_unit *texUnit =
+      &ctx->Texture.FixedFuncUnit[unit];
    GLuint color_combine, alpha_combine;
    const GLuint color_combine0 = RADEON_COLOR_ARG_A_ZERO | RADEON_COLOR_ARG_B_ZERO
          | RADEON_COLOR_ARG_C_CURRENT_COLOR | RADEON_BLEND_CTL_ADD
@@ -234,7 +236,7 @@ static GLboolean radeonUpdateTextureEnv( struct gl_context *ctx, int unit )
    rmesa->state.texture.unit[unit].format = 0;
    rmesa->state.texture.unit[unit].envMode = 0;
 
-   if ( !texUnit->_Current ) {
+   if ( !rtexUnit->_Current ) {
       color_combine = color_combine0;
       alpha_combine = alpha_combine0;
    }
@@ -257,7 +259,7 @@ static GLboolean radeonUpdateTextureEnv( struct gl_context *ctx, int unit )
 	 assert(op <= 3);
 	 switch ( srcRGBi ) {
 	 case GL_TEXTURE:
-	    if (texture_base_format(texUnit->_Current) == GL_ALPHA)
+	    if (texture_base_format(rtexUnit->_Current) == GL_ALPHA)
 	       color_arg[i] = radeon_zero_color[op];
 	    else
 	       color_arg[i] = radeon_texture_color[op][unit];
@@ -302,7 +304,7 @@ static GLboolean radeonUpdateTextureEnv( struct gl_context *ctx, int unit )
 	 assert(op <= 1);
 	 switch ( srcAi ) {
 	 case GL_TEXTURE:
-	    if (texture_base_format(texUnit->_Current) == GL_LUMINANCE)
+	    if (texture_base_format(rtexUnit->_Current) == GL_LUMINANCE)
 	       alpha_arg[i] = radeon_zero_alpha[op+1];
 	    else
 	       alpha_arg[i] = radeon_texture_alpha[op][unit];
@@ -798,7 +800,8 @@ static void set_texgen_matrix( r100ContextPtr rmesa,
 static GLboolean radeon_validate_texgen( struct gl_context *ctx, GLuint unit )
 {
    r100ContextPtr rmesa = R100_CONTEXT(ctx);
-   struct gl_texture_unit *texUnit = &ctx->Texture.Unit[unit];
+   struct gl_fixedfunc_texture_unit *texUnit =
+      &ctx->Texture.FixedFuncUnit[unit];
    GLuint inputshift = RADEON_TEXGEN_0_INPUT_SHIFT + unit*4;
    GLuint tmp = rmesa->TexGenEnabled;
    static const GLfloat reflect[16] = {

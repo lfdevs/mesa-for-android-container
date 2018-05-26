@@ -66,6 +66,7 @@ EXTRA_DIST = \
 	blorp/meson.build \
 	common/meson.build \
 	compiler/meson.build \
+	dev/meson.build \
 	genxml/meson.build \
 	isl/meson.build \
 	tools/meson.build \
@@ -75,6 +76,7 @@ EXTRA_DIST = \
 include Makefile.blorp.am
 include Makefile.common.am
 include Makefile.compiler.am
+include Makefile.dev.am
 include Makefile.genxml.am
 include Makefile.isl.am
 include Makefile.tools.am

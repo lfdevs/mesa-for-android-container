@@ -21,7 +21,6 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-#include "main/core.h"
 #include "ir.h"
 #include "linker.h"
 #include "ir_uniform.h"
@@ -29,6 +28,7 @@
 #include "program.h"
 #include "string_to_uint_map.h"
 #include "ir_array_refcount.h"
+#include "main/mtypes.h"
 
 /**
  * \file link_uniforms.cpp
@@ -1423,11 +1423,10 @@ link_assign_uniform_storage(struct gl_context *ctx,
          }
       }
 
-      STATIC_ASSERT(sizeof(shader->Program->sh.SamplerTargets) ==
-                    sizeof(parcel.targets));
-      memcpy(shader->Program->sh.SamplerTargets,
-             parcel.targets,
-             sizeof(shader->Program->sh.SamplerTargets));
+      STATIC_ASSERT(ARRAY_SIZE(shader->Program->sh.SamplerTargets) ==
+                    ARRAY_SIZE(parcel.targets));
+      for (unsigned j = 0; j < ARRAY_SIZE(parcel.targets); j++)
+         shader->Program->sh.SamplerTargets[j] = parcel.targets[j];
    }
 
 #ifndef NDEBUG

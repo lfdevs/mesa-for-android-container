@@ -535,7 +535,8 @@ _mesa_BlendEquation( GLenum mode )
       return;
    }
 
-   _mesa_flush_vertices_for_blend_state(ctx);
+   _mesa_flush_vertices_for_blend_adv(ctx, ctx->Color.BlendEnabled,
+                                      advanced_mode);
 
    for (buf = 0; buf < numBuffers; buf++) {
       ctx->Color.Blend[buf].EquationRGB = mode;
@@ -560,7 +561,8 @@ blend_equationi(struct gl_context *ctx, GLuint buf, GLenum mode,
        ctx->Color.Blend[buf].EquationA == mode)
       return;  /* no change */
 
-   _mesa_flush_vertices_for_blend_state(ctx);
+   _mesa_flush_vertices_for_blend_adv(ctx, ctx->Color.BlendEnabled,
+                                      advanced_mode);
    ctx->Color.Blend[buf].EquationRGB = mode;
    ctx->Color.Blend[buf].EquationA = mode;
    ctx->Color._BlendEquationPerBuffer = GL_TRUE;
@@ -849,6 +851,24 @@ _mesa_AlphaFunc( GLenum func, GLclampf ref )
    }
 }
 
+static const enum gl_logicop_mode color_logicop_mapping[16] = {
+   COLOR_LOGICOP_CLEAR,
+   COLOR_LOGICOP_AND,
+   COLOR_LOGICOP_AND_REVERSE,
+   COLOR_LOGICOP_COPY,
+   COLOR_LOGICOP_AND_INVERTED,
+   COLOR_LOGICOP_NOOP,
+   COLOR_LOGICOP_XOR,
+   COLOR_LOGICOP_OR,
+   COLOR_LOGICOP_NOR,
+   COLOR_LOGICOP_EQUIV,
+   COLOR_LOGICOP_INVERT,
+   COLOR_LOGICOP_OR_REVERSE,
+   COLOR_LOGICOP_COPY_INVERTED,
+   COLOR_LOGICOP_OR_INVERTED,
+   COLOR_LOGICOP_NAND,
+   COLOR_LOGICOP_SET
+};
 
 static ALWAYS_INLINE void
 logic_op(struct gl_context *ctx, GLenum opcode, bool no_error)
@@ -884,9 +904,10 @@ logic_op(struct gl_context *ctx, GLenum opcode, bool no_error)
    FLUSH_VERTICES(ctx, ctx->DriverFlags.NewLogicOp ? 0 : _NEW_COLOR);
    ctx->NewDriverState |= ctx->DriverFlags.NewLogicOp;
    ctx->Color.LogicOp = opcode;
+   ctx->Color._LogicOp = color_logicop_mapping[opcode & 0x0f];
 
    if (ctx->Driver.LogicOpcode)
-      ctx->Driver.LogicOpcode(ctx, opcode);
+      ctx->Driver.LogicOpcode(ctx, ctx->Color._LogicOp);
 }
 
 
@@ -953,33 +974,23 @@ _mesa_ColorMask( GLboolean red, GLboolean green,
                  GLboolean blue, GLboolean alpha )
 {
    GET_CURRENT_CONTEXT(ctx);
-   GLubyte tmp[4];
-   GLuint i;
-   GLboolean flushed;
 
    if (MESA_VERBOSE & VERBOSE_API)
       _mesa_debug(ctx, "glColorMask(%d, %d, %d, %d)\n",
                   red, green, blue, alpha);
 
-   /* Shouldn't have any information about channel depth in core mesa
-    * -- should probably store these as the native booleans:
-    */
-   tmp[RCOMP] = red    ? 0xff : 0x0;
-   tmp[GCOMP] = green  ? 0xff : 0x0;
-   tmp[BCOMP] = blue   ? 0xff : 0x0;
-   tmp[ACOMP] = alpha  ? 0xff : 0x0;
+   GLbitfield mask = (!!red) |
+                     ((!!green) << 1) |
+                     ((!!blue) << 2) |
+                     ((!!alpha) << 3);
+   mask = _mesa_replicate_colormask(mask, ctx->Const.MaxDrawBuffers);
 
-   flushed = GL_FALSE;
-   for (i = 0; i < ctx->Const.MaxDrawBuffers; i++) {
-      if (!TEST_EQ_4V(tmp, ctx->Color.ColorMask[i])) {
-         if (!flushed) {
-            FLUSH_VERTICES(ctx, ctx->DriverFlags.NewColorMask ? 0 : _NEW_COLOR);
-            ctx->NewDriverState |= ctx->DriverFlags.NewColorMask;
-         }
-         flushed = GL_TRUE;
-         COPY_4UBV(ctx->Color.ColorMask[i], tmp);
-      }
-   }
+   if (ctx->Color.ColorMask == mask)
+      return;
+
+   FLUSH_VERTICES(ctx, ctx->DriverFlags.NewColorMask ? 0 : _NEW_COLOR);
+   ctx->NewDriverState |= ctx->DriverFlags.NewColorMask;
+   ctx->Color.ColorMask = mask;
 
    if (ctx->Driver.ColorMask)
       ctx->Driver.ColorMask( ctx, red, green, blue, alpha );
@@ -993,7 +1004,6 @@ void GLAPIENTRY
 _mesa_ColorMaski(GLuint buf, GLboolean red, GLboolean green,
                  GLboolean blue, GLboolean alpha)
 {
-   GLubyte tmp[4];
    GET_CURRENT_CONTEXT(ctx);
 
    if (MESA_VERBOSE & VERBOSE_API)
@@ -1005,20 +1015,18 @@ _mesa_ColorMaski(GLuint buf, GLboolean red, GLboolean green,
       return;
    }
 
-   /* Shouldn't have any information about channel depth in core mesa
-    * -- should probably store these as the native booleans:
-    */
-   tmp[RCOMP] = red    ? 0xff : 0x0;
-   tmp[GCOMP] = green  ? 0xff : 0x0;
-   tmp[BCOMP] = blue   ? 0xff : 0x0;
-   tmp[ACOMP] = alpha  ? 0xff : 0x0;
+   GLbitfield mask = (!!red) |
+                     ((!!green) << 1) |
+                     ((!!blue) << 2) |
+                     ((!!alpha) << 3);
 
-   if (TEST_EQ_4V(tmp, ctx->Color.ColorMask[buf]))
+   if (GET_COLORMASK(ctx->Color.ColorMask, buf) == mask)
       return;
 
    FLUSH_VERTICES(ctx, ctx->DriverFlags.NewColorMask ? 0 : _NEW_COLOR);
    ctx->NewDriverState |= ctx->DriverFlags.NewColorMask;
-   COPY_4UBV(ctx->Color.ColorMask[buf], tmp);
+   ctx->Color.ColorMask &= ~(0xf << (4 * buf));
+   ctx->Color.ColorMask |= mask << (4 * buf);
 }
 
 
@@ -1169,7 +1177,7 @@ void _mesa_init_color( struct gl_context * ctx )
 
    /* Color buffer group */
    ctx->Color.IndexMask = ~0u;
-   memset(ctx->Color.ColorMask, 0xff, sizeof(ctx->Color.ColorMask));
+   ctx->Color.ColorMask = 0xffffffff;
    ctx->Color.ClearIndex = 0;
    ASSIGN_4V( ctx->Color.ClearColor.f, 0, 0, 0, 0 );
    ctx->Color.AlphaEnabled = GL_FALSE;
@@ -1189,6 +1197,7 @@ void _mesa_init_color( struct gl_context * ctx )
    ctx->Color.IndexLogicOpEnabled = GL_FALSE;
    ctx->Color.ColorLogicOpEnabled = GL_FALSE;
    ctx->Color.LogicOp = GL_COPY;
+   ctx->Color._LogicOp = COLOR_LOGICOP_COPY;
    ctx->Color.DitherFlag = GL_TRUE;
 
    /* GL_FRONT is not possible on GLES. Instead GL_BACK will render to either

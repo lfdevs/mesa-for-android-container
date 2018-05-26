@@ -123,6 +123,7 @@
 #include "shared.h"
 #include "shaderobj.h"
 #include "shaderimage.h"
+#include "state.h"
 #include "util/debug.h"
 #include "util/disk_cache.h"
 #include "util/strtod.h"
@@ -1264,8 +1265,10 @@ _mesa_initialize_context(struct gl_context *ctx,
        * GL_OES_texture_cube_map says
        * "Initially all texture generation modes are set to REFLECTION_MAP_OES"
        */
-      for (i = 0; i < MAX_TEXTURE_UNITS; i++) {
-         struct gl_texture_unit *texUnit = &ctx->Texture.Unit[i];
+      for (i = 0; i < ARRAY_SIZE(ctx->Texture.FixedFuncUnit); i++) {
+         struct gl_fixedfunc_texture_unit *texUnit =
+            &ctx->Texture.FixedFuncUnit[i];
+
          texUnit->GenS.Mode = GL_REFLECTION_MAP_NV;
          texUnit->GenT.Mode = GL_REFLECTION_MAP_NV;
          texUnit->GenR.Mode = GL_REFLECTION_MAP_NV;
@@ -1332,6 +1335,8 @@ _mesa_free_context_data( struct gl_context *ctx )
 
    _mesa_reference_vao(ctx, &ctx->Array.VAO, NULL);
    _mesa_reference_vao(ctx, &ctx->Array.DefaultVAO, NULL);
+   _mesa_reference_vao(ctx, &ctx->Array._EmptyVAO, NULL);
+   _mesa_reference_vao(ctx, &ctx->Array._DrawVAO, NULL);
 
    _mesa_free_attrib_data(ctx);
    _mesa_free_buffer_objects(ctx);
@@ -1577,13 +1582,15 @@ handle_first_current(struct gl_context *ctx)
 
    check_context_limits(ctx);
 
+   _mesa_update_vertex_processing_mode(ctx);
+
    /* According to GL_MESA_configless_context the default value of
     * glDrawBuffers depends on the config of the first surface it is bound to.
     * For GLES it is always GL_BACK which has a magic interpretation.
     */
    if (!ctx->HasConfig && _mesa_is_desktop_gl(ctx)) {
       if (ctx->DrawBuffer != _mesa_get_incomplete_framebuffer()) {
-         GLenum buffer;
+         GLenum16 buffer;
 
          if (ctx->DrawBuffer->Visual.doubleBufferMode)
             buffer = GL_BACK;

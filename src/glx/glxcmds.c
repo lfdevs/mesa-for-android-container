@@ -2037,40 +2037,6 @@ glXGetFBConfigFromVisualSGIX(Display * dpy, XVisualInfo * vis)
 
 #ifndef GLX_USE_APPLEGL
 /*
-** GLX_SGIX_swap_group
-*/
-static void
-__glXJoinSwapGroupSGIX(Display * dpy, GLXDrawable drawable,
-                       GLXDrawable member)
-{
-   (void) dpy;
-   (void) drawable;
-   (void) member;
-}
-
-
-/*
-** GLX_SGIX_swap_barrier
-*/
-static void
-__glXBindSwapBarrierSGIX(Display * dpy, GLXDrawable drawable, int barrier)
-{
-   (void) dpy;
-   (void) drawable;
-   (void) barrier;
-}
-
-static Bool
-__glXQueryMaxSwapBarriersSGIX(Display * dpy, int screen, int *max)
-{
-   (void) dpy;
-   (void) screen;
-   (void) max;
-   return False;
-}
-
-
-/*
 ** GLX_OML_sync_control
 */
 static Bool
@@ -2540,13 +2506,6 @@ static const struct name_address_pair GLX_functions[] = {
    GLX_FUNCTION(glXQueryGLXPbufferSGIX),
    GLX_FUNCTION(glXSelectEventSGIX),
    GLX_FUNCTION(glXGetSelectedEventSGIX),
-
-   /*** GLX_SGIX_swap_group ***/
-   GLX_FUNCTION2(glXJoinSwapGroupSGIX, __glXJoinSwapGroupSGIX),
-
-   /*** GLX_SGIX_swap_barrier ***/
-   GLX_FUNCTION2(glXBindSwapBarrierSGIX, __glXBindSwapBarrierSGIX),
-   GLX_FUNCTION2(glXQueryMaxSwapBarriersSGIX, __glXQueryMaxSwapBarriersSGIX),
 
    /*** GLX_MESA_copy_sub_buffer ***/
    GLX_FUNCTION2(glXCopySubBufferMESA, __glXCopySubBufferMESA),

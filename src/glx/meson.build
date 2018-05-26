@@ -18,6 +18,9 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+inc_glx = include_directories('.')
+
+subdir('apple')
 if with_dri_platform == 'windows'
   subdir('windows')
 endif
@@ -100,6 +103,7 @@ endif
 
 if with_dri_platform == 'apple'
   files_libglx += files('applegl_glx.c')
+  extra_libs_libglx += libappleglx
 elif with_dri_platform == 'windows'
   files_libglx += files('driwindows_glx.c')
   extra_libs_libglx += [
@@ -133,7 +137,7 @@ gl_lib_cargs = [
   '-DDEFAULT_DRIVER_DIR="@0@"'.format(dri_search_path),
 ]
 
-if dep_xxf86vm != [] and dep_xxf86vm.found()
+if dep_xxf86vm.found()
   gl_lib_cargs += '-DHAVE_XF86VIDMODE'
 endif
 

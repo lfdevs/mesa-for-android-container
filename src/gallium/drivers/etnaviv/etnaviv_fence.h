@@ -32,7 +32,8 @@
 
 void
 etna_create_fence_fd(struct pipe_context *pctx,
-                     struct pipe_fence_handle **pfence, int fd);
+                     struct pipe_fence_handle **pfence, int fd,
+                     enum pipe_fd_type type);
 
 void
 etna_fence_server_sync(struct pipe_context *pctx,

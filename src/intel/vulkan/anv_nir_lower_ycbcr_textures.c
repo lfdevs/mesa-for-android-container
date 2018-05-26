@@ -40,9 +40,9 @@ y_range(nir_builder *b,
         VkSamplerYcbcrRangeKHR range)
 {
    switch (range) {
-   case VK_SAMPLER_YCBCR_RANGE_ITU_FULL_KHR:
+   case VK_SAMPLER_YCBCR_RANGE_ITU_FULL:
       return y_channel;
-   case VK_SAMPLER_YCBCR_RANGE_ITU_NARROW_KHR:
+   case VK_SAMPLER_YCBCR_RANGE_ITU_NARROW:
       return nir_fmul(b,
                       nir_fadd(b,
                                nir_fmul(b, y_channel,
@@ -62,10 +62,10 @@ chroma_range(nir_builder *b,
              VkSamplerYcbcrRangeKHR range)
 {
    switch (range) {
-   case VK_SAMPLER_YCBCR_RANGE_ITU_FULL_KHR:
+   case VK_SAMPLER_YCBCR_RANGE_ITU_FULL:
       return nir_fadd(b, chroma_channel,
                       nir_imm_float(b, -pow(2, bpc - 1) / (pow(2, bpc) - 1.0f)));
-   case VK_SAMPLER_YCBCR_RANGE_ITU_NARROW_KHR:
+   case VK_SAMPLER_YCBCR_RANGE_ITU_NARROW:
       return nir_fmul(b,
                       nir_fadd(b,
                                nir_fmul(b, chroma_channel,
@@ -82,7 +82,7 @@ static const nir_const_value *
 ycbcr_model_to_rgb_matrix(VkSamplerYcbcrModelConversionKHR model)
 {
    switch (model) {
-   case VK_SAMPLER_YCBCR_MODEL_CONVERSION_YCBCR_601_KHR: {
+   case VK_SAMPLER_YCBCR_MODEL_CONVERSION_YCBCR_601: {
       static const nir_const_value bt601[3] = {
          { .f32 = {  1.402f,             1.0f,  0.0f,               0.0f } },
          { .f32 = { -0.714136286201022f, 1.0f, -0.344136286201022f, 0.0f } },
@@ -91,7 +91,7 @@ ycbcr_model_to_rgb_matrix(VkSamplerYcbcrModelConversionKHR model)
 
       return bt601;
    }
-   case VK_SAMPLER_YCBCR_MODEL_CONVERSION_YCBCR_709_KHR: {
+   case VK_SAMPLER_YCBCR_MODEL_CONVERSION_YCBCR_709: {
       static const nir_const_value bt709[3] = {
          { .f32 = {  1.5748031496063f,   1.0f,  0.0,                0.0f } },
          { .f32 = { -0.468125209181067f, 1.0f, -0.187327487470334f, 0.0f } },
@@ -100,7 +100,7 @@ ycbcr_model_to_rgb_matrix(VkSamplerYcbcrModelConversionKHR model)
 
       return bt709;
    }
-   case VK_SAMPLER_YCBCR_MODEL_CONVERSION_YCBCR_2020_KHR: {
+   case VK_SAMPLER_YCBCR_MODEL_CONVERSION_YCBCR_2020: {
       static const nir_const_value bt2020[3] = {
          { .f32 = { 1.4746f,             1.0f,  0.0f,               0.0f } },
          { .f32 = { -0.571353126843658f, 1.0f, -0.164553126843658f, 0.0f } },
@@ -133,7 +133,7 @@ convert_ycbcr(struct ycbcr_state *state,
                             bpcs[2], conversion->ycbcr_range),
                nir_imm_float(b, 1.0f));
 
-   if (conversion->ycbcr_model == VK_SAMPLER_YCBCR_MODEL_CONVERSION_YCBCR_IDENTITY_KHR)
+   if (conversion->ycbcr_model == VK_SAMPLER_YCBCR_MODEL_CONVERSION_YCBCR_IDENTITY)
       return expanded_channels;
 
    const nir_const_value *conversion_matrix =
@@ -206,7 +206,7 @@ implicit_downsampled_coords(struct ycbcr_state *state,
 
    for (c = 0; c < ARRAY_SIZE(conversion->chroma_offsets); c++) {
       if (plane_format->denominator_scales[c] > 1 &&
-          conversion->chroma_offsets[c] == VK_CHROMA_LOCATION_COSITED_EVEN_KHR) {
+          conversion->chroma_offsets[c] == VK_CHROMA_LOCATION_COSITED_EVEN) {
          comp[c] = implicit_downsampled_coord(b,
                                               nir_channel(b, old_coords, c),
                                               nir_channel(b, image_size, c),
@@ -316,13 +316,13 @@ swizzle_channel(struct isl_swizzle swizzle, unsigned channel)
 }
 
 static bool
-try_lower_tex_ycbcr(struct anv_pipeline *pipeline,
+try_lower_tex_ycbcr(struct anv_pipeline_layout *layout,
                     nir_builder *builder,
                     nir_tex_instr *tex)
 {
    nir_variable *var = tex->texture->var;
    const struct anv_descriptor_set_layout *set_layout =
-      pipeline->layout->set[var->data.descriptor_set].layout;
+      layout->set[var->data.descriptor_set].layout;
    const struct anv_descriptor_set_binding_layout *binding =
       &set_layout->binding[var->data.binding];
 
@@ -430,7 +430,7 @@ try_lower_tex_ycbcr(struct anv_pipeline *pipeline,
    }
 
    nir_ssa_def *result = nir_vec(builder, swizzled_comp, 4);
-   if (state.conversion->ycbcr_model != VK_SAMPLER_YCBCR_MODEL_CONVERSION_RGB_IDENTITY_KHR)
+   if (state.conversion->ycbcr_model != VK_SAMPLER_YCBCR_MODEL_CONVERSION_RGB_IDENTITY)
       result = convert_ycbcr(&state, result, swizzled_bpcs);
 
    nir_ssa_def_rewrite_uses(&tex->dest.ssa, nir_src_for_ssa(result));
@@ -440,7 +440,8 @@ try_lower_tex_ycbcr(struct anv_pipeline *pipeline,
 }
 
 bool
-anv_nir_lower_ycbcr_textures(nir_shader *shader, struct anv_pipeline *pipeline)
+anv_nir_lower_ycbcr_textures(nir_shader *shader,
+                             struct anv_pipeline_layout *layout)
 {
    bool progress = false;
 
@@ -458,7 +459,7 @@ anv_nir_lower_ycbcr_textures(nir_shader *shader, struct anv_pipeline *pipeline)
                continue;
 
             nir_tex_instr *tex = nir_instr_as_tex(instr);
-            function_progress |= try_lower_tex_ycbcr(pipeline, &builder, tex);
+            function_progress |= try_lower_tex_ycbcr(layout, &builder, tex);
          }
       }
 

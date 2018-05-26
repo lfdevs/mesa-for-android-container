@@ -180,6 +180,22 @@ struct intel_miptree_aux_buffer
     * @see 3DSTATE_HIER_DEPTH_BUFFER.SurfaceQPitch
     */
    uint32_t qpitch;
+
+   /**
+    * Buffer object containing the indirect clear color.
+    *
+    * @see create_ccs_buf_for_image
+    * @see RENDER_SURFACE_STATE.ClearValueAddress
+    */
+   struct brw_bo *clear_color_bo;
+
+   /**
+    * Offset into bo where the clear color can be found.
+    *
+    * @see create_ccs_buf_for_image
+    * @see RENDER_SURFACE_STATE.ClearValueAddress
+    */
+   uint32_t clear_color_offset;
 };
 
 struct intel_mipmap_tree
@@ -469,10 +485,6 @@ enum isl_dim_layout
 get_isl_dim_layout(const struct gen_device_info *devinfo,
                    enum isl_tiling tiling, GLenum target);
 
-enum isl_aux_usage
-intel_miptree_get_aux_isl_usage(const struct brw_context *brw,
-                                const struct intel_mipmap_tree *mt);
-
 void
 intel_get_image_dims(struct gl_texture_image *image,
                      int *width, int *height, int *depth);
@@ -642,8 +654,7 @@ intel_miptree_prepare_texture(struct brw_context *brw,
                               struct intel_mipmap_tree *mt,
                               enum isl_format view_format,
                               uint32_t start_level, uint32_t num_levels,
-                              uint32_t start_layer, uint32_t num_layers,
-                              bool disable_aux);
+                              uint32_t start_layer, uint32_t num_layers);
 void
 intel_miptree_prepare_image(struct brw_context *brw,
                             struct intel_mipmap_tree *mt);
@@ -676,6 +687,9 @@ intel_miptree_finish_depth(struct brw_context *brw,
 void
 intel_miptree_prepare_external(struct brw_context *brw,
                                struct intel_mipmap_tree *mt);
+void
+intel_miptree_finish_external(struct brw_context *brw,
+                              struct intel_mipmap_tree *mt);
 
 void
 intel_miptree_make_shareable(struct brw_context *brw,
@@ -713,32 +727,15 @@ bool
 intel_miptree_sample_with_hiz(struct brw_context *brw,
                               struct intel_mipmap_tree *mt);
 
-
-static inline bool
-intel_miptree_set_clear_color(struct gl_context *ctx,
+bool
+intel_miptree_set_clear_color(struct brw_context *brw,
                               struct intel_mipmap_tree *mt,
-                              union isl_color_value clear_color)
-{
-   if (memcmp(&mt->fast_clear_color, &clear_color, sizeof(clear_color)) != 0) {
-      mt->fast_clear_color = clear_color;
-      ctx->NewDriverState |= BRW_NEW_AUX_STATE;
-      return true;
-   }
-   return false;
-}
+                              const union gl_color_union *color);
 
-static inline bool
-intel_miptree_set_depth_clear_value(struct gl_context *ctx,
+bool
+intel_miptree_set_depth_clear_value(struct brw_context *brw,
                                     struct intel_mipmap_tree *mt,
-                                    float clear_value)
-{
-   if (mt->fast_clear_color.f32[0] != clear_value) {
-      mt->fast_clear_color.f32[0] = clear_value;
-      ctx->NewDriverState |= BRW_NEW_AUX_STATE;
-      return true;
-   }
-   return false;
-}
+                                    float clear_value);
 
 #ifdef __cplusplus
 }

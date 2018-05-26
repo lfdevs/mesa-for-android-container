@@ -134,7 +134,7 @@ svga_context_create(struct pipe_screen *screen, void *priv, unsigned flags)
 
    svga = CALLOC_STRUCT(svga_context);
    if (!svga)
-      goto cleanup;
+      goto done;
 
    LIST_INITHEAD(&svga->dirty_buffers);
 

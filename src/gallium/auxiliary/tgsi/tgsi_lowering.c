@@ -823,7 +823,7 @@ transform_dotp(struct tgsi_transform_context *tctx,
    struct tgsi_full_src_register *src0 = &inst->Src[0];
    struct tgsi_full_src_register *src1 = &inst->Src[1];
    struct tgsi_full_instruction new_inst;
-   unsigned opcode = inst->Instruction.Opcode;
+   enum tgsi_opcode opcode = inst->Instruction.Opcode;
 
    /* NOTE: any potential last instruction must replicate src on all
     * components (since it could be re-written to write to final dst)
@@ -908,7 +908,7 @@ transform_flr_ceil(struct tgsi_transform_context *tctx,
    struct tgsi_full_dst_register *dst  = &inst->Dst[0];
    struct tgsi_full_src_register *src0 = &inst->Src[0];
    struct tgsi_full_instruction new_inst;
-   unsigned opcode = inst->Instruction.Opcode;
+   enum tgsi_opcode opcode = inst->Instruction.Opcode;
 
    if (dst->Register.WriteMask & TGSI_WRITEMASK_XYZW) {
       /* FLR: FRC tmpA, src  CEIL: FRC tmpA, -src */
@@ -1038,7 +1038,7 @@ transform_samp(struct tgsi_transform_context *tctx,
    /* mask is clamped coords, pmask is all coords (for projection): */
    unsigned mask = 0, pmask = 0, smask;
    unsigned tex = inst->Texture.Texture;
-   unsigned opcode = inst->Instruction.Opcode;
+   enum tgsi_opcode opcode = inst->Instruction.Opcode;
    bool lower_txp = (opcode == TGSI_OPCODE_TXP) &&
 		   (ctx->config->lower_TXP & (1 << tex));
 

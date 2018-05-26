@@ -30,6 +30,7 @@
 
 #include "util/u_inlines.h"
 #include "util/u_atomic.h"
+#include "util/u_memory.h"
 
 struct xmesa_st_framebuffer {
    XMesaDisplay display;

@@ -96,7 +96,7 @@ alloc_buffer_object(struct brw_context *brw,
        */
       size += 64 * 32; /* max read length of 64 256-bit units */
    }
-   intel_obj->buffer = brw_bo_alloc(brw->bufmgr, "bufferobj", size, 64);
+   intel_obj->buffer = brw_bo_alloc(brw->bufmgr, "bufferobj", size);
 
    /* the buffer might be bound as a uniform buffer, need to update it
     */
@@ -290,7 +290,7 @@ brw_buffer_subdata(struct gl_context *ctx,
                     intel_obj->valid_data_start,
                     intel_obj->valid_data_end);
          struct brw_bo *temp_bo =
-            brw_bo_alloc(brw->bufmgr, "subdata temp", size, 64);
+            brw_bo_alloc(brw->bufmgr, "subdata temp", size);
 
          brw_bo_subdata(temp_bo, 0, size, data);
 
@@ -462,7 +462,7 @@ brw_map_buffer_range(struct gl_context *ctx,
       intel_obj->map_extra[index] = (uintptr_t) offset % alignment;
       intel_obj->range_map_bo[index] =
          brw_bo_alloc(brw->bufmgr, "BO blit temp",
-                      length + intel_obj->map_extra[index], alignment);
+                      length + intel_obj->map_extra[index]);
       void *map = brw_bo_map(brw, intel_obj->range_map_bo[index], access);
       obj->Mappings[index].Pointer = map + intel_obj->map_extra[index];
       return obj->Mappings[index].Pointer;

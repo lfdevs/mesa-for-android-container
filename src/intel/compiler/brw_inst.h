@@ -36,7 +36,7 @@
 
 #include "brw_eu_defines.h"
 #include "brw_reg_type.h"
-#include "common/gen_device_info.h"
+#include "dev/gen_device_info.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -343,7 +343,7 @@ REG_TYPE(src2)
  *  @{
  */
 static inline uint16_t
-brw_inst_3src_a1_src0_imm(const struct gen_device_info *devinfo,
+brw_inst_3src_a1_src0_imm(MAYBE_UNUSED const struct gen_device_info *devinfo,
                           const brw_inst *insn)
 {
    assert(devinfo->gen >= 10);
@@ -351,7 +351,7 @@ brw_inst_3src_a1_src0_imm(const struct gen_device_info *devinfo,
 }
 
 static inline uint16_t
-brw_inst_3src_a1_src2_imm(const struct gen_device_info *devinfo,
+brw_inst_3src_a1_src2_imm(MAYBE_UNUSED const struct gen_device_info *devinfo,
                           const brw_inst *insn)
 {
    assert(devinfo->gen >= 10);
@@ -359,7 +359,7 @@ brw_inst_3src_a1_src2_imm(const struct gen_device_info *devinfo,
 }
 
 static inline void
-brw_inst_set_3src_a1_src0_imm(const struct gen_device_info *devinfo,
+brw_inst_set_3src_a1_src0_imm(MAYBE_UNUSED const struct gen_device_info *devinfo,
                               brw_inst *insn, uint16_t value)
 {
    assert(devinfo->gen >= 10);
@@ -367,7 +367,7 @@ brw_inst_set_3src_a1_src0_imm(const struct gen_device_info *devinfo,
 }
 
 static inline void
-brw_inst_set_3src_a1_src2_imm(const struct gen_device_info *devinfo,
+brw_inst_set_3src_a1_src2_imm(MAYBE_UNUSED const struct gen_device_info *devinfo,
                               brw_inst *insn, uint16_t value)
 {
    assert(devinfo->gen >= 10);
@@ -505,6 +505,9 @@ FF(sfid,
    /* 6:   */  27,  24,
    /* 7:   */  27,  24,
    /* 8:   */  27,  24)
+FF(null_rt,
+   /* 4-7: */ -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+   /* 8:   */ 80, 80) /* actually only Gen11+ */
 FC(base_mrf,   27,  24, devinfo->gen < 6);
 /** @} */
 
@@ -700,7 +703,8 @@ brw_inst_imm_ud(const struct gen_device_info *devinfo, const brw_inst *insn)
 }
 
 static inline uint64_t
-brw_inst_imm_uq(const struct gen_device_info *devinfo, const brw_inst *insn)
+brw_inst_imm_uq(MAYBE_UNUSED const struct gen_device_info *devinfo,
+                const brw_inst *insn)
 {
    assert(devinfo->gen >= 8);
    return brw_inst_bits(insn, 127, 64);
@@ -799,7 +803,7 @@ brw_inst_##reg##_type(const struct gen_device_info *devinfo,                  \
                       const brw_inst *inst)                                   \
 {                                                                             \
    unsigned file = __builtin_strcmp("dst", #reg) == 0 ?                       \
-                   BRW_GENERAL_REGISTER_FILE :                                \
+                   (unsigned) BRW_GENERAL_REGISTER_FILE :                     \
                    brw_inst_##reg##_reg_file(devinfo, inst);                  \
    unsigned hw_type = brw_inst_##reg##_reg_hw_type(devinfo, inst);            \
    return brw_hw_type_to_reg_type(devinfo, (enum brw_reg_file)file, hw_type); \

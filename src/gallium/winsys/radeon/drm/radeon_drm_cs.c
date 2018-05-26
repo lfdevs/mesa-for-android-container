@@ -245,7 +245,7 @@ static unsigned radeon_lookup_or_add_real_buffer(struct radeon_drm_cs *cs,
          * This doesn't have to be done if virtual memory is enabled,
          * because there is no offset patching with virtual memory.
          */
-        if (cs->ring_type != RING_DMA || cs->ws->info.has_virtual_memory) {
+        if (cs->ring_type != RING_DMA || cs->ws->info.r600_has_virtual_memory) {
             return i;
         }
     }
@@ -407,7 +407,8 @@ static bool radeon_drm_cs_validate(struct radeon_winsys_cs *rcs)
 
         /* Flush if there are any relocs. Clean up otherwise. */
         if (cs->csc->num_relocs) {
-            cs->flush_cs(cs->flush_data, PIPE_FLUSH_ASYNC, NULL);
+            cs->flush_cs(cs->flush_data,
+			 RADEON_FLUSH_ASYNC_START_NEXT_GFX_IB_NOW, NULL);
         } else {
             radeon_cs_context_cleanup(cs->csc);
             cs->base.used_vram = 0;
@@ -635,7 +636,7 @@ static int radeon_drm_cs_flush(struct radeon_winsys_cs *rcs,
             cs->cst->flags[0] = 0;
             cs->cst->flags[1] = RADEON_CS_RING_DMA;
             cs->cst->cs.num_chunks = 3;
-            if (cs->ws->info.has_virtual_memory) {
+            if (cs->ws->info.r600_has_virtual_memory) {
                 cs->cst->flags[0] |= RADEON_CS_USE_VM;
             }
             break;
@@ -659,7 +660,7 @@ static int radeon_drm_cs_flush(struct radeon_winsys_cs *rcs,
             cs->cst->flags[1] = RADEON_CS_RING_GFX;
             cs->cst->cs.num_chunks = 3;
 
-            if (cs->ws->info.has_virtual_memory) {
+            if (cs->ws->info.r600_has_virtual_memory) {
                 cs->cst->flags[0] |= RADEON_CS_USE_VM;
                 cs->cst->cs.num_chunks = 3;
             }

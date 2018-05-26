@@ -287,7 +287,7 @@ linear_to_xtiled(uint32_t x0, uint32_t x1, uint32_t x2, uint32_t x3,
  */
 static inline void
 linear_to_ytiled(uint32_t x0, uint32_t x1, uint32_t x2, uint32_t x3,
-                 uint32_t y0, uint32_t y1,
+                 uint32_t y0, uint32_t y3,
                  char *dst, const char *src,
                  int32_t src_pitch,
                  uint32_t swizzle_bit,
@@ -306,6 +306,9 @@ linear_to_ytiled(uint32_t x0, uint32_t x1, uint32_t x2, uint32_t x3,
    const uint32_t column_width = ytile_span;
    const uint32_t bytes_per_column = column_width * ytile_height;
 
+   uint32_t y1 = MIN2(y3, ALIGN_UP(y0, 4));
+   uint32_t y2 = MAX2(y1, ALIGN_DOWN(y3, 4));
+
    uint32_t xo0 = (x0 % ytile_span) + (x0 / ytile_span) * bytes_per_column;
    uint32_t xo1 = (x1 % ytile_span) + (x1 / ytile_span) * bytes_per_column;
 
@@ -321,24 +324,81 @@ linear_to_ytiled(uint32_t x0, uint32_t x1, uint32_t x2, uint32_t x3,
 
    src += (ptrdiff_t)y0 * src_pitch;
 
-   for (yo = y0 * column_width; yo < y1 * column_width; yo += column_width) {
+   if (y0 != y1) {
+      for (yo = y0 * column_width; yo < y1 * column_width; yo += column_width) {
+         uint32_t xo = xo1;
+         uint32_t swizzle = swizzle1;
+
+         mem_copy(dst + ((xo0 + yo) ^ swizzle0), src + x0, x1 - x0);
+
+         /* Step by spans/columns.  As it happens, the swizzle bit flips
+          * at each step so we don't need to calculate it explicitly.
+          */
+         for (x = x1; x < x2; x += ytile_span) {
+            mem_copy_align16(dst + ((xo + yo) ^ swizzle), src + x, ytile_span);
+            xo += bytes_per_column;
+            swizzle ^= swizzle_bit;
+         }
+
+         mem_copy_align16(dst + ((xo + yo) ^ swizzle), src + x2, x3 - x2);
+
+         src += src_pitch;
+      }
+   }
+
+   for (yo = y1 * column_width; yo < y2 * column_width; yo += 4 * column_width) {
       uint32_t xo = xo1;
       uint32_t swizzle = swizzle1;
 
-      mem_copy(dst + ((xo0 + yo) ^ swizzle0), src + x0, x1 - x0);
+      if (x0 != x1) {
+         mem_copy(dst + ((xo0 + yo + 0 * column_width) ^ swizzle0), src + x0 + 0 * src_pitch, x1 - x0);
+         mem_copy(dst + ((xo0 + yo + 1 * column_width) ^ swizzle0), src + x0 + 1 * src_pitch, x1 - x0);
+         mem_copy(dst + ((xo0 + yo + 2 * column_width) ^ swizzle0), src + x0 + 2 * src_pitch, x1 - x0);
+         mem_copy(dst + ((xo0 + yo + 3 * column_width) ^ swizzle0), src + x0 + 3 * src_pitch, x1 - x0);
+      }
 
       /* Step by spans/columns.  As it happens, the swizzle bit flips
        * at each step so we don't need to calculate it explicitly.
        */
       for (x = x1; x < x2; x += ytile_span) {
-         mem_copy_align16(dst + ((xo + yo) ^ swizzle), src + x, ytile_span);
+         mem_copy_align16(dst + ((xo + yo + 0 * column_width) ^ swizzle), src + x + 0 * src_pitch, ytile_span);
+         mem_copy_align16(dst + ((xo + yo + 1 * column_width) ^ swizzle), src + x + 1 * src_pitch, ytile_span);
+         mem_copy_align16(dst + ((xo + yo + 2 * column_width) ^ swizzle), src + x + 2 * src_pitch, ytile_span);
+         mem_copy_align16(dst + ((xo + yo + 3 * column_width) ^ swizzle), src + x + 3 * src_pitch, ytile_span);
          xo += bytes_per_column;
          swizzle ^= swizzle_bit;
       }
 
-      mem_copy_align16(dst + ((xo + yo) ^ swizzle), src + x2, x3 - x2);
+      if (x2 != x3) {
+         mem_copy_align16(dst + ((xo + yo + 0 * column_width) ^ swizzle), src + x2 + 0 * src_pitch, x3 - x2);
+         mem_copy_align16(dst + ((xo + yo + 1 * column_width) ^ swizzle), src + x2 + 1 * src_pitch, x3 - x2);
+         mem_copy_align16(dst + ((xo + yo + 2 * column_width) ^ swizzle), src + x2 + 2 * src_pitch, x3 - x2);
+         mem_copy_align16(dst + ((xo + yo + 3 * column_width) ^ swizzle), src + x2 + 3 * src_pitch, x3 - x2);
+      }
 
-      src += src_pitch;
+      src += 4 * src_pitch;
+   }
+
+   if (y2 != y3) {
+      for (yo = y2 * column_width; yo < y3 * column_width; yo += column_width) {
+         uint32_t xo = xo1;
+         uint32_t swizzle = swizzle1;
+
+         mem_copy(dst + ((xo0 + yo) ^ swizzle0), src + x0, x1 - x0);
+
+         /* Step by spans/columns.  As it happens, the swizzle bit flips
+          * at each step so we don't need to calculate it explicitly.
+          */
+         for (x = x1; x < x2; x += ytile_span) {
+            mem_copy_align16(dst + ((xo + yo) ^ swizzle), src + x, ytile_span);
+            xo += bytes_per_column;
+            swizzle ^= swizzle_bit;
+         }
+
+         mem_copy_align16(dst + ((xo + yo) ^ swizzle), src + x2, x3 - x2);
+
+         src += src_pitch;
+      }
    }
 }
 
@@ -624,8 +684,8 @@ ytiled_to_linear_faster(uint32_t x0, uint32_t x1, uint32_t x2, uint32_t x3,
  * copy function (\ref tile_copy_fn).
  * The X range is in bytes, i.e. pixels * bytes-per-pixel.
  * The Y range is in pixels (i.e. unitless).
- * 'dst' is the start of the texture and 'src' is the corresponding
- * address to copy from, though copying begins at (xt1, yt1).
+ * 'dst' is the address of (0, 0) in the destination tiled texture.
+ * 'src' is the address of (xt1, yt1) in the source linear texture.
  */
 void
 linear_to_tiled(uint32_t xt1, uint32_t xt2,
@@ -698,8 +758,8 @@ linear_to_tiled(uint32_t xt1, uint32_t xt2,
          /* Translate by (xt,yt) for single-tile copier. */
          tile_copy(x0-xt, x1-xt, x2-xt, x3-xt,
                    y0-yt, y1-yt,
-                   dst + (ptrdiff_t) xt * th + (ptrdiff_t) yt * dst_pitch,
-                   src + (ptrdiff_t) xt      + (ptrdiff_t) yt * src_pitch,
+                   dst + (ptrdiff_t)xt * th  +  (ptrdiff_t)yt        * dst_pitch,
+                   src + (ptrdiff_t)xt - xt1 + ((ptrdiff_t)yt - yt1) * src_pitch,
                    src_pitch,
                    swizzle_bit,
                    mem_copy);
@@ -715,8 +775,8 @@ linear_to_tiled(uint32_t xt1, uint32_t xt2,
  * copy function (\ref tile_copy_fn).
  * The X range is in bytes, i.e. pixels * bytes-per-pixel.
  * The Y range is in pixels (i.e. unitless).
- * 'dst' is the start of the texture and 'src' is the corresponding
- * address to copy from, though copying begins at (xt1, yt1).
+ * 'dst' is the address of (xt1, yt1) in the destination linear texture.
+ * 'src' is the address of (0, 0) in the source tiled texture.
  */
 void
 tiled_to_linear(uint32_t xt1, uint32_t xt2,
@@ -789,8 +849,8 @@ tiled_to_linear(uint32_t xt1, uint32_t xt2,
          /* Translate by (xt,yt) for single-tile copier. */
          tile_copy(x0-xt, x1-xt, x2-xt, x3-xt,
                    y0-yt, y1-yt,
-                   dst + (ptrdiff_t) xt      + (ptrdiff_t) yt * dst_pitch,
-                   src + (ptrdiff_t) xt * th + (ptrdiff_t) yt * src_pitch,
+                   dst + (ptrdiff_t)xt - xt1 + ((ptrdiff_t)yt - yt1) * dst_pitch,
+                   src + (ptrdiff_t)xt * th  +  (ptrdiff_t)yt        * src_pitch,
                    dst_pitch,
                    swizzle_bit,
                    mem_copy);

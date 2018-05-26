@@ -245,7 +245,6 @@ clear_buffers(struct gl_context *ctx, GLbitfield buffers)
 {
    if (_mesa_is_winsys_fbo(ctx->DrawBuffer)) {
       /* this is a window system framebuffer */
-      const GLuint *colorMask = (GLuint *) &ctx->Color.ColorMask[0];
       const XMesaContext xmesa = XMESA_CONTEXT(ctx);
       XMesaBuffer b = XMESA_BUFFER(ctx->DrawBuffer);
       const GLint x = ctx->DrawBuffer->_Xmin;
@@ -264,7 +263,8 @@ clear_buffers(struct gl_context *ctx, GLbitfield buffers)
       XMesaSetForeground(xmesa->display, b->cleargc, xmesa->clearpixel);
 
       /* we can't handle color or index masking */
-      if (*colorMask == 0xffffffff && ctx->Color.IndexMask == 0xffffffff) {
+      if (GET_COLORMASK(ctx->Color.ColorMask, 0) == 0xf &&
+          ctx->Color.IndexMask == 0xffffffff) {
          if (buffers & BUFFER_BIT_FRONT_LEFT) {
             /* clear front color buffer */
             struct gl_renderbuffer *frontRb

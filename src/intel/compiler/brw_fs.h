@@ -191,6 +191,7 @@ public:
    fs_reg resolve_source_modifiers(const fs_reg &src);
    void emit_discard_jump();
    bool opt_peephole_sel();
+   bool opt_peephole_csel();
    bool opt_peephole_predicated_break();
    bool opt_saturate_propagation();
    bool opt_cmod_propagation();
@@ -395,7 +396,7 @@ public:
 
    void enable_debug(const char *shader_name);
    int generate_code(const cfg_t *cfg, int dispatch_width);
-   const unsigned *get_assembly(unsigned int *assembly_size);
+   const unsigned *get_assembly();
 
 private:
    void fire_fb_write(fs_inst *inst,
@@ -409,7 +410,7 @@ private:
    void generate_urb_write(fs_inst *inst, struct brw_reg payload);
    void generate_cs_terminate(fs_inst *inst, struct brw_reg payload);
    void generate_barrier(fs_inst *inst, struct brw_reg src);
-   void generate_linterp(fs_inst *inst, struct brw_reg dst,
+   bool generate_linterp(fs_inst *inst, struct brw_reg dst,
 			 struct brw_reg *src);
    void generate_tex(fs_inst *inst, struct brw_reg dst, struct brw_reg src,
                      struct brw_reg surface_index,
@@ -417,8 +418,10 @@ private:
    void generate_get_buffer_size(fs_inst *inst, struct brw_reg dst,
                                  struct brw_reg src,
                                  struct brw_reg surf_index);
-   void generate_ddx(enum opcode op, struct brw_reg dst, struct brw_reg src);
-   void generate_ddy(enum opcode op, struct brw_reg dst, struct brw_reg src);
+   void generate_ddx(const fs_inst *inst,
+                     struct brw_reg dst, struct brw_reg src);
+   void generate_ddy(const fs_inst *inst,
+                     struct brw_reg dst, struct brw_reg src);
    void generate_scratch_write(fs_inst *inst, struct brw_reg src);
    void generate_scratch_read(fs_inst *inst, struct brw_reg dst);
    void generate_scratch_read_gen7(fs_inst *inst, struct brw_reg dst);
@@ -469,6 +472,11 @@ private:
                               struct brw_reg reg,
                               struct brw_reg indirect_byte_offset);
 
+   void generate_shuffle(fs_inst *inst,
+                         struct brw_reg dst,
+                         struct brw_reg src,
+                         struct brw_reg idx);
+
    bool patch_discard_jumps_to_fb_writes();
 
    const struct brw_compiler *compiler;
@@ -503,6 +511,7 @@ fs_reg shuffle_64bit_data_for_32bit_write(const brw::fs_builder &bld,
 void shuffle_32bit_load_result_to_16bit_data(const brw::fs_builder &bld,
                                              const fs_reg &dst,
                                              const fs_reg &src,
+                                             uint32_t first_component,
                                              uint32_t components);
 
 void shuffle_16bit_data_for_32bit_write(const brw::fs_builder &bld,

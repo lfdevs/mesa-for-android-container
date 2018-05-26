@@ -153,7 +153,7 @@ intelInitExtensions(struct gl_context *ctx)
    ctx->Extensions.MESA_shader_integer_functions = ctx->Const.GLSLVersion >= 130;
 
    if (devinfo->is_g4x || devinfo->gen >= 5) {
-      ctx->Extensions.MESA_shader_framebuffer_fetch_non_coherent = true;
+      ctx->Extensions.EXT_shader_framebuffer_fetch_non_coherent = true;
       ctx->Extensions.KHR_blend_equation_advanced = true;
    }
 
@@ -172,7 +172,8 @@ intelInitExtensions(struct gl_context *ctx)
       ctx->Extensions.ARB_conditional_render_inverted = true;
       ctx->Extensions.ARB_cull_distance = true;
       ctx->Extensions.ARB_draw_buffers_blend = true;
-      ctx->Extensions.ARB_enhanced_layouts = true;
+      if (ctx->API != API_OPENGL_COMPAT)
+         ctx->Extensions.ARB_enhanced_layouts = true;
       ctx->Extensions.ARB_ES3_compatibility = true;
       ctx->Extensions.ARB_fragment_layer_viewport = true;
       ctx->Extensions.ARB_pipeline_statistics_query = true;
@@ -217,7 +218,7 @@ intelInitExtensions(struct gl_context *ctx)
       ctx->Extensions.ARB_derivative_control = true;
       ctx->Extensions.ARB_framebuffer_no_attachments = true;
       ctx->Extensions.ARB_gpu_shader5 = true;
-      ctx->Extensions.ARB_gpu_shader_fp64 = true;
+      ctx->Extensions.ARB_gpu_shader_fp64 = devinfo->has_64bit_types;
       ctx->Extensions.ARB_shader_atomic_counters = true;
       ctx->Extensions.ARB_shader_atomic_counter_ops = true;
       ctx->Extensions.ARB_shader_clock = true;
@@ -229,7 +230,7 @@ intelInitExtensions(struct gl_context *ctx)
       ctx->Extensions.ARB_texture_compression_bptc = true;
       ctx->Extensions.ARB_texture_view = true;
       ctx->Extensions.ARB_shader_storage_buffer_object = true;
-      ctx->Extensions.ARB_vertex_attrib_64bit = true;
+      ctx->Extensions.ARB_vertex_attrib_64bit = devinfo->has_64bit_types;
       ctx->Extensions.EXT_shader_samples_identical = true;
       ctx->Extensions.OES_primitive_bounding_box = true;
       ctx->Extensions.OES_texture_buffer = true;
@@ -279,8 +280,9 @@ intelInitExtensions(struct gl_context *ctx)
    }
 
    if (devinfo->gen >= 8) {
-      ctx->Extensions.ARB_gpu_shader_int64 = true;
-      ctx->Extensions.ARB_shader_ballot = true; /* requires ARB_gpu_shader_int64 */
+      ctx->Extensions.ARB_gpu_shader_int64 = devinfo->has_64bit_types;
+      /* requires ARB_gpu_shader_int64 */
+      ctx->Extensions.ARB_shader_ballot = devinfo->has_64bit_types;
       ctx->Extensions.ARB_ES3_2_compatibility = true;
    }
 
@@ -291,7 +293,7 @@ intelInitExtensions(struct gl_context *ctx)
       ctx->Extensions.KHR_texture_compression_astc_ldr = true;
       ctx->Extensions.KHR_texture_compression_astc_sliced_3d = true;
       ctx->Extensions.INTEL_conservative_rasterization = true;
-      ctx->Extensions.MESA_shader_framebuffer_fetch = true;
+      ctx->Extensions.EXT_shader_framebuffer_fetch = true;
       ctx->Extensions.ARB_post_depth_coverage = true;
    }
 

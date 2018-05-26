@@ -28,7 +28,7 @@
 #include <i915_drm.h>
 
 #include "isl.h"
-#include "common/gen_device_info.h"
+#include "dev/gen_device_info.h"
 
 uint32_t
 isl_tiling_to_i915_tiling(enum isl_tiling tiling)

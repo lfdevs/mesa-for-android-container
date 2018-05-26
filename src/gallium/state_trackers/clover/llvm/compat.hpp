@@ -36,9 +36,17 @@
 
 #include "util/algorithm.hpp"
 
+#if HAVE_LLVM < 0x0400
+#include <llvm/Bitcode/ReaderWriter.h>
+#else
+#include <llvm/Bitcode/BitcodeReader.h>
+#include <llvm/Bitcode/BitcodeWriter.h>
+#endif
+
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/Linker/Linker.h>
 #include <llvm/Transforms/IPO.h>
+#include <llvm/Transforms/Utils/Cloning.h>
 #include <llvm/Target/TargetMachine.h>
 #if HAVE_LLVM >= 0x0400
 #include <llvm/Support/Error.h>
@@ -81,8 +89,10 @@ namespace clover {
 
 #if HAVE_LLVM >= 0x0500
          const clang::InputKind ik_opencl = clang::InputKind::OpenCL;
+         const clang::LangStandard::Kind lang_opencl10 = clang::LangStandard::lang_opencl10;
 #else
          const clang::InputKind ik_opencl = clang::IK_OpenCL;
+         const clang::LangStandard::Kind lang_opencl10 = clang::LangStandard::lang_opencl;
 #endif
 
          inline void
@@ -217,6 +227,26 @@ namespace clover {
            ctx.setDiagnosticHandler(diagnostic_handler, data);
 #endif
         }
+
+	inline std::unique_ptr< ::llvm::Module>
+	clone_module(const ::llvm::Module &mod)
+	{
+#if HAVE_LLVM >= 0x0700
+		return ::llvm::CloneModule(mod);
+#else
+		return ::llvm::CloneModule(&mod);
+#endif
+	}
+
+	template<typename T> void
+	write_bitcode_to_file(const ::llvm::Module &mod, T &os)
+	{
+#if HAVE_LLVM >= 0x0700
+		::llvm::WriteBitcodeToFile(mod, os);
+#else
+		::llvm::WriteBitcodeToFile(&mod, os);
+#endif
+	}
       }
    }
 }

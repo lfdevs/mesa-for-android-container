@@ -103,6 +103,24 @@ lower_cs_intrinsics_convert_block(struct lower_intrinsics_state *state,
          break;
       }
 
+      case nir_intrinsic_load_subgroup_id:
+         if (state->local_workgroup_size > 8)
+            continue;
+
+         /* For small workgroup sizes, we know subgroup_id will be zero */
+         sysval = nir_imm_int(b, 0);
+         break;
+
+      case nir_intrinsic_load_num_subgroups: {
+         unsigned local_workgroup_size =
+            nir->info.cs.local_size[0] * nir->info.cs.local_size[1] *
+            nir->info.cs.local_size[2];
+         unsigned num_subgroups =
+            DIV_ROUND_UP(local_workgroup_size, state->dispatch_width);
+         sysval = nir_imm_int(b, num_subgroups);
+         break;
+      }
+
       default:
          continue;
       }

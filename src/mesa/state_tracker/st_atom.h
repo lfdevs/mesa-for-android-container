@@ -44,6 +44,7 @@ struct st_context;
 enum st_pipeline {
    ST_PIPELINE_RENDER,
    ST_PIPELINE_CLEAR,
+   ST_PIPELINE_META,
    ST_PIPELINE_UPDATE_FRAMEBUFFER,
    ST_PIPELINE_COMPUTE,
 };
@@ -54,8 +55,7 @@ void st_validate_state( struct st_context *st, enum st_pipeline pipeline );
 GLuint st_compare_func_to_pipe(GLenum func);
 
 enum pipe_format
-st_pipe_vertex_format(GLenum type, GLuint size, GLenum format,
-                      GLboolean normalized, GLboolean integer);
+st_pipe_vertex_format(const struct gl_array_attributes *attrib);
 
 
 /* Define ST_NEW_xxx_INDEX */
@@ -149,6 +149,8 @@ enum {
 #define ST_PIPELINE_CLEAR_STATE_MASK (ST_NEW_FB_STATE | \
                                       ST_NEW_SCISSOR | \
                                       ST_NEW_WINDOW_RECTANGLES)
+#define ST_PIPELINE_META_STATE_MASK (ST_PIPELINE_RENDER_STATE_MASK & \
+                                     ~ST_NEW_VERTEX_ARRAYS)
 /* For ReadPixels, ReadBuffer, GetSamplePosition: */
 #define ST_PIPELINE_UPDATE_FB_STATE_MASK (ST_NEW_FB_STATE)
 

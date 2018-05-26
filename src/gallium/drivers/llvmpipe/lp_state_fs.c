@@ -299,7 +299,7 @@ generate_fs_loop(struct gallivm_state *gallivm,
                  LLVMValueRef context_ptr,
                  LLVMValueRef num_loop,
                  struct lp_build_interp_soa_context *interp,
-                 struct lp_build_sampler_soa *sampler,
+                 const struct lp_build_sampler_soa *sampler,
                  LLVMValueRef mask_store,
                  LLVMValueRef (*out_color)[4],
                  LLVMValueRef depth_ptr,
@@ -2240,7 +2240,7 @@ generate_unswizzled_blend(struct gallivm_state *gallivm,
 
    if (dst_count > src_count) {
       if ((dst_type.width == 8 || dst_type.width == 16) &&
-          util_is_power_of_two(dst_type.length) &&
+          util_is_power_of_two_or_zero(dst_type.length) &&
           dst_type.length * dst_type.width < 128) {
          /*
           * Never try to load values as 4xi8 which we will then
@@ -3323,7 +3323,12 @@ make_variant_key(struct llvmpipe_context *lp,
    if (shader->info.base.file_max[TGSI_FILE_SAMPLER_VIEW] != -1) {
       key->nr_sampler_views = shader->info.base.file_max[TGSI_FILE_SAMPLER_VIEW] + 1;
       for(i = 0; i < key->nr_sampler_views; ++i) {
-         if(shader->info.base.file_mask[TGSI_FILE_SAMPLER_VIEW] & (1 << i)) {
+         /*
+          * Note sview may exceed what's representable by file_mask.
+          * This will still work, the only downside is that not actually
+          * used views may be included in the shader key.
+          */
+         if(shader->info.base.file_mask[TGSI_FILE_SAMPLER_VIEW] & (1u << (i & 31))) {
             lp_sampler_static_texture_state(&key->state[i].texture_state,
                                             lp->sampler_views[PIPE_SHADER_FRAGMENT][i]);
          }

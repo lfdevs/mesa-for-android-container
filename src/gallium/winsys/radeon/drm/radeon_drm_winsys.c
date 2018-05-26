@@ -363,6 +363,8 @@ static bool do_winsys_init(struct radeon_drm_winsys *ws)
         ws->info.max_alloc_size = MIN2(ws->info.vram_size * 0.7, ws->info.max_alloc_size);
     if (ws->info.drm_minor < 40)
         ws->info.max_alloc_size = MIN2(ws->info.max_alloc_size, 256*1024*1024);
+    /* Both 32-bit and 64-bit address spaces only have 4GB. */
+    ws->info.max_alloc_size = MIN2(ws->info.max_alloc_size, 3ull*1024*1024*1024);
 
     /* Get max clock frequency info and convert it to MHz */
     radeon_get_drm_value(ws->fd, RADEON_INFO_MAX_SCLK, NULL,
@@ -437,22 +439,22 @@ static bool do_winsys_init(struct radeon_drm_winsys *ws)
             radeon_get_drm_value(ws->fd, RADEON_INFO_SI_BACKEND_ENABLED_MASK, NULL,
                                  &ws->info.enabled_rb_mask);
 
-        ws->info.has_virtual_memory = false;
+        ws->info.r600_has_virtual_memory = false;
         if (ws->info.drm_minor >= 13) {
             uint32_t ib_vm_max_size;
 
-            ws->info.has_virtual_memory = true;
+            ws->info.r600_has_virtual_memory = true;
             if (!radeon_get_drm_value(ws->fd, RADEON_INFO_VA_START, NULL,
                                       &ws->va_start))
-                ws->info.has_virtual_memory = false;
+                ws->info.r600_has_virtual_memory = false;
             if (!radeon_get_drm_value(ws->fd, RADEON_INFO_IB_VM_MAX_SIZE, NULL,
                                       &ib_vm_max_size))
-                ws->info.has_virtual_memory = false;
+                ws->info.r600_has_virtual_memory = false;
             radeon_get_drm_value(ws->fd, RADEON_INFO_VA_UNMAP_WORKING, NULL,
                                  &ws->va_unmap_working);
         }
 	if (ws->gen == DRV_R600 && !debug_get_bool_option("RADEON_VA", false))
-		ws->info.has_virtual_memory = false;
+		ws->info.r600_has_virtual_memory = false;
     }
 
     /* Get max pipes, this is only needed for compute shaders.  All evergreen+
@@ -542,7 +544,7 @@ static void radeon_winsys_destroy(struct radeon_winsys *rws)
     mtx_destroy(&ws->hyperz_owner_mutex);
     mtx_destroy(&ws->cmask_owner_mutex);
 
-    if (ws->info.has_virtual_memory)
+    if (ws->info.r600_has_virtual_memory)
         pb_slabs_deinit(&ws->bo_slabs);
     pb_cache_deinit(&ws->bo_cache);
 
@@ -554,7 +556,8 @@ static void radeon_winsys_destroy(struct radeon_winsys *rws)
     util_hash_table_destroy(ws->bo_handles);
     util_hash_table_destroy(ws->bo_vas);
     mtx_destroy(&ws->bo_handles_mutex);
-    mtx_destroy(&ws->bo_va_mutex);
+    mtx_destroy(&ws->vm32.mutex);
+    mtx_destroy(&ws->vm64.mutex);
     mtx_destroy(&ws->bo_fence_lock);
 
     if (ws->fd >= 0)
@@ -769,12 +772,13 @@ radeon_drm_winsys_create(int fd, const struct pipe_screen_config *config,
     if (!do_winsys_init(ws))
         goto fail1;
 
-    pb_cache_init(&ws->bo_cache, 500000, ws->check_vm ? 1.0f : 2.0f, 0,
+    pb_cache_init(&ws->bo_cache, RADEON_MAX_CACHED_HEAPS,
+                  500000, ws->check_vm ? 1.0f : 2.0f, 0,
                   MIN2(ws->info.vram_size, ws->info.gart_size),
                   radeon_bo_destroy,
                   radeon_bo_can_reclaim);
 
-    if (ws->info.has_virtual_memory) {
+    if (ws->info.r600_has_virtual_memory) {
         /* There is no fundamental obstacle to using slab buffer allocation
          * without GPUVM, but enabling it requires making sure that the drivers
          * honor the address offset.
@@ -821,10 +825,34 @@ radeon_drm_winsys_create(int fd, const struct pipe_screen_config *config,
     ws->bo_handles = util_hash_table_create(handle_hash, handle_compare);
     ws->bo_vas = util_hash_table_create(handle_hash, handle_compare);
     (void) mtx_init(&ws->bo_handles_mutex, mtx_plain);
-    (void) mtx_init(&ws->bo_va_mutex, mtx_plain);
+    (void) mtx_init(&ws->vm32.mutex, mtx_plain);
+    (void) mtx_init(&ws->vm64.mutex, mtx_plain);
     (void) mtx_init(&ws->bo_fence_lock, mtx_plain);
-    ws->va_offset = ws->va_start;
-    list_inithead(&ws->va_holes);
+    list_inithead(&ws->vm32.holes);
+    list_inithead(&ws->vm64.holes);
+
+    /* The kernel currently returns 8MB. Make sure this doesn't change. */
+    if (ws->va_start > 8 * 1024 * 1024) {
+        /* Not enough 32-bit address space. */
+        radeon_winsys_destroy(&ws->base);
+        mtx_unlock(&fd_tab_mutex);
+        return NULL;
+    }
+
+    ws->vm32.start = ws->va_start;
+    ws->vm32.end = 1ull << 32;
+
+    /* The maximum is 8GB of virtual address space limited by the kernel.
+     * It's obviously not enough for bigger cards, like Hawaiis with 4GB
+     * and 8GB of physical memory and 4GB of GART.
+     *
+     * Older kernels set the limit to 4GB, which is even worse, so they only
+     * have 32-bit address space.
+     */
+    if (ws->info.drm_minor >= 41) {
+        ws->vm64.start = 1ull << 32;
+        ws->vm64.end = 1ull << 33;
+    }
 
     /* TTM aligns the BO size to the CPU page size */
     ws->info.gart_page_size = sysconf(_SC_PAGESIZE);
@@ -854,7 +882,7 @@ radeon_drm_winsys_create(int fd, const struct pipe_screen_config *config,
     return &ws->base;
 
 fail_slab:
-    if (ws->info.has_virtual_memory)
+    if (ws->info.r600_has_virtual_memory)
         pb_slabs_deinit(&ws->bo_slabs);
 fail_cache:
     pb_cache_deinit(&ws->bo_cache);

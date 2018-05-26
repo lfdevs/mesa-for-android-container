@@ -62,6 +62,28 @@ genX(cmd_buffer_mi_memcpy)(struct anv_cmd_buffer *cmd_buffer,
    assert(dst_offset % 4 == 0);
    assert(src_offset % 4 == 0);
 
+#if GEN_GEN == 7
+   /* On gen7, the combination of commands used here(MI_LOAD_REGISTER_MEM
+    * and MI_STORE_REGISTER_MEM) can cause GPU hangs if any rendering is
+    * in-flight when they are issued even if the memory touched is not
+    * currently active for rendering.  The weird bit is that it is not the
+    * MI_LOAD/STORE_REGISTER_MEM commands which hang but rather the in-flight
+    * rendering hangs such that the next stalling command after the
+    * MI_LOAD/STORE_REGISTER_MEM commands will catch the hang.
+    *
+    * It is unclear exactly why this hang occurs.  Both MI commands come with
+    * warnings about the 3D pipeline but that doesn't seem to fully explain
+    * it.  My (Jason's) best theory is that it has something to do with the
+    * fact that we're using a GPU state register as our temporary and that
+    * something with reading/writing it is causing problems.
+    *
+    * In order to work around this issue, we emit a PIPE_CONTROL with the
+    * command streamer stall bit set.
+    */
+   cmd_buffer->state.pending_pipe_bits |= ANV_PIPE_CS_STALL_BIT;
+   genX(cmd_buffer_apply_pipe_flushes)(cmd_buffer);
+#endif
+
    for (uint32_t i = 0; i < size; i += 4) {
       const struct anv_address src_addr =
          (struct anv_address) { src, src_offset + i};
@@ -150,7 +172,7 @@ genX(cmd_buffer_so_memcpy)(struct anv_cmd_buffer *cmd_buffer,
       &(struct GENX(VERTEX_ELEMENT_STATE)) {
          .VertexBufferIndex = 32,
          .Valid = true,
-         .SourceElementFormat = (enum GENX(SURFACE_FORMAT)) format,
+         .SourceElementFormat = format,
          .SourceElementOffset = 0,
          .Component0Control = (bs >= 4) ? VFCOMP_STORE_SRC : VFCOMP_STORE_0,
          .Component1Control = (bs >= 8) ? VFCOMP_STORE_SRC : VFCOMP_STORE_0,

@@ -18,12 +18,14 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+inc_egl = include_directories('.', 'main')
+inc_egl_dri2 = include_directories('drivers/dri2')
+
 c_args_for_egl = []
 link_for_egl = []
 deps_for_egl = []
-incs_for_egl = [
-  inc_include, inc_src, inc_loader, inc_gbm, include_directories('main'),
-]
+incs_for_egl = [inc_include, inc_src, inc_egl]
+
 files_egl = files(
   'main/eglapi.c',
   'main/eglapi.h',
@@ -53,23 +55,6 @@ files_egl = files(
   'main/eglsync.h',
   'main/eglentrypoint.h',
   'main/egltypedefs.h',
-  'drivers/dri2/egl_dri2.c',
-  'drivers/dri2/egl_dri2.h',
-  'drivers/dri2/egl_dri2_fallbacks.h',
-)
-
-linux_dmabuf_unstable_v1_protocol_c = custom_target(
-  'linux-dmabuf-unstable-v1-protocol.c',
-  input : wayland_dmabuf_xml,
-  output : 'linux-dmabuf-unstable-v1-protocol.c',
-  command : [prog_wl_scanner, 'code', '@INPUT@', '@OUTPUT@'],
-)
-
-linux_dmabuf_unstable_v1_client_protocol_h = custom_target(
-  'linux-dmabuf-unstable-v1-client-protocol.h',
-  input : wayland_dmabuf_xml,
-  output : 'linux-dmabuf-unstable-v1-client-protocol.h',
-  command : [prog_wl_scanner, 'client-header', '@INPUT@', '@OUTPUT@'],
 )
 
 g_egldispatchstubs_c = custom_target(
@@ -100,6 +85,18 @@ g_egldispatchstubs_h = custom_target(
   capture : true,
 )
 
+if with_dri2
+  files_egl += files(
+    'drivers/dri2/egl_dri2.c',
+    'drivers/dri2/egl_dri2.h',
+    'drivers/dri2/egl_dri2_fallbacks.h',
+  )
+  c_args_for_egl += [
+    '-DDEFAULT_DRIVER_DIR="@0@"'.format(dri_search_path),
+    '-D_EGL_BUILT_IN_DRIVER_DRI2',
+  ]
+endif
+
 if with_platform_x11
   files_egl += files('drivers/dri2/platform_x11.c')
   if with_dri3
@@ -110,8 +107,9 @@ if with_platform_x11
 endif
 if with_platform_drm
   files_egl += files('drivers/dri2/platform_drm.c')
-  link_for_egl += libgbm
-  incs_for_egl += include_directories('../gbm/main')
+  link_for_egl += [libloader, libgbm, libxmlconfig]
+  incs_for_egl += [inc_loader, inc_gbm, include_directories('../gbm/main')]
+  deps_for_egl += dep_libdrm
 endif
 if with_platform_surfaceless
   files_egl += files('drivers/dri2/platform_surfaceless.c')
@@ -132,6 +130,15 @@ endif
 if with_platform_android
   deps_for_egl += dep_android
   files_egl += files('drivers/dri2/platform_android.c')
+endif
+if with_platform_haiku
+  incs_for_egl += inc_haikugl
+  c_args_for_egl += [
+    '-D_EGL_BUILT_IN_DRIVER_HAIKU',
+  ]
+  files_egl += files('drivers/haiku/egl_haiku.cpp')
+  link_for_egl += libgl
+  deps_for_egl += cpp.find_library('be')
 endif
 
 # TODO: glvnd
@@ -160,8 +167,6 @@ libegl = shared_library(
   c_args : [
     c_vis_args,
     c_args_for_egl,
-    '-DDEFAULT_DRIVER_DIR="@0@"'.format(dri_search_path),
-    '-D_EGL_BUILT_IN_DRIVER_DRI2',
     '-D_EGL_NATIVE_PLATFORM=_EGL_PLATFORM_@0@'.format(egl_native_platform.to_upper()),
   ],
   include_directories : incs_for_egl,
@@ -202,6 +207,7 @@ if with_tests
   else
     test('egl-symbols-check',
       find_program('egl-symbols-check'),
+      env : env_test,
       args : libegl
     )
   endif

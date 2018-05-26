@@ -198,6 +198,8 @@
 #define     EG_V_SQ_ALU_SRC_LDS_DIRECT_B                             0x000000E0
 #define     EG_V_SQ_ALU_SRC_TIME_HI                                  0x000000E3
 #define     EG_V_SQ_ALU_SRC_TIME_LO                                  0x000000E4
+#define     EG_V_SQ_ALU_SRC_MASK_HI                                  0x000000E5
+#define     EG_V_SQ_ALU_SRC_MASK_LO                                  0x000000E6
 #define     EG_V_SQ_ALU_SRC_HW_WAVE_ID                               0x000000E7
 #define     EG_V_SQ_ALU_SRC_SIMD_ID                                  0x000000E8
 #define     EG_V_SQ_ALU_SRC_SE_ID                                    0x000000E9

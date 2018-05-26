@@ -161,8 +161,6 @@ static const struct extension_info known_glx_extensions[] = {
    { GLX(SGIS_multisample),            VER(0,0), Y, Y, N, N },
    { GLX(SGIX_fbconfig),               VER(1,3), Y, Y, N, N },
    { GLX(SGIX_pbuffer),                VER(1,3), Y, Y, N, N },
-   { GLX(SGIX_swap_barrier),           VER(0,0), N, N, N, N },
-   { GLX(SGIX_swap_group),             VER(0,0), N, N, N, N },
    { GLX(SGIX_visual_select_group),    VER(0,0), Y, Y, N, N },
    { GLX(SGI_make_current_read),       VER(1,3), Y, N, N, N },
    { GLX(SGI_swap_control),            VER(0,0), Y, N, N, N },

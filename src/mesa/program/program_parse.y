@@ -27,6 +27,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "main/errors.h"
 #include "main/mtypes.h"
 #include "main/imports.h"
 #include "program/program.h"
@@ -45,13 +46,13 @@ static struct asm_symbol *declare_variable(struct asm_parser_state *state,
     char *name, enum asm_type t, struct YYLTYPE *locp);
 
 static int add_state_reference(struct gl_program_parameter_list *param_list,
-    const gl_state_index tokens[STATE_LENGTH]);
+    const gl_state_index16 tokens[STATE_LENGTH]);
 
 static int initialize_symbol_from_state(struct gl_program *prog,
-    struct asm_symbol *param_var, const gl_state_index tokens[STATE_LENGTH]);
+    struct asm_symbol *param_var, const gl_state_index16 tokens[STATE_LENGTH]);
 
 static int initialize_symbol_from_param(struct gl_program *prog,
-    struct asm_symbol *param_var, const gl_state_index tokens[STATE_LENGTH]);
+    struct asm_symbol *param_var, const gl_state_index16 tokens[STATE_LENGTH]);
 
 static int initialize_symbol_from_const(struct gl_program *prog,
     struct asm_symbol *param_var, const struct asm_vector *vec,
@@ -136,7 +137,7 @@ static struct asm_instruction *asm_instruction_copy_ctor(
    unsigned attrib;
    int integer;
    float real;
-   gl_state_index state[STATE_LENGTH];
+   gl_state_index16 state[STATE_LENGTH];
    int negate;
    struct asm_vector vector;
    enum prog_opcode opcode;
@@ -2299,7 +2300,7 @@ declare_variable(struct asm_parser_state *state, char *name, enum asm_type t,
 
 
 int add_state_reference(struct gl_program_parameter_list *param_list,
-			const gl_state_index tokens[STATE_LENGTH])
+			const gl_state_index16 tokens[STATE_LENGTH])
 {
    const GLuint size = 4; /* XXX fix */
    char *name;
@@ -2307,7 +2308,7 @@ int add_state_reference(struct gl_program_parameter_list *param_list,
 
    name = _mesa_program_state_string(tokens);
    index = _mesa_add_parameter(param_list, PROGRAM_STATE_VAR, name,
-                               size, GL_NONE, NULL, tokens);
+                               size, GL_NONE, NULL, tokens, true);
    param_list->StateFlags |= _mesa_program_state_flags(tokens);
 
    /* free name string here since we duplicated it in add_parameter() */
@@ -2320,10 +2321,10 @@ int add_state_reference(struct gl_program_parameter_list *param_list,
 int
 initialize_symbol_from_state(struct gl_program *prog,
 			     struct asm_symbol *param_var, 
-			     const gl_state_index tokens[STATE_LENGTH])
+			     const gl_state_index16 tokens[STATE_LENGTH])
 {
    int idx = -1;
-   gl_state_index state_tokens[STATE_LENGTH];
+   gl_state_index16 state_tokens[STATE_LENGTH];
 
 
    memcpy(state_tokens, tokens, sizeof(state_tokens));
@@ -2372,10 +2373,10 @@ initialize_symbol_from_state(struct gl_program *prog,
 int
 initialize_symbol_from_param(struct gl_program *prog,
 			     struct asm_symbol *param_var, 
-			     const gl_state_index tokens[STATE_LENGTH])
+			     const gl_state_index16 tokens[STATE_LENGTH])
 {
    int idx = -1;
-   gl_state_index state_tokens[STATE_LENGTH];
+   gl_state_index16 state_tokens[STATE_LENGTH];
 
 
    memcpy(state_tokens, tokens, sizeof(state_tokens));

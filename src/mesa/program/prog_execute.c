@@ -36,8 +36,10 @@
 
 
 #include "c99_math.h"
+#include "main/errors.h"
 #include "main/glheader.h"
 #include "main/macros.h"
+#include "main/mtypes.h"
 #include "prog_execute.h"
 #include "prog_instruction.h"
 #include "prog_parameter.h"
@@ -117,11 +119,13 @@ get_src_register_pointer(const struct prog_src_register *source,
       /* Fallthrough */
    case PROGRAM_CONSTANT:
       /* Fallthrough */
-   case PROGRAM_UNIFORM:
+   case PROGRAM_UNIFORM: {
       if (reg >= (GLint) prog->Parameters->NumParameters)
          return ZeroVec;
-      return (GLfloat *) prog->Parameters->ParameterValues[reg];
 
+      unsigned pvo = prog->Parameters->ParameterValueOffset[reg];
+      return (GLfloat *) prog->Parameters->ParameterValues + pvo;
+   }
    case PROGRAM_SYSTEM_VALUE:
       assert(reg < (GLint) ARRAY_SIZE(machine->SystemValues));
       return machine->SystemValues[reg];

@@ -573,16 +573,16 @@ i830Scissor(struct gl_context * ctx)
 }
 
 static void
-i830LogicOp(struct gl_context * ctx, GLenum opcode)
+i830LogicOp(struct gl_context * ctx, enum gl_logicop_mode opcode)
 {
    struct i830_context *i830 = i830_context(ctx);
-   int tmp = intel_translate_logic_op(opcode);
 
    DBG("%s\n", __func__);
-   
+
+   assert((unsigned)opcode <= 15);
    I830_STATECHANGE(i830, I830_UPLOAD_CTX);
    i830->state.Ctx[I830_CTXREG_STATE4] &= ~LOGICOP_MASK;
-   i830->state.Ctx[I830_CTXREG_STATE4] |= LOGIC_OP_FUNC(tmp);
+   i830->state.Ctx[I830_CTXREG_STATE4] |= opcode;
 }
 
 

@@ -113,11 +113,13 @@ virgl_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_MAX_TEXTURE_ARRAY_LAYERS:
       return vscreen->caps.caps.v1.max_texture_array_layers;
    case PIPE_CAP_MIN_TEXEL_OFFSET:
+      return vscreen->caps.caps.v2.min_texel_offset;
    case PIPE_CAP_MIN_TEXTURE_GATHER_OFFSET:
-      return -8;
+      return vscreen->caps.caps.v2.min_texture_gather_offset;
    case PIPE_CAP_MAX_TEXEL_OFFSET:
+      return vscreen->caps.caps.v2.max_texel_offset;
    case PIPE_CAP_MAX_TEXTURE_GATHER_OFFSET:
-      return 7;
+      return vscreen->caps.caps.v2.max_texture_gather_offset;
    case PIPE_CAP_CONDITIONAL_RENDER:
       return vscreen->caps.caps.v1.bset.conditional_render;
    case PIPE_CAP_TEXTURE_BARRIER:
@@ -138,7 +140,7 @@ virgl_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_USER_VERTEX_BUFFERS:
       return 0;
    case PIPE_CAP_CONSTANT_BUFFER_OFFSET_ALIGNMENT:
-      return 16;
+      return vscreen->caps.caps.v2.uniform_buffer_offset_alignment;
    case PIPE_CAP_STREAM_OUTPUT_PAUSE_RESUME:
    case PIPE_CAP_STREAM_OUTPUT_INTERLEAVE_BUFFERS:
       return vscreen->caps.caps.v1.bset.streamout_pause_resume;
@@ -161,7 +163,7 @@ virgl_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_TEXTURE_BUFFER_OBJECTS:
       return vscreen->caps.caps.v1.max_tbo_size > 0;
    case PIPE_CAP_TEXTURE_BUFFER_OFFSET_ALIGNMENT:
-      return 0;
+      return vscreen->caps.caps.v2.texture_buffer_offset_alignment;
    case PIPE_CAP_BUFFER_SAMPLER_VIEW_RGBA_ONLY:
       return 0;
    case PIPE_CAP_CUBE_MAP_ARRAY:
@@ -182,21 +184,26 @@ virgl_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_TGSI_VS_LAYER_VIEWPORT:
       return 0;
    case PIPE_CAP_MAX_GEOMETRY_OUTPUT_VERTICES:
-      return 256;
+      return vscreen->caps.caps.v2.max_geom_output_vertices;
    case PIPE_CAP_MAX_GEOMETRY_TOTAL_OUTPUT_COMPONENTS:
-      return 16384;
+      return vscreen->caps.caps.v2.max_geom_total_output_components;
    case PIPE_CAP_TEXTURE_QUERY_LOD:
       return vscreen->caps.caps.v1.bset.texture_query_lod;
    case PIPE_CAP_MAX_TEXTURE_GATHER_COMPONENTS:
       return vscreen->caps.caps.v1.max_texture_gather_components;
+   case PIPE_CAP_DRAW_INDIRECT:
+      return vscreen->caps.caps.v1.bset.has_indirect_draw;
+   case PIPE_CAP_SAMPLE_SHADING:
+   case PIPE_CAP_FORCE_PERSAMPLE_INTERP:
+      return vscreen->caps.caps.v1.bset.has_sample_shading;
+   case PIPE_CAP_CULL_DISTANCE:
+      return vscreen->caps.caps.v1.bset.has_cull;
    case PIPE_CAP_TEXTURE_GATHER_SM5:
    case PIPE_CAP_BUFFER_MAP_PERSISTENT_COHERENT:
-   case PIPE_CAP_SAMPLE_SHADING:
    case PIPE_CAP_FAKE_SW_MSAA:
    case PIPE_CAP_TEXTURE_GATHER_OFFSETS:
    case PIPE_CAP_TGSI_VS_WINDOW_SPACE_POSITION:
    case PIPE_CAP_MAX_VERTEX_STREAMS:
-   case PIPE_CAP_DRAW_INDIRECT:
    case PIPE_CAP_MULTI_DRAW_INDIRECT:
    case PIPE_CAP_MULTI_DRAW_INDIRECT_PARAMS:
    case PIPE_CAP_TGSI_FS_FINE_DERIVATIVE:
@@ -214,7 +221,6 @@ virgl_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_TEXTURE_HALF_FLOAT_LINEAR:
    case PIPE_CAP_DEPTH_BOUNDS_TEST:
    case PIPE_CAP_TGSI_TXQS:
-   case PIPE_CAP_FORCE_PERSAMPLE_INTERP:
    case PIPE_CAP_SHAREABLE_SHADERS:
    case PIPE_CAP_CLEAR_TEXTURE:
    case PIPE_CAP_DRAW_PARAMETERS:
@@ -235,7 +241,6 @@ virgl_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_PCI_FUNCTION:
    case PIPE_CAP_FRAMEBUFFER_NO_ATTACHMENT:
    case PIPE_CAP_ROBUST_BUFFER_ACCESS_BEHAVIOR:
-   case PIPE_CAP_CULL_DISTANCE:
    case PIPE_CAP_PRIMITIVE_RESTART_FOR_PATCHES:
    case PIPE_CAP_TGSI_VOTE:
    case PIPE_CAP_MAX_WINDOW_RECTANGLES:
@@ -268,6 +273,9 @@ virgl_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_MAX_COMBINED_SHADER_OUTPUT_RESOURCES:
    case PIPE_CAP_SIGNED_VERTEX_BUFFER_OFFSET:
    case PIPE_CAP_CONTEXT_PRIORITY_MASK:
+   case PIPE_CAP_FENCE_SIGNAL:
+   case PIPE_CAP_CONSTBUF0_FLAGS:
+   case PIPE_CAP_PACKED_UNIFORMS:
       return 0;
    case PIPE_CAP_VENDOR_ID:
       return 0x1af4;
@@ -309,11 +317,13 @@ virgl_get_shader_param(struct pipe_screen *screen,
          return 1;
       case PIPE_SHADER_CAP_MAX_INPUTS:
          if (vscreen->caps.caps.v1.glsl_level < 150)
-            return 16;
+            return vscreen->caps.caps.v2.max_vertex_attribs;
          return (shader == PIPE_SHADER_VERTEX ||
-                 shader == PIPE_SHADER_GEOMETRY) ? 16 : 32;
+                 shader == PIPE_SHADER_GEOMETRY) ? vscreen->caps.caps.v2.max_vertex_attribs : 32;
       case PIPE_SHADER_CAP_MAX_OUTPUTS:
-         return 32;
+         if (shader == PIPE_SHADER_FRAGMENT)
+            return vscreen->caps.caps.v1.max_render_targets;
+         return vscreen->caps.caps.v2.max_vertex_outputs;
      // case PIPE_SHADER_CAP_MAX_CONSTS:
      //    return 4096;
       case PIPE_SHADER_CAP_MAX_TEMPS:
@@ -349,24 +359,20 @@ virgl_get_shader_param(struct pipe_screen *screen,
 static float
 virgl_get_paramf(struct pipe_screen *screen, enum pipe_capf param)
 {
+   struct virgl_screen *vscreen = virgl_screen(screen);
    switch (param) {
    case PIPE_CAPF_MAX_LINE_WIDTH:
-      /* fall-through */
+      return vscreen->caps.caps.v2.max_aliased_line_width;
    case PIPE_CAPF_MAX_LINE_WIDTH_AA:
-      return 255.0; /* arbitrary */
+      return vscreen->caps.caps.v2.max_smooth_line_width;
    case PIPE_CAPF_MAX_POINT_WIDTH:
-      /* fall-through */
+      return vscreen->caps.caps.v2.max_aliased_point_size;
    case PIPE_CAPF_MAX_POINT_WIDTH_AA:
-      return 255.0; /* arbitrary */
+      return vscreen->caps.caps.v2.max_smooth_point_size;
    case PIPE_CAPF_MAX_TEXTURE_ANISOTROPY:
       return 16.0;
    case PIPE_CAPF_MAX_TEXTURE_LOD_BIAS:
-      return 16.0; /* arbitrary */
-   case PIPE_CAPF_GUARD_BAND_LEFT:
-   case PIPE_CAPF_GUARD_BAND_TOP:
-   case PIPE_CAPF_GUARD_BAND_RIGHT:
-   case PIPE_CAPF_GUARD_BAND_BOTTOM:
-      return 0.0;
+      return vscreen->caps.caps.v2.max_texture_lod_bias;
    }
    /* should only get here on unhandled cases */
    debug_printf("Unexpected PIPE_CAPF %d query\n", param);

@@ -33,13 +33,29 @@ anv_wsi_proc_addr(VkPhysicalDevice physicalDevice, const char *pName)
    return anv_lookup_entrypoint(&physical_device->info, pName);
 }
 
+static uint64_t
+anv_wsi_image_get_modifier(VkImage _image)
+{
+   ANV_FROM_HANDLE(anv_image, image, _image);
+   return image->drm_format_mod;
+}
+
 VkResult
 anv_init_wsi(struct anv_physical_device *physical_device)
 {
-   return wsi_device_init(&physical_device->wsi_device,
-                          anv_physical_device_to_handle(physical_device),
-                          anv_wsi_proc_addr,
-                          &physical_device->instance->alloc);
+   VkResult result;
+
+   result = wsi_device_init(&physical_device->wsi_device,
+                            anv_physical_device_to_handle(physical_device),
+                            anv_wsi_proc_addr,
+                            &physical_device->instance->alloc);
+   if (result != VK_SUCCESS)
+      return result;
+
+   physical_device->wsi_device.supports_modifiers = true;
+   physical_device->wsi_device.image_get_modifier = anv_wsi_image_get_modifier;
+
+   return VK_SUCCESS;
 }
 
 void
@@ -225,4 +241,26 @@ VkResult anv_QueuePresentKHR(
                                    anv_device_to_handle(queue->device),
                                    _queue, 0,
                                    pPresentInfo);
+}
+
+VkResult anv_GetDeviceGroupPresentCapabilitiesKHR(
+    VkDevice                                    device,
+    VkDeviceGroupPresentCapabilitiesKHR*        pCapabilities)
+{
+   memset(pCapabilities->presentMask, 0,
+          sizeof(pCapabilities->presentMask));
+   pCapabilities->presentMask[0] = 0x1;
+   pCapabilities->modes = VK_DEVICE_GROUP_PRESENT_MODE_LOCAL_BIT_KHR;
+
+   return VK_SUCCESS;
+}
+
+VkResult anv_GetDeviceGroupSurfacePresentModesKHR(
+    VkDevice                                    device,
+    VkSurfaceKHR                                surface,
+    VkDeviceGroupPresentModeFlagsKHR*           pModes)
+{
+   *pModes = VK_DEVICE_GROUP_PRESENT_MODE_LOCAL_BIT_KHR;
+
+   return VK_SUCCESS;
 }

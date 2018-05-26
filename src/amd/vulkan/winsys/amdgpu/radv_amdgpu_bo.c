@@ -33,6 +33,8 @@
 #include <amdgpu.h>
 #include <amdgpu_drm.h>
 #include <inttypes.h>
+#include <pthread.h>
+#include <unistd.h>
 
 #include "util/u_atomic.h"
 
@@ -345,7 +347,8 @@ radv_amdgpu_winsys_bo_create(struct radeon_winsys *_ws,
 		request.flags |= AMDGPU_GEM_CREATE_CPU_GTT_USWC;
 	if (!(flags & RADEON_FLAG_IMPLICIT_SYNC) && ws->info.drm_minor >= 22)
 		request.flags |= AMDGPU_GEM_CREATE_EXPLICIT_SYNC;
-	if (flags & RADEON_FLAG_NO_INTERPROCESS_SHARING && ws->info.drm_minor >= 20 && ws->use_local_bos) {
+	if (flags & RADEON_FLAG_NO_INTERPROCESS_SHARING &&
+	    ws->info.has_local_buffers && ws->use_local_bos) {
 		bo->base.is_local = true;
 		request.flags |= AMDGPU_GEM_CREATE_VM_ALWAYS_VALID;
 	}
@@ -400,6 +403,54 @@ radv_amdgpu_winsys_bo_unmap(struct radeon_winsys_bo *_bo)
 {
 	struct radv_amdgpu_winsys_bo *bo = radv_amdgpu_winsys_bo(_bo);
 	amdgpu_bo_cpu_unmap(bo->bo);
+}
+
+static struct radeon_winsys_bo *
+radv_amdgpu_winsys_bo_from_ptr(struct radeon_winsys *_ws,
+                               void *pointer,
+                               uint64_t size)
+{
+	struct radv_amdgpu_winsys *ws = radv_amdgpu_winsys(_ws);
+	amdgpu_bo_handle buf_handle;
+	struct radv_amdgpu_winsys_bo *bo;
+	uint64_t va;
+	amdgpu_va_handle va_handle;
+
+	bo = CALLOC_STRUCT(radv_amdgpu_winsys_bo);
+	if (!bo)
+		return NULL;
+
+	if (amdgpu_create_bo_from_user_mem(ws->dev, pointer, size, &buf_handle))
+		goto error;
+
+	if (amdgpu_va_range_alloc(ws->dev, amdgpu_gpu_va_range_general,
+	                          size, 1 << 12, 0, &va, &va_handle, 0))
+		goto error_va_alloc;
+
+	if (amdgpu_bo_va_op(buf_handle, 0, size, va, 0, AMDGPU_VA_OP_MAP))
+		goto error_va_map;
+
+	/* Initialize it */
+	bo->base.va = va;
+	bo->va_handle = va_handle;
+	bo->size = size;
+	bo->ref_count = 1;
+	bo->ws = ws;
+	bo->bo = buf_handle;
+	bo->initial_domain = RADEON_DOMAIN_GTT;
+
+	radv_amdgpu_add_buffer_to_global_list(bo);
+	return (struct radeon_winsys_bo *)bo;
+
+error_va_map:
+	amdgpu_va_range_free(va_handle);
+
+error_va_alloc:
+	amdgpu_bo_free(buf_handle);
+
+error:
+	FREE(bo);
+	return NULL;
 }
 
 static struct radeon_winsys_bo *
@@ -541,6 +592,7 @@ void radv_amdgpu_bo_init_functions(struct radv_amdgpu_winsys *ws)
 	ws->base.buffer_destroy = radv_amdgpu_winsys_bo_destroy;
 	ws->base.buffer_map = radv_amdgpu_winsys_bo_map;
 	ws->base.buffer_unmap = radv_amdgpu_winsys_bo_unmap;
+	ws->base.buffer_from_ptr = radv_amdgpu_winsys_bo_from_ptr;
 	ws->base.buffer_from_fd = radv_amdgpu_winsys_bo_from_fd;
 	ws->base.buffer_get_fd = radv_amdgpu_winsys_get_fd;
 	ws->base.buffer_set_metadata = radv_amdgpu_winsys_bo_set_metadata;

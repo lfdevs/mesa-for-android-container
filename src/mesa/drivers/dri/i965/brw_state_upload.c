@@ -49,6 +49,7 @@ static void
 brw_upload_initial_gpu_state(struct brw_context *brw)
 {
    const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct brw_compiler *compiler = brw->screen->compiler;
 
    /* On platforms with hardware contexts, we can set our initial GPU state
     * right away rather than doing it via state atoms.  This saves a small
@@ -62,7 +63,7 @@ brw_upload_initial_gpu_state(struct brw_context *brw)
 
    brw_upload_invariant_state(brw);
 
-   if (devinfo->gen == 10) {
+   if (devinfo->gen == 10 || devinfo->gen == 11) {
       brw_load_register_imm32(brw, GEN10_CACHE_MODE_SS,
                               REG_MASK(GEN10_FLOAT_BLEND_OPTIMIZATION_ENABLE) |
                               GEN10_FLOAT_BLEND_OPTIMIZATION_ENABLE);
@@ -115,6 +116,29 @@ brw_upload_initial_gpu_state(struct brw_context *brw)
       OUT_BATCH(0);
       ADVANCE_BATCH();
    }
+
+   /* Set the "CONSTANT_BUFFER Address Offset Disable" bit, so
+    * 3DSTATE_CONSTANT_XS buffer 0 is an absolute address.
+    *
+    * This is only safe on kernels with context isolation support.
+    */
+   if (!compiler->constant_buffer_0_is_relative) {
+      if (devinfo->gen >= 9) {
+         BEGIN_BATCH(3);
+         OUT_BATCH(MI_LOAD_REGISTER_IMM | (3 - 2));
+         OUT_BATCH(CS_DEBUG_MODE2);
+         OUT_BATCH(REG_MASK(CSDBG2_CONSTANT_BUFFER_ADDRESS_OFFSET_DISABLE) |
+                   CSDBG2_CONSTANT_BUFFER_ADDRESS_OFFSET_DISABLE);
+         ADVANCE_BATCH();
+      } else if (devinfo->gen == 8) {
+         BEGIN_BATCH(3);
+         OUT_BATCH(MI_LOAD_REGISTER_IMM | (3 - 2));
+         OUT_BATCH(INSTPM);
+         OUT_BATCH(REG_MASK(INSTPM_CONSTANT_BUFFER_ADDRESS_OFFSET_DISABLE) |
+                   INSTPM_CONSTANT_BUFFER_ADDRESS_OFFSET_DISABLE);
+         ADVANCE_BATCH();
+      }
+   }
 }
 
 static inline const struct brw_tracked_state *
@@ -164,7 +188,9 @@ void brw_init_state( struct brw_context *brw )
 
    brw_init_caches(brw);
 
-   if (devinfo->gen >= 10)
+   if (devinfo->gen >= 11)
+      gen11_init_atoms(brw);
+   else if (devinfo->gen >= 10)
       gen10_init_atoms(brw);
    else if (devinfo->gen >= 9)
       gen9_init_atoms(brw);

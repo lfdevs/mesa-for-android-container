@@ -52,6 +52,7 @@
 #define ETNA_DBG_ZERO            0x200000 /* Zero all resources after allocation */
 #define ETNA_DBG_DRAW_STALL      0x400000 /* Stall FE/PE after every draw op */
 #define ETNA_DBG_SHADERDB        0x800000 /* dump program compile information */
+#define ETNA_DBG_NO_SINGLEBUF    0x1000000 /* disable single buffer feature */
 
 extern int etna_mesa_debug; /* set in etna_screen.c from ETNA_DEBUG */
 

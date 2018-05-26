@@ -1,5 +1,5 @@
 /****************************************************************************
-* Copyright (C) 2014-2016 Intel Corporation.   All Rights Reserved.
+* Copyright (C) 2014-2018 Intel Corporation.   All Rights Reserved.
 *
 * Permission is hereby granted, free of charge, to any person obtaining a
 * copy of this software and associated documentation files (the "Software"),
@@ -35,9 +35,11 @@ typedef std::thread* THREAD_PTR;
 
 struct SWR_CONTEXT;
 struct DRAW_CONTEXT;
+struct SWR_WORKER_PRIVATE_STATE;
 
 struct THREAD_DATA
 {
+    void* pWorkerPrivateData;// Pointer to per-worker private data
     uint32_t procGroupId;   // Will always be 0 for non-Windows OS
     uint32_t threadId;      // within the procGroup for Windows
     uint32_t numaId;        // NUMA node id
@@ -55,6 +57,7 @@ struct THREAD_POOL
     uint32_t numThreads;
     uint32_t numaMask;
     THREAD_DATA *pThreadData;
+    void* pWorkerPrivateDataArray; // All memory for worker private data
     uint32_t numReservedThreads; // Number of threads reserved for API use
     THREAD_DATA *pApiThreadData;
 };

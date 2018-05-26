@@ -18,7 +18,11 @@ env.Append(LIBS = [
     'ws2_32',
 ])
 
-env.Prepend(LIBS = [mesautil])
+env.Prepend(LIBS = [
+    mesautil,
+    nir,
+    spirv
+])
 
 sources = ['libgl_gdi.c']
 drivers = []
@@ -40,8 +44,6 @@ if env['gcc'] and env['machine'] != 'x86_64':
     sources += ['#src/gallium/state_trackers/wgl/opengl32.mingw.def']
 else:
     sources += ['#src/gallium/state_trackers/wgl/opengl32.def']
-
-drivers += [trace, rbug]
 
 env['no_import_lib'] = 1
 

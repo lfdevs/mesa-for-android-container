@@ -1373,11 +1373,12 @@ void APIENTRY gl_dispatch_stub_1357(GLuint texture, GLsizei samples, GLenum inte
 void APIENTRY gl_dispatch_stub_1358(GLuint semaphore, GLuint numBufferBarriers, const GLuint *buffers, GLuint numTextureBarriers, const GLuint *textures, const GLenum *srcLayouts);
 void APIENTRY gl_dispatch_stub_1359(GLuint memory, GLuint64 size, GLenum handleType, GLint fd);
 void APIENTRY gl_dispatch_stub_1360(GLuint semaphore, GLenum handleType, GLint fd);
-void APIENTRY gl_dispatch_stub_1361(GLenum frontfunc, GLenum backfunc, GLint ref, GLuint mask);
-void APIENTRY gl_dispatch_stub_1362(GLenum target, GLuint index, GLsizei count, const GLfloat *params);
+void APIENTRY gl_dispatch_stub_1361(void);
+void APIENTRY gl_dispatch_stub_1362(GLenum frontfunc, GLenum backfunc, GLint ref, GLuint mask);
 void APIENTRY gl_dispatch_stub_1363(GLenum target, GLuint index, GLsizei count, const GLfloat *params);
-void APIENTRY gl_dispatch_stub_1364(GLenum target, GLvoid *writeOffset);
+void APIENTRY gl_dispatch_stub_1364(GLenum target, GLuint index, GLsizei count, const GLfloat *params);
 void APIENTRY gl_dispatch_stub_1365(GLenum target, GLvoid *writeOffset);
+void APIENTRY gl_dispatch_stub_1366(GLenum target, GLvoid *writeOffset);
 GLAPI void APIENTRY glAlphaFuncx(GLenum func, GLclampx ref);
 GLAPI void APIENTRY glClearColorx(GLclampx red, GLclampx green, GLclampx blue, GLclampx alpha);
 GLAPI void APIENTRY glClearDepthx(GLclampx depth);
@@ -1421,8 +1422,8 @@ GLAPI void APIENTRY glGetTexParameterxv(GLenum target, GLenum pname, GLfixed *pa
 GLAPI void APIENTRY glPointParameterx(GLenum pname, GLfixed param);
 GLAPI void APIENTRY glPointParameterxv(GLenum pname, const GLfixed *params);
 GLAPI void APIENTRY glTexParameterxv(GLenum target, GLenum pname, const GLfixed *params);
-void APIENTRY gl_dispatch_stub_1409(void);
-void APIENTRY gl_dispatch_stub_1410(GLfloat minX, GLfloat minY, GLfloat minZ, GLfloat minW, GLfloat maxX, GLfloat maxY, GLfloat maxZ, GLfloat maxW);
+void APIENTRY gl_dispatch_stub_1410(void);
+void APIENTRY gl_dispatch_stub_1411(GLfloat minX, GLfloat minY, GLfloat minZ, GLfloat minW, GLfloat maxX, GLfloat maxY, GLfloat maxZ, GLfloat maxW);
 #undef MAPI_TMP_DEFINES
 #endif /* MAPI_TMP_DEFINES */
 
@@ -2158,301 +2159,301 @@ GLAPI void APIENTRY glMultiDrawElementsEXT(GLenum mode, const GLsizei *count, GL
 GLAPI void APIENTRY glAlphaFuncx(GLenum func, GLclampx ref)
 {
    const struct _glapi_table *_tbl = entry_current_get();
-   mapi_func _func = ((const mapi_func *) _tbl)[1366];
+   mapi_func _func = ((const mapi_func *) _tbl)[1367];
    ((void (APIENTRY *)(GLenum func, GLclampx ref)) _func)(func, ref);
 }
 
 GLAPI void APIENTRY glClearColorx(GLclampx red, GLclampx green, GLclampx blue, GLclampx alpha)
 {
    const struct _glapi_table *_tbl = entry_current_get();
-   mapi_func _func = ((const mapi_func *) _tbl)[1367];
+   mapi_func _func = ((const mapi_func *) _tbl)[1368];
    ((void (APIENTRY *)(GLclampx red, GLclampx green, GLclampx blue, GLclampx alpha)) _func)(red, green, blue, alpha);
 }
 
 GLAPI void APIENTRY glClearDepthx(GLclampx depth)
 {
    const struct _glapi_table *_tbl = entry_current_get();
-   mapi_func _func = ((const mapi_func *) _tbl)[1368];
+   mapi_func _func = ((const mapi_func *) _tbl)[1369];
    ((void (APIENTRY *)(GLclampx depth)) _func)(depth);
 }
 
 GLAPI void APIENTRY glColor4x(GLfixed red, GLfixed green, GLfixed blue, GLfixed alpha)
 {
    const struct _glapi_table *_tbl = entry_current_get();
-   mapi_func _func = ((const mapi_func *) _tbl)[1369];
+   mapi_func _func = ((const mapi_func *) _tbl)[1370];
    ((void (APIENTRY *)(GLfixed red, GLfixed green, GLfixed blue, GLfixed alpha)) _func)(red, green, blue, alpha);
 }
 
 GLAPI void APIENTRY glDepthRangex(GLclampx zNear, GLclampx zFar)
 {
    const struct _glapi_table *_tbl = entry_current_get();
-   mapi_func _func = ((const mapi_func *) _tbl)[1370];
+   mapi_func _func = ((const mapi_func *) _tbl)[1371];
    ((void (APIENTRY *)(GLclampx zNear, GLclampx zFar)) _func)(zNear, zFar);
 }
 
 GLAPI void APIENTRY glFogx(GLenum pname, GLfixed param)
 {
    const struct _glapi_table *_tbl = entry_current_get();
-   mapi_func _func = ((const mapi_func *) _tbl)[1371];
+   mapi_func _func = ((const mapi_func *) _tbl)[1372];
    ((void (APIENTRY *)(GLenum pname, GLfixed param)) _func)(pname, param);
 }
 
 GLAPI void APIENTRY glFogxv(GLenum pname, const GLfixed *params)
 {
    const struct _glapi_table *_tbl = entry_current_get();
-   mapi_func _func = ((const mapi_func *) _tbl)[1372];
+   mapi_func _func = ((const mapi_func *) _tbl)[1373];
    ((void (APIENTRY *)(GLenum pname, const GLfixed *params)) _func)(pname, params);
 }
 
 GLAPI void APIENTRY glFrustumf(GLfloat left, GLfloat right, GLfloat bottom, GLfloat top, GLfloat zNear, GLfloat zFar)
 {
    const struct _glapi_table *_tbl = entry_current_get();
-   mapi_func _func = ((const mapi_func *) _tbl)[1373];
+   mapi_func _func = ((const mapi_func *) _tbl)[1374];
    ((void (APIENTRY *)(GLfloat left, GLfloat right, GLfloat bottom, GLfloat top, GLfloat zNear, GLfloat zFar)) _func)(left, right, bottom, top, zNear, zFar);
 }
 
 GLAPI void APIENTRY glFrustumx(GLfixed left, GLfixed right, GLfixed bottom, GLfixed top, GLfixed zNear, GLfixed zFar)
 {
    const struct _glapi_table *_tbl = entry_current_get();
-   mapi_func _func = ((const mapi_func *) _tbl)[1374];
+   mapi_func _func = ((const mapi_func *) _tbl)[1375];
    ((void (APIENTRY *)(GLfixed left, GLfixed right, GLfixed bottom, GLfixed top, GLfixed zNear, GLfixed zFar)) _func)(left, right, bottom, top, zNear, zFar);
 }
 
 GLAPI void APIENTRY glLightModelx(GLenum pname, GLfixed param)
 {
    const struct _glapi_table *_tbl = entry_current_get();
-   mapi_func _func = ((const mapi_func *) _tbl)[1375];
+   mapi_func _func = ((const mapi_func *) _tbl)[1376];
    ((void (APIENTRY *)(GLenum pname, GLfixed param)) _func)(pname, param);
 }
 
 GLAPI void APIENTRY glLightModelxv(GLenum pname, const GLfixed *params)
 {
    const struct _glapi_table *_tbl = entry_current_get();
-   mapi_func _func = ((const mapi_func *) _tbl)[1376];
+   mapi_func _func = ((const mapi_func *) _tbl)[1377];
    ((void (APIENTRY *)(GLenum pname, const GLfixed *params)) _func)(pname, params);
 }
 
 GLAPI void APIENTRY glLightx(GLenum light, GLenum pname, GLfixed param)
 {
    const struct _glapi_table *_tbl = entry_current_get();
-   mapi_func _func = ((const mapi_func *) _tbl)[1377];
+   mapi_func _func = ((const mapi_func *) _tbl)[1378];
    ((void (APIENTRY *)(GLenum light, GLenum pname, GLfixed param)) _func)(light, pname, param);
 }
 
 GLAPI void APIENTRY glLightxv(GLenum light, GLenum pname, const GLfixed *params)
 {
    const struct _glapi_table *_tbl = entry_current_get();
-   mapi_func _func = ((const mapi_func *) _tbl)[1378];
+   mapi_func _func = ((const mapi_func *) _tbl)[1379];
    ((void (APIENTRY *)(GLenum light, GLenum pname, const GLfixed *params)) _func)(light, pname, params);
 }
 
 GLAPI void APIENTRY glLineWidthx(GLfixed width)
 {
    const struct _glapi_table *_tbl = entry_current_get();
-   mapi_func _func = ((const mapi_func *) _tbl)[1379];
+   mapi_func _func = ((const mapi_func *) _tbl)[1380];
    ((void (APIENTRY *)(GLfixed width)) _func)(width);
 }
 
 GLAPI void APIENTRY glLoadMatrixx(const GLfixed *m)
 {
    const struct _glapi_table *_tbl = entry_current_get();
-   mapi_func _func = ((const mapi_func *) _tbl)[1380];
+   mapi_func _func = ((const mapi_func *) _tbl)[1381];
    ((void (APIENTRY *)(const GLfixed *m)) _func)(m);
 }
 
 GLAPI void APIENTRY glMaterialx(GLenum face, GLenum pname, GLfixed param)
 {
    const struct _glapi_table *_tbl = entry_current_get();
-   mapi_func _func = ((const mapi_func *) _tbl)[1381];
+   mapi_func _func = ((const mapi_func *) _tbl)[1382];
    ((void (APIENTRY *)(GLenum face, GLenum pname, GLfixed param)) _func)(face, pname, param);
 }
 
 GLAPI void APIENTRY glMaterialxv(GLenum face, GLenum pname, const GLfixed *params)
 {
    const struct _glapi_table *_tbl = entry_current_get();
-   mapi_func _func = ((const mapi_func *) _tbl)[1382];
+   mapi_func _func = ((const mapi_func *) _tbl)[1383];
    ((void (APIENTRY *)(GLenum face, GLenum pname, const GLfixed *params)) _func)(face, pname, params);
 }
 
 GLAPI void APIENTRY glMultMatrixx(const GLfixed *m)
 {
    const struct _glapi_table *_tbl = entry_current_get();
-   mapi_func _func = ((const mapi_func *) _tbl)[1383];
+   mapi_func _func = ((const mapi_func *) _tbl)[1384];
    ((void (APIENTRY *)(const GLfixed *m)) _func)(m);
 }
 
 GLAPI void APIENTRY glMultiTexCoord4x(GLenum target, GLfixed s, GLfixed t, GLfixed r, GLfixed q)
 {
    const struct _glapi_table *_tbl = entry_current_get();
-   mapi_func _func = ((const mapi_func *) _tbl)[1384];
+   mapi_func _func = ((const mapi_func *) _tbl)[1385];
    ((void (APIENTRY *)(GLenum target, GLfixed s, GLfixed t, GLfixed r, GLfixed q)) _func)(target, s, t, r, q);
 }
 
 GLAPI void APIENTRY glNormal3x(GLfixed nx, GLfixed ny, GLfixed nz)
 {
    const struct _glapi_table *_tbl = entry_current_get();
-   mapi_func _func = ((const mapi_func *) _tbl)[1385];
+   mapi_func _func = ((const mapi_func *) _tbl)[1386];
    ((void (APIENTRY *)(GLfixed nx, GLfixed ny, GLfixed nz)) _func)(nx, ny, nz);
 }
 
 GLAPI void APIENTRY glOrthof(GLfloat left, GLfloat right, GLfloat bottom, GLfloat top, GLfloat zNear, GLfloat zFar)
 {
    const struct _glapi_table *_tbl = entry_current_get();
-   mapi_func _func = ((const mapi_func *) _tbl)[1386];
+   mapi_func _func = ((const mapi_func *) _tbl)[1387];
    ((void (APIENTRY *)(GLfloat left, GLfloat right, GLfloat bottom, GLfloat top, GLfloat zNear, GLfloat zFar)) _func)(left, right, bottom, top, zNear, zFar);
 }
 
 GLAPI void APIENTRY glOrthox(GLfixed left, GLfixed right, GLfixed bottom, GLfixed top, GLfixed zNear, GLfixed zFar)
 {
    const struct _glapi_table *_tbl = entry_current_get();
-   mapi_func _func = ((const mapi_func *) _tbl)[1387];
+   mapi_func _func = ((const mapi_func *) _tbl)[1388];
    ((void (APIENTRY *)(GLfixed left, GLfixed right, GLfixed bottom, GLfixed top, GLfixed zNear, GLfixed zFar)) _func)(left, right, bottom, top, zNear, zFar);
 }
 
 GLAPI void APIENTRY glPointSizex(GLfixed size)
 {
    const struct _glapi_table *_tbl = entry_current_get();
-   mapi_func _func = ((const mapi_func *) _tbl)[1388];
+   mapi_func _func = ((const mapi_func *) _tbl)[1389];
    ((void (APIENTRY *)(GLfixed size)) _func)(size);
 }
 
 GLAPI void APIENTRY glPolygonOffsetx(GLfixed factor, GLfixed units)
 {
    const struct _glapi_table *_tbl = entry_current_get();
-   mapi_func _func = ((const mapi_func *) _tbl)[1389];
+   mapi_func _func = ((const mapi_func *) _tbl)[1390];
    ((void (APIENTRY *)(GLfixed factor, GLfixed units)) _func)(factor, units);
 }
 
 GLAPI void APIENTRY glRotatex(GLfixed angle, GLfixed x, GLfixed y, GLfixed z)
 {
    const struct _glapi_table *_tbl = entry_current_get();
-   mapi_func _func = ((const mapi_func *) _tbl)[1390];
+   mapi_func _func = ((const mapi_func *) _tbl)[1391];
    ((void (APIENTRY *)(GLfixed angle, GLfixed x, GLfixed y, GLfixed z)) _func)(angle, x, y, z);
 }
 
 GLAPI void APIENTRY glSampleCoveragex(GLclampx value, GLboolean invert)
 {
    const struct _glapi_table *_tbl = entry_current_get();
-   mapi_func _func = ((const mapi_func *) _tbl)[1391];
+   mapi_func _func = ((const mapi_func *) _tbl)[1392];
    ((void (APIENTRY *)(GLclampx value, GLboolean invert)) _func)(value, invert);
 }
 
 GLAPI void APIENTRY glScalex(GLfixed x, GLfixed y, GLfixed z)
 {
    const struct _glapi_table *_tbl = entry_current_get();
-   mapi_func _func = ((const mapi_func *) _tbl)[1392];
+   mapi_func _func = ((const mapi_func *) _tbl)[1393];
    ((void (APIENTRY *)(GLfixed x, GLfixed y, GLfixed z)) _func)(x, y, z);
 }
 
 GLAPI void APIENTRY glTexEnvx(GLenum target, GLenum pname, GLfixed param)
 {
    const struct _glapi_table *_tbl = entry_current_get();
-   mapi_func _func = ((const mapi_func *) _tbl)[1393];
+   mapi_func _func = ((const mapi_func *) _tbl)[1394];
    ((void (APIENTRY *)(GLenum target, GLenum pname, GLfixed param)) _func)(target, pname, param);
 }
 
 GLAPI void APIENTRY glTexEnvxv(GLenum target, GLenum pname, const GLfixed *params)
 {
    const struct _glapi_table *_tbl = entry_current_get();
-   mapi_func _func = ((const mapi_func *) _tbl)[1394];
+   mapi_func _func = ((const mapi_func *) _tbl)[1395];
    ((void (APIENTRY *)(GLenum target, GLenum pname, const GLfixed *params)) _func)(target, pname, params);
 }
 
 GLAPI void APIENTRY glTexParameterx(GLenum target, GLenum pname, GLfixed param)
 {
    const struct _glapi_table *_tbl = entry_current_get();
-   mapi_func _func = ((const mapi_func *) _tbl)[1395];
+   mapi_func _func = ((const mapi_func *) _tbl)[1396];
    ((void (APIENTRY *)(GLenum target, GLenum pname, GLfixed param)) _func)(target, pname, param);
 }
 
 GLAPI void APIENTRY glTranslatex(GLfixed x, GLfixed y, GLfixed z)
 {
    const struct _glapi_table *_tbl = entry_current_get();
-   mapi_func _func = ((const mapi_func *) _tbl)[1396];
+   mapi_func _func = ((const mapi_func *) _tbl)[1397];
    ((void (APIENTRY *)(GLfixed x, GLfixed y, GLfixed z)) _func)(x, y, z);
 }
 
 GLAPI void APIENTRY glClipPlanef(GLenum plane, const GLfloat *equation)
 {
    const struct _glapi_table *_tbl = entry_current_get();
-   mapi_func _func = ((const mapi_func *) _tbl)[1397];
+   mapi_func _func = ((const mapi_func *) _tbl)[1398];
    ((void (APIENTRY *)(GLenum plane, const GLfloat *equation)) _func)(plane, equation);
 }
 
 GLAPI void APIENTRY glClipPlanex(GLenum plane, const GLfixed *equation)
 {
    const struct _glapi_table *_tbl = entry_current_get();
-   mapi_func _func = ((const mapi_func *) _tbl)[1398];
+   mapi_func _func = ((const mapi_func *) _tbl)[1399];
    ((void (APIENTRY *)(GLenum plane, const GLfixed *equation)) _func)(plane, equation);
 }
 
 GLAPI void APIENTRY glGetClipPlanef(GLenum plane, GLfloat *equation)
 {
    const struct _glapi_table *_tbl = entry_current_get();
-   mapi_func _func = ((const mapi_func *) _tbl)[1399];
+   mapi_func _func = ((const mapi_func *) _tbl)[1400];
    ((void (APIENTRY *)(GLenum plane, GLfloat *equation)) _func)(plane, equation);
 }
 
 GLAPI void APIENTRY glGetClipPlanex(GLenum plane, GLfixed *equation)
 {
    const struct _glapi_table *_tbl = entry_current_get();
-   mapi_func _func = ((const mapi_func *) _tbl)[1400];
+   mapi_func _func = ((const mapi_func *) _tbl)[1401];
    ((void (APIENTRY *)(GLenum plane, GLfixed *equation)) _func)(plane, equation);
 }
 
 GLAPI void APIENTRY glGetFixedv(GLenum pname, GLfixed *params)
 {
    const struct _glapi_table *_tbl = entry_current_get();
-   mapi_func _func = ((const mapi_func *) _tbl)[1401];
+   mapi_func _func = ((const mapi_func *) _tbl)[1402];
    ((void (APIENTRY *)(GLenum pname, GLfixed *params)) _func)(pname, params);
 }
 
 GLAPI void APIENTRY glGetLightxv(GLenum light, GLenum pname, GLfixed *params)
 {
    const struct _glapi_table *_tbl = entry_current_get();
-   mapi_func _func = ((const mapi_func *) _tbl)[1402];
+   mapi_func _func = ((const mapi_func *) _tbl)[1403];
    ((void (APIENTRY *)(GLenum light, GLenum pname, GLfixed *params)) _func)(light, pname, params);
 }
 
 GLAPI void APIENTRY glGetMaterialxv(GLenum face, GLenum pname, GLfixed *params)
 {
    const struct _glapi_table *_tbl = entry_current_get();
-   mapi_func _func = ((const mapi_func *) _tbl)[1403];
+   mapi_func _func = ((const mapi_func *) _tbl)[1404];
    ((void (APIENTRY *)(GLenum face, GLenum pname, GLfixed *params)) _func)(face, pname, params);
 }
 
 GLAPI void APIENTRY glGetTexEnvxv(GLenum target, GLenum pname, GLfixed *params)
 {
    const struct _glapi_table *_tbl = entry_current_get();
-   mapi_func _func = ((const mapi_func *) _tbl)[1404];
+   mapi_func _func = ((const mapi_func *) _tbl)[1405];
    ((void (APIENTRY *)(GLenum target, GLenum pname, GLfixed *params)) _func)(target, pname, params);
 }
 
 GLAPI void APIENTRY glGetTexParameterxv(GLenum target, GLenum pname, GLfixed *params)
 {
    const struct _glapi_table *_tbl = entry_current_get();
-   mapi_func _func = ((const mapi_func *) _tbl)[1405];
+   mapi_func _func = ((const mapi_func *) _tbl)[1406];
    ((void (APIENTRY *)(GLenum target, GLenum pname, GLfixed *params)) _func)(target, pname, params);
 }
 
 GLAPI void APIENTRY glPointParameterx(GLenum pname, GLfixed param)
 {
    const struct _glapi_table *_tbl = entry_current_get();
-   mapi_func _func = ((const mapi_func *) _tbl)[1406];
+   mapi_func _func = ((const mapi_func *) _tbl)[1407];
    ((void (APIENTRY *)(GLenum pname, GLfixed param)) _func)(pname, param);
 }
 
 GLAPI void APIENTRY glPointParameterxv(GLenum pname, const GLfixed *params)
 {
    const struct _glapi_table *_tbl = entry_current_get();
-   mapi_func _func = ((const mapi_func *) _tbl)[1407];
+   mapi_func _func = ((const mapi_func *) _tbl)[1408];
    ((void (APIENTRY *)(GLenum pname, const GLfixed *params)) _func)(pname, params);
 }
 
 GLAPI void APIENTRY glTexParameterxv(GLenum target, GLenum pname, const GLfixed *params)
 {
    const struct _glapi_table *_tbl = entry_current_get();
-   mapi_func _func = ((const mapi_func *) _tbl)[1408];
+   mapi_func _func = ((const mapi_func *) _tbl)[1409];
    ((void (APIENTRY *)(GLenum target, GLenum pname, const GLfixed *params)) _func)(target, pname, params);
 }
 
@@ -2775,133 +2776,133 @@ STUB_ASM_ENTRY("glMultiDrawElementsEXT")"\n"
 "\t"STUB_ASM_CODE("1170")"\n"
 
 STUB_ASM_ENTRY("glAlphaFuncx")"\n"
-"\t"STUB_ASM_CODE("1366")"\n"
-
-STUB_ASM_ENTRY("glClearColorx")"\n"
 "\t"STUB_ASM_CODE("1367")"\n"
 
-STUB_ASM_ENTRY("glClearDepthx")"\n"
+STUB_ASM_ENTRY("glClearColorx")"\n"
 "\t"STUB_ASM_CODE("1368")"\n"
 
-STUB_ASM_ENTRY("glColor4x")"\n"
+STUB_ASM_ENTRY("glClearDepthx")"\n"
 "\t"STUB_ASM_CODE("1369")"\n"
 
-STUB_ASM_ENTRY("glDepthRangex")"\n"
+STUB_ASM_ENTRY("glColor4x")"\n"
 "\t"STUB_ASM_CODE("1370")"\n"
 
-STUB_ASM_ENTRY("glFogx")"\n"
+STUB_ASM_ENTRY("glDepthRangex")"\n"
 "\t"STUB_ASM_CODE("1371")"\n"
 
-STUB_ASM_ENTRY("glFogxv")"\n"
+STUB_ASM_ENTRY("glFogx")"\n"
 "\t"STUB_ASM_CODE("1372")"\n"
 
-STUB_ASM_ENTRY("glFrustumf")"\n"
+STUB_ASM_ENTRY("glFogxv")"\n"
 "\t"STUB_ASM_CODE("1373")"\n"
 
-STUB_ASM_ENTRY("glFrustumx")"\n"
+STUB_ASM_ENTRY("glFrustumf")"\n"
 "\t"STUB_ASM_CODE("1374")"\n"
 
-STUB_ASM_ENTRY("glLightModelx")"\n"
+STUB_ASM_ENTRY("glFrustumx")"\n"
 "\t"STUB_ASM_CODE("1375")"\n"
 
-STUB_ASM_ENTRY("glLightModelxv")"\n"
+STUB_ASM_ENTRY("glLightModelx")"\n"
 "\t"STUB_ASM_CODE("1376")"\n"
 
-STUB_ASM_ENTRY("glLightx")"\n"
+STUB_ASM_ENTRY("glLightModelxv")"\n"
 "\t"STUB_ASM_CODE("1377")"\n"
 
-STUB_ASM_ENTRY("glLightxv")"\n"
+STUB_ASM_ENTRY("glLightx")"\n"
 "\t"STUB_ASM_CODE("1378")"\n"
 
-STUB_ASM_ENTRY("glLineWidthx")"\n"
+STUB_ASM_ENTRY("glLightxv")"\n"
 "\t"STUB_ASM_CODE("1379")"\n"
 
-STUB_ASM_ENTRY("glLoadMatrixx")"\n"
+STUB_ASM_ENTRY("glLineWidthx")"\n"
 "\t"STUB_ASM_CODE("1380")"\n"
 
-STUB_ASM_ENTRY("glMaterialx")"\n"
+STUB_ASM_ENTRY("glLoadMatrixx")"\n"
 "\t"STUB_ASM_CODE("1381")"\n"
 
-STUB_ASM_ENTRY("glMaterialxv")"\n"
+STUB_ASM_ENTRY("glMaterialx")"\n"
 "\t"STUB_ASM_CODE("1382")"\n"
 
-STUB_ASM_ENTRY("glMultMatrixx")"\n"
+STUB_ASM_ENTRY("glMaterialxv")"\n"
 "\t"STUB_ASM_CODE("1383")"\n"
 
-STUB_ASM_ENTRY("glMultiTexCoord4x")"\n"
+STUB_ASM_ENTRY("glMultMatrixx")"\n"
 "\t"STUB_ASM_CODE("1384")"\n"
 
-STUB_ASM_ENTRY("glNormal3x")"\n"
+STUB_ASM_ENTRY("glMultiTexCoord4x")"\n"
 "\t"STUB_ASM_CODE("1385")"\n"
 
-STUB_ASM_ENTRY("glOrthof")"\n"
+STUB_ASM_ENTRY("glNormal3x")"\n"
 "\t"STUB_ASM_CODE("1386")"\n"
 
-STUB_ASM_ENTRY("glOrthox")"\n"
+STUB_ASM_ENTRY("glOrthof")"\n"
 "\t"STUB_ASM_CODE("1387")"\n"
 
-STUB_ASM_ENTRY("glPointSizex")"\n"
+STUB_ASM_ENTRY("glOrthox")"\n"
 "\t"STUB_ASM_CODE("1388")"\n"
 
-STUB_ASM_ENTRY("glPolygonOffsetx")"\n"
+STUB_ASM_ENTRY("glPointSizex")"\n"
 "\t"STUB_ASM_CODE("1389")"\n"
 
-STUB_ASM_ENTRY("glRotatex")"\n"
+STUB_ASM_ENTRY("glPolygonOffsetx")"\n"
 "\t"STUB_ASM_CODE("1390")"\n"
 
-STUB_ASM_ENTRY("glSampleCoveragex")"\n"
+STUB_ASM_ENTRY("glRotatex")"\n"
 "\t"STUB_ASM_CODE("1391")"\n"
 
-STUB_ASM_ENTRY("glScalex")"\n"
+STUB_ASM_ENTRY("glSampleCoveragex")"\n"
 "\t"STUB_ASM_CODE("1392")"\n"
 
-STUB_ASM_ENTRY("glTexEnvx")"\n"
+STUB_ASM_ENTRY("glScalex")"\n"
 "\t"STUB_ASM_CODE("1393")"\n"
 
-STUB_ASM_ENTRY("glTexEnvxv")"\n"
+STUB_ASM_ENTRY("glTexEnvx")"\n"
 "\t"STUB_ASM_CODE("1394")"\n"
 
-STUB_ASM_ENTRY("glTexParameterx")"\n"
+STUB_ASM_ENTRY("glTexEnvxv")"\n"
 "\t"STUB_ASM_CODE("1395")"\n"
 
-STUB_ASM_ENTRY("glTranslatex")"\n"
+STUB_ASM_ENTRY("glTexParameterx")"\n"
 "\t"STUB_ASM_CODE("1396")"\n"
 
-STUB_ASM_ENTRY("glClipPlanef")"\n"
+STUB_ASM_ENTRY("glTranslatex")"\n"
 "\t"STUB_ASM_CODE("1397")"\n"
 
-STUB_ASM_ENTRY("glClipPlanex")"\n"
+STUB_ASM_ENTRY("glClipPlanef")"\n"
 "\t"STUB_ASM_CODE("1398")"\n"
 
-STUB_ASM_ENTRY("glGetClipPlanef")"\n"
+STUB_ASM_ENTRY("glClipPlanex")"\n"
 "\t"STUB_ASM_CODE("1399")"\n"
 
-STUB_ASM_ENTRY("glGetClipPlanex")"\n"
+STUB_ASM_ENTRY("glGetClipPlanef")"\n"
 "\t"STUB_ASM_CODE("1400")"\n"
 
-STUB_ASM_ENTRY("glGetFixedv")"\n"
+STUB_ASM_ENTRY("glGetClipPlanex")"\n"
 "\t"STUB_ASM_CODE("1401")"\n"
 
-STUB_ASM_ENTRY("glGetLightxv")"\n"
+STUB_ASM_ENTRY("glGetFixedv")"\n"
 "\t"STUB_ASM_CODE("1402")"\n"
 
-STUB_ASM_ENTRY("glGetMaterialxv")"\n"
+STUB_ASM_ENTRY("glGetLightxv")"\n"
 "\t"STUB_ASM_CODE("1403")"\n"
 
-STUB_ASM_ENTRY("glGetTexEnvxv")"\n"
+STUB_ASM_ENTRY("glGetMaterialxv")"\n"
 "\t"STUB_ASM_CODE("1404")"\n"
 
-STUB_ASM_ENTRY("glGetTexParameterxv")"\n"
+STUB_ASM_ENTRY("glGetTexEnvxv")"\n"
 "\t"STUB_ASM_CODE("1405")"\n"
 
-STUB_ASM_ENTRY("glPointParameterx")"\n"
+STUB_ASM_ENTRY("glGetTexParameterxv")"\n"
 "\t"STUB_ASM_CODE("1406")"\n"
 
-STUB_ASM_ENTRY("glPointParameterxv")"\n"
+STUB_ASM_ENTRY("glPointParameterx")"\n"
 "\t"STUB_ASM_CODE("1407")"\n"
 
-STUB_ASM_ENTRY("glTexParameterxv")"\n"
+STUB_ASM_ENTRY("glPointParameterxv")"\n"
 "\t"STUB_ASM_CODE("1408")"\n"
+
+STUB_ASM_ENTRY("glTexParameterxv")"\n"
+"\t"STUB_ASM_CODE("1409")"\n"
 
 );
 #undef MAPI_TMP_STUB_ASM_GCC_NO_HIDDEN

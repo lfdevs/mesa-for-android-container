@@ -172,6 +172,10 @@ PipeToProfile(enum pipe_video_profile profile)
       return VAProfileHEVCMain10;
    case PIPE_VIDEO_PROFILE_JPEG_BASELINE:
       return VAProfileJPEGBaseline;
+   case PIPE_VIDEO_PROFILE_VP9_PROFILE0:
+      return VAProfileVP9Profile0;
+   case PIPE_VIDEO_PROFILE_VP9_PROFILE2:
+      return VAProfileVP9Profile2;
    case PIPE_VIDEO_PROFILE_MPEG4_AVC_EXTENDED:
    case PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH10:
    case PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH422:
@@ -218,6 +222,10 @@ ProfileToPipe(VAProfile profile)
       return PIPE_VIDEO_PROFILE_HEVC_MAIN_10;
    case VAProfileJPEGBaseline:
       return PIPE_VIDEO_PROFILE_JPEG_BASELINE;
+   case VAProfileVP9Profile0:
+      return PIPE_VIDEO_PROFILE_VP9_PROFILE0;
+   case VAProfileVP9Profile2:
+      return PIPE_VIDEO_PROFILE_VP9_PROFILE2;
    case VAProfileNone:
        return PIPE_VIDEO_PROFILE_UNKNOWN;
    default:
@@ -233,6 +241,7 @@ typedef struct {
    struct vl_compositor_state cstate;
    vl_csc_matrix csc;
    mtx_t mutex;
+   char vendor_string[256];
 } vlVaDriver;
 
 typedef struct {
@@ -269,7 +278,9 @@ typedef struct {
       struct pipe_h264_picture_desc h264;
       struct pipe_h265_picture_desc h265;
       struct pipe_mjpeg_picture_desc mjpeg;
+      struct pipe_vp9_picture_desc vp9;
       struct pipe_h264_enc_picture_desc h264enc;
+      struct pipe_h265_enc_picture_desc h265enc;
    } desc;
 
    struct {
@@ -426,5 +437,20 @@ void vlVaHandlePictureParameterBufferMJPEG(vlVaDriver *drv, vlVaContext *context
 void vlVaHandleIQMatrixBufferMJPEG(vlVaContext *context, vlVaBuffer *buf);
 void vlVaHandleHuffmanTableBufferType(vlVaContext *context, vlVaBuffer *buf);
 void vlVaHandleSliceParameterBufferMJPEG(vlVaContext *context, vlVaBuffer *buf);
+void vlVaHandlePictureParameterBufferVP9(vlVaDriver *drv, vlVaContext *context, vlVaBuffer *buf);
+void vlVaHandleSliceParameterBufferVP9(vlVaContext *context, vlVaBuffer *buf);
+void vlVaDecoderVP9BitstreamHeader(vlVaContext *context, vlVaBuffer *buf);
+void getEncParamPresetH264(vlVaContext *context);
+void getEncParamPresetH265(vlVaContext *context);
+VAStatus vlVaHandleVAEncPictureParameterBufferTypeH264(vlVaDriver *drv, vlVaContext *context, vlVaBuffer *buf);
+VAStatus vlVaHandleVAEncSliceParameterBufferTypeH264(vlVaDriver *drv, vlVaContext *context, vlVaBuffer *buf);
+VAStatus vlVaHandleVAEncSequenceParameterBufferTypeH264(vlVaDriver *drv, vlVaContext *context, vlVaBuffer *buf);
+VAStatus vlVaHandleVAEncMiscParameterTypeRateControlH264(vlVaContext *context, VAEncMiscParameterBuffer *buf);
+VAStatus vlVaHandleVAEncMiscParameterTypeFrameRateH264(vlVaContext *context, VAEncMiscParameterBuffer *buf);
+VAStatus vlVaHandleVAEncPictureParameterBufferTypeHEVC(vlVaDriver *drv, vlVaContext *context, vlVaBuffer *buf);
+VAStatus vlVaHandleVAEncSliceParameterBufferTypeHEVC(vlVaDriver *drv, vlVaContext *context, vlVaBuffer *buf);
+VAStatus vlVaHandleVAEncSequenceParameterBufferTypeHEVC(vlVaDriver *drv, vlVaContext *context, vlVaBuffer *buf);
+VAStatus vlVaHandleVAEncMiscParameterTypeRateControlHEVC(vlVaContext *context, VAEncMiscParameterBuffer *buf);
+VAStatus vlVaHandleVAEncMiscParameterTypeFrameRateHEVC(vlVaContext *context, VAEncMiscParameterBuffer *buf);
 
 #endif //VA_PRIVATE_H

@@ -119,7 +119,7 @@ static inline void r600_emit_reloc(struct r600_common_context *rctx,
 				   enum radeon_bo_priority priority)
 {
 	struct radeon_winsys_cs *cs = ring->cs;
-	bool has_vm = ((struct r600_common_screen*)rctx->b.screen)->info.has_virtual_memory;
+	bool has_vm = ((struct r600_common_screen*)rctx->b.screen)->info.r600_has_virtual_memory;
 	unsigned reloc = radeon_add_to_buffer_list(rctx, ring, rbo, usage, priority);
 
 	if (!has_vm) {

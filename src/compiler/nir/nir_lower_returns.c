@@ -37,6 +37,8 @@ struct lower_returns_state {
     * needs to be predicated on the return flag variable.
     */
    bool has_predicated_return;
+
+   bool removed_unreachable_code;
 };
 
 static bool lower_returns_in_cf_list(struct exec_list *cf_list,
@@ -162,8 +164,9 @@ lower_returns_in_block(nir_block *block, struct lower_returns_state *state)
           */
          return false;
       } else {
+         state->removed_unreachable_code = true;
          nir_cf_delete(&list);
-         return true;
+         return false;
       }
    }
 
@@ -179,6 +182,12 @@ lower_returns_in_block(nir_block *block, struct lower_returns_state *state)
       return false;
 
    nir_instr_remove(&jump->instr);
+
+   /* If this is a return in the last block of the function there is nothing
+    * more to do once its removed.
+    */
+   if (block == nir_impl_last_block(state->builder.impl))
+      return true;
 
    nir_builder *b = &state->builder;
 
@@ -256,9 +265,11 @@ nir_lower_returns_impl(nir_function_impl *impl)
    state.loop = NULL;
    state.return_flag = NULL;
    state.has_predicated_return = false;
+   state.removed_unreachable_code = false;
    nir_builder_init(&state.builder, impl);
 
    bool progress = lower_returns_in_cf_list(&impl->body, &state);
+   progress = progress || state.removed_unreachable_code;
 
    if (progress) {
       nir_metadata_preserve(impl, nir_metadata_none);

@@ -43,6 +43,7 @@
 #include "ir_builder_print_visitor.h"
 #include "builtin_functions.h"
 #include "opt_add_neg_to_sub.h"
+#include "main/mtypes.h"
 
 class dead_variable_visitor : public ir_hierarchical_visitor {
 public:
@@ -520,7 +521,7 @@ standalone_compile_shader(const struct standalone_options *_options,
       } else {
          const gl_shader_stage stage = whole_program->Shaders[0]->Stage;
 
-         whole_program->data->LinkStatus = linking_success;
+         whole_program->data->LinkStatus = LINKING_SUCCESS;
          whole_program->_LinkedShaders[stage] =
             link_intrastage_shaders(whole_program /* mem_ctx */,
                                     ctx,

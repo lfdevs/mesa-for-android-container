@@ -853,6 +853,8 @@ void
 CodeEmitterNVC0::emitNOT(Instruction *i)
 {
    assert(i->encSize == 8);
+   if (i->getPredicate())
+      i->moveSources(1, 1);
    i->setSrc(1, i->src(0));
    emitForm_A(i, HEX64(68000000, 000001c3));
 }

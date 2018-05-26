@@ -81,15 +81,12 @@ static void
 intelClear(struct gl_context *ctx, GLbitfield mask)
 {
    struct intel_context *intel = intel_context(ctx);
-   GLuint colorMask;
    GLbitfield tri_mask = 0;
    GLbitfield blit_mask = 0;
    GLbitfield swrast_mask = 0;
    struct gl_framebuffer *fb = ctx->DrawBuffer;
    struct intel_renderbuffer *irb;
    int i;
-
-   memcpy(&colorMask, &ctx->Color.ColorMask[0], sizeof(colorMask));
 
    if (mask & (BUFFER_BIT_FRONT_LEFT | BUFFER_BIT_FRONT_RIGHT)) {
       intel->front_buffer_dirty = true;
@@ -115,7 +112,7 @@ intelClear(struct gl_context *ctx, GLbitfield mask)
    }
 
    /* HW color buffers (front, back, aux, generic FBO, etc) */
-   if (colorMask == ~0) {
+   if (GET_COLORMASK(ctx->Color.ColorMask, 0) == 0xf) {
       /* clear all R,G,B,A */
       blit_mask |= (mask & BUFFER_BITS_COLOR);
    }

@@ -479,6 +479,12 @@ SIMD_EMU_IWRAPPER_2(packs_epi32);   // See documentation for _mm256_packs_epi32 
 SIMD_EMU_IWRAPPER_2(packus_epi16);  // See documentation for _mm256_packus_epi16 and _mm512_packus_epi16
 SIMD_EMU_IWRAPPER_2(packus_epi32);  // See documentation for _mm256_packus_epi32 and _mm512_packus_epi32
 
+template<int ImmT>
+static SIMDINLINE Float SIMDCALL permute_ps(Float const &a)
+{
+    return _mm256_permute_ps(a, ImmT);
+}
+
 static SIMDINLINE Integer SIMDCALL permute_epi32(Integer const &a, Integer const &swiz) // return a[swiz[i]] for each 32-bit lane i (int32)
 {
     Integer result;

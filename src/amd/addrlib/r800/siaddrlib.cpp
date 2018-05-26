@@ -611,6 +611,29 @@ ADDR_E_RETURNCODE SiLib::ComputePipeEquation(
             break;
     }
 
+    if (m_settings.isVegaM && (pEquation->numBits == 4))
+    {
+        ADDR_CHANNEL_SETTING addeMsb = pAddr[0];
+        ADDR_CHANNEL_SETTING xor1Msb = pXor1[0];
+        ADDR_CHANNEL_SETTING xor2Msb = pXor2[0];
+
+        pAddr[0] = pAddr[1];
+        pXor1[0] = pXor1[1];
+        pXor2[0] = pXor2[1];
+
+        pAddr[1] = pAddr[2];
+        pXor1[1] = pXor1[2];
+        pXor2[1] = pXor2[2];
+
+        pAddr[2] = pAddr[3];
+        pXor1[2] = pXor1[3];
+        pXor2[2] = pXor2[3];
+
+        pAddr[3] = addeMsb;
+        pXor1[3] = xor1Msb;
+        pXor2[3] = xor2Msb;
+    }
+
     for (UINT_32 i = 0; i < pEquation->numBits; i++)
     {
         if (pAddr[i].value == 0)
@@ -754,6 +777,16 @@ UINT_32 SiLib::ComputePipeFromCoord(
             ADDR_UNHANDLED_CASE();
             break;
     }
+
+    if (m_settings.isVegaM && (numPipes == 16))
+    {
+        UINT_32 pipeMsb = pipeBit0;
+        pipeBit0 = pipeBit1;
+        pipeBit1 = pipeBit2;
+        pipeBit2 = pipeBit3;
+        pipeBit3 = pipeMsb;
+    }
+
     pipe = pipeBit0 | (pipeBit1 << 1) | (pipeBit2 << 2) | (pipeBit3 << 3);
 
     UINT_32 microTileThickness = Thickness(tileMode);
@@ -3468,22 +3501,20 @@ VOID SiLib::HwlSelectTileMode(
 
 /**
 ****************************************************************************************************
-*   SiLib::HwlGetMaxAlignments
+*   SiLib::HwlComputeMaxBaseAlignments
 *
 *   @brief
 *       Gets maximum alignments
 *   @return
-*       ADDR_E_RETURNCODE
+*       maximum alignments
 ****************************************************************************************************
 */
-ADDR_E_RETURNCODE SiLib::HwlGetMaxAlignments(
-    ADDR_GET_MAX_ALIGNMENTS_OUTPUT* pOut    ///< [out] output structure
-    ) const
+UINT_32 SiLib::HwlComputeMaxBaseAlignments() const
 {
     const UINT_32 pipes = HwlGetPipes(&m_tileTable[0].info);
 
     // Initial size is 64 KiB for PRT.
-    UINT_64 maxBaseAlign = 64 * 1024;
+    UINT_32 maxBaseAlign = 64 * 1024;
 
     for (UINT_32 i = 0; i < m_noOfEntries; i++)
     {
@@ -3494,7 +3525,7 @@ ADDR_E_RETURNCODE SiLib::HwlGetMaxAlignments(
             UINT_32 tileSize = Min(m_tileTable[i].info.tileSplitBytes,
                                    MicroTilePixels * 8 * 16);
 
-            UINT_64 baseAlign = tileSize * pipes * m_tileTable[i].info.banks *
+            UINT_32 baseAlign = tileSize * pipes * m_tileTable[i].info.banks *
                                 m_tileTable[i].info.bankWidth * m_tileTable[i].info.bankHeight;
 
             if (baseAlign > maxBaseAlign)
@@ -3504,12 +3535,29 @@ ADDR_E_RETURNCODE SiLib::HwlGetMaxAlignments(
         }
     }
 
-    if (pOut != NULL)
+    return maxBaseAlign;
+}
+
+/**
+****************************************************************************************************
+*   SiLib::HwlComputeMaxMetaBaseAlignments
+*
+*   @brief
+*       Gets maximum alignments for metadata
+*   @return
+*       maximum alignments for metadata
+****************************************************************************************************
+*/
+UINT_32 SiLib::HwlComputeMaxMetaBaseAlignments() const
+{
+    UINT_32 maxPipe = 1;
+
+    for (UINT_32 i = 0; i < m_noOfEntries; i++)
     {
-        pOut->baseAlign = maxBaseAlign;
+        maxPipe = Max(maxPipe, HwlGetPipes(&m_tileTable[i].info));
     }
 
-    return ADDR_OK;
+    return m_pipeInterleaveBytes * maxPipe;
 }
 
 /**

@@ -660,7 +660,7 @@ tgsi_default_instruction( void )
 }
 
 static struct tgsi_instruction
-tgsi_build_instruction(unsigned opcode,
+tgsi_build_instruction(enum tgsi_opcode opcode,
                        unsigned saturate,
                        unsigned precise,
                        unsigned num_dst_regs,

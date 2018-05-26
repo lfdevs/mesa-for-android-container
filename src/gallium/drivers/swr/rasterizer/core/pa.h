@@ -1330,6 +1330,7 @@ struct PA_TESS : PA_STATE
         SWR_ASSERT(slot < m_numAttributes);
         SWR_ASSERT(primIndex < PA_TESS::NumPrims());
 
+
         const float* pVertDataBase = (const float*)&m_pVertexData[slot * m_attributeStrideInVectors * 4];
         for (uint32_t i = 0; i < m_numVertsPerPrim; ++i)
         {

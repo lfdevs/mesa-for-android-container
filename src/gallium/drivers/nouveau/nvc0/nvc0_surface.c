@@ -403,10 +403,7 @@ nvc0_clear_buffer_push_nvc0(struct pipe_context *pipe,
       size -= nr * 4;
    }
 
-   if (buf->mm) {
-      nouveau_fence_ref(nvc0->screen->base.fence.current, &buf->fence);
-      nouveau_fence_ref(nvc0->screen->base.fence.current, &buf->fence_wr);
-   }
+   nvc0_resource_validate(buf, NOUVEAU_BO_WR);
 
    nouveau_bufctx_reset(nvc0->bufctx, 0);
 }
@@ -453,10 +450,7 @@ nvc0_clear_buffer_push_nve4(struct pipe_context *pipe,
       size -= nr * 4;
    }
 
-   if (buf->mm) {
-      nouveau_fence_ref(nvc0->screen->base.fence.current, &buf->fence);
-      nouveau_fence_ref(nvc0->screen->base.fence.current, &buf->fence_wr);
-   }
+   nvc0_resource_validate(buf, NOUVEAU_BO_WR);
 
    nouveau_bufctx_reset(nvc0->bufctx, 0);
 }
@@ -540,6 +534,8 @@ nvc0_clear_buffer(struct pipe_context *pipe,
       return;
    }
 
+   util_range_add(&buf->valid_buffer_range, offset, offset + size);
+
    assert(size % data_size == 0);
 
    if (data_size == 12) {
@@ -570,10 +566,10 @@ nvc0_clear_buffer(struct pipe_context *pipe,
    PUSH_REFN (push, buf->bo, buf->domain | NOUVEAU_BO_WR);
 
    BEGIN_NVC0(push, NVC0_3D(CLEAR_COLOR(0)), 4);
-   PUSH_DATAf(push, color.f[0]);
-   PUSH_DATAf(push, color.f[1]);
-   PUSH_DATAf(push, color.f[2]);
-   PUSH_DATAf(push, color.f[3]);
+   PUSH_DATA (push, color.ui[0]);
+   PUSH_DATA (push, color.ui[1]);
+   PUSH_DATA (push, color.ui[2]);
+   PUSH_DATA (push, color.ui[3]);
    BEGIN_NVC0(push, NVC0_3D(SCREEN_SCISSOR_HORIZ), 2);
    PUSH_DATA (push, width << 16);
    PUSH_DATA (push, height << 16);
@@ -600,10 +596,7 @@ nvc0_clear_buffer(struct pipe_context *pipe,
 
    IMMED_NVC0(push, NVC0_3D(COND_MODE), nvc0->cond_condmode);
 
-   if (buf->mm) {
-      nouveau_fence_ref(nvc0->screen->base.fence.current, &buf->fence);
-      nouveau_fence_ref(nvc0->screen->base.fence.current, &buf->fence_wr);
-   }
+   nvc0_resource_validate(buf, NOUVEAU_BO_WR);
 
    if (width * height != elements) {
       offset += width * height * data_size;

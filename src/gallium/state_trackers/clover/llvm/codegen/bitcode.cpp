@@ -66,15 +66,9 @@ namespace {
    emit_code(const ::llvm::Module &mod) {
       ::llvm::SmallVector<char, 1024> data;
       ::llvm::raw_svector_ostream os { data };
-      WriteBitcodeToFile(&mod, os);
+      compat::write_bitcode_to_file(mod, os);
       return { os.str().begin(), os.str().end() };
    }
-}
-
-module
-clover::llvm::build_module_bitcode(const ::llvm::Module &mod,
-                                   const clang::CompilerInstance &c) {
-   return build_module_common(mod, emit_code(mod), get_symbol_offsets(mod), c);
 }
 
 std::string

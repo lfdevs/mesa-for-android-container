@@ -82,6 +82,9 @@ static const struct {
         { 41, 0x3de020c7bdfd200dull, "ldvpmg_in  rf7, r2, r2; mov  r3, 13" },
         { 41, 0x3de02040f8ff7201ull, "stvpmv  1, rf8       ; mov  r1, 1" },
         { 41, 0xd8000e50bb2d3000ull, "sampid  rf16         ; fmul  rf57.h, r3, r1.l" },
+
+        /* v4.2 changes */
+        { 42, 0x3c203192bb814000ull, "barrierid  syncb     ; nop               ; thrsw" },
 };
 
 static void

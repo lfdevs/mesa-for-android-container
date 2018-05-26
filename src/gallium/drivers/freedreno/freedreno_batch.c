@@ -405,6 +405,19 @@ fd_batch_resource_used(struct fd_batch *batch, struct fd_resource *rsc, bool wri
 		if (rsc->batch_mask != (1 << batch->idx)) {
 			struct fd_batch_cache *cache = &batch->ctx->screen->batch_cache;
 			struct fd_batch *dep;
+
+			if (rsc->write_batch && rsc->write_batch != batch) {
+				struct fd_batch *b = NULL;
+				fd_batch_reference(&b, rsc->write_batch);
+
+				mtx_unlock(&batch->ctx->screen->lock);
+				fd_batch_flush(b, true, false);
+				mtx_lock(&batch->ctx->screen->lock);
+
+				fd_bc_invalidate_batch(b, false);
+				fd_batch_reference_locked(&b, NULL);
+			}
+
 			foreach_batch(dep, cache, rsc->batch_mask) {
 				struct fd_batch *b = NULL;
 				if (dep == batch)

@@ -670,7 +670,7 @@ llvmpipe_get_format_alignment( enum pipe_format format )
 
    bytes = size / 8;
 
-   if (!util_is_power_of_two(bytes)) {
+   if (!util_is_power_of_two_or_zero(bytes)) {
       bytes /= desc->nr_channels;
    }
 

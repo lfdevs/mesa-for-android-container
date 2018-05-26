@@ -89,6 +89,14 @@ isl_format_layouts[] = {
 % endfor
 };
 
+bool
+isl_format_is_valid(enum isl_format format)
+{
+    if (format >= sizeof(isl_format_layouts) / sizeof(isl_format_layouts[0]))
+        return false;
+    return isl_format_layouts[format].name;
+}
+
 enum isl_format
 isl_format_srgb_to_linear(enum isl_format format)
 {

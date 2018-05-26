@@ -20,16 +20,14 @@ env.Append(CPPPATH = [
     '#src/gallium/winsys',
 ])
 
-env.Append(CPPDEFINES = ['GALLIUM_RBUG', 'GALLIUM_TRACE'])
-
 sources = [
     'graw_xlib.c',
     graw_util
 ]
 
 if True:
-    env.Append(CPPDEFINES = ['GALLIUM_TRACE', 'GALLIUM_RBUG', 'GALLIUM_SOFTPIPE'])
-    env.Prepend(LIBS = [trace, rbug, softpipe])
+    env.Append(CPPDEFINES = ['GALLIUM_SOFTPIPE'])
+    env.Prepend(LIBS = [softpipe])
 
 if env['llvm']:
     env.Append(CPPDEFINES = 'GALLIUM_LLVMPIPE')

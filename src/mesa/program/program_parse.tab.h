@@ -157,7 +157,7 @@ extern int _mesa_program_debug;
 
 union YYSTYPE
 {
-#line 126 "./program/program_parse.y" /* yacc.c:1909  */
+#line 127 "./program/program_parse.y" /* yacc.c:1909  */
 
    struct asm_instruction *inst;
    struct asm_symbol *sym;
@@ -171,7 +171,7 @@ union YYSTYPE
    unsigned attrib;
    int integer;
    float real;
-   gl_state_index state[STATE_LENGTH];
+   gl_state_index16 state[STATE_LENGTH];
    int negate;
    struct asm_vector vector;
    enum prog_opcode opcode;

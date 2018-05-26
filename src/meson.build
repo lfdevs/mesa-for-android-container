@@ -64,7 +64,12 @@ if with_dri_i965 or with_intel_vk
 endif
 subdir('mesa')
 subdir('loader')
-subdir('glx')
+if with_platform_haiku
+  subdir('hgl')
+endif
+if with_glx != 'disabled'
+  subdir('glx')
+endif
 if with_gbm
   subdir('gbm')
 else
@@ -75,6 +80,11 @@ if with_egl
 endif
 if with_gallium
   subdir('gallium')
+  # This has to be here since it requires libgallium, and subdir cannot
+  # contain ..
+  if with_tests
+    subdir('mesa/state_tracker/tests')
+  endif
 endif
 
 # This must be after at least mesa, glx, and gallium, since libgl will be

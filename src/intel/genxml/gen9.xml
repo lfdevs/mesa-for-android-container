@@ -180,230 +180,6 @@
     <value name="SET" value="15"/>
   </enum>
 
-  <enum name="SURFACE_FORMAT" prefix="SF">
-    <value name="R32G32B32A32_FLOAT" value="0"/>
-    <value name="R32G32B32A32_SINT" value="1"/>
-    <value name="R32G32B32A32_UINT" value="2"/>
-    <value name="R32G32B32A32_UNORM" value="3"/>
-    <value name="R32G32B32A32_SNORM" value="4"/>
-    <value name="R64G64_FLOAT" value="5"/>
-    <value name="R32G32B32X32_FLOAT" value="6"/>
-    <value name="R32G32B32A32_SSCALED" value="7"/>
-    <value name="R32G32B32A32_USCALED" value="8"/>
-    <value name="R32G32B32A32_SFIXED" value="32"/>
-    <value name="R64G64_PASSTHRU" value="33"/>
-    <value name="R32G32B32_FLOAT" value="64"/>
-    <value name="R32G32B32_SINT" value="65"/>
-    <value name="R32G32B32_UINT" value="66"/>
-    <value name="R32G32B32_UNORM" value="67"/>
-    <value name="R32G32B32_SNORM" value="68"/>
-    <value name="R32G32B32_SSCALED" value="69"/>
-    <value name="R32G32B32_USCALED" value="70"/>
-    <value name="R32G32B32_SFIXED" value="80"/>
-    <value name="R16G16B16A16_UNORM" value="128"/>
-    <value name="R16G16B16A16_SNORM" value="129"/>
-    <value name="R16G16B16A16_SINT" value="130"/>
-    <value name="R16G16B16A16_UINT" value="131"/>
-    <value name="R16G16B16A16_FLOAT" value="132"/>
-    <value name="R32G32_FLOAT" value="133"/>
-    <value name="R32G32_SINT" value="134"/>
-    <value name="R32G32_UINT" value="135"/>
-    <value name="R32_FLOAT_X8X24_TYPELESS" value="136"/>
-    <value name="X32_TYPELESS_G8X24_UINT" value="137"/>
-    <value name="L32A32_FLOAT" value="138"/>
-    <value name="R32G32_UNORM" value="139"/>
-    <value name="R32G32_SNORM" value="140"/>
-    <value name="R64_FLOAT" value="141"/>
-    <value name="R16G16B16X16_UNORM" value="142"/>
-    <value name="R16G16B16X16_FLOAT" value="143"/>
-    <value name="A32X32_FLOAT" value="144"/>
-    <value name="L32X32_FLOAT" value="145"/>
-    <value name="I32X32_FLOAT" value="146"/>
-    <value name="R16G16B16A16_SSCALED" value="147"/>
-    <value name="R16G16B16A16_USCALED" value="148"/>
-    <value name="R32G32_SSCALED" value="149"/>
-    <value name="R32G32_USCALED" value="150"/>
-    <value name="R32G32_SFIXED" value="160"/>
-    <value name="R64_PASSTHRU" value="161"/>
-    <value name="B8G8R8A8_UNORM" value="192"/>
-    <value name="B8G8R8A8_UNORM_SRGB" value="193"/>
-    <value name="R10G10B10A2_UNORM" value="194"/>
-    <value name="R10G10B10A2_UNORM_SRGB" value="195"/>
-    <value name="R10G10B10A2_UINT" value="196"/>
-    <value name="R10G10B10_SNORM_A2_UNORM" value="197"/>
-    <value name="R8G8B8A8_UNORM" value="199"/>
-    <value name="R8G8B8A8_UNORM_SRGB" value="200"/>
-    <value name="R8G8B8A8_SNORM" value="201"/>
-    <value name="R8G8B8A8_SINT" value="202"/>
-    <value name="R8G8B8A8_UINT" value="203"/>
-    <value name="R16G16_UNORM" value="204"/>
-    <value name="R16G16_SNORM" value="205"/>
-    <value name="R16G16_SINT" value="206"/>
-    <value name="R16G16_UINT" value="207"/>
-    <value name="R16G16_FLOAT" value="208"/>
-    <value name="B10G10R10A2_UNORM" value="209"/>
-    <value name="B10G10R10A2_UNORM_SRGB" value="210"/>
-    <value name="R11G11B10_FLOAT" value="211"/>
-    <value name="R32_SINT" value="214"/>
-    <value name="R32_UINT" value="215"/>
-    <value name="R32_FLOAT" value="216"/>
-    <value name="R24_UNORM_X8_TYPELESS" value="217"/>
-    <value name="X24_TYPELESS_G8_UINT" value="218"/>
-    <value name="L32_UNORM" value="221"/>
-    <value name="A32_UNORM" value="222"/>
-    <value name="L16A16_UNORM" value="223"/>
-    <value name="I24X8_UNORM" value="224"/>
-    <value name="L24X8_UNORM" value="225"/>
-    <value name="A24X8_UNORM" value="226"/>
-    <value name="I32_FLOAT" value="227"/>
-    <value name="L32_FLOAT" value="228"/>
-    <value name="A32_FLOAT" value="229"/>
-    <value name="X8B8_UNORM_G8R8_SNORM" value="230"/>
-    <value name="A8X8_UNORM_G8R8_SNORM" value="231"/>
-    <value name="B8X8_UNORM_G8R8_SNORM" value="232"/>
-    <value name="B8G8R8X8_UNORM" value="233"/>
-    <value name="B8G8R8X8_UNORM_SRGB" value="234"/>
-    <value name="R8G8B8X8_UNORM" value="235"/>
-    <value name="R8G8B8X8_UNORM_SRGB" value="236"/>
-    <value name="R9G9B9E5_SHAREDEXP" value="237"/>
-    <value name="B10G10R10X2_UNORM" value="238"/>
-    <value name="L16A16_FLOAT" value="240"/>
-    <value name="R32_UNORM" value="241"/>
-    <value name="R32_SNORM" value="242"/>
-    <value name="R10G10B10X2_USCALED" value="243"/>
-    <value name="R8G8B8A8_SSCALED" value="244"/>
-    <value name="R8G8B8A8_USCALED" value="245"/>
-    <value name="R16G16_SSCALED" value="246"/>
-    <value name="R16G16_USCALED" value="247"/>
-    <value name="R32_SSCALED" value="248"/>
-    <value name="R32_USCALED" value="249"/>
-    <value name="B5G6R5_UNORM" value="256"/>
-    <value name="B5G6R5_UNORM_SRGB" value="257"/>
-    <value name="B5G5R5A1_UNORM" value="258"/>
-    <value name="B5G5R5A1_UNORM_SRGB" value="259"/>
-    <value name="B4G4R4A4_UNORM" value="260"/>
-    <value name="B4G4R4A4_UNORM_SRGB" value="261"/>
-    <value name="R8G8_UNORM" value="262"/>
-    <value name="R8G8_SNORM" value="263"/>
-    <value name="R8G8_SINT" value="264"/>
-    <value name="R8G8_UINT" value="265"/>
-    <value name="R16_UNORM" value="266"/>
-    <value name="R16_SNORM" value="267"/>
-    <value name="R16_SINT" value="268"/>
-    <value name="R16_UINT" value="269"/>
-    <value name="R16_FLOAT" value="270"/>
-    <value name="A8P8_UNORM_PALETTE0" value="271"/>
-    <value name="A8P8_UNORM_PALETTE1" value="272"/>
-    <value name="I16_UNORM" value="273"/>
-    <value name="L16_UNORM" value="274"/>
-    <value name="A16_UNORM" value="275"/>
-    <value name="L8A8_UNORM" value="276"/>
-    <value name="I16_FLOAT" value="277"/>
-    <value name="L16_FLOAT" value="278"/>
-    <value name="A16_FLOAT" value="279"/>
-    <value name="L8A8_UNORM_SRGB" value="280"/>
-    <value name="R5G5_SNORM_B6_UNORM" value="281"/>
-    <value name="B5G5R5X1_UNORM" value="282"/>
-    <value name="B5G5R5X1_UNORM_SRGB" value="283"/>
-    <value name="R8G8_SSCALED" value="284"/>
-    <value name="R8G8_USCALED" value="285"/>
-    <value name="R16_SSCALED" value="286"/>
-    <value name="R16_USCALED" value="287"/>
-    <value name="P8A8_UNORM_PALETTE0" value="290"/>
-    <value name="P8A8_UNORM_PALETTE1" value="291"/>
-    <value name="A1B5G5R5_UNORM" value="292"/>
-    <value name="A4B4G4R4_UNORM" value="293"/>
-    <value name="L8A8_UINT" value="294"/>
-    <value name="L8A8_SINT" value="295"/>
-    <value name="R8_UNORM" value="320"/>
-    <value name="R8_SNORM" value="321"/>
-    <value name="R8_SINT" value="322"/>
-    <value name="R8_UINT" value="323"/>
-    <value name="A8_UNORM" value="324"/>
-    <value name="I8_UNORM" value="325"/>
-    <value name="L8_UNORM" value="326"/>
-    <value name="P4A4_UNORM_PALETTE0" value="327"/>
-    <value name="A4P4_UNORM_PALETTE0" value="328"/>
-    <value name="R8_SSCALED" value="329"/>
-    <value name="R8_USCALED" value="330"/>
-    <value name="P8_UNORM_PALETTE0" value="331"/>
-    <value name="L8_UNORM_SRGB" value="332"/>
-    <value name="P8_UNORM_PALETTE1" value="333"/>
-    <value name="P4A4_UNORM_PALETTE1" value="334"/>
-    <value name="A4P4_UNORM_PALETTE1" value="335"/>
-    <value name="Y8_UNORM" value="336"/>
-    <value name="L8_UINT" value="338"/>
-    <value name="L8_SINT" value="339"/>
-    <value name="I8_UINT" value="340"/>
-    <value name="I8_SINT" value="341"/>
-    <value name="DXT1_RGB_SRGB" value="384"/>
-    <value name="R1_UNORM" value="385"/>
-    <value name="YCRCB_NORMAL" value="386"/>
-    <value name="YCRCB_SWAPUVY" value="387"/>
-    <value name="P2_UNORM_PALETTE0" value="388"/>
-    <value name="P2_UNORM_PALETTE1" value="389"/>
-    <value name="BC1_UNORM" value="390"/>
-    <value name="BC2_UNORM" value="391"/>
-    <value name="BC3_UNORM" value="392"/>
-    <value name="BC4_UNORM" value="393"/>
-    <value name="BC5_UNORM" value="394"/>
-    <value name="BC1_UNORM_SRGB" value="395"/>
-    <value name="BC2_UNORM_SRGB" value="396"/>
-    <value name="BC3_UNORM_SRGB" value="397"/>
-    <value name="MONO8" value="398"/>
-    <value name="YCRCB_SWAPUV" value="399"/>
-    <value name="YCRCB_SWAPY" value="400"/>
-    <value name="DXT1_RGB" value="401"/>
-    <value name="FXT1" value="402"/>
-    <value name="R8G8B8_UNORM" value="403"/>
-    <value name="R8G8B8_SNORM" value="404"/>
-    <value name="R8G8B8_SSCALED" value="405"/>
-    <value name="R8G8B8_USCALED" value="406"/>
-    <value name="R64G64B64A64_FLOAT" value="407"/>
-    <value name="R64G64B64_FLOAT" value="408"/>
-    <value name="BC4_SNORM" value="409"/>
-    <value name="BC5_SNORM" value="410"/>
-    <value name="R16G16B16_FLOAT" value="411"/>
-    <value name="R16G16B16_UNORM" value="412"/>
-    <value name="R16G16B16_SNORM" value="413"/>
-    <value name="R16G16B16_SSCALED" value="414"/>
-    <value name="R16G16B16_USCALED" value="415"/>
-    <value name="BC6H_SF16" value="417"/>
-    <value name="BC7_UNORM" value="418"/>
-    <value name="BC7_UNORM_SRGB" value="419"/>
-    <value name="BC6H_UF16" value="420"/>
-    <value name="PLANAR_420_8" value="421"/>
-    <value name="R8G8B8_UNORM_SRGB" value="424"/>
-    <value name="ETC1_RGB8" value="425"/>
-    <value name="ETC2_RGB8" value="426"/>
-    <value name="EAC_R11" value="427"/>
-    <value name="EAC_RG11" value="428"/>
-    <value name="EAC_SIGNED_R11" value="429"/>
-    <value name="EAC_SIGNED_RG11" value="430"/>
-    <value name="ETC2_SRGB8" value="431"/>
-    <value name="R16G16B16_UINT" value="432"/>
-    <value name="R16G16B16_SINT" value="433"/>
-    <value name="R32_SFIXED" value="434"/>
-    <value name="R10G10B10A2_SNORM" value="435"/>
-    <value name="R10G10B10A2_USCALED" value="436"/>
-    <value name="R10G10B10A2_SSCALED" value="437"/>
-    <value name="R10G10B10A2_SINT" value="438"/>
-    <value name="B10G10R10A2_SNORM" value="439"/>
-    <value name="B10G10R10A2_USCALED" value="440"/>
-    <value name="B10G10R10A2_SSCALED" value="441"/>
-    <value name="B10G10R10A2_UINT" value="442"/>
-    <value name="B10G10R10A2_SINT" value="443"/>
-    <value name="R64G64B64A64_PASSTHRU" value="444"/>
-    <value name="R64G64B64_PASSTHRU" value="445"/>
-    <value name="ETC2_RGB8_PTA" value="448"/>
-    <value name="ETC2_SRGB8_PTA" value="449"/>
-    <value name="ETC2_EAC_RGBA8" value="450"/>
-    <value name="ETC2_EAC_SRGB8_A8" value="451"/>
-    <value name="R8G8B8_UINT" value="456"/>
-    <value name="R8G8B8_SINT" value="457"/>
-    <value name="RAW" value="511"/>
-  </enum>
-
   <enum name="Shader Channel Select" prefix="SCS">
     <value name="ZERO" value="0"/>
     <value name="ONE" value="1"/>
@@ -461,7 +237,7 @@
   <struct name="VERTEX_ELEMENT_STATE" length="2">
     <field name="Vertex Buffer Index" start="26" end="31" type="uint"/>
     <field name="Valid" start="25" end="25" type="bool"/>
-    <field name="Source Element Format" start="16" end="24" type="SURFACE_FORMAT"/>
+    <field name="Source Element Format" start="16" end="24" type="uint"/>
     <field name="Edge Flag Enable" start="15" end="15" type="bool"/>
     <field name="Source Element Offset" start="0" end="11" type="uint"/>
     <field name="Component 0 Control" start="60" end="62" type="3D_Vertex_Component_Control"/>
@@ -683,7 +459,7 @@
       <value name="SURFTYPE_NULL" value="7"/>
     </field>
     <field name="Surface Array" start="28" end="28" type="bool"/>
-    <field name="Surface Format" start="18" end="27" type="SURFACE_FORMAT"/>
+    <field name="Surface Format" start="18" end="27" type="uint"/>
     <field name="Surface Vertical Alignment" start="16" end="17" type="uint">
       <value name="VALIGN 4" value="1"/>
       <value name="VALIGN 8" value="2"/>
@@ -2976,6 +2752,12 @@
     <field name="MI Command Opcode" start="23" end="28" type="uint" default="5"/>
   </instruction>
 
+  <instruction name="MI_ARB_ON_OFF" bias="1" length="1">
+    <field name="Command Type" start="29" end="31" type="uint" default="0"/>
+    <field name="MI Command Opcode" start="23" end="28" type="uint" default="8"/>
+    <field name="Arbitration Enable" start="0" end="0" type="bool" default="1"/>
+  </instruction>
+
   <instruction name="MI_ATOMIC" bias="2" length="3">
     <field name="Command Type" start="29" end="31" type="uint" default="0"/>
     <field name="MI Command Opcode" start="23" end="28" type="uint" default="47"/>
@@ -3112,6 +2894,10 @@
     <field name="DWord Length" start="0" end="7" type="uint" default="1"/>
     <field name="Register Offset" start="34" end="54" type="offset"/>
     <field name="Data DWord" start="64" end="95" type="uint"/>
+    <group count="0" start="96" size="64">
+      <field name="Register Offset" start="2" end="22" type="offset"/>
+      <field name="Data DWord" start="32" end="63" type="uint"/>
+    </group>
   </instruction>
 
   <instruction name="MI_LOAD_REGISTER_MEM" bias="2" length="4">
@@ -3630,6 +3416,73 @@
     <field name="GAM Done" start="31" end="31" type="bool"/>
   </register>
 
+  <register name="SC_INSTDONE" length="1" num="0x7100">
+    <field name="SVL Done" start="0" end="0" type="bool"/>
+    <field name="WMFE Done" start="1" end="1" type="bool"/>
+    <field name="WMBE Done" start="2" end="2" type="bool"/>
+    <field name="HIZ Done" start="3" end="3" type="bool"/>
+    <field name="STC Done" start="4" end="4" type="bool"/>
+    <field name="IZ Done" start="5" end="5" type="bool"/>
+    <field name="SBE Done" start="6" end="6" type="bool"/>
+    <field name="RCZ Done" start="8" end="8" type="bool"/>
+    <field name="RCC Done" start="9" end="9" type="bool"/>
+    <field name="RCPBE Done" start="10" end="10" type="bool"/>
+    <field name="RCPFE Done" start="11" end="11" type="bool"/>
+    <field name="DAPB Done" start="12" end="12" type="bool"/>
+    <field name="DAPRBE Done" start="13" end="13" type="bool"/>
+    <field name="SARB Done" start="15" end="15" type="bool"/>
+    <field name="DC0 Done" start="16" end="16" type="bool"/>
+    <field name="DC1 Done" start="17" end="17" type="bool"/>
+    <field name="DC2 Done" start="18" end="18" type="bool"/>
+    <field name="DC3 Done" start="19" end="19" type="bool"/>
+    <field name="GW0 Done" start="20" end="20" type="bool"/>
+    <field name="GW1 Done" start="21" end="21" type="bool"/>
+    <field name="GW2 Done" start="22" end="22" type="bool"/>
+    <field name="GW3 Done" start="23" end="23" type="bool"/>
+    <field name="TDC Done" start="24" end="24" type="bool"/>
+  </register>
+
+  <register name="ROW_INSTDONE" length="1" num="0xe164">
+    <field name="BC Done" start="0" end="0" type="bool"/>
+    <field name="PSD Done" start="1" end="1" type="bool"/>
+    <field name="DAPR Done" start="3" end="3" type="bool"/>
+    <field name="TDL Done" start="6" end="6" type="bool"/>
+    <field name="IC Done" start="12" end="12" type="bool"/>
+    <field name="MA0 Done" start="15" end="15" type="bool"/>
+    <field name="EU00 Done SS0" start="16" end="16" type="bool"/>
+    <field name="EU01 Done SS0" start="17" end="17" type="bool"/>
+    <field name="EU02 Done SS0" start="18" end="18" type="bool"/>
+    <field name="EU03 Done SS0" start="19" end="19" type="bool"/>
+    <field name="EU10 Done SS0" start="21" end="21" type="bool"/>
+    <field name="EU11 Done SS0" start="22" end="22" type="bool"/>
+    <field name="EU12 Done SS0" start="23" end="23" type="bool"/>
+    <field name="EU13 Done SS0" start="24" end="24" type="bool"/>
+    <field name="MA1 Done SS0" start="26" end="26" type="bool"/>
+  </register>
+
+  <register name="SAMPLER_INSTDONE" length="1" num="0xe160">
+    <field name="IME Done" start="0" end="0" type="bool"/>
+    <field name="PL0 Done" start="1" end="1" type="bool"/>
+    <field name="SO0 Done" start="2" end="2" type="bool"/>
+    <field name="DG0 Done" start="3" end="3" type="bool"/>
+    <field name="FT0 Done" start="4" end="4" type="bool"/>
+    <field name="DM0 Done" start="5" end="5" type="bool"/>
+    <field name="SC Done" start="6" end="6" type="bool"/>
+    <field name="FL0 Done" start="7" end="7" type="bool"/>
+    <field name="QC Done" start="8" end="8" type="bool"/>
+    <field name="SVSM Done" start="9" end="9" type="bool"/>
+    <field name="SI0 Done" start="10" end="10" type="bool"/>
+    <field name="MT0 Done" start="11" end="11" type="bool"/>
+    <field name="AVS Done" start="12" end="12" type="bool"/>
+    <field name="IEF Done" start="13" end="13" type="bool"/>
+    <field name="CRE Done" start="14" end="14" type="bool"/>
+    <field name="SVSM ARB3" start="15" end="15" type="bool"/>
+    <field name="SVSM ARB2" start="16" end="16" type="bool"/>
+    <field name="SVSM ARB1" start="17" end="17" type="bool"/>
+    <field name="SVSM Adapter" start="18" end="18" type="bool"/>
+    <field name="BDM Done" start="19" end="19" type="bool"/>
+  </register>
+
   <register name="L3CNTLREG" length="1" num="0x7034">
     <field name="SLM Enable" start="0" end="0" type="uint"/>
     <field name="URB Allocation" start="1" end="7" type="uint"/>
@@ -3844,6 +3697,12 @@
     <field name="Semaphore Wait" start="10" end="10" type="bool"/>
     <field name="RBWait" start="11" end="11" type="bool"/>
     <field name="Buffer Length (in pages - 1)" start="12" end="20" type="uint"/>
+  </register>
+
+  <register name="CS_DEBUG_MODE2" length="1" num="0x20d8">
+    <field name="3D Rendering Instruction Disable" start="0" end="0" type="bool"/>
+    <field name="Media Instruction Disable" start="1" end="1" type="bool"/>
+    <field name="CONSTANT_BUFFER Address Offset Disable" start="4" end="4" type="bool"/>
   </register>
 
 </genxml>

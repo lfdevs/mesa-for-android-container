@@ -43,9 +43,15 @@
 #endif
 
 #ifdef HAVE_WAYLAND_PLATFORM
-#include <wayland-client.h>
-#include "wayland/wayland-egl/wayland-egl-backend.h"
-/* forward declarations of protocol elements */
+/* forward declarations to avoid pulling wayland headers everywhere */
+struct wl_egl_window;
+struct wl_event_queue;
+struct wl_callback;
+struct wl_display;
+struct wl_drm;
+struct wl_registry;
+struct wl_shm;
+struct wl_surface;
 struct zwp_linux_dmabuf_v1;
 #endif
 
@@ -171,6 +177,7 @@ struct dri2_egl_display
    const __DRInoErrorExtension    *no_error;
    const __DRI2configQueryExtension *config;
    const __DRI2fenceExtension *fence;
+   const __DRI2blobExtension *blob;
    const __DRI2rendererQueryExtension *rendererQuery;
    const __DRI2interopExtension *interop;
    int                       fd;
@@ -198,6 +205,11 @@ struct dri2_egl_display
    xcb_screen_t             *screen;
    bool                     swap_available;
 #ifdef HAVE_DRI3
+   bool                     multibuffers_available;
+   int                      dri3_major_version;
+   int                      dri3_minor_version;
+   int                      present_major_version;
+   int                      present_minor_version;
    struct loader_dri3_extensions loader_dri3_ext;
 #endif
 #endif
@@ -211,13 +223,7 @@ struct dri2_egl_display
    struct wl_shm            *wl_shm;
    struct wl_event_queue    *wl_queue;
    struct zwp_linux_dmabuf_v1 *wl_dmabuf;
-   struct {
-      struct u_vector        xrgb2101010;
-      struct u_vector        argb2101010;
-      struct u_vector        xrgb8888;
-      struct u_vector        argb8888;
-      struct u_vector        rgb565;
-   } wl_modifiers;
+   struct u_vector          *wl_modifiers;
    bool                      authenticated;
    int                       formats;
    uint32_t                  capabilities;

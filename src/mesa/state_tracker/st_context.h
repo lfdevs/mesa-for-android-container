@@ -34,6 +34,7 @@
 #include "state_tracker/st_atom.h"
 #include "util/u_inlines.h"
 #include "util/list.h"
+#include "vbo/vbo.h"
 
 
 #ifdef __cplusplus
@@ -86,6 +87,20 @@ struct st_bound_handles
    uint64_t *handles;
 };
 
+
+#define NUM_DRAWPIX_CACHE_ENTRIES 4
+
+struct drawpix_cache_entry
+{
+   GLsizei width, height;
+   GLenum format, type;
+   const void *user_pointer;  /**< Last user 'pixels' pointer */
+   void *image;               /**< Copy of the glDrawPixels image data */
+   struct pipe_resource *texture;
+   unsigned age;
+};
+
+
 struct st_context
 {
    struct st_context_iface iface;
@@ -137,9 +152,9 @@ struct st_context
       struct pipe_blend_state               blend;
       struct pipe_depth_stencil_alpha_state depth_stencil;
       struct pipe_rasterizer_state          rasterizer;
-      struct pipe_sampler_state samplers[PIPE_SHADER_TYPES][PIPE_MAX_SAMPLERS];
-      GLuint num_samplers[PIPE_SHADER_TYPES];
-      struct pipe_sampler_view *sampler_views[PIPE_SHADER_TYPES][PIPE_MAX_SAMPLERS];
+      struct pipe_sampler_state frag_samplers[PIPE_MAX_SAMPLERS];
+      GLuint num_frag_samplers;
+      struct pipe_sampler_view *frag_sampler_views[PIPE_MAX_SAMPLERS];
       GLuint num_sampler_views[PIPE_SHADER_TYPES];
       struct pipe_clip_state clip;
       struct {
@@ -150,6 +165,7 @@ struct st_context
       unsigned fb_height;
       unsigned fb_num_samples;
       unsigned fb_num_layers;
+      unsigned fb_num_cb;
       unsigned num_viewports;
       struct pipe_scissor_state scissor[PIPE_MAX_VIEWPORTS];
       struct pipe_viewport_state viewport[PIPE_MAX_VIEWPORTS];
@@ -208,12 +224,10 @@ struct st_context
       void *vert_shaders[2];   /**< ureg shaders */
    } drawpix;
 
+   /** Cache of glDrawPixels images */
    struct {
-      GLsizei width, height;
-      GLenum format, type;
-      const void *user_pointer;  /**< Last user 'pixels' pointer */
-      void *image;               /**< Copy of the glDrawPixels image data */
-      struct pipe_resource *texture;
+      struct drawpix_cache_entry entries[NUM_DRAWPIX_CACHE_ENTRIES];
+      unsigned age;
    } drawpix_cache;
 
    /** for glReadPixels */
@@ -281,6 +295,9 @@ struct st_context
 
    /* Winsys buffers */
    struct list_head winsys_buffers;
+
+   /* For the initial pushdown, keep the list of vbo inputs. */
+   struct vbo_inputs draw_arrays;
 };
 
 

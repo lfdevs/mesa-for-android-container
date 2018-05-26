@@ -219,7 +219,7 @@ lp_build_concat(struct gallivm_state *gallivm,
    LLVMValueRef shuffles[LP_MAX_VECTOR_LENGTH];
 
    assert(src_type.length * num_vectors <= ARRAY_SIZE(shuffles));
-   assert(util_is_power_of_two(num_vectors));
+   assert(util_is_power_of_two_or_zero(num_vectors));
 
    new_length = src_type.length;
 

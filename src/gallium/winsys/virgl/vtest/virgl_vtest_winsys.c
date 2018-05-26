@@ -460,8 +460,12 @@ static void virgl_vtest_add_res(struct virgl_vtest_winsys *vtws,
    unsigned hash = res->res_handle & (sizeof(cbuf->is_handle_added)-1);
 
    if (cbuf->cres > cbuf->nres) {
-      fprintf(stderr,"failure to add relocation\n");
-      return;
+      cbuf->nres += 256;
+      cbuf->res_bo = realloc(cbuf->res_bo, cbuf->nres * sizeof(struct virgl_hw_buf*));
+      if (!cbuf->res_bo) {
+          fprintf(stderr,"failure to add relocation %d, %d\n", cbuf->cres, cbuf->nres);
+          return;
+      }
    }
 
    cbuf->res_bo[cbuf->cres] = NULL;
@@ -519,6 +523,8 @@ static int virgl_vtest_get_caps(struct virgl_winsys *vws,
                                 struct virgl_drm_caps *caps)
 {
    struct virgl_vtest_winsys *vtws = virgl_vtest_winsys(vws);
+
+   virgl_ws_fill_new_caps_defaults(caps);
    return virgl_vtest_send_get_caps(vtws, caps);
 }
 

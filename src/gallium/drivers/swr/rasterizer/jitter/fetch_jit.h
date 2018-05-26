@@ -101,7 +101,6 @@ struct FETCH_COMPILE_STATE
     uint32_t cutIndex{ 0xffffffff };
 
     // Options that effect the JIT'd code
-    bool bDisableVGATHER;                   // If enabled, FetchJit will generate loads/shuffles instead of VGATHERs
     bool bDisableIndexOOBCheck;             // If enabled, FetchJit will exclude index OOB check
     bool bEnableCutIndex{ false };          // Compares indices with the cut index and returns a cut mask
     bool bVertexIDOffsetEnable{ false };    // Offset vertexID by StartVertex for non-indexed draws or BaseVertex for indexed draws
@@ -110,14 +109,13 @@ struct FETCH_COMPILE_STATE
     bool bForceSequentialAccessEnable{ false };
     bool bInstanceIDOffsetEnable{ false };
 
-    FETCH_COMPILE_STATE(bool disableVGATHER = false, bool diableIndexOOBCheck = false):
-        bDisableVGATHER(disableVGATHER), bDisableIndexOOBCheck(diableIndexOOBCheck){ };
+    FETCH_COMPILE_STATE(bool diableIndexOOBCheck = false):
+        bDisableIndexOOBCheck(diableIndexOOBCheck){ };
 
     bool operator==(const FETCH_COMPILE_STATE &other) const
     {
         if (numAttribs != other.numAttribs) return false;
         if (indexType != other.indexType) return false;
-        if (bDisableVGATHER != other.bDisableVGATHER) return false;
         if (bDisableIndexOOBCheck != other.bDisableIndexOOBCheck) return false;
         if (bEnableCutIndex != other.bEnableCutIndex) return false;
         if (cutIndex != other.cutIndex) return false;

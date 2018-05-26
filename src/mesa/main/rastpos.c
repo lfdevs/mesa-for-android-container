@@ -35,7 +35,6 @@
 #include "mtypes.h"
 #include "rastpos.h"
 #include "state.h"
-#include "main/dispatch.h"
 #include "main/viewport.h"
 #include "util/bitscan.h"
 
@@ -266,7 +265,8 @@ static void
 compute_texgen(struct gl_context *ctx, const GLfloat vObj[4], const GLfloat vEye[4],
                const GLfloat normal[3], GLuint unit, GLfloat texcoord[4])
 {
-   const struct gl_texture_unit *texUnit = &ctx->Texture.Unit[unit];
+   const struct gl_fixedfunc_texture_unit *texUnit =
+      &ctx->Texture.FixedFuncUnit[unit];
 
    /* always compute sphere map terms, just in case */
    GLfloat u[3], two_nu, rx, ry, rz, m, mInv;
@@ -464,7 +464,7 @@ _mesa_RasterPos(struct gl_context *ctx, const GLfloat vObj[4])
          for (u = 0; u < ctx->Const.MaxTextureCoordUnits; u++) {
             GLfloat tc[4];
             COPY_4V(tc, ctx->Current.Attrib[VERT_ATTRIB_TEX0 + u]);
-            if (ctx->Texture.Unit[u].TexGenEnabled) {
+            if (ctx->Texture.FixedFuncUnit[u].TexGenEnabled) {
                compute_texgen(ctx, vObj, eye, norm, u, tc);
             }
             TRANSFORM_POINT(ctx->Current.RasterTexCoords[u],

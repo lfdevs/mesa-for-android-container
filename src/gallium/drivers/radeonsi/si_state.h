@@ -1,5 +1,6 @@
 /*
  * Copyright 2012 Advanced Micro Devices, Inc.
+ * All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -217,6 +218,12 @@ enum {
 	SI_PS_CONST_POLY_STIPPLE,
 	SI_PS_CONST_SAMPLE_POSITIONS,
 
+	/* Image descriptor of color buffer 0 for KHR_blend_equation_advanced. */
+	SI_PS_IMAGE_COLORBUF0,
+	SI_PS_IMAGE_COLORBUF0_HI,
+	SI_PS_IMAGE_COLORBUF0_FMASK,
+	SI_PS_IMAGE_COLORBUF0_FMASK_HI,
+
 	SI_NUM_RW_BUFFERS,
 };
 
@@ -271,9 +278,9 @@ struct si_descriptors {
 	uint32_t first_active_slot;
 	uint32_t num_active_slots;
 
-	/* The SGPR index where the 64-bit pointer to the descriptor array will
-	 * be stored. */
-	ubyte shader_userdata_offset;
+	/* The SH register offset relative to USER_DATA*_0 where the pointer
+	 * to the descriptor array will be stored. */
+	short shader_userdata_offset;
 	/* The size of one descriptor. */
 	ubyte element_dw_size;
 	/* If there is only one slot enabled, bind it directly instead of
@@ -324,13 +331,14 @@ void si_set_mutable_tex_desc_fields(struct si_screen *sscreen,
 				    unsigned base_level, unsigned first_level,
 				    unsigned block_width, bool is_stencil,
 				    uint32_t *state);
+void si_update_ps_colorbuf0_slot(struct si_context *sctx);
 void si_get_pipe_constant_buffer(struct si_context *sctx, uint shader,
 				 uint slot, struct pipe_constant_buffer *cbuf);
 void si_get_shader_buffers(struct si_context *sctx,
 			   enum pipe_shader_type shader,
 			   uint start_slot, uint count,
 			   struct pipe_shader_buffer *sbuf);
-void si_set_ring_buffer(struct pipe_context *ctx, uint slot,
+void si_set_ring_buffer(struct si_context *sctx, uint slot,
 			struct pipe_resource *buffer,
 			unsigned stride, unsigned num_records,
 			bool add_tid, bool swizzle,
@@ -362,7 +370,8 @@ struct pb_slab *si_bindless_descriptor_slab_alloc(void *priv, unsigned heap,
 						  unsigned entry_size,
 						  unsigned group_index);
 void si_bindless_descriptor_slab_free(void *priv, struct pb_slab *pslab);
-
+void si_rebind_buffer(struct si_context *sctx, struct pipe_resource *buf,
+		      uint64_t old_va);
 /* si_state.c */
 struct si_shader_selector;
 
@@ -395,6 +404,10 @@ si_create_sampler_view_custom(struct pipe_context *ctx,
 			      unsigned width0, unsigned height0,
 			      unsigned force_level);
 void si_update_fb_dirtiness_after_rendering(struct si_context *sctx);
+void si_update_ps_iter_samples(struct si_context *sctx);
+void si_save_qbo_state(struct si_context *sctx, struct si_qbo_state *st);
+void si_set_occlusion_query_state(struct si_context *sctx,
+				  bool old_perfect_enable);
 
 /* si_state_binning.c */
 void si_emit_dpbb_state(struct si_context *sctx, struct r600_atom *state);

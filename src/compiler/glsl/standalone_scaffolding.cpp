@@ -34,6 +34,7 @@
 #include <string.h>
 #include "util/ralloc.h"
 #include "util/strtod.h"
+#include "main/mtypes.h"
 
 void
 _mesa_warning(struct gl_context *ctx, const char *fmt, ...)
@@ -100,13 +101,13 @@ _mesa_new_shader(GLuint name, gl_shader_stage stage)
 }
 
 GLbitfield
-_mesa_program_state_flags(UNUSED const gl_state_index state[STATE_LENGTH])
+_mesa_program_state_flags(UNUSED const gl_state_index16 state[STATE_LENGTH])
 {
    return 0;
 }
 
 char *
-_mesa_program_state_string(UNUSED const gl_state_index state[STATE_LENGTH])
+_mesa_program_state_string(UNUSED const gl_state_index16 state[STATE_LENGTH])
 {
    return NULL;
 }

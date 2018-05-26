@@ -38,5 +38,5 @@ nv20_emit_logic_opcode(struct gl_context *ctx, int emit)
 
 	BEGIN_NV04(push, NV20_3D(COLOR_LOGIC_OP_ENABLE), 2);
 	PUSH_DATAb(push, ctx->Color.ColorLogicOpEnabled);
-	PUSH_DATA (push, nvgl_logicop_func(ctx->Color.LogicOp));
+	PUSH_DATA (push, ctx->Color.LogicOp);
 }

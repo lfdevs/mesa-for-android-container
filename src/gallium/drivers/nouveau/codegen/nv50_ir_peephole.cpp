@@ -1055,7 +1055,8 @@ ConstantFolding::opnd(Instruction *i, ImmediateValue &imm0, int s)
       } else
       if (s == 1 && !imm0.isNegative() && imm0.isPow2() &&
           !isFloatType(i->dType) &&
-          target->isOpSupported(OP_SHLADD, i->dType)) {
+          target->isOpSupported(OP_SHLADD, i->dType) &&
+          !i->subOp) {
          i->op = OP_SHLADD;
          imm0.applyLog2();
          i->setSrc(1, new_ImmediateValue(prog, imm0.reg.data.u32));
@@ -1304,7 +1305,7 @@ ConstantFolding::opnd(Instruction *i, ImmediateValue &imm0, int s)
                  src->op == OP_SHR &&
                  src->src(1).getImmediate(imm1) &&
                  i->src(t).mod == Modifier(0) &&
-                 util_is_power_of_two(imm0.reg.data.u32 + 1)) {
+                 util_is_power_of_two_or_zero(imm0.reg.data.u32 + 1)) {
          // low byte = offset, high byte = width
          uint32_t ext = (util_last_bit(imm0.reg.data.u32) << 8) | imm1.reg.data.u32;
          i->op = OP_EXTBF;
@@ -1313,7 +1314,7 @@ ConstantFolding::opnd(Instruction *i, ImmediateValue &imm0, int s)
       } else if (src->op == OP_SHL &&
                  src->src(1).getImmediate(imm1) &&
                  i->src(t).mod == Modifier(0) &&
-                 util_is_power_of_two(~imm0.reg.data.u32 + 1) &&
+                 util_is_power_of_two_or_zero(~imm0.reg.data.u32 + 1) &&
                  util_last_bit(~imm0.reg.data.u32) <= imm1.reg.data.u32) {
          i->op = OP_MOV;
          i->setSrc(s, NULL);

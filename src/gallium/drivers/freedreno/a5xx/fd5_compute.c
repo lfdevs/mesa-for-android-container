@@ -42,6 +42,18 @@ fd5_create_compute_state(struct pipe_context *pctx,
 		const struct pipe_compute_state *cso)
 {
 	struct fd_context *ctx = fd_context(pctx);
+
+	/* req_input_mem will only be non-zero for cl kernels (ie. clover).
+	 * This isn't a perfect test because I guess it is possible (but
+	 * uncommon) for none for the kernel parameters to be a global,
+	 * but ctx->set_global_bindings() can't fail, so this is the next
+	 * best place to fail if we need a newer version of kernel driver:
+	 */
+	if ((cso->req_input_mem > 0) &&
+			fd_device_version(ctx->dev) < FD_VERSION_BO_IOVA) {
+		return NULL;
+	}
+
 	struct ir3_compiler *compiler = ctx->screen->compiler;
 	struct fd5_compute_stateobj *so = CALLOC_STRUCT(fd5_compute_stateobj);
 	so->shader = ir3_shader_create_compute(compiler, cso, &ctx->debug);
@@ -156,6 +168,7 @@ fd5_launch_grid(struct fd_context *ctx, const struct pipe_grid_info *info)
 	struct ir3_shader_key key = {0};
 	struct ir3_shader_variant *v;
 	struct fd_ringbuffer *ring = ctx->batch->draw;
+	unsigned i, nglobal = 0;
 
 	emit_setup(ctx);
 
@@ -166,6 +179,23 @@ fd5_launch_grid(struct fd_context *ctx, const struct pipe_grid_info *info)
 
 	fd5_emit_cs_state(ctx, ring, v);
 	ir3_emit_cs_consts(v, ring, ctx, info);
+
+	foreach_bit(i, ctx->global_bindings.enabled_mask)
+		nglobal++;
+
+	if (nglobal > 0) {
+		/* global resources don't otherwise get an OUT_RELOC(), since
+		 * the raw ptr address is emitted ir ir3_emit_cs_consts().
+		 * So to make the kernel aware that these buffers are referenced
+		 * by the batch, emit dummy reloc's as part of a no-op packet
+		 * payload:
+		 */
+		OUT_PKT7(ring, CP_NOP, 2 * nglobal);
+		foreach_bit(i, ctx->global_bindings.enabled_mask) {
+			struct pipe_resource *prsc = ctx->global_bindings.buf[i];
+			OUT_RELOCW(ring, fd_resource(prsc)->bo, 0, 0, 0);
+		}
+	}
 
 	const unsigned *local_size = info->block; // v->shader->nir->info->cs.local_size;
 	const unsigned *num_groups = info->grid;

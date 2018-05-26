@@ -118,16 +118,16 @@ etna_sw_create_query(struct etna_context *ctx, unsigned query_type)
    return q;
 }
 
+static const struct pipe_driver_query_info list[] = {
+   {"prims-emitted", PIPE_QUERY_PRIMITIVES_EMITTED, { 0 }},
+   {"draw-calls", ETNA_QUERY_DRAW_CALLS, { 0 }},
+   {"rs-operations", ETNA_QUERY_RS_OPERATIONS, { 0 }},
+};
+
 int
 etna_sw_get_driver_query_info(struct pipe_screen *pscreen, unsigned index,
                               struct pipe_driver_query_info *info)
 {
-   static const struct pipe_driver_query_info list[] = {
-      {"prims-emitted", PIPE_QUERY_PRIMITIVES_EMITTED, { 0 }},
-      {"draw-calls", ETNA_QUERY_DRAW_CALLS, { 0 }},
-      {"rs-operations", ETNA_QUERY_RS_OPERATIONS, { 0 }},
-   };
-
    if (!info)
       return ARRAY_SIZE(list);
 
@@ -135,6 +135,24 @@ etna_sw_get_driver_query_info(struct pipe_screen *pscreen, unsigned index,
       return 0;
 
    *info = list[index];
+
+   return 1;
+}
+
+int
+etna_sw_get_driver_query_group_info(struct pipe_screen *pscreen,
+                                    unsigned index,
+                                    struct pipe_driver_query_group_info *info)
+{
+   if (!info)
+      return 1;
+
+   if (index != 0)
+      return 0;
+
+   info->name = "driver";
+   info->max_active_queries = ARRAY_SIZE(list);
+   info->num_queries = ARRAY_SIZE(list);
 
    return 1;
 }

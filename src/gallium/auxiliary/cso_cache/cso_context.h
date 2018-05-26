@@ -214,6 +214,9 @@ void cso_set_constant_buffer_resource(struct cso_context *cso,
                                       enum pipe_shader_type shader_stage,
                                       unsigned index,
                                       struct pipe_resource *buffer);
+void cso_set_constant_user_buffer(struct cso_context *cso,
+                                  enum pipe_shader_type shader_stage,
+                                  unsigned index, void *ptr, unsigned size);
 void cso_save_constant_buffer_slot0(struct cso_context *cso,
                                     enum pipe_shader_type shader_stage);
 void cso_restore_constant_buffer_slot0(struct cso_context *cso,

@@ -138,11 +138,18 @@ anv_shader_compile_to_nir(struct anv_pipeline *pipeline,
          .float64 = device->instance->physicalDevice.info.gen >= 8,
          .int64 = device->instance->physicalDevice.info.gen >= 8,
          .tessellation = true,
+         .device_group = true,
          .draw_parameters = true,
          .image_write_without_format = true,
          .multiview = true,
          .variable_pointers = true,
          .storage_16bit = device->instance->physicalDevice.info.gen >= 8,
+         .subgroup_arithmetic = true,
+         .subgroup_basic = true,
+         .subgroup_ballot = true,
+         .subgroup_quad = true,
+         .subgroup_shuffle = true,
+         .subgroup_vote = true,
       },
    };
 
@@ -179,16 +186,19 @@ anv_shader_compile_to_nir(struct anv_pipeline *pipeline,
    assert(exec_list_length(&nir->functions) == 1);
    entry_point->name = ralloc_strdup(entry_point, "main");
 
+   /* Now that we've deleted all but the main function, we can go ahead and
+    * lower the rest of the constant initializers.  We do this here so that
+    * nir_remove_dead_variables and split_per_member_structs below see the
+    * corresponding stores.
+    */
+   NIR_PASS_V(nir, nir_lower_constant_initializers, ~0);
+
    NIR_PASS_V(nir, nir_remove_dead_variables,
               nir_var_shader_in | nir_var_shader_out | nir_var_system_value);
 
    if (stage == MESA_SHADER_FRAGMENT)
       NIR_PASS_V(nir, nir_lower_wpos_center, pipeline->sample_shading_enable);
 
-   /* Now that we've deleted all but the main function, we can go ahead and
-    * lower the rest of the constant initializers.
-    */
-   NIR_PASS_V(nir, nir_lower_constant_initializers, ~0);
    NIR_PASS_V(nir, nir_propagate_invariant);
    NIR_PASS_V(nir, nir_lower_io_to_temporaries,
               entry_point->impl, true, false);
@@ -349,6 +359,7 @@ populate_cs_prog_key(const struct gen_device_info *devinfo,
 
 static void
 anv_pipeline_hash_shader(struct anv_pipeline *pipeline,
+                         struct anv_pipeline_layout *layout,
                          struct anv_shader_module *module,
                          const char *entrypoint,
                          gl_shader_stage stage,
@@ -363,10 +374,8 @@ anv_pipeline_hash_shader(struct anv_pipeline *pipeline,
       _mesa_sha1_update(&ctx, &pipeline->subpass->view_mask,
                         sizeof(pipeline->subpass->view_mask));
    }
-   if (pipeline->layout) {
-      _mesa_sha1_update(&ctx, pipeline->layout->sha1,
-                        sizeof(pipeline->layout->sha1));
-   }
+   if (layout)
+      _mesa_sha1_update(&ctx, layout->sha1, sizeof(layout->sha1));
    _mesa_sha1_update(&ctx, module->sha1, sizeof(module->sha1));
    _mesa_sha1_update(&ctx, entrypoint, strlen(entrypoint));
    _mesa_sha1_update(&ctx, &stage, sizeof(stage));
@@ -382,6 +391,7 @@ anv_pipeline_hash_shader(struct anv_pipeline *pipeline,
 static nir_shader *
 anv_pipeline_compile(struct anv_pipeline *pipeline,
                      void *mem_ctx,
+                     struct anv_pipeline_layout *layout,
                      struct anv_shader_module *module,
                      const char *entrypoint,
                      gl_shader_stage stage,
@@ -398,7 +408,7 @@ anv_pipeline_compile(struct anv_pipeline *pipeline,
    if (nir == NULL)
       return NULL;
 
-   NIR_PASS_V(nir, anv_nir_lower_ycbcr_textures, pipeline);
+   NIR_PASS_V(nir, anv_nir_lower_ycbcr_textures, layout);
 
    NIR_PASS_V(nir, anv_nir_lower_push_constants);
 
@@ -438,8 +448,8 @@ anv_pipeline_compile(struct anv_pipeline *pipeline,
       pipeline->needs_data_cache = true;
 
    /* Apply the actual pipeline layout to UBOs, SSBOs, and textures */
-   if (pipeline->layout)
-      anv_nir_apply_pipeline_layout(pipeline, nir, prog_data, map);
+   if (layout)
+      anv_nir_apply_pipeline_layout(pipeline, layout, nir, prog_data, map);
 
    if (stage != MESA_SHADER_COMPUTE)
       brw_nir_analyze_ubo_ranges(compiler, nir, prog_data->ubo_ranges);
@@ -489,7 +499,6 @@ anv_pipeline_add_compiled_stage(struct anv_pipeline *pipeline,
                                 struct anv_shader_bin *shader)
 {
    pipeline->shaders[stage] = shader;
-   pipeline->active_stages |= mesa_to_vk_shader_stage(stage);
 }
 
 static VkResult
@@ -508,8 +517,10 @@ anv_pipeline_compile_vs(struct anv_pipeline *pipeline,
 
    populate_vs_prog_key(&pipeline->device->info, &key);
 
+   ANV_FROM_HANDLE(anv_pipeline_layout, layout, info->layout);
+
    if (cache) {
-      anv_pipeline_hash_shader(pipeline, module, entrypoint,
+      anv_pipeline_hash_shader(pipeline, layout, module, entrypoint,
                                MESA_SHADER_VERTEX, spec_info,
                                &key, sizeof(key), sha1);
       bin = anv_pipeline_cache_search(cache, sha1, 20);
@@ -527,7 +538,7 @@ anv_pipeline_compile_vs(struct anv_pipeline *pipeline,
 
       void *mem_ctx = ralloc_context(NULL);
 
-      nir_shader *nir = anv_pipeline_compile(pipeline, mem_ctx,
+      nir_shader *nir = anv_pipeline_compile(pipeline, mem_ctx, layout,
                                              module, entrypoint,
                                              MESA_SHADER_VERTEX, spec_info,
                                              &prog_data.base.base, &map);
@@ -633,11 +644,13 @@ anv_pipeline_compile_tcs_tes(struct anv_pipeline *pipeline,
    populate_sampler_prog_key(&pipeline->device->info, &tes_key.tex);
    tcs_key.input_vertices = info->pTessellationState->patchControlPoints;
 
+   ANV_FROM_HANDLE(anv_pipeline_layout, layout, info->layout);
+
    if (cache) {
-      anv_pipeline_hash_shader(pipeline, tcs_module, tcs_entrypoint,
+      anv_pipeline_hash_shader(pipeline, layout, tcs_module, tcs_entrypoint,
                                MESA_SHADER_TESS_CTRL, tcs_spec_info,
                                &tcs_key, sizeof(tcs_key), tcs_sha1);
-      anv_pipeline_hash_shader(pipeline, tes_module, tes_entrypoint,
+      anv_pipeline_hash_shader(pipeline, layout, tes_module, tes_entrypoint,
                                MESA_SHADER_TESS_EVAL, tes_spec_info,
                                &tes_key, sizeof(tes_key), tes_sha1);
       memcpy(&tcs_sha1[20], tes_sha1, 20);
@@ -666,11 +679,13 @@ anv_pipeline_compile_tcs_tes(struct anv_pipeline *pipeline,
       void *mem_ctx = ralloc_context(NULL);
 
       nir_shader *tcs_nir =
-         anv_pipeline_compile(pipeline, mem_ctx, tcs_module, tcs_entrypoint,
+         anv_pipeline_compile(pipeline, mem_ctx, layout,
+                              tcs_module, tcs_entrypoint,
                               MESA_SHADER_TESS_CTRL, tcs_spec_info,
                               &tcs_prog_data.base.base, &tcs_map);
       nir_shader *tes_nir =
-         anv_pipeline_compile(pipeline, mem_ctx, tes_module, tes_entrypoint,
+         anv_pipeline_compile(pipeline, mem_ctx, layout,
+                              tes_module, tes_entrypoint,
                               MESA_SHADER_TESS_EVAL, tes_spec_info,
                               &tes_prog_data.base.base, &tes_map);
       if (tcs_nir == NULL || tes_nir == NULL) {
@@ -771,8 +786,10 @@ anv_pipeline_compile_gs(struct anv_pipeline *pipeline,
 
    populate_gs_prog_key(&pipeline->device->info, &key);
 
+   ANV_FROM_HANDLE(anv_pipeline_layout, layout, info->layout);
+
    if (cache) {
-      anv_pipeline_hash_shader(pipeline, module, entrypoint,
+      anv_pipeline_hash_shader(pipeline, layout, module, entrypoint,
                                MESA_SHADER_GEOMETRY, spec_info,
                                &key, sizeof(key), sha1);
       bin = anv_pipeline_cache_search(cache, sha1, 20);
@@ -790,7 +807,7 @@ anv_pipeline_compile_gs(struct anv_pipeline *pipeline,
 
       void *mem_ctx = ralloc_context(NULL);
 
-      nir_shader *nir = anv_pipeline_compile(pipeline, mem_ctx,
+      nir_shader *nir = anv_pipeline_compile(pipeline, mem_ctx, layout,
                                              module, entrypoint,
                                              MESA_SHADER_GEOMETRY, spec_info,
                                              &prog_data.base.base, &map);
@@ -849,8 +866,10 @@ anv_pipeline_compile_fs(struct anv_pipeline *pipeline,
 
    populate_wm_prog_key(pipeline, info, &key);
 
+   ANV_FROM_HANDLE(anv_pipeline_layout, layout, info->layout);
+
    if (cache) {
-      anv_pipeline_hash_shader(pipeline, module, entrypoint,
+      anv_pipeline_hash_shader(pipeline, layout, module, entrypoint,
                                MESA_SHADER_FRAGMENT, spec_info,
                                &key, sizeof(key), sha1);
       bin = anv_pipeline_cache_search(cache, sha1, 20);
@@ -868,7 +887,7 @@ anv_pipeline_compile_fs(struct anv_pipeline *pipeline,
 
       void *mem_ctx = ralloc_context(NULL);
 
-      nir_shader *nir = anv_pipeline_compile(pipeline, mem_ctx,
+      nir_shader *nir = anv_pipeline_compile(pipeline, mem_ctx, layout,
                                              module, entrypoint,
                                              MESA_SHADER_FRAGMENT, spec_info,
                                              &prog_data.base, &map);
@@ -997,8 +1016,10 @@ anv_pipeline_compile_cs(struct anv_pipeline *pipeline,
 
    populate_cs_prog_key(&pipeline->device->info, &key);
 
+   ANV_FROM_HANDLE(anv_pipeline_layout, layout, info->layout);
+
    if (cache) {
-      anv_pipeline_hash_shader(pipeline, module, entrypoint,
+      anv_pipeline_hash_shader(pipeline, layout, module, entrypoint,
                                MESA_SHADER_COMPUTE, spec_info,
                                &key, sizeof(key), sha1);
       bin = anv_pipeline_cache_search(cache, sha1, 20);
@@ -1016,7 +1037,7 @@ anv_pipeline_compile_cs(struct anv_pipeline *pipeline,
 
       void *mem_ctx = ralloc_context(NULL);
 
-      nir_shader *nir = anv_pipeline_compile(pipeline, mem_ctx,
+      nir_shader *nir = anv_pipeline_compile(pipeline, mem_ctx, layout,
                                              module, entrypoint,
                                              MESA_SHADER_COMPUTE, spec_info,
                                              &prog_data.base, &map);
@@ -1024,6 +1045,8 @@ anv_pipeline_compile_cs(struct anv_pipeline *pipeline,
          ralloc_free(mem_ctx);
          return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
       }
+
+      NIR_PASS_V(nir, anv_nir_add_base_work_group_id, &prog_data);
 
       anv_fill_binding_table(&prog_data.base, 1);
 
@@ -1279,8 +1302,6 @@ anv_pipeline_init(struct anv_pipeline *pipeline,
    assert(pCreateInfo->subpass < render_pass->subpass_count);
    pipeline->subpass = &render_pass->subpasses[pCreateInfo->subpass];
 
-   pipeline->layout = anv_pipeline_layout_from_handle(pCreateInfo->layout);
-
    result = anv_reloc_list_init(&pipeline->batch_relocs, alloc);
    if (result != VK_SUCCESS)
       return result;
@@ -1310,10 +1331,17 @@ anv_pipeline_init(struct anv_pipeline *pipeline,
    const VkPipelineShaderStageCreateInfo *pStages[MESA_SHADER_STAGES] = {};
    struct anv_shader_module *modules[MESA_SHADER_STAGES] = {};
    for (uint32_t i = 0; i < pCreateInfo->stageCount; i++) {
-      gl_shader_stage stage = ffs(pCreateInfo->pStages[i].stage) - 1;
+      VkShaderStageFlagBits vk_stage = pCreateInfo->pStages[i].stage;
+      gl_shader_stage stage = vk_to_mesa_shader_stage(vk_stage);
       pStages[stage] = &pCreateInfo->pStages[i];
       modules[stage] = anv_shader_module_from_handle(pStages[stage]->module);
+      pipeline->active_stages |= vk_stage;
    }
+
+   if (pipeline->active_stages & VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT)
+      pipeline->active_stages |= VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
+
+   assert(pipeline->active_stages & VK_SHADER_STAGE_VERTEX_BIT);
 
    if (modules[MESA_SHADER_VERTEX]) {
       result = anv_pipeline_compile_vs(pipeline, cache, pCreateInfo,
@@ -1354,7 +1382,7 @@ anv_pipeline_init(struct anv_pipeline *pipeline,
          goto compile_fail;
    }
 
-   assert(pipeline->active_stages & VK_SHADER_STAGE_VERTEX_BIT);
+   assert(pipeline->shaders[MESA_SHADER_VERTEX]);
 
    anv_pipeline_setup_l3_config(pipeline, false);
 

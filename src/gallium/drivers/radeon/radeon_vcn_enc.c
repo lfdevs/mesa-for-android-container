@@ -38,20 +38,61 @@
 #include "radeon_video.h"
 #include "radeon_vcn_enc.h"
 
-static void radeon_vcn_enc_get_param(struct radeon_encoder *enc, struct pipe_h264_enc_picture_desc *pic)
+static void radeon_vcn_enc_get_param(struct radeon_encoder *enc, struct pipe_picture_desc *picture)
 {
-	enc->enc_pic.picture_type = pic->picture_type;
-	enc->enc_pic.frame_num = pic->frame_num;
-	enc->enc_pic.pic_order_cnt = pic->pic_order_cnt;
-	enc->enc_pic.pic_order_cnt_type = pic->pic_order_cnt_type;
-	enc->enc_pic.ref_idx_l0 = pic->ref_idx_l0;
-	enc->enc_pic.ref_idx_l1 = pic->ref_idx_l1;
-	enc->enc_pic.not_referenced = pic->not_referenced;
-	enc->enc_pic.is_idr = (pic->picture_type == PIPE_H264_ENC_PICTURE_TYPE_IDR);
-	enc->enc_pic.crop_left = 0;
-	enc->enc_pic.crop_right = (align(enc->base.width, 16) - enc->base.width) / 2;
-	enc->enc_pic.crop_top = 0;
-	enc->enc_pic.crop_bottom = (align(enc->base.height, 16) - enc->base.height) / 2;
+   if (u_reduce_video_profile(picture->profile) == PIPE_VIDEO_FORMAT_MPEG4_AVC) {
+      struct pipe_h264_enc_picture_desc *pic = (struct pipe_h264_enc_picture_desc *)picture;
+      enc->enc_pic.picture_type = pic->picture_type;
+      enc->enc_pic.frame_num = pic->frame_num;
+      enc->enc_pic.pic_order_cnt = pic->pic_order_cnt;
+      enc->enc_pic.pic_order_cnt_type = pic->pic_order_cnt_type;
+      enc->enc_pic.ref_idx_l0 = pic->ref_idx_l0;
+      enc->enc_pic.ref_idx_l1 = pic->ref_idx_l1;
+      enc->enc_pic.not_referenced = pic->not_referenced;
+      enc->enc_pic.is_idr = (pic->picture_type == PIPE_H264_ENC_PICTURE_TYPE_IDR);
+      enc->enc_pic.crop_left = 0;
+      enc->enc_pic.crop_right = (align(enc->base.width, 16) - enc->base.width) / 2;
+      enc->enc_pic.crop_top = 0;
+      enc->enc_pic.crop_bottom = (align(enc->base.height, 16) - enc->base.height) / 2;
+   } else if (u_reduce_video_profile(picture->profile) == PIPE_VIDEO_FORMAT_HEVC) {
+      struct pipe_h265_enc_picture_desc *pic = (struct pipe_h265_enc_picture_desc *)picture;
+      enc->enc_pic.picture_type = pic->picture_type;
+      enc->enc_pic.frame_num = pic->frame_num;
+      enc->enc_pic.pic_order_cnt = pic->pic_order_cnt;
+      enc->enc_pic.pic_order_cnt_type = pic->pic_order_cnt_type;
+      enc->enc_pic.ref_idx_l0 = pic->ref_idx_l0;
+      enc->enc_pic.ref_idx_l1 = pic->ref_idx_l1;
+      enc->enc_pic.not_referenced = pic->not_referenced;
+      enc->enc_pic.is_idr = (pic->picture_type == PIPE_H265_ENC_PICTURE_TYPE_IDR) ||
+                            (pic->picture_type == PIPE_H265_ENC_PICTURE_TYPE_I);
+      enc->enc_pic.crop_left = 0;
+      enc->enc_pic.crop_right = (align(enc->base.width, 16) - enc->base.width) / 2;
+      enc->enc_pic.crop_top = 0;
+      enc->enc_pic.crop_bottom = (align(enc->base.height, 16) - enc->base.height) / 2;
+      enc->enc_pic.general_tier_flag = pic->seq.general_tier_flag;
+      enc->enc_pic.general_profile_idc = pic->seq.general_profile_idc;
+      enc->enc_pic.general_level_idc = pic->seq.general_level_idc;
+      enc->enc_pic.max_poc = pic->seq.intra_period;
+      enc->enc_pic.log2_max_poc = 0;
+      for (int i = enc->enc_pic.max_poc; i != 0; enc->enc_pic.log2_max_poc++)
+         i = (i >> 1);
+      enc->enc_pic.chroma_format_idc = pic->seq.chroma_format_idc;
+      enc->enc_pic.pic_width_in_luma_samples = pic->seq.pic_width_in_luma_samples;
+      enc->enc_pic.pic_height_in_luma_samples = pic->seq.pic_height_in_luma_samples;
+      enc->enc_pic.log2_diff_max_min_luma_coding_block_size = pic->seq.log2_diff_max_min_luma_coding_block_size;
+      enc->enc_pic.log2_min_transform_block_size_minus2 = pic->seq.log2_min_transform_block_size_minus2;
+      enc->enc_pic.log2_diff_max_min_transform_block_size = pic->seq.log2_diff_max_min_transform_block_size;
+      enc->enc_pic.max_transform_hierarchy_depth_inter = pic->seq.max_transform_hierarchy_depth_inter;
+      enc->enc_pic.max_transform_hierarchy_depth_intra = pic->seq.max_transform_hierarchy_depth_intra;
+      enc->enc_pic.log2_parallel_merge_level_minus2 = pic->pic.log2_parallel_merge_level_minus2;
+      enc->enc_pic.bit_depth_luma_minus8 = pic->seq.bit_depth_luma_minus8;
+      enc->enc_pic.bit_depth_chroma_minus8 = pic->seq.bit_depth_chroma_minus8;
+      enc->enc_pic.nal_unit_type = pic->pic.nal_unit_type;
+      enc->enc_pic.max_num_merge_cand = pic->slice.max_num_merge_cand;
+      enc->enc_pic.sample_adaptive_offset_enabled_flag = pic->seq.sample_adaptive_offset_enabled_flag;
+      enc->enc_pic.pcm_enabled_flag = pic->seq.pcm_enabled_flag;
+      enc->enc_pic.sps_temporal_mvp_enabled_flag = pic->seq.sps_temporal_mvp_enabled_flag;
+   }
 }
 
 static void flush(struct radeon_encoder *enc)
@@ -128,9 +169,8 @@ static void radeon_enc_begin_frame(struct pipe_video_codec *encoder,
 {
 	struct radeon_encoder *enc = (struct radeon_encoder*)encoder;
 	struct vl_video_buffer *vid_buf = (struct vl_video_buffer *)source;
-	struct pipe_h264_enc_picture_desc *pic = (struct pipe_h264_enc_picture_desc *)picture;
 
-	radeon_vcn_enc_get_param(enc, pic);
+	radeon_vcn_enc_get_param(enc, picture);
 
 	enc->get_buffer(vid_buf->resources[0], &enc->handle, &enc->luma);
 	enc->get_buffer(vid_buf->resources[1], NULL, &enc->chroma);
@@ -144,7 +184,7 @@ static void radeon_enc_begin_frame(struct pipe_video_codec *encoder,
 		si_vid_create_buffer(enc->screen, enc->si, 128 * 1024, PIPE_USAGE_STAGING);
 		si_vid_create_buffer(enc->screen, &fb, 4096, PIPE_USAGE_STAGING);
 		enc->fb = &fb;
-		enc->begin(enc, pic);
+		enc->begin(enc, picture);
 		flush(enc);
 		si_vid_destroy_buffer(&fb);
 	}
@@ -222,7 +262,7 @@ struct pipe_video_codec *radeon_create_encoder(struct pipe_context *context,
 		radeon_enc_get_buffer get_buffer)
 {
 	struct si_screen *sscreen = (struct si_screen *)context->screen;
-	struct r600_common_context *rctx = (struct r600_common_context*)context;
+	struct si_context *sctx = (struct si_context*)context;
 	struct radeon_encoder *enc;
 	struct pipe_video_buffer *tmp_buf, templat = {};
 	struct radeon_surf *tmp_surf;
@@ -246,7 +286,7 @@ struct pipe_video_codec *radeon_create_encoder(struct pipe_context *context,
 	enc->bits_in_shifter = 0;
 	enc->screen = context->screen;
 	enc->ws = ws;
-	enc->cs = ws->cs_create(rctx->ctx, RING_VCN_ENC, radeon_enc_cs_flush, enc);
+	enc->cs = ws->cs_create(sctx->ctx, RING_VCN_ENC, radeon_enc_cs_flush, enc);
 
 	if (!enc->cs) {
 		RVID_ERR("Can't get command submission context.\n");

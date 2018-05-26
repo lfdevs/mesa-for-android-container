@@ -1386,15 +1386,104 @@ nve4_make_image_handle_resident(struct pipe_context *pipe, uint64_t handle,
    }
 }
 
+static uint64_t
+gm107_create_image_handle(struct pipe_context *pipe,
+                          const struct pipe_image_view *view)
+{
+   /* GM107+ use TIC handles to reference images. As such, image handles are
+    * just the TIC id.
+    */
+   struct nvc0_context *nvc0 = nvc0_context(pipe);
+   struct nouveau_pushbuf *push = nvc0->base.pushbuf;
+   struct pipe_sampler_view *sview =
+      gm107_create_texture_view_from_image(pipe, view);
+   struct nv50_tic_entry *tic = nv50_tic_entry(sview);
+
+   if (tic == NULL)
+      goto fail;
+
+   tic->bindless = 1;
+   tic->id = nvc0_screen_tic_alloc(nvc0->screen, tic);
+   if (tic->id < 0)
+      goto fail;
+
+   nve4_p2mf_push_linear(&nvc0->base, nvc0->screen->txc, tic->id * 32,
+                         NV_VRAM_DOMAIN(&nvc0->screen->base), 32,
+                         tic->tic);
+
+   IMMED_NVC0(push, NVC0_3D(TIC_FLUSH), 0);
+
+   nvc0->screen->tic.lock[tic->id / 32] |= 1 << (tic->id % 32);
+
+   return 0x100000000ULL | tic->id;
+
+fail:
+   FREE(tic);
+   return 0;
+}
+
+static void
+gm107_delete_image_handle(struct pipe_context *pipe, uint64_t handle)
+{
+   struct nvc0_context *nvc0 = nvc0_context(pipe);
+   int tic = handle & NVE4_TIC_ENTRY_INVALID;
+   struct nv50_tic_entry *entry = nvc0->screen->tic.entries[tic];
+   struct pipe_sampler_view *view = &entry->pipe;
+   assert(entry->bindless == 1);
+   assert(!view_bound(nvc0, view));
+   entry->bindless = 0;
+   nvc0_screen_tic_unlock(nvc0->screen, entry);
+   pipe_sampler_view_reference(&view, NULL);
+}
+
+static void
+gm107_make_image_handle_resident(struct pipe_context *pipe, uint64_t handle,
+                                 unsigned access, bool resident)
+{
+   struct nvc0_context *nvc0 = nvc0_context(pipe);
+
+   if (resident) {
+      struct nvc0_resident *res = calloc(1, sizeof(struct nvc0_resident));
+      struct nv50_tic_entry *tic =
+         nvc0->screen->tic.entries[handle & NVE4_TIC_ENTRY_INVALID];
+      assert(tic);
+      assert(tic->bindless);
+
+      res->handle = handle;
+      res->buf = nv04_resource(tic->pipe.texture);
+      res->flags = (access & 3) << 8;
+      if (res->buf->base.target == PIPE_BUFFER &&
+          access & PIPE_IMAGE_ACCESS_WRITE)
+         util_range_add(&res->buf->valid_buffer_range,
+                        tic->pipe.u.buf.offset,
+                        tic->pipe.u.buf.offset + tic->pipe.u.buf.size);
+      list_add(&res->list, &nvc0->img_head);
+   } else {
+      list_for_each_entry_safe(struct nvc0_resident, pos, &nvc0->img_head, list) {
+         if (pos->handle == handle) {
+            list_del(&pos->list);
+            free(pos);
+            break;
+         }
+      }
+   }
+}
+
 void
 nvc0_init_bindless_functions(struct pipe_context *pipe) {
    pipe->create_texture_handle = nve4_create_texture_handle;
    pipe->delete_texture_handle = nve4_delete_texture_handle;
    pipe->make_texture_handle_resident = nve4_make_texture_handle_resident;
 
-   pipe->create_image_handle = nve4_create_image_handle;
-   pipe->delete_image_handle = nve4_delete_image_handle;
-   pipe->make_image_handle_resident = nve4_make_image_handle_resident;
+   if (nvc0_context(pipe)->screen->base.class_3d < GM107_3D_CLASS) {
+      pipe->create_image_handle = nve4_create_image_handle;
+      pipe->delete_image_handle = nve4_delete_image_handle;
+      pipe->make_image_handle_resident = nve4_make_image_handle_resident;
+   } else {
+      pipe->create_image_handle = gm107_create_image_handle;
+      pipe->delete_image_handle = gm107_delete_image_handle;
+      pipe->make_image_handle_resident = gm107_make_image_handle_resident;
+   }
 }
 
 

@@ -34,8 +34,9 @@
 #include "main/macros.h"
 #include "main/transformfeedback.h"
 #include "main/framebuffer.h"
+#include "main/varray.h"
 #include "tnl/tnl.h"
-#include "vbo/vbo_context.h"
+#include "vbo/vbo.h"
 #include "swrast/swrast.h"
 #include "swrast_setup/swrast_setup.h"
 #include "drivers/common/meta.h"
@@ -277,7 +278,7 @@ brw_emit_prim(struct brw_context *brw,
 
 static void
 brw_merge_inputs(struct brw_context *brw,
-                 const struct gl_vertex_array *arrays[])
+                 const struct gl_vertex_array *arrays)
 {
    const struct gen_device_info *devinfo = &brw->screen->devinfo;
    const struct gl_context *ctx = &brw->ctx;
@@ -291,7 +292,7 @@ brw_merge_inputs(struct brw_context *brw,
 
    for (i = 0; i < VERT_ATTRIB_MAX; i++) {
       brw->vb.inputs[i].buffer = -1;
-      brw->vb.inputs[i].glarray = arrays[i];
+      brw->vb.inputs[i].glarray = &arrays[i];
    }
 
    if (devinfo->gen < 8 && !devinfo->is_haswell) {
@@ -300,14 +301,16 @@ brw_merge_inputs(struct brw_context *brw,
        * 2_10_10_10_REV vertex formats.  Set appropriate workaround flags.
        */
       while (mask) {
+         const struct gl_array_attributes *glattrib;
          uint8_t wa_flags = 0;
 
          i = u_bit_scan64(&mask);
+         glattrib = brw->vb.inputs[i].glarray->VertexAttrib;
 
-         switch (brw->vb.inputs[i].glarray->Type) {
+         switch (glattrib->Type) {
 
          case GL_FIXED:
-            wa_flags = brw->vb.inputs[i].glarray->Size;
+            wa_flags = glattrib->Size;
             break;
 
          case GL_INT_2_10_10_10_REV:
@@ -315,12 +318,12 @@ brw_merge_inputs(struct brw_context *brw,
             /* fallthough */
 
          case GL_UNSIGNED_INT_2_10_10_10_REV:
-            if (brw->vb.inputs[i].glarray->Format == GL_BGRA)
+            if (glattrib->Format == GL_BGRA)
                wa_flags |= BRW_ATTRIB_WA_BGRA;
 
-            if (brw->vb.inputs[i].glarray->Normalized)
+            if (glattrib->Normalized)
                wa_flags |= BRW_ATTRIB_WA_NORMALIZE;
-            else if (!brw->vb.inputs[i].glarray->Integer)
+            else if (!glattrib->Integer)
                wa_flags |= BRW_ATTRIB_WA_SCALE;
 
             break;
@@ -439,15 +442,15 @@ brw_predraw_resolve_inputs(struct brw_context *brw, bool rendering,
          num_layers = INTEL_REMAINING_LAYERS;
       }
 
-      const bool disable_aux = rendering &&
+      if (rendering) {
          intel_disable_rb_aux_buffer(brw, draw_aux_buffer_disabled,
                                      tex_obj->mt, min_level, num_levels,
                                      "for sampling");
+      }
 
       intel_miptree_prepare_texture(brw, tex_obj->mt, view_format,
                                     min_level, num_levels,
-                                    min_layer, num_layers,
-                                    disable_aux);
+                                    min_layer, num_layers);
 
       /* If any programs are using it with texelFetch, we may need to also do
        * a prepare with an sRGB format to ensure texelFetch works "properly".
@@ -458,8 +461,7 @@ brw_predraw_resolve_inputs(struct brw_context *brw, bool rendering,
          if (txf_format != view_format) {
             intel_miptree_prepare_texture(brw, tex_obj->mt, txf_format,
                                           min_level, num_levels,
-                                          min_layer, num_layers,
-                                          disable_aux);
+                                          min_layer, num_layers);
          }
       }
 
@@ -514,7 +516,7 @@ brw_predraw_resolve_framebuffer(struct brw_context *brw,
    }
 
    /* Resolve color buffers for non-coherent framebuffer fetch. */
-   if (!ctx->Extensions.MESA_shader_framebuffer_fetch &&
+   if (!ctx->Extensions.EXT_shader_framebuffer_fetch &&
        ctx->FragmentProgram._Current &&
        ctx->FragmentProgram._Current->info.outputs_read) {
       const struct gl_framebuffer *fb = ctx->DrawBuffer;
@@ -531,8 +533,7 @@ brw_predraw_resolve_framebuffer(struct brw_context *brw,
          if (irb) {
             intel_miptree_prepare_texture(brw, irb->mt, irb->mt->surf.format,
                                           irb->mt_level, 1,
-                                          irb->mt_layer, irb->layer_count,
-                                          false);
+                                          irb->mt_layer, irb->layer_count);
          }
       }
    }
@@ -691,7 +692,7 @@ brw_postdraw_reconcile_align_wa_slices(struct brw_context *brw)
 
 static void
 brw_prepare_drawing(struct gl_context *ctx,
-                    const struct gl_vertex_array *arrays[],
+                    const struct gl_vertex_array *arrays,
                     const struct _mesa_index_buffer *ib,
                     bool index_bounds_valid,
                     GLuint min_index,
@@ -778,7 +779,7 @@ brw_finish_drawing(struct gl_context *ctx)
  */
 static void
 brw_draw_single_prim(struct gl_context *ctx,
-                     const struct gl_vertex_array *arrays[],
+                     const struct gl_vertex_array *arrays,
                      const struct _mesa_prim *prim,
                      unsigned prim_id,
                      struct brw_transform_feedback_object *xfb_obj,
@@ -818,25 +819,29 @@ brw_draw_single_prim(struct gl_context *ctx,
     * always flag if the shader uses one of the values. For direct draws,
     * we only flag if the values change.
     */
-   const int new_basevertex =
+   const int new_firstvertex =
       prim->indexed ? prim->basevertex : prim->start;
    const int new_baseinstance = prim->base_instance;
    const struct brw_vs_prog_data *vs_prog_data =
       brw_vs_prog_data(brw->vs.base.prog_data);
    if (prim_id > 0) {
-      const bool uses_draw_parameters =
+      const bool uses_firstvertex =
          vs_prog_data->uses_basevertex ||
+         vs_prog_data->uses_firstvertex;
+
+      const bool uses_draw_parameters =
+         uses_firstvertex ||
          vs_prog_data->uses_baseinstance;
 
       if ((uses_draw_parameters && prim->is_indirect) ||
-          (vs_prog_data->uses_basevertex &&
-           brw->draw.params.gl_basevertex != new_basevertex) ||
+          (uses_firstvertex &&
+           brw->draw.params.firstvertex != new_firstvertex) ||
           (vs_prog_data->uses_baseinstance &&
            brw->draw.params.gl_baseinstance != new_baseinstance))
          brw->ctx.NewDriverState |= BRW_NEW_VERTICES;
    }
 
-   brw->draw.params.gl_basevertex = new_basevertex;
+   brw->draw.params.firstvertex = new_firstvertex;
    brw->draw.params.gl_baseinstance = new_baseinstance;
    brw_bo_unreference(brw->draw.draw_params_bo);
 
@@ -911,6 +916,22 @@ retry:
    return;
 }
 
+
+static bool
+all_varyings_in_vbos(const struct gl_vertex_array *arrays)
+{
+   GLuint i;
+
+   for (i = 0; i < VERT_ATTRIB_MAX; i++)
+      if (arrays[i].BufferBinding->Stride &&
+          arrays[i].BufferBinding->BufferObj->Name == 0)
+         return false;
+
+   return true;
+}
+
+
+
 void
 brw_draw_prims(struct gl_context *ctx,
                const struct _mesa_prim *prims,
@@ -925,10 +946,15 @@ brw_draw_prims(struct gl_context *ctx,
 {
    unsigned i;
    struct brw_context *brw = brw_context(ctx);
-   const struct gl_vertex_array **arrays = ctx->Array._DrawArrays;
+   const struct gl_vertex_array *arrays;
    int predicate_state = brw->predicate.state;
    struct brw_transform_feedback_object *xfb_obj =
       (struct brw_transform_feedback_object *) gl_xfb_obj;
+
+   /* The initial pushdown of the inputs array into the drivers */
+   _mesa_set_drawing_arrays(ctx, brw->vb.draw_arrays.inputs);
+   arrays = ctx->Array._DrawArrays;
+   _vbo_update_inputs(ctx, &brw->vb.draw_arrays);
 
    if (!brw_check_conditional_render(brw))
       return;
@@ -947,8 +973,8 @@ brw_draw_prims(struct gl_context *ctx,
                  _mesa_enum_to_string(ctx->RenderMode));
       _swsetup_Wakeup(ctx);
       _tnl_wakeup(ctx);
-      _tnl_draw_prims(ctx, prims, nr_prims, ib,
-                      index_bounds_valid, min_index, max_index, NULL, 0, NULL);
+      _tnl_draw(ctx, prims, nr_prims, ib,
+                index_bounds_valid, min_index, max_index, NULL, 0, NULL);
       return;
    }
 
@@ -956,7 +982,7 @@ brw_draw_prims(struct gl_context *ctx,
     * get the minimum and maximum of their index buffer so we know what range
     * to upload.
     */
-   if (!index_bounds_valid && !vbo_all_varyings_in_vbos(arrays)) {
+   if (!index_bounds_valid && !all_varyings_in_vbos(arrays)) {
       perf_debug("Scanning index buffer to compute index buffer bounds.  "
                  "Use glDrawRangeElements() to avoid this.\n");
       vbo_get_minmax_indices(ctx, prims, ib, &min_index, &max_index, nr_prims);
@@ -1059,15 +1085,19 @@ brw_draw_indirect_prims(struct gl_context *ctx,
 }
 
 void
-brw_draw_init(struct brw_context *brw)
+brw_init_draw_functions(struct dd_function_table *functions)
 {
-   struct gl_context *ctx = &brw->ctx;
-   struct vbo_context *vbo = vbo_context(ctx);
-
    /* Register our drawing function:
     */
-   vbo->draw_prims = brw_draw_prims;
-   vbo->draw_indirect_prims = brw_draw_indirect_prims;
+   functions->Draw = brw_draw_prims;
+   functions->DrawIndirect = brw_draw_indirect_prims;
+}
+
+void
+brw_draw_init(struct brw_context *brw)
+{
+   /* Keep our list of gl_vertex_array inputs */
+   _vbo_init_inputs(&brw->vb.draw_arrays);
 
    for (int i = 0; i < VERT_ATTRIB_MAX; i++)
       brw->vb.inputs[i].buffer = -1;

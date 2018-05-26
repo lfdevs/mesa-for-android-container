@@ -78,8 +78,17 @@ _mesa_initialize_vao(struct gl_context *ctx,
 
 
 extern void
-_mesa_update_vao_client_arrays(struct gl_context *ctx,
-                               struct gl_vertex_array_object *vao);
+_mesa_update_vao_derived_arrays(struct gl_context *ctx,
+                                struct gl_vertex_array_object *vao);
+
+
+/**
+ * Mark the vao as shared and immutable, do remaining updates.
+ */
+extern void
+_mesa_set_vao_immutable(struct gl_context *ctx,
+                        struct gl_vertex_array_object *vao);
+
 
 /* Returns true if all varying arrays reside in vbos */
 extern bool
@@ -88,6 +97,54 @@ _mesa_all_varyings_in_vbos(const struct gl_vertex_array_object *vao);
 /* Returns true if all vbos are unmapped */
 extern bool
 _mesa_all_buffers_are_unmapped(const struct gl_vertex_array_object *vao);
+
+
+/**
+ * Array to apply the position/generic0 aliasing map to
+ * an attribute value used in vertex processing inputs to an attribute
+ * as they appear in the vao.
+ */
+extern const GLubyte
+_mesa_vao_attribute_map[ATTRIBUTE_MAP_MODE_MAX][VERT_ATTRIB_MAX];
+
+
+/**
+ * Apply the position/generic0 aliasing map to a bitfield from the vao.
+ * Use for example to convert gl_vertex_array_object::_Enabled
+ * or gl_vertex_buffer_binding::_VertexBinding from the vao numbering to
+ * the numbering used with vertex processing inputs.
+ */
+static inline GLbitfield
+_mesa_vao_enable_to_vp_inputs(gl_attribute_map_mode mode, GLbitfield enabled)
+{
+   switch (mode) {
+   case ATTRIBUTE_MAP_MODE_IDENTITY:
+      return enabled;
+   case ATTRIBUTE_MAP_MODE_POSITION:
+      /* Copy VERT_ATTRIB_POS enable bit into GENERIC0 position */
+      return (enabled & ~VERT_BIT_GENERIC0)
+         | ((enabled & VERT_BIT_POS) << VERT_ATTRIB_GENERIC0);
+   case ATTRIBUTE_MAP_MODE_GENERIC0:
+      /* Copy VERT_ATTRIB_GENERIC0 enable bit into POS position */
+      return (enabled & ~VERT_BIT_POS)
+         | ((enabled & VERT_BIT_GENERIC0) >> VERT_ATTRIB_GENERIC0);
+   default:
+      return 0;
+   }
+}
+
+
+/**
+ * Return the vp_inputs enabled bitmask after application of
+ * the position/generic0 aliasing map.
+ */
+static inline GLbitfield
+_mesa_get_vao_vp_inputs(const struct gl_vertex_array_object *vao)
+{
+   const gl_attribute_map_mode mode = vao->_AttributeMapMode;
+   return _mesa_vao_enable_to_vp_inputs(mode, vao->_Enabled);
+}
+
 
 /*
  * API functions

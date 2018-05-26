@@ -202,7 +202,6 @@ typedef enum {
 	/* meta instructions (category -1): */
 	/* placeholder instr to mark shader inputs: */
 	OPC_META_INPUT      = _OPC(-1, 0),
-	OPC_META_PHI        = _OPC(-1, 1),
 	/* The "fan-in" and "fan-out" instructions are used for keeping
 	 * track of instructions that write to multiple dst registers
 	 * (fan-out) like texture sample instructions, or read multiple
@@ -301,7 +300,7 @@ typedef struct PACKED {
 			uint32_t dummy1   : 12;
 		} a4xx;
 		struct PACKED {
-			uint32_t immed    : 32;
+			int32_t immed     : 32;
 		} a5xx;
 	};
 
@@ -410,7 +409,8 @@ typedef struct PACKED {
 
 	/* dword1: */
 	uint32_t dst      : 8;
-	uint32_t repeat   : 3;
+	uint32_t repeat   : 2;
+	uint32_t sat      : 1;
 	uint32_t src1_r   : 1;
 	uint32_t ss       : 1;
 	uint32_t ul       : 1;   /* dunno */
@@ -473,7 +473,8 @@ typedef struct PACKED {
 
 	/* dword1: */
 	uint32_t dst      : 8;
-	uint32_t repeat   : 3;
+	uint32_t repeat   : 2;
+	uint32_t sat      : 1;
 	uint32_t src1_r   : 1;
 	uint32_t ss       : 1;
 	uint32_t ul       : 1;
@@ -529,7 +530,8 @@ typedef struct PACKED {
 
 	/* dword1: */
 	uint32_t dst      : 8;
-	uint32_t repeat   : 3;
+	uint32_t repeat   : 2;
+	uint32_t sat      : 1;
 	uint32_t src_r    : 1;
 	uint32_t ss       : 1;
 	uint32_t ul       : 1;
@@ -752,9 +754,10 @@ typedef union PACKED {
 	instr_cat7_t cat7;
 	struct PACKED {
 		/* dword0: */
-		uint64_t pad1     : 40;
-		uint32_t repeat   : 3;  /* cat0-cat4 */
-		uint32_t pad2     : 1;
+		uint32_t pad1     : 32;
+
+		/* dword1: */
+		uint32_t pad2     : 12;
 		uint32_t ss       : 1;  /* cat1-cat4 (cat0??) and cat7 (?) */
 		uint32_t ul       : 1;  /* cat2-cat4 (and cat1 in blob.. which may be bug??) */
 		uint32_t pad3     : 13;
@@ -764,6 +767,28 @@ typedef union PACKED {
 
 	};
 } instr_t;
+
+static inline uint32_t instr_repeat(instr_t *instr)
+{
+	switch (instr->opc_cat) {
+	case 0:  return instr->cat0.repeat;
+	case 1:  return instr->cat1.repeat;
+	case 2:  return instr->cat2.repeat;
+	case 3:  return instr->cat3.repeat;
+	case 4:  return instr->cat4.repeat;
+	default: return 0;
+	}
+}
+
+static inline bool instr_sat(instr_t *instr)
+{
+	switch (instr->opc_cat) {
+	case 2:  return instr->cat2.sat;
+	case 3:  return instr->cat3.sat;
+	case 4:  return instr->cat4.sat;
+	default: return false;
+	}
+}
 
 static inline uint32_t instr_opc(instr_t *instr)
 {

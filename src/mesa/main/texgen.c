@@ -37,14 +37,13 @@
 #include "main/texgen.h"
 #include "main/texstate.h"
 #include "math/m_matrix.h"
-#include "main/dispatch.h"
 
 
 /**
  * Return texgen state for given coordinate
  */
 static struct gl_texgen *
-get_texgen(struct gl_context *ctx, struct gl_texture_unit *texUnit,
+get_texgen(struct gl_context *ctx, struct gl_fixedfunc_texture_unit *texUnit,
            GLenum coord)
 {
    if (ctx->API == API_OPENGLES) {
@@ -70,7 +69,7 @@ get_texgen(struct gl_context *ctx, struct gl_texture_unit *texUnit,
 void GLAPIENTRY
 _mesa_TexGenfv( GLenum coord, GLenum pname, const GLfloat *params )
 {
-   struct gl_texture_unit *texUnit;
+   struct gl_fixedfunc_texture_unit *texUnit;
    struct gl_texgen *texgen;
    GET_CURRENT_CONTEXT(ctx);
 
@@ -86,7 +85,7 @@ _mesa_TexGenfv( GLenum coord, GLenum pname, const GLfloat *params )
       return;
    }
 
-   texUnit = _mesa_get_current_tex_unit(ctx);
+   texUnit = _mesa_get_current_fixedfunc_tex_unit(ctx);
 
    texgen = get_texgen(ctx, texUnit, coord);
    if (!texgen) {
@@ -289,7 +288,7 @@ _mesa_TexGeni( GLenum coord, GLenum pname, GLint param )
 void GLAPIENTRY
 _mesa_GetTexGendv( GLenum coord, GLenum pname, GLdouble *params )
 {
-   struct gl_texture_unit *texUnit;
+   struct gl_fixedfunc_texture_unit *texUnit;
    struct gl_texgen *texgen;
    GET_CURRENT_CONTEXT(ctx);
 
@@ -298,7 +297,7 @@ _mesa_GetTexGendv( GLenum coord, GLenum pname, GLdouble *params )
       return;
    }
 
-   texUnit = _mesa_get_current_tex_unit(ctx);
+   texUnit = _mesa_get_current_fixedfunc_tex_unit(ctx);
 
    texgen = get_texgen(ctx, texUnit, coord);
    if (!texgen) {
@@ -326,7 +325,7 @@ _mesa_GetTexGendv( GLenum coord, GLenum pname, GLdouble *params )
 void GLAPIENTRY
 _mesa_GetTexGenfv( GLenum coord, GLenum pname, GLfloat *params )
 {
-   struct gl_texture_unit *texUnit;
+   struct gl_fixedfunc_texture_unit *texUnit;
    struct gl_texgen *texgen;
    GET_CURRENT_CONTEXT(ctx);
 
@@ -335,7 +334,7 @@ _mesa_GetTexGenfv( GLenum coord, GLenum pname, GLfloat *params )
       return;
    }
 
-   texUnit = _mesa_get_current_tex_unit(ctx);
+   texUnit = _mesa_get_current_fixedfunc_tex_unit(ctx);
 
    texgen = get_texgen(ctx, texUnit, coord);
    if (!texgen) {
@@ -371,7 +370,7 @@ _mesa_GetTexGenfv( GLenum coord, GLenum pname, GLfloat *params )
 void GLAPIENTRY
 _mesa_GetTexGeniv( GLenum coord, GLenum pname, GLint *params )
 {
-   struct gl_texture_unit *texUnit;
+   struct gl_fixedfunc_texture_unit *texUnit;
    struct gl_texgen *texgen;
    GET_CURRENT_CONTEXT(ctx);
 
@@ -380,7 +379,7 @@ _mesa_GetTexGeniv( GLenum coord, GLenum pname, GLint *params )
       return;
    }
 
-   texUnit = _mesa_get_current_tex_unit(ctx);
+   texUnit = _mesa_get_current_fixedfunc_tex_unit(ctx);
 
    texgen = get_texgen(ctx, texUnit, coord);
    if (!texgen) {

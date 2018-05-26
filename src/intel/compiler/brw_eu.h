@@ -34,6 +34,7 @@
 #define BRW_EU_H
 
 #include <stdbool.h>
+#include <stdio.h>
 #include "brw_inst.h"
 #include "brw_eu_defines.h"
 #include "brw_reg.h"
@@ -171,6 +172,7 @@ ALU2(SHR)
 ALU2(SHL)
 ALU1(DIM)
 ALU2(ASR)
+ALU3(CSEL)
 ALU1(F32TO16)
 ALU1(F16TO32)
 ALU2(ADD)
@@ -444,7 +446,8 @@ brw_untyped_atomic(struct brw_codegen *p,
                    struct brw_reg surface,
                    unsigned atomic_op,
                    unsigned msg_length,
-                   bool response_expected);
+                   bool response_expected,
+                   bool header_present);
 
 void
 brw_untyped_surface_read(struct brw_codegen *p,
@@ -459,7 +462,8 @@ brw_untyped_surface_write(struct brw_codegen *p,
                           struct brw_reg payload,
                           struct brw_reg surface,
                           unsigned msg_length,
-                          unsigned num_channels);
+                          unsigned num_channels,
+                          bool header_present);
 
 void
 brw_typed_atomic(struct brw_codegen *p,
@@ -468,7 +472,8 @@ brw_typed_atomic(struct brw_codegen *p,
                  struct brw_reg surface,
                  unsigned atomic_op,
                  unsigned msg_length,
-                 bool response_expected);
+                 bool response_expected,
+                 bool header_present);
 
 void
 brw_typed_surface_read(struct brw_codegen *p,
@@ -476,14 +481,16 @@ brw_typed_surface_read(struct brw_codegen *p,
                        struct brw_reg payload,
                        struct brw_reg surface,
                        unsigned msg_length,
-                       unsigned num_channels);
+                       unsigned num_channels,
+                       bool header_present);
 
 void
 brw_typed_surface_write(struct brw_codegen *p,
                         struct brw_reg payload,
                         struct brw_reg surface,
                         unsigned msg_length,
-                        unsigned num_channels);
+                        unsigned num_channels,
+                        bool header_present);
 
 void
 brw_byte_scattered_read(struct brw_codegen *p,
@@ -498,7 +505,8 @@ brw_byte_scattered_write(struct brw_codegen *p,
                          struct brw_reg payload,
                          struct brw_reg surface,
                          unsigned msg_length,
-                         unsigned bit_size);
+                         unsigned bit_size,
+                         bool header_present);
 
 void
 brw_memory_fence(struct brw_codegen *p,

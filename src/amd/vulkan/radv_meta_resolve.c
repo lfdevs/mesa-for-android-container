@@ -358,8 +358,6 @@ static void radv_pick_resolve_method_images(struct radv_image *src_image,
 		*method = RESOLVE_COMPUTE;
 	else if (vk_format_is_int(src_image->vk_format))
 		*method = RESOLVE_COMPUTE;
-	else if (src_image->info.array_size > 1)
-		*method = RESOLVE_COMPUTE;
 	
 	if (radv_layout_dcc_compressed(dest_image, dest_image_layout, queue_mask)) {
 		*method = RESOLVE_FRAGMENT;
@@ -448,7 +446,7 @@ void radv_CmdResolveImage(
 	if (src_image->info.array_size > 1)
 		radv_finishme("vkCmdResolveImage: multisample array images");
 
-	if (dest_image->surface.dcc_size) {
+	if (radv_image_has_dcc(dest_image)) {
 		radv_initialize_dcc(cmd_buffer, dest_image, 0xffffffff);
 	}
 	unsigned fs_key = radv_format_meta_fs_key(dest_image->vk_format);
@@ -650,7 +648,7 @@ radv_cmd_buffer_resolve_subpass(struct radv_cmd_buffer *cmd_buffer)
 
 		struct radv_image *dst_img = cmd_buffer->state.framebuffer->attachments[dest_att.attachment].attachment->image;
 
-		if (dst_img->surface.dcc_size) {
+		if (radv_image_has_dcc(dst_img)) {
 			radv_initialize_dcc(cmd_buffer, dst_img, 0xffffffff);
 			cmd_buffer->state.attachments[dest_att.attachment].current_layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 		}
@@ -671,4 +669,72 @@ radv_cmd_buffer_resolve_subpass(struct radv_cmd_buffer *cmd_buffer)
 
 	cmd_buffer->state.subpass = subpass;
 	radv_meta_restore(&saved_state, cmd_buffer);
+}
+
+/**
+ * Decompress CMask/FMask before resolving a multisampled source image inside a
+ * subpass.
+ */
+void
+radv_decompress_resolve_subpass_src(struct radv_cmd_buffer *cmd_buffer)
+{
+	const struct radv_subpass *subpass = cmd_buffer->state.subpass;
+	struct radv_framebuffer *fb = cmd_buffer->state.framebuffer;
+
+	for (uint32_t i = 0; i < subpass->color_count; ++i) {
+		VkAttachmentReference src_att = subpass->color_attachments[i];
+		VkAttachmentReference dest_att = subpass->resolve_attachments[i];
+
+		if (src_att.attachment == VK_ATTACHMENT_UNUSED ||
+		    dest_att.attachment == VK_ATTACHMENT_UNUSED)
+			continue;
+
+		struct radv_image *src_image =
+			fb->attachments[src_att.attachment].attachment->image;
+
+		VkImageResolve region = {};
+		region.srcSubresource.baseArrayLayer = 0;
+		region.srcSubresource.mipLevel = 0;
+		region.srcSubresource.layerCount = 1;
+
+		radv_decompress_resolve_src(cmd_buffer, src_image,
+					    src_att.layout, 1, &region);
+	}
+}
+
+/**
+ * Decompress CMask/FMask before resolving a multisampled source image.
+ */
+void
+radv_decompress_resolve_src(struct radv_cmd_buffer *cmd_buffer,
+			    struct radv_image *src_image,
+			    VkImageLayout src_image_layout,
+			    uint32_t region_count,
+			    const VkImageResolve *regions)
+{
+	for (uint32_t r = 0; r < region_count; ++r) {
+		const VkImageResolve *region = &regions[r];
+		const uint32_t src_base_layer =
+			radv_meta_get_iview_layer(src_image, &region->srcSubresource,
+						  &region->srcOffset);
+		VkImageSubresourceRange range;
+		range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		range.baseMipLevel = region->srcSubresource.mipLevel;
+		range.levelCount = 1;
+		range.baseArrayLayer = src_base_layer;
+		range.layerCount = region->srcSubresource.layerCount;
+
+		uint32_t queue_mask =
+			radv_image_queue_family_mask(src_image,
+						     cmd_buffer->queue_family_index,
+						     cmd_buffer->queue_family_index);
+
+		if (radv_layout_dcc_compressed(src_image, src_image_layout,
+					       queue_mask)) {
+			radv_decompress_dcc(cmd_buffer, src_image, &range);
+		} else {
+			radv_fast_clear_flush_image_inplace(cmd_buffer,
+							    src_image, &range);
+		}
+	}
 }

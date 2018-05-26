@@ -40,9 +40,10 @@
 
 #include "util/os_time.h"
 
-#include <stdio.h>
 #include <errno.h>
+#include <stdio.h>
 #include <stdlib.h>
+#include <sys/sysinfo.h>
 
 #include "freedreno_screen.h"
 #include "freedreno_resource.h"
@@ -336,6 +337,9 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_TILE_RASTER_ORDER:
 	case PIPE_CAP_MAX_COMBINED_SHADER_OUTPUT_RESOURCES:
 	case PIPE_CAP_SIGNED_VERTEX_BUFFER_OFFSET:
+	case PIPE_CAP_FENCE_SIGNAL:
+	case PIPE_CAP_CONSTBUF0_FLAGS:
+	case PIPE_CAP_PACKED_UNIFORMS:
 		return 0;
 
 	case PIPE_CAP_CONTEXT_PRIORITY_MASK:
@@ -475,11 +479,6 @@ fd_screen_get_paramf(struct pipe_screen *pscreen, enum pipe_capf param)
 		return 16.0f;
 	case PIPE_CAPF_MAX_TEXTURE_LOD_BIAS:
 		return 15.0f;
-	case PIPE_CAPF_GUARD_BAND_LEFT:
-	case PIPE_CAPF_GUARD_BAND_TOP:
-	case PIPE_CAPF_GUARD_BAND_RIGHT:
-	case PIPE_CAPF_GUARD_BAND_BOTTOM:
-		return 0.0f;
 	}
 	debug_printf("unknown paramf %d\n", param);
 	return 0;
@@ -636,16 +635,20 @@ fd_get_compute_param(struct pipe_screen *pscreen, enum pipe_shader_ir ir_type,
 	if (!has_compute(screen))
 		return 0;
 
+#define RET(x) do {                  \
+   if (ret)                          \
+      memcpy(ret, x, sizeof(x));     \
+   return sizeof(x);                 \
+} while (0)
+
 	switch (param) {
 	case PIPE_COMPUTE_CAP_ADDRESS_BITS:
-		if (ret) {
-			uint32_t *address_bits = ret;
-			address_bits[0] = 32;
-
-			if (is_a5xx(screen))
-				address_bits[0] = 64;
-		}
-		return 1 * sizeof(uint32_t);
+// don't expose 64b pointer support yet, until ir3 supports 64b
+// math, otherwise spir64 target is used and we get 64b pointer
+// calculations that we can't do yet
+//		if (is_a5xx(screen))
+//			RET((uint32_t []){ 64 });
+		RET((uint32_t []){ 32 });
 
 	case PIPE_COMPUTE_CAP_IR_TARGET:
 		if (ret)
@@ -653,59 +656,44 @@ fd_get_compute_param(struct pipe_screen *pscreen, enum pipe_shader_ir ir_type,
 		return strlen(ir) * sizeof(char);
 
 	case PIPE_COMPUTE_CAP_GRID_DIMENSION:
-		if (ret) {
-			uint64_t *grid_dimension = ret;
-			grid_dimension[0] = 3;
-		}
-		return 1 * sizeof(uint64_t);
+		RET((uint64_t []) { 3 });
 
 	case PIPE_COMPUTE_CAP_MAX_GRID_SIZE:
-		if (ret) {
-			uint64_t *grid_size = ret;
-			grid_size[0] = 65535;
-			grid_size[1] = 65535;
-			grid_size[2] = 65535;
-		}
-		return 3 * sizeof(uint64_t) ;
+		RET(((uint64_t []) { 65535, 65535, 65535 }));
 
 	case PIPE_COMPUTE_CAP_MAX_BLOCK_SIZE:
-		if (ret) {
-			uint64_t *block_size = ret;
-			block_size[0] = 1024;
-			block_size[1] = 1024;
-			block_size[2] = 64;
-		}
-		return 3 * sizeof(uint64_t) ;
+		RET(((uint64_t []) { 1024, 1024, 64 }));
 
 	case PIPE_COMPUTE_CAP_MAX_THREADS_PER_BLOCK:
-		if (ret) {
-			uint64_t *max_threads_per_block = ret;
-			*max_threads_per_block = 1024;
-		}
-		return sizeof(uint64_t);
+		RET((uint64_t []) { 1024 });
 
 	case PIPE_COMPUTE_CAP_MAX_GLOBAL_SIZE:
+		RET((uint64_t []) { screen->ram_size });
+
 	case PIPE_COMPUTE_CAP_MAX_LOCAL_SIZE:
-		if (ret) {
-			uint64_t *local_size = ret;
-			*local_size = 32768;
-		}
-		return sizeof(uint64_t);
+		RET((uint64_t []) { 32768 });
+
 	case PIPE_COMPUTE_CAP_MAX_PRIVATE_SIZE:
 	case PIPE_COMPUTE_CAP_MAX_INPUT_SIZE:
-		break;
+		RET((uint64_t []) { 4096 });
+
 	case PIPE_COMPUTE_CAP_MAX_MEM_ALLOC_SIZE:
-		if (ret) {
-			uint64_t *max = ret;
-			*max = 32768;
-		}
-		return sizeof(uint64_t);
+		RET((uint64_t []) { screen->ram_size });
+
 	case PIPE_COMPUTE_CAP_MAX_CLOCK_FREQUENCY:
+		RET((uint32_t []) { screen->max_freq / 1000000 });
+
 	case PIPE_COMPUTE_CAP_MAX_COMPUTE_UNITS:
+		RET((uint32_t []) { 9999 });  // TODO
+
 	case PIPE_COMPUTE_CAP_IMAGES_SUPPORTED:
+		RET((uint32_t []) { 1 });
+
 	case PIPE_COMPUTE_CAP_SUBGROUP_SIZE:
+		RET((uint32_t []) { 32 });  // TODO
+
 	case PIPE_COMPUTE_CAP_MAX_VARIABLE_THREADS_PER_BLOCK:
-		break;
+		RET((uint64_t []) { 1024 }); // TODO
 	}
 
 	return 0;
@@ -848,6 +836,10 @@ fd_screen_create(struct fd_device *dev)
 		/* # of rings equates to number of unique priority values: */
 		screen->priority_mask = (1 << val) - 1;
 	}
+
+	struct sysinfo si;
+	sysinfo(&si);
+	screen->ram_size = si.totalram;
 
 	DBG("Pipe Info:");
 	DBG(" GPU-id:          %d", screen->gpu_id);

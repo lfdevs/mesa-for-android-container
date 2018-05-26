@@ -60,8 +60,7 @@ vc5_pipe_flush(struct pipe_context *pctx, struct pipe_fence_handle **fence,
 
         if (fence) {
                 struct pipe_screen *screen = pctx->screen;
-                struct vc5_fence *f = vc5_fence_create(vc5->screen,
-                                                       vc5->last_emit_seqno);
+                struct vc5_fence *f = vc5_fence_create(vc5);
                 screen->fence_reference(screen, fence, NULL);
                 *fence = (struct pipe_fence_handle *)f;
         }
@@ -127,6 +126,13 @@ vc5_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
         struct pipe_context *pctx = &vc5->base;
 
         vc5->screen = screen;
+
+        int ret = drmSyncobjCreate(screen->fd, DRM_SYNCOBJ_CREATE_SIGNALED,
+                                   &vc5->out_sync);
+        if (ret) {
+                ralloc_free(vc5);
+                return NULL;
+        }
 
         pctx->screen = pscreen;
         pctx->priv = priv;

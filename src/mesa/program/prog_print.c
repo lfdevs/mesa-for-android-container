@@ -50,12 +50,14 @@ _mesa_register_file_name(gl_register_file f)
    switch (f) {
    case PROGRAM_TEMPORARY:
       return "TEMP";
-   case PROGRAM_STATE_VAR:
-      return "STATE";
+   case PROGRAM_ARRAY:
+      return "ARRAY";
    case PROGRAM_INPUT:
       return "INPUT";
    case PROGRAM_OUTPUT:
       return "OUTPUT";
+   case PROGRAM_STATE_VAR:
+      return "STATE";
    case PROGRAM_CONSTANT:
       return "CONST";
    case PROGRAM_UNIFORM:
@@ -68,6 +70,16 @@ _mesa_register_file_name(gl_register_file f)
       return "SYSVAL";
    case PROGRAM_UNDEFINED:
       return "UNDEFINED";
+   case PROGRAM_IMMEDIATE:
+      return "IMM";
+   case PROGRAM_BUFFER:
+      return "BUFFER";
+   case PROGRAM_MEMORY:
+      return "MEMORY";
+   case PROGRAM_IMAGE:
+      return "IMAGE";
+   case PROGRAM_HW_ATOMIC:
+      return "HWATOMIC";
    default:
       {
          static char s[20];
@@ -919,7 +931,9 @@ _mesa_fprint_parameter_list(FILE *f,
    fprintf(f, "dirty state flags: 0x%x\n", list->StateFlags);
    for (i = 0; i < list->NumParameters; i++){
       struct gl_program_parameter *param = list->Parameters + i;
-      const GLfloat *v = (GLfloat *) list->ParameterValues[i];
+      unsigned pvo = list->ParameterValueOffset[i];
+      const GLfloat *v = (GLfloat *) list->ParameterValues + pvo;
+
       fprintf(f, "param[%d] sz=%d %s %s = {%.3g, %.3g, %.3g, %.3g}",
 	      i, param->Size,
 	      _mesa_register_file_name(list->Parameters[i].Type),

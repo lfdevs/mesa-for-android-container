@@ -27,10 +27,85 @@
 
 
 #include "main/glheader.h"
-#include "main/mtypes.h"
+#include "main/arrayobj.h"
+#include "main/api_arrayelt.h"
 #include "main/vtxfmt.h"
-#include "vbo_context.h"
+#include "vbo_private.h"
 
+const GLubyte
+_vbo_attribute_alias_map[VP_MODE_MAX][VERT_ATTRIB_MAX] = {
+   /* VP_MODE_FF: */
+   {
+      VBO_ATTRIB_POS,                 /* VERT_ATTRIB_POS */
+      VBO_ATTRIB_NORMAL,              /* VERT_ATTRIB_NORMAL */
+      VBO_ATTRIB_COLOR0,              /* VERT_ATTRIB_COLOR0 */
+      VBO_ATTRIB_COLOR1,              /* VERT_ATTRIB_COLOR1 */
+      VBO_ATTRIB_FOG,                 /* VERT_ATTRIB_FOG */
+      VBO_ATTRIB_COLOR_INDEX,         /* VERT_ATTRIB_COLOR_INDEX */
+      VBO_ATTRIB_EDGEFLAG,            /* VERT_ATTRIB_EDGEFLAG */
+      VBO_ATTRIB_TEX0,                /* VERT_ATTRIB_TEX0 */
+      VBO_ATTRIB_TEX1,                /* VERT_ATTRIB_TEX1 */
+      VBO_ATTRIB_TEX2,                /* VERT_ATTRIB_TEX2 */
+      VBO_ATTRIB_TEX3,                /* VERT_ATTRIB_TEX3 */
+      VBO_ATTRIB_TEX4,                /* VERT_ATTRIB_TEX4 */
+      VBO_ATTRIB_TEX5,                /* VERT_ATTRIB_TEX5 */
+      VBO_ATTRIB_TEX6,                /* VERT_ATTRIB_TEX6 */
+      VBO_ATTRIB_TEX7,                /* VERT_ATTRIB_TEX7 */
+      VBO_ATTRIB_POINT_SIZE,          /* VERT_ATTRIB_POINT_SIZE */
+      VBO_ATTRIB_GENERIC0,            /* VERT_ATTRIB_GENERIC0 */
+      VBO_ATTRIB_GENERIC1,            /* VERT_ATTRIB_GENERIC1 */
+      VBO_ATTRIB_GENERIC2,            /* VERT_ATTRIB_GENERIC2 */
+      VBO_ATTRIB_GENERIC3,            /* VERT_ATTRIB_GENERIC3 */
+      VBO_ATTRIB_MAT_FRONT_AMBIENT,   /* VERT_ATTRIB_GENERIC4 */
+      VBO_ATTRIB_MAT_BACK_AMBIENT,    /* VERT_ATTRIB_GENERIC5 */
+      VBO_ATTRIB_MAT_FRONT_DIFFUSE,   /* VERT_ATTRIB_GENERIC6 */
+      VBO_ATTRIB_MAT_BACK_DIFFUSE,    /* VERT_ATTRIB_GENERIC7 */
+      VBO_ATTRIB_MAT_FRONT_SPECULAR,  /* VERT_ATTRIB_GENERIC8 */
+      VBO_ATTRIB_MAT_BACK_SPECULAR,   /* VERT_ATTRIB_GENERIC9 */
+      VBO_ATTRIB_MAT_FRONT_EMISSION,  /* VERT_ATTRIB_GENERIC10 */
+      VBO_ATTRIB_MAT_BACK_EMISSION,   /* VERT_ATTRIB_GENERIC11 */
+      VBO_ATTRIB_MAT_FRONT_SHININESS, /* VERT_ATTRIB_GENERIC12 */
+      VBO_ATTRIB_MAT_BACK_SHININESS,  /* VERT_ATTRIB_GENERIC13 */
+      VBO_ATTRIB_MAT_FRONT_INDEXES,   /* VERT_ATTRIB_GENERIC14 */
+      VBO_ATTRIB_MAT_BACK_INDEXES     /* VERT_ATTRIB_GENERIC15 */
+   },
+
+   /* VP_MODE_SHADER: */
+   {
+      VBO_ATTRIB_POS,                 /* VERT_ATTRIB_POS */
+      VBO_ATTRIB_NORMAL,              /* VERT_ATTRIB_NORMAL */
+      VBO_ATTRIB_COLOR0,              /* VERT_ATTRIB_COLOR0 */
+      VBO_ATTRIB_COLOR1,              /* VERT_ATTRIB_COLOR1 */
+      VBO_ATTRIB_FOG,                 /* VERT_ATTRIB_FOG */
+      VBO_ATTRIB_COLOR_INDEX,         /* VERT_ATTRIB_COLOR_INDEX */
+      VBO_ATTRIB_EDGEFLAG,            /* VERT_ATTRIB_EDGEFLAG */
+      VBO_ATTRIB_TEX0,                /* VERT_ATTRIB_TEX0 */
+      VBO_ATTRIB_TEX1,                /* VERT_ATTRIB_TEX1 */
+      VBO_ATTRIB_TEX2,                /* VERT_ATTRIB_TEX2 */
+      VBO_ATTRIB_TEX3,                /* VERT_ATTRIB_TEX3 */
+      VBO_ATTRIB_TEX4,                /* VERT_ATTRIB_TEX4 */
+      VBO_ATTRIB_TEX5,                /* VERT_ATTRIB_TEX5 */
+      VBO_ATTRIB_TEX6,                /* VERT_ATTRIB_TEX6 */
+      VBO_ATTRIB_TEX7,                /* VERT_ATTRIB_TEX7 */
+      VBO_ATTRIB_POINT_SIZE,          /* VERT_ATTRIB_POINT_SIZE */
+      VBO_ATTRIB_GENERIC0,            /* VERT_ATTRIB_GENERIC0 */
+      VBO_ATTRIB_GENERIC1,            /* VERT_ATTRIB_GENERIC1 */
+      VBO_ATTRIB_GENERIC2,            /* VERT_ATTRIB_GENERIC2 */
+      VBO_ATTRIB_GENERIC3,            /* VERT_ATTRIB_GENERIC3 */
+      VBO_ATTRIB_GENERIC4,            /* VERT_ATTRIB_GENERIC4 */
+      VBO_ATTRIB_GENERIC5,            /* VERT_ATTRIB_GENERIC5 */
+      VBO_ATTRIB_GENERIC6,            /* VERT_ATTRIB_GENERIC6 */
+      VBO_ATTRIB_GENERIC7,            /* VERT_ATTRIB_GENERIC7 */
+      VBO_ATTRIB_GENERIC8,            /* VERT_ATTRIB_GENERIC8 */
+      VBO_ATTRIB_GENERIC9,            /* VERT_ATTRIB_GENERIC9 */
+      VBO_ATTRIB_GENERIC10,           /* VERT_ATTRIB_GENERIC10 */
+      VBO_ATTRIB_GENERIC11,           /* VERT_ATTRIB_GENERIC11 */
+      VBO_ATTRIB_GENERIC12,           /* VERT_ATTRIB_GENERIC12 */
+      VBO_ATTRIB_GENERIC13,           /* VERT_ATTRIB_GENERIC13 */
+      VBO_ATTRIB_GENERIC14,           /* VERT_ATTRIB_GENERIC14 */
+      VBO_ATTRIB_GENERIC15            /* VERT_ATTRIB_GENERIC15 */
+   }
+};
 
 
 void
@@ -51,7 +126,6 @@ vbo_exec_init(struct gl_context *ctx)
    /* The aelt_context state should still be dirty from its creation */
    assert(_ae_is_state_dirty(ctx));
 
-   exec->array.recalculate_inputs = GL_TRUE;
    exec->eval.recalculate_maps = GL_TRUE;
 }
 
@@ -67,71 +141,6 @@ void vbo_exec_destroy( struct gl_context *ctx )
 
    vbo_exec_vtx_destroy( exec );
 }
-
-
-/**
- * Figure out the number of transform feedback primitives that will be output
- * considering the drawing mode, number of vertices, and instance count,
- * assuming that no geometry shading is done and primitive restart is not
- * used.
- *
- * This is used by driver back-ends in implementing the PRIMITIVES_GENERATED
- * and TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN queries.  It is also used to
- * pre-validate draw calls in GLES3 (where draw calls only succeed if there is
- * enough room in the transform feedback buffer for the result).
- */
-size_t
-vbo_count_tessellated_primitives(GLenum mode, GLuint count,
-                                 GLuint num_instances)
-{
-   size_t num_primitives;
-   switch (mode) {
-   case GL_POINTS:
-      num_primitives = count;
-      break;
-   case GL_LINE_STRIP:
-      num_primitives = count >= 2 ? count - 1 : 0;
-      break;
-   case GL_LINE_LOOP:
-      num_primitives = count >= 2 ? count : 0;
-      break;
-   case GL_LINES:
-      num_primitives = count / 2;
-      break;
-   case GL_TRIANGLE_STRIP:
-   case GL_TRIANGLE_FAN:
-   case GL_POLYGON:
-      num_primitives = count >= 3 ? count - 2 : 0;
-      break;
-   case GL_TRIANGLES:
-      num_primitives = count / 3;
-      break;
-   case GL_QUAD_STRIP:
-      num_primitives = count >= 4 ? ((count / 2) - 1) * 2 : 0;
-      break;
-   case GL_QUADS:
-      num_primitives = (count / 4) * 2;
-      break;
-   case GL_LINES_ADJACENCY:
-      num_primitives = count / 4;
-      break;
-   case GL_LINE_STRIP_ADJACENCY:
-      num_primitives = count >= 4 ? count - 3 : 0;
-      break;
-   case GL_TRIANGLES_ADJACENCY:
-      num_primitives = count / 6;
-      break;
-   case GL_TRIANGLE_STRIP_ADJACENCY:
-      num_primitives = count >= 6 ? (count - 4) / 2 : 0;
-      break;
-   default:
-      assert(!"Unexpected primitive type in count_tessellated_primitives");
-      num_primitives = 0;
-      break;
-   }
-   return num_primitives * num_instances;
-}
-
 
 
 /**
@@ -229,4 +238,90 @@ vbo_merge_prims(struct _mesa_prim *p0, const struct _mesa_prim *p1)
 
    p0->count += p1->count;
    p0->end = p1->end;
+}
+
+
+void
+_vbo_init_inputs(struct vbo_inputs *inputs)
+{
+   inputs->current = 0;
+   inputs->vertex_processing_mode = VP_MODE_FF;
+}
+
+
+/**
+ * Update the vbo_inputs's arrays to point to the vao->_VertexArray arrays
+ * according to the 'enable' bitmask.
+ * \param enable  bitfield of VERT_BIT_x flags.
+ */
+static inline void
+update_vao_inputs(struct gl_context *ctx,
+                  struct vbo_inputs *inputs, GLbitfield enable)
+{
+   const struct gl_vertex_array_object *vao = ctx->Array._DrawVAO;
+
+   /* Make sure we process only arrays enabled in the VAO */
+   assert((enable & ~_mesa_get_vao_vp_inputs(vao)) == 0);
+
+   /* Fill in the client arrays from the VAO */
+   const GLubyte *const map = _mesa_vao_attribute_map[vao->_AttributeMapMode];
+   const struct gl_array_attributes *attribs = &vao->VertexAttrib[0];
+   const struct gl_vertex_buffer_binding *bindings = &vao->BufferBinding[0];
+   while (enable) {
+      const int attr = u_bit_scan(&enable);
+      struct gl_vertex_array *input = &inputs->inputs[attr];
+      const struct gl_array_attributes *attrib = &attribs[map[attr]];
+      input->VertexAttrib = attrib;
+      input->BufferBinding = &bindings[attrib->BufferBindingIndex];
+   }
+}
+
+
+/**
+ * Update the vbo_inputs's arrays to point to the vbo->currval arrays
+ * according to the 'current' bitmask.
+ * \param current  bitfield of VERT_BIT_x flags.
+ */
+static inline void
+update_current_inputs(struct gl_context *ctx,
+                      struct vbo_inputs *inputs, GLbitfield current)
+{
+   gl_vertex_processing_mode mode = ctx->VertexProgram._VPMode;
+
+   /* All previously non current array pointers need update. */
+   GLbitfield mask = current & ~inputs->current;
+   /* On mode change, the slots aliasing with materials need update too */
+   if (mode != inputs->vertex_processing_mode)
+      mask |= current & VERT_BIT_MAT_ALL;
+
+   struct vbo_context *vbo = vbo_context(ctx);
+   const struct gl_array_attributes *const currval = &vbo->current[0];
+   const GLubyte *const map = _vbo_attribute_alias_map[mode];
+   while (mask) {
+      const int attr = u_bit_scan(&mask);
+      struct gl_vertex_array *input = &inputs->inputs[attr];
+      input->VertexAttrib = &currval[map[attr]];
+      input->BufferBinding = &vbo->binding;
+   }
+
+   inputs->current = current;
+   inputs->vertex_processing_mode = mode;
+}
+
+
+/**
+ * Update the vbo_inputs's arrays to point to the vao->_VertexArray and
+ * vbo->currval arrays according to Array._DrawVAO and
+ * Array._DrawVAOEnableAttribs.
+ */
+void
+_vbo_update_inputs(struct gl_context *ctx, struct vbo_inputs *inputs)
+{
+   const GLbitfield enable = ctx->Array._DrawVAOEnabledAttribs;
+
+   /* Update array input pointers */
+   update_vao_inputs(ctx, inputs, enable);
+
+   /* The rest must be current inputs. */
+   update_current_inputs(ctx, inputs, ~enable & VERT_BIT_ALL);
 }

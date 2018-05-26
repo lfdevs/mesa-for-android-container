@@ -379,12 +379,14 @@ driCreateContextAttribs(__DRIscreen *screen, int api,
 	}
     }
 
-    /* Mesa does not support the GL_ARB_compatibilty extension or the
-     * compatibility profile.  This means that we treat a API_OPENGL_COMPAT 3.1 as
-     * API_OPENGL_CORE and reject API_OPENGL_COMPAT 3.2+.
+    /* The specific Mesa driver may not support the GL_ARB_compatibilty
+     * extension or the compatibility profile.  In that case, we treat an
+     * API_OPENGL_COMPAT 3.1 as API_OPENGL_CORE. We reject API_OPENGL_COMPAT
+     * 3.2+ in any case.
      */
     if (mesa_api == API_OPENGL_COMPAT &&
-        ctx_config.major_version == 3 && ctx_config.minor_version == 1)
+        ctx_config.major_version == 3 && ctx_config.minor_version == 1 &&
+        screen->max_gl_compat_version < 31)
        mesa_api = API_OPENGL_CORE;
 
     if (mesa_api == API_OPENGL_COMPAT

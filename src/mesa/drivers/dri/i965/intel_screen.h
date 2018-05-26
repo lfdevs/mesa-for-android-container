@@ -34,7 +34,7 @@
 #include "isl/isl.h"
 #include "dri_util.h"
 #include "brw_bufmgr.h"
-#include "common/gen_device_info.h"
+#include "dev/gen_device_info.h"
 #include "i915_drm.h"
 #include "util/xmlconfig.h"
 
@@ -81,6 +81,7 @@ struct intel_screen
 #define KERNEL_ALLOWS_COMPUTE_DISPATCH              (1<<4)
 #define KERNEL_ALLOWS_EXEC_CAPTURE                  (1<<5)
 #define KERNEL_ALLOWS_EXEC_BATCH_FIRST              (1<<6)
+#define KERNEL_ALLOWS_CONTEXT_ISOLATION             (1<<7)
 
    struct brw_bufmgr *bufmgr;
 
@@ -117,6 +118,8 @@ struct intel_screen
    bool mesa_format_supports_texture[MESA_FORMAT_COUNT];
    bool mesa_format_supports_render[MESA_FORMAT_COUNT];
    enum isl_format mesa_to_isl_render_format[MESA_FORMAT_COUNT];
+
+   struct disk_cache *disk_cache;
 };
 
 extern void intelDestroyContext(__DRIcontext * driContextPriv);

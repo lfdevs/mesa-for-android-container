@@ -56,13 +56,6 @@ struct brw_bo {
     */
    uint64_t size;
 
-   /**
-    * Alignment requirement for object
-    *
-    * Used for GTT mapping & pinning the object.
-    */
-   uint64_t align;
-
    /** Buffer manager context associated with this buffer object */
    struct brw_bufmgr *bufmgr;
 
@@ -120,9 +113,6 @@ struct brw_bo {
    int refcount;
    const char *name;
 
-#ifndef EXEC_OBJECT_CAPTURE
-#define EXEC_OBJECT_CAPTURE            (1<<7)
-#endif
    uint64_t kflags;
 
    /**
@@ -178,7 +168,7 @@ struct brw_bo {
  * using brw_bo_map() to be used by the CPU.
  */
 struct brw_bo *brw_bo_alloc(struct brw_bufmgr *bufmgr, const char *name,
-                            uint64_t size, uint64_t alignment);
+                            uint64_t size);
 
 /**
  * Allocate a tiled buffer object.
@@ -255,7 +245,7 @@ MUST_CHECK void *brw_bo_map(struct brw_context *brw, struct brw_bo *bo, unsigned
  * Reduces the refcount on the userspace mapping of the buffer
  * object.
  */
-static inline int brw_bo_unmap(struct brw_bo *bo) { return 0; }
+static inline int brw_bo_unmap(UNUSED struct brw_bo *bo) { return 0; }
 
 /** Write data into an object. */
 int brw_bo_subdata(struct brw_bo *bo, uint64_t offset,
@@ -322,10 +312,6 @@ void brw_bufmgr_enable_reuse(struct brw_bufmgr *bufmgr);
 int brw_bo_wait(struct brw_bo *bo, int64_t timeout_ns);
 
 uint32_t brw_create_hw_context(struct brw_bufmgr *bufmgr);
-
-#define BRW_CONTEXT_LOW_PRIORITY ((I915_CONTEXT_MIN_USER_PRIORITY-1)/2)
-#define BRW_CONTEXT_MEDIUM_PRIORITY (I915_CONTEXT_DEFAULT_PRIORITY)
-#define BRW_CONTEXT_HIGH_PRIORITY ((I915_CONTEXT_MAX_USER_PRIORITY+1)/2)
 
 int brw_hw_context_set_priority(struct brw_bufmgr *bufmgr,
                                 uint32_t ctx_id,

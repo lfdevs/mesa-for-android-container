@@ -543,7 +543,6 @@ vc5_simulator_ioctl(int fd, unsigned long request, void *args)
                 return vc5_simulator_mmap_bo_ioctl(fd, args);
 
         case DRM_IOCTL_VC5_WAIT_BO:
-        case DRM_IOCTL_VC5_WAIT_SEQNO:
                 /* We do all of the vc5 rendering synchronously, so we just
                  * return immediately on the wait ioctls.  This ignores any
                  * native rendering to the host BO, so it does mean we race on

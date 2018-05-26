@@ -25,11 +25,7 @@
 
 nine_version = ['1', '0', '0']
 
-gallium_nine_c_args = [
-  '-DGALLIUM_DDEBUG',
-  '-DGALLIUM_RBUG',
-  '-DGALLIUME_TRACE',
-]
+gallium_nine_c_args = []
 gallium_nine_ld_args = []
 gallium_nine_link_depends = []
 
@@ -52,8 +48,8 @@ libgallium_nine = shared_library(
   link_args : [ld_args_gc_sections, gallium_nine_ld_args],
   link_depends : gallium_nine_link_depends,
   link_with : [
-    libgalliumvl_stub, libgallium, libnine_st, libmesa_util, libddebug,
-    librbug, libtrace, libpipe_loader_static, libws_null, libwsw, libswdri,
+    libgalliumvl_stub, libgallium, libnine_st, libmesa_util,
+    libpipe_loader_static, libws_null, libwsw, libswdri,
     libswkmsdri,
   ],
   dependencies : [
@@ -71,6 +67,6 @@ pkg.generate(
   name : 'd3d',
   description : 'Native D3D driver modules',
   version : '.'.join(nine_version),
-  requires_private : 'libdrm >= 2.4.75',
+  requires_private : 'libdrm >= ' + dep_libdrm.version(),
   variables : ['moduledir=${prefix}/@0@'.format(d3d_drivers_path)],
 )

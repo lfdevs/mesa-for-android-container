@@ -61,11 +61,15 @@
 #include "pipe/p_defines.h"
 #include "pipe/p_screen.h"
 #include "pipe/p_state.h"
+#include "state_tracker/st_api.h"
 
 #include "util/u_atomic.h"
 #include "util/u_inlines.h"
 
 #include "hud/hud_context.h"
+
+#include "main/errors.h"
+#include "main/imports.h"
 
 #include "xm_public.h"
 #include <GL/glx.h>

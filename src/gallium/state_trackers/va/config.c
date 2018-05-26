@@ -52,7 +52,7 @@ vlVaQueryConfigProfiles(VADriverContextP ctx, VAProfile *profile_list, int *num_
    *num_profiles = 0;
 
    pscreen = VL_VA_PSCREEN(ctx);
-   for (p = PIPE_VIDEO_PROFILE_MPEG2_SIMPLE; p <= PIPE_VIDEO_PROFILE_JPEG_BASELINE; ++p) {
+   for (p = PIPE_VIDEO_PROFILE_MPEG2_SIMPLE; p <= PIPE_VIDEO_PROFILE_VP9_PROFILE2; ++p) {
       if (u_reduce_video_profile(p) == PIPE_VIDEO_FORMAT_MPEG4 && !debug_get_option_mpeg4())
          continue;
 

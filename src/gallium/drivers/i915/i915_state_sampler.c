@@ -307,7 +307,8 @@ static void update_map(struct i915_context *i915,
    int first_level = view->u.tex.first_level;
    const uint num_levels = pt->last_level - first_level;
    unsigned max_lod = num_levels * 4;
-   bool is_npot = (!util_is_power_of_two(pt->width0) || !util_is_power_of_two(pt->height0)); 
+   bool is_npot = (!util_is_power_of_two_or_zero(pt->width0) ||
+                   !util_is_power_of_two_or_zero(pt->height0));
    uint format, pitch;
 
    /*

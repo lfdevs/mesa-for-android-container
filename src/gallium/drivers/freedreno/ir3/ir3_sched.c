@@ -136,18 +136,62 @@ deepest(struct ir3_instruction **srcs, unsigned nsrcs)
 	return d;
 }
 
+/**
+ * @block: the block to search in, starting from end; in first pass,
+ *    this will be the block the instruction would be inserted into
+ *    (but has not yet, ie. it only contains already scheduled
+ *    instructions).  For intra-block scheduling (second pass), this
+ *    would be one of the predecessor blocks.
+ * @instr: the instruction to search for
+ * @maxd:  max distance, bail after searching this # of instruction
+ *    slots, since it means the instruction we are looking for is
+ *    far enough away
+ * @pred:  if true, recursively search into predecessor blocks to
+ *    find the worst case (shortest) distance (only possible after
+ *    individual blocks are all scheduled
+ */
 static unsigned
-distance(struct ir3_sched_ctx *ctx, struct ir3_instruction *instr,
-		unsigned maxd)
+distance(struct ir3_block *block, struct ir3_instruction *instr,
+		unsigned maxd, bool pred)
 {
-	struct list_head *instr_list = &ctx->block->instr_list;
 	unsigned d = 0;
 
-	list_for_each_entry_rev (struct ir3_instruction, n, instr_list, node) {
+	list_for_each_entry_rev (struct ir3_instruction, n, &block->instr_list, node) {
 		if ((n == instr) || (d >= maxd))
-			break;
-		if (is_alu(n) || is_flow(n))
+			return d;
+		/* NOTE: don't count branch/jump since we don't know yet if they will
+		 * be eliminated later in resolve_jumps().. really should do that
+		 * earlier so we don't have this constraint.
+		 */
+		if (is_alu(n) || (is_flow(n) && (n->opc != OPC_JUMP) && (n->opc != OPC_BR)))
 			d++;
+	}
+
+	/* if coming from a predecessor block, assume it is assigned far
+	 * enough away.. we'll fix up later.
+	 */
+	if (!pred)
+		return maxd;
+
+	if (pred && (block->data != block)) {
+		/* Search into predecessor blocks, finding the one with the
+		 * shortest distance, since that will be the worst case
+		 */
+		unsigned min = maxd - d;
+
+		/* (ab)use block->data to prevent recursion: */
+		block->data = block;
+
+		for (unsigned i = 0; i < block->predecessors_count; i++) {
+			unsigned n;
+
+			n = distance(block->predecessors[i], instr, min, pred);
+
+			min = MIN2(min, n);
+		}
+
+		block->data = NULL;
+		d += min;
 	}
 
 	return d;
@@ -155,10 +199,10 @@ distance(struct ir3_sched_ctx *ctx, struct ir3_instruction *instr,
 
 /* calculate delay for specified src: */
 static unsigned
-delay_calc_srcn(struct ir3_sched_ctx *ctx,
+delay_calc_srcn(struct ir3_block *block,
 		struct ir3_instruction *assigner,
 		struct ir3_instruction *consumer,
-		unsigned srcn, bool soft)
+		unsigned srcn, bool soft, bool pred)
 {
 	unsigned delay = 0;
 
@@ -166,9 +210,7 @@ delay_calc_srcn(struct ir3_sched_ctx *ctx,
 		struct ir3_instruction *src;
 		foreach_ssa_src(src, assigner) {
 			unsigned d;
-			if (src->block != assigner->block)
-				break;
-			d = delay_calc_srcn(ctx, src, consumer, srcn, soft);
+			d = delay_calc_srcn(block, src, consumer, srcn, soft, pred);
 			delay = MAX2(delay, d);
 		}
 	} else {
@@ -181,7 +223,7 @@ delay_calc_srcn(struct ir3_sched_ctx *ctx,
 		} else {
 			delay = ir3_delayslots(assigner, consumer, srcn);
 		}
-		delay -= distance(ctx, assigner, delay);
+		delay -= distance(block, assigner, delay, pred);
 	}
 
 	return delay;
@@ -189,19 +231,15 @@ delay_calc_srcn(struct ir3_sched_ctx *ctx,
 
 /* calculate delay for instruction (maximum of delay for all srcs): */
 static unsigned
-delay_calc(struct ir3_sched_ctx *ctx, struct ir3_instruction *instr, bool soft)
+delay_calc(struct ir3_block *block, struct ir3_instruction *instr,
+		bool soft, bool pred)
 {
 	unsigned delay = 0;
 	struct ir3_instruction *src;
 
 	foreach_ssa_src_n(src, i, instr) {
 		unsigned d;
-		/* for array writes, no need to delay on previous write: */
-		if (i == 0)
-			continue;
-		if (src->block != instr->block)
-			continue;
-		d = delay_calc_srcn(ctx, src, instr, i, soft);
+		d = delay_calc_srcn(block, src, instr, i, soft, pred);
 		delay = MAX2(delay, d);
 	}
 
@@ -396,7 +434,7 @@ find_eligible_instr(struct ir3_sched_ctx *ctx, struct ir3_sched_notes *notes,
 		if (!candidate)
 			continue;
 
-		delay = delay_calc(ctx, candidate, soft);
+		delay = delay_calc(ctx->block, candidate, soft, false);
 		if (delay < min_delay) {
 			best_instr = candidate;
 			min_delay = delay;
@@ -516,12 +554,12 @@ sched_block(struct ir3_sched_ctx *ctx, struct ir3_block *block)
 	list_inithead(&block->instr_list);
 	list_inithead(&ctx->depth_list);
 
-	/* first a pre-pass to schedule all meta:input/phi instructions
+	/* first a pre-pass to schedule all meta:input instructions
 	 * (which need to appear first so that RA knows the register is
 	 * occupied), and move remaining to depth sorted list:
 	 */
 	list_for_each_entry_safe (struct ir3_instruction, instr, &unscheduled_list, node) {
-		if ((instr->opc == OPC_META_INPUT) || (instr->opc == OPC_META_PHI)) {
+		if (instr->opc == OPC_META_INPUT) {
 			schedule(ctx, instr);
 		} else {
 			ir3_insert_by_depth(instr, &ctx->depth_list);
@@ -537,7 +575,7 @@ sched_block(struct ir3_sched_ctx *ctx, struct ir3_block *block)
 			instr = find_eligible_instr(ctx, &notes, false);
 
 		if (instr) {
-			unsigned delay = delay_calc(ctx, instr, false);
+			unsigned delay = delay_calc(ctx->block, instr, false, false);
 
 			/* and if we run out of instructions that can be scheduled,
 			 * then it is time for nop's:
@@ -594,7 +632,7 @@ sched_block(struct ir3_sched_ctx *ctx, struct ir3_block *block)
 		debug_assert(ctx->pred);
 		debug_assert(block->condition);
 
-		delay -= distance(ctx, ctx->pred, delay);
+		delay -= distance(ctx->block, ctx->pred, delay, false);
 
 		while (delay > 0) {
 			ir3_NOP(block);
@@ -633,50 +671,58 @@ sched_block(struct ir3_sched_ctx *ctx, struct ir3_block *block)
 	 */
 }
 
-/* this is needed to ensure later RA stage succeeds: */
+/* After scheduling individual blocks, we still could have cases where
+ * one (or more) paths into a block, a value produced by a previous
+ * has too few delay slots to be legal.  We can't deal with this in the
+ * first pass, because loops (ie. we can't ensure all predecessor blocks
+ * are already scheduled in the first pass).  All we can really do at
+ * this point is stuff in extra nop's until things are legal.
+ */
 static void
-sched_insert_parallel_copies(struct ir3_block *block)
+sched_intra_block(struct ir3_sched_ctx *ctx, struct ir3_block *block)
 {
-	list_for_each_entry (struct ir3_instruction, instr, &block->instr_list, node) {
-		if (instr->opc == OPC_META_PHI) {
-			struct ir3_register *reg, *reg2;
-			foreach_src(reg, instr) {
-				struct ir3_instruction *src = reg->instr;
-				struct ir3_instruction *mov = NULL;
+	unsigned n = 0;
 
-				/* after CP we could end up w/ duplicate phi srcs: */
-				foreach_src(reg2, instr) {
-					if (reg == reg2)
-						break;
-					/* reg2 is before reg1 so already an inserted mov: */
-					else if (reg2->instr->regs[1]->instr == src) {
-						mov = reg2->instr;
-						break;
-					}
-				}
+	ctx->block = block;
 
-				if (!mov) {
-					mov = ir3_MOV(src->block, src, TYPE_U32);
-					mov->regs[0]->flags |= IR3_REG_PHI_SRC;
-					mov->regs[0]->instr = instr;
-				}
+	list_for_each_entry_safe (struct ir3_instruction, instr, &block->instr_list, node) {
+		unsigned delay = 0;
 
-				reg->instr = mov;
-			}
+		for (unsigned i = 0; i < block->predecessors_count; i++) {
+			unsigned d = delay_calc(block->predecessors[i], instr, false, true);
+			delay = MAX2(d, delay);
 		}
+
+		while (delay > n) {
+			struct ir3_instruction *nop = ir3_NOP(block);
+
+			/* move to before instr: */
+			list_delinit(&nop->node);
+			list_addtail(&nop->node, &instr->node);
+
+			n++;
+		}
+
+		/* we can bail once we hit worst case delay: */
+		if (++n > 6)
+			break;
 	}
 }
 
 int ir3_sched(struct ir3 *ir)
 {
 	struct ir3_sched_ctx ctx = {0};
-	list_for_each_entry (struct ir3_block, block, &ir->block_list, node) {
-		sched_insert_parallel_copies(block);
-	}
+
 	ir3_clear_mark(ir);
+
 	list_for_each_entry (struct ir3_block, block, &ir->block_list, node) {
 		sched_block(&ctx, block);
 	}
+
+	list_for_each_entry (struct ir3_block, block, &ir->block_list, node) {
+		sched_intra_block(&ctx, block);
+	}
+
 	if (ctx.error)
 		return -1;
 	return 0;

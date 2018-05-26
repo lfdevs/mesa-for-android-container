@@ -134,7 +134,7 @@ struct tgsi_image {
 
    void (*op)(const struct tgsi_image *image,
               const struct tgsi_image_params *params,
-              unsigned opcode,
+              enum tgsi_opcode opcode,
               const int s[TGSI_QUAD_SIZE],
               const int t[TGSI_QUAD_SIZE],
               const int r[TGSI_QUAD_SIZE],
@@ -167,7 +167,7 @@ struct tgsi_buffer {
 
    void (*op)(const struct tgsi_buffer *buffer,
               const struct tgsi_buffer_params *params,
-              unsigned opcode,
+              enum tgsi_opcode opcode,
               const int s[TGSI_QUAD_SIZE],
               float rgba[TGSI_NUM_CHANNELS][TGSI_QUAD_SIZE],
               float rgba2[TGSI_NUM_CHANNELS][TGSI_QUAD_SIZE]);

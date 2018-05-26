@@ -973,7 +973,7 @@ draw_set_sampler_views(struct draw_context *draw,
 
    for (i = 0; i < num; ++i)
       draw->sampler_views[shader_stage][i] = views[i];
-   for (i = num; i < PIPE_MAX_SHADER_SAMPLER_VIEWS; ++i)
+   for (i = num; i < draw->num_sampler_views[shader_stage]; ++i)
       draw->sampler_views[shader_stage][i] = NULL;
 
    draw->num_sampler_views[shader_stage] = num;

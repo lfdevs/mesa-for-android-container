@@ -26,6 +26,7 @@
 
 #include "util/macros.h"
 #include "main/macros.h"
+#include "compiler/shader_enums.h"
 
 #include "gen_l3_config.h"
 

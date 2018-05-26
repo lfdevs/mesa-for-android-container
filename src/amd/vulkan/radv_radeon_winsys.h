@@ -29,6 +29,7 @@
 #ifndef RADV_RADEON_WINSYS_H
 #define RADV_RADEON_WINSYS_H
 
+#include <stdio.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -177,6 +178,11 @@ struct radv_winsys_sem_info {
 	struct radv_winsys_sem_counts signal;
 };
 
+struct radv_winsys_bo_list {
+	struct radeon_winsys_bo **bos;
+	unsigned count;
+};
+
 struct radeon_winsys {
 	void (*destroy)(struct radeon_winsys *ws);
 
@@ -199,6 +205,10 @@ struct radeon_winsys {
 
 	void (*buffer_destroy)(struct radeon_winsys_bo *bo);
 	void *(*buffer_map)(struct radeon_winsys_bo *bo);
+
+	struct radeon_winsys_bo *(*buffer_from_ptr)(struct radeon_winsys *ws,
+						    void *pointer,
+						    uint64_t size);
 
 	struct radeon_winsys_bo *(*buffer_from_fd)(struct radeon_winsys *ws,
 						   int fd,
@@ -241,6 +251,7 @@ struct radeon_winsys {
 			 struct radeon_winsys_cs *initial_preamble_cs,
 			 struct radeon_winsys_cs *continue_preamble_cs,
 			 struct radv_winsys_sem_info *sem_info,
+			 const struct radv_winsys_bo_list *bo_list, /* optional */
 			 bool can_patch,
 			 struct radeon_winsys_fence *fence);
 
@@ -266,6 +277,11 @@ struct radeon_winsys {
 			   struct radeon_winsys_fence *fence,
 			   bool absolute,
 			   uint64_t timeout);
+	bool (*fences_wait)(struct radeon_winsys *ws,
+			    struct radeon_winsys_fence *const *fences,
+			    uint32_t fence_count,
+			    bool wait_all,
+			    uint64_t timeout);
 
 	/* old semaphores - non shareable */
 	struct radeon_winsys_sem *(*create_sem)(struct radeon_winsys *ws);
@@ -277,7 +293,8 @@ struct radeon_winsys {
 
 	void (*reset_syncobj)(struct radeon_winsys *ws, uint32_t handle);
 	void (*signal_syncobj)(struct radeon_winsys *ws, uint32_t handle);
-	bool (*wait_syncobj)(struct radeon_winsys *ws, uint32_t handle, uint64_t timeout);
+	bool (*wait_syncobj)(struct radeon_winsys *ws, const uint32_t *handles, uint32_t handle_count,
+			     bool wait_all, uint64_t timeout);
 
 	int (*export_syncobj)(struct radeon_winsys *ws, uint32_t syncobj, int *fd);
 	int (*import_syncobj)(struct radeon_winsys *ws, int fd, uint32_t *syncobj);

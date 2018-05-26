@@ -297,6 +297,8 @@ vtn_ssa_offset_pointer_dereference(struct vtn_builder *b,
       case GLSL_TYPE_INT:
       case GLSL_TYPE_UINT16:
       case GLSL_TYPE_INT16:
+      case GLSL_TYPE_UINT8:
+      case GLSL_TYPE_INT8:
       case GLSL_TYPE_UINT64:
       case GLSL_TYPE_INT64:
       case GLSL_TYPE_FLOAT:
@@ -413,6 +415,8 @@ vtn_pointer_to_deref(struct vtn_builder *b, struct vtn_pointer *ptr)
       case GLSL_TYPE_INT:
       case GLSL_TYPE_UINT16:
       case GLSL_TYPE_INT16:
+      case GLSL_TYPE_UINT8:
+      case GLSL_TYPE_INT8:
       case GLSL_TYPE_UINT64:
       case GLSL_TYPE_INT64:
       case GLSL_TYPE_FLOAT:
@@ -624,6 +628,8 @@ vtn_pointer_to_offset(struct vtn_builder *b, struct vtn_pointer *ptr,
          case GLSL_TYPE_INT:
          case GLSL_TYPE_UINT16:
          case GLSL_TYPE_INT16:
+         case GLSL_TYPE_UINT8:
+         case GLSL_TYPE_INT8:
          case GLSL_TYPE_UINT64:
          case GLSL_TYPE_INT64:
          case GLSL_TYPE_FLOAT:
@@ -672,6 +678,8 @@ vtn_type_block_size(struct vtn_builder *b, struct vtn_type *type)
    case GLSL_TYPE_INT:
    case GLSL_TYPE_UINT16:
    case GLSL_TYPE_INT16:
+   case GLSL_TYPE_UINT8:
+   case GLSL_TYPE_INT8:
    case GLSL_TYPE_UINT64:
    case GLSL_TYPE_INT64:
    case GLSL_TYPE_FLOAT:
@@ -683,12 +691,9 @@ vtn_type_block_size(struct vtn_builder *b, struct vtn_type *type)
       if (cols > 1) {
          vtn_assert(type->stride > 0);
          return type->stride * cols;
-      } else if (base_type == GLSL_TYPE_DOUBLE ||
-		 base_type == GLSL_TYPE_UINT64 ||
-		 base_type == GLSL_TYPE_INT64) {
-         return glsl_get_vector_elements(type->type) * 8;
       } else {
-         return glsl_get_vector_elements(type->type) * 4;
+         unsigned type_size = glsl_get_bit_size(type->type) / 8;
+         return glsl_get_vector_elements(type->type) * type_size;
       }
    }
 
@@ -756,8 +761,6 @@ _vtn_load_store_tail(struct vtn_builder *b, nir_intrinsic_op op, bool load,
    }
 
    if (op == nir_intrinsic_load_push_constant) {
-      vtn_assert(access_offset % 4 == 0);
-
       nir_intrinsic_set_base(instr, access_offset);
       nir_intrinsic_set_range(instr, access_size);
    }
@@ -807,6 +810,8 @@ _vtn_block_load_store(struct vtn_builder *b, nir_intrinsic_op op, bool load,
    case GLSL_TYPE_INT:
    case GLSL_TYPE_UINT16:
    case GLSL_TYPE_INT16:
+   case GLSL_TYPE_UINT8:
+   case GLSL_TYPE_INT8:
    case GLSL_TYPE_UINT64:
    case GLSL_TYPE_INT64:
    case GLSL_TYPE_FLOAT:
@@ -992,6 +997,8 @@ _vtn_variable_load_store(struct vtn_builder *b, bool load,
    case GLSL_TYPE_INT:
    case GLSL_TYPE_UINT16:
    case GLSL_TYPE_INT16:
+   case GLSL_TYPE_UINT8:
+   case GLSL_TYPE_INT8:
    case GLSL_TYPE_UINT64:
    case GLSL_TYPE_INT64:
    case GLSL_TYPE_FLOAT:
@@ -1076,6 +1083,8 @@ _vtn_variable_copy(struct vtn_builder *b, struct vtn_pointer *dest,
    case GLSL_TYPE_INT:
    case GLSL_TYPE_UINT16:
    case GLSL_TYPE_INT16:
+   case GLSL_TYPE_UINT8:
+   case GLSL_TYPE_INT8:
    case GLSL_TYPE_UINT64:
    case GLSL_TYPE_INT64:
    case GLSL_TYPE_FLOAT:
@@ -1192,12 +1201,20 @@ vtn_get_builtin_location(struct vtn_builder *b,
          *mode = nir_var_shader_in;
       else if (b->shader->info.stage == MESA_SHADER_GEOMETRY)
          *mode = nir_var_shader_out;
+      else if (b->options && b->options->caps.shader_viewport_index_layer &&
+               (b->shader->info.stage == MESA_SHADER_VERTEX ||
+                b->shader->info.stage == MESA_SHADER_TESS_EVAL))
+         *mode = nir_var_shader_out;
       else
          vtn_fail("invalid stage for SpvBuiltInLayer");
       break;
    case SpvBuiltInViewportIndex:
       *location = VARYING_SLOT_VIEWPORT;
       if (b->shader->info.stage == MESA_SHADER_GEOMETRY)
+         *mode = nir_var_shader_out;
+      else if (b->options && b->options->caps.shader_viewport_index_layer &&
+               (b->shader->info.stage == MESA_SHADER_VERTEX ||
+                b->shader->info.stage == MESA_SHADER_TESS_EVAL))
          *mode = nir_var_shader_out;
       else if (b->shader->info.stage == MESA_SHADER_FRAGMENT)
          *mode = nir_var_shader_in;
@@ -1259,8 +1276,8 @@ vtn_get_builtin_location(struct vtn_builder *b,
       set_mode_system_value(b, mode);
       break;
    case SpvBuiltInWorkgroupSize:
-      /* This should already be handled */
-      vtn_fail("unsupported builtin");
+      *location = SYSTEM_VALUE_LOCAL_GROUP_SIZE;
+      set_mode_system_value(b, mode);
       break;
    case SpvBuiltInWorkgroupId:
       *location = SYSTEM_VALUE_WORK_GROUP_ID;
@@ -1279,7 +1296,10 @@ vtn_get_builtin_location(struct vtn_builder *b,
       set_mode_system_value(b, mode);
       break;
    case SpvBuiltInBaseVertex:
-      *location = SYSTEM_VALUE_BASE_VERTEX;
+      /* OpenGL gl_BaseVertex (SYSTEM_VALUE_BASE_VERTEX) is not the same
+       * semantic as SPIR-V BaseVertex (SYSTEM_VALUE_FIRST_VERTEX).
+       */
+      *location = SYSTEM_VALUE_FIRST_VERTEX;
       set_mode_system_value(b, mode);
       break;
    case SpvBuiltInBaseInstance:
@@ -1290,8 +1310,48 @@ vtn_get_builtin_location(struct vtn_builder *b,
       *location = SYSTEM_VALUE_DRAW_ID;
       set_mode_system_value(b, mode);
       break;
+   case SpvBuiltInSubgroupSize:
+      *location = SYSTEM_VALUE_SUBGROUP_SIZE;
+      set_mode_system_value(b, mode);
+      break;
+   case SpvBuiltInSubgroupId:
+      *location = SYSTEM_VALUE_SUBGROUP_ID;
+      set_mode_system_value(b, mode);
+      break;
+   case SpvBuiltInSubgroupLocalInvocationId:
+      *location = SYSTEM_VALUE_SUBGROUP_INVOCATION;
+      set_mode_system_value(b, mode);
+      break;
+   case SpvBuiltInNumSubgroups:
+      *location = SYSTEM_VALUE_NUM_SUBGROUPS;
+      set_mode_system_value(b, mode);
+      break;
+   case SpvBuiltInDeviceIndex:
+      *location = SYSTEM_VALUE_DEVICE_INDEX;
+      set_mode_system_value(b, mode);
+      break;
    case SpvBuiltInViewIndex:
       *location = SYSTEM_VALUE_VIEW_INDEX;
+      set_mode_system_value(b, mode);
+      break;
+   case SpvBuiltInSubgroupEqMask:
+      *location = SYSTEM_VALUE_SUBGROUP_EQ_MASK,
+      set_mode_system_value(b, mode);
+      break;
+   case SpvBuiltInSubgroupGeMask:
+      *location = SYSTEM_VALUE_SUBGROUP_GE_MASK,
+      set_mode_system_value(b, mode);
+      break;
+   case SpvBuiltInSubgroupGtMask:
+      *location = SYSTEM_VALUE_SUBGROUP_GT_MASK,
+      set_mode_system_value(b, mode);
+      break;
+   case SpvBuiltInSubgroupLeMask:
+      *location = SYSTEM_VALUE_SUBGROUP_LE_MASK,
+      set_mode_system_value(b, mode);
+      break;
+   case SpvBuiltInSubgroupLtMask:
+      *location = SYSTEM_VALUE_SUBGROUP_LT_MASK,
       set_mode_system_value(b, mode);
       break;
    default:
@@ -1332,6 +1392,15 @@ apply_var_decoration(struct vtn_builder *b, nir_variable *nir_var,
       nir_var->data.read_only = true;
       nir_var->data.image.read_only = true;
       break;
+   case SpvDecorationRestrict:
+      nir_var->data.image.restrict_flag = true;
+      break;
+   case SpvDecorationVolatile:
+      nir_var->data.image._volatile = true;
+      break;
+   case SpvDecorationCoherent:
+      nir_var->data.image.coherent = true;
+      break;
    case SpvDecorationComponent:
       nir_var->data.location_frac = dec->literals[0];
       break;
@@ -1340,19 +1409,6 @@ apply_var_decoration(struct vtn_builder *b, nir_variable *nir_var,
       break;
    case SpvDecorationBuiltIn: {
       SpvBuiltIn builtin = dec->literals[0];
-
-      if (builtin == SpvBuiltInWorkgroupSize) {
-         /* This shouldn't be a builtin.  It's actually a constant. */
-         nir_var->data.mode = nir_var_global;
-         nir_var->data.read_only = true;
-
-         nir_constant *c = rzalloc(nir_var, nir_constant);
-         c->values[0].u32[0] = b->shader->info.cs.local_size[0];
-         c->values[0].u32[1] = b->shader->info.cs.local_size[1];
-         c->values[0].u32[2] = b->shader->info.cs.local_size[2];
-         nir_var->constant_initializer = c;
-         break;
-      }
 
       nir_variable_mode mode = nir_var->data.mode;
       vtn_get_builtin_location(b, builtin, &nir_var->data.location, &mode);
@@ -1378,10 +1434,7 @@ apply_var_decoration(struct vtn_builder *b, nir_variable *nir_var,
    case SpvDecorationRowMajor:
    case SpvDecorationColMajor:
    case SpvDecorationMatrixStride:
-   case SpvDecorationRestrict:
    case SpvDecorationAliased:
-   case SpvDecorationVolatile:
-   case SpvDecorationCoherent:
    case SpvDecorationUniform:
    case SpvDecorationStream:
    case SpvDecorationOffset:
@@ -1837,7 +1890,15 @@ vtn_create_variable(struct vtn_builder *b, struct vtn_value *val,
                interface_type->members[i]->type;
             var->members[i]->data.mode = nir_mode;
             var->members[i]->data.patch = var->patch;
+
+            if (initializer) {
+               assert(i < initializer->num_elements);
+               var->members[i]->constant_initializer =
+                  nir_constant_clone(initializer->elements[i], var->members[i]);
+            }
          }
+
+         initializer = NULL;
       } else {
          var->var = rzalloc(b->shader, nir_variable);
          var->var->name = ralloc_strdup(var->var, val->name);

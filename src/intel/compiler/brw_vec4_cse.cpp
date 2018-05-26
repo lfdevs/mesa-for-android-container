@@ -104,6 +104,25 @@ operands_match(const vec4_instruction *a, const vec4_instruction *b)
       return xs[0].equals(ys[0]) &&
              ((xs[1].equals(ys[1]) && xs[2].equals(ys[2])) ||
               (xs[2].equals(ys[1]) && xs[1].equals(ys[2])));
+   } else if (a->opcode == BRW_OPCODE_MOV &&
+              xs[0].file == IMM &&
+              xs[0].type == BRW_REGISTER_TYPE_VF) {
+      src_reg tmp_x = xs[0];
+      src_reg tmp_y = ys[0];
+
+      /* Smash out the values that are not part of the writemask.  Otherwise
+       * the equals operator will fail due to mismatches in unused components.
+       */
+      const unsigned ab_writemask = a->dst.writemask & b->dst.writemask;
+      const uint32_t mask = ((ab_writemask & WRITEMASK_X) ? 0x000000ff : 0) |
+                            ((ab_writemask & WRITEMASK_Y) ? 0x0000ff00 : 0) |
+                            ((ab_writemask & WRITEMASK_Z) ? 0x00ff0000 : 0) |
+                            ((ab_writemask & WRITEMASK_W) ? 0xff000000 : 0);
+
+      tmp_x.ud &= mask;
+      tmp_y.ud &= mask;
+
+      return tmp_x.equals(tmp_y);
    } else if (!a->is_commutative()) {
       return xs[0].equals(ys[0]) && xs[1].equals(ys[1]) && xs[2].equals(ys[2]);
    } else {
@@ -112,6 +131,14 @@ operands_match(const vec4_instruction *a, const vec4_instruction *b)
    }
 }
 
+/**
+ * Checks if instructions match, exactly for sources, but loosely for
+ * destination writemasks.
+ *
+ * \param 'a' is the generating expression from the AEB entry.
+ * \param 'b' is the second occurrence of the expression that we're
+ *        considering eliminating.
+ */
 static bool
 instructions_match(vec4_instruction *a, vec4_instruction *b)
 {
@@ -127,7 +154,7 @@ instructions_match(vec4_instruction *a, vec4_instruction *b)
           a->base_mrf == b->base_mrf &&
           a->header_size == b->header_size &&
           a->shadow_compare == b->shadow_compare &&
-          a->dst.writemask == b->dst.writemask &&
+          ((a->dst.writemask & b->dst.writemask) == a->dst.writemask) &&
           a->force_writemask_all == b->force_writemask_all &&
           a->size_written == b->size_written &&
           a->exec_size == b->exec_size &&

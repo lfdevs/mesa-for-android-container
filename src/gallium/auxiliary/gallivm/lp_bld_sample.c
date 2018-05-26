@@ -114,9 +114,9 @@ lp_sampler_static_texture_state(struct lp_static_texture_state *state,
    state->swizzle_a         = view->swizzle_a;
 
    state->target            = view->target;
-   state->pot_width         = util_is_power_of_two(texture->width0);
-   state->pot_height        = util_is_power_of_two(texture->height0);
-   state->pot_depth         = util_is_power_of_two(texture->depth0);
+   state->pot_width         = util_is_power_of_two_or_zero(texture->width0);
+   state->pot_height        = util_is_power_of_two_or_zero(texture->height0);
+   state->pot_depth         = util_is_power_of_two_or_zero(texture->depth0);
    state->level_zero_only   = !view->u.tex.last_level;
 
    /*
@@ -275,7 +275,7 @@ lp_build_rho(struct lp_build_sample_context *bld,
       rho = lp_build_mul(rho_bld, cubesize, rho);
    }
    else if (derivs) {
-      LLVMValueRef ddmax[3], ddx[3], ddy[3];
+      LLVMValueRef ddmax[3] = { NULL }, ddx[3] = { NULL }, ddy[3] = { NULL };
       for (i = 0; i < dims; i++) {
          LLVMValueRef floatdim;
          LLVMValueRef indexi = lp_build_const_int32(gallivm, i);

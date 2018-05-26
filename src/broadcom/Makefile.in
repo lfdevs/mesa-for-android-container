@@ -234,6 +234,14 @@ libbroadcom_v41_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
 	$(libbroadcom_v41_la_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) \
 	$(LDFLAGS) -o $@
+libbroadcom_v42_la_LIBADD =
+am__objects_5 = clif/libbroadcom_v42_la-v3dx_dump.lo
+am_libbroadcom_v42_la_OBJECTS = $(am__objects_5)
+libbroadcom_v42_la_OBJECTS = $(am_libbroadcom_v42_la_OBJECTS)
+libbroadcom_v42_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
+	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
+	$(libbroadcom_v42_la_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) \
+	$(LDFLAGS) -o $@
 PROGRAMS = $(noinst_PROGRAMS)
 qpu_tests_qpu_disasm_SOURCES = qpu/tests/qpu_disasm.c
 qpu_tests_qpu_disasm_OBJECTS = qpu/tests/qpu_disasm.$(OBJEXT)
@@ -277,10 +285,11 @@ am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
 SOURCES = $(cle_libbroadcom_cle_la_SOURCES) $(libbroadcom_la_SOURCES) \
 	$(libbroadcom_v33_la_SOURCES) $(libbroadcom_v41_la_SOURCES) \
-	qpu/tests/qpu_disasm.c
+	$(libbroadcom_v42_la_SOURCES) qpu/tests/qpu_disasm.c
 DIST_SOURCES = $(cle_libbroadcom_cle_la_SOURCES) \
 	$(libbroadcom_la_SOURCES) $(libbroadcom_v33_la_SOURCES) \
-	$(libbroadcom_v41_la_SOURCES) qpu/tests/qpu_disasm.c
+	$(libbroadcom_v41_la_SOURCES) $(libbroadcom_v42_la_SOURCES) \
+	qpu/tests/qpu_disasm.c
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -632,6 +641,9 @@ OBJEXT = @OBJEXT@
 OMX_BELLAGIO_CFLAGS = @OMX_BELLAGIO_CFLAGS@
 OMX_BELLAGIO_LIBS = @OMX_BELLAGIO_LIBS@
 OMX_BELLAGIO_LIB_INSTALL_DIR = @OMX_BELLAGIO_LIB_INSTALL_DIR@
+OMX_TIZONIA_CFLAGS = @OMX_TIZONIA_CFLAGS@
+OMX_TIZONIA_LIBS = @OMX_TIZONIA_LIBS@
+OMX_TIZONIA_LIB_INSTALL_DIR = @OMX_TIZONIA_LIB_INSTALL_DIR@
 OPENCL_LIBNAME = @OPENCL_LIBNAME@
 OPENCL_VERSION = @OPENCL_VERSION@
 OSMESA_LIB = @OSMESA_LIB@
@@ -699,7 +711,9 @@ VL_LIBS = @VL_LIBS@
 VULKAN_ICD_INSTALL_DIR = @VULKAN_ICD_INSTALL_DIR@
 WAYLAND_CLIENT_CFLAGS = @WAYLAND_CLIENT_CFLAGS@
 WAYLAND_CLIENT_LIBS = @WAYLAND_CLIENT_LIBS@
+WAYLAND_PROTOCOLS_CFLAGS = @WAYLAND_PROTOCOLS_CFLAGS@
 WAYLAND_PROTOCOLS_DATADIR = @WAYLAND_PROTOCOLS_DATADIR@
+WAYLAND_PROTOCOLS_LIBS = @WAYLAND_PROTOCOLS_LIBS@
 WAYLAND_SCANNER = @WAYLAND_SCANNER@
 WAYLAND_SCANNER_CFLAGS = @WAYLAND_SCANNER_CFLAGS@
 WAYLAND_SCANNER_LIBS = @WAYLAND_SCANNER_LIBS@
@@ -715,6 +729,8 @@ XCB_DRI2_CFLAGS = @XCB_DRI2_CFLAGS@
 XCB_DRI2_LIBS = @XCB_DRI2_LIBS@
 XCB_DRI3_CFLAGS = @XCB_DRI3_CFLAGS@
 XCB_DRI3_LIBS = @XCB_DRI3_LIBS@
+XCB_DRI3_MODIFIERS_CFLAGS = @XCB_DRI3_MODIFIERS_CFLAGS@
+XCB_DRI3_MODIFIERS_LIBS = @XCB_DRI3_MODIFIERS_LIBS@
 XF86VIDMODE_CFLAGS = @XF86VIDMODE_CFLAGS@
 XF86VIDMODE_LIBS = @XF86VIDMODE_LIBS@
 XLIBGL_CFLAGS = @XLIBGL_CFLAGS@
@@ -776,7 +792,6 @@ pdfdir = @pdfdir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
-runstatedir = @runstatedir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
@@ -793,7 +808,9 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/include \
 	-I$(top_builddir)/src \
 	-I$(top_srcdir)/src \
+	-I$(top_builddir)/src/compiler/nir \
 	-I$(top_srcdir)/src/broadcom/ \
+	-I$(top_srcdir)/src/broadcom/cle \
 	-I$(top_srcdir)/src/broadcom/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
 	-I$(top_srcdir)/src/gallium/include \
@@ -805,6 +822,7 @@ BROADCOM_GENXML_GENERATED_FILES = \
 	cle/v3d_packet_v21_pack.h \
 	cle/v3d_packet_v33_pack.h \
 	cle/v3d_packet_v41_pack.h \
+	cle/v3d_packet_v42_pack.h \
 	cle/v3d_xml.h \
 	$()
 
@@ -812,6 +830,7 @@ BROADCOM_GENXML_XML_FILES = \
 	cle/v3d_packet_v21.xml \
 	cle/v3d_packet_v33.xml \
 	cle/v3d_packet_v41.xml \
+	cle/v3d_packet_v42.xml \
 	$()
 
 BROADCOM_FILES = \
@@ -862,7 +881,7 @@ check_LTLIBRARIES =
 noinst_DATA = 
 noinst_HEADERS = 
 noinst_LTLIBRARIES = cle/libbroadcom_cle.la libbroadcom.la \
-	libbroadcom_v33.la libbroadcom_v41.la
+	libbroadcom_v33.la libbroadcom_v41.la libbroadcom_v42.la
 TESTS = $(check_PROGRAMS)
 BUILT_SOURCES = $(BROADCOM_GENXML_GENERATED_FILES)
 CLEANFILES = $(BUILT_SOURCES)
@@ -884,6 +903,8 @@ libbroadcom_v33_la_SOURCES = $(BROADCOM_PER_VERSION_SOURCES)
 libbroadcom_v33_la_CFLAGS = -DV3D_VERSION=33
 libbroadcom_v41_la_SOURCES = $(BROADCOM_PER_VERSION_SOURCES)
 libbroadcom_v41_la_CFLAGS = -DV3D_VERSION=41
+libbroadcom_v42_la_SOURCES = $(BROADCOM_PER_VERSION_SOURCES)
+libbroadcom_v42_la_CFLAGS = -DV3D_VERSION=42
 libbroadcom_la_SOURCES = $(BROADCOM_FILES)
 LDADD = \
 	libbroadcom.la \
@@ -1069,6 +1090,11 @@ clif/libbroadcom_v41_la-v3dx_dump.lo: clif/$(am__dirstamp) \
 
 libbroadcom_v41.la: $(libbroadcom_v41_la_OBJECTS) $(libbroadcom_v41_la_DEPENDENCIES) $(EXTRA_libbroadcom_v41_la_DEPENDENCIES) 
 	$(AM_V_CCLD)$(libbroadcom_v41_la_LINK)  $(libbroadcom_v41_la_OBJECTS) $(libbroadcom_v41_la_LIBADD) $(LIBS)
+clif/libbroadcom_v42_la-v3dx_dump.lo: clif/$(am__dirstamp) \
+	clif/$(DEPDIR)/$(am__dirstamp)
+
+libbroadcom_v42.la: $(libbroadcom_v42_la_OBJECTS) $(libbroadcom_v42_la_DEPENDENCIES) $(EXTRA_libbroadcom_v42_la_DEPENDENCIES) 
+	$(AM_V_CCLD)$(libbroadcom_v42_la_LINK)  $(libbroadcom_v42_la_OBJECTS) $(libbroadcom_v42_la_LIBADD) $(LIBS)
 
 clean-checkPROGRAMS:
 	@list='$(check_PROGRAMS)'; test -n "$$list" || exit 0; \
@@ -1121,6 +1147,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@clif/$(DEPDIR)/clif_dump.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@clif/$(DEPDIR)/libbroadcom_v33_la-v3dx_dump.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@clif/$(DEPDIR)/libbroadcom_v41_la-v3dx_dump.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@clif/$(DEPDIR)/libbroadcom_v42_la-v3dx_dump.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@common/$(DEPDIR)/v3d_debug.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@compiler/$(DEPDIR)/nir_to_vir.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@compiler/$(DEPDIR)/qpu_schedule.Plo@am__quote@
@@ -1187,6 +1214,13 @@ clif/libbroadcom_v41_la-v3dx_dump.lo: clif/v3dx_dump.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='clif/v3dx_dump.c' object='clif/libbroadcom_v41_la-v3dx_dump.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libbroadcom_v41_la_CFLAGS) $(CFLAGS) -c -o clif/libbroadcom_v41_la-v3dx_dump.lo `test -f 'clif/v3dx_dump.c' || echo '$(srcdir)/'`clif/v3dx_dump.c
+
+clif/libbroadcom_v42_la-v3dx_dump.lo: clif/v3dx_dump.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libbroadcom_v42_la_CFLAGS) $(CFLAGS) -MT clif/libbroadcom_v42_la-v3dx_dump.lo -MD -MP -MF clif/$(DEPDIR)/libbroadcom_v42_la-v3dx_dump.Tpo -c -o clif/libbroadcom_v42_la-v3dx_dump.lo `test -f 'clif/v3dx_dump.c' || echo '$(srcdir)/'`clif/v3dx_dump.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) clif/$(DEPDIR)/libbroadcom_v42_la-v3dx_dump.Tpo clif/$(DEPDIR)/libbroadcom_v42_la-v3dx_dump.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='clif/v3dx_dump.c' object='clif/libbroadcom_v42_la-v3dx_dump.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libbroadcom_v42_la_CFLAGS) $(CFLAGS) -c -o clif/libbroadcom_v42_la-v3dx_dump.lo `test -f 'clif/v3dx_dump.c' || echo '$(srcdir)/'`clif/v3dx_dump.c
 
 mostlyclean-libtool:
 	-rm -f *.lo

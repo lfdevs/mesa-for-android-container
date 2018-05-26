@@ -44,12 +44,15 @@ enum ir3_driver_param {
 	IR3_DP_NUM_WORK_GROUPS_X = 0,
 	IR3_DP_NUM_WORK_GROUPS_Y = 1,
 	IR3_DP_NUM_WORK_GROUPS_Z = 2,
+	IR3_DP_LOCAL_GROUP_SIZE_X = 4,
+	IR3_DP_LOCAL_GROUP_SIZE_Y = 5,
+	IR3_DP_LOCAL_GROUP_SIZE_Z = 6,
 	/* NOTE: gl_NumWorkGroups should be vec4 aligned because
 	 * glDispatchComputeIndirect() needs to load these from
 	 * the info->indirect buffer.  Keep that in mind when/if
 	 * adding any addition CS driver params.
 	 */
-	IR3_DP_CS_COUNT   = 4,   /* must be aligned to vec4 */
+	IR3_DP_CS_COUNT   = 8,   /* must be aligned to vec4 */
 
 	/* vertex shader driver params: */
 	IR3_DP_VTXID_BASE = 0,

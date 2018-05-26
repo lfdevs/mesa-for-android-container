@@ -68,10 +68,9 @@ static const struct vc5_format format_table[] = {
         FORMAT(R8G8B8A8_SNORM,    NO,           RGBA8_SNORM, SWIZ_XYZW, 16, 0),
         FORMAT(R8G8B8X8_SNORM,    NO,           RGBA8_SNORM, SWIZ_XYZ1, 16, 0),
         FORMAT(R10G10B10A2_UNORM, RGB10_A2,     RGB10_A2,    SWIZ_XYZW, 16, 0),
-        FORMAT(B10G10R10A2_UINT,  RGB10_A2UI,   RGB10_A2UI,  SWIZ_ZYXW, 16, 0),
+        FORMAT(R10G10B10A2_UINT,  RGB10_A2UI,   RGB10_A2UI,  SWIZ_XYZW, 16, 0),
 
-        FORMAT(B4G4R4A4_UNORM,    ABGR4444,     RGBA4,       SWIZ_YZWX, 16, 0),
-        FORMAT(B4G4R4X4_UNORM,    ABGR4444,     RGBA4,       SWIZ_YZW1, 16, 0),
+        FORMAT(A4B4G4R4_UNORM,    ABGR4444,     RGBA4,       SWIZ_XYZW, 16, 0),
 
         FORMAT(A1B5G5R5_UNORM,    ABGR1555,     RGB5_A1,     SWIZ_XYZW, 16, 0),
         FORMAT(X1B5G5R5_UNORM,    ABGR1555,     RGB5_A1,     SWIZ_XYZ1, 16, 0),
@@ -121,8 +120,8 @@ static const struct vc5_format format_table[] = {
 
         FORMAT(R16_SINT,          R16I,         R16I,        SWIZ_X001, 16, 0),
         FORMAT(R16_UINT,          R16UI,        R16UI,       SWIZ_X001, 16, 0),
-        FORMAT(R16G16_SINT,       RG16I,        R16I,        SWIZ_XY01, 16, 0),
-        FORMAT(R16G16_UINT,       RG16UI,       R16UI,       SWIZ_XY01, 16, 0),
+        FORMAT(R16G16_SINT,       RG16I,        RG16I,       SWIZ_XY01, 16, 0),
+        FORMAT(R16G16_UINT,       RG16UI,       RG16UI,      SWIZ_XY01, 16, 0),
         FORMAT(R16G16B16A16_SINT, RGBA16I,      RGBA16I,     SWIZ_XYZW, 16, 0),
         FORMAT(R16G16B16A16_UINT, RGBA16UI,     RGBA16UI,    SWIZ_XYZW, 16, 0),
 

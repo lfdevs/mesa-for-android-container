@@ -377,51 +377,24 @@ vc5_job_submit(struct vc5_context *vc5, struct vc5_job *job)
         if (!job->needs_flush)
                 goto done;
 
-        /* The RCL setup would choke if the draw bounds cause no drawing, so
-         * just drop the drawing if that's the case.
-         */
-        if (job->draw_max_x <= job->draw_min_x ||
-            job->draw_max_y <= job->draw_min_y) {
-                goto done;
-        }
-
         if (vc5->screen->devinfo.ver >= 41)
                 v3d41_emit_rcl(job);
         else
                 v3d33_emit_rcl(job);
 
         if (cl_offset(&job->bcl) > 0) {
-                vc5_cl_ensure_space_with_branch(&job->bcl,
-                                                7 +
-                                                cl_packet_length(OCCLUSION_QUERY_COUNTER));
-
-                if (job->oq_enabled) {
-                        /* Disable the OQ at the end of the CL, so that the
-                         * draw calls at the start of the CL don't inherit the
-                         * OQ counter.
-                         */
-                        cl_emit(&job->bcl, OCCLUSION_QUERY_COUNTER, counter);
-                }
-
-                /* Increment the semaphore indicating that binning is done and
-                 * unblocking the render thread.  Note that this doesn't act
-                 * until the FLUSH completes.
-                 */
-                cl_emit(&job->bcl, INCREMENT_SEMAPHORE, incr);
-
-                /* The FLUSH_ALL emits any unwritten state changes in each
-                 * tile.  We can use this to reset any state that needs to be
-                 * present at the start of the next tile, as we do with
-                 * OCCLUSION_QUERY_COUNTER above.
-                 */
-                cl_emit(&job->bcl, FLUSH_ALL_STATE, flush);
+                if (screen->devinfo.ver >= 41)
+                        v3d41_bcl_epilogue(vc5, job);
+                else
+                        v3d33_bcl_epilogue(vc5, job);
         }
 
+        job->submit.out_sync = vc5->out_sync;
         job->submit.bcl_end = job->bcl.bo->offset + cl_offset(&job->bcl);
         job->submit.rcl_end = job->rcl.bo->offset + cl_offset(&job->rcl);
 
         /* On V3D 4.1, the tile alloc/state setup moved to register writes
-         * instead of binner pac`kets.
+         * instead of binner packets.
          */
         if (screen->devinfo.ver >= 41) {
                 vc5_job_add_bo(job, job->tile_alloc);
@@ -447,15 +420,6 @@ vc5_job_submit(struct vc5_context *vc5, struct vc5_job *job)
                         fprintf(stderr, "Draw call returned %s.  "
                                         "Expect corruption.\n", strerror(errno));
                         warned = true;
-                }
-        }
-
-        if (vc5->last_emit_seqno - vc5->screen->finished_seqno > 5) {
-                if (!vc5_wait_seqno(vc5->screen,
-                                    vc5->last_emit_seqno - 5,
-                                    PIPE_TIMEOUT_INFINITE,
-                                    "job throttling")) {
-                        fprintf(stderr, "Job throttling failed\n");
                 }
         }
 

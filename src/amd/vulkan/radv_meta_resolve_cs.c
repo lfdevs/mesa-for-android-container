@@ -135,7 +135,7 @@ build_resolve_compute_shader(struct radv_device *dev, bool is_integer, bool is_s
 		outval = radv_meta_build_resolve_srgb_conversion(&b, outval);
 
 	nir_ssa_def *coord = nir_iadd(&b, global_id, &dst_offset->dest.ssa);
-	nir_intrinsic_instr *store = nir_intrinsic_instr_create(b.shader, nir_intrinsic_image_store);
+	nir_intrinsic_instr *store = nir_intrinsic_instr_create(b.shader, nir_intrinsic_image_var_store);
 	store->src[0] = nir_src_for_ssa(coord);
 	store->src[1] = nir_src_for_ssa(nir_ssa_undef(&b, 1, 32));
 	store->src[2] = nir_src_for_ssa(outval);
@@ -388,19 +388,8 @@ void radv_meta_resolve_compute_image(struct radv_cmd_buffer *cmd_buffer,
 {
 	struct radv_meta_saved_state saved_state;
 
-	for (uint32_t r = 0; r < region_count; ++r) {
-		const VkImageResolve *region = &regions[r];
-		const uint32_t src_base_layer =
-			radv_meta_get_iview_layer(src_image, &region->srcSubresource,
-						  &region->srcOffset);
-		VkImageSubresourceRange range;
-		range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		range.baseMipLevel = region->srcSubresource.mipLevel;
-		range.levelCount = 1;
-		range.baseArrayLayer = src_base_layer;
-		range.layerCount = region->srcSubresource.layerCount;
-		radv_fast_clear_flush_image_inplace(cmd_buffer, src_image, &range);
-	}
+	radv_decompress_resolve_src(cmd_buffer, src_image, src_image_layout,
+				    region_count, regions);
 
 	radv_meta_save(&saved_state, cmd_buffer,
 		       RADV_META_SAVE_COMPUTE_PIPELINE |
@@ -504,24 +493,7 @@ radv_cmd_buffer_resolve_subpass_cs(struct radv_cmd_buffer *cmd_buffer)
 	                                RADV_CMD_FLAG_INV_GLOBAL_L2 |
 	                                RADV_CMD_FLAG_INV_VMEM_L1;
 
-	for (uint32_t i = 0; i < subpass->color_count; ++i) {
-		VkAttachmentReference src_att = subpass->color_attachments[i];
-		VkAttachmentReference dest_att = subpass->resolve_attachments[i];
-
-		if (src_att.attachment == VK_ATTACHMENT_UNUSED ||
-		    dest_att.attachment == VK_ATTACHMENT_UNUSED)
-			continue;
-
-		struct radv_image_view *src_iview = cmd_buffer->state.framebuffer->attachments[src_att.attachment].attachment;
-
-		VkImageSubresourceRange range;
-		range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		range.baseMipLevel = 0;
-		range.levelCount = 1;
-		range.baseArrayLayer = 0;
-		range.layerCount = 1;
-		radv_fast_clear_flush_image_inplace(cmd_buffer, src_iview->image, &range);
-	}
+	radv_decompress_resolve_subpass_src(cmd_buffer);
 
 	radv_meta_save(&saved_state, cmd_buffer,
 		       RADV_META_SAVE_COMPUTE_PIPELINE |
@@ -536,63 +508,16 @@ radv_cmd_buffer_resolve_subpass_cs(struct radv_cmd_buffer *cmd_buffer)
 		if (dest_att.attachment == VK_ATTACHMENT_UNUSED)
 			continue;
 
-		struct radv_image *src_image = src_iview->image;
-		struct radv_image *dst_image = dst_iview->image;
-		for (uint32_t layer = 0; layer < src_image->info.array_size; layer++) {
-
-			struct radv_image_view tsrc_iview;
-			radv_image_view_init(&tsrc_iview, cmd_buffer->device,
-					     &(VkImageViewCreateInfo) {
-						     .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-							     .image = radv_image_to_handle(src_image),
-							     .viewType = radv_meta_get_view_type(src_image),
-							     .format = src_image->vk_format,
-							     .subresourceRange = {
-							     .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-							     .baseMipLevel = src_iview->base_mip,
-							     .levelCount = 1,
-							     .baseArrayLayer = layer,
-							     .layerCount = 1,
-						     },
-					     });
-
-			struct radv_image_view tdst_iview;
-			radv_image_view_init(&tdst_iview, cmd_buffer->device,
-					     &(VkImageViewCreateInfo) {
-						     .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-							     .image = radv_image_to_handle(dst_image),
-							     .viewType = radv_meta_get_view_type(dst_image),
-							     .format = vk_to_non_srgb_format(dst_image->vk_format),
-							     .subresourceRange = {
-							     .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-							     .baseMipLevel = dst_iview->base_mip,
-							     .levelCount = 1,
-							     .baseArrayLayer = layer,
-							     .layerCount = 1,
-						     },
-					     });
-			emit_resolve(cmd_buffer,
-				     &tsrc_iview,
-				     &tdst_iview,
-				     &(VkOffset2D) { 0, 0 },
-				     &(VkOffset2D) { 0, 0 },
-				     &(VkExtent2D) { fb->width, fb->height });
-		}
+		emit_resolve(cmd_buffer,
+			     src_iview,
+			     dst_iview,
+			     &(VkOffset2D) { 0, 0 },
+			     &(VkOffset2D) { 0, 0 },
+			     &(VkExtent2D) { fb->width, fb->height });
 	}
+
+	cmd_buffer->state.flush_bits |= RADV_CMD_FLAG_CS_PARTIAL_FLUSH |
+	                                RADV_CMD_FLAG_INV_VMEM_L1;
 
 	radv_meta_restore(&saved_state, cmd_buffer);
-
-	for (uint32_t i = 0; i < subpass->color_count; ++i) {
-		VkAttachmentReference dest_att = subpass->resolve_attachments[i];
-		struct radv_image *dst_img = cmd_buffer->state.framebuffer->attachments[dest_att.attachment].attachment->image;
-		if (dest_att.attachment == VK_ATTACHMENT_UNUSED)
-			continue;
-		VkImageSubresourceRange range;
-		range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		range.baseMipLevel = 0;
-		range.levelCount = 1;
-		range.baseArrayLayer = 0;
-		range.layerCount = 1;
-		radv_fast_clear_flush_image_inplace(cmd_buffer, dst_img, &range);
-	}
 }

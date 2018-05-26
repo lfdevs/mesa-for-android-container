@@ -90,7 +90,7 @@ build_dcc_decompress_compute_shader(struct radv_device *dev)
 	nir_builder_instr_insert(&b, &bar->instr);
 
 	nir_ssa_def *outval = &tex->dest.ssa;
-	nir_intrinsic_instr *store = nir_intrinsic_instr_create(b.shader, nir_intrinsic_image_store);
+	nir_intrinsic_instr *store = nir_intrinsic_instr_create(b.shader, nir_intrinsic_image_var_store);
 	store->src[0] = nir_src_for_ssa(global_id);
 	store->src[1] = nir_src_for_ssa(nir_ssa_undef(&b, 1, 32));
 	store->src[2] = nir_src_for_ssa(outval);
@@ -593,15 +593,15 @@ radv_emit_color_decompress(struct radv_cmd_buffer *cmd_buffer,
 		       RADV_META_SAVE_GRAPHICS_PIPELINE |
 		       RADV_META_SAVE_PASS);
 
-	if (decompress_dcc && image->surface.dcc_size) {
+	if (decompress_dcc && radv_image_has_dcc(image)) {
 		pipeline = cmd_buffer->device->meta_state.fast_clear_flush.dcc_decompress_pipeline;
-	} else if (image->fmask.size > 0) {
+	} else if (radv_image_has_fmask(image)) {
                pipeline = cmd_buffer->device->meta_state.fast_clear_flush.fmask_decompress_pipeline;
 	} else {
                pipeline = cmd_buffer->device->meta_state.fast_clear_flush.cmask_eliminate_pipeline;
 	}
 
-	if (!decompress_dcc && image->surface.dcc_size) {
+	if (!decompress_dcc && radv_image_has_dcc(image)) {
 		radv_emit_set_predication_state_from_image(cmd_buffer, image, true);
 		cmd_buffer->state.predicating = true;
 	}
@@ -667,7 +667,7 @@ radv_emit_color_decompress(struct radv_cmd_buffer *cmd_buffer,
 					&cmd_buffer->pool->alloc);
 
 	}
-	if (image->surface.dcc_size) {
+	if (!decompress_dcc && radv_image_has_dcc(image)) {
 		cmd_buffer->state.predicating = false;
 		radv_emit_set_predication_state_from_image(cmd_buffer, image, false);
 	}
@@ -771,9 +771,7 @@ radv_decompress_dcc_compute(struct radv_cmd_buffer *cmd_buffer,
 	state->flush_bits |= RADV_CMD_FLAG_CS_PARTIAL_FLUSH |
 			     RADV_CMD_FLAG_INV_VMEM_L1;
 
-	state->flush_bits |= radv_fill_buffer(cmd_buffer, image->bo,
-					      image->offset + image->dcc_offset,
-					      image->surface.dcc_size, 0xffffffff);
+	state->flush_bits |= radv_clear_dcc(cmd_buffer, image, 0xffffffff);
 
 	state->flush_bits |= RADV_CMD_FLAG_FLUSH_AND_INV_CB |
 			     RADV_CMD_FLAG_FLUSH_AND_INV_CB_META;

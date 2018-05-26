@@ -1,5 +1,5 @@
 /******************************************************************************
-* Copyright (C) 2015-2017 Intel Corporation.   All Rights Reserved.
+* Copyright (C) 2015-2018 Intel Corporation.   All Rights Reserved.
 *
 * Permission is hereby granted, free of charge, to any person obtaining a
 * copy of this software and associated documentation files (the "Software"),
@@ -109,13 +109,13 @@ GlobalKnobs::GlobalKnobs()
     InitKnob(DUMP_SHADER_IR);
     InitKnob(USE_GENERIC_STORETILE);
     InitKnob(FAST_CLEAR);
-    InitKnob(BASE_NUMA_NODE);
     InitKnob(MAX_NUMA_NODES);
-    InitKnob(BASE_CORE);
     InitKnob(MAX_CORES_PER_NUMA_NODE);
-    InitKnob(BASE_THREAD);
     InitKnob(MAX_THREADS_PER_CORE);
     InitKnob(MAX_WORKER_THREADS);
+    InitKnob(BASE_NUMA_NODE);
+    InitKnob(BASE_CORE);
+    InitKnob(BASE_THREAD);
     InitKnob(BUCKETS_START_FRAME);
     InitKnob(BUCKETS_END_FRAME);
     InitKnob(WORKER_SPIN_LOOP_COUNT);
@@ -124,6 +124,7 @@ GlobalKnobs::GlobalKnobs()
     InitKnob(MAX_TESS_PRIMS_PER_DRAW);
     InitKnob(DEBUG_OUTPUT_DIR);
     InitKnob(JIT_ENABLE_CACHE);
+    InitKnob(JIT_OPTIMIZATION_LEVEL);
     InitKnob(JIT_CACHE_DIR);
     InitKnob(TOSS_DRAW);
     InitKnob(TOSS_QUEUE_FE);
@@ -133,6 +134,7 @@ GlobalKnobs::GlobalKnobs()
     InitKnob(TOSS_SETUP_TRIS);
     InitKnob(TOSS_BIN_TRIS);
     InitKnob(TOSS_RS);
+    InitKnob(DISABLE_SPLIT_DRAW);
 }
 
 //========================================================
@@ -155,27 +157,27 @@ std::string GlobalKnobs::ToString(const char* optPerLinePrefix)
     str << (KNOB_USE_GENERIC_STORETILE ? "+\n" : "-\n");
     str << optPerLinePrefix << "KNOB_FAST_CLEAR:                 ";
     str << (KNOB_FAST_CLEAR ? "+\n" : "-\n");
-    str << optPerLinePrefix << "KNOB_BASE_NUMA_NODE:             ";
-    str << std::hex << std::setw(11) << std::left << KNOB_BASE_NUMA_NODE;
-    str << std::dec << KNOB_BASE_NUMA_NODE << "\n";
     str << optPerLinePrefix << "KNOB_MAX_NUMA_NODES:             ";
     str << std::hex << std::setw(11) << std::left << KNOB_MAX_NUMA_NODES;
     str << std::dec << KNOB_MAX_NUMA_NODES << "\n";
-    str << optPerLinePrefix << "KNOB_BASE_CORE:                  ";
-    str << std::hex << std::setw(11) << std::left << KNOB_BASE_CORE;
-    str << std::dec << KNOB_BASE_CORE << "\n";
     str << optPerLinePrefix << "KNOB_MAX_CORES_PER_NUMA_NODE:    ";
     str << std::hex << std::setw(11) << std::left << KNOB_MAX_CORES_PER_NUMA_NODE;
     str << std::dec << KNOB_MAX_CORES_PER_NUMA_NODE << "\n";
-    str << optPerLinePrefix << "KNOB_BASE_THREAD:                ";
-    str << std::hex << std::setw(11) << std::left << KNOB_BASE_THREAD;
-    str << std::dec << KNOB_BASE_THREAD << "\n";
     str << optPerLinePrefix << "KNOB_MAX_THREADS_PER_CORE:       ";
     str << std::hex << std::setw(11) << std::left << KNOB_MAX_THREADS_PER_CORE;
     str << std::dec << KNOB_MAX_THREADS_PER_CORE << "\n";
     str << optPerLinePrefix << "KNOB_MAX_WORKER_THREADS:         ";
     str << std::hex << std::setw(11) << std::left << KNOB_MAX_WORKER_THREADS;
     str << std::dec << KNOB_MAX_WORKER_THREADS << "\n";
+    str << optPerLinePrefix << "KNOB_BASE_NUMA_NODE:             ";
+    str << std::hex << std::setw(11) << std::left << KNOB_BASE_NUMA_NODE;
+    str << std::dec << KNOB_BASE_NUMA_NODE << "\n";
+    str << optPerLinePrefix << "KNOB_BASE_CORE:                  ";
+    str << std::hex << std::setw(11) << std::left << KNOB_BASE_CORE;
+    str << std::dec << KNOB_BASE_CORE << "\n";
+    str << optPerLinePrefix << "KNOB_BASE_THREAD:                ";
+    str << std::hex << std::setw(11) << std::left << KNOB_BASE_THREAD;
+    str << std::dec << KNOB_BASE_THREAD << "\n";
     str << optPerLinePrefix << "KNOB_BUCKETS_START_FRAME:        ";
     str << std::hex << std::setw(11) << std::left << KNOB_BUCKETS_START_FRAME;
     str << std::dec << KNOB_BUCKETS_START_FRAME << "\n";
@@ -198,6 +200,9 @@ std::string GlobalKnobs::ToString(const char* optPerLinePrefix)
     str << KNOB_DEBUG_OUTPUT_DIR << "\n";
     str << optPerLinePrefix << "KNOB_JIT_ENABLE_CACHE:           ";
     str << (KNOB_JIT_ENABLE_CACHE ? "+\n" : "-\n");
+    str << optPerLinePrefix << "KNOB_JIT_OPTIMIZATION_LEVEL:     ";
+    str << std::hex << std::setw(11) << std::left << KNOB_JIT_OPTIMIZATION_LEVEL;
+    str << std::dec << KNOB_JIT_OPTIMIZATION_LEVEL << "\n";
     str << optPerLinePrefix << "KNOB_JIT_CACHE_DIR:              ";
     str << KNOB_JIT_CACHE_DIR << "\n";
     str << optPerLinePrefix << "KNOB_TOSS_DRAW:                  ";
@@ -216,6 +221,8 @@ std::string GlobalKnobs::ToString(const char* optPerLinePrefix)
     str << (KNOB_TOSS_BIN_TRIS ? "+\n" : "-\n");
     str << optPerLinePrefix << "KNOB_TOSS_RS:                    ";
     str << (KNOB_TOSS_RS ? "+\n" : "-\n");
+    str << optPerLinePrefix << "KNOB_DISABLE_SPLIT_DRAW:         ";
+    str << (KNOB_DISABLE_SPLIT_DRAW ? "+\n" : "-\n");
     str << std::ends;
 
     return str.str();

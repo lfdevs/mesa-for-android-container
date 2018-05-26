@@ -38,6 +38,10 @@
 #define AMDGPU_GEM_CREATE_VM_ALWAYS_VALID (1 << 6)
 #endif
 
+#ifndef AMDGPU_VA_RANGE_HIGH
+#define AMDGPU_VA_RANGE_HIGH	0x2
+#endif
+
 /* Set to 1 for verbose output showing committed sparse buffer ranges. */
 #define DEBUG_SPARSE_COMMITS 0
 
@@ -235,7 +239,8 @@ static void *amdgpu_bo_map(struct pb_buffer *buf,
              * Only check whether the buffer is being used for write. */
             if (cs && amdgpu_bo_is_referenced_by_cs_with_usage(cs, bo,
                                                                RADEON_USAGE_WRITE)) {
-               cs->flush_cs(cs->flush_data, PIPE_FLUSH_ASYNC, NULL);
+               cs->flush_cs(cs->flush_data,
+			    RADEON_FLUSH_ASYNC_START_NEXT_GFX_IB_NOW, NULL);
                return NULL;
             }
 
@@ -245,7 +250,8 @@ static void *amdgpu_bo_map(struct pb_buffer *buf,
             }
          } else {
             if (cs && amdgpu_bo_is_referenced_by_cs(cs, bo)) {
-               cs->flush_cs(cs->flush_data, PIPE_FLUSH_ASYNC, NULL);
+               cs->flush_cs(cs->flush_data,
+			    RADEON_FLUSH_ASYNC_START_NEXT_GFX_IB_NOW, NULL);
                return NULL;
             }
 
@@ -268,7 +274,8 @@ static void *amdgpu_bo_map(struct pb_buffer *buf,
             if (cs) {
                if (amdgpu_bo_is_referenced_by_cs_with_usage(cs, bo,
                                                             RADEON_USAGE_WRITE)) {
-                  cs->flush_cs(cs->flush_data, 0, NULL);
+                  cs->flush_cs(cs->flush_data,
+			       RADEON_FLUSH_START_NEXT_GFX_IB_NOW, NULL);
                } else {
                   /* Try to avoid busy-waiting in amdgpu_bo_wait. */
                   if (p_atomic_read(&bo->num_active_ioctls))
@@ -282,7 +289,8 @@ static void *amdgpu_bo_map(struct pb_buffer *buf,
             /* Mapping for write. */
             if (cs) {
                if (amdgpu_bo_is_referenced_by_cs(cs, bo)) {
-                  cs->flush_cs(cs->flush_data, 0, NULL);
+                  cs->flush_cs(cs->flush_data,
+			       RADEON_FLUSH_START_NEXT_GFX_IB_NOW, NULL);
                } else {
                   /* Try to avoid busy-waiting in amdgpu_bo_wait. */
                   if (p_atomic_read(&bo->num_active_ioctls))
@@ -373,10 +381,9 @@ static void amdgpu_add_buffer_to_global_list(struct amdgpu_winsys_bo *bo)
 static struct amdgpu_winsys_bo *amdgpu_create_bo(struct amdgpu_winsys *ws,
                                                  uint64_t size,
                                                  unsigned alignment,
-                                                 unsigned usage,
                                                  enum radeon_bo_domain initial_domain,
                                                  unsigned flags,
-                                                 unsigned pb_cache_bucket)
+                                                 int heap)
 {
    struct amdgpu_bo_alloc_request request = {0};
    amdgpu_bo_handle buf_handle;
@@ -394,8 +401,10 @@ static struct amdgpu_winsys_bo *amdgpu_create_bo(struct amdgpu_winsys *ws,
       return NULL;
    }
 
-   pb_cache_init_entry(&ws->bo_cache, &bo->u.real.cache_entry, &bo->base,
-                       pb_cache_bucket);
+   if (heap >= 0) {
+      pb_cache_init_entry(&ws->bo_cache, &bo->u.real.cache_entry, &bo->base,
+                          heap);
+   }
    request.alloc_size = size;
    request.phys_alignment = alignment;
 
@@ -404,24 +413,21 @@ static struct amdgpu_winsys_bo *amdgpu_create_bo(struct amdgpu_winsys *ws,
    if (initial_domain & RADEON_DOMAIN_GTT)
       request.preferred_heap |= AMDGPU_GEM_DOMAIN_GTT;
 
-   /* If VRAM is just stolen system memory, allow both VRAM and
-    * GTT, whichever has free space. If a buffer is evicted from
-    * VRAM to GTT, it will stay there.
-    *
-    * DRM 3.6.0 has good BO move throttling, so we can allow VRAM-only
-    * placements even with a low amount of stolen VRAM.
+   /* Since VRAM and GTT have almost the same performance on APUs, we could
+    * just set GTT. However, in order to decrease GTT(RAM) usage, which is
+    * shared with the OS, allow VRAM placements too. The idea is not to use
+    * VRAM usefully, but to use it so that it's not unused and wasted.
     */
-   if (!ws->info.has_dedicated_vram && ws->info.drm_minor < 6)
+   if (!ws->info.has_dedicated_vram)
       request.preferred_heap |= AMDGPU_GEM_DOMAIN_GTT;
 
    if (flags & RADEON_FLAG_NO_CPU_ACCESS)
       request.flags |= AMDGPU_GEM_CREATE_NO_CPU_ACCESS;
    if (flags & RADEON_FLAG_GTT_WC)
       request.flags |= AMDGPU_GEM_CREATE_CPU_GTT_USWC;
-   /* TODO: Enable this once the kernel handles it efficiently. */
-   /*if (flags & RADEON_FLAG_NO_INTERPROCESS_SHARING &&
-       ws->info.drm_minor >= 20)
-      request.flags |= AMDGPU_GEM_CREATE_VM_ALWAYS_VALID;*/
+   if (flags & RADEON_FLAG_NO_INTERPROCESS_SHARING &&
+       ws->info.has_local_buffers)
+      request.flags |= AMDGPU_GEM_CREATE_VM_ALWAYS_VALID;
 
    r = amdgpu_bo_alloc(ws->dev, &request, &buf_handle);
    if (r) {
@@ -436,7 +442,9 @@ static struct amdgpu_winsys_bo *amdgpu_create_bo(struct amdgpu_winsys *ws,
    if (size > ws->info.pte_fragment_size)
 	   alignment = MAX2(alignment, ws->info.pte_fragment_size);
    r = amdgpu_va_range_alloc(ws->dev, amdgpu_gpu_va_range_general,
-                             size + va_gap_size, alignment, 0, &va, &va_handle, 0);
+                             size + va_gap_size, alignment, 0, &va, &va_handle,
+                             (flags & RADEON_FLAG_32BIT ? AMDGPU_VA_RANGE_32_BIT : 0) |
+			     AMDGPU_VA_RANGE_HIGH);
    if (r)
       goto error_va_alloc;
 
@@ -453,7 +461,7 @@ static struct amdgpu_winsys_bo *amdgpu_create_bo(struct amdgpu_winsys *ws,
 
    pipe_reference_init(&bo->base.reference, 1);
    bo->base.alignment = alignment;
-   bo->base.usage = usage;
+   bo->base.usage = 0;
    bo->base.size = size;
    bo->base.vtbl = &amdgpu_winsys_bo_vtbl;
    bo->ws = ws;
@@ -894,7 +902,8 @@ amdgpu_bo_sparse_create(struct amdgpu_winsys *ws, uint64_t size,
    va_gap_size = ws->check_vm ? 4 * RADEON_SPARSE_PAGE_SIZE : 0;
    r = amdgpu_va_range_alloc(ws->dev, amdgpu_gpu_va_range_general,
                              map_size + va_gap_size, RADEON_SPARSE_PAGE_SIZE,
-                             0, &bo->va, &bo->u.sparse.va_handle, 0);
+                             0, &bo->va, &bo->u.sparse.va_handle,
+			     AMDGPU_VA_RANGE_HIGH);
    if (r)
       goto error_va_alloc;
 
@@ -1162,7 +1171,7 @@ amdgpu_bo_create(struct radeon_winsys *rws,
 {
    struct amdgpu_winsys *ws = amdgpu_winsys(rws);
    struct amdgpu_winsys_bo *bo;
-   unsigned usage = 0, pb_cache_bucket = 0;
+   int heap = -1;
 
    /* VRAM implies WC. This is not optional. */
    assert(!(domain & RADEON_DOMAIN_VRAM) || flags & RADEON_FLAG_GTT_WC);
@@ -1221,30 +1230,23 @@ no_slab:
    bool use_reusable_pool = flags & RADEON_FLAG_NO_INTERPROCESS_SHARING;
 
    if (use_reusable_pool) {
-       int heap = radeon_get_heap_index(domain, flags);
+       heap = radeon_get_heap_index(domain, flags);
        assert(heap >= 0 && heap < RADEON_MAX_CACHED_HEAPS);
-       usage = 1 << heap; /* Only set one usage bit for each heap. */
-
-       pb_cache_bucket = radeon_get_pb_cache_bucket_index(heap);
-       assert(pb_cache_bucket < ARRAY_SIZE(ws->bo_cache.buckets));
 
        /* Get a buffer from the cache. */
        bo = (struct amdgpu_winsys_bo*)
-            pb_cache_reclaim_buffer(&ws->bo_cache, size, alignment, usage,
-                                    pb_cache_bucket);
+            pb_cache_reclaim_buffer(&ws->bo_cache, size, alignment, 0, heap);
        if (bo)
           return &bo->base;
    }
 
    /* Create a new one. */
-   bo = amdgpu_create_bo(ws, size, alignment, usage, domain, flags,
-                         pb_cache_bucket);
+   bo = amdgpu_create_bo(ws, size, alignment, domain, flags, heap);
    if (!bo) {
       /* Clear the cache and try again. */
       pb_slabs_reclaim(&ws->bo_slabs);
       pb_cache_release_all_buffers(&ws->bo_cache);
-      bo = amdgpu_create_bo(ws, size, alignment, usage, domain, flags,
-                            pb_cache_bucket);
+      bo = amdgpu_create_bo(ws, size, alignment, domain, flags, heap);
       if (!bo)
          return NULL;
    }
@@ -1295,7 +1297,8 @@ static struct pb_buffer *amdgpu_bo_from_handle(struct radeon_winsys *rws,
       goto error_query;
 
    r = amdgpu_va_range_alloc(ws->dev, amdgpu_gpu_va_range_general,
-                             result.alloc_size, 1 << 20, 0, &va, &va_handle, 0);
+                             result.alloc_size, 1 << 20, 0, &va, &va_handle,
+			     AMDGPU_VA_RANGE_HIGH);
    if (r)
       goto error_query;
 
@@ -1406,7 +1409,8 @@ static struct pb_buffer *amdgpu_bo_from_ptr(struct radeon_winsys *rws,
         goto error;
 
     if (amdgpu_va_range_alloc(ws->dev, amdgpu_gpu_va_range_general,
-                              aligned_size, 1 << 12, 0, &va, &va_handle, 0))
+                              aligned_size, 1 << 12, 0, &va, &va_handle,
+			      AMDGPU_VA_RANGE_HIGH))
         goto error_va_alloc;
 
     if (amdgpu_bo_va_op(buf_handle, 0, aligned_size, va, 0, AMDGPU_VA_OP_MAP))

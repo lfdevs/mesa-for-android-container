@@ -327,6 +327,49 @@ vc5_tf_statistics_record(struct vc5_context *vc5,
 }
 
 static void
+vc5_update_job_ez(struct vc5_context *vc5, struct vc5_job *job)
+{
+        switch (vc5->zsa->ez_state) {
+        case VC5_EZ_UNDECIDED:
+                /* If the Z/S state didn't pick a direction but didn't
+                 * disable, then go along with the current EZ state.  This
+                 * allows EZ optimization for Z func == EQUAL or NEVER.
+                 */
+                break;
+
+        case VC5_EZ_LT_LE:
+        case VC5_EZ_GT_GE:
+                /* If the Z/S state picked a direction, then it needs to match
+                 * the current direction if we've decided on one.
+                 */
+                if (job->ez_state == VC5_EZ_UNDECIDED)
+                        job->ez_state = vc5->zsa->ez_state;
+                else if (job->ez_state != vc5->zsa->ez_state)
+                        job->ez_state = VC5_EZ_DISABLED;
+                break;
+
+        case VC5_EZ_DISABLED:
+                /* If the current Z/S state disables EZ because of a bad Z
+                 * func or stencil operation, then we can't do any more EZ in
+                 * this frame.
+                 */
+                job->ez_state = VC5_EZ_DISABLED;
+                break;
+        }
+
+        /* If the FS affects the Z of the pixels, then it may update against
+         * the chosen EZ direction (though we could use
+         * ARB_conservative_depth's hints to avoid this)
+         */
+        if (vc5->prog.fs->prog_data.fs->writes_z) {
+                job->ez_state = VC5_EZ_DISABLED;
+        }
+
+        if (job->first_ez_state == VC5_EZ_UNDECIDED)
+                job->first_ez_state = job->ez_state;
+}
+
+static void
 vc5_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 {
         struct vc5_context *vc5 = vc5_context(pctx);
@@ -384,6 +427,7 @@ vc5_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 
         vc5_start_draw(vc5);
         vc5_update_compiled_shaders(vc5, info->mode);
+        vc5_update_job_ez(vc5, job);
 
 #if V3D_VERSION >= 41
         v3d41_emit_state(pctx);
@@ -515,9 +559,6 @@ vc5_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
                 if (vc5->zsa->base.depth.enabled) {
                         job->resolve |= PIPE_CLEAR_DEPTH;
                         rsc->initialized_buffers = PIPE_CLEAR_DEPTH;
-
-                        if (vc5->zsa->early_z_enable)
-                                job->uses_early_z = true;
                 }
 
                 if (vc5->zsa->base.stencil[0].enabled) {
@@ -586,26 +627,16 @@ vc5_clear(struct pipe_context *pctx, unsigned buffers,
 
                 switch (surf->internal_type) {
                 case V3D_INTERNAL_TYPE_8:
-                        if (surf->format == PIPE_FORMAT_B4G4R4A4_UNORM ||
-                            surf->format == PIPE_FORMAT_B4G4R4A4_UNORM) {
-                                /* Our actual hardware layout is ABGR4444, but
-                                 * we apply a swizzle when texturing to flip
-                                 * things back around.
-                                 */
-                                util_pack_color(color->f, PIPE_FORMAT_A8R8G8B8_UNORM,
-                                                &uc);
-                        } else {
-                                util_pack_color(color->f, PIPE_FORMAT_R8G8B8A8_UNORM,
-                                                &uc);
-                        }
+                        util_pack_color(color->f, PIPE_FORMAT_R8G8B8A8_UNORM,
+                                        &uc);
                         memcpy(job->clear_color[i], uc.ui, internal_size);
                         break;
                 case V3D_INTERNAL_TYPE_8I:
                 case V3D_INTERNAL_TYPE_8UI:
-                        job->clear_color[i][0] = ((uc.ui[0] & 0xff) |
-                                                  (uc.ui[1] & 0xff) << 8 |
-                                                  (uc.ui[2] & 0xff) << 16 |
-                                                  (uc.ui[3] & 0xff) << 24);
+                        job->clear_color[i][0] = ((color->ui[0] & 0xff) |
+                                                  (color->ui[1] & 0xff) << 8 |
+                                                  (color->ui[2] & 0xff) << 16 |
+                                                  (color->ui[3] & 0xff) << 24);
                         break;
                 case V3D_INTERNAL_TYPE_16F:
                         util_pack_color(color->f, PIPE_FORMAT_R16G16B16A16_FLOAT,
@@ -614,10 +645,10 @@ vc5_clear(struct pipe_context *pctx, unsigned buffers,
                         break;
                 case V3D_INTERNAL_TYPE_16I:
                 case V3D_INTERNAL_TYPE_16UI:
-                        job->clear_color[i][0] = ((uc.ui[0] & 0xffff) |
-                                                  uc.ui[1] << 16);
-                        job->clear_color[i][1] = ((uc.ui[2] & 0xffff) |
-                                                  uc.ui[3] << 16);
+                        job->clear_color[i][0] = ((color->ui[0] & 0xffff) |
+                                                  color->ui[1] << 16);
+                        job->clear_color[i][1] = ((color->ui[2] & 0xffff) |
+                                                  color->ui[3] << 16);
                         break;
                 case V3D_INTERNAL_TYPE_32F:
                 case V3D_INTERNAL_TYPE_32I:

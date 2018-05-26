@@ -389,6 +389,16 @@ vc5_write_uniforms(struct vc5_context *vc5, struct vc5_compiled_shader *shader,
                         /* XXX */
                         break;
 
+                case QUNIFORM_SPILL_OFFSET:
+                        cl_aligned_reloc(&job->indirect, &uniforms,
+                                         vc5->prog.spill_bo, 0);
+                        break;
+
+                case QUNIFORM_SPILL_SIZE_PER_THREAD:
+                        cl_aligned_u32(&uniforms,
+                                       vc5->prog.spill_size_per_thread);
+                        break;
+
                 default:
                         assert(quniform_contents_is_texture_p0(uinfo->contents[i]));
 
@@ -451,6 +461,8 @@ vc5_set_shader_uniform_dirty_flags(struct vc5_compiled_shader *shader)
                 case QUNIFORM_TEXTURE_DEPTH:
                 case QUNIFORM_TEXTURE_ARRAY_SIZE:
                 case QUNIFORM_TEXTURE_LEVELS:
+                case QUNIFORM_SPILL_OFFSET:
+                case QUNIFORM_SPILL_SIZE_PER_THREAD:
                         /* We could flag this on just the stage we're
                          * compiling for, but it's not passed in.
                          */

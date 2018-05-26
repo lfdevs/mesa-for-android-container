@@ -183,7 +183,7 @@ nvc0_validate_fb(struct nvc0_context *nvc0)
    }
 
    if (nr_cbufs == 0 && !fb->zsbuf) {
-      assert(util_is_power_of_two(fb->samples));
+      assert(util_is_power_of_two_or_zero(fb->samples));
       assert(fb->samples <= 8);
 
       nvc0_fb_set_null_rt(push, 0, fb->layers);

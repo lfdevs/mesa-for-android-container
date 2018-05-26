@@ -80,10 +80,7 @@ intel_check_blit_fragment_ops(struct gl_context * ctx, bool src_alpha_is_one)
       return false;
    }
 
-   if (!(ctx->Color.ColorMask[0][0] &&
-	 ctx->Color.ColorMask[0][1] &&
-	 ctx->Color.ColorMask[0][2] &&
-	 ctx->Color.ColorMask[0][3])) {
+   if (GET_COLORMASK(ctx->Color.ColorMask, 0) != 0xf) {
       DBG("fallback due to color masking\n");
       return false;
    }

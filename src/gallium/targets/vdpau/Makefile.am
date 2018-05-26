@@ -57,6 +57,8 @@ include $(top_srcdir)/src/gallium/drivers/r300/Automake.inc
 include $(top_srcdir)/src/gallium/drivers/r600/Automake.inc
 include $(top_srcdir)/src/gallium/drivers/radeonsi/Automake.inc
 
+include $(top_srcdir)/src/gallium/drivers/tegra/Automake.inc
+
 if HAVE_GALLIUM_STATIC_TARGETS
 
 libvdpau_gallium_la_SOURCES += target.c

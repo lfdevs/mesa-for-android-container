@@ -29,6 +29,7 @@
 #include <stdio.h>
 #include <sys/utsname.h>
 
+#include "util/mesa-sha1.h"
 #include "sid.h"
 #include "gfx9d.h"
 #include "ac_debug.h"
@@ -499,7 +500,13 @@ radv_dump_shader(struct radv_pipeline *pipeline,
 	fprintf(f, "%s:\n\n", radv_get_shader_name(shader, stage));
 
 	if (shader->spirv) {
-		fprintf(f, "SPIRV:\n");
+		unsigned char sha1[21];
+		char sha1buf[41];
+
+		_mesa_sha1_compute(shader->spirv, shader->spirv_size, sha1);
+		_mesa_sha1_format(sha1buf, sha1);
+
+		fprintf(f, "SPIRV (sha1: %s):\n", sha1buf);
 		radv_print_spirv(shader->spirv, shader->spirv_size, f);
 	}
 
@@ -508,6 +515,7 @@ radv_dump_shader(struct radv_pipeline *pipeline,
 		nir_print_shader(shader->nir, f);
 	}
 
+	fprintf(f, "LLVM IR:\n%s\n", shader->llvm_ir_string);
 	fprintf(f, "DISASM:\n%s\n", shader->disasm_string);
 
 	radv_shader_dump_stats(pipeline->device, shader, stage, f);
@@ -593,28 +601,32 @@ radv_dump_dmesg(FILE *f)
 	pclose(p);
 }
 
-static void
+void
 radv_dump_enabled_options(struct radv_device *device, FILE *f)
 {
 	uint64_t mask;
 
-	fprintf(f, "Enabled debug options: ");
+	if (device->instance->debug_flags) {
+		fprintf(f, "Enabled debug options: ");
 
-	mask = device->instance->debug_flags;
-	while (mask) {
-		int i = u_bit_scan64(&mask);
-		fprintf(f, "%s, ", radv_get_debug_option_name(i));
+		mask = device->instance->debug_flags;
+		while (mask) {
+			int i = u_bit_scan64(&mask);
+			fprintf(f, "%s, ", radv_get_debug_option_name(i));
+		}
+		fprintf(f, "\n");
 	}
-	fprintf(f, "\n");
 
-	fprintf(f, "Enabled perftest options: ");
+	if (device->instance->perftest_flags) {
+		fprintf(f, "Enabled perftest options: ");
 
-	mask = device->instance->perftest_flags;
-	while (mask) {
-		int i = u_bit_scan64(&mask);
-		fprintf(f, "%s, ", radv_get_perftest_option_name(i));
+		mask = device->instance->perftest_flags;
+		while (mask) {
+			int i = u_bit_scan64(&mask);
+			fprintf(f, "%s, ", radv_get_perftest_option_name(i));
+		}
+		fprintf(f, "\n");
 	}
-	fprintf(f, "\n");
 }
 
 static void

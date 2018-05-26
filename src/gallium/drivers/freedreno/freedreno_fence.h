@@ -41,7 +41,8 @@ boolean fd_fence_finish(struct pipe_screen *screen,
 		struct pipe_fence_handle *pfence,
 		uint64_t timeout);
 void fd_create_fence_fd(struct pipe_context *pctx,
-		struct pipe_fence_handle **pfence, int fd);
+		struct pipe_fence_handle **pfence, int fd,
+		enum pipe_fd_type type);
 void fd_fence_server_sync(struct pipe_context *pctx,
 		struct pipe_fence_handle *fence);
 int fd_fence_get_fd(struct pipe_screen *pscreen,

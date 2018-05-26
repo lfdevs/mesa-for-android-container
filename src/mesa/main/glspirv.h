@@ -24,11 +24,14 @@
 #ifndef GLSPIRV_H
 #define GLSPIRV_H
 
-#include "mtypes.h"
+#include "compiler/nir/nir.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+struct gl_context;
+struct gl_shader;
 
 /**
  * A SPIR-V module contains the raw SPIR-V binary as set by ShaderBinary.
@@ -75,6 +78,16 @@ void
 _mesa_spirv_shader_binary(struct gl_context *ctx,
                           unsigned n, struct gl_shader **shaders,
                           const void* binary, size_t length);
+
+void
+_mesa_spirv_link_shaders(struct gl_context *ctx,
+                         struct gl_shader_program *prog);
+
+nir_shader *
+_mesa_spirv_to_nir(struct gl_context *ctx,
+                   const struct gl_shader_program *prog,
+                   gl_shader_stage stage,
+                   const nir_shader_compiler_options *options);
 
 /**
  * \name API functions

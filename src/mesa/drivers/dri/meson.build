@@ -53,7 +53,7 @@ if dri_drivers != []
     dependencies : [
       dep_selinux, dep_libdrm, dep_expat, dep_m, dep_thread, dep_dl, idep_nir,
     ],
-    link_args : ['-Wl,--build-id=sha1', ld_args_bsymbolic, ld_args_gc_sections],
+    link_args : [ld_args_build_id, ld_args_bsymbolic, ld_args_gc_sections],
   )
 
   meson.add_install_script(
@@ -69,7 +69,7 @@ endif
 if with_dri
   dri_req_private = []
   if dep_libdrm.found()
-    dri_req_private = ['libdrm >= 2.4.75']  # FIXME: don't hardcode this
+    dri_req_private = ['libdrm >= ' + dep_libdrm.version()]
   endif
 
   pkg.generate(

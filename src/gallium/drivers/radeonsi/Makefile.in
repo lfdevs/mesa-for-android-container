@@ -141,23 +141,37 @@ mkinstalldirs = $(install_sh) -d
 CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
-libradeonsi_la_LIBADD =
+am__DEPENDENCIES_1 =
+libradeonsi_la_DEPENDENCIES = $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1)
 am__objects_1 =
-am__objects_2 = $(am__objects_1) cik_sdma.lo si_blit.lo si_clear.lo \
-	si_compute.lo si_cp_dma.lo si_debug.lo si_descriptors.lo \
-	si_dma.lo si_fence.lo si_get.lo si_hw_context.lo si_pipe.lo \
-	si_pm4.lo si_perfcounter.lo si_shader.lo si_shader_nir.lo \
+am__dirstamp = $(am__leading_dot)dirstamp
+am__objects_2 = $(am__objects_1) cik_sdma.lo si_blit.lo si_buffer.lo \
+	si_clear.lo si_compute.lo si_cp_dma.lo si_debug.lo \
+	si_descriptors.lo si_dma.lo si_dma_cs.lo si_fence.lo si_get.lo \
+	si_gfx_cs.lo si_gpu_load.lo si_pipe.lo si_pm4.lo \
+	si_perfcounter.lo si_query.lo si_shader.lo si_shader_nir.lo \
 	si_shader_tgsi_alu.lo si_shader_tgsi_mem.lo \
 	si_shader_tgsi_setup.lo si_state.lo si_state_binning.lo \
 	si_state_draw.lo si_state_msaa.lo si_state_shaders.lo \
 	si_state_streamout.lo si_state_viewport.lo si_test_dma.lo \
-	si_uvd.lo
+	si_texture.lo si_uvd.lo ../radeon/r600_perfcounter.lo \
+	../radeon/radeon_uvd.lo ../radeon/radeon_vcn_dec.lo \
+	../radeon/radeon_vcn_enc_1_2.lo ../radeon/radeon_vcn_enc.lo \
+	../radeon/radeon_uvd_enc_1_1.lo ../radeon/radeon_uvd_enc.lo \
+	../radeon/radeon_vce_40_2_2.lo ../radeon/radeon_vce_50.lo \
+	../radeon/radeon_vce_52.lo ../radeon/radeon_vce.lo \
+	../radeon/radeon_video.lo
 am_libradeonsi_la_OBJECTS = $(am__objects_2)
 libradeonsi_la_OBJECTS = $(am_libradeonsi_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
 am__v_lt_1 = 
+libradeonsi_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
+	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
+	$(AM_CFLAGS) $(CFLAGS) $(libradeonsi_la_LDFLAGS) $(LDFLAGS) -o \
+	$@
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -365,6 +379,9 @@ OBJEXT = @OBJEXT@
 OMX_BELLAGIO_CFLAGS = @OMX_BELLAGIO_CFLAGS@
 OMX_BELLAGIO_LIBS = @OMX_BELLAGIO_LIBS@
 OMX_BELLAGIO_LIB_INSTALL_DIR = @OMX_BELLAGIO_LIB_INSTALL_DIR@
+OMX_TIZONIA_CFLAGS = @OMX_TIZONIA_CFLAGS@
+OMX_TIZONIA_LIBS = @OMX_TIZONIA_LIBS@
+OMX_TIZONIA_LIB_INSTALL_DIR = @OMX_TIZONIA_LIB_INSTALL_DIR@
 OPENCL_LIBNAME = @OPENCL_LIBNAME@
 OPENCL_VERSION = @OPENCL_VERSION@
 OSMESA_LIB = @OSMESA_LIB@
@@ -432,7 +449,9 @@ VL_LIBS = @VL_LIBS@
 VULKAN_ICD_INSTALL_DIR = @VULKAN_ICD_INSTALL_DIR@
 WAYLAND_CLIENT_CFLAGS = @WAYLAND_CLIENT_CFLAGS@
 WAYLAND_CLIENT_LIBS = @WAYLAND_CLIENT_LIBS@
+WAYLAND_PROTOCOLS_CFLAGS = @WAYLAND_PROTOCOLS_CFLAGS@
 WAYLAND_PROTOCOLS_DATADIR = @WAYLAND_PROTOCOLS_DATADIR@
+WAYLAND_PROTOCOLS_LIBS = @WAYLAND_PROTOCOLS_LIBS@
 WAYLAND_SCANNER = @WAYLAND_SCANNER@
 WAYLAND_SCANNER_CFLAGS = @WAYLAND_SCANNER_CFLAGS@
 WAYLAND_SCANNER_LIBS = @WAYLAND_SCANNER_LIBS@
@@ -448,6 +467,8 @@ XCB_DRI2_CFLAGS = @XCB_DRI2_CFLAGS@
 XCB_DRI2_LIBS = @XCB_DRI2_LIBS@
 XCB_DRI3_CFLAGS = @XCB_DRI3_CFLAGS@
 XCB_DRI3_LIBS = @XCB_DRI3_LIBS@
+XCB_DRI3_MODIFIERS_CFLAGS = @XCB_DRI3_MODIFIERS_CFLAGS@
+XCB_DRI3_MODIFIERS_LIBS = @XCB_DRI3_MODIFIERS_LIBS@
 XF86VIDMODE_CFLAGS = @XF86VIDMODE_CFLAGS@
 XF86VIDMODE_LIBS = @XF86VIDMODE_LIBS@
 XLIBGL_CFLAGS = @XLIBGL_CFLAGS@
@@ -509,7 +530,6 @@ pdfdir = @pdfdir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
-runstatedir = @runstatedir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
@@ -530,6 +550,8 @@ C_SOURCES := \
 	cik_sdma.c \
 	driinfo_radeonsi.h \
 	si_blit.c \
+	si_buffer.c \
+	si_build_pm4.h \
 	si_clear.c \
 	si_compute.c \
 	si_compute.h \
@@ -537,15 +559,19 @@ C_SOURCES := \
 	si_debug.c \
 	si_descriptors.c \
 	si_dma.c \
+	si_dma_cs.c \
 	si_fence.c \
 	si_get.c \
-	si_hw_context.c \
+	si_gfx_cs.c \
+	si_gpu_load.c \
 	si_pipe.c \
 	si_pipe.h \
 	si_pm4.c \
 	si_pm4.h \
 	si_perfcounter.c \
 	si_public.h \
+	si_query.c \
+	si_query.h \
 	si_shader.c \
 	si_shader.h \
 	si_shader_internal.h \
@@ -562,7 +588,28 @@ C_SOURCES := \
 	si_state_viewport.c \
 	si_state.h \
 	si_test_dma.c \
-	si_uvd.c
+	si_texture.c \
+	si_uvd.c \
+	../radeon/r600_perfcounter.c \
+	../radeon/r600_pipe_common.h \
+	../radeon/radeon_uvd.c \
+	../radeon/radeon_uvd.h \
+	../radeon/radeon_vcn_dec.c \
+	../radeon/radeon_vcn_dec.h \
+	../radeon/radeon_vcn_enc_1_2.c \
+	../radeon/radeon_vcn_enc.c \
+	../radeon/radeon_vcn_enc.h \
+	../radeon/radeon_uvd_enc_1_1.c \
+	../radeon/radeon_uvd_enc.c \
+	../radeon/radeon_uvd_enc.h \
+	../radeon/radeon_vce_40_2_2.c \
+	../radeon/radeon_vce_50.c \
+	../radeon/radeon_vce_52.c \
+	../radeon/radeon_vce.c \
+	../radeon/radeon_vce.h \
+	../radeon/radeon_video.c \
+	../radeon/radeon_video.h \
+	../radeon/radeon_winsys.h
 
 GALLIUM_CFLAGS = \
 	-I$(top_srcdir)/include \
@@ -633,10 +680,19 @@ AM_CFLAGS = \
 	-I$(top_builddir)/src/compiler/nir \
 	-I$(top_srcdir)/src/amd/common \
 	$(RADEON_CFLAGS) \
-	$(LLVM_CFLAGS)
+	$(LLVM_CFLAGS) \
+	-Wstrict-overflow=0
 
+# ^^ disable warnings about overflows (os_time_timeout)
 noinst_LTLIBRARIES = libradeonsi.la
 libradeonsi_la_SOURCES = $(C_SOURCES)
+libradeonsi_la_LIBADD = \
+	$(CLOCK_LIB) \
+	$(LLVM_LIBS)
+
+libradeonsi_la_LDFLAGS = \
+	$(LLVM_LDFLAGS)
+
 GEN_DRIINFO_INPUTS = \
 	$(top_srcdir)/src/gallium/auxiliary/pipe-loader/driinfo_gallium.h \
 	$(srcdir)/driinfo_radeonsi.h
@@ -692,30 +748,78 @@ clean-noinstLTLIBRARIES:
 	  echo rm -f $${locs}; \
 	  rm -f $${locs}; \
 	}
+../radeon/$(am__dirstamp):
+	@$(MKDIR_P) ../radeon
+	@: > ../radeon/$(am__dirstamp)
+../radeon/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) ../radeon/$(DEPDIR)
+	@: > ../radeon/$(DEPDIR)/$(am__dirstamp)
+../radeon/r600_perfcounter.lo: ../radeon/$(am__dirstamp) \
+	../radeon/$(DEPDIR)/$(am__dirstamp)
+../radeon/radeon_uvd.lo: ../radeon/$(am__dirstamp) \
+	../radeon/$(DEPDIR)/$(am__dirstamp)
+../radeon/radeon_vcn_dec.lo: ../radeon/$(am__dirstamp) \
+	../radeon/$(DEPDIR)/$(am__dirstamp)
+../radeon/radeon_vcn_enc_1_2.lo: ../radeon/$(am__dirstamp) \
+	../radeon/$(DEPDIR)/$(am__dirstamp)
+../radeon/radeon_vcn_enc.lo: ../radeon/$(am__dirstamp) \
+	../radeon/$(DEPDIR)/$(am__dirstamp)
+../radeon/radeon_uvd_enc_1_1.lo: ../radeon/$(am__dirstamp) \
+	../radeon/$(DEPDIR)/$(am__dirstamp)
+../radeon/radeon_uvd_enc.lo: ../radeon/$(am__dirstamp) \
+	../radeon/$(DEPDIR)/$(am__dirstamp)
+../radeon/radeon_vce_40_2_2.lo: ../radeon/$(am__dirstamp) \
+	../radeon/$(DEPDIR)/$(am__dirstamp)
+../radeon/radeon_vce_50.lo: ../radeon/$(am__dirstamp) \
+	../radeon/$(DEPDIR)/$(am__dirstamp)
+../radeon/radeon_vce_52.lo: ../radeon/$(am__dirstamp) \
+	../radeon/$(DEPDIR)/$(am__dirstamp)
+../radeon/radeon_vce.lo: ../radeon/$(am__dirstamp) \
+	../radeon/$(DEPDIR)/$(am__dirstamp)
+../radeon/radeon_video.lo: ../radeon/$(am__dirstamp) \
+	../radeon/$(DEPDIR)/$(am__dirstamp)
 
 libradeonsi.la: $(libradeonsi_la_OBJECTS) $(libradeonsi_la_DEPENDENCIES) $(EXTRA_libradeonsi_la_DEPENDENCIES) 
-	$(AM_V_CCLD)$(LINK)  $(libradeonsi_la_OBJECTS) $(libradeonsi_la_LIBADD) $(LIBS)
+	$(AM_V_CCLD)$(libradeonsi_la_LINK)  $(libradeonsi_la_OBJECTS) $(libradeonsi_la_LIBADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
+	-rm -f ../radeon/*.$(OBJEXT)
+	-rm -f ../radeon/*.lo
 
 distclean-compile:
 	-rm -f *.tab.c
 
+@AMDEP_TRUE@@am__include@ @am__quote@../radeon/$(DEPDIR)/r600_perfcounter.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@../radeon/$(DEPDIR)/radeon_uvd.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@../radeon/$(DEPDIR)/radeon_uvd_enc.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@../radeon/$(DEPDIR)/radeon_uvd_enc_1_1.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@../radeon/$(DEPDIR)/radeon_vce.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@../radeon/$(DEPDIR)/radeon_vce_40_2_2.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@../radeon/$(DEPDIR)/radeon_vce_50.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@../radeon/$(DEPDIR)/radeon_vce_52.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@../radeon/$(DEPDIR)/radeon_vcn_dec.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@../radeon/$(DEPDIR)/radeon_vcn_enc.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@../radeon/$(DEPDIR)/radeon_vcn_enc_1_2.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@../radeon/$(DEPDIR)/radeon_video.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/cik_sdma.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_blit.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_buffer.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_clear.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_compute.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_cp_dma.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_debug.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_descriptors.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_dma.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_dma_cs.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_fence.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_get.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_hw_context.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_gfx_cs.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_gpu_load.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_perfcounter.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_pipe.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_pm4.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_query.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_shader.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_shader_nir.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_shader_tgsi_alu.Plo@am__quote@
@@ -729,6 +833,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_state_streamout.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_state_viewport.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_test_dma.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_texture.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_uvd.Plo@am__quote@
 
 .c.o:
@@ -760,6 +865,7 @@ mostlyclean-libtool:
 
 clean-libtool:
 	-rm -rf .libs _libs
+	-rm -rf ../radeon/.libs ../radeon/_libs
 
 ID: $(am__tagged_files)
 	$(am__define_uniq_tagged_files); mkid -fID $$unique
@@ -876,6 +982,8 @@ clean-generic:
 distclean-generic:
 	-test -z "$(CONFIG_CLEAN_FILES)" || rm -f $(CONFIG_CLEAN_FILES)
 	-test . = "$(srcdir)" || test -z "$(CONFIG_CLEAN_VPATH_FILES)" || rm -f $(CONFIG_CLEAN_VPATH_FILES)
+	-rm -f ../radeon/$(DEPDIR)/$(am__dirstamp)
+	-rm -f ../radeon/$(am__dirstamp)
 
 maintainer-clean-generic:
 	@echo "This command is intended for maintainers to use"
@@ -887,7 +995,7 @@ clean-am: clean-generic clean-libtool clean-noinstLTLIBRARIES \
 	mostlyclean-am
 
 distclean: distclean-am
-	-rm -rf ./$(DEPDIR)
+	-rm -rf ../radeon/$(DEPDIR) ./$(DEPDIR)
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
 	distclean-tags
@@ -933,7 +1041,7 @@ install-ps-am:
 installcheck-am:
 
 maintainer-clean: maintainer-clean-am
-	-rm -rf ./$(DEPDIR)
+	-rm -rf ../radeon/$(DEPDIR) ./$(DEPDIR)
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic
 

@@ -68,9 +68,10 @@ brw_param_value(struct brw_context *brw,
 
    case BRW_PARAM_DOMAIN_PARAMETER: {
       unsigned idx = BRW_PARAM_PARAMETER_IDX(param);
+      unsigned offset = prog->Parameters->ParameterValueOffset[idx];
       unsigned comp = BRW_PARAM_PARAMETER_COMP(param);
       assert(idx < prog->Parameters->NumParameters);
-      return prog->Parameters->ParameterValues[idx][comp].u;
+      return prog->Parameters->ParameterValues[offset + comp].u;
    }
 
    case BRW_PARAM_DOMAIN_UNIFORM: {
@@ -151,9 +152,9 @@ gen6_upload_push_constants(struct brw_context *brw,
       const int size = prog_data->nr_params * sizeof(gl_constant_value);
       gl_constant_value *param;
       if (devinfo->gen >= 8 || devinfo->is_haswell) {
-         param = intel_upload_space(brw, size, 32,
-                                    &stage_state->push_const_bo,
-                                    &stage_state->push_const_offset);
+         param = brw_upload_space(&brw->upload, size, 32,
+                                  &stage_state->push_const_bo,
+                                  &stage_state->push_const_offset);
       } else {
          param = brw_state_batch(brw, size, 32,
                                  &stage_state->push_const_offset);
@@ -249,8 +250,8 @@ brw_upload_pull_constants(struct brw_context *brw,
    uint32_t size = prog_data->nr_pull_params * 4;
    struct brw_bo *const_bo = NULL;
    uint32_t const_offset;
-   gl_constant_value *constants = intel_upload_space(brw, size, 64,
-                                                     &const_bo, &const_offset);
+   gl_constant_value *constants = brw_upload_space(&brw->upload, size, 64,
+                                                   &const_bo, &const_offset);
 
    STATIC_ASSERT(sizeof(gl_constant_value) == sizeof(float));
 

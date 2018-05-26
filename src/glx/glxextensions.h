@@ -67,8 +67,6 @@ enum
    SGIS_multisample_bit,
    SGIX_fbconfig_bit,
    SGIX_pbuffer_bit,
-   SGIX_swap_barrier_bit,
-   SGIX_swap_group_bit,
    SGIX_visual_select_group_bit,
    SGI_make_current_read_bit,
    SGI_swap_control_bit,

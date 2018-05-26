@@ -27,8 +27,10 @@
 */
 #include "tgsi/tgsi_transform.h"
 #include "virgl_context.h"
+#include "virgl_screen.h"
 struct virgl_transform_context {
    struct tgsi_transform_context base;
+   bool cull_enabled;
 };
 
 static void
@@ -55,9 +57,13 @@ static void
 virgl_tgsi_transform_property(struct tgsi_transform_context *ctx,
                               struct tgsi_full_property *prop)
 {
+   struct virgl_transform_context *vtctx = (struct virgl_transform_context *)ctx;
    switch (prop->Property.PropertyName) {
    case TGSI_PROPERTY_NUM_CLIPDIST_ENABLED:
    case TGSI_PROPERTY_NUM_CULLDIST_ENABLED:
+      if (vtctx->cull_enabled)
+	 ctx->emit_property(ctx, prop);
+      break;
    case TGSI_PROPERTY_NEXT_SHADER:
       break;
    default:
@@ -82,9 +88,9 @@ virgl_tgsi_transform_instruction(struct tgsi_transform_context *ctx,
    ctx->emit_instruction(ctx, inst);
 }
 
-struct tgsi_token *virgl_tgsi_transform(const struct tgsi_token *tokens_in)
+struct tgsi_token *virgl_tgsi_transform(struct virgl_context *vctx, const struct tgsi_token *tokens_in)
 {
-
+   struct virgl_screen *vscreen = (struct virgl_screen *)vctx->base.screen;
    struct virgl_transform_context transform;
    const uint newLen = tgsi_num_tokens(tokens_in);
    struct tgsi_token *new_tokens;
@@ -97,6 +103,7 @@ struct tgsi_token *virgl_tgsi_transform(const struct tgsi_token *tokens_in)
    transform.base.transform_declaration = virgl_tgsi_transform_declaration;
    transform.base.transform_property = virgl_tgsi_transform_property;
    transform.base.transform_instruction = virgl_tgsi_transform_instruction;
+   transform.cull_enabled = vscreen->caps.caps.v1.bset.has_cull;
    tgsi_transform_shader(tokens_in, new_tokens, newLen, &transform.base);
 
    return new_tokens;

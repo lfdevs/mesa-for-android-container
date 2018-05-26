@@ -922,6 +922,7 @@ enum marshal_dispatch_cmd_id
    DISPATCH_CMD_TexCoord4d,
    DISPATCH_CMD_TexCoord4f,
    DISPATCH_CMD_ProgramUniformMatrix3dv,
+   DISPATCH_CMD_FramebufferFetchBarrierEXT,
    DISPATCH_CMD_LockArraysEXT,
    DISPATCH_CMD_Rectfv,
    DISPATCH_CMD_BindImageTexture,

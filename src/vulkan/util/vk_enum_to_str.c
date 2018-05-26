@@ -251,13 +251,13 @@ vk_BorderColor_to_str(VkBorderColor input)
 }
 
 const char *
-vk_ChromaLocationKHR_to_str(VkChromaLocationKHR input)
+vk_ChromaLocation_to_str(VkChromaLocation input)
 {
     switch(input) {
         case 0:
-            return "VK_CHROMA_LOCATION_COSITED_EVEN_KHR";
+            return "VK_CHROMA_LOCATION_COSITED_EVEN";
         case 1:
-            return "VK_CHROMA_LOCATION_MIDPOINT_KHR";
+            return "VK_CHROMA_LOCATION_MIDPOINT";
     default:
         unreachable("Undefined enum value.");
     }
@@ -364,6 +364,21 @@ vk_ComponentSwizzle_to_str(VkComponentSwizzle input)
 }
 
 const char *
+vk_ConservativeRasterizationModeEXT_to_str(VkConservativeRasterizationModeEXT input)
+{
+    switch(input) {
+        case 0:
+            return "VK_CONSERVATIVE_RASTERIZATION_MODE_DISABLED_EXT";
+        case 1:
+            return "VK_CONSERVATIVE_RASTERIZATION_MODE_OVERESTIMATE_EXT";
+        case 2:
+            return "VK_CONSERVATIVE_RASTERIZATION_MODE_UNDERESTIMATE_EXT";
+    default:
+        unreachable("Undefined enum value.");
+    }
+}
+
+const char *
 vk_CoverageModulationModeNV_to_str(VkCoverageModulationModeNV input)
 {
     switch(input) {
@@ -451,11 +466,11 @@ vk_DebugReportObjectTypeEXT_to_str(VkDebugReportObjectTypeEXT input)
         case 32:
             return "VK_DEBUG_REPORT_OBJECT_TYPE_INDIRECT_COMMANDS_LAYOUT_NVX_EXT";
         case 33:
-            return "VK_DEBUG_REPORT_OBJECT_TYPE_VALIDATION_CACHE_EXT";
+            return "VK_DEBUG_REPORT_OBJECT_TYPE_VALIDATION_CACHE_EXT_EXT";
         case 1000085000:
-            return "VK_DEBUG_REPORT_OBJECT_TYPE_DESCRIPTOR_UPDATE_TEMPLATE_KHR_EXT";
+            return "VK_DEBUG_REPORT_OBJECT_TYPE_DESCRIPTOR_UPDATE_TEMPLATE_EXT";
         case 1000156000:
-            return "VK_DEBUG_REPORT_OBJECT_TYPE_SAMPLER_YCBCR_CONVERSION_KHR_EXT";
+            return "VK_DEBUG_REPORT_OBJECT_TYPE_SAMPLER_YCBCR_CONVERSION_EXT";
     default:
         unreachable("Undefined enum value.");
     }
@@ -493,11 +508,11 @@ vk_DescriptorType_to_str(VkDescriptorType input)
 }
 
 const char *
-vk_DescriptorUpdateTemplateTypeKHR_to_str(VkDescriptorUpdateTemplateTypeKHR input)
+vk_DescriptorUpdateTemplateType_to_str(VkDescriptorUpdateTemplateType input)
 {
     switch(input) {
         case 0:
-            return "VK_DESCRIPTOR_UPDATE_TEMPLATE_TYPE_DESCRIPTOR_SET_KHR";
+            return "VK_DESCRIPTOR_UPDATE_TEMPLATE_TYPE_DESCRIPTOR_SET";
         case 1:
             return "VK_DESCRIPTOR_UPDATE_TEMPLATE_TYPE_PUSH_DESCRIPTORS_KHR";
     default:
@@ -994,73 +1009,73 @@ vk_Format_to_str(VkFormat input)
         case 1000054007:
             return "VK_FORMAT_PVRTC2_4BPP_SRGB_BLOCK_IMG";
         case 1000156000:
-            return "VK_FORMAT_G8B8G8R8_422_UNORM_KHR";
+            return "VK_FORMAT_G8B8G8R8_422_UNORM";
         case 1000156001:
-            return "VK_FORMAT_B8G8R8G8_422_UNORM_KHR";
+            return "VK_FORMAT_B8G8R8G8_422_UNORM";
         case 1000156002:
-            return "VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM_KHR";
+            return "VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM";
         case 1000156003:
-            return "VK_FORMAT_G8_B8R8_2PLANE_420_UNORM_KHR";
+            return "VK_FORMAT_G8_B8R8_2PLANE_420_UNORM";
         case 1000156004:
-            return "VK_FORMAT_G8_B8_R8_3PLANE_422_UNORM_KHR";
+            return "VK_FORMAT_G8_B8_R8_3PLANE_422_UNORM";
         case 1000156005:
-            return "VK_FORMAT_G8_B8R8_2PLANE_422_UNORM_KHR";
+            return "VK_FORMAT_G8_B8R8_2PLANE_422_UNORM";
         case 1000156006:
-            return "VK_FORMAT_G8_B8_R8_3PLANE_444_UNORM_KHR";
+            return "VK_FORMAT_G8_B8_R8_3PLANE_444_UNORM";
         case 1000156007:
-            return "VK_FORMAT_R10X6_UNORM_PACK16_KHR";
+            return "VK_FORMAT_R10X6_UNORM_PACK16";
         case 1000156008:
-            return "VK_FORMAT_R10X6G10X6_UNORM_2PACK16_KHR";
+            return "VK_FORMAT_R10X6G10X6_UNORM_2PACK16";
         case 1000156009:
-            return "VK_FORMAT_R10X6G10X6B10X6A10X6_UNORM_4PACK16_KHR";
+            return "VK_FORMAT_R10X6G10X6B10X6A10X6_UNORM_4PACK16";
         case 1000156010:
-            return "VK_FORMAT_G10X6B10X6G10X6R10X6_422_UNORM_4PACK16_KHR";
+            return "VK_FORMAT_G10X6B10X6G10X6R10X6_422_UNORM_4PACK16";
         case 1000156011:
-            return "VK_FORMAT_B10X6G10X6R10X6G10X6_422_UNORM_4PACK16_KHR";
+            return "VK_FORMAT_B10X6G10X6R10X6G10X6_422_UNORM_4PACK16";
         case 1000156012:
-            return "VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_420_UNORM_3PACK16_KHR";
+            return "VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_420_UNORM_3PACK16";
         case 1000156013:
-            return "VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16_KHR";
+            return "VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16";
         case 1000156014:
-            return "VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_422_UNORM_3PACK16_KHR";
+            return "VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_422_UNORM_3PACK16";
         case 1000156015:
-            return "VK_FORMAT_G10X6_B10X6R10X6_2PLANE_422_UNORM_3PACK16_KHR";
+            return "VK_FORMAT_G10X6_B10X6R10X6_2PLANE_422_UNORM_3PACK16";
         case 1000156016:
-            return "VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_444_UNORM_3PACK16_KHR";
+            return "VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_444_UNORM_3PACK16";
         case 1000156017:
-            return "VK_FORMAT_R12X4_UNORM_PACK16_KHR";
+            return "VK_FORMAT_R12X4_UNORM_PACK16";
         case 1000156018:
-            return "VK_FORMAT_R12X4G12X4_UNORM_2PACK16_KHR";
+            return "VK_FORMAT_R12X4G12X4_UNORM_2PACK16";
         case 1000156019:
-            return "VK_FORMAT_R12X4G12X4B12X4A12X4_UNORM_4PACK16_KHR";
+            return "VK_FORMAT_R12X4G12X4B12X4A12X4_UNORM_4PACK16";
         case 1000156020:
-            return "VK_FORMAT_G12X4B12X4G12X4R12X4_422_UNORM_4PACK16_KHR";
+            return "VK_FORMAT_G12X4B12X4G12X4R12X4_422_UNORM_4PACK16";
         case 1000156021:
-            return "VK_FORMAT_B12X4G12X4R12X4G12X4_422_UNORM_4PACK16_KHR";
+            return "VK_FORMAT_B12X4G12X4R12X4G12X4_422_UNORM_4PACK16";
         case 1000156022:
-            return "VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_420_UNORM_3PACK16_KHR";
+            return "VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_420_UNORM_3PACK16";
         case 1000156023:
-            return "VK_FORMAT_G12X4_B12X4R12X4_2PLANE_420_UNORM_3PACK16_KHR";
+            return "VK_FORMAT_G12X4_B12X4R12X4_2PLANE_420_UNORM_3PACK16";
         case 1000156024:
-            return "VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_422_UNORM_3PACK16_KHR";
+            return "VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_422_UNORM_3PACK16";
         case 1000156025:
-            return "VK_FORMAT_G12X4_B12X4R12X4_2PLANE_422_UNORM_3PACK16_KHR";
+            return "VK_FORMAT_G12X4_B12X4R12X4_2PLANE_422_UNORM_3PACK16";
         case 1000156026:
-            return "VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_444_UNORM_3PACK16_KHR";
+            return "VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_444_UNORM_3PACK16";
         case 1000156027:
-            return "VK_FORMAT_G16B16G16R16_422_UNORM_KHR";
+            return "VK_FORMAT_G16B16G16R16_422_UNORM";
         case 1000156028:
-            return "VK_FORMAT_B16G16R16G16_422_UNORM_KHR";
+            return "VK_FORMAT_B16G16R16G16_422_UNORM";
         case 1000156029:
-            return "VK_FORMAT_G16_B16_R16_3PLANE_420_UNORM_KHR";
+            return "VK_FORMAT_G16_B16_R16_3PLANE_420_UNORM";
         case 1000156030:
-            return "VK_FORMAT_G16_B16R16_2PLANE_420_UNORM_KHR";
+            return "VK_FORMAT_G16_B16R16_2PLANE_420_UNORM";
         case 1000156031:
-            return "VK_FORMAT_G16_B16_R16_3PLANE_422_UNORM_KHR";
+            return "VK_FORMAT_G16_B16_R16_3PLANE_422_UNORM";
         case 1000156032:
-            return "VK_FORMAT_G16_B16R16_2PLANE_422_UNORM_KHR";
+            return "VK_FORMAT_G16_B16R16_2PLANE_422_UNORM";
         case 1000156033:
-            return "VK_FORMAT_G16_B16_R16_3PLANE_444_UNORM_KHR";
+            return "VK_FORMAT_G16_B16_R16_3PLANE_444_UNORM";
     default:
         unreachable("Undefined enum value.");
     }
@@ -1106,9 +1121,9 @@ vk_ImageLayout_to_str(VkImageLayout input)
         case 1000111000:
             return "VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR";
         case 1000117000:
-            return "VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL_KHR";
+            return "VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL";
         case 1000117001:
-            return "VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL_KHR";
+            return "VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL";
     default:
         unreachable("Undefined enum value.");
     }
@@ -1341,13 +1356,15 @@ vk_ObjectType_to_str(VkObjectType input)
         case 1000011000:
             return "VK_OBJECT_TYPE_DEBUG_REPORT_CALLBACK_EXT";
         case 1000085000:
-            return "VK_OBJECT_TYPE_DESCRIPTOR_UPDATE_TEMPLATE_KHR";
+            return "VK_OBJECT_TYPE_DESCRIPTOR_UPDATE_TEMPLATE";
         case 1000086000:
             return "VK_OBJECT_TYPE_OBJECT_TABLE_NVX";
         case 1000086001:
             return "VK_OBJECT_TYPE_INDIRECT_COMMANDS_LAYOUT_NVX";
+        case 1000128000:
+            return "VK_OBJECT_TYPE_DEBUG_UTILS_MESSENGER_EXT";
         case 1000156000:
-            return "VK_OBJECT_TYPE_SAMPLER_YCBCR_CONVERSION_KHR";
+            return "VK_OBJECT_TYPE_SAMPLER_YCBCR_CONVERSION";
         case 1000160000:
             return "VK_OBJECT_TYPE_VALIDATION_CACHE_EXT";
     default:
@@ -1399,13 +1416,13 @@ vk_PipelineCacheHeaderVersion_to_str(VkPipelineCacheHeaderVersion input)
 }
 
 const char *
-vk_PointClippingBehaviorKHR_to_str(VkPointClippingBehaviorKHR input)
+vk_PointClippingBehavior_to_str(VkPointClippingBehavior input)
 {
     switch(input) {
         case 0:
-            return "VK_POINT_CLIPPING_BEHAVIOR_ALL_CLIP_PLANES_KHR";
+            return "VK_POINT_CLIPPING_BEHAVIOR_ALL_CLIP_PLANES";
         case 1:
-            return "VK_POINT_CLIPPING_BEHAVIOR_USER_CLIP_PLANES_ONLY_KHR";
+            return "VK_POINT_CLIPPING_BEHAVIOR_USER_CLIP_PLANES_ONLY";
     default:
         unreachable("Undefined enum value.");
     }
@@ -1531,10 +1548,12 @@ vk_Result_to_str(VkResult input)
     switch(input) {
         case -1000174001:
             return "VK_ERROR_NOT_PERMITTED_EXT";
+        case -1000161000:
+            return "VK_ERROR_FRAGMENTATION_EXT";
         case -1000072003:
-            return "VK_ERROR_INVALID_EXTERNAL_HANDLE_KHR";
+            return "VK_ERROR_INVALID_EXTERNAL_HANDLE";
         case -1000069000:
-            return "VK_ERROR_OUT_OF_POOL_MEMORY_KHR";
+            return "VK_ERROR_OUT_OF_POOL_MEMORY";
         case -1000012000:
             return "VK_ERROR_INVALID_SHADER_NV";
         case -1000011001:
@@ -1638,32 +1657,32 @@ vk_SamplerReductionModeEXT_to_str(VkSamplerReductionModeEXT input)
 }
 
 const char *
-vk_SamplerYcbcrModelConversionKHR_to_str(VkSamplerYcbcrModelConversionKHR input)
+vk_SamplerYcbcrModelConversion_to_str(VkSamplerYcbcrModelConversion input)
 {
     switch(input) {
         case 0:
-            return "VK_SAMPLER_YCBCR_MODEL_CONVERSION_RGB_IDENTITY_KHR";
+            return "VK_SAMPLER_YCBCR_MODEL_CONVERSION_RGB_IDENTITY";
         case 1:
-            return "VK_SAMPLER_YCBCR_MODEL_CONVERSION_YCBCR_IDENTITY_KHR";
+            return "VK_SAMPLER_YCBCR_MODEL_CONVERSION_YCBCR_IDENTITY";
         case 2:
-            return "VK_SAMPLER_YCBCR_MODEL_CONVERSION_YCBCR_709_KHR";
+            return "VK_SAMPLER_YCBCR_MODEL_CONVERSION_YCBCR_709";
         case 3:
-            return "VK_SAMPLER_YCBCR_MODEL_CONVERSION_YCBCR_601_KHR";
+            return "VK_SAMPLER_YCBCR_MODEL_CONVERSION_YCBCR_601";
         case 4:
-            return "VK_SAMPLER_YCBCR_MODEL_CONVERSION_YCBCR_2020_KHR";
+            return "VK_SAMPLER_YCBCR_MODEL_CONVERSION_YCBCR_2020";
     default:
         unreachable("Undefined enum value.");
     }
 }
 
 const char *
-vk_SamplerYcbcrRangeKHR_to_str(VkSamplerYcbcrRangeKHR input)
+vk_SamplerYcbcrRange_to_str(VkSamplerYcbcrRange input)
 {
     switch(input) {
         case 0:
-            return "VK_SAMPLER_YCBCR_RANGE_ITU_FULL_KHR";
+            return "VK_SAMPLER_YCBCR_RANGE_ITU_FULL";
         case 1:
-            return "VK_SAMPLER_YCBCR_RANGE_ITU_NARROW_KHR";
+            return "VK_SAMPLER_YCBCR_RANGE_ITU_NARROW";
     default:
         unreachable("Undefined enum value.");
     }
@@ -1846,13 +1865,6 @@ vk_StructureType_to_str(VkStructureType input)
             return "VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR";
         case 1000009000:
             return "VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR";
-
-        #pragma GCC diagnostic push
-        #pragma GCC diagnostic ignored "-Wswitch"
-        case 1000010000:
-            return "VK_STRUCTURE_TYPE_NATIVE_BUFFER_ANDROID";
-        #pragma GCC diagnostic pop
-
         case 1000011000:
             return "VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT";
         case 1000018000:
@@ -1872,11 +1884,11 @@ vk_StructureType_to_str(VkStructureType input)
         case 1000041000:
             return "VK_STRUCTURE_TYPE_TEXTURE_LOD_GATHER_FORMAT_PROPERTIES_AMD";
         case 1000053000:
-            return "VK_STRUCTURE_TYPE_RENDER_PASS_MULTIVIEW_CREATE_INFO_KHX";
+            return "VK_STRUCTURE_TYPE_RENDER_PASS_MULTIVIEW_CREATE_INFO";
         case 1000053001:
-            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES_KHX";
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES";
         case 1000053002:
-            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PROPERTIES_KHX";
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PROPERTIES";
         case 1000056000:
             return "VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO_NV";
         case 1000056001:
@@ -1888,73 +1900,75 @@ vk_StructureType_to_str(VkStructureType input)
         case 1000058000:
             return "VK_STRUCTURE_TYPE_WIN32_KEYED_MUTEX_ACQUIRE_RELEASE_INFO_NV";
         case 1000059000:
-            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR";
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2";
         case 1000059001:
-            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2_KHR";
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2";
         case 1000059002:
-            return "VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2_KHR";
+            return "VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2";
         case 1000059003:
-            return "VK_STRUCTURE_TYPE_IMAGE_FORMAT_PROPERTIES_2_KHR";
+            return "VK_STRUCTURE_TYPE_IMAGE_FORMAT_PROPERTIES_2";
         case 1000059004:
-            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2_KHR";
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2";
         case 1000059005:
-            return "VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2_KHR";
+            return "VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2";
         case 1000059006:
-            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2_KHR";
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2";
         case 1000059007:
-            return "VK_STRUCTURE_TYPE_SPARSE_IMAGE_FORMAT_PROPERTIES_2_KHR";
+            return "VK_STRUCTURE_TYPE_SPARSE_IMAGE_FORMAT_PROPERTIES_2";
         case 1000059008:
-            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SPARSE_IMAGE_FORMAT_INFO_2_KHR";
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SPARSE_IMAGE_FORMAT_INFO_2";
         case 1000060000:
-            return "VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO_KHX";
+            return "VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO";
         case 1000060003:
-            return "VK_STRUCTURE_TYPE_DEVICE_GROUP_RENDER_PASS_BEGIN_INFO_KHX";
+            return "VK_STRUCTURE_TYPE_DEVICE_GROUP_RENDER_PASS_BEGIN_INFO";
         case 1000060004:
-            return "VK_STRUCTURE_TYPE_DEVICE_GROUP_COMMAND_BUFFER_BEGIN_INFO_KHX";
+            return "VK_STRUCTURE_TYPE_DEVICE_GROUP_COMMAND_BUFFER_BEGIN_INFO";
         case 1000060005:
-            return "VK_STRUCTURE_TYPE_DEVICE_GROUP_SUBMIT_INFO_KHX";
+            return "VK_STRUCTURE_TYPE_DEVICE_GROUP_SUBMIT_INFO";
         case 1000060006:
-            return "VK_STRUCTURE_TYPE_DEVICE_GROUP_BIND_SPARSE_INFO_KHX";
+            return "VK_STRUCTURE_TYPE_DEVICE_GROUP_BIND_SPARSE_INFO";
         case 1000060007:
-            return "VK_STRUCTURE_TYPE_DEVICE_GROUP_PRESENT_CAPABILITIES_KHX";
+            return "VK_STRUCTURE_TYPE_DEVICE_GROUP_PRESENT_CAPABILITIES_KHR";
         case 1000060008:
-            return "VK_STRUCTURE_TYPE_IMAGE_SWAPCHAIN_CREATE_INFO_KHX";
+            return "VK_STRUCTURE_TYPE_IMAGE_SWAPCHAIN_CREATE_INFO_KHR";
         case 1000060009:
-            return "VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_SWAPCHAIN_INFO_KHX";
+            return "VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_SWAPCHAIN_INFO_KHR";
         case 1000060010:
-            return "VK_STRUCTURE_TYPE_ACQUIRE_NEXT_IMAGE_INFO_KHX";
+            return "VK_STRUCTURE_TYPE_ACQUIRE_NEXT_IMAGE_INFO_KHR";
         case 1000060011:
-            return "VK_STRUCTURE_TYPE_DEVICE_GROUP_PRESENT_INFO_KHX";
+            return "VK_STRUCTURE_TYPE_DEVICE_GROUP_PRESENT_INFO_KHR";
         case 1000060012:
-            return "VK_STRUCTURE_TYPE_DEVICE_GROUP_SWAPCHAIN_CREATE_INFO_KHX";
+            return "VK_STRUCTURE_TYPE_DEVICE_GROUP_SWAPCHAIN_CREATE_INFO_KHR";
         case 1000060013:
-            return "VK_STRUCTURE_TYPE_BIND_BUFFER_MEMORY_DEVICE_GROUP_INFO_KHX";
+            return "VK_STRUCTURE_TYPE_BIND_BUFFER_MEMORY_DEVICE_GROUP_INFO";
         case 1000060014:
-            return "VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_DEVICE_GROUP_INFO_KHX";
+            return "VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_DEVICE_GROUP_INFO";
         case 1000061000:
             return "VK_STRUCTURE_TYPE_VALIDATION_FLAGS_EXT";
         case 1000062000:
             return "VK_STRUCTURE_TYPE_VI_SURFACE_CREATE_INFO_NN";
+        case 1000063000:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETER_FEATURES";
         case 1000070000:
-            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GROUP_PROPERTIES_KHX";
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GROUP_PROPERTIES";
         case 1000070001:
-            return "VK_STRUCTURE_TYPE_DEVICE_GROUP_DEVICE_CREATE_INFO_KHX";
+            return "VK_STRUCTURE_TYPE_DEVICE_GROUP_DEVICE_CREATE_INFO";
         case 1000071000:
-            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO_KHR";
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO";
         case 1000071001:
-            return "VK_STRUCTURE_TYPE_EXTERNAL_IMAGE_FORMAT_PROPERTIES_KHR";
+            return "VK_STRUCTURE_TYPE_EXTERNAL_IMAGE_FORMAT_PROPERTIES";
         case 1000071002:
-            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_BUFFER_INFO_KHR";
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_BUFFER_INFO";
         case 1000071003:
-            return "VK_STRUCTURE_TYPE_EXTERNAL_BUFFER_PROPERTIES_KHR";
+            return "VK_STRUCTURE_TYPE_EXTERNAL_BUFFER_PROPERTIES";
         case 1000071004:
-            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES_KHR";
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES";
         case 1000072000:
-            return "VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_BUFFER_CREATE_INFO_KHR";
+            return "VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_BUFFER_CREATE_INFO";
         case 1000072001:
-            return "VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO_KHR";
+            return "VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO";
         case 1000072002:
-            return "VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO_KHR";
+            return "VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO";
         case 1000073000:
             return "VK_STRUCTURE_TYPE_IMPORT_MEMORY_WIN32_HANDLE_INFO_KHR";
         case 1000073001:
@@ -1972,11 +1986,11 @@ vk_StructureType_to_str(VkStructureType input)
         case 1000075000:
             return "VK_STRUCTURE_TYPE_WIN32_KEYED_MUTEX_ACQUIRE_RELEASE_INFO_KHR";
         case 1000076000:
-            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_SEMAPHORE_INFO_KHR";
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_SEMAPHORE_INFO";
         case 1000076001:
-            return "VK_STRUCTURE_TYPE_EXTERNAL_SEMAPHORE_PROPERTIES_KHR";
+            return "VK_STRUCTURE_TYPE_EXTERNAL_SEMAPHORE_PROPERTIES";
         case 1000077000:
-            return "VK_STRUCTURE_TYPE_EXPORT_SEMAPHORE_CREATE_INFO_KHR";
+            return "VK_STRUCTURE_TYPE_EXPORT_SEMAPHORE_CREATE_INFO";
         case 1000078000:
             return "VK_STRUCTURE_TYPE_IMPORT_SEMAPHORE_WIN32_HANDLE_INFO_KHR";
         case 1000078001:
@@ -1992,11 +2006,11 @@ vk_StructureType_to_str(VkStructureType input)
         case 1000080000:
             return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PUSH_DESCRIPTOR_PROPERTIES_KHR";
         case 1000083000:
-            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES_KHR";
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES";
         case 1000084000:
             return "VK_STRUCTURE_TYPE_PRESENT_REGIONS_KHR";
         case 1000085000:
-            return "VK_STRUCTURE_TYPE_DESCRIPTOR_UPDATE_TEMPLATE_CREATE_INFO_KHR";
+            return "VK_STRUCTURE_TYPE_DESCRIPTOR_UPDATE_TEMPLATE_CREATE_INFO";
         case 1000086000:
             return "VK_STRUCTURE_TYPE_OBJECT_TABLE_CREATE_INFO_NVX";
         case 1000086001:
@@ -2023,6 +2037,8 @@ vk_StructureType_to_str(VkStructureType input)
             return "VK_STRUCTURE_TYPE_SWAPCHAIN_COUNTER_CREATE_INFO_EXT";
         case 1000092000:
             return "VK_STRUCTURE_TYPE_PRESENT_TIMES_INFO_GOOGLE";
+        case 1000094000:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES";
         case 1000097000:
             return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PER_VIEW_ATTRIBUTES_PROPERTIES_NVX";
         case 1000098000:
@@ -2031,16 +2047,20 @@ vk_StructureType_to_str(VkStructureType input)
             return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DISCARD_RECTANGLE_PROPERTIES_EXT";
         case 1000099001:
             return "VK_STRUCTURE_TYPE_PIPELINE_DISCARD_RECTANGLE_STATE_CREATE_INFO_EXT";
+        case 1000101000:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CONSERVATIVE_RASTERIZATION_PROPERTIES_EXT";
+        case 1000101001:
+            return "VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_CONSERVATIVE_STATE_CREATE_INFO_EXT";
         case 1000105000:
             return "VK_STRUCTURE_TYPE_HDR_METADATA_EXT";
         case 1000111000:
             return "VK_STRUCTURE_TYPE_SHARED_PRESENT_SURFACE_CAPABILITIES_KHR";
         case 1000112000:
-            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_FENCE_INFO_KHR";
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_FENCE_INFO";
         case 1000112001:
-            return "VK_STRUCTURE_TYPE_EXTERNAL_FENCE_PROPERTIES_KHR";
+            return "VK_STRUCTURE_TYPE_EXTERNAL_FENCE_PROPERTIES";
         case 1000113000:
-            return "VK_STRUCTURE_TYPE_EXPORT_FENCE_CREATE_INFO_KHR";
+            return "VK_STRUCTURE_TYPE_EXPORT_FENCE_CREATE_INFO";
         case 1000114000:
             return "VK_STRUCTURE_TYPE_IMPORT_FENCE_WIN32_HANDLE_INFO_KHR";
         case 1000114001:
@@ -2052,13 +2072,13 @@ vk_StructureType_to_str(VkStructureType input)
         case 1000115001:
             return "VK_STRUCTURE_TYPE_FENCE_GET_FD_INFO_KHR";
         case 1000117000:
-            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_POINT_CLIPPING_PROPERTIES_KHR";
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_POINT_CLIPPING_PROPERTIES";
         case 1000117001:
-            return "VK_STRUCTURE_TYPE_RENDER_PASS_INPUT_ATTACHMENT_ASPECT_CREATE_INFO_KHR";
+            return "VK_STRUCTURE_TYPE_RENDER_PASS_INPUT_ATTACHMENT_ASPECT_CREATE_INFO";
         case 1000117002:
-            return "VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO_KHR";
+            return "VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO";
         case 1000117003:
-            return "VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_DOMAIN_ORIGIN_STATE_CREATE_INFO_KHR";
+            return "VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_DOMAIN_ORIGIN_STATE_CREATE_INFO";
         case 1000119000:
             return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SURFACE_INFO_2_KHR";
         case 1000119001:
@@ -2066,15 +2086,37 @@ vk_StructureType_to_str(VkStructureType input)
         case 1000119002:
             return "VK_STRUCTURE_TYPE_SURFACE_FORMAT_2_KHR";
         case 1000120000:
-            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VARIABLE_POINTER_FEATURES_KHR";
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VARIABLE_POINTER_FEATURES";
         case 1000122000:
             return "VK_STRUCTURE_TYPE_IOS_SURFACE_CREATE_INFO_MVK";
         case 1000123000:
             return "VK_STRUCTURE_TYPE_MACOS_SURFACE_CREATE_INFO_MVK";
         case 1000127000:
-            return "VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS_KHR";
+            return "VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS";
         case 1000127001:
-            return "VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO_KHR";
+            return "VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO";
+        case 1000128000:
+            return "VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT";
+        case 1000128001:
+            return "VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_TAG_INFO_EXT";
+        case 1000128002:
+            return "VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT";
+        case 1000128003:
+            return "VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CALLBACK_DATA_EXT";
+        case 1000128004:
+            return "VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT";
+        case 1000129000:
+            return "VK_STRUCTURE_TYPE_ANDROID_HARDWARE_BUFFER_USAGE_ANDROID";
+        case 1000129001:
+            return "VK_STRUCTURE_TYPE_ANDROID_HARDWARE_BUFFER_PROPERTIES_ANDROID";
+        case 1000129002:
+            return "VK_STRUCTURE_TYPE_ANDROID_HARDWARE_BUFFER_FORMAT_PROPERTIES_ANDROID";
+        case 1000129003:
+            return "VK_STRUCTURE_TYPE_IMPORT_ANDROID_HARDWARE_BUFFER_INFO_ANDROID";
+        case 1000129004:
+            return "VK_STRUCTURE_TYPE_MEMORY_GET_ANDROID_HARDWARE_BUFFER_INFO_ANDROID";
+        case 1000129005:
+            return "VK_STRUCTURE_TYPE_EXTERNAL_FORMAT_ANDROID";
         case 1000130000:
             return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLER_FILTER_MINMAX_PROPERTIES_EXT";
         case 1000130001:
@@ -2089,16 +2131,24 @@ vk_StructureType_to_str(VkStructureType input)
             return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLE_LOCATIONS_PROPERTIES_EXT";
         case 1000143004:
             return "VK_STRUCTURE_TYPE_MULTISAMPLE_PROPERTIES_EXT";
+        case 1000145000:
+            return "VK_STRUCTURE_TYPE_PROTECTED_SUBMIT_INFO";
+        case 1000145001:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROTECTED_MEMORY_FEATURES";
+        case 1000145002:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROTECTED_MEMORY_PROPERTIES";
+        case 1000145003:
+            return "VK_STRUCTURE_TYPE_DEVICE_QUEUE_INFO_2";
         case 1000146000:
-            return "VK_STRUCTURE_TYPE_BUFFER_MEMORY_REQUIREMENTS_INFO_2_KHR";
+            return "VK_STRUCTURE_TYPE_BUFFER_MEMORY_REQUIREMENTS_INFO_2";
         case 1000146001:
-            return "VK_STRUCTURE_TYPE_IMAGE_MEMORY_REQUIREMENTS_INFO_2_KHR";
+            return "VK_STRUCTURE_TYPE_IMAGE_MEMORY_REQUIREMENTS_INFO_2";
         case 1000146002:
-            return "VK_STRUCTURE_TYPE_IMAGE_SPARSE_MEMORY_REQUIREMENTS_INFO_2_KHR";
+            return "VK_STRUCTURE_TYPE_IMAGE_SPARSE_MEMORY_REQUIREMENTS_INFO_2";
         case 1000146003:
-            return "VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2_KHR";
+            return "VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2";
         case 1000146004:
-            return "VK_STRUCTURE_TYPE_SPARSE_IMAGE_MEMORY_REQUIREMENTS_2_KHR";
+            return "VK_STRUCTURE_TYPE_SPARSE_IMAGE_MEMORY_REQUIREMENTS_2";
         case 1000147000:
             return "VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO_KHR";
         case 1000148000:
@@ -2112,25 +2162,39 @@ vk_StructureType_to_str(VkStructureType input)
         case 1000152000:
             return "VK_STRUCTURE_TYPE_PIPELINE_COVERAGE_MODULATION_STATE_CREATE_INFO_NV";
         case 1000156000:
-            return "VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_CREATE_INFO_KHR";
+            return "VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_CREATE_INFO";
         case 1000156001:
-            return "VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_INFO_KHR";
+            return "VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_INFO";
         case 1000156002:
-            return "VK_STRUCTURE_TYPE_BIND_IMAGE_PLANE_MEMORY_INFO_KHR";
+            return "VK_STRUCTURE_TYPE_BIND_IMAGE_PLANE_MEMORY_INFO";
         case 1000156003:
-            return "VK_STRUCTURE_TYPE_IMAGE_PLANE_MEMORY_REQUIREMENTS_INFO_KHR";
+            return "VK_STRUCTURE_TYPE_IMAGE_PLANE_MEMORY_REQUIREMENTS_INFO";
         case 1000156004:
-            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLER_YCBCR_CONVERSION_FEATURES_KHR";
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLER_YCBCR_CONVERSION_FEATURES";
         case 1000156005:
-            return "VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_IMAGE_FORMAT_PROPERTIES_KHR";
+            return "VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_IMAGE_FORMAT_PROPERTIES";
         case 1000157000:
-            return "VK_STRUCTURE_TYPE_BIND_BUFFER_MEMORY_INFO_KHR";
+            return "VK_STRUCTURE_TYPE_BIND_BUFFER_MEMORY_INFO";
         case 1000157001:
-            return "VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_INFO_KHR";
+            return "VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_INFO";
         case 1000160000:
             return "VK_STRUCTURE_TYPE_VALIDATION_CACHE_CREATE_INFO_EXT";
         case 1000160001:
             return "VK_STRUCTURE_TYPE_SHADER_MODULE_VALIDATION_CACHE_CREATE_INFO_EXT";
+        case 1000161000:
+            return "VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO_EXT";
+        case 1000161001:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT";
+        case 1000161002:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_PROPERTIES_EXT";
+        case 1000161003:
+            return "VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO_EXT";
+        case 1000161004:
+            return "VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_LAYOUT_SUPPORT_EXT";
+        case 1000168000:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_3_PROPERTIES";
+        case 1000168001:
+            return "VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_SUPPORT";
         case 1000174000:
             return "VK_STRUCTURE_TYPE_DEVICE_QUEUE_GLOBAL_PRIORITY_CREATE_INFO_EXT";
         case 1000178000:
@@ -2139,6 +2203,12 @@ vk_StructureType_to_str(VkStructureType input)
             return "VK_STRUCTURE_TYPE_MEMORY_HOST_POINTER_PROPERTIES_EXT";
         case 1000178002:
             return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_MEMORY_HOST_PROPERTIES_EXT";
+        case 1000185000:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_PROPERTIES_AMD";
+        case 1000190000:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_DIVISOR_PROPERTIES_EXT";
+        case 1000190001:
+            return "VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_DIVISOR_STATE_CREATE_INFO_EXT";
     default:
         unreachable("Undefined enum value.");
     }
@@ -2177,13 +2247,13 @@ vk_SystemAllocationScope_to_str(VkSystemAllocationScope input)
 }
 
 const char *
-vk_TessellationDomainOriginKHR_to_str(VkTessellationDomainOriginKHR input)
+vk_TessellationDomainOrigin_to_str(VkTessellationDomainOrigin input)
 {
     switch(input) {
         case 0:
-            return "VK_TESSELLATION_DOMAIN_ORIGIN_UPPER_LEFT_KHR";
+            return "VK_TESSELLATION_DOMAIN_ORIGIN_UPPER_LEFT";
         case 1:
-            return "VK_TESSELLATION_DOMAIN_ORIGIN_LOWER_LEFT_KHR";
+            return "VK_TESSELLATION_DOMAIN_ORIGIN_LOWER_LEFT";
     default:
         unreachable("Undefined enum value.");
     }

@@ -28,6 +28,7 @@
 #include <vulkan/vulkan.h>
 #include <vulkan/vk_android_native_buffer.h>
 
+#define _VK_AMD_buffer_marker_number (180)
 #define _VK_AMD_draw_indirect_count_number (34)
 #define _VK_AMD_gcn_shader_number (26)
 #define _VK_AMD_gpu_shader_half_float_number (37)
@@ -36,18 +37,22 @@
 #define _VK_AMD_negative_viewport_height_number (36)
 #define _VK_AMD_rasterization_order_number (19)
 #define _VK_AMD_shader_ballot_number (38)
+#define _VK_AMD_shader_core_properties_number (186)
 #define _VK_AMD_shader_explicit_vertex_parameter_number (22)
 #define _VK_AMD_shader_fragment_mask_number (138)
 #define _VK_AMD_shader_image_load_store_lod_number (47)
 #define _VK_AMD_shader_info_number (43)
 #define _VK_AMD_shader_trinary_minmax_number (21)
 #define _VK_AMD_texture_gather_bias_lod_number (42)
-#define _VK_ANDROID_native_buffer_number (11)
+#define _VK_ANDROID_external_memory_android_hardware_buffer_number (130)
 #define _VK_EXT_acquire_xlib_display_number (90)
 #define _VK_EXT_blend_operation_advanced_number (149)
+#define _VK_EXT_conservative_rasterization_number (102)
 #define _VK_EXT_debug_marker_number (23)
 #define _VK_EXT_debug_report_number (12)
+#define _VK_EXT_debug_utils_number (129)
 #define _VK_EXT_depth_range_unrestricted_number (14)
+#define _VK_EXT_descriptor_indexing_number (162)
 #define _VK_EXT_direct_mode_display_number (89)
 #define _VK_EXT_discard_rectangles_number (100)
 #define _VK_EXT_display_control_number (92)
@@ -67,6 +72,7 @@
 #define _VK_EXT_swapchain_colorspace_number (105)
 #define _VK_EXT_validation_cache_number (161)
 #define _VK_EXT_validation_flags_number (62)
+#define _VK_EXT_vertex_attribute_divisor_number (191)
 #define _VK_GOOGLE_display_timing_number (93)
 #define _VK_IMG_filter_cubic_number (16)
 #define _VK_IMG_format_pvrtc_number (55)
@@ -75,6 +81,8 @@
 #define _VK_KHR_bind_memory2_number (158)
 #define _VK_KHR_dedicated_allocation_number (128)
 #define _VK_KHR_descriptor_update_template_number (86)
+#define _VK_KHR_device_group_number (61)
+#define _VK_KHR_device_group_creation_number (71)
 #define _VK_KHR_display_number (3)
 #define _VK_KHR_display_swapchain_number (4)
 #define _VK_KHR_external_fence_number (114)
@@ -96,7 +104,9 @@
 #define _VK_KHR_incremental_present_number (85)
 #define _VK_KHR_maintenance1_number (70)
 #define _VK_KHR_maintenance2_number (118)
+#define _VK_KHR_maintenance3_number (169)
 #define _VK_KHR_mir_surface_number (8)
+#define _VK_KHR_multiview_number (54)
 #define _VK_KHR_push_descriptor_number (81)
 #define _VK_KHR_relaxed_block_layout_number (145)
 #define _VK_KHR_sampler_mirror_clamp_to_edge_number (15)
@@ -112,9 +122,6 @@
 #define _VK_KHR_win32_surface_number (10)
 #define _VK_KHR_xcb_surface_number (6)
 #define _VK_KHR_xlib_surface_number (5)
-#define _VK_KHX_device_group_number (61)
-#define _VK_KHX_device_group_creation_number (71)
-#define _VK_KHX_multiview_number (54)
 #define _VK_MVK_ios_surface_number (123)
 #define _VK_MVK_macos_surface_number (124)
 #define _VK_NN_vi_surface_number (63)
@@ -131,6 +138,7 @@
 #define _VK_NV_geometry_shader_passthrough_number (96)
 #define _VK_NV_glsl_shader_number (13)
 #define _VK_NV_sample_mask_override_coverage_number (95)
+#define _VK_NV_shader_subgroup_partitioned_number (199)
 #define _VK_NV_viewport_array2_number (97)
 #define _VK_NV_viewport_swizzle_number (99)
 #define _VK_NV_win32_keyed_mutex_number (59)
@@ -141,15 +149,16 @@ const char * vk_BlendFactor_to_str(VkBlendFactor input);
 const char * vk_BlendOp_to_str(VkBlendOp input);
 const char * vk_BlendOverlapEXT_to_str(VkBlendOverlapEXT input);
 const char * vk_BorderColor_to_str(VkBorderColor input);
-const char * vk_ChromaLocationKHR_to_str(VkChromaLocationKHR input);
+const char * vk_ChromaLocation_to_str(VkChromaLocation input);
 const char * vk_ColorSpaceKHR_to_str(VkColorSpaceKHR input);
 const char * vk_CommandBufferLevel_to_str(VkCommandBufferLevel input);
 const char * vk_CompareOp_to_str(VkCompareOp input);
 const char * vk_ComponentSwizzle_to_str(VkComponentSwizzle input);
+const char * vk_ConservativeRasterizationModeEXT_to_str(VkConservativeRasterizationModeEXT input);
 const char * vk_CoverageModulationModeNV_to_str(VkCoverageModulationModeNV input);
 const char * vk_DebugReportObjectTypeEXT_to_str(VkDebugReportObjectTypeEXT input);
 const char * vk_DescriptorType_to_str(VkDescriptorType input);
-const char * vk_DescriptorUpdateTemplateTypeKHR_to_str(VkDescriptorUpdateTemplateTypeKHR input);
+const char * vk_DescriptorUpdateTemplateType_to_str(VkDescriptorUpdateTemplateType input);
 const char * vk_DeviceEventTypeEXT_to_str(VkDeviceEventTypeEXT input);
 const char * vk_DiscardRectangleModeEXT_to_str(VkDiscardRectangleModeEXT input);
 const char * vk_DisplayEventTypeEXT_to_str(VkDisplayEventTypeEXT input);
@@ -171,7 +180,7 @@ const char * vk_ObjectType_to_str(VkObjectType input);
 const char * vk_PhysicalDeviceType_to_str(VkPhysicalDeviceType input);
 const char * vk_PipelineBindPoint_to_str(VkPipelineBindPoint input);
 const char * vk_PipelineCacheHeaderVersion_to_str(VkPipelineCacheHeaderVersion input);
-const char * vk_PointClippingBehaviorKHR_to_str(VkPointClippingBehaviorKHR input);
+const char * vk_PointClippingBehavior_to_str(VkPointClippingBehavior input);
 const char * vk_PolygonMode_to_str(VkPolygonMode input);
 const char * vk_PresentModeKHR_to_str(VkPresentModeKHR input);
 const char * vk_PrimitiveTopology_to_str(VkPrimitiveTopology input);
@@ -182,15 +191,15 @@ const char * vk_Result_to_str(VkResult input);
 const char * vk_SamplerAddressMode_to_str(VkSamplerAddressMode input);
 const char * vk_SamplerMipmapMode_to_str(VkSamplerMipmapMode input);
 const char * vk_SamplerReductionModeEXT_to_str(VkSamplerReductionModeEXT input);
-const char * vk_SamplerYcbcrModelConversionKHR_to_str(VkSamplerYcbcrModelConversionKHR input);
-const char * vk_SamplerYcbcrRangeKHR_to_str(VkSamplerYcbcrRangeKHR input);
+const char * vk_SamplerYcbcrModelConversion_to_str(VkSamplerYcbcrModelConversion input);
+const char * vk_SamplerYcbcrRange_to_str(VkSamplerYcbcrRange input);
 const char * vk_ShaderInfoTypeAMD_to_str(VkShaderInfoTypeAMD input);
 const char * vk_SharingMode_to_str(VkSharingMode input);
 const char * vk_StencilOp_to_str(VkStencilOp input);
 const char * vk_StructureType_to_str(VkStructureType input);
 const char * vk_SubpassContents_to_str(VkSubpassContents input);
 const char * vk_SystemAllocationScope_to_str(VkSystemAllocationScope input);
-const char * vk_TessellationDomainOriginKHR_to_str(VkTessellationDomainOriginKHR input);
+const char * vk_TessellationDomainOrigin_to_str(VkTessellationDomainOrigin input);
 const char * vk_ValidationCacheHeaderVersionEXT_to_str(VkValidationCacheHeaderVersionEXT input);
 const char * vk_ValidationCheckEXT_to_str(VkValidationCheckEXT input);
 const char * vk_VertexInputRate_to_str(VkVertexInputRate input);

@@ -415,7 +415,7 @@ const nir_op_info nir_op_infos[nir_num_opcodes] = {
       0
    },
    .input_types = {
-      nir_type_uint32
+      nir_type_uint
    },
    .algebraic_properties =
       0
@@ -444,6 +444,34 @@ const nir_op_info nir_op_infos[nir_num_opcodes] = {
    },
    .input_types = {
       nir_type_uint32
+   },
+   .algebraic_properties =
+      0
+},
+{
+   .name = "cube_face_coord",
+   .num_inputs = 1,
+   .output_size = 2,
+   .output_type = nir_type_float32,
+   .input_sizes = {
+      3
+   },
+   .input_types = {
+      nir_type_float32
+   },
+   .algebraic_properties =
+      0
+},
+{
+   .name = "cube_face_index",
+   .num_inputs = 1,
+   .output_size = 1,
+   .output_type = nir_type_float32,
+   .input_sizes = {
+      3
+   },
+   .input_types = {
+      nir_type_float32
    },
    .algebraic_properties =
       0
@@ -1171,7 +1199,7 @@ const nir_op_info nir_op_infos[nir_num_opcodes] = {
       0
    },
    .input_types = {
-      nir_type_int32
+      nir_type_int
    },
    .algebraic_properties =
       0
@@ -1233,6 +1261,34 @@ const nir_op_info nir_op_infos[nir_num_opcodes] = {
       0
 },
 {
+   .name = "fmax3",
+   .num_inputs = 3,
+   .output_size = 0,
+   .output_type = nir_type_float,
+   .input_sizes = {
+      0, 0, 0
+   },
+   .input_types = {
+      nir_type_float, nir_type_float, nir_type_float
+   },
+   .algebraic_properties =
+      0
+},
+{
+   .name = "fmed3",
+   .num_inputs = 3,
+   .output_size = 0,
+   .output_type = nir_type_float,
+   .input_sizes = {
+      0, 0, 0
+   },
+   .input_types = {
+      nir_type_float, nir_type_float, nir_type_float
+   },
+   .algebraic_properties =
+      0
+},
+{
    .name = "fmin",
    .num_inputs = 2,
    .output_size = 0,
@@ -1242,6 +1298,20 @@ const nir_op_info nir_op_infos[nir_num_opcodes] = {
    },
    .input_types = {
       nir_type_float, nir_type_float
+   },
+   .algebraic_properties =
+      0
+},
+{
+   .name = "fmin3",
+   .num_inputs = 3,
+   .output_size = 0,
+   .output_type = nir_type_float,
+   .input_sizes = {
+      0, 0, 0
+   },
+   .input_types = {
+      nir_type_float, nir_type_float, nir_type_float
    },
    .algebraic_properties =
       0
@@ -1620,6 +1690,34 @@ const nir_op_info nir_op_infos[nir_num_opcodes] = {
    },
    .input_types = {
       nir_type_float, nir_type_float
+   },
+   .algebraic_properties =
+      0
+},
+{
+   .name = "frexp_exp",
+   .num_inputs = 1,
+   .output_size = 0,
+   .output_type = nir_type_int32,
+   .input_sizes = {
+      0
+   },
+   .input_types = {
+      nir_type_float64
+   },
+   .algebraic_properties =
+      0
+},
+{
+   .name = "frexp_sig",
+   .num_inputs = 1,
+   .output_size = 0,
+   .output_type = nir_type_float64,
+   .input_sizes = {
+      0
+   },
+   .input_types = {
+      nir_type_float64
    },
    .algebraic_properties =
       0
@@ -2017,6 +2115,34 @@ const nir_op_info nir_op_infos[nir_num_opcodes] = {
       NIR_OP_IS_COMMUTATIVE | NIR_OP_IS_ASSOCIATIVE
 },
 {
+   .name = "imax3",
+   .num_inputs = 3,
+   .output_size = 0,
+   .output_type = nir_type_int,
+   .input_sizes = {
+      0, 0, 0
+   },
+   .input_types = {
+      nir_type_int, nir_type_int, nir_type_int
+   },
+   .algebraic_properties =
+      0
+},
+{
+   .name = "imed3",
+   .num_inputs = 3,
+   .output_size = 0,
+   .output_type = nir_type_int,
+   .input_sizes = {
+      0, 0, 0
+   },
+   .input_types = {
+      nir_type_int, nir_type_int, nir_type_int
+   },
+   .algebraic_properties =
+      0
+},
+{
    .name = "imin",
    .num_inputs = 2,
    .output_size = 0,
@@ -2029,6 +2155,20 @@ const nir_op_info nir_op_infos[nir_num_opcodes] = {
    },
    .algebraic_properties =
       NIR_OP_IS_COMMUTATIVE | NIR_OP_IS_ASSOCIATIVE
+},
+{
+   .name = "imin3",
+   .num_inputs = 3,
+   .output_size = 0,
+   .output_type = nir_type_int,
+   .input_sizes = {
+      0, 0, 0
+   },
+   .input_types = {
+      nir_type_int, nir_type_int, nir_type_int
+   },
+   .algebraic_properties =
+      0
 },
 {
    .name = "imod",
@@ -2599,7 +2739,7 @@ const nir_op_info nir_op_infos[nir_num_opcodes] = {
       0
    },
    .input_types = {
-      nir_type_uint32
+      nir_type_uint
    },
    .algebraic_properties =
       0
@@ -2647,6 +2787,20 @@ const nir_op_info nir_op_infos[nir_num_opcodes] = {
       NIR_OP_IS_COMMUTATIVE | NIR_OP_IS_ASSOCIATIVE
 },
 {
+   .name = "umax3",
+   .num_inputs = 3,
+   .output_size = 0,
+   .output_type = nir_type_uint,
+   .input_sizes = {
+      0, 0, 0
+   },
+   .input_types = {
+      nir_type_uint, nir_type_uint, nir_type_uint
+   },
+   .algebraic_properties =
+      0
+},
+{
    .name = "umax_4x8",
    .num_inputs = 2,
    .output_size = 0,
@@ -2661,6 +2815,20 @@ const nir_op_info nir_op_infos[nir_num_opcodes] = {
       NIR_OP_IS_COMMUTATIVE | NIR_OP_IS_ASSOCIATIVE
 },
 {
+   .name = "umed3",
+   .num_inputs = 3,
+   .output_size = 0,
+   .output_type = nir_type_uint,
+   .input_sizes = {
+      0, 0, 0
+   },
+   .input_types = {
+      nir_type_uint, nir_type_uint, nir_type_uint
+   },
+   .algebraic_properties =
+      0
+},
+{
    .name = "umin",
    .num_inputs = 2,
    .output_size = 0,
@@ -2673,6 +2841,20 @@ const nir_op_info nir_op_infos[nir_num_opcodes] = {
    },
    .algebraic_properties =
       NIR_OP_IS_COMMUTATIVE | NIR_OP_IS_ASSOCIATIVE
+},
+{
+   .name = "umin3",
+   .num_inputs = 3,
+   .output_size = 0,
+   .output_type = nir_type_uint,
+   .input_sizes = {
+      0, 0, 0
+   },
+   .input_types = {
+      nir_type_uint, nir_type_uint, nir_type_uint
+   },
+   .algebraic_properties =
+      0
 },
 {
    .name = "umin_4x8",

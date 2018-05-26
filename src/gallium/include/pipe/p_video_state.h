@@ -120,6 +120,15 @@ enum pipe_h264_enc_picture_type
    PIPE_H264_ENC_PICTURE_TYPE_SKIP = 0x04
 };
 
+enum pipe_h265_enc_picture_type
+{
+   PIPE_H265_ENC_PICTURE_TYPE_P = 0x00,
+   PIPE_H265_ENC_PICTURE_TYPE_B = 0x01,
+   PIPE_H265_ENC_PICTURE_TYPE_I = 0x02,
+   PIPE_H265_ENC_PICTURE_TYPE_IDR = 0x03,
+   PIPE_H265_ENC_PICTURE_TYPE_SKIP = 0x04
+};
+
 enum pipe_h264_enc_rate_control_method
 {
    PIPE_H264_ENC_RATE_CONTROL_METHOD_DISABLE = 0x00,
@@ -127,6 +136,15 @@ enum pipe_h264_enc_rate_control_method
    PIPE_H264_ENC_RATE_CONTROL_METHOD_VARIABLE_SKIP = 0x02,
    PIPE_H264_ENC_RATE_CONTROL_METHOD_CONSTANT = 0x03,
    PIPE_H264_ENC_RATE_CONTROL_METHOD_VARIABLE = 0x04
+};
+
+enum pipe_h265_enc_rate_control_method
+{
+   PIPE_H265_ENC_RATE_CONTROL_METHOD_DISABLE = 0x00,
+   PIPE_H265_ENC_RATE_CONTROL_METHOD_CONSTANT_SKIP = 0x01,
+   PIPE_H265_ENC_RATE_CONTROL_METHOD_VARIABLE_SKIP = 0x02,
+   PIPE_H265_ENC_RATE_CONTROL_METHOD_CONSTANT = 0x03,
+   PIPE_H265_ENC_RATE_CONTROL_METHOD_VARIABLE = 0x04
 };
 
 struct pipe_picture_desc
@@ -412,6 +430,87 @@ struct pipe_h264_enc_picture_desc
 
 };
 
+struct pipe_h265_enc_seq_param
+{
+   uint8_t  general_profile_idc;
+   uint8_t  general_level_idc;
+   uint8_t  general_tier_flag;
+   uint32_t intra_period;
+   uint16_t pic_width_in_luma_samples;
+   uint16_t pic_height_in_luma_samples;
+   uint32_t chroma_format_idc;
+   uint32_t bit_depth_luma_minus8;
+   uint32_t bit_depth_chroma_minus8;
+   bool strong_intra_smoothing_enabled_flag;
+   bool amp_enabled_flag;
+   bool sample_adaptive_offset_enabled_flag;
+   bool pcm_enabled_flag;
+   bool sps_temporal_mvp_enabled_flag;
+   uint8_t  log2_min_luma_coding_block_size_minus3;
+   uint8_t  log2_diff_max_min_luma_coding_block_size;
+   uint8_t  log2_min_transform_block_size_minus2;
+   uint8_t  log2_diff_max_min_transform_block_size;
+   uint8_t  max_transform_hierarchy_depth_inter;
+   uint8_t  max_transform_hierarchy_depth_intra;
+};
+
+struct pipe_h265_enc_pic_param
+{
+   uint8_t log2_parallel_merge_level_minus2;
+   uint8_t nal_unit_type;
+   bool constrained_intra_pred_flag;
+};
+
+struct pipe_h265_enc_slice_param
+{
+   uint8_t max_num_merge_cand;
+   int8_t slice_cb_qp_offset;
+   int8_t slice_cr_qp_offset;
+   int8_t slice_beta_offset_div2;
+   int8_t slice_tc_offset_div2;
+   bool cabac_init_flag;
+   uint32_t slice_deblocking_filter_disabled_flag;
+   bool slice_loop_filter_across_slices_enabled_flag;
+};
+
+struct pipe_h265_enc_rate_control
+{
+   enum pipe_h265_enc_rate_control_method rate_ctrl_method;
+   unsigned target_bitrate;
+   unsigned peak_bitrate;
+   unsigned frame_rate_num;
+   unsigned frame_rate_den;
+   unsigned quant_i_frames;
+   unsigned vbv_buffer_size;
+   unsigned vbv_buf_lv;
+   unsigned target_bits_picture;
+   unsigned peak_bits_picture_integer;
+   unsigned peak_bits_picture_fraction;
+   unsigned fill_data_enable;
+   unsigned enforce_hrd;
+};
+
+struct pipe_h265_enc_picture_desc
+{
+   struct pipe_picture_desc base;
+
+   struct pipe_h265_enc_seq_param seq;
+   struct pipe_h265_enc_pic_param pic;
+   struct pipe_h265_enc_slice_param slice;
+   struct pipe_h265_enc_rate_control rc;
+
+   enum pipe_h265_enc_picture_type picture_type;
+   unsigned decoded_curr_pic;
+   unsigned reference_frames[16];
+   unsigned frame_num;
+   unsigned pic_order_cnt;
+   unsigned pic_order_cnt_type;
+   unsigned ref_idx_l0;
+   unsigned ref_idx_l1;
+   bool not_referenced;
+   struct util_hash_table *frame_idx;
+};
+
 struct pipe_h265_sps
 {
    uint8_t chroma_format_idc;
@@ -575,6 +674,100 @@ struct pipe_mjpeg_picture_desc
 
       uint16_t restart_interval;
       unsigned num_mcus;
+   } slice_parameter;
+};
+
+struct vp9_segment_parameter
+{
+   struct {
+      uint16_t segment_reference_enabled:1;
+      uint16_t segment_reference:2;
+      uint16_t segment_reference_skipped:1;
+   } segment_flags;
+
+   bool alt_quant_enabled;
+   int16_t alt_quant;
+
+   bool alt_lf_enabled;
+   int16_t alt_lf;
+
+   uint8_t filter_level[4][2];
+
+   int16_t luma_ac_quant_scale;
+   int16_t luma_dc_quant_scale;
+
+   int16_t chroma_ac_quant_scale;
+   int16_t chroma_dc_quant_scale;
+};
+
+struct pipe_vp9_picture_desc
+{
+   struct pipe_picture_desc base;
+
+   struct pipe_video_buffer *ref[16];
+
+   struct {
+      uint16_t frame_width;
+      uint16_t frame_height;
+
+      struct {
+         uint32_t  subsampling_x:1;
+         uint32_t  subsampling_y:1;
+         uint32_t  frame_type:1;
+         uint32_t  show_frame:1;
+         uint32_t  error_resilient_mode:1;
+         uint32_t  intra_only:1;
+         uint32_t  allow_high_precision_mv:1;
+         uint32_t  mcomp_filter_type:3;
+         uint32_t  frame_parallel_decoding_mode:1;
+         uint32_t  reset_frame_context:2;
+         uint32_t  refresh_frame_context:1;
+         uint32_t  frame_context_idx:2;
+         uint32_t  segmentation_enabled:1;
+         uint32_t  segmentation_temporal_update:1;
+         uint32_t  segmentation_update_map:1;
+         uint32_t  last_ref_frame:3;
+         uint32_t  last_ref_frame_sign_bias:1;
+         uint32_t  golden_ref_frame:3;
+         uint32_t  golden_ref_frame_sign_bias:1;
+         uint32_t  alt_ref_frame:3;
+         uint32_t  alt_ref_frame_sign_bias:1;
+         uint32_t  lossless_flag:1;
+      } pic_fields;
+
+      uint8_t filter_level;
+      uint8_t sharpness_level;
+
+      uint8_t log2_tile_rows;
+      uint8_t log2_tile_columns;
+
+      uint8_t frame_header_length_in_bytes;
+
+      uint16_t first_partition_size;
+
+      uint8_t mb_segment_tree_probs[7];
+      uint8_t segment_pred_probs[3];
+
+      uint8_t profile;
+
+      uint8_t bit_depth;
+
+      bool mode_ref_delta_enabled;
+      bool mode_ref_delta_update;
+
+      uint8_t base_qindex;
+      int8_t y_dc_delta_q;
+      int8_t uv_ac_delta_q;
+      int8_t uv_dc_delta_q;
+   } picture_parameter;
+
+   struct {
+      uint32_t slice_data_size;
+      uint32_t slice_data_offset;
+
+      uint32_t slice_data_flag;
+
+      struct vp9_segment_parameter seg_param[8];
    } slice_parameter;
 };
 

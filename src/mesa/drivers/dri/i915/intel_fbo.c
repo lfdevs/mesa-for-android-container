@@ -287,7 +287,7 @@ intel_image_target_renderbuffer_storage(struct gl_context *ctx,
  * intel_process_dri2_buffer().
  */
 static GLboolean
-intel_alloc_window_storage(struct gl_context * ctx, struct gl_renderbuffer *rb,
+intel_alloc_window_storage(UNUSED struct gl_context *ctx, struct gl_renderbuffer *rb,
                            GLenum internalFormat, GLuint width, GLuint height)
 {
    assert(rb->Name == 0);
@@ -300,8 +300,10 @@ intel_alloc_window_storage(struct gl_context * ctx, struct gl_renderbuffer *rb,
 
 /** Dummy function for gl_renderbuffer::AllocStorage() */
 static GLboolean
-intel_nop_alloc_storage(struct gl_context * ctx, struct gl_renderbuffer *rb,
-                        GLenum internalFormat, GLuint width, GLuint height)
+intel_nop_alloc_storage(UNUSED struct gl_context *ctx,
+                        UNUSED struct gl_renderbuffer *rb,
+                        UNUSED GLenum internalFormat,
+                        UNUSED GLuint width, UNUSED GLuint height)
 {
    _mesa_problem(ctx, "intel_op_alloc_storage should never be called.");
    return false;
@@ -393,7 +395,8 @@ intel_new_renderbuffer(struct gl_context * ctx, GLuint name)
  */
 static void
 intel_bind_framebuffer(struct gl_context * ctx, GLenum target,
-                       struct gl_framebuffer *fb, struct gl_framebuffer *fbread)
+                       UNUSED struct gl_framebuffer *fb,
+                       UNUSED struct gl_framebuffer *fbread)
 {
    if (target == GL_FRAMEBUFFER_EXT || target == GL_DRAW_FRAMEBUFFER_EXT) {
       intel_draw_buffer(ctx);
@@ -419,8 +422,7 @@ intel_framebuffer_renderbuffer(struct gl_context * ctx,
 }
 
 static bool
-intel_renderbuffer_update_wrapper(struct intel_context *intel,
-                                  struct intel_renderbuffer *irb,
+intel_renderbuffer_update_wrapper(struct intel_renderbuffer *irb,
 				  struct gl_texture_image *image,
                                   uint32_t layer)
 {
@@ -468,7 +470,6 @@ intel_render_texture(struct gl_context * ctx,
                      struct gl_framebuffer *fb,
                      struct gl_renderbuffer_attachment *att)
 {
-   struct intel_context *intel = intel_context(ctx);
    struct gl_renderbuffer *rb = att->Renderbuffer;
    struct intel_renderbuffer *irb = intel_renderbuffer(rb);
    struct gl_texture_image *image = rb->TexImage;
@@ -495,7 +496,7 @@ intel_render_texture(struct gl_context * ctx,
 
    intel_miptree_check_level_layer(mt, att->TextureLevel, layer);
 
-   if (!intel_renderbuffer_update_wrapper(intel, irb, image, layer)) {
+   if (!intel_renderbuffer_update_wrapper(irb, image, layer)) {
        _swrast_render_texture(ctx, fb, att);
        return;
    }
@@ -641,7 +642,7 @@ intel_blit_framebuffer_with_blitter(struct gl_context *ctx,
                                     GLint srcX1, GLint srcY1,
                                     GLint dstX0, GLint dstY0,
                                     GLint dstX1, GLint dstY1,
-                                    GLbitfield mask, GLenum filter)
+                                    GLbitfield mask)
 {
    struct intel_context *intel = intel_context(ctx);
 
@@ -714,7 +715,7 @@ intel_blit_framebuffer_with_blitter(struct gl_context *ctx,
                                  dst_irb->mt,
                                  dst_irb->mt_level, dst_irb->mt_layer,
                                  dstX0, dstY0, dst_rb->Name == 0,
-                                 dstX1 - dstX0, dstY1 - dstY0, GL_COPY)) {
+                                 dstX1 - dstX0, dstY1 - dstY0, COLOR_LOGICOP_COPY)) {
             perf_debug("glBlitFramebuffer(): unknown blit failure.  "
                        "Falling back to software rendering.\n");
             return mask;
@@ -739,7 +740,7 @@ intel_blit_framebuffer(struct gl_context *ctx,
    mask = intel_blit_framebuffer_with_blitter(ctx, readFb, drawFb,
                                               srcX0, srcY0, srcX1, srcY1,
                                               dstX0, dstY0, dstX1, dstY1,
-                                              mask, filter);
+                                              mask);
    if (mask == 0x0)
       return;
 

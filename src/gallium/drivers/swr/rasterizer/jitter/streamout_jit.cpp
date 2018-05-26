@@ -32,6 +32,7 @@
 #include "jit_api.h"
 #include "streamout_jit.h"
 #include "gen_state_llvm.h"
+#include "functionpasses/passes.h"
 
 using namespace llvm;
 using namespace SwrJit;
@@ -112,11 +113,11 @@ struct StreamOutJit : public Builder
         {
             if (bitmask & (1 << i))
             {
-                indices.push_back(C(-1.0f));
+                indices.push_back(C(true));
             }
             else
             {
-                indices.push_back(C(0.0f));
+                indices.push_back(C(false));
             }
         }
         return ConstantVector::get(indices);
@@ -131,9 +132,6 @@ struct StreamOutJit : public Builder
     // @param decl - input decl
     void buildDecl(Value* pStream, Value* pOutBuffers[4], const STREAMOUT_DECL& decl)
     {
-        // @todo add this to x86 macros
-        Function* maskStore = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::x86_avx_maskstore_ps);
-
         uint32_t numComponents = _mm_popcnt_u32(decl.componentMask);
         uint32_t packedMask = (1 << numComponents) - 1;
         if (!decl.hole)
@@ -152,15 +150,14 @@ struct StreamOutJit : public Builder
 
             // store to output buffer
             // cast SO buffer to i8*, needed by maskstore
-            Value* pOut = BITCAST(pOutBuffers[decl.bufferIndex], PointerType::get(mInt8Ty, 0));
+            Value* pOut = BITCAST(pOutBuffers[decl.bufferIndex], PointerType::get(simd4Ty, 0));
 
             // cast input to <4xfloat>
             Value* src = BITCAST(vpackedAttrib, simd4Ty);
 
-            // cast mask to <4xint>
+            // cast mask to <4xi1>
             Value* mask = ToMask(packedMask);
-            mask = BITCAST(mask, VectorType::get(IRB()->getInt32Ty(), 4));
-            CALL(maskStore, {pOut, mask, src});
+            MASKED_STORE(src, pOut, 4, mask);
         }
 
         // increment SO buffer
@@ -310,6 +307,8 @@ struct StreamOutJit : public Builder
         passes.add(createSCCPPass());
         passes.add(createAggressiveDCEPass());
 
+        passes.add(createLowerX86Pass(JM(), this));
+
         passes.run(*soFunc);
 
         JitManager::DumpToFile(soFunc, "SoFunc_optimized");
@@ -325,12 +324,14 @@ struct StreamOutJit : public Builder
 /// @return PFN_SO_FUNC - pointer to SOS function
 PFN_SO_FUNC JitStreamoutFunc(HANDLE hJitMgr, const HANDLE hFunc)
 {
-    const llvm::Function *func = (const llvm::Function*)hFunc;
+    llvm::Function *func = (llvm::Function*)hFunc;
     JitManager* pJitMgr = reinterpret_cast<JitManager*>(hJitMgr);
     PFN_SO_FUNC pfnStreamOut;
     pfnStreamOut = (PFN_SO_FUNC)(pJitMgr->mpExec->getFunctionAddress(func->getName().str()));
     // MCJIT finalizes modules the first time you JIT code from them. After finalized, you cannot add new IR to the module
     pJitMgr->mIsModuleFinalized = true;
+
+    pJitMgr->DumpAsm(func, "SoFunc_optimized");
 
     return pfnStreamOut;
 }

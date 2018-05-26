@@ -9,11 +9,7 @@ AM_CFLAGS = \
 	$(GALLIUM_TARGET_CFLAGS)
 
 AM_CPPFLAGS = \
-	$(DEFINES) \
-        -DGALLIUM_DDEBUG \
-	-DGALLIUM_NOOP \
-	-DGALLIUM_RBUG \
-	-DGALLIUM_TRACE
+	$(DEFINES)
 
 dridir = $(DRI_DRIVER_INSTALL_DIR)
 dri_LTLIBRARIES = gallium_dri.la
@@ -47,14 +43,10 @@ gallium_dri_la_LIBADD = \
 	$(top_builddir)/src/gallium/state_trackers/dri/libdri.la \
 	$(top_builddir)/src/gallium/auxiliary/libgalliumvl.la \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
-        $(top_builddir)/src/gallium/drivers/ddebug/libddebug.la \
-	$(top_builddir)/src/gallium/drivers/noop/libnoop.la \
-	$(top_builddir)/src/gallium/drivers/rbug/librbug.la \
-	$(top_builddir)/src/gallium/drivers/trace/libtrace.la \
 	$(top_builddir)/src/mapi/shared-glapi/libglapi.la \
+	$(LIBDRM_LIBS) \
 	$(SELINUX_LIBS) \
 	$(EXPAT_LIBS) \
-	$(LIBDRM_LIBS) \
 	$(GALLIUM_COMMON_LIB_DEPS)
 
 EXTRA_gallium_dri_la_DEPENDENCIES = \
@@ -81,6 +73,8 @@ include $(top_srcdir)/src/gallium/drivers/radeonsi/Automake.inc
 include $(top_srcdir)/src/gallium/drivers/svga/Automake.inc
 
 include $(top_srcdir)/src/gallium/drivers/freedreno/Automake.inc
+
+include $(top_srcdir)/src/gallium/drivers/tegra/Automake.inc
 
 include $(top_srcdir)/src/gallium/drivers/vc4/Automake.inc
 include $(top_srcdir)/src/gallium/drivers/vc5/Automake.inc

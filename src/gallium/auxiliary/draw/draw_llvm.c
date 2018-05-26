@@ -606,7 +606,7 @@ generate_vs(struct draw_llvm_variant *variant,
             const LLVMValueRef (*inputs)[TGSI_NUM_CHANNELS],
             const struct lp_bld_tgsi_system_values *system_values,
             LLVMValueRef context_ptr,
-            struct lp_build_sampler_soa *draw_sampler,
+            const struct lp_build_sampler_soa *draw_sampler,
             boolean clamp_vertex_color)
 {
    struct draw_llvm *llvm = variant->llvm;

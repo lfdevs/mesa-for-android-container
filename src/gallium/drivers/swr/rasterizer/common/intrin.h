@@ -26,7 +26,10 @@
 
 #include "os.h"
 
+#if !defined(SIMD_ARCH)
 #define SIMD_ARCH KNOB_ARCH
+#endif 
+
 #include "simdlib_types.hpp"
 
 typedef SIMDImpl::SIMD128Impl::Float                      simd4scalar;

@@ -51,7 +51,7 @@
 #include "texobj.h"
 #include "texstate.h"
 #include "varray.h"
-#include "vbo/vbo_context.h"
+#include "vbo/vbo.h"
 #include "viewport.h"
 #include "blend.h"
 
@@ -177,15 +177,18 @@ update_program(struct gl_context *ctx)
     */
    if (vsProg) {
       /* Use GLSL vertex shader */
+      assert(VP_MODE_SHADER == ctx->VertexProgram._VPMode);
       _mesa_reference_program(ctx, &ctx->VertexProgram._Current, vsProg);
    }
    else if (_mesa_arb_vertex_program_enabled(ctx)) {
       /* Use user-defined vertex program */
+      assert(VP_MODE_SHADER == ctx->VertexProgram._VPMode);
       _mesa_reference_program(ctx, &ctx->VertexProgram._Current,
                               ctx->VertexProgram.Current);
    }
    else if (ctx->VertexProgram._MaintainTnlProgram) {
       /* Use vertex program generated from fixed-function state */
+      assert(VP_MODE_FF == ctx->VertexProgram._VPMode);
       _mesa_reference_program(ctx, &ctx->VertexProgram._Current,
                               _mesa_get_fixed_func_vertex_program(ctx));
       _mesa_reference_program(ctx, &ctx->VertexProgram._TnlProgram,
@@ -193,6 +196,7 @@ update_program(struct gl_context *ctx)
    }
    else {
       /* no vertex program */
+      assert(VP_MODE_FF == ctx->VertexProgram._VPMode);
       _mesa_reference_program(ctx, &ctx->VertexProgram._Current, NULL);
    }
 
@@ -356,9 +360,6 @@ _mesa_update_state_locked( struct gl_context *ctx )
          update_program(ctx);
    }
 
-   if (new_state & _NEW_ARRAY)
-      _mesa_update_vao_client_arrays(ctx, ctx->Array.VAO);
-
  out:
    new_prog_state |= update_program_constants(ctx);
 
@@ -373,7 +374,6 @@ _mesa_update_state_locked( struct gl_context *ctx )
     */
    ctx->Driver.UpdateState(ctx);
    ctx->NewState = 0;
-   ctx->Array.VAO->NewArrays = 0x0;
 }
 
 
@@ -455,4 +455,77 @@ _mesa_set_vp_override(struct gl_context *ctx, GLboolean flag)
        */
       ctx->NewState |= _NEW_PROGRAM;
    }
+}
+
+
+static void
+set_vertex_processing_mode(struct gl_context *ctx, gl_vertex_processing_mode m)
+{
+   if (ctx->VertexProgram._VPMode == m)
+      return;
+
+   /* On change we may get new maps into the current values */
+   ctx->NewDriverState |= ctx->DriverFlags.NewArray;
+
+   /* Finally memorize the value */
+   ctx->VertexProgram._VPMode = m;
+}
+
+
+/**
+ * Update ctx->VertexProgram._VPMode.
+ * This is to distinguish whether we're running
+ *   a vertex program/shader,
+ *   a fixed-function TNL program or
+ *   a fixed function vertex transformation without any program.
+ */
+void
+_mesa_update_vertex_processing_mode(struct gl_context *ctx)
+{
+   if (ctx->_Shader->CurrentProgram[MESA_SHADER_VERTEX])
+      set_vertex_processing_mode(ctx, VP_MODE_SHADER);
+   else if (_mesa_arb_vertex_program_enabled(ctx))
+      set_vertex_processing_mode(ctx, VP_MODE_SHADER);
+   else
+      set_vertex_processing_mode(ctx, VP_MODE_FF);
+}
+
+
+/**
+ * Set the _DrawVAO and the net enabled arrays.
+ * The vao->_Enabled bitmask is transformed due to position/generic0
+ * as stored in vao->_AttributeMapMode. Then the filter bitmask is applied
+ * to filter out arrays unwanted for the currently executed draw operation.
+ * For example, the generic attributes are masked out form the _DrawVAO's
+ * enabled arrays when a fixed function array draw is executed.
+ */
+void
+_mesa_set_draw_vao(struct gl_context *ctx, struct gl_vertex_array_object *vao,
+                   GLbitfield filter)
+{
+   struct gl_vertex_array_object **ptr = &ctx->Array._DrawVAO;
+   bool new_array = false;
+   if (*ptr != vao) {
+      _mesa_reference_vao_(ctx, ptr, vao);
+
+      new_array = true;
+   }
+
+   if (vao->NewArrays) {
+      _mesa_update_vao_derived_arrays(ctx, vao);
+      vao->NewArrays = 0;
+
+      new_array = true;
+   }
+
+   /* May shuffle the position and generic0 bits around, filter out unwanted */
+   const GLbitfield enabled = filter & _mesa_get_vao_vp_inputs(vao);
+   if (ctx->Array._DrawVAOEnabledAttribs != enabled)
+      new_array = true;
+
+   if (new_array)
+      ctx->NewDriverState |= ctx->DriverFlags.NewArray;
+
+   ctx->Array._DrawVAOEnabledAttribs = enabled;
+   _mesa_set_varying_vp_inputs(ctx, enabled);
 }

@@ -234,6 +234,10 @@ svga_init_shader_key_common(const struct svga_context *svga,
              svga_texture_device_format_has_alpha(view->texture)) ?
             set_alpha : copy_alpha;
 
+         if (view->texture->format == PIPE_FORMAT_DXT1_RGB ||
+             view->texture->format == PIPE_FORMAT_DXT1_SRGB)
+            swizzle_tab = set_alpha;
+
          key->tex[i].swizzle_r = swizzle_tab[view->swizzle_r];
          key->tex[i].swizzle_g = swizzle_tab[view->swizzle_g];
          key->tex[i].swizzle_b = swizzle_tab[view->swizzle_b];

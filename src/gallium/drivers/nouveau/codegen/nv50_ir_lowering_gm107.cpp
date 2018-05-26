@@ -262,6 +262,62 @@ GM107LoweringPass::handlePOPCNT(Instruction *i)
    return true;
 }
 
+bool
+GM107LoweringPass::handleSUQ(TexInstruction *suq)
+{
+   Value *ind = suq->getIndirectR();
+   Value *handle;
+   const int slot = suq->tex.r;
+   const int mask = suq->tex.mask;
+
+   if (suq->tex.bindless)
+      handle = ind;
+   else
+      handle = loadTexHandle(ind, slot + 32);
+
+   suq->tex.r = 0xff;
+   suq->tex.s = 0x1f;
+
+   suq->setIndirectR(NULL);
+   suq->setSrc(0, handle);
+   suq->tex.rIndirectSrc = 0;
+   suq->setSrc(1, bld.loadImm(NULL, 0));
+   suq->tex.query = TXQ_DIMS;
+   suq->op = OP_TXQ;
+
+   // We store CUBE / CUBE_ARRAY as a 2D ARRAY. Make sure that depth gets
+   // divided by 6.
+   if (mask & 0x4 && suq->tex.target.isCube()) {
+      int d = util_bitcount(mask & 0x3);
+      bld.setPosition(suq, true);
+      bld.mkOp2(OP_DIV, TYPE_U32, suq->getDef(d), suq->getDef(d),
+                bld.loadImm(NULL, 6));
+   }
+
+   // Samples come from a different query. If we want both samples and dims,
+   // create a second suq.
+   if (mask & 0x8) {
+      int d = util_bitcount(mask & 0x7);
+      Value *dst = suq->getDef(d);
+      TexInstruction *samples = suq;
+      assert(dst);
+
+      if (mask != 0x8) {
+         suq->setDef(d, NULL);
+         suq->tex.mask &= 0x7;
+         samples = cloneShallow(func, suq);
+         for (int i = 0; i < d; i++)
+            samples->setDef(d, NULL);
+         samples->setDef(0, dst);
+         suq->bb->insertAfter(suq, samples);
+      }
+      samples->tex.mask = 0x4;
+      samples->tex.query = TXQ_TYPE;
+   }
+
+   return true;
+}
+
 //
 // - add quadop dance for texturing
 // - put FP outputs in GPRs
@@ -283,6 +339,8 @@ GM107LoweringPass::visit(Instruction *i)
       return handleDFDX(i);
    case OP_POPCNT:
       return handlePOPCNT(i);
+   case OP_SUQ:
+      return handleSUQ(i->asTex());
    default:
       return NVC0LoweringPass::visit(i);
    }

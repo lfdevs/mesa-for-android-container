@@ -115,6 +115,10 @@ get_compiled_dummy_shader(struct svga_context *svga,
    FREE((void *) fs->base.tokens);
    fs->base.tokens = dummy;
 
+   tgsi_scan_shader(fs->base.tokens, &fs->base.info);
+   fs->generic_inputs = svga_get_generic_inputs_mask(&fs->base.info);
+   svga_remap_generics(fs->generic_inputs, fs->generic_remap_table);
+
    variant = translate_fragment_program(svga, fs, key);
    return variant;
 }
@@ -379,18 +383,17 @@ svga_reemit_fs_bindings(struct svga_context *svga)
       ret =  svga->swc->resource_rebind(svga->swc, NULL,
                                         svga->state.hw_draw.fs->gb_shader,
                                         SVGA_RELOC_READ);
-      goto out;
+   }
+   else {
+      if (svga_have_vgpu10(svga))
+         ret = SVGA3D_vgpu10_SetShader(svga->swc, SVGA3D_SHADERTYPE_PS,
+                                       svga->state.hw_draw.fs->gb_shader,
+                                       svga->state.hw_draw.fs->id);
+      else
+         ret = SVGA3D_SetGBShader(svga->swc, SVGA3D_SHADERTYPE_PS,
+                                  svga->state.hw_draw.fs->gb_shader);
    }
 
-   if (svga_have_vgpu10(svga))
-      ret = SVGA3D_vgpu10_SetShader(svga->swc, SVGA3D_SHADERTYPE_PS,
-                                    svga->state.hw_draw.fs->gb_shader,
-                                    svga->state.hw_draw.fs->id);
-   else
-      ret = SVGA3D_SetGBShader(svga->swc, SVGA3D_SHADERTYPE_PS,
-                               svga->state.hw_draw.fs->gb_shader);
-
- out:
    if (ret != PIPE_OK)
       return ret;
 

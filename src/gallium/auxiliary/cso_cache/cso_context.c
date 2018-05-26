@@ -407,8 +407,10 @@ void cso_destroy_context( struct cso_context *ctx )
          ctx->pipe->set_stream_output_targets(ctx->pipe, 0, NULL, NULL);
    }
 
-   for (i = 0; i < PIPE_MAX_SHADER_SAMPLER_VIEWS; i++) {
+   for (i = 0; i < ctx->nr_fragment_views; i++) {
       pipe_sampler_view_reference(&ctx->fragment_views[i], NULL);
+   }
+   for (i = 0; i < ctx->nr_fragment_views_saved; i++) {
       pipe_sampler_view_reference(&ctx->fragment_views_saved[i], NULL);
    }
 
@@ -1546,6 +1548,23 @@ cso_set_constant_buffer_resource(struct cso_context *cso,
 }
 
 void
+cso_set_constant_user_buffer(struct cso_context *cso,
+                             enum pipe_shader_type shader_stage,
+                             unsigned index, void *ptr, unsigned size)
+{
+   if (ptr) {
+      struct pipe_constant_buffer cb;
+      cb.buffer = NULL;
+      cb.buffer_offset = 0;
+      cb.buffer_size = size;
+      cb.user_buffer = ptr;
+      cso_set_constant_buffer(cso, shader_stage, index, &cb);
+   } else {
+      cso_set_constant_buffer(cso, shader_stage, index, NULL);
+   }
+}
+
+void
 cso_save_constant_buffer_slot0(struct cso_context *cso,
                                enum pipe_shader_type shader_stage)
 {
@@ -1685,6 +1704,12 @@ cso_draw_vbo(struct cso_context *cso,
              const struct pipe_draw_info *info)
 {
    struct u_vbuf *vbuf = cso->vbuf;
+
+   /* We can't have both indirect drawing and SO-vertex-count drawing */
+   assert(info->indirect == NULL || info->count_from_stream_output == NULL);
+
+   /* We can't have SO-vertex-count drawing with an index buffer */
+   assert(info->count_from_stream_output == NULL || info->index_size == 0);
 
    if (vbuf) {
       u_vbuf_draw_vbo(vbuf, info);

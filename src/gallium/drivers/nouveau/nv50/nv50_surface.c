@@ -672,10 +672,7 @@ nv50_clear_buffer_push(struct pipe_context *pipe,
       count -= nr;
    }
 
-   if (buf->mm) {
-      nouveau_fence_ref(nv50->screen->base.fence.current, &buf->fence);
-      nouveau_fence_ref(nv50->screen->base.fence.current, &buf->fence_wr);
-   }
+   nv50_resource_validate(buf, NOUVEAU_BO_WR);
 
    nouveau_bufctx_reset(nv50->bufctx, 0);
 }
@@ -727,6 +724,8 @@ nv50_clear_buffer(struct pipe_context *pipe,
       return;
    }
 
+   util_range_add(&buf->valid_buffer_range, offset, offset + size);
+
    assert(size % data_size == 0);
 
    if (offset & 0xff) {
@@ -747,10 +746,10 @@ nv50_clear_buffer(struct pipe_context *pipe,
    assert(width > 0);
 
    BEGIN_NV04(push, NV50_3D(CLEAR_COLOR(0)), 4);
-   PUSH_DATAf(push, color.f[0]);
-   PUSH_DATAf(push, color.f[1]);
-   PUSH_DATAf(push, color.f[2]);
-   PUSH_DATAf(push, color.f[3]);
+   PUSH_DATA (push, color.ui[0]);
+   PUSH_DATA (push, color.ui[1]);
+   PUSH_DATA (push, color.ui[2]);
+   PUSH_DATA (push, color.ui[3]);
 
    if (nouveau_pushbuf_space(push, 64, 1, 0))
       return;
@@ -796,10 +795,7 @@ nv50_clear_buffer(struct pipe_context *pipe,
    BEGIN_NV04(push, NV50_3D(COND_MODE), 1);
    PUSH_DATA (push, nv50->cond_condmode);
 
-   if (buf->mm) {
-      nouveau_fence_ref(nv50->screen->base.fence.current, &buf->fence);
-      nouveau_fence_ref(nv50->screen->base.fence.current, &buf->fence_wr);
-   }
+   nv50_resource_validate(buf, NOUVEAU_BO_WR);
 
    if (width * height != elements) {
       offset += width * height * data_size;

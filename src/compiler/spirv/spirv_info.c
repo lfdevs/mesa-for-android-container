@@ -87,6 +87,14 @@ spirv_capability_to_string(SpvCapability v)
    case SpvCapabilitySubgroupDispatch: return "SpvCapabilitySubgroupDispatch";
    case SpvCapabilityNamedBarrier: return "SpvCapabilityNamedBarrier";
    case SpvCapabilityPipeStorage: return "SpvCapabilityPipeStorage";
+   case SpvCapabilityGroupNonUniform: return "SpvCapabilityGroupNonUniform";
+   case SpvCapabilityGroupNonUniformVote: return "SpvCapabilityGroupNonUniformVote";
+   case SpvCapabilityGroupNonUniformArithmetic: return "SpvCapabilityGroupNonUniformArithmetic";
+   case SpvCapabilityGroupNonUniformBallot: return "SpvCapabilityGroupNonUniformBallot";
+   case SpvCapabilityGroupNonUniformShuffle: return "SpvCapabilityGroupNonUniformShuffle";
+   case SpvCapabilityGroupNonUniformShuffleRelative: return "SpvCapabilityGroupNonUniformShuffleRelative";
+   case SpvCapabilityGroupNonUniformClustered: return "SpvCapabilityGroupNonUniformClustered";
+   case SpvCapabilityGroupNonUniformQuad: return "SpvCapabilityGroupNonUniformQuad";
    case SpvCapabilitySubgroupBallotKHR: return "SpvCapabilitySubgroupBallotKHR";
    case SpvCapabilityDrawParameters: return "SpvCapabilityDrawParameters";
    case SpvCapabilitySubgroupVoteKHR: return "SpvCapabilitySubgroupVoteKHR";
@@ -100,6 +108,7 @@ spirv_capability_to_string(SpvCapability v)
    case SpvCapabilityVariablePointers: return "SpvCapabilityVariablePointers";
    case SpvCapabilityAtomicStorageOps: return "SpvCapabilityAtomicStorageOps";
    case SpvCapabilitySampleMaskPostDepthCoverage: return "SpvCapabilitySampleMaskPostDepthCoverage";
+   case SpvCapabilityFloat16ImageAMD: return "SpvCapabilityFloat16ImageAMD";
    case SpvCapabilityImageGatherBiasLodAMD: return "SpvCapabilityImageGatherBiasLodAMD";
    case SpvCapabilityFragmentMaskAMD: return "SpvCapabilityFragmentMaskAMD";
    case SpvCapabilityStencilExportEXT: return "SpvCapabilityStencilExportEXT";
@@ -111,9 +120,22 @@ spirv_capability_to_string(SpvCapability v)
    case SpvCapabilityShaderStereoViewNV: return "SpvCapabilityShaderStereoViewNV";
    case SpvCapabilityPerViewAttributesNV: return "SpvCapabilityPerViewAttributesNV";
    case SpvCapabilityFragmentFullyCoveredEXT: return "SpvCapabilityFragmentFullyCoveredEXT";
+   case SpvCapabilityShaderNonUniformEXT: return "SpvCapabilityShaderNonUniformEXT";
+   case SpvCapabilityRuntimeDescriptorArrayEXT: return "SpvCapabilityRuntimeDescriptorArrayEXT";
+   case SpvCapabilityInputAttachmentArrayDynamicIndexingEXT: return "SpvCapabilityInputAttachmentArrayDynamicIndexingEXT";
+   case SpvCapabilityUniformTexelBufferArrayDynamicIndexingEXT: return "SpvCapabilityUniformTexelBufferArrayDynamicIndexingEXT";
+   case SpvCapabilityStorageTexelBufferArrayDynamicIndexingEXT: return "SpvCapabilityStorageTexelBufferArrayDynamicIndexingEXT";
+   case SpvCapabilityUniformBufferArrayNonUniformIndexingEXT: return "SpvCapabilityUniformBufferArrayNonUniformIndexingEXT";
+   case SpvCapabilitySampledImageArrayNonUniformIndexingEXT: return "SpvCapabilitySampledImageArrayNonUniformIndexingEXT";
+   case SpvCapabilityStorageBufferArrayNonUniformIndexingEXT: return "SpvCapabilityStorageBufferArrayNonUniformIndexingEXT";
+   case SpvCapabilityStorageImageArrayNonUniformIndexingEXT: return "SpvCapabilityStorageImageArrayNonUniformIndexingEXT";
+   case SpvCapabilityInputAttachmentArrayNonUniformIndexingEXT: return "SpvCapabilityInputAttachmentArrayNonUniformIndexingEXT";
+   case SpvCapabilityUniformTexelBufferArrayNonUniformIndexingEXT: return "SpvCapabilityUniformTexelBufferArrayNonUniformIndexingEXT";
+   case SpvCapabilityStorageTexelBufferArrayNonUniformIndexingEXT: return "SpvCapabilityStorageTexelBufferArrayNonUniformIndexingEXT";
    case SpvCapabilitySubgroupShuffleINTEL: return "SpvCapabilitySubgroupShuffleINTEL";
    case SpvCapabilitySubgroupBufferBlockIOINTEL: return "SpvCapabilitySubgroupBufferBlockIOINTEL";
    case SpvCapabilitySubgroupImageBlockIOINTEL: return "SpvCapabilitySubgroupImageBlockIOINTEL";
+   case SpvCapabilityGroupNonUniformPartitionedNV: return "SpvCapabilityGroupNonUniformPartitionedNV";
    case SpvCapabilityMax: break; /* silence warnings about unhandled enums. */
    }
 
@@ -175,6 +197,9 @@ spirv_decoration_to_string(SpvDecoration v)
    case SpvDecorationPassthroughNV: return "SpvDecorationPassthroughNV";
    case SpvDecorationViewportRelativeNV: return "SpvDecorationViewportRelativeNV";
    case SpvDecorationSecondaryViewportRelativeNV: return "SpvDecorationSecondaryViewportRelativeNV";
+   case SpvDecorationNonUniformEXT: return "SpvDecorationNonUniformEXT";
+   case SpvDecorationHlslCounterBufferGOOGLE: return "SpvDecorationHlslCounterBufferGOOGLE";
+   case SpvDecorationHlslSemanticGOOGLE: return "SpvDecorationHlslSemanticGOOGLE";
    case SpvDecorationMax: break; /* silence warnings about unhandled enums. */
    }
 
@@ -491,6 +516,40 @@ spirv_op_to_string(SpvOp v)
    case SpvOpModuleProcessed: return "SpvOpModuleProcessed";
    case SpvOpExecutionModeId: return "SpvOpExecutionModeId";
    case SpvOpDecorateId: return "SpvOpDecorateId";
+   case SpvOpGroupNonUniformElect: return "SpvOpGroupNonUniformElect";
+   case SpvOpGroupNonUniformAll: return "SpvOpGroupNonUniformAll";
+   case SpvOpGroupNonUniformAny: return "SpvOpGroupNonUniformAny";
+   case SpvOpGroupNonUniformAllEqual: return "SpvOpGroupNonUniformAllEqual";
+   case SpvOpGroupNonUniformBroadcast: return "SpvOpGroupNonUniformBroadcast";
+   case SpvOpGroupNonUniformBroadcastFirst: return "SpvOpGroupNonUniformBroadcastFirst";
+   case SpvOpGroupNonUniformBallot: return "SpvOpGroupNonUniformBallot";
+   case SpvOpGroupNonUniformInverseBallot: return "SpvOpGroupNonUniformInverseBallot";
+   case SpvOpGroupNonUniformBallotBitExtract: return "SpvOpGroupNonUniformBallotBitExtract";
+   case SpvOpGroupNonUniformBallotBitCount: return "SpvOpGroupNonUniformBallotBitCount";
+   case SpvOpGroupNonUniformBallotFindLSB: return "SpvOpGroupNonUniformBallotFindLSB";
+   case SpvOpGroupNonUniformBallotFindMSB: return "SpvOpGroupNonUniformBallotFindMSB";
+   case SpvOpGroupNonUniformShuffle: return "SpvOpGroupNonUniformShuffle";
+   case SpvOpGroupNonUniformShuffleXor: return "SpvOpGroupNonUniformShuffleXor";
+   case SpvOpGroupNonUniformShuffleUp: return "SpvOpGroupNonUniformShuffleUp";
+   case SpvOpGroupNonUniformShuffleDown: return "SpvOpGroupNonUniformShuffleDown";
+   case SpvOpGroupNonUniformIAdd: return "SpvOpGroupNonUniformIAdd";
+   case SpvOpGroupNonUniformFAdd: return "SpvOpGroupNonUniformFAdd";
+   case SpvOpGroupNonUniformIMul: return "SpvOpGroupNonUniformIMul";
+   case SpvOpGroupNonUniformFMul: return "SpvOpGroupNonUniformFMul";
+   case SpvOpGroupNonUniformSMin: return "SpvOpGroupNonUniformSMin";
+   case SpvOpGroupNonUniformUMin: return "SpvOpGroupNonUniformUMin";
+   case SpvOpGroupNonUniformFMin: return "SpvOpGroupNonUniformFMin";
+   case SpvOpGroupNonUniformSMax: return "SpvOpGroupNonUniformSMax";
+   case SpvOpGroupNonUniformUMax: return "SpvOpGroupNonUniformUMax";
+   case SpvOpGroupNonUniformFMax: return "SpvOpGroupNonUniformFMax";
+   case SpvOpGroupNonUniformBitwiseAnd: return "SpvOpGroupNonUniformBitwiseAnd";
+   case SpvOpGroupNonUniformBitwiseOr: return "SpvOpGroupNonUniformBitwiseOr";
+   case SpvOpGroupNonUniformBitwiseXor: return "SpvOpGroupNonUniformBitwiseXor";
+   case SpvOpGroupNonUniformLogicalAnd: return "SpvOpGroupNonUniformLogicalAnd";
+   case SpvOpGroupNonUniformLogicalOr: return "SpvOpGroupNonUniformLogicalOr";
+   case SpvOpGroupNonUniformLogicalXor: return "SpvOpGroupNonUniformLogicalXor";
+   case SpvOpGroupNonUniformQuadBroadcast: return "SpvOpGroupNonUniformQuadBroadcast";
+   case SpvOpGroupNonUniformQuadSwap: return "SpvOpGroupNonUniformQuadSwap";
    case SpvOpSubgroupBallotKHR: return "SpvOpSubgroupBallotKHR";
    case SpvOpSubgroupFirstInvocationKHR: return "SpvOpSubgroupFirstInvocationKHR";
    case SpvOpSubgroupAllKHR: return "SpvOpSubgroupAllKHR";
@@ -515,6 +574,9 @@ spirv_op_to_string(SpvOp v)
    case SpvOpSubgroupBlockWriteINTEL: return "SpvOpSubgroupBlockWriteINTEL";
    case SpvOpSubgroupImageBlockReadINTEL: return "SpvOpSubgroupImageBlockReadINTEL";
    case SpvOpSubgroupImageBlockWriteINTEL: return "SpvOpSubgroupImageBlockWriteINTEL";
+   case SpvOpDecorateStringGOOGLE: return "SpvOpDecorateStringGOOGLE";
+   case SpvOpMemberDecorateStringGOOGLE: return "SpvOpMemberDecorateStringGOOGLE";
+   case SpvOpGroupNonUniformPartitionNV: return "SpvOpGroupNonUniformPartitionNV";
    case SpvOpMax: break; /* silence warnings about unhandled enums. */
    }
 

@@ -44,7 +44,6 @@ fd_create_surface(struct pipe_context *pctx,
 	if (!surface)
 		return NULL;
 
-	debug_assert(surf_tmpl->u.tex.first_layer == surf_tmpl->u.tex.last_layer);
 
 	struct pipe_surface *psurf = &surface->base;
 	unsigned level = surf_tmpl->u.tex.level;
@@ -56,9 +55,16 @@ fd_create_surface(struct pipe_context *pctx,
 	psurf->format = surf_tmpl->format;
 	psurf->width = u_minify(ptex->width0, level);
 	psurf->height = u_minify(ptex->height0, level);
-	psurf->u.tex.level = level;
-	psurf->u.tex.first_layer = surf_tmpl->u.tex.first_layer;
-	psurf->u.tex.last_layer = surf_tmpl->u.tex.last_layer;
+
+	if (ptex->target == PIPE_BUFFER) {
+		psurf->u.buf.first_element = surf_tmpl->u.buf.first_element;
+		psurf->u.buf.last_element = surf_tmpl->u.buf.last_element;
+	} else {
+		debug_assert(surf_tmpl->u.tex.first_layer == surf_tmpl->u.tex.last_layer);
+		psurf->u.tex.level = level;
+		psurf->u.tex.first_layer = surf_tmpl->u.tex.first_layer;
+		psurf->u.tex.last_layer = surf_tmpl->u.tex.last_layer;
+	}
 
 	// TODO
 	DBG("TODO: %ux%u", psurf->width, psurf->height);

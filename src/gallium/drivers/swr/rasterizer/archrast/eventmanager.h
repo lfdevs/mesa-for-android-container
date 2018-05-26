@@ -57,6 +57,7 @@ namespace ArchRast
 
         void Attach(EventHandler* pHandler)
         {
+            SWR_ASSERT(pHandler != nullptr);
             mHandlers.push_back(pHandler);
         }
 

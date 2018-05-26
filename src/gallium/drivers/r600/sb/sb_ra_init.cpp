@@ -708,7 +708,7 @@ void ra_split::split_vec(vvec &vv, vvec &v1, vvec &v2, bool allow_swz) {
 
 			assert(!o->is_dead());
 
-			if (o->is_undef() || o->is_geometry_emit())
+			if (o->is_undef() || o->is_geometry_emit() || o->is_scratch())
 				continue;
 
 			if (allow_swz && o->is_float_0_or_1())

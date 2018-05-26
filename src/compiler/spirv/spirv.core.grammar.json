@@ -3144,7 +3144,456 @@
         { "kind" : "IdRef", "name" : "'Target'" },
         { "kind" : "Decoration" }
       ],
+      "extensions" : [ "SPV_GOOGLE_hlsl_functionality1" ],
       "version" : "1.2"
+    },
+    {
+      "opname" : "OpGroupNonUniformElect",
+      "opcode" : 333,
+      "operands" : [
+        { "kind" : "IdResultType" },
+        { "kind" : "IdResult" },
+        { "kind" : "IdScope", "name" : "'Execution'" }
+      ],
+      "capabilities" : [ "GroupNonUniform" ],
+      "version" : "1.3"
+    },
+    {
+      "opname" : "OpGroupNonUniformAll",
+      "opcode" : 334,
+      "operands" : [
+        { "kind" : "IdResultType" },
+        { "kind" : "IdResult" },
+        { "kind" : "IdScope", "name" : "'Execution'" },
+        { "kind" : "IdRef", "name" : "'Predicate'" }
+      ],
+      "capabilities" : [ "GroupNonUniformVote" ],
+      "version" : "1.3"
+    },
+    {
+      "opname" : "OpGroupNonUniformAny",
+      "opcode" : 335,
+      "operands" : [
+        { "kind" : "IdResultType" },
+        { "kind" : "IdResult" },
+        { "kind" : "IdScope", "name" : "'Execution'" },
+        { "kind" : "IdRef", "name" : "'Predicate'" }
+      ],
+      "capabilities" : [ "GroupNonUniformVote" ],
+      "version" : "1.3"
+    },
+    {
+      "opname" : "OpGroupNonUniformAllEqual",
+      "opcode" : 336,
+      "operands" : [
+        { "kind" : "IdResultType" },
+        { "kind" : "IdResult" },
+        { "kind" : "IdScope", "name" : "'Execution'" },
+        { "kind" : "IdRef", "name" : "'Value'" }
+      ],
+      "capabilities" : [ "GroupNonUniformVote" ],
+      "version" : "1.3"
+    },
+    {
+      "opname" : "OpGroupNonUniformBroadcast",
+      "opcode" : 337,
+      "operands" : [
+        { "kind" : "IdResultType" },
+        { "kind" : "IdResult" },
+        { "kind" : "IdScope", "name" : "'Execution'" },
+        { "kind" : "IdRef", "name" : "'Value'" },
+        { "kind" : "IdRef", "name" : "'Id'" }
+      ],
+      "capabilities" : [ "GroupNonUniformBallot" ],
+      "version" : "1.3"
+    },
+    {
+      "opname" : "OpGroupNonUniformBroadcastFirst",
+      "opcode" : 338,
+      "operands" : [
+        { "kind" : "IdResultType" },
+        { "kind" : "IdResult" },
+        { "kind" : "IdScope", "name" : "'Execution'" },
+        { "kind" : "IdRef", "name" : "'Value'" }
+      ],
+      "capabilities" : [ "GroupNonUniformBallot" ],
+      "version" : "1.3"
+    },
+    {
+      "opname" : "OpGroupNonUniformBallot",
+      "opcode" : 339,
+      "operands" : [
+        { "kind" : "IdResultType" },
+        { "kind" : "IdResult" },
+        { "kind" : "IdScope", "name" : "'Execution'" },
+        { "kind" : "IdRef", "name" : "'Predicate'" }
+      ],
+      "capabilities" : [ "GroupNonUniformBallot" ],
+      "version" : "1.3"
+    },
+    {
+      "opname" : "OpGroupNonUniformInverseBallot",
+      "opcode" : 340,
+      "operands" : [
+        { "kind" : "IdResultType" },
+        { "kind" : "IdResult" },
+        { "kind" : "IdScope", "name" : "'Execution'" },
+        { "kind" : "IdRef", "name" : "'Value'" }
+      ],
+      "capabilities" : [ "GroupNonUniformBallot" ],
+      "version" : "1.3"
+    },
+    {
+      "opname" : "OpGroupNonUniformBallotBitExtract",
+      "opcode" : 341,
+      "operands" : [
+        { "kind" : "IdResultType" },
+        { "kind" : "IdResult" },
+        { "kind" : "IdScope", "name" : "'Execution'" },
+        { "kind" : "IdRef", "name" : "'Value'" },
+        { "kind" : "IdRef", "name" : "'Index'" }
+      ],
+      "capabilities" : [ "GroupNonUniformBallot" ],
+      "version" : "1.3"
+    },
+    {
+      "opname" : "OpGroupNonUniformBallotBitCount",
+      "opcode" : 342,
+      "operands" : [
+        { "kind" : "IdResultType" },
+        { "kind" : "IdResult" },
+        { "kind" : "IdScope", "name" : "'Execution'" },
+        { "kind" : "GroupOperation", "name" : "'Operation'" },
+        { "kind" : "IdRef", "name" : "'Value'" }
+      ],
+      "capabilities" : [ "GroupNonUniformBallot" ],
+      "version" : "1.3"
+    },
+    {
+      "opname" : "OpGroupNonUniformBallotFindLSB",
+      "opcode" : 343,
+      "operands" : [
+        { "kind" : "IdResultType" },
+        { "kind" : "IdResult" },
+        { "kind" : "IdScope", "name" : "'Execution'" },
+        { "kind" : "IdRef", "name" : "'Value'" }
+      ],
+      "capabilities" : [ "GroupNonUniformBallot" ],
+      "version" : "1.3"
+    },
+    {
+      "opname" : "OpGroupNonUniformBallotFindMSB",
+      "opcode" : 344,
+      "operands" : [
+        { "kind" : "IdResultType" },
+        { "kind" : "IdResult" },
+        { "kind" : "IdScope", "name" : "'Execution'" },
+        { "kind" : "IdRef", "name" : "'Value'" }
+      ],
+      "capabilities" : [ "GroupNonUniformBallot" ],
+      "version" : "1.3"
+    },
+    {
+      "opname" : "OpGroupNonUniformShuffle",
+      "opcode" : 345,
+      "operands" : [
+        { "kind" : "IdResultType" },
+        { "kind" : "IdResult" },
+        { "kind" : "IdScope", "name" : "'Execution'" },
+        { "kind" : "IdRef", "name" : "'Value'" },
+        { "kind" : "IdRef", "name" : "'Id'" }
+      ],
+      "capabilities" : [ "GroupNonUniformShuffle" ],
+      "version" : "1.3"
+    },
+    {
+      "opname" : "OpGroupNonUniformShuffleXor",
+      "opcode" : 346,
+      "operands" : [
+        { "kind" : "IdResultType" },
+        { "kind" : "IdResult" },
+        { "kind" : "IdScope", "name" : "'Execution'" },
+        { "kind" : "IdRef", "name" : "'Value'" },
+        { "kind" : "IdRef", "name" : "'Mask'" }
+      ],
+      "capabilities" : [ "GroupNonUniformShuffle" ],
+      "version" : "1.3"
+    },
+    {
+      "opname" : "OpGroupNonUniformShuffleUp",
+      "opcode" : 347,
+      "operands" : [
+        { "kind" : "IdResultType" },
+        { "kind" : "IdResult" },
+        { "kind" : "IdScope", "name" : "'Execution'" },
+        { "kind" : "IdRef", "name" : "'Value'" },
+        { "kind" : "IdRef", "name" : "'Delta'" }
+      ],
+      "capabilities" : [ "GroupNonUniformShuffleRelative" ],
+      "version" : "1.3"
+    },
+    {
+      "opname" : "OpGroupNonUniformShuffleDown",
+      "opcode" : 348,
+      "operands" : [
+        { "kind" : "IdResultType" },
+        { "kind" : "IdResult" },
+        { "kind" : "IdScope", "name" : "'Execution'" },
+        { "kind" : "IdRef", "name" : "'Value'" },
+        { "kind" : "IdRef", "name" : "'Delta'" }
+      ],
+      "capabilities" : [ "GroupNonUniformShuffleRelative" ],
+      "version" : "1.3"
+    },
+    {
+      "opname" : "OpGroupNonUniformIAdd",
+      "opcode" : 349,
+      "operands" : [
+        { "kind" : "IdResultType" },
+        { "kind" : "IdResult" },
+        { "kind" : "IdScope", "name" : "'Execution'" },
+        { "kind" : "GroupOperation", "name" : "'Operation'" },
+        { "kind" : "IdRef", "name" : "'Value'" },
+        { "kind" : "IdRef", "name" : "'ClusterSize'", "quantifier" : "?" }
+      ],
+      "capabilities" : [ "GroupNonUniformArithmetic", "GroupNonUniformClustered" ],
+      "version" : "1.3"
+    },
+    {
+      "opname" : "OpGroupNonUniformFAdd",
+      "opcode" : 350,
+      "operands" : [
+        { "kind" : "IdResultType" },
+        { "kind" : "IdResult" },
+        { "kind" : "IdScope", "name" : "'Execution'" },
+        { "kind" : "GroupOperation", "name" : "'Operation'" },
+        { "kind" : "IdRef", "name" : "'Value'" },
+        { "kind" : "IdRef", "name" : "'ClusterSize'", "quantifier" : "?" }
+      ],
+      "capabilities" : [ "GroupNonUniformArithmetic", "GroupNonUniformClustered" ],
+      "version" : "1.3"
+    },
+    {
+      "opname" : "OpGroupNonUniformIMul",
+      "opcode" : 351,
+      "operands" : [
+        { "kind" : "IdResultType" },
+        { "kind" : "IdResult" },
+        { "kind" : "IdScope", "name" : "'Execution'" },
+        { "kind" : "GroupOperation", "name" : "'Operation'" },
+        { "kind" : "IdRef", "name" : "'Value'" },
+        { "kind" : "IdRef", "name" : "'ClusterSize'", "quantifier" : "?" }
+      ],
+      "capabilities" : [ "GroupNonUniformArithmetic", "GroupNonUniformClustered" ],
+      "version" : "1.3"
+    },
+    {
+      "opname" : "OpGroupNonUniformFMul",
+      "opcode" : 352,
+      "operands" : [
+        { "kind" : "IdResultType" },
+        { "kind" : "IdResult" },
+        { "kind" : "IdScope", "name" : "'Execution'" },
+        { "kind" : "GroupOperation", "name" : "'Operation'" },
+        { "kind" : "IdRef", "name" : "'Value'" },
+        { "kind" : "IdRef", "name" : "'ClusterSize'", "quantifier" : "?" }
+      ],
+      "capabilities" : [ "GroupNonUniformArithmetic", "GroupNonUniformClustered" ],
+      "version" : "1.3"
+    },
+    {
+      "opname" : "OpGroupNonUniformSMin",
+      "opcode" : 353,
+      "operands" : [
+        { "kind" : "IdResultType" },
+        { "kind" : "IdResult" },
+        { "kind" : "IdScope", "name" : "'Execution'" },
+        { "kind" : "GroupOperation", "name" : "'Operation'" },
+        { "kind" : "IdRef", "name" : "'Value'" },
+        { "kind" : "IdRef", "name" : "'ClusterSize'", "quantifier" : "?" }
+      ],
+      "capabilities" : [ "GroupNonUniformArithmetic", "GroupNonUniformClustered" ],
+      "version" : "1.3"
+    },
+    {
+      "opname" : "OpGroupNonUniformUMin",
+      "opcode" : 354,
+      "operands" : [
+        { "kind" : "IdResultType" },
+        { "kind" : "IdResult" },
+        { "kind" : "IdScope", "name" : "'Execution'" },
+        { "kind" : "GroupOperation", "name" : "'Operation'" },
+        { "kind" : "IdRef", "name" : "'Value'" },
+        { "kind" : "IdRef", "name" : "'ClusterSize'", "quantifier" : "?" }
+      ],
+      "capabilities" : [ "GroupNonUniformArithmetic", "GroupNonUniformClustered" ],
+      "version" : "1.3"
+    },
+    {
+      "opname" : "OpGroupNonUniformFMin",
+      "opcode" : 355,
+      "operands" : [
+        { "kind" : "IdResultType" },
+        { "kind" : "IdResult" },
+        { "kind" : "IdScope", "name" : "'Execution'" },
+        { "kind" : "GroupOperation", "name" : "'Operation'" },
+        { "kind" : "IdRef", "name" : "'Value'" },
+        { "kind" : "IdRef", "name" : "'ClusterSize'", "quantifier" : "?" }
+      ],
+      "capabilities" : [ "GroupNonUniformArithmetic", "GroupNonUniformClustered" ],
+      "version" : "1.3"
+    },
+    {
+      "opname" : "OpGroupNonUniformSMax",
+      "opcode" : 356,
+      "operands" : [
+        { "kind" : "IdResultType" },
+        { "kind" : "IdResult" },
+        { "kind" : "IdScope", "name" : "'Execution'" },
+        { "kind" : "GroupOperation", "name" : "'Operation'" },
+        { "kind" : "IdRef", "name" : "'Value'" },
+        { "kind" : "IdRef", "name" : "'ClusterSize'", "quantifier" : "?" }
+      ],
+      "capabilities" : [ "GroupNonUniformArithmetic", "GroupNonUniformClustered" ],
+      "version" : "1.3"
+    },
+    {
+      "opname" : "OpGroupNonUniformUMax",
+      "opcode" : 357,
+      "operands" : [
+        { "kind" : "IdResultType" },
+        { "kind" : "IdResult" },
+        { "kind" : "IdScope", "name" : "'Execution'" },
+        { "kind" : "GroupOperation", "name" : "'Operation'" },
+        { "kind" : "IdRef", "name" : "'Value'" },
+        { "kind" : "IdRef", "name" : "'ClusterSize'", "quantifier" : "?" }
+      ],
+      "capabilities" : [ "GroupNonUniformArithmetic", "GroupNonUniformClustered" ],
+      "version" : "1.3"
+    },
+    {
+      "opname" : "OpGroupNonUniformFMax",
+      "opcode" : 358,
+      "operands" : [
+        { "kind" : "IdResultType" },
+        { "kind" : "IdResult" },
+        { "kind" : "IdScope", "name" : "'Execution'" },
+        { "kind" : "GroupOperation", "name" : "'Operation'" },
+        { "kind" : "IdRef", "name" : "'Value'" },
+        { "kind" : "IdRef", "name" : "'ClusterSize'", "quantifier" : "?" }
+      ],
+      "capabilities" : [ "GroupNonUniformArithmetic", "GroupNonUniformClustered" ],
+      "version" : "1.3"
+    },
+    {
+      "opname" : "OpGroupNonUniformBitwiseAnd",
+      "opcode" : 359,
+      "operands" : [
+        { "kind" : "IdResultType" },
+        { "kind" : "IdResult" },
+        { "kind" : "IdScope", "name" : "'Execution'" },
+        { "kind" : "GroupOperation", "name" : "'Operation'" },
+        { "kind" : "IdRef", "name" : "'Value'" },
+        { "kind" : "IdRef", "name" : "'ClusterSize'", "quantifier" : "?" }
+      ],
+      "capabilities" : [ "GroupNonUniformArithmetic", "GroupNonUniformClustered" ],
+      "version" : "1.3"
+    },
+    {
+      "opname" : "OpGroupNonUniformBitwiseOr",
+      "opcode" : 360,
+      "operands" : [
+        { "kind" : "IdResultType" },
+        { "kind" : "IdResult" },
+        { "kind" : "IdScope", "name" : "'Execution'" },
+        { "kind" : "GroupOperation", "name" : "'Operation'" },
+        { "kind" : "IdRef", "name" : "'Value'" },
+        { "kind" : "IdRef", "name" : "'ClusterSize'", "quantifier" : "?" }
+      ],
+      "capabilities" : [ "GroupNonUniformArithmetic", "GroupNonUniformClustered" ],
+      "version" : "1.3"
+    },
+    {
+      "opname" : "OpGroupNonUniformBitwiseXor",
+      "opcode" : 361,
+      "operands" : [
+        { "kind" : "IdResultType" },
+        { "kind" : "IdResult" },
+        { "kind" : "IdScope", "name" : "'Execution'" },
+        { "kind" : "GroupOperation", "name" : "'Operation'" },
+        { "kind" : "IdRef", "name" : "'Value'" },
+        { "kind" : "IdRef", "name" : "'ClusterSize'", "quantifier" : "?" }
+      ],
+      "capabilities" : [ "GroupNonUniformArithmetic", "GroupNonUniformClustered" ],
+      "version" : "1.3"
+    },
+    {
+      "opname" : "OpGroupNonUniformLogicalAnd",
+      "opcode" : 362,
+      "operands" : [
+        { "kind" : "IdResultType" },
+        { "kind" : "IdResult" },
+        { "kind" : "IdScope", "name" : "'Execution'" },
+        { "kind" : "GroupOperation", "name" : "'Operation'" },
+        { "kind" : "IdRef", "name" : "'Value'" },
+        { "kind" : "IdRef", "name" : "'ClusterSize'", "quantifier" : "?" }
+      ],
+      "capabilities" : [ "GroupNonUniformArithmetic", "GroupNonUniformClustered" ],
+      "version" : "1.3"
+    },
+    {
+      "opname" : "OpGroupNonUniformLogicalOr",
+      "opcode" : 363,
+      "operands" : [
+        { "kind" : "IdResultType" },
+        { "kind" : "IdResult" },
+        { "kind" : "IdScope", "name" : "'Execution'" },
+        { "kind" : "GroupOperation", "name" : "'Operation'" },
+        { "kind" : "IdRef", "name" : "'Value'" },
+        { "kind" : "IdRef", "name" : "'ClusterSize'", "quantifier" : "?" }
+      ],
+      "capabilities" : [ "GroupNonUniformArithmetic", "GroupNonUniformClustered" ],
+      "version" : "1.3"
+    },
+    {
+      "opname" : "OpGroupNonUniformLogicalXor",
+      "opcode" : 364,
+      "operands" : [
+        { "kind" : "IdResultType" },
+        { "kind" : "IdResult" },
+        { "kind" : "IdScope", "name" : "'Execution'" },
+        { "kind" : "GroupOperation", "name" : "'Operation'" },
+        { "kind" : "IdRef", "name" : "'Value'" },
+        { "kind" : "IdRef", "name" : "'ClusterSize'", "quantifier" : "?" }
+      ],
+      "capabilities" : [ "GroupNonUniformArithmetic", "GroupNonUniformClustered" ],
+      "version" : "1.3"
+    },
+    {
+      "opname" : "OpGroupNonUniformQuadBroadcast",
+      "opcode" : 365,
+      "operands" : [
+        { "kind" : "IdResultType" },
+        { "kind" : "IdResult" },
+        { "kind" : "IdScope", "name" : "'Execution'" },
+        { "kind" : "IdRef", "name" : "'Value'" },
+        { "kind" : "IdRef", "name" : "'Index'" }
+      ],
+      "capabilities" : [ "GroupNonUniformQuad" ],
+      "version" : "1.3"
+    },
+    {
+      "opname" : "OpGroupNonUniformQuadSwap",
+      "opcode" : 366,
+      "operands" : [
+        { "kind" : "IdResultType" },
+        { "kind" : "IdResult" },
+        { "kind" : "IdScope", "name" : "'Execution'" },
+        { "kind" : "IdRef", "name" : "'Value'" },
+        { "kind" : "IdRef", "name" : "'Direction'" }
+      ],
+      "capabilities" : [ "GroupNonUniformQuad" ],
+      "version" : "1.3"
     },
     {
       "opname" : "OpSubgroupBallotKHR",
@@ -3154,7 +3603,9 @@
         { "kind" : "IdResult" },
         { "kind" : "IdRef", "name" : "'Predicate'" }
       ],
-      "capabilities" : [ "SubgroupBallotKHR" ]
+      "capabilities" : [ "SubgroupBallotKHR" ],
+      "extensions" : [ "SPV_KHR_shader_ballot" ],
+      "version" : "None"
     },
     {
       "opname" : "OpSubgroupFirstInvocationKHR",
@@ -3164,7 +3615,9 @@
         { "kind" : "IdResult" },
         { "kind" : "IdRef", "name" : "'Value'" }
       ],
-      "capabilities" : [ "SubgroupBallotKHR" ]
+      "capabilities" : [ "SubgroupBallotKHR" ],
+      "extensions" : [ "SPV_KHR_shader_ballot" ],
+      "version" : "None"
     },
     {
       "opname" : "OpSubgroupAllKHR",
@@ -3174,7 +3627,11 @@
         { "kind" : "IdResult" },
         { "kind" : "IdRef", "name" : "'Predicate'" }
       ],
-      "capabilities" : [ "SubgroupVoteKHR" ]
+      "extensions" : [
+        "SPV_KHR_subgroup_vote"
+      ],
+      "capabilities" : [ "SubgroupVoteKHR" ],
+      "version" : "None"
     },
     {
       "opname" : "OpSubgroupAnyKHR",
@@ -3184,7 +3641,11 @@
         { "kind" : "IdResult" },
         { "kind" : "IdRef", "name" : "'Predicate'" }
       ],
-      "capabilities" : [ "SubgroupVoteKHR" ]
+      "extensions" : [
+        "SPV_KHR_subgroup_vote"
+      ],
+      "capabilities" : [ "SubgroupVoteKHR" ],
+      "version" : "None"
     },
     {
       "opname" : "OpSubgroupAllEqualKHR",
@@ -3194,7 +3655,11 @@
         { "kind" : "IdResult" },
         { "kind" : "IdRef", "name" : "'Predicate'" }
       ],
-      "capabilities" : [ "SubgroupVoteKHR" ]
+      "extensions" : [
+        "SPV_KHR_subgroup_vote"
+      ],
+      "capabilities" : [ "SubgroupVoteKHR" ],
+      "version" : "None"
     },
     {
       "opname" : "OpSubgroupReadInvocationKHR",
@@ -3206,6 +3671,7 @@
         { "kind" : "IdRef", "name" : "'Index'" }
       ],
       "capabilities" : [ "SubgroupBallotKHR" ],
+      "extensions" : [ "SPV_KHR_shader_ballot" ],
       "version" : "None"
     },
     {
@@ -3219,6 +3685,7 @@
         { "kind" : "IdRef",          "name" : "'X'" }
       ],
       "capabilities" : [ "Groups" ],
+      "extensions" : [ "SPV_AMD_shader_ballot" ],
       "version" : "None"
     },
     {
@@ -3232,6 +3699,7 @@
         { "kind" : "IdRef",          "name" : "'X'" }
       ],
       "capabilities" : [ "Groups" ],
+      "extensions" : [ "SPV_AMD_shader_ballot" ],
       "version" : "None"
     },
     {
@@ -3245,6 +3713,7 @@
         { "kind" : "IdRef",          "name" : "'X'" }
       ],
       "capabilities" : [ "Groups" ],
+      "extensions" : [ "SPV_AMD_shader_ballot" ],
       "version" : "None"
     },
     {
@@ -3258,6 +3727,7 @@
         { "kind" : "IdRef",          "name" : "'X'" }
       ],
       "capabilities" : [ "Groups" ],
+      "extensions" : [ "SPV_AMD_shader_ballot" ],
       "version" : "None"
     },
     {
@@ -3271,6 +3741,7 @@
         { "kind" : "IdRef",          "name" : "'X'" }
       ],
       "capabilities" : [ "Groups" ],
+      "extensions" : [ "SPV_AMD_shader_ballot" ],
       "version" : "None"
     },
     {
@@ -3284,6 +3755,7 @@
         { "kind" : "IdRef",          "name" : "'X'" }
       ],
       "capabilities" : [ "Groups" ],
+      "extensions" : [ "SPV_AMD_shader_ballot" ],
       "version" : "None"
     },
     {
@@ -3297,6 +3769,7 @@
         { "kind" : "IdRef",          "name" : "'X'" }
       ],
       "capabilities" : [ "Groups" ],
+      "extensions" : [ "SPV_AMD_shader_ballot" ],
       "version" : "None"
     },
     {
@@ -3310,6 +3783,7 @@
         { "kind" : "IdRef",          "name" : "'X'" }
       ],
       "capabilities" : [ "Groups" ],
+      "extensions" : [ "SPV_AMD_shader_ballot" ],
       "version" : "None"
     },
     {
@@ -3322,6 +3796,7 @@
         { "kind" : "IdRef", "name" : "'Coordinate'" }
       ],
       "capabilities" : [ "FragmentMaskAMD" ],
+      "extensions" : [ "SPV_AMD_shader_fragment_mask" ],
       "version" : "None"
     },
     {
@@ -3335,6 +3810,7 @@
         { "kind" : "IdRef", "name" : "'Fragment Index'" }
       ],
       "capabilities" : [ "FragmentMaskAMD" ],
+      "extensions" : [ "SPV_AMD_shader_fragment_mask" ],
       "version" : "None"
     },
     {
@@ -3429,6 +3905,39 @@
         { "kind" : "IdRef", "name" : "'Data'" }
       ],
       "capabilities" : [ "SubgroupImageBlockIOINTEL" ],
+      "version" : "None"
+    },
+    {
+      "opname" : "OpDecorateStringGOOGLE",
+      "opcode" : 5632,
+      "operands" : [
+        { "kind" : "IdRef",         "name" : "'Target'" },
+        { "kind" : "Decoration" }
+      ],
+      "extensions" : [ "SPV_GOOGLE_decorate_string" ],
+      "version" : "None"
+    },
+    {
+      "opname" : "OpMemberDecorateStringGOOGLE",
+      "opcode" : 5633,
+      "operands" : [
+        { "kind" : "IdRef",          "name" : "'Struct Type'" },
+        { "kind" : "LiteralInteger", "name" : "'Member'" },
+        { "kind" : "Decoration" }
+      ],
+      "extensions" : [ "SPV_GOOGLE_decorate_string" ],
+      "version" : "None"
+    },
+    {
+      "opname" : "OpGroupNonUniformPartitionNV",
+      "opcode" : 5296,
+      "operands" : [
+        { "kind" : "IdResultType" },
+        { "kind" : "IdResult" },
+        { "kind" : "IdRef", "name" : "'Value'" }
+      ],
+      "capabilities" : [ "GroupNonUniformPartitionedNV" ],
+      "extensions" : [ "SPV_NV_shader_subgroup_partitioned" ],
       "version" : "None"
     }
   ],
@@ -4060,12 +4569,14 @@
           "enumerant" : "PostDepthCoverage",
           "value" : 4446,
           "capabilities" : [ "SampleMaskPostDepthCoverage" ],
+          "extensions" : [ "SPV_KHR_post_depth_coverage" ],
           "version" : "None"
         },
         {
           "enumerant" : "StencilRefReplacingEXT",
           "value" : 5027,
           "capabilities" : [ "StencilExportEXT" ],
+          "extensions" : [ "SPV_EXT_shader_stencil_export" ],
           "version" : "None"
         }
       ]
@@ -4136,7 +4647,7 @@
             "SPV_KHR_variable_pointers"
           ],
           "capabilities" : [ "Shader" ],
-          "version" : "None"
+          "version" : "1.3"
         }
       ]
     },
@@ -5032,6 +5543,7 @@
         {
           "enumerant" : "ExplicitInterpAMD",
           "value" : 4999,
+          "extensions" : [ "SPV_AMD_shader_explicit_vertex_parameter" ],
           "version" : "None"
         },
         {
@@ -5060,6 +5572,29 @@
           "parameters" : [
             { "kind" : "LiteralInteger", "name" : "'Offset'" }
           ]
+        },
+        {
+          "enumerant" : "NonUniformEXT",
+          "value" : 5300,
+          "capabilities" : [ "ShaderNonUniformEXT" ]
+        },
+        {
+          "enumerant" : "HlslCounterBufferGOOGLE",
+          "value" : 5634,
+          "parameters" : [
+            { "kind" : "IdRef", "name" : "'Counter Buffer'" }
+          ],
+          "extensions" : [ "SPV_GOOGLE_hlsl_functionality1" ],
+          "version" : "None"
+        },
+        {
+          "enumerant" : "HlslSemanticGOOGLE",
+          "value" : 5635,
+          "parameters" : [
+            { "kind" : "LiteralString", "name" : "'Semantic'" }
+          ],
+          "extensions" : [ "SPV_GOOGLE_hlsl_functionality1" ],
+          "version" : "None"
         }
       ]
     },
@@ -5229,7 +5764,7 @@
         {
           "enumerant" : "SubgroupSize",
           "value" : 36,
-          "capabilities" : [ "Kernel" ]
+          "capabilities" : [ "Kernel", "GroupNonUniform", "SubgroupBallotKHR" ]
         },
         {
           "enumerant" : "SubgroupMaxSize",
@@ -5239,7 +5774,7 @@
         {
           "enumerant" : "NumSubgroups",
           "value" : 38,
-          "capabilities" : [ "Kernel" ]
+          "capabilities" : [ "Kernel", "GroupNonUniform" ]
         },
         {
           "enumerant" : "NumEnqueuedSubgroups",
@@ -5249,12 +5784,12 @@
         {
           "enumerant" : "SubgroupId",
           "value" : 40,
-          "capabilities" : [ "Kernel" ]
+          "capabilities" : [ "Kernel", "GroupNonUniform" ]
         },
         {
           "enumerant" : "SubgroupLocalInvocationId",
           "value" : 41,
-          "capabilities" : [ "Kernel" ]
+          "capabilities" : [ "Kernel", "GroupNonUniform", "SubgroupBallotKHR" ]
         },
         {
           "enumerant" : "VertexIndex",
@@ -5267,104 +5802,152 @@
           "capabilities" : [ "Shader" ]
         },
         {
+          "enumerant" : "SubgroupEqMask",
+          "value" : 4416,
+          "capabilities" : [ "SubgroupBallotKHR", "GroupNonUniformBallot" ],
+          "version" : "1.3"
+        },
+        {
+          "enumerant" : "SubgroupGeMask",
+          "value" : 4417,
+          "capabilities" : [ "SubgroupBallotKHR", "GroupNonUniformBallot" ],
+          "version" : "1.3"
+        },
+        {
+          "enumerant" : "SubgroupGtMask",
+          "value" : 4418,
+          "capabilities" : [ "SubgroupBallotKHR", "GroupNonUniformBallot" ],
+          "version" : "1.3"
+        },
+        {
+          "enumerant" : "SubgroupLeMask",
+          "value" : 4419,
+          "capabilities" : [ "SubgroupBallotKHR", "GroupNonUniformBallot" ],
+          "version" : "1.3"
+        },
+        {
+          "enumerant" : "SubgroupLtMask",
+          "value" : 4420,
+          "capabilities" : [ "SubgroupBallotKHR", "GroupNonUniformBallot" ],
+          "version" : "1.3"
+        },
+        {
           "enumerant" : "SubgroupEqMaskKHR",
           "value" : 4416,
-          "capabilities" : [ "SubgroupBallotKHR" ],
-          "version" : "None"
+          "capabilities" : [ "SubgroupBallotKHR", "GroupNonUniformBallot" ],
+          "extensions" : [ "SPV_KHR_shader_ballot" ],
+          "version" : "1.3"
         },
         {
           "enumerant" : "SubgroupGeMaskKHR",
           "value" : 4417,
-          "capabilities" : [ "SubgroupBallotKHR" ],
-          "version" : "None"
+          "capabilities" : [ "SubgroupBallotKHR", "GroupNonUniformBallot" ],
+          "extensions" : [ "SPV_KHR_shader_ballot" ],
+          "version" : "1.3"
         },
         {
           "enumerant" : "SubgroupGtMaskKHR",
           "value" : 4418,
-          "capabilities" : [ "SubgroupBallotKHR" ],
-          "version" : "None"
+          "capabilities" : [ "SubgroupBallotKHR", "GroupNonUniformBallot" ],
+          "extensions" : [ "SPV_KHR_shader_ballot" ],
+          "version" : "1.3"
         },
         {
           "enumerant" : "SubgroupLeMaskKHR",
           "value" : 4419,
-          "capabilities" : [ "SubgroupBallotKHR" ],
-          "version" : "None"
+          "capabilities" : [ "SubgroupBallotKHR", "GroupNonUniformBallot" ],
+          "extensions" : [ "SPV_KHR_shader_ballot" ],
+          "version" : "1.3"
         },
         {
           "enumerant" : "SubgroupLtMaskKHR",
           "value" : 4420,
-          "capabilities" : [ "SubgroupBallotKHR" ],
-          "version" : "None"
+          "capabilities" : [ "SubgroupBallotKHR", "GroupNonUniformBallot" ],
+          "extensions" : [ "SPV_KHR_shader_ballot" ],
+          "version" : "1.3"
         },
         {
           "enumerant" : "BaseVertex",
           "value" : 4424,
           "capabilities" : [ "DrawParameters" ],
-          "version" : "None"
+          "extensions" : [ "SPV_KHR_shader_draw_parameters" ],
+          "version" : "1.3"
         },
         {
           "enumerant" : "BaseInstance",
           "value" : 4425,
           "capabilities" : [ "DrawParameters" ],
-          "version" : "None"
+          "extensions" : [ "SPV_KHR_shader_draw_parameters" ],
+          "version" : "1.3"
         },
         {
           "enumerant" : "DrawIndex",
           "value" : 4426,
           "capabilities" : [ "DrawParameters" ],
-          "version" : "None"
+          "extensions" : [ "SPV_KHR_shader_draw_parameters" ],
+          "version" : "1.3"
         },
         {
           "enumerant" : "DeviceIndex",
           "value" : 4438,
           "capabilities" : [ "DeviceGroup" ],
-          "version" : "None"
+          "extensions" : [ "SPV_KHR_device_group" ],
+          "version" : "1.3"
         },
         {
           "enumerant" : "ViewIndex",
           "value" : 4440,
           "capabilities" : [ "MultiView" ],
-          "version" : "None"
+          "extensions" : [ "SPV_KHR_multiview" ],
+          "version" : "1.3"
         },
         {
           "enumerant" : "BaryCoordNoPerspAMD",
           "value" : 4992,
+          "extensions" : [ "SPV_AMD_shader_explicit_vertex_parameter" ],
           "version" : "None"
         },
         {
           "enumerant" : "BaryCoordNoPerspCentroidAMD",
           "value" : 4993,
+          "extensions" : [ "SPV_AMD_shader_explicit_vertex_parameter" ],
           "version" : "None"
         },
         {
           "enumerant" : "BaryCoordNoPerspSampleAMD",
           "value" : 4994,
+          "extensions" : [ "SPV_AMD_shader_explicit_vertex_parameter" ],
           "version" : "None"
         },
         {
           "enumerant" : "BaryCoordSmoothAMD",
           "value" : 4995,
+          "extensions" : [ "SPV_AMD_shader_explicit_vertex_parameter" ],
           "version" : "None"
         },
         {
           "enumerant" : "BaryCoordSmoothCentroidAMD",
           "value" : 4996,
+          "extensions" : [ "SPV_AMD_shader_explicit_vertex_parameter" ],
           "version" : "None"
         },
         {
           "enumerant" : "BaryCoordSmoothSampleAMD",
           "value" : 4997,
+          "extensions" : [ "SPV_AMD_shader_explicit_vertex_parameter" ],
           "version" : "None"
         },
         {
           "enumerant" : "BaryCoordPullModelAMD",
           "value" : 4998,
+          "extensions" : [ "SPV_AMD_shader_explicit_vertex_parameter" ],
           "version" : "None"
         },
         {
           "enumerant" : "FragStencilRefEXT",
           "value" : 5014,
           "capabilities" : [ "StencilExportEXT" ],
+          "extensions" : [ "SPV_EXT_shader_stencil_export" ],
           "version" : "None"
         },
         {
@@ -5401,6 +5984,7 @@
           "enumerant" : "FullyCoveredEXT",
           "value" : 5264,
           "capabilities" : [ "FragmentFullyCoveredEXT" ],
+          "extensions" : [ "SPV_EXT_fragment_fully_covered" ],
           "version" : "None"
         }
       ]
@@ -5438,17 +6022,38 @@
         {
           "enumerant" : "Reduce",
           "value" : 0,
-          "capabilities" : [ "Kernel" ]
+          "capabilities" : [ "Kernel", "GroupNonUniformArithmetic", "GroupNonUniformBallot" ]
         },
         {
           "enumerant" : "InclusiveScan",
           "value" : 1,
-          "capabilities" : [ "Kernel" ]
+          "capabilities" : [ "Kernel", "GroupNonUniformArithmetic", "GroupNonUniformBallot" ]
         },
         {
           "enumerant" : "ExclusiveScan",
           "value" : 2,
-          "capabilities" : [ "Kernel" ]
+          "capabilities" : [ "Kernel", "GroupNonUniformArithmetic", "GroupNonUniformBallot" ]
+        },
+        {
+          "enumerant" : "ClusteredReduce",
+          "value" : 3,
+          "capabilities" : [ "GroupNonUniformClustered" ],
+          "version" : "1.3"
+        },
+        {
+          "enumerant" : "PartitionedReduceNV",
+          "value" : 6,
+          "capabilities" : [ "GroupNonUniformPartitionedNV" ]
+        },
+        {
+          "enumerant" : "PartitionedInclusiveScanNV",
+          "value" : 7,
+          "capabilities" : [ "GroupNonUniformPartitionedNV" ]
+        },
+        {
+          "enumerant" : "PartitionedExclusiveScanNV",
+          "value" : 8,
+          "capabilities" : [ "GroupNonUniformPartitionedNV" ]
         }
       ]
     },
@@ -5765,6 +6370,53 @@
           "version" : "1.1"
         },
         {
+          "enumerant" : "GroupNonUniform",
+          "value" : 61,
+          "version" : "1.3"
+        },
+        {
+          "enumerant" : "GroupNonUniformVote",
+          "value" : 62,
+          "capabilities" : [ "GroupNonUniform" ],
+          "version" : "1.3"
+        },
+        {
+          "enumerant" : "GroupNonUniformArithmetic",
+          "value" : 63,
+          "capabilities" : [ "GroupNonUniform" ],
+          "version" : "1.3"
+        },
+        {
+          "enumerant" : "GroupNonUniformBallot",
+          "value" : 64,
+          "capabilities" : [ "GroupNonUniform" ],
+          "version" : "1.3"
+        },
+        {
+          "enumerant" : "GroupNonUniformShuffle",
+          "value" : 65,
+          "capabilities" : [ "GroupNonUniform" ],
+          "version" : "1.3"
+        },
+        {
+          "enumerant" : "GroupNonUniformShuffleRelative",
+          "value" : 66,
+          "capabilities" : [ "GroupNonUniform" ],
+          "version" : "1.3"
+        },
+        {
+          "enumerant" : "GroupNonUniformClustered",
+          "value" : 67,
+          "capabilities" : [ "GroupNonUniform" ],
+          "version" : "1.3"
+        },
+        {
+          "enumerant" : "GroupNonUniformQuad",
+          "value" : 68,
+          "capabilities" : [ "GroupNonUniform" ],
+          "version" : "1.3"
+        },
+        {
           "enumerant" : "SubgroupBallotKHR",
           "value" : 4423,
           "extensions" : [ "SPV_KHR_shader_ballot" ],
@@ -5775,7 +6427,7 @@
           "value" : 4427,
           "capabilities" : [ "Shader" ],
           "extensions" : [ "SPV_KHR_shader_draw_parameters" ],
-          "version" : "None"
+          "version" : "1.3"
         },
         {
           "enumerant" : "SubgroupVoteKHR",
@@ -5787,13 +6439,13 @@
           "enumerant" : "StorageBuffer16BitAccess",
           "value" : 4433,
           "extensions" : [ "SPV_KHR_16bit_storage" ],
-          "version" : "None"
+          "version" : "1.3"
         },
         {
           "enumerant" : "StorageUniformBufferBlock16",
           "value" : 4433,
           "extensions" : [ "SPV_KHR_16bit_storage" ],
-          "version" : "None"
+          "version" : "1.3"
         },
         {
           "enumerant" : "UniformAndStorageBuffer16BitAccess",
@@ -5803,7 +6455,7 @@
             "StorageUniformBufferBlock16"
           ],
           "extensions" : [ "SPV_KHR_16bit_storage" ],
-          "version" : "None"
+          "version" : "1.3"
         },
         {
           "enumerant" : "StorageUniform16",
@@ -5813,45 +6465,46 @@
             "StorageUniformBufferBlock16"
           ],
           "extensions" : [ "SPV_KHR_16bit_storage" ],
-          "version" : "None"
+          "version" : "1.3"
         },
         {
           "enumerant" : "StoragePushConstant16",
           "value" : 4435,
           "extensions" : [ "SPV_KHR_16bit_storage" ],
-          "version" : "None"
+          "version" : "1.3"
         },
         {
           "enumerant" : "StorageInputOutput16",
           "value" : 4436,
           "extensions" : [ "SPV_KHR_16bit_storage" ],
-          "version" : "None"
+          "version" : "1.3"
         },
         {
           "enumerant" : "DeviceGroup",
           "value" : 4437,
-          "version" : "None"
+          "extensions" : [ "SPV_KHR_device_group" ],
+          "version" : "1.3"
         },
         {
           "enumerant" : "MultiView",
           "value" : 4439,
           "capabilities" : [ "Shader" ],
           "extensions" : [ "SPV_KHR_multiview" ],
-          "version" : "None"
+          "version" : "1.3"
         },
         {
           "enumerant" : "VariablePointersStorageBuffer",
           "value" : 4441,
           "capabilities" : [ "Shader" ],
           "extensions" : [ "SPV_KHR_variable_pointers" ],
-          "version" : "None"
+          "version" : "1.3"
         },
         {
           "enumerant" : "VariablePointers",
           "value" : 4442,
           "capabilities" : [ "VariablePointersStorageBuffer" ],
           "extensions" : [ "SPV_KHR_variable_pointers" ],
-          "version" : "None"
+          "version" : "1.3"
         },
         {
           "enumerant" : "AtomicStorageOps",
@@ -5863,6 +6516,13 @@
           "enumerant" : "SampleMaskPostDepthCoverage",
           "value" : 4447,
           "extensions" : [ "SPV_KHR_post_depth_coverage" ],
+          "version" : "None"
+        },
+        {
+          "enumerant" : "Float16ImageAMD",
+          "value" : 5008,
+          "capabilities" : [ "Shader" ],
+          "extensions" : [ "SPV_AMD_gpu_shader_half_float_fetch" ],
           "version" : "None"
         },
         {
@@ -5950,6 +6610,90 @@
           "version" : "None"
         },
         {
+          "enumerant" : "ShaderNonUniformEXT",
+          "value" : 5301,
+          "capabilities" : [ "Shader" ],
+          "extensions" : [ "SPV_EXT_descriptor_indexing" ],
+          "version" : "None"
+        },
+        {
+          "enumerant" : "RuntimeDescriptorArrayEXT",
+          "value" : 5302,
+          "capabilities" : [ "Shader" ],
+          "extensions" : [ "SPV_EXT_descriptor_indexing" ],
+          "version" : "None"
+        },
+        {
+          "enumerant" : "InputAttachmentArrayDynamicIndexingEXT",
+          "value" : 5303,
+          "capabilities" : [ "InputAttachment" ],
+          "extensions" : [ "SPV_EXT_descriptor_indexing" ],
+          "version" : "None"
+        },
+        {
+          "enumerant" : "UniformTexelBufferArrayDynamicIndexingEXT",
+          "value" : 5304,
+          "capabilities" : [ "SampledBuffer" ],
+          "extensions" : [ "SPV_EXT_descriptor_indexing" ],
+          "version" : "None"
+        },
+        {
+          "enumerant" : "StorageTexelBufferArrayDynamicIndexingEXT",
+          "value" : 5305,
+          "capabilities" : [ "ImageBuffer" ],
+          "extensions" : [ "SPV_EXT_descriptor_indexing" ],
+          "version" : "None"
+        },
+        {
+          "enumerant" : "UniformBufferArrayNonUniformIndexingEXT",
+          "value" : 5306,
+          "capabilities" : [ "ShaderNonUniformEXT" ],
+          "extensions" : [ "SPV_EXT_descriptor_indexing" ],
+          "version" : "None"
+        },
+        {
+          "enumerant" : "SampledImageArrayNonUniformIndexingEXT",
+          "value" : 5307,
+          "capabilities" : [ "ShaderNonUniformEXT" ],
+          "extensions" : [ "SPV_EXT_descriptor_indexing" ],
+          "version" : "None"
+        },
+        {
+          "enumerant" : "StorageBufferArrayNonUniformIndexingEXT",
+          "value" : 5308,
+          "capabilities" : [ "ShaderNonUniformEXT" ],
+          "extensions" : [ "SPV_EXT_descriptor_indexing" ],
+          "version" : "None"
+        },
+        {
+          "enumerant" : "StorageImageArrayNonUniformIndexingEXT",
+          "value" : 5309,
+          "capabilities" : [ "ShaderNonUniformEXT" ],
+          "extensions" : [ "SPV_EXT_descriptor_indexing" ],
+          "version" : "None"
+        },
+        {
+          "enumerant" : "InputAttachmentArrayNonUniformIndexingEXT",
+          "value" : 5310,
+          "capabilities" : [ "InputAttachment", "ShaderNonUniformEXT" ],
+          "extensions" : [ "SPV_EXT_descriptor_indexing" ],
+          "version" : "None"
+        },
+        {
+          "enumerant" : "UniformTexelBufferArrayNonUniformIndexingEXT",
+          "value" : 5311,
+          "capabilities" : [ "SampledBuffer", "ShaderNonUniformEXT" ],
+          "extensions" : [ "SPV_EXT_descriptor_indexing" ],
+          "version" : "None"
+        },
+        {
+          "enumerant" : "StorageTexelBufferArrayNonUniformIndexingEXT",
+          "value" : 5312,
+          "capabilities" : [ "ImageBuffer", "ShaderNonUniformEXT" ],
+          "extensions" : [ "SPV_EXT_descriptor_indexing" ],
+          "version" : "None"
+        },
+        {
           "enumerant" : "SubgroupShuffleINTEL",
           "value" : 5568,
           "extensions" : [ "SPV_INTEL_subgroups" ],
@@ -5965,6 +6709,12 @@
           "enumerant" : "SubgroupImageBlockIOINTEL",
           "value" : 5570,
           "extensions" : [ "SPV_INTEL_subgroups" ],
+          "version" : "None"
+        },
+        {
+          "enumerant" : "GroupNonUniformPartitionedNV",
+          "value" : 5297,
+          "extensions" : [ "SPV_NV_shader_subgroup_partitioned" ],
           "version" : "None"
         }
       ]

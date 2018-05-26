@@ -59,20 +59,31 @@
 #define DEBUG_PRINT(msg, ...)
 #endif
 
+struct kms_sw_displaytarget;
+
+struct kms_sw_plane
+{
+   unsigned width;
+   unsigned height;
+   unsigned stride;
+   unsigned offset;
+   struct kms_sw_displaytarget *dt;
+   struct list_head link;
+};
 
 struct kms_sw_displaytarget
 {
    enum pipe_format format;
-   unsigned width;
-   unsigned height;
-   unsigned stride;
    unsigned size;
 
    uint32_t handle;
    void *mapped;
+   void *ro_mapped;
 
    int ref_count;
+   int map_count;
    struct list_head link;
+   struct list_head planes;
 };
 
 struct kms_sw_winsys
@@ -83,10 +94,16 @@ struct kms_sw_winsys
    struct list_head bo_list;
 };
 
-static inline struct kms_sw_displaytarget *
-kms_sw_displaytarget( struct sw_displaytarget *dt )
+static inline struct kms_sw_plane *
+kms_sw_plane( struct sw_displaytarget *dt )
 {
-   return (struct kms_sw_displaytarget *)dt;
+   return (struct kms_sw_plane *)dt;
+}
+
+static inline struct sw_displaytarget *
+sw_displaytarget( struct kms_sw_plane *pl)
+{
+   return (struct sw_displaytarget *)pl;
 }
 
 static inline struct kms_sw_winsys *
@@ -103,6 +120,39 @@ kms_sw_is_displaytarget_format_supported( struct sw_winsys *ws,
 {
    /* TODO: check visuals or other sensible thing here */
    return TRUE;
+}
+
+static struct kms_sw_plane *get_plane(struct kms_sw_displaytarget *kms_sw_dt,
+                                      enum pipe_format format,
+                                      unsigned width, unsigned height,
+                                      unsigned stride, unsigned offset)
+{
+   struct kms_sw_plane *plane = NULL;
+
+   if (offset + util_format_get_2d_size(format, stride, height) >
+       kms_sw_dt->size) {
+      DEBUG_PRINT("KMS-DEBUG: plane too big. format: %d stride: %d height: %d "
+                  "offset: %d size:%d\n", format, stride, height, offset,
+                  kms_sw_dt->size);
+      return NULL;
+   }
+
+   LIST_FOR_EACH_ENTRY(plane, &kms_sw_dt->planes, link) {
+      if (plane->offset == offset)
+         return plane;
+   }
+
+   plane = CALLOC_STRUCT(kms_sw_plane);
+   if (!plane)
+      return NULL;
+
+   plane->width = width;
+   plane->height = height;
+   plane->stride = stride;
+   plane->offset = offset;
+   plane->dt = kms_sw_dt;
+   list_add(&plane->link, &kms_sw_dt->planes);
+   return plane;
 }
 
 static struct sw_displaytarget *
@@ -124,11 +174,10 @@ kms_sw_displaytarget_create(struct sw_winsys *ws,
    if (!kms_sw_dt)
       goto no_dt;
 
+   list_inithead(&kms_sw_dt->planes);
    kms_sw_dt->ref_count = 1;
 
    kms_sw_dt->format = format;
-   kms_sw_dt->width = width;
-   kms_sw_dt->height = height;
 
    memset(&create_req, 0, sizeof(create_req));
    create_req.bpp = 32;
@@ -138,16 +187,19 @@ kms_sw_displaytarget_create(struct sw_winsys *ws,
    if (ret)
       goto free_bo;
 
-   kms_sw_dt->stride = create_req.pitch;
    kms_sw_dt->size = create_req.size;
    kms_sw_dt->handle = create_req.handle;
+   struct kms_sw_plane *plane = get_plane(kms_sw_dt, format, width, height,
+                                          create_req.pitch, 0);
+   if (!plane)
+      goto free_bo;
 
    list_add(&kms_sw_dt->link, &kms_sw->bo_list);
 
    DEBUG_PRINT("KMS-DEBUG: created buffer %u (size %u)\n", kms_sw_dt->handle, kms_sw_dt->size);
 
-   *stride = kms_sw_dt->stride;
-   return (struct sw_displaytarget *)kms_sw_dt;
+   *stride = create_req.pitch;
+   return sw_displaytarget(plane);
 
  free_bo:
    memset(&destroy_req, 0, sizeof destroy_req);
@@ -163,12 +215,17 @@ kms_sw_displaytarget_destroy(struct sw_winsys *ws,
                              struct sw_displaytarget *dt)
 {
    struct kms_sw_winsys *kms_sw = kms_sw_winsys(ws);
-   struct kms_sw_displaytarget *kms_sw_dt = kms_sw_displaytarget(dt);
+   struct kms_sw_plane *plane = kms_sw_plane(dt);
+   struct kms_sw_displaytarget *kms_sw_dt = plane->dt;
    struct drm_mode_destroy_dumb destroy_req;
 
    kms_sw_dt->ref_count --;
    if (kms_sw_dt->ref_count > 0)
       return;
+
+   if (kms_sw_dt->map_count > 0) {
+      DEBUG_PRINT("KMS-DEBUG: leaked map buffer %u\n", kms_sw_dt->handle);
+   }
 
    memset(&destroy_req, 0, sizeof destroy_req);
    destroy_req.handle = kms_sw_dt->handle;
@@ -177,6 +234,11 @@ kms_sw_displaytarget_destroy(struct sw_winsys *ws,
    list_del(&kms_sw_dt->link);
 
    DEBUG_PRINT("KMS-DEBUG: destroyed buffer %u\n", kms_sw_dt->handle);
+
+   struct kms_sw_plane *tmp;
+   LIST_FOR_EACH_ENTRY_SAFE(plane, tmp, &kms_sw_dt->planes, link) {
+      FREE(plane);
+   }
 
    FREE(kms_sw_dt);
 }
@@ -187,7 +249,8 @@ kms_sw_displaytarget_map(struct sw_winsys *ws,
                          unsigned flags)
 {
    struct kms_sw_winsys *kms_sw = kms_sw_winsys(ws);
-   struct kms_sw_displaytarget *kms_sw_dt = kms_sw_displaytarget(dt);
+   struct kms_sw_plane *plane = kms_sw_plane(dt);
+   struct kms_sw_displaytarget *kms_sw_dt = plane->dt;
    struct drm_mode_map_dumb map_req;
    int prot, ret;
 
@@ -198,16 +261,21 @@ kms_sw_displaytarget_map(struct sw_winsys *ws,
       return NULL;
 
    prot = (flags == PIPE_TRANSFER_READ) ? PROT_READ : (PROT_READ | PROT_WRITE);
-   kms_sw_dt->mapped = mmap(0, kms_sw_dt->size, prot, MAP_SHARED,
-                            kms_sw->fd, map_req.offset);
-
-   if (kms_sw_dt->mapped == MAP_FAILED)
-      return NULL;
+   void **ptr = (flags == PIPE_TRANSFER_READ) ? &kms_sw_dt->ro_mapped : &kms_sw_dt->mapped;
+   if (!*ptr) {
+      void *tmp = mmap(0, kms_sw_dt->size, prot, MAP_SHARED,
+                       kms_sw->fd, map_req.offset);
+      if (tmp == MAP_FAILED)
+         return NULL;
+      *ptr = tmp;
+   }
 
    DEBUG_PRINT("KMS-DEBUG: mapped buffer %u (size %u) at %p\n",
-         kms_sw_dt->handle, kms_sw_dt->size, kms_sw_dt->mapped);
+         kms_sw_dt->handle, kms_sw_dt->size, *ptr);
 
-   return kms_sw_dt->mapped;
+   kms_sw_dt->map_count++;
+
+   return *ptr + plane->offset;
 }
 
 static struct kms_sw_displaytarget *
@@ -230,10 +298,11 @@ kms_sw_displaytarget_find_and_ref(struct kms_sw_winsys *kms_sw,
    return NULL;
 }
 
-static struct kms_sw_displaytarget *
+static struct kms_sw_plane *
 kms_sw_displaytarget_add_from_prime(struct kms_sw_winsys *kms_sw, int fd,
+                                    enum pipe_format format,
                                     unsigned width, unsigned height,
-                                    unsigned stride)
+                                    unsigned stride, unsigned offset)
 {
    uint32_t handle = -1;
    struct kms_sw_displaytarget * kms_sw_dt;
@@ -245,13 +314,19 @@ kms_sw_displaytarget_add_from_prime(struct kms_sw_winsys *kms_sw, int fd,
       return NULL;
 
    kms_sw_dt = kms_sw_displaytarget_find_and_ref(kms_sw, handle);
-   if (kms_sw_dt)
-      return kms_sw_dt;
+   struct kms_sw_plane *plane = NULL;
+   if (kms_sw_dt) {
+      plane = get_plane(kms_sw_dt, format, width, height, stride, offset);
+      if (!plane)
+        kms_sw_dt->ref_count --;
+      return plane;
+   }
 
    kms_sw_dt = CALLOC_STRUCT(kms_sw_displaytarget);
    if (!kms_sw_dt)
       return NULL;
 
+   list_inithead(&kms_sw_dt->planes);
    off_t lseek_ret = lseek(fd, 0, SEEK_END);
    if (lseek_ret == -1) {
       FREE(kms_sw_dt);
@@ -260,27 +335,43 @@ kms_sw_displaytarget_add_from_prime(struct kms_sw_winsys *kms_sw, int fd,
    kms_sw_dt->size = lseek_ret;
    kms_sw_dt->ref_count = 1;
    kms_sw_dt->handle = handle;
-   kms_sw_dt->width = width;
-   kms_sw_dt->height = height;
-   kms_sw_dt->stride = stride;
 
    lseek(fd, 0, SEEK_SET);
+   plane = get_plane(kms_sw_dt, format, width, height, stride, offset);
+   if (!plane) {
+      FREE(kms_sw_dt);
+      return NULL;
+   }
 
    list_add(&kms_sw_dt->link, &kms_sw->bo_list);
 
-   return kms_sw_dt;
+   return plane;
 }
 
 static void
 kms_sw_displaytarget_unmap(struct sw_winsys *ws,
                            struct sw_displaytarget *dt)
 {
-   struct kms_sw_displaytarget *kms_sw_dt = kms_sw_displaytarget(dt);
+   struct kms_sw_plane *plane = kms_sw_plane(dt);
+   struct kms_sw_displaytarget *kms_sw_dt = plane->dt;
+
+   if (!kms_sw_dt->map_count)  {
+      DEBUG_PRINT("KMS-DEBUG: ignore duplicated unmap %u", kms_sw_dt->handle);
+      return;
+   }
+   kms_sw_dt->map_count--;
+   if (kms_sw_dt->map_count) {
+      DEBUG_PRINT("KMS-DEBUG: ignore unmap for busy buffer %u", kms_sw_dt->handle);
+      return;
+   }
 
    DEBUG_PRINT("KMS-DEBUG: unmapped buffer %u (was %p)\n", kms_sw_dt->handle, kms_sw_dt->mapped);
+   DEBUG_PRINT("KMS-DEBUG: unmapped buffer %u (was %p)\n", kms_sw_dt->handle, kms_sw_dt->ro_mapped);
 
    munmap(kms_sw_dt->mapped, kms_sw_dt->size);
    kms_sw_dt->mapped = NULL;
+   munmap(kms_sw_dt->ro_mapped, kms_sw_dt->size);
+   kms_sw_dt->ro_mapped = NULL;
 }
 
 static struct sw_displaytarget *
@@ -291,30 +382,34 @@ kms_sw_displaytarget_from_handle(struct sw_winsys *ws,
 {
    struct kms_sw_winsys *kms_sw = kms_sw_winsys(ws);
    struct kms_sw_displaytarget *kms_sw_dt;
+   struct kms_sw_plane *kms_sw_pl;
+
 
    assert(whandle->type == DRM_API_HANDLE_TYPE_KMS ||
           whandle->type == DRM_API_HANDLE_TYPE_FD);
 
-   if (whandle->offset != 0) {
-      DEBUG_PRINT("KMS-DEBUG: attempt to import unsupported winsys offset %d\n",
-                  whandle->offset);
-      return NULL;
-   }
-
    switch(whandle->type) {
    case DRM_API_HANDLE_TYPE_FD:
-      kms_sw_dt = kms_sw_displaytarget_add_from_prime(kms_sw, whandle->handle,
+      kms_sw_pl = kms_sw_displaytarget_add_from_prime(kms_sw, whandle->handle,
+                                                      templ->format,
                                                       templ->width0,
                                                       templ->height0,
-                                                      whandle->stride);
-      if (kms_sw_dt)
-         *stride = kms_sw_dt->stride;
-      return (struct sw_displaytarget *)kms_sw_dt;
+                                                      whandle->stride,
+                                                      whandle->offset);
+      if (kms_sw_pl)
+         *stride = kms_sw_pl->stride;
+      return sw_displaytarget(kms_sw_pl);
    case DRM_API_HANDLE_TYPE_KMS:
       kms_sw_dt = kms_sw_displaytarget_find_and_ref(kms_sw, whandle->handle);
       if (kms_sw_dt) {
-         *stride = kms_sw_dt->stride;
-         return (struct sw_displaytarget *)kms_sw_dt;
+         struct kms_sw_plane *plane;
+         LIST_FOR_EACH_ENTRY(plane, &kms_sw_dt->planes, link) {
+            if (whandle->offset == plane->offset) {
+               *stride = plane->stride;
+               return sw_displaytarget(plane);
+            }
+         }
+         kms_sw_dt->ref_count --;
       }
       /* fallthrough */
    default:
@@ -331,19 +426,20 @@ kms_sw_displaytarget_get_handle(struct sw_winsys *winsys,
                                 struct winsys_handle *whandle)
 {
    struct kms_sw_winsys *kms_sw = kms_sw_winsys(winsys);
-   struct kms_sw_displaytarget *kms_sw_dt = kms_sw_displaytarget(dt);
+   struct kms_sw_plane *plane = kms_sw_plane(dt);
+   struct kms_sw_displaytarget *kms_sw_dt = plane->dt;
 
    switch(whandle->type) {
    case DRM_API_HANDLE_TYPE_KMS:
       whandle->handle = kms_sw_dt->handle;
-      whandle->stride = kms_sw_dt->stride;
-      whandle->offset = 0;
+      whandle->stride = plane->stride;
+      whandle->offset = plane->offset;
       return TRUE;
    case DRM_API_HANDLE_TYPE_FD:
       if (!drmPrimeHandleToFD(kms_sw->fd, kms_sw_dt->handle,
                              DRM_CLOEXEC, (int*)&whandle->handle)) {
-         whandle->stride = kms_sw_dt->stride;
-         whandle->offset = 0;
+         whandle->stride = plane->stride;
+         whandle->offset = plane->offset;
          return TRUE;
       }
       /* fallthrough */

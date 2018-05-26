@@ -488,6 +488,12 @@ fd_launch_grid(struct pipe_context *pctx, const struct pipe_grid_info *info)
 	foreach_bit(i, ctx->tex[PIPE_SHADER_COMPUTE].valid_textures)
 		resource_read(batch, ctx->tex[PIPE_SHADER_COMPUTE].textures[i]->texture);
 
+	/* For global buffers, we don't really know if read or written, so assume
+	 * the worst:
+	 */
+	foreach_bit(i, ctx->global_bindings.enabled_mask)
+		resource_written(batch, ctx->global_bindings.buf[i]);
+
 	if (info->indirect)
 		resource_read(batch, info->indirect);
 

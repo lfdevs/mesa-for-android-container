@@ -86,47 +86,6 @@ nvgl_blend_eqn(unsigned eqn)
 }
 
 static inline unsigned
-nvgl_logicop_func(unsigned func)
-{
-	switch (func) {
-	case GL_CLEAR:
-		return 0x1500;
-	case GL_NOR:
-		return 0x1508;
-	case GL_AND_INVERTED:
-		return 0x1504;
-	case GL_COPY_INVERTED:
-		return 0x150c;
-	case GL_AND_REVERSE:
-		return 0x1502;
-	case GL_INVERT:
-		return 0x150a;
-	case GL_XOR:
-		return 0x1506;
-	case GL_NAND:
-		return 0x150e;
-	case GL_AND:
-		return 0x1501;
-	case GL_EQUIV:
-		return 0x1509;
-	case GL_NOOP:
-		return 0x1505;
-	case GL_OR_INVERTED:
-		return 0x150d;
-	case GL_COPY:
-		return 0x1503;
-	case GL_OR_REVERSE:
-		return 0x150b;
-	case GL_OR:
-		return 0x1507;
-	case GL_SET:
-		return 0x150f;
-	default:
-		assert(0);
-	}
-}
-
-static inline unsigned
 nvgl_comparison_op(unsigned op)
 {
 	switch (op) {

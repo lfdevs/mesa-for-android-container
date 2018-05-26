@@ -18,8 +18,6 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-# TODO: main/tests
-
 subdir('program')
 subdir('main')
 
@@ -106,7 +104,6 @@ files_libmesa_common = files(
   'main/convolve.h',
   'main/copyimage.c',
   'main/copyimage.h',
-  'main/core.h',
   'main/cpuinfo.c',
   'main/cpuinfo.h',
   'main/dd.h',
@@ -190,6 +187,7 @@ files_libmesa_common = files(
   'main/mipmap.h',
   'main/mm.c',
   'main/mm.h',
+  'main/menums.h',
   'main/mtypes.h',
   'main/multisample.c',
   'main/multisample.h',
@@ -327,7 +325,6 @@ files_libmesa_common = files(
   'vbo/vbo_attrib.h',
   'vbo/vbo_attrib_tmp.h',
   'vbo/vbo_context.c',
-  'vbo/vbo_context.h',
   'vbo/vbo_exec_api.c',
   'vbo/vbo_exec_array.c',
   'vbo/vbo_exec.c',
@@ -339,16 +336,11 @@ files_libmesa_common = files(
   'vbo/vbo_noop.c',
   'vbo/vbo_noop.h',
   'vbo/vbo_primitive_restart.c',
-  'vbo/vbo_rebase.c',
   'vbo/vbo_save_api.c',
   'vbo/vbo_save.c',
   'vbo/vbo_save_draw.c',
   'vbo/vbo_save.h',
   'vbo/vbo_save_loopback.c',
-  'vbo/vbo_split.c',
-  'vbo/vbo_split_copy.c',
-  'vbo/vbo_split.h',
-  'vbo/vbo_split_inplace.c',
   'x86/common_x86.c',
 )
 
@@ -367,6 +359,11 @@ files_libmesa_classic = files(
   'tnl/tnl.h',
   'tnl/t_pipeline.c',
   'tnl/t_pipeline.h',
+  'tnl/t_rebase.c',
+  'tnl/t_split.c',
+  'tnl/t_split_copy.c',
+  'tnl/t_split.h',
+  'tnl/t_split_inplace.c',
   'tnl/t_vb_cliptmp.h',
   'tnl/t_vb_fog.c',
   'tnl/t_vb_light.c',
@@ -536,6 +533,8 @@ files_libmesa_gallium = files(
   'state_tracker/st_cb_readpixels.h',
   'state_tracker/st_cb_strings.c',
   'state_tracker/st_cb_strings.h',
+  'state_tracker/st_cb_semaphoreobjects.c',
+  'state_tracker/st_cb_semaphoreobjects.h',
   'state_tracker/st_cb_syncobj.c',
   'state_tracker/st_cb_syncobj.h',
   'state_tracker/st_cb_texturebarrier.c',
@@ -578,6 +577,7 @@ files_libmesa_gallium = files(
   'state_tracker/st_nir.h',
   'state_tracker/st_nir_lower_builtin.c',
   'state_tracker/st_nir_lower_tex_src_plane.c',
+  'state_tracker/st_nir_lower_uniforms_to_ubo.c',
   'state_tracker/st_pbo.c',
   'state_tracker/st_pbo.h',
   'state_tracker/st_program.c',

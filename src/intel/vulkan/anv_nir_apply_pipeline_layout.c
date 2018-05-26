@@ -67,18 +67,18 @@ get_used_bindings_block(nir_block *block,
                         nir_intrinsic_binding(intrin));
             break;
 
-         case nir_intrinsic_image_load:
-         case nir_intrinsic_image_store:
-         case nir_intrinsic_image_atomic_add:
-         case nir_intrinsic_image_atomic_min:
-         case nir_intrinsic_image_atomic_max:
-         case nir_intrinsic_image_atomic_and:
-         case nir_intrinsic_image_atomic_or:
-         case nir_intrinsic_image_atomic_xor:
-         case nir_intrinsic_image_atomic_exchange:
-         case nir_intrinsic_image_atomic_comp_swap:
-         case nir_intrinsic_image_size:
-         case nir_intrinsic_image_samples:
+         case nir_intrinsic_image_var_load:
+         case nir_intrinsic_image_var_store:
+         case nir_intrinsic_image_var_atomic_add:
+         case nir_intrinsic_image_var_atomic_min:
+         case nir_intrinsic_image_var_atomic_max:
+         case nir_intrinsic_image_var_atomic_and:
+         case nir_intrinsic_image_var_atomic_or:
+         case nir_intrinsic_image_var_atomic_xor:
+         case nir_intrinsic_image_var_atomic_exchange:
+         case nir_intrinsic_image_var_atomic_comp_swap:
+         case nir_intrinsic_image_var_size:
+         case nir_intrinsic_image_var_samples:
             add_var_binding(state, intrin->variables[0]->var);
             break;
 
@@ -147,7 +147,7 @@ lower_res_reindex_intrinsic(nir_intrinsic_instr *intrin,
     * array elements are sequential.  A resource_reindex just turns into an
     * add of the two indices.
     */
-   assert(intrin->src[0].is_ssa && intrin->src[0].is_ssa);
+   assert(intrin->src[0].is_ssa && intrin->src[1].is_ssa);
    nir_ssa_def *new_index = nir_iadd(b, intrin->src[0].ssa,
                                         intrin->src[1].ssa);
 
@@ -326,11 +326,11 @@ setup_vec4_uniform_value(uint32_t *params, uint32_t offset, unsigned n)
 
 void
 anv_nir_apply_pipeline_layout(struct anv_pipeline *pipeline,
+                              struct anv_pipeline_layout *layout,
                               nir_shader *shader,
                               struct brw_stage_prog_data *prog_data,
                               struct anv_pipeline_bind_map *map)
 {
-   struct anv_pipeline_layout *layout = pipeline->layout;
    gl_shader_stage stage = shader->info.stage;
 
    struct apply_pipeline_layout_state state = {

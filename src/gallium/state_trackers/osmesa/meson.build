@@ -21,7 +21,7 @@
 libosmesa_st = static_library(
   'osmesa_st',
   'osmesa.c',
-  c_args : ['-DGALLIUM_SOFTPIPE', '-DGALLIUM_TRACE'],
+  c_args : ['-DGALLIUM_SOFTPIPE'],
   include_directories : [
     inc_include, inc_src, inc_gallium, inc_gallium_aux, inc_mapi, inc_mesa,
   ],

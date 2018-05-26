@@ -295,7 +295,7 @@ blorp_ensure_sf_program(struct blorp_context *blorp,
 void
 blorp_hiz_op(struct blorp_batch *batch, struct blorp_surf *surf,
              uint32_t level, uint32_t start_layer, uint32_t num_layers,
-             enum blorp_hiz_op op)
+             enum isl_aux_op op)
 {
    struct blorp_params params;
    blorp_params_init(&params);

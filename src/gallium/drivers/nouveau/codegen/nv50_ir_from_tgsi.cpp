@@ -3083,10 +3083,11 @@ Converter::handleINTERP(Value *dst[4])
          assert(sym[c]);
          op = insn->op;
          mode = insn->ipa;
+         ptr = insn->getIndirect(0, 0);
       }
    } else {
       if (src.isIndirect(0))
-         ptr = fetchSrc(src.getIndirect(0), 0, NULL);
+         ptr = shiftAddress(fetchSrc(src.getIndirect(0), 0, NULL));
 
       // We can assume that the fixed index will point to an input of the same
       // interpolation type in case of an indirect.
@@ -3144,10 +3145,10 @@ Converter::handleINTERP(Value *dst[4])
       insn = mkOp1(op, TYPE_F32, dst[c], sym[c] ? sym[c] : srcToSym(src, c));
       if (op == OP_PINTERP)
          insn->setSrc(1, w);
-      if (ptr)
-         insn->setIndirect(0, 0, ptr);
       if (offset)
          insn->setSrc(op == OP_PINTERP ? 2 : 1, offset);
+      if (ptr)
+         insn->setIndirect(0, 0, ptr);
 
       insn->setInterpolate(mode);
    }

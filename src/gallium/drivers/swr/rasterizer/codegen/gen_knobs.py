@@ -1,4 +1,4 @@
-# Copyright (C) 2014-2016 Intel Corporation.   All Rights Reserved.
+# Copyright (C) 2014-2018 Intel Corporation.   All Rights Reserved.
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
 # copy of this software and associated documentation files (the "Software"),
@@ -24,7 +24,7 @@ from __future__ import print_function
 import os
 import sys
 import knob_defs
-from gen_common import MakoTemplateWriter, ArgumentParser
+from gen_common import *
 
 def main(args=sys.argv[1:]):
 
@@ -40,22 +40,39 @@ def main(args=sys.argv[1:]):
     template_cpp = os.path.join(cur_dir, 'templates', 'gen_knobs.cpp')
     template_h = os.path.join(cur_dir, 'templates', 'gen_knobs.h')
 
-    if args.gen_h:
-        MakoTemplateWriter.to_file(
-            template_h,
-            args.output,
-            cmdline=sys.argv,
-            filename='gen_knobs',
-            knobs=knob_defs.KNOBS)
+    output_filename = os.path.basename(args.output)
+    output_dir = MakeTmpDir('_codegen')
 
-    if args.gen_cpp:
-        MakoTemplateWriter.to_file(
-            template_cpp,
-            args.output,
-            cmdline=sys.argv,
-            filename='gen_knobs',
-            knobs=knob_defs.KNOBS,
-            includes=['core/knobs_init.h', 'common/os.h', 'sstream', 'iomanip'])
+    output_file = os.path.join(output_dir, output_filename)
+
+    rval = 0
+
+    try:
+        if args.gen_h:
+            MakoTemplateWriter.to_file(
+                template_h,
+                output_file,
+                cmdline=sys.argv,
+                filename='gen_knobs',
+                knobs=knob_defs.KNOBS)
+
+        if args.gen_cpp:
+            MakoTemplateWriter.to_file(
+                template_cpp,
+                output_file,
+                cmdline=sys.argv,
+                filename='gen_knobs',
+                knobs=knob_defs.KNOBS,
+                includes=['core/knobs_init.h', 'common/os.h', 'sstream', 'iomanip'])
+
+        rval = CopyFileIfDifferent(output_file, args.output)
+
+    except:
+        rval = 1
+
+    finally:
+        # ignore errors from delete of tmp directory
+        DeleteDirTree(output_dir)
 
     return 0
 

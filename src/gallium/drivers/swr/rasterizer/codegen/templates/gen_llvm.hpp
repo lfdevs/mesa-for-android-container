@@ -1,5 +1,5 @@
 /****************************************************************************
-* Copyright (C) 2014-2017 Intel Corporation.   All Rights Reserved.
+* Copyright (C) 2014-2018 Intel Corporation.   All Rights Reserved.
 *
 * Permission is hereby granted, free of charge, to any person obtaining a
 * copy of this software and associated documentation files (the "Software"),
@@ -39,33 +39,33 @@ namespace SwrJit
 %for type in types:
     INLINE static StructType *Gen_${type['name']}(JitManager* pJitMgr)
     {
+        %if needs_ctx(type):
         LLVMContext& ctx = pJitMgr->mContext;
-	(void) ctx;
 
+        %endif
         StructType* pRetType = pJitMgr->mpCurrentModule->getTypeByName("${type['name']}");
         if (pRetType == nullptr)
         {
-            std::vector<Type*> members;
-            <%
-                (max_type_len, max_name_len) = calc_max_len(type['members'])
-            %>
-            %for member in type['members']:
-            /* ${member['name']} ${pad(len(member['name']), max_name_len)}*/ members.push_back(${ member['type'] });
-            %endfor
+            std::vector<Type*> members =<% (max_type_len, max_name_len) = calc_max_len(type['members']) %>
+            {
+                %for member in type['members']:
+                /* ${member['name']} ${pad(len(member['name']), max_name_len)}*/ ${member['type']},
+                %endfor
+            };
 
             pRetType = StructType::create(members, "${type['name']}", false);
 
             // Compute debug metadata
             llvm::DIBuilder builder(*pJitMgr->mpCurrentModule);
-            llvm::DIFile* pFile = builder.createFile("${input_file}", "${input_dir}");
+            llvm::DIFile* pFile = builder.createFile("${input_file}", "${os.path.normpath(input_dir).replace('\\', '/')}");
 
-            std::vector<std::pair<std::string, uint32_t>> dbgMembers;
-            %for member in type['members']:
-            dbgMembers.push_back(std::make_pair("${member['name']}", ${ member['lineNum'] }));
-            %endfor
-            
+            std::vector<std::pair<std::string, uint32_t>> dbgMembers =
+            {
+                %for member in type['members']:
+                std::make_pair("${member['name']}", ${pad(len(member['name']), max_name_len)}${member['lineNum']}),
+                %endfor
+            };
             pJitMgr->CreateDebugStructType(pRetType, "${type['name']}", pFile, ${type['lineNum']}, dbgMembers);
-
         }
 
         return pRetType;
@@ -79,6 +79,13 @@ namespace SwrJit
 } // ns SwrJit
 
 <%! # Global function definitions
+    import os
+    def needs_ctx(struct_type):
+        for m in struct_type.get('members', []):
+            if '(ctx)' in m.get('type', ''):
+                return True
+        return False
+
     def calc_max_len(fields):
         max_type_len = 0
         max_name_len = 0

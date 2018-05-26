@@ -57,16 +57,6 @@
 static float constants[] = { 1, 1, 0, 0 };
 static unsigned int dimensions[2] = { 0, 0 };
 
-/** Upload the constants. */
-static void
-up_consts(struct pp_queue_t *ppq)
-{
-   struct pipe_context *pipe = ppq->p->pipe;
-
-   pipe->buffer_subdata(pipe, ppq->constbuf, PIPE_TRANSFER_WRITE,
-                        0, sizeof(constants), constants);
-}
-
 /** Run function of the MLAA filter. */
 static void
 pp_jimenezmlaa_run(struct pp_queue_t *ppq, struct pipe_resource *in,
@@ -86,7 +76,6 @@ pp_jimenezmlaa_run(struct pp_queue_t *ppq, struct pipe_resource *in,
    /* Insufficient initialization checks. */
    assert(p);
    assert(ppq);
-   assert(ppq->constbuf);
    assert(ppq->areamaptex);
    assert(ppq->inner_tmp);
    assert(ppq->shaders[n]);
@@ -104,15 +93,14 @@ pp_jimenezmlaa_run(struct pp_queue_t *ppq, struct pipe_resource *in,
       constants[0] = 1.0f / p->framebuffer.width;
       constants[1] = 1.0f / p->framebuffer.height;
 
-      up_consts(ppq);
       dimensions[0] = p->framebuffer.width;
       dimensions[1] = p->framebuffer.height;
    }
 
-   cso_set_constant_buffer_resource(p->cso, PIPE_SHADER_VERTEX,
-                                    0, ppq->constbuf);
-   cso_set_constant_buffer_resource(p->cso, PIPE_SHADER_FRAGMENT,
-                                    0, ppq->constbuf);
+   cso_set_constant_user_buffer(p->cso, PIPE_SHADER_VERTEX,
+                                0, constants, sizeof(constants));
+   cso_set_constant_user_buffer(p->cso, PIPE_SHADER_FRAGMENT,
+                                0, constants, sizeof(constants));
 
    mstencil.stencil[0].enabled = 1;
    mstencil.stencil[0].valuemask = mstencil.stencil[0].writemask = ~0;
@@ -239,15 +227,6 @@ pp_jimenezmlaa_init_run(struct pp_queue_t *ppq, unsigned int n,
       return FALSE;
    }
 
-   ppq->constbuf = pipe_buffer_create(ppq->p->screen,
-                                      PIPE_BIND_CONSTANT_BUFFER,
-                                      PIPE_USAGE_DEFAULT,
-                                      sizeof(constants));
-   if (ppq->constbuf == NULL) {
-      pp_debug("Failed to allocate constant buffer\n");
-      goto fail;
-   }
-
    pp_debug("mlaa: using %u max search steps\n", val);
 
    util_sprintf(tmp_text, "%s"
@@ -352,12 +331,6 @@ pp_jimenezmlaa_color(struct pp_queue_t *ppq, struct pipe_resource *in,
 void
 pp_jimenezmlaa_free(struct pp_queue_t *ppq, unsigned int n)
 {
-   if (ppq->areamaptex) {
-      pipe_resource_reference(&ppq->areamaptex, NULL);
-   }
-
-   if (ppq->constbuf) {
-      pipe_resource_reference(&ppq->constbuf, NULL);
-   }
+   pipe_resource_reference(&ppq->areamaptex, NULL);
 }
 

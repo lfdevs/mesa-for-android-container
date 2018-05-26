@@ -86,6 +86,7 @@ static int amdgpu_surface_init(struct radeon_winsys *rws,
    config.info.array_size = tex->array_size;
    config.info.samples = tex->nr_samples;
    config.info.levels = tex->last_level + 1;
+   config.info.num_channels = util_format_get_nr_components(tex->format);
    config.is_3d = !!(tex->target == PIPE_TEXTURE_3D);
    config.is_cube = !!(tex->target == PIPE_TEXTURE_CUBE);
 
@@ -99,6 +100,8 @@ static int amdgpu_surface_init(struct radeon_winsys *rws,
       config.info.surf_index = &ws->surf_index_color;
    else
       config.info.surf_index = NULL;
+
+   config.info.fmask_surf_index = &ws->surf_index_fmask;
 
    return ac_compute_surface(ws->addrlib, &ws->info, &config, mode, surf);
 }

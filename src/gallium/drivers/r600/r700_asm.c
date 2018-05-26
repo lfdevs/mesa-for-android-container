@@ -124,3 +124,42 @@ void r700_bytecode_alu_read(struct r600_bytecode *bc,
 			G_SQ_ALU_WORD1_OP2_UPDATE_EXECUTE_MASK(word1);
 	}
 }
+
+int r700_bytecode_fetch_mem_build(struct r600_bytecode *bc, struct r600_bytecode_vtx *mem, unsigned id)
+{
+	unsigned opcode = r600_isa_fetch_opcode(bc->isa->hw_class, mem->op) >> 8;
+
+	bc->bytecode[id++] = S_SQ_MEM_RD_WORD0_MEM_INST(2) |
+		S_SQ_MEM_RD_WORD0_ELEM_SIZE(mem->elem_size) |
+		S_SQ_MEM_RD_WORD0_FETCH_WHOLE_QUAD(0) |
+		S_SQ_MEM_RD_WORD0_MEM_OP(opcode) |
+		S_SQ_MEM_RD_WORD0_UNCACHED(mem->uncached) |
+		S_SQ_MEM_RD_WORD0_INDEXED(mem->indexed) |
+		S_SQ_MEM_RD_WORD0_SRC_SEL_Y(mem->src_sel_y) |
+		S_SQ_MEM_RD_WORD0_SRC_GPR(mem->src_gpr) |
+		S_SQ_MEM_RD_WORD0_SRC_REL(mem->src_rel) |
+		S_SQ_MEM_RD_WORD0_SRC_SEL_X(mem->src_sel_x) |
+		S_SQ_MEM_RD_WORD0_BURST_COUNT(mem->burst_count) |
+		S_SQ_MEM_RD_WORD0_LDS_REQ(0) |
+		S_SQ_MEM_RD_WORD0_COALESCED_READ(0);
+
+	bc->bytecode[id++] = S_SQ_MEM_RD_WORD1_DST_GPR(mem->dst_gpr) |
+		S_SQ_MEM_RD_WORD1_DST_REL(mem->dst_rel) |
+		S_SQ_MEM_RD_WORD1_DST_SEL_X(mem->dst_sel_x) |
+		S_SQ_MEM_RD_WORD1_DST_SEL_Y(mem->dst_sel_y) |
+		S_SQ_MEM_RD_WORD1_DST_SEL_W(mem->dst_sel_w) |
+		S_SQ_MEM_RD_WORD1_DST_SEL_Z(mem->dst_sel_z) |
+		S_SQ_MEM_RD_WORD1_DATA_FORMAT(mem->data_format) |
+		S_SQ_MEM_RD_WORD1_NUM_FORMAT_ALL(mem->num_format_all) |
+		S_SQ_MEM_RD_WORD1_FORMAT_COMP_ALL(mem->format_comp_all) |
+		S_SQ_MEM_RD_WORD1_SRF_MODE_ALL(mem->srf_mode_all);
+
+	bc->bytecode[id++] = S_SQ_MEM_RD_WORD2_ARRAY_BASE(mem->array_base) |
+		S_SQ_MEM_RD_WORD2_ENDIAN_SWAP(0) |
+		S_SQ_MEM_RD_WORD2_ARRAY_SIZE(mem->array_size);
+
+
+	bc->bytecode[id++] = 0; /* MEM ops are 4 word aligned */
+
+	return 0;
+}

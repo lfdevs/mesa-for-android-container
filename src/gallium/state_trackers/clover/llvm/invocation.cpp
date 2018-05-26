@@ -63,6 +63,34 @@ using ::llvm::Module;
 using ::llvm::raw_string_ostream;
 
 namespace {
+
+    struct cl_version {
+        std::string version_str; // CL Version
+        unsigned version_number; // Numeric CL Version
+    };
+
+   static const unsigned ANY_VERSION = 999;
+   const cl_version cl_versions[] = {
+      { "1.0", 100},
+      { "1.1", 110},
+      { "1.2", 120},
+      { "2.0", 200},
+      { "2.1", 210},
+      { "2.2", 220},
+   };
+
+    struct clc_version_lang_std {
+        unsigned version_number; // CLC Version
+        clang::LangStandard::Kind clc_lang_standard;
+    };
+
+    const clc_version_lang_std cl_version_lang_stds[] = {
+       { 100, compat::lang_opencl10},
+       { 110, clang::LangStandard::lang_opencl11},
+       { 120, clang::LangStandard::lang_opencl12},
+       { 200, clang::LangStandard::lang_opencl20},
+    };
+
    void
    init_targets() {
       static bool targets_initialized = false;
@@ -93,8 +121,68 @@ namespace {
       return ctx;
    }
 
+   const struct clc_version_lang_std&
+   get_cl_lang_standard(unsigned requested, unsigned max = ANY_VERSION) {
+       for (const struct clc_version_lang_std &version : cl_version_lang_stds) {
+           if (version.version_number == max ||
+                   version.version_number == requested) {
+               return version;
+           }
+       }
+       throw build_error("Unknown/Unsupported language version");
+   }
+
+   const struct cl_version&
+   get_cl_version(const std::string &version_str,
+                  unsigned max = ANY_VERSION) {
+      for (const struct cl_version &version : cl_versions) {
+         if (version.version_number == max || version.version_str == version_str) {
+            return version;
+         }
+      }
+      throw build_error("Unknown/Unsupported language version");
+   }
+
+   clang::LangStandard::Kind
+   get_lang_standard_from_version_str(const std::string &version_str,
+                                      bool is_build_opt = false) {
+
+       //Per CL 2.0 spec, section 5.8.4.5:
+       //  If it's an option, use the value directly.
+       //  If it's a device version, clamp to max 1.x version, a.k.a. 1.2
+      const cl_version version =
+         get_cl_version(version_str, is_build_opt ? ANY_VERSION : 120);
+
+      const struct clc_version_lang_std standard =
+         get_cl_lang_standard(version.version_number);
+
+      return standard.clc_lang_standard;
+   }
+
+   clang::LangStandard::Kind
+   get_language_version(const std::vector<std::string> &opts,
+                        const std::string &device_version) {
+
+      const std::string search = "-cl-std=CL";
+
+      for (auto &opt: opts) {
+         auto pos = opt.find(search);
+         if (pos == 0){
+            const auto ver = opt.substr(pos + search.size());
+            const auto device_ver = get_cl_version(device_version);
+            const auto requested = get_cl_version(ver);
+            if (requested.version_number > device_ver.version_number) {
+               throw build_error();
+            }
+            return get_lang_standard_from_version_str(ver, true);
+         }
+      }
+
+      return get_lang_standard_from_version_str(device_version);
+   }
+
    std::unique_ptr<clang::CompilerInstance>
-   create_compiler_instance(const target &target,
+   create_compiler_instance(const device &dev,
                             const std::vector<std::string> &opts,
                             std::string &r_log) {
       std::unique_ptr<clang::CompilerInstance> c { new clang::CompilerInstance };
@@ -107,6 +195,9 @@ namespace {
       // class to recognize it as an OpenCL source file.
       const std::vector<const char *> copts =
          map(std::mem_fn(&std::string::c_str), opts);
+
+      const target &target = dev.ir_target();
+      const std::string &device_clc_version = dev.device_clc_version();
 
       if (!clang::CompilerInvocation::CreateFromArgs(
              c->getInvocation(), copts.data(), copts.data() + copts.size(), diag))
@@ -128,7 +219,7 @@ namespace {
       compat::set_lang_defaults(c->getInvocation(), c->getLangOpts(),
                                 compat::ik_opencl, ::llvm::Triple(target.triple),
                                 c->getPreprocessorOpts(),
-                                clang::LangStandard::lang_opencl11);
+                                get_language_version(opts, device_clc_version));
 
       c->createDiagnostics(new clang::TextDiagnosticPrinter(
                               *new raw_string_ostream(r_log),
@@ -143,7 +234,7 @@ namespace {
    std::unique_ptr<Module>
    compile(LLVMContext &ctx, clang::CompilerInstance &c,
            const std::string &name, const std::string &source,
-           const header_map &headers, const std::string &target,
+           const header_map &headers, const device &dev,
            const std::string &opts, std::string &r_log) {
       c.getFrontendOpts().ProgramAction = clang::frontend::EmitLLVMOnly;
       c.getHeaderSearchOpts().UseBuiltinIncludes = true;
@@ -159,7 +250,9 @@ namespace {
       c.getPreprocessorOpts().Includes.push_back("clc/clc.h");
 
       // Add definition for the OpenCL version
-      c.getPreprocessorOpts().addMacroDef("__OPENCL_VERSION__=110");
+      c.getPreprocessorOpts().addMacroDef("__OPENCL_VERSION__=" +
+              std::to_string(get_cl_version(
+                                  dev.device_version()).version_number));
 
       // clc.h requires that this macro be defined:
       c.getPreprocessorOpts().addMacroDef("cl_clang_storage_class_specifiers");
@@ -187,7 +280,7 @@ namespace {
       // barrier() (e.g. Moving barrier() inside a conditional that is
       // no executed by all threads) during its optimizaton passes.
       compat::add_link_bitcode_file(c.getCodeGenOpts(),
-                                    LIBCLC_LIBEXECDIR + target + ".bc");
+                                    LIBCLC_LIBEXECDIR + dev.ir_target() + ".bc");
 
       // Compile the code
       clang::EmitLLVMOnlyAction act(&ctx);
@@ -201,17 +294,15 @@ namespace {
 module
 clover::llvm::compile_program(const std::string &source,
                               const header_map &headers,
-                              const std::string &target,
+                              const device &dev,
                               const std::string &opts,
                               std::string &r_log) {
    if (has_flag(debug::clc))
       debug::log(".cl", "// Options: " + opts + '\n' + source);
 
    auto ctx = create_context(r_log);
-   auto c = create_compiler_instance(target, tokenize(opts + " input.cl"),
-                                     r_log);
-   auto mod = compile(*ctx, *c, "input.cl", source, headers, target, opts,
-                      r_log);
+   auto c = create_compiler_instance(dev, tokenize(opts + " input.cl"), r_log);
+   auto mod = compile(*ctx, *c, "input.cl", source, headers, dev, opts, r_log);
 
    if (has_flag(debug::llvm))
       debug::log(".ll", print_module_bitcode(*mod));
@@ -269,14 +360,14 @@ namespace {
 
 module
 clover::llvm::link_program(const std::vector<module> &modules,
-                           enum pipe_shader_ir ir, const std::string &target,
+                           const device &dev,
                            const std::string &opts, std::string &r_log) {
    std::vector<std::string> options = tokenize(opts + " input.cl");
    const bool create_library = count("-create-library", options);
    erase_if(equals("-create-library"), options);
 
    auto ctx = create_context(r_log);
-   auto c = create_compiler_instance(target, options, r_log);
+   auto c = create_compiler_instance(dev, options, r_log);
    auto mod = link(*ctx, *c, modules, r_log);
 
    optimize(*mod, c->getCodeGenOpts().OptimizationLevel, !create_library);
@@ -291,14 +382,11 @@ clover::llvm::link_program(const std::vector<module> &modules,
    if (create_library) {
       return build_module_library(*mod, module::section::text_library);
 
-   } else if (ir == PIPE_SHADER_IR_LLVM) {
-      return build_module_bitcode(*mod, *c);
-
-   } else if (ir == PIPE_SHADER_IR_NATIVE) {
+   } else if (dev.ir_format() == PIPE_SHADER_IR_NATIVE) {
       if (has_flag(debug::native))
-         debug::log(id +  ".asm", print_module_native(*mod, target));
+         debug::log(id +  ".asm", print_module_native(*mod, dev.ir_target()));
 
-      return build_module_native(*mod, target, *c, r_log);
+      return build_module_native(*mod, dev.ir_target(), *c, r_log);
 
    } else {
       unreachable("Unsupported IR.");

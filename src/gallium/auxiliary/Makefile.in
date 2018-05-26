@@ -167,7 +167,22 @@ am__libgallium_la_SOURCES_DIST = cso_cache/cso_cache.c \
 	draw/draw_pt_vsplit_tmp.h draw/draw_so_emit_tmp.h \
 	draw/draw_split_tmp.h draw/draw_vbuf.h draw/draw_vertex.c \
 	draw/draw_vertex.h draw/draw_vs.c draw/draw_vs_exec.c \
-	draw/draw_vs.h draw/draw_vs_variant.c hud/font.c hud/font.h \
+	draw/draw_vs.h draw/draw_vs_variant.c \
+	driver_ddebug/dd_context.c driver_ddebug/dd_draw.c \
+	driver_ddebug/dd_pipe.h driver_ddebug/dd_public.h \
+	driver_ddebug/dd_screen.c driver_ddebug/dd_util.h \
+	driver_noop/noop_pipe.c driver_noop/noop_public.h \
+	driver_noop/noop_state.c driver_rbug/rbug_context.c \
+	driver_rbug/rbug_context.h driver_rbug/rbug_core.c \
+	driver_rbug/rbug_objects.c driver_rbug/rbug_objects.h \
+	driver_rbug/rbug_public.h driver_rbug/rbug_screen.c \
+	driver_rbug/rbug_screen.h driver_trace/tr_context.c \
+	driver_trace/tr_context.h driver_trace/tr_dump.c \
+	driver_trace/tr_dump_defines.h driver_trace/tr_dump.h \
+	driver_trace/tr_dump_state.c driver_trace/tr_dump_state.h \
+	driver_trace/tr_public.h driver_trace/tr_screen.c \
+	driver_trace/tr_screen.h driver_trace/tr_texture.c \
+	driver_trace/tr_texture.h hud/font.c hud/font.h \
 	hud/hud_context.c hud/hud_context.h hud/hud_cpu.c \
 	hud/hud_nic.c hud/hud_cpufreq.c hud/hud_diskstat.c \
 	hud/hud_sensors_temp.c hud/hud_driver_query.c hud/hud_fps.c \
@@ -315,8 +330,15 @@ am__objects_1 = cso_cache/cso_cache.lo cso_cache/cso_context.lo \
 	draw/draw_pt_fetch_shade_pipeline.lo draw/draw_pt_post_vs.lo \
 	draw/draw_pt_so_emit.lo draw/draw_pt_util.lo \
 	draw/draw_pt_vsplit.lo draw/draw_vertex.lo draw/draw_vs.lo \
-	draw/draw_vs_exec.lo draw/draw_vs_variant.lo hud/font.lo \
-	hud/hud_context.lo hud/hud_cpu.lo hud/hud_nic.lo \
+	draw/draw_vs_exec.lo draw/draw_vs_variant.lo \
+	driver_ddebug/dd_context.lo driver_ddebug/dd_draw.lo \
+	driver_ddebug/dd_screen.lo driver_noop/noop_pipe.lo \
+	driver_noop/noop_state.lo driver_rbug/rbug_context.lo \
+	driver_rbug/rbug_core.lo driver_rbug/rbug_objects.lo \
+	driver_rbug/rbug_screen.lo driver_trace/tr_context.lo \
+	driver_trace/tr_dump.lo driver_trace/tr_dump_state.lo \
+	driver_trace/tr_screen.lo driver_trace/tr_texture.lo \
+	hud/font.lo hud/hud_context.lo hud/hud_cpu.lo hud/hud_nic.lo \
 	hud/hud_cpufreq.lo hud/hud_diskstat.lo hud/hud_sensors_temp.lo \
 	hud/hud_driver_query.lo hud/hud_fps.lo \
 	indices/u_primconvert.lo os/os_misc.lo os/os_process.lo \
@@ -408,7 +430,7 @@ am__libgalliumvl_la_SOURCES_DIST = vl/vl_bicubic_filter.c \
 	vl/vl_mpeg12_decoder.c vl/vl_mpeg12_decoder.h vl/vl_rbsp.h \
 	vl/vl_types.h vl/vl_vertex_buffers.c vl/vl_vertex_buffers.h \
 	vl/vl_video_buffer.c vl/vl_video_buffer.h vl/vl_vlc.h \
-	vl/vl_zscan.c vl/vl_zscan.h
+	vl/vl_zscan.c vl/vl_zscan.h vl/vl_probs_table.h
 am__objects_8 = vl/libgalliumvl_la-vl_bicubic_filter.lo \
 	vl/libgalliumvl_la-vl_compositor.lo \
 	vl/libgalliumvl_la-vl_csc.lo vl/libgalliumvl_la-vl_decoder.lo \
@@ -683,6 +705,9 @@ OBJEXT = @OBJEXT@
 OMX_BELLAGIO_CFLAGS = @OMX_BELLAGIO_CFLAGS@
 OMX_BELLAGIO_LIBS = @OMX_BELLAGIO_LIBS@
 OMX_BELLAGIO_LIB_INSTALL_DIR = @OMX_BELLAGIO_LIB_INSTALL_DIR@
+OMX_TIZONIA_CFLAGS = @OMX_TIZONIA_CFLAGS@
+OMX_TIZONIA_LIBS = @OMX_TIZONIA_LIBS@
+OMX_TIZONIA_LIB_INSTALL_DIR = @OMX_TIZONIA_LIB_INSTALL_DIR@
 OPENCL_LIBNAME = @OPENCL_LIBNAME@
 OPENCL_VERSION = @OPENCL_VERSION@
 OSMESA_LIB = @OSMESA_LIB@
@@ -750,7 +775,9 @@ VL_LIBS = @VL_LIBS@
 VULKAN_ICD_INSTALL_DIR = @VULKAN_ICD_INSTALL_DIR@
 WAYLAND_CLIENT_CFLAGS = @WAYLAND_CLIENT_CFLAGS@
 WAYLAND_CLIENT_LIBS = @WAYLAND_CLIENT_LIBS@
+WAYLAND_PROTOCOLS_CFLAGS = @WAYLAND_PROTOCOLS_CFLAGS@
 WAYLAND_PROTOCOLS_DATADIR = @WAYLAND_PROTOCOLS_DATADIR@
+WAYLAND_PROTOCOLS_LIBS = @WAYLAND_PROTOCOLS_LIBS@
 WAYLAND_SCANNER = @WAYLAND_SCANNER@
 WAYLAND_SCANNER_CFLAGS = @WAYLAND_SCANNER_CFLAGS@
 WAYLAND_SCANNER_LIBS = @WAYLAND_SCANNER_LIBS@
@@ -766,6 +793,8 @@ XCB_DRI2_CFLAGS = @XCB_DRI2_CFLAGS@
 XCB_DRI2_LIBS = @XCB_DRI2_LIBS@
 XCB_DRI3_CFLAGS = @XCB_DRI3_CFLAGS@
 XCB_DRI3_LIBS = @XCB_DRI3_LIBS@
+XCB_DRI3_MODIFIERS_CFLAGS = @XCB_DRI3_MODIFIERS_CFLAGS@
+XCB_DRI3_MODIFIERS_LIBS = @XCB_DRI3_MODIFIERS_LIBS@
 XF86VIDMODE_CFLAGS = @XF86VIDMODE_CFLAGS@
 XF86VIDMODE_LIBS = @XF86VIDMODE_LIBS@
 XLIBGL_CFLAGS = @XLIBGL_CFLAGS@
@@ -827,7 +856,6 @@ pdfdir = @pdfdir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
-runstatedir = @runstatedir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
@@ -899,6 +927,35 @@ C_SOURCES := \
 	draw/draw_vs_exec.c \
 	draw/draw_vs.h \
 	draw/draw_vs_variant.c \
+	driver_ddebug/dd_context.c \
+	driver_ddebug/dd_draw.c \
+	driver_ddebug/dd_pipe.h \
+	driver_ddebug/dd_public.h \
+	driver_ddebug/dd_screen.c \
+	driver_ddebug/dd_util.h \
+	driver_noop/noop_pipe.c \
+	driver_noop/noop_public.h \
+	driver_noop/noop_state.c \
+	driver_rbug/rbug_context.c \
+	driver_rbug/rbug_context.h \
+	driver_rbug/rbug_core.c \
+	driver_rbug/rbug_objects.c \
+	driver_rbug/rbug_objects.h \
+	driver_rbug/rbug_public.h \
+	driver_rbug/rbug_screen.c \
+	driver_rbug/rbug_screen.h \
+	driver_trace/tr_context.c \
+	driver_trace/tr_context.h \
+	driver_trace/tr_dump.c \
+	driver_trace/tr_dump_defines.h \
+	driver_trace/tr_dump.h \
+	driver_trace/tr_dump_state.c \
+	driver_trace/tr_dump_state.h \
+	driver_trace/tr_public.h \
+	driver_trace/tr_screen.c \
+	driver_trace/tr_screen.h \
+	driver_trace/tr_texture.c \
+	driver_trace/tr_texture.h \
 	hud/font.c \
 	hud/font.h \
 	hud/hud_context.c \
@@ -1194,7 +1251,8 @@ VL_SOURCES := \
 	vl/vl_video_buffer.h \
 	vl/vl_vlc.h \
 	vl/vl_zscan.c \
-	vl/vl_zscan.h
+	vl/vl_zscan.h \
+	vl/vl_probs_table.h
 
 
 # XXX: Nuke this as our dri targets no longer depend on VL.
@@ -1389,6 +1447,9 @@ libgalliumvl_stub_la_SOURCES = \
 @NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@	$(am__append_13)
 EXTRA_DIST = \
 	SConscript \
+	driver_rbug/README \
+	driver_trace/README \
+	driver_trace/trace.xsl \
 	indices/u_indices.c \
 	indices/u_unfilled_indices.c \
 	indices/u_indices_gen.py \
@@ -1528,6 +1589,58 @@ draw/draw_vs_exec.lo: draw/$(am__dirstamp) \
 	draw/$(DEPDIR)/$(am__dirstamp)
 draw/draw_vs_variant.lo: draw/$(am__dirstamp) \
 	draw/$(DEPDIR)/$(am__dirstamp)
+driver_ddebug/$(am__dirstamp):
+	@$(MKDIR_P) driver_ddebug
+	@: > driver_ddebug/$(am__dirstamp)
+driver_ddebug/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) driver_ddebug/$(DEPDIR)
+	@: > driver_ddebug/$(DEPDIR)/$(am__dirstamp)
+driver_ddebug/dd_context.lo: driver_ddebug/$(am__dirstamp) \
+	driver_ddebug/$(DEPDIR)/$(am__dirstamp)
+driver_ddebug/dd_draw.lo: driver_ddebug/$(am__dirstamp) \
+	driver_ddebug/$(DEPDIR)/$(am__dirstamp)
+driver_ddebug/dd_screen.lo: driver_ddebug/$(am__dirstamp) \
+	driver_ddebug/$(DEPDIR)/$(am__dirstamp)
+driver_noop/$(am__dirstamp):
+	@$(MKDIR_P) driver_noop
+	@: > driver_noop/$(am__dirstamp)
+driver_noop/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) driver_noop/$(DEPDIR)
+	@: > driver_noop/$(DEPDIR)/$(am__dirstamp)
+driver_noop/noop_pipe.lo: driver_noop/$(am__dirstamp) \
+	driver_noop/$(DEPDIR)/$(am__dirstamp)
+driver_noop/noop_state.lo: driver_noop/$(am__dirstamp) \
+	driver_noop/$(DEPDIR)/$(am__dirstamp)
+driver_rbug/$(am__dirstamp):
+	@$(MKDIR_P) driver_rbug
+	@: > driver_rbug/$(am__dirstamp)
+driver_rbug/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) driver_rbug/$(DEPDIR)
+	@: > driver_rbug/$(DEPDIR)/$(am__dirstamp)
+driver_rbug/rbug_context.lo: driver_rbug/$(am__dirstamp) \
+	driver_rbug/$(DEPDIR)/$(am__dirstamp)
+driver_rbug/rbug_core.lo: driver_rbug/$(am__dirstamp) \
+	driver_rbug/$(DEPDIR)/$(am__dirstamp)
+driver_rbug/rbug_objects.lo: driver_rbug/$(am__dirstamp) \
+	driver_rbug/$(DEPDIR)/$(am__dirstamp)
+driver_rbug/rbug_screen.lo: driver_rbug/$(am__dirstamp) \
+	driver_rbug/$(DEPDIR)/$(am__dirstamp)
+driver_trace/$(am__dirstamp):
+	@$(MKDIR_P) driver_trace
+	@: > driver_trace/$(am__dirstamp)
+driver_trace/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) driver_trace/$(DEPDIR)
+	@: > driver_trace/$(DEPDIR)/$(am__dirstamp)
+driver_trace/tr_context.lo: driver_trace/$(am__dirstamp) \
+	driver_trace/$(DEPDIR)/$(am__dirstamp)
+driver_trace/tr_dump.lo: driver_trace/$(am__dirstamp) \
+	driver_trace/$(DEPDIR)/$(am__dirstamp)
+driver_trace/tr_dump_state.lo: driver_trace/$(am__dirstamp) \
+	driver_trace/$(DEPDIR)/$(am__dirstamp)
+driver_trace/tr_screen.lo: driver_trace/$(am__dirstamp) \
+	driver_trace/$(DEPDIR)/$(am__dirstamp)
+driver_trace/tr_texture.lo: driver_trace/$(am__dirstamp) \
+	driver_trace/$(DEPDIR)/$(am__dirstamp)
 hud/$(am__dirstamp):
 	@$(MKDIR_P) hud
 	@: > hud/$(am__dirstamp)
@@ -1952,6 +2065,14 @@ mostlyclean-compile:
 	-rm -f cso_cache/*.lo
 	-rm -f draw/*.$(OBJEXT)
 	-rm -f draw/*.lo
+	-rm -f driver_ddebug/*.$(OBJEXT)
+	-rm -f driver_ddebug/*.lo
+	-rm -f driver_noop/*.$(OBJEXT)
+	-rm -f driver_noop/*.lo
+	-rm -f driver_rbug/*.$(OBJEXT)
+	-rm -f driver_rbug/*.lo
+	-rm -f driver_trace/*.$(OBJEXT)
+	-rm -f driver_trace/*.lo
 	-rm -f gallivm/*.$(OBJEXT)
 	-rm -f gallivm/*.lo
 	-rm -f hud/*.$(OBJEXT)
@@ -2025,6 +2146,20 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@draw/$(DEPDIR)/draw_vs_exec.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@draw/$(DEPDIR)/draw_vs_llvm.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@draw/$(DEPDIR)/draw_vs_variant.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@driver_ddebug/$(DEPDIR)/dd_context.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@driver_ddebug/$(DEPDIR)/dd_draw.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@driver_ddebug/$(DEPDIR)/dd_screen.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@driver_noop/$(DEPDIR)/noop_pipe.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@driver_noop/$(DEPDIR)/noop_state.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@driver_rbug/$(DEPDIR)/rbug_context.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@driver_rbug/$(DEPDIR)/rbug_core.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@driver_rbug/$(DEPDIR)/rbug_objects.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@driver_rbug/$(DEPDIR)/rbug_screen.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@driver_trace/$(DEPDIR)/tr_context.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@driver_trace/$(DEPDIR)/tr_dump.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@driver_trace/$(DEPDIR)/tr_dump_state.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@driver_trace/$(DEPDIR)/tr_screen.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@driver_trace/$(DEPDIR)/tr_texture.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@gallivm/$(DEPDIR)/lp_bld_arit.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@gallivm/$(DEPDIR)/lp_bld_arit_overflow.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@gallivm/$(DEPDIR)/lp_bld_assert.Plo@am__quote@
@@ -2377,6 +2512,10 @@ clean-libtool:
 	-rm -rf .libs _libs
 	-rm -rf cso_cache/.libs cso_cache/_libs
 	-rm -rf draw/.libs draw/_libs
+	-rm -rf driver_ddebug/.libs driver_ddebug/_libs
+	-rm -rf driver_noop/.libs driver_noop/_libs
+	-rm -rf driver_rbug/.libs driver_rbug/_libs
+	-rm -rf driver_trace/.libs driver_trace/_libs
 	-rm -rf gallivm/.libs gallivm/_libs
 	-rm -rf hud/.libs hud/_libs
 	-rm -rf indices/.libs indices/_libs
@@ -2508,6 +2647,14 @@ distclean-generic:
 	-rm -f cso_cache/$(am__dirstamp)
 	-rm -f draw/$(DEPDIR)/$(am__dirstamp)
 	-rm -f draw/$(am__dirstamp)
+	-rm -f driver_ddebug/$(DEPDIR)/$(am__dirstamp)
+	-rm -f driver_ddebug/$(am__dirstamp)
+	-rm -f driver_noop/$(DEPDIR)/$(am__dirstamp)
+	-rm -f driver_noop/$(am__dirstamp)
+	-rm -f driver_rbug/$(DEPDIR)/$(am__dirstamp)
+	-rm -f driver_rbug/$(am__dirstamp)
+	-rm -f driver_trace/$(DEPDIR)/$(am__dirstamp)
+	-rm -f driver_trace/$(am__dirstamp)
 	-rm -f gallivm/$(DEPDIR)/$(am__dirstamp)
 	-rm -f gallivm/$(am__dirstamp)
 	-rm -f hud/$(DEPDIR)/$(am__dirstamp)
@@ -2546,7 +2693,7 @@ clean-am: clean-generic clean-libtool clean-noinstLTLIBRARIES \
 	mostlyclean-am
 
 distclean: distclean-am
-	-rm -rf cso_cache/$(DEPDIR) draw/$(DEPDIR) gallivm/$(DEPDIR) hud/$(DEPDIR) indices/$(DEPDIR) nir/$(DEPDIR) os/$(DEPDIR) pipebuffer/$(DEPDIR) postprocess/$(DEPDIR) rbug/$(DEPDIR) renderonly/$(DEPDIR) rtasm/$(DEPDIR) tgsi/$(DEPDIR) translate/$(DEPDIR) util/$(DEPDIR) vl/$(DEPDIR)
+	-rm -rf cso_cache/$(DEPDIR) draw/$(DEPDIR) driver_ddebug/$(DEPDIR) driver_noop/$(DEPDIR) driver_rbug/$(DEPDIR) driver_trace/$(DEPDIR) gallivm/$(DEPDIR) hud/$(DEPDIR) indices/$(DEPDIR) nir/$(DEPDIR) os/$(DEPDIR) pipebuffer/$(DEPDIR) postprocess/$(DEPDIR) rbug/$(DEPDIR) renderonly/$(DEPDIR) rtasm/$(DEPDIR) tgsi/$(DEPDIR) translate/$(DEPDIR) util/$(DEPDIR) vl/$(DEPDIR)
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
 	distclean-tags
@@ -2592,7 +2739,7 @@ install-ps-am:
 installcheck-am:
 
 maintainer-clean: maintainer-clean-am
-	-rm -rf cso_cache/$(DEPDIR) draw/$(DEPDIR) gallivm/$(DEPDIR) hud/$(DEPDIR) indices/$(DEPDIR) nir/$(DEPDIR) os/$(DEPDIR) pipebuffer/$(DEPDIR) postprocess/$(DEPDIR) rbug/$(DEPDIR) renderonly/$(DEPDIR) rtasm/$(DEPDIR) tgsi/$(DEPDIR) translate/$(DEPDIR) util/$(DEPDIR) vl/$(DEPDIR)
+	-rm -rf cso_cache/$(DEPDIR) draw/$(DEPDIR) driver_ddebug/$(DEPDIR) driver_noop/$(DEPDIR) driver_rbug/$(DEPDIR) driver_trace/$(DEPDIR) gallivm/$(DEPDIR) hud/$(DEPDIR) indices/$(DEPDIR) nir/$(DEPDIR) os/$(DEPDIR) pipebuffer/$(DEPDIR) postprocess/$(DEPDIR) rbug/$(DEPDIR) renderonly/$(DEPDIR) rtasm/$(DEPDIR) tgsi/$(DEPDIR) translate/$(DEPDIR) util/$(DEPDIR) vl/$(DEPDIR)
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic
 

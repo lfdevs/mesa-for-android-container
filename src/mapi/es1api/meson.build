@@ -48,13 +48,14 @@ pkg.generate(
   description : 'Mesa OpenGL ES 1.1 CM library',
   version : meson.project_version(),
   libraries : libglesv1_cm,
-  libraries_private : '-lm -ldl -lpthread -pthread',
+  libraries_private : gl_priv_libs,
 )
 
 if with_tests
   test(
     'es1-ABI-check',
     find_program('ABI-check'),
+    env : env_test,
     args : libglesv1_cm
   )
 endif

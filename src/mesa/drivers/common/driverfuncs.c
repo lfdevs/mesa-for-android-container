@@ -55,6 +55,7 @@
 #include "tnl/tnl.h"
 #include "swrast/swrast.h"
 #include "swrast/s_renderbuffer.h"
+#include "vbo/vbo.h"
 
 #include "driverfuncs.h"
 #include "meta.h"
@@ -119,6 +120,10 @@ _mesa_init_driver_functions(struct dd_function_table *driver)
    /* ATI_fragment_shader */
    driver->NewATIfs = NULL;
 
+   /* Draw functions */
+   driver->Draw = NULL;
+   driver->DrawIndirect = _vbo_draw_indirect;
+
    /* simple state commands */
    driver->AlphaFunc = NULL;
    driver->BlendColor = NULL;
@@ -129,7 +134,6 @@ _mesa_init_driver_functions(struct dd_function_table *driver)
    driver->ColorMaterial = NULL;
    driver->CullFace = NULL;
    driver->DrawBuffer = NULL;
-   driver->DrawBuffers = NULL;
    driver->FrontFace = NULL;
    driver->DepthFunc = NULL;
    driver->DepthMask = NULL;
@@ -232,10 +236,10 @@ _mesa_init_driver_state(struct gl_context *ctx)
                                  ctx->Color.Blend[0].DstA);
 
    ctx->Driver.ColorMask(ctx,
-                         ctx->Color.ColorMask[0][RCOMP],
-                         ctx->Color.ColorMask[0][GCOMP],
-                         ctx->Color.ColorMask[0][BCOMP],
-                         ctx->Color.ColorMask[0][ACOMP]);
+                         GET_COLORMASK_BIT(ctx->Color.ColorMask, 0, 0),
+                         GET_COLORMASK_BIT(ctx->Color.ColorMask, 0, 1),
+                         GET_COLORMASK_BIT(ctx->Color.ColorMask, 0, 2),
+                         GET_COLORMASK_BIT(ctx->Color.ColorMask, 0, 3));
 
    ctx->Driver.CullFace(ctx, ctx->Polygon.CullFaceMode);
    ctx->Driver.DepthFunc(ctx, ctx->Depth.Func);
@@ -277,7 +281,7 @@ _mesa_init_driver_state(struct gl_context *ctx)
    }
 
    ctx->Driver.LineWidth(ctx, ctx->Line.Width);
-   ctx->Driver.LogicOpcode(ctx, ctx->Color.LogicOp);
+   ctx->Driver.LogicOpcode(ctx, ctx->Color._LogicOp);
    ctx->Driver.PointSize(ctx, ctx->Point.Size);
    ctx->Driver.PolygonStipple(ctx, (const GLubyte *) ctx->PolygonStipple);
    ctx->Driver.Scissor(ctx);

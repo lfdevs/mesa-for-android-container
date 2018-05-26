@@ -31,15 +31,13 @@ extern "C" {
 #endif
 
 #define DRM_VC5_SUBMIT_CL                         0x00
-#define DRM_VC5_WAIT_SEQNO                        0x01
-#define DRM_VC5_WAIT_BO                           0x02
-#define DRM_VC5_CREATE_BO                         0x03
-#define DRM_VC5_MMAP_BO                           0x04
-#define DRM_VC5_GET_PARAM                         0x05
-#define DRM_VC5_GET_BO_OFFSET                     0x06
+#define DRM_VC5_WAIT_BO                           0x01
+#define DRM_VC5_CREATE_BO                         0x02
+#define DRM_VC5_MMAP_BO                           0x03
+#define DRM_VC5_GET_PARAM                         0x04
+#define DRM_VC5_GET_BO_OFFSET                     0x05
 
 #define DRM_IOCTL_VC5_SUBMIT_CL           DRM_IOWR(DRM_COMMAND_BASE + DRM_VC5_SUBMIT_CL, struct drm_vc5_submit_cl)
-#define DRM_IOCTL_VC5_WAIT_SEQNO          DRM_IOWR(DRM_COMMAND_BASE + DRM_VC5_WAIT_SEQNO, struct drm_vc5_wait_seqno)
 #define DRM_IOCTL_VC5_WAIT_BO             DRM_IOWR(DRM_COMMAND_BASE + DRM_VC5_WAIT_BO, struct drm_vc5_wait_bo)
 #define DRM_IOCTL_VC5_CREATE_BO           DRM_IOWR(DRM_COMMAND_BASE + DRM_VC5_CREATE_BO, struct drm_vc5_create_bo)
 #define DRM_IOCTL_VC5_MMAP_BO             DRM_IOWR(DRM_COMMAND_BASE + DRM_VC5_MMAP_BO, struct drm_vc5_mmap_bo)
@@ -77,6 +75,13 @@ struct drm_vc5_submit_cl {
 	 /** End address of the RCL (first byte after the RCL) */
 	__u32 rcl_end;
 
+	/** An optional sync object to wait on before starting the BCL. */
+	__u32 in_sync_bcl;
+	/** An optional sync object to wait on before starting the RCL. */
+	__u32 in_sync_rcl;
+	/** An optional sync object to place the completion fence in. */
+	__u32 out_sync;
+
 	/* Offset of the tile alloc memory
 	 *
 	 * This is optional on V3D 3.3 (where the CL can set the value) but
@@ -84,39 +89,18 @@ struct drm_vc5_submit_cl {
 	 */
 	__u32 qma;
 
-	 /** Size of the tile alloc memory. */
+	/** Size of the tile alloc memory. */
 	__u32 qms;
 
-	 /** Offset of the tile state data array. */
+	/** Offset of the tile state data array. */
 	__u32 qts;
 
 	/* Pointer to a u32 array of the BOs that are referenced by the job.
 	 */
 	__u64 bo_handles;
 
-	/* Pointer to an array of chunks of extra submit CL information. (the
-	 * chunk struct is not yet defined)
-	 */
-	__u64 chunks;
-
 	/* Number of BO handles passed in (size is that times 4). */
 	__u32 bo_handle_count;
-
-	__u32 chunk_count;
-
-	__u64 flags;
-};
-
-/**
- * struct drm_vc5_wait_seqno - ioctl argument for waiting for
- * DRM_VC5_SUBMIT_CL completion using its returned seqno.
- *
- * timeout_ns is the timeout in nanoseconds, where "0" means "don't
- * block, just return the status."
- */
-struct drm_vc5_wait_seqno {
-	__u64 seqno;
-	__u64 timeout_ns;
 };
 
 /**
@@ -148,6 +132,9 @@ struct drm_vc5_create_bo {
 	 * Returned offset for the BO in the V3D address space.  This offset
 	 * is private to the DRM fd and is valid for the lifetime of the GEM
 	 * handle.
+	 *
+	 * This offset value will always be nonzero, since various HW
+	 * units treat 0 specially.
 	 */
 	__u32 offset;
 };
@@ -172,13 +159,13 @@ struct drm_vc5_mmap_bo {
 };
 
 enum drm_vc5_param {
-        DRM_VC5_PARAM_V3D_UIFCFG,
-        DRM_VC5_PARAM_V3D_HUB_IDENT1,
-        DRM_VC5_PARAM_V3D_HUB_IDENT2,
-        DRM_VC5_PARAM_V3D_HUB_IDENT3,
-        DRM_VC5_PARAM_V3D_CORE0_IDENT0,
-        DRM_VC5_PARAM_V3D_CORE0_IDENT1,
-        DRM_VC5_PARAM_V3D_CORE0_IDENT2,
+	DRM_VC5_PARAM_V3D_UIFCFG,
+	DRM_VC5_PARAM_V3D_HUB_IDENT1,
+	DRM_VC5_PARAM_V3D_HUB_IDENT2,
+	DRM_VC5_PARAM_V3D_HUB_IDENT3,
+	DRM_VC5_PARAM_V3D_CORE0_IDENT0,
+	DRM_VC5_PARAM_V3D_CORE0_IDENT1,
+	DRM_VC5_PARAM_V3D_CORE0_IDENT2,
 };
 
 struct drm_vc5_get_param {

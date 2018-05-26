@@ -27,11 +27,13 @@
 #include "JitManager.h"
 #include "llvm-c/Core.h"
 #include "llvm/Support/CBindingWrapping.h"
+#include "llvm/IR/LegacyPassManager.h"
 #pragma pop_macro("DEBUG")
 
 #include "state.h"
 #include "gen_state_llvm.h"
 #include "builder.h"
+#include "functionpasses/passes.h"
 
 #include "tgsi/tgsi_strings.h"
 #include "util/u_format.h"
@@ -98,7 +100,7 @@ swr_generate_sampler_key(const struct lp_tgsi_info &info,
       key.nr_sampler_views =
          info.base.file_max[TGSI_FILE_SAMPLER_VIEW] + 1;
       for (unsigned i = 0; i < key.nr_sampler_views; i++) {
-         if (info.base.file_mask[TGSI_FILE_SAMPLER_VIEW] & (1 << i)) {
+         if (info.base.file_mask[TGSI_FILE_SAMPLER_VIEW] & (1u << (i & 31))) {
             const struct pipe_sampler_view *view =
                ctx->sampler_views[shader_type][i];
             lp_sampler_static_texture_state(
@@ -584,6 +586,7 @@ BuilderSWR::CompileGS(struct swr_context *ctx, swr_jit_gs_key &key)
    attrBuilder.addStackAlignmentAttr(JM()->mVWidth * sizeof(float));
 
    std::vector<Type *> gsArgs{PointerType::get(Gen_swr_draw_context(JM()), 0),
+                              PointerType::get(mInt8Ty, 0),
                               PointerType::get(Gen_SWR_GS_CONTEXT(JM()), 0)};
    FunctionType *vsFuncType =
       FunctionType::get(Type::getVoidTy(JM()->mContext), gsArgs, false);
@@ -608,6 +611,8 @@ BuilderSWR::CompileGS(struct swr_context *ctx, swr_jit_gs_key &key)
    auto argitr = pFunction->arg_begin();
    Value *hPrivateData = &*argitr++;
    hPrivateData->setName("hPrivateData");
+   Value *pWorkerData = &*argitr++;
+   pWorkerData->setName("pWorkerData");
    Value *pGsCtx = &*argitr++;
    pGsCtx->setName("gsCtx");
 
@@ -752,6 +757,7 @@ BuilderSWR::CompileVS(struct swr_context *ctx, swr_jit_vs_key &key)
    attrBuilder.addStackAlignmentAttr(JM()->mVWidth * sizeof(float));
 
    std::vector<Type *> vsArgs{PointerType::get(Gen_swr_draw_context(JM()), 0),
+                              PointerType::get(mInt8Ty, 0),
                               PointerType::get(Gen_SWR_VS_CONTEXT(JM()), 0)};
    FunctionType *vsFuncType =
       FunctionType::get(Type::getVoidTy(JM()->mContext), vsArgs, false);
@@ -776,6 +782,8 @@ BuilderSWR::CompileVS(struct swr_context *ctx, swr_jit_vs_key &key)
    auto argitr = pFunction->arg_begin();
    Value *hPrivateData = &*argitr++;
    hPrivateData->setName("hPrivateData");
+   Value *pWorkerData = &*argitr++;
+   pWorkerData->setName("pWorkerData");
    Value *pVsCtx = &*argitr++;
    pVsCtx->setName("vsCtx");
    
@@ -1035,6 +1043,7 @@ BuilderSWR::CompileFS(struct swr_context *ctx, swr_jit_fs_key &key)
    attrBuilder.addStackAlignmentAttr(JM()->mVWidth * sizeof(float));
 
    std::vector<Type *> fsArgs{PointerType::get(Gen_swr_draw_context(JM()), 0),
+                              PointerType::get(mInt8Ty, 0),
                               PointerType::get(Gen_SWR_PS_CONTEXT(JM()), 0)};
    FunctionType *funcType =
       FunctionType::get(Type::getVoidTy(JM()->mContext), fsArgs, false);
@@ -1058,6 +1067,8 @@ BuilderSWR::CompileFS(struct swr_context *ctx, swr_jit_fs_key &key)
    auto args = pFunction->arg_begin();
    Value *hPrivateData = &*args++;
    hPrivateData->setName("hPrivateData");
+   Value *pWorkerData = &*args++;
+   pWorkerData->setName("pWorkerData");
    Value *pPS = &*args++;
    pPS->setName("psCtx");
 
@@ -1388,6 +1399,11 @@ BuilderSWR::CompileFS(struct swr_context *ctx, swr_jit_fs_key &key)
    gallivm_verify_function(gallivm, wrap(pFunction));
 
    gallivm_compile_module(gallivm);
+
+   // after the gallivm passes, we have to lower the core's intrinsics
+   llvm::legacy::FunctionPassManager lowerPass(JM()->mpCurrentModule);
+   lowerPass.add(createLowerX86Pass(mpJitMgr, this));
+   lowerPass.run(*pFunction);
 
    PFN_PIXEL_KERNEL kernel =
       (PFN_PIXEL_KERNEL)gallivm_jit_function(gallivm, wrap(pFunction));

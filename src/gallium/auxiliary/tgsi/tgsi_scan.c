@@ -55,7 +55,7 @@ is_memory_file(unsigned file)
 
 
 static bool
-is_mem_query_inst(unsigned opcode)
+is_mem_query_inst(enum tgsi_opcode opcode)
 {
    return opcode == TGSI_OPCODE_RESQ ||
           opcode == TGSI_OPCODE_TXQ ||
@@ -68,7 +68,7 @@ is_mem_query_inst(unsigned opcode)
  * texture map?
  */
 static bool
-is_texture_inst(unsigned opcode)
+is_texture_inst(enum tgsi_opcode opcode)
 {
    return (!is_mem_query_inst(opcode) &&
            tgsi_get_opcode_info(opcode)->is_tex);
@@ -80,7 +80,7 @@ is_texture_inst(unsigned opcode)
  * implicitly?
  */
 static bool
-computes_derivative(unsigned opcode)
+computes_derivative(enum tgsi_opcode opcode)
 {
    if (tgsi_get_opcode_info(opcode)->is_tex) {
       return opcode != TGSI_OPCODE_TG4 &&
@@ -267,7 +267,6 @@ scan_src_operand(struct tgsi_shader_info *info,
       const unsigned index = src->Register.Index;
 
       assert(fullinst->Instruction.Texture);
-      assert(index < ARRAY_SIZE(info->is_msaa_sampler));
       assert(index < PIPE_MAX_SAMPLERS);
 
       if (is_texture_inst(fullinst->Instruction.Opcode)) {
@@ -285,11 +284,6 @@ scan_src_operand(struct tgsi_shader_info *info,
              * agrees with the sampler view declaration.
              */
             assert(info->sampler_targets[index] == target);
-         }
-         /* MSAA samplers */
-         if (target == TGSI_TEXTURE_2D_MSAA ||
-             target == TGSI_TEXTURE_2D_ARRAY_MSAA) {
-            info->is_msaa_sampler[src->Register.Index] = TRUE;
          }
       }
    }
@@ -591,8 +585,11 @@ scan_declaration(struct tgsi_shader_info *info,
       int buffer;
       unsigned index, target, type;
 
-      /* only first 32 regs will appear in this bitfield */
-      info->file_mask[file] |= (1 << reg);
+      /*
+       * only first 32 regs will appear in this bitfield, if larger
+       * bits will wrap around.
+       */
+      info->file_mask[file] |= (1u << (reg & 31));
       info->file_count[file]++;
       info->file_max[file] = MAX2(info->file_max[file], (int)reg);
 

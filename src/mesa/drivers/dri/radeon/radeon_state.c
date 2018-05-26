@@ -41,7 +41,6 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "main/fbobject.h"
 #include "util/simple_list.h"
 #include "main/state.h"
-#include "main/core.h"
 #include "main/stencil.h"
 #include "main/viewport.h"
 
@@ -504,10 +503,10 @@ static void radeonColorMask( struct gl_context *ctx,
      return;
 
    mask = radeonPackColor( rrb->cpp,
-			   ctx->Color.ColorMask[0][RCOMP],
-			   ctx->Color.ColorMask[0][GCOMP],
-			   ctx->Color.ColorMask[0][BCOMP],
-			   ctx->Color.ColorMask[0][ACOMP] );
+			   GET_COLORMASK_BIT(ctx->Color.ColorMask, 0, 0),
+			   GET_COLORMASK_BIT(ctx->Color.ColorMask, 0, 1),
+			   GET_COLORMASK_BIT(ctx->Color.ColorMask, 0, 2),
+			   GET_COLORMASK_BIT(ctx->Color.ColorMask, 0, 3) );
 
    if ( rmesa->hw.msk.cmd[MSK_RB3D_PLANEMASK] != mask ) {
       RADEON_STATECHANGE( rmesa, msk );
@@ -1408,35 +1407,14 @@ static void radeonRenderMode( struct gl_context *ctx, GLenum mode )
    FALLBACK( rmesa, RADEON_FALLBACK_RENDER_MODE, (mode != GL_RENDER) );
 }
 
-
-static GLuint radeon_rop_tab[] = {
-   RADEON_ROP_CLEAR,
-   RADEON_ROP_AND,
-   RADEON_ROP_AND_REVERSE,
-   RADEON_ROP_COPY,
-   RADEON_ROP_AND_INVERTED,
-   RADEON_ROP_NOOP,
-   RADEON_ROP_XOR,
-   RADEON_ROP_OR,
-   RADEON_ROP_NOR,
-   RADEON_ROP_EQUIV,
-   RADEON_ROP_INVERT,
-   RADEON_ROP_OR_REVERSE,
-   RADEON_ROP_COPY_INVERTED,
-   RADEON_ROP_OR_INVERTED,
-   RADEON_ROP_NAND,
-   RADEON_ROP_SET,
-};
-
-static void radeonLogicOpCode( struct gl_context *ctx, GLenum opcode )
+static void radeonLogicOpCode(struct gl_context *ctx, enum gl_logicop_mode opcode)
 {
    r100ContextPtr rmesa = R100_CONTEXT(ctx);
-   GLuint rop = (GLuint)opcode - GL_CLEAR;
 
-   assert( rop < 16 );
+   assert((unsigned) opcode <= 15);
 
    RADEON_STATECHANGE( rmesa, msk );
-   rmesa->hw.msk.cmd[MSK_RB3D_ROPCNTL] = radeon_rop_tab[rop];
+   rmesa->hw.msk.cmd[MSK_RB3D_ROPCNTL] = opcode;
 }
 
 /* =============================================================
@@ -1911,7 +1889,7 @@ static void update_texturematrix( struct gl_context *ctx )
 	 if (needMatrix) {
 	    rmesa->NeedTexMatrix |= 1 << unit;
 	    radeonUploadTexMatrix( rmesa, unit,
-			!ctx->Texture.Unit[unit].TexGenEnabled );
+			!ctx->Texture.FixedFuncUnit[unit].TexGenEnabled );
 	 }
       }
    }

@@ -374,7 +374,7 @@ fd3_emit_vertex_bufs(struct fd_ringbuffer *ring, struct fd3_emit *emit)
 			continue;
 		if (vp->inputs[i].sysval) {
 			switch(vp->inputs[i].slot) {
-			case SYSTEM_VALUE_BASE_VERTEX:
+			case SYSTEM_VALUE_FIRST_VERTEX:
 				/* handled elsewhere */
 				break;
 			case SYSTEM_VALUE_VERTEX_ID_ZERO_BASE:

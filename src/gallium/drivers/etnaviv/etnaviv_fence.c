@@ -76,8 +76,10 @@ etna_screen_fence_finish(struct pipe_screen *pscreen, struct pipe_context *ctx,
 
 void
 etna_create_fence_fd(struct pipe_context *pctx,
-                     struct pipe_fence_handle **pfence, int fd)
+                     struct pipe_fence_handle **pfence, int fd,
+                     enum pipe_fd_type type)
 {
+   assert(type == PIPE_FD_TYPE_NATIVE_SYNC);
    *pfence = etna_fence_create(pctx, dup(fd));
 }
 

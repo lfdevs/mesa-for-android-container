@@ -221,7 +221,7 @@ brw_cache_new_bo(struct brw_cache *cache, uint32_t new_size)
    perf_debug("Copying to larger program cache: %u kB -> %u kB\n",
               (unsigned) cache->bo->size / 1024, new_size / 1024);
 
-   new_bo = brw_bo_alloc(brw->bufmgr, "program cache", new_size, 64);
+   new_bo = brw_bo_alloc(brw->bufmgr, "program cache", new_size);
    if (can_do_exec_capture(brw->screen))
       new_bo->kflags = EXEC_OBJECT_CAPTURE;
 
@@ -388,7 +388,7 @@ brw_init_caches(struct brw_context *brw)
    cache->items =
       calloc(cache->size, sizeof(struct brw_cache_item *));
 
-   cache->bo = brw_bo_alloc(brw->bufmgr, "program cache", 16384, 64);
+   cache->bo = brw_bo_alloc(brw->bufmgr, "program cache", 16384);
    if (can_do_exec_capture(brw->screen))
       cache->bo->kflags = EXEC_OBJECT_CAPTURE;
 
