@@ -543,7 +543,7 @@ intelReleaseTexBuffer(__DRIcontext *pDRICtx, GLint target,
     * should be a no-op in almost all cases.  On the off chance that someone
     * ever triggers this, we should at least warn them.
     */
-   if (intel_tex->mt->mcs_buf &&
+   if (intel_tex->mt->aux_buf &&
        intel_miptree_get_aux_state(intel_tex->mt, 0, 0) !=
        isl_drm_modifier_get_default_aux_state(intel_tex->mt->drm_modifier)) {
       _mesa_warning(ctx, "Aux state changed between BindTexImage and "

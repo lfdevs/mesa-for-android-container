@@ -732,10 +732,10 @@ static const struct gen_device_info gen_device_info_glk = {
    .l3_banks = 2,
 };
 
-/*TODO: Initialize l3_banks when we know the number. */
 static const struct gen_device_info gen_device_info_glk_2x6 = {
    GEN9_LP_FEATURES_2X6,
    .is_geminilake = true,
+   .l3_banks = 2,
 };
 
 static const struct gen_device_info gen_device_info_cfl_gt1 = {

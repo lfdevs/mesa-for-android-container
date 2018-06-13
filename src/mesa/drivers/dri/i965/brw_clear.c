@@ -240,7 +240,7 @@ brw_fast_clear_depth(struct gl_context *ctx)
           * buffer when doing a fast clear. Since we are skipping the fast
           * clear here, we need to update the clear color ourselves.
           */
-         uint32_t clear_offset = mt->hiz_buf->clear_color_offset;
+         uint32_t clear_offset = mt->aux_buf->clear_color_offset;
          union isl_color_value clear_color = { .f32 = { clear_value, } };
 
          /* We can't update the clear color while the hardware is still using
@@ -249,7 +249,7 @@ brw_fast_clear_depth(struct gl_context *ctx)
           */
          brw_emit_pipe_control_flush(brw, PIPE_CONTROL_CS_STALL);
          for (int i = 0; i < 4; i++) {
-            brw_store_data_imm32(brw, mt->hiz_buf->clear_color_bo,
+            brw_store_data_imm32(brw, mt->aux_buf->clear_color_bo,
                                  clear_offset + i * 4, clear_color.u32[i]);
          }
          brw_emit_pipe_control_flush(brw, PIPE_CONTROL_STATE_CACHE_INVALIDATE);

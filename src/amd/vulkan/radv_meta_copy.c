@@ -93,6 +93,8 @@ blit_surf_for_image_level_layer(struct radv_image *image,
 	    !(radv_image_is_tc_compat_htile(image)))
 		format = vk_format_for_size(vk_format_get_blocksize(format));
 
+	format = vk_format_no_srgb(format);
+
 	return (struct radv_meta_blit2d_surf) {
 		.format = format,
 		.bs = vk_format_get_blocksize(format),

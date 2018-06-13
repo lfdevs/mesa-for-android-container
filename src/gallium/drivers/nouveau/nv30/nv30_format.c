@@ -50,10 +50,12 @@
 #define S___ PIPE_BIND_SAMPLER_VIEW
 #define _R__ PIPE_BIND_RENDER_TARGET
 #define _B__ PIPE_BIND_RENDER_TARGET | PIPE_BIND_BLENDABLE
+#define _D__ PIPE_BIND_SCANOUT | PIPE_BIND_DISPLAY_TARGET | _B__
 #define _Z__ PIPE_BIND_DEPTH_STENCIL
 #define __V_ PIPE_BIND_VERTEX_BUFFER
 #define SR__ (S___ | _R__)
 #define SB__ (S___ | _B__)
+#define SD__ (S___ | _D__)
 #define SZ__ (S___ | _Z__)
 #define S_V_ (S___ | __V_)
 #define SRV_ (SR__ | __V_)
@@ -73,14 +75,14 @@ nv30_format_info_table[PIPE_FORMAT_COUNT] = {
    _(A8_SNORM            , S___),
    _(R8_UNORM            , S_V_),
    _(R8_SNORM            , S___),
-   _(B5G5R5X1_UNORM      , SB__),
+   _(B5G5R5X1_UNORM      , SD__),
    _(B5G5R5A1_UNORM      , S___),
    _(B4G4R4X4_UNORM      , S___),
    _(B4G4R4A4_UNORM      , S___),
-   _(B5G6R5_UNORM        , SB__),
-   _(BGRX8888_UNORM      , SB__),
+   _(B5G6R5_UNORM        , SD__),
+   _(BGRX8888_UNORM      , SD__),
    _(BGRX8888_SRGB       , S___),
-   _(BGRA8888_UNORM      , SB__),
+   _(BGRA8888_UNORM      , SD__),
    _(BGRA8888_SRGB       , S___),
    _(R8G8B8A8_UNORM      , __V_),
    _(RGBA8888_SNORM      , S___),

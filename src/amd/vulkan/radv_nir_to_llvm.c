@@ -1773,6 +1773,47 @@ static LLVMValueRef radv_get_sampler_desc(struct ac_shader_abi *abi,
 	return ac_build_load_to_sgpr(&ctx->ac, list, index);
 }
 
+/* For 2_10_10_10 formats the alpha is handled as unsigned by pre-vega HW.
+ * so we may need to fix it up. */
+static LLVMValueRef
+adjust_vertex_fetch_alpha(struct radv_shader_context *ctx,
+                          unsigned adjustment,
+                          LLVMValueRef alpha)
+{
+	if (adjustment == RADV_ALPHA_ADJUST_NONE)
+		return alpha;
+
+	LLVMValueRef c30 = LLVMConstInt(ctx->ac.i32, 30, 0);
+
+	if (adjustment == RADV_ALPHA_ADJUST_SSCALED)
+		alpha = LLVMBuildFPToUI(ctx->ac.builder, alpha, ctx->ac.i32, "");
+	else
+		alpha = ac_to_integer(&ctx->ac, alpha);
+
+	/* For the integer-like cases, do a natural sign extension.
+	 *
+	 * For the SNORM case, the values are 0.0, 0.333, 0.666, 1.0
+	 * and happen to contain 0, 1, 2, 3 as the two LSBs of the
+	 * exponent.
+	 */
+	alpha = LLVMBuildShl(ctx->ac.builder, alpha,
+	                     adjustment == RADV_ALPHA_ADJUST_SNORM ?
+	                     LLVMConstInt(ctx->ac.i32, 7, 0) : c30, "");
+	alpha = LLVMBuildAShr(ctx->ac.builder, alpha, c30, "");
+
+	/* Convert back to the right type. */
+	if (adjustment == RADV_ALPHA_ADJUST_SNORM) {
+		LLVMValueRef clamp;
+		LLVMValueRef neg_one = LLVMConstReal(ctx->ac.f32, -1.0);
+		alpha = LLVMBuildSIToFP(ctx->ac.builder, alpha, ctx->ac.f32, "");
+		clamp = LLVMBuildFCmp(ctx->ac.builder, LLVMRealULT, alpha, neg_one, "");
+		alpha = LLVMBuildSelect(ctx->ac.builder, clamp, neg_one, alpha, "");
+	} else if (adjustment == RADV_ALPHA_ADJUST_SSCALED) {
+		alpha = LLVMBuildSIToFP(ctx->ac.builder, alpha, ctx->ac.f32, "");
+	}
+
+	return alpha;
+}
 
 static void
 handle_vs_input_decl(struct radv_shader_context *ctx,
@@ -1783,18 +1824,19 @@ handle_vs_input_decl(struct radv_shader_context *ctx,
 	LLVMValueRef t_list;
 	LLVMValueRef input;
 	LLVMValueRef buffer_index;
-	int index = variable->data.location - VERT_ATTRIB_GENERIC0;
-	int idx = variable->data.location;
 	unsigned attrib_count = glsl_count_attribute_slots(variable->type, true);
 	uint8_t input_usage_mask =
 		ctx->shader_info->info.vs.input_usage_mask[variable->data.location];
 	unsigned num_channels = util_last_bit(input_usage_mask);
 
-	variable->data.driver_location = idx * 4;
+	variable->data.driver_location = variable->data.location * 4;
 
-	for (unsigned i = 0; i < attrib_count; ++i, ++idx) {
-		if (ctx->options->key.vs.instance_rate_inputs & (1u << (index + i))) {
-			uint32_t divisor = ctx->options->key.vs.instance_rate_divisors[index + i];
+	for (unsigned i = 0; i < attrib_count; ++i) {
+		LLVMValueRef output[4];
+		unsigned attrib_index = variable->data.location + i - VERT_ATTRIB_GENERIC0;
+
+		if (ctx->options->key.vs.instance_rate_inputs & (1u << attrib_index)) {
+			uint32_t divisor = ctx->options->key.vs.instance_rate_divisors[attrib_index];
 
 			if (divisor) {
 				buffer_index = LLVMBuildAdd(ctx->ac.builder, ctx->abi.instance_id,
@@ -1818,7 +1860,7 @@ handle_vs_input_decl(struct radv_shader_context *ctx,
 		} else
 			buffer_index = LLVMBuildAdd(ctx->ac.builder, ctx->abi.vertex_id,
 			                            ctx->abi.base_vertex, "");
-		t_offset = LLVMConstInt(ctx->ac.i32, index + i, false);
+		t_offset = LLVMConstInt(ctx->ac.i32, attrib_index, false);
 
 		t_list = ac_build_load_to_sgpr(&ctx->ac, t_list_ptr, t_offset);
 
@@ -1831,9 +1873,15 @@ handle_vs_input_decl(struct radv_shader_context *ctx,
 
 		for (unsigned chan = 0; chan < 4; chan++) {
 			LLVMValueRef llvm_chan = LLVMConstInt(ctx->ac.i32, chan, false);
-			ctx->inputs[ac_llvm_reg_index_soa(idx, chan)] =
-				ac_to_integer(&ctx->ac, LLVMBuildExtractElement(ctx->ac.builder,
-							input, llvm_chan, ""));
+			output[chan] = LLVMBuildExtractElement(ctx->ac.builder, input, llvm_chan, "");
+		}
+
+		unsigned alpha_adjust = (ctx->options->key.vs.alpha_adjust >> (attrib_index * 2)) & 3;
+		output[3] = adjust_vertex_fetch_alpha(ctx, alpha_adjust, output[3]);
+
+		for (unsigned chan = 0; chan < 4; chan++) {
+			ctx->inputs[ac_llvm_reg_index_soa(variable->data.location + i, chan)] =
+				ac_to_integer(&ctx->ac, output[chan]);
 		}
 	}
 }
@@ -1929,9 +1977,6 @@ static void
 prepare_interp_optimize(struct radv_shader_context *ctx,
                         struct nir_shader *nir)
 {
-	if (!ctx->options->key.fs.multisample)
-		return;
-
 	bool uses_center = false;
 	bool uses_centroid = false;
 	nir_foreach_variable(variable, &nir->inputs) {

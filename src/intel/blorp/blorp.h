@@ -109,6 +109,9 @@ struct blorp_surf
     * that it contains a swizzle of RGBA and resource min LOD of 0.
     */
    struct blorp_address clear_color_addr;
+
+   /* Only allowed for simple 2D non-MSAA surfaces */
+   uint32_t tile_x_sa, tile_y_sa;
 };
 
 void

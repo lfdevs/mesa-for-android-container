@@ -155,26 +155,11 @@ brw_emit_surface_state(struct brw_context *brw,
    struct brw_bo *aux_bo = NULL;
    struct isl_surf *aux_surf = NULL;
    uint64_t aux_offset = 0;
-   struct intel_miptree_aux_buffer *aux_buf = NULL;
-   switch (aux_usage) {
-   case ISL_AUX_USAGE_MCS:
-   case ISL_AUX_USAGE_CCS_D:
-   case ISL_AUX_USAGE_CCS_E:
-      aux_buf = mt->mcs_buf;
-      break;
-
-   case ISL_AUX_USAGE_HIZ:
-      aux_buf = mt->hiz_buf;
-      break;
-
-   case ISL_AUX_USAGE_NONE:
-      break;
-   }
 
    if (aux_usage != ISL_AUX_USAGE_NONE) {
-      aux_surf = &aux_buf->surf;
-      aux_bo = aux_buf->bo;
-      aux_offset = aux_buf->offset;
+      aux_surf = &mt->aux_buf->surf;
+      aux_bo = mt->aux_buf->bo;
+      aux_offset = mt->aux_buf->offset;
 
       /* We only really need a clear color if we also have an auxiliary
        * surface.  Without one, it does nothing.
@@ -192,8 +177,8 @@ brw_emit_surface_state(struct brw_context *brw,
    struct brw_bo *clear_bo = NULL;
    uint32_t clear_offset = 0;
    if (use_clear_address) {
-      clear_bo = aux_buf->clear_color_bo;
-      clear_offset = aux_buf->clear_color_offset;
+      clear_bo = mt->aux_buf->clear_color_bo;
+      clear_offset = mt->aux_buf->clear_color_offset;
    }
 
    isl_surf_fill_state(&brw->isl_dev, state, .surf = &surf, .view = &view,
@@ -652,26 +637,15 @@ brw_emit_buffer_surface_state(struct brw_context *brw,
                          .mocs = brw_get_bo_mocs(devinfo, bo));
 }
 
-void
-brw_update_buffer_texture_surface(struct gl_context *ctx,
-                                  unsigned unit,
-                                  uint32_t *surf_offset)
+static unsigned
+buffer_texture_range_size(struct brw_context *brw,
+                          struct gl_texture_object *obj)
 {
-   struct brw_context *brw = brw_context(ctx);
-   struct gl_texture_object *tObj = ctx->Texture.Unit[unit]._Current;
-   struct intel_buffer_object *intel_obj =
-      intel_buffer_object(tObj->BufferObject);
-   uint32_t size = tObj->BufferSize;
-   struct brw_bo *bo = NULL;
-   mesa_format format = tObj->_BufferObjectFormat;
-   const enum isl_format isl_format = brw_isl_format_for_mesa_format(format);
-   int texel_size = _mesa_get_format_bytes(format);
-
-   if (intel_obj) {
-      size = MIN2(size, intel_obj->Base.Size);
-      bo = intel_bufferobj_buffer(brw, intel_obj, tObj->BufferOffset, size,
-                                  false);
-   }
+   assert(obj->Target == GL_TEXTURE_BUFFER);
+   const unsigned texel_size = _mesa_get_format_bytes(obj->_BufferObjectFormat);
+   const unsigned buffer_size = (!obj->BufferObject ? 0 :
+                                 obj->BufferObject->Size);
+   const unsigned buffer_offset = MIN2(buffer_size, obj->BufferOffset);
 
    /* The ARB_texture_buffer_specification says:
     *
@@ -689,7 +663,29 @@ brw_update_buffer_texture_surface(struct gl_context *ctx,
     * so that when ISL divides by stride to obtain the number of texels, that
     * texel count is clamped to MAX_TEXTURE_BUFFER_SIZE.
     */
-   size = MIN2(size, ctx->Const.MaxTextureBufferSize * (unsigned) texel_size);
+   return MIN3((unsigned)obj->BufferSize,
+               buffer_size - buffer_offset,
+               brw->ctx.Const.MaxTextureBufferSize * texel_size);
+}
+
+void
+brw_update_buffer_texture_surface(struct gl_context *ctx,
+                                  unsigned unit,
+                                  uint32_t *surf_offset)
+{
+   struct brw_context *brw = brw_context(ctx);
+   struct gl_texture_object *tObj = ctx->Texture.Unit[unit]._Current;
+   struct intel_buffer_object *intel_obj =
+      intel_buffer_object(tObj->BufferObject);
+   const unsigned size = buffer_texture_range_size(brw, tObj);
+   struct brw_bo *bo = NULL;
+   mesa_format format = tObj->_BufferObjectFormat;
+   const enum isl_format isl_format = brw_isl_format_for_mesa_format(format);
+   int texel_size = _mesa_get_format_bytes(format);
+
+   if (intel_obj)
+      bo = intel_bufferobj_buffer(brw, intel_obj, tObj->BufferOffset, size,
+                                  false);
 
    if (isl_format == ISL_FORMAT_UNSUPPORTED) {
       _mesa_problem(NULL, "bad format %s for texture buffer\n",
@@ -1490,8 +1486,7 @@ update_buffer_image_param(struct brw_context *brw,
                           unsigned surface_idx,
                           struct brw_image_param *param)
 {
-   struct gl_buffer_object *obj = u->TexObj->BufferObject;
-   const uint32_t size = MIN2((uint32_t)u->TexObj->BufferSize, obj->Size);
+   const unsigned size = buffer_texture_range_size(brw, u->TexObj);
    update_default_image_param(brw, u, surface_idx, param);
 
    param->size[0] = size / _mesa_get_format_bytes(u->_ActualFormat);
@@ -1523,14 +1518,17 @@ update_image_surface(struct brw_context *brw,
       const unsigned format = get_image_format(brw, u->_ActualFormat, access);
 
       if (obj->Target == GL_TEXTURE_BUFFER) {
-         struct intel_buffer_object *intel_obj =
-            intel_buffer_object(obj->BufferObject);
          const unsigned texel_size = (format == ISL_FORMAT_RAW ? 1 :
                                       _mesa_get_format_bytes(u->_ActualFormat));
+         const unsigned buffer_size = buffer_texture_range_size(brw, obj);
+         struct brw_bo *const bo = !obj->BufferObject ? NULL :
+            intel_bufferobj_buffer(brw, intel_buffer_object(obj->BufferObject),
+                                   obj->BufferOffset, buffer_size,
+                                   access != GL_READ_ONLY);
 
          brw_emit_buffer_surface_state(
-            brw, surf_offset, intel_obj->buffer, obj->BufferOffset,
-            format, intel_obj->Base.Size, texel_size,
+            brw, surf_offset, bo, obj->BufferOffset,
+            format, buffer_size, texel_size,
             access != GL_READ_ONLY ? RELOC_WRITE : 0);
 
          update_buffer_image_param(brw, u, surface_idx, param);

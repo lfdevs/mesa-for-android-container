@@ -219,11 +219,9 @@ free:
 }
 
 static int tegra_screen_import_resource(struct tegra_screen *screen,
-                                        struct tegra_resource *resource,
-                                        bool has_modifiers)
+                                        struct tegra_resource *resource)
 {
    unsigned usage = PIPE_HANDLE_USAGE_READ;
-   struct drm_tegra_gem_set_tiling args;
    struct winsys_handle handle;
    boolean status;
    int fd, err;
@@ -254,67 +252,6 @@ static int tegra_screen_import_resource(struct tegra_screen *screen,
 
    close(fd);
 
-   if (!has_modifiers) {
-      memset(&args, 0, sizeof(args));
-      args.handle = resource->handle;
-
-      switch (handle.modifier) {
-         case DRM_FORMAT_MOD_NVIDIA_TEGRA_TILED:
-            args.mode = DRM_TEGRA_GEM_TILING_MODE_TILED;
-            break;
-
-         case DRM_FORMAT_MOD_NVIDIA_16BX2_BLOCK_ONE_GOB:
-            args.mode = DRM_TEGRA_GEM_TILING_MODE_BLOCK;
-            args.value = 0;
-            break;
-
-         case DRM_FORMAT_MOD_NVIDIA_16BX2_BLOCK_TWO_GOB:
-            args.mode = DRM_TEGRA_GEM_TILING_MODE_BLOCK;
-            args.value = 1;
-            break;
-
-         case DRM_FORMAT_MOD_NVIDIA_16BX2_BLOCK_FOUR_GOB:
-            args.mode = DRM_TEGRA_GEM_TILING_MODE_BLOCK;
-            args.value = 2;
-            break;
-
-         case DRM_FORMAT_MOD_NVIDIA_16BX2_BLOCK_EIGHT_GOB:
-            args.mode = DRM_TEGRA_GEM_TILING_MODE_BLOCK;
-            args.value = 3;
-            break;
-
-         case DRM_FORMAT_MOD_NVIDIA_16BX2_BLOCK_SIXTEEN_GOB:
-            args.mode = DRM_TEGRA_GEM_TILING_MODE_BLOCK;
-            args.value = 4;
-            break;
-
-         case DRM_FORMAT_MOD_NVIDIA_16BX2_BLOCK_THIRTYTWO_GOB:
-            args.mode = DRM_TEGRA_GEM_TILING_MODE_BLOCK;
-            args.value = 5;
-            break;
-
-         default:
-            debug_printf("unsupported modifier %" PRIx64 ", assuming linear\n",
-                         handle.modifier);
-            /* fall-through */
-
-         case DRM_FORMAT_MOD_LINEAR:
-            args.mode = DRM_TEGRA_GEM_TILING_MODE_PITCH;
-            break;
-      }
-
-      err = drmIoctl(screen->fd, DRM_IOCTL_TEGRA_GEM_SET_TILING, &args);
-      if (err < 0) {
-         fprintf(stderr, "failed to set tiling parameters: %s\n",
-                 strerror(errno));
-         err = -errno;
-         goto out;
-      }
-   }
-
-   return 0;
-
-out:
    return err;
 }
 
@@ -323,6 +260,7 @@ tegra_screen_resource_create(struct pipe_screen *pscreen,
                              const struct pipe_resource *template)
 {
    struct tegra_screen *screen = to_tegra_screen(pscreen);
+   uint64_t modifier = DRM_FORMAT_MOD_INVALID;
    struct tegra_resource *resource;
    int err;
 
@@ -330,13 +268,29 @@ tegra_screen_resource_create(struct pipe_screen *pscreen,
    if (!resource)
       return NULL;
 
-   resource->gpu = screen->gpu->resource_create(screen->gpu, template);
+   /*
+    * Applications that create scanout resources without modifiers are very
+    * unlikely to support modifiers at all. In that case the resources need
+    * to be created with a pitch-linear layout so that they can be properly
+    * shared with scanout hardware.
+    *
+    * Technically it is possible for applications to create resources without
+    * specifying a modifier but still query the modifier associated with the
+    * resource (e.g. using gbm_bo_get_modifier()) before handing it to the
+    * framebuffer creation API (such as the DRM_IOCTL_MODE_ADDFB2 IOCTL).
+    */
+   if (template->bind & PIPE_BIND_SCANOUT)
+      modifier = DRM_FORMAT_MOD_LINEAR;
+
+   resource->gpu = screen->gpu->resource_create_with_modifiers(screen->gpu,
+                                                               template,
+                                                               &modifier, 1);
    if (!resource->gpu)
       goto free;
 
    /* import scanout buffers for display */
    if (template->bind & PIPE_BIND_SCANOUT) {
-      err = tegra_screen_import_resource(screen, resource, false);
+      err = tegra_screen_import_resource(screen, resource);
       if (err < 0)
          goto destroy;
    }
@@ -561,6 +515,7 @@ tegra_screen_resource_create_with_modifiers(struct pipe_screen *pscreen,
                                             int count)
 {
    struct tegra_screen *screen = to_tegra_screen(pscreen);
+   struct pipe_resource tmpl = *template;
    struct tegra_resource *resource;
    int err;
 
@@ -568,14 +523,24 @@ tegra_screen_resource_create_with_modifiers(struct pipe_screen *pscreen,
    if (!resource)
       return NULL;
 
+   /*
+    * Assume that resources created with modifiers will always be used for
+    * scanout. This is necessary because some of the APIs that are used to
+    * create resources with modifiers (e.g. gbm_bo_create_with_modifiers())
+    * can't pass along usage information. Adding that capability might be
+    * worth adding to remove this ambiguity. Not all future use-cases that
+    * involve modifiers may always be targetting scanout hardware.
+    */
+   tmpl.bind |= PIPE_BIND_SCANOUT;
+
    resource->gpu = screen->gpu->resource_create_with_modifiers(screen->gpu,
-                                                               template,
+                                                               &tmpl,
                                                                modifiers,
                                                                count);
    if (!resource->gpu)
       goto free;
 
-   err = tegra_screen_import_resource(screen, resource, true);
+   err = tegra_screen_import_resource(screen, resource);
    if (err < 0)
       goto destroy;
 

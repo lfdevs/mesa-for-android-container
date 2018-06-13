@@ -132,7 +132,7 @@ static inline void virgl_ws_fill_new_caps_defaults(struct virgl_drm_caps *caps)
    caps->caps.v2.max_texel_offset = 7;
    caps->caps.v2.min_texture_gather_offset = -8;
    caps->caps.v2.max_texture_gather_offset = 7;
-   caps->caps.v2.texture_buffer_offset_alignment = 32;
+   caps->caps.v2.texture_buffer_offset_alignment = 0;
    caps->caps.v2.uniform_buffer_offset_alignment = 256;
 }
 #endif

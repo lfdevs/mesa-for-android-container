@@ -149,8 +149,8 @@ gen7_emit_depth_stencil_hiz(struct brw_context *brw,
       BEGIN_BATCH(3);
       OUT_BATCH(GEN7_3DSTATE_HIER_DEPTH_BUFFER << 16 | (3 - 2));
       OUT_BATCH((mocs << 25) |
-                (depth_mt->hiz_buf->pitch - 1));
-      OUT_RELOC(depth_mt->hiz_buf->bo, RELOC_WRITE, 0);
+                (depth_mt->aux_buf->pitch - 1));
+      OUT_RELOC(depth_mt->aux_buf->bo, RELOC_WRITE, 0);
       ADVANCE_BATCH();
    }
 

@@ -689,6 +689,7 @@ AMD_GENERATED_FILES = \
 noinst_LTLIBRARIES = $(ADDRLIB_LIBS) $(am__append_1)
 ADDRLIB_LIBS = addrlib/libamdgpu_addrlib.la
 addrlib_libamdgpu_addrlib_la_CPPFLAGS = \
+	$(DEFINES) \
 	-I$(top_srcdir)/src/ \
 	-I$(srcdir)/common \
 	-I$(srcdir)/addrlib \

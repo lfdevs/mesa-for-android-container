@@ -438,6 +438,15 @@ blorp_clear(struct blorp_batch *batch,
       params.x1 = x1;
       params.y1 = y1;
 
+      if (params.dst.tile_x_sa || params.dst.tile_y_sa) {
+         assert(params.dst.surf.samples == 1);
+         assert(num_layers == 1);
+         params.x0 += params.dst.tile_x_sa;
+         params.y0 += params.dst.tile_y_sa;
+         params.x1 += params.dst.tile_x_sa;
+         params.y1 += params.dst.tile_y_sa;
+      }
+
       /* The MinLOD and MinimumArrayElement don't work properly for cube maps.
        * Convert them to a single slice on gen4.
        */

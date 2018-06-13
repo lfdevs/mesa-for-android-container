@@ -55,9 +55,21 @@ struct radv_shader_module {
 	char data[0];
 };
 
+enum {
+	RADV_ALPHA_ADJUST_NONE = 0,
+	RADV_ALPHA_ADJUST_SNORM = 1,
+	RADV_ALPHA_ADJUST_SINT = 2,
+	RADV_ALPHA_ADJUST_SSCALED = 3,
+};
+
 struct radv_vs_variant_key {
 	uint32_t instance_rate_inputs;
 	uint32_t instance_rate_divisors[MAX_VERTEX_ATTRIBS];
+
+	/* For 2_10_10_10 formats the alpha is handled as unsigned by pre-vega HW.
+	 * so we may need to fix it up. */
+	uint64_t alpha_adjust;
+
 	uint32_t as_es:1;
 	uint32_t as_ls:1;
 	uint32_t export_prim_id:1;

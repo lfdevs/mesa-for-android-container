@@ -137,6 +137,28 @@ brw_blorp_surface_info_init(struct blorp_context *blorp,
     */
    if (is_render_target && blorp->isl_dev->info->gen <= 6)
       info->view.array_len = MIN2(info->view.array_len, 512);
+
+   if (surf->tile_x_sa || surf->tile_y_sa) {
+      /* This is only allowed on simple 2D surfaces without MSAA */
+      assert(info->surf.dim == ISL_SURF_DIM_2D);
+      assert(info->surf.samples == 1);
+      assert(info->surf.levels == 1);
+      assert(info->surf.logical_level0_px.array_len == 1);
+      assert(info->aux_usage == ISL_AUX_USAGE_NONE);
+
+      info->tile_x_sa = surf->tile_x_sa;
+      info->tile_y_sa = surf->tile_y_sa;
+
+      /* Instead of using the X/Y Offset fields in RENDER_SURFACE_STATE, we
+       * place the image at the tile boundary and offset our sampling or
+       * rendering.  For this reason, we need to grow the image by the offset
+       * to ensure that the hardware doesn't think we've gone past the edge.
+       */
+      info->surf.logical_level0_px.w += surf->tile_x_sa;
+      info->surf.logical_level0_px.h += surf->tile_y_sa;
+      info->surf.phys_level0_sa.w += surf->tile_x_sa;
+      info->surf.phys_level0_sa.h += surf->tile_y_sa;
+   }
 }
 
 

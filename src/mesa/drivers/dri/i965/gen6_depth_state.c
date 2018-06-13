@@ -160,13 +160,13 @@ gen6_emit_depth_stencil_hiz(struct brw_context *brw,
          assert(depth_mt);
 
          uint32_t offset;
-         isl_surf_get_image_offset_B_tile_sa(&depth_mt->hiz_buf->surf,
+         isl_surf_get_image_offset_B_tile_sa(&depth_mt->aux_buf->surf,
                                              lod, 0, 0, &offset, NULL, NULL);
 
 	 BEGIN_BATCH(3);
 	 OUT_BATCH((_3DSTATE_HIER_DEPTH_BUFFER << 16) | (3 - 2));
-	 OUT_BATCH(depth_mt->hiz_buf->surf.row_pitch - 1);
-	 OUT_RELOC(depth_mt->hiz_buf->bo, RELOC_WRITE, offset);
+	 OUT_BATCH(depth_mt->aux_buf->surf.row_pitch - 1);
+	 OUT_RELOC(depth_mt->aux_buf->bo, RELOC_WRITE, offset);
 	 ADVANCE_BATCH();
       } else {
 	 BEGIN_BATCH(3);

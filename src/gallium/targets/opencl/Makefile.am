@@ -23,11 +23,10 @@ lib@OPENCL_LIBNAME@_la_LIBADD = \
 	$(LIBELF_LIBS) \
 	$(DLOPEN_LIBS) \
 	-lclangCodeGen \
-	-lclangFrontendTool \
 	-lclangFrontend \
+	-lclangFrontendTool \
 	-lclangDriver \
 	-lclangSerialization \
-	-lclangCodeGen \
 	-lclangParse \
 	-lclangSema \
 	-lclangAnalysis \

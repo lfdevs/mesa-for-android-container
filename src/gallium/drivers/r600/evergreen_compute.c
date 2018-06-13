@@ -122,7 +122,8 @@ static void evergreen_set_rat(struct r600_pipe_compute *pipe,
 	rat_templ.u.tex.first_layer = 0;
 	rat_templ.u.tex.last_layer = 0;
 
-	/* Add the RAT the list of color buffers */
+	/* Add the RAT the list of color buffers. Drop the old buffer first. */
+	pipe_surface_reference(&pipe->ctx->framebuffer.state.cbufs[id], NULL);
 	pipe->ctx->framebuffer.state.cbufs[id] = pipe->ctx->b.b.create_surface(
 		(struct pipe_context *)pipe->ctx,
 		(struct pipe_resource *)bo, &rat_templ);

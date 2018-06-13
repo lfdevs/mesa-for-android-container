@@ -1,3 +1,9 @@
+mesa (18.1.1-1) unstable; urgency=medium
+
+  * New upstream release. (Closes: #901342)
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Wed, 13 Jun 2018 11:46:04 +0300
+
 mesa (18.1.0-1) experimental; urgency=medium
 
   [ Timo Aaltonen ]
@@ -12,6 +18,13 @@ mesa (18.1.0-1) experimental; urgency=medium
   * Bump libdrm-dev dependency to 2.4.91.
 
  -- Andreas Boll <aboll@debian.org>  Sat, 26 May 2018 10:34:44 +0200
+
+mesa (18.0.5-1) unstable; urgency=medium
+
+  * New upstream release.
+    - Fixes compositor freezes with XServer 1.20. Closes: #900149.
+
+ -- Emilio Pozuelo Monfort <pochu@debian.org>  Mon, 04 Jun 2018 09:51:42 +0200
 
 mesa (18.0.4-1) unstable; urgency=medium
 

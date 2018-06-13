@@ -3713,6 +3713,7 @@ brw_rounding_mode(struct brw_codegen *p,
    if (bits != BRW_CR0_RND_MODE_MASK) {
       brw_inst *inst = brw_AND(p, brw_cr0_reg(0), brw_cr0_reg(0),
                                brw_imm_ud(~BRW_CR0_RND_MODE_MASK));
+      brw_inst_set_exec_size(p->devinfo, inst, BRW_EXECUTE_1);
 
       /* From the Skylake PRM, Volume 7, page 760:
        *  "Implementation Restriction on Register Access: When the control
@@ -3727,6 +3728,7 @@ brw_rounding_mode(struct brw_codegen *p,
    if (bits) {
       brw_inst *inst = brw_OR(p, brw_cr0_reg(0), brw_cr0_reg(0),
                               brw_imm_ud(bits));
+      brw_inst_set_exec_size(p->devinfo, inst, BRW_EXECUTE_1);
       brw_inst_set_thread_control(p->devinfo, inst, BRW_THREAD_SWITCH);
    }
 }

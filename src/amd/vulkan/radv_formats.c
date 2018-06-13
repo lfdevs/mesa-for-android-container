@@ -655,6 +655,25 @@ radv_physical_device_get_format_properties(struct radv_physical_device *physical
 		tiled |= VK_FORMAT_FEATURE_STORAGE_IMAGE_ATOMIC_BIT;
 	}
 
+	switch(format) {
+	case VK_FORMAT_A2R10G10B10_SNORM_PACK32:
+	case VK_FORMAT_A2B10G10R10_SNORM_PACK32:
+	case VK_FORMAT_A2R10G10B10_SSCALED_PACK32:
+	case VK_FORMAT_A2B10G10R10_SSCALED_PACK32:
+	case VK_FORMAT_A2R10G10B10_SINT_PACK32:
+	case VK_FORMAT_A2B10G10R10_SINT_PACK32:
+		if (physical_device->rad_info.chip_class <= VI &&
+		    physical_device->rad_info.family != CHIP_STONEY) {
+			buffer &= ~(VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT |
+			            VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_BIT);
+			linear = 0;
+			tiled = 0;
+		}
+		break;
+	default:
+		break;
+	}
+
 	out_properties->linearTilingFeatures = linear;
 	out_properties->optimalTilingFeatures = tiled;
 	out_properties->bufferFeatures = buffer;

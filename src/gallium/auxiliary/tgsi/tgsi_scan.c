@@ -50,7 +50,8 @@ is_memory_file(unsigned file)
    return file == TGSI_FILE_SAMPLER ||
           file == TGSI_FILE_SAMPLER_VIEW ||
           file == TGSI_FILE_IMAGE ||
-          file == TGSI_FILE_BUFFER;
+          file == TGSI_FILE_BUFFER ||
+          file == TGSI_FILE_HW_ATOMIC;
 }
 
 

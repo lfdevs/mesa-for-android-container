@@ -29,7 +29,7 @@
 // Generation Command Line:
 //  ./rasterizer/codegen/gen_llvm_ir_macros.py
 //    --input
-//    /home/dylan/llvm-install/include/llvm/IR/IRBuilder.h
+//    /home/dylan/tigraine/llvm-install/include/llvm/IR/IRBuilder.h
 //    --output
 //    rasterizer/jitter
 //    --gen_h

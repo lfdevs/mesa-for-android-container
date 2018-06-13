@@ -2413,7 +2413,9 @@ blorp_copy(struct blorp_batch *batch,
                                dst_layer, ISL_FORMAT_UNSUPPORTED, true);
 
    struct brw_blorp_blit_prog_key wm_prog_key = {
-      .shader_type = BLORP_SHADER_TYPE_BLIT
+      .shader_type = BLORP_SHADER_TYPE_BLIT,
+      .need_src_offset = src_surf->tile_x_sa || src_surf->tile_y_sa,
+      .need_dst_offset = dst_surf->tile_x_sa || dst_surf->tile_y_sa,
    };
 
    const struct isl_format_layout *src_fmtl =
