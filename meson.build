@@ -836,7 +836,15 @@ endif
 # Check for GCC style atomics
 dep_atomic = null_dep
 
-if cc.compiles('int main() { int n; return __atomic_load_n(&n, __ATOMIC_ACQUIRE); }',
+if cc.compiles('''#include <stdint.h>
+                  int main() {
+                    struct {
+                      uint64_t *v;
+                    } x;
+                    return (int)__atomic_load_n(x.v, __ATOMIC_ACQUIRE) &
+                           (int)__atomic_add_fetch(x.v, (uint64_t)1, __ATOMIC_ACQ_REL);
+
+                  }''',
                name : 'GCC atomic builtins')
   pre_args += '-DUSE_GCC_ATOMIC_BUILTINS'
 
@@ -848,8 +856,11 @@ if cc.compiles('int main() { int n; return __atomic_load_n(&n, __ATOMIC_ACQUIRE)
   # as ARM.
   if not cc.links('''#include <stdint.h>
                      int main() {
-                       uint64_t n;
-                       return (int)__atomic_load_n(&n, __ATOMIC_ACQUIRE);
+                       struct {
+                         uint64_t *v;
+                       } x;
+                       return (int)__atomic_load_n(x.v, __ATOMIC_ACQUIRE) &
+                              (int)__atomic_add_fetch(x.v, (uint64_t)1, __ATOMIC_ACQ_REL);
                      }''',
                   name : 'GCC atomic builtins required -latomic')
     dep_atomic = cc.find_library('atomic')
@@ -873,7 +884,7 @@ endif
 # TODO: it should be possible to use an exe_wrapper to run the binary during
 # the build. 
 if meson.is_cross_build() 
-  if not (build_machine.cpu_family() == 'x86_64' and host_machine.cpu_family() == 'x86'
+  if not (build_machine.cpu_family().startswith('x86') and host_machine.cpu_family() == 'x86'
           and build_machine.system() == host_machine.system())
     message('Cross compiling to x86 from non-x86, disabling asm')
     with_asm = false

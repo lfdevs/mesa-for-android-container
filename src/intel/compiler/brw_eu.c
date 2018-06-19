@@ -126,6 +126,35 @@ brw_swizzle_immediate(enum brw_reg_type type, uint32_t x, unsigned swz)
    }
 }
 
+unsigned
+brw_get_default_exec_size(struct brw_codegen *p)
+{
+   return brw_inst_exec_size(p->devinfo, p->current);
+}
+
+unsigned
+brw_get_default_group(struct brw_codegen *p)
+{
+   if (p->devinfo->gen >= 6) {
+      unsigned group = brw_inst_qtr_control(p->devinfo, p->current) * 8;
+      if (p->devinfo->gen >= 7)
+         group += brw_inst_nib_control(p->devinfo, p->current) * 4;
+      return group;
+   } else {
+      unsigned qtr_control = brw_inst_qtr_control(p->devinfo, p->current);
+      if (qtr_control == BRW_COMPRESSION_COMPRESSED)
+         return 0;
+      else
+         return qtr_control * 8;
+   }
+}
+
+unsigned
+brw_get_default_access_mode(struct brw_codegen *p)
+{
+   return brw_inst_access_mode(p->devinfo, p->current);
+}
+
 void
 brw_set_default_exec_size(struct brw_codegen *p, unsigned value)
 {

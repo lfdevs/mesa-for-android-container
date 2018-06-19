@@ -969,11 +969,16 @@ submit_batch(struct brw_context *brw, int in_fence_fd, int *out_fence_fd)
       } else {
          /* Move the batch to the end of the validation list */
          struct drm_i915_gem_exec_object2 tmp;
+         struct brw_bo *tmp_bo;
          const unsigned index = batch->exec_count - 1;
 
          tmp = *entry;
          *entry = batch->validation_list[index];
          batch->validation_list[index] = tmp;
+
+         tmp_bo = batch->exec_bos[0];
+         batch->exec_bos[0] = batch->exec_bos[index];
+         batch->exec_bos[index] = tmp_bo;
       }
 
       ret = execbuffer(dri_screen->fd, batch, hw_ctx,

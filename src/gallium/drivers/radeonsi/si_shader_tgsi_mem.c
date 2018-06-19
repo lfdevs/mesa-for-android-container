@@ -276,9 +276,15 @@ static void image_fetch_coords(
 	struct si_shader_context *ctx = si_shader_context(bld_base);
 	LLVMBuilderRef builder = ctx->ac.builder;
 	unsigned target = inst->Memory.Texture;
-	const unsigned num_coords = tgsi_util_get_texture_coord_dim(target);
+	unsigned num_coords = tgsi_util_get_texture_coord_dim(target);
 	LLVMValueRef tmp;
 	int chan;
+
+	if (target == TGSI_TEXTURE_2D_MSAA ||
+	    target == TGSI_TEXTURE_2D_ARRAY_MSAA) {
+		/* Need the sample index as well. */
+		num_coords++;
+	}
 
 	for (chan = 0; chan < num_coords; ++chan) {
 		tmp = lp_build_emit_fetch(bld_base, inst, src, chan);

@@ -621,6 +621,101 @@ gen7_set_dp_scratch_message(struct brw_codegen *p,
    brw_inst_set_scratch_addr_offset(devinfo, inst, addr_offset);
 }
 
+struct brw_insn_state {
+   /* One of BRW_EXECUTE_* */
+   unsigned exec_size:3;
+
+   /* Group in units of channels */
+   unsigned group:5;
+
+   /* Compression control on gen4-5 */
+   bool compressed:1;
+
+   /* One of BRW_MASK_* */
+   unsigned mask_control:1;
+
+   bool saturate:1;
+
+   /* One of BRW_ALIGN_* */
+   unsigned access_mode:1;
+
+   /* One of BRW_PREDICATE_* */
+   enum brw_predicate predicate:4;
+
+   bool pred_inv:1;
+
+   /* Flag subreg.  Bottom bit is subreg, top bit is reg */
+   unsigned flag_subreg:2;
+
+   bool acc_wr_control:1;
+};
+
+static struct brw_insn_state
+brw_inst_get_state(const struct gen_device_info *devinfo,
+                   const brw_inst *insn)
+{
+   struct brw_insn_state state = { };
+
+   state.exec_size = brw_inst_exec_size(devinfo, insn);
+   if (devinfo->gen >= 6) {
+      state.group = brw_inst_qtr_control(devinfo, insn) * 8;
+      if (devinfo->gen >= 7)
+         state.group += brw_inst_nib_control(devinfo, insn) * 4;
+   } else {
+      unsigned qtr_control = brw_inst_qtr_control(devinfo, insn);
+      if (qtr_control == BRW_COMPRESSION_COMPRESSED) {
+         state.group = 0;
+         state.compressed = true;
+      } else {
+         state.group = qtr_control * 8;
+         state.compressed = false;
+      }
+   }
+   state.access_mode = brw_inst_access_mode(devinfo, insn);
+   state.mask_control = brw_inst_mask_control(devinfo, insn);
+   state.saturate = brw_inst_saturate(devinfo, insn);
+   state.predicate = brw_inst_pred_control(devinfo, insn);
+   state.pred_inv = brw_inst_pred_inv(devinfo, insn);
+
+   state.flag_subreg = brw_inst_flag_subreg_nr(devinfo, insn);
+   if (devinfo->gen >= 7)
+      state.flag_subreg += brw_inst_flag_reg_nr(devinfo, insn) * 2;
+
+   if (devinfo->gen >= 6)
+      state.acc_wr_control = brw_inst_acc_wr_control(devinfo, insn);
+
+   return state;
+}
+
+static void
+brw_inst_set_state(const struct gen_device_info *devinfo,
+                   brw_inst *insn,
+                   const struct brw_insn_state *state)
+{
+   brw_inst_set_exec_size(devinfo, insn, state->exec_size);
+   brw_inst_set_group(devinfo, insn, state->group);
+   brw_inst_set_compression(devinfo, insn, state->compressed);
+   brw_inst_set_access_mode(devinfo, insn, state->access_mode);
+   brw_inst_set_mask_control(devinfo, insn, state->mask_control);
+   brw_inst_set_saturate(devinfo, insn, state->saturate);
+   brw_inst_set_pred_control(devinfo, insn, state->predicate);
+   brw_inst_set_pred_inv(devinfo, insn, state->pred_inv);
+
+   if (is_3src(devinfo, brw_inst_opcode(devinfo, insn)) &&
+       state->access_mode == BRW_ALIGN_16) {
+      brw_inst_set_3src_a16_flag_subreg_nr(devinfo, insn, state->flag_subreg % 2);
+      if (devinfo->gen >= 7)
+         brw_inst_set_3src_a16_flag_reg_nr(devinfo, insn, state->flag_subreg / 2);
+   } else {
+      brw_inst_set_flag_subreg_nr(devinfo, insn, state->flag_subreg % 2);
+      if (devinfo->gen >= 7)
+         brw_inst_set_flag_reg_nr(devinfo, insn, state->flag_subreg / 2);
+   }
+
+   if (devinfo->gen >= 6)
+      brw_inst_set_acc_wr_control(devinfo, insn, state->acc_wr_control);
+}
+
 #define next_insn brw_next_insn
 brw_inst *
 brw_next_insn(struct brw_codegen *p, unsigned opcode)
@@ -635,9 +730,14 @@ brw_next_insn(struct brw_codegen *p, unsigned opcode)
 
    p->next_insn_offset += 16;
    insn = &p->store[p->nr_insn++];
-   memcpy(insn, p->current, sizeof(*insn));
 
+   memset(insn, 0, sizeof(*insn));
    brw_inst_set_opcode(devinfo, insn, opcode);
+
+   /* Apply the default instruction state */
+   struct brw_insn_state current = brw_inst_get_state(devinfo, p->current);
+   brw_inst_set_state(devinfo, insn, &current);
+
    return insn;
 }
 
@@ -997,7 +1097,7 @@ brw_MOV(struct brw_codegen *p, struct brw_reg dest, struct brw_reg src0)
     * each element twice.
     */
    if (devinfo->gen == 7 && !devinfo->is_haswell &&
-       brw_inst_access_mode(devinfo, p->current) == BRW_ALIGN_1 &&
+       brw_get_default_access_mode(p) == BRW_ALIGN_1 &&
        dest.type == BRW_REGISTER_TYPE_DF &&
        (src0.type == BRW_REGISTER_TYPE_F ||
         src0.type == BRW_REGISTER_TYPE_D ||
@@ -1119,7 +1219,7 @@ brw_inst *
 brw_F32TO16(struct brw_codegen *p, struct brw_reg dst, struct brw_reg src)
 {
    const struct gen_device_info *devinfo = p->devinfo;
-   const bool align16 = brw_inst_access_mode(devinfo, p->current) == BRW_ALIGN_16;
+   const bool align16 = brw_get_default_access_mode(p) == BRW_ALIGN_16;
    /* The F32TO16 instruction doesn't support 32-bit destination types in
     * Align1 mode, and neither does the Gen8 implementation in terms of a
     * converting MOV.  Gen7 does zero out the high 16 bits in Align16 mode as
@@ -1166,7 +1266,7 @@ brw_inst *
 brw_F16TO32(struct brw_codegen *p, struct brw_reg dst, struct brw_reg src)
 {
    const struct gen_device_info *devinfo = p->devinfo;
-   bool align16 = brw_inst_access_mode(devinfo, p->current) == BRW_ALIGN_16;
+   bool align16 = brw_get_default_access_mode(p) == BRW_ALIGN_16;
 
    if (align16) {
       assert(src.type == BRW_REGISTER_TYPE_UD);
@@ -1337,8 +1437,7 @@ gen6_IF(struct brw_codegen *p, enum brw_conditional_mod conditional,
    insn = next_insn(p, BRW_OPCODE_IF);
 
    brw_set_dest(p, insn, brw_imm_w(0));
-   brw_inst_set_exec_size(devinfo, insn,
-                          brw_inst_exec_size(devinfo, p->current));
+   brw_inst_set_exec_size(devinfo, insn, brw_get_default_exec_size(p));
    brw_inst_set_gen6_jump_count(devinfo, insn, 0);
    brw_set_src0(p, insn, src0);
    brw_set_src1(p, insn, src1);
@@ -1624,8 +1723,7 @@ brw_BREAK(struct brw_codegen *p)
                                   p->if_depth_in_loop[p->loop_stack_depth]);
    }
    brw_inst_set_qtr_control(devinfo, insn, BRW_COMPRESSION_NONE);
-   brw_inst_set_exec_size(devinfo, insn,
-                          brw_inst_exec_size(devinfo, p->current));
+   brw_inst_set_exec_size(devinfo, insn, brw_get_default_exec_size(p));
 
    return insn;
 }
@@ -1650,8 +1748,7 @@ brw_CONT(struct brw_codegen *p)
                                   p->if_depth_in_loop[p->loop_stack_depth]);
    }
    brw_inst_set_qtr_control(devinfo, insn, BRW_COMPRESSION_NONE);
-   brw_inst_set_exec_size(devinfo, insn,
-                          brw_inst_exec_size(devinfo, p->current));
+   brw_inst_set_exec_size(devinfo, insn, brw_get_default_exec_size(p));
    return insn;
 }
 
@@ -1671,8 +1768,7 @@ gen6_HALT(struct brw_codegen *p)
    }
 
    brw_inst_set_qtr_control(devinfo, insn, BRW_COMPRESSION_NONE);
-   brw_inst_set_exec_size(devinfo, insn,
-                          brw_inst_exec_size(devinfo, p->current));
+   brw_inst_set_exec_size(devinfo, insn, brw_get_default_exec_size(p));
    return insn;
 }
 
@@ -1778,8 +1874,7 @@ brw_WHILE(struct brw_codegen *p)
          brw_set_src1(p, insn, retype(brw_null_reg(), BRW_REGISTER_TYPE_D));
       }
 
-      brw_inst_set_exec_size(devinfo, insn,
-                             brw_inst_exec_size(devinfo, p->current));
+      brw_inst_set_exec_size(devinfo, insn, brw_get_default_exec_size(p));
 
    } else {
       if (p->single_program_flow) {
@@ -2207,7 +2302,7 @@ void brw_oword_block_read(struct brw_codegen *p,
    const unsigned target_cache =
       (devinfo->gen >= 6 ? GEN6_SFID_DATAPORT_CONSTANT_CACHE :
        BRW_DATAPORT_READ_TARGET_DATA_CACHE);
-   const unsigned exec_size = 1 << brw_inst_exec_size(devinfo, p->current);
+   const unsigned exec_size = 1 << brw_get_default_exec_size(p);
 
    /* On newer hardware, offset is in units of owords. */
    if (devinfo->gen >= 6)
@@ -2277,7 +2372,7 @@ void brw_fb_WRITE(struct brw_codegen *p,
    unsigned msg_type;
    struct brw_reg dest, src0;
 
-   if (brw_inst_exec_size(devinfo, p->current) >= BRW_EXECUTE_16)
+   if (brw_get_default_exec_size(p) >= BRW_EXECUTE_16)
       dest = retype(vec16(brw_null_reg()), BRW_REGISTER_TYPE_UW);
    else
       dest = retype(vec8(brw_null_reg()), BRW_REGISTER_TYPE_UW);
@@ -2330,7 +2425,7 @@ gen9_fb_READ(struct brw_codegen *p,
    const struct gen_device_info *devinfo = p->devinfo;
    assert(devinfo->gen >= 9);
    const unsigned msg_subtype =
-      brw_inst_exec_size(devinfo, p->current) == BRW_EXECUTE_16 ? 0 : 1;
+      brw_get_default_exec_size(p) == BRW_EXECUTE_16 ? 0 : 1;
    brw_inst *insn = next_insn(p, BRW_OPCODE_SENDC);
 
    brw_set_dest(p, insn, dst);
@@ -2341,8 +2436,7 @@ gen9_fb_READ(struct brw_codegen *p,
                            GEN6_SFID_DATAPORT_RENDER_CACHE,
                            msg_length, true /* header_present */,
                            response_length);
-   brw_inst_set_rt_slot_group(devinfo, insn,
-                              brw_inst_qtr_control(devinfo, p->current) / 2);
+   brw_inst_set_rt_slot_group(devinfo, insn, brw_get_default_group(p) / 16);
 
    return insn;
 }
@@ -2837,11 +2931,9 @@ brw_surface_payload_size(struct brw_codegen *p,
                          bool has_simd4x2,
                          bool has_simd16)
 {
-   if (has_simd4x2 &&
-       brw_inst_access_mode(p->devinfo, p->current) == BRW_ALIGN_16)
+   if (has_simd4x2 && brw_get_default_access_mode(p) == BRW_ALIGN_16)
       return 1;
-   else if (has_simd16 &&
-            brw_inst_exec_size(p->devinfo, p->current) == BRW_EXECUTE_16)
+   else if (has_simd16 && brw_get_default_exec_size(p) == BRW_EXECUTE_16)
       return 2 * num_channels;
    else
       return num_channels;
@@ -2859,8 +2951,8 @@ brw_set_dp_untyped_atomic_message(struct brw_codegen *p,
       (response_expected ? 1 << 5 : 0); /* Return data expected */
 
    if (devinfo->gen >= 8 || devinfo->is_haswell) {
-      if (brw_inst_access_mode(devinfo, p->current) == BRW_ALIGN_1) {
-         if (brw_inst_exec_size(devinfo, p->current) != BRW_EXECUTE_16)
+      if (brw_get_default_access_mode(p) == BRW_ALIGN_1) {
+         if (brw_get_default_exec_size(p) != BRW_EXECUTE_16)
             msg_control |= 1 << 4; /* SIMD8 mode */
 
          brw_inst_set_dp_msg_type(devinfo, insn,
@@ -2873,7 +2965,7 @@ brw_set_dp_untyped_atomic_message(struct brw_codegen *p,
       brw_inst_set_dp_msg_type(devinfo, insn,
                                GEN7_DATAPORT_DC_UNTYPED_ATOMIC_OP);
 
-      if (brw_inst_exec_size(devinfo, p->current) != BRW_EXECUTE_16)
+      if (brw_get_default_exec_size(p) != BRW_EXECUTE_16)
          msg_control |= 1 << 4; /* SIMD8 mode */
    }
 
@@ -2894,7 +2986,7 @@ brw_untyped_atomic(struct brw_codegen *p,
    const unsigned sfid = (devinfo->gen >= 8 || devinfo->is_haswell ?
                           HSW_SFID_DATAPORT_DATA_CACHE_1 :
                           GEN7_SFID_DATAPORT_DATA_CACHE);
-   const bool align1 = brw_inst_access_mode(devinfo, p->current) == BRW_ALIGN_1;
+   const bool align1 = brw_get_default_access_mode(p) == BRW_ALIGN_1;
    /* Mask out unused components -- This is especially important in Align16
     * mode on generations that don't have native support for SIMD4x2 atomics,
     * because unused but enabled components will cause the dataport to perform
@@ -2921,8 +3013,8 @@ brw_set_dp_untyped_surface_read_message(struct brw_codegen *p,
    /* Set mask of 32-bit channels to drop. */
    unsigned msg_control = 0xf & (0xf << num_channels);
 
-   if (brw_inst_access_mode(devinfo, p->current) == BRW_ALIGN_1) {
-      if (brw_inst_exec_size(devinfo, p->current) == BRW_EXECUTE_16)
+   if (brw_get_default_access_mode(p) == BRW_ALIGN_1) {
+      if (brw_get_default_exec_size(p) == BRW_EXECUTE_16)
          msg_control |= 1 << 4; /* SIMD16 mode */
       else
          msg_control |= 2 << 4; /* SIMD8 mode */
@@ -2965,8 +3057,8 @@ brw_set_dp_untyped_surface_write_message(struct brw_codegen *p,
    /* Set mask of 32-bit channels to drop. */
    unsigned msg_control = 0xf & (0xf << num_channels);
 
-   if (brw_inst_access_mode(devinfo, p->current) == BRW_ALIGN_1) {
-      if (brw_inst_exec_size(devinfo, p->current) == BRW_EXECUTE_16)
+   if (brw_get_default_access_mode(p) == BRW_ALIGN_1) {
+      if (brw_get_default_exec_size(p) == BRW_EXECUTE_16)
          msg_control |= 1 << 4; /* SIMD16 mode */
       else
          msg_control |= 2 << 4; /* SIMD8 mode */
@@ -2996,7 +3088,7 @@ brw_untyped_surface_write(struct brw_codegen *p,
    const unsigned sfid = (devinfo->gen >= 8 || devinfo->is_haswell ?
                           HSW_SFID_DATAPORT_DATA_CACHE_1 :
                           GEN7_SFID_DATAPORT_DATA_CACHE);
-   const bool align1 = brw_inst_access_mode(devinfo, p->current) == BRW_ALIGN_1;
+   const bool align1 = brw_get_default_access_mode(p) == BRW_ALIGN_1;
    /* Mask out unused components -- See comment in brw_untyped_atomic(). */
    const unsigned mask = devinfo->gen == 7 && !devinfo->is_haswell && !align1 ?
                           WRITEMASK_X : WRITEMASK_XYZW;
@@ -3034,7 +3126,7 @@ brw_byte_scattered_read(struct brw_codegen *p,
 {
    const struct gen_device_info *devinfo = p->devinfo;
    assert(devinfo->gen > 7 || devinfo->is_haswell);
-   assert(brw_inst_access_mode(devinfo, p->current) == BRW_ALIGN_1);
+   assert(brw_get_default_access_mode(p) == BRW_ALIGN_1);
    const unsigned sfid =  GEN7_SFID_DATAPORT_DATA_CACHE;
 
    struct brw_inst *insn = brw_send_indirect_surface_message(
@@ -3045,7 +3137,7 @@ brw_byte_scattered_read(struct brw_codegen *p,
    unsigned msg_control =
       brw_byte_scattered_data_element_from_bit_size(bit_size) << 2;
 
-   if (brw_inst_exec_size(devinfo, p->current) == BRW_EXECUTE_16)
+   if (brw_get_default_exec_size(p) == BRW_EXECUTE_16)
       msg_control |= 1; /* SIMD16 mode */
    else
       msg_control |= 0; /* SIMD8 mode */
@@ -3065,7 +3157,7 @@ brw_byte_scattered_write(struct brw_codegen *p,
 {
    const struct gen_device_info *devinfo = p->devinfo;
    assert(devinfo->gen > 7 || devinfo->is_haswell);
-   assert(brw_inst_access_mode(devinfo, p->current) == BRW_ALIGN_1);
+   assert(brw_get_default_access_mode(p) == BRW_ALIGN_1);
    const unsigned sfid = GEN7_SFID_DATAPORT_DATA_CACHE;
 
    struct brw_inst *insn = brw_send_indirect_surface_message(
@@ -3075,7 +3167,7 @@ brw_byte_scattered_write(struct brw_codegen *p,
    unsigned msg_control =
       brw_byte_scattered_data_element_from_bit_size(bit_size) << 2;
 
-   if (brw_inst_exec_size(devinfo, p->current) == BRW_EXECUTE_16)
+   if (brw_get_default_exec_size(p) == BRW_EXECUTE_16)
       msg_control |= 1;
    else
       msg_control |= 0;
@@ -3097,8 +3189,8 @@ brw_set_dp_typed_atomic_message(struct brw_codegen *p,
       (response_expected ? 1 << 5 : 0); /* Return data expected */
 
    if (devinfo->gen >= 8 || devinfo->is_haswell) {
-      if (brw_inst_access_mode(devinfo, p->current) == BRW_ALIGN_1) {
-         if (brw_inst_qtr_control(devinfo, p->current) % 2 == 1)
+      if (brw_get_default_access_mode(p) == BRW_ALIGN_1) {
+         if ((brw_get_default_group(p) / 8) % 2 == 1)
             msg_control |= 1 << 4; /* Use high 8 slots of the sample mask */
 
          brw_inst_set_dp_msg_type(devinfo, insn,
@@ -3112,7 +3204,7 @@ brw_set_dp_typed_atomic_message(struct brw_codegen *p,
       brw_inst_set_dp_msg_type(devinfo, insn,
                                GEN7_DATAPORT_RC_TYPED_ATOMIC_OP);
 
-      if (brw_inst_qtr_control(devinfo, p->current) % 2 == 1)
+      if ((brw_get_default_group(p) / 8) % 2 == 1)
          msg_control |= 1 << 4; /* Use high 8 slots of the sample mask */
    }
 
@@ -3132,7 +3224,7 @@ brw_typed_atomic(struct brw_codegen *p,
    const unsigned sfid = (devinfo->gen >= 8 || devinfo->is_haswell ?
                           HSW_SFID_DATAPORT_DATA_CACHE_1 :
                           GEN6_SFID_DATAPORT_RENDER_CACHE);
-   const bool align1 = (brw_inst_access_mode(devinfo, p->current) == BRW_ALIGN_1);
+   const bool align1 = brw_get_default_access_mode(p) == BRW_ALIGN_1;
    /* Mask out unused components -- See comment in brw_untyped_atomic(). */
    const unsigned mask = align1 ? WRITEMASK_XYZW : WRITEMASK_X;
    struct brw_inst *insn = brw_send_indirect_surface_message(
@@ -3155,8 +3247,8 @@ brw_set_dp_typed_surface_read_message(struct brw_codegen *p,
    unsigned msg_control = 0xf & (0xf << num_channels);
 
    if (devinfo->gen >= 8 || devinfo->is_haswell) {
-      if (brw_inst_access_mode(devinfo, p->current) == BRW_ALIGN_1) {
-         if (brw_inst_qtr_control(devinfo, p->current) % 2 == 1)
+      if (brw_get_default_access_mode(p) == BRW_ALIGN_1) {
+         if ((brw_get_default_group(p) / 8) % 2 == 1)
             msg_control |= 2 << 4; /* Use high 8 slots of the sample mask */
          else
             msg_control |= 1 << 4; /* Use low 8 slots of the sample mask */
@@ -3165,8 +3257,8 @@ brw_set_dp_typed_surface_read_message(struct brw_codegen *p,
       brw_inst_set_dp_msg_type(devinfo, insn,
                                HSW_DATAPORT_DC_PORT1_TYPED_SURFACE_READ);
    } else {
-      if (brw_inst_access_mode(devinfo, p->current) == BRW_ALIGN_1) {
-         if (brw_inst_qtr_control(devinfo, p->current) % 2 == 1)
+      if (brw_get_default_access_mode(p) == BRW_ALIGN_1) {
+         if ((brw_get_default_group(p) / 8) % 2 == 1)
             msg_control |= 1 << 5; /* Use high 8 slots of the sample mask */
       }
 
@@ -3210,8 +3302,8 @@ brw_set_dp_typed_surface_write_message(struct brw_codegen *p,
    unsigned msg_control = 0xf & (0xf << num_channels);
 
    if (devinfo->gen >= 8 || devinfo->is_haswell) {
-      if (brw_inst_access_mode(devinfo, p->current) == BRW_ALIGN_1) {
-         if (brw_inst_qtr_control(devinfo, p->current) % 2 == 1)
+      if (brw_get_default_access_mode(p) == BRW_ALIGN_1) {
+         if ((brw_get_default_group(p) / 8) % 2 == 1)
             msg_control |= 2 << 4; /* Use high 8 slots of the sample mask */
          else
             msg_control |= 1 << 4; /* Use low 8 slots of the sample mask */
@@ -3221,8 +3313,8 @@ brw_set_dp_typed_surface_write_message(struct brw_codegen *p,
                                HSW_DATAPORT_DC_PORT1_TYPED_SURFACE_WRITE);
 
    } else {
-      if (brw_inst_access_mode(devinfo, p->current) == BRW_ALIGN_1) {
-         if (brw_inst_qtr_control(devinfo, p->current) % 2 == 1)
+      if (brw_get_default_access_mode(p) == BRW_ALIGN_1) {
+         if ((brw_get_default_group(p) / 8) % 2 == 1)
             msg_control |= 1 << 5; /* Use high 8 slots of the sample mask */
       }
 
@@ -3245,7 +3337,7 @@ brw_typed_surface_write(struct brw_codegen *p,
    const unsigned sfid = (devinfo->gen >= 8 || devinfo->is_haswell ?
                           HSW_SFID_DATAPORT_DATA_CACHE_1 :
                           GEN6_SFID_DATAPORT_RENDER_CACHE);
-   const bool align1 = (brw_inst_access_mode(devinfo, p->current) == BRW_ALIGN_1);
+   const bool align1 = brw_get_default_access_mode(p) == BRW_ALIGN_1;
    /* Mask out unused components -- See comment in brw_untyped_atomic(). */
    const unsigned mask = (devinfo->gen == 7 && !devinfo->is_haswell && !align1 ?
                           WRITEMASK_X : WRITEMASK_XYZW);
@@ -3345,7 +3437,7 @@ brw_pixel_interpolator_query(struct brw_codegen *p,
 {
    const struct gen_device_info *devinfo = p->devinfo;
    struct brw_inst *insn;
-   const uint16_t exec_size = brw_inst_exec_size(devinfo, p->current);
+   const uint16_t exec_size = brw_get_default_exec_size(p);
 
    /* brw_send_indirect_message will automatically use a direct send message
     * if data is actually immediate.
@@ -3369,8 +3461,8 @@ brw_find_live_channel(struct brw_codegen *p, struct brw_reg dst,
                       struct brw_reg mask)
 {
    const struct gen_device_info *devinfo = p->devinfo;
-   const unsigned exec_size = 1 << brw_inst_exec_size(devinfo, p->current);
-   const unsigned qtr_control = brw_inst_qtr_control(devinfo, p->current);
+   const unsigned exec_size = 1 << brw_get_default_exec_size(p);
+   const unsigned qtr_control = brw_get_default_group(p) / 8;
    brw_inst *inst;
 
    assert(devinfo->gen >= 7);
@@ -3378,7 +3470,7 @@ brw_find_live_channel(struct brw_codegen *p, struct brw_reg dst,
 
    brw_push_insn_state(p);
 
-   if (brw_inst_access_mode(devinfo, p->current) == BRW_ALIGN_1) {
+   if (brw_get_default_access_mode(p) == BRW_ALIGN_1) {
       brw_set_default_mask_control(p, BRW_MASK_DISABLE);
 
       if (devinfo->gen >= 8) {
@@ -3485,7 +3577,7 @@ brw_broadcast(struct brw_codegen *p,
               struct brw_reg idx)
 {
    const struct gen_device_info *devinfo = p->devinfo;
-   const bool align1 = brw_inst_access_mode(devinfo, p->current) == BRW_ALIGN_1;
+   const bool align1 = brw_get_default_access_mode(p) == BRW_ALIGN_1;
    brw_inst *inst;
 
    brw_push_insn_state(p);

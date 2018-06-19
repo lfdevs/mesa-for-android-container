@@ -389,6 +389,9 @@ enum isl_format {
    ISL_FORMAT_GEN9_CCS_64BPP,
    ISL_FORMAT_GEN9_CCS_128BPP,
 
+   /* An upper bound on the supported format enumerations */
+   ISL_NUM_FORMATS,
+
    /* Hardware doesn't understand this out-of-band value */
    ISL_FORMAT_UNSUPPORTED =                             UINT16_MAX,
 };
@@ -1422,6 +1425,8 @@ isl_device_get_sample_counts(struct isl_device *dev);
 static inline const struct isl_format_layout * ATTRIBUTE_CONST
 isl_format_get_layout(enum isl_format fmt)
 {
+   assert(fmt != ISL_FORMAT_UNSUPPORTED);
+   assert(fmt < ISL_NUM_FORMATS);
    return &isl_format_layouts[fmt];
 }
 
@@ -1430,7 +1435,7 @@ bool isl_format_is_valid(enum isl_format);
 static inline const char * ATTRIBUTE_CONST
 isl_format_get_name(enum isl_format fmt)
 {
-   return isl_format_layouts[fmt].name;
+   return isl_format_get_layout(fmt)->name;
 }
 
 bool isl_format_supports_rendering(const struct gen_device_info *devinfo,
@@ -1545,7 +1550,7 @@ isl_format_block_is_1x1x1(enum isl_format fmt)
 static inline bool
 isl_format_is_srgb(enum isl_format fmt)
 {
-   return isl_format_layouts[fmt].colorspace == ISL_COLORSPACE_SRGB;
+   return isl_format_get_layout(fmt)->colorspace == ISL_COLORSPACE_SRGB;
 }
 
 enum isl_format isl_format_srgb_to_linear(enum isl_format fmt);
@@ -1555,10 +1560,13 @@ isl_format_is_rgb(enum isl_format fmt)
 {
    if (isl_format_is_yuv(fmt))
       return false;
-   return isl_format_layouts[fmt].channels.r.bits > 0 &&
-          isl_format_layouts[fmt].channels.g.bits > 0 &&
-          isl_format_layouts[fmt].channels.b.bits > 0 &&
-          isl_format_layouts[fmt].channels.a.bits == 0;
+
+   const struct isl_format_layout *fmtl = isl_format_get_layout(fmt);
+
+   return fmtl->channels.r.bits > 0 &&
+          fmtl->channels.g.bits > 0 &&
+          fmtl->channels.b.bits > 0 &&
+          fmtl->channels.a.bits == 0;
 }
 
 enum isl_format isl_format_rgb_to_rgba(enum isl_format rgb) ATTRIBUTE_CONST;

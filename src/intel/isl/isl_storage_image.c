@@ -312,6 +312,6 @@ isl_buffer_fill_image_param(const struct isl_device *dev,
 {
    *param = image_param_defaults;
 
-   param->stride[0] = isl_format_layouts[format].bpb / 8;
+   param->stride[0] = isl_format_get_layout(format)->bpb / 8;
    param->size[0] = size / param->stride[0];
 }

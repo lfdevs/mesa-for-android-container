@@ -178,7 +178,7 @@ struct si_screen {
 
 	struct radeon_info		info;
 	uint64_t			debug_flags;
-	char				renderer_string[100];
+	char				renderer_string[183];
 
 	unsigned			gs_table_depth;
 	unsigned			tess_offchip_block_dw_size;

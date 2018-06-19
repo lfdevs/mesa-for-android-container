@@ -915,8 +915,10 @@ miptree_create_for_planar_image(struct brw_context *brw,
                                      image->strides[index],
                                      tiling,
                                      MIPTREE_CREATE_NO_AUX);
-      if (mt == NULL)
+      if (mt == NULL) {
+         intel_miptree_release(&planar_mt);
          return NULL;
+      }
 
       mt->target = target;
 

@@ -200,6 +200,14 @@ emit_urb_config(struct blorp_batch *batch,
    blorp_emit_urb_config(batch, vs_entry_size, sf_entry_size);
 }
 
+#if GEN_GEN >= 7
+static void
+blorp_emit_memcpy(struct blorp_batch *batch,
+                  struct blorp_address dst,
+                  struct blorp_address src,
+                  uint32_t size);
+#endif
+
 static void
 blorp_emit_vertex_data(struct blorp_batch *batch,
                        const struct blorp_params *params,
@@ -260,6 +268,31 @@ blorp_emit_input_varying_data(struct blorp_batch *batch,
    }
 
    blorp_flush_range(batch, data, *size);
+
+   if (params->dst_clear_color_as_input) {
+#if GEN_GEN >= 7
+      /* In this case, the clear color isn't known statically and instead
+       * comes in through an indirect which we have to copy into the vertex
+       * buffer before we execute the 3DPRIMITIVE.  We already copied the
+       * value of params->wm_inputs.clear_color into the vertex buffer in the
+       * loop above.  Now we emit code to stomp it from the GPU with the
+       * actual clear color value.
+       */
+      assert(num_varyings == 1);
+
+      /* The clear color is the first thing after the header */
+      struct blorp_address clear_color_input_addr = *addr;
+      clear_color_input_addr.offset += 16;
+
+      const unsigned clear_color_size =
+         GEN_GEN < 10 ? batch->blorp->isl_dev->ss.clear_value_size : 4 * 4;
+      blorp_emit_memcpy(batch, clear_color_input_addr,
+                        params->dst.clear_color_addr,
+                        clear_color_size);
+#else
+      unreachable("MCS partial resolve is not a thing on SNB and earlier");
+#endif
+   }
 }
 
 static void
@@ -298,6 +331,7 @@ blorp_emit_vertex_buffers(struct blorp_batch *batch,
                           const struct blorp_params *params)
 {
    struct GENX(VERTEX_BUFFER_STATE) vb[3];
+   uint32_t num_vbs = 2;
    memset(vb, 0, sizeof(vb));
 
    struct blorp_address addr;
@@ -307,15 +341,6 @@ blorp_emit_vertex_buffers(struct blorp_batch *batch,
 
    blorp_emit_input_varying_data(batch, params, &addr, &size);
    blorp_fill_vertex_buffer_state(batch, vb, 1, addr, size, 0);
-
-   uint32_t num_vbs = 2;
-   if (params->dst_clear_color_as_input) {
-      const unsigned clear_color_size =
-         GEN_GEN < 10 ? batch->blorp->isl_dev->ss.clear_value_size : 4 * 4;
-      blorp_fill_vertex_buffer_state(batch, vb, num_vbs++,
-                                     params->dst.clear_color_addr,
-                                     clear_color_size, 0);
-   }
 
    const unsigned num_dwords = 1 + num_vbs * GENX(VERTEX_BUFFER_STATE_length);
    uint32_t *dw = blorp_emitn(batch, GENX(3DSTATE_VERTEX_BUFFERS), num_dwords);
@@ -449,49 +474,21 @@ blorp_emit_vertex_elements(struct blorp_batch *batch,
    };
    slot++;
 
-   if (params->dst_clear_color_as_input) {
-      /* If the caller wants the destination indirect clear color, redirect
-       * to vertex buffer 2 where we stored it earlier.  The only users of
-       * an indirect clear color source have that as their only vertex
-       * attribute.
-       */
-      assert(num_varyings == 1);
+   for (unsigned i = 0; i < num_varyings; ++i) {
       ve[slot] = (struct GENX(VERTEX_ELEMENT_STATE)) {
-         .VertexBufferIndex = 2,
+         .VertexBufferIndex = 1,
          .Valid = true,
-         .SourceElementOffset = 0,
-         .Component0Control = VFCOMP_STORE_SRC,
-#if GEN_GEN >= 9
          .SourceElementFormat = ISL_FORMAT_R32G32B32A32_FLOAT,
+         .SourceElementOffset = 16 + i * 4 * sizeof(float),
+         .Component0Control = VFCOMP_STORE_SRC,
          .Component1Control = VFCOMP_STORE_SRC,
          .Component2Control = VFCOMP_STORE_SRC,
          .Component3Control = VFCOMP_STORE_SRC,
-#else
-         /* Clear colors on gen7-8 are for bits out of one dword */
-         .SourceElementFormat = ISL_FORMAT_R32_FLOAT,
-         .Component1Control = VFCOMP_STORE_0,
-         .Component2Control = VFCOMP_STORE_0,
-         .Component3Control = VFCOMP_STORE_0,
+#if GEN_GEN <= 5
+         .DestinationElementOffset = slot * 4,
 #endif
       };
       slot++;
-   } else {
-      for (unsigned i = 0; i < num_varyings; ++i) {
-         ve[slot] = (struct GENX(VERTEX_ELEMENT_STATE)) {
-            .VertexBufferIndex = 1,
-            .Valid = true,
-            .SourceElementFormat = ISL_FORMAT_R32G32B32A32_FLOAT,
-            .SourceElementOffset = 16 + i * 4 * sizeof(float),
-            .Component0Control = VFCOMP_STORE_SRC,
-            .Component1Control = VFCOMP_STORE_SRC,
-            .Component2Control = VFCOMP_STORE_SRC,
-            .Component3Control = VFCOMP_STORE_SRC,
-#if GEN_GEN <= 5
-            .DestinationElementOffset = slot * 4,
-#endif
-         };
-         slot++;
-      }
    }
 
    const unsigned num_dwords =
@@ -1244,7 +1241,7 @@ blorp_emit_pipeline(struct blorp_batch *batch,
 
 #endif /* GEN_GEN >= 6 */
 
-#if GEN_GEN >= 7 && GEN_GEN < 10
+#if GEN_GEN >= 7
 static void
 blorp_emit_memcpy(struct blorp_batch *batch,
                   struct blorp_address dst,

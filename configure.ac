@@ -433,26 +433,40 @@ fi
 AM_CONDITIONAL([SSE41_SUPPORTED], [test x$SSE41_SUPPORTED = x1])
 AC_SUBST([SSE41_CFLAGS], $SSE41_CFLAGS)
 
-dnl Check for new-style atomic builtins
-AC_COMPILE_IFELSE([AC_LANG_SOURCE([[
+dnl Check for new-style atomic builtins. We first check without linking to
+dnl -latomic.
+AC_MSG_CHECKING(whether __atomic_load_n is supported)
+AC_LINK_IFELSE([AC_LANG_SOURCE([[
+#include <stdint.h>
 int main() {
-    int n;
-    return __atomic_load_n(&n, __ATOMIC_ACQUIRE);
-}]])], GCC_ATOMIC_BUILTINS_SUPPORTED=1)
-if test "x$GCC_ATOMIC_BUILTINS_SUPPORTED" = x1; then
+    struct {
+        uint64_t *v;
+    } x;
+    return (int)__atomic_load_n(x.v, __ATOMIC_ACQUIRE) &
+           (int)__atomic_add_fetch(x.v, (uint64_t)1, __ATOMIC_ACQ_REL);
+}]])], GCC_ATOMIC_BUILTINS_SUPPORTED=yes, GCC_ATOMIC_BUILTINS_SUPPORTED=no)
+
+dnl If that didn't work, we try linking with -latomic, which is needed on some
+dnl platforms.
+if test "x$GCC_ATOMIC_BUILTINS_SUPPORTED" != xyes; then
+   save_LDFLAGS=$LDFLAGS
+   LDFLAGS="$LDFLAGS -latomic"
+   AC_LINK_IFELSE([AC_LANG_SOURCE([[
+   #include <stdint.h>
+   int main() {
+        struct {
+            uint64_t *v;
+        } x;
+        return (int)__atomic_load_n(x.v, __ATOMIC_ACQUIRE) &
+               (int)__atomic_add_fetch(x.v, (uint64_t)1, __ATOMIC_ACQ_REL);
+   }]])], GCC_ATOMIC_BUILTINS_SUPPORTED=yes LIBATOMIC_LIBS="-latomic",
+          GCC_ATOMIC_BUILTINS_SUPPORTED=no)
+   LDFLAGS=$save_LDFLAGS
+fi
+AC_MSG_RESULT($GCC_ATOMIC_BUILTINS_SUPPORTED)
+
+if test "x$GCC_ATOMIC_BUILTINS_SUPPORTED" = xyes; then
     DEFINES="$DEFINES -DUSE_GCC_ATOMIC_BUILTINS"
-    dnl On some platforms, new-style atomics need a helper library
-    AC_MSG_CHECKING(whether -latomic is needed)
-    AC_LINK_IFELSE([AC_LANG_SOURCE([[
-    #include <stdint.h>
-    uint64_t v;
-    int main() {
-        return (int)__atomic_load_n(&v, __ATOMIC_ACQUIRE);
-    }]])], GCC_ATOMIC_BUILTINS_NEED_LIBATOMIC=no, GCC_ATOMIC_BUILTINS_NEED_LIBATOMIC=yes)
-    AC_MSG_RESULT($GCC_ATOMIC_BUILTINS_NEED_LIBATOMIC)
-    if test "x$GCC_ATOMIC_BUILTINS_NEED_LIBATOMIC" = xyes; then
-        LIBATOMIC_LIBS="-latomic"
-    fi
 fi
 AC_SUBST([LIBATOMIC_LIBS])
 
@@ -2085,6 +2099,9 @@ if test -n "$with_vulkan_drivers"; then
             PKG_CHECK_MODULES([AMDGPU], [libdrm >= $LIBDRM_AMDGPU_REQUIRED libdrm_amdgpu >= $LIBDRM_AMDGPU_REQUIRED])
             radeon_llvm_check $LLVM_REQUIRED_RADV "radv"
             require_x11_dri3 "radv"
+            if test "x$acv_mako_found" = xno; then
+                AC_MSG_ERROR([Python mako module v$PYTHON_MAKO_REQUIRED or higher not found])
+            fi
             HAVE_RADEON_VULKAN=yes
             ;;
         *)

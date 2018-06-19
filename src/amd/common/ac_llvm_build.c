@@ -2866,7 +2866,7 @@ static LLVMValueRef
 ac_build_set_inactive(struct ac_llvm_context *ctx, LLVMValueRef src,
 		      LLVMValueRef inactive)
 {
-	char name[32], type[8];
+	char name[33], type[8];
 	LLVMTypeRef src_type = LLVMTypeOf(src);
 	src = ac_to_integer(ctx, src);
 	inactive = ac_to_integer(ctx, inactive);

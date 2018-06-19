@@ -107,6 +107,9 @@ struct brw_codegen {
 
 void brw_pop_insn_state( struct brw_codegen *p );
 void brw_push_insn_state( struct brw_codegen *p );
+unsigned brw_get_default_exec_size(struct brw_codegen *p);
+unsigned brw_get_default_group(struct brw_codegen *p);
+unsigned brw_get_default_access_mode(struct brw_codegen *p);
 void brw_set_default_exec_size(struct brw_codegen *p, unsigned value);
 void brw_set_default_mask_control( struct brw_codegen *p, unsigned value );
 void brw_set_default_saturate( struct brw_codegen *p, bool enable );

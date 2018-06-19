@@ -1463,7 +1463,7 @@ glXImportContextEXT(Display *dpy, GLXContextID contextID)
    if (_XReply(dpy, (xReply *) & reply, 0, False) &&
        reply.n < (INT32_MAX / 2)) {
 
-      for (i = 0; i < reply.n * 2; i++) {
+      for (i = 0; i < reply.n; i++) {
          int prop[2];
 
          _XRead(dpy, (char *)prop, sizeof(prop));

@@ -1931,6 +1931,7 @@ CLEANFILES = $(VULKAN_GENERATED_FILES) vulkan/dev_icd.json \
 # ----------------------------------------------------------------------------
 EXTRA_DIST = blorp/meson.build common/meson.build compiler/meson.build \
 	dev/meson.build genxml/meson.build isl/meson.build \
+	tools/intel_sanitize_gpu.c tools/intel_sanitize_gpu.in \
 	tools/meson.build vulkan/meson.build meson.build blorp/TODO \
 	compiler/brw_nir_trig_workarounds.py $(GENXML_XML_FILES) \
 	$(GENXML_GENERATED_FILES) genxml/genX_pack.h \

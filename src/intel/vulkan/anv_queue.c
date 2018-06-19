@@ -311,18 +311,21 @@ anv_fence_impl_cleanup(struct anv_device *device,
    switch (impl->type) {
    case ANV_FENCE_TYPE_NONE:
       /* Dummy.  Nothing to do */
-      return;
+      break;
 
    case ANV_FENCE_TYPE_BO:
       anv_bo_pool_free(&device->batch_bo_pool, &impl->bo.bo);
-      return;
+      break;
 
    case ANV_FENCE_TYPE_SYNCOBJ:
       anv_gem_syncobj_destroy(device, impl->syncobj);
-      return;
+      break;
+
+   default:
+      unreachable("Invalid fence type");
    }
 
-   unreachable("Invalid fence type");
+   impl->type = ANV_FENCE_TYPE_NONE;
 }
 
 void anv_DestroyFence(
@@ -359,10 +362,8 @@ VkResult anv_ResetFences(
        *    first restored. The remaining operations described therefore
        *    operate on the restored payload.
        */
-      if (fence->temporary.type != ANV_FENCE_TYPE_NONE) {
+      if (fence->temporary.type != ANV_FENCE_TYPE_NONE)
          anv_fence_impl_cleanup(device, &fence->temporary);
-         fence->temporary.type = ANV_FENCE_TYPE_NONE;
-      }
 
       struct anv_fence_impl *impl = &fence->permanent;
 
@@ -914,22 +915,25 @@ anv_semaphore_impl_cleanup(struct anv_device *device,
    case ANV_SEMAPHORE_TYPE_NONE:
    case ANV_SEMAPHORE_TYPE_DUMMY:
       /* Dummy.  Nothing to do */
-      return;
+      break;
 
    case ANV_SEMAPHORE_TYPE_BO:
       anv_bo_cache_release(device, &device->bo_cache, impl->bo);
-      return;
+      break;
 
    case ANV_SEMAPHORE_TYPE_SYNC_FILE:
       close(impl->fd);
-      return;
+      break;
 
    case ANV_SEMAPHORE_TYPE_DRM_SYNCOBJ:
       anv_gem_syncobj_destroy(device, impl->syncobj);
-      return;
+      break;
+
+   default:
+      unreachable("Invalid semaphore type");
    }
 
-   unreachable("Invalid semaphore type");
+   impl->type = ANV_SEMAPHORE_TYPE_NONE;
 }
 
 void
@@ -940,7 +944,6 @@ anv_semaphore_reset_temporary(struct anv_device *device,
       return;
 
    anv_semaphore_impl_cleanup(device, &semaphore->temporary);
-   semaphore->temporary.type = ANV_SEMAPHORE_TYPE_NONE;
 }
 
 void anv_DestroySemaphore(

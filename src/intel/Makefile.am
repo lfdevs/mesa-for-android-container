@@ -69,6 +69,8 @@ EXTRA_DIST = \
 	dev/meson.build \
 	genxml/meson.build \
 	isl/meson.build \
+	tools/intel_sanitize_gpu.c \
+	tools/intel_sanitize_gpu.in \
 	tools/meson.build \
 	vulkan/meson.build \
 	meson.build
