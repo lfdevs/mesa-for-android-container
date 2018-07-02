@@ -350,27 +350,27 @@ gen6_gs_visitor::emit_thread_end()
    int max_usable_mrf = FIRST_SPILL_MRF(devinfo->gen);
 
    /* Issue the FF_SYNC message and obtain the initial VUE handle. */
+   this->current_annotation = "gen6 thread end: ff_sync";
+
+   vec4_instruction *inst = NULL;
+   if (prog->info.has_transform_feedback_varyings) {
+      src_reg sol_temp(this, glsl_type::uvec4_type);
+      emit(GS_OPCODE_FF_SYNC_SET_PRIMITIVES,
+           dst_reg(this->svbi),
+           this->vertex_count,
+           this->prim_count,
+           sol_temp);
+      inst = emit(GS_OPCODE_FF_SYNC,
+                  dst_reg(this->temp), this->prim_count, this->svbi);
+   } else {
+      inst = emit(GS_OPCODE_FF_SYNC,
+                  dst_reg(this->temp), this->prim_count, brw_imm_ud(0u));
+   }
+   inst->base_mrf = base_mrf;
+
    emit(CMP(dst_null_ud(), this->vertex_count, brw_imm_ud(0u), BRW_CONDITIONAL_G));
    emit(IF(BRW_PREDICATE_NORMAL));
    {
-      this->current_annotation = "gen6 thread end: ff_sync";
-
-      vec4_instruction *inst;
-      if (prog->info.has_transform_feedback_varyings) {
-         src_reg sol_temp(this, glsl_type::uvec4_type);
-         emit(GS_OPCODE_FF_SYNC_SET_PRIMITIVES,
-              dst_reg(this->svbi),
-              this->vertex_count,
-              this->prim_count,
-              sol_temp);
-         inst = emit(GS_OPCODE_FF_SYNC,
-                     dst_reg(this->temp), this->prim_count, this->svbi);
-      } else {
-         inst = emit(GS_OPCODE_FF_SYNC,
-                     dst_reg(this->temp), this->prim_count, brw_imm_ud(0u));
-      }
-      inst->base_mrf = base_mrf;
-
       /* Loop over all buffered vertices and emit URB write messages */
       this->current_annotation = "gen6 thread end: urb writes init";
       src_reg vertex(this, glsl_type::uint_type);
@@ -414,7 +414,7 @@ gen6_gs_visitor::emit_thread_end()
                dst_reg reg = dst_reg(MRF, mrf);
                reg.type = output_reg[varying][0].type;
                data.type = reg.type;
-               vec4_instruction *inst = emit(MOV(reg, data));
+               inst = emit(MOV(reg, data));
                inst->force_writemask_all = true;
 
                mrf++;
@@ -460,7 +460,7 @@ gen6_gs_visitor::emit_thread_end()
     *
     * However, this would lead us to end the program with an ENDIF opcode,
     * which we want to avoid, so what we do is that we always request a new
-    * VUE handle every time we do a URB WRITE, even for the last vertex we emit.
+    * VUE handle every time, even if GS produces no output.
     * With this we make sure that whether we have emitted at least one vertex
     * or none at all, we have to finish the thread without writing to the URB,
     * which works for both cases by setting the COMPLETE and UNUSED flags in
@@ -476,7 +476,7 @@ gen6_gs_visitor::emit_thread_end()
       emit(GS_OPCODE_SET_DWORD_2, dst_reg(MRF, base_mrf), data);
    }
 
-   vec4_instruction *inst = emit(GS_OPCODE_THREAD_END);
+   inst = emit(GS_OPCODE_THREAD_END);
    inst->urb_write_flags = BRW_URB_WRITE_COMPLETE | BRW_URB_WRITE_UNUSED;
    inst->base_mrf = base_mrf;
    inst->mlen = 1;

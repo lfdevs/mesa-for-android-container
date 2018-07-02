@@ -567,14 +567,16 @@ validate_call_instr(nir_call_instr *instr, validate_state *state)
    if (instr->return_deref == NULL) {
       validate_assert(state, glsl_type_is_void(instr->callee->return_type));
    } else {
-      validate_assert(state, instr->return_deref->deref.type == instr->callee->return_type);
+      validate_assert(state, instr->callee->return_type ==
+                             nir_deref_tail(&instr->return_deref->deref)->type);
       validate_deref_var(instr, instr->return_deref, state);
    }
 
    validate_assert(state, instr->num_params == instr->callee->num_params);
 
    for (unsigned i = 0; i < instr->num_params; i++) {
-      validate_assert(state, instr->callee->params[i].type == instr->params[i]->deref.type);
+      validate_assert(state, instr->callee->params[i].type ==
+                             nir_deref_tail(&instr->params[i]->deref)->type);
       validate_deref_var(instr, instr->params[i], state);
    }
 }

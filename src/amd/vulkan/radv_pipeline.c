@@ -524,20 +524,21 @@ radv_pipeline_compute_spi_color_formats(struct radv_pipeline *pipeline,
 		col_format |= cf << (4 * i);
 	}
 
+	/* If the i-th target format is set, all previous target formats must
+	 * be non-zero to avoid hangs.
+	 */
+	num_targets = (util_last_bit(col_format) + 3) / 4;
+	for (unsigned i = 0; i < num_targets; i++) {
+		if (!(col_format & (0xf << (i * 4)))) {
+			col_format |= V_028714_SPI_SHADER_32_R << (i * 4);
+		}
+	}
+
 	blend->cb_shader_mask = ac_get_cb_shader_mask(col_format);
 
 	if (blend->mrt0_is_dual_src)
 		col_format |= (col_format & 0xf) << 4;
 	blend->spi_shader_col_format = col_format;
-
-	/* If the i-th target format is set, all previous target formats must
-	 * be non-zero to avoid hangs.
-	 */
-	num_targets = (util_last_bit(blend->spi_shader_col_format) + 3) / 4;
-	for (unsigned i = 0; i < num_targets; i++) {
-		if (!(blend->spi_shader_col_format & (0xf << (i * 4))))
-			blend->spi_shader_col_format |= V_028714_SPI_SHADER_32_R << (i * 4);
-	}
 }
 
 static bool
@@ -621,7 +622,7 @@ radv_blend_check_commutativity(struct radv_blend_state *blend,
 		(1u << VK_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA);
 
 	if (dst == VK_BLEND_FACTOR_ONE &&
-	    (src_allowed && (1u << src))) {
+	    (src_allowed & (1u << src))) {
 		/* Addition is commutative, but floating point addition isn't
 		 * associative: subtle changes can be introduced via different
 		 * rounding. Be conservative, only enable for min and max.

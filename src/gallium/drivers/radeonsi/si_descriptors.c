@@ -94,7 +94,7 @@ static uint32_t null_image_descriptor[8] = {
 	 * descriptor */
 };
 
-static uint64_t si_desc_extract_buffer_address(uint32_t *desc)
+static uint64_t si_desc_extract_buffer_address(const uint32_t *desc)
 {
 	uint64_t va = desc[0] |
 		      ((uint64_t)G_008F04_BASE_ADDRESS_HI(desc[1]) << 32);
@@ -1054,7 +1054,7 @@ static void si_get_buffer_from_descriptors(struct si_buffer_resources *buffers,
 		*size = desc[2];
 
 		assert(G_008F04_STRIDE(desc[1]) == 0);
-		va = ((uint64_t)desc[1] << 32) | desc[0];
+		va = si_desc_extract_buffer_address(desc);
 
 		assert(va >= res->gpu_address && va + *size <= res->gpu_address + res->bo_size);
 		*offset = va - res->gpu_address;

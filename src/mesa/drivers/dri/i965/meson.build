@@ -138,7 +138,7 @@ files_i965 = files(
 i965_gen_libs = []
 foreach v : ['40', '45', '50', '60', '70', '75', '80', '90', '100', '110']
   i965_gen_libs += static_library(
-    'libi965_gen@0@'.format(v),
+    'i965_gen@0@'.format(v),
     ['genX_blorp_exec.c', 'genX_state_upload.c', gen_xml_pack],
     include_directories : [inc_common, inc_intel, inc_dri_common],
     c_args : [

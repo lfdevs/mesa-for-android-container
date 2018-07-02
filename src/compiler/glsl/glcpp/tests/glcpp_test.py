@@ -119,6 +119,9 @@ def test_unix(args):
             for l in diff:
                 print(l, file=sys.stderr)
 
+    if not total:
+        raise Exception('Could not find any tests.')
+
     print('{}/{}'.format(passed, total), 'tests returned correct results')
     return total == passed
 
@@ -154,6 +157,9 @@ def _replace_test(args, replace):
             print('FAIL')
             for l in diff:
                 print(l, file=sys.stderr)
+
+    if not total:
+        raise Exception('Could not find any tests.')
 
     print('{}/{}'.format(passed, total), 'tests returned correct results')
     return total == passed
@@ -196,6 +202,9 @@ def test_valgrind(args):
         else:
             print('FAIL')
             print(log, file=sys.stderr)
+
+    if not total:
+        raise Exception('Could not find any tests.')
 
     print('{}/{}'.format(passed, total), 'tests returned correct results')
     return total == passed

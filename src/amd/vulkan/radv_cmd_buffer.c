@@ -1009,6 +1009,68 @@ radv_emit_fb_color_state(struct radv_cmd_buffer *cmd_buffer,
 }
 
 static void
+radv_update_zrange_precision(struct radv_cmd_buffer *cmd_buffer,
+			     struct radv_ds_buffer_info *ds,
+			     struct radv_image *image, VkImageLayout layout,
+			     bool requires_cond_write)
+{
+	uint32_t db_z_info = ds->db_z_info;
+	uint32_t db_z_info_reg;
+
+	if (!radv_image_is_tc_compat_htile(image))
+		return;
+
+	if (!radv_layout_has_htile(image, layout,
+	                           radv_image_queue_family_mask(image,
+	                                                        cmd_buffer->queue_family_index,
+	                                                        cmd_buffer->queue_family_index))) {
+		db_z_info &= C_028040_TILE_SURFACE_ENABLE;
+	}
+
+	db_z_info &= C_028040_ZRANGE_PRECISION;
+
+	if (cmd_buffer->device->physical_device->rad_info.chip_class >= GFX9) {
+		db_z_info_reg = R_028038_DB_Z_INFO;
+	} else {
+		db_z_info_reg = R_028040_DB_Z_INFO;
+	}
+
+	/* When we don't know the last fast clear value we need to emit a
+	 * conditional packet, otherwise we can update DB_Z_INFO directly.
+	 */
+	if (requires_cond_write) {
+		radeon_emit(cmd_buffer->cs, PKT3(PKT3_COND_WRITE, 7, 0));
+
+		const uint32_t write_space = 0 << 8;	/* register */
+		const uint32_t poll_space = 1 << 4;	/* memory */
+		const uint32_t function = 3 << 0;	/* equal to the reference */
+		const uint32_t options = write_space | poll_space | function;
+		radeon_emit(cmd_buffer->cs, options);
+
+		/* poll address - location of the depth clear value */
+		uint64_t va = radv_buffer_get_va(image->bo);
+		va += image->offset + image->clear_value_offset;
+
+		/* In presence of stencil format, we have to adjust the base
+		 * address because the first value is the stencil clear value.
+		 */
+		if (vk_format_is_stencil(image->vk_format))
+			va += 4;
+
+		radeon_emit(cmd_buffer->cs, va);
+		radeon_emit(cmd_buffer->cs, va >> 32);
+
+		radeon_emit(cmd_buffer->cs, fui(0.0f));		 /* reference value */
+		radeon_emit(cmd_buffer->cs, (uint32_t)-1);	 /* comparison mask */
+		radeon_emit(cmd_buffer->cs, db_z_info_reg >> 2); /* write address low */
+		radeon_emit(cmd_buffer->cs, 0u);		 /* write address high */
+		radeon_emit(cmd_buffer->cs, db_z_info);
+	} else {
+		radeon_set_context_reg(cmd_buffer->cs, db_z_info_reg, db_z_info);
+	}
+}
+
+static void
 radv_emit_fb_ds_state(struct radv_cmd_buffer *cmd_buffer,
 		      struct radv_ds_buffer_info *ds,
 		      struct radv_image *image,
@@ -1066,6 +1128,9 @@ radv_emit_fb_ds_state(struct radv_cmd_buffer *cmd_buffer,
 
 	}
 
+	/* Update the ZRANGE_PRECISION value for the TC-compat bug. */
+	radv_update_zrange_precision(cmd_buffer, ds, image, layout, true);
+
 	radeon_set_context_reg(cmd_buffer->cs, R_028B78_PA_SU_POLY_OFFSET_DB_FMT_CNTL,
 			       ds->pa_su_poly_offset_db_fmt_cntl);
 }
@@ -1107,6 +1172,35 @@ radv_set_depth_clear_regs(struct radv_cmd_buffer *cmd_buffer,
 		radeon_emit(cmd_buffer->cs, ds_clear_value.stencil); /* R_028028_DB_STENCIL_CLEAR */
 	if (aspects & VK_IMAGE_ASPECT_DEPTH_BIT)
 		radeon_emit(cmd_buffer->cs, fui(ds_clear_value.depth)); /* R_02802C_DB_DEPTH_CLEAR */
+
+	/* Update the ZRANGE_PRECISION value for the TC-compat bug. This is
+	 * only needed when clearing Z to 0.0.
+	 */
+	if ((aspects & VK_IMAGE_ASPECT_DEPTH_BIT) &&
+	    ds_clear_value.depth == 0.0) {
+		struct radv_framebuffer *framebuffer = cmd_buffer->state.framebuffer;
+		const struct radv_subpass *subpass = cmd_buffer->state.subpass;
+
+		if (!framebuffer || !subpass)
+			return;
+
+		if (subpass->depth_stencil_attachment.attachment == VK_ATTACHMENT_UNUSED)
+			return;
+
+		int idx = subpass->depth_stencil_attachment.attachment;
+		VkImageLayout layout = subpass->depth_stencil_attachment.layout;
+		struct radv_attachment_info *att = &framebuffer->attachments[idx];
+		struct radv_image *image = att->attachment->image;
+
+		/* Only needed if the image is currently bound as the depth
+		 * surface.
+		 */
+		if (att->attachment->image != image)
+			return;
+
+		radv_update_zrange_precision(cmd_buffer, &att->ds, image,
+					     layout, false);
+	}
 }
 
 static void
@@ -1576,6 +1670,11 @@ radv_flush_constants(struct radv_cmd_buffer *cmd_buffer,
 	struct radv_pipeline *pipeline = stages & VK_SHADER_STAGE_COMPUTE_BIT
 					 ? cmd_buffer->state.compute_pipeline
 					 : cmd_buffer->state.pipeline;
+	VkPipelineBindPoint bind_point = stages & VK_SHADER_STAGE_COMPUTE_BIT ?
+					 VK_PIPELINE_BIND_POINT_COMPUTE :
+					 VK_PIPELINE_BIND_POINT_GRAPHICS;
+	struct radv_descriptor_state *descriptors_state =
+		radv_get_descriptors_state(cmd_buffer, bind_point);
 	struct radv_pipeline_layout *layout = pipeline->layout;
 	struct radv_shader_variant *shader, *prev_shader;
 	unsigned offset;
@@ -1593,7 +1692,8 @@ radv_flush_constants(struct radv_cmd_buffer *cmd_buffer,
 		return;
 
 	memcpy(ptr, cmd_buffer->push_constants, layout->push_constant_size);
-	memcpy((char*)ptr + layout->push_constant_size, cmd_buffer->dynamic_buffers,
+	memcpy((char*)ptr + layout->push_constant_size,
+	       descriptors_state->dynamic_buffers,
 	       16 * layout->dynamic_offset_count);
 
 	va = radv_buffer_get_va(cmd_buffer->upload.upload_bo);
@@ -2097,7 +2197,8 @@ VkResult radv_BeginCommandBuffer(
 		}
 	}
 
-	if (pBeginInfo->flags & VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT) {
+	if (cmd_buffer->level == VK_COMMAND_BUFFER_LEVEL_SECONDARY &&
+	    (pBeginInfo->flags & VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT)) {
 		assert(pBeginInfo->pInheritanceInfo);
 		cmd_buffer->state.framebuffer = radv_framebuffer_from_handle(pBeginInfo->pInheritanceInfo->framebuffer);
 		cmd_buffer->state.pass = radv_render_pass_from_handle(pBeginInfo->pInheritanceInfo->renderPass);
@@ -2226,6 +2327,8 @@ void radv_CmdBindDescriptorSets(
 	unsigned dyn_idx = 0;
 
 	const bool no_dynamic_bounds = cmd_buffer->device->instance->debug_flags & RADV_DEBUG_NO_DYNAMIC_BOUNDS;
+	struct radv_descriptor_state *descriptors_state =
+		radv_get_descriptors_state(cmd_buffer, pipelineBindPoint);
 
 	for (unsigned i = 0; i < descriptorSetCount; ++i) {
 		unsigned idx = i + firstSet;
@@ -2234,7 +2337,7 @@ void radv_CmdBindDescriptorSets(
 
 		for(unsigned j = 0; j < set->layout->dynamic_offset_count; ++j, ++dyn_idx) {
 			unsigned idx = j + layout->set[i + firstSet].dynamic_offset_start;
-			uint32_t *dst = cmd_buffer->dynamic_buffers + idx * 4;
+			uint32_t *dst = descriptors_state->dynamic_buffers + idx * 4;
 			assert(dyn_idx < dynamicOffsetCount);
 
 			struct radv_descriptor_range *range = set->dynamic_descriptors + j;
@@ -3706,6 +3809,20 @@ static void radv_initialize_htile(struct radv_cmd_buffer *cmd_buffer,
 					      size, clear_word);
 
 	state->flush_bits |= RADV_CMD_FLAG_FLUSH_AND_INV_DB_META;
+
+	/* Initialize the depth clear registers and update the ZRANGE_PRECISION
+	 * value for the TC-compat bug (because ZRANGE_PRECISION is 1 by
+	 * default). This is only needed whean clearing Z to 0.0f.
+	 */
+	if (radv_image_is_tc_compat_htile(image) && clear_word == 0) {
+		VkImageAspectFlags aspects = VK_IMAGE_ASPECT_DEPTH_BIT;
+		VkClearDepthStencilValue value = {};
+
+		if (vk_format_is_stencil(image->vk_format))
+			aspects |= VK_IMAGE_ASPECT_STENCIL_BIT;
+
+		radv_set_depth_clear_regs(cmd_buffer, image, value, aspects);
+	}
 }
 
 static void radv_handle_depth_image_transition(struct radv_cmd_buffer *cmd_buffer,
@@ -3720,14 +3837,7 @@ static void radv_handle_depth_image_transition(struct radv_cmd_buffer *cmd_buffe
 	if (!radv_image_has_htile(image))
 		return;
 
-	if (dst_layout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL &&
-	    (pending_clears & vk_format_aspects(image->vk_format)) == vk_format_aspects(image->vk_format) &&
-	    cmd_buffer->state.render_area.offset.x == 0 && cmd_buffer->state.render_area.offset.y == 0 &&
-	    cmd_buffer->state.render_area.extent.width == image->info.width &&
-	    cmd_buffer->state.render_area.extent.height == image->info.height) {
-		/* The clear will initialize htile. */
-		return;
-	} else if (src_layout == VK_IMAGE_LAYOUT_UNDEFINED &&
+	if (src_layout == VK_IMAGE_LAYOUT_UNDEFINED &&
 	           radv_layout_has_htile(image, dst_layout, dst_queue_mask)) {
 		/* TODO: merge with the clear if applicable */
 		radv_initialize_htile(cmd_buffer, image, range, 0);

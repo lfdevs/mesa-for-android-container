@@ -717,6 +717,14 @@ emit_fast_htile_clear(struct radv_cmd_buffer *cmd_buffer,
 	if ((clear_value.depth != 0.0 && clear_value.depth != 1.0) || !(aspects & VK_IMAGE_ASPECT_DEPTH_BIT))
 		goto fail;
 
+	/* GFX8 only supports 32-bit depth surfaces but we can enable TC-compat
+	 * HTILE for 16-bit surfaces if no Z planes are compressed. Though,
+	 * fast HTILE clears don't seem to work.
+	 */
+	if (cmd_buffer->device->physical_device->rad_info.chip_class == VI &&
+	    iview->image->vk_format == VK_FORMAT_D16_UNORM)
+		goto fail;
+
 	if (vk_format_aspects(iview->image->vk_format) & VK_IMAGE_ASPECT_STENCIL_BIT) {
 		if (clear_value.stencil != 0 || !(aspects & VK_IMAGE_ASPECT_STENCIL_BIT))
 			goto fail;

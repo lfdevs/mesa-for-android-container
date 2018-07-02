@@ -2219,13 +2219,13 @@ else
     have_vdpau_platform=no
 fi
 
-if echo $platforms | grep -q "x11\|drm"; then
+if echo $platforms | egrep -q "x11|drm"; then
     have_omx_platform=yes
 else
     have_omx_platform=no
 fi
 
-if echo $platforms | grep -q "x11\|drm\|wayland"; then
+if echo $platforms | egrep -q "x11|drm|wayland"; then
     have_va_platform=yes
 else
     have_va_platform=no

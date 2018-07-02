@@ -928,6 +928,7 @@ struct radv_descriptor_state {
 	uint32_t valid;
 	struct radv_push_descriptor_set push_set;
 	bool push_dirty;
+	uint32_t dynamic_buffers[4 * MAX_DYNAMIC_BUFFERS];
 };
 
 struct radv_cmd_state {
@@ -1013,7 +1014,6 @@ struct radv_cmd_buffer {
 	uint32_t queue_family_index;
 
 	uint8_t push_constants[MAX_PUSH_CONSTANTS_SIZE];
-	uint32_t dynamic_buffers[4 * MAX_DYNAMIC_BUFFERS];
 	VkShaderStageFlags push_constant_stages;
 	struct radv_descriptor_set meta_push_descriptors;
 

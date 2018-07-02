@@ -96,6 +96,7 @@ struct radeon_info {
 	bool                        has_fence_to_handle;
 	bool                        has_ctx_priority;
 	bool                        has_local_buffers;
+	bool                        kernel_flushes_hdp_before_ib;
 
 	/* Shader cores. */
 	uint32_t                    r600_max_quad_pipes; /* wave size / 16 */

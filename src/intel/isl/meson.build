@@ -54,7 +54,7 @@ foreach g : [['40', isl_gen4_files], ['50', []], ['60', isl_gen6_files],
              ['90', isl_gen9_files], ['100', []], ['110', []]]
   _gen = g[0]
   isl_gen_libs += static_library(
-    'libisl_gen@0@'.format(_gen),
+    'isl_gen@0@'.format(_gen),
     [g[1], isl_gen_files, gen_xml_pack],
     include_directories : [inc_common, inc_intel],
     c_args : [c_vis_args, no_override_init_args,

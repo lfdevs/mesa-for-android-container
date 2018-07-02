@@ -417,7 +417,6 @@ virgl_drm_winsys_resource_create_handle(struct virgl_winsys *qws,
    }
 
    res = util_hash_table_get(qdws->bo_handles, (void*)(uintptr_t)handle);
-   fprintf(stderr, "resource %p for handle %d, pfd=%d\n", res, handle, whandle->handle);
    if (res) {
       struct virgl_hw_res *r = NULL;
       virgl_drm_resource_reference(qdws, &r, res);
@@ -431,7 +430,6 @@ virgl_drm_winsys_resource_create_handle(struct virgl_winsys *qws,
    if (whandle->type == DRM_API_HANDLE_TYPE_FD) {
       res->bo_handle = handle;
    } else {
-      fprintf(stderr, "gem open handle %d\n", handle);
       memset(&open_arg, 0, sizeof(open_arg));
       open_arg.name = whandle->handle;
       if (drmIoctl(qdws->fd, DRM_IOCTL_GEM_OPEN, &open_arg)) {
