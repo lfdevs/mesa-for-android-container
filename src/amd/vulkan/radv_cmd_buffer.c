@@ -3003,8 +3003,9 @@ static void radv_emit_view_index(struct radv_cmd_buffer *cmd_buffer, unsigned in
 {
 	struct radv_pipeline *pipeline = cmd_buffer->state.pipeline;
 	for (unsigned stage = 0; stage < MESA_SHADER_STAGES; ++stage) {
-		if (!pipeline->shaders[stage])
+		if (!radv_get_shader(pipeline, stage))
 			continue;
+
 		struct radv_userdata_info *loc = radv_lookup_user_sgpr(pipeline, stage, AC_UD_VIEW_INDEX);
 		if (loc->sgpr_idx == -1)
 			continue;

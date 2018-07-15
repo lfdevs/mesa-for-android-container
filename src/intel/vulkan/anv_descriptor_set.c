@@ -257,13 +257,48 @@ void anv_DestroyDescriptorSetLayout(
    anv_descriptor_set_layout_unref(device, set_layout);
 }
 
+#define SHA1_UPDATE_VALUE(ctx, x) _mesa_sha1_update(ctx, &(x), sizeof(x));
+
+static void
+sha1_update_immutable_sampler(struct mesa_sha1 *ctx,
+                              const struct anv_sampler *sampler)
+{
+   if (!sampler->conversion)
+      return;
+
+   /* The only thing that affects the shader is ycbcr conversion */
+   _mesa_sha1_update(ctx, sampler->conversion,
+                     sizeof(*sampler->conversion));
+}
+
+static void
+sha1_update_descriptor_set_binding_layout(struct mesa_sha1 *ctx,
+   const struct anv_descriptor_set_binding_layout *layout)
+{
+   SHA1_UPDATE_VALUE(ctx, layout->array_size);
+   SHA1_UPDATE_VALUE(ctx, layout->descriptor_index);
+   SHA1_UPDATE_VALUE(ctx, layout->dynamic_offset_index);
+   SHA1_UPDATE_VALUE(ctx, layout->buffer_index);
+   _mesa_sha1_update(ctx, layout->stage, sizeof(layout->stage));
+
+   if (layout->immutable_samplers) {
+      for (uint16_t i = 0; i < layout->array_size; i++)
+         sha1_update_immutable_sampler(ctx, layout->immutable_samplers[i]);
+   }
+}
+
 static void
 sha1_update_descriptor_set_layout(struct mesa_sha1 *ctx,
                                   const struct anv_descriptor_set_layout *layout)
 {
-   size_t size = sizeof(*layout) +
-                 sizeof(layout->binding[0]) * layout->binding_count;
-   _mesa_sha1_update(ctx, layout, size);
+   SHA1_UPDATE_VALUE(ctx, layout->binding_count);
+   SHA1_UPDATE_VALUE(ctx, layout->size);
+   SHA1_UPDATE_VALUE(ctx, layout->shader_stages);
+   SHA1_UPDATE_VALUE(ctx, layout->buffer_count);
+   SHA1_UPDATE_VALUE(ctx, layout->dynamic_offset_count);
+
+   for (uint16_t i = 0; i < layout->binding_count; i++)
+      sha1_update_descriptor_set_binding_layout(ctx, &layout->binding[i]);
 }
 
 /*

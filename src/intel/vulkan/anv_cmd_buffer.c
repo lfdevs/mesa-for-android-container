@@ -153,6 +153,20 @@ anv_cmd_state_reset(struct anv_cmd_buffer *cmd_buffer)
    anv_cmd_state_init(cmd_buffer);
 }
 
+/**
+ * This function updates the size of the push constant buffer we need to emit.
+ * This is called in various parts of the driver to ensure that different
+ * pieces of push constant data get emitted as needed. However, it is important
+ * that we never shrink the size of the buffer. For example, a compute shader
+ * dispatch will always call this for the base group id, which has an
+ * offset in the push constant buffer that is smaller than the offset for
+ * storage image data. If the compute shader has storage images, we will call
+ * this again with a larger size during binding table emission. However,
+ * if we dispatch the compute shader again without dirtying our descriptors,
+ * we would still call this function with a smaller size for the base group
+ * id, and not for the images, which would incorrectly shrink the size of the
+ * push constant data we emit with that dispatch, making us drop the image data.
+ */
 VkResult
 anv_cmd_buffer_ensure_push_constants_size(struct anv_cmd_buffer *cmd_buffer,
                                           gl_shader_stage stage, uint32_t size)
@@ -166,6 +180,7 @@ anv_cmd_buffer_ensure_push_constants_size(struct anv_cmd_buffer *cmd_buffer,
          anv_batch_set_error(&cmd_buffer->batch, VK_ERROR_OUT_OF_HOST_MEMORY);
          return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
       }
+      (*ptr)->size = size;
    } else if ((*ptr)->size < size) {
       *ptr = vk_realloc(&cmd_buffer->pool->alloc, *ptr, size, 8,
                          VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
@@ -173,8 +188,8 @@ anv_cmd_buffer_ensure_push_constants_size(struct anv_cmd_buffer *cmd_buffer,
          anv_batch_set_error(&cmd_buffer->batch, VK_ERROR_OUT_OF_HOST_MEMORY);
          return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
       }
+      (*ptr)->size = size;
    }
-   (*ptr)->size = size;
 
    return VK_SUCCESS;
 }

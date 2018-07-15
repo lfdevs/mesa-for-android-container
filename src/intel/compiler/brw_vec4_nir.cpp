@@ -1806,7 +1806,23 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
       unreachable("not reached: should have been lowered");
 
    case nir_op_fsign:
-      if (type_sz(op[0].type) < 8) {
+      if (op[0].abs) {
+         /* Straightforward since the source can be assumed to be either
+          * strictly >= 0 or strictly <= 0 depending on the setting of the
+          * negate flag.
+          */
+         inst = emit(MOV(dst, op[0]));
+         inst->conditional_mod = BRW_CONDITIONAL_NZ;
+
+         inst = (op[0].negate)
+            ? emit(MOV(dst, brw_imm_f(-1.0f)))
+            : emit(MOV(dst, brw_imm_f(1.0f)));
+         inst->predicate = BRW_PREDICATE_NORMAL;
+
+         if (instr->dest.saturate)
+            inst->saturate = true;
+
+       } else if (type_sz(op[0].type) < 8) {
          /* AND(val, 0x80000000) gives the sign bit.
           *
           * Predicated OR ORs 1.0 (0x3f800000) with the sign bit if val is not

@@ -1655,6 +1655,7 @@ drivers/dri2/linux-dmabuf-unstable-v1-client-protocol.h: $(WL_DMABUF_XML)
 
 @HAVE_PLATFORM_WAYLAND_TRUE@drivers/dri2/linux-dmabuf-unstable-v1-protocol.lo: drivers/dri2/linux-dmabuf-unstable-v1-client-protocol.h
 @HAVE_PLATFORM_WAYLAND_TRUE@drivers/dri2/egl_dri2.lo: drivers/dri2/linux-dmabuf-unstable-v1-client-protocol.h
+@HAVE_PLATFORM_WAYLAND_TRUE@drivers/dri2/platform_wayland.lo: drivers/dri2/linux-dmabuf-unstable-v1-client-protocol.h
 g_egldispatchstubs.c: $(GLVND_GEN_DEPS)
 	$(PYTHON_GEN) $(top_srcdir)/src/egl/generate/gen_egl_dispatch.py source \
 		$(top_srcdir)/src/egl/generate/eglFunctionList.py \

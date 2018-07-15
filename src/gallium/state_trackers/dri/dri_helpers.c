@@ -214,6 +214,12 @@ dri2_server_wait_sync(__DRIcontext *_ctx, void *_fence, unsigned flags)
    struct pipe_context *ctx = dri_context(_ctx)->st->pipe;
    struct dri2_fence *fence = (struct dri2_fence*)_fence;
 
+   /* We might be called here with a NULL fence as a result of WaitSyncKHR
+    * on a EGL_KHR_reusable_sync fence. Nothing to do here in such case.
+    */
+   if (!fence)
+      return;
+
    if (ctx->fence_server_sync)
       ctx->fence_server_sync(ctx, fence->pipe_fence);
 }

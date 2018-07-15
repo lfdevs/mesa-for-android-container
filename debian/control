@@ -42,7 +42,7 @@ Build-Depends:
  bison,
  llvm-6.0-dev (>= 1:6.0~) [amd64 arm64 armel armhf i386 kfreebsd-amd64 kfreebsd-i386 mips mips64el mipsel powerpc ppc64 sparc64 ppc64el],
  libelf-dev [amd64 arm64 armel armhf i386 kfreebsd-amd64 kfreebsd-i386 mips mips64el mipsel powerpc ppc64 sparc64 ppc64el],
- libwayland-dev (>= 1.11.0) [linux-any],
+ libwayland-dev (>= 1.15.0) [linux-any],
  libclang-6.0-dev (>= 1:6.0~) [amd64 arm64 armel armhf i386 kfreebsd-amd64 kfreebsd-i386 mips mips64el mipsel powerpc ppc64 sparc64 ppc64el],
  libclc-dev (>= 0.2.0+git20180312-1~) [amd64 arm64 armel armhf i386 kfreebsd-amd64 kfreebsd-i386 mips mips64el mipsel powerpc ppc64 sparc64 ppc64el],
  wayland-protocols (>= 1.9),

@@ -1317,9 +1317,33 @@ static void si_flush_resource(struct pipe_context *ctx,
 	}
 
 	/* Always do the analysis even if DCC is disabled at the moment. */
-	if (rtex->dcc_gather_statistics && rtex->separate_dcc_dirty) {
-		rtex->separate_dcc_dirty = false;
-		vi_separate_dcc_process_and_reset_stats(ctx, rtex);
+	if (rtex->dcc_gather_statistics) {
+		bool separate_dcc_dirty = rtex->separate_dcc_dirty;
+
+		/* If the color buffer hasn't been unbound and fast clear hasn't
+		 * been used, separate_dcc_dirty is false, but there may have been
+		 * new rendering. Check if the color buffer is bound and assume
+		 * it's dirty.
+		 *
+		 * Note that DRI2 never unbinds window colorbuffers, which means
+		 * the DCC pipeline statistics query would never be re-set and would
+		 * keep adding new results until all free memory is exhausted if we
+		 * didn't do this.
+		 */
+		if (!separate_dcc_dirty) {
+			for (unsigned i = 0; i < sctx->framebuffer.state.nr_cbufs; i++) {
+				if (sctx->framebuffer.state.cbufs[i] &&
+				    sctx->framebuffer.state.cbufs[i]->texture == res) {
+					separate_dcc_dirty = true;
+					break;
+				}
+			}
+		}
+
+		if (separate_dcc_dirty) {
+			rtex->separate_dcc_dirty = false;
+			vi_separate_dcc_process_and_reset_stats(ctx, rtex);
+		}
 	}
 }
 

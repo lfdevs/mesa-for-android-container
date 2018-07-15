@@ -415,6 +415,7 @@ bool
 TargetNVC0::insnCanLoadOffset(const Instruction *insn, int s, int offset) const
 {
    const ValueRef& ref = insn->src(s);
+   offset += insn->src(s).get()->reg.data.offset;
    if (ref.getFile() == FILE_MEMORY_CONST &&
        (insn->op != OP_LOAD || insn->subOp != NV50_IR_SUBOP_LDC_IS))
       return offset >= -0x8000 && offset < 0x8000;

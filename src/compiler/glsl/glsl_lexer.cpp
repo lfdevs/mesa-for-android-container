@@ -3238,7 +3238,7 @@ KEYWORD(110, 100, 0, 0, FVEC4);
 case 238:
 YY_RULE_SETUP
 #line 631 "./glsl/glsl_lexer.ll"
-DEPRECATED_ES_TYPE_WITH_ALT(yyextra->ARB_texture_rectangle_enable, glsl_type::sampler2DRect_type);
+TYPE_WITH_ALT(110, 100, 0, 0, yyextra->ARB_texture_rectangle_enable, glsl_type::sampler2DRect_type);
 	YY_BREAK
 case 239:
 YY_RULE_SETUP
@@ -3248,7 +3248,7 @@ KEYWORD(110, 100, 0, 0, SAMPLER3DRECT);
 case 240:
 YY_RULE_SETUP
 #line 633 "./glsl/glsl_lexer.ll"
-DEPRECATED_ES_TYPE_WITH_ALT(yyextra->ARB_texture_rectangle_enable, glsl_type::sampler2DRectShadow_type);
+TYPE_WITH_ALT(110, 100, 0, 0, yyextra->ARB_texture_rectangle_enable, glsl_type::sampler2DRectShadow_type);
 	YY_BREAK
 case 241:
 YY_RULE_SETUP

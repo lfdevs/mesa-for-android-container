@@ -194,6 +194,13 @@ MakeContextCurrent(Display * dpy, GLXDrawable draw,
       return True;
    }
 
+   /* can't have only one be 0 */
+   if (!!draw != !!read) {
+      __glXUnlock();
+      __glXSendError(dpy, BadMatch, None, X_GLXMakeContextCurrent, True);
+      return False;
+   }
+
    if (oldGC != &dummyContext) {
       if (--oldGC->thread_refcount == 0) {
 	 oldGC->vtable->unbind(oldGC, gc);

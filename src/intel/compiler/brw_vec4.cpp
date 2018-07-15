@@ -799,10 +799,19 @@ vec4_visitor::opt_algebraic()
             break;
 
          if (inst->saturate) {
-            if (inst->dst.type != inst->src[0].type)
+            /* Full mixed-type saturates don't happen.  However, we can end up
+             * with things like:
+             *
+             *    mov.sat(8) g21<1>DF       -1F
+             *
+             * Other mixed-size-but-same-base-type cases may also be possible.
+             */
+            if (inst->dst.type != inst->src[0].type &&
+                inst->dst.type != BRW_REGISTER_TYPE_DF &&
+                inst->src[0].type != BRW_REGISTER_TYPE_F)
                assert(!"unimplemented: saturate mixed types");
 
-            if (brw_saturate_immediate(inst->dst.type,
+            if (brw_saturate_immediate(inst->src[0].type,
                                        &inst->src[0].as_brw_reg())) {
                inst->saturate = false;
                progress = true;

@@ -36,6 +36,17 @@
 namespace brw {
 
 static bool
+writemasks_incompatible(const vec4_instruction *earlier,
+                        const vec4_instruction *later)
+{
+   return (earlier->dst.writemask != WRITEMASK_X &&
+           earlier->dst.writemask != WRITEMASK_XYZW) ||
+          (earlier->dst.writemask == WRITEMASK_XYZW &&
+           later->src[0].swizzle != BRW_SWIZZLE_XYZW) ||
+          (later->dst.writemask & ~earlier->dst.writemask) != 0;
+}
+
+static bool
 opt_cmod_propagation_local(bblock_t *block)
 {
    bool progress = false;
@@ -80,6 +91,9 @@ opt_cmod_propagation_local(bblock_t *block)
             bool negate;
 
             if (scan_inst->opcode != BRW_OPCODE_ADD)
+               goto not_match;
+
+            if (writemasks_incompatible(scan_inst, inst))
                goto not_match;
 
             /* A CMP is basically a subtraction.  The result of the
@@ -132,11 +146,7 @@ opt_cmod_propagation_local(bblock_t *block)
                              scan_inst->dst, scan_inst->size_written)) {
             if ((scan_inst->predicate && scan_inst->opcode != BRW_OPCODE_SEL) ||
                 scan_inst->dst.offset != inst->src[0].offset ||
-                (scan_inst->dst.writemask != WRITEMASK_X &&
-                 scan_inst->dst.writemask != WRITEMASK_XYZW) ||
-                (scan_inst->dst.writemask == WRITEMASK_XYZW &&
-                 inst->src[0].swizzle != BRW_SWIZZLE_XYZW) ||
-                (inst->dst.writemask & ~scan_inst->dst.writemask) != 0 ||
+                writemasks_incompatible(scan_inst, inst) ||
                 scan_inst->exec_size != inst->exec_size ||
                 scan_inst->group != inst->group) {
                break;

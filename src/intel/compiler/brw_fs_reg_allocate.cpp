@@ -548,6 +548,9 @@ fs_visitor::assign_regs(bool allow_spilling, bool spill_all)
    int first_mrf_hack_node = node_count;
    if (devinfo->gen >= 7)
       node_count += BRW_MAX_GRF - GEN7_MRF_HACK_START;
+   int grf127_send_hack_node = node_count;
+   if (devinfo->gen >= 8)
+      node_count ++;
    struct ra_graph *g =
       ra_alloc_interference_graph(compiler->fs_reg_sets[rsi].regs, node_count);
 
@@ -649,6 +652,45 @@ fs_visitor::assign_regs(bool allow_spilling, bool spill_all)
             if (inst->src[i].file == VGRF) {
                ra_add_node_interference(g, inst->dst.nr, inst->src[i].nr);
             }
+         }
+      }
+   }
+
+   if (devinfo->gen >= 8) {
+      /* At Intel Broadwell PRM, vol 07, section "Instruction Set Reference",
+       * subsection "EUISA Instructions", Send Message (page 990):
+       *
+       * "r127 must not be used for return address when there is a src and
+       * dest overlap in send instruction."
+       *
+       * We are avoiding using grf127 as part of the destination of send
+       * messages adding a node interference to the grf127_send_hack_node.
+       * This node has a fixed asignment to grf127.
+       *
+       * We don't apply it to SIMD16 because previous code avoids any register
+       * overlap between sources and destination.
+       */
+      ra_set_node_reg(g, grf127_send_hack_node, 127);
+      if (dispatch_width == 8) {
+         foreach_block_and_inst(block, fs_inst, inst, cfg) {
+            if (inst->is_send_from_grf() && inst->dst.file == VGRF)
+               ra_add_node_interference(g, inst->dst.nr, grf127_send_hack_node);
+         }
+      }
+
+      if (spilled_any_registers) {
+         foreach_block_and_inst(block, fs_inst, inst, cfg) {
+            /* Spilling instruction are genereated as SEND messages from MRF
+             * but as Gen7+ supports sending from GRF the driver will maps
+             * assingn these MRF registers to a GRF. Implementations reuses
+             * the dest of the send message as source. So as we will have an
+             * overlap for sure, we create an interference between destination
+             * and grf127.
+             */
+            if ((inst->opcode == SHADER_OPCODE_GEN7_SCRATCH_READ ||
+                 inst->opcode == SHADER_OPCODE_GEN4_SCRATCH_READ) &&
+                inst->dst.file == VGRF)
+               ra_add_node_interference(g, inst->dst.nr, grf127_send_hack_node);
          }
       }
    }

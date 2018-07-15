@@ -945,6 +945,8 @@ bool expr_handler::fold_alu_op3(alu_node& n) {
 	if (!sh.safe_math && (n.bc.op_ptr->flags & AF_M_ASSOC)) {
 		if (fold_assoc(&n))
 			return true;
+		if (n.src.size() < 3)
+			return fold_alu_op2(n);
 	}
 
 	value* v0 = n.src[0]->gvalue();

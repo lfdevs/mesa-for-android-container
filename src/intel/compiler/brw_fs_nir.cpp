@@ -67,14 +67,25 @@ fs_visitor::nir_setup_outputs()
       vec4s[loc] = MAX2(vec4s[loc], var_vec4s);
    }
 
-   nir_foreach_variable(var, &nir->outputs) {
-      const int loc = var->data.driver_location;
-      if (outputs[loc].file == BAD_FILE) {
-         fs_reg reg = bld.vgrf(BRW_REGISTER_TYPE_F, 4 * vec4s[loc]);
-         for (unsigned i = 0; i < vec4s[loc]; i++) {
-            outputs[loc + i] = offset(reg, bld, 4 * i);
-         }
+   for (unsigned loc = 0; loc < ARRAY_SIZE(vec4s);) {
+      if (vec4s[loc] == 0) {
+         loc++;
+         continue;
       }
+
+      unsigned reg_size = vec4s[loc];
+
+      /* Check if there are any ranges that start within this range and extend
+       * past it. If so, include them in this allocation.
+       */
+      for (unsigned i = 1; i < reg_size; i++)
+         reg_size = MAX2(vec4s[i + loc] + i, reg_size);
+
+      fs_reg reg = bld.vgrf(BRW_REGISTER_TYPE_F, 4 * reg_size);
+      for (unsigned i = 0; i < reg_size; i++)
+         outputs[loc + i] = offset(reg, bld, 4 * i);
+
+      loc += reg_size;
    }
 }
 
@@ -810,11 +821,20 @@ fs_visitor::nir_emit_alu(const fs_builder &bld, nir_alu_instr *instr)
 
    case nir_op_fsign: {
       if (op[0].abs) {
-         /* Straightforward since the source can be assumed to be
-          * non-negative.
+         /* Straightforward since the source can be assumed to be either
+          * strictly >= 0 or strictly <= 0 depending on the setting of the
+          * negate flag.
           */
          set_condmod(BRW_CONDITIONAL_NZ, bld.MOV(result, op[0]));
-         set_predicate(BRW_PREDICATE_NORMAL, bld.MOV(result, brw_imm_f(1.0f)));
+
+         inst = (op[0].negate)
+            ? bld.MOV(result, brw_imm_f(-1.0f))
+            : bld.MOV(result, brw_imm_f(1.0f));
+
+         set_predicate(BRW_PREDICATE_NORMAL, inst);
+
+         if (instr->dest.saturate)
+            inst->saturate = true;
 
       } else if (type_sz(op[0].type) < 8) {
          /* AND(val, 0x80000000) gives the sign bit.

@@ -540,6 +540,18 @@ namespace {
       for (unsigned reg = 0; reg < 2; reg++)
          constrained[p.atom_of_reg(reg)] = true;
 
+      /* At Intel Broadwell PRM, vol 07, section "Instruction Set Reference",
+       * subsection "EUISA Instructions", Send Message (page 990):
+       *
+       * "r127 must not be used for return address when there is a src and
+       * dest overlap in send instruction."
+       *
+       * Register allocation ensures that, so don't move 127 around to avoid
+       * breaking that property.
+       */
+      if (v->devinfo->gen >= 8)
+         constrained[p.atom_of_reg(127)] = true;
+
       foreach_block_and_inst(block, fs_inst, inst, v->cfg) {
          /* Assume that anything referenced via fixed GRFs is baked into the
           * hardware's fixed-function logic and may be unsafe to move around.

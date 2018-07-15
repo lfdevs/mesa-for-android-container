@@ -67,6 +67,11 @@ genX(cmd_buffer_emit_state_base_address)(struct anv_cmd_buffer *cmd_buffer)
 {
    struct anv_device *device = cmd_buffer->device;
 
+   /* If we are emitting a new state base address we probably need to re-emit
+    * binding tables.
+    */
+   cmd_buffer->state.descriptors_dirty |= ~0;
+
    /* Emit a render target cache flush.
     *
     * This isn't documented anywhere in the PRM.  However, it seems to be
@@ -3021,6 +3026,8 @@ genX(cmd_buffer_flush_compute_state)(struct anv_cmd_buffer *cmd_buffer)
             curbe.CURBEDataStartAddress   = push_state.offset;
          }
       }
+
+      cmd_buffer->state.push_constants_dirty &= ~VK_SHADER_STAGE_COMPUTE_BIT;
    }
 
    cmd_buffer->state.compute.pipeline_dirty = false;

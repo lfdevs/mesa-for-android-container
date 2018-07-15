@@ -80,6 +80,7 @@ drivers/dri2/linux-dmabuf-unstable-v1-client-protocol.h: $(WL_DMABUF_XML)
 if HAVE_PLATFORM_WAYLAND
 drivers/dri2/linux-dmabuf-unstable-v1-protocol.lo: drivers/dri2/linux-dmabuf-unstable-v1-client-protocol.h
 drivers/dri2/egl_dri2.lo: drivers/dri2/linux-dmabuf-unstable-v1-client-protocol.h
+drivers/dri2/platform_wayland.lo: drivers/dri2/linux-dmabuf-unstable-v1-client-protocol.h
 
 AM_CFLAGS += $(WAYLAND_CLIENT_CFLAGS)
 libEGL_common_la_LIBADD += $(WAYLAND_CLIENT_LIBS)
