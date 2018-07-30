@@ -231,6 +231,10 @@ kernel::exec_context::bind(intrusive_ptr<command_queue> _q,
       cs.req_local_mem = mem_local;
       cs.req_input_mem = input.size();
       st = q->pipe->create_compute_state(q->pipe, &cs);
+      if (!st) {
+	 unbind(); // Cleanup
+	 throw error(CL_OUT_OF_RESOURCES);
+      }
    }
 
    return st;

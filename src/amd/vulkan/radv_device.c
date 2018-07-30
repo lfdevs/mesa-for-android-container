@@ -2181,7 +2181,7 @@ radv_get_preamble_cs(struct radv_queue *queue,
 			                       RADV_CMD_FLAG_INV_ICACHE |
 			                       RADV_CMD_FLAG_INV_SMEM_L1 |
 			                       RADV_CMD_FLAG_INV_VMEM_L1 |
-			                       RADV_CMD_FLAG_INV_GLOBAL_L2);
+			                       RADV_CMD_FLAG_INV_GLOBAL_L2, 0);
 		} else if (i == 1) {
 			si_cs_emit_cache_flush(cs,
 			                       queue->device->physical_device->rad_info.chip_class,
@@ -2191,7 +2191,7 @@ radv_get_preamble_cs(struct radv_queue *queue,
 			                       RADV_CMD_FLAG_INV_ICACHE |
 			                       RADV_CMD_FLAG_INV_SMEM_L1 |
 			                       RADV_CMD_FLAG_INV_VMEM_L1 |
-			                       RADV_CMD_FLAG_INV_GLOBAL_L2);
+			                       RADV_CMD_FLAG_INV_GLOBAL_L2, 0);
 		}
 
 		if (!queue->device->ws->cs_finalize(cs))

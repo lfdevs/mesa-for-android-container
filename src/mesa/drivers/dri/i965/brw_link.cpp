@@ -304,6 +304,8 @@ brw_link_shader(struct gl_context *ctx, struct gl_shader_program *shProg)
       NIR_PASS_V(prog->nir, nir_lower_atomics_to_ssbo,
                  prog->nir->info.num_abos);
 
+      nir_sweep(prog->nir);
+
       infos[stage] = &prog->nir->info;
 
       update_xfb_info(prog->sh.LinkedTransformFeedback, infos[stage]);

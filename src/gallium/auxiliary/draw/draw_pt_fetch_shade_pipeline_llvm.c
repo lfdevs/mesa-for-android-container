@@ -428,6 +428,15 @@ llvm_pipeline_generic(struct draw_pt_middle_end *middle,
       FREE(vert_info->verts);
       vert_info = &gs_vert_info;
       prim_info = &gs_prim_info;
+      /*
+       * pt emit can only handle ushort number of vertices (see
+       * render->allocate_vertices).
+       * vsplit guarantees there's never more than 4096, however GS can
+       * easily blow this up (by a factor of 256 (or even 1024) max).
+       */
+      if (vert_info->count > 65535) {
+         opt |= PT_PIPELINE;
+      }
    } else {
       if (draw_prim_assembler_is_required(draw, prim_info, vert_info)) {
          draw_prim_assembler_run(draw, prim_info, vert_info,

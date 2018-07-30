@@ -613,7 +613,7 @@ void anv_CmdBindDescriptorSets(
    ANV_FROM_HANDLE(anv_cmd_buffer, cmd_buffer, commandBuffer);
    ANV_FROM_HANDLE(anv_pipeline_layout, layout, _layout);
 
-   assert(firstSet + descriptorSetCount < MAX_SETS);
+   assert(firstSet + descriptorSetCount <= MAX_SETS);
 
    for (uint32_t i = 0; i < descriptorSetCount; i++) {
       ANV_FROM_HANDLE(anv_descriptor_set, set, pDescriptorSets[i]);

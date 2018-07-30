@@ -221,6 +221,12 @@ static void *si_create_compute_state(
 			const amd_kernel_code_t *code_object =
 				si_compute_get_code_object(program, 0);
 			code_object_to_config(code_object, &program->shader.config);
+			if (program->shader.binary.reloc_count != 0) {
+				fprintf(stderr, "Error: %d unsupported relocations\n",
+					program->shader.binary.reloc_count);
+				FREE(program);
+				return NULL;
+			}
 		} else {
 			si_shader_binary_read_config(&program->shader.binary,
 				     &program->shader.config, 0);

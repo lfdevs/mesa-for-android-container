@@ -524,7 +524,7 @@ int virgl_encoder_inline_write(struct virgl_context *ctx,
 
    left_bytes = size;
    while (left_bytes) {
-      if (ctx->cbuf->cdw + 12 > VIRGL_MAX_CMDBUF_DWORDS)
+      if (ctx->cbuf->cdw + 12 >= VIRGL_MAX_CMDBUF_DWORDS)
          ctx->base.flush(&ctx->base, NULL, 0);
 
       thispass = (VIRGL_MAX_CMDBUF_DWORDS - ctx->cbuf->cdw - 12) * 4;

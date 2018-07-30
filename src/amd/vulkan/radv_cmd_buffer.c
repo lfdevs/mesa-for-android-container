@@ -319,11 +319,21 @@ radv_reset_cmd_buffer(struct radv_cmd_buffer *cmd_buffer)
 	}
 
 	if (cmd_buffer->device->physical_device->rad_info.chip_class >= GFX9) {
+		unsigned num_db = cmd_buffer->device->physical_device->rad_info.num_render_backends;
+		unsigned eop_bug_offset;
 		void *fence_ptr;
+
 		radv_cmd_buffer_upload_alloc(cmd_buffer, 8, 0,
 					     &cmd_buffer->gfx9_fence_offset,
 					     &fence_ptr);
 		cmd_buffer->gfx9_fence_bo = cmd_buffer->upload.upload_bo;
+
+		/* Allocate a buffer for the EOP bug on GFX9. */
+		radv_cmd_buffer_upload_alloc(cmd_buffer, 16 * num_db, 0,
+					     &eop_bug_offset, &fence_ptr);
+		cmd_buffer->gfx9_eop_bug_va =
+			radv_buffer_get_va(cmd_buffer->upload.upload_bo);
+		cmd_buffer->gfx9_eop_bug_va += eop_bug_offset;
 	}
 
 	cmd_buffer->status = RADV_CMD_BUFFER_STATUS_INITIAL;
@@ -473,7 +483,7 @@ radv_cmd_buffer_after_draw(struct radv_cmd_buffer *cmd_buffer,
 				       cmd_buffer->device->physical_device->rad_info.chip_class,
 				       ptr, va,
 				       radv_cmd_buffer_uses_mec(cmd_buffer),
-				       flags);
+				       flags, cmd_buffer->gfx9_eop_bug_va);
 	}
 
 	if (unlikely(cmd_buffer->device->trace_bo))
@@ -681,8 +691,11 @@ radv_emit_rbplus_state(struct radv_cmd_buffer *cmd_buffer)
 	unsigned sx_blend_opt_control = 0;
 
 	for (unsigned i = 0; i < subpass->color_count; ++i) {
-		if (subpass->color_attachments[i].attachment == VK_ATTACHMENT_UNUSED)
+		if (subpass->color_attachments[i].attachment == VK_ATTACHMENT_UNUSED) {
+			sx_blend_opt_control |= S_02875C_MRT0_COLOR_OPT_DISABLE(1) << (i * 4);
+			sx_blend_opt_control |= S_02875C_MRT0_ALPHA_OPT_DISABLE(1) << (i * 4);
 			continue;
+		}
 
 		int idx = subpass->color_attachments[i].attachment;
 		struct radv_color_buffer_info *cb = &framebuffer->attachments[idx].cb;
@@ -796,6 +809,10 @@ radv_emit_rbplus_state(struct radv_cmd_buffer *cmd_buffer)
 		}
 	}
 
+	for (unsigned i = subpass->color_count; i < 8; ++i) {
+		sx_blend_opt_control |= S_02875C_MRT0_COLOR_OPT_DISABLE(1) << (i * 4);
+		sx_blend_opt_control |= S_02875C_MRT0_ALPHA_OPT_DISABLE(1) << (i * 4);
+	}
 	radeon_set_context_reg_seq(cmd_buffer->cs, R_028754_SX_PS_DOWNCONVERT, 3);
 	radeon_emit(cmd_buffer->cs, sx_ps_downconvert);
 	radeon_emit(cmd_buffer->cs, sx_blend_opt_epsilon);
@@ -2500,6 +2517,11 @@ VkResult radv_EndCommandBuffer(
 		si_emit_cache_flush(cmd_buffer);
 	}
 
+	/* Make sure CP DMA is idle at the end of IBs because the kernel
+	 * doesn't wait for it.
+	 */
+	si_cp_dma_wait_for_idle(cmd_buffer);
+
 	vk_free(&cmd_buffer->pool->alloc, cmd_buffer->state.attachments);
 
 	if (!cmd_buffer->device->ws->cs_finalize(cmd_buffer->cs))
@@ -4054,6 +4076,11 @@ void radv_CmdPipelineBarrier(
 					     0);
 	}
 
+	/* Make sure CP DMA is idle because the driver might have performed a
+	 * DMA operation for copying or filling buffers/images.
+	 */
+	si_cp_dma_wait_for_idle(cmd_buffer);
+
 	cmd_buffer->state.flush_bits |= dst_flush_bits;
 }
 
@@ -4070,6 +4097,11 @@ static void write_event(struct radv_cmd_buffer *cmd_buffer,
 
 	MAYBE_UNUSED unsigned cdw_max = radeon_check_space(cmd_buffer->device->ws, cs, 18);
 
+	/* Make sure CP DMA is idle because the driver might have performed a
+	 * DMA operation for copying or filling buffers/images.
+	 */
+	si_cp_dma_wait_for_idle(cmd_buffer);
+
 	/* TODO: this is overkill. Probably should figure something out from
 	 * the stage mask. */
 
@@ -4078,7 +4110,8 @@ static void write_event(struct radv_cmd_buffer *cmd_buffer,
 				   cmd_buffer->device->physical_device->rad_info.chip_class,
 				   radv_cmd_buffer_uses_mec(cmd_buffer),
 				   V_028A90_BOTTOM_OF_PIPE_TS, 0,
-				   1, va, 2, value);
+				   1, va, 2, value,
+				   cmd_buffer->gfx9_eop_bug_va);
 
 	assert(cmd_buffer->cs->cdw <= cdw_max);
 }

@@ -76,6 +76,9 @@ void
 blorp_surf_convert_to_single_slice(const struct isl_device *isl_dev,
                                    struct brw_blorp_surface_info *info);
 void
+surf_fake_rgb_with_red(const struct isl_device *isl_dev,
+                       struct brw_blorp_surface_info *info);
+void
 blorp_surf_convert_to_uncompressed(const struct isl_device *isl_dev,
                                    struct brw_blorp_surface_info *info,
                                    uint32_t *x, uint32_t *y,

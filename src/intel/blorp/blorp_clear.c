@@ -38,17 +38,20 @@ struct brw_blorp_const_color_prog_key
 {
    enum blorp_shader_type shader_type; /* Must be BLORP_SHADER_TYPE_CLEAR */
    bool use_simd16_replicated_data;
+   bool clear_rgb_as_red;
    bool pad[3];
 };
 
 static bool
 blorp_params_get_clear_kernel(struct blorp_context *blorp,
                               struct blorp_params *params,
-                              bool use_replicated_data)
+                              bool use_replicated_data,
+                              bool clear_rgb_as_red)
 {
    const struct brw_blorp_const_color_prog_key blorp_key = {
       .shader_type = BLORP_SHADER_TYPE_CLEAR,
       .use_simd16_replicated_data = use_replicated_data,
+      .clear_rgb_as_red = clear_rgb_as_red,
    };
 
    if (blorp->lookup_shader(blorp, &blorp_key, sizeof(blorp_key),
@@ -63,13 +66,34 @@ blorp_params_get_clear_kernel(struct blorp_context *blorp,
 
    nir_variable *v_color =
       BLORP_CREATE_NIR_INPUT(b.shader, clear_color, glsl_vec4_type());
+   nir_ssa_def *color = nir_load_var(&b, v_color);
+
+   if (clear_rgb_as_red) {
+      nir_variable *frag_coord =
+         nir_variable_create(b.shader, nir_var_shader_in,
+                             glsl_vec4_type(), "gl_FragCoord");
+      frag_coord->data.location = VARYING_SLOT_POS;
+      frag_coord->data.origin_upper_left = true;
+
+      nir_ssa_def *pos = nir_f2i32(&b, nir_load_var(&b, frag_coord));
+      nir_ssa_def *comp = nir_umod(&b, nir_channel(&b, pos, 0),
+                                       nir_imm_int(&b, 3));
+      nir_ssa_def *color_component =
+         nir_bcsel(&b, nir_ieq(&b, comp, nir_imm_int(&b, 0)),
+                       nir_channel(&b, color, 0),
+                       nir_bcsel(&b, nir_ieq(&b, comp, nir_imm_int(&b, 1)),
+                                     nir_channel(&b, color, 1),
+                                     nir_channel(&b, color, 2)));
+
+      nir_ssa_def *u = nir_ssa_undef(&b, 1, 32);
+      color = nir_vec4(&b, color_component, u, u, u);
+   }
 
    nir_variable *frag_color = nir_variable_create(b.shader, nir_var_shader_out,
                                                   glsl_vec4_type(),
                                                   "gl_FragColor");
    frag_color->data.location = FRAG_RESULT_COLOR;
-
-   nir_copy_var(&b, frag_color, v_color);
+   nir_store_var(&b, frag_color, color, 0xf);
 
    struct brw_wm_prog_key wm_key;
    brw_blorp_init_wm_prog_key(&wm_key);
@@ -327,7 +351,7 @@ blorp_fast_clear(struct blorp_batch *batch,
    get_fast_clear_rect(batch->blorp->isl_dev, surf->aux_surf,
                        &params.x0, &params.y0, &params.x1, &params.y1);
 
-   if (!blorp_params_get_clear_kernel(batch->blorp, &params, true))
+   if (!blorp_params_get_clear_kernel(batch->blorp, &params, true, false))
       return;
 
    brw_blorp_surface_info_init(batch->blorp, &params.dst, surf, level,
@@ -378,6 +402,7 @@ blorp_clear(struct blorp_batch *batch,
    clear_color = swizzle_color_value(clear_color, swizzle);
    swizzle = ISL_SWIZZLE_IDENTITY;
 
+   bool clear_rgb_as_red = false;
    if (format == ISL_FORMAT_R9G9B9E5_SHAREDEXP) {
       clear_color.u32[0] = float3_to_rgb9e5(clear_color.f32);
       format = ISL_FORMAT_R32_UINT;
@@ -391,6 +416,13 @@ blorp_clear(struct blorp_batch *batch,
       const struct isl_swizzle ARGB = ISL_SWIZZLE(ALPHA, RED, GREEN, BLUE);
       clear_color = swizzle_color_value(clear_color, ARGB);
       format = ISL_FORMAT_B4G4R4A4_UNORM;
+   } else if (isl_format_get_layout(format)->bpb % 3 == 0) {
+      clear_rgb_as_red = true;
+      if (format == ISL_FORMAT_R8G8B8_UNORM_SRGB) {
+         clear_color.f32[0] = util_format_linear_to_srgb_float(clear_color.f32[0]);
+         clear_color.f32[1] = util_format_linear_to_srgb_float(clear_color.f32[1]);
+         clear_color.f32[2] = util_format_linear_to_srgb_float(clear_color.f32[2]);
+      }
    }
 
    memcpy(&params.wm_inputs.clear_color, clear_color.f32, sizeof(float) * 4);
@@ -422,7 +454,8 @@ blorp_clear(struct blorp_batch *batch,
    }
 
    if (!blorp_params_get_clear_kernel(batch->blorp, &params,
-                                      use_simd16_replicated_data))
+                                      use_simd16_replicated_data,
+                                      clear_rgb_as_red))
       return;
 
    if (!blorp_ensure_sf_program(batch->blorp, &params))
@@ -455,6 +488,12 @@ blorp_clear(struct blorp_batch *batch,
          blorp_surf_convert_to_single_slice(batch->blorp->isl_dev, &params.dst);
       }
 
+      if (clear_rgb_as_red) {
+         surf_fake_rgb_with_red(batch->blorp->isl_dev, &params.dst);
+         params.x0 *= 3;
+         params.x1 *= 3;
+      }
+
       if (isl_format_is_compressed(params.dst.surf.format)) {
          blorp_surf_convert_to_uncompressed(batch->blorp->isl_dev, &params.dst,
                                             NULL, NULL, NULL, NULL);
@@ -480,7 +519,46 @@ blorp_clear(struct blorp_batch *batch,
        * 512 but a maximum 3D texture size is much larger.
        */
       params.num_layers = MIN2(params.dst.view.array_len, num_layers);
-      batch->blorp->exec(batch, &params);
+
+      const unsigned max_image_width = 16 * 1024;
+      if (params.dst.surf.logical_level0_px.width > max_image_width) {
+         /* Clearing an RGB image as red multiplies the surface width by 3
+          * so it may now be too wide for the hardware surface limits.  We
+          * have to break the clear up into pieces in order to clear wide
+          * images.
+          */
+         assert(clear_rgb_as_red);
+         assert(params.dst.surf.dim == ISL_SURF_DIM_2D);
+         assert(params.dst.surf.tiling == ISL_TILING_LINEAR);
+         assert(params.dst.surf.logical_level0_px.depth == 1);
+         assert(params.dst.surf.logical_level0_px.array_len == 1);
+         assert(params.dst.surf.levels == 1);
+         assert(params.dst.surf.samples == 1);
+         assert(params.dst.tile_x_sa == 0 || params.dst.tile_y_sa == 0);
+         assert(params.dst.aux_usage == ISL_AUX_USAGE_NONE);
+
+         /* max_image_width rounded down to a multiple of 3 */
+         const unsigned max_fake_rgb_width = (max_image_width / 3) * 3;
+         const unsigned cpp =
+            isl_format_get_layout(params.dst.surf.format)->bpb / 8;
+
+         params.dst.surf.logical_level0_px.width = max_fake_rgb_width;
+         params.dst.surf.phys_level0_sa.width = max_fake_rgb_width;
+
+         uint32_t orig_x0 = params.x0, orig_x1 = params.x1;
+         uint64_t orig_offset = params.dst.addr.offset;
+         for (uint32_t x = orig_x0; x < orig_x1; x += max_fake_rgb_width) {
+            /* Offset to the surface.  It's easy because we're linear */
+            params.dst.addr.offset = orig_offset + x * cpp;
+
+            params.x0 = 0;
+            params.x1 = MIN2(orig_x1 - x, max_image_width);
+
+            batch->blorp->exec(batch, &params);
+         }
+      } else {
+         batch->blorp->exec(batch, &params);
+      }
 
       start_layer += params.num_layers;
       num_layers -= params.num_layers;
@@ -511,7 +589,7 @@ blorp_clear_depth_stencil(struct blorp_batch *batch,
        * we disable statistics in 3DSTATE_WM.  Give it the usual clear shader
        * to work around the issue.
        */
-      if (!blorp_params_get_clear_kernel(batch->blorp, &params, false))
+      if (!blorp_params_get_clear_kernel(batch->blorp, &params, false, false))
          return;
    }
 
@@ -751,7 +829,7 @@ blorp_clear_attachments(struct blorp_batch *batch,
        * is tiled or not, we have to assume it may be linear.  This means no
        * SIMD16_REPDATA for us. :-(
        */
-      if (!blorp_params_get_clear_kernel(batch->blorp, &params, false))
+      if (!blorp_params_get_clear_kernel(batch->blorp, &params, false, false))
          return;
    }
 
@@ -836,7 +914,7 @@ blorp_ccs_resolve(struct blorp_batch *batch,
     * color" message.
     */
 
-   if (!blorp_params_get_clear_kernel(batch->blorp, &params, true))
+   if (!blorp_params_get_clear_kernel(batch->blorp, &params, true, false))
       return;
 
    batch->blorp->exec(batch, &params);
@@ -1114,7 +1192,7 @@ blorp_ccs_ambiguate(struct blorp_batch *batch,
    memset(&params.wm_inputs.clear_color, 0,
           sizeof(params.wm_inputs.clear_color));
 
-   if (!blorp_params_get_clear_kernel(batch->blorp, &params, true))
+   if (!blorp_params_get_clear_kernel(batch->blorp, &params, true, false))
       return;
 
    batch->blorp->exec(batch, &params);

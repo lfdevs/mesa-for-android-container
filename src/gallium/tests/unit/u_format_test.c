@@ -380,11 +380,6 @@ test_format_unpack_rgba_8unorm(const struct util_format_description *format_desc
    if (util_is_double_nan(test->unpacked[0][0][0]))
       success = TRUE;
 
-   /* Ignore S3TC errors */
-   if (format_desc->layout == UTIL_FORMAT_LAYOUT_S3TC) {
-      success = TRUE;
-   }
-
    if (!success) {
       print_unpacked_rgba_8unorm(format_desc, "FAILED: ", unpacked, " obtained\n");
       print_unpacked_rgba_8unorm(format_desc, "        ", expected, " expected\n");

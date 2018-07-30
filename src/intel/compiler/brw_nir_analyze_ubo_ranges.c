@@ -124,11 +124,28 @@ analyze_ubos_block(struct ubo_analysis_state *state, nir_block *block)
          continue;
 
       nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
-      if (intrin->intrinsic == nir_intrinsic_load_uniform)
+      switch (intrin->intrinsic) {
+      case nir_intrinsic_load_uniform:
+      case nir_intrinsic_image_var_load:
+      case nir_intrinsic_image_var_store:
+      case nir_intrinsic_image_var_atomic_add:
+      case nir_intrinsic_image_var_atomic_min:
+      case nir_intrinsic_image_var_atomic_max:
+      case nir_intrinsic_image_var_atomic_and:
+      case nir_intrinsic_image_var_atomic_or:
+      case nir_intrinsic_image_var_atomic_xor:
+      case nir_intrinsic_image_var_atomic_exchange:
+      case nir_intrinsic_image_var_atomic_comp_swap:
+      case nir_intrinsic_image_var_size:
          state->uses_regular_uniforms = true;
-
-      if (intrin->intrinsic != nir_intrinsic_load_ubo)
          continue;
+
+      case nir_intrinsic_load_ubo:
+         break; /* Fall through to the analysis below */
+
+      default:
+         continue; /* Not a uniform or UBO intrinsic */
+      }
 
       nir_const_value *block_const = nir_src_as_const_value(intrin->src[0]);
       nir_const_value *offset_const = nir_src_as_const_value(intrin->src[1]);
@@ -167,6 +184,7 @@ print_ubo_entry(FILE *file,
 void
 brw_nir_analyze_ubo_ranges(const struct brw_compiler *compiler,
                            nir_shader *nir,
+                           const struct brw_vs_prog_key *vs_key,
                            struct brw_ubo_range out_ranges[4])
 {
    const struct gen_device_info *devinfo = compiler->devinfo;
@@ -184,6 +202,23 @@ brw_nir_analyze_ubo_ranges(const struct brw_compiler *compiler,
       .blocks =
          _mesa_hash_table_create(mem_ctx, NULL, _mesa_key_pointer_equal),
    };
+
+   switch (nir->info.stage) {
+   case MESA_SHADER_VERTEX:
+      if (vs_key && vs_key->nr_userclip_plane_consts > 0)
+         state.uses_regular_uniforms = true;
+      break;
+
+   case MESA_SHADER_COMPUTE:
+      /* Compute shaders use push constants to get the subgroup ID so it's
+       * best to just assume some system values are pushed.
+       */
+      state.uses_regular_uniforms = true;
+      break;
+
+   default:
+      break;
+   }
 
    /* Walk the IR, recording how many times each UBO block/offset is used. */
    nir_foreach_function(function, nir) {

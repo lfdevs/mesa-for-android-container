@@ -1155,6 +1155,20 @@ brw_blorp_build_nir_shader(struct blorp_context *blorp, void *mem_ctx,
                                       key->dst_layout);
    }
 
+   nir_ssa_def *comp = NULL;
+   if (key->dst_rgb) {
+      /* The destination image is bound as a red texture three times as wide
+       * as the actual image.  Our shader is effectively running one color
+       * component at a time.  We need to save off the component and adjust
+       * the destination position.
+       */
+      assert(dst_pos->num_components == 2);
+      nir_ssa_def *dst_x = nir_channel(&b, dst_pos, 0);
+      comp = nir_umod(&b, dst_x, nir_imm_int(&b, 3));
+      dst_pos = nir_vec2(&b, nir_idiv(&b, dst_x, nir_imm_int(&b, 3)),
+                             nir_channel(&b, dst_pos, 1));
+   }
+
    /* Now (X, Y, S) = decode_msaa(dst_samples, detile(dst_tiling, offset)).
     *
     * That is: X, Y and S now contain the true coordinates and sample index of
@@ -1285,8 +1299,6 @@ brw_blorp_build_nir_shader(struct blorp_context *blorp, void *mem_ctx,
        * from the source color and write that to destination red.
        */
       assert(dst_pos->num_components == 2);
-      nir_ssa_def *comp =
-         nir_umod(&b, nir_channel(&b, dst_pos, 0), nir_imm_int(&b, 3));
 
       nir_ssa_def *color_component =
          nir_bcsel(&b, nir_ieq(&b, comp, nir_imm_int(&b, 0)),
@@ -1547,18 +1559,15 @@ struct blt_coords {
    struct blt_axis x, y;
 };
 
-static void
+void
 surf_fake_rgb_with_red(const struct isl_device *isl_dev,
-                       struct brw_blorp_surface_info *info,
-                       uint32_t *x, uint32_t *width)
+                       struct brw_blorp_surface_info *info)
 {
    blorp_surf_convert_to_single_slice(isl_dev, info);
 
    info->surf.logical_level0_px.width *= 3;
    info->surf.phys_level0_sa.width *= 3;
    info->tile_x_sa *= 3;
-   *x *= 3;
-   *width *= 3;
 
    enum isl_format red_format;
    switch (info->view.format) {
@@ -1588,28 +1597,6 @@ surf_fake_rgb_with_red(const struct isl_device *isl_dev,
    info->surf.format = info->view.format = red_format;
 }
 
-static void
-fake_dest_rgb_with_red(const struct isl_device *dev,
-                       struct blorp_params *params,
-                       struct brw_blorp_blit_prog_key *wm_prog_key,
-                       struct blt_coords *coords)
-{
-   /* Handle RGB destinations for blorp_copy */
-   const struct isl_format_layout *dst_fmtl =
-      isl_format_get_layout(params->dst.surf.format);
-
-   if (dst_fmtl->bpb % 3 == 0) {
-      uint32_t dst_x = coords->x.dst0;
-      uint32_t dst_width = coords->x.dst1 - dst_x;
-      surf_fake_rgb_with_red(dev, &params->dst,
-                             &dst_x, &dst_width);
-      coords->x.dst0 = dst_x;
-      coords->x.dst1 = dst_x + dst_width;
-      wm_prog_key->dst_rgb = true;
-      wm_prog_key->need_dst_offset = true;
-   }
-}
-
 enum blit_shrink_status {
    BLIT_NO_SHRINK = 0,
    BLIT_WIDTH_SHRINK = 1,
@@ -1627,8 +1614,6 @@ try_blorp_blit(struct blorp_batch *batch,
                struct blt_coords *coords)
 {
    const struct gen_device_info *devinfo = batch->blorp->isl_dev->info;
-
-   fake_dest_rgb_with_red(batch->blorp->isl_dev, params, wm_prog_key, coords);
 
    if (isl_format_has_sint_channel(params->src.view.format)) {
       wm_prog_key->texture_data_type = nir_type_int;
@@ -1833,6 +1818,21 @@ try_blorp_blit(struct blorp_batch *batch,
       params->wm_inputs.src_inv_size[1] =
          1.0f / minify(params->src.surf.logical_level0_px.height,
                        params->src.view.base_level);
+   }
+
+   if (isl_format_get_layout(params->dst.view.format)->bpb % 3 == 0) {
+      /* We can't render to  RGB formats natively because they aren't a
+       * power-of-two size.  Instead, we fake them by using a red format
+       * with the same channel type and size and emitting shader code to
+       * only write one channel at a time.
+       */
+      params->x0 *= 3;
+      params->x1 *= 3;
+
+      surf_fake_rgb_with_red(batch->blorp->isl_dev, &params->dst);
+
+      wm_prog_key->dst_rgb = true;
+      wm_prog_key->need_dst_offset = true;
    }
 
    if (params->src.tile_x_sa || params->src.tile_y_sa) {

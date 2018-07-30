@@ -1,3 +1,9 @@
+mesa (18.1.5-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Mon, 30 Jul 2018 14:30:06 +0300
+
 mesa (18.1.4-1) unstable; urgency=medium
 
   [ Emilio Pozuelo Monfort ]

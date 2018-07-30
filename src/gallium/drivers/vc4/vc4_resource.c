@@ -161,7 +161,7 @@ vc4_resource_transfer_map(struct pipe_context *pctx,
          */
         if ((usage & PIPE_TRANSFER_DISCARD_RANGE) &&
             !(usage & PIPE_TRANSFER_UNSYNCHRONIZED) &&
-            !(prsc->flags & PIPE_RESOURCE_FLAG_MAP_COHERENT) &&
+            !(prsc->flags & PIPE_RESOURCE_FLAG_MAP_PERSISTENT) &&
             prsc->last_level == 0 &&
             prsc->width0 == box->width &&
             prsc->height0 == box->height &&

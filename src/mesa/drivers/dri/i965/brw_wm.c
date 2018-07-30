@@ -149,7 +149,7 @@ brw_codegen_wm_prog(struct brw_context *brw,
       brw_nir_setup_glsl_uniforms(mem_ctx, fp->program.nir, &fp->program,
                                   &prog_data.base, true);
       brw_nir_analyze_ubo_ranges(brw->screen->compiler, fp->program.nir,
-                                 prog_data.base.ubo_ranges);
+                                 NULL, prog_data.base.ubo_ranges);
    } else {
       brw_nir_setup_arb_uniforms(mem_ctx, fp->program.nir, &fp->program,
                                  &prog_data.base);

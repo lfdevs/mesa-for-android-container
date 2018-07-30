@@ -452,7 +452,7 @@ anv_pipeline_compile(struct anv_pipeline *pipeline,
       anv_nir_apply_pipeline_layout(pipeline, layout, nir, prog_data, map);
 
    if (stage != MESA_SHADER_COMPUTE)
-      brw_nir_analyze_ubo_ranges(compiler, nir, prog_data->ubo_ranges);
+      brw_nir_analyze_ubo_ranges(compiler, nir, NULL, prog_data->ubo_ranges);
 
    assert(nir->num_uniforms == prog_data->nr_params * 4);
 

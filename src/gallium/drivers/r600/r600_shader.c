@@ -1673,19 +1673,11 @@ static void tgsi_src(struct r600_shader_ctx *ctx,
 		} else if (ctx->info.system_value_semantic_name[tgsi_src->Register.Index] == TGSI_SEMANTIC_TESSOUTER) {
 			r600_src->sel = 2;
 		} else if (ctx->info.system_value_semantic_name[tgsi_src->Register.Index] == TGSI_SEMANTIC_VERTICESIN) {
-			if (ctx->type == PIPE_SHADER_TESS_CTRL) {
-				r600_src->sel = ctx->tess_input_info;
-				r600_src->swizzle[0] = 2;
-				r600_src->swizzle[1] = 2;
-				r600_src->swizzle[2] = 2;
-				r600_src->swizzle[3] = 2;
-			} else {
-				r600_src->sel = ctx->tess_input_info;
-				r600_src->swizzle[0] = 3;
-				r600_src->swizzle[1] = 3;
-				r600_src->swizzle[2] = 3;
-				r600_src->swizzle[3] = 3;
-			}
+			r600_src->sel = ctx->tess_input_info;
+			r600_src->swizzle[0] = 2;
+			r600_src->swizzle[1] = 2;
+			r600_src->swizzle[2] = 2;
+			r600_src->swizzle[3] = 2;
 		} else if (ctx->type == PIPE_SHADER_TESS_CTRL && ctx->info.system_value_semantic_name[tgsi_src->Register.Index] == TGSI_SEMANTIC_PRIMID) {
 			r600_src->sel = 0;
 			r600_src->swizzle[0] = 0;
@@ -3559,7 +3551,7 @@ static int r600_shader_from_tgsi(struct r600_context *rctx,
 		ctx.tess_input_info = ++regno;
 		ctx.tess_output_info = ++regno;
 	} else if (ctx.type == PIPE_SHADER_TESS_EVAL) {
-		ctx.tess_input_info = 0;
+		ctx.tess_input_info = ++regno;
 		ctx.tess_output_info = ++regno;
 	} else if (ctx.type == PIPE_SHADER_GEOMETRY) {
 		ctx.gs_export_gpr_tregs[0] = ++regno;

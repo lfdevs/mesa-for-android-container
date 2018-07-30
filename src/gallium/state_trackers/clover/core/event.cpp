@@ -49,12 +49,14 @@ event::trigger_self() {
 }
 
 void
-event::trigger() {
+event::trigger() try {
    if (wait_count() == 1)
       action_ok(*this);
 
    for (event &ev : trigger_self())
       ev.trigger();
+} catch (error &e) {
+   abort(e.get());
 }
 
 std::vector<intrusive_ref<event>>

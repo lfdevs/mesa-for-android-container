@@ -1571,6 +1571,9 @@ anv_pipe_flush_bits_for_access_flags(VkAccessFlags flags)
          pipe_bits |= ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT;
          pipe_bits |= ANV_PIPE_DEPTH_CACHE_FLUSH_BIT;
          break;
+      case VK_ACCESS_MEMORY_WRITE_BIT:
+         pipe_bits |= ANV_PIPE_FLUSH_BITS;
+         break;
       default:
          break; /* Nothing to do */
       }
@@ -1600,6 +1603,12 @@ anv_pipe_invalidate_bits_for_access_flags(VkAccessFlags flags)
       case VK_ACCESS_INPUT_ATTACHMENT_READ_BIT:
       case VK_ACCESS_TRANSFER_READ_BIT:
          pipe_bits |= ANV_PIPE_TEXTURE_CACHE_INVALIDATE_BIT;
+         break;
+      case VK_ACCESS_MEMORY_READ_BIT:
+         pipe_bits |= ANV_PIPE_INVALIDATE_BITS;
+         break;
+      case VK_ACCESS_MEMORY_WRITE_BIT:
+         pipe_bits |= ANV_PIPE_FLUSH_BITS;
          break;
       default:
          break; /* Nothing to do */
