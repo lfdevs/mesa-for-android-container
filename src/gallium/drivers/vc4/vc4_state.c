@@ -624,7 +624,9 @@ vc4_create_sampler_view(struct pipe_context *pctx, struct pipe_resource *prsc,
         }
 
         so->texture_p0 =
-                (VC4_SET_FIELD(rsc->slices[0].offset >> 12, VC4_TEX_P0_OFFSET) |
+                (VC4_SET_FIELD((rsc->slices[0].offset +
+                                cso->u.tex.first_layer *
+                                rsc->cube_map_stride) >> 12, VC4_TEX_P0_OFFSET) |
                  VC4_SET_FIELD(rsc->vc4_format & 15, VC4_TEX_P0_TYPE) |
                  VC4_SET_FIELD(so->force_first_level ?
                                cso->u.tex.last_level :

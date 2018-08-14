@@ -2,7 +2,7 @@
 
 struct radv_dispatch_table {
    union {
-      void *entrypoints[227];
+      void *entrypoints[230];
       struct {
           PFN_vkCreateInstance vkCreateInstance;
           PFN_vkDestroyInstance vkDestroyInstance;
@@ -253,6 +253,21 @@ struct radv_dispatch_table {
           PFN_vkGetDeviceQueue2 vkGetDeviceQueue2;
           PFN_vkGetDescriptorSetLayoutSupport vkGetDescriptorSetLayoutSupport;
           PFN_vkGetDescriptorSetLayoutSupportKHR vkGetDescriptorSetLayoutSupportKHR;
+#ifdef VK_USE_PLATFORM_ANDROID_KHR
+          PFN_vkGetSwapchainGrallocUsageANDROID vkGetSwapchainGrallocUsageANDROID;
+#else
+          void *vkGetSwapchainGrallocUsageANDROID;
+# endif
+#ifdef VK_USE_PLATFORM_ANDROID_KHR
+          PFN_vkAcquireImageANDROID vkAcquireImageANDROID;
+#else
+          void *vkAcquireImageANDROID;
+# endif
+#ifdef VK_USE_PLATFORM_ANDROID_KHR
+          PFN_vkQueueSignalReleaseImageANDROID vkQueueSignalReleaseImageANDROID;
+#else
+          void *vkQueueSignalReleaseImageANDROID;
+# endif
           PFN_vkGetShaderInfoAMD vkGetShaderInfoAMD;
           PFN_vkGetMemoryHostPointerPropertiesEXT vkGetMemoryHostPointerPropertiesEXT;
       };
@@ -472,5 +487,14 @@ struct radv_dispatch_table {
   void radv_DestroySamplerYcbcrConversion(VkDevice device, VkSamplerYcbcrConversion ycbcrConversion, const VkAllocationCallbacks* pAllocator);
   void radv_GetDeviceQueue2(VkDevice device, const VkDeviceQueueInfo2* pQueueInfo, VkQueue* pQueue);
   void radv_GetDescriptorSetLayoutSupport(VkDevice device, const VkDescriptorSetLayoutCreateInfo* pCreateInfo, VkDescriptorSetLayoutSupport* pSupport);
-      VkResult radv_GetShaderInfoAMD(VkDevice device, VkPipeline pipeline, VkShaderStageFlagBits shaderStage, VkShaderInfoTypeAMD infoType, size_t* pInfoSize, void* pInfo);
+    #ifdef VK_USE_PLATFORM_ANDROID_KHR
+  VkResult radv_GetSwapchainGrallocUsageANDROID(VkDevice device, VkFormat format, VkImageUsageFlags imageUsage, int* grallocUsage);
+#endif // VK_USE_PLATFORM_ANDROID_KHR
+#ifdef VK_USE_PLATFORM_ANDROID_KHR
+  VkResult radv_AcquireImageANDROID(VkDevice device, VkImage image, int nativeFenceFd, VkSemaphore semaphore, VkFence fence);
+#endif // VK_USE_PLATFORM_ANDROID_KHR
+#ifdef VK_USE_PLATFORM_ANDROID_KHR
+  VkResult radv_QueueSignalReleaseImageANDROID(VkQueue queue, uint32_t waitSemaphoreCount, const VkSemaphore* pWaitSemaphores, VkImage image, int* pNativeFenceFd);
+#endif // VK_USE_PLATFORM_ANDROID_KHR
+  VkResult radv_GetShaderInfoAMD(VkDevice device, VkPipeline pipeline, VkShaderStageFlagBits shaderStage, VkShaderInfoTypeAMD infoType, size_t* pInfoSize, void* pInfo);
   VkResult radv_GetMemoryHostPointerPropertiesEXT(VkDevice device, VkExternalMemoryHandleTypeFlagBits handleType, const void* pHostPointer, VkMemoryHostPointerPropertiesEXT* pMemoryHostPointerProperties);

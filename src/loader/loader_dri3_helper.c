@@ -1147,7 +1147,7 @@ dri3_alloc_render_buffer(struct loader_dri3_drawable *draw, unsigned int format,
          uint32_t count = 0;
 
          mod_cookie = xcb_dri3_get_supported_modifiers(draw->conn,
-                                                       draw->drawable,
+                                                       draw->window,
                                                        depth, buffer->cpp * 8);
          mod_reply = xcb_dri3_get_supported_modifiers_reply(draw->conn,
                                                             mod_cookie,
@@ -1279,7 +1279,7 @@ dri3_alloc_render_buffer(struct loader_dri3_drawable *draw, unsigned int format,
        buffer->modifier != DRM_FORMAT_MOD_INVALID) {
       xcb_dri3_pixmap_from_buffers(draw->conn,
                                    pixmap,
-                                   draw->drawable,
+                                   draw->window,
                                    num_planes,
                                    width, height,
                                    buffer->strides[0], buffer->offsets[0],
@@ -1355,6 +1355,7 @@ dri3_update_drawable(__DRIdrawable *driDrawable,
       xcb_generic_error_t                       *error;
       xcb_present_query_capabilities_cookie_t   present_capabilities_cookie;
       xcb_present_query_capabilities_reply_t    *present_capabilities_reply;
+      xcb_window_t                               root_win;
 
       draw->first_init = false;
 
@@ -1392,11 +1393,11 @@ dri3_update_drawable(__DRIdrawable *driDrawable,
          mtx_unlock(&draw->mtx);
          return false;
       }
-
       draw->width = geom_reply->width;
       draw->height = geom_reply->height;
       draw->depth = geom_reply->depth;
       draw->vtable->set_drawable_size(draw, draw->width, draw->height);
+      root_win = geom_reply->root;
 
       free(geom_reply);
 
@@ -1430,6 +1431,11 @@ dri3_update_drawable(__DRIdrawable *driDrawable,
          xcb_unregister_for_special_event(draw->conn, draw->special_event);
          draw->special_event = NULL;
       }
+
+      if (draw->is_pixmap)
+         draw->window = root_win;
+      else
+         draw->window = draw->drawable;
    }
    dri3_flush_present_events(draw);
    mtx_unlock(&draw->mtx);

@@ -38,6 +38,7 @@
 #include "vc4_context.h"
 #include "vc4_qpu.h"
 #include "vc4_qir.h"
+#include "mesa/state_tracker/st_glsl_types.h"
 
 static struct qreg
 ntq_get_src(struct vc4_compile *c, nir_src src, int i);
@@ -48,6 +49,12 @@ static int
 type_size(const struct glsl_type *type)
 {
    return glsl_count_attribute_slots(type, false);
+}
+
+static int
+uniforms_type_size(const struct glsl_type *type)
+{
+        return st_glsl_storage_type_size(type, false);
 }
 
 static void
@@ -1685,7 +1692,7 @@ static void
 ntq_setup_uniforms(struct vc4_compile *c)
 {
         nir_foreach_variable(var, &c->s->uniforms) {
-                uint32_t vec4_count = type_size(var->type);
+                uint32_t vec4_count = uniforms_type_size(var->type);
                 unsigned vec4_size = 4 * sizeof(float);
 
                 declare_uniform_range(c, var->data.driver_location * vec4_size,
@@ -2468,9 +2475,13 @@ vc4_shader_state_create(struct pipe_context *pctx,
                  */
                 s = cso->ir.nir;
 
-                NIR_PASS_V(s, nir_lower_io, nir_var_all, type_size,
+                NIR_PASS_V(s, nir_lower_io, nir_var_all & ~nir_var_uniform,
+                           type_size,
                            (nir_lower_io_options)0);
-        } else {
+                NIR_PASS_V(s, nir_lower_io, nir_var_uniform,
+                           uniforms_type_size,
+                           (nir_lower_io_options)0);
+       } else {
                 assert(cso->type == PIPE_SHADER_IR_TGSI);
 
                 if (vc4_debug & VC4_DEBUG_TGSI) {

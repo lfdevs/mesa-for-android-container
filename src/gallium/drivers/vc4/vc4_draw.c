@@ -222,6 +222,8 @@ vc4_emit_gl_shader_state(struct vc4_context *vc4,
                         attr.coordinate_shader_vpm_offset = 0;
                         attr.vertex_shader_vpm_offset = 0;
                 }
+
+                vc4_bo_unreference(&bo);
         }
 
         cl_emit(&job->bcl, GL_SHADER_STATE, shader_state) {

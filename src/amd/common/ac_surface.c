@@ -1111,7 +1111,7 @@ static int gfx9_compute_miptree(ADDR_HANDLE addrlib,
 				/* This counter starts from 1 instead of 0. */
 				xin.surfIndex = p_atomic_inc_return(config->info.fmask_surf_index);
 				xin.flags = in->flags;
-				xin.swizzleMode = in->swizzleMode;
+				xin.swizzleMode = fin.swizzleMode;
 				xin.resourceType = in->resourceType;
 				xin.format = in->format;
 				xin.numSamples = in->numSamples;

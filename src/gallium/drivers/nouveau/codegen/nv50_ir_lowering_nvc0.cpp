@@ -2181,12 +2181,35 @@ NVC0LoweringPass::convertSurfaceFormat(TexInstruction *su)
 }
 
 void
+NVC0LoweringPass::insertOOBSurfaceOpResult(TexInstruction *su)
+{
+   if (!su->getPredicate())
+      return;
+
+   bld.setPosition(su, true);
+
+   for (unsigned i = 0; su->defExists(i); ++i) {
+      ValueDef &def = su->def(i);
+
+      Instruction *mov = bld.mkMov(bld.getSSA(), bld.loadImm(NULL, 0));
+      assert(su->cc == CC_NOT_P);
+      mov->setPredicate(CC_P, su->getPredicate());
+      Instruction *uni = bld.mkOp2(OP_UNION, TYPE_U32, bld.getSSA(), NULL, mov->getDef(0));
+
+      def.replace(uni->getDef(0), false);
+      uni->setSrc(0, def.get());
+   }
+}
+
+void
 NVC0LoweringPass::handleSurfaceOpNVE4(TexInstruction *su)
 {
    processSurfaceCoordsNVE4(su);
 
-   if (su->op == OP_SULDP)
+   if (su->op == OP_SULDP) {
       convertSurfaceFormat(su);
+      insertOOBSurfaceOpResult(su);
+   }
 
    if (su->op == OP_SUREDB || su->op == OP_SUREDP) {
       assert(su->getPredicate());
@@ -2296,8 +2319,10 @@ NVC0LoweringPass::handleSurfaceOpNVC0(TexInstruction *su)
 
    processSurfaceCoordsNVC0(su);
 
-   if (su->op == OP_SULDP)
+   if (su->op == OP_SULDP) {
       convertSurfaceFormat(su);
+      insertOOBSurfaceOpResult(su);
+   }
 
    if (su->op == OP_SUREDB || su->op == OP_SUREDP) {
       const int dim = su->tex.target.getDim();
@@ -2397,8 +2422,10 @@ NVC0LoweringPass::handleSurfaceOpGM107(TexInstruction *su)
 {
    processSurfaceCoordsGM107(su);
 
-   if (su->op == OP_SULDP)
+   if (su->op == OP_SULDP) {
       convertSurfaceFormat(su);
+      insertOOBSurfaceOpResult(su);
+   }
 
    if (su->op == OP_SUREDP) {
       Value *def = su->getDef(0);

@@ -142,6 +142,7 @@ private:
    void processSurfaceCoordsNVE4(TexInstruction *);
    void processSurfaceCoordsNVC0(TexInstruction *);
    void convertSurfaceFormat(TexInstruction *);
+   void insertOOBSurfaceOpResult(TexInstruction *);
 
 protected:
    Value *loadTexHandle(Value *ptr, unsigned int slot);

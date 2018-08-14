@@ -85,8 +85,7 @@ namespace {
          const unsigned arg_store_size = dl.getTypeStoreSize(arg_type);
          const unsigned arg_api_size = dl.getTypeAllocSize(arg_type);
 
-         const auto target_type = !arg_type->isIntegerTy() ? arg_type :
-            dl.getSmallestLegalIntType(mod.getContext(), arg_store_size * 8);
+         const auto target_type = compat::get_abi_type(arg_type, mod);
          const unsigned target_size = dl.getTypeStoreSize(target_type);
          const unsigned target_align = dl.getABITypeAlignment(target_type);
 

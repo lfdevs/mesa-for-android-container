@@ -198,6 +198,17 @@ resize_callback(struct wl_egl_window *wl_win, void *data)
    struct dri2_egl_display *dri2_dpy =
       dri2_egl_display(dri2_surf->base.Resource.Display);
 
+   /* Update the surface size as soon as native window is resized; from user
+    * pov, this makes the effect that resize is done inmediately after native
+    * window resize, without requiring to wait until the first draw.
+    *
+    * A more detailed and lengthy explanation can be found at
+    * https://lists.freedesktop.org/archives/mesa-dev/2018-June/196474.html
+    */
+   if (!dri2_surf->back) {
+      dri2_surf->base.Width = wl_win->width;
+      dri2_surf->base.Height = wl_win->height;
+   }
    dri2_dpy->flush->invalidate(dri2_surf->dri_drawable);
 }
 
@@ -249,6 +260,10 @@ dri2_wl_create_window_surface(_EGLDriver *drv, _EGLDisplay *disp,
 
    config = dri2_get_dri_config(dri2_conf, EGL_WINDOW_BIT,
                                 dri2_surf->base.GLColorspace);
+
+   dri2_surf->base.Width = window->width;
+   dri2_surf->base.Height = window->height;
+
    visual_idx = dri2_wl_visual_idx_from_config(dri2_dpy, config);
    assert(visual_idx != -1);
 
@@ -568,8 +583,8 @@ update_buffers(struct dri2_egl_surface *dri2_surf)
    struct dri2_egl_display *dri2_dpy =
       dri2_egl_display(dri2_surf->base.Resource.Display);
 
-   if (dri2_surf->base.Width != dri2_surf->wl_win->width ||
-       dri2_surf->base.Height != dri2_surf->wl_win->height) {
+   if (dri2_surf->base.Width != dri2_surf->wl_win->attached_width ||
+       dri2_surf->base.Height != dri2_surf->wl_win->attached_height) {
 
       dri2_wl_release_buffers(dri2_surf);
 
@@ -1623,8 +1638,8 @@ swrast_update_buffers(struct dri2_egl_surface *dri2_surf)
    if (dri2_surf->back)
       return 0;
 
-   if (dri2_surf->base.Width != dri2_surf->wl_win->width ||
-       dri2_surf->base.Height != dri2_surf->wl_win->height) {
+   if (dri2_surf->base.Width != dri2_surf->wl_win->attached_width ||
+       dri2_surf->base.Height != dri2_surf->wl_win->attached_height) {
 
       dri2_wl_release_buffers(dri2_surf);
 

@@ -114,6 +114,7 @@ struct loader_dri3_drawable {
    xcb_connection_t *conn;
    __DRIdrawable *dri_drawable;
    xcb_drawable_t drawable;
+   xcb_window_t window;
    int width;
    int height;
    int depth;

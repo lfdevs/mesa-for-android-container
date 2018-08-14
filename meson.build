@@ -957,7 +957,7 @@ if cc.links('''
       freelocale(loc);
       return 0;
     }''',
-    extra_args : pre_args,
+    args : pre_args,
     name : 'strtod has locale support')
   pre_args += '-DHAVE_STRTOD_L'
 endif

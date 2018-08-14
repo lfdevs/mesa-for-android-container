@@ -19,9 +19,6 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 # IN THE SOFTWARE.
 
-if HAVE_SHARED_GLAPI
-SHARED_GLAPI_LIB = $(top_builddir)/src/mapi/shared-glapi/libglapi.la
-endif
 
 SUBDIRS =
 
@@ -181,7 +178,7 @@ GL_LIBS = \
 	$(LIBDRM_LIBS) \
 	libglx.la \
 	$(top_builddir)/src/mapi/glapi/libglapi.la \
-	$(SHARED_GLAPI_LIB) \
+	$(top_builddir)/src/mapi/shared-glapi/libglapi.la \
 	$(GL_LIB_DEPS)
 
 GL_LDFLAGS = \

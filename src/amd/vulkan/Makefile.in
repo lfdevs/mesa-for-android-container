@@ -207,27 +207,28 @@ LTLIBRARIES = $(lib_LTLIBRARIES) $(noinst_LTLIBRARIES)
 libvulkan_common_la_LIBADD =
 am__libvulkan_common_la_SOURCES_DIST = radv_entrypoints.c \
 	radv_entrypoints.h radv_extensions.c radv_extensions.h \
-	radv_cmd_buffer.c radv_cs.h radv_debug.c radv_debug.h \
-	radv_device.c radv_descriptor_set.c radv_descriptor_set.h \
-	radv_formats.c radv_image.c radv_meta.c radv_meta.h \
-	radv_meta_blit.c radv_meta_blit2d.c radv_meta_buffer.c \
-	radv_meta_bufimage.c radv_meta_clear.c radv_meta_copy.c \
-	radv_meta_decompress.c radv_meta_fast_clear.c \
+	vk_format_table.c radv_cmd_buffer.c radv_cs.h radv_debug.c \
+	radv_debug.h radv_device.c radv_descriptor_set.c \
+	radv_descriptor_set.h radv_formats.c radv_image.c radv_meta.c \
+	radv_meta.h radv_meta_blit.c radv_meta_blit2d.c \
+	radv_meta_buffer.c radv_meta_bufimage.c radv_meta_clear.c \
+	radv_meta_copy.c radv_meta_decompress.c radv_meta_fast_clear.c \
 	radv_meta_resolve.c radv_meta_resolve_cs.c \
 	radv_meta_resolve_fs.c radv_nir_to_llvm.c radv_pass.c \
 	radv_pipeline.c radv_pipeline_cache.c radv_private.h \
 	radv_radeon_winsys.h radv_shader.c radv_shader_info.c \
 	radv_shader.h radv_query.c radv_util.c radv_util.h radv_wsi.c \
-	si_cmd_buffer.c vk_format_table.c vk_format.h \
-	winsys/amdgpu/radv_amdgpu_bo.c winsys/amdgpu/radv_amdgpu_bo.h \
-	winsys/amdgpu/radv_amdgpu_cs.c winsys/amdgpu/radv_amdgpu_cs.h \
+	si_cmd_buffer.c vk_format.h winsys/amdgpu/radv_amdgpu_bo.c \
+	winsys/amdgpu/radv_amdgpu_bo.h winsys/amdgpu/radv_amdgpu_cs.c \
+	winsys/amdgpu/radv_amdgpu_cs.h \
 	winsys/amdgpu/radv_amdgpu_surface.c \
 	winsys/amdgpu/radv_amdgpu_surface.h \
 	winsys/amdgpu/radv_amdgpu_winsys.c \
 	winsys/amdgpu/radv_amdgpu_winsys.h \
 	winsys/amdgpu/radv_amdgpu_winsys_public.h radv_wsi_x11.c \
 	radv_wsi_wayland.c radv_android.c
-am__objects_1 = radv_entrypoints.lo radv_extensions.lo
+am__objects_1 = radv_entrypoints.lo radv_extensions.lo \
+	vk_format_table.lo
 am__dirstamp = $(am__leading_dot)dirstamp
 am__objects_2 = winsys/amdgpu/radv_amdgpu_bo.lo \
 	winsys/amdgpu/radv_amdgpu_cs.lo \
@@ -243,7 +244,7 @@ am__objects_3 = radv_cmd_buffer.lo radv_debug.lo radv_device.lo \
 	radv_nir_to_llvm.lo radv_pass.lo radv_pipeline.lo \
 	radv_pipeline_cache.lo radv_shader.lo radv_shader_info.lo \
 	radv_query.lo radv_util.lo radv_wsi.lo si_cmd_buffer.lo \
-	vk_format_table.lo $(am__objects_2)
+	$(am__objects_2)
 am__objects_4 = radv_wsi_x11.lo
 @HAVE_PLATFORM_X11_TRUE@am__objects_5 = $(am__objects_4)
 am__objects_6 = radv_wsi_wayland.lo
@@ -448,6 +449,7 @@ GL_LIB_DEPS = @GL_LIB_DEPS@
 GL_PC_CFLAGS = @GL_PC_CFLAGS@
 GL_PC_LIB_PRIV = @GL_PC_LIB_PRIV@
 GL_PC_REQ_PRIV = @GL_PC_REQ_PRIV@
+GL_PKGCONF_LIB = @GL_PKGCONF_LIB@
 GREP = @GREP@
 HAVE_XF86VIDMODE = @HAVE_XF86VIDMODE@
 I915_CFLAGS = @I915_CFLAGS@
@@ -723,7 +725,6 @@ VULKAN_FILES := \
 	radv_util.h \
 	radv_wsi.c \
 	si_cmd_buffer.c \
-	vk_format_table.c \
 	vk_format.h \
 	$(RADV_WS_AMDGPU_FILES)
 
@@ -740,7 +741,8 @@ VULKAN_GENERATED_FILES := \
 	radv_entrypoints.c \
 	radv_entrypoints.h \
 	radv_extensions.c \
-	radv_extensions.h
+	radv_extensions.h \
+	vk_format_table.c
 
 noinst_HEADERS = \
 	$(top_srcdir)/include/vulkan/vk_platform.h \

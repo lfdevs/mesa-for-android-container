@@ -422,6 +422,9 @@ void
 brw_disk_cache_init(struct intel_screen *screen)
 {
 #ifdef ENABLE_SHADER_CACHE
+   if (INTEL_DEBUG & DEBUG_DISK_CACHE_DISABLE_MASK)
+      return;
+
    char renderer[10];
    MAYBE_UNUSED int len = snprintf(renderer, sizeof(renderer), "i965_%04x",
                                    screen->deviceID);
@@ -437,6 +440,7 @@ brw_disk_cache_init(struct intel_screen *screen)
    char timestamp[41];
    _mesa_sha1_format(timestamp, id_sha1);
 
-   screen->disk_cache = disk_cache_create(renderer, timestamp, 0);
+   const uint64_t driver_flags = INTEL_DEBUG & DEBUG_DISK_CACHE_MASK;
+   screen->disk_cache = disk_cache_create(renderer, timestamp, driver_flags);
 #endif
 }

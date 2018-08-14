@@ -996,7 +996,7 @@ static unsigned get_max_threads_per_block(struct r600_common_screen *screen,
 	if (ir_type != PIPE_SHADER_IR_TGSI)
 		return 256;
 	if (screen->chip_class >= EVERGREEN)
-		return 2048;
+		return 1024;
 	return 256;
 }
 

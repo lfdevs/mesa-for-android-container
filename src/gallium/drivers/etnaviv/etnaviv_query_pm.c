@@ -59,7 +59,7 @@ static const char *group_names[] = {
 
 static const struct etna_perfmon_config query_config[] = {
    {
-      .name = "hi-total-cyles",
+      .name = "hi-total-cycles",
       .type = ETNA_QUERY_HI_TOTAL_CYCLES,
       .group_id = ETNA_QUERY_HI_GROUP_ID,
       .source = (const struct etna_perfmon_source[]) {
@@ -67,7 +67,7 @@ static const struct etna_perfmon_config query_config[] = {
       }
    },
    {
-      .name = "hi-idle-cyles",
+      .name = "hi-idle-cycles",
       .type = ETNA_QUERY_HI_IDLE_CYCLES,
       .group_id = ETNA_QUERY_HI_GROUP_ID,
       .source = (const struct etna_perfmon_source[]) {
